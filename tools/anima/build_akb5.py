@@ -109,11 +109,14 @@ def build_shard(ccards):
     # class we care about. The true recall ceiling is the encoder hash table (H), not K. Do NOT raise without
     # also coupling nprobe and re-measuring on BOTH dims.
     K = max(1, min(93, RAM_BUDGET // D, max(1, N // 22)))
+    # ANIMA_KMEANS=det → reproducible on any machine (the HOST gate fixture); default sklearn keeps the
+    # shipped device shards byte-identical until a deliberate, device-verified switch.
+    _det = os.environ.get("ANIMA_KMEANS") == "det"
     if K > 1:
-        labels = KMeans(n_clusters=K, n_init=4, random_state=0).fit(vecs).labels_
+        labels = A.det_kmeans(vecs, K) if _det else KMeans(n_clusters=K, n_init=4, random_state=0).fit(vecs).labels_
     else:
         labels = np.zeros(N, int)
-    order = np.argsort(labels); cl = labels[order]
+    order = np.argsort(labels, kind="stable") if _det else np.argsort(labels); cl = labels[order]
     centroids = np.zeros((K, D), np.float32)
     for c in range(K):
         m = vecs[labels == c]

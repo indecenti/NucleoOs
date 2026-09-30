@@ -7,12 +7,17 @@
 // — the Settings "Download now" button, i.e. explicit consent — under the OS-wide download lock.
 // DOM-free; only WebGPU + dynamic import of @mlc-ai/web-llm (vendored on the device SD, CDN fallback).
 import { probeWebGPU } from './forge/webllm-engine.js';
-import { resolveLocalModel, localModelById, isOutOfMemoryError } from './forge/local-models.js';
+import { resolveLocalModel, localModelById, isOutOfMemoryError, isShaderF16Error, buildFor, stripThinking } from './forge/local-models.js';
 import * as ctxkit from './contextkit.js';   // same context engine as the cloud path, with the small WebLLM profile
 
+// CDN FIRST (the same pinned version as the vendored copy), SD copy only as the offline fallback: reading
+// a 6 MB bundle from the Cardputer's single-task web server on every first use is exactly the load the
+// device must never carry when the internet is right there. A stalled CDN falls back after 8 s.
+const WEBLLM_CDN = 'https://cdn.jsdelivr.net/npm/@mlc-ai/web-llm@0.2.84/+esm';
 const importWebLLM = async () => {
-  try { return await import('./forge/vendor/web-llm.js'); }
-  catch { return await import('https://esm.run/@mlc-ai/web-llm'); }
+  try {
+    return await Promise.race([import(WEBLLM_CDN), new Promise((_, rej) => setTimeout(() => rej(new Error('cdn timeout')), 8000))]);
+  } catch { return await import('./forge/vendor/web-llm.js'); }
 };
 
 let _engine = null, _loading = null, _caps = null, _loadedModel = null;
@@ -21,8 +26,10 @@ let _engine = null, _loading = null, _caps = null, _loadedModel = null;
 // strong GPU. It is downloaded only on explicit consent (loadLocal allowDownload), then cached offline.
 export function chosenLocalModel() {
   let stored = null; try { stored = localStorage.getItem('anima.localModel'); } catch {}
-  return resolveLocalModel(stored, (_caps && _caps.vramMB) || 0);
+  return resolveLocalModel(stored, _caps || {});
 }
+// The exact BUILD loaded on this GPU (q4f32 when the adapter lacks shader-f16).
+export function chosenLocalBuild() { return buildFor(chosenLocalModel(), _caps || {}); }
 export function loadedLocalModel() { return _loadedModel; }
 
 // Drop the resident engine so a model change (or a VRAM reclaim) takes effect on the next inference.
@@ -32,10 +39,12 @@ export async function unloadLocal() {
 }
 
 // { webgpu, vramMB, reason } — cached. webgpu=false → the chat must skip the GPU-locale tier.
-export async function probeLocal() {
-  if (_caps) return _caps;
+export async function probeLocal({ fresh = false } = {}) {
+  if (_caps && !fresh) return _caps;
   const gpu = await probeWebGPU();
-  _caps = { webgpu: gpu.supported, vramMB: gpu.vramMB || 0, reason: gpu.reason };
+  let deviceMemoryGB = 0; try { deviceMemoryGB = navigator.deviceMemory || 0; } catch {}
+  _caps = { webgpu: gpu.supported, vramMB: gpu.vramMB || 0, reason: gpu.reason, f16: gpu.supported ? gpu.f16 : undefined,
+    adapter: gpu.adapter || null, adapterClass: gpu.adapterClass || null, deviceMemoryGB };
   return _caps;
 }
 
@@ -93,8 +102,9 @@ export async function localModelCached(modelId = chosenLocalModel()) {
 }
 // Can the chat use the GPU tier RIGHT NOW with zero download? (resident engine, or installed weights)
 export async function localAvailable() {
-  if (_engine && _loadedModel === chosenLocalModel()) return true;
-  return localModelCached(chosenLocalModel());
+  await probeLocal();
+  if (_engine && _loadedModel === chosenLocalBuild()) return true;
+  return localModelCached(chosenLocalBuild());
 }
 
 // OS-wide download gate (web/shell/dlgate.js): one big pull at a time across every app/tab. Lazy and
@@ -112,7 +122,8 @@ async function withDlLock(label, fn) {
 export async function loadLocal(onProgress, opts = {}) {
   if (_engine) return _engine;
   if (_loading) return _loading;
-  const modelId = chosenLocalModel();
+  await probeLocal();                          // shader-f16 decides which build loads
+  const modelId = chosenLocalBuild();
   if (!opts.allowDownload && !(await localModelCached(modelId))) {
     throw Object.assign(new Error('local model not installed: ' + modelId), { code: 'NOT_INSTALLED', model: modelId });
   }
@@ -134,6 +145,10 @@ export async function loadLocal(onProgress, opts = {}) {
       const e2 = new Error('Il modello ' + (m ? m.label : modelId) + ' non è entrato nella GPU (serve più VRAM). Scegli un modello più piccolo in Impostazioni ▸ IA.');
       e2.kind = 'oom'; e2.model = modelId; throw e2;
     }
+    if (isShaderF16Error(e)) {               // the probe said f16 but the device refused: remember, load q4f32 next time
+      if (_caps) _caps.f16 = false;
+      const e3 = new Error('GPU without shader-f16: retrying with the 32-bit build.'); e3.kind = 'no-f16'; e3.model = modelId; throw e3;
+    }
     throw e;
   });
   return _loading;
@@ -147,6 +162,9 @@ async function generate(eng, body, opts = {}) {
   if (signal && signal.aborted) throw signal.reason || Object.assign(new Error('Stopped'), { name: 'AbortError' });
   const stop = () => { try { eng.interruptGenerate && eng.interruptGenerate(); } catch { /* best-effort */ } };
   if (signal) signal.addEventListener('abort', stop, { once: true });
+  // Qwen3 thinks out loud by default (<think>…</think>): slow on a small GPU and leaks into the chat.
+  // Off for chat/translation; WebLLM honours extra_body.enable_thinking. Any residue is stripped below.
+  if (/^Qwen3-/.test(_loadedModel || '') && !(body.extra_body && 'enable_thinking' in body.extra_body)) body = { ...body, extra_body: { ...(body.extra_body || {}), enable_thinking: false } };
   try {
     if (onDelta) {
       const chunks = await eng.chat.completions.create({ ...body, stream: true });
@@ -157,11 +175,11 @@ async function generate(eng, body, opts = {}) {
         if (d) { full += d; try { onDelta(d); } catch { /* renderer errors never kill the stream */ } }
       }
       if (signal && signal.aborted) throw signal.reason || Object.assign(new Error('Stopped'), { name: 'AbortError' });
-      return full;
+      return stripThinking(full);
     }
     const res = await eng.chat.completions.create(body);
     if (signal && signal.aborted) throw signal.reason || Object.assign(new Error('Stopped'), { name: 'AbortError' });
-    return (res && res.choices && res.choices[0] && res.choices[0].message && res.choices[0].message.content) || '';
+    return stripThinking((res && res.choices && res.choices[0] && res.choices[0].message && res.choices[0].message.content) || '');
   } finally {
     if (signal) signal.removeEventListener('abort', stop);
   }
@@ -171,10 +189,10 @@ async function generate(eng, body, opts = {}) {
 // incl. NOT_INSTALLED: it never downloads — so the caller can fall back to Grok). The model is a coder model but multilingual — fine for IT<->EN.
 export async function translateLocal(q, lang, onProgress, opts = {}) {
   const eng = await loadLocal(onProgress);
-  const sys = 'You are a translation engine between Italian and English. The user gives a request such as '
-    + '"traduci X in inglese" / "translate X to italian" / "come si dice X in inglese". Carry it out: output '
+  const sys = 'You are a translation engine for Italian, English, Spanish, French and German. The user gives a request '
+    + 'such as "traduci X in inglese" / "translate X to German" / "¿cómo se dice X en francés?". Carry it out: output '
     + 'ONLY the translation of the phrase X into the requested language — no preamble, no quotes, no notes. '
-    + 'If no target language is given, translate Italian->English or English->Italian.';
+    + 'If no target language is given, translate into English (or into Italian if X is already English).';
   const txt = await generate(eng, {
     messages: [{ role: 'system', content: sys }, { role: 'user', content: String(q) }],
     temperature: 0.2,

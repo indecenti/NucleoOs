@@ -8,7 +8,7 @@ import { ensureOnboarding } from './onboarding.js';   // first-boot AI setup + i
 import I18N from './nucleo-i18n.js';                  // centralized OS-wide internationalization
 import { makeFetchJSON, makeLoadState } from './boot-fetch.js';   // resilient boot fetch + typed user-state load (shell-boot-fetch.test)
 import { rankApps, rankActions, looksLikeNL, clipAnswer } from './search-rank.js';   // pure search ranking (host-tested)
-import { createBroker } from './appbroker.js';        // capability broker for sandboxed (agent-written) apps
+import { createBroker, sanitizeApp } from './appbroker.js';        // capability broker for sandboxed (agent-written) apps
 import { initSystemUI } from './system-ui.js';        // night light, lock screen, shortcuts sheet, widgets
 
 // Shell-namespaced translator: t(key, vars) → active-language string, falling back to core then key.
@@ -92,7 +92,7 @@ const glyph = (a) => {
     // link (plain http LAN IP), where the service-worker gate is inert — so the ~26 file icons never hit
     // the single-task PSRAM-less httpd as one 26-wide GET burst at first paint. alt="" = no broken-image
     // flash before hydration; data-fb carries the emoji fallback the pool swaps in on a 404.
-    return `<img data-src="${src}" data-app="${a.id}" data-fb="${safeFb}" alt="" width="16" height="16" decoding="async" style="width:1em; height:1em; vertical-align:middle; pointer-events:none; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.15));">`;
+    return `<img data-src="${escapeHtml(src)}" data-app="${escapeHtml(a.id)}" data-fb="${safeFb}" alt="" width="16" height="16" decoding="async" style="width:1em; height:1em; vertical-align:middle; pointer-events:none; filter: drop-shadow(0 2px 4px rgba(0,0,0,0.15));">`;
   }
   return fb;
 };
@@ -279,17 +279,54 @@ async function fetchWithRetry(url, options = {}, maxRetries = 3) {
 // seen when opening an app while a save is in flight) and starves the iframe → blank window. Fix: run
 // these writes through a SERIAL chain (one in flight) with a short timeout, so a stuck save frees its
 // socket fast instead of choking the open. Large drag-and-drop uploads keep the raw untimed path.
+// Resolves true once the device has ACCEPTED the write. It used to fire-and-forget: a 500 "oom" (the
+// very failure a no-PSRAM device produces under pressure), a 503 or a 401 all counted as success, so the
+// change was silently lost. Now:
+//   • writes are COALESCED per path — only the newest body is ever sent, however many saves queued up;
+//   • 5xx / network errors are retried with backoff; 4xx are not (retrying cannot fix them);
+//   • a write that still fails is KEPT and retried later (and on reconnect), and the user is told once.
 let cfgWriteChain = Promise.resolve();
+const cfgPending = new Map();                     // path -> newest body not yet accepted by the device
+let cfgRetryTimer = null, cfgFailNotified = false;
 function saveConfig(path, body) {
   // The ONE choke point every small config write goes through — so the read-only guard is enforced
-  // in a single place instead of at each of the three call sites.
-  if (roStores.has(path)) return Promise.resolve();
-  const run = cfgWriteChain.then(async () => {
-    try { await fetch('/api/fs/write?path=' + encodeURIComponent(path), { method: 'POST', body, signal: AbortSignal.timeout(8000) }); }
-    catch {}   // timeout / reset: the next debounced save will retry; never break the chain
-  });
-  cfgWriteChain = run.catch(() => {});
+  // in a single place instead of at each of the call sites.
+  if (roStores.has(path)) return Promise.resolve(true);
+  cfgPending.set(path, body);
+  const run = cfgWriteChain.then(() => flushConfig(path));
+  cfgWriteChain = run.catch(() => false);
   return run;
+}
+async function flushConfig(path) {
+  if (!cfgPending.has(path)) return true;         // an earlier queued run already wrote the newest body
+  const body = cfgPending.get(path);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    let r = null;
+    try { r = await fetch('/api/fs/write?path=' + encodeURIComponent(path), { method: 'POST', body, signal: AbortSignal.timeout(8000) }); } catch {}
+    if (r && r.ok) {
+      if (cfgPending.get(path) === body) cfgPending.delete(path);   // a newer body queued meanwhile stays pending
+      if (cfgFailNotified && !cfgPending.size) { cfgFailNotified = false; showToast(t('toast_save_recovered'), '✅', 'success'); }
+      return true;
+    }
+    if (r && r.status >= 400 && r.status < 500) break;             // unpaired / bad request: not transient
+    await new Promise((res) => setTimeout(res, 600 * (attempt + 1)));
+  }
+  if (!cfgFailNotified) { cfgFailNotified = true; showToast(t('toast_save_failed'), '⚠️', 'error', 7000); }
+  scheduleConfigRetry();
+  return false;
+}
+// Retry whatever is still pending, gently (one chain, every 15 s) until the device takes it.
+function scheduleConfigRetry() {
+  if (cfgRetryTimer) return;
+  cfgRetryTimer = setTimeout(() => {
+    cfgRetryTimer = null;
+    for (const [p, b] of cfgPending) saveConfig(p, b);
+  }, 15000);
+}
+function retryPendingConfigNow() {
+  if (!cfgPending.size) return;
+  clearTimeout(cfgRetryTimer); cfgRetryTimer = null;
+  for (const [p, b] of cfgPending) saveConfig(p, b);
 }
 
 let restoring = false, sessTimer = null;
@@ -324,7 +361,12 @@ async function restoreSession() {
   //   2. it created EVERY iframe at once, minimised ones included, which on a 4-6 socket device is a
   //      burst of simultaneous app loads for windows the user cannot even see. Minimised windows are
   //      now deferred: they appear in the taskbar and load their app the first time they are opened.
-  for (const g of [...saved.windows].sort((a, b) => (a.z || 0) - (b.z || 0))) {
+  const ordered = [...saved.windows].filter((g) => g && typeof g === 'object').sort((a, b) => (a.z || 0) - (b.z || 0));
+  // The top VISIBLE window loads now; every other visible one is restored in place but deferred and
+  // loaded one at a time afterwards (staggerRestore). A 7-window session used to be 7 app loads at once.
+  const topVisible = [...ordered].reverse().find((g) => !g.min && byId(g.id)) || null;
+  const later = [];
+  for (const g of ordered) {
     const app = byId(g.id);
     if (!app) continue;                        // app was uninstalled since
     // Rebuild the query from the saved URL, but only when it really points at THIS app's route —
@@ -334,11 +376,27 @@ async function restoreSession() {
       const q = g.url.indexOf('?');
       if (q >= 0) query = g.url.slice(q + 1);
     }
-    WM.open(app, query, { deferred: !!g.min });
+    const eager = g === topVisible;
+    WM.open(app, query, eager ? {} : { deferred: true, visible: !g.min });
     WM.applyGeom(g.id, g);
+    if (!eager && !g.min) later.push(g.id);
   }
   restoring = false;
   renderTaskbar();
+  staggerRestore(topVisible && topVisible.id, later.reverse());   // nearest-to-top first
+}
+
+// Load the deferred windows of a restored session one after another: each only once the previous app
+// (starting with the top window) has finished loading, plus a short quiet gap. Windows the user closes
+// or opens in the meantime are simply skipped (preload() is a no-op for them).
+async function staggerRestore(topId, ids) {
+  const top = topId && WM.list().find((w) => w.app.id === topId);
+  const f = top && top.el.querySelector('iframe');
+  if (f) await new Promise((r) => { const t = setTimeout(r, 15000); f.addEventListener('load', () => { clearTimeout(t); r(); }, { once: true }); });
+  for (const id of ids) {
+    await new Promise((r) => setTimeout(r, 400));
+    await WM.preload(id);
+  }
 }
 
 // ===== OS-wide layer: clipboard (persistent, bounded) + keyboard shortcuts =====
@@ -599,6 +657,11 @@ function wireFaults(win, where) {
 function initOS() {
   loadClipboard();
   wireFaults(window, 'NucleoOS');
+  // The desktop is a fixed canvas. body{overflow:hidden} stops the USER scrolling it, but not the
+  // browser: focusing or scrolling-into-view something below the fold (a window cascaded off-screen, an
+  // app autofocusing) scrolled the whole document and left a black band above the desktop that nothing
+  // could scroll back. Snap it back the instant it happens.
+  window.addEventListener('scroll', () => { if (window.scrollX || window.scrollY) window.scrollTo(0, 0); }, { passive: true });
   document.addEventListener('keydown', osKeydown);
   document.addEventListener('keyup', osKeyup);
   // Never leave the Alt+Tab overlay stuck if the window loses focus mid-cycle.
@@ -635,7 +698,7 @@ function initOS() {
     // Hand the freshly-opened app the last /api/status snapshot right away, so embedded apps that
     // ride the shell's broadcast (Settings, System Monitor) paint at once instead of waiting out
     // the next 15 s poll — zero extra device traffic.
-    if (lastStatusSnap) try { frame.contentWindow.postMessage({ t: 'status.snapshot', d: lastStatusSnap }, '*'); } catch {}
+    if (lastStatusSnap && curatedFrames().includes(frame)) try { frame.contentWindow.postMessage({ t: 'status.snapshot', d: lastStatusSnap }, '*'); } catch {}
   });
   // NOTE: desktop rubber-band selection is wired once by wireMarquee() (called from wireChrome).
   // A second marquee handler here would double-bind #desktop and fight the first one.
@@ -666,12 +729,19 @@ function migrateLegacy() {
 }
 
 let saveTimer = null, lastSaved = '';
+// uiSaveInFlight counts local ui-state saves that are scheduled or being written. While one is, an
+// fs.changed echo can only describe an OLDER state of ours, so syncUiState() must not adopt it: doing so
+// reverted the user's second change (drag icon A, drag icon B quickly → the echo of A undid B, and A was
+// then written over B).
+let uiSaveInFlight = 0;
 function saveUiState() {
   const body = JSON.stringify({ pins: state.pins, wallpaper: state.wallpaper, desktop: state.desktop, startPins: state.startPins, recent: state.recent, recoCollapsed: state.recoCollapsed, iconSize: state.iconSize, autoArrange: state.autoArrange });
   lastSaved = body;              // remember our own write so we can ignore its echo
+  if (!saveTimer) uiSaveInFlight++;
   clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {
-    saveConfig(UI_STATE_PATH, body);   // serialized + timed-out
+    saveTimer = null;
+    saveConfig(UI_STATE_PATH, body).finally(() => { uiSaveInFlight = Math.max(0, uiSaveInFlight - 1); });
   }, 400);
 }
 
@@ -702,6 +772,7 @@ async function syncUiState() {
     if (!r.ok) return;
     const body = await r.text();
     if (body === lastSaved) return;
+    if (uiSaveInFlight > 0 || cfgPending.has(UI_STATE_PATH)) return;   // an echo of an older write of ours
     const s = { ...UI_DEFAULTS, ...JSON.parse(body) };
     roStores.delete(UI_STATE_PATH);   // we just read the real thing: the store is trustworthy again
     state.pins = s.pins;
@@ -885,7 +956,7 @@ async function startDesktopServices() {
   // Warm the search index: instant from localStorage (if any), then revalidated against the
   // device. Repaint search results live whenever the index finishes (re)building.
   FsIndex.onUpdate(() => { if (searchActive()) refreshSearchView(); });
-  FsIndex.init();
+  FsIndex.init({ live: () => searchActive() });   // no crawl at boot: the first search warms it (fsindex.js)
   doRefreshStatus(); scheduleStatus();   // adaptive: pause-when-hidden + 15s→60s error backoff (see runStatus)
 }
 function onViewportChange(e) {
@@ -915,13 +986,16 @@ async function boot() {
   // is shown — including the pairing overlay. Re-render the imperatively-built surfaces (Start menu,
   // taskbar, tray) whenever the OS language changes live (from Settings, any window).
   await I18N.init('shell');
-  I18N.onChange(() => { try { WM.relabel(); renderDesktop(); renderStartMenu(); renderTaskbar(); setWsBadge(wsState); if (searchActive()) refreshSearchView(); } catch {} });
+  I18N.onChange(() => {
+    try { WM.relabel(); renderDesktop(); renderStartMenu(); renderTaskbar(); setWsBadge(wsState); if (searchActive()) refreshSearchView(); } catch {}
+    try { renderLinkBanner(); if (lastStatusSnap) refreshStatus(); } catch {}   // banner + tray texts follow the language live
+  });
   bootLog('boot start — checking pairing…');
   await ensurePaired();                          // block until this browser is paired with the device
   bootLog('pairing ok — loading /api/apps…');
   try {
     const d = await fetchJSON('/api/apps');
-    state.apps = d.apps.filter((a) => a.enabled).map((a) => ({ ...a, glyph: glyph(a) }));
+    state.apps = d.apps.filter((a) => a && a.enabled).map(sanitizeApp).filter(Boolean).map((a) => ({ ...a, glyph: glyph(a) }));
     bootLog('apps loaded:', state.apps.length);
   } catch (e) {
     bootLog('apps FAILED after retries → using mock set', e && (e.message || e));
@@ -1011,7 +1085,7 @@ async function refreshApps() {
     // naive rebuild dropped them for EVERY app and silently reverted allowAttr to the permissive
     // default — right after an install, which is exactly when a new, unvetted app appears.
     const prevPerms = new Map(state.apps.map((a) => [a.id, { p: a.permissions, c: a.created_by }]));
-    state.apps = d.apps.filter((a) => a.enabled).map((a) => {
+    state.apps = d.apps.filter((a) => a && a.enabled).map(sanitizeApp).filter(Boolean).map((a) => {
       const app = { ...a, glyph: glyph(a) };
       const prev = prevPerms.get(a.id);
       if (prev && Array.isArray(prev.p)) app.permissions = prev.p;
@@ -1077,6 +1151,7 @@ async function onWsClosed(gen) {
   } catch {}
   // Re-check AFTER the await: if a new socket appeared meanwhile, this verdict is about a dead past.
   if (gen !== wsGen || wsSock) return;
+  setLink(status > 0);                                                  // the live link dropped: tell the user if the DEVICE did
   if (!status) { setWsBadge('offline'); scheduleWS(); return; }        // unreachable → normal backoff
   if (status === 401 || status === 403) {                              // not evicted: no longer paired
     setWsBadge('offline'); hideEvictedBar();
@@ -1165,6 +1240,7 @@ function connectWS() {
     hideEvictedBar();                          // we hold the seat again
     setWsBadge('connected');
     ws.send(JSON.stringify({ op: 'subscribe', since: 0 }));
+    retryPendingConfigNow();                   // the device is back: write whatever it could not take before
   };
   ws.onmessage = (m) => {
     let msg; try { msg = JSON.parse(m.data); } catch { return; }
@@ -1223,7 +1299,7 @@ function connectWS() {
       // the arbiter already degrades gracefully (503/offline), this only tells the user the device is
       // prioritising a heavy task so a brief delay reads as intentional, not a bug.
       if (ev.t === 'system.busy' && ev.d) busyCtl.onEvent(!!ev.d.busy, ev.d.job);
-      for (const w of WM.list()) { const f = w.el.querySelector('iframe'); if (f) try { f.contentWindow.postMessage(ev, '*'); } catch {} }
+      for (const f of curatedFrames()) try { f.contentWindow.postMessage(ev, '*'); } catch {}
     }
   };
   ws.onclose = () => {
@@ -1333,6 +1409,12 @@ function wireMessages() {
   window.addEventListener('message', (e) => {
     const d = e.data;
     if (!d) return;
+    // Only the shell itself and CURATED app windows may drive the OS through this router. A sandboxed
+    // (agent-written) app has an opaque "null" origin and talks through the broker above; a web page
+    // shown inside the Browser app has a foreign origin. Without this gate either could read the OS
+    // clipboard, launch apps with arbitrary queries (e.g. add an Authenticator account), change the
+    // language/wallpaper on the device or put up the blocking install scrim.
+    if (!trustedSender(e)) return;
     if (d.type === 'set-theme') {
       if (d.theme) currentThemeState.theme = d.theme;
       if (d.accent) currentThemeState.accent = d.accent;
@@ -1402,6 +1484,31 @@ function wireMessages() {
     if (d.type !== 'open-file' || !d.path) return;
     openFile(d.path);
   });
+}
+
+// The window whose iframe IS `src` (or null). Nested same-origin frames are resolved by walking up.
+function senderApp(src) {
+  let s = src;
+  for (let i = 0; s && i < 5; i++) {
+    for (const w of WM.list()) { const f = w.el.querySelector('iframe'); if (f && f.contentWindow === s) return w.app; }
+    let p = null; try { p = s.parent; } catch {}
+    if (!p || p === s || p === window) break;
+    s = p;
+  }
+  return null;
+}
+function trustedSender(e) {
+  if (!e || e.origin !== location.origin) return false;
+  if (e.source === window) return true;
+  const app = senderApp(e.source);
+  return !!app && !WM.isSandboxed(app);
+}
+// The iframes of curated (non-sandboxed) windows: the only ones that receive the raw status snapshot
+// and the live event stream. Sandboxed apps get the reduced sys.status through the broker instead.
+function curatedFrames() {
+  const out = [];
+  for (const w of WM.list()) { if (WM.isSandboxed(w.app)) continue; const f = w.el.querySelector('iframe'); if (f) out.push(f); }
+  return out;
 }
 
 // --- Global Theme Engine ---
@@ -1556,8 +1663,8 @@ async function persistTheme(newTheme) {
     const txt = await r.text(); if (txt) s = JSON.parse(txt);
     if (!s.ui) s.ui = {};
     s.ui.theme = newTheme;
-    await saveConfig(path, JSON.stringify(s, null, 2));   // the one serialized, timed-out write path
-    showToast(t('toast_theme_saved'), newTheme === 'dark' ? '🌙' : '☀️', 'success');
+    const ok = await saveConfig(path, JSON.stringify(s, null, 2));   // the one serialized, timed-out write path
+    if (ok) showToast(t('toast_theme_saved'), newTheme === 'dark' ? '🌙' : '☀️', 'success');   // failure is announced by saveConfig
   } catch (err) {
     console.error('Failed to persist theme', err);
     showToast(t('toast_theme_error'), '⚠️', 'error');
@@ -1790,11 +1897,21 @@ function itemLabel(item) {
 function openItem(item) {
   if (item.type === 'app') { const a = byId(item.target); if (a) WM.open(a); return; }
   if (item.type === 'file') { openFile(item.target); return; }
-  if (item.type === 'url') {
-    if (/^https?:\/\//i.test(item.target)) window.open(item.target, '_blank', 'noopener');
-    else WM.open({ permissions: [], id: 'link:' + item.target, name: itemLabel(item), route: item.target, glyph: '🔗' });
-  }
+  if (item.type === 'url') openUrlTarget(item.target, itemLabel(item));
 }
+// A URL shortcut (desktop item or .lnk) opens a web page in a NEW TAB, or a page of this device inside a
+// window. Nothing else: a .lnk is a file any app with shared storage can write, so its target is
+// untrusted — a javascript:/data: "route" in an unsandboxed iframe would run with the shell's origin
+// (pairing cookie, key vault). Same-origin targets must be plain /apps/… paths.
+const SAME_ORIGIN_LINK = /^\/apps\/[A-Za-z0-9._~\/-]*(\?[A-Za-z0-9._~%&=+-]*)?$/;
+function openUrlTarget(target, label) {
+  const tg = String(target || '').trim();
+  if (/^https?:\/\//i.test(tg)) { window.open(tg, '_blank', 'noopener'); return; }
+  const route = SAME_ORIGIN_LINK.test(tg) && !/(^|\/)\.\.(\/|\?|$)/.test(tg) ? tg : '';
+  if (!route) { showToast(t('lnk_broken'), '⚠️', 'error'); return; }
+  WM.open({ permissions: [], id: 'link:' + route, name: label, route, glyph: '🔗' });
+}
+
 // Remember a freshly-opened file so it surfaces under Start → "Consigliati" (newest first,
 // deduped, bounded). Persisted with the rest of the UI state so it follows the user across clients.
 function pushRecent(path) {
@@ -1857,11 +1974,7 @@ async function openLnk(path, depth = 0) {
   const l = await readLnk(path);
   if (!l) { showToast(t('lnk_broken'), '⚠️', 'error'); return; }
   if (l.type === 'app') { const a = byId(l.target); a ? WM.open(a) : showToast(t('lnk_broken'), '⚠️', 'error'); return; }
-  if (l.type === 'url') {
-    if (/^https?:\/\//i.test(l.target)) window.open(l.target, '_blank', 'noopener');
-    else WM.open({ permissions: [], id: 'link:' + l.target, name: l.label || l.target, route: l.target, glyph: '🔗' });
-    return;
-  }
+  if (l.type === 'url') { openUrlTarget(l.target, l.label || l.target); return; }
   if (/\.lnk$/i.test(l.target)) return openLnk(l.target, depth + 1);   // shortcut chain
   openFile(l.target);
 }
@@ -1987,7 +2100,7 @@ function occupiedCells(exclude) {
   const skip = exclude instanceof Set ? exclude : new Set(exclude ? [exclude] : []);
   const s = new Set();
   for (const it of state.desktop) {
-    if (skip.has(it.uid) || it.x == null || it.y == null) continue;
+    if (skip.has(it.uid) || it.x == null || it.y == null || !isShown(it)) continue;
     s.add(snap(it.x) + ',' + snap(it.y));
   }
   return s;
@@ -2022,6 +2135,10 @@ function clampPos(x, y) {
   return { x: Math.min(Math.max(0, x), w - ICON_W), y: Math.min(Math.max(0, y), h - ICON_H) };
 }
 // Assign a stable cell to every icon that lacks one; returns true if anything changed.
+// A desktop item is SHOWN unless it is a shortcut to an app that is not installed/enabled right now
+// (disabled services like Swarm, an uninstalled test app). Those used to render as a red "?" that did
+// nothing on double-click. They are hidden, not deleted: re-enable the app and the icon is back in place.
+function isShown(it) { return !(it && it.type === 'app' && !byId(it.target)); }
 function assignMissingPositions() {
   const taken = occupiedCells();
   let changed = false;
@@ -2049,6 +2166,7 @@ function renderDesktop() {
   const visualTaken = new Set();
   
   state.desktop.forEach((item, idx) => {
+    if (!isShown(item)) return;
     let px = snap(item.x), py = snap(item.y);
     const { w, h } = desktopBox();
     if (w >= ICON_W && h >= ICON_H) {
@@ -2098,6 +2216,31 @@ function renderDesktop() {
     dragIcon(el, item);
     d.appendChild(el);
   });
+  d.querySelectorAll('.icon .label').forEach(fitLabel);
+}
+
+// Shrink-to-fit for desktop labels (the smartwatch trick): a single word wider than the label has no
+// break point left but the letter it hits ("Systemmonit|or") — and hyphens:auto only helps where the
+// browser happens to ship that language's dictionary. Pick the LARGEST of 12/11/10 px at which every
+// word fits on its line (a soft hyphen in the catalog name offers a break) and the name fits two lines.
+let fitCtx = null;
+function fitLabel(el) {
+  el.style.fontSize = '';
+  const maxW = el.clientWidth - 8;                 // .label has 4px side padding
+  if (maxW <= 0) return;
+  const cs = getComputedStyle(el);
+  fitCtx = fitCtx || document.createElement('canvas').getContext('2d');
+  const pieces = el.textContent.split(/[ \t\n]+/).flatMap((w) => {   // not \s: a no-break space keeps "À proximité" together
+    const p = w.split('­');
+    return p.map((s, i) => (i < p.length - 1 ? s + '-' : s));
+  });
+  for (const px of [12, 11, 10]) {
+    fitCtx.font = `${cs.fontWeight} ${px}px ${cs.fontFamily}`;
+    const widest = Math.max(0, ...pieces.map((s) => fitCtx.measureText(s).width));
+    if (widest > maxW && px > 10) continue;
+    if (px !== 12) el.style.fontSize = px + 'px';
+    if (el.scrollHeight <= el.clientHeight + 1 || px === 10) return;   // fits the 2-line clamp
+  }
 }
 
 // Click an icon: plain = select only it; Ctrl = toggle; Shift = range from the anchor.
@@ -2256,6 +2399,7 @@ function beginRename(uid) {
 function layoutGrid() {
   const taken = new Set(); let changed = false;
   for (const it of state.desktop) {
+    if (!isShown(it)) continue;                  // a hidden (uninstalled-app) icon must not hold a grid cell
     const cell = firstFreeCell(taken);
     if (it.x !== cell.x || it.y !== cell.y) { it.x = cell.x; it.y = cell.y; changed = true; }
     taken.add(cell.x + ',' + cell.y);
@@ -2900,7 +3044,7 @@ function runSearch(q, target) {
   SEARCH.q = q; SEARCH.target = target; SEARCH.sel = 0; SEARCH.userMoved = false;
   loadAppAliases();                // once: app names in every language, so any of them finds the app
   // Make sure the index is warm; results repaint via FsIndex.onUpdate when the crawl lands.
-  if (!FsIndex.isReady()) FsIndex.ensure();
+  FsIndex.warm();
   refreshSearchView();
 }
 
@@ -3261,11 +3405,78 @@ function refreshStatus() {
   _statusTimer = setTimeout(doRefreshStatus, 400);
 }
 
+// ── Device link: one honest answer to "is the Cardputer there?" ──────────────────────────────────
+// Before, a device that dropped off Wi-Fi showed up only as a small dot turning pink ~40 s later (the
+// status poll retried 5× with 6 s timeouts), while apps failed with raw "504"/"cannot read directory".
+// Now any failure triggers ONE cheap probe (any HTTP answer, even a 503, means "reachable but busy");
+// if nothing answers, a clear banner says so and a single probe retries with backoff (3 s → 30 s) until
+// the device is back — then pending saves are flushed and the live link is re-attached.
+let linkOnline = true, linkProbeTimer = null, linkProbeDelay = 3000;
+async function probeLink() {
+  try {
+    const opts = { cache: 'no-store' };
+    if (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) opts.signal = AbortSignal.timeout(4000);
+    const r = await fetch('/api/status', opts);
+    return r.status > 0;
+  } catch { return false; }
+}
+function setLink(online) {
+  if (online === linkOnline) return;
+  linkOnline = online;
+  renderLinkBanner();
+  if (online) {
+    clearTimeout(linkProbeTimer); linkProbeTimer = null; linkProbeDelay = 3000;
+    showToast(t('link_back'), '✅', 'success');
+    retryPendingConfigNow();
+    refreshStatus();
+    if (!wsSock && !wsEvicted) { wsBackoff = 3000; connectWS(); }
+  } else {
+    // Don't leave yesterday's Wi-Fi name and SD space in the tray while the device is gone.
+    try { document.querySelector('#tray-storage .v').textContent = t('tray_offline'); renderNetwork(null); } catch {}
+    scheduleLinkProbe();
+  }
+  // Apps that show live device data (Settings, System Monitor) hear it too: same {t,d} envelope as the bus.
+  for (const f of curatedFrames()) try { f.contentWindow.postMessage({ t: 'link.state', d: { online } }, '*'); } catch {}
+}
+function scheduleLinkProbe() {
+  if (linkProbeTimer || linkOnline || document.hidden) return;
+  linkProbeTimer = setTimeout(async () => {
+    linkProbeTimer = null;
+    if (linkOnline) return;
+    if (await probeLink()) setLink(true);
+    else { linkProbeDelay = Math.min(linkProbeDelay * 2, 30000); scheduleLinkProbe(); }
+  }, linkProbeDelay);
+}
+// Something failed: find out whether it is the device or just this request.
+async function suspectLink() { setLink(await probeLink()); }
+function renderLinkBanner() {
+  let bar = document.getElementById('link-down');
+  if (!bar) {
+    bar = document.createElement('div');
+    bar.id = 'link-down'; bar.setAttribute('role', 'status'); bar.setAttribute('aria-live', 'polite');
+    document.body.appendChild(bar);
+  }
+  if (linkOnline) { bar.classList.remove('show'); return; }
+  bar.innerHTML = `<span class="ld-ic" aria-hidden="true">\u{1F4E1}</span><span class="ld-tx"><b>${escapeHtml(t('link_down_title'))}</b> ${escapeHtml(t('link_down_body'))}</span>`
+    + `<button class="ld-btn" type="button">${escapeHtml(t('link_retry'))}</button>`;
+  bar.querySelector('.ld-btn').addEventListener('click', async (e) => {
+    const b = e.currentTarget; b.disabled = true;
+    const ok = await probeLink();
+    b.disabled = false;
+    if (ok) setLink(true);
+  });
+  bar.classList.add('show');
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden && !linkOnline) { linkProbeDelay = 3000; scheduleLinkProbe(); } });
+
 async function doRefreshStatus() {
   try {
-    const s = await fetchJSON('/api/status');
+    // Background poll: two quick tries, not five slow ones — a failure goes to suspectLink(), which
+    // settles "device gone" vs "device busy" with one probe instead of 30 s of retries.
+    const s = await fetchJSON('/api/status', { tries: 2, timeout: 5000 });
     lastStatusSnap = s;                    // kept for newly-opened windows (see setOnFrameLoad)
-    const txt = `SD ${fmtSize(s.storage.free_bytes)} free`;
+    setLink(true);
+    const txt = t('tray_sd_free', { free: fmtSize(s.storage.free_bytes) });
     document.querySelector('#tray-storage .v').textContent = txt;
     const smStorage = document.getElementById('sm-storage');
     if (smStorage) smStorage.textContent = `${s.storage.fs} · ${txt}`;
@@ -3282,11 +3493,12 @@ async function doRefreshStatus() {
     // (the shell already fetches it every 15 s; N embedded apps doing the same hammered the
     // single httpd task). Same {t,d} envelope as the WS forward below, so an app consumes it
     // through the same message listener. Apps keep their own fetch only when run standalone.
-    for (const w of WM.list()) { const f = w.el.querySelector('iframe'); if (f) try { f.contentWindow.postMessage({ t: 'status.snapshot', d: s }, '*'); } catch {} }
+    for (const f of curatedFrames()) try { f.contentWindow.postMessage({ t: 'status.snapshot', d: s }, '*'); } catch {}
     return true;
   } catch {
-    document.querySelector('#tray-storage .v').textContent = 'offline';
+    document.querySelector('#tray-storage .v').textContent = t('tray_offline');
     renderNetwork(null);
+    suspectLink();
     return false;
   }
 }
@@ -3313,11 +3525,11 @@ function renderNetwork(net) {
   const el = document.getElementById('tray-net');
   if (!el) return;
   let icon, label, title;
-  if (!net) { icon = ICONS.offline; label = 'offline'; title = 'Device unreachable'; }
+  if (!net) { icon = ICONS.offline; label = t('tray_offline'); title = t('net_unreachable'); }
   else if (net.mode === 'sta' && net.ssid) {
-    icon = ICONS.wifi; label = net.ssid; title = net.ip ? `Wi-Fi ${net.ssid} · ${net.ip}` : `Wi-Fi ${net.ssid}`;
+    icon = ICONS.wifi; label = net.ssid; title = t('net_wifi_title', { ssid: net.ssid }) + (net.ip ? ` · ${net.ip}` : '');
   } else {
-    icon = ICONS.ap; label = net.ssid || 'AP'; title = `Access Point ${net.ssid || ''} · http://192.168.4.1`;
+    icon = ICONS.ap; label = net.ssid || 'AP'; title = t('net_ap_title', { ssid: net.ssid || '' });
   }
   el.innerHTML = icon + `<span class="v">${escapeHtml(label)}</span>`;
   el.title = title;
@@ -3335,10 +3547,8 @@ function renderRemote(active, clients) {
   el.hidden = !active;
   if (!active) return;
   const n = Number.isFinite(clients) ? clients : null;
-  el.innerHTML = `🎮<span class="v">Controlling${n && n > 1 ? ` (${n})` : ''}</span>`;
-  el.title = n && n > 1
-    ? `This browser is controlling the device (${n} sessions). The Cardputer screen is paused.`
-    : 'This browser is controlling the device. The Cardputer screen is paused.';
+  el.innerHTML = `🎮<span class="v">${escapeHtml(t('remote_controlling'))}${n && n > 1 ? ` (${n})` : ''}</span>`;
+  el.title = n && n > 1 ? t('remote_title_many', { n }) : t('remote_title_one');
 }
 
 // Device-busy indicator. The firmware's heavy-work arbiter publishes system.busy when it serializes a

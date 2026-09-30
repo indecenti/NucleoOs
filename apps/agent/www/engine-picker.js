@@ -37,7 +37,7 @@ const FM_CACHE = 'anima-forge-models';            // MUST match apps/anima/www/i
 
 // Probe what this client can actually do. Async because WebGPU only answers via requestAdapter.
 export async function probeCaps(glob = (typeof globalThis !== 'undefined' ? globalThis : {})) {
-  const caps = { webgpu: false, vramMB: 0, wasm: typeof glob.WebAssembly !== 'undefined', online: !!(glob.navigator && glob.navigator.onLine) };
+  const caps = { webgpu: false, vramMB: 0, wasm: typeof glob.WebAssembly !== 'undefined', online: !!(glob.navigator && glob.navigator.onLine), cacheApi: typeof glob.caches !== 'undefined', secure: !!glob.isSecureContext };
   try {
     const gpu = glob.navigator && glob.navigator.gpu;
     if (gpu && gpu.requestAdapter) {
@@ -140,7 +140,9 @@ export function initEnginePicker({ host, t, hasKey, onChange }) {
         + '<label><input type="radio" name="eng" value="' + r.id + '"' + (sel ? ' checked' : '') + (canPick ? '' : ' disabled') + '> '
         + esc(t(LABELS[r.id])) + '</label>'
         + '<span class="ep-state s-' + r.state + '">' + esc(t(STATE_KEY[r.state] || r.state)) + '</span>'
-        + (r.reasonKey ? '<div class="ep-why">' + esc(t(r.reasonKey)) + '</div>' : '')
+        + (r.reasonKey ? '<div class="ep-why">' + esc(t(r.reasonKey))
+          + (r.id === 'webgpu' && r.state === 'unsupported' ? ' <button type="button" class="ep-how">' + esc(coreT('cap_how')) + '</button>' : '')
+          + '</div><div class="ep-cap" hidden></div>' : '')
         + (r.noteKey ? '<div class="ep-why">' + esc(t(r.noteKey)) + '</div>' : '')
         + (r.state === 'needs-model' ? '<button class="ep-get" data-model="' + r.model + '" data-kind="' + r.id + '">' + esc(t('eng_install', { size: r.sizeText })) + '</button>' : '')
         + '<div class="ep-prog" hidden><div class="ep-bar"></div><span class="ep-pct"></span></div>'
@@ -152,7 +154,16 @@ export function initEnginePicker({ host, t, hasKey, onChange }) {
       choice = el.value; localStorage.setItem(ENGINE_LS, choice); onChange && onChange(choice, rows);
     }));
     host.querySelectorAll('.ep-get').forEach((btn) => btn.addEventListener('click', () => install(btn)));
+    // "How to turn it on": the OS-wide capability panel (/capabilities.js) — the same checklist + exact fix
+    // ANIMA and Settings show, instead of a one-line "this PC or browser has no WebGPU".
+    host.querySelectorAll('.ep-how').forEach((btn) => btn.addEventListener('click', async () => {
+      const box = btn.closest('.ep-row').querySelector('.ep-cap'); if (!box) return;
+      if (!box.hidden) { box.hidden = true; return; }
+      try { const C = await import('/capabilities.js'); box.hidden = false;
+        C.renderCapabilityHelp(box, await C.probeCapabilities({ fresh: true }), coreT, { onVerified: () => { caps = null; refresh(); } }); } catch {}
+    }));
   }
+  const coreT = (k, v) => { try { const I = globalThis.NucleoI18N; const s = I && I.t ? I.t(k, v, 'core') : k; return s === k ? t(k, v) : s; } catch { return t(k, v); } };
 
   async function install(btn) {
     const row = btn.closest('.ep-row'); const modelId = btn.dataset.model; const kind = btn.dataset.kind;

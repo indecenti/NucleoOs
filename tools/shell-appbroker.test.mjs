@@ -11,7 +11,7 @@
 
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { normPath, resolveAppPath, methodAllowed, METHODS, createBroker } from '../web/shell/appbroker.js';
+import { normPath, resolveAppPath, methodAllowed, METHODS, createBroker, sanitizeApp } from '../web/shell/appbroker.js';
 
 const APP = ['storage.app'];
 const SHARED = ['storage.shared'];
@@ -277,4 +277,34 @@ test('a huge completion is truncated before it re-enters the sandbox', async () 
   const r = await h.call('ai.complete', { prompt: 'go' });
   assert.equal(r.ok, true);
   assert.equal(r.text.length, 4000);
+});
+
+// ── app record policy: a hostile manifest must be inert before the shell renders it ──────────────
+test('sanitizeApp keeps a curated app record intact', () => {
+  const a = sanitizeApp({ id: 'notepad', name: 'Notepad', route: '/apps/notepad/', icon: '/apps/notepad/icon.svg', enabled: true });
+  assert.deepEqual(a, { id: 'notepad', name: 'Notepad', route: '/apps/notepad/', icon: '/apps/notepad/icon.svg', enabled: true });
+  assert.equal(sanitizeApp({ id: 'weather', name: 'Meteo', route: '/apps/weather/', icon: 'icon.svg' }).icon, 'icon.svg', 'relative icon kept');
+});
+
+test('sanitizeApp drops records whose id is not a plain slug', () => {
+  for (const id of ['', '<img>', 'a"b', '../x', 'x y', 'a/b', null, 42]) assert.equal(sanitizeApp({ id, name: 'x' }), null, String(id));
+  assert.equal(sanitizeApp(null), null);
+});
+
+test('sanitizeApp neutralises script-bearing routes and icons', () => {
+  const evil = sanitizeApp({ id: 'evil', name: '<img src=x onerror=alert(1)>', route: 'javascript:alert(1)', icon: 'x" onerror="alert(1)' });
+  assert.equal(evil.route, '', 'a scheme is never a route');
+  assert.equal(evil.icon, '', 'a quote-bearing icon is dropped');
+  assert.equal(evil.name, '<img src=x onerror=alert(1)>', 'the name is kept as TEXT — every render site escapes it');
+  assert.equal(sanitizeApp({ id: 'e', route: '//evil.example/x' }).route, '', 'protocol-relative URL is off-origin');
+  assert.equal(sanitizeApp({ id: 'e', route: '/apps/../system/' }).route, '', 'no traversal');
+  assert.equal(sanitizeApp({ id: 'e', icon: 'https://tracker.example/p.png' }).icon, '', 'remote icons would leak presence');
+  assert.equal(sanitizeApp({ id: 'e', icon: 'data:text/html;base64,PHNjcmlwdD4=' }).icon, '', 'only image data: URLs');
+  assert.ok(sanitizeApp({ id: 'e', icon: 'data:image/png;base64,iVBORw0KGgo=' }).icon.startsWith('data:image/png'));
+});
+
+test('sanitizeApp strips control characters and bounds the name', () => {
+  assert.equal(sanitizeApp({ id: 'e', name: 'a\u0000b\nc' }).name, 'abc');
+  assert.equal(sanitizeApp({ id: 'e', name: 'x'.repeat(500) }).name.length, 80);
+  assert.equal(sanitizeApp({ id: 'e' }).name, 'e', 'missing name falls back to the id');
 });

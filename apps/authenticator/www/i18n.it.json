@@ -26,5 +26,10 @@
   "err_uri": "Link otpauth:// non valido",
   "err_secret": "Chiave segreta non valida (serve Base32)",
   "err_clip": "Impossibile leggere gli appunti",
-  "confirm_del": "Eliminare l’account \"{name}\"? La chiave 2FA verrà rimossa da questo dispositivo."
+  "confirm_del": "Eliminare l’account \"{name}\"? La chiave 2FA verrà rimossa da questo dispositivo.",
+  "err_device": "Cardputer non raggiungibile: nessuna modifica salvata. Riprova tra poco.",
+  "err_unpaired": "Questo browser non è abbinato al Cardputer: abbinalo per salvare gli account.",
+  "offline_banner": "Codici dall'ultima copia su questo browser: il Cardputer non risponde, le modifiche sono sospese.",
+  "err_hotp": "Gli account HOTP (a contatore) non sono supportati: usa un account TOTP (a tempo).",
+  "err_algo": "Algoritmo SHA-512 non supportato: questo account genererebbe codici errati."
 }

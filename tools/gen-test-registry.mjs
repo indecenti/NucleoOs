@@ -150,6 +150,7 @@ const extras = [
   { label: 'arbiter load (device)', cat: 'device-load', cmd: 'python', args: ['tools/test_arbiter_load.py'], verifies: 'Carico concorrente sul web server reale: liveness (mai irraggiungibile), heap floor, degrado grazioso (503 non crash). Richiede device flashato; SKIP se assente.' },
   { label: 'games · foundation+P2P+brain', cat: 'app-shell', cmd: 'node', args: ['tools/games-host/all.mjs'], verifies: 'Game Center: SDK host-authoritative, trasporto P2P/mailbox, logica Tris/Forza4/Pong, cervello LLM. (tools/games-host/)' },
   { label: 'dj · planner+npx', cat: 'app-shell', cmd: 'node', args: ['apps/dj/test/all.mjs'], verifies: 'DJ engine: planner beatmatch/armonico/energia + decode .npx (apps/dj/test/). App WIP, non installata.' },
+  { label: 'web E2E · shell smoke (5 lingue)', cat: 'app-shell', cmd: 'node', args: ['tools/web-e2e/run.mjs'], verifies: 'Chrome headless reale contro il simulatore, in modalità http su IP di rete (come il device): avvio + ogni app aperta dal menu Start in IT/EN/ES/FR/DE, zero eccezioni/fault/404, budget di carico del device all’avvio, scenari di guasto. SKIP se manca Chrome/Edge. (tools/web-e2e/)' },
   { label: 'gz freshness', cat: 'build-lint', cmd: 'node', args: ['tools/check-gz.mjs'], verifies: 'Ogni .gz servito (web/shell, apps/*/www) è in sync col sorgente — niente codice vecchio/orfano spedito al device (gotcha .gz shadowing).' },
 ];
 for (const e of extras) tests.push({ id: 'extra-' + slug(e.label), label: e.label, category: e.cat, kind: 'extra',

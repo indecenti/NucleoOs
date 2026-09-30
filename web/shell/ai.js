@@ -18,9 +18,9 @@ export const AI_PATH = '/data/anima/teacher.json';
 export const PROVIDERS = {
   anthropic: {
     label: 'Claude', base: 'https://api.anthropic.com', version: '2023-06-01',
-    prefix: /^sk-ant-/, ph: 'sk-ant-…', def: 'claude-sonnet-4-6',
+    prefix: /^sk-ant-/, ph: 'sk-ant-…', def: 'claude-sonnet-5-5',
     // model tuples are [id, it, en, es, fr, de] — render via modelLabel() so the picker follows the OS language.
-    models: [['claude-sonnet-4-6', 'Sonnet 4.6 · equilibrio', 'Sonnet 4.6 · balanced', 'Sonnet 4.6 · equilibrado', 'Sonnet 4.6 · équilibré', 'Sonnet 4.6 · ausgewogen'], ['claude-opus-4-8', 'Opus 4.8 · massima qualità', 'Opus 4.8 · top quality', 'Opus 4.8 · máxima calidad', 'Opus 4.8 · qualité maximale', 'Opus 4.8 · höchste Qualität'], ['claude-haiku-4-5', 'Haiku 4.5 · veloce/economico', 'Haiku 4.5 · fast/cheap', 'Haiku 4.5 · rápido/económico', 'Haiku 4.5 · rapide/économique', 'Haiku 4.5 · schnell/günstig']],
+    models: [['claude-sonnet-5-5', 'Sonnet 5.5 · equilibrio', 'Sonnet 5.5 · balanced', 'Sonnet 5.5 · equilibrado', 'Sonnet 5.5 · équilibré', 'Sonnet 5.5 · ausgewogen'], ['claude-opus-5-5', 'Opus 5.5 · massima qualità', 'Opus 5.5 · top quality', 'Opus 5.5 · máxima calidad', 'Opus 5.5 · qualité maximale', 'Opus 5.5 · höchste Qualität'], ['claude-haiku-4-5', 'Haiku 4.5 · veloce/economico', 'Haiku 4.5 · fast/cheap', 'Haiku 4.5 · rápido/económico', 'Haiku 4.5 · rapide/économique', 'Haiku 4.5 · schnell/günstig']],
   },
   openai: {
     label: 'Groq', base: 'https://api.groq.com/openai/v1', version: '',
@@ -74,7 +74,7 @@ export const CAPMATRIX = {
 // by the engine; google.max=Pro is offered only when geminiTier==='paid'). Single source so a preset
 // can ask for "max"/"mid"/"fast" without re-hardcoding model strings.
 export const TIERS = {
-  anthropic: { max: 'claude-opus-4-8',          mid: 'claude-sonnet-4-6',    fast: 'claude-haiku-4-5' },
+  anthropic: { max: 'claude-opus-5-5',          mid: 'claude-sonnet-5-5',    fast: 'claude-haiku-4-5' },
   openai:    { max: 'llama-3.3-70b-versatile',  mid: 'llama-3.1-8b-instant', fast: 'llama-3.1-8b-instant' },
   xai:       { max: 'grok-2-latest',            mid: 'grok-2-latest',        fast: 'grok-2-1212' },
   google:    { max: 'gemini-2.5-pro',           mid: 'gemini-2.5-flash',     fast: 'gemini-2.5-flash-lite' },
@@ -188,6 +188,10 @@ function modelTraits(id) {
   if (b) { const st = Math.min(84, Math.round(30 + 10 * Math.log2(parseFloat(b[1])))); return { strength: st, speed: Math.max(20, 100 - st) }; }
   return { strength: 50, speed: 60 };
 }
+// Ids NucleoOS itself shipped as defaults in the past (see resolveModel): a config still holding one follows
+// its family forward instead of staying on an old model forever.
+const FORMER_DEFAULTS = new Set(['claude-sonnet-4-6', 'claude-opus-4-8']);
+const familyOf = (id) => { const s = String(id).toLowerCase(); return FAMILIES.findIndex(([re]) => re.test(s)); };
 // Newer beats older inside a family: every number in the id, compared left to right ("4-6" > "4-5").
 const versionOf = (id) => (String(id).match(/\d+(?:\.\d+)?/g) || []).map(Number);
 function cmpVersion(a, b) { for (let i = 0; i < Math.max(a.length, b.length); i++) { const d = (a[i] || 0) - (b[i] || 0); if (d) return d; } return 0; }
@@ -256,7 +260,17 @@ export async function resolveModel(cfg, { tier, exclude = [], fresh = false, nee
     return imgs.sort((a, b) => cmpVersion(versionOf(b), versionOf(a)))[0] || null;
   }
   if (need === 'web') pool = pool.filter((id) => WEB_SEARCH_MODEL.test(id));
-  else if (saved && pool.includes(saved) && !NON_CHAT.test(saved)) return saved;
+  else if (saved && pool.includes(saved) && !NON_CHAT.test(saved)) {
+    // A saved id that is only a FORMER FACTORY DEFAULT was never the user's choice: it follows the newest
+    // served model of its family (Sonnet 4.6 → 5.5). A model the user picked is honoured while served.
+    if (FORMER_DEFAULTS.has(saved)) {
+      const fam = familyOf(saved);
+      const newer = pool.filter((id) => familyOf(id) === fam && !NON_CHAT.test(id) && cmpVersion(versionOf(id), versionOf(saved)) > 0)
+        .sort((a, b) => cmpVersion(versionOf(b), versionOf(a)))[0];
+      if (newer) return newer;
+    }
+    return saved;
+  }
   return rankModels(pool, need === 'web' ? 'max' : t)[0] || null;
 }
 
@@ -501,6 +515,20 @@ export function geminiTierLabel(tier, lang) {
 }
 export const maskKey = (k) => (k && k.length > 10 ? k.slice(0, 6) + '…' + k.slice(-4) : (k ? '…' : ''));
 
+// "martedì 29 settembre 2026 alle ore 22:40 (Europe/Rome)" in the OS language — appended to every system
+// prompt the shell sends, because a model has no clock (twin of apps/anima/www/contextkit.js nowText).
+const CLOCK_LOCALE = { it: 'it-IT', en: 'en-GB', es: 'es-ES', fr: 'fr-FR', de: 'de-DE' };
+export function nowText(lang = 'en', d = new Date()) {
+  let tz = ''; try { tz = Intl.DateTimeFormat().resolvedOptions().timeZone || ''; } catch {}
+  try {
+    const s = new Intl.DateTimeFormat(CLOCK_LOCALE[lang] || 'en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' }).format(d);
+    return tz ? `${s} (${tz})` : s;
+  } catch { return d.toISOString(); }
+}
+// The reply-language rule for an English-worded prompt (es/fr/de otherwise get English answers).
+const REPLY_LANG = { it: 'Italian', en: 'English', es: 'Spanish', fr: 'French', de: 'German' };
+export const replyRule = (lang) => 'Always reply in ' + (REPLY_LANG[lang] || 'English') + '.';
+
 // Lightweight capability probe — preferred over readTeacher() to answer "is AI configured?" because
 // it never returns the raw key. {hasKey, online, enabled, provider?, model?} or null on error.
 export async function caps() {
@@ -512,13 +540,20 @@ export async function caps() {
 // chat/spreadsheet/ir-remote/games/paint/agent/dictation on first action) and changes only when the
 // user edits a key. A 30 s cache collapses the open-burst of /api/fs/read into one device read;
 // writeTeacher() and a fs.changed on the path invalidate it immediately, so a key change is never stale.
-let _teacherCache = null, _teacherAt = 0;
+let _teacherCache = null, _teacherAt = 0, _teacherJob = null;
 const TEACHER_TTL = 30000;
-export function invalidateTeacher() { _teacherCache = null; _teacherAt = 0; }
+export function invalidateTeacher() { _teacherCache = null; _teacherAt = 0; _teacherJob = null; }
 
 // Read the active teacher config (paired). Returns a normalized cfg, {unpaired:true}, or null.
 export async function readTeacher(opts = {}) {
   if (!opts.fresh && _teacherCache && (Date.now() - _teacherAt) < TEACHER_TTL) return _teacherCache;
+  // Concurrent readers (Settings' tabs, the capability probe, a preset) share ONE device read.
+  if (!opts.fresh && _teacherJob) return _teacherJob;
+  const job = _readTeacher();
+  _teacherJob = job; job.finally(() => { if (_teacherJob === job) _teacherJob = null; });
+  return job;
+}
+async function _readTeacher() {
   try {
     const r = await fetch('/api/fs/read?path=' + encodeURIComponent(AI_PATH), { cache: 'no-store' });
     if (r.status === 401 || r.status === 403) return { unpaired: true };   // transient — not cached

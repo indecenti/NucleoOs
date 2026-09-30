@@ -119,7 +119,7 @@ export async function chatComplete(cfg, req, opts = {}) {
       method: 'POST', signal,
       headers: { 'content-type': 'application/json', 'x-api-key': cfg.key, 'anthropic-version': cfg.version || '2023-06-01',
                  'anthropic-dangerous-direct-browser-access': 'true' },
-      body: JSON.stringify({ model: cfg.model || 'claude-sonnet-4-6', max_tokens: maxTokens,
+      body: JSON.stringify({ model: cfg.model || 'claude-sonnet-5-5', max_tokens: maxTokens,
                              ...(req.system ? { system: req.system } : {}), messages: msgs, ...(stream ? { stream: true } : {}) }),
     });
     if (!resp.ok) throw await errorOf(resp);

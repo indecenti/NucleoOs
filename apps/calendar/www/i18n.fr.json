@@ -10,5 +10,7 @@
   "more_events": {
     "one": "+{count} autre",
     "other": "+{count} autres"
-  }
+  },
+  "read_failed": "Impossible de lire le calendrier du Cardputer. La modification est suspendue pour ne rien écraser — réessayez dans un instant.",
+  "not_paired": "Ce navigateur n'est pas associé au Cardputer — associez-le pour enregistrer le calendrier."
 }

@@ -26,5 +26,10 @@
   "err_uri": "Ungültiger otpauth://-Link",
   "err_secret": "Ungültiger geheimer Schlüssel (Base32 erwartet)",
   "err_clip": "Zwischenablage kann nicht gelesen werden",
-  "confirm_del": "Konto „{name}\" löschen? Sein 2FA-Schlüssel wird von diesem Gerät entfernt."
+  "confirm_del": "Konto „{name}\" löschen? Sein 2FA-Schlüssel wird von diesem Gerät entfernt.",
+  "err_device": "Cardputer nicht erreichbar – nichts wurde gespeichert. Versuche es gleich erneut.",
+  "err_unpaired": "Dieser Browser ist nicht mit dem Cardputer gekoppelt – kopple ihn, um Konten zu speichern.",
+  "offline_banner": "Codes aus der letzten Kopie dieses Browsers: Der Cardputer antwortet nicht, Änderungen sind pausiert.",
+  "err_hotp": "HOTP-Konten (zählerbasiert) werden nicht unterstützt – verwende ein TOTP-Konto (zeitbasiert).",
+  "err_algo": "SHA-512 wird nicht unterstützt – dieses Konto würde falsche Codes erzeugen."
 }

@@ -19,17 +19,32 @@ const VRAM_HINT = { [CODER_MODEL]: 1200, [ORCH_DEFAULT]: 900, [ORCH_SMALL]: 450 
 // probeWebGPU(nav) → { supported, vramMB?, reason }. Cleanly returns {supported:false} when there is
 // no navigator / no navigator.gpu (i.e. under Node). Uses adapter.limits.maxBufferSize as a VRAM
 // proxy (the largest single allocation a WebGPU adapter will admit ≈ usable budget).
+// Also reports shader-f16 (every catalog model is a q4f16 build; without it the q4f32 sibling must load),
+// the adapter identity and a coarse class (discrete / integrated / fallback) for model recommendations.
+// Asks for the HIGH-PERFORMANCE adapter so a laptop with an iGPU + dGPU gets the discrete one.
 export async function probeWebGPU(nav = (typeof navigator !== 'undefined' ? navigator : null)) {
   if (!nav || !nav.gpu || typeof nav.gpu.requestAdapter !== 'function') {
     return { supported: false, reason: 'no-webgpu' };
   }
   let adapter;
-  try { adapter = await nav.gpu.requestAdapter(); }
+  try { adapter = await nav.gpu.requestAdapter({ powerPreference: 'high-performance' }); }
   catch (e) { return { supported: false, reason: 'adapter-error:' + (e && e.message || e) }; }
   if (!adapter) return { supported: false, reason: 'no-adapter' };
   const maxBuf = adapter.limits && adapter.limits.maxBufferSize;
   const vramMB = typeof maxBuf === 'number' && maxBuf > 0 ? Math.round(maxBuf / (1024 * 1024)) : undefined;
-  return { supported: true, vramMB, reason: 'webgpu-ok' };
+  const info = adapter.info || {};
+  const f16 = !!(adapter.features && typeof adapter.features.has === 'function' && adapter.features.has('shader-f16'));
+  const gpu = { vendor: info.vendor || '', architecture: info.architecture || '', description: info.description || '', isFallback: !!(info.isFallbackAdapter || adapter.isFallbackAdapter) };
+  return { supported: true, vramMB, f16, adapter: gpu, adapterClass: classifyAdapter(gpu), reason: 'webgpu-ok' };
+}
+// Same rule as /capabilities.js adapterClass (kept here so this module stays importable host-side).
+export function classifyAdapter(info) {
+  if (!info) return 'none';
+  if (info.isFallback) return 'fallback';
+  const v = String(info.vendor || '').toLowerCase(), a = String(info.architecture || '').toLowerCase(), d = String(info.description || '').toLowerCase();
+  if (/swiftshader|llvmpipe|basic render|microsoft basic/.test(d + ' ' + a)) return 'fallback';
+  if (/nvidia/.test(v + d) || (/amd|ati/.test(v + d) && !/radeon\(tm\) graphics|vega \d graphics|680m|780m|890m/.test(d))) return 'discrete';
+  return 'integrated';
 }
 
 // chooseModels(caps) → { orchestrator:{id,vramMB}|null, coder:{id,vramMB}, plan }. Pure: defers the

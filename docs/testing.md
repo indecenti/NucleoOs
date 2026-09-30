@@ -14,6 +14,21 @@ tools/gen-test-registry.mjs   ← generates it (from gate.mjs + every *.test.mjs
 **Every** view reads from that one file: the gate, the CLI and the GUI. Regenerate the catalog when
 you add/move a test: `npm run test:registry`.
 
+## First run on a new machine: the gate fixture
+
+The host gate reads a DERIVED SD fixture (not versioned): the 256-dim L1 index + encoder, the typed
+encyclopedia (AKB5), the learned facets and the HDC triples. On a fresh clone build it **once**:
+
+```
+npm run anima:fixture     # = node tools/anima/build_packs.mjs --host-only  (~2 min, never touches the device packs)
+```
+
+The build is **reproducible** (deterministic `det_kmeans`, EOL-independent corpus hash): the same `index_sha`
+recorded in `tools/anima-host/sd/data/anima/anima-it-index.bin.prov` on every machine and in CI; `check_pack`
+reports `FIXTURE MISMATCH` when the fixture present is not the recorded one. Without the fixture (or with a
+partial one) the gate judges an ANIMA with no typed knowledge: it abstains on facts ("I don't know") and the
+recall goldens flip — not regressions, just an incomplete fixture.
+
 ## Three ways to run them
 
 | View | Command | What it is for |

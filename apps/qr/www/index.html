@@ -203,16 +203,48 @@
 
     // ---- saved library (shared with the native app via SD) ----
     var lib = { schema: 1, items: [] };
-    async function loadLib() { var j = await readJSON(SHARED); if (j && Array.isArray(j.items)) lib = j; renderLib(); }
+    // Typed read. A FAILED read (offline, 401, 503) is NOT an empty library: the next save used to write
+    // [one QR] over everything the user (or the native app) had saved. 404 / "{}" = nothing yet.
+    async function readLib() {
+      try {
+        var r = await fetch('/api/fs/read?path=' + encodeURIComponent(SHARED), { cache: 'no-store' });
+        if (r.status === 404) return { ok: true, lib: { schema: 1, items: [] } };
+        if (!r.ok) return { ok: false, status: r.status };
+        var txt = (await r.text()).trim();
+        if (!txt) return { ok: true, lib: { schema: 1, items: [] } };
+        var j = JSON.parse(txt);
+        if (j && Array.isArray(j.items)) return { ok: true, lib: j };
+        if (j && typeof j === 'object' && !Object.keys(j).length) return { ok: true, lib: { schema: 1, items: [] } };
+        return { ok: false, status: 'corrupt' };
+      } catch (e) { return { ok: false, status: e instanceof SyntaxError ? 'corrupt' : 0 }; }
+    }
+    function failText(st) { return st === 401 || st === 403 ? TR('not_paired') : st === 'corrupt' ? TR('read_corrupt') : TR('read_failed'); }
+    var libErr = null;          // non-null while the device's library could not be read (nothing may be written)
+    async function loadLib() { var r = await readLib(); libErr = r.ok ? null : r.status; if (r.ok) lib = r.lib; renderLib(); }
+    // Items are addressed by a stable key, never by list position: the native app may have changed the list.
+    function itemKey(it) { return it.id || (String(it.ts || '') + '|' + String(it.data || '')); }
+    // Read-modify-write against the FRESH file; fn(lib) edits it in place (false = nothing to do).
+    async function mutateLib(fn, msg) {
+      var r = await readLib();
+      if (!r.ok) { libErr = r.status; renderLib(); toast(failText(r.status)); return false; }
+      if (fn(r.lib) === false) { lib = r.lib; libErr = null; renderLib(); return false; }
+      await mkdirp('/data/QR');
+      var ok = await writeText(SHARED, JSON.stringify(r.lib, null, 0));
+      if (ok) { lib = r.lib; libErr = null; }
+      renderLib(); toast(ok ? (msg || TR('saved')) : TR('save_failed'));
+      return ok;
+    }
     function renderLib() {
       var el = $('#savedList');
+      if (libErr != null) { el.innerHTML = '<div class="empty">⚠ ' + escapeHtml(failText(libErr)) + '</div>'; return; }
       if (!lib.items.length) { el.innerHTML = '<div class="empty">' + TR('saved_empty') + '</div>'; return; }
       el.innerHTML = lib.items.map(function (it, i) {
         var ic = (TYPES[it.type] || TYPES.text).icon;
         return '<div class="item"><div class="ic">' + ic + '</div><div class="lab"><div class="n">' + escapeHtml(it.label) + '</div><div class="s">' + escapeHtml(it.data) + '</div></div>' +
-          '<button data-load="' + i + '" title="' + TR('load') + '">↺</button><button data-del="' + i + '" title="' + TR('delete') + '">✕</button></div>';
+          '<button data-load="' + i + '" title="' + TR('load') + '">↺</button><button data-del="' + escapeHtml(itemKey(it)) + '" title="' + TR('delete') + '">✕</button></div>';
       }).join('');
-      el.querySelectorAll('[data-del]').forEach(function (b) { b.onclick = function () { lib.items.splice(+b.dataset.del, 1); persist(TR('deleted')); }; });
+      el.querySelectorAll('[data-del]').forEach(function (b) { b.onclick = function () { var k = b.dataset.del;
+        mutateLib(function (l) { var i = l.items.findIndex(function (x) { return itemKey(x) === k; }); if (i < 0) return false; l.items.splice(i, 1); }, TR('deleted')); }; });
       el.querySelectorAll('[data-load]').forEach(function (b) { b.onclick = function () { var it = lib.items[+b.dataset.load]; loadItem(it); }; });
     }
     function escapeHtml(s) { return String(s == null ? '' : s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
@@ -226,18 +258,11 @@
       var el = $('#form').querySelector('[data-k="' + k + '"]'); if (el) el.value = it.data;
       render(); toast(TR('loaded_x', { label: it.label }));
     }
-    async function persist(msg) {
-      await mkdirp('/data/QR');
-      var ok = await writeText(SHARED, JSON.stringify(lib, null, 0));
-      renderLib();
-      toast(ok ? (msg || TR('saved')) : TR('save_failed'));
-    }
     function saveCurrent() {
       if (!lastQR || !lastData) return;
       var t = TYPES[cur];
-      lib.items.unshift({ id: 'q' + Date.now().toString(36), label: (t.label(form) || TR(t.nameKey)).slice(0, 40), type: cur, data: lastData, ecc: parseInt($('#ecc').value, 10) || 0, ts: Date.now() });
-      if (lib.items.length > 50) lib.items.length = 50;
-      persist(TR('saved_to_device'));
+      var item = { id: 'q' + Date.now().toString(36), label: (t.label(form) || TR(t.nameKey)).slice(0, 40), type: cur, data: lastData, ecc: parseInt($('#ecc').value, 10) || 0, ts: Date.now() };
+      mutateLib(function (l) { l.items.unshift(item); if (l.items.length > 50) l.items.length = 50; }, TR('saved_to_device'));
     }
 
     // ---- chips ----

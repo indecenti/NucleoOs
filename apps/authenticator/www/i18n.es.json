@@ -26,5 +26,10 @@
   "err_uri": "Enlace otpauth:// no válido",
   "err_secret": "Clave secreta no válida (se espera Base32)",
   "err_clip": "No se puede leer el portapapeles",
-  "confirm_del": "¿Eliminar la cuenta \"{name}\"? Su clave 2FA se quitará de este dispositivo."
+  "confirm_del": "¿Eliminar la cuenta \"{name}\"? Su clave 2FA se quitará de este dispositivo.",
+  "err_device": "Cardputer inaccesible: no se guardó ningún cambio. Inténtalo de nuevo en breve.",
+  "err_unpaired": "Este navegador no está vinculado al Cardputer: vincúlalo para guardar las cuentas.",
+  "offline_banner": "Códigos de la última copia de este navegador: el Cardputer no responde, los cambios están en pausa.",
+  "err_hotp": "Las cuentas HOTP (por contador) no son compatibles: usa una cuenta TOTP (por tiempo).",
+  "err_algo": "SHA-512 no es compatible: esta cuenta generaría códigos incorrectos."
 }

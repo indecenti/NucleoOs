@@ -103,16 +103,38 @@
     let tasks = [];          // { id, text, done, pri (0|1|2), ts }
     let filter = 'all';
     let newPri = 0;
-    let dirty = false, saveTimer = 0;
+    let dirty = false, saveTimer = 0, retryTimer = 0, retryMs = 5000;
+    let readOk = false;       // editing is allowed only once the REAL file was read (or is known not to exist)
 
     // ---- device storage (graceful fallback to memory in preview) --------------
     async function readText(path) {
       try { const r = await fetch('/api/fs/read?path=' + encodeURIComponent(path), { cache: 'no-store' });
         return r.ok ? await r.text() : null; } catch { return null; }
     }
+    // Typed read of the task list. A FAILED read (offline, 401, 503) is NOT an empty list: treating it as one
+    // showed "no tasks" and the next add wrote that one task over the whole list on the SD. 404 = none yet.
+    async function readTasks() {
+      try {
+        const r = await fetch('/api/fs/read?path=' + encodeURIComponent(FILE), { cache: 'no-store' });
+        if (r.status === 404) return { ok: true, list: [] };
+        if (!r.ok) return { ok: false, status: r.status };
+        const txt = (await r.text()).trim();
+        if (!txt) return { ok: true, list: [] };
+        const j = JSON.parse(txt);
+        return Array.isArray(j) ? { ok: true, list: j } : { ok: false, status: 'corrupt' };
+      } catch (e) { return { ok: false, status: e instanceof SyntaxError ? 'corrupt' : 0 }; }
+    }
+    // → true, or the failing HTTP status (0 = unreachable)
     async function writeText(path, body) {
       try { const r = await fetch('/api/fs/write?path=' + encodeURIComponent(path), { method: 'POST', body });
-        return r.ok; } catch { return false; }
+        return r.ok ? true : r.status; } catch { return 0; }
+    }
+    const failText = (st) => st === 401 || st === 403 ? T('not_paired') : st === 'corrupt' ? T('read_corrupt') : T('read_failed');
+    // Every edit goes through here: while the real list is unknown, nothing may change (and we try again).
+    function canEdit() {
+      if (readOk) return true;
+      load();
+      return false;
     }
     async function loadTheme() {
       const t = await readText(SETTINGS);
@@ -122,12 +144,23 @@
     function scheduleSave() {
       dirty = true; $('save').textContent = T('saving');
       clearTimeout(saveTimer);
-      saveTimer = setTimeout(async () => {
-        const ok = await writeText(FILE, JSON.stringify(tasks, null, 2));
-        dirty = false; $('save').textContent = ok ? T('saved') : T('saved_locally');
-        setTimeout(() => { if (!dirty) $('save').textContent = ''; }, 1500);
-      }, 350);
+      saveTimer = setTimeout(writeNow, 350);
     }
+    // A refused write keeps the change (dirty) and retries with backoff; it never claims it was saved.
+    async function writeNow() {
+      clearTimeout(retryTimer);
+      const w = await writeText(FILE, JSON.stringify(tasks, null, 2));
+      if (w === true) {
+        dirty = false; retryMs = 5000; $('save').textContent = T('saved');
+        setTimeout(() => { if (!dirty) $('save').textContent = ''; }, 1500);
+        return true;
+      }
+      $('save').textContent = w === 401 || w === 403 ? T('not_paired') : T('save_failed');
+      retryTimer = setTimeout(() => { if (dirty) writeNow(); }, retryMs);
+      retryMs = Math.min(retryMs * 2, 60000);
+      return false;
+    }
+    addEventListener('beforeunload', (e) => { if (dirty) { e.preventDefault(); e.returnValue = ''; } });
 
     // ---- rendering -------------------------------------------------------------
     const order = (a, b) => (b.done === a.done ? 0 : a.done ? 1 : -1) || (b.pri - a.pri) || (a.ts - b.ts);
@@ -138,7 +171,8 @@
       list.innerHTML = '';
       if (!view.length) {
         const li = document.createElement('li'); li.style.borderBottom = '0';
-        const emptyKey = filter === 'done' ? 'empty_done' : filter === 'active' ? 'empty_active' : 'empty_all';
+        // Not read yet (device unreachable / unpaired): say THAT, never "no tasks yet" over a list we have not seen.
+        const emptyKey = !readOk ? 'not_loaded' : filter === 'done' ? 'empty_done' : filter === 'active' ? 'empty_active' : 'empty_all';
         li.innerHTML = `<div class="empty" data-i18n-html="${emptyKey}"></div>`;
         list.appendChild(li);
       }
@@ -152,8 +186,8 @@
           `<span class="txt" tabindex="0"></span>` +
           `<button class="del" data-i18n-attr="title:delete" title="Delete">×</button>`;
         li.querySelector('.txt').textContent = t.text;
-        li.querySelector('.box').onclick = () => { t.done = !t.done; scheduleSave(); render(); };
-        li.querySelector('.del').onclick = () => { tasks = tasks.filter((x) => x.id !== t.id); scheduleSave(); render(); };
+        li.querySelector('.box').onclick = () => { if (!canEdit()) return; t.done = !t.done; scheduleSave(); render(); };
+        li.querySelector('.del').onclick = () => { if (!canEdit()) return; tasks = tasks.filter((x) => x.id !== t.id); scheduleSave(); render(); };
         const txt = li.querySelector('.txt');
         txt.ondblclick = () => editInline(txt, t);
         list.appendChild(li);
@@ -168,7 +202,7 @@
       range.selectNodeContents(span); sel.removeAllRanges(); sel.addRange(range);
       const finish = (save) => {
         span.contentEditable = 'false';
-        if (save) { const v = span.textContent.trim(); if (v) { t.text = v; scheduleSave(); } }
+        if (save && canEdit()) { const v = span.textContent.trim(); if (v) { t.text = v; scheduleSave(); } }
         render();
       };
       span.onblur = () => finish(true);
@@ -181,7 +215,7 @@
     // ---- add -------------------------------------------------------------------
     function add() {
       const v = $('text').value.trim();
-      if (!v) return;
+      if (!v || !canEdit()) return;               // blocked: the typed text stays in the box
       tasks.push({ id: 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), text: v, done: false, pri: newPri, ts: tasks.length });
       $('text').value = '';
       scheduleSave(); render(); $('text').focus();
@@ -204,7 +238,7 @@
       render();
     });
 
-    $('clear').onclick = () => { tasks = tasks.filter((t) => !t.done); scheduleSave(); render(); };
+    $('clear').onclick = () => { if (!canEdit()) return; tasks = tasks.filter((t) => !t.done); scheduleSave(); render(); };
 
     // global shortcut: "/" focuses the input from anywhere
     addEventListener('keydown', (e) => {
@@ -236,19 +270,26 @@
       $('save').textContent = T('copied'); setTimeout(() => { if (!dirty) $('save').textContent = ''; }, 1200);
     }
     // Flush the debounced autosave immediately (Ctrl+S).
+    // An explicit Ctrl+S always writes (the user asked) — but never a list that was not read from the device.
     function flushSave() {
       clearTimeout(saveTimer);
-      writeText(FILE, JSON.stringify(tasks, null, 2)).then((ok) => {
-        dirty = false; $('save').textContent = ok ? T('saved') : T('saved_locally');
-        setTimeout(() => { if (!dirty) $('save').textContent = ''; }, 1500);
-      });
+      if (!canEdit()) return;
+      writeNow();
     }
 
     // ---- boot ------------------------------------------------------------------
+    let loading = null;
     async function load() {
-      const raw = await readText(FILE);
-      if (raw) { try { const j = JSON.parse(raw); if (Array.isArray(j)) tasks = j; } catch {} }
-      render();
+      if (dirty) return;                          // never replace unsaved edits with the file
+      if (loading) return loading;
+      loading = (async () => {
+        const r = await readTasks();
+        readOk = r.ok;
+        if (r.ok) { tasks = r.list; if ($('save').textContent && !dirty) $('save').textContent = ''; }
+        else $('save').textContent = failText(r.status);
+        render();
+      })().finally(() => { loading = null; });
+      return loading;
     }
     async function init() {
       await loadTheme();

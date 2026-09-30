@@ -44,8 +44,8 @@ import { routeFor, providerOf, PROVIDERS, CAPMATRIX, servedModel, toAiError } fr
 
 export const MODELS = {
   orchestrator: 'claude-haiku-4-5',   // cheap/fast triage + small tasks
-  worker: 'claude-sonnet-4-6',        // default doer
-  hard: 'claude-opus-4-8',            // deep reasoning
+  worker: 'claude-sonnet-5-5',        // default doer
+  hard: 'claude-opus-5-5',            // deep reasoning
   small: 'claude-haiku-4-5',
 };
 const MAX_STEPS = 14;            // tool-use rounds per worker

@@ -13,6 +13,28 @@ import { installModel } from './install-flow.js';
 import { humanBytes, etaSeconds, etaText } from './install-flow.js';
 
 const EN = (lang) => lang === 'en';
+const LANG_IDX = { it: 0, en: 1, es: 2, fr: 3, de: 4 };
+const TXT = {"title":["Installazione modello offline","Installing offline model","Instalando modelo offline","Installation du modèle hors ligne","Offline-Modell wird installiert"],
+  "starting":["Avvio…","Starting…","Iniciando…","Démarrage…","Start…"],
+  "cancel":["Annulla","Cancel","Cancelar","Annuler","Abbrechen"],
+  "retry":["Riprova","Retry","Reintentar","Réessayer","Erneut versuchen"],
+  "close":["Chiudi","Close","Cerrar","Fermer","Schließen"],
+  "fromSd":["dalla SD del Cardputer","from the Cardputer SD","desde la SD del Cardputer","depuis la SD du Cardputer","von der Cardputer-SD"],
+  "fromCdn":["da Internet (CDN)","from the internet (CDN)","desde internet (CDN)","depuis internet (CDN)","aus dem Internet (CDN)"],
+  "resuming":["Ripresa…","Resuming…","Reanudando…","Reprise…","Fortsetzen…"],
+  "trySd":["Sorgente non raggiungibile → provo la SD del Cardputer…","Source unreachable → trying the Cardputer SD…","Origen inaccesible → pruebo la SD del Cardputer…","Source injoignable → essai de la SD du Cardputer…","Quelle nicht erreichbar → versuche die Cardputer-SD…"],
+  "verifying":["Verifica integrità (SHA-256)…","Verifying integrity (SHA-256)…","Verificando integridad (SHA-256)…","Vérification de l’intégrité (SHA-256)…","Integrität wird geprüft (SHA-256)…"],
+  "downloading":["Scaricamento…","Downloading…","Descargando…","Téléchargement…","Wird geladen…"],
+  "source":["Sorgente: ","Source: ","Origen: ","Source : ","Quelle: "],
+  "reconnIn":["Riconnessione tra ","Reconnecting in ","Reconectando en ","Reconnexion dans ","Neuverbindung in "],
+  "attempt":["tentativo ","attempt ","intento ","tentative ","Versuch "],
+  "stopped":["Interrotto","Stopped","Detenido","Arrêté","Angehalten"],
+  "cancelled":["Annullato","Cancelled","Cancelado","Annulé","Abgebrochen"],
+  "installed":["✓ Installato — ora funziona offline","✓ Installed — runs offline now","✓ Instalado: ahora funciona offline","✓ Installé — fonctionne désormais hors ligne","✓ Installiert – läuft jetzt offline"],
+  "fetched":["Scaricato ","Fetched ","Descargado ","Téléchargé ","Geladen "]};
+// Five OS languages (was it/en only: es/fr/de users got Italian mid-install).
+const txFor = (lang) => (k) => { const row = TXT[k]; return row ? (row[LANG_IDX[lang]] ?? row[1]) : k; };
+
 
 // One-time scoped stylesheet (theme-aware via the app's CSS vars). id-guarded so re-opens don't pile up.
 function ensureStyle() {
@@ -63,6 +85,7 @@ function tellShell(state, label) {
 function makeModal(label, lang) {
   ensureStyle();
   const en = EN(lang);
+  const tx = txFor(lang);
   const el = (t, c, txt) => { const e = document.createElement(t); if (c) e.className = c; if (txt != null) e.textContent = txt; return e; };
 
   const scrim = el('div', 'nfi-scrim');
@@ -70,13 +93,13 @@ function makeModal(label, lang) {
   // header
   const hd = el('div', 'nfi-hd');
   hd.append(el('div', 'nfi-ic', '⬇'));
-  const hdtx = el('div'); hdtx.append(el('div', 'nfi-title', en ? 'Installing offline model' : 'Installazione modello offline'), el('div', 'nfi-sub', label));
+  const hdtx = el('div'); hdtx.append(el('div', 'nfi-title', tx('title')), el('div', 'nfi-sub', label));
   hd.append(hdtx);
   // body
   const body = el('div', 'nfi-body');
   const bar = el('div', 'nfi-bar indet'); const fill = el('i'); bar.append(fill);
   const stat = el('div', 'nfi-stat');
-  const phaseEl = el('span', 'nfi-phase', en ? 'Starting…' : 'Avvio…');
+  const phaseEl = el('span', 'nfi-phase', tx('starting'));
   const bytesEl = el('span', 'nfi-bytes', '');
   const etaEl = el('span', 'nfi-eta', '');
   stat.append(phaseEl, bytesEl, etaEl);
@@ -88,16 +111,16 @@ function makeModal(label, lang) {
   body.append(bar, stat, srcEl, msgEl, note);
   // footer
   const ft = el('div', 'nfi-ft');
-  const cancelBtn = el('button', '', en ? 'Cancel' : 'Annulla');
-  const retryBtn = el('button', 'pri', en ? 'Retry' : 'Riprova'); retryBtn.hidden = true;
-  const closeBtn = el('button', '', en ? 'Close' : 'Chiudi'); closeBtn.hidden = true;
+  const cancelBtn = el('button', '', tx('cancel'));
+  const retryBtn = el('button', 'pri', tx('retry')); retryBtn.hidden = true;
+  const closeBtn = el('button', '', tx('close')); closeBtn.hidden = true;
   ft.append(cancelBtn, retryBtn, closeBtn);
   card.append(hd, body, ft); scrim.append(card);
 
   // swallow stray clicks/keys on the backdrop so nothing behind reacts.
   scrim.addEventListener('click', (e) => { if (e.target === scrim) e.stopPropagation(); });
 
-  const srcLabel = (s) => s === 'sd' ? (en ? 'from the Cardputer SD' : 'dalla SD del Cardputer') : s === 'cdn' ? (en ? 'from the internet (CDN)' : 'da Internet (CDN)') : '';
+  const srcLabel = (s) => s === 'sd' ? (tx('fromSd')) : s === 'cdn' ? (tx('fromCdn')) : '';
   const setBar = (pct) => { if (pct == null || !Number.isFinite(pct)) { bar.classList.add('indet'); fill.style.width = ''; } else { bar.classList.remove('indet'); fill.style.width = Math.max(2, pct) + '%'; } };
 
   // rate/ETA estimator over a short trailing window
@@ -116,22 +139,22 @@ function makeModal(label, lang) {
     onCancel(cb) { cancelCb = cb; },
     setPhase(name) {
       clearRc();
-      phaseEl.textContent = name === 'resuming' ? (en ? 'Resuming…' : 'Ripresa…') : (en ? 'Starting…' : 'Avvio…');
+      phaseEl.textContent = name === 'resuming' ? (tx('resuming')) : (tx('starting'));
       msgEl.classList.remove('show', 'err'); setBar(null);
     },
     onProgress(p) {
       if (!p) return;
       if (p.phase === 'fallback') {
-        phaseEl.textContent = en ? 'Source unreachable → trying the Cardputer SD…' : 'Sorgente non raggiungibile → provo la SD del Cardputer…';
+        phaseEl.textContent = tx('trySd');
         return;
       }
-      if (p.phase === 'verifying') { phaseEl.textContent = en ? 'Verifying integrity (SHA-256)…' : 'Verifica integrità (SHA-256)…'; return; }
+      if (p.phase === 'verifying') { phaseEl.textContent = tx('verifying'); return; }
       if (p.phase === 'done') { return; }
       // 'progress'
       clearRc(); msgEl.classList.remove('show', 'err');
       if (Number.isFinite(p.pct)) setBar(p.pct); else setBar(null);
-      phaseEl.textContent = en ? 'Downloading…' : 'Scaricamento…';
-      if (p.source) srcEl.textContent = (en ? 'Source: ' : 'Sorgente: ') + srcLabel(p.source);
+      phaseEl.textContent = tx('downloading');
+      if (p.source) srcEl.textContent = (tx('source')) + srcLabel(p.source);
       if (Number.isFinite(p.bytesDone) && Number.isFinite(p.bytesTotal) && p.bytesTotal > 0) {
         lastBytesTotal = p.bytesTotal;
         bytesEl.textContent = humanBytes(p.bytesDone) + ' / ' + humanBytes(p.bytesTotal);
@@ -142,18 +165,18 @@ function makeModal(label, lang) {
       clearRc(); setBar(null);
       msgEl.className = 'nfi-msg show'; msgEl.textContent = ''; const b = el('b', '', msg.title); msgEl.append(b, document.createTextNode(msg.detail));
       let left = Math.ceil((delayMs || 0) / 1000);
-      const paint = () => { phaseEl.textContent = (en ? 'Reconnecting in ' : 'Riconnessione tra ') + left + 's… (' + (en ? 'attempt ' : 'tentativo ') + attempt + ')'; };
+      const paint = () => { phaseEl.textContent = (tx('reconnIn')) + left + 's… (' + (tx('attempt')) + attempt + ')'; };
       paint(); rcTimer = setInterval(() => { left = Math.max(0, left - 1); paint(); if (left <= 0) clearRc(); }, 1000);
     },
     setError(e) {
       clearRc(); setBar(0); bar.style.display = 'none';
-      phaseEl.textContent = en ? 'Stopped' : 'Interrotto';
+      phaseEl.textContent = tx('stopped');
       bytesEl.textContent = ''; etaEl.textContent = ''; srcEl.textContent = '';
       msgEl.className = 'nfi-msg show err'; msgEl.textContent = ''; msgEl.append(el('b', '', e.title), document.createTextNode(e.detail));
       cancelBtn.hidden = true; retryBtn.hidden = !e.canRetry; closeBtn.hidden = false;
     },
     setCancelled() {
-      clearRc(); phaseEl.textContent = en ? 'Cancelled' : 'Annullato';
+      clearRc(); phaseEl.textContent = tx('cancelled');
       msgEl.className = 'nfi-msg show'; msgEl.textContent = en
         ? 'Stopped. The parts already downloaded are kept — installing again later resumes from here.'
         : 'Interrotto. Le parti già scaricate sono conservate — reinstallando più tardi riprende da qui.';
@@ -161,8 +184,8 @@ function makeModal(label, lang) {
       cancelBtn.hidden = true; retryBtn.hidden = true; closeBtn.hidden = false;
     },
     setDone(r) {
-      clearRc(); setBar(100); phaseEl.textContent = en ? '✓ Installed — runs offline now' : '✓ Installato — ora funziona offline';
-      srcEl.textContent = r && r.source ? ((en ? 'Fetched ' : 'Scaricato ') + srcLabel(r.source)) : '';
+      clearRc(); setBar(100); phaseEl.textContent = tx('installed');
+      srcEl.textContent = r && r.source ? ((tx('fetched')) + srcLabel(r.source)) : '';
       bytesEl.textContent = ''; etaEl.textContent = '';
       msgEl.classList.remove('show', 'err');
       cancelBtn.hidden = true; retryBtn.hidden = true; closeBtn.hidden = false; closeBtn.classList.add('pri');

@@ -120,5 +120,11 @@
   "guideTeach": "Di «remember that the meeting room <b>is</b> on the third floor» o «my name is Marco» (el cerebro offline entiende inglés e italiano). Los datos personales los guarda el Cardputer, así todos los navegadores los ven; si el Cardputer no está disponible, esperan en este navegador y se le pasan en cuanto responde.",
   "guidePrivacyT": "Privacidad",
   "guidePrivacy": "En modo <b>Privado</b> nada sale de esta máquina ni de tu Cardputer. Con una clave, las llamadas online van directamente de tu navegador al proveedor — nunca a través del dispositivo, nunca registradas.",
-  "guideClose": "Entendido"
+  "guideClose": "Entendido",
+  "gpuRecommended": "recomendado para esta GPU",
+  "engLocalServer": "Servidor local",
+  "engThisPc": "este ordenador",
+  "netThisPc": "ninguna · se queda en este ordenador",
+  "localSkipped": "{m} no cabía en memoria: ha respondido un modelo más ligero",
+  "agentLocal": "Agente local · {server} · {model}"
 }

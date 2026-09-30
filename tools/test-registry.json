@@ -3326,6 +3326,22 @@
       "anima": false
     },
     {
+      "id": "unit-shell-ai-engines",
+      "label": "shell-ai-engines.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/shell-ai-engines.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
       "id": "unit-shell-ambient",
       "label": "shell-ambient.test.mjs",
       "category": "app-shell",
@@ -3406,6 +3422,22 @@
       "anima": false
     },
     {
+      "id": "unit-shell-capabilities",
+      "label": "shell-capabilities.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/shell-capabilities.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
       "id": "unit-shell-copilot-catalog",
       "label": "shell-copilot-catalog.test.mjs",
       "category": "app-shell",
@@ -3414,6 +3446,38 @@
       "args": [
         "--test",
         "tools/shell-copilot-catalog.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-shell-fsindex",
+      "label": "shell-fsindex.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/shell-fsindex.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-shell-local-ai-help",
+      "label": "shell-local-ai-help.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/shell-local-ai-help.test.mjs"
       ],
       "verifies": "",
       "nl": false,
@@ -3776,6 +3840,21 @@
         "apps/dj/test/all.mjs"
       ],
       "verifies": "DJ engine: planner beatmatch/armonico/energia + decode .npx (apps/dj/test/). App WIP, non installata.",
+      "nl": false,
+      "lang": "na",
+      "in_gate": false,
+      "anima": false
+    },
+    {
+      "id": "extra-web-e2e-shell-smoke-5-lingue",
+      "label": "web E2E · shell smoke (5 lingue)",
+      "category": "app-shell",
+      "kind": "extra",
+      "cmd": "node",
+      "args": [
+        "tools/web-e2e/run.mjs"
+      ],
+      "verifies": "Chrome headless reale contro il simulatore, in modalità http su IP di rete (come il device): avvio + ogni app aperta dal menu Start in IT/EN/ES/FR/DE, zero eccezioni/fault/404, budget di carico del device all’avvio, scenari di guasto. SKIP se manca Chrome/Edge. (tools/web-e2e/)",
       "nl": false,
       "lang": "na",
       "in_gate": false,

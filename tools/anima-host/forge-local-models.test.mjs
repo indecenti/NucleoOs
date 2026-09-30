@@ -1,74 +1,84 @@
-// Gate: ANIMA in-browser GPU model catalog. The chat's "Local · GPU" tier downloads one of these from the
-// CDN on first use (automatic, transparent) and caches it offline. This pins: the default is the recommended
-// model that actually runs for most people AND ships on the device SD (since 6dd9f49 that is the 1.5B, not
-// the 7B — the 7B default OOM'd integrated GPUs after a 4.7 GB download), every id is a real MLC q4f16 id
-// (so WebLLM's prebuilt config knows it — no model_lib to vendor), an explicit user choice always wins,
-// no-WebGPU is the only HARD block (a per-buffer proxy never blocks a deliberate choice), and
-// OOM/device-lost is recognised so the UI can say "pick smaller".
+// Gate: ANIMA in-browser GPU model catalog (apps/anima/www/forge/local-models.js). Pins the 2026-09 truths:
+//   • current generation (Qwen3) with REAL download sizes and WebLLM's own VRAM needs;
+//   • no false promise: nothing claims "on the SD / installs offline" (it was never staged — audit 2026-09);
+//   • the recommendation follows the ADAPTER CLASS (discrete → 4B, integrated → 1.7B, weak → 0.6B), not a
+//     per-buffer limit dressed up as VRAM; an explicit user choice always wins;
+//   • a GPU without shader-f16 loads the q4f32 sibling instead of failing;
+//   • legacy Qwen2.5 choices keep working (not silently switched), but aren't offered to new users.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
-  LOCAL_MODELS, DEFAULT_LOCAL_MODEL, localModelById, resolveLocalModel, localModelCompat, isOutOfMemoryError, webgpuCause,
+  LOCAL_MODELS, DEFAULT_LOCAL_MODEL, localModelById, offeredModels, resolveLocalModel, recommendModel, buildFor,
+  localModelCompat, isOutOfMemoryError, isShaderF16Error, stripThinking, webgpuCause,
 } from '../../apps/anima/www/forge/local-models.js';
 
-test('catalog: every id is a real MLC q4f16 id, ordered top-quality → smallest, exactly one recommended', () => {
-  assert.ok(LOCAL_MODELS.length >= 4);
+const vendored = readFileSync(new URL('../../apps/anima/www/forge/vendor/web-llm.js', import.meta.url), 'utf8');
+
+test('catalog: every id (and its q4f32 sibling) exists in the vendored WebLLM prebuilt config', () => {
   for (const m of LOCAL_MODELS) {
-    assert.match(m.id, /-q4f16_1-MLC$/, m.id + ' is an MLC q4f16 id');
-    assert.ok(m.sizeGB > 0 && m.needGB > 0, m.id + ' has sizes');
+    assert.match(m.id, /-q4f16_1-MLC$/, m.id);
+    assert.ok(vendored.includes(`"${m.id}"`), m.id + ' missing from vendored web-llm.js');
+    const f32 = m.id.replace('-q4f16_1-', '-q4f32_1-');
+    assert.ok(vendored.includes(`"${f32}"`), f32 + ' (no-f16 fallback) missing from vendored web-llm.js');
+    assert.ok(m.sizeGB > 0 && m.needGB > 0 && m.needF32GB >= m.needGB, m.id + ' sizes');
   }
-  assert.equal(LOCAL_MODELS.filter((m) => m.best).length, 1, 'exactly one best/recommended');
-  // Since 6dd9f49 the recommendation is decoupled from the list order: the catalog still reads
-  // top-quality first, but the recommended pick is the SD-staged model that installs offline.
-  assert.ok(LOCAL_MODELS.find((m) => m.best).onDevice, 'the recommended model is staged on the device SD');
-  // the tail is the smallest, gira-quasi-ovunque fallback (last entry has the minimum size).
-  const minSize = Math.min(...LOCAL_MODELS.map((m) => m.sizeGB));
-  assert.equal(LOCAL_MODELS[LOCAL_MODELS.length - 1].sizeGB, minSize, 'smallest model is last');
+  assert.equal(LOCAL_MODELS.filter((m) => m.best).length, 1, 'exactly one default');
 });
 
-test('default is the recommended model — the one that actually runs for most people, from the SD', () => {
-  assert.equal(DEFAULT_LOCAL_MODEL, LOCAL_MODELS.find((m) => m.best).id);
-  assert.ok(localModelById(DEFAULT_LOCAL_MODEL));
-  // 6dd9f49: the 7B default (4.7 GB, ~6 GB VRAM) OOM'd integrated GPUs; the 1.5B ships on the SD,
-  // installs with no internet, and a strong GPU still picks bigger explicitly (resolveLocalModel).
-  assert.match(DEFAULT_LOCAL_MODEL, /1\.5B/);
-  assert.equal(localModelById(DEFAULT_LOCAL_MODEL).onDevice, true, 'the default installs offline from the device');
+test('no model claims an offline install from the SD any more (it was never staged)', () => {
+  for (const m of LOCAL_MODELS) assert.ok(!m.onDevice, m.id + ' must not claim onDevice');
 });
 
-test('resolveLocalModel: a valid explicit choice ALWAYS wins; unset/invalid → the best default', () => {
-  assert.equal(resolveLocalModel('Qwen2.5-3B-Instruct-q4f16_1-MLC', 0), 'Qwen2.5-3B-Instruct-q4f16_1-MLC');
-  assert.equal(resolveLocalModel(null, 99999), DEFAULT_LOCAL_MODEL);          // huge proxy still → default, never bigger than catalog
-  assert.equal(resolveLocalModel('not-a-real-model', 0), DEFAULT_LOCAL_MODEL); // invalid → default
+test('the current generation is offered; legacy only when it is the user\'s existing choice', () => {
+  const ids = offeredModels(null).map((m) => m.id);
+  assert.ok(ids.every((id) => id.startsWith('Qwen3-')), ids.join());
+  assert.ok(offeredModels('Qwen2.5-3B-Instruct-q4f16_1-MLC').some((m) => m.id === 'Qwen2.5-3B-Instruct-q4f16_1-MLC'));
+  assert.equal(DEFAULT_LOCAL_MODEL, 'Qwen3-1.7B-q4f16_1-MLC');
 });
 
-test('compat: no WebGPU is the ONLY hard block; a deliberate choice is never blocked by the buffer proxy', () => {
-  const best = DEFAULT_LOCAL_MODEL;
-  assert.equal(localModelCompat(best, { webgpu: false }).ok, false);          // genuinely can't run
-  assert.equal(localModelCompat(best, { webgpu: false }).level, 'no-webgpu');
-  assert.equal(localModelCompat(best, { webgpu: true, vramMB: 4096 }).ok, true);
-  // a tiny per-buffer proxy → advisory 'tight', but still ok:true (the user knows their GPU)
-  const tight = localModelCompat(best, { webgpu: true, vramMB: 256 });
-  assert.equal(tight.ok, true);
-  assert.equal(tight.level, 'tight');
-  assert.equal(localModelCompat('nope', { webgpu: true }).ok, false);         // unknown id
+test('recommendModel follows the adapter class', () => {
+  assert.equal(recommendModel({ webgpu: false }), null);
+  assert.equal(recommendModel({ webgpu: true, adapterClass: 'discrete' }), 'Qwen3-4B-q4f16_1-MLC');
+  assert.equal(recommendModel({ webgpu: true, adapterClass: 'integrated', deviceMemoryGB: 8 }), 'Qwen3-1.7B-q4f16_1-MLC');
+  assert.equal(recommendModel({ webgpu: true, adapterClass: 'integrated', deviceMemoryGB: 4 }), 'Qwen3-0.6B-q4f16_1-MLC');
+  assert.equal(recommendModel({ webgpu: true, adapterClass: 'fallback' }), 'Qwen3-0.6B-q4f16_1-MLC');
 });
 
-test('webgpuCause: says WHY there is no WebGPU so the button can say what to do', () => {
-  // plain-HTTP page (http://<device-ip>): Chromium hides navigator.gpu -> the insecure-origin flag fixes it
+test('resolveLocalModel: an explicit valid choice ALWAYS wins; unset → the recommendation for this GPU', () => {
+  assert.equal(resolveLocalModel('Qwen2.5-3B-Instruct-q4f16_1-MLC', { webgpu: true, adapterClass: 'discrete' }), 'Qwen2.5-3B-Instruct-q4f16_1-MLC');
+  assert.equal(resolveLocalModel(null, { webgpu: true, adapterClass: 'discrete' }), 'Qwen3-4B-q4f16_1-MLC');
+  assert.equal(resolveLocalModel('not-a-model', {}), DEFAULT_LOCAL_MODEL);
+  assert.equal(resolveLocalModel('Qwen3-4B-q4f32_1-MLC', {}), 'Qwen3-4B-q4f16_1-MLC', 'a stored f32 build maps back to its catalog entry');
+});
+
+test('buildFor: q4f32 sibling when the GPU lacks shader-f16', () => {
+  assert.equal(buildFor('Qwen3-1.7B-q4f16_1-MLC', { f16: false }), 'Qwen3-1.7B-q4f32_1-MLC');
+  assert.equal(buildFor('Qwen3-1.7B-q4f16_1-MLC', { f16: true }), 'Qwen3-1.7B-q4f16_1-MLC');
+  assert.equal(buildFor('Qwen3-1.7B-q4f16_1-MLC', {}), 'Qwen3-1.7B-q4f16_1-MLC', 'unknown → the f16 build');
+});
+
+test('compat: no WebGPU is the ONLY hard block; the f32 VRAM need is used without f16', () => {
+  const d = DEFAULT_LOCAL_MODEL;
+  assert.equal(localModelCompat(d, { webgpu: false }).level, 'no-webgpu');
+  assert.equal(localModelCompat(d, { webgpu: true, adapterClass: 'discrete' }).level, 'ok');
+  assert.equal(localModelCompat('Qwen3-8B-q4f16_1-MLC', { webgpu: true, adapterClass: 'integrated' }).level, 'tight', 'an 8B on an iGPU is flagged, not blocked');
+  assert.equal(localModelCompat('Qwen3-8B-q4f16_1-MLC', { webgpu: true, adapterClass: 'integrated' }).ok, true);
+  assert.equal(localModelCompat(d, { webgpu: true, f16: false, adapterClass: 'discrete' }).need, localModelById(d).needF32GB);
+  assert.equal(localModelCompat('nope', { webgpu: true }).ok, false);
+});
+
+test('webgpuCause still says WHY (insecure page / browser / blocked adapter)', () => {
   assert.equal(webgpuCause({ webgpu: false, reason: 'no-webgpu' }, { secure: false }), 'insecure');
-  assert.equal(localModelCompat(DEFAULT_LOCAL_MODEL, { webgpu: false, reason: 'no-webgpu' }, { secure: false }).cause, 'insecure');
-  // secure page and still nothing -> the browser itself lacks WebGPU
   assert.equal(webgpuCause({ webgpu: false, reason: 'no-webgpu' }, { secure: true }), 'browser');
-  assert.equal(webgpuCause({ webgpu: false }), 'browser');
-  // WebGPU present, no usable adapter -> acceleration off / GPU blocklisted or too old
   assert.equal(webgpuCause({ webgpu: false, reason: 'no-adapter' }, { secure: true }), 'blocked');
-  assert.equal(webgpuCause({ webgpu: false, reason: 'adapter-error:boom' }, { secure: false }), 'blocked');
   assert.equal(webgpuCause({ webgpu: true }), null);
 });
 
-test('isOutOfMemoryError recognises GPU OOM / device-lost, not ordinary errors', () => {
-  for (const s of ['Out of memory', 'buffer exceeds the limit', 'maxStorageBufferBindingSize', 'WebGPU device lost', 'out of device memory'])
-    assert.equal(isOutOfMemoryError(new Error(s)), true, s);
-  for (const s of ['network error', '404 not found', 'fetch failed'])
-    assert.equal(isOutOfMemoryError(new Error(s)), false, s);
+test('error classifiers + thinking residue', () => {
+  for (const s of ['Out of memory', 'buffer exceeds the limit', 'WebGPU device lost']) assert.equal(isOutOfMemoryError(new Error(s)), true, s);
+  assert.equal(isOutOfMemoryError(new Error('fetch failed')), false);
+  assert.equal(isShaderF16Error(new Error('ShaderF16SupportError: this model requires shader-f16')), true);
+  assert.equal(stripThinking('<think>\nhmm\n</think>\n\nCiao!'), 'Ciao!');
+  assert.equal(stripThinking('Ciao!'), 'Ciao!');
 });

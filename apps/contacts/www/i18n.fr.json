@@ -26,5 +26,10 @@
   "err_empty": "Un nom ou un e-mail est requis",
   "confirm_del": "Supprimer « {name} » ?",
   "vcard_saved": "vCard enregistrée dans {path}",
-  "vcard_fail": "Échec de l’enregistrement de la vCard"
+  "vcard_fail": "Échec de l’enregistrement de la vCard",
+  "read_failed": "Impossible de lire les contacts du Cardputer : la modification est suspendue pour ne rien écraser.",
+  "read_corrupt": "Le fichier des contacts du Cardputer est illisible : il n'est pas modifié pour ne rien perdre.",
+  "not_paired": "Ce navigateur n'est pas associé au Cardputer — associez-le pour enregistrer les contacts.",
+  "save_failed": "Échec de l'enregistrement : le Cardputer ne répond pas. Réessayez dans un instant.",
+  "ro_cache": "Vous voyez la dernière copie enregistrée dans ce navigateur (lecture seule)."
 }

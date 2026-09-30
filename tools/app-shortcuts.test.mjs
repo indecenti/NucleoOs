@@ -145,6 +145,18 @@ test('Calculator: selectAll also copies the result (display-only widget)', () =>
   assert.equal(clip && clip.data, '123');
 });
 
+test('Calculator: unary minus applies to the whole bracket, not to its first number', () => {
+  // -(2+3) used to give 1 and 2*-(1+1) gave 0: the sign was carried into the bracket's first operand.
+  const cases = { '-(2+3)': '-5', '2*-(1+1)': '-4', '-2*3': '-6', '--3': '3', '10-(4-6)': '12', '-(-(2))': '2',
+    '3-2': '1', '-3+5': '2', '(1+2)*-3': '-9', '+4': '4', '2*(3+4)': '14', '7/-2': '-3.5' };
+  for (const [expr, want] of Object.entries(cases)) {
+    const app = loadApp('apps/calculator/www/index.html');
+    for (const ch of expr) app.keydown(ch);
+    app.keydown('=');
+    assert.equal(app.getEl('disp').textContent, want, expr);
+  }
+});
+
 // ================= Notepad =================
 test('Notepad: os-shortcut save on a titled file writes via the OS file API', async () => {
   const writes = [];

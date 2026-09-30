@@ -57,7 +57,7 @@ export function resolveConfigs(teacher) {
     : (j.key && (j.provider === 'google' || /generativelanguage/i.test(j.base || '')) ? { base: j.base, model: j.model, key: j.key } : null);
   const gChat = (goog && goog.key) ? { provider: 'google', base: goog.base || 'https://generativelanguage.googleapis.com/v1beta/openai', model: goog.model || 'gemini-2.5-flash', key: goog.key, proxy: true } : null;
   if (j.provider === 'google' && gChat) chat = gChat;                  // active Gemini wins
-  else if (anth && anth.key) chat = { provider: 'anthropic', base: anth.base || 'https://api.anthropic.com', model: anth.model || 'claude-sonnet-4-6', key: anth.key, version: anth.version || '2023-06-01' };
+  else if (anth && anth.key) chat = { provider: 'anthropic', base: anth.base || 'https://api.anthropic.com', model: anth.model || 'claude-sonnet-5-5', key: anth.key, version: anth.version || '2023-06-01' };
   else if (xai && xai.key) chat = { provider: 'openai', base: xai.base || 'https://api.x.ai/v1', model: xai.model || 'grok-3-mini', key: xai.key };
   else if (oa && oa.key) chat = { provider: 'openai', base: oa.base || 'https://api.groq.com/openai/v1', model: oa.model || 'llama-3.1-8b-instant', key: oa.key };
   else if (gChat) chat = gChat;                                        // saved Gemini as last resort (Claude/Grok/Groq preferred: browser-direct)

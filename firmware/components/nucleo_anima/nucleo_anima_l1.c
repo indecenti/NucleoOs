@@ -703,6 +703,8 @@ static bool l1_is_stop_word(const char *w)
         "spiega", "descrivi", "definisci", "definiscimi", "descrivimi", "raccontami", "sarebbe", "sarebbero", "della",
         "dello", "delle", "degli", "nell", "nella", "nello", "nelle", "negli", "sulla", "sullo", "sulle", "sugli",
         "tutti", "tutto", "sempre", "ancora", "anche", "dopo", "prima", "sotto", "sopra", "dentro", "fuori",
+        // polite want-to-know wrappers peeled by a_topic_strip ("mi piacerebbe sapere…", "sono curioso di…")
+        "piacerebbe", "interesserebbe", "curioso", "curiosa", "conoscere", "wondering", "wanted",
         // Sostantivi comuni italiani
         "storia", "storie", "lingua", "lingue", "linguaggio", "linguaggi", "parola", "parole", "lettera", "lettere",
         "numero", "numeri", "paese", "paesi", "citta", "fiume", "fiumi", "monte", "monti", "lago", "laghi", "mare", "mari",

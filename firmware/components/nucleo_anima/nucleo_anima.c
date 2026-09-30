@@ -2913,6 +2913,7 @@ static anima_result_t l0_query(const char *input, bool en)
 // Defined after a_norm_phrase (below); forward-declared here. 0=none, 1=formal (L0-first), 2=conversational (L1-first).
 void a_norm_phrase(const char *raw, char *out, size_t cap);
 static int a_topic_strip(const char *q, char *out, size_t outsz);
+static size_t a_know_wrapper(const char *nq);
 
 // Conversational KNOWLEDGE->SKILL bridge: after telling the user what a topic IS, proactively offer the
 // matching skill ANIMA can DO with it + invite a follow-up. Turns retrieval into a dialogue ("so cos'è la
@@ -3320,6 +3321,18 @@ static int try_cascade(const char *q, bool en, anima_result_t *r)
     }
     *r = l0_query(q, en);
     if (r->tier != ANIMA_TIER_NONE) { mem_update(r); return 1; }
+    // "vorrei sapere che ore sono" / "voglio sapere quanta batteria ho": the wrapper's desire verb ties the
+    // live keyword with open_app and sinks L0's confidence. Re-ask L0 without it — live readings and answers
+    // only: a launch never rests on a want-to-know phrasing.
+    if (kind == 1) {
+        char nq[160]; a_norm_phrase(q, nq, sizeof nq);
+        size_t wl = a_know_wrapper(nq);
+        if (wl) {
+            anima_result_t lr = l0_query(nq + wl, en);
+            if (lr.tier != ANIMA_TIER_NONE && lr.action != ANIMA_ACT_LAUNCH && strcmp(lr.intent, "clarify") != 0) { *r = lr; mem_update(r); return 1; }
+            memset(r, 0, sizeof *r);
+        }
+    }
     // PALPABLE knowledge<->skill ambiguity: a bare topic ANIMA both knows and can compute, with no cue
     // (no opener -> kind==0; no digits/compute verb -> handled inside a_skill_clarify). Ask instead of
     // guessing — exactly once. A clear request (opener, or numbers/"calcola") never reaches here.
@@ -3420,6 +3433,23 @@ static int a_norm_ntok(const char *norm) { int n = 0; for (const char *p = norm;
 // stays a live command); 2 = CONVERSATIONAL opener ("cosa sai di X" / "do you know X") — never a
 // command, so the caller runs L1 on the topic FIRST. Never strips semantic words ("come"/"perche").
 // An optional leading article is dropped after the opener.
+// A polite WANT-TO-KNOW wrapper ("vorrei sapere come si crea un file", "i'd like to know what X is",
+// "voglio sapere quanta batteria ho"). `nq` is a_norm_phrase output; returns the length of the matched
+// " wrapper " prefix (its trailing space included) when a question follows it, else 0.
+static size_t a_know_wrapper(const char *nq)
+{
+    static const char *const wrap_know[] = {
+        "vorrei sapere","volevo sapere","voglio sapere","mi piacerebbe sapere","vorrei conoscere",
+        "mi interesserebbe sapere","sono curioso di sapere","sarei curioso di sapere",
+        "i would like to know","i d like to know","i want to know","i wanted to know","i was wondering","i wonder", NULL };
+    for (int i = 0; wrap_know[i]; i++) {
+        char pat[40]; snprintf(pat, sizeof pat, " %s ", wrap_know[i]);
+        size_t L = strlen(pat);
+        if (strncmp(nq, pat, L) == 0 && nq[L]) return L;
+    }
+    return 0;
+}
+
 static int a_topic_strip(const char *q, char *out, size_t outsz)
 {
     char nq[160];
@@ -3467,15 +3497,20 @@ static int a_topic_strip(const char *q, char *out, size_t outsz)
         // tool_event already refused these (a question word follows, nothing to schedule).
         "mi ricordi","me lo ricordi","puoi ricordarmi","potresti ricordarmi","sai ricordarmi","ricordami",
         "can you remind me","could you remind me","remind me","do you remember", NULL };
+    // A polite WANT-TO-KNOW wrapper carries no topic of its own: peel it, then read the opener that follows
+    // it (if any). Without an inner opener the rest is still the question -> FORMAL (L0-first).
+    size_t wl = a_know_wrapper(nq);
+    const char *base = wl ? nq + wl - 1 : nq; bool wrapped = wl != 0;
     int kind = 0; const char *rest = NULL;
     for (int i = 0; lead_conv[i]; i++) {
         char pat[40]; snprintf(pat, sizeof pat, " %s ", lead_conv[i]);
-        if (strncmp(nq, pat, strlen(pat)) == 0) { rest = nq + strlen(pat); kind = 2; break; }
+        if (strncmp(base, pat, strlen(pat)) == 0) { rest = base + strlen(pat); kind = 2; break; }
     }
     if (!rest) for (int i = 0; lead_formal[i]; i++) {
         char pat[40]; snprintf(pat, sizeof pat, " %s ", lead_formal[i]);
-        if (strncmp(nq, pat, strlen(pat)) == 0) { rest = nq + strlen(pat); kind = 1; break; }
+        if (strncmp(base, pat, strlen(pat)) == 0) { rest = base + strlen(pat); kind = 1; break; }
     }
+    if (!rest && wrapped) { rest = base + 1; kind = 1; }
     if (!rest) return 0;
     static const char *const art[] = { "il ","lo ","la ","i ","gli ","le ","un ","uno ","una ","l ",
         "del ","dello ","della ","dei ","degli ","delle ","di ","the ","a ","an ", NULL };
@@ -3505,6 +3540,25 @@ static int a_topic_strip(const char *q, char *out, size_t outsz)
         }
         n = strlen(out);
         while (n && (out[n-1] == ' ' || out[n-1] == '?' || out[n-1] == '!' || out[n-1] == '.')) out[--n] = 0;
+    }
+    // An English INDIRECT question left behind by the opener ("do you know what X is", "i was wondering
+    // who X was") keeps the verb at the end: reduce it to the subject X, the topic L1 and the canonical
+    // "what is X" retry expect. Only this exact what/who … is/are/was/were shape; anything else stays.
+    static const char *const ind_head[] = { "what ", "who ", NULL };
+    static const char *const ind_tail[] = { " is", " are", " was", " were", NULL };
+    for (int h = 0; ind_head[h]; h++) {
+        size_t hl = strlen(ind_head[h]);
+        if (strncmp(out, ind_head[h], hl) != 0) continue;
+        n = strlen(out);
+        for (int t = 0; ind_tail[t]; t++) {
+            size_t tl = strlen(ind_tail[t]);
+            if (n > hl + tl && strcmp(out + n - tl, ind_tail[t]) == 0) {
+                out[n - tl] = 0;
+                memmove(out, out + hl, strlen(out + hl) + 1);
+                break;
+            }
+        }
+        break;
     }
     return out[0] ? kind : 0;
 }

@@ -31,7 +31,8 @@ def _corpus_sha():
     h = hashlib.sha256()
     for p in sorted(glob.glob(os.path.join(A.KDIR, "*.jsonl")), key=os.path.basename):
         h.update(os.path.basename(p).encode("utf-8")); h.update(b"\0")
-        with open(p, "rb") as f: h.update(f.read())
+        # EOL-normalised: a Windows checkout (core.autocrlf) turns the LF corpus into CRLF — same content.
+        with open(p, "rb") as f: h.update(f.read().replace(b"\r\n", b"\n"))
         h.update(b"\n")
     return h.hexdigest()
 def _file_sha(p):
@@ -44,6 +45,7 @@ def write_prov(index_path, D, K, N, n_labels):
     prov = {"schema": 1, "tool": "build_akb2.py",
             "corpus_sha": _corpus_sha(), "encoder_sha": _file_sha(enc_path),
             "D": int(D), "K": int(K), "N": int(N), "n_labels": int(n_labels)}
+    if os.environ.get("ANIMA_KMEANS") == "det": prov["kmeans"] = "det-v1"   # reproducible build (index_sha added after augment)
     with open(index_path + ".prov", "w", encoding="utf-8") as f:
         json.dump(prov, f, indent=0, sort_keys=True)
     return prov
@@ -128,11 +130,18 @@ RAM_BUDGET = 18000                                  # bytes for the centroid mal
                                                     # raising K needs device-verified RAM headroom (focus-mode).
 K_RAM = max(8, RAM_BUDGET // D)
 K = max(8, min(256, K_RAM, N // 22))
-km = KMeans(n_clusters=K, n_init=4, random_state=0).fit(vecs)
-order = np.argsort(km.labels_); cl = km.labels_[order]
+# ANIMA_KMEANS=det → A.det_kmeans: bit-reproducible on any machine (the HOST gate fixture uses it, so the
+# gate gives the same verdict everywhere). Default stays sklearn so the shipped DEVICE packs are unchanged
+# until a deliberate, device-verified switch.
+KMEANS = os.environ.get("ANIMA_KMEANS", "sklearn")
+if KMEANS == "det":
+    labels_ = A.det_kmeans(vecs, K)
+else:
+    labels_ = KMeans(n_clusters=K, n_init=4, random_state=0).fit(vecs).labels_
+order = (np.argsort(labels_, kind="stable") if KMEANS == "det" else np.argsort(labels_)); cl = labels_[order]
 centroids = np.zeros((K, D), np.float32)
 for c in range(K):
-    m = vecs[km.labels_ == c]
+    m = vecs[labels_ == c]
     if len(m): centroids[c] = m.mean(0)
 cn = np.linalg.norm(centroids, axis=1, keepdims=True); centroids /= np.where(cn > 0, cn, 1)
 dir_off = np.zeros(K, np.uint32); dir_cnt = np.zeros(K, np.uint32); pos = 0
@@ -180,7 +189,7 @@ def search(q, topc=2):
     cs = cq8 @ qv / (np.linalg.norm(cq8,axis=1)+1e-9)
     best=-1; bc=-9
     for c in np.argsort(cs)[::-1][:topc]:
-        for i in np.where(km.labels_==c)[0]:
+        for i in np.where(labels_==c)[0]:
             cos=float(vq8[i]@qv/((np.linalg.norm(vq8[i])*np.linalg.norm(qv))+1e-9))
             if cos>bc: bc=cos; best=i
     return LABELS[vlab[best]], bc

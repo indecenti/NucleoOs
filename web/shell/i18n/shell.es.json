@@ -287,5 +287,19 @@
   "app_video-studio": "Estudio de vídeo",
   "app_voice-manager": "Comandos de voz",
   "app_weather": "Tiempo",
-  "app_wifi-scanner": "Escáner WiFi"
+  "app_wifi-scanner": "Escáner WiFi",
+  "toast_save_failed": "No se pudo guardar en el Cardputer: se reintentará automáticamente en cuanto responda.",
+  "toast_save_recovered": "Cambios guardados en el Cardputer.",
+  "link_down_title": "Cardputer inaccesible.",
+  "link_down_body": "Reconectando… Comprueba que esté encendido y en la misma red Wi-Fi.",
+  "link_retry": "Reintentar ahora",
+  "link_back": "Conectado de nuevo al Cardputer.",
+  "tray_sd_free": "SD {free} libres",
+  "tray_offline": "sin conexión",
+  "net_unreachable": "Dispositivo inaccesible",
+  "net_wifi_title": "Wi-Fi {ssid}",
+  "net_ap_title": "Punto de acceso {ssid} · http://192.168.4.1",
+  "remote_controlling": "Controlando",
+  "remote_title_one": "Este navegador controla el dispositivo. La pantalla del Cardputer está en pausa.",
+  "remote_title_many": "Este navegador controla el dispositivo ({n} sesiones). La pantalla del Cardputer está en pausa."
 }

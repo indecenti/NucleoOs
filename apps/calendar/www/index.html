@@ -94,32 +94,69 @@
     let selKey = null;
 
     const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    const todayKey = ymd(new Date());
+    const todayKey = () => ymd(new Date());      // a function: the app may stay open past midnight
 
+    // Typed read. A FAILED read (offline, 401, 503) is NOT an empty calendar: treating it as one showed
+    // "no events" and the next add wrote that empty calendar over the real file on the SD.
+    // The firmware answers a missing /system/config/*.json with 200 "{}", so 404 is also "nothing yet".
     async function readJSON(path) {
-      try { const r = await fetch('/api/fs/read?path=' + encodeURIComponent(path), { cache: 'no-store' });
-        return r.ok ? JSON.parse(await r.text()) : null; } catch { return null; }
+      try {
+        const r = await fetch('/api/fs/read?path=' + encodeURIComponent(path), { cache: 'no-store' });
+        if (r.status === 404) return { ok: true, data: null };
+        if (!r.ok) return { ok: false, status: r.status };
+        const txt = await r.text();
+        return { ok: true, data: txt ? JSON.parse(txt) : null };
+      } catch { return { ok: false, status: 0 }; }
     }
     async function writeJSON(path, obj) {
       try { const r = await fetch('/api/fs/write?path=' + encodeURIComponent(path),
-        { method: 'POST', body: JSON.stringify(obj, null, 2) }); return r.ok; } catch { return false; }
+        { method: 'POST', body: JSON.stringify(obj) }); return r.ok ? true : r.status; } catch { return 0; }
+    }
+    // Reminders ANIMA adds on the device carry no id (nucleo_httpd.c writes {time,text}), so they could
+    // never be deleted here (the delete filter compared against "undefined"). Give every event a STABLE
+    // id derived from its content, so the same event gets the same id on every load without rewriting.
+    function stableId(s) { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return 'a' + (h >>> 0).toString(36); }
+    function normalize(d) {
+      const out = (d && typeof d === 'object' && d.events && typeof d.events === 'object') ? d : { schema: 1, events: {} };
+      for (const [k, arr] of Object.entries(out.events)) {
+        if (!Array.isArray(arr)) { delete out.events[k]; continue; }
+        arr.forEach((e, i) => { if (e && !e.id) e.id = stableId(k + '|' + (e.time || '') + '|' + (e.text || '') + '|' + i); });
+      }
+      return out;
+    }
+    let readOk = false;                           // editing is allowed only once the real file was read
+    function showReadState(status) {
+      $('save').textContent = status === 401 || status === 403 ? t('not_paired') : t('read_failed');
     }
 
     async function loadSettings() {
-      const s = await readJSON(SETTINGS);
+      const r = await readJSON(SETTINGS);
+      const s = r.ok ? r.data : null;
       if (s?.ui?.theme) document.documentElement.dataset.theme = s.ui.theme;
-      if (s?.device?.locale) locale = s.device.locale;
+      // Dates follow the OS regional format (Settings ▸ Language & Region), like every other surface.
+      locale = I18N.locale ? I18N.locale() : (s?.device?.locale || navigator.language);
       // Infer week start from locale: most of the world starts Monday; US/CA/JP start Sunday.
       const reg = (locale || navigator.language || 'en-US').split('-')[1]?.toUpperCase();
       firstDay = ['US', 'CA', 'JP'].includes(reg) ? 0 : 1;
     }
     async function loadEvents() {
-      const d = await readJSON(CAL);
-      if (d && typeof d === 'object' && d.events) data = d;
+      const r = await readJSON(CAL);
+      readOk = r.ok;
+      if (!r.ok) { showReadState(r.status); return; }
+      data = normalize(r.data);
     }
-    async function persist() {
+    // Read-modify-write against the FRESH file: ANIMA (on the device) or another window may have changed
+    // it since we loaded, and writing our stale copy back erased their events.
+    async function mutate(fn) {
       $('save').textContent = t('saving');
-      $('save').textContent = (await writeJSON(CAL, data)) ? t('saved_device') : t('save_failed');
+      const r = await readJSON(CAL);
+      if (!r.ok) { readOk = false; showReadState(r.status); return false; }
+      const fresh = normalize(r.data);
+      fn(fresh);
+      const w = await writeJSON(CAL, fresh);
+      if (w === true) { data = fresh; readOk = true; $('save').textContent = t('saved_device'); return true; }
+      $('save').textContent = w === 401 || w === 403 ? t('not_paired') : t('save_failed');
+      return false;
     }
 
     function monthLabel(d) { return d.toLocaleDateString(locale, { month: 'long', year: 'numeric' }); }
@@ -147,7 +184,7 @@
         const evs = (data.events[key] || []).slice().sort((a, b) => (a.time || '').localeCompare(b.time || ''));
         const chips = evs.slice(0, 2).map((e) => `<div class="ev" title="${esc(e.text)}">${e.time ? esc(e.time) + ' ' : ''}${esc(e.text)}</div>`).join('');
         const more = evs.length > 2 ? `<div class="more">${esc(t('more_events', { count: evs.length - 2 }))}</div>` : '';
-        cells.push(`<div class="cell${out ? ' out' : ''}${key === todayKey ? ' today' : ''}${key === selKey ? ' sel' : ''}" data-k="${key}">
+        cells.push(`<div class="cell${out ? ' out' : ''}${key === todayKey() ? ' today' : ''}${key === selKey ? ' sel' : ''}" data-k="${key}">
           <div class="n">${d.getDate()}</div><div class="evs">${chips}${more}</div></div>`);
       }
       $('grid').innerHTML = cells.join('');
@@ -158,7 +195,7 @@
       if (!selKey) { $('day-title').textContent = t('pick_day'); $('day-sub').textContent = ''; $('evlist').innerHTML = ''; return; }
       const d = new Date(selKey + 'T00:00:00');
       $('day-title').textContent = d.toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long' });
-      $('day-sub').textContent = selKey === todayKey ? t('today') : '';
+      $('day-sub').textContent = selKey === todayKey() ? t('today') : '';
       const evs = (data.events[selKey] || []).slice().sort((a, b) => (a.time || '').localeCompare(b.time || ''));
       if (!evs.length) { $('evlist').innerHTML = `<div class="empty">${esc(t('empty_events'))}</div>`; return; }
       $('evlist').innerHTML = evs.map((e) => `<div class="evrow">
@@ -172,26 +209,30 @@
     async function addEvent() {
       const text = $('ev-text').value.trim(); if (!text || !selKey) return;
       const time = $('ev-time').value || '';
-      (data.events[selKey] ||= []).push({ id: 'e' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), time, text });
-      $('ev-text').value = '';
-      renderGrid(); renderDay(); await persist();
+      const key = selKey, ev = { id: 'e' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), time, text };
+      if (await mutate((d) => { (d.events[key] ||= []).push(ev); })) $('ev-text').value = '';   // keep the text if it failed
+      renderGrid(); renderDay();
     }
     async function removeEvent(id) {
-      const arr = data.events[selKey] || [];
-      data.events[selKey] = arr.filter((e) => e.id !== id);
-      if (!data.events[selKey].length) delete data.events[selKey];
-      renderGrid(); renderDay(); await persist();
+      const key = selKey;
+      await mutate((d) => {
+        const arr = (d.events[key] || []).filter((e) => e.id !== id);
+        if (arr.length) d.events[key] = arr; else delete d.events[key];
+      });
+      renderGrid(); renderDay();
     }
 
     const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
     $('prev').onclick = () => { view.setMonth(view.getMonth() - 1); renderGrid(); };
     $('next').onclick = () => { view.setMonth(view.getMonth() + 1); renderGrid(); };
-    $('today-btn').onclick = () => { view = new Date(); view.setDate(1); select(todayKey); };
+    $('today-btn').onclick = () => { view = new Date(); view.setDate(1); select(todayKey()); };
     $('ev-text').addEventListener('keydown', (e) => { if (e.key === 'Enter') addEvent(); });
 
     // Live cross-client: another window edited the calendar or theme → reflect it.
     window.addEventListener('message', (e) => {
+      // ANIMA adding a reminder on the device publishes calendar.changed (nucleo_httpd.c), not fs.changed.
+      if (e.data?.t === 'calendar.changed') loadEvents().then(() => { renderGrid(); renderDay(); });
       if (e.data?.t === 'fs.changed' && typeof e.data.d?.path === 'string') {
         if (e.data.d.path.endsWith('calendar.json')) loadEvents().then(() => { renderGrid(); renderDay(); });
         if (e.data.d.path.endsWith('settings.json')) loadSettings().then(() => { renderDow(); renderGrid(); renderDay(); });
@@ -201,7 +242,7 @@
 
     async function init() {
       await loadSettings(); await loadEvents();
-      renderDow(); select(todayKey);
+      renderDow(); select(todayKey());
     }
     // Re-run imperative redraws (weekday/month/day labels, event chips, status) on live language change.
     I18N.onChange(() => { renderDow(); renderGrid(); renderDay(); });

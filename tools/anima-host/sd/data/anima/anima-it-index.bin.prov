@@ -1,10 +1,12 @@
 {
-"D": 256,
-"K": 70,
-"N": 35101,
-"corpus_sha": "c796982c495b2e603587710e62085a8d7c0eba5093ff908228ef5bd0255b3969",
-"encoder_sha": "03c86b330c1d6d00715bcfbef83a3c88ca797751ab0e73c3f8c47b12f08c4558",
-"n_labels": 2014,
-"schema": 1,
-"tool": "build_akb2.py"
+"D":256,
+"K":70,
+"N":35101,
+"corpus_sha":"c796982c495b2e603587710e62085a8d7c0eba5093ff908228ef5bd0255b3969",
+"encoder_sha":"03c86b330c1d6d00715bcfbef83a3c88ca797751ab0e73c3f8c47b12f08c4558",
+"index_sha":"1eb71e800caf3d6b8b30f1ca62175327985f56a2d42a291745fccb4e5cc16942",
+"kmeans":"det-v1",
+"n_labels":2014,
+"schema":1,
+"tool":"build_akb2.py"
 }
