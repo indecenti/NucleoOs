@@ -1,4 +1,5 @@
 #include "nucleo_auth.h"
+#include "auth_slots.h"
 #include "nucleo_board.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -20,7 +21,7 @@ static const char *TAG = "auth";
 
 #define COOKIE_NAME   "nucleo_session"
 #define TOKEN_HEX_LEN 48                    // 24 random bytes -> 48 hex chars
-#define MAX_TOKENS    32                    // bounded ring of valid sessions (browsers + CLI tools)
+#define MAX_TOKENS    32                    // bounded table of valid sessions (browsers + CLI tools), LRU-evicted
 #define COOKIE_MAXAGE 31536000              // browser cookie lifetime: 1 year (server-side idle-TTL is the real bound)
 
 // Sliding idle-TTL. A session that goes UNUSED for SESSION_TTL_SEC is expired server-side and dropped —
@@ -43,8 +44,24 @@ static char    s_pin_override[7];           // optional fixed PIN from settings.
 static bool    s_required = true;
 static char    s_tokens[MAX_TOKENS][TOKEN_HEX_LEN + 1];
 static int64_t s_tok_seen[MAX_TOKENS];      // wall-clock (time()) last seen; 0 = minted before the clock was set
-static int     s_token_count;               // newest at [count-1] wrapping via ring write
-static int     s_token_head;                // next write slot (ring)
+static int     s_token_count;               // live sessions in s_tokens
+// RAM-only recency (auth_slots.h): bumped on every authenticated request, never persisted, so the hot
+// path stays write-free. A new pairing takes a free slot, else evicts the LEAST recently used session.
+static uint32_t s_tok_lru[MAX_TOKENS];
+static uint32_t s_lru_tick;
+
+static void count_tokens(void)
+{
+    s_token_count = 0;
+    for (int i = 0; i < MAX_TOKENS; i++) if (s_tokens[i][0]) s_token_count++;
+}
+
+static void rank_tokens(void)               // after a load: recency from the persisted "last seen"
+{
+    bool used[MAX_TOKENS];
+    for (int i = 0; i < MAX_TOKENS; i++) used[i] = s_tokens[i][0] != '\0';
+    s_lru_tick = auth_rank_seen(used, s_tok_seen, s_tok_lru, MAX_TOKENS);
+}
 
 // Per-source-IP brute-force throttle. A GLOBAL counter let any one hostile client lock out EVERY other
 // client from pairing (trivial remote DoS of the whole web OS); keying it per IP contains the attacker
@@ -137,7 +154,8 @@ static void load_auth(void)
 {
     memset(s_tokens, 0, sizeof(s_tokens));
     memset(s_tok_seen, 0, sizeof(s_tok_seen));
-    s_token_count = 0; s_token_head = 0;
+    memset(s_tok_lru, 0, sizeof(s_tok_lru));
+    s_token_count = 0; s_lru_tick = 0;
 
     // Read /cfg first, then the NVS fallback. Size the buffer from the file: a full 32-token ring is
     // ~2.3 KB, and the old fixed 2 KB read truncated it -> parse failed -> PIN + all sessions wiped.
@@ -159,8 +177,8 @@ static void load_auth(void)
     cJSON *pin = cJSON_GetObjectItem(root, "pin");           // restore the persisted PIN
     if (cJSON_IsString(pin) && strlen(pin->valuestring) == 6) strcpy(s_pin, pin->valuestring);
     cJSON *arr = cJSON_GetObjectItem(root, "tokens");
-    int c = cJSON_GetArraySize(arr);
-    for (int i = 0; i < c && i < MAX_TOKENS; i++) {
+    int c = cJSON_GetArraySize(arr), k = 0;
+    for (int i = 0; i < c && k < MAX_TOKENS; i++) {
         cJSON *e = cJSON_GetArrayItem(arr, i);
         const char *hex = NULL; int64_t seen = 0;
         if (cJSON_IsString(e)) {                                   // legacy format: a bare token string (pre-TTL)
@@ -172,13 +190,14 @@ static void load_auth(void)
             if (cJSON_IsNumber(s)) seen = (int64_t)s->valuedouble;
         }
         if (hex && strlen(hex) == TOKEN_HEX_LEN) {
-            strcpy(s_tokens[s_token_head], hex);
-            s_tok_seen[s_token_head] = seen;                       // legacy tokens load with seen=0 -> TTL clock starts on next use
-            s_token_head = (s_token_head + 1) % MAX_TOKENS;
-            if (s_token_count < MAX_TOKENS) s_token_count++;
+            strcpy(s_tokens[k], hex);
+            s_tok_seen[k] = seen;                                  // legacy tokens load with seen=0 -> TTL clock starts on next use
+            k++;
         }
     }
     cJSON_Delete(root);
+    count_tokens();
+    rank_tokens();
     if (from_nvs) { save_auth(); ESP_LOGW(TAG, "auth recovered from NVS fallback (/cfg missing) — re-persisted"); }
     ESP_LOGI(TAG, "loaded %d session token(s)", s_token_count);
 }
@@ -282,13 +301,15 @@ static bool token_valid(const char *tok)
                 s_tok_seen[i] = now; save_auth();
             } else if (now - s_tok_seen[i] > SESSION_TTL_SEC) {
                 s_tokens[i][0] = '\0'; s_tok_seen[i] = 0;   // unused past the TTL -> expire this session (must re-pair)
-                if (s_token_count > 0) s_token_count--;
+                s_tok_lru[i] = 0;
+                count_tokens();
                 save_auth();
                 return false;
             } else if (now - s_tok_seen[i] > SESSION_REFRESH_SEC) {
                 s_tok_seen[i] = now; save_auth();           // sliding refresh, at most once/day (keeps the hot path write-free)
             }
         }
+        s_tok_lru[i] = ++s_lru_tick;                        // in use right now: the last one a new pairing may evict
         return true;
     }
     return false;
@@ -337,10 +358,9 @@ int nucleo_auth_revoke(const char *keep_token)
     for (int i = 0; i < MAX_TOKENS; i++) {
         if (!s_tokens[i][0]) continue;
         if (keep_token && *keep_token && ct_equal(s_tokens[i], keep_token)) continue;   // spare the caller's own session
-        s_tokens[i][0] = '\0'; s_tok_seen[i] = 0; revoked++;
+        s_tokens[i][0] = '\0'; s_tok_seen[i] = 0; s_tok_lru[i] = 0; revoked++;
     }
-    s_token_count = 0;
-    for (int i = 0; i < MAX_TOKENS; i++) if (s_tokens[i][0]) s_token_count++;
+    count_tokens();
     if (revoked) save_auth();                                                           // persist the wipe (both tiers)
     return revoked;
 }
@@ -356,7 +376,8 @@ bool nucleo_auth_factory_reset(void)
     // RAM first: every session is dead and pairing is refused (no PIN matches "") from this instant on.
     memset(s_tokens, 0, sizeof(s_tokens));
     memset(s_tok_seen, 0, sizeof(s_tok_seen));
-    s_token_count = 0; s_token_head = 0; s_pin[0] = '\0';
+    memset(s_tok_lru, 0, sizeof(s_tok_lru));
+    s_token_count = 0; s_lru_tick = 0; s_pin[0] = '\0';
     remove(AUTH_JSON); remove(AUTH_JSON ".tmp");
     struct stat st;                                          // gone only if the FS says so (not EMFILE / I/O error)
     if (!(stat(AUTH_JSON, &st) != 0 && (errno == ENOENT || errno == ENOTDIR))) ok = false;
@@ -389,11 +410,14 @@ static void mint_token(char *out)
     static const char hex[] = "0123456789abcdef";
     for (int i = 0; i < TOKEN_HEX_LEN; i++) out[i] = hex[esp_random() & 0xF];
     out[TOKEN_HEX_LEN] = '\0';
-    strcpy(s_tokens[s_token_head], out);             // bounded ring: oldest session is evicted
+    bool used[MAX_TOKENS];
+    for (int i = 0; i < MAX_TOKENS; i++) used[i] = s_tokens[i][0] != '\0';
+    int slot = auth_pick_slot(used, s_tok_lru, MAX_TOKENS);   // free slot, else the least recently used session
+    strcpy(s_tokens[slot], out);
     { int64_t now = (int64_t)time(NULL);             // stamp last-seen so the idle-TTL has a start point
-      s_tok_seen[s_token_head] = now > CLOCK_VALID_EPOCH ? now : 0; }   // 0 if clock cold -> starts on first clocked use
-    s_token_head = (s_token_head + 1) % MAX_TOKENS;
-    if (s_token_count < MAX_TOKENS) s_token_count++;
+      s_tok_seen[slot] = now > CLOCK_VALID_EPOCH ? now : 0; }   // 0 if clock cold -> starts on first clocked use
+    s_tok_lru[slot] = ++s_lru_tick;
+    count_tokens();
     save_auth();
 }
 
