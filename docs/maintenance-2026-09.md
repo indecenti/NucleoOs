@@ -115,10 +115,15 @@ A pass over everything *around* the code — what a first-time reader or a licen
 - **Standard health file:** added [`SECURITY.md`](../SECURITY.md) — a private vulnerability-reporting
   policy with an explicit in/out-of-scope split (the bundled offensive tools working as designed are
   not vulnerabilities), complementing the README's responsible-use section.
-- **Known gap (not fixed here):** ~200 tracked source files still carry Italian in dev comments and a
-  number of hardcoded Italian UI strings (the latter tracked under *i18n* below). A translation pass
-  must be careful not to touch the Italian **NLU example strings** in `nucleo_anima/*.c` (they are the
-  Italian intent corpus and must stay), so it is left as a deliberate, gate-verified effort.
+- **Italian dev comments translated to English:** a comment-only pass over tooling (`tools/*`), the
+  web shell (`web/shell/*`) and non-ANIMA firmware, including the ANIMA chat app (`app_anima.cpp`,
+  ~115 lines). Each edit was verified comment-only — every touched C/C++ file is byte-identical after
+  stripping comments. Deliberately left untouched: the Italian **NLU example corpus** in
+  `nucleo_anima/*.c`, quoted example utterances / UI labels that comments cite (translating them would
+  break the match with the real string), and hardcoded Italian **UI strings** and dev **CLI output
+  strings** — those are string literals, tracked as a separate i18n effort (see *i18n* below).
+  Two files (`app_wifi.cpp`, `app_updates.cpp`) were skipped while a concurrent nucleo_guest feature
+  had them open.
 - **History rewrite (separate step):** the copyrighted media, the vendored `reference/` trees and the
   dropped GGUF/teacher parts still exist in git history; a `git filter-branch` + force-push removes
   them and shrinks the ~3 GB `.git`. The TTS parts are purged in a second pass once the Release exists.
