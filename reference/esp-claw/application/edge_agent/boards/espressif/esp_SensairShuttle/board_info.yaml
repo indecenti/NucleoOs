@@ -1,4 +1,0 @@
-board: esp_SensairShuttle
-chip: esp32c5
-description: "ESP-SensairShuttle Development Board"
-manufacturer: "ESPRESSIF"

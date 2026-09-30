@@ -1,4 +1,0 @@
-# CORS
-
-/clientjs/*
-  Access-Control-Allow-Origin: *
