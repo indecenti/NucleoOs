@@ -126,5 +126,6 @@
   "engThisPc": "dieser Computer",
   "netThisPc": "keins · bleibt auf diesem Computer",
   "localSkipped": "{m} passte nicht in den Speicher: ein leichteres Modell hat geantwortet",
-  "agentLocal": "Lokaler Agent · {server} · {model}"
+  "agentLocal": "Lokaler Agent · {server} · {model}",
+  "agentDeclined": "Das lokale Modell ({model}) konnte diese Aufgabe mit deinen Dateien nicht erledigen ({why}), und ich erfinde keine Antwort. Ein größeres Modell auf deinem PC (Ollama) oder ein Cloud-Schlüssel schafft das; oder teile die Anfrage in einfachere Schritte auf."
 }

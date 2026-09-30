@@ -218,7 +218,7 @@ export async function queryLocal(q, lang, history, onProgress, opts = {}) {
   }, opts);
   const reply = (txt || '').trim();
   if (!reply) return null;
-  return { reply, tier: 'M4-local', intent: /```/.test(reply) ? 'code' : 'local', confidence: 60, domain: 'local', trace: 'Browser LLM · WebLLM' };
+  return { reply, tier: 'M4-local', intent: /```/.test(reply) ? 'code' : 'local', confidence: 60, domain: 'local', model: _loadedModel || '', trace: 'Browser LLM · WebLLM' };
 }
 
 // The installed GPU model as an AGENT engine for the Agenti runtime's local loop (apps/agent/local-worker.js):
