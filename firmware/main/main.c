@@ -37,6 +37,7 @@
 #include "nucleo_voice.h"
 #include "nucleo_ir.h"
 #include "esp_ota_ops.h"
+#include "nucleo_guest.h"  // M5Launcher guest mode (runtime-detected from the partition table)
 #include "esp_app_desc.h"   // esp_app_get_description(): real running-image version for the boot banner
 #include "esp_system.h"     // esp_reset_reason(): why the PREVIOUS boot ended (panic vs WDT vs brownout)
 #include "esp_timer.h"      // Solo bring-up watchdog: the net under a boot that never reaches a UI task
@@ -189,10 +190,16 @@ void app_main(void)
 
     esp_err_t nvs = nvs_flash_init();
     if (nvs == ESP_ERR_NVS_NO_FREE_PAGES || nvs == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+        // Hosted by M5Launcher the "nvs" partition is SHARED with the Launcher (its settings + app list):
+        // an erase resets those too. Still the only recovery for an unusable NVS, so it stays — but loud.
+        if (nucleo_guest_hosted()) ESP_LOGE(TAG, "NVS unusable (%s): erasing the NVS shared with M5Launcher", esp_err_to_name(nvs));
         ESP_ERROR_CHECK(nvs_flash_erase());
         ESP_ERROR_CHECK(nvs_flash_init());
     }
     bootmark("nvs");
+    // Installed by M5Launcher? (partition-table scan, cached; logs the guest-mode posture once.)
+    // Stand-alone: false, nothing changes. docs/m5launcher.md
+    nucleo_guest_hosted();
 
     // Reclaim the BLE controller's idle DRAM (~tens of KB) for the OS/ANIMA on a PSRAM-less, heap-starved
     // chip. Bluetooth is OFF by default (a niche Security tool); enabling it in the BLE app + rebooting

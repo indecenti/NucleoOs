@@ -9,6 +9,7 @@
 #include "nucleo_notify.h"
 #include "nucleo_i18n.h"
 #include "nucleo_arb.h"
+#include "nucleo_guest.h"   // hosted by M5Launcher: the next OTA slot is another app's -> no self-OTA
 
 #include <stdio.h>
 #include <string.h>
@@ -439,6 +440,12 @@ static void install_task(void *arg)
 {
     (void)arg;
     char want[65];
+
+    // Installed by M5Launcher: esp_ota_get_next_update_partition() would be ANOTHER app's slot (or our
+    // own running one). Never write it — the update comes from Launcher's OTA list (docs/m5launcher.md).
+    if (!nucleo_guest_self_ota_allowed())
+        fail_install(UT("Aggiorna da M5Launcher (OTA)", "Update from M5Launcher (OTA)", "Actualiza desde M5Launcher (OTA)",
+                        "Mettez a jour via M5Launcher (OTA)", "Update ueber M5Launcher (OTA)"), 0);
 
     // Runs in a fresh-heap Solo boot where Wi-Fi has only just come up — wait for the STA IP first.
     if (!wait_sta_ip()) fail_install(UT("Nessuna rete Wi-Fi", "No Wi-Fi network", "Sin red Wi-Fi", "Pas de réseau Wi-Fi", "Kein WLAN"), 0);

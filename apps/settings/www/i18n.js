@@ -27,7 +27,7 @@ export const STR = {
     upCheckFail: 'Controllo non riuscito (offline o limite GitHub). Riprova più tardi.', upPagesLag: 'Release appena pubblicata: il sito di download non è ancora allineato. Riprova tra qualche minuto.', upNoOtaAsset: 'Questa release non include l\'immagine OTA per il browser: usa il flasher web.',
     upSumsFail: 'Verifica integrità non riuscita: download interrotto.', upDownloading: 'Download firmware… {mb} MB', upVerifying: 'Verifica SHA-256…',
     upFlashing: 'Scrittura firmware sul dispositivo… non spegnerlo.', upWaitReboot: 'Riavvio del dispositivo in corso…', upDone: 'Aggiornato a {tag}.',
-    upFailTimeout: 'Il dispositivo non è tornato online: verifica a mano (in caso, flasher web).', upBusy: 'Dispositivo occupato (un altro download è in corso). Riprova tra poco.', upAuthFail: 'Sessione non associata: riapri lo shell e ripeti il pairing.',
+    upFailTimeout: 'Il dispositivo non è tornato online: verifica a mano (in caso, flasher web).', upBusy: 'Dispositivo occupato (un altro download è in corso). Riprova tra poco.', upHosted: 'Installato da M5Launcher: aggiorna NucleoOS dal Launcher (OTA).', upAuthFail: 'Sessione non associata: riapri lo shell e ripeti il pairing.',
     upNever: 'mai', upFlashHint: 'Scarica l\'immagine OTA dal sito ufficiale, ne verifica l\'integrità (SHA-256) e la invia al dispositivo. Al termine il Cardputer si riavvia da solo; se l\'immagine non parte, torna da sola alla versione precedente (rollback).',
     // control center
     pulse: 'Battito del dispositivo', heap: 'Memoria libera', frag: 'Frammentazione',
@@ -164,7 +164,7 @@ export const STR = {
     upCheckFail: 'Check failed (offline or GitHub rate limit). Try again later.', upPagesLag: 'Release just published: the download site is not aligned yet. Try again in a few minutes.', upNoOtaAsset: 'This release has no browser-OTA image: use the web flasher.',
     upSumsFail: 'Integrity check failed: download aborted.', upDownloading: 'Downloading firmware… {mb} MB', upVerifying: 'Verifying SHA-256…',
     upFlashing: 'Writing firmware to the device… do not power it off.', upWaitReboot: 'Device is rebooting…', upDone: 'Updated to {tag}.',
-    upFailTimeout: 'The device did not come back online: check it manually (web flasher if needed).', upBusy: 'Device busy (another download is running). Try again shortly.', upAuthFail: 'Session not paired: reopen the shell and pair again.',
+    upFailTimeout: 'The device did not come back online: check it manually (web flasher if needed).', upBusy: 'Device busy (another download is running). Try again shortly.', upHosted: 'Installed by M5Launcher: update NucleoOS from the Launcher (OTA).', upAuthFail: 'Session not paired: reopen the shell and pair again.',
     upNever: 'never', upFlashHint: 'Downloads the OTA image from the official site, verifies its integrity (SHA-256) and streams it to the device. The Cardputer reboots on its own; if the new image fails to boot it rolls back to the previous version automatically.',
     pulse: 'Device pulse', heap: 'Free memory', frag: 'Fragmentation',
     cpu: 'CPU', signal: 'Wi-Fi signal', uptime: 'Uptime', battery: 'Battery',
@@ -300,7 +300,7 @@ export const STR = {
     upCheckFail: 'Comprobación fallida (sin conexión o límite de GitHub). Inténtalo más tarde.', upPagesLag: 'Release recién publicada: el sitio de descarga aún no está alineado. Inténtalo en unos minutos.', upNoOtaAsset: 'Esta release no incluye imagen OTA para el navegador: usa el web flasher.',
     upSumsFail: 'Verificación de integridad fallida: descarga cancelada.', upDownloading: 'Descargando firmware… {mb} MB', upVerifying: 'Verificando SHA-256…',
     upFlashing: 'Escribiendo firmware en el dispositivo… no lo apagues.', upWaitReboot: 'El dispositivo se está reiniciando…', upDone: 'Actualizado a {tag}.',
-    upFailTimeout: 'El dispositivo no volvió a estar en línea: compruébalo a mano (web flasher si hace falta).', upBusy: 'Dispositivo ocupado (hay otra descarga en curso). Inténtalo en breve.', upAuthFail: 'Sesión no emparejada: reabre el shell y vuelve a emparejar.',
+    upFailTimeout: 'El dispositivo no volvió a estar en línea: compruébalo a mano (web flasher si hace falta).', upBusy: 'Dispositivo ocupado (hay otra descarga en curso). Inténtalo en breve.', upHosted: 'Instalado por M5Launcher: actualiza NucleoOS desde el Launcher (OTA).', upAuthFail: 'Sesión no emparejada: reabre el shell y vuelve a emparejar.',
     upNever: 'nunca', upFlashHint: 'Descarga la imagen OTA del sitio oficial, verifica su integridad (SHA-256) y la envía al dispositivo. El Cardputer se reinicia solo; si la nueva imagen no arranca, vuelve sola a la versión anterior (rollback).',
     // control center
     pulse: 'Pulso del dispositivo', heap: 'Memoria libre', frag: 'Fragmentación',
@@ -431,7 +431,7 @@ export const STR = {
     upCheckFail: 'Vérification échouée (hors ligne ou limite GitHub). Réessayez plus tard.', upPagesLag: 'Release tout juste publiée : le site de téléchargement n\'est pas encore aligné. Réessayez dans quelques minutes.', upNoOtaAsset: 'Cette release n\'inclut pas d\'image OTA pour le navigateur : utilisez le web flasher.',
     upSumsFail: 'Vérification d\'intégrité échouée : téléchargement annulé.', upDownloading: 'Téléchargement du firmware… {mb} Mo', upVerifying: 'Vérification SHA-256…',
     upFlashing: 'Écriture du firmware sur l\'appareil… ne l\'éteignez pas.', upWaitReboot: 'Redémarrage de l\'appareil…', upDone: 'Mis à jour vers {tag}.',
-    upFailTimeout: 'L\'appareil n\'est pas revenu en ligne : vérifiez manuellement (web flasher au besoin).', upBusy: 'Appareil occupé (un autre téléchargement est en cours). Réessayez bientôt.', upAuthFail: 'Session non appairée : rouvrez le shell et refaites l\'appairage.',
+    upFailTimeout: 'L\'appareil n\'est pas revenu en ligne : vérifiez manuellement (web flasher au besoin).', upBusy: 'Appareil occupé (un autre téléchargement est en cours). Réessayez bientôt.', upHosted: 'Installé par M5Launcher : mettez NucleoOS à jour depuis le Launcher (OTA).', upAuthFail: 'Session non appairée : rouvrez le shell et refaites l\'appairage.',
     upNever: 'jamais', upFlashHint: 'Télécharge l\'image OTA depuis le site officiel, vérifie son intégrité (SHA-256) et l\'envoie à l\'appareil. Le Cardputer redémarre tout seul ; si la nouvelle image ne démarre pas, il revient seul à la version précédente (rollback).',
     // control center
     pulse: 'Pouls de l’appareil', heap: 'Mémoire libre', frag: 'Fragmentation',
@@ -562,7 +562,7 @@ export const STR = {
     upCheckFail: 'Prüfung fehlgeschlagen (offline oder GitHub-Limit). Später erneut versuchen.', upPagesLag: 'Release gerade veröffentlicht: die Download-Seite ist noch nicht angeglichen. In ein paar Minuten erneut versuchen.', upNoOtaAsset: 'Diese Release enthält kein Browser-OTA-Image: Web-Flasher verwenden.',
     upSumsFail: 'Integritätsprüfung fehlgeschlagen: Download abgebrochen.', upDownloading: 'Firmware wird geladen… {mb} MB', upVerifying: 'SHA-256 wird geprüft…',
     upFlashing: 'Firmware wird auf das Gerät geschrieben… nicht ausschalten.', upWaitReboot: 'Gerät startet neu…', upDone: 'Aktualisiert auf {tag}.',
-    upFailTimeout: 'Das Gerät kam nicht zurück: bitte manuell prüfen (notfalls Web-Flasher).', upBusy: 'Gerät beschäftigt (ein anderer Download läuft). Gleich erneut versuchen.', upAuthFail: 'Sitzung nicht gekoppelt: Shell neu öffnen und erneut koppeln.',
+    upFailTimeout: 'Das Gerät kam nicht zurück: bitte manuell prüfen (notfalls Web-Flasher).', upBusy: 'Gerät beschäftigt (ein anderer Download läuft). Gleich erneut versuchen.', upHosted: 'Über M5Launcher installiert: NucleoOS im Launcher aktualisieren (OTA).', upAuthFail: 'Sitzung nicht gekoppelt: Shell neu öffnen und erneut koppeln.',
     upNever: 'nie', upFlashHint: 'Lädt das OTA-Image von der offiziellen Seite, prüft seine Integrität (SHA-256) und streamt es zum Gerät. Der Cardputer startet selbst neu; startet das neue Image nicht, fällt er automatisch auf die vorherige Version zurück (Rollback).',
     // control center
     pulse: 'Gerätepuls', heap: 'Freier Speicher', frag: 'Fragmentierung',

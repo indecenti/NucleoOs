@@ -42,3 +42,6 @@ jobs:
 
       - name: Native release-update policy (host-compiled C)
         run: node tools/anima-host/update-check.mjs
+
+      - name: M5Launcher guest-mode policy (host-compiled C)
+        run: node tools/anima-host/guest-check.mjs

@@ -513,6 +513,13 @@ const gates = [
     // throttle that can never wedge (never-checked and clock-backwards are both "due"). Twin of the
     // web logic in web/shell/update-core.js (tools/update-core.test.mjs). Pure C, no device.
     ok: (code) => code === 0, summary: (o) => (o.match(/update-policy: [^\n]*/) || [lastLine(o)])[0].trim() },
+  { name: 'guest-policy (M5Launcher)', cmd: 'node', args: ['tools/anima-host/guest-check.mjs'],
+    // Guest mode under M5Launcher (firmware/components/nucleo_guest/guest_policy.c), host-compiled with
+    // MinGW. Encodes the REAL firmware/partitions.csv and proves: our shipped table is never "hosted"
+    // (stand-alone unchanged), a Launcher-written table is (self-OTA refused: its next slot is another
+    // app's), back-to-Launcher mirrors the Launcher bootloader (key > DDLB > deep sleep), and Launcher's
+    // merged-image installer finds our app at ota_0 and keeps the `cfg` label. docs/m5launcher.md.
+    ok: (code) => code === 0, summary: (o) => (o.match(/guest-policy: [^\n]*/) || [lastLine(o)])[0].trim() },
   { name: 'launcher-model (native UI)', cmd: 'node', args: ['tools/launcher-host/check.mjs'],
     // The native launcher model (firmware/components/nucleo_app/launcher_menu.cpp), host-compiled with
     // MinGW against the REAL app table extracted from the firmware sources: registry capacity (every

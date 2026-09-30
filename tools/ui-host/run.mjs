@@ -63,6 +63,7 @@ const INC = [
   '-I', join(FW, 'nucleo_app', 'include'), '-I', join(FW, 'nucleo_app'),
   '-I', join(FW, 'nucleo_kbd', 'include'), '-I', join(FW, 'nucleo_ui', 'include'),
   '-I', join(FW, 'nucleo_storage', 'include'), '-I', join(FW, 'nucleo_voice', 'include'), '-I', CJSON,
+  '-I', join(FW, 'nucleo_guest', 'include'),
 ];
 const COMPAT = ['-include', join(here, 'shim', 'host_compat.h')];
 

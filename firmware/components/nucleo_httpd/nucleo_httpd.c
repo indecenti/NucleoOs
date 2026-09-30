@@ -22,6 +22,7 @@
 #include "smtp_proto.h"      // smtp_addr_valid() — recipient validation (header/command-injection guard)
 #include "nucleo_mailcfg.h"  // NVS account store for /api/mail/accounts
 #include "nucleo_eventbus.h"
+#include "nucleo_guest.h"   // M5Launcher guest mode: no self-OTA, report the host in /api/status
 #include "nucleo_arb.h"     // heavy-work arbiter: serialize outbound TLS so two fetches can't both OOM
 #include "nucleo_power.h"   // real battery level for /api/status
 #include "nucleo_imu.h"     // coarse motion sense (Cardputer ADV; no-op on the original) for /api/status
@@ -216,7 +217,11 @@ static esp_err_t status_get(httpd_req_t *req)
         }
     }
     cJSON_AddStringToObject(ota, "state", sstr);
-    cJSON_AddBoolToObject(ota, "rollback_enabled", true);   // CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE
+    // Hosted by M5Launcher: its bootloader + table, no A/B banks of ours -> no rollback, no self-OTA.
+    bool hosted = nucleo_guest_hosted();
+    cJSON_AddBoolToObject(ota, "rollback_enabled", !hosted);   // CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE (own bootloader only)
+    cJSON_AddBoolToObject(ota, "self_update", nucleo_guest_self_ota_allowed());
+    cJSON_AddStringToObject(ota, "host", hosted ? "m5launcher" : "standalone");
 
     // Heavy-work arbiter: is a TLS/SD/heap job holding the single budget right now, and the
     // teardown heap-floor watermark. The shell shows a "busy" banner and leaves client-only apps
@@ -813,6 +818,14 @@ static esp_err_t ota_post(httpd_req_t *req)
 {
     NUCLEO_AUTH_GUARD(req);   // firmware flashing requires a paired session
     httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+    // Installed by M5Launcher: the "next" OTA slot belongs to another installed app. Refuse BEFORE reading
+    // the body; the update path there is Launcher's own OTA list (docs/m5launcher.md).
+    if (!nucleo_guest_self_ota_allowed()) {
+        httpd_resp_set_status(req, "409 Conflict");
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_sendstr(req, "{\"error\":\"hosted\",\"host\":\"m5launcher\",\"message\":\"Installed by M5Launcher: update NucleoOS from the Launcher (OTA)\"}");
+        return ESP_FAIL;
+    }
     const esp_partition_t *part = esp_ota_get_next_update_partition(NULL);
     if (!part) { httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "no OTA partition"); return ESP_FAIL; }
 
