@@ -84,6 +84,7 @@ ANIMA is NucleoOS's offline natural-language assistant (retrieval + reasoning in
 | [memory-budget.md](memory-budget.md) | The riskiest bet: fitting Wi-Fi/BLE/HTTP/display/bus into ~512 KB via mutually-exclusive transport profiles. |
 | [partition-table.md](partition-table.md) | The 8 MB flash layout — dual OTA banks (`ota_0`/`ota_1`), no factory, coredump + config partitions. |
 | [m5launcher.md](m5launcher.md) | Running as a guest of M5Launcher — the Launcher boot model, what guest mode changes (no self-OTA, Back to M5Launcher), and how to publish on M5Burner so it appears in the Launcher's OTA list. |
+| [sd-content-install.md](sd-content-install.md) | The release SD payload (built from sources, per-file manifest, hosted on Pages) and the design of the device downloading its SD content by itself — ownership rules, failure handling, test plan. |
 | [storage.md](storage.md) | The microSD filesystem — mount model (FAT32/exFAT over SPI3), capacity, first-boot provisioning. |
 | [wifi-supervisor.md](wifi-supervisor.md) | When the background Wi-Fi supervisor may touch the radio, and the hotspot-join contract (fixes issue #3). |
 | [swarm-architecture.md](swarm-architecture.md) | Decision record: why multi-Cardputer cooperation is *not* master/slave; the accepted model. *(ADR)* |

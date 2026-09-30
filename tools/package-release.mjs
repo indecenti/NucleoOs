@@ -1,18 +1,21 @@
 // package-release.mjs — assemble the PUBLIC release payload into dist/.
 //
 // Produces, from a clean checkout (no user data, no ROMs — those are gitignored):
-//   dist/sd/                 the distributable SD-card tree (deploy/sd-safe minus the heavy OPTIONAL
-//                            browser-LLM models + oversized voice clips) — the workflow zips this.
+//   dist/sd/                 the distributable SD-card tree, assembled FROM THE SOURCES by
+//                            `sd_deploy.py release` (same SOURCE_MAP/DEVICE_STATE as every SD tool; heavy
+//                            optional models, device state and orphan shards filtered out) — zipped by the workflow.
+//   dist/sd-manifest.txt     the device's per-file manifest of that tree (the on-device SD-content installer).
 //   dist/manifest.json       an ESP Web Tools manifest for the single merged image (browser flashing).
 //   dist/FLASH.md            end-user install instructions (esptool + web flasher + SD setup).
 //   dist/RELEASE_NOTES.md    a short notes stub the release can prepend to auto-generated notes.
 //
 // The merged firmware image itself (nucleoos-<ver>.bin, flashable at 0x0) is produced by the release
 // workflow with `esptool merge_bin` after `idf.py build` — this script only references it by name so it
-// runs with plain Node (no ESP-IDF needed) and is unit-testable locally.
+// runs with Node + Python (stdlib; no ESP-IDF needed) and is unit-testable locally.
 //
 //   node tools/package-release.mjs
-import { readFileSync, writeFileSync, mkdirSync, rmSync, cpSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 
 const root = process.cwd();
@@ -27,17 +30,26 @@ const dist = join(root, 'dist');
 rmSync(dist, { recursive: true, force: true });
 mkdirSync(dist, { recursive: true });
 
-// --- clean SD tree: deploy/sd-safe is the distributable card (game/ROM entries are .factory manifests
-// only, never binaries). Drop the heavy OPTIONAL ML assets a first install doesn't need — they're all
-// installable from inside their app: the image-diffusion model (~530 MB, Paint), the speech models
-// (~70 MB, ANIMA voice), the WebLLM model (ANIMA Forge), and the big runtime wasm (ONNX, ffmpeg, wllama).
-// This keeps the SD payload lean (~60 MB) while the OS, every app's code, and the offline text knowledge
-// base ship. Users add the models in-app on demand. ---
-const HEAVY = ['/models/', '/vendor/onnxruntime-web/', '/vendor/ffmpeg/', '/vendor/wllama/', '/forge/vendor/'];
-const norm = (s) => s.replace(/\\/g, '/');
-const skip = (s) => { const n = norm(s);
-  return HEAVY.some((h) => n.includes(h)) || /\.(pcm|gguf|npy|onnx)$/i.test(n); };
-cpSync(join(root, 'deploy/sd-safe'), join(dist, 'sd'), { recursive: true, filter: (s) => !skip(s) });
+// --- SD tree, built from the sources (never from the stale deploy/sd-safe snapshot). sd_deploy.py owns the
+// source map, the device-state list and the device's write allow-list; it drops the heavy OPTIONAL ML assets
+// (installable in-app: diffusion, speech, WebLLM models, the big runtime wasm), device state and
+// unreferenced knowledge shards, and fails on anything outside the allow-list. ---
+const py = ['python', 'python3'].find((b) => spawnSync(b, ['--version']).status === 0);
+if (!py) { console.error('package-release: Python 3 is required (tools/nucleo-sd-deploy/sd_deploy.py)'); process.exit(1); }
+const sdb = spawnSync(py, ['tools/nucleo-sd-deploy/sd_deploy.py', 'release', join(dist, 'sd'),
+  '--tag', `v${ver}`, '--manifest', join(dist, 'sd-manifest.txt')], { cwd: root, encoding: 'utf8' });
+process.stdout.write(sdb.stdout || ''); process.stderr.write(sdb.stderr || '');
+if (sdb.status !== 0) { console.error('package-release: SD payload build FAILED'); process.exit(1); }
+// Sizes for the docs come from the manifest header, so they can never drift from what ships again.
+const packs = {};
+let sdTotal = 0;
+for (const line of readFileSync(join(dist, 'sd-manifest.txt'), 'utf8').split('\n')) {
+  const h = /^#nucleoos-sd \d+ \S+ \d+ (\d+)$/.exec(line); if (h) sdTotal = +h[1];
+  const m = /^#pack (\S+) \d+ (\d+)$/.exec(line); if (m) packs[m[1]] = +m[2];
+}
+const MB = (b) => `${Math.round(b / 1048576)} MB`;
+const sdSize = `~${MB(sdTotal)}: core ${MB(packs.core || 0)}`
+  + Object.keys(packs).filter((k) => k !== 'core').map((k) => ` + ${k} ${MB(packs[k])}`).join('');
 
 // --- ESP Web Tools manifest: one merged image written at offset 0 (bootloader+parttable+ota+app) ---
 writeFileSync(join(dist, 'manifest.json'), JSON.stringify({
@@ -57,12 +69,12 @@ operator console in any browser.
 
 **You need:** a Cardputer, a USB-C cable, and a **microSD card** (formatted **FAT32**).
 
-> **⚠️ Not for M5Launcher / M5Burner.** \`${binName}\` is a **full flash image** (bootloader +
-> partition table + app) — write it at offset **0x0** as described below. A launcher's
-> "Install firmware" cannot install it, and flashing it **replaces** any launcher on the device
-> (NucleoOS brings its own bootloader and partition table).
-> \`${sdZip}\` is the **SD-card payload, not firmware** — never select it in a launcher; extract
-> it to the card root (Step 2).
+> **Two ways to run it.** \`${binName}\` is a **full flash image** (bootloader + partition table +
+> app). Flashed at offset **0x0** (Step 1) NucleoOS owns the device and updates itself. It can also be
+> installed **by M5Launcher** (its OTA list, or its SD-card installer): NucleoOS then runs as a guest
+> next to your other firmwares and is updated from the Launcher — see *Installing with M5Launcher* below.
+> \`${sdZip}\` is the **SD-card payload, not firmware** — never select it in a launcher's "Install
+> firmware"; extract it to the card root (Step 2).
 
 ---
 
@@ -93,9 +105,22 @@ backup slot, so you can't brick the device this way.
 
 NucleoOS serves all of its apps and data from the microSD.
 1. Format the card as **FAT32**.
-2. Extract **\`${sdZip}\`** to the **root** of the card. You should end up with these folders on the card:
-   \`/apps\`, \`/www\`, \`/system\`, \`/data\`.
+2. Extract **\`${sdZip}\`** (${sdSize}) to the **root** of the card. You should end up with these
+   folders directly on the card: \`/apps\`, \`/www\`, \`/system\`, \`/data\` (not inside another folder).
+   Extracting over an existing NucleoOS card is safe: the zip carries no settings, keys or learned data.
 3. Insert the card into the Cardputer **before powering on**.
+
+---
+
+## Installing with M5Launcher
+
+If your Cardputer runs [M5Launcher](https://github.com/bmorcelli/Launcher), install NucleoOS from the
+Launcher (its **OTA** list, or **SD** with \`${binName}\` copied to the card) instead of Step 1, then do
+Step 2. NucleoOS detects the Launcher by itself and:
+- updates **only through the Launcher** (its own updater is switched off so it can never overwrite
+  another installed app);
+- offers **Settings ▸ Device ▸ Back to M5Launcher** (then press ENTER on the Launcher's splash);
+- shares the card with your other firmwares — it writes only its own folders.
 
 ---
 
@@ -108,7 +133,7 @@ Power on. You'll see the animated boot splash, then the desktop. The screen show
 
 ## Adding the optional AI models (not bundled — see below why)
 
-To keep this download small (~30 MB) and license-clean, the **large machine-learning models are not
+To keep this download small (${sdSize}) and license-clean, the **large machine-learning models are not
 included**. You almost never need to copy them manually: **open the app once while online and it
 downloads its model from a public CDN and caches it in your browser**, after which it runs offline.
 The models on the SD are only needed for a device that is *never* online, or to skip that one-time
@@ -165,9 +190,8 @@ ${changelogSection(ver)}An installable build of NucleoOS — a web-native applia
 
 ### Download
 - **\`${binName}\`** — the firmware: a **full flash image**, written at offset **0x0** with a browser web
-  flasher (uses \`manifest.json\`) or \`esptool write_flash 0x0\`. **Not installable via M5Launcher /
-  M5Burner** "Install firmware" — flashing it replaces any launcher (NucleoOS has its own bootloader
-  and partition table).
+  flasher (uses \`manifest.json\`) or \`esptool write_flash 0x0\` — or installed **by M5Launcher**, where
+  NucleoOS runs as a guest next to other firmwares (updates then come from the Launcher; see FLASH.md).
 - **\`${sdZip}\`** — the microSD payload (desktop + apps + system + the offline knowledge base) — **not
   firmware, never select it in a launcher**. Extract it to the root of a **FAT32** card and insert it
   before boot.
@@ -190,11 +214,11 @@ native **Updates** app. No cable needed.
   \`gh attestation verify ${binName} --repo indecenti/NucleoOs\`.
 
 ### What's included / not
-The download is intentionally lean (~30 MB): the large ML models are **not** bundled (they install
+The download is intentionally lean (${sdSize}): the large ML models are **not** bundled (they install
 in-app), and games ship **without ROMs** — add your own. No user data, keys, or other sensitive files
 are included.
 `);
 
 console.log(`package-release: tag=${tag}  bin=${binName}  sdzip=${sdZip}`);
-console.log(`  staged clean SD tree at dist/sd (excluded: ML models + heavy runtime wasm)`);
+console.log(`  staged SD tree at dist/sd from the sources: ${sdSize}; manifest dist/sd-manifest.txt`);
 console.log(`  wrote dist/manifest.json, dist/FLASH.md, dist/RELEASE_NOTES.md`);

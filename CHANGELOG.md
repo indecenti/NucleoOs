@@ -4,6 +4,21 @@ All notable user-facing changes to NucleoOS. Format loosely follows
 [Keep a Changelog](https://keepachangelog.com/). Versions match
 [`firmware/version/VERSION`](firmware/version/VERSION) and the pushed git tag (`vX.Y.Z`).
 
+## [Unreleased]
+
+### Added
+- **Runs under M5Launcher** — the same firmware image can be installed by M5Launcher (its OTA list
+  or SD installer). NucleoOS detects it and runs as a guest: updates come from the Launcher (its own
+  updater is switched off so it can never overwrite another installed app), and Settings ▸ Device
+  gains *Back to M5Launcher*. Stand-alone installs are unchanged. See `docs/m5launcher.md`.
+
+### Fixed
+- **The release SD zip is current again** — it is now built from the sources (it was a months-old
+  snapshot: an old web shell and 15 web apps missing), carries no development state files, ships only
+  the knowledge shards the assistant actually reads (~72 MB less), and extracts straight to the card
+  root (it used to wrap everything in an `sd/` folder). Each release also publishes a per-file
+  manifest of that content, the base for the device downloading it by itself.
+
 ## [0.4.0] — 2026-09-24
 
 ### Added

@@ -70,6 +70,9 @@ SOURCE_MAP = [
          src=_src("deploy/sd-safe/data/anima/akb5")),
     dict(dest="data/anima/anima-it-akb5.bin", kind="file", gz=False,
          src=_src("deploy/sd-safe/data/anima/anima-it-akb5.bin", "models/anima-it-akb5.bin")),
+    # IR remote presets (read-only, firmware nucleo_ir reads /system/ir/presets.bin). Built by
+    # tools/ir-pack.mjs into the sd-sim tree; deploy.ps1 already shipped it, this map had missed it.
+    dict(dest="system/ir",       kind="tree", gz=False, src=_src("tools/sd-sim/system/ir")),
     # SPOKEN voice: concatenative TTS clip bank (nucleo_tts), IT+EN. clips.pcm is oversized
     # (fetched by oversized-assets/rejoin.mjs); index.bin is committed. System part, not user
     # state -> always written, never deleted. (The LISTENING voice — split-part Vosk models —
@@ -152,7 +155,11 @@ def sha256(path, buf=1 << 20):
     return h.hexdigest()
 
 def gz_file(src, dst):
-    with open(src, "rb") as fi, gzip.open(dst, "wb", compresslevel=9) as fo:
+    # Deterministic: no source name and mtime 0 in the gzip header, so an unchanged file always yields
+    # byte-identical .gz — otherwise every build changes every twin's hash and a delta sync (the device
+    # SD-content installer, push-ota --sync) would re-send all of them.
+    with open(src, "rb") as fi, open(dst, "wb") as raw, \
+         gzip.GzipFile(filename="", mode="wb", compresslevel=9, fileobj=raw, mtime=0) as fo:
         shutil.copyfileobj(fi, fo)
 
 # ---------------------------------------------------------------- Windows drives
@@ -416,6 +423,204 @@ def verify(root, log, master=MASTER, progress=None):
     for d in diff[:30]:
         log("  DIVERSO " + d)
     return missing, diff, ok
+
+# ---------------------------------------------------------------- release payload (headless, CI)
+# The PUBLIC SD payload: what the release zip carries and what the device's SD-content installer
+# downloads file by file (docs/sd-content-install.md). Same SOURCE_MAP / DEVICE_STATE as every other
+# path here, plus release-only filters. Built straight from the sources (never from deploy/sd-safe as a
+# whole), filtered while copying, and checked against the SAME write allow-list the device enforces.
+RELEASE_MANIFEST = "sd-manifest.txt"
+RELEASE_MANIFEST_VERSION = 1
+# Heavy OPTIONAL assets a first install doesn't need (installable in-app) — same list package-release.mjs
+# used for the zip: image-diffusion + speech + WebLLM models and the big runtime wasm.
+RELEASE_HEAVY = ["/models/", "/vendor/onnxruntime-web/", "/vendor/ffmpeg/", "/vendor/wllama/", "/forge/vendor/"]
+RELEASE_HEAVY_EXT = (".pcm", ".gguf", ".npy", ".onnx")
+# Payload files that aren't needed ON THE CARD: the stale sd-safe README (would also collide with other
+# firmwares' README on a shared M5Launcher card) and the dev sd-sim's user-area scratch file.
+RELEASE_DROP = {"README.md", "data/apps/test.lua",
+                "data/ir/nucleo-remotes.ir"}   # a dev-sim user remote (IR app user data), not payload
+# Packs: everything is 'core' except the companion installers the web shell links (phone APK, Windows
+# exe) — useful to the browser, not to the Cardputer — and the arcade emulator cores. Optional packs are
+# installed only on request.
+RELEASE_PACKS = [("www/shell/downloads/", "downloads"),
+                 # the Arcade app's emulator cores (~20 MB of wasm): only needed to play arcade ROMs
+                 ("apps/arcade/www/emulatorjs/", "arcade")]
+# Files the release MUST contain (a subset of COMPLETENESS: TTS clips / Vosk / exe are not in git).
+RELEASE_REQUIRED = [
+    "www/shell/index.html",
+    "system/registry/apps.json",
+    "system/ir/presets.bin",
+    "data/anima/anima-it-encoder.bin",
+    "data/anima/anima-it-index.bin",
+    "data/anima/anima-it-akb5.bin",
+    "data/anima/learned/facets.it.jsonl",
+    "data/anima/learned/facets.en.jsonl",
+]
+# apps.json is MERGED on the device (the Agent app adds the user's own apps to it), never overwritten.
+RELEASE_MERGE = {"system/registry/apps.json"}
+
+def release_path_allowed(rel):
+    """The write allow-list, mirrored by the firmware installer's policy (defense in depth: a manifest
+    line outside it is refused on the device too). Returns '' if allowed, else the reason."""
+    if not rel or len(rel) > 200:
+        return "length"
+    if any(ord(c) < 0x20 or ord(c) > 0x7e for c in rel) or "\\" in rel:
+        return "charset"
+    if rel.startswith("/") or "//" in rel or rel.endswith("/"):
+        return "shape"
+    parts = rel.split("/")
+    if any(p in ("", ".", "..") for p in parts):
+        return "dot-segment"
+    if is_state(rel):
+        return "device-state"
+    top = parts[0]
+    if top == "www":
+        return "" if len(parts) > 2 and parts[1] == "shell" else "root"
+    if top == "apps":
+        if len(parts) < 3:
+            return "apps-root"                          # apps/theme.cfg and friends are device state
+        if parts[2] == "data":
+            return "app-data"                           # apps/<id>/data/** is the app's user data
+        return ""
+    if top == "system":
+        return "" if len(parts) > 2 and parts[1] in ("registry", "ir") else "system"
+    if top == "data":
+        if len(parts) >= 3 and parts[1] == "anima":
+            name = parts[2]
+            if len(parts) == 3 and (name.startswith(("anima-", "dict-", "commands"))):
+                return ""
+            if len(parts) == 4 and name == "akb5" and parts[3].endswith(".bin"):
+                return ""
+            if len(parts) == 4 and name == "learned" and parts[3] in ("facets.it.jsonl", "facets.en.jsonl"):
+                return ""
+            return "anima-state"
+        if len(parts) == 4 and parts[1] == "tts" and parts[2] in ("it", "en"):
+            return ""
+        return "data"
+    if top in ("wallpapers", "evilportal"):
+        return "" if len(parts) > 1 else "root"
+    return "root"
+
+def _akb5_shards(list_path):
+    """Shard file names referenced by an AKB5 manifest (tools/anima/build_akb5.py MANIFEST layout:
+    'AKB5' | u32 D | u32 n | n x {u8 namelen, name, u32 ncards, u32 N, u16 K} | centroid block)."""
+    import struct
+    b = Path(list_path).read_bytes()
+    if b[:4] != b"AKB5":
+        raise ValueError(f"{list_path}: not an AKB5 manifest")
+    _, n = struct.unpack_from("<II", b, 4)
+    o, names = 12, []
+    for _ in range(n):
+        ln = b[o]; o += 1
+        names.append(b[o:o + ln].decode("utf-8")); o += ln + 4 + 4 + 2
+    return names
+
+def _pack_of(rel):
+    for prefix, pack in RELEASE_PACKS:
+        if rel.startswith(prefix):
+            return pack
+    return "core"
+
+def build_release(out, tag, log, manifest_path=None):
+    """Assemble the public SD payload into `out` + write the device manifest. Returns (stats, errors);
+    any error means the payload must not ship. Never touches deploy/sd-master or a card."""
+    out = Path(out)
+    if out.exists():
+        shutil.rmtree(out)
+    out.mkdir(parents=True)
+    # 1) plan: rel -> ('copy', src) | ('gz', raw_src). Later rules win, exactly like assemble_master's
+    #    copy order (e.g. the sd-safe akb5 list replaces the sd-sim one).
+    plan = {}
+    for rule in SOURCE_MAP:
+        src = next((s for s in rule["src"] if s.exists()), None)
+        if src is None:
+            log(f"  - {rule['dest']}: no source (skipped)")
+            continue
+        if rule["kind"] == "file":
+            plan[rule["dest"]] = ("copy", src)
+            continue
+        for f in sorted(src.rglob("*")):
+            if not f.is_file():
+                continue
+            rel = f"{rule['dest']}/{f.relative_to(src).as_posix()}"
+            raw = f.with_name(f.name[:-3]) if f.name.endswith(".gz") else None
+            if raw is not None and raw.is_file():
+                # A committed twin keeps the EOL of the machine that gzipped it (check-gz.mjs compares
+                # EOL-normalized for that reason). Regenerate it from the raw source instead: the pair
+                # is then byte-exact and the hash is the same on every build machine.
+                plan[rel] = ("gz", raw)
+                continue
+            plan[rel] = ("copy", f)
+            if rule["gz"] and f.suffix.lower() in GZ_EXT:
+                plan.setdefault(rel + ".gz", ("gz", f))
+    errors, dropped = [], dict(heavy=0, state=0, orphan=0, other=0)
+    # 2) AKB5: ship exactly the shards the shipped manifest routes to (the sd-sim tree carries extra,
+    #    unreferenced shards — ~72 MB nobody reads).
+    list_rel = "data/anima/anima-it-akb5.bin"
+    wanted = None
+    if list_rel in plan:
+        try:
+            wanted = set(_akb5_shards(plan[list_rel][1]))
+        except Exception as e:
+            errors.append(f"akb5 manifest unreadable: {e}")
+    # 3) filter
+    keep = {}
+    for rel, entry in sorted(plan.items()):
+        n = "/" + rel
+        if rel in RELEASE_DROP or rel.endswith(MANIFEST_NAME):
+            dropped["other"] += 1; continue
+        if any(h in n for h in RELEASE_HEAVY) or rel.lower().endswith(RELEASE_HEAVY_EXT):
+            dropped["heavy"] += 1; continue
+        if is_state(rel):
+            dropped["state"] += 1; continue
+        if rel.startswith("data/anima/akb5/") and wanted is not None and rel.split("/")[-1] not in wanted:
+            dropped["orphan"] += 1; continue
+        why = release_path_allowed(rel)
+        if why:
+            errors.append(f"path outside the device allow-list ({why}): {rel}")
+            continue
+        keep[rel] = entry
+    if wanted is not None:
+        for s in sorted(wanted):
+            if f"data/anima/akb5/{s}" not in keep:
+                errors.append(f"akb5 shard referenced by the manifest but missing: {s}")
+    for rel in RELEASE_REQUIRED:
+        if rel not in keep:
+            errors.append(f"required file missing: {rel}")
+    # 4) write + hash
+    lines, packs = [], {}
+    total = 0
+    for rel, (kind, src) in sorted(keep.items()):
+        dst = out / rel
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        if kind == "gz":
+            gz_file(src, dst)
+        else:
+            shutil.copyfile(src, dst)
+        size = dst.stat().st_size
+        pack = _pack_of(rel)
+        mode = "m" if rel in RELEASE_MERGE else "w"
+        lines.append(f"{sha256(dst)} {size} {pack} {mode} {rel}")
+        p = packs.setdefault(pack, [0, 0]); p[0] += 1; p[1] += size
+        total += size
+    # 5) .gz twins must decompress to their sibling (webfs serves .gz first: a stale twin ships old code)
+    for rel in keep:
+        if rel.endswith(".gz") and rel[:-3] in keep:
+            try:
+                with gzip.open(out / rel, "rb") as g:
+                    if g.read() != (out / rel[:-3]).read_bytes():
+                        errors.append(f"stale .gz twin: {rel}")
+            except Exception as e:
+                errors.append(f"bad .gz {rel}: {e}")
+    head = [f"#nucleoos-sd {RELEASE_MANIFEST_VERSION} {tag} {len(lines)} {total}"]
+    head += [f"#pack {k} {v[0]} {v[1]}" for k, v in sorted(packs.items())]
+    mp = Path(manifest_path) if manifest_path else out.parent / RELEASE_MANIFEST
+    mp.write_text("\n".join(head + lines) + "\n", encoding="ascii", newline="\n")
+    stats = dict(files=len(lines), bytes=total, packs=packs, dropped=dropped, manifest=str(mp))
+    log(f"release {tag}: {len(lines)} files, {total/2**20:.1f} MB "
+        + " ".join(f"[{k} {v[0]} / {v[1]/2**20:.1f} MB]" for k, v in sorted(packs.items()))
+        + f"  dropped {dropped}")
+    return stats, errors
 
 
 # ---------------------------------------------------------------- format (optional)
@@ -899,6 +1104,19 @@ def main():
                   "--dry" in args, log)
     elif args[0] == "verify" and len(args) > 1:
         verify(args[1], log)
+    elif args[0] == "release" and len(args) > 1:
+        # release <out-dir> [--tag vX.Y.Z] [--manifest <path>]   (headless; exit 1 on any error)
+        tag = "v" + (REPO / "firmware" / "version" / "VERSION").read_text(encoding="utf-8").strip()
+        man = None
+        if "--tag" in args:
+            tag = args[args.index("--tag") + 1]
+        if "--manifest" in args:
+            man = args[args.index("--manifest") + 1]
+        _, errors = build_release(args[1], tag, log, man)
+        for e in errors:
+            log("ERROR " + e)
+        if errors:
+            sys.exit(1)
     else:
         print(__doc__)
 

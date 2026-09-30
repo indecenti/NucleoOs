@@ -89,11 +89,23 @@ jobs:
 
       - name: Zip the SD payload
         run: |
-          cd dist && zip -qr "nucleoos-${{ steps.ver.outputs.full }}-sd.zip" sd
+          # Zip the tree's CONTENTS (no leading sd/ folder): "extract to the card root" must yield
+          # /apps, /www, /system, /data — a leading sd/ left users with /sd/apps and an empty-looking OS.
+          (cd dist/sd && zip -qr "../nucleoos-${{ steps.ver.outputs.full }}-sd.zip" .)
+          cd dist
           cp "nucleoos-${{ steps.ver.outputs.full }}-sd.zip" nucleoos-latest-sd.zip   # stable "latest" link
+          if unzip -Z1 "nucleoos-${{ steps.ver.outputs.full }}-sd.zip" | grep -q '^sd/'; then
+            echo "::error::SD zip still has a leading sd/ folder"; exit 1
+          fi
+          # The device's per-file manifest of that same tree (sd_deploy.py release, written by
+          # package-release.mjs): pages.yml hosts the tree file by file next to it for the on-device
+          # SD-content installer (docs/sd-content-install.md).
+          cp sd-manifest.txt "nucleoos-${{ steps.ver.outputs.full }}-sd-manifest.txt"
 
       - name: Checksums (the updater verifies these before flashing)
-        run: cd dist && sha256sum *.bin *.zip > SHA256SUMS
+        # One line per ASSET only — the firmware updater reads this file into a 2 KB buffer, so the
+        # per-file SD hashes live in the manifest, never here.
+        run: cd dist && sha256sum *.bin *.zip nucleoos-*-sd-manifest.txt > SHA256SUMS
 
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
@@ -104,6 +116,7 @@ jobs:
           files: |
             dist/nucleoos-${{ steps.ver.outputs.full }}.bin
             dist/nucleoos-${{ steps.ver.outputs.full }}-sd.zip
+            dist/nucleoos-${{ steps.ver.outputs.full }}-sd-manifest.txt
             dist/nucleoos-${{ steps.ver.outputs.full }}-ota.bin
             dist/nucleoos-latest.bin
             dist/nucleoos-latest-sd.zip

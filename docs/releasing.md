@@ -166,6 +166,15 @@ The tag triggers `.github/workflows/release.yml`, a **three-stage, each-gates-th
    image** (`nucleoos-latest-ota.bin`) + `SHA256SUMS`, publishes the Release, attaches **signed build
    provenance** (sigstore/OIDC — verify with `gh attestation verify <bin> --repo indecenti/NucleoOs`),
    then **dispatches `pages.yml`**.
+   The SD payload is assembled **from the sources** by `sd_deploy.py release` (called by
+   `tools/package-release.mjs`; never from the `deploy/sd-safe` snapshot): same `SOURCE_MAP` /
+   `DEVICE_STATE` as every SD tool, heavy optional models, device state and unreferenced knowledge
+   shards filtered out, every path checked against the device's write allow-list
+   (`tools/nucleo-sd-deploy/allowlist-vectors.json`). It ships as the `-sd.zip` (contents at the zip
+   root) plus `-sd-manifest.txt` (one `sha256 size pack mode path` line per file), and `pages.yml`
+   hosts the last three releases' trees file by file under `sd/<x.y.z>/` for the on-device
+   SD-content installer ([sd-content-install.md](sd-content-install.md)). Gated by
+   `tools/sd-payload.test.mjs`.
 3. **verify** — fails the run unless the release assets are reachable *and* the web-flasher site
    (Pages) has actually caught up: `version.json` == this tag, with the OTA image + checksums live.
 
