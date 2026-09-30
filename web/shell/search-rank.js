@@ -36,11 +36,20 @@ export function kwScore(kw, query) {
 
 // Apps: the display name leads, the ID is a slightly weaker alias (so "file-commander" finds the app
 // even when the name is localised). Ties break alphabetically for a stable, predictable list.
-export function rankApps(apps, query) {
+// `label(app)` is the name shown NOW (the shell passes the active-language name); `aliases(app)` lists
+// every other name the app is known by — its name in the other OS languages — so "Rechner" still finds
+// the calculator with the UI in Italian, as the native Spotlight does. An alias hit ranks just under
+// the same hit on the shown name, so the current language wins a tie.
+export function rankApps(apps, query, label = (app) => app.name, aliases = () => []) {
   const ql = normMatch(query).trim();
   if (!ql) return [];
   return (apps || [])
-    .map((app) => ({ app, name: app.name, s: Math.max(matchScore(app.name, ql), matchScore(app.id, ql) - 5) }))
+    .map((app) => {
+      const name = label(app);
+      let s = Math.max(matchScore(name, ql), matchScore(app.id, ql) - 5);
+      for (const alt of aliases(app) || []) s = Math.max(s, matchScore(alt, ql) - 2);
+      return { app, name, s };
+    })
     .filter((r) => r.s >= 0)
     .sort((a, b) => b.s - a.s || String(a.name).localeCompare(String(b.name)));
 }

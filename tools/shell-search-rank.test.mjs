@@ -47,6 +47,46 @@ test('rankApps matches the app ID too, but the display name wins a tie', () => {
   assert.deepEqual(rankApps(APPS, ''), [], 'an empty query matches nothing');
 });
 
+// Localised app names: the shell passes the active-language name as `label` and every other name the
+// app has (manifest + all five languages) as `aliases` — the native Spotlight matches all five too.
+const I18N_APPS = [
+  { id: 'calculator', name: 'Calculator' },
+  { id: 'games', name: 'Giochi' },
+  { id: 'contacts', name: 'Contatti' },
+];
+const DE = { calculator: 'Rechner', games: 'Spiele', contacts: 'Kontakte' };
+const ALIASES = {
+  calculator: ['Calculator', 'Calculadora', 'Calculatrice', 'Rechner'],
+  games: ['Giochi', 'Games', 'Juegos', 'Jeux', 'Spiele'],
+  contacts: ['Contatti', 'Contacts', 'Contactos', 'Kontakte'],
+};
+const deLabel = (a) => DE[a.id] || a.name;
+const allNames = (a) => ALIASES[a.id] || [];
+
+test('rankApps shows and matches the localised label', () => {
+  const r = rankApps(I18N_APPS, 'spi', deLabel, allNames);
+  assert.deepEqual(names(r), ['Spiele'], 'the row carries the name shown in the UI language');
+  assert.equal(r[0].app.id, 'games');
+});
+
+test('rankApps finds an app by its name in ANY language', () => {
+  assert.equal(rankApps(I18N_APPS, 'giochi', deLabel, allNames)[0].app.id, 'games', 'the Italian manifest name, UI in German');
+  assert.equal(rankApps(I18N_APPS, 'calculadora', deLabel, allNames)[0].name, 'Rechner', 'a Spanish name finds it, shown in German');
+  assert.equal(rankApps(I18N_APPS, 'contacts', deLabel, allNames)[0].name, 'Kontakte');
+});
+
+test('a hit on the shown name outranks the same hit on another-language alias', () => {
+  const apps = [{ id: 'a', name: 'Kalender' }, { id: 'b', name: 'Zeit' }];
+  const label = (a) => a.name;
+  const aliases = (a) => (a.id === 'b' ? ['Kalender'] : []);
+  assert.equal(names(rankApps(apps, 'kalender', label, aliases))[0], 'Kalender', 'the shown-name exact match leads');
+});
+
+test('rankApps without a label/aliases behaves as before (manifest name only)', () => {
+  assert.deepEqual(names(rankApps(I18N_APPS, 'giochi')), ['Giochi']);
+  assert.deepEqual(rankApps(I18N_APPS, 'spiele'), [], 'no aliases passed → no cross-language match');
+});
+
 // The system-actions provider: labels are shown, `kw` is a search-only synonym list.
 const ACTIONS = [
   { id: 'settings', name: 'Apri Impostazioni', kw: 'impostazioni preferenze opzioni configura sistema' },
