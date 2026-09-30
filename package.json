@@ -56,6 +56,7 @@
     "push-ota": "node tools/push-ota.mjs",
     "anima": "node tools/anima-host/anima.mjs",
     "anima:build": "node tools/anima-host/anima.mjs --build",
+    "assets": "node oversized-assets/rejoin.mjs",
     "anima:sweep": "node tools/anima-host/anima.mjs --file tools/anima-host/queries.txt",
     "anima:agent": "node tools/anima-host/agent-check.mjs",
     "anima:dev192": "node tools/anima-host/dev192.mjs",

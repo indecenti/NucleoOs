@@ -245,8 +245,8 @@ if ($To) {
             & robocopy $ttsSrc (Join-Path $To 'data\tts') *.* /E /NJH /NJS /NDL /NFL /NP /R:1 /W:1 | Out-Null
             if ($LASTEXITCODE -ge 8) { throw "robocopy TTS ha riportato un errore (exit $LASTEXITCODE)" }
         }
-        Write-Host "Voce TTS: data/tts -> $To (da deploy/sd-safe, mai cancellata)"
+        Write-Host "TTS voice: data/tts -> $To (from deploy/sd-safe, never mirror-deleted)"
     } else {
-        Write-Warning "Voce TTS assente in deploy/sd-safe/data/tts - ricostruisci con: node oversized-assets/rejoin.mjs tts-it-clips tts-en-clips"
+        Write-Warning "TTS voice missing in deploy/sd-safe/data/tts - fetch it with: node oversized-assets/rejoin.mjs tts-it-clips tts-en-clips"
     }
 }

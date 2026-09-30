@@ -1,6 +1,6 @@
 // nucleo_link_bruce.h — Bruce-compatible ESP-NOW share codec ("Bruce mode" of the Vicino app).
 //
-// Wire-identical to Bruce's EspConnection::Message (reference/bruce/src/core/connect/esp_connection.h)
+// Wire-identical to Bruce's EspConnection::Message (upstream pr3y/Bruce: src/core/connect/esp_connection.h)
 // so a NucleoOS device can send/receive files with a real Bruce device. Bruce declares the size fields
 // as C++ `size_t`, which is 4 bytes on the ESP32 (xtensa, 32-bit); we use uint32_t so the layout is
 // IDENTICAL on both the device and the x86-64 host gate. The _Static_asserts in the .c lock the 248-byte
