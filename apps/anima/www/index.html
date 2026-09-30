@@ -739,6 +739,20 @@
     .dlg h3{margin:0 0 8px;font-size:14px;font-weight:var(--fw-title)}
     .dlg .dlg-b{margin:0;font-size:12.5px;line-height:1.55;color:var(--muted);white-space:pre-wrap;overflow-wrap:anywhere;max-height:50vh;overflow:auto}
     .dlg .dlg-b.rich{white-space:normal}
+    /* Engines panel (mode pill): the two modes + what each engine can do RIGHT NOW */
+    .eng-modes{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:2px 0 12px}
+    .eng-mode{text-align:left;padding:9px 10px;border-radius:var(--r);border:1px solid var(--line2);background:var(--chip-bg);color:var(--text);cursor:pointer;font:inherit}
+    .eng-mode b{display:block;font-size:13px;margin-bottom:2px}
+    .eng-mode span{display:block;font-size:11.5px;color:var(--muted);line-height:1.4}
+    .eng-mode[aria-pressed="true"]{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+    .eng-list{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:6px}
+    .eng-list li{display:grid;grid-template-columns:18px 1fr;gap:8px;align-items:start;font-size:12.5px;line-height:1.45}
+    .eng-list li i{font-style:normal;text-align:center}
+    .eng-list li b{color:var(--text);font-weight:var(--fw-title)}
+    .eng-list li .ok{color:var(--accent2)} .eng-list li .off{color:var(--muted)}
+    .eng-order{margin:10px 0 0;font-size:11.5px;color:var(--muted)}
+    .set-field.is-off .f-ctl{opacity:.45}
+    .set-field.is-off .f-ctl button{cursor:not-allowed}
     /* shared capability panel (/capabilities.js renderCapabilityHelp) */
     .cap-list{list-style:none;margin:0 0 10px;padding:0;display:grid;gap:4px}
     .cap-row{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
@@ -1213,17 +1227,14 @@
         compactLbl:'Compatta contesto', pin:'fissa', pinned:'Fissato nel contesto', unpinned:'Sfissato', pinHint:'Fissa: tieni nel contesto durante la compattazione',
         themeNames:{ dark:'Midnight', light:'Daylight', oled:'Carbon', hc:'Contrast' },
         edgeErr:'Non riesco a caricare ANIMA in locale: scaricamento del cervello non riuscito. Controlla la connessione al dispositivo.',
-        edgeNeedInstall:'ANIMA offline gira in questo browser (WASM), ma il cervello non è ancora installato qui. Installalo una volta da Impostazioni ▸ Modelli (poi risponde in locale anche senza Cardputer), oppure usa la modalità Ibrida/Online.',
-        edge:{ lead:'Assistente di NucleoOS che gira INTERAMENTE in questo browser (WebAssembly): offline, privato e istantaneo. Apre app, fa calcoli, dà ora e data, crea file, risponde a domande e impara ciò che gli insegni — senza che nulla lasci il dispositivo.',
+        edge:{ 
                mgmt:'Cervello locale', reload:'Ricarica', cached:'in cache · pronto offline', missing:'non ancora scaricato',
                ready:'ANIMA pronta — gira in locale ⚡',
-               pillTip:'Modalità Browser: ANIMA gira in locale nel tuo browser, niente lascia il dispositivo. Clic per cambiare (Browser · Ibrida · Online).',
                tutTitle:'ANIMA è pronta — e gira in locale',
-               tutBody:'D’ora in poi ANIMA risponde <b>interamente in questo browser</b>: istantanea, privata e funziona anche col Cardputer spento.',
-               tutBullets:['Stesse risposte del dispositivo (stesso cervello), ma sulla tua CPU.','Insegnale fatti: «ricorda che la sala riunioni <b>è</b> al terzo piano» — li ricorda anche dopo aver ricaricato.','Per meteo e notizie online passa a «Ibrida» in ⚙ Impostazioni · Motore.','Digita <b>/guida</b> per la mappa completa: i cervelli, la cascata di fallback e la privacy.'],
+               tutBullets:['Stesse risposte del dispositivo (stesso cervello), ma sulla tua CPU.','Insegnale fatti: «ricorda che la sala riunioni <b>è</b> al terzo piano» — li ricorda anche dopo aver ricaricato.','','Digita <b>/guida</b> per la mappa completa: i cervelli, la cascata di fallback e la privacy.'],
                tutBtn:'Inizia', tutTry:'Prova: «capitale della Francia»' },
         greet:{ morning:'Buongiorno', afternoon:'Buon pomeriggio', evening:'Buonasera', night:'Buonanotte' },
-        welTitle:'ANIMA', welLead:'Assistente offline di NucleoOS. Capisce italiano e inglese, apre app, fa calcoli, dà ora/data/spazio, crea file, gestisce il calendario e risponde a domande — tutto sul dispositivo.',
+        welTitle:'ANIMA', 
         catExamples:'Esempi', catCaps:'Capacità', catCommands:'Comandi',
         welTips:['<kbd>⏎</kbd> invia','<kbd>⌘K</kbd> tavolozza','<kbd>/</kbd> comandi','<kbd>↑</kbd> cronologia','<kbd>?</kbd> scorciatoie'],
         examples:['meteo brescia','quanti giorni a natale','che ora è','chi è Einstein'],
@@ -1231,7 +1242,6 @@
         cmdCards:['/help','/theme','/new','/export'],
         offline:'Non riesco a raggiungere il motore ANIMA sul dispositivo.',
         dontknow:'Non lo so ancora. Posso aprire app, dirti ora/spazio, creare file, dare il meteo e rispondere a domande.',
-        onlineNoLLM:'Modalità solo online: nessun LLM disponibile. Controlla chiave/Internet, oppure usa un modello locale del browser.',
         opened:'aperto', created:'creato', exists:'esiste già', cleared:'Conversazione pulita.',
         thinking:['Sto pensando','Rifletto','Elaboro','Ragiono','Compongo','Consulto la memoria','Sto cercando'],
         restored:'Conversazione ripristinata.', reasoning:'Ragionamento', steps:'passi',
@@ -1270,17 +1280,14 @@
         compactLbl:'Compact context', pin:'pin', pinned:'Pinned in context', unpinned:'Unpinned', pinHint:'Pin: keep in context through compaction',
         themeNames:{ dark:'Midnight', light:'Daylight', oled:'Carbon', hc:'Contrast' },
         edgeErr:'Could not load ANIMA locally: brain download failed. Check the device connection.',
-        edgeNeedInstall:'ANIMA offline runs in this browser (WASM), but the brain isn’t installed here yet. Install it once from Settings ▸ Models (then it answers locally even without the Cardputer), or use Hybrid/Online mode.',
-        edge:{ lead:"NucleoOS's assistant running ENTIRELY in this browser (WebAssembly): offline, private and instant. It opens apps, does math, tells time and date, creates files, answers questions and learns what you teach it — without anything leaving the device.",
+        edge:{ 
                mgmt:'Local brain', reload:'Reload', cached:'cached · ready offline', missing:'not downloaded yet',
                ready:'ANIMA ready — running locally ⚡',
-               pillTip:'Browser mode: ANIMA runs locally in your browser, nothing leaves the device. Click to switch (Browser · Hybrid · Online).',
                tutTitle:'ANIMA is ready — and it runs locally',
-               tutBody:'From now on ANIMA answers <b>entirely in this browser</b>: instant, private, and it works even with the Cardputer off.',
-               tutBullets:['Same answers as the device (same brain), just on your CPU.','Teach it facts: “remember that the meeting room <b>is</b> on the third floor” — it remembers them even after a reload.','For online weather and news switch to “Hybrid” in ⚙ Settings · Engine.','Type <b>/guide</b> for the full map: the brains, the fallback cascade and privacy.'],
+               tutBullets:['Same answers as the device (same brain), just on your CPU.','Teach it facts: “remember that the meeting room <b>is</b> on the third floor” — it remembers them even after a reload.','','Type <b>/guide</b> for the full map: the brains, the fallback cascade and privacy.'],
                tutBtn:'Start', tutTry:'Try: “capital of France”' },
         greet:{ morning:'Good morning', afternoon:'Good afternoon', evening:'Good evening', night:'Good night' },
-        welTitle:'ANIMA', welLead:"NucleoOS's offline assistant. It understands English and Italian, opens apps, does math, tells time/date/space, creates files, manages the calendar and answers questions — all on-device.",
+        welTitle:'ANIMA', 
         catExamples:'Examples', catCaps:'Capabilities', catCommands:'Commands',
         welTips:['<kbd>⏎</kbd> send','<kbd>⌘K</kbd> palette','<kbd>/</kbd> commands','<kbd>↑</kbd> history','<kbd>?</kbd> shortcuts'],
         examples:['weather london','days until christmas','what time is it','who is Einstein'],
@@ -1288,7 +1295,6 @@
         cmdCards:['/help','/theme','/new','/export'],
         offline:"I can't reach the ANIMA engine on the device.",
         dontknow:"I don't know yet. I can open apps, tell time/space, create files, give the weather and answer questions.",
-        onlineNoLLM:'Online-only mode: no LLM available. Check the key/Internet, or use a browser-local model.',
         opened:'opened', created:'created', exists:'already exists', cleared:'Conversation cleared.',
         thinking:['Thinking','Pondering','Cogitating','Reasoning','Composing','Recalling','Searching'],
         restored:'Conversation restored.', reasoning:'Reasoning', steps:'steps',
@@ -1358,24 +1364,18 @@
         "local GPU": "GPU local",
         "browser": "navegador",
         "Offline: the Cardputer’s brain, no network. If the device doesn’t answer, the browser brain (if ready) is the backup. Type /guide for the full map.": "Offline: el cerebro del Cardputer, sin red. Si el dispositivo no responde, el cerebro del navegador (si está listo) hace de reserva. Escribe /guide para el mapa completo.",
-        "Hybrid: the Cardputer first (it can already use the cloud teacher), then — as backup — the browser brain and the web index.": "Híbrida: primero el Cardputer (que ya puede usar el maestro en la nube), luego — como reserva — el cerebro del navegador y el índice web.",
         "Local GPU: the model runs on the browser GPU — offline and private. For full-sentence translation with no cloud (Grok only if there is no GPU).": "GPU local: el modelo corre en la GPU del navegador — offline y privado. Para traducir frases enteras sin nube (Grok solo si no hay GPU).",
         "Browser: the whole offline cascade runs HERE in the browser (WebAssembly) — answers identical to the Cardputer. If it doesn’t know, it serves already-cached web cards (no network). The brain downloads once; then it works even with the Cardputer off. Nothing leaves the device.": "Navegador: toda la cascada offline corre AQUÍ en el navegador (WebAssembly) — respuestas idénticas al Cardputer. Si no lo sabe, sirve tarjetas web ya en caché (sin red). El cerebro se descarga una vez; luego funciona incluso con el Cardputer apagado. Nada sale del dispositivo.",
         "Online: real LLMs (cloud Grok/Claude → browser LLM). As a last resort, BEFORE scaling onto the Cardputer, it uses the browser brain and indexes the web.": "Online: LLM reales (nube Grok/Claude → LLM del navegador). Como último recurso, ANTES de escalar al Cardputer, usa el cerebro del navegador e indexa la web.",
         "Could not load ANIMA locally: brain download failed. Check the device connection.": "No se pudo cargar ANIMA en local: falló la descarga del cerebro. Comprueba la conexión con el dispositivo.",
-        "ANIMA offline runs in this browser (WASM), but the brain isn’t installed here yet. Install it once from Settings ▸ Models (then it answers locally even without the Cardputer), or use Hybrid/Online mode.": "ANIMA offline corre en este navegador (WASM), pero el cerebro aún no está instalado aquí. Instálalo una vez desde Ajustes ▸ Modelos (luego responde en local incluso sin el Cardputer), o usa el modo Híbrida/Online.",
-        "NucleoOS's assistant running ENTIRELY in this browser (WebAssembly): offline, private and instant. It opens apps, does math, tells time and date, creates files, answers questions and learns what you teach it — without anything leaving the device.": "El asistente de NucleoOS que corre ENTERAMENTE en este navegador (WebAssembly): offline, privado e instantáneo. Abre apps, hace cálculos, dice la hora y la fecha, crea archivos, responde preguntas y aprende lo que le enseñas — sin que nada salga del dispositivo.",
         "Local brain": "Cerebro local",
         "Reload": "Recargar",
         "cached · ready offline": "en caché · listo offline",
         "not downloaded yet": "aún no descargado",
         "ANIMA ready — running locally ⚡": "ANIMA lista — corriendo en local ⚡",
-        "Browser mode: ANIMA runs locally in your browser, nothing leaves the device. Click to switch (Browser · Hybrid · Online).": "Modo Navegador: ANIMA corre en local en tu navegador, nada sale del dispositivo. Clic para cambiar (Navegador · Híbrida · Online).",
         "ANIMA is ready — and it runs locally": "ANIMA está lista — y corre en local",
-        "From now on ANIMA answers <b>entirely in this browser</b>: instant, private, and it works even with the Cardputer off.": "A partir de ahora ANIMA responde <b>enteramente en este navegador</b>: instantánea, privada y funciona incluso con el Cardputer apagado.",
         "Same answers as the device (same brain), just on your CPU.": "Las mismas respuestas que el dispositivo (mismo cerebro), solo que en tu CPU.",
         "Teach it facts: “remember that the meeting room <b>is</b> on the third floor” — it remembers them even after a reload.": "Enséñale hechos: «recuerda que la sala de reuniones <b>está</b> en el tercer piso» — los recuerda incluso tras recargar.",
-        "For online weather and news switch to “Hybrid” in ⚙ Settings · Engine.": "Para el tiempo y las noticias online cambia a «Híbrida» en ⚙ Ajustes · Motor.",
         "Type <b>/guide</b> for the full map: the brains, the fallback cascade and privacy.": "Escribe <b>/guide</b> para el mapa completo: los cerebros, la cascada de reserva y la privacidad.",
         "Start": "Empezar",
         "Try: “capital of France”": "Prueba: «capital de Francia»",
@@ -1383,7 +1383,6 @@
         "Good afternoon": "Buenas tardes",
         "Good evening": "Buenas tardes",
         "Good night": "Buenas noches",
-        "NucleoOS's offline assistant. It understands English and Italian, opens apps, does math, tells time/date/space, creates files, manages the calendar and answers questions — all on-device.": "El asistente offline de NucleoOS. Entiende inglés e italiano, abre apps, hace cálculos, dice hora/fecha/espacio, crea archivos, gestiona el calendario y responde preguntas — todo en el dispositivo.",
         "Examples": "Ejemplos",
         "Capabilities": "Capacidades",
         "Commands": "Comandos",
@@ -1403,7 +1402,6 @@
         "convert 10 km to miles": "convierte 10 km a millas",
         "I can't reach the ANIMA engine on the device.": "No puedo alcanzar el motor ANIMA en el dispositivo.",
         "I don't know yet. I can open apps, tell time/space, create files, give the weather and answer questions.": "Aún no lo sé. Puedo abrir apps, decir hora/espacio, crear archivos, dar el tiempo y responder preguntas.",
-        "Online-only mode: no LLM available. Check the key/Internet, or use a browser-local model.": "Modo solo online: no hay LLM disponible. Comprueba la clave/Internet, o usa un modelo local del navegador.",
         "opened": "abierto",
         "created": "creado",
         "already exists": "ya existe",
@@ -1498,7 +1496,6 @@
         "Read replies aloud with the browser voice (also online/long replies).": "Lee las respuestas en voz alta con la voz del navegador (también online y largas).",
         "Yes": "Sí",
         "Where the intelligence runs: device, browser or online.": "Dónde corre la inteligencia: dispositivo, navegador u online.",
-        "Hybrid": "Híbrida",
         "Local GPU": "GPU local",
         "Fallback chain: Online (cloud) → Local GPU → Browser (WASM + web index) → Cardputer. It scales onto the Cardputer only as the last net. Type /guide in chat for the full map.": "Cadena de reserva: Online (nube) → GPU local → Navegador (WASM + índice web) → Cardputer. Escala al Cardputer solo como última red. Escribe /guide en el chat para el mapa completo.",
         "The offline brain downloaded in this browser.": "El cerebro offline descargado en este navegador.",
@@ -1594,7 +1591,6 @@
         "Local GPU · WebLLM": "GPU local · WebLLM",
         "Setting up ANIMA on this device": "Preparando ANIMA en este dispositivo",
         "Copying ANIMA’s offline brain into this browser so it runs locally — fast, private, and it keeps working with the Cardputer off. One-time download.": "Copiando el cerebro offline de ANIMA en este navegador para que corra en local — rápido, privado y sigue funcionando con el Cardputer apagado. Descarga única.",
-        "It’s the same engine as the device, just on your CPU. You can switch to <b>Hybrid</b> anytime in Settings · Engine.": "Es el mismo motor que el dispositivo, solo que en tu CPU. Puedes cambiar a <b>Híbrida</b> cuando quieras en Ajustes · Motor.",
         "Cancel download": "Cancelar descarga",
         "Cancelling…": "Cancelando…",
         "loading engine…": "cargando el motor…",
@@ -1602,12 +1598,10 @@
         "updating the brain…": "actualizando el cerebro…",
         "brain · ": "cerebro · ",
         "starting…": "iniciando…",
-        "Could not download the brain from the device. Check the connection and retry — or use the device (Hybrid) instead.": "No se pudo descargar el cerebro del dispositivo. Comprueba la conexión y reintenta — o usa el dispositivo (Híbrida).",
         "Retry": "Reintentar",
         "Use device": "Usar el dispositivo",
         "Download ANIMA’s offline brain?": "¿Descargar el cerebro offline de ANIMA?",
         "To run ANIMA locally in this browser I need to download its brain (~88 MB) from the device, once. Then it works fast, private, and with the Cardputer off.": "Para correr ANIMA en local en este navegador necesito descargar su cerebro (~88 MB) del dispositivo, una vez. Luego funciona rápido, privado y con el Cardputer apagado.",
-        "Nothing downloads without your OK. You can switch to <b>Hybrid</b> (use the device) anytime.": "Nada se descarga sin tu OK. Puedes cambiar a <b>Híbrida</b> (usar el dispositivo) cuando quieras.",
         "Download (~88 MB)": "Descargar (~88 MB)",
         "capital of France": "capital de Francia",
         "How ANIMA works": "Cómo funciona ANIMA",
@@ -1827,24 +1821,18 @@
         "browser": "navigateur",
         "online": "en ligne",
         "Offline: the Cardputer’s brain, no network. If the device doesn’t answer, the browser brain (if ready) is the backup. Type /guide for the full map.": "Hors ligne : le cerveau du Cardputer, sans réseau. Si l’appareil ne répond pas, le cerveau du navigateur (s’il est prêt) prend le relais. Tapez /guide pour la carte complète.",
-        "Hybrid: the Cardputer first (it can already use the cloud teacher), then — as backup — the browser brain and the web index.": "Hybride : d’abord le Cardputer (il peut déjà utiliser le professeur cloud), puis — en secours — le cerveau du navigateur et l’index web.",
         "Local GPU: the model runs on the browser GPU — offline and private. For full-sentence translation with no cloud (Grok only if there is no GPU).": "GPU local : le modèle tourne sur le GPU du navigateur — hors ligne et privé. Pour traduire des phrases entières sans cloud (Grok seulement s’il n’y a pas de GPU).",
         "Browser: the whole offline cascade runs HERE in the browser (WebAssembly) — answers identical to the Cardputer. If it doesn’t know, it serves already-cached web cards (no network). The brain downloads once; then it works even with the Cardputer off. Nothing leaves the device.": "Navigateur : toute la cascade hors ligne tourne ICI dans le navigateur (WebAssembly) — réponses identiques au Cardputer. S’il ne sait pas, il sert des fiches web déjà en cache (sans réseau). Le cerveau se télécharge une fois ; ensuite il fonctionne même Cardputer éteint. Rien ne quitte l’appareil.",
         "Online: real LLMs (cloud Grok/Claude → browser LLM). As a last resort, BEFORE scaling onto the Cardputer, it uses the browser brain and indexes the web.": "En ligne : de vrais LLM (cloud Grok/Claude → LLM du navigateur). En dernier recours, AVANT de basculer sur le Cardputer, il utilise le cerveau du navigateur et indexe le web.",
         "Could not load ANIMA locally: brain download failed. Check the device connection.": "Impossible de charger ANIMA en local : le téléchargement du cerveau a échoué. Vérifiez la connexion à l’appareil.",
-        "ANIMA offline runs in this browser (WASM), but the brain isn’t installed here yet. Install it once from Settings ▸ Models (then it answers locally even without the Cardputer), or use Hybrid/Online mode.": "ANIMA hors ligne tourne dans ce navigateur (WASM), mais le cerveau n’est pas encore installé ici. Installez-le une fois depuis Paramètres ▸ Modèles (il répond alors en local même sans le Cardputer), ou utilisez le mode Hybride/En ligne.",
-        "NucleoOS's assistant running ENTIRELY in this browser (WebAssembly): offline, private and instant. It opens apps, does math, tells time and date, creates files, answers questions and learns what you teach it — without anything leaving the device.": "L’assistant de NucleoOS qui tourne ENTIÈREMENT dans ce navigateur (WebAssembly) : hors ligne, privé et instantané. Il ouvre des apps, fait des calculs, donne l’heure et la date, crée des fichiers, répond aux questions et apprend ce que vous lui enseignez — sans que rien ne quitte l’appareil.",
         "Local brain": "Cerveau local",
         "Reload": "Recharger",
         "cached · ready offline": "en cache · prêt hors ligne",
         "not downloaded yet": "pas encore téléchargé",
         "ANIMA ready — running locally ⚡": "ANIMA prête — s’exécute en local ⚡",
-        "Browser mode: ANIMA runs locally in your browser, nothing leaves the device. Click to switch (Browser · Hybrid · Online).": "Mode Navigateur : ANIMA tourne en local dans votre navigateur, rien ne quitte l’appareil. Cliquez pour changer (Navigateur · Hybride · En ligne).",
         "ANIMA is ready — and it runs locally": "ANIMA est prête — et elle tourne en local",
-        "From now on ANIMA answers <b>entirely in this browser</b>: instant, private, and it works even with the Cardputer off.": "Désormais ANIMA répond <b>entièrement dans ce navigateur</b> : instantanée, privée, et fonctionne même Cardputer éteint.",
         "Same answers as the device (same brain), just on your CPU.": "Les mêmes réponses que l’appareil (même cerveau), mais sur votre CPU.",
         "Teach it facts: “remember that the meeting room <b>is</b> on the third floor” — it remembers them even after a reload.": "Apprenez-lui des faits : « souviens-toi que la salle de réunion <b>est</b> au troisième étage » — il s’en souvient même après un rechargement.",
-        "For online weather and news switch to “Hybrid” in ⚙ Settings · Engine.": "Pour la météo et les actus en ligne, passez à « Hybride » dans ⚙ Paramètres · Moteur.",
         "Type <b>/guide</b> for the full map: the brains, the fallback cascade and privacy.": "Tapez <b>/guide</b> pour la carte complète : les cerveaux, la cascade de secours et la confidentialité.",
         "Start": "Commencer",
         "Try: “capital of France”": "Essayez : « capitale de la France »",
@@ -1852,7 +1840,6 @@
         "Good afternoon": "Bon après-midi",
         "Good evening": "Bonsoir",
         "Good night": "Bonne nuit",
-        "NucleoOS's offline assistant. It understands English and Italian, opens apps, does math, tells time/date/space, creates files, manages the calendar and answers questions — all on-device.": "L’assistant hors ligne de NucleoOS. Il comprend l’anglais et l’italien, ouvre des apps, fait des calculs, donne l’heure/la date/l’espace, crée des fichiers, gère le calendrier et répond aux questions — tout sur l’appareil.",
         "Examples": "Exemples",
         "Capabilities": "Capacités",
         "Commands": "Commandes",
@@ -1871,7 +1858,6 @@
         "convert 10 km to miles": "convertis 10 km en miles",
         "I can't reach the ANIMA engine on the device.": "Impossible de joindre le moteur ANIMA sur l’appareil.",
         "I don't know yet. I can open apps, tell time/space, create files, give the weather and answer questions.": "Je ne sais pas encore. Je peux ouvrir des apps, donner l’heure/l’espace, créer des fichiers, donner la météo et répondre aux questions.",
-        "Online-only mode: no LLM available. Check the key/Internet, or use a browser-local model.": "Mode en ligne uniquement : aucun LLM disponible. Vérifiez la clé/Internet, ou utilisez un modèle local du navigateur.",
         "opened": "ouvert",
         "created": "créé",
         "already exists": "existe déjà",
@@ -1964,7 +1950,6 @@
         "Read replies aloud with the browser voice (also online/long replies).": "Lit les réponses à voix haute avec la voix du navigateur (aussi en ligne/longues).",
         "Yes": "Oui",
         "Where the intelligence runs: device, browser or online.": "Où tourne l’intelligence : appareil, navigateur ou en ligne.",
-        "Hybrid": "Hybride",
         "Local GPU": "GPU local",
         "Fallback chain: Online (cloud) → Local GPU → Browser (WASM + web index) → Cardputer. It scales onto the Cardputer only as the last net. Type /guide in chat for the full map.": "Chaîne de secours : En ligne (cloud) → GPU local → Navigateur (WASM + index web) → Cardputer. Il bascule sur le Cardputer seulement en dernier recours. Tapez /guide dans le chat pour la carte complète.",
         "The offline brain downloaded in this browser.": "Le cerveau hors ligne téléchargé dans ce navigateur.",
@@ -2059,7 +2044,6 @@
         "Local GPU · WebLLM": "GPU local · WebLLM",
         "Setting up ANIMA on this device": "Préparation d’ANIMA sur cet appareil",
         "Copying ANIMA’s offline brain into this browser so it runs locally — fast, private, and it keeps working with the Cardputer off. One-time download.": "Copie du cerveau hors ligne d’ANIMA dans ce navigateur pour qu’il tourne en local — rapide, privé, et continue de fonctionner Cardputer éteint. Téléchargement unique.",
-        "It’s the same engine as the device, just on your CPU. You can switch to <b>Hybrid</b> anytime in Settings · Engine.": "C’est le même moteur que l’appareil, juste sur votre CPU. Vous pouvez passer en <b>Hybride</b> à tout moment dans Paramètres · Moteur.",
         "Cancel download": "Annuler le téléchargement",
         "Cancelling…": "Annulation…",
         "loading engine…": "chargement du moteur…",
@@ -2067,12 +2051,10 @@
         "updating the brain…": "mise à jour du cerveau…",
         "brain · ": "cerveau · ",
         "starting…": "démarrage…",
-        "Could not download the brain from the device. Check the connection and retry — or use the device (Hybrid) instead.": "Impossible de télécharger le cerveau depuis l’appareil. Vérifiez la connexion et réessayez — ou utilisez l’appareil (Hybride).",
         "Retry": "Réessayer",
         "Use device": "Utiliser l’appareil",
         "Download ANIMA’s offline brain?": "Télécharger le cerveau hors ligne d’ANIMA ?",
         "To run ANIMA locally in this browser I need to download its brain (~88 MB) from the device, once. Then it works fast, private, and with the Cardputer off.": "Pour exécuter ANIMA en local dans ce navigateur, je dois télécharger son cerveau (~88 Mo) depuis l’appareil, une fois. Ensuite elle fonctionne vite, en privé, et Cardputer éteint.",
-        "Nothing downloads without your OK. You can switch to <b>Hybrid</b> (use the device) anytime.": "Rien ne se télécharge sans votre accord. Vous pouvez passer en <b>Hybride</b> (utiliser l’appareil) à tout moment.",
         "Download (~88 MB)": "Télécharger (~88 Mo)",
         "capital of France": "capitale de la France",
         "How ANIMA works": "Comment fonctionne ANIMA",
@@ -2288,24 +2270,18 @@
         "local GPU": "lokale GPU",
         "browser": "Browser",
         "Offline: the Cardputer’s brain, no network. If the device doesn’t answer, the browser brain (if ready) is the backup. Type /guide for the full map.": "Offline: das Gehirn des Cardputer, ohne Netz. Antwortet das Gerät nicht, springt das Browser-Gehirn (falls bereit) ein. Tippe /guide für die vollständige Übersicht.",
-        "Hybrid: the Cardputer first (it can already use the cloud teacher), then — as backup — the browser brain and the web index.": "Hybrid: zuerst der Cardputer (er kann bereits den Cloud-Lehrer nutzen), dann — als Reserve — das Browser-Gehirn und der Web-Index.",
         "Local GPU: the model runs on the browser GPU — offline and private. For full-sentence translation with no cloud (Grok only if there is no GPU).": "Lokale GPU: das Modell läuft auf der Browser-GPU — offline und privat. Für die Übersetzung ganzer Sätze ohne Cloud (Grok nur, wenn keine GPU vorhanden).",
         "Browser: the whole offline cascade runs HERE in the browser (WebAssembly) — answers identical to the Cardputer. If it doesn’t know, it serves already-cached web cards (no network). The brain downloads once; then it works even with the Cardputer off. Nothing leaves the device.": "Browser: die gesamte Offline-Kaskade läuft HIER im Browser (WebAssembly) — Antworten identisch zum Cardputer. Weiß er es nicht, liefert er bereits zwischengespeicherte Web-Karten (ohne Netz). Das Gehirn wird einmal geladen; danach funktioniert es sogar bei ausgeschaltetem Cardputer. Nichts verlässt das Gerät.",
         "Online: real LLMs (cloud Grok/Claude → browser LLM). As a last resort, BEFORE scaling onto the Cardputer, it uses the browser brain and indexes the web.": "Online: echte LLMs (Cloud Grok/Claude → Browser-LLM). Als letztes Mittel, BEVOR auf den Cardputer ausgewichen wird, nutzt es das Browser-Gehirn und indexiert das Web.",
         "Could not load ANIMA locally: brain download failed. Check the device connection.": "ANIMA konnte nicht lokal geladen werden: Gehirn-Download fehlgeschlagen. Prüfe die Geräteverbindung.",
-        "ANIMA offline runs in this browser (WASM), but the brain isn’t installed here yet. Install it once from Settings ▸ Models (then it answers locally even without the Cardputer), or use Hybrid/Online mode.": "ANIMA offline läuft in diesem Browser (WASM), aber das Gehirn ist hier noch nicht installiert. Installiere es einmal über Einstellungen ▸ Modelle (dann antwortet es lokal, auch ohne Cardputer), oder nutze den Hybrid-/Online-Modus.",
-        "NucleoOS's assistant running ENTIRELY in this browser (WebAssembly): offline, private and instant. It opens apps, does math, tells time and date, creates files, answers questions and learns what you teach it — without anything leaving the device.": "Der Assistent von NucleoOS, der VOLLSTÄNDIG in diesem Browser läuft (WebAssembly): offline, privat und sofort. Er öffnet Apps, rechnet, nennt Uhrzeit und Datum, erstellt Dateien, beantwortet Fragen und lernt, was du ihm beibringst — ohne dass etwas das Gerät verlässt.",
         "Local brain": "Lokales Gehirn",
         "Reload": "Neu laden",
         "cached · ready offline": "zwischengespeichert · offline bereit",
         "not downloaded yet": "noch nicht geladen",
         "ANIMA ready — running locally ⚡": "ANIMA bereit — läuft lokal ⚡",
-        "Browser mode: ANIMA runs locally in your browser, nothing leaves the device. Click to switch (Browser · Hybrid · Online).": "Browser-Modus: ANIMA läuft lokal in deinem Browser, nichts verlässt das Gerät. Zum Wechseln klicken (Browser · Hybrid · Online).",
         "ANIMA is ready — and it runs locally": "ANIMA ist bereit — und läuft lokal",
-        "From now on ANIMA answers <b>entirely in this browser</b>: instant, private, and it works even with the Cardputer off.": "Ab jetzt antwortet ANIMA <b>vollständig in diesem Browser</b>: sofort, privat und sogar bei ausgeschaltetem Cardputer.",
         "Same answers as the device (same brain), just on your CPU.": "Dieselben Antworten wie das Gerät (dasselbe Gehirn), nur auf deiner CPU.",
         "Teach it facts: “remember that the meeting room <b>is</b> on the third floor” — it remembers them even after a reload.": "Bring ihm Fakten bei: „merke dir, dass der Besprechungsraum im dritten Stock <b>ist</b>“ — er merkt sie sich sogar nach einem Neuladen.",
-        "For online weather and news switch to “Hybrid” in ⚙ Settings · Engine.": "Für Online-Wetter und -Nachrichten wechsle zu „Hybrid“ in ⚙ Einstellungen · Engine.",
         "Type <b>/guide</b> for the full map: the brains, the fallback cascade and privacy.": "Tippe <b>/guide</b> für die vollständige Übersicht: die Gehirne, die Fallback-Kaskade und den Datenschutz.",
         "Start": "Los geht’s",
         "Try: “capital of France”": "Versuch: „Hauptstadt von Frankreich“",
@@ -2313,7 +2289,6 @@
         "Good afternoon": "Guten Tag",
         "Good evening": "Guten Abend",
         "Good night": "Gute Nacht",
-        "NucleoOS's offline assistant. It understands English and Italian, opens apps, does math, tells time/date/space, creates files, manages the calendar and answers questions — all on-device.": "Der Offline-Assistent von NucleoOS. Er versteht Englisch und Italienisch, öffnet Apps, rechnet, nennt Uhrzeit/Datum/Speicher, erstellt Dateien, verwaltet den Kalender und beantwortet Fragen — alles auf dem Gerät.",
         "Examples": "Beispiele",
         "Capabilities": "Fähigkeiten",
         "Commands": "Befehle",
@@ -2333,7 +2308,6 @@
         "convert 10 km to miles": "rechne 10 km in Meilen um",
         "I can't reach the ANIMA engine on the device.": "Die ANIMA-Engine auf dem Gerät ist nicht erreichbar.",
         "I don't know yet. I can open apps, tell time/space, create files, give the weather and answer questions.": "Ich weiß es noch nicht. Ich kann Apps öffnen, Uhrzeit/Speicher nennen, Dateien erstellen, das Wetter geben und Fragen beantworten.",
-        "Online-only mode: no LLM available. Check the key/Internet, or use a browser-local model.": "Nur-Online-Modus: kein LLM verfügbar. Prüfe den Schlüssel/das Internet, oder nutze ein browser-lokales Modell.",
         "opened": "geöffnet",
         "created": "erstellt",
         "already exists": "existiert bereits",
@@ -2519,7 +2493,6 @@
         "Local GPU · WebLLM": "Lokale GPU · WebLLM",
         "Setting up ANIMA on this device": "ANIMA wird auf diesem Gerät eingerichtet",
         "Copying ANIMA’s offline brain into this browser so it runs locally — fast, private, and it keeps working with the Cardputer off. One-time download.": "Kopiere ANIMAs Offline-Gehirn in diesen Browser, damit es lokal läuft — schnell, privat und auch bei ausgeschaltetem Cardputer. Einmaliger Download.",
-        "It’s the same engine as the device, just on your CPU. You can switch to <b>Hybrid</b> anytime in Settings · Engine.": "Es ist dieselbe Engine wie das Gerät, nur auf deiner CPU. Du kannst jederzeit in Einstellungen · Engine zu <b>Hybrid</b> wechseln.",
         "Cancel download": "Download abbrechen",
         "Cancelling…": "Breche ab…",
         "loading engine…": "lade Engine…",
@@ -2527,12 +2500,10 @@
         "updating the brain…": "aktualisiere das Gehirn…",
         "brain · ": "Gehirn · ",
         "starting…": "starte…",
-        "Could not download the brain from the device. Check the connection and retry — or use the device (Hybrid) instead.": "Das Gehirn konnte nicht vom Gerät geladen werden. Prüfe die Verbindung und versuche es erneut — oder nutze das Gerät (Hybrid).",
         "Retry": "Erneut versuchen",
         "Use device": "Gerät verwenden",
         "Download ANIMA’s offline brain?": "ANIMAs Offline-Gehirn herunterladen?",
         "To run ANIMA locally in this browser I need to download its brain (~88 MB) from the device, once. Then it works fast, private, and with the Cardputer off.": "Um ANIMA lokal in diesem Browser auszuführen, muss ich ihr Gehirn (~88 MB) einmal vom Gerät laden. Danach läuft es schnell, privat und bei ausgeschaltetem Cardputer.",
-        "Nothing downloads without your OK. You can switch to <b>Hybrid</b> (use the device) anytime.": "Ohne dein OK wird nichts geladen. Du kannst jederzeit zu <b>Hybrid</b> (Gerät nutzen) wechseln.",
         "Download (~88 MB)": "Herunterladen (~88 MB)",
         "capital of France": "Hauptstadt von Frankreich",
         "How ANIMA works": "Wie ANIMA funktioniert",
@@ -3118,7 +3089,7 @@
             det.appendChild(sm); det.appendChild(pre); wrap.appendChild(det);
           } else wrap.appendChild(pre);
           el.appendChild(wrap);
-        } else if(p) renderBlocks(el, p);
+        } else if(p) renderBlocks(el, ctxkit.plainMath(p));   // model LaTeX -> readable text (no TeX renderer here)
       });
     }
 
@@ -3235,6 +3206,8 @@
         else if(I==='wikidata'){ eng='Online · Wikidata'; model='REST API'; }
         else { eng=TR('Online · maestro Grok', 'Online · Grok teacher');   // grok / teacher / generic remote
                model=r.model||(keyCfg&&keyCfg.model)||'auto'; host=hostOf((keyCfg&&keyCfg.base)||''); }
+      } else if(r.status){                                          // an exact value read from the Cardputer's /api/status (no model involved)
+        kind='device'; icon='▣'; eng=L('engLiveStatus'); model='/api/status';
       } else if(r.web){                                             // in-browser WEB INDEX — live Wikipedia/Wikidata from the browser, or a cached recall (never the MCU)
         kind='wasm'; icon='🌐'; eng=TR('Browser · indice web', 'Browser · web index');
         model = r.recalled ? (TR('card in cache', 'cached card')) : (TR('Wikipedia (live)', 'Wikipedia (live)'));
@@ -3403,7 +3376,7 @@
         '<div class="wcard"><h5>'+esc(t.catCommands)+'</h5>'+t.cmdCards.map(c=>'<button class="wchip" data-fill="'+esc(c)+' ">'+esc(c)+'</button>').join('')+'</div>'+
         '</div>' : '';
       wb.innerHTML='<div class="top"><span class="star">✻</span><span class="title">'+esc(greeting())+' — '+esc(t.welTitle)+'</span></div>'+
-        '<div class="lead">'+esc(isPrivate()&&t.edge?t.edge.lead:t.welLead)+'</div>'+cards+
+        '<div class="lead">'+esc(L(isPrivate()?'welLeadPrivate':'welLeadAuto'))+'</div>'+cards+
         '<div class="tips">'+t.welTips.join('').replace(/⌘K/g, isMac?'⌘K':'Ctrl K')+'</div>';
       w.appendChild(wb); logEl.appendChild(w);
     }
@@ -3731,7 +3704,7 @@
       e.querySelector('.pi').textContent='⚡';
       e.querySelector('.pt').textContent = TR('Preparo ANIMA su questo dispositivo', 'Setting up ANIMA on this device');
       e.querySelector('.pd').textContent = TR('Copio il cervello offline di ANIMA in questo browser per farlo girare in locale — veloce, privato e funziona anche col Cardputer spento. Scaricamento una tantum.', 'Copying ANIMA’s offline brain into this browser so it runs locally — fast, private, and it keeps working with the Cardputer off. One-time download.');
-      e.querySelector('.prov-tip').innerHTML = TR('È lo stesso motore del dispositivo, ma sulla tua CPU. Puoi passare a <b>Ibrida</b> quando vuoi in Impostazioni · Motore.', 'It’s the same engine as the device, just on your CPU. You can switch to <b>Hybrid</b> anytime in Settings · Engine.');
+      e.querySelector('.prov-tip').textContent = L('provTip');
       e.querySelector('.prov-card').classList.remove('tut');     // reset from a prior tutorial view
       e.querySelector('.prov-act').classList.remove('on');
       e.querySelector('.prov-bar i').style.width='0'; e.querySelector('.pp').textContent=''; e.querySelector('.pf').textContent='';
@@ -3756,7 +3729,7 @@
     function provError(){
       const e=provEl(), act=e.querySelector('.prov-act');
       e.querySelector('.prov-cancel').style.display='none';
-      e.querySelector('.pd').textContent = TR('Non riesco a scaricare il cervello dal dispositivo. Controlla la connessione e riprova — oppure usa il dispositivo (Ibrida).', 'Could not download the brain from the device. Check the connection and retry — or use the device (Hybrid) instead.');
+      e.querySelector('.pd').textContent = L('provErr');
       const retry=e.querySelector('.pretry'), dev=e.querySelector('.pdev');
       retry.textContent=TR('Riprova', 'Retry'); dev.textContent=TR('Usa il dispositivo', 'Use device');
       retry.onclick=()=>{ act.classList.remove('on'); ensureEdge(true, true).catch(()=>{}); };   // Retry IS consent
@@ -3815,7 +3788,7 @@
       e.querySelector('.prov-card').classList.add('tut');
       e.querySelector('.pi').textContent='⚡';
       e.querySelector('.pt').textContent=t.edge.tutTitle;
-      e.querySelector('.pd').innerHTML=t.edge.tutBody;
+      e.querySelector('.pd').innerHTML=L('tutBodyLocal');
       // bullet 3 used to point at the retired "Hybrid" mode: it now comes from the catalog (Auto / Private).
       e.querySelector('.prov-tip').innerHTML='<ul class="tut-list">'+t.edge.tutBullets.map((b,i)=>'<li>'+(i===2?L('tutModeBullet'):b)+'</li>').join('')+'</ul>';
       const act=e.querySelector('.prov-act'); act.classList.add('on');
@@ -4079,7 +4052,7 @@
       try{ return await AM.withStep(_turnSig, AM.STEP_MS.device, async (signal)=>{
           const resp = await dfetch('/api/anima?q='+encodeURIComponent(q)+'&lang='+lang+'&mode='+(devMode||'off')+sidQ(), { signal });
           if(resp.status===413 || resp.status===414){ _turnDevErr='too_long'; return null; }
-          if(!resp.ok){ _turnDevErr ||= resp.status===401 ? 'unpaired' : resp.status===503 ? 'busy' : 'unreachable'; return null; }
+          if(!resp.ok){ if(resp.status===503) await refreshDevProfile(); _turnDevErr ||= resp.status===401 ? 'unpaired' : resp.status===503 ? 'busy' : 'unreachable'; return null; }
           return await resp.json(); }); }
       catch{ if(!(_turnSig && _turnSig.aborted)) _turnDevErr ||= 'unreachable'; return null; }
     }
@@ -4092,6 +4065,25 @@
     // Turn-scoped memos: the probe's engine/device answers are reused by the offline rungs of the same turn
     // (never a second query — both engines keep dialogue state).
     let _turnLocal=null, _turnDevice=null, _turnDevErr='';
+    // The device's boot profile (/api/status "profile"): "web" = the lean server-Solo a browser session runs
+    // on, with its offline brain OFF by design. A 503 there is not "busy" — say what it really is. Refreshed
+    // whenever the device declines, so it is right after a reboot too.
+    let _devProfile='';
+    // '' = unreachable; 'up' = reachable, profile unknown (firmware older than the field); else 'web' | 'full'.
+    async function refreshDevProfile(){ try{ const r=await fetch('/api/status',{ cache:'no-store' }); if(!r.ok){ _devProfile=''; return; } const j=await r.json(); _devProfile=String((j&&j.profile)||'up'); }catch{ _devProfile=''; } syncL1Row(); }
+    // The Cardputer brain policy (Auto/On/Off) means nothing while the device runs the web profile — its brain
+    // is off by design — so the row says that and its buttons stand down instead of pretending to matter.
+    function syncL1Row(){
+      const seg=document.getElementById('set-l1mode'); if(!seg) return;
+      let web=false; try{ web=_devProfile==='web'; }catch{ return; }   // an early settings paint may run before the profile exists
+      const field=seg.closest('.set-field'), sub=field&&field.querySelector('.f-sub');
+      for(const b of seg.children) b.disabled=web;
+      field && field.classList.toggle('is-off', web);
+      if(sub){ if(!sub.dataset.base) sub.dataset.base=sub.textContent; sub.textContent = web ? L('l1WebMode') : sub.dataset.base; }
+    }
+    // A device ACTION the Cardputer could not take this turn goes to the PC's model WITH the real tools (the
+    // local agent) instead of stopping at "not done": it acts, or says honestly that it can't.
+    let _turnForceAgent=false;
     // The running turn's AbortSignal (null between turns). Every device / web / cloud / GPU step of the
     // turn runs under AM.withStep(_turnSig, …): Stop aborts them all, a slow step times out on its own.
     let _turnSig=null;
@@ -4113,7 +4105,7 @@
         catch{ return done({ err: (_turnSig && _turnSig.aborted) ? 'stopped' : 'unreachable' }); }
         if(resp.status===401) return done({ err:'unpaired' });
         if(resp.status===413 || resp.status===414) return done({ err:'too_long' });
-        if(resp.status===503) return done({ err:'busy' });
+        if(resp.status===503){ await refreshDevProfile(); return done({ err:'busy' }); }
         if(!resp.ok) return done({ err:'unreachable' });
         try{ const r=await resp.json(); replayPendingSoon(); return done({ r }); }catch{ return done({ err:'unreachable' }); }
       } finally { st.done(); }
@@ -4141,7 +4133,7 @@
     }
     function notDoneWhy(why){
       if(why==='unpaired') return TR('Questo browser non è associato al Cardputer (serve il PIN)', 'This browser isn’t paired with the Cardputer (PIN needed)');
-      if(why==='busy') return TR('Il Cardputer è occupato, riprova tra poco', 'The Cardputer is busy, try again in a moment');
+      if(why==='busy') return _devProfile==='web' ? L('devWebMode') : TR('Il Cardputer è occupato, riprova tra poco', 'The Cardputer is busy, try again in a moment');
       if(why==='too_long') return TR('La richiesta è troppo lunga per il Cardputer', 'The request is too long for the Cardputer');
       if(why==='unsupported') return TR('Il firmware di questo Cardputer non può eseguirlo dal web (aggiornalo)', 'This Cardputer firmware can’t run it from the web (update it)');
       if(why==='mismatch') return TR('Il Cardputer non l’ha riconosciuto come comando', 'The Cardputer did not recognise it as a command');
@@ -4195,6 +4187,13 @@
       return local;
     }
 
+    // A PC model is running, answering this page, and agents are on: the local agent can take a device action.
+    async function pcServerLive(){
+      try{ const E=await enginesMod(); const cfg=E.loadLocalConfig(); if(!cfg.enabled) return false;
+        const live=await E.liveServers({ config:cfg }); return live.some((s)=>s.status==='ok' && s.models && s.models.length); }
+      catch{ return false; }
+    }
+    async function pcAgentReady(){ return useAgents && await pcServerLive(); }
     async function commandFirst(q){
       const P=await cascadeMod();
       const mem=P.memoryHint ? P.memoryHint(q) : null;
@@ -4215,7 +4214,19 @@
       }
       const d=await deviceCommand(q);
       if(d.r) return P.classifyCommand(d.r) ? d.r : null;             // not a command after all → normal ladder (rung 4 reuses d)
-      // Device unreachable: never let an LLM rung "perform" a device change it cannot make.
+      // The device could not take it (web mode, unreachable…). A plain LLM must never "perform" a device change
+      // it cannot make — but the PC's model WITH the real tools can: hand the action to the local agent.
+      // Live state the status already carries (SD space, battery, time, network…) is answered EXACTLY from it —
+      // never by a model: qwen3.5:9b, handed "how much SD space", said 1.4 GB on a card with 18.7 free.
+      if(hint==='live' && d.err!=='unpaired' && d.err!=='stopped' && P.liveKind){
+        const k=P.liveKind(q);
+        if(k){ let st=null; try{ const rs=await fetch('/api/status',{ cache:'no-store' }); if(rs.ok) st=await rs.json(); }catch{}
+          const txt=st && P.liveFromStatus(k, st, lang);
+          if(txt) return { reply:txt, intent:'live_'+k, domain:'system', tier:'status', status:true, confidence:95 }; }
+      }
+      // Same for live state ("how much SD space") and launching an app: a tool-less chat would guess the value
+      // or claim it opened the app; the agent reads device_status / calls open_in_os for real.
+      if((hint==='act' || hint==='live' || hint==='launch') && d.err!=='unpaired' && d.err!=='stopped' && await pcAgentReady()){ _turnForceAgent=true; return null; }
       return hint==='act' ? notPerformed(null, d.err) : null;
     }
     // Make a device action REAL or say it wasn't: the in-browser engine only proposes (so the device runs it),
@@ -4332,7 +4343,12 @@
     // instead of silently degrading to another tier. The most actionable one wins.
     let _turnAiErr = null;
     function noteAiErr(e, cfg){
-      const err = AI.toAiError(e, cfg || keyCfg);
+      // Only a CLOUD call can fail as a cloud provider. With no key, or in Private, no cloud rung ran: the error
+      // came from a local engine (the PC model, the agent runtime), and labelling it with the default provider
+      // told users without any key "I can't reach Claude".
+      const c = cfg || keyCfg;
+      if(isPrivate() || !((c && c.key) || keyCfg.key || groqCfg())) return;
+      const err = AI.toAiError(e, c);
       if(err.kind==='stopped') return;
       if(!_turnAiErr || (AI.actionableAiError(err) && !AI.actionableAiError(_turnAiErr))) _turnAiErr = err;
     }
@@ -4539,7 +4555,19 @@
       else target=a.abs||(a.path?root+String(a.path).replace(/^\.?\/+/,''):'');
       const lines=[];
       if(target) lines.push(L(isPath?'agentPath':'agentTarget',{ p:target }));
-      if(always) lines.push('⚠ '+L(a.hw?'agentHw':'agentIrrev'));
+      // WHAT will be written, not only where: approving a write you cannot see is not a real approval.
+      const clip=(s,maxL=10,maxC=600)=>{ const all=String(s==null?'':s).replace(/\r\n/g,'\n'); const ls=all.split('\n');
+        let out=ls.slice(0,maxL).join('\n'); if(out.length>maxC) out=out.slice(0,maxC)+'…';
+        return out+(ls.length>maxL?'\n'+L('agentMoreLines',{ n:ls.length-maxL }):''); };
+      if((op==='write_file'||op==='append_file') && a.content!=null){
+        const n=String(a.content).split('\n').length;
+        lines.push('', L(op==='append_file'?'agentAppend':'agentContent',{ n }), clip(a.content));
+      } else if(op==='edit_file' && (a.old!=null || a.new!=null)){
+        lines.push('', L('agentReplaces'), clip(a.old,6,300), '', L('agentWith'), clip(a.new,6,300));
+      } else if(op==='run_js' && a.code){
+        lines.push('', L('agentCode'), clip(a.code,12,700));
+      }
+      if(always) lines.push('', '⚠ '+L(a.hw?'agentHw':'agentIrrev'));
       return { title:L('agentWants',{ op }), body:lines.join('\n') };
     }
     let _agentLocalFirst=false, _agentStr=null, _agentStrLang='';
@@ -4702,7 +4730,7 @@
       let live=null;
       const onDelta=(d)=>{ if(sig.aborted) return; if(!live){ think.remove(); live=streamShell(); } live.push(d); };
       let r; const _t0=Date.now();   // pipeline latency: measured across the whole brain resolution (incl. fallbacks)
-      _turnLocal=null; _turnDevice=null; _turnDevErr=''; _turnAiErr=null; _lastCloudModel='';
+      _turnLocal=null; _turnDevice=null; _turnDevErr=''; _turnAiErr=null; _lastCloudModel=''; _turnForceAgent=false;
       try{
       // COMMANDS FIRST: a device action or live-state question ("alza il volume", "ricordami…", "che ore sono"),
       // and anything about the user's personal memory, is resolved by the Cardputer before any LLM rung — even
@@ -4747,13 +4775,16 @@
         //      real workspace tools: read, search, write, edit (approved), run_js, open in the OS. The same Agenti
         //      runtime the cloud uses, on native tool calling — ANIMA as a small OpenCode that needs no key and,
         //      in Private, no network. Nothing is inferred on the Cardputer: it only stores the files.
-        if(!r && localFirst && lcfg.enabled && useAgents && !sig.aborted && ctxkit.wantsAgent(sendQ, { workspace:fs.hasRoot() })){
+        if(!r && (localFirst || _turnForceAgent) && lcfg.enabled && useAgents && !sig.aborted && (_turnForceAgent || ctxkit.wantsAgent(sendQ, { workspace:fs.hasRoot() }))){
           const live=await (await enginesMod()).liveServers({ config:lcfg }).catch(()=>[]);
           if(live.some((s)=>s.status==='ok' && s.models.length)){
             _agentDidMutate=false; _agentCancelled=false; _agentWsAsked=false; _agentLocalFirst=true;
             try{ r = await agentAsk(sendQ, think, await wsxOnce()); }catch(e){ r = null; if(String(e&&e.message)!=='stopped') noteAiErr(e); }
           }
         }
+        // A device action handed to the local agent that it could not carry out stops HERE, honestly: the
+        // tool-less chat rungs below would only describe an action nobody performed.
+        if(!r && _turnForceAgent && !sig.aborted) r = notPerformed(null, _turnDevErr || 'busy');
         // 1a - LOCAL SERVER first (see above)
         if(!r && localFirst && !sig.aborted) r = await tryLocalServer();
 
@@ -4845,11 +4876,11 @@
         // does the reply name the device problem (and how to get a local one).
         const why = _turnDevErr;
         const aiWhy = _turnAiErr ? AI.explainAiError(_turnAiErr, lang) : '';
-        const msg = aiWhy ? aiWhy + ' ' + (have ? UI[lang].dontknow : (UI[lang].edgeNeedInstall||''))
+        const msg = aiWhy ? aiWhy + ' ' + (have ? UI[lang].dontknow : L('noEngine'))
           : why==='too_long'
           ? TR('La domanda è troppo lunga per il Cardputer: accorciala e riprova.', 'This question is too long for the Cardputer: shorten it and try again.')
           : (have || !why) ? UI[lang].dontknow
-          : (why==='unreachable' ? UI[lang].offline : '⚠ '+notDoneWhy(why)+'.') + ' ' + (UI[lang].edgeNeedInstall||'');
+          : (why==='unreachable' ? UI[lang].offline : '⚠ '+notDoneWhy(why)+'.') + ' ' + L('noEngine');
         renderMd(body, msg); body.dataset.raw=msg; history.push({role:'bot',text:msg}); persist(); setDot('err');
         maybeLocalAiHint(body, null).catch(()=>{});   // nothing answered: exactly when "your Ollama refuses NucleoOS" matters most
         return;
@@ -5679,9 +5710,10 @@
     // so "Private" means the same thing in Ctrl+Space. Provider keys are configuration, not a mode.
     function isPrivate(){ return AM.isPrivate(mode); }
     const modeLabel = (m)=> L(AM.isPrivate(m) ? 'modePrivate' : 'modeAuto');
-    function chooseMode(m){ mode=AM.writeMode(m); applyAll(); syncL1Ext(); input.focus();
-      // Private leans on the local brains: offer the WASM brain (consent-gated, never a silent pull) if it is not here yet.
-      if(isPrivate()) ensureEdge(true).catch(()=>{}); }
+    function chooseMode(m){ mode=AM.writeMode(m); applyAll(); syncL1Ext();
+      // Private leans on the local brains: offer the WASM brain (consent-gated, never a silent pull) only when
+      // no PC model can serve it — with Ollama ready the 96 MB offer was noise.
+      if(isPrivate()) (async()=>{ if(!(await pcServerLive())) ensureEdge(true).catch(()=>{}); })(); }
     // Another surface (the copilot chip, another tab) changed the mode: follow it live.
     AM.onModeChange((m)=>{ if(m!==mode){ mode=m; applyAll(); syncL1Ext(); } });
     // Tell the device whether a brain OTHER than its offline L1 is generating, so AUTO frees L1's RAM.
@@ -5734,14 +5766,60 @@
     });
     $('ctx-inspect').addEventListener('click',()=>{ openSettings(false); openInspector(); });
     $('ctx-meter').addEventListener('click',()=>openInspector());
-    const toggleMode = () => chooseMode(mode==='private' ? 'auto' : 'private');
-    $('q-mode').addEventListener('click', toggleMode);
-    $('mode-pill').addEventListener('click', toggleMode);
+    // ENGINES PANEL — the mode pill used to flip Auto/Private blind, and flipping to Private opened a 96 MB
+    // download even with a PC model ready. Now it shows both modes explained, and what every engine can do
+    // RIGHT NOW (PC server, browser brain, the Cardputer, cloud), so the user knows who will answer and why.
+    async function engineStatus(){
+      const st={ pc:null, browser:false, device:'', cloud:'', pcFirst:false };
+      try{ const E=await enginesMod(); const cfg=E.loadLocalConfig(); st.pcFirst=cfg.prefer==='local';
+        if(cfg.enabled){ const live=await E.liveServers({ config:cfg, fresh:true });
+          const ok=live.find((s)=>s.status==='ok' && s.models && s.models.length), cors=live.find((s)=>s.status==='cors');
+          if(ok) st.pc={ name:ok.name, model:E.pickModel(ok.models,'chat',{ perf:E.loadPerf(), base:ok.base })||'' };
+          else if(cors) st.pc={ name:cors.name, cors:true }; } }catch{}
+      try{ st.browser=await browserProvisioned(); }catch{}
+      await refreshDevProfile(); st.device=_devProfile;
+      try{ await ensureKeyLoaded(); if(keyCfg.key) st.cloud=curProv().label||keyCfg.provider; }catch{}
+      return st;
+    }
+    async function openEnginePanel(){
+      const st=await engineStatus();
+      const esc=(s)=>String(s==null?'':s).replace(/[&<>"]/g,(c)=>({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;' }[c]));
+      const row=(icon, name, ok, text)=>'<li><i aria-hidden="true">'+icon+'</i><div><b>'+esc(name)+'</b> — <span class="'+(ok?'ok':'off')+'">'+esc(text)+'</span></div></li>';
+      const render=(el)=>{
+        const priv=isPrivate();
+        el.innerHTML='<div class="eng-modes" role="group" aria-label="'+esc(L('engModeGroup'))+'">'
+          +'<button type="button" class="eng-mode" data-m="auto" aria-pressed="'+(!priv)+'"><b>'+esc(L('modeAuto'))+'</b><span>'+esc(L('engAutoDesc'))+'</span></button>'
+          +'<button type="button" class="eng-mode" data-m="private" aria-pressed="'+priv+'"><b>'+esc(L('modePrivate'))+'</b><span>'+esc(L('engPrivDesc'))+'</span></button></div>'
+          +'<ul class="eng-list">'
+          + row('⌂', L('engPc'), !!(st.pc && !st.pc.cors),
+              st.pc ? (st.pc.cors ? L('engPcCors',{ server:st.pc.name }) : st.pc.name+' · '+(prettyModel(st.pc.model)||st.pc.model||'?')) : L('engPcNone'))
+          + row('⬡', L('engBrowser'), st.browser, L(st.browser?'engBrowserOn':'engBrowserOff'))
+          + row('▣', 'Cardputer', st.device==='full' || st.device==='up', L(st.device==='web'?'engDevWeb':st.device==='full'?'engDevFull':st.device==='up'?'engDevUp':'engDevNone'))
+          + row('☁', 'Cloud', !!st.cloud && !priv, st.cloud ? (priv ? L('engCloudPriv',{ p:st.cloud }) : st.cloud) : L('engCloudNone'))
+          +'</ul>'
+          // With BOTH a cloud key and a PC model, Auto has a real choice of who goes first (ai-engines "prefer",
+          // shared with the copilot) — shown only when it matters, instead of a setting nobody could reach.
+          +(!priv && st.cloud && st.pc && !st.pc.cors
+            ? '<div class="eng-modes" role="group" aria-label="'+esc(L('engOrderLbl'))+'" style="margin:12px 0 0">'
+              +'<button type="button" class="eng-mode eng-pref" data-p="cloud" aria-pressed="'+(!st.pcFirst)+'"><b>'+esc(L('engCloudFirst'))+'</b><span>'+esc(L('engCloudFirstDesc',{ p:st.cloud }))+'</span></button>'
+              +'<button type="button" class="eng-mode eng-pref" data-p="local" aria-pressed="'+(!!st.pcFirst)+'"><b>'+esc(L('engPcFirst'))+'</b><span>'+esc(L('engPcFirstDesc'))+'</span></button></div>'
+            : '')
+          +'<p class="eng-order">'+esc(L(priv ? 'engOrderPriv' : !st.cloud ? 'engOrderAuto' : st.pcFirst && st.pc ? 'engOrderAutoPcFirst' : 'engOrderAutoCloud'))+'</p>';
+        for(const b of el.querySelectorAll('.eng-mode:not(.eng-pref)')) b.addEventListener('click',()=>{ chooseMode(b.dataset.m); render(el); });
+        for(const b of el.querySelectorAll('.eng-pref')) b.addEventListener('click',async()=>{
+          try{ const E=await enginesMod(); const cfg=E.loadLocalConfig(); if(b.dataset.p==='local') cfg.prefer='local'; else delete cfg.prefer; E.saveLocalConfig(cfg); st.pcFirst=b.dataset.p==='local'; }catch{}
+          render(el); });
+      };
+      await askDialog({ title:L('engTitle'), render, ok:L('engClose'), single:true });
+    }
+    $('q-mode').addEventListener('click', openEnginePanel);
+    $('mode-pill').addEventListener('click', openEnginePanel);
     $('q-lang').addEventListener('click',()=>chooseLang(lang==='it'?'en':'it'));
     // The two status-bar toggles are spans with role=button: give them the keyboard a button has.
     for(const id of ['q-mode','q-lang']) $(id).addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){ e.preventDefault(); $(id).click(); } });
     // Reflect the persisted L1 policy on the device at startup (firmware resets to AUTO each boot) and
     // push the current engine's browser-LLM state once. Best-effort: the device may be unreachable.
+    idle(()=>{ refreshDevProfile(); }, 900);   // the device profile (web/full) for the engines panel and the L1 row
     idle(function initL1(){ try{ if(l1mode!=='auto') dfetch('/api/anima/l1',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({mode:l1mode})}).catch(()=>{}); }catch{} _l1ext=null; syncL1Ext(); }, 700);   // push the boot L1-policy POST off the launch burst
 
     // DEFAULT BRAIN = ONLINE when an API key is configured. User rule: if Grok/Claude keys exist, the
@@ -5810,7 +5888,7 @@
       { const e=$('s-verify'); if(e) e.textContent=TR('Integrità SD','SD integrity'); }
       { const e=$('h-readiness'); if(e) e.textContent=TR('Air-gap readiness','Air-gap readiness'); }
       { const e=$('fd-newfile'); if(e) e.textContent=TR('+ File','+ File'); }
-      { const seg=$('set-l1mode'); if(seg) for(const b of seg.children) b.classList.toggle('on', b.dataset.l1===l1mode); }
+      { const seg=$('set-l1mode'); if(seg) for(const b of seg.children) b.classList.toggle('on', b.dataset.l1===l1mode); syncL1Row(); }
       { const sb=$('set-voicesrc'); if(sb){ sb.children[0].disabled=!(voice&&voice.browserAvailable); sb.children[1].disabled=!(voice&&voice.deviceAvailable); } }
       // online-AI key panel labels (bilingual, mirrors the rest of settings)
       { const txt=(id,s)=>{ const e=$(id); if(e) e.textContent=s; };

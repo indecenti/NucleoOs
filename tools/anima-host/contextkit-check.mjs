@@ -2,7 +2,7 @@
 // Run: node tools/anima-host/contextkit-check.mjs
 import {
   estimateTokens, MODEL_PROFILES, profileFor, groqProfile, resolveKind, wantsCode, wantsLong,
-  buildLedger, renderLedger, wrapData, buildSystem, buildMessages, assemble, usageTokens,
+  buildLedger, renderLedger, wrapData, buildSystem, buildMessages, assemble, usageTokens, plainMath,
 } from '../../apps/anima/www/contextkit.js';
 
 let pass = 0, fail = 0; const fails = [];
@@ -153,6 +153,27 @@ ok('usageTokens ratio clamped', u.ratio > 0 && u.ratio <= 1 && u.budget === MODE
     ok(`${lg}/${mode}: the prompt says models run outside the Cardputer`, /(outside it|fuori da lui)/i.test(sys));
   }
   ok("local server: the model is told it runs on the user's computer",/user's own computer|computer dell'utente/.test(assemble({ history: [], user: 'x', mode: 'server', lang: 'en' }).system));
+}
+
+/* ---- plainMath: LaTeX from a model shown as readable text (no TeX renderer on the device) ---- */
+{
+  // Verbatim spans from qwen3.5:9b's train-meeting answer (2026-10-01), which ANIMA printed raw.
+  const R = String.raw;
+  ok('math: text + times', plainMath(R`percorre: $120 \text{ km/h} \times 0,5 \text{ h} = 60 \text{ km}$.`) === 'percorre: 120 km/h × 0,5 h = 60 km.');
+  ok('math: frac + approx', plainMath(R`è: $\frac{150}{210} \approx 0,7143 \text{ ore}$ (che`) === 'è: 150/210 ≈ 0,7143 ore (che');
+  ok('math: mathbf', plainMath(R`= $\mathbf{09:27:51}$.`) === '= 09:27:51.');
+  ok('math: nested mathbf{text{}}', plainMath(R`$\mathbf{145,7 \text{ km}}$`) === '145,7 km');
+  ok('math: plain arithmetic span', plainMath('($0,5 + 0,7143$) ore') === '(0,5 + 0,7143) ore');
+  ok('math: grouped fraction', plainMath(R`$\frac{a+b}{2}$`) === '(a+b)/2');
+  ok('math: superscript + sqrt', plainMath(R`$x^2 + \sqrt{16} = 10^{3}$`) === 'x² + √16 = 10³');
+  ok('math: degrees + subscript', plainMath(R`$25^\circ C$ e $H_2O$`) === '25° C e H₂O');
+  ok('math: display $$ on its own line', plainMath('a $$E = mc^2$$ b') === 'a \nE = mc²\n b');
+  ok('math: paren and bracket delimiters', plainMath(R`\(\pi \approx 3,14\)`) === 'π ≈ 3,14' && plainMath(R`\[a \ne b\]`) === '\na ≠ b\n');
+  ok('math: prices are not math', plainMath('costa $5 e poi $10 in più') === 'costa $5 e poi $10 in più');
+  const code = 'usa `' + R`$\frac{a}{b}$` + '` così';
+  ok('math: inline code untouched', plainMath(code) === code);
+  ok('math: plain text unchanged', plainMath('Nessuna formula qui: 3 + 4.') === 'Nessuna formula qui: 3 + 4.');
+  ok('math: null-safe', plainMath(null) === '' && plainMath(undefined) === '');
 }
 
 /* ---- report ---- */
