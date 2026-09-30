@@ -96,7 +96,7 @@ A pass over everything *around* the code — what a first-time reader or a licen
   Windows app's `dist/`, and deploy-time device-state backups. Files stay on disk; `.gitignore` was
   rewritten in English and grouped by purpose so the tree only holds sources.
 - **English-only enforced:** the Italian root plan `piano-cardputer-os.md` became
-  [`docs/original-plan.md`](original-plan.md) (indexed under History); `OVERSIZED-ASSETS.md`,
+  [`docs/archive/original-plan.md`](archive/original-plan.md) (indexed under History); `OVERSIZED-ASSETS.md`,
   `tools/nucleo-suite/README.md`, the `oversized-assets/` tooling, and the TTS/oversize comments in
   `deploy.ps1` / `sd-sync.ps1` / `sd_deploy.py` were all translated.
 - **No more vendored third-party trees:** `reference/bruce` (AGPL-3.0, ~63 MB) and `reference/esp-claw`
