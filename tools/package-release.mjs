@@ -107,7 +107,9 @@ NucleoOS serves all of its apps and data from the microSD.
 1. Format the card as **FAT32**.
 2. Extract **\`${sdZip}\`** (${sdSize}) to the **root** of the card. You should end up with these
    folders directly on the card: \`/apps\`, \`/www\`, \`/system\`, \`/data\` (not inside another folder).
-   Extracting over an existing NucleoOS card is safe: the zip carries no settings, keys or learned data.
+   Extracting over an existing NucleoOS card keeps your data: the zip carries no settings, keys, learned
+   data or documents. It does replace the app list (\`system/registry/apps.json\`), so web apps you created
+   with the **Agent** app disappear from the launcher until you publish them again (their files stay).
 3. Insert the card into the Cardputer **before powering on**.
 
 ---

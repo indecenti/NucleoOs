@@ -430,6 +430,7 @@ def verify(root, log, master=MASTER, progress=None):
 # path here, plus release-only filters. Built straight from the sources (never from deploy/sd-safe as a
 # whole), filtered while copying, and checked against the SAME write allow-list the device enforces.
 RELEASE_MANIFEST = "sd-manifest.txt"
+RELEASE_MARKER = ".nucleo-release"     # <out>.nucleo-release NEXT TO the out dir: "build_release made this"
 RELEASE_MANIFEST_VERSION = 1
 # Heavy OPTIONAL assets a first install doesn't need (installable in-app) — same list package-release.mjs
 # used for the zip: image-diffusion + speech + WebLLM models and the big runtime wasm.
@@ -437,6 +438,9 @@ RELEASE_HEAVY = ["/models/", "/vendor/onnxruntime-web/", "/vendor/ffmpeg/", "/ve
 RELEASE_HEAVY_EXT = (".pcm", ".gguf", ".npy", ".onnx")
 # Payload files that aren't needed ON THE CARD: the stale sd-safe README (would also collide with other
 # firmwares' README on a shared M5Launcher card) and the dev sd-sim's user-area scratch file.
+# data/tts/**: the voice index only matches the clip bank it was built with; clips.pcm is never released
+# (oversized), so shipping index.bin alone could desync a card's older, hand-installed clips. The voice
+# ships as a PAIR in a future voice pack, never half. (Dropped in build_release's filter.)
 RELEASE_DROP = {"README.md", "data/apps/test.lua",
                 "data/ir/nucleo-remotes.ir"}   # a dev-sim user remote (IR app user data), not payload
 # Packs: everything is 'core' except the companion installers the web shell links (phone APK, Windows
@@ -524,10 +528,19 @@ def _pack_of(rel):
 def build_release(out, tag, log, manifest_path=None):
     """Assemble the public SD payload into `out` + write the device manifest. Returns (stats, errors);
     any error means the payload must not ship. Never touches deploy/sd-master or a card."""
-    out = Path(out)
+    out = Path(out).resolve()
+    # `out` is wiped and rebuilt: never let that be a card, a drive root or anything outside a build dir.
+    if out.parent == out or len(out.parts) < 3:
+        raise RuntimeError(f"release: refusing to use {out} (drive root / too shallow)")
     if out.exists():
+        looks_like_card = any((out / m).exists() for m in (MANIFEST_NAME, "system", "data", "apps", "www"))
+        if looks_like_card and not out.with_name(out.name + RELEASE_MARKER).exists():
+            raise RuntimeError(f"release: {out} looks like an SD card or a foreign tree, refusing to wipe it")
         shutil.rmtree(out)
     out.mkdir(parents=True)
+    # The marker sits BESIDE the tree, never inside it (it would ship in the zip onto users' cards).
+    out.with_name(out.name + RELEASE_MARKER).write_text("sd_deploy.py release output - safe to delete\n",
+                                                        encoding="ascii")
     # 1) plan: rel -> ('copy', src) | ('gz', raw_src). Later rules win, exactly like assemble_master's
     #    copy order (e.g. the sd-safe akb5 list replaces the sd-sim one).
     plan = {}
@@ -547,7 +560,8 @@ def build_release(out, tag, log, manifest_path=None):
             if raw is not None and raw.is_file():
                 # A committed twin keeps the EOL of the machine that gzipped it (check-gz.mjs compares
                 # EOL-normalized for that reason). Regenerate it from the raw source instead: the pair
-                # is then byte-exact and the hash is the same on every build machine.
+                # is then byte-exact. (Hashes are reproducible per checkout; the published payload is
+                # built on the Linux CI runner, where sources are LF.)
                 plan[rel] = ("gz", raw)
                 continue
             plan[rel] = ("copy", f)
@@ -567,7 +581,7 @@ def build_release(out, tag, log, manifest_path=None):
     keep = {}
     for rel, entry in sorted(plan.items()):
         n = "/" + rel
-        if rel in RELEASE_DROP or rel.endswith(MANIFEST_NAME):
+        if rel in RELEASE_DROP or rel.endswith(MANIFEST_NAME) or rel.startswith("data/tts/"):
             dropped["other"] += 1; continue
         if any(h in n for h in RELEASE_HEAVY) or rel.lower().endswith(RELEASE_HEAVY_EXT):
             dropped["heavy"] += 1; continue
@@ -1112,7 +1126,11 @@ def main():
             tag = args[args.index("--tag") + 1]
         if "--manifest" in args:
             man = args[args.index("--manifest") + 1]
-        _, errors = build_release(args[1], tag, log, man)
+        try:
+            _, errors = build_release(args[1], tag, log, man)
+        except RuntimeError as e:
+            log("ERROR " + str(e))
+            sys.exit(1)
         for e in errors:
             log("ERROR " + e)
         if errors:
