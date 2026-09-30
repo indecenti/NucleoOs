@@ -88,6 +88,6 @@ tiny screen + keyboard. See `docs/device-ui.md`.
   never-auto-deploy), and a PostToolUse hook runs `npm run validate` after registry/manifest edits.
 - **`.claude/agents/`** — custom subagents for recurring roles: `firmware-reviewer`,
   `anima-corpus-curator`, `board-bringup-verifier`. Delegate to them with the Agent tool.
-- **Memory** (`~/.claude/projects/G--Nucleo/memory/`) — personal facts, preferences, and
+- **Memory** (`~/.claude/projects/<project>/memory/`) — personal facts, preferences, and
   decision/status notes that aren't in the repo. One fact per file; keep `MEMORY.md`
   index entries to a tight one line. Don't grow memory files into mini-docs — that belongs in `docs/`.

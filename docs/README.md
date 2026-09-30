@@ -103,6 +103,7 @@ Point-in-time records — useful for context and decisions already made, not cur
 
 | Doc | What you get |
 |---|---|
+| [original-plan.md](original-plan.md) | The original execution plan NucleoOS started from — v1 core vs. phased innovation roadmap. *(historical)* |
 | [maintenance-2026-06.md](maintenance-2026-06.md) | June 2026 hardening pass — dead-code removal, RAM/fragmentation and concurrency fixes. *(historical)* |
 | [maintenance-2026-08.md](maintenance-2026-08.md) | August 2026 pass — making the test harness portable off-Windows and hunting real correctness bugs. *(historical)* |
 | [maintenance-2026-09.md](maintenance-2026-09.md) | September 2026 web-OS consolidation — the browser E2E suite and the fixes it found. *(historical)* |

@@ -1,60 +1,60 @@
 # NucleoOS Toolkit
 
-Launcher unico (GUI Tkinter, a carosello) per gli strumenti **PC-side** del
-Cardputer NucleoOS. Raccoglie in un solo posto i tool utili all'utente e li
-avvia ciascuno nel proprio processo; pensato per essere impacchettato in un
-**`.exe`** distribuibile.
+A single launcher (Tkinter GUI, carousel-style) for the **PC-side** tools of the
+NucleoOS Cardputer. It gathers the tools that are useful to the user in one place
+and starts each of them in its own process; it is designed to be packaged as a
+distributable **`.exe`**.
 
 ```
-python tools/nucleo-suite/launcher.py        # avvia il launcher
-python tools/nucleo-suite/launcher.py --selftest   # verifica il wiring, senza GUI
+python tools/nucleo-suite/launcher.py        # start the launcher
+python tools/nucleo-suite/launcher.py --selftest   # check the wiring, without a GUI
 ```
 
-## Strumenti inclusi
+## Included tools
 
-| Tool | Cat. | Tipo | Da .exe | Cosa fa |
+| Tool | Cat. | Type | From .exe | What it does |
 |------|------|------|:------:|---------|
-| **NFV Video Converter** | Video | GUI | ✅ | Converte qualsiasi video in clip `.nfv` per il device |
-| **NFV Reindex** | Video | CLI | ✅ | Aggiunge l'indice di seek alle vecchie clip `.nfv` |
-| **SD Deploy** | Sistema | GUI | ⛔ | Provisiona/aggiorna la SD del Cardputer |
-| **Flasher** | Sistema | GUI | ⛔ | Build / flash USB / deploy SD / OTA |
-| **Boot Log** | Diagnostica | CLI | ✅ | Cattura il log di avvio via seriale |
-| **Serial Monitor** | Diagnostica | CLI | ✅ | Registra il log seriale senza resettare il device |
+| **NFV Video Converter** | Video | GUI | ✅ | Converts any video into `.nfv` clips for the device |
+| **NFV Reindex** | Video | CLI | ✅ | Adds the seek index to old `.nfv` clips |
+| **SD Deploy** | System | GUI | ⛔ | Provisions/updates the Cardputer's SD card |
+| **Flasher** | System | GUI | ⛔ | Build / USB flash / SD deploy / OTA |
+| **Boot Log** | Diagnostics | CLI | ✅ | Captures the boot log over serial |
+| **Serial Monitor** | Diagnostics | CLI | ✅ | Records the serial log without resetting the device |
 
-I tool **⛔** dipendono dal repo e dalla toolchain (ESP-IDF, master della SD):
-funzionano da sorgente, ma non hanno senso in un `.exe` autonomo — nel pacchetto
-appaiono disattivati con una nota.
+The **⛔** tools depend on the repo and on the toolchain (ESP-IDF, the SD master):
+they work from source, but make no sense in a standalone `.exe` — in the package
+they appear disabled with a note.
 
-Cosa **non** è incluso, di proposito: gli strumenti interni di sviluppo/AI
-(`tools/anima/*`, gate, eval, test-lab, `npx_gen`, `train_wiki`, generatori voce
-e manifest, diagnostica NFV).
+What is deliberately **not** included: the internal development/AI tools
+(`tools/anima/*`, gates, evals, test-lab, `npx_gen`, `train_wiki`, voice and
+manifest generators, NFV diagnostics).
 
-## Architettura (perché funziona anche da `.exe`)
+## Architecture (why it also works from the `.exe`)
 
-- `tools_registry.py` è la **fonte unica**: descrive ogni tool e il suo percorso
-  `.py` relativo alla radice del repo.
-- Da **sorgente** il launcher esegue direttamente lo script reale del repo
-  (i GUI con `pythonw`, i CLI con output nel pannello).
-- Da **`.exe`** il launcher ri-lancia sé stesso con `--run <id>`: l'eseguibile
-  congelato contiene gli script (rispecchiati nella stessa struttura `tools/...`)
-  e li esegue via `runpy`. Stessa stringa di percorso, due modalità.
+- `tools_registry.py` is the **single source of truth**: it describes each tool and
+  its `.py` path relative to the repo root.
+- From **source**, the launcher runs the real repo script directly
+  (GUIs with `pythonw`, CLIs with their output in the panel).
+- From the **`.exe`**, the launcher re-launches itself with `--run <id>`: the frozen
+  executable contains the scripts (mirrored in the same `tools/...` structure)
+  and runs them via `runpy`. Same path string, two modes.
 
-## Creare il `.exe`
+## Building the `.exe`
 
-Serve PyInstaller (`pip install pyinstaller`). Poi:
+PyInstaller is required (`pip install pyinstaller`). Then:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File tools\nucleo-suite\build_exe.ps1
 ```
 
-Output: `tools/nucleo-suite/dist/NucleoSuite/NucleoSuite.exe` — una **cartella
-unica** da zippare e distribuire.
+Output: `tools/nucleo-suite/dist/NucleoSuite/NucleoSuite.exe` — a **single
+folder** to zip and distribute.
 
-> ⚠️ **ffmpeg** non è incluso nel bundle: deve stare sul `PATH` dell'utente
-> finale perché il convertitore video funzioni.
+> ⚠️ **ffmpeg** is not included in the bundle: it must be on the end user's
+> `PATH` for the video converter to work.
 
-## Aggiungere un nuovo tool
+## Adding a new tool
 
-Aggiungi un dizionario in `TOOLS` dentro `tools_registry.py` (vedi i campi
-documentati lì). Se deve funzionare anche da `.exe`, metti `frozen_ok: True` e
-aggiungi il suo `.py` (e le eventuali dipendenze) a `NucleoSuite.spec`.
+Add a dictionary to `TOOLS` in `tools_registry.py` (see the fields documented
+there). If it must also work from the `.exe`, set `frozen_ok: True` and add its
+`.py` (and any dependencies) to `NucleoSuite.spec`.
