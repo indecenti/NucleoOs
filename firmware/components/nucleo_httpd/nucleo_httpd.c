@@ -1776,8 +1776,9 @@ static esp_err_t apps_get(httpd_req_t *req)
         if (!a) continue;          // out of heap for even one object: skip it rather than abort the stream
         cJSON_AddStringToObject(a, "id", apps[i].id);
         cJSON_AddStringToObject(a, "name", apps[i].name);
-        cJSON_AddStringToObject(a, "route", apps[i].web_route);
-        cJSON_AddStringToObject(a, "icon", apps[i].icon);
+        char route[40], icon[48];   // rebuilt from the compact registry entry (same strings as the manifest)
+        cJSON_AddStringToObject(a, "route", nucleo_registry_route(&apps[i], route, sizeof route));
+        cJSON_AddStringToObject(a, "icon", nucleo_registry_icon(&apps[i], icon, sizeof icon));
         cJSON_AddBoolToObject(a, "enabled", apps[i].enabled);
         char *one = cJSON_PrintUnformatted(a);   // small: a single app object (~150-250 bytes)
         cJSON_Delete(a);

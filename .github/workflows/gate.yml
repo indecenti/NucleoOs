@@ -45,3 +45,6 @@ jobs:
 
       - name: M5Launcher guest-mode policy (host-compiled C)
         run: node tools/anima-host/guest-check.mjs
+
+      - name: App registry limits (the C layer runs in the local gate, needs ESP-IDF cJSON)
+        run: node tools/anima-host/registry-check.mjs

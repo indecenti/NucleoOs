@@ -44,3 +44,15 @@ See [app-runtimes.md](app-runtimes.md).
 - The registry is written only by the OS (atomic write + journal entry), never by apps
   directly — apps request changes via events, which the OS validates against permissions.
 - Every write appends an event to `/journal`, so registry state is replayable and undoable.
+- **Exception in practice:** the privileged **Agent** app publishes the user's own web apps by upserting
+  entries stamped `"created_by": "agent"` into `apps.json` (`apps/agent/www/app-publish.js`,
+  `planRegistryUpdate`). Any tool that updates the registry must therefore **merge** (keep those entries,
+  and the user's `enabled` / `permissions` choices), never overwrite it wholesale.
+
+## Firmware limits
+
+The firmware keeps the registry in a static table (`nucleo_registry.h`): up to **80 apps**, ids up to 24
+characters, names up to 31, an icon that is either the standard `/apps/<id>/icon.svg` or a relative path /
+glyph up to 21 bytes; `web_route` is always `/apps/<id>/` (webfs serves nothing else). Entries past the cap
+are dropped with a log warning. `npm run registry:test` gates these limits against every shipped manifest
+and keeps at least 16 slots free for user apps.

@@ -30,6 +30,7 @@
     "setupstore:test": "node tools/anima-host/setup-store-check.mjs",
     "update:test": "node tools/anima-host/update-check.mjs",
     "guest:test": "node tools/anima-host/guest-check.mjs",
+    "registry:test": "node tools/anima-host/registry-check.mjs",
     "launcher:test": "node tools/launcher-host/check.mjs",
     "ui:shots": "node tools/ui-host/run.mjs",
     "otalisten:test": "node tools/anima-host/ota-listen-check.mjs",
