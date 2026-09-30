@@ -286,6 +286,7 @@ async function syncSd(host, args) {
 
     // Delete stale gzipped orphans if they exist on the device but are not in our staged list.
     // This prevents the device from serving an outdated gzipped copy instead of the new raw file.
+    let rewriteRaw = false;
     if (idx.kind === 'ok' && idx.files.has(name + '.gz')) {
       const gzDevPath = devPath + '.gz';
       if (!stagedPaths.has(gzDevPath)) {
@@ -297,6 +298,11 @@ async function syncSd(host, args) {
             if (r.ok) {
               idx.files.delete(name + '.gz');
               console.log(`  - ${gzDevPath} (deleted stale orphan)`);
+            } else if (r.status === 403 && /^(www\/shell|apps\/[^/]+\/www)\//i.test(f.rel)) {
+              // /www and /apps refuse deletes; the firmware instead drops a stale twin when the raw file is
+              // written (nucleo_fsapi fstwin.c) — so rewrite the raw file even if it is current.
+              rewriteRaw = true;
+              console.log(`  ~ ${gzDevPath} (stale orphan: rewriting ${devPath} so the device drops it)`);
             } else {
               console.warn(`  ⚠ failed to delete stale orphan ${gzDevPath}: HTTP ${r.status}`);
             }
@@ -307,8 +313,8 @@ async function syncSd(host, args) {
       }
     }
 
-    let need = !present, why = 'create';
-    if (present) {
+    let need = !present || rewriteRaw, why = present ? 'update' : 'create';
+    if (present && !rewriteRaw) {
       const size = f.size == null ? (await readFile(f.abs)).length : f.size;
       if (size !== devSize) { need = true; why = 'update'; }
       else if (size <= SMALL) { need = !(await deviceEquals(devPath, await readFile(f.abs))); why = 'update'; }

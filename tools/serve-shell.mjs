@@ -405,7 +405,12 @@ async function fsApi(req, res, url) {
       res.writeHead(200, { 'content-type': type, 'accept-ranges': 'bytes', 'content-length': data.length, 'access-control-allow-origin': '*' });
       return res.end(data);
     }
-    if (op === 'write') { await writeFile(abs, await readBody(req)); publish('fs.changed', { op: 'write', path: p }); return sendJSON(res, { ok: true }); }
+    if (op === 'write') {
+      await writeFile(abs, await readBody(req)); publish('fs.changed', { op: 'write', path: p });
+      // MIRROR THE FIRMWARE (nucleo_fsapi fstwin.c): writing a file webfs serves gz-first drops its stale .gz twin.
+      if (/^\/(www\/shell|apps\/[^/]+\/www)\/./i.test(p) && !/\.gz$/i.test(p)) await rm(abs + '.gz', { force: true }).catch(() => {});
+      return sendJSON(res, { ok: true });
+    }
     if (op === 'delete') { await rm(abs, { recursive: true }); publish('fs.changed', { op: 'delete', path: p }); return sendJSON(res, { ok: true }); }
     if (op === 'mkdir') {
       let existed = true; try { await stat(abs); } catch { existed = false; }

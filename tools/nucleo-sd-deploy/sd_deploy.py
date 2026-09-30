@@ -186,6 +186,23 @@ def merge_registry_text(release_text, device_text):
         text += eol
     return text, kept, shadowed, device is not None
 
+# ---------------------------------------------------------------- stale .gz twins
+# The device's webfs serves "<file>.gz" instead of "<file>" in /www/shell and /apps/<id>/www, so a stale twin
+# shadows new code. The firmware drops it when <file> is written over the API (nucleo_fsapi fstwin.c); a
+# card written directly must do the same: a twin the payload does not ship, next to a raw file it does, is
+# stale by definition. Same scope as the firmware, held to tools/lib/twin-scope-vectors.json.
+import re as _re
+_TWIN_RE = _re.compile(r"^(www/shell|apps/[^/]+/www)/.", _re.IGNORECASE)
+
+def twin_scope(rel):
+    return bool(_TWIN_RE.match(rel or ""))
+
+def stale_twins(staged, card_has):
+    """staged: set of SD-relative paths shipped; card_has(rel)->bool. Returns twin paths to remove."""
+    return sorted(r + ".gz" for r in staged
+                  if twin_scope(r) and not r.lower().endswith(".gz") and (r + ".gz") not in staged
+                  and card_has(r + ".gz"))
+
 def is_state(rel):
     rel = rel.replace("\\", "/")
     return any(fnmatch.fnmatch(rel, p) or rel.startswith(p.rstrip("*")) and p.endswith("*")
@@ -428,6 +445,13 @@ def provision(root, mode, dry, log, master=MASTER, progress=None):
             shutil.copy2(f, tmp)
             os.replace(tmp, dst)
         st["written"] += 1; st["bytes"] += f.stat().st_size
+    # stale .gz twins the payload no longer ships (see twin_scope): the only files this tool removes
+    staged = {rel for _, rel in files}
+    for twin in stale_twins(staged, lambda r: (dst_root / r.replace("/", os.sep)).is_file()):
+        if not dry:
+            (dst_root / twin.replace("/", os.sep)).unlink()
+        log(f"  {'[DRY] ' if dry else ''}stale twin removed: {twin}")
+        st["twins"] = st.get("twins", 0) + 1
     if mode == "fresh":
         _write_fresh_state(dst_root, dry, log, st)
     # manifest on the SD

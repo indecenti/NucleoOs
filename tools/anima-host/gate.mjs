@@ -526,6 +526,12 @@ const gates = [
     // out byte-identical to the manifests, the cap leaves room for the user's Agent-published apps (the
     // old cap equalled the shipped count and dropped all of them) and exactly the cap loads past it.
     ok: (code) => code === 0, summary: (o) => (o.match(/registry: [^\n]*/g) || [lastLine(o)]).pop().trim() },
+  { name: 'fstwin (stale .gz twin)', cmd: 'node', args: ['tools/anima-host/fstwin-check.mjs'],
+    // Writing <file> over the API drops a stale <file>.gz (webfs serves the twin first; deleting it under
+    // /www and /apps is refused) — ONLY in /www/shell and /apps/<id>/www, never a user's .tar.gz. Real files;
+    // the scope table (tools/lib/twin-scope-vectors.json) is held across the firmware C, the JS/Python SD
+    // tools and the PowerShell regex in deploy.ps1 / sd-sync.ps1.
+    ok: (code) => code === 0, summary: (o) => (o.match(/fstwin: [^\n]*/) || [lastLine(o)])[0].trim() },
   { name: 'launcher-model (native UI)', cmd: 'node', args: ['tools/launcher-host/check.mjs'],
     // The native launcher model (firmware/components/nucleo_app/launcher_menu.cpp), host-compiled with
     // MinGW against the REAL app table extracted from the firmware sources: registry capacity (every

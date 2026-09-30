@@ -16,6 +16,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync, existsSync, cpSync, statSync, readdirSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
+import { gzipSync, gunzipSync } from 'node:zlib';
 import { join, dirname } from 'node:path';
 
 const ROOT = process.cwd();
@@ -60,6 +61,9 @@ const SENTINELS = {
   'launcher/config.conf': 'OTHER-FIRMWARE-2',
 };
 const EMPTY_DIRS = ['data/Music', 'data/Pictures', 'BruceRF/empty'];
+// A stale .gz twin of a file the payload ships WITHOUT a twin: the device would serve it instead of the file
+// (webfs serves "<file>.gz" first). Every tool must leave that file served correctly: twin gone or byte-exact.
+const STALE_TWIN_OF = 'apps/calculator/www/i18n.en.json';
 const AGENT = { id: 'myapp', version: '0.1.0', path: '/apps/myapp', enabled: true, created_by: 'agent', permissions: ['storage.app'] };
 
 const sha = (p) => createHash('sha256').update(readFileSync(p)).digest('hex');
@@ -70,6 +74,9 @@ function makeCard(dir, payload) {
   cpSync(payload, dir, { recursive: true });
   for (const [rel, body] of Object.entries(SENTINELS)) { mkdirSync(dirname(join(dir, rel)), { recursive: true }); writeFileSync(join(dir, rel), body); }
   for (const d of EMPTY_DIRS) mkdirSync(join(dir, d), { recursive: true });
+  if (!existsSync(join(payload, STALE_TWIN_OF)) || existsSync(join(payload, STALE_TWIN_OF + '.gz')))
+    throw new Error(`fixture: ${STALE_TWIN_OF} must ship without a twin`);
+  writeFileSync(join(dir, STALE_TWIN_OF + '.gz'), gzipSync('{"stale":"old code"}'));
   const reg = join(dir, 'system/registry/apps.json');
   const doc = JSON.parse(readFileSync(reg, 'utf8'));
   doc.installed.push(AGENT);
@@ -91,6 +98,8 @@ function check(label, dir) {
   else if (mine && JSON.stringify(mine) !== JSON.stringify(AGENT)) bad.push('Agent app entry altered');
   if (reg && reg.installed.length < 40) bad.push(`registry lost the bundled apps (${reg.installed.length})`);
   if (!existsSync(join(dir, 'www/shell/index.html'))) bad.push('payload missing: www/shell/index.html');
+  const tw = join(dir, STALE_TWIN_OF + '.gz');
+  if (existsSync(tw) && !gunzipSync(readFileSync(tw)).equals(readFileSync(join(dir, STALE_TWIN_OF)))) bad.push(`stale twin still shadows ${STALE_TWIN_OF}`);
   console.log(`  ${bad.length ? 'FAIL' : 'ok  '} ${label}${bad.length ? '\n        ' + bad.join('\n        ') : ''}`);
   failures += bad.length ? 1 : 0;
 }

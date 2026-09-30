@@ -31,6 +31,7 @@
     "update:test": "node tools/anima-host/update-check.mjs",
     "guest:test": "node tools/anima-host/guest-check.mjs",
     "registry:test": "node tools/anima-host/registry-check.mjs",
+    "fstwin:test": "node tools/anima-host/fstwin-check.mjs",
     "sdtools:e2e": "node tools/sd-tools-e2e.mjs",
     "launcher:test": "node tools/launcher-host/check.mjs",
     "ui:shots": "node tools/ui-host/run.mjs",
