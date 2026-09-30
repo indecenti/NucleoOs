@@ -168,5 +168,7 @@
   "engPcFirstDesc": "Gratuit et privé ; le cloud seulement si le PC ne répond pas.",
   "engOrderAutoPcFirst": "En Auto, les commandes vont au Cardputer ; le reste à l’IA locale du PC, puis au cloud, au cerveau du navigateur et au Cardputer.",
   "l1WebMode": "Le Cardputer est en mode web : son cerveau hors ligne est en pause pour laisser la mémoire au bureau, ce choix n’a donc aucun effet tant que vous ne revenez pas au système du Cardputer.",
-  "engLiveStatus": "Cardputer · état en direct"
+  "engLiveStatus": "Cardputer · état en direct",
+  "engModel": "Modèle sur le PC",
+  "engModelAuto": "Automatique (le plus adapté, mesuré sur ce PC)"
 }

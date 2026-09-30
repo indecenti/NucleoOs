@@ -3,7 +3,7 @@
 // PC's model, which answered "1,4 GB" on a card with 18.7 GB free. These values must never pass through a model.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { liveKind, liveFromStatus, commandHint } from '../apps/anima/www/local/cascade.js';
+import { liveKind, liveFromStatus, commandHint, guessLang } from '../apps/anima/www/local/cascade.js';
 
 // The Cardputer ADV's real /api/status (2026-10-01), trimmed.
 const ST = {
@@ -73,6 +73,19 @@ test('routing understands all five UI languages (a missed command reached a tool
   // how-to questions and statements are NOT commands
   for (const q of ['¿cómo subo el volumen de mi PC?', 'comment augmenter le volume sur Windows ?', 'wie mache ich den Bildschirm heller?',
     'son las cinco', 'el volumen del libro es grande y pesado', 'chi è Einstein']) assert.notEqual(commandHint(q), 'act', q);
+});
+
+test('the answer follows the language the question was written in', () => {
+  const cases = {
+    'Quanto spazio libero ho sulla SD?': 'it', 'che ore sono': 'it', 'quanta batteria ho': 'it',
+    'how much free space do I have': 'en', 'what time is it': 'en', 'battery level': 'en',
+    '¿Cuánto espacio libre tengo?': 'es', 'qué hora es': 'es', 'cuanta bateria me queda': 'es',
+    'Combien d\'espace libre il me reste ?': 'fr', 'Quelle heure est-il ?': 'fr',
+    'Wie viel Speicherplatz habe ich?': 'de', 'Wie spät ist es?': 'de', 'Welches Jahr haben wir?': 'de',
+  };
+  for (const [q, l] of Object.entries(cases)) assert.equal(guessLang(q), l, q);
+  assert.equal(guessLang('uptime'), null, 'no cue: the OS language is kept');
+  assert.equal(liveFromStatus('space', ST, guessLang('Wie viel Speicherplatz habe ich?')), 'Deine SD-Karte hat 18,7 GB frei von 32,0 GB.');
 });
 
 test('all five languages answer', () => {
