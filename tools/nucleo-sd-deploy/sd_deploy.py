@@ -141,6 +141,51 @@ USER_DIRS = ["data/Music", "data/Videos", "data/Pictures", "data/Documents", "da
              "data/downloads", "data/shared", "data/imports", "data/exports"]
 TEACHER_TEMPLATE = {"provider": "groq", "model": "llama-3.3-70b-versatile", "key": ""}
 
+# ---------------------------------------------------------------- registry merge
+# system/registry/apps.json on a card in use also lists the user's own web apps (published by the Agent app,
+# "created_by": "agent"). Overwriting it with the release copy uninstalled them. Twin of
+# tools/lib/registry-merge.mjs mergeRegistryText(); both are held to tools/lib/registry-merge-vectors.json.
+REGISTRY_REL = "system/registry/apps.json"
+
+def _registry_parse(text):
+    if text is None:
+        return None
+    try:
+        doc = json.loads(text.lstrip("﻿"))
+    except Exception:
+        return None
+    return doc if isinstance(doc, dict) and isinstance(doc.get("installed"), list) else None
+
+def merge_registry_text(release_text, device_text):
+    """-> (text, kept_ids, shadowed_ids, device_readable). Release text returned byte-exact when nothing
+    is carried over; raises ValueError if the RELEASE registry is malformed."""
+    release = _registry_parse(release_text)
+    if release is None:
+        raise ValueError("release registry is malformed")
+    device = _registry_parse(device_text)
+    sys_ids = {e.get("id") for e in release["installed"] if isinstance(e, dict) and isinstance(e.get("id"), str)}
+    kept, shadowed, extra = [], [], []
+    for e in (device or {}).get("installed", []):
+        if not (isinstance(e, dict) and e.get("created_by") == "agent" and isinstance(e.get("id"), str)):
+            continue
+        if e["id"] in sys_ids:
+            if e["id"] not in shadowed:
+                shadowed.append(e["id"])
+            continue
+        if e["id"] in kept:
+            continue
+        kept.append(e["id"]); extra.append(e)
+    if not kept:
+        return release_text, kept, shadowed, device is not None
+    doc = dict(release); doc["installed"] = release["installed"] + extra
+    eol = "\r\n" if "\r\n" in release_text else "\n"
+    text = json.dumps(doc, indent=2, ensure_ascii=False)
+    if eol != "\n":
+        text = text.replace("\n", eol)
+    if release_text.endswith("\n"):
+        text += eol
+    return text, kept, shadowed, device is not None
+
 def is_state(rel):
     rel = rel.replace("\\", "/")
     return any(fnmatch.fnmatch(rel, p) or rel.startswith(p.rstrip("*")) and p.endswith("*")
@@ -356,6 +401,24 @@ def provision(root, mode, dry, log, master=MASTER, progress=None):
             st["state_kept"] += 1
             continue
         dst = dst_root / rel.replace("/", os.sep)
+        if rel == REGISTRY_REL:
+            # Merge, never overwrite: keep the user's Agent-published apps (see merge_registry_text).
+            # bytes, not read_text(): text mode would rewrite CRLF and break the byte-exact release copy
+            rel_text = f.read_bytes().decode("utf-8")
+            dev_text = dst.read_bytes().decode("utf-8", errors="replace") if dst.exists() else None
+            text, kept, shadowed, _ = merge_registry_text(rel_text, dev_text)
+            if kept or shadowed:
+                log(f"  registry: kept user apps {kept}" + (f", shadowed by system apps {shadowed}" if shadowed else ""))
+            if dev_text == text:
+                st["skipped"] += 1
+                continue
+            if not dry:
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                tmp = dst.with_suffix(dst.suffix + ".nctmp")
+                tmp.write_bytes(text.encode("utf-8"))
+                os.replace(tmp, dst)
+            st["written"] += 1; st["bytes"] += len(text.encode("utf-8"))
+            continue
         if dst.exists() and dst.stat().st_size == f.stat().st_size and sha256(dst) == sha256(f):
             st["skipped"] += 1
             continue

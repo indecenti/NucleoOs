@@ -18,6 +18,7 @@
 import { readFileSync, statSync, readdirSync } from 'node:fs';
 import { join, posix, relative, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { REGISTRY_REL, mergeRegistryText } from './lib/registry-merge.mjs';
 
 const argv = process.argv.slice(2);
 const opt = (name, def) => { const i = argv.indexOf('--' + name); return i >= 0 ? (argv[i + 1] ?? true) : def; };
@@ -115,11 +116,11 @@ async function ensureDir(relDir) {
   if (DRY) log('  mkdir', '/' + relDir);
 }
 
-async function uploadFile(relPath, absLocal, size) {
+async function uploadFile(relPath, absLocal, size, content) {
   const parent = relPath.includes('/') ? relPath.slice(0, relPath.lastIndexOf('/')) : '';
   await ensureDir(parent);
   if (DRY) { log('  PUT  ', '/' + relPath, `(${size} B)`); return; }
-  const buf = readFileSync(absLocal);
+  const buf = content || readFileSync(absLocal);
   const res = await http('POST', `/api/fs/write?path=${enc('/' + relPath)}`, {
     headers: { 'Content-Type': 'application/octet-stream' },
     body: buf,
@@ -176,10 +177,24 @@ const log = (...a) => console.log(...a);
 
     if (!needs) { skippedExist++; if (VERBOSE) log('  have ', '/' + f.rel); continue; }
 
+    // system/registry/apps.json: MERGE with the device copy (it lists the user's own Agent apps), never
+    // overwrite (tools/lib/registry-merge.mjs). Unreadable device copy -> leave it alone.
+    let content = null;
+    if (f.rel === REGISTRY_REL) {
+      let devText = null;
+      const r = await http('GET', `/api/fs/read?path=${enc('/' + f.rel)}`);
+      if (r.ok) devText = Buffer.from(await r.arrayBuffer()).toString('utf8');
+      else if (r.status !== 404) { errors++; log('  ERR  ', '/' + f.rel, '-> device copy unreadable, registry left as is'); continue; }
+      const m = mergeRegistryText(readFileSync(f.abs, 'utf8'), devText);
+      if (m.kept.length) log('  registry: keeping the user apps', m.kept.join(', '));
+      if (devText !== null && devText === m.text) { skippedExist++; continue; }
+      content = Buffer.from(m.text, 'utf8');
+    }
+
     try {
-      await uploadFile(f.rel, f.abs, f.size);
+      await uploadFile(f.rel, f.abs, content ? content.length : f.size, content);
       uploaded++;
-      if (!DRY) log('  sent ', '/' + f.rel, `(${f.size} B)`);
+      if (!DRY) log('  sent ', '/' + f.rel, `(${content ? content.length : f.size} B${content ? ', merged' : ''})`);
     } catch (e) {
       errors++;
       log('  ERR  ', '/' + f.rel, '->', e.message);

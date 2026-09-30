@@ -39,6 +39,7 @@
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { join, relative, posix, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { REGISTRY_REL, mergeRegistryText } from './lib/registry-merge.mjs';
 
 const REPO = join(fileURLToPath(import.meta.url), '..', '..');
 const SD = join(REPO, 'deploy', 'sd');
@@ -108,6 +109,27 @@ function parseArgs(argv) {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const prefixed = (rel, list) => list.some((p) => rel === p || rel.startsWith(p + '/'));
+
+// system/registry/apps.json is MERGED with the device's copy, never overwritten: the device also lists the
+// user's own Agent-published apps (tools/lib/registry-merge.mjs). Reads the device copy with `fetchDev`
+// (-> Response). Returns {buf} to write, {same:true} when the device already holds the merged text, or
+// {unknown:true} when the device copy can't be read (then we don't write — never risk dropping user apps).
+async function mergedRegistry(fetchDev, localBuf, present) {
+  let devText = null;
+  if (present) {
+    try {
+      const r = await fetchDev();
+      if (r.status === 404) await r.arrayBuffer().catch(() => {});
+      else if (r.ok) devText = Buffer.from(await r.arrayBuffer()).toString('utf8');
+      else { await r.arrayBuffer().catch(() => {}); return { unknown: true }; }
+    } catch { return { unknown: true }; }
+  }
+  const m = mergeRegistryText(localBuf.toString('utf8'), devText);
+  if (m.kept.length) console.log(`  registry: keeping the user's apps ${m.kept.join(', ')}`);
+  if (m.shadowed.length) console.warn(`  ⚠ registry: user apps shadowed by system apps with the same id: ${m.shadowed.join(', ')}`);
+  if (devText !== null && devText === m.text) return { same: true };
+  return { buf: Buffer.from(m.text, 'utf8') };
+}
 
 // Load deploy/sd/.deploy-manifest.json (the authoritative staged-file list deploy.ps1 writes).
 // Falls back to walking the tree if it's absent. Returns [{rel, abs, size}] sorted.
@@ -246,6 +268,21 @@ async function syncSd(host, args) {
       devSize = present ? probe.size : -1;
     }
     if (present && prefixed(f.rel, PROTECTED)) { skipped++; continue; }   // user state: create-only
+
+    if (f.rel === REGISTRY_REL) {                                          // merge, never overwrite
+      const mr = await mergedRegistry(() => fetchWithTimeout(host + '/api/fs/read?path=' + encodeURIComponent(devPath),
+        { cache: 'no-store', headers: authHeaders() }, args.timeout), await readFile(f.abs), present);
+      if (mr.unknown) { console.error(`  ? ${devPath} → device copy unreadable, registry left as is`); unknown++; continue; }
+      if (mr.same) { skipped++; continue; }
+      const why = present ? 'update' : 'create';
+      if (args.dryRun) { console.log(`  would ${why} ${devPath} (${mr.buf.length} B, merged)`); (why === 'create' ? created++ : updated++); bytes += mr.buf.length; continue; }
+      if (await pushFile(devPath, devDir, name, mr.buf)) {
+        if (idx.kind === 'ok') idx.files.set(name, mr.buf.length);
+        console.log(`  ${why === 'create' ? '+' : '↑'} ${devPath} (${mr.buf.length} B, merged)`);
+        (why === 'create' ? created++ : updated++); bytes += mr.buf.length;
+      } else failed++;
+      continue;
+    }
 
     // Delete stale gzipped orphans if they exist on the device but are not in our staged list.
     // This prevents the device from serving an outdated gzipped copy instead of the new raw file.
@@ -512,7 +549,14 @@ async function main() {
   for (const abs of files) {
     const rel = relative(SD, abs).split(/[\\/]/).join('/');     // POSIX for the device
     const devPath = '/' + rel;
-    const buf = await readFile(abs);
+    let buf = await readFile(abs);
+    if (rel === REGISTRY_REL) {                                            // merge, never overwrite
+      const mr = await mergedRegistry(() => fetchWithTimeout(host + '/api/fs/read?path=' + encodeURIComponent(devPath),
+        { cache: 'no-store', headers: authHeaders() }, args.timeout), buf, true);
+      if (mr.unknown) { console.error('  ? ' + devPath + ' → device copy unreadable, registry left as is'); failed++; continue; }
+      if (mr.same) { skipped++; continue; }
+      buf = mr.buf;
+    }
     if (await deviceMatches(devPath, buf)) { skipped++; continue; }
     if (args.dryRun) { console.log('  would update ' + devPath + ` (${buf.length} B)`); written++; bytes += buf.length; continue; }
     await ensureDir(posix.dirname(devPath));
