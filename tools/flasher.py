@@ -297,11 +297,12 @@ class FlasherApp:
         self.btn_deploy = ttk.Button(b, text="💾 Deploy su SD", command=self.do_deploy)
         self.btn_deploy.pack(side="left", padx=3)
         tip(self.btn_deploy, "Sincronizza deploy/sd → microSD selezionata (deploy.ps1 -To).\n"
-                             "Copia solo i file cambiati e rimuove quelli estranei (mirror).\n"
+                             "Copia solo i file cambiati; sulla SD non cancella mai nulla.\n"
                              "Chiede conferma; rifiuta unità non rimovibili. Usa Dry-run per provare.")
         ttk.Label(t, foreground="#888", wraplength=780, justify="left",
                   text="deploy.ps1 fa sync incrementale (SHA-256): copia solo i file cambiati, "
-                       "scrittura atomica, verifica e mirror-delete. La scrittura su SD e' protetta: "
+                       "scrittura atomica e verifica; sulla SD aggiunge/aggiorna soltanto (app dell'utente, "
+                       "modelli e file di altri firmware restano). La scrittura su SD e' protetta: "
                        "rifiuta qualsiasi unita' non Removable o di sistema/boot.").pack(anchor="w", padx=10)
 
     def _tab_ota(self, nb):
@@ -504,7 +505,8 @@ class FlasherApp:
         dry = self.dryrun_var.get()
         if not dry and not messagebox.askyesno(
                 "Deploy su SD", f"Scrivere il contenuto OS su {drive} ?\n"
-                "Verranno rimossi i file estranei (mirror). L'unita' deve essere la microSD del Cardputer."):
+                "Vengono solo aggiunti/aggiornati i file di sistema: nulla viene cancellato. "
+                "L'unita' deve essere la microSD del Cardputer."):
             return
         args = PS + ["-File", DEPLOY_PS1, "-To", drive]
         if dry:

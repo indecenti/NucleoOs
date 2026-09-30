@@ -114,6 +114,19 @@ Dedicated NL runners (all under `tools/anima-host/`), also runnable via `npm`:
 | `skill-probe.mjs` | (various `eval_skills*`) | Curated cross-skill routing: the right request reaches the right tool. |
 | `nl-stress.mjs` / `describe-stress.mjs` / `ood-check.mjs` | | NL stress at volume, descriptions, out-of-scope: 0 hallucinations. |
 
+## SD tools (card safety)
+
+Everything that writes a NucleoOS SD card is held to one contract: it never deletes or overwrites what
+the user — or another firmware on a shared M5Launcher card — keeps there, it MERGES
+`system/registry/apps.json` (the user's Agent-published apps survive), and a second run changes nothing.
+
+| Command | What it proves |
+|---|---|
+| `node tools/sd-tools-e2e.mjs` (`npm run sdtools:e2e`) | runs `sd_deploy.py update`, `push-ota --sync`, `sd-net-sync --force` (against the simulator), and on Windows `sd-sync.ps1` and `deploy.ps1 -To` (via `-TestTarget`, which only accepts a folder under `%TEMP%`) FOR REAL on fake cards with 34 user/state/foreign sentinels, empty user folders and an Agent app — twice each — plus `deploy.ps1 -DryRun` writing zero bytes. Local gate (copies a few hundred MB per tool); `SDTOOLS_ONLY=<name>` runs one tool. |
+| `node --test tools/registry-merge.test.mjs` | the apps.json merge rule, JS and its Python twin byte-identical on the shared `tools/lib/registry-merge-vectors.json` |
+| `node --test tools/sd-payload.test.mjs` | the release SD payload (`sd_deploy.py release`) and the shared write allow-list vectors |
+| `node tools/anima-host/registry-check.mjs` | the firmware registry limits and byte-identical `/api/apps` fields |
+
 ## Determinism and validity
 
 - **No unseeded RNG, no wall-clock** in the tests (the `date` skill is excluded from the generators to

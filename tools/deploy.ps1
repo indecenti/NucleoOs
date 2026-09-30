@@ -1,16 +1,20 @@
 # Smart incremental deploy of the NucleoOS SD content.
 #
 # Stages the repo -> deploy/sd copying ONLY files whose content actually changed
-# (SHA-256), then optionally mirrors deploy/sd -> a target SD drive the same way.
+# (SHA-256), then optionally pushes deploy/sd -> a target SD drive the same way.
 # Professional & safe: manifest-driven skip, atomic per-file writes (.nctmp + rename),
-# post-copy hash verification, and mirror-delete of stale files. Nothing big is recopied
-# unless it changed by even a single byte.
+# post-copy hash verification. The STAGING tree (deploy/sd, owned by this script) is mirrored:
+# files no longer in the sources are removed from it. The CARD (-To) is never mirrored: it also
+# holds the user's own apps (Agent), downloaded models, device state and, on an M5Launcher card,
+# other firmwares' files — the push only adds/updates, and system/registry/apps.json is MERGED
+# (tools/lib/registry-merge.mjs), never overwritten. Stale files on a card are removed by hand.
 #
 # Usage:
 #   powershell -ExecutionPolicy Bypass -File tools\deploy.ps1                 # stage only
 #   powershell -ExecutionPolicy Bypass -File tools\deploy.ps1 -To H:\         # stage + push to SD
 #   powershell -ExecutionPolicy Bypass -File tools\deploy.ps1 -To H:\ -DryRun # preview, no writes
-param([string]$To, [switch]$DryRun)
+#   -TestTarget : TEST HARNESS ONLY — accept a non-removable -To, and only one inside %TEMP%.
+param([string]$To, [switch]$DryRun, [switch]$TestTarget)
 $ErrorActionPreference = 'Stop'
 $repo = Split-Path $PSScriptRoot -Parent
 $sd = Join-Path $repo 'deploy\sd'
@@ -103,10 +107,17 @@ function Copy-IfChanged($src, $dst, $key, $man, $seen, $stat) {
     $fi = Get-Item -LiteralPath $src
     $size = $fi.Length.ToString(); $mtime = $fi.LastWriteTimeUtc.Ticks.ToString()
     $m = $man[$key]
-    if ($m -and "$($m.size)" -eq $size -and "$($m.mtime)" -eq $mtime) { $stat.skipped++; return }  # unchanged (fast path)
+    # The manifest only says what THIS script last wrote; the destination may have changed since (a file
+    # removed on the device, a card written by another tool). Trust the fast paths only while the file is
+    # actually there, and skip a copy whose bytes are already in place.
+    $present = Test-Path -LiteralPath $dst
+    $dstLen = if ($present) { (Get-Item -LiteralPath $dst).Length } else { -1 }
+    # fast path: source unchanged since the last push AND the destination still has its size (a truncated or
+    # rewritten file on the card is re-copied; a full byte check is what `sd_deploy.py verify` is for)
+    if ($present -and $dstLen -eq $fi.Length -and $m -and "$($m.size)" -eq $size -and "$($m.mtime)" -eq $mtime) { $stat.skipped++; return }
     $hash = FileHash $src
-    if ($m -and "$($m.hash)" -eq $hash) {                                                            # touched but identical -> no copy
-        $man[$key] = [pscustomobject]@{ size = $size; mtime = $mtime; hash = $hash }; $stat.skipped++; return
+    if ($present -and $dstLen -eq $fi.Length -and (($m -and "$($m.hash)" -eq $hash) -or (FileHash $dst) -eq $hash)) {
+        $man[$key] = [pscustomobject]@{ size = $size; mtime = $mtime; hash = $hash }; $stat.skipped++; return   # identical bytes -> no copy
     }
     if (-not $DryRun) {
         $dir = Split-Path $dst -Parent; if (-not (Test-Path $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
@@ -119,13 +130,15 @@ function Copy-IfChanged($src, $dst, $key, $man, $seen, $stat) {
     $stat.copied++; $stat.bytes += $fi.Length
 }
 
-function Sync-Dir($srcRoot, $dstRoot, $prefix, $man, $seen, $stat) {
+function Sync-Dir($srcRoot, $dstRoot, $prefix, $man, $seen, $stat, $exclude = @()) {
     if (-not (Test-Path $srcRoot)) { return }
     Get-ChildItem -LiteralPath $srcRoot -Recurse -File | ForEach-Object {
         $rel = ($_.FullName.Substring($srcRoot.Length).TrimStart('\', '/')) -replace '\\', '/'
         if ($rel -eq $MANIFEST) { return }
         $key = if ($prefix) { "$prefix/$rel" } else { $rel }
+        foreach ($x in $exclude) { if ($key -eq $x -or $key.StartsWith("$x/")) { return } }
         if (Is-State $key) { return }   # never stage/push a user's key or runtime state
+        if ($script:CardPush -and $key -eq 'system/registry/apps.json') { return }   # merged separately on a card
         Copy-IfChanged $_.FullName (Join-Path $dstRoot ($key -replace '/', '\')) $key $man $seen $stat
     }
 }
@@ -178,7 +191,11 @@ $man = Load-Manifest $sd; $seen = @{}; $stat = @{ copied = 0; skipped = 0; delet
 Sync-Dir "$repo\registry"          $sd 'system/registry'        $man $seen $stat
 Sync-Dir "$repo\apps"              $sd 'apps'                   $man $seen $stat
 Sync-Dir "$repo\web\shell"         $sd 'www/shell'              $man $seen $stat
-Sync-Dir "$repo\tools\sd-sim\data" $sd 'data'                   $man $seen $stat
+# The ANIMA knowledge (the shipped AKB5 manifest + exactly the shards it routes to) comes ONLY from
+# deploy/sd-safe below — the same source sd_deploy.py release ships. The sd-sim tree carries its own 62-shard
+# manifest and extra shards for the simulator; staging both made person.bin and the manifest ping-pong
+# between the two copies on every run and shipped 15 unreferenced shards (~72 MB).
+Sync-Dir "$repo\tools\sd-sim\data" $sd 'data'                   $man $seen $stat @('data/anima/akb5', 'data/anima/anima-it-akb5.bin')
 Sync-Dir "$repo\tools\sd-sim\system\ir" $sd 'system/ir'         $man $seen $stat   # IR preset pack (presets.bin)
 # Staging static assets from deploy/sd-safe
 Sync-Dir "$repo\deploy\sd-safe\data\anima\akb5" $sd 'data/anima/akb5' $man $seen $stat
@@ -203,15 +220,22 @@ else { Write-Warning "NucleoMind.apk missing - build nucleomind in Android Studi
 Write-Host "Compressing Web App files (GZIP) to save network RAM..."
 Get-ChildItem -Path $sd -Recurse -Include *.js,*.css,*.html | ForEach-Object {
     $out = "$($_.FullName).gz"
+    $rel = ($out.Substring($sd.Length).TrimStart('\', '/')) -replace '\\', '/'
+    # A twin staged from the SOURCES (committed, kept fresh by check-gz) is authoritative: never regenerate
+    # over it — a re-gzip here has different bytes, so the next run would re-stage the committed one (churn).
+    if ($seen.ContainsKey($rel)) { return }
     if (-not ((Test-Path $out) -and (Get-Item $out).LastWriteTimeUtc -ge $_.LastWriteTimeUtc)) {
+        if ($DryRun) { $seen[$rel] = $true; return }
         $inStream = [System.IO.File]::OpenRead($_.FullName)
         $outStream = [System.IO.File]::Create($out)
         $gzip = New-Object System.IO.Compression.GZipStream($outStream, [System.IO.Compression.CompressionMode]::Compress)
         $inStream.CopyTo($gzip)
         $gzip.Dispose(); $outStream.Dispose(); $inStream.Dispose()
     }
-    $rel = ($out.Substring($sd.Length).TrimStart('\', '/')) -replace '\\', '/'
     $seen[$rel] = $true
+    # record the generated twin like any staged file, so manifest consumers (push-ota) see it too
+    $go = Get-Item -LiteralPath $out
+    $man[$rel] = [pscustomobject]@{ size = $go.Length.ToString(); mtime = $go.LastWriteTimeUtc.Ticks.ToString(); hash = (FileHash $out) }
 }
 
 Apply-Mirror $sd $seen $man $stat
@@ -221,6 +245,16 @@ Report "Stage (deploy/sd)" $stat
 # 2) Optional: mirror deploy/sd -> target SD drive (incremental)
 if ($To) {
     if (-not (Test-Path $To)) { throw "target not found: $To" }
+    if ($TestTarget) {
+        # Test harness seam: a fake card folder, and ONLY under the temp dir — never a real disk.
+        $full = (Resolve-Path -LiteralPath $To).Path.TrimEnd('\')
+        $tmp = [IO.Path]::GetFullPath($env:TEMP).TrimEnd('\')
+        if (-not $full.StartsWith($tmp + '\', [StringComparison]::OrdinalIgnoreCase)) {
+            throw "SAFETY ABORT: -TestTarget only accepts a folder under $tmp (got $full)"
+        }
+        $To = $full
+        Write-Host "Target OK: TEST folder $To"
+    } else {
     # SAFETY: only ever write to a removable, non-system, non-boot drive.
     $dl = $To.TrimEnd('\', ':').Substring(0, 1)
     $vol = Get-Volume -DriveLetter $dl -ErrorAction Stop
@@ -229,11 +263,28 @@ if ($To) {
         throw "SAFETY ABORT: $To ($($tdisk.FriendlyName), $($vol.DriveType)) is not a removable non-system drive"
     }
     Write-Host "Target OK: $dl`: $($tdisk.FriendlyName) ($($vol.DriveType), $([math]::Round($vol.Size/1GB,1)) GB)"
+    }
     $tman = Load-Manifest $To; $tseen = @{}; $tstat = @{ copied = 0; skipped = 0; deleted = 0; bytes = 0 }
+    # Add/update only — NO mirror on a card (see the header): nothing the card holds is ever deleted.
+    $script:CardPush = $true
     Sync-Dir $sd $To '' $tman $tseen $tstat
-    Apply-Mirror $To $tseen $tman $tstat
+    $script:CardPush = $false
     Save-Manifest $To $tman
     Report "Push ($To)" $tstat
+
+    # Registry: MERGE the staged apps.json into the card's copy — the release is authoritative for bundled
+    # apps, the user's Agent-published apps (created_by "agent") are kept (tools/lib/registry-merge.mjs).
+    $regSrc = Join-Path $sd 'system\registry\apps.json'
+    $regDst = Join-Path $To 'system\registry\apps.json'
+    if (Test-Path $regSrc) {
+        $out = if ($DryRun) { [IO.Path]::GetTempFileName() } else { $regDst }
+        if (-not $DryRun) { New-Item -ItemType Directory -Force -Path (Split-Path $regDst) | Out-Null }
+        $dev = if (Test-Path $regDst) { $regDst } else { '-' }
+        $res = & node (Join-Path $PSScriptRoot 'lib\registry-merge.mjs') $regSrc $dev $out
+        if ($LASTEXITCODE -ne 0) { throw "registry merge failed (exit $LASTEXITCODE)" }
+        if ($DryRun) { Remove-Item $out -ErrorAction SilentlyContinue }
+        Write-Host "Registry ($To): $res"
+    }
 
     # Voice that SPEAKS: the nucleo_tts clip banks (data/tts/, ~800 MB) are too big for the
     # git-tracked deploy/sd staging, so they ship straight from deploy/sd-safe. No /MIR -> only
