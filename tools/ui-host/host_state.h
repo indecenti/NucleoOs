@@ -5,8 +5,8 @@
 struct HostState {
     const char *wifi_mode = "sta";            // "sta" | "ap"
     const char *ssid = "Casa-Rossi";
-    const char *ip = "192.168.0.166";
-    const char *pin = "687879";
+    const char *ip = "192.168.1.42";          // fictional: never a real device address or PIN
+    const char *pin = "314159";
     int  rssi = -58;
     bool time_synced = true;
     int  battery = 76;                        // -1 = no gauge
