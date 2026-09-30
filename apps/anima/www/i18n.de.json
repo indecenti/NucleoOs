@@ -120,5 +120,11 @@
   "guideTeach": "Sag „remember that the meeting room <b>is</b> on the third floor“ oder „my name is Marco“ (das Offline-Gehirn versteht Englisch und Italienisch). Persönliche Angaben verwahrt der Cardputer, damit jeder Browser sie sieht; ist der Cardputer nicht erreichbar, warten sie in diesem Browser und gehen an ihn, sobald er antwortet.",
   "guidePrivacyT": "Datenschutz",
   "guidePrivacy": "Im <b>Privat</b>-Modus verlässt nichts dieses Gerät und deinen Cardputer. Mit einem Schlüssel gehen Online-Anfragen direkt von deinem Browser zum Anbieter — nie über das Gerät, nie protokolliert.",
-  "guideClose": "Verstanden"
+  "guideClose": "Verstanden",
+  "gpuRecommended": "empfohlen für diese GPU",
+  "engLocalServer": "Lokaler Server",
+  "engThisPc": "dieser Computer",
+  "netThisPc": "keins · bleibt auf diesem Computer",
+  "localSkipped": "{m} passte nicht in den Speicher: ein leichteres Modell hat geantwortet",
+  "agentLocal": "Lokaler Agent · {server} · {model}"
 }

@@ -150,3 +150,44 @@ def to_labels(cards):
         d = c.get("detail", {"it": "", "en": ""})
         out.append((c["action"], c["arg"], c["reply"]["it"], c["reply"]["en"], d["it"], d["en"], index_texts(c)))
     return out
+
+
+def det_kmeans(X, K, iters=80, seed=0):
+    """REPRODUCIBLE k-means → cluster label per row (np.int64).
+
+    sklearn's KMeans(random_state=0) is only deterministic for ONE sklearn version on ONE thread layout:
+    the gate fixture built on another PC (other sklearn / OpenMP) clustered differently and flipped every
+    borderline routing golden. This is plain numpy, float64, a seeded k-means++ init, first-index
+    tie-breaking and distances rounded to 1e-9, so the same (vectors, K) gives the same labels on any
+    machine and in CI. Empty clusters keep their previous centre; stops early once centres are stable.
+    """
+    X = np.asarray(X, dtype=np.float64)
+    n = len(X)
+    rng = np.random.default_rng(seed)
+    xx = (X * X).sum(1)
+    centers = np.empty((K, X.shape[1]), dtype=np.float64)
+    centers[0] = X[int(rng.integers(n))]
+    d2 = np.maximum(xx - 2 * X @ centers[0] + centers[0] @ centers[0], 0.0)
+    for k in range(1, K):
+        tot = d2.sum()
+        if tot <= 0:
+            idx = k % n
+        else:
+            idx = int(np.searchsorted(np.cumsum(d2 / tot), rng.random(), side="right"))
+            idx = min(idx, n - 1)
+        centers[k] = X[idx]
+        d2 = np.minimum(d2, np.maximum(xx - 2 * X @ centers[k] + centers[k] @ centers[k], 0.0))
+    lab = np.zeros(n, dtype=np.int64)
+    for _ in range(iters):
+        dist = np.round(xx[:, None] - 2 * (X @ centers.T) + (centers * centers).sum(1)[None, :], 9)
+        lab = np.argmin(dist, axis=1)                       # first index wins a tie
+        cnt = np.bincount(lab, minlength=K)
+        new = np.zeros_like(centers)
+        np.add.at(new, lab, X)
+        keep = cnt > 0
+        new[keep] /= cnt[keep, None]
+        new[~keep] = centers[~keep]
+        if np.array_equal(np.round(new, 12), np.round(centers, 12)):
+            break
+        centers = new
+    return lab

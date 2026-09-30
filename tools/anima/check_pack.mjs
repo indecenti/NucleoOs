@@ -41,7 +41,8 @@ function corpusSha() {
   const h = createHash('sha256');
   for (const name of files) {
     h.update(name, 'utf8'); h.update(Buffer.from([0]));
-    h.update(readFileSync(join(KDIR, name))); h.update(Buffer.from([0x0a]));
+    // EOL-normalised: a Windows checkout (core.autocrlf) materialises the LF corpus as CRLF — same content.
+    h.update(Buffer.from(readFileSync(join(KDIR, name), 'latin1').replace(/\r\n/g, '\n'), 'latin1')); h.update(Buffer.from([0x0a]));
   }
   return { sha: h.digest('hex'), n: files.length };
 }
@@ -133,6 +134,10 @@ for (const t of TREES) {
                       `${corpus.sha.slice(0,12)}… → rebuild + re-sync (npm run anima:packs${t.expectDim===256?' --host':''}) and re-validate goldens`);
       if (prov.encoder_sha !== fileSha(encP))
         problems.push(`STALE INDEX: built from a different encoder than ${t.dir}/anima-it-encoder.bin → rebuild`);
+      // A reproducible build (kmeans:det-v1) fingerprints its final bytes: a fixture that differs from the
+      // recorded build is not the pack the goldens were calibrated on — say so instead of judging with it.
+      if (prov.index_sha && prov.index_sha !== fileSha(idxP))
+        problems.push(`FIXTURE MISMATCH: ${t.dir}/anima-it-index.bin is not the recorded reproducible build (${prov.index_sha.slice(0,12)}…) → npm run anima:packs -- --host-only`);
       if (prov.corpus_sha === corpus.sha) provTag = ` ${C.d}prov✓${C.x}`;
     }
   }

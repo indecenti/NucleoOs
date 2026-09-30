@@ -11,7 +11,9 @@
 
 // Case-fold and treat -, _ and . as word separators, so "file-commander" is one phrase for matching
 // purposes and an app ID reads like its display name.
-export const normMatch = (s) => String(s == null ? '' : s).toLowerCase().replace(/[-_.]+/g, ' ');
+// Soft hyphens (U+00AD, typographic break points in long localised app names) are invisible: never let
+// them split a match ("Einstel­lungen" must match "einstellungen").
+export const normMatch = (s) => String(s == null ? '' : s).replace(/­/g, '').toLowerCase().replace(/[-_.]+/g, ' ');
 
 // Score a candidate against a query. -1 = no match. BOTH sides are normalised here, so callers
 // cannot half-apply the rule (an un-normalised "file-commander" used to match nothing at all).

@@ -6,7 +6,7 @@
 // Usage: node tools/serve-shell.mjs   (http://localhost:5599)
 import { createServer } from 'node:http';
 import { readFile, writeFile, readdir, stat, rm, mkdir, rename } from 'node:fs/promises';
-import { readFileSync, existsSync } from 'node:fs';   // sync reads for the ANIMA agenda/capabilities executor
+import { readFileSync, existsSync, writeFileSync } from 'node:fs';   // sync reads for the ANIMA agenda/capabilities executor
 import { createHash, randomBytes, randomInt } from 'node:crypto';
 import { join, dirname, extname, normalize } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -19,8 +19,10 @@ import { execFileSync } from 'node:child_process';   // git short hash + dirty f
 
 const REPO = join(dirname(fileURLToPath(import.meta.url)), '..');
 const SHELL = join(REPO, 'web', 'shell');
-const SD = join(REPO, 'tools', 'sd-sim');
-const PORT = 5599;
+// NUCLEO_SD_ROOT points the simulated SD at another folder (the browser E2E suite runs on a temp copy
+// so a test run never dirties the tracked tools/sd-sim). PORT=0 picks a free port (printed on start).
+const SD = normalize(process.env.NUCLEO_SD_ROOT || join(REPO, 'tools', 'sd-sim'));
+const PORT = process.env.PORT !== undefined ? Number(process.env.PORT) : 5599;
 // ANIMA app-launch vocabulary — single source of truth shared verbatim with the firmware,
 // which generates its APP_ALIAS[] from this same file (tools/anima/gen_aliases.py). Editing the
 // JSON keeps the device and this simulator resolving "apri <app>" through one vocabulary.
@@ -58,6 +60,7 @@ async function apiApps() {
     let m = {}; try { m = await jread(`apps/${a.id}/manifest.json`); } catch {}
     apps.push({ id: a.id, name: m.name || a.id, route: m.web_route || '', icon: m.icon || '', enabled: a.enabled });
   }
+  for (const x of SIM.extraApps) apps.push(x);   // test-only records injected via POST /api/_sim/apps
   return { apps };
 }
 // Running-firmware version, composed like firmware/version/version.cmake composes PROJECT_VER:
@@ -93,13 +96,49 @@ const simState = {
   bootMs: Date.now(),
   minFree: 17000,                 // drifts slowly downward like the real watermark
   l1Mode: 'auto', externalBrain: false,
-  lang: 'en', langGen: 1,         // OS language + generation counter, like nucleo_i18n on the device
+  lang: (() => { try { const l = JSON.parse(readFileSync(join(SD, 'system', 'config', 'settings.json'), 'utf8')).ui.language; return /^(it|en|es|fr|de)$/.test(l) ? l : 'en'; } catch { return 'en'; } })(),
+  langGen: 1,                     // OS language + generation counter, like nucleo_i18n on the device
   ttsEnabled: false,
   voiceAlwaysOn: false,
   logs: [],                       // appended to by sim actions; served oldest→newest as text/plain
   anima: { q: 0, none: 0, cmd: 0, fact: 0, stitch: 0, remote: 0, last_conf: 0, last: '-' },  // grows on /api/diag for the Log Viewer
   oom: 0,                         // stays 0 (healthy); bump by hand to exercise the OOM flag
 };
+// Mail presets — verbatim from firmware nucleo_mailcfg.c s_presets[] (all implicit TLS on 465).
+const MAIL_PRESETS = [
+  ['Gmail', 'smtp.gmail.com', 'App Password (2FA required)'], ['Outlook/M365', 'smtp.office365.com', 'App Password if 2FA on'],
+  ['Yahoo', 'smtp.mail.yahoo.com', 'App Password required'], ['iCloud', 'smtp.mail.me.com', 'App-specific password'],
+  ['Brevo', 'smtp-relay.brevo.com', 'Free signup -> SMTP key'], ['SMTP2GO', 'mail.smtp2go.com', 'Free signup -> SMTP user/pass'],
+  ['Mailjet', 'in-v3.mailjet.com', 'Free signup -> API key/secret'], ['Custom', '', 'Enter host manually'],
+];
+// /api/screen stand-in: the Cardputer TFT is 240x135; the firmware streams a bottom-up 24-bit BMP.
+// A dark gradient with a centred accent bar — enough for the Terminal `screen` command and any app
+// that shows "what the device displays" to render something real in the simulator.
+function simScreenBmp() {
+  const W = 240, H = 135, row = Math.ceil((W * 3) / 4) * 4, size = 54 + row * H;
+  const b = Buffer.alloc(size);
+  b.write('BM', 0); b.writeUInt32LE(size, 2); b.writeUInt32LE(54, 10);
+  b.writeUInt32LE(40, 14); b.writeInt32LE(W, 18); b.writeInt32LE(H, 22);
+  b.writeUInt16LE(1, 26); b.writeUInt16LE(24, 28); b.writeUInt32LE(row * H, 34);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    const o = 54 + y * row + x * 3, bar = y > 60 && y < 75 && x > 40 && x < 200;
+    b[o] = bar ? 0xff : 40 + (y >> 1); b[o + 1] = bar ? 0xa1 : 20 + (x >> 3); b[o + 2] = bar ? 0x4e : 14;   // BGR
+  }
+  return b;
+}
+const simMail = { accounts: [], def: -1 };   // NVS account store stand-in (RAM only)
+const simFido = { pin: '', creds: [{ rp: 'github.com', user: 'demo', signCount: 12 }] };   // one demo passkey
+// OS language lives in settings.json ui.language on the device (nucleo_i18n.c): read it at boot, write
+// it back on every POST /api/lang. The sim used to keep it in RAM only, so a language chosen through the
+// API was silently reverted by the shell re-reading settings.json.
+function persistSimLang(lg) {
+  const f = join(SD, 'system', 'config', 'settings.json');
+  let root = {};
+  try { root = JSON.parse(readFileSync(f, 'utf8')) || {}; } catch (e) { if (existsSync(f)) return; }   // unreadable: never clobber
+  if (!root.ui || typeof root.ui !== 'object') root.ui = {};
+  root.ui.language = lg;
+  try { writeFileSync(f, JSON.stringify(root, null, 2)); } catch {}
+}
 function simLog(line) { simState.logs.push(line); if (simState.logs.length > 60) simState.logs.shift(); }
 simLog(`I (220) boot: NucleoOS ${FW_VERSION}, reset reason POWERON`);
 simLog('I (640) wifi: connected to home-wifi, ip=192.168.1.42');
@@ -468,9 +507,69 @@ function isAskable(q) {
   return true;
 }
 
+// ---- fault injection (SIMULATOR ONLY) ----
+// The real device fails in ways a healthy Node server never does: it drops off WiFi, answers 503
+// while the arbiter is busy, stalls under heap pressure, loses the live socket. Without a way to
+// provoke those, every retry/offline/reconnect path in the shell ships untested.
+//   POST /api/_sim/fault  {route:'/api/apps', status:503, delay_ms:0, times:3, drop:false}
+//        route is a path prefix ('*' = everything except /api/_sim); times:0 = until cleared;
+//        drop:true destroys the socket (what "device unreachable" looks like to the browser).
+//   POST /api/_sim/fault  {clear:true}          remove every rule
+//   POST /api/_sim/offline {on:true|false}       drop EVERY request + the live socket (device gone)
+//   POST /api/_sim/ws-drop                       kill the live socket once (WiFi blip)
+//   GET  /api/_sim/stats                         request counters (the E2E device-load budget)
+//   POST /api/_sim/apps  {add:{…}} | {clear:true}  inject extra /api/apps records (hostile-manifest tests)
+const SIM = { faults: [], offline: false, extraApps: [], stats: { total: 0, inflight: 0, peak: 0, byPath: {} } };
+const simFaultFor = (path) => SIM.faults.find((f) => (f.route === '*' || path.startsWith(f.route)) && (f.times === 0 || f.left > 0));
+async function simControl(req, res, path) {
+  let b = {}; try { b = JSON.parse((await readBody(req)).toString('utf8') || '{}'); } catch {}
+  if (path === '/api/_sim/fault') {
+    if (b.clear) SIM.faults = [];
+    else SIM.faults.push({ route: String(b.route || '*'), status: b.status | 0, delay_ms: b.delay_ms | 0,
+      times: b.times | 0, left: b.times | 0, drop: !!b.drop });
+    return sendJSON(res, { ok: true, faults: SIM.faults });
+  }
+  if (path === '/api/_sim/offline') {
+    SIM.offline = !!b.on;
+    if (SIM.offline) for (const s of sockets) { sockets.delete(s); try { s.destroy(); } catch {} }
+    return sendJSON(res, { ok: true, offline: SIM.offline });
+  }
+  if (path === '/api/_sim/apps') {                 // {add:{id,name,route,icon,enabled}} | {clear:true}: fake installs (e.g. a hostile manifest)
+    if (b.clear) SIM.extraApps = [];
+    if (b.add && typeof b.add === 'object') SIM.extraApps.push(b.add);
+    return sendJSON(res, { ok: true, n: SIM.extraApps.length });
+  }
+  if (path === '/api/_sim/ws-drop') {
+    const n = sockets.size;
+    for (const s of sockets) { sockets.delete(s); try { s.destroy(); } catch {} }
+    return sendJSON(res, { ok: true, dropped: n });
+  }
+  if (path === '/api/_sim/stats') {
+    if (req.method === 'POST' && b.reset) SIM.stats = { total: 0, inflight: SIM.stats.inflight, peak: SIM.stats.inflight, byPath: {} };
+    return sendJSON(res, SIM.stats);
+  }
+  return send(res, 404, 'text/plain', '404');
+}
+
 const server = createServer(async (req, res) => {
   const url = new URL(req.url, 'http://x');
   const path = decodeURIComponent(url.pathname);
+
+  if (path.startsWith('/api/_sim/')) return simControl(req, res, path);
+  if (SIM.offline) { req.socket.destroy(); return; }
+  // Device-load accounting: how many requests the browser throws at the (single-task, 4-6 socket)
+  // device and how many it keeps in flight at once. The E2E suite asserts a budget on these.
+  const st = SIM.stats;
+  st.total++; st.inflight++; if (st.inflight > st.peak) st.peak = st.inflight;
+  st.byPath[path] = (st.byPath[path] || 0) + 1;
+  res.on('close', () => { st.inflight--; });
+  const fault = simFaultFor(path);
+  if (fault) {
+    if (fault.left > 0) fault.left--;
+    if (fault.delay_ms) await new Promise((r) => setTimeout(r, fault.delay_ms));
+    if (fault.drop) { req.socket.destroy(); return; }
+    if (fault.status) return send(res, fault.status, 'application/json', JSON.stringify({ error: 'sim fault', busy: fault.status === 503, retry_after_ms: 300 }));
+  }
 
   // Pairing endpoints (public by nature) + the guard for protected routes.
   if (path === '/api/auth/status') return sendJSON(res, { required: AUTH.required, paired: isAuthed(req), sessions: AUTH.tokens.size });
@@ -493,12 +592,116 @@ const server = createServer(async (req, res) => {
       if (!isAuthed(req)) return reject401(res);
       let b = {}; try { b = JSON.parse((await readBody(req)).toString('utf8') || '{}'); } catch {}
       const lg = String(b.lang || '').trim();
-      if (/^(it|en|es|fr|de)$/.test(lg) && lg !== simState.lang) {
-        simState.lang = lg; simState.langGen++;
-        publish('settings.changed', { lang: lg });     // the device broadcasts the change over /ws
+      if (/^(it|en|es|fr|de)$/.test(lg)) {
+        const changed = lg !== simState.lang;
+        simState.lang = lg;
+        persistSimLang(lg);                            // like nucleo_i18n.c persist_lang(): settings.json ui.language, always
+        if (changed) { simState.langGen++; publish('settings.changed', { lang: lg }); }   // broadcast only on a real change
       }
     }
     return sendJSON(res, { lang: simState.lang, gen: simState.langGen });
+  }
+  // Mail (mirrors nucleo_httpd.c /api/mail/* + nucleo_mailcfg.c): presets are static and public;
+  // accounts/send need a paired session; passwords are write-only (only has_pass is ever returned).
+  // Nothing is really sent — /send validates like the firmware and reports success.
+  if (path === '/api/mail/presets') return sendJSON(res, { presets: MAIL_PRESETS.map(([name, host, hint]) => ({ name, host, port: 465, tls: 0, hint })) });
+  if (path === '/api/mail/accounts') {
+    if (!isAuthed(req)) return reject401(res);
+    if (req.method === 'POST') {
+      let b = null; try { b = JSON.parse((await readBody(req)).toString('utf8')); } catch {}
+      if (!b) return send(res, 400, 'text/plain', 'bad json');
+      const idx = Number.isInteger(b.idx) ? b.idx : -1;
+      if (b.delete === true) { if (idx >= 0 && idx < simMail.accounts.length) simMail.accounts.splice(idx, 1); if (simMail.def >= simMail.accounts.length) simMail.def = simMail.accounts.length ? 0 : -1; }
+      else {
+        const prev = simMail.accounts[idx] || {};
+        const a = { name: String(b.name || ''), host: String(b.host || ''), port: Number.isInteger(b.port) ? b.port : 465, tls: b.tls === 1 ? 1 : 0,
+          user: String(b.user || ''), pass: b.pass ? String(b.pass) : (prev.pass || ''), from: String(b.from || b.user || ''), from_name: String(b.from_name || '') };
+        let saved = idx;
+        if (idx >= 0 && idx < simMail.accounts.length) simMail.accounts[idx] = a;
+        else { if (simMail.accounts.length >= 4) return send(res, 500, 'text/plain', 'save failed (full?)'); simMail.accounts.push(a); saved = simMail.accounts.length - 1; }
+        if (b.default === true || simMail.def < 0) simMail.def = saved;
+      }
+    }
+    res.setHeader('Cache-Control', 'no-store');
+    return sendJSON(res, { accounts: simMail.accounts.map(({ pass, ...a }, idx) => ({ idx, ...a, has_pass: !!pass })), default: simMail.def });
+  }
+  if (path === '/api/mail/send' && req.method === 'POST') {
+    if (!isAuthed(req)) return reject401(res);
+    let b = null; try { b = JSON.parse((await readBody(req)).toString('utf8')); } catch {}
+    if (!b) return send(res, 400, 'text/plain', 'bad json');
+    const idx = Number.isInteger(b.account) ? b.account : simMail.def;
+    const to = typeof b.to === 'string' ? b.to : '';
+    let error = null;
+    if (idx < 0 || !simMail.accounts[idx]) error = 'no account configured';
+    else if (!to || typeof b.body !== 'string') error = 'missing to/body';
+    else if (!/^[^\s@,<>]+@[^\s@,<>]+\.[^\s@,<>]+$/.test(to)) error = 'invalid recipient address';
+    else if (/[\r\n]/.test(String(b.subject || ''))) error = 'invalid subject (newline)';
+    if (!error) simLog(`I (${Date.now() % 100000}) smtp: (sim) sent to ${to}`);
+    return sendJSON(res, error ? { ok: false, error } : { ok: true });
+  }
+  // ── small device routes (mirror nucleo_httpd.c / nucleo_app.cpp / app_constellations.cpp shapes) ──
+  if (path === '/api/time/set' && req.method === 'POST') {           // browser → device clock push (paired)
+    if (!isAuthed(req)) return reject401(res);
+    let b = null; try { b = JSON.parse((await readBody(req)).toString('utf8')); } catch {}
+    if (!b) return send(res, 400, 'text/plain', 'bad json');
+    if (!(Number(b.ts) > 0)) return send(res, 400, 'text/plain', 'missing ts');
+    apiStatus.network.time_synced = true;
+    return sendJSON(res, { ok: true, time: Math.floor(Date.now() / 1000) });
+  }
+  if (path === '/api/wifi/priority' && req.method === 'POST') {      // pin/unpin a saved network
+    if (!isAuthed(req)) return reject401(res);
+    let b = null; try { b = JSON.parse((await readBody(req)).toString('utf8')); } catch {}
+    if (!b) return send(res, 400, 'text/plain', 'bad json');
+    if (typeof b.ssid !== 'string' || !b.ssid || b.priority === undefined) return send(res, 400, 'text/plain', 'missing ssid/priority');
+    return sendJSON(res, { ok: true });
+  }
+  if (path === '/api/wifi/reconnect' && req.method === 'POST') {     // rejoin the best known network now
+    if (!isAuthed(req)) return reject401(res);
+    return sendJSON(res, { ok: true });
+  }
+  if (path === '/api/anima/verify') {                                // cross-substrate claim check (Forge)
+    if (!isAuthed(req)) return reject401(res);
+    // The simulator has no on-device zero-hallucination brain to judge a claim against, so it answers
+    // the one thing it can honestly say: unknown (the Forge client treats that as "warn", never "pass").
+    res.setHeader('Cache-Control', 'no-store');
+    return sendJSON(res, { checks: [{ status: 'unknown', evidence: '' }] });
+  }
+  if (path === '/api/screen') {                                      // TFT screenshot, 240x135 24-bit BMP
+    if (!isAuthed(req)) return reject401(res);
+    return send(res, 200, 'image/bmp', simScreenBmp());
+  }
+  if (path === '/api/game/costellazioni/save') {                     // native game save slot (≤1 KB JSON)
+    if (!isAuthed(req)) return reject401(res);
+    const f = join(SD, 'data', 'games', 'costellazioni.json');
+    if (req.method === 'POST') {
+      const raw = await readBody(req);
+      if (raw.length <= 0 || raw.length > 1024) return send(res, 400, 'application/json', JSON.stringify({ error: 'badlen' }));
+      let j = null; try { j = JSON.parse(raw.toString('utf8')); } catch {}
+      if (!j || typeof j !== 'object') return send(res, 400, 'application/json', JSON.stringify({ error: 'json' }));
+      await mkdir(dirname(f), { recursive: true }); await writeFile(f, JSON.stringify(j));
+      return sendJSON(res, { ok: true });
+    }
+    try { return sendJSON(res, JSON.parse(await readFile(f, 'utf8'))); }
+    catch { return send(res, 404, 'application/json', JSON.stringify({ error: 'nosave' })); }
+  }
+  // FIDO2 passkey console (mirrors firmware nucleo_fido/port/fido_api.c): paired only, same shapes.
+  if (path.startsWith('/api/fido/')) {
+    if (!isAuthed(req)) return reject401(res);
+    const fb = req.method === 'POST' ? await readBody(req).then((x) => { try { return JSON.parse(x.toString('utf8')); } catch { return null; } }) : null;
+    if (path === '/api/fido/status') return sendJSON(res, { keyHardware: false, pinSet: !!simFido.pin, pinRetries: simFido.pin ? 8 : 0, credCount: simFido.creds.length, connected: false });
+    if (path === '/api/fido/creds') return sendJSON(res, simFido.creds.map((c, index) => ({ index, ...c })));
+    if (path === '/api/fido/cred/delete' && req.method === 'POST') {
+      const i = fb && Number.isInteger(fb.index) ? fb.index : -1;
+      const ok = i >= 0 && i < simFido.creds.length; if (ok) simFido.creds.splice(i, 1);
+      return sendJSON(res, { ok });
+    }
+    if (path === '/api/fido/pin' && req.method === 'POST') {
+      const p = fb && typeof fb.pin === 'string' ? fb.pin : '';
+      if (p.length < 4 || p.length > 63) return sendJSON(res, { ok: false, err: 'pin length 4-63' });
+      simFido.pin = p; return sendJSON(res, { ok: true });
+    }
+    if (path === '/api/fido/reset' && req.method === 'POST') { simFido.pin = ''; simFido.creds = []; return sendJSON(res, { ok: true }); }
+    return send(res, 404, 'text/plain', '404');
   }
   if (path === '/api/associations') return sendJSON(res, await jread('registry/file-associations.json'));
   if (path === '/api/display') {   // mirrors the firmware: blank/relight the Cardputer screen (no-op on the sim)
@@ -917,7 +1120,7 @@ const server = createServer(async (req, res) => {
 
 // minimal WebSocket upgrade at /ws
 server.on('upgrade', (req, socket) => {
-  if (new URL(req.url, 'http://x').pathname !== '/ws') { socket.destroy(); return; }
+  if (new URL(req.url, 'http://x').pathname !== '/ws' || SIM.offline) { socket.destroy(); return; }
   // The browser sends the session cookie on the WS handshake automatically — gate it too.
   if (!isAuthed(req)) { socket.write('HTTP/1.1 401 Unauthorized\r\nConnection: close\r\n\r\n'); socket.destroy(); return; }
   const key = req.headers['sec-websocket-key'];
@@ -952,7 +1155,9 @@ server.on('upgrade', (req, socket) => {
   // connection lingered and net.clients kept counting a client that had gone. That is not cosmetic —
   // the shell now READS net.clients to tell "someone holds the seat" from "the line dropped", so an
   // inflated count is a wrong answer to a question the OS actually asks.
+  if (socket.__c) { socket.__c.ws = true; socket.__c.lru = ++lruClock; }
   socket.on('data', (chunk) => {
+    if (socket.__c) socket.__c.lru = ++lruClock;      // only CLIENT frames refresh the session's LRU slot (like esp_http_server)
     if (chunk && chunk.length && (chunk[0] & 0x0f) === 0x8) { try { socket.destroy(); } catch {} }
   });
   socket.on('close', () => { if (sockets.delete(socket)) publish('system.clients', { n: sockets.size }); });
@@ -2604,8 +2809,9 @@ async function simExecTool(r, en) {
       const fp = join(SD, 'system', 'config', 'calendar.json');
       await mkdir(dirname(fp), { recursive: true });
       let cal = { events: {} }; try { cal = JSON.parse(readFileSync(fp, 'utf8')); if (!cal.events) cal.events = {}; } catch {}
-      (cal.events[date] = cal.events[date] || []).push({ time: m.time, text: m.text });
+      (cal.events[date] = cal.events[date] || []).push({ time: m.time, text: m.text });   // no id — exactly like the firmware
       await writeFile(fp, JSON.stringify(cal, null, 2));
+      publish('calendar.changed', { by: 'anima' });                                          // nucleo_httpd.c publishes this too
       r.reply = m.time ? (en ? `Added "${m.text}" on ${date} at ${m.time}.` : `Aggiunto "${m.text}" il ${date} alle ${m.time}.`)
                        : (en ? `Added "${m.text}" on ${date}.` : `Aggiunto "${m.text}" il ${date}.`);
       r.done = true;
@@ -3311,4 +3517,93 @@ function animaQuery(input, lang, mem) {
   return { query: input, tier: 'command', action: best.action, intent: best.id, arg, reply, confidence: conf, state: 'idle' };
 }
 
-server.listen(PORT, () => console.log(`NucleoOS device simulator on http://localhost:${PORT}`));
+// ---- device socket model (SIM_DEVICE_SOCKETS=4 mirrors nucleo_httpd.c + esp_http_server) ----
+// The firmware runs ONE httpd task with max_open_sockets = 4 (the /ws INCLUDED) and lru_purge_enable.
+// Modelled after esp-idf components/esp_http_server/src (httpd_main.c httpd_accept_conn, httpd_sess.c):
+//   • requests are served ONE AT A TIME by the single task (others wait, queued on their sockets);
+//   • a session's lru_counter is 0 when accepted and bumped only after a request on it COMPLETES
+//     (for a /ws session: after a CLIENT frame — server pushes never refresh it);
+//   • when a 5th connection arrives, the session with the LOWEST counter that is not being served is
+//     closed first — i.e. a freshly accepted socket whose request is still queued (the browser sees
+//     ERR_CONNECTION_RESET), or the idle /ws.
+// Browsers open up to 6 keep-alive connections per host, so any fan-out beyond ~3 parallel requests is
+// felt here exactly as on the Cardputer. Service time: SIM_DEVICE_BASE_MS per request + SIM_DEVICE_MS_PER_KB
+// per KB sent (SD read + WiFi). Long ANIMA/LLM/proxy calls run off the httpd task on the device
+// (httpd_req_async_handler_begin), so they neither hold the queue nor get purged while in flight.
+// Off by default for interactive dev; the E2E suite turns it on. Counted in /api/_sim/stats.
+const DEV_SOCKETS = Number(process.env.SIM_DEVICE_SOCKETS || 0);
+const DEV_BASE_MS = Number(process.env.SIM_DEVICE_BASE_MS || 6);
+const DEV_MS_PER_KB = Number(process.env.SIM_DEVICE_MS_PER_KB || 0.5);
+const ASYNC_ROUTE = /^\/api\/(anima|llm|proxy|online|transcribe)(\/|$)/;
+const conns = new Set();
+let lruClock = 0, deviceQueue = Promise.resolve();
+if (DEV_SOCKETS > 0) {
+  server.keepAliveTimeout = 0;          // esp httpd has no idle timeout: a session lives until purged/closed
+  server.headersTimeout = 0; server.requestTimeout = 0;
+}
+// esp httpd loop: select → serve EVERY session that has a request ready → accept ONE new connection
+// (purging the lowest-lru idle session if all slots are taken). New connections therefore wait in the
+// listen backlog (paused here) while the task is busy, and are let in between requests.
+const backlog = [];
+let devActive = 0, devQueued = 0;
+function devIdle() { return devActive === 0 && devQueued === 0; }
+function acceptOne() {
+  while (backlog.length && backlog[0].sock.destroyed) backlog.shift();
+  const c = backlog.shift();
+  if (!c) return;
+  if (conns.size >= DEV_SOCKETS) {
+    let victim = null;
+    for (const o of conns) if (!o.busy && o.queued === 0 && (!victim || o.lru < victim.lru)) victim = o;
+    if (!victim) for (const o of conns) if (!o.busy && (!victim || o.lru < victim.lru)) victim = o;
+    if (victim) {
+      conns.delete(victim);
+      SIM.stats.purged = (SIM.stats.purged || 0) + 1;
+      if (victim.ws) SIM.stats.wsPurged = (SIM.stats.wsPurged || 0) + 1;
+      if (process.env.SIM_DEBUG_PURGE) console.log(`[purge] ws=${victim.ws} lru=${victim.lru} clock=${lruClock} served=${victim.served || 0} unread=${victim.sock.readableLength}`);
+      victim.sock.destroy();
+    }
+  }
+  conns.add(c);
+  c.accepted = true;
+  c.onAccept();
+}
+server.on('connection', (sock) => {
+  const c = { sock, lru: 0, ws: false, busy: false, queued: 0, accepted: !(DEV_SOCKETS > 0) };
+  c.acceptedP = new Promise((r) => { c.onAccept = r; });
+  sock.__c = c;
+  sock.on('close', () => { conns.delete(c); });
+  if (c.accepted) { conns.add(c); return; }
+  backlog.push(c);           // waits in the listen backlog; its request (if any) is held until accepted
+  if (devIdle()) setImmediate(acceptOne);
+});
+// Serve one request at a time, like the single httpd task. Resolves when this request may run.
+function deviceTurn(req, res) {
+  const c = req.socket.__c;
+  if (!DEV_SOCKETS || !c) return null;
+  const path = new URL(req.url, 'http://x').pathname;
+  if (ASYNC_ROUTE.test(path)) {         // off-task worker: not queued, not purgeable while in flight
+    c.busy = true;
+    res.on('close', () => { c.busy = false; c.lru = ++lruClock; });
+    return null;
+  }
+  if (!c.accepted) return c.acceptedP.then(() => deviceTurn(req, res));
+  c.queued++; devQueued++;
+  const turn = deviceQueue.then(() => new Promise((release) => {
+    c.queued--; devQueued--;
+    if (req.socket.destroyed) { release(); return; }   // purged while queued: nothing to serve
+    c.busy = true; devActive++;
+    const sent0 = req.socket.bytesWritten;
+    res.on('close', () => {
+      c.busy = false; c.lru = ++lruClock; devActive--; c.served = (c.served || 0) + 1;
+      const kb = Math.max(0, req.socket.bytesWritten - sent0) / 1024;
+      setTimeout(() => { release(); acceptOne(); }, DEV_BASE_MS + kb * DEV_MS_PER_KB);
+    });
+    turnStart(req);
+  }));
+  const ready = new Promise((r) => { req.__start = r; });
+  deviceQueue = turn;
+  return ready;
+}
+function turnStart(req) { if (req.__start) req.__start(); }
+
+server.listen(PORT, () => console.log(`NucleoOS device simulator on http://localhost:${server.address().port}`));

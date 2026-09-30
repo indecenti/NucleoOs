@@ -145,7 +145,8 @@ function main() {
     const problems = [];
     for (const p of OUT_PATHS) {
       if (!existsSync(join(ROOT, p))) { problems.push(`${p}: missing (run: npm run gen:api)`); continue; }
-      if (read(p) !== json) problems.push(`${p}: out of date with firmware (run: npm run gen:api)`);
+      // EOL-normalised: a Windows checkout (core.autocrlf) turns the committed LF file into CRLF — not drift.
+      if (read(p).replace(/\r\n/g, '\n') !== json) problems.push(`${p}: out of date with firmware (run: npm run gen:api)`);
     }
     for (const k of undocumented) problems.push(`undocumented real route: ${k}`);
     for (const k of stale) problems.push(`stale doc (no such route): ${k}`);

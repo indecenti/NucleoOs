@@ -59,3 +59,32 @@ test('the self-test health set and scene endpoints are disjoint-or-known (no typ
     assert.match(p, /^\/api\//, 'looks like an API path: ' + p);
   }
 });
+
+// ── the WHOLE firmware surface ────────────────────────────────────────────────────────────────
+// registry/web-api-spec.json is regenerated from the firmware's real route table (gen-api-spec --check
+// keeps it honest). Every one of those routes must exist in the simulator too, or the browser E2E suite
+// and the preview silently test a device that does not exist: an app calling an unmocked route gets a
+// 404 in the simulator and a working answer on the Cardputer (or the reverse), and nobody finds out.
+const spec = JSON.parse(readFileSync(join(REPO, 'registry', 'web-api-spec.json'), 'utf8'));
+// Routes the simulator deliberately does NOT reproduce — each with the reason. Keep this list short.
+const DEVICE_ONLY = {
+  '/api/game/costellazioni/gentest': 'debug dump of the native C procedural generator; no JS twin to answer with',
+};
+function simHas(path) {
+  if (sim.includes(`'${path}'`)) return true;
+  const parts = path.split('/');
+  for (let n = parts.length - 1; n >= 3; n--) if (sim.includes(`path.startsWith('${parts.slice(0, n).join('/')}/')`)) return true;
+  return false;
+}
+
+test('the simulator mocks EVERY route the firmware registers (web-api-spec.json)', () => {
+  const routes = [...new Set(spec.map((r) => r.path))].filter((p) => !/[*{]/.test(p));
+  assert.ok(routes.length >= 60, `spec lists only ${routes.length} routes`);
+  const missing = routes.filter((p) => !DEVICE_ONLY[p] && !simHas(p));
+  assert.deepEqual(missing, [], 'firmware routes the simulator does not mock (add them to tools/serve-shell.mjs): ' + missing.join(', '));
+});
+
+test('the device-only exception list only names real firmware routes', () => {
+  const routes = new Set(spec.map((r) => r.path));
+  for (const p of Object.keys(DEVICE_ONLY)) assert.ok(routes.has(p), `stale DEVICE_ONLY entry: ${p}`);
+});

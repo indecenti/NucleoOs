@@ -63,7 +63,9 @@ export function buildReports() {
 }
 
 const text = (report) => JSON.stringify(report, null, 2) + '\n';
-const read = (p) => (existsSync(p) ? readFileSync(p, 'utf8') : null);
+// EOL-normalised: a Windows checkout (core.autocrlf=true) materialises these LF files as CRLF, which
+// is not drift — the same bytes on the device either way once gzip-assets reads them.
+const read = (p) => (existsSync(p) ? readFileSync(p, 'utf8').replace(/\r\n/g, '\n') : null);
 
 // Returns the list of reports that do not match the cores on disk (empty === in sync).
 export function checkCoreReports() {

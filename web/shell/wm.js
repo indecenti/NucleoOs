@@ -127,6 +127,35 @@ function materialise(w) {
   });
 }
 
+// Load a deferred window's app WITHOUT bringing it forward. Resolves once its frame has loaded (or at
+// once when there is nothing to load), so the caller can start the next load only after this one:
+// session restore walks the restored windows through here one at a time instead of N frames at once.
+export function preload(id, timeoutMs = 15000) {
+  const w = windows.get(id);
+  if (!w || !w.pending || w.min) return Promise.resolve(false);
+  // A background load must not steal focus: many apps autofocus an input on load, which would move the
+  // keyboard into this window (typing lands in the wrong app) and, through the blur safety net below,
+  // raise it over the window the user is actually working in. Hold it "quiet" and hand focus back.
+  const prev = document.activeElement;
+  w.quiet = true;
+  materialise(w);
+  const f = w.el.querySelector('iframe');
+  if (!f) { w.quiet = false; return Promise.resolve(false); }
+  return new Promise((resolve) => {
+    // Give focus back if the app grabbed it. Checked twice: right after load, and again once apps that
+    // autofocus only after an async init (i18n catalogs, a first fetch) have had time to do so. The user
+    // clicking into the window still raises it at any time (its own pointerdown listener).
+    const giveBack = () => { try { if (document.activeElement === f && prev && prev !== f && typeof prev.focus === 'function') prev.focus(); } catch {} };
+    const done = () => {
+      clearTimeout(t);
+      setTimeout(() => { giveBack(); resolve(true); }, 150);
+      setTimeout(() => { giveBack(); w.quiet = false; }, 1500);
+    };
+    const t = setTimeout(done, timeoutMs);
+    f.addEventListener('load', done, { once: true });
+  });
+}
+
 function focus(id) {
   for (const w of windows.values()) w.el.classList.remove('active');
   const w = windows.get(id);
@@ -152,6 +181,7 @@ window.addEventListener('blur', () => {
     const ae = document.activeElement;
     if (!ae || ae.tagName !== 'IFRAME') return;
     for (const w of windows.values()) {
+      if (w.quiet) continue;                      // a background preload autofocusing is not the user choosing it
       if (w.el.querySelector('iframe') === ae && !w.el.classList.contains('active')) { focus(w.app.id); break; }
     }
   }, 0);
@@ -187,11 +217,16 @@ export function open(app, query, opts = {}) {
   }
   const el = document.createElement('div');
   el.className = 'win';
-  const n = windows.size;
+  // Cascade new windows, wrapping back to the top-left before they would start below the work area
+  // (with many windows open the 12th+ used to open off-screen and drag the whole page down).
+  const A0 = workArea();
+  const steps = Math.max(1, Math.floor(Math.max(0, Math.min(A0.w - 380, A0.h - 260)) / 28));
+  const n = windows.size % steps;
   el.style.left = (60 + n * 28) + 'px';
   el.style.top = (40 + n * 28) + 'px';
 
-  const body = opts.deferred ? '' : frameHtml(app, src);
+  // A deferred window shows its app glyph until the app is loaded (on focus, or by preload()).
+  const body = opts.deferred ? `<div class="placeholder pending" aria-busy="true">${glyph(app)}</div>` : frameHtml(app, src);
   el.innerHTML =
     `<div class="bar"><span class="glyph">${glyph(app)}</span>` +
     `<span class="t">${attr(labelFor(app))}</span>` +
@@ -234,7 +269,9 @@ export function open(app, query, opts = {}) {
   // A deferred window must NOT be focused here: focus() materialises the frame, which is exactly the
   // load we are deferring. It is being restored minimised, so there is nothing to bring forward —
   // it just needs to exist in the taskbar until the user opens it.
-  if (opts.deferred) { const w = windows.get(app.id); if (w) { w.min = true; w.el.classList.add('hidden'); } onChange(); return; }
+  // opts.visible keeps a deferred window ON SCREEN (session restore of a window that was not minimised):
+  // it sits in place with its glyph and loads when preload() reaches it or the user touches it.
+  if (opts.deferred) { const w = windows.get(app.id); if (w && !opts.visible) { w.min = true; w.el.classList.add('hidden'); } onChange(); return; }
   focus(app.id);
 }
 
@@ -401,6 +438,14 @@ export function serialize() {
 export function applyGeom(id, g) {
   const w = windows.get(id);
   if (!w) return;
+  // Start from a FLOATING window. open() may already have applied this app's per-app memory — possibly
+  // maximised — and maximize() is a toggle: re-applying a saved `max:true` on top of it un-maximised
+  // the window (a maximised Settings came back small), and a saved floating rect landed on a maximised one.
+  if (w.max || w.snap) {
+    w.el.classList.remove('max', 'snapped');
+    w.max = false; w.snap = null;
+    const mb = w.el.querySelector('.max'); if (mb) mb.title = 'Maximize';
+  }
   if (g.x != null) w.el.style.left = g.x + 'px';
   if (g.y != null) w.el.style.top = g.y + 'px';
   if (g.w) w.el.style.width = g.w + 'px';
@@ -410,8 +455,8 @@ export function applyGeom(id, g) {
   // end in focus(), which builds the iframe — precisely the load being deferred — so a
   // minimised-AND-maximised window still paid for its app at boot. Hold materialisation across the
   // geometry restore, then put it back in the taskbar.
-  if (g.min) w.holdDeferred = true;
-  if (g.max) maximize(id);                  // re-maximize (stores current floating geom as prev)
+  if (g.min || w.pending) w.holdDeferred = true;   // any deferred window: restoring its geometry is not "wanting" it
+  if (g.max) maximize(id);                 // re-maximize (stores current floating geom as prev)
   else if (g.snap) applySnap(id, g.snap);   // re-snap to its half/quarter
   w.holdDeferred = false;
   if (g.min) { w.min = true; w.el.classList.add('hidden'); }

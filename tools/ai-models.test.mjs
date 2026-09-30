@@ -115,3 +115,16 @@ test('routeFor carries the tier, so a retired TIERS id is re-picked for the same
   assert.equal(r.tier, 'max');
   assert.equal(AI.routeFor({ difficulty: 'fast' }, { openai: { key: 'gsk_x' } }, null).tier, 'fast');
 });
+
+test('a FORMER factory default follows its family forward; a model the user picked stays', async () => {
+  const anth = (model) => ({ provider: 'anthropic', base: 'https://api.anthropic.com', key: 'sk-ant-test-' + Math.random(), model, version: '2023-06-01' });
+  mockFetch(['claude-opus-5-5', 'claude-sonnet-5-5', 'claude-sonnet-4-6', 'claude-opus-4-8', 'claude-haiku-4-5-20251001', 'claude-sonnet-4-5'], () => ok('x'));
+  assert.equal(await AI.resolveModel(anth('claude-sonnet-4-6')), 'claude-sonnet-5-5', 'the old shipped default upgrades within its family');
+  assert.equal(await AI.resolveModel(anth('claude-opus-4-8')), 'claude-opus-5-5');
+  assert.equal(await AI.resolveModel(anth('claude-sonnet-4-5')), 'claude-sonnet-4-5', 'a model the user chose is honoured while served');
+  assert.equal(await AI.resolveModel(anth('claude-haiku-4-5-20251001')), 'claude-haiku-4-5-20251001');
+  mockFetch(['claude-sonnet-4-6', 'claude-haiku-4-5'], () => ok('x'));
+  assert.equal(await AI.resolveModel(anth('claude-sonnet-4-6')), 'claude-sonnet-4-6', 'no newer one served: stays');
+  assert.equal(AI.PROVIDERS.anthropic.def, 'claude-sonnet-5-5');
+  assert.deepEqual(AI.TIERS.anthropic, { max: 'claude-opus-5-5', mid: 'claude-sonnet-5-5', fast: 'claude-haiku-4-5' });
+});

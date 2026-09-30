@@ -57,6 +57,8 @@
   .empty-all { text-align: center; color: var(--muted); margin: 12vh auto; max-width: 360px; padding: 20px; }
   .empty-all .big { font-size: 44px; margin-bottom: 10px; }
   .empty-all h2 { color: var(--text); font-size: 17px; margin: 0 0 6px; }
+  .ro-note { background: #3a2a10; color: #ffd48a; border-bottom: 1px solid #6b4a14; padding: 7px 14px; font-size: 13px; }
+  .hint.bad { background: var(--bad); }
   .hint { position: fixed; left: 50%; bottom: 22px; transform: translateX(-50%); background: var(--ok);
     color: #06121f; padding: 8px 16px; border-radius: 10px; font-size: 13px; font-weight: 600; opacity: 0;
     transition: opacity .2s; pointer-events: none; }
@@ -127,28 +129,61 @@ const PATH = '/data/contacts.json';
 let contacts = [];          // [{ id, name, email, phone, org, note, fav }]
 let selId = null, query = '';
 
-async function loadContacts() {
+// Typed read. A FAILED read (offline, 401, 503) is NOT "no contacts": the old code then showed this browser's
+// cache (or nothing) and the next edit wrote that over the real file on the SD. 404 = none yet.
+async function readDevice() {
   try {
     const r = await fetch('/api/fs/read?path=' + encodeURIComponent(PATH), { cache: 'no-store' });
-    if (r.ok) { const s = await r.text(); const j = s ? JSON.parse(s) : {}; if (Array.isArray(j.contacts)) contacts = j.contacts; }
-  } catch {}
-  if (!contacts.length) { try { const l = JSON.parse(localStorage.getItem('contacts.cache') || '{}'); if (Array.isArray(l.contacts)) contacts = l.contacts; } catch {} }
+    if (r.status === 404) return { ok: true, list: [] };
+    if (!r.ok) return { ok: false, status: r.status };
+    const s = (await r.text()).trim();
+    if (!s) return { ok: true, list: [] };
+    const j = JSON.parse(s);
+    if (j && Array.isArray(j.contacts)) return { ok: true, list: j.contacts };
+    if (j && typeof j === 'object' && !Object.keys(j).length) return { ok: true, list: [] };   // the firmware's "{}"
+    return { ok: false, status: 'corrupt' };
+  } catch (e) { return { ok: false, status: e instanceof SyntaxError ? 'corrupt' : 0 }; }
 }
+const readCache = () => { try { const l = JSON.parse(localStorage.getItem('contacts.cache') || '{}'); return Array.isArray(l.contacts) ? l.contacts : []; } catch { return []; } };
+const writeCache = () => { try { localStorage.setItem('contacts.cache', JSON.stringify({ contacts })); } catch {} };
+const failText = (st) => st === 401 || st === 403 ? t('not_paired') : st === 'corrupt' ? t('read_corrupt') : t('read_failed');
+let readOk = false;
+// A persistent note while what is shown is NOT the device's list (this browser's last copy, read-only).
+function showNote(st) {
+  let n = $('ro-note');
+  if (st == null) { if (n) n.remove(); return; }
+  if (!n) { n = document.createElement('div'); n.id = 'ro-note'; n.className = 'ro-note'; n.setAttribute('role', 'status'); document.body.prepend(n); }
+  n.textContent = '⚠ ' + failText(st) + (contacts.length ? ' ' + t('ro_cache') : '');
+}
+function toast(msg, bad) {
+  const h = $('hint'); h.textContent = msg; h.classList.toggle('bad', !!bad); h.classList.add('show');
+  setTimeout(() => h.classList.remove('show'), bad ? 3200 : 1800);
+}
+async function loadContacts() {
+  const r = await readDevice();
+  readOk = r.ok;
+  if (r.ok) { contacts = r.list; writeCache(); showNote(null); }
+  else { contacts = readCache(); showNote(r.status); }
+}
+// Every edit is read-modify-write against the FRESH file (another browser may have changed it), and never
+// runs on a list we could not read. fn(list) edits it in place; returning false cancels.
 let saveChain = Promise.resolve();
-function saveContacts() {
-  try { localStorage.setItem('contacts.cache', JSON.stringify({ contacts })); } catch {}
-  const body = JSON.stringify({ schema: 1, contacts }, null, 2);
-  saveChain = saveChain.then(async () => {
+function mutate(fn) {
+  const job = saveChain.then(async () => {
+    const r = await readDevice();
+    if (!r.ok) { readOk = false; showNote(r.status); toast(failText(r.status), true); return false; }
+    const list = r.list;
+    if (fn(list) === false) return false;
     try {
-      const r = await fetch('/api/fs/write?path=' + encodeURIComponent(PATH),
-        { method: 'POST', body, signal: (() => { try { return AbortSignal.timeout(9000); } catch { return undefined; } })() });
-      if (!r.ok) throw new Error('HTTP ' + r.status);
-    } catch {
-      const h = $('hint'); h.textContent = '⚠ Save failed · Salvataggio non riuscito'; h.classList.add('show');
-      setTimeout(() => h.classList.remove('show'), 1800);
-    }
+      const w = await fetch('/api/fs/write?path=' + encodeURIComponent(PATH),
+        { method: 'POST', body: JSON.stringify({ schema: 1, contacts: list }, null, 2), signal: (() => { try { return AbortSignal.timeout(9000); } catch { return undefined; } })() });
+      if (!w.ok) { toast(w.status === 401 || w.status === 403 ? t('not_paired') : t('save_failed'), true); return false; }
+    } catch { toast(t('save_failed'), true); return false; }
+    contacts = list; readOk = true; writeCache(); showNote(null);
+    return true;
   });
-  return saveChain;
+  saveChain = job.catch(() => false);
+  return job;
 }
 
 function avatarColor(s) { let h = 0; for (const c of String(s || '?')) h = (h * 31 + c.charCodeAt(0)) >>> 0; return `hsl(${h % 360} 68% 62%)`; }
@@ -182,7 +217,8 @@ function render() {
       (c.org || c.email ? `<div class="n2">${esc(c.org || c.email)}</div>` : '') + '</div>' +
       `<span class="star ${c.fav ? 'on' : ''}">${c.fav ? '★' : '☆'}</span>`;
     el.addEventListener('click', () => { selId = c.id; render(); showDetail(c); if (window.innerWidth <= 620) { $('list').classList.add('hide-mobile'); $('detail').classList.add('show-mobile'); } });
-    el.querySelector('.star').addEventListener('click', (e) => { e.stopPropagation(); c.fav = !c.fav; saveContacts(); render(); });
+    el.querySelector('.star').addEventListener('click', async (e) => { e.stopPropagation();
+      if (await mutate((l) => { const x = l.find((y) => y.id === c.id); if (!x) return false; x.fav = !x.fav; })) render(); });
     list.appendChild(el);
   }
 }
@@ -256,20 +292,28 @@ function openSheet(c) {
   $('scrim').classList.add('show'); setTimeout(() => $('f-name').focus(), 40);
 }
 function closeSheet() { $('scrim').classList.remove('show'); }
-function saveSheet() {
+async function saveSheet() {
   const name = $('f-name').value.trim(), email = $('f-email').value.trim();
   if (!name && !email) { $('msg').textContent = t('err_empty'); return; }
   const data = { name, email, phone: $('f-phone').value.trim(), org: $('f-org').value.trim(), note: $('f-note').value.trim() };
-  if (editId) { const c = contacts.find((x) => x.id === editId); if (c) Object.assign(c, data); }
-  else { const c = { id: 'c-' + Date.now() + '-' + Math.floor(Math.random() * 1e4), fav: false, ...data }; contacts.push(c); selId = c.id; }
-  saveContacts(); render(); showDetail(contacts.find((x) => x.id === selId)); closeSheet();
+  const id = editId || 'c-' + Date.now() + '-' + Math.floor(Math.random() * 1e4);
+  $('save').disabled = true;
+  const ok = await mutate((l) => {
+    const x = l.find((y) => y.id === id);
+    if (x) Object.assign(x, data); else l.push({ id, fav: false, ...data });   // edited elsewhere meanwhile: merged, not lost
+  });
+  $('save').disabled = false;
+  if (!ok) { $('msg').textContent = readOk ? t('save_failed') : failText(0); return; }   // the sheet stays open: nothing typed is lost
+  selId = id; render(); showDetail(contacts.find((x) => x.id === selId)); closeSheet();
 }
-function delContact() {
+async function delContact() {
   if (!editId) return;
   const c = contacts.find((x) => x.id === editId);
   if (!confirm(t('confirm_del', { name: (c && (c.name || c.email)) || '' }))) return;
-  contacts = contacts.filter((x) => x.id !== editId); if (selId === editId) selId = null;
-  saveContacts(); render(); showDetail(null); closeSheet();
+  const id = editId;
+  if (!(await mutate((l) => { const i = l.findIndex((x) => x.id === id); if (i >= 0) l.splice(i, 1); }))) { $('msg').textContent = readOk ? t('save_failed') : failText(0); return; }
+  if (selId === id) selId = null;
+  render(); showDetail(null); closeSheet();
 }
 
 $('add').addEventListener('click', () => openSheet(null));

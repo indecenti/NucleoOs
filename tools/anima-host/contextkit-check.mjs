@@ -114,6 +114,47 @@ ok('assemble picks cloud kind', asm.kind === 'cloud' && asm.messages.length > 2)
 const u = usageTokens(convo, MODEL_PROFILES.webllm);
 ok('usageTokens ratio clamped', u.ratio > 0 && u.ratio <= 1 && u.budget === MODEL_PROFILES.webllm.inTokens);
 
+/* ---- five languages + the real clock (every substrate) ---- */
+// es/fr/de used to get the ITALIAN prompt ("Rispondi in italiano"), so ANIMA answered them in Italian; and
+// no local-model prompt carried the date, so "tomorrow at 9" landed in the model's training year.
+{
+  const { nowText, replyLanguage } = await import('../../apps/anima/www/contextkit.js');
+  const names = { it: null, en: 'English', es: 'Spanish', fr: 'French', de: 'German' };
+  for (const [lg, name] of Object.entries(names)) {
+    for (const mode of ['only', 'webllm', 'server']) {
+      const a = assemble({ history: [], user: 'x', mode, provider: 'anthropic', lang: lg });
+      if (name) ok(`${lg}/${mode}: explicit "reply in ${name}"`, a.system.includes('Always reply in ' + name));
+      else ok(`it/${mode}: Italian prompt, no English reply rule`, !/Always reply in/.test(a.system) && /Sei ANIMA/.test(a.system));
+      ok(`${lg}/${mode}: the current year is in the prompt`, a.system.includes(String(new Date().getFullYear())));
+    }
+  }
+  ok('now can be disabled with an empty string', !/Now:|Adesso:|Today:|Oggi:/.test(assemble({ history: [], user: 'x', mode: 'webllm', lang: 'en', now: '' }).system));
+  ok('nowText is localised (German weekday)', /(Montag|Dienstag|Mittwoch|Donnerstag|Freitag|Samstag|Sonntag)/.test(nowText('de', new Date(2026, 8, 29, 9, 0))));
+  ok('replyLanguage falls back to English', replyLanguage('xx') === 'English');
+}
+
+/* ---- a local AI server on this PC (Ollama / LM Studio …): its own window, the full prompt ---- */
+{
+  ok('resolveKind server=local', resolveKind('server', 'anthropic') === 'local');
+  const p = MODEL_PROFILES.local;
+  ok('local profile: input + code reply fit the 8k context ai-engines asks for', p.inTokens + p.codeTokens <= 8192);
+  ok('local profile: richer than the in-browser GPU model', p.inTokens > MODEL_PROFILES.webllm.inTokens);
+  const a = assemble({ history: [], user: 'scrivi una funzione', mode: 'server', lang: 'it', tree: 'a.js', files: [{ path: 'a.js', content: '1→x' }] });
+  ok('local: full ANIMA prompt (grounding rules), not the lean WebLLM one', /REGOLE DI BASE/.test(a.system));
+  ok('local: workspace tree + files are in context', /workspace_tree/.test(a.system) && /a\.js/.test(a.system));
+}
+
+/* ---- what NucleoOS IS: every generative engine gets the architecture as ground truth ---- */
+{
+  // qwen3.5:9b, asked why the Cardputer doesn't run the AI itself, invented "a remote, scalable NucleoOS server".
+  for (const mode of ['only', 'server', 'webllm']) for (const lg of ['it', 'en', 'de']) {
+    const sys = assemble({ history: [], user: 'x', mode, provider: 'anthropic', lang: lg }).system;
+    ok(`${lg}/${mode}: the prompt states the hardware (ESP32-S3, no PSRAM)`, /ESP32-S3/.test(sys) && /PSRAM/.test(sys));
+    ok(`${lg}/${mode}: the prompt says models run outside the Cardputer`, /(outside it|fuori da lui)/i.test(sys));
+  }
+  ok("local server: the model is told it runs on the user's computer",/user's own computer|computer dell'utente/.test(assemble({ history: [], user: 'x', mode: 'server', lang: 'en' }).system));
+}
+
 /* ---- report ---- */
 console.log(`\ncontextkit-check: ${pass} passed, ${fail} failed`);
 if (fail) { console.log('FAILED:\n - ' + fails.join('\n - ')); process.exit(1); }

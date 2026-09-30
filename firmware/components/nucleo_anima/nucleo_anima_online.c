@@ -1067,7 +1067,7 @@ static int http_post_json(const char *url, const char *auth, const char *body, c
 // it needs from it. The key never lives in firmware source.
 // ===========================================================================
 #define ANTHROPIC_VERSION_DEFAULT "2023-06-01"
-#define ANTHROPIC_MODEL_DEFAULT   "claude-sonnet-4-6"
+#define ANTHROPIC_MODEL_DEFAULT   "claude-sonnet-5-5"
 
 typedef struct {
     char provider[16];   // "anthropic" | "openai" (openai = any OpenAI-compatible incl. Groq)

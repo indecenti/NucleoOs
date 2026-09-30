@@ -12,5 +12,10 @@
   "empty_active": "Niente da fare — tutto fatto! 🎉",
   "empty_all": "Nessuna attività.<br>Scrivi sopra e premi Invio.",
   "toggle": "Attiva/disattiva",
-  "count": "{active} attive · {total} totali"
+  "count": "{active} attive · {total} totali",
+  "read_failed": "Impossibile leggere le attività dal Cardputer. Le modifiche sono sospese per non sovrascriverle: riprova tra poco.",
+  "read_corrupt": "Il file delle attività sul Cardputer non è leggibile: non lo modifico per non perderlo.",
+  "not_paired": "Questo browser non è abbinato al Cardputer: abbinalo per salvare le attività.",
+  "save_failed": "Non salvato — il Cardputer non risponde, riprovo da solo",
+  "not_loaded": "Attività non ancora caricate dal Cardputer."
 }

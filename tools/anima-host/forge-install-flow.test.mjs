@@ -4,7 +4,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  prereqFor, messageFor, backoffMs, etaSeconds, humanBytes, abortableSleep, installModel,
+  prereqFor, messageFor, backoffMs, etaSeconds, humanBytes, abortableSleep, installModel, classifyError,
 } from '../../apps/anima/www/forge/install-flow.js';
 
 class DlError extends Error { constructor(kind, msg) { super(msg || kind); this.kind = kind; } }
@@ -159,4 +159,52 @@ test('OS-wide lock: the whole run is wrapped in the injected dlLock', async () =
   const r = await installModel({ store, modelId: 'M', kind: 'wasm', caps: { wasm: true }, ui, dlLock, sleep: instantSleep });
   assert.equal(r.ok, true);
   assert.equal(wrapped, true);
+});
+
+// ── 2026-09: plain-http pages, unknown errors, five languages ────────────────────────────────────
+test('prereq: a page without the Cache API (plain http) is blocked up-front as "insecure", before any download', async () => {
+  assert.deepEqual(prereqFor('webgpu', { webgpu: true, cacheApi: false }), { ok: false, reason: 'insecure' });
+  let called = 0;
+  const store = { download: async () => { called++; return { source: 'cdn' }; } };
+  const ui = mkUi();
+  const r = await installModel({ store, modelId: 'M', kind: 'webgpu', caps: { webgpu: true, cacheApi: false }, ui, sleep: instantSleep });
+  assert.equal(r.reason, 'insecure');
+  assert.equal(called, 0, 'nothing is downloaded that could not be stored');
+});
+
+test('REGRESSION: an error with no kind (e.g. ReferenceError: caches is not defined) is NOT retried forever', async () => {
+  let n = 0;
+  const store = { download: async () => { n++; throw new ReferenceError('caches is not defined'); } };
+  const ui = mkUi();
+  const r = await installModel({ store, modelId: 'M', kind: 'wasm', caps: { wasm: true }, ui, sleep: instantSleep });
+  assert.equal(n, 1, 'one attempt, no auto-resume loop');
+  assert.equal(r.reason, 'insecure');
+  const other = { download: async () => { throw new Error('something odd'); } };
+  const r2 = await installModel({ store: other, modelId: 'M', kind: 'wasm', caps: { wasm: true }, ui: mkUi(), sleep: instantSleep });
+  assert.equal(r2.reason, 'unknown', 'an unknown error is shown, not looped on');
+});
+
+test('classifyError: only real network failures are transient', () => {
+  assert.equal(classifyError(new TypeError('Failed to fetch')), 'transient');
+  assert.equal(classifyError(Object.assign(new Error('signal timed out'), { name: 'TimeoutError' })), 'transient');
+  assert.equal(classifyError(Object.assign(new Error('quota'), { name: 'QuotaExceededError' })), 'cache');
+  assert.equal(classifyError(new ReferenceError('caches is not defined')), 'insecure');
+  assert.equal(classifyError(new Error('boom')), 'unknown');
+  assert.equal(classifyError(new DlError('integrity')), 'integrity');
+});
+
+test('messageFor speaks all five OS languages (and falls back to English)', () => {
+  const seen = new Set();
+  for (const lang of ['it', 'en', 'es', 'fr', 'de']) {
+    for (const kind of ['insecure', 'no-webgpu', 'integrity', 'notfound', 'cache', 'busy', 'unknown', 'transient']) {
+      const m = messageFor(kind, { sizeText: '1 GB', error: new Error('x') }, lang);
+      assert.ok(m.title && m.detail, `${kind}/${lang}`);
+      assert.ok(!m.detail.includes('{'), `${kind}/${lang} has an unfilled placeholder`);
+      seen.add(m.title);
+    }
+  }
+  assert.ok(seen.size >= 38, 'titles really differ per language');
+  assert.equal(messageFor('cache', {}, 'xx').title, messageFor('cache', {}, 'en').title);
+  assert.equal(messageFor('insecure').fatal, true);
+  assert.equal(messageFor('transient').fatal, false);
 });

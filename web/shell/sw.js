@@ -3,11 +3,11 @@
 // Bump this on every shell change that must reach already-installed clients. The reason for each
 // roll goes in docs/shell-cache-log.md — NOT here: it used to be one 10.5 KB comment on this line,
 // half the whole service worker, re-shipped to every browser on every update check.
-const CACHE = 'nucleo-shell-v144';   // v144 — Game Center cards localised (game_<id>_name/_desc, all five languages)
+const CACHE = 'nucleo-shell-v145';   // v145 — consolidation: local AI engines, data safety, no boot SD crawl (see docs/shell-cache-log.md)
 // Per-version cache for app assets (/apps/<id>/...). Tied to the shell version so a deploy (which
 // bumps CACHE) drops it; the shell also flushes it on apps.changed (OTA app update) via postMessage.
 const APP_CACHE = CACHE + '-apps';
-const ASSETS = ['./', 'index.html', 'style.css', 'copilot.css', 'notify.css', 'onboarding.css', 'shell.js', 'boot-fetch.js', 'copilot.js', 'anima-mode.js', 'notify.js', 'onboarding.js', 'ambient.js', 'ai.js', 'ai-keys.js', 'shortcuts.js', 'search-rank.js', 'appbroker.js', 'wm.js', 'fsindex.js', 'busy.js', 'dlgate.js', 'micgate.js', 'system-ui.js', 'nucleo-i18n.js', 'update-check.js', 'update-core.js', 'sha256.js', 'i18n/core.it.json', 'i18n/core.en.json', 'i18n/core.es.json', 'i18n/core.fr.json', 'i18n/core.de.json', 'i18n/shell.it.json', 'i18n/shell.en.json', 'i18n/shell.es.json', 'i18n/shell.fr.json', 'i18n/shell.de.json', 'manifest.webmanifest', 'icon.png', 'icons.json'];   // NB: wallpaper.png removed — it's a 535KB JPEG-misnamed-.png never displayed (live wallpaper = /data/Pictures/wallpaper.png) that only tripped the webfs low-heap defer
+const ASSETS = ['./', 'index.html', 'style.css', 'copilot.css', 'notify.css', 'onboarding.css', 'shell.js', 'boot-fetch.js', 'copilot.js', 'anima-mode.js', 'notify.js', 'onboarding.js', 'ambient.js', 'ai.js', 'ai-keys.js', 'shortcuts.js', 'search-rank.js', 'appbroker.js', 'wm.js', 'fsindex.js', 'busy.js', 'dlgate.js', 'micgate.js', 'system-ui.js', 'nucleo-i18n.js', 'update-check.js', 'update-core.js', 'sha256.js', 'ai-engines.js', 'capabilities.js', 'local-ai-help.js', 'i18n/core.it.json', 'i18n/core.en.json', 'i18n/core.es.json', 'i18n/core.fr.json', 'i18n/core.de.json', 'i18n/shell.it.json', 'i18n/shell.en.json', 'i18n/shell.es.json', 'i18n/shell.fr.json', 'i18n/shell.de.json', 'manifest.webmanifest', 'icon.png', 'icons.json'];   // NB: wallpaper.png removed — it's a 535KB JPEG-misnamed-.png never displayed (live wallpaper = /data/Pictures/wallpaper.png) that only tripped the webfs low-heap defer
 
 // --- Device request gate (shared reads, exclusive writes) ----------------------
 // The firmware httpd has max_open_sockets=4 + lru_purge_enable (it deliberately RESETS

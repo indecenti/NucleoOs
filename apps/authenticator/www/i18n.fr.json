@@ -26,5 +26,10 @@
   "err_uri": "Lien otpauth:// non valide",
   "err_secret": "Clé secrète non valide (Base32 attendu)",
   "err_clip": "Impossible de lire le presse-papiers",
-  "confirm_del": "Supprimer le compte « {name} » ? Sa clé 2FA sera retirée de cet appareil."
+  "confirm_del": "Supprimer le compte « {name} » ? Sa clé 2FA sera retirée de cet appareil.",
+  "err_device": "Cardputer injoignable — rien n'a été enregistré. Réessayez dans un instant.",
+  "err_unpaired": "Ce navigateur n'est pas associé au Cardputer — associez-le pour enregistrer les comptes.",
+  "offline_banner": "Codes issus de la dernière copie de ce navigateur : le Cardputer ne répond pas, les modifications sont suspendues.",
+  "err_hotp": "Les comptes HOTP (à compteur) ne sont pas pris en charge — utilisez un compte TOTP (temporel).",
+  "err_algo": "SHA-512 n'est pas pris en charge — ce compte produirait des codes erronés."
 }

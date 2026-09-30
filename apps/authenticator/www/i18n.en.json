@@ -26,5 +26,10 @@
   "err_uri": "Invalid otpauth:// link",
   "err_secret": "Invalid secret key (Base32 expected)",
   "err_clip": "Cannot read the clipboard",
-  "confirm_del": "Delete the \"{name}\" account? Its 2FA key will be removed from this device."
+  "confirm_del": "Delete the \"{name}\" account? Its 2FA key will be removed from this device.",
+  "err_device": "Cardputer unreachable — nothing was saved. Try again shortly.",
+  "err_unpaired": "This browser isn't paired with the Cardputer — pair it to save accounts.",
+  "offline_banner": "Codes from this browser's last copy: the Cardputer isn't answering, so changes are paused.",
+  "err_hotp": "HOTP (counter-based) accounts aren't supported — use a TOTP (time-based) account.",
+  "err_algo": "SHA-512 isn't supported — this account would produce wrong codes."
 }

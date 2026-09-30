@@ -287,5 +287,19 @@
   "app_video-studio": "Video Studio",
   "app_voice-manager": "Voice Commands",
   "app_weather": "Weather",
-  "app_wifi-scanner": "WiFi Scanner"
+  "app_wifi-scanner": "WiFi Scanner",
+  "toast_save_failed": "Couldn't save to the Cardputer — retrying automatically as soon as it answers.",
+  "toast_save_recovered": "Changes saved to the Cardputer.",
+  "link_down_title": "Cardputer unreachable.",
+  "link_down_body": "Reconnecting… Check that it is on and on the same Wi-Fi network.",
+  "link_retry": "Retry now",
+  "link_back": "Connected to the Cardputer again.",
+  "tray_sd_free": "SD {free} free",
+  "tray_offline": "offline",
+  "net_unreachable": "Device unreachable",
+  "net_wifi_title": "Wi-Fi {ssid}",
+  "net_ap_title": "Access point {ssid} · http://192.168.4.1",
+  "remote_controlling": "Controlling",
+  "remote_title_one": "This browser is controlling the device. The Cardputer screen is paused.",
+  "remote_title_many": "This browser is controlling the device ({n} sessions). The Cardputer screen is paused."
 }

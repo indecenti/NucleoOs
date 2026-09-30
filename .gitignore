@@ -84,3 +84,5 @@ tools/sd-sim/data/Saves/
 # Same, when a local gbemu/ggemu session writes straight into a staged deploy/sd (personal game
 # saves — never shipping content, and the .sav/.id/.st0 filenames leak the game titles played).
 deploy/sd/data/Saves/
+# Browser E2E suite: failure screenshots (tools/web-e2e/)
+build/web-e2e/

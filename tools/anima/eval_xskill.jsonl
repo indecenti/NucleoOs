@@ -40,7 +40,7 @@
 {"q":"cos'è un cane","lang":"it","expect":"tier:none"}
 // --- open_app vs knowledge ("vorrei/voglio sapere/capire" must NOT launch) ---
 {"q":"vorrei capire come funziona la memoria","lang":"it","expect":"tier:none"}
-{"q":"voglio sapere cos'è un puntatore","lang":"it","expect":"tier:none"}
+{"q":"voglio sapere cos'è un puntatore","lang":"it","expect":"l1"}
 {"q":"vorrei sapere perché il cielo è blu","lang":"it","expect":"tier:none"}
 {"q":"voglio aprire le foto","lang":"it","expect":"open_app"}
 {"q":"voglio disegnare un gatto","lang":"it","expect":"open_app"}

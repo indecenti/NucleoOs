@@ -61,7 +61,7 @@ test('Max is the only blockable preset and needs a key + online', () => {
   assert.equal(ok.state, 'available');
   const plan = planPreset('max', withKey('anthropic'), REG);
   assert.equal(plan.mode, 'only'); assert.equal(plan.l1, 'off');                                    // device stands down to free RAM
-  assert.equal(plan.teacherModel, 'claude-opus-4-8');                                               // top tier of the active provider
+  assert.equal(plan.teacherModel, 'claude-opus-5-5');                                               // top tier of the active provider
 });
 
 test('Balanced is always offerable and routes through the firmware cascade (heap-gate respected)', () => {
@@ -69,7 +69,7 @@ test('Balanced is always offerable and routes through the firmware cascade (heap
   const noKey = planPreset('balanced', sig(), REG);
   assert.equal(noKey.mode, 'on'); assert.equal(noKey.teacherModel, null);                           // no key → device only
   const withC = planPreset('balanced', withKey('anthropic'), REG);
-  assert.equal(withC.teacherModel, 'claude-sonnet-4-6');                                            // mid tier
+  assert.equal(withC.teacherModel, 'claude-sonnet-5-5');                                            // mid tier
 });
 
 test('Local is needs-prep without a usable browser pack, available with one', () => {

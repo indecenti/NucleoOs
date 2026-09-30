@@ -225,6 +225,10 @@
     details.emap{margin-top:8px;border-left:2px solid var(--line2);padding-left:10px;border-radius:0 var(--r-sm) var(--r-sm) 0}
     details.emap.k-cloud{border-left-color:var(--warn)}
     details.emap.k-gpu{border-left-color:var(--accent2)}
+    details.emap.k-server{border-left-color:var(--accent2)}
+    .lai-hint{margin-top:8px;font-size:12px;color:var(--muted);display:flex;flex-wrap:wrap;align-items:center;gap:4px 8px}
+    .lai-how{font:inherit;cursor:pointer;color:var(--accent);background:transparent;border:1px solid var(--line2);border-radius:var(--r-sm);padding:1px 8px}
+    .lai-how:hover{background:var(--hover)}.lai-how:focus-visible{outline:2px solid var(--focus-ring);outline-offset:1px}
     details.emap.k-wasm{border-left-color:var(--accent)}
     details.emap.k-device{border-left-color:var(--ok)}
     details.emap>summary{cursor:pointer;list-style:none;display:flex;align-items:center;gap:7px;color:var(--muted);font:11.5px var(--mono);padding:2px 7px 2px 4px;margin-left:-4px;border-radius:var(--r-sm);transition:color var(--t),background var(--t)}
@@ -236,6 +240,7 @@
     details.emap>summary .emap-ic{flex:none;font-size:12px;color:var(--muted)}
     details.emap.k-cloud>summary .emap-ic{color:var(--warn)}
     details.emap.k-gpu>summary .emap-ic{color:var(--accent2)}
+    details.emap.k-server>summary .emap-ic{color:var(--accent2)}
     details.emap.k-wasm>summary .emap-ic{color:var(--accent)}
     details.emap.k-device>summary .emap-ic{color:var(--ok)}
     details.emap>summary .emap-line{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -733,6 +738,20 @@
     .dlg.danger{border-color:var(--danger-line)}
     .dlg h3{margin:0 0 8px;font-size:14px;font-weight:var(--fw-title)}
     .dlg .dlg-b{margin:0;font-size:12.5px;line-height:1.55;color:var(--muted);white-space:pre-wrap;overflow-wrap:anywhere;max-height:50vh;overflow:auto}
+    .dlg .dlg-b.rich{white-space:normal}
+    /* shared capability panel (/capabilities.js renderCapabilityHelp) */
+    .cap-list{list-style:none;margin:0 0 10px;padding:0;display:grid;gap:4px}
+    .cap-row{display:flex;gap:8px;align-items:baseline;flex-wrap:wrap}
+    .cap-row small{color:var(--muted);opacity:.85}
+    .cap-dot{width:16px;text-align:center;font-weight:700}
+    .cap-row.ok .cap-dot{color:#36d399} .cap-row.no .cap-dot{color:#f87272}
+    .cap-row.ok span:not(.cap-dot){color:var(--text)}
+    .cap-steps{margin:6px 0 8px;padding-left:24px;display:grid;gap:6px;color:var(--text)}
+    .cap-copy{cursor:pointer;padding:1px 5px;border-radius:5px;background:var(--chip-bg);border:1px dashed var(--line2);user-select:all;word-break:break-all}
+    .cap-copy.copied{border-color:#36d399;color:#36d399}
+    .cap-tip{margin:6px 0 0;font-size:11.5px}
+    .cap-actions{display:flex;gap:10px;align-items:center;margin-top:10px;flex-wrap:wrap}
+    .cap-actions button{padding:5px 12px;border-radius:var(--r);border:1px solid var(--line2);background:var(--chip-bg);color:var(--text);font:var(--fw-label) 12px var(--mono);cursor:pointer}
     .dlg .dlg-act{display:flex;justify-content:flex-end;gap:8px;margin-top:14px;flex-wrap:wrap}
     .dlg .dlg-act button{padding:6px 14px;border-radius:var(--r);border:1px solid var(--line2);background:var(--chip-bg);color:var(--text);font:var(--fw-label) 12px var(--mono);cursor:pointer}
     .dlg .dlg-act button.pri{background:var(--accent);border-color:var(--accent);color:var(--accent-on)}
@@ -2876,14 +2895,18 @@
         +'<h3 id="dlg-t"></h3><p class="dlg-b" id="dlg-b"></p><div class="dlg-act"><button type="button" class="dlg-no"></button><button type="button" class="pri dlg-ok"></button></div></div>';
       document.body.appendChild(s); _dlgEl=s; return s;
     }
-    function askDialog({ title, body, ok, cancel, danger, single }={}){
+    // render(el): optional rich body (e.g. the shared capability checklist) instead of plain text.
+    function askDialog({ title, body, ok, cancel, danger, single, render }={}){
       const gen=_dlgGen;
       const show=()=>new Promise((resolve)=>{
         if(gen!==_dlgGen){ resolve(false); return; }     // queued behind a Stop: the turn is gone, the answer is no
         const s=dlgEl(), box=s.querySelector('.dlg'), okB=s.querySelector('.dlg-ok'), noB=s.querySelector('.dlg-no');
         const prev=document.activeElement;
         s.querySelector('#dlg-t').textContent=title||'';
-        s.querySelector('#dlg-b').textContent=body||''; s.querySelector('#dlg-b').hidden=!body;
+        const bEl=s.querySelector('#dlg-b');
+        bEl.classList.toggle('rich', typeof render==='function');
+        if(typeof render==='function'){ bEl.textContent=''; bEl.hidden=false; try{ render(bEl); }catch{ bEl.textContent=body||''; } }
+        else { bEl.textContent=body||''; bEl.hidden=!body; }
         okB.textContent=ok||L('ok')||'OK'; noB.textContent=cancel||L('cancel')||'Cancel'; noB.hidden=!!single;   // single: an explanation, one button
         box.classList.toggle('danger', !!danger);
         const done=(v)=>{ s.classList.remove('open'); s.removeEventListener('keydown',key,true); okB.onclick=noB.onclick=null; s.onclick=null; _dlgClose=null;
@@ -3198,7 +3221,9 @@
     function engineMap(r){
       const en=lang==='en', I=r.intent||'', D=r.domain||'', T=r.tier||'';
       let kind, icon, eng, model='', host='';
-      if(T==='M4-local' || r.substrate==='M4-local'){               // local-GPU tier (browser WebLLM)
+      if(T==='server' && r.engine){                                  // local AI server on this computer (Ollama / LM Studio …)
+        kind='server'; icon='⌂'; eng=L('engLocalServer')+' · '+(r.engine.server||''); model=r.engine.model||''; host=hostOf(r.engine.base||'');
+      } else if(T==='M4-local' || r.substrate==='M4-local'){               // local-GPU tier (browser WebLLM)
         kind='gpu'; icon='✦'; eng=TR('GPU locale · WebLLM', 'Local GPU · WebLLM'); model=prettyModel(CODER_MODEL); host=TR('browser · WebGPU', 'browser · WebGPU');
       } else if(T==='remote' || D==='online' || ['grok','teacher','cloud','online','agent','wiki','wikidata','weather','fx'].includes(I)){   // online tier (incl. the firmware online-only 'cloud' intent, code answers, and the multi-agent path)
         kind='cloud'; icon='☁';
@@ -3224,6 +3249,7 @@
       if(kind==='cloud'){ const hh=(host||'').toLowerCase();
         provider = hh.includes('groq')?'Groq' : hh.includes('anthropic')?'Anthropic (Claude)' : hh.includes('openai')?'OpenAI' : ((keyCfg&&keyCfg.provider)||''); }
       else if(kind==='gpu') provider = TR('la GPU del tuo browser', 'your browser GPU');
+      else if(kind==='server') provider = L('engThisPc');
       return { kind, icon, eng, model, host, mode, ms, chars, provider,
         net:(kind==='cloud' || (r.web && !r.recalled)), modelIsTool:((kind==='wasm'||kind==='device') && !r.web),
         domain:D, intent:I, confidence:r.confidence||0, memory:!!r.memory, corrected:r.corrected||'',
@@ -3263,7 +3289,7 @@
         em.model && [em.modelIsTool?(TR('Strumento', 'Tool')):(TR('Modello', 'Model')), em.model],
         em.provider && [TR('Provider', 'Provider'), em.provider],
         em.host && [TR('Host', 'Host'), em.host],
-        [TR('Rete', 'Network'), em.kind==='gpu'?(TR('nessuna · GPU locale', 'none · local GPU')):(em.net?(TR('usata (online)', 'used (online)')):(TR('nessuna (offline)', 'none (offline)'))), (em.net||em.kind==='gpu')?'net-on':'net-off'],
+        [TR('Rete', 'Network'), em.kind==='gpu'?(TR('nessuna · GPU locale', 'none · local GPU')):em.kind==='server'?L('netThisPc'):(em.net?(TR('usata (online)', 'used (online)')):(TR('nessuna (offline)', 'none (offline)'))), (em.net||em.kind==='gpu')?'net-on':'net-off'],
         em.ms && [TR('Tempo', 'Time'), em.ms+' ms'],
       ]);
       grp('✲', TR('Ragionamento', 'Reasoning'), [
@@ -3896,14 +3922,16 @@
       let cat, caps;
       try{ cat=await import('./forge/local-models.js'); }catch{ return; }
       try{ const m=await loadLLM(); caps=await m.probeLocal(); }catch{ caps={webgpu:false}; }
-      const cur=(()=>{ try{ return localStorage.getItem('anima.localModel'); }catch{ return null; } })() || cat.DEFAULT_LOCAL_MODEL;
+      const rec=cat.recommendModel(caps)||cat.DEFAULT_LOCAL_MODEL;   // for THIS GPU (discrete → 4B, integrated → 1.7B, weak → 0.6B)
+      const stored=(()=>{ try{ return localStorage.getItem('anima.localModel'); }catch{ return null; } })();
+      const cur=(stored && cat.localModelById(stored)) ? cat.localModelById(stored).id : rec;
       if(sel.dataset.filled!=='1'){
         sel.innerHTML='';
-        for(const mo of cat.LOCAL_MODELS){ const o=document.createElement('option'); o.value=mo.id;
-          o.textContent=mo.label+' · ~'+mo.sizeGB+'GB'+(mo.best?(TR(' · consigliato', ' · best')):''); sel.appendChild(o); }
+        for(const mo of cat.offeredModels(cur)){ const o=document.createElement('option'); o.value=mo.id;
+          o.textContent=mo.label+' · ~'+mo.sizeGB+' GB'+(mo.id===rec?(' · '+(L('gpuRecommended')||TR('consigliato per questa GPU', 'recommended for this GPU'))):''); sel.appendChild(o); }
         sel.dataset.filled='1';
       }
-      sel.value = cat.localModelById(cur)?cur:cat.DEFAULT_LOCAL_MODEL;
+      sel.value = cur;
       // Say whether the chosen model is INSTALLED: the chat's GPU tier only ever uses an installed one.
       // No WebGPU: say WHY (plain-HTTP page / browser / GPU) and turn the button into "How to turn it on",
       // never a button that silently repeats the same red line.
@@ -3913,12 +3941,22 @@
         const off=c.level==='no-webgpu';
         btn.dataset.why=off?'1':''; btn.textContent=off?L('gpuHow'):TR('Scarica ora', 'Download now');
         if(off){ stat.style.color='#f87272'; stat.textContent=gpuWhy(c); return; }
-        const base=(c.level==='tight'?L('gpuTight',{ need:String(mo.needGB) }):L('gpuOk',{ gb:String(mo.sizeGB) }))||c.msg;
+        const base=(c.level==='tight'?L('gpuTight',{ need:String(c.need||mo.needGB) }):L('gpuOk',{ gb:String(mo.sizeGB) }))||c.msg;
         stat.textContent=base; stat.style.color=c.level==='tight'?'#fbbd23':'var(--muted)';
         loadLLM().then(m=>m.localModelCached(id)).then((ok)=>{ if(sel.value!==id) return;
           stat.textContent=base+' · '+(ok?'✓ '+TR('installato', 'installed'):TR('non installato — la chat non lo usa finché non lo scarichi', 'not installed — chat skips it until you download it')); }).catch(()=>{}); };
       // The whole story in one dialog: why, the exact steps, and that ANIMA keeps answering meanwhile.
       const explainNoGpu=async (c)=>{
+        // The OS-wide diagnosis (/capabilities.js): a live checklist, the exact fix for THIS browser with copy
+        // buttons, the notes the old text lacked (the same switch unlocks the model cache; an IP change needs it
+        // again) and "Done — check again". Every app explains it the same way now.
+        let C=null; try{ C=await import('/capabilities.js'); }catch{ C=null; }
+        if(C){
+          const caps2=await C.probeCapabilities({ fresh:true });
+          await askDialog({ title:L('gpuDlgTitle'), single:true, ok:L('close'),
+            render:(el)=>{ C.renderCapabilityHelp(el, caps2, (k,v)=>L(k,v)||k, { onVerified:async ()=>{ try{ const m=await loadLLM(); caps=await m.probeLocal({ fresh:true }); }catch{} paintStat(); } }); } });
+          return;
+        }
         const flag=(/\bEdg\//.test(navigator.userAgent)?'edge':'chrome')+'://flags/#unsafely-treat-insecure-origin-as-secure';
         const r=String(caps.reason||''), detail=r.startsWith('adapter-error:')?'\n\n'+L('gpuDetail',{ d:r.slice(14) }):'';
         const copy=c.cause==='insecure';
@@ -4322,11 +4360,12 @@
       return AI.withAutoModel(cfg, (c)=>AM.withStep(_turnSig, AM.STEP_MS.cloud, (signal)=>compoundCall(c, q, signal)), pick);
     }
     async function compoundCall(g, q, signal){
-      const today=(()=>{ try{ return new Date().toISOString().slice(0,10); }catch{ return ''; } })();
-      const sys=(lang==='en'
-        ? 'You are a concise web research assistant. Search the web as needed and answer DIRECTLY in English. Use Markdown. Cite sources inline as [1], [2]… matching the order of the Sources list the UI appends. Do NOT narrate your process, do NOT print your search results as a table, and do NOT show code or its output unless explicitly asked. Keep it tight.'
+      // Every language gets its own reply rule and the real local date/time (the model has no clock).
+      const now=ctxkit.nowText(lang);
+      const sys=(lang!=='it'
+        ? 'You are a concise web research assistant. Search the web as needed and answer DIRECTLY in '+ctxkit.replyLanguage(lang)+'. Use Markdown. Cite sources inline as [1], [2]… matching the order of the Sources list the UI appends. Do NOT narrate your process, do NOT print your search results as a table, and do NOT show code or its output unless explicitly asked. Keep it tight.'
         : 'Sei un assistente di ricerca web conciso. Cerca sul web quando serve e rispondi DIRETTAMENTE in italiano. Usa Markdown. Cita le fonti inline come [1], [2]… nello stesso ordine dell\'elenco Fonti che l\'interfaccia aggiunge. NON raccontare il tuo processo, NON stampare i risultati di ricerca come tabella e NON mostrare codice o il suo output se non richiesto esplicitamente. Sii sintetico.')
-        + (today?(lang==='en'?'\nToday is '+today+'.':'\nOggi è '+today+'.'):'');
+        + (now?(lang!=='it'?'\nNow: '+now+'.':'\nAdesso: '+now+'.'):'');
       const msgs=history.filter(h=>h.role==='user'||h.role==='bot').slice(-8).map(h=>({role:h.role==='bot'?'assistant':'user', content:String(h.text||'')}));
       const resp=await fetch(g.base+'/chat/completions', { method:'POST', signal,
         headers:{ 'content-type':'application/json', 'authorization':'Bearer '+g.key },
@@ -4402,7 +4441,6 @@
     // opts.onDelta streams the tokens to the caller's renderer. A failure AFTER tokens arrived is not
     // retried on another provider (it would repeat the answer) — it throws with .partial for the caller.
     async function cloudAsk(q, _wsx, opts={}){
-      const today=(()=>{ try{ return new Date().toISOString().slice(0,10); }catch{ return ''; } })();
       let streamed=false;
       const onDelta = opts.onDelta ? (d)=>{ streamed=true; opts.onDelta(d); } : null;
       const wsx=_wsx || await wsContext(q);   // reuse the caller's workspace context when provided (no redundant device reads)
@@ -4414,7 +4452,8 @@
       let route = keyCfg;
       if(hard){ try{ const r=AI.routeFor({difficulty:'hard'}, keyCfg.keys||{}, keyCfg); if(r&&r.key) route=r; }catch{} }
       const callWith=async(cfg)=>{
-        const a=ctxkit.assemble({ history, user:q, mode:'only', provider:cfg.provider, model:cfg.model, lang, now:today,
+        const a=ctxkit.assemble({ history, user:q, mode:'only', provider:cfg.provider, model:cfg.model, lang,   // now: contextkit's localised date + time + weekday
+
           workspace:wsRoot, tree:wsx.tree, files:wsx.files });
         return cloudComplete(cfg.provider, cfg.base, cfg.model, cfg.key, cfg.version, a.system, a.messages, { maxTokens:a.maxTokens, temperature:a.temperature, signal:_turnSig, onDelta, tier: hard ? 'max' : 'mid' });
       };
@@ -4434,6 +4473,50 @@
       const routed = route.provider!==keyCfg.provider || used!==keyCfg.model;   // surface the model when it differs from the saved one
       const note = routed ? (AI.providerOf(route.provider).label+' · '+used) : '';
       return { reply:txt, intent:/```/.test(txt)?'code':'cloud', confidence:70, substrate:'M3', domain:'online', model:used, ...(note?{trace:note}:{}) };
+    }
+
+    // LOCAL AI SERVER — Ollama / LM Studio / llama.cpp / Jan on THIS computer, reached browser → localhost,
+    // never through the Cardputer. /ai-engines.js detects it (cached per burst of turns), picks the best
+    // installed model for the task and steps down to a lighter one when it does not fit in memory. It gets
+    // the full ANIMA prompt (date, language, grounding rules, workspace) sized for an 8k window. In Private
+    // only a server on this very computer counts: a LAN box would still be "the network".
+    let _enginesP=null;
+    const enginesMod=()=> _enginesP || (_enginesP=import('/ai-engines.js').catch(e=>{ _enginesP=null; throw e; }));
+    async function localServerAsk(q, wsx, opts={}){
+      const E=await enginesMod();
+      const cfg=E.loadLocalConfig(); if(!cfg.enabled) return null;
+      const wsRoot=(fs.hasRoot&&fs.hasRoot())? fs.getRoot() : undefined;
+      const a=ctxkit.assemble({ history, user:q, mode:'server', lang, workspace:wsRoot, tree:(wsx&&wsx.tree)||'', files:(wsx&&wsx.files)||[] });
+      const res=await E.localComplete(ctxkit.wantsCode(q)?'code':'chat', {
+        messages:[{ role:'system', content:a.system }, ...a.messages], temperature:a.temperature, maxTokens:a.maxTokens,
+        loopbackOnly:!!opts.private, signal:opts.signal||_turnSig, onDelta:opts.onDelta, config:cfg });
+      if(!res || !res.text) return null;
+      const eng=res.engine||{};
+      const steps=[(eng.server||'')+' · '+(eng.model||'')];
+      if(eng.skipped && eng.skipped.length) steps.push(L('localSkipped',{ m:eng.skipped.join(', ') }));
+      return { reply:res.text, tier:'server', intent:/```/.test(res.text)?'code':'chat', confidence:70, domain:'local',
+        engine:eng, model:eng.model, trace:steps.join(' > ') };
+    }
+
+    // A local server that RUNS but refuses this page (CORS — Ollama admits only localhost by default, NucleoOS
+    // comes from the Cardputer's IP): say it ONCE per session under an answer, with the exact per-OS fix one
+    // click away (/local-ai-help.js). Otherwise a user with Ollama never learns why ANIMA does not use it.
+    let _laiHinted=false;
+    async function maybeLocalAiHint(body, r){
+      if(_laiHinted || (r && r.tier==='server')) return;
+      try{ if(sessionStorage.getItem('anima.laiHint')) return; }catch{}
+      const E=await enginesMod(); const cfg=E.loadLocalConfig(); if(!cfg.enabled) return;
+      const s=(await E.liveServers({ config:cfg })).find((x)=>x.status==='cors'); if(!s) return;
+      _laiHinted=true; try{ sessionStorage.setItem('anima.laiHint','1'); }catch{}
+      const row=document.createElement('div'); row.className='lai-hint';
+      row.appendChild(document.createTextNode('ℹ '+L('lai_hint',{ server:s.name })+' '));
+      const b=document.createElement('button'); b.type='button'; b.className='lai-how'; b.textContent=L('lai_how');
+      b.addEventListener('click', async()=>{
+        let H=null; try{ H=await import('/local-ai-help.js'); }catch{ return; }
+        await askDialog({ title:L('lai_title',{ server:s.name }), single:true, ok:L('close'),
+          render:(el)=>{ H.renderLocalAiHelp(el, { server:s }, (k,v)=>L(k,v)||k, { onVerified:()=>row.remove() }); } });
+      });
+      row.appendChild(b); body.appendChild(row); scrollDown();
     }
 
     // ---- multi-agent path: the PRIMARY online engine. Reuses the Agenti runtime (orchestrator → tool-use
@@ -4460,7 +4543,7 @@
       return { title:L('agentWants',{ op }), body:lines.join('\n') };
     }
     async function agentRuntime(){
-      const sig=(keyCfg.key||'')+'|'+(keyCfg.model||'')+'|'+keysSig()+'|'+((fs.hasRoot&&fs.hasRoot())?fs.getRoot():'');
+      const sig=lang+'|'+(keyCfg.key||'')+'|'+(keyCfg.model||'')+'|'+keysSig()+'|'+((fs.hasRoot&&fs.hasRoot())?fs.getRoot():'');
       if(_agentRt && _agentRtKey===sig) return _agentRt;
       const { createRuntime } = await import('/apps/agent/runtime.js');   // device webfs maps /apps/<id>/<rest> → /apps/<id>/www/<rest>: the URI must NOT contain /www/
       // The runtime's own "never auto-approve" set (delete_file / publish_app / manage_app). Same module
@@ -4519,6 +4602,12 @@
         const seed=wsx || await wsContext(q);   // Claude-Code <env>: seed the worker with the workspace tree + @-mentioned files
         const txt=await rt.run(q, history.slice(0,-1), { seed });   // prior turns (runtime appends q as the current user)
         if(!txt) return null;
+        const eng=rt.engine;
+        // On the PC's own model the turn is named like any local-server answer (engine map "k-server": Ollama · model).
+        if(eng && eng.kind==='server') return { reply:txt, tier:'server', intent:'agent', confidence:75, domain:'local', engine:eng, model:eng.model,
+          trace:L('agentLocal',{ server:eng.server||'', model:eng.model||'' }) };
+        if(eng && eng.kind==='local') return { reply:txt, tier:'M4-local', substrate:'M4-local', intent:'agent', confidence:65, domain:'local',
+          trace:L('agentLocal',{ server:'WebGPU', model:'' }) };
         return { reply:txt, intent:'agent', confidence:80, domain:'online', substrate:'M2', trace:(TR('Agenti · orchestratore → worker', 'Agents · orchestrator → worker')) };
       } finally { _agentThink=null; }
     }
@@ -4602,12 +4691,31 @@
         // 0 - translation has its own grounded ladder (device dictionary -> GPU model -> cloud)
         try{ r = await routeTranslate(q, sig); }catch{ r = null; }
 
+        // The workspace context is built at most ONCE per turn, by whichever generative rung needs it first.
+        let _wsxP=null; const wsxOnce=()=> _wsxP || (_wsxP=wsContext(sendQ));
+        // LOCAL AI SERVER (Ollama / LM Studio … on this computer). It answers FIRST when there is no cloud key,
+        // in Private (it never leaves this PC), or when the user chose "local first"; otherwise the user's cloud
+        // model answers and the local server is its fallback (1b) — no key, no internet, quota gone.
+        let lcfg={ enabled:false }; try{ lcfg=(await enginesMod()).loadLocalConfig(); }catch{}
+        const localFirst = priv || !keyCfg.key || lcfg.prefer==='local';
+        const tryLocalServer=async()=>{
+          if(!lcfg.enabled) return null;
+          try{ const wsx=await wsxOnce(); return await AM.withStep(sig, AM.STEP_MS.local, (signal)=>localServerAsk(sendQ, wsx, { private:priv, onDelta, signal })); }
+          catch(e){
+            if(sig.aborted) return null;
+            const part = live ? live.text() : '';        // it died mid-answer: keep what came, marked incomplete
+            return part ? { reply:part, tier:'server', engine:{}, intent:'chat', confidence:40, domain:'local', incomplete:true } : null;
+          }
+        };
+        // 1a - LOCAL SERVER first (see above)
+        if(!r && localFirst && !sig.aborted) r = await tryLocalServer();
+
         // 1 - CLOUD. Browser-direct, never through the firmware: the mbedTLS handshake OOMs on this
         //     PSRAM-less chip. The agentic loop is browser-hosted for the same reason; a proxy
         //     provider (relayed via the device) skips the loop so a 14-step relay cannot hammer it.
         if(!r && !priv && keyCfg.key && !sig.aborted){
           const loopEligible = useAgents && !curProv().proxy;
-          const wsx = await wsContext(sendQ);   // built ONCE - shared by the loop seed and fallback
+          const wsx = await wsxOnce();   // built ONCE - shared by the loop seed and fallback
           if(loopEligible && !sig.aborted){
             _agentDidMutate = false; _agentCancelled = false; _agentWsAsked = false;
             try{ r = await agentAsk(sendQ, think, wsx); }catch(e){ r = null; noteAiErr(e); }
@@ -4620,6 +4728,9 @@
               if(part && !sig.aborted) r = { reply:part, intent:'cloud', confidence:40, substrate:'M3', domain:'online', incomplete:true }; }
           }
         }
+
+        // 1b - LOCAL SERVER as the cloud's fallback (the cloud was tried first and did not answer)
+        if(!r && !localFirst && !sig.aborted && !live) r = await tryLocalServer();
 
         // 2 - BROWSER GPU LLM (WebLLM). A real generative model on the user's own GPU - the rung the
         //     old 'Browser' mode could never reach. Works in private mode too: once installed it is local.
@@ -4671,7 +4782,9 @@
           ? TR('La domanda è troppo lunga per il Cardputer: accorciala e riprova.', 'This question is too long for the Cardputer: shorten it and try again.')
           : (have || !why) ? UI[lang].dontknow
           : (why==='unreachable' ? UI[lang].offline : '⚠ '+notDoneWhy(why)+'.') + ' ' + (UI[lang].edgeNeedInstall||'');
-        renderMd(body, msg); body.dataset.raw=msg; history.push({role:'bot',text:msg}); persist(); setDot('err'); return;
+        renderMd(body, msg); body.dataset.raw=msg; history.push({role:'bot',text:msg}); persist(); setDot('err');
+        maybeLocalAiHint(body, null).catch(()=>{});   // nothing answered: exactly when "your Ollama refuses NucleoOS" matters most
+        return;
       }
       // A device action is done only if the Cardputer did it: run a browser-engine proposal on the device,
       // or turn it into an honest "not done" (device unreachable / unpaired / refused / old firmware).
@@ -4704,6 +4817,7 @@
       // silently making every answer worse. Actionable -> a warning; a transient blip -> a quiet note.
       if(_turnAiErr && r.domain!=='online'){ const act=AI.actionableAiError(_turnAiErr); const t=(act?'⚠ ':'ℹ ')+AI.explainAiError(_turnAiErr, lang);
         entry.lines.push({ text:t, kind:act?'warn':'dim' }); addLined(body, t, act?'warn':'dim'); }
+      maybeLocalAiHint(body, r).catch(()=>{});
 
       // multi-step reasoning plan kept for export; rendered inside the engine map (below) as the "Steps" node
       if(r.trace && r.trace.includes(' > ')) entry.trace=r.trace.split(' > ');
@@ -5312,7 +5426,7 @@
     const _sizeText=(b)=> !b?'':(b>=1e9?(b/1e9).toFixed(2)+' GB':(b/1e6).toFixed(0)+' MB');
     async function renderForgeModels(){
       const box=$('forge-models'); if(!box) return; await loadForge(); box.textContent='';
-      const caps={ webgpu:!!navigator.gpu, wasm:typeof WebAssembly!=='undefined', online:navigator.onLine };
+      const caps={ webgpu:!!navigator.gpu, wasm:typeof WebAssembly!=='undefined', online:navigator.onLine, cacheApi:typeof caches!=='undefined', secure:!!window.isSecureContext };
       for(const m of FORGE_MODELS){
         let st='absent'; try{ st=await forgeStore.status(m.id); }catch{}
         const blocked = m.kind==='webgpu' && !caps.webgpu;

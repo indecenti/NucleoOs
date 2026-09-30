@@ -26,5 +26,10 @@
   "err_empty": "Serve almeno un nome o un’email",
   "confirm_del": "Eliminare \"{name}\"?",
   "vcard_saved": "vCard salvata in {path}",
-  "vcard_fail": "Salvataggio vCard non riuscito"
+  "vcard_fail": "Salvataggio vCard non riuscito",
+  "read_failed": "Impossibile leggere la rubrica dal Cardputer: le modifiche sono sospese per non sovrascriverla.",
+  "read_corrupt": "Il file della rubrica sul Cardputer non è leggibile: non lo modifico per non perderlo.",
+  "not_paired": "Questo browser non è abbinato al Cardputer: abbinalo per salvare i contatti.",
+  "save_failed": "Salvataggio non riuscito: il Cardputer non risponde. Riprova tra poco.",
+  "ro_cache": "Vedi l'ultima copia salvata in questo browser (sola lettura)."
 }

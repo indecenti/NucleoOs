@@ -174,7 +174,11 @@ html[data-theme='light'] .boot-spinner { border-color: #0000001a; border-top-col
    Idle: clamp to 2 lines (Windows wraps long names instead of one-line ellipsis). */
 .icon .label { font-size: 12px; font-weight: 600; color: #fff; max-width: var(--icon-w, 84px);
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-  overflow-wrap: anywhere; line-height: 1.2; padding: 1px 4px; border-radius: 6px;
+  /* Break long names at SYLLABLES in the OS language (<html lang> follows it), never mid-letter:
+     "Automation Studio" used to wrap as "Automatio / n Studio". break-word only splits a word that
+     cannot fit even on its own line (and hyphens:auto normally handles that first). */
+  overflow-wrap: break-word; word-break: normal; -webkit-hyphens: auto; hyphens: auto;
+  line-height: 1.2; padding: 1px 4px; border-radius: 6px;
   text-shadow: 0 1px 2px rgba(0,0,0,.95), 0 0 3px rgba(0,0,0,.85), 0 0 1px rgba(0,0,0,.9); }
 /* Selected / hovered / focused: reveal the FULL name (no clamp) on a readable backing that
    overlays neighbours, exactly like Windows. Raised z-index so the expansion wins. */
@@ -695,6 +699,28 @@ html[data-theme='light'] .toast { background: #ffffffee; }
 html[data-theme='light'] #ws-evicted { background: #ffffffee; color: #17203a; border-color: #00000022; }
 @media (prefers-reduced-motion: reduce) { #ws-evicted { transition: none; } }
 @keyframes wsPulse { 0%, 100% { opacity: 1; } 50% { opacity: .3; } }
+/* ====== Device unreachable banner (link monitor) — top-center, non-blocking ====== */
+#link-down {
+  position: fixed; left: 50%; top: 12px; transform: translateX(-50%) translateY(-12px); z-index: 10001;
+  display: none; align-items: center; gap: 12px;
+  padding: 10px 12px 10px 14px; border-radius: 12px;
+  background: #3a1d24e6; border: 1px solid #ff8a9a44; box-shadow: 0 20px 50px #000a;
+  backdrop-filter: blur(24px) saturate(1.6); color: var(--text, #e6edf7);
+  font-size: 13px; max-width: min(620px, calc(100vw - 32px));
+  opacity: 0; transition: opacity .18s ease, transform .18s ease;
+}
+#link-down.show { display: flex; opacity: 1; transform: translateX(-50%) translateY(0); }
+#link-down .ld-ic { font-size: 16px; animation: wsPulse 1.6s ease-in-out infinite; }
+#link-down .ld-tx { flex: 1; line-height: 1.35; }
+#link-down .ld-btn {
+  flex: 0 0 auto; cursor: pointer; border: 1px solid #ffffff2e; border-radius: 8px;
+  padding: 6px 12px; font: inherit; font-weight: 600; color: #fff; white-space: nowrap;
+  background: linear-gradient(180deg, #4ea1ff, #2f7fe0);
+}
+#link-down .ld-btn:disabled { opacity: .6; cursor: progress; }
+#link-down .ld-btn:focus-visible { outline: 2px solid var(--accent, #4ea1ff); outline-offset: 2px; }
+html[data-theme='light'] #link-down { background: #fff1f3f2; color: #3a1d24; border-color: #d0303044; }
+@media (prefers-reduced-motion: reduce) { #link-down, #link-down .ld-ic { transition: none; animation: none; } }
 /* ====== Device Busy indicator (heavy-work arbiter: system.busy) ====== */
 #tray-busy {
   display: inline-flex; align-items: center; gap: 5px;

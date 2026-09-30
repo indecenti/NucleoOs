@@ -129,7 +129,8 @@ try {
   const { buildSpec, serialize, OUT_PATHS } = await import('./gen-api-spec.mjs');
   const { spec, undocumented, stale } = buildSpec();
   const json = serialize(spec);
-  const rawText = (p) => readFileSync(join(ROOT, p), 'utf8').replace(/^﻿/, '');
+  // EOL-normalised (like check-gz): a Windows checkout turns the committed LF spec into CRLF — not drift.
+  const rawText = (p) => readFileSync(join(ROOT, p), 'utf8').replace(/^﻿/, '').replace(/\r\n/g, '\n');
   for (const p of OUT_PATHS) {
     if (!existsSync(join(ROOT, p))) errs.push(`api-spec: ${p} missing (run: npm run gen:api)`);
     else if (rawText(p) !== json) errs.push(`api-spec: ${p} out of date with firmware (run: npm run gen:api)`);

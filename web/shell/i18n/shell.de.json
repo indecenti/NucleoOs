@@ -287,5 +287,19 @@
   "app_video-studio": "Videostudio",
   "app_voice-manager": "Sprachbefehle",
   "app_weather": "Wetter",
-  "app_wifi-scanner": "WLAN-Scanner"
+  "app_wifi-scanner": "WLAN-Scanner",
+  "toast_save_failed": "Speichern auf dem Cardputer fehlgeschlagen – neuer Versuch automatisch, sobald er antwortet.",
+  "toast_save_recovered": "Änderungen auf dem Cardputer gespeichert.",
+  "link_down_title": "Cardputer nicht erreichbar.",
+  "link_down_body": "Verbindung wird wiederhergestellt… Prüfe, ob er eingeschaltet und im selben WLAN ist.",
+  "link_retry": "Jetzt erneut versuchen",
+  "link_back": "Wieder mit dem Cardputer verbunden.",
+  "tray_sd_free": "SD {free} frei",
+  "tray_offline": "offline",
+  "net_unreachable": "Gerät nicht erreichbar",
+  "net_wifi_title": "WLAN {ssid}",
+  "net_ap_title": "Zugangspunkt {ssid} · http://192.168.4.1",
+  "remote_controlling": "Steuerung",
+  "remote_title_one": "Dieser Browser steuert das Gerät. Der Cardputer-Bildschirm ist pausiert.",
+  "remote_title_many": "Dieser Browser steuert das Gerät ({n} Sitzungen). Der Cardputer-Bildschirm ist pausiert."
 }
