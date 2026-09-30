@@ -11,7 +11,7 @@
 // chat bubbles: your questions right-aligned in blue, ANIMA's answers left with a colored rail,
 // meta notes dim and small. "Compatto" in Settings swaps to the denser 16px Font2 for more lines.
 // All visible strings are ASCII-folded on the way in so accented online text never shows tofu in
-// the ASCII-only GFX font. A fresh/cleared chat shows a suggestion deck (fn+;/. + Invio) that both
+// the ASCII-only GFX font. A fresh/cleared chat shows a suggestion deck (fn+;/. + Enter) that both
 // welcomes and showcases what ANIMA can do; TAB opens the IDEE tab — a drill-down catalog of every
 // offline skill, where parametric entries (e.g. a multiplication) open a fill-in form for the values.
 //
@@ -308,7 +308,7 @@ static bool s_en    = false;                      // mirror of the OS language (
 // cycles tabs (backward), so the two arrows page the carousel symmetrically.
 enum { TAB_IDEE = 0, TAB_OGGI = 1, TAB_GUIDA = 2, TAB_IA = 3, TAB_STATO = 4 };
 #define TAB_N 5
-// IA (settings) tab rows — fixed order; SLIDER rows (Velocita voce/Volume/Luce) entrano in L/R adjust.
+// IA (settings) tab rows — fixed order; SLIDER rows (Velocita voce/Volume/Luce) enter L/R adjust mode.
 enum { IA_ONLINE = 0, IA_LANG, IA_TEXT, IA_VOICE, IA_SPEED, IA_VOL, IA_BRI, IA_CLEAR };
 #define IA_ROWS 8
 #define GUIDE_N 9                                 // cards in the GUIDA manual (also its "row" count)
@@ -522,7 +522,7 @@ static void wrap_ring(int k, bool from_cur)
     if (!s_msg || !s_row) { s_rown = 0; return; }
     bool on = !from_cur;
     for (int i = 0; i < s_mcount; i++) { int idx = (s_mhead - s_mcount + i + MSG_MAX) % MSG_MAX;
-        if (idx == s_full_idx) {                                  // slot corrente: wrappa dal testo pieno...
+        if (idx == s_full_idx) {                                  // current slot: wrap from the full text...
             on = true;
             int len = (int)strlen(s_ses->full);
             if (s_reveal >= 0 && s_reveal < len) {                // ...truncated to s_reveal bytes during the typewriter effect
@@ -928,15 +928,15 @@ static void speak_result(const anima_result_t &r, bool en)
         if (!nucleo_tts_enabled()) return;   // voice off -> skip the whole loop (no useless WAV-plan attempts)
         const char *full = nucleo_anima_long_reply();
         const char *p = (full && full[0]) ? full : r.reply;
-        // CAP 340: una risposta lunga non si recita (monologo) — la voce dice UNA sola volta "leggila".
+        // CAP 340: a long answer is not recited (monologue) — the voice says "leggila" exactly ONCE.
         if ((int)strlen(p) > VOICE_CAP) { nucleo_tts_read_hint(lang); return; }
-        // Sotto il cap: leggi frase per frase ("un po' alla volta"), aspettando l'audio prima della
-        // successiva. Se una frase NON e' coperta dal pool clip, di' "leggila" UNA volta e fermati: MAI
-        // due "leggi" nella stessa risposta. Invio/Esc fermano la voce; un tasto stampabile pure (e resta
-        // come primo carattere della prossima domanda: turn_key).
+        // Under the cap: read sentence by sentence ("un po' alla volta"), waiting for the audio before the
+        // next one. If a sentence is NOT covered by the clip pool, say "leggila" ONCE and stop: NEVER
+        // two "leggi" in the same answer. Enter/Esc stop the voice; so does a printable key (which stays
+        // as the first character of the next question: turn_key).
         bool hinted = false;
         for (int g = 0; *p && g < 24; g++) {
-            if (turn_key() != TK_NONE) { nucleo_audio_stop(); return; }                          // Invio / digitazione = stop
+            if (turn_key() != TK_NONE) { nucleo_audio_stop(); return; }                          // Enter / typing = stop
             char sent[200]; int n = 0;
             while (p[n] && n < (int)sizeof(sent) - 1) { char c = p[n]; sent[n++] = c; if (c == '.' || c == '!' || c == '?') break; }
             sent[n] = 0; p += n;
@@ -944,48 +944,48 @@ static void speak_result(const anima_result_t &r, bool en)
             bool letter = false;   // skip a punctuation-only shard (e.g. ".)") that would just trigger "leggila"
             for (int i = 0; i < n; i++) { char c = sent[i]; if ((c|32) >= 'a' && (c|32) <= 'z') { letter = true; break; } if (c >= '0' && c <= '9') { letter = true; break; } }
             if (!letter) continue;
-            // say_quiet parla la frase se coperta dal pool, altrimenti resta MUTO e ritorna false (niente
-            // "leggila" interno). Il read_hint parte UNA volta sola sotto -> mai due.
+            // say_quiet speaks the sentence if covered by the pool, otherwise stays MUTE and returns false (no
+            // internal "leggila"). The read_hint fires only ONCE below -> never two.
             if (nucleo_tts_say_quiet(sent, lang)) {
-                if (voice_wait(0) != TK_NONE) return;        // un tasto ferma la voce DURANTE il play (non solo tra le frasi)
+                if (voice_wait(0) != TK_NONE) return;        // a key stops the voice DURING playback (not just between sentences)
             }
-            else { if (!hinted) { nucleo_tts_read_hint(lang); hinted = true; } break; }          // scoperta -> una "leggila", poi stop
+            else { if (!hinted) { nucleo_tts_read_hint(lang); hinted = true; } break; }          // uncovered -> one "leggila", then stop
         }
         return;
     }
-    // Il CALCOLO non e' piu' instradato a "leggila": nucleo_tts_say() ora "parlabilizza" = % ^ (mathspeak),
-    // cosi' "Fa 16", "Il 20% di 150 = 30", "5^3 = 125" si pronunciano; cio' che resta scoperto (geometria
-    // simbolo-densa, numeri romani) cade comunque in "leggila" dentro say(). Era il bug "Fa 16 muto".
+    // CALCULATION is no longer routed to "leggila": nucleo_tts_say() now makes symbols speakable = % ^ (mathspeak),
+    // so "Fa 16", "Il 20% di 150 = 30", "5^3 = 125" get pronounced; whatever stays uncovered (symbol-dense
+    // geometry, Roman numerals) still falls to "leggila" inside say(). This was the "Fa 16 muto" bug.
 
-    // TRADUTTORE — voce BILINGUE in due tempi: la CORNICE "cane in inglese" (pausa) poi la TRADUZIONE "dog".
-    // La reply e' `"<src>" in <lingua>: <tgt>[, sinonimi].` -> la cornice = tutto prima del ": " (virgolette
-    // tolte), detta nella lingua UI quando la sorgente E' nella lingua UI (caso comune: parola italiana in
-    // modo IT -> "cane in inglese" tutto coperto dall'indice IT). Se la sorgente e' STRANIERA (parola inglese
-    // in modo IT) la cornice "in italiano" mischierebbe le lingue: ripiego sulla sola parola sorgente nella
-    // sua lingua ("dog" -> "cane"). La pausa e' il gap del wait_idle. I due render usano indici mono-lingua.
+    // TRANSLATOR — BILINGUAL voice in two beats: the FRAME "cane in inglese" (pause) then the TRANSLATION "dog".
+    // The reply is `"<src>" in <lingua>: <tgt>[, sinonimi].` -> the frame = everything before ": " (quotes
+    // stripped), spoken in the UI language when the source IS in the UI language (common case: Italian word in
+    // IT mode -> "cane in inglese" fully covered by the IT index). If the source is FOREIGN (English word
+    // in IT mode) the frame "in italiano" would mix languages: fall back to just the source word in its
+    // own language ("dog" -> "cane"). The pause is the wait_idle gap. The two renders use single-language indexes.
     if (!strcmp(r.intent, "translate")) {
         char tw[80], tl[8];
         if (nucleo_tts_translate_word(r.reply, tw, sizeof tw, tl, sizeof tl)) {
-            char *cm = strchr(tw, ','); if (cm) *cm = 0;          // solo la prima traduzione (non l'elenco sinonimi)
+            char *cm = strchr(tw, ','); if (cm) *cm = 0;          // only the first translation (not the synonym list)
             char *tgt = tw; while (*tgt == ' ') tgt++;
-            const char *src_lang = (tl[0] == 'e' && tl[1] == 'n') ? "it" : "en";   // sorgente = lingua opposta al target
+            const char *src_lang = (tl[0] == 'e' && tl[1] == 'n') ? "it" : "en";   // source = language opposite to the target
             char p1[120]; int o = 0; const char *p1lang;
-            if (!strcmp(src_lang, en ? "en" : "it")) {            // sorgente nella lingua UI -> cornice intera
+            if (!strcmp(src_lang, en ? "en" : "it")) {            // source in the UI language -> full frame
                 const char *colon = strstr(r.reply, ": ");
                 for (const char *p = r.reply; *p && (!colon || p < colon) && o < (int)sizeof(p1) - 1; p++)
                     if (*p != '"') p1[o++] = *p;                  // "cane" in inglese -> cane in inglese
                 p1lang = lang;
-            } else {                                              // sorgente straniera -> solo la parola, sua lingua
+            } else {                                              // foreign source -> just the word, in its own language
                 const char *q1 = strchr(r.reply, '"'), *q2 = q1 ? strchr(q1 + 1, '"') : NULL;
                 if (q1 && q2) for (const char *p = q1 + 1; p < q2 && o < (int)sizeof(p1) - 1; p++) p1[o++] = *p;
                 p1lang = src_lang;
             }
             p1[o] = 0;
-            // MAI due "leggila": say_quiet resta muto su parola scoperta -> un solo read_hint se nessuna parte parla.
+            // NEVER two "leggila": say_quiet stays mute on an uncovered word -> a single read_hint if no part speaks.
             bool spoke = false;
             if (p1[0] && nucleo_tts_say_quiet(p1, p1lang)) {
                 spoke = true;
-                if (voice_wait(2500) != TK_NONE) return;          // interrotta: niente seconda parte
+                if (voice_wait(2500) != TK_NONE) return;          // interrupted: no second part
             }
             if (nucleo_tts_say_quiet(tgt, tl)) spoke = true;
             if (!spoke) nucleo_tts_read_hint(lang);
@@ -993,18 +993,18 @@ static void speak_result(const anima_result_t &r, bool en)
         }
     }
 
-    // Risolvi il template {value} (stato: ora/batteria/data/spazio/...) PRIMA di parlare. Senza, si
-    // vocalizzerebbe il template GREZZO "{value}." e le graffe farebbero scattare la guardia "sa di
-    // codice" -> "leggila", mentre lo schermo (che sostituisce in present_result) mostra il valore
-    // giusto: era questo il "ora a schermo ma non la pronuncia". Stessa sostituzione dello schermo.
+    // Resolve the {value} template (status: time/battery/date/space/...) BEFORE speaking. Without this, the
+    // RAW template "{value}." would be voiced and the braces would trip the "smells like code" guard
+    // -> "leggila", while the screen (which substitutes in present_result) shows the right value:
+    // this was the "time on screen but not spoken" bug. Same substitution as the screen.
     const char *ph = (r.action == ANIMA_ACT_SYSTEM) ? strstr(r.reply, "{value}") : NULL;
     if (ph) {
         char value[384]; fill_system_value(r.arg, value, sizeof value, en);
         char spoken[416];
         snprintf(spoken, sizeof spoken, "%.*s%s%s", (int)(ph - r.reply), r.reply, value, ph + 7);
         if (!strcmp(r.arg, "agenda")) {
-            // L'elenco eventi (orari/testi) e' variabile -> se l'intero non e' pronunciabile, di' almeno
-            // il CONTEGGIO ("oggi hai 3 impegni"), troncando ai due punti. Conteggio detto > "leggila".
+            // The event list (times/texts) is variable -> if the whole is not speakable, at least say
+            // the COUNT ("oggi hai 3 impegni"), truncating at the colon. Spoken count > "leggila".
             char count[80]; snprintf(count, sizeof count, "%s", spoken);
             char *colon = strchr(count, ':'); if (colon) *colon = 0;
             nucleo_tts_say_or(spoken, count, lang);
@@ -1012,9 +1012,9 @@ static void speak_result(const anima_result_t &r, bool en)
             nucleo_tts_say(spoken, lang);
         }
     } else if (nucleo_tts_has_mathtypo(r.reply)) {
-        // FORMULA densa (geometria/fisica: "Area = π·5² = 78.5398") -> la voce non sa dire i simboli; se
-        // c'e' un RISULTATO numerico pulito dopo l'ultimo "=", dillo ("Il risultato e' 78.5398") invece
-        // di "leggila". Altrimenti (formula senza numero, es. "A = π·r²") -> say normale -> "leggila".
+        // Dense FORMULA (geometry/physics: "Area = π·5² = 78.5398") -> the voice can't speak the symbols; if
+        // there is a clean numeric RESULT after the last "=", say it ("Il risultato e' 78.5398") instead
+        // of "leggila". Otherwise (formula with no number, e.g. "A = π·r²") -> normal say -> "leggila".
         char res[48];
         if (nucleo_tts_eq_result(r.reply, res, sizeof res)) {
             char spoken[80]; snprintf(spoken, sizeof spoken, en ? "The result is %s." : "Il risultato e' %s.", res);
@@ -1150,11 +1150,11 @@ static void refresh_complications(void)
 static void load_today(void) { cal_refresh(false); }
 
 // ---- live SYSTEM value resolver (mirrors anima_get() in nucleo_httpd.c) ------
-// BILINGUE: i valori (giorni/mesi/stagioni/ora/spazio/uptime/agenda) escono nella lingua della
-// sessione (en). Senza, in modalita' inglese uscivano in italiano e la voce EN non li copriva
-// -> "leggila" (era il "l'inglese non risponde all'ora"). I template wrapper ({value}) li sceglie
-// gia' INTENTS[] per lingua; qui produciamo il VALORE coerente. Uptime per esteso (no "2g 3h": la
-// voce direbbe le lettere) -> stesso testo a schermo e a voce.
+// BILINGUAL: the values (days/months/seasons/time/space/uptime/agenda) come out in the session
+// language (en). Without this, in English mode they came out in Italian and the EN voice didn't cover them
+// -> "leggila" (this was the "l'inglese non risponde all'ora" bug). The wrapper templates ({value}) are already
+// chosen per language by INTENTS[]; here we produce the matching VALUE. Uptime spelled out (no "2g 3h": the
+// voice would say the letters) -> same text on screen and in speech.
 static void fill_system_value(const char *arg, char *out, size_t n, bool en)
 {
     snprintf(out, n, en ? "not available" : "non disponibile");
@@ -1232,9 +1232,9 @@ static bool apply_event(const char *spec, char *reply, size_t rcap)
     mktime(&t);
     char date[16]; strftime(date, sizeof(date), "%Y-%m-%d", &t);
 
-    // Azzera il task-WDT (8s) PRIMA dell'I/O su SD: questa funzione gira sulla UI task (watchdog-watched)
-    // e una scrittura su SD lenta/contesa puo' prendere secondi -> senza questo il WDT resetta il chip a
-    // meta' scrittura (era il "i promemoria fanno riavviare"). No-op se la task non e' iscritta al WDT.
+    // Reset the task-WDT (8s) BEFORE the SD I/O: this function runs on the UI task (watchdog-watched)
+    // and a slow/contended SD write can take seconds -> without this the WDT resets the chip in the
+    // middle of the write (this was the "i promemoria fanno riavviare" bug). No-op if the task isn't subscribed to the WDT.
     if (esp_task_wdt_status(NULL) == ESP_OK) esp_task_wdt_reset();
     const char *path = CAL_PATH;
     bool had_data = false;
@@ -1255,7 +1255,7 @@ static bool apply_event(const char *spec, char *reply, size_t rcap)
     char *outc = cJSON_PrintUnformatted(root); cJSON_Delete(root);
     bool ok = false;
     if (outc) {
-        if (esp_task_wdt_status(NULL) == ESP_OK) esp_task_wdt_reset();   // read+parse fatti: ripeti pet prima del write
+        if (esp_task_wdt_status(NULL) == ESP_OK) esp_task_wdt_reset();   // read+parse done: pet again before the write
         mkdir(NUCLEO_SD_MOUNT "/system", 0775); mkdir(NUCLEO_SD_MOUNT "/system/config", 0775);
         char tmp[160]; snprintf(tmp, sizeof(tmp), "%s.tmp", path);
         FILE *o = fopen(tmp, "wb");
@@ -1264,11 +1264,11 @@ static bool apply_event(const char *spec, char *reply, size_t rcap)
     }
     if (ok) {
         s_ses->cal_ok = false;          // the calendar changed: the next reader re-parses it (cal_refresh)
-        // NIENTE event_publish qui: on-device (ANIMA nativa) NON c'e' MAI un client web da refreshare, e il
-        // publish prende il mutex del bus eventi con portMAX_DELAY + scrive il journal su SD MENTRE apply_event
-        // sta gia' usando la SD -> se quella scrittura si contende/blocca, il mutex resta preso all'infinito e
-        // ogni task che usa il bus (httpd incluso) si blocca = FREEZE TOTALE del device. Il reminder deve SOLO
-        // scrivere il file. (Il path web in nucleo_httpd.c pubblica ancora l'evento, li' un client puo' esserci.)
+        // NO event_publish here: on-device (native ANIMA) there is NEVER a web client to refresh, and the
+        // publish takes the event-bus mutex with portMAX_DELAY + writes the journal to SD WHILE apply_event
+        // is already using the SD -> if that write contends/blocks, the mutex stays taken forever and
+        // every task using the bus (httpd included) blocks = TOTAL device FREEZE. The reminder must ONLY
+        // write the file. (The web path in nucleo_httpd.c still publishes the event, a client may be there.)
         if (tm[0]) snprintf(reply, rcap, s_en ? "Added \"%s\" on %s at %s." : "Aggiunto \"%s\" il %s alle %s.", text, date, tm);
         else       snprintf(reply, rcap, s_en ? "Added \"%s\" on %s."       : "Aggiunto \"%s\" il %s.",       text, date);
     }
@@ -1372,24 +1372,24 @@ static void make_tag(char *out, size_t n, const anima_result_t &r, int ms)
 // Turn the just-returned result into transcript messages (and queue a launch if asked). `ms` = the turn time.
 static void present_result(int ms)
 {
-    char reply[1024];   // pieno fino al cap del motore (s_ses->res.reply[1024]): la risposta corrente si mostra INTERA
-    // NB: sullo stack di proposito, NON static — su ADV 1 KB di .bss in piu' spinge httpd_start oltre il filo
-    // del rasoio dell'heap di boot (abort loop in main.c). La pressione sullo stack main 8 KB e' un rischio
-    // teorico latente (mai un overflow osservato); l'heap di boot e' il vincolo reale. Vedi boot-ram-discipline.
-    bool tool_ok = true;            // esito dell'operazione TOOL -> conferma vocale "Fatto"/"Errore"
+    char reply[1024];   // full up to the engine cap (s_ses->res.reply[1024]): the current answer is shown IN FULL
+    // NB: on the stack on purpose, NOT static — on ADV 1 KB more of .bss pushes httpd_start over the razor's
+    // edge of the boot heap (abort loop in main.c). The pressure on the 8 KB main stack is a latent
+    // theoretical risk (never an observed overflow); the boot heap is the real constraint. See boot-ram-discipline.
+    bool tool_ok = true;            // outcome of the TOOL operation -> spoken confirmation "Fatto"/"Errore"
     s_ses->launch[0] = 0;           // a new answer supersedes any "Enter = open <app>" offer
     bool _tool_write = s_ses->res.action == ANIMA_ACT_TOOL &&
         (!strcmp(s_ses->res.intent, "add_event") || !strcmp(s_ses->res.intent, "create_file"));
-    // PIPELINE SEQUENZIALE (mai operazioni parallele): prima di scrivere il memo su SD, FERMA del tutto
-    // l'audio in corso e attendi che il task player si sia smontato. Senza, la scrittura SD del calendario
-    // correva IN PARALLELO con il task audio che legge/scrive la stessa SD (assemblaggio WAV/play della
-    // voce di una risposta precedente) -> contesa FatFs/I2S che inchioda il device (era il freeze del
-    // "ricordami/segna appuntamento"). nucleo_audio_stop e' bounded (~4.5s max) e pet-a il WDT. Cosi' la
-    // sequenza e': capisci (query inline, gia' conclusa) -> [stop audio + libera] -> scrivi
-    // memo -> SOLO DOPO sintetizza la voce di conferma (in coda, sotto). Una risorsa per volta.
+    // SEQUENTIAL PIPELINE (never parallel operations): before writing the memo to SD, fully STOP the
+    // audio in progress and wait for the player task to tear down. Without this, the calendar's SD write
+    // ran IN PARALLEL with the audio task reading/writing the same SD (WAV assembly/playback of the
+    // voice of a previous answer) -> FatFs/I2S contention that hangs the device (this was the freeze of
+    // "ricordami/segna appuntamento"). nucleo_audio_stop is bounded (~4.5s max) and pets the WDT. So the
+    // sequence is: understand (inline query, already finished) -> [stop audio + free] -> write
+    // memo -> ONLY AFTER synthesize the confirmation voice (queued, below). One resource at a time.
     if (_tool_write) {
-        nucleo_audio_stop();             // nessun task audio tocca la SD mentre scriviamo il memo
-        nucleo_audio_wait_idle(200);     // margine: l'uscita I2S e' libera prima dell'I/O su SD
+        nucleo_audio_stop();             // no audio task touches the SD while we write the memo
+        nucleo_audio_wait_idle(200);     // margin: the I2S output is free before the SD I/O
         ESP_LOGW(ATAG, "TOOL %s START free=%u largest=%u", s_ses->res.intent,
             (unsigned)esp_get_free_heap_size(), (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT));
     }
@@ -1406,7 +1406,7 @@ static void present_result(int ms)
         char path[128]; snprintf(path, sizeof(path), NUCLEO_SD_MOUNT "%s", s_ses->res.arg);
         char dir[128]; snprintf(dir, sizeof(dir), "%s", path);
         char *slash = strrchr(dir, '/'); if (slash && slash != dir) { *slash = 0; mkdir(dir, 0775); }
-        if (esp_task_wdt_status(NULL) == ESP_OK) esp_task_wdt_reset();   // pet il WDT prima del write SD (come apply_event)
+        if (esp_task_wdt_status(NULL) == ESP_OK) esp_task_wdt_reset();   // pet the WDT before the SD write (like apply_event)
         FILE *ex = fopen(path, "rb");
         if (ex) { fclose(ex); snprintf(reply, sizeof(reply), s_en ? "%s already exists: I won't overwrite it." : "%s esiste gia: non lo sovrascrivo.", bn); nucleo_anima_note_file(s_ses->res.arg); nucleo_anima_observe("create_file", true); }
         else {
@@ -1427,8 +1427,8 @@ static void present_result(int ms)
         if (want > 100) want = 100;
         if (vol) nucleo_audio_set_volume(want); else nucleo_app_set_brightness(want);
         nucleo_app_persist_prefs();   // a spoken "set volume/brightness" is a deliberate pref -> survives reboot
-        // Bilingue: e' pronunciata PER INTERO (say_or sotto), quindi in EN deve uscire in inglese o la
-        // voce EN non la coprirebbe. mathspeak rende "%" -> "per cento"/"percent".
+        // Bilingual: it is spoken IN FULL (say_or below), so in EN it must come out in English or the
+        // EN voice wouldn't cover it. mathspeak renders "%" -> "per cento"/"percent".
         snprintf(reply, sizeof(reply), s_en ? (vol ? "Volume %d%%." : "Brightness %d%%.")
                                             : (vol ? "Volume al %d%%." : "Luminosita al %d%%."), want);
         nucleo_anima_observe(s_ses->res.intent, true);
@@ -1469,8 +1469,8 @@ static void present_result(int ms)
         const char *body = (full && full[0]) ? full : (s_ses->res.reply[0] ? s_ses->res.reply : (s_en ? "I don't know." : "Non lo so."));
         snprintf(reply, sizeof(reply), "%s", body);
     }
-    // La risposta CORRENTE si mostra INTERA: salva il testo pieno (foldato) in s_ses->full; quel messaggio verra'
-    // wrappato da li' (vedi rebuild_rows). Nel ring va solo la copia accorciata qui sotto (cronologia, RAM bassa).
+    // The CURRENT answer is shown IN FULL: store the full (folded) text in s_ses->full; that message will be
+    // wrapped from there (see rebuild_rows). Only the shortened copy below goes into the ring (history, low RAM).
     app_ui_ascii_fold(reply, s_ses->full, sizeof s_ses->full);
     // Tiny screen: keep a long answer SHORT in the HISTORY ring (the current one shows full, scroll to read).
     // Clip at a clean boundary — the longest complete sentence within the limit, else a whole word; never mid-word.
@@ -1483,13 +1483,13 @@ static void present_result(int ms)
         reply[cut] = 0;
     }
     // The answer bubble: amber rail when ANIMA is asking a follow-up (awaiting a reply), else violet.
-    s_full_idx = -1;                                  // il rebuild dentro push_anima NON deve applicare s_ses->full allo slot vecchio
-    push_anima(reply, s_ses->res.awaiting ? AMBER : ACC);  // copia accorciata nel ring (cronologia)
-    s_full_idx = (s_mhead - 1 + MSG_MAX) % MSG_MAX;   // marca lo slot appena scritto: mostralo INTERO da s_ses->full
+    s_full_idx = -1;                                  // the rebuild inside push_anima must NOT apply s_ses->full to the old slot
+    push_anima(reply, s_ses->res.awaiting ? AMBER : ACC);  // shortened copy into the ring (history)
+    s_full_idx = (s_mhead - 1 + MSG_MAX) % MSG_MAX;   // mark the slot just written: show it IN FULL from s_ses->full
     s_ses->vmode = V_ANCHOR; s_ses->anchor = (signed char)s_full_idx;   // reader: the answer's FIRST row at the top
     make_tag(s_msg[s_full_idx].tag, MSG_TAG, s_ses->res, ms);            // "L1 . 0.4 s" at the answer's end
     snprintf(s_ses->last_tag, sizeof s_ses->last_tag, "%s", s_msg[s_full_idx].tag);
-    rebuild_rows();                                   // ri-wrappa quel messaggio dal testo pieno
+    rebuild_rows();                                   // re-wrap that message from the full text
     if (s_ses->res.corrected[0]) { char c[80]; snprintf(c, sizeof(c), s_en ? "(understood: %s)" : "(ho inteso: %s)", s_ses->res.corrected); push_meta(c, DIM); }
     // Reasoning trace (Claude-Code-style steps): only for genuine multi-step agent turns (those whose
     // trace has a step separator). Single-tier answers stay clean — the badge already shows tier+conf.
@@ -1512,10 +1512,10 @@ static void present_result(int ms)
     s_last_math = is_math_intent(s_ses->res.intent) && s_ses->res.action == ANIMA_ACT_ANSWER;
     if (s_last_math) extract_last_number(reply, s_ses->last_num, sizeof s_ses->last_num); else s_ses->last_num[0] = 0;
 
-    // Conferma VOCALE delle operazioni (TOOL): se la frase esatta non e' pronunciabile (nomi file,
-    // dettagli evento -> finirebbe in "leggila"), dice una conferma breve sull'ESITO. Le reply gia'
-    // coperte (es. "Volume al 70 per cento") vengono dette tali e quali. I LANCIO non parlano:
-    // l'app che si apre e' gia' il feedback. (Nel path low-mem speak_result salta TOOL: niente doppio.)
+    // Spoken CONFIRMATION of operations (TOOL): if the exact sentence is not speakable (file names,
+    // event details -> would end up as "leggila"), say a short confirmation of the OUTCOME. Replies that are already
+    // covered (e.g. "Volume al 70 per cento") are spoken as-is. LAUNCHes don't speak:
+    // the app opening is already the feedback. (In the low-mem path speak_result skips TOOL: no double.)
     if (s_ses->res.action == ANIMA_ACT_TOOL) {
         if (_tool_write) ESP_LOGW(ATAG, "TOOL %s SPEAK start largest=%u", s_ses->res.intent,
             (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT));
@@ -1524,7 +1524,7 @@ static void present_result(int ms)
     }
 
     s_d_hdr = true;
-    s_d_input = true;                              // ridipingi la riga input: toglie lo stato "sta scrivendo" quando s_busy si spegne
+    s_d_input = true;                              // repaint the input row: clears the "is typing" state when s_busy turns off
     save_chat();                                   // persist the transcript so re-entry shows this turn
 }
 
@@ -1533,7 +1533,7 @@ static void ask_clear(void);               // "Clear chat" behind the confirm ca
 static void submit(void);
 static void chat_type(char ch);            // types one char into the chat line (defined with the key handlers)
 static void refresh_complications(void);   // watch-face glance strip; used by clear_chat() above its definition
-static const char *chat_hint(void);        // footer hint (usato da cancel_query/submit prima della sua def)
+static const char *chat_hint(void);        // footer hint (used by cancel_query/submit before its definition)
 
 // Stop command (/stop, Enter/DEL while busy): hush any voice and free the UI. The inline turn itself is
 // stopped from inside submit() (turn_key) — the loop can't deliver keys while it runs.
@@ -1542,8 +1542,8 @@ static void cancel_query(void)
     if (!s_busy) { push_meta(s_en ? "Nothing to stop." : "Niente da fermare.", DIM); return; }
     nucleo_audio_stop();                            // hush any sentence being read aloud right now
     s_busy = false; s_spin = 0;
-    s_d_hdr = true; s_d_input = true;   // ridipingi la riga input: toglie i puntini "pensa" (anche path NK_DEL)
-    nucleo_app_set_hint(chat_hint());   // ripristina il footer normale
+    s_d_hdr = true; s_d_input = true;   // repaint the input row: clears the "pensa" dots (also the NK_DEL path)
+    nucleo_app_set_hint(chat_hint());   // restore the normal footer
     push_meta(s_en ? "(stopped)" : "(annullato)", DIM);
 }
 
@@ -1563,13 +1563,13 @@ static void launch_now(void)
     nucleo_app_exit();                                         // Solo: saves + esp_restart(), never returns
 }
 
-// Effetto "scrittura" stile GPT/Claude per le risposte ONLINE: rivela la risposta corrente in al massimo
-// TW_FRAMES frame (~0.35 s + render, qualunque sia la lunghezza) invece dei ~40-80 frame da 50 ms di prima,
-// che aggiungevano 1.5-2.5 s a una risposta media. Ogni frame ri-wrappa SOLO la risposta corrente (+ le
-// meta che la seguono): le righe dei messaggi precedenti non cambiano e restano come sono (wrap_ring).
-// Le risposte offline (istantanee) non passano di qui: compaiono subito. Path inline (Solo): il loop UI e'
-// bloccato dalla submit, qui animiamo noi. Ritorna TK_STOP (Invio/Esc: salta la voce), TK_TYPED (tasto
-// stampabile: tenuto per la prossima domanda, salta la voce) o TK_NONE.
+// GPT/Claude-style "typing" effect for ONLINE answers: reveals the current answer in at most
+// TW_FRAMES frames (~0.35 s + render, whatever the length) instead of the previous ~40-80 frames of 50 ms,
+// which added 1.5-2.5 s to an average answer. Each frame re-wraps ONLY the current answer (+ the
+// metas that follow it): the rows of earlier messages don't change and stay as they are (wrap_ring).
+// Offline answers (instant) don't come through here: they appear immediately. Inline path (Solo): the UI loop is
+// blocked by submit, so we animate here. Returns TK_STOP (Enter/Esc: skip the voice), TK_TYPED (printable
+// key: kept for the next question, skips the voice) or TK_NONE.
 #define TW_FRAMES   10
 #define TW_FRAME_MS 35
 static int typewriter_reveal(void)
@@ -1587,13 +1587,13 @@ static int typewriter_reveal(void)
         n += step; if (n > total) n = total;
         while (n < total && s_ses->full[n] != ' ') n++;        // finish the word: never cut one in half
         s_reveal = n;
-        s_spin = (s_spin + 1) & 3;                             // anima i pallini "pensa" MENTRE scrive
-        if (k >= 0) wrap_ring(k, true); else rebuild_rows();   // ri-wrappa solo il messaggio troncato
-        s_d_input = true;                                      // ridipingi anche i pallini
+        s_spin = (s_spin + 1) & 3;                             // animate the "pensa" dots WHILE it types
+        if (k >= 0) wrap_ring(k, true); else rebuild_rows();   // re-wrap only the truncated message
+        s_d_input = true;                                      // repaint the dots too
         draw();
-        if (n >= total) break;                                 // ultimo frame: gia' tutto a schermo
+        if (n >= total) break;                                 // last frame: already all on screen
         res = turn_key();
-        if (res != TK_NONE) break;                             // Invio/Esc = STOP; un tasto stampabile pure
+        if (res != TK_NONE) break;                             // Enter/Esc = STOP; so does a printable key
         vTaskDelay(pdMS_TO_TICKS(TW_FRAME_MS));
     }
     s_reveal = -1;
@@ -1710,10 +1710,10 @@ static void submit(void)
     // only thing running anyway), then paints the answer. (ANIMA only ever runs in Solo: enter() reboots
     // into it, so this is the only query path.)
     s_busy = true;
-    nucleo_app_set_hint(s_en ? "Enter to stop" : "Invio per fermare");   // footer: come fermare durante l'esecuzione
-    launcher_render_hint_bar();                                          // ...dipinto SUBITO (il loop framework e' bloccato per tutto il turno inline)
-    // CHAT-FEEL: la query inline BLOCCA questo task UI -> senza, lo schermo resta congelato sullo stato
-    // pre-invio fino alla risposta. Dipingi SUBITO la bolla utente + i puntini "pensa".
+    nucleo_app_set_hint(s_en ? "Enter to stop" : "Invio per fermare");   // footer: how to stop while running
+    launcher_render_hint_bar();                                          // ...painted IMMEDIATELY (the framework loop is blocked for the whole inline turn)
+    // CHAT-FEEL: the inline query BLOCKS this UI task -> without this, the screen stays frozen on the
+    // pre-submit state until the answer. Paint the user bubble + the "pensa" dots IMMEDIATELY.
     s_spin = 0; s_d_body = s_d_input = s_d_hdr = true; draw();
     // The FIRST query after the Solo reboot races the Wi-Fi reconnect (~5-8 s): if online is on but the
     // IP isn't up yet, online_available() is false -> the cascade stands UP L1 and answers offline even
@@ -1723,7 +1723,7 @@ static void submit(void)
     if (nucleo_anima_online_enabled()) {
         for (int i = 0; i < 50 && !nucleo_anima_online_available(); i++) {
             if (esp_task_wdt_status(NULL) == ESP_OK) esp_task_wdt_reset();
-            if ((i & 3) == 0) { s_spin = (s_spin + 1) & 3; s_d_input = true; draw(); }   // anima "sta scrivendo..."
+            if ((i & 3) == 0) { s_spin = (s_spin + 1) & 3; s_d_input = true; draw(); }   // animate "sta scrivendo..."
             vTaskDelay(pdMS_TO_TICKS(100));
         }
     }
@@ -1754,16 +1754,16 @@ static void submit(void)
     // SEEN. Paint it synchronously now (ANIMA is direct-draw), THEN speak. Only an ONLINE answer gets the
     // (capped) typewriter; an offline one is instant, so it appears at once — the reveal was pure latency.
     int stop = (s_ses->res.tier == ANIMA_TIER_REMOTE) ? typewriter_reveal() : TK_NONE;
-    s_busy = false;        // scrittura finita -> pallini via, prompt normale, badge -> orologio
+    s_busy = false;        // typing finished -> dots gone, normal prompt, badge -> clock
     s_d_input = s_d_hdr = true; draw();
-    // Keys pressed during the query/reveal: Invio/Esc = STOP (salta la voce, il testo resta a schermo); un
-    // tasto stampabile salta la voce E diventa il primo carattere della prossima domanda (s_ses->carry).
+    // Keys pressed during the query/reveal: Enter/Esc = STOP (skips the voice, the text stays on screen); a
+    // printable key skips the voice AND becomes the first character of the next question (s_ses->carry).
     if (stop == TK_NONE) stop = drain_turn_keys();
     if (stop == TK_STOP) push_meta(s_en ? "(stopped)" : "(annullato)", DIM);
-    else if (stop == TK_NONE) speak_result(s_ses->res, s_en);   // voce on-device, interrompibile (turn_key)
-    esp_task_wdt_add(NULL);                   // turn finito (query + render voce SD-lenta): ri-sottoscrivi il task WDT
+    else if (stop == TK_NONE) speak_result(s_ses->res, s_en);   // on-device voice, interruptible (turn_key)
+    esp_task_wdt_add(NULL);                   // turn finished (query + slow-SD voice render): re-subscribe the task WDT
     if (s_ses->carry) { char c = s_ses->carry; s_ses->carry = 0; chat_type(c); }   // start the next question
-    nucleo_app_set_hint(chat_hint()); launcher_render_hint_bar();   // ripristina il footer normale
+    nucleo_app_set_hint(chat_hint()); launcher_render_hint_bar();   // restore the normal footer
     s_d_input = true; s_d_hdr = true;
     nucleo_app_request_draw();
 }
@@ -1801,9 +1801,9 @@ static void clear_confirm_done(bool yes)
 // ---- suggestion deck (empty-state) ------------------------------------------
 // A fresh/cleared chat shows starter prompts that exercise the breadth of ANIMA AND lean on everyday
 // human life: time, weather, Wi-Fi/network, mental math, a calendar reminder, a unit conversion, a
-// percentage (tip/discount), capabilities. fn+;/. pick, Invio runs. (No "open app" prompt here on purpose:
+// percentage (tip/discount), capabilities. fn+;/. pick, Enter runs. (No "open app" prompt here on purpose:
 // opening an app leaves ANIMA with a reboot — it lives in IDEE > App e file, one confirm away.)
-#define SUG_N 16   // deck espanso: 16 voci scrollabili (su/giu), copre piu' skill
+#define SUG_N 16   // expanded deck: 16 scrollable entries (up/down), covers more skills
 static const char *SUG_IT[SUG_N] = {
     "Che ore sono", "Che giorno e oggi", "Meteo a Brescia",
     "Quanto spazio ho sulla SD", "A che rete sono connesso", "Quanto fa 18 x 24",
@@ -1964,7 +1964,7 @@ static const Leaf LEAVES[] = {
     { 6,1, "Apri app","Open app",        "Apri %s","Open %s",                                     "App es musica","App e.g. music",0,0 },
     { 6,0, "Musica","Music",             "Apri la musica","Open music",                           0,0,0,0 },
     { 6,0, "Impostazioni","Settings",    "Apri le impostazioni","Open settings",                  0,0,0,0 },
-    // NOTA RAPIDA: sentinella @note in p1 (slots=0) -> activate_leaf apre l'editor con path timestamp
+    // QUICK NOTE: @note sentinel in p1 (slots=0) -> activate_leaf opens the editor with a timestamp path
     { 6,0, "Nota rapida","Quick note",   0,0,  "@note",0,  0,0 },
     // EDITOR leaf: slots=1 collects the PATH, then "@editor" (sentinel in p2) opens the full-screen
     // textarea instead of sending a query; the typed content is written to that path on Ctrl+S.
@@ -1978,9 +1978,9 @@ static const Leaf LEAVES[] = {
     { 7,1, "Capo di stato","Head of st.","Chi e il capo di stato di %s","Who is the head of state of %s","Nazione","Country",0,0 },
     { 7,1, "Esempio codice","Code ex.",  "Scrivimi un esempio di codice %s","Write a code example in %s","Linguaggio","Language",0,0 },
     { 7,0, "Su NucleoOS","About OS",     "Cos'e NucleoOS","What is NucleoOS",                     0,0,0,0 },
-    // -- Traduci (8) -- la PAROLA va PRIMA della lingua: il parser del traduttore estrae il residuo tra
-    // "traduci"/"translate" e "in inglese"/"to english". Col vecchio "Traduci in inglese: <parola>" la
-    // parola finiva dopo i due punti e NON veniva estratta -> "Cosa traduco?". Ora "traduci <parola> in ...".
+    // -- Traduci (8) -- the WORD goes BEFORE the language: the translator's parser extracts the remainder between
+    // "traduci"/"translate" and "in inglese"/"to english". With the old "Traduci in inglese: <parola>" the
+    // word ended up after the colon and was NOT extracted -> "Cosa traduco?". Now "traduci <parola> in ...".
     { 8,1, "In inglese","To English",    "traduci %s in inglese","translate %s to english",     "Testo","Text",0,0 },
     { 8,1, "In italiano","To Italian",   "traduci %s in italiano","translate %s to italian",     "Testo","Text",0,0 },
 };
@@ -2159,7 +2159,7 @@ static void leave(void)
     // Give the shared 32 KB canvas back before handing over (bounded ~700 ms; the lazy getter heals later).
     // In practice leave() only runs from close_app() in the Solo boot, right before its esp_restart().
     for (int i = 0; i < 35 && !nucleo_screen_acquire(); i++) vTaskDelay(pdMS_TO_TICKS(20));
-    if (nucleo_exclusive_active()) nucleo_exclusive_exit();  // ripristina httpd/L1/mDNS/voce: canvas gia' ripristinata
+    if (nucleo_exclusive_active()) nucleo_exclusive_exit();  // restore httpd/L1/mDNS/voice: canvas already restored
     d.setFont(&fonts::Font0); d.setTextSize(1);    // restore the framework's default font for the next app
 }
 
@@ -2178,7 +2178,7 @@ static const char *chat_hint(void)
 static void menu_hint(void)
 {
     if (s_edit) {
-        if (s_tab == TAB_IA && s_mrow == IA_SPEED) {   // mostra il valore % mentre si regola la velocita' voce
+        if (s_tab == TAB_IA && s_mrow == IA_SPEED) {   // show the % value while adjusting the voice speed
             char h[40]; snprintf(h, sizeof h, s_en ? "speed %d%%   l/r   enter ok" : "vel %d%%   sx/dx   invio ok", nucleo_tts_speed());
             nucleo_app_set_hint(h); return;
         }
@@ -2248,7 +2248,7 @@ static void idee_form_key(int key, char ch);   // defined below (fill-in form ke
 static bool on_back(int key)
 {
     if (!s_ses) { if (key == NK_BACK) nucleo_app_exit(); return true; }   // OOM notice: Esc leaves (Solo -> reboot)
-    if (s_exit_confirm) { s_exit_confirm = false; mark_all_dirty(); nucleo_app_request_draw(); return true; }  // Esc nel modale = annulla (resta)
+    if (s_exit_confirm) { s_exit_confirm = false; mark_all_dirty(); nucleo_app_request_draw(); return true; }  // Esc in the modal = cancel (stay)
     if (s_ses->clear_confirm) {                             // confirm card: Esc = No, ',' toggles the focus
         if (key == NK_BACK) clear_confirm_done(false);
         else { app_ui_confirm_key(NK_LEFT, 0, &s_ses->clear_yes); nucleo_app_request_draw(); }
@@ -2268,7 +2268,7 @@ static bool on_back(int key)
         return true;
     }
     if (!s_menu_open) {                                     // chat base + welcome deck
-        if (key == NK_BACK) { s_exit_confirm = true; nucleo_app_request_draw(); return true; }  // Esc -> chiedi conferma, NON chiudere subito
+        if (key == NK_BACK) { s_exit_confirm = true; nucleo_app_request_draw(); return true; }  // Esc -> ask for confirmation, do NOT close right away
         if (!key_mod()) chat_type(',');                     // ',' types a comma (was: closed ANIMA = Solo reboot)
         return true;                                        // fn+, (Left arrow): nothing to move on an append-only line
     }
@@ -2308,7 +2308,7 @@ static void slider_adjust(int delta)
     if (s_tab != TAB_IA) return;
     if      (s_mrow == IA_VOL)   nucleo_audio_set_volume(nucleo_audio_volume() + delta);
     else if (s_mrow == IA_BRI)   nucleo_app_set_brightness(nucleo_app_brightness() + delta);
-    else if (s_mrow == IA_SPEED) nucleo_tts_set_speed(nucleo_tts_speed() + delta);   // velocita' voce ±5%
+    else if (s_mrow == IA_SPEED) nucleo_tts_set_speed(nucleo_tts_speed() + delta);   // voice speed ±5%
 }
 
 // IDEE tab: the skill catalog, a two-level drill-down. Categories -> ENTER drills into a category's
@@ -2369,8 +2369,8 @@ static void activate_leaf(int li)
         // (busy -> only a meta line, which alone wouldn't clear the old tab bar).
         s_menu_open = false; reset_idee();
         nucleo_app_set_hint(chat_hint()); mark_all_dirty();
-        // NOTA RAPIDA: sentinella @note in p1_it -> genera path con timestamp e apre l'editor direttamente.
-        // Non invia nessuna query; l'utente scrive il contenuto e Ctrl+S salva il file.
+        // QUICK NOTE: @note sentinel in p1_it -> generates a timestamped path and opens the editor directly.
+        // It sends no query; the user types the content and Ctrl+S saves the file.
         if (L->p1_it && !strcmp(L->p1_it, "@note")) {
             char path[80];
             quick_note_path(path, sizeof path);             // per-second name, never an existing file
@@ -2477,8 +2477,8 @@ static void editor_open(const char *path)
 }
 // Write the buffer to the SD path (guarded: absolute "/..." path, no ".."). NEVER overwrites: the
 // editor starts empty, so writing over an existing file would silently wipe it — an existing name
-// becomes name-2, name-3... Creates the parent dir, stops audio first (sequenziale: una risorsa per
-// volta), pets the WDT around the SD I/O. Success: confirmation in the chat + editor closed. FAILURE:
+// becomes name-2, name-3... Creates the parent dir, stops audio first (sequential: one resource at a
+// time), pets the WDT around the SD I/O. Success: confirmation in the chat + editor closed. FAILURE:
 // the editor STAYS OPEN with the text intact and the footer says so; a user path that can't be written
 // (bad name, missing parent chain) is re-pointed to a fresh /data/note/ name — the title bar shows it —
 // so the very next Ctrl+S can still rescue the text.
@@ -2559,7 +2559,7 @@ static void ia_key(int key)
         if      (key == NK_RIGHT || key == NK_UP) slider_adjust(+5);
         else if (key == NK_DOWN)                  slider_adjust(-5);
         else if (key == NK_ENTER)               { s_edit = false; nucleo_app_persist_prefs(); }   // save volume/brightness on exit
-        menu_hint(); nucleo_app_request_draw(); return;     // hint aggiorna il % della velocita' live
+        menu_hint(); nucleo_app_request_draw(); return;     // the hint updates the live speed %
     }
     if      (key == NK_UP)   s_mrow = (s_mrow > 0) ? s_mrow - 1 : -1;   // row 0 -> back to the tab bar
     else if (key == NK_DOWN) { if (s_mrow < IA_ROWS - 1) s_mrow++; }
@@ -2575,7 +2575,7 @@ static void ia_key(int key)
                 if (s_ses->vmode == V_MANUAL) s_ses->vmode = V_FOLLOW;
                 rebuild_rows(); break;
             case IA_VOICE:  if (nucleo_tts_available()) nucleo_tts_set_enabled(!nucleo_tts_enabled()); break;
-            case IA_SPEED:  s_edit = true; break;            // -> L/R adjust mode (velocita' voce)
+            case IA_SPEED:  s_edit = true; break;            // -> L/R adjust mode (voice speed)
             case IA_VOL:    s_edit = true; break;            // -> L/R adjust mode
             case IA_BRI:    s_edit = true; break;
             case IA_CLEAR:  ask_clear(); return;           // destructive: the confirm card first
@@ -2648,7 +2648,7 @@ static void retry_online(void)
 static void on_key(int key, char ch)
 {
     if (!s_ses) return;                                     // no session block: only Esc (on_back) works
-    if (s_exit_confirm) {                                   // modale conferma: Invio = conferma, altro = annulla
+    if (s_exit_confirm) {                                   // confirm modal: Enter = confirm, anything else = cancel
         s_exit_confirm = false;
         if (s_ed_open) {                                    // editor "discard the text?": Enter only (letters are
             if (key == NK_ENTER) editor_cancel();           // what you type — a stray 's' must never discard a note)
@@ -2656,8 +2656,8 @@ static void on_key(int key, char ch)
             return;
         }
         if (key == NK_ENTER || ch == 's' || ch == 'S' || ch == 'y' || ch == 'Y')
-            nucleo_app_exit();                             // conferma -> chiude (in Solo = esp_restart, NON ritorna)
-        else { mark_all_dirty(); nucleo_app_request_draw(); }   // annulla -> torna alla chat
+            nucleo_app_exit();                             // confirm -> closes (in Solo = esp_restart, does NOT return)
+        else { mark_all_dirty(); nucleo_app_request_draw(); }   // cancel -> back to the chat
         return;
     }
     if (s_ses->clear_confirm) {                             // the confirm card owns every key
@@ -2712,7 +2712,7 @@ static void on_key(int key, char ch)
         return;
     }
 
-    if (key == NK_ENTER) {                                  // Invio mentre elabora = stop (the inline turn polls it itself: turn_key)
+    if (key == NK_ENTER) {                                  // Enter while processing = stop (the inline turn polls it itself: turn_key)
         if (!s_busy && s_ilen == 0) {                        // empty line: open the offered app, else the reader
             if (s_ses->launch[0]) launch_now(); else reader_open();
             return;
@@ -2841,7 +2841,7 @@ static int build_ia(IAItem *it)
     snprintf(it[IA_TEXT].val, 14, "%s", s_big ? (s_en ? "Big" : "Grande") : (s_en ? "Small" : "Piccolo"));
     it[IA_VOICE].label = s_en ? "Voice" : "Voce"; it[IA_VOICE].kind = SV_TOGGLE;
     it[IA_VOICE].on = nucleo_tts_available() && nucleo_tts_enabled();
-    // Velocita' di lettura: slider mappato dall'intervallo % [MIN..MAX] a 0..100 per il disegno della barra.
+    // Reading speed: slider mapped from the % range [MIN..MAX] to 0..100 for drawing the bar.
     it[IA_SPEED].label = s_en ? "Speed" : "Velocita"; it[IA_SPEED].kind = SV_SLIDER;
     it[IA_SPEED].slider = (nucleo_tts_speed() - TTS_SPEED_MIN) * 100 / (TTS_SPEED_MAX - TTS_SPEED_MIN);
     it[IA_VOL].label = "Volume"; it[IA_VOL].kind = SV_SLIDER; it[IA_VOL].slider = nucleo_audio_volume();
@@ -3394,7 +3394,7 @@ static void draw_header(int top)
 static void draw_deck(int ty0, int avail)
 {
     // Glance header: a time-of-day greeting (left) + clock (right) — like a watch's top card — then
-    // the starter prompts. fn+;/. pick, Invio (or 1-9) sends, so the first ask needs no typing.
+    // the starter prompts. fn+;/. pick, Enter (or 1-9) sends, so the first ask needs no typing.
     // Painted in place (opaque text + leftovers): moving the pick repaints the rows, never a blank body.
     time_t now = time(NULL); struct tm *tm = localtime(&now);
     int hr = tm ? tm->tm_hour : 9;
@@ -3545,7 +3545,7 @@ static void draw_input(int top, int h)
     const int fh = (int)d.fontHeight();
     d.fillRect(0, in_top + 1, 240, ty - in_top - 1, BG);   // the margins around the glyph band (BG over BG: invisible)
     if (ty + fh < bot) d.fillRect(0, ty + fh, 240, bot - ty - fh, BG);
-    if (s_busy && s_ilen == 0) {                            // pensa: onda di 4 pallini, il "picco" luminoso scorre
+    if (s_busy && s_ilen == 0) {                            // thinking: wave of 4 dots, the bright "peak" travels
         const int cy = in_top + inH / 2, act = (int)(s_spin & 3);
         d.fillRect(0, ty, 72, fh, BG);
         for (int i = 0; i < 4; i++) {
@@ -3580,7 +3580,7 @@ static void draw_input(int top, int h)
 // without touching anything else (no flicker). Hidden on the deck and while busy.
 static void draw_caret(int top, int h)
 {
-    if (deck_active() || s_menu_open || s_busy) return;     // busy: la riga input mostra i pallini -> il caret non li tocca
+    if (deck_active() || s_menu_open || s_busy) return;     // busy: the input row shows the dots -> the caret doesn't touch them
     int inH = input_h(), in_top = top + h - inH, ty = in_top + 4;
     set_font(chat_font());
     const int x0 = input_x0(), availw = 232 - x0;
@@ -3674,7 +3674,7 @@ static void draw_editor(int top, int h)
     d.fillRect(E->cx, E->cy, 2, fh, (s_blink & 2) ? ACC : BG);   // the caret at the end of the text
 }
 
-// Modale di conferma uscita: pannello a tutto schermo, font grandi ben visibili (REGOLA UI nativa).
+// Exit-confirm modal: full-screen panel, large clearly visible fonts (native UI RULE).
 // With the editor open the same modal asks "discard the typed text?" (Esc in the editor with text).
 static void draw_exit_modal(void)
 {
@@ -3684,7 +3684,7 @@ static void draw_exit_modal(void)
     int bw = 212, bh = 92, bx = (240 - bw) / 2, by = top + (h - bh) / 2;
     d.fillRoundRect(bx, by, bw, bh, 10, BG);
     d.drawRoundRect(bx, by, bw, bh, 10, ACC);
-    d.drawRoundRect(bx + 1, by + 1, bw - 2, bh - 2, 9, ACC);          // doppio bordo = piu' marcato
+    d.drawRoundRect(bx + 1, by + 1, bw - 2, bh - 2, 9, ACC);          // double border = more pronounced
     set_font(F_BIG); d.setTextColor(FG, BG);
     const char *q = ed ? (s_en ? "Discard the text?" : "Scartare il testo?") : (s_en ? "Leave ANIMA?" : "Uscire da ANIMA?");
     d.setCursor(120 - (int)d.textWidth(q) / 2, by + 14); d.print(q);
@@ -3712,7 +3712,7 @@ static void draw(void)
     // in-place painters believe is on the panel is stale -> one full repaint (ANTI-FLICKER.md, repaint_gen).
     const unsigned gen = nucleo_app_repaint_gen();
     if (gen != s_ses->rgen) { s_ses->rgen = gen; mark_all_dirty(); }
-    if (s_exit_confirm) { draw_exit_modal(); return; }      // modale uscita sopra a tutto
+    if (s_exit_confirm) { draw_exit_modal(); return; }      // exit modal on top of everything
     if (s_ses->clear_confirm) {                             // the kit's confirm card over the current scene
         if (s_d_clear) { d.fillRect(0, top, 240, h, BG); s_d_clear = false; }   // an overlay painted over: clean backdrop
         d.setFont(&fonts::Font0); d.setTextSize(1);
