@@ -8,7 +8,6 @@ web/**           linguist-vendored
 android-app/**   linguist-vendored
 models/**        linguist-vendored
 nucleomind/**    linguist-vendored
-_scratch/**      linguist-vendored
 **/vendor/**     linguist-vendored
 *.min.js         linguist-vendored
 *.gz             linguist-vendored

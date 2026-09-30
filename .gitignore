@@ -1,33 +1,58 @@
-# --- SOLO segreti: mai committare chiavi/credenziali ---
-# Chiave teacher ANIMA (Groq/Claude/Grok/Gemini) e suoi backup
+# =============================================================================
+# Secrets — never commit keys or credentials
+# =============================================================================
+# ANIMA teacher key (Groq/Claude/Grok/Gemini) and its backups
 tools/anima/.teacher*.json
 **/teacher.json
-# Chiavi droppate come file di testo / estensione dedicata
+# Keys dropped as text files / dedicated extension
 GEMINI API KEY*.txt
 *API KEY*.txt
 *.apikey
-# Cookie di sessione/auth (sensibili)
+# Session/auth cookies
 /devcookie.txt
 /*cookie*.txt
-# Note di rilascio locali: host/PIN dei device (pairing) — mai committare
+# Local release notes: device hosts/PINs (pairing)
 tools/release.local.json
 tools/*.local.json
 
-# --- Bytecode Python generato (non sorgente) ---
+# =============================================================================
+# Build output, logs and caches (all regenerable)
+# =============================================================================
+# Host-gate executables, fixtures and screenshots (tools/*-host, ui-host, web-e2e, ...)
+/build/
+tools/*-host/build/
+# Release build output
+/dist/
+windows-app/dist/
+# Python bytecode
 __pycache__/
 *.pyc
-
-# --- Log di build/flash/serial (artefatti di sviluppo) ---
+# Build / flash / serial / sync logs
 *.log
-
-# --- Master SD assemblato da tools/nucleo-sd-deploy (artefatto rigenerabile, ~1.7 GB) ---
+/_flash_log.txt
+# Personal scratch space — keep it local
+/_scratch/
+# Host-harness scratch root: a throwaway SD mirror the ANIMA gate builds while running
+tools/anima-host/d192root/
+# Game Boy reference test ROMs, fetched SHA-256-pinned by tools/emu-host/gb-accuracy.mjs
+tools/emu-host/testroms/
+# Assembled SD master from tools/nucleo-sd-deploy (~1.7 GB) and its auto-saved reports
 /deploy/sd-master/
-# Report auto-salvati di SD Deploy
 /tools/nucleo-sd-deploy/reports/
+# Local device-state backups taken during deploys (personal learned data, sessions)
+/deploy/_backups/
+/deploy/_state-orphans-backup/
 
-# --- Non-distributable device SD content (kept LOCALLY, never committed) ---
-# Copyrighted game ROMs / DOS bundles / media, and personal user data. The distributable
-# SD tree is deploy/sd-safe (manifests only); deploy/sd + tools/sd-sim are dev cards.
+# =============================================================================
+# Copyrighted or personal media — never committed
+# =============================================================================
+# Converted .nfv videos are converter output; third-party films are copyrighted
+tools/nfv/out/
+*.nfv
+
+# Non-distributable device SD content (kept LOCALLY, never committed): copyrighted game ROMs,
+# DOS bundles, media and personal user data. The distributable SD tree is deploy/sd-safe
+# (manifests only); deploy/sd and tools/sd-sim are dev cards.
 # ROM library: ignore the GAME FILES but keep the empty folder skeleton + README, so a fresh
 # clone still ships the tree that first-boot provisioning mirrors onto a blank card.
 deploy/sd/data/ROMs/**
@@ -40,6 +65,7 @@ deploy/sd/data/Documents/
 deploy/sd/data/Notes/
 deploy/sd/data/Recordings/
 deploy/sd/data/Videos/
+deploy/sd/data/Saves/
 deploy/sd/data/ir/userdata.json
 deploy/sd/data/*.txt
 deploy/sd/data/*.todo
@@ -50,39 +76,13 @@ tools/sd-sim/data/Documents/
 tools/sd-sim/data/Notes/
 tools/sd-sim/data/Recordings/
 tools/sd-sim/data/Videos/
+tools/sd-sim/data/Saves/
 tools/sd-sim/data/ir/userdata.json
 tools/sd-sim/data/*.txt
 tools/sd-sim/data/*.todo
 tools/sd-sim/data/*.md
 
-# Release build output
-/dist/
-
-# Copyrighted ROMs staged for the Arcade app (device/SD only, never committed).
-# The OS's ROM library lives at data/ROMs — deploy/sd and tools/sd-sim entries already exist above.
-
 # EmulatorJS runtime is vendored ONCE at apps/arcade/www/emulatorjs (the source of truth).
 # deploy/sd is a staging tree that tools/deploy.ps1 regenerates from apps/, so committing the
 # 20 MB copy there would duplicate every core blob in the repo for no gain.
 deploy/sd/apps/arcade/www/emulatorjs/
-
-# Host-harness scratch root: a throwaway SD mirror the ANIMA gate builds while running.
-tools/anima-host/d192root/
-
-# Game Boy reference test ROMs, fetched SHA-256-pinned by tools/emu-host/gb-accuracy.mjs
-tools/emu-host/testroms/
-# gg-sweep is a local compat-QA report: emulator-rendered frames of the tester's own (copyrighted)
-# GG ROM collection, plus a text index/log. The renders are derivative screenshots of commercial
-# games — never publish them. Keep this local-only; gg:test's real gate is zexall, not the sweep.
-build/gg-sweep/
-build/launcher-host/
-# setup-store gate scratch (host exe + cJSON.o + the fake /cfg and SD it writes Wi-Fi fixtures into)
-build/setup-store/
-build/setupstore/
-# Saves/states the emulators write into the SD simulator (native gbemu: data/Saves/<system>/)
-tools/sd-sim/data/Saves/
-# Same, when a local gbemu/ggemu session writes straight into a staged deploy/sd (personal game
-# saves — never shipping content, and the .sav/.id/.st0 filenames leak the game titles played).
-deploy/sd/data/Saves/
-# Browser E2E suite: failure screenshots (tools/web-e2e/)
-build/web-e2e/
