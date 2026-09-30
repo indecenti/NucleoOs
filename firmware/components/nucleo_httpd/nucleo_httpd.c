@@ -489,9 +489,11 @@ static esp_err_t wifi_scan_get(httpd_req_t *req)
 }
 
 // GET /api/wifi/known -> saved networks (the multi-network store), most-preferred ordering not
-// guaranteed; the web manager sorts client-side. Reveals SSID + priority only (never passwords).
-// {"networks":[{"ssid","priority","current"}],"mode":"sta|ap","ssid":"..."}. Auth-gated: it is
-// user configuration, and join/forget below mutate the radio.
+// guaranteed; the web manager sorts client-side. Reveals SSID + priority + whether a password is
+// stored (never the password itself). has_pass is false for a saved net recovered from the
+// password-free SD mirror, so the UI asks for it instead of offering "keep the stored one".
+// {"networks":[{"ssid","priority","current","has_pass"}],"mode":"sta|ap","ssid":"..."}. Auth-gated:
+// it is user configuration, and join/forget below mutate the radio.
 static esp_err_t wifi_known_get(httpd_req_t *req)
 {
     NUCLEO_AUTH_GUARD(req);
@@ -505,6 +507,7 @@ static esp_err_t wifi_known_get(httpd_req_t *req)
         cJSON_AddStringToObject(o, "ssid", ss);
         cJSON_AddNumberToObject(o, "priority", nucleo_setup_net_priority(i));
         cJSON_AddBoolToObject(o, "current", cur[0] && !strcmp(ss, cur));
+        cJSON_AddBoolToObject(o, "has_pass", nucleo_setup_net_has_password(ss));
         cJSON_AddItemToArray(arr, o);
     }
     cJSON_AddStringToObject(root, "mode", nucleo_setup_mode());

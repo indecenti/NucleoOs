@@ -94,6 +94,44 @@ money/heap, or reveals more than "a NucleoOS device exists here", it is paired-o
   `429 Too Many Requests`). A 6-digit space + escalating per-IP lockout makes guessing impractical
   on a LAN.
 
+## Secrets at rest: Wi-Fi and hotspot passwords
+
+The rule for every credential: **internal flash only, never the removable SD.** The pairing PIN and
+tokens follow it (`auth.json`, above); so do the saved Wi-Fi passwords and the hotspot password.
+
+- `networks.json` (every joined network: SSID, password, priority, recency) and `setup.json`
+  (wizard result + hotspot SSID/`ap_pass`) are persisted by `nucleo_setup/setup_store.c` to
+  `/cfg/config/` (LittleFS) and the NVS namespace `nucleocfg` in full.
+- They are also mirrored to `/sd/system/config/` so a device whose internal flash was wiped can
+  recover its setup from the card — but that mirror is **secret-free by construction**: the store
+  removes every `pass` / `ap_pass` member (any depth, any case) before printing the SD copy, and
+  if that redacted print fails the SD write is skipped rather than falling back to the full text.
+  Recovery from the card therefore restores the configuration and the SSID list, and the user
+  re-enters the passwords once (details in `docs/setup-wizard.md`).
+- A card written by older firmware (which mirrored the full documents) is detected on the first
+  load — the store scans the card copy for a password member — and rewritten without it; an
+  SD-only legacy copy first hands its passwords to `/cfg` + NVS so nothing is lost. A dirty copy
+  that can't be rewritten is deleted once the passwords are safe internally, and an old
+  firmware's orphan `.tmp` holding a password is removed.
+- The same change closes a second path: `/api/fs/*` is rooted at the SD, so before it any paired
+  browser **or installed web app** could read every saved Wi-Fi password with
+  `GET /api/fs/read?path=/system/config/networks.json`. The HTTP API has no route to `/cfg` or
+  NVS. `GET /api/wifi/known` reveals SSID, priority and `has_pass` (whether a password is
+  stored), never the password.
+- Guarded on the PC by `npm run setupstore:test` (in the ANIMA gate): the real `setup_store.c` is
+  host-compiled with ESP-IDF's cJSON and every tier combination, the legacy scrub, a blocked card
+  write and an allocation failure at each malloc of a save are checked for a password reaching
+  the card by name, by value or as raw bytes. A static check fails the gate if `nucleo_setup.c` starts
+  persisting another password-like member (`*pass*`, `psk`, `*key*`, `*secret*`, `*token*`,
+  `*pin*`) without adding it to the redaction.
+- The hotspot password is still **shown on the Cardputer screen** on purpose (Device Info, Wi-Fi
+  app, first-run wizard): reading it requires the device in hand, the same proximity proof as
+  the pairing PIN.
+- An **open hotspot** exists only as an explicit user choice (clearing the password in the Wi-Fi
+  app → `ap_open: true`); the firmware never falls into it by accident — a 1–7 char password is
+  rejected at the setter. It forfeits the WPA2 link encryption that the HTTP limitation below
+  relies on as its mitigation; pairing still gates the API.
+
 ## Firmware
 
 `components/nucleo_auth` owns the PIN, the token store (with per-token last-seen for the
@@ -133,6 +171,12 @@ static esp_err_t write_post(httpd_req_t *req) {
 - **OTA accepts any `0xE9` image.** `/api/ota` is paired-only, but it does not verify a signature —
   a paired client can flash arbitrary firmware. Secure Boot v2 + signed OTA is the fix; it is a
   flash-config decision (irreversible eFuse) and is deliberately not enabled yet.
+- **Internal flash is not encrypted.** The SD card no longer carries any password, but `/cfg` and
+  NVS hold them in plaintext: whoever has the *device* itself (not just its card) can dump them
+  over USB serial (`esptool read_flash`). ESP32 Flash Encryption (+ NVS encryption) is the fix; like
+  Secure Boot it is an irreversible eFuse decision and is deliberately not enabled yet. A card
+  used with firmware older than the secret-free mirror may still hold the old plaintext in
+  unallocated FAT sectors after the scrub.
 - **No per-app permissions.** A paired session can do anything the API allows. App sandboxing
   / capability scopes are future work.
 - **App bundle signatures** (`settings.security.verify_bundle_signatures`, Ed25519) are still
