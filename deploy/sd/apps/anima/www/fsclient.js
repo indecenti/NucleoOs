@@ -8,6 +8,8 @@
 // joins the root; an absolute path must already sit inside the root or it is refused.
 
 // Text-ish files we are willing to read for search / preview (everything else is opaque blob).
+import { tolerantReplace } from './edit-replace.js';
+
 const TEXT_EXT = new Set(['txt','md','markdown','json','jsonl','ndjson','csv','tsv','log','c','h','cpp','hpp','cc','cxx',
   'js','mjs','cjs','ts','tsx','jsx','py','sh','bash','zsh','lua','html','htm','css','scss','xml','yml','yaml','toml','ini',
   'cfg','conf','env','sql','rs','go','java','kt','rb','php','pl','r','swift','vue','svelte','tex','rtf','srt','vtt','diff','patch']);
@@ -208,13 +210,14 @@ export function makeFS(initialRoot) {
     const cur = await read(p, {});
     if (!cur.ok) return { ok: false, error: cur.error, path: cur.path };
     const text = cur.content;
-    const count = text.split(oldStr).length - 1;
-    if (count === 0) return { ok: false, error: 'not-found', path: cur.path };
-    if (count > 1 && !all) return { ok: false, error: 'not-unique', count, path: cur.path };
-    const next = all ? text.split(oldStr).join(newStr) : text.replace(oldStr, newStr);
+    // Tolerant matching (edit-replace.js, from OpenCode): an old text that differs from the file only in
+    // indentation / trailing spaces / escaping still lands — once, never a guess between several places.
+    const r = tolerantReplace(text, oldStr, newStr, { all });
+    if (!r.ok) return { ok: false, error: r.error, message: r.message, path: cur.path };
+    const next = r.text;
     const w = await write(p, next, { overwrite: true });
     if (!w.ok) return w;
-    return { ok: true, path: cur.path, abs: cur.abs, replaced: all ? count : 1, ...diffStat(text, next), before: text, after: next };
+    return { ok: true, path: cur.path, abs: cur.abs, replaced: r.count, strategy: r.strategy, ...diffStat(text, next), before: text, after: next };
   }
 
   async function del(p) {
