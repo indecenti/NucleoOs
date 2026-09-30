@@ -58,7 +58,7 @@
 #include "esp_timer.h"
 #include "esp_heap_caps.h"
 #include "esp_log.h"
-#include "esp_task_wdt.h"   // pet il task-WDT prima della scrittura SD del calendario (anti-reboot)
+#include "esp_task_wdt.h"   // pet the task WDT before the calendar's SD write (anti-reboot)
 #include "esp_attr.h"       // RTC_NOINIT_ATTR: carry the seeded question across the ANIMA Solo reboot
 #include "esp_app_desc.h"   // esp_app_get_description(): real running-image version (single source of truth)
 #include "esp_system.h"     // esp_reset_reason(): the "open <app>" handoff is honoured only after our own reboot
@@ -86,8 +86,8 @@ void nucleo_anima_set_compact_reply(bool on);
 // Audio decoder: stop any background playback so its ~17-30 KB Helix decoder block returns to the
 // heap the moment ANIMA opens — the assistant needs that RAM. Idempotent.
 void nucleo_audio_stop(void);
-// Aspetta che la voce/audio in corso finisca DA SOLA (no-op se niente suona, cap ms). Serializza le
-// operazioni pesanti in RAM (es. la scrittura del calendario) con la riproduzione: niente picchi sommati.
+// Waits for the current voice/audio to finish ON ITS OWN (no-op if nothing is playing, capped at ms). Serializes
+// heavy RAM operations (e.g. writing the calendar) with playback: no stacked peaks.
 void nucleo_audio_wait_idle(uint32_t max_ms);
 // Event bus: publish a calendar.changed event after a native add_event write (so the web/calendar
 // service refresh). Defined in nucleo_eventbus; linked into this component (calendar_svc uses it).
@@ -189,13 +189,13 @@ typedef struct { char text[MSG_TEXT]; unsigned short col, accent; unsigned char 
 // freed in leave(); every access is null-guarded so an OOM-on-enter degrades to "no transcript", not a crash.
 static Msg *s_msg = nullptr;
 static int s_mhead, s_mcount;
-// "Risposta corrente INTERA": il ring tiene copie accorciate a MSG_TEXT (cronologia, RAM bassa); l'ultima
-// risposta di ANIMA si mostra invece per intero da s_ses->full (fino al cap del motore, 1 KB). s_full_idx
-// = slot del ring di quel messaggio (-1 = nessuno) -> rebuild_rows wrappa quel messaggio da s_ses->full.
+// "Full current answer": the ring keeps shortened copies at MSG_TEXT (history, low RAM); ANIMA's
+// latest answer instead shows in full from s_ses->full (up to the engine's cap, 1 KB). s_full_idx
+// = ring slot of that message (-1 = none) -> rebuild_rows wraps that message from s_ses->full.
 static int  s_full_idx = -1;
-static int  s_reveal   = -1;   // typewriter: -1 = mostra tutto s_ses->full; >=0 = mostra solo i primi N byte (rivelazione graduale stile GPT)
-static bool s_exit_confirm = false;   // modale conferma uscita (Esc nel chat base): true = mostra la modale a tutto schermo
-extern void launcher_render_hint_bar(void);   // ridipinge il footer SUBITO (il loop framework e' bloccato durante la query inline)
+static int  s_reveal   = -1;   // typewriter: -1 = show all of s_ses->full; >=0 = show only the first N bytes (gradual GPT-style reveal)
+static bool s_exit_confirm = false;   // exit-confirm modal (Esc in the base chat): true = show the full-screen modal
+extern void launcher_render_hint_bar(void);   // repaints the footer IMMEDIATELY (the framework loop is blocked during the inline query)
 
 // Wrapped display rows (derived). A row points into a message's text (valid until the next
 // rebuild, which every push triggers after writing the message).
@@ -479,7 +479,7 @@ static void wrap_msg(const Msg *m, const char *override_text)
     // User rows are right-aligned with a min-x of 22, so their usable width is 232-22=210; ANIMA rows
     // start at x=11 (210..225 region) so 214. Wrapping must match the render budget or a full line clips.
     const int availw = (m->role == R_META) ? 224 : (m->role == R_USER) ? 210 : 214;
-    const char *text = override_text ? override_text : m->text;   // risposta corrente: testo pieno da s_ses->full
+    const char *text = override_text ? override_text : m->text;   // current answer: full text from s_ses->full
     s_wrap_mi = (unsigned char)(m - s_msg);
     int before = s_rown, first = 1;
     if (!text[0]) { emit_row(text, 0, m->col, m->accent, m->role, font, 1); return; }
@@ -525,7 +525,7 @@ static void wrap_ring(int k, bool from_cur)
         if (idx == s_full_idx) {                                  // slot corrente: wrappa dal testo pieno...
             on = true;
             int len = (int)strlen(s_ses->full);
-            if (s_reveal >= 0 && s_reveal < len) {                // ...troncato a s_reveal byte durante il typewriter
+            if (s_reveal >= 0 && s_reveal < len) {                // ...truncated to s_reveal bytes during the typewriter effect
                 char saved = s_ses->full[s_reveal]; s_ses->full[s_reveal] = 0;
                 wrap_msg(&s_msg[idx], s_ses->full);
                 s_ses->full[s_reveal] = saved;
@@ -553,7 +553,7 @@ static unsigned short pal(unsigned short c)
 static void push_msg(unsigned char role, unsigned short col, unsigned short accent, const char *text)
 {
     if (!s_msg) return;
-    if (s_mhead == s_full_idx) s_full_idx = -1;   // lo slot del messaggio "intero" viene riusato -> torna accorciato
+    if (s_mhead == s_full_idx) s_full_idx = -1;   // the "full" message's slot is being reused -> goes back to shortened
     Msg *m = &s_msg[s_mhead];
     app_ui_ascii_fold(text, m->text, MSG_TEXT);
     m->col = col_role(col); m->accent = role == R_ANIMA ? col_role(accent) : accent; m->role = role; m->tag[0] = 0;
@@ -783,9 +783,9 @@ static void load_chat(void)
         s_mhead = (s_mhead + 1) % MSG_MAX; if (s_mcount < MSG_MAX) s_mcount++;
     }
     fclose(f);
-    // Separatore visivo in TESTA alla chat ripristinata: "── ripresa GG/MM HH:MM ──".
-    // Inserisce nel ring PRIMA del primo messaggio (slot libero a sinistra della testa logica);
-    // s_en e' gia' caricato da load_settings() che precede load_chat() in enter().
+    // Visual separator at the HEAD of the restored chat: "── ripresa GG/MM HH:MM ──".
+    // Inserted into the ring BEFORE the first message (a free slot to the left of the logical head);
+    // s_en is already loaded by load_settings(), which precedes load_chat() in enter().
     if (s_mcount > 0 && s_mcount < MSG_MAX) {
         char sep[48];
         struct stat st;
@@ -798,12 +798,12 @@ static void load_chat(void)
         } else {
             snprintf(sep, sizeof sep, s_en ? "-- restored --" : "-- ripresa --");
         }
-        // Slot libero prima della testa logica: (mhead - mcount - 1) % MSG_MAX
+        // Free slot before the logical head: (mhead - mcount - 1) % MSG_MAX
         int slot = (s_mhead - s_mcount - 1 + MSG_MAX * 2) % MSG_MAX;
         Msg *m = &s_msg[slot];
         m->role = R_META; m->col = K_DIM; m->accent = 0; m->tag[0] = 0;
         snprintf(m->text, MSG_TEXT, "%s", sep);
-        s_mcount++;   // il ring ora include il meta come messaggio piu' vecchio
+        s_mcount++;   // the ring now includes the meta note as its oldest message
     }
 }
 // Seed the recall ring from the restored transcript (oldest -> newest, so the newest line is hist_at(0)).
@@ -860,13 +860,13 @@ extern "C" const char *nucleo_anima_take_launch(void)
     return s_rtc_preset[0] ? s_rtc_preset : nullptr;
 }
 
-// Voce on-device: pronuncia la risposta, MA non la conoscenza (tier remoto/L1/MOSAICO) ne' la
-// calcolatrice (intent "calc") -> per quelle suona "leggila sullo schermo". Le risposte non
-// interamente coperte da clip diventano comunque "leggila" dentro nucleo_tts_say().
-static void fill_system_value(const char *arg, char *out, size_t n, bool en);   // definita piu' sotto
+// On-device voice: speaks the answer, but NOT the knowledge (remote/L1/MOSAICO tier) nor the
+// calculator (intent "calc") -> for those it plays "leggila sullo schermo". Answers not
+// entirely covered by clips still end up as "leggila" inside nucleo_tts_say().
+static void fill_system_value(const char *arg, char *out, size_t n, bool en);   // defined further below
 
-// Cap di lettura vocale: oltre questa lunghezza la voce NON recita (sarebbe un monologo) ma dice UNA
-// sola volta "leggila sullo schermo". Sotto il cap legge frase per frase. Tiene la voce da chat reale.
+// Voice reading cap: beyond this length the voice does NOT recite it (it would be a monologue) but says
+// "leggila sullo schermo" just ONCE. Below the cap it reads sentence by sentence. Keeps the voice feeling like real chat.
 #define VOICE_CAP 340
 
 // ---- keys during a turn -------------------------------------------------------
@@ -918,9 +918,9 @@ static int voice_wait(uint32_t max_ms)
 static void speak_result(const anima_result_t &r, bool en)
 {
     if (!r.reply[0]) return;
-    // LAUNCH e TOOL li vocalizza present_result: conosce il nome NATIVO dell'app (non l'id "media-player"
-    // grezzo, che non e' coperto -> "leggila") e l'ESITO dell'operazione (-> conferma "Fatto"). Qui niente,
-    // cosi' non si doppia la voce ne' si legge un id come fosse parlato.
+    // LAUNCH and TOOL are voiced by present_result: it knows the app's NATIVE name (not the raw
+    // "media-player" id, which isn't covered -> "leggila") and the operation's OUTCOME (-> a "Fatto" confirmation). Nothing here,
+    // so the voice doesn't double up or read an id out loud as if it were speech.
     if (r.action == ANIMA_ACT_LAUNCH || r.action == ANIMA_ACT_TOOL) return;
     const char *lang = en ? "en" : "it";
     bool knowledge = r.tier == ANIMA_TIER_FACT || r.tier == ANIMA_TIER_STITCH || r.tier == ANIMA_TIER_REMOTE;

@@ -37,8 +37,8 @@ REPORTS = os.path.join(HERE, "test-lab", "reports")
 
 # A ready-to-run sample: varied Wikipedia-style knowledge questions, IT + EN. Used by --example and by
 # the cockpit's "Scarica esempio" button. Keep questions short (<150 chars) and side-effect free.
-# Ogni caso punta a una VOCE Wikipedia reale: "subject" = titolo canonico (IT) = chiave per ingerire
-# l'articolo; "q" = domanda che contiene il nome completo, nelle forme delle ask-phrasing del corpus.
+# Each case points at a real Wikipedia ENTRY: "subject" = canonical title (IT) = key for ingesting
+# the article; "q" = a question that contains the full name, in the corpus ask-phrasing forms.
 EXAMPLE = [
     {"q": "chi è Dante Alighieri", "lang": "it", "subject": "Dante Alighieri"},
     {"q": "chi era Marie Curie", "lang": "it", "subject": "Marie Curie"},

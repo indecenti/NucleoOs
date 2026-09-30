@@ -3,25 +3,25 @@
 """
 NucleoOS — SD Deploy
 ====================
-Sistema di provisioning della SD del Cardputer, con UI Tkinter. Tre operazioni:
+Provisioning system for the Cardputer SD card, with a Tkinter UI. Three operations:
 
-  • PROVISION (SD vuova/nuova) : assembla il payload completo da TUTTE le sorgenti
-        canoniche e lo scrive su una SD vuota, creando la struttura, le cartelle
-        utente e i template di stato puliti (nessuna chiave, nessuna card imparata).
-  • UPDATE (SD esistente)      : aggiorna SOLO i file di sistema (app, www, registry,
-        conoscenza ANIMA) PRESERVANDO lo stato del device (chiave Groq, card imparate,
-        impostazioni, dati utente). Non cancella MAI nulla.
-  • VERIFY                     : confronta la SD col master (hash) e segnala mancanti/diversi.
+  • PROVISION (blank/new SD)   : assemble the full payload from ALL the canonical
+        sources and write it to a blank SD, creating the structure, the user
+        folders and clean state templates (no key, no learned cards).
+  • UPDATE (existing SD)    : update ONLY the system files (apps, www, registry,
+        ANIMA knowledge) PRESERVING the device state (Groq key, learned cards,
+        settings, user data). NEVER deletes anything.
+  • VERIFY                     : compare the SD against the master (hash) and report missing/different files.
 
-Il "master" viene assemblato in deploy/sd-master/ raccogliendo da:
+The "master" is assembled in deploy/sd-master/ by gathering from:
   registry/  apps/  web/shell/  web/downloads/ (app companion)  tools/sd-sim/data/
-  + i pack ANIMA (encoder, index, manifest+shard akb5)  + voce TTS  + evilportal/
-  wallpapers/  README — colmando i buchi che la vecchia pipeline (deploy.ps1 / sd-safe)
-  lasciava aperti (akb5 fuori pipeline, wallpapers solo-su-SD, downloads). Ogni
-  .js/.css/.html (e i portali evilportal) viene gz-ato (il firmware serve i .gz), e i
-  manifesti .factory dei giochi di fabbrica vengono (ri)generati dal payload reale.
+  + the ANIMA packs (encoder, index, manifest+akb5 shards)  + TTS voice  + evilportal/
+  wallpapers/  README — filling the gaps the old pipeline (deploy.ps1 / sd-safe)
+  left open (akb5 outside the pipeline, SD-only wallpapers, downloads). Every
+  .js/.css/.html (and the evilportal portals) is gzipped (the firmware serves the .gz), and the
+  .factory manifests of the factory games are (re)generated from the real payload.
 
-Solo stdlib (tkinter, ctypes, hashlib, gzip, shutil). Lancio:
+stdlib only (tkinter, ctypes, hashlib, gzip, shutil). Launch:
     python tools/nucleo-sd-deploy/sd_deploy.py
 """
 import os, sys, json, gzip, shutil, hashlib, threading, queue, time, fnmatch, string, subprocess
@@ -34,38 +34,38 @@ MASTER = REPO / "deploy" / "sd-master"          # assembled, verifiable payload
 MANIFEST_NAME = ".deploy-manifest.json"
 GZ_EXT = {".js", ".css", ".html"}
 
-# ---------------------------------------------------------------- lingua / language
-# Bilingue IT/EN. LANG è globale così anche i log del core si traducono; la GUI lo
-# commuta con l'interruttore. / Bilingual IT/EN; LANG is global so core logs translate too.
+# ---------------------------------------------------------------- language
+# Bilingual IT/EN. LANG is global so the core logs are translated too; the GUI
+# toggles it with the switch.
 LANG = "it"
 def T(it, en):
     return en if LANG == "en" else it
 
 # ---------------------------------------------------------------- source map
-# Ogni regola: dest relativo sulla SD <- prima sorgente ESISTENTE tra i candidati.
-# kind: 'tree' (cartella ricorsiva) | 'file' (singolo). gz: genera i .gz per js/css/html.
+# Each rule: destination relative to the SD <- first EXISTING source among the candidates.
+# kind: 'tree' (recursive folder) | 'file' (single). gz: generate the .gz for js/css/html.
 def _src(*cands):
     return [REPO / c for c in cands]
 
-# NB: questa classificazione (SOURCE_MAP = sistema, DEVICE_STATE = stato utente) è la stessa
-# che il firmware applica A RUNTIME per impedire la CANCELLAZIONE dei file di sistema dall'SD:
-# vedi firmware/components/nucleo_board/include/nucleo_fsprotect.h (nucleo_fs_is_protected), che
-# blocca delete/move-away di system/registry, system/web, apps/, www/, della VOCE (clip TTS in
-# data/tts/<lang>/ + modelli Vosk sotto apps/) e del cervello ANIMA
-# (data/anima/{anima-*,dict-*,commands*,akb5/}) per file-manager, ANIMA, runtime JS e app Files.
-# Se aggiungi qui un nuovo albero di sistema, aggiorna anche quel predicato (e viceversa).
+# NB: this classification (SOURCE_MAP = system, DEVICE_STATE = user state) is the same one
+# the firmware applies AT RUNTIME to prevent DELETION of system files from the SD:
+# see firmware/components/nucleo_board/include/nucleo_fsprotect.h (nucleo_fs_is_protected), which
+# blocks delete/move-away of system/registry, system/web, apps/, www/, of the VOICE (TTS clips in
+# data/tts/<lang>/ + Vosk models under apps/) and of the ANIMA brain
+# (data/anima/{anima-*,dict-*,commands*,akb5/}) for the file manager, ANIMA, the JS runtime and the Files app.
+# If you add a new system tree here, update that predicate too (and vice versa).
 SOURCE_MAP = [
-    # system + registry (sorgenti repo, freschi)
+    # system + registry (repo sources, fresh)
     dict(dest="system/registry", kind="tree", gz=False, src=_src("registry")),
-    # app (sorgenti repo complete: includono tour.js/nlcommand.js che sd-safe perdeva)
+    # app (complete repo sources: they include tour.js/nlcommand.js, which sd-safe used to miss)
     dict(dest="apps",            kind="tree", gz=True,  src=_src("apps")),
-    # shell web
+    # web shell
     dict(dest="www/shell",       kind="tree", gz=True,  src=_src("web/shell")),
-    # app companion scaricabili dallo shell (es. NucleoConnect.exe) — stanno in web/downloads/, non in web/shell/
+    # companion apps downloadable from the shell (e.g. NucleoConnect.exe) — they live in web/downloads/, not in web/shell/
     dict(dest="www/shell/downloads", kind="tree", gz=False, src=_src("web/downloads")),
-    # seed dati utente + base ANIMA (encoder/index/dict/commands) — NON include akb5
+    # user-data seed + ANIMA base (encoder/index/dict/commands) — does NOT include akb5
     dict(dest="data",            kind="tree", gz=False, src=_src("tools/sd-sim/data")),
-    # CONOSCENZA ANIMA akb5 — il buco della vecchia pipeline. 46 shard completi.
+    # ANIMA akb5 KNOWLEDGE — the gap in the old pipeline. 46 complete shards.
     dict(dest="data/anima/akb5",            kind="tree", gz=False,
          src=_src("deploy/sd-safe/data/anima/akb5")),
     dict(dest="data/anima/anima-it-akb5.bin", kind="file", gz=False,
@@ -99,9 +99,9 @@ COMPLETENESS = [
 ]
 MIN_AKB5_SHARDS = 40
 
-# Manifesti .factory: bloccano la cancellazione dei giochi DI FABBRICA (firmware
-# nucleo_fsfactory.h). Generati QUI dal payload reale del master, così il lock
-# combacia esattamente con ciò che spedisci (stesse regole di tools/gen-factory-manifests.py).
+# .factory manifests: block deletion of the FACTORY games (firmware
+# nucleo_fsfactory.h). Generated HERE from the real master payload, so the lock
+# matches exactly what you ship (same rules as tools/gen-factory-manifests.py).
 FACTORY_NAME = ".factory"
 FACTORY_HEADER = ("# Bundled factory games -- pinned against deletion. "
                   "Generated by tools/gen-factory-manifests.py. Do not edit.\n")
@@ -115,24 +115,24 @@ FACTORY_TARGETS = [
 ]
 
 # ---------------------------------------------------------------- device state
-# Path (glob, rel SD root) di STATO DEVICE: su PROVISION si scrive un template pulito;
+# Paths (glob, rel SD root) of DEVICE STATE: on PROVISION a clean template is written;
 # on UPDATE they are PRESERVED (never overwritten, never deleted).
 DEVICE_STATE = [
-    "data/anima/teacher.json",      # chiave Groq / config online
-    # learned/ NON in blocco: facets.<lang>.jsonl sono SEED firmware-pinned READ-ONLY (devono combaciare
-    # con VKL_FACETS_* nel .bin) e DEVONO essere scritti. Proteggi solo i file SCRITTI dal device per nome:
-    "data/anima/learned/it.jsonl", "data/anima/learned/en.jsonl",   # cache risposte online
+    "data/anima/teacher.json",      # Groq key / online config
+    # learned/ NOT as a whole: facets.<lang>.jsonl are firmware-pinned READ-ONLY SEEDs (they must match
+    # VKL_FACETS_* in the .bin) and MUST be written. Protect only the files WRITTEN by the device, by name:
+    "data/anima/learned/it.jsonl", "data/anima/learned/en.jsonl",   # online answer cache
     "data/anima/learned/it.vec", "data/anima/learned/en.vec",       # embedding cache
-    "data/anima/learned/mind.*.jsonl",                              # triple KGE runtime (mind_put)
-    "data/anima/learned/knowledge.ledger.jsonl", "data/anima/learned/evo/*",   # ledger di evoluzione
+    "data/anima/learned/mind.*.jsonl",                              # runtime KGE triples (mind_put)
+    "data/anima/learned/knowledge.ledger.jsonl", "data/anima/learned/evo/*",   # evolution ledger
     "data/anima/telemetry.ndjson", "data/anima/session.txt", "data/anima/sessions.json",
     "data/anima/workspace.json", "data/anima/*.httptrace",
-    "system/config/*",              # impostazioni runtime
+    "system/config/*",              # runtime settings
     "system/keys/*", "system/sessions/*",
     "config/*", "backups/*", "journal/*",
     "*.vec", "auth.json", "volume.json", "settings.json",
 ]
-# Cartelle utente da creare vuote su una SD nuova.
+# User folders to create empty on a new SD.
 USER_DIRS = ["data/Music", "data/Videos", "data/Pictures", "data/Documents", "data/Notes",
              "data/Recordings", "data/ROMs", "data/DOS", "data/Transcripts",
              "data/downloads", "data/shared", "data/imports", "data/exports"]
@@ -157,7 +157,7 @@ def gz_file(src, dst):
 
 # ---------------------------------------------------------------- Windows drives
 def list_drives():
-    """Ritorna [(root, type_str, label, free_gb, total_gb)] per le unità presenti."""
+    """Return [(root, type_str, label, free_gb, total_gb)] for the drives present."""
     out = []
     if os.name != "nt":
         return out
@@ -170,7 +170,7 @@ def list_drives():
             continue
         root = f"{L}:\\"
         t = k.GetDriveTypeW(ctypes.c_wchar_p(root))
-        if t not in (2, 3):           # solo rimovibili e fisse (mai network/cd)
+        if t not in (2, 3):           # removable and fixed only (never network/cd)
             continue
         label = _vol_label(root)
         free, total = _free_total(root)
@@ -199,8 +199,8 @@ def _free_total(root):
         return 0.0, 0.0
 
 def _root(p):
-    """Normalizza un drive-root: 'H:' / 'H:\\' -> 'H:\\'. Senza la barra, Path('H:') è
-    drive-RELATIVO (cwd su H:) e ogni join punta nel posto sbagliato."""
+    """Normalize a drive root: 'H:' / 'H:\\' -> 'H:\\'. Without the backslash, Path('H:') is
+    drive-RELATIVE (cwd on H:) and every join points to the wrong place."""
     p = str(p)
     if len(p) == 2 and p[1] == ":":
         p += os.sep
@@ -227,19 +227,19 @@ def detect_target(root):
     has_anima = (p / "data" / "anima").exists()
     if has_sys or has_man or has_anima:
         return "nucleoos"
-    # vuota o quasi (solo System Volume Information / metadati FS)
+    # empty or nearly so (only System Volume Information / FS metadata)
     entries = [e for e in p.iterdir() if e.name not in ("System Volume Information", "$RECYCLE.BIN")]
     return "blank" if not entries else "foreign"
 
 # ---------------------------------------------------------------- assemble master
 def assemble_master(log, master=MASTER, progress=None):
-    """Raccoglie tutte le sorgenti -> master/, gz, manifest. Ritorna (stats, warnings).
-    progress(frac 0..1, testo) opzionale per la barra di avanzamento."""
+    """Gather all the sources -> master/, gz, manifest. Returns (stats, warnings).
+    Optional progress(frac 0..1, text) for the progress bar."""
     master = Path(master)
     stats = dict(copied=0, gz=0, bytes=0, factory=0, akb5=0, files=0)
     warns = []
     log(f"Master: {master}")
-    # conteggio sorgenti per la percentuale (la copia è ~80%, il manifest ~20%)
+    # source count for the percentage (the copy is ~80%, the manifest ~20%)
     total_src = 0
     for rule in SOURCE_MAP:
         src = next((s for s in rule["src"] if s.exists()), None)
@@ -273,11 +273,11 @@ def assemble_master(log, master=MASTER, progress=None):
                         gz_file(f, str(d) + ".gz"); stats["gz"] += 1
                     done += 1; tick(f"Copia {done}/{total_src}")
         log(f"  ✓ {rule['dest']:<28} <- {src.relative_to(REPO)}")
-    # .factory: blocca i giochi di fabbrica contro la cancellazione (dopo la copia, prima del manifest)
+    # .factory: pins the factory games against deletion (after the copy, before the manifest)
     nfact = write_factory_manifests(master, log)
     stats["factory"] = nfact
     log(f"  .factory: {nfact} giochi pinnati")
-    # completezza
+    # completeness
     for label, rel in COMPLETENESS:
         if not (master / rel.replace("/", os.sep)).exists():
             warns.append(f"CRITICO mancante: {label} ({rel})")
@@ -287,7 +287,7 @@ def assemble_master(log, master=MASTER, progress=None):
     if n_shards < MIN_AKB5_SHARDS:
         warns.append(f"akb5 incompleto: {n_shards} shard (<{MIN_AKB5_SHARDS})")
     log(f"  akb5 shard: {n_shards}")
-    # manifest (con avanzamento sull'hashing, la parte lenta)
+    # manifest (with progress on the hashing, the slow part)
     files = [f for f in master.rglob("*") if f.is_file() and f.name != MANIFEST_NAME]
     man = {}
     for i, f in enumerate(files):
@@ -306,8 +306,8 @@ def _copy_one(src, dst, stats):
     stats["bytes"] += src.stat().st_size
 
 def write_factory_manifests(master, log):
-    """Crea i .factory nei giochi di fabbrica del master (anti-cancellazione).
-    Replica tools/gen-factory-manifests.py ma sul payload appena assemblato."""
+    """Create the .factory files in the master's factory games (anti-deletion).
+    Mirrors tools/gen-factory-manifests.py but on the freshly assembled payload."""
     master = Path(master)
     total = 0
     for rel, exts in FACTORY_TARGETS:
@@ -333,7 +333,7 @@ def _iter_master(master):
             yield f, f.relative_to(master).as_posix()
 
 def provision(root, mode, dry, log, master=MASTER, progress=None):
-    """mode='fresh' (SD nuova) | 'update' (preserva stato). Ritorna stats."""
+    """mode='fresh' (new SD) | 'update' (preserves state). Returns stats."""
     master = Path(master)
     if not (master / MANIFEST_NAME).exists():
         raise RuntimeError("master non assemblato — premi prima 'Assembla master'")
@@ -345,7 +345,7 @@ def provision(root, mode, dry, log, master=MASTER, progress=None):
         if progress and total:
             progress((i + 1) / total, f"{'Anteprima' if dry else 'Scrittura'} {i + 1}/{total}")
         if is_state(rel):
-            # stato device: in update si preserva sempre; in fresh si scrive il template dopo
+            # device state: always preserved on update; on fresh the template is written afterwards
             st["state_kept"] += 1
             continue
         dst = dst_root / rel.replace("/", os.sep)
@@ -360,7 +360,7 @@ def provision(root, mode, dry, log, master=MASTER, progress=None):
         st["written"] += 1; st["bytes"] += f.stat().st_size
     if mode == "fresh":
         _write_fresh_state(dst_root, dry, log, st)
-    # manifest sulla SD
+    # manifest on the SD
     if not dry:
         shutil.copy2(master / MANIFEST_NAME, dst_root / MANIFEST_NAME)
     log(f"{'[DRY] ' if dry else ''}{mode}: scritti {st['written']}, invariati {st['skipped']}, "
@@ -369,7 +369,7 @@ def provision(root, mode, dry, log, master=MASTER, progress=None):
     return st
 
 def _write_fresh_state(dst_root, dry, log, st):
-    """SD nuova: template puliti (chiave vuota, learned vuoto) + cartelle utente."""
+    """New SD: clean templates (empty key, empty learned) + user folders."""
     if dry:
         log("[DRY] creerei: teacher.json template, learned/ vuoto, "
             + str(len(USER_DIRS)) + " cartelle utente")
@@ -391,7 +391,7 @@ def _write_fresh_state(dst_root, dry, log, st):
     log(f"Stato device fresco: learned/ + {len(USER_DIRS)} cartelle utente assicurate")
 
 def verify(root, log, master=MASTER, progress=None):
-    """Confronta master vs SD per hash. Ritorna (missing, diff, ok)."""
+    """Compare master vs SD by hash. Returns (missing, diff, ok)."""
     master = Path(master)
     man = json.loads((master / MANIFEST_NAME).read_text(encoding="utf-8"))
     dst_root = Path(_root(root))
@@ -418,10 +418,10 @@ def verify(root, log, master=MASTER, progress=None):
     return missing, diff, ok
 
 
-# ---------------------------------------------------------------- format (opzionale)
+# ---------------------------------------------------------------- format (optional)
 def format_fat32(root, label, log):
-    """Formatta una SD in FAT32 (quick format). Solo Windows. Ritorna True se riuscito.
-    Le guardie di sicurezza (rimovibile, non disco di sistema, conferma) stanno nel chiamante."""
+    """Format an SD as FAT32 (quick format). Windows only. Returns True on success.
+    The safety guards (removable, not the system disk, confirmation) live in the caller."""
     if os.name != "nt":
         log("Formattazione disponibile solo su Windows.")
         return False
@@ -430,7 +430,7 @@ def format_fat32(root, label, log):
     cmd = f'format {drive} /FS:FAT32 /Q /V:{label} /Y'
     log(f"$ {cmd}")
     try:
-        # 'format' su unità rimovibili chiede "Premi INVIO quando pronto": gli diamo l'INVIO via stdin.
+        # 'format' on removable drives asks "Press ENTER when ready": we feed it ENTER via stdin.
         p = subprocess.run(cmd, input="\n\n", capture_output=True, text=True,
                            encoding="utf-8", errors="replace", shell=True)
         for line in (p.stdout or "").splitlines():
@@ -465,7 +465,7 @@ def run_gui():
     def log(msg):
         q.put(str(msg))
 
-    def prog_cb(frac, text):           # chiamata dai worker (thread): instrada via coda
+    def prog_cb(frac, text):           # called by the workers (threads): routes via the queue
         q.put(("prog", frac, text))
 
     def pump():
@@ -484,7 +484,7 @@ def run_gui():
             pass
         app.after(60, pump)
 
-    # ---- tooltip (Tkinter non ne ha uno nativo): comparsa ritardata, testo via getter (rilocalizza)
+    # ---- tooltip (Tkinter has no native one): delayed appearance, text via getter (re-localizes)
     class _Tip:
         def __init__(self, widget, getter):
             self.w = widget; self.getter = getter; self.tip = None; self.id = None
@@ -518,7 +518,7 @@ def run_gui():
         _Tip(widget, lambda: T(it, en))
         return widget
 
-    # ---- registro testi statici per il cambio lingua / static-text registry for language switch
+    # ---- static-text registry for language switch
     i18n = []
     def TW(widget, it, en):
         i18n.append((widget, it, en))
@@ -535,7 +535,7 @@ def run_gui():
                 w.config(text=T(it, en))
             except Exception:
                 pass
-        on_drive_change()                       # rilocalizza lo stato unità
+        on_drive_change()                       # re-localizes the drive status
 
     # ---- header
     top = ttk.Frame(app, padding=10); top.pack(fill="x")
@@ -651,7 +651,7 @@ def run_gui():
         else:
             prog_lbl.config(text=(T("completato", "done") if prog["value"] else ""))
 
-    # ---- report: auto-salvato in reports/ + esportabile "Salva con nome"
+    # ---- report: auto-saved in reports/ + exportable via "Save as"
     def _report_text(d):
         L = ["NucleoOS · SD Deploy — report",
              f"quando    : {d.get('timestamp')}",
@@ -699,7 +699,7 @@ def run_gui():
         except Exception as e:
             messagebox.showerror("Report", str(e))
 
-    # ---- formattazione FAT32 (opzionale, fortemente protetta)
+    # ---- FAT32 formatting (optional, heavily guarded)
     def do_format():
         if busy["on"]:
             return
@@ -806,7 +806,7 @@ def run_gui():
                 app.after(0, lambda: set_busy(False))
         threading.Thread(target=job, daemon=True).start()
 
-    # ---- tooltip esplicativi (bilingue) su ogni controllo
+    # ---- explanatory (bilingual) tooltips on every control
     tip(drive_box,
         "Unità SD su cui lavorare. Le rimovibili (★ SD) sono preferite e selezionate in automatico. "
         "Mostra lettera, etichetta e spazio libero/totale.",
@@ -864,13 +864,13 @@ def run_gui():
         "Avanzamento reale dell'operazione in corso (copia, manifest, scrittura o verifica).",
         "Real progress of the running operation (copy, manifest, write or verify).")
 
-    set_lang("it")                            # imposta stili lingua + applica i testi
+    set_lang("it")                            # set language styles + apply the texts
     log(T(f"Repo: {REPO}", f"Repo: {REPO}"))
     log(T("1) Assembla master  2) scegli unità + operazione  3) Esegui  (usa Anteprima per sicurezza)",
           "1) Assemble master  2) pick drive + operation  3) Run  (use Dry-run to be safe)"))
     refresh_drives()
     pump()
-    if os.environ.get("SDDEPLOY_SMOKE"):     # smoke: costruisci la GUI e chiudi (no interazione)
+    if os.environ.get("SDDEPLOY_SMOKE"):     # smoke: build the GUI and close (no interaction)
         seq = os.environ.get("SDDEPLOY_SMOKE")
         if seq == "en":
             app.after(400, lambda: set_lang("en"))
@@ -880,7 +880,7 @@ def run_gui():
 
 # ================================================================ CLI fallback
 def main():
-    try:                                  # la console Windows (cp1252) non digerisce ✓/⚠: forza UTF-8
+    try:                                  # the Windows console (cp1252) chokes on ✓/⚠: force UTF-8
         sys.stdout.reconfigure(encoding="utf-8")
         sys.stderr.reconfigure(encoding="utf-8")
     except Exception:

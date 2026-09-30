@@ -1,7 +1,7 @@
-// Verifica END-TO-END del "si scatena correttamente?": carica l'INDICE REALE (index.bin generato) e
-// per ogni risposta di ANIMA replica la decisione di nucleo_tts_say() — WHOLE-clip (risposta fissa),
-// SPEAK (lista clip composte), o READ_IT (guardia, o parola NON coperta: la stampa). Linka la C reale
-// del firmware (nucleo_tts_plan.c + nucleo_tts_index.c). Uso:
+// END-TO-END check of "does it trigger correctly?": loads the REAL INDEX (generated index.bin) and
+// for each ANIMA reply replicates the decision of nucleo_tts_say() — WHOLE-clip (fixed reply),
+// SPEAK (list of composed clips), or READ_IT (guard, or an UNCOVERED word: it prints it). Links the real
+// firmware C (nucleo_tts_plan.c + nucleo_tts_index.c). Usage:
 //   tts-replies-check <index.bin> <it|en> <replies.txt>
 #include "nucleo_tts.h"
 #include "nucleo_tts_index.h"
@@ -30,8 +30,8 @@ int main(int argc, char **argv) {
         size_t L = strlen(s); while (L && (s[L-1]=='\n'||s[L-1]=='\r')) s[--L]=0;
         if (!L || s[0] == '#') continue;
         n++;
-        // Rispecchia nucleo_tts_say(): "parlabilizza" = % ^ PRIMA di decidere (la guardia non blocca piu'
-        // su '=', il planner vede "per cento"/"elevato"). Cosi' il gate misura cio' che il device dice davvero.
+        // Mirrors nucleo_tts_say(): "speechify" = % ^ BEFORE deciding (the guard no longer blocks
+        // on '=', the planner sees "per cento"/"elevato"). This way the gate measures what the device really says.
         char sp[1024]; nucleo_tts_mathspeak(s, sp, sizeof sp, lang); s = sp;
         char full[48]; nucleo_tts_full_slug(s, full, sizeof full);
         if (full[0] && tts_index_find(&IX, full, NULL, NULL)) { whole++; printf("  WHOLE  %s\n", s); continue; }

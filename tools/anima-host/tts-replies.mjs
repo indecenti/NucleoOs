@@ -1,7 +1,7 @@
-// Verifica che le risposte REALI di ANIMA si "scatenino" sulla voce: compila l'harness C
-// (tts-replies-check) e lo esegue contro l'indice generato (deploy/sd-safe/data/tts/<lang>/index.bin)
-// con i casi test-replies.<lang>.txt. SKIP pulito se l'indice non e' ancora stato generato.
-// Uso: npm run anima:tts-replies
+// Verifies that ANIMA's REAL replies "trigger" correctly on the voice: compiles the C harness
+// (tts-replies-check) and runs it against the generated index (deploy/sd-safe/data/tts/<lang>/index.bin)
+// with the test-replies.<lang>.txt cases. Clean SKIP if the index has not been generated yet.
+// Usage: npm run anima:tts-replies
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';

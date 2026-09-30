@@ -1,6 +1,6 @@
-// app_snake.cpp — Snake Duel: 1v1 in rete (ESP-NOW) o vs AI
-// Mondo 80×40 celle, CELL=8px, camera segue il proprio serpente (come Tank Duel).
-// Host-autoritativa. HUD con minimappa. NX_SOLO only: httpd non tocco in solo boot.
+// app_snake.cpp — Snake Duel: 1v1 over the network (ESP-NOW) or vs AI
+// World 80×40 cells, CELL=8px, the camera follows your own snake (like Tank Duel).
+// Host-authoritative. HUD with a minimap. NX_SOLO only: httpd is left untouched in Solo boot.
 // Power-up: SPEED, SLOW, SHORT, GHOST.
 #include "app_gfx.h"
 #include "game_sfx.h"
@@ -16,20 +16,20 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-// ─── mondo / camera ──────────────────────────────────────────────────────────
+// ─── world / camera ──────────────────────────────────────────────────────────
 #define WORLD_W   80
 #define WORLD_H   40
-#define CELL       8      // px per cella
+#define CELL       8      // px per cell
 #define HUD_H     25
 #define PLAY_Y    HUD_H
-#define VIEW_W    30      // celle visibili X: 240/8=30
-#define VIEW_H    13      // celle visibili Y: floor(110/8)=13
+#define VIEW_W    30      // visible cells X: 240/8=30
+#define VIEW_H    13      // visible cells Y: floor(110/8)=13
 
-// Minimappa nella HUD
+// Minimap in the HUD
 #define MM_X      100
 #define MM_Y        2
-#define MM_W       40     // 1px = 2 celle X (WORLD_W/MM_W = 2)
-#define MM_H       20     // 1px = 2 celle Y (WORLD_H/MM_H = 2)
+#define MM_W       40     // 1px = 2 cells X (WORLD_W/MM_W = 2)
+#define MM_H       20     // 1px = 2 cells Y (WORLD_H/MM_H = 2)
 
 // ─── timing ───────────────────────────────────────────────────────────────────
 #define MOVE_MS      200LL
@@ -43,13 +43,13 @@
 #define JOIN_TIMEOUT 4000000LL
 #define FRAME_US   33333LL
 
-// ─── limiti ───────────────────────────────────────────────────────────────────
+// ─── limits ───────────────────────────────────────────────────────────────────
 #define MAX_SEG   60
 #define NET_SEG   38
 #define MAX_HOSTS  6
 #define N_PARTS   24
 
-// ─── direzioni ────────────────────────────────────────────────────────────────
+// ─── directions ───────────────────────────────────────────────────────────────
 enum { DUP=0, DRT=1, DDN=2, DLT=3 };
 static const int8_t DX[4]={0,1,0,-1}, DY[4]={-1,0,1,0};
 #define OPP(d_) ((d_)^2)
@@ -59,7 +59,7 @@ enum { PU_NONE=0, PU_SPEED, PU_SLOW, PU_SHORT, PU_GHOST, PU_SHIELD, PU_COUNT };
 static const uint16_t PU_COL[PU_COUNT]={0, C_YELLOW, C_PURPLE, C_PINK, C_GREY, 0x07FF};
 static const char     PU_SYM[PU_COUNT]={' ','F','L','X','G','S'};
 
-// ─── stati ────────────────────────────────────────────────────────────────────
+// ─── states ───────────────────────────────────────────────────────────────────
 enum { ST_MENU=0, ST_HOST, ST_BROWSE, ST_PLAY, ST_OVER, ST_HELP, ST_SCORES };
 enum { MODE_AI=0, MODE_HOST=1, MODE_GUEST=2 };
 #define N_MENU 5
@@ -71,7 +71,7 @@ static const char* MENU_ITEMS[N_MENU]={
     "Come si gioca"
 };
 
-// ─── protocollo ───────────────────────────────────────────────────────────────
+// ─── protocol ─────────────────────────────────────────────────────────────────
 #define SN_M0 'S'
 #define SN_M1 'N'
 #define SN_VER 1
@@ -89,7 +89,7 @@ struct sn_state_t {
     uint8_t  tick;
     uint8_t  s1_len, s1_dir, s1_alive, s1_pu, s1_put, s1_score;
     uint8_t  s2_len, s2_dir, s2_alive, s2_pu, s2_put, s2_score;
-    int8_t   fx, fy, fx2, fy2;   // 2 cibi sempre presenti
+    int8_t   fx, fy, fx2, fy2;   // 2 foods always present
     uint8_t  pu_type; int8_t pu_x, pu_y;
     uint8_t  phase;
     int8_t   segs[NET_SEG*4]; // s1 × NET_SEG × (x,y) then s2
@@ -99,7 +99,7 @@ static_assert(sizeof(sn_state_t) <= PNET_MAXMSG, "State packet too large");
 
 // ─── snake ────────────────────────────────────────────────────────────────────
 struct Snake {
-    int8_t  bx[MAX_SEG], by[MAX_SEG]; // [0]=testa
+    int8_t  bx[MAX_SEG], by[MAX_SEG]; // [0]=head
     int     len;
     int8_t  dir, next_dir;
     int8_t  inq[2];                  // input queue: up to 2 buffered turns (responsive quick turns)
@@ -112,7 +112,7 @@ struct Snake {
     int64_t move_next_us;
 };
 
-// ─── ostacoli ─────────────────────────────────────────────────────────────────
+// ─── obstacles ───────────────────────────────────────────────────────────────
 // Heap-on-enter (was .bss ~3.1 KB): a Solo-boot game is closed during normal OS boot, so this map
 // held boot RAM for nothing. calloc in on_enter(), freed on_exit; readers skip cleanly if null.
 static uint8_t (*s_obstacles)[WORLD_W] = nullptr;  // 0=free, 1=wall
@@ -122,7 +122,7 @@ struct Trail { int8_t x,y; int life; };
 struct SnakeTrail { Trail pts[8]; int cnt; };
 static SnakeTrail s_trail1, s_trail2;
 
-// ─── particelle ───────────────────────────────────────────────────────────────
+// ─── particles ───────────────────────────────────────────────────────────────
 struct Part { float x,y,vx,vy; int life; uint16_t col; };
 
 // ─── SFX ──────────────────────────────────────────────────────────────────────
@@ -186,11 +186,11 @@ static const game_sfx_t s_sfx = {
 };
 #define SFX(id) game_sfx_play(&s_sfx,(id))
 
-// ─── stato globale ────────────────────────────────────────────────────────────
+// ─── global state ────────────────────────────────────────────────────────────
 static int      s_st;
 static int      s_mode;
 static Snake    s_s1, s_s2;
-static int8_t   s_fx, s_fy, s_fx2, s_fy2;  // 2 cibi simultanei
+static int8_t   s_fx, s_fy, s_fx2, s_fy2;  // 2 simultaneous foods
 static uint8_t  s_pu_type;
 static int8_t   s_pu_x, s_pu_y;
 static int      s_pu_life;
@@ -206,7 +206,7 @@ static int      s_menu_sel;
 static int      s_menu_top;     // windowed-list scroll top (keeps the footer clear)
 static int      s_browse_sel;
 static int      s_help_pg;
-static int      s_cam_x, s_cam_y;   // top-left del viewport in celle mondo
+static int      s_cam_x, s_cam_y;   // top-left of the viewport in world cells
 
 static uint8_t  s_peer[6];
 static int64_t  s_last_tx_us;
@@ -232,7 +232,7 @@ static int rng_range(int lo, int hi) {
     return lo+(int)(rng_next()%(uint32_t)(hi-lo+1));
 }
 
-// ─── colori ───────────────────────────────────────────────────────────────────
+// ─── colors ───────────────────────────────────────────────────────────────────
 static uint16_t dim565(uint16_t c, int n, int d_) {
     int r=((c>>11)&0x1F)*n/d_;
     int g=((c>>5)&0x3F)*n/d_;
@@ -252,7 +252,7 @@ static void cam_update(void) {
     if(cy>WORLD_H-VIEW_H)cy=WORLD_H-VIEW_H;
     s_cam_x=cx; s_cam_y=cy;
 }
-// Coordinate schermo da cella mondo
+// Screen coordinates from a world cell
 static inline int sx_(int8_t c) { return (c-s_cam_x)*CELL; }
 static inline int sy_(int8_t r) { return HUD_H+(r-s_cam_y)*CELL; }
 static inline bool inv_(int8_t c, int8_t r) {
@@ -271,14 +271,14 @@ static bool snake_has(const Snake& s, int8_t x, int8_t y, int skip=0) {
     return false;
 }
 
-// ─── mappa ostacoli ───────────────────────────────────────────────────────────
+// ─── obstacle map ─────────────────────────────────────────────────────────────
 static void gen_obstacles(void) {
     if(!s_obstacles) return;
     memset(s_obstacles,0,(size_t)WORLD_H*WORLD_W);
-    // Bordi
+    // Borders
     for(int c=0;c<WORLD_W;c++) s_obstacles[0][c]=s_obstacles[WORLD_H-1][c]=1;
     for(int r=0;r<WORLD_H;r++) s_obstacles[r][0]=s_obstacles[r][WORLD_W-1]=1;
-    // Rocce sparse: ~15 blocchi 2×2 random
+    // Scattered rocks: ~15 random 2×2 blocks
     for(int i=0;i<15;i++) {
         int x=rng_range(4,WORLD_W-5), y=rng_range(4,WORLD_H-5);
         for(int dy=0;dy<2&&y+dy<WORLD_H;dy++)
@@ -300,7 +300,7 @@ static void trail_step(SnakeTrail& tr) {
     for(int i=0;i<tr.cnt;i++) if(tr.pts[i].life>0) tr.pts[i].life--;
 }
 
-// ─── particelle ───────────────────────────────────────────────────────────────
+// ─── particles ───────────────────────────────────────────────────────────────
 static void parts_spawn(float px, float py, uint16_t col, int n) {
     int k=0;
     for(auto& p:s_parts) {
@@ -314,7 +314,7 @@ static void parts_step(void) {
     for(auto& p:s_parts){if(!p.life)continue;p.x+=p.vx;p.y+=p.vy;p.vy+=0.12f;p.life--;}
 }
 
-// ─── campo: cibo / power-up ───────────────────────────────────────────────────
+// ─── field: food / power-up ────────────────────────────────────────────────
 static void spawn_free(int8_t& ox, int8_t& oy) {
     for(int t=0;t<600;t++) {
         int8_t cx=rng_range(1,WORLD_W-2), cy=rng_range(1,WORLD_H-2);
@@ -333,7 +333,7 @@ static void spawn_pu(void) {
     s_pu_life=20;
 }
 
-// ─── applica power-up ────────────────────────────────────────────────────────
+// ─── apply power-up ──────────────────────────────────────────────────────────
 static void apply_pu(Snake& me, Snake& opp, uint8_t pu) {
     SFX(SX_PU);
     switch(pu) {
@@ -347,14 +347,14 @@ static void apply_pu(Snake& me, Snake& opp, uint8_t pu) {
 static int64_t snake_interval(const Snake& s) {
     if(s.pu==PU_SPEED) return FAST_MS*1000LL;
     if(s.pu==PU_SLOW)  return SLOW_MS*1000LL;
-    // Velocità progressiva: -4ms ogni cibo mangiato combinato, minimo 100ms
+    // Progressive speed: -4ms per food eaten (combined), minimum 100ms
     int total = s_s1.score + s_s2.score;
     int64_t base = (MOVE_MS - total*4)*1000LL;
     if(base < 100000LL) base = 100000LL;
     return base;
 }
 
-// ─── step un serpente (HOST only) ────────────────────────────────────────────
+// ─── step one snake (HOST only) ────────────────────────────────────────────
 static bool snake_step(Snake& s, Snake& opp) {
     if(!s.alive) return false;
     // Pop one buffered turn per step so quick double-taps (e.g. up-then-left to dodge) all register.
@@ -376,18 +376,18 @@ static bool snake_step(Snake& s, Snake& opp) {
     int cp=(s.len<MAX_SEG)?s.len:MAX_SEG-1;
     memmove(&s.bx[1],&s.bx[0],cp);
     memmove(&s.by[1],&s.by[0],cp);
-    // Trail: aggiungi la vecchia posizione della testa
+    // Trail: append the old head position
     SnakeTrail& tr=(&s==&s_s1)?s_trail1:s_trail2;
     trail_add(tr, s.bx[0], s.by[0]);
     s.bx[0]=nx; s.by[0]=ny;
-    // Cibo 1 (cresce di 2)
+    // Food 1 (grows by 2)
     if(nx==s_fx&&ny==s_fy) {
         if(s.len<MAX_SEG-1) s.len+=2; else if(s.len<MAX_SEG) s.len++;
         s.score++; if(s.score>s_hisc)s_hisc=s.score;
         parts_spawn((float)(sx_(nx)+CELL/2), (float)(sy_(ny)+CELL/2), C_RED, 12);
         spawn_food(); SFX(SX_EAT);
     }
-    // Cibo 2 (cresce di 2)
+    // Food 2 (grows by 2)
     if(nx==s_fx2&&ny==s_fy2) {
         if(s.len<MAX_SEG-1) s.len+=2; else if(s.len<MAX_SEG) s.len++;
         s.score++; if(s.score>s_hisc)s_hisc=s.score;
@@ -417,7 +417,7 @@ static int8_t ai_choose(void) {
         if(hit) continue;
         bool opp_body=snake_has(op,nx,ny,1);
         bool head_clash=(nx==op.bx[0]&&ny==op.by[0]);
-        // Lookahead: conta vicini liberi
+        // Lookahead: count free neighbours
         int free_nb=0;
         for(int d2=0;d2<4;d2++) {
             int8_t nnx=nx+DX[d2], nny=ny+DY[d2];
@@ -427,7 +427,7 @@ static int8_t ai_choose(void) {
             for(int i=0;i<me.len-2;i++) if(me.bx[i]==nnx&&me.by[i]==nny){blk=true;break;}
             if(!blk&&!snake_has(op,nnx,nny)) free_nb++;
         }
-        // Punta al cibo più vicino tra i due
+        // Aim at whichever food is closer
         int d1=abs(nx-s_fx)+abs(ny-s_fy);
         int d2c=abs(nx-s_fx2)+abs(ny-s_fy2);
         int dist=d1<d2c?d1:d2c;
@@ -444,7 +444,7 @@ static void on_death(void) {
     else if(d2&&!d1){ s_winner=1; s_wins1++; }
     else            { s_winner=(s_s1.score>=s_s2.score)?1:2;
                       if(s_winner==1)s_wins1++;else s_wins2++; }
-    // Esplosione in coordinate schermo (cam già aggiornata prima di game_step)
+    // Explosion in screen coordinates (camera already updated before game_step)
     if(d1) parts_spawn(sx_(s_s1.bx[0])+(float)CELL/2, sy_(s_s1.by[0])+(float)CELL/2, C_GREEN, 20);
     if(d2) parts_spawn(sx_(s_s2.bx[0])+(float)CELL/2, sy_(s_s2.by[0])+(float)CELL/2, 0xF81F, 20);
     SFX(s_winner==1?SX_WIN:SX_DIE);
@@ -458,7 +458,7 @@ static void game_step(int64_t now) {
     if(s_s2.pu&&--s_s2.pu_t<=0) s_s2.pu=PU_NONE;
     if(s_pu_type&&--s_pu_life<=0) s_pu_type=PU_NONE;
     if(!s_pu_type&&--s_pu_next<=0){ spawn_pu(); s_pu_next=rng_range(8,16); }
-    // Salvo teste prima dello step per rilevare lo swap (pass-through)
+    // Save heads before the step to detect the swap (pass-through)
     int8_t old_h1x=s_s1.bx[0], old_h1y=s_s1.by[0];
     int8_t old_h2x=s_s2.bx[0], old_h2y=s_s2.by[0];
     if(s_s1.alive&&now>=s_s1.move_next_us){
@@ -469,17 +469,17 @@ static void game_step(int64_t now) {
         snake_step(s_s2,s_s1);
         s_s2.move_next_us=now+snake_interval(s_s2);
     }
-    // Cross-collision: testa su corpo avversario
+    // Cross-collision: head on opponent's body
     if(s_s1.alive&&snake_has(s_s2,s_s1.bx[0],s_s1.by[0],1)) s_s1.alive=false;
     if(s_s2.alive&&snake_has(s_s1,s_s2.bx[0],s_s2.by[0],1)) s_s2.alive=false;
-    // Testa-a-testa: stesso nodo OPPURE swap di posizione
+    // Head-to-head: same node OR position swap
     if(s_s1.alive&&s_s2.alive) {
         bool same_cell = (s_s1.bx[0]==s_s2.bx[0]&&s_s1.by[0]==s_s2.by[0]);
         bool swap = (s_s1.bx[0]==old_h2x&&s_s1.by[0]==old_h2y
                      &&s_s2.bx[0]==old_h1x&&s_s2.by[0]==old_h1y);
         if(same_cell||swap){ s_s1.alive=false; s_s2.alive=false; }
     }
-    // Update particelle e trail
+    // Update particles and trail
     parts_step();
     trail_step(s_trail1);
     trail_step(s_trail2);
@@ -521,7 +521,7 @@ static void send_input(int8_t dir) {
     pnet_send(s_peer,&pk,sizeof(pk));
 }
 
-// ─── avvia partita ────────────────────────────────────────────────────────────
+// ─── start match ─────────────────────────────────────────────────────────────
 static void start_game(uint32_t seed) {
     s_rng=seed?seed:0xDEADBEEFu;
     gen_obstacles();
@@ -544,7 +544,7 @@ static void start_game(uint32_t seed) {
     nucleo_app_request_draw();
 }
 
-// ─── applica stato (guest) ───────────────────────────────────────────────────
+// ─── apply state (guest) ─────────────────────────────────────────────────────
 static void apply_state(const sn_state_t* st, int plen) {
     int n1=st->s1_len, n2=st->s2_len;
     if(n1>NET_SEG||n2>NET_SEG) return;   // wire lengths are peer-controlled; a legit host caps at NET_SEG(38<MAX_SEG). Reject before the copy loops overrun bx/by[MAX_SEG] and clobber the len field.
@@ -563,7 +563,7 @@ static void apply_state(const sn_state_t* st, int plen) {
         s_winner=(st->s1_alive)?1:2;
         if(s_winner==2)s_wins2++;else s_wins1++;
         SFX(s_winner==2?SX_WIN:SX_DIE);
-        // Esplosione lato guest
+        // Explosion on the guest side
         cam_update();
         Snake& dead=(s_winner==1)?s_s2:s_s1;
         uint16_t dc=(s_winner==1)?0xF81F:C_GREEN;
@@ -573,7 +573,7 @@ static void apply_state(const sn_state_t* st, int plen) {
     nucleo_app_request_draw();
 }
 
-// ─── gestore pacchetti ────────────────────────────────────────────────────────
+// ─── packet handler ──────────────────────────────────────────────────────────
 static void net_handle(const pnet_pkt_t* pkt) {
     const sn_hdr_t* hdr=(const sn_hdr_t*)pkt->buf;
     if(pkt->len<(int)sizeof(sn_hdr_t)) return;
@@ -682,7 +682,7 @@ static bool poll_fn(void) {
             }
         }
     } else if(s_st==ST_PLAY) {
-        // Camera aggiornata PRIMA di game_step → esplosioni in pos. corrette
+        // Camera updated BEFORE game_step → explosions land at the correct position
         cam_update();
         if(s_mode==MODE_HOST||s_mode==MODE_AI) {
             game_step(now);
@@ -710,12 +710,12 @@ static bool poll_fn(void) {
     return true;
 }
 
-// ─── HUD con minimappa ────────────────────────────────────────────────────────
+// ─── HUD with minimap ────────────────────────────────────────────────────────
 static void draw_hud(void) {
     d.fillRect(0,0,W,HUD_H,0x1082);
     d.drawFastHLine(0,HUD_H-1,W,0x2945);
 
-    // P1 (verde) — lato sinistro
+    // P1 (green) — left side
     d.setTextColor(C_GREEN); d.setTextSize(1);
     char buf[14]; strncpy(buf,s_s1.name,8); buf[8]=0;
     d.setCursor(3,4); d.print(buf);
@@ -726,7 +726,7 @@ static void draw_hud(void) {
         d.fillRect(3,HUD_H-3,bw,2,PU_COL[s_s1.pu]);
     }
 
-    // P2 (magenta) — lato destro
+    // P2 (magenta) — right side
     d.setTextColor(0xF81F); d.setTextSize(1);
     strncpy(buf,s_s2.name,8); buf[8]=0;
     int nw=(int)strlen(buf)*6;
@@ -739,27 +739,27 @@ static void draw_hud(void) {
         d.fillRect(W-MM_W-6-bw,HUD_H-3,bw,2,PU_COL[s_s2.pu]);
     }
 
-    // Minimappa — centro destra
+    // Minimap — center right
     d.fillRect(W-MM_W-2, MM_Y, MM_W, MM_H, 0x0821);
     d.drawRect(W-MM_W-2, MM_Y, MM_W, MM_H, 0x4228);
     int mx=W-MM_W-2;
-    // Viewport rect sulla mappa
+    // Viewport rect on the map
     int vrx=mx+s_cam_x/2, vry=MM_Y+s_cam_y/2;
     d.drawRect(vrx, vry, VIEW_W/2, VIEW_H/2, 0x52AA);
-    // Cibi
+    // Food
     d.drawPixel(mx+s_fx/2,  MM_Y+s_fy/2,  C_RED);
     d.drawPixel(mx+s_fx2/2, MM_Y+s_fy2/2, 0xFD00);
     // PU
     if(s_pu_type) d.drawPixel(mx+s_pu_x/2, MM_Y+s_pu_y/2, PU_COL[s_pu_type]);
-    // Corpi serpenti (ogni 3° segmento)
+    // Snake bodies (every 3rd segment)
     for(int i=2;i<s_s1.len;i+=3) d.drawPixel(mx+s_s1.bx[i]/2, MM_Y+s_s1.by[i]/2, dim565(C_GREEN,5,8));
     for(int i=2;i<s_s2.len;i+=3) d.drawPixel(mx+s_s2.bx[i]/2, MM_Y+s_s2.by[i]/2, dim565(0xF81F,5,8));
-    // Teste
+    // Heads
     d.fillRect(mx+s_s1.bx[0]/2, MM_Y+s_s1.by[0]/2, 2, 2, C_GREEN);
     d.fillRect(mx+s_s2.bx[0]/2, MM_Y+s_s2.by[0]/2, 2, 2, 0xF81F);
 }
 
-// ─── draw serpente con camera ─────────────────────────────────────────────────
+// ─── draw snake with camera ──────────────────────────────────────────────────
 static void draw_snake(const Snake& s, uint16_t col) {
     for(int i=s.len-1;i>=0;i--) {
         int8_t cx=s.bx[i], cy=s.by[i];
@@ -773,10 +773,10 @@ static void draw_snake(const Snake& s, uint16_t col) {
             if(s.pu==PU_SHIELD){ d.drawCircle(hcx,hcy,CELL/2+2,0x07FF); d.drawCircle(hcx,hcy,CELL/2+1,dim565((uint16_t)0x07FF,1,2)); }
             else if(s.pu==PU_GHOST){ d.drawRoundRect(px-2,py-2,CELL+4,CELL+4,3,dim565((uint16_t)0xC618,1,2)); }
             else if(s.pu==PU_SPEED){ d.drawFastHLine(px-3,hcy,2,C_YELLOW); d.drawFastHLine(px+CELL+1,hcy,2,C_YELLOW); }
-            // Testa con occhi
+            // Head with eyes
             d.fillRoundRect(px,py,CELL,CELL,2,sc);
             d.drawRoundRect(px,py,CELL,CELL,2,dim565(sc,14,8));
-            // Occhi in base alla direzione
+            // Eyes based on direction
             if(s.dir==DRT){ d.fillRect(px+5,py+1,2,2,0); d.fillRect(px+5,py+5,2,2,0); }
             else if(s.dir==DLT){ d.fillRect(px+1,py+1,2,2,0); d.fillRect(px+1,py+5,2,2,0); }
             else if(s.dir==DUP){ d.fillRect(px+2,py+1,2,2,0); d.fillRect(px+4,py+1,2,2,0); }
@@ -788,9 +788,9 @@ static void draw_snake(const Snake& s, uint16_t col) {
     }
 }
 
-// ─── bordi mondo visibili ─────────────────────────────────────────────────────
+// ─── visible world borders ───────────────────────────────────────────────────
 static void draw_borders(void) {
-    uint16_t wc=0x528A; // blu-grigio scuro per muro
+    uint16_t wc=0x528A; // dark blue-grey for wall
     if(s_cam_x==0)            d.fillRect(0,PLAY_Y,2,H-PLAY_Y,wc);
     if(s_cam_x+VIEW_W>=WORLD_W) d.fillRect(W-2,PLAY_Y,2,H-PLAY_Y,wc);
     if(s_cam_y==0)            d.fillRect(0,PLAY_Y,W,2,wc);
@@ -800,12 +800,12 @@ static void draw_borders(void) {
     }
 }
 
-// ─── draw campo ───────────────────────────────────────────────────────────────
+// ─── draw field ───────────────────────────────────────────────────────────────
 static void draw_play(void) {
-    // Background semplice
+    // Simple background
     d.fillRect(0,PLAY_Y,W,H-PLAY_Y,0x0821);
 
-    // Ostacoli (minimale)
+    // Obstacles (minimal)
     for(int gx_=s_cam_x;gx_<s_cam_x+VIEW_W&&gx_<WORLD_W;gx_++) {
         for(int gy_=s_cam_y;gy_<s_cam_y+VIEW_H&&gy_<WORLD_H;gy_++) {
             if(!s_obstacles||gx_<0||gx_>=WORLD_W||gy_<0||gy_>=WORLD_H||!s_obstacles[gy_][gx_]) continue;
@@ -816,7 +816,7 @@ static void draw_play(void) {
 
     draw_borders();
 
-    // Cibo 1 — rosso pulsante + glow
+    // Food 1 — pulsing red + glow
     if(inv_(s_fx,s_fy)) {
         int fpx=sx_(s_fx)+CELL/2, fpy=sy_(s_fy)+CELL/2;
         int frad=(s_tick&8)?3:4;
@@ -825,7 +825,7 @@ static void draw_play(void) {
         d.drawCircle(fpx,fpy,frad+2,dim565(C_RED,4,8));
         d.fillCircle(fpx,fpy,frad,C_RED);
     }
-    // Cibo 2 — arancione + glow
+    // Food 2 — orange + glow
     if(inv_(s_fx2,s_fy2)) {
         uint16_t oc=0xFD00;
         int fpx=sx_(s_fx2)+CELL/2, fpy=sy_(s_fy2)+CELL/2;
@@ -836,7 +836,7 @@ static void draw_play(void) {
         d.fillCircle(fpx,fpy,frad,oc);
     }
 
-    // Power-up sul campo con aura
+    // Power-up on the field with an aura
     if(s_pu_type&&inv_(s_pu_x,s_pu_y)) {
         int ppx=sx_(s_pu_x)+CELL/2, ppy=sy_(s_pu_y)+CELL/2;
         uint16_t pc=PU_COL[s_pu_type];
@@ -844,13 +844,13 @@ static void draw_play(void) {
         int aura=((s_tick>>1)&2);
         d.drawCircle(ppx,ppy,pr+2+aura,dim565(pc,3,8));
         d.fillCircle(ppx,ppy,pr,pc);
-        // Simbolo sopra l'orb
+        // Symbol above the orb
         d.setTextColor(0xFFFF); d.setTextSize(1);
         char sym[2]={PU_SYM[s_pu_type],0};
         d.setCursor(ppx-3, ppy-CELL-1); d.print(sym);
     }
 
-    // Trail dietro i serpenti
+    // Trail behind the snakes
     for(int i=0;i<s_trail1.cnt;i++) {
         if(!s_trail1.pts[i].life) continue;
         int tx=sx_(s_trail1.pts[i].x), ty=sy_(s_trail1.pts[i].y);
@@ -866,15 +866,15 @@ static void draw_play(void) {
         d.fillRect(tx+2,ty+2,CELL-4,CELL-4,tc);
     }
 
-    // Serpenti: avversario sotto, proprio sopra
+    // Snakes: opponent below, own above
     if(s_mode==MODE_GUEST){ draw_snake(s_s1,C_GREEN);  draw_snake(s_s2,0xF81F); }
     else                  { draw_snake(s_s2,0xF81F);   draw_snake(s_s1,C_GREEN); }
 
-    // Particelle esplosione
+    // Explosion particles
     for(auto& p:s_parts)
         if(p.life) d.fillRect((int)p.x,(int)p.y,3,3,p.col);
 
-    // Flash bordo schermo a morte
+    // Screen-edge flash on death
     if(s_flash>0) {
         uint16_t fc=(s_winner==1)?C_GREEN:0xF81F;
         for(int t=0;t<(s_flash>5?2:1);t++)
@@ -884,7 +884,7 @@ static void draw_play(void) {
     draw_hud();
 }
 
-// ─── schermate menu ───────────────────────────────────────────────────────────
+// ─── menu screens ────────────────────────────────────────────────────────────
 static void draw_menu(void) {
     d.fillScreen(BG);
 
@@ -1097,7 +1097,7 @@ static void on_key(int key, char ch) {
             }
             break;
         case ST_PLAY:
-            // NK_LEFT → on_back lo intercetta e chiama set_dir(DLT)
+            // NK_LEFT → on_back intercepts it and calls set_dir(DLT)
             if(key==NK_UP  ||ch=='w'||ch=='W') set_dir(DUP);
             if(key==NK_DOWN||ch=='s'||ch=='S') set_dir(DDN);
             if(key==NK_RIGHT||ch=='d'||ch=='D') set_dir(DRT);
@@ -1137,7 +1137,7 @@ static void on_tab(void) {
     if(s_st==ST_HELP){ s_help_pg^=1; nucleo_app_request_draw(); }
 }
 
-// ─── ciclo vita app ───────────────────────────────────────────────────────────
+// ─── app lifecycle ───────────────────────────────────────────────────────────
 static void on_enter(void) {
     if(!s_obstacles) s_obstacles=(uint8_t(*)[WORLD_W])calloc(WORLD_H,WORLD_W);  // ~3.1 KB only while playing
     s_st=ST_MENU; s_menu_sel=0;
@@ -1162,7 +1162,7 @@ static void on_exit(void) {
     free(s_obstacles); s_obstacles=nullptr;   // back to zero .bss until relaunched
 }
 
-// ─── registrazione ────────────────────────────────────────────────────────────
+// ─── registration ────────────────────────────────────────────────────────────
 extern "C" void nucleo_register_snake(void) {
     static const nucleo_app_def_t app = {
         "snake", "Snake", "Games", "Serpente 1v1 in rete (ESP-NOW) o vs AI",

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-# build_index.py — impacchetta una cartella di clip <slug>.wav (24kHz mono 16-bit) in DUE file che
-# il device legge in modo efficiente: index.bin (slug->offset,len, ORDINATO) + clips.pcm (PCM grezzo
-# concatenato). Cosi' il Cardputer NON apre 28k file in una cartella FAT (lento, O(N)), ma fa una
-# ricerca binaria nell'indice (RAM~0, ~15 letture). Vedi nucleo_tts_index.h.
+# build_index.py — packs a folder of <slug>.wav clips (24kHz mono 16-bit) into TWO files that
+# the device reads efficiently: index.bin (slug->offset,len, SORTED) + clips.pcm (raw PCM
+# concatenated). This way the Cardputer does NOT open 28k files in a FAT folder (slow, O(N)) but does a
+# binary search in the index (RAM~0, ~15 reads). See nucleo_tts_index.h.
 #
 #   python build_index.py --in tools/nucleo-tts/_wav/it --out deploy/sd-safe/data/tts/it
 import os, sys, argparse, struct, wave, glob
@@ -17,12 +17,12 @@ def main():
     os.makedirs(args.outdir, exist_ok=True)
 
     wavs = glob.glob(os.path.join(args.indir, "*.wav"))
-    # slug -> path; slug = nome file senza .wav, troncato a 47 (deve combaciare col planner)
+    # slug -> path; slug = file name without .wav, truncated to 47 (must match the planner)
     items = {}
     for p in wavs:
         slug = os.path.splitext(os.path.basename(p))[0][:SLUG-1]
         if slug: items[slug] = p
-    slugs = sorted(items, key=lambda s: s.encode("ascii", "ignore"))   # byte-order == strcmp del device
+    slugs = sorted(items, key=lambda s: s.encode("ascii", "ignore"))   # byte-order == the device strcmp
     if not slugs: sys.exit("nessun .wav in %s" % args.indir)
 
     pcm_path = os.path.join(args.outdir, "clips.pcm")
@@ -33,7 +33,7 @@ def main():
             try:
                 w = wave.open(items[slug], "rb")
                 if w.getnchannels() != 1 or w.getsampwidth() != 2 or w.getframerate() != args.rate:
-                    bad += 1; w.close(); continue            # formato non canonico -> scarta (non corrompere)
+                    bad += 1; w.close(); continue            # non-canonical format -> discard (do not corrupt)
                 data = w.readframes(w.getnframes()); w.close()
             except Exception:
                 bad += 1; continue

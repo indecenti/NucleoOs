@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
 NPX Generator — NucleoPlayerXtra Audio Analysis Tool
-Genera file .npx sidecar per il DJ player di NucleoOS.
+Generates .npx sidecar files for the NucleoOS DJ player.
 
-Trascina & rilascia file MP3/WAV nella finestra per analizzarli massivamente.
-I file .npx vengono salvati accanto agli audio originali sulla SD card.
+Drag & drop MP3/WAV files into the window to analyze them in bulk.
+The .npx files are saved next to the original audio files on the SD card.
 
-Requisiti: pip install librosa numpy tkinterdnd2 soundfile
+Requirements: pip install librosa numpy tkinterdnd2 soundfile
 """
 import struct
 import os

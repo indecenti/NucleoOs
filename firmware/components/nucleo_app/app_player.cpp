@@ -63,10 +63,10 @@ extern "C" {
 
 #define MUSIC_DIR     NUCLEO_SD_MOUNT "/data/Music"
 #define SETTINGS_PATH NUCLEO_SD_MOUNT "/system/config/player.json"
-// Tenuti PICCOLI come il Video app (VState ~5 KB) di proposito: PState va allocato in UN blocco
-// contiguo all'apertura, e su questo heap frammentato senza PSRAM il blocco grande non c'e' (96+64
-// voci facevano ~10,5 KB -> calloc falliva -> "RAM insufficiente" e Music non apriva). 48 voci per
-// cartella + 32 in coda portano PState a ~5,3 KB, in linea col Video che apre senza problemi.
+// Kept SMALL like the Video app (VState ~5 KB) on purpose: PState must be allocated as ONE
+// contiguous block at open time, and on this fragmented heap without PSRAM the large block isn't
+// there (96+64 entries made ~10.5 KB -> calloc failed -> "out of RAM" and Music wouldn't open). 48
+// entries per folder + 32 queued keep PState at ~5.3 KB, in line with Video, which opens fine.
 #define MAXE   48   // max entries in current folder
 #define MAXQ   32   // max queued tracks
 #define HEAD_H 20   // list context-header height
@@ -234,8 +234,8 @@ static uint32_t track_seconds(const char *abs)
     fclose(f); return secs;
 }
 
-// Usa stat() per determinare se un path è una directory.
-// d_type è inaffidabile su FATFS (restituisce DT_UNKNOWN).
+// Use stat() to determine whether a path is a directory.
+// d_type is unreliable on FATFS (returns DT_UNKNOWN).
 static bool is_dir_stat(const char *path)
 {
     struct stat sb;

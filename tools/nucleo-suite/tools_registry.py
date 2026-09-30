@@ -1,19 +1,18 @@
 # -*- coding: utf-8 -*-
 """
-Registro dei tool della NucleoOS Toolkit — bilingue IT/EN.
 NucleoOS Toolkit tool registry — bilingual IT/EN.
 
-Fonte UNICA usata sia dal launcher (launcher.py) sia dal build .exe
-(NucleoSuite.spec). I percorsi `script` sono relativi alla radice del repo e
-vengono rispecchiati 1:1 dentro il bundle PyInstaller.
+SINGLE source used by both the launcher (launcher.py) and the .exe build
+(NucleoSuite.spec). The `script` paths are relative to the repo root and
+are mirrored 1:1 inside the PyInstaller bundle.
 
-I campi testuali localizzabili (title, tagline, description, features, requires,
-e le label dei params) sono dizionari {"it": ..., "en": ...}. Il launcher sceglie
-la lingua con L(). I campi NON testuali (id, cat, glyph, accent, script, kind,
-frozen_ok, needs_repo) restano semplici.
+The localizable text fields (title, tagline, description, features, requires,
+and the params labels) are dicts {"it": ..., "en": ...}. The launcher picks
+the language with L(). The NON-text fields (id, cat, glyph, accent, script, kind,
+frozen_ok, needs_repo) stay plain.
 
-cat = chiave categoria STABILE ("video" | "system" | "diag"): il filtro lavora su
-questa, i nomi visualizzati arrivano da CATS (localizzati).
+cat = STABLE category key ("video" | "system" | "diag"): the filter works on
+it, the displayed names come from CATS (localized).
 """
 
 TOOLS = [
@@ -262,7 +261,7 @@ TOOLS = [
 
 TOOLS_BY_ID = {t["id"]: t for t in TOOLS}
 
-# Categorie: chiave stabile + nome localizzato.
+# Categories: stable key + localized name.
 CATS = [
     ("all",    {"it": "Tutti",       "en": "All"}),
     ("video",  {"it": "Video",       "en": "Video"}),

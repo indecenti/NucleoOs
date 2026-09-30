@@ -1,19 +1,19 @@
 // app_screensaver.cpp — NucleoOS Salvaschermo
 //
-// Tre effetti animati + modalità schermo-off. Si attiva automaticamente dal
-// launcher dopo inattività configurabile (5-600 s). Qualsiasi tasto lo chiude.
+// Three animated effects + a screen-off mode. Activated automatically by the
+// launcher after a configurable idle time (5-600 s). Any key closes it.
 //
-// ANTI-FLICKER: Tecnica 1 esclusivamente.
-//   poll_fn() restituisce true alla frequenza target → il framework chiama
-//   on_draw() → l'app disegna il frame completo sul CANVAS (sprite SRAM) →
-//   il framework blitta il canvas sul TFT in un'unica transazione DMA.
-//   MAI direct_draw=true con fillScreen: quella combo scrive direttamente al
-//   TFT in due passate e produce sfarfallio evidente.
+// ANTI-FLICKER: Technique 1 exclusively.
+//   poll_fn() returns true at the target frequency → the framework calls
+//   on_draw() → the app draws the full frame on the CANVAS (SRAM sprite) →
+//   the framework blits the canvas to the TFT in a single DMA transaction.
+//   NEVER direct_draw=true with fillScreen: that combo writes directly to the
+//   TFT in two passes and produces visible flicker.
 //
-// Effetti (tutto static .bss, zero heap runtime):
-//   MODE_CLOCK — orologio rimbalzante stile DVD (canvas: fillScreen + testo)
-//   MODE_STARS — starfield warp 3D   (canvas: fillScreen + drawPixel)
-//   MODE_FIRE  — fuoco procedurale   (canvas: fillRect per cella, batch write)
+// Effects (all static .bss, zero runtime heap):
+//   MODE_CLOCK — DVD-style bouncing clock (canvas: fillScreen + text)
+//   MODE_STARS — 3D starfield warp   (canvas: fillScreen + drawPixel)
+//   MODE_FIRE  — procedural fire     (canvas: fillRect per cell, batch write)
 
 #include "nucleo_app.h"
 #include "nucleo_kbd.h"
@@ -33,39 +33,39 @@
 #define W 240
 #define H 135
 
-// ---- Modalità ---------------------------------------------------------------
+// ---- Modes -------------------------------------------------------------------
 #define MODE_OFF   0
 #define MODE_CLOCK 1
 #define MODE_STARS 2
 #define MODE_FIRE  3
 
-// ---- Stato condiviso (letto da nucleo_app.cpp) ------------------------------
+// ---- Shared state (read by nucleo_app.cpp) ----------------------------------
 static int32_t g_threshold_ms = 60000;
 static int     g_mode         = MODE_CLOCK;
 static bool    g_trigger      = false;
 static bool    s_cfg_loaded   = false;   // screensaver.json read this boot (see cfg_ensure)
 
-// ---- Stato app --------------------------------------------------------------
+// ---- App state ----------------------------------------------------------------
 static bool    s_running    = false;
 static bool    s_auto       = false;
 static int     s_tab        = 0;
 static int     s_sel        = 0;
 static bool    s_dirty      = true;
-static int64_t s_frame_us   = 0;    // timestamp ultimo frame (µs)
+static int64_t s_frame_us   = 0;    // timestamp of the last frame (µs)
 static int     s_saved_bright = 80;
 
-// ---- Frequenze target (µs/frame) -------------------------------------------
-#define CLOCK_US  100000   // 10 fps — orologio secondi, abbastanza fluido
+// ---- Target frequencies (µs/frame) -------------------------------------------
+#define CLOCK_US  100000   // 10 fps — seconds clock, smooth enough
 #define STARS_US   33333   // ~30 fps
-#define FIRE_US    16666   // ~60 fps — fuoco ultrafluidissimo
+#define FIRE_US    16666   // ~60 fps — silky-smooth fire
 
-// ==================== OROLOGIO RIMBALZANTE ==================================
-// Tecnica 1: ogni frame → fillScreen(0) su canvas → disegna testo → blit unico.
-// Nessun delta tracking: il canvas è lo stato intermedio, il TFT vede un frame
-// completo per ogni blit.
+// ==================== BOUNCING CLOCK =========================================
+// Technique 1: each frame → fillScreen(0) on canvas → draw text → single blit.
+// No delta tracking: the canvas is the intermediate state, the TFT sees a
+// complete frame on every blit.
 
 #define CL_TW 144   // "HH:MM:SS" @ size-3: 8 char × 18 px
-#define CL_TH  38   // 24 (ora) + 2 + 12 (data)
+#define CL_TH  38   // 24 (hour) + 2 + 12 (date)
 
 static int16_t cl_x, cl_y;
 static int8_t  cl_vx, cl_vy;
@@ -88,19 +88,19 @@ static void clock_init(void)
 
 static void clock_frame(void)
 {
-    // Aggiorna posizione con rimbalzo e cambio colore ai bordi
+    // Update position with bounce and color change at the edges
     cl_x += cl_vx; cl_y += cl_vy;
     if (cl_x <= 0)         { cl_x = 0;        cl_vx =  1; cl_ci = (cl_ci + 1) % NCL; }
     if (cl_x + CL_TW >= W) { cl_x = W - CL_TW; cl_vx = -1; cl_ci = (cl_ci + 1) % NCL; }
     if (cl_y <= 0)         { cl_y = 0;        cl_vy =  1; cl_ci = (cl_ci + 1) % NCL; }
     if (cl_y + CL_TH >= H) { cl_y = H - CL_TH; cl_vy = -1; cl_ci = (cl_ci + 1) % NCL; }
 
-    // Frame completo sul canvas: sfondo nero + orologio
+    // Full frame on canvas: black background + clock
     d.fillScreen(0x0000);
 
     uint16_t col = CL_COLS[cl_ci];
 
-    // Alone sottile (rettangolo scuro dietro il testo)
+    // Faint halo (dark rectangle behind the text)
     d.fillRoundRect(cl_x - 4, cl_y - 3, CL_TW + 8, CL_TH + 4, 4,
                     (uint16_t)(col >> 3 & 0x1CE3));
 
@@ -125,9 +125,9 @@ static void clock_frame(void)
     d.print(dat);
 }
 
-// ==================== STARFIELD WARP 3D =====================================
-// Tecnica 1: fillScreen(0) su canvas ogni frame, poi drawPixel delle stelle.
-// Il canvas viene blittato una volta: il TFT vede un frame atomico senza strappi.
+// ==================== STARFIELD WARP 3D =======================================
+// Technique 1: fillScreen(0) on canvas every frame, then drawPixel the stars.
+// The canvas is blitted once: the TFT sees one atomic frame with no tearing.
 
 #define NSTARS 64
 #define ZMAX   24
@@ -152,7 +152,7 @@ static void stars_init(void)
 
 static void stars_frame(void)
 {
-    // Frame completo: cielo nero + stelle proiettate
+    // Full frame: black sky + projected stars
     d.fillScreen(0x0000);
 
     int cx = W / 2, cy = H / 2;
@@ -177,44 +177,44 @@ static void stars_frame(void)
     }
 }
 
-// ==================== FUOCO PROCEDURALE (Doom-fire) =========================
-// Griglia 60×27 celle da 4×5 px = esattamente 240×135 (copertura totale).
-// +1 riga sorgente nascosta sotto lo schermo: fire_buf[FH-1] è sempre 255,
-// non viene renderizzata ma alimenta le fiamme che arrivano al bordo inferiore.
+// ==================== PROCEDURAL FIRE (Doom-fire) =============================
+// 60×27 grid of 4×5 px cells = exactly 240×135 (full coverage).
+// +1 hidden source row below the screen: fire_buf[FH-1] is always 255,
+// it isn't rendered but feeds the flames that reach the bottom edge.
 //
-// Algoritmo classico Doom-fire (Fabien Sanglard):
-//   ogni cella guarda la cella sotto, con shift laterale casuale e decadimento
-//   0-1: produce lingua di fiamma con deriva naturale senza arte artefattuale.
+// Classic Doom-fire algorithm (Fabien Sanglard):
+//   each cell looks at the cell below, with random lateral shift and decay
+//   0-1: produces a flame tongue with natural drift and no artefacts.
 //
-// Palette 4 fasi: nero → rosso scuro → arancione → giallo → bianco alle punte.
-// Tecnica 1: tutto sul canvas (d = canvas nell'on_draw), blit unico dal framework.
+// 4-phase palette: black → dark red → orange → yellow → white at the tips.
+// Technique 1: everything on the canvas (d = canvas in on_draw), single blit by the framework.
 
-#define FW   60          // celle larghezza (60*4=240)
-#define FHV  27          // celle visibili in altezza (27*5=135)
-#define FH   28          // +1 riga sorgente nascosta
-#define FCS  4           // px per cella orizzontale
-#define FCH  5           // px per cella verticale
+#define FW   60          // cell width (60*4=240)
+#define FHV  27          // visible cells in height (27*5=135)
+#define FH   28          // +1 hidden source row
+#define FCS  4           // px per horizontal cell
+#define FCH  5           // px per vertical cell
 
 // Heap-on-demand (was .bss ~1.7 KB): only the FIRE mode needs it, and the saver is closed at boot.
 // Allocated in fire_init(), freed on_exit; the fire_* helpers skip cleanly if the alloc failed.
 static uint8_t (*fire_buf)[FW] = nullptr;
 static uint16_t fire_pal[256];
 static bool     fire_pal_ok = false;
-static int      fire_breath = 0;     // oscillazione globale 0..8 per respiro fiamme
+static int      fire_breath = 0;     // global oscillation 0..8 for flame breathing
 
 static void fire_init_pal(void)
 {
     if (fire_pal_ok) return;
     for (int i = 0; i < 256; i++) {
         int r, g, b;
-        // Palette fuoco MASSIMO: nero → rosso scuro vivace → rosso fuoco → arancione bruciante → giallo+arancione → bianco incandescente
-        if      (i < 15)  { r = 0;   g = 0;   b = 0; }                                      // nero profondo
-        else if (i < 40)  { r = (i - 15) * 9;  g = 0;  b = 0; }                            // rosso scuro bruciante (0..225)
-        else if (i < 80)  { r = 255; g = (i - 40) * 4; b = 0; }                            // rosso-arancione fuoco vivace
-        else if (i < 120) { r = 255; g = 160 + (i - 80); b = (i - 80) / 4; }              // arancione intensissimo
-        else if (i < 160) { r = 255; g = 200 + (i - 120) / 2; b = 30 + (i - 120) / 2; }   // giallo-arancione bruciante
-        else if (i < 200) { r = 255; g = 220 + (i - 160) / 4; b = 60 + (i - 160) / 2; }   // giallo brillante con azzurro
-        else              { r = 255; g = 230 + (i - 200) / 5; b = 100 + (i - 200) / 3; }  // bianco incandescente azzurrino
+        // MAXIMUM fire palette: black → vivid dark red → fire red → burning orange → yellow+orange → white-hot
+        if      (i < 15)  { r = 0;   g = 0;   b = 0; }                                      // deep black
+        else if (i < 40)  { r = (i - 15) * 9;  g = 0;  b = 0; }                            // burning dark red (0..225)
+        else if (i < 80)  { r = 255; g = (i - 40) * 4; b = 0; }                            // vivid red-orange fire
+        else if (i < 120) { r = 255; g = 160 + (i - 80); b = (i - 80) / 4; }              // intense orange
+        else if (i < 160) { r = 255; g = 200 + (i - 120) / 2; b = 30 + (i - 120) / 2; }   // burning yellow-orange
+        else if (i < 200) { r = 255; g = 220 + (i - 160) / 4; b = 60 + (i - 160) / 2; }   // bright yellow with a hint of blue
+        else              { r = 255; g = 230 + (i - 200) / 5; b = 100 + (i - 200) / 3; }  // glowing bluish white
         if (r > 255) r = 255;
         if (g > 255) g = 255;
         if (b > 255) b = 255;
@@ -225,19 +225,19 @@ static void fire_init_pal(void)
 
 static void fire_seed(void)
 {
-    // Sorgente caotica con breath globale (oscillazione 0..8) + picchi esplosivi
-    fire_breath = (fire_breath + 1) % 16;  // 0..15, ciclo per respiro sinusoidale
+    // Chaotic source with a global breath (oscillation 0..8) + explosive spikes
+    fire_breath = (fire_breath + 1) % 16;  // 0..15, cycle for a sinusoidal breath
     int breath_mod = 4 + (fire_breath < 8 ? fire_breath : 16 - fire_breath);  // 4..12
 
     for (int x = 0; x < FW; x++) {
         int base = 255;
-        // Variazione intensità con modulazione breath
+        // Intensity variation with breath modulation
         if (rand() % 3 == 0)  base = 200 + (rand() % 55);
-        if (rand() % 5 == 0)  base = 180 + (rand() % 75);    // più picchi brucianti
-        if (rand() % 10 == 0) base = 100 + (rand() % 155);   // buchi per vortici
-        if (rand() % 20 == 0) base = 255;                     // bolidi esplosivi rare
+        if (rand() % 5 == 0)  base = 180 + (rand() % 75);    // more burning spikes
+        if (rand() % 10 == 0) base = 100 + (rand() % 155);   // holes for vortices
+        if (rand() % 20 == 0) base = 255;                     // rare explosive fireballs
 
-        // Applica breath globale come modulatore
+        // Apply the global breath as a modulator
         base = (base * breath_mod) / 8;
         fire_buf[FH - 1][x] = (uint8_t)(base > 255 ? 255 : base);
     }
@@ -245,23 +245,23 @@ static void fire_seed(void)
 
 static void fire_step(void)
 {
-    // Doom-fire MASSIMO: deriva esplosiva, decadimento dinamico, vortici + scintille
+    // MAXIMUM Doom-fire: explosive drift, dynamic decay, vortices + sparks
     for (int y = 0; y < FH - 1; y++) {
         for (int x = 0; x < FW; x++) {
-            int r  = rand() % 16;  // [0..15] ultra-varianza
-            int sx = x - ((r >> 2) - 1);  // shift ampio [-1..2]
+            int r  = rand() % 16;  // [0..15] ultra-variance
+            int sx = x - ((r >> 2) - 1);  // wide shift [-1..2]
             if (sx < 0)   sx = 0;
             if (sx >= FW) sx = FW - 1;
 
-            // Decadimento variabile 0-4 per vortici più intensi
-            int decay = (r & 7) >> 1;  // [0..3], ma spesso meno
+            // Variable 0-4 decay for more intense vortices
+            int decay = (r & 7) >> 1;  // [0..3], but often less
             int v = (int)fire_buf[y + 1][sx] - decay;
 
-            // Effetti boosters:
-            if (rand() % 100 < 15) {  // scintille ascendenti rare
+            // Booster effects:
+            if (rand() % 100 < 15) {  // rare rising sparks
                 v = (int)fire_buf[y + 1][sx] - (decay >> 1);
             }
-            if (rand() % 100 < 8) {   // bolidi esplosivi ultra-rari
+            if (rand() % 100 < 8) {   // ultra-rare explosive fireballs
                 v = (int)fire_buf[y + 1][sx];
             }
 
@@ -276,28 +276,28 @@ static void fire_init(void)
     if (!fire_buf) return;
     fire_init_pal();
     memset(fire_buf, 0, (size_t)FH * FW);
-    fire_breath = 0;  // reset respiro
+    fire_breath = 0;  // reset breath
     fire_seed();
 }
 
 static void fire_frame(void)
 {
     if (!fire_buf) return;
-    fire_seed();   // sorgente sempre piena → fiamma continua al bordo inferiore
+    fire_seed();   // source always full → continuous flame at the bottom edge
     fire_step();
     for (int y = 0; y < FHV; y++)
         for (int x = 0; x < FW; x++)
             d.fillRect(x * FCS, y * FCH, FCS, FCH, fire_pal[fire_buf[y][x]]);
 }
 
-// ==================== AVVIO / STOP SAVER ====================================
+// ==================== START / STOP SAVER ======================================
 static void saver_start(void)
 {
     s_running = true;
-    // fullscreen: il canvas copre tutto 240×135, hint bar esclusa
+    // fullscreen: the canvas covers the whole 240×135, hint bar excluded
     nucleo_app_set_fullscreen(true);
-    // NON usare direct_draw: si disegna sul canvas, il framework blitta una volta
-    // sola → zero sfarfallio (Tecnica 1 anti-flicker).
+    // DO NOT use direct_draw: drawing happens on the canvas, the framework blits
+    // once → zero flicker (Technique 1 anti-flicker).
     if (g_mode == MODE_OFF) {
         s_saved_bright = nucleo_app_brightness();
         nucleo_app_set_brightness(0);
@@ -309,7 +309,7 @@ static void saver_start(void)
         fire_init();
     }
     s_frame_us = esp_timer_get_time();
-    nucleo_app_request_draw();  // forza il primo frame subito
+    nucleo_app_request_draw();  // force the first frame immediately
 }
 
 static void saver_stop(void)
@@ -321,7 +321,7 @@ static void saver_stop(void)
     s_dirty = true;
 }
 
-// ==================== PERSISTENZA ===========================================
+// ==================== PERSISTENCE ==============================================
 static void load_settings(void)
 {
     FILE *f = fopen(SETTINGS_PATH, "rb");
@@ -350,7 +350,7 @@ static void save_settings(void)
     fclose(f);
 }
 
-// ---- app_ui_list callbacks (tab EFFETTO) ------------------------------------
+// ---- app_ui_list callbacks (EFFETTO tab) -------------------------------------
 static const char *mode_label(int i, void *)
 {
     static const char *const N[] = { "Spento","Orologio","Stelle","Fuoco","► Prova" };
@@ -368,7 +368,7 @@ static unsigned short mode_color(int i, void *)
     return C_PURPLE;
 }
 
-// ==================== UI IMPOSTAZIONI =======================================
+// ==================== SETTINGS UI ==============================================
 static void draw_settings(void)
 {
     int ch = nucleo_app_content_height();
@@ -415,7 +415,7 @@ static void draw_settings(void)
     }
 }
 
-// ==================== CALLBACK APP =========================================
+// ==================== APP CALLBACKS ============================================
 static bool on_back(int key)
 {
     if (s_running) {
@@ -430,9 +430,9 @@ static bool on_back(int key)
 static void on_tab(void)
 {
     if (s_running) {
-        // Se preview da selezione (s_auto), TAB non cicla — solo BACK chiude
+        // If previewing from a selection (s_auto), TAB doesn't cycle — only BACK closes
         if (s_auto) return;
-        // Altrimenti cicla effetti (solo da impostazioni manuali)
+        // Otherwise cycle effects (manual settings only)
         saver_stop();
         g_mode = (g_mode + 1) % 4;
         s_sel  = g_mode;
@@ -445,9 +445,9 @@ static void on_tab(void)
     nucleo_app_request_draw();
 }
 
-// poll_fn: chiamata ~50 Hz, restituisce true alla frequenza target dell'effetto.
-// Il framework chiama on_draw solo quando true → blit al TFT alla data rate,
-// non alla loop rate (anti-flicker, evita frame duplicati).
+// poll_fn: called ~50 Hz, returns true at the effect's target frequency.
+// The framework calls on_draw only when true → blits to the TFT at the data rate,
+// not the loop rate (anti-flicker, avoids duplicate frames).
 static bool poll_fn(void)
 {
     if (!s_running || g_mode == MODE_OFF) return false;
@@ -506,8 +506,8 @@ static void on_key(int key, char ch)
 
 static void on_tick(void) {}
 
-// on_draw: per il saver disegna il frame completo sul canvas (Tecnica 1).
-// Per le impostazioni ridisegna solo quando s_dirty.
+// on_draw: for the saver, draws the full frame on the canvas (Technique 1).
+// For settings, redraws only when s_dirty.
 static void on_draw(void)
 {
     if (s_running) {
@@ -515,7 +515,7 @@ static void on_draw(void)
             case MODE_CLOCK: clock_frame(); break;
             case MODE_STARS: stars_frame(); break;
             case MODE_FIRE:  fire_frame();  break;
-            // MODE_OFF: schermo spento, backlight 0, nulla da disegnare
+            // MODE_OFF: screen off, backlight 0, nothing to draw
         }
         return;
     }
@@ -526,7 +526,7 @@ static void on_draw(void)
 
 static void on_exit(void) { if (s_running) saver_stop(); save_settings(); free(fire_buf); fire_buf = nullptr; }
 
-// ==================== HOOK DI SISTEMA =======================================
+// ==================== SYSTEM HOOKS =============================================
 // The saved timeout/style used to be read only when this app was opened, so after a reboot the saver
 // always fired at the 60 s default. Load once, lazily, from whichever entry point runs first.
 static void cfg_ensure(void) { if (!s_cfg_loaded) { s_cfg_loaded = true; load_settings(); } }
@@ -556,7 +556,7 @@ extern "C" void nucleo_screensaver_set_mode(int mode)
 }
 extern "C" void nucleo_screensaver_set_trigger(void) { g_trigger = true; }
 
-// ==================== REGISTRAZIONE =========================================
+// ==================== REGISTRATION =============================================
 extern "C" void nucleo_register_screensaver(void)
 {
     static const nucleo_app_def_t app = {

@@ -695,18 +695,18 @@ static esp_err_t start_play_window(const char *path, uint32_t start_ms, uint32_t
     // Pin to core 1 (APP_CPU): the Wi-Fi/LWIP stack lives on core 0, so keeping the
     // read->decode->I2S loop off that core removes the contention that starved the DMA
     // and caused stutter on the live stream.
-    // RAM/frammentazione: il WAV (la voce TTS — MOLTE clip corte) scorre su buffer STATICI (play_wav usa
-    // buf[1024] static; i2s_write tmp[512]) -> stack SHALLOW (~3KB). Gli 8KB sono tarati sul decoder MP3
-    // (Helix, profondo). Dare 8KB anche al WAV churnava un blocco grosso a OGNI play -> il largest free block
-    // scendeva (misurato 21.5KB->13KB in 40 play) finche', dopo il ciclo exit/re-enter ANIMA (worker 30KB),
-    // l'alloc del task audio falliva e la VOCE restava muta. 5KB al WAV: meno churn, libera RAM durante la
-    // voce, fitta anche con largest piccolo. MP3/radio restano 8KB.
+    // RAM/fragmentation: the WAV (TTS voice — MANY short clips) runs on STATIC buffers (play_wav uses
+    // static buf[1024]; i2s_write tmp[512]) -> SHALLOW stack (~3KB). The 8KB is sized for the MP3 decoder
+    // (Helix, deep). Giving 8KB to WAV too churned a big block on EVERY play -> the largest free block
+    // kept shrinking (measured 21.5KB->13KB over 40 plays) until, after the ANIMA exit/re-enter cycle
+    // (worker 30KB), the audio task's alloc failed and the VOICE went silent. 5KB for WAV: less churn,
+    // frees up RAM during speech, and fits even with a small largest-free-block. MP3/radio stay at 8KB.
     const char *_ext = strrchr(path, '.');
     uint32_t stack = (_ext && !strcasecmp(_ext, ".wav")) ? 5120 : 8192;
-    // Un player task auto-cancellante libera lo stack via IDLE (DIFFERITO, dopo vTaskDelete). Un stop->play
-    // piu' stretto del reclaim serve vecchio+nuovo stack insieme e, sotto frammentazione, xTaskCreate fallisce
-    // -> play scartato in SILENZIO. Dai un tick all'IDLE per recuperare e RIPROVA una volta; il doppio
-    // fallimento (vero OOM) ora e' LOGGATO.
+    // A self-cancelling player task frees its stack via IDLE (DEFERRED, after vTaskDelete). A stop->play
+    // tighter than the reclaim needs old+new stack at once, and under fragmentation xTaskCreate fails
+    // -> the play is dropped SILENTLY. Give IDLE one tick to catch up and RETRY once; a genuine double
+    // failure (real OOM) is now LOGGED.
     BaseType_t ok = xTaskCreatePinnedToCore(player_task, "audio", stack, NULL, 5, &s_task, 1);
     if (ok != pdPASS) {
         ESP_LOGW(TAG, "audio task create retry (heap tight: largest %u B)",
@@ -741,8 +741,8 @@ esp_err_t nucleo_audio_play_window(const char *path, uint32_t start_ms, uint32_t
 }
 esp_err_t nucleo_audio_play_url(const char *url) { return start_play(url, 0, 0); }   // player_task detects http://
 
-// Non-blocking: true mentre una clip/stream e' in riproduzione (per pollare un'interruzione senza
-// bloccare su wait_idle). Legge solo l'atomic gia' esistente -> zero RAM.
+// Non-blocking: true while a clip/stream is playing (to poll for an interruption without
+// blocking on wait_idle). Only reads the existing atomic -> zero RAM.
 bool nucleo_audio_playing(void) { return atomic_load(&s_playing); }
 // Live I2S output rate (Hz) — the rate the decoder actually latched via nucleo_audio_i2s_rate();
 // 0 when the TX channel is closed. Used to diagnose "decodes but silent" (wrong-rate) reports.
@@ -819,11 +819,11 @@ void nucleo_audio_stop(void)
     audio_unlock();
 }
 
-// Aspetta che la riproduzione in corso FINISCA DA SOLA (non la taglia, a differenza di stop). Serve a
-// SERIALIZZARE: chi sta per fare un'operazione PESANTE in RAM (es. ANIMA che scrive il calendario — albero
-// cJSON fino a ~32KB) la chiama PRIMA, cosi' il task audio (stack 8KB) e' gia' liberato e i due picchi NON
-// si sommano (niente "concomitanze che caricano la RAM"). No-op se niente suona; cap a max_ms (poi procede
-// comunque, fail-safe). Pet del WDT come stop() — la chiama una UI/worker task watchdog-watched.
+// Waits for the current playback to FINISH ON ITS OWN (doesn't cut it off, unlike stop). Used to
+// SERIALIZE: whoever is about to do a HEAVY RAM operation (e.g. ANIMA writing the calendar — a cJSON
+// tree up to ~32KB) calls this FIRST, so the audio task (8KB stack) is already freed and the two peaks
+// don't stack up (no "concurrent RAM load"). No-op if nothing is playing; capped at max_ms (then proceeds
+// anyway, fail-safe). Pets the WDT like stop() — called by a watchdog-watched UI/worker task.
 void nucleo_audio_wait_idle(uint32_t max_ms)
 {
     if (!atomic_load(&s_playing)) return;

@@ -1,18 +1,16 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-NucleoOS Toolkit — launcher a carosello dei tool PC-side per il Cardputer.
 NucleoOS Toolkit — carousel launcher for the PC-side Cardputer tools.
 
-Una finestra (GUI Tkinter, bilingue IT/EN) raccoglie i tool utili e ne avvia uno
-per volta in un processo a parte. / One bilingual window gathers the useful tools
-and launches one at a time in its own process.
+One bilingual window (Tkinter GUI, IT/EN) gathers the useful tools and launches one
+at a time in its own process.
 
-Due modalità, stessa esperienza / Two modes, same experience:
-  • Sorgente / Source:  python tools/nucleo-suite/launcher.py
-  • .exe:               NucleoSuite.spec -> dist/NucleoSuite/NucleoSuite.exe
+Two modes, same experience:
+  • Source:  python tools/nucleo-suite/launcher.py
+  • .exe:    NucleoSuite.spec -> dist/NucleoSuite/NucleoSuite.exe
 
-Diagnostica senza GUI / headless check:  python launcher.py --selftest
+Headless check:  python launcher.py --selftest
 """
 from __future__ import annotations
 
@@ -32,7 +30,7 @@ FROZEN = getattr(sys, "frozen", False)
 
 
 # --------------------------------------------------------------------------- #
-#  Risoluzione percorsi (sorgente vs .exe) / Path resolution
+#  Path resolution (source vs .exe)
 # --------------------------------------------------------------------------- #
 def repo_root() -> Path | None:
     if FROZEN:
@@ -57,7 +55,7 @@ def script_path(tool: dict) -> Path | None:
 
 
 def tool_available(tool: dict) -> tuple[bool, dict]:
-    """(disponibile, motivo-bilingue) nella modalità corrente."""
+    """(available, bilingual reason) in the current mode."""
     if FROZEN and not tool["frozen_ok"]:
         return False, {"it": "Disponibile solo da sorgente (richiede repo + toolchain).",
                        "en": "Available only from source (needs repo + toolchain)."}
@@ -70,7 +68,7 @@ def tool_available(tool: dict) -> tuple[bool, dict]:
 
 
 # --------------------------------------------------------------------------- #
-#  --run <id> : esegue lo script impacchettato come __main__ (modalità .exe)
+#  --run <id> : runs the bundled script as __main__ (.exe mode)
 # --------------------------------------------------------------------------- #
 def _dispatch_run(tool_id: str, extra: list[str]) -> int:
     tool = TOOLS_BY_ID.get(tool_id)
@@ -90,7 +88,7 @@ def _dispatch_run(tool_id: str, extra: list[str]) -> int:
         return 0
     except SystemExit as e:
         return int(e.code or 0)
-    except BaseException:  # noqa: BLE001 — app windowed: l'errore sarebbe invisibile
+    except BaseException:  # noqa: BLE001 — windowed app: the error would be invisible
         import traceback
         tb = traceback.format_exc()
         try:
@@ -127,13 +125,13 @@ def run_gui() -> int:
     import tkinter as tk
     from tkinter import filedialog, messagebox
 
-    # palette (vibe NucleoOS: spazio/atomo)
+    # palette (NucleoOS vibe: space/atom)
     BG, PANEL, CARD, EDGE = "#0b0f17", "#131a26", "#172131", "#243349"
     TXT, MUT, DIM = "#e6edf6", "#8aa0b8", "#5b6b80"
     ACC, OKC, WARN = "#4ea1ff", "#7ee787", "#ffb454"
     FONT = "Segoe UI"
 
-    # ---- testi di interfaccia bilingui / bilingual UI strings ----
+    # ---- bilingual UI strings ----
     UI = {
         "subtitle": {"it": "Strumenti PC-side per il Cardputer", "en": "PC-side tools for the Cardputer"},
         "mode_exe": {"it": "pacchetto .exe", "en": ".exe package"},
@@ -182,7 +180,7 @@ def run_gui() -> int:
 
     state = {"index": 0, "filter": "all", "lang": "it"}
     filtered: list[dict] = list(TOOLS)
-    tips: list = []   # _Tip vivi, per aggiornarli al cambio lingua
+    tips: list = []   # live _Tip instances, so they can be updated on language change
 
     def L(val):
         if isinstance(val, dict):
@@ -197,7 +195,7 @@ def run_gui() -> int:
     sw, sh = root.winfo_screenwidth(), root.winfo_screenheight()
     root.geometry(f"{W}x{H}+{(sw - W) // 2}+{max(0, (sh - H) // 2 - 20)}")
 
-    # ---- tooltip (Tkinter non ne ha uno nativo) / tooltip helper ----
+    # ---- tooltip helper (Tkinter has no native one) ----
     class _Tip:
         def __init__(self, widget, getter):
             self.w = widget; self.getter = getter; self.tip = None; self.id = None
@@ -234,7 +232,7 @@ def run_gui() -> int:
         _Tip(widget, getter)
         return widget
 
-    # ---- icone vettoriali (no asset binari) ----
+    # ---- vector icons (no binary assets) ----
     def draw_glyph(cv, kind, color, s=92):
         cv.delete("all")
         import math
@@ -296,7 +294,7 @@ def run_gui() -> int:
     subtitle_lbl = tk.Label(tit, bg=BG, fg=MUT, font=(FONT, 10))
     subtitle_lbl.pack(anchor="w")
 
-    # lingua (IT/EN) a destra
+    # language (IT/EN) on the right
     langbar = tk.Frame(header, bg=BG)
     langbar.pack(side="right")
     lang_btns = {}
@@ -316,7 +314,7 @@ def run_gui() -> int:
         lang_btns[code] = b
         tip(b, lambda: L(UI["tip_lang"]))
 
-    # ---- filtro categorie ----
+    # ---- category filter ----
     filt = tk.Frame(root, bg=BG)
     filt.pack(fill="x", padx=22)
     cat_btns = {}
@@ -339,7 +337,7 @@ def run_gui() -> int:
         cat_btns[key] = (b, name)
         tip(b, lambda: L(UI["tip_filter"]))
 
-    # ---- area carosello ----
+    # ---- carousel area ----
     stage = tk.Frame(root, bg=BG)
     stage.pack(fill="both", expand=True, padx=22, pady=6)
 
@@ -367,7 +365,7 @@ def run_gui() -> int:
     dots_inner = tk.Frame(dots, bg=BG)
     dots_inner.pack()
 
-    # ---- pannello output ----
+    # ---- output panel ----
     outwrap = tk.Frame(root, bg=BG)
     outwrap.pack(fill="both", padx=22, pady=(0, 6))
     obar = tk.Frame(outwrap, bg=BG)
@@ -399,7 +397,7 @@ def run_gui() -> int:
     status.pack(fill="x", side="bottom")
 
     # --------------------------------------------------------------------- #
-    #  Esecuzione dei tool
+    #  Running the tools
     # --------------------------------------------------------------------- #
     def gui_python():
         if FROZEN:
@@ -629,7 +627,7 @@ def run_gui() -> int:
                            f"{L(UI['category'])} {L(catname)}")
 
     def relabel():
-        """Riapplica tutti i testi di chrome alla lingua corrente + re-render."""
+        """Re-apply all the chrome texts to the current language + re-render."""
         mode = L(UI["mode_exe"]) if FROZEN else L(UI["mode_src"])
         subtitle_lbl.config(text=f"{L(UI['subtitle'])} · {mode}")
         for key, (b, name) in cat_btns.items():
@@ -638,7 +636,7 @@ def run_gui() -> int:
         clr_btn.config(text=L(UI["clear"]))
         render()
 
-    # ---- bind tastiera ----
+    # ---- keyboard bindings ----
     root.bind("<Left>", lambda e: nav(-1))
     root.bind("<Right>", lambda e: nav(1))
     root.bind("<Return>", lambda e: filtered and run_tool(filtered[state["index"]]))

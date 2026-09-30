@@ -1,28 +1,28 @@
 #!/usr/bin/env python3
-# build_voice.py — pre-vocalizza (OFFLINE, sul PC) il "pacchetto voce" per il TTS concatenativo di
-# NucleoOS, in ITALIANO e/o INGLESE. Genera clip WAV canoniche 16kHz/mono/16-bit + le copia (poi via
-# tools/sd-sync.ps1) in /data/tts/<lang>/. Il device le concatena a runtime (firmware nucleo_tts):
-# nessuna sintesi a bordo, voce naturale, RAM ~zero (esistenza clip = stat su SD, niente manifest).
+# build_voice.py — pre-vocalizes (OFFLINE, on the PC) the "voice pack" for the concatenative TTS of
+# NucleoOS, in ITALIAN and/or ENGLISH. Generates canonical 16kHz/mono/16-bit WAV clips + copies them (then via
+# tools/sd-sync.ps1) to /data/tts/<lang>/. The device concatenates them at runtime (firmware nucleo_tts):
+# no on-board synthesis, natural voice, ~zero RAM (clip existence = stat on the SD, no manifest).
 #
-# Tre strati per lingua:
-#   1) OBBLIGATORIO (generato qui, sempre completo e corretto): n0..n99 (cardinali con elisione IT
-#      ventuno/ventitré/ventotto; EN twenty-three), connettori numerici (cento.. / hundred,thousand),
-#      virgola|point, meno|minus, lett_a..lett_z (nomi lettere).
-#   2) DIZIONARIO: la colonna 0 dei .tsv (dict-it-en = parole/frasi IT; dict-en-it = EN) -> copre il
-#      vocabolario reale, quasi azzera lo spelling di fallback.
-#   3) LEXICON editabile: tools/nucleo-tts/lexicon.<lang>.txt (frasi comuni dell'assistente). Le frasi
-#      multi-parola diventano slug con "_" e il planner le PREFERISCE alle singole parole (match greedy).
+# Three layers per language:
+#   1) MANDATORY (generated here, always complete and correct): n0..n99 (cardinals with IT elision
+#      ventuno/ventitré/ventotto; EN twenty-three), numeric connectors (cento.. / hundred,thousand),
+#      virgola|point, meno|minus, lett_a..lett_z (letter names).
+#   2) DICTIONARY: column 0 of the .tsv files (dict-it-en = IT words/phrases; dict-en-it = EN) -> covers the
+#      real vocabulary, almost eliminating fallback spelling.
+#   3) Editable LEXICON: tools/nucleo-tts/lexicon.<lang>.txt (common assistant phrases). Multi-word
+#      phrases become slugs with "_" and the planner PREFERS them over single words (greedy match).
 #
-# Motori (offline, --engine): piper (--model *.onnx, qualita' migliore) | espeak (espeak-ng) | pico
-# (pico2wave, gia' 16kHz). Normalizzazione finale via ffmpeg (nel PATH).
+# Engines (offline, --engine): piper (--model *.onnx, best quality) | espeak (espeak-ng) | pico
+# (pico2wave, already 16kHz). Final normalization via ffmpeg (on PATH).
 #
-# Esempi:
-#   python build_voice.py --langs it,en --engine espeak --no-dict     # giro veloce (solo pacchetto+lexicon)
+# Examples:
+#   python build_voice.py --langs it,en --engine espeak --no-dict     # quick pass (pack + lexicon only)
 #   python build_voice.py --langs it --engine piper --model it.onnx --limit 500
-#   python build_voice.py --langs it,en --engine pico                 # tutto (lungo: ~77k clip)
+#   python build_voice.py --langs it,en --engine pico                 # everything (long: ~77k clips)
 import argparse, os, subprocess, sys, tempfile, shutil, re, unicodedata
 
-# ---- ITALIANO ---------------------------------------------------------------------------------
+# ---- ITALIAN ---------------------------------------------------------------------------------
 IT_U   = ["zero","uno","due","tre","quattro","cinque","sei","sette","otto","nove"]
 IT_T   = ["dieci","undici","dodici","tredici","quattordici","quindici","sedici",
           "diciassette","diciotto","diciannove"]
@@ -42,7 +42,7 @@ def cardinal_it(n):
     if u == 3:      return base + "tré"             # ventitré, trentatré...
     return base + IT_U[u]
 
-# ---- INGLESE ----------------------------------------------------------------------------------
+# ---- ENGLISH ----------------------------------------------------------------------------------
 EN_U   = ["zero","one","two","three","four","five","six","seven","eight","nine"]
 EN_T   = ["ten","eleven","twelve","thirteen","fourteen","fifteen","sixteen",
           "seventeen","eighteen","nineteen"]
@@ -54,8 +54,8 @@ def cardinal_en(n):
     t, u = n // 10, n % 10
     return EN_TENS[t] + ("-" + EN_U[u] if u else "")    # twenty-three
 
-# ---- nomi delle lettere (per sillabare gli acronimi: USB -> "u esse bi") -----------------------
-# slug lett_<a..z>; il testo e' COME si pronuncia la lettera nella lingua (Edge la dice naturale).
+# ---- letter names (to spell out acronyms: USB -> "u esse bi") -----------------------
+# slug lett_<a..z>; the text is HOW the letter is pronounced in the language (Edge says it naturally).
 IT_LETT = {"a":"a","b":"bi","c":"ci","d":"di","e":"e","f":"effe","g":"gi","h":"acca","i":"i",
            "j":"i lunga","k":"cappa","l":"elle","m":"emme","n":"enne","o":"o","p":"pi","q":"cu",
            "r":"erre","s":"esse","t":"ti","u":"u","v":"vu","w":"doppia vu","x":"ics","y":"ipsilon","z":"zeta"}
@@ -63,27 +63,27 @@ EN_LETT = {"a":"ay","b":"bee","c":"see","d":"dee","e":"ee","f":"ef","g":"gee","h
            "j":"jay","k":"kay","l":"el","m":"em","n":"en","o":"oh","p":"pee","q":"cue","r":"ar",
            "s":"ess","t":"tee","u":"you","v":"vee","w":"double u","x":"ex","y":"why","z":"zee"}
 
-# ---- pacchetto obbligatorio per lingua --------------------------------------------------------
+# ---- mandatory pack per language --------------------------------------------------------
 def mandatory(lang):
     m = {}
     if lang == "en":
         for n in range(100): m["n%d" % n] = cardinal_en(n)
         m["hundred"]="hundred"; m["thousand"]="thousand"; m["million"]="million"
         m["point"]="point"; m["minus"]="minus"
-        for c, name in EN_LETT.items(): m["lett_%s" % c] = name   # sillabazione acronimi
+        for c, name in EN_LETT.items(): m["lett_%s" % c] = name   # acronym spelling
         m["read_it"] = "I can't say this out loud, please read it on the screen."
     else:
         for n in range(100): m["n%d" % n] = cardinal_it(n)
         for h in range(1,10): m[IT_HUND[h]] = IT_HUND[h]
         for t in range(1,10): m[IT_THOU[t]] = IT_THOU[t]
         m["mila"]="mila"; m["virgola"]="virgola"; m["meno"]="meno"
-        for c, name in IT_LETT.items(): m["lett_%s" % c] = name   # sillabazione acronimi
+        for c, name in IT_LETT.items(): m["lett_%s" % c] = name   # acronym spelling
         m["read_it"] = "Non posso dirtelo a voce, leggi la risposta sullo schermo."
     return m
 
 def slugify(text):
-    # DEVE combaciare con la normalizzazione del firmware (nucleo_tts_plan.c): fold accenti -> ASCII,
-    # minuscolo, tieni [a-z0-9], parole unite da '_'. Altrimenti la clip non viene trovata sul device.
+    # MUST match the firmware normalization (nucleo_tts_plan.c): fold accents -> ASCII,
+    # lowercase, keep [a-z0-9], words joined by '_'. Otherwise the clip is not found on the device.
     t = unicodedata.normalize("NFKD", text).encode("ascii", "ignore").decode("ascii").lower()
     out, prev = [], False
     for ch in t:
@@ -92,16 +92,16 @@ def slugify(text):
     return "".join(out).strip("_")
 
 def sanitize_text(t):
-    # Testo PRONUNCIATO (non lo slug): togli caratteri/punteggiatura che il TTS leggerebbe male, tieni
-    # lettere (anche accentate, per la pronuncia), cifre, spazi, apostrofo, trattino. Scrivile bene.
+    # SPOKEN text (not the slug): strip characters/punctuation the TTS would misread, keep
+    # letters (accented too, for pronunciation), digits, spaces, apostrophe, hyphen. Write them properly.
     t = (t.replace("’","'").replace("‘","'").replace("`","'")
           .replace("–","-").replace("—","-").replace(" "," "))
-    t = re.sub(r"[^0-9A-Za-zÀ-ſ'\- ]+", " ", t)   # solo lettere(+accenti)/cifre/'/-/spazio
+    t = re.sub(r"[^0-9A-Za-zÀ-ſ'\- ]+", " ", t)   # letters (+accents)/digits/'/-/space only
     return re.sub(r"\s+", " ", t).strip()
 
 def read_lines(path, col0_only):
-    """Una voce per riga: 'slug<TAB>testo' o 'testo'; col0_only -> prende solo la 1a colonna TSV.
-    Lo slug e' il fold del testo (== device); il testo pronunciato e' sanitizzato."""
+    """One entry per line: 'slug<TAB>text' or 'text'; col0_only -> takes only the 1st TSV column.
+    The slug is the fold of the text (== device); the spoken text is sanitized."""
     m = {}
     if not path or not os.path.exists(path): return m
     with open(path, encoding="utf-8") as f:
@@ -118,7 +118,7 @@ def read_lines(path, col0_only):
     return m
 
 def synth_lang(engine, espeak_bin, model, lang, text, raw):
-    """Sintetizza `text` per `lang` col motore scelto -> WAV grezzo `raw`."""
+    """Synthesize `text` for `lang` with the chosen engine -> raw WAV `raw`."""
     if engine == "espeak":
         p = subprocess.run([espeak_bin,"-v","en" if lang=="en" else "it","-w",raw,text], capture_output=True)
     elif engine == "pico":
@@ -132,8 +132,8 @@ def synth_lang(engine, espeak_bin, model, lang, text, raw):
     if p.returncode: sys.exit("%s fallito: %s" % (engine, p.stderr.decode('utf-8','replace')))
 
 def normalize(raw, out_wav, fast=False):
-    # 16kHz mono 16-bit PCM canonico. loudnorm uniforma il volume tra clip (importante per la
-    # concatenazione) ma raddoppia il tempo: --fast lo salta (eSpeak ha gia' volume costante).
+    # Canonical 16kHz mono 16-bit PCM. loudnorm evens out the volume across clips (important for
+    # concatenation) but doubles the time: --fast skips it (eSpeak already has constant volume).
     cmd = ["ffmpeg","-y","-i",raw,"-ar","16000","-ac","1","-sample_fmt","s16"]
     if not fast: cmd += ["-af","loudnorm=I=-16:TP=-1.5:LRA=11"]
     cmd.append(out_wav)
@@ -141,14 +141,14 @@ def normalize(raw, out_wav, fast=False):
     if p.returncode: sys.exit("ffmpeg fallito: %s" % p.stderr.decode('utf-8','replace'))
 
 def resolve_espeak(explicit):
-    """Trova l'eseguibile espeak-ng (PATH o installazione Windows tipica)."""
+    """Find the espeak-ng executable (PATH or typical Windows install)."""
     if explicit: return explicit
     p = shutil.which("espeak-ng") or shutil.which("espeak")
     if p: return p
     for c in [r"C:\Program Files\eSpeak NG\espeak-ng.exe",
               r"C:\Program Files (x86)\eSpeak NG\espeak-ng.exe"]:
         if os.path.exists(c): return c
-    return "espeak-ng"   # ultima spiaggia: lascia fallire con messaggio chiaro
+    return "espeak-ng"   # last resort: let it fail with a clear message
 
 def main():
     ap = argparse.ArgumentParser(description="Pacchetto voce IT/EN per NucleoOS TTS concatenativo.")

@@ -1,7 +1,7 @@
-// Verifica che l'ORARIO parlato (nucleo_tts_speak_time) sia pronunciabile per OGNI minuto del giorno:
-// compila l'harness C reale del firmware e lo esegue contro gli indici clip generati
-// (deploy/sd-safe/data/tts/<lang>/index.bin). SKIP pulito se gli indici non sono ancora stati generati.
-// Uso: npm run anima:tts-time
+// Verifies that the spoken TIME (nucleo_tts_speak_time) is pronounceable for EVERY minute of the day:
+// compiles the real firmware C harness and runs it against the generated clip indexes
+// (deploy/sd-safe/data/tts/<lang>/index.bin). Clean SKIP if the indexes have not been generated yet.
+// Usage: npm run anima:tts-time
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';

@@ -110,7 +110,7 @@ async function main() {
     { q: 'cosa significa effimero', online: true, check: all(intent('wiktionary'), answered), note: 'definizione di dizionario' },
 
     { sect: 'Ragionamento: deduzione HDC/KGE + composizione neuro-simbolica' },
-    // ("chi ha scritto la divina commedia" già appreso nella sezione Fatti) → ora deduco l'inverso:
+    // ("chi ha scritto la divina commedia" already learned in the Facts section) → now deduce the inverse:
     { q: 'cosa ha scritto Dante', online: true, check: all(intent('kge'), has('commedia')), note: 'DEDUCE l\'inverso, offline (mai memorizzato così)' },
     { q: 'chi è nato prima, Dante o Einstein', online: true, check: all(intent('combinator'), has('dante')), note: 'COMPONE 2 fatti: confronto nascite (mai memorizzato)' },
     { q: 'in che continente è Lione', online: true, check: all(intent('kge-geo'), has('europa')), note: 'impara la catena e DEDUCE il continente' },

@@ -12,7 +12,7 @@ foreach ($num in $ips) {
     } catch {}
 }
 if ($found) {
-    # Salva il nuovo IP in release.local.json in modo da aggiornare la configurazione locale!
+    # Save the new IP in release.local.json so the local configuration gets updated!
     $cfg = @{ host = $found; pin = "689614" } | ConvertTo-Json
     $cfg | Out-File "tools\release.local.json" -Encoding utf8
     Write-Host "release.local.json aggiornato con successo." -ForegroundColor Green

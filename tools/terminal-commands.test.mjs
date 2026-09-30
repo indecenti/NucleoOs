@@ -13,7 +13,7 @@ if (!scriptMatch) {
 
 let scriptCode = scriptMatch[1];
 
-// Taglia l'auto-avvio e il boot finale per evitare top-level await SyntaxError e chiamate sul DOM finto
+// Cut the auto-start and the final boot to avoid a top-level await SyntaxError and calls on the fake DOM
 const bootIndex = scriptCode.indexOf('// ---- boot ------------------------------------------------------------------');
 if (bootIndex !== -1) {
   scriptCode = scriptCode.slice(0, bootIndex);
@@ -26,7 +26,7 @@ scriptCode = scriptCode
   .replace(/^[ \t]*import\b[^\n]*\n/gm, '')
   .replace(/\bawait\s+(I18N\.init\s*\()/g, '$1');
 
-// Espone let/const all'oggetto globale del sandbox VM per poterli testare
+// Expose let/const on the VM sandbox global object so they can be tested
 scriptCode = scriptCode
   .replace('const COMMANDS =', 'globalThis.COMMANDS =')
   .replace('let cwd =', 'globalThis.cwd =')
@@ -38,7 +38,7 @@ scriptCode = scriptCode
   .replace('const envVars =', 'globalThis.envVars =')
   .replace('async function run(', 'globalThis.run = async function (');
 
-// Preparazione dei mock del DOM e delle chiamate di rete
+// Set up the DOM and network-call mocks
 const emitted = [];
 const mockedFetch = {};
 const mockedFs = {};
@@ -194,7 +194,7 @@ function resetTest() {
     for (const k of Object.keys(envVars)) delete envVars[k];
     Object.assign(envVars, { SHELL: '/bin/sh', PATH: '/apps/bin', USER: 'admin', OS: 'NucleoOS', TERM: 'xterm-color', CWD: '/' });
   }
-  // Mock del file manuale .info
+  // Mock of the .info manual file
   mockedFs['/system/manual/ls.info'] = JSON.stringify({
     id: 'ls',
     category: 'terminal',
@@ -442,13 +442,13 @@ test('export: esporta e aggiorna variabili d\'ambiente', () => {
 
 test('man: mostra la pagina di manuale dei comandi', async () => {
   resetTest();
-  // Test in inglese (default)
+  // English tests (default)
   await COMMANDS.man('ls');
   assert.ok(emitted.length >= 1);
   assert.ok(emitted[0].text.includes('LS(1) - ls [path]'));
   assert.ok(emitted.some(e => e.text.includes('List directory contents.')));
 
-  // Test in italiano (tramite LANG variabile d'ambiente)
+  // Italian tests (via the LANG environment variable)
   resetTest();
   envVars.LANG = 'it_IT.UTF-8';
   await COMMANDS.man('ls');

@@ -104,17 +104,17 @@ uint32_t nucleo_event_publish(const char *topic, const char *payload_json)
     int64_t ts_copy = e->ts;
     xSemaphoreGive(s_lock);
 
-    // Journal FUORI da s_lock: journal_append fa I/O su SD (stat/fopen/fprintf/fclose). Farlo SOTTO s_lock
-    // significava che una scrittura SD lenta/contesa (es. subito dopo la scrittura del calendario di ANIMA
-    // sulla stessa task) teneva il lock del ring per TUTTA l'I/O -> ogni altra task che pubblica o legge un
-    // evento si bloccava su s_lock (portMAX_DELAY) = FREEZE TOTALE del device, senza reboot (l'IDLE pasce il
-    // WDT). Un s_jlock dedicato serializza solo i journaler; ring/lettori/httpd restano liberi durante l'I/O.
-    // Attesa LIMITATA, MAI portMAX_DELAY. Se un journaler e' appeso nell'I/O SD (card lenta/assente, oppure
-    // heap troppo frammentato per i buffer FATFS), gli ALTRI publisher non devono restare bloccati per sempre
-    // su s_jlock -> e' esattamente il "FREEZE TOTALE senza reboot" descritto sopra, solo spostato dal ring al
-    // journal. Scaduto il timeout saltiamo SOLO la riga su disco: il blocco si riduce alla sola task davvero
-    // ferma sull'SD, tutte le altre proseguono. Persistenza best-effort (gia' a RAM zero): l'evento esce
-    // comunque dal tail live (s_sink, sotto). NIENTE task/coda dedicata -> nessuno stack residente in ostaggio.
+    // Journal OUTSIDE s_lock: journal_append does I/O on SD (stat/fopen/fprintf/fclose). Doing it UNDER
+    // s_lock meant a slow/contended SD write (e.g. right after ANIMA writes the calendar on the same
+    // task) held the ring lock for the WHOLE I/O -> every other task publishing or reading an
+    // event blocked on s_lock (portMAX_DELAY) = TOTAL FREEZE of the device, with no reboot (IDLE pets the
+    // WDT). A dedicated s_jlock serializes only the journalers; the ring/readers/httpd stay free during I/O.
+    // BOUNDED wait, NEVER portMAX_DELAY. If a journaler is stuck in SD I/O (slow/missing card, or
+    // heap too fragmented for the FATFS buffers), the OTHER publishers must not stay blocked forever
+    // on s_jlock -> that would be exactly the "TOTAL FREEZE with no reboot" described above, just moved from
+    // the ring to the journal. Once the timeout expires we ONLY skip the disk line: the stall is limited to
+    // the one task actually stuck on the SD, all the others proceed. Best-effort persistence (already at
+    // zero RAM): the event still comes out of the live tail (s_sink, below). NO dedicated task/queue -> no stack held hostage.
     if (s_jlock && xSemaphoreTake(s_jlock, pdMS_TO_TICKS(500)) == pdTRUE) {
         event_t je; je.seq = seq; je.ts = ts_copy;
         memcpy(je.topic, t_copy, sizeof je.topic);

@@ -34,13 +34,13 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.abspath(os.path.join(HERE, "..", ".."))
 REGISTRY = os.path.join(REPO, "tools", "test-registry.json")
 HISTORY = os.path.join(HERE, "history.jsonl")
-REPORTS = os.path.join(HERE, "reports")   # report per-corsa (JSON+MD), versionati + latest + index.jsonl
-KEEP_REPORTS = 40                          # quanti run-*.{json,md} tenere prima di potare i piu vecchi
-TRAIN_REQ = os.path.join(REPO, "tools", "anima", "train_requests.json")   # file richieste della scheda Allenamento
-TRAIN_PY = os.path.join("tools", "train_wiki.py")                          # runner allenamento (relativo a REPO)
+REPORTS = os.path.join(HERE, "reports")   # per-run reports (JSON+MD), versioned + latest + index.jsonl
+KEEP_REPORTS = 40                          # how many run-*.{json,md} to keep before pruning the oldest
+TRAIN_REQ = os.path.join(REPO, "tools", "anima", "train_requests.json")   # requests file of the Training tab
+TRAIN_PY = os.path.join("tools", "train_wiki.py")                          # training runner (relative to REPO)
 
-# Pausa fra due test che martellano il device reale (categoria device-load), così heap+WiFi del
-# Cardputer (no-PSRAM) rientrano prima della raffica successiva. Saltata se il device ha fatto SKIP.
+# Pause between two tests that hammer the real device (device-load category), so the heap + WiFi of the
+# Cardputer (no PSRAM) recover before the next burst. Skipped if the device did a SKIP.
 DEVICE_COOLDOWN_S = 4
 
 DOT = {"pending": "○", "running": "◐", "pass": "●", "fail": "●", "skip": "◌", "error": "▲"}
@@ -99,7 +99,7 @@ class TestLab(tk.Tk):
         super().__init__()
         self.title("ANIMA Test Lab · health monitor")
         self.geometry("1240x820")
-        self.minsize(1160, 700)   # sotto questa larghezza la toolbar si schiaccerebbe (campi device irraggiungibili)
+        self.minsize(1160, 700)   # below this width the toolbar would get squashed (device fields unreachable)
         self.configure(bg=CL["bg"])
         self.reg = load_registry()
         self.reg_tests = {t["id"]: t for t in self.reg["tests"]}
@@ -117,7 +117,7 @@ class TestLab(tk.Tk):
         self._populate()
         self._render_dashboard()
         self.after(80, self._drain)
-        self.after(1000, self._tick)   # orologio/indicatore di corsa: avanza anche fra una query e l'altra
+        self.after(1000, self._tick)   # run clock/indicator: keeps advancing between one query and the next
 
     # ---- style ---------------------------------------------------------------------------------
     def _style(self):
@@ -153,7 +153,7 @@ class TestLab(tk.Tk):
         tk.Label(top, text="ANIMA", bg=CL["bg"], fg=CL["fg"], font=("Segoe UI", 17, "bold")).pack(side="left")
         tk.Label(top, text="test lab · health monitor", bg=CL["bg"], fg=CL["muted"], font=("Segoe UI", 12)).pack(side="left", padx=8)
         self.headline = tk.Label(top, text="", bg=CL["bg"], fg=CL["muted"], font=("Segoe UI", 12, "bold")); self.headline.pack(side="right")
-        # Indicatore di corsa SEMPRE VISIBILE (su ogni scheda): lampeggia mentre i test girano.
+        # ALWAYS-VISIBLE run indicator (on every tab): blinks while the tests run.
         self.runpill = tk.Label(top, text="○ pronto", bg=CL["bg"], fg=CL["muted"], font=("Segoe UI", 11, "bold"))
         self.runpill.pack(side="right", padx=14)
         self._run_blink = False
@@ -163,9 +163,9 @@ class TestLab(tk.Tk):
         self.rebuild = tk.BooleanVar(value=True)
         self.only_nl = tk.BooleanVar(value=False)
         self.search = tk.StringVar()
-        self.device_ip = tk.StringVar(value="192.168.0.166")   # target dei test device-load (iniettato come --url)
-        self._device_ip_snap = "192.168.0.166"                 # snapshot preso sul main thread a ogni corsa
-        self.device_delay = tk.IntVar(value=12)                # pausa fra query NL sul device (--delay), min 3
+        self.device_ip = tk.StringVar(value="192.168.0.166")   # target of the device-load tests (injected as --url)
+        self._device_ip_snap = "192.168.0.166"                 # snapshot taken on the main thread at every run
+        self.device_delay = tk.IntVar(value=12)                # pause between NL queries on the device (--delay), min 3
         self._device_delay_snap = 12
         bar = tk.Frame(self, bg=CL["bg"]); bar.pack(side="top", fill="x", padx=12, pady=(0, 6))
 
@@ -179,7 +179,7 @@ class TestLab(tk.Tk):
 
         n_anima = sum(1 for t in self.reg["tests"] if t.get("anima"))
         n_nl = sum(1 for t in self.reg["tests"] if t["nl"])
-        # I test «device-load» sono gli UNICI che colpiscono il Cardputer reale; tutto il resto gira su PC.
+        # The «device-load» tests are the ONLY ones that hit the real Cardputer; everything else runs on the PC.
         host_ids = [t["id"] for t in self.reg["tests"] if not self._is_device(t)]
         self._dev_ids = [t["id"] for t in self.reg["tests"] if t["category"] == "device-load"]
         btn(bar, "🧠 ANIMA offline", lambda: self.run([t["id"] for t in self.reg["tests"] if t.get("anima")]), accent=True,
@@ -211,8 +211,8 @@ class TestLab(tk.Tk):
         self.prog = ttk.Progressbar(bar, mode="determinate", length=220); self.prog.pack(side="right")
         self._tip(self.prog, "Avanzamento: quanti test sono stati eseguiti sul totale.")
 
-        # --- riga DEDICATA ai controlli del Cardputer (sempre visibile e modificabile, non più schiacciata
-        #     nella toolbar affollata). Valgono SOLO per i test «device-load» (📡); gli altri li ignorano. ---
+        # --- ROW DEDICATED to the Cardputer controls (always visible and editable, no longer squashed
+        #     into the crowded toolbar). They apply ONLY to the «device-load» tests (📡); the others ignore them. ---
         devbar = tk.Frame(self, bg=CL["card"]); devbar.pack(side="top", fill="x", padx=12, pady=(0, 6))
         tk.Label(devbar, text="📡 Cardputer", bg=CL["card"], fg=CL["warn"], font=("Segoe UI", 10, "bold")).pack(side="left", padx=(10, 8), pady=6)
         tk.Label(devbar, text="IP / URL:", bg=CL["card"], fg=CL["muted"], font=("Segoe UI", 9)).pack(side="left", padx=(0, 4))
@@ -272,16 +272,16 @@ class TestLab(tk.Tk):
         self.tree.bind("<Leave>", lambda e: self._hide_tt(), add="+")
         for s in DOT: self.tree.tag_configure(s, foreground=CL[s])
         self.tree.tag_configure("cat", font=("Segoe UI", 10, "bold"), foreground=CL["accent"])
-        self.tree.tag_configure("catdev", font=("Segoe UI", 10, "bold"), foreground=CL["warn"])  # categoria device reale
+        self.tree.tag_configure("catdev", font=("Segoe UI", 10, "bold"), foreground=CL["warn"])  # real-device category
 
         right = tk.Frame(body, bg=CL["panel"], width=470); right.pack(side="right", fill="both"); right.pack_propagate(False)
-        # --- intestazione FISSA (non scorre): titolo + badge stato + riquadri contatori + barra + meta + verdetto ---
+        # --- FIXED header (does not scroll): title + status badge + counter tiles + bar + meta + verdict ---
         hdr = tk.Frame(right, bg=CL["panel"]); hdr.pack(side="top", fill="x", padx=10, pady=(8, 2))
         self.live_title = tk.Label(hdr, text="Output", bg=CL["panel"], fg=CL["fg"], font=("Segoe UI", 11, "bold"), anchor="w")
         self.live_title.pack(side="left")
         self.live_badge = tk.Label(hdr, text="", bg=CL["panel"], fg=CL["muted"], font=("Segoe UI", 9, "bold"))
         self.live_badge.pack(side="right")
-        self._cells = tk.Frame(right, bg=CL["panel"])     # riempito on-demand (solo quando arrivano righe per-query)
+        self._cells = tk.Frame(right, bg=CL["panel"])     # filled on demand (only when per-query lines arrive)
         self.cell_val = {}
         for key, label, color in (("served", "SERVITE", "good"), ("crash", "CRASH", "bad"),
                                   ("err", "ERRORI", "warn"), ("trap", "TRAP", "accent")):
@@ -295,7 +295,7 @@ class TestLab(tk.Tk):
         self.live_meta.pack(side="top", fill="x", padx=10, pady=(0, 2))
         self.live_verdict = tk.Label(right, text="", bg=CL["panel"], fg=CL["muted"], font=("Segoe UI", 10, "bold"), anchor="w")
         self.live_verdict.pack(side="top", fill="x", padx=10, pady=(0, 6))
-        # --- log SCORREVOLE colorato ---
+        # --- colored SCROLLING log ---
         logwrap = tk.Frame(right, bg=CL["panel"]); logwrap.pack(side="top", fill="both", expand=True, padx=(10, 0), pady=(0, 8))
         self.out = tk.Text(logwrap, bg="#0c0e12", fg="#cfd3da", insertbackground=CL["fg"], relief="flat",
                            font=self.mono, wrap="word", padx=8, pady=6)
@@ -355,7 +355,7 @@ class TestLab(tk.Tk):
 
     @staticmethod
     def _train_parse_count(txt):
-        """Quante richieste contiene il testo (array JSON → len; altrimenti righe non-vuote/non-commento)."""
+        """How many requests the text contains (JSON array → len; otherwise non-empty/non-comment lines)."""
         if not txt.strip():
             return 0
         try:
@@ -376,7 +376,7 @@ class TestLab(tk.Tk):
             self._train_update_count()
 
     def _train_subprocess(self, extra_args):
-        """Chiama il runner allenamento per attività rapide (esempio/prompt). Ritorna (ok, stdout)."""
+        """Call the training runner for quick tasks (example/prompt). Returns (ok, stdout)."""
         env = {**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8"}
         try:
             p = subprocess.run([sys.executable, TRAIN_PY, *extra_args], cwd=REPO, capture_output=True,
@@ -400,7 +400,7 @@ class TestLab(tk.Tk):
 
     @staticmethod
     def _train_questions(txt):
-        """Estrae la lista delle domande (q) dal testo: array JSON / JSONL / una per riga."""
+        """Extract the list of questions (q) from the text: JSON array / JSONL / one per line."""
         txt = txt.strip()
         if not txt:
             return []
@@ -436,7 +436,7 @@ class TestLab(tk.Tk):
         prompt = out.strip()
         avoid = self._train_questions(self.train_text.get("1.0", "end"))
         if avoid:
-            shown = avoid[:400]                 # cap: non gonfiare il prompt all'infinito
+            shown = avoid[:400]                 # cap: do not bloat the prompt endlessly
             prompt += ("\n\nDA NON USARE — queste domande sono GIÀ in elenco, generane solo di NUOVE e diverse:\n"
                        + "\n".join(f"- {q}" for q in shown))
             if len(avoid) > len(shown):
@@ -597,8 +597,8 @@ class TestLab(tk.Tk):
             pass
 
     # ---- per-run reports (machine-readable, versioned, + latest pointer) -----------------------
-    # Scopo: dopo ogni corsa lasciare una traccia che un'altra sessione (umano o agente) possa
-    # rileggere SENZA rifare i test — esito per-test, durate, e l'output dei falliti per diagnosi.
+    # Purpose: after every run leave a trace that another session (human or agent) can
+    # re-read WITHOUT re-running the tests — per-test outcome, durations, and the output of the failed ones for diagnosis.
     def _write_report(self, ids):
         ids = [i for i in (ids or []) if i in self.tests]
         if not ids: return None
@@ -620,7 +620,7 @@ class TestLab(tk.Tk):
                        "status": t["status"], "summary": t.get("summary", ""),
                        "duration_s": round(t.get("duration", 0.0), 2),
                        "cmd": f"{t['cmd']} {' '.join(self._args_for(t))}"} for t in items],
-            # output completo (troncato) SOLO dei falliti: è ciò che serve per diagnosticare a freddo
+            # full (truncated) output of the failed tests ONLY: it is what you need to diagnose cold
             "failures": [{"id": t["id"], "label": t["label"], "category": t["category"],
                           "summary": t.get("summary", ""), "output": (t.get("output", "") or "")[-6000:]}
                          for t in items if t["status"] in ("fail", "error")],
@@ -629,11 +629,11 @@ class TestLab(tk.Tk):
         stamp = ts.strftime("%Y%m%d-%H%M%S")
         path = os.path.join(REPORTS, f"run-{stamp}.json")
         self._dump_json(path, report)
-        self._dump_json(os.path.join(REPORTS, "latest.json"), report)   # puntatore "ultimo" sempre aggiornato
+        self._dump_json(os.path.join(REPORTS, "latest.json"), report)   # always-current "latest" pointer
         md = self._report_md(report)
         self._dump_text(os.path.join(REPORTS, f"run-{stamp}.md"), md)
         self._dump_text(os.path.join(REPORTS, "latest.md"), md)
-        # indice append-only: una riga per corsa → "qual è l'ultimo" e storico in colpo d'occhio
+        # append-only index: one line per run → "which is the latest" and the history at a glance
         try:
             with open(os.path.join(REPORTS, "index.jsonl"), "a", encoding="utf-8") as f:
                 f.write(json.dumps({"ts": report["ts"], "scope": scope, "file": f"run-{stamp}.json",
@@ -779,40 +779,40 @@ class TestLab(tk.Tk):
         self._sync_rows()
         self.stop_flag.clear()
         self._device_ip_snap = self.device_ip.get().strip()   # snapshot on the main thread (Tk vars aren't thread-safe)
-        try: self._device_delay_snap = max(3, int(self.device_delay.get()))   # floor 3s, anche se l'utente digita meno
+        try: self._device_delay_snap = max(3, int(self.device_delay.get()))   # floor 3s, even if the user types less
         except (tk.TclError, ValueError): self._device_delay_snap = 12
-        self._last_ids = list(ids)        # esattamente cosa è girato in QUESTA corsa → ambito del report
+        self._last_ids = list(ids)        # exactly what ran in THIS run → scope of the report
         self._full_run = len(ids) >= 20   # a substantial run (ANIMA-offline / NL / all) records a trend point
         self.worker = threading.Thread(target=self._run_batch, args=(ids,), daemon=True); self.worker.start()
 
     @staticmethod
     def _is_device(t):
-        """Un test colpisce il Cardputer reale se è device-load O ha il flag ui_device (es. allenamento)."""
+        """A test hits the real Cardputer if it is device-load OR has the ui_device flag (e.g. training)."""
         return t.get("category") == "device-load" or bool(t.get("ui_device"))
 
     def _args_for(self, t):
-        """Args del registry, più --url <device-ip> per i test che toccano il device (e --delay se ui_delay).
-        L'IP/pausa digitati (snapshot sul main thread) sovrascrivono i default dello script; vuoto = li lascia."""
+        """Registry args, plus --url <device-ip> for the tests that touch the device (and --delay if ui_delay).
+        The typed IP/pause (snapshot on the main thread) override the script defaults; empty = leave them."""
         args = list(t["args"])
         if self._is_device(t) and self._device_ip_snap and "--url" not in args:
             ip = self._device_ip_snap
             args += ["--url", ip if ip.startswith("http") else f"http://{ip}"]
         if t.get("ui_delay") and "--delay" not in args:
-            args += ["--delay", str(self._device_delay_snap)]   # pausa/cadenza impostata dalla UI
+            args += ["--delay", str(self._device_delay_snap)]   # pause/cadence set from the UI
         return args
 
     def _stream_proc(self, t, to, on_line):
-        """Esegue il test e ne fa lo STREAM dello stdout riga-per-riga (on_line per ogni riga), invece di
-        catturare tutto alla fine. Ritorna (returncode, output_completo, timed_out). PYTHONUNBUFFERED forza
-        il figlio Python a non bufferizzare lo stdout su pipe (altrimenti niente live). ■ Stop uccide il proc."""
+        """Run the test and STREAM its stdout line by line (on_line for each line), instead of
+        capturing everything at the end. Returns (returncode, full_output, timed_out). PYTHONUNBUFFERED forces
+        the Python child not to buffer stdout on a pipe (otherwise no live output). ■ Stop kills the proc."""
         env = {**os.environ, "PYTHONUTF8": "1", "PYTHONIOENCODING": "utf-8", "PYTHONUNBUFFERED": "1"}
         proc = subprocess.Popen([t["cmd"], *self._args_for(t)], cwd=REPO, stdout=subprocess.PIPE,
                                 stderr=subprocess.STDOUT, text=True, bufsize=1, encoding="utf-8",
                                 errors="replace", env=env)
-        self._cur_proc = proc                   # esposto a stop(): kill IMMEDIATO anche durante una pausa lunga
+        self._cur_proc = proc                   # exposed to stop(): IMMEDIATE kill even during a long pause
         timed = {"v": False}
         timer = None
-        if to:                                  # to=None (registry timeout_s:null) → nessun timer, soak illimitato
+        if to:                                  # to=None (registry timeout_s:null) → no timer, unlimited soak
             def _kill():
                 timed["v"] = True
                 try: proc.kill()
@@ -849,7 +849,7 @@ class TestLab(tk.Tk):
             self.q.put(("set", i, "running", "")); self.q.put(("status", f"▶ {t['label']}{tgt}"))
             self.q.put(("livestart", i))
             status = "error"; ts0 = time.time()
-            to = t["timeout_s"] if "timeout_s" in t else 900   # registry può dare null = nessun timeout (soak lunghi)
+            to = t["timeout_s"] if "timeout_s" in t else 900   # the registry may give null = no timeout (long soaks)
             try:
                 rc, out, timed_out = self._stream_proc(t, to, lambda ln, _i=i: self.q.put(("line", _i, ln)))
                 last = next((ln for ln in reversed(out.splitlines()) if ln.strip()), "")
@@ -862,7 +862,7 @@ class TestLab(tk.Tk):
                     self.q.put(("done", i, status, last.strip()[-90:], out, time.time() - ts0))
             except Exception as e:
                 self.q.put(("done", i, "error", str(e)[:80], str(e), time.time() - ts0))
-            # Cooldown solo fra test device che hanno DAVVERO girato (no skip), e mai dopo l'ultimo.
+            # Cooldown only between device tests that ACTUALLY ran (no skip), and never after the last one.
             if (t.get("category") == "device-load" and status in ("pass", "fail")
                     and i != ids[-1] and not self.stop_flag.is_set()):
                 for s in range(DEVICE_COOLDOWN_S, 0, -1):
@@ -873,7 +873,7 @@ class TestLab(tk.Tk):
 
     def stop(self):
         self.stop_flag.set(); self.status.config(text="stop richiesto…")
-        p = getattr(self, "_cur_proc", None)        # uccide SUBITO il processo in corso (no attesa fine pausa)
+        p = getattr(self, "_cur_proc", None)        # kills the running process IMMEDIATELY (no waiting for the pause to end)
         if p and p.poll() is None:
             try: p.kill()
             except Exception: pass
@@ -936,9 +936,9 @@ class TestLab(tk.Tk):
         sec = int(max(0, sec)); return f"{sec // 60:02d}:{sec % 60:02d}"
 
     def _live_begin(self, tid):
-        """Un test parte: porta in vista lo stream e azzera l'intestazione. I riquadri contatori restano
-        nascosti finché non arrivano righe per-query (li mostra solo il NL soak); per gli altri test la
-        barra resta indeterminata (animata) e il log scorre."""
+        """A test starts: bring the stream into view and reset the header. The counter tiles stay
+        hidden until per-query lines arrive (only the NL soak shows them); for the other tests the
+        bar stays indeterminate (animated) and the log scrolls."""
         try: self.nb.select(self.tab_test)
         except Exception: pass
         t = self.reg_tests.get(tid, {})
@@ -951,7 +951,7 @@ class TestLab(tk.Tk):
         dev = self._is_device(t)
         self.live_title.config(text=f"▶ {self._live_label}", fg=CL["warn"] if dev else CL["fg"])
         self.live_verdict.config(text="")
-        self._cells.pack_forget()                       # riquadri nascosti finché non c'è una riga [q]
+        self._cells.pack_forget()                       # tiles hidden until there is a [q] line
         try: self.live_prog.config(mode="indeterminate"); self.live_prog.start(60)
         except tk.TclError: pass
         self.out.delete("1.0", "end")
@@ -968,7 +968,7 @@ class TestLab(tk.Tk):
         return "dim"
 
     def _live_update_stats(self, line):
-        """Parsa '[q] i/N mark lang tier ms · query' → aggiorna SOLO i contatori (il rendering è separato)."""
+        """Parse '[q] i/N mark lang tier ms · query' → update ONLY the counters (rendering is separate)."""
         if not line.startswith("[q] "):
             return False
         try:
@@ -986,8 +986,8 @@ class TestLab(tk.Tk):
             return False
 
     def _render_live(self):
-        """Disegna l'intestazione viva: badge stato + indicatore globale (lampeggia) + riquadri + barra + meta.
-        Chiamato sia all'arrivo di una riga sia dal ticker (così l'orologio avanza fra una query e l'altra)."""
+        """Draw the live header: status badge + global indicator (blinks) + tiles + bar + meta.
+        Called both when a line arrives and from the ticker (so the clock advances between one query and the next)."""
         active = getattr(self, "_live_active", False)
         sym = "●" if getattr(self, "_run_blink", False) else "○"
         s = getattr(self, "_live_stats", {"served": 0, "crash": 0, "err": 0, "trap": 0, "n": 0, "tot": 0})
@@ -1008,7 +1008,7 @@ class TestLab(tk.Tk):
             self.live_meta.config(text=f"in esecuzione…   trascorso {self._mmss(el)}")
 
     def _live_finish(self, tid, status, summary):
-        """A test finito: ferma la barra, mostra il verdetto evidenziato (se è il test mostrato live)."""
+        """When a test finishes: stop the bar, show the highlighted verdict (if it is the test shown live)."""
         if getattr(self, "_live_tid", None) != tid:
             return
         try: self.live_prog.stop(); self.live_prog.config(mode="determinate")
@@ -1022,29 +1022,29 @@ class TestLab(tk.Tk):
         self.live_badge.config(text=v[0].split()[0], fg=CL[v[1]])
 
     def _live_idle(self):
-        """Nessuna run in corso: indicatore globale a riposo."""
+        """No run in progress: global indicator at rest."""
         self._live_active = False
         self.runpill.config(text="○ pronto", fg=CL["muted"])
 
     def _tick(self):
-        """Ogni secondo: fa avanzare orologio/ETA e fa lampeggiare l'indicatore mentre i test girano."""
+        """Every second: advance the clock/ETA and blink the indicator while the tests run."""
         if getattr(self, "_live_active", False):
             self._run_blink = not getattr(self, "_run_blink", False)
             self._render_live()
         self.after(1000, self._tick)
 
     def _live_line(self, tid, line):
-        """Una riga di stdout dal test in corso → statistiche in alto + riga colorata nel log."""
+        """A stdout line from the running test → stats at the top + a colored line in the log."""
         if getattr(self, "_live_tid", None) != tid:
             return
         if self._live_update_stats(line) and not self._live_has_q:
-            self._live_has_q = True                     # prima riga per-query: rivela i riquadri + barra a %
+            self._live_has_q = True                     # first per-query line: reveal the tiles + % bar
             self._cells.pack(side="top", fill="x", padx=8, pady=(2, 4), before=self.live_prog)
             try: self.live_prog.stop(); self.live_prog.config(mode="determinate")
             except tk.TclError: pass
         self._render_live()
         self.out.insert("end", line + "\n", self._live_color(line))
-        try:                                  # cap del buffer: i soak NL fanno migliaia di righe
+        try:                                  # buffer cap: the NL soaks produce thousands of lines
             if int(self.out.index("end-1c").split(".")[0]) > 4000:
                 self.out.delete("1.0", "2000.0")
         except (tk.TclError, ValueError):
@@ -1077,7 +1077,7 @@ class TestLab(tk.Tk):
 
     def _show_output(self, _e):
         if self.worker and self.worker.is_alive():
-            return                          # una run è in corso: non sovrascrivere lo stream live
+            return                          # a run is in progress: do not overwrite the live stream
         sel = self.tree.selection()
         if not sel or sel[0] not in self.item_for: return
         t = self.tests[self.item_for[sel[0]]]

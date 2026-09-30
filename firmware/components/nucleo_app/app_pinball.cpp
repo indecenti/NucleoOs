@@ -8,7 +8,7 @@
 //
 // The score and the pop-up DMD are drawn with a real 5x7 DOT-MATRIX font (each pixel a little glowing dot),
 // which both looks like a true pinball Dot Matrix Display AND sidesteps rotated-text entirely — a rotated
-// grid of dots is trivial. The DMD is "a comparsa": hidden normally, it slides in for events (SHOOT AGAIN,
+// grid of dots is trivial. The DMD is "pop-in": hidden normally, it slides in for events (SHOOT AGAIN,
 // BONUS, JACKPOT, TILT, BALL n, GAME OVER...) with animation, then retracts.
 //
 // Constraints (same as the other games): exclusive_flags = NX_NET_APP (dedicate RAM + free the I2S line so

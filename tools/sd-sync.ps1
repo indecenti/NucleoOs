@@ -1,8 +1,8 @@
 <#
-  sd-sync.ps1 - copia SICURA del payload di sistema NucleoOS sulla SD del Cardputer.
+  sd-sync.ps1 - SAFE copy of the NucleoOS system payload to the Cardputer SD.
 
-  Sorgente : deploy/sd/  (asset statici: apps, www, system/registry, pack ANIMA)
-  Target   : la radice della SD (es. H:\)
+  Source : deploy/sd/  (static assets: apps, www, system/registry, ANIMA packs)
+  Target : the SD root (e.g. H:\)
 
   VOICE (integral system part, always on board):
    - the Vosk dictation models (apps/anima/www/vosk/models, split parts) travel with the deploy/sd payload;
@@ -10,20 +10,20 @@
    Both without /MIR: only added/updated, never deleted (and firmware nucleo_fs_is_protected
    also prevents on-device deletion).
 
-  GARANZIE:
-   - NON cancella MAI niente sul target (nessun /MIR /PURGE): aggiunge/aggiorna soltanto.
-   - PROTEGGE lo stato del device anche se per errore finisse nel payload:
-       data\anima\teacher.json      (chiave Groq / config online)
-       data\anima\learned\*         (card imparate + .vec)
+  GUARANTEES:
+   - NEVER deletes anything on the target (no /MIR /PURGE): only adds/updates.
+   - PROTECTS the device state even if it ended up in the payload by mistake:
+       data\anima\teacher.json      (Groq key / online config)
+       data\anima\learned\*         (learned cards + .vec)
        data\anima\telemetry.ndjson, session.txt, .httptrace
-       system\config\*              (impostazioni utente create a runtime)
+       system\config\*              (user settings created at runtime)
        config\*, backups\, journal\
-   - Si rifiuta di scrivere se il target non sembra una SD NucleoOS (manca system\ o data\),
-     a meno di -Force, cosi' non sovrascrivi il disco sbagliato.
+   - Refuses to write if the target does not look like a NucleoOS SD (missing system\ or data\),
+     unless -Force is given, so you do not overwrite the wrong disk.
 
-  USO:
+  USAGE:
      powershell -File tools\sd-sync.ps1 -Target H:\
-     powershell -File tools\sd-sync.ps1 -Target H:\ -WhatIf      # anteprima, non scrive
+     powershell -File tools\sd-sync.ps1 -Target H:\ -WhatIf      # preview, does not write
 #>
 [CmdletBinding(SupportsShouldProcess=$true)]
 param(
@@ -36,18 +36,18 @@ $src = Join-Path $PSScriptRoot '..\deploy\sd' | Resolve-Path | Select-Object -Ex
 
 if (-not (Test-Path $Target)) { throw "Target '$Target' non trovato. Inserisci la SD e controlla la lettera di unita'." }
 
-# Sanity: e' davvero una SD NucleoOS?
+# Sanity: is this really a NucleoOS SD?
 $looksLikeSd = (Test-Path (Join-Path $Target 'system')) -or (Test-Path (Join-Path $Target '.deploy-manifest.json'))
 if (-not $looksLikeSd -and -not $Force) {
   throw "Il target '$Target' non sembra una SD NucleoOS (manca system\ o .deploy-manifest.json). Usa -Force se sei sicuro."
 }
 
-# File/dir che NON devono mai essere toccati sul device.
-# NB: data\anima\learned NON e' piu' escluso in blocco — i SEED firmware-pinned facets.<lang>.jsonl
-# (read-only sul device, devono combaciare byte-per-byte con VKL_FACETS_* nel .bin) DEVONO arrivare.
-# I file SCRITTI dal device dentro learned/ sono invece protetti per NOME qui sotto: la cache online
-# (it.jsonl/en.jsonl + *.vec), le triple KGE runtime (mind.*.jsonl) e il ledger di evoluzione
-# (knowledge.ledger.jsonl, occ/subclass.jsonl). Aggiunto sessions.json (cronologia chat reale).
+# Files/dirs that must NEVER be touched on the device.
+# NB: data\anima\learned is no longer excluded as a whole — the firmware-pinned SEED facets.<lang>.jsonl
+# (read-only on the device, must match byte-for-byte VKL_FACETS_* in the .bin) MUST get through.
+# The files WRITTEN by the device inside learned/ are instead protected by NAME below: the online cache
+# (it.jsonl/en.jsonl + *.vec), the runtime KGE triples (mind.*.jsonl) and the evolution ledger
+# (knowledge.ledger.jsonl, occ/subclass.jsonl). Added sessions.json (real chat history).
 $xf = @('teacher.json','telemetry.ndjson','session.txt','sessions.json','.httptrace','*.httptrace','*.vec','auth.json','volume.json','settings.json','workspace.json',
         'it.jsonl','en.jsonl','mind.it.jsonl','mind.en.jsonl','knowledge.ledger.jsonl','occ.jsonl','subclass.jsonl')
 $xd = @(
@@ -62,7 +62,7 @@ $xd = @(
 )
 
 $flags = @('/E','/FFT','/R:1','/W:1','/NJH','/NJS','/NDL','/NP')
-if ($WhatIfPreference) { $flags += '/L' }   # /L = solo lista, non copia
+if ($WhatIfPreference) { $flags += '/L' }   # /L = list only, does not copy
 
 $mode = 'COPIA'
 if ($WhatIfPreference) { $mode = 'ANTEPRIMA (nessuna scrittura)' }
@@ -74,7 +74,7 @@ Write-Host ''
 
 & robocopy "$src" "$Target" *.* @flags /XF @xf /XD @xd
 $rc = $LASTEXITCODE
-# robocopy: 0-7 = successo (8+ = errore reale)
+# robocopy: 0-7 = success (8+ = real error)
 if ($rc -ge 8) { throw "robocopy ha riportato un errore (exit $rc)." }
 
 # TTS voice: the clip bank (data/tts) is not in deploy/sd (too big for the repo) ->

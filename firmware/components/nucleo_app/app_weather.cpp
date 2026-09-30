@@ -234,7 +234,7 @@ static void on_enter(void)
 static void on_key(int key, char ch)
 {
     if (s_fav_screen) {
-        int total = s_fav_n + 1;                      // +1 = "aggiungi"
+        int total = s_fav_n + 1;                      // +1 = "add"
         if (key == NK_UP)   { s_fav_sel = (s_fav_sel - 1 + total) % total; nucleo_app_request_draw(); }
         if (key == NK_DOWN) { s_fav_sel = (s_fav_sel + 1) % total; nucleo_app_request_draw(); }
         if ((ch == 'd' || key == NK_DEL) && s_fav_sel < s_fav_n) { fav_del(s_fav_sel); if (s_fav_sel >= s_fav_n && s_fav_sel) s_fav_sel--; nucleo_app_request_draw(); }
