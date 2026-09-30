@@ -79,9 +79,9 @@ export async function ollamaCaps(base, model, { fetch: f = globalThis.fetch, tim
     if (!r.ok) return null;
     const j = await r.json();
     const c = new Set(j.capabilities || []);
-    let ctx = 0;
-    for (const [k, v] of Object.entries(j.model_info || {})) if (/context_length$/.test(k)) ctx = v;
-    return { chat: c.has('completion'), tools: c.has('tools'), vision: c.has('vision'), thinking: c.has('thinking'), embedding: c.has('embedding'), audio: c.has('audio'), ctx };
+    let ctx = 0, blocks = 0;
+    for (const [k, v] of Object.entries(j.model_info || {})) { if (/context_length$/.test(k)) ctx = v; if (/\.block_count$/.test(k)) blocks = v; }
+    return { chat: c.has('completion'), tools: c.has('tools'), vision: c.has('vision'), thinking: c.has('thinking'), embedding: c.has('embedding'), audio: c.has('audio'), ctx, blocks };
   } catch { return null; } finally { tm.done(); }
 }
 
@@ -113,6 +113,17 @@ const isEmbed = (m) => (m.caps && m.caps.embedding && !m.caps.chat) || /embed|bg
 // model FILE of that size already spills once loaded (gemma4:12b: 7.56 GB file, 8.9 GB loaded with its
 // projector and an 8k KV cache), so the prior compares the file size to it with no slack.
 export const DEFAULT_VRAM_GB = 7;
+// A model FILE bigger than the GPU still runs well split between GPU and CPU — a sparse MoE best of all
+// (qwen3.6 35B-A3B, 22.6 GB, on an 8 GB laptop RTX 5070: 12 layers on the GPU → 22.4 tok/s, as fast as the
+// dense 9B). Ollama's own split tried to load too much and died with "CUDA error: out of memory"; 20 layers
+// spilled the VRAM into shared memory → 3.8 tok/s. So: the layers that fit, with room for the KV cache and
+// the vision projector. null = cannot tell (no size / layer count).
+export const VRAM_RESERVE_GB = 1.6;
+export function gpuLayersFor({ sizeGB, blockCount, vramGB = DEFAULT_VRAM_GB, reserveGB = VRAM_RESERVE_GB } = {}) {
+  if (!(sizeGB > 0) || !(blockCount > 0) || !(vramGB > 0)) return null;
+  const n = Math.floor(blockCount * Math.max(0, vramGB - reserveGB) / sizeGB);
+  return Math.max(0, Math.min(blockCount, n));
+}
 // task: 'chat' | 'agent' | 'code' | 'vision' | 'embed'. Prefers capable models of a size that stays
 // responsive on a consumer GPU (≤ ~14B, unless it is a sparse MoE "a3b"), bigger within that range.
 // opts.perf / opts.base: what was MEASURED on this computer (see notePerf) beats every size estimate.
@@ -131,9 +142,12 @@ export function pickModel(models, task = 'chat', { perf = null, base = '' } = {}
     const fits = p <= 14 || moe(m);
     s += fits ? Math.min(p, 14) * 2 : 2;
     // What must sit in (V)RAM is the FILE, not the active parameters: a 22 GB MoE "a3b" still loads 22 GB.
-    // Past ~10 GB it rarely fits a consumer GPU and spills to CPU (slow) or fails — keep it as a fallback.
-    if (m.sizeGB && m.sizeGB > 10) s -= 30 + m.sizeGB;
+    // Past ~10 GB it rarely fits a consumer GPU and spills to CPU (slow) or fails — keep it as a fallback…
+    // …UNLESS it was measured fast on THIS computer: split GPU/CPU, a sparse MoE runs as fast as a dense
+    // small model and is far more capable (35B-A3B at 22.4 tok/s next to the 9B's 20.5). Speed is the truth.
     const seen = perf && perf.models && perf.models[base + '|' + m.id];
+    const provenFast = !!(seen && seen.tps >= 12);
+    if (m.sizeGB && m.sizeGB > 10 && !provenFast) s -= 30 + m.sizeGB;
     if (seen && seen.tps) {
       // Measured here. Measured 2026-09-30 on an 8 GB laptop RTX 5070: gemma4:12b (8.9 GB) ran a third on
       // the CPU at 2.1 tok/s — a minute per answer — while qwen3.5:9b gave 20.5 tok/s. Speed is the truth.
@@ -165,13 +179,16 @@ export function loadPerf(storage = globalThis.localStorage) {
 export function savePerf(perf, storage = globalThis.localStorage) { try { storage.setItem(PERF, JSON.stringify(perf)); } catch {} }
 // obs: { tps, sizeGB?, vramGB? } → the updated record. The VRAM estimate follows the latest evidence: a model
 // that fit entirely raises it to at least its size; one that spilled pins it to what the GPU actually held.
-export function notePerf(perf, base, model, { tps, sizeGB, vramGB } = {}) {
+// numGpu: the GPU/CPU split we CHOSE for it (gpuLayersFor) — remembered so the next load goes straight to it,
+// and never read as the GPU's capacity (6.4 GB held by a deliberate split is not "this GPU has 6.4 GB").
+export function notePerf(perf, base, model, { tps, sizeGB, vramGB, numGpu } = {}) {
   const p = perf && perf.models ? perf : { models: {} };
   const key = base + '|' + model;
   const prev = p.models[key] || {};
   const rec = { ...prev, at: Date.now() };
   if (tps > 0) rec.tps = prev.tps ? Math.round((prev.tps * 0.4 + tps * 0.6) * 10) / 10 : tps;   // smooth one noisy turn
-  if (sizeGB && vramGB != null) {
+  if (Number.isInteger(numGpu)) rec.numGpu = numGpu;
+  if (sizeGB && vramGB != null && !Number.isInteger(rec.numGpu)) {
     rec.fit = Math.round(Math.min(1, vramGB / sizeGB) * 100) / 100;
     // fit entirely → the GPU holds AT LEAST this much (never lowers the estimate); spilled → it holds what it held.
     p.vramGB = rec.fit >= 0.98 ? Math.max(p.vramGB || DEFAULT_VRAM_GB, Math.round(sizeGB * 10) / 10) : Math.round(vramGB * 10) / 10;
@@ -306,16 +323,31 @@ export async function localComplete(task, { messages, tools, temperature, maxTok
     const ladder = pinned ? [pinned] : [...new Set([chosen, ...rankModels(s.models, task, { perf, base: s.base })].filter(Boolean))];
     const skipped = [];
     for (const model of ladder) {
+      const options = {};
+      if (temperature != null) options.temperature = temperature;
+      if (maxTokens) options.num_predict = maxTokens;
+      if (numCtx) options.num_ctx = numCtx;
+      const rec = perf.models && perf.models[s.base + '|' + model];
+      if (s.kind === 'ollama' && rec && Number.isInteger(rec.numGpu)) options.num_gpu = rec.numGpu;   // the split that worked last time
+      const run = () => (s.kind === 'ollama'
+        ? ollamaChat({ base: s.base, model, messages, tools, options, signal, onDelta, fetch: f })
+        : openaiChat({ base: s.base, model, key: s.key, messages, tools, temperature, maxTokens, signal, onDelta, fetch: f }));
       try {
-        const options = {};
-        if (temperature != null) options.temperature = temperature;
-        if (maxTokens) options.num_predict = maxTokens;
-        if (numCtx) options.num_ctx = numCtx;
-        const res = s.kind === 'ollama'
-          ? await ollamaChat({ base: s.base, model, messages, tools, options, signal, onDelta, fetch: f })
-          : await openaiChat({ base: s.base, model, key: s.key, messages, tools, temperature, maxTokens, signal, onDelta, fetch: f });
-        if (s.kind === 'ollama' && res.usage && res.usage.outputTokens >= 16) learnPerf(perf, s.base, model, res.usage.tokPerSec, { storage, fetch: f });
-        return { ...res, engine: { server: s.name, kind: s.kind, model, base: s.base, ...(skipped.length ? { skipped } : {}) } };
+        let res;
+        try { res = await run(); }
+        catch (e) {
+          // Out of memory while LOADING a model bigger than the GPU: Ollama's own split was wrong. Retry once
+          // with the layers that fit (gpuLayersFor) — the rest runs on the CPU — before stepping down.
+          if (!(s.kind === 'ollama' && isOutOfMemory(e) && options.num_gpu == null && !(signal && signal.aborted))) throw e;
+          const info = await ollamaCaps(s.base, model, { fetch: f });
+          const m = s.models.find((x) => x.id === model);
+          const layers = gpuLayersFor({ sizeGB: m && m.sizeGB, blockCount: info && info.blocks, vramGB: perf.vramGB || DEFAULT_VRAM_GB });
+          if (layers == null) throw e;
+          options.num_gpu = layers;
+          res = await run();
+        }
+        if (s.kind === 'ollama' && res.usage && res.usage.outputTokens >= 16) learnPerf(perf, s.base, model, res.usage.tokPerSec, { storage, fetch: f, numGpu: options.num_gpu });
+        return { ...res, engine: { server: s.name, kind: s.kind, model, base: s.base, ...(options.num_gpu != null ? { gpuLayers: options.num_gpu } : {}), ...(skipped.length ? { skipped } : {}) } };
       } catch (e) {
         if (signal && signal.aborted) throw e;
         if (!isOutOfMemory(e)) { forgetServers(); throw e; }   // server gone / model removed: re-probe next turn
@@ -327,10 +359,10 @@ export async function localComplete(task, { messages, tools, temperature, maxTok
 }
 // Fire-and-forget: read where the model sits (VRAM vs CPU) and remember how fast it answered. Never blocks
 // or fails the turn; a server without /api/ps just records the speed.
-async function learnPerf(perf, base, model, tps, { storage, fetch: f }) {
+async function learnPerf(perf, base, model, tps, { storage, fetch: f, numGpu }) {
   try {
     const m = (await ollamaLoaded(base, { fetch: f })).find((x) => x.id === model);
-    notePerf(perf, base, model, { tps, sizeGB: m && m.sizeGB, vramGB: m ? m.vramGB : undefined });
+    notePerf(perf, base, model, { tps, sizeGB: m && m.sizeGB, vramGB: m ? m.vramGB : undefined, numGpu });
     if (storage) savePerf(perf, storage);
   } catch {}
 }
