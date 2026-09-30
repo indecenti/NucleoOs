@@ -118,23 +118,30 @@ FACTORY_TARGETS = [
 ]
 
 # ---------------------------------------------------------------- device state
-# Paths (glob, rel SD root) of DEVICE STATE: on PROVISION a clean template is written;
-# on UPDATE they are PRESERVED (never overwritten, never deleted).
-DEVICE_STATE = [
-    "data/anima/teacher.json",      # Groq key / online config
-    # learned/ NOT as a whole: facets.<lang>.jsonl are firmware-pinned READ-ONLY SEEDs (they must match
-    # VKL_FACETS_* in the .bin) and MUST be written. Protect only the files WRITTEN by the device, by name:
-    "data/anima/learned/it.jsonl", "data/anima/learned/en.jsonl",   # online answer cache
-    "data/anima/learned/it.vec", "data/anima/learned/en.vec",       # embedding cache
-    "data/anima/learned/mind.*.jsonl",                              # runtime KGE triples (mind_put)
-    "data/anima/learned/knowledge.ledger.jsonl", "data/anima/learned/evo/*",   # evolution ledger
-    "data/anima/telemetry.ndjson", "data/anima/session.txt", "data/anima/sessions.json",
-    "data/anima/workspace.json", "data/anima/*.httptrace",
-    "system/config/*",              # runtime settings
-    "system/keys/*", "system/sessions/*",
-    "config/*", "backups/*", "journal/*",
-    "*.vec", "auth.json", "volume.json", "settings.json",
-]
+# DEVICE / USER STATE (API key, learned caches, settings, keys, the user's documents...): on PROVISION a
+# clean template is written; on UPDATE it is PRESERVED (never overwritten, never deleted). The table is
+# tools/lib/sd-policy.json, shared with deploy.ps1, sd-sync.ps1, push-ota and sd-net-sync (see its _doc);
+# tools/sd-policy.test.mjs holds every implementation to the same vectors.
+import re
+SD_POLICY = json.loads((REPO / "tools" / "lib" / "sd-policy.json").read_text(encoding="utf-8"))
+
+def _glob_re(glob):
+    """'**/' = zero or more segments, '**' = anything, '*' = within one segment; case-insensitive."""
+    out, i = "", 0
+    while i < len(glob):
+        if glob.startswith("**/", i):
+            out += "(?:.*/)?"; i += 3
+        elif glob.startswith("**", i):
+            out += ".*"; i += 2
+        elif glob[i] == "*":
+            out += "[^/]*"; i += 1
+        else:
+            out += re.escape(glob[i]); i += 1
+    return re.compile("^" + out + "$", re.IGNORECASE)
+
+_STATE_RE = [_glob_re(g) for g in SD_POLICY["state"]]
+_ANIMA_SHIP_RE = [_glob_re(g) for g in SD_POLICY["animaShip"]]
+DEVICE_STATE = SD_POLICY["state"]          # kept for readers of the old name
 # User folders to create empty on a new SD.
 USER_DIRS = ["data/Music", "data/Videos", "data/Pictures", "data/Documents", "data/Notes",
              "data/Recordings", "data/ROMs", "data/DOS", "data/Transcripts",
@@ -204,9 +211,13 @@ def stale_twins(staged, card_has):
                   and card_has(r + ".gz"))
 
 def is_state(rel):
-    rel = rel.replace("\\", "/")
-    return any(fnmatch.fnmatch(rel, p) or rel.startswith(p.rstrip("*")) and p.endswith("*")
-               for p in DEVICE_STATE)
+    """Device/user state per tools/lib/sd-policy.json (same semantics as tools/lib/sd-policy.mjs)."""
+    p = (rel or "").replace("\\", "/").lstrip("/")
+    if any(r.match(p) for r in _STATE_RE):
+        return True
+    if p.lower().startswith("data/anima/"):
+        return not any(r.match(p) for r in _ANIMA_SHIP_RE)
+    return False
 
 # ---------------------------------------------------------------- helpers
 def sha256(path, buf=1 << 20):

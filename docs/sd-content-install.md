@@ -100,7 +100,8 @@ unchanged; this adds one more consumer of the same payload definition.
   **brain files only** (`anima-*`, `dict-*`, `commands*`, `akb5/`), `data/anima/learned/facets.{it,en}.jsonl`,
   `wallpapers/`, `evilportal/`. Anything else in a manifest → the line is refused and the run fails
   loudly (a bad manifest must not write anywhere).
-- **Deny-list** mirrors `sd_deploy.py DEVICE_STATE` / `push-ota isDeviceState`: `system/config`,
+- **Deny-list** = the shared device/user-state table `tools/lib/sd-policy.json` (every SD tool reads it;
+  the device installer will be held to the same `tools/lib/sd-policy-vectors.json`), e.g. `system/config`,
   `system/keys`, `system/sessions`, logs, `data/anima/teacher.json`, learned caches, `data/tts/` root, …
 - **Path hygiene**: relative, no `..`, no backslash, no leading `/`, ≤ 200 chars (+`.part` fits the 256
   buffers), printable ASCII.

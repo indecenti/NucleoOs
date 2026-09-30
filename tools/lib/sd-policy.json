@@ -1,0 +1,40 @@
+{
+  "_doc": [
+    "THE single table of what on a NucleoOS SD card belongs to the DEVICE / the USER, read at runtime by every",
+    "tool that writes a card: deploy.ps1 (staging + -To), sd-sync.ps1, push-ota.mjs, sd-net-sync.mjs and",
+    "tools/nucleo-sd-deploy/sd_deploy.py (update/provision/verify and the release payload). A path classified",
+    "as device state is never staged, shipped, pushed or overwritten by any of them.",
+    "",
+    "isDeviceState(path): true if it matches a 'state' pattern; otherwise, under data/anima/ it is state unless",
+    "it matches an 'animaShip' pattern (the ANIMA brain + firmware-pinned seeds ship; the API key, learned",
+    "caches, profile, sessions... are the user's, and new ANIMA state files are protected automatically).",
+    "",
+    "Patterns: SD-relative, case-insensitive (FAT). '*' = any characters except '/', '**' = any characters",
+    "including '/' ('**/' also matches nothing), nothing else is special. Implementations: tools/lib/",
+    "sd-policy.mjs, sd_deploy.py, deploy.ps1 / sd-sync.ps1 — all held to tools/lib/sd-policy-vectors.json by",
+    "tools/sd-policy.test.mjs. The firmware's delete guard (nucleo_fsprotect.h) and the factory-reset lists",
+    "(app_wifi.cpp) answer different questions and are not generated from this file."
+  ],
+  "state": [
+    "system/config/**", "system/keys/**", "system/sessions/**", "system/log/**", "system/logs/**",
+    "system/.trash/**", "system/mail/**", "system/voice/**",
+    "system/volume.json", "system/time.json", "system/notify.jsonl", "system/notify.jsonl.*", "system/bg.jpg",
+    "config/**", "backups/**", "journal/**",
+    "auth.json", "volume.json", "settings.json",
+    "apps/theme.cfg", "apps/*/data/**",
+    "data/tts/*.cfg", "data/tts/*.ver", "data/tts/*.wav",
+    "data/Documents/**", "data/Notes/**", "data/Pictures/**", "data/Recordings/**", "data/Transcripts/**",
+    "data/Saves/**", "data/Desktop/**", "data/uploads/**", "data/downloads/**", "data/shared/**",
+    "data/imports/**", "data/exports/**", "data/cache/**", "data/apps/**", "data/ssh/**", "data/QR/**",
+    "data/Contacts/**", "data/GameShots/**", "data/Screenshots/**", "data/ir/userdata.json",
+    "**/*.vec", "**/*.httptrace"
+  ],
+  "_media": "data/ROMs, data/DOS, data/Music, data/Videos are user media too, but NOT listed as state: push-ota --include-media deliberately ships them (bundled factory games, dev media). Tools skip them unless asked.",
+  "animaShip": [
+    "data/anima/akb5/**",
+    "data/anima/anima-*",
+    "data/anima/dict-*",
+    "data/anima/commands*",
+    "data/anima/learned/facets.*.jsonl"
+  ]
+}
