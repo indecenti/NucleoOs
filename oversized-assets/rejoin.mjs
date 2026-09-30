@@ -1,6 +1,6 @@
-// Ricostruisce i file oversize dai loro pezzi e ne verifica l'integrità (SHA-256).
-// Uso: node oversized-assets/rejoin.mjs            (dalla root del repo)
-//      node oversized-assets/rejoin.mjs <id> ...   (solo alcuni asset)
+// Rebuilds the oversized files from their parts and verifies integrity (SHA-256).
+// Usage: node oversized-assets/rejoin.mjs            (from the repo root)
+//        node oversized-assets/rejoin.mjs <id> ...   (only some assets)
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join, dirname } from 'node:path';
@@ -16,12 +16,12 @@ for (const a of manifest.assets) {
   const partFiles = Array.from({ length: a.parts }, (_, i) =>
     join(ROOT, `${a.partPrefix}${String(i).padStart(3, '0')}`));
   const missing = partFiles.filter((p) => !existsSync(p));
-  if (missing.length) { console.error(`✗ ${a.id}: parti mancanti (${missing.length})`); fail++; continue; }
+  if (missing.length) { console.error(`✗ ${a.id}: missing parts (${missing.length})`); fail++; continue; }
 
   const buf = Buffer.concat(partFiles.map((p) => readFileSync(p)));
   const gotSha = sha256(buf);
   if (buf.length !== a.bytes || gotSha !== a.sha256) {
-    console.error(`✗ ${a.id}: integrità FALLITA (atteso ${a.sha256.slice(0,12)}…/${a.bytes}B, ottenuto ${gotSha.slice(0,12)}…/${buf.length}B)`);
+    console.error(`✗ ${a.id}: integrity FAILED (expected ${a.sha256.slice(0,12)}…/${a.bytes}B, got ${gotSha.slice(0,12)}…/${buf.length}B)`);
     fail++; continue;
   }
   const dest = join(ROOT, a.path);
@@ -30,5 +30,5 @@ for (const a of manifest.assets) {
   console.log(`✓ ${a.id} -> ${a.path}  (${(a.bytes/1048576).toFixed(0)} MiB, sha ok)`);
   ok++;
 }
-console.log(`\nFatto: ${ok} ricostruiti, ${fail} falliti.`);
+console.log(`\nDone: ${ok} rebuilt, ${fail} failed.`);
 process.exit(fail ? 1 : 0);

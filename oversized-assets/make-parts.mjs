@@ -1,28 +1,28 @@
-// Genera le parti <100 MiB dei file oversize + manifest.json (con SHA-256).
-// Uso: node oversized-assets/make-parts.mjs   (dalla root del repo)
-// I file originali NON sono versionati (sono in .git/info/exclude): qui produciamo
-// solo le parti committabili. Per ricostruirli: node oversized-assets/rejoin.mjs
+// Generates the <100 MiB parts of the oversized files + manifest.json (with SHA-256).
+// Usage: node oversized-assets/make-parts.mjs   (from the repo root)
+// The original files are NOT versioned (they live in .git/info/exclude): here we produce
+// only the committable parts. To rebuild the originals: node oversized-assets/rejoin.mjs
 import { readFileSync, writeFileSync, mkdirSync, rmSync, existsSync, statSync, readdirSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 
-const CHUNK = 90 * 1024 * 1024; // 90 MiB < limite 100 MiB di GitHub
+const CHUNK = 90 * 1024 * 1024; // 90 MiB < GitHub's 100 MiB limit
 const ROOT = process.cwd();
 const PARTS = join(ROOT, 'oversized-assets', 'parts');
 
 const assets = [
   { id: 'qwen-coder-gguf',
     path: 'deploy/sd-safe/apps/anima/www/forge/models/Qwen2.5-Coder-0.5B-Instruct-GGUF/qwen2.5-coder-0.5b-instruct-q4_k_m.gguf',
-    what: 'Modello Qwen2.5-Coder 0.5B Instruct (GGUF q4_k_m) usato da ANIMA Forge (path wllama/llama.cpp).' },
+    what: 'Qwen2.5-Coder 0.5B Instruct model (GGUF q4_k_m) used by ANIMA Forge (wllama/llama.cpp path).' },
   { id: 'teacher-npy',
     path: 'tools/anima/.cache/teacher_200000_192.npy',
-    what: 'Cache NumPy degli embedding "teacher" (200k campioni x 192 dim) della pipeline encoder ANIMA.' },
+    what: 'NumPy cache of the "teacher" embeddings (200k samples x 192 dims) of the ANIMA encoder pipeline.' },
   { id: 'tts-it-clips',
     path: 'deploy/sd-safe/data/tts/it/clips.pcm',
-    what: 'Banco clip audio del TTS concatenativo italiano (nucleo_tts).' },
+    what: 'Audio clip bank of the Italian concatenative TTS (nucleo_tts).' },
   { id: 'tts-en-clips',
     path: 'deploy/sd-safe/data/tts/en/clips.pcm',
-    what: 'Banco clip audio del TTS concatenativo inglese (nucleo_tts).' },
+    what: 'Audio clip bank of the English concatenative TTS (nucleo_tts).' },
 ];
 
 const sha256 = (buf) => createHash('sha256').update(buf).digest('hex');
