@@ -34,6 +34,7 @@ import { toAgentTools as hwAgentTools, capabilityForTool, callCapability, HW_MUT
 import { orchestrateScaffold, orchestratePublish, orchestrateManage } from './app-ops.js';
 import { buildReviewPrompt, parseReviewVerdict, reviewNote } from './app-review.js';
 import { createDeviceQueue } from './device-queue.js';
+import { createToolGuard } from './tool-guard.js';      // tool-name repair + doom-loop stop before every tool call (OpenCode-style)
 import { runWorkerLocal } from './local-worker.js';   // the LOCAL transport (F0): grammar-constrained loop on an injected browser-local engine
 import { smokeApp, smokeSummary, stageAppRecipe } from './app-recipe.js';   // F5: install-and-smoke on the device + app-recipe learning   // ONE intelligent queue for every device-touching call (reads pooled, writes + Gemini proxy exclusive)
 import { routeFor, providerOf, PROVIDERS, CAPMATRIX, servedModel, toAiError } from '/ai.js';   // multi-model router + capability matrix (image/whisper) for the capability tools
@@ -178,7 +179,18 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
   const hwGranted = new Set(Array.isArray(hwPerms) ? hwPerms : []);
   const HW_TOOLS = HW_CAPABILITIES.filter((c) => hwGranted.has(c.permission));
   const hwToolDefs = HW_TOOLS.length ? hwAgentTools().filter((td) => HW_TOOLS.some((c) => c.id.replace(/\./g, '_') === td.name)) : [];
-  const hwToolNames = new Set(hwToolDefs.map((td) => td.name));        // Settings-tunable loop budget (default 14, hard-capped so a fat-fingered value can't runaway)
+  const hwToolNames = new Set(hwToolDefs.map((td) => td.name));
+  // Every tool call of every loop (cloud, Groq, the PC's model, the browser GPU) passes this guard: a
+  // misspelled tool name is repaired or answered readably, and a 3rd identical call in a row is not run.
+  const toolGuard = createToolGuard([...CLIENT_TOOLS.map((td) => td.name), ...hwToolNames, 'web_search']);
+  async function guardedExec(name, input, label) {
+    const g = toolGuard.check(name, input);
+    if (!g.run) {
+      if (ui && ui.toolEnd) ui.toolEnd({ name, input, label, ts: Date.now() }, g.content, true);
+      return { content: g.content, is_error: true };
+    }
+    return execTool(g.name, input, label);
+  }        // Settings-tunable loop budget (default 14, hard-capped so a fat-fingered value can't runaway)
   const PARALLEL = Math.min(6, (maxParallel | 0) > 0 ? (maxParallel | 0) : MAX_PARALLEL);
 
   // Resolve a (cfg, model) for a subtask. When the caller passes the full keys{} map, route ACROSS providers
@@ -308,7 +320,7 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
           const v = verifyCode(input.path, input.content, checkSyntax);   // edit→lint loop: a broken write comes back with a ⚠
           return done(t('rt_write_ok', { path: r.path, bytes: r.bytes }) + (v.ok ? '' : '\n' + v.warning + t('rt_write_fix'))); }
         case 'append_file': { const r = await withRetry(() => dq.write(() => fs.append(input.path, String(input.content == null ? '' : input.content)))); return r.ok ? done(t('rt_append_ok', { path: r.path })) : done(t('rt_err', { op: 'append', error: r.error }), true); }
-        case 'edit_file': { const r = await withRetry(() => dq.write(() => fs.edit(input.path, String(input.old || ''), String(input.new || ''), { all: false }))); if (!r.ok) return done(t('rt_err', { op: 'edit', error: r.error }) + (r.error && /not found/i.test(r.error) ? t('rt_edit_reread') : ''), true);
+        case 'edit_file': { const r = await withRetry(() => dq.write(() => fs.edit(input.path, String(input.old || ''), String(input.new || ''), { all: false }))); if (!r.ok) return done(t('rt_err', { op: 'edit', error: r.message || r.error }) + (!r.message && /not.found/i.test(r.error || '') ? t('rt_edit_reread') : ''), true);   // r.message says what to do next (edit-replace.js)
           let warn = '';   // verify only code files (one cheap read-back); prose edits skip it
           if (/\.(js|mjs|cjs|json)$/i.test(input.path)) { try { const rb = await dq.read(() => fs.read(input.path, { maxBytes: READ_CAP })); if (rb.ok) { const v = verifyCode(input.path, rb.content, checkSyntax); if (!v.ok) warn = '\n' + v.warning + t('rt_edit_fix'); } } catch {} }
           return done(t('rt_edit_ok', { path: r.path, added: (r.added || 0), removed: (r.removed || 0) }) + warn); }
@@ -522,7 +534,7 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
     const oaTools = toOpenAITools([...CLIENT_TOOLS, ...hwToolDefs]);
     const msgs = [{ role: 'system', content: system }, ...messages];
     const callModel = (m) => callOpenAIChat(deviceFetch, wcfg, { model, messages: m, tools: oaTools, toolChoice: 'auto', maxTokens, temperature: 0.3, signal: aborter && aborter.signal });
-    return runOpenAIToolLoop({ callModel, execTool, messages: msgs, maxSteps: STEPS,
+    return runOpenAIToolLoop({ callModel, execTool: guardedExec, messages: msgs, maxSteps: STEPS,
       abort: aborter && aborter.signal, onEvent: (e) => { if (e.type === 'tool' && ui && ui.status) ui.status('⚙ ' + e.name); } });
   }
 
@@ -541,7 +553,7 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
         const uses = (resp.content || []).filter((b) => b.type === 'tool_use');
         const results = [];
         for (const u of uses) {
-          const r = await execTool(u.name, u.input, u.id);
+          const r = await guardedExec(u.name, u.input, u.id);
           results.push({ type: 'tool_result', tool_use_id: u.id, content: r.content, is_error: r.is_error });
         }
         messages.push({ role: 'user', content: results });
@@ -581,7 +593,7 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
     };
     readCap = LOCAL_READ_CAP;
     try {
-      return await runLocalToolLoop({ chat, execTool, messages: [{ role: 'system', content: system }, ...messages], tools, maxSteps: STEPS,
+      return await runLocalToolLoop({ chat, execTool: guardedExec, messages: [{ role: 'system', content: system }, ...messages], tools, maxSteps: STEPS,
         abort: aborter && aborter.signal, onEvent: (e) => { if (e.type === 'tool' && ui && ui.status) ui.status('⚙ ' + e.name); } });
     } finally { readCap = READ_CAP; }
   }
@@ -648,7 +660,7 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
         if (ui && ui.status) ui.status('Agente (locale: ' + (rung.tier || 'local') + ')…');
         try {
           const out = await runWorkerLocal(
-            { engine: rung.engine, execTool, grammar: local.grammar, verify: local.verify || null },
+            { engine: rung.engine, execTool: guardedExec, grammar: local.grammar, verify: local.verify || null },
             { messages: baseMessages, root, maxSteps: Math.min(STEPS, 10),
               onEvent: (e) => { if (e.type === 'action' && ui && ui.status) ui.status('⚙ ' + e.op); } });
           if (out && !out.declined) { lastEngine = { kind: 'local', tier: rung.tier, model: rung.engine.model || '' }; return out.text || ''; }   // workers return plain text — same contract
@@ -763,6 +775,7 @@ Sii conservativo: in dubbio scegli "task". Considera il contesto della conversaz
   async function run(userMsg, history = [], opts = {}) {
     aborter = new AbortController();
     taskPlan = [];                                   // each question starts with an empty checklist
+    toolGuard.reset();                               // …and a clean doom-loop history
     if (ui && ui.plan) { try { ui.plan([]); } catch {} }
     const hist = compact(history, { budget: 20000, lang, minRecent: 8 }).history;   // generous: compaction (ANIMA-tuned) drops old assistant turns, so keep more verbatim
     const histMsgs = hist.map((t) => ({ role: t.role === 'bot' ? 'assistant' : 'user', content: String(t.text || '') }))
