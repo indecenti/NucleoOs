@@ -28,6 +28,50 @@ static esp_err_t serve_rescue(httpd_req_t *req)
     return httpd_resp_send(req, rescue_html_start, len);
 }
 
+// Web-OS handoff page (EMBED_TXTFILES "handoff.html"): see nucleo_webfs_set_handoff_cb in the header.
+extern const char handoff_html_start[] asm("_binary_handoff_html_start");
+extern const char handoff_html_end[]   asm("_binary_handoff_html_end");
+static bool (*s_handoff_wanted)(void);
+// Tick the handoff page was queued (0 = none). httpd_resp_send returns once the bytes are in the TCP send
+// buffer, NOT once the browser has them: rebooting on the very next app tick cut the page short (verified on
+// Chrome — the splash painted, the script at the end never arrived, so the page neither translated nor
+// reloaded). The reboot waits HANDOFF_FLUSH_MS for the transfer to finish.
+#define HANDOFF_FLUSH_MS 1500
+static volatile TickType_t s_handoff_at;
+void nucleo_webfs_set_handoff_cb(bool (*wanted)(void)) { s_handoff_wanted = wanted; }
+bool nucleo_webfs_take_handoff(void)
+{
+    TickType_t at = s_handoff_at;
+    if (!at || (xTaskGetTickCount() - at) < pdMS_TO_TICKS(HANDOFF_FLUSH_MS)) return false;
+    s_handoff_at = 0;
+    return true;
+}
+
+// Only a real browser page load counts. Sec-Fetch-Mode would say so, but browsers send Fetch Metadata only
+// to secure origins — never to http://<device-ip> (verified on Chrome: the handoff never fired). What every
+// browser DOES send on a page load, over plain HTTP too, is an Accept that asks for text/html; curl, the dev
+// tools (push-ota, sd-net-sync) and fetch() calls from the shell send "*/*", so they read "/" untouched.
+static bool is_browser_navigation(httpd_req_t *req)
+{
+    char v[16];
+    if (httpd_req_get_hdr_value_str(req, "Sec-Fetch-Mode", v, sizeof v) == ESP_OK) return !strcmp(v, "navigate");
+    size_t n = httpd_req_get_hdr_value_len(req, "Accept");
+    if (n == 0 || n >= 256) return false;
+    static char acc[256];   // static, not stack: httpd serves on ONE task and static_get's frame is already deep
+    return httpd_req_get_hdr_value_str(req, "Accept", acc, sizeof acc) == ESP_OK && strstr(acc, "text/html") != NULL;
+}
+
+static esp_err_t serve_handoff(httpd_req_t *req)
+{
+    size_t len = (size_t)(handoff_html_end - handoff_html_start);
+    if (len > 0) len--;   // drop the trailing NUL that EMBED_TXTFILES appends
+    httpd_resp_set_type(req, "text/html; charset=utf-8");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    esp_err_t e = httpd_resp_send(req, handoff_html_start, len);
+    if (!s_handoff_at) s_handoff_at = xTaskGetTickCount() | 1;   // the app task reboots HANDOFF_FLUSH_MS later (|1: never 0)
+    return e;
+}
+
 // Circuit breaker for the static catch-all: refuse to START a large full-file stream when contiguous
 // SRAM is already low. Streaming a multi-MB asset (e.g. an offline voice-model part) through the
 // single-task web server while it's heap-starved is what tips it over — every other request
@@ -145,6 +189,18 @@ static esp_err_t static_get(httpd_req_t *req)
     char path[256];
     map_uri(req->uri, path, sizeof(path));
     if (!path[0]) { httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "bad path"); return ESP_FAIL; }
+
+    // Web-OS handoff: a browser opening the desktop while the full native OS runs gets the small
+    // "preparing web mode" page and the device reboots into server Solo — before the shell's asset storm.
+    if (s_handoff_wanted) {
+        char nav[16]; size_t ni = 0;
+        for (const char *u = req->uri; *u && *u != '?' && ni < sizeof(nav) - 1; u++) nav[ni++] = *u;
+        nav[ni] = '\0';
+        if ((!strcmp(nav, "/") || !strcmp(nav, "/index.html")) && is_browser_navigation(req) && s_handoff_wanted()) {
+            ESP_LOGW(TAG, "browser opened the web OS on the full-OS heap -> handoff page + server Solo");
+            return serve_handoff(req);
+        }
+    }
 
     // CONDITIONAL GET first, from two stat()s — before any heap reclaim or file open. HTML/JS/CSS are
     // "no-cache" (revalidate every load) and on http://LAN-IP the service worker is inert, so without a
