@@ -86,3 +86,10 @@ tools/sd-sim/data/*.md
 # deploy/sd is a staging tree that tools/deploy.ps1 regenerates from apps/, so committing the
 # 20 MB copy there would duplicate every core blob in the repo for no gain.
 deploy/sd/apps/arcade/www/emulatorjs/
+
+# =============================================================================
+# Vendored third-party reference trees — cloned locally, never committed
+# (see reference/README.md for upstreams and licenses)
+# =============================================================================
+reference/*
+!reference/README.md
