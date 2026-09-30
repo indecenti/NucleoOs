@@ -172,6 +172,9 @@ The tag triggers `.github/workflows/release.yml`, a **three-stage, each-gates-th
    image** (`nucleoos-latest-ota.bin`) + `SHA256SUMS`, publishes the Release, attaches **signed build
    provenance** (sigstore/OIDC — verify with `gh attestation verify <bin> --repo indecenti/NucleoOs`),
    then **dispatches `pages.yml`**.
+   The firmware builds on **ESP-IDF v5.4.4** with the managed components pinned by the committed
+   `firmware/dependencies.lock` (m5gfx, tinyusb, mdns, littlefs…) — the same library versions a local
+   `flash.ps1` build uses. Bumping a component or IDF is a deliberate change: update both, then re-test on a device.
    The SD payload is assembled **from the sources** by `sd_deploy.py release` (called by
    `tools/package-release.mjs`; never from the `deploy/sd-safe` snapshot): same `SOURCE_MAP` /
    `DEVICE_STATE` as every SD tool, heavy optional models, device state and unreferenced knowledge

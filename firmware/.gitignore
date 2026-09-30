@@ -2,4 +2,5 @@ build/
 sdkconfig
 sdkconfig.old
 managed_components/
-dependencies.lock
+# dependencies.lock is COMMITTED on purpose: it pins the managed components (m5gfx, tinyusb, mdns,
+# littlefs...) so the CI release builds the exact library versions the device was tested with.
