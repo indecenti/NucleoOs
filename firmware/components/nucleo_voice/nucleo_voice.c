@@ -488,8 +488,8 @@ static void semantic_dispatch(const char *tokens[], int ntok)
                     nucleo_tts_say(gist, VOICE_LANG);
                 // TRADUTTORE: pronuncia la traduzione nella SUA lingua (es. "dog" in inglese), non in IT.
                 } else if (!strcmp(r.intent, "translate")) {
-                    // BILINGUE: cornice "cane in inglese" (lingua UI=it) poi pausa poi la TRADUZIONE "dog"
-                    // nella lingua target. Sorgente straniera (parola inglese) -> ripiego sulla sola parola.
+                    // BILINGUAL: frame "cane in inglese" (UI lang=it) then a pause then the TRANSLATION "dog"
+                    // in the target language. Foreign source (English word) -> fall back to the word alone.
                     char tw[80], tl[8];
                     if (nucleo_tts_translate_word(r.reply, tw, sizeof tw, tl, sizeof tl)) {
                         char *cm = strchr(tw, ','); if (cm) *cm = 0;
