@@ -168,5 +168,7 @@
   "engPcFirstDesc": "Free and private; the cloud only if the PC can’t answer.",
   "engOrderAutoPcFirst": "In Auto, commands go to the Cardputer; everything else to the PC’s local AI, then the cloud, the browser brain and the Cardputer.",
   "l1WebMode": "The Cardputer is in web mode now: its offline brain is paused to leave the desktop the memory, so this choice has no effect until you go back to the Cardputer’s own OS.",
-  "engLiveStatus": "Cardputer · live status"
+  "engLiveStatus": "Cardputer · live status",
+  "engModel": "PC model",
+  "engModelAuto": "Automatic (the best fit, measured on this PC)"
 }
