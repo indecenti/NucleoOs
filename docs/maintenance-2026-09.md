@@ -112,6 +112,13 @@ A pass over everything *around* the code — what a first-time reader or a licen
   local parts → Release/CDN download*, SHA-256-verifying every result (`npm run assets`).
 - **Consistency:** `package.json` version aligned to the released `0.4.0`; stale memory path dropped
   from `CLAUDE.md`.
+- **Standard health file:** added [`SECURITY.md`](../SECURITY.md) — a private vulnerability-reporting
+  policy with an explicit in/out-of-scope split (the bundled offensive tools working as designed are
+  not vulnerabilities), complementing the README's responsible-use section.
+- **Known gap (not fixed here):** ~200 tracked source files still carry Italian in dev comments and a
+  number of hardcoded Italian UI strings (the latter tracked under *i18n* below). A translation pass
+  must be careful not to touch the Italian **NLU example strings** in `nucleo_anima/*.c` (they are the
+  Italian intent corpus and must stay), so it is left as a deliberate, gate-verified effort.
 - **History rewrite (separate step):** the copyrighted media, the vendored `reference/` trees and the
   dropped GGUF/teacher parts still exist in git history; a `git filter-branch` + force-push removes
   them and shrinks the ~3 GB `.git`. The TTS parts are purged in a second pass once the Release exists.
