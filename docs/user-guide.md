@@ -67,20 +67,26 @@ NucleoOS serves all its apps and data **from the card**, so this step is require
 On first power-up the Cardputer runs a short on-screen wizard, driven by its own keyboard. It runs
 only once (until you reset the device). See [`setup-wizard.md`](setup-wizard.md).
 
-1. **Language** — pick your UI language.
-2. **Storage** — it shows the detected SD (type, size, free space).
+1. **Language** — **English** or **Italiano**. The choice applies at once to the rest of the
+   wizard and to the whole OS. The other interface languages (Deutsch, Español, Français) can be
+   chosen afterwards in **Settings ▸ Language**.
+2. **Welcome** — press **Enter** to begin.
 3. **Network** — choose one:
-   - **Join a Wi-Fi network** — pick your SSID from the scan, type the password on the keyboard.
-   - **Create an Access Point** — the device starts its own network instead.
+   - **Connect to a Wi-Fi network** — pick your SSID from the scan, type the password on the keyboard.
+   - **Skip – use an Access Point** — the device starts its own network instead.
+
+   If the join fails, no network is found, or you go back, the wizard falls back to the Access
+   Point on its own, so the device is always reachable.
 4. **Device name** — defaults to `nucleo-01` (this becomes the hostname, e.g. `nucleo-01.local`).
-5. **Done** — the screen shows the **address to open from your PC or phone**.
+5. **All set** — the screen shows the network and the **address to open from your PC or phone**
+   (plus a `/downloads/` link for the Windows app).
 
 **If you joined Wi-Fi:** the screen shows an **IP address**. Open it in a browser on the **same
 Wi-Fi**.
 
 **If you skipped Wi-Fi (or chose Access Point):** the Cardputer starts its own network named
-**`NucleoOS-xxxx`** with a password shown on screen. Connect a phone or PC to that network, then
-open the address displayed.
+**`NucleoOS-xxxx`** (a per-device suffix) with a password shown on screen. Connect a phone or PC to
+that network, then open the address displayed — **`http://192.168.4.1/`**.
 
 ---
 
@@ -91,10 +97,12 @@ NucleoOS Web is the full workstation — file manager, spreadsheet, Paint, games
 1. On a device on the **same network**, open the **IP address** (or `http://<device-name>.local`)
    the Cardputer showed you.
 2. The first time, the page asks you to **pair**. This proves you can physically see the device.
-3. On the Cardputer, find the **6-digit PIN**. Two easy ways:
-   - Press **TAB** to open the **Control Center**, move to the **Web client** shortcut — the bottom
-     line shows the **IP and the pairing PIN**; or
-   - open the **Connection** app and choose **Pair**.
+3. On the Cardputer, find the **6-digit PIN**. It is shown in several places:
+   - press **TAB** to open the **Control Center** and move to the **Web** shortcut — the bottom line
+     shows `Web <address>   PIN <code>` (on Wi-Fi and in Access Point mode alike);
+   - **Settings ▸ Device ▸ PIN**;
+   - the **Connection** app (while the Cardputer is on Wi-Fi) and the **Remote Control** app, which
+     both show the address and the PIN.
 4. Type that PIN into the browser. You're in — the session is remembered (an `HttpOnly` cookie), so
    you won't re-enter it on that browser after reboots.
 
@@ -103,8 +111,9 @@ Notes on pairing (details in [`security.md`](security.md)):
 - The PIN is **stable across reboots** — the same 6 digits show every time; only *new* browsers
   need it.
 - After 5 wrong PINs from one device, that device is locked out with an escalating backoff.
-- To sign other browsers out (e.g. a lost laptop), use the revoke control in the OS
-  (`Settings`/`Connection`), which drops the other sessions.
+- To sign browsers out (e.g. a lost laptop), open **Settings ▸ Device ▸ Web sessions** and press
+  **Enter**: after a confirmation it signs **every** browser out (the PIN stays the same), so each one
+  pairs again with the PIN.
 
 ---
 

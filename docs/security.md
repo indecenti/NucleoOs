@@ -15,7 +15,8 @@ device-clock / TTS write actions.
 ## Model
 
 Pairing proves **physical proximity**: the device shows a 6-digit PIN on the Cardputer
-screen (Connection app → `Pair`), and a browser proves it can see that screen by entering
+screen (Control Center ▸ Web, Settings ▸ Device ▸ PIN, the Connection app while on Wi-Fi, the
+Remote Control app), and a browser proves it can see that screen by entering
 the code — the same idea as pairing a Chromecast or a Bluetooth speaker.
 
 ```
