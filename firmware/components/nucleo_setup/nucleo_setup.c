@@ -490,7 +490,13 @@ static void wait_for_ip(void)
 // On success the AP is deliberately LEFT up: the supervisor drops it (WP_ACT_DROP_AP) only once
 // it has been idle past the grace window, so a web-UI user who drove this join from the hotspot
 // keeps their session alive instead of being kicked before the response even flushes.
-static void connect_sta(const char *ssid, const char *pass)
+// ch/bssid (optional, from our own scan): join THAT access point directly. The all-channel scan below exists
+// to land on the strongest AP of a multi-AP home — but connect_best_known() has just scanned every channel
+// and knows the strongest one, so the driver scanning them all AGAIN only cost ~2 s per boot (measured on the
+// ADV: IP at 11.9 s). With a hint the driver probes one channel and associates with that exact BSSID.
+static void connect_sta_at(const char *ssid, const char *pass, uint8_t ch, const uint8_t *bssid);
+static void connect_sta(const char *ssid, const char *pass) { connect_sta_at(ssid, pass, 0, NULL); }
+static void connect_sta_at(const char *ssid, const char *pass, uint8_t ch, const uint8_t *bssid)
 {
     s_want_sta = true;                  // keep this link up (auto-reconnect on any drop)
     // MODE FIRST, then the credentials. esp_wifi_set_config(WIFI_IF_STA) is documented as callable
@@ -520,6 +526,12 @@ static void connect_sta(const char *ssid, const char *pass)
     wc.sta.threshold.authmode = WIFI_AUTH_OPEN;              // accept whatever security the AP offers (no min filter)
     wc.sta.pmf_cfg.capable    = true;                        // 802.11w PMF: needed to associate with WPA2/WPA3-mixed APs
     wc.sta.failure_retry_cnt  = 3;                           // let the driver retry the association before it gives up
+    if (ch && bssid) {                                       // our scan already picked the strongest AP: go straight to it
+        wc.sta.channel   = ch;
+        wc.sta.bssid_set = true;
+        memcpy(wc.sta.bssid, bssid, 6);
+        wc.sta.scan_method = WIFI_FAST_SCAN;                 // with a channel set, the driver probes only that channel
+    }
     WIFI_TRY(esp_wifi_set_config(WIFI_IF_STA, &wc));
     esp_wifi_connect();
     wait_for_ip();
@@ -568,7 +580,7 @@ static void start_ap(void)
 // These call into the (blocking) esp_wifi driver, so the app runs them on a worker task and shows a
 // spinner. Scan results are cached here (the app reads them through the primitive getters below).
 #define WSCAN_MAX 24
-typedef struct { char ssid[33]; int rssi; uint8_t ch; uint8_t auth; } wscan_t;
+typedef struct { char ssid[33]; int rssi; uint8_t ch; uint8_t auth; uint8_t bssid[6]; } wscan_t;   // bssid+ch of the STRONGEST AP for the SSID
 static wscan_t s_wscan[WSCAN_MAX];
 static int s_wscan_n = 0;
 
@@ -599,11 +611,13 @@ int nucleo_setup_scan(void)
         int dup = -1;
         for (int j = 0; j < s_wscan_n; j++) if (!strcmp(s_wscan[j].ssid, ss)) { dup = j; break; }
         if (dup >= 0) {
-            if (recs[i].rssi > s_wscan[dup].rssi) { s_wscan[dup].rssi = recs[i].rssi; s_wscan[dup].ch = recs[i].primary; s_wscan[dup].auth = recs[i].authmode; }
+            if (recs[i].rssi > s_wscan[dup].rssi) { s_wscan[dup].rssi = recs[i].rssi; s_wscan[dup].ch = recs[i].primary; s_wscan[dup].auth = recs[i].authmode;
+                                                    memcpy(s_wscan[dup].bssid, recs[i].bssid, 6); }
             continue;
         }
         strncpy(s_wscan[s_wscan_n].ssid, ss, 32); s_wscan[s_wscan_n].ssid[32] = 0;
         s_wscan[s_wscan_n].rssi = recs[i].rssi; s_wscan[s_wscan_n].ch = recs[i].primary; s_wscan[s_wscan_n].auth = recs[i].authmode;
+        memcpy(s_wscan[s_wscan_n].bssid, recs[i].bssid, 6);
         s_wscan_n++;
     }
     free(recs);
@@ -702,7 +716,17 @@ static bool connect_best_known(void)
         if (wp_ap_busy(&s_wp, ap_sta_count(), wp_now())) { ESP_LOGI(TAG, "join cycle paused: hotspot in use"); break; }
         int i = order[a];
         ESP_LOGW(TAG, "auto-join '%s' (prio %u, %d dBm)", s_nets[i].ssid, s_nets[i].prio, rssi[a]);
-        connect_sta(s_nets[i].ssid, s_nets[i].pass);
+        const wscan_t *hit = NULL;                              // the scan entry = strongest AP for this SSID
+        for (int j = 0; j < s_wscan_n; j++) if (!strcmp(s_wscan[j].ssid, s_nets[i].ssid)) { hit = &s_wscan[j]; break; }
+        if (hit && hit->ch) {
+            connect_sta_at(s_nets[i].ssid, s_nets[i].pass, hit->ch, hit->bssid);
+            if (!s_ip[0] && !wp_ap_busy(&s_wp, ap_sta_count(), wp_now())) {
+                ESP_LOGW(TAG, "direct join to ch %u failed — retrying with a full scan", hit->ch);
+                connect_sta(s_nets[i].ssid, s_nets[i].pass);  // exactly the previous behaviour
+            }
+        } else {
+            connect_sta(s_nets[i].ssid, s_nets[i].pass);
+        }
         if (s_ip[0]) { strncpy(s_ssid, s_nets[i].ssid, sizeof(s_ssid)-1); s_ssid[sizeof(s_ssid)-1] = 0;
                        strncpy(s_mode, "sta", sizeof(s_mode)-1); save_config(); ok = true; }
     }
@@ -743,8 +767,12 @@ static void net_trace(const char *what, const char *ip)
 //   DROP_AP    joined + hotspot idle past grace: stop beaconing (battery)
 static void wifi_supervisor(void *arg)
 {
+    bool first = true;
     for (;;) {
-        vTaskDelay(pdMS_TO_TICKS(2000));
+        // The first tick runs almost at once: at boot the device waits for Wi-Fi, and a flat 2 s sleep before
+        // the very first join attempt was pure dead time (measured: the join started 4.5 s after the services).
+        vTaskDelay(pdMS_TO_TICKS(first ? 150 : 2000));
+        first = false;
         wifi_mode_t cur = WIFI_MODE_NULL;
         esp_wifi_get_mode(&cur);
         wifi_ap_record_t ap;
