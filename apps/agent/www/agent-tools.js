@@ -325,3 +325,120 @@ export async function runOpenAIToolLoop({ callModel, execTool, messages, maxStep
   }
   return '(step budget exhausted — the task may be incomplete)';
 }
+
+// ───────────────────────── LOCAL-SERVER loop (Ollama / LM Studio on the user's PC) ─────────────────────────
+// The same worker contract, for a model running on the user's own computer — the "OpenCode on a Cardputer"
+// path: no cloud key, no network, the PC's GPU does the thinking and the Cardputer only stores the files.
+// `chat(messages)` → { text, toolCalls: [{ name, arguments }] } (web/shell/ai-engines.js localComplete shape).
+// Messages are kept in a superset of both wire formats: assistant tool_calls carry an id AND object arguments
+// (Ollama's native /api/chat), tool results carry tool_call_id AND tool_name; ai-engines.openaiChat
+// stringifies the arguments for OpenAI-compatible servers.
+//
+// What a small local model needs that a cloud model does not (measured on qwen3.5:9b and minicpm5-2b):
+//   • a tool call written as TEXT (<tool_call>{…}</tool_call> or a bare {"name":…,"arguments":…}) when the
+//     server's parser missed it — recovered here instead of shown to the human as the "answer";
+//   • the SAME call repeated in a loop — the second repeat is answered with a nudge, not re-executed;
+//   • a context window of 8–16k — older tool results are trimmed (the recent ones stay whole), so a long
+//     edit session does not overflow the window and silently lose the system prompt.
+// search_files with no hit for a multi-word query: the terms to retry, most distinctive first. A model asked
+// "where is euro defined" searches the phrase "function euro" — which misses `const euro = …` and makes a
+// small model conclude the symbol does not exist. Code keywords and short words are not distinctive.
+const SEARCH_NOISE = new Set(['function', 'const', 'let', 'var', 'class', 'def', 'export', 'import', 'return', 'async', 'await', 'the', 'and', 'for', 'from', 'new', 'this', 'that', 'with', 'funzione', 'función', 'fonction', 'funktion']);
+export function searchFallbackTerms(query) {
+  const words = String(query || '').split(/[^\p{L}\p{N}_$.-]+/u).filter((w) => w.length >= 3 && !SEARCH_NOISE.has(w.toLowerCase()));
+  if (words.length < 1 || words.join(' ') === String(query).trim()) return [];
+  return [...new Set(words)].sort((a, b) => b.length - a.length).slice(0, 3);
+}
+
+export const LOCAL_EXCLUDED_TOOLS = new Set(['generate_image', 'transcribe']);   // need a cloud provider key
+export const PRIVATE_EXCLUDED_TOOLS = new Set(['weather']);                       // a network call: never in Private
+
+export function localToolDefs(clientTools = CLIENT_TOOLS, { private: priv = false } = {}) {
+  return clientTools.filter((t) => !LOCAL_EXCLUDED_TOOLS.has(t.name) && !(priv && PRIVATE_EXCLUDED_TOOLS.has(t.name)));
+}
+
+// Tool calls a model wrote into its text instead of the structured field. Only a call to a KNOWN tool counts,
+// so prose or a JSON example in an answer is never executed. → { calls, text } (text without the calls).
+export function parseTextToolCalls(text, known) {
+  const src = String(text || '');
+  const calls = [];
+  const accept = (j) => {
+    if (!j || typeof j !== 'object') return false;
+    const fn = j.function && typeof j.function === 'object' ? j.function : j;
+    const name = fn.name || j.tool || j.tool_name;
+    let args = fn.arguments != null ? fn.arguments : (fn.parameters != null ? fn.parameters : (j.args || j.input || {}));
+    if (typeof args === 'string') { try { args = JSON.parse(args); } catch { args = {}; } }
+    if (!name || (known && !known.has(name))) return false;
+    calls.push({ name, arguments: args && typeof args === 'object' ? args : {} });
+    return true;
+  };
+  let rest = src.replace(/<tool_call>\s*([\s\S]*?)\s*<\/tool_call>/g, (m, body) => { let j = null; try { j = JSON.parse(body); } catch {} return accept(j) ? '' : m; });
+  if (!calls.length) {
+    const t = rest.trim().replace(/^```(?:json)?\s*|\s*```$/g, '');
+    if (/^[[{]/.test(t)) {
+      let j = null; try { j = JSON.parse(t); } catch {}
+      const arr = Array.isArray(j) ? j : j ? [j] : [];
+      if (arr.length && arr.every((x) => accept(x))) rest = '';
+      else calls.length = 0;
+    }
+  }
+  return { calls, text: rest.trim() };
+}
+
+const argsObject = (a) => { if (a && typeof a === 'object') return a; if (typeof a === 'string') { try { const j = JSON.parse(a); return j && typeof j === 'object' ? j : {}; } catch {} } return {}; };
+
+// Keep the conversation inside the window: every tool result but the `keep` most recent is cut to a stub
+// once the whole transcript passes `budget` characters (~4 chars per token).
+export function trimOldToolResults(messages, { budget = 36000, keep = 4, stub = 400 } = {}) {
+  const size = () => messages.reduce((n, m) => n + String(m.content || '').length + (m.tool_calls ? JSON.stringify(m.tool_calls).length : 0), 0);
+  if (size() <= budget) return 0;
+  const idx = messages.map((m, i) => (m.role === 'tool' ? i : -1)).filter((i) => i >= 0);
+  let cut = 0;
+  for (const i of idx.slice(0, Math.max(0, idx.length - keep))) {
+    const c = String(messages[i].content || '');
+    if (c.length <= stub) continue;
+    messages[i] = { ...messages[i], content: c.slice(0, stub) + '\n…(older result trimmed to save context — run the tool again if you need it)' };
+    cut++;
+    if (size() <= budget) break;
+  }
+  return cut;
+}
+
+export async function runLocalToolLoop({ chat, execTool, messages, tools = [], maxSteps = 12, abort, onEvent, budget = 36000 }) {
+  const known = new Set(tools.map((t) => (t.function ? t.function.name : t.name)).filter(Boolean));
+  const seen = new Map();                                  // call signature → how many times it ran
+  for (let step = 0; step < maxSteps; step++) {
+    if (abort && abort.aborted) throw new Error('stopped');
+    trimOldToolResults(messages, { budget });
+    const r = (await chat(messages)) || {};
+    let calls = (r.toolCalls || []).filter((c) => c && c.name).map((c) => ({ name: c.name, arguments: argsObject(c.arguments) }));
+    let text = String(r.text || '');
+    if (!calls.length && known.size) { const p = parseTextToolCalls(text, known); if (p.calls.length) { calls = p.calls; text = p.text; } }
+    const asst = { role: 'assistant', content: text };
+    if (calls.length) asst.tool_calls = calls.map((c, i) => ({ id: 'call_' + step + '_' + i, type: 'function', function: { name: c.name, arguments: c.arguments } }));
+    messages.push(asst);
+    if (onEvent) onEvent({ type: 'assistant', content: text, calls: calls.map((c) => c.name) });
+    if (!calls.length) return text;
+    for (const tc of asst.tool_calls) {
+      const { name, arguments: args } = tc.function;
+      const sig = name + ' ' + JSON.stringify(args);
+      const n = (seen.get(sig) || 0) + 1; seen.set(sig, n);
+      let out;
+      if (known.size && !known.has(name)) out = { content: 'Unknown tool "' + name + '". Available tools: ' + [...known].join(', ') + '.', is_error: true };
+      else if (n > 2 && name !== 'update_plan') out = { content: 'You already called ' + name + ' with exactly these arguments ' + (n - 1) + ' times; the result is above. Do something different, or give the final answer now.', is_error: true };
+      else {
+        if (onEvent) onEvent({ type: 'tool', name, args });
+        out = (await execTool(name, args, tc.id)) || { content: '' };
+      }
+      messages.push({ role: 'tool', tool_call_id: tc.id, tool_name: name, content: typeof out.content === 'string' ? out.content : JSON.stringify(out.content) });
+      if (onEvent) onEvent({ type: 'tool_result', name, is_error: !!out.is_error });
+    }
+  }
+  // Out of steps: one last call WITHOUT tools, so the human gets a summary of what was done instead of silence.
+  try {
+    messages.push({ role: 'user', content: 'Step budget reached. Stop using tools and summarize briefly what you did and what is left.' });
+    const r = (await chat(messages, { noTools: true })) || {};
+    if (r.text) return String(r.text) + '\n\n(step budget exhausted — the task may be incomplete)';
+  } catch (e) { if (abort && abort.aborted) throw new Error('stopped'); }
+  return '(step budget exhausted — the task may be incomplete)';
+}

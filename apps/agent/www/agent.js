@@ -35,6 +35,18 @@ let active = null;         // the user's chosen active cfg (for geminiTier + rou
 let rt = null;             // runtime instance
 let history = [];          // [{role:'user'|'bot', text}]
 let busy = false;
+let localUp = null;        // a local AI server on this PC (Ollama / LM Studio …) that can run the agent: { server, model } | null
+
+// The PC's own model as an agent engine (/ai-engines.js): detected on boot, no key needed, works offline.
+async function detectLocalServer() {
+  try {
+    const E = await import('/ai-engines.js');
+    const cfgL = E.loadLocalConfig(); if (!cfgL.enabled) return null;
+    const s = (await E.liveServers({ config: cfgL })).find((x) => x.status === 'ok' && x.models.length);
+    if (!s) return null;
+    return { server: s.name, model: (cfgL.models && cfgL.models[s.id] && cfgL.models[s.id].agent) || E.pickModel(s.models, 'agent', { perf: E.loadPerf(), base: s.base }) || s.models[0].id };
+  } catch { return null; }
+}
 
 // ---- tiny safe markdown (escape → fenced code → inline) ----
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -264,14 +276,16 @@ async function rebuildRuntime() {
       } catch { return { verdict: 'pass' }; }
     },
   };
-  rt = createRuntime({ cfg, root, lang: lang(), ui, keys, active, t, local: local.grammar ? local : null, hwPerms: await loadHwPerms() });
+  // localServer: first when there is no cloud key (the runtime decides), else the fallback when the cloud fails.
+  const localServer = { first: () => false, private: () => false };
+  rt = createRuntime({ cfg, root, lang: lang(), ui, keys, active, t, local: local.grammar ? local : null, hwPerms: await loadHwPerms(), localServer });
   $('model-line').textContent = modelLine();
 }
 
 async function send() {
   if (busy || !rt) return;
   const q = $('q').value.trim(); if (!q) return;
-  if (!navigator.onLine) { showGate('offline'); return; }
+  if (!navigator.onLine && !localUp) { showGate('offline'); return; }   // a model on this PC needs no internet
   $('q').value = ''; autosize();
   addMsg('user', q);
   history.push({ role: 'user', text: q });
@@ -295,7 +309,8 @@ function autosize() { const t = $('q'); t.style.height = 'auto'; t.style.height 
 
 async function boot() {
   hideGate();
-  if (!navigator.onLine) { showGate('offline'); return; }
+  localUp = await detectLocalServer();
+  if (!navigator.onLine && !localUp) { showGate('offline'); return; }
   setStatus(t('st_checking_key'));
   try {
     // Shared cached vault read (memoised ~30s in ai.js → collapses repeated device reads). Returns the
@@ -305,6 +320,15 @@ async function boot() {
     const res = pickCfg(tc || {});
     cfg = res && res.cfg; keys = res && res.keys; active = res && res.active;
   } catch { cfg = null; keys = null; active = null; }
+  if (!cfg && localUp) {
+    // No cloud key, but a model runs on this PC (Ollama / LM Studio): the full agent with native tool calling.
+    cfg = { provider: 'openai', key: '', model: '' }; keys = {}; active = null;
+    await rebuildRuntime();
+    $('model-line').textContent = localUp.server + ' · ' + localUp.model;
+    setStatus(t('st_ready'), 'ok');
+    if (!history.length) addMsg('sys', t('ready_local_server', { server: localUp.server, model: localUp.model }));
+    return;
+  }
   if (!cfg) {
     // No cloud key. F4: a cached local model is a first-class way to run — boot on it instead of
     // dead-ending at the key gate. The stub cfg has no key, so the cloud loop exits in zero hops
@@ -339,6 +363,7 @@ $('q').addEventListener('input', autosize);
 $('q').addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(); } });
 $('ws').addEventListener('change', () => { if (cfg) rebuildRuntime(); });
 window.addEventListener('online', () => { if (!cfg) boot(); else hideGate(); });
+window.addEventListener('offline', () => { if (localUp) hideGate(); });
 window.addEventListener('offline', () => { setStatus(t('st_offline_reconnect'), 'err'); });
 
 // Live language switch (no reload). The observer repaints all [data-i18n] DOM; re-do the bits we

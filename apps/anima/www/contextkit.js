@@ -67,6 +67,31 @@ export function resolveKind(mode, provider) {
 const CODE_RE = /\b(codic|programm|script|funzion|gioco|giochi|game|javascript|\bjs\b|typescript|python|html|css|snippet|algoritm|class\b|componente|component|regex|sql|shader|canvas)\b/i;
 const LONG_RE = /\b(raccont|storia|stories|story|saggio|essay|articol|article|poesia|poem|lettera|letter|email|sceneggiat|tutorial|spiega|explain|descrivi|dettagli|approfond)\b/i;
 export function wantsCode(s) { return CODE_RE.test(String(s || '')); }
+
+// Is this a TASK for the tool-using agent (files, code, a page, an app) rather than a chat turn? Decides whether
+// a model on the user's own PC (Ollama …) runs with the real workspace tools — the "OpenCode on a Cardputer"
+// path — or answers as plain chat with ANIMA's grounding. Five languages. High-precision: a work VERB plus a
+// work OBJECT, or a file name / path in the text; with a workspace open, any coding request counts too.
+const AGENT_VERB = new RegExp('(?<!\\p{L})(' + [
+  'crea\\w*', 'scriv\\w*', 'modific\\w*', 'corregg\\w*', 'corrigg\\w*', 'sistem\\w*', 'aggiung\\w*', 'rinomin\\w*', 'spost\\w*', 'elimin\\w*', 'cancell\\w*', 'legg\\w*', 'cerc\\w*', 'trov\\w*', 'rifattor\\w*', 'costruisc\\w*', 'implement\\w*', 'aggiorn\\w*', 'salv\\w*', 'genera\\w*', 'fai', 'fammi', 'prepara',
+  'create', 'write', 'edit', 'fix', 'modify', 'add', 'rename', 'move', 'delete', 'remove', 'read', 'search', 'find', 'refactor', 'build', 'make', 'implement', 'update', 'save', 'generate', 'scaffold',
+  'escrib\\w*', 'corrig\\w*', 'arregl\\w*', 'añad\\w*', 'renombr\\w*', 'muev\\w*', 'borr\\w*', 'lee', 'busc\\w*', 'constru\\w*', 'actualiz\\w*', 'guard\\w*', 'hazme', 'haz',
+  'cré\\w*', 'écri\\w*', 'modifi\\w*', 'ajout\\w*', 'renomm\\w*', 'déplac\\w*', 'supprim\\w*', 'lis', 'cherch\\w*', 'construi\\w*', 'mets à jour', 'enregistr\\w*', 'génér\\w*', 'fais',
+  'erstell\\w*', 'schreib\\w*', 'änder\\w*', 'bearbeit\\w*', 'korrigier\\w*', 'füg\\w*', 'benenn\\w*', 'verschieb\\w*', 'lösch\\w*', 'lies', 'such\\w*', 'bau\\w*', 'implementier\\w*', 'aktualisier\\w*', 'speicher\\w*', 'generier\\w*', 'mach\\w*',
+].join('|').replace(/\\w\*/g, '\\p{L}*') + ')(?!\\p{L})', 'iu');   // Unicode edges: "écris", "ändere" start with a non-ASCII letter
+const AGENT_OBJECT = /\b(file|files|cartell\w*|pagin\w*|html|css|javascript|\bjs\b|script|codic\w*|funzion\w*|progett\w*|app|applicazion\w*|workspace|repo\w*|folder|page|code|function|project|component\w*|archivo\w*|carpeta\w*|página\w*|código|función|proyecto|aplicación|fichier\w*|dossier\w*|appli\w*|fonction\w*|projet\w*|datei\w*|ordner|seite\w*|funktion\w*|projekt\w*|anwendung|bug)\b/i;
+const FILE_TOKEN = /(?:^|[\s"'`(@])(?:\.{0,2}\/)?(?:[\w.-]+\/)*[\w-]+\.(?:m?js|cjs|ts|json|html?|css|md|txt|py|csv|svg|xml|ya?ml|ini|sh|c|h|cpp)\b|(?:^|\s)\/(?:data|apps|sd)\/\S+/i;
+// A file request that also ASKS something about the content ("leggi notes.md e dimmi quanti…", "read X and
+// summarize it") — more than "show me the file". Five languages.
+const CONTENT_Q = /\?|\b(e|ed|and|y|et|und)\s+(dimmi|dicci|spiegami|riassum\w*|tell|explain|summari[sz]e|count|dime|explícame|resume|dis-moi|explique|résume|sag|erklär\w*|zusammenfass\w*)|\b(quant[ieoa]|how\s+(many|much)|cuánt[oa]s?|combien|wie\s+viele?|riassum\w*|summari[sz]e|resum\w*|résum\w*|zusammenfass\w*|spiega|explain|expl[ií]ca|erklär\w*|cosa\s+(fa|dice|contiene)|what\s+(does|is\s+in)|qué\s+(hace|contiene)|que\s+(fait|contient)|was\s+(macht|steht))\b/i;
+export function asksAboutContent(s) { return CONTENT_Q.test(String(s || '')); }
+
+export function wantsAgent(s, { workspace = false } = {}) {
+  const t = String(s || '');
+  if (FILE_TOKEN.test(t)) return true;
+  if (AGENT_VERB.test(t) && AGENT_OBJECT.test(t)) return true;
+  return !!workspace && wantsCode(t) && AGENT_VERB.test(t);
+}
 export function wantsLong(s) { return LONG_RE.test(String(s || '')); }
 
 /* ───────────────────────── typed working-memory ledger ───────────────────────── */

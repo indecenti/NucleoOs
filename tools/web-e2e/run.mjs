@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const SOLO = new Set(['shell-smoke.e2e.mjs']);
-const HEAVY = new Set(['ollama.e2e.mjs', 'anima-local-ai.e2e.mjs']);
+const HEAVY = new Set(['ollama.e2e.mjs', 'anima-local-ai.e2e.mjs', 'anima-code.e2e.mjs']);
 const all = readdirSync(here).filter((f) => f.endsWith('.e2e.mjs')).sort();
 const path = (f) => join(here, f);
 const phases = [

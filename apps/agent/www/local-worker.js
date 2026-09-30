@@ -72,6 +72,38 @@ export function flattenMessages(messages) {
   return out;
 }
 
+// What a small model emits when decoding is NOT grammar-constrained — measured 2026-09-30 on Qwen3-1.7B /
+// WebGPU, where WebLLM's grammar matcher is broken (0.2.84 hangs, 0.2.85 aborts, and either poisons the
+// engine for every later call): an empty <think></think>, a ```json fence, prose around the array, the op
+// named "action"/"tool", a tool name instead of an op ("read_file"), arguments nested in "args", a single
+// object instead of an array. Normalized here into the canonical array; grammarAccepts still validates the
+// result exactly as strictly, so nothing outside the closed schema can get through.
+const OP_ALIAS = { read_file: 'read', write_file: 'write', append_file: 'append', edit_file: 'edit', replace: 'edit', move_file: 'move', rename: 'move',
+  delete_file: 'delete', remove: 'delete', make_dir: 'mkdir', list_files: 'list', ls: 'list', search_files: 'search', grep: 'search',
+  reply: 'answer', respond: 'answer', final: 'answer', final_answer: 'answer', finish: 'done' };
+const tryJson = (s) => { try { return JSON.parse(s); } catch { return undefined; } };
+export function normalizeActionsText(text) {
+  const raw = String(text == null ? '' : text);
+  let s = raw.replace(/<think>[\s\S]*?<\/think>/g, '').trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
+  const at = s.search(/[[{]/);
+  if (at < 0) return raw;
+  s = s.slice(at);
+  let j = tryJson(s);
+  if (j === undefined) j = tryJson(s.slice(0, s.lastIndexOf(']') + 1));
+  if (j === undefined) j = tryJson(s.slice(0, s.lastIndexOf('}') + 1));
+  if (j === undefined || j === null || typeof j !== 'object') return raw;
+  const list = Array.isArray(j) ? j : Array.isArray(j.actions) ? j.actions : [j];
+  return JSON.stringify(list.map((a) => {
+    if (!a || typeof a !== 'object') return a;
+    const o = { ...a };
+    if (o.op == null) { const k = ['action', 'tool', 'type', 'name'].find((x) => typeof o[x] === 'string'); if (k) { o.op = o[k]; delete o[k]; } }
+    for (const k of ['args', 'arguments', 'params', 'parameters', 'input']) if (o[k] && typeof o[k] === 'object') { Object.assign(o, o[k]); delete o[k]; }
+    if (typeof o.op === 'string') { const op = o.op.toLowerCase(); o.op = OP_ALIAS[op] || op; }
+    if (o.op === 'answer' && o.text == null) { const k = ['content', 'message', 'answer', 'reply'].find((x) => typeof o[x] === 'string'); if (k) { o.text = o[k]; delete o[k]; } }
+    return o;
+  }));
+}
+
 // One grammar-constrained agentic loop on an injected local engine.
 //   deps: { engine:{chat}, execTool, grammar:{toGBNF, grammarAccepts}, fence?:(s)=>s }
 //   opts: { task | messages, system?, root?, maxSteps?, maxActions?, onEvent? }
@@ -90,7 +122,7 @@ export async function runWorkerLocal(deps, opts = {}) {
     ...(opts.messages ? flattenMessages(opts.messages) : [{ role: 'user', content: String(opts.task || '') }]),
   ];
 
-  let invalid = 0, lastSig = '', sameCount = 0;
+  let invalid = 0, lastSig = '', sameCount = 0, toolsRan = false;
   for (let step = 0; step < maxSteps; step++) {
     const r = await engine.chat(messages, { grammar: gbnf, temperature: 0.2 });
     const text = (r && r.text) || '';
@@ -99,7 +131,12 @@ export async function runWorkerLocal(deps, opts = {}) {
     // Re-validate what the grammar should already have constrained (an engine without XGrammar —
     // wllama — samples free-form; the contract must hold either way). One corrective retry, then
     // decline: a model that cannot emit two valid arrays in a row will not emit a valid app either.
-    const acc = grammar.grammarAccepts(text, { root });
+    const acc = grammar.grammarAccepts(normalizeActionsText(text), { root });
+    // Plain prose AFTER real tool results is the model's final answer (it has what it needs and just says
+    // it). Only then: with no tool run behind it, prose is still invalid and declines as before.
+    if (!acc.ok && toolsRan && !/[[{]/.test(text) && text.replace(/<think>[\s\S]*?<\/think>/g, '').trim()) {
+      return { text: text.replace(/<think>[\s\S]*?<\/think>/g, '').trim(), steps: step + 1 };
+    }
     if (!acc.ok) {
       if (++invalid > 1) return { declined: true, reason: 'invalid-actions:' + acc.reason, steps: step + 1 };
       messages.push({ role: 'user', content: 'Invalid (' + acc.reason + '). Reply with ONLY a JSON array of valid actions.' });
@@ -135,6 +172,7 @@ export async function runWorkerLocal(deps, opts = {}) {
         }
       }
       const res = await execTool(m.tool, m.map(a), 'local:' + step);
+      toolsRan = true;
       results.push('[' + a.op + (res.is_error ? ' ERROR' : '') + ']\n' + (res.content || ''));
     }
     messages.push({ role: 'user', content: results.join('\n\n') });

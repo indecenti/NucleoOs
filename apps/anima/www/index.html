@@ -4542,6 +4542,15 @@
       if(always) lines.push('⚠ '+L(a.hw?'agentHw':'agentIrrev'));
       return { title:L('agentWants',{ op }), body:lines.join('\n') };
     }
+    let _agentLocalFirst=false, _agentStr=null, _agentStrLang='';
+    async function agentStrings(){
+      if(!_agentStr || _agentStrLang!==lang){
+        const load=async(l)=>{ try{ const r=await fetch('/apps/agent/i18n.'+l+'.json'); return r.ok ? await r.json() : null; }catch{ return null; } };
+        const en=await load('en')||{}; _agentStr={ ...en, ...((lang!=='en' && await load(lang))||{}) }; _agentStrLang=lang;
+      }
+      const d=_agentStr;
+      return (k,v)=>{ const s=d[k]; return typeof s==='string' ? s.replace(/\{(\w+)\}/g,(m,n)=> v && v[n]!=null ? String(v[n]) : m) : k; };
+    }
     async function agentRuntime(){
       const sig=lang+'|'+(keyCfg.key||'')+'|'+(keyCfg.model||'')+'|'+keysSig()+'|'+((fs.hasRoot&&fs.hasRoot())?fs.getRoot():'');
       if(_agentRt && _agentRtKey===sig) return _agentRt;
@@ -4589,7 +4598,17 @@
         }catch{} },
       };
       const steps=parseInt(get('anima.agentSteps','0'),10)||undefined, par=parseInt(get('anima.agentParallel','0'),10)||undefined;   // optional power-user tuning via storage
-      _agentRt=createRuntime({ cfg, root, lang, ui, keys:(keyCfg.keys||{}), active:cfg, maxSteps:steps, maxParallel:par }); _agentRtKey=sig; return _agentRt;
+      // The runtime's own strings (tool results the MODEL reads: "wrote x (N bytes)", "rejected by the human"…)
+      // live in Agenti's i18n. Without them the model was handed bare keys like "rt_write_ok" as tool results.
+      const rtT=await agentStrings();
+      // localServer: the PC's own model (Ollama / LM Studio) as an agent engine — first when there is no key, in
+      // Private, or when the user chose local first; otherwise the cloud's fallback. Read live on every turn.
+      const localServer={ first:()=>_agentLocalFirst, private:()=>isPrivate(), engines:enginesMod };
+      // local: the installed in-browser GPU model (WebLLM) as the last agent rung — grammar-constrained actions,
+      // so a 1.7B model can only emit valid tool calls. Built lazily; none installed → no rung.
+      const local={ grammar:await import('/apps/anima/forge/grammar.js').catch(()=>null),
+        engines:async()=>{ try{ const m=await loadLLM(); const e=await m.localAgentEngine(); return e ? [{ tier:'local-webgpu', engine:e }] : []; }catch{ return []; } } };
+      _agentRt=createRuntime({ cfg, root, lang, ui, keys:(keyCfg.keys||{}), active:cfg, maxSteps:steps, maxParallel:par, t:rtT, localServer, local:local.grammar?local:null }); _agentRtKey=sig; return _agentRt;
     }
     // Abort an in-flight agent run (Stop / Esc). The runtime's stop() aborts every fetch + the tool loop;
     // the flag tells ask() to end the turn cleanly instead of substituting a fresh single-shot cloud answer.
@@ -4648,6 +4667,13 @@
     }
     // Answers that were GENERATED (cloud, agent, browser GPU, web search) are streamed or shown at once;
     // only instant local answers get the short typewriter.
+    // Can a tool-using agent run right now? A cloud key the agent loop takes (not in Private), or a local server up.
+    async function agentCanRun(){
+      if(!useAgents) return false;
+      if(!isPrivate()){ await ensureKeyLoaded(); if(keyCfg.key && !curProv().proxy) return true; }
+      const E=await enginesMod(); const cfg=E.loadLocalConfig(); if(!cfg.enabled) return false;
+      return (await E.liveServers({ config:cfg })).some((s)=>s.status==='ok' && s.models.length && (!isPrivate() || E.isLoopback(s.base)));
+    }
     const generatedReply = (r)=> !!r && (r.tier==='M4-local' || r.domain==='online' || r.domain==='local' || r.substrate==='M3');
 
     async function ask(q){
@@ -4655,7 +4681,15 @@
       if(q[0]==='/' && handleSlash(q)) return;
       // workspace file agent: a clear file intent runs here (the "hands"); else fall through to ANIMA.
       const fintent = parseFileIntent(q);
-      if(fintent){ if(fs.hasRoot()){ runFileIntent(q, fintent); return; } inviteWorkspace(q); return; }
+      // A write whose CONTENT must be generated ("crea index.html con un orologio") goes to the agent when one can
+      // run (cloud key with agents, or a model on this PC): composeContent would ask the Cardputer's offline brain
+      // to write it — heavy for the device and never a real page. Literal ops stay on the instant path.
+      // Likewise a read/list/search that carries a QUESTION ("read notes.md and tell me how many items…"): the instant
+      // path would only show the file and drop the question.
+      const needsAgent = fintent && ((fintent.op==='write' || fintent.op==='append') && fintent.mode==='auto'
+        || /^(read|list|tree|search|glob)$/.test(fintent.op) && ctxkit.asksAboutContent(q));
+      const genWrite = needsAgent && await agentCanRun().catch(()=>false);
+      if(fintent && !genWrite){ if(fs.hasRoot()){ runFileIntent(q, fintent); return; } inviteWorkspace(q); return; }
       const sendQ = chainMath(q);   // engine-facing query (may carry the running total); visible msg stays q
       busy=true; interrupt=false; setStop(true); closeSlash(); stopSpeaking();   // un nuovo turno zittisce la risposta precedente
       const ctl=new AbortController(); turnCtl=ctl; _turnSig=ctl.signal; const sig=ctl.signal;
@@ -4707,6 +4741,17 @@
             return part ? { reply:part, tier:'server', engine:{}, intent:'chat', confidence:40, domain:'local', incomplete:true } : null;
           }
         };
+        // 1a - LOCAL AGENT: a TASK (files, code, a page, an app — ctxkit.wantsAgent) on the PC's own model WITH the
+        //      real workspace tools: read, search, write, edit (approved), run_js, open in the OS. The same Agenti
+        //      runtime the cloud uses, on native tool calling — ANIMA as a small OpenCode that needs no key and,
+        //      in Private, no network. Nothing is inferred on the Cardputer: it only stores the files.
+        if(!r && localFirst && lcfg.enabled && useAgents && !sig.aborted && ctxkit.wantsAgent(sendQ, { workspace:fs.hasRoot() })){
+          const live=await (await enginesMod()).liveServers({ config:lcfg }).catch(()=>[]);
+          if(live.some((s)=>s.status==='ok' && s.models.length)){
+            _agentDidMutate=false; _agentCancelled=false; _agentWsAsked=false; _agentLocalFirst=true;
+            try{ r = await agentAsk(sendQ, think, await wsxOnce()); }catch(e){ r = null; if(String(e&&e.message)!=='stopped') noteAiErr(e); }
+          }
+        }
         // 1a - LOCAL SERVER first (see above)
         if(!r && localFirst && !sig.aborted) r = await tryLocalServer();
 
@@ -4717,7 +4762,7 @@
           const loopEligible = useAgents && !curProv().proxy;
           const wsx = await wsxOnce();   // built ONCE - shared by the loop seed and fallback
           if(loopEligible && !sig.aborted){
-            _agentDidMutate = false; _agentCancelled = false; _agentWsAsked = false;
+            _agentDidMutate = false; _agentCancelled = false; _agentWsAsked = false; _agentLocalFirst = lcfg.prefer==='local';
             try{ r = await agentAsk(sendQ, think, wsx); }catch(e){ r = null; noteAiErr(e); }
           }
           if(!r && !sig.aborted){
@@ -4731,6 +4776,18 @@
 
         // 1b - LOCAL SERVER as the cloud's fallback (the cloud was tried first and did not answer)
         if(!r && !localFirst && !sig.aborted && !live) r = await tryLocalServer();
+
+        // 2a - BROWSER GPU AGENT: a task with no PC server and no cloud answer still gets the real tools, on the
+        //      installed WebGPU model (grammar-constrained actions — see local-llm.localAgentEngine). Installed only.
+        if(!r && !sig.aborted && !live && useAgents && ctxkit.wantsAgent(sendQ, { workspace:fs.hasRoot() })){
+          try{
+            const m = await loadLLM(); const caps = await m.probeLocal();
+            if(caps.webgpu && await m.localAvailable()){
+              _agentDidMutate=false; _agentCancelled=false; _agentWsAsked=false; _agentLocalFirst=true;
+              try{ r = await agentAsk(sendQ, think, await wsxOnce()); }catch(e){ r = null; if(String(e&&e.message)!=='stopped') noteAiErr(e); }
+            }
+          }catch{ /* no GPU model → the chat rung below */ }
+        }
 
         // 2 - BROWSER GPU LLM (WebLLM). A real generative model on the user's own GPU - the rung the
         //     old 'Browser' mode could never reach. Works in private mode too: once installed it is local.

@@ -152,5 +152,8 @@
   "smoke_ok": "✓ device smoke test: {n} checks ok — the app responds",
   "smoke_fail": "✗ device smoke test failed: {names}",
   "smoke_none": "no smoke test",
-  "recipe_learned": "📚 learned as a recipe: {id}"
+  "recipe_learned": "📚 learned as a recipe: {id}",
+  "rt_local_server_failed": "The model on this computer did not answer ({error}) — trying the next engine…",
+  "ready_local_server": "No cloud key: running on {model} via {server}, on this computer — no internet needed. Destructive actions still ask for confirmation.",
+  "rt_search_fallback": "No exact match for \"{q}\"; matches for \"{term}\":"
 }
