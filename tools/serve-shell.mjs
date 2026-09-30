@@ -75,7 +75,9 @@ const FW_VERSION = (() => {
   const dirty = hash !== 'nogit' && git(['status', '--porcelain', '--', ':(exclude)firmware/version']) ? '*' : '';
   return `${vf('VERSION', '0.0.0')}+${vf('BUILD', '0')}.g${hash}${dirty}`.slice(0, 31);   // app-descriptor cap
 })();
-const apiStatus = { os: 'NucleoOS', version: FW_VERSION, uptime_s: 0, free_heap: 210000,
+// profile mirrors nucleo_httpd.c status_get: "web" = the lean server-Solo a browser session runs on (the
+// device's offline brain is off). SIM_PROFILE=full plays the full native OS instead.
+const apiStatus = { os: 'NucleoOS', version: FW_VERSION, uptime_s: 0, profile: process.env.SIM_PROFILE === 'full' ? 'full' : 'web', free_heap: 210000,
   min_free_heap: 17000, largest_free_block: 42000,
   storage: { mounted: true, fs: 'exFAT', total_bytes: 63864569856, free_bytes: 63800000000 },
   network: { mode: 'sta', ssid: 'home-wifi', ip: '192.168.1.42', time_synced: true }, apps: { installed: 9 },

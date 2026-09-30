@@ -998,6 +998,15 @@ extern "C" void      nucleo_anima_l1_set_external_brain(bool); // force the offl
 extern "C" void      nucleo_discovery_stop(void);             // stop mDNS advertising (client already connected)
 extern "C" esp_err_t nucleo_discovery_resume(void);           // resume mDNS advertising
 extern "C" bool      nucleo_webfs_take_heap_request(void);    // webfs: a heavy asset asks to free the 32 KB canvas
+extern "C" void      nucleo_webfs_set_handoff_cb(bool (*wanted)(void));   // webfs: hand off BEFORE the shell loads
+extern "C" bool      nucleo_webfs_take_handoff(void);         // webfs: a browser got the handoff page -> reboot now
+
+// Asked by the httpd task when a browser navigates to "/": must this boot hand serving to server Solo?
+// The SAME conditions as the WebSocket-connect trigger in the app loop (one-shot, never mid-OTA, anti-loop).
+static bool web_handoff_wanted(void)
+{
+    return !s_solo_active && !s_force_listen && !(boot_was_crash_reset() && s_prev_server_solo);
+}
 
 static bool s_web_focus = false;            // deep RAM teardown active (online key + signal while a client drives)
 static bool s_mdns_off  = false;            // mDNS stopped while the OS shell is connected (s_remote; frees ~10KB, unconditional re: online key / AP-vs-STA)
@@ -1547,6 +1556,7 @@ void nucleo_app_run(void)
     // attempt may have failed — don't auto-reboot again or we'd loop; serve inline instead. A clean esp_restart
     // (our Solo request) is ESP_RST_SW, never a crash, so the healthy path always gets server-Solo.
     bool boot_was_crash = boot_was_crash_reset();
+    nucleo_webfs_set_handoff_cb(web_handoff_wanted);   // a browser opening "/" hands off before the shell loads
 
     // Watchdog the loop: if an iteration wedges >8 s the chip resets instead of freezing.
     // Tolerate ESP_ERR_INVALID_STATE if the TWDT is disabled in this build.
@@ -1656,7 +1666,10 @@ void nucleo_app_run(void)
         // suppress ONLY if server-Solo ITSELF crashed last boot (boot_was_crash && s_prev_server_solo) — a
         // full-OS crash must PREFER the lean server-Solo, not stay stranded in the RAM-heavy launcher that
         // caused it. Raw shell count on purpose.
-        if (nucleo_ws_shell_count() > 0 && !s_solo_active && !s_force_listen && !(boot_was_crash && s_prev_server_solo))
+        // Two triggers: the handoff page webfs served to a browser opening "/" (the normal path — the shell
+        // has NOT loaded yet, so nothing is cut), and a shell's WebSocket (fallback: a tab left open across a
+        // device reboot reconnects without navigating).
+        if ((nucleo_webfs_take_handoff() || nucleo_ws_shell_count() > 0) && !s_solo_active && !s_force_listen && !(boot_was_crash && s_prev_server_solo))
             nucleo_app_solo_request(SOLO_REMOTE);   // never returns (warm reboot into server Solo)
 
         // Idle screen-off: while the panel sleeps we draw NOTHING (the 32 KB canvas is freed and given to

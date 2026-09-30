@@ -46,6 +46,12 @@ jobs:
       - name: M5Launcher guest-mode policy (host-compiled C)
         run: node tools/anima-host/guest-check.mjs
 
+      - name: Web-mode handoff page carries the shell boot splash
+        run: node tools/gen-handoff.mjs --check
+
+      - name: Pairing-session table evicts LRU, never the live session (host-compiled C)
+        run: node tools/anima-host/authslot-check.mjs
+
       - name: App registry limits (the C layer runs in the local gate, needs ESP-IDF cJSON)
         run: node tools/anima-host/registry-check.mjs
 

@@ -520,6 +520,15 @@ const gates = [
     // app's), back-to-Launcher mirrors the Launcher bootloader (key > DDLB > deep sleep), and Launcher's
     // merged-image installer finds our app at ota_0 and keeps the `cfg` label. docs/m5launcher.md.
     ok: (code) => code === 0, summary: (o) => (o.match(/guest-policy: [^\n]*/) || [lastLine(o)])[0].trim() },
+  { name: 'web-mode handoff page', cmd: 'node', args: ['tools/gen-handoff.mjs', '--check'],
+    // firmware/components/nucleo_webfs/handoff.html (served from flash while the device reboots into its web
+    // profile) must carry the CURRENT shell boot splash from web/shell/index.html — copied in by gen-handoff.
+    ok: (code) => code === 0, summary: (o) => (o.match(/handoff:check: [^\n]*/) || [lastLine(o)])[0].trim() },
+  { name: 'pairing sessions (LRU)', cmd: 'node', args: ['tools/anima-host/authslot-check.mjs'],
+    // The pairing-session table (firmware/components/nucleo_auth/auth_slots.c), host-compiled: a new
+    // pairing takes a free slot, else evicts the least recently used session — never the browser in use,
+    // also right after a reboot (the old ring's head restarted at 0 and evicted the live desktop session).
+    ok: (code) => code === 0, summary: (o) => (o.match(/authslot: [^\n]*/) || [lastLine(o)])[0].trim() },
   { name: 'app-registry (firmware)', cmd: 'node', args: ['tools/anima-host/registry-check.mjs'],
     // The firmware registry (firmware/components/nucleo_registry/nucleo_registry.c), host-compiled with the
     // IDF cJSON: every shipped app fits the compact 94-byte entry, /api/apps strings (name/route/icon) come

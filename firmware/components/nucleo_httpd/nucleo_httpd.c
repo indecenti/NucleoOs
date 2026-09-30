@@ -171,6 +171,11 @@ static esp_err_t status_get(httpd_req_t *req)
     cJSON_AddStringToObject(root, "version", app ? app->version : "?");
     cJSON_AddStringToObject(root, "built", app ? app->date : "?");
     cJSON_AddNumberToObject(root, "uptime_s", esp_timer_get_time() / 1000000);
+    // Which boot profile serves this request. "web" = the lean server-Solo a browser session hands off to:
+    // httpd + auth only, the offline brain / voice / IR / recorder / calendar service are OFF to leave the
+    // desktop the RAM — so clients can say that honestly instead of "the Cardputer is busy".
+    { extern bool nucleo_app_solo_is_server(void);
+      cJSON_AddStringToObject(root, "profile", nucleo_app_solo_is_server() ? "web" : "full"); }
     // Heap diagnostics. free_heap is "free right now"; the number that actually tells you
     // whether SRAM is tight is min_free_heap — the lowest the free pool has EVER dropped to
     // since boot (the true headroom watermark). largest_free_block vs free_heap reveals

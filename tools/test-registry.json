@@ -1768,6 +1768,82 @@
       "anima": false
     },
     {
+      "id": "gate-guest-policy-m5launcher",
+      "label": "guest-policy (M5Launcher)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/guest-check.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-web-mode-handoff-page",
+      "label": "web-mode handoff page",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/gen-handoff.mjs",
+        "--check"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-pairing-sessions-lru",
+      "label": "pairing sessions (LRU)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/authslot-check.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-app-registry-firmware",
+      "label": "app-registry (firmware)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/registry-check.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-fstwin-stale-gz-twin",
+      "label": "fstwin (stale .gz twin)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/fstwin-check.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
       "id": "gate-launcher-model-native-ui",
       "label": "launcher-model (native UI)",
       "category": "cascade-infra",
@@ -3086,6 +3162,22 @@
       "anima": false
     },
     {
+      "id": "unit-anima-live-status",
+      "label": "anima-live-status.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-live-status.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
       "id": "unit-translate",
       "label": "translate.test.mjs",
       "category": "nl-translate",
@@ -3310,6 +3402,22 @@
       "anima": false
     },
     {
+      "id": "unit-fsclient-root",
+      "label": "fsclient-root.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/fsclient-root.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
       "id": "unit-games-catalog-i18n",
       "label": "games-catalog-i18n.test.mjs",
       "category": "app-shell",
@@ -3350,6 +3458,54 @@
       "args": [
         "--test",
         "tools/nfv/nfv.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-registry-merge",
+      "label": "registry-merge.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/registry-merge.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-sd-payload",
+      "label": "sd-payload.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/sd-payload.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-sd-policy",
+      "label": "sd-policy.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/sd-policy.test.mjs"
       ],
       "verifies": "",
       "nl": false,
