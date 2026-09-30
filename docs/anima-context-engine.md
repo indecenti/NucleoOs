@@ -97,7 +97,8 @@ To redeploy after changes:
 powershell -File tools\deploy.ps1            # stage repo → deploy/sd + regenerate .gz
 powershell -File tools\sd-sync.ps1 -Target H:\   # SAFE additive copy to the SD (protects teacher.json/learned)
 ```
-Do NOT use `deploy.ps1 -To H:\` for the SD: its mirror-delete can wipe device state (the Groq key, learned cards).
+`deploy.ps1 -To H:\` no longer mirror-deletes on a card (since 2026-09-30 it only adds/updates and merges
+`system/registry/apps.json`), and it never stages device state (the Groq key, learned cards).
 
 ## Gotcha — cross-app imports
 

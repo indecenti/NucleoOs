@@ -133,7 +133,13 @@ a live file.
   user state stays "unverifiable". The firmware now streams the listing (O(1) RAM).
 - **SD sync (card in the PC):**
   `tools\deploy.ps1 -To H:\` (the `-To` guard refuses non-removable / system drives).
-  Then put the card back in the Cardputer.
+  Then put the card back in the Cardputer. On the card the push only adds/updates (it never deletes:
+  the card also holds the user's Agent apps, downloaded models, device state and, under M5Launcher,
+  other firmwares' files) and `system/registry/apps.json` is merged, never overwritten
+  (`tools/lib/registry-merge.mjs`). A file missing or resized on the card is re-copied even when the
+  card's manifest says it is current. Files the release no longer ships stay on the card until removed
+  by hand. Every SD tool (`deploy.ps1 -To`, `sd-sync.ps1`, `push-ota --sync`, `sd-net-sync`,
+  `sd_deploy.py update`) follows the same two rules.
 
 After either, reload the shell in the browser; the bumped SW pulls the new assets.
 
