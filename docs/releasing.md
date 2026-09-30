@@ -184,6 +184,10 @@ Practical consequence: **users only see a release once the tag is pushed** — a
 gets a tagged release is invisible to everyone who installed from the flasher. And a tag on a tree
 that fails the gate never publishes at all.
 
+### Optional: M5Burner / M5Launcher listing
+The same merged image (`nucleoos-<version>.bin`) can be shared on M5Burner, which also puts it in
+M5Launcher's OTA list. Manual, account-bound step — see [m5launcher.md](m5launcher.md#publishing-so-it-shows-up-in-the-launchers-ota-list).
+
 ### Security properties
 - **No unreviewed ship:** the gate blocks the build; `main` is always green (CI), so tags build green.
 - **Tag ↔ version coherence:** the pipeline refuses `tag != v<VERSION>` — no "v0.3.1 that is really 0.2.x".

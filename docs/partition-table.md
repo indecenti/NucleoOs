@@ -56,3 +56,11 @@ If the image ever outgrows ~3.5 MB, the next step is one large app bank (~6.5 MB
 recovery bank (~0.5 MB), with the staged image and last-known-good copy held on the SD card. That
 maximises app space while keeping OTA safe, but it's a custom OTA subsystem (a dedicated recovery
 app + flash-from-SD logic + FAT-corruption handling), not a table edit — only worth it past 3.5 MB.
+
+## Under M5Launcher
+
+Installed by M5Launcher, NucleoOS runs inside the Launcher's table instead of this one (our app in an
+`ota_N` slot, `cfg` recreated by label at 448 KB, no A/B banks of ours). The firmware detects that at
+runtime and switches off self-OTA — see [m5launcher.md](m5launcher.md). Keep `ota_0` the first app
+partition and `cfg` a labelled data partition: that is what the Launcher's installer extracts
+(`npm run guest:test` gates it).

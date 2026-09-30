@@ -3,6 +3,7 @@
 // sessions, screensaver, ANIMA mode, SD card. Setters just update the state so a scene can act on it.
 #include "host_state.h"
 #include "nucleo_storage.h"
+#include "nucleo_guest.h"
 #include <string.h>
 #include <stdio.h>
 
@@ -24,6 +25,12 @@ static bool s_tts = true, s_ble = false, s_voice = false, s_remote = true;
 static int  s_tts_speed = 100, s_saver_s = 120, s_saver_mode = 1, s_anima_mode = 1, s_sessions = 2;
 
 extern "C" {
+// Guest mode (M5Launcher): the simulated device is a stand-alone install, so Settings ▸ Device keeps
+// its stand-alone rows and the goldens don't move. The real decision core is gated by guest:test.
+bool           nucleo_guest_hosted(void) { return false; }
+bool           nucleo_guest_self_ota_allowed(void) { return true; }
+guest_return_t nucleo_guest_return_mode(void) { return GUEST_RET_DEEP_SLEEP; }
+bool           nucleo_guest_return_to_launcher(void) { return false; }
 int         nucleo_setup_channel(void) { return 6; }
 const char *nucleo_setup_device_name(void) { return s_devname; }
 void        nucleo_setup_set_device_name(const char *n) { snprintf(s_devname, sizeof s_devname, "%s", n); }

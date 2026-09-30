@@ -14,6 +14,7 @@
 #include "update_policy.h"
 #include "nucleo_exclusive.h"
 #include "nucleo_i18n.h"
+#include "nucleo_guest.h"   // installed by M5Launcher: no self-OTA, the update comes from Launcher's list
 
 #include <string.h>
 #include <stdio.h>
@@ -153,7 +154,8 @@ static void on_key(int key, char ch)
         else if (key == NK_ENTER) act_row(s_sel);
         else if (ch >= '1' && ch < (char)('1' + rows)) act_row(ch - '1');
     } else if (s_ui == UI_CONFIRM) {
-        if (key == NK_ENTER) start_install();
+        // Hosted: the confirm card only explains where the update lives; ENTER just goes back.
+        if (key == NK_ENTER) { if (nucleo_guest_self_ota_allowed()) start_install(); else { s_ui = UI_MAIN; set_hint_for_ui(); mark(); } }
     }
 }
 
@@ -217,6 +219,16 @@ static void draw_main(void)
 static void draw_confirm(void)
 {
     char msg[48];
+    if (!nucleo_guest_self_ota_allowed()) {   // installed by M5Launcher: its OTA list owns updates
+        snprintf(msg, sizeof msg, "%s %s", PT("Disponibile", "Available", "Disponible", "Disponible", "Verfuegbar"), nucleo_update_latest_tag());
+        center(msg, 24, 2, FG);
+        center(PT("Aggiorna da M5Launcher:", "Update from M5Launcher:", "Actualiza desde M5Launcher:",
+                  "Mettez a jour via M5Launcher :", "Update ueber M5Launcher:"), 54, 1, MUTED);
+        center(PT("Launcher > OTA > NucleoOS", "Launcher > OTA > NucleoOS", "Launcher > OTA > NucleoOS",
+                  "Launcher > OTA > NucleoOS", "Launcher > OTA > NucleoOS"), 68, 1, FG);
+        center(PT("ENTER = OK", "ENTER = OK", "ENTER = OK", "ENTREE = OK", "ENTER = OK"), 92, 1, C_GREEN);
+        return;
+    }
     snprintf(msg, sizeof msg, "%s %s?", PT("Aggiornare a", "Update to", "Actualizar a", "Mettre a jour vers", "Aktualisieren auf"), nucleo_update_latest_tag());
     center(msg, 30, 2, FG);
     center(PT("Scarica l'immagine verificata e riavvia.", "Downloads the verified image and reboots.",

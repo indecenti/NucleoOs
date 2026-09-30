@@ -28,6 +28,7 @@
 #include "app_ui.h"           // app_ui_confirm / app_ui_ascii_fold
 #include "ui_glyph.h"         // system glyph set (shared with the Control Center)
 #include "nucleo_i18n.h"      // TR5(it,en,es,fr,de) + the 5-language OS switch
+#include "nucleo_guest.h"     // installed by M5Launcher: Device page gains "Back to M5Launcher"
 #include <M5GFX.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -144,7 +145,7 @@ enum {
     R_BT_BOOT, R_BT_STATE,                                                                  // Bluetooth
     R_BRIGHT, R_THEME, R_SAVER_TIME, R_SAVER_STYLE,                                         // Display
     R_VOLUME, R_MUTE, R_TTS, R_TTS_SPEED, R_VOICE,                                          // Sound
-    R_NAME, R_PIN, R_SESSIONS, R_MODEL, R_VERSION, R_BATTERY, R_SD, R_RAM, R_UPTIME, R_UPDATES, R_RESTART,  // Device
+    R_NAME, R_PIN, R_SESSIONS, R_MODEL, R_VERSION, R_BATTERY, R_SD, R_RAM, R_UPTIME, R_UPDATES, R_RESTART, R_LAUNCHER,  // Device
     R_RST_SOFT, R_RST_HARD,                                                                 // Reset
     R_SAVED_NET, R_FORGET_ALL,                                                              // Saved networks
 };
@@ -156,6 +157,8 @@ static const uint8_t ROWS_BT[]      = { R_BT_BOOT, R_BT_STATE, R_RESTART };
 static const uint8_t ROWS_DISPLAY[] = { R_BRIGHT, R_THEME, R_SAVER_TIME, R_SAVER_STYLE };
 static const uint8_t ROWS_SOUND[]   = { R_VOLUME, R_MUTE, R_TTS, R_TTS_SPEED, R_VOICE };
 static const uint8_t ROWS_DEVICE[]  = { R_NAME, R_PIN, R_SESSIONS, R_MODEL, R_VERSION, R_BATTERY, R_SD, R_RAM, R_UPTIME, R_UPDATES, R_RESTART };
+// Same page when installed by M5Launcher (runtime-detected; stand-alone never shows the extra row).
+static const uint8_t ROWS_DEVICE_HOSTED[] = { R_NAME, R_PIN, R_SESSIONS, R_MODEL, R_VERSION, R_BATTERY, R_SD, R_RAM, R_UPTIME, R_UPDATES, R_RESTART, R_LAUNCHER };
 static const uint8_t ROWS_RESET[]   = { R_RST_SOFT, R_RST_HARD };
 static const uint8_t SECTIONS[]     = { PG_WIFI, PG_AP, PG_BT, PG_DISPLAY, PG_SOUND, PG_DEVICE, PG_RESET };   // TAB order
 #define NROWS(a) ((int)(sizeof(a) / sizeof((a)[0])))
@@ -360,7 +363,8 @@ static const uint8_t *page_rows(int pg, int *n)
         case PG_BT:      *n = NROWS(ROWS_BT);      return ROWS_BT;
         case PG_DISPLAY: *n = NROWS(ROWS_DISPLAY); return ROWS_DISPLAY;
         case PG_SOUND:   *n = NROWS(ROWS_SOUND);   return ROWS_SOUND;
-        case PG_DEVICE:  *n = NROWS(ROWS_DEVICE);  return ROWS_DEVICE;
+        case PG_DEVICE:  if (nucleo_guest_hosted()) { *n = NROWS(ROWS_DEVICE_HOSTED); return ROWS_DEVICE_HOSTED; }
+                         *n = NROWS(ROWS_DEVICE);  return ROWS_DEVICE;
         case PG_RESET:   *n = NROWS(ROWS_RESET);   return ROWS_RESET;
         default:         *n = 0;                   return nullptr;
     }
@@ -600,6 +604,19 @@ static void make_row_id(uint8_t id, int num, Row &r)
     case R_RESTART: r.label = TR5("Riavvia", "Restart", "Reiniciar", "Relancer", "Neustart"); r.kind = K_DANGER;
                     sset(r, TR5("Chiude tutto e riparte", "Closes everything and restarts", "Cierra todo y reinicia",
                                 "Ferme tout et redemarre", "Schliesst alles, startet neu")); break;
+    case R_LAUNCHER: {
+        r.label = TR5("Torna a M5Launcher", "Back to M5Launcher", "Volver a M5Launcher", "Retour a M5Launcher", "Zurueck zu M5Launcher");
+        r.kind = K_DANGER;
+        guest_return_t m = nucleo_guest_return_mode();
+        if (m == GUEST_RET_DEEP_SLEEP)
+            sset(r, TR5("Poi INVIO sulla sua schermata", "Then ENTER on its splash", "Luego ENTER en su pantalla",
+                        "Puis ENTREE sur son ecran", "Dann ENTER im Startbild"));
+        else if (m == GUEST_RET_POWER_CYCLE)
+            sset(r, TR5("Spegni e riaccendi", "Switch off and on", "Apaga y enciende", "Eteindre et rallumer", "Aus- und einschalten"));
+        else
+            sset(r, TR5("Tieni il suo tasto e riavvia", "Hold its key and restart", "Manten su tecla y reinicia",
+                        "Maintenir sa touche, relancer", "Seine Taste halten, Neustart"));
+    } break;
     // -- Reset (armed rows show how many ENTER presses are left)
     case R_RST_SOFT: case R_RST_HARD:
         r.label = (id == R_RST_SOFT) ? TR5("Azzera config", "Reset settings", "Borrar ajustes", "Effacer reglages", "Konfig loeschen")
@@ -1333,6 +1350,11 @@ static void on_draw(void)
             app_ui_confirm(TR5("Riavviare?", "Restart?", "Reiniciar?", "Redemarrer?", "Neustarten?"),
                            TR5("Il dispositivo si riavvia ora.", "The device restarts now.", "El equipo se reinicia ahora.",
                                "L'appareil redemarre.", "Das Geraet startet jetzt neu."), s_cf_yes); break;
+        case R_LAUNCHER:
+            // Launcher's splash auto-boots the selected app (us) after its timer: ENTER there opens its menu.
+            app_ui_confirm(TR5("Tornare a M5Launcher?", "Back to M5Launcher?", "Volver a M5Launcher?", "Retour a M5Launcher?", "Zu M5Launcher?"),
+                           TR5("Premi INVIO sul suo avvio.", "Press ENTER on its splash.", "Pulsa ENTER en su inicio.",
+                               "ENTREE sur son demarrage.", "ENTER im Startbild druecken."), s_cf_yes); break;
         case R_FORGET_ALL:
             snprintf(msg, sizeof msg, TR5("%d reti e le loro password.", "%d networks and passwords.", "%d redes y sus claves.",
                                           "%d reseaux et mots de passe.", "%d Netze und Passwoerter."), nucleo_setup_net_count());
@@ -1615,6 +1637,10 @@ static void activate(const Row &r)
     case R_NAME:     open_editor(IM_NAME, nucleo_setup_device_name()); break;
     case R_UPDATES:  flush_prefs(); nucleo_app_launch_id("updates"); return;
     case R_RESTART:  s_cf = R_RESTART; s_cf_yes = false; break;
+    case R_LAUNCHER:
+        if (nucleo_guest_return_mode() == GUEST_RET_DEEP_SLEEP) { s_cf = R_LAUNCHER; s_cf_yes = false; }
+        else toast(r.sub);   // Launcher's own settings forbid a software hand-off: the row says what to do
+        break;
     case R_SESSIONS: if (r.kind == K_DANGER) { s_cf = R_SESSIONS; s_cf_yes = false; } break;
     case R_FORGET_ALL: s_cf = R_FORGET_ALL; s_cf_yes = false; break;
     case R_SAVED_NET: {
@@ -1677,6 +1703,8 @@ static void confirm_done(bool yes)
     if (!yes) return;
     switch (what) {
     case R_RESTART:    flush_prefs(); esp_restart(); break;
+    case R_LAUNCHER:   flush_prefs(); nucleo_guest_return_to_launcher();   // never returns when it can act
+                       toast(TR5("Spegni e riaccendi", "Switch off and on", "Apaga y enciende", "Eteindre et rallumer", "Aus- und einschalten")); break;
     case R_FORGET_ALL: nucleo_setup_forget();
                        toast_ok(TR5("Reti dimenticate: hotspot attivo", "Networks forgotten: hotspot on", "Redes olvidadas: hotspot activo",
                                     "Reseaux oublies: hotspot actif", "Netze vergessen: Hotspot an")); break;
