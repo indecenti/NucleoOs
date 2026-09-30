@@ -50,6 +50,7 @@ ANIMA is NucleoOS's offline natural-language assistant (retrieval + reasoning in
 | [anima-online.md](anima-online.md) | How ANIMA behaves with Wi-Fi up — structured knowledge + a cloud teacher that leaves the device permanently smarter offline. |
 | [anima-agent.md](anima-agent.md) | Micro-agent design: intent routing, tool use with strict schemas, multi-domain RAG within 512 KB. *(design)* |
 | [anima-roadmap.md](anima-roadmap.md) | The ordered, verifiable build plan for ANIMA — north star, invariants, phased gates. *(roadmap)* |
+| [anima-local-first-plan.md](anima-local-first-plan.md) | A local-first agent plan — keep the device minimal, run everything heavy in the browser / on the user's PC. *(plan; proposed, awaiting approval)* |
 | [anima-memory.md](anima-memory.md) | The SRAM / flash (XIP) / SD memory hierarchy that lets the brain hold far more than RAM. *(design)* |
 | [anima-knowledge-graph.md](anima-knowledge-graph.md) | Typed entities, faceted relations and indexed retrieval (Wikidata-derived). *(durable plan; SD index not yet built)* |
 | [anima-knowledge-scale.md](anima-knowledge-scale.md) | Scaling the offline knowledge brain to 50–60 GB of certain, bilingual content. *(durable plan)* |
@@ -104,6 +105,7 @@ Point-in-time records — useful for context and decisions already made, not cur
 |---|---|
 | [maintenance-2026-06.md](maintenance-2026-06.md) | June 2026 hardening pass — dead-code removal, RAM/fragmentation and concurrency fixes. *(historical)* |
 | [maintenance-2026-08.md](maintenance-2026-08.md) | August 2026 pass — making the test harness portable off-Windows and hunting real correctness bugs. *(historical)* |
+| [maintenance-2026-09.md](maintenance-2026-09.md) | September 2026 web-OS consolidation — the browser E2E suite and the fixes it found. *(historical)* |
 | [shell-cache-log.md](shell-cache-log.md) | The service-worker cache-version changelog for `web/shell/sw.js` (why each roll happened). |
 | [roadmap.md](roadmap.md) | The honest overall state — what a real OS needs, what exists vs is still designed. *(roadmap)* |
 | [repo-history-purge.md](repo-history-purge.md) | A one-time, deliberately-manual runbook to strip non-distributable blobs from git history. *(runbook)* |
