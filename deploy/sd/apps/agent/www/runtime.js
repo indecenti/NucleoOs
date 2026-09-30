@@ -347,7 +347,7 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
         case 'device_status': {
           const r = await withRetry(() => dq.read(() => fetch('/api/status', { cache: 'no-store' }).then((x) => x.json())));
           if (!r || !r.os) return done(t('rt_device_na'), true);
-          const gb = (b) => (Number(b || 0) / 1073741824).toFixed(1);
+          const gb = (b) => (Number(b || 0) / 1e9).toFixed(1);   // decimal GB, the unit the desktop and ANIMA show
           const dt = (r.network && r.network.time) ? new Date(r.network.time * 1000) : null;   // NOT `t`: that shadows the injected translator t() (TDZ-crashes the rt_device_na path above)
           // Fenced: the SSID is attacker-chosen text (any nearby AP picks its own name) that lands
           // straight in the model's context. Same rule as a file body — device state is DATA.
@@ -356,7 +356,10 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
             rete: r.network ? (r.network.mode + ' · ' + (r.network.ssid || '-') + ' · ' + (r.network.ip || '-')) : '-',
             spazio_sd: (r.storage && r.storage.mounted) ? (gb(r.storage.free_bytes) + ' GB liberi su ' + gb(r.storage.total_bytes) + ' GB') : 'SD non montata',
             uptime_s: r.uptime_s, ram_libera_kb: Math.round((r.free_heap || 0) / 1024),
-            batteria: 'non leggibile su questo hardware (nessun IC di alimentazione esposto)',
+            // The ADV reports its battery in /api/status; the original Cardputer exposes no fuel gauge.
+            batteria: (r.battery && typeof r.battery.pct === 'number')
+              ? Math.round(r.battery.pct) + '% (' + ((r.battery.mv || 0) / 1000).toFixed(2) + ' V)'
+              : 'non riportata da questo hardware',
           }, null, 1)));
         }
         case 'list_apps': {
@@ -682,7 +685,7 @@ STRUMENTI:
 • update_plan: la CHECKLIST viva del lavoro. Su un compito in più passi (costruire un'app, toccare più file) chiamalo SUBITO con 3-7 milestone reali (una sola in "doing"), poi di nuovo dopo ogni passo per segnarla "done" e avviare la successiva. L'umano la vede aggiornarsi in tempo reale e tu ci rileggi a che punto sei. Non costa nulla (nessun accesso al device, nessuna approvazione). Salta il piano solo per le risposte in un colpo solo.
 • scaffold_app + publish_app: PUOI CREARE NUOVE APP per NucleoOS. Flusso: 1) scaffold_app({name, description, category, kind}) genera lo scheletro da un TEMPLATE funzionante (kind: blank/list/timer/converter — scegli il più vicino all'obiettivo) in una cartella di staging nel workspace; 2) MODIFICA <id>/www/index.html (e aggiungi .js/.css se servono) con i tool file per costruire l'app vera — è una pagina web autonoma, dark-theme, può importare /nucleo-i18n.js; 3) publish_app({id}) la installa nel launcher LIVE (l'utente approva, nessun riavvio). Usa questo flusso quando l'utente chiede di "creare/costruire/fare un'app". Tieni l'app leggera e autonoma (niente dipendenze esterne pesanti): gira su un device con poca RAM. Per nascondere o ripristinare un'app che HAI creato usa manage_app({id, action:'disable'|'enable'}) — le app non si possono cancellare dal device, ma si possono disabilitare.
 • get_os_api: il CONTRATTO REALE di NucleoOS — rotte HTTP del device (topic "routes"/"route"), regole del manifest ("manifest"), regole di deploy ("rules"). CONSULTALO prima di scrivere codice che chiama /api/* e prima di publish_app: mai indovinare una rotta o un campo.
-• device_status: stato LIVE del Cardputer — ora/data, spazio SD, Wi-Fi (SSID/IP), uptime, RAM. Usalo per "che ore sono", "quanto spazio", "che rete", "è tutto ok". La BATTERIA non è leggibile su questo hardware: dillo onestamente.
+• device_status: stato LIVE del Cardputer — ora/data, spazio SD, Wi-Fi (SSID/IP), uptime, RAM e batteria (se il modello la riporta). Usalo per "che ore sono", "quanto spazio", "che rete", "quanta batteria", "è tutto ok", e riporta i VALORI ESATTI che restituisce — mai stimarli.
 • weather: meteo attuale + min/max di oggi per una città (online, Open-Meteo, senza chiave).
 • generate_image: genera un'immagine da un prompt e la SALVA in un file del workspace (provider capace di immagini, es. Grok/xAI). Per "disegna/crea un'immagine di…", icone, asset. Se manca una chiave xAI, dillo onestamente. Poi puoi aprirla con open_in_os({path}).
 • transcribe: trascrive in testo un file audio del workspace (wav/mp3/m4a/ogg/flac) con un provider vocale (Groq Whisper). Per "trascrivi questa registrazione". Se manca una chiave Groq, dillo onestamente.
