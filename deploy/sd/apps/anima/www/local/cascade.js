@@ -133,20 +133,36 @@ export function actRequest(r, lang) {
 //   'launch' - opens an app
 // File creation is deliberately NOT here: with a key the agent writes real files into the workspace.
 const fold = (s) => String(s || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[\u2018\u2019`]/g, "'");
-const SETTING_NOUN = /\b(volume|audio|suono|luminosita|brightness|schermo|screen|display|retroilluminazione|backlight)\b/;
-const SETTING_VERB = /\b(alza|abbassa|aumenta|diminuisci|riduci|imposta|metti|porta|regola|cambia|setta|modifica|muta|silenzia|azzera|raise|lower|increase|decrease|set|turn|mute|unmute|dim|brighten|change|adjust|fai|rendi|make)\b/;
-const SETTING_AMOUNT = /\b(piu|meno|more|less|max|massimo|massima|minimo|minima|meta|half|zero|muto|alto|alta|basso|bassa|up|down)\b|\d/;
+// ROUTING vocabulary. The deterministic engine answers in Italian and English; these lists only decide that an
+// utterance is a device command / live question, so they also carry Spanish, French and German — otherwise
+// "sube el volumen" or "öffne den Rechner" reached a tool-less chat model that could claim it was done.
+const SETTING_NOUN = /\b(volume|audio|suono|luminosita|brightness|schermo|screen|display|retroilluminazione|backlight|volumen|brillo|pantalla|sonido|luminosite|ecran|lautstarke|helligkeit|bildschirm)\b/;
+const SETTING_VERB = /\b(alza|abbassa|aumenta|diminuisci|riduci|imposta|metti|porta|regola|cambia|setta|modifica|muta|silenzia|azzera|raise|lower|increase|decrease|set|turn|mute|unmute|dim|brighten|change|adjust|fai|rendi|make|sube|baja|reduce|pon|ajusta|silencia|monte|baisse|augmente|diminue|regle|mets|coupe|erhohe|verringere|stelle|mach|dreh|schalte|reduziere)\b/;
+const SETTING_AMOUNT = /\b(piu|meno|more|less|max|massimo|massima|minimo|minima|meta|half|zero|muto|alto|alta|basso|bassa|up|down|mas|menos|plus|moins|mehr|weniger|maximo|lauter|leiser|heller|dunkler)\b|\d/;
 const GEOMETRY = /\b(cubo|sfera|cilindro|cono|piramide|prisma|lato|raggio|altezza|diametro|densita|massa|litri|cube|sphere|cylinder|cone|pyramid|prism|side|radius|height|diameter|density|mass|liters|litres|vendite|sales)\b/;
-const REMIND = /\b(ricordami|ricordamelo|ricordatemi|promemoria|remind me|reminder)\b/;
-const EVENT_VERB = /\b(aggiungi|crea|segna|metti|fissa|programma|pianifica|prenota|inserisci|add|create|schedule|book|put|new|nuovo|nuova)\b/;
-const EVENT_NOUN = /\b(evento|eventi|appuntamento|appuntamenti|impegno|riunione|incontro|event|appointment|meeting)\b|\b(in|nel|al|to|on) (my |mio |il |nel )?(calendario|calendar|agenda)\b/;
-const TIMER = /\b(timer|sveglia|alarm)\b/;
-const TIMER_CUE = /\b(metti|imposta|avvia|punta|fai partire|set|start)\b|\b\d+\s*(s|sec|secondi|seconds|min|minuti|minutes|h|ore|hours)\b|\b(alle|at)\s+\d/;
+const REMIND = /\b(ricordami|ricordamelo|ricordatemi|promemoria|remind me|reminder|recuerdame|recordatorio|rappelle-moi|rappelle moi|rappel|erinnere mich|erinnerung)\b/;
+const EVENT_VERB = /\b(aggiungi|crea|segna|metti|fissa|programma|pianifica|prenota|inserisci|add|create|schedule|book|put|new|nuovo|nuova|anade|agrega|apunta|ajoute|cree|planifie|fuge|erstelle|trage|plane)\b/;
+const EVENT_NOUN = /\b(evento|eventi|appuntamento|appuntamenti|impegno|riunione|incontro|event|appointment|meeting|cita|reunion|evenement|rendez-vous|termin|besprechung|treffen)\b|\b(in|nel|al|to|on|en|a|dans|au|im|in den) (my |mio |il |nel |mi |el |mon |le |meinen |den )?(calendario|calendar|agenda|calendrier|kalender)\b/;
+const TIMER = /\b(timer|sveglia|alarm|temporizador|alarma|minuteur|reveil|wecker)\b/;
+const TIMER_CUE = /\b(metti|imposta|avvia|punta|fai partire|set|start|pon|programa|mets|lance|stelle|starte)\b|\b\d+\s*(s|sec|secondi|seconds|min|minuti|minutes|h|ore|hours|segundos|minutos|horas|secondes|heures|sekunden|minuten|stunden)\b|\b(alle|at|a las|a|um)\s+\d/;
 // Live state is matched as the WHOLE utterance (plus polite fillers), never as a fragment: "che versione di
 // python devo usare" or "che giorno è natale" are questions for a brain, not for the RTC, and must not be
 // answered by the device ahead of the cloud.
-const LEAD = String.raw`(?:(?:ehi |hey |ciao )?anima,? )?(?:(?:mi )?(?:dici|sai dirmi|puoi dirmi) |dimmi |(?:can|could) you tell me |tell me |please )?`;
-const TAIL = String.raw` ?(?:adesso|ora|oggi|now|today|please|per favore|grazie)?`;
+const LEAD = String.raw`(?:(?:ehi |hey |ciao |hola |salut |hallo )?anima,? )?(?:(?:mi )?(?:dici|sai dirmi|puoi dirmi) |dimmi |(?:can|could) you tell me |tell me |please |dime |dis-moi |dis moi |sag mir |bitte )?`;
+const TAIL = String.raw` ?(?:adesso|ora|oggi|now|today|please|per favore|grazie|ahora|hoy|por favor|maintenant|aujourd'hui|s'il te plait|jetzt|heute|bitte)?`;
+// Spanish / French / German forms of each LIVE entry below (same order), already accent-folded.
+const LIVE_XL = [
+  String.raw`que hora es|quelle heure (?:est-il|il est|est il)|il est quelle heure|wie spat ist es|wie ?viel uhr ist es`,
+  String.raw`que dia es(?: hoy)?|a que (?:dia|fecha) estamos|que fecha es(?: hoy)?|quel jour (?:sommes-nous|sommes nous|on est|est-on)|quelle (?:est la )?date(?: aujourd'hui)?|welcher tag ist(?: heute)?|welches datum (?:ist|haben wir)(?: heute)?|der wievielte ist heute`,
+  String.raw`en que ano estamos|que ano es|en quelle annee (?:sommes-nous|sommes nous|on est)|welches jahr (?:ist|haben wir)|en que estacion estamos|quelle saison(?: sommes-nous| est-ce)?|welche jahreszeit(?: ist| haben wir)?`,
+  String.raw`(?:cuanta |nivel de )?bateria(?: me queda| queda| tengo)?|(?:niveau de )?batterie(?: restante)?|combien de batterie(?: il me reste)?|(?:wie viel )?akku(?:stand)?|batteriestand`,
+  String.raw`cuanto espacio (?:libre )?(?:tengo|queda|hay)(?: en la sd)?|espacio (?:libre|disponible)(?: en la sd)?|combien d'espace (?:libre )?(?:il me reste|reste|ai-je|j'ai)?(?: sur la sd)?|espace (?:libre|disponible)(?: sur la sd)?|wie viel (?:freier )?(?:speicher|speicherplatz|platz)(?: habe ich| ist frei| ist noch frei)?(?: auf der sd)?|freier speicher(?:platz)?`,
+  String.raw`cuanta (?:ram|memoria)(?: libre)?(?: tengo)?|memoria libre|combien de (?:ram|memoire)(?: libre)?|memoire libre|wie viel (?:ram|arbeitsspeicher)(?: ist frei)?|freier arbeitsspeicher`,
+  String.raw`cuanto tiempo llevas encendid[oa]|depuis combien de temps es-tu allume|wie lange laufst du schon`,
+  String.raw`que version (?:eres|tienes|de nucleoos|del firmware)|version del firmware|quelle version(?: de nucleoos| du firmware| es-tu)?|welche version(?: von nucleoos| hast du| ist das)?|firmware-version`,
+  String.raw`a que (?:red|wifi) estoy conectado|que (?:red|wifi)(?: es| uso)?|estoy conectado(?: a internet)?|mi (?:direccion )?ip|a quel (?:reseau|wifi) suis-je connecte|quel (?:reseau|wifi)(?: est-ce)?|suis-je connecte(?: a internet)?|mon adresse ip|mit welchem (?:wlan|netz|wifi) bin ich verbunden|welches (?:wlan|netz|wifi)|bin ich verbunden|meine ip(?:-adresse)?`,
+  String.raw`que citas tengo(?: hoy| manana)?|(?:mi|la) agenda(?: de hoy)?|qu'est-ce que j'ai (?:aujourd'hui|demain)(?: a l'agenda)?|mon agenda|mes rendez-vous(?: d'aujourd'hui)?|welche termine habe ich(?: heute| morgen)?|meine termine(?: heute)?|mein kalender`,
+];
 const LIVE = [
   String.raw`che or[ae] (?:e|sono)|che ora e|l'ora|ora esatta|what time is it|what'?s the time|the time|current time`,
   String.raw`che giorno (?:e|siamo)(?: oggi)?|oggi che giorno e|che data e(?: oggi)?|(?:la )?data(?: di oggi)?|what day is (?:it|today)|what'?s the date|what is the date|today'?s date|the date`,
@@ -158,12 +174,59 @@ const LIVE = [
   String.raw`(?:che|quale) versione (?:sei|hai|e|di nucleoos|del firmware|del sistema)|versione(?: del)? firmware|firmware version|what version (?:are you|is this|of nucleoos)`,
   String.raw`(?:a che|a quale) (?:rete|wi-?fi) sono connesso|(?:che|quale) (?:rete|wi-?fi)(?: e| uso| stai usando)?|sono connesso(?: a internet)?|am i connected|(?:which|what) (?:network|wi-?fi)(?: am i on| is this)?|(?:qual e )?(?:il mio )?indirizzo ip|(?:what'?s )?my ip(?: address)?|ip address`,
   String.raw`(?:che|quali) (?:impegni|appuntamenti) ho(?: oggi| domani)?|i miei impegni|impegni(?: di)? oggi|cosa ho (?:in agenda|oggi|domani)|agenda(?: di)? oggi|(?:what'?s|what is) on (?:today|my calendar)|my (?:schedule|agenda|appointments)(?: today)?`,
-].map((re) => new RegExp('^' + LEAD + '(?:' + re + ')' + TAIL + '$'));
+].map((re, i) => new RegExp('^' + LEAD + '(?:' + re + (LIVE_XL[i] ? '|' + LIVE_XL[i] : '') + ')' + TAIL + '$'));
 // "how do I raise the volume on my PC?" is a how-to, not an order: interrogative openers never trigger 'act'.
-const HOWTO = /^(come|perche|quando|dove|chi|cosa|che cosa|quale|how|why|when|where|who|what|which|can i|posso)\b/;
-const LAUNCH = /^(apri|avvia|lancia|open|launch)\s+(?!source\b)\S/;
+const HOWTO = /^(come|perche|quando|dove|chi|cosa|che cosa|quale|how|why|when|where|who|what|which|can i|posso|como|por que|cuando|donde|quien|puedo|comment|pourquoi|quand|ou|qui|est-ce que|puis-je|wie|warum|wann|wo|wer|kann ich)\b/;
+const LAUNCH = /^(apri|avvia|lancia|open|launch|abre|abrir|inicia|ouvre|ouvrir|lance|lancer|offne|offnen|starte)\s+(?!source\b)\S/;
+
+// Which live value a 'live' question asks for — same order as LIVE above.
+const LIVE_KINDS = ['time', 'date', 'year', 'battery', 'space', 'ram', 'uptime', 'version', 'network', 'agenda'];
+export function liveKind(q) {
+  const t = fold(q).replace(/[?!.,;:¿¡]+/g, ' ').replace(/\s+/g, ' ').trim();
+  for (let i = 0; i < LIVE.length; i++) if (LIVE[i].test(t)) return LIVE_KINDS[i] === 'year' && /stagion|season|estacion|saison|jahreszeit/.test(t) ? 'season' : LIVE_KINDS[i];
+  return null;
+}
+// The EXACT answer to a live question, from the device's own /api/status — for a Cardputer whose brain is off
+// (web mode) or unreachable. A language model handed this question guessed ("1,4 GB free" on a card with 18.7),
+// so these values never go through one. null = not answerable from the status (agenda, season): the caller
+// hands it on. GB are decimal (1e9), like the desktop's own "SD … GB free".
+const LIVE_T = {
+  it: { space: 'Sulla SD hai {free} GB liberi su {total} GB.', nosd: 'La scheda SD non è montata.', battery: 'Batteria al {pct}% ({v} V).', nobat: 'Questo Cardputer non riporta il livello della batteria.', ram: 'RAM libera: {kb} KB (il blocco più grande è {blk} KB).', uptime: 'Il Cardputer è acceso da {d}.', version: 'NucleoOS {v}.', net: 'Connesso alla rete Wi-Fi «{ssid}», indirizzo {ip}.', ap: 'Il Cardputer è in modalità access point ({ip}).', nonet: 'Il Cardputer non è connesso a nessuna rete.', time: 'Sono le {t}.', date: 'Oggi è {d}.', year: 'Siamo nel {y}.', h: 'h', m: 'min' },
+  en: { space: 'Your SD card has {free} GB free of {total} GB.', nosd: 'The SD card is not mounted.', battery: 'Battery at {pct}% ({v} V).', nobat: 'This Cardputer does not report its battery level.', ram: 'Free RAM: {kb} KB (largest block {blk} KB).', uptime: 'The Cardputer has been on for {d}.', version: 'NucleoOS {v}.', net: 'Connected to the Wi-Fi network “{ssid}”, address {ip}.', ap: 'The Cardputer is in access-point mode ({ip}).', nonet: 'The Cardputer is not connected to any network.', time: 'It is {t}.', date: 'Today is {d}.', year: 'It is {y}.', h: 'h', m: 'min' },
+  es: { space: 'Tu SD tiene {free} GB libres de {total} GB.', nosd: 'La tarjeta SD no está montada.', battery: 'Batería al {pct}% ({v} V).', nobat: 'Este Cardputer no informa del nivel de batería.', ram: 'RAM libre: {kb} KB (bloque mayor {blk} KB).', uptime: 'El Cardputer lleva encendido {d}.', version: 'NucleoOS {v}.', net: 'Conectado a la red Wi-Fi «{ssid}», dirección {ip}.', ap: 'El Cardputer está en modo punto de acceso ({ip}).', nonet: 'El Cardputer no está conectado a ninguna red.', time: 'Son las {t}.', date: 'Hoy es {d}.', year: 'Estamos en {y}.', h: 'h', m: 'min' },
+  fr: { space: 'Votre carte SD a {free} Go libres sur {total} Go.', nosd: 'La carte SD n’est pas montée.', battery: 'Batterie à {pct} % ({v} V).', nobat: 'Ce Cardputer n’indique pas le niveau de sa batterie.', ram: 'RAM libre : {kb} Ko (plus grand bloc {blk} Ko).', uptime: 'Le Cardputer est allumé depuis {d}.', version: 'NucleoOS {v}.', net: 'Connecté au réseau Wi-Fi « {ssid} », adresse {ip}.', ap: 'Le Cardputer est en mode point d’accès ({ip}).', nonet: 'Le Cardputer n’est connecté à aucun réseau.', time: 'Il est {t}.', date: 'Nous sommes le {d}.', year: 'Nous sommes en {y}.', h: 'h', m: 'min' },
+  de: { space: 'Deine SD-Karte hat {free} GB frei von {total} GB.', nosd: 'Die SD-Karte ist nicht eingebunden.', battery: 'Akku bei {pct} % ({v} V).', nobat: 'Dieser Cardputer meldet keinen Akkustand.', ram: 'Freier RAM: {kb} KB (größter Block {blk} KB).', uptime: 'Der Cardputer läuft seit {d}.', version: 'NucleoOS {v}.', net: 'Verbunden mit dem WLAN „{ssid}“, Adresse {ip}.', ap: 'Der Cardputer ist im Access-Point-Modus ({ip}).', nonet: 'Der Cardputer ist mit keinem Netz verbunden.', time: 'Es ist {t}.', date: 'Heute ist {d}.', year: 'Wir haben {y}.', h: 'Std.', m: 'Min.' },
+};
+const LOCALE = { it: 'it-IT', en: 'en-GB', es: 'es-ES', fr: 'fr-FR', de: 'de-DE' };
+export function liveFromStatus(kind, st, lang = 'it', now = new Date()) {
+  if (!st || typeof st !== 'object') return null;
+  const T = LIVE_T[lang] || LIVE_T.en, loc = LOCALE[lang] || 'en-GB';
+  const fill = (s, v) => s.replace(/\{(\w+)\}/g, (m, k) => (v[k] != null ? String(v[k]) : m));
+  const num = (x, d = 1) => Number(x).toLocaleString(loc, { minimumFractionDigits: d, maximumFractionDigits: d });
+  const net = st.network || {};
+  const clock = (typeof net.time === 'number' && net.time > 1672531200) ? new Date(net.time * 1000) : now;   // the device clock is the authority when set
+  switch (kind) {
+    case 'space': { const s = st.storage; if (!s || !s.mounted || !s.total_bytes) return T.nosd;
+      return fill(T.space, { free: num(s.free_bytes / 1e9), total: num(s.total_bytes / 1e9) }); }
+    case 'battery': { const b = st.battery; if (!b || typeof b.pct !== 'number') return T.nobat;
+      return fill(T.battery, { pct: Math.round(b.pct), v: num((b.mv || 0) / 1000, 2) }); }
+    case 'ram': if (typeof st.free_heap !== 'number') return null;
+      return fill(T.ram, { kb: Math.round(st.free_heap / 1024), blk: Math.round((st.largest_free_block || 0) / 1024) });
+    case 'uptime': { if (typeof st.uptime_s !== 'number') return null; const h = Math.floor(st.uptime_s / 3600), m = Math.floor((st.uptime_s % 3600) / 60);
+      return fill(T.uptime, { d: (h ? h + ' ' + T.h + ' ' : '') + m + ' ' + T.m }); }
+    case 'version': return st.version ? fill(T.version, { v: st.version }) : null;
+    case 'network': if (net.mode === 'sta' && net.ip) return fill(T.net, { ssid: net.ssid || '?', ip: net.ip });
+      if (net.mode === 'ap') return fill(T.ap, { ip: net.ip || '192.168.4.1' });
+      return T.nonet;
+    case 'time': return fill(T.time, { t: clock.toLocaleTimeString(loc, { hour: '2-digit', minute: '2-digit' }) });
+    case 'date': return fill(T.date, { d: clock.toLocaleDateString(loc, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }) });
+    case 'year': return fill(T.year, { y: clock.getFullYear() });
+    default: return null;                          // agenda, season: not in the status — hand it on
+  }
+}
+
 export function commandHint(q) {
-  const t = fold(q).replace(/[?!.,;:]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const t = fold(q).replace(/[?!.,;:¿¡]+/g, ' ').replace(/\s+/g, ' ').trim();
   if (!t) return null;
   if (!HOWTO.test(t)) {
     // A setting needs an imperative verb, or a SHORT "noun + amount" phrase ("volume al 50", "più luce"):
@@ -212,7 +275,7 @@ const MEM_RECALL = new RegExp('(?:^|\\s)(?:' + [
   'what do i do for (?:work|a living)', "when(?:'s| is) my birthday",
 ].join('|') + ')(?:\\s|$)');
 export function memoryHint(q) {
-  const t = fold(q).replace(/[?!.,;:]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const t = fold(q).replace(/[?!.,;:¿¡]+/g, ' ').replace(/\s+/g, ' ').trim();
   if (!t) return null;
   const lead = TEACH_LEAD.exec(t);
   if (lead) {
