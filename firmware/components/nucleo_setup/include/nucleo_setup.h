@@ -8,7 +8,7 @@
 extern "C" {
 #endif
 
-// True once the wizard has been completed (reads /system/config/setup.json).
+// True once the wizard has been completed (reads setup.json: /cfg, then NVS, then the SD mirror).
 bool nucleo_setup_is_complete(void);
 
 // Run the on-device wizard (blocking, uses nucleo_ui) and persist the result.
@@ -88,7 +88,8 @@ void        nucleo_setup_forget(void);            // wipe ALL saved networks, dr
 bool        nucleo_setup_factory_reset(void);
 
 // ---- Known-networks store (multi-network, "real OS" Wi-Fi) -------------------
-// NucleoOS remembers every Wi-Fi it has joined (SSID+password, on power-safe flash) and, at boot
+// NucleoOS remembers every Wi-Fi it has joined (SSID+password on power-safe flash + NVS; the SD mirror
+// keeps SSIDs only — see setup_store.h) and, at boot
 // and on any drop, scans and auto-joins the BEST in-range known network (manual priority first,
 // then strongest signal) instead of only ever trying the last one. These expose that store to the
 // native Wi-Fi app and the web manager.
@@ -108,7 +109,7 @@ bool        nucleo_setup_ap_intended(void);               // true iff the hotspo
 bool        nucleo_setup_ap_active(void);                 // true whenever the SoftAP is beaconing/reachable now (chosen hotspot OR rescue fallback); a "how to reach me" UI keys on THIS
 bool        nucleo_setup_ap_rescue(void);                 // true iff the AP is up only as a temporary fallback while still trying to join a client link
 void        nucleo_setup_set_ap_ssid(const char *ssid);   // edit hotspot name (persists; applies live)
-void        nucleo_setup_set_ap_pass(const char *pass);   // "" = open AP, else WPA2 (8..63 chars)
+void        nucleo_setup_set_ap_pass(const char *pass);   // "" = open AP (kept open, never re-minted), else WPA2 (8..63 chars); 1..7 rejected
 
 // Persistence health for diagnostics (/api/diag). Reports which of the three config tiers
 // (/cfg LittleFS, NVS, SD mirror) accepted the most recent save — so "settings not saved"

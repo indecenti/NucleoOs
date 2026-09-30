@@ -1,5 +1,6 @@
 // Host gate for the three-tier config store (firmware/components/nucleo_setup/setup_store.c) behind
-// setup.json + networks.json, compiled against an in-memory NVS (nvs_host.c). Proves on the PC:
+// setup.json + networks.json, compiled against an in-memory NVS (nvs_host.c) and ESP-IDF's cJSON. The
+// SD-secret / hotspot side of the same store is setup-store-secrets-ctest.c. Proves on the PC:
 //   P1  a save fans out to /cfg, NVS and the SD mirror; each tier is independent (a dead one never
 //       blocks the others) and the SD subtree is created on demand
 //   P2  load order is /cfg -> NVS -> SD, and a fallback hit is flagged so the caller heals the rest
@@ -35,6 +36,24 @@ static const char *DOC_A = "{\"complete\":true,\"mode\":\"sta\",\"ssid\":\"Home\
                            "\"ap_ssid\":\"NucleoOS-1A2B\",\"ap_pass\":\"k7m2p9q4r8s3\"}";
 static const char *DOC_B = "{\"complete\":true,\"mode\":\"ap\",\"ssid\":\"\",\"device_name\":\"lab\"}";
 static const char *NETS  = "{\"seq\":2,\"nets\":[{\"ssid\":\"Home\",\"pass\":\"hunter22\",\"prio\":0,\"seq\":2}]}";
+// What the SD mirror holds for DOC_A: the same document without its secret (setup_store.h).
+static const char *DOC_A_SD = "{\"complete\":true,\"mode\":\"sta\",\"ssid\":\"Home\",\"device_name\":\"desk\","
+                              "\"ap_ssid\":\"NucleoOS-1A2B\"}";
+
+// The documents, as nucleo_setup.c describes them (SETUP_DOC / NETS_DOC), plus the degraded layouts.
+static const setup_doc_t D_SETUP = { CFG_SETUP,   "setup",    SD_SETUP,   "ap_pass" };
+static const setup_doc_t D_NETS  = { CFG_NETS,    "networks", SD_NETS,    "pass" };
+static const setup_doc_t D_NOSD  = { CFG_SETUP,   "setup",    NOSD_SETUP, "ap_pass" };   // no SD card
+static const setup_doc_t D_NOCFG = { NOCFG_SETUP, "setup",    SD_SETUP,   "ap_pass" };   // no /cfg partition
+static const setup_doc_t D_NONE  = { NOCFG_SETUP, "setup",    NOSD_SETUP, "ap_pass" };   // neither
+
+// Save a JSON text the way nucleo_setup does (a cJSON tree handed to the store).
+static int persist(const setup_doc_t *d, const char *text) { return setup_store_save(d, cJSON_Parse(text)); }
+static void status(bool *c, bool *v, bool *s, int *t)
+{
+    setup_store_status_t st; setup_store_status(&st);
+    *c = st.cfg_ok; *v = st.nvs_ok; *s = st.sd_ok; *t = st.tiers_ok;
+}
 
 static int exists(const char *p) { FILE *f = fopen(p, "rb"); if (!f) return 0; fclose(f); return 1; }
 static int is_dir(const char *p) { struct stat st; return stat(p, &st) == 0 && S_ISDIR(st.st_mode); }
@@ -60,10 +79,11 @@ static void nvs_del(const char *ns, const char *key)
 }
 
 // Load and compare. want == NULL: expect nothing loadable. fb: expected from_fallback (-1 = don't care).
-static int load_is(const char *cfg, const char *sd, const char *key, const char *want, int fb)
+static int load_is(const setup_doc_t *d, const char *want, int fb)
 {
-    bool from_fb = false;
-    char *got = setup_store_load(cfg, sd, key, &from_fb);
+    setup_tier_t tier; bool dirty;
+    char *got = setup_store_load(d, &tier, &dirty);
+    bool from_fb = tier != SETUP_TIER_CFG;
     int ok = want ? (got && !strcmp(got, want) && (fb < 0 || (int)from_fb == fb)) : (got == NULL);
     free(got);
     return ok;
@@ -80,38 +100,38 @@ static void t_fanout(void)
 {
     fresh();
     CHECK(!is_dir(ROOT "/sd/system"), "precondition: SD subtree not provisioned yet");
-    int n = setup_store_persist(CFG_SETUP, SD_SETUP, "setup", DOC_A);
+    int n = persist(&D_SETUP, DOC_A);
     CHECK(n == 3, "P1: save lands on all three tiers (got %d)", n);
     CHECK(is_dir(ROOT "/sd/system/config"), "P1: SD mirror subtree created on demand");
     CHECK(exists(CFG_SETUP) && exists(SD_SETUP), "P1: /cfg file + SD mirror written");
     CHECK(nvs_has(SETUP_STORE_NVS_NS, "setup"), "P1: NVS copy under nucleocfg/setup");
     CHECK(!exists(CFG_SETUP ".tmp") && !exists(SD_SETUP ".tmp"), "P1: atomic write leaves no .tmp");
     bool c = false, v = false, s = false; int t = 0;
-    setup_store_status(&c, &v, &s, &t);
+    status(&c, &v, &s, &t);
     CHECK(c && v && s && t == 3, "P1: persist status reports 3/3 tiers");
-    CHECK(load_is(CFG_SETUP, SD_SETUP, "setup", DOC_A, 0), "P2: loads from /cfg, not flagged as fallback");
-    n = setup_store_persist(CFG_SETUP, SD_SETUP, "setup", DOC_B);   // overwrite in place (SD: dest exists)
-    CHECK(n == 3 && load_is(CFG_SETUP, SD_SETUP, "setup", DOC_B, 0), "P1: re-save overwrites every tier");
+    CHECK(load_is(&D_SETUP, DOC_A, 0), "P2: loads from /cfg, not flagged as fallback");
+    n = persist(&D_SETUP, DOC_B);   // overwrite in place (SD: dest exists)
+    CHECK(n == 3 && load_is(&D_SETUP, DOC_B, 0), "P1: re-save overwrites every tier");
     remove(CFG_SETUP); nvs_del(SETUP_STORE_NVS_NS, "setup");
-    CHECK(load_is(CFG_SETUP, SD_SETUP, "setup", DOC_B, 1), "P1: the SD mirror got the overwrite too");
+    CHECK(load_is(&D_SETUP, DOC_B, 1), "P1: the SD mirror got the overwrite too");
     CHECK(nvs_host_open_handles() == 0, "no NVS handle leaked");
 }
 
 static void t_degraded(void)
 {
     fresh();
-    int n = setup_store_persist(CFG_SETUP, NOSD_SETUP, "setup", DOC_A);
+    int n = persist(&D_NOSD, DOC_A);
     CHECK(n == 2, "P1: no SD card -> /cfg + NVS still persist (got %d)", n);
-    n = setup_store_persist(NOCFG_SETUP, SD_SETUP, "setup", DOC_A);
+    n = persist(&D_NOCFG, DOC_A);
     CHECK(n == 2, "P1: no /cfg partition (launcher install) -> NVS + SD still persist (got %d)", n);
-    n = setup_store_persist(NOCFG_SETUP, NOSD_SETUP, "setup", DOC_A);
+    n = persist(&D_NONE, DOC_A);
     CHECK(n == 1, "P1: neither -> NVS alone still persists (got %d)", n);
     bool c = true, v = false, s = true; int t = 0;
-    setup_store_status(&c, &v, &s, &t);
+    status(&c, &v, &s, &t);
     CHECK(!c && v && !s && t == 1, "P1: status names the surviving tier");
-    CHECK(load_is(NOCFG_SETUP, NOSD_SETUP, "setup", DOC_A, 1), "P2: NVS-only config still loads");
+    CHECK(load_is(&D_NONE, DOC_A, 1), "P2: NVS-only config still loads");
     nvs_host_set_initialized(false);
-    n = setup_store_persist(NOCFG_SETUP, NOSD_SETUP, "setup", DOC_A);
+    n = persist(&D_NONE, DOC_A);
     CHECK(n == 0, "P1: nothing available -> 0 tiers (caller shouts)");
     nvs_host_set_initialized(true);
 }
@@ -119,68 +139,68 @@ static void t_degraded(void)
 static void t_read_order(void)
 {
     fresh();
-    setup_store_persist(CFG_SETUP, SD_SETUP, "setup", DOC_A);
+    persist(&D_SETUP, DOC_A);
     put(CFG_SETUP, DOC_B);                               // tiers disagree: /cfg must win
-    CHECK(load_is(CFG_SETUP, SD_SETUP, "setup", DOC_B, 0), "P2: /cfg wins over NVS and SD");
+    CHECK(load_is(&D_SETUP, DOC_B, 0), "P2: /cfg wins over NVS and SD");
     remove(CFG_SETUP);
-    CHECK(load_is(CFG_SETUP, SD_SETUP, "setup", DOC_A, 1), "P2: /cfg gone -> NVS answers, flagged fallback");
+    CHECK(load_is(&D_SETUP, DOC_A, 1), "P2: /cfg gone -> NVS answers, flagged fallback");
     nvs_del(SETUP_STORE_NVS_NS, "setup");
-    CHECK(load_is(CFG_SETUP, SD_SETUP, "setup", DOC_A, 1), "P2: NVS gone too -> SD mirror answers");
+    CHECK(load_is(&D_SETUP, DOC_A_SD, 1), "P2: NVS gone too -> SD mirror answers (without the hotspot password)");
     remove(SD_SETUP);
-    CHECK(load_is(CFG_SETUP, SD_SETUP, "setup", NULL, -1), "P2: no tier -> nothing (wizard runs)");
+    CHECK(load_is(&D_SETUP, NULL, -1), "P2: no tier -> nothing (wizard runs)");
     // Heal: what load_config() does after a fallback hit — a re-save restores the primary tier.
-    setup_store_persist(CFG_SETUP, SD_SETUP, "setup", DOC_A);
-    CHECK(load_is(CFG_SETUP, SD_SETUP, "setup", DOC_A, 0), "P2: re-persist heals /cfg");
+    persist(&D_SETUP, DOC_A);
+    CHECK(load_is(&D_SETUP, DOC_A, 0), "P2: re-persist heals /cfg");
 }
 
 static void t_old_reset_was_noop(void)
 {
     fresh();
-    setup_store_persist(CFG_SETUP, SD_SETUP, "setup", DOC_A);
-    setup_store_persist(CFG_NETS, SD_NETS, "networks", NETS);
+    persist(&D_SETUP, DOC_A);
+    persist(&D_NETS, NETS);
     remove(SD_SETUP); remove(SD_NETS);                   // exactly what rm_tree("/sd/system/config") did
-    CHECK(load_is(CFG_SETUP, SD_SETUP, "setup", DOC_A, 0), "P3: SD-only wipe: /cfg still has complete:true -> wizard skipped");
-    CHECK(load_is(CFG_NETS, SD_NETS, "networks", NETS, 0), "P3: SD-only wipe: saved networks survive");
+    CHECK(load_is(&D_SETUP, DOC_A, 0), "P3: SD-only wipe: /cfg still has complete:true -> wizard skipped");
+    CHECK(load_is(&D_NETS, NETS, 0), "P3: SD-only wipe: saved networks survive");
     remove(CFG_SETUP);                                   // + deleting /cfg by hand still isn't enough...
-    CHECK(load_is(CFG_SETUP, SD_SETUP, "setup", DOC_A, 1), "P3: /cfg + SD wiped: NVS still answers");
+    CHECK(load_is(&D_SETUP, DOC_A, 1), "P3: /cfg + SD wiped: NVS still answers");
 }
 
 static void t_erase(void)
 {
     fresh();
-    setup_store_persist(CFG_SETUP, SD_SETUP, "setup", DOC_A);
-    setup_store_persist(CFG_NETS, SD_NETS, "networks", NETS);
+    persist(&D_SETUP, DOC_A);
+    persist(&D_NETS, NETS);
     put(CFG_SETUP ".tmp", "{half-written");            // a save interrupted by a power cut
     put(SD_SETUP ".tmp", "{half-written");
     nvs_put("nucleoauth", "auth", "{\"pin\":\"123456\",\"tokens\":[]}");   // pairing lives in its own namespace
-    CHECK(setup_store_erase(CFG_SETUP, SD_SETUP, "setup"), "R1: erase reports success");
-    CHECK(load_is(CFG_SETUP, SD_SETUP, "setup", NULL, -1), "R1: setup.json gone from every tier");
+    CHECK(setup_store_erase(&D_SETUP), "R1: erase reports success");
+    CHECK(load_is(&D_SETUP, NULL, -1), "R1: setup.json gone from every tier");
     CHECK(!exists(CFG_SETUP) && !exists(SD_SETUP), "R1: /cfg file and SD mirror removed");
     CHECK(!exists(CFG_SETUP ".tmp") && !exists(SD_SETUP ".tmp"), "R1: .tmp leftovers removed");
     CHECK(!nvs_has(SETUP_STORE_NVS_NS, "setup"), "R1: NVS key erased");
-    CHECK(load_is(CFG_NETS, SD_NETS, "networks", NETS, 0), "R1: erase is per document (networks untouched)");
-    CHECK(setup_store_erase(CFG_NETS, SD_NETS, "networks"), "R1: networks erase reports success");
-    CHECK(load_is(CFG_NETS, SD_NETS, "networks", NULL, -1), "R1: networks.json gone from every tier");
+    CHECK(load_is(&D_NETS, NETS, 0), "R1: erase is per document (networks untouched)");
+    CHECK(setup_store_erase(&D_NETS), "R1: networks erase reports success");
+    CHECK(load_is(&D_NETS, NULL, -1), "R1: networks.json gone from every tier");
     CHECK(nvs_host_key_count(SETUP_STORE_NVS_NS) == 0, "R1: nucleocfg namespace empty");
     CHECK(nvs_has("nucleoauth", "auth"), "R1: pairing store untouched (soft reset keeps pairing)");
-    CHECK(setup_store_erase(CFG_SETUP, SD_SETUP, "setup"), "R2: erasing again is idempotent");
+    CHECK(setup_store_erase(&D_SETUP), "R2: erasing again is idempotent");
     CHECK(nvs_host_open_handles() == 0, "no NVS handle leaked");
 }
 
 static void t_erase_honest(void)
 {
     nvs_host_reset();                                    // namespace never created
-    CHECK(setup_store_erase(NOCFG_SETUP, NOSD_SETUP, "setup"), "R2: no /cfg, no SD, no namespace -> erased");
+    CHECK(setup_store_erase(&D_NONE), "R2: no /cfg, no SD, no namespace -> erased");
     CHECK(nvs_host_key_count(SETUP_STORE_NVS_NS) <= 0, "R2: nothing left in NVS");
 
     fresh();
-    setup_store_persist(CFG_SETUP, SD_SETUP, "setup", DOC_A);
+    persist(&D_SETUP, DOC_A);
     nvs_host_set_initialized(false);
-    CHECK(!setup_store_erase(CFG_SETUP, SD_SETUP, "setup"), "R2: NVS down -> erase must NOT claim success");
+    CHECK(!setup_store_erase(&D_SETUP), "R2: NVS down -> erase must NOT claim success");
     nvs_host_set_initialized(true);
-    CHECK(load_is(CFG_SETUP, SD_SETUP, "setup", DOC_A, 1), "R2: ...because the NVS copy really survived");
-    CHECK(setup_store_erase(CFG_SETUP, SD_SETUP, "setup"), "R2: retry with NVS up succeeds");
-    CHECK(load_is(CFG_SETUP, SD_SETUP, "setup", NULL, -1), "R2: and nothing loads afterwards");
+    CHECK(load_is(&D_SETUP, DOC_A, 1), "R2: ...because the NVS copy really survived");
+    CHECK(setup_store_erase(&D_SETUP), "R2: retry with NVS up succeeds");
+    CHECK(load_is(&D_SETUP, NULL, -1), "R2: and nothing loads afterwards");
 }
 
 static void t_slurp(void)
@@ -196,23 +216,23 @@ static void t_slurp(void)
 static void t_seal(void)
 {
     fresh();
-    setup_store_persist(CFG_SETUP, SD_SETUP, "setup", DOC_A);
-    setup_store_persist(CFG_NETS, SD_NETS, "networks", NETS);
+    persist(&D_SETUP, DOC_A);
+    persist(&D_NETS, NETS);
     CHECK(!setup_store_sealed(), "R3: store open before the reset");
     // The nucleo_setup_factory_reset() sequence: seal, then erase both documents.
     CHECK(setup_store_seal(), "R3: seal reports drained (no save in flight)");
     CHECK(setup_store_sealed(), "R3: sealed");
-    CHECK(setup_store_erase(CFG_SETUP, SD_SETUP, "setup") && setup_store_erase(CFG_NETS, SD_NETS, "networks"),
+    CHECK(setup_store_erase(&D_SETUP) && setup_store_erase(&D_NETS),
           "R3: both documents erased");
     // Between the reset and esp_restart(): the supervisor joins and saves, the AP mints its password.
-    int n1 = setup_store_persist(CFG_SETUP, SD_SETUP, "setup", DOC_A);
-    int n2 = setup_store_persist(CFG_NETS, SD_NETS, "networks", NETS);
+    int n1 = persist(&D_SETUP, DOC_A);
+    int n2 = persist(&D_NETS, NETS);
     CHECK(n1 == 0 && n2 == 0, "R3: sealed store refuses every save (got %d, %d)", n1, n2);
     CHECK(!exists(CFG_SETUP) && !exists(SD_SETUP) && !exists(CFG_NETS) && !exists(SD_NETS), "R3: no file came back");
     CHECK(nvs_host_key_count(SETUP_STORE_NVS_NS) == 0, "R3: no NVS key came back");
-    CHECK(load_is(CFG_SETUP, SD_SETUP, "setup", NULL, -1) && load_is(CFG_NETS, SD_NETS, "networks", NULL, -1),
+    CHECK(load_is(&D_SETUP, NULL, -1) && load_is(&D_NETS, NULL, -1),
           "R3: next boot loads nothing -> first-run wizard re-runs");
-    CHECK(setup_store_erase(CFG_SETUP, SD_SETUP, "setup"), "R3: erase still works while sealed");
+    CHECK(setup_store_erase(&D_SETUP), "R3: erase still works while sealed");
 }
 
 int main(void)

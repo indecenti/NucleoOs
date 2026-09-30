@@ -76,6 +76,9 @@ tools/emu-host/testroms/
 # games — never publish them. Keep this local-only; gg:test's real gate is zexall, not the sweep.
 build/gg-sweep/
 build/launcher-host/
+# setup-store gate scratch (host exe + cJSON.o + the fake /cfg and SD it writes Wi-Fi fixtures into)
+build/setup-store/
+build/setupstore/
 # Saves/states the emulators write into the SD simulator (native gbemu: data/Saves/<system>/)
 tools/sd-sim/data/Saves/
 # Same, when a local gbemu/ggemu session writes straight into a staged deploy/sd (personal game

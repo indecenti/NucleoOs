@@ -1,6 +1,6 @@
 #include "nucleo_setup.h"
 #include "nucleo_board.h"
-#include <sys/stat.h>   // mkdir() for the SD time.json
+#include <sys/stat.h>   // mkdir() for /sd/system/time.json
 #include "nucleo_ui.h"
 #include "nucleo_storage.h"
 #include "nucleo_app.h"
@@ -16,6 +16,8 @@
 #include "esp_event.h"
 #include "cJSON.h"
 #include "nvs.h"           // factory reset: esp_wifi's own namespace when the driver is not up
+#include "setup_store.h"   // three-tier config persistence; SD mirror without secrets (host-tested by `npm run setupstore:test`)
+#include "ap_creds.h"      // hotspot credential lifecycle incl. the deliberate open choice (host-tested, same gate)
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "freertos/semphr.h"
@@ -24,7 +26,6 @@
 #include "nucleo_i18n.h"   // first-run wizard language step + bilingual (TR) wizard strings
 #include "esp_heap_caps.h"
 #include "wifi_policy.h"   // supervisor decision core (pure C, host-tested by `npm run wifi:test`)
-#include "setup_store.h"   // three-tier config persistence (pure C, host-tested by `npm run setupstore:test`)
 #include <assert.h>
 
 static const char *TAG = "setup";
@@ -64,12 +65,10 @@ static_assert((int)WP_MODE_NULL == (int)WIFI_MODE_NULL && (int)WP_MODE_STA == (i
 } while (0)
 // Brick-class config now lives on the power-loss-safe LittleFS store (internal flash),
 // not the SD's FAT which can corrupt on a power cut mid-write. SETUP_LEGACY is the old
-// SD path: read once and migrated to /cfg so existing devices keep their setup.
+// SD path: still the SD mirror tier (without the hotspot password — see setup_store.h), and
+// read as a fallback so legacy SD-only devices migrate to /cfg and keep their setup.
 #define SETUP_JSON   NUCLEO_CFG_MOUNT "/config/setup.json"
 #define SETUP_LEGACY NUCLEO_SD_MOUNT  "/system/config/setup.json"
-#define AP_SSID_PREFIX  "NucleoOS"     // factory default hotspot name prefix; a per-device suffix is appended
-#define AP_PASS_LEGACY  "nucleoos"     // the OLD shared default — auto-upgraded to a per-device random one
-#define AP_SSID_LEGACY  "NucleoOS-Setup"   // the OLD shared default SSID — auto-upgraded to a per-device name
 
 static char s_ip[16];   // STA IP once connected (empty if not)
 
@@ -80,11 +79,10 @@ static char s_name[24] = "nucleo-01";
 // any save_config() (e.g. the AP starts and mints its per-device credentials at boot, before the wizard
 // even runs, and persisting THOSE must not mark setup complete or the wizard would be skipped forever).
 static bool s_complete = false;
-// Hotspot credentials are runtime-editable (persisted in setup.json). Empty = not yet initialised;
-// ensure_default_ap_creds() fills a per-device SSID + a RANDOM WPA2 password on first use. An empty
-// password after that means an OPEN AP; otherwise WPA2-PSK (the driver requires 8..63 chars).
-static char s_ap_ssid[33] = "";
-static char s_ap_pass[64] = "";
+// Hotspot credentials are runtime-editable (persisted in setup.json). ensure_default_ap_creds() fills a
+// per-device SSID + a RANDOM WPA2 password on first use; the user's deliberate OPEN choice is its own
+// flag (s_ap.open), so it is never re-minted. Lifecycle + JSON in ap_creds.c (host-tested).
+static ap_creds_t s_ap;
 static bool s_wifi_ready;
 // STA-ONLY posture (a streaming Solo boot, e.g. the Radio). The SoftAP interface + config cost real
 // RAM on this PSRAM-less chip and nobody can use a setup hotspot inside a dedicated one-app boot —
@@ -212,42 +210,51 @@ static void on_wifi_event(void *arg, esp_event_base_t base, int32_t id, void *da
 }
 
 // ---- persistence -----------------------------------------------------------
-// Config MUST survive a reboot on ANY install, including the worst case a user can hit: a firmware
-// loaded through a third-party launcher that lacks our custom partition table (so the /cfg LittleFS
-// store never mounts) AND with no SD card inserted. setup_store.c therefore writes every document to
-// three INDEPENDENT tiers — /cfg LittleFS, NVS, SD mirror — and reads them back in that order; the
-// loader re-persists a copy recovered from a fallback tier so any missing tier heals on the next save.
-// It is plain C (host-tested: `npm run setupstore:test`); see setup_store.h.
+// Three tiers (/cfg LittleFS -> NVS -> SD mirror) behind setup_store.c, which is host-gated
+// (`npm run setupstore:test`). Each document names its secret: the SD mirror is written WITHOUT it,
+// because the card is removable and readable by anyone who pulls it. See setup_store.h.
+static const setup_doc_t SETUP_DOC = { SETUP_JSON, "setup", SETUP_LEGACY, "ap_pass" };
 
 static void save_config(void);   // fwd: load may re-persist when recovering from a fallback tier
 static bool s_cfg_loaded;        // a config doc was parsed once: RAM (s_mode/s_ssid/s_complete) is now authoritative
 
 static bool load_config(void)
 {
-    // Try /cfg, then the NVS fallback, then the SD backup (covers the legacy SD-only layout too).
-    bool from_fallback = false;
-    char *txt = setup_store_load(SETUP_JSON, SETUP_LEGACY, "setup", &from_fallback);
+    // Try /cfg, then the NVS fallback, then the SD mirror (covers the legacy SD-only layout too).
+    setup_tier_t tier; bool sd_dirty;
+    char *txt = setup_store_load(&SETUP_DOC, &tier, &sd_dirty);
     if (!txt) return false;
+    bool from_fallback = tier != SETUP_TIER_CFG;
     cJSON *r = cJSON_Parse(txt); free(txt);
     if (!r) return false;
     cJSON *c = cJSON_GetObjectItem(r, "complete");
     cJSON *m = cJSON_GetObjectItem(r, "mode");
     cJSON *s = cJSON_GetObjectItem(r, "ssid");
     cJSON *n = cJSON_GetObjectItem(r, "device_name");
-    cJSON *as = cJSON_GetObjectItem(r, "ap_ssid");
-    cJSON *ap = cJSON_GetObjectItem(r, "ap_pass");
     if (cJSON_IsString(m)) strncpy(s_mode, m->valuestring, sizeof(s_mode) - 1);
     if (cJSON_IsString(s)) strncpy(s_ssid, s->valuestring, sizeof(s_ssid) - 1);
     if (cJSON_IsString(n)) strncpy(s_name, n->valuestring, sizeof(s_name) - 1);
-    if (cJSON_IsString(as) && as->valuestring[0]) strncpy(s_ap_ssid, as->valuestring, sizeof(s_ap_ssid) - 1);
-    if (cJSON_IsString(ap)) strncpy(s_ap_pass, ap->valuestring, sizeof(s_ap_pass) - 1);
+    ap_creds_load(&s_ap, r);                  // ap_ssid / ap_pass / ap_open
     bool complete = cJSON_IsTrue(c);
     s_cfg_loaded = true;
     s_complete = complete;                    // reflect the persisted flag so later save_config()s preserve it
     cJSON_Delete(r);
-    // Recovered from NVS or the SD backup (e.g. /cfg absent on a launcher install, or the legacy
-    // SD-only layout): rewrite everywhere so every available tier holds a fresh copy next boot.
-    if (from_fallback && complete) { save_config(); ESP_LOGI(TAG, "setup recovered from fallback tier — re-persisted to all tiers"); }
+    // The SD mirror never carries the hotspot password: after a flash wipe start_ap() mints a new one
+    // (an OPEN hotspot stays open — "ap_open" is not a secret and is kept on the card).
+    if (tier == SETUP_TIER_SD && !sd_dirty && !s_ap.open)
+        ESP_LOGW(TAG, "setup recovered from the SD mirror — hotspot password is not kept on the card, a new one will be set");
+    // Recovered from NVS or the SD mirror (e.g. /cfg absent on a launcher install, or the legacy
+    // SD-only layout): rewrite everywhere so every available tier holds a fresh copy next boot. A card
+    // still holding the password in plaintext (older firmware) is rewritten now, redacted — once per
+    // boot: load_config() re-runs on every Wi-Fi app exit, and a read-only card would otherwise cost a
+    // full /cfg + NVS rewrite each time (the store already deletes a dirty copy it can't rewrite).
+    static bool s_scrub_tried;
+    if (sd_dirty && s_scrub_tried) sd_dirty = false;
+    if (sd_dirty) s_scrub_tried = true;
+    if ((from_fallback && complete) || sd_dirty) {
+        save_config();
+        ESP_LOGI(TAG, "setup re-persisted to all tiers (%s)", sd_dirty ? "SD mirror scrubbed of the hotspot password" : "recovered from fallback tier");
+    }
     return complete;
 }
 
@@ -255,24 +262,25 @@ static void save_config(void)
 {
     // Serialize with cJSON — it ESCAPES quotes/backslashes in the user-supplied strings (device name is
     // free-text; SSIDs/passwords can contain " or \). Hand-rolled snprintf JSON would emit a malformed
-    // document that setup_store_persist then fans out IDENTICALLY to all three tiers, so cJSON_Parse fails
-    // everywhere on next boot -> load_config() returns false -> the first-run wizard re-runs and the
-    // config resets. Then fan out best-effort (no early return: a dead /cfg must not stop NVS + SD).
+    // document that the store then fans out to all three tiers, so cJSON_Parse fails everywhere on next
+    // boot -> load_config() returns false -> the first-run wizard re-runs and the config resets. The
+    // store fans out best-effort (a dead /cfg must not stop NVS + SD) and drops "ap_pass" from the SD copy.
+    // Any failed add (OOM) aborts: a partial document would overwrite the good one on every tier.
     cJSON *r = cJSON_CreateObject();
-    if (!r) return;
-    cJSON_AddBoolToObject(r,   "complete",    s_complete);   // true only after the wizard finishes (see s_complete)
-    cJSON_AddStringToObject(r, "mode",        s_mode);
-    cJSON_AddStringToObject(r, "ssid",        s_ssid);
-    cJSON_AddStringToObject(r, "device_name", s_name);
-    cJSON_AddStringToObject(r, "ap_ssid",     s_ap_ssid);
-    cJSON_AddStringToObject(r, "ap_pass",     s_ap_pass);
-    char *txt = cJSON_PrintUnformatted(r);
-    cJSON_Delete(r);
-    if (!txt) return;
-    s_cfg_loaded = true;                      // what we persist IS the config now (wizard / first web join): RAM is authoritative
-    int tiers = setup_store_persist(SETUP_JSON, SETUP_LEGACY, "setup", txt);
-    if (tiers == 0 && !setup_store_sealed()) ESP_LOGE(TAG, "save_config: NO persistence tier available — settings will not survive reboot");
-    free(txt);
+    if (!r ||
+        !cJSON_AddBoolToObject(r,   "complete",    s_complete) ||   // true only after the wizard finishes (see s_complete)
+        !cJSON_AddStringToObject(r, "mode",        s_mode) ||
+        !cJSON_AddStringToObject(r, "ssid",        s_ssid) ||
+        !cJSON_AddStringToObject(r, "device_name", s_name) ||
+        !ap_creds_save(&s_ap, r)) {           // ap_ssid, ap_pass (/cfg + NVS only — never the SD mirror), ap_open
+        cJSON_Delete(r);
+        ESP_LOGE(TAG, "save_config: out of memory — not persisted");
+        return;
+    }
+    int tiers = setup_store_save(&SETUP_DOC, r);   // takes ownership of r
+    if (tiers >= 0) s_cfg_loaded = true;           // what we persist IS the config now (wizard / first web join): RAM is authoritative
+    if (tiers < 0)  ESP_LOGE(TAG, "save_config: out of memory — not persisted");
+    else if (tiers == 0 && !setup_store_sealed()) ESP_LOGE(TAG, "save_config: NO persistence tier available — settings will not survive reboot");
 }
 
 // ---- known-networks store (multi-network) ----------------------------------
@@ -280,8 +288,9 @@ static void save_config(void)
 // successfully joined (SSID + password + manual priority + recency stamp) so the device can scan
 // and pick the best in-range one instead of only ever retrying the last network.
 #define NETS_JSON  NUCLEO_CFG_MOUNT "/config/networks.json"
-#define NETS_SD    NUCLEO_SD_MOUNT  "/system/config/networks.json"   // redundant SD backup of saved networks
+#define NETS_SD    NUCLEO_SD_MOUNT  "/system/config/networks.json"   // SD mirror: SSIDs + prio + seq, NO passwords
 #define MAX_NETS   16
+static const setup_doc_t NETS_DOC = { NETS_JSON, "networks", NETS_SD, "pass" };
 typedef struct { char ssid[33]; char pass[64]; uint8_t prio; uint32_t seq; } known_net_t;
 static known_net_t s_nets[MAX_NETS];
 static int      s_net_n = 0;
@@ -294,8 +303,8 @@ static void load_networks(void)
 {
     if (s_nets_loaded) return;
     s_nets_loaded = true;
-    bool from_fallback = false;
-    char *txt = setup_store_load(NETS_JSON, NETS_SD, "networks", &from_fallback);   // /cfg -> NVS -> SD
+    setup_tier_t tier; bool sd_dirty;
+    char *txt = setup_store_load(&NETS_DOC, &tier, &sd_dirty);   // /cfg -> NVS -> SD
     if (!txt) return;
     cJSON *r = cJSON_Parse(txt); free(txt);
     if (!r) return;
@@ -311,7 +320,9 @@ static void load_networks(void)
         cJSON *pr = cJSON_GetObjectItem(it, "prio");
         cJSON *sq = cJSON_GetObjectItem(it, "seq");
         strncpy(s_nets[k].ssid, s->valuestring, 32); s_nets[k].ssid[32] = 0;
+        // No "pass" = recovered from the SD mirror, which never holds one: known SSID, password needed.
         if (cJSON_IsString(p)) { strncpy(s_nets[k].pass, p->valuestring, 63); s_nets[k].pass[63] = 0; }
+        else s_nets[k].pass[0] = 0;
         s_nets[k].prio = cJSON_IsNumber(pr) ? (uint8_t)pr->valueint : 0;
         s_nets[k].seq  = cJSON_IsNumber(sq) ? (uint32_t)sq->valuedouble : 0;
         if (s_nets[k].seq > s_net_seq) s_net_seq = s_nets[k].seq;
@@ -319,29 +330,32 @@ static void load_networks(void)
     }
     s_net_n = k;
     cJSON_Delete(r);
-    if (from_fallback && s_net_n > 0) save_networks();   // heal /cfg (+ any other tier) from the recovered copy
+    if (tier == SETUP_TIER_SD && !sd_dirty && s_net_n > 0)
+        ESP_LOGW(TAG, "%d saved network(s) recovered from the SD mirror without passwords — re-enter them in Wi-Fi", s_net_n);
+    // Heal /cfg (+ any other tier) from a recovered copy, and rewrite an SD mirror that an older firmware
+    // left holding the passwords in plaintext (the parsed RAM copy keeps them; the card gets them stripped).
+    if ((tier != SETUP_TIER_CFG && s_net_n > 0) || sd_dirty) save_networks();
 }
 
 static void save_networks(void)
 {
+    // Any failed add (OOM) aborts: a net persisted without its "pass" would lose the password on
+    // /cfg + NVS too (it would load back as "known, password needed").
     cJSON *r = cJSON_CreateObject();
-    if (!r) return;
-    cJSON_AddNumberToObject(r, "seq", s_net_seq);
-    cJSON *arr = cJSON_AddArrayToObject(r, "nets");
-    for (int i = 0; i < s_net_n; i++) {
+    cJSON *arr = (r && cJSON_AddNumberToObject(r, "seq", s_net_seq)) ? cJSON_AddArrayToObject(r, "nets") : NULL;
+    bool ok = arr != NULL;
+    for (int i = 0; ok && i < s_net_n; i++) {
         cJSON *o = cJSON_CreateObject();
-        cJSON_AddStringToObject(o, "ssid", s_nets[i].ssid);
-        cJSON_AddStringToObject(o, "pass", s_nets[i].pass);
-        cJSON_AddNumberToObject(o, "prio", s_nets[i].prio);
-        cJSON_AddNumberToObject(o, "seq",  s_nets[i].seq);
-        cJSON_AddItemToArray(arr, o);
+        ok = o && cJSON_AddItemToArray(arr, o) &&
+             cJSON_AddStringToObject(o, "ssid", s_nets[i].ssid) &&
+             cJSON_AddStringToObject(o, "pass", s_nets[i].pass) &&   // /cfg + NVS only — stripped from the SD mirror
+             cJSON_AddNumberToObject(o, "prio", s_nets[i].prio) &&
+             cJSON_AddNumberToObject(o, "seq",  s_nets[i].seq);
     }
-    char *txt = cJSON_PrintUnformatted(r);
-    cJSON_Delete(r);
-    if (!txt) return;
-    int tiers = setup_store_persist(NETS_JSON, NETS_SD, "networks", txt);   // /cfg + NVS + SD, best-effort
-    if (tiers == 0 && !setup_store_sealed()) ESP_LOGE(TAG, "save_networks: NO persistence tier available");
-    free(txt);
+    if (!ok) { cJSON_Delete(r); ESP_LOGE(TAG, "save_networks: out of memory — not persisted"); return; }
+    int tiers = setup_store_save(&NETS_DOC, r);   // /cfg + NVS + SD, best-effort; takes ownership of r
+    if (tiers < 0)  ESP_LOGE(TAG, "save_networks: out of memory — not persisted");
+    else if (tiers == 0 && !setup_store_sealed()) ESP_LOGE(TAG, "save_networks: NO persistence tier available");
 }
 
 static int net_find(const char *ssid)
@@ -512,40 +526,23 @@ static void connect_sta(const char *ssid, const char *pass)
     if (s_ip[0]) net_remember(ssid, pass);   // every successful join is added to the known list
 }
 
-// True iff the hotspot is ACTUALLY secured. WPA2-PSK needs an 8..63 char key; a 1..7 char password is
-// invalid and the driver would fall back to OPEN. Every UI must read this, not s_ap_pass[0], so the
-// screen never claims a password on an AP that is actually open.
-static bool ap_secure(void) { return strlen(s_ap_pass) >= 8; }
+// True iff the hotspot is ACTUALLY secured (WPA2-PSK needs 8..63 chars). Every UI must read this, not
+// the password's first byte, so the screen never claims a password on an AP that is actually open.
+static bool ap_secure(void) { return ap_creds_secure(&s_ap); }
 
-// Fill per-device factory defaults for the hotspot on first use, and upgrade the old SHARED defaults.
-// Security: the default password is RANDOM (hardware RNG), NOT derived from the MAC — this firmware is
-// open source and the soft-AP broadcasts its MAC as the BSSID, so any MAC-based scheme would be publicly
-// reproducible. The SSID gets a per-device suffix (not secret, just to avoid two units colliding). The
-// freshly-minted default is persisted once (robust 3-tier save) and shown on the device screen, so it is
+// Per-device factory defaults on first use + upgrade of the old SHARED defaults (ap_creds_ensure: random
+// WPA2 key from the hardware RNG, never MAC-derived). A deliberately OPEN hotspot is left open. The
+// freshly-minted default is persisted once (3-tier save) and shown on the device screen, so it is
 // stable across reboots and always discoverable by the owner.
 static void ensure_default_ap_creds(void)
 {
-    bool changed = false;
-    // Upgrade path: a device still on the old shared "nucleoos" / "NucleoOS-Setup" defaults gets fresh
-    // per-device credentials. (A user who set their own values never matches these exact strings.)
-    if (!strcmp(s_ap_pass, AP_PASS_LEGACY)) { s_ap_pass[0] = 0; ESP_LOGW(TAG, "upgrading shared default AP password -> per-device random"); }
-    if (!strcmp(s_ap_ssid, AP_SSID_LEGACY))   s_ap_ssid[0] = 0;
-
-    if (!s_ap_ssid[0]) {
-        uint8_t mac[6] = {0};
-        esp_read_mac(mac, ESP_MAC_WIFI_SOFTAP);
-        snprintf(s_ap_ssid, sizeof s_ap_ssid, "%s-%02X%02X", AP_SSID_PREFIX, mac[4], mac[5]);
-        changed = true;
+    if (!strcmp(s_ap.pass, AP_CREDS_PASS_LEGACY)) ESP_LOGW(TAG, "upgrading shared default AP password -> per-device random");
+    uint8_t mac[6] = {0};
+    esp_read_mac(mac, ESP_MAC_WIFI_SOFTAP);
+    if (ap_creds_ensure(&s_ap, mac, esp_random)) {
+        save_config();
+        ESP_LOGI(TAG, "hotspot default set: SSID '%s' (per-device)", s_ap.ssid);
     }
-    if (!s_ap_pass[0]) {
-        static const char AB[] = "abcdefghjkmnpqrstuvwxyz23456789";   // 30 chars, no ambiguous 0/O/1/I/l
-        char p[13];
-        for (int i = 0; i < 12; i++) p[i] = AB[esp_random() % (sizeof(AB) - 1)];   // ~59 bits entropy
-        p[12] = 0;
-        snprintf(s_ap_pass, sizeof s_ap_pass, "%s", p);              // 12 chars, WPA2-valid
-        changed = true;
-    }
-    if (changed) { save_config(); ESP_LOGI(TAG, "hotspot default set: SSID '%s' (per-device)", s_ap_ssid); }
 }
 
 static void start_ap(void)
@@ -554,16 +551,17 @@ static void start_ap(void)
     s_want_sta = false;                 // AP mode: stop trying to reconnect as a client
     ensure_default_ap_creds();          // per-device SSID + random WPA2 password on first use (persists once)
     wifi_config_t wc = {0};
-    strncpy((char *)wc.ap.ssid, s_ap_ssid, sizeof(wc.ap.ssid) - 1);
+    strncpy((char *)wc.ap.ssid, s_ap.ssid, sizeof(wc.ap.ssid) - 1);
     bool secure = ap_secure();                                               // WPA2 needs >=8; else OPEN
-    if (secure) strncpy((char *)wc.ap.password, s_ap_pass, sizeof(wc.ap.password) - 1);
-    else if (s_ap_pass[0]) ESP_LOGW(TAG, "AP password too short (<8) — starting OPEN");
+    if (secure) strncpy((char *)wc.ap.password, s_ap.pass, sizeof(wc.ap.password) - 1);
+    else if (s_ap.pass[0]) ESP_LOGW(TAG, "AP password too short (<8) — starting OPEN");
+    else ESP_LOGW(TAG, "hotspot is OPEN (user's choice) — no WPA2");
     wc.ap.max_connection = 2;
     wc.ap.authmode = secure ? WIFI_AUTH_WPA2_PSK : WIFI_AUTH_OPEN;
     wc.ap.pmf_cfg.capable = true;                                            // advertise 802.11w PMF (harden mgmt frames)
     WIFI_TRY(esp_wifi_set_config(WIFI_IF_AP, &wc));
     WIFI_TRY(esp_wifi_set_mode(WIFI_MODE_AP));
-    strncpy(s_ssid, s_ap_ssid, sizeof(s_ssid) - 1);
+    strncpy(s_ssid, s_ap.ssid, sizeof(s_ssid) - 1);
 }
 
 // ---- non-blocking Wi-Fi control for the native Wi-Fi app --------------------
@@ -810,6 +808,17 @@ bool nucleo_setup_join(const char *ssid, const char *pass)
     // the stored one (an open network simply has an empty stored password).
     const char *use_pass = pass ? pass : "";
     if (!use_pass[0]) { load_networks(); int idx = net_find(ssid); if (idx >= 0 && s_nets[idx].pass[0]) use_pass = s_nets[idx].pass; }
+    // Still no password for a network the last scan saw SECURED (typically a saved net recovered from
+    // the password-free SD mirror): the join cannot succeed, so fail BEFORE touching the radio — no
+    // dropped link to the current network, no empty password written over the driver's NVS creds.
+    if (!use_pass[0]) {
+        for (int i = 0; i < s_wscan_n; i++)
+            if (!strcmp(s_wscan[i].ssid, ssid) && s_wscan[i].auth != WIFI_AUTH_OPEN) {
+                ESP_LOGW(TAG, "join '%s' refused: secured network and no password stored or given", ssid);
+                if (s_wifi_op_lock) xSemaphoreGive(s_wifi_op_lock);
+                return false;
+            }
+    }
     esp_wifi_disconnect();
     strncpy(s_ssid, ssid, sizeof(s_ssid) - 1); s_ssid[sizeof(s_ssid) - 1] = 0;
     connect_sta(ssid, use_pass);               // remembers the net on success
@@ -877,8 +886,8 @@ bool nucleo_setup_factory_reset(void)
 {
     s_auto = false; s_want_sta = false;          // the supervisor starts no new join cycle...
     bool ok = setup_store_seal();                // ...and every later save is refused until reboot
-    ok = setup_store_erase(SETUP_JSON, SETUP_LEGACY, "setup") && ok;
-    ok = setup_store_erase(NETS_JSON, NETS_SD, "networks") && ok;
+    ok = setup_store_erase(&SETUP_DOC) && ok;
+    ok = setup_store_erase(&NETS_DOC) && ok;
     s_net_n = 0; s_net_seq = 0; s_nets_loaded = true; s_complete = false;   // RAM matches the erased store
     if (s_wifi_ready) {
         // esp_wifi_restore() is the driver's own reset (what ESP-IDF's wifi_prov_mgr_reset_provisioning()
@@ -948,8 +957,8 @@ void nucleo_setup_reconnect_best(void)
     if (!connect_best_known()) { start_ap(); strncpy(s_mode, "ap", sizeof(s_mode) - 1); }
 }
 void        nucleo_setup_set_device_name(const char *n) { if (n && n[0]) { strncpy(s_name, n, sizeof(s_name) - 1); s_name[sizeof(s_name) - 1] = 0; save_config(); } }
-const char *nucleo_setup_ap_ssid(void)           { return s_ap_ssid; }
-const char *nucleo_setup_ap_pass(void)           { return s_ap_pass; }
+const char *nucleo_setup_ap_ssid(void)           { return s_ap.ssid; }
+const char *nucleo_setup_ap_pass(void)           { return s_ap.pass; }
 bool        nucleo_setup_ap_secure(void)         { return ap_secure(); }
 // The hotspot is the user's DELIBERATE choice only when we are NOT auto-joining a client link. During a
 // STA-intended boot with a saved network out of range, apply_network() runs the AP as a reachable
@@ -973,7 +982,10 @@ bool        nucleo_setup_ap_rescue(void)         { return !s_sta_only && s_auto 
 void nucleo_setup_persist_status(nucleo_persist_status_t *out)
 {
     if (!out) return;
-    setup_store_status(&out->cfg_ok, &out->nvs_ok, &out->sd_ok, &out->tiers_ok);   // tiers_ok -1 = no save yet this boot
+    setup_store_status_t st;
+    setup_store_status(&st);
+    out->cfg_ok = st.cfg_ok; out->nvs_ok = st.nvs_ok; out->sd_ok = st.sd_ok;
+    out->tiers_ok = st.tiers_ok;   // -1 = no save yet this boot
 }
 
 // Edit the hotspot credentials. SSID must be non-empty; password is "" (open) or 8..63 (WPA2).
@@ -981,20 +993,20 @@ void nucleo_setup_persist_status(nucleo_persist_status_t *out)
 void nucleo_setup_set_ap_ssid(const char *s)
 {
     if (!s || !s[0]) return;
-    strncpy(s_ap_ssid, s, sizeof(s_ap_ssid) - 1); s_ap_ssid[sizeof(s_ap_ssid) - 1] = 0;
+    strncpy(s_ap.ssid, s, sizeof(s_ap.ssid) - 1); s_ap.ssid[sizeof(s_ap.ssid) - 1] = 0;
     save_config();
     if (!strcmp(s_mode, "ap")) start_ap();           // apply live if the hotspot is up
 }
 void nucleo_setup_set_ap_pass(const char *p)
 {
-    if (!p) return;
-    // Enforce the WPA2 invariant AT the setter, not only in UI callers: "" = intentional OPEN, but a
-    // 1..7 char password is invalid and would make start_ap() silently launch an OPEN hotspot while the
-    // UI still shows a password. Reject it here so no future caller (web API, ANIMA action) can ship an
-    // accidentally-open AP. (esp. see ap_secure().)
-    size_t len = strlen(p);
-    if (len > 0 && len < 8) { ESP_LOGW(TAG, "AP password rejected: %u chars (need 0 or 8..63)", (unsigned)len); return; }
-    strncpy(s_ap_pass, p, sizeof(s_ap_pass) - 1); s_ap_pass[sizeof(s_ap_pass) - 1] = 0;
+    // Enforce the WPA2 invariant AT the setter, not only in UI callers: "" = deliberate OPEN (kept open
+    // across restarts — ap_creds records the choice), but a 1..7 char password is invalid and would make
+    // start_ap() silently launch an OPEN hotspot while the UI still shows a password. Reject it here so
+    // no future caller (web API, ANIMA action) can ship an accidentally-open AP. (See ap_secure().)
+    if (!ap_creds_set_pass(&s_ap, p)) {
+        ESP_LOGW(TAG, "AP password rejected: %u chars (need 0 or 8..63)", p ? (unsigned)strlen(p) : 0u);
+        return;
+    }
     save_config();
     if (!strcmp(s_mode, "ap")) start_ap();
 }
@@ -1063,7 +1075,7 @@ void nucleo_setup_choose_network(void)
     strncpy(s_mode, "ap", sizeof(s_mode) - 1);
     start_ap();
     save_config();
-    char apline[80]; snprintf(apline, sizeof apline, "%s / %s", s_ap_ssid, ap_secure() ? s_ap_pass : "open");
+    char apline[80]; snprintf(apline, sizeof apline, "%s / %s", s_ap.ssid, ap_secure() ? s_ap.pass : "open");
     const char *apok[] = { "Access Point ready", apline, "http://192.168.4.1/" };
     nucleo_ui_message("Network", apok, 3);
 }
@@ -1077,7 +1089,7 @@ static void build_info(char *l1, char *l2, char *l3)
         if (s_ip[0]) snprintf(base, sizeof(base), "http://%s", s_ip);
         else snprintf(base, sizeof(base), "http://%s.local", s_name);
     } else {
-        snprintf(l1, 48, "AP: %s (%s)", s_ap_ssid, ap_secure() ? s_ap_pass : "open");
+        snprintf(l1, 48, "AP: %s (%s)", s_ap.ssid, ap_secure() ? s_ap.pass : "open");
         snprintf(base, sizeof(base), "http://192.168.4.1");
     }
     snprintf(l2, 48, "Open: %s/", base);
@@ -1143,8 +1155,8 @@ static void wizard_network(void)
     strncpy(s_mode, "ap", sizeof(s_mode) - 1);
     start_ap();                                            // mints the per-device SSID + random password
     save_config();
-    char ssidline[56]; snprintf(ssidline, sizeof ssidline, "Wi-Fi: %s", s_ap_ssid);
-    char passline[80]; snprintf(passline, sizeof passline, "%s %s", TR("Password:", "Password:"), ap_secure() ? s_ap_pass : TR("(aperta)", "(open)"));
+    char ssidline[56]; snprintf(ssidline, sizeof ssidline, "Wi-Fi: %s", s_ap.ssid);
+    char passline[80]; snprintf(passline, sizeof passline, "%s %s", TR("Password:", "Password:"), ap_secure() ? s_ap.pass : TR("(aperta)", "(open)"));
     const char *info[] = { TR("Collega PC/telefono al Wi-Fi:", "Connect your PC/phone to Wi-Fi:"), ssidline, passline, "http://192.168.4.1/" };
     nucleo_ui_message(TR("Access Point attivo", "Access Point ready"), info, 4);
 }
@@ -1282,7 +1294,7 @@ esp_err_t nucleo_setup_apply_network(void)
     } else {
         s_auto = false;
         start_ap();
-        ESP_LOGI(TAG, "started Access Point '%s'", s_ap_ssid);
+        ESP_LOGI(TAG, "started Access Point '%s'", s_ap.ssid);
     }
     return ESP_OK;
 }
@@ -1345,7 +1357,7 @@ void nucleo_setup_show_home(void)
         if (s_ip[0]) snprintf(base, sizeof(base), "http://%s", s_ip);
         else         snprintf(base, sizeof(base), "http://%s.local", s_name);
     } else {
-        snprintf(l1, sizeof(l1), "AP: %s (%s)", s_ap_ssid, ap_secure() ? s_ap_pass : "open");
+        snprintf(l1, sizeof(l1), "AP: %s (%s)", s_ap.ssid, ap_secure() ? s_ap.pass : "open");
         snprintf(base, sizeof(base), "http://192.168.4.1");
     }
     snprintf(l2, sizeof(l2), "Open: %s/", base);
@@ -1372,6 +1384,6 @@ void nucleo_setup_fast_start(void)
     } else {
         s_auto = false;
         start_ap();
-        ESP_LOGI(TAG, "fast start: AP-only '%s'", s_ap_ssid);
+        ESP_LOGI(TAG, "fast start: AP-only '%s'", s_ap.ssid);
     }
 }

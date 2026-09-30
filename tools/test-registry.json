@@ -1738,8 +1738,8 @@
       "anima": false
     },
     {
-      "id": "gate-setup-store-reset",
-      "label": "setup-store (reset)",
+      "id": "gate-setup-store-reset-sd-secrets",
+      "label": "setup-store (reset + SD secrets)",
       "category": "connect-transfer",
       "kind": "gate",
       "cmd": "node",

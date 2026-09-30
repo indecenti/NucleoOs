@@ -494,13 +494,18 @@ const gates = [
     // a failed cycle, and a failed one-shot join never arms the retry loop. 160 assertions incl. a full
     // replay of the issue story and uint32 ms wraparound. Pure C, no device.
     ok: (code) => code === 0, summary: (o) => (o.match(/wifi-policy: [^\n]*/) || [lastLine(o)])[0].trim() },
-  { name: 'setup-store (reset)', cmd: 'node', args: ['tools/anima-host/setup-store-check.mjs'],
-    // The three-tier config store behind setup.json + networks.json (firmware/components/nucleo_setup/
-    // setup_store.c), host-compiled with MinGW against an in-memory NVS: fan-out to /cfg + NVS + SD with
-    // independent tiers, /cfg -> NVS -> SD read order, and the Settings ▸ Reset contract — erase EVERY
-    // tier (the old SD-only wipe left /cfg/NVS answering, so the wizard never re-ran), report an
-    // uninitialised NVS as a failure, and a sealed store refuses the supervisor's racing re-save. Pure C.
-    ok: (code) => code === 0, summary: (o) => (o.match(/setup-store: [^\n]*/) || [lastLine(o)])[0].trim() },
+  { name: 'setup-store (reset + SD secrets)', cmd: 'node', args: ['tools/anima-host/setup-store-check.mjs'],
+    // nucleo_setup's three-tier config store (firmware/components/nucleo_setup/setup_store.c) + the hotspot
+    // credential core (ap_creds.c), host-compiled with MinGW against ESP-IDF's real cJSON and an in-memory
+    // NVS. Reset contract: fan-out to /cfg + NVS + SD with independent tiers, /cfg -> NVS -> SD read order,
+    // Settings ▸ Reset erases EVERY tier (the old SD-only wipe left /cfg/NVS answering), an uninitialised
+    // NVS is reported as a failure, a sealed store refuses a racing re-save. SD secrets: the removable SD
+    // mirror NEVER holds a Wi-Fi or hotspot password (by name, value or raw bytes) while /cfg + NVS keep
+    // them; flash-wipe / launcher-install / no-card / legacy-plaintext-card recovery still work; an
+    // allocation failure at every malloc of a save never leaks the full text onto the card; a deliberately
+    // OPEN hotspot is never re-minted to a password. Plus a static drift guard on the persisted members.
+    ok: (code) => code === 0, summary: (o) => (o.match(/setup-store: d+ passed[^
+]*/) || [lastLine(o)])[0].trim() },
   { name: 'update-policy (release)', cmd: 'node', args: ['tools/anima-host/update-check.mjs'],
     // The native release-update decision core (firmware/components/nucleo_app/update_policy.c), host-
     // compiled with MinGW — the SAME C that runs on the device. Proves semver-triplet parse/compare

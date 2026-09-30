@@ -70,36 +70,84 @@ selected row; lists scroll when longer than the viewport.
 
 ## Persistence
 
-Saved as `setup.json` to **three independent tiers**, so it survives any install (even a firmware
-loaded without the custom partition table, and a device with no SD card): `/cfg/config/setup.json`
-on the internal LittleFS (primary), an NVS copy, and an SD mirror at `/system/config/setup.json`.
-They are read in that order — the first one that answers wins — and a copy recovered from NVS or the
-SD is re-written to every tier. The wizard therefore also runs on a device with no SD card inserted.
+Two documents — `setup.json` (wizard result + hotspot) and `networks.json` (every Wi-Fi joined) —
+are written by `firmware/components/nucleo_setup/setup_store.c` to three **independent** tiers,
+each best-effort so one failure never blocks the others. Loads read them in this order and the
+first tier that answers wins, and a copy recovered from NVS or the SD is re-written to every tier.
+The wizard therefore also runs on a device with no SD card inserted.
+
+| Tier | Where | Holds |
+|---|---|---|
+| 1. `/cfg` LittleFS (internal flash, power-loss-safe) | `/cfg/config/setup.json`, `/cfg/config/networks.json` | full document |
+| 2. NVS, namespace `nucleocfg` | keys `setup`, `networks` | full document |
+| 3. SD mirror | `/sd/system/config/setup.json`, `/sd/system/config/networks.json` | document **without secrets** |
+
+Full documents (tiers 1–2):
 
 ```json
 { "complete": true, "mode": "sta", "ssid": "HomeWiFi", "device_name": "nucleo-01",
-  "ap_ssid": "NucleoOS-XXXX", "ap_pass": "<per-device hotspot password>" }
+  "ap_ssid": "NucleoOS-1A2B", "ap_pass": "<random 12 chars>", "ap_open": false }
+
+{ "seq": 9, "nets": [ { "ssid": "HomeWiFi", "pass": "<wifi password>", "prio": 2, "seq": 7 } ] }
 ```
 
+The SD mirror is the same document with every `ap_pass` / `pass` member removed.
+
 - `complete: true` makes `nucleo_setup_is_complete()` return true → the wizard is skipped.
-- **Joined Wi-Fi networks** (SSID + password + priority, up to 16) live in a sibling `networks.json`,
-  persisted to the same three tiers (`/cfg/config/networks.json`, NVS, and the SD mirror
-  `/system/config/networks.json`); esp_wifi also keeps the current credentials in NVS
-  (`WIFI_STORAGE_FLASH`). Note that the SD mirrors of both files hold the Wi-Fi and hotspot
-  passwords in plaintext.
+- **Hotspot password** (`ap_creds.c`): on first use the device mints a per-device SSID and a
+  random 12-char WPA2 password. The user can set their own (8–63 chars; 1–7 is rejected because
+  the driver would silently start an open AP) or clear it for an **open** hotspot. That choice is
+  `ap_open: true` — its own flag, because an empty `ap_pass` alone also means "not minted yet",
+  and firmware before this flag re-minted a password over the open choice on every AP restart.
+  `ap_open` is not a secret, so it stays in the SD mirror; a stale `ap_open` next to a stored
+  password is ignored (the password wins), and a document without the flag (older firmware)
+  counts as not open.
 - On every later boot, `nucleo_setup_apply_network()` reads the mode: for STA it brings the AP up at
   once (the device is reachable immediately) and lets the background Wi-Fi supervisor join the best
   saved network; otherwise it starts the AP.
-
-The three-tier store is `firmware/components/nucleo_setup/setup_store.c` — plain C, host-tested
-by `npm run setupstore:test` (fan-out, read order, and the reset contract below).
+- **No password is ever written to the card.** Wi-Fi and hotspot passwords live only on internal
+  flash (`/cfg` + NVS; esp_wifi also keeps the current station credentials in its own NVS). The
+  card is removable, unencrypted FAT and served to paired clients by `/api/fs/read`, so a copy
+  there would hand every saved password to whoever pulls it. See `docs/security.md`.
+- **Why the mirror still exists:** it is the only copy that survives a wipe of the internal
+  flash (e.g. a reflash through a launcher that erases NVS, or a firmware without our `cfg`
+  partition). After such a wipe, with the card still inserted, the device recovers
+  `complete`, the device name, the mode, the hotspot SSID and every saved SSID + priority —
+  **the wizard does not re-run**. What it cannot recover are the passwords:
+  - the hotspot mints a fresh random WPA2 password, shown in Device Info and the Wi-Fi app
+    (a hotspot the user had made open stays open — `ap_open` survives on the card);
+  - each saved secured network appears as known but passwordless (`has_pass: false` in
+    `GET /api/wifi/known`) — the native Wi-Fi app opens the password editor for it, the web Wi-Fi
+    scanner asks for the password instead of offering "blank = use saved", a join without one is
+    refused before the radio is touched (the current link is not dropped), and the auto-join
+    supervisor skips it until a password is entered (no pointless retries).
+- **Cards written by older firmware** (which mirrored the full documents) are scrubbed: on the
+  first load the store sees a password member on the card and the loader re-saves, rewriting the
+  mirror without it (tried once per boot). If the card is the *only* copy (legacy SD-only layout,
+  or a flash wipe), the passwords are first migrated into `/cfg` + NVS, then stripped from the
+  card. If the card can't be rewritten (full, write error) the dirty copy is deleted instead —
+  but only once the passwords are safe on `/cfg` or NVS. An older firmware's orphan
+  `<file>.json.tmp` holding a password is removed on load. The card probe streams the file
+  through a 64-byte stack buffer: no heap copy on the boot path. FAT deletion does not overwrite
+  the old sectors, so treat passwords stored on a card used with older firmware as exposed if
+  that card may have left your hands.
+- **Why not encrypt the SD copy instead:** a key kept in NVS dies in the very wipe that makes
+  the mirror useful; a key derived from the MAC is public (the soft-AP broadcasts it as its
+  BSSID); an eFuse key is irreversible per-device provisioning. None of them buys a working
+  recovery path, so the mirror simply leaves the secrets out.
+- Verified on the PC by `npm run setupstore:test` (part of the ANIMA gate): the real
+  `setup_store.c` + `ap_creds.c` + ESP-IDF's cJSON: fan-out, read order and the reset contract
+  below, every tier combination, legacy scrub, an allocation failure at every malloc of a save,
+  and the hotspot lifecycle (an open hotspot stays open across AP restarts, reboots and flash-wipe
+  recovery; a secured one is re-minted).
 
 ## Reset
 
 The wizard runs again only when no tier holds a `setup.json` with `complete: true`. Because `/cfg` and
 NVS are read before the SD mirror (and a copy recovered from them is written back to the SD), deleting
-the SD copy alone — e.g. from File Commander — does **not** re-arm it. Settings ▸ Reset does it
-properly; both rows need ENTER ×3 and then reboot:
+the SD copy alone — e.g. from File Commander — does **not** re-arm it, and neither does wiping the
+internal flash alone: the SD mirror then restores `complete: true` (without any password).
+Settings ▸ Reset does it properly; both rows need ENTER ×3 and then reboot:
 
 - **Reset settings** ("Network, prefs, logs. Files kept") calls `nucleo_setup_factory_reset()`:
   `setup.json` and `networks.json` are erased from `/cfg`, NVS (`nucleocfg` keys `setup` / `networks`)

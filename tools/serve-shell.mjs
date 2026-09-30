@@ -79,6 +79,14 @@ const apiStatus = { os: 'NucleoOS', version: FW_VERSION, uptime_s: 0, free_heap:
   ota: { running: 'factory', next: 'ota_0', state: 'valid', rollback_enabled: true },
   arbiter: { busy: false, job: '', held_ms: 0, waiters: 0, grants: 4, denials: 0, yields: 0, heap_free_min: 12800 } };
 
+// Deterministic nearby-AP list for /api/wifi/scan (also decides "secured" for the simulated join).
+const SIM_WIFI_SCAN = [
+  { ssid: 'home-wifi', rssi: -42, channel: 6, auth: 'WPA2' },
+  { ssid: 'FRITZ!Box 7530', rssi: -67, channel: 11, auth: 'WPA2/WPA3' },
+  { ssid: 'CoffeeShop_Free', rssi: -78, channel: 1, auth: 'Open' },
+  { ssid: 'Vodafone-2261', rssi: -83, channel: 3, auth: 'WPA2' },
+];
+
 // ---- Settings/Control-Center live-diagnostics + device-state mocks (mirror the firmware shapes the
 // Control Center app reads). Module-level state so toggles round-trip in the preview. ----
 const simState = {
@@ -580,25 +588,28 @@ const server = createServer(async (req, res) => {
   }
   if (path === '/api/wifi/scan') {                  // on-demand AP scan (deterministic; small delay to show the spinner)
     await new Promise((r) => setTimeout(r, 450));
-    return sendJSON(res, { networks: [
-      { ssid: 'home-wifi', rssi: -42, channel: 6, auth: 'WPA2' },
-      { ssid: 'FRITZ!Box 7530', rssi: -67, channel: 11, auth: 'WPA2/WPA3' },
-      { ssid: 'CoffeeShop_Free', rssi: -78, channel: 1, auth: 'Open' },
-      { ssid: 'Vodafone-2261', rssi: -83, channel: 3, auth: 'WPA2' } ] });
+    return sendJSON(res, { networks: SIM_WIFI_SCAN });
   }
   // Known-networks store (mirror nucleo_setup multi-network API: /api/wifi/{known,join,forget}).
   // In-memory here; the firmware persists to /cfg/config/networks.json. Auth-gated on device.
   {
-    const w = (simState.wifi ||= { known: [{ ssid: 'home-wifi', priority: 1 }], current: 'home-wifi' });
+    // has_pass mirrors the firmware: false = saved SSID without a stored password (e.g. recovered from
+    // the password-free SD mirror after a flash wipe) — 'FRITZ!Box 7530' seeds that state for the web UI.
+    const w = (simState.wifi ||= { known: [{ ssid: 'home-wifi', priority: 1, has_pass: true },
+      { ssid: 'FRITZ!Box 7530', priority: 0, has_pass: false }], current: 'home-wifi' });
     if (path === '/api/wifi/known') {
       return sendJSON(res, { mode: 'sta', ssid: w.current,
-        networks: w.known.map((n) => ({ ssid: n.ssid, priority: n.priority | 0, current: n.ssid === w.current })) });
+        networks: w.known.map((n) => ({ ssid: n.ssid, priority: n.priority | 0, current: n.ssid === w.current, has_pass: !!n.has_pass })) });
     }
     if (path === '/api/wifi/join' && req.method === 'POST') {
       let b = {}; try { b = JSON.parse((await readBody(req)).toString('utf8') || '{}'); } catch {}
       if (!b.ssid) return send(res, 400, 'application/json', '{"ok":false}');
       await new Promise((r) => setTimeout(r, 600));     // mimic the blocking join
-      if (!w.known.some((n) => n.ssid === b.ssid)) w.known.push({ ssid: b.ssid, priority: 0 });
+      // Like nucleo_setup_join: a secured network with no password given or stored fails up front.
+      const k = w.known.find((n) => n.ssid === b.ssid);
+      const secured = SIM_WIFI_SCAN.some((n) => n.ssid === b.ssid && n.auth !== 'Open');
+      if (!b.pass && secured && !(k && k.has_pass)) return sendJSON(res, { ok: false });
+      if (k) { if (b.pass) k.has_pass = true; } else w.known.push({ ssid: b.ssid, priority: 0, has_pass: !!b.pass });
       w.current = b.ssid;
       simLog(`I (${Date.now() % 100000}) setup: joined '${b.ssid}'`);
       return sendJSON(res, { ok: true, ip: '192.168.1.42' });

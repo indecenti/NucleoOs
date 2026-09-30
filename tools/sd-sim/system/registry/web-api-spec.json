@@ -891,13 +891,13 @@
       "title": "GET /api/wifi/known - Reti Wi-Fi Salvate",
       "description": "Restituisce l'elenco delle reti Wi-Fi memorizzate (lo store multi-rete). NucleoOS ricorda ogni rete a cui si è connesso e al boot/alla caduta sceglie automaticamente la migliore in portata (priorità manuale, poi segnale più forte).",
       "synopsis": "GET /api/wifi/known",
-      "details": "Richiede autenticazione (configurazione utente). Espone solo SSID e priorità, mai le password. Risposta {\"networks\":[{\"ssid\",\"priority\",\"current\"}],\"mode\":\"sta|ap\",\"ssid\":\"...\"}."
+      "details": "Richiede autenticazione (configurazione utente). Espone SSID, priorità e se una password è memorizzata (has_pass), mai la password. has_pass è false per una rete recuperata dal mirror SD, che non contiene password: va reinserita. Risposta {\"networks\":[{\"ssid\",\"priority\",\"current\",\"has_pass\"}],\"mode\":\"sta|ap\",\"ssid\":\"...\"}."
     },
     "en": {
       "title": "GET /api/wifi/known - Saved Wi-Fi Networks",
       "description": "Returns the saved Wi-Fi networks (the multi-network store). NucleoOS remembers every network it has joined and, at boot and on any drop, auto-picks the best in-range one (manual priority first, then strongest signal).",
       "synopsis": "GET /api/wifi/known",
-      "details": "Auth-gated (user configuration). Exposes SSID and priority only, never passwords. Response {\"networks\":[{\"ssid\",\"priority\",\"current\"}],\"mode\":\"sta|ap\",\"ssid\":\"...\"}."
+      "details": "Auth-gated (user configuration). Exposes SSID, priority and whether a password is stored (has_pass), never the password. has_pass is false for a network recovered from the SD mirror, which holds no passwords: it must be re-entered. Response {\"networks\":[{\"ssid\",\"priority\",\"current\",\"has_pass\"}],\"mode\":\"sta|ap\",\"ssid\":\"...\"}."
     },
     "params": []
   },
