@@ -1981,6 +1981,22 @@
       "anima": true
     },
     {
+      "id": "gate-anima-code-local-server-pc-model",
+      "label": "anima-code local server (PC model)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/anima-code-server.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
       "id": "gate-anima-code-os-api-f1",
       "label": "anima-code os-api (F1)",
       "category": "cascade-infra",
@@ -2256,6 +2272,22 @@
       "args": [
         "--test",
         "tools/anima-host/anima-code-picker.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-anima-code-server",
+      "label": "anima-code-server.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/anima-code-server.test.mjs"
       ],
       "verifies": "",
       "nl": false,

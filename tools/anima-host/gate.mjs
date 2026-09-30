@@ -596,6 +596,12 @@ const gates = [
     // before any tool runs; stalls, loops and budget exhaustion DECLINE honestly instead of faking;
     // and the cascade skips a declining rung. docs/anima-code.md §13.
     ok: (code) => code === 0, summary: (o) => (o.match(/# pass \d+/) || ['?'])[0] + ' ' + (o.match(/# fail \d+/) || [''])[0] },
+  { name: 'anima-code local server (PC model)', cmd: 'node', args: ['--test', 'tools/anima-host/anima-code-server.test.mjs'],
+    // The agent on a model running on the user's own PC (Ollama / LM Studio): native tool calls threaded
+    // through execTool; small-model failure modes (calls written as text, repeated calls, unknown tools)
+    // recovered or nudged; old tool results trimmed to fit a 16k window; a pinned model per task; and
+    // ANIMA's task-vs-chat router in five languages. The real-Ollama run is tools/web-e2e/anima-code.e2e.mjs.
+    ok: (code) => code === 0, summary: (o) => (o.match(/[#ℹ] pass \d+/) || ['?'])[0] + ' ' + (o.match(/[#ℹ] fail \d+/) || [''])[0] },
   { name: 'anima-code os-api (F1)', cmd: 'node', args: ['--test', 'tools/anima-host/anima-code-osapi.test.mjs'],
     // The agent reads the REAL OS contract instead of guessing it: bounded slices of the served
     // web-api-spec, a manifest digest with the $ref-resolved permission enum, the silent deploy

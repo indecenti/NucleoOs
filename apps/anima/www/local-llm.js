@@ -221,6 +221,35 @@ export async function queryLocal(q, lang, history, onProgress, opts = {}) {
   return { reply, tier: 'M4-local', intent: /```/.test(reply) ? 'code' : 'local', confidence: 60, domain: 'local', trace: 'Browser LLM · WebLLM' };
 }
 
+// The installed GPU model as an AGENT engine for the Agenti runtime's local loop (apps/agent/local-worker.js):
+// { chat(messages, { grammar, temperature, signal }) → { text } }. Loads only an INSTALLED model (never a
+// download mid-task); null when this browser has none.
+// The action grammar is NOT handed to WebLLM: measured 2026-09-30 with Qwen3-1.7B on an RTX 5070, every
+// constrained request (GBNF, even a one-rule grammar, or json_object) hung forever on 0.2.84 and aborted on
+// 0.2.85 — and left the engine answering nothing afterwards. Free decoding runs at ~21 tok/s; the loop
+// normalizes and strictly re-validates what the model wrote (normalizeActionsText + grammarAccepts).
+// localStorage 'anima.webgpuGrammar'='1' re-enables it, to re-test a newer WebLLM.
+const AGENT_STEP_MS = 120000;
+export async function localAgentEngine() {
+  if (!(await localAvailable())) return null;
+  return {
+    async chat(messages, opts = {}) {
+      const eng = await loadLocal(null);
+      const body = { messages, temperature: typeof opts.temperature === 'number' ? opts.temperature : 0.2, max_tokens: opts.maxTokens || 1024 };
+      let useGrammar = false; try { useGrammar = localStorage.getItem('anima.webgpuGrammar') === '1'; } catch {}
+      if (opts.grammar && useGrammar) body.response_format = { type: 'grammar', grammar: opts.grammar };
+      // A step that never ends must not hang the turn: stop the GPU after AGENT_STEP_MS (or on the user's Stop).
+      const ac = new AbortController();
+      const timer = setTimeout(() => ac.abort(Object.assign(new Error('local model step timed out'), { name: 'TimeoutError' })), AGENT_STEP_MS);
+      const outer = opts.signal; const relay = () => ac.abort(outer.reason);
+      if (outer) { if (outer.aborted) relay(); else outer.addEventListener('abort', relay, { once: true }); }
+      try { return { text: await generate(eng, body, { signal: ac.signal }), usage: {} }; }
+      finally { clearTimeout(timer); if (outer) outer.removeEventListener('abort', relay); }
+    },
+    get model() { return _loadedModel || chosenLocalBuild(); },
+  };
+}
+
 // Browser-safe translation-request detector (mirror of firmware nucleo_anima_translate_is_request and the
 // Node twin — but no fs). Italian-vowel fold + the same 0-FP triggers (verb / "come si dice" frame / noun+lang).
 const FOLD = { 'à':'a','á':'a','â':'a','è':'e','é':'e','ê':'e','ì':'i','í':'i','î':'i','ò':'o','ó':'o','ô':'o','ù':'u','ú':'u','û':'u' };

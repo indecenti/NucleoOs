@@ -291,7 +291,9 @@ const stripThink = (s) => String(s || '').replace(/<think>[\s\S]*?<\/think>\s*/g
 // loopbackOnly: Private mode — only a server on THIS computer counts (a LAN box is still "the network").
 // perf: what was measured on this computer (loadPerf); a fresh measurement is recorded after each Ollama
 // answer (storage: where it is kept; null = don't persist, e.g. tests that pass their own perf).
-export async function localComplete(task, { messages, tools, temperature, maxTokens, loopbackOnly = false, signal, onDelta, config = loadLocalConfig(), servers, perf, storage = globalThis.localStorage, fetch: f = globalThis.fetch } = {}) {
+// model: pin one model (an agent keeps the model it started a task with — no switch mid-task); numCtx: the
+// context window to ask Ollama for (8k default; the agent asks for more — see AGENT_CTX).
+export async function localComplete(task, { messages, tools, temperature, maxTokens, loopbackOnly = false, signal, onDelta, model: pinned, numCtx, config = loadLocalConfig(), servers, perf, storage = globalThis.localStorage, fetch: f = globalThis.fetch } = {}) {
   if (!config.enabled) return null;
   if (!perf) perf = storage ? loadPerf(storage) : { models: {} };
   const live = servers || await liveServers({ config, fetch: f });
@@ -301,13 +303,14 @@ export async function localComplete(task, { messages, tools, temperature, maxTok
     const chosen = config.models && config.models[s.id] && config.models[s.id][task];
     // The user's pick first, then the rest of the ladder: a model that does not fit in memory right now
     // (another app holds the GPU, the context is too big) falls through to the next lighter one.
-    const ladder = [...new Set([chosen, ...rankModels(s.models, task, { perf, base: s.base })].filter(Boolean))];
+    const ladder = pinned ? [pinned] : [...new Set([chosen, ...rankModels(s.models, task, { perf, base: s.base })].filter(Boolean))];
     const skipped = [];
     for (const model of ladder) {
       try {
         const options = {};
         if (temperature != null) options.temperature = temperature;
         if (maxTokens) options.num_predict = maxTokens;
+        if (numCtx) options.num_ctx = numCtx;
         const res = s.kind === 'ollama'
           ? await ollamaChat({ base: s.base, model, messages, tools, options, signal, onDelta, fetch: f })
           : await openaiChat({ base: s.base, model, key: s.key, messages, tools, temperature, maxTokens, signal, onDelta, fetch: f });

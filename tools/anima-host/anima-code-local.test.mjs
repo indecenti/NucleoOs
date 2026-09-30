@@ -167,3 +167,23 @@ test('localSystem names the workspace root and the untrusted-fence rule', () => 
   assert.match(s, /\/data\/agent/);
   assert.match(s, /untrusted/);
 });
+
+// ---- free decoding (WebLLM's grammar matcher is broken for Qwen3 in the browser — see local-llm.js) ----------
+test('normalizeActionsText: what a 1.7B model writes without a grammar becomes the canonical array', async () => {
+  const { normalizeActionsText } = await import('../../apps/agent/www/local-worker.js');
+  const canon = (s) => JSON.parse(normalizeActionsText(s));
+  assert.deepEqual(canon('<think>\n\n</think>\n\n[{"action":"read","path":"/data/proj/app.js"}]'), [{ op: 'read', path: '/data/proj/app.js' }]);
+  assert.deepEqual(canon('Ecco:\n```json\n{"tool":"edit_file","args":{"path":"a.js","old":"-","new":"+"}}\n```\nFatto.'), [{ op: 'edit', path: 'a.js', old: '-', new: '+' }]);
+  assert.deepEqual(canon('[{"op":"reply","content":"ciao"}]'), [{ op: 'answer', text: 'ciao' }]);
+  assert.equal(normalizeActionsText('just prose'), 'just prose', 'prose stays prose (and is rejected by the validator)');
+  // normalization never widens the schema: an unknown op normalized is still refused
+  assert.equal(grammarAccepts(normalizeActionsText('{"action":"format_disk"}')).ok, false);
+});
+
+test('prose after a real tool result is the final answer; prose with no tool behind it still declines', async () => {
+  const engine = scriptedEngine(['[{"action":"read","path":"a.txt"}]', 'Il file contiene tre righe.']);
+  const execTool = fakeExecTool({ 'a.txt': '1\n2\n3' });
+  const r = await runWorkerLocal({ engine, execTool, grammar }, { task: 'quante righe?', maxSteps: 4 });
+  assert.equal(r.text, 'Il file contiene tre righe.');
+  assert.equal(execTool.log.length, 1);
+});
