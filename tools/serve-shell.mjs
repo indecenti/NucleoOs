@@ -363,7 +363,10 @@ async function fsApi(req, res, url) {
     if (op === 'list') {
       let names = [];
       try { names = await readdir(abs); }
-      catch (e) { if (e.code === 'ENOENT') return sendJSON(res, { entries: [] }); throw e; }  // missing dir = empty (matches firmware)
+      // MIRROR THE FIRMWARE (nucleo_fsapi.c list_get): opendir() failing -> 404 "no dir". The sim used to answer
+      // 200 {entries:[]}, so a client could not tell "missing" from "empty" here while it can on the device
+      // (sd-net-sync skipped the mkdir and every upload into a new folder failed only on the sim).
+      catch (e) { if (e.code === 'ENOENT' || e.code === 'ENOTDIR') return send(res, 404, 'text/plain', 'no dir'); throw e; }
       const entries = [];
       for (const name of names) { const st = await stat(join(abs, name)); entries.push({ name, type: st.isDirectory() ? 'dir' : 'file', size: st.size }); }
       return sendJSON(res, { entries });
