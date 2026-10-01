@@ -95,10 +95,20 @@ jobs:
             [ "$n" -ge 3 ] && break
             r=$(printf '%s' "$row" | base64 -d)
             tag=$(printf '%s' "$r" | jq -r '.tag_name'); ver=${tag#v}
-            pick() { printf '%s' "$r" | jq -r --arg re "$1" \
-              '[.assets[] | select(.name | test($re)) | select(.name | test("latest") | not)][0].browser_download_url // empty'; }
-            zip_url=$(pick '-sd\\.zip$'); man_url=$(pick '-sd-manifest\\.txt$')
-            if [ -z "$zip_url" ] || [ -z "$man_url" ]; then echo "skip $tag (no device SD manifest)"; continue; fi
+            # Match assets by exact suffix (string ops, not regex: a backslash in a jq regex via --arg is
+            # ambiguous across jq versions and silently matched nothing, so v0.5.0 was skipped although its
+            # -sd.zip / -sd-manifest.txt were attached). Exclude the "latest" alias copies.
+            pick() { printf '%s' "$r" | jq -r --arg suf "$1" \
+              '[.assets[] | select(.name | endswith($suf)) | select(.name | contains("latest") | not)][0].browser_download_url // empty'; }
+            zip_url=$(pick '-sd.zip'); man_url=$(pick '-sd-manifest.txt')
+            if [ -z "$zip_url" ] || [ -z "$man_url" ]; then
+              # A release that genuinely predates the manifest is fine to skip; but if it HAS a manifest
+              # asset and we still didn't pick it, that is a bug — fail loudly instead of hosting nothing.
+              if printf '%s' "$r" | jq -e '[.assets[].name | select(endswith("-sd-manifest.txt"))] | length > 0' >/dev/null; then
+                echo "::error::$tag has an SD manifest asset but it was not selected"; exit 1
+              fi
+              echo "skip $tag (no device SD manifest)"; continue
+            fi
             d="_site/sd/$ver"; mkdir -p "$d"
             curl -fSL --retry 3 -o sd.zip "$zip_url"
             unzip -q sd.zip -d "$d"; rm -f sd.zip
