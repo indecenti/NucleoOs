@@ -83,8 +83,8 @@ static void on_tick(void) { nucleo_app_request_draw(); }   // 5Hz refresh of pee
 
 static void on_enter(void) {
     s_sel = 0;
-    nucleo_app_set_hint(TR("invio ping   su/giu   esc", "enter ping   up/dn   esc"));
-    if (!swarm_svc_start()) nucleo_app_set_hint(TR("ESP-NOW non avviato   esc", "ESP-NOW not started   esc"));
+    nucleo_app_set_hint(TR5("invio ping   su/giu   esc", "enter ping   up/dn   esc", "intro ping   ar/ab   esc", "entrer ping   h/b   esc", "enter ping   auf/ab   esc"));
+    if (!swarm_svc_start()) nucleo_app_set_hint(TR5("ESP-NOW non avviato   esc", "ESP-NOW not started   esc", "ESP-NOW no iniciado   esc", "ESP-NOW non demarr   esc", "ESP-NOW nicht gestart   esc"));
 }
 static void on_exit(void) { swarm_svc_stop(); }
 

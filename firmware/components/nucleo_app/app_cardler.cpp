@@ -165,7 +165,7 @@ static void on_enter(void)
     s_gs = GS_MENU; s_menu_sel = 0; s_last_us = 0; s_frame = 0;
     nucleo_app_set_poll_handler(poll_fn);
     nucleo_app_set_back_handler(on_back);
-    nucleo_app_set_hint(TR(";/. scegli   invio ok   esc indietro", ";/. pick   enter ok   esc back"));
+    nucleo_app_set_hint(TR5(";/. scegli   invio ok   esc indietro", ";/. pick   enter ok   esc back", ";/. elige   intro ok   esc atras", ";/. pick   entrer ok   esc retour", ";/. waehle   enter ok   esc zur"));
     nucleo_app_request_draw();
 }
 
@@ -518,7 +518,7 @@ static void on_key(int key, char ch)
         case GS_MENU:
             if (key == NK_UP || key == NK_DOWN || ch == 'e' || ch == 's') { s_menu_sel ^= 1; }
             else if (key == NK_ENTER) {
-                if (s_menu_sel == 0) { reset_run(); s_gs = GS_PLAY; nucleo_app_set_hint(TR("W/A/S/D o inclina muovi   invio parla/apri   spazio azzera   esc menu", "W/A/S/D or tilt move   enter talk/open   space recenter   esc menu")); }
+                if (s_menu_sel == 0) { reset_run(); s_gs = GS_PLAY; nucleo_app_set_hint(TR5("W/A/S/D o inclina muovi   invio parla/apri   spazio azzera   esc menu", "W/A/S/D or tilt move   enter talk/open   space recenter   esc menu", "W/A/S/D/incl. mueve   intro habla/abre   esp. centra   esc menu", "W/A/S/D/incl. bouge   entree parle/ouvre   esp. centre   esc menu", "W/A/S/D/kipp. geht   enter reden/oeffn.   Leer Mitte   esc Menue")); }
                 else { s_set_sel = 0; s_gs = GS_SETTINGS; }
             }
             break;

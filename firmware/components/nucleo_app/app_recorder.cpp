@@ -37,6 +37,7 @@ extern "C" {
 #include "nucleo_board.h"
 #include "nucleo_ui.h"
 #include "nucleo_anima.h"          // cloud transcribe + summary/actions/qa/title (no on-device ASR)
+#include "nucleo_i18n.h"           // TR5 for language selection
 #include "nucleo_exclusive.h"      // dedicated-mode RAM reclaim for the heavy TLS audio upload (Wi-Fi stays)
 #include "notify_synth.h"          // zero-RAM polyphonic synth -> the GO push-to-talk start/stop cues
 #include "cJSON.h"
@@ -268,8 +269,6 @@ static const char *sys_lang(void)
 // Language hint for the worker: explicit setting, else "auto" (Whisper detects).
 static const char *lang_hint(void) { return s_lang == 1 ? "it" : s_lang == 2 ? "en" : "auto"; }
 
-// TR(it,en) picks the right string — keeps the small-screen labels readable in the user's language.
-#define TR(it_, en_) (s_en ? (en_) : (it_))
 
 static int load_text(const char *abs, char *buf, int cap)   // sidecar -> buf; returns length, 0 if absent
 {
@@ -395,7 +394,7 @@ static void delete_sel(void)
     if (nucleo_recorder_is_recording() || s_count == 0) return;
     // An AI job holds the take's WAV / .txt / .tx.ndjson open; with CONFIG_FATFS_FS_LOCK=0 an unlink
     // under the worker corrupts the volume and the worker then rewrites sidecars under a dead name.
-    if (s_job == 1) { nucleo_app_set_hint(TR("AI in corso — attendi", "AI busy — wait")); return; }
+    if (s_job == 1) { nucleo_app_set_hint(TR5("AI in corso — attendi", "AI busy — wait", "IA espera", "IA attend", "KI lauft -- warte")); return; }
     char title[40]; snprintf(title, sizeof(title), "Delete %s?", s_list[s_sel].label);
     const char *opts[] = { "Cancel", "Delete" };
     if (nucleo_ui_menu(title, opts, 2) != 1) return;
@@ -452,7 +451,7 @@ static void rename_take(const char *oldname, const char *newbase)
 static void rename_sel(void)
 {
     if (nucleo_recorder_is_recording() || s_count == 0) return;
-    if (s_job == 1) { nucleo_app_set_hint(TR("AI in corso — attendi", "AI busy — wait")); return; }   // worker holds the sidecars open
+    if (s_job == 1) { nucleo_app_set_hint(TR5("AI in corso — attendi", "AI busy — wait", "IA espera", "IA attend", "KI lauft -- warte")); return; }   // worker holds the sidecars open
     char nm[40];
     snprintf(nm, sizeof(nm), "%s", s_list[s_sel].name);
     char *dot = strrchr(nm, '.'); if (dot && !strcasecmp(dot, ".wav")) *dot = '\0';
@@ -697,7 +696,7 @@ static void request_dedicated_mode(void)
 {
     if (nucleo_anima_solo_active() || s_enter_solo_us) return;
     s_enter_solo_us = esp_timer_get_time() + 700000;
-    nucleo_app_set_hint(TR("Apro modalità dedicata…", "Opening dedicated mode…"));
+    nucleo_app_set_hint(TR5("Apro modalità dedicata…", "Opening dedicated mode…", "Abre modo dedicado", "Ouverture dediee", "Widme Betrieb"));
     nucleo_app_request_draw();
 }
 
@@ -722,7 +721,7 @@ static void ask_all(void)
     if (s_job == 1 || s_enter_solo_us || s_count == 0 || nucleo_recorder_is_busy()) return;
     if (!nucleo_anima_solo_active()) { request_dedicated_mode(); return; }   // reboot into the dedicated boot first
     char q[160] = "";
-    nucleo_ui_input(TR("Chiedi a tutte le note", "Ask across all notes"), q, sizeof q, 0);
+    nucleo_ui_input(TR5("Chiedi a tutte le note", "Ask across all notes", "Preg. todas notas", "Demand. toutes notes", "Frage alle Notizen"), q, sizeof q, 0);
     if (!q[0]) { nucleo_app_request_draw(); return; }
     snprintf(s_job_q, sizeof s_job_q, "%s", q);
     s_job_kind = JOB_ASKALL; s_jobname[0] = 0; s_renamed[0] = 0;           // askall has no single take
@@ -898,14 +897,14 @@ static void detail_placeholder(int x, int y, int tab)
 {
     const char *t1, *t2;
     switch (tab) {
-    case T_SUMMARY: t1 = TR("Nessun riassunto",  "No summary yet");
-                    t2 = TR("Invio: genera",      "Enter to generate"); break;
-    case T_SCRIPT:  t1 = TR("Nessuna trascrizione","No transcript yet");
-                    t2 = TR("Invio: trascrivi",   "Enter to transcribe"); break;
-    case T_ACTIONS: t1 = TR("Nessuna azione",     "No action items");
-                    t2 = TR("Invio: estrai azioni","Enter to extract"); break;
-    default:        t1 = TR("Fai una domanda",    "Ask about this note");
-                    t2 = TR("Invio: scrivi domanda","Enter to type a question"); break;
+    case T_SUMMARY: t1 = TR5("Nessun riassunto",  "No summary yet", "Sin resumen", "Pas de resume", "Kein Zusammenfass");
+                    t2 = TR5("Invio: genera",      "Enter to generate", "Intro: genera", "Entree: creer", "Enter: erstellen"); break;
+    case T_SCRIPT:  t1 = TR5("Nessuna trascrizione","No transcript yet", "Sin transcripcion", "Pas de transcript", "Kein Transkript");
+                    t2 = TR5("Invio: trascrivi",   "Enter to transcribe", "Intro: transcribir", "Entree: transcrire", "Enter: transkribieren"); break;
+    case T_ACTIONS: t1 = TR5("Nessuna azione",     "No action items", "Sin acciones", "Pas d'actions", "Keine Aktionen");
+                    t2 = TR5("Invio: estrai azioni","Enter to extract", "Intro: extraer", "Entree: extraire", "Enter: extrahieren"); break;
+    default:        t1 = TR5("Fai una domanda",    "Ask about this note", "Haz una pregunta", "Poser une question", "Stelle eine Frage");
+                    t2 = TR5("Invio: scrivi domanda","Enter to type a question", "Intro: escribe pregunta", "Entree: taper question", "Enter: Frage tippen"); break;
     }
     d.setFont(&fonts::FreeSans9pt7b); d.setTextSize(1);
     d.setTextColor(MUTED, BG); d.setCursor(x, y);      d.print(t1);
@@ -925,10 +924,10 @@ static void detail_draw(int top, int h)
     if (busy) {
         d.setFont(&fonts::FreeSans9pt7b); d.setTextSize(1);
         char b[40]; snprintf(b, sizeof b, "%s %s...",
-            s_eng_ready ? s_eng_short : "AI", TR("sta elaborando", "is working"));
+            s_eng_ready ? s_eng_short : "AI", TR5("sta elaborando", "is working", "trabaja", "travaille", "arbeitet"));
         d.setTextColor(AMBER, BG); d.setCursor(12, y0 + 30); d.print(b);
         d.setTextColor(MUTED, BG); d.setCursor(12, y0 + 50);
-        d.print(TR("trascrizione + ragionamento cloud", "transcribe + reason in the cloud"));
+        d.print(TR5("trascrizione + ragionamento cloud", "transcribe + reason in the cloud", "transcribe + razona nube", "transcribe + raison nuage", "transkribiere + denke Wolke"));
         d.setFont(&fonts::Font0);
     } else if (s_empty || !s_text || !s_text[0]) {
         detail_placeholder(10, y0 + 22, s_tab);
@@ -961,10 +960,10 @@ static void detail_draw(int top, int h)
     }
     if (nucleo_audio_is_playing() && s_playing >= 0) { draw_transport(footer_y); return; }
     const char *hint = s_tab == T_ASK
-        ? TR("Invio: domanda   </> tab   spc audio", "Enter ask   </> tab   spc play")
+        ? TR5("Invio: domanda   </> tab   spc audio", "Enter ask   </> tab   spc play", "Intro: pregunta </> tab spc audio", "Entree: demande </> tab spc jouer", "Enter: Frage </> tab spc spielen")
         : (s_empty
-            ? TR("Invio: genera   </> tab   spc audio",  "Enter make   </> tab   spc play")
-            : TR("su/giu riga  ,/. pagina  </> tab  spc", "up/dn line  ,/. page  </> tab  spc"));
+            ? TR5("Invio: genera   </> tab   spc audio",  "Enter make   </> tab   spc play", "Intro: crea </> tab spc audio", "Entree: creer </> tab spc jouer", "Enter: mache </> tab spc spielen")
+            : TR5("su/giu riga  ,/. pagina  </> tab  spc", "up/dn line  ,/. page  </> tab  spc", "ar/ab linea ,/. pag </> tab spc", "haut/bas ligne ,/. page </> tab spc", "auf/ab Zeile ,/. Seite </> tab spc"));
     d.setTextColor(MUTED, BG); d.setCursor(8, footer_y + 2); d.print(hint);
 }
 
@@ -974,7 +973,7 @@ static void detail_action(void)        // Enter inside the reader
     if (s_job == 3) s_job = 0;                                   // retry after error: clear flag first
     if (s_tab == T_ASK) {
         char q[160] = "";
-        nucleo_ui_input(TR("Chiedi a ", "Ask "), q, sizeof q, 0);
+        nucleo_ui_input(TR5("Chiedi a ", "Ask ", "Pregunta", "Demande", "Frage"), q, sizeof q, 0);
         if (q[0]) start_job(JOB_QA, q);
         nucleo_app_request_draw(); return;
     }
@@ -1002,12 +1001,12 @@ static void detail_key(int key, char ch)
 // ---- cross-note answer reader (M_ASK) -------------------------------------------------------------
 static void ask_draw(int top, int h)
 {
-    int y0 = app_ui_title(TR("Chiedi a tutte le note", "Ask all notes"), VIO, s_eng_ready ? s_eng_short : nullptr);
+    int y0 = app_ui_title(TR5("Chiedi a tutte le note", "Ask all notes", "Preg. todas", "Dem. toutes", "Frage alle"), VIO, s_eng_ready ? s_eng_short : nullptr);
     int footer_y = top + h - 12;
     d.fillRect(0, y0, 240, footer_y - y0, BG);
     if (!s_text || !s_text[0]) {
         d.setFont(&fonts::FreeSans9pt7b); d.setTextSize(1); d.setTextColor(MUTED, BG);
-        d.setCursor(10, y0 + 24); d.print(TR("Nessuna risposta.", "No answer.")); d.setFont(&fonts::Font0);
+        d.setCursor(10, y0 + 24); d.print(TR5("Nessuna risposta.", "No answer.", "Sin respuesta.", "Pas reponse.", "Keine Antwort.")); d.setFont(&fonts::Font0);
     } else {
         const int LH = 20, FONT_H = 22, firstbase = y0 + 18;   // row PITCH is LH, but FreeSans9pt7b draws ~FONT_H tall
         // Reserve a FULL glyph height below the last row so it clears the footer bar: the old "footer_y - 4"
@@ -1029,7 +1028,7 @@ static void ask_draw(int top, int h)
     }
     d.fillRect(0, footer_y, 240, 12, BG); d.drawFastHLine(0, footer_y, 240, LINE);
     d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(8, footer_y + 2);
-    d.print(TR("su/giu riga  ,/. pagina  esc: indietro", "up/dn line  ,/. page  esc back"));
+    d.print(TR5("su/giu riga  ,/. pagina  esc: indietro", "up/dn line  ,/. page  esc back", "ar/ab linea ,/. pag esc volta", "haut/bas ligne ,/. pag esc ret.", "auf/ab Zeile ,/. Seite esc zur."));
 }
 
 // ---- Now Playing card (M_PLAY) --------------------------------------------------------------------
@@ -1074,7 +1073,7 @@ static void draw_play(int top, int h)
         char vb[16]; snprintf(vb, sizeof vb, "Vol %d%%", nucleo_audio_volume());
         d.setTextColor(FG, BG); d.setCursor(14, by + 16); d.print(vb);
     } else {
-        const char *st = !playing ? TR("Fine", "Ended") : paused ? TR("In pausa", "Paused") : TR("In ascolto", "Playing");
+        const char *st = !playing ? TR5("Fine", "Ended", "Fin", "Fini", "Ende") : paused ? TR5("In pausa", "Paused", "En pausa", "Pause", "Pausiert") : TR5("In ascolto", "Playing", "Escucha", "Joue", "Spielt");
         unsigned short sc = !playing ? MUTED : paused ? AMBER : GRN;
         d.setTextColor(sc, BG); d.setCursor(14, by + 16);
         d.print(playing && !paused ? ">  " : paused ? "II  " : ""); d.print(st);
@@ -1159,14 +1158,14 @@ static void settings_draw(int top, int h)
     if (s_set_tab == ST_AI) {
         const char *langv = s_lang == 1 ? "IT" : s_lang == 2 ? "EN" : "Auto";
         int y = y0 + 4;
-        draw_opt(y,      s_set_row == 0, TR("Trascrizione auto", "Auto transcribe"), nullptr, true, s_auto_transcribe);
-        draw_opt(y + 26, s_set_row == 1, TR("Riassunto auto",    "Auto summary"),    nullptr, true, s_auto_summary);
-        draw_opt(y + 52, s_set_row == 2, TR("Titolo auto",       "Auto title"),      nullptr, true, s_auto_title);
-        draw_opt(y + 78, s_set_row == 3, TR("Lingua",            "Language"),        langv,   false, false);
+        draw_opt(y,      s_set_row == 0, TR5("Trascrizione auto", "Auto transcribe", "Transcribe auto", "Transcribe auto", "Auto transkribiere"), nullptr, true, s_auto_transcribe);
+        draw_opt(y + 26, s_set_row == 1, TR5("Riassunto auto",    "Auto summary",    "Resumen auto", "Resume auto", "Auto Auszug"),    nullptr, true, s_auto_summary);
+        draw_opt(y + 52, s_set_row == 2, TR5("Titolo auto",       "Auto title",      "Titulo auto", "Titre auto", "Auto Titel"),      nullptr, true, s_auto_title);
+        draw_opt(y + 78, s_set_row == 3, TR5("Lingua",            "Language",        "Idioma", "Langue", "Sprache"),        langv,   false, false);
     } else if (s_set_tab == ST_AUDIO) {
         draw_vol_row(y0 + 6, s_set_row == 0, nucleo_audio_volume());
         d.setFont(&fonts::FreeSans9pt7b); d.setTextSize(1); d.setTextColor(DIM, BG);
-        d.setCursor(12, y0 + 44); d.print(TR("Per riascoltare le note", "Playback level for takes"));
+        d.setCursor(12, y0 + 44); d.print(TR5("Per riascoltare le note", "Playback level for takes", "Nivel reproduc notas", "Niveau lecture notes", "Wiedergabe Notizen"));
         d.setFont(&fonts::Font0);
     } else {
         d.setFont(&fonts::FreeSans9pt7b); d.setTextSize(1);
@@ -1185,9 +1184,9 @@ static void settings_draw(int top, int h)
 
     d.fillRect(0, footer_y, 240, 12, BG); d.drawFastHLine(0, footer_y, 240, LINE);
     d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(8, footer_y + 2);
-    d.print(s_set_tab == ST_AI    ? TR("su/giu riga  Invio: cambia  </> tab", "up/dn row   ent change   </> tab")
-          : s_set_tab == ST_AUDIO ? TR("su/giu: volume   </> tab",            "up/dn volume   </> tab")
-          :                          TR("</> tab   Esc: indietro",            "</> tab   esc back"));
+    d.print(s_set_tab == ST_AI    ? TR5("su/giu riga  Invio: cambia  </> tab", "up/dn row   ent change   </> tab", "ar/ab fila intro cambia </> tab", "haut/bas rang ent change </> tab", "auf/ab Zeile enter aendern </> tab")
+          : s_set_tab == ST_AUDIO ? TR5("su/giu: volume   </> tab",            "up/dn volume   </> tab", "ar/ab volumen </> tab", "haut/bas volume </> tab", "auf/ab Lautstaerke </> t.")
+          :                          TR5("</> tab   Esc: indietro",            "</> tab   esc back", "</> tab esc volver", "</> tab esc retour", "</> tab esc zuruck"));
 }
 
 static void settings_key(int key, char ch)
@@ -1231,7 +1230,7 @@ static unsigned short rl_color(int i, void *) { return i == s_playing ? GRN : (s
 static void draw_recording(void)
 {
     bool arming = (s_ptt == PTT_ARMING && !nucleo_recorder_is_recording());   // GO held, start cue playing
-    int y0 = app_ui_title(arming ? TR("Pronto", "Ready") : TR("Registrazione", "Recording"), ACC, nullptr);
+    int y0 = app_ui_title(arming ? TR5("Pronto", "Ready", "Listo", "Pret", "Bereit") : TR5("Registrazione", "Recording", "Grabacion", "Enregis.", "Aufnahme"), ACC, nullptr);
     bool blink = (esp_timer_get_time() / 400000) & 1;
 
     if (arming) {                                            // the mic opens the instant the cue finishes
@@ -1240,7 +1239,7 @@ static void draw_recording(void)
         d.drawCircle(120, cy, 30, ACC);
         d.fillCircle(120, cy, 16, ACC);
         d.setFont(&fonts::FreeSans9pt7b); d.setTextSize(1); d.setTextColor(GRN, BG);
-        const char *m = TR("Tieni GO e parla...", "Hold GO and speak...");
+        const char *m = TR5("Tieni GO e parla...", "Hold GO and speak...", "Sosten GO y habla...", "Tenir GO et parler...", "Halte GO und sprich...");
         d.setCursor(120 - (int)d.textWidth(m) / 2, cy + 46); d.print(m);
         d.setFont(&fonts::Font0);
         return;
@@ -1268,8 +1267,8 @@ static void draw_recording(void)
     int lvl = nucleo_recorder_level();
     const char *coach = nullptr; unsigned short cc = MUTED;
     if (s >= 1) {
-        if (s_peak >= 96 || lvl >= 96)  { coach = TR("Troppo vicino",   "Too loud"); cc = ACC; }
-        else if (s_peak < 6)            { coach = TR("Parla piu' forte","Speak up"); cc = AMBER; }
+        if (s_peak >= 96 || lvl >= 96)  { coach = TR5("Troppo vicino",   "Too loud", "Muy cercar", "Trop pres", "Zu nah"); cc = ACC; }
+        else if (s_peak < 6)            { coach = TR5("Parla piu' forte","Speak up", "Mas fuerte", "Plus fort", "Lauter"); cc = AMBER; }
     }
     d.setCursor(10, ty + 82);
     if (coach) { d.setTextColor(cc, BG); d.print(coach); }
@@ -1285,10 +1284,10 @@ static void draw_library(int top, int h)
 {
     char sub[32];
     if (s_count) snprintf(sub, sizeof(sub), "%d %s  %u:%02u",
-                          s_count, TR(s_count == 1 ? "nota" : "note", s_count == 1 ? "take" : "takes"),
+                          s_count, TR5(s_count == 1 ? "nota" : "note", s_count == 1 ? "take" : "takes", s_count == 1 ? "nota" : "notas", s_count == 1 ? "prise" : "prises", s_count == 1 ? "Aufnahme" : "Aufnahmen"),
                           (unsigned)(s_total_secs / 60), (unsigned)(s_total_secs % 60));
-    else         snprintf(sub, sizeof(sub), TR("0 note", "0 takes"));
-    int y0 = app_ui_title(TR("Registratore", "Voice Recorder"), ACC, sub);
+    else         snprintf(sub, sizeof(sub), TR5("0 note", "0 takes", "0 notas", "0 pises", "0 Aufnahmen"));
+    int y0 = app_ui_title(TR5("Registratore", "Voice Recorder", "Grabador Voz", "Enregistreur Voix", "Sprachrekorder"), ACC, sub);
 
     if (s_count == 0) {
         // Smartwatch-style call to action: a big record button glyph + one clear instruction, centred.
@@ -1297,7 +1296,7 @@ static void draw_library(int top, int h)
         d.drawCircle(120, cy, 26, ACC);
         d.fillCircle(120, cy, 16, ACC);                      // the "record" disc
         d.setFont(&fonts::FreeSans9pt7b); d.setTextSize(1);
-        const char *m1 = TR("Tieni GO o premi R", "Hold GO or press R");
+        const char *m1 = TR5("Tieni GO o premi R", "Hold GO or press R", "Manten GO/pulsa R", "Tiens GO/appuie R", "Halte GO/druecke R");
         d.setTextColor(FG, BG); d.setCursor(120 - (int)d.textWidth(m1) / 2, y0 + 70); d.print(m1);
         d.setFont(&fonts::Font0);
         char fr[24]; human_free(fr, sizeof(fr));
@@ -1312,7 +1311,7 @@ static void draw_library(int top, int h)
 
     if (s_job == 1) {
         char b[32]; snprintf(b, sizeof b, "%s %s...", s_eng_ready ? s_eng_short : "AI",
-                             TR("sta lavorando", "working"));
+                             TR5("sta lavorando", "working", "trabaja", "travaille", "arbeitet"));
         d.setTextColor(AMBER, BG); d.setCursor(8, footer_y + 2); d.print(b); return;
     }
     if (s_job == 3) {
@@ -1331,7 +1330,7 @@ static void draw_library(int top, int h)
     d.setTextColor(r->has_ai ? VIO : MUTED, BG); d.setCursor(8, footer_y + 2); d.print(det);
 
     // Hint AI a destra: distingue "apri AI reader" da "genera AI" in modo leggibile.
-    const char *hint = r->has_ai ? TR("A: leggi AI", "A: AI reader") : TR("A: crea AI", "A: gen AI");
+    const char *hint = r->has_ai ? TR5("A: leggi AI", "A: AI reader", "A: leer IA", "A: lecteur IA", "A: IA lesen") : TR5("A: crea AI", "A: gen AI", "A: crear IA", "A: creer IA", "A: IA gen");
     d.setTextColor(r->has_ai ? VIO : ACC, BG);
     d.setCursor(240 - 6 * (int)strlen(hint) - 4, footer_y + 2); d.print(hint);
 }
@@ -1340,33 +1339,33 @@ static void draw_library(int top, int h)
 static void set_hint_for_mode(void)
 {
     if (nucleo_recorder_is_recording()) {
-        nucleo_app_set_hint(s_ptt == PTT_RECORDING ? TR("Rilascia GO per fermare", "Release GO to stop")
-                                                   : TR("R/Spazio: ferma", "R/Space: stop")); return;
+        nucleo_app_set_hint(s_ptt == PTT_RECORDING ? TR5("Rilascia GO per fermare", "Release GO to stop", "Suelta GO", "Relache GO", "Lasse GO")
+                                                   : TR5("R/Spazio: ferma", "R/Space: stop", "R/Esp: para", "R/Esp: arret", "R/Leer: stop")); return;
     }
     switch (s_mode) {
     case M_DETAIL:
         nucleo_app_set_hint(s_tab == T_ASK
-            ? TR("</> tab  Invio: chiedi  Spc: audio  Esc: back",
-                 "</> tab  Enter ask  Spc play  Esc back")
-            : TR("</> tab  su/giu riga  ,/. pagina  Invio: genera",
-                 "</> tab  up/dn line  ,/. page  Enter make"));
+            ? TR5("</> tab  Invio: chiedi  Spc: audio  Esc: back",
+                 "</> tab  Enter ask  Spc play  Esc back", "</> tab intro pregunta spc audio esc v", "</> tab entree demande spc jouer esc r", "</> tab enter frage spc spielen esc zur")
+            : TR5("</> tab  su/giu riga  ,/. pagina  Invio: genera",
+                 "</> tab  up/dn line  ,/. page  Enter make", "</> tab ar/ab ,/. pag intro genera", "</> tab haut/bas ,/. pag entree creer", "</> tab auf/ab ,/. Seite enter mache"));
         break;
     case M_SETTINGS:
         nucleo_app_set_hint(
-            s_set_tab == ST_AUDIO ? TR("</> tab  su/giu: volume  Esc: back", "</> tab  up/dn volume  Esc back")
-          : s_set_tab == ST_AI    ? TR("</> tab  su/giu  Invio: cambia  Esc: back", "</> tab  up/dn  Enter change  Esc back")
-          :                          TR("</> tab  Esc: back", "</> tab  Esc back"));
+            s_set_tab == ST_AUDIO ? TR5("</> tab  su/giu: volume  Esc: back", "</> tab  up/dn volume  Esc back", "</> tab ar/ab vol esc volta", "</> tab haut/bas vol esc ret.", "</> tab auf/ab Laut. esc zur.")
+          : s_set_tab == ST_AI    ? TR5("</> tab  su/giu  Invio: cambia  Esc: back", "</> tab  up/dn  Enter change  Esc back", "</> tab ar/ab intro cambia esc vol", "</> tab haut/bas entree change esc ret", "</> tab auf/ab enter aendern esc zur")
+          :                          TR5("</> tab  Esc: back", "</> tab  Esc back", "</> tab esc volta", "</> tab esc ret.", "</> tab esc zur."));
         break;
     case M_ASK:
-        nucleo_app_set_hint(TR("su/giu riga  ,/. pagina  Esc: back", "up/dn line  ,/. page  Esc back"));
+        nucleo_app_set_hint(TR5("su/giu riga  ,/. pagina  Esc: back", "up/dn line  ,/. page  Esc back", "ar/ab linea ,/. pag esc volver", "haut/bas ligne ,/. pag esc ret.", "auf/ab Zeile ,/. Seite esc zuruck"));
         break;
     case M_PLAY:
-        nucleo_app_set_hint(TR("Spc: play/pausa  ,/. cerca  su/giu vol  A: AI  Esc: back",
-                              "Spc play/pause  ,/. seek  up/dn vol  A: AI  Esc back"));
+        nucleo_app_set_hint(TR5("Spc: play/pausa  ,/. cerca  su/giu vol  A: AI  Esc: back",
+                              "Spc play/pause  ,/. seek  up/dn vol  A: AI  Esc back", "Spc play/pausa ,/. busca A: IA esc vol", "Spc joue/pause ,/. cher. A: IA esc ret.", "Spc spielen/pause ,/. such A: KI esc z"));
         break;
     default:
-        nucleo_app_set_hint(TR("Invio: ascolta  A: AI  K: chiedi a tutte  1-9: vai  R: reg",
-                              "Enter: play  A: AI  K: ask all  1-9: jump  R: rec"));
+        nucleo_app_set_hint(TR5("Invio: ascolta  A: AI  K: chiedi a tutte  1-9: vai  R: reg",
+                              "Enter: play  A: AI  K: ask all  1-9: jump  R: rec", "Intro: escucha A: IA K: todo 1-9 R: gra", "Entree: jouer A: IA K: tout 1-9 R: enr", "Enter: spielen A: KI K: all 1-9 R: auf"));
     }
 }
 static void set_mode(int m)
@@ -1418,17 +1417,17 @@ static void list_key(int key, char ch)
         esp_err_t rc = arm_record();
         if (rc == ESP_OK) {
             s_rec_wait_us = 0;
-            nucleo_app_set_hint(TR("R/Spazio: ferma", "R/Space: stop"));
+            nucleo_app_set_hint(TR5("R/Spazio: ferma", "R/Space: stop", "R/Espacio: para", "R/Espace: arret", "R/Leer: halt"));
         } else if (rc == ESP_ERR_INVALID_STATE && nucleo_recorder_owner() == NUCLEO_MIC_STREAM) {
             nucleo_recorder_release_stream();                 // a web stream owns it → preempt, retry in tick
             s_rec_wait_us = esp_timer_get_time() + 4000000;   // poll up to 4 s for it to release
-            nucleo_app_set_hint(TR("Libero il mic dal web…", "Releasing mic from web…"));
+            nucleo_app_set_hint(TR5("Libero il mic dal web…", "Releasing mic from web…", "Libero mic web", "Libere mic web", "Mic web frei"));
         } else if (rc == ESP_ERR_INVALID_STATE) {             // our own take still finalizing → brief wait
             s_rec_wait_us = esp_timer_get_time() + 1500000;
-            nucleo_app_set_hint(TR("Mic occupato, attendo…", "Mic busy, waiting…"));
+            nucleo_app_set_hint(TR5("Mic occupato, attendo…", "Mic busy, waiting…", "Mic ocupado", "Mic occupe", "Mic besetzt"));
         } else {                                              // ESP_FAIL: no contiguous RAM for the task
             s_rec_wait_us = esp_timer_get_time() + 1500000;   // L1 just dropped; give the heap a beat, retry
-            nucleo_app_set_hint(TR("Libero memoria…", "Freeing memory…"));
+            nucleo_app_set_hint(TR5("Libero memoria…", "Freeing memory…", "Libero RAM", "Libere RAM", "RAM frei"));
         }
     }
     else return;
@@ -1482,7 +1481,7 @@ static bool rec_back(int key)
         int64_t now = esp_timer_get_time();
         if (s_ai_abort_deadline_us && now < s_ai_abort_deadline_us) return false;   // second Esc: let it close
         s_ai_abort_deadline_us = now + 2000000;
-        nucleo_app_set_hint(TR("AI in corso — Esc di nuovo per uscire", "AI working — Esc again to leave"));
+        nucleo_app_set_hint(TR5("AI in corso — Esc di nuovo per uscire", "AI working — Esc again to leave", "IA -- Esc otra vez", "IA -- Esc nouveau", "KI -- Esc nochmal"));
         return true;
     }
     return false;                                              // library: let the framework close the app
@@ -1567,7 +1566,7 @@ static void enter(void)
     // notice (and once the mic is idle). In Solo (solo_active) we stay — this is the real app home.
     if (!nucleo_anima_solo_active()) {
         s_enter_solo_us = esp_timer_get_time() + 700000;
-        nucleo_app_set_hint(TR("Apro modalità dedicata…", "Opening dedicated mode…"));
+        nucleo_app_set_hint(TR5("Apro modalità dedicata…", "Opening dedicated mode…", "Abre modo dedicado", "Ouverture dediee", "Widme Betrieb"));
     } else {
         ESP_LOGW(REC_TAG, "Recorder Solo: ready free=%u largest=%u",
                  (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
@@ -1635,13 +1634,13 @@ static void tick(void)
         esp_err_t rc = arm_record();
         if (rc == ESP_OK) {
             s_rec_wait_us = 0; wave_reset(); s_was_rec = true;
-            nucleo_app_set_hint(TR("R/Spazio: ferma", "R/Space: stop")); need = true;
+            nucleo_app_set_hint(TR5("R/Spazio: ferma", "R/Space: stop", "R/Espacio: para", "R/Espace: arret", "R/Leer: halt")); need = true;
         } else if (esp_timer_get_time() >= s_rec_wait_us) {
             s_rec_wait_us = 0;
             const char *msg = (nucleo_recorder_owner() == NUCLEO_MIC_STREAM)
-                ? TR("Mic occupato (uso web)", "Mic busy (web stream)")
-                : (rc == ESP_ERR_INVALID_STATE) ? TR("Mic non disponibile", "Mic unavailable")
-                                                : TR("Memoria piena: chiudi un'app", "Out of memory: close an app");
+                ? TR5("Mic occupato (uso web)", "Mic busy (web stream)", "Mic ocupado web", "Mic occupe web", "Mic besetzt web")
+                : (rc == ESP_ERR_INVALID_STATE) ? TR5("Mic non disponibile", "Mic unavailable", "Mic no disponible", "Mic indisponible", "Mic nicht frei")
+                                                : TR5("Memoria piena: chiudi un'app", "Out of memory: close an app", "Memoria llena: cierra una app", "Memoire pleine: ferme app", "Speicher voll: app schliessen");
             nucleo_app_set_hint(msg); need = true;
         }
     }
@@ -1709,12 +1708,12 @@ static void tick(void)
 static const char *job_kind_label(int k)
 {
     switch (k) {
-        case JOB_SUMMARY:    return TR("Riassunto", "Summary");
-        case JOB_TRANSCRIBE: return TR("Trascrizione", "Transcription");
-        case JOB_ACTIONS:    return TR("Azioni", "Action items");
-        case JOB_QA:         return TR("Risposta", "Answer");
-        case JOB_TITLE:      return TR("Titolo", "Title");
-        case JOB_ASKALL:     return TR("Risposta (tutte)", "Answer (all notes)");
+        case JOB_SUMMARY:    return TR5("Riassunto", "Summary", "Resumen", "Resume", "Auszug");
+        case JOB_TRANSCRIBE: return TR5("Trascrizione", "Transcription", "Transcripcion", "Transcription", "Transkript");
+        case JOB_ACTIONS:    return TR5("Azioni", "Action items", "Acciones", "Actions", "Aktionen");
+        case JOB_QA:         return TR5("Risposta", "Answer", "Respuesta", "Reponse", "Antwort");
+        case JOB_TITLE:      return TR5("Titolo", "Title", "Titulo", "Titre", "Titel");
+        case JOB_ASKALL:     return TR5("Risposta (tutte)", "Answer (all notes)", "Respuesta (todas)", "Reponse (toutes)", "Antwort (alle)");
         default:             return "AI";
     }
 }
@@ -1743,7 +1742,7 @@ static void draw_ai_working(int top, int h)
     // Fixed string (no animated dots): constant width, so the BG-backed glyphs fully self-clear —
     // the spinner already carries the motion. A phase-varying width would shift the centered start
     // and leave a residue on the direct path.
-    const char *w1 = TR("Elaborazione in corso…", "Processing…");   // no provider brand
+    const char *w1 = TR5("Elaborazione in corso…", "Processing…", "Procesando", "Traitement", "Arbeitet");   // no provider brand
     d.setFont(&fonts::FreeSans9pt7b); d.setTextColor(GRN, BG);
     d.setCursor(120 - (int)d.textWidth(w1) / 2, cy + 22); d.print(w1);
     // Chunked long-transcription progress, when active: "segmento 3/15". Its width and presence both
@@ -1751,7 +1750,7 @@ static void draw_ai_working(int top, int h)
     d.fillRect(20, cy + 32, 200, 18, BG);
     int pd = 0, pt = 0; nucleo_anima_transcribe_progress(&pd, &pt);
     if (pt > 1) {
-        char w2[40]; snprintf(w2, sizeof w2, "%s %d/%d", TR("segmento", "segment"), pd + (pd < pt ? 1 : 0), pt);
+        char w2[40]; snprintf(w2, sizeof w2, "%s %d/%d", TR5("segmento", "segment", "segmento", "segment", "Segment"), pd + (pd < pt ? 1 : 0), pt);
         d.setTextColor(MUTED, BG); d.setCursor(120 - (int)d.textWidth(w2) / 2, cy + 42); d.print(w2);
     }
     d.setFont(&fonts::Font0);
@@ -1777,9 +1776,9 @@ static void draw(void)
         int cy = top + h / 2;
         d.fillCircle(120, cy - 22, 13, REC_DISC); d.drawCircle(120, cy - 22, 13, ACC); d.fillCircle(120, cy - 22, 5, ACC);
         d.setFont(&fonts::FreeSans9pt7b);
-        const char *m = TR("Modalità dedicata", "Dedicated mode");
+        const char *m = TR5("Modalità dedicata", "Dedicated mode", "Modo dedicado", "Mode dedie", "Widme Modus");
         d.setTextColor(FG, BG); d.setCursor(120 - (int)d.textWidth(m) / 2, cy + 6); d.print(m);
-        const char *m2 = TR("preparo la RAM…", "preparing RAM…");
+        const char *m2 = TR5("preparo la RAM…", "preparing RAM…", "prepara RAM", "prepare RAM", "bereite RAM");
         d.setTextColor(MUTED, BG); d.setCursor(120 - (int)d.textWidth(m2) / 2, cy + 26); d.print(m2);
         d.setFont(&fonts::Font0);
         return;

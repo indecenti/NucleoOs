@@ -48,7 +48,7 @@ static void on_enter(void) {
     if (s_up_ok) { nucleo_ble_scan_start(); sentinel_tracker_start(); }
     nucleo_app_set_back_handler(on_back);
     nucleo_app_set_tab_handler(on_tab);
-    nucleo_app_set_hint(TR("tab: info   esc: esci", "tab: info   esc: back"));
+    nucleo_app_set_hint(TR5("tab: info   esc: esci", "tab: info   esc: back", "tab: info   esc: salir", "tab: info   esc: retour", "tab: info   esc: zurueck"));
     nucleo_app_request_draw();
 }
 
@@ -67,25 +67,25 @@ static void on_tick(void) {
 static void draw_list(int h) {
     if (!s_up_ok) {   // BLE didn't come up (rare after the BLE-Solo Wi-Fi-skip fix)
         int y0 = app_ui_title("Sentinel", WARN, nullptr);
-        txt(8, y0 + 14, TR("Bluetooth non attivo.", "Bluetooth not active."), FG, BG, 1);
-        txt(8, y0 + 30, TR("Riprova ad aprire l'app.", "Reopen the app to retry."), MUTED, BG, 1);
-        txt(8, y0 + 46, TR("esc: torna al sistema", "esc: back to the system"), DIM, BG, 1);
+        txt(8, y0 + 14, TR5("Bluetooth non attivo.", "Bluetooth not active.", "Bluetooth no activo.", "Bluetooth non actif.", "Bluetooth nicht aktiv."), FG, BG, 1);
+        txt(8, y0 + 30, TR5("Riprova ad aprire l'app.", "Reopen the app to retry.", "Abre de nuevo la app.", "Rouvrez app pr essayer.", "Oeffne app zum versuchen."), MUTED, BG, 1);
+        txt(8, y0 + 46, TR5("esc: torna al sistema", "esc: back to the system", "esc: vuelve al sistema", "esc: retour au systeme", "esc: zurueck zum system"), DIM, BG, 1);
         return;
     }
     int following = sentinel_tracker_following();
     int y0 = app_ui_title("Sentinel", following ? ALERT : ACC,
-                          nucleo_ble_is_synced() ? TR("scansione", "scanning") : TR("avvio...", "starting..."));
+                          nucleo_ble_is_synced() ? TR5("scansione", "scanning", "escaneando", "balayage", "scan") : TR5("avvio...", "starting...", "iniciando...", "demarrage...", "starten..."));
 
     if (following > 0) {   // prominent alert banner
         d.fillRoundRect(6, y0 + 2, W - 12, 20, 5, ALERT);
         char b[40];
-        snprintf(b, sizeof b, TR("!  %d tracker ti segue", "!  %d tracker following you"), following);
+        snprintf(b, sizeof b, TR5("!  %d tracker ti segue", "!  %d tracker following you", "!  %d tracker te sigue", "!  %d tracker te suivant", "!  %d tracker folgt dir"), following);
         txt(12, y0 + 7, b, 0x0000, ALERT, 1);
         y0 += 22;
     }
 
     int cnt = sentinel_tracker_count();
-    char cb[24]; snprintf(cb, sizeof cb, TR("%d tracker vicini", "%d trackers nearby"), cnt);
+    char cb[24]; snprintf(cb, sizeof cb, TR5("%d tracker vicini", "%d trackers nearby", "%d trackers cercanos", "%d trackers proches", "%d tracker nah"), cnt);
     txt(8, y0 + 6, cb, following ? ALERT : ACC, BG, 1);
 
     int y = y0 + 22; sentinel_view_t v; char ln[56];
@@ -97,17 +97,17 @@ static void draw_list(int h) {
         txt(8, y, ln, v.following ? ALERT : FG, BG, 1);
         y += 12;
     }
-    if (!cnt) txt(8, y, TR("Nessun tracker rilevato.", "No trackers detected."), DIM, BG, 1);
+    if (!cnt) txt(8, y, TR5("Nessun tracker rilevato.", "No trackers detected.", "Sin tracker detectado.", "Pas de tracker detecte.", "Kein tracker erkannt."), DIM, BG, 1);
 }
 
 static void draw_info(void) {
-    int y0 = app_ui_title("Sentinel", ACC, TR("difesa", "defense"));
-    txt(8, y0 + 6,  TR("Rileva tracker che ti seguono.", "Detects trackers following you."), FG, BG, 1);
-    txt(8, y0 + 20, TR("AirTag/FindMy, SmartTag, Tile,", "AirTag/FindMy, SmartTag, Tile,"), MUTED, BG, 1);
-    txt(8, y0 + 32, TR("Chipolo. Solo ascolto, zero TX.", "Chipolo. Listen only, zero TX."), MUTED, BG, 1);
-    txt(8, y0 + 50, TR("<< = ti sta seguendo", "<< = following you"), ALERT, BG, 1);
-    txt(8, y0 + 62, TR(" ! = in modo smarrito", " ! = in lost mode"), WARN, BG, 1);
-    txt(8, y0 + 80, TR("tab: torna alla lista", "tab: back to the list"), DIM, BG, 1);
+    int y0 = app_ui_title("Sentinel", ACC, TR5("difesa", "defense", "defensa", "defense", "schutz"));
+    txt(8, y0 + 6,  TR5("Rileva tracker che ti seguono.", "Detects trackers following you.", "Detecta trackers que te siguen.", "Detecte les trackers te suivant.", "Erkennt tracker die dir folgen."), FG, BG, 1);
+    txt(8, y0 + 20, TR5("AirTag/FindMy, SmartTag, Tile,", "AirTag/FindMy, SmartTag, Tile,", "AirTag/FindMy, SmartTag, Tile,", "AirTag/FindMy, SmartTag, Tile,", "AirTag/FindMy, SmartTag, Tile,"), MUTED, BG, 1);
+    txt(8, y0 + 32, TR5("Chipolo. Solo ascolto, zero TX.", "Chipolo. Listen only, zero TX.", "Chipolo. Solo escucha, cero TX.", "Chipolo. Ecoute seule, zero TX.", "Chipolo. Nur hoer, kein TX."), MUTED, BG, 1);
+    txt(8, y0 + 50, TR5("<< = ti sta seguendo", "<< = following you", "<< = te sigue", "<< = te suivant", "<< = folgt dir"), ALERT, BG, 1);
+    txt(8, y0 + 62, TR5(" ! = in modo smarrito", " ! = in lost mode", " ! = en modo perdido", " ! = en mode perdu", " ! = lost Modus"), WARN, BG, 1);
+    txt(8, y0 + 80, TR5("tab: torna alla lista", "tab: back to the list", "tab: vuelve a lista", "tab: retour a liste", "tab: zurueck zu liste"), DIM, BG, 1);
 }
 
 static void on_draw(void) {

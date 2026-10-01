@@ -31,6 +31,9 @@ const char *nucleo_setup_ip(void);         // our own STA IP ("" when offline)
 }
 
 #define TR(it_, en_) nucleo_tr((it_), (en_))
+#ifndef TR5
+#define TR5(it_, en_, es_, fr_, de_) nucleo_tr5((it_), (en_), (es_), (fr_), (de_))
+#endif
 
 // BG/FG/MUTED/DIM/LINE/INK come from launcher_theme.h (themed, shared with the launcher).
 static const unsigned short ACC = C_BLUE, GRN = C_GREEN, WARN = C_YELLOW;   // off-state fill = LINE (themed)
@@ -152,17 +155,17 @@ static void start_connect(void)
     s_rxlen = 0;
     s_need_pin = false;
     s_sock = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-    if (s_sock < 0) { go_offline(TR("errore socket", "socket error"), false); return; }
+    if (s_sock < 0) { go_offline(TR5("errore socket", "socket error", "error socket", "erreur socket", "Socket-Fehler"), false); return; }
     fcntl(s_sock, F_SETFL, O_NONBLOCK);
     struct sockaddr_in a;
     memset(&a, 0, sizeof a);
     a.sin_family = AF_INET;
     a.sin_port   = htons(KD_PORT);
-    if (!inet_aton(s_ip, &a.sin_addr)) { go_offline(TR("IP non valido", "bad IP"), false); return; }
+    if (!inet_aton(s_ip, &a.sin_addr)) { go_offline(TR5("IP non valido", "bad IP", "IP no val.", "IP inval.", "ung. IP"), false); return; }
     connect(s_sock, (struct sockaddr *)&a, sizeof a);   // EINPROGRESS expected
     s_cs = CS_CONNECT;
     s_conn_t0 = now_ms();
-    set_status(TR("connetto...", "connecting..."));
+    set_status(TR5("connetto...", "connecting...", "conectando...", "connexion...", "verbinde..."));
     nucleo_app_request_draw();
 }
 
@@ -174,11 +177,11 @@ static void start_discover(void)
     s_search = mdns_query_async_new(NULL, "_keydeck", "_tcp", MDNS_TYPE_PTR, 2500, 4, NULL);
     if (!s_search) {
         if (s_saved_ip[0]) { snprintf(s_ip, sizeof s_ip, "%s", s_saved_ip); start_connect(); }
-        else go_offline(TR("mDNS ko e nessun IP", "mDNS down, no IP"), false);
+        else go_offline(TR5("mDNS ko e nessun IP", "mDNS down, no IP", "mDNS caido, sin IP", "mDNS en baisse", "mDNS aus, keine IP"), false);
         return;
     }
     s_cs = CS_SEARCH;
-    set_status(TR("cerco NucleoV2...", "searching NucleoV2..."));
+    set_status(TR5("cerco NucleoV2...", "searching NucleoV2...", "buscando V2...", "cherche V2...", "V2 gesucht..."));
     nucleo_app_request_draw();
 }
 
@@ -193,7 +196,7 @@ static bool tx_line(const char *fmt, ...)
     va_end(ap);
     if (n <= 0 || n >= (int)sizeof out) return false;  // truncated = lost '\n' = merged lines: never send
     if (send(s_sock, out, (size_t)n, 0) != n) {
-        go_offline(TR("connessione persa", "link lost"), true);
+        go_offline(TR5("connessione persa", "link lost", "enlace perd.", "lien perd.", "Verbdg. verl."), true);
         return false;
     }
     s_last_tx = now_ms();
@@ -223,7 +226,7 @@ static void handle_line(char *line)
         // "WELCOME v1 <os> <host>" — keep the host label for the UI
         char *last = strrchr(line, ' ');
         if (last && last[1]) snprintf(s_server, sizeof s_server, "%s", last + 1);
-        set_status(TR("collegato", "connected"));
+        set_status(TR5("collegato", "connected", "conectado", "connecte", "verbunden"));
         ip_save(s_ip);                         // remember the last good server
         return;
     }
@@ -231,7 +234,7 @@ static void handle_line(char *line)
     if (strcmp(line, "ERR badpin") == 0) {
         // Server requires (a different) PIN: stop the retry loop, point the user at the editor.
         s_need_pin = true;
-        go_offline(TR("PIN richiesto: Server, tasto P", "PIN required: Server tab, P"), false);
+        go_offline(TR5("PIN richiesto: Server, tasto P", "PIN required: Server tab, P", "PIN requis: Server, P", "PIN requis: Srv, P", "PIN erf.: Server, P"), false);
         return;
     }
     // PONG / other ERR: nothing to do — any traffic already proves the link is alive.
@@ -265,10 +268,10 @@ static bool pump(void)
                 start_connect();
             } else if (s_saved_ip[0]) {
                 snprintf(s_ip, sizeof s_ip, "%s", s_saved_ip);
-                set_status(TR("mDNS muto, provo IP noto", "mDNS silent, trying saved IP"));
+                set_status(TR5("mDNS muto, provo IP noto", "mDNS silent, trying saved IP", "mDNS mudo, prueba IP", "mDNS muet, essai IP", "mDNS stumm, IP-Test"));
                 start_connect();
             } else {
-                go_offline(TR("nessun NucleoV2 in rete", "no NucleoV2 found"), false);
+                go_offline(TR5("nessun NucleoV2 in rete", "no NucleoV2 found", "sin V2 encontrado", "pas V2 trouv.", "kein V2 gef."), false);
             }
             changed = true;
         }
@@ -292,13 +295,13 @@ static bool pump(void)
                 s_nofocus = false;
                 if (s_pin[0]) tx_line("HELLO v1 cardputer PIN=%s\n", s_pin);
                 else          tx_line("HELLO v1 cardputer\n");
-                set_status(TR("collegato", "connected"));
+                set_status(TR5("collegato", "connected", "conectado", "connecte", "verbunden"));
             } else {
-                go_offline(TR("P4 non risponde", "no answer from P4"), true);
+                go_offline(TR5("P4 non risponde", "no answer from P4", "sin respuesta de P4", "pas de reponse de P4", "keine Antwort vom P4"), true);
             }
             changed = true;
         } else if (now - s_conn_t0 > KD_CONN_TO_MS) {
-            go_offline(TR("timeout connessione", "connect timeout"), true);
+            go_offline(TR5("timeout connessione", "connect timeout", "tiempo agotado", "delai depasse", "Verb. Zeal."), true);
             changed = true;
         }
     }
@@ -322,7 +325,7 @@ static bool pump(void)
             }
         }
         if (n == 0 || (n < 0 && errno != EWOULDBLOCK && errno != EAGAIN)) {
-            go_offline(TR("connessione persa", "link lost"), true);
+            go_offline(TR5("connessione persa", "link lost", "enlace perd.", "lien perd.", "Verbdg. verl."), true);
             changed = true;
         } else if (now - s_last_tx > KD_PING_MS) {
             tx_line("PING\n");
@@ -396,7 +399,7 @@ static int status_row(int y)
     d.setCursor(22, y);
     char ln[44];
     if (on) snprintf(ln, sizeof ln, "%s  %s", s_server[0] ? s_server : "NucleoV2", s_ip);
-    else    snprintf(ln, sizeof ln, "%s", s_status[0] ? s_status : TR("non collegato", "offline"));
+    else    snprintf(ln, sizeof ln, "%s", s_status[0] ? s_status : TR5("non collegato", "offline", "sin conex.", "hors ligne", "offline"));
     d.print(ln);
     return y + 12;
 }
@@ -408,13 +411,13 @@ static void type_screen(unsigned char m, const char *echo)
     d.setTextSize(2);
     d.setTextColor(ACC, BG);
     d.setCursor(8, 4);
-    d.print(TR("Digita su P4", "Type on P4"));
+    d.print(TR5("Digita su P4", "Type on P4", "Escribe en P4", "Taper sur P4", "auf P4 tippen"));
     d.setTextSize(1);
     const bool on = (s_cs == CS_ONLINE);
     d.fillCircle(160, 12, 4, on ? GRN : WARN);
     d.setTextColor(on ? GRN : WARN, BG);
     d.setCursor(170, 8);
-    d.print(on ? "online" : TR("perso", "lost"));
+    d.print(on ? "online" : TR5("perso", "lost", "perdido", "perdu", "verloren"));
 
     int x = 8, y = 28;
     chip(x, y, "CTRL",  m & NK_MOD_CTRL, ACC);  x += 38;
@@ -422,13 +425,13 @@ static void type_screen(unsigned char m, const char *echo)
     chip(x, y, "SHIFT", m & NK_MOD_SHIFT, ACC); x += 44;
     chip(x, y, "FN",    m & NK_MOD_FN, ACC);
 
-    d.setTextColor(MUTED, BG); d.setCursor(8, 50); d.print(TR("Inviato:", "Sent:"));
+    d.setTextColor(MUTED, BG); d.setCursor(8, 50); d.print(TR5("Inviato:", "Sent:", "Enviado:", "Envoye:", "Gesendet:"));
     d.setTextColor(FG, BG);    d.setCursor(60, 50); d.print(echo && echo[0] ? echo : "-");
 
     if (s_nofocus) {
         d.setTextColor(WARN, BG);
         d.setCursor(8, 64);
-        d.print(TR("Tocca un campo di testo sul P4!", "Tap a text field on the P4!"));
+        d.print(TR5("Tocca un campo di testo sul P4!", "Tap a text field on the P4!", "Toca un campo de texto en P4!", "Taper sur un champ sur P4!", "Tippe auf ein Textfeld auf P4!"));
     }
 
     // Mini system monitor — keeps the telemetry on screen while typing.
@@ -439,12 +442,12 @@ static void type_screen(unsigned char m, const char *echo)
     d.setCursor(8, 82);
     if (s_cpu0 >= 0) snprintf(ln, sizeof ln, "PSRAM %s MB   CPU %d%% / %d%%", mb, s_cpu0, s_cpu1);
     else             snprintf(ln, sizeof ln, "PSRAM %s MB", mb);
-    d.print(s_stat_at ? ln : TR("attendo dati...", "waiting for data..."));
+    d.print(s_stat_at ? ln : TR5("attendo dati...", "waiting for data...", "esperando datos...", "attente donnees...", "warte auf Daten..."));
 
     d.setTextColor(DIM, BG);
-    d.setCursor(8, 104);  d.print(TR("Frecce/Tab/Invio inoltrati", "Arrows/Tab/Enter forwarded"));
-    d.setCursor(8, 116);  d.print(TR("Fn+Canc=Del  Fn+`=Esc", "Fn+Del=Del  Fn+`=Esc"));
-    d.setTextColor(WARN, BG); d.setCursor(178, 116); d.print(TR("` esci", "` exit"));
+    d.setCursor(8, 104);  d.print(TR5("Frecce/Tab/Invio inoltrati", "Arrows/Tab/Enter forwarded", "Flechas/Tab/INTRO renviad.", "Fleches/Tab/ENT ren.", "Pfeile/Tab/ENT w.geleitet"));
+    d.setCursor(8, 116);  d.print(TR5("Fn+Canc=Del  Fn+`=Esc", "Fn+Del=Del  Fn+`=Esc", "Fn+Supr=Supr  Fn+`=Esc", "Fn+Supr=Supr  Fn+`=Ec.", "Fn+Entf=Entf  Fn+`=Esc"));
+    d.setTextColor(WARN, BG); d.setCursor(178, 116); d.print(TR5("` esci", "` exit", "` salir", "` quitter", "` beenden"));
 }
 
 // Composite the modal frame into the shared back-buffer and blit once — never a direct-to-panel
@@ -518,7 +521,7 @@ static void on_enter(void)
     s_nofocus = false;
     s_need_pin = false;
     nucleo_app_set_back_handler(on_back);
-    nucleo_app_set_hint(TR("ENTER digita  </> tab  ` esci", "ENTER type  </> tab  ` exit"));
+    nucleo_app_set_hint(TR5("ENTER digita  </> tab  ` esci", "ENTER type  </> tab  ` exit", "ENTER escr  </> tab  ` sal", "ENTER tap  </> tab  ` quit", "ENT tippen  </> tab  ` end"));
     cfg_load();
     if (s_saved_ip[0]) { snprintf(s_ip, sizeof s_ip, "%s", s_saved_ip); start_connect(); }
     else start_discover();
@@ -615,14 +618,14 @@ static void draw_monitor(int top)
     fmt_mb(mb, sizeof mb, s_ps_free);
     fmt_mb(tot, sizeof tot, s_ps_total);
     d.setTextSize(1); d.setTextColor(MUTED, BG);
-    d.setCursor(8, y + 4); d.print(TR("PSRAM libera", "Free PSRAM"));
+    d.setCursor(8, y + 4); d.print(TR5("PSRAM libera", "Free PSRAM", "PSRAM libre", "PSRAM libre", "PSRAM frei"));
     d.setTextSize(2); d.setTextColor(s_stat_at ? GRN : DIM, BG);
     d.setCursor(8, y + 14);
     if (s_stat_at) { snprintf(ln, sizeof ln, "%s MB", mb); d.print(ln); }
     else d.print("--");
     d.setTextSize(1); d.setTextColor(MUTED, BG);
     d.setCursor(120, y + 22);
-    if (s_ps_total) { snprintf(ln, sizeof ln, "%s %s MB", TR("di", "of"), tot); d.print(ln); }
+    if (s_ps_total) { snprintf(ln, sizeof ln, "%s %s MB", TR5("di", "of", "de", "de", "von"), tot); d.print(ln); }
     bar(8, y + 32, 224, 6, s_ps_total ? (int)((uint64_t)s_ps_free * 100 / s_ps_total) : 0, GRN);
 
     // Per-core CPU load.
@@ -641,12 +644,12 @@ static void draw_monitor(int top)
     d.setCursor(8, y + 74);
     if (s_stat_at) {
         snprintf(ln, sizeof ln, "SRAM %u KB   %s %uh %02um", s_sram_free / 1024,
-                 TR("acceso da", "up"), s_uptime / 3600, (s_uptime % 3600) / 60);
+                 TR5("acceso da", "up", "en", "depuis", "seit"), s_uptime / 3600, (s_uptime % 3600) / 60);
         d.print(ln);
     } else if (s_cs == CS_ONLINE) {
-        d.print(TR("attendo telemetria...", "waiting for telemetry..."));
+        d.print(TR5("attendo telemetria...", "waiting for telemetry...", "esperando telemetria...", "attente telemetrie...", "warte auf Telemetrie..."));
     } else {
-        d.print(TR("ENTER riconnette", "ENTER reconnects"));
+        d.print(TR5("ENTER riconnette", "ENTER reconnects", "ENTER reconecta", "ENTER reconnecte", "ENTER vbd. neu"));
     }
 }
 
@@ -655,30 +658,30 @@ static void draw_server(int top)
     int y = status_row(top + 22);
     char ln[44];
     d.setTextSize(1);
-    d.setTextColor(MUTED, BG); d.setCursor(8, y + 6);  d.print(TR("Scoperta: mDNS _keydeck._tcp", "Discovery: mDNS _keydeck._tcp"));
+    d.setTextColor(MUTED, BG); d.setCursor(8, y + 6);  d.print(TR5("Scoperta: mDNS _keydeck._tcp", "Discovery: mDNS _keydeck._tcp", "Descubr.: mDNS _keydeck._tcp", "Decouverte: mDNS _keydeck._tcp", "Erkenn.: mDNS _keydeck._tcp"));
     d.setTextColor(FG, BG);    d.setCursor(8, y + 20);
-    snprintf(ln, sizeof ln, "%s: %-15s  PIN: %s", TR("IP salvato", "Saved IP"),
-             s_saved_ip[0] ? s_saved_ip : "-", s_pin[0] ? s_pin : TR("no (aperto)", "off (open)"));
+    snprintf(ln, sizeof ln, "%s: %-15s  PIN: %s", TR5("IP salvato", "Saved IP", "IP guardado", "IP sauveg.", "gespeich. IP"),
+             s_saved_ip[0] ? s_saved_ip : "-", s_pin[0] ? s_pin : TR5("no (aperto)", "off (open)", "no (abierto)", "non (ouvert)", "nein (offen)"));
     d.print(ln);
 
     if (s_edit != E_NONE) {
         d.setTextColor(ACC, BG); d.setCursor(8, y + 38);
-        d.print(s_edit == E_IP ? TR("Nuovo IP:", "New IP:")
-                               : TR("PIN del P4 (vuoto=nessuno):", "P4 PIN (empty=none):"));
+        d.print(s_edit == E_IP ? TR5("Nuovo IP:", "New IP:", "nuevo IP:", "nouvel IP:", "neue IP:")
+                               : TR5("PIN del P4 (vuoto=nessuno):", "P4 PIN (empty=none):", "PIN P4(vacio=--)", "PIN P4(vide=--)", "P4-PIN(leer=--):"));
         d.setTextSize(2); d.setTextColor(FG, BG); d.setCursor(8, y + 50);
         snprintf(ln, sizeof ln, "%s_", s_ebuf);
         d.print(ln);
         d.setTextSize(1); d.setTextColor(DIM, BG);
-        d.setCursor(8, y + 72); d.print(TR("ENTER salva  Canc corregge  ` annulla", "ENTER save  Del edit  ` cancel"));
+        d.setCursor(8, y + 72); d.print(TR5("ENTER salva  Canc corregge  ` annulla", "ENTER save  Del edit  ` cancel", "ENT gda  Supr ed  ` can", "ENT sauv  Supr mod  ` anu", "ENT spe  Entf be  ` br"));
     } else {
         d.setTextColor(GRN, BG);   d.setCursor(8, y + 40);  d.print("ENTER");
-        d.setTextColor(MUTED, BG); d.setCursor(56, y + 40); d.print(TR("cerca di nuovo (mDNS)", "search again (mDNS)"));
+        d.setTextColor(MUTED, BG); d.setCursor(56, y + 40); d.print(TR5("cerca di nuovo (mDNS)", "search again (mDNS)", "busca nuevo (mDNS)", "recher. nouv. (mDNS)", "nochmal suc (mDNS)"));
         d.setTextColor(GRN, BG);   d.setCursor(8, y + 54);  d.print("M");
-        d.setTextColor(MUTED, BG); d.setCursor(56, y + 54); d.print(TR("inserisci IP a mano", "enter IP manually"));
+        d.setTextColor(MUTED, BG); d.setCursor(56, y + 54); d.print(TR5("inserisci IP a mano", "enter IP manually", "ingresa IP manual", "entrer IP manuel", "IP manuell eingeb."));
         d.setTextColor(GRN, BG);   d.setCursor(8, y + 68);  d.print("P");
         d.setTextColor(s_need_pin ? WARN : MUTED, BG); d.setCursor(56, y + 68);
-        d.print(s_need_pin ? TR("PIN richiesto dal P4!", "P4 requires a PIN!")
-                           : TR("imposta PIN (se il P4 lo chiede)", "set PIN (if the P4 asks)"));
+        d.print(s_need_pin ? TR5("PIN richiesto dal P4!", "P4 requires a PIN!", "P4 requiere PIN!", "P4 requiert PIN!", "P4 erfordert PIN!")
+                           : TR5("imposta PIN (se il P4 lo chiede)", "set PIN (if the P4 asks)", "PIN si P4 pide", "PIN si P4 dem.", "PIN falls P4 fragt"));
     }
 }
 
@@ -689,15 +692,15 @@ static void draw_info(int top)
     d.setTextSize(1);
     d.setTextColor(FG, BG);
     d.setCursor(8, y + 6);
-    snprintf(ln, sizeof ln, "%s: %s:%d", TR("Server", "Server"), s_ip[0] ? s_ip : "-", KD_PORT);
+    snprintf(ln, sizeof ln, "%s: %s:%d", TR5("Server", "Server", "Servidor", "Serveur", "Server"), s_ip[0] ? s_ip : "-", KD_PORT);
     d.print(ln);
     d.setCursor(8, y + 20);
-    snprintf(ln, sizeof ln, "%s: %s", TR("Questo Cardputer", "This Cardputer"), nucleo_setup_ip());
+    snprintf(ln, sizeof ln, "%s: %s", TR5("Questo Cardputer", "This Cardputer", "Este Cardputer", "Ce Cardputer", "dieser Cardputer"), nucleo_setup_ip());
     d.print(ln);
     d.setTextColor(MUTED, BG);
-    d.setCursor(8, y + 38); d.print(TR("Protocollo KeyDeck v1 (TCP)", "KeyDeck protocol v1 (TCP)"));
-    d.setCursor(8, y + 52); d.print(TR("Tasti -> campo attivo sul P4", "Keys -> focused field on P4"));
-    d.setCursor(8, y + 66); d.print(TR("Telemetria: PSRAM+CPU ogni 1s", "Telemetry: PSRAM+CPU every 1s"));
+    d.setCursor(8, y + 38); d.print(TR5("Protocollo KeyDeck v1 (TCP)", "KeyDeck protocol v1 (TCP)", "Protocolo KeyDeck v1 (TCP)", "Protocole KeyDeck v1 (TCP)", "KeyDeck-Protokoll v1 (TCP)"));
+    d.setCursor(8, y + 52); d.print(TR5("Tasti -> campo attivo sul P4", "Keys -> focused field on P4", "Teclas -> campo enfocado en P4", "Touches -> champ actif sur P4", "Tasten -> aktives Feld auf P4"));
+    d.setCursor(8, y + 66); d.print(TR5("Telemetria: PSRAM+CPU ogni 1s", "Telemetry: PSRAM+CPU every 1s", "Telemetria: PSRAM+CPU cada 1s", "Telemetrie: PSRAM+CPU chaque 1s", "Telemetrie: PSRAM+CPU alle 1s"));
 }
 
 static void draw(void)

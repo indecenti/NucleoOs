@@ -383,7 +383,7 @@ static void draw_settings(void)
 
         int sec = (int)(g_threshold_ms / 1000);
         char sv[20];
-        if (sec == 0)           snprintf(sv, sizeof sv, "%s", TR("mai", "never"));   // set from Settings
+        if (sec == 0)           snprintf(sv, sizeof sv, "%s", TR5("mai", "never", "nunca", "jamais", "niemals"));   // set from Settings
         else if (sec < 60)      snprintf(sv, sizeof sv, "%d sec", sec);
         else if (sec == 60)     snprintf(sv, sizeof sv, "1 min");
         else if (sec % 60 == 0) snprintf(sv, sizeof sv, "%d min", sec / 60);
@@ -421,7 +421,7 @@ static bool on_back(int key)
     if (s_running) {
         saver_stop();
         if (s_auto) { s_auto = false; nucleo_app_exit(); }
-        else        { nucleo_app_set_hint(TR("TAB cambia   invio seleziona   esc esci", "TAB switch   enter select   esc back")); nucleo_app_request_draw(); }
+        else        { nucleo_app_set_hint(TR5("TAB cambia   invio seleziona   esc esci", "TAB switch   enter select   esc back", "TAB cambia   intro elige   esc atras", "TAB change   entrer selecte   esc ret", "TAB wechsel   enter waehle   esc zur")); nucleo_app_request_draw(); }
         return true;
     }
     return false;
@@ -472,7 +472,7 @@ static void on_enter(void)
     } else {
         s_running = false; s_auto = false;
         s_tab = 0; s_sel = g_mode; s_dirty = true;
-        nucleo_app_set_hint(TR("TAB cambia   invio seleziona   esc esci", "TAB switch   enter select   esc back"));
+        nucleo_app_set_hint(TR5("TAB cambia   invio seleziona   esc esci", "TAB switch   enter select   esc back", "TAB cambia   intro elige   esc atras", "TAB change   entrer selecte   esc ret", "TAB wechsel   enter waehle   esc zur"));
         nucleo_app_request_draw();
     }
 }
@@ -482,7 +482,7 @@ static void on_key(int key, char ch)
     if (s_running) {
         saver_stop();
         if (s_auto) { s_auto = false; nucleo_app_exit(); }
-        else        { nucleo_app_set_hint(TR("TAB cambia   invio seleziona   esc esci", "TAB switch   enter select   esc back")); nucleo_app_request_draw(); }
+        else        { nucleo_app_set_hint(TR5("TAB cambia   invio seleziona   esc esci", "TAB switch   enter select   esc back", "TAB cambia   intro elige   esc atras", "TAB change   entrer selecte   esc ret", "TAB wechsel   enter waehle   esc zur")); nucleo_app_request_draw(); }
         return;
     }
     bool changed = false;

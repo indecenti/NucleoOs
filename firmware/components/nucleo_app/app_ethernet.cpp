@@ -60,15 +60,15 @@ static const MenuItem MENU[] = {
 
 static void set_hint(void)
 {
-    if (s_panel)                       nucleo_app_set_hint(TR("su/giu pagina   invio chiudi", "up/dn page   enter close"));
+    if (s_panel)                       nucleo_app_set_hint(TR5("su/giu pagina   invio chiudi", "up/dn page   enter close", "arr/abj pag.   enter cerr.", "haut/bas page   entree f.", "auf/ab seite   enter sch."));
     else switch (s_state) {
-        case ST_CONSENT:   nucleo_app_set_hint(TR("invio accetto   esc esci   tab guida", "enter accept   esc back   tab guide")); break;
-        case ST_NOMODULE:  nucleo_app_set_hint(TR("collega W5500   premi un tasto per rilevare", "connect W5500   press a key to detect")); break;
-        case ST_SCANNING:  nucleo_app_set_hint(TR("scansione in corso...", "scanning...")); break;
-        case ST_STOPPING:  nucleo_app_set_hint(TR("arresto + ripristino...", "stopping + restoring...")); break;
-        case ST_HOSTS:     nucleo_app_set_hint(TR("su/giu   invio MITM   m mappa   esc indietro", "up/dn   enter MITM   m map   esc back")); break;
-        case ST_RUNNING:   nucleo_app_set_hint(TR("invio: ferma+ripristina   esc: lascia attivo", "enter: stop+restore   esc: leave on")); break;
-        default:           nucleo_app_set_hint(TR("su/giu   invio avvia   tab guida", "up/dn   enter start   tab guide")); break;
+        case ST_CONSENT:   nucleo_app_set_hint(TR5("invio accetto   esc esci   tab guida", "enter accept   esc back   tab guide", "enter acepto   esc volver   tab guia", "entree accepte   esc ret.   tab guide", "enter akzept.   esc zur.   tab anleit.")); break;
+        case ST_NOMODULE:  nucleo_app_set_hint(TR5("collega W5500   premi un tasto per rilevare", "connect W5500   press a key to detect", "conecta W5500   pulsa tecla detectar", "branche W5500   appuyez touche detecter", "verbinde W5500   drucke taste erkennen")); break;
+        case ST_SCANNING:  nucleo_app_set_hint(TR5("scansione in corso...", "scanning...", "escaneando...", "balayage...", "scanning...")); break;
+        case ST_STOPPING:  nucleo_app_set_hint(TR5("arresto + ripristino...", "stopping + restoring...", "deteniendo + restaur...", "stop + restore...", "stop + restore...")); break;
+        case ST_HOSTS:     nucleo_app_set_hint(TR5("su/giu   invio MITM   m mappa   esc indietro", "up/dn   enter MITM   m map   esc back", "arr/abj   enter MITM   m map   esc vol.", "h/b   entree MITM   m carte   esc ret.", "auf/ab   enter MITM   m karte   esc z.")); break;
+        case ST_RUNNING:   nucleo_app_set_hint(TR5("invio: ferma+ripristina   esc: lascia attivo", "enter: stop+restore   esc: leave on", "enter: detn.+rest.   esc: dejar act.", "entree: arret+r.   esc: laisser act.", "enter: stop+restore   esc: stay on")); break;
+        default:           nucleo_app_set_hint(TR5("su/giu   invio avvia   tab guida", "up/dn   enter start   tab guide", "arr/abj   enter inicia   tab guia", "h/b   entree demarrer   tab guide", "auf/ab   enter start   tab anleit.")); break;
     }
 }
 

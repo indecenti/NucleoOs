@@ -63,11 +63,11 @@ static int  s_linelen;
 
 static void set_hint(void)
 {
-    if (s_state == ST_CONSENT)       nucleo_app_set_hint(TR("su/giu scegli   invio avvia   esc esci", "up/dn pick   enter start   esc back"));
-    else if (s_state == ST_CUSTOM)   nucleo_app_set_hint(TR("invio aggiungi   canc togli   tab avvia   esc esci", "enter add   del remove   tab start   esc back"));
-    else if (s_state == ST_ARMING)   nucleo_app_set_hint(TR("avvio in corso...", "starting..."));
-    else if (s_state == ST_STOPPING) nucleo_app_set_hint(TR("arresto in corso...", "stopping..."));
-    else                             nucleo_app_set_hint(TR("invio: ferma   esc: lascia attivo", "enter: stop   esc: leave on"));
+    if (s_state == ST_CONSENT)       nucleo_app_set_hint(TR5("su/giu scegli   invio avvia   esc esci", "up/dn pick   enter start   esc back", "ar/ab elige   intro inicia   esc atras", "haut/bas pick   entrer dema   esc ret", "auf/ab waehle   enter start   esc zur"));
+    else if (s_state == ST_CUSTOM)   nucleo_app_set_hint(TR5("invio aggiungi   canc togli   tab avvia   esc esci", "enter add   del remove   tab start   esc back", "intro anade  supr quita  tab inicia  esc sale", "entree ajoute  del suppr  tab lance  esc ret", "enter hinzu  entf weg  tab start  esc zurueck"));
+    else if (s_state == ST_ARMING)   nucleo_app_set_hint(TR5("avvio in corso...", "starting...", "iniciando...", "demarrage...", "start..."));
+    else if (s_state == ST_STOPPING) nucleo_app_set_hint(TR5("arresto in corso...", "stopping...", "detencion...", "arret...", "beendigung..."));
+    else                             nucleo_app_set_hint(TR5("invio: ferma   esc: lascia attivo", "enter: stop   esc: leave on", "intro: detiene   esc: deja on", "entrer arreter   esc laisser", "enter: stopp   esc: weiter"));
 }
 
 static void enter_custom(void)

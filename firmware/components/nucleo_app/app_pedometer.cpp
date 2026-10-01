@@ -166,7 +166,7 @@ static void enter(void)
 {
     s_settings = false;
     nucleo_imu_steps_reset(); s_steps = 0; s_cad = 0; s_last_step_us = 0;
-    nucleo_app_set_hint(TR("cammina col device   R azzera   TAB opzioni   esc esci", "walk with device   R reset   TAB options   esc back"));
+    nucleo_app_set_hint(TR5("cammina col device   R azzera   TAB opzioni   esc esci", "walk with device   R reset   TAB options   esc back", "camina device  R reset TAB opciones esc", "marche dev. R reset TAB option  esc ret", "Gehen mit Geraet R reset TAB Op esc zur"));
     nucleo_app_set_poll_handler(poll);
     nucleo_app_set_tab_handler(p_tab);
     nucleo_app_set_back_handler(p_back);

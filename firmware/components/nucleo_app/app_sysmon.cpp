@@ -24,7 +24,7 @@ static const uint16_t STO_COL = 0xFD20;   // storage = orange
 
 static uint32_t s_last_up = 0;
 static bool     s_first = true;   // full-clear only once; later ticks repaint just the changing regions (no flicker)
-static void enter(void) { nucleo_app_set_hint(TR("esc esci", "esc back")); s_last_up = 0; s_first = true; nucleo_app_request_draw(); }
+static void enter(void) { nucleo_app_set_hint(TR5("esc esci", "esc back", "esc atras", "esc retour", "esc zurueck")); s_last_up = 0; s_first = true; nucleo_app_request_draw(); }
 // The finest-grained value shown is uptime in whole seconds — redraw at 1 Hz, not 5 Hz.
 static void tick(void) { uint32_t up = (uint32_t)(esp_timer_get_time() / 1000000); if (up != s_last_up) { s_last_up = up; nucleo_app_request_draw(); } }
 

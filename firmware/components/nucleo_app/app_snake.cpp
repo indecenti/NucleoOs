@@ -1144,8 +1144,8 @@ static void on_enter(void) {
     memset(s_parts,0,sizeof(s_parts));
     s_cam_x=0; s_cam_y=0;
     s_last_us=esp_timer_get_time();
-    if (!pnet_start()) nucleo_app_set_hint(TR("ESP-NOW non avviato   esc", "ESP-NOW not started   esc"));
-    else nucleo_app_set_hint(TR("\x18\x19 scegli   invio avvia   esc esci", "\x18\x19 pick   enter start   esc back"));
+    if (!pnet_start()) nucleo_app_set_hint(TR5("ESP-NOW non avviato   esc", "ESP-NOW not started   esc", "ESP-NOW no iniciado   esc", "ESP-NOW non demarr   esc", "ESP-NOW nicht gestart   esc"));
+    else nucleo_app_set_hint(TR5("\x18\x19 scegli   invio avvia   esc esci", "\x18\x19 pick   enter start   esc back", "\x18\x19 elige   intro juega   esc sale", "\x18\x19 choix   entree joue   esc ret", "\x18\x19 waehle   enter start   esc zur"));
     nucleo_app_set_poll_handler(poll_fn);
     nucleo_app_set_back_handler(on_back);
     nucleo_app_set_tab_handler(on_tab);
