@@ -27,6 +27,7 @@
     "swarm:test": "node tools/anima-host/swarm-sec-check.mjs",
     "eth:test": "node tools/anima-host/eth-check.mjs",
     "wifi:test": "node tools/anima-host/wifi-check.mjs",
+    "sdcontent:test": "node tools/anima-host/sdcontent-check.mjs",
     "setupstore:test": "node tools/anima-host/setup-store-check.mjs",
     "update:test": "node tools/anima-host/update-check.mjs",
     "guest:test": "node tools/anima-host/guest-check.mjs",
