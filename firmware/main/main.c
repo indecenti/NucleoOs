@@ -268,6 +268,7 @@ void app_main(void)
             const char *lines[] = { msg, "", wait };
             nucleo_ui_home("NucleoOS", lines, 3);
             nucleo_storage_format_now();
+            if (flang[0]) nucleo_i18n_set_lang(flang);   // re-persist the language onto the fresh card
             bootmark("sd-format");
         }
         nucleo_storage_provision();         bootmark("sd-provision");

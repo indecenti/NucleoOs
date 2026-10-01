@@ -27,7 +27,8 @@ static int  s_tts_speed = 100, s_saver_s = 120, s_saver_mode = 1, s_anima_mode =
 extern "C" {
 // Guest mode (M5Launcher): the simulated device is a stand-alone install, so Settings ▸ Device keeps
 // its stand-alone rows and the goldens don't move. The real decision core is gated by guest:test.
-bool           nucleo_guest_hosted(void) { return false; }
+bool           g_host_guest = false;                       // scene-controlled: running under M5Launcher
+bool           nucleo_guest_hosted(void) { return g_host_guest; }
 bool           nucleo_guest_self_ota_allowed(void) { return true; }
 guest_return_t nucleo_guest_return_mode(void) { return GUEST_RET_DEEP_SLEEP; }
 bool           nucleo_guest_return_to_launcher(void) { return false; }

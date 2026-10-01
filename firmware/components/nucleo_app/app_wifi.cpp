@@ -148,7 +148,7 @@ enum {
     R_BRIGHT, R_THEME, R_SAVER_TIME, R_SAVER_STYLE,                                         // Display
     R_VOLUME, R_MUTE, R_TTS, R_TTS_SPEED, R_VOICE,                                          // Sound
     R_NAME, R_PIN, R_SESSIONS, R_MODEL, R_VERSION, R_BATTERY, R_SD, R_RAM, R_UPTIME, R_UPDATES, R_RESTART, R_LAUNCHER,  // Device
-    R_RST_SOFT, R_RST_HARD, R_RST_SD,                                                       // Reset
+    R_RST_SOFT, R_RST_HARD, R_RST_FMT, R_RST_SD,                                            // Reset
     R_SAVED_NET, R_FORGET_ALL,                                                              // Saved networks
 };
 
@@ -161,8 +161,8 @@ static const uint8_t ROWS_SOUND[]   = { R_VOLUME, R_MUTE, R_TTS, R_TTS_SPEED, R_
 static const uint8_t ROWS_DEVICE[]  = { R_NAME, R_PIN, R_SESSIONS, R_MODEL, R_VERSION, R_BATTERY, R_SD, R_RAM, R_UPTIME, R_UPDATES, R_RESTART };
 // Same page when installed by M5Launcher (runtime-detected; stand-alone never shows the extra row).
 static const uint8_t ROWS_DEVICE_HOSTED[] = { R_NAME, R_PIN, R_SESSIONS, R_MODEL, R_VERSION, R_BATTERY, R_SD, R_RAM, R_UPTIME, R_UPDATES, R_RESTART, R_LAUNCHER };
-static const uint8_t ROWS_RESET[]   = { R_RST_SOFT, R_RST_HARD, R_RST_SD };
-static bool is_rst(uint8_t id) { return id == R_RST_SOFT || id == R_RST_HARD || id == R_RST_SD; }   // ENTER x3 rows
+static const uint8_t ROWS_RESET[]   = { R_RST_SOFT, R_RST_HARD, R_RST_FMT, R_RST_SD };
+static bool is_rst(uint8_t id) { return id == R_RST_SOFT || id == R_RST_HARD || id == R_RST_FMT || id == R_RST_SD; }   // ENTER x3 rows
 static const uint8_t SECTIONS[]     = { PG_WIFI, PG_AP, PG_BT, PG_DISPLAY, PG_SOUND, PG_DEVICE, PG_RESET };   // TAB order
 #define NROWS(a) ((int)(sizeof(a) / sizeof((a)[0])))
 
@@ -627,27 +627,33 @@ static void make_row_id(uint8_t id, int num, Row &r)
                         "Maintenir sa touche, relancer", "Seine Taste halten, Neustart"));
     } break;
     // -- Reset (armed rows show how many ENTER presses are left)
-    case R_RST_SOFT: case R_RST_HARD: case R_RST_SD:
+    case R_RST_SOFT: case R_RST_HARD: case R_RST_FMT: case R_RST_SD: {
+        // Four rows, each named for exactly what it erases: config only · factory reset (internal stores +
+        // the SD's state folders) · the SD card only · both ("from scratch": a blank device + the wizard).
+        const bool card = id == R_RST_FMT || id == R_RST_SD;
         r.label = (id == R_RST_SOFT) ? TR5("Azzera config", "Reset settings", "Borrar ajustes", "Effacer reglages", "Konfig loeschen")
                 : (id == R_RST_HARD) ? TR5("Reset totale", "Factory reset", "Borrado total", "Tout effacer", "Werksreset")
-                                     : TR5("Formatta SD", "Erase SD card", "Formatear SD", "Formater la SD", "SD formatieren");
+                : (id == R_RST_FMT)  ? TR5("Formatta SD", "Erase SD card", "Formatear SD", "Formater la SD", "SD formatieren")
+                                     : TR5("Tutto da zero", "Wipe everything", "Borrar todo", "Tout a zero", "Alles loeschen");
         r.kind = K_DANGER;
+        if (card) r.dis = !nucleo_storage_info()->mounted;
         if (s_rst_id == id) { snprintf(r.val, sizeof r.val, "x%d", s_rst_left + 1);
-                              snprintf(r.sub, sizeof r.sub, TR5("Invio ancora %d volte", "ENTER %d more times", "ENTER %d veces mas",
-                                                                "ENTER encore %d fois", "ENTER noch %d-mal"), s_rst_left); }
-        else if (id == R_RST_SD) {
-            r.dis = !nucleo_storage_info()->mounted;
-            sset(r, r.dis ? TR5("Nessuna scheda SD", "No SD card", "Sin tarjeta SD", "Pas de carte SD", "Keine SD-Karte")
-                 : nucleo_guest_hosted() ? TR5("Anche i file di M5Launcher", "Also M5Launcher's files", "Tambien archivos M5Launcher",
-                                               "Aussi les fichiers M5Launcher", "Auch M5Launcher-Dateien")
-                                         : TR5("TUTTA la SD + reset totale", "The WHOLE SD + factory reset", "TODA la SD + borrado total",
-                                               "TOUTE la SD + tout effacer", "GANZE SD + Werksreset"));
-        }
+                              // A card shared with M5Launcher loses the Launcher's files too: said where the user confirms.
+                              snprintf(r.sub, sizeof r.sub, card && nucleo_guest_hosted()
+                                           ? TR5("Anche M5Launcher: invio ancora %d", "M5Launcher too: ENTER %d more", "M5Launcher incl.: ENTER %d mas",
+                                                 "M5Launcher aussi: ENTREE %d fois", "Auch M5Launcher: ENTER %dx")
+                                           : TR5("Invio ancora %d volte", "ENTER %d more times", "ENTER %d veces mas",
+                                                 "ENTER encore %d fois", "ENTER noch %d-mal"), s_rst_left); }
+        else if (card && r.dis) sset(r, TR5("Nessuna scheda SD", "No SD card", "Sin tarjeta SD", "Pas de carte SD", "Keine SD-Karte"));
+        else if (id == R_RST_FMT) sset(r, TR5("Solo la SD. Wi-Fi e PIN restano", "SD only. Wi-Fi and PIN kept", "Solo la SD. Wi-Fi y PIN quedan",
+                                             "SD seule. Wi-Fi et PIN gardes", "Nur SD. WLAN und PIN bleiben"));
+        else if (id == R_RST_SD)  sset(r, TR5("Reset totale + formatta SD", "Factory reset + erase SD", "Borrado total + formatear SD",
+                                             "Tout effacer + formater SD", "Werksreset + SD formatieren"));
         else sset(r, id == R_RST_SOFT ? TR5("Rete, preferenze, log. File salvi", "Network, prefs, logs. Files kept", "Red, ajustes, logs (no archivos)",
                                             "Reseau, prefs, logs (sauf fichiers)", "Netz, Setup, Logs. Dateien bleiben")
                                       : TR5("Anche chiavi e dati ANIMA", "Also keys and ANIMA data", "Tambien claves, datos ANIMA",
                                             "Aussi cles et donnees ANIMA", "Auch Keys und ANIMA-Daten"));
-        break;
+    } break;
     // -- Saved networks
     case R_SAVED_NET: {
         const char *ss = nucleo_setup_net_ssid(num);
@@ -1694,10 +1700,17 @@ static void activate(const Row &r)
                            "Prefere: rejoint en premier", "Bevorzugt: zuerst verbunden")
                      : TR5("Priorita normale", "Normal priority", "Prioridad normal", "Priorite normale", "Normale Prioritaet"));
     } break;
-    case R_RST_SOFT: case R_RST_HARD: case R_RST_SD:
-        if (r.id == R_RST_SD && r.dis) { toast(TR5("Nessuna scheda SD", "No SD card", "Sin tarjeta SD", "Pas de carte SD", "Keine SD-Karte")); break; }
+    case R_RST_SOFT: case R_RST_HARD: case R_RST_FMT: case R_RST_SD:
+        if ((r.id == R_RST_FMT || r.id == R_RST_SD) && r.dis) { toast(TR5("Nessuna scheda SD", "No SD card", "Sin tarjeta SD", "Pas de carte SD", "Keine SD-Karte")); break; }
         if (s_rst_id != r.id) { s_rst_id = r.id; s_rst_left = 2; }
-        else if (--s_rst_left <= 0) {
+        else if (--s_rst_left <= 0 && r.id == R_RST_FMT) {
+            // The card only: armed, run at the next boot before anything opens a file on it (see
+            // nucleo_storage_format_arm). Wi-Fi, PIN and sessions live on /cfg + NVS and stay.
+            if (nucleo_storage_format_arm(nucleo_i18n_lang())) esp_restart();
+            s_rst_id = R_NONE;
+            toast(TR5("Formattazione non avviata", "Erase could not start", "No se pudo formatear", "Formatage impossible", "Formatieren nicht gestartet"));
+        }
+        else if (s_rst_left <= 0) {
             flush_prefs();
             // The brick-class config lives on internal flash (/cfg LittleFS + NVS), with the SD only a
             // mirror that /cfg and NVS heal back — so each owner erases EVERY tier of its store and seals
