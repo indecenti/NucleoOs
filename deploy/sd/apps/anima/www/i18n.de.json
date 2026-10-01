@@ -170,5 +170,7 @@
   "l1WebMode": "Der Cardputer ist gerade im Web-Modus: Sein Offline-Gehirn pausiert, damit der Desktop den Speicher hat — diese Wahl wirkt erst, wenn du zum eigenen System des Cardputers zurückkehrst.",
   "engLiveStatus": "Cardputer · Live-Status",
   "engModel": "Modell auf dem PC",
-  "engModelAuto": "Automatisch (das passendste, auf diesem PC gemessen)"
+  "engModelAuto": "Automatisch (das passendste, auf diesem PC gemessen)",
+  "agentShCmd": "Befehl:",
+  "agentShWrites": "Was sich ändert:"
 }

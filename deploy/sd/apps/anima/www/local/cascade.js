@@ -170,7 +170,7 @@ const LIVE = [
   String.raw`(?:quanta|livello(?: della)?|stato(?: della)?|carica(?: della)?) batteria(?: ho| hai| c'e| rimane| resta)?|batteria|battery(?: level| left| status)?|how much battery(?: is left| do i have| left)?`,
   String.raw`quanto spazio (?:libero |rimasto )?(?:ho|hai|c'e|resta|rimane)(?: sulla sd| su sd)?|spazio (?:libero|rimasto|disponibile|su sd|sulla sd)|(?:free|disk|sd) space|how much (?:free )?space(?: is left| do i have| left)?|storage left`,
   String.raw`quanta (?:ram|memoria)(?: libera)?(?: ho| hai| c'e)?|(?:ram|memoria) (?:libera|disponibile)|free (?:ram|memory)|how much (?:ram|memory)(?: is free| do you have| left)?`,
-  String.raw`uptime|da quanto (?:tempo )?(?:sei|e) acces[oa]|how long have you been (?:on|up|running)`,
+  String.raw`uptime|da quanto (?:tempo )?(?:sei|e) acces[oa](?: il (?:cardputer|dispositivo|device))?|how long (?:have you been|has the (?:cardputer|device) been) (?:on|up|running)`,
   String.raw`(?:che|quale) versione (?:sei|hai|e|di nucleoos|del firmware|del sistema)|versione(?: del)? firmware|firmware version|what version (?:are you|is this|of nucleoos)`,
   String.raw`(?:a che|a quale) (?:rete|wi-?fi) sono connesso|(?:che|quale) (?:rete|wi-?fi)(?: e| uso| stai usando)?|sono connesso(?: a internet)?|am i connected|(?:which|what) (?:network|wi-?fi)(?: am i on| is this)?|(?:qual e )?(?:il mio )?indirizzo ip|(?:what'?s )?my ip(?: address)?|ip address`,
   String.raw`(?:che|quali) (?:impegni|appuntamenti) ho(?: oggi| domani)?|i miei impegni|impegni(?: di)? oggi|cosa ho (?:in agenda|oggi|domani)|agenda(?: di)? oggi|(?:what'?s|what is) on (?:today|my calendar)|my (?:schedule|agenda|appointments)(?: today)?`,
@@ -246,6 +246,37 @@ export function liveFromStatus(kind, st, lang = 'it', now = new Date()) {
     case 'year': return fill(T.year, { y: clock.getFullYear() });
     default: return null;                          // agenda, season: not in the status — hand it on
   }
+}
+
+// A question that asks SEVERAL live values at once ("quanto spazio c'è sulla SD e da quanto è acceso?") is not
+// one whole-utterance LIVE match: split it on and/e/y/et/und/commas and answer every clause from the status.
+// → ['space','uptime'] when every clause is a live question, else null.
+export function liveKinds(q) {
+  const one = liveKind(q); if (one) return [one];
+  const clauses = String(q || '').split(/\s*(?:[,;?]|\s(?:e|ed|and|y|et|und|o)\s)\s*/i).map((c) => c.trim()).filter(Boolean);
+  if (clauses.length < 2) return null;
+  const kinds = [];
+  for (const c of clauses) {
+    const k = liveKind(c);                                  // no guessing: every clause must be a live question on its own
+    if (!k) return null;
+    if (!kinds.includes(k)) kinds.push(k);
+  }
+  return kinds;
+}
+// One compact line of the Cardputer's live state for EVERY engine's prompt (contextkit `device`), ~40 tokens.
+export function deviceLine(st, lang = 'it') {
+  if (!st || typeof st !== 'object') return '';
+  const it = lang === 'it', parts = [];
+  const s = st.storage;
+  if (s && s.mounted && s.total_bytes) parts.push((it ? 'SD ' : 'SD ') + (s.free_bytes / 1e9).toFixed(1) + (it ? ' GB liberi su ' : ' GB free of ') + (s.total_bytes / 1e9).toFixed(1));
+  if (st.battery && typeof st.battery.pct === 'number') parts.push((it ? 'batteria ' : 'battery ') + Math.round(st.battery.pct) + '%');
+  if (typeof st.uptime_s === 'number') { const h = Math.floor(st.uptime_s / 3600), m = Math.floor((st.uptime_s % 3600) / 60); parts.push((it ? 'acceso da ' : 'up ') + (h ? h + ' h ' : '') + m + ' min'); }
+  const n = st.network || {};
+  if (n.mode === 'sta' && n.ip) parts.push('Wi-Fi «' + (n.ssid || '?') + '» ' + n.ip);
+  if (typeof st.free_heap === 'number') parts.push('RAM ' + Math.round(st.free_heap / 1024) + ' KB');
+  if (st.profile) parts.push(st.profile === 'web' ? (it ? 'modalità web (cervello offline in pausa)' : 'web mode (offline brain paused)') : (it ? 'OS completo' : 'full OS'));
+  if (st.version) parts.push('NucleoOS ' + st.version);
+  return parts.join(', ');
 }
 
 export function commandHint(q) {

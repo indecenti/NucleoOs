@@ -3315,10 +3315,16 @@
         if(speed===0 || reducedMotion()){ finish(); return; }
         const cur=document.createElement('span'); cur.className='cursor'; cur.setAttribute('aria-hidden','true'); body.appendChild(cur);
         const n=Math.max(Math.round(2*(14/Math.max(speed,4))), Math.ceil(text.length/60));
-        let i=0;
+        // Progress follows the CLOCK, not the number of ticks: a background tab throttles timers to ~1/s, and a
+        // tick-counted reveal crawled a two-sentence answer for minutes while the turn stayed "busy". Hidden tab →
+        // show it all; never longer than 1.5 s whatever happens.
+        let i=0; const t0=performance.now();
         const step=()=>{
-          if(interrupt || i>=text.length){ cur.remove(); finish(); return; }
-          cur.insertAdjacentText('beforebegin', text.slice(i,i+n)); i+=n; scrollDown();
+          const el=performance.now()-t0;
+          if(interrupt || document.hidden || el>1500){ cur.remove(); finish(); return; }
+          const want=Math.min(text.length, (Math.floor(el/Math.max(speed,1))+1)*n);
+          if(want>i){ cur.insertAdjacentText('beforebegin', text.slice(i,want)); i=want; scrollDown(); }
+          if(i>=text.length){ cur.remove(); finish(); return; }
           setTimeout(step, speed);
         };
         setTimeout(step, speed);
@@ -4083,6 +4089,19 @@
       field && field.classList.toggle('is-off', web);
       if(sub){ if(!sub.dataset.base) sub.dataset.base=sub.textContent; sub.textContent = web ? L('l1WebMode') : sub.dataset.base; }
     }
+    // One cached read of /api/status shared by the exact live answers and the device line every prompt carries
+    // (a few seconds old at most: one request per turn burst, not one per use — the device serves it on 18 KB).
+    let _devStatus=null, _devStatusAt=0;
+    async function statusNow(maxAgeMs=4000){
+      if(_devStatus && Date.now()-_devStatusAt<maxAgeMs) return _devStatus;
+      // bounded: a device busy serving a big asset must never hold the turn (seen: /api/status timing out while
+      // ANIMA's own 680 KB page reloaded) — a stale value or none beats a hung answer
+      try{ const ctl=new AbortController(); const tm=setTimeout(()=>ctl.abort(), 3000);
+        const r=await fetch('/api/status',{ cache:'no-store', signal:ctl.signal }); clearTimeout(tm);
+        if(r.ok){ _devStatus=await r.json(); _devStatusAt=Date.now(); _devProfile=String((_devStatus&&_devStatus.profile)||'up'); } }catch{}
+      return _devStatus;
+    }
+    async function deviceFacts(){ try{ const P=await cascadeMod(); const st=await statusNow(15000); return (st && P.deviceLine) ? P.deviceLine(st, lang) : ''; }catch{ return ''; } }
     // A device ACTION the Cardputer could not take this turn goes to the PC's model WITH the real tools (the
     // local agent) instead of stopping at "not done": it acts, or says honestly that it can't.
     let _turnForceAgent=false;
@@ -4200,6 +4219,13 @@
       const P=await cascadeMod();
       const mem=P.memoryHint ? P.memoryHint(q) : null;
       if(mem) return memoryFirst(q, mem, P);
+      // SEVERAL live values in one question ("spazio sulla SD e da quanto è acceso?"): every clause answered exactly.
+      const kinds=P.liveKinds ? P.liveKinds(q) : null;
+      if(kinds && kinds.length>1){
+        const st=await statusNow(); const lg=(P.guessLang && P.guessLang(q)) || lang;
+        const parts=st ? kinds.map((k)=>P.liveFromStatus(k, st, lg)).filter(Boolean) : [];
+        if(parts.length===kinds.length) return { reply:parts.join(' '), intent:'live_multi', domain:'system', tier:'status', status:true, confidence:95 };
+      }
       const hint=P.commandHint(q); if(!hint) return null;             // ordinary question: no device round-trip
       try{ const m=await loadLLM(); if(m.isTranslateRequest(q)) return null; }catch{}   // translation has its own ladder
       // The real classifier: the in-browser engine when it is already here (no download), else the device.
@@ -4470,7 +4496,7 @@
       let route = keyCfg;
       if(hard){ try{ const r=AI.routeFor({difficulty:'hard'}, keyCfg.keys||{}, keyCfg); if(r&&r.key) route=r; }catch{} }
       const callWith=async(cfg)=>{
-        const a=ctxkit.assemble({ history, user:q, mode:'only', provider:cfg.provider, model:cfg.model, lang,   // now: contextkit's localised date + time + weekday
+        const a=ctxkit.assemble({ history, user:q, mode:'only', provider:cfg.provider, model:cfg.model, lang, device:await deviceFacts(),   // now: contextkit's localised date + time + weekday
 
           workspace:wsRoot, tree:wsx.tree, files:wsx.files });
         return cloudComplete(cfg.provider, cfg.base, cfg.model, cfg.key, cfg.version, a.system, a.messages, { maxTokens:a.maxTokens, temperature:a.temperature, signal:_turnSig, onDelta, tier: hard ? 'max' : 'mid' });
@@ -4504,7 +4530,7 @@
       const E=await enginesMod();
       const cfg=E.loadLocalConfig(); if(!cfg.enabled) return null;
       const wsRoot=(fs.hasRoot&&fs.hasRoot())? fs.getRoot() : undefined;
-      const a=ctxkit.assemble({ history, user:q, mode:'server', lang, workspace:wsRoot, tree:(wsx&&wsx.tree)||'', files:(wsx&&wsx.files)||[] });
+      const a=ctxkit.assemble({ history, user:q, mode:'server', lang, device:await deviceFacts(), workspace:wsRoot, tree:(wsx&&wsx.tree)||'', files:(wsx&&wsx.files)||[] });
       const res=await E.localComplete(ctxkit.wantsCode(q)?'code':'chat', {
         messages:[{ role:'system', content:a.system }, ...a.messages], temperature:a.temperature, maxTokens:a.maxTokens,
         loopbackOnly:!!opts.private, signal:opts.signal||_turnSig, onDelta:opts.onDelta, config:cfg });
@@ -4556,6 +4582,12 @@
       else if(op==='move_file' && a.from) target=(String(a.from).startsWith('/')?'':root)+String(a.from).replace(/^\.\//,'')+' → '+(a.abs||a.to||'?');
       else target=a.abs||(a.path?root+String(a.path).replace(/^\.?\/+/,''):'');
       const lines=[];
+      if(op==='sh'){                                   // a shell line that changes files: the line as typed + what it touches
+        lines.push(L('agentShCmd'), '$ '+String(a.cmd||''));
+        if(Array.isArray(a.writes) && a.writes.length) lines.push('', L('agentShWrites'), ...a.writes.slice(0,8).map((w)=>'• '+w.op+' '+(w.path||'')));
+        if(always) lines.push('', '⚠ '+L('agentIrrev'));
+        return { title:L('agentWants',{ op:'sh' }), body:lines.join('\n') };
+      }
       if(target) lines.push(L(isPath?'agentPath':'agentTarget',{ p:target }));
       // WHAT will be written, not only where: approving a write you cannot see is not a real approval.
       const clip=(s,maxL=10,maxC=600)=>{ const all=String(s==null?'':s).replace(/\r\n/g,'\n'); const ls=all.split('\n');
@@ -4610,7 +4642,7 @@
           // Auto-approve covers ordinary workspace edits ONLY. An irreversible/system op (ALWAYS_CONFIRM) or a
           // hardware act (a.hw) is asked EVERY time — the runtime calls confirm() for those precisely because
           // auto-approve must not cover them (a prompt-injected "publish this app" would otherwise go through).
-          const always = !!a.hw || ALWAYS.has(a.op);
+          const always = !!a.hw || ALWAYS.has(a.op) || (a.op==='sh' && Array.isArray(a.writes) && a.writes.some((w)=>w.op==='rm'));   // a shell rm asks like delete_file
           if(agentAuto && !always) return true;
           const q=agentConfirmText(a, always);
           return askDialog({ title:q.title, body:q.body, ok:L('allow'), cancel:L('deny'), danger:always });
@@ -4720,7 +4752,11 @@
       // path would only show the file and drop the question.
       const needsAgent = fintent && ((fintent.op==='write' || fintent.op==='append') && fintent.mode==='auto'
         || /^(read|list|tree|search|glob)$/.test(fintent.op) && ctxkit.asksAboutContent(q));
-      const genWrite = needsAgent && await agentCanRun().catch(()=>false);
+      // A request in SEVERAL steps ("crea la cartella demo e dentro un README…, poi mostramelo") is a task, not one
+      // file op: the instant path took only its first op. And with no workspace open, the instant path could only
+      // say "open a workspace" — the agent offers the same choice AND can do the job in /data/agent.
+      const multiStep = !!fintent && /\b(e poi|poi|quindi|dopo|e dentro|and then|then|after that|inside it|y luego|luego|puis|ensuite|danach|dann)\b/i.test(q);
+      const genWrite = (needsAgent || multiStep || (!!fintent && !fs.hasRoot())) && await agentCanRun().catch(()=>false);
       if(fintent && !genWrite){ if(fs.hasRoot()){ runFileIntent(q, fintent); return; } inviteWorkspace(q); return; }
       const sendQ = chainMath(q);   // engine-facing query (may carry the running total); visible msg stays q
       busy=true; interrupt=false; setStop(true); closeSlash(); stopSpeaking();   // un nuovo turno zittisce la risposta precedente
