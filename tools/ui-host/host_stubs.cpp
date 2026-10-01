@@ -60,6 +60,7 @@ extern "C" BaseType_t xTaskCreate(TaskFunction_t fn, const char *name, uint32_t,
 }
 extern "C" BaseType_t xTaskCreatePinnedToCore(TaskFunction_t, const char *, uint32_t, void *, UBaseType_t, TaskHandle_t *out, BaseType_t) { if (out) *out = nullptr; return pdPASS; }
 extern "C" void vTaskDelete(TaskHandle_t) {}
+extern "C" UBaseType_t uxTaskGetStackHighWaterMark(TaskHandle_t) { return 4096; }
 extern "C" void vTaskDelay(TickType_t) {}
 extern "C" TickType_t xTaskGetTickCount(void) { return (TickType_t)(g_host.now_us / 1000); }
 

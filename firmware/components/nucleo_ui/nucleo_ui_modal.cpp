@@ -161,6 +161,7 @@ extern "C" void nucleo_ui_message(const char *title, const char *const *lines, i
 
 extern "C" void nucleo_ui_home(const char *title, const char *const *lines, int n)
 {
+    s_hint = "";                                   // no hint bar here: present() must not repaint a stale one
     ModalSurface s;
     header(s.g, title);
     s.g->setTextColor(FG, BG);

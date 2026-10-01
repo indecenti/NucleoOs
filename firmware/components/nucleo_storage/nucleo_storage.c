@@ -42,7 +42,9 @@ esp_err_t nucleo_storage_mount_cfg(void)
     return ESP_OK;
 }
 
-esp_err_t nucleo_storage_mount(void)
+static esp_err_t mount_ex(bool format_if_failed);
+esp_err_t nucleo_storage_mount(void) { return mount_ex(false); }
+static esp_err_t mount_ex(bool format_if_failed)
 {
     sdmmc_host_t host = SDSPI_HOST_DEFAULT();
     host.slot = NUCLEO_SD_SPI_HOST;
@@ -70,7 +72,7 @@ esp_err_t nucleo_storage_mount(void)
 
     // Do NOT auto-format: an unreadable card must surface as an error, not be wiped.
     esp_vfs_fat_sdmmc_mount_config_t mcfg = {
-        .format_if_mount_failed = false,
+        .format_if_mount_failed = format_if_failed,   // only the interrupted-erase recovery (format_recover)
         .max_files = 8,
         .allocation_unit_size = 16 * 1024,
     };
@@ -228,6 +230,7 @@ const nucleo_storage_info_t *nucleo_storage_info(void) { return &s_info; }
 void *nucleo_storage_card(void) { return s_info.mounted ? s_card : NULL; }
 
 #define FORMAT_MARKER NUCLEO_CFG_MOUNT "/sd-format.arm"   // /cfg root: the factory reset clears /cfg/config only
+#define FORMAT_RUN    NUCLEO_CFG_MOUNT "/sd-format.run"   // an erase in progress: survives a power cut mid-f_mkfs
 
 bool nucleo_storage_format_arm(const char *lang)
 {
@@ -250,13 +253,38 @@ bool nucleo_storage_format_pending(char *lang)
 
 esp_err_t nucleo_storage_format_now(void)
 {
-    unlink(FORMAT_MARKER);
-    if (!s_info.mounted || !s_card) { ESP_LOGE(TAG, "format: no card mounted, nothing erased"); return ESP_ERR_INVALID_STATE; }
-    ESP_LOGW(TAG, "erasing the whole SD card (FAT32)...");
+    // ARMED -> RUNNING: never armed again (no format-every-boot loop), yet a power cut mid-f_mkfs is still
+    // known at the next boot, where the card no longer mounts (format_recover finishes the job).
+    if (rename(FORMAT_MARKER, FORMAT_RUN) != 0) unlink(FORMAT_MARKER);
+    if (!s_info.mounted || !s_card) { unlink(FORMAT_RUN); ESP_LOGE(TAG, "format: no card mounted, nothing erased"); return ESP_ERR_INVALID_STATE; }
+    ESP_LOGW(TAG, "erasing the whole SD card...");
     int64_t t0 = esp_timer_get_time();
     esp_err_t err = esp_vfs_fat_sdcard_format(NUCLEO_SD_MOUNT, s_card);   // unmount, f_mkfs, mount back
     ESP_LOGW(TAG, "SD erase: %s in %lld ms", esp_err_to_name(err), (long long)((esp_timer_get_time() - t0) / 1000));
     s_info.total_bytes = 0;                                               // refresh() re-reads the new volume
-    if (err != ESP_OK) s_info.mount_error = err;
+    // IDF frees the card and unregisters /sd when the MOUNT-BACK fails, yet can still return ESP_OK (f_mkfs
+    // itself succeeded): never keep a freed handle. Verify the volume; if it is gone, mount from scratch.
+    uint64_t tot = 0, fr = 0;
+    if (esp_vfs_fat_info(NUCLEO_SD_MOUNT, &tot, &fr) != ESP_OK) {
+        ESP_LOGE(TAG, "SD erase: the card did not mount back, remounting");
+        s_card = NULL; s_info.mounted = false;
+        if (err == ESP_OK) err = ESP_FAIL;
+        if (mount_ex(false) == ESP_OK) err = ESP_OK;
+    }
+    if (err == ESP_OK) unlink(FORMAT_RUN);
+    else s_info.mount_error = err;
     return err;
+}
+
+esp_err_t nucleo_storage_format_recover(void)
+{
+    // The card did not mount at boot. An ARMED erase is dropped (it must not wipe another card inserted
+    // later); a RUNNING one (power cut mid-erase) is finished once: mount with format-on-failure.
+    unlink(FORMAT_MARKER);
+    FILE *f = fopen(FORMAT_RUN, "r");
+    if (!f) return ESP_ERR_NOT_FOUND;
+    fclose(f);
+    unlink(FORMAT_RUN);                                                   // one attempt only, even if it crashes
+    ESP_LOGW(TAG, "SD erase was interrupted: formatting the card again");
+    return mount_ex(true);
 }

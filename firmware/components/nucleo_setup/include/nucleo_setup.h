@@ -63,8 +63,13 @@ void nucleo_setup_show_home(void);
 // First boot: the wizard (nucleo_setup_run) does the language, then Settings ▸ Nearby networks does the
 // network. onboarding(): that step is still owed this boot. onboard_finish(): it is over — a join already
 // completed the setup, otherwise the hotspot becomes the chosen mode; true = the device is on a Wi-Fi.
+// The step is owed until onboard_ack() (the user saw "All set"). finish_async() runs the finish on the Wi-Fi
+// supervisor; finish_poll(): -1 pending, 0 hotspot, 1 joined.
 bool nucleo_setup_onboarding(void);
 bool nucleo_setup_onboard_finish(void);
+void nucleo_setup_onboard_finish_async(void);
+int  nucleo_setup_onboard_finish_poll(void);
+void nucleo_setup_onboard_ack(void);
 
 // Register the network setup apps to the native OS launcher
 void nucleo_setup_register_apps(void);
@@ -80,6 +85,9 @@ int         nucleo_setup_scan_channel(int i);
 int         nucleo_setup_scan_secure(int i);      // 1 = encrypted (not OPEN)
 const char *nucleo_setup_scan_auth_label(int i);  // "Open"/"WPA2"/"WPA3"/... (for the web scanner)
 bool        nucleo_setup_join(const char *ssid, const char *pass);  // blocking; true if it got an IP
+// Why the last nucleo_setup_join() failed.
+enum { NUCLEO_JOIN_OK = 0, NUCLEO_JOIN_PASSWORD, NUCLEO_JOIN_NOT_FOUND, NUCLEO_JOIN_NO_IP, NUCLEO_JOIN_FAILED };
+int         nucleo_setup_join_error(void);
 bool        nucleo_setup_config_loaded(void);     // saved config parsed/written this boot (false in Wi-Fi-skipped Solo boots)
 void        nucleo_setup_start_ap(void);          // switch to hotspot (AP) mode now (no-op if !config_loaded)
 void        nucleo_setup_stop_ap(void);           // turn AP OFF -> rejoin client (STA) mode (Settings toggle)
