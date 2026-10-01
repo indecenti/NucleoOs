@@ -170,7 +170,7 @@ static const char *s_msg;
 static char  s_msgbuf[28];                      // backing store for dynamic toasts
 
 // reels
-static uint8_t s_strip[NREEL][SLEN];
+static uint8_t (*s_strip)[SLEN];                  // NREEL rows, APP_RAM (rebuilt by build_strips() in on_enter)
 static float r_pos[NREEL];                       // continuous top-index
 static float r_start[NREEL], r_target[NREEL];
 static int   r_phase[NREEL];                      // 0 done/idle, 1 spin, 2 stop, 3 bounce
@@ -202,7 +202,7 @@ static int   s_fin_age;                             // ms since the finale fired
 // coin particles
 #define NPART 40
 struct Coin { float x, y, vx, vy; int life, max; uint16_t col; };
-static Coin s_coin[NPART];
+static Coin *s_coin;                                 // NPART entries, APP_RAM: 0 B when closed
 
 // firework bursts (mega/jackpot celebration only)
 #define NFW 5
@@ -1240,7 +1240,7 @@ static void on_enter(void)
     // "synth now"), exactly like pinball/poker/pong. Pre-synthesizing all 24 SFX synchronously on the UI task
     // at launch (the old presynth() call) blocked it past the 8 s Task-WDT on a cold cache (first launch /
     // SFX_VER bump) -> TASK_WDT reset on opening Slots. Lazy synth spreads that cost one clip at a time.
-    memset(s_coin, 0, sizeof s_coin);
+    memset(s_coin, 0, sizeof(Coin) * NPART);
     memset(s_fw, 0, sizeof s_fw);
     reset_win_marks();
     for (int r = 0; r < NREEL; r++) { r_phase[r] = 0; r_top[r] = (int)(esp_random() % SLEN); r_pos[r] = r_top[r]; r_flash_ms[r] = 0; }
@@ -1260,14 +1260,22 @@ static void on_enter(void)
 }
 static void on_exit(void) { nucleo_audio_stop(); cfg_write(); }
 
+// Working RAM: allocated (zeroed) by the framework before on_enter, freed after on_exit. Foreground-only.
+static const nucleo_app_ram_t APP_RAM[] = {
+    { (void **)&s_coin, sizeof(Coin) * NPART },
+    { (void **)&s_strip, sizeof(uint8_t) * NREEL * SLEN },
+    { nullptr, 0 }
+};
+
 extern "C" void nucleo_register_slots(void)
 {
     static const nucleo_app_def_t app = {
         "slots", "Slot", "Games", "Slot machine: gira e vinci il jackpot",
         '7', C_YELLOW, on_enter, on_key, nullptr, on_draw, on_exit,
-        NX_NET_APP | NX_SOLO   // NX_SOLO: reboot into a FRESH unfragmented heap (the 32KB canvas couldn't be
+        NX_NET_APP | NX_SOLO,  // NX_SOLO: reboot into a FRESH unfragmented heap (the 32KB canvas couldn't be
                                // re-acquired inline on the fragmented heap -> OOM/Task-WDT). NX_NET_APP bits are
                                // no-ops in Solo (services already down at boot) but kept defensively.
+        APP_RAM
     };
     nucleo_app_register(&app);
 }

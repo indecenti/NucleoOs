@@ -48,7 +48,8 @@ static ir_fav_t        *s_fav; static int s_nfav;
 // Category index (v3 pack): remotes are packed SORTED by category, so each category is a contiguous
 // [start,count] range — the REMOTES view browses category -> remotes -> buttons with plain seek math.
 #define MAX_CAT 16
-static struct { char name[IRPACK_CAT_LEN]; int start, count; } s_cats[MAX_CAT];
+typedef struct { char name[IRPACK_CAT_LEN]; int start, count; } ir_cat_t;
+static ir_cat_t *s_cats;  // MAX_CAT entries, APP_RAM (0 B when closed); open_pack() rebuilds it on enter
 static int s_ncat;      // distinct categories found in the pack
 static int s_catsel;    // chosen category (level 1/2)
 
@@ -84,7 +85,8 @@ static int         s_find_done;       // unique codes tried
 static int         s_find_total;      // unique region-matching codes (denominator)
 static char        s_find_brand[24];  // current candidate brand (big readout)
 static nir_proto_t s_find_proto; static uint32_t s_find_addr, s_find_cmd;
-static uint32_t    s_find_seen[96]; static int s_find_nseen;
+#define FIND_SEEN_MAX 96
+static uint32_t   *s_find_seen; static int s_find_nseen;   // FIND_SEEN_MAX keys, APP_RAM
 
 static uint32_t find_key(uint8_t proto, uint32_t addr, uint32_t cmd) {
     return ((uint32_t)proto << 24) | ((addr & 0xFF) << 8) | (cmd & 0xFF);
@@ -184,10 +186,14 @@ static void tx_center(int cx, int y, const char *s, unsigned short fg, unsigned 
 
 // Emit one code: protocol-encoded, or — for a RAW record (proto 0) — the captured µs streamed from
 // the pack (cmd_or_off is then the RAW-pool byte offset). This is what makes any protocol sendable.
+// RAW scratch, APP_RAM: ir_emit is file-local and only runs from on_key/on_tick (foreground), and
+// nucleo_ir_send_raw copies it into RMT symbols synchronously, so nothing reads it after close.
+#define RAW_DUR_MAX 400
+static uint16_t *s_rawdur;
 static void ir_emit(uint8_t proto, uint32_t addr, uint32_t cmd_or_off) {
     if (proto == IRPACK_PROTO_RAW) {
-        uint16_t car = 0; static uint16_t dur[400];
-        int n = ir_pack_raw(&s_pack, cmd_or_off, &car, dur, 400);
+        uint16_t car = 0; uint16_t *dur = s_rawdur;
+        int n = ir_pack_raw(&s_pack, cmd_or_off, &car, dur, RAW_DUR_MAX);
         if (n > 0) nucleo_ir_send_raw(dur, n, car, 0);
     } else {
         nucleo_ir_send_proto((nir_proto_t)proto, addr, cmd_or_off, 0);
@@ -298,7 +304,7 @@ static bool find_advance(void) {
         if (!ir_pack_tvpower(&s_pack, idx, &t) || !region_hit(t.region)) continue;
         uint32_t key = tvp_key(&t);
         if (find_seen(key)) continue;
-        if (s_find_nseen < (int)(sizeof s_find_seen / sizeof s_find_seen[0])) s_find_seen[s_find_nseen++] = key;
+        if (s_find_nseen < FIND_SEEN_MAX) s_find_seen[s_find_nseen++] = key;
         if (t.proto == IRPACK_PROTO_RAW) { s_find_proto = (nir_proto_t)0; s_find_addr = 0; s_find_cmd = ir_pack_tvp_raw_off(&t); }
         else                            { s_find_proto = (nir_proto_t)t.proto; s_find_addr = t.addr; s_find_cmd = t.cmd; }
         snprintf(s_find_brand, sizeof s_find_brand, "%s", t.brand);
@@ -315,7 +321,7 @@ static void start_find(void) {
         ir_pack_tvp_t t;
         if (ir_pack_tvpower(&s_pack, i, &t) && region_hit(t.region)) {
             uint32_t k = tvp_key(&t);
-            if (!find_seen(k)) { if (s_find_nseen < 96) s_find_seen[s_find_nseen++] = k; s_find_total++; }
+            if (!find_seen(k)) { if (s_find_nseen < FIND_SEEN_MAX) s_find_seen[s_find_nseen++] = k; s_find_total++; }
         }
     }
     if (!s_find_total) { snprintf(s_status, sizeof s_status, "no codes"); return; }
@@ -518,6 +524,7 @@ static void on_tick(void) {
 static void enter(void) {
     s_view = 0; s_level = 0; s_sel = 0; s_dev = 0; s_catsel = 0; s_region = 0; s_sweep = false; s_find = false;
     s_status[0] = 0; s_cur_brand[0] = 0; s_find_brand[0] = 0;
+    s_ncat = 0; s_find_nseen = 0;   // s_cats / s_find_seen come back zeroed (APP_RAM)
     // No heavy load anymore: the catalog is read record-by-record from presets.bin, so there's no
     // multi-KB slurp to make room for — the shared canvas can stay put.
     open_pack();
@@ -528,11 +535,17 @@ static void enter(void) {
 }
 static void on_exit(void) { s_sweep = false; free_all(); }
 
+static const nucleo_app_ram_t APP_RAM[] = {
+    { (void **)&s_rawdur,    sizeof(uint16_t) * RAW_DUR_MAX },
+    { (void **)&s_find_seen, sizeof(uint32_t) * FIND_SEEN_MAX },
+    { (void **)&s_cats,      sizeof(ir_cat_t) * MAX_CAT },
+    { nullptr, 0 } };
+
 extern "C" void nucleo_register_ir(void) {
     static const nucleo_app_def_t app = {
         "ir", "IR Remote", "Tools", "TV-B-Gone, brand remotes & favourites (SD catalog)",
         'I', ACC,
-        enter, on_key, on_tick, on_draw, on_exit
+        enter, on_key, on_tick, on_draw, on_exit, 0, APP_RAM
     };
     nucleo_app_register(&app);
 }

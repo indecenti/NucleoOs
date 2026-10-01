@@ -162,13 +162,14 @@ static bool    s_join_pending;
 static uint32_t s_resseq;               // result sequence (dedup)
 struct Room { uint8_t mac[6]; char name[22]; int64_t seen; };
 #define NROOM 6
-static Room    s_rooms[NROOM];
+static Room   *s_rooms;                 // NROOM entries, per-app RAM (APP_RAM): 0 B when closed
 static int     s_nroom, s_rsel;
 static bool    s_guest_in;              // host: a guest joined my room
 static bool    s_welcomed;              // guest: the host acknowledged my JOIN (in the room, waiting for START)
 static char    s_peer_name[22];
 // reliable outbound (one in flight: turn-based)
-static uint8_t s_rel[120]; static int s_rel_len; static int64_t s_rel_next; static bool s_rel_on;
+#define REL_MAX 120
+static uint8_t *s_rel; static int s_rel_len; static int64_t s_rel_next; static bool s_rel_on;   // s_rel: REL_MAX bytes, APP_RAM
 static int     s_last_weap;             // weapon fired this turn (echoed in RESULT)
 
 static int    s_screen, s_msel, s_diff = 1;
@@ -177,8 +178,8 @@ static int64_t s_now, s_last, s_frame;
 static unsigned s_anim;
 
 // terrain / theme
-static uint8_t s_h[WW];
-static uint8_t s_dug[WW];   // 1 = column was cratered/raised -> show exposed dirt, no grass rim
+static uint8_t *s_h;        // WW columns, APP_RAM
+static uint8_t *s_dug;      // WW columns, APP_RAM. 1 = column was cratered/raised -> show exposed dirt, no grass rim
 static int     s_atmo;                 // current atmosphere (time of day / weather)
 static uint16_t th_skyT, th_skyM, th_skyB, th_ground, th_ground2, th_rim, th_accent, th_glow, th_sun, th_cloud;
 static int     s_starN, s_sunR, s_sunX, s_sunY; static bool s_moon, s_rain;
@@ -188,7 +189,7 @@ static int     s_wind;
 
 // tanks
 struct Tank { float x, y; int hp; int elev; int power; int weap; int ammo[NWEAP]; bool dead; int shield; };
-static Tank   s_tk[2];
+static Tank   *s_tk;                    // 2 tanks, APP_RAM
 static int    s_active, s_wins[2], s_draw_flag;
 #define SERIES_TGT 3   // vs-CPU is a best-of series: first tank to win SERIES_TGT rounds takes the match
 // --- juicy bonus attribution (vs CPU) ---
@@ -230,7 +231,7 @@ static char   s_entry_ang[4], s_entry_pow[4];
 // projectiles
 struct Proj { bool on; float x, y, vx, vy; int wp, beh, owner; bool child, rolling, split; int fuse; int dig; int bnc; };
 #define NPROJ 14
-static Proj   s_pr[NPROJ];
+static Proj   *s_pr;                    // NPROJ entries, APP_RAM
 // napalm burning patches + beam FX + impact-dwell camera
 #define NFIRE 3
 struct Fire { bool on; int x, w, ticks; };
@@ -252,16 +253,16 @@ static bool s_spectate;   // net passive: locally re-simulating the opponent's s
 // FX pools
 #define NSPK 36
 struct Spark { float x, y, vx, vy; int life, max; uint16_t col; };
-static Spark  s_spk[NSPK];
+static Spark  *s_spk;                   // NSPK entries, APP_RAM
 #define NSHAT 4
 struct Shat { bool on; float x, y, sc, yaw; int t, dur; uint16_t col; };
-static Shat   s_sh[NSHAT];
+static Shat   *s_sh;                    // NSHAT entries, APP_RAM
 #define NRING 6
 struct Ring { bool on; float x, y, r, max; int life, lmax; uint16_t col; };
-static Ring   s_rg[NRING];
+static Ring   *s_rg;                    // NRING entries, APP_RAM
 #define NDMG 5
 struct Dpop { bool on; float x, y; int life, val; uint16_t col; const char *msg; };  // msg!=null -> bonus banner "msg +val"
-static Dpop   s_dp[NDMG];
+static Dpop   *s_dp;                    // NDMG entries, APP_RAM
 static float  s_shake;
 static int    s_flash, s_flashmax, s_flashpeak;   // peak = max screen coverage 0..255 (small blasts subtle, nuke = white-out)
 static uint16_t s_flashcol;
@@ -653,7 +654,7 @@ static void set_atmo(void) {
 }
 static void gen_terrain(void) {
     set_atmo();
-    memset(s_dug, 0, sizeof s_dug);     // fresh board = pristine grass everywhere
+    memset(s_dug, 0, WW);               // fresh board = pristine grass everywhere
     float amp = (s_atmo == ATM_RAIN) ? 0.85f : (s_atmo == ATM_DAY) ? 1.1f : 1.0f;   // gentle per-atmosphere relief
     float base = 84 + h01(0, s_seed) * 18;
     for (int x = 0; x < WW; x++) {
@@ -730,8 +731,8 @@ static void build_match(int mode, uint32_t seed, int wind, int t0x, int t1x, int
     plateau(t0x, 9); plateau(t1x, 9);
     for (int i = 0; i < 2; i++) s_tk[i].y = surf((int)s_tk[i].x) - TANK_H / 2;
     for (int i = 0; i < NCLOUD; i++) { s_cl_x[i] = frnd(0, W); s_cl_y[i] = frnd(2, GTOP - 6); s_cl_s[i] = frnd(0.7f, 1.6f); }
-    memset(s_pr, 0, sizeof s_pr); memset(s_spk, 0, sizeof s_spk); memset(s_sh, 0, sizeof s_sh);
-    memset(s_rg, 0, sizeof s_rg); memset(s_dp, 0, sizeof s_dp); memset(s_fire, 0, sizeof s_fire);
+    memset(s_pr, 0, sizeof(Proj) * NPROJ); memset(s_spk, 0, sizeof(Spark) * NSPK); memset(s_sh, 0, sizeof(Shat) * NSHAT);
+    memset(s_rg, 0, sizeof(Ring) * NRING); memset(s_dp, 0, sizeof(Dpop) * NDMG); memset(s_fire, 0, sizeof s_fire);
     s_shake = 0; s_flash = 0; s_nuke_t = 0; s_camfree = 0; s_camY = 0; s_lava_x = -1;
     s_beam_t = 0; s_dwell_t = 0; s_draw_flag = 0; s_resseq = 0; s_rel_on = false; s_peerleft = false;
     s_ufo.on = false;
@@ -2606,11 +2607,18 @@ static void on_enter(void) {
 }
 static void on_exit(void) { net_send_bye(); pnet_stop(); nucleo_audio_stop(); cfg_write(); }
 
+// Match/lobby/FX state only: settings, loadout and leaderboard stay static (they survive close/reopen).
+static const nucleo_app_ram_t APP_RAM[] = {
+    { (void **)&s_h, WW }, { (void **)&s_dug, WW }, { (void **)&s_tk, sizeof(Tank) * 2 },
+    { (void **)&s_pr, sizeof(Proj) * NPROJ }, { (void **)&s_spk, sizeof(Spark) * NSPK }, { (void **)&s_sh, sizeof(Shat) * NSHAT },
+    { (void **)&s_rg, sizeof(Ring) * NRING }, { (void **)&s_dp, sizeof(Dpop) * NDMG }, { (void **)&s_rooms, sizeof(Room) * NROOM },
+    { (void **)&s_rel, REL_MAX }, { nullptr, 0 } };
+
 extern "C" void nucleo_register_tanks(void) {
     static const nucleo_app_def_t app = {
         "tanks", "Tanks", "Games", "Artiglieria a turni: terreno distruttibile, 29 armi, scudi, biomi, vs CPU",
         'T', C_GREEN, on_enter, on_key, nullptr, on_draw, on_exit,
-        NX_NET_APP
+        NX_NET_APP, APP_RAM
     };
     nucleo_app_register(&app);
 }

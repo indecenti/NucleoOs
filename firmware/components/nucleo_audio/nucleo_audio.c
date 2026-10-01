@@ -6,6 +6,7 @@
 #include "nucleo_codec.h"   // ADV: power the ES8311 DAC before TX (no-op on the original NS4168)
 #include <string.h>
 #include <strings.h>
+#include <stdlib.h>
 #include <stdatomic.h>
 #include <sys/stat.h>
 #include "freertos/FreeRTOS.h"
@@ -57,8 +58,19 @@ static inline void i2s_unlock(void)   { if (s_i2s_mtx) xSemaphoreGiveRecursive(s
 // Shared MP3 decode scratch (see nucleo_audio_priv.h) — one copy for the file and radio
 // decoders, which never run concurrently (single player task). ~6.6 KB saved vs a static
 // buffer set per decoder.
-uint8_t nucleo_audio_in[NUCLEO_AUDIO_IN_SZ];
-int16_t nucleo_audio_out[NUCLEO_AUDIO_OUT_SZ];
+uint8_t *nucleo_audio_in;
+int16_t *nucleo_audio_out;
+bool nucleo_audio_scratch_get(void)
+{
+    const size_t n = NUCLEO_AUDIO_IN_SZ + NUCLEO_AUDIO_OUT_SZ * sizeof(int16_t);
+    uint8_t *p = malloc(n);
+    if (!p) { nucleo_audio_do_reclaim(); p = malloc(n); }
+    if (!p) { ESP_LOGE(TAG, "decode scratch (%u B): no RAM", (unsigned)n); return false; }
+    nucleo_audio_in = p;
+    nucleo_audio_out = (int16_t *)(p + NUCLEO_AUDIO_IN_SZ);   // IN_SZ is a multiple of 4: aligned
+    return true;
+}
+void nucleo_audio_scratch_put(void) { free(nucleo_audio_in); nucleo_audio_in = NULL; nucleo_audio_out = NULL; }
 
 static i2s_chan_handle_t s_tx = NULL;
 static int s_rate = 0, s_chans = 0;             // current I2S config
@@ -139,6 +151,9 @@ static void i2s_close(void)
 // playing (won't fight it). Opens the TX if idle and FREES it afterwards so it never holds the I2S pins
 // from the recorder. kind: 0 = low "throw" rumble, 1 = sharp "settle" clack. strength 5..100 scales it.
 // Integer-only (no FPU/math dependency). Blocks for ~60-90 ms — call it on discrete events, not per frame.
+// One chunk buffer shared by blip / tone / siren: each runs synchronously on its caller and returns
+// before another can start (they are no-ops while a track plays), so one 512 B copy replaces three.
+static int16_t s_fx[256];
 void nucleo_audio_blip(int kind, int strength)
 {
     if (atomic_load(&s_playing)) return;
@@ -147,7 +162,7 @@ void nucleo_audio_blip(int kind, int strength)
     bool opened = (s_tx == NULL);
     if (nucleo_audio_i2s_rate(16000, 1) != ESP_OK) return;
     int N = (kind == 0) ? 900 : 600;                  // short clacks (~55/40 ms): minimal blocking write
-    static int16_t b[256];
+    int16_t *b = s_fx;
     uint32_t rng = 0x9E3779B9u + (uint32_t)kind * 2654435761u;
     int lp = 0;
     for (int off = 0; off < N; ) {
@@ -181,7 +196,7 @@ void nucleo_audio_tone(int freq, int ms, int strength)
     int half  = 8000 / freq;                   // half-period in samples (16000 / freq / 2)
     if (half < 1) half = 1;
     int amp = 9000 * strength / 100;           // loud but below the 16-bit clip
-    static int16_t b[256];
+    int16_t *b = s_fx;
     int phase = 0, level = amp;
     for (int off = 0; off < total; ) {
         int chunk = (total - off) < 256 ? (total - off) : 256;
@@ -209,7 +224,7 @@ void nucleo_audio_siren(int dur_ms)
     if (dur_ms < 20) dur_ms = 20; else if (dur_ms > 2000) dur_ms = 2000;
     if (nucleo_audio_i2s_rate(16000, 1) != ESP_OK) return;   // opens TX if idle; LEFT OPEN on purpose
     int total = 16000 * dur_ms / 1000;
-    static int16_t b[256];
+    int16_t *b = s_fx;
     static float ph = 0.0f, swp = 0.0f;                      // persist across calls -> seamless wail
     const int amp = 20000;                                   // very loud; the tiny speaker distorts = harsher
     for (int off = 0; off < total; ) {
@@ -560,13 +575,17 @@ static void play_wav(FILE *f)
     if (nucleo_audio_i2s_rate(rate, chans) != ESP_OK) return;
     nucleo_audio_set_total_bytes(data_len ? data_len : 0);
 
-    static int16_t buf[1024];
+    // Read buffer on the heap for the clip only (was 2 KB of permanent .bss; the stack stays shallow).
+    enum { WAV_BUF = 2048 };
+    int16_t *buf = malloc(WAV_BUF);
+    if (!buf) { ESP_LOGE(TAG, "wav buffer: no RAM"); return; }
     size_t got;
-    while (nucleo_audio_keep_running() && (got = fread(buf, 1, sizeof(buf), f)) > 0) {
+    while (nucleo_audio_keep_running() && (got = fread(buf, 1, WAV_BUF, f)) > 0) {
         nucleo_audio_i2s_write(buf, got);
         nucleo_audio_add_file_bytes((uint32_t)got);
         nucleo_audio_add_samples((uint32_t)(got / 2 / (chans < 1 ? 1 : chans)), rate);
     }
+    free(buf);
 }
 
 // WDT-safe absolute seek — see nucleo_audio_priv.h. FATFS (no fast-seek) walks the cluster chain

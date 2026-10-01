@@ -40,7 +40,7 @@ static int   s_mode    = M_BARS;
 static int   s_pal     = 0;        // palette index
 static int   s_sens    = 100;      // manual sensitivity %, 40..250
 static bool  s_frozen  = false;
-static ms_snapshot_t s_snap;       // last copied frame
+static ms_snapshot_t *s_snap;      // last copied frame (APP_RAM: allocated on open, freed on close)
 static bool  s_ok      = false;    // got at least one frame
 static uint32_t s_seen = 0;        // last seq we folded into caps/history
 static bool  s_was_running = false; // last polled engine running-state (edge -> one repaint)
@@ -52,14 +52,14 @@ static int64_t s_retry_until = 0;   // 0 = not retrying (running, or window exha
 static int64_t s_retry_next  = 0;
 
 // peak-hold caps (bars), slow fall
-static float s_cap[MS_BANDS];
+static float *s_cap;              // MS_BANDS entries, APP_RAM
 
 // per-band smoothed display level — THE flicker fix. The DSP publishes RAW per-frame magnitudes that
-// jump frame-to-frame with mic noise; rendered straight (s_snap.bands[b]) they read as a violent
+// jump frame-to-frame with mic noise; rendered straight (s_snap->bands[b]) they read as a violent
 // jitter, not a smooth analyzer. Envelope them here with a fast attack / slow decay (the classic
 // "falling bars" VU) so motion is fluid. We smooth the RAW value (pre-sensitivity) so a U/D sens
 // change stays instant. Reset in enter().
-static float s_disp[MS_BANDS];
+static float *s_disp;             // MS_BANDS entries, APP_RAM
 // scope vertical AGC, enveloped: recomputing the trace peak EVERY frame made quiet signals "breathe"
 // (the whole wave rescaled each frame). Track a slow-release peak so the gain holds steady instead.
 static float s_scope_gain = 256.0f;
@@ -117,7 +117,7 @@ static uint16_t level_col(int pct) { return pct >= 85 ? C_RED : pct >= 55 ? C_YE
 // waterfall calls it for EVERY cell (up to 232*32 ~= 7400 per frame), which dominated the mode's CPU
 // and made frames arrive unevenly (read as flicker). Precompute once per palette and index by the
 // 0..255 band byte instead of recomputing the lerp. Rebuilt in enter()/on_tab(), never per frame. 512 B.
-static uint16_t s_grad_lut[256];
+static uint16_t *s_grad_lut;      // 256 entries, APP_RAM: rebuilt in enter() and on palette change
 static void build_grad_lut(void) { for (int i = 0; i < 256; i++) s_grad_lut[i] = grad((float)i / 255.0f); }
 static inline uint16_t grad8(uint8_t v) { return s_grad_lut[v]; }
 
@@ -146,8 +146,8 @@ static void draw_hud(void)
         d.fillRect(W - 26, 2, 6, 15, C_YELLOW);
         d.fillRect(W - 14, 2, 6, 15, C_YELLOW);
     } else {
-        bool has = s_ok && s_snap.note_idx >= 0;
-        if (has) snprintf(buf, sizeof buf, "%s%d", nucleo_micspec_note_name(s_snap.note_idx), s_snap.octave);
+        bool has = s_ok && s_snap->note_idx >= 0;
+        if (has) snprintf(buf, sizeof buf, "%s%d", nucleo_micspec_note_name(s_snap->note_idx), s_snap->octave);
         else     snprintf(buf, sizeof buf, "--");
         d.setTextSize(2);
         d.setTextColor(has ? THEME_ACC : DIM, BG);
@@ -166,7 +166,7 @@ static void draw_hud(void)
     d.setTextColor(MUTED, BG);
     d.setCursor(W - 16 - (int)strlen(buf) * 6, my); d.print(buf);
 
-    int on = s_ok ? s_snap.onset : 0;                 // onset is already enveloped in the DSP -> smooth pulse
+    int on = s_ok ? s_snap->onset : 0;                // onset is already enveloped in the DSP -> smooth pulse
     if (on > 24) d.fillCircle(W - 7, my + 3, 2 + on / 70, grad(0.9f));
     d.fillCircle(W - 7, my + 3, 2, FG);
 
@@ -265,7 +265,7 @@ static void draw_scope(void)
     uint16_t fc = grad(0.30f);                        // dim body fill under the trace
     int px = 4, py = cy;
     for (int i = 0; i < MS_WAVE && i < W - 8; i++) {
-        int v = (int)((long)s_snap.wave[i] * amp * s_sens / 100 / g);
+        int v = (int)((long)s_snap->wave[i] * amp * s_sens / 100 / g);
         int y = cy - v;
         if (y < MAIN_T) y = MAIN_T;
         else if (y > MAIN_B) y = MAIN_B;
@@ -328,7 +328,7 @@ static void draw_tuner(void)
     // numeric readout (bottom row, clear of the pager dots)
     char ln[40];
     snprintf(ln, sizeof ln, TR("%+d cent   %d.%02dHz   chiar. %d%%", "%+d cent   %d.%02dHz   clar. %d%%"),
-             cents, s_snap.pitch_cHz / 100, s_snap.pitch_cHz % 100, s_snap.clarity);
+             cents, s_snap->pitch_cHz / 100, s_snap->pitch_cHz % 100, s_snap->clarity);
     d.setTextSize(1); d.setTextColor(MUTED, BG);
     d.setCursor((W - (int)strlen(ln) * 6) / 2, gy + 4); d.print(ln);
 }
@@ -339,7 +339,7 @@ static void fold_frame(void)
     // smooth each band (fast attack, slow decay) and ride the peak-hold cap off the SMOOTHED level so
     // bars + waterfall move fluidly instead of strobing the raw DSP output (the on-screen "flicker").
     for (int b = 0; b < MS_BANDS; b++) {
-        float raw = (float)s_snap.bands[b];                       // 0..255, pre-sensitivity
+        float raw = (float)s_snap->bands[b];                      // 0..255, pre-sensitivity
         float a   = (raw > s_disp[b]) ? 0.55f : 0.22f;            // snap up, ease down (~40ms / ~115ms)
         s_disp[b] += (raw - s_disp[b]) * a;
         int sv = sens_apply((int)(s_disp[b] + 0.5f));
@@ -347,19 +347,19 @@ static void fold_frame(void)
     }
     // scope AGC: envelope the trace peak (slow release) so the wave doesn't rescale every frame
     int wpeak = 1;
-    for (int i = 0; i < MS_WAVE; i++) { int amp = s_snap.wave[i]; if (amp < 0) amp = -amp; if (amp > wpeak) wpeak = amp; }
+    for (int i = 0; i < MS_WAVE; i++) { int amp = s_snap->wave[i]; if (amp < 0) amp = -amp; if (amp > wpeak) wpeak = amp; }
     if (wpeak > s_scope_gain) s_scope_gain = (float)wpeak; else s_scope_gain = s_scope_gain * 0.92f + wpeak * 0.08f;
     if (s_scope_gain < 64.0f) s_scope_gain = 64.0f;               // floor: don't over-amplify pure silence
     // smooth the HUD numbers — raw level/dB/Hz jump every frame, the big digits would flicker
-    float lv = (float)s_snap.level;
+    float lv = (float)s_snap->level;
     s_lvl += (lv - s_lvl) * (lv > s_lvl ? 0.5f : 0.2f);
-    s_db  += ((float)s_snap.level_db - s_db) * 0.25f;
-    if (s_snap.dom_hz > 0) s_hz += ((float)s_snap.dom_hz - s_hz) * 0.30f;
+    s_db  += ((float)s_snap->level_db - s_db) * 0.25f;
+    if (s_snap->dom_hz > 0) s_hz += ((float)s_snap->dom_hz - s_hz) * 0.30f;
     // tuner: hold + smooth so the readout is steady enough to tune to (raw note/cents jump every frame)
-    if (s_snap.note_idx >= 0) {
-        if (s_snap.note_idx == s_tnote && s_snap.octave == s_toct)
-            s_tcents += ((float)s_snap.cents - s_tcents) * 0.30f;   // same note: ease the cents
-        else { s_tnote = s_snap.note_idx; s_toct = s_snap.octave; s_tcents = (float)s_snap.cents; }  // new note: snap
+    if (s_snap->note_idx >= 0) {
+        if (s_snap->note_idx == s_tnote && s_snap->octave == s_toct)
+            s_tcents += ((float)s_snap->cents - s_tcents) * 0.30f;  // same note: ease the cents
+        else { s_tnote = s_snap->note_idx; s_toct = s_snap->octave; s_tcents = (float)s_snap->cents; }  // new note: snap
         s_tmiss = 0;
         bool intune = (s_tcents > -4.0f && s_tcents < 4.0f);
         s_tlock = intune ? (s_tlock < 30 ? s_tlock + 1 : 30) : 0;
@@ -405,8 +405,8 @@ static bool poll(void)
     }
     if (!run) return false;                           // error/idle splash is static
     if (s_ok && nucleo_micspec_seq() == s_seen) return false;   // lock-free: nothing new, skip mutex+copy
-    if (nucleo_micspec_get(&s_snap) && (!s_ok || s_snap.seq != s_seen)) {
-        s_ok = true; s_seen = s_snap.seq; fold_frame();
+    if (nucleo_micspec_get(s_snap) && (!s_ok || s_snap->seq != s_seen)) {
+        s_ok = true; s_seen = s_snap->seq; fold_frame();
         return true;                                  // a genuinely new analysis frame -> blit
     }
     return false;                                     // same seq this loop -> skip the redraw entirely
@@ -483,8 +483,8 @@ static void enter(void)
 {
     s_ok = false; s_seen = 0; s_frozen = false; s_was_running = false;
     build_grad_lut();                  // palette persists across sessions; prime the LUT before the first draw
-    memset(s_cap, 0, sizeof s_cap);
-    memset(s_disp, 0, sizeof s_disp);
+    memset(s_cap, 0, sizeof(float) * MS_BANDS);
+    memset(s_disp, 0, sizeof(float) * MS_BANDS);
     s_scope_gain = 256.0f;
     s_lvl = 0.0f; s_db = -90.0f; s_hz = 0.0f;
     s_tnote = -1; s_toct = 0; s_tcents = 0.0f; s_tmiss = 0; s_tlock = 0;
@@ -532,6 +532,16 @@ static void on_exit(void)
     if (!nucleo_anima_solo_active()) nucleo_exclusive_exit();   // restore httpd/mDNS/voice/L1 (skipped in Solo: never started; Esc reboots out)
 }
 
+// Working RAM: allocated (zeroed) by the framework before enter(), freed after on_exit(). Foreground-only:
+// the DSP engine copies frames out synchronously (nucleo_micspec_get) and on_exit stops it first.
+static const nucleo_app_ram_t APP_RAM[] = {
+    { (void **)&s_snap,     sizeof(ms_snapshot_t) },
+    { (void **)&s_grad_lut, sizeof(uint16_t) * 256 },
+    { (void **)&s_cap,      sizeof(float) * MS_BANDS },
+    { (void **)&s_disp,     sizeof(float) * MS_BANDS },
+    { nullptr, 0 }
+};
+
 extern "C" void nucleo_register_micspec(void)
 {
     static const nucleo_app_def_t app = {
@@ -543,9 +553,10 @@ extern "C" void nucleo_register_micspec(void)
         // analyzer draws BUFFERED. On the live (fragmented) heap — esp. the ADV, ~16 KB largest free — the
         // canvas couldn't be carved, the run loop fell back to DIRECT draw, and the per-frame self-clear
         // flickered. Trade-off: Esc reboots back to the OS (the mic engine stops cleanly first).
-        NX_SOLO | NX_WIFI   // radio down too: the analyzer uses zero network, and on the RAM-edge
+        NX_SOLO | NX_WIFI,  // radio down too: the analyzer uses zero network, and on the RAM-edge
                             // ADV the ~48 KB the Wi-Fi driver holds is exactly the headroom the DSP
                             // scratch + waterfall history + 32 KB canvas want. Same combo as gbemu.
+        APP_RAM
     };
     nucleo_app_register(&app);
 }

@@ -595,6 +595,32 @@ static const nucleo_app_def_t STUB = { "stub", "", "System", "", ' ', C_GREY, st
 // (extern: no REQUIRES cycle on nucleo_anima.)
 extern "C" bool nucleo_anima_l1_unload_if_idle(void);
 
+// Per-app working RAM (nucleo_app_ram_t): allocated right before on_enter, freed right after on_exit, so an
+// app that is not open costs nothing. s_app_ram is the table currently held (one app is foreground at a time).
+static const nucleo_app_ram_t *s_app_ram = nullptr;
+static void app_ram_free(void)
+{
+    if (!s_app_ram) return;
+    for (const nucleo_app_ram_t *r = s_app_ram; r->ptr; r++) { free(*r->ptr); *r->ptr = nullptr; }
+    s_app_ram = nullptr;
+}
+static bool app_ram_alloc(const nucleo_app_def_t *def)
+{
+    app_ram_free();
+    if (!def || !def->ram) return true;
+    for (const nucleo_app_ram_t *r = def->ram; r->ptr; r++) {
+        *r->ptr = calloc(1, r->bytes);
+        if (!*r->ptr) {
+            ESP_LOGW("applaunch", "'%s' needs %u B, largest=%u: not opened", def->id ? def->id : "?", r->bytes,
+                     (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT));
+            for (const nucleo_app_ram_t *q = def->ram; q < r; q++) { free(*q->ptr); *q->ptr = nullptr; }
+            return false;
+        }
+    }
+    s_app_ram = def->ram;
+    return true;
+}
+
 static void open_app_def(const nucleo_app_def_t *def)
 {
     // DIAG breadcrumbs (WARN -> visible in /api/logs): bracket on_enter with heap stats so a hang/OOM
@@ -627,6 +653,21 @@ static void open_app_def(const nucleo_app_def_t *def)
             nucleo_exclusive_enter(xf, NULL);          // idempotent: adds nothing if already active
             s_app_excl = !was_active;                  // own the restore ONLY if WE activated it (no false latch)
         }
+    }
+    // The app's working RAM, after exclusive mode freed what it frees. No RAM -> the app does not open (no
+    // on_enter, no on_exit): back to the launcher with a clear message, never a half-initialised app.
+    if (!app_ram_alloc(def)) {
+        if (s_app_excl) { s_app_excl = false; nucleo_exclusive_exit(); }
+        const char *lines[] = { TR5("Non c'e' abbastanza RAM per aprire questa app.", "Not enough RAM to open this app.",
+                                    "No hay RAM suficiente para abrir esta app.", "Pas assez de RAM pour ouvrir cette app.",
+                                    "Nicht genug RAM fuer diese App."),
+                                TR5("Chiudi altre attivita' e riprova.", "Close other activities and retry.",
+                                    "Cierra otras tareas y reintenta.", "Fermez d'autres activites et reessayez.",
+                                    "Andere Aktivitaeten beenden und erneut versuchen.") };
+        nucleo_ui_message(TR5("RAM insufficiente", "Not enough RAM", "RAM insuficiente", "RAM insuffisante", "RAM knapp"), lines, 2);
+        if (s_solo_active) esp_restart();       // Solo has no launcher to return to: back to the full OS
+        s_active = -1; s_stub = nullptr; s_dirty = true; s_chrome_dirty = true;
+        return;
     }
     s_app_tab = nullptr;                        // each app starts without a TAB claim; on_enter may set one
     s_app_back = nullptr; s_app_direct = false; s_app_fullscreen = false; // ...nor a Back claim / direct-draw / fullscreen pin; on_enter may set them
@@ -720,6 +761,7 @@ static void launch_by_id(const char *id)
     // allocates — more RAM for the viewer, and no leaked buffer. (close_app covers the app->launcher
     // path; this is the missing app->app path.) Guarded to a real app: not the launcher (-1) or stub (-2).
     if (s_active >= 0 && s_apps[s_active].on_exit) s_apps[s_active].on_exit();
+    app_ram_free();                                       // ...and its working RAM, before the incoming app's
     s_active = idx; s_stub = nullptr;
     open_app_def(&s_apps[idx]);
 }
@@ -809,6 +851,7 @@ static void close_app(void)
     }
     // Covers are captured ONLY on explicit request in-game ('C' / Ctrl+P), never automatically on exit.
     if (def && def->on_exit) def->on_exit();
+    app_ram_free();                             // the app's working RAM goes back to the system
     // Restore ONLY exclusive we entered declaratively for this app (back/crash/early exit all land here).
     // We deliberately do NOT touch exclusive entered imperatively by an app or a background worker (the
     // Recorder's AI task self-restores when it finishes) — tearing it down here would restart httpd/voice

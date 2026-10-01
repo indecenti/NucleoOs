@@ -169,7 +169,7 @@ static uint32_t s_rng;
 // cosmetics (local only)
 #define NSPK 26
 struct Spark { float x, y, vx, vy; int life, max; uint16_t col; };
-static Spark  s_spk[NSPK];
+static Spark  *s_spk;                   // NSPK entries, per-app RAM (APP_RAM): 0 B when closed
 #define NTRAIL 9
 static float  s_tx[NTRAIL], s_ty[NTRAIL];
 static int    s_ti;
@@ -177,7 +177,7 @@ static float  s_shake;
 static int    s_hitl, s_hitr;           // paddle hit-flash timers (ms)
 #define NWAVE 6                          // expanding shock-rings on every bounce
 struct Wave { float x, y, r, max; int life, lmax; uint16_t col; };
-static Wave   s_wave[NWAVE];
+static Wave   *s_wave;                  // NWAVE entries, APP_RAM
 static int    s_flash;                   // full-field flash timer on a scored point (ms)
 static uint16_t s_flashcol;
 
@@ -193,7 +193,7 @@ static char     s_joinname[22];         // room being joined — named feedback 
 
 struct Host { uint8_t mac[6]; char name[22]; int64_t seen; };
 #define NHOST 6
-static Host   s_hosts[NHOST];
+static Host   *s_hosts;                 // NHOST entries, APP_RAM (only touched from poll/draw/keys)
 static int    s_nhost, s_bsel;
 
 // persistence / settings
@@ -396,8 +396,8 @@ static void new_match(int mode) {
     s_phase = PH_COUNT; s_phtimer = 1800; s_cnt = 3;
     s_netlost = s_peerleft = false;
     s_last_rx = s_last_tx = s_state_ms = now_ms();
-    memset(s_spk, 0, sizeof s_spk);
-    memset(s_wave, 0, sizeof s_wave);
+    memset(s_spk, 0, sizeof(Spark) * NSPK);
+    memset(s_wave, 0, sizeof(Wave) * NWAVE);
     s_shake = 0; s_hitl = s_hitr = 0; s_flash = 0;
     serve();
 }
@@ -1136,11 +1136,16 @@ static void on_enter(void) {
 }
 static void on_exit(void) { send_bye(); pnet_stop(); nucleo_audio_stop(); cfg_write(); }
 
+static const nucleo_app_ram_t APP_RAM[] = {
+    { (void **)&s_spk, sizeof(Spark) * NSPK }, { (void **)&s_wave, sizeof(Wave) * NWAVE },
+    { (void **)&s_hosts, sizeof(Host) * NHOST }, { nullptr, 0 } };
+
 extern "C" void nucleo_register_pong(void) {
     static const nucleo_app_def_t app = {
         "pong", "Pong", "Games", "Pong arcade: 1v1 in rete tra due Cardputer, o vs CPU",
         'P', C_BLUE, on_enter, on_key, nullptr, on_draw, on_exit,
-        NX_NET_APP                                 // ~70KB freed, Wi-Fi STA (ESP-NOW) stays up
+        NX_NET_APP,                                // ~70KB freed, Wi-Fi STA (ESP-NOW) stays up
+        APP_RAM
     };
     nucleo_app_register(&app);
 }

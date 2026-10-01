@@ -9,6 +9,15 @@ extern "C" {
 
 // Key events delivered to apps are now defined in nucleo_kbd.h
 #include "nucleo_kbd.h"
+
+// An app's working RAM: ZERO bytes until it opens. An app lists its big buffers (arrays, tables, scratch)
+// as pointers in a {&ptr, bytes} table ended by {0, 0}; the framework callocs every entry BEFORE on_enter
+// and frees + NULLs them right AFTER on_exit. If the heap cannot provide them the app simply does not
+// open ("Not enough RAM" dialog) and neither on_enter nor on_exit runs, so the app never sees a NULL
+// buffer while it is foreground. Code that runs OUTSIDE the app's foreground life (an httpd handler, a
+// background task, another app) must not touch these buffers — keep that state static. (docs/memory-budget.md)
+typedef struct { void **ptr; unsigned int bytes; } nucleo_app_ram_t;
+
 typedef struct {
     const char *id;
     const char *name;
@@ -27,6 +36,7 @@ typedef struct {
     // want reclaim only DURING a heavy action (Video/Recorder/Music play) leave this 0 and call
     // nucleo_exclusive_enter/exit themselves; the close safety-net still covers early exit.
     unsigned int exclusive_flags;    // trailing field: existing positional initializers zero it
+    const nucleo_app_ram_t *ram;     // per-app working RAM, allocated on open / freed on close (NULL = none)
 } nucleo_app_def_t;
 
 // Capacity of the app registry (nucleo_app.cpp) and of the launcher tree (launcher_menu.cpp), which

@@ -189,7 +189,9 @@ static const game_sfx_t s_sfx = {
 // ─── global state ────────────────────────────────────────────────────────────
 static int      s_st;
 static int      s_mode;
-static Snake    s_s1, s_s2;
+static Snake   *s_snk;                  // 2 snakes, per-app RAM (APP_RAM): 0 B when closed
+#define s_s1 (s_snk[0])
+#define s_s2 (s_snk[1])
 static int8_t   s_fx, s_fy, s_fx2, s_fy2;  // 2 simultaneous foods
 static uint8_t  s_pu_type;
 static int8_t   s_pu_x, s_pu_y;
@@ -218,10 +220,10 @@ static bool     s_join_pending;
 static uint8_t  s_seq;
 
 struct HostEntry { uint8_t mac[6]; char name[13]; int64_t ts; bool valid; };
-static HostEntry s_hosts[MAX_HOSTS];
+static HostEntry *s_hosts;               // MAX_HOSTS entries, APP_RAM (only touched from poll/draw/keys)
 static int       s_n_hosts;
 
-static Part s_parts[N_PARTS];
+static Part *s_parts;                    // N_PARTS entries, APP_RAM
 static int  s_logo_off;
 
 // ─── RNG ──────────────────────────────────────────────────────────────────────
@@ -303,7 +305,8 @@ static void trail_step(SnakeTrail& tr) {
 // ─── particles ───────────────────────────────────────────────────────────────
 static void parts_spawn(float px, float py, uint16_t col, int n) {
     int k=0;
-    for(auto& p:s_parts) {
+    for(int i=0;i<N_PARTS;i++) {
+        Part& p=s_parts[i];
         if(p.life>0||k>=n) continue;
         float ang=k*0.5236f; // π/6 per particle
         float sp=2.5f+(k&3)*0.7f;
@@ -311,7 +314,7 @@ static void parts_spawn(float px, float py, uint16_t col, int n) {
     }
 }
 static void parts_step(void) {
-    for(auto& p:s_parts){if(!p.life)continue;p.x+=p.vx;p.y+=p.vy;p.vy+=0.12f;p.life--;}
+    for(int i=0;i<N_PARTS;i++){Part& p=s_parts[i];if(!p.life)continue;p.x+=p.vx;p.y+=p.vy;p.vy+=0.12f;p.life--;}
 }
 
 // ─── field: food / power-up ────────────────────────────────────────────────
@@ -497,8 +500,9 @@ static void send_hello(void) {
     pk.status=(s_st==ST_PLAY)?1:0;
     pnet_send(nullptr,&pk,sizeof(pk));
 }
+static sn_state_t *s_stpk;                // send_state() scratch, APP_RAM (sent only from poll_fn)
 static void send_state(void) {
-    static sn_state_t pk;
+    sn_state_t& pk=*s_stpk;
     fill_hdr(&pk,SN_STATE); pk.tick=s_tick;
     int n1=(s_s1.len<NET_SEG)?s_s1.len:NET_SEG;
     pk.s1_len=n1; pk.s1_dir=s_s1.dir; pk.s1_alive=s_s1.alive;
@@ -529,7 +533,7 @@ static void start_game(uint32_t seed) {
     const char* nm2=(s_mode==MODE_GUEST)?pnet_name():(s_mode==MODE_AI?"CPU":s_s2.name);
     snake_init(s_s1, 12, WORLD_H/2, DRT, nm1);   s_s1.len=5;
     snake_init(s_s2, WORLD_W-13, WORLD_H/2, DLT, nm2); s_s2.len=5;
-    memset(s_parts,0,sizeof(s_parts));
+    memset(s_parts,0,sizeof(Part)*N_PARTS);
     memset(&s_trail1,0,sizeof(s_trail1)); memset(&s_trail2,0,sizeof(s_trail2));
     s_pu_type=PU_NONE; s_pu_next=rng_range(6,12);
     s_winner=0; s_flash=0; s_tick=0;
@@ -871,8 +875,8 @@ static void draw_play(void) {
     else                  { draw_snake(s_s2,0xF81F);   draw_snake(s_s1,C_GREEN); }
 
     // Explosion particles
-    for(auto& p:s_parts)
-        if(p.life) d.fillRect((int)p.x,(int)p.y,3,3,p.col);
+    for(int i=0;i<N_PARTS;i++)
+        if(s_parts[i].life) d.fillRect((int)s_parts[i].x,(int)s_parts[i].y,3,3,s_parts[i].col);
 
     // Screen-edge flash on death
     if(s_flash>0) {
@@ -1141,7 +1145,7 @@ static void on_tab(void) {
 static void on_enter(void) {
     if(!s_obstacles) s_obstacles=(uint8_t(*)[WORLD_W])calloc(WORLD_H,WORLD_W);  // ~3.1 KB only while playing
     s_st=ST_MENU; s_menu_sel=0;
-    memset(s_parts,0,sizeof(s_parts));
+    memset(s_parts,0,sizeof(Part)*N_PARTS);
     s_cam_x=0; s_cam_y=0;
     s_last_us=esp_timer_get_time();
     if (!pnet_start()) nucleo_app_set_hint(TR("ESP-NOW non avviato   esc", "ESP-NOW not started   esc"));
@@ -1163,11 +1167,14 @@ static void on_exit(void) {
 }
 
 // ─── registration ────────────────────────────────────────────────────────────
+static const nucleo_app_ram_t APP_RAM[] = {
+    { (void **)&s_snk, sizeof(Snake)*2 }, { (void **)&s_hosts, sizeof(HostEntry)*MAX_HOSTS },
+    { (void **)&s_parts, sizeof(Part)*N_PARTS }, { (void **)&s_stpk, sizeof(sn_state_t) }, { nullptr, 0 } };
 extern "C" void nucleo_register_snake(void) {
     static const nucleo_app_def_t app = {
         "snake", "Snake", "Games", "Serpente 1v1 in rete (ESP-NOW) o vs AI",
         'S', C_GREEN, on_enter, on_key, nullptr, on_draw, on_exit,
-        NX_SOLO
+        NX_SOLO, APP_RAM
     };
     nucleo_app_register(&app);
 }
