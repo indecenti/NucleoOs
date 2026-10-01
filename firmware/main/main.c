@@ -350,6 +350,30 @@ void app_main(void)
     // by "did the Solo task start" — and it is the profile that already had its own fix.
     if (solo && !solo_srv) solo_watchdog_arm();
 
+    // SD content self-install, in a DEDICATED minimal boot. The first-boot wizard (or Settings ▸ SD) armed a
+    // download; run it HERE, before httpd / ANIMA / the app registry / audio / mDNS ever start — only the SD,
+    // the UI language and a STA-ONLY Wi-Fi link are up, so the whole heap is free and UNFRAGMENTED for the TLS
+    // handshake and the ~50 MB stream (the earlier placement, after the full APSTA bring-up, left too small a
+    // contiguous block and the download failed out-of-memory on this PSRAM-less chip). Then reboot into the
+    // full OS on the fresh SD. Never runs unless armed; the full OS is a plain boot.
+    if (sd_ok && !solo && nucleo_sdcontent_armed()) {
+        ESP_LOGW(TAG, "SD content install boot: STA-only Wi-Fi, everything else skipped for max heap");
+        nucleo_app_release_buffers();                 // free the 32 KB canvas: the largest contiguous block for TLS
+        nucleo_setup_apply_network_sta_only();        // STA only (no SoftAP): ~20 KB less than APSTA, and all we need
+        HMEM("sdcontent-pre");
+        bool ok = nucleo_sdcontent_run();             // progress screen; writes content.json on success
+        const char *l = nucleo_i18n_lang();
+        int k = !strcmp(l, "it") ? 1 : !strcmp(l, "es") ? 2 : !strcmp(l, "fr") ? 3 : !strcmp(l, "de") ? 4 : 0;
+        if (!ok) {
+            const sdc_state_t *st = nucleo_sdcontent_state();
+            static const char *const T[5] = { "SD download failed", "Download SD non riuscito", "Descarga SD fallida",
+                                              "Echec du telechargement SD", "SD-Download fehlgeschlagen" };
+            const char *lines[] = { T[k], "", st->err[0] ? st->err : "?" };
+            nucleo_ui_message("NucleoOS", lines, 3);   // waits for ENTER so the reason is readable
+        }
+        esp_restart();   // success -> full OS loads the fresh SD; failure -> arm cleared, a normal boot follows
+    }
+
     // Bring up networking + services FIRST so the device is never bricked and the web UI
     // always works, even while the on-device keyboard is being verified/tuned.
     HMEM("after-sd");
@@ -409,34 +433,6 @@ void app_main(void)
     bootmark("ir");
     HMEM("after-network");
     bootmark("pre-httpd");
-
-    // SD content self-install. A download armed by the first-boot wizard (or Settings ▸ SD) runs HERE, in
-    // the pre-httpd big-heap window — the ONLY place a TLS handshake's ~40 KB contiguous block fits on this
-    // no-PSRAM chip. It streams the web OS + ANIMA payload for THIS firmware to the SD (verified, resumable,
-    // never touching user state), then reboots so the whole OS loads the fresh content. Skippable, and it
-    // never runs unless the user armed it. Full OS only (a Solo boot is reached from an already-populated SD).
-    if (sd_ok && !solo && nucleo_sdcontent_armed()) {
-        nucleo_app_release_buffers();                 // hand the TLS handshake the largest contiguous block
-        bool ok = nucleo_sdcontent_run();             // draws progress via nucleo_sdcontent_on_progress()
-        const char *l = nucleo_i18n_lang();
-        int k = !strcmp(l, "it") ? 1 : !strcmp(l, "es") ? 2 : !strcmp(l, "fr") ? 3 : !strcmp(l, "de") ? 4 : 0;
-        if (ok) {
-            static const char *const D[5] = { "Content installed.", "Contenuti installati.", "Contenido instalado.",
-                                              "Contenu installe.", "Inhalt installiert." };
-            const char *lines[] = { D[k] }; nucleo_ui_home("NucleoOS", lines, 1);
-            esp_restart();                            // reboot: registry / L1 / httpd load the fresh SD cleanly
-        }
-        // Failed: the SD lacks content but the device still boots (hotspot + rescue console let the user retry
-        // from Settings ▸ SD). Show why, briefly, then carry on.
-        {
-            const sdc_state_t *st = nucleo_sdcontent_state();
-            static const char *const T[5] = { "SD download failed", "Download SD non riuscito", "Descarga SD fallida",
-                                              "Echec du telechargement SD", "SD-Download fehlgeschlagen" };
-            const char *lines[] = { T[k], "", st->err[0] ? st->err : "?" };
-            nucleo_ui_home("NucleoOS", lines, 3);
-            vTaskDelay(pdMS_TO_TICKS(2500));
-        }
-    }
     // httpd MUST come up — the web OS is not optional. On this no-PSRAM chip it needs an ~18 KB
     // CONTIGUOUS block, and a tight boot can fragment the heap right below that (largest seen ~15 KB).
     // So we free the 32 KB off-screen launcher canvas UP FRONT (the launcher re-acquires it lazily;
