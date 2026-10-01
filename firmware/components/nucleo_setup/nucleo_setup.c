@@ -203,7 +203,11 @@ static void on_wifi_event(void *arg, esp_event_base_t base, int32_t id, void *da
         ESP_LOGW(TAG, "STA disconnected (reason=%d, was ip=%s) — reconnecting",
                  d ? d->reason : -1, s_ip[0] ? s_ip : "-");   // reason code lands in the RAM ring -> /api/logs
         s_ip[0] = '\0';
-        if (s_want_sta) esp_wifi_connect();          // reconnect to the saved network
+        // During an EXPLICIT join the wait loop owns the attempt (the driver already retries the
+        // association failure_retry_cnt times); re-dialing here on every handshake-timeout disconnect
+        // just restarted the association mid-attempt and kept the device "connecting" forever. Only the
+        // background keep-alive re-dials (a link that dropped after it was established).
+        if (s_want_sta && !s_join_explicit) esp_wifi_connect();   // reconnect to the saved network
     } else if (base == WIFI_EVENT && (id == WIFI_EVENT_AP_STACONNECTED || id == WIFI_EVENT_AP_STADISCONNECTED)) {
         // Soft-AP client activity: opens the policy's grace window so the supervisor stays off
         // the radio while someone is joining/using the hotspot — including a phone whose WPA2
@@ -521,9 +525,17 @@ static void connect_sta_at(const char *ssid, const char *pass, uint8_t ch, const
     // proceeds with whatever stale/empty config is left in NVS -> WIFI_REASON_NO_AP_FOUND (201) ->
     // another failed cycle. Observed as an endless "set_config -> UNKNOWN ERROR / reason=201" loop
     // that no correct password could break. Enabling STA first makes the write land.
+    // ONE radio on this chip: in APSTA the hotspot and the STA link must share a channel. If the hotspot is
+    // beaconing on channel A and the router is on channel B, association succeeds but the 4-way-handshake
+    // EAPOL frames are lost on the wrong channel -> WIFI_REASON_HANDSHAKE_TIMEOUT (15). That is THE cause of
+    // "connecting... then asks for the password again". An EXPLICIT user join (s_join_explicit: the first-boot
+    // wizard, or the Settings Wi-Fi app) therefore runs in PURE STA — there is no web client on the hotspot to
+    // keep alive, the user is at the device — so there is no second channel to conflict with and the handshake
+    // completes. The background supervisor still joins in APSTA (I2) to keep a web user's hotspot alive.
     wifi_mode_t cur = WIFI_MODE_NULL;
     esp_wifi_get_mode(&cur);
-    WIFI_TRY(esp_wifi_set_mode((wifi_mode_t)wp_join_mode((wp_mode_t)cur)));   // I2: keeps a live AP beaconing
+    wifi_mode_t jm = s_join_explicit ? WIFI_MODE_STA : (wifi_mode_t)wp_join_mode((wp_mode_t)cur);
+    WIFI_TRY(esp_wifi_set_mode(jm));
     wifi_config_t wc = {0};
     strncpy((char *)wc.sta.ssid, ssid, sizeof(wc.sta.ssid) - 1);
     strncpy((char *)wc.sta.password, pass, sizeof(wc.sta.password) - 1);
@@ -539,9 +551,10 @@ static void connect_sta_at(const char *ssid, const char *pass, uint8_t ch, const
     wc.sta.threshold.authmode = WIFI_AUTH_OPEN;              // accept whatever security the AP offers (no min filter)
     wc.sta.pmf_cfg.capable    = true;                        // 802.11w PMF: needed to associate with WPA2/WPA3-mixed APs
     wc.sta.failure_retry_cnt  = 3;                           // let the driver retry the association before it gives up
-    // One radio: in APSTA the hotspot and the link share a channel. Move the hotspot to the router's channel
-    // BEFORE associating, so no channel switch (CSA) happens in the middle of the 4-way handshake.
-    if (ch && wp_ap_iface_up((wp_mode_t)wp_join_mode((wp_mode_t)cur))) {
+    // Background (APSTA) join only: the hotspot and the link share the one radio, so move the hotspot to the
+    // router's channel before associating (no channel switch mid-handshake). An explicit join is pure STA, so
+    // there is no AP to realign — the whole conflict is gone.
+    if (ch && jm != WIFI_MODE_STA && wp_ap_iface_up((wp_mode_t)jm)) {
         wifi_config_t apc = {0};
         if (esp_wifi_get_config(WIFI_IF_AP, &apc) == ESP_OK && apc.ap.channel != ch) {
             apc.ap.channel = ch;
@@ -880,17 +893,11 @@ bool nucleo_setup_join(const char *ssid, const char *pass)
     strncpy(s_ssid, ssid, sizeof(s_ssid) - 1); s_ssid[sizeof(s_ssid) - 1] = 0;
     wifi_country_apply();                      // the language may have changed since boot (first-boot wizard)
     s_last_reason = 0; s_auth_fails = 0; s_assoc = false; s_join_explicit = true;
-    // Join the access point the user just picked from OUR scan (its channel + BSSID): one-channel probe instead
-    // of a full re-scan with the hotspot beaconing. If that AP moved, one plain attempt follows.
-    int si = -1;
-    for (int i = 0; i < s_wscan_n; i++) if (!strcmp(s_wscan[i].ssid, ssid)) { si = i; break; }
-    if (si >= 0 && s_wscan[si].ch) connect_sta_at(ssid, use_pass, s_wscan[si].ch, s_wscan[si].bssid);
-    else                           connect_sta(ssid, use_pass);               // remembers the net on success
-    if (!s_ip[0] && si >= 0 && s_auth_fails < 4 && !s_assoc) {
-        ESP_LOGW(TAG, "join '%s' on ch %d failed (reason %d): retrying with a full scan", ssid, s_wscan[si].ch, s_last_reason);
-        s_last_reason = 0;
-        connect_sta(ssid, use_pass);
-    }
+    // One clean path: pure STA (connect_sta_at via connect_sta sets the mode from s_join_explicit) with an
+    // all-channel scan by signal, so the driver itself lands on the strongest AP for this SSID. No hotspot
+    // beaconing to share the channel with, so no handshake timeout, and no channel/BSSID pinning to get wrong.
+    int si = -1; for (int i = 0; i < s_wscan_n; i++) if (!strcmp(s_wscan[i].ssid, ssid)) { si = i; break; }
+    connect_sta(ssid, use_pass);               // remembers the net on success
     s_join_explicit = false;
     bool ok = s_ip[0] != 0;
     s_join_err = ok ? NUCLEO_JOIN_OK : (s_auth_fails >= 2 && reason_is_auth(s_last_reason)) ? NUCLEO_JOIN_PASSWORD
