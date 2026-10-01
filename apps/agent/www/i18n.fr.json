@@ -70,6 +70,7 @@
   "rt_unknown": "inconnu",
   "rt_run_ok": "✔ exécuté",
   "rt_publish_not_done": "L’app « {id} » n’a PAS été installée : la dernière publication a été refusée ({why}). Corrigez-la et demandez-moi de la republier.",
+  "rt_app_runtime_err": "L’app est installée mais plante au démarrage : {errors}. Corrigez le code et republiez-la.",
   "rt_open_file_ok": "✔ ouverture de {path} dans l'OS",
   "rt_open_app_ok": "✔ lancement de l'app {app}",
   "rt_open_specify": "Précise un chemin ou une app.",

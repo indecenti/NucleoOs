@@ -312,7 +312,6 @@ export function inlineScripts(html) {
     if (/\bsrc\s*=/i.test(attrs)) continue;                                   // external script — not our code
     const type = (attrs.match(/\btype\s*=\s*["']?([^"'\s>]+)/i) || [])[1];
     if (type && !/^(text\/javascript|module|application\/javascript)$/i.test(type)) continue;  // json/importmap/etc
-    if (/^\s*(import|export)\s/m.test(code)) continue;                        // ES module body — checker would false-alarm
     if (code.trim()) out.push(code);
   }
   return out;
@@ -329,12 +328,10 @@ export function lintApp(files, checkSyntax) {
     if (ext === 'json') {
       try { JSON.parse(content); } catch (e) { errors.push(path + ': invalid JSON (' + String((e && e.message) || e) + ')'); }
     } else if ((ext === 'js' || ext === 'mjs' || ext === 'cjs') && typeof checkSyntax === 'function') {
-      if (/^\s*(import|export)\s/m.test(content)) continue;                   // module body — skip (see verifyCode)
       const r = checkSyntax(content, { bare: true });   // a real file: no sandbox parameters (os, console…)
       if (r && !r.ok) errors.push(path + ': syntax error' + (r.line ? ' (line ' + r.line + ')' : '') + (r.error ? ': ' + r.error : ''));
     } else if (ext === 'html' || ext === 'htm') {
       if (typeof checkSyntax === 'function') for (const code of inlineScripts(content)) {
-        if (/^\s*(import|export)\s/m.test(code)) continue;              // module imports may span lines — skip, like a .js module
         const r = checkSyntax(code, { bare: true });   // the page's own `const os = …` is legal here
         if (r && !r.ok) { errors.push(path + ': inline <script> syntax error' + (r.line ? ' (line ~' + r.line + ')' : '') + (r.error ? ': ' + r.error : '')); break; }
       }

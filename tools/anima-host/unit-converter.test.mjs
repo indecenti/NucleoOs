@@ -92,7 +92,10 @@ test('runCommand end-to-end (parse + convert)', () => {
 // proven without a device or a model.
 const APP = join(dirname(fileURLToPath(import.meta.url)), '..', '..', 'apps', 'unit-converter');
 const readApp = (rel) => readFileSync(join(APP, rel), 'utf8');
-const checkSyntax = (code) => { try { new Function(code); return { ok: true }; } catch (e) { return { ok: false, error: e.message }; } };
+// The REAL publish lint, with acorn loaded: the app's ES modules (convert.js, the inline module) are parsed for
+// real — the Function-constructor stand-in could not read import / export at all.
+const { checkSyntax, loadParser } = await import('../../apps/code-runner/www/nucleo-run.js');
+await loadParser();
 
 test('pipeline install: manifest validates', () => {
   const m = JSON.parse(readApp('manifest.json'));

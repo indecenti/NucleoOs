@@ -30,6 +30,16 @@ both exist; `ai.local.engines.prefer`) and the PC model pick (`ai.local.engines.
 Cloud errors are recorded only when a cloud rung could run (a key, not Private) — never "can't reach Claude"
 for a local failure. Replies follow the language of the user's message (prompt rule in `contextkit.js`).
 
+## The web client carries the load (http:// has no service worker)
+NucleoOS is opened at `http://<cardputer-ip>`: not a secure origin, so `navigator.serviceWorker` does not exist and the
+SW's device gate (2 in flight, exclusive writes, app cache) never runs there. Page code must be device-friendly itself:
+- `web/shell/seq-import.js`: an app's own module graph fetched ONE file at a time and linked in the browser (blob URLs;
+  shared modules keep their real URL). ANIMA loads the agent runtime with it — a parallel `import()` of ~12 modules lost
+  one on the 4-socket httpd and the browser kept the failure until a reload. `tools/seq-import.test.mjs`.
+- ANIMA's SD copy of the conversations (`sessions.json`, the cross-device sync) is written after 3 quiet minutes or when
+  ANIMA is hidden / closed (keepalive), ≤56 KB — not ~100 KB after every turn (37 s, heap down to 1.5 KB).
+- If the agent still fails to load, ANIMA says so (`agentLoadFail`) instead of a tool-less chat "applying" changes.
+
 ## The Cardputer's web profile
 A browser opening `/` on the full native OS gets a flash page (`firmware/components/nucleo_webfs/handoff.html`,
 the shell's own boot splash copied in by `tools/gen-handoff.mjs`; `npm run handoff:check`) and the device
@@ -62,6 +72,11 @@ and `/api/apps` kept the old list until a reboot.
 - A model bigger than the GPU: on Ollama's "CUDA out of memory" the load is retried once with
   `num_gpu = gpuLayersFor(size, block_count, VRAM)`; the working split is remembered (`numGpu`).
   Measured (8 GB RTX 5070 laptop): qwen3.6 35B-A3B at 12 layers = 22.4 tok/s; qwen3.5 9B = 20.5 tok/s.
+  NOT monotonic: 7 layers fail too (CUDA pins host RAM for the CPU part) — the retry climbs `gpuLayerLadder` (est, +3, +6).
+- **First measurement** (`benchmarkCandidates`, ANIMA idle 25 s, once per model per browser): a big model is a fallback
+  until measured fast, and was never measured because never picked. Every unmeasured big model is assumed fast at once
+  and only the winner is measured. Dev PC, 2026-10-01: 35B-A3B 40.8 tok/s (10 layers), coder:16k 47 — now the agent /
+  chat and code picks; it fixed first time the Contatore task the 9B had botched.
 
 ## Agent guards (`apps/agent/www`) — from OpenCode (MIT)
 - `edit-replace.js` (in `apps/anima/www`, used by `fsclient.edit`): tolerant old→new replacer chain; one

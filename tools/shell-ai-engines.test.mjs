@@ -271,3 +271,48 @@ test('one loopback server that answers proves the browser is not blocking: the s
   const none = await detectServers({ fetch: async () => { throw new TypeError('x'); }, permissions: perm, servers: [{ id: 'ollama', kind: 'ollama', name: 'Ollama', base: 'http://localhost:11434' }] });
   assert.equal(none[0].status, 'blocked');
 });
+
+test('a model that would win if fast is measured first — the 35B-A3B lost to the 9B forever, unmeasured', async () => {
+  const { benchCandidates, pickModel } = await import('../web/shell/ai-engines.js');
+  const caps = { chat: true, tools: true };
+  const models = [   // the dev PC's real list (sizes in GB)
+    { id: 'qwen3.5:9b', sizeGB: 6.6, params: '9.7B', family: 'qwen35', caps },
+    { id: 'minicpm5-2b:latest', sizeGB: 1.6, params: '2.5B', family: 'llama', caps: { chat: true, tools: false } },
+    { id: 'qwen3.6-coder:16k', sizeGB: 22.6, params: '35.5B', family: 'qwen35moe', caps },
+    { id: 'qwen3.6:35b-a3b-mtp-q4_K_M', sizeGB: 22.6, params: '35.5B', family: 'qwen35moe', caps },
+    { id: 'gemma4:12b', sizeGB: 7.6, params: '11.9B', family: 'gemma4', caps },
+  ];
+  const base = 'http://localhost:11434';
+  assert.equal(pickModel(models, 'agent', { base }), 'qwen3.5:9b', 'unmeasured: the big file stays a fallback');
+  assert.deepEqual(benchCandidates(models, 'agent', { base }), ['qwen3.6:35b-a3b-mtp-q4_K_M']);
+  assert.deepEqual(benchCandidates(models, 'code', { base }), ['qwen3.6-coder:16k']);
+  const perf = { models: { [base + '|qwen3.6:35b-a3b-mtp-q4_K_M']: { tps: 22.4 } } };
+  assert.equal(pickModel(models, 'agent', { perf, base }), 'qwen3.6:35b-a3b-mtp-q4_K_M', 'measured fast: it wins');
+  assert.deepEqual(benchCandidates(models, 'agent', { perf, base }), [], 'measured: never again');
+  assert.deepEqual(benchCandidates(models, 'agent', { base, tried: { [base + '|qwen3.6:35b-a3b-mtp-q4_K_M']: Date.now() } }), [], 'a failed try waits a week');
+});
+
+test('too FEW GPU layers fail too: the retry climbs the ladder until a split loads (7 OOM, 9 ok on the ADV PC)', async () => {
+  const { gpuLayerLadder, forgetServers } = await import('../web/shell/ai-engines.js');
+  assert.deepEqual(gpuLayerLadder(7, 41), [7, 10, 13]);
+  assert.deepEqual(gpuLayerLadder(40, 41), [40, 41], 'capped at the layer count, no repeats');
+  const base = ollamaFetch();
+  const sent = [];
+  const oom = () => new Response('{"error":"llama-server reported out-of-memory during startup: CUDA error\nCUDA error: out of memory"}', { status: 500 });
+  const f = async (url, init) => {
+    if (url.endsWith('/api/show')) { const m = JSON.parse(init.body).model; return json({ capabilities: CAPS[m] || [], model_info: { 'qwen35moe.block_count': 41 } }); }
+    if (url.endsWith('/api/ps')) return json({ models: [] });
+    if (!url.endsWith('/api/chat')) return base(url, init);
+    const n = JSON.parse(init.body).options.num_gpu; sent.push(n);
+    if (n == null || n < 9) return oom();                       // Ollama's own split and the low estimate both die
+    return stream(['{"message":{"content":"ok"}}\n{"done":true,"eval_count":40,"eval_duration":1000000000}\n']);
+  };
+  forgetServers();
+  const store = new Map(); const st = { getItem: (k) => store.get(k) ?? null, setItem: (k, v) => store.set(k, v) };
+  const perf = { models: {}, vramGB: 5.5 };                     // learned from the 9B: an under-estimate
+  const cfg = { enabled: true, servers: [DEFAULT_SERVERS[0]] };
+  const r = await localComplete('code', { model: 'qwen3.6-coder:16k', messages: [{ role: 'user', content: 'x' }], fetch: f, storage: st, config: cfg, perf });
+  assert.equal(r && r.text, 'ok');
+  assert.deepEqual(sent, [undefined, 7, 10]);
+  assert.equal(r.engine.gpuLayers, 10);
+});
