@@ -154,6 +154,7 @@
   "agentWith": "Par :",
   "agentCode": "Code :",
   "agentSaveTo": "La sortie sera enregistrée dans {path}",
+  "agentLoadFail": "⚠ Le moteur de l’agent ne s’est pas chargé : le Cardputer était occupé et un fichier s’est perdu. Aucun fichier n’a été modifié. Rechargez ANIMA (F5) et réessayez.",
   "agentMoreLines": "… ({n} lignes de plus)",
   "devWebMode": "En mode web, le Cardputer met son cerveau hors ligne en pause pour laisser toute la mémoire au bureau",
   "noEngine": "Aucun moteur n’a pu répondre. Trois solutions : lancez une IA locale sur ce PC (Ollama ou LM Studio, ANIMA l’utilise d’elle-même), installez le cerveau hors ligne dans ce navigateur via Paramètres ▸ Modèles, ou ajoutez une clé cloud dans Paramètres ▸ IA et utilisez Auto.",

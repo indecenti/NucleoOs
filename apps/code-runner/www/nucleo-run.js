@@ -158,10 +158,29 @@ const RUN_SRC = '(' + workerMain.toString() + ')();';
 // print, args, env as parameters — so every page that does `const os = …` (the agent's own app template) failed
 // "Identifier 'os' has already been declared" and no agent app could be published. A module's import / export
 // lines are neutralised in place (same line count, so reported lines stay right).
+// With acorn loaded (loadParser(): vendor/acorn.mjs, MIT, on demand) a bare check parses REAL modules too —
+// import / export, top-level await — which the Function-constructor trick cannot, so agent apps and .mjs
+// files were not checked at all. Without it, module code is reported { ok:true, skipped:'module' }.
+let _acorn = null;
+export async function loadParser() {
+  if (_acorn === null) { try { _acorn = await import('./vendor/acorn.mjs'); } catch { _acorn = false; } }
+  return !!_acorn;
+}
+function acornCheck(src) {
+  const opt = { ecmaVersion: 'latest', allowHashBang: true };
+  try { _acorn.parse(src, { ...opt, sourceType: 'module' }); return { ok: true }; }
+  catch (e) {
+    // a plain script that is not valid as a module (sloppy-mode only syntax) is still a valid script
+    try { _acorn.parse(src, { ...opt, sourceType: 'script', allowAwaitOutsideFunction: true }); return { ok: true }; } catch {}
+    return { ok: false, error: String(e.message || e).replace(/\s*\(\d+:\d+\)$/, ''), line: e.loc && e.loc.line, col: e.loc && e.loc.column + 1 };
+  }
+}
 export function checkSyntax(code, opts) {
   try {
     const AsyncFn = Object.getPrototypeOf(async function () {}).constructor;
     const bare = !!(opts && opts.bare);
+    if (bare && _acorn) return acornCheck(String(code || ''));
+    if (bare && /^\s*(import|export)\s/m.test(String(code || ''))) return { ok: true, skipped: 'module' };   // no parser: never a false alarm
     let src = String(code || '');
     if (bare) src = src
       .replace(/^[ \t]*import\b[^\n]*$/gm, '')

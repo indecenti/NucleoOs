@@ -89,9 +89,7 @@ const chk = (code) => (/BROKEN/.test(code) ? { ok: false, line: 2, error: 'unexp
 ok('lint passes a clean app', lintApp([{ path: 'i18n.en.json', content: '{"a":1}' }, { path: 'app.js', content: 'const x=1;' }], chk).ok);
 ok('lint REFUSES broken JSON (e.g. i18n)', !lintApp([{ path: 'i18n.it.json', content: '{bad' }], chk).ok);
 ok('lint REFUSES broken .js', !lintApp([{ path: 'app.js', content: 'BROKEN code' }], chk).ok);
-ok('lint skips ES-module .js (no false alarm)', lintApp([{ path: 'm.js', content: 'import x from "y";\nBROKEN' }], chk).ok);
 ok('lint REFUSES broken inline <script>', !lintApp([{ path: 'index.html', content: '<h1>x</h1><script>BROKEN</script>' }], chk).ok);
-ok('lint skips inline MODULE script', lintApp([{ path: 'index.html', content: '<script type="module">import a from "/x";\nBROKEN</script>' }], chk).ok);
 ok('lint passes html with no scripts', lintApp([{ path: 'index.html', content: '<h1>hi</h1>' }], chk).ok);
 ok('inlineScripts skips external + json, keeps plain', inlineScripts('<script src="a.js"></script><script type="application/json">{}</script><script>var y=1;</script>').length === 1);
 ok('starter scaffold passes its own lint', lintApp([{ path: 'manifest.json', content: JSON.stringify(buildManifest({ name: 'X' })) }, { path: 'www/i18n.en.json', content: starterI18n({ name: 'X' }, true) }, { path: 'www/index.html', content: starterHtml({ name: 'X' }) }], chk).ok);
@@ -120,6 +118,15 @@ ok('list i18n keys present', ['add', 'empty', 'placeholder'].every((k) => k in J
   ok('real lint still refuses a broken inline script', !lintApp([{ path: 'index.html', content: '<script>const os = ;</script>' }], real).ok);
   ok('real lint: a file may declare os / console', lintApp([{ path: 'app.js', content: 'const os = 1; const print = () => os;' }], real).ok);
   ok('sandbox snippets keep their parameters', real('os.fs.read("x")').ok && !real('const os = 1;').ok);
+  // ES modules: skipped while no parser is loaded (never a false alarm), CHECKED once acorn is (vendor/acorn.mjs)
+  const brokenMod = [{ path: 'index.html', content: '<script type="module">import a from "/x";\nconst b = ;</script>' }, { path: 'm.js', content: 'import x from "y";\nexport const z = ;' }];
+  ok('module code is skipped without the parser', lintApp(brokenMod, real).ok);
+  const { loadParser } = await import('../../apps/code-runner/www/nucleo-run.js');
+  ok('acorn loads from vendor/', await loadParser());
+  const lm = lintApp(brokenMod, real);
+  ok('with acorn a broken inline module AND a broken .js module are refused', !lm.ok && lm.errors.length === 2 && /line/.test(lm.errors.join(' ')));
+  ok('with acorn a valid module page passes', lintApp([{ path: 'index.html', content: '<script type="module">import a from "/x";\nconst b = await a();\nexport { b };</script>' }], real).ok);
+  for (const kind of APP_KINDS) ok('starter (' + kind + ') passes the acorn lint', lintApp([{ path: 'index.html', content: starterHtml({ id: 'demo', name: 'Demo', kind }) }], real).ok);
 }
 ok('timer i18n keys present', ['start', 'reset', 'minutes'].every((k) => k in JSON.parse(starterI18n({ name: 'T', kind: 'timer' }, true))));
 

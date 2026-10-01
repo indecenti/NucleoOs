@@ -138,6 +138,11 @@ export const DEFAULT_VRAM_GB = 7;
 // spilled the VRAM into shared memory → 3.8 tok/s. So: the layers that fit, with room for the KV cache and
 // the vision projector. null = cannot tell (no size / layer count).
 export const VRAM_RESERVE_GB = 1.6;
+// The GPU-layer splits tried after an out-of-memory load: the estimate, then +3 and +6 (see localComplete).
+export function gpuLayerLadder(estimate, blockCount) {
+  const max = blockCount > 0 ? blockCount : Infinity;
+  return [...new Set([estimate, estimate + 3, estimate + 6].map((n) => Math.max(1, Math.min(max, n))))];
+}
 export function gpuLayersFor({ sizeGB, blockCount, vramGB = DEFAULT_VRAM_GB, reserveGB = VRAM_RESERVE_GB } = {}) {
   if (!(sizeGB > 0) || !(blockCount > 0) || !(vramGB > 0)) return null;
   const n = Math.floor(blockCount * Math.max(0, vramGB - reserveGB) / sizeGB);
@@ -362,8 +367,17 @@ export async function localComplete(task, { messages, tools, temperature, maxTok
           const m = s.models.find((x) => x.id === model);
           const layers = gpuLayersFor({ sizeGB: m && m.sizeGB, blockCount: info && info.blocks, vramGB: perf.vramGB || DEFAULT_VRAM_GB });
           if (layers == null) throw e;
-          options.num_gpu = layers;
-          res = await run();
+          // NOT monotonic: on the 8 GB dev laptop the 35B-A3B fails at 7 GPU layers and runs at 9 or 12 — the fewer
+          // layers on the GPU, the more pinned host RAM CUDA needs for the rest, and that runs out too. So the
+          // estimate first, then a few MORE layers; the first split that loads is remembered (numGpu).
+          let lastErr = e;
+          for (const n of gpuLayerLadder(layers, info && info.blocks)) {
+            if (signal && signal.aborted) throw lastErr;
+            options.num_gpu = n;
+            try { res = await run(); lastErr = null; break; }
+            catch (e2) { lastErr = e2; if (!isOutOfMemory(e2)) throw e2; }
+          }
+          if (lastErr) throw lastErr;
         }
         if (s.kind === 'ollama' && res.usage && res.usage.outputTokens >= 16) learnPerf(perf, s.base, model, res.usage.tokPerSec, { storage, fetch: f, numGpu: options.num_gpu });
         return { ...res, engine: { server: s.name, kind: s.kind, model, base: s.base, ...(options.num_gpu != null ? { gpuLayers: options.num_gpu } : {}), ...(skipped.length ? { skipped } : {}) } };
@@ -384,4 +398,50 @@ async function learnPerf(perf, base, model, tps, { storage, fetch: f, numGpu }) 
     notePerf(perf, base, model, { tps, sizeGB: m && m.sizeGB, vramGB: m ? m.vramGB : undefined, numGpu });
     if (storage) savePerf(perf, storage);
   } catch {}
+}
+
+// ── first measurement of a model that would win if it were fast ──────────────────────────────────────
+// pickModel keeps a big file (>10 GB) as a fallback until it is MEASURED fast here — but a model that is never
+// picked is never measured. On the dev PC the 35B-A3B MoE (22.4 tok/s, far more capable) lost to the 9B forever
+// in every new browser. This measures, once per browser and model, only a model that would rank FIRST for the
+// task if it proved fast. Short (≤64 tokens), cancellable (signal), retried after a week if it failed.
+const BENCH = 'ai.local.benchTried';
+const BENCH_RETRY_MS = 7 * 24 * 3600e3;
+export function benchCandidates(models, task, { perf = { models: {} }, base = '', tried = {}, now = Date.now() } = {}) {
+  // Every unmeasured big model is assumed fast AT ONCE and only the winner is measured: if it turns out slow,
+  // the next one wins next time. (One by one, the 35B general model and its coder twin both "won" for code.)
+  const open = (models || []).filter((m) => {
+    const key = base + '|' + m.id;
+    if (perf.models && perf.models[key] && perf.models[key].tps) return false;     // already measured
+    if (tried[key] && now - tried[key] < BENCH_RETRY_MS) return false;
+    if (!(m.sizeGB > 10)) return false;                                             // small ones are picked and measured anyway
+    return !(task === 'agent' && m.caps && !m.caps.tools);
+  });
+  if (!open.length) return [];
+  const hypo = { ...perf, models: { ...(perf.models || {}) } };
+  for (const m of open) hypo.models[base + '|' + m.id] = { tps: 20 };
+  const win = pickModel(models, task, { perf: hypo, base });
+  return open.some((m) => m.id === win) ? [win] : [];
+}
+export async function benchmarkCandidates({ task = 'agent', config = loadLocalConfig(), storage = globalThis.localStorage, signal, fetch: f = globalThis.fetch } = {}) {
+  if (!config.enabled) return [];
+  const perf = storage ? loadPerf(storage) : { models: {} };
+  let tried = {}; try { tried = JSON.parse((storage && storage.getItem(BENCH)) || '{}') || {}; } catch {}
+  const done = [];
+  for (const s of await liveServers({ config, fetch: f })) {
+    if (s.status !== 'ok' || s.kind !== 'ollama' || !s.models.length) continue;
+    for (const id of benchCandidates(s.models, task, { perf, base: s.base, tried })) {
+      if (signal && signal.aborted) return done;
+      tried[s.base + '|' + id] = Date.now();
+      try { storage && storage.setItem(BENCH, JSON.stringify(tried)); } catch {}
+      try {
+        const res = await localComplete(task, { model: id, maxTokens: 64, signal, perf, storage, fetch: f, config, servers: [s],
+          messages: [{ role: 'user', content: 'Count from 1 to 40, numbers separated by spaces, nothing else.' }] });
+        const tps = res && res.usage && res.usage.tokPerSec;
+        if (tps) { notePerf(perf, s.base, id, { tps, sizeGB: (s.models.find((x) => x.id === id) || {}).sizeGB, numGpu: res.engine && res.engine.gpuLayers }); if (storage) savePerf(perf, storage); }
+        done.push({ base: s.base, model: id, tps: tps || 0 });
+      } catch (e) { if (signal && signal.aborted) return done; done.push({ base: s.base, model: id, tps: 0, error: String(e && e.message || e) }); }
+    }
+  }
+  return done;
 }

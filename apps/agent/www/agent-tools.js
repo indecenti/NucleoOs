@@ -84,9 +84,8 @@ export function verifyCode(path, content, checkSyntax) {
     catch (e) { return { ok: false, warning: '⚠ invalid JSON: ' + String((e && e.message) || e) }; }
   }
   if ((ext === 'js' || ext === 'mjs' || ext === 'cjs') && typeof checkSyntax === 'function') {
-    // checkSyntax validates a SCRIPT body (it wraps the code in a function), so ES module syntax
-    // (top-level import/export) would false-alarm. Skip modules — a wrong warning is worse than none.
-    if (/^\s*(import|export)\s/m.test(String(content == null ? '' : content))) return { ok: true };
+    // Modules (import / export) are parsed by acorn when it is loaded (nucleo-run loadParser); without it
+    // checkSyntax skips them — a wrong warning is worse than none.
     const r = checkSyntax(String(content == null ? '' : content), { bare: true });   // a file, not a sandbox snippet
     if (!r || r.ok) return { ok: true };
     return { ok: false, warning: '⚠ syntax error' + (r.line ? ' at line ' + r.line : '') + ': ' + (r.error || 'parse failed') };

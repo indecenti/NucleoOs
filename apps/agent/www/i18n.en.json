@@ -70,6 +70,7 @@
   "rt_unknown": "unknown",
   "rt_run_ok": "✔ executed",
   "rt_publish_not_done": "The app “{id}” was NOT installed: the last publish was refused ({why}). Fix it and ask me to publish it again.",
+  "rt_app_runtime_err": "The app is installed but throws when it starts: {errors}. Fix the code and publish it again.",
   "rt_open_file_ok": "✔ opening {path} in the OS",
   "rt_open_app_ok": "✔ launching app {app}",
   "rt_open_specify": "Specify a path or app.",

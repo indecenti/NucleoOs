@@ -27,7 +27,7 @@ import { compact } from '/apps/anima/context.js';
 // Provider-agnostic contract layer (node+browser safe, host-testable): tool surface + the Groq/OpenAI
 // tool-use machinery so the multi-agent works on Grok too, not just Claude.
 import { CLIENT_TOOLS, MUTATING, ALWAYS_CONFIRM, GROQ_MODELS, GEMINI_MODELS, toOpenAITools, callOpenAIChat as rawOpenAIChat, runOpenAIToolLoop, runLocalToolLoop, localToolDefs, searchFallbackTerms, extractJson, guardPlan, withLineNumbers, verifyCode, fenceUntrusted, normalizePlan, renderPlan, osApiIndex, osApiRoute, osApiManifest, OSAPI_RULES } from './agent-tools.js';
-import { checkSyntax } from '/apps/code-runner/nucleo-run.js';   // parse-only JS check (host-safe) for the write→lint loop
+import { checkSyntax, loadParser } from '/apps/code-runner/nucleo-run.js';   // parse-only JS check (host-safe) for the write→lint loop
 import { toAgentTools as hwAgentTools, capabilityForTool, callCapability, HW_MUTATING, HW_CAPABILITIES } from '/apps/code-runner/nucleo-hw.js';   // F2: the Cardputer's real hardware as GATED agent tools
 // "Create a NucleoOS app" skill — PURE orchestration (scaffold/publish/manage) + the advisory review,
 // host-tested. The privileged device I/O is injected (appIo) below; the orchestrators never touch fetch.
@@ -162,6 +162,36 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
   // The installed apps (device /api/apps: id + name) with what each one IS (category + description from
   // /app-catalog.json, generated from the manifests). With names alone a model asked "which apps play
   // music?" invented answers. The catalog is one static file, fetched once per runtime.
+  // Load a just-published app for ~2.5 s in a hidden frame with the SAME sandbox the desktop gives agent apps,
+  // and collect what it throws (error / unhandled rejection). A probe script is prepended inside <head> on the
+  // same line, so reported line numbers stay the app's own. Broker calls are answered (sys.info → the OS
+  // language; the rest refused): the app runs its real start-up path. Browser only; null elsewhere.
+  async function runtimeSmoke(id) {
+    if (typeof document === 'undefined' || !/^[a-z0-9._-]+$/i.test(id)) return null;
+    const r = await dq.read(() => fetch('/apps/' + id + '/', { cache: 'no-store' }));
+    if (!r.ok) return null;
+    const probe = '<base href="/apps/' + id + '/"><script>(function(){var P=function(m){try{parent.postMessage({type:"nucleo.smoke",m:String(m).slice(0,240)},"*")}catch(e){}};'
+      + 'addEventListener("error",function(e){P((e.message||"error")+(e.lineno?" (line "+e.lineno+")":""))});'
+      + 'addEventListener("unhandledrejection",function(e){var x=e.reason;P("unhandled rejection: "+(x&&x.message||x))});})();</script>';
+    let html = await r.text();
+    html = /<head[^>]*>/i.test(html) ? html.replace(/<head[^>]*>/i, (m) => m + probe) : probe + html;
+    const errs = [];
+    const f = document.createElement('iframe');
+    f.setAttribute('sandbox', 'allow-scripts allow-forms allow-modals');
+    f.setAttribute('aria-hidden', 'true');
+    f.style.cssText = 'position:fixed;left:-10000px;top:0;width:360px;height:240px;border:0;visibility:hidden';
+    const onMsg = (e) => {
+      if (e.source !== f.contentWindow) return;
+      const d = e.data || {};
+      if (d.type === 'nucleo.smoke') { if (errs.length < 8) errs.push(String(d.m)); }
+      else if (d.type === 'nucleo.broker') e.source.postMessage({ type: 'nucleo.broker.reply', id: d.id, ...(d.method === 'sys.info' ? { ok: true, lang } : { ok: false, error: 'not available during the start-up check' }) }, '*');
+    };
+    addEventListener('message', onMsg);
+    try { f.srcdoc = html; document.body.appendChild(f); await wait(2500); }
+    finally { removeEventListener('message', onMsg); f.remove(); }
+    return errs;
+  }
+
   let appCatalog = null;
   async function installedApps() {
     const r = await dq.read(() => fetch('/api/apps', { cache: 'no-store' }).then((x) => x.json()));
@@ -177,6 +207,7 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
   // The worker's live checklist (update_plan). Named taskPlan, not plan: run() already has a local
   // `plan` — the orchestrator's typed classification — and the two are different things. In memory
   // only; a checklist describes THIS run, so persisting it would resurrect a stale one next question.
+  loadParser().catch(() => {});      // acorn, on demand (~60 KB gz): by the first write the module check is ready
   let taskPlan = [];
   let lastPublish = null;            // {id, ok, why} of this turn's last publish_app — see publishTruth()
   let lastEngine = null;                           // who answered the last run: { kind:'server'|'cloud'|'local', … }
@@ -476,6 +507,15 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
             // A publish the device does not list is not installed (the ADV's registry reload ran out of heap and
             // /api/apps kept the old table; the model still said "installed, despite the verification error").
             if (!smoke.ok) lastPublish = { id: String(input.id || ''), ok: false, why: smoke.checks.filter((c) => !c.ok).map((c) => c.name + ': ' + c.detail).join('; ') };
+            // …and RUN it: the lint proves it parses, not that it starts. Errors thrown while it loads come back
+            // to the model (like an IDE's diagnostics after a save) and to the reply, so it fixes them.
+            if (smoke.ok) {
+              const errs = await runtimeSmoke(String(input.id || '')).catch(() => null);
+              if (errs && errs.length) {
+                msg += '\n⚠ ' + t('rt_app_runtime_err', { errors: errs.slice(0, 4).join(' | ') });
+                lastPublish = { id: String(input.id || ''), ok: true, runtimeErrors: errs.slice(0, 4) };
+              }
+            }
             if (smoke.ok) {
               try {
                 let manifest = null, html = '';
@@ -889,6 +929,8 @@ Sii conservativo: in dubbio scegli "task". Considera il contesto della conversaz
   // publish_app calls had been refused (nothing reached /apps). When the turn's last publish failed, the reply
   // says so — deterministically, from the tool result, whatever the model wrote.
   function publishTruth(reply) {
+    if (lastPublish && lastPublish.ok && lastPublish.runtimeErrors)
+      return String(reply || '').trimEnd() + '\n\n⚠ ' + t('rt_app_runtime_err', { errors: lastPublish.runtimeErrors.join(' | ') });
     if (!lastPublish || lastPublish.ok) return reply;
     return String(reply || '').trimEnd() + '\n\n⚠ ' + t('rt_publish_not_done', { id: lastPublish.id, why: lastPublish.why || '?' });
   }

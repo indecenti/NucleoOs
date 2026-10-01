@@ -70,6 +70,7 @@
   "rt_unknown": "unbekannt",
   "rt_run_ok": "✔ ausgeführt",
   "rt_publish_not_done": "Die App „{id}“ wurde NICHT installiert: die letzte Veröffentlichung wurde abgelehnt ({why}). Korrigiere sie und bitte mich, sie erneut zu veröffentlichen.",
+  "rt_app_runtime_err": "Die App ist installiert, wirft aber beim Start Fehler: {errors}. Korrigiere den Code und veröffentliche sie erneut.",
   "rt_open_file_ok": "✔ öffne {path} im OS",
   "rt_open_app_ok": "✔ starte App {app}",
   "rt_open_specify": "Gib einen Pfad oder eine App an.",
