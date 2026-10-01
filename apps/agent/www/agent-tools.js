@@ -425,9 +425,15 @@ export function trimOldToolResults(messages, { budget = 36000, keep = 4, stub = 
   return cut;
 }
 
+// A reply that only ANNOUNCES work ("Faccio le due modifiche… Poi ripubblico l'app.") with no tool call: small
+// local models stop there and the turn ends with nothing done. Five languages, intent / future forms.
+export const ANNOUNCES_WORK = /(?<!\p{L})(faccio|modifico|procedo|vado a|sto per|ora (?:modifico|creo|scrivo|pubblico|ripubblico|eseguo|leggo)|poi (?:ripubblico|pubblico|eseguo|salvo)|i'?ll|i will|let me|i'?m going to|next,? i|voy a|ahora (?:modifico|creo)|je vais|maintenant je|ich werde|jetzt (?:ändere|erstelle|schreibe))(?!\p{L})/iu;
+const NUDGE_DO_IT = 'You described what you will do, but you did not call any tool, so NOTHING has changed yet. Do it now with the tools (edit_file, write_file, publish_app, …). If it is truly already done, give the final answer.';
+
 export async function runLocalToolLoop({ chat, execTool, messages, tools = [], maxSteps = 12, abort, onEvent, budget = 36000 }) {
   const known = new Set(tools.map((t) => (t.function ? t.function.name : t.name)).filter(Boolean));
   const seen = new Map();                                  // call signature → how many times it ran
+  let nudged = false;                                      // one "you only announced it" nudge per turn
   for (let step = 0; step < maxSteps; step++) {
     if (abort && abort.aborted) throw new Error('stopped');
     trimOldToolResults(messages, { budget });
@@ -439,7 +445,10 @@ export async function runLocalToolLoop({ chat, execTool, messages, tools = [], m
     if (calls.length) asst.tool_calls = calls.map((c, i) => ({ id: 'call_' + step + '_' + i, type: 'function', function: { name: c.name, arguments: c.arguments } }));
     messages.push(asst);
     if (onEvent) onEvent({ type: 'assistant', content: text, calls: calls.map((c) => c.name) });
-    if (!calls.length) return text;
+    if (!calls.length) {
+      if (!nudged && known.size && ANNOUNCES_WORK.test(text)) { nudged = true; messages.push({ role: 'user', content: NUDGE_DO_IT }); continue; }
+      return text;
+    }
     for (const tc of asst.tool_calls) {
       const { name, arguments: args } = tc.function;
       const sig = name + ' ' + JSON.stringify(args);

@@ -283,6 +283,7 @@ export function deviceLine(st, lang = 'it') {
   return parts.join(', ');
 }
 
+const CODEY = /[\w-]\.(?:html?|css|js|mjs|json|md|txt|py|csv|svg)\b|\/[\w.-]+\/|\b\d+\s*(?:px|pt|em|rem|vh|vw)\b|\b(css|html|javascript|codice|code|pulsant\w*|button\w*|div|font)\b/i;
 export function commandHint(q) {
   const t = fold(q).replace(/[?!.,;:¿¡]+/g, ' ').replace(/\s+/g, ' ').trim();
   if (!t) return null;
@@ -290,7 +291,10 @@ export function commandHint(q) {
     // A setting needs an imperative verb, or a SHORT "noun + amount" phrase ("volume al 50", "più luce"):
     // like the engine's own guard, a longer verb-less sentence is a statement ("l'audio del film era basso").
     const words = t.split(' ').length;
-    if (SETTING_NOUN.test(t) && !GEOMETRY.test(t) &&
+    // A request about CODE is never a device setting: "modifica contatore/www/index.html: il numero grande (96px)
+    // centrato nello schermo" set the backlight to 96%. A file / path, a CSS unit or a long sentence rules it out.
+    const codey = CODEY.test(String(q || '')) || words > 16;
+    if (!codey && SETTING_NOUN.test(t) && !GEOMETRY.test(t) &&
         (SETTING_VERB.test(t) || (SETTING_AMOUNT.test(t) && words <= 4))) return 'act';
     if (REMIND.test(t) || (EVENT_VERB.test(t) && EVENT_NOUN.test(t)) || (TIMER.test(t) && TIMER_CUE.test(t))) return 'act';
   }

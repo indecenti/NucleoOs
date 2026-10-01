@@ -162,6 +162,9 @@ test('ANIMA: a task goes to the agent, a chat turn does not (5 languages)', () =
     // publishing an app the agent prepared (live miss: a chat invented `install_app` commands)
     "Pubblica e installa sul Cardputer l'app contatore", 'Publish the counter app to the Cardputer', 'Instala la app contador',
     "Publie l'application compteur", 'Installiere die App Zähler',
+    // switching an app on / off (live miss: a chat said "disabled" and changed nothing)
+    "Disattiva l'app contatore sul Cardputer", "riattiva l'app contatore", 'Disable the counter app', 'Desactiva la app contador',
+    "Désactive l'application compteur", 'Deaktiviere die App Zähler',
   ];
   const chats = [
     'ciao come stai', 'che ore sono', 'apri la calcolatrice', 'aggiungi un evento domani alle 9', "cos'è nucleoos",
@@ -187,4 +190,23 @@ test('search_files leniency: a phrase with no hit is retried on its most distinc
   assert.deepEqual(searchFallbackTerms('const formatPrice ='), ['formatPrice']);
   assert.deepEqual(searchFallbackTerms('euro'), [], 'a single term has nothing to fall back to');
   assert.deepEqual(searchFallbackTerms('def parse_line'), ['parse_line']);
+});
+
+test('a reply that only announces the work is nudged once to actually do it (qwen3.5:9b stopped at "Faccio le modifiche…")', async () => {
+  const { chat, seen } = scripted([
+    { text: "Faccio le due modifiche richieste a contatore/www/index.html, poi ripubblico l'app.", toolCalls: [] },
+    { text: '', toolCalls: [{ name: 'edit_file', arguments: { path: 'a.html', old: 'x', new: 'y' } }] },
+    { text: 'Fatto.', toolCalls: [] },
+  ]);
+  const ran = [];
+  const out = await runLocalToolLoop({ chat, execTool: async (n) => { ran.push(n); return { content: 'ok' }; }, messages: [{ role: 'system', content: 's' }, { role: 'user', content: 'modifica' }], tools: TOOLS });
+  assert.equal(out, 'Fatto.'); assert.deepEqual(ran, ['edit_file']); assert.equal(seen.length, 3);
+  assert.match(seen[1].messages.at(-1).content, /did not call any tool/);
+  // a plain answer is not nudged, and a second announcement is returned as is (one nudge per turn)
+  const plain = scripted([{ text: 'Il file ha 12 righe.', toolCalls: [] }]);
+  assert.equal(await runLocalToolLoop({ chat: plain.chat, execTool: async () => ({ content: '' }), messages: [{ role: 'user', content: 'q' }], tools: TOOLS }), 'Il file ha 12 righe.');
+  assert.equal(plain.seen.length, 1);
+  const twice = scripted([{ text: 'Ora modifico il file.', toolCalls: [] }]);
+  assert.equal(await runLocalToolLoop({ chat: twice.chat, execTool: async () => ({ content: '' }), messages: [{ role: 'user', content: 'q' }], tools: TOOLS }), 'Ora modifico il file.');
+  assert.equal(twice.seen.length, 2);
 });

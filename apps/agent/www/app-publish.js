@@ -141,7 +141,9 @@ function brokerClient(id, catJson) {
               write: (path, content) => call('fs.write', { path, content }),
               list: (path) => call('fs.list', { path }) },
         notify: (text) => call('notify', { text }),
-        sys: { info: () => call('sys.info', {}), status: () => call('sys.status', {}) },
+        // info has a SHORT timeout: the page awaits it (for the language) before wiring its buttons, so opened
+        // on its own — no shell broker to answer — an agent app sat dead for the full 10 s.
+        sys: { info: () => call('sys.info', {}, 1200), status: () => call('sys.status', {}) },
         // Intelligence as a syscall — each needs its OWN manifest permission, or the call is denied:
         //   ai.ask(q)        → the on-device deterministic brain (needs 'ai.anima'; offline, no cost)
         //   ai.complete(p)   → the user's cloud model (needs 'ai.cloud'; single-flight, rate-limited)
