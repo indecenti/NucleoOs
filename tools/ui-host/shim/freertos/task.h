@@ -9,6 +9,7 @@ BaseType_t xTaskCreatePinnedToCore(TaskFunction_t fn, const char *name, uint32_t
 void vTaskDelete(TaskHandle_t t);
 void vTaskDelay(TickType_t t);
 TickType_t xTaskGetTickCount(void);
+UBaseType_t uxTaskGetStackHighWaterMark(TaskHandle_t t);
 #ifdef __cplusplus
 }
 #endif

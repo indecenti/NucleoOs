@@ -47,11 +47,19 @@ int         nucleo_setup_scan_rssi(int i) { return i >= 0 && i < SCAN_N ? SCAN[i
 int         nucleo_setup_scan_channel(int i) { return i >= 0 && i < SCAN_N ? SCAN[i].ch : 0; }
 int         nucleo_setup_scan_secure(int i) { return i >= 0 && i < SCAN_N ? SCAN[i].secure : 0; }
 const char *nucleo_setup_scan_auth_label(int i) { return i >= 0 && i < SCAN_N ? SCAN[i].auth : ""; }
-bool        nucleo_setup_join(const char *, const char *) { return true; }
+extern int  g_host_join_err;
+bool        nucleo_setup_join(const char *, const char *) { return g_host_join_err == 0; }
 bool        g_host_onboarding = false;                     // scene-controlled: the first-boot network step
 bool        nucleo_setup_onboarding(void) { return g_host_onboarding; }
 bool        g_host_onboard_sta = false;                    // scene-controlled: the step ended with a join
-bool        nucleo_setup_onboard_finish(void) { g_host_onboarding = false; return g_host_onboard_sta; }
+bool        nucleo_setup_onboard_finish(void) { return g_host_onboard_sta; }
+static int  s_host_fin = -1;
+void        nucleo_setup_onboard_finish_async(void) { s_host_fin = g_host_onboard_sta ? 1 : 0; }
+int         nucleo_setup_onboard_finish_poll(void) { return s_host_fin; }
+void        nucleo_setup_onboard_ack(void) { g_host_onboarding = false; s_host_fin = -1; }
+bool        nucleo_setup_is_complete(void) { return !g_host_onboarding; }
+int         g_host_join_err = 0;                           // scene-controlled: why the last join failed
+int         nucleo_setup_join_error(void) { return g_host_join_err; }
 void        nucleo_setup_forget(void) { s_saved_n = 0; }
 bool        nucleo_setup_factory_reset(void) { s_saved_n = 0; snprintf(s_devname, sizeof s_devname, "nucleo-01"); return true; }
 bool        nucleo_setup_net_is_known(const char *ssid) { for (int i = 0; i < s_saved_n; i++) if (!strcmp(s_saved[i], ssid)) return true; return false; }

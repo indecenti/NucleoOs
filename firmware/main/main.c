@@ -173,6 +173,24 @@ static void bootmark_begin(void)                  // call right after the SD mou
     if (f) { fputs("=== boot ===\n", f); if (s_pre_n > 0) fwrite(s_pre, 1, (size_t)s_pre_n, f); fclose(f); }
 }
 
+// Settings > Reset > Erase SD / Wipe everything: the boot-time erase screen (and its failure), in the UI language.
+static void sd_erase_screen(bool failed)
+{
+    const char *l = nucleo_i18n_lang();
+    int k = !strcmp(l, "it") ? 1 : !strcmp(l, "es") ? 2 : !strcmp(l, "fr") ? 3 : !strcmp(l, "de") ? 4 : 0;
+    static const char *const MSG[5]  = { "Erasing the SD card...", "Formatto la scheda SD...", "Formateando la tarjeta SD...",
+                                         "Formatage de la carte SD...", "SD-Karte wird formatiert..." };
+    static const char *const WAIT[5] = { "Do not switch off.", "Non spegnere.", "No apagues.", "Ne pas eteindre.", "Nicht ausschalten." };
+    static const char *const LONG[5] = { "It can take a few minutes.", "Puo durare qualche minuto.", "Puede tardar unos minutos.",
+                                         "Cela peut prendre quelques min.", "Kann einige Minuten dauern." };
+    static const char *const FAIL[5] = { "SD erase failed.", "Formattazione non riuscita.", "No se pudo formatear.",
+                                         "Formatage impossible.", "Formatieren fehlgeschlagen." };
+    static const char *const HOW[5]  = { "Format it on a PC (FAT32).", "Formattala da PC (FAT32).", "Formateala en un PC (FAT32).",
+                                         "Formatez-la sur un PC (FAT32).", "Am PC formatieren (FAT32)." };
+    if (failed) { const char *lines[] = { FAIL[k], "", HOW[k] }; nucleo_ui_message("NucleoOS", lines, 3); }
+    else        { const char *lines[] = { MSG[k], "", WAIT[k], LONG[k] }; nucleo_ui_home("NucleoOS", lines, 4); }
+}
+
 void app_main(void)
 {
     ESP_LOGI(TAG, "NucleoOS booting — last reset: %s", reset_reason_str(esp_reset_reason()));
@@ -258,16 +276,12 @@ void app_main(void)
         char flang[3];
         if (nucleo_storage_format_pending(flang)) {
             if (flang[0]) nucleo_i18n_set_lang(flang);
-            const char *l = nucleo_i18n_lang();
-            const char *msg = !strcmp(l, "it") ? "Formatto la scheda SD..." : !strcmp(l, "es") ? "Formateando la tarjeta SD..."
-                            : !strcmp(l, "fr") ? "Formatage de la carte SD..." : !strcmp(l, "de") ? "SD-Karte wird formatiert..."
-                            : "Erasing the SD card...";
-            const char *wait = !strcmp(l, "it") ? "Non spegnere (fino a 1 min)" : !strcmp(l, "es") ? "No apagues (hasta 1 min)"
-                             : !strcmp(l, "fr") ? "Ne pas eteindre (1 min max)" : !strcmp(l, "de") ? "Nicht ausschalten (bis 1 Min)"
-                             : "Do not switch off (up to 1 min)";
-            const char *lines[] = { msg, "", wait };
-            nucleo_ui_home("NucleoOS", lines, 3);
-            nucleo_storage_format_now();
+            sd_erase_screen(false);
+            esp_err_t fe = nucleo_storage_format_now();
+            if (fe != ESP_OK) {
+                sd_erase_screen(true);                   // said, not silent; ENTER continues
+                if (!nucleo_storage_info()->mounted) esp_restart();   // no card left: boot again without it
+            }
             if (flang[0]) nucleo_i18n_set_lang(flang);   // re-persist the language onto the fresh card
             bootmark("sd-format");
         }
@@ -294,6 +308,8 @@ void app_main(void)
         bootmark("registry");
     } else {
         ESP_LOGE(TAG, "no usable SD card");
+        // An erase interrupted by a power cut leaves an unmountable card: finish it (once), then reboot onto it.
+        if (nucleo_storage_format_recover() == ESP_OK) { ESP_LOGW(TAG, "SD erase recovered: rebooting"); esp_restart(); }
     }
 
     // Graceful-shutdown hook: ESP-IDF runs nucleo_storage_sync() on every clean esp_restart()

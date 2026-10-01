@@ -55,6 +55,9 @@ bool nucleo_storage_format_pending(char *lang);
 // Erase the mounted card (FAT32, the mount's 16 KB allocation unit). Clears the marker FIRST, so a crash
 // or a failure can never turn into a format-at-every-boot loop.
 esp_err_t nucleo_storage_format_now(void);
+// Boot, when the card did NOT mount: drop an armed erase (never wipe a card swapped in later) and finish one
+// that a power cut interrupted (format-on-mount-failure, once). ESP_OK = the card is now mounted.
+esp_err_t nucleo_storage_format_recover(void);
 
 #ifdef __cplusplus
 }

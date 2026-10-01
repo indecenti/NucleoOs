@@ -98,6 +98,8 @@ static bool s_want_sta = false;        // true while we intend to stay on STA (d
 static bool s_auto = false;
 static SemaphoreHandle_t s_wifi_op_lock;   // serialize join / best-known selection (one connect attempt at a time)
 static void wifi_supervisor(void *arg);    // background (re)join task; defined after the scan helpers
+static volatile bool s_fin_req, s_fin_sta;  // first-boot finish request (nucleo_setup_onboard_finish_async)
+static volatile int  s_fin_state;
 // Supervisor decision core (wifi_policy.c). Owns retry scheduling, the soft-AP busy/grace guard
 // and the radio-mode rules; the code here only samples inputs and executes the returned actions.
 static wp_state_t s_wp;
@@ -171,10 +173,32 @@ static void start_sntp(void)
 // Keep the STA link alive and track the live IP. Without auto-reconnect on disconnect a
 // single drop (AP reboot, roaming, weak signal, or the very first association attempt)
 // would leave the device offline forever — that is the "doesn't keep the connection" bug.
+// An explicit join (nucleo_setup_join) watches WHY the attempt fails, so the UI can say "wrong password" /
+// "network not found" / "no address from the router" instead of one opaque "could not connect".
+static volatile int  s_last_reason;   // last WIFI_EVENT_STA_DISCONNECTED reason
+static volatile int  s_auth_fails;    // password-class disconnects during the current explicit join
+static volatile bool s_assoc;         // associated with the AP at least once (then a missing IP = DHCP)
+static volatile bool s_join_explicit; // wait_for_ip(): longer window + early exit on a wrong password
+static int s_join_err;                // NUCLEO_JOIN_* of the last explicit join
+static bool reason_is_auth(int r)
+{
+    return r == WIFI_REASON_AUTH_EXPIRE || r == WIFI_REASON_MIC_FAILURE || r == WIFI_REASON_4WAY_HANDSHAKE_TIMEOUT ||
+           r == WIFI_REASON_AUTH_FAIL || r == WIFI_REASON_HANDSHAKE_TIMEOUT;
+}
+static bool reason_is_not_found(int r)
+{
+    return r == WIFI_REASON_NO_AP_FOUND || r == WIFI_REASON_NO_AP_FOUND_W_COMPATIBLE_SECURITY ||
+           r == WIFI_REASON_NO_AP_FOUND_IN_AUTHMODE_THRESHOLD || r == WIFI_REASON_NO_AP_FOUND_IN_RSSI_THRESHOLD;
+}
+static TaskHandle_t s_sup_task;       // the Wi-Fi supervisor (also runs the first-boot finish, see below)
+
 static void on_wifi_event(void *arg, esp_event_base_t base, int32_t id, void *data)
 {
-    if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
+    if (base == WIFI_EVENT && id == WIFI_EVENT_STA_CONNECTED) {
+        s_assoc = true;
+    } else if (base == WIFI_EVENT && id == WIFI_EVENT_STA_DISCONNECTED) {
         wifi_event_sta_disconnected_t *d = (wifi_event_sta_disconnected_t *)data;
+        if (d) { s_last_reason = d->reason; if (reason_is_auth(d->reason)) s_auth_fails++; }
         ESP_LOGW(TAG, "STA disconnected (reason=%d, was ip=%s) — reconnecting",
                  d ? d->reason : -1, s_ip[0] ? s_ip : "-");   // reason code lands in the RAM ring -> /api/logs
         s_ip[0] = '\0';
@@ -424,7 +448,7 @@ static void wifi_ensure(void)
     wp_init(&s_wp, wp_now());                                        // policy state before the supervisor runs
     static bool sup_started = false;
     if (!sup_started) { sup_started = true;                          // background (re)join supervisor
-        xTaskCreate(wifi_supervisor, "wifisup", 6144, NULL, tskIDLE_PRIORITY + 1, NULL);   // +2 KB: room for the net_trace FAT write on a silent-drop
+        xTaskCreate(wifi_supervisor, "wifisup", 6144, NULL, tskIDLE_PRIORITY + 1, &s_sup_task);   // +2 KB: room for the net_trace FAT write on a silent-drop
     }
     s_wifi_ready = true;
 }
@@ -437,8 +461,13 @@ static void wait_for_ip(void)
     s_ip[0] = '\0';
     esp_netif_t *sta = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
     esp_netif_ip_info_t ip = {0};
-    for (int t = 0; t < 40; t++) {
+    // An explicit join scans, associates and runs DHCP while the hotspot keeps beaconing (APSTA): 8 s was
+    // too short on the first boot. Two password-class failures in a row = wrong password, no point waiting.
+    int steps = s_join_explicit ? 80 : 40;
+    for (int t = 0; t < steps; t++) {
         vTaskDelay(pdMS_TO_TICKS(200));
+        if (s_join_explicit && s_auth_fails >= 2) break;
+        if (s_join_explicit && t >= 15 && reason_is_not_found(s_last_reason) && !s_assoc) break;   // 3 s of "not there"
         if (sta && esp_netif_get_ip_info(sta, &ip) == ESP_OK && ip.ip.addr != 0) {
             uint32_t a = ip.ip.addr;
             snprintf(s_ip, sizeof(s_ip), "%u.%u.%u.%u",
@@ -739,8 +768,9 @@ static void wifi_supervisor(void *arg)
     for (;;) {
         // The first tick runs almost at once: at boot the device waits for Wi-Fi, and a flat 2 s sleep before
         // the very first join attempt was pure dead time (measured: the join started 4.5 s after the services).
-        vTaskDelay(pdMS_TO_TICKS(first ? 150 : 2000));
+        ulTaskNotifyTake(pdTRUE, pdMS_TO_TICKS(first ? 150 : 2000));   // = the old sleep, but a request wakes it
         first = false;
+        if (s_fin_req) { s_fin_req = false; s_fin_sta = nucleo_setup_onboard_finish(); s_fin_state = 2; continue; }
         wifi_mode_t cur = WIFI_MODE_NULL;
         esp_wifi_get_mode(&cur);
         wifi_ap_record_t ap;
@@ -815,10 +845,30 @@ bool nucleo_setup_join(const char *ssid, const char *pass)
                 return false;
             }
     }
+    // Drop any current/half-open link FIRST with re-dialing off, and let its DISCONNECTED event land: the
+    // event handler re-dials while s_want_sta is set, and a late event used to fire esp_wifi_connect() in
+    // the middle of THIS attempt (connect_sta sets s_want_sta), restarting the association it was waiting on.
+    s_want_sta = false;
     esp_wifi_disconnect();
+    vTaskDelay(pdMS_TO_TICKS(200));
     strncpy(s_ssid, ssid, sizeof(s_ssid) - 1); s_ssid[sizeof(s_ssid) - 1] = 0;
-    connect_sta(ssid, use_pass);               // remembers the net on success
+    s_last_reason = 0; s_auth_fails = 0; s_assoc = false; s_join_explicit = true;
+    // Join the access point the user just picked from OUR scan (its channel + BSSID): one-channel probe instead
+    // of a full re-scan with the hotspot beaconing. If that AP moved, one plain attempt follows.
+    int si = -1;
+    for (int i = 0; i < s_wscan_n; i++) if (!strcmp(s_wscan[i].ssid, ssid)) { si = i; break; }
+    if (si >= 0 && s_wscan[si].ch) connect_sta_at(ssid, use_pass, s_wscan[si].ch, s_wscan[si].bssid);
+    else                           connect_sta(ssid, use_pass);               // remembers the net on success
+    if (!s_ip[0] && si >= 0 && s_auth_fails < 2 && !s_assoc) {
+        ESP_LOGW(TAG, "join '%s' on ch %d failed (reason %d): retrying with a full scan", ssid, s_wscan[si].ch, s_last_reason);
+        s_last_reason = 0;
+        connect_sta(ssid, use_pass);
+    }
+    s_join_explicit = false;
     bool ok = s_ip[0] != 0;
+    s_join_err = ok ? NUCLEO_JOIN_OK : (s_auth_fails > 0 || reason_is_auth(s_last_reason)) ? NUCLEO_JOIN_PASSWORD
+               : reason_is_not_found(s_last_reason) ? NUCLEO_JOIN_NOT_FOUND : s_assoc ? NUCLEO_JOIN_NO_IP : NUCLEO_JOIN_FAILED;
+    if (!ok) ESP_LOGW(TAG, "join '%s' failed: err=%d reason=%d assoc=%d", ssid, s_join_err, s_last_reason, (int)s_assoc);
     // Invariant I4: a FAILED one-shot join must never arm the background retry loop. The old
     // unconditional `s_auto = true` did exactly that — one wrong password put the supervisor
     // into an eternal scan/join loop that kept knocking the hotspot over ("AP keeps
@@ -838,6 +888,7 @@ bool nucleo_setup_join(const char *ssid, const char *pass)
 // Sentinel, NX_WIFI apps, USB-web) never runs load_config(): s_mode/s_name/AP creds are still the RAM
 // DEFAULTS there, so the Control Center must not offer the hotspot toggle, and start/stop_ap refuse.
 bool nucleo_setup_config_loaded(void) { return s_cfg_loaded; }
+int  nucleo_setup_join_error(void) { return s_join_err; }
 
 void nucleo_setup_start_ap(void)
 {
@@ -1039,6 +1090,8 @@ static void wizard_language(void)
 }
 
 static bool s_onboarding = false;   // this boot: the wizard did the language, Settings does the network
+// The finish runs on the supervisor (6 KB, always there): no new task to allocate on a fragmented heap.
+// s_fin_req / s_fin_sta / s_fin_state are declared with the supervisor (0 idle, 1 requested, 2 done).
 
 void nucleo_setup_run(void)
 {
@@ -1057,8 +1110,10 @@ void nucleo_setup_run(void)
     s_onboarding = true;            // the framework now opens Settings ▸ Nearby networks
 }
 
-// True while the first boot still owes the network step (Settings shows it, then calls finish).
-bool nucleo_setup_onboarding(void) { return s_onboarding && !s_complete; }
+// True while the first boot still owes the network step OR its "All set" page: until the user has seen that
+// page (nucleo_setup_onboard_ack), the launcher keeps re-opening Settings on it.
+bool nucleo_setup_onboarding(void) { return s_onboarding; }
+void nucleo_setup_onboard_ack(void) { s_onboarding = false; s_fin_state = 0; }
 
 // The network step is over. A successful join already completed the setup (nucleo_setup_join); otherwise
 // the hotspot — up since the first-boot apply_network — is the way in: keep it, and record the choice.
@@ -1067,15 +1122,28 @@ bool nucleo_setup_onboard_finish(void)
 {
     bool sta = s_complete && !strcmp(s_mode, "sta") && s_ip[0];
     if (!s_complete) {
+        // Same radio discipline as a join: one Wi-Fi op at a time, never under a running scan.
+        if (s_wifi_op_lock) xSemaphoreTake(s_wifi_op_lock, portMAX_DELAY);
+        if (s_scan_lock) xSemaphoreTake(s_scan_lock, portMAX_DELAY);
         s_auto = false;
         strncpy(s_mode, "ap", sizeof(s_mode) - 1);
         start_ap();
+        if (s_scan_lock) xSemaphoreGive(s_scan_lock);
         s_complete = true;
         save_config();
+        if (s_wifi_op_lock) xSemaphoreGive(s_wifi_op_lock);
     }
-    s_onboarding = false;
     return sta;
 }
+
+void nucleo_setup_onboard_finish_async(void)
+{
+    s_fin_state = 1;
+    if (!s_sup_task) { s_fin_sta = nucleo_setup_onboard_finish(); s_fin_state = 2; return; }   // no Wi-Fi stack: nothing heavy
+    s_fin_req = true;
+    xTaskNotifyGive(s_sup_task);
+}
+int nucleo_setup_onboard_finish_poll(void) { return s_fin_state == 2 ? (s_fin_sta ? 1 : 0) : -1; }
 
 // The launcher keeps the app foregrounded until Esc; on_enter just sets the hint and the
 // framework calls on_draw (nucleo_setup_show_home) to paint the connection info. Esc exits.

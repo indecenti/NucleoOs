@@ -19,7 +19,8 @@ The wizard is **on rails**: every path ends on step 4, and nothing else in the O
                  Locked: Tab, LEFT, the other pages, forget/prefer are inert.
                  Exits: a join (native, or from a browser on the hotspot), or Esc -> "Skip Wi-Fi?
                  You will use its hotspot." [Yes] -> per-device hotspot.
-                 A failed join stays here: "Failed: check the password".
+                 A failed join stays here and says why: wrong password (the field re-opens with
+                 what was typed), network not found, no address from the router.
 4. All set       "All set!" + "Connected to <ssid>" (or hotspot name + password), "Open in a
                  browser" <ip> (or 192.168.4.1) and the pairing PIN.  [Enter] -> the launcher.
                  setup.json (complete: true) is written when step 3 ends; never shown again.
@@ -29,8 +30,12 @@ Code: `nucleo_setup_run()` (steps 1–2) in `firmware/components/nucleo_setup/nu
 `app_wifi.cpp` (`OB_NETS` → `OB_DONE`, steps 3–4). Guarantees:
 
 - **Off the UI task.** Ending step 3 (hotspot up + setup persisted to /cfg, NVS and the SD) runs on
-  Settings' "wifi" worker task with a spinner, after any scan in flight — never on the launcher's 8 KB
-  main task, where the store chain overflowed the stack and rebooted the device on "Skip Wi-Fi".
+  the Wi-Fi supervisor task (woken by a notify; no task to allocate), under the same radio locks as a join
+  and a scan — never on the launcher's 8 KB main task, where the store chain overflowed the stack and
+  rebooted the device on "Skip Wi-Fi".
+- **The join.** It uses the channel + BSSID of the AP picked from the scan (one plain retry if it moved),
+  waits up to 16 s (APSTA), stops early on a confirmed wrong password, and never re-dials mid-attempt.
+- **All set is owed** until ENTER/Esc on it (`nucleo_setup_onboard_ack`): a force-closed Settings re-opens on it.
 - **Never abandoned.** If Settings is closed before step 4 by any path, the launcher re-opens the
   network step (at most every 2 s) as long as `nucleo_setup_onboarding()` is true.
 - **Resumable.** Power loss before step 3 ends leaves `complete: false`: the next boot starts again
