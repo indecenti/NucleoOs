@@ -2002,12 +2002,12 @@ static esp_err_t anima_l1_post(httpd_req_t *req)
     return ESP_OK;
 }
 
-// GET/POST /api/tts — voce offline on-device: interruttore "parla" + VELOCITA' di lettura.
+// GET/POST /api/tts — on-device offline voice: "speak" toggle + reading SPEED.
 // GET  -> {"enabled":bool,"available":bool,"speed":int%,"speed_min/max/step":int}.
-// POST body {"enabled":bool}? imposta l'interruttore; {"speed":int%}? imposta la velocita' (clampata,
-// persistita, invalida la cache); {"say":"testo","lang":"it|en"}? fa parlare subito il device (test/azione
-// web — usa la velocita' gia' impostata in questo POST). GET (stato) e' pubblico; il POST e' un'azione
-// (parla + persiste la velocita') quindi richiede una sessione associata.
+// POST body {"enabled":bool}? sets the toggle; {"speed":int%}? sets the speed (clamped,
+// persisted, invalidates the cache); {"say":"text","lang":"it|en"}? makes the device speak right away (test/web
+// action — uses the speed already set in this POST). GET (status) is public; the POST is an action
+// (speaks + persists the speed) so it requires a paired session.
 static esp_err_t tts_handler(httpd_req_t *req)
 {
     if (req->method == HTTP_POST) {
@@ -2023,7 +2023,7 @@ static esp_err_t tts_handler(httpd_req_t *req)
                 cJSON *e = cJSON_GetObjectItem(in, "enabled");
                 if (cJSON_IsBool(e)) nucleo_tts_set_enabled(cJSON_IsTrue(e));
                 cJSON *sp = cJSON_GetObjectItem(in, "speed");
-                if (cJSON_IsNumber(sp)) nucleo_tts_set_speed(sp->valueint);   // PRIMA del say -> il test usa il nuovo passo
+                if (cJSON_IsNumber(sp)) nucleo_tts_set_speed(sp->valueint);   // BEFORE say -> the test uses the new speed
                 cJSON *say = cJSON_GetObjectItem(in, "say");
                 if (cJSON_IsString(say) && say->valuestring[0]) {
                     cJSON *l = cJSON_GetObjectItem(in, "lang");

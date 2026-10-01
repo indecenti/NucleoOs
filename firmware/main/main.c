@@ -482,9 +482,9 @@ void app_main(void)
     bootmark("anima");
     if (sd_ok && (!solo || nucleo_app_solo_needs_speech())) nucleo_tts_init(nucleo_i18n_lang());   // SKIP in non-speech Solo (e.g. Recorder), save heap
     bootmark("tts");
-    // Voce a step su heap minuscolo (no PSRAM): se il task audio non trova lo stack contiguo, il player
-    // libera l'indice L1 offline (se inattivo) e ritenta -> niente piu' "offline niente voce". main e'
-    // l'unico punto che puo' dipendere sia da nucleo_audio sia da nucleo_anima, quindi cabliamo qui.
+    // Voice under a tiny heap (no PSRAM): if the audio task can't find a contiguous stack, the player
+    // frees the offline L1 index (if idle) and retries -> no more "offline, no voice". main is
+    // the only place that can depend on both nucleo_audio and nucleo_anima, so we wire it here.
     nucleo_audio_set_reclaim_cb(nucleo_anima_l1_unload_if_idle_void);
 #if CONFIG_NUCLEO_ANIMA_BENCH
     nucleo_anima_benchmark();                // Phase 0: log the three numbers (opt-in)

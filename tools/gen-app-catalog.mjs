@@ -30,7 +30,8 @@ export function buildCatalog() {
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const text = buildCatalog();
-  const same = existsSync(OUT) && readFileSync(OUT, 'utf8') === text;
+  // line endings do not count: a Windows checkout (autocrlf) holds the file as CRLF
+  const same = existsSync(OUT) && readFileSync(OUT, 'utf8').replace(/\r\n/g, '\n') === text;
   if (process.argv.includes('--check')) {
     if (!same) { console.log('catalog:check: web/shell/app-catalog.json is OUT OF SYNC with the app manifests — run node tools/gen-app-catalog.mjs'); process.exit(1); }
     console.log('catalog:check: app-catalog.json matches the app manifests');
