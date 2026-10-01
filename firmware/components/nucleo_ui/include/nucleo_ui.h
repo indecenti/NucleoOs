@@ -33,6 +33,10 @@ void nucleo_ui_input(const char *title, char *buf, int len, int masked);
 // Static info/home screen (draws and returns immediately, no input wait).
 void nucleo_ui_home(const char *title, const char *const *lines, int n);
 
+// One-shot progress screen (header + status line + a bar, no input wait). pct 0..100, or <0 for an
+// indeterminate bar. Repaint it to advance. Used by the boot-window SD-content installer.
+void nucleo_ui_progress(const char *title, const char *line, int pct);
+
 // Full-screen animated boot splash: a glowing atomic nucleus (Nucleo = nucleus) with three
 // electrons weaving through tilted orbits, the NucleoOS wordmark + a loading bar. Blocks for
 // ~NUCLEO_SPLASH_MS; any keypress skips it. Self-contained (own 16bpp canvas, no SD/network).

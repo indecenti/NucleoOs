@@ -170,6 +170,33 @@ extern "C" void nucleo_ui_home(const char *title, const char *const *lines, int 
 }
 
 
+// A one-shot progress screen (no key loop): header, one status line, a filled bar with the percent.
+// Used by the boot-window SD-content installer, which repaints it per file. pct < 0 shows an indeterminate
+// bar (a moving block). Safe to call from the pre-httpd boot window (same surfaces as every modal).
+extern "C" void nucleo_ui_progress(const char *title, const char *line, int pct)
+{
+    s_hint = "";
+    ModalSurface s;
+    LovyanGFX &g = *s.g;
+    header(&g, title);
+    g.setTextColor(FG, BG);
+    g.setFont(&fonts::Font0); g.setTextSize(1);
+    if (line && line[0]) { g.setCursor(8, MHDR + 10); g.print(line); }
+    const int bx = 8, bw = W - 16, by = 70, bh = 18;
+    g.drawRoundRect(bx, by, bw, bh, 4, LINE);
+    if (pct < 0) {                                   // indeterminate: a block that walks with the frame count
+        static int walk = 0; walk = (walk + 12) % (bw - 40);
+        g.fillRoundRect(bx + 2 + walk, by + 2, 36, bh - 4, 3, ACC);
+    } else {
+        int p = pct < 0 ? 0 : pct > 100 ? 100 : pct;
+        int fw = (bw - 4) * p / 100;
+        if (fw > 0) g.fillRoundRect(bx + 2, by + 2, fw, bh - 4, 3, ACC);
+        char pc[8]; snprintf(pc, sizeof pc, "%d%%", p);
+        g.setTextColor(FG, BG); g.setCursor(bx + bw / 2 - 10, by + bh + 6); g.print(pc);
+    }
+    s.present();
+}
+
 extern "C" int nucleo_ui_menu(const char *title, const char *const *items, int n)
 {
     // Settings' list look: every item at size 2 (the old unfocused items were size 1, 6 px glyphs), the
