@@ -494,6 +494,13 @@ const gates = [
     // a failed cycle, and a failed one-shot join never arms the retry loop. 160 assertions incl. a full
     // replay of the issue story and uint32 ms wraparound. Pure C, no device.
     ok: (code) => code === 0, summary: (o) => (o.match(/wifi-policy: [^\n]*/) || [lastLine(o)])[0].trim() },
+  { name: 'sdcontent (SD self-install policy)', cmd: 'node', args: ['tools/anima-host/sdcontent-check.mjs'],
+    // The SD content self-install decision core (firmware/components/nucleo_sdcontent/content_policy.c),
+    // host-compiled with MinGW: path hygiene, the writable allow-list (every ownership row in
+    // docs/sd-content-install.md §4 — a hostile manifest must never write outside www/shell, bundled apps,
+    // registry, IR, the ANIMA brain files, facet seeds, wallpapers, evilportal), manifest header/line
+    // parsing, tag matching and the per-file plan (skip/write/create-only/merge). Pure C, no device.
+    ok: (code) => code === 0, summary: (o) => (o.match(/sdcontent-policy: [^\n]*/) || [lastLine(o)])[0].trim() },
   { name: 'setup-store (reset + SD secrets)', cmd: 'node', args: ['tools/anima-host/setup-store-check.mjs'],
     // nucleo_setup's three-tier config store (firmware/components/nucleo_setup/setup_store.c) + the hotspot
     // credential core (ap_creds.c), host-compiled with MinGW against ESP-IDF's real cJSON and an in-memory
