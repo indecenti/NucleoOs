@@ -14,6 +14,7 @@
 //
 // Example device paths: www/shell/sw.js , apps/groq-chat/www/index.html
 import { readFile } from 'node:fs/promises';
+import { deviceSession } from './lib/device-session.mjs';
 
 const argv = process.argv.slice(2);
 let host = null, pin = null;
@@ -32,14 +33,11 @@ if (!host || !pairs.length) { console.error('usage: --host <url> --pin <code> <l
 const timeout = (ms) => { const c = new AbortController(); const t = setTimeout(() => c.abort(), ms); return { signal: c.signal, done: () => clearTimeout(t) }; };
 async function f(url, opt, ms = 15000) { const g = timeout(ms); try { return await fetch(url, { ...opt, signal: g.signal }); } finally { g.done(); } }
 
-// Pair with the screen PIN -> nucleo_session cookie reused on every write (same flow as push-ota.mjs).
+// One cached paired session per device (device-session.mjs): pairing on every run evicted the user's browser.
 let cookie = null;
 if (pin) {
-  const r = await f(host + '/api/pair', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pin }) });
-  if (!r.ok) { console.error(`✗ pairing rejected (HTTP ${r.status}) — check the PIN on the Cardputer`); process.exit(1); }
-  const m = /(?:^|,\s*)(nucleo_session=[^;]+)/.exec(r.headers.get('set-cookie') || '');
-  cookie = m ? m[1] : null;
-  if (!cookie) { console.error('✗ paired but no session cookie returned'); process.exit(1); }
+  try { cookie = await deviceSession(host, pin); }
+  catch (e) { console.error(`✗ ${e.message}${e.status === 401 ? ' — check the PIN on the Cardputer' : ''}`); process.exit(1); }
 }
 const auth = cookie ? { cookie } : {};
 
@@ -58,4 +56,4 @@ for (const { local, dev } of pairs) {
   if (!wrote) { console.error(`✗ ${dev}: failed after 3 attempts`); fail++; }
 }
 console.log(`\nPush: ${ok} written, ${fail} failed.`);
-process.exit(fail ? 1 : 0);
+process.exitCode = fail ? 1 : 0;   // not process.exit(): exiting with fetch sockets mid-close tripped a libuv assertion on Windows (exit 9)

@@ -154,11 +154,23 @@ const RUN_SRC = '(' + workerMain.toString() + ')();';
 // Parse-only syntax check (NO execution) — host-safe (works in Node, no Worker/DOM). Used by the
 // ANIMA agent loop's VERIFY gate (mode:'check') so a candidate is validated before it can be
 // applied/run. Compiling an AsyncFunction parses the body without invoking it.
-export function checkSyntax(code) {
+// opts.bare: check a real FILE / page <script>, not a sandbox snippet. The snippet wrapper declares os, console,
+// print, args, env as parameters — so every page that does `const os = …` (the agent's own app template) failed
+// "Identifier 'os' has already been declared" and no agent app could be published. A module's import / export
+// lines are neutralised in place (same line count, so reported lines stay right).
+export function checkSyntax(code, opts) {
   try {
     const AsyncFn = Object.getPrototypeOf(async function () {}).constructor;
+    const bare = !!(opts && opts.bare);
+    let src = String(code || '');
+    if (bare) src = src
+      .replace(/^[ \t]*import\b[^\n]*$/gm, '')
+      .replace(/^[ \t]*export\s*\{[^}\n]*\}[^\n]*$/gm, '')
+      .replace(/^([ \t]*)export\s+default\s+/gm, '$1void ')
+      .replace(/^([ \t]*)export\s+(?=(?:async\s+)?function|class|const|let|var)/gm, '$1');
     // eslint-disable-next-line no-new
-    new AsyncFn('os', 'console', 'print', 'args', 'env', '"use strict";\n' + String(code || ''));
+    if (bare) new AsyncFn('"use strict";\n' + src);
+    else new AsyncFn('os', 'console', 'print', 'args', 'env', '"use strict";\n' + src);
     return { ok: true };
   } catch (e) {
     const msg = String((e && e.message) || e);

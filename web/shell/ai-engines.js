@@ -33,9 +33,22 @@ function reqInit(url, init = {}) {
   return o;
 }
 
+// Chrome's Local Network Access gate for a page on the Cardputer's LAN address reaching this PC's localhost:
+// 'granted' | 'prompt' | 'denied', or null where the browser has no such permission (older Chrome, Firefox).
+// A DENIED gate fails the fetch exactly like a stopped server — the panel said "start Ollama" to a user whose
+// Ollama was running, so the probe tells the two apart.
+export async function localNetworkPermission({ permissions = globalThis.navigator && globalThis.navigator.permissions } = {}) {
+  if (!permissions || !permissions.query) return null;
+  for (const name of ['loopback-network', 'local-network-access', 'local-network']) {
+    try { const s = await permissions.query({ name }); if (s && s.state) return s.state; } catch {}
+  }
+  return null;
+}
+
 // ── probing ──────────────────────────────────────────────────────────────────────────────────────
-// → { ...server, status: 'ok'|'cors'|'down'|'error', models: [ {id, sizeGB, params, family, caps:{…}} ], error? }
-export async function probeServer(server, { fetch: f = globalThis.fetch, timeoutMs = 1500, details = true } = {}) {
+// → { ...server, status: 'ok'|'cors'|'blocked'|'down'|'error', models: [ {id, sizeGB, params, family, caps:{…}} ], error? }
+//   'blocked' = this browser forbids the page to reach localhost (Local Network Access denied), whatever runs there.
+export async function probeServer(server, { fetch: f = globalThis.fetch, timeoutMs = 1500, details = true, permissions } = {}) {
   const out = { ...server, status: 'down', models: [] };
   const listUrl = server.kind === 'ollama' ? server.base.replace(/\/+$/, '') + '/api/tags' : server.base.replace(/\/+$/, '') + '/models';
   const tm = withTimeout(timeoutMs);
@@ -43,6 +56,8 @@ export async function probeServer(server, { fetch: f = globalThis.fetch, timeout
   try { r = await f(listUrl, reqInit(listUrl, { signal: tm.signal, headers: server.key ? { authorization: 'Bearer ' + server.key } : undefined })); }
   catch (e) {
     tm.done();
+    out.error = String(e && e.message || e);
+    if (isLoopback(listUrl) && await localNetworkPermission(permissions ? { permissions } : undefined) === 'denied') { out.status = 'blocked'; return out; }
     // Up but refusing this origin (CORS) resolves an opaque no-cors request; a dead server rejects it too.
     const t2 = withTimeout(timeoutMs);
     try { await f(listUrl, reqInit(listUrl, { mode: 'no-cors', signal: t2.signal })); out.status = 'cors'; }
@@ -85,8 +100,12 @@ export async function ollamaCaps(base, model, { fetch: f = globalThis.fetch, tim
   } catch { return null; } finally { tm.done(); }
 }
 
-export async function detectServers({ servers = DEFAULT_SERVERS, fetch: f = globalThis.fetch, timeoutMs = 1500 } = {}) {
-  return Promise.all(servers.map((s) => probeServer(s, { fetch: f, timeoutMs })));
+export async function detectServers({ servers = DEFAULT_SERVERS, fetch: f = globalThis.fetch, timeoutMs = 1500, permissions } = {}) {
+  const out = await Promise.all(servers.map((s) => probeServer(s, { fetch: f, timeoutMs, permissions })));
+  // The permission query is not the truth: inside the ANIMA iframe Chrome answers "denied" while its fetches to
+  // Ollama go through. One loopback server that answered proves the gate is open — the others are just stopped.
+  if (out.some((s) => s.status !== 'down' && s.status !== 'blocked' && isLoopback(s.base))) for (const s of out) if (s.status === 'blocked') s.status = 'down';
+  return out;
 }
 // Cached for chat turns: probing four localhost ports on EVERY question would add up to a second of
 // latency when no server runs. The result is re-used for ttl — only for the SAME server list and fetch

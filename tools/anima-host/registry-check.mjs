@@ -58,7 +58,7 @@ mkdirSync(BUILD, { recursive: true });
 const exe = join(BUILD, process.platform === 'win32' ? 'registryctest.exe' : 'registryctest');
 const cc = spawnSync(GCC, ['-std=gnu11', '-O1', '-Wall', '-Wextra', '-Werror', '-Wno-format-truncation',
   '-I', 'firmware/components/nucleo_registry/include', '-I', 'tools/ui-host/shim', '-I', CJSON,
-  'tools/anima-host/registry-ctest.c', 'firmware/components/nucleo_registry/nucleo_registry.c', join(CJSON, 'cJSON.c'),
+  'tools/anima-host/registry-ctest.c', 'firmware/components/nucleo_registry/nucleo_registry.c', 'firmware/components/nucleo_registry/registry_scan.c', join(CJSON, 'cJSON.c'),
   '-o', exe], { cwd: ROOT, env, encoding: 'utf8' });
 if (cc.status !== 0) { console.log('registry: COMPILE FAILED'); process.stdout.write(cc.stdout || ''); process.stdout.write(cc.stderr || ''); process.exit(1); }
 

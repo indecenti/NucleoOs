@@ -23,6 +23,7 @@ import { staleTwins } from './lib/twin-scope.mjs';
 import { isDeviceState } from './lib/sd-policy.mjs';
 import { deviceTarget, TARGET_HELP } from './lib/device-target.mjs';
 import { stagingDrift } from './staging-check.mjs';
+import { deviceSession } from './lib/device-session.mjs';
 
 const argv = process.argv.slice(2);
 const opt = (name, def) => { const i = argv.indexOf('--' + name); return i >= 0 ? (argv[i + 1] ?? true) : def; };
@@ -70,15 +71,9 @@ async function http(method, path, { body, headers } = {}) {
 }
 
 async function pair() {
-  const res = await http('POST', '/api/pair', {
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ pin: PIN }),
-  });
-  if (!res.ok) throw new Error(`pair failed: HTTP ${res.status}`);
-  const sc = res.headers.get('set-cookie') || '';
-  const m = sc.match(/nucleo_session=[0-9a-f]+/i);
-  if (!m) throw new Error('pair: no session cookie returned');
-  COOKIE = m[0];
+  // One cached session per device (lib/device-session.mjs): a fresh /api/pair per run evicted the browser's.
+  try { COOKIE = await deviceSession(BASE, PIN); }
+  catch (e) { throw new Error(`pair failed: ${e.message}`); }
 }
 
 // Cached directory listing: rel dir -> Map(name -> {type,size}) | null (does not exist).

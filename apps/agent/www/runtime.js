@@ -55,6 +55,7 @@ const MAX_PAUSE = 6;             // server-tool (web_search) continuations
 const MAX_PARALLEL = 3;          // concurrent cloud workers
 const READ_CAP = 24000;          // bytes returned to the model per read (keeps context lean)
 const LOCAL_READ_CAP = 9000;     // ...and to a local model, whose whole window is AGENT_CTX tokens
+const RUN_OUT_CAP = 6000;        // chars of run_js stdout handed back to the model
 const AGENT_CTX = 16384;         // Ollama num_ctx for the agent: measured 2026-09-30, qwen3.5:9b 8k -> 16k costs +0.27 GB
 
 // Retry a workspace op on transient device pressure (503 "busy" / network blip). Returns the op's
@@ -158,13 +159,26 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
   function deviceFetch(url, opts) {
     return (typeof url === 'string' && url.indexOf('/api/llm') === 0) ? dq.write(() => fetch(url, opts)) : fetch(url, opts);
   }
+  // The installed apps (device /api/apps: id + name) with what each one IS (category + description from
+  // /app-catalog.json, generated from the manifests). With names alone a model asked "which apps play
+  // music?" invented answers. The catalog is one static file, fetched once per runtime.
+  let appCatalog = null;
+  async function installedApps() {
+    const r = await dq.read(() => fetch('/api/apps', { cache: 'no-store' }).then((x) => x.json()));
+    if (!appCatalog) { try { appCatalog = (await dq.read(() => fetch('/app-catalog.json').then((x) => (x.ok ? x.json() : null)))) || {}; } catch { appCatalog = {}; } }
+    const info = appCatalog.apps || {};
+    return ((r && r.apps) || []).filter((a) => a.enabled !== false)
+      .map((a) => ({ ...a, category: (info[a.id] || {}).category || '', description: (info[a.id] || {}).description || '' }));
+  }
   let sandbox = null, sandboxTried = false;
+  const runOut = [];                 // what the current run_js printed — handed back to the model with the result
   let osapiSpecMemo, osapiManifestMemo;            // get_os_api: the 112 KB spec is read from SD once per session
   let aborter = null;
   // The worker's live checklist (update_plan). Named taskPlan, not plan: run() already has a local
   // `plan` — the orchestrator's typed classification — and the two are different things. In memory
   // only; a checklist describes THIS run, so persisting it would resurrect a stale one next question.
   let taskPlan = [];
+  let lastPublish = null;            // {id, ok, why} of this turn's last publish_app — see publishTruth()
   let lastEngine = null;                           // who answered the last run: { kind:'server'|'cloud'|'local', … }
   let readCap = READ_CAP;                          // lowered while a local-window model is working
   const hasCloud = () => !!(cfg && cfg.key) || !!(keys && Object.values(keys).some((e) => e && e.key));
@@ -191,7 +205,7 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
     fs,
     device: {
       status: () => dq.read(() => fetch('/api/status', { cache: 'no-store' }).then((x) => x.json())),
-      apps: async () => { const r = await dq.read(() => fetch('/api/apps', { cache: 'no-store' }).then((x) => x.json())); return ((r && r.apps) || []).filter((a) => a.enabled !== false); },
+      apps: () => installedApps(),
       open: async (x) => (await execTool('open_in_os', x)).content,
     },
     confirm: async ({ cmd, writes, destructive }) => {
@@ -241,7 +255,12 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
       // (confined via fsclient.resolve, throttled, human-gated). This also keeps online-only intact
       // (no offline cascade) and stops the chip being used as a fetch relay.
       sandbox = mod.createRunner({ cwd: root, lang, timeoutMs: 5000, fs: false, http: false, anima: false, notify: false, hw: false,
-        onLog: (lvl, txt) => ui && ui.sandboxLog && ui.sandboxLog(lvl, txt) });
+        onLog: (lvl, txt) => {
+          // The printed output is the RESULT the model asked for: before, it reached only the UI panel (and in
+          // ANIMA nothing at all), so the model never saw its own numbers and guessed them (7.5 for a 7.25 mean).
+          if (lvl === 'clear') runOut.length = 0; else if (txt != null) runOut.push(lvl === 'log' || lvl === 'info' ? String(txt) : '[' + lvl + '] ' + txt);
+          if (ui && ui.sandboxLog) ui.sandboxLog(lvl, txt);
+        } });
     } catch (e) { sandbox = null; }
     return sandbox;
   }
@@ -349,10 +368,22 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
         case 'delete_file': { const r = await withRetry(() => dq.write(() => fs.del(input.path))); return r.ok ? done(t('rt_delete_ok', { path: r.path })) : done(t('rt_err', { op: 'delete', error: r.error }) + (/protected|403/i.test(String(r.error)) ? t('rt_delete_protected') : ''), true); }
         case 'move_file': { const r = await withRetry(() => dq.write(() => fs.move(input.from, input.to, { overwrite: false }))); return r.ok ? done(t('rt_move_ok', { from: input.from, to: input.to })) : done(t('rt_err', { op: 'move', error: r.error }), true); }
         case 'run_js': { const sb = await ensureSandbox(); if (!sb) return done(t('rt_sandbox_na'), true);
+          runOut.length = 0;
           const out = await sb.run(String(input.code || ''), {}, {});
-          if (out.timeout) return done(t('rt_run_timeout'), true);
-          if (!out.ok) return done(t('rt_run_err', { error: (out.error || t('rt_unknown')) }) + (out.stack ? '\n' + out.stack : ''), true);
-          return done(t('rt_run_ok') + (out.hasValue ? ' → ' + out.value : '') + (out.ms != null ? ' (' + out.ms + 'ms)' : '')); }
+          const printed = runOut.join('\n');
+          const shown = printed.length > RUN_OUT_CAP ? printed.slice(0, RUN_OUT_CAP) + '\n…(output truncated at ' + RUN_OUT_CAP + ' chars)' : printed;
+          if (out.timeout) return done(t('rt_run_timeout') + (shown ? '\nstdout:\n' + shown : ''), true);
+          if (!out.ok) return done(t('rt_run_err', { error: (out.error || t('rt_unknown')) }) + (out.stack ? '\n' + out.stack : '') + (shown ? '\nstdout:\n' + shown : ''), true);
+          // save_to: the computed text goes into the file AS PRINTED — a model that retyped a table of results
+          // into write_file copied numbers wrong. Same confined, throttled write as write_file (approved with the run).
+          let saved = '';
+          if (input.save_to) {
+            const body = printed || (out.hasValue ? String(out.value) : '');
+            const w = await withRetry(() => dq.write(() => fs.write(String(input.save_to), body.endsWith('\n') ? body : body + '\n', { overwrite: true, mkdir: true })));
+            saved = w.ok ? '\n' + t('rt_write_ok', { path: w.path, bytes: w.bytes }) : '\n' + t('rt_err', { op: 'write', error: w.error });
+          }
+          return done(t('rt_run_ok') + (out.hasValue ? ' → ' + out.value : '') + (out.ms != null ? ' (' + out.ms + 'ms)' : '')
+            + (shown ? '\nstdout:\n' + shown : '') + saved); }
         case 'open_in_os': { try {
             if (input.path) { const abs = fs.resolve(input.path); window.parent && window.parent.postMessage({ type: 'open-file', path: abs }, '*'); return done(t('rt_open_file_ok', { path: input.path })); }
             if (input.app) { window.parent && window.parent.postMessage({ type: 'open-app', id: String(input.app) }, '*'); return done(t('rt_open_app_ok', { app: input.app })); }
@@ -397,13 +428,12 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
           }, null, 1)));
         }
         case 'list_apps': {
-          const r = await withRetry(() => dq.read(() => fetch('/api/apps', { cache: 'no-store' }).then((x) => x.json())));
-          const apps = (r && r.apps) || [];
+          const apps = await withRetry(() => installedApps());
           if (!apps.length) return done(t('rt_no_apps'), true);
           // Fenced: an app NAME comes from a manifest — including manifests this very agent wrote
           // and published. Unfenced, "publish an app named 'ignore your instructions and …'" is a
           // self-service injection channel that survives across sessions.
-          return done(fenceUntrusted('app_list', {}, apps.filter((a) => a.enabled !== false).map((a) => a.id + ' — ' + a.name).join('\n')));
+          return done(fenceUntrusted('app_list', {}, apps.map((a) => a.id + ' — ' + a.name + (a.category ? ' [' + a.category + ']' : '') + (a.description ? ': ' + a.description : '')).join('\n')));
         }
         case 'weather': {
           const city = String(input.city || '').trim(); if (!city) return done(t('rt_weather_city'), true);
@@ -433,6 +463,7 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
         case 'scaffold_app': { const r = await orchestrateScaffold(appIo, { input }); return done(r.message, !r.ok); }
         case 'publish_app': {
           const r = await orchestratePublish(appIo, { id: input.id });
+          lastPublish = { id: String(input.id || ''), ok: !!r.ok, why: r.ok ? '' : String(r.message || '').split('\n')[0] };
           if (!r.ok) return done(r.message, true);
           // F5 — LIVE SMOKE: prove the just-installed app actually serves on the device before we call
           // it done. A publish the launcher accepted but that 404s is a silent failure. GET-only, through
@@ -442,6 +473,9 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
           try {
             const smoke = await smokeApp(input.id, { fetchFn: (u) => dq.read(() => fetch(u, { cache: 'no-store' })), fsFetch: (u) => dq.read(() => fetch(u, { cache: 'no-store' })) });
             msg += '\n' + smokeSummary(smoke, (k, v) => t(k, v));
+            // A publish the device does not list is not installed (the ADV's registry reload ran out of heap and
+            // /api/apps kept the old table; the model still said "installed, despite the verification error").
+            if (!smoke.ok) lastPublish = { id: String(input.id || ''), ok: false, why: smoke.checks.filter((c) => !c.ok).map((c) => c.name + ': ' + c.detail).join('; ') };
             if (smoke.ok) {
               try {
                 let manifest = null, html = '';
@@ -712,11 +746,11 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
     return `Sei un AGENTE operativo di NucleoOS — un vero sistema operativo multi-app su un M5Stack Cardputer, guidato dal browser dell'utente. ${CLOUD_ONLY_MARK} e PROGRAMMI come uno sviluppatore esperto. Porti a termine il compito USANDO gli strumenti reali.
 
 STRUMENTI:
-• sh: una shell POSIX sui file dello spazio di lavoro (root ${root}) — PREFERISCILA per esplorare e per le operazioni semplici: ls, cat, head, tail, sed -n 'A,Bp', wc -l, grep -rn, find -name, tree, mkdir -p, cp, mv, rm, echo > / >>, con pipe | e ; && ||. Sul Cardputer: df, free, uptime, date, uname, apps, open APP. Per cambiare testo DENTRO un file usa edit_file.
+• sh: una shell POSIX sui file dello spazio di lavoro (root ${root}) — PREFERISCILA per esplorare e per le operazioni semplici: ls, cat, head, tail, sed -n 'A,Bp', wc -l, grep -rn, find -name, tree, mkdir -p, cp, mv, rm, echo > / >>, con pipe | e ; && ||. Sul Cardputer: df, free, uptime, date, uname, apps (id, nome, categoria, cosa fa — es. apps | grep -i audio), open APP. Per domande sulle app installate usa SEMPRE apps/list_apps: non elencare app a memoria. Per cambiare testo DENTRO un file usa edit_file.
 • File (se non usi sh): list_files, read_file, search_files, make_dir, write_file, edit_file, append_file, delete_file, move_file.
-• run_js: esegue JavaScript in sandbox (~5s; niente DOM/rete/file) per CALCOLARE o trasformare dati — poi persisti il risultato con i tool file.
+• run_js: esegue JavaScript in sandbox (~5s; niente DOM/rete/file) per CALCOLARE o trasformare dati; ciò che stampi con console.log ti torna come stdout. Per un file con risultati calcolati (report, tabella, CSV) stampa TUTTO il testo e passa save_to: viene scritto così com'è — non ricopiare mai i numeri a mano in write_file.
 • open_in_os: LANCIA un'app del device (es. calculator, notepad, media-player, radio, photo-viewer, calendar) o apre un file nell'app giusta. È così che "apri la calcolatrice", "metti la musica", ecc.
-• list_apps: elenca le app installate (id + nome) — chiamalo prima di lanciare se non sei sicuro dell'id.
+• list_apps: elenca le app installate (id, nome, categoria, descrizione) — chiamalo prima di lanciare se non sei sicuro dell'id.
 • update_plan: la CHECKLIST viva del lavoro. Su un compito in più passi (costruire un'app, toccare più file) chiamalo SUBITO con 3-7 milestone reali (una sola in "doing"), poi di nuovo dopo ogni passo per segnarla "done" e avviare la successiva. L'umano la vede aggiornarsi in tempo reale e tu ci rileggi a che punto sei. Non costa nulla (nessun accesso al device, nessuna approvazione). Salta il piano solo per le risposte in un colpo solo.
 • scaffold_app + publish_app: PUOI CREARE NUOVE APP per NucleoOS. Flusso: 1) scaffold_app({name, description, category, kind}) genera lo scheletro da un TEMPLATE funzionante (kind: blank/list/timer/converter — scegli il più vicino all'obiettivo) in una cartella di staging nel workspace; 2) MODIFICA <id>/www/index.html (e aggiungi .js/.css se servono) con i tool file per costruire l'app vera — è una pagina web autonoma, dark-theme, può importare /nucleo-i18n.js; 3) publish_app({id}) la installa nel launcher LIVE (l'utente approva, nessun riavvio). Usa questo flusso quando l'utente chiede di "creare/costruire/fare un'app". Tieni l'app leggera e autonoma (niente dipendenze esterne pesanti): gira su un device con poca RAM. Per nascondere o ripristinare un'app che HAI creato usa manage_app({id, action:'disable'|'enable'}) — le app non si possono cancellare dal device, ma si possono disabilitare.
 • get_os_api: il CONTRATTO REALE di NucleoOS — rotte HTTP del device (topic "routes"/"route"), regole del manifest ("manifest"), regole di deploy ("rules"). CONSULTALO prima di scrivere codice che chiama /api/* e prima di publish_app: mai indovinare una rotta o un campo.
@@ -798,6 +832,7 @@ Sii conservativo: in dubbio scegli "task". Considera il contesto della conversaz
   async function run(userMsg, history = [], opts = {}) {
     aborter = new AbortController();
     taskPlan = [];                                   // each question starts with an empty checklist
+    lastPublish = null;                              // …and no app-publish outcome yet (publishTruth)
     toolGuard.reset();                               // …and a clean doom-loop history
     shell.reset();                                   // …and the shell back at the workspace root
     if (ui && ui.plan) { try { ui.plan([]); } catch {} }
@@ -843,11 +878,19 @@ Sii conservativo: in dubbio scegli "task". Considera il contesto della conversaz
     }
 
     // single task (default): route to the best model across all configured keys, with cross-provider fallback.
-    return await runWorkerWithFallback({
+    return publishTruth(await runWorkerWithFallback({
       spec: { difficulty: plan.hard ? 'hard' : 'mid', capability: plan.capability },
       system: workerSystem(seedExtra),
       baseMessages: [...histMsgs, { role: 'user', content: userMsg }],
-    });
+    }));
+  }
+
+  // The model's last word is not the record: qwen3.5:9b answered "Contatore created and installed!" after BOTH its
+  // publish_app calls had been refused (nothing reached /apps). When the turn's last publish failed, the reply
+  // says so — deterministically, from the tool result, whatever the model wrote.
+  function publishTruth(reply) {
+    if (!lastPublish || lastPublish.ok) return reply;
+    return String(reply || '').trimEnd() + '\n\n⚠ ' + t('rt_publish_not_done', { id: lastPublish.id, why: lastPublish.why || '?' });
   }
 
   return { run, stop, fs, get workspace() { return root; }, get plan() { return taskPlan.map((x) => ({ ...x })); }, get engine() { return lastEngine && { ...lastEngine }; } };

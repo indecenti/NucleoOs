@@ -139,3 +139,16 @@ test('plannedWrites sees through pipes and redirections', () => {
   assert.deepEqual(plannedWrites(parse('cat a | grep x > out.txt')), [{ op: 'write', path: 'out.txt' }]);
   assert.deepEqual(plannedWrites(parse('ls; cat a')), []);
 });
+
+test('apps carries category and what the app does, so a model can grep it instead of guessing', async () => {
+  fakeDevice({});
+  const sh = createAgentShell({ fs: makeFS('/data/agent'), confirm: async () => true, device: { apps: async () => [
+    { id: 'metronome', name: 'Metronome', category: 'media', description: 'Metronome with tap tempo and a chromatic tuner' },
+    { id: 'calculator', name: 'Calcolatrice', category: 'utility', description: 'Scientific calculator' }] } });
+  assert.equal((await sh.run('apps | grep -i tuner')).out, 'metronome\tMetronome\t[media]\tMetronome with tap tempo and a chromatic tuner');
+});
+
+test('cat -n numbers lines (it was read as a file name)', async () => {
+  const { sh } = shell(FILES);
+  assert.equal((await sh.run('cat -n notes/todo.md')).out, '     1\t- latte\n     2\t- uova\n     3\t- pane');
+});

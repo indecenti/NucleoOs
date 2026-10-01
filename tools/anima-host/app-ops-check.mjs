@@ -161,6 +161,11 @@ await (async () => {
 await (async () => {
   const io = makeMemIo({ sys: { '/system/registry/apps.json': REG([{ id: 'my-notes', created_by: 'agent', enabled: true }]) } });
   ok('scaffold over an agent-owned id proceeds', (await orchestrateScaffold(io, { input: { name: 'My Notes', kind: 'blank' } })).ok === true && 'my-notes/manifest.json' in io._ws);
+  // …but never over the app already STAGED in the workspace (it overwrote a finished index.html on the ADV)
+  io._ws['my-notes/www/index.html'] = '<h1>my finished work</h1>';
+  const again = await orchestrateScaffold(io, { input: { name: 'My Notes', kind: 'blank' } });
+  ok('scaffold refuses an app already in the workspace', again.ok === false && again.error === 'exists' && io._ws['my-notes/www/index.html'] === '<h1>my finished work</h1>');
+  ok('scaffold overwrite:true starts over on request', (await orchestrateScaffold(io, { input: { name: 'My Notes', kind: 'blank', overwrite: true } })).ok === true && io._ws['my-notes/www/index.html'] !== '<h1>my finished work</h1>');
   const io2 = makeMemIo({ sys: { '/system/registry/apps.json': REG([{ id: 'mine', created_by: 'agent', enabled: false }]) } });
   const r2 = await orchestrateManage(io2, { id: 'mine', action: 'enable' });
   ok('manage enable of a disabled agent app', r2.ok === true && !r2.noop && JSON.parse(io2._sys['/system/registry/apps.json']).installed[0].enabled === true);

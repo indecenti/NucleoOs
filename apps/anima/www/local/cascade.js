@@ -155,7 +155,7 @@ const LIVE_XL = [
   String.raw`que hora es|quelle heure (?:est-il|il est|est il)|il est quelle heure|wie spat ist es|wie ?viel uhr ist es`,
   String.raw`que dia es(?: hoy)?|a que (?:dia|fecha) estamos|que fecha es(?: hoy)?|quel jour (?:sommes-nous|sommes nous|on est|est-on)|quelle (?:est la )?date(?: aujourd'hui)?|welcher tag ist(?: heute)?|welches datum (?:ist|haben wir)(?: heute)?|der wievielte ist heute`,
   String.raw`en que ano estamos|que ano es|en quelle annee (?:sommes-nous|sommes nous|on est)|welches jahr (?:ist|haben wir)|en que estacion estamos|quelle saison(?: sommes-nous| est-ce)?|welche jahreszeit(?: ist| haben wir)?`,
-  String.raw`(?:cuanta |nivel de )?bateria(?: me queda| queda| tengo)?|(?:niveau de )?batterie(?: restante)?|combien de batterie(?: il me reste)?|(?:wie viel )?akku(?:stand)?|batteriestand`,
+  String.raw`(?:cuanta |nivel de )?bateria(?: me queda| queda| tengo| tiene)?|(?:niveau de )?batterie(?: restante)?|combien de batterie(?: il me reste)?|(?:wie viel )?akku(?:stand)?|batteriestand`,
   String.raw`cuanto espacio (?:libre )?(?:tengo|queda|hay)(?: en la sd)?|espacio (?:libre|disponible)(?: en la sd)?|combien d'espace (?:libre )?(?:il me reste|reste|ai-je|j'ai)?(?: sur la sd)?|espace (?:libre|disponible)(?: sur la sd)?|wie viel (?:freier )?(?:speicher|speicherplatz|platz)(?: habe ich| ist frei| ist noch frei)?(?: auf der sd)?|freier speicher(?:platz)?`,
   String.raw`cuanta (?:ram|memoria)(?: libre)?(?: tengo)?|memoria libre|combien de (?:ram|memoire)(?: libre)?|memoire libre|wie viel (?:ram|arbeitsspeicher)(?: ist frei)?|freier arbeitsspeicher`,
   String.raw`cuanto tiempo llevas encendid[oa]|depuis combien de temps es-tu allume|wie lange laufst du schon`,
@@ -167,12 +167,12 @@ const LIVE = [
   String.raw`che or[ae] (?:e|sono)|che ora e|l'ora|ora esatta|what time is it|what'?s the time|the time|current time`,
   String.raw`che giorno (?:e|siamo)(?: oggi)?|oggi che giorno e|che data e(?: oggi)?|(?:la )?data(?: di oggi)?|what day is (?:it|today)|what'?s the date|what is the date|today'?s date|the date`,
   String.raw`che anno (?:e|siamo)|in che anno siamo|what year is it|che stagione e|in che stagione siamo|what season is it`,
-  String.raw`(?:quanta|livello(?: della)?|stato(?: della)?|carica(?: della)?) batteria(?: ho| hai| c'e| rimane| resta)?|batteria|battery(?: level| left| status)?|how much battery(?: is left| do i have| left)?`,
+  String.raw`(?:quanta|livello(?: della)?|stato(?: della)?|carica(?: della)?) (?:di )?batteria(?: ho| hai| ha| c'e| rimane| resta)?|batteria|battery(?: level| left| status)?|how much battery(?: is left| do i have| left)?`,
   String.raw`quanto spazio (?:libero |rimasto )?(?:ho|hai|c'e|resta|rimane)(?: sulla sd| su sd)?|spazio (?:libero|rimasto|disponibile|su sd|sulla sd)|(?:free|disk|sd) space|how much (?:free )?space(?: is left| do i have| left)?|storage left`,
-  String.raw`quanta (?:ram|memoria)(?: libera)?(?: ho| hai| c'e)?|(?:ram|memoria) (?:libera|disponibile)|free (?:ram|memory)|how much (?:ram|memory)(?: is free| do you have| left)?`,
+  String.raw`quanta (?:ram|memoria)(?: libera)?(?: ho| hai| ha| c'e)?|(?:ram|memoria) (?:libera|disponibile)|free (?:ram|memory)|how much (?:free )?(?:ram|memory)(?: is free| do you have| does it have| has it| left)?`,
   String.raw`uptime|da quanto (?:tempo )?(?:sei|e) acces[oa](?: il (?:cardputer|dispositivo|device))?|how long (?:have you been|has the (?:cardputer|device) been) (?:on|up|running)`,
-  String.raw`(?:che|quale) versione (?:sei|hai|e|di nucleoos|del firmware|del sistema)|versione(?: del)? firmware|firmware version|what version (?:are you|is this|of nucleoos)`,
-  String.raw`(?:a che|a quale) (?:rete|wi-?fi) sono connesso|(?:che|quale) (?:rete|wi-?fi)(?: e| uso| stai usando)?|sono connesso(?: a internet)?|am i connected|(?:which|what) (?:network|wi-?fi)(?: am i on| is this)?|(?:qual e )?(?:il mio )?indirizzo ip|(?:what'?s )?my ip(?: address)?|ip address`,
+  String.raw`(?:che|quale) versione (?:sei|hai|ha|e|di nucleoos|del firmware|del sistema)|versione(?: del)? firmware|firmware version|what version (?:are you|is this|of nucleoos)`,
+  String.raw`(?:a che|a quale) (?:rete(?: wi-?fi)?|wi-?fi) (?:sono|sei|e) (?:connesso|collegato)|(?:che|quale) (?:rete(?: wi-?fi)?|wi-?fi)(?: e| uso| usa| stai usando)?|(?:sono|e) (?:connesso|collegato)(?: a internet)?|am i connected|is it connected|(?:which|what) (?:network|wi-?fi)(?: am i on| is this| is it (?:on|connected to))?|(?:qual e |che )?(?:il mio |l')?(?:indirizzo )?ip(?: ho| ha)?|(?:what'?s )?(?:my |its )?ip(?: address)?|ip address`,
   String.raw`(?:che|quali) (?:impegni|appuntamenti) ho(?: oggi| domani)?|i miei impegni|impegni(?: di)? oggi|cosa ho (?:in agenda|oggi|domani)|agenda(?: di)? oggi|(?:what'?s|what is) on (?:today|my calendar)|my (?:schedule|agenda|appointments)(?: today)?`,
 ].map((re, i) => new RegExp('^' + LEAD + '(?:' + re + (LIVE_XL[i] ? '|' + LIVE_XL[i] : '') + ')' + TAIL + '$'));
 // "how do I raise the volume on my PC?" is a how-to, not an order: interrogative openers never trigger 'act'.
@@ -183,7 +183,8 @@ const LAUNCH = /^(apri|avvia|lancia|open|launch|abre|abrir|inicia|ouvre|ouvrir|l
 // answers composed HERE without a model (liveFromStatus): a German question on an Italian desktop gets German.
 // Cheap and deliberately conservative: distinctive function words + a few letters only one language uses.
 const LANG_CUES = {
-  it: /\b(che|quanto|quanta|quanti|sono|ho|hai|della|sulla|oggi|adesso|mi|dimmi|batteria|spazio|ore)\b/g,
+  // "Imposta la luminosità dello schermo…" scored Spanish on "la" alone and the reply came back as "Brillo al 50 %".
+  it: /\b(che|quanto|quanta|quanti|sono|ho|hai|della|dello|delle|degli|sulla|nel|nella|il|lo|gli|oggi|adesso|mi|dimmi|batteria|spazio|ore|imposta|alza|abbassa|metti|schermo|luminosita)\b/g,
   en: /\b(what|how|much|many|is|the|my|do|have|left|time|today|battery|space|which|am)\b/g,
   es: /\b(que|cuanto|cuanta|tengo|queda|hay|estoy|hoy|es|mi|la|el|bateria|espacio|hora|dime)\b/g,
   fr: /\b(quel|quelle|combien|est|il|reste|suis|aujourd'hui|mon|ma|de|batterie|espace|heure|sommes)\b/g,
@@ -204,8 +205,11 @@ export function guessLang(q) {
 
 // Which live value a 'live' question asks for — same order as LIVE above.
 const LIVE_KINDS = ['time', 'date', 'year', 'battery', 'space', 'ram', 'uptime', 'version', 'network', 'agenda'];
+// "quanta RAM libera ha il Cardputer", "how much memory does the Cardputer have": the device named as the subject
+// is the same question as "quanta RAM libera hai" — dropped before matching (the questions are about it anyway).
+const DEVICE_SUBJ = /\s*\b(?:(?:il|del|sul|nel|al|dal|the|on the|of the|el|del|la|le|du|sur le|der|des|vom|am|auf dem|mein|mon|mi|my|il mio|questo|this) )?(?:cardputer(?: adv)?|dispositivo|device)\b/g;
 export function liveKind(q) {
-  const t = fold(q).replace(/[?!.,;:¿¡]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const t = fold(q).replace(/[?!.,;:¿¡]+/g, ' ').replace(DEVICE_SUBJ, ' ').replace(/\s+/g, ' ').replace(/\bdoes have\b/, 'does it have').trim();
   for (let i = 0; i < LIVE.length; i++) if (LIVE[i].test(t)) return LIVE_KINDS[i] === 'year' && /stagion|season|estacion|saison|jahreszeit/.test(t) ? 'season' : LIVE_KINDS[i];
   return null;
 }
@@ -293,6 +297,46 @@ export function commandHint(q) {
   for (const re of LIVE) if (re.test(t)) return 'live';
   if (LAUNCH.test(t)) return 'launch';
   return null;
+}
+
+// settingAct(q): a volume / brightness order read WITHOUT an engine — for a Cardputer whose brain is paused (web
+// mode) and a browser with no WASM brain installed: "luminosità al 50%" said "not carried out" although
+// POST /api/anima/act sets it in one call. Only unambiguous orders: an explicit percentage, max / min / half /
+// mute, or a plain up / down (±10, the native step). Anything else → null (the normal ladder decides).
+const BRIGHT_NOUN = /\b(luminosita|luce|brightness|schermo|screen|display|retroilluminazione|backlight|brillo|pantalla|luminosite|ecran|helligkeit|bildschirm)\b/;
+const VOL_NOUN = /\b(volume|audio|suono|sound|volumen|sonido|lautstarke)\b/;
+const UP = /\b(alza|aumenta|piu|raise|increase|up|louder|brighter|brighten|sube|mas|monte|augmente|plus|erhohe|mehr|lauter|heller)\b/;
+const DOWN = /\b(abbassa|diminuisci|riduci|meno|lower|decrease|down|quieter|dim|baja|menos|reduce|baisse|diminue|moins|verringere|reduziere|weniger|leiser|dunkler)\b/;
+export function settingAct(q) {
+  if (commandHint(q) !== 'act') return null;
+  const t = fold(q).replace(/[?!.,;:¿¡]+/g, ' ').replace(/\s+/g, ' ').trim();
+  const bright = BRIGHT_NOUN.test(t), vol = VOL_NOUN.test(t);
+  if (bright === vol) return null;                              // neither, or both: not ours to guess
+  let arg = null;
+  const pct = t.match(/\b(\d{1,3})\s*(?:%|percento|per cento|percent|por ciento|pour cent|prozent)?(?!\s*(?:min|sec|ore|h)\b)/);
+  if (pct && +pct[1] <= 100) arg = String(+pct[1]);
+  else if (/\b(massim[oa]|max|maximum|maximo|maximal|al massimo|a tope)\b/.test(t)) arg = '100';
+  else if (/\b(minim[oa]|min|minimum|minimo|minimal)\b/.test(t)) arg = '0';
+  else if (/\b(meta|half|mitad|moitie|halb|halbe)\b/.test(t)) arg = '50';
+  else if (vol && /\b(muto|muta|silenzia|mute|silencia|coupe|stumm)\b/.test(t)) arg = '0';
+  else if (UP.test(t) && !DOWN.test(t)) arg = '+10';
+  else if (DOWN.test(t) && !UP.test(t)) arg = '-10';
+  if (arg == null) return null;
+  const tool = bright ? 'set_brightness' : 'set_volume';
+  return { action: 'tool', tool, intent: tool, arg, reply: '', local: true };
+}
+// The reply for a setting the DEVICE applied (its own reply is it/en only and carries the value it really set).
+const SETTING_DONE = {
+  it: { set_volume: 'Volume al {p}%.', set_brightness: 'Luminosità al {p}%.' },
+  en: { set_volume: 'Volume {p}%.', set_brightness: 'Brightness {p}%.' },
+  es: { set_volume: 'Volumen al {p} %.', set_brightness: 'Brillo al {p} %.' },
+  fr: { set_volume: 'Volume à {p} %.', set_brightness: 'Luminosité à {p} %.' },
+  de: { set_volume: 'Lautstärke {p} %.', set_brightness: 'Helligkeit {p} %.' },
+};
+export function settingReply(tool, deviceReply, lang = 'it') {
+  const m = String(deviceReply || '').match(/(\d{1,3})\s*%/);
+  const T = SETTING_DONE[lang] || SETTING_DONE.en;
+  return m && T[tool] ? T[tool].replace('{p}', m[1]) : String(deviceReply || '');
 }
 
 // ---- personal memory: ONE owner --------------------------------------------------------------------

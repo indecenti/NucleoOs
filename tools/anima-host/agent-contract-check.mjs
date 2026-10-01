@@ -39,6 +39,12 @@ ok('guard forces task: space', guardPlan({ mode: 'answer', answer: '10GB' }, 'qu
 ok('guard forces task: write file', guardPlan({ mode: 'answer' }, 'scrivi un file note.txt').mode === 'task');
 ok('guard forces task EN', guardPlan({ mode: 'answer' }, 'what time is it?').mode === 'task');
 ok('guard keeps chitchat as answer', guardPlan({ mode: 'answer', answer: 'Bene!' }, 'ciao come stai?').mode === 'answer');
+// gpt-oss-120b on Groq triaged these as "answer" and replied with a script for the user to run (ADV, 2026-10-01)
+ok('guard forces task: fix a named file', guardPlan({ mode: 'answer' }, "Nel file demo/somma.js c'è un bug: trovalo e correggilo").mode === 'task');
+ok('guard forces task: analyse a csv', guardPlan({ mode: 'answer' }, 'Analizza demo/voti.csv e salva un riepilogo in demo/riepilogo.md').mode === 'task');
+ok('guard forces task: write a script', guardPlan({ mode: 'answer' }, 'Scrivi demo/palindromo.js e provalo con 3 esempi').mode === 'task');
+ok('guard forces task: ES', guardPlan({ mode: 'answer' }, 'corrige el error en app.js').mode === 'task');
+ok('guard keeps a question ABOUT a file type as answer', guardPlan({ mode: 'answer', answer: 'JSON è…' }, 'cosa contiene di solito un package.json?').mode === 'answer');
 ok('guard keeps story as answer', guardPlan({ mode: 'answer', answer: '...' }, 'scrivimi una poesia sul mare').mode === 'answer');
 ok('guard null → task', guardPlan(null, 'qualsiasi cosa').mode === 'task');
 ok('guard passes through a real task', guardPlan({ mode: 'task', hard: true }, 'refactor il file').mode === 'task');

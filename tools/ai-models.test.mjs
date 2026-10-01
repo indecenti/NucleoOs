@@ -128,3 +128,15 @@ test('a FORMER factory default follows its family forward; a model the user pick
   assert.equal(AI.PROVIDERS.anthropic.def, 'claude-sonnet-5-5');
   assert.deepEqual(AI.TIERS.anthropic, { max: 'claude-opus-5-5', mid: 'claude-sonnet-5-5', fast: 'claude-haiku-4-5' });
 });
+
+test('a Groq free-tier limit is a wait, not a spent credit (its text links to billing)', () => {
+  const groq = 'rate_limit_exceeded · Rate limit reached for model `openai/gpt-oss-120b` in organization `org_x` service tier `on_demand` on tokens per day (TPD): Limit 200000, Used 199500, Requested 9000. Please try again in 7m12.5s. Need more tokens? Upgrade to Dev Tier today at https://console.groq.com/settings/billing';
+  assert.equal(AI.aiErrorKind(429, groq), 'rate');
+  assert.equal(AI.retryAfterFromText(groq), 433);
+  assert.equal(AI.retryAfterFromText('Please try again in 2.04s.'), 3);
+  assert.equal(AI.retryAfterFromText('Please try again in 850ms'), 1);
+  assert.equal(AI.retryAfterFromText('nothing here'), 0);
+  const e = new AI.AiError('rate', groq, { provider: 'openai', retryAfter: 433 });
+  assert.match(AI.explainAiError(e, 'it'), /\(8 min\)/);
+  assert.equal(AI.aiErrorKind(404, 'HTTP 404'), 'model', 'the old boundary was a backspace char and never matched');
+});

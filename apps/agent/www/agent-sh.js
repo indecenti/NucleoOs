@@ -173,7 +173,14 @@ export function createAgentShell({ fs, device = {}, confirm = async () => true, 
       }
       return out.join('\n');
     },
-    cat: async (a, io) => { if (!a.length) return io.stdin ?? ''; const parts = []; for (const p of a) parts.push(await readText(p)); return parts.join('\n'); },
+    cat: async (a, io) => {
+      // cat -n numbers the lines (qwen3.5:9b ran it and got "No such file: -n")
+      const { f, rest } = flags(a, { short: 'n' });
+      let src;
+      if (!rest.length) src = io.stdin ?? ''; else { const parts = []; for (const p of rest) parts.push(await readText(p)); src = parts.join('\n'); }
+      if (!f.n) return src;
+      return lines(src).map((l, i) => String(i + 1).padStart(6) + '\t' + l).join('\n');
+    },
     head: async (a, io) => { const { f, rest } = flags(a, { short: '', numeric: 'n', withValue: { n: 'n' } }); const n = Math.max(0, +(f.n ?? 10) || 0); const src = rest.length ? await readText(rest[0]) : (io.stdin ?? ''); return lines(src).slice(0, n).join('\n'); },
     tail: async (a, io) => { const { f, rest } = flags(a, { short: '', numeric: 'n', withValue: { n: 'n' } }); const n = Math.max(0, +(f.n ?? 10) || 0); const src = rest.length ? await readText(rest[0]) : (io.stdin ?? ''); const ls = lines(src); return ls.slice(Math.max(0, ls.length - n)).join('\n'); },
     sed: async (a, io) => {
@@ -268,7 +275,8 @@ export function createAgentShell({ fs, device = {}, confirm = async () => true, 
     uptime: async () => { const s = device.status && await device.status(); if (!s) throw new Error('uptime: device status unavailable'); const u = s.uptime_s | 0; return `up ${Math.floor(u / 3600)}h ${Math.floor((u % 3600) / 60)}m` + (s.battery && typeof s.battery.pct === 'number' ? `, battery ${Math.round(s.battery.pct)}%` : ''); },
     date: async () => { const s = device.status && await device.status(); const t = s && s.network && s.network.time; return (t > 1672531200 ? new Date(t * 1000) : new Date()).toString(); },
     uname: async () => { const s = device.status && await device.status(); return 'NucleoOS ' + ((s && s.version) || '') + ' esp32s3' + (s && s.profile ? ' (' + s.profile + ' profile)' : ''); },
-    apps: async () => { const l = device.apps ? await device.apps() : []; return l.map((x) => x.id + '\t' + x.name).join('\n'); },
+    // id, name, and — when the catalog has it — category and what the app does, so `apps | grep -i audio` works
+    apps: async () => { const l = device.apps ? await device.apps() : []; return l.map((x) => x.id + '\t' + x.name + (x.category ? '\t[' + x.category + ']' : '') + (x.description ? '\t' + x.description : '')).join('\n'); },
     open: async (a) => { if (!device.open) throw new Error('open: not available here'); const x = a[0]; if (!x) throw new Error('open: usage: open APP-ID | FILE'); return await device.open(/[./]/.test(x) ? { path: path(x) } : { app: x }); },
   };
 
