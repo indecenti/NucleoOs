@@ -10,14 +10,15 @@
 // Shared MP3 decode scratch: one input ring + one PCM output buffer. The file decoder
 // (nucleo_audio_mp3.c) and the radio decoder (nucleo_audio_http.c) are mutually exclusive
 // — only the single audio player task ever runs, and only one of them at a time — so they
-// share ONE buffer set instead of each owning a static .bss copy. Frees ~6.6 KB of
-// permanent .bss for the PSRAM-less heap (the ANIMA L1 centroid slab needs a large
-// contiguous block, and shrinking .bss grows the heap arena at its edge). Defined once in
-// nucleo_audio.c.
+// share ONE buffer set, and it exists only WHILE an MP3 plays: the decoder takes it right after
+// MP3InitDecoder (so the decoder's larger blocks are placed first) and returns it when the clip ends.
+// 0 B when silent (it used to be 6.6 KB of permanent .bss).
 #define NUCLEO_AUDIO_IN_SZ   2048             // input ring (>= one MP3 frame, 1441 max)
 #define NUCLEO_AUDIO_OUT_SZ  (1152 * 2)       // max PCM samples per frame (1152 * 2 ch)
-extern uint8_t nucleo_audio_in[NUCLEO_AUDIO_IN_SZ];
-extern int16_t nucleo_audio_out[NUCLEO_AUDIO_OUT_SZ];
+extern uint8_t *nucleo_audio_in;              // valid between scratch_get() and scratch_put()
+extern int16_t *nucleo_audio_out;
+bool nucleo_audio_scratch_get(void);          // false = no RAM (the clip is skipped, logged)
+void nucleo_audio_scratch_put(void);
 
 // (Re)configure the I2S TX clock/slots for a stream. Safe to call again on a rate
 // change mid-file; lazily creates the channel on first use.

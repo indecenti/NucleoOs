@@ -25,6 +25,7 @@ void nucleo_audio_play_mp3(FILE *f)
     if (!dec) { ESP_LOGE(TAG, "MP3InitDecoder failed (out of RAM?) — clip will be SILENT"); nucleo_audio_dbg_set_init(2); return; }
     nucleo_audio_dbg_set_init(1);
 
+    if (!nucleo_audio_scratch_get()) { MP3FreeDecoder(dec); nucleo_audio_dbg_set_init(2); return; }
     uint8_t *in = nucleo_audio_in;        // shared scratch — file & radio decoders never run at once
     int16_t *out = nucleo_audio_out;
     uint8_t *rp = in;
@@ -88,5 +89,6 @@ void nucleo_audio_play_mp3(FILE *f)
         }
     }
     ESP_LOGI(TAG, "decode finished: %u frames", (unsigned)frames);
+    nucleo_audio_scratch_put();
     MP3FreeDecoder(dec);
 }

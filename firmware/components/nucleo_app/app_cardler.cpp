@@ -80,7 +80,7 @@ static bool is_open(int tx, int ty) { for (int i = 0; i < s_nopen; i++) if (s_op
 // ---- wandering entities (NPCs + beasts), seeded from ENT[] ----
 typedef struct { int x, y; int lo, hi; int8_t vx, vy; int face; uint8_t sprite, kind; const char *line;
                  int pause; } Ent;
-static Ent s_ent[NENT];
+static Ent *s_ent;                     // NENT entries, the framework's per-app RAM (APP_RAM): 0 B when closed
 
 static void ent_init(void)
 {
@@ -535,13 +535,15 @@ static void on_key(int key, char ch)
     nucleo_app_request_draw();
 }
 
+static const nucleo_app_ram_t APP_RAM[] = { { (void **)&s_ent, sizeof(Ent) * NENT }, { nullptr, 0 } };
+
 extern "C" void nucleo_register_cardler(void)
 {
     static const nucleo_app_def_t app = {
         "cardler", "Cardler", "Games", "Mini RPG: esplora, parla, raccogli",
         'C', 0x3FE6,
         on_enter, on_key, nullptr, on_draw, on_exit,
-        NX_SOLO
+        NX_SOLO, APP_RAM
     };
     nucleo_app_register(&app);
 }

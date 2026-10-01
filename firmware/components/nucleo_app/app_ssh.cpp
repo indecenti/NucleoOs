@@ -65,7 +65,7 @@ static const unsigned short PAL[16] = {
 static char    *s_sb = nullptr;     // logical (unwrapped, ANSI-stripped) lines
 static uint8_t *s_sbcol = nullptr;  // parallel per-char colour index (optional; NULL = monochrome)
 static int   s_head = 0, s_count = 0;
-static char  s_cur[SB_W]; static uint8_t s_curcol[SB_W]; static int s_curlen = 0;
+static char  *s_cur; static uint8_t *s_curcol; static int s_curlen = 0;   // SB_W each, APP_RAM (0 B when closed)
 static int   s_aesc = 0, s_p[6], s_pn = 0;     // CSI param accumulator (for SGR)
 static uint8_t s_fgbase = DEF_FG; static bool s_bold = false;
 static int   s_scroll = 0;
@@ -133,7 +133,7 @@ static void sb_info(const char *s) { sb_feed(s, strlen(s)); sb_feed("\n", 1); } 
 
 // ── command history (in-RAM ring + persisted to SD) ──
 #define HIST_MAX 30
-static char s_hist[HIST_MAX][SB_W]; static int s_histN = 0, s_histPos = -1;
+static char (*s_hist)[SB_W]; static int s_histN = 0, s_histPos = -1;   // HIST_MAX rows, APP_RAM; hist_load() refills it on_enter
 static void ensure_dirs() { mkdir(SSH_DIR, 0777); mkdir(KEYS_DIR, 0777); }
 static void hist_add_mem(const char *cmd) {
     if (!cmd[0]) { s_histPos = -1; return; }
@@ -162,10 +162,10 @@ static const char *CMDS[] = {
     "git status", "git pull", "git log --oneline", "git diff", "git add .", "git commit -m \"",
     "nano ", "vi ", "vim ", "mkdir ", "rm ", "rm -rf ", "cp ", "mv ", "chmod +x ", "chown ",
     "tar -xzf ", "tar -czf ", "unzip ", "scp ", "reboot", "shutdown -h now", "exit", nullptr };
-static char s_compPrefix[SB_W] = ""; static int s_compIdx = -1;
+static char *s_compPrefix; static int s_compIdx = -1;   // SB_W, APP_RAM
 
 // ── input line ──
-static char s_line[SB_W]; static int s_linelen = 0, s_cur_x = 0;
+static char *s_line; static int s_linelen = 0, s_cur_x = 0;   // SB_W, APP_RAM
 
 // ── connection / state ──
 enum { ST_FORM, ST_CONNECTING, ST_SHELL, ST_CLOSED };
@@ -174,7 +174,8 @@ static int s_state = ST_FORM;
 static char s_host[80] = "", s_user[32] = "", s_pass[80] = "", s_passph[80] = "";
 static int  s_auth = AUTH_PW;
 static int  s_field = 0;
-static char s_status[96] = "";
+#define STATUS_W 96
+static char *s_status;                 // STATUS_W, APP_RAM (ssh_task writes it, but on_exit stops/deletes the task first)
 static volatile bool s_quit = false;
 static TaskHandle_t s_task = nullptr;
 static StreamBufferHandle_t s_in = nullptr;
@@ -182,12 +183,15 @@ static int  s_zoom = 1;
 static bool s_manual = false;
 // key files
 #define MAX_KEYS 12
-static char s_keys[MAX_KEYS][48]; static int s_keysN = 0, s_keyIdx = 0;
+#define KEY_W 48
+static char (*s_keys)[KEY_W]; static int s_keysN = 0, s_keyIdx = 0;   // MAX_KEYS rows, APP_RAM; scan_keys() refills it on_enter
+#define CAND_MAX 170
+static const char **s_cand;            // CAND_MAX Tab-completion candidates (do_complete scratch), APP_RAM
 
-static void set_status(const char *s) { snprintf(s_status, sizeof s_status, "%s", s); s_dirty = true; nucleo_app_request_draw(); }
+static void set_status(const char *s) { snprintf(s_status, STATUS_W, "%s", s); s_dirty = true; nucleo_app_request_draw(); }
 static void send_bytes(const char *b, int n) { if (s_in) xStreamBufferSend(s_in, b, n, 0); }
 static void scan_keys() { s_keysN = 0; ensure_dirs(); DIR *dp = opendir(KEYS_DIR); if (!dp) return;
-    struct dirent *e; while ((e = readdir(dp)) && s_keysN < MAX_KEYS) { if (e->d_name[0] == '.') continue; if (strstr(e->d_name, ".pub")) continue; snprintf(s_keys[s_keysN++], 48, "%s", e->d_name); } closedir(dp); }
+    struct dirent *e; while ((e = readdir(dp)) && s_keysN < MAX_KEYS) { if (e->d_name[0] == '.') continue; if (strstr(e->d_name, ".pub")) continue; snprintf(s_keys[s_keysN++], KEY_W, "%s", e->d_name); } closedir(dp); }
 static int form_nfields() { return s_auth == AUTH_PW ? 4 : 5; }   // host,user,auth,(pass | key,passph)
 
 // ── host-key pinning helpers ──
@@ -326,11 +330,11 @@ static void do_complete() {
     int ws = s_cur_x; while (ws > 0 && s_line[ws - 1] != ' ') ws--;
     char tok[SB_W]; int tl = s_cur_x - ws; if (tl < 0) tl = 0; if (tl > SB_W - 1) tl = SB_W - 1;
     memcpy(tok, &s_line[ws], tl); tok[tl] = 0;
-    static const char *cand[170]; int nc = 0; bool whole = (ws == 0);
+    const char **cand = s_cand; int nc = 0; bool whole = (ws == 0);
     for (int i = 0; CMDS[i] && nc < 160; i++) if (strncmp(CMDS[i], tok, tl) == 0) cand[nc++] = CMDS[i];
     if (whole) for (int i = s_histN - 1; i >= 0 && nc < 168; i--) if (strncmp(s_hist[i], tok, tl) == 0) cand[nc++] = s_hist[i];
     if (nc == 0) return;
-    if (strcmp(tok, s_compPrefix) != 0 || s_compIdx < 0) { snprintf(s_compPrefix, sizeof s_compPrefix, "%s", tok); s_compIdx = 0; }
+    if (strcmp(tok, s_compPrefix) != 0 || s_compIdx < 0) { snprintf(s_compPrefix, SB_W, "%s", tok); s_compIdx = 0; }
     else s_compIdx = (s_compIdx + 1) % nc;
     const char *pick = cand[s_compIdx]; char rest[SB_W]; snprintf(rest, sizeof rest, "%s", &s_line[s_cur_x]);
     int pl = strlen(pick); if (ws + pl >= SB_W) pl = SB_W - 1 - ws;
@@ -499,6 +503,7 @@ static void ssh_tab() { on_key(NK_TAB, 0); }
 static void on_enter() {
     s_state = ST_FORM; s_field = 0; s_status[0] = 0; s_dirty = true; s_zoom = 1; s_manual = false;
     s_auth = AUTH_PW; s_keyIdx = 0;
+    s_linelen = s_cur_x = 0; s_curlen = 0; s_compIdx = -1;   // their APP_RAM buffers come back zeroed
     // The terminal paints straight to the panel (every draw_* uses d.*), so the 32 KB shared canvas
     // is dead weight: release it AND pin direct draw so the run loop won't composite an empty canvas
     // over us — handing that contiguous block to libssh2/mbedTLS (the start_connect 34 KB gate now
@@ -522,11 +527,26 @@ static void on_exit() {
     if (nucleo_exclusive_active()) nucleo_exclusive_exit();
 }
 
+// Per-app working RAM: allocated (zeroed) before on_enter, freed after on_exit. All of it is UI-only
+// or touched by ssh_task, which on_exit stops/deletes before returning. s_host/s_user stay static on
+// purpose: the form keeps the last target across sessions.
+static const nucleo_app_ram_t APP_RAM[] = {
+    { (void **)&s_hist,       HIST_MAX * SB_W },
+    { (void **)&s_cand,       sizeof(const char *) * CAND_MAX },
+    { (void **)&s_keys,       MAX_KEYS * KEY_W },
+    { (void **)&s_cur,        SB_W },
+    { (void **)&s_curcol,     SB_W },
+    { (void **)&s_line,       SB_W },
+    { (void **)&s_compPrefix, SB_W },
+    { (void **)&s_status,     STATUS_W },
+    { nullptr, 0 } };
+
 extern "C" void nucleo_register_ssh(void) {
     static const nucleo_app_def_t app = {
         "ssh", "SSH", "Connect", "Terminale SSH nativo (modalita dedicata)",
         's', 0x2EE0, on_enter, on_key, on_tick, on_draw, on_exit,
-        NX_NET_APP   // declarative: dedicated RAM for the whole SSH session; framework restores on close
+        NX_NET_APP,  // declarative: dedicated RAM for the whole SSH session; framework restores on close
+        APP_RAM
     };
     nucleo_app_register(&app);
 }

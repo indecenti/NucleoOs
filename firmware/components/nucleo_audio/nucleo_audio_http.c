@@ -68,6 +68,11 @@ void nucleo_audio_stream_url(const char *url)
              (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
              (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
 
+    if (!nucleo_audio_scratch_get()) {
+        MP3FreeDecoder(dec);
+        nucleo_event_publish("radio.error", "{\"reason\":\"no_ram_decoder\"}");
+        return;
+    }
     uint8_t *in = nucleo_audio_in;        // shared scratch — file & radio decoders never run at once
     int16_t *out = nucleo_audio_out;
     bool logged = false;
@@ -150,5 +155,6 @@ void nucleo_audio_stream_url(const char *url)
         esp_http_client_cleanup(cli);
         if (nucleo_audio_keep_running()) { ESP_LOGW(TAG, "stream dropped, reconnecting"); vTaskDelay(pdMS_TO_TICKS(500)); }
     }
+    nucleo_audio_scratch_put();
     MP3FreeDecoder(dec);
 }

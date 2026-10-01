@@ -156,18 +156,19 @@ struct Spark { float x,y,vx,vy; uint16_t col; int life,maxlife; };
 struct Ring { float x,y; int life,maxlife; uint16_t col; };  // expanding blast ring
 
 // ========================== static state ======================================
-static uint8_t   s_map[MAP_H][MAP_W];
-static Tank      s_tanks[2];
-static Bullet    s_bullets[MAX_BULLETS];
+// Arrays marked APP_RAM are per-app RAM (framework callocs them on open, frees on close): 0 B when closed.
+static uint8_t (*s_map)[MAP_W];           // [MAP_H][MAP_W], APP_RAM
+static Tank     *s_tanks;                 // 2 players, APP_RAM
+static Bullet   *s_bullets;               // MAX_BULLETS, APP_RAM
 static ShopZone  s_shops[MAX_SHOPS];
-static ShopItem  s_shop_items[2][SHOP_N];  // per-player catalog (deterministic)
+static ShopItem (*s_shop_items)[SHOP_N];  // [2][SHOP_N] per-player catalog (deterministic), APP_RAM
 static int8_t    s_shop_zone[2];           // which zone each tank is shopping (-1 none)
 static int8_t    s_shop_done[2];           // zone already shopped — blocked until tank exits it
-static Spark     s_sparks[MAX_SPARKS];
-static Ring      s_rings[MAX_RINGS];
+static Spark    *s_sparks;                // MAX_SPARKS, APP_RAM
+static Ring     *s_rings;                 // MAX_RINGS, APP_RAM
 static Pickup    s_picks[MAX_PICKS];
 static int       s_pick_spawn_cd;
-static Tank      s_bots[MAX_BOTS];      // respawning AI horde (host/CPU authoritative)
+static Tank     *s_bots;                 // MAX_BOTS respawning AI horde (host/CPU authoritative), APP_RAM
 static int       s_nbots;               // active bots this match (0 in MT_DUEL)
 static int       s_nplayers;            // 1 (solo) or 2 (the human slots in use)
 static int       s_match_type;          // MT_*
@@ -269,7 +270,7 @@ static int64_t  s_last_rx, s_last_tx, s_last_hello, s_join_t, s_join_resend;
 
 struct Host { uint8_t mac[6]; char name[22]; int64_t seen; };
 #define NHOST 6
-static Host s_hosts[NHOST];
+static Host *s_hosts;                     // NHOST, APP_RAM (only touched from poll/draw/keys)
 static int  s_nhost, s_bsel;
 
 // ========================== utility ===========================================
@@ -351,7 +352,7 @@ static void fill_rect_map(int tx,int ty,int tw,int th,uint8_t v){
 }
 static void map_gen(uint32_t seed){
     s_rng=seed; if(!s_rng) s_rng=0xBEEF1234u;
-    memset(s_map,T_FLOOR,sizeof s_map);
+    memset(s_map,T_FLOOR,sizeof(uint8_t)*MAP_H*MAP_W);
     // border bunkers
     for(int x=0;x<MAP_W;x++){ s_map[0][x]=T_BUNKER; s_map[MAP_H-1][x]=T_BUNKER; }
     for(int y=0;y<MAP_H;y++){ s_map[y][0]=T_BUNKER; s_map[y][MAP_W-1]=T_BUNKER; }
@@ -1043,11 +1044,11 @@ static void net_handle(const pnet_pkt_t *p){
             tank_init(s_tanks[0],(int)a->t1type,true);
             tank_init(s_tanks[1],(int)a->t2type,false);
             s_nplayers=2; s_match_type=a->mtype; s_nbots=a->nbot>MAX_BOTS?MAX_BOTS:a->nbot;
-            memset(s_bots,0,sizeof s_bots);        // render-only; host streams positions
-            memset(s_bullets,0,sizeof s_bullets);
+            memset(s_bots,0,sizeof(Tank)*MAX_BOTS);        // render-only; host streams positions
+            memset(s_bullets,0,sizeof(Bullet)*MAX_BULLETS);
             memset(s_shops,0,sizeof s_shops);
-            memset(s_sparks,0,sizeof s_sparks);
-            memset(s_rings,0,sizeof s_rings);
+            memset(s_sparks,0,sizeof(Spark)*MAX_SPARKS);
+            memset(s_rings,0,sizeof(Ring)*MAX_RINGS);
             memset(s_picks,0,sizeof s_picks);
             s_shop_zone[0]=s_shop_zone[1]=-1; s_shop_done[0]=s_shop_done[1]=-1;
             s_flash=0; s_shake=0;
@@ -1070,10 +1071,10 @@ static void net_handle(const pnet_pkt_t *p){
             tank_init(s_tanks[0],htype,true);
             tank_init(s_tanks[1],(int)j->ttype,false);
             s_nplayers=2; setup_bots();            // s_match_type chosen on the host screen
-            memset(s_bullets,0,sizeof s_bullets);
+            memset(s_bullets,0,sizeof(Bullet)*MAX_BULLETS);
             memset(s_shops,0,sizeof s_shops);
-            memset(s_sparks,0,sizeof s_sparks);
-            memset(s_rings,0,sizeof s_rings);
+            memset(s_sparks,0,sizeof(Spark)*MAX_SPARKS);
+            memset(s_rings,0,sizeof(Ring)*MAX_RINGS);
             memset(s_picks,0,sizeof s_picks);
             s_shop_zone[0]=s_shop_zone[1]=-1; s_shop_done[0]=s_shop_done[1]=-1;
             s_flash=0; s_shake=0;
@@ -1141,7 +1142,7 @@ static void net_handle(const pnet_pkt_t *p){
             s_tanks[0].weapon=st->p1wp;  s_tanks[1].weapon=st->p2wp;
             s_tanks[0].pu=st->p1pu;      s_tanks[1].pu=st->p2pu;
             s_tanks[0].pu_ms=st->p1pums*64; s_tanks[1].pu_ms=st->p2pums*64;
-            memset(s_bullets,0,sizeof s_bullets);
+            memset(s_bullets,0,sizeof(Bullet)*MAX_BULLETS);
             // Bound by the WIRE array size (bul[12]), not MAX_BULLETS(14): a peer-controlled nbul>12
             // must never read st->bul past its 12 slots (OOB read of the received packet).
             for(int i=0;i<(int)st->nbul&&i<(int)(sizeof(st->bul)/sizeof(st->bul[0]));i++){
@@ -1506,7 +1507,7 @@ static bool match_over_check(void){
 }
 // host/CPU: size + spawn the bot horde for the current match type
 static void setup_bots(void){
-    memset(s_bots,0,sizeof s_bots);
+    memset(s_bots,0,sizeof(Tank)*MAX_BOTS);
     s_bot_level=0; s_bot_kills=0; s_bot_level_cd=16000;
     s_nbots=(s_match_type==MT_DUEL)?0:4;
     for(int i=0;i<s_nbots;i++) bot_spawn(i);
@@ -2326,10 +2327,10 @@ static void start_match(int mode, int t1type, int t2type){
     s_nplayers=(s_match_type==MT_COOP)?1:2;     // co-op vs CPU is solo survival
     if(s_nplayers<2) s_tanks[1].alive=false;
     setup_bots();
-    memset(s_bullets,0,sizeof s_bullets);
+    memset(s_bullets,0,sizeof(Bullet)*MAX_BULLETS);
     memset(s_shops,0,sizeof s_shops);
-    memset(s_sparks,0,sizeof s_sparks);
-    memset(s_rings,0,sizeof s_rings);
+    memset(s_sparks,0,sizeof(Spark)*MAX_SPARKS);
+    memset(s_rings,0,sizeof(Ring)*MAX_RINGS);
     memset(s_picks,0,sizeof s_picks);
     s_shop_zone[0]=s_shop_zone[1]=-1; s_shop_done[0]=s_shop_done[1]=-1;
     s_flash=0; s_ai_shop_cd=0; s_ai_strafe_cd=0; s_ai_strafe=1; s_ai_fire_last=0;
@@ -2656,7 +2657,7 @@ static void on_enter(void){
     s_was_fire=s_was_pu=false;
     s_ai_fire_last=0;
     s_join_pending=false; s_join_t=s_join_resend=0;
-    s_match_type=MT_DUEL; s_nbots=0; s_nplayers=2; memset(s_bots,0,sizeof s_bots);
+    s_match_type=MT_DUEL; s_nbots=0; s_nplayers=2; memset(s_bots,0,sizeof(Tank)*MAX_BOTS);
     // Start ESP-NOW immediately (like Pong) so the lobby's HELLO discovery works the instant
     // you enter Create/Join — pnet also disables WiFi power-save so broadcasts aren't dropped.
     if(!pnet_start()) nucleo_app_set_hint(TR("ESP-NOW KO   esc esci", "ESP-NOW failed   esc back"));
@@ -2671,12 +2672,18 @@ static void on_exit(void){
     pnet_stop();
 }
 
+static const nucleo_app_ram_t APP_RAM[] = {
+    { (void **)&s_map, sizeof(uint8_t)*MAP_H*MAP_W }, { (void **)&s_tanks, sizeof(Tank)*2 },
+    { (void **)&s_bullets, sizeof(Bullet)*MAX_BULLETS }, { (void **)&s_shop_items, sizeof(ShopItem)*2*SHOP_N },
+    { (void **)&s_sparks, sizeof(Spark)*MAX_SPARKS }, { (void **)&s_rings, sizeof(Ring)*MAX_RINGS },
+    { (void **)&s_bots, sizeof(Tank)*MAX_BOTS }, { (void **)&s_hosts, sizeof(Host)*NHOST }, { nullptr, 0 } };
+
 extern "C" void nucleo_register_tankduel(void){
     static const nucleo_app_def_t app = {
         "tankd","Tank Duel","Games","Arena 1v1: mappa 40x40, shop contestato, 4 tank, upgrade",
         'D', rgb(255,150,80),
         on_enter, on_key, nullptr, on_draw, on_exit,
-        NX_NET_APP
+        NX_NET_APP, APP_RAM
     };
     nucleo_app_register(&app);
 }

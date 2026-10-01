@@ -59,11 +59,11 @@ static const char *CAT_FULL[N_CAT]  = { "Uno (1)","Due (2)","Tre (3)","Quattro (
 
 #define MAXP 4
 struct Player { int score[N_CAT]; bool used[N_CAT]; int ybonus; bool cpu; };
-static Player s_pl[MAXP];
+static Player *s_pl;                      // MAXP entries, APP_RAM (reset by start_game)
 static int    s_np, s_cur, s_turn;        // player count, current player, turn 0..12
 
 struct Die { float yaw, pitch, bank, y0, p0, ye, pe, wob; int value; bool held, rolling; };
-static Die s_d[5];
+static Die *s_d;                          // 5 dice, APP_RAM (reset by reset_dice_idle in enter)
 
 enum { PH_SETUP, PH_ROLL, PH_SCORE, PH_OVER };
 static int  s_phase;
@@ -86,9 +86,9 @@ static bool    s_suggest[5];     // auto-hold suggestion mask (cleared on any ke
 static int64_t s_suggest_us;     // suggestion visible until this time
 static int64_t s_contrib_flash_us; // mini-dice strip flash duration on category change
 
-// Heap-free particle burst: YAHTZEE fireworks (radial) + game-over confetti (rain). No per-frame alloc.
+// Particle burst: YAHTZEE fireworks (radial) + game-over confetti (rain). No per-frame alloc.
 struct Part { float x, y, vx, vy; uint16_t col; uint8_t life, lmax; };
-static Part s_part[30];
+static Part *s_part;                      // 30 entries, APP_RAM (pool sized by s_npart)
 static int  s_npart;
 
 static uint16_t COL_IVORY, COL_PIP, COL_PIP1, COL_FELT, COL_FELTG;
@@ -973,12 +973,22 @@ static void enter(void)
 
 static void on_exit(void) { nucleo_audio_stop(); }
 
+// Working RAM: allocated (zeroed) by the framework before enter(), freed after on_exit(). Foreground-only;
+// every open starts at SETUP, so no game state needs to survive a close.
+static const nucleo_app_ram_t APP_RAM[] = {
+    { (void **)&s_part, sizeof(Part) * 30 },
+    { (void **)&s_pl,   sizeof(Player) * MAXP },
+    { (void **)&s_d,    sizeof(Die) * 5 },
+    { nullptr, 0 }
+};
+
 extern "C" void nucleo_register_yahtzee(void)
 {
     static const nucleo_app_def_t app = {
         "yahtzee", "Yahtzee", "Games", "Yahtzee a turni (1-4 + CPU), dadi 3D",
         'Y', C_YELLOW, enter, on_key, nullptr, draw, on_exit,
-        NX_NET_APP   // dedicate RAM + free the shared I2S/mic line so the chiptune SFX reliably play
+        NX_NET_APP,  // dedicate RAM + free the shared I2S/mic line so the chiptune SFX reliably play
+        APP_RAM
     };
     nucleo_app_register(&app);
 }
