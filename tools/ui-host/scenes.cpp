@@ -178,6 +178,7 @@ static void app_draw(void)
 }
 
 extern bool g_host_guest;
+extern bool g_host_onboard_sta;
 extern bool g_host_onboarding;                       // settings_stubs.cpp
 extern "C" void nucleo_settings_onboard(void);
 static const Scene SETTINGS[] = {
@@ -187,6 +188,10 @@ static const Scene SETTINGS[] = {
     // First boot: Settings opens on Nearby networks; Esc means "use the hotspot". Then the join password.
     { "onboard",      [] { g_host_onboarding = true; nucleo_settings_onboard(); app_open("wifi"); app_draw(); } },
     { "onboard-pass", [] { g_host_onboarding = true; nucleo_settings_onboard(); app_open("wifi"); down(3); app_key(NK_ENTER); app_type("casa2026"); app_draw(); } },
+    { "onboard-skip", [] { g_host_onboarding = true; nucleo_settings_onboard(); app_open("wifi"); app_key(NK_BACK); app_draw(); } },
+    { "onboard-tab",  [] { g_host_onboarding = true; nucleo_settings_onboard(); app_open("wifi"); app_key(NK_TAB); app_key(NK_LEFT); app_draw(); } },   // locked: stays on the list
+    { "onboard-done-ap", [] { g_host_onboarding = true; nucleo_settings_onboard(); app_open("wifi"); app_key(NK_BACK); app_key(NK_RIGHT); app_key(NK_ENTER); app_draw(); } },
+    { "onboard-done-sta", [] { g_host_onboard_sta = true; g_host_onboarding = true; nucleo_settings_onboard(); app_open("wifi"); app_key(NK_BACK); app_key(NK_RIGHT); app_key(NK_ENTER); app_draw(); } },
     { "onboard-reveal", [] { g_host_onboarding = true; nucleo_settings_onboard(); app_open("wifi"); down(3); app_key(NK_ENTER); app_type("casa2026"); app_key(NK_TAB); app_draw(); } },
     // Scrolling one row at a time with the heap of a busy ADV (strip sprite 12 rows): every step is an
     // INCREMENTAL repaint. The ADV showed half-drawn rows and a text-less focus chip here (2026-10-01).

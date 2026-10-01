@@ -150,6 +150,7 @@ enum {
     R_NAME, R_PIN, R_SESSIONS, R_MODEL, R_VERSION, R_BATTERY, R_SD, R_RAM, R_UPTIME, R_UPDATES, R_RESTART, R_LAUNCHER,  // Device
     R_RST_SOFT, R_RST_HARD, R_RST_FMT, R_RST_SD,                                            // Reset
     R_SAVED_NET, R_FORGET_ALL,                                                              // Saved networks
+    R_OB_SKIP,                                                                              // first boot: skip Wi-Fi (confirm only)
 };
 
 static const uint8_t ROWS_ROOT[]    = { R_S_WIFI, R_S_AP, R_S_BT, R_S_DISPLAY, R_S_SOUND, R_ANIMA, R_LANG, R_DATETIME, R_S_DEVICE, R_S_RESET };
@@ -759,9 +760,16 @@ extern "C" void nucleo_settings_search_preset(const char *q)
 // First boot: the wizard did the language; the NETWORK step is this app (Nearby networks — scan, signal,
 // password editor, join). onboard(): the next open starts there. A join ends it on the Wi-Fi card; Esc
 // ends it on the Hotspot page, which shows the hotspot name + password the phone needs.
-static bool s_onboard_req = false, s_onboard = false;
+// First-boot network step, ON RAILS: it opens on Nearby networks and only two exits exist — a join, or Esc
+// confirmed as "use the hotspot" — and both land on the "All set" page (address + PIN), whose ENTER opens the
+// launcher. Tab/LEFT/other pages are locked meanwhile; if the app is closed anyway (it never should be), the
+// launcher re-opens this step until it is finished (nucleo_app.cpp), so the wizard always reaches its end.
+enum { OB_NONE = 0, OB_NETS, OB_DONE };
+static bool    s_onboard_req = false;
+static uint8_t s_onboard = OB_NONE;
+static bool    s_done_sta = false;                 // the "All set" page: joined a network (else: hotspot)
 extern "C" void nucleo_settings_onboard(void) { s_onboard_req = true; }
-static void onboard_end(bool esc);
+static void onboard_end(void);
 
 // ---- drawing ------------------------------------------------------------------------------------
 // Two paths (docs/ANTI-FLICKER.md, technique 2 - "an app that can lose the canvas"):
@@ -1338,6 +1346,38 @@ static void draw_joining(void)
     txt(W / 2 - (int)strlen(b) * 6, 88, b, FG, BG, 2);
 }
 
+// "All set": the end of the first-boot wizard. Where the device is reachable now and the pairing PIN —
+// everything needed to open the web OS — at sizes readable at arm's length.
+static void draw_done(void)
+{
+    if (!s_full) return;                                             // static page
+    const char *t = TR5("Tutto pronto!", "All set!", "Todo listo!", "Tout est pret !", "Alles bereit!");
+    int tw = (int)strlen(t) * 12, tx = (W - tw - 18) / 2;
+    ui_glyph(&d, UG_CHECK, tx + 6, 12, 7, GOOD, BG);
+    txt(tx + 18, 4, t, GOOD, BG, 2);
+    d.drawFastHLine(0, 23, W, LINE);
+    char b[48], name[34];
+    int y = 28;
+    if (s_done_sta) {
+        app_ui_ascii_fold(nucleo_setup_ssid(), name, sizeof name);
+        snprintf(b, sizeof b, TR5("Connesso a %s", "Connected to %s", "Conectado a %s", "Connecte a %s", "Verbunden mit %s"), name);
+        f2(8, y, b, W - 16, FG, BG, false); y += 20;
+    } else {
+        app_ui_ascii_fold(nucleo_setup_ap_ssid(), name, sizeof name);
+        snprintf(b, sizeof b, "Hotspot: %s", name);
+        f2(8, y, b, W - 16, FG, BG, false); y += 17;
+        if (nucleo_setup_ap_secure()) { snprintf(b, sizeof b, "Password: %s", nucleo_setup_ap_pass()); f2(8, y, b, W - 16, FG, BG, false); }
+        y += 20;
+    }
+    int lw = f2(8, y + 1, TR5("Apri dal browser", "Open in a browser", "Abre en el navegador", "Ouvre dans un navigateur", "Im Browser oeffnen"),
+                W - 16, MUTED, BG, false);
+    (void)lw; y += 17;
+    txt_fit(8, y, s_done_sta ? nucleo_setup_ip() : "192.168.4.1", W - 16, ACC, BG, 2); y += 22;
+    const char *pin = nucleo_auth_pin();
+    snprintf(b, sizeof b, "PIN %s", pin && pin[0] ? pin : "------");
+    txt_fit(8, y, b, W - 16, FG, BG, 2);
+}
+
 // ---- on_draw -------------------------------------------------------------------------------
 // What forces a FULL paint on the direct path: anything that changes the layout of the whole screen.
 static uint32_t scene_sig(void)
@@ -1348,6 +1388,7 @@ static uint32_t scene_sig(void)
     h = fnv(fnv(h, s_im != IM_NONE ? 1u : 0u), s_cf);
     h = fnv(fnv(fnv(h, THEME_BG), THEME_ACC), THEME_FG);
     h = fnv(h, nucleo_i18n_gen());
+    h = fnv(h, s_onboard);
     h = fnv(h, page_count(s_page) == 0 ? 1u : 0u);
     h = fnv(h, (s_page == PG_NETS && nucleo_setup_scan_count() == 0) ? 1u : 0u);
     return h;
@@ -1377,7 +1418,8 @@ static void on_draw(void)
         if (y0 < s_toast_y + 20) d.fillRect(0, y0, W - 3, s_toast_y + 20 - y0, BG);
         mark(s_toast_y, s_toast_y + 20);
     }
-    if (s_dt)                            draw_datetime();
+    if (s_onboard == OB_DONE)            draw_done();
+    else if (s_dt)                       draw_datetime();
     else if (s_busy && s_op == OP_JOIN)  draw_joining();
     else if (s_page == PG_NETS)          draw_nets(ch);
     else                                 draw_page(ch);
@@ -1408,6 +1450,10 @@ static void on_draw(void)
                                         TR5("Il Wi-Fi attuale si disconnette.", "Your Wi-Fi link will drop.", "El Wi-Fi actual se desconecta.",
                                             "Le Wi-Fi actuel se deconnecte.", "Das aktuelle Wi-Fi trennt sich."), s_cf_yes);
             break;
+        case R_OB_SKIP:
+            app_ui_confirm(TR5("Saltare il Wi-Fi?", "Skip Wi-Fi?", "Omitir el Wi-Fi?", "Sans Wi-Fi ?", "Ohne WLAN?"),
+                           TR5("Userai il suo hotspot.", "You will use its hotspot.", "Usaras su hotspot.",
+                               "Tu utiliseras son hotspot.", "Du nutzt seinen Hotspot."), s_cf_yes); break;
         case R_SESSIONS:
             app_ui_confirm(TR5("Disconnettere?", "Sign out all?", "Cerrar sesiones?", "Deconnecter?", "Alle abmelden?"),
                            TR5("I browser rifaranno il pairing.", "Browsers must pair again.", "Hay que vincular de nuevo.",
@@ -1426,6 +1472,7 @@ static void on_draw(void)
 static void update_hint(void)
 {
     static char hb[48];
+    if (s_onboard == OB_DONE) { nucleo_app_set_hint(TR5("invio inizia", "enter start", "enter empezar", "enter commencer", "enter starten")); return; }
     if (s_im == IM_PASS) { nucleo_app_set_hint(s_reveal
                                       ? TR5("invio ok  tab nascondi  esc annulla", "enter ok  tab hide  esc cancel", "enter ok  tab ocultar  esc anular",
                                             "enter ok  tab cacher  esc annuler", "enter ok  tab verbergen  esc Abbr.")
@@ -1440,7 +1487,7 @@ static void update_hint(void)
                                                             "</> Feld   up/dn Wert   enter setzen")); return; }
     if (s_busy && s_op == OP_JOIN){ nucleo_app_set_hint(TR5("connessione in corso...", "connecting...", "conectando...",
                                                             "connexion...", "verbinde...")); return; }
-    const char *back = s_onboard ? TR5("esc hotspot", "esc hotspot", "esc hotspot", "esc hotspot", "esc Hotspot")
+    const char *back = s_onboard ? TR5("esc salta", "esc skip", "esc omitir", "esc passer", "esc ueberspringen")
                      : (s_page == PG_ROOT) ? TR5("esc esci", "esc back", "esc salir", "esc sortir", "esc Ende")
                      : s_page == PG_SEARCH ? TR5("esc chiude", "esc close", "esc cerrar", "esc fermer", "esc zurueck")
                      :                       TR5("esc indietro", "esc back", "esc atras", "esc retour", "esc zurueck");
@@ -1561,7 +1608,7 @@ static void go_back(void)
 static void on_tab(void)
 {
     if (s_im == IM_PASS) { s_reveal = !s_reveal; update_hint(); nucleo_app_request_draw(); return; }   // show / hide the password
-    if (s_im != IM_NONE || s_cf != R_NONE || s_dt || (s_busy && s_op == OP_JOIN)) return;
+    if (s_im != IM_NONE || s_cf != R_NONE || s_dt || (s_busy && s_op == OP_JOIN) || s_onboard) return;   // first boot: locked
     int cur = (s_page == PG_NETS || s_page == PG_SAVED) ? (int)PG_WIFI : (int)s_page, next = PG_WIFI;
     if (cur == PG_ROOT || cur == PG_SEARCH) {
         Row r; focused_row(r);
@@ -1771,6 +1818,7 @@ static void confirm_done(bool yes)
     case R_FORGET_ALL: nucleo_setup_forget();
                        toast_ok(TR5("Reti dimenticate: hotspot attivo", "Networks forgotten: hotspot on", "Redes olvidadas: hotspot activo",
                                     "Reseaux oublies: hotspot actif", "Netze vergessen: Hotspot an")); break;
+    case R_OB_SKIP:    onboard_end(); break;
     case R_SESSIONS:   nucleo_auth_revoke(NULL);
                        toast_ok(TR5("Tutti i browser disconnessi", "Every browser signed out", "Navegadores desconectados",
                                     "Navigateurs deconnectes", "Alle Browser abgemeldet")); break;
@@ -1829,6 +1877,11 @@ static void search_set(const char *q)
 // LEFT and Esc never arrive here: the framework routes both to on_back().
 static void on_key(int k, char ch)
 {
+    if (s_onboard == OB_DONE) {                                      // "All set": ENTER opens the launcher
+        if (k == NK_ENTER) { s_onboard = OB_NONE; nucleo_app_exit(); }
+        return;
+    }
+    if (s_onboard && s_im == IM_NONE && s_cf == R_NONE && s_page != PG_NETS) set_page(PG_NETS);   // rails
     if (s_im != IM_NONE) { input_key(k, ch); }
     else if (s_cf != R_NONE) { int c = app_ui_confirm_key(k, ch, &s_cf_yes); if (c >= 0) confirm_done(c == 1); }
     else if (s_dt) {
@@ -1877,7 +1930,7 @@ static void on_key(int k, char ch)
                         if (nucleo_setup_scan_secure(sel - 1) && !nucleo_setup_net_has_password(s_join_ssid)) open_editor(IM_PASS, "");
                         else { s_join_pass[0] = 0; start_op(OP_JOIN); }
                     }
-                } else if (sel > 0 && !s_busy) {
+                } else if (sel > 0 && !s_busy && !s_onboard) {               // forget / prefer: not on first boot
                     const char *ss = nucleo_setup_scan_ssid(sel - 1);
                     if (nucleo_setup_net_is_known(ss)) {
                         if (k == NK_DEL) { snprintf(s_cf_ssid, sizeof s_cf_ssid, "%s", ss); s_cf = R_SAVED_NET; s_cf_yes = false; }
@@ -1914,7 +1967,8 @@ static bool on_back(int key)
     else if (s_cf != R_NONE)  { if (left) app_ui_confirm_key(NK_LEFT, 0, &s_cf_yes); else s_cf = R_NONE; }
     else if (s_dt)            { if (left) dt_step(-1); else s_dt = false; }
     else if (s_busy && s_op == OP_JOIN) { /* swallow: the join finishes on its own */ }
-    else if (s_onboard && !left) onboard_end(true);   // first boot: Esc = no Wi-Fi now, use the hotspot
+    else if (s_onboard == OB_DONE) { if (left) return true; s_onboard = OB_NONE; return false; }   // Esc: launcher, like ENTER
+    else if (s_onboard) { if (!left) { s_cf = R_OB_SKIP; s_cf_yes = false; } }   // first boot: Esc asks "use the hotspot?"
     else {
         s_rst_id = R_NONE;
         Row r;
@@ -1955,9 +2009,11 @@ static void on_tick(void)
             s_busy = false; s_done = false; int op = s_op; s_op = OP_NONE;
             if (op == OP_JOIN) {
                 memset(s_join_pass, 0, sizeof s_join_pass);
-                if (s_join_ok) { toast_ok(TR5("Connesso", "Connected", "Conectado", "Connecte", "Verbunden")); set_page(PG_WIFI);
-                                 if (s_onboard) onboard_end(false); }
-                else toast(TR5("Connessione non riuscita", "Could not connect", "No se pudo conectar", "Echec de connexion", "Verbindung fehlgeschlagen"));
+                if (s_join_ok && s_onboard) onboard_end();
+                else if (s_join_ok) { toast_ok(TR5("Connesso", "Connected", "Conectado", "Connecte", "Verbunden")); set_page(PG_WIFI); }
+                else toast(s_onboard ? TR5("Non riuscita: controlla la password", "Failed: check the password", "Fallo: revisa la clave",
+                                           "Echec : verifie le mot de passe", "Fehler: Passwort pruefen")
+                                     : TR5("Connessione non riuscita", "Could not connect", "No se pudo conectar", "Echec de connexion", "Verbindung fehlgeschlagen"));
             } else if (op == OP_SCAN && s_page == PG_NETS) {
                 s_sel[PG_NETS] = (int8_t)(nucleo_setup_scan_count() > 0 ? 1 : 0);   // focus the strongest network
                 s_scroll = 0;
@@ -1966,6 +2022,7 @@ static void on_tick(void)
         }
         nucleo_app_request_draw(); return;
     }
+    if (s_onboard == OB_NETS && !nucleo_setup_onboarding()) { onboard_end(); update_hint(); nucleo_app_request_draw(); return; }   // joined from the web
     if (s_tickn % 5 == 0) {                                   // 1 Hz: repaint only when a live value changed
         uint32_t sig = live_sig();
         if (sig != s_live) { s_live = sig; update_hint(); nucleo_app_request_draw(); }
@@ -1984,21 +2041,18 @@ static void enter(void)
     nucleo_app_set_tab_handler(on_tab);
     nucleo_app_set_back_handler(on_back);
     if (s_preset[0]) { s_page = PG_SEARCH; search_set(s_preset); s_preset[0] = 0; }   // opened from launcher Spotlight
-    if (s_onboard_req) { s_onboard_req = false; s_onboard = nucleo_setup_onboarding(); if (s_onboard) set_page(PG_NETS); }
+    if (s_onboard_req) { s_onboard_req = false; s_onboard = nucleo_setup_onboarding() ? OB_NETS : OB_NONE; if (s_onboard) set_page(PG_NETS); }
     update_hint(); nucleo_app_request_draw();
 }
-static void onboard_end(bool esc)
+// Ends the network step (a join, or the confirmed skip -> hotspot) and shows "All set".
+static void onboard_end(void)
 {
-    s_onboard = false;
-    bool sta = nucleo_setup_onboard_finish();
-    if (esc && !sta) {
-        set_page(PG_AP);                                       // name + password of the hotspot, right there
-        toast_ok(TR5("Hotspot attivo", "Hotspot on", "Hotspot activo", "Hotspot actif", "Hotspot an"));
-    }
+    s_done_sta = nucleo_setup_onboard_finish();
+    s_onboard = OB_DONE; s_msg_t = 0;
 }
 static void leave(void)
 {
-    if (s_onboard) onboard_end(false);   // left before choosing (home key): the hotspot keeps it reachable
+    s_onboard = OB_NONE;   // an unfinished step stays pending in nucleo_setup: the launcher re-opens it
     flush_prefs();
     strip_release();
     if (!(s_busy && s_op == OP_JOIN)) wipe(s_join_pass, sizeof s_join_pass);   // an in-flight join wipes its own

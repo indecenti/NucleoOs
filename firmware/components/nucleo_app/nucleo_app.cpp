@@ -1715,6 +1715,12 @@ void nucleo_app_run(void)
             display_sleep();
             continue;
         }
+        // First boot: the network step must reach its end ("All set"). Whatever closed Settings before
+        // that, the launcher is not usable yet: open the step again.
+        static int64_t s_ob_try = -10000;                           // at most one re-open every 2 s
+        if (s_active == -1 && !s_gamefront && nucleo_setup_onboarding() && now - s_ob_try >= 2000) {
+            s_ob_try = now; nucleo_settings_onboard(); nucleo_app_launch_id("wifi"); last_act = now;
+        }
         // Local screensaver: triggers from the launcher (no app open), without a remote client.
         // Also works from GameFront: s_gamefront is cleared before launching it (otherwise the
         // gamefront>foreground-app render branch stops on_draw from running) and s_gf_return=true
