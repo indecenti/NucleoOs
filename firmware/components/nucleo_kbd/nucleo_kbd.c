@@ -46,6 +46,15 @@ static const char KM_SH[4][14] = {
 };
 
 static bool s_adv = false;
+
+// One-shot Shift for TEXT FIELDS. The Cardputer's Shift (Aa) only works HELD with the key; tapped first, like
+// on a phone, it did nothing and the letter came out lowercase — a password with capitals or symbols then
+// "failed" for no visible reason. A tap of Shift alone (no key while it was down) toggles a latch; text
+// editors consume it for their next character (nucleo_kbd_take_shift_tap + nucleo_kbd_shifted). Games and
+// every other reader are untouched: they never take the latch.
+static bool s_sh_used;        // a key went down while Shift was held (then it was a chord, not a tap)
+static bool s_sh_tap;         // the latch
+static void shift_edge(bool down) { if (down) s_sh_used = false; else if (!s_sh_used) s_sh_tap = !s_sh_tap; }
 static char s_last;   // raw char last reported (edge detection, GPIO backend)
 
 // ---- shared: a layout char -> key event ------------------------------------
@@ -173,7 +182,7 @@ static nucleo_key_t tca_read(void)
     int y = (col + 4) % 4;
     if (x < 0 || x > 13 || y < 0 || y > 3) return (nucleo_key_t){NK_NONE, 0};
 
-    if (is_shift_xy(x, y)) { s_tca_shift = pressed; return (nucleo_key_t){NK_NONE, 0}; }
+    if (is_shift_xy(x, y)) { s_tca_shift = pressed; shift_edge(pressed); return (nucleo_key_t){NK_NONE, 0}; }
     if (is_mod_xy(x, y)) {
         uint8_t b = mod_for_xy(x, y);
         if (pressed) s_tca_modbits |= b; else s_tca_modbits &= ~b;
@@ -187,6 +196,7 @@ static nucleo_key_t tca_read(void)
         return (nucleo_key_t){NK_NONE, 0};
     }
     down_set(base, true);
+    if (s_tca_shift) s_sh_used = true;                      // Shift+key chord: not a tap
     s_tca_held = lc; s_tca_held_base = base;                // fresh press: arm the repeat clock
     s_tca_rep_us = now + KEY_REPEAT_DELAY_US;
     return map_char(lc);
@@ -230,6 +240,10 @@ static char scan_char(void)
             else { down_set(KM[y][x], true); if (!found) found = KM[y][x]; }   // record ALL held printables
         }
     }
+    static bool sh_prev;
+    bool sh = (mods & NK_MOD_SHIFT) != 0;
+    if (sh && found) s_sh_used = true;                   // Shift+key chord: not a tap
+    if (sh != sh_prev) { shift_edge(sh); sh_prev = sh; }
     s_mods = mods;                                       // published for nucleo_kbd_mods()
     if (found && (mods & NK_MOD_SHIFT)) {
         for (int y = 0; y < 4; y++)
@@ -277,6 +291,16 @@ void nucleo_kbd_init(void)
 nucleo_key_t nucleo_kbd_read(void)
 {
     return s_adv ? tca_read() : gpio_read();
+}
+
+bool nucleo_kbd_shift_latched(void) { return s_sh_tap; }
+bool nucleo_kbd_take_shift_tap(void) { bool t = s_sh_tap; s_sh_tap = false; return t; }
+char nucleo_kbd_shifted(char c)
+{
+    for (int y = 0; y < 4; y++)
+        for (int x = 0; x < 14; x++)
+            if (KM[y][x] == c && KM_SH[y][x] && KM_SH[y][x] != '\b' && KM_SH[y][x] != '\n') return KM_SH[y][x];
+    return c;                                            // already shifted, or no shifted form
 }
 
 // Modifiers held right now (NK_MOD_* bitmask).
