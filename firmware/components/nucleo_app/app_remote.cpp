@@ -90,7 +90,7 @@ static void remote_enter(void)
     nucleo_voice_suspend(true);          // free the ~16 KB voice engine — Remote Control is a server-listening
                                          // screen, it never needs the mic; hand that RAM to httpd/OTA/API too.
                                          // Restored in remote_exit (only if a holder still wants it).
-    nucleo_app_set_hint(TR("invio handoff auto on/off   esc esci", "enter auto handoff on/off   esc back"));
+    nucleo_app_set_hint(TR5("invio handoff auto on/off   esc esci", "enter auto handoff on/off   esc back", "intro handoff auto on/off   esc atr", "entree handoff auto on/off   esc retour", "enter auto-uberg. an/aus   esc zurueck"));
     s_sig = -1;
     nucleo_app_request_draw();
 }

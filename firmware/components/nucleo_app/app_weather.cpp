@@ -215,8 +215,8 @@ static void add_city_flow(void)
 // ---- lifecycle ------------------------------------------------------------------------------------
 static bool on_back(int key)
 {
-    if (s_fav_screen) { s_fav_screen = false; nucleo_app_set_hint(TR("1-3 tab   </> cambia   r aggiorna   esc esci",
-                                                    "1-3 tab   </> switch   r refresh   esc back")); nucleo_app_request_draw(); return true; }
+    if (s_fav_screen) { s_fav_screen = false; nucleo_app_set_hint(TR5("1-3 tab   </> cambia   r aggiorna   esc esci",
+                                                    "1-3 tab   </> switch   r refresh   esc back", "1-3   </> cambia   r actual   esc atras", "1-3   </> change   r actual   esc ret", "1-3   </> aendern   r aktualis   esc zur")); nucleo_app_request_draw(); return true; }
     if (key == NK_LEFT) { s_tab = (Tab)((s_tab + T_SET) % (T_SET + 1)); nucleo_app_request_draw(); return true; }
     return false;
 }
@@ -226,8 +226,8 @@ static void on_enter(void)
     s_tab = T_NOW; s_set_sel = 0; s_fav_screen = false; s_fav_sel = 0;
     fav_load();
     nucleo_app_set_back_handler(on_back);
-    nucleo_app_set_hint(TR("1-3 tab   </> cambia   r aggiorna   esc esci",
-                                                    "1-3 tab   </> switch   r refresh   esc back"));
+    nucleo_app_set_hint(TR5("1-3 tab   </> cambia   r aggiorna   esc esci",
+                                                    "1-3 tab   </> switch   r refresh   esc back", "1-3   </> cambia   r actual   esc atras", "1-3   </> change   r actual   esc ret", "1-3   </> aendern   r aktualis   esc zur"));
     do_refresh(false);
 }
 
@@ -258,7 +258,7 @@ static void on_key(int key, char ch)
         if (key == NK_ENTER) {
             if (s_set_sel == 0) do_refresh(false);
             else if (s_set_sel == 1) do_refresh(true);
-            else if (s_set_sel == 2) { s_fav_screen = true; s_fav_sel = 0; nucleo_app_set_hint(TR("invio apri   d elimina   esc indietro", "enter open   d delete   esc back")); nucleo_app_request_draw(); }
+            else if (s_set_sel == 2) { s_fav_screen = true; s_fav_sel = 0; nucleo_app_set_hint(TR5("invio apri   d elimina   esc indietro", "enter open   d delete   esc back", "intro abre   d elimina   esc atras", "entrer ouvre   d supprime   esc ret", "enter oeffne   d loeschen   esc zur")); nucleo_app_request_draw(); }
             else { s_units_f = !s_units_f; nucleo_app_request_draw(); }
         }
     }
@@ -347,7 +347,7 @@ static void draw_set(int top, int h)
     snprintf(unit, sizeof unit, TR5("Unita: %s", "Units: %s", "Unidad: %s", "Unite: %s", "Grad: %s"),
              s_units_f ? "Fahrenheit" : "Celsius");
     const char *items[4] = {
-        TR5("Aggiorna", "Refresh", "Actualizar", "Actualiser", "Aktualisieren"),
+        TR5("Aggiorna", "Refresh", "Actualizar", "Actualiser", "Aktualis."),
         TR5("Localizza (IP)", "Locate (IP)", "Localizar (IP)", "Localiser (IP)", "Orten (IP)"),
         favln, unit
     };

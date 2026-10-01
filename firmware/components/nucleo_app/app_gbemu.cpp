@@ -81,7 +81,7 @@ struct EmuSys {
     const char *dir_a, *dir_b;               // ROM folders; entries found in dir_b carry the badge
     const char *ext_a, *ext_b;               // extensions; ext_b also carries the badge
     const char *badge;                       // "C": a Game Boy Color cart on the DMG core
-    const char *empty_it, *empty_en;         // what an empty shelf says
+    const char *empty_it, *empty_en, *empty_es, *empty_fr, *empty_de;  // what an empty shelf says
     const char *state_js, *shelf_swp;        // resume + view options; the shelf while a game runs
     const char *trace, *trace_name;          // the on-card trace, and how a failure box names it
     int64_t     frame_us;                    // the console's real frame time
@@ -816,28 +816,28 @@ enum { MI_RESUME = 0, MI_SAVE, MI_LOAD, MI_VOL, MI_SCREEN, MI_LINES, MI_INFO, MI
 static const char *menu_label(int i, char *buf, size_t n)
 {
     switch (i) {
-        case MI_RESUME: return TR("Riprendi", "Resume");
-        case MI_SAVE:   return TR("Salva stato", "Save state");
+        case MI_RESUME: return TR5("Riprendi", "Resume", "Reanudar", "Reprendre", "Weiter");
+        case MI_SAVE:   return TR5("Salva stato", "Save state", "Guardar", "Sauvegarder", "Speichern");
         // Cached: menu_label runs on every repaint and every 20 ms for the scrolling row, and a stat()
         // on the SD card per call is exactly the kind of work that must not ride a UI loop.
-        case MI_LOAD:   return st->state_ok ? TR("Carica stato", "Load state")
-                                            : TR("Carica stato (vuoto)", "Load state (empty)");
-        case MI_VOL:    snprintf(buf, n, "%s: %d%%", TR("Volume", "Volume"), nucleo_audio_volume()); return buf;
-        case MI_SCREEN: snprintf(buf, n, "%s: %s", TR("Schermo", "Screen"),
-                                 s_stretch ? TR("Pieno", "Filled") : "1:1"); return buf;
-        case MI_LINES:  snprintf(buf, n, "%s: %s", TR("Righe", "Lines"),
-                                 s_sharp ? TR("Nette", "Sharp") : TR("Fuse", "Blended")); return buf;
-        case MI_RESET:  return TR("Reset gioco", "Reset game");
-        case MI_INFO:   snprintf(buf, n, "%s: %s", TR("Info a schermo", "On-screen info"),
-                                 (s_stretch || s_src_w != SRC_W) ? TR("n.d.", "n/a") : s_hud ? TR("si", "on") : TR("no", "off"));
+        case MI_LOAD:   return st->state_ok ? TR5("Carica stato", "Load state", "Cargar", "Charger", "Laden")
+                                            : TR5("Carica stato (vuoto)", "Load state (empty)", "Cargar (vacio)", "Charger (vide)", "Laden (leer)");
+        case MI_VOL:    snprintf(buf, n, "%s: %d%%", TR5("Volume", "Volume", "Volumen", "Volume", "Lauts."), nucleo_audio_volume()); return buf;
+        case MI_SCREEN: snprintf(buf, n, "%s: %s", TR5("Schermo", "Screen", "Pantalla", "Ecran", "Bild"),
+                                 s_stretch ? TR5("Pieno", "Filled", "Lleno", "Complet", "Voll") : "1:1"); return buf;
+        case MI_LINES:  snprintf(buf, n, "%s: %s", TR5("Righe", "Lines", "Lineas", "Lignes", "Linien"),
+                                 s_sharp ? TR5("Nette", "Sharp", "Nitida", "Nette", "Scharf") : TR5("Fuse", "Blended", "Fundido", "Fondu", "Gemischt")); return buf;
+        case MI_RESET:  return TR5("Reset gioco", "Reset game", "Reiniciar", "Reinit.", "Zuruecksetzen");
+        case MI_INFO:   snprintf(buf, n, "%s: %s", TR5("Info a schermo", "On-screen info", "Info en pantalla", "Info a l'ecran", "Info auf Bild"),
+                                 (s_stretch || s_src_w != SRC_W) ? TR5("n.d.", "n/a", "n.d.", "n.d.", "n.v.") : s_hud ? TR5("si", "on", "si", "on", "an") : TR5("no", "off", "no", "off", "aus"));
                         return buf;
-        case MI_PAL:    snprintf(buf, n, "%s: %s", TR("Colori", "Palette"),
-                                 SYS->palettes ? PAL_NAME[s_pal] : TR("della cartuccia", "cartridge"));
+        case MI_PAL:    snprintf(buf, n, "%s: %s", TR5("Colori", "Palette", "Paleta", "Palette", "Palette"),
+                                 SYS->palettes ? PAL_NAME[s_pal] : TR5("della cartuccia", "cartridge", "del cartucho", "de cartouche", "der Patrone"));
                         return buf;
-        case MI_PIC:    snprintf(buf, n, "%s: %s", TR("Immagine", "Picture"),
-                                 st->relief == 1 ? "30 fps" : TR("Piena", "Full"));
+        case MI_PIC:    snprintf(buf, n, "%s: %s", TR5("Immagine", "Picture", "Imagen", "Image", "Bild"),
+                                 st->relief == 1 ? "30 fps" : TR5("Piena", "Full", "Completa", "Complete", "Vollst."));
                         return buf;
-        default:        return TR("Esci dal gioco", "Quit game");
+        default:        return TR5("Esci dal gioco", "Quit game", "Salir juego", "Quitter jeu", "Spiel beenden");
     }
 }
 
@@ -892,7 +892,7 @@ static void menu_draw(void)
     if (w.core_errors) {                  // the game ran into data: say it, the Reset row is selected
         d.setTextColor(AMB, BG);
         d.setCursor(MENU_X + 8, MENU_Y + 4);
-        d.printf(TR("CPU bloccata @%04X - Reset?", "CPU crashed @%04X - Reset?"), (unsigned)w.core_err_addr);
+        d.printf(TR5("CPU bloccata @%04X - Reset?", "CPU crashed @%04X - Reset?", "CPU bloq. @%04X - Reiniciar?", "CPU bloquee @%04X - Reinit?", "CPU blockiert @%04X - Reset?"), (unsigned)w.core_err_addr);
     } else {
         d.setTextColor(DIM, BG);
         d.setCursor(MENU_X + 8, MENU_Y + 4); d.print(SYS->title());
@@ -979,7 +979,7 @@ static void menu_activate(void)
         case MI_RESET:
             SYS->reset();
             st->crash_told = false;
-            toast(TR("reset", "reset"));
+            toast(TR5("reset", "reset", "reset", "reinit", "zurueck"));
             menu_close(); return;
         case MI_INFO:   s_hud = !s_hud;
                         if (!s_hud) frame_clear(); else { hud_draw(); chrome_draw(); }
@@ -987,14 +987,14 @@ static void menu_activate(void)
         case MI_SAVE: {
             esp_err_t e = SYS->state_save(0);
             if (e == ESP_OK) st->state_ok = true;
-            toast(e == ESP_OK ? TR("salvato", "saved") : TR("errore", "failed"));
+            toast(e == ESP_OK ? TR5("salvato", "saved", "guardado", "enreg.", "speich.") : TR5("errore", "failed", "error", "erreur", "fehler"));
             menu_close(); return;
         }
         case MI_LOAD: {
             esp_err_t e = SYS->state_load(0);
-            toast(e == ESP_OK ? TR("caricato", "loaded")
-                              : e == ESP_ERR_NOT_FOUND ? TR("nessuno stato", "no state")
-                                                       : TR("stato non valido", "bad state"));
+            toast(e == ESP_OK ? TR5("caricato", "loaded", "cargado", "charge", "geladen")
+                              : e == ESP_ERR_NOT_FOUND ? TR5("nessuno stato", "no state", "sin estado", "sans etat", "kein zustand")
+                                                       : TR5("stato non valido", "bad state", "estado malo", "etat mauvais", "Bad Zustand"));
             menu_close(); return;
         }
         case MI_PAL: if (!SYS->palettes) return;
@@ -1030,7 +1030,7 @@ static void fail_draw(void)
     d.fillRect(8, y, 224, 48, BG);
     d.drawRoundRect(8, y, 224, 48, 8, AMB);
     d.setTextSize(1);
-    d.setTextColor(AMB, BG);   d.setCursor(16, y + 8);  d.print(TR("Avvio non riuscito", "Could not start"));
+    d.setTextColor(AMB, BG);   d.setCursor(16, y + 8);  d.print(TR5("Avvio non riuscito", "Could not start", "No se pudo iniciar", "Pas possible", "Nicht starten"));
     d.setTextColor(FG, BG);    d.setCursor(16, y + 22); d.print(st->fail);
     d.setTextColor(DIM, BG);   d.setCursor(16, y + 34); d.print(SYS->trace_name);
 }
@@ -1045,13 +1045,13 @@ static void fail_box(const char *what)
 static void start_error(esp_err_t e, uint8_t cart_type, char *buf, size_t n)
 {
     switch (e) {
-        case ESP_ERR_INVALID_VERSION: snprintf(buf, n, "%s", TR("Solo Game Boy Color", "Game Boy Color only")); break;
-        case ESP_ERR_NOT_SUPPORTED:   snprintf(buf, n, "%s %s", TR("Cartuccia non supportata:", "Unsupported cartridge:"),
+        case ESP_ERR_INVALID_VERSION: snprintf(buf, n, "%s", TR5("Solo Game Boy Color", "Game Boy Color only", "Solo Game Boy Color", "Game Boy Color seul", "Nur Game Boy Color")); break;
+        case ESP_ERR_NOT_SUPPORTED:   snprintf(buf, n, "%s %s", TR5("Cartuccia non supportata:", "Unsupported cartridge:", "Cartucho no soportado:", "Cartouche non supportee:", "Patrone nicht unterstutzt"),
                                                nucleo_gb_cart_name(cart_type)); break;
-        case ESP_ERR_NOT_FOUND:       snprintf(buf, n, "%s", TR("ROM non trovata", "ROM not found")); break;
-        case ESP_ERR_NO_MEM:          snprintf(buf, n, "%s", TR("RAM insufficiente", "Not enough RAM")); break;
-        case ESP_ERR_INVALID_SIZE:    snprintf(buf, n, "%s", TR("File troppo corto", "File too short")); break;
-        default:                      snprintf(buf, n, "%s 0x%x", TR("ROM non valida", "Invalid ROM"), (unsigned)e); break;
+        case ESP_ERR_NOT_FOUND:       snprintf(buf, n, "%s", TR5("ROM non trovata", "ROM not found", "ROM no hallada", "ROM non trouvee", "ROM nicht da")); break;
+        case ESP_ERR_NO_MEM:          snprintf(buf, n, "%s", TR5("RAM insufficiente", "Not enough RAM", "RAM insuficiente", "RAM insuffisante", "Zu wenig RAM")); break;
+        case ESP_ERR_INVALID_SIZE:    snprintf(buf, n, "%s", TR5("File troppo corto", "File too short", "Archivo muy corto", "Fichier court", "Datei zu kurz")); break;
+        default:                      snprintf(buf, n, "%s 0x%x", TR5("ROM non valida", "Invalid ROM", "ROM invalida", "ROM invalide", "ROM ungueltig"), (unsigned)e); break;
     }
 }
 
@@ -1078,7 +1078,7 @@ static void play_session(const char *name)
     char path[300];
     if (!rom_path(name, path, sizeof path)) {
         trace("  FAIL: not found in either ROM folder");
-        fail_box(TR("ROM non trovata", "ROM not found"));
+        fail_box(TR5("ROM non trovata", "ROM not found", "ROM no hallada", "ROM non trouvee", "ROM nicht da"));
         return;
     }
     trace("  path=%s", path);
@@ -1125,7 +1125,7 @@ static void play_session(const char *name)
         trace("  FAIL: band buffers (2 x %u B) alloc failed", (unsigned)band_bytes());
         free(st->band[0]); free(st->band[1]); st->band[0] = st->band[1] = nullptr;
         nucleo_app_set_direct_draw(false);
-        fail_box(TR("RAM insufficiente (video)", "Not enough RAM (video)"));
+        fail_box(TR5("RAM insufficiente (video)", "Not enough RAM (video)", "RAM insuf. (video)", "RAM insuf. (video)", "Zu wenig RAM (video)"));
         return;
     }
 
@@ -1445,9 +1445,9 @@ static void draw(void)
         st->sel_title[0] = '\0';
         d.setTextSize(1); d.setTextColor(MUTED, BG);
         d.setCursor(8, top + 34);
-        d.print(st->flen ? TR("Nessun risultato", "No match")
-                         : TR(SYS->empty_it, SYS->empty_en));
-        if (st->flen) { d.setCursor(8, top + 48); d.setTextColor(DIM, BG); d.print(TR("Canc per correggere", "Backspace to edit")); }
+        d.print(st->flen ? TR5("Nessun risultato", "No match", "Nada", "Rien", "Nichts")
+                         : TR5(SYS->empty_it, SYS->empty_en, SYS->empty_es, SYS->empty_fr, SYS->empty_de));
+        if (st->flen) { d.setCursor(8, top + 48); d.setTextColor(DIM, BG); d.print(TR5("Canc per correggere", "Backspace to edit", "Retroceso editar", "Retour pour modifier", "Zurueck bearbeiten")); }
         fail_draw();
         return;
     }
@@ -1511,8 +1511,8 @@ static void draw(void)
 static void hint(void)
 {
     nucleo_app_set_hint(st && st->flen
-        ? TR("Invio gioca · Canc corregge · Esc pulisce",  "Enter plays · Backspace edits · Esc clears")
-        : TR("Scrivi per cercare · 1-9 · Invio gioca",     "Type to search · 1-9 · Enter plays"));
+        ? TR5("Invio gioca · Canc corregge · Esc pulisce",  "Enter plays · Backspace edits · Esc clears", "Intro juega/Bksp edita/Esc limpia", "Entree joue/Ret. edite/Esc efface", "Enter spielt/Bearb./Esc loescht")
+        : TR5("Scrivi per cercare · 1-9 · Invio gioca",     "Type to search · 1-9 · Enter plays", "Escribe buscar/1-9/Intro juega", "Tapez chercher/1-9/Entree joue", "Tippen Suchen/1-9/Enter spielt"));
 }
 
 static void on_key(int key, char ch)
@@ -1587,7 +1587,7 @@ static void gb_explain(esp_err_t e, const char *path, char *buf, size_t n)
 }
 static const EmuSys SYS_GB = {
     "gbemu", "Game Boy", "GB", DIR_GB, DIR_GBC, ".gb", ".gbc", "C",
-    "Nessuna ROM in /data/ROMs/gb", "No ROMs in /data/ROMs/gb",
+    "Nessuna ROM in /data/ROMs/gb", "No ROMs in /data/ROMs/gb", "Ninguna ROM en /data/ROMs/gb", "Aucune ROM dans /data/ROMs/gb", "Keine ROMs in /data/ROMs/gb",
     NUCLEO_SD_MOUNT "/system/config/gbemu.json", NUCLEO_SD_MOUNT "/system/config/gbemu.shelf",
     NUCLEO_SD_MOUNT "/gbemu_trace.txt", "/gbemu_trace.txt",
     16743,                                   // 59.727 Hz — the DMG's real frame time
@@ -1604,12 +1604,12 @@ static void gg_explain(esp_err_t e, const char *path, char *buf, size_t n)
 {
     // No controller the core refuses: "not supported" can only be a zip without a cartridge in it.
     if (e == ESP_ERR_NOT_SUPPORTED && strcasestr(path, ".zip"))
-        snprintf(buf, n, "%s", TR("Nessun gioco nello zip", "No game in the zip"));
+        snprintf(buf, n, "%s", TR5("Nessun gioco nello zip", "No game in the zip", "Sin juego en zip", "Aucun jeu dans zip", "Kein Spiel in zip"));
     else start_error(e, 0, buf, n);
 }
 static const EmuSys SYS_GG = {
     "ggemu", "Game Gear", "GG", DIR_GG, DIR_SMS, ".gg", ".sms", "SMS",
-    "Nessuna ROM in /data/ROMs/gg o /sms", "No ROMs in /data/ROMs/gg or /sms",
+    "Nessuna ROM in /data/ROMs/gg o /sms", "No ROMs in /data/ROMs/gg or /sms", "Ninguna ROM en /data/ROMs/gg o /sms", "Aucune ROM dans /data/ROMs/gg ou /sms", "Keine ROMs in /data/ROMs/gg oder /sms",
     NUCLEO_SD_MOUNT "/system/config/ggemu.json", NUCLEO_SD_MOUNT "/system/config/ggemu.shelf",
     NUCLEO_SD_MOUNT "/ggemu_trace.txt", "/ggemu_trace.txt",
     16688,                                   // 262 x 228 cycles at 3.579545 MHz = 59.92 Hz
@@ -1630,7 +1630,7 @@ static void enter(void)
     if (!st) st = (EState *)calloc(1, sizeof(EState));
     if (st && !st->sh) st->sh = (Shelf *)calloc(1, sizeof(Shelf));
     if (st && !st->sh) { free(st); st = nullptr; }
-    if (!st) { nucleo_app_set_hint(TR("RAM insufficiente", "Not enough RAM")); return; }
+    if (!st) { nucleo_app_set_hint(TR5("RAM insufficiente", "Not enough RAM", "RAM insuficiente", "RAM insuffisante", "Zu wenig RAM")); return; }
     trace("=== %s enter: solo=%d exclusive=%d ===", SYS->id,
           (int)nucleo_anima_solo_active(), (int)nucleo_exclusive_active());
     trace_heap("on enter");

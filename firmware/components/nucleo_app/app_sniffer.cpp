@@ -49,11 +49,11 @@ static bool s_pulse;
 
 static void set_hint(void)
 {
-    if (s_state == ST_CONSENT)       nucleo_app_set_hint(TR("invio accetto   esc esci", "enter accept   esc back"));
-    else if (s_state == ST_ARMING)   nucleo_app_set_hint(TR("avvio...", "starting..."));
-    else if (s_state == ST_STOPPING) nucleo_app_set_hint(TR("salvo e chiudo...", "saving & closing..."));
-    else if (s_state == ST_RUNNING)  nucleo_app_set_hint(TR("invio ferma e salva", "enter stop & save"));
-    else                             nucleo_app_set_hint(TR("su/giu   > cambia   invio avvia", "up/dn   > change   enter start"));
+    if (s_state == ST_CONSENT)       nucleo_app_set_hint(TR5("invio accetto   esc esci", "enter accept   esc back", "intro acepta   esc atras", "entrer accepter   esc ret", "enter akzept   esc zurueck"));
+    else if (s_state == ST_ARMING)   nucleo_app_set_hint(TR5("avvio...", "starting...", "iniciando...", "demarrage...", "start..."));
+    else if (s_state == ST_STOPPING) nucleo_app_set_hint(TR5("salvo e chiudo...", "saving & closing...", "guardo y cierro...", "enregistre & ferme...", "speicher & schliess..."));
+    else if (s_state == ST_RUNNING)  nucleo_app_set_hint(TR5("invio ferma e salva", "enter stop & save", "intro para y guarda", "entree stop & enreg", "enter stopp+sichern"));
+    else                             nucleo_app_set_hint(TR5("su/giu   > cambia   invio avvia", "up/dn   > change   enter start", "ar/ab   > cambia   intro inicia", "haut/bas   > change   entrer dema", "auf/ab   > aendern   enter start"));
 }
 
 static void enter(void)

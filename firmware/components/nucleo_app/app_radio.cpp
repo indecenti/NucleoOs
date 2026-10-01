@@ -240,7 +240,7 @@ static void draw_netline(const station_t *st)
         int r = nucleo_setup_rssi();
         snprintf(line, sizeof line, "%.20s  %d dBm", nucleo_setup_ssid(), r);
     } else {
-        snprintf(line, sizeof line, "%s", TR("attendo rete WiFi...", "waiting for WiFi..."));
+        snprintf(line, sizeof line, "%s", TR5("attendo rete WiFi...", "waiting for WiFi...", "esperando red WiFi...", "en attente de WiFi...", "warte auf WiFi..."));
     }
     if (!strcmp(line, s_netline_last)) return;
     snprintf(s_netline_last, sizeof s_netline_last, "%s", line);
@@ -467,7 +467,7 @@ static void enter(void)
     ensure_stations();
     s_sel = (s_default < s_count) ? s_default : 0;
     s_top = 0; clamp_scroll();
-    nucleo_app_set_hint(TR("su/giu scegli   invio ascolta", "up/dn pick   enter listen"));
+    nucleo_app_set_hint(TR5("su/giu scegli   invio ascolta", "up/dn pick   enter listen", "ar/ab elige   intro escucha", "h/b choix   entree ecoute", "auf/ab waehle   enter hoere"));
 }
 
 // Always tear everything down — audio task (decoder + WiFi buffers) and the station array — so the

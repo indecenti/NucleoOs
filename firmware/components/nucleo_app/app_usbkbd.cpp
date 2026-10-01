@@ -193,7 +193,7 @@ static void on_enter(void)
     s_last_conn = -1; s_last_leds = 0xFF;             // stale -> the first tick paints the real host state
     s_usb_ok = (nucleo_usbhid_start() == ESP_OK);     // resident for the session (takes USB PHY)
     nucleo_app_set_back_handler(on_back);
-    nucleo_app_set_hint(TR("1-4 tab   </> cambia   invio   esc esci", "1-4 tab   </> switch   enter   esc back"));
+    nucleo_app_set_hint(TR5("1-4 tab   </> cambia   invio   esc esci", "1-4 tab   </> switch   enter   esc back", "1-4 tab   </> camb.   intro   esc atr", "1-4 tab   </> chang.  entree  esc ret", "1-4 tab   </> wechs.  enter   esc zrck"));
     nucleo_app_request_draw();
 }
 

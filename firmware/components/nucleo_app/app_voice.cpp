@@ -108,7 +108,7 @@ static void enter(void)
     // PTT heap gate (nucleo_voice.c) silently refuses every press — the app looks dead. Wi-Fi stays.
     nucleo_exclusive_enter(NX_HTTPD | NX_ANIMA_L1 | NX_DISCOVERY, nullptr);
     nucleo_app_set_tab_handler(on_tab);
-    nucleo_app_set_hint(TR("TAB schede  R aggiungi  Del elimina", "TAB tabs  R add  Del remove"));
+    nucleo_app_set_hint(TR5("TAB schede  R aggiungi  Del elimina", "TAB tabs  R add  Del remove", "TAB pestan  R agrega  Supr bor", "TAB pestan  R agrega  Supp sup", "TAB tabs  R add  Entf loescht"));
     s_tab = 0; s_sel = 0; s_confirm_del = false;
     nucleo_voice_set_test_mode(true);   // recognize but DON'T act: a stray GO here must not fire a real command
     nucleo_voice_request(true);         // hold the lazy engine up while training/testing here
@@ -187,7 +187,7 @@ static void on_key(int key, char ch)
             // Prompt for the word name, pre-filled if we arrived via 'R' on a selected template.
             char word[32] = "";
             snprintf(word, sizeof(word), "%s", s_rec_word);
-            nucleo_ui_input(TR("Nome parola (es: registratore)", "Word name (e.g. recorder)"), word, sizeof(word), 0);
+            nucleo_ui_input(TR5("Nome parola (es: registratore)", "Word name (e.g. recorder)", "Palabra (ej: grabadora)", "Nom mot (ex: enregistreur)", "Wortname (z.B. recorder)"), word, sizeof(word), 0);
             if (!word[0]) { nucleo_app_request_draw(); return; }
             snprintf(s_rec_word, sizeof(s_rec_word), "%s", word);
             nucleo_voice_arm_learning_mode(s_rec_word);
@@ -221,8 +221,8 @@ static void on_key(int key, char ch)
 static const char *tab_label(int i)
 {
     switch (i) {
-        case 0:  return TR("MODELLI",  "TEMPLATES");
-        case 1:  return TR("ADDESTRA", "TRAIN");
+        case 0:  return TR5("MODELLI",  "TEMPLATES", "PLANTILLAS", "MODELES", "VORLAGEN");
+        case 1:  return TR5("ADDESTRA", "TRAIN", "ADIESTRA", "ENTRAINER", "TRAINIERE");
         default: return "INFO";
     }
 }
@@ -256,16 +256,16 @@ static void draw_triggers(int top_y)
 
     if (s_tpl_count == 0) {
         d.setTextSize(1); d.setTextColor(DIM, BG);
-        d.setCursor(12, y0 + 14); d.print(TR("Nessun modello salvato.", "No templates saved."));
+        d.setCursor(12, y0 + 14); d.print(TR5("Nessun modello salvato.", "No templates saved.", "Sin plantillas.", "Aucun modele.", "Keine Vorlagen."));
         d.fillRoundRect(12, y0 + 34, 240-24, 22, 6, ACC);
         d.setTextColor(BG, ACC);
-        d.setCursor(W/2 - 60, y0 + 41); d.print(TR("Premi R per addestrare", "Press R to train"));
+        d.setCursor(W/2 - 60, y0 + 41); d.print(TR5("Premi R per addestrare", "Press R to train", "Pulsa R entrenar", "Appuyez R entrainer", "Druecke R trainiere"));
         return;
     }
     app_ui_list(y0, h, s_tpl_count, s_sel, tl_label, nullptr, nullptr, nullptr);
 
     if (s_confirm_del && s_sel < s_tpl_count) {
-        app_ui_confirm(TR("Elimina modello?", "Delete template?"), s_tpl_names[s_sel], s_del_yes);
+        app_ui_confirm(TR5("Elimina modello?", "Delete template?", "Borrar plantilla?", "Supprimer modele?", "Vorlage loeschen?"), s_tpl_names[s_sel], s_del_yes);
         return;
     }
 
@@ -275,9 +275,9 @@ static void draw_triggers(int top_y)
     d.setTextSize(1); d.setTextColor(MUTED, BG);
     if (s_tpl_count > 0 && s_sel < s_tpl_count) {
         d.setCursor(8, fy + 4);
-        d.print(TR("Premi ", "Press "));
+        d.print(TR5("Premi ", "Press ", "Prensa ", "Appuyez ", "Druecke "));
         d.setTextColor(C_RED, BG); d.print("Del");
-        d.setTextColor(MUTED, BG); d.print(TR(" per eliminare", " to delete"));
+        d.setTextColor(MUTED, BG); d.print(TR5(" per eliminare", " to delete", " para borrar", " pour supp", " zum loeschen"));
     }
 }
 
@@ -290,13 +290,13 @@ static void draw_record(int top_y)
     case RS_IDLE:
         d.fillRoundRect(8, y, 240 - 16, 80, 8, LINE); // Dark box
         d.setTextColor(FG, LINE); d.setCursor(16, y + 8); d.setTextSize(2);
-        d.print(TR("Nuova Parola", "New Word"));
+        d.print(TR5("Nuova Parola", "New Word", "Nueva Palab", "Nouveau Mot", "Neues Wort"));
         d.setTextSize(1); d.setTextColor(ACC, LINE); d.setCursor(16, y + 30);
-        d.print(TR("1. Premi Invio e scrivi nome", "1. Press Enter, type a name"));
+        d.print(TR5("1. Premi Invio e scrivi nome", "1. Press Enter, type a name", "1. Pulsa INTRO, escribe nom", "1. Appuyez ENTREE, tapez nom", "1. Druecke ENTER, gib Namen"));
         d.setTextColor(DIM, LINE); d.setCursor(16, y + 46);
-        d.print(TR("2. Tieni premuto GO e parla", "2. Hold GO and speak"));
+        d.print(TR5("2. Tieni premuto GO e parla", "2. Hold GO and speak", "2. Manten GO y habla", "2. Appuyez GO et parlez", "2. Halte GO und sprich"));
         d.setTextColor(DIM, LINE); d.setCursor(16, y + 62);
-        d.print(TR("100% Offline (nessun WAV)", "100% offline (no WAV)"));
+        d.print(TR5("100% Offline (nessun WAV)", "100% offline (no WAV)", "100% Sin WAV", "100% Hors ligne (no WAV)", "100% Offline (kein WAV)"));
         break;
 
     case RS_WAITING_FN: {
@@ -306,10 +306,10 @@ static void draw_record(int top_y)
         unsigned short box = listening ? REC_BG : LINE;   // red-ish while capturing, dark while waiting
         d.fillRoundRect(8, y, W - 16, 80, 8, box);
         d.setTextColor(listening ? ACC2 : ACC, box); d.setTextSize(2); d.setCursor(16, y + 8);
-        d.print(listening ? TR("IN ASCOLTO...", "LISTENING...") : TR("TIENI GO e parla", "HOLD GO & speak"));
+        d.print(listening ? TR5("IN ASCOLTO...", "LISTENING...", "ESCUCHANDO...", "ECOUTE...", "HOERT..") : TR5("TIENI GO e parla", "HOLD GO & speak", "MANTEN GO y habla", "TIENS GO et parle", "HALTE GO & sprich"));
 
         d.setTextSize(1); d.setTextColor(FG, box); d.setCursor(16, y + 30);
-        d.print(TR("Parola:", "Word:"));
+        d.print(TR5("Parola:", "Word:", "Palabra:", "Mot:", "Wort:"));
         d.setTextColor(ACC, box); d.setTextSize(2); d.setCursor(16, y + 44);
         d.print(s_rec_word);
 
@@ -330,22 +330,22 @@ static void draw_record(int top_y)
     case RS_DONE:
         d.fillRoundRect(8, y, W - 16, 80, 8, OK_BG); // Soft green box
         d.setTextSize(2); d.setTextColor(ACC, OK_BG); d.setCursor(16, y + 16);
-        d.print(TR("SALVATO!", "SAVED!"));
+        d.print(TR5("SALVATO!", "SAVED!", "GUARDADO!", "ENREGISTRE", "SPEICHERT!"));
         d.setTextSize(1); d.setTextColor(FG, OK_BG); d.setCursor(16, y + 44);
-        char msg2[48]; snprintf(msg2, sizeof(msg2), TR("'%s.tpl' creato.", "'%s.tpl' created."), s_rec_word);
+        char msg2[48]; snprintf(msg2, sizeof(msg2), TR5("'%s.tpl' creato.", "'%s.tpl' created.", "'%s.tpl' creado.", "'%s.tpl' cree.", "'%s.tpl' erstellt."), s_rec_word);
         d.print(msg2);
         d.setTextColor(MUTED, OK_BG); d.setCursor(16, y + 60);
-        d.print(TR("Premi un tasto.", "Press any key."));
+        d.print(TR5("Premi un tasto.", "Press any key.", "Pulsa una tecla", "Appuyez touche", "Druecke Taste"));
         break;
 
     case RS_TOO_SHORT:
         d.fillRoundRect(8, y, W - 16, 80, 8, ERR_BG); // Red/orange box
         d.setTextSize(2); d.setTextColor(C_RED, ERR_BG); d.setCursor(16, y + 12);
-        d.print(TR("ERRORE AUDIO", "AUDIO ERROR"));
+        d.print(TR5("ERRORE AUDIO", "AUDIO ERROR", "ERROR AUDIO", "ERREUR AUDIO", "AUDIOFEHLER"));
         d.setTextSize(1); d.setTextColor(FG, ERR_BG); d.setCursor(16, y + 36);
-        d.print(TR("Troppo corto o silenzio.", "Too short or silent."));
+        d.print(TR5("Troppo corto o silenzio.", "Too short or silent.", "Muy corto o silencio.", "Trop court ou silence.", "Zu kurz oder stumm."));
         d.setTextColor(MUTED, ERR_BG); d.setCursor(16, y + 54);
-        d.print(TR("Tieni GO piu a lungo.", "Hold GO longer."));
+        d.print(TR5("Tieni GO piu a lungo.", "Hold GO longer.", "Manten GO tiempo", "Tenez GO plus long", "Halte GO laenger."));
         break;
     }
 }
@@ -358,11 +358,11 @@ static void draw_status(int top_y)
 
     bool aon = nucleo_voice_always_on();
     struct { const char *k; const char *v; unsigned short col; } rows[] = {
-        { TR("MODELLI","TEMPLATES"),  nullptr,          ACC   },
+        { TR5("MODELLI","TEMPLATES", "PLANTILLAS", "MODELES", "VORLAGEN"),  nullptr,          ACC   },
         { "WS CLIENT", nullptr,          ws > 0 ? ACC : MUTED },
-        { "ROUTING",   ws > 0 ? "Web" : TR("Locale","Local"), ws > 0 ? ACC2 : ACC },
-        { TR("LINGUA","LANGUAGE"),    "IT/EN (Anima)", MUTED  },
-        { TR("SEMPRE ON","ALWAYS ON"), aon ? TR("Si","Yes") : "No", aon ? ACC2 : MUTED },
+        { "ROUTING",   ws > 0 ? "Web" : TR5("Locale","Local", "Local", "Local", "Lokal"), ws > 0 ? ACC2 : ACC },
+        { TR5("LINGUA","LANGUAGE", "IDIOMA", "LANGUE", "SPRACHE"),    "IT/EN (Anima)", MUTED  },
+        { TR5("SEMPRE ON","ALWAYS ON", "SIEMPRE ON", "TOUJOURS ON", "IMMER ON"), aon ? TR5("Si","Yes", "Si", "Oui", "Ja") : "No", aon ? ACC2 : MUTED },
     };
     const int NROWS = (int)(sizeof(rows) / sizeof(rows[0]));
     // Fill dynamic fields
@@ -385,7 +385,7 @@ static void draw_status(int top_y)
     // Hint: how to toggle the persistent always-on opt-in.
     d.setTextSize(1); d.setTextColor(MUTED, BG);
     d.setCursor(16, y + 12 + NROWS * 16 + 6);
-    d.print(TR("A = Sempre attiva (PTT da home)", "A = Always on (PTT from home)"));
+    d.print(TR5("A = Sempre attiva (PTT da home)", "A = Always on (PTT from home)", "A = Siempre on (PTT inicio)", "A = Toujours on (PTT accueil)", "A = Immer an (PTT Startseite)"));
 }
 
 static void draw(void)

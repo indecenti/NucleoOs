@@ -198,7 +198,7 @@ static void on_enter(void)
     if (!s_items)  s_items  = (Item *)malloc(sizeof(Item) * MAX_ITEMS);
     scan_items();
     nucleo_app_set_back_handler(on_back);
-    nucleo_app_set_hint(TR("frecce scegli   invio apri   esc indietro", "arrows pick   enter open   esc back"));
+    nucleo_app_set_hint(TR5("frecce scegli   invio apri   esc indietro", "arrows pick   enter open   esc back", "flechas elige   intro abre   esc atr", "fleches choix   entree ouv   esc ret", "pfeile waehlen   enter oeff   esc zur"));
     nucleo_app_request_draw();
 }
 
