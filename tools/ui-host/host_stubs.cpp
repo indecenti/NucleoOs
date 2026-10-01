@@ -51,7 +51,13 @@ extern "C" const esp_app_desc_t *esp_app_get_description(void)
     static esp_app_desc_t a = { "0.4.0+host", "nucleoos", "09:00:00", "Sep 29 2026", "v5.4-host" };
     return &a;
 }
-extern "C" BaseType_t xTaskCreate(TaskFunction_t, const char *, uint32_t, void *, UBaseType_t, TaskHandle_t *out) { if (out) *out = nullptr; return pdPASS; }
+// Settings' "wifi" worker runs inline (scan / join / finish complete before the next tick); others stay inert.
+extern "C" BaseType_t xTaskCreate(TaskFunction_t fn, const char *name, uint32_t, void *arg, UBaseType_t, TaskHandle_t *out)
+{
+    if (out) *out = nullptr;
+    if (fn && name && !strcmp(name, "wifi")) fn(arg);
+    return pdPASS;
+}
 extern "C" BaseType_t xTaskCreatePinnedToCore(TaskFunction_t, const char *, uint32_t, void *, UBaseType_t, TaskHandle_t *out, BaseType_t) { if (out) *out = nullptr; return pdPASS; }
 extern "C" void vTaskDelete(TaskHandle_t) {}
 extern "C" void vTaskDelay(TickType_t) {}

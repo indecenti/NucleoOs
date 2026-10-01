@@ -218,7 +218,7 @@ static bool s_dt = false;                      // date/time editor
 static int  s_dtf = 0;                         // focused field 0=Y 1=M 2=D 3=h 4=m
 static int  s_dtv[5];
 
-enum { OP_NONE = 0, OP_SCAN, OP_JOIN };
+enum { OP_NONE = 0, OP_SCAN, OP_JOIN, OP_FINISH };   // FINISH: end the first-boot network step (hotspot + persist)
 static volatile int  s_op = OP_NONE;
 static volatile bool s_busy = false, s_done = false, s_join_ok = false;
 static char s_join_pass[80];
@@ -768,6 +768,7 @@ enum { OB_NONE = 0, OB_NETS, OB_DONE };
 static bool    s_onboard_req = false;
 static uint8_t s_onboard = OB_NONE;
 static bool    s_done_sta = false;                 // the "All set" page: joined a network (else: hotspot)
+static bool    s_ob_finish_pend = false;           // skip confirmed while a scan still owns the radio: finish after it
 extern "C" void nucleo_settings_onboard(void) { s_onboard_req = true; }
 static void onboard_end(void);
 
@@ -1378,12 +1379,24 @@ static void draw_done(void)
     txt_fit(8, y, b, W - 16, FG, BG, 2);
 }
 
+// The first-boot step closing (hotspot up + setup saved): a second or two, never a frozen list.
+static void draw_finishing(void)
+{
+    draw_header("Wi-Fi", NULL, false);
+    draw_spinner(W / 2, 52);
+    if (!s_full) return;
+    const char *m = TR5("Attivo l'hotspot...", "Starting the hotspot...", "Activando el hotspot...",
+                        "Demarrage du hotspot...", "Hotspot startet...");
+    f2(W / 2 - (int)strlen(m) * 7 / 2, 76, m, W - 16, MUTED, BG, false);
+}
+
 // ---- on_draw -------------------------------------------------------------------------------
 // What forces a FULL paint on the direct path: anything that changes the layout of the whole screen.
 static uint32_t scene_sig(void)
 {
     uint32_t h = fnv(fnv(1u, s_page), s_dt ? 1u : 0u);
     h = fnv(h, (s_busy && s_op == OP_JOIN) ? 1u : 0u);
+    h = fnv(h, ((s_busy && s_op == OP_FINISH) || s_ob_finish_pend) ? 1u : 0u);
     h = fnv(h, (s_page == PG_NETS && s_busy && s_op == OP_SCAN) ? 1u : 0u);
     h = fnv(fnv(h, s_im != IM_NONE ? 1u : 0u), s_cf);
     h = fnv(fnv(fnv(h, THEME_BG), THEME_ACC), THEME_FG);
@@ -1421,6 +1434,7 @@ static void on_draw(void)
     if (s_onboard == OB_DONE)            draw_done();
     else if (s_dt)                       draw_datetime();
     else if (s_busy && s_op == OP_JOIN)  draw_joining();
+    else if ((s_busy && s_op == OP_FINISH) || s_ob_finish_pend) draw_finishing();
     else if (s_page == PG_NETS)          draw_nets(ch);
     else                                 draw_page(ch);
     if (s_im != IM_NONE) draw_input(ch);
@@ -1487,6 +1501,8 @@ static void update_hint(void)
                                                             "</> Feld   up/dn Wert   enter setzen")); return; }
     if (s_busy && s_op == OP_JOIN){ nucleo_app_set_hint(TR5("connessione in corso...", "connecting...", "conectando...",
                                                             "connexion...", "verbinde...")); return; }
+    if ((s_busy && s_op == OP_FINISH) || s_ob_finish_pend) { nucleo_app_set_hint(TR5("un attimo...", "one moment...", "un momento...",
+                                                            "un instant...", "einen Moment...")); return; }
     const char *back = s_onboard ? TR5("esc salta", "esc skip", "esc omitir", "esc passer", "esc ueberspringen")
                      : (s_page == PG_ROOT) ? TR5("esc esci", "esc back", "esc salir", "esc sortir", "esc Ende")
                      : s_page == PG_SEARCH ? TR5("esc chiude", "esc close", "esc cerrar", "esc fermer", "esc zurueck")
@@ -1553,6 +1569,10 @@ static void wifi_task(void *)
         s_join_ok = nucleo_setup_join(ssid, pass);
         wipe(pass, sizeof pass);
     }
+    // Ending the first-boot step may bring the hotspot up and persists setup to /cfg + NVS + the SD: blocking
+    // driver calls and the deep store chain, so it runs HERE, never on the launcher's (main) task — where it
+    // overflowed the stack and rebooted the device on "Skip Wi-Fi" (back to M5Launcher's splash).
+    else if (s_op == OP_FINISH) s_done_sta = nucleo_setup_onboard_finish();
     s_done = true; s_task = nullptr; vTaskDelete(nullptr);
 }
 static void start_op(int op)
@@ -1893,7 +1913,8 @@ static void on_key(int k, char ch)
             toast_ok(TR5("Data e ora impostate", "Date and time set", "Fecha y hora fijadas", "Date et heure reglees", "Datum und Zeit gesetzt"));
         }
     }
-    else if (s_busy && s_op == OP_JOIN) { return; }
+    else if (s_busy && (s_op == OP_JOIN || s_op == OP_FINISH)) { return; }
+    else if (s_ob_finish_pend) { return; }                         // skip confirmed: waiting for the scan to end
     else {
         if (k != NK_ENTER) s_rst_id = R_NONE;                        // any other key disarms a reset
         // Search: on the root any letter opens it; inside it, printable keys type and DEL erases.
@@ -1966,7 +1987,8 @@ static bool on_back(int key)
     if (s_im != IM_NONE)      { if (left) input_char(','); else input_close(); }
     else if (s_cf != R_NONE)  { if (left) app_ui_confirm_key(NK_LEFT, 0, &s_cf_yes); else s_cf = R_NONE; }
     else if (s_dt)            { if (left) dt_step(-1); else s_dt = false; }
-    else if (s_busy && s_op == OP_JOIN) { /* swallow: the join finishes on its own */ }
+    else if (s_busy && (s_op == OP_JOIN || s_op == OP_FINISH)) { /* swallow: it finishes on its own */ }
+    else if (s_ob_finish_pend) { /* skip confirmed: waiting for the scan to end */ }
     else if (s_onboard == OB_DONE) { if (left) return true; s_onboard = OB_NONE; return false; }   // Esc: launcher, like ENTER
     else if (s_onboard) { if (!left) { s_cf = R_OB_SKIP; s_cf_yes = false; } }   // first boot: Esc asks "use the hotspot?"
     else {
@@ -2009,11 +2031,15 @@ static void on_tick(void)
             s_busy = false; s_done = false; int op = s_op; s_op = OP_NONE;
             if (op == OP_JOIN) {
                 memset(s_join_pass, 0, sizeof s_join_pass);
-                if (s_join_ok && s_onboard) onboard_end();
+                if (s_join_ok && s_onboard) { update_hint(); onboard_end(); nucleo_app_request_draw(); return; }
                 else if (s_join_ok) { toast_ok(TR5("Connesso", "Connected", "Conectado", "Connecte", "Verbunden")); set_page(PG_WIFI); }
                 else toast(s_onboard ? TR5("Non riuscita: controlla la password", "Failed: check the password", "Fallo: revisa la clave",
                                            "Echec : verifie le mot de passe", "Fehler: Passwort pruefen")
                                      : TR5("Connessione non riuscita", "Could not connect", "No se pudo conectar", "Echec de connexion", "Verbindung fehlgeschlagen"));
+            } else if (op == OP_FINISH) {
+                s_onboard = OB_DONE; s_msg_t = 0;                    // "All set"
+            } else if (op == OP_SCAN && s_ob_finish_pend) {
+                s_ob_finish_pend = false; update_hint(); onboard_end(); nucleo_app_request_draw(); return;
             } else if (op == OP_SCAN && s_page == PG_NETS) {
                 s_sel[PG_NETS] = (int8_t)(nucleo_setup_scan_count() > 0 ? 1 : 0);   // focus the strongest network
                 s_scroll = 0;
@@ -2047,12 +2073,13 @@ static void enter(void)
 // Ends the network step (a join, or the confirmed skip -> hotspot) and shows "All set".
 static void onboard_end(void)
 {
-    s_done_sta = nucleo_setup_onboard_finish();
-    s_onboard = OB_DONE; s_msg_t = 0;
+    if (s_onboard != OB_NETS) return;
+    if (s_busy) { s_ob_finish_pend = (s_op == OP_SCAN); return; }   // a scan owns the radio: finish right after it
+    start_op(OP_FINISH);                                            // OOM: start_op says so, the list stays, Esc retries
 }
 static void leave(void)
 {
-    s_onboard = OB_NONE;   // an unfinished step stays pending in nucleo_setup: the launcher re-opens it
+    s_onboard = OB_NONE; s_ob_finish_pend = false;   // an unfinished step stays pending in nucleo_setup: the launcher re-opens it
     flush_prefs();
     strip_release();
     if (!(s_busy && s_op == OP_JOIN)) wipe(s_join_pass, sizeof s_join_pass);   // an in-flight join wipes its own

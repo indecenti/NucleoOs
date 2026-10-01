@@ -11,7 +11,7 @@ The wizard is **on rails**: every path ends on step 4, and nothing else in the O
 
 ```
 1. Language      "Language / Lingua": English, Italiano, Espanol, Francais, Deutsch — applied at once,
-                 so every later screen (and the whole OS) is in the chosen language. Esc = English.
+                 so every later screen (and the whole OS) is in the chosen language. Esc is inert.
 2. Welcome       "Welcome to NucleoOS. Next: pick your Wi-Fi. Esc = use the hotspot."  [Enter]
 3. Network       Settings ▸ Nearby networks in onboarding mode: the real scan list (signal bars,
                  Scan again), the real password field (size 2, last character shown for 1.5 s,
@@ -28,6 +28,9 @@ The wizard is **on rails**: every path ends on step 4, and nothing else in the O
 Code: `nucleo_setup_run()` (steps 1–2) in `firmware/components/nucleo_setup/nucleo_setup.c`, then
 `app_wifi.cpp` (`OB_NETS` → `OB_DONE`, steps 3–4). Guarantees:
 
+- **Off the UI task.** Ending step 3 (hotspot up + setup persisted to /cfg, NVS and the SD) runs on
+  Settings' "wifi" worker task with a spinner, after any scan in flight — never on the launcher's 8 KB
+  main task, where the store chain overflowed the stack and rebooted the device on "Skip Wi-Fi".
 - **Never abandoned.** If Settings is closed before step 4 by any path, the launcher re-opens the
   network step (at most every 2 s) as long as `nucleo_setup_onboarding()` is true.
 - **Resumable.** Power loss before step 3 ends leaves `complete: false`: the next boot starts again

@@ -1032,8 +1032,10 @@ static void wizard_language(void)
 {
     static const char *const names[] = { "English", "Italiano", "Espanol", "Francais", "Deutsch" };
     static const char *const codes[] = { "en", "it", "es", "fr", "de" };
-    int m = nucleo_ui_menu("Language / Lingua", names, 5);
-    nucleo_i18n_set_lang(codes[(m >= 0 && m < 5) ? m : 0]);
+    int m;
+    do m = nucleo_ui_menu("Language / Lingua", names, 5);   // on rails: Esc does not pick a language for you
+    while (m < 0 || m >= 5);
+    nucleo_i18n_set_lang(codes[m]);
 }
 
 static bool s_onboarding = false;   // this boot: the wizard did the language, Settings does the network
