@@ -117,3 +117,4 @@ bool        g_host_sd_needed = false;                      // scene-controlled: 
 extern "C" bool nucleo_sdcontent_needed(void) { return g_host_sd_needed; }
 extern "C" bool nucleo_sdcontent_arm(bool) { return true; }
 extern "C" void nucleo_sdcontent_decline(void) {}
+extern "C" bool nucleo_setup_is_first_boot(void) { return false; }

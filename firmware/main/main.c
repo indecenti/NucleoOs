@@ -350,6 +350,15 @@ void app_main(void)
     // by "did the Solo task start" — and it is the profile that already had its own fix.
     if (solo && !solo_srv) solo_watchdog_arm();
 
+    // FIRST BOOT (setup not finished yet): boot LEAN. Skip httpd / mDNS / ANIMA / recorder / voice / TTS so
+    // the on-device wizard's Wi-Fi scan and join run on a clean, UNFRAGMENTED heap. The full OS leaves only
+    // ~8 KB contiguous (22 KB free, chopped by the 18 KB httpd block + mDNS + L1), and the join's 6 KB worker
+    // task then OOM-crashed mid-connect — so the wizard rebooted before it could finish and kept re-asking for
+    // the password. When setup completes (a join, or the hotspot skip), the device reboots into the full OS.
+    const bool setup_pending = sd_ok && !solo && !nucleo_setup_is_complete();
+    if (setup_pending) { ESP_LOGW(TAG, "first-boot setup: LEAN boot (no httpd/mDNS/ANIMA) for a clean wizard heap");
+                         nucleo_setup_set_first_boot(true); }
+
     // SD content self-install, in a DEDICATED minimal boot. The first-boot wizard (or Settings ▸ SD) armed a
     // download; run it HERE, before httpd / ANIMA / the app registry / audio / mDNS ever start — only the SD,
     // the UI language and a STA-ONLY Wi-Fi link are up, so the whole heap is free and UNFRAGMENTED for the TLS
@@ -422,10 +431,10 @@ void app_main(void)
     // FIRST (with mDNS's 12 KB still free) makes the boot deterministic; mDNS then comes up post-httpd
     // (~16 KB free, fits) and advertises a few hundred ms later — functionally irrelevant, and a rare mDNS
     // failure is non-fatal (the device stays reachable by IP), unlike the httpd abort.
-    if ((!solo || solo_rec) && sd_ok && nucleo_recorder_init() != ESP_OK)  // PDM mic — NEEDED in Recorder Solo (record IN the dedicated boot); skipped only in ANIMA Solo
+    if ((!solo || solo_rec) && !setup_pending && sd_ok && nucleo_recorder_init() != ESP_OK)  // PDM mic — NEEDED in Recorder Solo; SKIP during first-boot setup (lean heap)
         ESP_LOGW(TAG, "recorder mic init failed");
     bootmark("recorder");
-    if (!solo || solo_srv) nucleo_auth_init();  // pairing PIN + session tokens — needed whenever httpd runs (full OS + Web Client Solo)
+    if ((!solo || solo_srv) && !setup_pending) nucleo_auth_init();  // pairing PIN + sessions — needed whenever httpd runs; SKIP during lean first-boot setup
     bootmark("auth");
     nucleo_arb_init();                       bootmark("arb");        // heavy-work arbiter (one job at a time) — KEPT: ANIMA online needs it
     if (!solo && nucleo_ir_init() != ESP_OK) // IR LED (GPIO44) via RMT; serves /api/ir/* + TV-B-Gone — not in Solo
@@ -446,7 +455,7 @@ void app_main(void)
     // strand the device with no web/OTA path to recover. Solo boots never reach the OTA confirm as
     // the trusted path either (the post-OTA reboot always lands in the full OS, not Solo).
     bool boot_healthy = false;
-    if (!solo || solo_srv) {   // SKIPPED in Solo EXCEPT Web Client server-Solo (exists to serve the web OS on a fresh heap)
+    if ((!solo || solo_srv) && !setup_pending) {   // SKIPPED in Solo (except Web Client) AND during lean first-boot setup
       nucleo_app_release_buffers();                 // free the 32 KB canvas first: httpd's contiguous block, no leaked-socket retry
       // NOTE: the pre-httpd update check was REMOVED. The outbound TLS to GitHub needs ~35-40 KB
       // contiguous; even here (canvas freed) the largest block is only ~29 KB, so mbedTLS could OOM
@@ -487,7 +496,7 @@ void app_main(void)
     // "mdns_send: Cannot allocate memory". Discovery is a convenience (the device is always reachable by IP;
     // ota.ps1 already prefers IP, and web-focus stops mDNS the moment a client connects), so when the
     // contiguous heap is too low to run it without starving the SERVER, SKIP it and keep those bytes for httpd.
-    if ((!solo || solo_srv) && !usbweb) {   // Web Client Solo advertises too (heap-gated); SKIPPED on USB-web (no Wi-Fi to advertise on — the PC uses the fixed USB IP)
+    if ((!solo || solo_srv) && !usbweb && !setup_pending) {   // SKIPPED on USB-web and during lean first-boot setup
         size_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL);
         if (largest >= 14336) nucleo_discovery_start(nucleo_setup_device_name());   // ~14 KB headroom: mDNS fits without starving httpd
         else ESP_LOGW(TAG, "mDNS SKIPPED at boot: largest free block %u < 14336 — reachable by IP, httpd keeps the heap", (unsigned)largest);
@@ -550,9 +559,9 @@ void app_main(void)
     // heap this mode exists to keep free for the browser's first, heaviest load. Skipping it also makes the
     // boot log honest (it already lists "L1" among the skipped subsystems). The web OS answers in its own
     // browser brain; /api/anima degrades to a graceful "not ready" (tier none) if the shell ever asks.
-    if (!solo_srv) nucleo_anima_init(nucleo_i18n_lang());   // follow the system language (default English), not a hardcoded IT
+    if (!solo_srv && !setup_pending) nucleo_anima_init(nucleo_i18n_lang());   // SKIP during lean first-boot setup (empty SD, no L1 anyway)
     bootmark("anima");
-    if (sd_ok && (!solo || nucleo_app_solo_needs_speech())) nucleo_tts_init(nucleo_i18n_lang());   // SKIP in non-speech Solo (e.g. Recorder), save heap
+    if (sd_ok && (!solo || nucleo_app_solo_needs_speech()) && !setup_pending) nucleo_tts_init(nucleo_i18n_lang());   // SKIP in non-speech Solo + lean first-boot setup
     bootmark("tts");
     // Voice under a tiny heap (no PSRAM): if the audio task can't find a contiguous stack, the player
     // frees the offline L1 index (if idle) and retries -> no more "offline, no voice". main is
@@ -566,7 +575,7 @@ void app_main(void)
 #endif
     // AVCEB voice engine: PTT (FN key) → DTW template match → nucleo_anima_query() → action.
     // Initialized after anima (needs anima_try_lock) and after SD (loads .tpl templates).
-    if ((!solo || nucleo_app_solo_needs_speech()) && nucleo_voice_init() != ESP_OK)   // SKIP in non-speech Solo: frees mic+task heap
+    if ((!solo || nucleo_app_solo_needs_speech()) && !setup_pending && nucleo_voice_init() != ESP_OK)   // SKIP in non-speech Solo + lean first-boot setup
         ESP_LOGW(TAG, "voice engine init failed (mic busy?)");
     bootmark("voice");
 

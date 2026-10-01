@@ -10,6 +10,10 @@ extern "C" {
 
 // True once the wizard has been completed (reads setup.json: /cfg, then NVS, then the SD mirror).
 bool nucleo_setup_is_complete(void);
+// First boot ran LEAN (main skipped httpd/ANIMA/... so the wizard has a clean heap). The wizard reboots
+// into the full OS when setup finishes. set by main; read by the wizard ("All set" -> reboot).
+void nucleo_setup_set_first_boot(bool on);
+bool nucleo_setup_is_first_boot(void);
 
 // Run the on-device wizard (blocking, uses nucleo_ui) and persist the result.
 void nucleo_setup_run(void);
