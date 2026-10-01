@@ -7,7 +7,7 @@ whether to join an existing Wi-Fi or create an Access Point for the client app.
 
 ## Flow
 
-The wizard is **on rails**: every path ends on step 4, and nothing else in the OS is reachable before.
+The wizard is **on rails**: every path ends on step 5, and nothing else in the OS is reachable before.
 
 ```
 1. Language      "Language / Lingua": English, Italiano, Espanol, Francais, Deutsch — applied at once,
@@ -21,20 +21,41 @@ The wizard is **on rails**: every path ends on step 4, and nothing else in the O
                  You will use its hotspot." [Yes] -> per-device hotspot.
                  A failed join stays here and says why: wrong password (the field re-opens with
                  what was typed), network not found, no address from the router.
-4. All set       "All set!" + "Connected to <ssid>" (or hotspot name + password), "Open in a
-                 browser" <ip> (or 192.168.4.1) and the pairing PIN.  [Enter] -> the launcher.
+4. SD content    Only after a JOIN (a hotspot has no Internet) and only when the card really needs it
+                 (nucleo_sdcontent_needed() looks at the files on the card, see sd-content-install.md §3):
+                   missing   "The web OS and ANIMA are not on the SD card yet. About 50 MB: keep it
+                             charging."                  [Download now] [Later]
+                   older     "SD update. The SD has the v0.4.2 files. Only the changed files download."
+                                                         [Update now]   [Later]
+                   cut short "The download was cut short. It resumes where it stopped."
+                                                         [Resume]       [Later]
+                 A card already filled by hand from the release zip, or with content of unknown
+                 version, is NOT offered anything (Settings ▸ Device ▸ SD content can verify it).
+                 </> / Tab / up/down move the focus, 1/2 pick, ENTER confirms, Esc = Later.
+                 Download/Update/Resume arm the install boot and restart into it (sd-content-install.md
+                 §3.3): progress screen, verdict, then the full OS.
+   4b. Later     "No problem. Download them any time in: Settings > Device. Or copy them to the SD:
+                 the v<x.y.z> release's SD zip, unzipped at the SD's root."  [Enter] -> step 5.
+                 "Later" is remembered for this firmware (content.json declined) — never asked again
+                 until a newer firmware; a hand copy made afterwards is recognised on its own.
+5. All set       "All set!" + "Connected to <ssid>" (or hotspot name + password), "Open in a
+                 browser" <ip> (or 192.168.4.1) and the pairing PIN.  [Enter] -> the launcher
+                 (first boot: a restart into the full OS, see "Lean first boot" below).
                  setup.json (complete: true) is written when step 3 ends; never shown again.
 ```
 
 Code: `nucleo_setup_run()` (steps 1–2) in `firmware/components/nucleo_setup/nucleo_setup.c`, then
-`app_wifi.cpp` (`OB_NETS` → `OB_DONE`, steps 3–4). Guarantees:
+`app_wifi.cpp` (`OB_NETS` → `OB_SD` → `OB_SD_LATER` → `OB_DONE`, steps 3–5). Guarantees:
 
 - **Off the UI task.** Ending step 3 (hotspot up + setup persisted to /cfg, NVS and the SD) runs on
   the Wi-Fi supervisor task (woken by a notify; no task to allocate), under the same radio locks as a join
   and a scan — never on the launcher's 8 KB main task, where the store chain overflowed the stack and
   rebooted the device on "Skip Wi-Fi".
-- **The join.** It uses the channel + BSSID of the AP picked from the scan (one plain retry if it moved),
-  waits up to 16 s (APSTA), stops early on a confirmed wrong password, and never re-dials mid-attempt.
+- **The join.** One connect routine for every join (`connect_sta` in `nucleo_setup.c`). An explicit join
+  (the wizard, Settings) runs in pure **STA** mode: the hotspot shares the single radio's channel, and
+  APSTA made the 4-way handshake time out. Full-channel scan by signal, PMF capable, 3 driver retries,
+  stops early on a confirmed wrong password, never re-dials mid-attempt; the error names the cause and
+  the driver's reason code ("Wrong password? (15)").
 - **All set is owed** until ENTER/Esc on it (`nucleo_setup_onboard_ack`): a force-closed Settings re-opens on it.
 - **Never abandoned.** If Settings is closed before step 4 by any path, the launcher re-opens the
   network step (at most every 2 s) as long as `nucleo_setup_onboarding()` is true.
@@ -44,8 +65,14 @@ Code: `nucleo_setup_run()` (steps 1–2) in `firmware/components/nucleo_setup/nu
   (never into a failed sprite), and a short back-buffer still gets its hint bar.
 - Device name: `nucleo-XXXX` from the MAC (renamable in Settings ▸ Device).
 
-Host-rendered: `ui:shots` scenes `wizard.*` (language, welcome, inputs) and
-`settings.onboard*` (list, password, skip confirm, locked Tab/LEFT, All set: joined / hotspot).
+Host-rendered: `ui:shots` scenes `wizard.*` (language, welcome, inputs, the install boot's
+`install-connect` / `install-run` / `install-done` / `install-failed`) and `settings.onboard*` (list,
+password, skip confirm, locked Tab/LEFT, SD content: missing / update / resume / focus moved / Later page /
+All set: joined / hotspot).
+
+**Lean first boot.** While setup is not complete, main.c boots only what the wizard needs (no httpd,
+mDNS, ANIMA, recorder, voice, TTS, auth): the join and the scan get a clean heap. ENTER on "All set"
+then restarts into the full OS (`nucleo_setup_is_first_boot()`).
 
 **Pairing PIN — implemented, but not a wizard step.** The 6-digit pairing PIN
 ([`security.md`](security.md)) is minted once on first boot (`esp_random`, persisted, stable across

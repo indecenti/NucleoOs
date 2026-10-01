@@ -19,10 +19,31 @@
 extern "C" {
 #endif
 
-// Does the SD lack content matching the running firmware? Reads /sd/system/content.json only (no network):
-// true when it is missing, incomplete, or for another firmware — false when complete for this firmware,
-// when the user chose "Skip" for this firmware, or when no SD is mounted (nothing to fill).
+// Should the device OFFER the download? Looks at the card itself (no network): true only when the web OS /
+// ANIMA files are missing, a run was interrupted, or they are from an older release (then it is an UPDATE:
+// only the changed files are fetched). A hand copy of this release, a complete install, a "Later", or no SD
+// at all: false. See nucleo_sdcontent_status() / sdc_content_status().
 bool nucleo_sdcontent_needed(void);
+
+// What the SD holds, for the wizard, Settings ▸ Device and the web rescue page (the card's own files, no
+// network; the values mirror sdc_status_t, plus NO_SD).
+typedef enum {
+    NUCLEO_SDC_NO_SD = 0,     // no card mounted
+    NUCLEO_SDC_MISSING,       // the web OS is not on the card
+    NUCLEO_SDC_PARTIAL,       // a run for this firmware was interrupted (a rerun resumes)
+    NUCLEO_SDC_OUTDATED,      // there, but from another release: an update fetches only the changed files
+    NUCLEO_SDC_SKIPPED,       // not there, the user chose "Later" for this firmware
+    NUCLEO_SDC_COMPLETE,      // installed and verified here, for this firmware
+    NUCLEO_SDC_MANUAL,        // copied by hand from this release's -sd.zip (not verified yet)
+    NUCLEO_SDC_UNKNOWN,       // there, but nothing says which release (a dev sync, an old zip)
+} nucleo_sdc_status_t;
+nucleo_sdc_status_t nucleo_sdcontent_status(void);
+
+// The release the card's content is from ("0.4.2"), when known; "" otherwise. Valid after _status().
+const char *nucleo_sdcontent_card_tag(void);
+
+// This firmware's release, "x.y.z" (the content it wants; the -sd.zip to copy by hand is named after it).
+const char *nucleo_sdcontent_fw_tag(void);
 
 // Arm a download for the NEXT boot (NVS flag) and reboot, OR disarm. Returns false if the NVS write failed.
 bool nucleo_sdcontent_arm(bool on);

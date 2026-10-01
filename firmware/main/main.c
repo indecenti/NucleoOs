@@ -192,21 +192,42 @@ static void sd_erase_screen(bool failed)
     else        { const char *lines[] = { MSG[k], "", WAIT[k], LONG[k] }; nucleo_ui_home("NucleoOS", lines, 4); }
 }
 
-// The install boot: Wi-Fi is up and associated — NOW hand the TLS handshake the 32 KB canvas block (held
-// until here so the Wi-Fi bring-up could not fragment it).
-void nucleo_sdcontent_on_net_ready(void) { nucleo_app_release_buffers(); }
+// The install boot: Wi-Fi is up and associated — NOW hand the TLS handshake the 32 KB canvas block and the
+// 19 KB TinyUSB NCM buffer (both held until here so the Wi-Fi bring-up could not fragment them).
+void nucleo_sdcontent_on_net_ready(void) { nucleo_app_release_buffers(); nucleo_usbnet_reclaim(); }
 
-// The boot-window SD-content installer's progress bar: it calls this after each file (weak hook override).
+// The install boot's screens: the engine's state -> the UI's view. The time left comes from the NETWORK rate
+// of this run (KB received / seconds since the first file), applied to the payload still to go; it is shown
+// only once 10 s and 128 KB of data make the rate meaningful.
+static int64_t s_sdc_t0;
+static int     s_sdc_kb0;
+static void sdc_view(const sdc_state_t *st, nucleo_ui_install_t *v)
+{
+    memset(v, 0, sizeof *v);
+    v->phase = st->phase == SDC_IDLE ? NUI_INST_CONNECTING : st->phase == SDC_CHECKING ? NUI_INST_CHECKING
+             : st->phase == SDC_DOWNLOADING ? NUI_INST_DOWNLOADING : st->phase == SDC_DONE ? NUI_INST_DONE : NUI_INST_FAILED;
+    v->pct = st->pct; v->kb_done = st->kb_done; v->kb_total = st->kb_total;
+    v->files_done = st->files_done; v->files_total = st->files_total;
+    v->file = st->cur; v->err = st->err; v->eta_s = -1;
+    if (st->phase != SDC_DOWNLOADING) return;
+    int64_t now = esp_timer_get_time();
+    if (!s_sdc_t0) { s_sdc_t0 = now; s_sdc_kb0 = st->recv_kb; return; }
+    int64_t dt_ms = (now - s_sdc_t0) / 1000;
+    int got = st->recv_kb - s_sdc_kb0;
+    if (dt_ms >= 10000 && got >= 128 && st->kb_total > st->kb_done)
+        v->eta_s = (int)((int64_t)(st->kb_total - st->kb_done) * dt_ms / got / 1000);
+    else if (st->kb_total <= st->kb_done) v->eta_s = 0;
+}
+
+// The engine's progress hook (weak override): repaint at most 4x a second, and at once on a phase change.
 void nucleo_sdcontent_on_progress(const sdc_state_t *st)
 {
-    const char *l = nucleo_i18n_lang();
-    int k = !strcmp(l, "it") ? 1 : !strcmp(l, "es") ? 2 : !strcmp(l, "fr") ? 3 : !strcmp(l, "de") ? 4 : 0;
-    static const char *const T[5] = { "Downloading content", "Scarico i contenuti", "Descargando contenido",
-                                      "Telechargement", "Inhalt wird geladen" };
-    char line[64];
-    if (st->phase == SDC_CHECKING) snprintf(line, sizeof line, "%s...", T[k]);
-    else snprintf(line, sizeof line, "%d / %d  %.28s", st->files_done, st->files_total, st->cur);
-    nucleo_ui_progress(T[k], line, st->phase == SDC_CHECKING ? -1 : st->pct);
+    static int64_t last; static int last_phase = -1;
+    int64_t now = esp_timer_get_time();
+    if ((int)st->phase == last_phase && now - last < 250000) return;
+    last = now; last_phase = (int)st->phase;
+    nucleo_ui_install_t v; sdc_view(st, &v);
+    nucleo_ui_install_screen(&v);
 }
 
 void app_main(void)
@@ -349,6 +370,10 @@ void app_main(void)
     const bool solo_rec = solo && (nucleo_app_solo_app() == 2);   // Recorder profile: pure cloud transcribe, no voice/TTS
     const bool solo_srv = solo && nucleo_app_solo_is_server();     // Web Client: httpd + auth stay UP; everything else skipped for max heap
     const bool usbweb   = solo_srv && nucleo_usbnet_web_armed();   // Web Client reached via key W (USB cable): skip Wi-Fi/mDNS, the PC connects over USB-NCM (~48 KB reclaimed)
+    // TinyUSB's ~19 KB NCM buffer is only for the USB-web boot: every other boot hands it to the heap now. The
+    // SD-content install boot does it later, right before TLS (nucleo_sdcontent_on_net_ready), so the
+    // handshake gets that block intact (a region added now would absorb the Wi-Fi bring-up's small allocs).
+    if (!usbweb && !sdc_install) nucleo_usbnet_reclaim();
     if (solo_srv)  ESP_LOGW(TAG, "Web Client Solo boot: httpd + auth + mDNS UP; skipping recorder/IR/voice/TTS/L1/calendar for max web-OS heap");
     else if (solo) ESP_LOGW(TAG, "%s Solo boot: skipping httpd/mDNS/recorder/auth/IR%s",
                        solo_rec ? "Recorder" : "ANIMA", solo_rec ? " + TTS/voice" : "");
@@ -383,15 +408,10 @@ void app_main(void)
         nucleo_setup_apply_network_sta_only();        // STA only (no SoftAP): ~20 KB less than APSTA, and all we need
         HMEM("sdcontent-pre");
         bool ok = nucleo_sdcontent_run();             // progress screen; writes content.json on success
-        const char *l = nucleo_i18n_lang();
-        int k = !strcmp(l, "it") ? 1 : !strcmp(l, "es") ? 2 : !strcmp(l, "fr") ? 3 : !strcmp(l, "de") ? 4 : 0;
-        if (!ok) {
-            const sdc_state_t *st = nucleo_sdcontent_state();
-            static const char *const T[5] = { "SD download failed", "Download SD non riuscito", "Descarga SD fallida",
-                                              "Echec du telechargement SD", "SD-Download fehlgeschlagen" };
-            const char *lines[] = { T[k], "", st->err[0] ? st->err : "?" };
-            nucleo_ui_message("NucleoOS", lines, 3);   // waits for ENTER so the reason is readable
-        }
+        // The verdict screen: success restarts by itself after a few seconds; a failure stays up long enough
+        // to be read (2 min), then the device restarts anyway rather than idle on its 120 mAh battery.
+        nucleo_ui_install_t v; sdc_view(nucleo_sdcontent_state(), &v);
+        nucleo_ui_install_result(&v, ok ? 6 : 120);
         esp_restart();   // success -> full OS loads the fresh SD; failure -> arm cleared, a normal boot follows
     }
 

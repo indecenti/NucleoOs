@@ -26,10 +26,24 @@ typedef struct {
     sdc_state_t     *st;
     uint8_t         *buf;         // one window, malloc'd for the run only (no permanent RAM in the full OS)
     uint64_t         recv;        // body bytes received this run
+    uint64_t         total;       // payload bytes of the selected packs
+    uint64_t         done;        // payload bytes of the files finished (installed or present)
     unsigned         windows;     // windows received (progress pacing)
+    bool             payload;     // the fetch in flight is a payload file (counts toward done)
 } eng_t;
 
 static void tick(eng_t *e) { if (e->io->tick) e->io->tick(e->io->ctx); }
+static void prog_at(eng_t *e, uint32_t in_flight)
+{
+    e->st->recv_kb = (int)(e->recv / 1024);
+    if (e->total) {
+        uint64_t d = e->done + in_flight;
+        if (d > e->total) d = e->total;
+        e->st->kb_done = (uint32_t)(d / 1024);
+        if (e->st->phase == SDC_DOWNLOADING) e->st->pct = (int)(d * 100 / e->total);
+    }
+    if (e->io->progress) e->io->progress(e->io->ctx, e->st);
+}
 static void prog(eng_t *e)
 {
     e->st->recv_kb = (int)(e->recv / 1024);
@@ -139,7 +153,7 @@ static sdc_code_t fetch_to_file(eng_t *e, const char *url, const char *part, boo
         sdc_sha256_update(&c, e->buf, (size_t)n);
         off += (uint32_t)n;
         e->recv += (uint32_t)n;
-        if ((++e->windows & 31) == 0) prog(e);                 // keep a big file's bar moving
+        if ((++e->windows & 7) == 0) prog_at(e, e->payload ? off : 0);   // keep a big file's bar moving (~48 KB)
         if ((uint32_t)n < want) break;                          // short read: the resource ended
     }
     if (fclose(f) != 0 && rc == SDC_OK) rc = SDC_E_WRITE;
@@ -159,7 +173,9 @@ static sdc_code_t install_file(eng_t *e, const sdc_file_t *f)
     mkdir_parents(dst);
     for (int attempt = 0; attempt < 2; attempt++) {
         uint32_t n = 0;
+        e->payload = true;
         sdc_code_t rc = fetch_to_file(e, url, part, true, f->size, got, &n);
+        e->payload = false;
         if (rc != SDC_OK) return rc;
         if (n == f->size && strncmp(got, f->sha, 64) == 0) {
             unlink(dst);                                        // FAT/Windows rename does not replace
@@ -224,11 +240,13 @@ bool sdc_engine_run(const sdc_cfg_t *cfg, const sdc_io_t *io, sdc_state_t *st)
             continue;
         }
         sdc_file_t f; bool cmt;
-        if (sdc_parse_file(line, &f, &cmt)) { if (pack_wanted(cfg->packs, f.pack)) total++; }
+        if (sdc_parse_file(line, &f, &cmt)) { if (pack_wanted(cfg->packs, f.pack)) { total++; e->total += f.size; } }
         else if (!cmt) { line[strcspn(line, "\r\n")] = 0; fclose(mf); fail(e, SDC_E_MANIFEST_BAD, "invalid manifest", line); goto out; }
     }
     if (!have_hdr) { fclose(mf); fail(e, SDC_E_MANIFEST_BAD, "invalid manifest", "no header"); goto out; }
-    st->files_total = total; st->phase = SDC_DOWNLOADING; st->pct = 0; prog(e);
+    sdc_content_write(cfg->root, cfg->ver3, false, false);   // "started": an interrupted run reads as PARTIAL
+    st->files_total = total; st->kb_total = (uint32_t)(e->total / 1024);
+    st->phase = SDC_DOWNLOADING; st->pct = 0; prog_at(e, 0);
 
     // 4) Install pass.
     rewind(mf);
@@ -253,13 +271,14 @@ bool sdc_engine_run(const sdc_cfg_t *cfg, const sdc_io_t *io, sdc_state_t *st)
             st->files_written++;
         }
         st->files_done++;
-        st->pct = total > 0 ? (st->files_done * 100) / total : 100;
-        prog(e);
+        e->done += f.size;
+        if (!e->total) st->pct = total > 0 ? (st->files_done * 100) / total : 100;   // an all-empty payload
+        prog_at(e, 0);
     }
     fclose(mf);
 
     sdc_content_write(cfg->root, cfg->ver3, true, false);
-    st->phase = SDC_DONE; st->pct = 100; st->code = SDC_OK;
+    st->phase = SDC_DONE; st->pct = 100; st->code = SDC_OK; st->kb_done = st->kb_total;
     prog(e);
     ok = true;
 out:
@@ -298,11 +317,49 @@ void sdc_content_write(const char *root, const char *tag, bool complete, bool de
     fclose(f);
 }
 
+// The release named by root/system/content/manifest.txt's header ("" when absent / not a manifest).
+static bool manifest_tag(const char *root, char *tag, size_t cap)
+{
+    char path[300]; join(path, sizeof path, root, "system/content/manifest.txt");
+    FILE *f = fopen(path, "r");
+    if (!f) return false;
+    char line[SDC_LINE_MAX]; bool ok = false;
+    if (fgets(line, sizeof line, f)) {
+        sdc_header_t h;
+        if (sdc_parse_header(line, &h)) { snprintf(tag, cap, "%.23s", h.tag[0] == 'v' ? h.tag + 1 : h.tag); ok = true; }
+    }
+    fclose(f);
+    return ok;
+}
+
+sdc_status_t sdc_content_status(const char *root, const char *ver3, char *tag, size_t tagcap)
+{
+    char dummy[24]; if (!tag || !tagcap) { tag = dummy; tagcap = sizeof dummy; }
+    tag[0] = 0;
+    char ctag[24]; bool complete = false, declined = false;
+    bool have_cj = sdc_content_read(root, ctag, sizeof ctag, &complete, &declined);
+    bool cj_mine = have_cj && sdc_tag_matches(ver3, ctag);
+    if (cj_mine && complete)               { snprintf(tag, tagcap, "%s", ver3); return SDC_ST_COMPLETE; }
+    if (cj_mine && !declined)              { snprintf(tag, tagcap, "%s", ver3); return SDC_ST_PARTIAL; }
+    // The files themselves: is the web OS on the card (by hand, or a previous install)?
+    char p[300]; uint32_t sz = 0;
+    join(p, sizeof p, root, "www/shell/index.html");
+    bool shell = file_size(p, &sz) && sz > 0;
+    if (!shell) { join(p, sizeof p, root, "www/shell/index.html.gz"); shell = file_size(p, &sz) && sz > 0; }
+    if (shell) {
+        char mtag[24];
+        if (manifest_tag(root, mtag, sizeof mtag)) {
+            snprintf(tag, tagcap, "%s", mtag);
+            return sdc_tag_matches(ver3, mtag) ? SDC_ST_MANUAL : SDC_ST_OUTDATED;
+        }
+        if (have_cj && complete)           { snprintf(tag, tagcap, "%s", ctag); return SDC_ST_OUTDATED; }
+        return SDC_ST_UNKNOWN;
+    }
+    return cj_mine && declined ? SDC_ST_SKIPPED : SDC_ST_MISSING;
+}
+
 bool sdc_content_needed(const char *root, const char *ver3)
 {
-    char tag[24]; bool complete = false, declined = false;
-    if (!sdc_content_read(root, tag, sizeof tag, &complete, &declined)) return true;   // never installed
-    if (strcmp(tag, ver3) != 0) return true;                                        // for another firmware
-    if (complete) return false;
-    return !declined;                                                                 // interrupted -> offer; skipped -> not
+    sdc_status_t s = sdc_content_status(root, ver3, NULL, 0);
+    return s == SDC_ST_MISSING || s == SDC_ST_PARTIAL || s == SDC_ST_OUTDATED;
 }

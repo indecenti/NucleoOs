@@ -255,7 +255,7 @@ void app_ui_confirm(const char *title, const char *msg, bool yes_focus)
     // Yes = destructive (red); No = safe (accent). Focused button is filled.
     d.fillRoundRect(yx, by, bw, bh, 7, yes_focus ? DANGER : BG);
     d.drawRoundRect(yx, by, bw, bh, 7, DANGER);
-    const char *yes = TR("Si", "Yes"), *no = "No";
+    const char *yes = TR5("Si", "Yes", "Si", "Oui", "Ja"), *no = TR5("No", "No", "No", "Non", "Nein");
     d.setTextSize(2); d.setTextColor(yes_focus ? INK : DANGER, yes_focus ? DANGER : BG);
     d.setCursor(yx + bw / 2 - (int)strlen(yes) * 6, by + 4); d.print(yes);
     d.fillRoundRect(nx, by, bw, bh, 7, yes_focus ? BG : ACC);

@@ -182,6 +182,8 @@ extern bool g_host_onboard_sta;
 extern int g_host_join_err;
 extern bool g_host_shift_latch;
 extern bool g_host_onboarding;                       // settings_stubs.cpp
+extern bool g_host_sd_needed;
+extern int  g_host_sdc_status;
 extern "C" void nucleo_settings_onboard(void);
 static const Scene SETTINGS[] = {
     { "root",      [] { app_open("wifi"); app_draw(); } },
@@ -197,6 +199,18 @@ static const Scene SETTINGS[] = {
     { "onboard-wrongpass", [] { g_host_join_err = 1; g_host_onboarding = true; nucleo_settings_onboard(); app_open("wifi"); down(3); app_key(NK_ENTER); app_type("casa2026"); app_key(NK_ENTER); app_draw(); } },
     { "onboard-notfound",  [] { g_host_join_err = 2; g_host_onboarding = true; nucleo_settings_onboard(); app_open("wifi"); down(3); app_key(NK_ENTER); app_type("casa2026"); app_key(NK_ENTER); app_draw(); } },
     { "onboard-shift", [] { g_host_onboarding = true; nucleo_settings_onboard(); app_open("wifi"); down(3); app_key(NK_ENTER); app_type("casa"); g_host_shift_latch = true; app_draw(); } },
+    // After a successful join with the SD missing the web OS: the skippable "SD content" step, then "All set".
+    { "onboard-sd",       [] { g_host_sd_needed = true; g_host_onboard_sta = true; g_host_onboarding = true; nucleo_settings_onboard();
+                               app_open("wifi"); app_key(NK_BACK); app_key(NK_RIGHT); app_key(NK_ENTER); app_draw(); } },
+    { "onboard-sd-later", [] { g_host_sd_needed = true; g_host_onboard_sta = true; g_host_onboarding = true; nucleo_settings_onboard();
+                               app_open("wifi"); app_key(NK_BACK); app_key(NK_RIGHT); app_key(NK_ENTER); app_draw();
+                               app_key(NK_RIGHT); app_draw_incr(); } },                        // focus moves: buttons only
+    { "onboard-sd-skip",  [] { g_host_sd_needed = true; g_host_onboard_sta = true; g_host_onboarding = true; nucleo_settings_onboard();
+                               app_open("wifi"); app_key(NK_BACK); app_key(NK_RIGHT); app_key(NK_ENTER); app_draw();
+                               app_key(NK_BACK); app_draw(); } },                              // Esc = later -> "All set"
+    { "onboard-sd-update", [] { g_host_sdc_status = 3; g_host_sd_needed = true; g_host_onboard_sta = true; g_host_onboarding = true; nucleo_settings_onboard(); app_open("wifi"); app_key(NK_BACK); app_key(NK_RIGHT); app_key(NK_ENTER); app_draw(); } },               // an older release on the card
+    { "onboard-sd-resume", [] { g_host_sdc_status = 2; g_host_sd_needed = true; g_host_onboard_sta = true; g_host_onboarding = true; nucleo_settings_onboard(); app_open("wifi"); app_key(NK_BACK); app_key(NK_RIGHT); app_key(NK_ENTER); app_draw(); } },               // an interrupted run
+    { "onboard-sd-done",   [] { g_host_sd_needed = true; g_host_onboard_sta = true; g_host_onboarding = true; nucleo_settings_onboard(); app_open("wifi"); app_key(NK_BACK); app_key(NK_RIGHT); app_key(NK_ENTER); app_draw(); app_key(NK_BACK); app_draw(); app_key(NK_ENTER); app_draw(); } },   // Later -> explained -> All set
     { "onboard-reveal", [] { g_host_onboarding = true; nucleo_settings_onboard(); app_open("wifi"); down(3); app_key(NK_ENTER); app_type("casa2026"); app_key(NK_TAB); app_draw(); } },
     // Scrolling one row at a time with the heap of a busy ADV (strip sprite 12 rows): every step is an
     // INCREMENTAL repaint. The ADV showed half-drawn rows and a text-less focus chip here (2026-10-01).
@@ -215,6 +229,11 @@ static const Scene SETTINGS[] = {
     { "device",    [] { app_open("wifi"); down(8); app_key(NK_ENTER); app_draw(); } },
     { "device-sd", [] { app_open("wifi"); down(8); app_key(NK_ENTER);
                         down(6); app_draw(); } },
+    { "device-sdc",    [] { app_open("wifi"); down(8); app_key(NK_ENTER); down(7); app_draw(); } },
+    { "device-sdc-manual", [] { g_host_sdc_status = 6; app_open("wifi"); down(8); app_key(NK_ENTER); down(7); app_draw(); } },
+    { "device-sdc-old",    [] { g_host_sdc_status = 3; app_open("wifi"); down(8); app_key(NK_ENTER); down(7); app_draw(); } },
+    { "device-sdc-ok", [] { g_host_sdc_status = 5; app_open("wifi"); down(8); app_key(NK_ENTER); down(7); app_draw(); } },
+    { "device-sdc-ask", [] { app_open("wifi"); down(8); app_key(NK_ENTER); down(7); app_key(NK_ENTER); app_draw(); } },
     { "reset",     [] { app_open("wifi"); app_key(NK_UP); app_key(NK_ENTER); app_draw(); } },
     { "reset-sd",  [] { app_open("wifi"); app_key(NK_UP); app_key(NK_ENTER); down(2); app_draw(); } },
     { "reset-sd-armed", [] { app_open("wifi"); app_key(NK_UP); app_key(NK_ENTER); down(2); app_key(NK_ENTER); app_draw(); } },
@@ -259,6 +278,22 @@ static const Scene WIZARD[] = {
     // The ADV's back-buffer is fitted to its largest block (130 rows): the hint bar must still be whole.
     { "lang-short", [] { g_host.canvas_rows = 130; nucleo_screen_release(); keys({ K(NK_DOWN) }); wizard_lang(); } },
     { "welcome",    [] { keys({}); wizard_welcome(); } },
+    // The SD-content install boot: the live screen (direct to the panel, as on the device) and its verdicts.
+    { "install-connect", [] { nucleo_ui_modal_direct(true); nucleo_ui_install_t v = {}; v.phase = NUI_INST_CONNECTING; v.pct = -1; v.eta_s = -1;
+                              nucleo_ui_install_screen(&v); } },
+    { "install-run",     [] { nucleo_ui_modal_direct(true); nucleo_ui_install_t v = {}; v.phase = NUI_INST_DOWNLOADING;
+                              v.pct = 8; v.kb_done = 4300; v.kb_total = 53248; v.files_done = 96; v.files_total = 1274; v.eta_s = -1;
+                              v.file = "shell.js"; nucleo_ui_install_screen(&v);
+                              // later frames: incremental, every field shrinks or grows (stale glyphs would show)
+                              v.pct = 63; v.kb_done = 33600; v.files_done = 803; v.eta_s = 412; v.file = "anima-it-akb5.bin";
+                              nucleo_ui_install_screen(&v); } },
+    { "install-done",    [] { nucleo_ui_modal_direct(true); keys({ K(NK_ENTER) }); nucleo_ui_install_t v = {}; v.phase = NUI_INST_DONE;
+                              v.pct = 100; v.kb_done = v.kb_total = 53248; v.files_done = v.files_total = 1274;
+                              nucleo_ui_install_result(&v, 1); } },
+    { "install-failed",  [] { nucleo_ui_modal_direct(true); keys({ K(NK_ENTER) }); nucleo_ui_install_t v = {}; v.phase = NUI_INST_FAILED;
+                              v.err = T5("Download interrotto (rete)", "Download interrupted (network)", "Descarga interrumpida (red)",
+                                         "Telechargement coupe (reseau)", "Download abgebrochen (Netz)");
+                              nucleo_ui_install_result(&v, 1); } },
     { "input",      [] { keys({ 'c', 'a', 's', 'a' }); char b[33] = ""; nucleo_ui_input("Nome dispositivo", b, sizeof b, 0); } },
     { "input-pass", [] { keys({ 's', 'e', 'g', 'r', 'e', 't', 'o' }); char b[65] = ""; nucleo_ui_input("Password", b, sizeof b, 1); } },
     { "input-shift", [] { g_host_shift_latch = true; keys({ 'c', 'a', 's', 'a' }); char b[33] = ""; nucleo_ui_input("Nome dispositivo", b, sizeof b, 0); } },
