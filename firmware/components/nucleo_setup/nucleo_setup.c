@@ -462,11 +462,12 @@ static void wait_for_ip(void)
     esp_netif_t *sta = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
     esp_netif_ip_info_t ip = {0};
     // An explicit join scans, associates and runs DHCP while the hotspot keeps beaconing (APSTA): 8 s was
-    // too short on the first boot. Two password-class failures in a row = wrong password, no point waiting.
+    // too short on the first boot. A first handshake timeout / auth-expire is routine on ESP32 (the next try
+    // lands), so only a run of them means a wrong password: 4 in one join.
     int steps = s_join_explicit ? 80 : 40;
     for (int t = 0; t < steps; t++) {
         vTaskDelay(pdMS_TO_TICKS(200));
-        if (s_join_explicit && s_auth_fails >= 2) break;
+        if (s_join_explicit && s_auth_fails >= 4) break;
         if (s_join_explicit && t >= 15 && reason_is_not_found(s_last_reason) && !s_assoc) break;   // 3 s of "not there"
         if (sta && esp_netif_get_ip_info(sta, &ip) == ESP_OK && ip.ip.addr != 0) {
             uint32_t a = ip.ip.addr;
@@ -859,16 +860,18 @@ bool nucleo_setup_join(const char *ssid, const char *pass)
     for (int i = 0; i < s_wscan_n; i++) if (!strcmp(s_wscan[i].ssid, ssid)) { si = i; break; }
     if (si >= 0 && s_wscan[si].ch) connect_sta_at(ssid, use_pass, s_wscan[si].ch, s_wscan[si].bssid);
     else                           connect_sta(ssid, use_pass);               // remembers the net on success
-    if (!s_ip[0] && si >= 0 && s_auth_fails < 2 && !s_assoc) {
+    if (!s_ip[0] && si >= 0 && s_auth_fails < 4 && !s_assoc) {
         ESP_LOGW(TAG, "join '%s' on ch %d failed (reason %d): retrying with a full scan", ssid, s_wscan[si].ch, s_last_reason);
         s_last_reason = 0;
         connect_sta(ssid, use_pass);
     }
     s_join_explicit = false;
     bool ok = s_ip[0] != 0;
-    s_join_err = ok ? NUCLEO_JOIN_OK : (s_auth_fails > 0 || reason_is_auth(s_last_reason)) ? NUCLEO_JOIN_PASSWORD
+    s_join_err = ok ? NUCLEO_JOIN_OK : (s_auth_fails >= 2 && reason_is_auth(s_last_reason)) ? NUCLEO_JOIN_PASSWORD
                : reason_is_not_found(s_last_reason) ? NUCLEO_JOIN_NOT_FOUND : s_assoc ? NUCLEO_JOIN_NO_IP : NUCLEO_JOIN_FAILED;
-    if (!ok) ESP_LOGW(TAG, "join '%s' failed: err=%d reason=%d assoc=%d", ssid, s_join_err, s_last_reason, (int)s_assoc);
+    // Diagnosable over USB / /api/logs without the secret: its length, the AP picked, every reason seen.
+    ESP_LOGW(TAG, "join '%s' %s: err=%d last_reason=%d auth_fails=%d assoc=%d pass_len=%d ch=%d", ssid, ok ? "ok" : "FAILED",
+             s_join_err, s_last_reason, (int)s_auth_fails, (int)s_assoc, (int)strlen(use_pass), si >= 0 ? s_wscan[si].ch : 0);
     // Invariant I4: a FAILED one-shot join must never arm the background retry loop. The old
     // unconditional `s_auto = true` did exactly that — one wrong password put the supervisor
     // into an eternal scan/join loop that kept knocking the hotspot over ("AP keeps

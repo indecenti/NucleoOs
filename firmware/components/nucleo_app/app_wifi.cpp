@@ -1322,7 +1322,7 @@ static void draw_input(int ch)
     // character just typed (PEEK_US) or all of it while revealed (TAB).
     bool mask = (s_im == IM_PASS) && !s_reveal;
     bool peek = mask && s_ikey_us && esp_timer_get_time() - s_ikey_us < PEEK_US;
-    int vx = 11 + (int)strlen(lab) * 6 + 8, maxc = (W - 14 - vx) / 12 - 1;
+    int vx = 11 + (int)strlen(lab) * 6 + 8, maxc = (W - 40 - vx) / 12 - 1;   // room for the Aa badge
     if (maxc > 36) maxc = 36;
     int from = s_ilen > maxc ? s_ilen - maxc : 0, k = 0;
     char sh[40];
@@ -1331,6 +1331,9 @@ static void draw_input(int ch)
     sh[maxc + 1] = 0;
     txt(vx, iy + 5, sh, FG, LINE, 2);
     d.fillRect(vx + k * 12 + 1, iy + 5, 2, 16, ACC);                 // caret (inside the text cell)
+    // Shift tapped: the next character comes out shifted — say so where the eye is.
+    if (nucleo_kbd_shift_latched()) { d.fillRoundRect(W - 30, iy + 5, 22, 15, 4, ACC); txt(W - 25, iy + 9, "Aa", INK, ACC, 1); }
+    else d.fillRect(W - 30, iy + 5, 22, 15, LINE);
 }
 static void draw_toast(int ch)
 {
@@ -1865,7 +1868,12 @@ static void confirm_done(bool yes)
 
 // ---- inline text input ------------------------------------------------------------------------
 // Every printable key types — including , ; . / which double as the arrows (Wi-Fi passwords use them).
-static void input_char(char c) { if (c >= 32 && c < 127 && s_ilen < (int)sizeof(s_ibuf) - 1) { s_ibuf[s_ilen++] = c; s_ibuf[s_ilen] = 0; s_ikey_us = esp_timer_get_time(); } }
+static void input_char(char c)
+{
+    if (c < 32 || c >= 127 || s_ilen >= (int)sizeof(s_ibuf) - 1) return;
+    if (nucleo_kbd_take_shift_tap()) c = nucleo_kbd_shifted(c);   // Aa tapped first: this one is shifted
+    s_ibuf[s_ilen++] = c; s_ibuf[s_ilen] = 0; s_ikey_us = esp_timer_get_time();
+}
 static void input_close(void) { s_im = IM_NONE; memset(s_ibuf, 0, sizeof s_ibuf); s_ilen = 0; }
 static void input_key(int k, char ch)
 {
@@ -2038,6 +2046,8 @@ static void on_tick(void)
     }
     if (s_msg_t > 0 && --s_msg_t == 0) nucleo_app_request_draw();
     if (s_ikey_us && esp_timer_get_time() - s_ikey_us >= PEEK_US) { s_ikey_us = 0; if (s_im == IM_PASS) nucleo_app_request_draw(); }   // re-mask the peeked char
+    static bool s_latch_shown;
+    if (s_im != IM_NONE && nucleo_kbd_shift_latched() != s_latch_shown) { s_latch_shown = !s_latch_shown; nucleo_app_request_draw(); }
     if (s_busy) {
         s_anim++;
         if (s_done) {

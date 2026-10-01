@@ -256,9 +256,9 @@ extern "C" void nucleo_ui_input(const char *title, char *buf, int len, int maske
     ModalSurface s;
     LovyanGFX &canvas = *s.g;
     int pos = (int)strlen(buf);
-    int last_pos = -1, last_blink = -1, last_peek = -1, last_rev = -1; uint32_t last_sum = 0;
+    int last_pos = -1, last_blink = -1, last_peek = -1, last_rev = -1, last_latch = -1; uint32_t last_sum = 0;
     bool reveal = false; int64_t key_us = 0;
-    const int FY = MHDR + 18, FH = 28, MAXC = (W - 24) / 12 - 1;
+    const int FY = MHDR + 18, FH = 28, MAXC = (W - 48) / 12 - 1;   // room for the Aa badge
 
     for (;;) {
         int64_t now = esp_timer_get_time();
@@ -270,11 +270,13 @@ extern "C" void nucleo_ui_input(const char *title, char *buf, int len, int maske
             if (k.key == NK_ENTER || k.key == NK_BACK) { buf[pos] = '\0'; break; }
             else if (k.key == NK_DEL) { if (pos > 0) buf[--pos] = '\0'; }
             else if (k.key == NK_TAB && masked) reveal = !reveal;
-            else if (k.ch >= 32 && pos < len - 1) { buf[pos++] = k.ch; buf[pos] = '\0'; key_us = esp_timer_get_time(); }
+            else if (k.ch >= 32 && pos < len - 1) { buf[pos++] = nucleo_kbd_take_shift_tap() ? nucleo_kbd_shifted(k.ch) : k.ch; buf[pos] = '\0'; key_us = esp_timer_get_time(); }
+            if (nucleo_kbd_shift_latched() != (last_latch == 1)) last_sum ^= 1u;   // repaint the Aa badge
             modal_idle();
             continue;
         }
         last_pos = pos; last_blink = blink; last_sum = sum; last_peek = peek; last_rev = reveal;
+        last_latch = nucleo_kbd_shift_latched() ? 1 : 0;
         header(&canvas, title);
         canvas.fillRoundRect(4, FY, W - 8, FH, 7, LINE);
         canvas.drawRoundRect(4, FY, W - 8, FH, 7, ACC);
@@ -288,6 +290,8 @@ extern "C" void nucleo_ui_input(const char *title, char *buf, int len, int maske
         canvas.setCursor(12, FY + 6);
         canvas.print(sh);
         if (blink == 0) canvas.fillRect(12 + k * 12 + 1, FY + 6, 2, 16, ACC);   // caret
+        if (last_latch == 1) { canvas.fillRoundRect(W - 32, FY + 6, 22, 15, 4, ACC); canvas.setTextSize(1);
+                               canvas.setTextColor(THEME_INK, ACC); canvas.setCursor(W - 27, FY + 10); canvas.print("Aa"); }
         if (masked)
             hint(&canvas, reveal ? H5("invio ok  tab nascondi  esc annulla", "enter ok  tab hide  esc cancel", "enter ok  tab ocultar  esc anular",
                                       "enter ok  tab cacher  esc annuler", "enter ok  tab verbergen  esc Abbr.")
@@ -300,7 +304,7 @@ extern "C" void nucleo_ui_input(const char *title, char *buf, int len, int maske
         if (kk.key == NK_ENTER || kk.key == NK_BACK) { buf[pos] = '\0'; break; }
         else if (kk.key == NK_DEL) { if (pos > 0) buf[--pos] = '\0'; }
         else if (kk.key == NK_TAB && masked) reveal = !reveal;
-        else if (kk.ch >= 32 && pos < len - 1) { buf[pos++] = kk.ch; buf[pos] = '\0'; key_us = esp_timer_get_time(); }
+        else if (kk.ch >= 32 && pos < len - 1) { buf[pos++] = nucleo_kbd_take_shift_tap() ? nucleo_kbd_shifted(kk.ch) : kk.ch; buf[pos] = '\0'; key_us = esp_timer_get_time(); }
 
         modal_idle();
     }

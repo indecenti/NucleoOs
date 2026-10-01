@@ -180,6 +180,7 @@ static void app_draw(void)
 extern bool g_host_guest;
 extern bool g_host_onboard_sta;
 extern int g_host_join_err;
+extern bool g_host_shift_latch;
 extern bool g_host_onboarding;                       // settings_stubs.cpp
 extern "C" void nucleo_settings_onboard(void);
 static const Scene SETTINGS[] = {
@@ -195,6 +196,7 @@ static const Scene SETTINGS[] = {
     { "onboard-done-sta", [] { g_host_onboard_sta = true; g_host_onboarding = true; nucleo_settings_onboard(); app_open("wifi"); app_key(NK_BACK); app_key(NK_RIGHT); app_key(NK_ENTER); app_draw(); } },
     { "onboard-wrongpass", [] { g_host_join_err = 1; g_host_onboarding = true; nucleo_settings_onboard(); app_open("wifi"); down(3); app_key(NK_ENTER); app_type("casa2026"); app_key(NK_ENTER); app_draw(); } },
     { "onboard-notfound",  [] { g_host_join_err = 2; g_host_onboarding = true; nucleo_settings_onboard(); app_open("wifi"); down(3); app_key(NK_ENTER); app_type("casa2026"); app_key(NK_ENTER); app_draw(); } },
+    { "onboard-shift", [] { g_host_onboarding = true; nucleo_settings_onboard(); app_open("wifi"); down(3); app_key(NK_ENTER); app_type("casa"); g_host_shift_latch = true; app_draw(); } },
     { "onboard-reveal", [] { g_host_onboarding = true; nucleo_settings_onboard(); app_open("wifi"); down(3); app_key(NK_ENTER); app_type("casa2026"); app_key(NK_TAB); app_draw(); } },
     // Scrolling one row at a time with the heap of a busy ADV (strip sprite 12 rows): every step is an
     // INCREMENTAL repaint. The ADV showed half-drawn rows and a text-less focus chip here (2026-10-01).
@@ -259,6 +261,7 @@ static const Scene WIZARD[] = {
     { "welcome",    [] { keys({}); wizard_welcome(); } },
     { "input",      [] { keys({ 'c', 'a', 's', 'a' }); char b[33] = ""; nucleo_ui_input("Nome dispositivo", b, sizeof b, 0); } },
     { "input-pass", [] { keys({ 's', 'e', 'g', 'r', 'e', 't', 'o' }); char b[65] = ""; nucleo_ui_input("Password", b, sizeof b, 1); } },
+    { "input-shift", [] { g_host_shift_latch = true; keys({ 'c', 'a', 's', 'a' }); char b[33] = ""; nucleo_ui_input("Nome dispositivo", b, sizeof b, 0); } },
     { "input-reveal", [] { keys({ 's', 'e', 'g', 'r', 'e', 't', 'o', K(NK_TAB) }); char b[65] = ""; nucleo_ui_input("Password", b, sizeof b, 1); } },
 };
 #undef K

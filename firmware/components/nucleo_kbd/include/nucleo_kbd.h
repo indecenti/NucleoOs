@@ -39,6 +39,12 @@ unsigned char nucleo_kbd_mods(void);
 // pinball flipper) — the printable-key table is reliable, unlike the best-effort modifier mapping.
 bool nucleo_kbd_char_down(char c);
 
+// One-shot Shift for text fields: a TAP of Shift (Aa) alone latches it for the next character (a second tap
+// clears it); holding Shift with the key still works as before. Only text editors take the latch.
+bool nucleo_kbd_shift_latched(void);      // peek (to show an "Aa" badge)
+bool nucleo_kbd_take_shift_tap(void);     // consume: true = shift the character being typed
+char nucleo_kbd_shifted(char c);          // the layout's shifted form of an unshifted char ('a'->'A', '1'->'!')
+
 // The ADV's system I2C bus (the TCA8418 keyboard owns the 8/9 master). Returned as void*
 // to avoid forcing the i2c driver header on every includer — cast to i2c_master_bus_handle_t.
 // NULL on the original Cardputer (GPIO-matrix keyboard) or before init. Shared with the

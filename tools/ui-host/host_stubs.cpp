@@ -114,3 +114,7 @@ extern "C" nucleo_key_t nucleo_kbd_read(void)
 }
 extern "C" unsigned char nucleo_kbd_mods(void) { return 0; }
 extern "C" bool nucleo_kbd_char_down(char) { return false; }
+bool g_host_shift_latch = false;                                       // scene-controlled
+extern "C" bool nucleo_kbd_shift_latched(void) { return g_host_shift_latch; }
+extern "C" bool nucleo_kbd_take_shift_tap(void) { bool t = g_host_shift_latch; g_host_shift_latch = false; return t; }
+extern "C" char nucleo_kbd_shifted(char c) { return (c >= 'a' && c <= 'z') ? (char)(c - 32) : c; }
