@@ -123,6 +123,18 @@ test('helpful errors and bounded output', async () => {
   assert.match((await sh.run('cat nope.txt')).out, /No such file/);
 });
 
+test('echo -e / -n and printf write real multi-line files', async () => {
+  // what qwen3.5:9b actually ran on the ADV (2026-10-01) — before, the file got "-e …\n…" literally
+  const { sh, dev } = shell(FILES);
+  await sh.run('mkdir -p demo && echo -e "riga uno\\nriga due\\nriga tre" > demo/README.md');
+  assert.equal(dev.store.get('/data/agent/demo/README.md'), 'riga uno\nriga due\nriga tre\n');
+  await sh.run('echo -n senza-a-capo > a.txt');
+  assert.equal(dev.store.get('/data/agent/a.txt'), 'senza-a-capo');
+  await sh.run('printf "%s: %d\\n" totale 42 > b.txt');
+  assert.equal(dev.store.get('/data/agent/b.txt'), 'totale: 42\n');
+  assert.equal((await sh.run('echo "a\\nb"')).out, 'a\\nb', 'plain echo leaves backslashes alone');
+});
+
 test('plannedWrites sees through pipes and redirections', () => {
   assert.deepEqual(plannedWrites(parse('cat a | grep x > out.txt')), [{ op: 'write', path: 'out.txt' }]);
   assert.deepEqual(plannedWrites(parse('ls; cat a')), []);
