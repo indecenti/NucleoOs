@@ -6,13 +6,35 @@ All notable user-facing changes to NucleoOS. Format loosely follows
 
 ## [Unreleased]
 
+## [0.5.0] — 2026-10-01
+
 ### Added
+- **The device downloads its own SD content** — on a blank or out-of-date card, NucleoOS fetches the
+  web desktop and the assistant's files for its firmware straight from the release (GitHub Pages),
+  verifies every file by SHA-256 and writes it to the card by itself, without ever touching your data.
+  Offered as a skippable step at the end of the first-run wizard, and it resumes if interrupted. The
+  first install pulls the ~50 MB *core* (a complete web OS + assistant); emulator and PC/phone-app
+  packs stay optional. See `docs/sd-content-install.md`.
 - **Runs under M5Launcher** — the same firmware image can be installed by M5Launcher (its OTA list
   or SD installer). NucleoOS detects it and runs as a guest: updates come from the Launcher (its own
   updater is switched off so it can never overwrite another installed app), and Settings ▸ Device
   gains *Back to M5Launcher*. Stand-alone installs are unchanged. See `docs/m5launcher.md`.
+- **Erase SD card / Wipe everything** — two new rows under Settings ▸ Reset. *Erase SD card* formats
+  the whole card (Wi-Fi, PIN and sessions kept); *Wipe everything* does a factory reset and formats
+  the card — a truly blank device, then the first-run wizard. The format runs at the next boot, before
+  anything opens a file on the card, and resumes if a power cut interrupts it.
 
 ### Fixed
+- **Wi-Fi joins reliably from the device** — picking a network in the first-run wizard (or the Settings
+  Wi-Fi app) now connects in pure station mode, so the 4-way handshake can't fail on a channel clash
+  with the setup hotspot (this chip has one radio) — the long-standing "connecting… then it asks for
+  the password again". A wrong password re-opens the field with what you typed and says why; the join
+  logic is now a single, centralized path. The regulatory region follows the UI language, so channels
+  12–13 work in the EU after a reset.
+- **A readable, on-rails first-run wizard** — five languages (not two), a password field at a legible
+  size with a one-tap Shift (Aa), a reveal toggle and the last character shown briefly, the real
+  signal list from Settings, and an end screen ("All set") with the address and pairing PIN. Every path
+  reaches the end; the step can't be left half-finished.
 - **The release SD zip is current again** — it is now built from the sources (it was a months-old
   snapshot: an old web shell and 15 web apps missing), carries no development state files, ships only
   the knowledge shards the assistant actually reads (~72 MB less), and extracts straight to the card
