@@ -38,7 +38,12 @@ static const char *TAG = "sdcontent";
 #define MANIFEST_DIR    NUCLEO_SD_MOUNT "/system/content"
 #define MANIFEST_PART   MANIFEST_DIR "/manifest.part"
 #define MANIFEST_FILE   MANIFEST_DIR "/manifest.txt"
-#define TLS_MIN_BLOCK   40000u          // a GitHub TLS handshake needs ~40 KB contiguous
+// Minimum contiguous block to attempt the TLS handshake. mbedTLS is already in low-memory mode here
+// (asymmetric 8K/4K content buffers, dynamic buffers, CA/config freed after handshake — sdkconfig), so
+// HTTPS fits in ~22-26 KB; the Radio app streams HTTPS on this same chip in a STA-only boot with a block
+// this size. The old 40 KB gate was the full-OS OTA-updater figure and wrongly rejected the install boot,
+// which (STA-only, canvas freed, nothing else up) has a smaller — but sufficient — largest block.
+#define TLS_MIN_BLOCK   22000u
 
 static sdc_state_t s_st;
 const sdc_state_t *nucleo_sdcontent_state(void) { return &s_st; }
@@ -290,8 +295,14 @@ bool nucleo_sdcontent_run(void)
     // Clear the arm flag FIRST: a crash/failure must never turn into a download-every-boot loop.
     nucleo_sdcontent_arm(false);
 
-    if (heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) < TLS_MIN_BLOCK)
-        return fail_run(L5("Memoria insufficiente", "Not enough memory", "Memoria insuficiente", "Memoire insuffisante", "Zu wenig Speicher"));
+    size_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    size_t freeb = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
+    ESP_LOGW(TAG, "install boot heap: free=%u largest=%u (need >=%u for TLS)", (unsigned)freeb, (unsigned)largest, TLS_MIN_BLOCK);
+    if (largest < TLS_MIN_BLOCK) {
+        snprintf(s_st.err, sizeof s_st.err, "%s: %u KB",
+                 L5("RAM insufficiente", "Not enough RAM", "Sin RAM", "RAM insuffisante", "Zu wenig RAM"), (unsigned)(largest / 1024));
+        s_st.phase = SDC_FAILED; progress(); return false;
+    }
 
     // Wait for the STA IP (creds were saved by the wizard just before the reboot).
     for (int t = 0; t < 120 && (!nucleo_setup_ip() || !nucleo_setup_ip()[0]); t++) { vTaskDelay(pdMS_TO_TICKS(250)); esp_task_wdt_reset(); }

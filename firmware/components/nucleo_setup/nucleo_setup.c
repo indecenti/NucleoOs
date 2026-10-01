@@ -1086,6 +1086,9 @@ static void wizard_language(void)
 }
 
 static bool s_onboarding = false;   // this boot: the wizard did the language, Settings does the network
+static bool s_first_boot = false;   // main booted LEAN (no httpd/ANIMA) for the wizard: reboot to the full OS when done
+void nucleo_setup_set_first_boot(bool on) { s_first_boot = on; }
+bool nucleo_setup_is_first_boot(void) { return s_first_boot; }
 // The finish runs on the supervisor (6 KB, always there): no new task to allocate on a fragmented heap.
 // s_fin_req / s_fin_sta / s_fin_state are declared with the supervisor (0 idle, 1 requested, 2 done).
 

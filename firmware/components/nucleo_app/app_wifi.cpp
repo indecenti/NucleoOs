@@ -71,6 +71,7 @@ const char *nucleo_setup_scan_auth_label(int i);
 bool        nucleo_setup_join(const char *ssid, const char *pass);
 int         nucleo_ui_menu(const char *title, const char *const *items, int n);   // nucleo_ui_modal.cpp (blocking)
 bool        nucleo_sdcontent_needed(void);                // SD lacks the web OS/ANIMA files for this firmware
+bool        nucleo_setup_is_first_boot(void);            // main booted lean for the wizard -> reboot to full OS when done
 bool        nucleo_sdcontent_arm(bool on);                // arm the boot-window installer + reboot
 void        nucleo_sdcontent_decline(void);               // remember "skip" for this firmware version
 bool        nucleo_setup_onboarding(void);                // first boot: the network step (or its "All set") is owed
@@ -1919,7 +1920,9 @@ static void search_set(const char *q)
 static void on_key(int k, char ch)
 {
     if (s_onboard == OB_DONE) {                                      // "All set": ENTER opens the launcher
-        if (k == NK_ENTER) { s_onboard = OB_NONE; nucleo_setup_onboard_ack(); nucleo_app_exit(); }
+        if (k == NK_ENTER) { s_onboard = OB_NONE; nucleo_setup_onboard_ack();
+                             if (nucleo_setup_is_first_boot()) esp_restart();   // lean setup is done: boot the full OS
+                             nucleo_app_exit(); }
         return;
     }
     if (s_onboard && s_im == IM_NONE && s_cf == R_NONE && s_page != PG_NETS) set_page(PG_NETS);   // rails
