@@ -269,7 +269,29 @@ static const char *L5(const char *it, const char *en, const char *es, const char
     if (l[0] == 'd' && l[1] == 'e') return de;
     return en;
 }
-static bool fail_run(const char *msg) { snprintf(s_st.err, sizeof s_st.err, "%s", msg); s_st.phase = SDC_FAILED; progress(); return false; }
+// Persist the last failure reason to NVS so the FULL OS (after the install boot reboots) can report it on
+// /api/status — the install boot has no httpd and its RAM log ring is wiped by the reboot, so this is the
+// only way to read why it failed over the network.
+static void persist_diag(void)
+{
+    nvs_handle_t h = nvs_open_sdc(true);
+    if (!h) return;
+    nvs_set_str(h, "diag", s_st.err);
+    nvs_commit(h); nvs_close(h);
+}
+bool nucleo_sdcontent_last_diag(char *out, size_t n)
+{
+    if (!out || n == 0) return false;
+    out[0] = 0;
+    nvs_handle_t h = nvs_open_sdc(false);
+    if (!h) return false;
+    size_t len = n;
+    bool ok = nvs_get_str(h, "diag", out, &len) == ESP_OK && out[0];
+    nvs_close(h);
+    return ok;
+}
+static bool fail_sdc(void) { persist_diag(); s_st.phase = SDC_FAILED; progress(); return false; }
+static bool fail_run(const char *msg) { snprintf(s_st.err, sizeof s_st.err, "%s", msg); return fail_sdc(); }
 
 // Download one file (WRITE/CREATE): url -> /sd/<path>.part -> verify sha -> rename. One retry.
 static bool fetch_file(const char *base, const sdc_file_t *f)
@@ -324,7 +346,7 @@ bool nucleo_sdcontent_run(void)
     if (largest < TLS_MIN_BLOCK) {
         snprintf(s_st.err, sizeof s_st.err, "%s: %u KB",
                  L5("RAM insufficiente", "Not enough RAM", "Sin RAM", "RAM insuffisante", "Zu wenig RAM"), (unsigned)(largest / 1024));
-        s_st.phase = SDC_FAILED; progress(); return false;
+        return fail_sdc();
     }
 
     // Wait for the STA IP (creds were saved by the wizard just before the reboot).
@@ -346,7 +368,7 @@ bool nucleo_sdcontent_run(void)
         snprintf(s_st.err, sizeof s_st.err, "%s v%s (HTTP %d / tls %d)",
                  L5("Contenuti offline?", "Content offline?", "Contenido offline?", "Contenu hors ligne ?", "Inhalt offline?"),
                  ver3, s_last_status, s_last_open_err);
-        s_st.phase = SDC_FAILED; progress(); return false;
+        return fail_sdc();
     }
     unlink(MANIFEST_FILE); rename(MANIFEST_PART, MANIFEST_FILE);
 
