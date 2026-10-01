@@ -34,7 +34,8 @@ import { toAgentTools as hwAgentTools, capabilityForTool, callCapability, HW_MUT
 import { orchestrateScaffold, orchestratePublish, orchestrateManage } from './app-ops.js';
 import { buildReviewPrompt, parseReviewVerdict, reviewNote } from './app-review.js';
 import { createDeviceQueue } from './device-queue.js';
-import { createToolGuard } from './tool-guard.js';      // tool-name repair + doom-loop stop before every tool call (OpenCode-style)
+import { createToolGuard } from './tool-guard.js';
+import { createAgentShell } from './agent-sh.js';          // the `sh` tool: ls/cat/grep/find/sed -n/… over the workspace      // tool-name repair + doom-loop stop before every tool call (OpenCode-style)
 import { runWorkerLocal } from './local-worker.js';   // the LOCAL transport (F0): grammar-constrained loop on an injected browser-local engine
 import { smokeApp, smokeSummary, stageAppRecipe } from './app-recipe.js';   // F5: install-and-smoke on the device + app-recipe learning   // ONE intelligent queue for every device-touching call (reads pooled, writes + Gemini proxy exclusive)
 import { routeFor, providerOf, PROVIDERS, CAPMATRIX, servedModel, toAiError } from '/ai.js';   // multi-model router + capability matrix (image/whisper) for the capability tools
@@ -183,6 +184,22 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
   // Every tool call of every loop (cloud, Groq, the PC's model, the browser GPU) passes this guard: a
   // misspelled tool name is repaired or answered readably, and a 3rd identical call in a row is not run.
   const toolGuard = createToolGuard([...CLIENT_TOOLS.map((td) => td.name), ...hwToolNames, 'web_search']);
+  // The `sh` tool: a POSIX-like shell over the same confined workspace (agent-sh.js). Device commands read
+  // /api/status and /api/apps through the device queue; `open` reuses open_in_os. A line that changes files
+  // is confirmed once, as typed — `rm` always asks, even under auto-approve (like delete_file).
+  const shell = createAgentShell({
+    fs,
+    device: {
+      status: () => dq.read(() => fetch('/api/status', { cache: 'no-store' }).then((x) => x.json())),
+      apps: async () => { const r = await dq.read(() => fetch('/api/apps', { cache: 'no-store' }).then((x) => x.json())); return ((r && r.apps) || []).filter((a) => a.enabled !== false); },
+      open: async (x) => (await execTool('open_in_os', x)).content,
+    },
+    confirm: async ({ cmd, writes, destructive }) => {
+      if (!ui || !ui.confirm) return false;
+      if (!destructive && ui.autoApprove && ui.autoApprove()) return true;
+      return !!(await ui.confirm({ op: 'sh', cmd, writes, root }));
+    },
+  });
   async function guardedExec(name, input, label) {
     const g = toolGuard.check(name, input);
     if (!g.run) {
@@ -299,6 +316,11 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
         if (mustAsk) { const ok = await ui.confirm({ op: name, ...input, abs, root }); if (!ok) return done(t('rt_reject'), true); }
       }
       switch (name) {
+        case 'sh': {
+          const r = await shell.run(String(input.cmd || input.command || ''));
+          const body = r.out || (r.code ? '(no output, exit ' + r.code + ')' : '(done, no output)');
+          return done(fenceUntrusted('sh', { cmd: String(input.cmd || '').slice(0, 120) }, body + (r.out && r.code > 1 ? '\n[exit ' + r.code + ']' : '')), r.code > 1);
+        }
         case 'list_files': { const r = await withRetry(() => dq.read(() => fs.list(input.path || '.'))); if (!r.ok) return done(t('rt_err', { op: 'list', error: r.error }), true);
           return done((r.entries || []).map((e) => (e.type === 'dir' ? '📁 ' : '📄 ') + e.name + (e.type === 'dir' ? '/' : '') + (e.type === 'file' ? ' (' + (e.size || 0) + 'b)' : '')).join('\n') || t('rt_dir_empty')); }
         case 'read_file': { const r = await withRetry(() => dq.read(() => fs.read(input.path, { maxBytes: readCap }))); if (!r.ok) return done(t('rt_err', { op: 'read', error: r.error }), true);
@@ -690,7 +712,8 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
     return `Sei un AGENTE operativo di NucleoOS — un vero sistema operativo multi-app su un M5Stack Cardputer, guidato dal browser dell'utente. ${CLOUD_ONLY_MARK} e PROGRAMMI come uno sviluppatore esperto. Porti a termine il compito USANDO gli strumenti reali.
 
 STRUMENTI:
-• File nello spazio di lavoro (root ${root}): list_files, read_file, search_files, make_dir, write_file, edit_file, append_file, delete_file, move_file.
+• sh: una shell POSIX sui file dello spazio di lavoro (root ${root}) — PREFERISCILA per esplorare e per le operazioni semplici: ls, cat, head, tail, sed -n 'A,Bp', wc -l, grep -rn, find -name, tree, mkdir -p, cp, mv, rm, echo > / >>, con pipe | e ; && ||. Sul Cardputer: df, free, uptime, date, uname, apps, open APP. Per cambiare testo DENTRO un file usa edit_file.
+• File (se non usi sh): list_files, read_file, search_files, make_dir, write_file, edit_file, append_file, delete_file, move_file.
 • run_js: esegue JavaScript in sandbox (~5s; niente DOM/rete/file) per CALCOLARE o trasformare dati — poi persisti il risultato con i tool file.
 • open_in_os: LANCIA un'app del device (es. calculator, notepad, media-player, radio, photo-viewer, calendar) o apre un file nell'app giusta. È così che "apri la calcolatrice", "metti la musica", ecc.
 • list_apps: elenca le app installate (id + nome) — chiamalo prima di lanciare se non sei sicuro dell'id.
@@ -776,6 +799,7 @@ Sii conservativo: in dubbio scegli "task". Considera il contesto della conversaz
     aborter = new AbortController();
     taskPlan = [];                                   // each question starts with an empty checklist
     toolGuard.reset();                               // …and a clean doom-loop history
+    shell.reset();                                   // …and the shell back at the workspace root
     if (ui && ui.plan) { try { ui.plan([]); } catch {} }
     const hist = compact(history, { budget: 20000, lang, minRecent: 8 }).history;   // generous: compaction (ANIMA-tuned) drops old assistant turns, so keep more verbatim
     const histMsgs = hist.map((t) => ({ role: t.role === 'bot' ? 'assistant' : 'user', content: String(t.text || '') }))

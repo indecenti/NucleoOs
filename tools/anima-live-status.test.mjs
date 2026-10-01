@@ -3,7 +3,26 @@
 // PC's model, which answered "1,4 GB" on a card with 18.7 GB free. These values must never pass through a model.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { liveKind, liveFromStatus, commandHint, guessLang } from '../apps/anima/www/local/cascade.js';
+import { liveKind, liveFromStatus, commandHint, guessLang, liveKinds, deviceLine } from '../apps/anima/www/local/cascade.js';
+
+test('a question asking several live values at once is split and every part answered', () => {
+  // the real miss (2026-10-01): it reached a tool-less chat, which said it could not read the SD
+  assert.deepEqual(liveKinds("Quanto spazio libero c'è sulla SD e da quanto è acceso il Cardputer?"), ['space', 'uptime']);
+  assert.deepEqual(liveKinds('che ore sono e quanta batteria ho'), ['time', 'battery']);
+  assert.deepEqual(liveKinds('what time is it and how much battery do I have'), ['time', 'battery']);
+  assert.deepEqual(liveKinds('quanto spazio libero ho'), ['space']);
+  assert.equal(liveKinds('che ore sono e chi è Einstein'), null, 'one clause is not a live question: the whole turn goes on as usual');
+  assert.equal(liveKinds('chi è Einstein'), null);
+});
+
+test('every engine gets one compact line of the live device state', () => {
+  const st = { version: '0.4.0', uptime_s: 5025, free_heap: 26820, profile: 'web', storage: { mounted: true, total_bytes: 31998345216, free_bytes: 18714492928 },
+    battery: { pct: 100, mv: 4152 }, network: { mode: 'sta', ssid: 'nonnoBob', ip: '192.168.0.104' } };
+  assert.equal(deviceLine(st, 'it'), 'SD 18.7 GB liberi su 32.0, batteria 100%, acceso da 1 h 23 min, Wi-Fi «nonnoBob» 192.168.0.104, RAM 26 KB, modalità web (cervello offline in pausa), NucleoOS 0.4.0');
+  assert.match(deviceLine(st, 'en'), /^SD 18\.7 GB free of 32\.0, battery 100%, up 1 h 23 min/);
+  assert.ok(deviceLine(st, 'it').length < 200, 'small enough for every prompt');
+  assert.equal(deviceLine(null), '');
+});
 
 // The Cardputer ADV's real /api/status (2026-10-01), trimmed.
 const ST = {

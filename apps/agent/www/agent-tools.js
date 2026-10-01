@@ -7,6 +7,9 @@
 // ───────────────────────── tool surface (the worker↔OS contract) ─────────────────────────
 // Anthropic-native shape ({name, description, input_schema}); toOpenAITools() maps it for Groq/OpenAI.
 export const CLIENT_TOOLS = [
+  // FIRST: one POSIX-like shell over the workspace (agent-sh.js). Models already know these commands from their
+  // training, so they need no per-tool teaching; for local models it replaces list/search/mkdir/mv/rm/append.
+  { name: 'sh', description: "Run a shell command line on the Cardputer's files, inside the workspace, like a POSIX shell: ls, cat, head, tail, sed -n 'A,Bp', wc, grep -rn, find -name, tree, sort, uniq, echo, mkdir -p, touch, cp, mv, rm -r; pipes | and redirection > >> <, ; && ||. The Cardputer itself: df, free, uptime, date, uname, apps, open APP-ID|FILE. Use it to explore and for simple file operations; use edit_file to change text inside a file. Lines that change files are approved by the human once.", input_schema: { type: 'object', properties: { cmd: { type: 'string', description: 'the command line, e.g. grep -rn TODO src | head -20' } }, required: ['cmd'] } },
   { name: 'list_files', description: 'List files and folders in a workspace directory. Call this to explore before reading or writing.', input_schema: { type: 'object', properties: { path: { type: 'string', description: 'workspace-relative path, default "."' } }, required: [] } },
   { name: 'read_file', description: 'Read a text file from the workspace. Output is line-numbered ("12→code") so you can reference exact lines — but for edit_file the "old" string must be the RAW text WITHOUT the "N→" prefix. Read a file before editing it. For large files pass offset (1-based first line) and limit (max lines).', input_schema: { type: 'object', properties: { path: { type: 'string' }, offset: { type: 'number', description: 'first line, 1-based (optional)' }, limit: { type: 'number', description: 'max lines to return (optional)' } }, required: ['path'] } },
   { name: 'search_files', description: 'Search workspace file contents by text or regex. Use to locate where something is defined.', input_schema: { type: 'object', properties: { query: { type: 'string' }, glob: { type: 'string', description: 'optional name filter e.g. *.js' } }, required: ['query'] } },
@@ -353,7 +356,9 @@ export function searchFallbackTerms(query) {
   return [...new Set(words)].sort((a, b) => b.length - a.length).slice(0, 3);
 }
 
-export const LOCAL_EXCLUDED_TOOLS = new Set(['generate_image', 'transcribe']);   // need a cloud provider key
+// generate_image / transcribe need a cloud provider key. The rest is what `sh` already does (ls, grep -rn,
+// mkdir -p, mv, rm, echo >>, apps): a small local model chooses better among fewer tools.
+export const LOCAL_EXCLUDED_TOOLS = new Set(['generate_image', 'transcribe', 'list_files', 'search_files', 'make_dir', 'move_file', 'delete_file', 'append_file', 'list_apps']);
 export const PRIVATE_EXCLUDED_TOOLS = new Set(['weather']);                       // a network call: never in Private
 
 export function localToolDefs(clientTools = CLIENT_TOOLS, { private: priv = false } = {}) {

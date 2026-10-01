@@ -63,15 +63,15 @@ test('a tool call written as text is recovered; prose and unknown names are not 
   assert.equal(parseTextToolCalls('{"name":"rm_rf","arguments":{}}', known).calls.length, 0, 'an unknown tool is never recovered');
   assert.equal(parseTextToolCalls('La risposta è 42.', known).calls.length, 0);
 
-  const { chat } = scripted([{ text: '<tool_call>{"name":"list_files","arguments":{}}</tool_call>' }, { text: 'Ci sono 2 file.' }]);
+  const { chat } = scripted([{ text: '<tool_call>{"name":"sh","arguments":{"cmd":"ls"}}</tool_call>' }, { text: 'Ci sono 2 file.' }]);
   const ran = [];
   const out = await runLocalToolLoop({ chat, execTool: async (n) => { ran.push(n); return { content: 'a.js\nb.js' }; }, messages: [{ role: 'user', content: 'quali file?' }], tools: TOOLS });
-  assert.deepEqual(ran, ['list_files']);
+  assert.deepEqual(ran, ['sh']);
   assert.equal(out, 'Ci sono 2 file.');
 });
 
 test('the same call repeated is nudged instead of re-run; an unknown tool gets the list', async () => {
-  const same = { text: '', toolCalls: [{ name: 'list_files', arguments: { path: '.' } }] };
+  const same = { text: '', toolCalls: [{ name: 'sh', arguments: { cmd: 'ls' } }] };
   const { chat } = scripted([same, same, same, same, { text: '', toolCalls: [{ name: 'format_disk', arguments: {} }] }, { text: 'ok' }]);
   let runs = 0;
   const messages = [{ role: 'user', content: 'x' }];
@@ -79,7 +79,7 @@ test('the same call repeated is nudged instead of re-run; an unknown tool gets t
   assert.equal(out, 'ok');
   assert.equal(runs, 2, 'a repeated identical call runs at most twice');
   const tools = messages.filter((m) => m.role === 'tool').map((m) => m.content);
-  assert.match(tools[2], /already called list_files/);
+  assert.match(tools[2], /already called sh/);
   assert.match(tools[4], /Unknown tool "format_disk".*read_file/);
 });
 
@@ -97,7 +97,7 @@ test('old tool results are trimmed to fit a local window; the recent ones stay w
 
 test('out of steps: one last tool-less call summarizes instead of going silent', async () => {
   let n = 0;
-  const loopChat = async (m, o) => (o && o.noTools ? { text: 'Ho elencato i file; resta da scrivere il test.' } : { text: '', toolCalls: [{ name: 'list_files', arguments: { path: 'p' + (n++) } }] });
+  const loopChat = async (m, o) => (o && o.noTools ? { text: 'Ho elencato i file; resta da scrivere il test.' } : { text: '', toolCalls: [{ name: 'sh', arguments: { cmd: 'ls p' + (n++) } }] });
   const out = await runLocalToolLoop({ chat: loopChat, execTool: async () => ({ content: 'ok' }), messages: [{ role: 'user', content: 'x' }], tools: TOOLS, maxSteps: 3 });
   assert.match(out, /^Ho elencato i file/);
   assert.match(out, /step budget exhausted/);
@@ -113,6 +113,10 @@ test('the local tool surface drops cloud-only tools, and network tools in Privat
   assert.ok(names.includes('read_file') && names.includes('edit_file') && names.includes('run_js') && names.includes('weather'));
   assert.ok(!names.includes('generate_image') && !names.includes('transcribe'));
   assert.ok(!localToolDefs(CLIENT_TOOLS, { private: true }).some((t) => t.name === 'weather'));
+  // one shell instead of six look-alike tools: a small model chooses better among fewer
+  assert.equal(names[0], 'sh', 'the shell comes first');
+  for (const dup of ['list_files', 'search_files', 'make_dir', 'move_file', 'delete_file', 'append_file', 'list_apps']) assert.ok(!names.includes(dup), dup + ' is covered by sh for local models');
+  assert.ok(CLIENT_TOOLS.some((t) => t.name === 'list_files'), 'cloud models keep the full set');
 });
 
 test('OpenAI-compatible servers get string arguments and tool_call_id', () => {
