@@ -170,5 +170,7 @@
   "l1WebMode": "The Cardputer is in web mode now: its offline brain is paused to leave the desktop the memory, so this choice has no effect until you go back to the Cardputer’s own OS.",
   "engLiveStatus": "Cardputer · live status",
   "engModel": "PC model",
-  "engModelAuto": "Automatic (the best fit, measured on this PC)"
+  "engModelAuto": "Automatic (the best fit, measured on this PC)",
+  "agentShCmd": "Command:",
+  "agentShWrites": "What it changes:"
 }
