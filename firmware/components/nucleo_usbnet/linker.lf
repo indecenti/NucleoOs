@@ -1,0 +1,15 @@
+# TinyUSB's NCM endpoint buffer (ncm_epbuf, ~19 KB): esp_tinyusb declares it DRAM_ATTR, i.e. a ".dram1.N"
+# section inside .dram0.data -- RAM every boot pays plus the same 19 KB of zeros in the flash image, although
+# only the USB-web boot ever uses it. This mapping moves ncm_device.c's .dram1 sections to NOLOAD .dram0.bss
+# (zeroed at boot, no flash image) between the symbols _nucleo_ncm_start / _nucleo_ncm_end, and
+# nucleo_usbnet_reclaim() hands that range to the heap on every boot that will not start USB-web -- the same
+# technique ESP-IDF uses for the Bluetooth controller's memory (esp_bt_mem_release).
+[scheme:nucleo_ncm_reclaim]
+entries:
+    dram -> dram0_bss
+
+[mapping:nucleo_ncm_reclaim]
+archive: libespressif__tinyusb.a
+entries:
+    ncm_device (nucleo_ncm_reclaim);
+        dram -> dram0_bss ALIGN(4, pre, post) SURROUND(nucleo_ncm)

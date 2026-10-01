@@ -2,6 +2,7 @@
 #include "esp_log.h"
 #include "esp_attr.h"
 #include "esp_heap_caps.h"
+#include "esp_heap_caps_init.h"
 #include "esp_mac.h"
 #include "esp_netif.h"
 #include "esp_netif_defaults.h"
@@ -33,6 +34,22 @@ static bool s_failed = false;
 bool nucleo_usbnet_failed(void) { return s_failed; }
 
 static esp_netif_t *s_netif = NULL;
+
+// The NCM buffer bracket emitted by linker.lf (SURROUND). Strong references on purpose: if that mapping ever
+// stops applying, the link fails instead of the buffer silently becoming resident again.
+extern uint8_t _nucleo_ncm_start[], _nucleo_ncm_end[];
+static bool s_reclaimed = false;
+
+size_t nucleo_usbnet_reclaim(void)
+{
+    if (s_reclaimed) return 0;
+    intptr_t a = ((intptr_t)_nucleo_ncm_start + 3) & ~(intptr_t)3;
+    intptr_t b = (intptr_t)_nucleo_ncm_end & ~(intptr_t)3;
+    if (b - a < 1024) return 0;
+    s_reclaimed = true;                     // even if the heap refuses: the buffer is no longer ours to use
+    if (heap_caps_add_region(a, b) != ESP_OK) { ESP_LOGW(TAG, "NCM buffer reclaim refused"); return 0; }
+    return (size_t)(b - a);
+}
 
 // ── explicit NCM-only USB descriptor ─────────────────────────────────────────
 // MSC stays enabled in Kconfig (for the SD-drive mode), so the DEFAULT descriptor would fold in a
@@ -73,6 +90,11 @@ static esp_err_t usb_recv_cb(void *buffer, uint16_t len, void *ctx)
 
 void nucleo_usbnet_start(void)
 {
+    if (s_reclaimed) {                      // its buffer belongs to the heap this boot (never on a USB-web boot)
+        ESP_LOGE(TAG, "usbnet: NCM buffer was reclaimed this boot, not starting");
+        s_failed = true;
+        return;
+    }
     // Heap snapshot BEFORE any bring-up. This log reaches the JTAG serial console (USB is still in
     // JTAG mode here; tinyusb_driver_install below is what switches the port to OTG). Bringing up
     // TinyUSB + esp_netif + a DHCP server needs a big contiguous block; on this no-PSRAM chip a

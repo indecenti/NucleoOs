@@ -48,6 +48,15 @@ large headroom; profile A is the tight one and caps concurrent sessions.
   and free heap 31968 → 36352 — a boot-gate win for RAM the closed app never needed resident.
   This is enforceable: `idf.py size --archive_details libnucleo_app.a` lists the per-symbol
   `.bss` — a multi-KB `s_*` array in an app is a red flag.
+- **Library buffers too — reclaim what a boot will not use.** A third-party static that only one boot
+  mode needs is moved between linker symbols by an IDF linker fragment and handed to the heap on every
+  other boot (`heap_caps_add_region`, the technique ESP-IDF uses for `esp_bt_mem_release`). TinyUSB's
+  NCM endpoint buffer (`ncm_epbuf`, 19 KB, a DRAM_ATTR `.dram1` array = RAM *and* 19 KB of zeros in the
+  flash image) is the first: `nucleo_usbnet/linker.lf` places it in `.bss` between
+  `_nucleo_ncm_start/_end`, and `nucleo_usbnet_reclaim()` gives it to the heap in every boot that is not
+  USB-web (the SD-content install boot does it right before TLS). Strong symbol references make the link
+  fail if the fragment ever stops applying. Measured: image −18.7 KB, +19 KB contiguous heap.
+  Audit the rest with `esp_idf_size --files build/nucleoos.map` (static DRAM per object).
 - WebSocket/BLE payloads are **delta events only** (see `event-protocol.md`), never full state.
 - Partial display refresh — never a full 240×135×2 = ~63 KB framebuffer.
 - Bounded ring buffers for logs/audio; backpressure instead of unbounded queues.

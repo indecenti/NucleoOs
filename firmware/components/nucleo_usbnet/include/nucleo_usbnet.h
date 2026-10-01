@@ -11,6 +11,7 @@
 // (flash + JTAG console never lost). Wi-Fi/LAN is unaffected when the cable isn't used.
 #pragma once
 #include <stdbool.h>
+#include <stddef.h>
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -28,6 +29,12 @@ bool nucleo_usbnet_web_armed(void);
 // Bring up the USB network card: TinyUSB NCM + an esp_netif with a static IP and a DHCP server.
 // Call AFTER nucleo_httpd_start() (the httpd is bound to 0.0.0.0 and will answer on this netif).
 void nucleo_usbnet_start(void);
+
+// TinyUSB's NCM endpoint buffer (~19 KB) is linked into .bss between two symbols (linker.lf), with no flash
+// image, and is handed back to the heap here on every boot that will not start USB-web. Once reclaimed,
+// nucleo_usbnet_start() refuses (USB-web is armed with a reboot, so this boot never needed it). Returns the
+// bytes added to the heap (0 if already reclaimed or the heap refused the region).
+size_t nucleo_usbnet_reclaim(void);
 
 // True once the USB network device is up (for the on-device Remote screen to show the address).
 bool nucleo_usbnet_is_active(void);
