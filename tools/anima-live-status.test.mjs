@@ -15,6 +15,17 @@ test('a question asking several live values at once is split and every part answ
   assert.equal(liveKinds('chi è Einstein'), null);
 });
 
+test('the Cardputer named as the subject is still a live question (went to a cloud model on the ADV)', () => {
+  assert.deepEqual(liveKinds('Quanta RAM libera ha il Cardputer e a che rete Wi-Fi è collegato?'), ['ram', 'network']);
+  assert.deepEqual(liveKinds('che ip ha il cardputer e quanta batteria?'), ['network', 'battery']);
+  assert.deepEqual(liveKinds('che rete wifi usa il cardputer e quanta batteria ha?'), ['network', 'battery']);
+  assert.deepEqual(liveKinds('how much free memory does the Cardputer have?'), ['ram']);
+  assert.deepEqual(liveKinds('che versione ha il cardputer'), ['version']);
+  assert.deepEqual(liveKinds('cuanta bateria tiene el cardputer'), ['battery']);
+  assert.equal(liveKinds("che cos'è il cardputer"), null, 'a question ABOUT the device is not a status read');
+  assert.equal(liveKinds('il cardputer'), null);
+});
+
 test('every engine gets one compact line of the live device state', () => {
   const st = { version: '0.4.0', uptime_s: 5025, free_heap: 26820, profile: 'web', storage: { mounted: true, total_bytes: 31998345216, free_bytes: 18714492928 },
     battery: { pct: 100, mv: 4152 }, network: { mode: 'sta', ssid: 'nonnoBob', ip: '192.168.0.104' } };
@@ -101,6 +112,8 @@ test('the answer follows the language the question was written in', () => {
     '¿Cuánto espacio libre tengo?': 'es', 'qué hora es': 'es', 'cuanta bateria me queda': 'es',
     'Combien d\'espace libre il me reste ?': 'fr', 'Quelle heure est-il ?': 'fr',
     'Wie viel Speicherplatz habe ich?': 'de', 'Wie spät ist es?': 'de', 'Welches Jahr haben wir?': 'de',
+    'Imposta la luminosità dello schermo del Cardputer al 50%': 'it',   // answered "Brillo al 50 %" on the ADV
+    'alza il volume': 'it', 'baja el volumen': 'es', 'pon el brillo al 50': 'es',
   };
   for (const [q, l] of Object.entries(cases)) assert.equal(guessLang(q), l, q);
   assert.equal(guessLang('uptime'), null, 'no cue: the OS language is kept');
@@ -109,4 +122,22 @@ test('the answer follows the language the question was written in', () => {
 
 test('all five languages answer', () => {
   for (const l of ['it', 'en', 'es', 'fr', 'de']) assert.ok(/18[.,]7/.test(liveFromStatus('space', ST, l)), l);
+});
+
+test('a volume / brightness order is read without an engine (web mode said "not carried out")', async () => {
+  const { settingAct, settingReply } = await import('../apps/anima/www/local/cascade.js');
+  const arg = (q) => { const a = settingAct(q); return a && a.tool + ' ' + a.arg; };
+  assert.equal(arg('Imposta la luminosità dello schermo del Cardputer al 50%'), 'set_brightness 50');
+  assert.equal(arg('alza il volume'), 'set_volume +10');
+  assert.equal(arg('abbassa la luminosità'), 'set_brightness -10');
+  assert.equal(arg('volume al massimo'), 'set_volume 100');
+  assert.equal(arg('silenzia il volume'), 'set_volume 0');
+  assert.equal(arg('set the brightness to 30 percent'), 'set_brightness 30');
+  assert.equal(arg('baja el volumen'), 'set_volume -10');
+  assert.equal(arg('stelle die Helligkeit auf 80'), 'set_brightness 80');
+  assert.equal(settingAct('come alzo il volume del mio PC?'), null, 'a how-to is not an order');
+  assert.equal(settingAct('cambia il volume'), null, 'no amount, no direction: not ours to guess');
+  assert.equal(settingAct("l'audio del film era basso ieri sera"), null);
+  assert.equal(settingReply('set_brightness', 'Luminosita al 50%.', 'it'), 'Luminosità al 50%.');
+  assert.equal(settingReply('set_volume', 'Volume 100%.', 'de'), 'Lautstärke 100 %.');
 });

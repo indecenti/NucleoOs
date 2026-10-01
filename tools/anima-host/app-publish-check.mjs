@@ -112,6 +112,15 @@ ok('list kind wires list+add', starterHtml({ name: 'L', kind: 'list' }).includes
 ok('timer kind wires disp+start', starterHtml({ name: 'T', kind: 'timer' }).includes('id="disp"') && starterHtml({ name: 'T', kind: 'timer' }).includes('id="start"'));
 ok('converter kind wires out+from', starterHtml({ name: 'C', kind: 'converter' }).includes('id="out"') && starterHtml({ name: 'C', kind: 'converter' }).includes('id="from"'));
 ok('list i18n keys present', ['add', 'empty', 'placeholder'].every((k) => k in JSON.parse(starterI18n({ name: 'L', kind: 'list' }, false))));
+// …and with the REAL parser (the fake one above hid it): the sandbox wrapper declares `os`, so every agent app —
+// the starter included — failed "Identifier 'os' has already been declared" and publish_app never wrote (ADV, 2026-10-01).
+{
+  const { checkSyntax: real } = await import('../../apps/code-runner/www/nucleo-run.js');
+  for (const kind of APP_KINDS) ok('starter (' + kind + ') passes the REAL lint', lintApp([{ path: 'index.html', content: starterHtml({ id: 'demo', name: 'Demo', kind }) }], real).ok);
+  ok('real lint still refuses a broken inline script', !lintApp([{ path: 'index.html', content: '<script>const os = ;</script>' }], real).ok);
+  ok('real lint: a file may declare os / console', lintApp([{ path: 'app.js', content: 'const os = 1; const print = () => os;' }], real).ok);
+  ok('sandbox snippets keep their parameters', real('os.fs.read("x")').ok && !real('const os = 1;').ok);
+}
 ok('timer i18n keys present', ['start', 'reset', 'minutes'].every((k) => k in JSON.parse(starterI18n({ name: 'T', kind: 'timer' }, true))));
 
 console.log(`\napp-publish-check: ${pass} passed, ${fail} failed`);

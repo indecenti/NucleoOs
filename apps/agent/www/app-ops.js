@@ -38,6 +38,12 @@ export async function orchestrateScaffold(io, { input = {} } = {}) {
   const reg = await io.sysReadJson('/system/registry/apps.json');
   const existing = reg && (reg.installed || []).find((a) => a && a.id === id);
   if (existing && !isAgentApp(existing)) return fail('system-id', tr(io, 'ao_system_id', { id }));
+  // An app already staged here is WORK, not a template slot: qwen3.5:9b, asked to publish the finished
+  // "contatore", scaffolded it again and the starter overwrote its index.html. Only an explicit overwrite redoes it.
+  if (!input.overwrite) {
+    const prev = await io.readWs(id + '/manifest.json', { maxBytes: 16384 });
+    if (prev && prev.ok) return fail('exists', tr(io, 'ao_scaffold_exists', { id }));
+  }
   const files = [
     [id + '/manifest.json', JSON.stringify(manifest, null, 2)],
     [id + '/www/index.html', starterHtml(input)],
@@ -115,7 +121,7 @@ export async function orchestratePublish(io, { id: rawId } = {}) {
     const w = await io.sysWrite(s.destAbs, s.content);
     if (w.ok) copied++;
   }
-  const rw = await io.sysWrite('/system/registry/apps.json', JSON.stringify(plan.doc, null, 2));
+  const rw = await io.sysWrite('/system/registry/apps.json', JSON.stringify(plan.doc));   // compact: the device re-reads it in one block on a tight heap
   if (!rw.ok) return fail('sys-write-registry', tr(io, 'ao_write_registry_fail', { copied, error: rw.error }));
 
   if (io.notifyAppsChanged) io.notifyAppsChanged();
@@ -136,7 +142,7 @@ export async function orchestrateManage(io, { id: rawId, action: rawAction } = {
       : plan.reason === 'not-found' ? tr(io, 'ao_not_found', { id })
         : tr(io, 'ao_registry_unreadable2'));
   if (plan.was === (action === 'enable')) return { ok: true, noop: true, message: tr(io, 'ao_already', { id, state: (action === 'enable' ? tr(io, 'ao_enabled') : tr(io, 'ao_disabled')) }) };
-  const rw = await io.sysWrite('/system/registry/apps.json', JSON.stringify(plan.doc, null, 2));
+  const rw = await io.sysWrite('/system/registry/apps.json', JSON.stringify(plan.doc));   // compact (see publish)
   if (!rw.ok) return fail('sys-write-registry', tr(io, 'ao_registry_fail', { error: rw.error }));
   if (io.notifyAppsChanged) io.notifyAppsChanged();
   return { ok: true, message: tr(io, 'ao_manage_ok', { id, state: (action === 'enable' ? tr(io, 'ao_enabled_full') : tr(io, 'ao_disabled_full')) }) };

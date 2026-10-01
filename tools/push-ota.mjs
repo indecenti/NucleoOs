@@ -42,6 +42,7 @@ import { fileURLToPath } from 'node:url';
 import { REGISTRY_REL, mergeRegistryText } from './lib/registry-merge.mjs';
 import { isDeviceState } from './lib/sd-policy.mjs';
 import { stagingDrift } from './staging-check.mjs';
+import { deviceSession } from './lib/device-session.mjs';
 
 const REPO = join(fileURLToPath(import.meta.url), '..', '..');
 const SD = join(REPO, 'deploy', 'sd');
@@ -419,13 +420,6 @@ const fetchWithTimeout = (url, opts, ms) => {
 let sessionCookie = null;
 const authHeaders = () => (sessionCookie ? { cookie: sessionCookie } : {});
 
-// Pull the nucleo_session=… pair out of a Set-Cookie header (drop the attributes).
-function parseSessionCookie(setCookie) {
-  if (!setCookie) return null;
-  const m = /(?:^|,\s*)(nucleo_session=[^;]+)/.exec(setCookie);
-  return m ? m[1] : null;
-}
-
 // Pair with the device using the screen PIN; stores the session cookie on success.
 // Returns true if paired (or no auth needed), false otherwise.
 async function ensurePaired(host, args) {
@@ -446,26 +440,14 @@ async function ensurePaired(host, args) {
     return true;     // not required, or already paired
   }
 
-  // PIN given: pair and capture the session cookie.
-  let r;
-  try {
-    r = await fetchWithTimeout(host + '/api/pair',
-      { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pin: args.pin }) },
-      args.timeout);
-  } catch (e) {
-    console.error(`✗ Pairing request failed: ${e.message}`);
+  // PIN given: reuse this tool family's cached session, pairing only when the device refuses it
+  // (lib/device-session.mjs — a fresh /api/pair per run evicted the user's browser session).
+  try { sessionCookie = await deviceSession(host, args.pin, { timeoutMs: args.timeout }); }
+  catch (e) {
+    console.error(e.status ? `✗ Pairing rejected (HTTP ${e.status}) — check the PIN on the Cardputer screen.` : `✗ Pairing request failed: ${e.message}`);
     return false;
   }
-  if (!r.ok) {
-    console.error(`✗ Pairing rejected (HTTP ${r.status}) — check the PIN on the Cardputer screen.`);
-    return false;
-  }
-  sessionCookie = parseSessionCookie(r.headers.get('set-cookie'));
-  if (!sessionCookie) {
-    console.error('✗ Pairing succeeded but no session cookie was returned by the device.');
-    return false;
-  }
-  console.log('✓ Paired with device (session cookie acquired).');
+  console.log('✓ Paired with device (session cookie ready).');
   return true;
 }
 

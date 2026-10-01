@@ -156,12 +156,19 @@ test('ANIMA: a task goes to the agent, a chat turn does not (5 languages)', () =
     // which/where questions too (live miss: a chat invented a README's content and answered "0 files")
     'In quali file dello spazio di lavoro compare la parola NucleoOS?', 'Which files in the workspace mention ESP32?',
     'Dove si trova il file README nella cartella demo?', '¿En qué archivos aparece la palabra demo?', 'Quels fichiers contiennent le mot demo ?', 'Welche Dateien enthalten das Wort demo?',
+    // the INSTALLED apps (live miss: a chat listed apps from memory, with a text-to-speech Calculator)
+    'Quali app installate sul Cardputer riguardano audio o musica?', 'Which installed apps play music?',
+    '¿Qué aplicaciones instaladas hay para la música?', 'Quelles applications installées concernent la musique ?', 'Welche installierten Apps gibt es für Musik?',
+    // publishing an app the agent prepared (live miss: a chat invented `install_app` commands)
+    "Pubblica e installa sul Cardputer l'app contatore", 'Publish the counter app to the Cardputer', 'Instala la app contador',
+    "Publie l'application compteur", 'Installiere die App Zähler',
   ];
   const chats = [
     'ciao come stai', 'che ore sono', 'apri la calcolatrice', 'aggiungi un evento domani alle 9', "cos'è nucleoos",
     'what is the weather in Rome', 'raccontami una storia', 'wie spät ist es', 'quanto fa 2+2', 'traduci ciao in inglese',
     '¿qué hora es?', 'quelle heure est-il', 'erzähl mir einen Witz',
     'dammi una ricetta per la carbonara', 'quanta batteria ho', 'mostrami una barzelletta', 'how many planets are there',
+    'qual è la migliore app per imparare l’inglese?', 'what is an app?',
   ];
   for (const q of tasks) assert.ok(wantsAgent(q), 'task: ' + q);
   for (const q of chats) assert.ok(!wantsAgent(q), 'chat: ' + q);

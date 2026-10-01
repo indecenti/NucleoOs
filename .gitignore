@@ -101,3 +101,6 @@ deploy/sd-safe/apps/anima/www/forge/models/**/*.gguf
 tools/anima/.cache/teacher_*.npy
 oversized-assets/parts/qwen-coder-gguf/
 oversized-assets/parts/teacher-npy/
+
+# Cached paired session per device for the dev tools (tools/lib/device-session.mjs) — a secret
+tools/.device-sessions.json

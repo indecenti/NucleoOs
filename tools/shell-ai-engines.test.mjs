@@ -248,3 +248,26 @@ test('a model bigger than the GPU loads split GPU/CPU instead of being skipped, 
   assert.equal(pickModel(models, 'chat', { perf: slow, base: b }), 'qwen3.5:9b', 'measured slow: back to the small one');
   forgetServers();
 });
+
+test('a browser that forbids localhost (Local Network Access denied) is "blocked", not a stopped server', async () => {
+  const { probeServer, localNetworkPermission } = await import('../web/shell/ai-engines.js');
+  const fail = async () => { throw new TypeError('Failed to fetch'); };
+  const perm = (state) => ({ query: async ({ name }) => { if (name !== 'loopback-network') throw new TypeError('unknown'); return { state }; } });
+  const srv = { id: 'ollama', kind: 'ollama', name: 'Ollama', base: 'http://localhost:11434' };
+  assert.equal((await probeServer(srv, { fetch: fail, permissions: perm('denied') })).status, 'blocked');
+  assert.equal((await probeServer(srv, { fetch: fail, permissions: perm('granted') })).status, 'down');
+  assert.equal((await probeServer({ ...srv, base: 'http://192.168.0.9:11434' }, { fetch: fail, permissions: perm('denied') })).status, 'down', 'only loopback is gated');
+  assert.equal(await localNetworkPermission({ permissions: undefined }), null);
+});
+
+test('one loopback server that answers proves the browser is not blocking: the stopped ones are just "down"', async () => {
+  const { detectServers } = await import('../web/shell/ai-engines.js');
+  const perm = { query: async () => ({ state: 'denied' }) };    // what Chrome reports inside the ANIMA iframe
+  const f = async (url) => { if (String(url).includes(':11434')) return new Response(JSON.stringify({ models: [] }), { status: 200 }); throw new TypeError('Failed to fetch'); };
+  const out = await detectServers({ fetch: f, permissions: perm, servers: [
+    { id: 'ollama', kind: 'ollama', name: 'Ollama', base: 'http://localhost:11434' },
+    { id: 'lmstudio', kind: 'openai', name: 'LM Studio', base: 'http://localhost:1234/v1' }] });
+  assert.deepEqual(out.map((s) => s.status), ['ok', 'down']);
+  const none = await detectServers({ fetch: async () => { throw new TypeError('x'); }, permissions: perm, servers: [{ id: 'ollama', kind: 'ollama', name: 'Ollama', base: 'http://localhost:11434' }] });
+  assert.equal(none[0].status, 'blocked');
+});

@@ -5,6 +5,7 @@
 #include <string.h>
 #include "esp_log.h"
 #include "cJSON.h"
+#include "registry_scan.h"
 
 static const char *TAG = "registry";
 static nucleo_app_t s_apps[NUCLEO_MAX_APPS];
@@ -90,7 +91,8 @@ static char *read_file(const char *path)
     fseek(f, 0, SEEK_SET);
     if (len < 0 || len > REGFILE_MAX) { ESP_LOGE(TAG, "%s size %ld out of range", path, len); fclose(f); return NULL; }
     char *buf = malloc(len + 1);
-    if (buf && fread(buf, 1, len, f) == (size_t)len) buf[len] = '\0';
+    if (!buf) ESP_LOGE(TAG, "no heap for %s (%ld B in one block)", path, len);   // was silent: same symptom, no clue
+    else if (fread(buf, 1, len, f) == (size_t)len) buf[len] = '\0';
     else { free(buf); buf = NULL; }
     fclose(f);
     return buf;
@@ -102,30 +104,46 @@ esp_err_t nucleo_registry_load(void)
     // previous table, not empty the launcher until reboot. Reset the count only once the doc is parsed.
     char *txt = read_file(APPS_JSON);
     if (!txt) return ESP_FAIL;
+    const size_t len = strlen(txt);
 
-    cJSON *root = cJSON_Parse(txt);
-    free(txt);
-    if (!root) { ESP_LOGE(TAG, "invalid JSON in apps.json"); return ESP_FAIL; }
+    // ONE app object at a time (registry_scan.h): the whole-document parse needed ~25-30 KB of nodes and
+    // failed on the web profile's heap right after an install, leaving the new app off /api/apps.
+    // Pass 1 proves every object parses (peak = one small object) BEFORE the live table is touched, so a
+    // malformed doc or a heap too tight even for that keeps the previous table, as before.
+    size_t cur = 0, b, e;
+    int r, objs = 0;
+    while ((r = registry_scan_installed(txt, len, &cur, &b, &e)) == 1) {
+        cJSON *item = cJSON_ParseWithLength(txt + b, e - b);
+        if (!item) { ESP_LOGE(TAG, "apps.json: app #%d does not parse (malformed, or no heap)", objs + 1); free(txt); return ESP_FAIL; }
+        cJSON_Delete(item);
+        objs++;
+    }
+    if (r < 0) { ESP_LOGE(TAG, "apps.json: missing \"installed\" array, or a malformed entry after app #%d", objs); free(txt); return ESP_FAIL; }
+
     s_count = 0;
-
-    cJSON *installed = cJSON_GetObjectItem(root, "installed");
-    cJSON *item;
-    cJSON_ArrayForEach(item, installed) {
+    cur = 0;
+    int skipped = 0;
+    while (registry_scan_installed(txt, len, &cur, &b, &e) == 1) {
         if (s_count >= NUCLEO_MAX_APPS) { ESP_LOGW(TAG, "app cap reached"); break; }
+        cJSON *item = cJSON_ParseWithLength(txt + b, e - b);
+        if (!item) { skipped++; continue; }              // pass 1 parsed it: only a heap grab in between can fail it
         cJSON *id = cJSON_GetObjectItem(item, "id");
         cJSON *ver = cJSON_GetObjectItem(item, "version");
         cJSON *en = cJSON_GetObjectItem(item, "enabled");
-        if (!cJSON_IsString(id)) continue;
-        nucleo_app_t *a = &s_apps[s_count++];
-        memset(a, 0, sizeof(*a));
-        strncpy(a->id, id->valuestring, sizeof(a->id) - 1);
-        if (cJSON_IsString(ver)) strncpy(a->version, ver->valuestring, sizeof(a->version) - 1);
-        a->enabled = cJSON_IsTrue(en);
-        load_manifest_fields(a);
+        if (cJSON_IsString(id)) {
+            nucleo_app_t *a = &s_apps[s_count++];
+            memset(a, 0, sizeof(*a));
+            strncpy(a->id, id->valuestring, sizeof(a->id) - 1);
+            if (cJSON_IsString(ver)) strncpy(a->version, ver->valuestring, sizeof(a->version) - 1);
+            a->enabled = cJSON_IsTrue(en);
+            cJSON_Delete(item);                         // free this app's nodes before its manifest is read
+            load_manifest_fields(a);
+        } else cJSON_Delete(item);
     }
-    cJSON_Delete(root);
-    ESP_LOGI(TAG, "loaded %d installed apps", s_count);
-    return ESP_OK;
+    free(txt);
+    if (skipped) ESP_LOGW(TAG, "loaded %d installed apps; %d skipped for lack of heap (back on the next reload)", s_count, skipped);
+    else ESP_LOGI(TAG, "loaded %d installed apps (%d in apps.json)", s_count, objs);
+    return skipped ? ESP_ERR_NO_MEM : ESP_OK;
 }
 
 int nucleo_registry_count(void) { return s_count; }
