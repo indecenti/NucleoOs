@@ -88,7 +88,10 @@ export function asksAboutContent(s) { return CONTENT_Q.test(String(s || '')); }
 
 // A QUESTION about the user's files is a task too — it needs the tools to look: "Quante righe ha ogni file .md
 // nello spazio di lavoro?" went to a tool-less chat that answered it "had no access to the file system".
-const ASK_VERB = /\b(quant[ieoa]|elenc\w*|mostr\w*|dammi|conta|how\s+(many|much)|list|show|count|give\s+me|cuánt[oa]s?|muéstr\w*|dame|combien|montre\w*|liste\w*|wie\s+viele?|zeig\w*|liste)\b/i;
+// …including WHICH / WHERE questions: "In quali file compare la parola NucleoOS?" reached a tool-less chat,
+// which invented the file's content and answered "0 files". Any question about the files needs eyes on them.
+// Unicode word edges (?<!\p{L}) / (?!\p{L}): a plain \b does not see a boundary next to "é" ("¿En qué archivos…").
+const ASK_VERB = /(?<!\p{L})(quant[ieoa]|qual[ei]?|dove|in che|elenc\p{L}*|mostr\p{L}*|dammi|conta|contien\p{L}*|compar\p{L}*|how\s+(many|much)|which|where|what|list|show|count|give\s+me|contain\p{L}*|cuánt[oa]s?|cuál(es)?|dónde|qué|muéstr\p{L}*|dame|aparec\p{L}*|combien|quel(le)?s?|où|montre\p{L}*|liste\p{L}*|wie\s+viele?|welche[rsnm]?|wo|was|zeig\p{L}*|enthält)(?!\p{L})/iu;
 const EXT_TOKEN = /(?:^|[\s(])\*?\.(?:m?js|cjs|ts|json|html?|css|md|txt|py|csv|svg|xml|ya?ml)\b/i;
 const WS_NOUN = /\b(spazio di lavoro|cartella di lavoro|workspace|nella sd|sulla sd|on the sd|espacio de trabajo|espace de travail|arbeitsbereich)\b/i;
 export function wantsAgent(s, { workspace = false } = {}) {

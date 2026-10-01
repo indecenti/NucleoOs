@@ -153,6 +153,9 @@ test('ANIMA: a task goes to the agent, a chat turn does not (5 languages)', () =
     // questions ABOUT the files need the tools to look (live miss 2026-10-01: a tool-less chat said it had no access)
     'Quante righe ha ogni file .md nello spazio di lavoro? Dammi una tabella.', 'How many .js files are in the workspace?',
     'elenca i file della cartella demo', '¿Cuántos archivos hay en la carpeta demo?', 'Combien de fichiers dans le dossier demo ?', 'Wie viele Dateien sind im Ordner demo?',
+    // which/where questions too (live miss: a chat invented a README's content and answered "0 files")
+    'In quali file dello spazio di lavoro compare la parola NucleoOS?', 'Which files in the workspace mention ESP32?',
+    'Dove si trova il file README nella cartella demo?', '¿En qué archivos aparece la palabra demo?', 'Quels fichiers contiennent le mot demo ?', 'Welche Dateien enthalten das Wort demo?',
   ];
   const chats = [
     'ciao come stai', 'che ore sono', 'apri la calcolatrice', 'aggiungi un evento domani alle 9', "cos'è nucleoos",
