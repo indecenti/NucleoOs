@@ -385,7 +385,7 @@ static void play_q(int pos)
         snprintf(st->playpath, sizeof st->playpath, "%s", abs);
         if (s_vol_default > 0) nucleo_audio_set_volume(s_vol_default);
     } else {
-        nucleo_app_set_hint(TR("Riproduzione non riuscita", "Playback failed"));
+        nucleo_app_set_hint(TR5("Riproduzione non riuscita", "Playback failed", "Reproduccion falla", "Lecture echouee", "Wiedergabe fehler"));
     }
 }
 
@@ -834,10 +834,10 @@ static void update_hint(void)
     if (hs == s_hint_last) return;
     s_hint_last = hs;
     switch (hs) {
-        case 1:  nucleo_app_set_hint(TR("scrivi cerca   invio trova   esc", "type search   enter find   esc")); break;
-        case 2:  nucleo_app_set_hint(TR("su/giu scegli   invio conferma   esc", "up/dn pick   enter choose   esc")); break;
-        case 3:  nucleo_app_set_hint(TR("</> scheda   su/giu riga   esc chiudi", "</> tab   up/dn row   esc close")); break;
-        default: nucleo_app_set_hint(TR("su/giu sfoglia   invio riproduci   tab menu", "up/dn browse   enter play   tab menu"));
+        case 1:  nucleo_app_set_hint(TR5("scrivi cerca   invio trova   esc", "type search   enter find   esc", "escribe busca   intro buscar   esc", "ecris che   entrer trouve   esc", "tippe Suche   enter find   esc")); break;
+        case 2:  nucleo_app_set_hint(TR5("su/giu scegli   invio conferma   esc", "up/dn pick   enter choose   esc", "ar/ab elige   intro confirma   esc", "haut/bas pick   entrer confirm   esc", "auf/ab Wahl   enter waehle   esc")); break;
+        case 3:  nucleo_app_set_hint(TR5("</> scheda   su/giu riga   esc chiudi", "</> tab   up/dn row   esc close", "</> tab   ar/ab fila   esc cierra", "</> tab   h/b ligne   esc ferme", "</> tab   auf/ab Zeile   esc zu")); break;
+        default: nucleo_app_set_hint(TR5("su/giu sfoglia   invio riproduci   tab menu", "up/dn browse   enter play   tab menu", "ar/ab hojea   intro reproduc   tab menu", "haut/bas joue   entrer jouer   tab menu", "auf/ab such   enter spiel   tab menu"));
     }
 }
 
@@ -1184,7 +1184,7 @@ static void enter(void)
         size_t blk   = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL);
         ESP_LOGE("music", "enter OOM: PState=%u free=%u largest=%u",
                  (unsigned)sizeof(PState), (unsigned)freeb, (unsigned)blk);
-        char h[64]; snprintf(h, sizeof h, TR("RAM bassa: libero %uk blocco %uk", "Low RAM: free %uk block %uk"),
+        char h[64]; snprintf(h, sizeof h, TR5("RAM bassa: libero %uk blocco %uk", "Low RAM: free %uk block %uk", "RAM baja: libre %uk bloque %uk", "RAM bas: libre %uk bloc %uk", "RAM knapp: frei %uk block %uk"),
                              (unsigned)(freeb / 1024), (unsigned)(blk / 1024));
         nucleo_app_set_hint(h);
         return;                                 // the framework owns the window; leave() releases it

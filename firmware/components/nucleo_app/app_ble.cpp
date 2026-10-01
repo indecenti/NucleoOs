@@ -85,7 +85,7 @@ static void on_enter(void)
     s_screen = MENU; s_sel = 0;
     s_up_ok  = nucleo_ble_radio_present() && nucleo_ble_up();
     nucleo_app_set_back_handler(on_back);
-    nucleo_app_set_hint(TR("1-8 scegli  enter avvia  esc indietro", "1-8 pick  enter start  esc back"));
+    nucleo_app_set_hint(TR5("1-8 scegli  enter avvia  esc indietro", "1-8 pick  enter start  esc back", "1-8 elige  intro lanza  esc atr", "1-8 choix  enter lanc  esc ret", "1-8 waehl  eingabe start  esc zu"));
     nucleo_app_request_draw();
 }
 

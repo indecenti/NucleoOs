@@ -58,11 +58,11 @@ static const int           TIER_PCT[5]  = { 0, 25, 48, 72, 92 };
 static const char *tier_name(int t)
 {
     switch (t) {
-        case 0:  return TR("non provato", "untested");
-        case 1:  return TR("Debole",   "Weak");
-        case 2:  return TR("Discreto", "Fair");
-        case 3:  return TR("Buono",    "Good");
-        default: return TR("Ottimo",   "Great");
+        case 0:  return TR5("non provato", "untested", "sin probar", "non teste", "not tested");
+        case 1:  return TR5("Debole",   "Weak", "Debil", "Faible", "Schwach");
+        case 2:  return TR5("Discreto", "Fair", "Discreto", "Moyen", "Befrie.");
+        case 3:  return TR5("Buono",    "Good", "Bueno", "Bon", "Gut");
+        default: return TR5("Ottimo",   "Great", "Excelente", "Excellent", "Hervorr.");
     }
 }
 
@@ -131,7 +131,7 @@ static void enter(void)
     // which the loaded heap can't spare — without this the PTT heap gate silently refuses every press.
     nucleo_exclusive_enter(NX_HTTPD | NX_ANIMA_L1 | NX_DISCOVERY, nullptr);
     nucleo_app_set_tab_handler(on_tab);
-    nucleo_app_set_hint(TR("TAB schede  GO+parla per provare", "TAB tabs  GO+speak to test"));
+    nucleo_app_set_hint(TR5("TAB schede  GO+parla per provare", "TAB tabs  GO+speak to test", "TAB pestanas  GO+habla prueba", "TAB onglets  GO+parlez test", "TAB Reiter  GO+sprich Test"));
     s_tab = 0; s_sel = 0; s_recog = 0; s_have_m = s_have_r = false;
     nucleo_voice_request(true);       // keep the lazy engine up while we test
     nucleo_voice_set_test_mode(true); // recognize but DON'T act (no launches/TTS)
@@ -184,7 +184,7 @@ static void on_key(int key, char ch)
 // ── Draw ──────────────────────────────────────────────────────────────────────
 static void draw_tabs(int top_y)
 {
-    const char *LBL[2] = { TR("PROVA", "TEST"), TR("DIAGNOSI", "DIAGNOSE") };
+    const char *LBL[2] = { TR5("PROVA", "TEST", "PRUEBA", "TEST", "TEST"), TR5("DIAGNOSI", "DIAGNOSE", "DIAGNOSTICO", "DIAGNOSTIC", "DIAGNOSE") };
     int tw = 240 / 2;
     for (int i = 0; i < 2; i++) {
         bool active = (i == s_tab);
@@ -211,14 +211,14 @@ static void draw_prova(int top_y)
 
     if (!s_have_m) {
         d.fillRoundRect(8, y, W - 16, 74, 8, PANEL);
-        d.setTextSize(2); d.setTextColor(ACC, PANEL); d.setCursor(16, y + 10); d.print(TR("Tieni GO", "Hold GO"));
-        d.setTextColor(FG, PANEL); d.setCursor(16, y + 30); d.print(TR("e parla", "and speak"));
+        d.setTextSize(2); d.setTextColor(ACC, PANEL); d.setCursor(16, y + 10); d.print(TR5("Tieni GO", "Hold GO", "Mantener GO", "Tenir GO", "Halte GO"));
+        d.setTextColor(FG, PANEL); d.setCursor(16, y + 30); d.print(TR5("e parla", "and speak", "y habla", "et parlez", "und sprich"));
         d.setTextSize(1); d.setTextColor(MUTED, PANEL); d.setCursor(16, y + 54);
-        d.print(TR("Modo prova: riconosce ma NON agisce.", "Test mode: recognizes but does NOT act."));
+        d.print(TR5("Modo prova: riconosce ma NON agisce.", "Test mode: recognizes but does NOT act.", "Modo prueba: reconoce pero NO actua.", "Mode test: reconnait mais N'agit PAS.", "Testmodus: erkennt, aber handelt NICHT."));
         // Footer hint.
         d.setTextColor(DIM, BG); d.setCursor(16, top_y + nucleo_app_content_height() - 14);
-        d.print(s_tpl_count > 0 ? TR("Pronuncia un comando addestrato.", "Say a trained command.")
-                                : TR("Nessun comando: usa Voice Trainer.", "No command: use Voice Trainer."));
+        d.print(s_tpl_count > 0 ? TR5("Pronuncia un comando addestrato.", "Say a trained command.", "Di un comando entrenado.", "Dites cmd apprise.", "Sag trainierten Befehl.")
+                                : TR5("Nessun comando: usa Voice Trainer.", "No command: use Voice Trainer.", "Sin comando: usa Voice Trainer.", "Pas cmd: Voice Trainer.", "Kein Befehl: nutze Voice Trainer."));
         return;
     }
 
@@ -240,10 +240,10 @@ static void draw_prova(int top_y)
     int ry = y + 54;
     d.setTextSize(1);
     if (s_have_r) {
-        const char *verb = TR("Risposta", "Answer");
-        if (s_r.action == ANIMA_ACT_LAUNCH)      verb = TR("Avvierebbe", "Would launch");
-        else if (s_r.action == ANIMA_ACT_SYSTEM) verb = TR("Stato", "Status");
-        else if (!s_r.matched)                   verb = TR("Nessun comando", "No command");
+        const char *verb = TR5("Risposta", "Answer", "Respuesta", "Reponse", "Antwort");
+        if (s_r.action == ANIMA_ACT_LAUNCH)      verb = TR5("Avvierebbe", "Would launch", "Abriria", "Lancerait", "Wuerde starten");
+        else if (s_r.action == ANIMA_ACT_SYSTEM) verb = TR5("Stato", "Status", "Estado", "Statut", "Status");
+        else if (!s_r.matched)                   verb = TR5("Nessun comando", "No command", "Sin comando", "Pas cmd", "Kein Befehl");
         d.setTextColor(ACC, BG); d.setCursor(12, ry); d.print(verb);
         d.setTextColor(FG, BG);  d.setCursor(12, ry + 12);
         char rb[34]; snprintf(rb, sizeof(rb), "%.32s", s_r.matched ? s_r.reply : "—");
@@ -272,8 +272,8 @@ static void draw_diagnosi(int top_y)
 
     if (s_tpl_count == 0) {
         d.setTextSize(1); d.setTextColor(DIM, BG);
-        d.setCursor(12, y0 + 14); d.print(TR("Nessun comando addestrato.", "No trained command."));
-        d.setCursor(12, y0 + 30); d.print(TR("Apri Voice Trainer per crearne.", "Open Voice Trainer to create one."));
+        d.setCursor(12, y0 + 14); d.print(TR5("Nessun comando addestrato.", "No trained command.", "Sin comando entrenado.", "Pas cmd apprise.", "Kein Befehl app."));
+        d.setCursor(12, y0 + 30); d.print(TR5("Apri Voice Trainer per crearne.", "Open Voice Trainer to create one.", "Abre Voice Trainer para crear uno.", "Ouvrez Voice Trainer pr creer.", "Oeffne Voice Trainer. Erstellen."));
         return;
     }
     app_ui_list(y0, h, s_tpl_count, s_sel, dg_label, dg_right, dg_color, nullptr);
@@ -282,7 +282,7 @@ static void draw_diagnosi(int top_y)
     int fy = top_y + nucleo_app_content_height() - 14;
     d.fillRect(0, fy, W, 14, BG); d.drawFastHLine(0, fy, W, LINE);
     d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(8, fy + 3);
-    d.print(TR("Prova ogni comando; rosso = riaddestra", "Test each command; red = retrain"));
+    d.print(TR5("Prova ogni comando; rosso = riaddestra", "Test each command; red = retrain", "Prueba cmd; rojo=reeducar", "Teste cmd; rouge=reapp.", "Teste Befehl; rot=neu lernen"));
 }
 
 static void draw(void)

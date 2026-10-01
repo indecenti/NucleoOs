@@ -36,18 +36,18 @@ static int   s_set_sel;
 static const char *gset_label(int i, void *)
 {
     switch (i) {
-        case 0: return TR("Unita", "Units");
-        case 1: return TR("Inverti segno", "Flip sign");
-        case 2: return TR("Azzera calib.", "Reset zero");
+        case 0: return TR5("Unita", "Units", "Unidades", "Unites", "Einheiten");
+        case 1: return TR5("Inverti segno", "Flip sign", "Invertir sgn", "Inverser sgn", "Vorzeichen um");
+        case 2: return TR5("Azzera calib.", "Reset zero", "Reaj. cero", "Reinit zero", "Null resets");
     }
     return "";
 }
 static const char *gset_right(int i, void *)
 {
     switch (i) {
-        case 0: return s_cfg.units == 1 ? "%" : TR("gradi", "deg");
-        case 1: return s_cfg.invert ? TR("si", "yes") : "no";
-        case 2: return TR("INVIO", "ENTER");
+        case 0: return s_cfg.units == 1 ? "%" : TR5("gradi", "deg", "grad", "deg", "Grad");
+        case 1: return s_cfg.invert ? TR5("si", "yes", "si", "oui", "ja") : "no";
+        case 2: return TR5("INVIO", "ENTER", "INTRO", "ENTREE", "ENTER");
     }
     return "";
 }
@@ -131,17 +131,17 @@ static void draw(void)
                            : (s_qa == INT32_MIN ? 0.f : (float)s_qa / 10.0f);   // qa already has zero+invert applied
     bool onRound = reliable && (fabsf(shown) < 0.4f || fabsf(fabsf(shown) - 90.f) < 0.4f || fabsf(fabsf(shown) - 45.f) < 0.4f || fabsf(fabsf(shown) - 180.f) < 0.4f);
 
-    const char    *rgt = !present ? "NO IMU" : s_frozen ? TR("BLOCCATO", "LOCKED") : (s_zero != 0.f ? "REL" : "LIVE");
+    const char    *rgt = !present ? "NO IMU" : s_frozen ? TR5("BLOCCATO", "LOCKED", "BLOQUEADO", "VERROU", "GESPERRT") : (s_zero != 0.f ? "REL" : "LIVE");
     unsigned short acc = !present ? C_YELLOW : s_frozen ? C_GREEN : (onRound ? C_GREEN : C_BLUE);
     // "!D" = frame going STRAIGHT to the panel (no 32 KB back-buffer) — see app_level.cpp.
     char rb[16];
     if (!nucleo_app_is_buffered()) { snprintf(rb, sizeof rb, "%s !D", rgt); rgt = rb; }
-    int y0 = app_ui_title(TR("Goniometro", "Protractor"), acc, rgt);
+    int y0 = app_ui_title(TR5("Goniometro", "Protractor", "Transportador", "Rapporteur", "Winkelmesser"), acc, rgt);
 
     if (!present) {
         d.setTextSize(2); d.setTextColor(C_YELLOW, BG);
-        d.setCursor(12, y0 + 18); d.print(TR("Sensore IMU", "IMU sensor"));
-        d.setCursor(12, y0 + 40); d.print(TR("non rilevato", "not detected"));
+        d.setCursor(12, y0 + 18); d.print(TR5("Sensore IMU", "IMU sensor", "Sensor IMU", "Capteur IMU", "IMU-Sensor"));
+        d.setCursor(12, y0 + 40); d.print(TR5("non rilevato", "not detected", "no detectado", "non detecte", "nicht erkannt"));
         return;
     }
     if (s_settings) {                                  // TAB options — shared list (no overlap, consistent)
@@ -205,9 +205,9 @@ static void draw(void)
     else if (reliable) d.drawCircle(nx + tw + 4 + ts, cy - 4 * ts + 3, ts, onRound ? C_GREEN : FG);   // degree mark
     d.setTextSize(1); d.setTextColor(MUTED, BG);
     d.setCursor(nx, cy + 4 * ts + 5);
-    d.print(!reliable ? TR("inclina il device", "tilt the device")
-                      : s_frozen ? TR("bloccato", "locked")
-                                 : (s_zero != 0.f ? TR("relativo", "relative") : TR("assoluto", "absolute")));
+    d.print(!reliable ? TR5("inclina il device", "tilt the device", "inclina el disp.", "inclinez l'appar", "Geraet neigen")
+                      : s_frozen ? TR5("bloccato", "locked", "bloqueado", "verrouille", "gesperrt")
+                                 : (s_zero != 0.f ? TR5("relativo", "relative", "relativo", "relatif", "relativ") : TR5("assoluto", "absolute", "absoluto", "absolu", "absolut")));
 }
 
 // dim a colour ~45% for the needle's counter-tail (local helper; fx3d::scl is for the 3D path).
@@ -240,7 +240,7 @@ static void enter(void)
     s_qa = s_qx = s_qy = INT32_MIN; s_qf = -1; s_frame_us = 0;   // force the first live frame after a (re)open
     nucleo_imu_level(&s_lx, &s_ly, &s_deg);
     s_reliable = nucleo_imu_present() && s_deg > FLAT_MIN;
-    nucleo_app_set_hint(TR("spazio azzera   F blocca   R assoluto   TAB opzioni   esc esci", "space zero   F lock   R absolute   TAB options   esc back"));
+    nucleo_app_set_hint(TR5("spazio azzera   F blocca   R assoluto   TAB opzioni   esc esci", "space zero   F lock   R absolute   TAB options   esc back", "esp. cero   F bloq.   R abs.   TAB opc.", "esp. zero   F verr.   R abs.   TAB opt.", "Leer null   F spe.   R abs.   TAB opt."));
     nucleo_app_set_tab_handler(g_tab);
     nucleo_app_set_back_handler(g_back);
     nucleo_app_set_poll_handler(poll);

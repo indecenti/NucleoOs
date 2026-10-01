@@ -1606,7 +1606,7 @@ static int typewriter_reveal(void)
 // The online mode's name in the OS language (chat lines, the /info readout, the mode toast, STATO).
 static const char *mode_name(int m)
 {
-    return m == OM_OFF ? "Offline" : m == OM_ONLY ? TR("Solo online", "Online only") : TR("Ibrido", "Hybrid");
+    return m == OM_OFF ? "Offline" : m == OM_ONLY ? TR5("Solo online", "Online only", "Solo en linea", "En ligne seul", "Nur online") : TR5("Ibrido", "Hybrid", "Hibrido", "Hybride", "Hybrid");
 }
 static void push_mode(void)
 {
@@ -2833,7 +2833,7 @@ static int build_ia(IAItem *it)
 {
     memset(it, 0, sizeof(IAItem) * IA_ROWS);
     it[IA_ONLINE].label = "Online"; it[IA_ONLINE].kind = SV_TEXT;
-    snprintf(it[IA_ONLINE].val, 14, "%s", s_omode == OM_OFF ? "Off" : s_omode == OM_ONLY ? TR("Solo", "Only") : "On");
+    snprintf(it[IA_ONLINE].val, 14, "%s", s_omode == OM_OFF ? "Off" : s_omode == OM_ONLY ? TR5("Solo", "Only", "Solo", "Seul", "Nur") : "On");
     it[IA_LANG].label = s_en ? "Lang" : "Lingua"; it[IA_LANG].kind = SV_TEXT;   // the OS language (Enter: IT <-> EN)
     snprintf(it[IA_LANG].val, 14, "%.2s", nucleo_i18n_lang());
     for (char *c = it[IA_LANG].val; *c; c++) if (*c >= 'a' && *c <= 'z') *c -= 32;
@@ -2993,7 +2993,7 @@ static void draw_stato(int ch)
     const char *ssid = nucleo_setup_ssid(), *ip = nucleo_setup_ip();
     if (ip && ip[0]) snprintf(v, sizeof v, "%s", ip);
     else             snprintf(v, sizeof v, "%s", s_en ? "offline" : "non conn.");
-    stato_row(y, TR("Rete", "Net"), v, (ip && ip[0]) ? GRN : MUTED);
+    stato_row(y, TR5("Rete", "Net", "Red", "Reseau", "Netz"), v, (ip && ip[0]) ? GRN : MUTED);
     if (ip && ip[0] && ssid && ssid[0]) {                                // SSID as a small grey tag, right-aligned
         char sb[18]; snprintf(sb, sizeof sb, "%.16s", ssid);
         d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextColor(DIM, BG);

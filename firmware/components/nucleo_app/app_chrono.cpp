@@ -166,7 +166,7 @@ static void draw_stopwatch(int top, int h)
 {
     int ms = sw_elapsed_ms();
     const char *right = s_sw_run ? "REC" : (ms ? "II" : "");
-    int y0 = app_ui_title(TR("Cronometro", "Stopwatch"), s_sw_run ? C_GREEN : C_BLUE, right);
+    int y0 = app_ui_title(TR5("Cronometro", "Stopwatch", "Cronometro", "Chrono", "Stoppuhr"), s_sw_run ? C_GREEN : C_BLUE, right);
 
     char big[16]; fmt_swatch(ms, big, sizeof(big));
     int laps_h = s_sw_nlap ? (s_sw_nlap * 12 + 4) : 0;
@@ -177,7 +177,7 @@ static void draw_stopwatch(int top, int h)
     int ly = digit_y + 40;
     for (int i = 0; i < s_sw_nlap; i++) {
         char row[28], t[16]; fmt_swatch(s_sw_lap[i], t, sizeof(t));
-        snprintf(row, sizeof(row), "%s %d  %s", TR("Giro", "Lap"), s_sw_nlap - i, t);
+        snprintf(row, sizeof(row), "%s %d  %s", TR5("Giro", "Lap", "Vuelta", "Tour", "Runde"), s_sw_nlap - i, t);
         d.setTextSize(1); d.setTextColor(i == 0 ? FG : MUTED, BG);
         d.setCursor((W - (int)strlen(row) * 6) / 2, ly); d.print(row);
         ly += 12;
@@ -189,7 +189,7 @@ static void draw_timer(int top, int h, bool flash_on)
     int left = tm_left_ms();
     bool low = s_tm_run && left <= 10000;
     unsigned short accent = s_tm_done ? C_RED : (s_tm_run ? (low ? C_RED : C_YELLOW) : C_BLUE);
-    const char *right = s_tm_done ? "!!!" : (s_tm_run ? "II" : (s_tm_rem_ms > 0 ? TR("PAUSA", "PAUSE") : ""));
+    const char *right = s_tm_done ? "!!!" : (s_tm_run ? "II" : (s_tm_rem_ms > 0 ? TR5("PAUSA", "PAUSE", "PAUSA", "PAUSE", "PAUSE") : ""));
     int y0 = app_ui_title("Timer", accent, right);
     int cy = y0 + (top + h - y0) / 2 - 18;
 
@@ -197,10 +197,10 @@ static void draw_timer(int top, int h, bool flash_on)
         // Blinking full-content alarm banner — the text background must track the flashing fill.
         unsigned short bg = flash_on ? C_RED : BG, fg = flash_on ? BG : C_RED;
         if (flash_on) d.fillRect(0, y0 + 2, W, top + h - y0 - 2, C_RED);
-        const char *big = TR("FINITO!", "TIME'S UP!");
+        const char *big = TR5("FINITO!", "TIME'S UP!", "TIEMPO!", "FINI!", "FERTIG!");
         d.setTextSize(3); d.setTextColor(fg, bg);
         d.setCursor((W - (int)strlen(big) * 18) / 2, cy - 8); d.print(big);
-        const char *m = TR("premi un tasto", "press any key");
+        const char *m = TR5("premi un tasto", "press any key", "pulsa cualquier", "appuyer touche", "Taste druecken");
         d.setTextSize(1); d.setTextColor(flash_on ? BG : MUTED, bg);
         d.setCursor((W - (int)strlen(m) * 6) / 2, cy + 30); d.print(m);
         return;
@@ -226,7 +226,7 @@ static void draw_timer(int top, int h, bool flash_on)
         int ux = (s_tm_field == 0) ? x : x + 3 * cw;
         d.fillRoundRect(ux, ty + 6 * size + 2, 2 * cw - 4, 3, 1, C_BLUE);
         d.setTextSize(1); d.setTextColor(MUTED, BG);
-        const char *m = TR("1-9 = minuti", "1-9 = minutes");
+        const char *m = TR5("1-9 = minuti", "1-9 = minutes", "1-9 = minutos", "1-9 = minutes", "1-9 = Minuten");
         d.setCursor((W - (int)strlen(m) * 6) / 2, ty + 6 * size + 10); d.print(m);
     }
 }
@@ -235,14 +235,14 @@ static void set_hint(void)
 {
     const char *hint;
     if (s_mode == MODE_STOP) {
-        if (s_sw_run)               hint = TR("INVIO pausa | su=giro | TAB timer", "ENTER pause | up=lap | TAB timer");
-        else if (sw_elapsed_ms())   hint = TR("INVIO riprendi | R azzera | TAB timer", "ENTER resume | R reset | TAB timer");
-        else                        hint = TR("INVIO avvia | TAB timer", "ENTER start | TAB timer");
+        if (s_sw_run)               hint = TR5("INVIO pausa | su=giro | TAB timer", "ENTER pause | up=lap | TAB timer", "INTRO pausa | ar=vuelta | TAB timer", "ENTREE pause | haut=tour | TAB tmr", "ENTER pause | oben=Runde | TAB Chr");
+        else if (sw_elapsed_ms())   hint = TR5("INVIO riprendi | R azzera | TAB timer", "ENTER resume | R reset | TAB timer", "INTRO reanuda | R reset | TAB timer", "ENTREE reprendre | R remet | TAB tmr", "ENTER weiter | R zurueck | TAB Chrono");
+        else                        hint = TR5("INVIO avvia | TAB timer", "ENTER start | TAB timer", "INTRO inicia | TAB timer", "ENTREE debut | TAB timer", "ENTER start | TAB Chrono");
     } else {
-        if (s_tm_done)              hint = TR("premi un tasto", "press any key");
-        else if (s_tm_run)          hint = TR("INVIO pausa | R azzera | TAB crono", "ENTER pause | R reset | TAB chrono");
-        else if (s_tm_rem_ms > 0)   hint = TR("INVIO riprendi | R azzera", "ENTER resume | R reset");
-        else                        hint = TR("frecce imposta | INVIO avvia | TAB crono", "arrows set | ENTER start | TAB chrono");
+        if (s_tm_done)              hint = TR5("premi un tasto", "press any key", "pulsa cualquier", "appuyer touche", "Taste druecken");
+        else if (s_tm_run)          hint = TR5("INVIO pausa | R azzera | TAB crono", "ENTER pause | R reset | TAB chrono", "INTRO pausa | R reset | TAB crono", "ENTREE pause | R remet | TAB crono", "ENTER pause | R zurueck | TAB Chrono");
+        else if (s_tm_rem_ms > 0)   hint = TR5("INVIO riprendi | R azzera", "ENTER resume | R reset", "INTRO reanuda | R reset", "ENTREE repr | R remet", "ENTER weiter | R zurueck");
+        else                        hint = TR5("frecce imposta | INVIO avvia | TAB crono", "arrows set | ENTER start | TAB chrono", "flechas cfg | INTRO inicia | TAB crn", "fleches fixer | ENTREE debut | TAB crn", "Pfeile stelle | ENTER start | TAB Cr");
     }
     nucleo_app_set_hint(hint);
 }

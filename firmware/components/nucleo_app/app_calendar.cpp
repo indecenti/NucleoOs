@@ -317,17 +317,17 @@ static void fmt_countdown(const char *hhmm, char *out, int cap)
 // ---- views + hints -----------------------------------------------------------
 static void form_hint(void)
 {
-    if (s_field == F_DAY)       nucleo_app_set_hint(TR("</> giorno  su/giu settimana  TAB campo", "</> day  up/dn week  TAB field"));
-    else if (s_field == F_TIME) nucleo_app_set_hint(TR("cifre o su/giu  CANC = tutto il g.", "digits or up/dn  DEL = all day"));
-    else                        nucleo_app_set_hint(TR("TAB completa/campo  INVIO salva", "TAB complete/field  ENTER save"));
+    if (s_field == F_DAY)       nucleo_app_set_hint(TR5("</> giorno  su/giu settimana  TAB campo", "</> day  up/dn week  TAB field", "</> dia  arr/aba sem.  TAB campo", "</> jour  haut/bas sem.  TAB chp", "</> Tag  oben/u. Woche  TAB Feld"));
+    else if (s_field == F_TIME) nucleo_app_set_hint(TR5("cifre o su/giu  CANC = tutto il g.", "digits or up/dn  DEL = all day", "digitos o arr/aba  SUPR = todo d", "chiffres ou h/b  SUPR = j. entier", "Ziffern o/u  LOESCH = Ganztag"));
+    else                        nucleo_app_set_hint(TR5("TAB completa/campo  INVIO salva", "TAB complete/field  ENTER save", "TAB completa/campo  INTRO guardar", "TAB complet/champ  ENTREE sauve", "TAB komplett/Feld  ENTER speich."));
 }
 static void set_view(int v)
 {
     s_view = v;
     if (v == V_FORM)        form_hint();
-    else if (v == V_EVENT)  nucleo_app_set_hint(TR("su/giu evento  e modifica  d elimina", "up/dn event  e edit  d delete"));
-    else if (v == V_MONTH)  nucleo_app_set_hint(TR("frecce giorno  INVIO apri  TAB pross.", "arrows day  ENTER open  TAB next"));
-    else                    nucleo_app_set_hint(TR("</> giorno  n nuovo  m mese  d elimina", "</> day  n new  m month  d delete"));
+    else if (v == V_EVENT)  nucleo_app_set_hint(TR5("su/giu evento  e modifica  d elimina", "up/dn event  e edit  d delete", "arr/aba evt  e edita  d elimina", "haut/bas evt  e edite  d efface", "oben/unten evt  e bearb  d lsch"));
+    else if (v == V_MONTH)  nucleo_app_set_hint(TR5("frecce giorno  INVIO apri  TAB pross.", "arrows day  ENTER open  TAB next", "flechas dia  INTRO abre  TAB prox.", "fleches jour  ENTREE ouvre  TAB sui", "Pfeile Tag  ENTER oeffne  TAB nae."));
+    else                    nucleo_app_set_hint(TR5("</> giorno  n nuovo  m mese  d elimina", "</> day  n new  m month  d delete", "</> dia  n nuevo  m mes  d elimina", "</> jour  n nouveau  m mois  d eff.", "</> Tag  n neu  m Monat  d loesch"));
 }
 static void goto_day(int off)
 {
@@ -431,7 +431,7 @@ static bool form_commit(void)
 {
     if (s_ftext_dirty && s_flen == 0) { s_msg = TR5("Scrivi un titolo", "Type a title", "Escribe un titulo", "Ecris un titre", "Titel eingeben"); s_field = F_TEXT; form_hint(); return false; }
     cJSON *evs = events_obj(true);
-    if (!evs) { s_msg = TR("File illeggibile", "File unreadable"); return false; }
+    if (!evs) { s_msg = TR5("File illeggibile", "File unreadable", "Archivo ilegible", "Fichier illegal", "Datei ungueltig"); return false; }
     char key[12]; day_key(s_foff, key);
     char tbuf[6] = "";
     if (s_fmin >= 0) snprintf(tbuf, sizeof tbuf, "%02d:%02d", s_fmin / 60, s_fmin % 60);
@@ -440,20 +440,20 @@ static bool form_commit(void)
     if (s_editing) {
         cJSON *old = cJSON_GetObjectItem(evs, s_edkey);
         obj = cJSON_IsArray(old) ? cJSON_GetArrayItem(old, s_edsrc) : nullptr;
-        if (!obj) { s_msg = TR("Evento sparito", "Event gone"); return false; }
+        if (!obj) { s_msg = TR5("Evento sparito", "Event gone", "Evento perdido", "Evt disparu", "Termin weg"); return false; }
         newsrc = s_edsrc;
         if (strcmp(key, s_edkey) != 0) {                     // moved to another day: re-home it
             obj = cJSON_DetachItemFromArray(old, s_edsrc);
             if (cJSON_GetArraySize(old) == 0) cJSON_DeleteItemFromObject(evs, s_edkey);
             cJSON *dst = day_array_mk(evs, key);
-            if (!dst) { cJSON_Delete(obj); resync_from_disk(); s_msg = TR("RAM insufficiente", "Not enough RAM"); return false; }
+            if (!dst) { cJSON_Delete(obj); resync_from_disk(); s_msg = TR5("RAM insufficiente", "Not enough RAM", "RAM insuficiente", "RAM insuffisant", "RAM voll"); return false; }
             newsrc = cJSON_GetArraySize(dst);
             cJSON_AddItemToArray(dst, obj);
         }
     } else {
         cJSON *dst = day_array_mk(evs, key);
         obj = cJSON_CreateObject();
-        if (!dst || !obj) { cJSON_Delete(obj); resync_from_disk(); s_msg = TR("RAM insufficiente", "Not enough RAM"); return false; }
+        if (!dst || !obj) { cJSON_Delete(obj); resync_from_disk(); s_msg = TR5("RAM insufficiente", "Not enough RAM", "RAM insuficiente", "RAM insuffisant", "RAM voll"); return false; }
         char id[24]; make_id(id, sizeof id);
         cJSON_AddStringToObject(obj, "id", id);
         newsrc = cJSON_GetArraySize(dst);
@@ -684,9 +684,9 @@ static void empty_state(const char *l1, unsigned short c1, const char *l2, const
 static void draw_day(void)
 {
     draw_day_header();
-    if (!time_ready()) { empty_state(TR5("Ora non impostata", "Clock not set", "Hora no fijada", "Heure non reglee", "Uhr nicht gestellt"), ERR, TR("App WiFi > SYS", "WiFi app > SYS"), nullptr); return; }
-    if (s_bad)         { empty_state(TR("File illeggibile", "File unreadable"), ERR, TR("Correggi dal web", "Fix it from the web"), nullptr); return; }
-    if (s_ev_oom)      { empty_state(TR("RAM insufficiente", "Not enough RAM"), ERR, TR("Esci e riprova", "Exit and retry"), nullptr); return; }
+    if (!time_ready()) { empty_state(TR5("Ora non impostata", "Clock not set", "Hora no fijada", "Heure non reglee", "Uhr fehlt"), ERR, TR5("App WiFi > SYS", "WiFi app > SYS", "App WiFi > SYS", "App WiFi > SYS", "App WiFi > SYS"), nullptr); return; }
+    if (s_bad)         { empty_state(TR5("File illeggibile", "File unreadable", "Archivo ilegible", "Fichier illegal", "Datei ungueltig"), ERR, TR5("Correggi dal web", "Fix it from the web", "Corrige desde web", "Fixe depuis web", "Korrigiere online"), nullptr); return; }
+    if (s_ev_oom)      { empty_state(TR5("RAM insufficiente", "Not enough RAM", "RAM insuficiente", "RAM insuffisant", "RAM voll"), ERR, TR5("Esci e riprova", "Exit and retry", "Salida e reinento", "Sortie et reessai", "Beende u versuche"), nullptr); return; }
     if (s_evn == 0) {
         char nb[12], line3[28] = "";
         next_busy(s_ev_key, nb);

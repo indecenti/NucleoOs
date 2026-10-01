@@ -84,7 +84,7 @@ static void draw_digital(int top, int h, const struct tm *tm, bool synced)
 {
     if (!synced) {
         centered("--:--", 6, top + h / 2 - 30, C_GREY, BG);
-        centered(TR("attendo sincronizzazione NTP...", "waiting for NTP sync..."), 1, top + h / 2 + 20, C_YELLOW, BG);
+        centered(TR5("attendo sincronizzazione NTP...", "waiting for NTP sync...", "espera sincroniz. NTP...", "attente synchro NTP...", "warte auf NTP-Sync..."), 1, top + h / 2 + 20, C_YELLOW, BG);
         return;
     }
     int hh = s_h24 ? tm->tm_hour : (tm->tm_hour % 12 ? tm->tm_hour % 12 : 12);
@@ -138,7 +138,7 @@ static void draw_analog(int top, int h, const struct tm *tm, bool synced)
     }
 
     if (!synced) {
-        centered(TR("attendo NTP...", "waiting NTP..."), 1, cy - 4, C_YELLOW, BG);
+        centered(TR5("attendo NTP...", "waiting NTP...", "esperando NTP...", "attente NTP...", "warte auf NTP..."), 1, cy - 4, C_YELLOW, BG);
         return;
     }
 
@@ -162,12 +162,12 @@ static void draw_settings(int top, int h)
     d.fillRoundRect(bx, by, bw, bh, 8, INK);
     d.drawRoundRect(bx, by, bw, bh, 8, C_BLUE);
     d.setTextSize(2); d.setTextColor(C_BLUE, INK);
-    d.setCursor(bx + 12, by + 6); d.print(TR("Opzioni", "Options"));
+    d.setCursor(bx + 12, by + 6); d.print(TR5("Opzioni", "Options", "Opciones", "Options", "Optionen"));
 
     char rows[3][32];
-    snprintf(rows[0], 32, "%s %s", TR("Quadrante:", "Face:"), s_face == FACE_ANALOG ? TR("Analog.", "Analog") : TR("Digit.", "Digital"));
-    snprintf(rows[1], 32, "%s %s", TR("Formato:", "Format:"), s_h24 ? "24h" : "12h");
-    snprintf(rows[2], 32, "%s %s", TR("Secondi:", "Seconds:"), s_secs ? "On" : "Off");
+    snprintf(rows[0], 32, "%s %s", TR5("Quadrante:", "Face:", "Cuadr.:", "Cadran:", "Ziff.:"), s_face == FACE_ANALOG ? TR5("Analog.", "Analog", "Analog.", "Analog.", "Analog.") : TR5("Digit.", "Digital", "Digit.", "Digit.", "Digit."));
+    snprintf(rows[1], 32, "%s %s", TR5("Formato:", "Format:", "Formato:", "Format:", "Format:"), s_h24 ? "24h" : "12h");
+    snprintf(rows[2], 32, "%s %s", TR5("Secondi:", "Seconds:", "Segundos:", "Secondes:", "Sekunden:"), s_secs ? "On" : "Off");
     for (int i = 0; i < 3; i++) {
         bool sel = (i == s_set_sel); int ry = by + 28 + i * 20;
         if (sel) d.fillRoundRect(bx + 6, ry - 2, bw - 12, 18, 5, C_BLUE);
@@ -175,7 +175,7 @@ static void draw_settings(int top, int h)
         d.setCursor(bx + 12, ry); d.print(rows[i]);
     }
     d.setTextSize(1); d.setTextColor(MUTED, INK);
-    d.setCursor(bx + 12, by + bh - 10); d.print(TR("su/giu  </>  INVIO chiudi", "up/dn  </>  ENTER close"));
+    d.setCursor(bx + 12, by + bh - 10); d.print(TR5("su/giu  </>  INVIO chiudi", "up/dn  </>  ENTER close", "arr/abj  </>  ENTER cerr.", "haut/bas  <>  ENTREE f.", "auf/ab  <>  ENTER sch."));
 }
 
 static void draw(void)
@@ -189,8 +189,8 @@ static void draw(void)
     else                       draw_digital(top, h, tm, synced);
 
     if (s_settings) draw_settings(top, h);
-    nucleo_app_set_hint(s_settings ? TR("su/giu | </> cambia | INVIO chiudi", "up/dn | </> change | ENTER close")
-                                   : TR("TAB quadrante | INVIO opzioni", "TAB face | ENTER options"));
+    nucleo_app_set_hint(s_settings ? TR5("su/giu | </> cambia | INVIO chiudi", "up/dn | </> change | ENTER close", "arr/abj | </> cambia | enter cerr.", "haut/bas | <> change | ENTREE ferm.", "auf/ab | <> aend. | ENTER schlie.")
+                                   : TR5("TAB quadrante | INVIO opzioni", "TAB face | ENTER options", "TAB cuadr. | ENTER opciones", "TAB cadran | ENTREE options", "TAB ziff. | ENTER optionen"));
 }
 
 // ── change detection: redraw only when the shown unit ticks over ──────────────
