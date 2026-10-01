@@ -104,6 +104,10 @@ actions), no duplicate device calls, CDN-first heavy libraries with SD fallback.
    only file storage: reads are cached in the browser, writes are batched, and no inference, indexing or
    long task ever runs on the device.
    *Test:* scripted agent tasks in 5 languages on Ollama and on a WebLLM model; device request budget.
+   *Status (2026-09-30):* agent runtime on local engines done — Ollama/LM Studio native tool calling and the
+   WebGPU model (free decoding + strict re-validation; WebLLM grammars are broken for Qwen3) in ANIMA and Agenti,
+   E2E green on the real Ollama (5 languages) and the real GPU. See `docs/anima-code.md` F6. Still open: the HTML
+   Viewer app, embeddings retrieval over SD documents, a sandboxed "run JS" with the workspace files.
    **ANIMA stays ANIMA:** facts the OS knows (date, time, weekday, battery, Wi-Fi, storage, open apps, files)
    are answered DETERMINISTICALLY in all five languages before any model runs. Measured 2026-09-29:
    Qwen3-1.7B on WebGPU, given the real date in its prompt, answered "Montag" on a Tuesday. Models reason

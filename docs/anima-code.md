@@ -66,6 +66,29 @@ OS-native knowledge**, unified behind one agent loop that can run on any substra
   relative imports 404'd when device-served); the ANIMA `forge` command now opens Agenti.
   Gate: `anima-code-picker.test.mjs` (10 tests).
 - **F5 — live device test + recipe distillation** — **done (2026-08-18).** publish→smoke→learn in `app-recipe.js`; gate `anima-code-f5.test.mjs`.
+- **F6 — the PC's own model + WebGPU as real agents ("OpenCode on a Cardputer")** — **done (2026-09-30).**
+  - **Local-server rung** (`runtime.js` `runWorkerLocalServer` → `agent-tools.js` `runLocalToolLoop`): Ollama /
+    LM Studio via `/ai-engines.js` with NATIVE tool calling; first when there is no key or in Private (no
+    orchestrator round, no network tools), otherwise the cloud's fallback. One model pinned per task, 16k
+    window (`AGENT_CTX`; qwen3.5:9b 8k→16k = +0.27 GB), tool results trimmed past the window, calls written
+    as text recovered, repeated calls nudged, a tool-less summary when out of steps.
+  - **ANIMA routes tasks to it** (`contextkit.wantsAgent`, 5 languages): files/code/pages go to the tool loop,
+    chat stays chat. A generated-content write ("crea index.html con un orologio") and a read that asks a
+    question ("leggi X e dimmi…", `asksAboutContent`) no longer take the instant file path. Agenti boots on a
+    local server with no key and works offline.
+  - **WebGPU rung** (`local-llm.localAgentEngine` → `local-worker.js`): WebLLM's grammar matcher is broken for
+    Qwen3 in the browser (0.2.84 hangs, 0.2.85 aborts; both poison the engine), so decoding is FREE and
+    `normalizeActionsText` + `grammarAccepts` re-validate strictly. Small-model rules learned on the real GPU:
+    few-shot protocol examples, answers written in the same reply as a tool call are dropped, prose after a
+    real tool result is the answer, parroted protocol feedback declines, an explicit "what next" after results.
+    A decline is shown honestly (`agentDeclined`) — never handed to a tool-less chat model.
+  - Fixed on the way: ANIMA handed the model raw i18n keys as tool results (no `t`); `read_file` numbered the
+    empty tail line (models counted +1); `search_files` falls back to the most distinctive term; the GPU
+    engine map named a hard-coded model.
+  - Gates: `anima-code-server.test.mjs` (in `anima:gate`), `anima-code-local.test.mjs`. Real runs (RTX 5070 8 GB):
+    `tools/web-e2e/anima-code.e2e.mjs` — 7 tasks in it/en/es/fr/de on qwen3.5:9b, checked on the SD, 2–50 s each,
+    zero device inference; `E2E_GPU=1 anima-local-ai.e2e.mjs` — Qwen3-1.7B fixes a file on the SD (9 s) and
+    answers from a file (2 s).
 
 Nothing here auto-deploys or flashes. Every phase is host-gated and shippable on its own.
 
