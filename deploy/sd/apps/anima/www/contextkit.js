@@ -86,10 +86,19 @@ const FILE_TOKEN = /(?:^|[\s"'`(@])(?:\.{0,2}\/)?(?:[\w.-]+\/)*[\w-]+\.(?:m?js|c
 const CONTENT_Q = /\?|\b(e|ed|and|y|et|und)\s+(dimmi|dicci|spiegami|riassum\w*|tell|explain|summari[sz]e|count|dime|explícame|resume|dis-moi|explique|résume|sag|erklär\w*|zusammenfass\w*)|\b(quant[ieoa]|how\s+(many|much)|cuánt[oa]s?|combien|wie\s+viele?|riassum\w*|summari[sz]e|resum\w*|résum\w*|zusammenfass\w*|spiega|explain|expl[ií]ca|erklär\w*|cosa\s+(fa|dice|contiene)|what\s+(does|is\s+in)|qué\s+(hace|contiene)|que\s+(fait|contient)|was\s+(macht|steht))\b/i;
 export function asksAboutContent(s) { return CONTENT_Q.test(String(s || '')); }
 
+// A QUESTION about the user's files is a task too — it needs the tools to look: "Quante righe ha ogni file .md
+// nello spazio di lavoro?" went to a tool-less chat that answered it "had no access to the file system".
+// …including WHICH / WHERE questions: "In quali file compare la parola NucleoOS?" reached a tool-less chat,
+// which invented the file's content and answered "0 files". Any question about the files needs eyes on them.
+// Unicode word edges (?<!\p{L}) / (?!\p{L}): a plain \b does not see a boundary next to "é" ("¿En qué archivos…").
+const ASK_VERB = /(?<!\p{L})(quant[ieoa]|qual[ei]?|dove|in che|elenc\p{L}*|mostr\p{L}*|dammi|conta|contien\p{L}*|compar\p{L}*|how\s+(many|much)|which|where|what|list|show|count|give\s+me|contain\p{L}*|cuánt[oa]s?|cuál(es)?|dónde|qué|muéstr\p{L}*|dame|aparec\p{L}*|combien|quel(le)?s?|où|montre\p{L}*|liste\p{L}*|wie\s+viele?|welche[rsnm]?|wo|was|zeig\p{L}*|enthält)(?!\p{L})/iu;
+const EXT_TOKEN = /(?:^|[\s(])\*?\.(?:m?js|cjs|ts|json|html?|css|md|txt|py|csv|svg|xml|ya?ml)\b/i;
+const WS_NOUN = /\b(spazio di lavoro|cartella di lavoro|workspace|nella sd|sulla sd|on the sd|espacio de trabajo|espace de travail|arbeitsbereich)\b/i;
 export function wantsAgent(s, { workspace = false } = {}) {
   const t = String(s || '');
   if (FILE_TOKEN.test(t)) return true;
   if (AGENT_VERB.test(t) && AGENT_OBJECT.test(t)) return true;
+  if (ASK_VERB.test(t) && (EXT_TOKEN.test(t) || WS_NOUN.test(t) || /\b(file|files|cartell\w*|folder\w*|archivos?|carpetas?|fichiers?|dossiers?|dateien?|ordner)\b/i.test(t))) return true;
   return !!workspace && wantsCode(t) && AGENT_VERB.test(t);
 }
 export function wantsLong(s) { return LONG_RE.test(String(s || '')); }
