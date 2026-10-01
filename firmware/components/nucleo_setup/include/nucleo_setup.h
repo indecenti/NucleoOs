@@ -88,6 +88,7 @@ bool        nucleo_setup_join(const char *ssid, const char *pass);  // blocking;
 // Why the last nucleo_setup_join() failed.
 enum { NUCLEO_JOIN_OK = 0, NUCLEO_JOIN_PASSWORD, NUCLEO_JOIN_NOT_FOUND, NUCLEO_JOIN_NO_IP, NUCLEO_JOIN_FAILED };
 int         nucleo_setup_join_error(void);
+int         nucleo_setup_join_reason(void);   // the Wi-Fi driver's last disconnect reason code (WIFI_REASON_*)
 bool        nucleo_setup_config_loaded(void);     // saved config parsed/written this boot (false in Wi-Fi-skipped Solo boots)
 void        nucleo_setup_start_ap(void);          // switch to hotspot (AP) mode now (no-op if !config_loaded)
 void        nucleo_setup_stop_ap(void);           // turn AP OFF -> rejoin client (STA) mode (Settings toggle)

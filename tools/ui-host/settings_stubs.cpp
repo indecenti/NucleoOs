@@ -60,6 +60,7 @@ void        nucleo_setup_onboard_ack(void) { g_host_onboarding = false; s_host_f
 bool        nucleo_setup_is_complete(void) { return !g_host_onboarding; }
 int         g_host_join_err = 0;                           // scene-controlled: why the last join failed
 int         nucleo_setup_join_error(void) { return g_host_join_err; }
+int         nucleo_setup_join_reason(void) { return g_host_join_err == 1 ? 15 : g_host_join_err == 2 ? 201 : 0; }
 void        nucleo_setup_forget(void) { s_saved_n = 0; }
 bool        nucleo_setup_factory_reset(void) { s_saved_n = 0; snprintf(s_devname, sizeof s_devname, "nucleo-01"); return true; }
 bool        nucleo_setup_net_is_known(const char *ssid) { for (int i = 0; i < s_saved_n; i++) if (!strcmp(s_saved[i], ssid)) return true; return false; }
