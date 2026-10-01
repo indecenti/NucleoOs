@@ -37,6 +37,10 @@ void nucleo_ui_home(const char *title, const char *const *lines, int n);
 // indeterminate bar. Repaint it to advance. Used by the boot-window SD-content installer.
 void nucleo_ui_progress(const char *title, const char *line, int pct);
 
+// Force every blocking modal to draw DIRECT to the panel (no 32 KB back-buffer / sprite). The SD-content
+// installer sets this so painting its progress bar can't re-allocate the canvas it freed for the TLS heap.
+void nucleo_ui_modal_direct(bool on);
+
 // Full-screen animated boot splash: a glowing atomic nucleus (Nucleo = nucleus) with three
 // electrons weaving through tilted orbits, the NucleoOS wordmark + a loading bar. Blocks for
 // ~NUCLEO_SPLASH_MS; any keypress skips it. Self-contained (own 16bpp canvas, no SD/network).

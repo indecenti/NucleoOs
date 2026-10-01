@@ -102,12 +102,19 @@ static void draw_body(LovyanGFX &canvas, const char *const *lines, int n)
 // one needed ~64 KB, never there once Wi-Fi + httpd are up), else the PANEL itself. The old code drew into
 // a sprite whose createSprite() had FAILED unchecked: every draw was a no-op and the first-boot wizard sat
 // on a BLACK screen waiting for keys (ADV under M5Launcher after a factory reset, 2026-10-01).
+// When set, modals draw DIRECT to the panel and never touch a back-buffer. The boot-window SD-content
+// installer sets this so drawing its progress bar can't re-allocate the 32 KB shared canvas it just freed
+// for the TLS handshake (the re-acquire was eating the very RAM the download needs).
+static bool s_modal_direct = false;
+extern "C" void nucleo_ui_modal_direct(bool on) { s_modal_direct = on; }
+
 struct ModalSurface {
     M5Canvas local;
     LovyanGFX *g;
     bool sprite;
     ModalSurface() : local(&d), g(&d), sprite(false)
     {
+        if (s_modal_direct) return;                 // direct to the panel: keep every byte free for TLS
         M5Canvas *sh = nucleo_screen();
         if (sh || (nucleo_screen_acquire() && (sh = nucleo_screen()))) { g = sh; sprite = true; return; }
         local.setPsram(false);

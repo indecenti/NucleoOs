@@ -368,6 +368,7 @@ void app_main(void)
     if (sd_ok && !solo && nucleo_sdcontent_armed()) {
         ESP_LOGW(TAG, "SD content install boot: STA-only Wi-Fi, everything else skipped for max heap");
         nucleo_app_release_buffers();                 // free the 32 KB canvas: the largest contiguous block for TLS
+        nucleo_ui_modal_direct(true);                 // the progress bar draws DIRECT: never re-allocate that canvas
         nucleo_setup_apply_network_sta_only();        // STA only (no SoftAP): ~20 KB less than APSTA, and all we need
         HMEM("sdcontent-pre");
         bool ok = nucleo_sdcontent_run();             // progress screen; writes content.json on success

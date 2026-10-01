@@ -295,6 +295,21 @@ bool nucleo_sdcontent_run(void)
     // Clear the arm flag FIRST: a crash/failure must never turn into a download-every-boot loop.
     nucleo_sdcontent_arm(false);
 
+    // The SD must be mounted AND writable — we are about to write ~1300 files to it. Prove it with a real
+    // write/read/delete of a temp file (a mount can be present but read-only on a worn/locked card), and say
+    // so clearly instead of failing later with an opaque "download failed".
+    {
+        struct stat sb;
+        if (stat(NUCLEO_SD_MOUNT, &sb) != 0)
+            return fail_run(L5("Nessuna scheda SD", "No SD card", "Sin tarjeta SD", "Pas de carte SD", "Keine SD-Karte"));
+        mkdir(NUCLEO_SD_MOUNT "/system", 0775);
+        const char *probe = NUCLEO_SD_MOUNT "/system/.sdc-write-test";
+        FILE *pf = fopen(probe, "wb");
+        if (!pf || fwrite("ok", 1, 2, pf) != 2) { if (pf) fclose(pf); unlink(probe);
+            return fail_run(L5("SD non scrivibile", "SD not writable", "SD no escribible", "SD non inscriptible", "SD nicht beschreibbar")); }
+        fclose(pf); unlink(probe);
+    }
+
     size_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
     size_t freeb = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
     ESP_LOGW(TAG, "install boot heap: free=%u largest=%u (need >=%u for TLS)", (unsigned)freeb, (unsigned)largest, TLS_MIN_BLOCK);
