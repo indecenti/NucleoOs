@@ -192,6 +192,10 @@ static void sd_erase_screen(bool failed)
     else        { const char *lines[] = { MSG[k], "", WAIT[k], LONG[k] }; nucleo_ui_home("NucleoOS", lines, 4); }
 }
 
+// The install boot: Wi-Fi is up and associated — NOW hand the TLS handshake the 32 KB canvas block (held
+// until here so the Wi-Fi bring-up could not fragment it).
+void nucleo_sdcontent_on_net_ready(void) { nucleo_app_release_buffers(); }
+
 // The boot-window SD-content installer's progress bar: it calls this after each file (weak hook override).
 void nucleo_sdcontent_on_progress(const sdc_state_t *st)
 {
@@ -229,6 +233,10 @@ void app_main(void)
         ESP_ERROR_CHECK(nvs_flash_init());
     }
     bootmark("nvs");
+    // An SD-content download armed for THIS boot (wizard / Settings ▸ SD): the dedicated install boot. Known
+    // this early (NVS) so the steps it does not need — the animated splash (a second 32 KB canvas) and the app
+    // registry — are skipped, and nothing churns the heap the TLS handshake will need.
+    const bool sdc_install = nucleo_sdcontent_armed();
     // Installed by M5Launcher? (partition-table scan, cached; logs the guest-mode posture once.)
     // Stand-alone: false, nothing changes. docs/m5launcher.md
     nucleo_guest_hosted();
@@ -277,7 +285,7 @@ void app_main(void)
     // Animated boot identity: a glowing atomic nucleus with orbiting electrons (Nucleo = nucleus).
     // Blocks ~2.5 s on its own canvas while the heap is still clean; any key skips it. The final
     // frame stays on the panel through the SD/network bringup below until the launcher draws.
-    nucleo_ui_boot_splash();
+    if (!sdc_install) nucleo_ui_boot_splash();   // the install boot goes straight to its progress screen
     bootmark("after-splash");
 
     bool sd_ok = false;
@@ -317,7 +325,7 @@ void app_main(void)
             }
         }
 
-        if (nucleo_registry_load() != ESP_OK)
+        if (!sdc_install && nucleo_registry_load() != ESP_OK)   // the install boot never shows the launcher
             ESP_LOGW(TAG, "registry not loaded");
         bootmark("registry");
     } else {
@@ -367,8 +375,11 @@ void app_main(void)
     // full OS on the fresh SD. Never runs unless armed; the full OS is a plain boot.
     if (sd_ok && !solo && nucleo_sdcontent_armed()) {
         ESP_LOGW(TAG, "SD content install boot: STA-only Wi-Fi, everything else skipped for max heap");
-        nucleo_app_release_buffers();                 // free the 32 KB canvas: the largest contiguous block for TLS
-        nucleo_ui_modal_direct(true);                 // the progress bar draws DIRECT: never re-allocate that canvas
+        // Keep the 32 KB canvas HELD while Wi-Fi comes up and associates (driver buffers, lwip, DHCP, the
+        // supervisor's stack all land elsewhere); it is released right before the TLS handshake
+        // (nucleo_sdcontent_on_net_ready below), which then gets one intact 32 KB block. Freeing it first, as
+        // before, let the Wi-Fi bring-up carve that hole into fragments.
+        nucleo_ui_modal_direct(true);                 // the progress bar draws DIRECT: never re-allocate a canvas
         nucleo_setup_apply_network_sta_only();        // STA only (no SoftAP): ~20 KB less than APSTA, and all we need
         HMEM("sdcontent-pre");
         bool ok = nucleo_sdcontent_run();             // progress screen; writes content.json on success
