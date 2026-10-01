@@ -7,29 +7,42 @@ whether to join an existing Wi-Fi or create an Access Point for the client app.
 
 ## Flow
 
+The wizard is **on rails**: every path ends on step 4, and nothing else in the OS is reachable before.
+
 ```
-1. Language           "Language / Lingua": English / Italiano — applied instantly, so every
-                      later screen (and the whole OS) is already in the chosen language
-2. Welcome            "Welcome to NucleoOS. Let's set up your device."  [Enter to begin]
-3. Network            ▸ Connect to a Wi-Fi network
-                      ▸ Skip - use an Access Point
-3a. (Connect) Scan    pick SSID from a scrolled list
-3b. (Connect) Password masked text entry via the keyboard -> "Connected!" + http://<ip>/
-3c. (AP)              on Skip, a failed join, no networks found or back: per-device SSID
-                      "NucleoOS-XXXX" + random password + http://192.168.4.1/ (client connects here)
-4. Device name        default "nucleo-01"  (becomes hostname / nucleo-01.local)
-5. Done               "Setup complete!" + Wi-Fi/AP line, "Open: <url>/", "Win app: <url>/downloads/"
-                      -> writes setup.json (complete: true), never shown again
+1. Language      "Language / Lingua": English, Italiano, Espanol, Francais, Deutsch — applied at once,
+                 so every later screen (and the whole OS) is in the chosen language. Esc = English.
+2. Welcome       "Welcome to NucleoOS. Next: pick your Wi-Fi. Esc = use the hotspot."  [Enter]
+3. Network       Settings ▸ Nearby networks in onboarding mode: the real scan list (signal bars,
+                 Scan again), the real password field (size 2, last character shown for 1.5 s,
+                 Tab shows/hides all of it) and the real join.
+                 Locked: Tab, LEFT, the other pages, forget/prefer are inert.
+                 Exits: a join (native, or from a browser on the hotspot), or Esc -> "Skip Wi-Fi?
+                 You will use its hotspot." [Yes] -> per-device hotspot.
+                 A failed join stays here: "Failed: check the password".
+4. All set       "All set!" + "Connected to <ssid>" (or hotspot name + password), "Open in a
+                 browser" <ip> (or 192.168.4.1) and the pairing PIN.  [Enter] -> the launcher.
+                 setup.json (complete: true) is written when step 3 ends; never shown again.
 ```
 
-Code: `nucleo_setup_run()` in `firmware/components/nucleo_setup/nucleo_setup.c`. The language step
-offers English and Italian only; Spanish, French and German are picked afterwards in Settings
-(native or web) — see [`i18n.md`](i18n.md).
+Code: `nucleo_setup_run()` (steps 1–2) in `firmware/components/nucleo_setup/nucleo_setup.c`, then
+`app_wifi.cpp` (`OB_NETS` → `OB_DONE`, steps 3–4). Guarantees:
+
+- **Never abandoned.** If Settings is closed before step 4 by any path, the launcher re-opens the
+  network step (at most every 2 s) as long as `nucleo_setup_onboarding()` is true.
+- **Resumable.** Power loss before step 3 ends leaves `complete: false`: the next boot starts again
+  at step 1.
+- **No dead screens.** The modals draw into the shared back-buffer, an 8-bpp sprite or the panel
+  (never into a failed sprite), and a short back-buffer still gets its hint bar.
+- Device name: `nucleo-XXXX` from the MAC (renamable in Settings ▸ Device).
+
+Host-rendered: `ui:shots` scenes `wizard.*` (language, welcome, inputs) and
+`settings.onboard*` (list, password, skip confirm, locked Tab/LEFT, All set: joined / hotspot).
 
 **Pairing PIN — implemented, but not a wizard step.** The 6-digit pairing PIN
 ([`security.md`](security.md)) is minted once on first boot (`esp_random`, persisted, stable across
 reboots; `settings.security.pin` can pin a fixed one) by `nucleo_auth`, not by the wizard, and the
-wizard's screens never show it. After setup, read it on the device from any of: the **Connection** app
+wizard shows it on its last screen (All set). After setup, read it on the device from any of: the **Connection** app
 (`info`; its PIN row shows the code once the device has joined a Wi-Fi network), **Settings ▸ Device ▸ PIN**, the Control Center's
 web-client shortcut (`Web <ip>   PIN <pin>`), or the **QR Code** app's pairing source.
 

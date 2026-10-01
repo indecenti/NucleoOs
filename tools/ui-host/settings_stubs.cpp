@@ -50,7 +50,8 @@ const char *nucleo_setup_scan_auth_label(int i) { return i >= 0 && i < SCAN_N ? 
 bool        nucleo_setup_join(const char *, const char *) { return true; }
 bool        g_host_onboarding = false;                     // scene-controlled: the first-boot network step
 bool        nucleo_setup_onboarding(void) { return g_host_onboarding; }
-bool        nucleo_setup_onboard_finish(void) { g_host_onboarding = false; return false; }
+bool        g_host_onboard_sta = false;                    // scene-controlled: the step ended with a join
+bool        nucleo_setup_onboard_finish(void) { g_host_onboarding = false; return g_host_onboard_sta; }
 void        nucleo_setup_forget(void) { s_saved_n = 0; }
 bool        nucleo_setup_factory_reset(void) { s_saved_n = 0; snprintf(s_devname, sizeof s_devname, "nucleo-01"); return true; }
 bool        nucleo_setup_net_is_known(const char *ssid) { for (int i = 0; i < s_saved_n; i++) if (!strcmp(s_saved[i], ssid)) return true; return false; }
@@ -101,3 +102,5 @@ const nucleo_storage_info_t *nucleo_storage_info(void)
 }
 }
 bool        nucleo_storage_format_arm(const char *) { return true; }
+bool        g_host_app_exited = false;                     // scene-visible: the app asked to close
+extern "C" void nucleo_app_exit(void) { g_host_app_exited = true; }
