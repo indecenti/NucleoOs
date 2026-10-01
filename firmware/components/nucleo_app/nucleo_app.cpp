@@ -693,6 +693,8 @@ static bool maybe_solo_launch(int idx)
     return true;
 }
 extern "C" void nucleo_settings_search_preset(const char *q);   // app_wifi.cpp
+extern "C" void nucleo_settings_onboard(void);                  // app_wifi.cpp: next open = first-boot network step
+extern "C" bool nucleo_setup_onboarding(void);                  // nucleo_setup.c
 static void launch_by_id(const char *id);
 static void launch(const MenuNode *app)
 {
@@ -1598,6 +1600,9 @@ void nucleo_app_run(void)
     else if (reopen_recorder_pending()) { s_reopen_req = 0; nucleo_app_launch_id("recorder"); }
     // Full OS after ANIMA Solo said "open Music": open the app it staged, like a launcher tap.
     else if (const char *aid = nucleo_anima_take_launch()) nucleo_app_launch_id(aid);
+    // First boot: the wizard did the language; the network step IS Settings ▸ Nearby networks (the real
+    // scan list + password editor + join), not a second blocking copy of it.
+    else if (nucleo_setup_onboarding()) { nucleo_settings_onboard(); nucleo_app_launch_id("wifi"); }
     // Release-update dialog: a newer, non-dismissed release was learned on a previous boot (pure
     // NVS decision — no network on this path). Update now / next boot (Esc) / ignore this version.
     else if (nucleo_update_dialog_pending()) { nucleo_app_launch_id("updates"); }

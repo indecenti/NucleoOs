@@ -27,7 +27,7 @@ bool nucleo_screen_acquire(void)
     if (s_screen_alive) return true;
     if (!g_host.canvas_ok) return false;
     s_screen.setColorDepth(8);
-    s_screen_alive = s_screen.createSprite(240, 135) != nullptr;
+    s_screen_alive = s_screen.createSprite(240, g_host.canvas_rows) != nullptr;
     return s_screen_alive;
 }
 void nucleo_screen_release(void) { if (s_screen_alive) { s_screen.deleteSprite(); s_screen_alive = false; } }
@@ -95,6 +95,15 @@ extern "C" int  nucleo_app_content_top(void) { return 0; }                 // as
 extern "C" int  nucleo_app_content_height(void) { return 135 - 14; }       // H - HINT (not fullscreen)
 extern "C" void nucleo_app_request_draw(void) {}
 extern "C" void nucleo_app_force_repaint(void) {}
-extern "C" nucleo_key_t nucleo_kbd_read(void) { nucleo_key_t k; memset(&k, 0, sizeof k); return k; }
+// Apps get their keys from the scene (app_key); only the blocking modals poll. They read the scripted
+// keys, then 40 idle polls (a menu's glide settles), then ENTER, which ends every modal.
+extern "C" nucleo_key_t nucleo_kbd_read(void)
+{
+    nucleo_key_t k; memset(&k, 0, sizeof k);
+    if (g_host.kbd_i < 0) return k;
+    if (g_host.kbd_i < g_host.kbd_n) return g_host.kbd[g_host.kbd_i++];
+    if (++g_host.kbd_i > g_host.kbd_n + 40) { k.key = NK_ENTER; g_host.kbd_i = -1; }
+    return k;
+}
 extern "C" unsigned char nucleo_kbd_mods(void) { return 0; }
 extern "C" bool nucleo_kbd_char_down(char) { return false; }

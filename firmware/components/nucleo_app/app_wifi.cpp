@@ -68,6 +68,8 @@ int         nucleo_setup_scan_channel(int i);
 int         nucleo_setup_scan_secure(int i);
 const char *nucleo_setup_scan_auth_label(int i);
 bool        nucleo_setup_join(const char *ssid, const char *pass);
+bool        nucleo_setup_onboarding(void);                // first boot: the network step is ours (see enter())
+bool        nucleo_setup_onboard_finish(void);
 void        nucleo_setup_start_ap(void);
 void        nucleo_setup_stop_ap(void);
 void        nucleo_setup_forget(void);
@@ -193,6 +195,12 @@ static uint8_t s_hit_pg[18], s_hit_id[18];     // search results (page, row id)
 static int     s_hits = 0;
 
 enum { IM_NONE = 0, IM_PASS, IM_NAME, IM_APSSID, IM_APPASS };
+// The join password is no longer typed blind: like a phone, the character just typed shows for 1.5 s,
+// and TAB shows / hides the whole password. On the Cardputer's tiny keys a wrong letter behind a row of
+// asterisks was the usual reason a join "failed".
+static bool    s_reveal = false;
+static int64_t s_ikey_us = 0;                  // when the last character was typed (0 = none showing)
+static const int64_t PEEK_US = 1500000;
 static int  s_im = IM_NONE;
 static char s_ibuf[80]; static int s_ilen = 0;
 static char s_join_ssid[33];
@@ -732,6 +740,13 @@ extern "C" void nucleo_settings_search_preset(const char *q)
     snprintf(s_preset, sizeof s_preset, "%s", q ? q : "");
 }
 
+// First boot: the wizard did the language; the NETWORK step is this app (Nearby networks — scan, signal,
+// password editor, join). onboard(): the next open starts there. A join ends it on the Wi-Fi card; Esc
+// ends it on the Hotspot page, which shows the hotspot name + password the phone needs.
+static bool s_onboard_req = false, s_onboard = false;
+extern "C" void nucleo_settings_onboard(void) { s_onboard_req = true; }
+static void onboard_end(bool esc);
+
 // ---- drawing ------------------------------------------------------------------------------------
 // Two paths (docs/ANTI-FLICKER.md, technique 2 - "an app that can lose the canvas"):
 //  - BUFFERED: the framework hands us the shared canvas, wiped: draw the whole frame, one blit.
@@ -1270,15 +1285,19 @@ static void draw_input(int ch)
         d.drawRoundRect(4, iy, W - 8, 25, 7, ACC);
         txt(11, iy + 9, lab, ACC, LINE, 1);
     }
-    bool mask = (s_im == IM_PASS);                                   // the join password stays hidden
-    int vx = 11 + (int)strlen(lab) * 6 + 8, maxc = (W - 14 - vx) / 6 - 1;
+    // The value at size 2 (12 px glyphs, readable on the 240 px panel). A password is masked except the
+    // character just typed (PEEK_US) or all of it while revealed (TAB).
+    bool mask = (s_im == IM_PASS) && !s_reveal;
+    bool peek = mask && s_ikey_us && esp_timer_get_time() - s_ikey_us < PEEK_US;
+    int vx = 11 + (int)strlen(lab) * 6 + 8, maxc = (W - 14 - vx) / 12 - 1;
     if (maxc > 36) maxc = 36;
     int from = s_ilen > maxc ? s_ilen - maxc : 0, k = 0;
-    char sh[40]; for (int i = from; i < s_ilen && k < maxc; i++, k++) sh[k] = mask ? '*' : s_ibuf[i];
+    char sh[40];
+    for (int i = from; i < s_ilen && k < maxc; i++, k++) sh[k] = (mask && !(peek && i == s_ilen - 1)) ? '*' : s_ibuf[i];
     for (int j = k; j <= maxc; j++) sh[j] = ' ';                    // pad: the field overwrites itself
     sh[maxc + 1] = 0;
-    txt(vx, iy + 9, sh, FG, LINE, 1);
-    d.fillRect(vx + k * 6 + 1, iy + 9, 2, 8, ACC);                   // caret (inside the text cell)
+    txt(vx, iy + 5, sh, FG, LINE, 2);
+    d.fillRect(vx + k * 12 + 1, iy + 5, 2, 16, ACC);                 // caret (inside the text cell)
 }
 static void draw_toast(int ch)
 {
@@ -1391,6 +1410,11 @@ static void on_draw(void)
 static void update_hint(void)
 {
     static char hb[48];
+    if (s_im == IM_PASS) { nucleo_app_set_hint(s_reveal
+                                      ? TR5("invio ok  tab nascondi  esc annulla", "enter ok  tab hide  esc cancel", "enter ok  tab ocultar  esc anular",
+                                            "enter ok  tab cacher  esc annuler", "enter ok  tab verbergen  esc Abbr.")
+                                      : TR5("invio ok  tab mostra  esc annulla", "enter ok  tab show  esc cancel", "enter ok  tab mostrar  esc anular",
+                                            "enter ok  tab voir  esc annuler", "enter ok  tab zeigen  esc Abbr.")); return; }
     if (s_im != IM_NONE)          { nucleo_app_set_hint(TR5("invio salva   esc annulla", "enter save   esc cancel", "enter guardar   esc anular",
                                                             "enter valider   esc annuler", "enter sichern   esc Abbruch")); return; }
     if (s_cf != R_NONE)           { nucleo_app_set_hint(TR5("</> scegli   invio conferma", "</> pick   enter confirm", "</> elegir   enter confirmar",
@@ -1400,7 +1424,8 @@ static void update_hint(void)
                                                             "</> Feld   up/dn Wert   enter setzen")); return; }
     if (s_busy && s_op == OP_JOIN){ nucleo_app_set_hint(TR5("connessione in corso...", "connecting...", "conectando...",
                                                             "connexion...", "verbinde...")); return; }
-    const char *back = (s_page == PG_ROOT) ? TR5("esc esci", "esc back", "esc salir", "esc sortir", "esc Ende")
+    const char *back = s_onboard ? TR5("esc hotspot", "esc hotspot", "esc hotspot", "esc hotspot", "esc Hotspot")
+                     : (s_page == PG_ROOT) ? TR5("esc esci", "esc back", "esc salir", "esc sortir", "esc Ende")
                      : s_page == PG_SEARCH ? TR5("esc chiude", "esc close", "esc cerrar", "esc fermer", "esc zurueck")
                      :                       TR5("esc indietro", "esc back", "esc atras", "esc retour", "esc zurueck");
     if (s_page == PG_NETS) {
@@ -1519,6 +1544,7 @@ static void go_back(void)
 // TAB: jump to the next section (from the root: the focused one, or Wi-Fi).
 static void on_tab(void)
 {
+    if (s_im == IM_PASS) { s_reveal = !s_reveal; update_hint(); nucleo_app_request_draw(); return; }   // show / hide the password
     if (s_im != IM_NONE || s_cf != R_NONE || s_dt || (s_busy && s_op == OP_JOIN)) return;
     int cur = (s_page == PG_NETS || s_page == PG_SAVED) ? (int)PG_WIFI : (int)s_page, next = PG_WIFI;
     if (cur == PG_ROOT || cur == PG_SEARCH) {
@@ -1536,6 +1562,7 @@ static void on_tab(void)
 static void open_editor(int mode, const char *init)
 {
     s_im = mode; snprintf(s_ibuf, sizeof s_ibuf, "%s", init ? init : ""); s_ilen = (int)strlen(s_ibuf);
+    s_reveal = false; s_ikey_us = 0;
 }
 
 // LEFT/RIGHT on a slider or a choice. Returns false when the row isn't adjustable — toggles are
@@ -1734,7 +1761,7 @@ static void confirm_done(bool yes)
 
 // ---- inline text input ------------------------------------------------------------------------
 // Every printable key types — including , ; . / which double as the arrows (Wi-Fi passwords use them).
-static void input_char(char c) { if (c >= 32 && c < 127 && s_ilen < (int)sizeof(s_ibuf) - 1) { s_ibuf[s_ilen++] = c; s_ibuf[s_ilen] = 0; } }
+static void input_char(char c) { if (c >= 32 && c < 127 && s_ilen < (int)sizeof(s_ibuf) - 1) { s_ibuf[s_ilen++] = c; s_ibuf[s_ilen] = 0; s_ikey_us = esp_timer_get_time(); } }
 static void input_close(void) { s_im = IM_NONE; memset(s_ibuf, 0, sizeof s_ibuf); s_ilen = 0; }
 static void input_key(int k, char ch)
 {
@@ -1857,6 +1884,7 @@ static bool on_back(int key)
     else if (s_cf != R_NONE)  { if (left) app_ui_confirm_key(NK_LEFT, 0, &s_cf_yes); else s_cf = R_NONE; }
     else if (s_dt)            { if (left) dt_step(-1); else s_dt = false; }
     else if (s_busy && s_op == OP_JOIN) { /* swallow: the join finishes on its own */ }
+    else if (s_onboard && !left) onboard_end(true);   // first boot: Esc = no Wi-Fi now, use the hotspot
     else {
         s_rst_id = R_NONE;
         Row r;
@@ -1890,13 +1918,15 @@ static void on_tick(void)
 {
     s_tickn++;
     if (s_msg_t > 0 && --s_msg_t == 0) nucleo_app_request_draw();
+    if (s_ikey_us && esp_timer_get_time() - s_ikey_us >= PEEK_US) { s_ikey_us = 0; if (s_im == IM_PASS) nucleo_app_request_draw(); }   // re-mask the peeked char
     if (s_busy) {
         s_anim++;
         if (s_done) {
             s_busy = false; s_done = false; int op = s_op; s_op = OP_NONE;
             if (op == OP_JOIN) {
                 memset(s_join_pass, 0, sizeof s_join_pass);
-                if (s_join_ok) { toast_ok(TR5("Connesso", "Connected", "Conectado", "Connecte", "Verbunden")); set_page(PG_WIFI); }
+                if (s_join_ok) { toast_ok(TR5("Connesso", "Connected", "Conectado", "Connecte", "Verbunden")); set_page(PG_WIFI);
+                                 if (s_onboard) onboard_end(false); }
                 else toast(TR5("Connessione non riuscita", "Could not connect", "No se pudo conectar", "Echec de connexion", "Verbindung fehlgeschlagen"));
             } else if (op == OP_SCAN && s_page == PG_NETS) {
                 s_sel[PG_NETS] = (int8_t)(nucleo_setup_scan_count() > 0 ? 1 : 0);   // focus the strongest network
@@ -1924,10 +1954,21 @@ static void enter(void)
     nucleo_app_set_tab_handler(on_tab);
     nucleo_app_set_back_handler(on_back);
     if (s_preset[0]) { s_page = PG_SEARCH; search_set(s_preset); s_preset[0] = 0; }   // opened from launcher Spotlight
+    if (s_onboard_req) { s_onboard_req = false; s_onboard = nucleo_setup_onboarding(); if (s_onboard) set_page(PG_NETS); }
     update_hint(); nucleo_app_request_draw();
+}
+static void onboard_end(bool esc)
+{
+    s_onboard = false;
+    bool sta = nucleo_setup_onboard_finish();
+    if (esc && !sta) {
+        set_page(PG_AP);                                       // name + password of the hotspot, right there
+        toast_ok(TR5("Hotspot attivo", "Hotspot on", "Hotspot activo", "Hotspot actif", "Hotspot an"));
+    }
 }
 static void leave(void)
 {
+    if (s_onboard) onboard_end(false);   // left before choosing (home key): the hotspot keeps it reachable
     flush_prefs();
     strip_release();
     if (!(s_busy && s_op == OP_JOIN)) wipe(s_join_pass, sizeof s_join_pass);   // an in-flight join wipes its own

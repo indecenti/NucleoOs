@@ -100,6 +100,7 @@ lgfxSrc.push(fontStub);
 const fwSrc = [
   join(FW, 'nucleo_app', 'launcher_render.cpp'), join(FW, 'nucleo_app', 'launcher_menu.cpp'),
   join(FW, 'nucleo_app', 'app_ui.cpp'), join(FW, 'nucleo_app', 'app_wifi.cpp'), join(FW, 'nucleo_ui', 'nucleo_theme.cpp'),
+  join(FW, 'nucleo_ui', 'nucleo_ui_modal.cpp'),
   join(FW, 'nucleo_storage', 'nucleo_i18n.c'), join(CJSON, 'cJSON.c'),
   join(here, 'host_stubs.cpp'), join(here, 'settings_stubs.cpp'), join(here, 'scenes.cpp'),
 ];

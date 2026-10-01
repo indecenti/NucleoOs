@@ -10,6 +10,7 @@
 #include "launcher_render.h"
 #include "nucleo_i18n.h"
 #include "nucleo_theme.h"
+#include "nucleo_ui.h"         // the blocking modals (nucleo_ui_modal.cpp) the wizard scenes drive
 #include "apps.gen.h"          // HOST_APPS[], HOST_APP_N (run.mjs, from tools/launcher-host/apps.mjs)
 #include <stdio.h>
 #include <string.h>
@@ -176,10 +177,16 @@ static void app_draw(void)
     launcher_render_hint_bar();
 }
 
+extern bool g_host_onboarding;                       // settings_stubs.cpp
+extern "C" void nucleo_settings_onboard(void);
 static const Scene SETTINGS[] = {
     { "root",      [] { app_open("wifi"); app_draw(); } },
     { "root-row4", [] { app_open("wifi"); down(4); app_draw(); } },
     { "root-end",  [] { app_open("wifi"); app_key(NK_UP); app_draw(); } },
+    // First boot: Settings opens on Nearby networks; Esc means "use the hotspot". Then the join password.
+    { "onboard",      [] { g_host_onboarding = true; nucleo_settings_onboard(); app_open("wifi"); app_draw(); } },
+    { "onboard-pass", [] { g_host_onboarding = true; nucleo_settings_onboard(); app_open("wifi"); down(3); app_key(NK_ENTER); app_type("casa2026"); app_draw(); } },
+    { "onboard-reveal", [] { g_host_onboarding = true; nucleo_settings_onboard(); app_open("wifi"); down(3); app_key(NK_ENTER); app_type("casa2026"); app_key(NK_TAB); app_draw(); } },
     // Scrolling one row at a time with the heap of a busy ADV (strip sprite 12 rows): every step is an
     // INCREMENTAL repaint. The ADV showed half-drawn rows and a text-less focus chip here (2026-10-01).
     { "root-scroll", [] { g_host.largest_block = 9000; app_open("wifi"); app_draw();
@@ -203,6 +210,46 @@ static const Scene SETTINGS[] = {
     { "from-spotlight", [] { nucleo_settings_search_preset("bri"); app_open("wifi"); app_draw(); } },
 };
 
+// ---- first-boot wizard: the REAL blocking modals (nucleo_ui_modal.cpp) driven by scripted keys ----------
+static void keys(std::initializer_list<int> ks)
+{
+    static nucleo_key_t q[32]; int n = 0;
+    for (int k : ks) if (n < 32) { memset(&q[n], 0, sizeof q[n]); if (k > 0xFF) q[n].key = k >> 8; else { q[n].key = NK_CHAR; q[n].ch = (char)k; } n++; }
+    g_host.kbd = q; g_host.kbd_n = n; g_host.kbd_i = 0;
+}
+#define K(code) ((int)(code) << 8)
+static void wizard_lang(void)
+{
+    static const char *names[] = { "English", "Italiano", "Espanol", "Francais", "Deutsch" };   // nucleo_setup.c
+    nucleo_ui_menu("Language / Lingua", names, 5);
+}
+// Mirror of nucleo_setup_run()'s welcome (nucleo_setup.c needs the whole Wi-Fi stack to compile here).
+static const char *T5(const char *it, const char *en, const char *es, const char *fr, const char *de)
+{
+    const char *l = nucleo_i18n_lang();
+    return !strcmp(l, "it") ? it : !strcmp(l, "es") ? es : !strcmp(l, "fr") ? fr : !strcmp(l, "de") ? de : en;
+}
+static void wizard_welcome(void)
+{
+    const char *welcome[] = {
+        T5("Benvenuto in NucleoOS.", "Welcome to NucleoOS.", "Bienvenido a NucleoOS.", "Bienvenue dans NucleoOS.", "Willkommen bei NucleoOS."), "",
+        T5("Ora scegli la rete Wi-Fi.", "Next: pick your Wi-Fi.", "Ahora elige tu Wi-Fi.", "Choisissez votre Wi-Fi.", "Jetzt WLAN waehlen."),
+        T5("Esc = usa l'hotspot.", "Esc = use the hotspot.", "Esc = usar el hotspot.", "Esc = utiliser le hotspot.", "Esc = Hotspot nutzen.") };
+    nucleo_ui_message("NucleoOS", welcome, 4);
+}
+static const Scene WIZARD[] = {
+    { "lang",       [] { keys({}); wizard_lang(); } },
+    { "lang-row3",  [] { keys({ K(NK_DOWN), K(NK_DOWN), K(NK_DOWN) }); wizard_lang(); } },
+    { "lang-end",   [] { keys({ K(NK_UP) }); wizard_lang(); } },
+    // The ADV's back-buffer is fitted to its largest block (130 rows): the hint bar must still be whole.
+    { "lang-short", [] { g_host.canvas_rows = 130; nucleo_screen_release(); keys({ K(NK_DOWN) }); wizard_lang(); } },
+    { "welcome",    [] { keys({}); wizard_welcome(); } },
+    { "input",      [] { keys({ 'c', 'a', 's', 'a' }); char b[33] = ""; nucleo_ui_input("Nome dispositivo", b, sizeof b, 0); } },
+    { "input-pass", [] { keys({ 's', 'e', 'g', 'r', 'e', 't', 'o' }); char b[65] = ""; nucleo_ui_input("Password", b, sizeof b, 1); } },
+    { "input-reveal", [] { keys({ 's', 'e', 'g', 'r', 'e', 't', 'o', K(NK_TAB) }); char b[65] = ""; nucleo_ui_input("Password", b, sizeof b, 1); } },
+};
+#undef K
+
 static const char *LANGS[]  = { "en", "it", "es", "fr", "de" };
 static const char *THEMES[] = { "classic", "nano_banana", "hacker", "amoled" };
 
@@ -210,8 +257,10 @@ static const char *THEMES[] = { "classic", "nano_banana", "hacker", "amoled" };
 // their focus across opens on purpose (resume), so a shared process would leak one scene into the next.
 static const Scene *find_scene(const char *surface, const char *scene)
 {
-    const Scene *set = !strcmp(surface, "launcher") ? SCENES : !strcmp(surface, "settings") ? SETTINGS : nullptr;
-    int n = set == SCENES ? (int)(sizeof SCENES / sizeof SCENES[0]) : (int)(sizeof SETTINGS / sizeof SETTINGS[0]);
+    const Scene *set = !strcmp(surface, "launcher") ? SCENES : !strcmp(surface, "settings") ? SETTINGS
+                     : !strcmp(surface, "wizard") ? WIZARD : nullptr;
+    int n = set == SCENES ? (int)(sizeof SCENES / sizeof SCENES[0]) : set == SETTINGS ? (int)(sizeof SETTINGS / sizeof SETTINGS[0])
+          : (int)(sizeof WIZARD / sizeof WIZARD[0]);
     for (int i = 0; set && i < n; i++) if (!strcmp(set[i].name, scene)) return &set[i];
     return nullptr;
 }
@@ -221,6 +270,7 @@ static void list_all(void)
     struct { const char *surface; const Scene *set; int n; } S[] = {
         { "launcher", SCENES, (int)(sizeof SCENES / sizeof SCENES[0]) },
         { "settings", SETTINGS, (int)(sizeof SETTINGS / sizeof SETTINGS[0]) },
+        { "wizard", WIZARD, (int)(sizeof WIZARD / sizeof WIZARD[0]) },
     };
     for (auto &g : S)
         for (int i = 0; i < g.n; i++) {
@@ -248,7 +298,7 @@ static int render_one(const char *full)
     sc->run();
     dump(full);
     // The hint bar prints at most 39 Font0 glyphs (launcher_render_hint_bar): a longer hint is cut.
-    if (strcmp(part[1], "cc") && strlen(launcher_render_hint()) > 39)
+    if (strcmp(part[0], "wizard") && strcmp(part[1], "cc") && strlen(launcher_render_hint()) > 39)
         printf("ui-check: %s: hint is %d chars, the bar shows 39: \"%s\"\n", full, (int)strlen(launcher_render_hint()), launcher_render_hint());
     return 0;
 }
