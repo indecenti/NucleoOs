@@ -43,7 +43,7 @@ extern "C" time_t host_time(time_t *out) { if (out) *out = g_host.wall; return g
 extern "C" esp_reset_reason_t esp_reset_reason(void) { return ESP_RST_POWERON; }
 extern "C" void esp_restart(void) {}
 extern "C" uint32_t esp_get_free_heap_size(void) { return 17000; }
-extern "C" size_t heap_caps_get_largest_free_block(unsigned) { return g_host.canvas_ok ? 40000 : 12000; }
+extern "C" size_t heap_caps_get_largest_free_block(unsigned) { return g_host.largest_block ? g_host.largest_block : g_host.canvas_ok ? 40000 : 12000; }
 extern "C" size_t heap_caps_get_free_size(unsigned) { return 30000; }
 extern "C" size_t heap_caps_get_minimum_free_size(unsigned) { return 9000; }
 extern "C" const esp_app_desc_t *esp_app_get_description(void)

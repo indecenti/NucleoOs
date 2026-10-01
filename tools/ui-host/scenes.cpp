@@ -146,6 +146,16 @@ static void app_key(int key, char ch = 0)
 }
 static void app_type(const char *s) { while (*s) app_key(NK_CHAR, *s++); }
 static void down(int n) { while (n-- > 0) app_key(NK_DOWN); }
+// What the device does between full paints: the app redraws in place — no clear, no new generation —
+// so the direct path repaints only the boxes that changed, through its strip sprite.
+static void app_draw(void);
+static void app_draw_incr(void)
+{
+    if (nucleo_screen()) { app_draw(); return; }   // buffered: the framework composes every frame anyway
+    for (int t = 0; t < 3; t++) { g_host.now_us += 200000; if (s_app->on_tick) s_app->on_tick(); }
+    s_app->on_draw();
+    launcher_render_hint_bar();
+}
 static void app_draw(void)
 {
     for (int t = 0; t < 12; t++) { g_host.now_us += 200000; if (s_app->on_tick) s_app->on_tick(); }   // let toasts/eases settle
@@ -170,6 +180,10 @@ static const Scene SETTINGS[] = {
     { "root",      [] { app_open("wifi"); app_draw(); } },
     { "root-row4", [] { app_open("wifi"); down(4); app_draw(); } },
     { "root-end",  [] { app_open("wifi"); app_key(NK_UP); app_draw(); } },
+    // Scrolling one row at a time with the heap of a busy ADV (strip sprite 12 rows): every step is an
+    // INCREMENTAL repaint. The ADV showed half-drawn rows and a text-less focus chip here (2026-10-01).
+    { "root-scroll", [] { g_host.largest_block = 9000; app_open("wifi"); app_draw();
+                          for (int i = 0; i < 5; i++) { app_key(NK_DOWN); app_draw_incr(); } } },
     { "wifi",      [] { app_open("wifi"); app_key(NK_ENTER); app_draw(); } },
     { "nets",      [] { app_open("wifi"); app_key(NK_ENTER); app_key(NK_ENTER); app_key(NK_DOWN); app_draw(); } },
     { "hotspot",   [] { app_open("wifi"); app_key(NK_DOWN); app_key(NK_ENTER); app_draw(); } },

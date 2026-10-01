@@ -48,7 +48,7 @@ for (const { local, dev } of pairs) {
   let wrote = false;
   for (let attempt = 1; attempt <= 3 && !wrote; attempt++) {
     try {
-      const r = await f(host + '/api/fs/write?path=' + encodeURIComponent(dev), { method: 'POST', body: buf, headers: auth }, 20000);
+      const r = await f(host + '/api/fs/write?path=' + encodeURIComponent(dev), { method: 'POST', body: buf, headers: auth }, Math.max(20000, Math.ceil(buf.length / 20)));   // ≥20 KB/s: a 3 MB firmware image needs minutes, not 20 s
       if (r.ok) { console.log(`✓ ${dev}  (${buf.length} B)`); ok++; wrote = true; }
       else { console.error(`  …${dev} HTTP ${r.status} (attempt ${attempt})`); await new Promise(s => setTimeout(s, 800 * attempt)); }
     } catch (e) { console.error(`  …${dev} ${e.message} (attempt ${attempt})`); await new Promise(s => setTimeout(s, 800 * attempt)); }
