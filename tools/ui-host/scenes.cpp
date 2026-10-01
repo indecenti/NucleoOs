@@ -177,6 +177,7 @@ static void app_draw(void)
     launcher_render_hint_bar();
 }
 
+extern bool g_host_guest;
 extern bool g_host_onboarding;                       // settings_stubs.cpp
 extern "C" void nucleo_settings_onboard(void);
 static const Scene SETTINGS[] = {
@@ -207,6 +208,8 @@ static const Scene SETTINGS[] = {
     { "reset",     [] { app_open("wifi"); app_key(NK_UP); app_key(NK_ENTER); app_draw(); } },
     { "reset-sd",  [] { app_open("wifi"); app_key(NK_UP); app_key(NK_ENTER); down(2); app_draw(); } },
     { "reset-sd-armed", [] { app_open("wifi"); app_key(NK_UP); app_key(NK_ENTER); down(2); app_key(NK_ENTER); app_draw(); } },
+    { "reset-sd-guest", [] { g_host_guest = true; app_open("wifi"); app_key(NK_UP); app_key(NK_ENTER); down(2); app_key(NK_ENTER); app_draw(); } },
+    { "reset-wipe",  [] { app_open("wifi"); app_key(NK_UP); app_key(NK_ENTER); down(3); app_draw(); } },
     { "search",    [] { app_open("wifi"); app_type("lum"); app_draw(); } },
     { "search-none", [] { app_open("wifi"); app_type("qqz"); app_draw(); } },
     { "from-spotlight", [] { nucleo_settings_search_preset("bri"); app_open("wifi"); app_draw(); } },
