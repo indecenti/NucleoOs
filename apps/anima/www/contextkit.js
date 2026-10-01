@@ -75,6 +75,9 @@ export function wantsCode(s) { return CODE_RE.test(String(s || '')); }
 const AGENT_VERB = new RegExp('(?<!\\p{L})(' + [
   // publish / install an app (live miss: "Pubblica e installa l'app contatore" got a chat that invented commands)
   'pubblic\\w*', 'install\\w*', 'publish\\w*', 'deploy\\w*', 'instal\\w*', 'publi\\w*', 'veröffentlich\\w*', 'installier\\w*',
+  // …and switch one on / off ("Disattiva l'app contatore" got a chat that said "done" and changed nothing)
+  'disattiv\\w*', 'riattiv\\w*', 'attiv\\w*', 'abilit\\w*', 'disabilit\\w*', 'disable\\w*', 'enable\\w*',
+  'desactiv\\w*', 'activ\\w*', 'désactiv\\w*', 'réactiv\\w*', 'deaktivier\\w*', 'aktivier\\w*',
   'crea\\w*', 'scriv\\w*', 'modific\\w*', 'corregg\\w*', 'corrigg\\w*', 'sistem\\w*', 'aggiung\\w*', 'rinomin\\w*', 'spost\\w*', 'elimin\\w*', 'cancell\\w*', 'legg\\w*', 'cerc\\w*', 'trov\\w*', 'rifattor\\w*', 'costruisc\\w*', 'implement\\w*', 'aggiorn\\w*', 'salv\\w*', 'genera\\w*', 'fai', 'fammi', 'prepara',
   'create', 'write', 'edit', 'fix', 'modify', 'add', 'rename', 'move', 'delete', 'remove', 'read', 'search', 'find', 'refactor', 'build', 'make', 'implement', 'update', 'save', 'generate', 'scaffold',
   'escrib\\w*', 'corrig\\w*', 'arregl\\w*', 'añad\\w*', 'renombr\\w*', 'muev\\w*', 'borr\\w*', 'lee', 'busc\\w*', 'constru\\w*', 'actualiz\\w*', 'guard\\w*', 'hazme', 'haz',

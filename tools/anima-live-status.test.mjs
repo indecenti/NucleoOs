@@ -138,6 +138,10 @@ test('a volume / brightness order is read without an engine (web mode said "not 
   assert.equal(settingAct('come alzo il volume del mio PC?'), null, 'a how-to is not an order');
   assert.equal(settingAct('cambia il volume'), null, 'no amount, no direction: not ours to guess');
   assert.equal(settingAct("l'audio del film era basso ieri sera"), null);
+  // a CODE request naming the screen is not a setting (it set the backlight to 96% on the ADV)
+  assert.equal(settingAct('Ora modifica contatore/www/index.html: il numero deve essere grande (almeno 96px) e centrato orizzontalmente e verticalmente nello schermo, con i pulsanti − e + centrati sotto. Poi ripubblica l\'app.'), null);
+  assert.equal(commandHint('metti il testo al centro dello schermo in style.css'), null);
+  assert.equal(commandHint('rendi lo schermo più grande con font 20px'), null);
   assert.equal(settingReply('set_brightness', 'Luminosita al 50%.', 'it'), 'Luminosità al 50%.');
   assert.equal(settingReply('set_volume', 'Volume 100%.', 'de'), 'Lautstärke 100 %.');
 });
