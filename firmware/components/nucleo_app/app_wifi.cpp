@@ -836,6 +836,12 @@ static void paint_box(int x, int w, int y, int h, box_fn fn, const void *ctx)
         nucleo_app_set_gfx(nullptr);
         panel->setClipRect(x, y0, w, y1 - y0);
         s_strip->pushSprite(panel, 0, sy);
+        // pushSprite is ASYNCHRONOUS here: M5GFX DMAs straight out of a sprite in internal RAM (always, on
+        // this PSRAM-less chip) and returns while the strip is still on the wire. The next iteration — or
+        // the next box — refills this same strip, so without the wait the panel received a mix of two
+        // strips: half-drawn rows and a focus chip whose label vanished (ADV, 2026-10-01). The host
+        // renderer has no DMA, which is why ui:shots never showed it.
+        panel->waitDMA();
     }
     panel->setClipRect(cx, cy, cw, chh);
 }
