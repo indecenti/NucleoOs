@@ -508,8 +508,7 @@ const gates = [
     // another firmware, a hostile path, a missing / unwritable card. Asserts the final tree is byte-exact, user
     // state untouched, no .part left, reruns download nothing, resume fetches only what is missing, Skip is
     // remembered. Plus FIPS SHA-256 vectors and hashlib agreement on the real release in dist/.
-    ok: (code) => code === 0, summary: (o) => (o.match(/sdcontent-e2e: [^
-]*/) || [lastLine(o)])[0].trim() },
+    ok: (code) => code === 0, summary: (o) => (o.match(/sdcontent-e2e: [^\n]*/) || [lastLine(o)])[0].trim() },
   { name: 'setup-store (reset + SD secrets)', cmd: 'node', args: ['tools/anima-host/setup-store-check.mjs'],
     // nucleo_setup's three-tier config store (firmware/components/nucleo_setup/setup_store.c) + the hotspot
     // credential core (ap_creds.c), host-compiled with MinGW against ESP-IDF's real cJSON and an in-memory
