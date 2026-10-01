@@ -46,7 +46,10 @@ static void test_allow(void)
     OK(!sdc_path_writable("data/anima/teacher.json"), "api-key vault refused");
     OK(!sdc_path_writable("data/anima/learned/cache.jsonl"), "learned cache refused");
     OK(!sdc_path_writable("data/anima/sessions.json"), "anima sessions refused");
-    OK(!sdc_path_writable("data/tts/it/voice.bin"), "tts bank refused (out of scope)");
+    OK(sdc_path_writable("data/tts/it/clips.pcm"), "tts bank it allowed (pipeline parity)");
+    OK(sdc_path_writable("data/tts/en/index.bin"), "tts bank en allowed (pipeline parity)");
+    OK(!sdc_path_writable("data/tts/speak.cfg"), "tts runtime cfg refused");
+    OK(!sdc_path_writable("data/tts/fr/x.bin"), "tts other lang refused");
     OK(!sdc_path_writable("data/Documents/note.txt"), "user documents refused");
     OK(!sdc_path_writable("backups/b.bin"), "backups refused");
     OK(!sdc_path_writable("auth.json"), "auth refused");

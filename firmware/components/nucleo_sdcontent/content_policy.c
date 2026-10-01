@@ -74,6 +74,12 @@ bool sdc_path_writable(const char *path)
         return false;
     }
 
+    // TTS voice banks under data/tts/<lang>/ (it, en) — kept in lockstep with the release pipeline's
+    // allow-list (sd_deploy.py release_path_allowed). The banks are out of scope for `core` today, but a
+    // release that ships them must land where the user's own data/tts/ runtime cache (.cfg/.wav) does not.
+    if (under(path, "data/tts/it/")) return true;
+    if (under(path, "data/tts/en/")) return true;
+
     // Wallpapers and the evil-portal page templates.
     if (under(path, "wallpapers/")) return true;
     if (under(path, "evilportal/")) return true;

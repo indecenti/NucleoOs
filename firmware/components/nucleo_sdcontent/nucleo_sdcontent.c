@@ -43,6 +43,22 @@ static const char *TAG = "sdcontent";
 static sdc_state_t s_st;
 const sdc_state_t *nucleo_sdcontent_state(void) { return &s_st; }
 
+// Which packs this run installs. Default "core" — a complete, working web OS + ANIMA (~50 MB). The
+// optional packs (arcade emulators, the PC/Android downloads) are added later from Settings ▸ SD, so the
+// first-boot download stays lean and matches the "~50 MB" the wizard offers.
+static char s_packs[48] = "core";
+static bool pack_wanted(const char *pack)
+{
+    size_t pl = strlen(pack);
+    for (const char *p = s_packs; *p; ) {
+        const char *comma = strchr(p, ',');
+        size_t len = comma ? (size_t)(comma - p) : strlen(p);
+        if (len == pl && strncmp(p, pack, pl) == 0) return true;
+        p += len; if (*p == ',') p++;
+    }
+    return false;
+}
+
 // Weak default; main.c overrides to paint the boot-window progress bar.
 __attribute__((weak)) void nucleo_sdcontent_on_progress(const sdc_state_t *st) { (void)st; }
 static void progress(void) { nucleo_sdcontent_on_progress(&s_st); }
@@ -305,7 +321,7 @@ bool nucleo_sdcontent_run(void)
             continue;
         }
         sdc_file_t f; bool cmt;
-        if (sdc_parse_file(line, &f, &cmt)) total++;
+        if (sdc_parse_file(line, &f, &cmt)) { if (pack_wanted(f.pack)) total++; }
         else if (!cmt) { fclose(mf); return fail_run(L5("Manifest non valido", "Invalid manifest", "Manifest invalido", "Manifeste invalide", "Ungueltiges Manifest")); }
     }
     if (!have_hdr) { fclose(mf); return fail_run(L5("Manifest non valido", "Invalid manifest", "Manifest invalido", "Manifeste invalide", "Ungueltiges Manifest")); }
@@ -316,6 +332,7 @@ bool nucleo_sdcontent_run(void)
     while (fgets(line, sizeof line, mf)) {
         sdc_file_t f; bool cmt;
         if (!sdc_parse_file(line, &f, &cmt)) continue;      // header / #pack / comment
+        if (!pack_wanted(f.pack)) continue;                 // optional pack, not selected this run
         char dst[260]; snprintf(dst, sizeof dst, "%s/%s", NUCLEO_SD_MOUNT, f.path);
         uint32_t dsz = 0; bool on_disk = file_stat(dst, &dsz);
         char dsha[65]; bool have_sha = false;
