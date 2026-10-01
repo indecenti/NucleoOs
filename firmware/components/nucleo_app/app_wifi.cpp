@@ -69,6 +69,10 @@ int         nucleo_setup_scan_channel(int i);
 int         nucleo_setup_scan_secure(int i);
 const char *nucleo_setup_scan_auth_label(int i);
 bool        nucleo_setup_join(const char *ssid, const char *pass);
+int         nucleo_ui_menu(const char *title, const char *const *items, int n);   // nucleo_ui_modal.cpp (blocking)
+bool        nucleo_sdcontent_needed(void);                // SD lacks the web OS/ANIMA files for this firmware
+bool        nucleo_sdcontent_arm(bool on);                // arm the boot-window installer + reboot
+void        nucleo_sdcontent_decline(void);               // remember "skip" for this firmware version
 bool        nucleo_setup_onboarding(void);                // first boot: the network step (or its "All set") is owed
 bool        nucleo_setup_onboard_finish(void);
 void        nucleo_setup_onboard_finish_async(void);      // runs the finish on the Wi-Fi supervisor
@@ -2042,7 +2046,23 @@ static void on_tick(void)
     s_tickn++;
     if (s_fin_wait) {                                          // the step is closing on the supervisor
         int r = nucleo_setup_onboard_finish_poll();
-        if (r >= 0) { s_fin_wait = false; s_done_sta = r == 1; s_onboard = OB_DONE; s_msg_t = 0; update_hint(); }
+        if (r >= 0) {
+            s_fin_wait = false; s_done_sta = r == 1; s_msg_t = 0;
+            // The ONE skippable step after the Wi-Fi join: if the device is online but the SD is missing the
+            // web OS / ANIMA files, offer to download them (a blocking modal, like the language step). The
+            // user is at the device; "Download" arms the install and reboots into the boot-window installer,
+            // "Skip" remembers the choice for this firmware. Only when actually joined (a hotspot has no net).
+            if (s_done_sta && nucleo_sdcontent_needed()) {
+                const char *items[] = {
+                    TR5("Scarica (~50 MB)", "Download (~50 MB)", "Descargar (~50 MB)", "Telecharger (~50 Mo)", "Laden (~50 MB)"),
+                    TR5("Salta", "Skip", "Omitir", "Passer", "Ueberspringen") };
+                int m = nucleo_ui_menu(TR5("Scaricare i contenuti?", "Download content?", "Descargar contenido?",
+                                           "Telecharger le contenu ?", "Inhalt laden?"), items, 2);
+                if (m == 0) nucleo_sdcontent_arm(true);   // reboots into the installer; does not return
+                else nucleo_sdcontent_decline();          // not offered again until a firmware change
+            }
+            s_onboard = OB_DONE; update_hint();
+        }
         nucleo_app_request_draw();
     }
     if (s_msg_t > 0 && --s_msg_t == 0) nucleo_app_request_draw();

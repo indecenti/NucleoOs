@@ -113,3 +113,7 @@ const nucleo_storage_info_t *nucleo_storage_info(void)
 bool        nucleo_storage_format_arm(const char *) { return true; }
 bool        g_host_app_exited = false;                     // scene-visible: the app asked to close
 extern "C" void nucleo_app_exit(void) { g_host_app_exited = true; }
+bool        g_host_sd_needed = false;                      // scene-controlled: SD missing web OS files
+extern "C" bool nucleo_sdcontent_needed(void) { return g_host_sd_needed; }
+extern "C" bool nucleo_sdcontent_arm(bool) { return true; }
+extern "C" void nucleo_sdcontent_decline(void) {}
