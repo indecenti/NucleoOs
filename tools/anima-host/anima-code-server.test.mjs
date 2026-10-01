@@ -150,11 +150,15 @@ test('ANIMA: a task goes to the agent, a chat turn does not (5 languages)', () =
     'Correggi la funzione somma in app.js', 'crea una pagina html con un orologio', 'leggi README.md',
     'Create a todo app', 'refactor the code in utils.js', 'Escribe un archivo con la lista de la compra',
     'Écris un fichier avec la liste', 'Crée une page avec une horloge', 'Erstelle eine Datei mit einer Liste', 'Ändere die Datei im Ordner',
+    // questions ABOUT the files need the tools to look (live miss 2026-10-01: a tool-less chat said it had no access)
+    'Quante righe ha ogni file .md nello spazio di lavoro? Dammi una tabella.', 'How many .js files are in the workspace?',
+    'elenca i file della cartella demo', '¿Cuántos archivos hay en la carpeta demo?', 'Combien de fichiers dans le dossier demo ?', 'Wie viele Dateien sind im Ordner demo?',
   ];
   const chats = [
     'ciao come stai', 'che ore sono', 'apri la calcolatrice', 'aggiungi un evento domani alle 9', "cos'è nucleoos",
     'what is the weather in Rome', 'raccontami una storia', 'wie spät ist es', 'quanto fa 2+2', 'traduci ciao in inglese',
     '¿qué hora es?', 'quelle heure est-il', 'erzähl mir einen Witz',
+    'dammi una ricetta per la carbonara', 'quanta batteria ho', 'mostrami una barzelletta', 'how many planets are there',
   ];
   for (const q of tasks) assert.ok(wantsAgent(q), 'task: ' + q);
   for (const q of chats) assert.ok(!wantsAgent(q), 'chat: ' + q);

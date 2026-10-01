@@ -4568,6 +4568,7 @@
     // across providers (planning→cheap, work→mid, hard→strongest); the runtime keeps Gemini (proxy) out of
     // the loop. The runtime is cached and rebuilt when the active key / keys map / workspace root changes.
     let _agentRt=null, _agentRtKey='', _agentDidMutate=false, _agentCancelled=false, _agentWsAsked=false;
+    let _wsScratchChosen=false;   // the user chose the scratch /data/agent once: don't ask again this session
     // The cache sig must change when ANY routed provider's key/model changes — not just the active one or the
     // SET of provider names — or the cached runtime would route in-loop subtasks with a stale secondary cfg.
     function keysSig(){ return Object.entries(keyCfg.keys||{}).map(([p,e])=>p+':'+((e&&e.model)||'')+':'+String((e&&e.key)||'').slice(-4)).sort().join(','); }
@@ -4630,9 +4631,12 @@
         confirm:async(a)=>{
           // First file-CREATING action with no workspace open → offer to open one (once per turn) so the
           // files stay visible/navigable in ANIMA's tree instead of landing invisibly in the scratch /data/agent.
-          if(!fs.hasRoot() && !_agentWsAsked && /^(write_file|edit_file|append_file|make_dir|move_file)$/.test(a.op||'')){
+          // Asked once per SESSION, not per task: answering "use /data/agent" before every request was a chore.
+          // A shell line that creates files counts (the agent now reaches for `mkdir -p … && echo … >` first).
+          if(!fs.hasRoot() && !_agentWsAsked && !_wsScratchChosen && (/^(write_file|edit_file|append_file|make_dir|move_file)$/.test(a.op||'') || (a.op==='sh' && Array.isArray(a.writes) && a.writes.length))){
             _agentWsAsked=true;
             const open=await askDialog({ title:L('wsAskTitle'), body:L('wsAskBody'), ok:L('wsAskOpen'), cancel:L('wsAskScratch') });
+            if(!open) _wsScratchChosen=true;
             if(open){
               const picked=await pickWorkspaceModal('/data');
               if(picked){ try{ _agentRt && _agentRt.fs && _agentRt.fs.setRoot(ws.root); }catch{} return true; }   // chosen destination → the write lands in the workspace; approve it

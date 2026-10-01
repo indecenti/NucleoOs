@@ -86,10 +86,16 @@ const FILE_TOKEN = /(?:^|[\s"'`(@])(?:\.{0,2}\/)?(?:[\w.-]+\/)*[\w-]+\.(?:m?js|c
 const CONTENT_Q = /\?|\b(e|ed|and|y|et|und)\s+(dimmi|dicci|spiegami|riassum\w*|tell|explain|summari[sz]e|count|dime|explícame|resume|dis-moi|explique|résume|sag|erklär\w*|zusammenfass\w*)|\b(quant[ieoa]|how\s+(many|much)|cuánt[oa]s?|combien|wie\s+viele?|riassum\w*|summari[sz]e|resum\w*|résum\w*|zusammenfass\w*|spiega|explain|expl[ií]ca|erklär\w*|cosa\s+(fa|dice|contiene)|what\s+(does|is\s+in)|qué\s+(hace|contiene)|que\s+(fait|contient)|was\s+(macht|steht))\b/i;
 export function asksAboutContent(s) { return CONTENT_Q.test(String(s || '')); }
 
+// A QUESTION about the user's files is a task too — it needs the tools to look: "Quante righe ha ogni file .md
+// nello spazio di lavoro?" went to a tool-less chat that answered it "had no access to the file system".
+const ASK_VERB = /\b(quant[ieoa]|elenc\w*|mostr\w*|dammi|conta|how\s+(many|much)|list|show|count|give\s+me|cuánt[oa]s?|muéstr\w*|dame|combien|montre\w*|liste\w*|wie\s+viele?|zeig\w*|liste)\b/i;
+const EXT_TOKEN = /(?:^|[\s(])\*?\.(?:m?js|cjs|ts|json|html?|css|md|txt|py|csv|svg|xml|ya?ml)\b/i;
+const WS_NOUN = /\b(spazio di lavoro|cartella di lavoro|workspace|nella sd|sulla sd|on the sd|espacio de trabajo|espace de travail|arbeitsbereich)\b/i;
 export function wantsAgent(s, { workspace = false } = {}) {
   const t = String(s || '');
   if (FILE_TOKEN.test(t)) return true;
   if (AGENT_VERB.test(t) && AGENT_OBJECT.test(t)) return true;
+  if (ASK_VERB.test(t) && (EXT_TOKEN.test(t) || WS_NOUN.test(t) || /\b(file|files|cartell\w*|folder\w*|archivos?|carpetas?|fichiers?|dossiers?|dateien?|ordner)\b/i.test(t))) return true;
   return !!workspace && wantsCode(t) && AGENT_VERB.test(t);
 }
 export function wantsLong(s) { return LONG_RE.test(String(s || '')); }
