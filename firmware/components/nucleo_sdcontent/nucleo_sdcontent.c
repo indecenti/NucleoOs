@@ -125,8 +125,10 @@ static bool file_sha(const char *abspath, char *out_hex)
 // ---- HTTP (one keep-alive handle, reused across every file) -----------------------------------------
 
 static esp_http_client_handle_t s_cli;
+static int s_last_status;          // last HTTP status (0 = the connection/TLS never opened)
+static int s_last_open_err;        // esp_err of the last failed open (TLS/DNS), for diagnosis
 
-static bool http_open(const char *url)
+static bool http_open_once(const char *url)
 {
     if (!s_cli) {
         esp_http_client_config_t cfg = {
@@ -134,18 +136,24 @@ static bool http_open(const char *url)
             .buffer_size = 2048, .keep_alive_enable = true,
         };
         s_cli = esp_http_client_init(&cfg);
-        if (!s_cli) return false;
+        if (!s_cli) { s_last_open_err = -1; return false; }
     } else {
         esp_http_client_set_url(s_cli, url);
     }
-    if (esp_http_client_open(s_cli, 0) != ESP_OK) {        // re-dial once on a dropped keep-alive
-        esp_http_client_cleanup(s_cli); s_cli = NULL;
-        return http_open(url);
-    }
+    s_last_status = 0;
+    esp_err_t oe = esp_http_client_open(s_cli, 0);
+    if (oe != ESP_OK) { s_last_open_err = oe; esp_http_client_cleanup(s_cli); s_cli = NULL; return false; }
     esp_http_client_fetch_headers(s_cli);
-    int status = esp_http_client_get_status_code(s_cli);
-    if (status != 200) { ESP_LOGW(TAG, "GET %s -> HTTP %d", url, status); esp_http_client_close(s_cli); return false; }
+    s_last_status = esp_http_client_get_status_code(s_cli);
+    if (s_last_status != 200) { ESP_LOGW(TAG, "GET %s -> HTTP %d", url, s_last_status); esp_http_client_close(s_cli); return false; }
     return true;
+}
+
+static bool http_open(const char *url)
+{
+    if (http_open_once(url)) return true;
+    if (s_last_status != 0) return false;   // a real HTTP status (404/redirect) — re-dialing won't change it
+    return http_open_once(url);             // connection/TLS failed: ONE clean re-dial (no infinite recursion)
 }
 
 static void http_done(void) { if (s_cli) esp_http_client_close(s_cli); }
@@ -326,13 +334,20 @@ bool nucleo_sdcontent_run(void)
 
     char ver3[24]; fw_ver3(ver3, sizeof ver3);
     char base[96]; snprintf(base, sizeof base, "%ssd/%s/", SDC_BASE_HOST, ver3);
+    ESP_LOGW(TAG, "install for v%s, base=%s", ver3, base);
 
     // 1) fetch the manifest to a file.
     mkdir(NUCLEO_SD_MOUNT "/system", 0775); mkdir(MANIFEST_DIR, 0775);
     char murl[128], msha[65];
     snprintf(murl, sizeof murl, "%ssd-manifest.txt", base);
-    if (http_to_file(murl, MANIFEST_PART, msha) < 0)
-        return fail_run(L5("Contenuti non disponibili online", "Content not available online", "Contenido no disponible online", "Contenu indisponible en ligne", "Inhalt online nicht verfuegbar"));
+    if (http_to_file(murl, MANIFEST_PART, msha) < 0) {
+        // Say WHY on screen: the firmware version (so a wrong sd/<ver>/ URL is obvious), the HTTP status
+        // (404 = that version is not hosted; 0 = the TLS/connection never opened) and the TLS error.
+        snprintf(s_st.err, sizeof s_st.err, "%s v%s (HTTP %d / tls %d)",
+                 L5("Contenuti offline?", "Content offline?", "Contenido offline?", "Contenu hors ligne ?", "Inhalt offline?"),
+                 ver3, s_last_status, s_last_open_err);
+        s_st.phase = SDC_FAILED; progress(); return false;
+    }
     unlink(MANIFEST_FILE); rename(MANIFEST_PART, MANIFEST_FILE);
 
     // 2) header + count pass.
