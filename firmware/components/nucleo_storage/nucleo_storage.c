@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <sys/stat.h>
 #include <errno.h>
+#include <unistd.h>         // unlink(): the SD-erase marker
 #include <time.h>
 #include "esp_log.h"
 #include "esp_app_desc.h"   // esp_app_get_description(): stamp the real firmware version into volume.json
