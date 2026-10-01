@@ -151,6 +151,18 @@ bool nucleo_sdcontent_needed(void)
     return sdc_content_needed(NUCLEO_SD_MOUNT, ver3);
 }
 
+static char s_card_tag[24], s_fw_tag[24];
+nucleo_sdc_status_t nucleo_sdcontent_status(void)
+{
+    s_card_tag[0] = 0;
+    struct stat sb;
+    if (stat(NUCLEO_SD_MOUNT, &sb) != 0) return NUCLEO_SDC_NO_SD;
+    char ver3[24]; fw_ver3(ver3, sizeof ver3);
+    return (nucleo_sdc_status_t)sdc_content_status(NUCLEO_SD_MOUNT, ver3, s_card_tag, sizeof s_card_tag);
+}
+const char *nucleo_sdcontent_card_tag(void) { return s_card_tag; }
+const char *nucleo_sdcontent_fw_tag(void) { if (!s_fw_tag[0]) fw_ver3(s_fw_tag, sizeof s_fw_tag); return s_fw_tag; }
+
 void nucleo_sdcontent_decline(void)
 {
     char ver3[24]; fw_ver3(ver3, sizeof ver3);
@@ -256,14 +268,17 @@ static bool fail_here(sdc_code_t code, const char *detail)
 bool nucleo_sdcontent_run(void)
 {
     memset(&s_st, 0, sizeof s_st);
-    s_st.phase = SDC_CHECKING; s_st.pct = -1;
+    s_st.phase = SDC_IDLE; s_st.pct = -1;        // IDLE here = waiting for the Wi-Fi link ("Connecting")
     nucleo_sdcontent_on_progress(&s_st);
 
     nucleo_sdcontent_arm(false);                 // FIRST: a crash or failure must never become a boot loop
     s_heap[0] = 0;
     heap_mark("boot");                           // canvas still held, Wi-Fi coming up
 
-    for (int t = 0; t < 120 && (!nucleo_setup_ip() || !nucleo_setup_ip()[0]); t++) { vTaskDelay(pdMS_TO_TICKS(250)); esp_task_wdt_reset(); }
+    for (int t = 0; t < 120 && (!nucleo_setup_ip() || !nucleo_setup_ip()[0]); t++) {
+        vTaskDelay(pdMS_TO_TICKS(250)); esp_task_wdt_reset();
+        if ((t & 3) == 3) nucleo_sdcontent_on_progress(&s_st);   // keep the "Connecting" bar alive (1 Hz)
+    }
     if (!nucleo_setup_ip() || !nucleo_setup_ip()[0]) {
         s_st.code = SDC_E_FETCH; s_st.phase = SDC_FAILED;
         snprintf(s_st.err, sizeof s_st.err, "%s", L5("Nessuna rete Wi-Fi", "No Wi-Fi network", "Sin red Wi-Fi", "Pas de reseau Wi-Fi", "Kein WLAN"));

@@ -44,8 +44,10 @@ typedef struct {
     int  files_total;     // selected files in the manifest
     int  files_done;      // installed + already present (verified)
     int  files_written;   // actually downloaded this run
-    int  pct;             // 0..100 by file count (-1 unknown)
-    int  recv_kb;         // bytes downloaded this run / 1024
+    int  pct;             // 0..100 by payload bytes (-1 unknown)
+    int  recv_kb;         // bytes downloaded this run / 1024 (network: the ETA's rate)
+    uint32_t kb_total;    // payload of the selected packs / 1024
+    uint32_t kb_done;     // of which installed or already present (verified) / 1024, incl. the file in flight
     int  requests;        // HTTP requests made (diagnostics, tests)
     char cur[40];         // current file (basename), for the progress line
     sdc_code_t code;      // why it failed (SDC_OK while fine)
@@ -83,9 +85,26 @@ bool sdc_engine_run(const sdc_cfg_t *cfg, const sdc_io_t *io, sdc_state_t *st);
 bool sdc_content_read(const char *root, char *tag, size_t tagcap, bool *complete, bool *declined);
 void sdc_content_write(const char *root, const char *tag, bool complete, bool declined);
 
-// Should the device offer the download? true when content.json is missing, for another firmware, or an
-// interrupted run; false when complete for ver3 or when the user chose "Skip" for ver3. (Card presence is
-// the caller's check.)
+// What the card holds, from the files themselves — the SD can be filled by this engine OR copied by hand from
+// the release's -sd.zip, which carries its manifest at system/content/manifest.txt (its header names the
+// release). content.json is this engine's own record. In order:
+//   COMPLETE  content.json: complete for ver3 (installed + verified here)
+//   PARTIAL   content.json: a run for ver3 started and did not finish (a rerun resumes)
+//   MANUAL    the web OS is there and the manifest beside it names ver3 (a hand copy of this release)
+//   OUTDATED  the web OS is there, from another release (by the manifest, else by content.json)
+//   UNKNOWN   the web OS is there, nothing says which release (a dev sync, an old zip)
+//   SKIPPED   nothing there, the user chose "Later" for ver3
+//   MISSING   nothing there
+// tag (optional) receives the release the card holds, when known ("" otherwise). (Card presence is the
+// caller's check.)
+typedef enum {
+    SDC_ST_MISSING = 1, SDC_ST_PARTIAL, SDC_ST_OUTDATED, SDC_ST_SKIPPED, SDC_ST_COMPLETE, SDC_ST_MANUAL, SDC_ST_UNKNOWN,
+} sdc_status_t;
+sdc_status_t sdc_content_status(const char *root, const char *ver3, char *tag, size_t tagcap);
+
+// Should the device OFFER the download (the first-boot wizard, a boot prompt)? Only when something is
+// actually missing or old: MISSING, PARTIAL (resume) and OUTDATED (an update: just the changed files).
+// A hand copy (MANUAL / UNKNOWN), a complete install or a "Later" is never nagged about.
 bool sdc_content_needed(const char *root, const char *ver3);
 
 #ifdef __cplusplus

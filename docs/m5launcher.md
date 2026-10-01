@@ -64,9 +64,18 @@ Verified against the Launcher sources (bmorcelli/Launcher, Sept 2026) and its bo
 - **Smaller `cfg`.** 448 KB instead of 640 KB; it holds small JSON config, pins/recents and the music
   DB, well within that.
 
-Not handled by the Launcher (same as a web-flasher install): the **SD payload** (`nucleoos-*-sd.zip`,
-shell + web apps + ANIMA data). Copy it to the card as described in the release `FLASH.md`; the native
-OS runs without it.
+Not handled by the Launcher (same as a web-flasher install): the **SD payload** (shell + web apps +
+ANIMA data). NucleoOS fetches it **itself** over Wi-Fi — the first-boot wizard offers it right after the
+Wi-Fi join, Settings ▸ Device ▸ SD content any time — or it can be copied by hand from the release's
+`nucleoos-*-sd.zip` (recognised by the manifest it carries). Details, including what is specific to a
+Launcher-shared card: [`sd-content-install.md`](sd-content-install.md) §3 and §6b. The native OS runs
+without it.
+
+**Size budget.** The Launcher sizes each app slot to the image it installs (ours: `nucle1`/`nucle2`,
+0x310000 = 3,211,264 B on the ADV with the current Launcher). An update larger than the slot the Launcher
+created cannot be installed in place, so the image is kept under it: after the TinyUSB buffer reclaim
+(memory-budget.md) the image is 3,201,088 B (2026-10-02), ~10 KB of headroom. Check
+`build/nucleoos.bin` against the slot before publishing.
 
 ## Publishing so it shows up in the Launcher's OTA list
 
@@ -98,6 +107,8 @@ automated from this repo.
 
 - Host: `npm run guest:test` — the real `guest_policy.c` against the real `partitions.csv` plus a
   Launcher-written table (also in the ANIMA gate and CI `gate.yml`).
+- No serial console under the Launcher (it hands the USB port to the app, which switches it): diagnose a
+  hosted device over the network — `/api/status` (`sdc_diag`, `sdc_heap`, `ota.host`) and `/api/logs`.
 - Device (manual, when releasing): install the merged image from the Launcher's SD installer →
   NucleoOS boots, Settings ▸ Device shows *Back to M5Launcher*, `/api/status` has
   `ota.host:"m5launcher"`, the Updates app points to the Launcher, *Back to M5Launcher* + ENTER lands

@@ -176,34 +176,6 @@ extern "C" void nucleo_ui_home(const char *title, const char *const *lines, int 
     s.present();
 }
 
-
-// A one-shot progress screen (no key loop): header, one status line, a filled bar with the percent.
-// Used by the boot-window SD-content installer, which repaints it per file. pct < 0 shows an indeterminate
-// bar (a moving block). Safe to call from the pre-httpd boot window (same surfaces as every modal).
-extern "C" void nucleo_ui_progress(const char *title, const char *line, int pct)
-{
-    s_hint = "";
-    ModalSurface s;
-    LovyanGFX &g = *s.g;
-    header(&g, title);
-    g.setTextColor(FG, BG);
-    g.setFont(&fonts::Font0); g.setTextSize(1);
-    if (line && line[0]) { g.setCursor(8, MHDR + 10); g.print(line); }
-    const int bx = 8, bw = W - 16, by = 70, bh = 18;
-    g.drawRoundRect(bx, by, bw, bh, 4, LINE);
-    if (pct < 0) {                                   // indeterminate: a block that walks with the frame count
-        static int walk = 0; walk = (walk + 12) % (bw - 40);
-        g.fillRoundRect(bx + 2 + walk, by + 2, 36, bh - 4, 3, ACC);
-    } else {
-        int p = pct < 0 ? 0 : pct > 100 ? 100 : pct;
-        int fw = (bw - 4) * p / 100;
-        if (fw > 0) g.fillRoundRect(bx + 2, by + 2, fw, bh - 4, 3, ACC);
-        char pc[8]; snprintf(pc, sizeof pc, "%d%%", p);
-        g.setTextColor(FG, BG); g.setCursor(bx + bw / 2 - 10, by + bh + 6); g.print(pc);
-    }
-    s.present();
-}
-
 extern "C" int nucleo_ui_menu(const char *title, const char *const *items, int n)
 {
     // Settings' list look: every item at size 2 (the old unfocused items were size 1, 6 px glyphs), the
@@ -340,6 +312,145 @@ extern "C" void nucleo_ui_input(const char *title, char *buf, int len, int maske
         else if (kk.key == NK_TAB && masked) reveal = !reveal;
         else if (kk.ch >= 32 && pos < len - 1) { buf[pos++] = nucleo_kbd_take_shift_tap() ? nucleo_kbd_shifted(kk.ch) : kk.ch; buf[pos] = '\0'; key_us = esp_timer_get_time(); }
 
+        modal_idle();
+    }
+}
+
+// ---- SD-content install screens ------------------------------------------------------------------------
+// Status colours: the launcher palette (launcher_theme.h), legible on every theme background.
+static const uint16_t INST_GOOD = 0x8FF3, INST_BAD = 0xF96B;
+
+// Draw s at (x,y) in monospace Font0 at size sz, padded to exactly w chars so a shorter value overwrites
+// the previous one (glyph cells paint their own background: no clear, no flicker). align: 0 left, 1 right.
+static void put_fixed(LovyanGFX &g, int x, int y, int sz, int w, const char *s, uint16_t fg, int align)
+{
+    char b[48];
+    if (w > 47) w = 47;
+    int n = (int)strlen(s); if (n > w) n = w;
+    int pad = w - n;
+    if (align) { memset(b, ' ', (size_t)pad); memcpy(b + pad, s, (size_t)n); }
+    else       { memcpy(b, s, (size_t)n); memset(b + n, ' ', (size_t)pad); }
+    b[w] = 0;
+    g.setFont(&fonts::Font0); g.setTextSize(sz); g.setTextColor(fg, BG);
+    g.setCursor(x, y); g.print(b);
+    g.setTextSize(1);
+}
+static void mb_str(char *b, size_t n, unsigned kb)
+{
+    unsigned t = (kb * 10u + 512u) / 1024u;                 // tenths of a MB
+    snprintf(b, n, "%u.%u", t / 10u, t % 10u);
+}
+static const char *inst_title(void) { return H5("Contenuti SD", "SD content", "Contenido SD", "Contenu SD", "SD-Inhalte"); }
+
+extern "C" void nucleo_ui_install_screen(const nucleo_ui_install_t *v)
+{
+    static int s_phase = -1, s_fw = -1;
+    static char s_sig[4][48];                                 // what each field shows now
+    if (!v) return;
+    s_hint = "";
+    ModalSurface s;
+    LovyanGFX &g = *s.g;
+    const int bx = 8, bw = W - 16, by = 76, bh = 12;
+    bool full = (int)v->phase != s_phase || s.sprite;         // a back-buffer frame is always whole
+    if (full) {
+        s_phase = (int)v->phase; s_fw = -1; memset(s_sig, 0, sizeof s_sig);
+        header(&g, inst_title());
+        const char *st = v->phase == NUI_INST_CONNECTING ? H5("Connessione alla rete...", "Connecting to the network...",
+                                                                "Conectando a la red...", "Connexion au reseau...", "Verbinde mit dem Netz...")
+                       : v->phase == NUI_INST_CHECKING   ? H5("Preparo il download...", "Preparing the download...",
+                                                                "Preparando la descarga...", "Preparation...", "Download wird vorbereitet...")
+                       :                                   H5("Download e verifica dei file", "Downloading and verifying",
+                                                                "Descargando y verificando", "Telechargement et controle", "Laden und pruefen");
+        g.setFont(&fonts::Font2); g.setTextSize(1); g.setTextColor(FG, BG);
+        g.setCursor(8, MHDR + 4); g.print(st);
+        g.setFont(&fonts::Font0);
+        g.drawRoundRect(bx, by, bw, bh, 4, LINE);
+        hint(&g, H5("non spegnere: tienilo collegato", "do not switch off: keep it plugged in", "no apagues: mantenlo conectado",
+                    "ne pas eteindre: laisser branche", "nicht ausschalten: Kabel lassen"));
+    }
+    char b[48];
+    // the bar: indeterminate (a walking block) until the payload size is known, then filled by bytes
+    if (v->pct < 0 || v->phase < NUI_INST_DOWNLOADING) {
+        static int walk = 0; walk = (walk + 10) % (bw - 44);
+        g.fillRect(bx + 2, by + 2, bw - 4, bh - 4, BG);
+        g.fillRoundRect(bx + 2 + walk, by + 2, 40, bh - 4, 3, ACC);
+    } else {
+        int p = v->pct > 100 ? 100 : v->pct;
+        int fw = (bw - 4) * p / 100;
+        if (fw != s_fw) {                                     // only the new slice (the bar never goes back)
+            if (s_fw < 0 || fw < s_fw) g.fillRect(bx + 2, by + 2, bw - 4, bh - 4, BG);
+            if (fw > 0) g.fillRoundRect(bx + 2, by + 2, fw, bh - 4, 3, ACC);
+            s_fw = fw;
+        }
+    }
+    if (v->phase == NUI_INST_DOWNLOADING && v->pct >= 0) {
+        // 0: the big percentage (size 3, 18 px glyphs): readable at arm's length
+        snprintf(b, sizeof b, "%d%%", v->pct > 100 ? 100 : v->pct);
+        if (strcmp(b, s_sig[0])) { snprintf(s_sig[0], sizeof s_sig[0], "%s", b); put_fixed(g, 8, 46, 3, 4, b, FG, 0); }
+        // 1: MB done / total, right-aligned beside it
+        char d1[12], d2[12]; mb_str(d1, sizeof d1, v->kb_done); mb_str(d2, sizeof d2, v->kb_total);
+        snprintf(b, sizeof b, "%s / %s MB", d1, d2);
+        if (strcmp(b, s_sig[1])) { snprintf(s_sig[1], sizeof s_sig[1], "%s", b); put_fixed(g, W - 8 - 18 * 6, 54, 1, 18, b, FG, 1); }
+        // 2: files left, time left right
+        char eta[20];
+        if (v->eta_s < 0) snprintf(eta, sizeof eta, "%s", H5("calcolo...", "estimating...", "calculando...", "estimation...", "schaetze..."));
+        else if (v->eta_s < 60) snprintf(eta, sizeof eta, "%s", H5("< 1 min", "< 1 min", "< 1 min", "< 1 min", "< 1 Min"));
+        else snprintf(eta, sizeof eta, H5("~%d min", "~%d min", "~%d min", "~%d min", "~%d Min"), (v->eta_s + 30) / 60);
+        char fl[24]; snprintf(fl, sizeof fl, H5("%d/%d file", "%d/%d files", "%d/%d archivos", "%d/%d fichiers", "%d/%d Dateien"),
+                              v->files_done, v->files_total);
+        char row[48]; snprintf(row, sizeof row, "%-24.24s%14.14s", fl, eta);
+        if (strcmp(row, s_sig[2])) { snprintf(s_sig[2], sizeof s_sig[2], "%s", row); put_fixed(g, 6, 94, 1, 38, row, FG, 0); }
+        // 3: the file in flight, muted
+        snprintf(b, sizeof b, "%.38s", v->file ? v->file : "");
+        if (strcmp(b, s_sig[3])) { snprintf(s_sig[3], sizeof s_sig[3], "%s", b); put_fixed(g, 6, 107, 1, 38, b, MUT, 0); }
+    }
+    s.present();
+}
+
+extern "C" void nucleo_ui_install_result(const nucleo_ui_install_t *v, int timeout_s)
+{
+    if (!v) return;
+    bool ok = v->phase == NUI_INST_DONE;
+    ModalSurface s;
+    LovyanGFX &g = *s.g;
+    header(&g, inst_title());
+    // the verdict: a round badge + one line at size 2
+    uint16_t col = ok ? INST_GOOD : INST_BAD;
+    const int cx = 18, cy = MHDR + 16;
+    g.fillCircle(cx, cy, 9, col);
+    if (ok) { for (int t = 0; t < 2; t++) { g.drawLine(cx - 5, cy + t, cx - 1, cy + 4 + t, BG); g.drawLine(cx - 1, cy + 4 + t, cx + 5, cy - 4 + t, BG); } }
+    else    { g.fillRect(cx - 1, cy - 6, 3, 8, BG); g.fillRect(cx - 1, cy + 4, 3, 3, BG); }
+    const char *t = ok ? H5("Installati", "Installed", "Instalados", "Installes", "Installiert")
+                       : H5("Non completato", "Not finished", "No completado", "Inacheve", "Nicht fertig");
+    g.setTextColor(col, BG); g.setTextSize(2); g.setCursor(34, cy - 7); g.print(t); g.setTextSize(1);
+    g.setFont(&fonts::Font2); g.setTextColor(FG, BG);
+    char b[64]; int y = MHDR + 32;
+    if (ok) {
+        char mb[12]; mb_str(mb, sizeof mb, v->kb_total);
+        snprintf(b, sizeof b, H5("%d file, %s MB, verificati.", "%d files, %s MB, verified.", "%d archivos, %s MB, verificados.",
+                                 "%d fichiers, %s Mo, verifies.", "%d Dateien, %s MB, geprueft."), v->files_total, mb);
+        g.setCursor(8, y); g.print(b); y += 18;
+        g.setTextColor(MUT, BG); g.setCursor(8, y);
+        g.print(H5("Web OS e ANIMA sono pronti.", "Web OS and ANIMA are ready.", "Web OS y ANIMA estan listos.",
+                   "Web OS et ANIMA sont prets.", "Web OS und ANIMA sind bereit."));
+    } else {
+        snprintf(b, sizeof b, "%.40s", v->err && v->err[0] ? v->err : "?");
+        g.setCursor(8, y); g.print(b); y += 18;
+        g.setTextColor(MUT, BG);
+        g.setCursor(8, y);
+        g.print(H5("I file gia' scaricati restano.", "Files already done are kept.", "Lo ya descargado se conserva.",
+                   "Le deja telecharge est garde.", "Geladenes bleibt erhalten."));
+        y += 16; g.setCursor(8, y);
+        g.print(H5("Riprova: Impostazioni > Dispositivo", "Retry: Settings > Device", "Reintenta: Ajustes > Dispositivo",
+                   "Reessayer: Reglages > Appareil", "Erneut: Einstellungen > Geraet"));
+    }
+    g.setFont(&fonts::Font0);
+    hint(&g, H5("invio riavvia", "enter restart", "enter reiniciar", "enter redemarrer", "enter Neustart"));
+    s.present();
+    int64_t end = esp_timer_get_time() + (int64_t)(timeout_s > 0 ? timeout_s : 1) * 1000000;
+    while (esp_timer_get_time() < end) {
+        nucleo_key_t k = nucleo_kbd_read();
+        if (k.key == NK_ENTER) break;
         modal_idle();
     }
 }

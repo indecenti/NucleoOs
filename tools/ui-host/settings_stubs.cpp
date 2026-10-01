@@ -4,6 +4,7 @@
 #include "host_state.h"
 #include "nucleo_storage.h"
 #include "nucleo_guest.h"
+#include "nucleo_sdcontent.h"   // nucleo_sdc_status_t
 #include <string.h>
 #include <stdio.h>
 
@@ -117,4 +118,8 @@ bool        g_host_sd_needed = false;                      // scene-controlled: 
 extern "C" bool nucleo_sdcontent_needed(void) { return g_host_sd_needed; }
 extern "C" bool nucleo_sdcontent_arm(bool) { return true; }
 extern "C" void nucleo_sdcontent_decline(void) {}
+int         g_host_sdc_status = 1;                         // scene-controlled: nucleo_sdc_status_t (1 = MISSING)
+extern "C" nucleo_sdc_status_t nucleo_sdcontent_status(void) { return (nucleo_sdc_status_t)g_host_sdc_status; }
+extern "C" const char *nucleo_sdcontent_card_tag(void) { return g_host_sdc_status == 3 ? "0.4.2" : ""; }
+extern "C" const char *nucleo_sdcontent_fw_tag(void) { return "0.5.0"; }
 extern "C" bool nucleo_setup_is_first_boot(void) { return false; }

@@ -29,6 +29,7 @@
 #include "ui_glyph.h"         // system glyph set (shared with the Control Center)
 #include "nucleo_i18n.h"      // TR5(it,en,es,fr,de) + the 5-language OS switch
 #include "nucleo_guest.h"     // installed by M5Launcher: Device page gains "Back to M5Launcher"
+#include "nucleo_sdcontent.h" // SD content: the wizard's download step + Device > "SD content"
 #include <M5GFX.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -69,11 +70,7 @@ int         nucleo_setup_scan_channel(int i);
 int         nucleo_setup_scan_secure(int i);
 const char *nucleo_setup_scan_auth_label(int i);
 bool        nucleo_setup_join(const char *ssid, const char *pass);
-int         nucleo_ui_menu(const char *title, const char *const *items, int n);   // nucleo_ui_modal.cpp (blocking)
-bool        nucleo_sdcontent_needed(void);                // SD lacks the web OS/ANIMA files for this firmware
 bool        nucleo_setup_is_first_boot(void);            // main booted lean for the wizard -> reboot to full OS when done
-bool        nucleo_sdcontent_arm(bool on);                // arm the boot-window installer + reboot
-void        nucleo_sdcontent_decline(void);               // remember "skip" for this firmware version
 bool        nucleo_setup_onboarding(void);                // first boot: the network step (or its "All set") is owed
 bool        nucleo_setup_onboard_finish(void);
 void        nucleo_setup_onboard_finish_async(void);      // runs the finish on the Wi-Fi supervisor
@@ -159,7 +156,7 @@ enum {
     R_BT_BOOT, R_BT_STATE,                                                                  // Bluetooth
     R_BRIGHT, R_THEME, R_SAVER_TIME, R_SAVER_STYLE,                                         // Display
     R_VOLUME, R_MUTE, R_TTS, R_TTS_SPEED, R_VOICE,                                          // Sound
-    R_NAME, R_PIN, R_SESSIONS, R_MODEL, R_VERSION, R_BATTERY, R_SD, R_RAM, R_UPTIME, R_UPDATES, R_RESTART, R_LAUNCHER,  // Device
+    R_NAME, R_PIN, R_SESSIONS, R_MODEL, R_VERSION, R_BATTERY, R_SD, R_SDC, R_RAM, R_UPTIME, R_UPDATES, R_RESTART, R_LAUNCHER,  // Device
     R_RST_SOFT, R_RST_HARD, R_RST_FMT, R_RST_SD,                                            // Reset
     R_SAVED_NET, R_FORGET_ALL,                                                              // Saved networks
     R_OB_SKIP,                                                                              // first boot: skip Wi-Fi (confirm only)
@@ -171,9 +168,9 @@ static const uint8_t ROWS_AP[]      = { R_AP_ON, R_AP_STATE, R_AP_SSID, R_AP_PAS
 static const uint8_t ROWS_BT[]      = { R_BT_BOOT, R_BT_STATE, R_RESTART };
 static const uint8_t ROWS_DISPLAY[] = { R_BRIGHT, R_THEME, R_SAVER_TIME, R_SAVER_STYLE };
 static const uint8_t ROWS_SOUND[]   = { R_VOLUME, R_MUTE, R_TTS, R_TTS_SPEED, R_VOICE };
-static const uint8_t ROWS_DEVICE[]  = { R_NAME, R_PIN, R_SESSIONS, R_MODEL, R_VERSION, R_BATTERY, R_SD, R_RAM, R_UPTIME, R_UPDATES, R_RESTART };
+static const uint8_t ROWS_DEVICE[]  = { R_NAME, R_PIN, R_SESSIONS, R_MODEL, R_VERSION, R_BATTERY, R_SD, R_SDC, R_RAM, R_UPTIME, R_UPDATES, R_RESTART };
 // Same page when installed by M5Launcher (runtime-detected; stand-alone never shows the extra row).
-static const uint8_t ROWS_DEVICE_HOSTED[] = { R_NAME, R_PIN, R_SESSIONS, R_MODEL, R_VERSION, R_BATTERY, R_SD, R_RAM, R_UPTIME, R_UPDATES, R_RESTART, R_LAUNCHER };
+static const uint8_t ROWS_DEVICE_HOSTED[] = { R_NAME, R_PIN, R_SESSIONS, R_MODEL, R_VERSION, R_BATTERY, R_SD, R_SDC, R_RAM, R_UPTIME, R_UPDATES, R_RESTART, R_LAUNCHER };
 static const uint8_t ROWS_RESET[]   = { R_RST_SOFT, R_RST_HARD, R_RST_FMT, R_RST_SD };
 static bool is_rst(uint8_t id) { return id == R_RST_SOFT || id == R_RST_HARD || id == R_RST_FMT || id == R_RST_SD; }   // ENTER x3 rows
 static const uint8_t SECTIONS[]     = { PG_WIFI, PG_AP, PG_BT, PG_DISPLAY, PG_SOUND, PG_DEVICE, PG_RESET };   // TAB order
@@ -249,6 +246,7 @@ static bool bt_pref(void) { if (s_bt_pref < 0) s_bt_pref = nucleo_ble_pref_enabl
 static int  squality(int rssi) { if (!rssi) return 0; int q = 2 * (rssi + 100); return q < 0 ? 0 : q > 100 ? 100 : q; }
 static uint16_t qcol(int q)    { return q >= 60 ? GOOD : q >= 33 ? WARN : BAD; }
 static bool connected(void)    { return !strcmp(nucleo_setup_mode(), "sta") && nucleo_setup_ip()[0]; }
+static nucleo_sdc_status_t sdc_status(void);   // Device > SD content (cached; defined with the wizard state)
 static bool ap_on(void)        { return nucleo_setup_ap_intended(); }   // the user's choice (not a rescue fallback)
 static bool ap_up(void)        { return nucleo_setup_ap_active(); }     // reachable right now (chosen OR rescue)
 static bool ap_resc(void)      { return nucleo_setup_ap_rescue(); }     // up only as a temporary STA fallback
@@ -608,6 +606,41 @@ static void make_row_id(uint8_t id, int num, Row &r)
                                                              "%.1f sur %.1f GB libres", "%.1f von %.1f GB frei"), f / 1024.0f, t / 1024.0f);
         } else { vset(r, TR5("assente", "none", "ninguna", "absente", "fehlt")); r.col = BAD; }
     } break;
+    case R_SDC: {
+        // The web OS + ANIMA payload on the card (content.json, cached: no SD read per paint).
+        r.label = TR5("Contenuti SD", "SD content", "Contenido SD", "Contenu SD", "SD-Inhalte"); r.glyph = UG_UPDATE;
+        switch (sdc_status()) {
+        case NUCLEO_SDC_NO_SD:
+            vset(r, TR5("assente", "none", "ninguna", "absente", "fehlt")); r.col = MUTED; r.dis = true;
+            sset(r, TR5("Nessuna scheda SD", "No SD card", "Sin tarjeta SD", "Pas de carte SD", "Keine SD-Karte")); break;
+        case NUCLEO_SDC_COMPLETE:
+            vset(r, "OK"); r.col = GOOD;
+            sset(r, TR5("Invio: verifica e ripara", "Enter: verify and repair", "Enter: verificar y reparar",
+                        "Entree: verifier, reparer", "Enter: pruefen, reparieren")); break;
+        case NUCLEO_SDC_PARTIAL:
+            vset(r, TR5("incompleti", "incomplete", "incompleto", "incomplet", "unvollst.")); r.col = WARN;
+            sset(r, TR5("Invio: riprendi il download", "Enter: resume the download", "Enter: reanudar la descarga",
+                        "Entree: reprendre", "Enter: Download fortsetzen")); break;
+        case NUCLEO_SDC_OUTDATED: {
+            const char *ct = nucleo_sdcontent_card_tag();
+            if (ct[0]) snprintf(r.val, sizeof r.val, "v%.10s", ct); else vset(r, TR5("vecchi", "older", "antiguo", "anciens", "aelter"));
+            r.col = WARN;
+            sset(r, TR5("Invio: aggiorna i file cambiati", "Enter: update the changed files", "Enter: actualizar lo cambiado",
+                        "Entree: mettre a jour", "Enter: Geaendertes laden")); } break;
+        case NUCLEO_SDC_MANUAL:
+            vset(r, "OK"); r.col = GOOD;
+            sset(r, TR5("Copiati a mano. Invio: verifica", "Copied by hand. Enter: verify", "Copiado a mano. Enter: verificar",
+                        "Copie a la main. Entree: verifier", "Von Hand kopiert. Enter: pruefen")); break;
+        case NUCLEO_SDC_UNKNOWN:
+            vset(r, TR5("presenti", "present", "presentes", "presents", "vorhanden")); r.col = FG;
+            sset(r, TR5("Versione ignota. Invio: verifica", "Unknown version. Enter: verify", "Version desconocida. Enter: verificar",
+                        "Version inconnue. Entree: verifier", "Version unbekannt. Enter: pruefen")); break;
+        default:
+            vset(r, TR5("mancanti", "missing", "faltan", "absents", "fehlen")); r.col = WARN;
+            sset(r, TR5("Invio: scarica (~50 MB)", "Enter: download (~50 MB)", "Enter: descargar (~50 MB)",
+                        "Entree: telecharger (~50 Mo)", "Enter: laden (~50 MB)")); break;
+        }
+    } break;
     case R_RAM:
         r.label = TR5("RAM libera", "Free RAM", "RAM libre", "RAM libre", "Freier RAM"); r.kind = K_INFO; r.col = FG;
         snprintf(r.val, sizeof r.val, "%u KB", (unsigned)(heap_caps_get_free_size(MALLOC_CAP_DEFAULT) / 1024));
@@ -777,7 +810,18 @@ extern "C" void nucleo_settings_search_preset(const char *q)
 // confirmed as "use the hotspot" — and both land on the "All set" page (address + PIN), whose ENTER opens the
 // launcher. Tab/LEFT/other pages are locked meanwhile; if the app is closed anyway (it never should be), the
 // launcher re-opens this step until it is finished (nucleo_app.cpp), so the wizard always reaches its end.
-enum { OB_NONE = 0, OB_NETS, OB_DONE };
+// After a successful join, when the SD lacks the web OS / ANIMA files, one more SKIPPABLE page comes first:
+// "SD content" (download now / later), docs/setup-wizard.md.
+// "Later" leads to OB_SD_LATER: how to get the files afterwards (Settings, or copied by hand from the zip).
+enum { OB_NONE = 0, OB_NETS, OB_SD, OB_SD_LATER, OB_DONE };
+static bool    s_sd_yes = true;                    // the SD page's focus: "Download now" (else "Later")
+static uint32_t s_sd_btn_sig = 0;                  // what its two buttons show (direct path: repaint only those)
+static int8_t  s_sdc_cache = -1;                   // nucleo_sdcontent_status(), read once per Device-page visit
+static nucleo_sdc_status_t sdc_status(void)
+{
+    if (s_sdc_cache < 0) s_sdc_cache = (int8_t)nucleo_sdcontent_status();
+    return (nucleo_sdc_status_t)s_sdc_cache;
+}
 static bool    s_onboard_req = false;
 static uint8_t s_onboard = OB_NONE;
 static bool    s_done_sta = false;                 // the "All set" page: joined a network (else: hotspot)
@@ -785,6 +829,7 @@ static bool    s_fin_wait = false;                 // the step is closing on the
 static char    s_retry_pass[80];                   // a wrong password comes back in the field, to fix the typo
 extern "C" void nucleo_settings_onboard(void) { s_onboard_req = true; }
 static void onboard_end(void);
+static void update_hint(void);
 
 // ---- drawing ------------------------------------------------------------------------------------
 // Two paths (docs/ANTI-FLICKER.md, technique 2 - "an app that can lose the canvas"):
@@ -1396,6 +1441,100 @@ static void draw_done(void)
     txt_fit(8, y, b, W - 16, FG, BG, 2);
 }
 
+// The wizard's SD-content step. It is reached only when the card really lacks the files (nucleo_sdcontent_needed
+// looks at the files themselves: a hand copy is recognised), and says which case it is: missing (download ~50 MB),
+// from an older release (an UPDATE: only the changed files), or an interrupted run (resume). Static page; only
+// the two buttons repaint when the focus moves (no full-screen flash on the direct path).
+static void draw_sd_offer(void)
+{
+    const nucleo_sdc_status_t cs = sdc_status();
+    const bool upd = cs == NUCLEO_SDC_OUTDATED, res = cs == NUCLEO_SDC_PARTIAL;
+    if (s_full) {
+        s_sd_btn_sig = 0;
+        const char *t = upd ? TR5("Aggiorna SD", "SD update", "Actualizar SD", "MAJ de la SD", "SD-Update")
+                            : TR5("Contenuti SD", "SD content", "Contenido SD", "Contenu SD", "SD-Inhalte");
+        ui_glyph(&d, UG_UPDATE, 14, 12, 7, ACC, BG);
+        txt(26, 4, t, ACC, BG, 2);
+        d.drawFastHLine(0, 23, W, LINE);
+        char b[48];
+        if (upd) {
+            const char *ct = nucleo_sdcontent_card_tag();
+            if (ct[0]) snprintf(b, sizeof b, TR5("La SD ha i file della v%s.", "The SD has the v%s files.", "La SD tiene los de la v%s.",
+                                                 "La SD a ceux de la v%s.", "Die SD hat die v%s-Dateien."), ct);
+            else snprintf(b, sizeof b, "%s", TR5("La SD ha file di un'altra versione.", "The SD has older files.", "La SD tiene otra version.",
+                                                 "La SD a une autre version.", "Die SD hat aeltere Dateien."));
+            f2(8, 28, b, W - 16, FG, BG, false);
+            f2(8, 44, TR5("Scarico solo i file cambiati.", "Only the changed files download.", "Solo bajo lo que cambio.",
+                          "Seuls les changements arrivent.", "Nur Geaendertes wird geladen."), W - 16, FG, BG, false);
+        } else if (res) {
+            f2(8, 28, TR5("Il download si era interrotto.", "The download was cut short.", "La descarga quedo a medias.",
+                          "Le telechargement s'est coupe.", "Der Download brach ab."), W - 16, FG, BG, false);
+            f2(8, 44, TR5("Riprende da dove era rimasto.", "It resumes where it stopped.", "Sigue donde se quedo.",
+                          "Il reprend ou il s'est arrete.", "Er macht dort weiter."), W - 16, FG, BG, false);
+        } else {
+            f2(8, 28, TR5("Web OS e ANIMA non sono", "The web OS and ANIMA are", "El web OS y ANIMA no estan",
+                          "Le web OS et ANIMA ne sont", "Web OS und ANIMA sind"), W - 16, FG, BG, false);
+            f2(8, 44, TR5("ancora sulla scheda SD.", "not on the SD card yet.", "aun en la tarjeta SD.",
+                          "pas encore sur la SD.", "noch nicht auf der SD."), W - 16, FG, BG, false);
+        }
+        f2(8, 62, upd || res ? TR5("Tienilo in carica.", "Keep it charging.", "Dejalo cargando.", "Garde-le en charge.", "Am Ladekabel lassen.")
+                             : TR5("Circa 50 MB: tienilo in carica.", "About 50 MB: keep it charging.", "Unos 50 MB: dejalo cargando.",
+                                   "Env. 50 Mo: garde-le en charge.", "Etwa 50 MB: am Ladekabel."), W - 16, MUTED, BG, false);
+    }
+    uint32_t sg = fnv(fnv(fnv(7u, s_sd_yes ? 1u : 2u), THEME_ACC), (uint32_t)cs);
+    if (sg == s_sd_btn_sig && !s_full) return;
+    s_sd_btn_sig = sg;
+    const char *go = upd ? TR5("Aggiorna ora", "Update now", "Actualizar", "Mettre a jour", "Jetzt updaten")
+                   : res ? TR5("Riprendi", "Resume", "Reanudar", "Reprendre", "Fortsetzen")
+                   :       TR5("Scarica ora", "Download now", "Descargar", "Telecharger", "Jetzt laden");
+    const char *lb[2] = { go, TR5("Piu tardi", "Later", "Mas tarde", "Plus tard", "Spaeter") };
+    const int bw = (W - 24) / 2, by = 84, bh = 24;
+    for (int i = 0; i < 2; i++) {
+        int bx = 8 + i * (bw + 8);
+        bool on = (i == 0) == s_sd_yes;
+        d.fillRoundRect(bx, by, bw, bh, 6, on ? ACC : BG);
+        if (!on) d.drawRoundRect(bx, by, bw, bh, 6, LINE);
+        d.setFont(&fonts::Font2); d.setTextSize(1);
+        int tw = (int)d.textWidth(lb[i]); if (tw > bw - 8) tw = bw - 8;
+        d.setFont(&fonts::Font0);
+        f2(bx + (bw - tw) / 2, by + 4, lb[i], bw - 8, on ? INK : FG, on ? ACC : BG, false);
+    }
+    mark(by, by + bh);
+}
+
+// "Later": the files can come any time — from Settings (the same download), or copied BY HAND from the
+// release's SD zip (the device recognises a hand copy by the manifest the zip carries). Static page.
+static void draw_sd_later(void)
+{
+    if (!s_full) return;
+    const char *t = TR5("Nessun problema", "No problem", "Sin problema", "Pas de souci", "Kein Problem");
+    ui_glyph(&d, UG_INFO, 14, 12, 7, ACC, BG);
+    txt(26, 4, t, ACC, BG, 2);
+    d.drawFastHLine(0, 23, W, LINE);
+    char b[48];
+    f2(8, 28, TR5("Scaricali quando vuoi da:", "Download them any time in:", "Descargalos cuando quieras:",
+                  "Telecharge-les plus tard:", "Spaeter herunterladen in:"), W - 16, FG, BG, false);
+    f2(16, 44, TR5("Impostazioni > Dispositivo", "Settings > Device", "Ajustes > Dispositivo", "Reglages > Appareil",
+                   "Einstellungen > Geraet"), W - 24, ACC, BG, false);
+    f2(8, 64, TR5("Oppure copiali tu sulla SD:", "Or copy them to the SD:", "O copialos tu en la SD:",
+                  "Ou copie-les sur la SD:", "Oder selbst auf die SD:"), W - 16, FG, BG, false);
+    snprintf(b, sizeof b, TR5("lo zip SD della release v%s", "the v%s release's SD zip", "el zip SD de la v%s",
+                              "le zip SD de la v%s", "das SD-Zip der v%s"), nucleo_sdcontent_fw_tag());
+    f2(16, 80, b, W - 24, ACC, BG, false);
+    f2(16, 96, TR5("estratto nella radice della SD", "unzipped at the SD's root", "descomprimido en la raiz",
+                   "decompresse a la racine", "ins SD-Hauptverzeichnis"), W - 24, MUTED, BG, false);
+}
+
+// The SD step's choice. "Download/Update/Resume" arms the install boot and restarts into it (never returns);
+// "Later" remembers it for this firmware and explains the two ways to get the files afterwards.
+static void sd_offer_choose(bool download)
+{
+    if (download && nucleo_sdcontent_arm(true)) return;   // arm() restarts the device
+    if (!download) nucleo_sdcontent_decline();
+    s_onboard = download ? OB_DONE : OB_SD_LATER;         // (arm failed: on to "All set", Settings can retry)
+    update_hint(); nucleo_app_request_draw();
+}
+
 // The first-boot step closing (hotspot up + setup saved): a second or two, never a frozen list.
 static void draw_finishing(void)
 {
@@ -1449,6 +1588,8 @@ static void on_draw(void)
         mark(s_toast_y, s_toast_y + 20);
     }
     if (s_onboard == OB_DONE)            draw_done();
+    else if (s_onboard == OB_SD)         draw_sd_offer();
+    else if (s_onboard == OB_SD_LATER)   draw_sd_later();
     else if (s_dt)                       draw_datetime();
     else if (s_busy && s_op == OP_JOIN)  draw_joining();
     else if (s_fin_wait)                 draw_finishing();
@@ -1485,6 +1626,22 @@ static void on_draw(void)
             app_ui_confirm(TR5("Saltare il Wi-Fi?", "Skip Wi-Fi?", "Omitir el Wi-Fi?", "Sans Wi-Fi ?", "Ohne WLAN?"),
                            TR5("Userai il suo hotspot.", "You will use its hotspot.", "Usaras su hotspot.",
                                "Tu utiliseras son hotspot.", "Du nutzt seinen Hotspot."), s_cf_yes); break;
+        case R_SDC:
+            switch (sdc_status()) {
+            case NUCLEO_SDC_COMPLETE: case NUCLEO_SDC_MANUAL: case NUCLEO_SDC_UNKNOWN:
+                app_ui_confirm(TR5("Verificare?", "Verify files?", "Verificar?", "Verifier ?", "Pruefen?"),
+                               TR5("Riavvia, ripara solo cio che serve.", "Restarts, repairs only what is off.", "Reinicia, repara lo necesario.",
+                                   "Redemarre, repare le necessaire.", "Neustart, repariert nur Fehler."), s_cf_yes); break;
+            case NUCLEO_SDC_OUTDATED:
+                app_ui_confirm(TR5("Aggiornare?", "Update now?", "Actualizar?", "Mettre a jour ?", "Aktualisieren?"),
+                               TR5("Riavvia, scarica solo i cambiati.", "Restarts, gets only what changed.", "Reinicia, baja solo lo nuevo.",
+                                   "Redemarre, prend les changements.", "Neustart, laedt nur Neues."), s_cf_yes); break;
+            default:
+                app_ui_confirm(TR5("Scaricare ora?", "Download now?", "Descargar ya?", "Telecharger ?", "Jetzt laden?"),
+                               TR5("Riavvia e scarica ~50 MB.", "Restarts and downloads ~50 MB.", "Reinicia y descarga ~50 MB.",
+                                   "Redemarre, telecharge ~50 Mo.", "Neustart, laedt ~50 MB."), s_cf_yes); break;
+            }
+            break;
         case R_SESSIONS:
             app_ui_confirm(TR5("Disconnettere?", "Sign out all?", "Cerrar sesiones?", "Deconnecter?", "Alle abmelden?"),
                            TR5("I browser rifaranno il pairing.", "Browsers must pair again.", "Hay que vincular de nuevo.",
@@ -1504,6 +1661,9 @@ static void update_hint(void)
 {
     static char hb[48];
     if (s_onboard == OB_DONE) { nucleo_app_set_hint(TR5("invio inizia", "enter start", "enter empezar", "enter commencer", "enter starten")); return; }
+    if (s_onboard == OB_SD_LATER) { nucleo_app_set_hint(TR5("invio continua", "enter continue", "enter continuar", "enter continuer", "enter weiter")); return; }
+    if (s_onboard == OB_SD)   { nucleo_app_set_hint(TR5("</> scegli   invio conferma", "</> pick   enter confirm", "</> elegir   enter confirmar",
+                                                        "</> choisir   enter valider", "</> Wahl   enter bestaetigen")); return; }
     if (s_im == IM_PASS) { nucleo_app_set_hint(s_reveal
                                       ? TR5("invio ok  tab nascondi  esc annulla", "enter ok  tab hide  esc cancel", "enter ok  tab ocultar  esc anular",
                                             "enter ok  tab cacher  esc annuler", "enter ok  tab verbergen  esc Abbr.")
@@ -1627,6 +1787,7 @@ static void set_page(int pg)
     if (s_sel[pg] >= n) s_sel[pg] = (int8_t)(n > 0 ? n - 1 : 0);
     if (s_sel[pg] < 0) s_sel[pg] = 0;
     if (pg == PG_NETS && nucleo_setup_scan_count() == 0 && !s_busy) start_op(OP_SCAN);   // opening it IS the request
+    if (pg == PG_DEVICE) s_sdc_cache = -1;                    // SD content: re-read once per visit
 }
 static void open_section(int pg)
 {
@@ -1767,6 +1928,12 @@ static void activate(const Row &r)
     case R_AP_PASS:  open_editor(IM_APPASS, nucleo_setup_ap_pass()); break;
     case R_NAME:     open_editor(IM_NAME, nucleo_setup_device_name()); break;
     case R_UPDATES:  flush_prefs(); nucleo_app_launch_id("updates"); return;
+    case R_SDC:
+        if (r.dis) toast(TR5("Nessuna scheda SD", "No SD card", "Sin tarjeta SD", "Pas de carte SD", "Keine SD-Karte"));
+        else if (!connected()) toast(TR5("Serve il Wi-Fi: collegati prima", "Needs Wi-Fi: join a network first", "Necesita Wi-Fi: conectate antes",
+                                         "Il faut le Wi-Fi: connecte-toi", "Braucht WLAN: erst verbinden"));
+        else { s_cf = R_SDC; s_cf_yes = false; }
+        break;
     case R_RESTART:  s_cf = R_RESTART; s_cf_yes = false; break;
     case R_LAUNCHER:
         if (nucleo_guest_return_mode() == GUEST_RET_DEEP_SLEEP) { s_cf = R_LAUNCHER; s_cf_yes = false; }
@@ -1854,6 +2021,10 @@ static void confirm_done(bool yes)
                        toast_ok(TR5("Reti dimenticate: hotspot attivo", "Networks forgotten: hotspot on", "Redes olvidadas: hotspot activo",
                                     "Reseaux oublies: hotspot actif", "Netze vergessen: Hotspot an")); break;
     case R_OB_SKIP:    onboard_end(); break;
+    case R_SDC:        flush_prefs();
+                       if (!nucleo_sdcontent_arm(true))            // restarts into the install boot on success
+                           toast(TR5("Non riuscito: riprova", "Could not start: retry", "No se pudo: reintenta", "Echec: reessayer", "Fehlgeschlagen: erneut"));
+                       break;
     case R_SESSIONS:   nucleo_auth_revoke(NULL);
                        toast_ok(TR5("Tutti i browser disconnessi", "Every browser signed out", "Navegadores desconectados",
                                     "Navigateurs deconnectes", "Alle Browser abgemeldet")); break;
@@ -1923,6 +2094,17 @@ static void on_key(int k, char ch)
         if (k == NK_ENTER) { s_onboard = OB_NONE; nucleo_setup_onboard_ack();
                              if (nucleo_setup_is_first_boot()) esp_restart();   // lean setup is done: boot the full OS
                              nucleo_app_exit(); }
+        return;
+    }
+    if (s_onboard == OB_SD_LATER) {                                  // "No problem": ENTER -> "All set"
+        if (k == NK_ENTER) { s_onboard = OB_DONE; update_hint(); nucleo_app_request_draw(); }
+        return;
+    }
+    if (s_onboard == OB_SD) {                                        // "SD content": two buttons
+        if (k == NK_RIGHT || k == NK_UP || k == NK_DOWN || k == NK_TAB) s_sd_yes = !s_sd_yes;
+        else if (k == NK_CHAR && (ch == '1' || ch == '2')) sd_offer_choose(ch == '1');
+        else if (k == NK_ENTER) sd_offer_choose(s_sd_yes);
+        update_hint(); nucleo_app_request_draw();
         return;
     }
     if (s_onboard && s_im == IM_NONE && s_cf == R_NONE && s_page != PG_NETS) set_page(PG_NETS);   // rails
@@ -2014,6 +2196,8 @@ static bool on_back(int key)
     else if (s_busy && s_op == OP_JOIN) { /* swallow: the join finishes on its own */ }
     else if (s_fin_wait) { /* the step is closing */ }
     else if (s_onboard == OB_DONE) { if (left) return true; s_onboard = OB_NONE; nucleo_setup_onboard_ack(); return false; }   // Esc: like ENTER
+    else if (s_onboard == OB_SD) { if (left) s_sd_yes = !s_sd_yes; else sd_offer_choose(false); }    // Esc = "Later"
+    else if (s_onboard == OB_SD_LATER) { if (!left) { s_onboard = OB_DONE; } }                       // Esc: on to "All set"
     else if (s_onboard) { if (!left) { s_cf = R_OB_SKIP; s_cf_yes = false; } }   // first boot: Esc asks "use the hotspot?"
     else {
         s_rst_id = R_NONE;
@@ -2051,20 +2235,12 @@ static void on_tick(void)
         int r = nucleo_setup_onboard_finish_poll();
         if (r >= 0) {
             s_fin_wait = false; s_done_sta = r == 1; s_msg_t = 0;
-            // The ONE skippable step after the Wi-Fi join: if the device is online but the SD is missing the
-            // web OS / ANIMA files, offer to download them (a blocking modal, like the language step). The
-            // user is at the device; "Download" arms the install and reboots into the boot-window installer,
-            // "Skip" remembers the choice for this firmware. Only when actually joined (a hotspot has no net).
-            if (s_done_sta && nucleo_sdcontent_needed()) {
-                const char *items[] = {
-                    TR5("Scarica (~50 MB)", "Download (~50 MB)", "Descargar (~50 MB)", "Telecharger (~50 Mo)", "Laden (~50 MB)"),
-                    TR5("Salta", "Skip", "Omitir", "Passer", "Ueberspringen") };
-                int m = nucleo_ui_menu(TR5("Scaricare i contenuti?", "Download content?", "Descargar contenido?",
-                                           "Telecharger le contenu ?", "Inhalt laden?"), items, 2);
-                if (m == 0) nucleo_sdcontent_arm(true);   // reboots into the installer; does not return
-                else nucleo_sdcontent_decline();          // not offered again until a firmware change
-            }
-            s_onboard = OB_DONE; update_hint();
+            // The ONE skippable step after the Wi-Fi join: online, but the SD lacks the web OS / ANIMA files ->
+            // the "SD content" page (download now / later). Only when actually joined: a hotspot has no Internet.
+            s_sdc_cache = -1;                                  // the card as it is NOW (a hand copy counts)
+            if (s_done_sta && nucleo_sdcontent_needed()) { s_onboard = OB_SD; s_sd_yes = true; }
+            else s_onboard = OB_DONE;
+            update_hint();
         }
         nucleo_app_request_draw();
     }
@@ -2117,7 +2293,7 @@ static void enter(void)
     s_im = IM_NONE; s_cf = R_NONE; s_dt = false; s_rst_id = R_NONE; s_prefs_dirty = false; s_tts_pend = -1;
     s_theme_pend = false; s_saver_t_pend = -1; s_saver_m_pend = -1;
     s_qn = 0; s_q[0] = 0; s_hits = 0; s_tts_ok = -1; s_bt_pref = -1;
-    s_msg_t = 0; s_live = 0;
+    s_msg_t = 0; s_live = 0; s_sdc_cache = -1;
     if (!s_task) { s_busy = false; s_op = OP_NONE; s_done = false; }
     nucleo_app_set_tab_handler(on_tab);
     nucleo_app_set_back_handler(on_back);

@@ -14,7 +14,7 @@
 // runs with Node + Python (stdlib; no ESP-IDF needed) and is unit-testable locally.
 //
 //   node tools/package-release.mjs
-import { readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, rmSync, copyFileSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 
@@ -47,6 +47,11 @@ for (const line of readFileSync(join(dist, 'sd-manifest.txt'), 'utf8').split('\n
   const h = /^#nucleoos-sd \d+ \S+ \d+ (\d+)$/.exec(line); if (h) sdTotal = +h[1];
   const m = /^#pack (\S+) \d+ (\d+)$/.exec(line); if (m) packs[m[1]] = +m[2];
 }
+// The tree carries its OWN manifest (system/content/manifest.txt, not listed in itself): a card filled BY HAND
+// from the -sd.zip is then recognised by the device (sdc_content_status: MANUAL, or OUTDATED for a newer
+// firmware, whose update fetches only the changed files), and never re-offered a download it does not need.
+mkdirSync(join(dist, 'sd', 'system', 'content'), { recursive: true });
+copyFileSync(join(dist, 'sd-manifest.txt'), join(dist, 'sd', 'system', 'content', 'manifest.txt'));
 const MB = (b) => `${Math.round(b / 1048576)} MB`;
 const sdSize = `~${MB(sdTotal)}: core ${MB(packs.core || 0)}`
   + Object.keys(packs).filter((k) => k !== 'core').map((k) => ` + ${k} ${MB(packs[k])}`).join('');

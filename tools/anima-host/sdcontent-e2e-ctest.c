@@ -190,10 +190,25 @@ static int fake_get(void *ctx, const char *url, uint32_t off, uint32_t len, uint
     return (int)n;
 }
 
+// What the progress screen sees: the percentage must never go back, must move INSIDE a big file (not only
+// between files), and kb_done must stay within kb_total.
+static struct { int calls, last_pct, mid_file, inflight; bool monotonic, bounded; char last_cur[40]; } PR;
+static void prog_rec(void *ctx, const sdc_state_t *st)
+{
+    (void)ctx;
+    PR.calls++;
+    if (st->phase != SDC_DOWNLOADING && st->phase != SDC_DONE) return;
+    if (st->pct >= 0) { if (st->pct < PR.last_pct) PR.monotonic = false; PR.last_pct = st->pct; }
+    if (st->kb_done > st->kb_total) PR.bounded = false;
+    if (st->phase == SDC_DOWNLOADING && !strcmp(st->cur, PR.last_cur)) PR.inflight++;   // a repeat = mid-file update
+    if (st->phase == SDC_DOWNLOADING && st->pct > 0 && st->pct < 100) PR.mid_file++;
+    snprintf(PR.last_cur, sizeof PR.last_cur, "%s", st->cur);
+}
 static bool run(fake_t *f, const char *root, uint32_t window, const char *packs, sdc_state_t *st)
 {
     sdc_cfg_t cfg = { .root = root, .base_url = PREFIX, .ver3 = "0.5.0", .packs = packs, .window = window, .retries = 3 };
-    sdc_io_t io = { .ctx = f, .get = fake_get, .progress = NULL, .tick = NULL };
+    memset(&PR, 0, sizeof PR); PR.monotonic = PR.bounded = true;
+    sdc_io_t io = { .ctx = f, .get = fake_get, .progress = prog_rec, .tick = NULL };
     return sdc_engine_run(&cfg, &io, st);
 }
 
@@ -288,6 +303,11 @@ int main(void)
     OK(st.files_written == NFX - 2, "S1 writes everything except the existing create-only seed");
     OK(f1.max_len <= (int)WINDOW, "S1 never asks for more than one window");
     check_core_installed("S1", false); check_user_state("S1");
+    { uint64_t core = 0; for (int i = 0; i < NFX; i++) if (!strcmp(FX[i].pack, "core")) { static uint8_t b[80000]; core += fx_bytes(&FX[i], b); }
+      OK(st.kb_total == (uint32_t)(core / 1024), "S1 kb_total is the core payload (the bar measures bytes, not files)");
+      OK(st.kb_done == st.kb_total && st.pct == 100, "S1 the bar ends full"); }
+    OK(PR.monotonic && PR.bounded, "S1 progress never goes back, never past the total");
+    OK(PR.inflight > 0, "S1 a big file updates the bar while it downloads");
     { char tag[24]; bool c = false, d = false; OK(sdc_content_read(SD, tag, sizeof tag, &c, &d) && c && !d && !strcmp(tag, "0.5.0"), "S1 content.json complete for 0.5.0"); }
     OK(file_is(SD "/system/registry/apps.json", "{\"installed\":[\"release\"]}\n"), "S1 registry created when absent");
     OK(!sdc_content_needed(SD, "0.5.0"), "S1 nothing more to offer for 0.5.0");
@@ -394,6 +414,50 @@ int main(void)
     sdc_content_write(SD, "0.5.0", false, true);
     OK(!sdc_content_needed(SD, "0.5.0"), "S15 skipped -> not offered again for 0.5.0");
     OK(sdc_content_needed(SD, "0.6.0"), "S15 a new firmware offers it again");
+
+    // S17 a card filled BY HAND from the release's -sd.zip (which carries its manifest): recognised, never
+    //     re-offered; a newer firmware sees it as OUTDATED and the update fetches only what changed.
+    {
+        fresh_sd();
+        static uint8_t b[80000];
+        for (int i = 0; i < NFX; i++) {                                  // the user's edited seed stays (like a careful copy)
+            if (strcmp(FX[i].pack, "core") || (FX[i].mode == 'c' && !strcmp(FX[i].path, "data/anima/learned/facets.it.jsonl"))) continue;
+            put(SD, FX[i].path, b, fx_bytes(&FX[i], b));
+        }
+        uint8_t *m; long mn = slurp(SRV "/sd-manifest.txt", &m);
+        put(SD, "system/content/manifest.txt", m, (size_t)mn); free(m);
+        char tag[24];
+        OK(sdc_content_status(SD, "0.5.0", tag, sizeof tag) == SDC_ST_MANUAL && !strcmp(tag, "0.5.0"), "S17 a hand copy of this release is MANUAL (0.5.0)");
+        OK(!sdc_content_needed(SD, "0.5.0"), "S17 a hand copy is not offered the download");
+        OK(sdc_content_status(SD, "0.6.0", tag, sizeof tag) == SDC_ST_OUTDATED && !strcmp(tag, "0.5.0"), "S17 for a newer firmware it is OUTDATED (from 0.5.0)");
+        OK(sdc_content_needed(SD, "0.6.0"), "S17 an outdated card is offered the update");
+        sdc_content_write(SD, "0.5.0", false, true);                   // an old "Later" must not hide real files
+        OK(sdc_content_status(SD, "0.5.0", NULL, 0) == SDC_ST_MANUAL, "S17 a stale 'Later' does not mask a hand copy");
+        unlink(SD "/system/content.json");
+        // "verify and repair" over the hand copy: nothing to fetch, then recorded as COMPLETE
+        fake_t fa = { .srv = SRV };
+        ok = run(&fa, SD, WINDOW, "core", &st);
+        OK(ok && st.files_written == 0, "S17 verifying a correct hand copy downloads no file");
+        OK(sdc_content_status(SD, "0.5.0", NULL, 0) == SDC_ST_COMPLETE, "S17 ... and records it COMPLETE");
+        // an update where one file changed: exactly that file is fetched
+        put(SD, "www/shell/app.js", "OLD-RELEASE", 11);
+        fake_t fb = { .srv = SRV };
+        ok = run(&fb, SD, WINDOW, "core", &st);
+        OK(ok && st.files_written == 1, "S17 an update fetches only the changed file");
+        check_core_installed("S17", false); check_user_state("S17");
+    }
+    // S18 the web OS without any manifest (a dev sync, an old zip): UNKNOWN, not nagged
+    fresh_sd(); put(SD, "www/shell/index.html.gz", "gz", 2);
+    OK(sdc_content_status(SD, "0.5.0", NULL, 0) == SDC_ST_UNKNOWN && !sdc_content_needed(SD, "0.5.0"), "S18 web OS of unknown release: UNKNOWN, not offered");
+    // S19 an interrupted run reads as PARTIAL (resume), not as a hand copy, although its manifest is on the card
+    fresh_sd(); fake_t f19 = { .srv = SRV, .cut_path = "data/anima/anima-it-akb5.bin", .cut_off = 2 * WINDOW };
+    ok = run(&f19, SD, WINDOW, "core", &st);
+    OK(!ok && sdc_content_status(SD, "0.5.0", NULL, 0) == SDC_ST_PARTIAL && sdc_content_needed(SD, "0.5.0"), "S19 interrupted -> PARTIAL, offered (resume)");
+    // S20 a blank card, then "Later": SKIPPED, not offered
+    fresh_sd();
+    OK(sdc_content_status(SD, "0.5.0", NULL, 0) == SDC_ST_MISSING, "S20 a blank card is MISSING");
+    sdc_content_write(SD, "0.5.0", false, true);
+    OK(sdc_content_status(SD, "0.5.0", NULL, 0) == SDC_ST_SKIPPED, "S20 'Later' on a blank card is SKIPPED");
 
     printf("sdcontent-e2e: %d checks, %d failed\n", checks, fails);
     return fails ? 1 : 0;

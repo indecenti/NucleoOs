@@ -33,9 +33,33 @@ void nucleo_ui_input(const char *title, char *buf, int len, int masked);
 // Static info/home screen (draws and returns immediately, no input wait).
 void nucleo_ui_home(const char *title, const char *const *lines, int n);
 
-// One-shot progress screen (header + status line + a bar, no input wait). pct 0..100, or <0 for an
-// indeterminate bar. Repaint it to advance. Used by the boot-window SD-content installer.
-void nucleo_ui_progress(const char *title, const char *line, int pct);
+// The SD-content installer's screens (the dedicated install boot). One view struct, mapped from the engine's
+// state by main.c so this component stays free of nucleo_sdcontent.
+typedef enum {
+    NUI_INST_CONNECTING = 0,   // waiting for the Wi-Fi link
+    NUI_INST_CHECKING,         // card probe + manifest
+    NUI_INST_DOWNLOADING,      // files
+    NUI_INST_DONE,
+    NUI_INST_FAILED,
+} nucleo_ui_inst_phase_t;
+typedef struct {
+    nucleo_ui_inst_phase_t phase;
+    int pct;                   // 0..100 by bytes, <0 unknown
+    unsigned kb_done, kb_total;
+    int files_done, files_total;
+    int eta_s;                 // <0: not known yet
+    const char *file;          // the file in flight (may be NULL)
+    const char *err;           // FAILED: the localized reason
+} nucleo_ui_install_t;
+
+// The live install screen: big percentage, MB done/total, files, time left, the file in flight, and a
+// "do not switch off" hint. INCREMENTAL on the panel: the chrome is painted once per phase, then only the
+// fields whose value changed (fixed-width, background-filled glyphs: no clear, no flicker, no back-buffer).
+void nucleo_ui_install_screen(const nucleo_ui_install_t *v);
+
+// The install's last screen (DONE or FAILED): what happened and what to do next. Returns on ENTER or after
+// timeout_s seconds (an unattended device must not sit awake on its 120 mAh battery).
+void nucleo_ui_install_result(const nucleo_ui_install_t *v, int timeout_s);
 
 // Force every blocking modal to draw DIRECT to the panel (no 32 KB back-buffer / sprite). The SD-content
 // installer sets this so painting its progress bar can't re-allocate the canvas it freed for the TLS heap.
