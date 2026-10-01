@@ -253,6 +253,23 @@ void app_main(void)
         sd_ok = true;
         bootmark_begin();                   // SD up: start a fresh trace on the card (/sd/boot_trace.txt)
         bootmark("sd-mounted");
+        // Settings > Reset > Erase SD armed a whole-card format: run it NOW, before provisioning or any
+        // other component opens a file on the card. The fresh card is then provisioned like a new one.
+        char flang[3];
+        if (nucleo_storage_format_pending(flang)) {
+            if (flang[0]) nucleo_i18n_set_lang(flang);
+            const char *l = nucleo_i18n_lang();
+            const char *msg = !strcmp(l, "it") ? "Formatto la scheda SD..." : !strcmp(l, "es") ? "Formateando la tarjeta SD..."
+                            : !strcmp(l, "fr") ? "Formatage de la carte SD..." : !strcmp(l, "de") ? "SD-Karte wird formatiert..."
+                            : "Erasing the SD card...";
+            const char *wait = !strcmp(l, "it") ? "Non spegnere (fino a 1 min)" : !strcmp(l, "es") ? "No apagues (hasta 1 min)"
+                             : !strcmp(l, "fr") ? "Ne pas eteindre (1 min max)" : !strcmp(l, "de") ? "Nicht ausschalten (bis 1 Min)"
+                             : "Do not switch off (up to 1 min)";
+            const char *lines[] = { msg, "", wait };
+            nucleo_ui_home("NucleoOS", lines, 3);
+            nucleo_storage_format_now();
+            bootmark("sd-format");
+        }
         nucleo_storage_provision();         bootmark("sd-provision");
         nucleo_storage_refresh();           bootmark("sd-refresh");
         nucleo_i18n_load();                 // system UI language (settings.json ui.language) for native apps

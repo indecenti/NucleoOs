@@ -45,6 +45,17 @@ void nucleo_storage_sync(void);
 // (cast to sdmmc_card_t* on use).
 void *nucleo_storage_card(void);
 
+// Whole-card erase (Settings > Reset > Erase SD). Formatting a mounted card while the OS holds files open
+// on it (the ANIMA index, logs, audio) would leave dangling handles writing into the fresh FAT, so the erase
+// is ARMED here — a marker on the internal /cfg store, carrying the UI language for the boot screen — and
+// RUN on the next boot by main.c, right after the mount and before anything opens a file on the card.
+bool nucleo_storage_format_arm(const char *lang);
+// True when armed; `lang` (>= 3 bytes, may be NULL) receives the language stored with the marker.
+bool nucleo_storage_format_pending(char *lang);
+// Erase the mounted card (FAT32, the mount's 16 KB allocation unit). Clears the marker FIRST, so a crash
+// or a failure can never turn into a format-at-every-boot loop.
+esp_err_t nucleo_storage_format_now(void);
+
 #ifdef __cplusplus
 }
 #endif
