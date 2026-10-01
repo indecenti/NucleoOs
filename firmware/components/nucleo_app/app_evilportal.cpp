@@ -160,24 +160,24 @@ static void build_rows(void)
 
 static void set_hint(void)
 {
-    if (s_menu)                       nucleo_app_set_hint(TR("su/giu   invio scegli   tab/esc chiudi", "up/dn   enter pick   tab/esc close"));
+    if (s_menu)                       nucleo_app_set_hint(TR5("su/giu   invio scegli   tab/esc chiudi", "up/dn   enter pick   tab/esc close", "arriba/ab intro elige tab/esc cierra", "haut/bas intro choisir tab/esc fer.", "auf/ab   enter waehlen   tab/esc zu."));
     else switch (s_state) {
-        case ST_CONSENT:   nucleo_app_set_hint(TR("invio accetto   esc esci", "enter accept   esc back")); break;
-        case ST_HOME:      nucleo_app_set_hint(TR("su/giu   invio apri   tab menu   esc esci", "up/dn   enter open   tab menu   esc back")); break;
-        case ST_TARGETS:   nucleo_app_set_hint(TR("su/giu   invio scegli   r riscan   esc indietro", "up/dn   enter pick   r rescan   esc back")); break;
-        case ST_KARMA:     nucleo_app_set_hint(TR("invio config   a portale-ora   b beacona   r riascolta", "enter config   a portal-now   b beacon   r re-listen")); break;
-        case ST_LURE:      nucleo_app_set_hint(TR("invio ferma esca   esc indietro", "enter stop lure   esc back")); break;
-        case ST_SSID:      nucleo_app_set_hint(TR("su/giu   invio scegli   esc indietro", "up/dn   enter pick   esc back")); break;
-        case ST_TYPE:      nucleo_app_set_hint(TR("scrivi   invio ok   canc   esc indietro", "type   enter ok   del   esc back")); break;
-        case ST_PAGE:      nucleo_app_set_hint(TR("su/giu   invio scegli   esc indietro", "up/dn   enter pick   esc back")); break;
-        case ST_SETUP:     nucleo_app_set_hint(TR("su/giu   invio modifica   tab menu   esc indietro", "up/dn   enter edit   tab menu   esc back")); break;
-        case ST_RUNNING:   nucleo_app_set_hint(TR("invio ferma   tab menu   esc lascia attivo", "enter stop   tab menu   esc leave running")); break;
-        case ST_LOOT:      nucleo_app_set_hint(TR("esc indietro", "esc back")); break;
-        case ST_GUIDE:     nucleo_app_set_hint(TR("esc indietro", "esc back")); break;
-        case ST_SCAN:      nucleo_app_set_hint(TR("scansione reti...", "scanning networks...")); break;
-        case ST_KARMA_SCAN:nucleo_app_set_hint(TR("ascolto le probe...", "listening for probes...")); break;
-        case ST_CLONE:     nucleo_app_set_hint(TR("clono la pagina...", "cloning the page...")); break;
-        case ST_STOPPING:  nucleo_app_set_hint(TR("arresto in corso...", "stopping...")); break;
+        case ST_CONSENT:   nucleo_app_set_hint(TR5("invio accetto   esc esci", "enter accept   esc back", "intro acepto   esc vuelvo", "ok accepte   esc retour", "ok akzept   esc zurueck")); break;
+        case ST_HOME:      nucleo_app_set_hint(TR5("su/giu   invio apri   tab menu   esc esci", "up/dn   enter open   tab menu   esc back", "arriba/ab intro abre tab menu esc", "haut/bas intro ouvre tab menu esc", "auf/ab enter oeffne tab menu esc")); break;
+        case ST_TARGETS:   nucleo_app_set_hint(TR5("su/giu   invio scegli   r riscan   esc indietro", "up/dn   enter pick   r rescan   esc back", "arriba/ab intro elige r rescan", "haut/bas intro choisir r rescan", "auf/ab enter waehlen r neusuche")); break;
+        case ST_KARMA:     nucleo_app_set_hint(TR5("invio config   a portale-ora   b beacona   r riascolta", "enter config   a portal-now   b beacon   r re-listen", "intro config a portal-ya b beacon", "config portal-ya beacon re-ecoute", "enter einst portal-jetzt beacon")); break;
+        case ST_LURE:      nucleo_app_set_hint(TR5("invio ferma esca   esc indietro", "enter stop lure   esc back", "intro detiene esca  esc atras", "ok arrete leurre   esc retour", "ok stoppe koeder  esc zurueck")); break;
+        case ST_SSID:      nucleo_app_set_hint(TR5("su/giu   invio scegli   esc indietro", "up/dn   enter pick   esc back", "arriba/ab intro elige  esc atras", "haut/bas intro choisir  esc ret", "auf/ab enter waehlen   esc zurck")); break;
+        case ST_TYPE:      nucleo_app_set_hint(TR5("scrivi   invio ok   canc   esc indietro", "type   enter ok   del   esc back", "escribe intro ok borra   esc atras", "tape ok suppr   esc retour", "schreib enter ok del   esc zurueck")); break;
+        case ST_PAGE:      nucleo_app_set_hint(TR5("su/giu   invio scegli   esc indietro", "up/dn   enter pick   esc back", "arriba/ab intro elige  esc atras", "haut/bas intro choisir  esc ret", "auf/ab enter waehlen   esc zur")); break;
+        case ST_SETUP:     nucleo_app_set_hint(TR5("su/giu   invio modifica   tab menu   esc indietro", "up/dn   enter edit   tab menu   esc back", "arriba/ab intro edita tab menu", "haut/bas intro edite tab menu esc", "auf/ab enter bearbeite tab menu")); break;
+        case ST_RUNNING:   nucleo_app_set_hint(TR5("invio ferma   tab menu   esc lascia attivo", "enter stop   tab menu   esc leave running", "intro detiene   tab menu   esc act", "ok arrete   tab menu   esc actif", "ok stoppe   tab menu   esc laeuft")); break;
+        case ST_LOOT:      nucleo_app_set_hint(TR5("esc indietro", "esc back", "esc atras", "esc retour", "esc zurueck")); break;
+        case ST_GUIDE:     nucleo_app_set_hint(TR5("esc indietro", "esc back", "esc atras", "esc retour", "esc zurueck")); break;
+        case ST_SCAN:      nucleo_app_set_hint(TR5("scansione reti...", "scanning networks...", "escaneando redes...", "balayage reseaux...", "netzwerk-scan...")); break;
+        case ST_KARMA_SCAN:nucleo_app_set_hint(TR5("ascolto le probe...", "listening for probes...", "escuchando probes...", "ecoute des probes...", "sonde-hoer...")); break;
+        case ST_CLONE:     nucleo_app_set_hint(TR5("clono la pagina...", "cloning the page...", "clonando pagina...", "clonage de page...", "seite-clone...")); break;
+        case ST_STOPPING:  nucleo_app_set_hint(TR5("arresto in corso...", "stopping...", "deteniendo...", "arret...", "stoppe...")); break;
     }
 }
 

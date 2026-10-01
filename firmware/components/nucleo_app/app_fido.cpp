@@ -60,10 +60,10 @@ static int fido_present(const char *rp, void *ui) {
     int top = nucleo_app_content_top(), h = nucleo_app_content_height();
     d.fillRect(0, top, 240, h, BG);
     int y0 = app_ui_title("Sign-in", ACC, nullptr);
-    txt(8, y0 + 8, TR("Un sito vuole accedere:", "A site wants to sign in:"), FG, BG, 1);
+    txt(8, y0 + 8, TR5("Un sito vuole accedere:", "A site wants to sign in:", "Un sitio desea acceder:", "Un site veut acceder:", "Website benoetigt Zugriff:"), FG, BG, 1);
     char rb[40]; snprintf(rb, sizeof rb, "%.32s", (rp && rp[0]) ? rp : "?");
     txt(8, y0 + 26, rb, ACC, BG, 2);
-    txt(8, h - 14, TR("INVIO conferma   ESC nega", "ENTER approve   ESC deny"), WARN, BG, 1);
+    txt(8, h - 14, TR5("INVIO conferma   ESC nega", "ENTER approve   ESC deny", "ENTER aprob.   ESC niega", "ENTER aprob.   ESC refuse", "ENTER bestaet.   ESC ableh."), WARN, BG, 1);
     while (true) {
         esp_task_wdt_reset();
         nucleo_key_t k = nucleo_kbd_read();
@@ -86,7 +86,7 @@ static int pin_entry(const char *title, const char *sub, char *buf, int cap) {
         int y0 = app_ui_title(title, ACC, sub);
         char mask[40]; int mi = 0; for (int i = 0; i < n && mi < 38; i++) mask[mi++] = '*'; mask[mi] = 0;
         txt(8, y0 + 16, n ? mask : "____", FG, BG, 3);
-        txt(8, h - 14, TR("INVIO ok   ESC annulla", "ENTER ok   ESC cancel"), WARN, BG, 1);
+        txt(8, h - 14, TR5("INVIO ok   ESC annulla", "ENTER ok   ESC cancel", "ENTER ok   ESC cancela", "ENTER ok   ESC annule", "ENTER ok   ESC bricht"), WARN, BG, 1);
         for (;;) {
             esp_task_wdt_reset();
             nucleo_key_t k = nucleo_kbd_read();
@@ -106,7 +106,7 @@ static int pin_entry(const char *title, const char *sub, char *buf, int cap) {
 static int fido_verify(const char *rp, void *ui) {
     (void)ui;
     if (!nucleo_fido_pin_is_set()) return 0;
-    char sub[40]; snprintf(sub, sizeof sub, TR("per %.18s", "for %.18s"), (rp && rp[0]) ? rp : "?");
+    char sub[40]; snprintf(sub, sizeof sub, TR5("per %.18s", "for %.18s", "para %.18s", "pour %.18s", "fuer %.18s"), (rp && rp[0]) ? rp : "?");
     char pin[72];
     int n = pin_entry("PIN", sub, pin, sizeof pin);
     int r = (n > 0) ? nucleo_fido_pin_check(pin) : 0;
@@ -133,9 +133,9 @@ static void on_enter(void) {
         nucleo_fido_start(&UI);
         nucleo_app_set_poll_handler(poll_cb);
         nucleo_app_set_back_handler(on_back);
-        nucleo_app_set_hint(TR("P pin   M passkey   esc esci", "P pin   M passkeys   esc exit"));
+        nucleo_app_set_hint(TR5("P pin   M passkey   esc esci", "P pin   M passkeys   esc exit", "P pin   M llave   esc sal.", "P pin   M cle    esc sort", "P pin   M passkey   esc aus."));
     } else {
-        nucleo_app_set_hint(TR("invio: modo chiave (riavvia)", "enter: key mode (reboots)"));
+        nucleo_app_set_hint(TR5("invio: modo chiave (riavvia)", "enter: key mode (reboots)", "intro: modo llave (reinicia)", "entree: mode cle (redemarr.)", "EINGABE: Modus (neustart)"));
     }
     nucleo_app_request_draw();
 }
@@ -161,11 +161,11 @@ static void on_key(int key, char ch) {
     if (ch == 'm' || ch == 'M') { s_km = KM_MANAGE; s_cm_sel = 0; nucleo_app_request_draw(); return; }
     if (ch == 'p' || ch == 'P') {                                             // set / change the on-device PIN
         char pin[72];
-        int n = pin_entry(TR("Nuovo PIN", "New PIN"), TR("4-63 caratteri", "4-63 chars"), pin, sizeof pin);
+        int n = pin_entry(TR5("Nuovo PIN", "New PIN", "Nuevo PIN", "Nouveau PIN", "Neue PIN"), TR5("4-63 caratteri", "4-63 chars", "4-63 caract.", "4-63 caract.", "4-63 Zeichen"), pin, sizeof pin);
         // pin_set() returns false on a bad length (FIDO caps the PIN at 63): don't leave the user
         // believing UV is configured when it silently didn't take. Tell them via the hint bar.
         if (n >= 4 && !nucleo_fido_pin_set(pin))
-            nucleo_app_set_hint(TR("PIN non valido (4-63 caratteri)", "invalid PIN (4-63 chars)"));
+            nucleo_app_set_hint(TR5("PIN non valido (4-63 caratteri)", "invalid PIN (4-63 chars)", "PIN invalido (4-63 caract.)", "PIN invalide (4-63 caract.)", "Ung. PIN (4-63 Zeichen)"));
         memset(pin, 0, sizeof pin);
         nucleo_app_request_draw();
     }
@@ -182,9 +182,9 @@ static void on_tick(void) {
 static void draw_manage(int h) {
     int cnt = nucleo_fido_cred_count();
     int y0 = app_ui_title("Passkey", ACC, nullptr);
-    char cb[24]; snprintf(cb, sizeof cb, TR("%d salvate", "%d stored"), cnt);
+    char cb[24]; snprintf(cb, sizeof cb, TR5("%d salvate", "%d stored", "%d guardadas", "%d sauvegard.", "%d gespeich."), cnt);
     txt(8, y0 + 4, cb, ACC, BG, 1);
-    if (!cnt) txt(8, y0 + 22, TR("Nessuna passkey.", "No passkeys."), DIM, BG, 1);
+    if (!cnt) txt(8, y0 + 22, TR5("Nessuna passkey.", "No passkeys.", "Ninguna llave.", "Aucune cle.", "Keine Passkeys."), DIM, BG, 1);
     int y = y0 + 20; fido_cred_view_t v;
     for (int i = 0; i < cnt && i < 6; i++) {
         if (!nucleo_fido_cred_get(i, &v)) break;
@@ -194,7 +194,7 @@ static void draw_manage(int h) {
         txt(8, y, ln, sel ? ACC : FG, sel ? SURF2 : BG, 1);
         y += 12;
     }
-    txt(8, h - 14, TR("D cancella   esc indietro", "D delete   esc back"), DIM, BG, 1);
+    txt(8, h - 14, TR5("D cancella   esc indietro", "D delete   esc back", "D elimina   esc atr.", "D efface   esc retour", "D loesch.  esc zurueck"), DIM, BG, 1);
 }
 
 static void on_draw(void) {
@@ -204,24 +204,24 @@ static void on_draw(void) {
     if (s_key_mode && s_km == KM_MANAGE) { draw_manage(h); return; }
     if (!s_key_mode) {
         int y0 = app_ui_title("FIDO Key", ACC, nullptr);
-        txt(8, y0 + 10, TR("Security key", "Security key"), FG, BG, 2);
-        txt(8, y0 + 26, TR("FIDO2 / U2F (passkey)", "FIDO2 / U2F (passkeys)"), MUTED, BG, 1);
-        txt(8, y0 + 34, TR("Il modo chiave rende FIDO l'unica", "Key mode makes FIDO the sole"), MUTED, BG, 1);
-        txt(8, y0 + 46, TR("interfaccia USB (serve riavvio).", "USB interface (needs a reboot)."), MUTED, BG, 1);
-        txt(8, y0 + 64, TR("INVIO per entrare.", "ENTER to enter."), WARN, BG, 1);
+        txt(8, y0 + 10, TR5("Security key", "Security key", "Security key", "Cle de securite", "Sicherheits."), FG, BG, 2);
+        txt(8, y0 + 26, TR5("FIDO2 / U2F (passkey)", "FIDO2 / U2F (passkeys)", "FIDO2 / U2F (llave)", "FIDO2 / U2F (cle)", "FIDO2 / U2F (Schluessel)"), MUTED, BG, 1);
+        txt(8, y0 + 34, TR5("Il modo chiave rende FIDO l'unica", "Key mode makes FIDO the sole", "El modo llave hace FIDO unica", "Mode cle rend FIDO seule", "Schluesselmod macht FIDO allein"), MUTED, BG, 1);
+        txt(8, y0 + 46, TR5("interfaccia USB (serve riavvio).", "USB interface (needs a reboot).", "interfaz USB (necesita reinicio).", "interface USB (necessite reboot).", "USB-Interface (Neustart noetig)."), MUTED, BG, 1);
+        txt(8, y0 + 64, TR5("INVIO per entrare.", "ENTER to enter.", "INTRO para entrar.", "ENTREE entrer.", "EINGABE Eintritt."), WARN, BG, 1);
         return;
     }
-    int y0 = app_ui_title("FIDO Key", ACC, nucleo_fido_ready() ? TR("collegata", "connected") : TR("attesa PC", "waiting for PC"));
-    txt(8, y0 + 6, TR("Chiave attiva", "Key active"), FG, BG, 2);
+    int y0 = app_ui_title("FIDO Key", ACC, nucleo_fido_ready() ? TR5("collegata", "connected", "conectada", "connectee", "verbunden") : TR5("attesa PC", "waiting for PC", "esperando PC", "en attente du PC", "wartet auf PC"));
+    txt(8, y0 + 6, TR5("Chiave attiva", "Key active", "Llave activa", "Cle active", "Schluessel an"), FG, BG, 2);
     bool pinset = nucleo_fido_pin_is_set();
-    txt(8, y0 + 30, pinset ? TR("PIN impostato - UV attivo", "PIN set - UV on")
-                           : TR("nessun PIN (P = imposta)", "no PIN (P = set)"),
+    txt(8, y0 + 30, pinset ? TR5("PIN impostato - UV attivo", "PIN set - UV on", "PIN asign. - UV on", "PIN def. - UV on", "PIN gest. - UV an")
+                           : TR5("nessun PIN (P = imposta)", "no PIN (P = set)", "sin PIN (P=asign.)", "pas PIN (P=def.)", "kein PIN (P=setz.)"),
         pinset ? C_GREEN : WARN, BG, 1);
-    txt(8, y0 + 44, nucleo_fido_key_is_hardware() ? TR("chiave: eFuse hardware", "key: eFuse hardware")
-                                                  : TR("chiave: NVS software", "key: NVS software"),
+    txt(8, y0 + 44, nucleo_fido_key_is_hardware() ? TR5("chiave: eFuse hardware", "key: eFuse hardware", "llave: eFuse hardware", "cle: eFuse materiel", "Schl.: eFuse hardware")
+                                                  : TR5("chiave: NVS software", "key: NVS software", "llave: NVS software", "cle: NVS logiciel", "Schl.: NVS software"),
         nucleo_fido_key_is_hardware() ? C_GREEN : MUTED, BG, 1);
-    txt(8, y0 + 58, TR("Aggiungila come security key sul sito.", "Add it as a security key on the site."), MUTED, BG, 1);
-    txt(8, h - 14, TR("P imposta PIN   esc esce (riavvia)", "P set PIN   esc exits (reboots)"), DIM, BG, 1);
+    txt(8, y0 + 58, TR5("Aggiungila come security key sul sito.", "Add it as a security key on the site.", "Agreguala como security key en sitio.", "Ajoutez-le comme cle de securite.", "Fuegen Sie es als Sicherheitsschl. ein."), MUTED, BG, 1);
+    txt(8, h - 14, TR5("P imposta PIN   esc esce (riavvia)", "P set PIN   esc exits (reboots)", "P asigna PIN   esc sal. (reinicia)", "P definir PIN esc quit.(redemarr.)", "P PIN setzen   esc aus. (neustart)"), DIM, BG, 1);
 }
 
 extern "C" void nucleo_register_fido(void) {

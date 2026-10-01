@@ -79,12 +79,12 @@ static int total_rows(void) { return s_n + 1; }   // +1 for the "TUTTE" row
 
 static void set_hint(void)
 {
-    if (s_panel)                     nucleo_app_set_hint(TR("su/giu pagina   invio chiudi", "up/dn page   enter close"));
-    else if (s_state == ST_CONSENT)  nucleo_app_set_hint(TR("invio accetto   esc esci   tab guida", "enter accept   esc back   tab guide"));
-    else if (s_state == ST_SCAN)     nucleo_app_set_hint(TR("scansione in corso...", "scanning..."));
-    else if (s_state == ST_STOPPING) nucleo_app_set_hint(TR("arresto in corso...", "stopping..."));
-    else if (s_state == ST_RUNNING)  nucleo_app_set_hint(TR("invio: ferma   esc: lascia on   tab: guida", "enter: stop   esc: leave on   tab: guide"));
-    else                             nucleo_app_set_hint(TR("su/giu avvia   r riscan   tab guida", "up/dn start   r rescan   tab guide"));
+    if (s_panel)                     nucleo_app_set_hint(TR5("su/giu pagina   invio chiudi", "up/dn page   enter close", "ar/ab pag   intro cierra", "haut/bas pg   entrer ferme", "auf/ab pg   enter schliess"));
+    else if (s_state == ST_CONSENT)  nucleo_app_set_hint(TR5("invio accetto   esc esci   tab guida", "enter accept   esc back   tab guide", "intro acepta   esc atras   tab guia", "entrer accepter   esc ret   tab guide", "enter akzept   esc zur   tab anleit"));
+    else if (s_state == ST_SCAN)     nucleo_app_set_hint(TR5("scansione in corso...", "scanning...", "escaneo...", "balayage...", "abtast..."));
+    else if (s_state == ST_STOPPING) nucleo_app_set_hint(TR5("arresto in corso...", "stopping...", "detencion...", "arret...", "beendigung..."));
+    else if (s_state == ST_RUNNING)  nucleo_app_set_hint(TR5("invio: ferma   esc: lascia on   tab: guida", "enter: stop   esc: leave on   tab: guide", "intro: detiene   esc: deja on   tab guia", "entree: arret   esc: laisse   tab: guide", "enter: stopp   esc: weiter   tab: Hilfe"));
+    else                             nucleo_app_set_hint(TR5("su/giu avvia   r riscan   tab guida", "up/dn start   r rescan   tab guide", "ar/ab inicia   r rescan   tab guia", "h/b demarre   r rescan   tab guide", "auf/ab start   r rescan   tab Hilfe"));
 }
 
 static void enter(void)

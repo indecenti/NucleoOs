@@ -112,9 +112,9 @@ static void scan(void)
 }
 
 // ---- hints (bilingual) ----
-static void list_hint(void) { nucleo_app_set_hint(TR("INVIO apri  ->azioni  n nuova  d elimina", "ENTER open  ->actions  n new  d delete")); }
-static void view_hint(void) { nucleo_app_set_hint(TR(";/. scorri  INVIO modifica  TAB opzioni  <-lista", ";/. scroll  ENTER edit  TAB options  <-list")); }
-static void edit_hint(void) { nucleo_app_set_hint(TR("INVIO a capo  CANC cancella  <-salva", "ENTER newline  DEL backspace  <-save")); }
+static void list_hint(void) { nucleo_app_set_hint(TR5("INVIO apri  ->azioni  n nuova  d elimina", "ENTER open  ->actions  n new  d delete", "INTRO abre  ->accion  n nuevo  d borra", "ENTREE ouvre  ->action  n nuevo  d sup", "ENTER abre  ->Aktion  n neu  d loescht")); }
+static void view_hint(void) { nucleo_app_set_hint(TR5(";/. scorri  INVIO modifica  TAB opzioni  <-lista", ";/. scroll  ENTER edit  TAB options  <-list", ";/. desplaza  INTRO edit  TAB opt  <-li", ";/. defil  ENTER edit  TAB opt  <-list", ";/. scroll  ENTER edit  TAB opt  <-list")); }
+static void edit_hint(void) { nucleo_app_set_hint(TR5("INVIO a capo  CANC cancella  <-salva", "ENTER newline  DEL backspace  <-save", "INTRO linea  SUPR atras  <-guardar", "ENTREE nouv ligne  SUPP ret  <-sauver", "ENTER zeile  ENTF zurueck  <-speich.")); }
 
 static void load(const char *name)
 {
@@ -175,7 +175,7 @@ static void dup_note(const char *name)
     if (in && out) { char b[512]; size_t r; while ((r = fread(b, 1, sizeof b, in)) > 0) fwrite(b, 1, r, out); }
     if (in) fclose(in);
     if (out) fclose(out);
-    nucleo_app_set_hint(TR("Duplicata", "Duplicated"));
+    nucleo_app_set_hint(TR5("Duplicata", "Duplicated", "Duplicada", "Dupliquee", "Dupliziert"));
 }
 static void count_stats(const char *name)
 {
@@ -329,7 +329,7 @@ static void enter(void)
 static void tick(void) { if (s_mode == M_LIST && app_ui_list_animating()) nucleo_app_request_draw(); }
 static void leave(void) { save(); free(s_buf); s_buf = nullptr; free(s_names); s_names = nullptr; }
 
-static const char *nl_label(int i, void *) { return (i == 0 || !s_names) ? TR("+ Nuova nota", "+ New note") : s_names[i - 1]; }
+static const char *nl_label(int i, void *) { return (i == 0 || !s_names) ? TR5("+ Nuova nota", "+ New note", "+ Nueva nota", "+ New note", "+ Neue notiz") : s_names[i - 1]; }
 static unsigned short nl_color(int i, void *) { return i == 0 ? GRN : ACC; }
 
 static int view_vis(void) { int h = nucleo_app_content_height() - 22; int lh = body_size() * 8; return h / lh < 1 ? 1 : h / lh; }
@@ -339,19 +339,19 @@ static void open_actions(void)
 {
     snprintf(s_target, sizeof s_target, "%s", s_names[s_sel - 1]);
     s_mode = M_ACT; s_actsel = 0; nucleo_audio_tone(1500, 20, 45);
-    nucleo_app_set_hint(TR("su/giu scegli  INVIO ok  <-indietro", "up/dn pick  ENTER ok  <-back"));
+    nucleo_app_set_hint(TR5("su/giu scegli  INVIO ok  <-indietro", "up/dn pick  ENTER ok  <-back", "ar/ab elige  INTRO ok  <-atras", "haut/bas choix  ENTREE ok  <-re", "auf/ab waehle  ENTER ok  <-zu"));
     nucleo_app_request_draw();
 }
 static void input_commit(void)
 {
-    if (!s_input[0]) { nucleo_app_set_hint(TR("Nome vuoto", "Empty name")); return; }
+    if (!s_input[0]) { nucleo_app_set_hint(TR5("Nome vuoto", "Empty name", "Nombre vacio", "Nom vide", "Name leer")); return; }
     char nm[72]; snprintf(nm, sizeof nm, "%s", s_input);
     if (!strchr(nm, '.')) { const char *dot = strrchr(s_target, '.'); snprintf(nm + strlen(nm), sizeof nm - strlen(nm), "%s", dot ? dot : ".md"); }
     char oldp[200], newp[200];
     snprintf(oldp, sizeof oldp, "%s/%s", NOTES_DIR, s_target);
     snprintf(newp, sizeof newp, "%s/%s", NOTES_DIR, nm);
-    if (access(newp, F_OK) == 0) { nucleo_app_set_hint(TR("Esiste gia'", "Already exists")); return; }
-    nucleo_app_set_hint(rename(oldp, newp) == 0 ? TR("Rinominata", "Renamed") : TR("Rinomina fallita", "Rename failed"));
+    if (access(newp, F_OK) == 0) { nucleo_app_set_hint(TR5("Esiste gia'", "Already exists", "Ya existe", "Existe deja", "Existiert bereits")); return; }
+    nucleo_app_set_hint(rename(oldp, newp) == 0 ? TR5("Rinominata", "Renamed", "Renombrada", "Renommee", "Umbenannt") : TR5("Rinomina fallita", "Rename failed", "Error al renombr", "Echec renomm.", "Fehler beim Umb"));
     s_mode = M_LIST; scan(); nucleo_app_request_draw();
 }
 static void input_key(int key, char ch)
@@ -368,10 +368,10 @@ static void act_perform(int idx)
     switch (idx) {
         case 0: load(s_target); break;                                                 // Open  -> M_VIEW
         case 1: s_mode = M_INPUT; snprintf(s_input, sizeof s_input, "%s", s_target);    // Rename
-                nucleo_app_set_hint(TR("digita  INVIO conferma  <-annulla", "type  ENTER confirm  <-cancel")); break;
+                nucleo_app_set_hint(TR5("digita  INVIO conferma  <-annulla", "type  ENTER confirm  <-cancel", "escribe  INTRO ok  <-cancela", "tapez  ENTREE confirme  <-annule", "gib ein  ENTER ok  <-abbr")); break;
         case 2: dup_note(s_target); s_mode = M_LIST; scan(); break;                     // Duplicate
         case 3: count_stats(s_target); s_mode = M_DETAILS;                              // Details
-                nucleo_app_set_hint(TR("un tasto per chiudere", "press a key to close")); break;
+                nucleo_app_set_hint(TR5("un tasto per chiudere", "press a key to close", "una tecla para cerrar", "une touche pour fermer", "taste zum schliessen")); break;
         case 4: s_mode = M_LIST; s_confirm_del = true; s_del_yes = false; break;        // Delete -> confirm on s_sel
     }
     nucleo_app_request_draw();
@@ -420,9 +420,9 @@ static void on_key(int key, char ch)
         int vis = view_vis(), maxs = s_doc_lines - vis; if (maxs < 0) maxs = 0;
         if (key == NK_UP)        { if (s_vscroll > 0) s_vscroll--; }
         else if (key == NK_DOWN) { if (s_vscroll < maxs) s_vscroll++; }
-        else if (key == NK_TAB)  { s_mode = M_SET; s_setsel = 0; nucleo_app_set_hint(TR("SU/GIU voce  DX cambia  TAB chiudi", "UP/DN row  RIGHT change  TAB close")); }
+        else if (key == NK_TAB)  { s_mode = M_SET; s_setsel = 0; nucleo_app_set_hint(TR5("SU/GIU voce  DX cambia  TAB chiudi", "UP/DN row  RIGHT change  TAB close", "AR/AB linea  DX cambia  TAB cierra", "HAUT/BAS ligne  DROIT chge  TAB ferme", "AUF/AB zeile  RECHTS aend  TAB close")); }
         else if (key == NK_ENTER) {
-            if (s_trunc) nucleo_app_set_hint(TR("File >4KB: sola lettura (usa l'app web)", "File >4KB: read-only (use the web app)"));
+            if (s_trunc) nucleo_app_set_hint(TR5("File >4KB: sola lettura (usa l'app web)", "File >4KB: read-only (use the web app)", "Arch >4KB: soloLectura (usa app web)", "Fich >4KB: lecture seule (app web)", "Datei >4KB: nur Lese (web app)"));
             else { s_mode = M_EDIT; edit_hint(); }
         }
         else if (key == NK_DEL) { save(); s_mode = M_LIST; scan(); s_abs[0] = 0; list_hint(); }
@@ -464,7 +464,7 @@ static bool notes_on_back(int key)
 static void draw_list(void)
 {
     int top = nucleo_app_content_top(), h = nucleo_app_content_height();
-    char c[16]; snprintf(c, sizeof(c), TR("%d note", "%d notes"), s_n);
+    char c[16]; snprintf(c, sizeof(c), TR5("%d note", "%d notes", "%d notas", "%d notes", "%d Notizen"), s_n);
     int y0 = app_ui_title("Notes", ACC, c);
     app_ui_list(y0, top + h - y0, s_n + 1, s_sel, nl_label, nullptr, nl_color, nullptr);
 }
@@ -515,12 +515,12 @@ static void draw_text(void)
             if (l == nlines) d.fillRect(6 + col * 12, y, 6, 14, GRN);
             y += LINEH;
         }
-        if (s_len == 0) { d.setTextSize(1); d.setTextColor(DIM, BG); d.setCursor(6, top + 20); d.print(TR("Scrivi...", "Type...")); }
+        if (s_len == 0) { d.setTextSize(1); d.setTextColor(DIM, BG); d.setCursor(6, top + 20); d.print(TR5("Scrivi...", "Type...", "Escribe...", "Tapez...", "Gib ein...")); }
         return;
     }
 
     render_doc(s_vscroll, false);
-    if (s_len == 0) { d.setTextSize(1); d.setTextColor(DIM, BG); d.setCursor(6, top + 20); d.print(TR("(vuota)", "(empty)")); }
+    if (s_len == 0) { d.setTextSize(1); d.setTextColor(DIM, BG); d.setCursor(6, top + 20); d.print(TR5("(vuota)", "(empty)", "(vacia)", "(vide)", "(leer)")); }
 
     if (s_doc_lines > vis) {
         int maxs = s_doc_lines - vis; if (maxs < 0) maxs = 0;
@@ -536,10 +536,10 @@ static void draw_settings_card(void)
     int cw = 200, cx = (240 - cw) / 2, cy = 30, chh = 74;
     d.fillRoundRect(cx, cy, cw, chh, 8, INK);
     d.drawRoundRect(cx, cy, cw, chh, 8, ACC);
-    d.setTextSize(1); d.setTextColor(GRN, INK); d.setCursor(cx + 10, cy + 8); d.print(TR("OPZIONI VISTA", "VIEW OPTIONS"));
-    const char *szn[3] = { TR("Piccolo","Small"), TR("Medio","Medium"), TR("Grande","Large") };
-    const char *mdn[3] = { "Auto", "Markdown", TR("Testo","Plain") };
-    const char *lbl[2] = { TR("Dimensione font","Font size"), TR("Formato","Format") };
+    d.setTextSize(1); d.setTextColor(GRN, INK); d.setCursor(cx + 10, cy + 8); d.print(TR5("OPZIONI VISTA", "VIEW OPTIONS", "OPCIONES VISTA", "OPT.AFFICHAGE", "ANZEIGEOPT."));
+    const char *szn[3] = { TR5("Piccolo","Small", "Pequeno", "Petit", "Klein"), TR5("Medio","Medium", "Medio", "Moyen", "Mittel"), TR5("Grande","Large", "Grande", "Grand", "Gross") };
+    const char *mdn[3] = { "Auto", "Markdown", TR5("Testo","Plain", "Texto", "Texte", "Text") };
+    const char *lbl[2] = { TR5("Dimensione font","Font size", "Tam.fuente", "Taille police", "Police"), TR5("Formato","Format", "Formato", "Format", "Format") };
     const char *val[2] = { szn[s_fontsz], mdn[s_mdmode] };
     for (int i = 0; i < 2; i++) {
         int y = cy + 26 + i * 20, sel = (i == s_setsel);
@@ -557,7 +557,7 @@ static void draw_actions(void)
     d.fillRect(0, top, 240, h, BG);
     char t[24]; snprintf(t, sizeof t, "%.20s", s_target);
     int y0 = app_ui_title(t, ACC, nullptr);
-    const char *items[ACT_N] = { TR("Apri","Open"), TR("Rinomina","Rename"), TR("Duplica","Duplicate"), TR("Dettagli","Details"), TR("Elimina","Delete") };
+    const char *items[ACT_N] = { TR5("Apri","Open", "Abre", "Ouvre", "Oeffne"), TR5("Rinomina","Rename", "Renombra", "Renomme", "Umbenennen"), TR5("Duplica","Duplicate", "Duplica", "Duplique", "Duplizieren"), TR5("Dettagli","Details", "Detalles", "Details", "Info"), TR5("Elimina","Delete", "Borra", "Supprime", "Loeschen") };
     const char icons[ACT_N] = { '>', 'R', 'C', 'i', 'x' };
     const int ROW = 17;
     for (int i = 0; i < ACT_N; i++) {
@@ -574,7 +574,7 @@ static void draw_details(void)
 {
     int top = nucleo_app_content_top(), h = nucleo_app_content_height();
     d.fillRect(0, top, 240, h, BG);
-    int y0 = app_ui_title(TR("Dettagli","Details"), ACC, nullptr);
+    int y0 = app_ui_title(TR5("Dettagli","Details", "Detalles", "Details", "Info"), ACC, nullptr);
     int y = y0 + 4;
     char nm[24]; snprintf(nm, sizeof nm, "%.20s", s_target);
     d.setTextSize(2); d.setTextColor(ACC, BG); d.setCursor(8, y); d.print(nm); y += 24;
@@ -586,16 +586,16 @@ static void draw_details(void)
         char sz[16];
         if (st.st_size < 1024) snprintf(sz, sizeof sz, "%ld B",  (long)st.st_size);
         else                   snprintf(sz, sizeof sz, "%ld KB", (long)((st.st_size + 1023) / 1024));
-        snprintf(line, sizeof line, TR("Dimensione: %s", "Size: %s"), sz);
+        snprintf(line, sizeof line, TR5("Dimensione: %s", "Size: %s", "Tamano: %s", "Taille: %s", "Groesse: %s"), sz);
         d.setTextColor(MUTED, BG); d.setCursor(8, y); d.print(line); y += 14;
         time_t mt = st.st_mtime; struct tm *tm = localtime(&mt);
         if (tm) { char db[24]; snprintf(db, sizeof db, "%02d/%02d/%04d %02d:%02d", tm->tm_mday, tm->tm_mon+1, 1900+tm->tm_year, tm->tm_hour, tm->tm_min);
-                  snprintf(line, sizeof line, TR("Modificato: %s", "Modified: %s"), db);
+                  snprintf(line, sizeof line, TR5("Modificato: %s", "Modified: %s", "Modificado: %s", "Modifie: %s", "Geaendert: %s"), db);
                   d.setTextColor(MUTED, BG); d.setCursor(8, y); d.print(line); y += 14; }
     }
-    snprintf(line, sizeof line, TR("Righe: %ld   Parole: %ld", "Lines: %ld   Words: %ld"), s_stat_lines, s_stat_words);
+    snprintf(line, sizeof line, TR5("Righe: %ld   Parole: %ld", "Lines: %ld   Words: %ld", "Lineas: %ld   Palabras:%ld", "Lignes: %ld   Mots: %ld", "Zeilen: %ld   Woerter: %ld"), s_stat_lines, s_stat_words);
     d.setTextColor(MUTED, BG); d.setCursor(8, y); d.print(line); y += 14;
-    snprintf(line, sizeof line, TR("Byte: %ld", "Bytes: %ld"), s_stat_bytes);
+    snprintf(line, sizeof line, TR5("Byte: %ld", "Bytes: %ld", "Bytes: %ld", "Octets: %ld", "Bytes: %ld"), s_stat_bytes);
     d.setTextColor(DIM, BG); d.setCursor(8, y); d.print(line);
 }
 
@@ -603,7 +603,7 @@ static void draw_input(void)
 {
     int top = nucleo_app_content_top(), h = nucleo_app_content_height();
     d.fillRect(0, top, 240, h, BG);
-    d.setTextSize(2); d.setTextColor(ACC, BG); d.setCursor(8, top+8); d.print(TR("Rinomina nota", "Rename note"));
+    d.setTextSize(2); d.setTextColor(ACC, BG); d.setCursor(8, top+8); d.print(TR5("Rinomina nota", "Rename note", "Renombra nota", "Renomme note", "Umbenne notiz"));
     int bx = 8, by = top+38, bw = 224, bh = 24;
     d.fillRoundRect(bx, by, bw, bh, 4, INK);
     d.drawRoundRect(bx, by, bw, bh, 4, s_input[0] ? ACC : LINE);
@@ -612,7 +612,7 @@ static void draw_input(void)
     char disp[20]; snprintf(disp, sizeof disp, "%s_", show);
     d.setTextSize(2); d.setTextColor(FG, INK); d.setCursor(bx+4, by+4); d.print(disp);
     d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(8, by+bh+8);
-    d.print(TR("INVIO conferma   <- annulla", "ENTER confirm   <- cancel"));
+    d.print(TR5("INVIO conferma   <- annulla", "ENTER confirm   <- cancel", "INTRO confirma   <- cancela", "ENTREE confirm   <- annule", "ENTER bestaetigt   <- abbr."));
 }
 
 static void draw(void)
@@ -623,7 +623,7 @@ static void draw(void)
     if (s_mode == M_LIST) draw_list();
     else draw_text();
     if (s_mode == M_LIST && s_confirm_del && s_sel > 0)
-        app_ui_confirm(TR("Eliminare la nota?", "Delete note?"), s_names[s_sel - 1], s_del_yes);
+        app_ui_confirm(TR5("Eliminare la nota?", "Delete note?", "Borrar la nota?", "Supprimer note?", "Notiz loeschen?"), s_names[s_sel - 1], s_del_yes);
     if (s_mode == M_SET) draw_settings_card();
 }
 

@@ -36,7 +36,7 @@ static void enter(void)
     s_prev_bright = nucleo_app_brightness();   // remember so ESC restores the user's setting
     s_on = true;                               // a flashlight should light up the moment you open it
     apply_state();
-    nucleo_app_set_hint(TR("spazio on/off   esc esci", "space on/off   esc back"));
+    nucleo_app_set_hint(TR5("spazio on/off   esc esci", "space on/off   esc back", "espacio on/off   esc atras", "espace on/off   esc retour", "Taste an/aus   esc Reset"));
     nucleo_app_request_draw();
 }
 

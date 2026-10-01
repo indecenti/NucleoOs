@@ -111,6 +111,7 @@ extern "C" void nucleo_voice_suspend(bool s) { g_voice_suspended += s ? 1 : -1; 
 extern "C" bool nucleo_power_battery_available(void) { return true; }
 extern "C" int  nucleo_power_battery_pct(void) { return 77; }
 const char *nucleo_tr(const char *it, const char *en) { (void)en; return it; }
+const char *nucleo_tr5(const char *it, const char *en, const char *es, const char *fr, const char *de) { (void)en; (void)es; (void)fr; (void)de; return it; }
 
 char g_events[64][160];
 int  g_event_n;

@@ -353,16 +353,18 @@ static void update_hint(void)
     if (s_search_mode) {
         static char h[64];
         if (s_search_long > 0)
-            snprintf(h, sizeof h, TR("'%s' +%d percorsi lunghi omessi", "'%s' +%d long paths skipped"), s_query, s_search_long);
+            snprintf(h, sizeof h, TR5("'%s' +%d percorsi lunghi omessi", "'%s' +%d long paths skipped", "'%s' +%d rutas largas omitidas", "'%s' +%d longs chemins omis", "'%s' +%d lange Pfade skip"), s_query, s_search_long);
         else
-            snprintf(h, sizeof h, TR("'%s'  DEL=reset filtro", "'%s'  DEL=clear filter"), s_query);
+            snprintf(h, sizeof h, TR5("'%s'  DEL=reset filtro", "'%s'  DEL=clear filter", "'%s'  DEL=reset filtro", "'%s'  DEL=reinit filtre", "'%s'  DEL=Filter reset"), s_query);
         nucleo_app_set_hint(h);
     } else if (at_root()) {
-        nucleo_app_set_hint(TR("INVIO apri  ->azioni  /=recenti  ESC esci",
-                               "ENTER open  ->actions  /=recent  ESC exit"));
+        nucleo_app_set_hint(TR5("INVIO apri  ->azioni  /=recenti  ESC esci",
+                                "ENTER open  ->actions  /=recent  ESC exit", "INTRO abre  ->acciones  /=rec  ESC sal",
+                                "ENTREE ouvre  ->actions  /=rec  ESC qu", "ENTER oeffnet  ->Aktion  /=zul  ESC be"));
     } else {
-        nucleo_app_set_hint(TR("INVIO apri  ->azioni  <-su  D=elimina",
-                               "ENTER open  ->actions  <-up  D=delete"));
+        nucleo_app_set_hint(TR5("INVIO apri  ->azioni  <-su  D=elimina",
+                                "ENTER open  ->actions  <-up  D=delete", "INTRO abre  ->acciones  <-arriba  D=el",
+                                "ENTREE ouvre  ->actions  <-haut  D=supp", "ENTER oeffnet  ->Aktion  <-hoch D=losch"));
     }
 }
 
@@ -404,7 +406,7 @@ static void activate_selected(void)
             hist_record_dir(web);
             int l = (int)strlen(s_path);
             if (l+(int)strlen(e->name)+2 < (int)sizeof(s_path)) { snprintf(s_path+l, sizeof(s_path)-l, "%s/", e->name); scan(); update_hint(); }
-            else nucleo_app_set_hint(TR("Percorso troppo lungo","Path too long"));
+            else nucleo_app_set_hint(TR5("Percorso troppo lungo","Path too long", "Ruta muy larga", "Chemin trop long", "Pfad zu lang"));
             return;
         }
         char web[192]; snprintf(web, sizeof web, "%s%s", s_path, e->name);
@@ -412,12 +414,12 @@ static void activate_selected(void)
     }
     const char *dot = strrchr(s_search_mode ? abs : e->name, '.');
     if (dot && is_image_ext(dot)) {
-        if (nucleo_app_image_oversize(abs)) nucleo_app_set_hint(TR("Troppo grande: usa l'app web","Too large: use the web app"));
+        if (nucleo_app_image_oversize(abs)) nucleo_app_set_hint(TR5("Troppo grande: usa l'app web","Too large: use the web app", "Demasiado grande: usa app web", "Trop grand: utilisez app web", "Zu gross: Web-App nutzen"));
         else nucleo_app_launch_file(abs);
     } else if (dot && is_web_video_ext(dot)) {
-        nucleo_app_set_hint(TR("Video non .nfv: usa l'app web","Non-.nfv video: use the web app"));
+        nucleo_app_set_hint(TR5("Video non .nfv: usa l'app web","Non-.nfv video: use the web app", "Video sin .nfv: usa app web", "Video sans .nfv: utilisez app web", "Video ohne .nfv: Web-App verwenden"));
     } else if (!nucleo_app_launch_file(abs)) {
-        nucleo_app_set_hint(TR("nessuna app per questo tipo","no app for this type"));
+        nucleo_app_set_hint(TR5("nessuna app per questo tipo","no app for this type", "sin app para este tipo", "pas d'app pour ce type", "Keine App fuer Typ"));
     }
 }
 
@@ -429,7 +431,7 @@ static void open_actions(void)
     snprintf(s_act_name, sizeof s_act_name, "%s", e->name);
     s_act_isdir = e->dir; s_act_open = true; s_act_sel = 0;
     nucleo_audio_tone(1500, 20, 45);
-    nucleo_app_set_hint(TR("su/giu scegli  INVIO ok  <-annulla", "up/dn pick  ENTER ok  <-cancel"));
+    nucleo_app_set_hint(TR5("su/giu scegli  INVIO ok  <-annulla", "up/dn pick  ENTER ok  <-cancel", "arriba/abajo sel  INTRO ok  <canc", "haut/bas choix ENTREE ok  <-annul", "oben/unten sel  ENTER ok  <-abbr"));
     nucleo_app_request_draw();
 }
 
@@ -438,14 +440,14 @@ static void start_input(int mode)   // 1 = rename, 2 = new folder
     s_input_mode = mode;
     if (mode == 1) snprintf(s_input, sizeof s_input, "%s", s_act_name);   // prefill with the current name
     else           s_input[0] = 0;
-    nucleo_app_set_hint(TR("digita  INVIO conferma  <-annulla", "type  ENTER confirm  <-cancel"));
+    nucleo_app_set_hint(TR5("digita  INVIO conferma  <-annulla", "type  ENTER confirm  <-cancel", "escribe  INTRO confirm  <-canc", "tapez  ENTREE confirm  <-annul", "geben ein  ENTER best.  <-abbr"));
     nucleo_app_request_draw();
 }
 
 static void arm_delete_from_actions(void)
 {
     if (nucleo_fs_is_protected(s_act_abs) || nucleo_fs_is_factory(s_act_abs)) {
-        nucleo_app_set_hint(TR("Protetto: file di sistema","Protected: system file"));
+        nucleo_app_set_hint(TR5("Protetto: file di sistema","Protected: system file", "Protegido: archivo sistem", "Protege: fichier system", "Geschuetzt: Systemdatei"));
         nucleo_app_request_draw(); return;
     }
     s_del_arm = s_sel; s_del_yes = false; s_del_isdir = s_act_isdir;
@@ -456,18 +458,18 @@ static void arm_delete_from_actions(void)
 
 static void input_commit(void)
 {
-    if (!s_input[0]) { nucleo_app_set_hint(TR("Nome vuoto","Empty name")); return; }
+    if (!s_input[0]) { nucleo_app_set_hint(TR5("Nome vuoto","Empty name", "Nombre vacio", "Nom vide", "Name leer")); return; }
     if (s_input_mode == 1) {   // rename s_act_abs -> same dir + s_input
         if (nucleo_fs_is_protected(s_act_abs) || nucleo_fs_is_factory(s_act_abs)) {
-            s_input_mode = 0; nucleo_app_set_hint(TR("Protetto","Protected")); nucleo_app_request_draw(); return;
+            s_input_mode = 0; nucleo_app_set_hint(TR5("Protetto","Protected", "Protegido", "Protege", "Geschuetzt")); nucleo_app_request_draw(); return;
         }
         char nab[300]; snprintf(nab, sizeof nab, "%s%s%s", NUCLEO_SD_MOUNT, s_path, s_input);
-        struct stat st; if (stat(nab, &st) == 0) { nucleo_app_set_hint(TR("Esiste gia'","Already exists")); return; }
-        nucleo_app_set_hint(rename(s_act_abs, nab) == 0 ? TR("Rinominato","Renamed") : TR("Rinomina fallita","Rename failed"));
+        struct stat st; if (stat(nab, &st) == 0) { nucleo_app_set_hint(TR5("Esiste gia'","Already exists", "Ya existe", "Existe deja", "Existiert bereits")); return; }
+        nucleo_app_set_hint(rename(s_act_abs, nab) == 0 ? TR5("Rinominato","Renamed", "Renombrado", "Renomme", "Umbenannt") : TR5("Rinomina fallita","Rename failed", "Renombrar fallo", "Echec renommage", "Umbenennung fehl"));
     } else {                   // new folder in the current dir
         char nd[300]; snprintf(nd, sizeof nd, "%s%s%s", NUCLEO_SD_MOUNT, s_path, s_input);
-        struct stat st; if (stat(nd, &st) == 0) { nucleo_app_set_hint(TR("Esiste gia'","Already exists")); return; }
-        nucleo_app_set_hint(mkdir(nd, 0775) == 0 ? TR("Cartella creata","Folder created") : TR("Creazione fallita","Create failed"));
+        struct stat st; if (stat(nd, &st) == 0) { nucleo_app_set_hint(TR5("Esiste gia'","Already exists", "Ya existe", "Existe deja", "Existiert bereits")); return; }
+        nucleo_app_set_hint(mkdir(nd, 0775) == 0 ? TR5("Cartella creata","Folder created", "Carpeta creada", "Dossier cree", "Ordner erstellt") : TR5("Creazione fallita","Create failed", "Creacion fallo", "Echec creation", "Erstellung fails"));
     }
     s_input_mode = 0; scan(); sd_refresh(); nucleo_app_request_draw();
 }
@@ -478,7 +480,7 @@ static void act_perform(int idx)
     nucleo_audio_tone(1600, 20, 45);
     switch (idx) {
         case ACT_OPEN:    activate_selected(); break;
-        case ACT_DETAILS: s_details_open = true; nucleo_app_set_hint(TR("un tasto per chiudere","press a key to close")); break;
+        case ACT_DETAILS: s_details_open = true; nucleo_app_set_hint(TR5("un tasto per chiudere","press a key to close", "pulsa tecla cerrar", "appuyez touche fermer", "Taste druecken schliess")); break;
         case ACT_RENAME:  start_input(1); break;
         case ACT_MKDIR:   start_input(2); break;
         case ACT_DELETE:  arm_delete_from_actions(); break;
@@ -563,7 +565,7 @@ static void on_key(int key, char ch)
 
     if (ch == '/') {   // open the quick-panel
         s_tab_open = true; s_tab_page = 0; s_tab_sel = 0;
-        nucleo_app_set_hint(TR("/=pg2/chiudi  SU/GIU sel  INVIO apri", "/=pg2/close  UP/DN sel  ENTER open"));
+        nucleo_app_set_hint(TR5("/=pg2/chiudi  SU/GIU sel  INVIO apri", "/=pg2/close  UP/DN sel  ENTER open", "/=pg2/cierra  ARRIBA/ABJ sel  INTRO a", "/=pg2/ferme  HAUT/BAS sel  ENTREE ouv", "/=pg2/schliess OBN/UNT sel ENTER oeff"));
         nucleo_app_request_draw(); return;
     }
 
@@ -579,7 +581,7 @@ static void on_key(int key, char ch)
         if (r == 1) {
             int keep = s_del_arm;
             int rc = s_del_isdir ? rmdir(s_del_abs) : unlink(s_del_abs);
-            if (rc != 0 && s_del_isdir) nucleo_app_set_hint(TR("Cartella non vuota","Folder not empty"));
+            if (rc != 0 && s_del_isdir) nucleo_app_set_hint(TR5("Cartella non vuota","Folder not empty", "Carpeta no vacia", "Dossier non vide", "Ordner nicht leer"));
             scan(); sd_refresh();
             tn = total_n();
             if (keep >= tn) keep = tn-1;
@@ -595,7 +597,7 @@ static void on_key(int key, char ch)
         Entry *e = entry_at(s_sel);
         char abs[256]; snprintf(abs, sizeof abs, "%s%s%s", NUCLEO_SD_MOUNT, s_path, e->name);
         if (nucleo_fs_is_protected(abs)||nucleo_fs_is_factory(abs)) {
-            nucleo_app_set_hint(TR("Protetto: file di sistema","Protected: system file"));
+            nucleo_app_set_hint(TR5("Protetto: file di sistema","Protected: system file", "Protegido: archivo sistem", "Protege: fichier system", "Geschuetzt: Systemdatei"));
         } else {
             s_del_arm = s_sel; s_del_yes = false; s_del_isdir = false;
             snprintf(s_del_abs,  sizeof s_del_abs,  "%s", abs);
@@ -638,7 +640,7 @@ static void draw_list(int y0, int list_h)
     d.fillRect(0, y0, 240, list_h, BG);
     if (tn == 0) {
         d.setTextColor(DIM, BG); d.setCursor(14, y0+8);
-        d.print(s_search_mode ? TR("Nessun risultato","No results") : TR("Cartella vuota","Empty folder"));
+        d.print(s_search_mode ? TR5("Nessun risultato","No results", "Sin resultados", "Aucun resultat", "Keine Ergeb.") : TR5("Cartella vuota","Empty folder", "Carpeta vacia", "Dossier vide", "Ordner leer"));
         return;
     }
     int vis    = list_h / STEP;
@@ -721,9 +723,9 @@ static void draw_panel(int y0, int list_h)
     d.fillRoundRect(122, y0+1, 114, BTN_H, 3, p0 ? DIM : DIRC);
     d.setTextSize(1);
     d.setTextColor(p0 ? INK : MUTED, p0 ? DIRC : DIM);
-    d.setCursor(20, y0+4); d.print(TR("RECENTI", "RECENT"));
+    d.setCursor(20, y0+4); d.print(TR5("RECENTI", "RECENT", "RECIENTE", "RECENT", "ZULETZT"));
     d.setTextColor(p0 ? MUTED : INK, p0 ? DIM : DIRC);
-    d.setCursor(148, y0+4); d.print(TR("CERCA", "SEARCH"));
+    d.setCursor(148, y0+4); d.print(TR5("CERCA", "SEARCH", "BUSCA", "CHERCHE", "SUCHE"));
 
     int cy = y0 + BTN_H + 2;
     int content_h = list_h - BTN_H - 2;
@@ -731,7 +733,7 @@ static void draw_panel(int y0, int list_h)
     if (s_tab_page == 0) {
         if (!s_hist || s_hist_n == 0) {
             d.setTextColor(DIM, PNL); d.setTextSize(1);
-            d.setCursor(10, cy+10); d.print(TR("Nessuna cronologia", "No history yet"));
+            d.setCursor(10, cy+10); d.print(TR5("Nessuna cronologia", "No history yet", "Sin historial", "Pas d'historique", "Keine Verlauf"));
         } else {
             const int ROW = 14;
             int max_show = content_h / ROW; if (max_show > s_hist_n) max_show = s_hist_n;
@@ -760,7 +762,7 @@ static void draw_panel(int y0, int list_h)
         }
     } else {
         d.setTextColor(MUTED, PNL); d.setTextSize(1);
-        d.setCursor(8, cy+3); d.print(TR("Cerca ovunque:", "Search everywhere:"));
+        d.setCursor(8, cy+3); d.print(TR5("Cerca ovunque:", "Search everywhere:", "Busca en todas partes", "Cherche partout", "Ueberall suchen"));
         int bx = 8, by = cy+14, bw = 224, bh = 20;
         d.fillRoundRect(bx, by, bw, bh, 3, FIELD);
         d.drawRoundRect(bx, by, bw, bh, 3, s_query[0] ? DIRC : LINE);
@@ -771,7 +773,7 @@ static void draw_panel(int y0, int list_h)
         d.setCursor(bx+4, by+2); d.print(qdisp);
         d.setTextSize(1); d.setTextColor(DIM, PNL);
         d.setCursor(8, by+bh+4);
-        d.print(TR("INVIO=cerca  CANC=back  /=chiudi", "ENTER=search  DEL=back  /=close"));
+        d.print(TR5("INVIO=cerca  CANC=back  /=chiudi", "ENTER=search  DEL=back  /=close", "INTRO=busca  SUPR=atr  /=cierra", "ENTREE=cherche  SUPP=ret  /=ferme", "ENTER=suche  DEL=zurueck  /=schlie"));
     }
 }
 
@@ -780,8 +782,8 @@ static void draw_actions(int y0, int list_h)
 {
     d.fillRect(0, y0, 240, list_h, BG);
     const char *items[ACT_COUNT] = {
-        TR("Apri","Open"), TR("Dettagli","Details"), TR("Rinomina","Rename"),
-        TR("Nuova cartella","New folder"), TR("Elimina","Delete") };
+        TR5("Apri","Open", "Abre", "Ouvre", "Oeffnet"), TR5("Dettagli","Details", "Detalles", "Details", "Details"), TR5("Rinomina","Rename", "Renombra", "Renomme", "Umbenennen"),
+        TR5("Nuova cartella","New folder", "Nueva carpeta", "Nouv. dossier", "Neuer Ordner"), TR5("Elimina","Delete", "Elimina", "Supprime", "Loeschen") };
     const char icons[ACT_COUNT] = { '>', 'i', 'R', '+', 'x' };
     const int ROW = 17;
     for (int i = 0; i < ACT_COUNT; i++) {
@@ -808,17 +810,17 @@ static void draw_details(int y0, int list_h)
     d.setTextSize(1);
     char line[52];
     if (ok) {
-        if (s_act_isdir) { d.setTextColor(MUTED, BG); d.setCursor(8, y); d.print(TR("Tipo: cartella","Type: folder")); y += 12; }
+        if (s_act_isdir) { d.setTextColor(MUTED, BG); d.setCursor(8, y); d.print(TR5("Tipo: cartella","Type: folder", "Tipo: carpeta", "Type: dossier", "Typ: Ordner")); y += 12; }
         else { char sz[16]; fmt_kb((uint64_t)((st.st_size + 1023) / 1024), sz, sizeof sz);
-               snprintf(line, sizeof line, TR("Dimensione: %s","Size: %s"), sz);
+               snprintf(line, sizeof line, TR5("Dimensione: %s","Size: %s", "Tamano: %s", "Taille: %s", "Groesse: %s"), sz);
                d.setTextColor(MUTED, BG); d.setCursor(8, y); d.print(line); y += 12; }
         time_t mt = st.st_mtime; struct tm *tm = localtime(&mt);
         if (tm) { char db[24]; snprintf(db, sizeof db, "%02d/%02d/%04d %02d:%02d", tm->tm_mday, tm->tm_mon+1, 1900+tm->tm_year, tm->tm_hour, tm->tm_min);
-                  snprintf(line, sizeof line, TR("Modificato: %s","Modified: %s"), db);
+                  snprintf(line, sizeof line, TR5("Modificato: %s","Modified: %s", "Modificado: %s", "Modifie: %s", "Geaendert: %s"), db);
                   d.setTextColor(MUTED, BG); d.setCursor(8, y); d.print(line); y += 12; }
-    } else { d.setTextColor(C_RED, BG); d.setCursor(8, y); d.print(TR("Impossibile leggere","Cannot read")); y += 12; }
+    } else { d.setTextColor(C_RED, BG); d.setCursor(8, y); d.print(TR5("Impossibile leggere","Cannot read", "No se lee", "Impossibl lire", "Kann nchtlesen")); y += 12; }
 
-    d.setTextColor(DIM, BG); d.setCursor(8, y); d.print(TR("Percorso:","Path:")); y += 11;
+    d.setTextColor(DIM, BG); d.setCursor(8, y); d.print(TR5("Percorso:","Path:", "Ruta:", "Chemin:", "Pfad:")); y += 11;
     char pab[40]; snprintf(pab, sizeof pab, "%.38s", s_path);
     d.setTextColor(MUTED, BG); d.setCursor(8, y); d.print(pab); y += 15;
 
@@ -836,7 +838,7 @@ static void draw_details(int y0, int list_h)
 static void draw_input(int top, int h)
 {
     d.fillRect(0, top, 240, h, BG);
-    const char *title = (s_input_mode == 1) ? TR("Rinomina","Rename") : TR("Nuova cartella","New folder");
+    const char *title = (s_input_mode == 1) ? TR5("Rinomina","Rename", "Renombra", "Renomme", "Umbenennen") : TR5("Nuova cartella","New folder", "Nueva carpeta", "Nouv. dossier", "Neuer Ordner");
     d.setTextSize(2); d.setTextColor(ACC, BG); d.setCursor(8, top+8); d.print(title);
     int bx = 8, by = top+38, bw = 224, bh = 24;
     d.fillRoundRect(bx, by, bw, bh, 4, FIELD);
@@ -846,7 +848,7 @@ static void draw_input(int top, int h)
     char disp[20]; snprintf(disp, sizeof disp, "%s_", show);
     d.setTextSize(2); d.setTextColor(FG, FIELD); d.setCursor(bx+4, by+4); d.print(disp);
     d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(8, by+bh+8);
-    d.print(TR("INVIO conferma   <- annulla", "ENTER confirm   <- cancel"));
+    d.print(TR5("INVIO conferma   <- annulla", "ENTER confirm   <- cancel", "INTRO confirma   <- cancel", "ENTREE confirme   <- annul", "ENTER best.   <- abbr"));
 }
 
 // ── Draw ───────────────────────────────────────────────────────────────────────
@@ -861,9 +863,9 @@ static void draw(void)
     if (s_act_open || s_details_open) {
         snprintf(title, sizeof title, "%.20s", s_act_name);
         acc = s_act_isdir ? DIRC : ACC;
-        snprintf(cnt, sizeof cnt, "%s", s_act_isdir ? TR("cart.","dir") : TR("file","file"));
+        snprintf(cnt, sizeof cnt, "%s", s_act_isdir ? TR5("cart.","dir", "carp.", "doss.", "ord.") : TR5("file","file", "arch.", "fich.", "dat."));
     } else {
-        if (s_search_mode) snprintf(title, sizeof title, TR("Risultati", "Results"));
+        if (s_search_mode) snprintf(title, sizeof title, TR5("Risultati", "Results", "Resultados", "Resultats", "Ergebnisse"));
         else if (at_root()) snprintf(title, sizeof title, "Files");
         else {
             char tmp[192]; snprintf(tmp, sizeof tmp, "%s", s_path);
@@ -885,7 +887,7 @@ static void draw(void)
     else                     draw_list(y0, list_h);
 
     if (s_del_arm >= 0 && !s_tab_open && !s_act_open && !s_details_open)
-        app_ui_confirm(s_del_isdir ? TR("Elimina cartella?","Delete folder?") : TR("Elimina file?","Delete file?"),
+        app_ui_confirm(s_del_isdir ? TR5("Elimina cartella?","Delete folder?", "Elimina carpeta?", "Supp. dossier?", "Ordner loeschen?") : TR5("Elimina file?","Delete file?", "Elimina archiv?", "Supp. fichier?", "Datei loeschen?"),
                        s_del_name, s_del_yes);
 }
 

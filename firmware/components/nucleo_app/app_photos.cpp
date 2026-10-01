@@ -106,10 +106,10 @@ static void enter(void)
     s_open_abs[0] = 0;
     const char *of = nucleo_app_take_open_file();
     if (of && of[0]) {
-        if (nucleo_app_image_oversize(of)) { nucleo_app_set_hint(TR("Troppo grande: usa l'app web", "Too large: use the web app")); return; }   // safety net: never decode a giant
+        if (nucleo_app_image_oversize(of)) { nucleo_app_set_hint(TR5("Troppo grande: usa l'app web", "Too large: use the web app", "Muy grande: usa la app web", "Trop gros: utilisez l'app web", "zu gross: nutze die web-app")); return; }   // safety net: never decode a giant
         snprintf(s_open_abs, sizeof s_open_abs, "%s", of); enter_view(); return;   // opened from Files -> show THAT image
     }
-    nucleo_app_set_hint(TR(";/. muovi  invio apri  esc indietro", ";/. move  enter view  esc back"));
+    nucleo_app_set_hint(TR5(";/. muovi  invio apri  esc indietro", ";/. move  enter view  esc back", ";/. mueve  enter ver  esc volver", ";/. depl.  entree voir  esc ret.", ";/. bew.  enter zeigen  esc ret."));
 }
 static void tick(void) { if (!s_view && app_ui_list_animating()) nucleo_app_request_draw(); }  // only while the list animates
 
@@ -118,7 +118,7 @@ static void tick(void) { if (!s_view && app_ui_list_animating()) nucleo_app_requ
 static void enter_view(void)
 {
     s_view = true;
-    nucleo_app_set_hint(TR(";/. prec/succ  del lista  esc indietro", ";/. prev/next  del list  esc back"));
+    nucleo_app_set_hint(TR5(";/. prec/succ  del lista  esc indietro", ";/. prev/next  del list  esc back", ";/. prec/sig  del lista  esc volver", ";/. prec/suiv  del liste  esc retour", ";/. prec/naech  del liste  esc ret."));
     nucleo_app_release_buffers();
     nucleo_app_set_direct_draw(true);
 }
@@ -130,7 +130,7 @@ static unsigned short ph_color(int, void *) { return 0xFE8C; }
 static void open_selected(void)
 {
     char abs[256]; snprintf(abs, sizeof abs, "%s/%s", PIC_DIR, s_names[s_sel]);
-    if (nucleo_app_image_oversize(abs)) nucleo_app_set_hint(TR("Troppo grande: usa l'app web", "Too large: use the web app"));
+    if (nucleo_app_image_oversize(abs)) nucleo_app_set_hint(TR5("Troppo grande: usa l'app web", "Too large: use the web app", "Muy grande: usa la app web", "Trop gros: utilisez l'app web", "zu gross: nutze die web-app"));
     else enter_view();
 }
 
@@ -146,7 +146,7 @@ static void on_key(int key, char ch)
 {
     if (s_view) {
         if (s_open_abs[0]) {                          // external "open with" image: single file, no prev/next
-            if (key == NK_DEL) { s_open_abs[0] = 0; s_view = false; nucleo_app_set_direct_draw(false); d.releasePngMemory(); nucleo_app_set_hint(TR(";/. muovi  invio apri  esc indietro", ";/. move  enter view  esc back")); }
+            if (key == NK_DEL) { s_open_abs[0] = 0; s_view = false; nucleo_app_set_direct_draw(false); d.releasePngMemory(); nucleo_app_set_hint(TR5(";/. muovi  invio apri  esc indietro", ";/. move  enter view  esc back", ";/. mueve  enter ver  esc volver", ";/. depl.  entree voir  esc ret.", ";/. bew.  enter zeigen  esc ret.")); }
             else return;
         }
         else if (key == NK_UP || key == NK_DOWN) {
@@ -154,9 +154,9 @@ static void on_key(int key, char ch)
             s_sel = (key == NK_UP) ? (s_sel + s_n - 1) % s_n : (s_sel + 1) % s_n;
             // prev/next must pass the same oversize guard as Enter: a camera-size neighbour crashes the decoder
             char abs[256]; snprintf(abs, sizeof abs, "%s/%s", PIC_DIR, s_names[s_sel]);
-            if (nucleo_app_image_oversize(abs)) view_to_list(TR("Troppo grande: usa l'app web", "Too large: use the web app"));
+            if (nucleo_app_image_oversize(abs)) view_to_list(TR5("Troppo grande: usa l'app web", "Too large: use the web app", "Muy grande: usa la app web", "Trop gros: utilisez l'app web", "zu gross: nutze die web-app"));
         }
-        else if (key == NK_DEL)  view_to_list(TR(";/. muovi  invio apri  esc indietro", ";/. move  enter view  esc back"));
+        else if (key == NK_DEL)  view_to_list(TR5(";/. muovi  invio apri  esc indietro", ";/. move  enter view  esc back", ";/. mueve  enter ver  esc volver", ";/. depl.  entree voir  esc ret.", ";/. bew.  enter zeigen  esc ret."));
         else return;
     } else {
         if (key == NK_UP)        { if (s_n) s_sel = (s_sel + s_n - 1) % s_n; }
@@ -198,7 +198,7 @@ static void draw_list(void)
     int top = nucleo_app_content_top(), h = nucleo_app_content_height();
     char c[16]; snprintf(c, sizeof(c), "%d image%s", s_n, s_n == 1 ? "" : "s");
     int y0 = app_ui_title("Photos", ACC, c);
-    if (s_n == 0) { d.setTextColor(DIM, BG); d.setCursor(12, y0 + 16); d.print(TR("Nessuna immagine in /data/Pictures", "No images in /data/Pictures")); return; }
+    if (s_n == 0) { d.setTextColor(DIM, BG); d.setCursor(12, y0 + 16); d.print(TR5("Nessuna immagine in /data/Pictures", "No images in /data/Pictures", "Sin imagenes en /data/Pictures", "Pas images /data/Pictures", "keine bilder in /data/Pictures")); return; }
     app_ui_list(y0, top + h - y0, s_n, s_sel, ph_label, nullptr, ph_color, nullptr);
 }
 

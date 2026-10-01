@@ -26,11 +26,11 @@ enum { V_BULLSEYE, V_TUBE_H, V_TUBE_V, V_DIGITAL, V_SETTINGS, V_COUNT };
 static const char *view_name(int i)
 {
     switch (i) {
-        case V_BULLSEYE: return TR("Mira", "Bullseye");
-        case V_TUBE_H:   return TR("Tubo", "Tube");
-        case V_TUBE_V:   return TR("Piombo", "Plumb");
-        case V_DIGITAL:  return TR("Digitale", "Digital");
-        default:         return TR("Impostazioni", "Settings");
+        case V_BULLSEYE: return TR5("Mira", "Bullseye", "Mira", "Mire", "Zielscheibe");
+        case V_TUBE_H:   return TR5("Tubo", "Tube", "Tubo", "Tube", "Roehr");
+        case V_TUBE_V:   return TR5("Piombo", "Plumb", "Plomada", "Aplomb", "Lot");
+        case V_DIGITAL:  return TR5("Digitale", "Digital", "Digital", "Numerique", "Digital");
+        default:         return TR5("Impostazioni", "Settings", "Configurac.", "Parametres", "Einstellung");
     }
 }
 
@@ -164,7 +164,7 @@ static void view_bullseye(int top, int h, int y0)
     d.setCursor(nx, vcy + 16); d.print(bx2);
     snprintf(bx2, sizeof(bx2), "Y %+5.1f", (double)(asinf(fminf(fmaxf(ay, -1), 1)) * RAD2DEG));
     d.setCursor(nx, vcy + 28); d.print(bx2);
-    if (level) { d.setTextColor(C_GREEN, BG); d.setCursor(nx, vcy + 42); d.print(TR("IN BOLLA", "LEVEL")); }
+    if (level) { d.setTextColor(C_GREEN, BG); d.setCursor(nx, vcy + 42); d.print(TR5("IN BOLLA", "LEVEL", "NIVELADO", "A NIVEAU", "EBEN")); }
 }
 
 // a horizontal/vertical capillary vial with a bubble driven by `t` in [-1..1] (0 = centred)
@@ -227,9 +227,9 @@ static void view_digital(int top, int h, int y0)
     bool level = tot < s_cfg.tol;
     int bottom = top + h, third = (bottom - y0) / 3;
     d.setTextSize(1); d.setTextColor(MUTED, BG);
-    d.setCursor(8, y0 + 4);  d.print(TR("X (lungo)", "X (long)"));
-    d.setCursor(8, y0 + third + 2); d.print(TR("Y (corto)", "Y (short)"));
-    d.setCursor(8, y0 + 2 * third); d.print(TR("TOTALE", "TOTAL"));
+    d.setCursor(8, y0 + 4);  d.print(TR5("X (lungo)", "X (long)", "X (largo)", "X (long)", "X (lang)"));
+    d.setCursor(8, y0 + third + 2); d.print(TR5("Y (corto)", "Y (short)", "Y (corto)", "Y (court)", "Y (kurz)"));
+    d.setCursor(8, y0 + 2 * third); d.print(TR5("TOTALE", "TOTAL", "TOTAL", "TOTAL", "GESAMT"));
     big_num(96, y0 + 2,            fabsf(aX), fabsf(aX) < s_cfg.tol ? C_GREEN : FG, W - 100);
     big_num(96, y0 + third,        fabsf(aY), fabsf(aY) < s_cfg.tol ? C_GREEN : FG, W - 100);
     big_num(96, y0 + 2 * third - 2, tot,      level ? C_GREEN : C_BLUE, W - 100);
@@ -241,11 +241,11 @@ static void view_digital(int top, int h, int y0)
 static const char *set_label(int i, void *)
 {
     switch (i) {
-        case 0: return TR("Unita", "Units");
-        case 1: return TR("Inverti X", "Flip X");
-        case 2: return TR("Inverti Y", "Flip Y");
-        case 3: return TR("Tolleranza", "Tolerance");
-        case 4: return TR("Azzera calib.", "Reset zero");
+        case 0: return TR5("Unita", "Units", "Unidad", "Unites", "Einheit");
+        case 1: return TR5("Inverti X", "Flip X", "Invertir X", "Inverser X", "X umkeh.");
+        case 2: return TR5("Inverti Y", "Flip Y", "Invertir Y", "Inverser Y", "Y umkeh.");
+        case 3: return TR5("Tolleranza", "Tolerance", "Tolerancia", "Tolerance", "Toleranz");
+        case 4: return TR5("Azzera calib.", "Reset zero", "Restab. cero", "Reinit. zero", "Kal. zurck.");
     }
     return "";
 }
@@ -253,11 +253,11 @@ static const char *set_right(int i, void *)
 {
     static char b[12];
     switch (i) {
-        case 0: return s_cfg.units == 1 ? "%" : TR("gradi", "deg");
-        case 1: return s_cfg.flipx ? TR("si", "yes") : "no";
-        case 2: return s_cfg.flipy ? TR("si", "yes") : "no";
+        case 0: return s_cfg.units == 1 ? "%" : TR5("gradi", "deg", "grados", "deg", "grad");
+        case 1: return s_cfg.flipx ? TR5("si", "yes", "si", "oui", "ja") : "no";
+        case 2: return s_cfg.flipy ? TR5("si", "yes", "si", "oui", "ja") : "no";
         case 3: snprintf(b, sizeof b, "%.1f", (double)s_cfg.tol); return b;
-        case 4: return TR("INVIO", "ENTER");
+        case 4: return TR5("INVIO", "ENTER", "INTRO", "ENTREE", "EINGABE");
     }
     return "";
 }
@@ -280,12 +280,12 @@ static void draw(void)
     char rt[24]; snprintf(rt, sizeof(rt), "%s%s%s", view_name(s_view), s_hold ? " *" : "",
                           nucleo_app_is_buffered() ? "" : " !D");
     unsigned short acc = !present ? C_YELLOW : s_hold ? C_PURPLE : level ? C_GREEN : C_BLUE;
-    int y0 = app_ui_title(TR("Livella", "Level"), acc, rt);
+    int y0 = app_ui_title(TR5("Livella", "Level", "Nivel", "Niveau", "Libelle"), acc, rt);
 
     if (!present) {
         d.setTextSize(2); d.setTextColor(C_YELLOW, BG);
-        d.setCursor(12, y0 + 14); d.print(TR("Sensore IMU", "IMU sensor"));
-        d.setCursor(12, y0 + 36); d.print(TR("non rilevato", "not detected"));
+        d.setCursor(12, y0 + 14); d.print(TR5("Sensore IMU", "IMU sensor", "Sensor IMU", "Capteur IMU", "IMU-Sensor"));
+        d.setCursor(12, y0 + 36); d.print(TR5("non rilevato", "not detected", "no detectado", "non detectable", "nicht erkannt"));
         d.setTextSize(1); d.setTextColor(DIM, BG);
         d.setCursor(12, y0 + 60); d.print(nucleo_imu_debug());
         return;
@@ -362,8 +362,11 @@ static void enter(void)
     s_hold = false;
     s_qx = s_qy = s_qd = INT32_MIN; s_frame_us = 0;   // force the first live frame after a (re)open
     nucleo_imu_level(&s_lx, &s_ly, &s_deg);
-    nucleo_app_set_hint(TR("tab vista   g azzera   f blocca   </> sfoglia   esc esci",
-                           "tab view   g zero   f hold   </> browse   esc back"));
+    nucleo_app_set_hint(TR5("tab vista   g azzera   f blocca   </> sfoglia   esc esci",
+                           "tab view   g zero   f hold   </> browse   esc back",
+                           "tab v   g cero  f blq  </> nav esc sal",
+                           "tab vue g zero f bloq </> nav esc sort",
+                           "tab ans g null f halt </> nav esc zur"));
     nucleo_app_set_tab_handler(tab);
     nucleo_app_set_back_handler(back);
     nucleo_app_set_poll_handler(poll);

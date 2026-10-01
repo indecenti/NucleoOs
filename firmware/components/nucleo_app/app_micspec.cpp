@@ -29,10 +29,10 @@ enum { M_BARS = 0, M_FALL, M_SCOPE, M_TUNE, N_MODES };
 static const char *mode_name(int i)
 {
     switch (i) {
-        case M_BARS:  return TR("BARRE", "BARS");
-        case M_FALL:  return TR("CASCATA", "WATERFALL");
-        case M_SCOPE: return TR("ONDA", "WAVE");
-        default:      return TR("ACCORDATORE", "TUNER");
+        case M_BARS:  return TR5("BARRE", "BARS", "BARRAS", "BARRES", "STAEBE");
+        case M_FALL:  return TR5("CASCATA", "WATERFALL", "CASCADA", "CASCADE", "WASSERFALL");
+        case M_SCOPE: return TR5("ONDA", "WAVE", "ONDA", "ONDE", "WELLE");
+        default:      return TR5("ACCORDATORE", "TUNER", "AFINADOR", "ACCORDEUR", "STIMMER");
     }
 }
 
@@ -282,7 +282,7 @@ static void draw_tuner(void)
 {
     if (s_tnote < 0) {                                          // nothing held: clear prompt, big enough to read
         d.setTextSize(2); d.setTextColor(MUTED, BG);
-        const char *p = TR("Suona una nota", "Play a note");
+        const char *p = TR5("Suona una nota", "Play a note", "Toca una nota", "Jouer une note", "Spiel Note");
         d.setCursor((W - (int)strlen(p) * 12) / 2, MAIN_T + 22); d.print(p);
         return;
     }
@@ -296,7 +296,7 @@ static void draw_tuner(void)
     if (intune && !held) {
         d.drawRect(2, MAIN_T - 2, W - 4, 50, C_GREEN);
         d.setTextSize(1); d.setTextColor(C_GREEN, BG);
-        d.setCursor(W - 58, MAIN_T - 1); d.print(TR("INTONATO", "IN TUNE"));
+        d.setCursor(W - 58, MAIN_T - 1); d.print(TR5("INTONATO", "IN TUNE", "AFINADO", "JUSTE", "REIN"));
     }
 
     // big note letter (left) + octave; dimmed while it's only the held (no live sound) note
@@ -310,7 +310,7 @@ static void draw_tuner(void)
     d.setCursor(nx + lw + 3, MAIN_T + 26); d.print(oc);
 
     // actionable verdict (right): flat or sharp? — large + colour-coded, with a dead-band around centre
-    const char *dir = intune ? "OK" : (s_tcents > 4.0f) ? TR("CALA", "DOWN") : (s_tcents < -4.0f) ? TR("ALZA", "UP") : "OK";
+    const char *dir = intune ? "OK" : (s_tcents > 4.0f) ? TR5("CALA", "DOWN", "BAJA", "BAISSE", "TIEFER") : (s_tcents < -4.0f) ? TR5("ALZA", "UP", "SUBE", "HAUSSE", "HOEHER") : "OK";
     d.setTextSize(3); d.setTextColor(col, BG);
     d.setCursor(W - 6 - (int)strlen(dir) * 18, MAIN_T + 12); d.print(dir);
 
@@ -327,7 +327,7 @@ static void draw_tuner(void)
 
     // numeric readout (bottom row, clear of the pager dots)
     char ln[40];
-    snprintf(ln, sizeof ln, TR("%+d cent   %d.%02dHz   chiar. %d%%", "%+d cent   %d.%02dHz   clar. %d%%"),
+    snprintf(ln, sizeof ln, TR5("%+d cent   %d.%02dHz   chiar. %d%%", "%+d cent   %d.%02dHz   clar. %d%%", "%+d cent   %d.%02dHz   clar. %d%%", "%+d cent   %d.%02dHz   clar. %d%%", "%+d cent   %d.%02dHz   klar. %d%%"),
              cents, s_snap->pitch_cHz / 100, s_snap->pitch_cHz % 100, s_snap->clarity);
     d.setTextSize(1); d.setTextColor(MUTED, BG);
     d.setCursor((W - (int)strlen(ln) * 6) / 2, gy + 4); d.print(ln);
@@ -430,13 +430,13 @@ static void draw(void)
     if (!nucleo_micspec_running()) {
         draw_hud();
         if (s_retry_until) {                          // still inside the retry window: not an error yet
-            draw_splash(TR("Avvio microfono...", "Starting mic..."), MUTED);
+            draw_splash(TR5("Avvio microfono...", "Starting mic...", "Iniciando mic...", "Demarrage mic...", "Starte Mic..."), MUTED);
             return;
         }
         int e = nucleo_micspec_last_error();
-        if (e == MS_ERR_BUSY) draw_splash(TR("Mic occupato", "Mic busy"), C_YELLOW);
-        else if (e == MS_ERR_OOM) draw_splash(TR("Memoria insuff.", "Out of memory"), C_RED);
-        else draw_splash(TR("Mic non avviato", "Mic not started"), C_RED);
+        if (e == MS_ERR_BUSY) draw_splash(TR5("Mic occupato", "Mic busy", "Mic ocupado", "Mic occupe", "Mic besetzt"), C_YELLOW);
+        else if (e == MS_ERR_OOM) draw_splash(TR5("Memoria insuff.", "Out of memory", "Memoria insuf.", "Mem insuff.", "Speicher voll"), C_RED);
+        else draw_splash(TR5("Mic non avviato", "Mic not started", "Mic no iniciado", "Mic non demarre", "Mic nicht gestart"), C_RED);
         return;
     }
 
@@ -455,7 +455,7 @@ static void draw(void)
 
 static void set_hint(void)
 {
-    nucleo_app_set_hint(TR("L/R modo   TAB tema   U/D sens   GO ferma", "L/R mode   TAB theme   U/D sens   GO freeze"));
+    nucleo_app_set_hint(TR5("L/R modo   TAB tema   U/D sens   GO ferma", "L/R mode   TAB theme   U/D sens   GO freeze", "L/R md   TAB tema   U/D sns   GO congel", "L/R mode   TAB theme   U/D sns   GO gl", "L/R Modus   TAB Tema   U/D Emf   GO ein"));
 }
 
 static void on_key(int key, char ch)
