@@ -500,74 +500,43 @@ static void wait_for_ip(void)
     ESP_LOGW(TAG, "STA: no IP (connection failed)");
 }
 
-// Connect as STA with explicit credentials, then wait for an IP.
-// Invariant I2 (wifi_policy.h): if the fallback hotspot is up, the attempt runs in APSTA so the
-// AP keeps beaconing through it — the old unconditional WIFI_MODE_STA took the hotspot DOWN for
-// up to ~8 s per candidate, which a phone mid-join reported as "couldn't connect / authenticate".
-// On success the AP is deliberately LEFT up: the supervisor drops it (WP_ACT_DROP_AP) only once
-// it has been idle past the grace window, so a web-UI user who drove this join from the hotspot
-// keeps their session alive instead of being kicked before the response even flushes.
-// ch/bssid (optional, from our own scan): join THAT access point directly. The all-channel scan below exists
-// to land on the strongest AP of a multi-AP home — but connect_best_known() has just scanned every channel
-// and knows the strongest one, so the driver scanning them all AGAIN only cost ~2 s per boot (measured on the
-// ADV: IP at 11.9 s). With a hint the driver probes one channel and associates with that exact BSSID.
-static void connect_sta_at(const char *ssid, const char *pass, uint8_t ch, const uint8_t *bssid);
-static void connect_sta(const char *ssid, const char *pass) { connect_sta_at(ssid, pass, 0, NULL); }
-static void connect_sta_at(const char *ssid, const char *pass, uint8_t ch, const uint8_t *bssid)
+// ====================================================================================================
+//  The ONE station-join primitive. Every STA connection — first-boot wizard, the Settings Wi-Fi app,
+//  the background supervisor, the legacy NVS migration — goes through connect_sta(). There is no other
+//  place that sets the STA config, picks the join mode, or calls esp_wifi_connect() for a normal link.
+//  Callers hold s_wifi_op_lock (one attempt at a time).
+// ----------------------------------------------------------------------------------------------------
+//  Mode (the one rule, from the chip having a SINGLE radio):
+//   - EXPLICIT join (s_join_explicit: the user is at the device — wizard or Settings) -> PURE STA.
+//     In AP+STA the hotspot and the link must share a channel; with the hotspot on channel A and the
+//     router on channel B the association succeeds but the 4-way-handshake EAPOL frames are lost on the
+//     wrong channel -> WIFI_REASON_HANDSHAKE_TIMEOUT (15) = "connecting… then asks for the password
+//     again". Pure STA removes the second channel, so the handshake completes. No web client on the
+//     hotspot to protect here.
+//   - BACKGROUND join (supervisor) -> APSTA when the AP iface is up (invariant I2, wifi_policy.h), so a
+//     web user driving the device from the hotspot is not kicked mid-join; pure STA otherwise.
+//  Config: all-channel scan sorted by signal (the driver's FAST_SCAN stops at the first — often weakest
+//  — beacon, the classic "connects some boots, not others"); PMF capable (WPA2/WPA3-mixed APs); no RSSI/
+//  auth floor; failure_retry_cnt so the driver retries the association itself. Creds persist in NVS, so
+//  the driver's own post-drop auto-reconnect reuses them.
+static void connect_sta(const char *ssid, const char *pass)
 {
     s_want_sta = true;                  // keep this link up (auto-reconnect on any drop)
-    // MODE FIRST, then the credentials. esp_wifi_set_config(WIFI_IF_STA) is documented as callable
-    // "only when specified interface is enabled, otherwise API fail" — in AP-only mode it returns
-    // ESP_ERR_WIFI_IF and the SSID/password are silently DROPPED. That state is reached on the normal
-    // path, and it is self-sustaining: a failed join cycle parks the radio in WIFI_MODE_AP to save
-    // battery (see WP_ACT_TRY_JOIN), nucleo_setup_scan() restores AP-only when it entered from it,
-    // and the next attempt then writes its config into a interface that does not exist. The join
-    // proceeds with whatever stale/empty config is left in NVS -> WIFI_REASON_NO_AP_FOUND (201) ->
-    // another failed cycle. Observed as an endless "set_config -> UNKNOWN ERROR / reason=201" loop
-    // that no correct password could break. Enabling STA first makes the write land.
-    // ONE radio on this chip: in APSTA the hotspot and the STA link must share a channel. If the hotspot is
-    // beaconing on channel A and the router is on channel B, association succeeds but the 4-way-handshake
-    // EAPOL frames are lost on the wrong channel -> WIFI_REASON_HANDSHAKE_TIMEOUT (15). That is THE cause of
-    // "connecting... then asks for the password again". An EXPLICIT user join (s_join_explicit: the first-boot
-    // wizard, or the Settings Wi-Fi app) therefore runs in PURE STA — there is no web client on the hotspot to
-    // keep alive, the user is at the device — so there is no second channel to conflict with and the handshake
-    // completes. The background supervisor still joins in APSTA (I2) to keep a web user's hotspot alive.
+    // MODE FIRST, then the credentials: esp_wifi_set_config(WIFI_IF_STA) fails with ESP_ERR_WIFI_IF in
+    // AP-only mode and silently drops the SSID/password, which then joins with stale NVS config ->
+    // reason 201 forever. Enabling the STA iface first makes the write land.
     wifi_mode_t cur = WIFI_MODE_NULL;
     esp_wifi_get_mode(&cur);
-    wifi_mode_t jm = s_join_explicit ? WIFI_MODE_STA : (wifi_mode_t)wp_join_mode((wp_mode_t)cur);
-    WIFI_TRY(esp_wifi_set_mode(jm));
+    WIFI_TRY(esp_wifi_set_mode(s_join_explicit ? WIFI_MODE_STA : (wifi_mode_t)wp_join_mode((wp_mode_t)cur)));
     wifi_config_t wc = {0};
     strncpy((char *)wc.sta.ssid, ssid, sizeof(wc.sta.ssid) - 1);
     strncpy((char *)wc.sta.password, pass, sizeof(wc.sta.password) - 1);
-    // Reliability across multi-AP homes (mesh / range-extender / the same SSID on the 2.4 GHz and the
-    // 5 GHz radios): the driver DEFAULTS to WIFI_FAST_SCAN, which stops at the FIRST beacon it hears for
-    // the SSID — often a weak or distant node, so the association flaps or times out. That is the classic
-    // "connects some boots, not others" failure. Scan every channel and pick the STRONGEST match instead
-    // (the fix WiFiManager / ESPHome / Tasmota all ship). Because creds persist in NVS (WIFI_STORAGE_FLASH),
-    // the driver's OWN auto-reconnect after a drop (on_wifi_event -> esp_wifi_connect) reuses this config too.
     wc.sta.scan_method        = WIFI_ALL_CHANNEL_SCAN;
-    wc.sta.sort_method        = WIFI_CONNECT_AP_BY_SIGNAL;   // strongest RSSI first
-    wc.sta.threshold.rssi     = -127;                        // never filter a reachable AP out by weak signal
-    wc.sta.threshold.authmode = WIFI_AUTH_OPEN;              // accept whatever security the AP offers (no min filter)
-    wc.sta.pmf_cfg.capable    = true;                        // 802.11w PMF: needed to associate with WPA2/WPA3-mixed APs
-    wc.sta.failure_retry_cnt  = 3;                           // let the driver retry the association before it gives up
-    // Background (APSTA) join only: the hotspot and the link share the one radio, so move the hotspot to the
-    // router's channel before associating (no channel switch mid-handshake). An explicit join is pure STA, so
-    // there is no AP to realign — the whole conflict is gone.
-    if (ch && jm != WIFI_MODE_STA && wp_ap_iface_up((wp_mode_t)jm)) {
-        wifi_config_t apc = {0};
-        if (esp_wifi_get_config(WIFI_IF_AP, &apc) == ESP_OK && apc.ap.channel != ch) {
-            apc.ap.channel = ch;
-            WIFI_TRY(esp_wifi_set_config(WIFI_IF_AP, &apc));
-            ESP_LOGW(TAG, "hotspot moved to ch %d (the router's) before joining", ch);
-        }
-    }
-    if (ch && bssid) {                                       // our scan already picked the strongest AP: go straight to it
-        wc.sta.channel   = ch;
-        wc.sta.bssid_set = true;
-        memcpy(wc.sta.bssid, bssid, 6);
-        wc.sta.scan_method = WIFI_FAST_SCAN;                 // with a channel set, the driver probes only that channel
-    }
+    wc.sta.sort_method        = WIFI_CONNECT_AP_BY_SIGNAL;
+    wc.sta.threshold.rssi     = -127;
+    wc.sta.threshold.authmode = WIFI_AUTH_OPEN;
+    wc.sta.pmf_cfg.capable    = true;
+    wc.sta.failure_retry_cnt  = 3;
     WIFI_TRY(esp_wifi_set_config(WIFI_IF_STA, &wc));
     esp_wifi_connect();
     wait_for_ip();
@@ -752,17 +721,7 @@ static bool connect_best_known(void)
         if (wp_ap_busy(&s_wp, ap_sta_count(), wp_now())) { ESP_LOGI(TAG, "join cycle paused: hotspot in use"); break; }
         int i = order[a];
         ESP_LOGW(TAG, "auto-join '%s' (prio %u, %d dBm)", s_nets[i].ssid, s_nets[i].prio, rssi[a]);
-        const wscan_t *hit = NULL;                              // the scan entry = strongest AP for this SSID
-        for (int j = 0; j < s_wscan_n; j++) if (!strcmp(s_wscan[j].ssid, s_nets[i].ssid)) { hit = &s_wscan[j]; break; }
-        if (hit && hit->ch) {
-            connect_sta_at(s_nets[i].ssid, s_nets[i].pass, hit->ch, hit->bssid);
-            if (!s_ip[0] && !wp_ap_busy(&s_wp, ap_sta_count(), wp_now())) {
-                ESP_LOGW(TAG, "direct join to ch %u failed — retrying with a full scan", hit->ch);
-                connect_sta(s_nets[i].ssid, s_nets[i].pass);  // exactly the previous behaviour
-            }
-        } else {
-            connect_sta(s_nets[i].ssid, s_nets[i].pass);
-        }
+        connect_sta(s_nets[i].ssid, s_nets[i].pass);           // the one join primitive (all-channel, by signal)
         if (s_ip[0]) { strncpy(s_ssid, s_nets[i].ssid, sizeof(s_ssid)-1); s_ssid[sizeof(s_ssid)-1] = 0;
                        strncpy(s_mode, "sta", sizeof(s_mode)-1); save_config(); ok = true; }
     }
@@ -893,7 +852,7 @@ bool nucleo_setup_join(const char *ssid, const char *pass)
     strncpy(s_ssid, ssid, sizeof(s_ssid) - 1); s_ssid[sizeof(s_ssid) - 1] = 0;
     wifi_country_apply();                      // the language may have changed since boot (first-boot wizard)
     s_last_reason = 0; s_auth_fails = 0; s_assoc = false; s_join_explicit = true;
-    // One clean path: pure STA (connect_sta_at via connect_sta sets the mode from s_join_explicit) with an
+    // One clean path: connect_sta() picks pure STA from s_join_explicit and runs an
     // all-channel scan by signal, so the driver itself lands on the strongest AP for this SSID. No hotspot
     // beaconing to share the channel with, so no handshake timeout, and no channel/BSSID pinning to get wrong.
     int si = -1; for (int i = 0; i < s_wscan_n; i++) if (!strcmp(s_wscan[i].ssid, ssid)) { si = i; break; }
