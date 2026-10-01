@@ -145,7 +145,7 @@ extern "C" void nucleo_ui_init(void)
 
 // Draw the header (title + hairline rule) on a canvas. The battery icon was removed: the ADC
 // reading was unreliable on this unit, so it was misleading.
-static void header(M5Canvas *canvas, const char *title)
+static void header(LovyanGFX *canvas, const char *title)
 {
     nucleo_theme_draw_bg(canvas, W, H);
     canvas->setTextColor(ACC, BG);
@@ -157,7 +157,7 @@ static void header(M5Canvas *canvas, const char *title)
     canvas->setTextSize(1);
 }
 
-static void hint(M5Canvas *canvas, const char *h)
+static void hint(LovyanGFX *canvas, const char *h)
 {
     canvas->setTextColor(MUT, BG);
     canvas->setTextSize(1);
@@ -170,7 +170,7 @@ static void hint(M5Canvas *canvas, const char *h)
 // to read on the 240x135 panel; any line too wide for size 2 (URLs, long technical strings) auto-drops
 // to size 1 so it is never clipped. Dense screens (>4 lines) stay compact at size 1 to avoid overflow.
 // An empty string is a vertical spacer. Caller sets the text colour; header()/hint() own the chrome.
-static void draw_body(M5Canvas &canvas, const char *const *lines, int n)
+static void draw_body(LovyanGFX &canvas, const char *const *lines, int n)
 {
     bool big = (n <= 4);
     int y = 32;
@@ -186,40 +186,64 @@ static void draw_body(M5Canvas &canvas, const char *const *lines, int n)
     }
 }
 
+// Where a blocking modal (the first-boot wizard, a message, a menu, a text field) draws. In order: the
+// shared back-buffer (re-acquired if it was dropped), else a private 8-bpp sprite (32 KB — the old 16-bpp
+// one needed ~64 KB, never there once Wi-Fi + httpd are up), else the PANEL itself. The old code drew into
+// a sprite whose createSprite() had FAILED unchecked: every draw was a no-op and the first-boot wizard sat
+// on a BLACK screen waiting for keys (ADV under M5Launcher after a factory reset, 2026-10-01).
+struct ModalSurface {
+    M5Canvas local;
+    LovyanGFX *g;
+    bool sprite;
+    ModalSurface() : local(&d), g(&d), sprite(false)
+    {
+        if (s_screen_alive || nucleo_screen_acquire()) { g = &s_screen; sprite = true; return; }
+        local.setPsram(false);
+        local.setColorDepth(8);
+        if (local.createSprite(W, H)) { g = &local; sprite = true; return; }
+        ESP_LOGW("ui", "modal: no RAM for a back-buffer, drawing direct to the panel");
+    }
+    ~ModalSurface() { if (g == &local) local.deleteSprite(); }
+    // Show the frame. A sprite goes up in one push (and the DMA is waited for: the next frame refills it);
+    // direct frames are already on the panel.
+    void present()
+    {
+        if (!sprite) return;
+        static_cast<M5Canvas *>(g)->pushSprite(0, 0);
+        d.waitDMA();
+    }
+};
+// The modals redraw only when what they show changes (key, cursor blink, marquee step): the old loops
+// re-rendered and pushed the whole 240x135 frame every 15 ms while waiting for a key — battery for nothing,
+// and on the direct path a visible flicker.
+static void modal_idle(void)
+{
+    esp_task_wdt_reset();   // a slow typist/idle dialog must not trip the 8s task WDT (no-op if unwatched)
+    vTaskDelay(pdMS_TO_TICKS(15));
+}
+
 extern "C" void nucleo_ui_message(const char *title, const char *const *lines, int n)
 {
-    M5Canvas local(&d);
-    M5Canvas *shared = s_screen_alive ? &s_screen : nullptr;   // reuse the launcher buffer only if ALREADY up
-    if (!shared) { local.setPsram(false); local.createSprite(W, H); }   // else our own (DMA-internal), never force 32 KB
-    M5Canvas &canvas = shared ? *shared : local; // a transient modal never needs a SECOND 32 KB canvas
-    
+    ModalSurface s;
+    header(s.g, title);
+    s.g->setTextColor(FG, BG);
+    draw_body(*s.g, lines, n);
+    hint(s.g, "[enter] continue");
+    s.present();
     for (;;) {
-        header(&canvas, title);
-        canvas.setTextColor(FG, BG);
-        draw_body(canvas, lines, n);
-        hint(&canvas, "[enter] continue");
-        canvas.pushSprite(0, 0);
-
         nucleo_key_t k = nucleo_kbd_read();
         if (k.key == NK_ENTER) break;
-        esp_task_wdt_reset();   // a slow typist/idle dialog must not trip the 8s task WDT (no-op if unwatched)
-        vTaskDelay(pdMS_TO_TICKS(15));
+        modal_idle();
     }
-    if (&canvas == &local) local.deleteSprite();   // free only what WE allocated; the shared buffer persists
 }
 
 extern "C" void nucleo_ui_home(const char *title, const char *const *lines, int n)
 {
-    // Home is usually static, but we'll draw it once via canvas to avoid flicker
-    M5Canvas local(&d);
-    M5Canvas *shared = s_screen_alive ? &s_screen : nullptr;   // reuse the launcher buffer only if ALREADY up
-    if (!shared) { local.setPsram(false); local.createSprite(W, H); }   // else our own (DMA-internal), never force 32 KB
-    M5Canvas &canvas = shared ? *shared : local; // a transient modal never needs a SECOND 32 KB canvas
-    header(&canvas, title);
-    canvas.setTextColor(FG, BG);
-    draw_body(canvas, lines, n);
-    canvas.pushSprite(0, 0);
-    if (&canvas == &local) local.deleteSprite();   // free only what WE allocated; the shared buffer persists
+    ModalSurface s;
+    header(s.g, title);
+    s.g->setTextColor(FG, BG);
+    draw_body(*s.g, lines, n);
+    s.present();
 }
 
 // ---- animated boot splash ----------------------------------------------------------------
@@ -432,18 +456,33 @@ extern "C" int nucleo_ui_menu(const char *title, const char *const *items, int n
     int sel = 0;
     float smooth_y = 0.0f;
     uint32_t frame = 0;
-    
-    M5Canvas local(&d);
-    M5Canvas *shared = s_screen_alive ? &s_screen : nullptr;   // reuse the launcher buffer only if ALREADY up
-    if (!shared) { local.setPsram(false); local.createSprite(W, H); }   // else our own (DMA-internal), never force 32 KB
-    M5Canvas &canvas = shared ? *shared : local; // a transient modal never needs a SECOND 32 KB canvas
-    
+    int last_y = -1, last_sel = -1, last_off = -1;
+
+    ModalSurface s;
+    LovyanGFX &canvas = *s.g;
+    // On the direct path the list snaps instead of easing: every eased frame would repaint the whole
+    // panel in place (flicker); a back-buffer can afford the glide.
+    const bool ease = s.sprite;
+
     for (;;) {
-        header(&canvas, title);
-        
         float target_y = sel * 24.0f;
-        smooth_y += (target_y - smooth_y) * 0.3f;
-        
+        smooth_y = ease ? smooth_y + (target_y - smooth_y) * 0.3f : target_y;
+        if (ease && fabsf(target_y - smooth_y) < 0.5f) smooth_y = target_y;
+        int tw_sel = (sel >= 0 && sel < n) ? (canvas.setTextSize(2), (int)canvas.textWidth(items[sel])) : 0;
+        int off = tw_sel > W - 20 ? (int)((frame / 2) % (uint32_t)(tw_sel + 40)) : 0;   // marquee step of a long item
+        if ((int)smooth_y == last_y && sel == last_sel && off == last_off) {         // nothing visible changed
+            nucleo_key_t k = nucleo_kbd_read();
+            if (k.key == NK_UP) { sel = (sel + n - 1) % n; frame = 0; }
+            else if (k.key == NK_DOWN) { sel = (sel + 1) % n; frame = 0; }
+            else if (k.key == NK_ENTER) return sel;
+            else if (k.key == NK_BACK) return -1;
+            frame++;
+            modal_idle();
+            continue;
+        }
+        last_y = (int)smooth_y; last_sel = sel; last_off = off;
+        header(&canvas, title);
+
         int base_y = 38;
         
         for (int i = 0; i < n; i++) {
@@ -478,29 +517,38 @@ extern "C" int nucleo_ui_menu(const char *title, const char *const *items, int n
         }
         
         hint(&canvas, "[;/.] move  [enter] ok  [`] back");
-        canvas.pushSprite(0, 0);
-        
+        s.present();
+
         nucleo_key_t k = nucleo_kbd_read();
         if (k.key == NK_UP) { sel = (sel + n - 1) % n; frame = 0; }
         else if (k.key == NK_DOWN) { sel = (sel + 1) % n; frame = 0; }
-        else if (k.key == NK_ENTER) { if (&canvas == &local) local.deleteSprite(); return sel; }
-        else if (k.key == NK_BACK) { if (&canvas == &local) local.deleteSprite(); return -1; }
-        
+        else if (k.key == NK_ENTER) return sel;
+        else if (k.key == NK_BACK) return -1;
+
         frame++;
-        esp_task_wdt_reset();   // a slow typist/idle dialog must not trip the 8s task WDT (no-op if unwatched)
-        vTaskDelay(pdMS_TO_TICKS(15));
+        modal_idle();
     }
 }
 
 extern "C" void nucleo_ui_input(const char *title, char *buf, int len, int masked)
 {
-    M5Canvas local(&d);
-    M5Canvas *shared = s_screen_alive ? &s_screen : nullptr;   // reuse the launcher buffer only if ALREADY up
-    if (!shared) { local.setPsram(false); local.createSprite(W, H); }   // else our own (DMA-internal), never force 32 KB
-    M5Canvas &canvas = shared ? *shared : local; // a transient modal never needs a SECOND 32 KB canvas
+    ModalSurface s;
+    LovyanGFX &canvas = *s.g;
     int pos = (int)strlen(buf);
-    
+    int last_pos = -1; int last_blink = -1; uint32_t last_sum = 0;
+
     for (;;) {
+        int blink = (int)((esp_timer_get_time() / 500000) % 2);
+        uint32_t sum = 2166136261u; for (int i = 0; i < pos; i++) sum = (sum ^ (uint8_t)buf[i]) * 16777619u;
+        if (pos == last_pos && blink == last_blink && sum == last_sum) {   // nothing visible changed
+            nucleo_key_t k = nucleo_kbd_read();
+            if (k.key == NK_ENTER || k.key == NK_BACK) { buf[pos] = '\0'; break; }
+            else if (k.key == NK_DEL) { if (pos > 0) buf[--pos] = '\0'; }
+            else if (k.ch >= 32 && pos < len - 1) { buf[pos++] = k.ch; buf[pos] = '\0'; }
+            modal_idle();
+            continue;
+        }
+        last_pos = pos; last_blink = blink; last_sum = sum;
         header(&canvas, title);
         canvas.setTextColor(FG, BG); 
         canvas.setTextSize(2);
@@ -511,21 +559,19 @@ extern "C" void nucleo_ui_input(const char *title, char *buf, int len, int maske
             canvas.print(buf);
         }
         // Blinking cursor
-        if ((esp_timer_get_time() / 500000) % 2 == 0) {
+        if (blink == 0) {
             canvas.print("_");
         }
-        
+
         canvas.setTextSize(1);
         hint(&canvas, "[enter] ok  [del] erase  [`] cancel");
-        canvas.pushSprite(0, 0);
-        
+        s.present();
+
         nucleo_key_t k = nucleo_kbd_read();
         if (k.key == NK_ENTER || k.key == NK_BACK) { buf[pos] = '\0'; break; }
         else if (k.key == NK_DEL) { if (pos > 0) buf[--pos] = '\0'; }
         else if (k.ch >= 32 && pos < len - 1) { buf[pos++] = k.ch; buf[pos] = '\0'; }
-        
-        esp_task_wdt_reset();   // a slow typist/idle dialog must not trip the 8s task WDT (no-op if unwatched)
-        vTaskDelay(pdMS_TO_TICKS(15));
+
+        modal_idle();
     }
-    if (&canvas == &local) local.deleteSprite();   // free only what WE allocated; the shared buffer persists
 }
