@@ -123,7 +123,16 @@ e.g. a Settings chip duplicated below itself. The run loop now forces a full bli
 frame after direct frames, and bumps `nucleo_app_repaint_gen()` on the first direct frame after a
 buffered one, so incremental direct painters redo one full paint.
 
+**A reused sprite must wait for its DMA (fixed 2026-10-01).** `pushSprite` is asynchronous inside an
+open transaction (the direct path runs `on_draw` between `d.startWrite()` / `d.endWrite()`): M5GFX
+DMAs straight out of any sprite in internal RAM — always, on this PSRAM-less chip — and returns while
+the bytes are still on the wire. Refilling the SAME sprite right away (the next strip of a box, the next
+box) corrupts the transfer: on the ADV, Settings showed half-drawn rows and a focus chip whose label
+vanished. Call `panel->waitDMA()` after the push before touching the buffer again. The host renderer
+(`npm run ui:shots`) has no DMA and cannot show this class of bug — reason from the code.
+
 ## Checklist when adding/touching a drawing routine
+- Pushing the same sprite again within one frame (strips, tiles)? `waitDMA()` before refilling it.
 - Does it run on a repeating cadence? If yes, it must use one of the techniques above.
 - Is there a `fillScreen`/large `fillRect` on that cadence? If yes, that's the bug — move it
   to a one-time static pass, or switch to a sprite.
