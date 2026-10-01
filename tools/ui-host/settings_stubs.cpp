@@ -47,6 +47,9 @@ int         nucleo_setup_scan_channel(int i) { return i >= 0 && i < SCAN_N ? SCA
 int         nucleo_setup_scan_secure(int i) { return i >= 0 && i < SCAN_N ? SCAN[i].secure : 0; }
 const char *nucleo_setup_scan_auth_label(int i) { return i >= 0 && i < SCAN_N ? SCAN[i].auth : ""; }
 bool        nucleo_setup_join(const char *, const char *) { return true; }
+bool        g_host_onboarding = false;                     // scene-controlled: the first-boot network step
+bool        nucleo_setup_onboarding(void) { return g_host_onboarding; }
+bool        nucleo_setup_onboard_finish(void) { g_host_onboarding = false; return false; }
 void        nucleo_setup_forget(void) { s_saved_n = 0; }
 bool        nucleo_setup_factory_reset(void) { s_saved_n = 0; snprintf(s_devname, sizeof s_devname, "nucleo-01"); return true; }
 bool        nucleo_setup_net_is_known(const char *ssid) { for (int i = 0; i < s_saved_n; i++) if (!strcmp(s_saved[i], ssid)) return true; return false; }

@@ -2,6 +2,7 @@
 #pragma once
 #include <stdint.h>
 #include <time.h>
+#include "nucleo_kbd.h"
 struct HostState {
     const char *wifi_mode = "sta";            // "sta" | "ap"
     const char *ssid = "Casa-Rossi";
@@ -16,6 +17,9 @@ struct HostState {
     bool ap_active = false, ap_intended = false, cfg_loaded = true;
     bool canvas_ok = true;                    // false = the 32 KB back-buffer could not be allocated (ADV after Wi-Fi)
     size_t largest_block = 0;                 // > 0: the heap's largest free block, as measured on a busy ADV
+    int  canvas_rows = 135;                   // < 135: the back-buffer fitted to a short block (the ADV at ui-init)
+    const nucleo_key_t *kbd = nullptr;        // scripted keys for the BLOCKING modals (nucleo_ui_menu/input/message)
+    int  kbd_n = 0, kbd_i = 0;
     bool adv = false;
     int64_t now_us = 5000000;                 // esp_timer clock
     time_t wall = 1790678520;                 // 2026-09-29 09:22 UTC (scripted wall clock)

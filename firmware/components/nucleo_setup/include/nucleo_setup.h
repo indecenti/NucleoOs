@@ -60,8 +60,11 @@ int nucleo_setup_channel(void);
 // Draw the post-setup "home" screen (connection + app-download info).
 void nucleo_setup_show_home(void);
 
-// Choose AP or join an existing Wi-Fi (usable anytime, not just first boot).
-void nucleo_setup_choose_network(void);
+// First boot: the wizard (nucleo_setup_run) does the language, then Settings ▸ Nearby networks does the
+// network. onboarding(): that step is still owed this boot. onboard_finish(): it is over — a join already
+// completed the setup, otherwise the hotspot becomes the chosen mode; true = the device is on a Wi-Fi.
+bool nucleo_setup_onboarding(void);
+bool nucleo_setup_onboard_finish(void);
 
 // Register the network setup apps to the native OS launcher
 void nucleo_setup_register_apps(void);

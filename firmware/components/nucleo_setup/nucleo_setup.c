@@ -429,38 +429,6 @@ static void wifi_ensure(void)
     s_wifi_ready = true;
 }
 
-// Scan and copy up to max unique SSIDs. Returns the count.
-static int scan_networks(char out[][33], int max)
-{
-    wifi_ensure();
-    // Scanning needs the STA interface active; we may currently be AP-only, so switch to
-    // APSTA (keeps the AP up) before scanning. In the STA-only posture the mode already is
-    // (and must stay) plain STA — forcing APSTA there would resurrect the AP netif we never made.
-    if (!s_sta_only) esp_wifi_set_mode(WIFI_MODE_APSTA);
-    esp_wifi_scan_stop();
-    esp_err_t err = esp_wifi_scan_start(NULL, true);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Wi-Fi scan failed: %s (0x%x)", esp_err_to_name(err), err);
-        return 0;
-    }
-    uint16_t num = 0;
-    esp_wifi_scan_get_ap_num(&num);
-    if (num > 20) num = 20;
-    wifi_ap_record_t *recs = malloc(20 * sizeof(wifi_ap_record_t));
-    if (!recs) return 0; // out of memory
-    esp_wifi_scan_get_ap_records(&num, recs);
-    int count = 0;
-    for (int i = 0; i < num && count < max; i++) {
-        const char *ssid = (const char *)recs[i].ssid;
-        if (!ssid[0]) continue;
-        bool dup = false;
-        for (int j = 0; j < count; j++) if (!strcmp(out[j], ssid)) { dup = true; break; }
-        if (!dup) { strncpy(out[count], ssid, 32); out[count][32] = '\0'; count++; }
-    }
-    free(recs);
-    return count;
-}
-
 // Wait (up to ~8s) for a DHCP IP on the STA interface. Sets s_ip (empty on failure). Only ever runs
 // in the background supervisor task now, so a slow/absent AP costs the retry loop a backoff tick, not
 // the boot. 8s comfortably covers normal DHCP while keeping rescan+rejoin snappy when a net is gone.
@@ -1039,176 +1007,72 @@ void nucleo_setup_set_ap_pass(const char *p)
     if (!strcmp(s_mode, "ap")) start_ap();
 }
 
-// ---- wizard ----------------------------------------------------------------
+// ---- first-run wizard ----------------------------------------------------------------------------
+// The wizard does only what has no other home: the LANGUAGE (every screen after it, the OS included, is
+// already in the chosen one) and a welcome. The NETWORK step is the Settings app itself — Settings ▸ Nearby
+// networks, opened by the framework right after boot (nucleo_setup_onboarding): the same scan list with
+// signal / lock / security, password editor, join and anti-flicker drawing the user meets later. The old
+// wizard had its own blocking copy of all that: two languages, a list with no signal, a password typed
+// blind behind asterisks, a full-screen repaint on every key (the flicker) — and joins that failed.
 
-// Choose AP or join an existing Wi-Fi (scan/pick/password); sets mode and brings the
-// radio up. Reusable from the first-run wizard AND the home menu (reconfigure anytime).
-void nucleo_setup_choose_network(void)
+// 5-language literal picker for the wizard (ASCII: the on-TFT font has no accented glyphs).
+static const char *W5(const char *it, const char *en, const char *es, const char *fr, const char *de)
 {
-    const char *modes[] = { "Join a Wi-Fi network", "Create an Access Point" };
-    int m = nucleo_ui_menu("Network", modes, 2);
-    if (m < 0) return;                     // back: keep current network
-    if (m == 0) {                          // join an existing network
-        if (s_ip[0] && !strcmp(s_mode, "sta")) {
-            char title[32];
-            snprintf(title, sizeof(title), "Net: %s", s_ssid);
-            const char *warn_opts[] = { "Keep current Wi-Fi", "Disconnect & Scan new" };
-            int w = nucleo_ui_menu(title, warn_opts, 2);
-            if (w != 1) return; // return to launcher
-            esp_wifi_disconnect();
-            s_ip[0] = '\0';
-            vTaskDelay(pdMS_TO_TICKS(100)); // allow stack to process disconnect
-        }
-
-        const char *scan_msg[] = { "Scanning for Wi-Fi", "Please wait..." };
-        nucleo_ui_home("Network", scan_msg, 2);
-        char ssids[20][33];
-        int n = scan_networks(ssids, 20);
-        if (n > 0) {
-            const char *items[20];
-            for (int i = 0; i < n; i++) items[i] = ssids[i];
-            int pick = nucleo_ui_menu("Choose Wi-Fi", items, n);
-            if (pick >= 0) {
-                strncpy(s_ssid, ssids[pick], sizeof(s_ssid) - 1);
-                char pass[65] = {0};
-                nucleo_ui_input("Wi-Fi password", pass, sizeof(pass), 1);
-                const char *wait[] = { "Disabling AP...", "Connecting to Wi-Fi:", s_ssid };
-                nucleo_ui_home("Network", wait, 3);
-                connect_sta(s_ssid, pass);           // remembers the net on success
-                if (s_ip[0]) {                       // connected: got an IP
-                    s_auto = true;
-                    strncpy(s_mode, "sta", sizeof(s_mode) - 1);
-                    save_config();
-                    char u[32]; snprintf(u, sizeof(u), "http://%s/", s_ip);
-                    const char *ok[] = { "Connected!", s_ssid, u };
-                    nucleo_ui_message("Network", ok, 3);
-                    return;
-                }
-                const char *fail[] = { "Could not connect.", "Check the password." };
-                nucleo_ui_message("Network", fail, 2);
-                return; // Return instead of falling through to AP
-            } else {
-                return; // User aborted picking Wi-Fi
-            }
-        } else {
-            const char *none[] = { "No networks found." };
-            nucleo_ui_message("Network", none, 1);
-            return; // Return instead of falling through to AP
-        }
-    }
-    // Switch to Access Point: turn the Wi-Fi client off, bring the AP up, and confirm.
-    const char *sw[] = { "Disabling Wi-Fi...", "Starting Access Point" };
-    nucleo_ui_home("Network", sw, 2);
-    s_auto = false;
-    strncpy(s_mode, "ap", sizeof(s_mode) - 1);
-    start_ap();
-    save_config();
-    char apline[80]; snprintf(apline, sizeof apline, "%s / %s", s_ap.ssid, ap_secure() ? s_ap.pass : "open");
-    const char *apok[] = { "Access Point ready", apline, "http://192.168.4.1/" };
-    nucleo_ui_message("Network", apok, 3);
+    const char *l = nucleo_i18n_lang();
+    if (!l) return en;
+    if (l[0] == 'i' && l[1] == 't') return it;
+    if (l[0] == 'e' && l[1] == 's') return es;
+    if (l[0] == 'f' && l[1] == 'r') return fr;
+    if (l[0] == 'd' && l[1] == 'e') return de;
+    return en;
 }
 
-static void build_info(char *l1, char *l2, char *l3)
-{
-    char base[40];
-    if (!strcmp(s_mode, "sta") && s_ssid[0]) {
-        snprintf(l1, 48, "Wi-Fi: %s", s_ssid);
-        // Prefer the real IP (always works); fall back to mDNS name if unknown.
-        if (s_ip[0]) snprintf(base, sizeof(base), "http://%s", s_ip);
-        else snprintf(base, sizeof(base), "http://%s.local", s_name);
-    } else {
-        snprintf(l1, 48, "AP: %s (%s)", s_ap.ssid, ap_secure() ? s_ap.pass : "open");
-        snprintf(base, sizeof(base), "http://192.168.4.1");
-    }
-    snprintf(l2, 48, "Open: %s/", base);
-    snprintf(l3, 52, "Win app: %s/downloads/", base);
-}
-
-// ---- first-run wizard steps ------------------------------------------------
-
-// Step 1 — LANGUAGE, the very first thing on a fresh device. Applied INSTANTLY (nucleo_i18n_set_en),
-// so every following wizard screen — and the whole OS — is already painted in the chosen language.
-// English is the default (also on back/dismiss), matching the OS-wide English-first default.
+// Step 1 — LANGUAGE, applied instantly. English is the default (also on back), as everywhere in the OS.
 static void wizard_language(void)
 {
-    const char *opts[] = { "English", "Italiano" };
-    int m = nucleo_ui_menu("Language / Lingua", opts, 2);
-    nucleo_i18n_set_en(m != 1);   // index 1 = Italiano; anything else (incl. back) = English
+    static const char *const names[] = { "English", "Italiano", "Espanol", "Francais", "Deutsch" };
+    static const char *const codes[] = { "en", "it", "es", "fr", "de" };
+    int m = nucleo_ui_menu("Language / Lingua", names, 5);
+    nucleo_i18n_set_lang(codes[(m >= 0 && m < 5) ? m : 0]);
 }
 
-// Step 3 — NETWORK, and it is BYPASSABLE. "Connect to Wi-Fi" runs the scan/join; "Skip" (and any
-// join failure / no networks / back) falls through to the Access Point so the device is ALWAYS
-// reachable, then tells the user exactly how to connect (SSID + password + URL).
-static void wizard_network(void)
-{
-    const char *opts[] = { TR("Connetti a una rete Wi-Fi", "Connect to a Wi-Fi network"),
-                           TR("Salta - usa un Access Point", "Skip - use an Access Point") };
-    int m = nucleo_ui_menu(TR("Rete", "Network"), opts, 2);
-    if (m == 0) {
-        const char *scan_msg[] = { TR("Ricerca reti Wi-Fi", "Scanning for Wi-Fi"), TR("Attendere...", "Please wait...") };
-        nucleo_ui_home(TR("Rete", "Network"), scan_msg, 2);
-        char ssids[20][33];
-        int n = scan_networks(ssids, 20);
-        if (n > 0) {
-            const char *items[20];
-            for (int i = 0; i < n; i++) items[i] = ssids[i];
-            int pick = nucleo_ui_menu(TR("Scegli la rete", "Choose Wi-Fi"), items, n);
-            if (pick >= 0) {
-                strncpy(s_ssid, ssids[pick], sizeof(s_ssid) - 1); s_ssid[sizeof(s_ssid) - 1] = 0;
-                char pass[65] = {0};
-                nucleo_ui_input(TR("Password Wi-Fi", "Wi-Fi password"), pass, sizeof(pass), 1);
-                const char *wait[] = { TR("Connessione a:", "Connecting to:"), s_ssid };
-                nucleo_ui_home(TR("Rete", "Network"), wait, 2);
-                connect_sta(s_ssid, pass);                 // remembers the net on success
-                if (s_ip[0]) {
-                    s_auto = true;
-                    strncpy(s_mode, "sta", sizeof(s_mode) - 1);
-                    save_config();
-                    char u[40]; snprintf(u, sizeof u, "http://%s/", s_ip);
-                    const char *ok[] = { TR("Connesso!", "Connected!"), s_ssid, TR("Apri nel browser:", "Open in your browser:"), u };
-                    nucleo_ui_message(TR("Rete", "Network"), ok, 4);
-                    return;                                // STA up — network step done
-                }
-                const char *fail[] = { TR("Connessione fallita.", "Could not connect."), TR("Avvio Access Point.", "Starting Access Point.") };
-                nucleo_ui_message(TR("Rete", "Network"), fail, 2);   // -> fall through to AP
-            }
-            // pick < 0 (back): fall through to AP
-        } else {
-            const char *none[] = { TR("Nessuna rete trovata.", "No networks found."), TR("Avvio Access Point.", "Starting Access Point.") };
-            nucleo_ui_message(TR("Rete", "Network"), none, 2);       // -> fall through to AP
-        }
-    }
-    // Skip, or Wi-Fi not joined: bring the Access Point up and INFORM the user how to reach the device.
-    s_auto = false;
-    strncpy(s_mode, "ap", sizeof(s_mode) - 1);
-    start_ap();                                            // mints the per-device SSID + random password
-    save_config();
-    char ssidline[56]; snprintf(ssidline, sizeof ssidline, "Wi-Fi: %s", s_ap.ssid);
-    char passline[80]; snprintf(passline, sizeof passline, "%s %s", TR("Password:", "Password:"), ap_secure() ? s_ap.pass : TR("(aperta)", "(open)"));
-    const char *info[] = { TR("Collega PC/telefono al Wi-Fi:", "Connect your PC/phone to Wi-Fi:"), ssidline, passline, "http://192.168.4.1/" };
-    nucleo_ui_message(TR("Access Point attivo", "Access Point ready"), info, 4);
-}
+static bool s_onboarding = false;   // this boot: the wizard did the language, Settings does the network
 
 void nucleo_setup_run(void)
 {
-    wizard_language();                                     // step 1: language first, applied live
+    wizard_language();
+    const char *welcome[] = {
+        W5("Benvenuto in NucleoOS.", "Welcome to NucleoOS.", "Bienvenido a NucleoOS.", "Bienvenue dans NucleoOS.", "Willkommen bei NucleoOS."), "",
+        W5("Ora scegli la rete Wi-Fi.", "Next: pick your Wi-Fi.", "Ahora elige tu Wi-Fi.", "Choisissez votre Wi-Fi.", "Jetzt WLAN waehlen."),
+        W5("Esc = usa l'hotspot.", "Esc = use the hotspot.", "Esc = usar el hotspot.", "Esc = utiliser le hotspot.", "Esc = Hotspot nutzen.") };
+    nucleo_ui_message("NucleoOS", welcome, 4);
+    // A unique default name (the hotspot uses the same MAC suffix); renamed any time in Settings ▸ Device.
+    if (!s_name[0] || !strcmp(s_name, "nucleo-01")) {
+        uint8_t mac[6] = {0};
+        esp_read_mac(mac, ESP_MAC_WIFI_SOFTAP);
+        snprintf(s_name, sizeof s_name, "nucleo-%02x%02x", mac[4], mac[5]);
+    }
+    s_onboarding = true;            // the framework now opens Settings ▸ Nearby networks
+}
 
-    const char *welcome[] = { TR("Benvenuto in NucleoOS.", "Welcome to NucleoOS."), "",
-                              TR("Configuriamo il dispositivo.", "Let's set up your device."),
-                              TR("Premi Invio per iniziare.", "Press Enter to begin.") };
-    nucleo_ui_message("NucleoOS - Setup", welcome, 4);     // step 2: welcome, in the chosen language
+// True while the first boot still owes the network step (Settings shows it, then calls finish).
+bool nucleo_setup_onboarding(void) { return s_onboarding && !s_complete; }
 
-    wizard_network();                                      // step 3: Wi-Fi (bypassable) / AP fallback
-
-    nucleo_ui_input(TR("Nome dispositivo", "Device name"), s_name, sizeof(s_name), 0);   // step 4: name
-    if (!s_name[0]) strncpy(s_name, "nucleo-01", sizeof(s_name) - 1);
-    s_complete = true;                                     // the wizard finished -> mark setup complete NOW
-    save_config();                                         // persists complete:true so the wizard never runs again
-
-    char l1[48], l2[48], l3[52];
-    build_info(l1, l2, l3);
-    const char *done[] = { TR("Configurazione completata!", "Setup complete!"), l1, l2, l3 };
-    nucleo_ui_message(TR("Tutto pronto", "All set"), done, 4);   // step 5: done
+// The network step is over. A successful join already completed the setup (nucleo_setup_join); otherwise
+// the hotspot — up since the first-boot apply_network — is the way in: keep it, and record the choice.
+// Returns true when the device ended up on a Wi-Fi network.
+bool nucleo_setup_onboard_finish(void)
+{
+    bool sta = s_complete && !strcmp(s_mode, "sta") && s_ip[0];
+    if (!s_complete) {
+        s_auto = false;
+        strncpy(s_mode, "ap", sizeof(s_mode) - 1);
+        start_ap();
+        s_complete = true;
+        save_config();
+    }
+    s_onboarding = false;
+    return sta;
 }
 
 // The launcher keeps the app foregrounded until Esc; on_enter just sets the hint and the
