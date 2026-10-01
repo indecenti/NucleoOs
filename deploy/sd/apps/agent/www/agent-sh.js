@@ -102,6 +102,7 @@ function flags(args, spec) {          // spec: { short: 'ilnrv', withValue: { n:
   return { f, rest };
 }
 const lines = (s) => { const t = String(s ?? ''); const ls = t.split('\n'); if (ls.length && ls[ls.length - 1] === '') ls.pop(); return ls; };
+const unescapeC = (s) => String(s).replace(/\\([nt\\"'r0])/g, (m, c) => ({ n: '\n', t: '\t', '\\': '\\', '"': '"', "'": "'", r: '\r', 0: '' }[c]));
 
 export function createAgentShell({ fs, device = {}, confirm = async () => true, limits = {} } = {}) {
   const L = { ...SH_LIMITS, ...limits };
@@ -138,7 +139,20 @@ export function createAgentShell({ fs, device = {}, confirm = async () => true, 
     help: async () => 'Commands: ' + Object.keys(C).sort().join(' ') + '\nPipes | redirection > >> < and ; && || work like a POSIX shell. Paths are inside the workspace.',
     pwd: async () => '/' + (cwd || ''),
     cd: async (a) => { const d = a[0] || ''; if (!d || d === '/' || d === '~') { cwd = ''; return ''; } if (!(await isDir(d))) throw new Error(`cd: ${d}: No such directory`); cwd = show(d) === '.' ? '' : show(d); return ''; },
-    echo: async (a) => { const n = a[0] === '-n'; return (n ? a.slice(1) : a).join(' '); },
+    // echo -e / -n / -ne and printf: what models reach for to write a multi-line file (`echo -e "a\nb" > f`).
+    // A model wrote "-e …\n…" literally into a README before these were understood.
+    echo: async (a) => {
+      let i = 0, esc = false, nl = true;
+      for (; i < a.length && /^-[neE]+$/.test(a[i]); i++) { if (a[i].includes('e')) esc = true; if (a[i].includes('E')) esc = false; if (a[i].includes('n')) nl = false; }
+      const s = a.slice(i).join(' ');
+      return { out: (esc ? unescapeC(s) : s), raw: !nl };
+    },
+    printf: async (a) => {
+      if (!a.length) throw new Error('printf: usage: printf FORMAT [ARG...]');
+      let k = 1;
+      const out = unescapeC(a[0]).replace(/%([sd%])/g, (m, c) => (c === '%' ? '%' : c === 'd' ? String(parseInt(a[k++] ?? '0', 10) || 0) : String(a[k++] ?? '')));
+      return { out, raw: true };
+    },
     ls: async (a) => {
       const { f, rest } = flags(a, { short: 'laR1h' });
       const targets = rest.length ? rest : ['.'];
@@ -263,11 +277,11 @@ export function createAgentShell({ fs, device = {}, confirm = async () => true, 
     const inFrom = st.redirs.find((r) => r.op === '<'), outTo = st.redirs.find((r) => r.op === '>' || r.op === '>>');
     const feed = inFrom ? await readText(inFrom.path) : stdin;
     let res = await C[name](st.argv.slice(1), { stdin: feed, last });
-    let code = 0;
-    if (res && typeof res === 'object') { code = res.code | 0; res = res.out; }
+    let code = 0, raw = false;                              // raw: echo -n / printf — no newline added, as in a real shell
+    if (res && typeof res === 'object') { code = res.code | 0; raw = !!res.raw; res = res.out; }
     let out = res == null ? '' : String(res);
     if (outTo) {
-      let body = out ? out.replace(/\n?$/, '\n') : '';
+      let body = raw ? out : (out ? out.replace(/\n?$/, '\n') : '');
       if (outTo.op === '>>') { const r = await fs.append(path(outTo.path), body); if (!r.ok) throw new Error(`${name}: cannot write ${outTo.path}: ${r.error}`); }
       else { const r = await fs.write(path(outTo.path), body, { overwrite: true, mkdir: true }); if (!r.ok) throw new Error(`${name}: cannot write ${outTo.path}: ${r.error}`); }
       out = '';
