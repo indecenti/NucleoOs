@@ -148,7 +148,7 @@ enum {
     R_BRIGHT, R_THEME, R_SAVER_TIME, R_SAVER_STYLE,                                         // Display
     R_VOLUME, R_MUTE, R_TTS, R_TTS_SPEED, R_VOICE,                                          // Sound
     R_NAME, R_PIN, R_SESSIONS, R_MODEL, R_VERSION, R_BATTERY, R_SD, R_RAM, R_UPTIME, R_UPDATES, R_RESTART, R_LAUNCHER,  // Device
-    R_RST_SOFT, R_RST_HARD,                                                                 // Reset
+    R_RST_SOFT, R_RST_HARD, R_RST_SD,                                                       // Reset
     R_SAVED_NET, R_FORGET_ALL,                                                              // Saved networks
 };
 
@@ -161,7 +161,8 @@ static const uint8_t ROWS_SOUND[]   = { R_VOLUME, R_MUTE, R_TTS, R_TTS_SPEED, R_
 static const uint8_t ROWS_DEVICE[]  = { R_NAME, R_PIN, R_SESSIONS, R_MODEL, R_VERSION, R_BATTERY, R_SD, R_RAM, R_UPTIME, R_UPDATES, R_RESTART };
 // Same page when installed by M5Launcher (runtime-detected; stand-alone never shows the extra row).
 static const uint8_t ROWS_DEVICE_HOSTED[] = { R_NAME, R_PIN, R_SESSIONS, R_MODEL, R_VERSION, R_BATTERY, R_SD, R_RAM, R_UPTIME, R_UPDATES, R_RESTART, R_LAUNCHER };
-static const uint8_t ROWS_RESET[]   = { R_RST_SOFT, R_RST_HARD };
+static const uint8_t ROWS_RESET[]   = { R_RST_SOFT, R_RST_HARD, R_RST_SD };
+static bool is_rst(uint8_t id) { return id == R_RST_SOFT || id == R_RST_HARD || id == R_RST_SD; }   // ENTER x3 rows
 static const uint8_t SECTIONS[]     = { PG_WIFI, PG_AP, PG_BT, PG_DISPLAY, PG_SOUND, PG_DEVICE, PG_RESET };   // TAB order
 #define NROWS(a) ((int)(sizeof(a) / sizeof((a)[0])))
 
@@ -626,13 +627,22 @@ static void make_row_id(uint8_t id, int num, Row &r)
                         "Maintenir sa touche, relancer", "Seine Taste halten, Neustart"));
     } break;
     // -- Reset (armed rows show how many ENTER presses are left)
-    case R_RST_SOFT: case R_RST_HARD:
+    case R_RST_SOFT: case R_RST_HARD: case R_RST_SD:
         r.label = (id == R_RST_SOFT) ? TR5("Azzera config", "Reset settings", "Borrar ajustes", "Effacer reglages", "Konfig loeschen")
-                                     : TR5("Reset totale", "Factory reset", "Borrado total", "Tout effacer", "Werksreset");
+                : (id == R_RST_HARD) ? TR5("Reset totale", "Factory reset", "Borrado total", "Tout effacer", "Werksreset")
+                                     : TR5("Formatta SD", "Erase SD card", "Formatear SD", "Formater la SD", "SD formatieren");
         r.kind = K_DANGER;
         if (s_rst_id == id) { snprintf(r.val, sizeof r.val, "x%d", s_rst_left + 1);
                               snprintf(r.sub, sizeof r.sub, TR5("Invio ancora %d volte", "ENTER %d more times", "ENTER %d veces mas",
                                                                 "ENTER encore %d fois", "ENTER noch %d-mal"), s_rst_left); }
+        else if (id == R_RST_SD) {
+            r.dis = !nucleo_storage_info()->mounted;
+            sset(r, r.dis ? TR5("Nessuna scheda SD", "No SD card", "Sin tarjeta SD", "Pas de carte SD", "Keine SD-Karte")
+                 : nucleo_guest_hosted() ? TR5("Anche i file di M5Launcher", "Also M5Launcher's files", "Tambien archivos M5Launcher",
+                                               "Aussi les fichiers M5Launcher", "Auch M5Launcher-Dateien")
+                                         : TR5("TUTTA la SD + reset totale", "The WHOLE SD + factory reset", "TODA la SD + borrado total",
+                                               "TOUTE la SD + tout effacer", "GANZE SD + Werksreset"));
+        }
         else sset(r, id == R_RST_SOFT ? TR5("Rete, preferenze, log. File salvi", "Network, prefs, logs. Files kept", "Red, ajustes, logs (no archivos)",
                                             "Reseau, prefs, logs (sauf fichiers)", "Netz, Setup, Logs. Dateien bleiben")
                                       : TR5("Anche chiavi e dati ANIMA", "Also keys and ANIMA data", "Tambien claves, datos ANIMA",
@@ -928,7 +938,7 @@ static void draw_row(int y, const Row &r, bool foc, bool icon)
     if (icon) ui_glyph(&d, r.glyph, 14, y + 9, 6, ink, pill);
     int top_vx = rx;                                                        // right edge left for the name
     if (r.kind == K_TOGGLE) { draw_switch(rx, y + 9, r.on && !r.dis, true); top_vx = rx - 30; }
-    else if (r.kind == K_NAV || (danger && r.id != R_RST_SOFT && r.id != R_RST_HARD)) { ui_glyph(&d, UG_NEXT, rx - 2, y + 9, 5, ink, pill); top_vx = rx - 12; }
+    else if (r.kind == K_NAV || (danger && !is_rst(r.id))) { ui_glyph(&d, UG_NEXT, rx - 2, y + 9, 5, ink, pill); top_vx = rx - 12; }
     else if (r.kind == K_DANGER && r.val[0]) { top_vx = rx - f2(rx, y + 1, r.val, 40, ink, pill, true) - 6; }
     txt_fit(lx, y + 2, r.label, top_vx - lx, ink, pill, 2);
 
@@ -1463,7 +1473,7 @@ static void update_hint(void)
         case K_CYCLE:  verb = TR5("</> cambia", "</> change", "</> cambiar", "</> changer", "</> aendern"); break;
         case K_EDIT:   verb = TR5("invio modifica", "enter edit", "enter editar", "enter modifier", "enter bearbeiten"); break;
         case K_INFO:   verb = TR5("su/giu scegli", "up/dn pick", "up/dn elegir", "up/dn choisir", "up/dn waehlen"); break;
-        case K_DANGER: verb = (r.id == R_RST_SOFT || r.id == R_RST_HARD)
+        case K_DANGER: verb = is_rst(r.id)
                             ? TR5("invio 3 volte", "enter 3 times", "enter 3 veces", "enter 3 fois", "enter 3-mal")
                             : TR5("invio conferma", "enter confirm", "enter confirmar", "enter valider", "enter ausfuehren"); break;
         default:       verb = TR5("invio apri", "enter open", "enter abrir", "enter ouvrir", "enter zeigen"); break;
@@ -1684,7 +1694,8 @@ static void activate(const Row &r)
                            "Prefere: rejoint en premier", "Bevorzugt: zuerst verbunden")
                      : TR5("Priorita normale", "Normal priority", "Prioridad normal", "Priorite normale", "Normale Prioritaet"));
     } break;
-    case R_RST_SOFT: case R_RST_HARD:
+    case R_RST_SOFT: case R_RST_HARD: case R_RST_SD:
+        if (r.id == R_RST_SD && r.dis) { toast(TR5("Nessuna scheda SD", "No SD card", "Sin tarjeta SD", "Pas de carte SD", "Keine SD-Karte")); break; }
         if (s_rst_id != r.id) { s_rst_id = r.id; s_rst_left = 2; }
         else if (--s_rst_left <= 0) {
             flush_prefs();
@@ -1708,16 +1719,22 @@ static void activate(const Row &r)
                                                 "/sd/config", "/sd/backups", "/sd/journal" };
             static const char *const HARD_FILES[] = { "/sd/data/anima/teacher.json", "/sd/data/anima/telemetry.ndjson",
                                                       "/sd/data/anima/session.txt", "/sd/data/anima/sessions.json", "/sd/data/anima/workspace.json" };
-            rm_children_except("/sd/system/config", KEEP, NROWS(KEEP));
-            for (int i = 0; i < NROWS(SOFT); i++) rm_tree(SOFT[i]);
-            for (int i = 0; i < NROWS(SOFT_FILES); i++) unlink(SOFT_FILES[i]);
-            if (r.id == R_RST_HARD) {
+            // Erase SD: the factory reset's internal tiers, then the WHOLE card is formatted at the next boot
+            // (armed, see nucleo_storage_format_arm) — so its SD paths are skipped here, the format takes them.
+            const bool sd = r.id == R_RST_SD;
+            if (!sd) {
+                rm_children_except("/sd/system/config", KEEP, NROWS(KEEP));
+                for (int i = 0; i < NROWS(SOFT); i++) rm_tree(SOFT[i]);
+            }
+            for (int i = 0; i < NROWS(SOFT_FILES); i++) if (!sd || !strncmp(SOFT_FILES[i], "/cfg/", 5)) unlink(SOFT_FILES[i]);
+            if (r.id != R_RST_SOFT) {
                 ok = nucleo_auth_factory_reset() && ok;
                 ok = nucleo_mailcfg_erase_all() && ok;     // SMTP app passwords
                 ok = nucleo_keydeck_forget() && ok;        // a remote device's address + PIN
-                for (int i = 0; i < NROWS(HARD); i++) rm_tree(HARD[i]);
-                for (int i = 0; i < NROWS(HARD_FILES); i++) unlink(HARD_FILES[i]);
+                for (int i = 0; i < NROWS(HARD); i++) if (!sd || !strncmp(HARD[i], "/cfg/", 5)) rm_tree(HARD[i]);
+                if (!sd) for (int i = 0; i < NROWS(HARD_FILES); i++) unlink(HARD_FILES[i]);
             }
+            if (sd) ok = nucleo_storage_format_arm(nucleo_i18n_lang()) && ok;
             if (ok) esp_restart();
             // A tier survived (logged): don't reboot into a device that would heal it back and look reset.
             // Every step is idempotent and the stores stay sealed, so ENTER x3 again simply retries.

@@ -99,3 +99,4 @@ const nucleo_storage_info_t *nucleo_storage_info(void)
     return &si;
 }
 }
+bool        nucleo_storage_format_arm(const char *) { return true; }

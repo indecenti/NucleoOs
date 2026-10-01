@@ -205,6 +205,8 @@ static const Scene SETTINGS[] = {
     { "device-sd", [] { app_open("wifi"); down(8); app_key(NK_ENTER);
                         down(6); app_draw(); } },
     { "reset",     [] { app_open("wifi"); app_key(NK_UP); app_key(NK_ENTER); app_draw(); } },
+    { "reset-sd",  [] { app_open("wifi"); app_key(NK_UP); app_key(NK_ENTER); down(2); app_draw(); } },
+    { "reset-sd-armed", [] { app_open("wifi"); app_key(NK_UP); app_key(NK_ENTER); down(2); app_key(NK_ENTER); app_draw(); } },
     { "search",    [] { app_open("wifi"); app_type("lum"); app_draw(); } },
     { "search-none", [] { app_open("wifi"); app_type("qqz"); app_draw(); } },
     { "from-spotlight", [] { nucleo_settings_search_preset("bri"); app_open("wifi"); app_draw(); } },

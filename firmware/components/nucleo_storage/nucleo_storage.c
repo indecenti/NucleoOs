@@ -8,6 +8,7 @@
 #include "esp_log.h"
 #include "esp_app_desc.h"   // esp_app_get_description(): stamp the real firmware version into volume.json
 #include "esp_vfs_fat.h"
+#include "esp_timer.h"
 #include "sdmmc_cmd.h"
 #include "driver/sdspi_host.h"
 #include "driver/spi_common.h"
@@ -224,3 +225,37 @@ void nucleo_storage_sync(void)
 const nucleo_storage_info_t *nucleo_storage_info(void) { return &s_info; }
 
 void *nucleo_storage_card(void) { return s_info.mounted ? s_card : NULL; }
+
+#define FORMAT_MARKER NUCLEO_CFG_MOUNT "/sd-format.arm"   // /cfg root: the factory reset clears /cfg/config only
+
+bool nucleo_storage_format_arm(const char *lang)
+{
+    FILE *f = fopen(FORMAT_MARKER, "w");
+    if (!f) { ESP_LOGE(TAG, "format: cannot arm (%s, errno %d)", FORMAT_MARKER, errno); return false; }
+    fprintf(f, "%.2s\n", lang && lang[0] ? lang : "en");
+    bool ok = fclose(f) == 0;
+    ESP_LOGW(TAG, "SD erase armed for the next boot");
+    return ok;
+}
+
+bool nucleo_storage_format_pending(char *lang)
+{
+    FILE *f = fopen(FORMAT_MARKER, "r");
+    if (!f) return false;
+    if (lang) { lang[0] = 0; if (fgets(lang, 3, f)) lang[strcspn(lang, "\r\n")] = 0; }
+    fclose(f);
+    return true;
+}
+
+esp_err_t nucleo_storage_format_now(void)
+{
+    unlink(FORMAT_MARKER);
+    if (!s_info.mounted || !s_card) { ESP_LOGE(TAG, "format: no card mounted, nothing erased"); return ESP_ERR_INVALID_STATE; }
+    ESP_LOGW(TAG, "erasing the whole SD card (FAT32)...");
+    int64_t t0 = esp_timer_get_time();
+    esp_err_t err = esp_vfs_fat_sdcard_format(NUCLEO_SD_MOUNT, s_card);   // unmount, f_mkfs, mount back
+    ESP_LOGW(TAG, "SD erase: %s in %lld ms", esp_err_to_name(err), (long long)((esp_timer_get_time() - t0) / 1000));
+    s_info.total_bytes = 0;                                               // refresh() re-reads the new volume
+    if (err != ESP_OK) s_info.mount_error = err;
+    return err;
+}
