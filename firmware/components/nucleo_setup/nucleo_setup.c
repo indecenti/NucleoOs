@@ -3,6 +3,7 @@
 #include <sys/stat.h>   // mkdir() for /sd/system/time.json
 #include "nucleo_ui.h"
 #include "nucleo_storage.h"
+#include "nucleo_i18n.h"   // the UI language picks the Wi-Fi regulatory country (wifi_country_apply)
 #include "nucleo_app.h"
 #include <stdio.h>
 #include <string.h>
@@ -420,6 +421,19 @@ const char *nucleo_setup_device_name(void) { return s_name; }
 
 // ---- wifi helpers ----------------------------------------------------------
 
+// Regulatory country. The driver default is "01" (world safe): channels 1-11 only active; 12-13 are passive
+// until a beacon teaches the country (802.11d). Many EU routers sit on 12/13, and a factory reset (which erases
+// the driver's NVS, where the country is stored) brings "01" back. Pick it from the UI language — the EU
+// languages get their country (1-13, legal there); English stays world safe. 802.11d stays ON, so the AP's
+// own country IE always wins once associated (esp_wifi_set_country_code, IDF 5.4).
+static void wifi_country_apply(void)
+{
+    const char *l = nucleo_i18n_lang();
+    const char *cc = !strcmp(l, "it") ? "IT" : !strcmp(l, "es") ? "ES" : !strcmp(l, "fr") ? "FR" : !strcmp(l, "de") ? "DE" : "01";
+    esp_err_t e = esp_wifi_set_country_code(cc, true);
+    if (e != ESP_OK) ESP_LOGW(TAG, "set_country_code(%s) -> %s", cc, esp_err_to_name(e));
+}
+
 static void wifi_ensure(void)
 {
     if (s_wifi_ready) return;
@@ -429,6 +443,7 @@ static void wifi_ensure(void)
     if (!s_sta_only) esp_netif_create_default_wifi_ap();   // STA-only Solo: no AP netif at all
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     WIFI_TRY(esp_wifi_init(&cfg));
+    wifi_country_apply();
     esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID, on_wifi_event, NULL, NULL);
     esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP, on_wifi_event, NULL, NULL);
     esp_wifi_set_storage(WIFI_STORAGE_FLASH);      // persist creds in NVS, not on SD
@@ -524,6 +539,16 @@ static void connect_sta_at(const char *ssid, const char *pass, uint8_t ch, const
     wc.sta.threshold.authmode = WIFI_AUTH_OPEN;              // accept whatever security the AP offers (no min filter)
     wc.sta.pmf_cfg.capable    = true;                        // 802.11w PMF: needed to associate with WPA2/WPA3-mixed APs
     wc.sta.failure_retry_cnt  = 3;                           // let the driver retry the association before it gives up
+    // One radio: in APSTA the hotspot and the link share a channel. Move the hotspot to the router's channel
+    // BEFORE associating, so no channel switch (CSA) happens in the middle of the 4-way handshake.
+    if (ch && wp_ap_iface_up((wp_mode_t)wp_join_mode((wp_mode_t)cur))) {
+        wifi_config_t apc = {0};
+        if (esp_wifi_get_config(WIFI_IF_AP, &apc) == ESP_OK && apc.ap.channel != ch) {
+            apc.ap.channel = ch;
+            WIFI_TRY(esp_wifi_set_config(WIFI_IF_AP, &apc));
+            ESP_LOGW(TAG, "hotspot moved to ch %d (the router's) before joining", ch);
+        }
+    }
     if (ch && bssid) {                                       // our scan already picked the strongest AP: go straight to it
         wc.sta.channel   = ch;
         wc.sta.bssid_set = true;
@@ -853,6 +878,7 @@ bool nucleo_setup_join(const char *ssid, const char *pass)
     esp_wifi_disconnect();
     vTaskDelay(pdMS_TO_TICKS(200));
     strncpy(s_ssid, ssid, sizeof(s_ssid) - 1); s_ssid[sizeof(s_ssid) - 1] = 0;
+    wifi_country_apply();                      // the language may have changed since boot (first-boot wizard)
     s_last_reason = 0; s_auth_fails = 0; s_assoc = false; s_join_explicit = true;
     // Join the access point the user just picked from OUR scan (its channel + BSSID): one-channel probe instead
     // of a full re-scan with the hotspot beaconing. If that AP moved, one plain attempt follows.
@@ -892,6 +918,7 @@ bool nucleo_setup_join(const char *ssid, const char *pass)
 // DEFAULTS there, so the Control Center must not offer the hotspot toggle, and start/stop_ap refuse.
 bool nucleo_setup_config_loaded(void) { return s_cfg_loaded; }
 int  nucleo_setup_join_error(void) { return s_join_err; }
+int  nucleo_setup_join_reason(void) { return s_last_reason; }   // the driver's last disconnect reason (shown with the error)
 
 void nucleo_setup_start_ap(void)
 {

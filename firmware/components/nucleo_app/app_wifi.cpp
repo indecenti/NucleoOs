@@ -76,6 +76,7 @@ int         nucleo_setup_onboard_finish_poll(void);       // -1 pending, 0 hotsp
 void        nucleo_setup_onboard_ack(void);               // the user saw "All set"
 bool        nucleo_setup_is_complete(void);
 int         nucleo_setup_join_error(void);                // NUCLEO_JOIN_* (nucleo_setup.h): 1 password, 2 not found, 3 no IP
+int         nucleo_setup_join_reason(void);               // the driver's reason code, shown with the error
 void        nucleo_setup_start_ap(void);
 void        nucleo_setup_stop_ap(void);
 void        nucleo_setup_forget(void);
@@ -2059,13 +2060,15 @@ static void on_tick(void)
                 else if (s_join_ok) { toast_ok(TR5("Connesso", "Connected", "Conectado", "Connecte", "Verbunden")); set_page(PG_WIFI); }
                 else {
                     int e = nucleo_setup_join_error();
-                    toast(e == JOIN_PASSWORD  ? TR5("Password errata: riprova", "Wrong password: try again", "Clave incorrecta: reintenta",
-                                                    "Mot de passe incorrect", "Falsches Passwort")
-                        : e == JOIN_NOT_FOUND ? TR5("Rete non trovata: avvicinati", "Network not found: move closer", "Red no encontrada",
-                                                    "Reseau introuvable", "Netz nicht gefunden")
-                        : e == JOIN_NO_IP     ? TR5("Il router non da un indirizzo", "No address from the router", "El router no da IP",
-                                                    "Pas d'adresse du routeur", "Keine Adresse vom Router")
-                        : TR5("Connessione non riuscita", "Could not connect", "No se pudo conectar", "Echec de connexion", "Verbindung fehlgeschlagen"));
+                    const char *m = e == JOIN_PASSWORD  ? TR5("Password errata?", "Wrong password?", "Clave incorrecta?", "Mot de passe faux ?", "Passwort falsch?")
+                                  : e == JOIN_NOT_FOUND ? TR5("Rete non trovata", "Network not found", "Red no encontrada", "Reseau introuvable", "Netz nicht gefunden")
+                                  : e == JOIN_NO_IP     ? TR5("Il router non da IP", "No IP from the router", "El router no da IP", "Pas d'IP du routeur", "Keine IP vom Router")
+                                  : TR5("Non riuscita", "Could not connect", "No se pudo conectar", "Echec de connexion", "Fehlgeschlagen");
+                    // The driver's reason code goes with it: "Wrong password? (15)" is diagnosable, "failed" is not.
+                    static char tb[44];
+                    int rc = nucleo_setup_join_reason();
+                    if (rc > 0) snprintf(tb, sizeof tb, "%s (%d)", m, rc); else snprintf(tb, sizeof tb, "%s", m);
+                    toast(tb);
                     if (e == JOIN_PASSWORD && s_retry_pass[0]) open_editor(IM_PASS, s_retry_pass);   // fix the typo, ENTER retries
                     wipe(s_retry_pass, sizeof s_retry_pass);
                 }
