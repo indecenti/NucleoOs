@@ -1,9 +1,8 @@
-// SD content self-install — device engine. See nucleo_sdcontent.h. Reuses the OTA updater's proven
-// pattern: esp_http_client + the cert bundle, streaming mbedtls SHA-256, run only in the big-heap
-// boot window. content_policy.c decides what may be written; this file does the I/O and never writes
-// a path the policy refused.
+// SD content self-install — device glue. See nucleo_sdcontent.h. The download itself is sdc_engine.c
+// (host-tested end to end); this file is the HTTPS transport, NVS (arm flag + last failure), the heap and
+// Wi-Fi gates, and the localized messages.
 #include "nucleo_sdcontent.h"
-#include "content_policy.h"
+#include "sdc_engine.h"
 #include "nucleo_board.h"
 
 #include "esp_http_client.h"
@@ -12,63 +11,65 @@
 #include "esp_log.h"
 #include "esp_heap_caps.h"
 #include "esp_system.h"
-#include "esp_timer.h"
 #include "esp_task_wdt.h"
 #include "nvs.h"
-#include "nvs_flash.h"
-#include "mbedtls/sha256.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
 #include <string.h>
 #include <stdio.h>
 #include <sys/stat.h>
-#include <errno.h>
-#include <unistd.h>
 
-// pulled from nucleo_storage (free space) + nucleo_setup (STA IP wait) without their headers.
-extern const char *nucleo_setup_ip(void);
+extern const char *nucleo_setup_ip(void);                              // nucleo_setup (resolved at link)
+extern const char *nucleo_i18n_lang(void) __attribute__((weak));       // nucleo_storage (resolved at link)
 
 static const char *TAG = "sdcontent";
 
 #define SDC_BASE_HOST   "https://indecenti.github.io/NucleoOs/"   // == UPD_BASE (OTA updater)
 #define SDC_NVS_NS      "sdc"
 #define SDC_NVS_ARM     "arm"
-#define CONTENT_JSON    NUCLEO_SD_MOUNT "/system/content.json"
-#define MANIFEST_DIR    NUCLEO_SD_MOUNT "/system/content"
-#define MANIFEST_PART   MANIFEST_DIR "/manifest.part"
-#define MANIFEST_FILE   MANIFEST_DIR "/manifest.txt"
-// Minimum contiguous block to attempt the TLS handshake. mbedTLS is already in low-memory mode here
-// (asymmetric 8K/4K content buffers, dynamic buffers, CA/config freed after handshake — sdkconfig), so
-// HTTPS fits in ~22-26 KB; the Radio app streams HTTPS on this same chip in a STA-only boot with a block
-// this size. The old 40 KB gate was the full-OS OTA-updater figure and wrongly rejected the install boot,
-// which (STA-only, canvas freed, nothing else up) has a smaller — but sufficient — largest block.
+#define SDC_NVS_DIAG    "diag"
+// Bytes per request. A 6 KB body plus GitHub's ~1 KB of headers stays under the 8 KB TLS record cap
+// (CONFIG_MBEDTLS_SSL_IN_CONTENT_LEN) whatever record size the server picks — measured: such responses
+// arrive in records of <= 4169 bytes, while a full-body GET of the manifest arrives in 16401-byte records.
+#define SDC_WINDOW      6144u
+// Minimum contiguous block to attempt the TLS handshake (mbedTLS is in low-memory mode: asymmetric 8K/4K
+// buffers, dynamic buffers, CA/config freed after the handshake).
 #define TLS_MIN_BLOCK   22000u
 
 static sdc_state_t s_st;
 const sdc_state_t *nucleo_sdcontent_state(void) { return &s_st; }
 
-// Which packs this run installs. Default "core" — a complete, working web OS + ANIMA (~50 MB). The
-// optional packs (arcade emulators, the PC/Android downloads) are added later from Settings ▸ SD, so the
-// first-boot download stays lean and matches the "~50 MB" the wizard offers.
+// Which packs a run installs. "core" = a complete web OS + ANIMA (~50 MB, what the wizard offers); the
+// optional packs (arcade emulators, the PC/Android downloads) come later from Settings ▸ SD.
 static char s_packs[48] = "core";
-static bool pack_wanted(const char *pack)
+
+__attribute__((weak)) void nucleo_sdcontent_on_progress(const sdc_state_t *st) { (void)st; }
+// Called once the STA link is up, right before the first TLS handshake: main.c frees the 32 KB canvas here.
+__attribute__((weak)) void nucleo_sdcontent_on_net_ready(void) { }
+
+// The install boot's heap at each stage, persisted (NVS "heap", /api/status .sdc_heap) on every run — the
+// install boot has no httpd, so this is how its real RAM is read over the network afterwards.
+static char s_heap[96];
+static void heap_mark(const char *stage)
 {
-    size_t pl = strlen(pack);
-    for (const char *p = s_packs; *p; ) {
-        const char *comma = strchr(p, ',');
-        size_t len = comma ? (size_t)(comma - p) : strlen(p);
-        if (len == pl && strncmp(p, pack, pl) == 0) return true;
-        p += len; if (*p == ',') p++;
-    }
-    return false;
+    size_t n = strlen(s_heap);
+    if (n >= sizeof s_heap - 24) return;
+    snprintf(s_heap + n, sizeof s_heap - n, "%s%s %u/%u", n ? " | " : "", stage,
+             (unsigned)(heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) / 1024),
+             (unsigned)(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) / 1024));
 }
 
-// Weak default; main.c overrides to paint the boot-window progress bar.
-__attribute__((weak)) void nucleo_sdcontent_on_progress(const sdc_state_t *st) { (void)st; }
-static void progress(void) { nucleo_sdcontent_on_progress(&s_st); }
-
-// ---- small helpers ----------------------------------------------------------------------------------
+static const char *L5(const char *it, const char *en, const char *es, const char *fr, const char *de)
+{
+    const char *l = nucleo_i18n_lang ? nucleo_i18n_lang() : 0;
+    if (!l) return en;
+    if (l[0] == 'i' && l[1] == 't') return it;
+    if (l[0] == 'e' && l[1] == 's') return es;
+    if (l[0] == 'f' && l[1] == 'r') return fr;
+    if (l[0] == 'd' && l[1] == 'e') return de;
+    return en;
+}
 
 // "0.5.0" from the app descriptor's "0.5.0+9.gabc123".
 static void fw_ver3(char *out, size_t cap)
@@ -79,161 +80,12 @@ static void fw_ver3(char *out, size_t cap)
     snprintf(out, cap, "%d.%d.%d", v0, v1, v2);
 }
 
-static void hex32(const unsigned char *d, char *out)      // 32 bytes -> 64 lowercase hex + NUL
-{
-    static const char *h = "0123456789abcdef";
-    for (int i = 0; i < 32; i++) { out[i * 2] = h[d[i] >> 4]; out[i * 2 + 1] = h[d[i] & 15]; }
-    out[64] = 0;
-}
-
-// Create every parent directory of an SD absolute path ("/sd/a/b/c" -> mkdir /sd/a, /sd/a/b).
-static void mkdir_parents(const char *abspath)
-{
-    char tmp[260];
-    snprintf(tmp, sizeof tmp, "%s", abspath);
-    for (char *p = tmp + 1; *p; p++) {
-        if (*p == '/') {
-            *p = 0;
-            if (mkdir(tmp, 0775) != 0 && errno != EEXIST) ESP_LOGW(TAG, "mkdir %s: errno %d", tmp, errno);
-            *p = '/';
-        }
-    }
-}
-
-static bool file_stat(const char *abspath, uint32_t *size)
-{
-    struct stat st;
-    if (stat(abspath, &st) != 0) return false;
-    if (size) *size = (uint32_t)st.st_size;
-    return true;
-}
-
-// SHA-256 of an on-disk file -> 64 hex. false on read error.
-static bool file_sha(const char *abspath, char *out_hex)
-{
-    FILE *f = fopen(abspath, "rb");
-    if (!f) return false;
-    mbedtls_sha256_context c; mbedtls_sha256_init(&c); mbedtls_sha256_starts(&c, 0);
-    static char buf[1024]; size_t r;
-    while ((r = fread(buf, 1, sizeof buf, f)) > 0) mbedtls_sha256_update(&c, (const unsigned char *)buf, r);
-    fclose(f);
-    unsigned char dig[32]; mbedtls_sha256_finish(&c, dig); mbedtls_sha256_free(&c);
-    hex32(dig, out_hex);
-    return true;
-}
-
-// ---- HTTP (one keep-alive handle, reused across every file) -----------------------------------------
-
-static esp_http_client_handle_t s_cli;
-static int s_last_status;          // last HTTP status (0 = the connection/TLS never opened)
-static int s_last_open_err;        // esp_err of the last failed open (TLS/DNS), for diagnosis
-
-static bool http_open_once(const char *url)
-{
-    if (!s_cli) {
-        esp_http_client_config_t cfg = {
-            .url = url, .timeout_ms = 15000, .crt_bundle_attach = esp_crt_bundle_attach,
-            .buffer_size = 2048, .keep_alive_enable = true,
-        };
-        s_cli = esp_http_client_init(&cfg);
-        if (!s_cli) { s_last_open_err = -1; return false; }
-    } else {
-        esp_http_client_set_url(s_cli, url);
-    }
-    s_last_status = 0;
-    esp_err_t oe = esp_http_client_open(s_cli, 0);
-    if (oe != ESP_OK) { s_last_open_err = oe; esp_http_client_cleanup(s_cli); s_cli = NULL; return false; }
-    esp_http_client_fetch_headers(s_cli);
-    s_last_status = esp_http_client_get_status_code(s_cli);
-    if (s_last_status != 200) { ESP_LOGW(TAG, "GET %s -> HTTP %d", url, s_last_status); esp_http_client_close(s_cli); return false; }
-    return true;
-}
-
-static bool http_open(const char *url)
-{
-    if (http_open_once(url)) return true;
-    if (s_last_status != 0) return false;   // a real HTTP status (404/redirect) — re-dialing won't change it
-    return http_open_once(url);             // connection/TLS failed: ONE clean re-dial (no infinite recursion)
-}
-
-static void http_done(void) { if (s_cli) esp_http_client_close(s_cli); }
-
-// Why the last http_to_file() failed, for diagnosis (persisted with the error): 0 ok, 1 http open/status,
-// 2 fopen(dst), 3 fwrite (SD full / write error), 4 esp_http_client_read (TLS body), plus bytes written.
-static int  s_io_reason;
-static long s_io_bytes;
-
-// Download `url` to `dstpart`, hashing as it streams. On success `sha_hex` holds the file's SHA-256.
-// Returns bytes written, or -1 on error. Feeds the WDT per chunk.
-static long http_to_file(const char *url, const char *dstpart, char *sha_hex)
-{
-    s_io_reason = 0; s_io_bytes = 0;
-    if (!http_open(url)) { s_io_reason = 1; return -1; }
-    FILE *f = fopen(dstpart, "wb");
-    if (!f) { http_done(); ESP_LOGE(TAG, "open %s: errno %d", dstpart, errno); s_io_reason = 2; return -1; }
-    mbedtls_sha256_context c; mbedtls_sha256_init(&c); mbedtls_sha256_starts(&c, 0);
-    static char buf[2048];
-    long total = 0; int r;
-    bool io_err = false;
-    while ((r = esp_http_client_read(s_cli, buf, sizeof buf)) > 0) {
-        if (fwrite(buf, 1, r, f) != (size_t)r) { io_err = true; break; }   // SD full / write error
-        mbedtls_sha256_update(&c, (const unsigned char *)buf, r);
-        total += r;
-        esp_task_wdt_reset();
-    }
-    fclose(f);
-    http_done();
-    unsigned char dig[32]; mbedtls_sha256_finish(&c, dig); mbedtls_sha256_free(&c);
-    s_io_bytes = total;
-    if (io_err) { s_io_reason = 3; unlink(dstpart); return -1; }
-    if (r < 0)  { s_io_reason = 4; unlink(dstpart); return -1; }   // TLS/body read error after the 200
-    hex32(dig, sha_hex);
-    return total;
-}
-
-// ---- content.json (tiny, hand-parsed: no cJSON dependency for 3 fields) ------------------------------
-
-static bool content_read(char *tag, size_t tagcap, bool *complete)
-{
-    *complete = false; if (tag) tag[0] = 0;
-    FILE *f = fopen(CONTENT_JSON, "rb");
-    if (!f) return false;
-    char buf[192]; size_t n = fread(buf, 1, sizeof buf - 1, f); fclose(f);
-    buf[n] = 0;
-    const char *t = strstr(buf, "\"tag\"");
-    if (t) { t = strchr(t, ':'); if (t) { t = strchr(t, '"'); if (t) { t++; size_t k = 0;
-        while (t[k] && t[k] != '"' && k < tagcap - 1) { tag[k] = t[k]; k++; } tag[k] = 0; } } }
-    *complete = strstr(buf, "\"complete\":true") || strstr(buf, "\"complete\": true");
-    return true;
-}
-
-static void content_write(const char *tag, bool complete, bool declined)
-{
-    mkdir(NUCLEO_SD_MOUNT "/system", 0775);
-    FILE *f = fopen(CONTENT_JSON, "w");
-    if (!f) { ESP_LOGE(TAG, "content.json write: errno %d", errno); return; }
-    fprintf(f, "{\"tag\":\"%s\",\"complete\":%s,\"declined\":%s}\n",
-            tag, complete ? "true" : "false", declined ? "true" : "false");
-    fclose(f);
-}
-
-// ---- public: detect / arm / decline -----------------------------------------------------------------
-
-bool nucleo_sdcontent_needed(void)
-{
-    struct stat st;
-    if (stat(NUCLEO_SD_MOUNT, &st) != 0) return false;      // no card -> nothing to fill
-    char tag[24], ver3[24]; bool complete;
-    fw_ver3(ver3, sizeof ver3);
-    if (!content_read(tag, sizeof tag, &complete)) return true;   // never installed
-    if (!complete) return true;                                   // interrupted
-    return strcmp(tag, ver3) != 0;                                // installed, but for another firmware
-}
+// ---- NVS: arm flag + last failure -------------------------------------------------------------------
 
 static nvs_handle_t nvs_open_sdc(bool write)
 {
     nvs_handle_t h = 0;
-    nvs_open(SDC_NVS_NS, write ? NVS_READWRITE : NVS_READONLY, &h);
+    if (nvs_open(SDC_NVS_NS, write ? NVS_READWRITE : NVS_READONLY, &h) != ESP_OK) return 0;
     return h;
 }
 
@@ -253,40 +105,30 @@ bool nucleo_sdcontent_arm(bool on)
     if (e == ESP_OK) e = nvs_commit(h);
     nvs_close(h);
     if (e != ESP_OK) return false;
-    if (on) { ESP_LOGW(TAG, "SD content download armed — rebooting into the boot-window installer"); esp_restart(); }
+    if (on) { ESP_LOGW(TAG, "SD content download armed — rebooting into the install boot"); esp_restart(); }
     return true;
 }
 
-void nucleo_sdcontent_decline(void)
-{
-    char ver3[24]; fw_ver3(ver3, sizeof ver3);
-    content_write(ver3, false, true);     // complete=false, declined=true: not offered again until a new firmware
-}
-
-// ---- the run ----------------------------------------------------------------------------------------
-
-// language pick without pulling nucleo_i18n into REQUIRES: weak ref like the UI modals.
-extern const char *nucleo_i18n_lang(void) __attribute__((weak));
-static const char *L5(const char *it, const char *en, const char *es, const char *fr, const char *de)
-{
-    const char *l = nucleo_i18n_lang ? nucleo_i18n_lang() : 0;
-    if (!l) return en;
-    if (l[0] == 'i' && l[1] == 't') return it;
-    if (l[0] == 'e' && l[1] == 's') return es;
-    if (l[0] == 'f' && l[1] == 'r') return fr;
-    if (l[0] == 'd' && l[1] == 'e') return de;
-    return en;
-}
-// Persist the last failure reason to NVS so the FULL OS (after the install boot reboots) can report it on
-// /api/status — the install boot has no httpd and its RAM log ring is wiped by the reboot, so this is the
-// only way to read why it failed over the network.
-static void persist_diag(void)
+static void diag_store(const char *s)
 {
     nvs_handle_t h = nvs_open_sdc(true);
     if (!h) return;
-    nvs_set_str(h, "diag", s_st.err);
+    if (s) nvs_set_str(h, SDC_NVS_DIAG, s); else nvs_erase_key(h, SDC_NVS_DIAG);
+    if (s_heap[0]) nvs_set_str(h, "heap", s_heap);
     nvs_commit(h); nvs_close(h);
 }
+bool nucleo_sdcontent_last_heap(char *out, size_t n)
+{
+    if (!out || n == 0) return false;
+    out[0] = 0;
+    nvs_handle_t h = nvs_open_sdc(false);
+    if (!h) return false;
+    size_t len = n;
+    bool ok = nvs_get_str(h, "heap", out, &len) == ESP_OK && out[0];
+    nvs_close(h);
+    return ok;
+}
+
 bool nucleo_sdcontent_last_diag(char *out, size_t n)
 {
     if (!out || n == 0) return false;
@@ -294,145 +136,172 @@ bool nucleo_sdcontent_last_diag(char *out, size_t n)
     nvs_handle_t h = nvs_open_sdc(false);
     if (!h) return false;
     size_t len = n;
-    bool ok = nvs_get_str(h, "diag", out, &len) == ESP_OK && out[0];
+    bool ok = nvs_get_str(h, SDC_NVS_DIAG, out, &len) == ESP_OK && out[0];
     nvs_close(h);
     return ok;
 }
-static bool fail_sdc(void) { persist_diag(); s_st.phase = SDC_FAILED; progress(); return false; }
-static bool fail_run(const char *msg) { snprintf(s_st.err, sizeof s_st.err, "%s", msg); return fail_sdc(); }
 
-// Download one file (WRITE/CREATE): url -> /sd/<path>.part -> verify sha -> rename. One retry.
-static bool fetch_file(const char *base, const sdc_file_t *f)
+// ---- detect / decline -------------------------------------------------------------------------------
+
+bool nucleo_sdcontent_needed(void)
 {
-    char url[320], dst[260], part[266], got[65];
-    snprintf(url, sizeof url, "%s%s", base, f->path);
-    snprintf(dst, sizeof dst, "%s/%s", NUCLEO_SD_MOUNT, f->path);
-    snprintf(part, sizeof part, "%s.part", dst);
-    mkdir_parents(dst);
-    for (int attempt = 0; attempt < 2; attempt++) {
-        long n = http_to_file(url, part, got);
-        if (n >= 0 && (uint32_t)n == f->size && strncmp(got, f->sha, 64) == 0) {
-            unlink(dst);
-            if (rename(part, dst) != 0) { unlink(part); ESP_LOGE(TAG, "rename %s: errno %d", dst, errno); return false; }
-            // keep the .gz twin consistent: if the manifest brings a raw file, a stale .gz beside it would
-            // shadow it (webfs serves .gz first). Remove a sibling .gz the manifest did not also list — the
-            // next manifest line that IS the .gz will re-create it; a raw-only file loses its stale twin.
-            return true;
-        }
-        ESP_LOGW(TAG, "file '%s' attempt %d: n=%ld want=%u sha_ok=%d", f->path, attempt, n, (unsigned)f->size, n >= 0 && strncmp(got, f->sha, 64) == 0);
-        unlink(part);
+    struct stat sb;
+    if (stat(NUCLEO_SD_MOUNT, &sb) != 0) return false;                  // no card: nothing to fill
+    char ver3[24]; fw_ver3(ver3, sizeof ver3);
+    return sdc_content_needed(NUCLEO_SD_MOUNT, ver3);
+}
+
+void nucleo_sdcontent_decline(void)
+{
+    char ver3[24]; fw_ver3(ver3, sizeof ver3);
+    sdc_content_write(NUCLEO_SD_MOUNT, ver3, false, true);
+}
+
+// ---- HTTPS transport: Range windows on ONE keep-alive connection ------------------------------------
+// esp_http_client_close() really closes the socket, so it is NOT called between windows: after the body is
+// read (and flushed), the next esp_http_client_open() on the same host reuses the connection (the client
+// re-dials only when the server said "Connection: close" or a request failed — then cli_drop()).
+
+static esp_http_client_handle_t s_cli;
+static int s_tls_err;
+
+static void cli_drop(void)
+{
+    if (!s_cli) return;
+    esp_http_client_close(s_cli);
+    esp_http_client_cleanup(s_cli);
+    s_cli = NULL;
+}
+
+static int dev_get(void *ctx, const char *url, uint32_t off, uint32_t len, uint8_t *buf, int *status)
+{
+    (void)ctx;
+    *status = 0;
+    if (!s_cli) {
+        esp_http_client_config_t cfg = {
+            .url = url, .timeout_ms = 15000, .crt_bundle_attach = esp_crt_bundle_attach,
+            .buffer_size = 2048, .buffer_size_tx = 1024, .keep_alive_enable = true,
+        };
+        s_cli = esp_http_client_init(&cfg);
+        if (!s_cli) return -1;
+    } else if (esp_http_client_set_url(s_cli, url) != ESP_OK) {
+        cli_drop();
+        return -1;
     }
+    char range[40];
+    snprintf(range, sizeof range, "bytes=%u-%u", (unsigned)off, (unsigned)(off + len - 1));
+    esp_http_client_set_header(s_cli, "Range", range);
+    esp_err_t e = esp_http_client_open(s_cli, 0);
+    if (e != ESP_OK) { s_tls_err = (int)e; cli_drop(); return -1; }
+    int64_t cl = esp_http_client_fetch_headers(s_cli);
+    int st = esp_http_client_get_status_code(s_cli);
+    *status = st;
+    if (st != 206 && st != 200) {                                        // 404 / 416 / 5xx: no body we want
+        if (esp_http_client_flush_response(s_cli, NULL) != ESP_OK || !esp_http_client_is_persistent_connection(s_cli)) cli_drop();
+        return -1;
+    }
+    // A server that ignored Range on a long body would now send 16 KB records the TLS layer cannot take.
+    if (st == 200 && cl > (int64_t)len) { cli_drop(); return -1; }
+    int got = 0;
+    while (got < (int)len) {
+        int r = esp_http_client_read(s_cli, (char *)buf + got, (int)len - got);
+        if (r < 0) { *status = 0; cli_drop(); return -1; }
+        if (r == 0) break;
+        got += r;
+    }
+    if (esp_http_client_flush_response(s_cli, NULL) != ESP_OK || !esp_http_client_is_persistent_connection(s_cli)) cli_drop();
+    return got;
+}
+
+static void io_progress(void *ctx, const sdc_state_t *st) { (void)ctx; nucleo_sdcontent_on_progress(st); }
+static void io_tick(void *ctx) { (void)ctx; esp_task_wdt_reset(); }
+
+// ---- the run ----------------------------------------------------------------------------------------
+
+static void localize(void)
+{
+    const char *m;
+    switch (s_st.code) {
+    case SDC_E_NO_SD:        m = L5("Nessuna scheda SD", "No SD card", "Sin tarjeta SD", "Pas de carte SD", "Keine SD-Karte"); break;
+    case SDC_E_SD_RO:        m = L5("SD non scrivibile", "SD not writable", "SD no escribible", "SD non inscriptible", "SD nicht beschreibbar"); break;
+    case SDC_E_MANIFEST:     m = L5("Contenuti non raggiungibili", "Content unreachable", "Contenido inaccesible", "Contenu injoignable", "Inhalt nicht erreichbar"); break;
+    case SDC_E_MANIFEST_BAD: m = L5("Manifest non valido", "Invalid manifest", "Manifest invalido", "Manifeste invalide", "Ungueltiges Manifest"); break;
+    case SDC_E_TAG:          m = L5("Aggiorna prima il firmware", "Update the firmware first", "Actualiza el firmware", "Mettez a jour le firmware", "Erst Firmware updaten"); break;
+    case SDC_E_FETCH:        m = L5("Download interrotto", "Download interrupted", "Descarga interrumpida", "Telechargement interrompu", "Download abgebrochen"); break;
+    case SDC_E_VERIFY:       m = L5("File corrotto", "Corrupted file", "Archivo corrupto", "Fichier corrompu", "Datei beschaedigt"); break;
+    case SDC_E_WRITE:        m = L5("Scrittura SD fallita", "SD write failed", "Error al escribir la SD", "Ecriture SD impossible", "SD-Schreibfehler"); break;
+    case SDC_E_NOMEM:        m = L5("RAM insufficiente", "Not enough RAM", "Sin RAM", "RAM insuffisante", "Zu wenig RAM"); break;
+    default:                 m = L5("Download fallito", "Download failed", "Descarga fallida", "Echec", "Fehler"); break;
+    }
+    const char *slash = strrchr(s_st.detail, '/');
+    const char *d = slash ? slash + 1 : s_st.detail;
+    if (s_st.code == SDC_E_MANIFEST || s_st.code == SDC_E_FETCH)
+        snprintf(s_st.err, sizeof s_st.err, "%s (HTTP %d)%s%.28s", m, s_st.http, d[0] ? " " : "", d);
+    else if (d[0])
+        snprintf(s_st.err, sizeof s_st.err, "%s: %.40s", m, d);
+    else
+        snprintf(s_st.err, sizeof s_st.err, "%s", m);
+}
+
+static bool fail_here(sdc_code_t code, const char *detail)
+{
+    s_st.code = code; s_st.phase = SDC_FAILED;
+    snprintf(s_st.detail, sizeof s_st.detail, "%s", detail ? detail : "");
+    localize();
+    diag_store(s_st.err);
+    nucleo_sdcontent_on_progress(&s_st);
     return false;
 }
 
 bool nucleo_sdcontent_run(void)
 {
     memset(&s_st, 0, sizeof s_st);
-    s_st.phase = SDC_CHECKING; s_st.pct = -1; progress();
+    s_st.phase = SDC_CHECKING; s_st.pct = -1;
+    nucleo_sdcontent_on_progress(&s_st);
 
-    // Clear the arm flag FIRST: a crash/failure must never turn into a download-every-boot loop.
-    nucleo_sdcontent_arm(false);
+    nucleo_sdcontent_arm(false);                 // FIRST: a crash or failure must never become a boot loop
+    s_heap[0] = 0;
+    heap_mark("boot");                           // canvas still held, Wi-Fi coming up
 
-    // The SD must be mounted AND writable — we are about to write ~1300 files to it. Prove it with a real
-    // write/read/delete of a temp file (a mount can be present but read-only on a worn/locked card), and say
-    // so clearly instead of failing later with an opaque "download failed".
-    {
-        struct stat sb;
-        if (stat(NUCLEO_SD_MOUNT, &sb) != 0)
-            return fail_run(L5("Nessuna scheda SD", "No SD card", "Sin tarjeta SD", "Pas de carte SD", "Keine SD-Karte"));
-        mkdir(NUCLEO_SD_MOUNT "/system", 0775);
-        const char *probe = NUCLEO_SD_MOUNT "/system/.sdc-write-test";
-        FILE *pf = fopen(probe, "wb");
-        if (!pf || fwrite("ok", 1, 2, pf) != 2) { if (pf) fclose(pf); unlink(probe);
-            return fail_run(L5("SD non scrivibile", "SD not writable", "SD no escribible", "SD non inscriptible", "SD nicht beschreibbar")); }
-        fclose(pf); unlink(probe);
+    for (int t = 0; t < 120 && (!nucleo_setup_ip() || !nucleo_setup_ip()[0]); t++) { vTaskDelay(pdMS_TO_TICKS(250)); esp_task_wdt_reset(); }
+    if (!nucleo_setup_ip() || !nucleo_setup_ip()[0]) {
+        s_st.code = SDC_E_FETCH; s_st.phase = SDC_FAILED;
+        snprintf(s_st.err, sizeof s_st.err, "%s", L5("Nessuna rete Wi-Fi", "No Wi-Fi network", "Sin red Wi-Fi", "Pas de reseau Wi-Fi", "Kein WLAN"));
+        heap_mark("nonet");
+        diag_store(s_st.err); nucleo_sdcontent_on_progress(&s_st);
+        return false;
     }
+    heap_mark("link");
+    nucleo_sdcontent_on_net_ready();             // main.c frees the 32 KB canvas for the handshake
+    heap_mark("tls");
 
     size_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
     size_t freeb = heap_caps_get_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT);
-    ESP_LOGW(TAG, "install boot heap: free=%u largest=%u (need >=%u for TLS)", (unsigned)freeb, (unsigned)largest, TLS_MIN_BLOCK);
+    ESP_LOGW(TAG, "install boot heap: free=%u largest=%u (need >=%u)", (unsigned)freeb, (unsigned)largest, TLS_MIN_BLOCK);
     if (largest < TLS_MIN_BLOCK) {
-        snprintf(s_st.err, sizeof s_st.err, "%s: %u KB",
-                 L5("RAM insufficiente", "Not enough RAM", "Sin RAM", "RAM insuffisante", "Zu wenig RAM"), (unsigned)(largest / 1024));
-        return fail_sdc();
+        char kb[16]; snprintf(kb, sizeof kb, "%u KB", (unsigned)(largest / 1024));
+        return fail_here(SDC_E_NOMEM, kb);
     }
-
-    // Wait for the STA IP (creds were saved by the wizard just before the reboot).
-    for (int t = 0; t < 120 && (!nucleo_setup_ip() || !nucleo_setup_ip()[0]); t++) { vTaskDelay(pdMS_TO_TICKS(250)); esp_task_wdt_reset(); }
-    if (!nucleo_setup_ip() || !nucleo_setup_ip()[0])
-        return fail_run(L5("Nessuna rete Wi-Fi", "No Wi-Fi network", "Sin red Wi-Fi", "Pas de reseau Wi-Fi", "Kein WLAN"));
 
     char ver3[24]; fw_ver3(ver3, sizeof ver3);
     char base[96]; snprintf(base, sizeof base, "%ssd/%s/", SDC_BASE_HOST, ver3);
-    ESP_LOGW(TAG, "install for v%s, base=%s", ver3, base);
+    ESP_LOGW(TAG, "install v%s from %s, packs=%s, window=%u", ver3, base, s_packs, SDC_WINDOW);
 
-    // 1) fetch the manifest to a file.
-    mkdir(NUCLEO_SD_MOUNT "/system", 0775); mkdir(MANIFEST_DIR, 0775);
-    char murl[128], msha[65];
-    snprintf(murl, sizeof murl, "%ssd-manifest.txt", base);
-    if (http_to_file(murl, MANIFEST_PART, msha) < 0) {
-        // Say WHY on screen: the firmware version (so a wrong sd/<ver>/ URL is obvious), the HTTP status
-        // (404 = that version is not hosted; 0 = the TLS/connection never opened) and the TLS error.
-        snprintf(s_st.err, sizeof s_st.err, "%s v%s (http %d tls %d io%d b%ld)",
-                 L5("Download fallito", "Download failed", "Descarga fallida", "Echec", "Fehler"),
-                 ver3, s_last_status, s_last_open_err, s_io_reason, s_io_bytes);
-        return fail_sdc();
-    }
-    unlink(MANIFEST_FILE); rename(MANIFEST_PART, MANIFEST_FILE);
-
-    // 2) header + count pass.
-    FILE *mf = fopen(MANIFEST_FILE, "r");
-    if (!mf) return fail_run(L5("Manifest illeggibile", "Manifest unreadable", "Manifest ilegible", "Manifeste illisible", "Manifest unlesbar"));
-    char line[320]; sdc_header_t hdr; bool have_hdr = false;
-    int total = 0;
-    while (fgets(line, sizeof line, mf)) {
-        if (!have_hdr && sdc_parse_header(line, &hdr)) { have_hdr = true;
-            if (!sdc_tag_matches(ver3, hdr.tag)) { fclose(mf);
-                return fail_run(L5("Aggiorna prima il firmware", "Update the firmware first", "Actualiza el firmware", "Mettez a jour le firmware", "Erst Firmware updaten")); }
-            continue;
-        }
-        sdc_file_t f; bool cmt;
-        if (sdc_parse_file(line, &f, &cmt)) { if (pack_wanted(f.pack)) total++; }
-        else if (!cmt) { fclose(mf); return fail_run(L5("Manifest non valido", "Invalid manifest", "Manifest invalido", "Manifeste invalide", "Ungueltiges Manifest")); }
-    }
-    if (!have_hdr) { fclose(mf); return fail_run(L5("Manifest non valido", "Invalid manifest", "Manifest invalido", "Manifeste invalide", "Ungueltiges Manifest")); }
-    s_st.files_total = total; s_st.phase = SDC_DOWNLOADING; s_st.pct = 0; progress();
-
-    // 3) install pass.
-    rewind(mf);
-    while (fgets(line, sizeof line, mf)) {
-        sdc_file_t f; bool cmt;
-        if (!sdc_parse_file(line, &f, &cmt)) continue;      // header / #pack / comment
-        if (!pack_wanted(f.pack)) continue;                 // optional pack, not selected this run
-        char dst[260]; snprintf(dst, sizeof dst, "%s/%s", NUCLEO_SD_MOUNT, f.path);
-        uint32_t dsz = 0; bool on_disk = file_stat(dst, &dsz);
-        char dsha[65]; bool have_sha = false;
-        if (on_disk && dsz == f.size) have_sha = file_sha(dst, dsha);   // only hash when size matches
-        sdc_plan_t pl = sdc_plan(&f, on_disk, dsz, have_sha ? dsha : NULL);
-
-        const char *slash = strrchr(f.path, '/');
-        const char *bn = slash ? slash + 1 : f.path;
-        snprintf(s_st.cur, sizeof s_st.cur, "%.39s", bn);   // basename for the progress line (bounded)
-
-        if (pl == SDC_PLAN_SKIP || pl == SDC_PLAN_CREATE_SKIP) {
-            s_st.files_done++;
-        } else if (pl == SDC_PLAN_MERGE) {
-            // apps.json: on a fresh/absent file, write it (first install). If it already exists it is the
-            // device's live registry (agent-created apps etc.) — keep it, never blind-overwrite.
-            if (!on_disk) { if (fetch_file(base, &f)) s_st.files_written++; else { fclose(mf); return fail_run(L5("Download fallito", "Download failed", "Descarga fallida", "Echec du telechargement", "Download fehlgeschlagen")); } }
-            s_st.files_done++;
-        } else { // WRITE
-            if (!fetch_file(base, &f)) { fclose(mf); return fail_run(L5("Download fallito", "Download failed", "Descarga fallida", "Echec du telechargement", "Download fehlgeschlagen")); }
-            s_st.files_written++; s_st.files_done++; s_st.recv_kb += (int)(f.size / 1024);
-        }
-        s_st.pct = total > 0 ? (s_st.files_done * 100) / total : 100;
-        progress();
-    }
-    fclose(mf);
-    if (s_cli) { esp_http_client_cleanup(s_cli); s_cli = NULL; }
-
-    content_write(ver3, true, false);
-    s_st.phase = SDC_DONE; s_st.pct = 100; progress();
-    ESP_LOGW(TAG, "SD content complete: %d files (%d written) for %s", s_st.files_done, s_st.files_written, ver3);
-    return true;
+    sdc_cfg_t cfg = { .root = NUCLEO_SD_MOUNT, .base_url = base, .ver3 = ver3, .packs = s_packs,
+                      .window = SDC_WINDOW, .retries = 3 };
+    sdc_io_t io = { .ctx = NULL, .get = dev_get, .progress = io_progress, .tick = io_tick };
+    s_tls_err = 0;
+    bool ok = sdc_engine_run(&cfg, &io, &s_st);
+    cli_drop();
+    { size_t n = strlen(s_heap);                 // the lowest free heap the whole run reached
+      if (n < sizeof s_heap - 16) snprintf(s_heap + n, sizeof s_heap - n, " | min %u",
+                                           (unsigned)(heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL | MALLOC_CAP_8BIT) / 1024)); }
+    ESP_LOGW(TAG, "install %s: code=%d http=%d tls=%d requests=%d files %d/%d written=%d detail=%s",
+             ok ? "OK" : "FAILED", s_st.code, s_st.http, s_tls_err, s_st.requests,
+             s_st.files_done, s_st.files_total, s_st.files_written, s_st.detail);
+    if (ok) { diag_store(NULL); return true; }   // clears the failure, keeps the heap profile
+    localize();
+    diag_store(s_st.err);
+    nucleo_sdcontent_on_progress(&s_st);
+    return false;
 }

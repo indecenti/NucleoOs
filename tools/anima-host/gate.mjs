@@ -501,6 +501,15 @@ const gates = [
     // registry, IR, the ANIMA brain files, facet seeds, wallpapers, evilportal), manifest header/line
     // parsing, tag matching and the per-file plan (skip/write/create-only/merge). Pure C, no device.
     ok: (code) => code === 0, summary: (o) => (o.match(/sdcontent-policy: [^\n]*/) || [lastLine(o)])[0].trim() },
+  { name: 'sdcontent-e2e (SD download, end to end)', cmd: 'node', args: ['tools/anima-host/sdcontent-e2e.mjs'],
+    // The REAL installer engine (sdc_engine.c + content_policy.c + sdc_sha256.c) driven against a fake GitHub
+    // Pages that models the Cardputer's 8 KB TLS record cap (the shipped bug: a plain GET died after HTTP 200)
+    // and injects faults: dropped connections, corrupted windows, mid-file link loss, 404s, a manifest for
+    // another firmware, a hostile path, a missing / unwritable card. Asserts the final tree is byte-exact, user
+    // state untouched, no .part left, reruns download nothing, resume fetches only what is missing, Skip is
+    // remembered. Plus FIPS SHA-256 vectors and hashlib agreement on the real release in dist/.
+    ok: (code) => code === 0, summary: (o) => (o.match(/sdcontent-e2e: [^
+]*/) || [lastLine(o)])[0].trim() },
   { name: 'setup-store (reset + SD secrets)', cmd: 'node', args: ['tools/anima-host/setup-store-check.mjs'],
     // nucleo_setup's three-tier config store (firmware/components/nucleo_setup/setup_store.c) + the hotspot
     // credential core (ap_creds.c), host-compiled with MinGW against ESP-IDF's real cJSON and an in-memory
