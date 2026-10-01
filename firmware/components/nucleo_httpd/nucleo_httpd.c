@@ -170,6 +170,8 @@ static esp_err_t status_get(httpd_req_t *req)
     const esp_app_desc_t *app = esp_app_get_description();
     cJSON_AddStringToObject(root, "version", app ? app->version : "?");
     cJSON_AddStringToObject(root, "built", app ? app->date : "?");
+    { extern bool nucleo_sdcontent_last_diag(char *, size_t);   // last SD-content install failure (persisted in NVS)
+      char diag[80]; if (nucleo_sdcontent_last_diag(diag, sizeof diag)) cJSON_AddStringToObject(root, "sdc_diag", diag); }
     cJSON_AddNumberToObject(root, "uptime_s", esp_timer_get_time() / 1000000);
     // Which boot profile serves this request. "web" = the lean server-Solo a browser session hands off to:
     // httpd + auth only, the offline brain / voice / IR / recorder / calendar service are OFF to leave the

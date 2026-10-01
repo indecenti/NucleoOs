@@ -10,6 +10,7 @@
 #pragma once
 #include <stdbool.h>
 #include <stdint.h>
+#include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -58,6 +59,9 @@ bool nucleo_sdcontent_run(void);
 
 // Live progress snapshot (valid during a run; the UI polls it).
 const sdc_state_t *nucleo_sdcontent_state(void);
+
+// The last install-boot failure reason, persisted to NVS (the install boot has no httpd). true if present.
+bool nucleo_sdcontent_last_diag(char *out, size_t n);
 
 // Progress hook: the engine calls this after each file so a boot-window drawer can paint a bar. Weak,
 // default no-op; main.c provides the real one (it owns M5GFX). Never call UI from here directly (C).
