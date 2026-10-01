@@ -158,13 +158,19 @@ static bool http_open(const char *url)
 
 static void http_done(void) { if (s_cli) esp_http_client_close(s_cli); }
 
+// Why the last http_to_file() failed, for diagnosis (persisted with the error): 0 ok, 1 http open/status,
+// 2 fopen(dst), 3 fwrite (SD full / write error), 4 esp_http_client_read (TLS body), plus bytes written.
+static int  s_io_reason;
+static long s_io_bytes;
+
 // Download `url` to `dstpart`, hashing as it streams. On success `sha_hex` holds the file's SHA-256.
 // Returns bytes written, or -1 on error. Feeds the WDT per chunk.
 static long http_to_file(const char *url, const char *dstpart, char *sha_hex)
 {
-    if (!http_open(url)) return -1;
+    s_io_reason = 0; s_io_bytes = 0;
+    if (!http_open(url)) { s_io_reason = 1; return -1; }
     FILE *f = fopen(dstpart, "wb");
-    if (!f) { http_done(); ESP_LOGE(TAG, "open %s: errno %d", dstpart, errno); return -1; }
+    if (!f) { http_done(); ESP_LOGE(TAG, "open %s: errno %d", dstpart, errno); s_io_reason = 2; return -1; }
     mbedtls_sha256_context c; mbedtls_sha256_init(&c); mbedtls_sha256_starts(&c, 0);
     static char buf[2048];
     long total = 0; int r;
@@ -178,7 +184,9 @@ static long http_to_file(const char *url, const char *dstpart, char *sha_hex)
     fclose(f);
     http_done();
     unsigned char dig[32]; mbedtls_sha256_finish(&c, dig); mbedtls_sha256_free(&c);
-    if (io_err || r < 0) { unlink(dstpart); return -1; }
+    s_io_bytes = total;
+    if (io_err) { s_io_reason = 3; unlink(dstpart); return -1; }
+    if (r < 0)  { s_io_reason = 4; unlink(dstpart); return -1; }   // TLS/body read error after the 200
     hex32(dig, sha_hex);
     return total;
 }
@@ -365,9 +373,9 @@ bool nucleo_sdcontent_run(void)
     if (http_to_file(murl, MANIFEST_PART, msha) < 0) {
         // Say WHY on screen: the firmware version (so a wrong sd/<ver>/ URL is obvious), the HTTP status
         // (404 = that version is not hosted; 0 = the TLS/connection never opened) and the TLS error.
-        snprintf(s_st.err, sizeof s_st.err, "%s v%s (HTTP %d / tls %d)",
-                 L5("Contenuti offline?", "Content offline?", "Contenido offline?", "Contenu hors ligne ?", "Inhalt offline?"),
-                 ver3, s_last_status, s_last_open_err);
+        snprintf(s_st.err, sizeof s_st.err, "%s v%s (http %d tls %d io%d b%ld)",
+                 L5("Download fallito", "Download failed", "Descarga fallida", "Echec", "Fehler"),
+                 ver3, s_last_status, s_last_open_err, s_io_reason, s_io_bytes);
         return fail_sdc();
     }
     unlink(MANIFEST_FILE); rename(MANIFEST_PART, MANIFEST_FILE);
