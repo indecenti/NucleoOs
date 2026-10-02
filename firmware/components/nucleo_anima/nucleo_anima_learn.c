@@ -10,9 +10,15 @@
 #include <ctype.h>
 #include <stdio.h>
 #include <stdint.h>
+#include <stdlib.h>            // malloc: the per-call scratch below
 #include <math.h>              // sqrt
 
 #define LEARN_DIM     256       // == L1_MAXDIM / RECALL_DIM: the widest encoder vector we buffer
+#define TSV_LN        640       // one learned-TSV line
+// The per-call scratch of this file lives on the heap ONLY for the call that needs it (it was ~3 KB of
+// permanent .bss). A store REWRITE takes it before any file is touched, so no RAM means "not written",
+// never a half-rewritten store.
+typedef struct { char rid[80]; int8_t rv[LEARN_DIM]; } learn_rec_t;
 #define LEARN_MAX     128       // bounded store: drop the oldest beyond this many user facts
 #define LEARN_FLOOR   0.68f     // semantic floor: a real paraphrase of a short subject lands ~0.70-0.80 (measured),
                                 // while an unrelated query sits ~0.20 — a wide margin. The full-coverage lexical
@@ -140,6 +146,8 @@ static void vec_put(const char *id, const int8_t *v, int D)
 {
     uint8_t idl = (uint8_t)strlen(id);
     if (idl == 0 || idl >= 80) return;
+    learn_rec_t *sc = malloc(sizeof *sc);
+    if (!sc) return;
 
     int total = 0;
     FILE *in = fopen(U_VEC, "rb");
@@ -157,12 +165,12 @@ static void vec_put(const char *id, const int8_t *v, int D)
 
     char tmp[180]; snprintf(tmp, sizeof(tmp), "%s.tmp", U_VEC);
     FILE *out = fopen(tmp, "wb");
-    if (!out) return;
+    if (!out) { free(sc); return; }
     in = fopen(U_VEC, "rb");
     if (in) {
-        uint8_t l; unsigned char db[2]; static char rid[80]; static int8_t rv[LEARN_DIM];
+        uint8_t l; unsigned char db[2]; char *rid = sc->rid; int8_t *rv = sc->rv;
         while (fread(&l, 1, 1, in) == 1) {
-            if (l == 0 || l >= sizeof(rid) || fread(rid, 1, l, in) != l || fread(db, 1, 2, in) != 2) break;
+            if (l == 0 || l >= sizeof sc->rid || fread(rid, 1, l, in) != l || fread(db, 1, 2, in) != 2) break;
             int d = db[0] | (db[1] << 8);
             if (d <= 0 || d > LEARN_DIM) { if (fseek(in, d, SEEK_CUR) != 0) break; continue; }
             if (fread(rv, 1, d, in) != (size_t)d) break;
@@ -177,18 +185,20 @@ static void vec_put(const char *id, const int8_t *v, int D)
     fclose(out);
     remove(U_VEC);
     if (rename(tmp, U_VEC) != 0) remove(tmp);
+    free(sc);
 }
 
 // Rewrite the text record file in lockstep with the sidecar: same drop-same-id + oldest-eviction policy.
 static void tsv_put(const char *id, const char *trig, const char *reply)
 {
     size_t idl = strlen(id);
+    char *ln = malloc(TSV_LN);                     // one line buffer for both passes, taken before the rewrite
+    if (!ln) return;
 
     int total = 0;
     FILE *in = fopen(U_TSV, "r");
     if (in) {
-        static char ln[640];
-        while (fgets(ln, sizeof(ln), in)) {
+        while (fgets(ln, TSV_LN, in)) {
             char *tab = strchr(ln, '\t'); if (!tab) continue;
             size_t k = (size_t)(tab - ln);
             if (!(k == idl && !memcmp(ln, id, k))) total++;
@@ -199,11 +209,10 @@ static void tsv_put(const char *id, const char *trig, const char *reply)
 
     char tmp[180]; snprintf(tmp, sizeof(tmp), "%s.tmp", U_TSV);
     FILE *out = fopen(tmp, "w");
-    if (!out) return;
+    if (!out) { free(ln); return; }
     in = fopen(U_TSV, "r");
     if (in) {
-        static char ln[640];
-        while (fgets(ln, sizeof(ln), in)) {
+        while (fgets(ln, TSV_LN, in)) {
             char *tab = strchr(ln, '\t'); if (!tab) continue;
             size_t k = (size_t)(tab - ln);
             if (k == idl && !memcmp(ln, id, k)) continue;
@@ -217,6 +226,7 @@ static void tsv_put(const char *id, const char *trig, const char *reply)
     fclose(out);
     remove(U_TSV);
     if (rename(tmp, U_TSV) != 0) remove(tmp);
+    free(ln);
 }
 
 // Fetch the trigger + reply for an exact id from the TSV. Returns 1 on hit.
@@ -224,8 +234,10 @@ static int tsv_get(const char *id, char *trig, int tcap, char *reply, int rcap)
 {
     FILE *f = fopen(U_TSV, "r");
     if (!f) return 0;
-    size_t idl = strlen(id); int found = 0; static char ln[640];
-    while (fgets(ln, sizeof(ln), f)) {
+    char *ln = malloc(TSV_LN);
+    if (!ln) { fclose(f); return 0; }
+    size_t idl = strlen(id); int found = 0;
+    while (fgets(ln, TSV_LN, f)) {
         char *t1 = strchr(ln, '\t'); if (!t1) continue;
         size_t k = (size_t)(t1 - ln);
         if (!(k == idl && !memcmp(ln, id, k))) continue;
@@ -239,6 +251,7 @@ static int tsv_get(const char *id, char *trig, int tcap, char *reply, int rcap)
         found = 1; break;
     }
     fclose(f);
+    free(ln);
     return found;
 }
 
@@ -252,8 +265,6 @@ int nucleo_anima_learn_put(const char *subject, const char *fact, bool en)
 
     int D = nucleo_anima_l1_dim();
     if (D <= 0 || D > LEARN_DIM) return 0;                    // encoder absent -> recall would be off
-    static int8_t v[LEARN_DIM];
-    if (nucleo_anima_l1_encode(subject, v, LEARN_DIM) != D) return 0;
 
     char slug[64]; learn_slug(slug, sizeof(slug), subject);
     if (!slug[0]) return 0;
@@ -264,9 +275,12 @@ int nucleo_anima_learn_put(const char *subject, const char *fact, bool en)
     san_line(reply, sizeof(reply), fact);
     if (!trig[0] || !reply[0]) return 0;
 
-    vec_put(id, v, D);
-    tsv_put(id, trig, reply);
-    return 1;
+    int8_t *v = malloc(LEARN_DIM);                            // the subject's vector, for this call only
+    if (!v) return 0;
+    int ok = nucleo_anima_l1_encode(subject, v, LEARN_DIM) == D;
+    if (ok) { vec_put(id, v, D); tsv_put(id, trig, reply); }
+    free(v);
+    return ok;
 }
 
 int nucleo_anima_learn_recall(const char *query, bool en, anima_result_t *out)
@@ -278,15 +292,17 @@ int nucleo_anima_learn_recall(const char *query, bool en, anima_result_t *out)
     FILE *in = fopen(U_VEC, "rb");                            // nothing learned -> skip the encode entirely
     if (!in) return 0;
 
-    static int8_t qv[LEARN_DIM];
-    if (nucleo_anima_l1_encode(query, qv, LEARN_DIM) != D) { fclose(in); return 0; }
+    struct { int8_t qv[LEARN_DIM]; learn_rec_t rec; } *sc = malloc(sizeof *sc);   // freed once the scan ends
+    if (!sc) { fclose(in); return 0; }
+    int8_t *qv = sc->qv;
+    if (nucleo_anima_l1_encode(query, qv, LEARN_DIM) != D) { fclose(in); free(sc); return 0; }
     double qn = 0; for (int k = 0; k < D; k++) qn += (double)qv[k] * qv[k];
-    qn = sqrt(qn); if (qn < 1e-9) { fclose(in); return 0; }
+    qn = sqrt(qn); if (qn < 1e-9) { fclose(in); free(sc); return 0; }
 
     char bestid[80] = ""; float best = -2.0f;
-    static char rid[80]; static int8_t rv[LEARN_DIM]; uint8_t l; unsigned char db[2];
+    char *rid = sc->rec.rid; int8_t *rv = sc->rec.rv; uint8_t l; unsigned char db[2];
     while (fread(&l, 1, 1, in) == 1) {
-        if (l == 0 || l >= sizeof(rid) || fread(rid, 1, l, in) != l || fread(db, 1, 2, in) != 2) break;
+        if (l == 0 || l >= sizeof sc->rec.rid || fread(rid, 1, l, in) != l || fread(db, 1, 2, in) != 2) break;
         int d = db[0] | (db[1] << 8);
         if (d != D) { if (fseek(in, d, SEEK_CUR) != 0) break; continue; }
         if (fread(rv, 1, d, in) != (size_t)d) break;
@@ -296,6 +312,7 @@ int nucleo_anima_learn_recall(const char *query, bool en, anima_result_t *out)
         if (cos > best) { best = cos; rid[l] = 0; snprintf(bestid, sizeof(bestid), "%s", rid); }
     }
     fclose(in);
+    free(sc);                                                 // bestid is a copy: the scratch is done
     if (best < LEARN_FLOOR || !bestid[0]) return 0;          // semantic floor: not confidently the same topic
 
     char trig[U_TRIG_MAX + 1], reply[U_REPLY_MAX + 1];
