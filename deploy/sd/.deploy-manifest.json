@@ -846,23 +846,23 @@
                                        },
     "apps/anima/www/local/anima-local.mjs":  {
                                                  "size":  "74498",
-                                                 "mtime":  "639263421844828552",
+                                                 "mtime":  "639265270984841064",
                                                  "hash":  "def0fe734d9418743a75f6d3b578a5b9eaf3027dbaa9a77af1b5b056088ba028"
                                              },
     "apps/anima/www/local/anima-local.mjs.gz":  {
                                                     "size":  "20749",
-                                                    "mtime":  "639263502039265260",
+                                                    "mtime":  "639265270986556425",
                                                     "hash":  "202bb04056aec5eca4a10e137082161852a18811eddddef92085d89e615f87f5"
                                                 },
     "apps/anima/www/local/anima-local.wasm":  {
-                                                  "size":  "422386",
-                                                  "mtime":  "639263421831513312",
-                                                  "hash":  "3f6288ee1d2260dd0185ae18b1ecef071699724930922c1bab6e57bb411a1571"
+                                                  "size":  "383372",
+                                                  "mtime":  "639265270979963610",
+                                                  "hash":  "45cd11a601422f00e1dad773b229364ec9c26fbe0332a7de7c6dbd0bd59feb23"
                                               },
     "apps/anima/www/local/anima-local.wasm.gz":  {
-                                                     "size":  "185276",
-                                                     "mtime":  "639263421846515240",
-                                                     "hash":  "db508ba599dac9b790c1b96f5c717ef10b38b2fbfdc333eeed998e9c66203736"
+                                                     "size":  "163961",
+                                                     "mtime":  "639265270986686681",
+                                                     "hash":  "fb6ce18064e1556899b33e42a05d9e917295fbd91221fd8c20111202862d8bbd"
                                                  },
     "apps/anima/www/local/cascade.js":  {
                                             "size":  "36413",
@@ -875,14 +875,14 @@
                                                "hash":  "143950d17e817ef0eb7d22fceb7ff2a7728f70298f8a09f89c144edda2e1cb46"
                                            },
     "apps/anima/www/local/engine.js":  {
-                                           "size":  "35206",
-                                           "mtime":  "639263001876879872",
-                                           "hash":  "3f0082e4933a8acdcae6504416699aaac0c992323f3b712ad8a8bf0f60b0515f"
+                                           "size":  "35460",
+                                           "mtime":  "639264966228199328",
+                                           "hash":  "0dd720a2a6a9b8d19a18aa6b6b5898911072b372992de38cfaaa56d98fba2a38"
                                        },
     "apps/anima/www/local/engine.js.gz":  {
-                                              "size":  "12037",
-                                              "mtime":  "639263502039279315",
-                                              "hash":  "21f8fb793b0e667fccc5b31da4cb7289e646d07fb2960715b20c4cd186baabef"
+                                              "size":  "12142",
+                                              "mtime":  "639264966512813655",
+                                              "hash":  "0ac20aa79d7e24aeb11edc95cb76f5c182212abe1f65d223082faf39ea6a1396"
                                           },
     "apps/anima/www/local/weather.js":  {
                                             "size":  "24888",
@@ -6134,6 +6134,11 @@
                                                "mtime":  "639263182810043640",
                                                "hash":  "4a44bc0ec64b0323d822d38771345703f91ab6f905ef09fbc6a01c03eeba72c6"
                                            },
+    "data/anima/anima-person-ambig.bin":  {
+                                              "size":  "99328",
+                                              "mtime":  "639264961829311328",
+                                              "hash":  "27cae283abdcb8c1048c12fa5d36e153a2976cca307810c76dec0b687f0abe5c"
+                                          },
     "data/anima/commands.it.json":  {
                                         "size":  "1384",
                                         "mtime":  "639172129787602189",
