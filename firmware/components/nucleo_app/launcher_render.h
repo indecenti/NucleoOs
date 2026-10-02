@@ -69,6 +69,7 @@ void launcher_render_control_center_close(void);       // persist a brightness/v
 int         launcher_render_control_center_key(int key, char ch);
 const char *launcher_render_control_center_launch_id(void);
 bool        launcher_render_control_center_tick(void);  // 1 Hz: true when what the panel shows changed
+bool        launcher_render_control_center_animating(void);   // every loop: true while its scroll eases
 // Without the back-buffer the panel repaints only the elements that changed (flicker-free); call this
 // when something else drew over it, so the next paint is a full one.
 void        launcher_render_control_center_invalidate(void);

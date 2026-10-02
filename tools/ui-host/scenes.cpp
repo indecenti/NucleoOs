@@ -94,7 +94,7 @@ static void go_category(const char *cat, int row)
 static void type(const char *s) { launcher_reset(); while (*s) launcher_filter_push(*s++); }
 
 // The Control Center over the launcher, exactly as TAB raises it on the device; keys < 0 are characters.
-// Painted until its scroll has eased to the focused card (the run loop keeps frames coming while it moves).
+// Painted like the device run loop does: one frame per key, then a frame per iteration while the scroll eases.
 static void cc_scene(std::initializer_list<int> keys)
 {
     launcher_reset(); draw_launcher();
@@ -102,7 +102,8 @@ static void cc_scene(std::initializer_list<int> keys)
     launcher_render_control_center_open();
     for (int k : keys) launcher_render_control_center_key(k < 0 ? NK_CHAR : k, k < 0 ? (char)-k : 0);
     launcher_render_control_center_invalidate();
-    for (int i = 0; i < 40; i++) { launcher_render_control_center(); if (!launcher_render_control_center_tick()) break; }
+    launcher_render_control_center();
+    for (int i = 0; i < 40 && launcher_render_control_center_animating(); i++) launcher_render_control_center();
 }
 
 struct Scene { const char *name; void (*run)(void); };
@@ -122,6 +123,7 @@ static const Scene SCENES[] = {
                           go_category(LAUNCHER_RECENT_ID, 0); draw_launcher(); } },
     { "search-none", [] { type("zzq"); draw_launcher(); } },
     { "cc",          [] { cc_scene({}); } },
+    { "cc-bright",   [] { cc_scene({ NK_DOWN }); } },                              // brightness card centred
     { "cc-volume",   [] { cc_scene({ NK_DOWN, NK_DOWN }); } },                     // scrolled to mid-column
     { "cc-web",      [] { cc_scene({ NK_DOWN, NK_DOWN, NK_DOWN, NK_RIGHT }); } },  // bottom: IP + pairing PIN
     { "cc-restart",  [] { cc_scene({ -'9' }); } },                                // key 9 arms Restart (red)

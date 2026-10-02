@@ -1337,7 +1337,12 @@ static uint32_t s_cc_drawn_sig = 0;    // latched by every draw (key-driven or t
 
 // 1 Hz: true only when the panel's content changed since it was last DRAWN — a static panel is never
 // re-blitted, and a key-driven redraw is not repeated by the next tick (ANTI-FLICKER.md).
-bool launcher_render_control_center_tick(void) { return s_cc_anim || cc_sig() != s_cc_drawn_sig; }
+bool launcher_render_control_center_tick(void) { return cc_sig() != s_cc_drawn_sig; }
+
+// Every loop iteration (~50 Hz), like the launcher list: true while the scroll is still easing toward the
+// focused card, so each frame moves it one step. (The 1 Hz tick above moved it once a second: the panel sat
+// half-scrolled for seconds after every key.)
+bool launcher_render_control_center_animating(void) { return s_cc_anim; }
 
 // ---- drawing ------------------------------------------------------------------------------------
 // One painter for both paths. With the shared back-buffer the whole panel is composed and blitted once.
@@ -1630,13 +1635,11 @@ template <typename T> static void cc_knob(T *g)
     g->fillRect(CC_KNOB_X, ky, 2, kh, MUTED);
 }
 
-// Where the column must scroll so the focused card (and its ring) is fully in the viewport.
+// Where the column must scroll: the focused card CENTRED in the viewport (a watch list keeps the selection
+// in the middle), clamped to the column ends so the first and last cards still sit at the edges.
 static int cc_scroll_target(int vph)
 {
-    int top = CC_CARD_Y[s_cc_line] - (s_cc_line ? 2 : 0), bot = CC_CARD_Y[s_cc_line] + CC_CARD_H[s_cc_line];
-    int t = s_cc_scroll;
-    if (top < t) t = top;
-    if (bot > t + vph) t = bot - vph;
+    int t = CC_CARD_Y[s_cc_line] + CC_CARD_H[s_cc_line] / 2 - vph / 2;
     int mx = CC_COL_H - vph; if (mx < 0) mx = 0;
     if (t > mx) t = mx;
     if (t < 0) t = 0;
