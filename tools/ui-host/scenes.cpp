@@ -93,6 +93,18 @@ static void go_category(const char *cat, int row)
 }
 static void type(const char *s) { launcher_reset(); while (*s) launcher_filter_push(*s++); }
 
+// The Control Center over the launcher, exactly as TAB raises it on the device; keys < 0 are characters.
+// Painted until its scroll has eased to the focused card (the run loop keeps frames coming while it moves).
+static void cc_scene(std::initializer_list<int> keys)
+{
+    launcher_reset(); draw_launcher();
+    launcher_render_control_center_reset();
+    launcher_render_control_center_open();
+    for (int k : keys) launcher_render_control_center_key(k < 0 ? NK_CHAR : k, k < 0 ? (char)-k : 0);
+    launcher_render_control_center_invalidate();
+    for (int i = 0; i < 40; i++) { launcher_render_control_center(); if (!launcher_render_control_center_tick()) break; }
+}
+
 struct Scene { const char *name; void (*run)(void); };
 static const Scene SCENES[] = {
     { "home",        [] { launcher_reset(); draw_launcher(); } },
@@ -109,8 +121,10 @@ static const Scene SCENES[] = {
     { "cat-recent",  [] { launcher_reset(); for (const char *id : { "files", "weather", "wifi" }) launcher_note_launch(id);
                           go_category(LAUNCHER_RECENT_ID, 0); draw_launcher(); } },
     { "search-none", [] { type("zzq"); draw_launcher(); } },
-    { "cc",          [] { launcher_reset(); draw_launcher(); launcher_render_control_center_open();
-                          launcher_render_control_center_invalidate(); launcher_render_control_center(); } },
+    { "cc",          [] { cc_scene({}); } },
+    { "cc-volume",   [] { cc_scene({ NK_DOWN, NK_DOWN }); } },                     // scrolled to mid-column
+    { "cc-web",      [] { cc_scene({ NK_DOWN, NK_DOWN, NK_DOWN, NK_RIGHT }); } },  // bottom: IP + pairing PIN
+    { "cc-restart",  [] { cc_scene({ -'9' }); } },                                // key 9 arms Restart (red)
 };
 
 // ---- foreground-app framework (what nucleo_app.cpp gives a native app) -----------------------------
@@ -328,6 +342,7 @@ static void list_all(void)
             for (const char *l : LANGS) printf("%s.%s.%s.classic\n", g.surface, g.set[i].name, l);
             for (const char *t : THEMES) if (strcmp(t, "classic")) printf("%s.%s.en.%s\n", g.surface, g.set[i].name, t);
             printf("%s.%s.en.classic.direct\n", g.surface, g.set[i].name);
+            printf("%s.%s.en.classic.short\n", g.surface, g.set[i].name);   // the ADV's fitted 240x130 canvas
         }
 }
 
@@ -340,14 +355,24 @@ static int render_one(const char *full)
     const Scene *sc = find_scene(part[0], part[1]);
     if (!sc) { fprintf(stderr, "unknown scene %s\n", full); return 2; }
     bool direct = np == 5 && !strcmp(part[4], "direct");
+    bool shortc = np == 5 && !strcmp(part[4], "short");
     nucleo_theme_set(part[3]);
     nucleo_i18n_set_lang(part[2]);
     g_host.canvas_ok = !direct;
-    if (direct) nucleo_screen_release();
+    // Every scene states its canvas height (no leak from a previous scene in this process). 130 rows is what
+    // nucleo_screen_acquire() fits on the ADV: (31,744 B largest block - 512) / 240.
+    g_host.canvas_rows = shortc ? 130 : 135;
+    g_host.stale_mark = shortc; g_host.stale_px = 0;
+    nucleo_screen_release();
     launcher_build_menu();
     g_host.now_us += 1000000;
     sc->run();
     dump(full);
+    if (shortc && g_host.stale_px) {                  // rows the short canvas left showing the old frame
+        int n = 0;
+        for (int y = 130; y < 135; y++) for (int x = 0; x < 240; x++) if (d.readPixel(x, y) == g_host.stale_px) n++;
+        if (n) printf("ui-check: %s: %d px in rows 130-134 never repainted (the surface blits a short canvas and leaves the old frame there)\n", full, n);
+    }
     // The hint bar prints at most 39 Font0 glyphs (launcher_render_hint_bar): a longer hint is cut.
     if (strcmp(part[0], "wizard") && strcmp(part[1], "cc") && strlen(launcher_render_hint()) > 39)
         printf("ui-check: %s: hint is %d chars, the bar shows 39: \"%s\"\n", full, (int)strlen(launcher_render_hint()), launcher_render_hint());
