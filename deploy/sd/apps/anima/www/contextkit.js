@@ -73,6 +73,11 @@ export function wantsCode(s) { return CODE_RE.test(String(s || '')); }
 // path — or answers as plain chat with ANIMA's grounding. Five languages. High-precision: a work VERB plus a
 // work OBJECT, or a file name / path in the text; with a workspace open, any coding request counts too.
 const AGENT_VERB = new RegExp('(?<!\\p{L})(' + [
+  // publish / install an app (live miss: "Pubblica e installa l'app contatore" got a chat that invented commands)
+  'pubblic\\w*', 'install\\w*', 'publish\\w*', 'deploy\\w*', 'instal\\w*', 'publi\\w*', 'veröffentlich\\w*', 'installier\\w*',
+  // …and switch one on / off ("Disattiva l'app contatore" got a chat that said "done" and changed nothing)
+  'disattiv\\w*', 'riattiv\\w*', 'attiv\\w*', 'abilit\\w*', 'disabilit\\w*', 'disable\\w*', 'enable\\w*',
+  'desactiv\\w*', 'activ\\w*', 'désactiv\\w*', 'réactiv\\w*', 'deaktivier\\w*', 'aktivier\\w*',
   'crea\\w*', 'scriv\\w*', 'modific\\w*', 'corregg\\w*', 'corrigg\\w*', 'sistem\\w*', 'aggiung\\w*', 'rinomin\\w*', 'spost\\w*', 'elimin\\w*', 'cancell\\w*', 'legg\\w*', 'cerc\\w*', 'trov\\w*', 'rifattor\\w*', 'costruisc\\w*', 'implement\\w*', 'aggiorn\\w*', 'salv\\w*', 'genera\\w*', 'fai', 'fammi', 'prepara',
   'create', 'write', 'edit', 'fix', 'modify', 'add', 'rename', 'move', 'delete', 'remove', 'read', 'search', 'find', 'refactor', 'build', 'make', 'implement', 'update', 'save', 'generate', 'scaffold',
   'escrib\\w*', 'corrig\\w*', 'arregl\\w*', 'añad\\w*', 'renombr\\w*', 'muev\\w*', 'borr\\w*', 'lee', 'busc\\w*', 'constru\\w*', 'actualiz\\w*', 'guard\\w*', 'hazme', 'haz',
@@ -94,11 +99,15 @@ export function asksAboutContent(s) { return CONTENT_Q.test(String(s || '')); }
 const ASK_VERB = /(?<!\p{L})(quant[ieoa]|qual[ei]?|dove|in che|elenc\p{L}*|mostr\p{L}*|dammi|conta|contien\p{L}*|compar\p{L}*|how\s+(many|much)|which|where|what|list|show|count|give\s+me|contain\p{L}*|cuánt[oa]s?|cuál(es)?|dónde|qué|muéstr\p{L}*|dame|aparec\p{L}*|combien|quel(le)?s?|où|montre\p{L}*|liste\p{L}*|wie\s+viele?|welche[rsnm]?|wo|was|zeig\p{L}*|enthält)(?!\p{L})/iu;
 const EXT_TOKEN = /(?:^|[\s(])\*?\.(?:m?js|cjs|ts|json|html?|css|md|txt|py|csv|svg|xml|ya?ml)\b/i;
 const WS_NOUN = /\b(spazio di lavoro|cartella di lavoro|workspace|nella sd|sulla sd|on the sd|espacio de trabajo|espace de travail|arbeitsbereich)\b/i;
+const INSTALLED_APPS = /(?<!\p{L})(app|apps|applicazion\p{L}*|aplicacion\p{L}*|aplicación|applications?|anwendung\p{L}*)(?!\p{L}).{0,40}(?<!\p{L})(installat\p{L}*|installed|instalad\p{L}*|installée?s?|installiert\p{L}*|cardputer|nucleoos)(?!\p{L})|(?<!\p{L})(installed|installiert\p{L}*)\s+(app|apps|applications?|anwendung\p{L}*)(?!\p{L})/iu;
 export function wantsAgent(s, { workspace = false } = {}) {
   const t = String(s || '');
   if (FILE_TOKEN.test(t)) return true;
   if (AGENT_VERB.test(t) && AGENT_OBJECT.test(t)) return true;
   if (ASK_VERB.test(t) && (EXT_TOKEN.test(t) || WS_NOUN.test(t) || /\b(file|files|cartell\w*|folder\w*|archivos?|carpetas?|fichiers?|dossiers?|dateien?|ordner)\b/i.test(t))) return true;
+  // …and about the INSTALLED apps: "Quali app installate sul Cardputer riguardano la musica?" reached a tool-less
+  // chat that listed apps from memory (and invented a text-to-speech Calculator). The agent reads the real list.
+  if (ASK_VERB.test(t) && INSTALLED_APPS.test(t)) return true;
   return !!workspace && wantsCode(t) && AGENT_VERB.test(t);
 }
 export function wantsLong(s) { return LONG_RE.test(String(s || '')); }

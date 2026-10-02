@@ -141,7 +141,9 @@ function brokerClient(id, catJson) {
               write: (path, content) => call('fs.write', { path, content }),
               list: (path) => call('fs.list', { path }) },
         notify: (text) => call('notify', { text }),
-        sys: { info: () => call('sys.info', {}), status: () => call('sys.status', {}) },
+        // info has a SHORT timeout: the page awaits it (for the language) before wiring its buttons, so opened
+        // on its own — no shell broker to answer — an agent app sat dead for the full 10 s.
+        sys: { info: () => call('sys.info', {}, 1200), status: () => call('sys.status', {}) },
         // Intelligence as a syscall — each needs its OWN manifest permission, or the call is denied:
         //   ai.ask(q)        → the on-device deterministic brain (needs 'ai.anima'; offline, no cost)
         //   ai.complete(p)   → the user's cloud model (needs 'ai.cloud'; single-flight, rate-limited)
@@ -310,7 +312,6 @@ export function inlineScripts(html) {
     if (/\bsrc\s*=/i.test(attrs)) continue;                                   // external script — not our code
     const type = (attrs.match(/\btype\s*=\s*["']?([^"'\s>]+)/i) || [])[1];
     if (type && !/^(text\/javascript|module|application\/javascript)$/i.test(type)) continue;  // json/importmap/etc
-    if (/^\s*(import|export)\s/m.test(code)) continue;                        // ES module body — checker would false-alarm
     if (code.trim()) out.push(code);
   }
   return out;
@@ -327,12 +328,11 @@ export function lintApp(files, checkSyntax) {
     if (ext === 'json') {
       try { JSON.parse(content); } catch (e) { errors.push(path + ': invalid JSON (' + String((e && e.message) || e) + ')'); }
     } else if ((ext === 'js' || ext === 'mjs' || ext === 'cjs') && typeof checkSyntax === 'function') {
-      if (/^\s*(import|export)\s/m.test(content)) continue;                   // module body — skip (see verifyCode)
-      const r = checkSyntax(content);
+      const r = checkSyntax(content, { bare: true });   // a real file: no sandbox parameters (os, console…)
       if (r && !r.ok) errors.push(path + ': syntax error' + (r.line ? ' (line ' + r.line + ')' : '') + (r.error ? ': ' + r.error : ''));
     } else if (ext === 'html' || ext === 'htm') {
       if (typeof checkSyntax === 'function') for (const code of inlineScripts(content)) {
-        const r = checkSyntax(code);
+        const r = checkSyntax(code, { bare: true });   // the page's own `const os = …` is legal here
         if (r && !r.ok) { errors.push(path + ': inline <script> syntax error' + (r.line ? ' (line ~' + r.line + ')' : '') + (r.error ? ': ' + r.error : '')); break; }
       }
     }

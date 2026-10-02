@@ -279,7 +279,7 @@ export async function resolveModel(cfg, { tier, exclude = [], fresh = false, nee
 export function tierOfModel(id) {
   const s = String(id || '').toLowerCase();
   if (/haiku|8b|lite|instant|mini|nano|small|fast/.test(s)) return 'fast';
-  if (/opus|70b|120b|405b|-pro|maverick|grok-[4-9]/.test(s)) return 'max';
+  if (/opus|70b|120b|405b|-pro\b|maverick|grok-[4-9]/.test(s)) return 'max';
   return 'mid';
 }
 export async function servedModel(cfg, model, { exclude = [], fresh = false } = {}) {
@@ -295,14 +295,24 @@ export async function servedModel(cfg, model, { exclude = [], fresh = false } = 
 export class AiError extends Error {
   constructor(kind, message, extra = {}) { super(message); this.name = 'AiError'; this.kind = kind; Object.assign(this, extra); }
 }
+const RATE_TEXT = /rate.?limit (reached|exceeded)|tokens per (minute|day)|requests per (minute|day)|\b(tpm|tpd|rpm|rpd)\b/;
+// "Please try again in 7m12.5s" / "in 1h2m" / "in 850ms" → seconds (Groq puts the wait in the text, not always in Retry-After).
+export function retryAfterFromText(text) {
+  const m = String(text || '').match(/try again in\s+(?:(\d+)h)?\s*(?:(\d+)m(?!s))?\s*(?:([\d.]+)s)?\s*(?:(\d+)ms)?/i);
+  if (!m || !(m[1] || m[2] || m[3] || m[4])) return 0;
+  return Math.max(1, Math.ceil((+m[1] || 0) * 3600 + (+m[2] || 0) * 60 + (+m[3] || 0) + (+m[4] || 0) / 1000));
+}
 export function aiErrorKind(status, text) {
   const m = String(text || '').toLowerCase();
   if (status === 401 || /invalid[_ ]?api[_ ]?key|authentication_error|invalid x-api-key|incorrect api key|api key not valid|unauthori[sz]ed/.test(m)) return 'auth';
   if (/model_not_found|model_decommissioned|decommission|does not exist|no longer (supported|available)|not_found_error|unknown model|model .{0,60}not found|deprecated model/.test(m)) return 'model';
   if (status === 413 || /context_length|context length|maximum context|too many tokens|request too large|prompt is too long/.test(m)) return 'too_long';
+  // Groq's 429 "Rate limit reached … tokens per day (TPD) … Upgrade … settings/billing" is a LIMIT that resets, not a
+  // spent credit — it said "credit used up" to a free-tier user who only had to wait a few minutes.
+  if (RATE_TEXT.test(m)) return 'rate';
   if (/insufficient_quota|exceeded your (current )?quota|credit balance|billing|out of credits|payment required/.test(m) || status === 402) return 'quota';
   if (status === 429 || /rate.?limit|too many requests/.test(m)) return 'rate';
-  if (status === 404 || /http 404/.test(m)) return 'model';
+  if (status === 404 || /\bhttp 404\b/.test(m)) return 'model';
   if (status === 403 || /permission|forbidden|not allowed|unsupported (region|country)|location is not supported/.test(m)) return 'forbidden';
   if (status === 503 && /"busy"|device busy|low-mem|arbiter/.test(m)) return 'device_busy';   // the Cardputer's /api/llm relay
   if (status >= 500 || /overloaded/.test(m)) return 'provider_down';
@@ -315,7 +325,7 @@ export async function aiErrorFromResponse(resp, cfg, bodyText) {
   let msg = '';
   try { const j = JSON.parse(text); const e = j && (j.error || j); msg = [e.code, e.type, e.message || (typeof e === 'string' ? e : '')].filter(Boolean).join(' · '); } catch { msg = String(text || '').slice(0, 300); }
   const kind = aiErrorKind(resp.status, msg || text);
-  const ra = Number(resp.headers && resp.headers.get && resp.headers.get('retry-after')) || 0;
+  const ra = Number(resp.headers && resp.headers.get && resp.headers.get('retry-after')) || retryAfterFromText(msg || text);
   return new AiError(kind, msg || ('HTTP ' + resp.status), { status: resp.status, provider: cfg && cfg.provider, model: cfg && cfg.model, retryAfter: ra });
 }
 // Wrap anything thrown around a provider call (network TypeError, abort, an AiError already) as an AiError.
@@ -327,7 +337,7 @@ export function toAiError(e, cfg) {
   if (name === 'AbortError') return new AiError('stopped', msg, extra);
   if (name === 'TimeoutError' || /timed? ?out/i.test(msg)) return new AiError('timeout', msg, extra);
   if (name === 'TypeError' || /failed to fetch|networkerror|load failed|network/i.test(msg)) return new AiError('network', msg, extra);
-  if (e && e.status) Object.assign(extra, { status: e.status, retryAfter: e.retryAfter || 0 });
+  if (e && e.status) Object.assign(extra, { status: e.status, retryAfter: e.retryAfter || retryAfterFromText(msg) });
   return new AiError(aiErrorKind(e && e.status, msg + ' ' + ((e && e.code) || '')), msg, extra);
 }
 
@@ -435,7 +445,7 @@ export function explainAiError(e, lang, opts = {}) {
   const detail = String(err.message || '').replace(/\s+/g, ' ').slice(0, 160);
   return tpl.replace(/\{SET\}/g, opts.settings || AI_SETTINGS_AT[l] || AI_SETTINGS_AT.en)
     .replace(/\{P\}/g, P).replace(/\{M\}/g, err.model || '?')
-    .replace('{R}', err.retryAfter ? ` (${err.retryAfter} s)` : '')
+    .replace('{R}', err.retryAfter ? ' (' + (err.retryAfter < 90 ? err.retryAfter + ' s' : Math.ceil(err.retryAfter / 60) + ' min') + ')' : '')
     .replace('{S}', err.status ? ` (HTTP ${err.status})` : '')
     .replace('{D}', detail ? `: ${detail}` : '');
 }
