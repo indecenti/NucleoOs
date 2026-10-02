@@ -48,6 +48,7 @@ bool nucleo_anima_l1_unload_if_idle(void)
 {
     if (!nucleo_anima_try_lock()) return false;
     nucleo_anima_l1_unload();
+    nucleo_anima_l1_release_scratch();   // ...and L1's search scratch: no l1_query frame can be live here
     nucleo_anima_unlock();
     return true;
 }

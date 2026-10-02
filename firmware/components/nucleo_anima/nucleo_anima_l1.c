@@ -149,11 +149,19 @@ static bool s_ct_reg;
 #define L1_COUNT(v) do { } while (0)
 #endif
 
-// The query vector of the turn. The AKB5 router encodes the text ONCE into s_qv and raises s_qv_ready
-// for the per-shard searches, which then reuse it instead of re-encoding (each encode is ~100 encoder
-// row reads and re-grabs the ~24 KB hot-row cache the shard switch just freed).
-static int8_t s_qv[L1_MAXDIM];
-static bool   s_qv_ready;
+// The L1 search scratch: the turn's query vector (the AKB5 router encodes the text ONCE into qv and raises
+// s_qv_ready, so the per-shard searches reuse it instead of re-encoding — each encode is ~100 encoder row
+// reads and re-grabs the ~24 KB hot-row cache the shard switch just freed), the streamed-centroid chunk and
+// the rerank row. ZERO bytes until L1 actually serves a query: a stood-down L1 (an online teacher with a key,
+// or a browser LLM, answering) never allocates it. It stays across queries like the hot-row cache and is
+// handed back ONLY by nucleo_anima_l1_release_scratch() from nucleo_anima_l1_unload_if_idle() — never by
+// nucleo_anima_l1_unload(), which the AKB5 router calls between shards MID-QUERY while qv is in use.
+#define L1_CCHUNK 16                         // centroids per streamed SD read
+typedef struct { int8_t qv[L1_MAXDIM]; int8_t cbuf[L1_CCHUNK * L1_MAXDIM]; int8_t row[L1_MAXDIM]; } l1_scratch_t;
+static l1_scratch_t *s_l1s;
+static bool          s_qv_ready;
+static bool l1s_acquire(void) { return s_l1s || (s_l1s = calloc(1, sizeof *s_l1s)) != NULL; }
+void nucleo_anima_l1_release_scratch(void) { free(s_l1s); s_l1s = NULL; s_qv_ready = false; }
 
 // ---- FNV-1a 32-bit with a leading tag byte (matches distill.py feats()) ----
 static uint32_t fnv1a_tag(uint8_t tag, const char *s, int len)
@@ -206,7 +214,7 @@ static int l1_words(const char *in, char w[L1_MAXWORDS][L1_WORDLEN])
 // slot count only changes hit/miss). The freed app .bss (recorder/photos lazy buffers) is what lets
 // the bigger block land contiguously when ANIMA runs at the launcher.
 #define ENC_CACHE 128                        // ceiling; actual = s_ec_slots (<=128, power-of-two down to 16)
-static uint32_t s_ec_id[ENC_CACHE];          // slot tags sized to the ceiling (512 B .bss)
+static uint32_t *s_ec_id;                    // slot tags: the tail of the s_ec_row block (0 B while unloaded)
 static int8_t  *s_ec_row;                    // s_ec_slots * s_D int8 rows, malloc'd lazily (heap, not .bss)
 static int      s_ec_slots;                  // rows actually allocated this acquire (0 = no cache, SD fallback)
 
@@ -215,8 +223,8 @@ static void ec_cache_acquire(void)
 {
     if (s_ec_row || s_D == 0) return;
     for (int want = ENC_CACHE; want >= 16; want >>= 1) {   // largest power-of-two cache that fits
-        s_ec_row = malloc((size_t)want * s_D);
-        if (s_ec_row) { s_ec_slots = want; L1_COUNT(s_ct_cache); break; }
+        s_ec_row = malloc((size_t)want * (s_D + sizeof(uint32_t)));   // rows + their slot tags, one block
+        if (s_ec_row) { s_ec_slots = want; s_ec_id = (uint32_t *)(s_ec_row + (size_t)want * s_D); L1_COUNT(s_ct_cache); break; }
     }
     if (s_ec_row) for (int i = 0; i < s_ec_slots; i++) s_ec_id[i] = 0xFFFFFFFFu;
     else s_ec_slots = 0;
@@ -357,7 +365,7 @@ static bool load_index(void)
     if (fseek(s_idx, (long)ctrd_sz, SEEK_CUR) != 0) { fclose(s_idx); s_idx=NULL; return false; }
     s_cdir = malloc(cdir_sz);
     if (!s_cdir && s_ec_row) {                        // tiny (K*8 B); only fails if the heap is truly empty
-        free(s_ec_row); s_ec_row = NULL; s_ec_slots = 0;   // hand back the reconstructable hot-row cache, retry once
+        free(s_ec_row); s_ec_row = NULL; s_ec_id = NULL; s_ec_slots = 0;   // hand back the reconstructable hot-row cache, retry once
         s_cdir = malloc(cdir_sz);
     }
     if (!s_cdir) {
@@ -506,7 +514,7 @@ void nucleo_anima_l1_unload(void)
     free(s_centroids); s_centroids = NULL;
     free(s_cnorm);     s_cnorm = NULL;
     free(s_cdir);      s_cdir = NULL;
-    free(s_ec_row);    s_ec_row = NULL; s_ec_slots = 0;   // hand the hot-row cache back (re-acquired on next encode)
+    free(s_ec_row);    s_ec_row = NULL; s_ec_id = NULL; s_ec_slots = 0;   // hand the hot-row cache (+ its tags) back
     if (s_idx) { fclose(s_idx); s_idx = NULL; }
     // The SD encoder FILE* keeps a FATFS per-file cache (one sector) resident for as long as it stays
     // open — pure idle RAM once a query finishes. Close it too so ANIMA holds NOTHING while you use the
@@ -527,7 +535,7 @@ void nucleo_anima_l1_unload(void)
 size_t nucleo_anima_l1_heap_bytes(void)
 {
     return (s_cdir   ? (size_t)s_K * 2 * sizeof(uint32_t) : 0)   // tiny directory (centroids stream: 0 RAM)
-         + (s_ec_row ? (size_t)s_ec_slots * s_D : 0);            // reconstructable encoder hot-row cache
+         + (s_ec_row ? (size_t)s_ec_slots * (s_D + sizeof(uint32_t)) : 0);   // reconstructable hot-row cache + tags
 }
 
 // ─── L1 serving policy (RAM optimization) ─────────────────────────────────────────────────────
@@ -1286,13 +1294,14 @@ int nucleo_anima_l1_query(const char *text, bool en, bool want_detail, anima_res
     // behind for nucleo_anima_l1_band() to offer as a "did you mean" on this one.
     s_band.a1 = s_band.a2 = -1; s_band.c1 = s_band.c2 = -2.0f;
     if (!s_in_akb5 && !nucleo_anima_l1_serving()) return 0;
+    if (!l1s_acquire()) return 0;                  // no RAM for the search scratch: a clean miss, like any L1 failure
     // Transparent AKB5 routing: when a category-sharded manifest is present, EVERY caller (and the
     // stitch/band that follow) is served from the right shard with no change at the call sites. The
     // router re-enters this function once per shard with s_in_akb5 set, so those run the flat search.
     if (s_akb5_on && !s_in_akb5) return nucleo_anima_l1_akb5_query(text, en, want_detail, out);
     if (!s_ready || !text || !ensure_index()) return 0;     // reload the index on demand if it was freed
     g_anima_stage = 0xC8;                          // DIAG: flat L1 search (index resident, encoding)
-    int8_t *qv = s_qv;
+    int8_t *qv = s_l1s->qv;
     if (!(s_in_akb5 && s_qv_ready) && !l1_encode(text, qv)) return 0;   // the router already encoded it
     // float (hardware FPU on the S3) not double (software-emulated). Norm via an int32 sum-of-squares
     // (exact: |qv|<=127, D<=256 -> <=4.1M, fits int32), then one hardware sqrtf.
@@ -1314,8 +1323,8 @@ int nucleo_anima_l1_query(const char *text, bool en, bool want_detail, anima_res
     // no big contiguous malloc -> no heap-churn OOM, and L1's RAM footprint drops to the K*8 directory.
     // The norm is recomputed inline (== the old !s_cnorm path, bit-for-bit). We seek to the centroid slab
     // first; the prefilter/vector reads further down seek absolutely, so the shared handle is fine.
-    enum { CCHUNK = 16 };
-    static int8_t cbuf[CCHUNK * L1_MAXDIM];        // <=16 centroids per SD read (<=4 KB, shared, NOT stack)
+    enum { CCHUNK = L1_CCHUNK };
+    int8_t *cbuf = s_l1s->cbuf;                    // <=16 centroids per SD read (<=4 KB of scratch heap, NOT stack)
     if (fseek(s_idx, s_ctrd_off, SEEK_SET) != 0) return 0;
     for (uint32_t c0 = 0; c0 < s_K; c0 += CCHUNK) {
         uint32_t nc = s_K - c0; if (nc > CCHUNK) nc = CCHUNK;
@@ -1345,7 +1354,7 @@ int nucleo_anima_l1_query(const char *text, bool en, bool want_detail, anima_res
 
     // 2) rerank the probed clusters; track the top-2 DISTINCT cards (by answer offset).
     float bestcos = -2.0f, secondcos = -2.0f; long best_ansoff = -1, second_ansoff = -1;
-    static int8_t row[L1_MAXDIM];
+    int8_t *row = s_l1s->row;
     bool use_prefilter = (s_sig_base != 0);
 #ifdef ANIMA_HOST
     if (getenv("ANIMA_L1_EXACT")) use_prefilter = false;   // force the brute-force path (parity diff testing)
@@ -1851,8 +1860,9 @@ int nucleo_anima_l1_akb5_query(const char *text, bool en, bool want_detail, anim
     // Encode ONCE for the whole turn: routing below and every per-shard search reuse s_qv (s_qv_ready),
     // instead of re-encoding per shard — which also re-grabbed the ~24 KB hot-row cache each shard
     // switch had just freed (12-23 big malloc/free cycles per query on the device).
-    const int8_t *qv = s_qv;
-    if (nucleo_anima_l1_encode(text, s_qv, L1_MAXDIM) != (int)D) { fclose(f); return 0; }
+    if (!l1s_acquire()) { fclose(f); return 0; }   // public entry too: never assume the caller acquired it
+    const int8_t *qv = s_l1s->qv;
+    if (nucleo_anima_l1_encode(text, s_l1s->qv, L1_MAXDIM) != (int)D) { fclose(f); return 0; }
     double qn2 = 0; for (uint32_t k = 0; k < D; k++) qn2 += (double)qv[k] * qv[k];
     float qn = sqrtf((float)qn2) + 1e-6f;
 
