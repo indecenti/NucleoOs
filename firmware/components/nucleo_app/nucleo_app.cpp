@@ -2058,6 +2058,7 @@ void nucleo_app_run(void)
         // Smooth-scroll toward the focused row (the only animation). Suppressed during the PTT session
         // (launcher_render_step_scroll composites into the back-buffer = re-acquires the freed canvas).
         if (s_active == -1 && !s_gamefront && !s_control_center && !s_torch && !s_voice_dark && launcher_render_step_scroll()) s_dirty = true;
+        if (s_control_center && !s_torch && !s_voice_dark && launcher_render_control_center_animating()) s_dirty = true;   // CC scroll easing
         if (s_gamefront && !s_control_center && !s_torch && !s_voice_dark && gamefront_step()) s_dirty = true;
 
         bool fg_taken = false;   // did the foreground-app branch own the screen this iteration? (idle-reblit guard)

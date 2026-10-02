@@ -160,8 +160,8 @@ settings: a status strip over a **scrolling column of four cards**.
 - UP/DOWN move between cards (wrap), LEFT/RIGHT move inside a card or adjust a slider, ENTER acts,
   **1-9 select and fire** the n-th tile/shortcut, Esc or TAB closes. The focus — and the scroll — are
   **remembered** across opens; the focus is a 2 px **ring** around the element (red while armed).
-- The column scrolls so the **focused card is always fully in view** (eased when the back-buffer is
-  available, a jump when drawing direct); a knob on the right edge shows the position. A scrolled edge
+- The column scrolls so the **focused card sits in the middle** of the viewport, watch-list style (clamped
+  at the column ends; eased every loop iteration when the back-buffer is available, a jump when drawing direct); a knob on the right edge shows the position. A scrolled edge
   may cut a tile or a track (it reads as "more this way") but **never half a line of text**: a caption
   is drawn only when its whole line is in view.
 - Every caption is **Font2** when it fits the column and falls back to Font0 when a translation does
