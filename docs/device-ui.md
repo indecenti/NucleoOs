@@ -143,36 +143,46 @@ countdown (high-friction on purpose for a whole-OS wipe; the row shows the press
 
 ## Control Center (TAB)
 
-TAB from anywhere (unless the foreground app claims it) raises a **one-screen quick panel** — no
-tabs, no hidden pages. Top to bottom:
+TAB from anywhere (unless the foreground app claims it) raises the quick panel — smartwatch quick
+settings: a status strip over a **scrolling column of four cards**.
 
 ```
 ┌ 14:05  CasaNet              ▮▮▮ ▭ 85% ┐  status strip: clock · network · signal · battery
-│ [1 Mute] [2 Torch] [3 Sleep] [4 Hotspot]│  toggle tiles — keys 1-4 fire them directly
-│ ☀ ━━━━━━━━━━━━━━●──────────      70%   │  brightness (LEFT/RIGHT adjust in place)
-│ ♪ ━━━━━━━●─────────────────      40%   │  volume     (LEFT/RIGHT adjust, ENTER = mute)
-│ (⚙) (▭) (⌨) (▯) (⏻)                    │  Settings · Web client · USB keyboard · USB drive · Restart
-└ Brightness 70%   </> adjust            ┘  context line: what the focus does + its live value
+│ [1 🔇] [2 🔦] [3 ☾] [4 📶]            ▌│  icon tiles — keys 1-4 fire them directly
+│ Audio attivo           invio silenzia ▌│  caption (Font2): the focused tile + what ENTER does
+│ ☀ Luminosita                     70%  ▌│  brightness card (LEFT/RIGHT adjust)
+│ ━━━━━━━━━━━━━━━━━━●──────────────      │
+│ ♪ Volume  invio muto             40%   │  volume card (LEFT/RIGHT adjust, ENTER = mute)
+│ [5 ⚙] [6 ▭] [7 ⌨] [8 ▯] [9 ⏻]         │  shortcuts — keys 5-9 fire them directly
+└ 6 Web 192.168.1.42        PIN 314159   ┘  Settings · Web client · USB keyboard · USB drive · Restart
 ```
 
-- UP/DOWN move between lines (wrap), LEFT/RIGHT move inside a line or adjust a slider, ENTER acts,
-  Esc or TAB closes. The focus is **remembered** across opens and drawn as a 2 px **ring** around
-  the element (red while a disruptive action is armed).
-- The context line names the focused control and its state; on the Web-client shortcut it shows
-  the **IP and pairing PIN** (what you need to open the web OS).
+- UP/DOWN move between cards (wrap), LEFT/RIGHT move inside a card or adjust a slider, ENTER acts,
+  **1-9 select and fire** the n-th tile/shortcut, Esc or TAB closes. The focus — and the scroll — are
+  **remembered** across opens; the focus is a 2 px **ring** around the element (red while armed).
+- The column scrolls so the **focused card is always fully in view** (eased when the back-buffer is
+  available, a jump when drawing direct); a knob on the right edge shows the position. A scrolled edge
+  may cut a tile or a track (it reads as "more this way") but **never half a line of text**: a caption
+  is drawn only when its whole line is in view.
+- Every caption is **Font2** when it fits the column and falls back to Font0 when a translation does
+  not, so no text runs off the panel in any of the five languages. Unfocused cards show their title
+  (and quick keys); the focused card names the control, its live state and the key that acts. On the
+  Web shortcut it shows the **IP and pairing PIN** (what you need to open the web OS).
 - Disruptive actions — Hotspot (it drops the Wi-Fi client link) and Restart — **arm** on the first
-  ENTER and fire on the second; any other key disarms. In a Wi-Fi-skipped Solo boot (BLE suite /
+  ENTER/digit and fire on the second; any other key disarms. In a Wi-Fi-skipped Solo boot (BLE suite /
   Sentinel, NX_WIFI apps, USB-web) the setup config was never loaded, so the Hotspot tile is drawn
   disabled and `nucleo_setup_start_ap/stop_ap` refuse (`nucleo_setup_config_loaded()`).
 - Brightness/volume changes are persisted once, when the panel closes. Screen-off turns the
   backlight fully off; the next key wakes it (and is swallowed).
-- **Flicker-free without the back-buffer.** On the ADV the 32 KB canvas often can't be allocated
-  after Wi-Fi comes up, so the panel paints straight to the display. It then repaints only the
-  elements whose state changed (`CcShown s_ccs`) and never clears first: focus moves redraw two
-  ring outlines, colour changes redraw a glyph over its own fill, a slider lifts only its old knob
-  and repaints the track as two non-overlapping pieces, and every text line is a fixed-width field
-  drawn opaque. Only opening the panel — or an overlay (torch, voice, reminder) having painted over
-  it (`launcher_render_control_center_invalidate()`) — costs one full paint.
+- **Short back-buffer.** On the ADV the heap's largest block is ~31.7 KB, so
+  `nucleo_screen_acquire()` fits the canvas to **240x130** instead of 240x135. The panel's viewport
+  ends at the canvas height and the rows below are cleared on the panel, so they never keep the
+  previous frame (the launcher footer used to show through, half-cut). `npm run ui:shots` renders
+  every scene with a 130-row canvas too (`*.short`) and fails on any panel row left unrepainted.
+- **Flicker-free without the back-buffer.** When the canvas cannot be allocated at all the panel paints
+  straight to the display and repaints only what changed (`CcShown s_ccs`): focus moves redraw two
+  ring outlines, a slider lifts only its old knob and repaints the track as two non-overlapping
+  pieces, captions repaint only when their text changes. A scroll there is a single full repaint.
 
 Code: `launcher_render.cpp` (§ Control Center). Theme roles only + named `C_*` semantics.
 

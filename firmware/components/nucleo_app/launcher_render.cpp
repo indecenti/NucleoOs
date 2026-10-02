@@ -1128,27 +1128,32 @@ void launcher_render_list(void)
     }
 }
 
-// ---- Control Center overlay (one-screen quick panel) -------------------------
-// Raised with TAB from anywhere. ONE screen, no tabs and no hidden pages: everything a quick panel is
-// for is visible at once, top to bottom —
+// ---- Control Center overlay (smartwatch quick settings) ----------------------
+// Raised with TAB from anywhere. A status strip over a SCROLLING column of four cards, Wear-OS style:
 //
 //   14:05  CasaNet                 |||  [=] 85%    status strip: clock · network · signal · battery
-//   [1 Muto] [2 Torcia] [3 Spegni] [4 Hotspot]     toggle tiles (keys 1-4 fire them directly)
-//   (sun)  =================o---------   70%       brightness  (LEFT/RIGHT adjust in place)
-//   (spk)  ========o------------------   40%       volume      (ENTER toggles mute)
-//   (gear) (web) (kbd) (usb) (power)               shortcuts: Settings · Web client · USB keyboard ·
-//                                                  USB drive · Restart
-//   Luminosita 70%   </> regola                    context line: what the focus does + its live value
-//                                                  (on the Web shortcut: the IP and pairing PIN)
+//   [1 mute] [2 torch] [3 moon] [4 hotspot]        icon tiles — keys 1-4 fire them directly
+//   Audio attivo               invio silenzia      caption (Font2): the focused tile + what ENTER does
+//   (sun) Luminosita                     70%       brightness card: caption + track (LEFT/RIGHT adjust)
+//   (spk) Volume  invio muto             40%       volume card (ENTER toggles mute)
+//   [5 gear] [6 web] [7 kbd] [8 usb] [9 power]     shortcuts — keys 5-9 fire them directly
+//   6 Web 192.168.1.42          PIN 314159         caption: on the Web shortcut, the IP and pairing PIN
 //
-// Keys: UP/DOWN move between lines (wrap); LEFT/RIGHT move inside a line or adjust a slider; ENTER acts;
-// Esc (or TAB) closes. The focus is REMEMBERED across opens (resume where you left off). Disruptive
-// actions (Hotspot, which drops the Wi-Fi client link, and Restart) arm on the first ENTER and fire on
-// the second; any other key disarms — the focus turns red and the context line says so.
+// The focused card is always fully in view (the column scrolls under the strip, eased when buffered) and a
+// knob on the right edge shows where you are. Every caption is Font2 when it fits the column and Font0
+// when a translation does not, so no text ever runs off the panel. The viewport ends at the last row THIS
+// frame can draw: the back-buffer's height when buffered — on the ADV the canvas is fitted to the heap's
+// largest block, 240x130, not 135 — or the panel's when direct; the rows below a short canvas are cleared
+// on the panel, so they never keep the previous frame (the launcher footer used to show through there).
 //
-// Colours are theme roles (BG/FG/MUTED/DIM/LINE/INK/THEME_ACC) plus the named semantic C_* accents only:
-// the old sheet's private 0x10A2/0x1A8B surface tints ignored the theme (black-on-black on AMOLED).
-// Language, theme, USB-drive and network details moved to the Settings app (the gear shortcut), so the
+// Keys: UP/DOWN move between cards (wrap); LEFT/RIGHT move inside a card or adjust a slider; ENTER acts;
+// 1-9 select AND fire the n-th tile/shortcut; Esc (or TAB) closes. Focus and scroll are REMEMBERED across
+// opens (resume where you left off). Disruptive actions (Hotspot, which drops the Wi-Fi client link, and
+// Restart) arm on the first ENTER/digit and fire on the second; any other key disarms — the focus turns
+// red and the caption asks.
+//
+// Colours are theme roles (BG/FG/MUTED/DIM/LINE/INK/THEME_ACC) plus the named semantic C_* accents only.
+// Language, theme, USB-drive and network details live in the Settings app (the gear shortcut), so the
 // panel stays a panel. Zero .bss beyond a few focus bytes; composited into the shared back-buffer.
 #include "ui_glyph.h"
 
@@ -1167,15 +1172,23 @@ enum { SC_SETTINGS = 0, SC_WEB, SC_USBKBD, SC_USBDRIVE, SC_RESTART, CC_NSHORT };
 #define CC_ARM_HOTSPOT  TL_HOTSPOT
 #define CC_ARM_RESTART  (100 + SC_RESTART)
 
-// Geometry (240x135, full screen). Every element keeps a 2 px focus-ring margin that never overlaps a
-// neighbour's ring (tiles 4x55 + 4 px gaps, shortcuts 5x43 + 4 px gaps, lines 2 px apart), so a focus
-// move only redraws two outlines. Rings: tiles y 20..57, sliders 59..77 / 78..96, shortcuts 98..119.
+// Geometry. The body is a virtual column scrolled under the strip; every element keeps a 2 px focus-ring
+// margin that never shares a row with a neighbour's ring, so a focus move only redraws two outlines.
 static const int CC_STRIP_H = 18;
-static const int CC_TILE_Y = 22, CC_TILE_H = 34, CC_TILE_W = 55, CC_TILE_P = 59;
-static const int CC_BRI_Y = 61, CC_VOL_Y = 80, CC_SL_H = 15, CC_SL_X = 4, CC_SL_W = 232;
-static const int CC_TRK_X = 30, CC_TRK_W = 168, CC_TRK_H = 6;                        // slider track
-static const int CC_SHORT_Y = 100, CC_SHORT_H = 18, CC_SHORT_W = 43, CC_SHORT_P = 47;
-static const int CC_CTX_Y = 121;
+static const int CC_BODY_Y  = CC_STRIP_H + 1;                  // first body row (below the strip rule)
+static const int CC_X0 = 4, CC_XW = 228;                       // card column; the scroll knob sits right of it
+static const int CC_KNOB_X = 236;                              // 2 px scroll knob
+static const int CC_CARD_Y[CC_NLINES] = { 0, 58, 96, 134 };    // card tops in the column
+static const int CC_CARD_H[CC_NLINES] = { 58, 34, 34, 52 };    // ...and heights: tiles, bright, volume, shortcuts
+static const int CC_COL_H = 186;                               // the whole column
+static const int CC_TILE_W = 54, CC_TILE_P = 58, CC_TILE_H = 34, CC_TILE_DY = 3, CC_TILE_CAP = 40;
+static const int CC_SHORT_W = 42, CC_SHORT_P = 46, CC_SHORT_H = 26, CC_SHORT_DY = 3, CC_SHORT_CAP = 33;
+static const int CC_CAP_H = 16;                                // one caption line (Font2 height)
+static const int CC_TRK_X = 12, CC_TRK_W = 212, CC_TRK_H = 6, CC_TRK_DY = 24;   // slider track in its card
+
+static int  s_cc_scroll = 0;           // body scroll in rows — kept across opens with the focus (resume)
+static bool s_cc_anim   = false;       // buffered scroll still easing toward the focused card
+static bool s_cc_snap   = true;        // the next paint jumps straight to the target (set on open)
 
 static int  s_cc_line  = CL_TILES;     // focused line — kept across opens (resume)
 static int  s_cc_tile  = 0;            // focused tile
@@ -1217,7 +1230,14 @@ static int cc_short_glyph(int i)
 void launcher_render_control_center_invalidate(void);
 void launcher_render_control_center_open(void)          // focus kept: resume; first paint is a full one
 {
-    s_cc_arm = -1; s_cc_prefs = false; launcher_render_control_center_invalidate();
+    s_cc_arm = -1; s_cc_prefs = false; s_cc_snap = true; launcher_render_control_center_invalidate();
+}
+
+// Forget the remembered focus and scroll (the first-boot state). The UI host scenes start from it, so a
+// golden never depends on which panel scene ran before it in the same process.
+void launcher_render_control_center_reset(void)
+{
+    s_cc_line = CL_TILES; s_cc_tile = 0; s_cc_short = 0; s_cc_scroll = 0; s_cc_arm = -1; s_cc_snap = true;
 }
 
 void launcher_render_control_center_close(void)
@@ -1262,13 +1282,19 @@ int launcher_render_control_center_key(int key, char ch)
 {
     int  armed = s_cc_arm;
     bool digit = (key == NK_CHAR && ch >= '1' && ch < '1' + CC_NTILES);
-    if (key != NK_ENTER && !digit) s_cc_arm = -1;          // any other key disarms a pending action
+    bool dshort = (key == NK_CHAR && ch >= '1' + CC_NTILES && ch < '1' + CC_NTILES + CC_NSHORT);
+    if (key != NK_ENTER && !digit && !dshort) s_cc_arm = -1;   // any other key disarms a pending action
 
     if (key == NK_BACK) return CC_CLOSE;
     if (digit) {                                           // 1-4: fire a tile directly (smartwatch quick keys)
         s_cc_line = CL_TILES; s_cc_tile = ch - '1';
         if (armed != s_cc_tile) { armed = -1; s_cc_arm = -1; }
         return cc_tile_act(s_cc_tile, armed);
+    }
+    if (dshort) {                                          // 5-9: fire a shortcut directly (9 = Restart arms)
+        s_cc_line = CL_SHORT; s_cc_short = ch - '1' - CC_NTILES;
+        if (armed != 100 + s_cc_short) { armed = -1; s_cc_arm = -1; }
+        return cc_short_act(s_cc_short, armed);
     }
     if (key == NK_UP || key == NK_DOWN) {
         s_cc_line = (s_cc_line + (key == NK_DOWN ? 1 : CC_NLINES - 1)) % CC_NLINES;
@@ -1311,7 +1337,7 @@ static uint32_t s_cc_drawn_sig = 0;    // latched by every draw (key-driven or t
 
 // 1 Hz: true only when the panel's content changed since it was last DRAWN — a static panel is never
 // re-blitted, and a key-driven redraw is not repeated by the next tick (ANTI-FLICKER.md).
-bool launcher_render_control_center_tick(void) { return cc_sig() != s_cc_drawn_sig; }
+bool launcher_render_control_center_tick(void) { return s_cc_anim || cc_sig() != s_cc_drawn_sig; }
 
 // ---- drawing ------------------------------------------------------------------------------------
 // One painter for both paths. With the shared back-buffer the whole panel is composed and blitted once.
@@ -1325,7 +1351,8 @@ bool launcher_render_control_center_tick(void) { return cc_sig() != s_cc_drawn_s
 // Only opening the panel (or an overlay having painted over it) costs one full paint.
 struct CcShown {
     bool     valid;
-    uint32_t strip, ctx;
+    int16_t  vh;                       // viewport bottom of the last paint (canvas height or the panel's)
+    uint32_t strip, cap[CC_NLINES];    // strip + one caption hash per card
     uint8_t  tile_fill[CC_NTILES];
     uint16_t tile_ink[CC_NTILES], tile_ring[CC_NTILES];
     uint8_t  sl_glyph[2], sl_kr[2];
@@ -1396,9 +1423,138 @@ template <typename T> static void cc_strip(T *g, bool full)
     if (full) g->drawFastHLine(0, CC_STRIP_H, W, LINE);
 }
 
-template <typename T> static void cc_tile(T *g, int i, bool full)
+// The viewport clip: the body rows this frame can draw. Pieces that need their own clip (the slider track)
+// intersect with it and restore it, so nothing ever lands on the strip or below the viewport.
+static int s_cc_vp0 = CC_BODY_Y, s_cc_vp1 = 135;
+// A whole band inside the viewport? Text and caption icons are drawn only then: a scrolled edge may cut a
+// tile or a track (that reads as "more this way"), never half a line of text.
+static bool cc_band_visible(int y, int h) { return y >= s_cc_vp0 && y + h <= s_cc_vp1; }
+template <typename T> static void cc_clip_body(T *g) { g->setClipRect(0, s_cc_vp0, W, s_cc_vp1 - s_cc_vp0); }
+template <typename T> static void cc_clip_piece(T *g, int x, int y, int w, int h)
 {
-    int x = 4 + i * CC_TILE_P, y = CC_TILE_Y;
+    int y0 = y > s_cc_vp0 ? y : s_cc_vp0, y1 = (y + h) < s_cc_vp1 ? (y + h) : s_cc_vp1;
+    g->setClipRect(x, y0, w, y1 > y0 ? y1 - y0 : 0);
+}
+
+// One caption line: `l` left (from x), `r` right-aligned. Font2 when both fit the column, else Font0 — and
+// if even that is too wide the right part is dropped, so a long translation never runs off the panel.
+// Hash-gated: in direct mode a caption repaints only when its text or colour changes.
+template <typename T> static void cc_caption(T *g, int x, int y, const char *l, const char *r,
+                                             unsigned short lc, unsigned short rc, int slot, bool full)
+{
+    uint32_t h = 2166136261u;
+    for (const char *p = l; *p; p++) h = (h ^ (uint8_t)*p) * 16777619u;
+    h = (h ^ 0x7Cu) * 16777619u;
+    for (const char *p = r; *p; p++) h = (h ^ (uint8_t)*p) * 16777619u;
+    h = (h ^ (((uint32_t)lc << 16) | rc)) * 16777619u;
+    if (!full && h == s_ccs.cap[slot]) return;
+    if (!cc_band_visible(y, CC_CAP_H)) return;        // half a line of text is never drawn (scrolled edge)
+    s_ccs.cap[slot] = h;
+    int avail = CC_X0 + CC_XW - 2 - x;
+    g->fillRect(x, y, CC_X0 + CC_XW - x, CC_CAP_H, BG);
+    g->setTextSize(1);
+    g->setFont(&fonts::Font2);
+    int lw = (int)g->textWidth(l), rw = r[0] ? (int)g->textWidth(r) : 0, gap = r[0] ? 10 : 0;
+    bool big = lw + rw + gap <= avail;
+    if (!big) {
+        g->setFont(&fonts::Font0);
+        lw = (int)g->textWidth(l); rw = r[0] ? (int)g->textWidth(r) : 0; gap = r[0] ? 6 : 0;
+        if (lw + rw + gap > avail) { r = ""; rw = 0; }
+    }
+    int ty = big ? y : y + 4;                                         // Font0 centred in the 16 px band
+    g->setTextColor(lc, BG); g->setCursor(x, ty); g->print(l);
+    if (r[0]) { g->setTextColor(rc, BG); g->setCursor(CC_X0 + CC_XW - 2 - rw, ty); g->print(r); }
+    g->setFont(&fonts::Font0);
+}
+
+static const char *cc_enter(void) { return TR5("invio", "enter", "enter", "enter", "enter"); }
+
+// What a card's caption says: the focused card names its focused control, its live state and the key that
+// acts (red while a disruptive action is armed); an unfocused card shows its title (and its quick keys).
+static void cc_caption_text(int line, char *l, int lc, char *r, int rc, unsigned short *col, unsigned short *rcol)
+{
+    bool foc = (s_cc_line == line);
+    *col = foc ? FG : MUTED; *rcol = foc ? THEME_ACC : DIM;
+    l[0] = r[0] = 0;
+    #define SET(L, R) do { snprintf(l, lc, "%s", (L)); snprintf(r, rc, "%s", (R)); } while (0)
+    if (line == CL_TILES) {
+        if (!foc) { SET(TR5("Rapide", "Quick", "Rapidas", "Rapides", "Schnell"), "1-4"); return; }
+        switch (s_cc_tile) {
+            case TL_MUTE:
+                if (nucleo_audio_is_muted()) SET(TR5("Audio muto", "Sound muted", "Sin sonido", "Son coupe", "Ton aus"),
+                                                 TR5("invio riattiva", "enter unmute", "enter activa", "enter retablit", "enter Ton an"));
+                else                         SET(TR5("Audio attivo", "Sound on", "Sonido activo", "Son actif", "Ton an"),
+                                                 TR5("invio silenzia", "enter mute", "enter silencia", "enter coupe", "enter stumm"));
+                return;
+            case TL_TORCH:  SET(TR5("Torcia", "Torch", "Linterna", "Torche", "Lampe"),
+                                TR5("invio accende", "enter on", "enter enciende", "enter allume", "enter an")); return;
+            case TL_SCREEN: SET(TR5("Spegni schermo", "Screen off", "Apagar pantalla", "Eteindre ecran", "Display aus"), cc_enter()); return;
+            default:
+                if (!cc_hotspot_ok()) { SET(TR5("Hotspot non disponibile", "Hotspot unavailable", "Hotspot no disponible",
+                                                "Hotspot indisponible", "Hotspot nicht verfuegbar"), ""); *col = MUTED; return; }
+                if (s_cc_arm == CC_ARM_HOTSPOT) {
+                    *col = *rcol = C_RED;
+                    SET(nucleo_setup_ap_intended() ? TR5("Spegnere hotspot?", "Hotspot off?", "Apagar hotspot?", "Couper hotspot ?", "Hotspot aus?")
+                                                   : TR5("Accendere hotspot?", "Hotspot on?", "Activar hotspot?", "Activer hotspot ?", "Hotspot an?"),
+                        TR5("invio si", "enter yes", "enter si", "enter oui", "enter ja"));
+                    return;
+                }
+                if (nucleo_setup_ap_intended()) { snprintf(l, lc, "%.16s", nucleo_setup_ap_ssid()); snprintf(r, rc, "192.168.4.1");
+                                                  *col = *rcol = C_YELLOW; return; }
+                SET(TR5("Hotspot spento", "Hotspot off", "Hotspot apagado", "Hotspot coupe", "Hotspot aus"),
+                    TR5("invio x2", "enter x2", "enter x2", "enter x2", "enter x2"));
+                return;
+        }
+    }
+    if (line == CL_BRIGHT) {
+        snprintf(l, lc, "%s", TR5("Luminosita", "Brightness", "Brillo", "Luminosite", "Helligkeit"));
+        snprintf(r, rc, "%d%%", nucleo_app_brightness()); *rcol = *col; return;
+    }
+    if (line == CL_VOLUME) {
+        bool m = nucleo_audio_is_muted();
+        if (!foc)   snprintf(l, lc, "%s", TR5("Volume", "Volume", "Volumen", "Volume", "Lautstaerke"));
+        else if (m) snprintf(l, lc, "%s", TR5("Volume  invio riattiva", "Volume  enter unmute", "Volumen  enter activa",
+                                              "Volume  enter retablit", "Lautst.  enter Ton an"));
+        else        snprintf(l, lc, "%s", TR5("Volume  invio muto", "Volume  enter mute", "Volumen  enter mudo",
+                                              "Volume  enter muet", "Lautst.  enter stumm"));
+        if (m) snprintf(r, rc, "%s", TR5("muto", "muted", "mudo", "muet", "stumm"));
+        else   snprintf(r, rc, "%d%%", nucleo_audio_volume());
+        *rcol = *col; return;
+    }
+    if (!foc) { SET(TR5("Scorciatoie", "Shortcuts", "Atajos", "Raccourcis", "Kurzwahl"), "5-9"); return; }
+    switch (s_cc_short) {
+        case SC_SETTINGS: SET(TR5("5 Impostazioni", "5 Settings", "5 Ajustes", "5 Reglages", "5 Einstellungen"), cc_enter()); return;
+        case SC_WEB: {
+            const char *ip = cc_online() ? nucleo_setup_ip() : nucleo_setup_ap_active() ? "192.168.4.1" : "--";
+            snprintf(l, lc, "6 Web %.15s", ip); snprintf(r, rc, "PIN %.8s", nucleo_auth_pin()); *rcol = FG; return;
+        }
+        case SC_USBKBD:   SET(TR5("7 Tastiera USB", "7 USB keyboard", "7 Teclado USB", "7 Clavier USB", "7 USB-Tastatur"), cc_enter()); return;
+        case SC_USBDRIVE: SET(TR5("8 SD come disco USB", "8 SD as USB drive", "8 SD como disco USB", "8 SD en disque USB",
+                                  "8 SD als USB-Laufwerk"), cc_enter()); return;
+        default:
+            if (s_cc_arm == CC_ARM_RESTART) {
+                *col = *rcol = C_RED;
+                SET(TR5("Riavviare ora?", "Restart now?", "Reiniciar ahora?", "Redemarrer ?", "Jetzt neu starten?"),
+                    TR5("invio si", "enter yes", "enter si", "enter oui", "enter ja"));
+                return;
+            }
+            SET(TR5("9 Riavvia", "9 Restart", "9 Reiniciar", "9 Redemarrer", "9 Neustart"),
+                TR5("invio x2", "enter x2", "enter x2", "enter x2", "enter x2"));
+            return;
+    }
+    #undef SET
+}
+
+template <typename T> static void cc_card_caption(T *g, int line, int x, int y, bool full)
+{
+    char l[48], r[24]; unsigned short lc, rc;
+    cc_caption_text(line, l, sizeof l, r, sizeof r, &lc, &rc);
+    cc_caption(g, x, y, l, r, lc, rc, line, full);
+}
+
+template <typename T> static void cc_tile(T *g, int i, int oy, bool full)
+{
+    int x = CC_X0 + i * CC_TILE_P, y = oy + CC_TILE_DY;
     bool on = cc_tile_on(i), foc = (s_cc_line == CL_TILES && s_cc_tile == i);
     bool off = (i == TL_HOTSPOT && !cc_hotspot_ok());                 // unavailable this boot
     uint8_t  fk   = (uint8_t)((on ? 1 : 0) | (off ? 2 : 0));
@@ -1409,145 +1565,132 @@ template <typename T> static void cc_tile(T *g, int i, bool full)
     bool refill = full || fk != s_ccs.tile_fill[i];
     if (refill) g->fillRoundRect(x, y, CC_TILE_W, CC_TILE_H, 8, fill);
     if (refill || ink != s_ccs.tile_ink[i]) {
-        ui_glyph(g, cc_tile_glyph(i), x + CC_TILE_W / 2, y + 12, 7, ink, fill);
-        const char *lb = cc_tile_label(i);
-        g->setTextSize(1); g->setTextColor(ink, fill);
-        g->setCursor(x + (CC_TILE_W - (int)strlen(lb) * 6) / 2, y + 24); g->print(lb);
+        ui_glyph(g, cc_tile_glyph(i), x + CC_TILE_W / 2, y + CC_TILE_H / 2 + 1, 10, ink, fill);   // the big icon IS the label
         char k[2] = { (char)('1' + i), 0 };                           // quick-key badge
-        g->setTextColor(nucleo_theme_ink_on(fill, on ? INK : DIM), fill); g->setCursor(x + 4, y + 3); g->print(k);
+        g->setFont(&fonts::Font0); g->setTextSize(1);
+        g->setTextColor(nucleo_theme_ink_on(fill, on ? INK : DIM), fill); g->setCursor(x + 5, y + 3); g->print(k);
     }
     s_ccs.tile_fill[i] = fk; s_ccs.tile_ink[i] = ink;
 }
 
-template <typename T> static void cc_slider(T *g, int k, bool full)
+template <typename T> static void cc_slider(T *g, int k, int oy, bool full)
 {
-    int  line = k ? CL_VOLUME : CL_BRIGHT, y = k ? CC_VOL_Y : CC_BRI_Y, cy = y + CC_SL_H / 2;
+    int  line = k ? CL_VOLUME : CL_BRIGHT, y = oy, cy = y + CC_TRK_DY + CC_TRK_H / 2;
     bool foc = (s_cc_line == line), muted = k && nucleo_audio_is_muted();
     int  val = k ? nucleo_audio_volume() : nucleo_app_brightness();
     unsigned short sem  = k ? (muted ? DIM : C_GREEN) : C_YELLOW;
     unsigned short ink  = foc ? FG : MUTED;
     unsigned short ring = cc_focus_col(foc, false);
     uint8_t glyph = (uint8_t)(k ? (muted ? UG_MUTE : UG_SPEAKER) : UG_SUN);
-    if (full || ring != s_ccs.sl_ring[k]) { cc_ring(g, CC_SL_X, y, CC_SL_W, CC_SL_H, 7, ring); s_ccs.sl_ring[k] = ring; }
-    if (full || glyph != s_ccs.sl_glyph[k] || ink != s_ccs.sl_ink[k]) {
-        if (!full && glyph != s_ccs.sl_glyph[k]) g->fillRect(7, y, 17, CC_SL_H, BG);   // a different icon SHAPE
-        ui_glyph(g, glyph, 15, cy, 6, ink, BG);
+    if (full || ring != s_ccs.sl_ring[k]) { cc_ring(g, CC_X0, y, CC_XW, CC_CARD_H[line], 7, ring); s_ccs.sl_ring[k] = ring; }
+    if ((full || glyph != s_ccs.sl_glyph[k] || ink != s_ccs.sl_ink[k]) && cc_band_visible(y + 2, CC_CAP_H)) {
+        if (!full && glyph != s_ccs.sl_glyph[k]) g->fillRect(CC_X0 + 2, y + 2, 17, CC_CAP_H, BG);   // a different icon SHAPE
+        ui_glyph(g, glyph, CC_X0 + 10, y + 2 + CC_CAP_H / 2, 6, ink, BG);
     }
+    cc_card_caption(g, line, CC_X0 + 22, y + 2, full);
     int fw = val * CC_TRK_W / 100; if (fw < 0) fw = 0; if (fw > CC_TRK_W) fw = CC_TRK_W;
-    int kr = foc ? 5 : 3;
-    int kx = CC_TRK_X + fw; if (kx < CC_TRK_X + 5) kx = CC_TRK_X + 5; if (kx > CC_TRK_X + CC_TRK_W - 5) kx = CC_TRK_X + CC_TRK_W - 5;
+    int kr = foc ? 6 : 4;
+    int kx = CC_TRK_X + fw; if (kx < CC_TRK_X + 6) kx = CC_TRK_X + 6; if (kx > CC_TRK_X + CC_TRK_W - 6) kx = CC_TRK_X + CC_TRK_W - 6;
     if (full || val != s_ccs.sl_val[k] || kr != s_ccs.sl_kr[k] || kx != s_ccs.sl_kx[k] || sem != s_ccs.sl_col[k] || ink != s_ccs.sl_ink[k]) {
         if (!full) g->fillCircle(s_ccs.sl_kx[k], cy, s_ccs.sl_kr[k], BG);            // lift the old knob
         int ty = cy - CC_TRK_H / 2;
-        if (fw < CC_TRK_W) { g->setClipRect(CC_TRK_X + fw, ty, CC_TRK_W - fw, CC_TRK_H); g->fillRoundRect(CC_TRK_X, ty, CC_TRK_W, CC_TRK_H, 3, LINE); }
-        if (fw > 0)        { g->setClipRect(CC_TRK_X, ty, fw, CC_TRK_H);                g->fillRoundRect(CC_TRK_X, ty, CC_TRK_W, CC_TRK_H, 3, sem); }
-        g->clearClipRect();
+        if (fw < CC_TRK_W) { cc_clip_piece(g, CC_TRK_X + fw, ty, CC_TRK_W - fw, CC_TRK_H); g->fillRoundRect(CC_TRK_X, ty, CC_TRK_W, CC_TRK_H, 3, LINE); }
+        if (fw > 0)        { cc_clip_piece(g, CC_TRK_X, ty, fw, CC_TRK_H);                g->fillRoundRect(CC_TRK_X, ty, CC_TRK_W, CC_TRK_H, 3, sem); }
+        cc_clip_body(g);
         g->fillCircle(kx, cy, kr, foc ? FG : sem);
-        char b[8]; snprintf(b, sizeof b, "%3d%%", val);                // fixed 4-char field, opaque
-        g->setTextSize(1); g->setTextColor(ink, BG);
-        g->setCursor(CC_SL_X + CC_SL_W - 4 - 24, cy - 3); g->print(b);
     }
     s_ccs.sl_glyph[k] = glyph; s_ccs.sl_ink[k] = ink; s_ccs.sl_val[k] = (int16_t)val;
     s_ccs.sl_kx[k] = (int16_t)kx; s_ccs.sl_kr[k] = (uint8_t)kr; s_ccs.sl_col[k] = sem;
 }
 
-template <typename T> static void cc_short(T *g, int i, bool full)
+template <typename T> static void cc_short(T *g, int i, int oy, bool full)
 {
-    int x = 4 + i * CC_SHORT_P, y = CC_SHORT_Y;
+    int x = CC_X0 + i * CC_SHORT_P, y = oy + CC_SHORT_DY;
     bool foc = (s_cc_line == CL_SHORT && s_cc_short == i);
     unsigned short ring = cc_focus_col(foc, i == SC_RESTART && s_cc_arm == CC_ARM_RESTART);
     unsigned short ink  = (i == SC_RESTART) ? C_RED : nucleo_theme_ink_on(LINE, foc ? FG : MUTED);   // red = semantic, kept
     if (full) g->fillRoundRect(x, y, CC_SHORT_W, CC_SHORT_H, 7, LINE);
     if (full || ring != s_ccs.sh_ring[i]) { cc_ring(g, x, y, CC_SHORT_W, CC_SHORT_H, 7, ring); s_ccs.sh_ring[i] = ring; }
-    if (full || ink != s_ccs.sh_ink[i])   { ui_glyph(g, cc_short_glyph(i), x + CC_SHORT_W / 2, y + CC_SHORT_H / 2, 6, ink, LINE); s_ccs.sh_ink[i] = ink; }
-}
-
-// The one line of text on the panel: names the focused control, its live state and the key that acts
-// (vocabulary of docs/native-ui-kit.md §5). Red while a disruptive action is armed.
-static const char *cc_context_text(char *b, int cap, unsigned short *col)
-{
-    const char *s = b; *col = MUTED; b[0] = 0;
-    if (s_cc_arm == CC_ARM_HOTSPOT) {
-        *col = C_RED;
-        return nucleo_setup_ap_intended() ? TR5("invio spegne hotspot   esc annulla", "enter hotspot off   esc cancel", "enter apaga hotspot   esc cancela",
-                                              "enter coupe hotspot   esc annule", "enter Hotspot aus   esc abbrechen")
-                                          : TR5("invio accende hotspot   esc annulla", "enter hotspot on   esc cancel", "enter activa hotspot   esc cancela",
-                                              "enter active hotspot   esc annule", "enter Hotspot an   esc abbrechen");
-    }
-    if (s_cc_arm == CC_ARM_RESTART) { *col = C_RED; return TR5("invio riavvia ora   esc annulla", "enter restart now   esc cancel", "enter reiniciar   esc cancela",
-                                                            "enter redemarrer   esc annule", "enter Neustart   esc abbrechen"); }
-    if (s_cc_line == CL_TILES) {
-        switch (s_cc_tile) {
-            case TL_MUTE:   return nucleo_audio_is_muted() ? TR5("Audio muto   invio riattiva", "Sound muted   enter unmute", "Sin sonido   enter activa",
-                                                                  "Son coupe   enter retablit", "Ton aus   enter Ton an")
-                                                           : TR5("Audio attivo   invio silenzia", "Sound on   enter mute", "Sonido activo   enter silencia",
-                                                                  "Son actif   enter coupe", "Ton an   enter stumm");
-            case TL_TORCH:  return TR5("Torcia   invio accende", "Torch   enter turn on", "Linterna   enter enciende", "Torche   enter allume", "Lampe   enter an");
-            case TL_SCREEN: return TR5("Spegni schermo   un tasto riaccende", "Screen off   any key wakes it", "Apaga pantalla   una tecla despierta",
-                                  "Ecran eteint   une touche reveille", "Display aus   Taste weckt");
-            default:
-                if (!cc_hotspot_ok()) return TR5("Hotspot non disponibile in questa app", "Hotspot unavailable in this app", "Hotspot no disponible aqui",
-                                               "Hotspot indisponible ici", "Hotspot hier nicht verfuegbar");
-                if (nucleo_setup_ap_intended()) { snprintf(b, cap, "%.18s  192.168.4.1", nucleo_setup_ap_ssid()); *col = C_YELLOW; return s; }
-                return TR5("Hotspot spento   invio x2 accende", "Hotspot off   enter x2 turns on", "Hotspot apagado   enter x2 activa",
-                          "Hotspot coupe   enter x2 active", "Hotspot aus   enter x2 an");
-        }
-    }
-    if (s_cc_line == CL_BRIGHT) { snprintf(b, cap, TR5("Luminosita %d%%   </> regola", "Brightness %d%%   </> adjust", "Brillo %d%%   </> ajusta",
-                                                  "Luminosite %d%%   </> regle", "Helligkeit %d%%   </> stellt"), nucleo_app_brightness()); return s; }
-    if (s_cc_line == CL_VOLUME) {
-        if (nucleo_audio_is_muted()) snprintf(b, cap, TR5("Volume %d%% muto   invio riattiva", "Volume %d%% muted   enter unmute", "Volumen %d%% mudo   enter activa",
-                                            "Volume %d%% coupe   enter retablit", "Lautst. %d%% stumm   enter an"), nucleo_audio_volume());
-        else                         snprintf(b, cap, TR5("Volume %d%%   </> regola   invio muto", "Volume %d%%   </> adjust   enter mute", "Volumen %d%%   </> ajusta   enter mudo",
-                                            "Volume %d%%   </> regle   enter muet", "Lautst. %d%%   </> stellt   enter stumm"), nucleo_audio_volume());
-        return s;
-    }
-    switch (s_cc_short) {
-        case SC_SETTINGS: return TR5("Tutte le impostazioni   invio apri", "All settings   enter open", "Todos los ajustes   enter abrir",
-                                    "Tous les reglages   enter ouvrir", "Alle Einstellungen   enter oeffnen");
-        case SC_WEB: {
-            const char *ip = cc_online() ? nucleo_setup_ip() : nucleo_setup_ap_active() ? "192.168.4.1" : "--";
-            snprintf(b, cap, "Web %.15s   PIN %.8s", ip, nucleo_auth_pin()); *col = FG; return s;
-        }
-        case SC_USBKBD:   return TR5("Tastiera USB per il PC   invio apri", "USB keyboard for a PC   enter open", "Teclado USB para PC   enter abrir",
-                                    "Clavier USB pour PC   enter ouvrir", "USB-Tastatur fuer PC   enter oeffnen");
-        case SC_USBDRIVE: return TR5("Scheda SD come disco USB   invio apri", "SD card as a USB drive   enter open", "SD como disco USB   enter abrir",
-                                    "SD en disque USB   enter ouvrir", "SD als USB-Laufwerk   enter oeffnen");
-        default:          return TR5("Riavvia il dispositivo   invio x2", "Restart the device   enter x2", "Reiniciar el equipo   enter x2",
-                                    "Redemarrer l'appareil   enter x2", "Geraet neu starten   enter x2");
+    if (full || ink != s_ccs.sh_ink[i]) {
+        ui_glyph(g, cc_short_glyph(i), x + CC_SHORT_W / 2 + 3, y + CC_SHORT_H / 2, 8, ink, LINE);
+        char k[2] = { (char)('1' + CC_NTILES + i), 0 };               // quick-key badge 5-9
+        g->setFont(&fonts::Font0); g->setTextSize(1);
+        g->setTextColor(nucleo_theme_ink_on(LINE, DIM), LINE); g->setCursor(x + 4, y + 3); g->print(k);
+        s_ccs.sh_ink[i] = ink;
     }
 }
 
-template <typename T> static void cc_context(T *g, bool full)
+// Scroll knob on the right edge: where the viewport sits in the column (smartwatch position indicator).
+template <typename T> static void cc_knob(T *g)
 {
-    char b[48]; unsigned short c; const char *s = cc_context_text(b, sizeof b, &c);
-    char o[40]; memset(o, ' ', 39); o[39] = 0;                        // centred in a fixed 39-column field
-    int len = (int)strlen(s); if (len > 39) len = 39;
-    memcpy(o + (39 - len) / 2, s, len);
-    uint32_t h = 2166136261u; for (const char *p = o; *p; p++) h = (h ^ (uint8_t)*p) * 16777619u;
-    h ^= c;
-    if (!full && h == s_ccs.ctx) return;
-    s_ccs.ctx = h;
-    if (full) g->drawFastHLine(0, CC_CTX_Y, W, LINE);
-    g->setTextSize(1); g->setTextColor(c, BG); g->setCursor(3, CC_CTX_Y + 4); g->print(o);
+    int vph = s_cc_vp1 - s_cc_vp0;
+    if (CC_COL_H <= vph) return;
+    int kh = vph * vph / CC_COL_H, ky = s_cc_vp0 + s_cc_scroll * (vph - kh) / (CC_COL_H - vph);
+    g->fillRect(CC_KNOB_X, s_cc_vp0, 2, vph, LINE);
+    g->fillRect(CC_KNOB_X, ky, 2, kh, MUTED);
 }
 
-template <typename T> static void cc_paint(T *g, bool full)
+// Where the column must scroll so the focused card (and its ring) is fully in the viewport.
+static int cc_scroll_target(int vph)
 {
-    if (full) g->fillScreen(BG);
+    int top = CC_CARD_Y[s_cc_line] - (s_cc_line ? 2 : 0), bot = CC_CARD_Y[s_cc_line] + CC_CARD_H[s_cc_line];
+    int t = s_cc_scroll;
+    if (top < t) t = top;
+    if (bot > t + vph) t = bot - vph;
+    int mx = CC_COL_H - vph; if (mx < 0) mx = 0;
+    if (t > mx) t = mx;
+    if (t < 0) t = 0;
+    return t;
+}
+
+template <typename T> static void cc_paint(T *g, bool full, int vh)
+{
+    if (full) g->fillRect(0, 0, W, vh, BG);
     cc_strip(g, full);
-    for (int i = 0; i < CC_NTILES; i++) cc_tile(g, i, full);
-    cc_slider(g, 0, full);
-    cc_slider(g, 1, full);
-    for (int i = 0; i < CC_NSHORT; i++) cc_short(g, i, full);
-    cc_context(g, full);
+    s_cc_vp0 = CC_BODY_Y; s_cc_vp1 = vh;
+    cc_clip_body(g);
+    for (int line = 0; line < CC_NLINES; line++) {
+        int oy = CC_BODY_Y + CC_CARD_Y[line] - s_cc_scroll;
+        if (oy + CC_CARD_H[line] <= s_cc_vp0 || oy >= s_cc_vp1) continue;   // fully out of view
+        switch (line) {
+            case CL_TILES:
+                for (int i = 0; i < CC_NTILES; i++) cc_tile(g, i, oy, full);
+                cc_card_caption(g, CL_TILES, CC_X0 + 2, oy + CC_TILE_CAP, full);
+                break;
+            case CL_BRIGHT: cc_slider(g, 0, oy, full); break;
+            case CL_VOLUME: cc_slider(g, 1, oy, full); break;
+            default:
+                for (int i = 0; i < CC_NSHORT; i++) cc_short(g, i, oy, full);
+                cc_card_caption(g, CL_SHORT, CC_X0 + 2, oy + CC_SHORT_CAP, full);
+                break;
+        }
+    }
+    if (full) cc_knob(g);
+    g->clearClipRect();
 }
 
 void launcher_render_control_center(void)
 {
     s_cc_drawn_sig = cc_sig();
     M5Canvas *c = nucleo_screen();
-    if (c) { cc_paint(c, true); c->pushSprite(0, 0); }                // back-buffer: compose all, ONE blit
-    else   { d.startWrite(); cc_paint(&d, !s_ccs.valid); d.endWrite(); }   // direct: only what changed
-    s_ccs.valid = true;                                               // the screen now matches s_ccs
+    int vh = c ? c->height() : H; if (vh > H) vh = H;        // the rows THIS frame can draw
+    int tgt = cc_scroll_target(vh - CC_BODY_Y);
+    if (c) {                                                  // back-buffer: compose all, ONE blit
+        int dl = tgt - s_cc_scroll;                           // ease toward the focused card, a step per frame
+        s_cc_scroll = s_cc_snap ? tgt : s_cc_scroll + ((dl >= -2 && dl <= 2) ? dl : dl / 2);
+        s_cc_anim = (s_cc_scroll != tgt);
+        cc_paint(c, true, vh);
+        c->pushSprite(0, 0);
+        // A canvas fitted to a short heap block (240x130 on the ADV) cannot cover the panel's last rows: clear
+        // them here, or they keep the previous frame (BG over BG on later frames — nothing visibly changes).
+        if (vh < H) { d.startWrite(); d.fillRect(0, vh, W, H - vh, BG); d.endWrite(); }
+    } else {                                                  // direct: only what changed
+        // An animated scroll would repaint the whole body every frame straight on the panel (flicker): jump.
+        bool full = !s_ccs.valid || tgt != s_cc_scroll || s_ccs.vh != vh;
+        s_cc_scroll = tgt; s_cc_anim = false;
+        d.startWrite(); cc_paint(&d, full, vh); d.endWrite();
+    }
+    s_cc_snap = false;
+    s_ccs.vh = (int16_t)vh;
+    s_ccs.valid = true;                                       // the screen now matches s_ccs
 }

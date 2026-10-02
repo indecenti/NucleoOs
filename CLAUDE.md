@@ -55,7 +55,8 @@ Verification matrix: `npm run validate` (registry/manifest), `i18n:gate`, `gz:ch
 Native UI (launcher, Control Center, Settings) is verified on the PC too, never by flashing to look:
 `npm run launcher:test` compiles the real `launcher_menu.cpp` against the real app table;
 `npm run ui:shots` renders the real UI C with the real LovyanGFX into PNGs (5 languages × 4 themes ×
-direct/buffered path) under `build/ui-host/` and diffs them against `tools/ui-host/golden.json`.
+buffered / direct / short path — `.short` = the ADV's 240x130 fitted canvas, and it FAILS on any panel row
+left unrepainted below it) under `build/ui-host/` and diffs them against `tools/ui-host/golden.json`.
 Look at `build/ui-host/sheets/*.png` after any native UI change; accept with `-- --update`.
 
 **Library/API docs:** when touching a third-party API (ESP-IDF, Three.js, Vosk, js-dos, the

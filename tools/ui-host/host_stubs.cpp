@@ -31,7 +31,19 @@ bool nucleo_screen_acquire(void)
     return s_screen_alive;
 }
 void nucleo_screen_release(void) { if (s_screen_alive) { s_screen.deleteSprite(); s_screen_alive = false; } }
-M5Canvas *nucleo_screen(void) { if (!g_host.canvas_ok) nucleo_screen_release(); return nucleo_screen_acquire() ? &s_screen : nullptr; }
+M5Canvas *nucleo_screen(void)
+{
+    if (!g_host.canvas_ok) nucleo_screen_release();
+    if (!nucleo_screen_acquire()) return nullptr;
+    // A canvas shorter than the panel cannot cover its last rows. On the device they keep whatever was there
+    // (the launcher footer under the Control Center). Mark them here, so render_one catches a surface that
+    // blits the canvas and never repaints below it.
+    if (g_host.stale_mark && s_screen.height() < 135) {
+        d.fillRect(0, s_screen.height(), 240, 135 - s_screen.height(), HOST_STALE);
+        g_host.stale_px = d.readPixel(0, s_screen.height());
+    }
+    return &s_screen;
+}
 void host_display_begin(void) { d.setColorDepth(16); d.createSprite(240, 135); d.fillScreen(0); }
 
 extern "C" bool nucleo_ui_is_adv(void) { return g_host.adv; }

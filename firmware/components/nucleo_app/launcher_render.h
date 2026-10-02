@@ -62,6 +62,7 @@ bool launcher_render_step_scroll(void);
 // sliders, 5 shortcuts and a context line. Focus is kept across opens (resume).
 void launcher_render_control_center(void);             // compose + blit the panel
 void launcher_render_control_center_open(void);        // disarm any pending action (focus is kept)
+void launcher_render_control_center_reset(void);       // forget the remembered focus + scroll (first-boot state)
 void launcher_render_control_center_close(void);       // persist a brightness/volume change once
 // Handle a key. Returns CC_NONE(0)/CC_REDRAW(1)/CC_CLOSE(2)/CC_SCREEN_OFF(3)/CC_LAUNCH(4)/CC_TORCH(5).
 // When CC_LAUNCH: call launcher_render_control_center_launch_id() for the app id to open.
