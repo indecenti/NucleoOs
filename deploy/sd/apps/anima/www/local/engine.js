@@ -20,6 +20,9 @@ const PACK = [
   { p: 'data/anima/commands.it.json',         req: true  },
   { p: 'data/anima/dict-it-en.tsv',           req: false },
   { p: 'data/anima/dict-en-it.tsv',           req: false },
+  // WHICH-PERSON table (shared surnames -> "which one do you mean?"), read by fseek from /sd like the device
+  // does (anima_person.c). Absent -> no clarify, the cascade answers as before.
+  { p: 'data/anima/anima-person-ambig.bin',   req: false },
   { p: 'data/anima/learned/mind.it.jsonl',    req: false },
   { p: 'data/anima/learned/mind.en.jsonl',    req: false },
   { p: 'data/anima/learned/facets.it.jsonl',  req: false },
