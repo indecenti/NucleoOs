@@ -153,8 +153,10 @@ The dialogic band cannot reach these: a bare surname scores 0.55–0.72, well be
 window. And widening the window would not help, because **cosine margin is the wrong instrument
 here** — `chi è Kennedy` beats its runner-up by 0.186, looking confident while being the wrong
 Kennedy. The question "how many people carry this surname?" has an *exact* answer, so it is answered
-at build time (`tools/anima/build_person_ambig.mjs` → `anima_person_ambig.h`) and never estimated at
-runtime.
+at build time (`tools/anima/build_person_ambig.mjs` → `data/anima/anima-person-ambig.bin` on the SD:
+fixed records binary-searched by `nucleo_anima/anima_person.c`, no flash and no heap — moved off flash on
+2026-10-02 when the image outgrew the M5Launcher app slot) and never estimated at runtime. No table on the
+card → no clarify, ANIMA answers as it would without it.
 
 Design notes that matter more than the feature:
 
