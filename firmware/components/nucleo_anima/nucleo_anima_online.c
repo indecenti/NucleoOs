@@ -559,11 +559,15 @@ static int cache_get(const char *slug, bool en, anima_result_t *out, long *age)
 // streaming (O(dim) RAM). Mirrors the 2-byte format nucleo_anima_learn.c already uses.
 static void vec_sync(bool en, const char *id, const char *embed_text)
 {
-    static int8_t v[RECALL_DIM];
+    // Vector + record scratch on the heap for this call only (was 592 B of .bss), taken BEFORE any file
+    // is touched: no RAM -> the paraphrase sidecar is simply not updated (the JSONL card stays authoritative).
+    struct { int8_t v[RECALL_DIM]; char rid[80]; int8_t rv[RECALL_DIM]; } *sc = malloc(sizeof *sc);
+    if (!sc) return;
+    int8_t *v = sc->v;
     int D = nucleo_anima_l1_encode(embed_text, v, RECALL_DIM);
-    if (D <= 0 || D > RECALL_DIM) return;             // encoder absent -> semantic recall disabled
+    if (D <= 0 || D > RECALL_DIM) { free(sc); return; }   // encoder absent -> semantic recall disabled
     uint8_t idl = (uint8_t)strlen(id);
-    if (idl == 0 || idl >= 80) return;
+    if (idl == 0 || idl >= 80) { free(sc); return; }
     char vp[170]; vec_path(vp, sizeof(vp), en);
 
     // Pass 1: count records that are NOT this id (for oldest-eviction).
@@ -584,12 +588,12 @@ static void vec_sync(bool en, const char *id, const char *embed_text)
     // Pass 2: rewrite survivors, append the fresh record. Atomic temp + rename.
     char tmp[180]; snprintf(tmp, sizeof(tmp), "%s.tmp", vp);
     FILE *out = fopen(tmp, "wb");
-    if (!out) return;
+    if (!out) { free(sc); return; }
     in = fopen(vp, "rb");
     if (in) {
-        uint8_t l, db[2]; static char rid[80]; static int8_t rv[RECALL_DIM];
+        uint8_t l, db[2]; char *rid = sc->rid; int8_t *rv = sc->rv;
         while (fread(&l, 1, 1, in) == 1) {
-            if (l == 0 || l >= sizeof(rid) || fread(rid, 1, l, in) != l || fread(db, 1, 2, in) != 2) break;
+            if (l == 0 || l >= sizeof sc->rid || fread(rid, 1, l, in) != l || fread(db, 1, 2, in) != 2) break;
             int d = db[0] | (db[1] << 8);
             if (d <= 0 || d > RECALL_DIM) break;             // bad dim (or an old 1-byte file) -> stop, rebuild fresh
             if (fread(rv, 1, d, in) != (size_t)d) break;
@@ -604,6 +608,7 @@ static void vec_sync(bool en, const char *id, const char *embed_text)
     fclose(out);
     remove(vp);                              // FatFs rename() won't overwrite an existing file -> drop the stale copy first
     if (rename(tmp, vp) != 0) remove(tmp);
+    free(sc);
 }
 
 // Catalogue a fetched entity into the learned cache. Identity is the CANONICAL Wikipedia title, so
@@ -879,8 +884,11 @@ static bool coh_accept(const char *entity, const char *title, const char *extrac
     if (!qs[0] || !ts[0]) return false;
     float co = coh_ortho(qs, ts);
     if (co >= COH_AUTO_HI) return true;                       // near-exact name: always trust (no net call)
-    static float cal[COH_MAXCAL];
-    int N = coh_calibration(en, cal, COH_MAXCAL);
+    // The calibration sample (512 B) is heap only while it is read, and freed BEFORE the LENS C network
+    // check below, so none of it is held through that TLS handshake. No RAM -> N = 0 -> the prior alone
+    // (exactly the cold-start threshold of a device with no cards yet).
+    float *cal = malloc(COH_MAXCAL * sizeof(float));
+    int N = cal ? coh_calibration(en, cal, COH_MAXCAL) : 0;
     float emp = COH_PRIOR;
     if (N > 0) {
         qsort(cal, N, sizeof(float), coh_cmp_f);
@@ -889,6 +897,7 @@ static bool coh_accept(const char *entity, const char *title, const char *extrac
         if (idx >= N) idx = N - 1;
         emp = cal[idx];
     }
+    free(cal);
     float thr = (COH_N0 * COH_PRIOR + N * emp) / (float)(COH_N0 + N);
     bool lens = (co >= thr) || (coh_grounding(entity, extract) > 0);   // LENS A or LENS B
     if (!lens) return false;                                  // neither lens -> reject (no save)

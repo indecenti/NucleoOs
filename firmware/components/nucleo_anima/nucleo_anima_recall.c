@@ -184,15 +184,18 @@ int nucleo_anima_online_recall(const char *query, bool en, anima_result_t *out)
     FILE *in = fopen(vp, "rb");
     if (!in) return 0;
 
-    static int8_t qv[RECALL_DIM];
-    if (nucleo_anima_l1_encode(query, qv, RECALL_DIM) != D) { fclose(in); return 0; }
+    // Query + record scratch on the heap for the scan only (was 592 B of .bss).
+    struct { int8_t qv[RECALL_DIM]; char rid[80]; int8_t rv[RECALL_DIM]; } *sc = malloc(sizeof *sc);
+    if (!sc) { fclose(in); return 0; }
+    int8_t *qv = sc->qv;
+    if (nucleo_anima_l1_encode(query, qv, RECALL_DIM) != D) { fclose(in); free(sc); return 0; }
     // int8 vectors: each squared term <=127^2 and D<=256, so the norm sums are exact in int32.
     int32_t qn2 = 0; for (int k = 0; k < D; k++) qn2 += (int32_t)qv[k] * qv[k];
-    float qn = sqrtf((float)qn2); if (qn < 1e-6f) { fclose(in); return 0; }
+    float qn = sqrtf((float)qn2); if (qn < 1e-6f) { fclose(in); free(sc); return 0; }
     char bestid[80] = ""; float best = -2.0f;
-    static char rid[80]; static int8_t rv[RECALL_DIM]; uint8_t l, db[2];
+    char *rid = sc->rid; int8_t *rv = sc->rv; uint8_t l, db[2];
     while (fread(&l, 1, 1, in) == 1) {
-        if (l == 0 || l >= sizeof(rid) || fread(rid, 1, l, in) != l || fread(db, 1, 2, in) != 2) break;
+        if (l == 0 || l >= sizeof sc->rid || fread(rid, 1, l, in) != l || fread(db, 1, 2, in) != 2) break;
         int d = db[0] | (db[1] << 8);                        // u16-LE dim
         if (d != D) { if (d <= 0 || d > RECALL_DIM || fseek(in, d, SEEK_CUR) != 0) break; continue; }
         if (fread(rv, 1, d, in) != (size_t)d) break;
@@ -202,6 +205,7 @@ int nucleo_anima_online_recall(const char *query, bool en, anima_result_t *out)
         if (cos > best) { best = cos; rid[l] = 0; snprintf(bestid, sizeof(bestid), "%s", rid); }
     }
     fclose(in);
+    free(sc);                                      // bestid is a copy: the scratch is done
 #ifdef ANIMA_HOST
     if (getenv("RECALL_TRACE")) fprintf(stderr, "[recall] best=%.3f id=%s\n", best, bestid);   // host-only tuning aid
 #endif

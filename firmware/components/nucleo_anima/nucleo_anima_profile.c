@@ -12,12 +12,17 @@
 
 // ---- tiny field store (field-keyed TSV, streaming rewrite) -----------------
 
+// The line buffer is heap for the call only (was 2 x 256 B of .bss). pset takes it BEFORE the rewrite
+// starts, so no RAM means "no change" — never a profile rewritten without its other fields.
+#define P_LN 256
 static int pget(const char *field, char *out, int cap)
 {
     FILE *f = fopen(P_TSV, "r");
     if (!f) return 0;
-    size_t fl = strlen(field); int found = 0; static char ln[256];
-    while (fgets(ln, sizeof(ln), f)) {
+    char *ln = malloc(P_LN);
+    if (!ln) { fclose(f); return 0; }
+    size_t fl = strlen(field); int found = 0;
+    while (fgets(ln, P_LN, f)) {
         char *t = strchr(ln, '\t'); if (!t) continue;
         if ((size_t)(t - ln) != fl || memcmp(ln, field, fl)) continue;
         char *v = t + 1; size_t n = strlen(v);
@@ -26,19 +31,21 @@ static int pget(const char *field, char *out, int cap)
         memcpy(out, v, n); out[n] = 0; found = out[0] ? 1 : 0; break;
     }
     fclose(f);
+    free(ln);
     return found;
 }
 
 static void pset(const char *field, const char *value)
 {
     size_t fl = strlen(field);
+    char *ln = malloc(P_LN);
+    if (!ln) return;
     char tmp[160]; snprintf(tmp, sizeof(tmp), "%s.tmp", P_TSV);
     FILE *out = fopen(tmp, "w");
-    if (!out) return;
+    if (!out) { free(ln); return; }
     FILE *in = fopen(P_TSV, "r");
     if (in) {
-        static char ln[256];
-        while (fgets(ln, sizeof(ln), in)) {
+        while (fgets(ln, P_LN, in)) {
             char *t = strchr(ln, '\t'); if (!t) continue;
             if ((size_t)(t - ln) == fl && !memcmp(ln, field, fl)) continue;   // drop the old value
             fputs(ln, out);
@@ -50,6 +57,7 @@ static void pset(const char *field, const char *value)
     fclose(out);
     remove(P_TSV);
     if (rename(tmp, P_TSV) != 0) remove(tmp);
+    free(ln);
 }
 
 // ---- text helpers ----------------------------------------------------------
