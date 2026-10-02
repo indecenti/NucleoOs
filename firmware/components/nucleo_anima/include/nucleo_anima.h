@@ -129,6 +129,9 @@ void nucleo_anima_unlock(void);
 // this PSRAM-less chip. _unload() frees it (reloads transparently on the next query); _heap_bytes()
 // reports how much that reclaim would free right now (0 when already unloaded).
 void   nucleo_anima_l1_unload(void);
+// Free L1's search scratch (~4.6 KB: query vector, centroid chunk, rerank row). ONLY with no l1_query frame
+// live — nucleo_anima_l1_unload_if_idle() calls it under the gate; never from inside the cascade.
+void   nucleo_anima_l1_release_scratch(void);
 // Guarded reclaim for callers OUTSIDE the cascade: unload only if no query is running (try-locks the
 // spine gate). Returns false (and frees nothing) when ANIMA is busy — skip the reclaim, don't corrupt.
 bool   nucleo_anima_l1_unload_if_idle(void);
