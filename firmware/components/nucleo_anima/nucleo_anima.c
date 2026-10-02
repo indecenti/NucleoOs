@@ -817,9 +817,10 @@ static int a_pick_ordinal(const char *input)
 // Cosine cannot decide this. The existing dialogic band needs the top two within 0.08 of each other
 // inside [0.82, 0.85); a bare surname scores 0.55-0.72, and "chi è Kennedy" separates its top two by
 // 0.186 — confidently wrong. So the question is answered from an EXACT fact instead: how many people
-// in the corpus carry this surname (anima_person_ambig.h, generated from the corpus, flash-resident,
-// no heap). Two or more, with nothing in the query to single one out -> ask rather than guess.
-#include "anima_person_ambig.h"
+// in the corpus carry this surname (data/anima/anima-person-ambig.bin on the SD, generated from the
+// corpus, read record by record: no flash, no heap — anima_person.h). Two or more, with nothing in the
+// query to single one out -> ask rather than guess. No table on the card -> no clarify, as before.
+#include "anima_person.h"
 
 // Words a person question wraps its subject in — taken from the phrasings the corpus itself indexes
 // ("chi è X", "cosa sai di X", "parlami di X", "who was X", "tell me about X"). A token that is
@@ -858,25 +859,23 @@ static bool a_given_has(const char *given, const char *w)
 // Fill `out` with the people a query could mean, most prominent first (the corpus is curated in that
 // order). Returns the count, which is >= 2 only when the query genuinely fails to single one out:
 // "chi è Trump" -> 10, "chi è Donald Trump" -> 0 (one match, answer it normally), "chi è Einstein"
-// -> 0 (only one Einstein exists). `grp` receives the surname-group index so the pick can be
-// resolved later without keeping any strings in the session.
-static int a_person_ambig(const char *q, const anima_person_t **out, int cap, uint16_t *grp)
+// -> 0 (only one Einstein exists). `out` receives person indices (into the SD table), `grp` the number
+// of people the query could still mean, so the pick can be resolved later without keeping any strings.
+// Find the surname a query ends with ("Donald TRUMP"), scanning from the right. Surnames under 3
+// letters are never in the table (the generator drops them), so those tokens cost no SD read.
+static int a_person_group(ap_db_t *db, char tok[A_MAX_TOKENS][A_TOK_LEN], int n, uint16_t *goff, uint8_t *gn)
 {
-    char tok[A_MAX_TOKENS][A_TOK_LEN];
-    int n = a_tokenize(q, tok);
-    if (n == 0 || n > 8) return 0;                    // a long sentence is not a bare "who is X"
+    for (int i = n - 1; i >= 0; i--)
+        if (strlen(tok[i]) >= 3 && ap_surname(db, tok[i], goff, gn)) return i;
+    return -1;
+}
 
-    // Find the surname. A name ends with it ("Donald TRUMP"), so scan from the right.
-    const anima_surname_t *g = NULL; int si = -1;
-    for (int i = n - 1; i >= 0 && !g; i--) {
-        int lo = 0, hi = ANIMA_SURNAME_N - 1;
-        while (lo <= hi) {
-            int m = (lo + hi) / 2, c = strcmp(ANIMA_SURNAME[m].surname, tok[i]);
-            if (c == 0) { g = &ANIMA_SURNAME[m]; si = i; break; }
-            if (c < 0) lo = m + 1; else hi = m - 1;
-        }
-    }
-    if (!g) return 0;
+static int a_person_ambig_db(ap_db_t *db, char tok[A_MAX_TOKENS][A_TOK_LEN], int n, uint16_t *out, int cap, uint16_t *grp)
+{
+    uint16_t goff = 0; uint8_t gn = 0;
+    int si = a_person_group(db, tok, n, &goff, &gn);
+    if (si < 0) return 0;
+    ap_person_t pr;                                    // one record at a time, on the stack
 
     // Every other token must be a lead word or a given name of someone in the group. Anything else
     // ("chi ha scritto IT di King") means this is not a bare identity question -> do not clarify.
@@ -886,7 +885,10 @@ static int a_person_ambig(const char *q, const anima_person_t **out, int cap, ui
         if (i == si || strlen(tok[i]) < 2) continue;
         if (a_person_lead(tok[i])) continue;
         bool is_given = false;
-        for (int k = 0; k < g->n; k++) if (a_given_has(ANIMA_PERSON[g->off + k].given, tok[i])) { is_given = true; break; }
+        for (int k = 0; k < gn && !is_given; k++) {
+            if (!ap_person(db, (uint16_t)(goff + k), &pr)) return 0;
+            if (a_given_has(pr.given, tok[i])) is_given = true;
+        }
         if (!is_given) return 0;
         matched++;
     }
@@ -898,8 +900,9 @@ static int a_person_ambig(const char *q, const anima_person_t **out, int cap, ui
     // asked for. "Michael Jordan" resolves to the player; "Michael B. Jordan" to the actor; "Donald
     // Trump Jr." to the son. Only a genuine tie is worth a question.
     int best_spec = -1, best_cnt = 0;
-    for (int k = 0; k < g->n; k++) {
-        const char *gv = ANIMA_PERSON[g->off + k].given;
+    for (int k = 0; k < gn; k++) {
+        if (!ap_person(db, (uint16_t)(goff + k), &pr)) return 0;
+        const char *gv = pr.given;
         int spec = 0; bool complete = true;
         for (const char *p = gv; *p && complete; ) {
             const char *e = strchr(p, ' '); size_t l = e ? (size_t)(e - p) : strlen(p);
@@ -917,18 +920,18 @@ static int a_person_ambig(const char *q, const anima_person_t **out, int cap, ui
     if (matched && best_cnt == 1 && best_spec > 0) return 0;   // the query named one person outright
 
     int cnt = 0, survivors = 0;
-    for (int k = 0; k < g->n; k++) {
-        const anima_person_t *p = &ANIMA_PERSON[g->off + k];
+    for (int k = 0; k < gn; k++) {
+        if (!ap_person(db, (uint16_t)(goff + k), &pr)) return 0;
         if (matched) {                                 // keep only people consistent with EVERY name token given
             bool all = true;
             for (int i = 0; i < n && all; i++) {
                 if (i == si || strlen(tok[i]) < 2 || a_person_lead(tok[i])) continue;
-                if (!a_given_has(p->given, tok[i])) all = false;
+                if (!a_given_has(pr.given, tok[i])) all = false;
             }
             if (!all) continue;
         }
         survivors++;                                   // counted BEFORE the cap: it is what "N more" means
-        if (cnt < cap) out[cnt++] = p;
+        if (cnt < cap) out[cnt++] = (uint16_t)(goff + k);
     }
     if (cnt < 2) return 0;                             // singled out, or nothing left -> answer normally
     // `total` is the number of people the query could still mean, NOT the size of the surname group:
@@ -938,19 +941,42 @@ static int a_person_ambig(const char *q, const anima_person_t **out, int cap, ui
     return cnt;
 }
 
+static int a_person_ambig(const char *q, uint16_t *out, int cap, uint16_t *grp)
+{
+    char tok[A_MAX_TOKENS][A_TOK_LEN];
+    int n = a_tokenize(q, tok);
+    if (n == 0 || n > 8) return 0;                    // a long sentence is not a bare "who is X"
+    ap_db_t db;
+    if (!ap_open(&db)) return 0;                       // no table on the SD: answer normally
+    int rc = a_person_ambig_db(&db, tok, n, out, cap, grp);
+    ap_close(&db);
+    return rc;
+}
+
+// The display name of table person `idx` into `out` ("" when unavailable).
+static void a_person_display(uint16_t idx, char *out, size_t cap)
+{
+    out[0] = 0;
+    ap_db_t db; ap_person_t p;
+    if (!ap_open(&db)) return;
+    if (ap_person(&db, idx, &p)) snprintf(out, cap, "%s", p.display);
+    ap_close(&db);
+}
+
 // The other half of the same fact. A surname only ONE person carries does not need a question — it
 // needs the full name. "who was einstein" scored 0.682 against a corpus that only ever phrases that
 // card as "who was Albert Einstein", just under the 0.72 rescue floor, so English refused while
 // Italian squeaked through at 0.722. Rather than lower a gate that exists to stop hallucinations,
 // resolve the surname and ask again properly.
 //
-// Returns the full name, or NULL. The caller runs this ONLY after the cascade has already decided to
-// refuse, so it cannot displace a correct answer — the worst case is that the retry also refuses.
-static const char *a_person_unique(const char *q)
+// Writes the full name to `full` and returns true, or false. The caller runs this ONLY after the cascade
+// has already decided to refuse, so it cannot displace a correct answer — the worst case is that the
+// retry also refuses.
+static bool a_person_unique(const char *q, char *full, size_t cap)
 {
     char tok[A_MAX_TOKENS][A_TOK_LEN];
     int n = a_tokenize(q, tok);
-    if (n == 0 || n > 6) return NULL;
+    if (n == 0 || n > 6) return false;
 
     // "e newton?" / "and newton?" names a unique surname, but it is a CONTINUATION, not a question:
     // it means "the same thing I just asked, about Newton". Answering it on its own would resolve it
@@ -958,31 +984,28 @@ static const char *a_person_unique(const char *q)
     // the thread. A leading conjunction is the whole signature.
     static const char *const cont[] = { "e","ed","ma","poi","allora","oppure","o",
                                         "and","but","then","or","also", NULL };
-    for (int i = 0; cont[i]; i++) if (!strcmp(tok[0], cont[i])) return NULL;
+    for (int i = 0; cont[i]; i++) if (!strcmp(tok[0], cont[i])) return false;
 
-    const anima_surname_t *g = NULL; int si = -1;
-    for (int i = n - 1; i >= 0 && !g; i--) {
-        int lo = 0, hi = ANIMA_SURNAME_N - 1;
-        while (lo <= hi) {
-            int m = (lo + hi) / 2, c = strcmp(ANIMA_SURNAME[m].surname, tok[i]);
-            if (c == 0) { g = &ANIMA_SURNAME[m]; si = i; break; }
-            if (c < 0) lo = m + 1; else hi = m - 1;
-        }
-    }
-    if (!g || g->n != 1) return NULL;                  // shared surnames are a question, not a retry
-
-    const anima_person_t *p = &ANIMA_PERSON[g->off];
+    ap_db_t db;
+    if (!ap_open(&db)) return false;                   // no table on the SD: nothing to resolve
+    uint16_t goff = 0; uint8_t gn = 0; ap_person_t pr;
+    int si = a_person_group(&db, tok, n, &goff, &gn);
+    bool ok = si >= 0 && gn == 1 && ap_person(&db, goff, &pr);   // shared surnames are a question, not a retry
+    ap_close(&db);
+    if (!ok) return false;
+    const ap_person_t *p = &pr;
     // Same strictness as the clarify: every other token must be a question lead-in or part of this
     // person's name. It is what keeps "cos'è una rose" from being answered with a K-pop singer.
     bool adds = false;
     for (int i = 0; i < n; i++) {
         if (i == si || strlen(tok[i]) < 2) continue;
         if (a_person_lead(tok[i])) continue;
-        if (!a_given_has(p->given, tok[i])) return NULL;
+        if (!a_given_has(p->given, tok[i])) return false;
         adds = true;
     }
-    if (adds) return NULL;              // the query already spells the given name: retrying adds nothing
-    return p->display;
+    if (adds) return false;             // the query already spells the given name: retrying adds nothing
+    snprintf(full, cap, "%s", p->display);
+    return true;
 }
 
 // Calendar agenda (computed-from-state): "che impegni ho oggi", "cosa devo fare oggi", "chi devo
@@ -3776,10 +3799,8 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
         uint8_t noff = s_session.clarify_person_n;
         s_session.clarify_person_n = 0;
         if (pick >= 0 && pick < noff) {
-            snprintf(person_pick, sizeof person_pick, "%s",
-                     ANIMA_PERSON[s_session.clarify_person_opt[pick]].display);
-            q = person_pick;
-            person_resolved = true;
+            a_person_display(s_session.clarify_person_opt[pick], person_pick, sizeof person_pick);
+            if (person_pick[0]) { q = person_pick; person_resolved = true; }   // card removed meanwhile: handle normally
         }
         // Not an ordinal: the clarify is dropped and the input handled normally — the user may well
         // have answered by typing the name itself, which the cascade resolves on its own.
@@ -4134,7 +4155,7 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
     // Skipped right after a pick: the chosen full name can itself be a shared one ("Arthur Guinness"
     // names two people), and asking about it again would loop the same question forever.
     if (!person_resolved) {
-        const anima_person_t *opt[3]; uint16_t total = 0;
+        uint16_t opt[3]; uint16_t total = 0;
         int nopt = a_person_ambig(q, opt, 3, &total);
         if (nopt >= 2) {
             memset(&r, 0, sizeof r);
@@ -4142,8 +4163,10 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
             snprintf(r.intent, sizeof r.intent, "clarify");
             snprintf(r.state, sizeof r.state, "clarify");
             int w = snprintf(r.reply, sizeof r.reply, en ? "Which one do you mean: " : "Quale intendi: ");
-            for (int i = 0; i < nopt && w < (int)sizeof r.reply; i++)
-                w += snprintf(r.reply + w, sizeof r.reply - w, "%s%d) %s", i ? "  " : "", i + 1, opt[i]->display);
+            for (int i = 0; i < nopt && w < (int)sizeof r.reply; i++) {
+                char dn[AP_DISPLAY_MAX]; a_person_display(opt[i], dn, sizeof dn);
+                w += snprintf(r.reply + w, sizeof r.reply - w, "%s%d) %s", i ? "  " : "", i + 1, dn);
+            }
             if (total > nopt && w < (int)sizeof r.reply)
                 snprintf(r.reply + w, sizeof r.reply - w,
                          (total - nopt) == 1 ? (en ? "  (1 more carries that name)" : "  (un'altra persona porta quel nome)")
@@ -4151,7 +4174,7 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
                          total - nopt);
             else if (w < (int)sizeof r.reply)
                 snprintf(r.reply + w, sizeof r.reply - w, "?");
-            for (int i = 0; i < nopt; i++) s_session.clarify_person_opt[i] = (uint16_t)(opt[i] - ANIMA_PERSON);
+            for (int i = 0; i < nopt; i++) s_session.clarify_person_opt[i] = opt[i];
             s_session.clarify_person_n = (uint8_t)nopt;
             goto done;
         }
@@ -4204,7 +4227,8 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
     // the running thread, and resolving it context-free would answer a cold session that must abstain
     // — and would pre-empt the coreference tier that gives the thread its continuity.
     {
-        const char *full = a_is_followup_q(q) ? NULL : a_person_unique(q);
+        char fullb[AP_DISPLAY_MAX];
+        const char *full = (!a_is_followup_q(q) && a_person_unique(q, fullb, sizeof fullb)) ? fullb : NULL;
         if (full && try_cascade(full, en, &r)) {
             snprintf(s_mem.last_topic, sizeof(s_mem.last_topic), "%s", full);   // "tell me more" follows the person
             mem_update(&r); s_session.dirty = true;

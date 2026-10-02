@@ -9,7 +9,7 @@
 //
 // Cosine cannot separate these cases — "chi è Kennedy" beats its runner-up by 0.186, looking
 // confident while being the wrong Kennedy — so the decision is made from an exact corpus fact
-// instead (anima_person_ambig.h). What this gate checks:
+// instead (data/anima/anima-person-ambig.bin, read by nucleo_anima/anima_person.c). What this gate checks:
 //
 //   1. ASKS WHEN AMBIGUOUS   — a bare shared surname returns a question naming real people.
 //   2. ANSWERS WHEN NOT      — a full name, and a surname only one person carries, still answer.
