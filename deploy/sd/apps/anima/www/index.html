@@ -3439,7 +3439,7 @@
     }
     // Retention: the newest SESS_MAX conversations (pinned and the active one always stay). What falls out
     // is tombstoned, so a later merge with the SD copy cannot bring it back.
-    const SESS_MAX=50, SESS_SD_MAX=256*1024, SESS_PATH='/data/anima/sessions.json';
+    const SESS_MAX=50, SESS_SD_MAX=56*1024, SESS_PATH='/data/anima/sessions.json';
     let tombs=(()=>{ try{ const t=JSON.parse(get('anima.sessTomb','[]')); return Array.isArray(t)?t.filter(x=>Array.isArray(x)&&typeof x[0]==='string'):[]; }catch{ return []; } })();
     function saveTombs(){ tombs=tombs.slice(-300); set('anima.sessTomb', JSON.stringify(tombs)); }
     function tomb(id){ tombs=tombs.filter(t=>t[0]!==id); tombs.push([id,Date.now()]); saveTombs(); }
@@ -3478,12 +3478,23 @@
       for(const s of pool){ const j=JSON.stringify({ ...s, history:storedHistory(s) }); if(out.length && bytes+j.length>SESS_SD_MAX) continue; bytes+=j.length; out.push(j); }
       return '{"v":2,"sessions":['+out.join(',')+'],"tomb":'+JSON.stringify(tombs)+'}';
     }
-    function sessSdSave(){ clearTimeout(sessSdTimer); sessSdTimer=setTimeout(()=>{ try{
+    // WHEN it is written matters as much as what: the browser keeps the conversations (localStorage) — the SD
+    // copy only lets ANOTHER device find them. It used to be rewritten 2.5 s after every turn: ~100 KB as an
+    // EXCLUSIVE write (the shell's SW gate holds every other device request meanwhile) took 37 s on the ADV in
+    // web mode, stalled the agent's module loads and drove the heap to 1.5 KB. Now: after 3 quiet minutes, or
+    // at once when ANIMA is hidden / closed — never while a turn runs.
+    const SESS_SD_QUIET_MS=180000;
+    function sessSdWrite(keepalive){ try{
+      if(busy && !keepalive){ sessSdSave(); return; }
       const body=sdPayload();
       if(body===_sessLast) return;                     // unchanged since the last SD write (or read) → no device round-trip
       _sessLast=body;
-      fetch('/api/fs/write?path='+encodeURIComponent(SESS_PATH),{method:'POST',body}).catch(()=>{ _sessLast=''; });  // let a retry through on failure
-    }catch{} }, 2500); }
+      fetch('/api/fs/write?path='+encodeURIComponent(SESS_PATH),{method:'POST',body,keepalive:!!keepalive && body.length<60000}).catch(()=>{ _sessLast=''; });  // let a retry through on failure
+    }catch{} }
+    function sessSdSave(){ clearTimeout(sessSdTimer); sessSdTimer=setTimeout(()=>sessSdWrite(false), SESS_SD_QUIET_MS); }
+    function sessSdFlush(){ if(!sessSdTimer) return; clearTimeout(sessSdTimer); sessSdTimer=0; sessSdWrite(true); }
+    document.addEventListener('visibilitychange', ()=>{ if(document.hidden) sessSdFlush(); });
+    addEventListener('pagehide', sessSdFlush);
     // Merge the SD copy into this browser by id: a conversation missing here is added, one that is newer
     // there replaces ours, a tombstone (deleted in either browser) wins over an older copy. Never runs under
     // a turn in flight. Local-only or newer-here conversations are written back by the normal debounce.
@@ -4254,6 +4265,14 @@
       }
       // Same for live state ("how much SD space") and launching an app: a tool-less chat would guess the value
       // or claim it opened the app; the agent reads device_status / calls open_in_os for real.
+      // A plain volume / brightness order needs no engine at all: the device sets it in one call (/api/anima/act),
+      // also in web mode and with no WASM brain in this browser — before that it said "not carried out".
+      if(hint==='act' && d.err==='busy' && P.settingAct){
+        const a=P.settingAct(q);
+        if(a){ const acted=await deviceAct(a);
+          if(acted && acted.done===true) return { ...acted, reply:P.settingReply(a.tool, acted.reply, (P.guessLang && P.guessLang(q)) || lang) };
+          if(acted) return notPerformed(acted, 'failed'); }
+      }
       if((hint==='act' || hint==='live' || hint==='launch') && d.err!=='unpaired' && d.err!=='stopped' && await pcAgentReady()){ _turnForceAgent=true; return null; }
       return hint==='act' ? notPerformed(null, d.err) : null;
     }
@@ -4526,6 +4545,24 @@
     // only a server on this very computer counts: a LAN box would still be "the network".
     let _enginesP=null;
     const enginesMod=()=> _enginesP || (_enginesP=import('/ai-engines.js').catch(e=>{ _enginesP=null; throw e; }));
+    // FIRST MEASUREMENT of a big PC model that would win if fast (ai-engines.benchmarkCandidates): without it the
+    // 35B-A3B — as fast as the 9B here and far more capable — was never picked, so never measured, in a new
+    // browser. Once ANIMA has been idle a while (minimised counts — the best moment: it runs on the PC's GPU, not
+    // here); any new turn aborts it; once per model per browser.
+    let _benchCtl=null, _benchDone=false;
+    function scheduleBench(){
+      if(_benchDone) return;
+      setTimeout(async()=>{
+        if(_benchDone || busy){ scheduleBench(); return; }
+        _benchDone=true;
+        try{
+          const E=await enginesMod(); if(!E.benchmarkCandidates) return;
+          _benchCtl=new AbortController();
+          for(const task of ['agent','code']){ if(_benchCtl.signal.aborted) break; await E.benchmarkCandidates({ task, signal:_benchCtl.signal }); }
+        }catch{} finally{ _benchCtl=null; }
+      }, 25000);
+    }
+    scheduleBench();
     async function localServerAsk(q, wsx, opts={}){
       const E=await enginesMod();
       const cfg=E.loadLocalConfig(); if(!cfg.enabled) return null;
@@ -4550,9 +4587,13 @@
       if(_laiHinted || (r && r.tier==='server')) return;
       try{ if(sessionStorage.getItem('anima.laiHint')) return; }catch{}
       const E=await enginesMod(); const cfg=E.loadLocalConfig(); if(!cfg.enabled) return;
-      const s=(await E.liveServers({ config:cfg })).find((x)=>x.status==='cors'); if(!s) return;
+      const live=await E.liveServers({ config:cfg });
+      const s=live.find((x)=>x.status==='cors'), blocked=!s && live.find((x)=>x.status==='blocked');
+      if(!s && !blocked) return;
       _laiHinted=true; try{ sessionStorage.setItem('anima.laiHint','1'); }catch{}
       const row=document.createElement('div'); row.className='lai-hint';
+      // Ollama may well be running: it is THIS browser that forbids the page to reach localhost.
+      if(blocked){ row.textContent='ℹ '+L('engPc')+': '+L('engPcBlocked'); body.appendChild(row); scrollDown(); return; }
       row.appendChild(document.createTextNode('ℹ '+L('lai_hint',{ server:s.name })+' '));
       const b=document.createElement('button'); b.type='button'; b.className='lai-how'; b.textContent=L('lai_how');
       b.addEventListener('click', async()=>{
@@ -4579,6 +4620,8 @@
       const op=String(a.op||'?'), root=a.root?String(a.root).replace(/\/+$/,'')+'/':'';
       let target='', isPath=true;
       if((op==='publish_app'||op==='manage_app') && a.id){ target='/apps/'+a.id+'/'+(op==='manage_app'?' ('+(a.action||'?')+')':''); isPath=false; }
+      // scaffold_app said only "wants to run scaffold_app": show the app it is about to create, and where
+      else if(op==='scaffold_app' && (a.id || a.name)){ target=(a.name?'«'+a.name+'» ':'')+root+String(a.id||'').replace(/^\/+/,'')+'/'+(a.kind?' ('+a.kind+')':''); isPath=false; }
       else if(a.hw){ target=a.abs||''; isPath=false; }
       else if(op==='move_file' && a.from) target=(String(a.from).startsWith('/')?'':root)+String(a.from).replace(/^\.\//,'')+' → '+(a.abs||a.to||'?');
       else target=a.abs||(a.path?root+String(a.path).replace(/^\.?\/+/,''):'');
@@ -4601,6 +4644,7 @@
         lines.push('', L('agentReplaces'), clip(a.old,6,300), '', L('agentWith'), clip(a.new,6,300));
       } else if(op==='run_js' && a.code){
         lines.push('', L('agentCode'), clip(a.code,12,700));
+        if(a.save_to) lines.push('', L('agentSaveTo',{ path:String(a.save_to) }));
       }
       if(always) lines.push('', '⚠ '+L(a.hw?'agentHw':'agentIrrev'));
       return { title:L('agentWants',{ op }), body:lines.join('\n') };
@@ -4617,7 +4661,12 @@
     async function agentRuntime(){
       const sig=lang+'|'+(keyCfg.key||'')+'|'+(keyCfg.model||'')+'|'+keysSig()+'|'+((fs.hasRoot&&fs.hasRoot())?fs.getRoot():'');
       if(_agentRt && _agentRtKey===sig) return _agentRt;
-      const { createRuntime } = await import('/apps/agent/runtime.js');   // device webfs maps /apps/<id>/<rest> → /apps/<id>/www/<rest>: the URI must NOT contain /www/
+      // device webfs maps /apps/<id>/<rest> → /apps/<id>/www/<rest>: the URI must NOT contain /www/.
+      // ONE FILE AT A TIME (/seq-import.js): no service worker gates requests on http://, and a plain import()
+      // fetched the agent's ~12 modules at once — the 4-socket httpd lost one and the agent stayed dead.
+      let createRuntime;
+      try{ const { seqImport }=await import('/seq-import.js'); ({ createRuntime }=await seqImport('/apps/agent/runtime.js', { own:['/apps/agent/','/apps/code-runner/'] })); }
+      catch{ ({ createRuntime }=await import('/apps/agent/runtime.js')); }
       // The runtime's own "never auto-approve" set (delete_file / publish_app / manage_app). Same module
       // instance runtime.js already loaded, so no extra fetch; mirrored as a floor if it ever fails to load.
       let ALWAYS=null; try{ ALWAYS=(await import('/apps/agent/agent-tools.js')).ALWAYS_CONFIRM; }catch{}
@@ -4764,6 +4813,7 @@
       if(fintent && !genWrite){ if(fs.hasRoot()){ runFileIntent(q, fintent); return; } inviteWorkspace(q); return; }
       const sendQ = chainMath(q);   // engine-facing query (may carry the running total); visible msg stays q
       busy=true; interrupt=false; setStop(true); closeSlash(); stopSpeaking();   // un nuovo turno zittisce la risposta precedente
+      if(_benchCtl){ try{ _benchCtl.abort(); }catch{} _benchCtl=null; }         // the user comes first: stop a model measurement
       const ctl=new AbortController(); turnCtl=ctl; _turnSig=ctl.signal; const sig=ctl.signal;
       setLogBusy(true);
       addUser(q); history.push({role:'user',text:q}); persist();
@@ -4821,7 +4871,12 @@
           const live=await (await enginesMod()).liveServers({ config:lcfg }).catch(()=>[]);
           if(live.some((s)=>s.status==='ok' && s.models.length)){
             _agentDidMutate=false; _agentCancelled=false; _agentWsAsked=false; _agentLocalFirst=true;
-            try{ r = await agentAsk(sendQ, think, await wsxOnce()); }catch(e){ r = null; if(String(e&&e.message)!=='stopped') noteAiErr(e); }
+            try{ r = await agentAsk(sendQ, think, await wsxOnce()); }catch(e){ r = null; if(String(e&&e.message)!=='stopped') noteAiErr(e);
+              // The agent's code did not even load (a module lost while the Cardputer was busy — the browser then
+              // refuses it until a reload). Say so: the tool-less chat below would "apply" the changes in prose
+              // and touch no file (it did, on the ADV).
+              if(/dynamically imported module|Importing a module script failed|error loading dynamically/i.test(String(e&&e.message)))
+                r={ reply:L('agentLoadFail'), tier:'server', intent:'agent', confidence:0, domain:'local', notDone:true }; }
           }
         }
         // A device action handed to the local agent that it could not carry out stops HERE, honestly: the
@@ -5815,12 +5870,13 @@
       const st={ pc:null, browser:false, device:'', cloud:'', pcFirst:false };
       try{ const E=await enginesMod(); const cfg=E.loadLocalConfig(); st.pcFirst=cfg.prefer==='local';
         if(cfg.enabled){ const live=await E.liveServers({ config:cfg, fresh:true });
-          const ok=live.find((s)=>s.status==='ok' && s.models && s.models.length), cors=live.find((s)=>s.status==='cors');
+          const ok=live.find((s)=>s.status==='ok' && s.models && s.models.length), cors=live.find((s)=>s.status==='cors'), blocked=live.find((s)=>s.status==='blocked');
           if(ok){ const perf=E.loadPerf(); const pin=cfg.models && cfg.models[ok.id] && cfg.models[ok.id].chat;
             st.pc={ id:ok.id, name:ok.name, base:ok.base, pin:pin||'', model:pin||E.pickModel(ok.models,'chat',{ perf, base:ok.base })||'',
               models:ok.models.filter((m)=>!(m.caps && m.caps.embedding && !m.caps.chat) && !/embed|bge|minilm|e5-/i.test(m.id))
                 .map((m)=>({ id:m.id, sizeGB:m.sizeGB, tps:(perf.models[ok.base+'|'+m.id]||{}).tps||0 })) }; }
-          else if(cors) st.pc={ name:cors.name, cors:true }; } }catch{}
+          else if(cors) st.pc={ name:cors.name, cors:true };
+          else if(blocked) st.pc={ name:blocked.name, cors:true, blocked:true }; } }catch{}
       try{ st.browser=await browserProvisioned(); }catch{}
       await refreshDevProfile(); st.device=_devProfile;
       try{ await ensureKeyLoaded(); if(keyCfg.key) st.cloud=curProv().label||keyCfg.provider; }catch{}
@@ -5837,7 +5893,7 @@
           +'<button type="button" class="eng-mode" data-m="private" aria-pressed="'+priv+'"><b>'+esc(L('modePrivate'))+'</b><span>'+esc(L('engPrivDesc'))+'</span></button></div>'
           +'<ul class="eng-list">'
           + row('⌂', L('engPc'), !!(st.pc && !st.pc.cors),
-              st.pc ? (st.pc.cors ? L('engPcCors',{ server:st.pc.name }) : st.pc.name+' · '+(prettyModel(st.pc.model)||st.pc.model||'?')) : L('engPcNone'))
+              st.pc ? (st.pc.blocked ? L('engPcBlocked') : st.pc.cors ? L('engPcCors',{ server:st.pc.name }) : st.pc.name+' · '+(prettyModel(st.pc.model)||st.pc.model||'?')) : L('engPcNone'))
           + row('⬡', L('engBrowser'), st.browser, L(st.browser?'engBrowserOn':'engBrowserOff'))
           + row('▣', 'Cardputer', st.device==='full' || st.device==='up', L(st.device==='web'?'engDevWeb':st.device==='full'?'engDevFull':st.device==='up'?'engDevUp':'engDevNone'))
           + row('☁', 'Cloud', !!st.cloud && !priv, st.cloud ? (priv ? L('engCloudPriv',{ p:st.cloud }) : st.cloud) : L('engCloudNone'))

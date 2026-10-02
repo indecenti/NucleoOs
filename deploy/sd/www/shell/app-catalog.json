@@ -1,0 +1,245 @@
+{
+ "generated": "tools/gen-app-catalog.mjs",
+ "apps": {
+  "file-commander": {
+   "name": "File Commander",
+   "category": "system",
+   "description": "Browse, move and organize files on the SD card; the default open-with fallback."
+  },
+  "notepad": {
+   "name": "Notepad",
+   "category": "productivity",
+   "description": "Lightweight text editor and viewer for plain-text and code files."
+  },
+  "photo-viewer": {
+   "name": "Photo Viewer",
+   "category": "media",
+   "description": "View image files on the display and in the web shell."
+  },
+  "media-player": {
+   "name": "Media Player",
+   "category": "media",
+   "description": "Play audio files through the I2S speaker."
+  },
+  "radio": {
+   "name": "Radio Index",
+   "category": "media",
+   "description": "Tune into free live radio. The station list is shared with the on-device Radio app."
+  },
+  "video-player": {
+   "name": "Video Player",
+   "category": "media",
+   "description": "Play video files. Decoding runs in the client browser; the device only streams bytes."
+  },
+  "video-studio": {
+   "name": "Video Studio",
+   "category": "media",
+   "description": "Convert videos to the device .nfv format and deliver them to the SD. Conversion runs on a PC companion (native ffmpeg + GPU); this app is…"
+  },
+  "automation-studio": {
+   "name": "Automation Studio",
+   "category": "tools",
+   "description": "Create event-to-action rules running on a sandboxed micro-VM."
+  },
+  "ir-remote": {
+   "name": "IR Remote",
+   "category": "tools",
+   "description": "Universal infrared remote: TV-B-Gone, brand remotes, macros and .ir import — drives the Cardputer IR LED."
+  },
+  "swarm": {
+   "name": "Swarm",
+   "category": "connectivity",
+   "description": "Federate nearby Cardputers over ESP-NOW: shared clipboard, peers and events."
+  },
+  "settings": {
+   "name": "Settings",
+   "category": "system",
+   "description": "Configure device, network, power, UI and security; edit file associations."
+  },
+  "log-viewer": {
+   "name": "Log Viewer",
+   "category": "tools",
+   "description": "Tail live logs and replay the event journal for time-travel debugging."
+  },
+  "system-monitor": {
+   "name": "System Monitor",
+   "category": "tools",
+   "description": "Live device stats — memory, storage, uptime, app count, and a real-time event feed."
+  },
+  "calculator": {
+   "name": "Calculator",
+   "category": "tools",
+   "description": "A simple calculator with keyboard support."
+  },
+  "clock": {
+   "name": "Clock",
+   "category": "tools",
+   "description": "Clock, stopwatch, timer — with analog face and NTP cascade."
+  },
+  "calendar": {
+   "name": "Calendar",
+   "category": "tools",
+   "description": "Month calendar with events saved on the device."
+  },
+  "dosbox": {
+   "name": "DOS Box",
+   "category": "tools",
+   "description": "Run classic DOS programs and games. Emulation runs in the client browser (js-dos / DOSBox WASM); the device only stores and streams the…"
+  },
+  "dos-importer": {
+   "name": "DOS Importer",
+   "category": "tools",
+   "description": "Drag-and-drop a DOS program (folder, .exe/.com/.bat, or .zip) to build a js-dos bundle in the browser and install it onto the SD for the…"
+  },
+  "recorder": {
+   "name": "Voice Recorder",
+   "category": "media",
+   "description": "Record from the Cardputer or browser microphone; always saved as MP3 on the SD card. Live transcription + ANIMA summaries, action items and…"
+  },
+  "dictation": {
+   "name": "Trascrizione",
+   "category": "media",
+   "description": "Trascrizione vocale dal vivo dal microfono del Cardputer: il device manda solo l'audio (~32 KB/s), il riconoscimento gira nel browser…"
+  },
+  "voice-manager": {
+   "name": "Comandi Vocali",
+   "category": "system",
+   "description": "Addestra il riconoscitore vocale offline del Cardputer con la tua voce: tutorial guidato, libreria di comandi nativi ancorati alle azioni…"
+  },
+  "recycle-bin": {
+   "name": "Recycle Bin",
+   "category": "system",
+   "description": "View, restore or permanently delete files moved to the trash by File Commander."
+  },
+  "updates": {
+   "name": "Updates",
+   "category": "system",
+   "description": "Update NucleoOS over the air: flash new firmware safely (auto-rollback) and check the system version."
+  },
+  "anima": {
+   "name": "ANIMA",
+   "category": "productivity",
+   "description": "Offline Italian assistant. Type a command or a question; it answers and opens apps, fully on-device."
+  },
+  "agent": {
+   "name": "Agenti",
+   "category": "tools",
+   "description": "Sistema multi-agente online: agenti Claude (orchestratore Haiku + worker Sonnet/Opus) che operano nell'OS — creano e modificano file…"
+  },
+  "code-runner": {
+   "name": "Code Runner",
+   "category": "tools",
+   "description": "Run small JavaScript programs in a sandboxed Web Worker — edit, run and see the output, with capability-gated access to the SD, the network…"
+  },
+  "terminal": {
+   "name": "Terminal",
+   "category": "system",
+   "description": "A keyboard-first console for the filesystem and system status."
+  },
+  "ssh": {
+   "name": "SSH",
+   "category": "tools",
+   "description": "Terminale SSH reale verso host remoti, via un piccolo bridge self-hosted (nessun servizio terzo). Il lavoro SSH gira fuori dal Cardputer…"
+  },
+  "tasks": {
+   "name": "Tasks",
+   "category": "productivity",
+   "description": "A keyboard-first to-do list with priorities, saved on the device."
+  },
+  "wifi-scanner": {
+   "name": "WiFi Scanner",
+   "category": "connectivity",
+   "description": "Scan nearby Wi-Fi networks with signal, channel and security."
+  },
+  "help": {
+   "name": "Help",
+   "category": "system",
+   "description": "Sistema di aiuto e documentazione di NucleoOS."
+  },
+  "browser": {
+   "name": "Browser",
+   "category": "tools",
+   "description": "Browser leggero: apre i siti esterni in una scheda reale del browser, con ricerca e download integrati."
+  },
+  "groq-chat": {
+   "name": "AI Chat",
+   "category": "productivity",
+   "description": "Chat with a cloud LLM via Groq (OpenAI-compatible). Bring your own API key, pick a model. Online only; the model answers directly — no…"
+  },
+  "paint": {
+   "name": "Paint",
+   "category": "tools",
+   "description": "Editor di immagini e disegno"
+  },
+  "spreadsheet": {
+   "name": "Spreadsheet",
+   "category": "productivity",
+   "description": "Foglio di calcolo con formule, formattazione e salvataggio CSV"
+  },
+  "archive-manager": {
+   "name": "Archive Manager",
+   "category": "tools",
+   "description": "Browse, extract and create ZIP archives stored on the device."
+  },
+  "miei-fatti": {
+   "name": "I Miei Fatti",
+   "category": "productivity",
+   "description": "Capture personal and world facts and teach them to ANIMA on the device — recallable later in natural language, fully offline."
+  },
+  "games": {
+   "name": "Giochi",
+   "category": "games",
+   "description": "Centro giochi multiplayer: lobby di rete, chat e partite fino a 4 giocatori peer-to-peer (WebRTC). Il dispositivo fa solo da incontro; il…"
+  },
+  "nearby": {
+   "name": "Vicino",
+   "category": "connectivity",
+   "description": "Scambia file e comandi con dispositivi vicini (Nucleo o Bruce) via ESP-NOW."
+  },
+  "qr": {
+   "name": "Codice QR",
+   "category": "tools",
+   "description": "Genera QR ottimizzati (URL, Wi-Fi, contatti...) e salvali sul dispositivo per l'app nativa."
+  },
+  "mail": {
+   "name": "Mail",
+   "category": "connectivity",
+   "description": "Send email via Gmail / Outlook / Yahoo / iCloud or any SMTP server."
+  },
+  "unit-converter": {
+   "name": "Unit Converter",
+   "category": "tools",
+   "description": "Convert length, mass, temperature, volume, data, speed and time — with a natural-language command bar in English and Italian."
+  },
+  "passkeys": {
+   "name": "Passkeys",
+   "category": "tools",
+   "description": "Manage the FIDO security key from the browser: list and delete resident passkeys, set the on-device PIN, view key status and sign counters.…"
+  },
+  "weather": {
+   "name": "Meteo",
+   "category": "tools",
+   "description": "Geolocated weather and 6-day forecast (Open-Meteo, browser-direct: the Cardputer is never touched). Mirrors the native device Weather…"
+  },
+  "authenticator": {
+   "name": "Authenticator",
+   "category": "tools",
+   "description": "Two-factor (2FA) verification codes — TOTP/HOTP computed in the browser (pure JS, no Web Crypto, works over http LAN and offline). Import…"
+  },
+  "contacts": {
+   "name": "Contatti",
+   "category": "productivity",
+   "description": "The OS address book: people with email/phone/org/notes, favorites, search, vCard export to the SD. Integrates with Mail (one click opens…"
+  },
+  "arcade": {
+   "name": "Arcade",
+   "category": "games",
+   "description": "Play the ROM library on the SD card in the browser — NES, SNES, Game Boy, GBA, Mega Drive and PC Engine, emulated client-side with…"
+  },
+  "metronome": {
+   "name": "Metronome",
+   "category": "media",
+   "description": "Metronome with tap tempo, accents and subdivisions, plus a chromatic instrument tuner — all client-side Web Audio, zero device load."
+  }
+ }
+}
