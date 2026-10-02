@@ -7,6 +7,7 @@
   "scripts": {
     "validate": "node tools/validate.mjs",
     "gz:check": "node tools/check-gz.mjs",
+    "image:check": "node tools/image-size-check.mjs",
     "gen:api": "node tools/gen-api-spec.mjs",
     "gen:api:check": "node tools/gen-api-spec.mjs --check",
     "i18n:gate": "node tools/i18n-check.mjs",

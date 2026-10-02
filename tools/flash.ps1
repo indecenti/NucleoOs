@@ -77,6 +77,9 @@ if (-not $built) {
 if (-not (Test-Path "$fw\build\nucleoos.bin")) { Write-Error "Build reported success but nucleoos.bin is missing"; exit 1 }
 $binKB = [math]::Round((Get-Item "$fw\build\nucleoos.bin").Length / 1KB)
 Write-Host "Build OK -- nucleoos.bin = $binKB KB"
+# The image must fit the app slot M5Launcher made on hosted devices (tools/image-size-check.mjs).
+node (Join-Path $PSScriptRoot "image-size-check.mjs") "$fw\build\nucleoos.bin"
+if ($LASTEXITCODE -ne 0) { Write-Error "nucleoos.bin does not fit the M5Launcher app slot -- not flashing"; exit 1 }
 
 if (-not $BuildOnly) {
     Write-Host "Flashing to $Port..."

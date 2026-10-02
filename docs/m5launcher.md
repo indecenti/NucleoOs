@@ -73,9 +73,12 @@ without it.
 
 **Size budget.** The Launcher sizes each app slot to the image it installs (ours: `nucle1`/`nucle2`,
 0x310000 = 3,211,264 B on the ADV with the current Launcher). An update larger than the slot the Launcher
-created cannot be installed in place, so the image is kept under it: after the TinyUSB buffer reclaim
-(memory-budget.md) the image is 3,201,088 B (2026-10-02), ~10 KB of headroom. Check
-`build/nucleoos.bin` against the slot before publishing.
+created cannot be installed in place, so the image is kept under it, and **`tools/image-size-check.mjs`
+enforces it** (`npm run image:check`; run by `flash.ps1` before flashing and by the release workflow
+before packaging). History: the 5-language native strings pushed the image to 3,239,056 B, 27.8 KB over;
+recovered by moving ANIMA's which-person table to the SD (−38.5 KB, docs/anima.md) and trimming mbedTLS to
+what we negotiate (TLS client only, P-256/384/521 + X25519, no PEM write / CSR parse: −9.7 KB) →
+3,190,848 B, 19.9 KB free (2026-10-02).
 
 ## Publishing so it shows up in the Launcher's OTA list
 
