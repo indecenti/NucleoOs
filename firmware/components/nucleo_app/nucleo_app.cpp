@@ -477,6 +477,8 @@ static bool (*s_app_back)(int key) = nullptr; // foreground app's Back/Esc/Left 
 static bool s_app_direct = false;          // app freed the shared canvas -> draw direct, don't re-acquire
 static bool s_cc_canvas_borrowed = false;  // CC re-acquired the canvas from a direct-draw app; release on close
 static bool s_app_fullscreen = false;      // app reclaims the hint-bar rows: blit clipped to H, footer not drawn
+static int64_t s_loop_prev_ms = 0;          // run-loop heartbeat: a big gap = a blocking modal held the user
+static bool s_app_keep_awake = false;      // app vetoes the idle screen-off (e.g. a viewer that must stay lit)
 static void (*s_app_ptt)(bool) = nullptr;  // foreground app owns the GO-hold (recorder PTT); else voice PTT
 static bool (*s_app_poll)(void) = nullptr; // live app's per-loop poll: returns true to request a blit (gates the redraw to the app's data rate, not the loop rate)
 static bool s_app_excl   = false;          // framework entered exclusive for this app (declarative) -> it restores it
@@ -670,7 +672,7 @@ static void open_app_def(const nucleo_app_def_t *def)
         return;
     }
     s_app_tab = nullptr;                        // each app starts without a TAB claim; on_enter may set one
-    s_app_back = nullptr; s_app_direct = false; s_app_fullscreen = false; // ...nor a Back claim / direct-draw / fullscreen pin; on_enter may set them
+    s_app_back = nullptr; s_app_direct = false; s_app_fullscreen = false; s_app_keep_awake = false; // ...nor a Back claim / direct-draw / fullscreen pin; on_enter may set them
     s_app_ptt = nullptr;                        // ...nor a GO-hold (PTT) claim; the recorder sets it on_enter
     s_app_poll = nullptr;                       // ...nor a per-loop data poll; a live app (mic spectrum) sets it on_enter
     launcher_render_reset_hint_colors();        // default dark footer; on_enter may override (e.g. Torch)
@@ -866,6 +868,7 @@ static void close_app(void)
     s_app_tab = nullptr;                        // app gone -> TAB returns to the Control Center
     s_app_back = nullptr; s_app_direct = false; // ...Back returns to close, drawing back to buffered
     if (s_app_fullscreen) { s_app_fullscreen = false; s_hint_dirty = true; } // restore the footer on app close
+    s_app_keep_awake = false;
     s_app_ptt = nullptr;                        // ...GO-hold returns to the voice recognizer
     s_app_poll = nullptr;                       // ...no live app polling once back at the launcher
     launcher_render_reset_hint_colors();        // restore the default dark footer for the launcher
@@ -926,6 +929,7 @@ void nucleo_app_set_direct_draw(bool on)
 }
 int  nucleo_app_content_top(void)    { return 0; }
 int  nucleo_app_content_height(void) { return s_app_fullscreen ? H : (H - HINT); }
+void nucleo_app_set_keep_awake(bool on) { s_app_keep_awake = on; }
 void nucleo_app_set_fullscreen(bool on)
 {
     if (s_app_fullscreen == on) return;
@@ -1663,6 +1667,11 @@ void nucleo_app_run(void)
     for (;;) {
         esp_task_wdt_reset();
         int64_t now = esp_timer_get_time() / 1000;
+        // A blocking modal (video playback, file dialogs) owns the keyboard without passing through here:
+        // a long gap since the last iteration means the user was busy in it, so count it as activity —
+        // else the idle screen-off/saver would fire the instant the modal returns.
+        if (now - s_loop_prev_ms > 2000) last_act = now;
+        s_loop_prev_ms = now;
 
         // NOTE: the release check now runs SYNCHRONOUSLY at boot (main.c, pre-httpd window) where the
         // contiguous heap is large enough for the external TLS handshake. A +60 s async check here
@@ -1775,6 +1784,19 @@ void nucleo_app_run(void)
             if (s_gamefront) { s_gamefront = false; s_gf_return = true; }
             nucleo_app_launch_id("screensaver");
             last_act = now;  // reset so it doesn't re-trigger immediately after
+        }
+        // In-app idle screen-off: an open app can't host the saver (native apps are exclusive — launching
+        // it would close e.g. the Radio and stop the stream), so after the same timeout we only drop the
+        // backlight; the app keeps running and the first key relights it and is swallowed (CC Sleep path).
+        // Games, the saver itself and apps that pinned keep_awake stay lit.
+        if (s_active >= 0 && !s_remote && !s_wake_pending && !s_torch && !s_voice_dark && !s_disp_sleep &&
+            !s_disp_off && !s_app_keep_awake && !s_control_center && !nucleo_voice_is_listening()) {
+            const nucleo_app_def_t *ia = active_def();
+            bool exempt = !ia || (ia->id && !strcmp(ia->id, "screensaver")) ||
+                          (ia->category && !strcmp(ia->category, "Games"));
+            if (!exempt && nucleo_screensaver_should_activate(now - last_act)) {
+                s_wake_saved_bright = nucleo_app_brightness(); nucleo_ui_set_brightness(0); s_wake_pending = true;
+            }
         }
 
         // PTT low-power capture finished: the voice engine has captured, recognized, and played the

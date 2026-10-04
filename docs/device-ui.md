@@ -174,6 +174,12 @@ settings: a status strip over a **scrolling column of four cards**.
   disabled and `nucleo_setup_start_ap/stop_ap` refuse (`nucleo_setup_config_loaded()`).
 - Brightness/volume changes are persisted once, when the panel closes. Screen-off turns the
   backlight fully off; the next key wakes it (and is swallowed).
+- **Idle inside an app.** The animated screensaver runs only from the launcher (native apps are
+  exclusive: launching it would close e.g. the Radio). With an app open, after the same screensaver
+  timeout the backlight just drops (same wake path as Screen-off) while the app keeps running.
+  Exempt: Games, the saver itself, and any app calling `nucleo_app_set_keep_awake(true)`. Blocking
+  modals (video playback) don't run the main loop, so they never blank; a long loop gap counts as
+  activity so the screen doesn't drop the instant a modal returns.
 - **Short back-buffer.** On the ADV the heap's largest block is ~31.7 KB, so
   `nucleo_screen_acquire()` fits the canvas to **240x130** instead of 240x135. The panel's viewport
   ends at the canvas height and the rows below are cleared on the panel, so they never keep the

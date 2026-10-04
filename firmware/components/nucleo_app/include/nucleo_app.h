@@ -111,6 +111,9 @@ void nucleo_app_set_direct_draw(bool on);
 // is its content area, the blit is clipped to H (not H-HINT) and the footer is NOT drawn. content_height()
 // then returns H. Set/clear it per screen; auto-cleared on app open/close (the footer comes back).
 void nucleo_app_set_fullscreen(bool on);
+// Keep-awake: the app vetoes the in-app idle screen-off (backlight drop after the screensaver timeout).
+// Auto-cleared on app open/close.
+void nucleo_app_set_keep_awake(bool on);
 bool nucleo_app_launch_file(const char *path); // open the app associated with a file (open-with); false if no viewer for the type
 // Viewer on_enter helper: the EXACT file Files asked to open ("open with"), consumed once — NULL
 // when the app was opened normally. Lets Notes/Music/Photos open that file, not their own folder.
