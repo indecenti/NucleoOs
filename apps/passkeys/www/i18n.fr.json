@@ -31,5 +31,7 @@
   "resetok": "Authentificateur réinitialisé.",
   "delok": "Passkey supprimée.",
   "err": "Échec de la requête.",
-  "tries": "essais restants"
+  "tries": "essais restants",
+  "askdel": "Effacer la passkey de {rp} ({user}) ? Vous ne pourrez plus vous connecter à {rp} avec elle. Irréversible.",
+  "stale": "La liste des passkeys a changé sur l'appareil — rien n'a été effacé. Vérifiez la liste et réessayez."
 }

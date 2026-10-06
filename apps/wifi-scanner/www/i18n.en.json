@@ -2,7 +2,7 @@
   "_lang": "en",
   "title": "WiFi Manager",
   "btn_auto": "Auto",
-  "auto_hint": "Auto-refresh every 8s",
+  "auto_hint": "Auto-refresh every 25s",
   "connect": "Connect",
   "reconnect": "Reconnect",
   "forget": "Forget",
@@ -30,7 +30,7 @@
   "sec_open": "open",
   "sec_open_hint": "Open network",
   "hidden_ssid": "(hidden)",
-  "src_connected_only": "connected AP only — scan API pending",
-  "src_demo": "demo data — device offline",
+  "src_failed": "scan failed — device unreachable or busy",
+  "src_need_pair": "not paired — pair this browser to scan",
   "src_live": "live scan"
 }

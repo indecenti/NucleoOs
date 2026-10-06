@@ -28,5 +28,11 @@
   "rebooting_short": "Device is rebooting…",
   "update_complete": "Update complete — device is back online. ✔",
   "reboot_timeout": "Device did not come back in time. Check it and refresh.",
-  "reboot_waiting": "Rebooting… waiting for the device ({tries})"
+  "reboot_waiting": "Rebooting… waiting for the device ({tries})",
+  "err_empty": "This file is empty — pick the nucleoos.bin firmware image.",
+  "err_not_image": "This is not an ESP32 firmware image (maybe a saved web page or a broken download).",
+  "err_merged": "This is the full-flash image (nucleoos-latest.bin, with bootloader) — for USB flashing only. Pick the OTA image (…-ota.bin / nucleoos.bin).",
+  "err_too_big": "This file is larger than the firmware slot ({max}) — it is not a NucleoOS OTA image.",
+  "err_busy": "the device is busy with another download — try again in a moment",
+  "not_applied": "The connection was lost and the device did not restart — the update was NOT installed. Try again."
 }

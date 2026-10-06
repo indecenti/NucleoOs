@@ -31,5 +31,7 @@
   "resetok": "Autenticador restablecido.",
   "delok": "Passkey eliminada.",
   "err": "Solicitud fallida.",
-  "tries": "intentos"
+  "tries": "intentos",
+  "askdel": "¿Borrar la passkey de {rp} ({user})? Ya no podrás iniciar sesión en {rp} con ella. No se puede deshacer.",
+  "stale": "La lista de passkeys cambió en el dispositivo — no se borró nada. Revisa la lista e inténtalo de nuevo."
 }

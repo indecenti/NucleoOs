@@ -31,5 +31,7 @@
   "resetok": "Authenticator reset.",
   "delok": "Passkey deleted.",
   "err": "Request failed.",
-  "tries": "tries left"
+  "tries": "tries left",
+  "askdel": "Delete the passkey for {rp} ({user})? You will no longer be able to sign in to {rp} with it. This cannot be undone.",
+  "stale": "The passkey list changed on the device — nothing was deleted. Check the list and try again."
 }

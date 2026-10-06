@@ -198,8 +198,20 @@
       if (pw) pw.addEventListener('keydown', (e) => { if (e.key === 'Enter') joinNet(n.ssid, pw.value); });
     }
 
+    // No scan result at all (the first scan failed): say why instead of an empty "no networks" list.
+    let failedKey = null;
+    function renderFailed(key) {
+      failedKey = key;
+      const list = $('list'); list.innerHTML = '';
+      const li = document.createElement('li'); li.style.borderBottom = '0';
+      li.innerHTML = `<div class="empty"><span class="big">📡</span><span></span></div>`;
+      li.querySelector('.empty span:last-child').textContent = t(key);
+      list.appendChild(li);
+      $('count').textContent = '—';
+    }
+
     function render(nets) {
-      lastNets = nets;
+      lastNets = nets; failedKey = null;
       const list = $('list');
       list.innerHTML = '';
       if (!nets.length) {
@@ -256,34 +268,22 @@
     }
 
     // Try the device scan endpoint; normalise a few likely field names.
+    // Returns { nets } or { err } (HTTP status, or 0 = unreachable / not a scan answer).
     async function deviceScan() {
       try {
         const r = await fetch('/api/wifi/scan', { cache: 'no-store' });
-        if (!r.ok) return null;
+        if (!r.ok) return { err: r.status };
         const j = await r.json();
         const arr = Array.isArray(j) ? j : (j.networks || j.aps || j.results || null);
-        if (!Array.isArray(arr)) return null;
-        return arr.map((n) => ({
+        if (!Array.isArray(arr)) return { err: 0 };
+        return { nets: arr.map((n) => ({
           ssid: n.ssid ?? n.SSID ?? n.name ?? '',
           rssi: n.rssi ?? n.RSSI ?? n.signal ?? -90,
           channel: n.channel ?? n.ch ?? n.primary ?? null,
           auth: n.auth ?? n.security ?? n.encryption ?? n.authmode ?? null,
           bssid: n.bssid ?? n.BSSID ?? n.mac ?? null,
-        }));
-      } catch { return null; }
-    }
-
-    // Demo set so the app is fully explorable in preview / before the API exists.
-    function demoScan() {
-      return [
-        { ssid: 'NucleoOS-Mesh', rssi: -41, channel: 6,  auth: 'WPA2', bssid: '4C:11:AE:0B:2F:90' },
-        { ssid: 'HomeFiber-5G',  rssi: -57, channel: 36, auth: 'WPA3', bssid: '8C:DE:52:1A:77:01' },
-        { ssid: 'Cardputer-AP',  rssi: -63, channel: 1,  auth: 'WPA2', bssid: 'A0:B7:65:34:9C:12' },
-        { ssid: 'GuestZone',     rssi: -71, channel: 11, auth: 'Open', bssid: 'F8:1A:67:22:0D:88' },
-        { ssid: 'IoT-Lab',       rssi: -78, channel: 6,  auth: 'WPA2', bssid: '24:6F:28:5E:31:AA' },
-        { ssid: '',              rssi: -84, channel: 9,  auth: 'WPA2', bssid: 'DC:A6:32:11:8E:43' },
-        { ssid: 'eduroam',       rssi: -88, channel: 44, auth: 'WPA2-Enterprise', bssid: '00:0C:E6:7B:55:10' },
-      ];
+        })) };
+      } catch { return { err: 0 }; }
     }
 
     // Driven from the shell when embedded: status.snapshot keeps connectedSSID fresh (no own
@@ -297,25 +297,17 @@
       scanning = true; $('hd').classList.add('scanning');
       if (!EMBEDDED) await fetchStatus();        // standalone: refresh "connected" highlight (embedded: from snapshot)
       await fetchKnown();                        // refresh the saved-network set (cheap, no scan block)
-      let nets = await deviceScan(), live = true;
-      if (!nets) {                               // no scan API: at least show the connected AP, else demo
-        if (connectedSSID) {
-          const s = await fetchStatus();
-          nets = [{ ssid: connectedSSID, rssi: s?.network?.rssi ?? -55, channel: s?.network?.channel ?? null,
-                    auth: s?.network?.auth ?? 'WPA2', bssid: s?.network?.bssid ?? null }];
-          setSrc('src_connected_only', false);
-          live = false;
-        } else {
-          nets = demoScan(); setSrc('src_demo', false); live = false;
-          if (!known.size) { connectedSSID = 'NucleoOS-Mesh';   // seed the manager UI for offline preview
-            known = new Map([['NucleoOS-Mesh', { priority: 1, current: true }], ['HomeFiber-5G', { priority: 0 }]]); }
-        }
-      } else {
-        setSrc('src_live', true);
+      const res = await deviceScan();
+      if (res.nets) { setSrc('src_live', true); render(res.nets); }
+      else {
+        // A failed scan (offline, busy, not paired — the firmware gates /api/wifi/scan) never invents
+        // networks or a "connected" badge: keep the last REAL scan on screen and say why this one failed.
+        const key = res.err === 401 || res.err === 403 ? 'src_need_pair' : 'src_failed';
+        setSrc(key, false);
+        if (!lastNets) renderFailed(key);
       }
-      render(nets);
       scanning = false; $('hd').classList.remove('scanning');
-      if (live) setSrc('src_live', true, ' · ' + new Date().toLocaleTimeString());
+      if (res.nets) setSrc('src_live', true, ' · ' + new Date().toLocaleTimeString());
     }
 
     // ---- controls --------------------------------------------------------------
@@ -349,7 +341,7 @@
     // On a live language switch, re-render the imperatively-built rows + footer
     // (the observer handles [data-i18n] nodes; these strings are set via t()).
     I18N.onChange(() => {
-      if (lastNets) render(lastNets);
+      if (lastNets) render(lastNets); else if (failedKey) renderFailed(failedKey);
       if (lastSrc) setSrc(lastSrc.key, lastSrc.live, lastSrc.suffix);
     });
 

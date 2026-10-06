@@ -31,5 +31,7 @@
   "resetok": "Authenticator zurückgesetzt.",
   "delok": "Passkey gelöscht.",
   "err": "Anfrage fehlgeschlagen.",
-  "tries": "Versuche übrig"
+  "tries": "Versuche übrig",
+  "askdel": "Passkey für {rp} ({user}) löschen? Die Anmeldung bei {rp} damit ist dann nicht mehr möglich. Nicht rückgängig zu machen.",
+  "stale": "Die Passkey-Liste hat sich auf dem Gerät geändert — nichts wurde gelöscht. Liste prüfen und erneut versuchen."
 }

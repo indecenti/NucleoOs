@@ -28,5 +28,11 @@
   "rebooting_short": "L'appareil redémarre…",
   "update_complete": "Mise à jour terminée — l'appareil est de nouveau en ligne. ✔",
   "reboot_timeout": "L'appareil n'est pas revenu à temps. Vérifiez-le et actualisez.",
-  "reboot_waiting": "Redémarrage… en attente de l'appareil ({tries})"
+  "reboot_waiting": "Redémarrage… en attente de l'appareil ({tries})",
+  "err_empty": "Ce fichier est vide — choisissez l'image firmware nucleoos.bin.",
+  "err_not_image": "Ce n'est pas une image firmware ESP32 (peut-être une page web enregistrée ou un téléchargement corrompu).",
+  "err_merged": "C'est l'image flash complète (nucleoos-latest.bin, avec bootloader) — réservée au flash USB. Choisissez l'image OTA (…-ota.bin / nucleoos.bin).",
+  "err_too_big": "Ce fichier dépasse l'emplacement firmware ({max}) — ce n'est pas une image OTA NucleoOS.",
+  "err_busy": "l'appareil est occupé par un autre téléchargement — réessayez dans un instant",
+  "not_applied": "Connexion perdue et l'appareil n'a pas redémarré — la mise à jour n'a PAS été installée. Réessayez."
 }

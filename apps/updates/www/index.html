@@ -130,9 +130,35 @@
     else setMsg(t(lastMsg.key, lastMsg.args), lastMsg.kind);
   }
 
-  $('install').addEventListener('click', () => {
+  // Refuse what can never be a valid OTA image BEFORE uploading: every POST /api/ota first switches the
+  // device into its OTA RAM posture (Remote Control, voice suspended) and only then sees the bytes.
+  const OTA_SLOT_MAX = 0x380000;                    // ota_0 / ota_1 size in firmware/partitions.csv
+  async function imageProblem(f) {
+    if (!f.size) return 'err_empty';
+    if (f.size > OTA_SLOT_MAX) return 'err_too_big';
+    const head = new Uint8Array(await f.slice(0, 1).arrayBuffer());
+    if (head[0] !== 0xE9) return 'err_not_image';    // ESP image magic (the firmware checks it too)
+    // The merged full-flash image (bootloader at 0x0) carries the partition table at 0x8000: two entries
+    // with the 0xAA50 magic. Sent to /api/ota it would put a bootloader in the app slot (docs/update-check.md).
+    if (f.size >= 0x8022) {
+      const pt = new Uint8Array(await f.slice(0x8000, 0x8022).arrayBuffer());
+      if (pt[0] === 0xAA && pt[1] === 0x50 && pt[0x20] === 0xAA && pt[0x21] === 0x50) return 'err_merged';
+    }
+    return '';
+  }
+  // The device's reason, readable: its JSON {message|error} (409 hosted, …) or "busy" (503 single-flight).
+  function deviceReason(xhr) {
+    const txt = xhr.responseText || '';
+    try { const j = JSON.parse(txt); if (j && typeof j === 'object') { if (j.busy) return t('err_busy'); if (j.message || j.error) return String(j.message || j.error); } } catch {}
+    return txt.trim().slice(0, 200) || ('HTTP ' + xhr.status);
+  }
+
+  $('install').addEventListener('click', async () => {
     if (!file) return;
     if (!/\.bin$/i.test(file.name)) { setMsgKey('err_pick_bin', null, 'err'); return; }
+    $('install').disabled = true;                   // no second upload while the image is being checked
+    const bad = await imageProblem(file);
+    if (bad) { setMsgKey(bad, { max: '3.5 MB' }, 'err'); $('install').disabled = !file; return; }
     $('install').disabled = true; $('bin').disabled = true; $('refresh').disabled = true;
     $('bar').style.display = 'block';
     const xhr = new XMLHttpRequest();
@@ -144,26 +170,31 @@
       setMsg(t('uploading', { pct }), '');
     };
     xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) { setMsgKey('image_written', null, 'ok'); waitForReboot(); }
-      else { setMsgKey('update_rejected', { reason: (xhr.responseText || ('HTTP ' + xhr.status)) }, 'err'); resetControls(); }
+      if (xhr.status >= 200 && xhr.status < 300) { setMsgKey('image_written', null, 'ok'); waitForReboot(0); }
+      else { setMsgKey('update_rejected', { reason: deviceReason(xhr) }, 'err'); resetControls(); }
     };
-    // The device reboots right after responding, so the socket may drop — treat that as "rebooting".
-    xhr.onerror = () => { setMsgKey('upload_done_rebooting', null, 'ok'); waitForReboot(); };
+    // The device reboots right after responding, so the socket may drop — but so does an early device-side
+    // abort or a WiFi blip. No 2xx seen = unknown outcome: wait for the device and check it really rebooted.
+    const sentAt = Date.now();
+    xhr.onerror = () => { setMsgKey('upload_done_rebooting', null, 'ok'); waitForReboot(sentAt); };
     xhr.timeout = 120000;
-    xhr.ontimeout = () => { setMsgKey('rebooting_short', null, 'ok'); waitForReboot(); };
+    xhr.ontimeout = () => { setMsgKey('rebooting_short', null, 'ok'); waitForReboot(sentAt); };
     xhr.send(file);
   });
 
   function resetControls() { $('install').disabled = !file; $('bin').disabled = false; $('refresh').disabled = false; $('bar').style.display = 'none'; $('barfill').style.width = '0'; }
 
-  // Poll /api/status until the device is back, then show the new state.
-  function waitForReboot() {
+  // Poll /api/status until the device is back, then show the new state. sentAt (ms) = the upload's outcome
+  // is unknown: if the device's uptime predates the upload it never restarted, so nothing was installed.
+  function waitForReboot(sentAt) {
     $('barfill').style.width = '100%';
     let tries = 0;
     const iv = setInterval(async () => {
       tries++;
       const ok = await loadStatus();
-      if (ok) { clearInterval(iv); setMsgKey('update_complete', null, 'ok'); resetControls(); file = null; $('bin').value = ''; }
+      const up = ok && lastStatus ? lastStatus.uptime_s : null;
+      if (ok && sentAt && typeof up === 'number' && up * 1000 >= Date.now() - sentAt) { clearInterval(iv); setMsgKey('not_applied', null, 'err'); resetControls(); }
+      else if (ok) { clearInterval(iv); setMsgKey('update_complete', null, 'ok'); file = null; $('bin').value = ''; resetControls(); }
       else if (tries > 40) { clearInterval(iv); setMsgKey('reboot_timeout', null, 'warn'); resetControls(); }
       else setMsgKey('reboot_waiting', { tries }, 'warn');
     }, 2000);
