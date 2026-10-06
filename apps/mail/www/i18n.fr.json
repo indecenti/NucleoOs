@@ -45,5 +45,6 @@
   "secured": "enregistré",
   "gmail_hint": "Gmail/Yahoo/iCloud nécessitent un mot de passe d'application (avec 2FA), pas ton mot de passe de connexion.",
   "body_label": "Message",
-  "err_password_required": "Saisissez le mot de passe du compte."
+  "err_password_required": "Saisissez le mot de passe du compte.",
+  "confirm_delete_account": "Supprimer le compte « {name} » ? Son mot de passe enregistré sur le Cardputer sera aussi effacé."
 }

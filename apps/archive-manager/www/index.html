@@ -127,7 +127,14 @@
       compressing: "Compressing...", reading_file: "Reading {name}... ({i}/{total})",
       generating_zip: "Generating .zip file...", saving_archive: "Saving archive...",
       compress_complete: "Compression Complete!", saved_x: "Saved {name}",
-      compress_error: "Compression Error", no_files: "No files to compress"
+      compress_error: "Compression Error", no_files: "No files to compress",
+      err_read_file: "Couldn't read the archive from the Cardputer (error {status}).",
+      err_write_file: "Couldn't write {name} (error {status}).",
+      err_mkdir: "Couldn't create the folder {name} (error {status}).",
+      err_list_dir: "Couldn't list the folder {name} (error {status}).",
+      err_read_src: "Couldn't read {name} (error {status}).",
+      err_save_archive: "Couldn't save {name} (error {status}).",
+      confirm_overwrite: "{count} file(s) already exist and will be overwritten:\n{names}\n\nExtract anyway?"
     };
     const t = (key, args) => {
       if (window.__amI18n) return window.__amI18n(key, args);
@@ -135,8 +142,11 @@
       if (args) for (const k in args) s = s.replace(new RegExp('\\{' + k + '\\}', 'g'), args[k]);
       return s;
     };
-    let __amRedraw = null; // set by views that need re-render on language change
-    window.__amOnI18n = (cb) => { __amRedraw = cb; };
+    // Set by views that need a re-render on language change. It MUST live on window: the i18n module below
+    // reads window.__amRedraw, and a top-level `let` in a classic script is not a window property (it was
+    // always undefined there, so compress mode was never re-translated).
+    window.__amRedraw = null;
+    window.__amOnI18n = (cb) => { window.__amRedraw = cb; };
 
     const api = (op, path, opts) => fetch(`/api/fs/${op}?path=` + encodeURIComponent(path), opts);
     const parent = (p) => p.replace(/\/[^/]+\/?$/, '') || '/';
@@ -177,6 +187,13 @@
       }
     }
 
+    // Opened by the shell on a .zip (double-click / Open with): WM.open passes ?path=...
+    const pathParam = urlParams.get('path');
+    if (!compressParam && pathParam && pathParam.toLowerCase().endsWith('.zip')) {
+      mode = 'extract';
+      loadZip(pathParam);
+    }
+
     // Handle open-file event from the OS (modalità estrazione)
     window.addEventListener('message', async (e) => {
       const d = e.data;
@@ -191,17 +208,26 @@
     // ==========================================
     // EXTRACT MODE
     // ==========================================
+    // An error whose text is a catalog key: it is re-translated when the OS language switches.
+    const i18nErr = (key, args) => Object.assign(new Error(t(key, args)), { i18n: { key, args } });
+    const errText = (err) => err && err.i18n ? t(err.i18n.key, err.i18n.args) : String((err && err.message) || err);
+
     async function loadZip(path) {
-      statusEl.removeAttribute('data-i18n');
-      statusEl.innerHTML = t('loading_file', { path: esc(path) });
-      listEl.innerHTML = `<div class="empty">${esc(t('loading_archive'))}</div>`;
+      // Every extract-mode view repaints itself on a language switch (and once the i18n engine is up: a
+      // ?path= open starts before it, so the first paint uses the English fallback).
+      const paintLoading = () => {
+        statusEl.removeAttribute('data-i18n');
+        statusEl.innerHTML = t('loading_file', { path: esc(path) });
+        listEl.innerHTML = `<div class="empty">${esc(t('loading_archive'))}</div>`;
+      };
+      paintLoading(); window.__amOnI18n(paintLoading);
       btnAction.disabled = true;
       btnLabel.setAttribute('data-i18n', 'extract_here');
       btnLabel.textContent = t('extract_here');
 
       try {
         const res = await api('read', path);
-        if (!res.ok) throw new Error('Failed to read file');
+        if (!res.ok) throw i18nErr('err_read_file', { status: res.status });
         const blob = await res.blob();
         
         currentZipObj = new JSZip();
@@ -218,14 +244,20 @@
           return a.dir ? -1 : 1;
         });
 
-        renderExtractList();
-        statusEl.removeAttribute('data-i18n');
-        statusEl.innerHTML = t('items_in', { count: zipEntries.length, path: esc(path) });
+        const paintLoaded = () => {
+          renderExtractList();
+          statusEl.removeAttribute('data-i18n');
+          statusEl.innerHTML = t('items_in', { count: zipEntries.length, path: esc(path) });
+        };
+        paintLoaded(); window.__amOnI18n(paintLoaded);
         btnAction.disabled = zipEntries.length === 0;
       } catch (err) {
-        statusEl.removeAttribute('data-i18n');
-        statusEl.textContent = t('error_x', { msg: err.message });
-        listEl.innerHTML = `<div class="empty" style="color:var(--danger)">${esc(t('open_failed'))}<br><small>${esc(err.message)}</small></div>`;
+        const paintError = () => {
+          statusEl.removeAttribute('data-i18n');
+          statusEl.textContent = t('error_x', { msg: errText(err) });
+          listEl.innerHTML = `<div class="empty" style="color:var(--danger)">${esc(t('open_failed'))}<br><small>${esc(errText(err))}</small></div>`;
+        };
+        paintError(); window.__amOnI18n(paintError);
       }
     }
 
@@ -247,9 +279,54 @@
       });
     }
 
+    const joinPath = (dir, rel) => (dir === '/' ? '' : dir) + '/' + rel.replace(/\/+$/, '');
+    // Names already present in a folder (null = the folder does not exist yet). Anything but a 404 is an
+    // error: we cannot promise "nothing gets overwritten" about a folder we could not list.
+    async function listNames(dir) {
+      const r = await api('list', dir);
+      if (r.status === 404) return null;
+      if (!r.ok) throw i18nErr('err_list_dir', { name: dir, status: r.status });
+      const j = await r.json();
+      return new Set((j.entries || []).map((e) => e.name));
+    }
+    // Archive files whose target already exists. Only the folders the archive writes into are listed.
+    async function findClashes(targetDir) {
+      const byDir = new Map();
+      for (const e of zipEntries) {
+        if (e.dir) continue;
+        const full = joinPath(targetDir, e.name);
+        const d = parent(full);
+        if (!byDir.has(d)) byDir.set(d, []);
+        byDir.get(d).push({ base: full.split('/').pop(), rel: e.name });
+      }
+      const out = [];
+      for (const [d, files] of byDir) {
+        const names = await listNames(d);
+        if (names) for (const f of files) if (names.has(f.base)) out.push(f.rel);
+      }
+      return out;
+    }
+    // /api/fs/mkdir creates ONE level (firmware mkdir(2)) and /api/fs/write never creates parents, so every
+    // missing ancestor of an entry is created top-down first. An existing folder answers ok.
+    async function ensureDir(dir, made) {
+      if (!dir || dir === '/' || made.has(dir)) return;
+      await ensureDir(parent(dir), made);
+      const r = await api('mkdir', dir, { method: 'POST' });
+      if (!r.ok) throw i18nErr('err_mkdir', { name: dir, status: r.status });
+      made.add(dir);
+    }
+
     async function executeExtract() {
       if (!currentZipObj || !currentZipPath) return;
       const targetDir = parent(currentZipPath);
+      // Never overwrite a file silently: list what already exists and ask once.
+      let clashes;
+      try { clashes = await findClashes(targetDir); }
+      catch (err) { statusEl.removeAttribute('data-i18n'); statusEl.textContent = t('error_x', { msg: errText(err) }); return; }
+      if (clashes.length) {
+        const names = clashes.slice(0, 8).join('\n') + (clashes.length > 8 ? '\n…' : '');
+        if (!confirm(t('confirm_overwrite', { count: clashes.length, names }))) return;
+      }
       overlay.classList.remove('hidden');
       progTitle.removeAttribute('data-i18n');
       progText.removeAttribute('data-i18n'); progText.removeAttribute('data-i18n-args');
@@ -257,19 +334,21 @@
 
       let totalFiles = zipEntries.filter(e => !e.dir).length;
       let doneFiles = 0;
-      
+      const made = new Set([targetDir]);
+
       try {
         for (let i = 0; i < zipEntries.length; i++) {
           const entry = zipEntries[i];
-          const fullPath = targetDir === '/' ? `/${entry.name}` : `${targetDir}/${entry.name}`;
-          
+          const fullPath = joinPath(targetDir, entry.name);
+
           if (entry.dir) {
-            await api('mkdir', fullPath, { method: 'POST' });
+            await ensureDir(fullPath, made);
           } else {
+            await ensureDir(parent(fullPath), made);
             progText.textContent = t('extracting_file', { name: entry.name, done: doneFiles, total: totalFiles });
             const arrayBuffer = await entry.async("arraybuffer");
             const res = await api('write', fullPath, { method: 'POST', body: arrayBuffer });
-            if (!res.ok) throw new Error(`Failed to write ${entry.name}`);
+            if (!res.ok) throw i18nErr('err_write_file', { name: entry.name, status: res.status });
             
             doneFiles++;
             progFill.style.width = Math.floor((doneFiles / totalFiles) * 100) + '%';
@@ -283,7 +362,7 @@
         setTimeout(() => { overlay.classList.add('hidden'); }, 1500);
       } catch (err) {
         progTitle.textContent = t('extract_error');
-        progText.textContent = err.message;
+        progText.textContent = errText(err);
         progFill.style.background = 'var(--danger)';
         setTimeout(() => { overlay.classList.add('hidden'); progFill.style.background = 'var(--accent)'; }, 3000);
       }
@@ -329,7 +408,7 @@
 
     async function walkDir(dirPath, filesOut) {
       const res = await api('list', dirPath);
-      if (!res.ok) throw new Error("Failed to list " + dirPath);
+      if (!res.ok) throw i18nErr('err_list_dir', { name: dirPath, status: res.status });
       const data = await res.json();
       for (const e of (data.entries || [])) {
         const full = dirPath === '/' ? `/${e.name}` : `${dirPath}/${e.name}`;
@@ -379,7 +458,7 @@
           }
         }
 
-        if (filesToZip.length === 0) throw new Error(t('no_files'));
+        if (filesToZip.length === 0) throw i18nErr('no_files');
 
         // 2. Read and add to JSZip
         const zip = new JSZip();
@@ -391,7 +470,7 @@
           progFill.style.width = Math.floor((i / total) * 50) + '%'; // First 50% is reading
           
           const r = await api('read', f.path);
-          if (!r.ok) throw new Error("Cannot read " + f.path);
+          if (!r.ok) throw i18nErr('err_read_src', { name: f.path, status: r.status });
           const buf = await r.arrayBuffer();
           zip.file(f.relative, buf);
         }
@@ -414,7 +493,7 @@
         const wRes = await fetch(`/api/fs/write?path=` + encodeURIComponent(outPath), {
           method: 'POST', body: zipBlob
         });
-        if (!wRes.ok) throw new Error("Failed to save " + zipName);
+        if (!wRes.ok) throw i18nErr('err_save_archive', { name: zipName, status: wRes.status });
 
         progFill.style.width = '100%';
         progTitle.textContent = t('compress_complete');
@@ -425,7 +504,7 @@
 
       } catch(err) {
         progTitle.textContent = t('compress_error');
-        progText.textContent = err.message;
+        progText.textContent = errText(err);
         progFill.style.background = 'var(--danger)';
         setTimeout(() => { overlay.classList.add('hidden'); progFill.style.background = 'var(--accent)'; }, 3000);
       }

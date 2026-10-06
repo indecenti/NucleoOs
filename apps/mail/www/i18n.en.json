@@ -44,5 +44,6 @@
   "secured": "stored",
   "gmail_hint": "Gmail/Yahoo/iCloud need an App Password (with 2FA), not your login password.",
   "body_label": "Message",
-  "err_password_required": "Enter the account password."
+  "err_password_required": "Enter the account password.",
+  "confirm_delete_account": "Delete the account \"{name}\"? Its password stored on the Cardputer is erased too."
 }

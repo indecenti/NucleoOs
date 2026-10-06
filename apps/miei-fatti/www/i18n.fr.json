@@ -79,5 +79,8 @@
   "listhint": "{n}/128 faits enseignables à ANIMA. Au-delà, l’appareil oublie les plus anciens (cette liste reste).",
   "reteachDone": "Réappris {o}/{n}.",
   "verifyDone": "Vérifiés {o}/{n}.",
-  "dedDone": "Apprises {o}/{n} déductions."
+  "dedDone": "Apprises {o}/{n} déductions.",
+  "readFailed": "Impossible de lire vos faits du Cardputer : la modification est suspendue pour ne rien écraser. Réessayez dans un instant.",
+  "readCorrupt": "Le fichier des faits du Cardputer est illisible : il n'est pas modifié pour ne rien perdre.",
+  "notPaired": "Ce navigateur n'est pas associé au Cardputer — associez-le pour enregistrer vos faits."
 }

@@ -20,14 +20,30 @@ const uid = () => 'h' + Math.random().toString(36).slice(2, 8);
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 // ── persistence (SD, paired) ──
-async function loadHosts() {
+// Typed read. A FAILED read (offline, 401, 503, corrupt JSON) is NOT "no hosts": the old code then showed
+// an empty list and the next "Save host" wrote a one-entry hosts.json over the saved list. 404 = none yet.
+async function readHosts() {
   try {
     const r = await fetch('/api/fs/read?path=' + encodeURIComponent(HOSTS_PATH), { cache: 'no-store' });
-    if (r.ok) { const j = JSON.parse(await r.text()); hosts = Array.isArray(j.hosts) ? j.hosts : []; }
-    else hosts = [];
-  } catch { hosts = []; }
+    if (r.status === 404) return { ok: true, list: [] };
+    if (!r.ok) return { ok: false, status: r.status };
+    const s = (await r.text()).trim();
+    if (!s) return { ok: true, list: [] };
+    const j = JSON.parse(s);
+    if (j && Array.isArray(j.hosts)) return { ok: true, list: j.hosts };
+    if (j && typeof j === 'object' && !Array.isArray(j) && !Object.keys(j).length) return { ok: true, list: [] };   // the firmware's "{}"
+    return { ok: false, status: 'corrupt' };
+  } catch (e) { return { ok: false, status: e instanceof SyntaxError ? 'corrupt' : 0 }; }
+}
+const failText = (st) => st === 401 || st === 403 ? t('not_paired') : st === 'corrupt' ? t('read_corrupt') : t('read_failed');
+let readOk = false, readStatus = 0;      // saving is allowed only once the REAL list was read (or is known not to exist)
+async function loadHosts() {
+  const r = await readHosts();
+  readOk = r.ok; readStatus = r.ok ? 0 : r.status;
+  if (r.ok) hosts = r.list;
 }
 async function saveHosts() {
+  if (!readOk) return false;                                  // never write over a list we could not read
   try { await fetch('/api/fs/mkdir?path=' + encodeURIComponent('/data/ssh'), { method: 'POST' }); } catch {}
   try { const r = await fetch('/api/fs/write?path=' + encodeURIComponent(HOSTS_PATH), { method: 'POST', body: JSON.stringify({ hosts }) }); return r.ok; } catch { return false; }
 }
@@ -51,6 +67,7 @@ I18N.onChange(() => paintBridgeLine());
 // ── sidebar ──
 function renderHosts() {
   const box = $('hosts'); box.textContent = '';
+  if (!readOk) { const d = document.createElement('div'); d.className = 'hint'; d.style.padding = '8px'; d.textContent = failText(readStatus); box.appendChild(d); return; }
   if (!hosts.length) { box.innerHTML = '<div class="hint" style="padding:8px" data-i18n="no_hosts">Nessun host. Crea il primo →</div>'; return; }
   for (const h of hosts) {
     const d = document.createElement('div'); d.className = 'host' + (sel && sel.id === h.id ? ' sel' : '');
@@ -85,6 +102,9 @@ function showForm(h) {
   const collect = () => ({ id: (h && h.id) || uid(), name: $('f-name').value.trim() || $('f-host').value.trim(), host: $('f-host').value.trim(), port: parseInt($('f-port').value, 10) || 22, user: $('f-user').value.trim(), auth, hostkey: (h && h.hostkey) || undefined });
   $('f-save').addEventListener('click', async () => {
     const prof = collect(); if (!prof.host || !prof.user) { $('f-stat').textContent = t('err_host_user_required'); return; }
+    // The saved list is unknown (read failed): re-read it first; while it still fails, nothing is written
+    // and the form keeps what was typed.
+    if (!readOk) { await loadHosts(); renderHosts(); if (!readOk) { $('f-stat').textContent = failText(readStatus); return; } }
     const i = hosts.findIndex((x) => x.id === prof.id); if (i >= 0) hosts[i] = prof; else hosts.push(prof);
     sel = prof; const ok = await saveHosts(); renderHosts(); $('f-stat').textContent = ok ? t('saved') : t('st_error', { msg: HOSTS_PATH });
   });

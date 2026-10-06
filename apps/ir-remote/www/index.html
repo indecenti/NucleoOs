@@ -259,13 +259,50 @@
       try { await fetch('/api/fs/mkdir?path=' + encodeURIComponent(path.replace(/\/[^/]+$/, '')), { method: 'POST' }); } catch {}
       try { await fetch('/api/fs/write?path=' + encodeURIComponent(path), { method: 'POST', headers: { 'Content-Type': type || 'application/json' }, body }); } catch {}
     }
+    // Typed read of the SD copy. A FAILED read (offline, 401, 503, corrupt JSON) is NOT "no user data": the
+    // old code fell back to this browser's localStorage (often empty) and the next button press — which
+    // records a "recent" — saved that over /data/ir/userdata.json. Only a 404 means "none yet".
+    let sdOk = false;            // the SD copy was read (or is known not to exist): only then may it be written
+    async function readUserData() {
+      try {
+        const r = await fetch('/api/fs/read?path=' + encodeURIComponent(UDATA), { cache: 'no-store' });
+        if (r.status === 404) return { ok: true, data: null };
+        if (!r.ok) return { ok: false, status: r.status };
+        const txt = (await r.text()).trim();
+        if (!txt) return { ok: true, data: null };
+        const j = JSON.parse(txt);
+        return j && typeof j === 'object' && !Array.isArray(j) ? { ok: true, data: j } : { ok: false, status: 'corrupt' };
+      } catch (e) { return { ok: false, status: e instanceof SyntaxError ? 'corrupt' : 0 }; }
+    }
+    // The SD became readable again after a failed read: keep everything on it AND what was added here in the
+    // meantime (union — nothing is lost), then let the write go ahead.
+    const unionBy = (a, b, key) => { const out = [...(a || [])], seen = new Set(out.map(key)); for (const x of (b || [])) if (!seen.has(key(x))) { seen.add(key(x)); out.push(x); } return out; };
+    async function recoverSd() {
+      const r = await readUserData(); if (!r.ok) return false;
+      const d = r.data || {};
+      favs = unionBy(d.favs, favs, (f) => codeKey(f.code));
+      custom = unionBy(d.custom, custom, (c) => c.name + '|' + codeKey(c));
+      macros = unionBy(d.macros, macros, (m) => m.name);
+      recents = unionBy(recents, d.recents, (x) => codeKey(x.code)).slice(0, 12);
+      sdOk = true;
+      LS.set('ir.userdata', { favs, custom, macros, recents });
+      try { renderCustom(); renderMacros(); rebuildMacroStepOptions(); if (curTab === 'fav') renderFav(); } catch {}
+      return true;
+    }
     function persist() {
-      const data = { favs, custom, macros, recents }; LS.set('ir.userdata', data);
+      LS.set('ir.userdata', { favs, custom, macros, recents });
       clearTimeout(saveTimer);
-      saveTimer = setTimeout(() => { if (!demo) sdWrite(UDATA, JSON.stringify(data)); }, 600);
+      saveTimer = setTimeout(async () => {
+        if (demo) return;
+        if (!sdOk && !(await recoverSd())) return;     // never write over an SD copy we could not read
+        sdWrite(UDATA, JSON.stringify({ favs, custom, macros, recents }));
+      }, 600);
     }
     async function loadUserData() {
-      let data = await readJSON(UDATA);                                  // SD (null if unpaired/missing)
+      const r = await readUserData();
+      sdOk = r.ok;
+      if (!r.ok && !demo) toast(t('sd_read_failed'));
+      let data = r.ok ? r.data : null;                                   // SD (null when missing)
       if (!data || !(data.favs || data.custom || data.macros)) data = LS.get('ir.userdata', null);
       if (!data) data = { favs: LS.get('ir.fav', []), custom: LS.get('ir.custom', []), macros: LS.get('ir.macros', []), recents: LS.get('ir.recent', []) };
       favs = data.favs || []; custom = data.custom || []; macros = data.macros || []; recents = data.recents || [];

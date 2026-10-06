@@ -51,5 +51,8 @@
   "hostkey_ok": "clave de host verificada: {fp}",
   "hostkey_mismatch": "¡CLAVE DE HOST CAMBIADA! memorizada {old} — recibida {fp}. Posible MITM: sesión rechazada. Si el cambio es legítimo (servidor reinstalado), acepta la nueva clave.",
   "hostkey_mismatch_short": "clave de host cambiada — sesión rechazada",
-  "hostkey_accept": "Aceptar nueva clave"
+  "hostkey_accept": "Aceptar nueva clave",
+  "read_failed": "No se pudieron leer los hosts guardados del Cardputer: no guardo nada para no sobrescribirlos. Inténtalo de nuevo en breve.",
+  "read_corrupt": "El archivo de hosts guardados del Cardputer no se puede leer: no lo modifico para no perderlo.",
+  "not_paired": "Este navegador no está vinculado al Cardputer: vincúlalo para guardar los hosts."
 }

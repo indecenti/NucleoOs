@@ -1632,26 +1632,40 @@ $('voice-always-on').addEventListener('change', toggleVoiceAlways);
 
   // Add a SECONDARY provider key (image=xAI, Whisper=Groq) into teacher.json.keys{} WITHOUT changing the
   // active chat provider — the real fix for "Claude can't draw / transcribe" without losing Claude as chat.
+  // Returns true, or the (localized) reason nothing was written. A FAILED read (offline, 503) or a corrupt
+  // teacher.json is NOT an empty one: the old code then wrote {keys:{<new>}} over the file and erased the
+  // active Anthropic key + config. Only a 404 means "no teacher.json yet" (a fresh file is fine).
   async function addSecondaryKey(provider, key) {
+    let j = {};
     try {
       const r = await fetch('/api/fs/read?path=' + encodeURIComponent(TPATH), { cache: 'no-store' });
-      if (r.status === 401 || r.status === 403) { status(EN() ? 'Pair the browser first.' : 'Accoppia prima il browser.', false); return false; }
-      let j = {}; if (r.ok) { try { j = JSON.parse(await r.text()) || {}; } catch {} }
-      j.keys = (j.keys && typeof j.keys === 'object') ? j.keys : {};
-      const bases = { xai: 'https://api.x.ai/v1', openai: 'https://api.groq.com/openai/v1' };
-      const defs = { xai: 'grok-2-latest', openai: 'llama-3.1-8b-instant' };
-      j.keys[provider] = { base: bases[provider], model: defs[provider], key };
+      if (r.status === 401 || r.status === 403) return T('settingsNotPaired');
+      if (r.status !== 404) {
+        if (!r.ok) return T('teacherReadFailed');
+        const txt = (await r.text()).trim();
+        if (txt) {
+          try { j = JSON.parse(txt); } catch { return T('teacherReadCorrupt'); }
+          if (!j || typeof j !== 'object' || Array.isArray(j)) return T('teacherReadCorrupt');
+        }
+      }
+    } catch { return T('teacherReadFailed'); }
+    j.keys = (j.keys && typeof j.keys === 'object' && !Array.isArray(j.keys)) ? j.keys : {};
+    const bases = { xai: 'https://api.x.ai/v1', openai: 'https://api.groq.com/openai/v1' };
+    const defs = { xai: 'grok-2-latest', openai: 'llama-3.1-8b-instant' };
+    j.keys[provider] = { base: bases[provider], model: defs[provider], key };
+    try {
       const w = await fetch('/api/fs/write?path=' + encodeURIComponent(TPATH), { method: 'POST', body: JSON.stringify(j) });
-      return w.ok;
-    } catch { return false; }
+      return w.ok ? true : (w.status === 401 || w.status === 403 ? T('settingsNotPaired') : T('saveFailed'));
+    } catch { return T('saveFailed'); }
   }
   async function addKeyFlow(provider) {
     const name = provider === 'xai' ? 'Grok (xAI)' : 'Groq';
     const k = prompt((EN() ? 'Paste the ' : 'Incolla la chiave ') + name + (EN() ? ' key (kept on device, used only for that feature):' : ' (resta sul dispositivo, usata solo per quella funzione):'));
     if (!k || !k.trim()) return;
     status(EN() ? 'saving…' : 'salvo…');
-    const ok = await addSecondaryKey(provider, k.trim());
-    status(ok ? (name + (EN() ? ' key added' : ' chiave aggiunta')) : (EN() ? 'save failed (pair the browser?)' : 'salvataggio fallito (browser accoppiato?)'), ok);
+    const res = await addSecondaryKey(provider, k.trim());
+    const ok = res === true;
+    status(ok ? (name + (EN() ? ' key added' : ' chiave aggiunta')) : res, ok);
     if (ok) { await refreshCaps(); reEval(); }
   }
 

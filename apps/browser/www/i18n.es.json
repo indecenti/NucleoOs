@@ -74,6 +74,7 @@
   "errAccessDenied": "Acceso denegado — asegúrate de estar vinculado con el dispositivo",
   "errSdWrite": "Error de escritura en la SD ({status}): {detail}",
   "errMkdir": "Mkdir falló ({status}): {detail}",
+  "errDlBusy": "Ya hay otra descarga en curso — inténtalo de nuevo en breve",
 
   "toastBookmarkRemoved": "Favorito quitado",
   "toastBookmarkAdded": "Favorito añadido",

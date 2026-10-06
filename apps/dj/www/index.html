@@ -161,7 +161,9 @@ function renderList() {
   ul.innerHTML = '';
   for (const it of lib) {
     const li = document.createElement('li');
-    li.innerHTML = `<span>♪</span><span class="grow name">${it.name}</span><span class="b">${t('cue')}</span>`;
+    li.innerHTML = `<span>♪</span><span class="grow name"></span><span class="b"></span>`;
+    li.querySelector('.name').textContent = it.name;          // a file name from the SD is text, never markup
+    li.querySelector('.b').textContent = t('cue');
     li.onclick = () => cueTrack(it.path, li);
     it._li = li; ul.appendChild(li);
   }

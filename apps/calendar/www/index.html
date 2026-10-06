@@ -202,7 +202,7 @@
       if (!evs.length) { $('evlist').innerHTML = `<div class="empty">${esc(t('empty_events'))}</div>`; return; }
       $('evlist').innerHTML = evs.map((e) => `<div class="evrow">
         <span class="et">${e.time ? esc(e.time) : '–'}</span><span class="ex">${esc(e.text)}</span>
-        <button class="del" data-id="${e.id}" data-i18n-attr="title:delete" title="${esc(t('delete'))}">✕</button></div>`).join('');
+        <button class="del" data-id="${esc(e.id)}" data-i18n-attr="title:delete" title="${esc(t('delete'))}">✕</button></div>`).join('');
       $('evlist').querySelectorAll('.del').forEach((b) => b.onclick = () => removeEvent(b.dataset.id));
     }
 

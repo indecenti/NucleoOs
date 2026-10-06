@@ -318,6 +318,9 @@
       await loadData(); renderAccounts();
     }
     async function delAccount(idx) {
+      const a = accounts.find((x) => x.idx === idx); if (!a) return;
+      // The stored SMTP password goes with it and cannot be read back: always ask first.
+      if (!confirm(t('confirm_delete_account', { name: a.name || a.user || a.host }))) return;
       const r = await fetch('/api/mail/accounts', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ idx, delete: true }) }).catch(() => null);
       if (r && r.status === 401) { setStatus('err', t('need_pair')); return; }

@@ -74,6 +74,7 @@
   "errAccessDenied": "Accesso negato — assicurati di essere associato al dispositivo",
   "errSdWrite": "Scrittura SD fallita ({status}): {detail}",
   "errMkdir": "Mkdir fallita ({status}): {detail}",
+  "errDlBusy": "Un altro download è già in corso — riprova tra poco",
 
   "toastBookmarkRemoved": "Preferito rimosso",
   "toastBookmarkAdded": "Preferito aggiunto",

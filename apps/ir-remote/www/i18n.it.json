@@ -92,5 +92,6 @@
   "b_power": "Accensione", "b_input": "Sorgente", "b_menu": "Menu", "b_home": "Home", "b_back": "Indietro",
   "b_vol_up": "Volume su", "b_vol_down": "Volume giù", "b_mute": "Muto",
   "b_ch_up": "Canale su", "b_ch_down": "Canale giù",
-  "b_up": "Su", "b_down": "Giù", "b_left": "Sinistra", "b_right": "Destra", "b_ok": "OK"
+  "b_up": "Su", "b_down": "Giù", "b_left": "Sinistra", "b_right": "Destra", "b_ok": "OK",
+  "sd_read_failed": "Impossibile leggere preferiti e pulsanti salvati sulla SD: le modifiche restano in questo browser finché non torna leggibile."
 }
