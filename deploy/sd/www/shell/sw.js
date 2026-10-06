@@ -3,7 +3,7 @@
 // Bump this on every shell change that must reach already-installed clients. The reason for each
 // roll goes in docs/shell-cache-log.md — NOT here: it used to be one 10.5 KB comment on this line,
 // half the whole service worker, re-shipped to every browser on every update check.
-const CACHE = 'nucleo-shell-v148';   // v148 — fixes from testing a real Cardputer (see docs/shell-cache-log.md)
+const CACHE = 'nucleo-shell-v150';   // v150 — a window that lost a module reloads once (see docs/shell-cache-log.md)
 // Per-version cache for app assets (/apps/<id>/...). Tied to the shell version so a deploy (which
 // bumps CACHE) drops it; the shell also flushes it on apps.changed (OTA app update) via postMessage.
 const APP_CACHE = CACHE + '-apps';
@@ -39,8 +39,8 @@ function pump() {
 }
 function acquire(need) { return new Promise((resolve) => { queue.push({ need, resolve }); pump(); }); }
 function release(need) { active -= need; pump(); }
-async function netFetch(req, signal) {
-  try { return await fetch(req, signal ? { signal } : undefined); }
+async function netFetch(req) {
+  try { return await fetch(req); }
   catch (err) {
     // A transient lru_purge reset / momentary OOM. Replaying a body is unsafe, so
     // only retry idempotent GETs (no body) after a short breath.
@@ -54,14 +54,22 @@ async function netFetch(req, signal) {
     throw err;
   }
 }
+// A write holds the WHOLE pool — but only for so long. It used to be ABORTED after 15 s, which killed
+// every multi-MB upload (desktop drop, File Commander) mid-transfer: 504, then retried three times. The
+// SW cannot see a body's size (Content-Length is not exposed on a FetchEvent request), so it never aborts
+// a write; instead, past EXCLUSIVE_MAX_MS it hands back all but one permit and the upload carries on as
+// an ordinary shared request. A hung write therefore can no longer freeze the desktop either. Callers
+// that want a deadline (the shell's small config saves) set their own — that abort reaches us through
+// req.signal.
+const EXCLUSIVE_MAX_MS = 15000;
 async function gatedFetch(req, exclusive) {
   const need = exclusive ? MAX_INFLIGHT : 1;
   await acquire(need);
+  let held = need;
+  const downgrade = exclusive ? setTimeout(() => { if (held > 1) { const give = held - 1; held = 1; release(give); } }, EXCLUSIVE_MAX_MS) : null;
   try {
-    // A write holds the WHOLE pool, so cap it with a timeout: a hung exclusive lock would
-    // otherwise freeze the desktop. A tiny JSON save to SD is sub-second; 15s is generous.
-    return await netFetch(req, exclusive ? AbortSignal.timeout(15000) : null);
-  } finally { release(need); }
+    return await netFetch(req);
+  } finally { clearTimeout(downgrade); release(held); }
 }
 
 // --- ANIMA Forge: serve installed model weights from the verified install cache --------------------
@@ -89,6 +97,21 @@ async function trimWallpaperCache(cache) {
     for (let i = 0; i < keys.length - WALLPAPER_CACHE_MAX; i++) await cache.delete(keys[i]);
   } catch {}
 }
+// A file changed under a cached image: drop every cached read of that path (or of anything below it, for
+// a folder move/delete). Without this a Paint save reopened with the OLD pixels and a deleted image kept
+// being served, from a cache that even survives deploys.
+async function dropCachedImages(paths) {
+  const ps = paths.filter(Boolean).map((p) => p.replace(/\/+$/, ''));
+  if (!ps.length) return;
+  try {
+    const cache = await caches.open(WALLPAPER_CACHE);
+    for (const k of await cache.keys()) {
+      let kp = null; try { kp = new URL(k.url).searchParams.get('path'); } catch {}
+      if (kp && ps.some((p) => kp === p || kp.startsWith(p + '/'))) await cache.delete(k);
+    }
+  } catch {}
+}
+const changedPaths = (url) => [url.searchParams.get('path'), url.searchParams.get('from'), url.searchParams.get('to')];
 function forgeModelKey(url) {
   const u = String(url).split('?')[0].split('#')[0];
   let m = /\/forge\/models\/([^/]+)\/(.+)$/.exec(u);
@@ -145,6 +168,11 @@ self.addEventListener('fetch', (e) => {
     return;
   }
 
+  // Everything else that is not the device (LLM providers, GitHub, CDNs) goes straight to the network.
+  // Routed through gatedFetch it held one of the DEVICE's permits for a request the device never sees,
+  // and a CORS/network failure came back as a fake 504 "device unreachable".
+  if (url.origin !== self.location.origin) return;
+
   const p = url.pathname;
   if (p.startsWith('/api/')) {
     // Images read via the file API (wallpapers, gallery thumbnails) → DURABLE cache with
@@ -157,7 +185,8 @@ self.addEventListener('fetch', (e) => {
         const cache = await caches.open(WALLPAPER_CACHE);
         const hit = await cache.match(e.request);
         const network = gatedFetch(e.request).then(async (res) => {
-          if (res && res.ok) { await cache.put(e.request, res.clone()); await trimWallpaperCache(cache); }
+          // A cache failure (quota, a 206 partial) must never cost the caller a good network answer.
+          if (res && res.ok && res.status === 200) { try { await cache.put(e.request, res.clone()); await trimWallpaperCache(cache); } catch {} }
           return res;
         }).catch(() => null);
         if (hit) { e.waitUntil(network); return hit; }          // instant; refresh silently
@@ -171,7 +200,21 @@ self.addEventListener('fetch', (e) => {
     // free, so it finds a large contiguous block instead of running OOM mid-burst.
     if (p === '/api/fs/read' || p === '/api/fs/list' || p === '/api/fs/write') {
       const exclusive = (p === '/api/fs/write');   // list = shared read (need=1), like read
-      e.respondWith(gatedFetch(e.request, exclusive).catch(() => new Response('', { status: 504, statusText: 'device busy' })));
+      e.respondWith((async () => {
+        if (exclusive) await dropCachedImages(changedPaths(url));
+        const res = await gatedFetch(e.request, exclusive).catch(() => new Response('', { status: 504, statusText: 'device busy' }));
+        if (exclusive && res.ok) await dropCachedImages(changedPaths(url));   // a read racing the write may have re-cached the old bytes
+        return res;
+      })());
+      return;
+    }
+    // Move / delete: not gated (as before), but they change what a cached image path holds.
+    if ((p === '/api/fs/move' || p === '/api/fs/delete') && e.request.method !== 'GET') {
+      e.respondWith((async () => {
+        const res = await fetch(e.request);
+        if (res.ok) await dropCachedImages(changedPaths(url));
+        return res;
+      })());
       return;
     }
     // /api/anima: the question to the assistant. Twelve surfaces call it — copilot, shell

@@ -165,14 +165,14 @@
                                        "hash":  "c29be84f6e4c98c51942cd89b506c6731e9d1dad0e8965a66e7b35523ff886e6"
                                    },
     "apps/agent/www/index.html":  {
-                                      "size":  "10474",
-                                      "mtime":  "639269177242989293",
-                                      "hash":  "336a31e26f81bfaf706d5b0e858bc357bd4b405e042fda5a1c817a694099a9cf"
+                                      "size":  "10929",
+                                      "mtime":  "639269241113078882",
+                                      "hash":  "0aaa2a48c45f1b0f290460a8799e8d4c2d8175133a43ac70a77c8d4f19005417"
                                   },
     "apps/agent/www/index.html.gz":  {
-                                         "size":  "3405",
-                                         "mtime":  "639269177242999322",
-                                         "hash":  "0f68e634af564c192be51e34f061eb3a4813c3eb57983d05d42200c800a5fc0e"
+                                         "size":  "3679",
+                                         "mtime":  "639269241113089838",
+                                         "hash":  "aafe4b15d4546f0b0fe781d1962b5bec64d341456eb99ad1e7529a7093ac38d1"
                                      },
     "apps/agent/www/local-worker.js":  {
                                            "size":  "14322",
@@ -825,14 +825,14 @@
                                            "hash":  "01586030a302a969982438e7b83cd4b0138166697a1c8defe6b25533ad887002"
                                        },
     "apps/anima/www/index.html":  {
-                                      "size":  "539270",
-                                      "mtime":  "639269177244250079",
-                                      "hash":  "693a3d07be7d5f8375cf16d3f6b1d990c18356a7dc4f46ceb5f4e832cdd8de97"
+                                      "size":  "539727",
+                                      "mtime":  "639269241113120295",
+                                      "hash":  "497ef8572a0c05e29ac2955155d2def1236cfd3906a4fe00bf5f94c4d6c626db"
                                   },
     "apps/anima/www/index.html.gz":  {
-                                         "size":  "164148",
-                                         "mtime":  "639269177244250079",
-                                         "hash":  "1a5d5dc7c411eea22707ec3a6d1fcd0aa7ddc1638285c3bddd4291daec32ce11"
+                                         "size":  "164426",
+                                         "mtime":  "639269241113133577",
+                                         "hash":  "8910e6fdee339797525a0c947b0baf637f94af3633dc2c6cb945678b00523500"
                                      },
     "apps/anima/www/local-llm.js":  {
                                         "size":  "17526",
@@ -1630,14 +1630,14 @@
                                         "hash":  "044f3a3e44388fd5e5e97e0c3438971f536e46b1f0343b79a8f4bb824198ba8f"
                                     },
     "apps/arcade/www/index.html":  {
-                                       "size":  "31066",
-                                       "mtime":  "639269177249211701",
-                                       "hash":  "1ce0480000370e3b30477f2dc40a6f55c9dd75f9511e581478521ac8b9258eb6"
+                                       "size":  "31521",
+                                       "mtime":  "639269241113143794",
+                                       "hash":  "fa184f90ad6d4e2a7f7f6751f6836cec72397bb1d1ddc154807d50759702b96b"
                                    },
     "apps/arcade/www/index.html.gz":  {
-                                          "size":  "10507",
-                                          "mtime":  "639269177249211701",
-                                          "hash":  "aa93353e6269e20e96e584d0303967d3b6177c8da008ce9f1b77b0dec5f14be7"
+                                          "size":  "10731",
+                                          "mtime":  "639269241113143794",
+                                          "hash":  "155d514bd2818a0e4737c9649ac921d68b5eb54fb743c8a001f65f500bfc026e"
                                       },
     "apps/arcade/www/player.html":  {
                                         "size":  "33393",
@@ -1730,14 +1730,14 @@
                                                  "hash":  "a616ecb8ebfe46e13660e9d66b001bcd7349ddd45676f7a7957ed97a9354adf7"
                                              },
     "apps/archive-manager/www/index.html":  {
-                                                "size":  "24432",
-                                                "mtime":  "639269197159023634",
-                                                "hash":  "13d74c7acfa2a7347c32a87911ba454cfc5ccdc7776d8a513cf17a53fe5a0a89"
+                                                "size":  "24889",
+                                                "mtime":  "639269241113153843",
+                                                "hash":  "082b3fb1f8274d8f94212a24e05f83638ae120554e0f705e42fa7c718729ac15"
                                             },
     "apps/archive-manager/www/index.html.gz":  {
-                                                   "size":  "7453",
-                                                   "mtime":  "639269197159023634",
-                                                   "hash":  "64590a74cc9dcf398231cc0b71c9e55af3ba7a94165fbee752d22dbeda667d19"
+                                                   "size":  "7665",
+                                                   "mtime":  "639269241113163835",
+                                                   "hash":  "0158e9347649c38c47289743f6cefe935c95f4e8a3761980df6aee26fc837daa"
                                                },
     "apps/archive-manager/www/jszip.min.js":  {
                                                   "size":  "97642",
@@ -1820,14 +1820,14 @@
                                                "hash":  "3f0670e9d3868e35b73153aea27a4b6d334f03240aecb5f57f31c216301d4a6d"
                                            },
     "apps/authenticator/www/index.html":  {
-                                              "size":  "21426",
-                                              "mtime":  "639269177249450763",
-                                              "hash":  "1d65cd868c09463fa9afcfd1ca470caa776433a9176ace04b1cbcbb7f385d648"
+                                              "size":  "21881",
+                                              "mtime":  "639269241113163835",
+                                              "hash":  "798b8b52dee82395f4640fec0a24d3c4d3a984585b5a88ff2a03f87586928043"
                                           },
     "apps/authenticator/www/index.html.gz":  {
-                                                 "size":  "7238",
-                                                 "mtime":  "639269177249460768",
-                                                 "hash":  "b7992214f8b41d83fcb6fda06e84d07c5cd57099c324e6a022a007d74106fc52"
+                                                 "size":  "7459",
+                                                 "mtime":  "639269241113173834",
+                                                 "hash":  "3a7b045c00f5616641bd5fb0a91c6da8eab444a7fe2750d63d682de93a5a4046"
                                              },
     "apps/authenticator/www/otp.js":  {
                                           "size":  "8573",
@@ -1910,14 +1910,14 @@
                                              "hash":  "cd0c402da5c399d14529782f05720a3878e645c272fd47c50aaf23136c15cb65"
                                          },
     "apps/browser/www/index.html":  {
-                                        "size":  "76247",
-                                        "mtime":  "639269177249511147",
-                                        "hash":  "f4fa07225e932a40edf11959b67c240111ce1b9c724d144e5e27ee786148be7b"
+                                        "size":  "76704",
+                                        "mtime":  "639269241113183834",
+                                        "hash":  "d6a45a6f0c038858c0c72cebe6d928822e309613e2cd3624c6fbced8e107328a"
                                     },
     "apps/browser/www/index.html.gz":  {
-                                           "size":  "18307",
-                                           "mtime":  "639269177249511147",
-                                           "hash":  "13533ae740acd7f6c16dd583c37d3864efb2130baa9050f0b8eb4439dc8c25aa"
+                                           "size":  "18493",
+                                           "mtime":  "639269241113183834",
+                                           "hash":  "b306ccd2f8badf86b7d1e1a6628db73eb1b684e1cf395480a88260f155fbf277"
                                        },
     "apps/calculator/manifest.json":  {
                                           "size":  "671",
@@ -1955,14 +1955,14 @@
                                              "hash":  "3fe8c38c04cd2ce3699c88cadc180041b6a8e258922e46902639071d55d92494"
                                          },
     "apps/calculator/www/index.html":  {
-                                           "size":  "6386",
-                                           "mtime":  "639269177249511147",
-                                           "hash":  "5ee910599f83ce00e6515bc48209ab3c21c4f07308609667d01733cc6b51a14c"
+                                           "size":  "6843",
+                                           "mtime":  "639269241113193840",
+                                           "hash":  "62f83ee9d146f50cec427b229e96696d18b6025e6cd72ff23b3642b4d447aa90"
                                        },
     "apps/calculator/www/index.html.gz":  {
-                                              "size":  "2636",
-                                              "mtime":  "639269177249585711",
-                                              "hash":  "f5aa400616c6f415d6f2e8366686645f357754294462de592cc5876f0a407679"
+                                              "size":  "2868",
+                                              "mtime":  "639269241113193840",
+                                              "hash":  "6726a1148e98fdb845fca0ecd0e263992070de90efde5b16f0c515fe1088cbd0"
                                           },
     "apps/calendar/manifest.json":  {
                                         "size":  "653",
@@ -2035,14 +2035,14 @@
                                           "hash":  "0837ee2e4bc2f887269dede481f84abdc9a39880197a3e11fe9c05c4f4b01a6b"
                                       },
     "apps/calendar/www/index.html":  {
-                                         "size":  "14943",
-                                         "mtime":  "639269197159109563",
-                                         "hash":  "e14be269c4b821f2d537699738dcea4170befee1477663de89f5850fe25344e6"
+                                         "size":  "15400",
+                                         "mtime":  "639269241113203832",
+                                         "hash":  "212b8d518c7cb18d8b67eeb82ba427b4ad7c35676ba466d193e04d3121a47d33"
                                      },
     "apps/calendar/www/index.html.gz":  {
-                                            "size":  "5193",
-                                            "mtime":  "639269197159109563",
-                                            "hash":  "5526e04bd352f018eb01223c0ed9787aa87216c2c09b22cc184124f29fb424ee"
+                                            "size":  "5429",
+                                            "mtime":  "639269241113203832",
+                                            "hash":  "f242ae2b20d70f6a1bbf80a0f76cfdaec273654deabf1f0ec14d1e22ad0e5d3d"
                                         },
     "apps/clock/manifest.json":  {
                                      "size":  "670",
@@ -2105,14 +2105,14 @@
                                            "hash":  "50d553c6c3f0575dec6f31d997a7e5672a06be3d08bfb673d15635b2346d7ac6"
                                        },
     "apps/clock/www/index.html":  {
-                                      "size":  "24557",
-                                      "mtime":  "639269177249684848",
-                                      "hash":  "8f7a26b20ba0ccd22cb5ed098d92a927a76e0ab58e3da3ae7ff2e9e69752bd76"
+                                      "size":  "25014",
+                                      "mtime":  "639269241113217025",
+                                      "hash":  "1f10b1b534de907dbdb1838bcca6e1d6ffbd5025adf3533f1bdf19dbd0f2f54d"
                                   },
     "apps/clock/www/index.html.gz":  {
-                                         "size":  "6891",
-                                         "mtime":  "639269177249684848",
-                                         "hash":  "9c7e83cd941e11bd7461512f100241827107a1fd65c28d1bf9dff43b98f0c1d6"
+                                         "size":  "7115",
+                                         "mtime":  "639269241113217025",
+                                         "hash":  "75dc4f3ae1bbe02bfa5be8d84ea51ea37f6a2892a0bbed2ad8581bc5a7a7014e"
                                      },
     "apps/code-runner/manifest.json":  {
                                            "size":  "856",
@@ -2185,14 +2185,14 @@
                                                  "hash":  "9eae9e86c29aba1731fc8b152440500421ee8f0862f29ea33e9fd64c483ec7a3"
                                              },
     "apps/code-runner/www/index.html":  {
-                                            "size":  "15786",
-                                            "mtime":  "639269177249740270",
-                                            "hash":  "9bbc9112aabefc9e4c2a9ac442a186ff9e93e7c4281abcd6a415361c27fe18b3"
+                                            "size":  "16241",
+                                            "mtime":  "639269241113217025",
+                                            "hash":  "8c7222e8d26db6f345758ba90eacdb9e7cd0aa3efcc9360d2db7e2de0d83387e"
                                         },
     "apps/code-runner/www/index.html.gz":  {
-                                               "size":  "5768",
-                                               "mtime":  "639269177249740270",
-                                               "hash":  "3318aa8ab507565dbbdc60c5bc2f9ec16f87b5a82d9a11afc6e34323721cd918"
+                                               "size":  "5985",
+                                               "mtime":  "639269241113217025",
+                                               "hash":  "11229ae978dd2d86409c4d6a2a6762f314a6facb9bc68155456621b8e7207fd8"
                                            },
     "apps/code-runner/www/nucleo-hw.js":  {
                                               "size":  "11845",
@@ -2310,14 +2310,14 @@
                                           "hash":  "411d8e362d2b9733b731b2e435a28c3e8bb3e9d4202f1ba33c502b18ff6f2f5f"
                                       },
     "apps/contacts/www/index.html":  {
-                                         "size":  "21506",
-                                         "mtime":  "639269177249772937",
-                                         "hash":  "1deb2771f3f7055561b3a9251938522e04ba1a1c1c621851773a9a897eadfdc5"
+                                         "size":  "21961",
+                                         "mtime":  "639269241113240259",
+                                         "hash":  "f93dbf160e92c87eee0ed88cc8418f8000351b53f2a5ea6b5940d5631637cd0c"
                                      },
     "apps/contacts/www/index.html.gz":  {
-                                            "size":  "6804",
-                                            "mtime":  "639269177249772937",
-                                            "hash":  "29076078fb70ea2b98363267a25e0ad03203e2cdda6c47e353aa5a74f920f4cc"
+                                            "size":  "7024",
+                                            "mtime":  "639269241113240259",
+                                            "hash":  "80900d96e3b3d362672cf081538f51f2f038ba01efa5c8ee8f1b817250e5b34d"
                                         },
     "apps/dictation/manifest.json":  {
                                          "size":  "895",
@@ -2400,14 +2400,14 @@
                                            "hash":  "1365531420e79879a72a63fb6979ddb67e09dbd78682663dd86a71cc571959e3"
                                        },
     "apps/dictation/www/index.html":  {
-                                          "size":  "31012",
-                                          "mtime":  "639269177249884132",
-                                          "hash":  "7d9474741c6966459f296e4cdc3fda985a63161303ee5162bce167234f0b843b"
+                                          "size":  "31467",
+                                          "mtime":  "639269241113255885",
+                                          "hash":  "67a46078512549f12852c3145a5bfc89e620ba72a6c71389a0584517c4d08316"
                                       },
     "apps/dictation/www/index.html.gz":  {
-                                             "size":  "10173",
-                                             "mtime":  "639269177249894105",
-                                             "hash":  "b3e2257400dfbf502255ac721d143f1145552293a713394e817a7372a892155d"
+                                             "size":  "10381",
+                                             "mtime":  "639269241113255885",
+                                             "hash":  "3ef0deeecfa7294cb146e6d03a20138b54c3c1edbea995905b5355f267b55032"
                                          },
     "apps/dj/manifest.json":  {
                                   "size":  "730",
@@ -2540,14 +2540,14 @@
                                         "hash":  "6a47de674900f8c66bf5e8c5cb278468157e94d4f0d6bfb783bd5d257111e2c1"
                                     },
     "apps/dj/www/index.html":  {
-                                   "size":  "12424",
-                                   "mtime":  "639269197159109563",
-                                   "hash":  "4d7356096ea7d97eb85e08b6a1529318edc6a0ff27d60e72f1671fe87608c059"
+                                   "size":  "12879",
+                                   "mtime":  "639269241113255885",
+                                   "hash":  "833e82ca7ebc476922f7576dd722bf71c722447414aa24cee879aa3f418d1813"
                                },
     "apps/dj/www/index.html.gz":  {
-                                      "size":  "4745",
-                                      "mtime":  "639269197159109563",
-                                      "hash":  "ef7995a1336bed99715325e3f40b93f67216a57066912988fbce542e9cfa201b"
+                                      "size":  "4988",
+                                      "mtime":  "639269241113255885",
+                                      "hash":  "c25b1640ebcfe6a0ecb0f62124564b564baf400aba45747645a460d3877368bb"
                                   },
     "apps/dj/www/npx.js":  {
                                "size":  "9058",
@@ -2630,14 +2630,14 @@
                                               "hash":  "aaddaab5a1ce9980513697d689c1762b4cb0d59857be2465fcd6db1f821a776f"
                                           },
     "apps/dos-importer/www/index.html":  {
-                                             "size":  "22850",
-                                             "mtime":  "639269177250028827",
-                                             "hash":  "ea330212de1d05354b886906830c02cf734540330c9d96bacfe5542cf660af4d"
+                                             "size":  "23307",
+                                             "mtime":  "639269241113255885",
+                                             "hash":  "35916d14b29eec8db262246d1d95fab9d5da3c89998f410bb9dd16f40af0bf04"
                                          },
     "apps/dos-importer/www/index.html.gz":  {
-                                                "size":  "7543",
-                                                "mtime":  "639269177250028827",
-                                                "hash":  "4ee668d4073008f768877873217dc7ef8627ea716ed59f09dcaa9611b4584290"
+                                                "size":  "7769",
+                                                "mtime":  "639269241113255885",
+                                                "hash":  "d5b7040baf4e432333240906e5a0087afa602bbebc1c954e50bc146ba09180e9"
                                             },
     "apps/dosbox/manifest.json":  {
                                       "size":  "1111",
@@ -2700,14 +2700,14 @@
                                             "hash":  "988a3691d0f5c055a34062c89cf834d2b465ba4f4d5af04fe3d4afc30ef2527e"
                                         },
     "apps/dosbox/www/index.html":  {
-                                       "size":  "19736",
-                                       "mtime":  "639269177250110694",
-                                       "hash":  "31e370c2e929257f161a33c81cb79179e490b59bac2a1ed1862913928ef1d31d"
+                                       "size":  "20193",
+                                       "mtime":  "639269241113255885",
+                                       "hash":  "91e40ec6d112e6fcdba1a176cc8398a93d0299b7c4e297780a4dc17157ff65ff"
                                    },
     "apps/dosbox/www/index.html.gz":  {
-                                          "size":  "6986",
-                                          "mtime":  "639269177250110694",
-                                          "hash":  "3a9087ba8cdba4bd3865683da212fc80e19d9e6f50bf7411a686ba1b54f146ab"
+                                          "size":  "7206",
+                                          "mtime":  "639269241113255885",
+                                          "hash":  "b32bcae68b2b84796c4df3e982aea2a5a682db607686df19283a4138e59ff8a8"
                                       },
     "apps/file-commander/manifest.json":  {
                                               "size":  "869",
@@ -2770,14 +2770,14 @@
                                                     "hash":  "819ea3d414f803a2df893d967f43df286e04e4cee4213f582c97e03fc8689bf7"
                                                 },
     "apps/file-commander/www/index.html":  {
-                                               "size":  "93666",
-                                               "mtime":  "639269197159127120",
-                                               "hash":  "3b774f890b7cea6db6d2fd93d5a9e38cfa912633884040dc6901aa13b6fd061a"
+                                               "size":  "94123",
+                                               "mtime":  "639269241113307027",
+                                               "hash":  "a6118222248f149456306e3b070751fcb1c622f3ce2bcf2a5d6b59caf86a6452"
                                            },
     "apps/file-commander/www/index.html.gz":  {
-                                                  "size":  "27005",
-                                                  "mtime":  "639269197159127120",
-                                                  "hash":  "5e9c564d09a987f866ce32b1fb02beba3c7854f3f34abacdbfff37d9385e1e61"
+                                                  "size":  "27152",
+                                                  "mtime":  "639269241113317111",
+                                                  "hash":  "9d0a35ffb2a985f95046a6fdb0d97def2a656d5f85fdb2a6c09bbe6f27b42295"
                                               },
     "apps/games/manifest.json":  {
                                      "size":  "792",
@@ -3015,14 +3015,14 @@
                                            "hash":  "3fc505739647450ceb9e789f97af51794bae121f5f5bd05267711466dcf91870"
                                        },
     "apps/games/www/index.html":  {
-                                      "size":  "64696",
-                                      "mtime":  "639269177250381849",
-                                      "hash":  "254e339518d3f4d38134f228dac1e6ec6f23e6f390252d1859a39e6dc2043906"
+                                      "size":  "65151",
+                                      "mtime":  "639269241113320652",
+                                      "hash":  "4f0317fa3bc32a266dee9a2f407505be4c4b0b274f568cd857d1302bc3ab484d"
                                   },
     "apps/games/www/index.html.gz":  {
-                                         "size":  "19115",
-                                         "mtime":  "639269177250409508",
-                                         "hash":  "55541782572bf1870f80457d0a3b7c852acdd7b96b5ca3fc99dadd0fd879d54c"
+                                         "size":  "19325",
+                                         "mtime":  "639269241113320652",
+                                         "hash":  "539c8325083c80ec698809a6eec994b37de5630cb80362b94177e9f68c1a449e"
                                      },
     "apps/games/www/llm-brain.js":  {
                                         "size":  "8117",
@@ -3175,14 +3175,14 @@
                                            "hash":  "e2bc88306076ea5101eadb33d4a23cec581d39418b02a44802e4b933858f6d2b"
                                        },
     "apps/groq-chat/www/index.html":  {
-                                          "size":  "31703",
-                                          "mtime":  "639269177250543813",
-                                          "hash":  "da2750f3d3723a95ceb6685a0384e18cb69a1d4a1b9bdf24109e9a8b308e2c0b"
+                                          "size":  "32160",
+                                          "mtime":  "639269241113331168",
+                                          "hash":  "d65836e23c8d868ccbce1168bd073ac4cef0fdafb4e477a48e9427aec5291123"
                                       },
     "apps/groq-chat/www/index.html.gz":  {
-                                             "size":  "10970",
-                                             "mtime":  "639269177250553813",
-                                             "hash":  "66caa06cec6928a2b304e3cb21496ff70e9c2bf3581c30fdb2ea267a0b32f9a1"
+                                             "size":  "11193",
+                                             "mtime":  "639269241113341168",
+                                             "hash":  "9f5ce437eecb6446df1237aa33e6cbe81adca911718dd4e32efc17cebe6be390"
                                          },
     "apps/help/manifest.json":  {
                                     "size":  "610",
@@ -3245,14 +3245,14 @@
                                           "hash":  "a1ec50f0634dae425da678d5ab4d4d817693156c4e3f6a39d530e8da3acc1c13"
                                       },
     "apps/help/www/index.html":  {
-                                     "size":  "47639",
-                                     "mtime":  "639269177250587963",
-                                     "hash":  "195ac426599a9f7b8246be653c6a729d42b9394b8979b0274425af7533d7d133"
+                                     "size":  "48096",
+                                     "mtime":  "639269241113341168",
+                                     "hash":  "3fe1a10cead8c3008d6e10c86a5000e5b8cae7f8eabd8dc6b41424fa50cb140c"
                                  },
     "apps/help/www/index.html.gz":  {
-                                        "size":  "11838",
-                                        "mtime":  "639269177250587963",
-                                        "hash":  "addefe024e3552fdad36124de7cf4b4241a66e4aee38cccb24113d7d92e4f3e5"
+                                        "size":  "12052",
+                                        "mtime":  "639269241113351168",
+                                        "hash":  "b7aaa68fdca21673c2020b069a4f6b1c580eb445f83e7821a15ede728c88b325"
                                     },
     "apps/ir-remote/manifest.json":  {
                                          "size":  "796",
@@ -3325,14 +3325,14 @@
                                            "hash":  "d91ef0dfabb204dc0dc24c92ca4f7526ca79f45cb391cfb215e44dc58c27e399"
                                        },
     "apps/ir-remote/www/index.html":  {
-                                          "size":  "58987",
-                                          "mtime":  "639269197159224075",
-                                          "hash":  "d6384546264a484fd2c0dff524ec0e302a572dc7288faef146c4945f404eff58"
+                                          "size":  "59444",
+                                          "mtime":  "639269241113361171",
+                                          "hash":  "40224d9a8d4c46ba970ce35260d41f9c6eb468674b02b50879b5dc59a5d45c12"
                                       },
     "apps/ir-remote/www/index.html.gz":  {
-                                             "size":  "17036",
-                                             "mtime":  "639269197159233409",
-                                             "hash":  "4ed5ebaaa74aa7c8259038982b8829a4ae37e033e1a2b633f1be498277d3eacb"
+                                             "size":  "17271",
+                                             "mtime":  "639269241113361171",
+                                             "hash":  "b066632af388f436a7a444f9447e573b74b5fa425cd4528ad82651477635a3e3"
                                          },
     "apps/ir-remote/www/presets.json":  {
                                             "size":  "14613",
@@ -3425,14 +3425,14 @@
                                                 "hash":  "2022c6a1fe883d1c920d07353b399df3eec2c60379a17fca08d72bf85fe73be5"
                                             },
     "apps/log-viewer/www/index.html":  {
-                                           "size":  "22401",
-                                           "mtime":  "639269177250714712",
-                                           "hash":  "06d3236b9c20df04209fcc61e0c20eeef85a79ec8b18d3e5083759551773cc4c"
+                                           "size":  "22856",
+                                           "mtime":  "639269241113371168",
+                                           "hash":  "8ace1ff437e857961166db9b373c43a401b1a07084a920d3113d5579b6be6b4a"
                                        },
     "apps/log-viewer/www/index.html.gz":  {
-                                              "size":  "7491",
-                                              "mtime":  "639269177250714712",
-                                              "hash":  "29e9d1ce11feef63195e69d175d16d0cdf711944accc8284f7872c6f0ac43f9d"
+                                              "size":  "7722",
+                                              "mtime":  "639269241113371168",
+                                              "hash":  "91b4759fbf636344b76be7b7e1eaadbfc4ff86540f649c816f36416a6a742a0e"
                                           },
     "apps/mail/manifest.json":  {
                                     "size":  "646",
@@ -3505,14 +3505,14 @@
                                       "hash":  "48bc7f5f7b8f2e079dbd1b88953835232b138a4034662532f91850506eaba9a9"
                                   },
     "apps/mail/www/index.html":  {
-                                     "size":  "22086",
-                                     "mtime":  "639269197159276702",
-                                     "hash":  "bb9a4b555b9c2e6dbc4b453d902a4ff618bab4787b0f199a2501540764642bc5"
+                                     "size":  "22543",
+                                     "mtime":  "639269241113381191",
+                                     "hash":  "b718b5832928e36b5109b5379ee314ec5a7da5d96cc1ea680abf4a166265c83c"
                                  },
     "apps/mail/www/index.html.gz":  {
-                                        "size":  "6459",
-                                        "mtime":  "639269197159286750",
-                                        "hash":  "c8c33b181cc2cf4e7c3e238dd7eb462f35bf4685328594a521e954bb03962053"
+                                        "size":  "6685",
+                                        "mtime":  "639269241113381191",
+                                        "hash":  "1fc369be657f801c4c4fbcc6820bc5a50fd5a39582017dd81ee83fea1fe1380c"
                                     },
     "apps/media-player/manifest.json":  {
                                             "size":  "823",
@@ -3575,14 +3575,14 @@
                                                   "hash":  "65a6066455901c465a950ac2bccae8331025f8c02e6f227148a44e89cb750fad"
                                               },
     "apps/media-player/www/index.html":  {
-                                             "size":  "4218",
-                                             "mtime":  "639269177250751940",
-                                             "hash":  "1f0a768bb287f859cdaf9044522fed538b87668c31b8607aa65a11bceaab4509"
+                                             "size":  "4675",
+                                             "mtime":  "639269241113393879",
+                                             "hash":  "69699c184080443e1f7d04da22934994644ee32ff9871d6f3a8ac21424e446ed"
                                          },
     "apps/media-player/www/index.html.gz":  {
-                                                "size":  "1921",
-                                                "mtime":  "639269177250751940",
-                                                "hash":  "43e292105037243cb58a3cbb97e18eab36bb859ce5be015ef55bbb0ed863bfd8"
+                                                "size":  "2158",
+                                                "mtime":  "639269241113403927",
+                                                "hash":  "7b5f0f61c88f02d784445b64ef89a897cb26bb2f9fd8ddc2aba6955c00de4e49"
                                             },
     "apps/metronome/manifest.json":  {
                                          "size":  "694",
@@ -3665,14 +3665,14 @@
                                            "hash":  "5035ad293e85f99a14692d1af1d484c84380ab1acd20f328843a880efd2eef25"
                                        },
     "apps/metronome/www/index.html":  {
-                                          "size":  "12345",
-                                          "mtime":  "639269177250751940",
-                                          "hash":  "ebbd2f06de747fc071e5a2f2522b19f16ebca3063de45a7f9ba7a20207b74333"
+                                          "size":  "12800",
+                                          "mtime":  "639269241113403927",
+                                          "hash":  "12e2d86be008b6ff1a1146f35a765d91ae18d6d5b80343b1931f73f9b13e57c9"
                                       },
     "apps/metronome/www/index.html.gz":  {
-                                             "size":  "3984",
-                                             "mtime":  "639269177250751940",
-                                             "hash":  "a49f3bf56518a3eef4fcb8e7bd6c207961de22c096d51d8fb3218f830c84597e"
+                                             "size":  "4236",
+                                             "mtime":  "639269241113413966",
+                                             "hash":  "045cc55f97c3bda4f7cc47fa5652df3a502846da263e7c78f79d7fb7d4af50a6"
                                          },
     "apps/miei-fatti/manifest.json":  {
                                           "size":  "812",
@@ -3745,14 +3745,14 @@
                                             "hash":  "cf8ddcb8f0ba49163bba0c9f454201daa60b72c098f9bb5b5533bdcf5e2e9eef"
                                         },
     "apps/miei-fatti/www/index.html":  {
-                                           "size":  "44284",
-                                           "mtime":  "639269197159326811",
-                                           "hash":  "3aedc78ec8bb35163368f3084cc20e9c0be59df47b4ad4e1a04941183e818b6a"
+                                           "size":  "44739",
+                                           "mtime":  "639269241113413966",
+                                           "hash":  "cf5b3f32825b6bc04d0ffaab1e0905ecdf0fc3085a5f6f250825b83e625b2d69"
                                        },
     "apps/miei-fatti/www/index.html.gz":  {
-                                              "size":  "13774",
-                                              "mtime":  "639269197159336813",
-                                              "hash":  "49371e975ee7e2741a0da338db0f6ee08061046be09b559ff852ee0e7fc8a4d1"
+                                              "size":  "14012",
+                                              "mtime":  "639269241113423921",
+                                              "hash":  "be21d48df843e9b1e8128a4b3a29f565d23064f56a1a7e8c42dda2edcdd98219"
                                           },
     "apps/nearby/manifest.json":  {
                                       "size":  "928",
@@ -3825,14 +3825,14 @@
                                         "hash":  "52c8ca257aa71822762684dfaef8c25d8816c84fbb348ed7d3f1a085ee768b40"
                                     },
     "apps/nearby/www/index.html":  {
-                                       "size":  "19627",
-                                       "mtime":  "639269177250981752",
-                                       "hash":  "847d673b2fc365b46041bc34f43ddf66050d84a14e8a5cc056455bbcc757f61f"
+                                       "size":  "20082",
+                                       "mtime":  "639269241113423921",
+                                       "hash":  "9b60fb0451b2f2356d8907ced4c13a73f859cde41edc5b195927be2b672ad693"
                                    },
     "apps/nearby/www/index.html.gz":  {
-                                          "size":  "6248",
-                                          "mtime":  "639269177250991778",
-                                          "hash":  "1a507a55fee77cefca5daf6f81898ae67b3dff8cc2f565d5fba1230b94123b08"
+                                          "size":  "6473",
+                                          "mtime":  "639269241113433927",
+                                          "hash":  "bc723f7afd4b47998b6691e0aa176b3d42057765c384d03d53f86c7099b56500"
                                       },
     "apps/nearby/www/nearby-skill.js":  {
                                             "size":  "6498",
@@ -3905,14 +3905,14 @@
                                              "hash":  "b5616a2569cd28980f33fa60d5db0bc1d0bebee97daa82dbcff4cd96a25f7761"
                                          },
     "apps/notepad/www/index.html":  {
-                                        "size":  "10555",
-                                        "mtime":  "639269197159366951",
-                                        "hash":  "7c608b62fd44c04e0cbed6fa0fa38c505535579d6603c794ca18e482883bf41a"
+                                        "size":  "11012",
+                                        "mtime":  "639269241113443924",
+                                        "hash":  "f66cfcd8f8df6eaeab6c68fc60d64ea5c4323e07da8f8547159e3b98b6c1fdfb"
                                     },
     "apps/notepad/www/index.html.gz":  {
-                                           "size":  "3802",
-                                           "mtime":  "639269197159366951",
-                                           "hash":  "a3cd4b3c30a4994e834dd7abb1acc68581670c7866cefcba8666e61552a1cf48"
+                                           "size":  "4019",
+                                           "mtime":  "639269241113443924",
+                                           "hash":  "935e2ac99d4ea8e8a0a477ed57781f7fa2b3b89914601f79d2ab304dde8f86d6"
                                        },
     "apps/paint/manifest.json":  {
                                      "size":  "632",
@@ -4075,14 +4075,14 @@
                                          "hash":  "2e46514049989c0cb700c7dff2bbf0dc05981f61f6c21b34b78efbf2d70bd2a1"
                                      },
     "apps/paint/www/index.html":  {
-                                      "size":  "180957",
-                                      "mtime":  "639269177251131130",
-                                      "hash":  "296fc69d9fb715d9eaeee65e40174fa8fda67258fa13c16e583ec2582e3c0c63"
+                                      "size":  "181412",
+                                      "mtime":  "639269241113463929",
+                                      "hash":  "c91d886e4c3a7f3f51c31ef81f9e82b096add5617614f3097391ee4b4e8b16d1"
                                   },
     "apps/paint/www/index.html.gz":  {
-                                         "size":  "52642",
-                                         "mtime":  "639269177251131130",
-                                         "hash":  "a0c2c673e78cafd97343dd8935183a65b31a4af06ede8de24cec0cca2ba26606"
+                                         "size":  "52792",
+                                         "mtime":  "639269241113467086",
+                                         "hash":  "50df23ccb45ce588daf1a6dab53d90bd3c1eed66ebb412d196756c9ca1b565ad"
                                      },
     "apps/paint/www/nlcommand.js":  {
                                         "size":  "14215",
@@ -4225,14 +4225,14 @@
                                           "hash":  "5092d2b647f78d14ccbeb6bae114786d68a5990ecf449d0350f33dff013b8a8c"
                                       },
     "apps/passkeys/www/index.html":  {
-                                         "size":  "8358",
-                                         "mtime":  "639269177253606515",
-                                         "hash":  "a2661067974958e01d1f3ab3e94b84bda457491703eae43cedab740021ecac07"
+                                         "size":  "8813",
+                                         "mtime":  "639269241113467086",
+                                         "hash":  "624a48d1d361d06aab0c8449b9ec8c27108529312abba17b0ea73ead3e3e9f6d"
                                      },
     "apps/passkeys/www/index.html.gz":  {
-                                            "size":  "3042",
-                                            "mtime":  "639269177253618281",
-                                            "hash":  "b0485c64f0cede193155c9b9ef358a7b94a4568c01977fbef7125e7e60a50284"
+                                            "size":  "3274",
+                                            "mtime":  "639269241113467086",
+                                            "hash":  "d637203e7965acf5decebc3471f426550ebbbda7382d045c56ea5c0cc8dc799f"
                                         },
     "apps/photo-viewer/manifest.json":  {
                                             "size":  "1004",
@@ -4295,14 +4295,14 @@
                                                   "hash":  "11e710d72117b894d2081c70d0826bee023135ba44b2a0ed4df7f85a1b399297"
                                               },
     "apps/photo-viewer/www/index.html":  {
-                                             "size":  "5155",
-                                             "mtime":  "639269177253668326",
-                                             "hash":  "01e272f240a7ff87f5ddf75d6b0e0cbde0ecf8a1326f9012c081d0d4753b332a"
+                                             "size":  "5612",
+                                             "mtime":  "639269241113467086",
+                                             "hash":  "9b26f8aac8e5322e0bf5543862ff36b9b56421469a4e4ca5466cb94451df5c94"
                                          },
     "apps/photo-viewer/www/index.html.gz":  {
-                                                "size":  "2117",
-                                                "mtime":  "639269177253668326",
-                                                "hash":  "fbba5e8583e8e2577d3a8194f64b019e16ce4bf41eac097c0230b87b9b7ffcc5"
+                                                "size":  "2338",
+                                                "mtime":  "639269241113467086",
+                                                "hash":  "d7e23955c8f8189ab9b42470a4ea04e7f2b45010f0b8a7ff641e6f2232bb35d9"
                                             },
     "apps/qr/manifest.json":  {
                                   "size":  "745",
@@ -4365,14 +4365,14 @@
                                         "hash":  "465860bcbec212c7f836e9760d5a8167c61b0c3e3ea0f616c105e71fe60db7a4"
                                     },
     "apps/qr/www/index.html":  {
-                                   "size":  "21370",
-                                   "mtime":  "639269177253715576",
-                                   "hash":  "9e84700fff410e6d9e1785c685370a802fb6c42f9bd6e6b750d7bdd544db2c08"
+                                   "size":  "21827",
+                                   "mtime":  "639269241113467086",
+                                   "hash":  "8b26f45a1997c4306cea5c4aa375e70fb141ca87b869bc993934856c437cd4bc"
                                },
     "apps/qr/www/index.html.gz":  {
-                                      "size":  "7174",
-                                      "mtime":  "639269177253715576",
-                                      "hash":  "1a4fa830921573ea9b874fc4c590e9107a23b266c7f2c62478e19f79e655bdeb"
+                                      "size":  "7413",
+                                      "mtime":  "639269241113467086",
+                                      "hash":  "147cd62d3b12c0fc64d69eba2c7d3acb8fc83fe6bff34a5caf6d59baaba3884e"
                                   },
     "apps/qr/www/qrcode.js":  {
                                   "size":  "17828",
@@ -4455,14 +4455,14 @@
                                        "hash":  "2a4bf8e16fbdb95b63d5f158df6eb6f5c8810202e9faec458d840bddfba7fe9d"
                                    },
     "apps/radio/www/index.html":  {
-                                      "size":  "37760",
-                                      "mtime":  "639269197159444548",
-                                      "hash":  "37f961dc3b3fcdd57bff29110b97600036123fa2fe58f0e6f08c64b93084e826"
+                                      "size":  "38217",
+                                      "mtime":  "639269241113467086",
+                                      "hash":  "a547fbd07bdf88fa697d917c4f8ed67e0c81b3c382c2679198f930f6472b4bd2"
                                   },
     "apps/radio/www/index.html.gz":  {
-                                         "size":  "11165",
-                                         "mtime":  "639269197159455364",
-                                         "hash":  "eb3612ca30f6af0e2bc96779273d99395074d02a1b3cf30192364fa3cc07af84"
+                                         "size":  "11434",
+                                         "mtime":  "639269241113467086",
+                                         "hash":  "8f21311c9ed2b19a31739218972fab01e8e2d8705d66a14bd5777d8f36291c86"
                                      },
     "apps/recorder/manifest.json":  {
                                         "size":  "1070",
@@ -4535,14 +4535,14 @@
                                           "hash":  "0da2455e7b7b634227504f1572c589e4985d596041d76e354f33a51f71786761"
                                       },
     "apps/recorder/www/index.html":  {
-                                         "size":  "50983",
-                                         "mtime":  "639269177253752213",
-                                         "hash":  "80725c91a88c0076326f6aa26aefb757d7a4b97968268dc6e846f7e7ac1a0f59"
+                                         "size":  "51440",
+                                         "mtime":  "639269241113467086",
+                                         "hash":  "1a4f680c669c5d0d1cb350e6e3cd9dd078f1347a480452b5e84f735f3dd249db"
                                      },
     "apps/recorder/www/index.html.gz":  {
-                                            "size":  "17122",
-                                            "mtime":  "639269177253835903",
-                                            "hash":  "b29947f9a3dc031ec69ad6501b3129c8e56f243fc16390672e2efc9054e7cbab"
+                                            "size":  "17328",
+                                            "mtime":  "639269241113467086",
+                                            "hash":  "07befbae61f7e85f88c7f26617f588754fd01f5d571c993307da02faf7c4972f"
                                         },
     "apps/recorder/www/longtranscribe.js":  {
                                                 "size":  "13480",
@@ -4635,14 +4635,14 @@
                                                  "hash":  "852ac15af7cf4c51c2d1f368edb768ebf6b772213dcd2892368412b093221466"
                                              },
     "apps/recycle-bin/www/index.html":  {
-                                            "size":  "10520",
-                                            "mtime":  "639269197159504309",
-                                            "hash":  "d28653a874eb5b80d317a0f476ee685eab5585aa28c83412b998cd5ec1baf5a3"
+                                            "size":  "10975",
+                                            "mtime":  "639269241113467086",
+                                            "hash":  "6dfe0632c3bb45a32c09c045bab3189d09e78e83e4e4298b156d4bed40ba8e9c"
                                         },
     "apps/recycle-bin/www/index.html.gz":  {
-                                               "size":  "3577",
-                                               "mtime":  "639269197159504309",
-                                               "hash":  "c8bc2dfafd117b8bf70d93d6d50539331187d778049d8fe957c1503bf0d8940e"
+                                               "size":  "3820",
+                                               "mtime":  "639269241113467086",
+                                               "hash":  "3bdd54b356d4a497e7004b7d1a1242e58549809112ea50162771fc905b918c19"
                                            },
     "apps/settings/manifest.json":  {
                                         "size":  "848",
@@ -4685,14 +4685,14 @@
                                          "hash":  "4b96206e9c01b6350f4b8b58c4999c4b1ca393f5d5456e5e7b792ff592be0f6c"
                                      },
     "apps/settings/www/index.html":  {
-                                         "size":  "134543",
-                                         "mtime":  "639269197159533944",
-                                         "hash":  "d44fc213be4b8ae51c5f7b3f9fc3a9c730bd268f24b295c8b183ed3270199310"
+                                         "size":  "135000",
+                                         "mtime":  "639269241113560470",
+                                         "hash":  "3820c0ad73bb4005c49e137971e3f6592946281c6d04357b0b6020f26053f224"
                                      },
     "apps/settings/www/index.html.gz":  {
-                                            "size":  "37705",
-                                            "mtime":  "639269197159543939",
-                                            "hash":  "f5d29536fa923c3726d4ed7c4e84dba1e7344a97969f068245a2dc72612b499a"
+                                            "size":  "37887",
+                                            "mtime":  "639269241113568164",
+                                            "hash":  "1d8cbcb86c15c0dd121e51bb61de9263282c49d01c722811dab9060780ca0158"
                                         },
     "apps/settings/www/poller.js":  {
                                         "size":  "4820",
@@ -4905,14 +4905,14 @@
                                              "hash":  "322b2f6469f1d1a0d5fb03808f8deded12e2bfa612b58d4d944daa4aedd6a8af"
                                          },
     "apps/spreadsheet/www/index.html":  {
-                                            "size":  "177823",
-                                            "mtime":  "639269197159606754",
-                                            "hash":  "d9babfdcae2be4209c55b7422d66e5f3acc1ca71aa0fcc7271746bd672252982"
+                                            "size":  "178278",
+                                            "mtime":  "639269241113579341",
+                                            "hash":  "8d74b1d0474f47dd28186a246ce34bcf2f0a78aeb08868828d92ba76edc0bd63"
                                         },
     "apps/spreadsheet/www/index.html.gz":  {
-                                               "size":  "53875",
-                                               "mtime":  "639269197159614245",
-                                               "hash":  "11ad276cf524049e488a4a68cb97c7449265bf703b354d48aad6e8a436219ce2"
+                                               "size":  "53910",
+                                               "mtime":  "639269241113589332",
+                                               "hash":  "3094491600f6e58418f835ce8f202f88371543aa9d9f2d950b1b81bc2578b8cc"
                                            },
     "apps/ssh/manifest.json":  {
                                    "size":  "775",
@@ -4995,14 +4995,14 @@
                                      "hash":  "64ee92db9fc593aee440df6c0c4c18e427b2ce95ebe48df495857da7262dbc2b"
                                  },
     "apps/ssh/www/index.html":  {
-                                    "size":  "7323",
-                                    "mtime":  "639269177254159311",
-                                    "hash":  "0ee0d9ed83e150a9db5045a2f63e2755692a545118b4a14c80a185874008df26"
+                                    "size":  "7778",
+                                    "mtime":  "639269241113599372",
+                                    "hash":  "0fe732596145b3fbcbee8bedb317ab980352ed6e94808063b23a19ab6c870c8d"
                                 },
     "apps/ssh/www/index.html.gz":  {
-                                       "size":  "2688",
-                                       "mtime":  "639269177254165636",
-                                       "hash":  "b5679679e1b1f955c14c0017aca6257019b066919049fe138ba22dd0049db76c"
+                                       "size":  "2961",
+                                       "mtime":  "639269241113599372",
+                                       "hash":  "3aae033961e52c527e7ca19e53203a40e10a99d41b656e572a904d7f10f2e3ac"
                                    },
     "apps/ssh/www/ssh-client.js":  {
                                        "size":  "4687",
@@ -5095,14 +5095,14 @@
                                                     "hash":  "dda0ff4758ce75ae009ae4ca2ec71294b1d3837daff71318c4617f39a37511fb"
                                                 },
     "apps/system-monitor/www/index.html":  {
-                                               "size":  "16710",
-                                               "mtime":  "639269177254248588",
-                                               "hash":  "2f9c5d8287357a68a9d2ed7e2fbb09d50eb57bdd605cde612fe5b186047a79e6"
+                                               "size":  "17167",
+                                               "mtime":  "639269241113609374",
+                                               "hash":  "9f8276d02087a0e54469feed0f8a1ad8a93bbce14029a7ff6951bda088f92aa2"
                                            },
     "apps/system-monitor/www/index.html.gz":  {
-                                                  "size":  "6022",
-                                                  "mtime":  "639269177254258596",
-                                                  "hash":  "6a3f4b0ff9ae8d1c71f07e1f4741126abbd4ef0ddb86e467c5122f24e8ed33e2"
+                                                  "size":  "6254",
+                                                  "mtime":  "639269241113619337",
+                                                  "hash":  "e6959b586d4e34d0c1c4dc0e7cff93618ed83d6656f84e055467eae6fb01f419"
                                               },
     "apps/tasks/manifest.json":  {
                                      "size":  "795",
@@ -5175,14 +5175,14 @@
                                        "hash":  "e92cf238f74c8036624a53fecf161e5abf9454e2dfc57ecf3c7da163b7c9e9d8"
                                    },
     "apps/tasks/www/index.html":  {
-                                      "size":  "16630",
-                                      "mtime":  "639269197159682700",
-                                      "hash":  "f9695a99c89b209e29d1f20de2d52a90266044fa477940c91a29942a7d968c5f"
+                                      "size":  "17087",
+                                      "mtime":  "639269241113619337",
+                                      "hash":  "0e343ca2c25598fb48e5e2d40d012eb2af11541317fc909d573b9b58a8f668a3"
                                   },
     "apps/tasks/www/index.html.gz":  {
-                                         "size":  "5478",
-                                         "mtime":  "639269197159689120",
-                                         "hash":  "3a278c6d0bd2409d4ea706acc1bc91083febeb113ed512b3f107b6557493bddb"
+                                         "size":  "5709",
+                                         "mtime":  "639269241113629329",
+                                         "hash":  "8f1fe8c4dd1ac5f805c3656846ea9a39fa3c1b7a2eb3e32d77ca3385bb695ad2"
                                      },
     "apps/terminal/manifest.json":  {
                                         "size":  "881",
@@ -5255,14 +5255,14 @@
                                           "hash":  "e3380676169f206832842a3a972995db11a592bcf2eb86f958047c4a0a46d5bb"
                                       },
     "apps/terminal/www/index.html":  {
-                                         "size":  "147430",
-                                         "mtime":  "639269197159700071",
-                                         "hash":  "df681dc91dfabeb336b713678c1e0b8c1e52eb1e1b29b84f09c18c98614d664a"
+                                         "size":  "148831",
+                                         "mtime":  "639269241113639043",
+                                         "hash":  "11a3ae8d51abb78549b3ef49529889265d21336a9073f317d223f2857dd1fbed"
                                      },
     "apps/terminal/www/index.html.gz":  {
-                                            "size":  "41489",
-                                            "mtime":  "639269197159700071",
-                                            "hash":  "e9326594c2a4254d689a62b3e92626490a51a851c999d51b4b503570d6f5e6b0"
+                                            "size":  "41898",
+                                            "mtime":  "639269241113656540",
+                                            "hash":  "88d06359a1a22c83f9961413dcd8a5fb10b2e28cbcde3619d2cbb29fd1582d83"
                                         },
     "apps/unit-converter/manifest.json":  {
                                               "size":  "708",
@@ -5345,14 +5345,14 @@
                                                 "hash":  "6196c09557cb469ec13aa34b5a43cfcf627a26ebeda302e5c21c38ed8a756aae"
                                             },
     "apps/unit-converter/www/index.html":  {
-                                               "size":  "9750",
-                                               "mtime":  "639269177254427917",
-                                               "hash":  "47350f884ca7d22f106e9cd37a6f8f87929b9586d2a974f8df416c8e77b332ae"
+                                               "size":  "10205",
+                                               "mtime":  "639269241113656540",
+                                               "hash":  "f493b915276a1187ebdfcaf38a28facd58069eb80432bbac1a348ae91305329d"
                                            },
     "apps/unit-converter/www/index.html.gz":  {
-                                                  "size":  "3442",
-                                                  "mtime":  "639269177254432993",
-                                                  "hash":  "07de37fdebe2a247063a0c9f709c68e530a178b6cfd3d799b682319c6694a510"
+                                                  "size":  "3692",
+                                                  "mtime":  "639269241113666591",
+                                                  "hash":  "bc92fb3bad682c313db8507c5296d0c45fe3be29ece24fa819cdc4ab54f96f90"
                                               },
     "apps/updates/manifest.json":  {
                                        "size":  "587",
@@ -5425,14 +5425,14 @@
                                              "hash":  "fb1f36b10475c698ef8ea878e293ad989749e117cc41ed15068d6818a1939b86"
                                          },
     "apps/updates/www/index.html":  {
-                                        "size":  "11058",
-                                        "mtime":  "639269177254500177",
-                                        "hash":  "73b267a0976e9334f5a3995f37dcadeca944e222e6024067cb86d45fc9358c44"
+                                        "size":  "11513",
+                                        "mtime":  "639269241113676632",
+                                        "hash":  "d6f0beff9b7c1aa7fa6b2fc74380c08f7577bacf6107bbfdece96ba9f8565245"
                                     },
     "apps/updates/www/index.html.gz":  {
-                                           "size":  "4178",
-                                           "mtime":  "639269177254500177",
-                                           "hash":  "6a9852661e1d06a9d5ef31bb3fad5a11130bf00d53517d3d95a657f7c82a88cd"
+                                           "size":  "4412",
+                                           "mtime":  "639269241113676632",
+                                           "hash":  "c18254faea40a1856e528ead98c61b9933056cc85ed8898b6bd967e7fa7bd341"
                                        },
     "apps/video-player/manifest.json":  {
                                             "size":  "1048",
@@ -5495,14 +5495,14 @@
                                                   "hash":  "b8b31dc76c73ad32fe586fb050af741d3b713b38a1d63713b255171c6410cc3d"
                                               },
     "apps/video-player/www/index.html":  {
-                                             "size":  "71713",
-                                             "mtime":  "639269177254541400",
-                                             "hash":  "dcb2df80e763425a077921e04b07cf21e08b99198a2c285ecd5d774959e3a24a"
+                                             "size":  "72170",
+                                             "mtime":  "639269241113686623",
+                                             "hash":  "186e00d0532d288e6c29aa83b6eff48c53042d142ff2ffdd4f6f872bd0fc2a05"
                                          },
     "apps/video-player/www/index.html.gz":  {
-                                                "size":  "17487",
-                                                "mtime":  "639269177254541400",
-                                                "hash":  "9dc2e67d38b6e81069a5cede4ced1724cce2cc8c0deca20f1d5e60aa5d849bde"
+                                                "size":  "17742",
+                                                "mtime":  "639269241113686623",
+                                                "hash":  "0a1feee6bd2ca39ec4bcacd4d628c5ef4f9747d798fe904f82e4b4b9dc42a5a3"
                                             },
     "apps/video-studio/manifest.json":  {
                                             "size":  "1108",
@@ -5585,14 +5585,14 @@
                                               "hash":  "748182bb49045e4cca9806c0971d3d09e206343422c8c6bc357d14a925cac25b"
                                           },
     "apps/video-studio/www/index.html":  {
-                                             "size":  "7957",
-                                             "mtime":  "639269177254620260",
-                                             "hash":  "d9e7be199aea6ef3a34588530dc1a2ce69963aa4f0d964f492cb25a4838137de"
+                                             "size":  "8412",
+                                             "mtime":  "639269241113697000",
+                                             "hash":  "7ecf3596a8c934ffb27dc82acf75b01b9eceaf102d0db26faaf2f1b72cd4d9b0"
                                          },
     "apps/video-studio/www/index.html.gz":  {
-                                                "size":  "3244",
-                                                "mtime":  "639269177254620260",
-                                                "hash":  "7a30166333d12d1213aaf622e502311b07bf5b62b4b1b943a4e891accabf8988"
+                                                "size":  "3479",
+                                                "mtime":  "639269241113697000",
+                                                "hash":  "d98d619c09af479d2119adb00b85358e84f269f10176103ef95006d5c6142baf"
                                             },
     "apps/video-studio/www/nfv.js":  {
                                          "size":  "2789",
@@ -5730,14 +5730,14 @@
                                                "hash":  "c5318d28a682f7758625857046c22bf7ac89dbdbb85aefb686de29861a3f6f17"
                                            },
     "apps/voice-manager/www/index.html":  {
-                                              "size":  "20665",
-                                              "mtime":  "639269177257054049",
-                                              "hash":  "063d752dae701de5b4a91b05fa52f459fb0d4407d5f05224f04652aecf593caa"
+                                              "size":  "21122",
+                                              "mtime":  "639269241113709811",
+                                              "hash":  "59ee845b2391c78e7e8ef5ffb8bdb8628e272bc3bff5ae62a40af1e381cad212"
                                           },
     "apps/voice-manager/www/index.html.gz":  {
-                                                 "size":  "5748",
-                                                 "mtime":  "639269177257064057",
-                                                 "hash":  "a72d2dc911f406b452d6fa72398988208ea74ea0b41d9fe6d3ef060928ab2cc3"
+                                                 "size":  "6021",
+                                                 "mtime":  "639269241113709811",
+                                                 "hash":  "b070f50f7b49ecce0809f3a1be02bb9826e4d1d1385f2f7053bf8a4e34d066e8"
                                              },
     "apps/weather/manifest.json":  {
                                        "size":  "748",
@@ -5810,14 +5810,14 @@
                                          "hash":  "086a629f45a1d46c102543b97e5cb345f915256265d344d7e882d9806ff3e018"
                                      },
     "apps/weather/www/index.html":  {
-                                        "size":  "20435",
-                                        "mtime":  "639269177257109609",
-                                        "hash":  "af87fe0db6103bff206aef9a96c17ad015c36af001975270a3c677954bfcd887"
+                                        "size":  "20890",
+                                        "mtime":  "639269241113724051",
+                                        "hash":  "a28bdf0dcc0cd2317885f8bc9fe91cf5d756387fc081d3506db65bb2b9820396"
                                     },
     "apps/weather/www/index.html.gz":  {
-                                           "size":  "6941",
-                                           "mtime":  "639269177257109609",
-                                           "hash":  "687ca05edb6d09ad01182969e0f102991b648b537c64252a4fec8c7e6f1fa260"
+                                           "size":  "7173",
+                                           "mtime":  "639269241113724051",
+                                           "hash":  "5b00a12c3adf573cb4e96aeefff514ed27680293824f96fe5a5479152dabfab7"
                                        },
     "apps/wifi-scanner/manifest.json":  {
                                             "size":  "756",
@@ -5890,14 +5890,14 @@
                                               "hash":  "b6ae36e6f5478c86bc96d28de0bcabc3d982049131da7467458c0e64dcf07c7a"
                                           },
     "apps/wifi-scanner/www/index.html":  {
-                                             "size":  "20204",
-                                             "mtime":  "639269177257175890",
-                                             "hash":  "e5361221db3b075080ff28cf8274db8e476d4ecfab4b90326de9e3f43fe643d0"
+                                             "size":  "20661",
+                                             "mtime":  "639269241113724051",
+                                             "hash":  "d59504a255c3ca06bd8e47e7b543a4e518f228f615e04f8415266eadc27a0e84"
                                          },
     "apps/wifi-scanner/www/index.html.gz":  {
-                                                "size":  "6677",
-                                                "mtime":  "639269177257175890",
-                                                "hash":  "6ce02143fa8873c1f04a81be622aa693775bca4c4667693af3c10e7f8584644f"
+                                                "size":  "6910",
+                                                "mtime":  "639269241113724051",
+                                                "hash":  "b8cbe747aa8986807c1c94e9b1834d53d19ce214f160525d83a8c1dc269d0d3e"
                                             },
     "data/anima/akb5/ai-ml.bin":  {
                                       "size":  "63308",
@@ -6830,14 +6830,14 @@
                                     "hash":  "202fa2a3e36496f09e7b2219a1d9d930cb5799bb6eaf03b8856a61055431cea0"
                                 },
     "www/shell/dlgate.js":  {
-                                "size":  "3662",
-                                "mtime":  "639269177506833812",
-                                "hash":  "1dd5a241e36660caf8c2d73f575c0922b15a208aad1fc7d69db903f595cc8bdc"
+                                "size":  "2417",
+                                "mtime":  "639269241115616310",
+                                "hash":  "fb861c8895014d16709d9ef1cb8f3ff60e430b2ff967fb99eb79dac8fb920279"
                             },
     "www/shell/dlgate.js.gz":  {
-                                   "size":  "1682",
-                                   "mtime":  "639269177506843848",
-                                   "hash":  "545ee0f8b5acc92b14f41341d917d89e0ecfd3dca4468c240972851441cc1531"
+                                   "size":  "1225",
+                                   "mtime":  "639269241115616310",
+                                   "hash":  "2977c86e21169ee7afd9cbb8b2e981e2bdeec4e9bf4c8738a7e53ed2ebf61b70"
                                },
     "www/shell/downloads/NucleoConnect.exe":  {
                                                   "size":  "151552",
@@ -6850,14 +6850,14 @@
                                                "hash":  "a52b79fe01469bb92e7fe705dccb7ab0d0648dec66d8eb789b4c78b37a7b19ab"
                                            },
     "www/shell/fsindex.js":  {
-                                 "size":  "9091",
-                                 "mtime":  "639269177506843848",
-                                 "hash":  "078486fd75a433d247401ebce1a513a70f8b1d89eedc3cd6dc6648fa6d1fa5a1"
+                                 "size":  "9050",
+                                 "mtime":  "639269241115616310",
+                                 "hash":  "021e07a28cee9453172218368b409d67acb8ae0649bec8c97ed14a0c42265a83"
                              },
     "www/shell/fsindex.js.gz":  {
-                                    "size":  "3850",
-                                    "mtime":  "639269177506854400",
-                                    "hash":  "e3e6aee852475ccfd46c1d1fb12e0fb5321a78230d789570539fce188d3dff20"
+                                    "size":  "3816",
+                                    "mtime":  "639269241115626271",
+                                    "hash":  "49adb4e3fce27df46489d7ac377d7db6bdf1cf15d6b8ba1d805b439a05d8e2a0"
                                 },
     "www/shell/i18n/core.de.json":  {
                                         "size":  "7073",
@@ -6910,64 +6910,64 @@
                                            "hash":  "febd608abeb4582c6a07afc5707e727c48567c6e402b669b1426cf3b13b0993d"
                                        },
     "www/shell/i18n/coverage.json":  {
-                                         "size":  "1405",
-                                         "mtime":  "639269177507106187",
-                                         "hash":  "66ce1d0a17ea8fcf956dc702f7343f286c7b291e4ac253db219ce888c317f7ff"
+                                         "size":  "1406",
+                                         "mtime":  "639269241115636274",
+                                         "hash":  "de3b79e9db3e8f8021a5dcab144f4bf4cc040c36f8b29ed65168b9e86f07b9ab"
                                      },
     "www/shell/i18n/coverage.json.gz":  {
-                                            "size":  "592",
-                                            "mtime":  "639269177507106187",
-                                            "hash":  "18b267768dc9b19fa3ff75826ed574cdb524747aee43839266bf72034e31686e"
+                                            "size":  "580",
+                                            "mtime":  "639269241115639551",
+                                            "hash":  "c2f26a482ed21c1eaf30485f1fde8ad53dd76bff0d106844de6a0ac01b30b791"
                                         },
     "www/shell/i18n/shell.de.json":  {
-                                         "size":  "13088",
-                                         "mtime":  "639269177507116366",
-                                         "hash":  "e88a6aaba4e195e8f5ff0c3923ee785b2e5b6b91635f389d4580941974554ecd"
+                                         "size":  "13621",
+                                         "mtime":  "639269241115650067",
+                                         "hash":  "98a1830fc661d6349fe3d8486556ce2d22f929915a068b57f0ac3bd8d1b77f1e"
                                      },
     "www/shell/i18n/shell.de.json.gz":  {
-                                            "size":  "4728",
-                                            "mtime":  "639269177507126317",
-                                            "hash":  "0482428dbc3359b6889824dc6287a2694d2108738bedd2b0dfcee4be52421e84"
+                                            "size":  "4888",
+                                            "mtime":  "639269241115655144",
+                                            "hash":  "d85b0f1866ef4e7bde844e37892f9ea9a086777960eb600d692aea02bc786a62"
                                         },
     "www/shell/i18n/shell.en.json":  {
-                                         "size":  "12103",
-                                         "mtime":  "639269177507136291",
-                                         "hash":  "e895d1fb994ea76ba4c12e87d9920d4ce177858fbe3d5c438cdc6b6cb90aeb11"
+                                         "size":  "12563",
+                                         "mtime":  "639269241115662545",
+                                         "hash":  "364a0cddcd082779ac703f8b56446b2a96b316b29b0824fa1f6ea0f5d1a2218a"
                                      },
     "www/shell/i18n/shell.en.json.gz":  {
-                                            "size":  "4130",
-                                            "mtime":  "639269177507136291",
-                                            "hash":  "2b4d4074433d1ce1f1a6b7ef6b15091a70fa6af2b1697d1b1f5f2313742b2dfc"
+                                            "size":  "4287",
+                                            "mtime":  "639269241115666104",
+                                            "hash":  "543e530cdbded53b8f8f12148894b542c91bb9711e1c6d3cb58f454665ae5edc"
                                         },
     "www/shell/i18n/shell.es.json":  {
-                                         "size":  "13259",
-                                         "mtime":  "639269177507136291",
-                                         "hash":  "73d2c2b38b0291d581854e4110e880cd4bf9fb18d1ac7f217b208cefff3faf50"
+                                         "size":  "13787",
+                                         "mtime":  "639269241115671141",
+                                         "hash":  "c2556b433590e315de95217a2ef9f822a1e887da58a4c6e15223700bf8722406"
                                      },
     "www/shell/i18n/shell.es.json.gz":  {
-                                            "size":  "4627",
-                                            "mtime":  "639269177507136291",
-                                            "hash":  "5ff3adc1fea2e2af0b9ea0ba72e9f9758746dfaf108b529382caf9745d4643fe"
+                                            "size":  "4801",
+                                            "mtime":  "639269241115671141",
+                                            "hash":  "567fdccf8cd0fc4c13c6dd950f6ff5f53925e91df60e38c22d1450799d7df27c"
                                         },
     "www/shell/i18n/shell.fr.json":  {
-                                         "size":  "13545",
-                                         "mtime":  "639269177507176317",
-                                         "hash":  "c39c7d679e95ddad6f7833e745b80d4d61f778ea6af2f842a05c3bcbb6fd767b"
+                                         "size":  "14054",
+                                         "mtime":  "639269241115671141",
+                                         "hash":  "75f112a37578e5ff95615a969a3e69b69dbcf93ff4092e00e655c9f06711afdb"
                                      },
     "www/shell/i18n/shell.fr.json.gz":  {
-                                            "size":  "4780",
-                                            "mtime":  "639269177507176317",
-                                            "hash":  "c2c985d0869fdde921a56658a976216359587c9b863cbefaeafe53031bfa4514"
+                                            "size":  "4933",
+                                            "mtime":  "639269241115671141",
+                                            "hash":  "09c0bc5b8830b1abfd1199937069d35d1efd049c953004ce62aedececc7378c9"
                                         },
     "www/shell/i18n/shell.it.json":  {
-                                         "size":  "12866",
-                                         "mtime":  "639269177507176317",
-                                         "hash":  "88ef7f440e32d2306c4859dee85fd899814afcb3a9ed1998b78989602778810f"
+                                         "size":  "13378",
+                                         "mtime":  "639269241115671141",
+                                         "hash":  "1c4f76c3f1e2cab35ab204a25010915b96f79023707769755e893edb670b24e6"
                                      },
     "www/shell/i18n/shell.it.json.gz":  {
-                                            "size":  "4465",
-                                            "mtime":  "639269177507176317",
-                                            "hash":  "023b0144494f3c21840bfdcf558c58a028e9b321115f16c46d9b668d059c095a"
+                                            "size":  "4631",
+                                            "mtime":  "639269241115671141",
+                                            "hash":  "9c7a2e25de5f344bbe21977ecc15151154e5290146ec3755b9c98f03e80cc409"
                                         },
     "www/shell/icon.png":  {
                                "size":  "59694",
@@ -7015,14 +7015,14 @@
                                               "hash":  "dabe93a6851d0b40e0d77d2d15fa904b4f1d002d06687945c9295041cc92e712"
                                           },
     "www/shell/micgate.js":  {
-                                 "size":  "15032",
-                                 "mtime":  "639269177507427541",
-                                 "hash":  "09ea88200d0f264a68c43036e5b2ee0184d55c97004ccdbe6ff5ea548d40a079"
+                                 "size":  "14748",
+                                 "mtime":  "639269241115671141",
+                                 "hash":  "1c423f7a2a2f4e0a1fd291746362875cfcbabbd4124aecfafdd28d573b1fb5f9"
                              },
     "www/shell/micgate.js.gz":  {
-                                    "size":  "5529",
-                                    "mtime":  "639269177507427541",
-                                    "hash":  "af2174ac9a713e9eac1442537a4d08a2b81278ca7713bb39951f3daf24cd4de2"
+                                    "size":  "5426",
+                                    "mtime":  "639269241115707891",
+                                    "hash":  "b64ac9ad786ad312ed0a87a73173b3205237d78e52ca329b8249cc800ea3ca55"
                                 },
     "www/shell/notify.css":  {
                                  "size":  "4529",
@@ -7045,14 +7045,14 @@
                                    "hash":  "f286e2baa8362f1e0ebf9f4ecd14ed4e5eb3dd96f7c475d5b658a38dd0bea610"
                                },
     "www/shell/nucleo-i18n.js":  {
-                                     "size":  "21377",
-                                     "mtime":  "639269177507555578",
-                                     "hash":  "2b2af38360f8c414317f1304549b2dcf4530de089c5e1fc33d2c770db5167184"
+                                     "size":  "22104",
+                                     "mtime":  "639269241115718110",
+                                     "hash":  "a6f7e25ed4be38dc5a92b50774e40b47efcdb2351e53bc4047d09efa9914ec29"
                                  },
     "www/shell/nucleo-i18n.js.gz":  {
-                                        "size":  "8103",
-                                        "mtime":  "639269177507555578",
-                                        "hash":  "5efd1ff459734aa7770a0b7f125a1504912342f3f1b0d87c3b3e7ffd832f25e2"
+                                        "size":  "8328",
+                                        "mtime":  "639269241115718110",
+                                        "hash":  "31d9a8f593686d8cb04d3732c8a5f98805295bade4bd1b7795ced89e6de811cd"
                                     },
     "www/shell/onboarding.css":  {
                                      "size":  "4400",
@@ -7105,14 +7105,14 @@
                                    "hash":  "333b261a0525dedc5f6ea1bc31133e0d5128c04a3f5370fb1ad773a625ae9049"
                                },
     "www/shell/shell.js":  {
-                               "size":  "217992",
-                               "mtime":  "639269177507679111",
-                               "hash":  "d40ac68e53246ac27bc0b32f6516230dfe3ff8dd7ef4730f0b76b7c0d24df962"
+                               "size":  "222864",
+                               "mtime":  "639269241115739319",
+                               "hash":  "f5f3c251507a9c629734ca4fa025d306e75e7621effd994b07363977e2fd4e90"
                            },
     "www/shell/shell.js.gz":  {
-                                  "size":  "70630",
-                                  "mtime":  "639269177507679111",
-                                  "hash":  "6e6d26b7f98eea46133eda86c48cf9e9a3fb62e3311ed09f499191978ad0e8f1"
+                                  "size":  "72137",
+                                  "mtime":  "639269241115739319",
+                                  "hash":  "5f6cfdb760692b39aae65d375b25064c3ace8a648537de66f502a3d779369a22"
                               },
     "www/shell/shortcuts.js":  {
                                    "size":  "3457",
@@ -7135,14 +7135,14 @@
                                    "hash":  "50fbcd1189a705a9af4e2add0221b00d35d958bcee80fd2bba7337795582247e"
                                },
     "www/shell/sw.js":  {
-                            "size":  "14899",
-                            "mtime":  "639269177507728273",
-                            "hash":  "e0045c11065755244acd4ce5bad172b9f755e7d7f90827b4f325a61d23a93de9"
+                            "size":  "17504",
+                            "mtime":  "639269241115754378",
+                            "hash":  "d581f6bc81d7275167d8d9b5ca8a15c949aa286ab152ea8459362144a82f7a20"
                         },
     "www/shell/sw.js.gz":  {
-                               "size":  "5963",
-                               "mtime":  "639269177507728273",
-                               "hash":  "f249538db4711b6d5567267b7b323e320219abe5d4027e7d1ac5a0473536a2ba"
+                               "size":  "6783",
+                               "mtime":  "639269241115754378",
+                               "hash":  "b135467c93419e7e4c0e6daf06e9bf84301871058b4c4e6fe3a0eb3c9d116aa7"
                            },
     "www/shell/system-ui.js":  {
                                    "size":  "13529",
@@ -7180,13 +7180,13 @@
                                     "hash":  "62d0f2c105a660391c7abaf166e2306b1f5b912db83bce59e1293451120d95d8"
                                 },
     "www/shell/wm.js":  {
-                            "size":  "40143",
-                            "mtime":  "639269177507944612",
-                            "hash":  "a0473c052314e453a612b6ac23dc5d12fe815456c9fdcf912724ae572f743c5d"
+                            "size":  "45174",
+                            "mtime":  "639269241115772025",
+                            "hash":  "518351d79190244a79d1cb7c47e3c812037e53f7f596e419da38e4c330ccad98"
                         },
     "www/shell/wm.js.gz":  {
-                               "size":  "13344",
-                               "mtime":  "639269177507944612",
-                               "hash":  "95d2c926377aac42b61c567425e898aa14b36ab5000130df21d88beeaf8ac237"
+                               "size":  "15045",
+                               "mtime":  "639269241115782059",
+                               "hash":  "9c86b77fc42bca32760729ba655e36c41aa0163a6a974dc3a60693af9d19eadb"
                            }
 }

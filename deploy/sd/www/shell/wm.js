@@ -13,11 +13,17 @@ let onChange = () => {};
 let onFrameLoad = () => {};
 let geomFor = () => null;  // shell-supplied: last-known geometry for an app id (survives close)
 let labelFor = (app) => (app && app.name) || '';   // shell-supplied: the app's name in the active UI language
+// Shell-supplied translator for the window chrome (tooltips, the no-route placeholder): this module has no
+// i18n of its own. The English fallbacks only show if the shell never wires one.
+const CHROME_EN = { win_minimize: 'Minimize', win_maximize: 'Maximize', win_restore: 'Restore', win_close: 'Close', win_no_route: 'No web route declared.' };
+let tr = (k) => CHROME_EN[k] || k;
 
 export function setOnChange(fn) { onChange = fn; }
 // The shell localises app names (i18n catalog, manifest name as fallback) and hands the resolver here,
 // so the title bar and the iframe's accessible title follow the OS language.
 export function setLabeler(fn) { labelFor = fn; }
+// The shell hands in its catalog lookup for the window chrome strings (keys win_*). Re-applied by relabel().
+export function setTranslator(fn) { if (typeof fn === 'function') tr = (k) => { const v = fn(k); return v && v !== k ? v : (CHROME_EN[k] || k); }; }
 // Called with (iframe, app) each time an app's iframe finishes loading, so the shell can
 // inject OS-wide keyboard shortcuts into the app document (same-origin apps only).
 export function setOnFrameLoad(fn) { onFrameLoad = fn; }
@@ -79,13 +85,19 @@ export const attr = (v) => String(v == null ? '' : v)
 // what their manifest declared. allow-forms + allow-modals keep ordinary UI working; popups, top-level
 // navigation and downloads stay off. Curated apps are untouched: they are vetted code, and revoking
 // their origin would break every one of them at once.
-export function isSandboxed(app) { return !!(app && app.created_by === 'agent'); }
+//
+// Provenance is FAIL-CLOSED. The shell stamps every installed app with `trust`: 'pending' until the registry
+// (or, if that read fails, the shipped built-in list) has vouched for it, then 'trusted' or 'sandbox'. A
+// pending app is never given a frame — its window waits (see open/materialise/settleTrust) — and anything
+// marked 'sandbox' runs without an origin even when the registry never said created_by:'agent'.
+export function isSandboxed(app) { return !!(app && (app.created_by === 'agent' || app.trust === 'sandbox' || app.trust === 'pending')); }
+const trustPending = (app) => !!(app && app.trust === 'pending');
 
 export function frameHtml(app, src) {
   const sandbox = isSandboxed(app) ? ' sandbox="allow-scripts allow-forms allow-modals"' : '';
   return app && app.route
     ? `<iframe src="${attr(src)}"${sandbox} title="${attr(labelFor(app))}" allow="${attr(allowAttr(app))}"></iframe>`
-    : `<div class="placeholder">${glyph(app)}<br><br>${attr(app && labelFor(app))}<br><small>No web route declared.</small></div>`;
+    : `<div class="placeholder">${glyph(app)}<br><br>${attr(app && labelFor(app))}<br><small>${attr(tr('win_no_route'))}</small></div>`;
 }
 
 // An app renaming its own window (postMessage `set-window-title`: "Paint — foto.png", a dirty-dot
@@ -107,16 +119,44 @@ export function relabel() {
     if (t && !w.title) t.textContent = name;
     const f = w.el.querySelector('iframe');
     if (f) f.title = name;
+    chromeTitles(w);
   }
+}
+// The title-bar buttons' tooltips, in the current language and for the current max/restore state.
+function chromeTitles(w) {
+  const q = (s) => w.el.querySelector('.bar ' + s);
+  const mn = q('.min'), mx = q('.max'), cl = q('.close');
+  if (mn) mn.title = tr('win_minimize');
+  if (mx) mx.title = tr(w.max ? 'win_restore' : 'win_maximize');
+  if (cl) cl.title = tr('win_close');
+}
+
+// An app window lost one of its own scripts/stylesheets while loading (the Cardputer's single-task httpd
+// resets a connection under a burst, and on http:// no service worker retries it): a lost module leaves the
+// app dead until it is reopened. The app reports it (the inline guard first in every app's <head>); reload
+// that window ONCE per materialisation, after a short pause for the device to drain. Never a loop: a
+// resource that keeps failing is left alone. → true when a reload was scheduled.
+const RESOURCE_RETRY_MS = 800;
+export function retryFrame(source) {
+  for (const w of windows.values()) {
+    const f = w.el.querySelector('iframe');
+    if (!f || f.contentWindow !== source) continue;
+    if (w.resourceRetried) return false;
+    w.resourceRetried = true;
+    setTimeout(() => { try { f.contentWindow.location.reload(); } catch { f.src = f.src; } }, RESOURCE_RETRY_MS);
+    return true;
+  }
+  return false;
 }
 
 // Build the iframe of a deferred window, once, on demand. Everything that reads the frame already
 // guards on null (notifyVis, the status broadcast, the shortcut injection), so a pending window is
 // simply a window whose app has not loaded yet.
 function materialise(w) {
-  if (!w || !w.pending || w.holdDeferred) return;
+  if (!w || !w.pending || w.holdDeferred || trustPending(w.app)) return;   // provenance unknown: no frame yet
   const src = w.pending;
   w.pending = null;
+  w.resourceRetried = false;                                               // a new frame gets its own one retry
   const host = w.el.querySelector('.body');
   if (!host) return;
   host.innerHTML = frameHtml(w.app, src);
@@ -154,6 +194,20 @@ export function preload(id, timeoutMs = 15000) {
     const t = setTimeout(done, timeoutMs);
     f.addEventListener('load', done, { once: true });
   });
+}
+
+// The shell learned (or re-learned) each app's provenance: swap in the fresh app records and load every
+// window that was held only because its app's trust was still pending. Minimised ones stay deferred and
+// load when focused, like any other deferred window.
+export function settleTrust(lookup) {
+  for (const w of windows.values()) {
+    const fresh = typeof lookup === 'function' ? lookup(w.app.id) : null;
+    if (fresh) w.app = fresh;
+    if (w.trustHold && !trustPending(w.app)) {
+      w.trustHold = false;
+      if (!w.min) materialise(w);
+    }
+  }
 }
 
 function focus(id) {
@@ -207,11 +261,14 @@ export function open(app, query, opts = {}) {
   if (windows.has(app.id)) {                       // already open: optionally navigate, then focus
     const w = windows.get(app.id);
     const iframe = w.el.querySelector('iframe');
-    if (iframe && src) iframe.src = src;
+    // Navigate ONLY when the caller asked for something (a file, a query). A bare re-open — a Start/taskbar
+    // click, open-app without a query — used to reassign the plain route, which RELOADS the app: Notepad
+    // lost its unsaved text just because the user clicked its icon again.
+    if (iframe && query) iframe.src = src;
     // A DEFERRED window has no iframe yet, so setting .src silently did nothing and it later
     // materialised its OLD pending URL: double-clicking a file with that app minimised opened
     // yesterday's document, with no error to explain it. Retarget the pending load instead.
-    else if (!iframe && src) w.pending = src;
+    else if (!iframe && src && (query || !w.pending)) w.pending = src;
     focus(app.id);
     return;
   }
@@ -225,14 +282,17 @@ export function open(app, query, opts = {}) {
   el.style.left = (60 + n * 28) + 'px';
   el.style.top = (40 + n * 28) + 'px';
 
-  // A deferred window shows its app glyph until the app is loaded (on focus, or by preload()).
-  const body = opts.deferred ? `<div class="placeholder pending" aria-busy="true">${glyph(app)}</div>` : frameHtml(app, src);
+  // A deferred window shows its app glyph until the app is loaded (on focus, or by preload()). So does a
+  // window whose app's provenance is still pending: it is built and shown, but gets its frame only once
+  // the shell knows whether to sandbox it (settleTrust) — never a guessed-trusted frame first.
+  const hold = !opts.deferred && trustPending(app) && !!app.route;
+  const body = (opts.deferred || hold) ? `<div class="placeholder pending" aria-busy="true">${glyph(app)}</div>` : frameHtml(app, src);
   el.innerHTML =
     `<div class="bar"><span class="glyph">${glyph(app)}</span>` +
     `<span class="t">${attr(labelFor(app))}</span>` +
-    `<button class="min" title="Minimize"><svg viewBox="0 0 11 11" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.3"><line x1="2" y1="6" x2="9" y2="6" stroke-linecap="round"/></svg></button>` +
-    `<button class="max" title="Maximize"><svg viewBox="0 0 11 11" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="2" y="2" width="7" height="7" rx="1.2"/></svg></button>` +
-    `<button class="close" title="Close"><svg viewBox="0 0 11 11" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.3"><line x1="2.6" y1="2.6" x2="8.4" y2="8.4" stroke-linecap="round"/><line x1="8.4" y1="2.6" x2="2.6" y2="8.4" stroke-linecap="round"/></svg></button></div>` +
+    `<button class="min" title="${attr(tr('win_minimize'))}"><svg viewBox="0 0 11 11" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.3"><line x1="2" y1="6" x2="9" y2="6" stroke-linecap="round"/></svg></button>` +
+    `<button class="max" title="${attr(tr('win_maximize'))}"><svg viewBox="0 0 11 11" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="2" y="2" width="7" height="7" rx="1.2"/></svg></button>` +
+    `<button class="close" title="${attr(tr('win_close'))}"><svg viewBox="0 0 11 11" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.3"><line x1="2.6" y1="2.6" x2="8.4" y2="8.4" stroke-linecap="round"/><line x1="8.4" y1="2.6" x2="2.6" y2="8.4" stroke-linecap="round"/></svg></button></div>` +
     `<div class="body">${body}</div>` +
     `<div class="win-resizer n" data-dir="n"></div><div class="win-resizer s" data-dir="s"></div>` +
     `<div class="win-resizer e" data-dir="e"></div><div class="win-resizer w" data-dir="w"></div>` +
@@ -240,7 +300,7 @@ export function open(app, query, opts = {}) {
     `<div class="win-resizer sw" data-dir="sw"></div><div class="win-resizer se" data-dir="se"></div>`;
 
   layer.appendChild(el);
-  windows.set(app.id, { el, app, min: false, max: false, snap: null, prev: null, pending: opts.deferred ? src : null });
+  windows.set(app.id, { el, app, min: false, max: false, snap: null, prev: null, pending: (opts.deferred || hold) ? src : null, trustHold: hold });
 
   const frame = el.querySelector('iframe');
   if (frame) frame.addEventListener('load', () => {
@@ -369,12 +429,12 @@ export function applySnap(id, zone) {
   if (!w.snap && !w.max) w.prev = curGeom(w);
   w.el.classList.remove('max', 'snapped');
   if (zone === 'full') {
-    w.max = true; w.snap = null; w.el.classList.add('max'); w.el.querySelector('.max').title = 'Restore';
+    w.max = true; w.snap = null; w.el.classList.add('max'); chromeTitles(w);
   } else {
     const r = zoneRect(zone, workArea());
     w.max = false; w.snap = zone; w.el.classList.add('snapped');
     Object.assign(w.el.style, { left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px' });
-    w.el.querySelector('.max').title = 'Maximize';
+    chromeTitles(w);
   }
   focus(id);
 }
@@ -454,7 +514,7 @@ export function applyGeom(id, g) {
   if (w.max || w.snap) {
     w.el.classList.remove('max', 'snapped');
     w.max = false; w.snap = null;
-    const mb = w.el.querySelector('.max'); if (mb) mb.title = 'Maximize';
+    chromeTitles(w);
   }
   if (g.x != null) w.el.style.left = g.x + 'px';
   if (g.y != null) w.el.style.top = g.y + 'px';
@@ -484,13 +544,12 @@ export function maximize(id) {
     w.el.classList.remove('max', 'snapped');
     if (w.prev) Object.assign(w.el.style, w.prev);
     w.max = false; w.snap = null;
-    w.el.querySelector('.max').title = 'Maximize';
   } else {
     w.prev = curGeom(w);
     w.el.classList.add('max');
     w.max = true;
-    w.el.querySelector('.max').title = 'Restore';
   }
+  chromeTitles(w);
   focus(id);
 }
 
@@ -542,10 +601,33 @@ function hidePreview() { if (preview) preview.classList.add('hidden'); }
 // The window-level listeners live only for the duration of a gesture: registered on pointerdown,
 // removed in endDrag. Registering them once per window leaked all three (plus the closed window's
 // DOM they close over) on every open/close cycle — close() never removed them.
+// A maximized/snapped window is torn off only once the pointer has really MOVED (TEAR_PX). Tearing off on
+// pointerdown un-maximized the window on a plain click of its title bar, and broke double-click-to-restore:
+// the first press restored it, the dblclick then maximized it again.
+const TEAR_PX = 5;
 function drag(win, handle, id) {
-  let sx, sy, ox, oy, moving = false, zone = null, dragPid = null;
+  let sx, sy, ox, oy, moving = false, zone = null, dragPid = null, tearPending = false;
+  const tearOff = (e) => {
+    const w = windows.get(id);
+    tearPending = false;
+    if (!w || !(w.max || w.snap)) return;
+    const rect = win.getBoundingClientRect();
+    const ratioX = rect.width ? (sx - rect.left) / rect.width : 0.5;   // where on the bar it was grabbed
+    w.el.classList.remove('max', 'snapped'); w.max = false; w.snap = null;
+    chromeTitles(w);
+    const prev = w.prev || { width: '520px', height: '360px' };
+    const fw = parseInt(prev.width) || 520, fh = parseInt(prev.height) || 360;
+    win.style.width = fw + 'px'; win.style.height = fh + 'px';
+    win.style.left = Math.max(0, e.clientX - fw * ratioX) + 'px';
+    win.style.top = Math.max(0, e.clientY - 17) + 'px';
+    sx = e.clientX; sy = e.clientY; ox = win.offsetLeft; oy = win.offsetTop;   // keep dragging from here
+  };
   const onMove = (e) => {
     if (!moving || (dragPid != null && e.pointerId !== dragPid)) return;   // a second finger must not steer this window
+    if (tearPending) {
+      if (Math.abs(e.clientX - sx) <= TEAR_PX && Math.abs(e.clientY - sy) <= TEAR_PX) return;   // a click, not a drag (yet)
+      tearOff(e);
+    }
     const A = workArea();
     win.style.left = Math.max(0, ox + e.clientX - sx) + 'px';
     win.style.top = Math.min(A.h - 34, Math.max(0, oy + e.clientY - sy)) + 'px';
@@ -558,7 +640,8 @@ function drag(win, handle, id) {
   const endDrag = (e) => {
     if (!moving) return;
     if (e && e.pointerId != null && dragPid != null && e.pointerId !== dragPid) return;   // not our gesture
-    moving = false; hidePreview();
+    const wasClick = tearPending;              // pressed and released a maximized bar without moving
+    moving = false; tearPending = false; hidePreview();
     window.removeEventListener('pointermove', onMove);
     window.removeEventListener('pointerup', endDrag);
     window.removeEventListener('pointercancel', endDrag);
@@ -567,24 +650,15 @@ function drag(win, handle, id) {
     const iframe = win.querySelector('iframe');
     if (iframe) iframe.style.pointerEvents = '';
     if (zone) { applySnap(id, zone); zone = null; }
-    else onChange();
+    else if (!wasClick) onChange();
   };
   handle.addEventListener('pointerdown', (e) => {
     if (e.button !== 0) return;
     if (e.target.closest('button')) return;
     const w = windows.get(id);
-    // Dragging a maximized/snapped window "tears it off": restore floating size under the cursor.
-    if (w && (w.max || w.snap)) {
-      const rect = win.getBoundingClientRect();
-      const ratioX = rect.width ? (e.clientX - rect.left) / rect.width : 0.5;
-      w.el.classList.remove('max', 'snapped'); w.max = false; w.snap = null;
-      w.el.querySelector('.max').title = 'Maximize';
-      const prev = w.prev || { width: '520px', height: '360px' };
-      const fw = parseInt(prev.width) || 520, fh = parseInt(prev.height) || 360;
-      win.style.width = fw + 'px'; win.style.height = fh + 'px';
-      win.style.left = Math.max(0, e.clientX - fw * ratioX) + 'px';
-      win.style.top = Math.max(0, e.clientY - 17) + 'px';
-    }
+    // Dragging a maximized/snapped window "tears it off" (restores its floating size under the cursor) —
+    // but only once the pointer actually moves; see TEAR_PX.
+    tearPending = !!(w && (w.max || w.snap));
     moving = true; sx = e.clientX; sy = e.clientY;
     ox = win.offsetLeft; oy = win.offsetTop;
     e.preventDefault();
@@ -646,7 +720,7 @@ function attachResize(win, id) {
       const w = windows.get(id);
       if (w.max || w.snap) {
         w.el.classList.remove('max', 'snapped'); w.max = false; w.snap = null;
-        w.el.querySelector('.max').title = 'Maximize';
+        chromeTitles(w);
       }
       const dir = r.dataset.dir;
       const startX = e.clientX, startY = e.clientY;
@@ -672,9 +746,11 @@ function attachResize(win, id) {
         if (dir.includes('s')) newH = startH + dy;
         if (dir.includes('n')) { newH = startH - dy; newT = startT + dy; }
 
-        if (newW < minW) { newL -= (minW - newW); newW = minW; }
-        if (newH < minH) { newT -= (minH - newH); newH = minH; }
-        if (newT < 0) { newH += newT; newT = 0; }
+        // Clamp to the minimum by moving only the edge being dragged: shifting newL/newT regardless of
+        // direction made a sw corner dragged past the min height move the TOP edge, an ne corner the LEFT.
+        if (newW < minW) { if (dir.includes('w')) newL -= (minW - newW); newW = minW; }
+        if (newH < minH) { if (dir.includes('n')) newT -= (minH - newH); newH = minH; }
+        if (dir.includes('n') && newT < 0) { newH += newT; newT = 0; }
 
         win.style.width = newW + 'px'; win.style.height = newH + 'px';
         if (dir.includes('w') || dir.includes('n')) {

@@ -66,10 +66,6 @@ export async function withMicLock(label, fn, opts = {}) {
   try { return await run(); } finally { _busy = false; release(); }
 }
 
-// The label of whoever holds the mic right now across the OS, or null. Sees web holders (any tab) via
-// the lock-label broadcast; the on-device native Recorder holds no web lock, so use micBusy() for that.
-export function activeMicLabel() { return _local || _remote || null; }
-
 // Best-effort OS-wide busy check INCLUDING the native on-device recorder (which the Web Lock can't see):
 // combines the web lock label with the firmware's /api/rec/status. Returns {busy, label}.
 export async function micBusy() {

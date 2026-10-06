@@ -49,6 +49,8 @@ function loadAppAliases() {
 }
 const appSearchNames = (a) => [a.name, ...(appAliases.get(a.id) || [])];
 WM.setLabeler(appName);         // window title bars + iframe titles use the same localised name
+WM.setTranslator((k) => t(k));  // ...and the window chrome (Minimize/Maximize/Restore/Close tooltips)
+I18N.setSenderGuard((e) => trustedSender(e));   // set-language obeys the same trust boundary as the OS router
 
 // The OS-wide AI copilot is loaded lazily in initOS(); held here so OS-level handlers
 // (Escape, the unified search row) can talk to it. null until copilot.js initialises.
@@ -865,20 +867,18 @@ function showPairing() {
     pin.addEventListener('input', () => { pin.value = pin.value.replace(/\D/g, '').slice(0, 6); msg.textContent = ''; });
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
-      if (pin.value.length !== 6) { msg.textContent = 'Enter all 6 digits.'; return; }
+      if (pin.value.length !== 6) { msg.textContent = t('pair_need_digits'); return; }
       btn.disabled = true; msg.textContent = '';
       let r;
       try { r = await fetch('/api/pair', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pin: pin.value }) }); }
-      catch { msg.textContent = 'Network error — is the device on?'; btn.disabled = false; return; }
+      catch { msg.textContent = t('pair_net_error'); btn.disabled = false; return; }
       if (r.ok) {   // cookie is set; proceed — settle whichever call is currently waiting
         ov.classList.add('hidden'); btn.disabled = false;
         const res = pairResolve; pairResolve = null; if (res) res();
         return;
       }
       let body = {}; try { body = await r.json(); } catch {}
-      msg.textContent = r.status === 429 || body.locked
-        ? 'Too many attempts. Wait a moment and try again.'
-        : 'Wrong code. Check the screen and retry.';
+      msg.textContent = r.status === 429 || body.locked ? t('pair_locked') : t('pair_wrong');
       pin.value = ''; pin.focus(); btn.disabled = false;
     });
   });
@@ -908,24 +908,53 @@ function stopStatusPolling() {
 // timeout — the shell then declared the device unreachable and made the desktop read-only. Measured,
 // not theorised. Here it runs after the desktop has painted and before the first window opens, which
 // is the only ordering constraint that actually exists. On a phone it never runs at all.
-async function loadAppPermissions() {
+//
+// The same read decides PROVENANCE, fail-closed (wm.js isSandboxed): every app starts 'pending' (its window
+// waits, frameless), and only the registry — or, when it is unreadable or silent about an app, the list of
+// apps shipped with the OS (app-catalog.json, generated from the repo registry) — can make it 'trusted'.
+// Anything else runs sandboxed. It used to be the other way round: a registry read that failed or timed
+// out (swallowed), or an app published a moment ago, left created_by unset and the agent's app opened
+// with the shell's origin — cookie, /api/*, key vault.
+let builtinIds = null;   // Set of app ids shipped with the OS, once read
+async function loadBuiltinIds() {
+  if (builtinIds) return builtinIds;
   try {
-    const reg = await fetchJSON('/api/fs/read?path=' + encodeURIComponent('/system/registry/apps.json'), { tries: 2, timeout: 4000 });
-    // created_by travels with the permissions: it is what decides whether the app gets an origin at all.
-    const byIdReg = new Map(((reg && reg.installed) || []).map((a) => [a.id, a]));
-    let n = 0;
-    for (const a of state.apps) {
-      const e = byIdReg.get(a.id);
-      if (!e) continue;
+    const cat = await fetchJSON('/app-catalog.json', { tries: 3, timeout: 4000 });
+    builtinIds = new Set(Object.keys((cat && cat.apps) || {}));
+    return builtinIds;
+  } catch (e) {
+    console.warn('[shell] built-in app list unreadable → unconfirmed apps stay sandboxed:', (e && e.message) || e);
+    return new Set();     // not cached: the next registry pass tries again
+  }
+}
+async function loadAppPermissions() {
+  let reg = null;
+  try {
+    reg = await fetchJSON('/api/fs/read?path=' + encodeURIComponent('/system/registry/apps.json'), { tries: 2, timeout: 4000 });
+  } catch (e) {
+    // Permissions: keep the pre-existing permissive default rather than mute dictation/recorder/ANIMA on a
+    // blip. Provenance: NOT permissive — see above.
+    console.warn('[shell] registry unreadable → permissive feature policy; provenance from the built-in list:', (e && e.message) || e);
+  }
+  // created_by travels with the permissions: it is what decides whether the app gets an origin at all.
+  const byIdReg = new Map(((reg && Array.isArray(reg.installed) && reg.installed) || []).filter((a) => a && a.id).map((a) => [a.id, a]));
+  const apps = state.apps;
+  const builtin = apps.some((a) => !byIdReg.has(a.id)) ? await loadBuiltinIds() : new Set();
+  let n = 0, boxed = 0;
+  for (const a of state.apps) {
+    const e = byIdReg.get(a.id);
+    if (e) {
       a.permissions = Array.isArray(e.permissions) ? e.permissions : [];
       if (e.created_by) a.created_by = e.created_by;
+      a.trust = e.created_by === 'agent' ? 'sandbox' : 'trusted';
       n++;
+    } else {
+      a.trust = builtin.has(a.id) && a.created_by !== 'agent' ? 'trusted' : 'sandbox';
     }
-    bootLog('permissions applied to ' + n + '/' + state.apps.length + ' app frames');
-  } catch (e) {
-    // Keep the pre-existing permissive default rather than mute dictation/recorder/ANIMA on a blip.
-    console.warn('[shell] registry permissions unreadable → app iframes keep the permissive default:', (e && e.message) || e);
+    if (a.trust === 'sandbox') boxed++;
   }
+  bootLog('permissions applied to ' + n + '/' + state.apps.length + ' app frames; sandboxed ' + boxed);
+  WM.settleTrust(byId);    // load the windows that were waiting for this answer
 }
 // Started as EARLY as the app list allows and awaited later, so the window in which a user-opened app
 // could still get the permissive default is as small as we can make it without holding the boot screen
@@ -995,11 +1024,11 @@ async function boot() {
   bootLog('pairing ok — loading /api/apps…');
   try {
     const d = await fetchJSON('/api/apps');
-    state.apps = d.apps.filter((a) => a && a.enabled).map(sanitizeApp).filter(Boolean).map((a) => ({ ...a, glyph: glyph(a) }));
+    state.apps = d.apps.filter((a) => a && a.enabled).map(sanitizeApp).filter(Boolean).map((a) => ({ ...a, glyph: glyph(a), trust: 'pending' }));
     bootLog('apps loaded:', state.apps.length);
   } catch (e) {
     bootLog('apps FAILED after retries → using mock set', e && (e.message || e));
-    state.apps = MOCK.map((a) => ({ ...a, glyph: glyph(a) }));
+    state.apps = MOCK.map((a) => ({ ...a, glyph: glyph(a), trust: 'pending' }));
   }
   beginLoadAppPermissions();               // fire now; startDesktopServices awaits the same promise
   try {
@@ -1084,12 +1113,13 @@ async function refreshApps() {
     // /api/apps carries no permissions (the firmware streams only id/name/route/icon/enabled), so a
     // naive rebuild dropped them for EVERY app and silently reverted allowAttr to the permissive
     // default — right after an install, which is exactly when a new, unvetted app appears.
-    const prevPerms = new Map(state.apps.map((a) => [a.id, { p: a.permissions, c: a.created_by }]));
+    const prevPerms = new Map(state.apps.map((a) => [a.id, { p: a.permissions, c: a.created_by, t: a.trust }]));
     state.apps = d.apps.filter((a) => a && a.enabled).map(sanitizeApp).filter(Boolean).map((a) => {
-      const app = { ...a, glyph: glyph(a) };
+      const app = { ...a, glyph: glyph(a), trust: 'pending' };   // a NEW app waits for the registry re-read below
       const prev = prevPerms.get(a.id);
       if (prev && Array.isArray(prev.p)) app.permissions = prev.p;
       if (prev && prev.c) app.created_by = prev.c;
+      if (prev && prev.t) app.trust = prev.t;
       return app;
     });
     permsReady = null; beginLoadAppPermissions();   // and re-read the registry: the new app has its own
@@ -1316,14 +1346,16 @@ document.addEventListener('visibilitychange', () => {
   // Below the mobile breakpoint onViewportChange deliberately shut /ws + the status poll ("the device
   // pays nothing for a phone-sized viewer") — returning to the foreground must not undo that.
   if (!desktopStarted || !mqDesktop.matches) return;
+  // Revive the /api/status poll FIRST: it pauses entirely while hidden (scheduleStatus bails), so on return
+  // give an instant fresh snapshot (an SSID/IP change made while hidden shows at once) and reset the error
+  // backoff. It used to sit after the socket checks below — and the common case, a socket still OPEN,
+  // returned before it: one hide and the tray stopped updating for the rest of the session.
+  _statusInt = STATUS_BASE; doRefreshStatus(); scheduleStatus();
   if (wsEvicted) { seatFreeCheck(); return; }   // back in view: the seat may have been freed
   if (wsSock && (wsSock.readyState === WebSocket.OPEN || wsSock.readyState === WebSocket.CONNECTING)) return;
   if (wsTimer) { clearTimeout(wsTimer); wsTimer = null; }
   wsBackoff = 3000;
   connectWS();
-  // Also revive the /api/status poll: it pauses entirely while hidden, so on return give an instant
-  // fresh snapshot (an SSID/IP change made while hidden shows at once) and reset the error backoff.
-  _statusInt = STATUS_BASE; doRefreshStatus(); scheduleStatus();
 });
 // On a real tab close / navigation, close the socket explicitly so the device reclaims it in ~4s
 // (clean FIN → the firmware's on_sock_close hook fires at once) instead of waiting out the ~20s TCP
@@ -1461,6 +1493,9 @@ function wireMessages() {
       return;
     }
 
+    // An app window lost one of its own scripts/stylesheets while loading (the device reset the connection):
+    // the window manager reloads it once. Trusted senders only — a sandboxed app never gets here.
+    if (d.type === 'app-resource-failed') { WM.retryFrame(e.source); return; }
     // An app asking to close its own window (e.g. Paint "Esci") or update its title bar. Map the
     // posting iframe back to its window via contentWindow identity.
     if (d.type === 'close-window' || d.type === 'set-window-title') {
@@ -1908,13 +1943,22 @@ function openItem(item) {
 // window. Nothing else: a .lnk is a file any app with shared storage can write, so its target is
 // untrusted — a javascript:/data: "route" in an unsandboxed iframe would run with the shell's origin
 // (pairing cookie, key vault). Same-origin targets must be plain /apps/… paths.
+// The page also INHERITS the trust of the app it belongs to: /apps/<id>/… runs exactly as sandboxed as app
+// <id> does. A link window used to carry no created_by at all, so an agent app could write
+// /data/Desktop/x.lnk → /apps/<itself>/www/index.html and be opened with the shell's origin. An id that is
+// not installed, or not vouched for, gets the sandbox.
 const SAME_ORIGIN_LINK = /^\/apps\/[A-Za-z0-9._~\/-]*(\?[A-Za-z0-9._~%&=+-]*)?$/;
-function openUrlTarget(target, label) {
+async function openUrlTarget(target, label) {
   const tg = String(target || '').trim();
   if (/^https?:\/\//i.test(tg)) { window.open(tg, '_blank', 'noopener'); return; }
   const route = SAME_ORIGIN_LINK.test(tg) && !/(^|\/)\.\.(\/|\?|$)/.test(tg) ? tg : '';
   if (!route) { showToast(t('lnk_broken'), '⚠️', 'error'); return; }
-  WM.open({ permissions: [], id: 'link:' + route, name: label, route, glyph: '🔗' });
+  if (permsReady) { try { await permsReady; } catch {} }   // provenance first, then the frame
+  const m = /^\/apps\/([^/?]+)/.exec(route);
+  const owner = m ? byId(m[1]) : null;
+  const trusted = !!owner && owner.trust === 'trusted' && !WM.isSandboxed(owner);
+  WM.open({ permissions: [], id: 'link:' + route, name: label, route, glyph: '🔗', trust: trusted ? 'trusted' : 'sandbox',
+    ...(owner && owner.created_by ? { created_by: owner.created_by } : {}) });
 }
 
 // Remember a freshly-opened file so it surfaces under Start → "Consigliati" (newest first,
@@ -2024,7 +2068,8 @@ async function createDesktopShortcut(payload, pos) {
   let name = base + '.lnk';
   for (let i = 2; existing.has(name); i++) name = base + ' (' + i + ').lnk';
   const path = DESKTOP_DIR + '/' + name;
-  try { await fetch('/api/fs/write?path=' + encodeURIComponent(path), { method: 'POST', body: serializeLnk(payload) }); }
+  // The write must have SUCCEEDED: a 500 (oom) / 504 (device busy) used to still add the icon and say "linked".
+  try { const w = await fetch('/api/fs/write?path=' + encodeURIComponent(path), { method: 'POST', body: serializeLnk(payload) }); if (!w.ok) throw 0; }
   catch { showToast(t('lnk_create_fail'), '⚠️', 'error'); return null; }
   const cell = pos ? nearestFreeCell(pos.x, pos.y, occupiedCells()) : firstFreeCell(occupiedCells());
   state.desktop.push({ uid: uniqueUid('desk-' + path), type: 'file', target: path, x: cell.x, y: cell.y });
@@ -2065,7 +2110,10 @@ async function performFcDrop(op, items, pos) {
         const r = await fetch('/api/fs/move?from=' + encodeURIComponent(it.path) + '&to=' + encodeURIComponent(dst), { method: 'POST' });
         if (!r.ok) throw 0;
       } else {                                                        // copy: read + write (no copy endpoint on the device)
-        const buf = await (await fetch('/api/fs/read?path=' + encodeURIComponent(it.path), { cache: 'no-store' })).arrayBuffer();
+        // A failed read's body is an error page, not the file: never write it as the "copy".
+        const rd = await fetch('/api/fs/read?path=' + encodeURIComponent(it.path), { cache: 'no-store' });
+        if (!rd.ok) throw 0;
+        const buf = await rd.arrayBuffer();
         const w = await fetch('/api/fs/write?path=' + encodeURIComponent(dst), { method: 'POST', body: buf });
         if (!w.ok) throw 0;
       }
@@ -2623,8 +2671,12 @@ function ctxKey(e) {
 
 // ---- generic OS modal: styled prompt / confirm / properties (replaces native prompt()/confirm()) ----
 // Resolves to the input string (prompt), true/false (confirm), or true (info). Enter = OK, Esc /
-// backdrop = cancel. One modal at a time; the scrim element is reused.
+// backdrop = cancel. One modal at a time; the scrim element is reused. A modal opened while another is up
+// CANCELS the older one first: its DOM was replaced but its capture-phase keydown listener lived on, so the
+// next Enter — meant for the new box — resolved the hidden one as confirmed ("reset the desktop?").
+let osModalCancel = null;
 function osModal({ title, glyph, bodyHTML = '', withInput, value, placeholder, okText, cancelText, danger, okOnly }) {
+  if (osModalCancel) { const c = osModalCancel; osModalCancel = null; c(); }
   return new Promise((resolve) => {
     const scrim = document.getElementById('os-modal-scrim');
     const box = document.createElement('div');
@@ -2644,6 +2696,7 @@ function osModal({ title, glyph, bodyHTML = '', withInput, value, placeholder, o
     let closed = false;
     const close = (result) => {
       if (closed) return; closed = true;
+      if (osModalCancel === cancelThis) osModalCancel = null;
       scrim.classList.remove('show'); scrim.setAttribute('aria-hidden', 'true');
       setTimeout(() => { if (!scrim.classList.contains('show')) scrim.innerHTML = ''; }, 160);
       document.removeEventListener('keydown', onKey, true);
@@ -2653,6 +2706,8 @@ function osModal({ title, glyph, bodyHTML = '', withInput, value, placeholder, o
       if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(okOnly ? true : null); }
       else if (e.key === 'Enter') { e.preventDefault(); e.stopPropagation(); close(input ? input.value : true); }
     };
+    const cancelThis = () => close(okOnly ? true : null);
+    osModalCancel = cancelThis;
     document.addEventListener('keydown', onKey, true);
     box.querySelector('[data-act="ok"]').addEventListener('click', () => close(input ? input.value : true));
     const cancelBtn = box.querySelector('[data-act="cancel"]');
@@ -3662,8 +3717,15 @@ function closeOsFileDialog(resultPath) {
   osDialogCaller = null;
 }
 
+// Listings are sequenced: only the newest navigation may paint. A slow, older listing used to land on top of
+// a newer one (crumbs said one folder, the list showed another). Navigating also clears the search filter
+// and, when opening, the picked file name — which otherwise resolved against the NEW folder on "Open".
+let osDialogSeq = 0;
 async function loadOsDialogDir(path) {
+  const seq = ++osDialogSeq;
   osDialogCwd = path;
+  if (osDialogSearch) osDialogSearch.value = '';
+  if (osDialogMode !== 'save') osDialogFilename.value = '';   // a typed SAVE name follows the user to the new folder
   osDialogCrumbs.innerHTML = '';
   const segs = path.split('/').filter(Boolean);
   let acc = '';
@@ -3683,16 +3745,19 @@ async function loadOsDialogDir(path) {
     osDialogCrumbs.appendChild(span);
   }
   
-  osDialogList.innerHTML = '<div class="os-dialog-msg">Loading…</div>';
+  const say = (key) => { osDialogList.innerHTML = ''; const d = document.createElement('div'); d.className = 'os-dialog-msg'; d.textContent = t(key); osDialogList.appendChild(d); };
+  say('osdlg_loading');
   osDialogFiles = [];
   try {
     const r = await fetch('/api/fs/list?path=' + encodeURIComponent(path));
     if (!r.ok) throw new Error();
     const data = await r.json();
+    if (seq !== osDialogSeq) return;               // the user has navigated on since
     osDialogFiles = data.entries || [];
     renderOsDialogList();
   } catch {
-    osDialogList.innerHTML = '<div class="os-dialog-msg">Impossibile leggere la directory.</div>';
+    if (seq !== osDialogSeq) return;
+    say('osdlg_read_error');
   }
 }
 
@@ -3725,7 +3790,8 @@ function renderOsDialogList(filterQuery = '') {
   });
 
   if (entries.length === 0) {
-    osDialogList.innerHTML = '<div class="os-dialog-msg">Nessun file trovato.</div>';
+    const d = document.createElement('div'); d.className = 'os-dialog-msg'; d.textContent = t('osdlg_empty');
+    osDialogList.appendChild(d);
     return;
   }
 

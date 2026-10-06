@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
   <meta charset="utf-8">
+  <script>/* NucleoOS resource guard: a lost same-origin script/stylesheet makes the shell reload this window once (wm.js retryFrame) */addEventListener('error',function(e){var t=e.target,u;if(!t||t===window||parent===window||(t.tagName!=='SCRIPT'&&t.tagName!=='LINK'))return;try{u=new URL(t.src||t.href,location.href);if(u.origin===location.origin)parent.postMessage({type:'app-resource-failed',src:u.pathname},location.origin)}catch(_){}},true)</script>
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Terminal</title>
   <style>
@@ -2406,10 +2407,26 @@
       }
       return false;
     }
+    // One history write at a time. Closing the window fires both visibilitychange and pagehide while a
+    // batch save may still be running, and the device's single-task httpd reset one of two concurrent
+    // writes of the same file (seen on a real Cardputer). A save asked for meanwhile runs once after the
+    // current one, and only if the list changed since what was written.
+    let histSaving = null, histAgain = false, histAgainKeep = false;
     async function saveHistory(keepalive) {
       if (!histLoaded) return;
       clearT(histTimer); histTimer = 0; histNew = 0; histFirstAt = 0;
-      await writeApp(APPDIR + '/history.jsonl', hist.map((h) => JSON.stringify(h)).join('\n'), keepalive);
+      if (histSaving) { histAgain = true; histAgainKeep = histAgainKeep || !!keepalive; return histSaving; }
+      histSaving = (async () => {
+        let keep = !!keepalive, last = null;
+        for (;;) {
+          histAgain = false;
+          const body = hist.map((h) => JSON.stringify(h)).join('\n');
+          if (body !== last) { last = body; await writeApp(APPDIR + '/history.jsonl', body, keep); }
+          if (!histAgain) break;
+          keep = histAgainKeep; histAgainKeep = false;
+        }
+      })();
+      try { await histSaving; } finally { histSaving = null; }
     }
     async function saveAliases() {
       await writeApp(APPDIR + '/aliases.json', JSON.stringify(aliases));

@@ -135,7 +135,6 @@ export function warm() {
 
 export function onUpdate(cb) { updateCbs.add(cb); return () => updateCbs.delete(cb); }
 export const isReady = () => builtAt > 0;
-export const size = () => index.length;
 
 // ---- ranking ----
 // Higher is better. Rewards prefix and word-boundary matches over buried substrings, penalises
