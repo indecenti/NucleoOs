@@ -34,6 +34,11 @@ if (!status) { console.error(`${origin} does not answer /api/status`); process.e
 console.log(`device ${origin}: v${status.version}, heap ${status.free_heap} B free (min ${status.min_free_heap}, block ${status.largest_free_block}), ${status.apps && status.apps.installed} apps`);
 
 const SESSION = '/system/config/session.json';
+// The newest window, now: how much text its app shows and which of its own files it holds (status 200).
+const WIN_NOW = `(() => { const w = [...document.querySelectorAll('.win')].pop(); const f = w && w.querySelector('iframe');
+  try { const d = f.contentDocument; return { bodyLen: d && d.body ? d.body.innerText.trim().length : 0,
+    loaded: f.contentWindow.performance.getEntriesByType('resource').filter((e) => e.responseStatus === 200 && e.name.startsWith(location.origin)).map((e) => new URL(e.name).pathname) };
+  } catch { return null; } })()`;
 const browser = await launchBrowser();
 const report = [];
 let exitCode = 0, sessionBefore = null;
@@ -80,17 +85,37 @@ try {
     if (only && !only.some((o) => name.toLowerCase().includes(o))) continue;
     const t1 = Date.now();
     let r, bad = [];
+    let recovered = [];
     try {
       r = await openAppAt(page, i);
       bad = defects(r.events, origin);
       if (!r.info.opened) bad.push('window did not open');
       else if (r.info.bodyLen === 0) bad.push('window is blank');
       if (r.info.offscreen) bad.push('window opened off-screen');
+      // The shell reloads a window that lost one of its own resources while loading (wm.js retryFrame): give it
+      // time, then re-measure. A lost file that the window now holds, or a blank window that filled in, is a
+      // RECOVERY — reported apart, so the resets stay visible without being counted as broken apps.
+      if (r.info.opened && bad.length) {
+        for (let k = 0; k < 5 && bad.length; k++) {
+          await sleep(2000);
+          const now = await page.eval(WIN_NOW).catch(() => null);
+          if (!now) break;
+          bad = bad.filter((d) => {
+            const lost = /^FAILED \S+ (\S+)/.exec(d) || /^HTTP 5\d\d (\S+)/.exec(d);
+            const path = lost && lost[1].replace(/^https?:\/\/[^/]+/, '').split('?')[0];
+            const ok = (d === 'window is blank' && now.bodyLen > 0) || (path && now.loaded.includes(path));
+            if (ok) recovered.push(d);
+            return !ok;
+          });
+        }
+      }
     } catch (e) { bad.push('did not finish loading: ' + String(e && e.message || e).split('\n')[0]); }
     const ms = Date.now() - t1;
-    const row = { name, ms, defects: [...new Set(bad)] };
+    const row = { name, ms, defects: [...new Set(bad)], recovered: [...new Set(recovered)] };
     report.push(row);
-    console.log(`${row.defects.length ? '✗' : '✓'} ${name.padEnd(24)} ${(ms / 1000).toFixed(1).padStart(5)} s${row.defects.length ? '\n     ' + row.defects.join('\n     ') : ''}`);
+    const mark = row.defects.length ? '✗' : row.recovered.length ? '↻' : '✓';
+    const notes = [...row.defects, ...row.recovered.map((d) => 'recovered: ' + d)];
+    console.log(`${mark} ${name.padEnd(24)} ${(ms / 1000).toFixed(1).padStart(5)} s${notes.length ? '\n     ' + notes.join('\n     ') : ''}`);
     if (row.defects.length) { exitCode = 1; await page.screenshot(join(SHOTS, `${lang}-${name.replace(/[^\w-]+/g, '_')}.png`)); }
     await closeAllWindows(page).catch(() => page.eval(`document.querySelectorAll('.win button.close').forEach((b) => b.click())`).catch(() => {}));
     await sleep(pause);
@@ -98,7 +123,8 @@ try {
   const after = await fetch(origin + '/api/status').then((x) => x.json()).catch(() => null);
   const failed = report.filter((r) => r.defects.length);
   const slow = [...report].sort((a, b) => b.ms - a.ms).slice(0, 5).map((r) => `${r.name} ${(r.ms / 1000).toFixed(1)} s`);
-  console.log(`\n${report.length - failed.length}/${report.length} apps clean; slowest: ${slow.join(', ')}`);
+  const rec = report.filter((r) => !r.defects.length && r.recovered.length);
+  console.log(`\n${report.length - failed.length}/${report.length} apps working (${rec.length} recovered after a lost file${rec.length ? ': ' + rec.map((r) => r.name).join(', ') : ''}); slowest: ${slow.join(', ')}`);
   if (after) console.log(`device after: heap ${after.free_heap} B free (min ${after.min_free_heap}, block ${after.largest_free_block}), uptime ${after.uptime_s} s`);
 } catch (e) {
   console.error('✗ ' + (e && e.message || e)); exitCode = 1;
