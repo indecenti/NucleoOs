@@ -1450,9 +1450,9 @@ $('voice-always-on').addEventListener('change', toggleVoiceAlways);
 (function () {
   const TPATH = '/data/anima/teacher.json';
   let REG = { providers: {} }, lastSig = null, evaluating = false, pendingApply = null;
-  // it+en catalogs only here: tier-2 languages (es/fr/de) read the English strings (OS base).
+  // Every string here is 5-language: T() keys in i18n.js STR, and preset-engine.js label objects
+  // ({ it, en, es, fr, de }) read through L(); English stays the fallback floor.
   const L = (o) => (o && (o[lang] || o.en || o.it)) || '';
-  const EN = () => lang !== 'it';
 
   async function buildReg() { try { const ai = await import('/ai.js'); REG = buildRegistry(ai.PROVIDERS, ai.CAPMATRIX, ai.TIERS); } catch {} }
 
@@ -1505,8 +1505,8 @@ $('voice-always-on').addEventListener('change', toggleVoiceAlways);
       el.className = 'pcard' + (p.id === active ? ' active' : '') + (f.state === 'recommended' ? ' rec' : '') + (f.state === 'blocked' ? ' blocked' : '');
       el.dataset.id = p.id;
       let pill;
-      if (f.state === 'blocked') pill = `<span class="ppill blk">${L(f.reason) || (EN() ? 'Unavailable' : 'Non disponibile')}</span>`;
-      else if (f.state === 'needs-prep') pill = `<span class="ppill prep">⬇ ${EN() ? 'To prepare' : 'Da preparare'}</span>`;
+      if (f.state === 'blocked') pill = `<span class="ppill blk">${L(f.reason) || T('apUnavailable')}</span>`;
+      else if (f.state === 'needs-prep') pill = `<span class="ppill prep">⬇ ${T('apToPrepare')}</span>`;
       else if (f.state === 'recommended') pill = `<span class="ppill rec">✓ ${L(pl.using)}</span>`;
       else pill = `<span class="ppill ok">✓ ${L(pl.using)}</span>`;
       el.innerHTML = `<div class="ph"><span>${p.icon}</span><span>${L(p)}</span></div><div class="pin">${L(p.intent)}</div>${pill}`;
@@ -1527,14 +1527,14 @@ $('voice-always-on').addEventListener('change', toggleVoiceAlways);
     const gpuS = sig.webgpu ? (gpuOk ? CT('cap_gpu_ready', { model: shortModel }) : CT('cap_gpu_nomodel'))
       : (sig.gpuCause === 'insecure' ? CT('cap_gpu_blocked_http') : CT('cap_gpu_none'));
     const rungs = [
-      { k: 'cloud', t: EN() ? '1 · Cloud' : '1 · Cloud', led: cloudOk ? 'on' : (sig.hasKey ? 'warn' : 'off'), s: cloudOk ? ('✓ ' + sig.provider) : (sig.hasKey ? (sig.online ? (EN() ? 'ready' : 'pronta') : 'offline') : (EN() ? 'no key' : 'nessuna chiave')) },
-      { k: 'gpu', t: EN() ? '2 · Browser GPU' : '2 · GPU browser', led: gpuOk ? 'on' : (sig.webgpu ? 'warn' : 'off'), s: gpuS, how: !sig.webgpu },
-      { k: 'wasm', t: EN() ? '3 · Browser WASM' : '3 · WASM browser', led: wasmOk ? 'on' : 'warn', s: wasmOk ? (EN() ? 'cached' : 'in cache') : (EN() ? 'pack not downloaded' : 'pack non scaricato') },
-      { k: 'device', t: EN() ? '4 · Cardputer' : '4 · Cardputer', led: 'on', s: EN() ? 'always ready' : 'sempre pronto' },
+      { k: 'cloud', t: T('apRungCloud'), led: cloudOk ? 'on' : (sig.hasKey ? 'warn' : 'off'), s: cloudOk ? ('✓ ' + sig.provider) : (sig.hasKey ? (sig.online ? T('apCloudReady') : T('apOffline')) : T('apNoKey')) },
+      { k: 'gpu', t: T('apRungGpu'), led: gpuOk ? 'on' : (sig.webgpu ? 'warn' : 'off'), s: gpuS, how: !sig.webgpu },
+      { k: 'wasm', t: T('apRungWasm'), led: wasmOk ? 'on' : 'warn', s: wasmOk ? T('apCached') : T('apPackMissing') },
+      { k: 'device', t: T('apRungDevice'), led: 'on', s: T('apAlwaysReady') },
     ];
     const escT = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
     box.innerHTML = rungs.map((r) => `<div class="rung" style="${r.k === landed ? 'border-color:var(--accent)' : ''}"><div class="rh"><span class="led ${r.led}"></span>${r.t}${r.k === landed ? ' ◀' : ''}</div><div class="rs">${escT(r.s)}${r.how ? ` <button type="button" class="cap-how" style="font-size:11px">${escT(CT('cap_how'))}</button>` : ''}</div></div>`).join('')
-      + `<div style="flex-basis:100%;margin-top:5px"><button id="preset-verify" style="font-size:12px">▶ ${EN() ? 'Test now' : 'Prova adesso'}</button> <span class="hint" id="preset-verify-out"></span></div>`
+      + `<div style="flex-basis:100%;margin-top:5px"><button id="preset-verify" style="font-size:12px">▶ ${T('apTestNow')}</button> <span class="hint" id="preset-verify-out"></span></div>`
       + `<div id="cap-panel" style="flex-basis:100%" hidden></div>`;
     const vb = $('preset-verify'); if (vb) vb.addEventListener('click', () => verifyNow());
     // The same checklist + exact fix ANIMA shows, inline here (no second explanation to drift).
@@ -1553,9 +1553,9 @@ $('voice-always-on').addEventListener('change', toggleVoiceAlways);
     const box = $('caps-row'); if (!box) return; box.innerHTML = '';
     const cap = ((REG.providers && REG.providers[sig.provider]) || {}).caps || {};
     const items = [
-      { ic: '💬', t: EN() ? 'Chat' : 'Chat', ok: true },
-      { ic: '🎨', t: EN() ? 'Images' : 'Immagini', ok: !!cap.image || sig.keys.xai, fix: 'xai' },
-      { ic: '🎙️', t: EN() ? 'Transcription' : 'Trascrizione', ok: !!cap.whisper || sig.keys.openai, fix: 'openai' },
+      { ic: '💬', t: T('apCapChat'), ok: true },
+      { ic: '🎨', t: T('apCapImages'), ok: !!cap.image || sig.keys.xai, fix: 'xai' },
+      { ic: '🎙️', t: T('apCapTranscription'), ok: !!cap.whisper || sig.keys.openai, fix: 'openai' },
       { ic: '🛠️', t: 'Tool-use', ok: true },
     ];
     for (const it of items) {
@@ -1570,16 +1570,14 @@ $('voice-always-on').addEventListener('change', toggleVoiceAlways);
     const box = $('apps-list'); if (!box) return; box.innerHTML = '';
     for (const a of APP_MAP) {
       const st = appStatus(a, sig, REG), el = document.createElement('div'); el.className = 'arow';
-      el.innerHTML = `<span>${EN() ? a.en : a.it}</span><span class="ast ${st.ok ? 'ok' : 'warn'}">${st.ok ? (EN() ? '✓ use this' : '✓ usano questo') : (EN() ? st.en : st.it)}</span>`;
+      el.innerHTML = `<span>${L(a)}</span><span class="ast ${st.ok ? 'ok' : 'warn'}">${st.ok ? T('apUseThis') : L(st)}</span>`;
       box.appendChild(el);
     }
   }
 
   function renderScope() {
     const box = $('scope-legend'); if (!box) return;
-    box.innerHTML = (EN()
-      ? ['💾 SD · survives reboot', '⚡ Live · resets on reboot', '🌐 This browser only']
-      : ['💾 SD · sopravvive al riavvio', '⚡ Live · si azzera al riavvio', '🌐 Solo questo browser']).map((s) => `<span>${s}</span>`).join('');
+    box.innerHTML = ['apScopeSd', 'apScopeLive', 'apScopeBrowser'].map((k) => `<span>${T(k)}</span>`).join('');
   }
 
   async function reEval() {
@@ -1588,21 +1586,19 @@ $('voice-always-on').addEventListener('change', toggleVoiceAlways);
     finally { evaluating = false; }
   }
 
-  function l1Human(m) { return m === 'off' ? (EN() ? 'frees ~31 KB (offline brain off)' : 'libera ~31 KB (cervello offline spento)')
-    : m === 'on' ? (EN() ? 'keeps the offline brain resident' : 'tiene il cervello offline residente')
-    : (EN() ? 'offline brain stands aside when a stronger one is active' : 'il cervello offline si fa da parte quando uno più forte è attivo'); }
+  function l1Human(m) { return T(m === 'off' ? 'apL1Off' : m === 'on' ? 'apL1On' : 'apL1Auto'); }
 
   function onPick(id) {
     const sig = lastSig; if (!sig) return;
     if (id === 'auto') return doApply(id, sig);            // Auto re-evaluates and applies instantly
     const res = applyPreset(model, id, sig, REG); if (!res) return;
     $('pm-ic').textContent = res.preset.icon; $('pm-title').textContent = L(res.preset);
-    const bul = [(EN() ? 'Will use: ' : 'Userà: ') + L(res.using), l1Human(res.apiCalls[0].body.mode)];
-    if (res.teacherModel) bul.push((EN() ? 'Model: ' : 'Modello: ') + res.teacherModel);
-    if (res.local['anima.edgeWeb'] === '0') bul.push(EN() ? 'Blocks on-demand web access (no egress)' : 'Blocca l’accesso web on-demand (nessuna uscita di rete)');
+    const bul = [T('apWillUse') + L(res.using), l1Human(res.apiCalls[0].body.mode)];
+    if (res.teacherModel) bul.push(T('apModel') + res.teacherModel);
+    if (res.local['anima.edgeWeb'] === '0') bul.push(T('apNoEgress'));
     $('pm-bullets').innerHTML = bul.map((x) => '• ' + x).join('<br>');
     const gg = res.gaps || [];
-    $('pm-apps').innerHTML = gg.length ? ('⚠ ' + gg.map((g) => L(g)).join('<br>⚠ ')) : (EN() ? 'All configured apps are covered.' : 'Tutte le app configurate sono coperte.');
+    $('pm-apps').innerHTML = gg.length ? ('⚠ ' + gg.map((g) => L(g)).join('<br>⚠ ')) : T('apAllCovered');
     pendingApply = { id, sig };
     $('preset-modal').classList.add('show');
   }
@@ -1620,15 +1616,15 @@ $('voice-always-on').addEventListener('change', toggleVoiceAlways);
 
   async function doApply(id, sig) {
     const res = applyPreset(model, id, sig, REG); if (!res) return;
-    status((EN() ? 'Applying profile: ' : 'Applico profilo: ') + L(res.preset) + '…');
+    status(T('apApplying') + L(res.preset) + '…');
     model = res.model; toForm(); await persistModel();                       // 1. durable intent on SD
     try { for (const k of Object.keys(res.local)) localStorage.setItem(k, res.local[k]); } catch {}  // 2. shared-origin localStorage
     if (res.teacherModel) await writeTeacherModel(res.teacherModel);          // 3. teacher.json model nudge
     let failed = false;
     for (const c of res.apiCalls) { try { const r = await api(c.path, { method: c.method, body: c.body }); if (!r || !r.ok) failed = true; } catch { failed = true; } }  // 4. live, sequential
     await refreshCaps(); syncQuickToggles();                                  // refreshCaps → reEval via hook
-    status(failed ? (EN() ? 'Profile saved — some live steps need a retry' : 'Profilo salvato — alcuni passi live vanno ritentati')
-      : ((EN() ? 'Profile applied: ' : 'Profilo applicato: ') + L(res.preset) + ' · ' + L(res.using)), !failed);
+    status(failed ? T('apSavedRetry')
+      : (T('apApplied') + L(res.preset) + ' · ' + L(res.using)), !failed);
   }
 
   // Add a SECONDARY provider key (image=xAI, Whisper=Groq) into teacher.json.keys{} WITHOUT changing the
@@ -1661,17 +1657,17 @@ $('voice-always-on').addEventListener('change', toggleVoiceAlways);
   }
   async function addKeyFlow(provider) {
     const name = provider === 'xai' ? 'Grok (xAI)' : 'Groq';
-    const k = prompt((EN() ? 'Paste the ' : 'Incolla la chiave ') + name + (EN() ? ' key (kept on device, used only for that feature):' : ' (resta sul dispositivo, usata solo per quella funzione):'));
+    const k = prompt(T('apPastePre') + name + T('apPastePost'));
     if (!k || !k.trim()) return;
-    status(EN() ? 'saving…' : 'salvo…');
+    status(T('apSaving'));
     const res = await addSecondaryKey(provider, k.trim());
     const ok = res === true;
-    status(ok ? (name + (EN() ? ' key added' : ' chiave aggiunta')) : res, ok);
+    status(ok ? (name + T('apKeyAdded')) : res, ok);
     if (ok) { await refreshCaps(); reEval(); }
   }
 
   async function verifyNow() {
-    const out = $('preset-verify-out'); if (out) out.textContent = EN() ? 'testing…' : 'provo…';
+    const out = $('preset-verify-out'); if (out) out.textContent = T('apTesting');
     const sig = lastSig || await probeSignals();
     const pl = planPreset((model.ai && model.ai.preset) || 'auto', sig, REG) || {};
     const t0 = performance.now();
@@ -1679,11 +1675,11 @@ $('voice-always-on').addEventListener('change', toggleVoiceAlways);
       if (pl.mode === 'only' && sig.exec !== 'device' && sig.hasKey) {
         const ai = await import('/ai.js'); const cfg = await ai.readTeacher();
         if (cfg && cfg.key) { const ok = await ai.cloudPing(cfg); const ms = Math.round(performance.now() - t0);
-          if (out) out.textContent = ok ? `✓ ${cfg.provider} ${EN() ? 'responds' : 'risponde'} · ${ms} ms` : (EN() ? '✗ key rejected' : '✗ chiave rifiutata'); return; }
+          if (out) out.textContent = ok ? `✓ ${cfg.provider} ${T('apResponds')} · ${ms} ms` : T('apKeyRejected'); return; }
       }
       const r = await fetch('/api/anima?q=ping&lang=' + lang + '&mode=' + (pl.mode === 'on' ? 'on' : 'off'), { cache: 'no-store' });
       const j = await r.json().catch(() => null); const ms = Math.round(performance.now() - t0);
-      if (out) out.textContent = j ? `✓ ${EN() ? 'answered by' : 'risponde'} ${j.intent || j.tier || 'device'} · ${ms} ms` : (EN() ? '✗ no answer' : '✗ nessuna risposta');
+      if (out) out.textContent = j ? `✓ ${T('apAnsweredBy')} ${j.intent || j.tier || 'device'} · ${ms} ms` : T('apNoAnswer');
     } catch (e) { if (out) out.textContent = '✗ ' + (e && e.message || e); }
   }
 
