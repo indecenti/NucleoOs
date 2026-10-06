@@ -1493,6 +1493,9 @@ function wireMessages() {
       return;
     }
 
+    // An app window lost one of its own scripts/stylesheets while loading (the device reset the connection):
+    // the window manager reloads it once. Trusted senders only — a sandboxed app never gets here.
+    if (d.type === 'app-resource-failed') { WM.retryFrame(e.source); return; }
     // An app asking to close its own window (e.g. Paint "Esci") or update its title bar. Map the
     // posting iframe back to its window via contentWindow identity.
     if (d.type === 'close-window' || d.type === 'set-window-title') {

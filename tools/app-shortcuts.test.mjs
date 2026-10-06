@@ -40,7 +40,8 @@ function makeEl(id) {
 
 function loadApp(rel, { search = '', fetchImpl } = {}) {
   const html = fs.readFileSync(path.resolve(rel), 'utf8');
-  const m = html.match(/<script(?:\s+type="module")?>([\s\S]*?)<\/script>/);   // module or classic inline script
+  // The app's own inline script (module or classic) — not the resource guard every app carries first in <head>.
+  const m = [...html.matchAll(/<script(?:\s+type="module")?>([\s\S]*?)<\/script>/g)].find((x) => !x[1].includes('app-resource-failed'));
   assert.ok(m, 'inline script not found in ' + rel);
 
   const els = new Map();

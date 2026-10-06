@@ -131,6 +131,24 @@ function chromeTitles(w) {
   if (cl) cl.title = tr('win_close');
 }
 
+// An app window lost one of its own scripts/stylesheets while loading (the Cardputer's single-task httpd
+// resets a connection under a burst, and on http:// no service worker retries it): a lost module leaves the
+// app dead until it is reopened. The app reports it (the inline guard first in every app's <head>); reload
+// that window ONCE per materialisation, after a short pause for the device to drain. Never a loop: a
+// resource that keeps failing is left alone. → true when a reload was scheduled.
+const RESOURCE_RETRY_MS = 800;
+export function retryFrame(source) {
+  for (const w of windows.values()) {
+    const f = w.el.querySelector('iframe');
+    if (!f || f.contentWindow !== source) continue;
+    if (w.resourceRetried) return false;
+    w.resourceRetried = true;
+    setTimeout(() => { try { f.contentWindow.location.reload(); } catch { f.src = f.src; } }, RESOURCE_RETRY_MS);
+    return true;
+  }
+  return false;
+}
+
 // Build the iframe of a deferred window, once, on demand. Everything that reads the frame already
 // guards on null (notifyVis, the status broadcast, the shortcut injection), so a pending window is
 // simply a window whose app has not loaded yet.
@@ -138,6 +156,7 @@ function materialise(w) {
   if (!w || !w.pending || w.holdDeferred || trustPending(w.app)) return;   // provenance unknown: no frame yet
   const src = w.pending;
   w.pending = null;
+  w.resourceRetried = false;                                               // a new frame gets its own one retry
   const host = w.el.querySelector('.body');
   if (!host) return;
   host.innerHTML = frameHtml(w.app, src);

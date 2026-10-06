@@ -3351,6 +3351,22 @@
       "anima": false
     },
     {
+      "id": "unit-app-resource-guard",
+      "label": "app-resource-guard.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/app-resource-guard.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
       "id": "unit-app-shortcuts",
       "label": "app-shortcuts.test.mjs",
       "category": "app-shell",

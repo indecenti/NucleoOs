@@ -68,3 +68,53 @@ test('the device dropping off the network is shown at once, clearly, and recover
   assert.ok(back, '"Retry now" did not bring the link back');
   assert.ok(await page.waitFor(`(document.querySelector('#tray-ws .ws-dot') || {}).className === 'ws-dot connected'`, { timeout: 15000 }), 'the live channel did not re-attach');
 });
+
+// Found on a real Cardputer (tools/web-e2e/device-smoke.mjs): the single-task httpd (4 sockets) now and then
+// resets a connection while an app window loads. A lost module (Recorder's `import … from '/micgate.js'`)
+// left the app dead until the user reopened it — no service worker on http:// to retry. Every app reports a
+// failed <script>/<link> to the shell, which reloads that window ONCE; a resource that keeps failing is not
+// retried in a loop.
+test('an app that loses a module while loading recovers by itself, and never reloads in a loop', { skip }, async (t) => {
+  const sim = await startSim({ seed: { '/system/config/session.json': { windows: [], geom: {} } } });
+  const browser = await launchBrowser({ args: [HOST_RULES] });
+  t.after(async () => { await browser.close(); await sim.stop(); });
+  const page = await browser.newPage();
+  await page.setViewport(1280, 800);
+  assert.ok(await bootShell(page, sim, { lang: 'it' }));
+  const openRecorder = () => page.eval(`(() => {
+    const row = [...document.querySelectorAll('#sm-all .sm-row')].find((r) => r.title.replace(/\u00ad/g, '') === 'Registratore');
+    row.click(); return true; })()`);
+  // Frame loads, counted on the "device": every (re)load of the window fetches the app page again.
+  const pageLoads = async () => { const st = await sim.control('/api/_sim/stats');
+    return Object.entries(st.byPath).filter(([k]) => k === '/apps/recorder/' || k === '/apps/recorder/index.html').reduce((n, [, v]) => n + v, 0); };
+  const micgateLoaded = `(() => { const f = [...document.querySelectorAll('.win iframe')].pop(); try {
+    return f.contentWindow.performance.getEntriesByType('resource').some((e) => e.name.endsWith('/micgate.js') && e.responseStatus === 200); } catch { return false; } })()`;
+
+  // The device RESETS the connection; Chrome then retries on its own a varying number of times (socket
+  // reuse), so a dropped socket does not reproduce deterministically. A 503 — the firmware's own "busy" —
+  // is never retried by the browser and fails the module exactly like the lost one does.
+  await t.test('one lost module: the window reloads once and the app works', async () => {
+    await sim.control('/api/_sim/fault', { route: '/micgate.js', status: 503, times: 1 });
+    await sim.control('/api/_sim/stats', { reset: true });
+    assert.ok(await openRecorder());
+    const ok = await page.waitFor(micgateLoaded, { timeout: 15000 }).catch(() => false);
+    if (!ok) { await sim.control('/api/_sim/fault', { clear: true }); await closeAll(page); }
+    assert.ok(ok, 'the app ended up with its module loaded');
+    try { assert.equal(await pageLoads(), 2, 'exactly one reload'); }
+    finally { await sim.control('/api/_sim/fault', { clear: true }); await closeAll(page); }
+  });
+
+  await t.test('a module that keeps failing: one retry, then the app is left alone', async () => {
+    await sim.control('/api/_sim/fault', { route: '/micgate.js', status: 503, times: 0 });   // fails until cleared
+    await sim.control('/api/_sim/stats', { reset: true });
+    assert.ok(await openRecorder());
+    await new Promise((r) => setTimeout(r, 6000));
+    try { assert.equal(await pageLoads(), 2, 'one retry, no loop'); }
+    finally { await sim.control('/api/_sim/fault', { clear: true }); await closeAll(page); }
+  });
+});
+
+async function closeAll(page) {
+  await page.eval(`document.querySelectorAll('.win button.close').forEach((b) => b.click())`);
+  await page.waitFor(`document.querySelectorAll('.win').length === 0`, { timeout: 4000 });
+}

@@ -20,7 +20,7 @@ launchable it must also be registered and aliased. Miss a step and it's invisibl
   "power": { "budget_class": "low", "wants_wakeup": [] }, "mesh": { "exposes": [], "consumes": [] } }
 ```
 `www/` holds at least `index.html`, `icon.svg`, and (if it has UI text) `i18n.en.json` +
-`i18n.it.json`. **The icon is served only from `www/`** (`/apps/<id>/icon.svg`); an app's icon
+`i18n.it.json`. `index.html` starts its `<head>` with `<meta charset="utf-8">` and then the **resource guard** line copied verbatim from any other app (the inline `<script>` reporting `app-resource-failed`) — before any script or stylesheet. The Cardputer's httpd resets connections under load; the guard lets the shell reload a window that lost a module (`tools/app-resource-guard.test.mjs` fails without it). **The icon is served only from `www/`** (`/apps/<id>/icon.svg`); an app's icon
 source is its manifest. To import code from another app use `/apps/<otherid>/<file>` —
 **without** `/www/` (webfs + sim both map there; adding `/www/` 404s).
 
