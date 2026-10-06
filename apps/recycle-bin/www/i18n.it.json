@@ -19,5 +19,9 @@
   "confirm_empty": {
     "one": "Eliminare definitivamente {count} elemento? L'operazione non può essere annullata.",
     "other": "Eliminare definitivamente {count} elementi? L'operazione non può essere annullata."
-  }
+  },
+  "confirm_purge": "Eliminare definitivamente “{name}”? L'operazione non si può annullare.",
+  "toast_delete_failed": "Eliminazione non riuscita — l'elemento è ancora nel cestino",
+  "err_index_unreadable": "Impossibile leggere il Cestino in questo momento — non è stato modificato nulla. Riprova.",
+  "load_failed": "Impossibile leggere il Cestino in questo momento. Riprova tra poco."
 }

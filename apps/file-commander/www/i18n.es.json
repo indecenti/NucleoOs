@@ -74,7 +74,7 @@
   "del_kind_file": "el archivo",
   "del_kind_folder": "la carpeta",
   "sub_local_perm": "Los elementos locales se saltan la Papelera de reciclaje — es permanente.",
-  "sub_folder_perm": "Todo su contenido se elimina permanentemente.",
+  "sub_folder_perm": "Las carpetas no pasan por la Papelera y se eliminan permanentemente. Solo se puede eliminar una carpeta vacía.",
   "sub_to_trash": "Va a la Papelera de reciclaje (Ctrl+Z para deshacer).",
   "sub_files_to_trash": "Los archivos van a la Papelera de reciclaje (Ctrl+Z para deshacer).",
 
@@ -105,5 +105,13 @@
   "up_net_error": "error de red",
   "up_aborted": "cancelado",
   "up_read_fail": "no se puede leer (vacío, ausente o supera el límite de tamaño del puente)",
-  "to_sd_label": "{name}  →  SD:{path}"
+  "to_sd_label": "{name}  →  SD:{path}",
+
+  "err_trash_failed": "“{name}” no se ha eliminado: no se pudo mover a la Papelera.",
+  "err_trash_index": "No se puede leer la Papelera ahora — no se ha eliminado nada. Inténtalo de nuevo.",
+  "err_restore_failed": "No se pudo restaurar “{name}” — sigue en la Papelera.",
+  "err_move_kept": { "one": "{count} elemento no se pudo mover — se ha conservado el original.", "other": "{count} elementos no se pudieron mover — se han conservado los originales." },
+  "err_copy_failed": { "one": "{count} elemento no se pudo copiar.", "other": "{count} elementos no se pudieron copiar." },
+  "err_folder_not_empty": "La carpeta “{name}” no se ha eliminado: no está vacía. Elimina antes su contenido.",
+  "err_new_file": "No se pudo crear “{name}”."
 }

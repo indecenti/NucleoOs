@@ -483,7 +483,7 @@
       if (!sel.length) { xfer = null; return; }
       const items = [];
       if (isSD()) {
-        for (const e of sel) { const p = join(cwd, e.name); items.push({ name: e.name, read: () => api('read', p).then((r) => r.blob()), del: () => trashFile(p, false) }); }
+        for (const e of sel) { const p = join(cwd, e.name); items.push({ name: e.name, read: () => api('read', p).then((r) => { if (!r.ok) throw new Error(t('up_failed') + ' (' + r.status + ')'); return r.blob(); }), del: () => trashFile(p, false) }); }
       } else if (ACTIVE.src === 'bridge') {
         for (const e of sel) { const p = winJoin(ACTIVE.path, e.name); items.push({ name: e.name, read: () => bridgeReadBlob(p), del: () => bridgeDelete(p) }); }
       } else {
@@ -505,17 +505,29 @@
     async function pasteXfer() {
       if (!xfer || !xfer.items.length || !writable()) return;
       const { op, items } = xfer;
+      const copied = new Set();                          // items whose copy really landed
       if (isSD()) {
         let taken = new Set(); try { const sd = await (await api('list', cwd)).json(); taken = new Set((sd.entries || []).map((e) => e.name)); } catch {}
-        const jobs = items.map((it) => ({ label: it.name, dest: join(cwd, uniqueName(it.name, taken)), read: it.read }));
-        await runUploadJobs(jobs);                       // progress panel + 640 MB guard
-        pushUndo({ type: 'paste', created: jobs.map((j) => j.dest) });
+        const jobs = items.map((it) => ({ label: it.name, dest: join(cwd, uniqueName(it.name, taken)), read: it.read, item: it }));
+        const done = await runUploadJobs(jobs);          // progress panel + 640 MB guard; resolves to the jobs that landed
+        for (const j of done) copied.add(j.item);
+        if (done.length) pushUndo({ type: 'paste', created: done.map((j) => j.dest) });
       } else {
         let taken = new Set(); try { taken = new Set((await listLocal(ACTIVE)).entries.map((e) => e.name)); } catch {}
-        for (const it of items) { try { const blob = await it.read(); await localWriteFile(ACTIVE, uniqueName(it.name, taken), blob); } catch (err) { console.warn('paste failed:', it.name, err); } }
+        for (const it of items) { try { const blob = await it.read(); await localWriteFile(ACTIVE, uniqueName(it.name, taken), blob); copied.add(it); } catch (err) { console.warn('paste failed:', it.name, err); } }
         load();
       }
-      if (op === 'cut') { for (const it of items) { try { await it.del(); } catch {} } xfer = null; if (isSD()) load(); }
+      const failed = items.filter((it) => !copied.has(it));
+      if (op === 'cut') {
+        // A move deletes a source ONLY when its copy landed; a failed one keeps its source (and stays on
+        // the clipboard, still cut, so the paste can simply be retried).
+        let kept = failed.length;
+        for (const it of items) { if (!copied.has(it)) continue; try { await it.del(); } catch (err) { console.warn('cut: source kept', it.name, err); kept++; } }
+        xfer = failed.length ? { op, items: failed } : null;
+        paintCut();
+        if (kept) toast(t('err_move_kept', { count: kept }));
+        if (isSD()) load();
+      } else if (failed.length) toast(t('err_copy_failed', { count: failed.length }));
     }
 
     // ---- SD drag-and-drop operations (Windows modifiers): Ctrl=copy · Shift/none=move · Alt=shortcut ----
@@ -526,7 +538,7 @@
     }
     const lnkBlob = (target, label) => JSON.stringify({ schema: 1, type: 'file', target, label: label || undefined, createdAt: Date.now() });
     async function fcDropInto(destDir, items, op) {
-      let ok = 0;
+      let ok = 0, failed = 0;
       for (const it of items) {
         if (!it || !it.path) continue;
         if (destDir === it.path || destDir.startsWith(it.path + '/')) continue;        // never a folder into itself/descendant
@@ -541,9 +553,14 @@
         const dst = await fcUniqueDest(destDir, it.name);
         try {
           if (op === 'move') { const r = await fetch('/api/fs/move?from=' + encodeURIComponent(it.path) + '&to=' + encodeURIComponent(dst), { method: 'POST' }); if (r.ok) ok++; else if (r.status === 403) toast(t('lock_kept_safe')); }
-          else { const buf = await (await api('read', it.path)).arrayBuffer(); if ((await api('write', dst, { method: 'POST', body: buf })).ok) ok++; }
-        } catch {}
+          else {
+            const r = await api('read', it.path);                     // a failed read must not become the copy
+            if (!r.ok) { failed++; continue; }
+            if ((await api('write', dst, { method: 'POST', body: await r.arrayBuffer() })).ok) ok++; else failed++;
+          }
+        } catch { if (op === 'copy') failed++; }
       }
+      if (failed) toast(t('err_copy_failed', { count: failed }));
       if (ok) load();
     }
     async function makeShortcut(e) {                              // create a .lnk in the current folder
@@ -757,9 +774,17 @@
       const ok = await confirmModal(t(e.type === 'dir' ? 'del_folder' : 'del_file', { name: e.name }),
         e.type === 'dir' ? t('sub_folder_perm') : t('sub_to_trash'));
       if (!ok) return;
-      if (e.type === 'dir') await api('delete', path, { method: 'POST' });
-      else await trashFile(path);                 // recoverable
+      if (e.type === 'dir') await deleteFolder(path);
+      else { try { await trashFile(path); } catch (err) { toast(failMsg(err, t('err_trash_failed', { name: e.name }))); } }   // recoverable
       load();
+    }
+    // Folders skip the Recycle Bin, and the firmware only removes an EMPTY folder (rmdir) - a non-empty
+    // one answers 404 "no entry". Say so instead of silently doing nothing (403 = protected, toasted by api()).
+    async function deleteFolder(path) {
+      let r; try { r = await api('delete', path, { method: 'POST' }); } catch {}
+      if (r && (r.ok || r.status === 403)) return r.ok;
+      toast(t('err_folder_not_empty', { name: path.split('/').pop() }));
+      return false;
     }
     async function newFolder() {
       if (!writable()) return;
@@ -772,7 +797,16 @@
       let name = await inputModal(t('modal_new_text'), t('modal_file_name'), t('default_untitled'));
       if (!name) return;
       if (!/\.[a-z0-9]+$/i.test(name)) name += '.txt';
-      await api('write', join(cwd, name), { method: 'POST', body: '' }); load();
+      // Never truncate an existing file: re-list the folder and pick a free name ("untitled (1).txt").
+      // If the folder can't be listed we can't know, so nothing is written.
+      const dir = cwd;
+      let taken;
+      try { const r = await api('list', dir); if (r.ok) taken = new Set(((await r.json()).entries || []).map((x) => x.name)); } catch {}
+      if (!taken) { toast(t('cannot_read')); return; }
+      name = uniqueName(name, taken);
+      let w; try { w = await api('write', join(dir, name), { method: 'POST', body: '' }); } catch {}
+      if (!w || !w.ok) toast(t('err_new_file', { name }));
+      load();
     }
     async function renameFile(e) {
       if (!writable()) return;
@@ -862,39 +896,97 @@
     async function pasteFiles(clip) {
       if (!clip || clip.kind !== 'files' || !clip.data) return;
       const { op, paths } = clip.data; const created = [], moved = [];
+      let failed = 0;
       for (const src of paths) {
         let name = src.split('/').pop(), dst = join(cwd, name);
         if (dst === src) { if (op === 'cut') continue; name = name.replace(/(\.[^.]+)?$/, ' copy$&'); dst = join(cwd, name); }
         try {
-          const buf = await (await api('read', src)).arrayBuffer();   // files only (folders skipped)
-          await api('write', dst, { method: 'POST', body: buf });
-          created.push(dst);
-          if (op === 'cut') { await trashFile(src, false); moved.push({ src, dst }); }
-        } catch {}
+          const r = await api('read', src);                           // files only (folders skipped)
+          if (!r.ok) throw new Error('read ' + r.status);             // never write an error body as the file
+          const w = await api('write', dst, { method: 'POST', body: await r.arrayBuffer() });
+          if (!w.ok) throw new Error('write ' + w.status);
+        } catch (err) { console.warn('paste failed', src, err); failed++; continue; }   // the source is untouched
+        if (op === 'cut') {
+          // The copy landed; the source goes only into the Recycle Bin. If that fails it stays put, and
+          // the copy is kept as a plain paste (undoable) so nothing is lost.
+          try { await trashFile(src, false); moved.push({ src, dst }); }
+          catch (err) { console.warn('cut: source kept', src, err); created.push(dst); failed++; }
+        } else created.push(dst);
       }
-      if (op === 'cut' && moved.length) pushUndo({ type: 'move', moved });
-      else if (created.length) pushUndo({ type: 'paste', created });
+      if (moved.length) pushUndo({ type: 'move', moved });
+      if (created.length) pushUndo({ type: 'paste', created });
+      if (failed) toast(t(op === 'cut' ? 'err_move_kept' : 'err_copy_failed', { count: failed }));
       load();
     }
 
     // ---- recycle bin (persistent, bounded) + session undo ----
-    async function loadTrashDb() { try { const r = await api('read', TRASH_DB); if (r.ok) return JSON.parse(await r.text()); } catch {} return { items: [] }; }
+    // The trash index, or null when it could not be read. A failed read is NEVER an empty bin: saving
+    // that would wipe the record of every other trashed file. A 404, or the firmware's "{}" for a
+    // missing /system/config/*.json, is a genuinely empty bin.
+    async function loadTrashDb() {
+      let r; try { r = await api('read', TRASH_DB); } catch { return null; }
+      if (r.status === 404) return { items: [] };
+      if (!r.ok) return null;
+      try {
+        const d = JSON.parse(await r.text());
+        if (d && typeof d === 'object' && !Array.isArray(d)) {
+          if (d.items === undefined) return { ...d, items: [] };
+          if (Array.isArray(d.items)) return d;
+        }
+      } catch {}
+      return null;
+    }
     const saveTrashDb = (db) => api('write', TRASH_DB, { method: 'POST', body: JSON.stringify(db) });
+    // A failed step with a message already meant for the user (callers toast err.message).
+    const userError = (msg) => Object.assign(new Error(msg), { user: true });
+    const failMsg = (err, fallback) => (err && err.user ? err.message : fallback);
+    // Move one SD file into the Recycle Bin. Every step is checked and the original is deleted LAST:
+    // index readable -> copy read -> copy written -> index saved -> original deleted. Any failure throws
+    // (with a localized message) and leaves the original where it was.
     async function trashFile(path, record = true) {
-      await api('mkdir', TRASH, { method: 'POST' });
-      const tpath = join(TRASH, Date.now() + '_' + Math.floor(Math.random() * 9999) + '_' + path.split('/').pop());
-      const buf = await (await api('read', path)).arrayBuffer();
-      await api('write', tpath, { method: 'POST', body: buf });
-      await api('delete', path, { method: 'POST' });
+      const name = path.split('/').pop();
+      const notTrashed = () => userError(t('err_trash_failed', { name }));
       const db = await loadTrashDb();
-      db.items.unshift({ orig: path, trash: tpath, name: path.split('/').pop(), ts: Date.now() });
-      while (db.items.length > TRASH_CAP) { const old = db.items.pop(); try { await api('delete', old.trash, { method: 'POST' }); } catch {} }
-      await saveTrashDb(db);
+      if (!db) throw userError(t('err_trash_index'));
+      await api('mkdir', TRASH, { method: 'POST' }).catch(() => {});
+      const tpath = join(TRASH, Date.now() + '_' + Math.floor(Math.random() * 9999) + '_' + name);
+      let r; try { r = await api('read', path); } catch { throw notTrashed(); }
+      if (!r.ok) throw notTrashed();
+      const buf = await r.arrayBuffer();
+      let w; try { w = await api('write', tpath, { method: 'POST', body: buf }); } catch { throw notTrashed(); }
+      if (!w.ok) { api('delete', tpath, { method: 'POST' }).catch(() => {}); throw notTrashed(); }
+      const entry = { orig: path, trash: tpath, name, ts: Date.now() };
+      db.items.unshift(entry);
+      let s; try { s = await saveTrashDb(db); } catch {}
+      if (!s || !s.ok) { api('delete', tpath, { method: 'POST' }).catch(() => {}); throw notTrashed(); }
+      let d; try { d = await api('delete', path, { method: 'POST' }); } catch {}
+      if (!d || !d.ok) {                          // the original stays: roll the trash copy + entry back
+        db.items = db.items.filter((i) => i !== entry);
+        await saveTrashDb(db).catch(() => {});
+        api('delete', tpath, { method: 'POST' }).catch(() => {});
+        throw notTrashed();
+      }
+      if (db.items.length > TRASH_CAP) {          // evict the oldest only once this one is safely in
+        while (db.items.length > TRASH_CAP) { const old = db.items.pop(); try { await api('delete', old.trash, { method: 'POST' }); } catch {} }
+        await saveTrashDb(db).catch(() => {});
+      }
       if (record) pushUndo({ type: 'delete', orig: path, trash: tpath });
     }
+    // Put a trashed file back. The trash copy is deleted only once the restored bytes are written; on
+    // any failure it stays in the Recycle Bin (and in its index) and the user is told. Returns ok.
     async function restoreFromTrash(trash, orig) {
-      try { const buf = await (await api('read', trash)).arrayBuffer(); await api('write', orig, { method: 'POST', body: buf });
-        await api('delete', trash, { method: 'POST' }); const db = await loadTrashDb(); db.items = db.items.filter((i) => i.trash !== trash); await saveTrashDb(db); } catch {}
+      const name = orig.split('/').pop();
+      try {
+        const db = await loadTrashDb();
+        if (!db) { toast(t('err_trash_index')); return false; }
+        const r = await api('read', trash);
+        if (!r.ok) throw new Error('read ' + r.status);
+        const w = await api('write', orig, { method: 'POST', body: await r.arrayBuffer() });
+        if (!w.ok) throw new Error('write ' + w.status);
+        await api('delete', trash, { method: 'POST' }).catch(() => {});
+        db.items = db.items.filter((i) => i.trash !== trash); await saveTrashDb(db).catch(() => {});
+        return true;
+      } catch (err) { console.warn('restore failed', err); toast(t('err_restore_failed', { name })); return false; }
     }
     async function deleteSelection() {
       const sel = selectedEntries(); if (!sel.length) return;
@@ -910,15 +1002,15 @@
       if (free.length > 1 && !await confirmModal(t('del_n', { count: free.length }), t('sub_files_to_trash'))) return;
       for (const e of free) {
         const p = join(cwd, e.name);
-        if (e.type === 'dir') { if (await confirmModal(t('del_folder', { name: e.name }), t('sub_folder_perm'))) await api('delete', p, { method: 'POST' }); }
-        else await trashFile(p);
+        if (e.type === 'dir') { if (await confirmModal(t('del_folder', { name: e.name }), t('sub_folder_perm'))) await deleteFolder(p); }
+        else { try { await trashFile(p); } catch (err) { toast(failMsg(err, t('err_trash_failed', { name: e.name }))); } }
       }
       selected.clear(); load();
     }
     function pushUndo(rec) { undoStack.push(rec); if (undoStack.length > UNDO_CAP) undoStack.shift(); }
     async function undo() {
       const rec = undoStack.pop(); if (!rec) return;
-      if (rec.type === 'delete') await restoreFromTrash(rec.trash, rec.orig);
+      if (rec.type === 'delete') { if (!await restoreFromTrash(rec.trash, rec.orig)) pushUndo(rec); }   // failed: keep it undoable
       else if (rec.type === 'paste') { for (const p of rec.created) try { await api('delete', p, { method: 'POST' }); } catch {} }
       // undo a move with the firmware's atomic move — never read+rewrite the file through the browser
       else if (rec.type === 'move') { for (const m of rec.moved) try { await fetch('/api/fs/move?from=' + encodeURIComponent(m.dst) + '&to=' + encodeURIComponent(m.src), { method: 'POST' }); } catch {} }
@@ -1073,8 +1165,10 @@
 
     // Run a queue of { file:Blob, dest:sdPath, label } uploads sequentially, with the
     // progress panel. Shared by drag-and-drop-from-Explorer and copy-from-local-device.
+    // Resolves to the jobs that really landed on the SD (a move must delete only those sources).
     async function runUploadJobs(jobs) {
-      if (!jobs.length) return;
+      if (!jobs.length) return [];
+      const landed = [];
       const title = document.getElementById('up-title');
       upPanel.classList.remove('hidden');
       uploading = true;
@@ -1085,13 +1179,14 @@
         try {
           const file = job.file || (job.read && await job.read());      // lazy read (local files fetched on demand)
           if (file.size > MAX_UPLOAD) { ui.fail(t('up_too_large', { size: fmt(file.size) })); failed++; }
-          else { await putFile(file, job.dest, ui.progress); ui.done(); ok++; }
+          else { await putFile(file, job.dest, ui.progress); ui.done(); ok++; landed.push(job); }
         } catch (err) { ui.fail((err && err.message) || t('up_failed')); failed++; }
         title.textContent = t('up_count', { done: ++done, total: jobs.length });
       }
       uploading = false;
       title.textContent = failed ? t('up_done_failed', { ok, failed }) : t('up_done', { ok });
       if (isSD()) load();   // refresh only if the SD is the current view
+      return landed;
     }
 
     // Copy the selected files from the active local device into the SD (at the last SD folder).

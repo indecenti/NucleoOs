@@ -69,32 +69,61 @@
     clearTimeout(toastTimer); toastTimer = setTimeout(() => t.classList.remove('show'), 1800);
   }
 
+  // The index of trashed files, or null when it could not be read. A failed read is NEVER an empty bin:
+  // the next purge/restore would save that and wipe the record of every other trashed file. A 404, or
+  // the firmware's "{}" for a missing /system/config/*.json, is a genuinely empty bin.
   async function loadDb() {
-    try { const r = await api('read', TRASH_DB); if (r.ok) { const d = JSON.parse(await r.text()); if (Array.isArray(d.items)) return d; } } catch {}
-    return { items: [] };
+    let r; try { r = await api('read', TRASH_DB); } catch { return null; }
+    if (r.status === 404) return { items: [] };
+    if (!r.ok) return null;
+    try {
+      const d = JSON.parse(await r.text());
+      if (d && typeof d === 'object' && !Array.isArray(d)) {
+        if (d.items === undefined) return { ...d, items: [] };
+        if (Array.isArray(d.items)) return d;
+      }
+    } catch {}
+    return null;
   }
   const saveDb = (db) => api('write', TRASH_DB, { method: 'POST', body: JSON.stringify(db) });
+  // Load the index for a change; on failure tell the user and return null so the caller changes nothing.
+  async function loadDbForChange() {
+    const db = await loadDb();
+    if (!db) toast(t('err_index_unreadable'));
+    return db;
+  }
 
   async function restore(item) {
     try {
+      if (!await loadDbForChange()) return;
       const r = await api('read', item.trash);
       if (!r.ok) { toast(t('toast_restore_failed')); render(); return; }
       const buf = await r.arrayBuffer();
       const w = await api('write', item.orig, { method: 'POST', body: buf });
       if (!w.ok) { toast(t('toast_restore_failed')); render(); return; }
       await api('delete', item.trash, { method: 'POST' });
-      const db = await loadDb(); db.items = db.items.filter((i) => i.trash !== item.trash); await saveDb(db);
+      const db = await loadDbForChange();
+      if (db) { db.items = db.items.filter((i) => i.trash !== item.trash); await saveDb(db); }
       toast(t('toast_restored_to', { path: item.orig }));
     } catch { toast(t('toast_restore_failed')); }
     render();
   }
+  // Permanent, so it asks first — like "Empty bin" always did.
   async function purge(item) {
-    try { await api('delete', item.trash, { method: 'POST' }); } catch {}
-    const db = await loadDb(); db.items = db.items.filter((i) => i.trash !== item.trash); await saveDb(db);
+    if (!confirm(t('confirm_purge', { name: item.name }))) return;
+    const db = await loadDbForChange();
+    if (!db) { render(); return; }
+    try {
+      const r = await api('delete', item.trash, { method: 'POST' });
+      // 404 = the file is already gone: dropping its stale entry is right. Anything else: keep it listed.
+      if (!r.ok && r.status !== 404) { toast(t('toast_delete_failed')); render(); return; }
+    } catch { toast(t('toast_delete_failed')); render(); return; }
+    db.items = db.items.filter((i) => i.trash !== item.trash); await saveDb(db);
     toast(t('toast_deleted_perm')); render();
   }
   async function restoreAll() {
-    const db = await loadDb();
+    const db = await loadDbForChange();
+    if (!db) { render(); return; }
     const failed = [];
     for (const item of [...db.items]) {
       try {
@@ -110,7 +139,8 @@
     toast(failed.length ? t('toast_restore_failed') : t('toast_restored_all')); render();
   }
   async function empty() {
-    const db = await loadDb();
+    const db = await loadDbForChange();
+    if (!db) { render(); return; }
     if (db.items.length && !confirm(t('confirm_empty', { count: db.items.length }))) return;
     for (const item of db.items) { try { await api('delete', item.trash, { method: 'POST' }); } catch {} }
     await saveDb({ items: [] }); toast(t('toast_bin_emptied')); render();
@@ -136,6 +166,14 @@
   async function render() {
     const db = await loadDb();
     const list = document.getElementById('list');
+    if (!db) {                                   // unreadable: say so, never "the bin is empty"
+      document.getElementById('count').textContent = '';
+      document.getElementById('restore-all').disabled = true;
+      document.getElementById('empty').disabled = true;
+      list.innerHTML = '<div class="empty"><div><div class="big">⚠️</div><span></span></div></div>';
+      list.querySelector('.empty span').textContent = t('load_failed');
+      return;
+    }
     const items = db.items || [];
     document.getElementById('count').textContent = items.length ? t('count', { count: items.length }) : t('count_empty');
     document.getElementById('restore-all').disabled = !items.length;

@@ -74,7 +74,7 @@
   "del_kind_file": "il file",
   "del_kind_folder": "la cartella",
   "sub_local_perm": "Gli elementi locali saltano il Cestino — l'operazione è definitiva.",
-  "sub_folder_perm": "Tutto il suo contenuto viene rimosso definitivamente.",
+  "sub_folder_perm": "Le cartelle non passano dal Cestino e vengono eliminate definitivamente. Si può eliminare solo una cartella vuota.",
   "sub_to_trash": "Va nel Cestino (Ctrl+Z per annullare).",
   "sub_files_to_trash": "I file vanno nel Cestino (Ctrl+Z per annullare).",
 
@@ -105,5 +105,13 @@
   "up_net_error": "errore di rete",
   "up_aborted": "annullato",
   "up_read_fail": "impossibile leggere (vuoto, mancante o oltre il limite di dimensione del ponte)",
-  "to_sd_label": "{name}  →  SD:{path}"
+  "to_sd_label": "{name}  →  SD:{path}",
+
+  "err_trash_failed": "“{name}” non è stato eliminato: non è stato possibile spostarlo nel Cestino.",
+  "err_trash_index": "Impossibile leggere il Cestino in questo momento — non è stato eliminato nulla. Riprova.",
+  "err_restore_failed": "Impossibile ripristinare “{name}” — è ancora nel Cestino.",
+  "err_move_kept": { "one": "{count} elemento non è stato spostato — l'originale è stato mantenuto.", "other": "{count} elementi non sono stati spostati — gli originali sono stati mantenuti." },
+  "err_copy_failed": { "one": "{count} elemento non è stato copiato.", "other": "{count} elementi non sono stati copiati." },
+  "err_folder_not_empty": "La cartella “{name}” non è stata eliminata: non è vuota. Elimina prima il suo contenuto.",
+  "err_new_file": "Impossibile creare “{name}”."
 }

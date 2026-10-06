@@ -19,5 +19,9 @@
   "confirm_empty": {
     "one": "Supprimer définitivement {count} élément ? Cette action est irréversible.",
     "other": "Supprimer définitivement {count} éléments ? Cette action est irréversible."
-  }
+  },
+  "confirm_purge": "Supprimer définitivement « {name} » ? Cette action est irréversible.",
+  "toast_delete_failed": "Échec de la suppression — l'élément est toujours dans la corbeille",
+  "err_index_unreadable": "Impossible de lire la Corbeille pour le moment — rien n'a été modifié. Réessayez.",
+  "load_failed": "Impossible de lire la Corbeille pour le moment. Réessayez dans un instant."
 }

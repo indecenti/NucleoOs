@@ -74,7 +74,7 @@
   "del_kind_file": "file",
   "del_kind_folder": "folder",
   "sub_local_perm": "Local items skip the Recycle Bin — this is permanent.",
-  "sub_folder_perm": "Everything inside it is removed permanently.",
+  "sub_folder_perm": "Folders skip the Recycle Bin and are deleted permanently. Only an empty folder can be deleted.",
   "sub_to_trash": "It goes to the Recycle Bin (Ctrl+Z to undo).",
   "sub_files_to_trash": "Files go to the Recycle Bin (Ctrl+Z to undo).",
 
@@ -105,5 +105,13 @@
   "up_net_error": "network error",
   "up_aborted": "aborted",
   "up_read_fail": "cannot read (empty, missing, or over the bridge size limit)",
-  "to_sd_label": "{name}  →  SD:{path}"
+  "to_sd_label": "{name}  →  SD:{path}",
+
+  "err_trash_failed": "“{name}” was not deleted: it could not be moved to the Recycle Bin.",
+  "err_trash_index": "Cannot read the Recycle Bin right now — nothing was deleted. Try again.",
+  "err_restore_failed": "Could not restore “{name}” — it is still in the Recycle Bin.",
+  "err_move_kept": { "one": "{count} item could not be moved — the original was kept.", "other": "{count} items could not be moved — the originals were kept." },
+  "err_copy_failed": { "one": "{count} item could not be copied.", "other": "{count} items could not be copied." },
+  "err_folder_not_empty": "Folder “{name}” was not deleted: it is not empty. Delete its contents first.",
+  "err_new_file": "Could not create “{name}”."
 }

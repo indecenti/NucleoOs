@@ -74,7 +74,7 @@
   "del_kind_file": "Die Datei",
   "del_kind_folder": "Den Ordner",
   "sub_local_perm": "Lokale Elemente überspringen den Papierkorb — dies ist endgültig.",
-  "sub_folder_perm": "Der gesamte Inhalt wird endgültig entfernt.",
+  "sub_folder_perm": "Ordner umgehen den Papierkorb und werden endgültig gelöscht. Nur ein leerer Ordner kann gelöscht werden.",
   "sub_to_trash": "Es wandert in den Papierkorb (Ctrl+Z zum Rückgängigmachen).",
   "sub_files_to_trash": "Die Dateien wandern in den Papierkorb (Ctrl+Z zum Rückgängigmachen).",
 
@@ -105,5 +105,13 @@
   "up_net_error": "Netzwerkfehler",
   "up_aborted": "abgebrochen",
   "up_read_fail": "kann nicht gelesen werden (leer, fehlt oder über der Größenbeschränkung der Brücke)",
-  "to_sd_label": "{name}  →  SD:{path}"
+  "to_sd_label": "{name}  →  SD:{path}",
+
+  "err_trash_failed": "„{name}“ wurde nicht gelöscht: Es konnte nicht in den Papierkorb verschoben werden.",
+  "err_trash_index": "Der Papierkorb kann gerade nicht gelesen werden — es wurde nichts gelöscht. Bitte erneut versuchen.",
+  "err_restore_failed": "„{name}“ konnte nicht wiederhergestellt werden — es liegt noch im Papierkorb.",
+  "err_move_kept": { "one": "{count} Element konnte nicht verschoben werden — das Original wurde behalten.", "other": "{count} Elemente konnten nicht verschoben werden — die Originale wurden behalten." },
+  "err_copy_failed": { "one": "{count} Element konnte nicht kopiert werden.", "other": "{count} Elemente konnten nicht kopiert werden." },
+  "err_folder_not_empty": "Der Ordner „{name}“ wurde nicht gelöscht: Er ist nicht leer. Lösche zuerst seinen Inhalt.",
+  "err_new_file": "„{name}“ konnte nicht erstellt werden."
 }
