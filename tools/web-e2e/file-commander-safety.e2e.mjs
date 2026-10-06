@@ -42,6 +42,8 @@ const SEED = {
   '/data/dc/into/.keep': '',
   '/data/ti/h.txt': 'hotel',                       // trash index unreadable
   '/data/tz/i.txt': 'india',                       // trash index answered "{}" (firmware: missing file)
+  '/data/te/j.txt': 'juliett',                     // trash index is a 0-byte file
+  '/data/tc/k.txt': 'kilo',                        // trash index is corrupt
 };
 
 // Wrap window.fetch so an exact /api/fs/<op>?path=<path> answers `status` (optionally `times` times).
@@ -249,6 +251,36 @@ test('file-commander: a failed step never costs the user a file', { skip }, asyn
       await settle(page);
       const db = await trashDb();
       assert.ok(Array.isArray(db.items) && db.items.some((i) => i.orig === '/data/tz/i.txt'), 'the trashed file is missing from the index: ' + JSON.stringify(db));
+    } finally { await fs.writeFile(join(sim.sd, 'system/config/trash.json'), before); }
+  });
+
+  // Review finding: a 0-byte or corrupt index used to block EVERY delete for good (no way out in the UI).
+  await t.test('a 0-byte index is an empty bin: the delete works and the file is indexed', async () => {
+    const page = await openFc(browser, sim, '/data/te');
+    const fs = await import('node:fs/promises');
+    const before = await sim.readSd('/system/config/trash.json');
+    await fs.writeFile(join(sim.sd, 'system/config/trash.json'), '');
+    try {
+      await select(page, 'j.txt');
+      await shortcut(page, 'delete');
+      assert.ok(await page.waitFor(`!${rowJs('j.txt')}`, { timeout: T }), 'the delete went through');
+      await settle(page);
+      assert.ok((await trashDb()).items.some((i) => i.orig === '/data/te/j.txt'), 'the trashed file is indexed');
+    } finally { await fs.writeFile(join(sim.sd, 'system/config/trash.json'), before); }
+  });
+
+  await t.test('a corrupt index is kept aside (never lost) and the bin starts a fresh one', async () => {
+    const page = await openFc(browser, sim, '/data/tc');
+    const fs = await import('node:fs/promises');
+    const before = await sim.readSd('/system/config/trash.json');
+    await fs.writeFile(join(sim.sd, 'system/config/trash.json'), '{"items":[{"orig":"/x"');
+    try {
+      await select(page, 'k.txt');
+      await shortcut(page, 'delete');
+      assert.ok(await page.waitFor(`!${rowJs('k.txt')}`, { timeout: T }), 'the delete went through');
+      await settle(page);
+      assert.ok((await trashDb()).items.some((i) => i.orig === '/data/tc/k.txt'), 'the trashed file is indexed');
+      assert.equal(await sim.readSd('/system/config/trash.corrupt.json'), '{"items":[{"orig":"/x"', 'the unreadable index is kept, byte for byte');
     } finally { await fs.writeFile(join(sim.sd, 'system/config/trash.json'), before); }
   });
 });

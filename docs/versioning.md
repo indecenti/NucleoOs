@@ -33,6 +33,10 @@ Two tiny files under `firmware/version/` hold the only hand-or-tool-managed numb
 | `firmware/version/VERSION` | semver, e.g. `0.2.0` | `version-bump.ps1 -Bump <part>` on a real release |
 | `firmware/version/BUILD` | build counter, e.g. `7` | `version-bump.ps1` (default), auto, every build |
 
+A release bump (`-Bump`/`-Set`) also carries the new semver to `package.json`, `CITATION.cff` and a dated
+`CHANGELOG.md` section opened under `[Unreleased]` (whose notes it now heads — review them). CI fails on any
+drift between them (`tools/version-consistency.test.mjs`; the script itself: `tools/version-bump.test.mjs`).
+
 `firmware/version/version.cmake` reads those two files, adds the git short hash + dirty flag, and
 sets **`PROJECT_VER`** *before* ESP-IDF's `project.cmake` (the only point where it's honoured —
 see ESP-IDF "App version" docs). ESP-IDF bakes `PROJECT_VER` into the application descriptor.
@@ -71,7 +75,8 @@ so bumping `BUILD` every build never makes the tree show as dirty — only real 
 by re-reading `/api/status` through the reboot — proof the new image took.
 
 **Cut a real release (semver bump).** Bump the semver first (resets the build counter to 0), then
-release, then commit the `firmware/version/*` change so the number is monotonic in history:
+release, then commit the `firmware/version/*` change (plus the `package.json`, `CITATION.cff` and
+`CHANGELOG.md` it updated) so the number is monotonic in history:
 ```
 powershell -ExecutionPolicy Bypass -File tools\version-bump.ps1 -Bump patch   # 0.2.0 -> 0.2.1, build 0
 powershell -ExecutionPolicy Bypass -File tools\release.ps1

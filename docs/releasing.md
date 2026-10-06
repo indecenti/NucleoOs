@@ -153,10 +153,10 @@ After either, reload the shell in the browser; the bumped SW pulls the new asset
 Everything below is CI; you push a tag and nothing else. **How to cut a release:**
 
 ```
-# 1. bump the human version (semver) and land it on main. VERSION is the source of truth;
-#    package.json "version", CITATION.cff "version" and a CHANGELOG.md "## [0.3.1]" section
-#    must match it (tools/version-consistency.test.mjs fails the gate otherwise)
-echo 0.3.1 > firmware/version/VERSION
+# 1. bump the human version (semver) and land it on main. VERSION is the source of truth; the
+#    script also updates package.json, CITATION.cff and opens the CHANGELOG.md "## [0.3.1]" section
+#    (tools/version-consistency.test.mjs fails the gate on any drift) — review the changelog notes
+powershell -ExecutionPolicy Bypass -File toolsersion-bump.ps1 -Set 0.3.1
 git add firmware/version/VERSION package.json CITATION.cff CHANGELOG.md && git commit -m "release: v0.3.1"
 git push origin main            # CI (ci.yml) runs the gate on main
 

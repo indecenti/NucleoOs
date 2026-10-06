@@ -44,7 +44,45 @@ if ($Set) {
 }
 
 # Write WITHOUT a trailing newline + ASCII so CMake file(STRINGS) and Get-Content both read one clean line.
+$oldSemver = (Get-Content $verFile -Raw).Trim()
 [System.IO.File]::WriteAllText($verFile,   $semver, [System.Text.Encoding]::ASCII)
 [System.IO.File]::WriteAllText($buildFile, "$build", [System.Text.Encoding]::ASCII)
+
+# A release (the semver moved) carries the version everywhere it is declared, so the CI gate
+# (tools/version-consistency.test.mjs) stays green: package.json, CITATION.cff, and a CHANGELOG.md
+# section opened right under [Unreleased] (its bullets are still written by hand).
+if ($semver -ne $oldSemver) {
+    $root  = Split-Path $PSScriptRoot -Parent
+    $today = Get-Date -Format 'yyyy-MM-dd'
+    $utf8  = New-Object System.Text.UTF8Encoding($false)
+    $pkg = Join-Path $root 'package.json'
+    if (Test-Path $pkg) {
+        $t = [System.IO.File]::ReadAllText($pkg)
+        # The FIRST "version" only (the package's own). NB: [regex]::Replace's 4th argument is
+        # RegexOptions, not a count — an instance Replace(input, replacement, count) limits it.
+        $vre = New-Object System.Text.RegularExpressions.Regex('("version"\s*:\s*")[^"]*(")')
+        $t = $vre.Replace($t, "`${1}$semver`${2}", 1)
+        [System.IO.File]::WriteAllText($pkg, $t, $utf8)
+    }
+    $cff = Join-Path $root 'CITATION.cff'
+    if (Test-Path $cff) {
+        $t = [System.IO.File]::ReadAllText($cff)
+        $t = [regex]::Replace($t, '(?m)^version:.*$', "version: $semver")
+        $t = [regex]::Replace($t, '(?m)^date-released:.*$', "date-released: `"$today`"")
+        [System.IO.File]::WriteAllText($cff, $t, $utf8)
+    }
+    $log = Join-Path $root 'CHANGELOG.md'
+    if (Test-Path $log) {
+        $t = [System.IO.File]::ReadAllText($log)
+        if ($t -notmatch [regex]::Escape("## [$semver]")) {
+            $nl = if ($t -match "`r`n") { "`r`n" } else { "`n" }
+            $re = New-Object System.Text.RegularExpressions.Regex('## \[Unreleased\]')
+            $dash = [char]0x2014   # an em dash, built here: Windows PowerShell 5.1 reads this file as ANSI
+            $t = $re.Replace($t, "## [Unreleased]$nl$nl## [$semver] $dash $today", 1)
+            [System.IO.File]::WriteAllText($log, $t, $utf8)
+            Write-Host "CHANGELOG.md: the [Unreleased] notes are now under [$semver] - review them" -ForegroundColor Yellow
+        }
+    }
+}
 
 Write-Host ("version -> {0}  build {1}   (ships as {0}+{1}.g<git>[*])" -f $semver, $build) -ForegroundColor Green

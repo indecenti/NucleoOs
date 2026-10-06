@@ -83,7 +83,7 @@ const net = {
   count(p) { return net.calls.filter((c) => c.path === p).length; },
   reset() {
     net.calls.length = 0; net.writes.length = 0; net.status.clear(); net.failing.clear();
-    net.fs = {}; net.json = {}; net.unpaired = false; net.inFlight = 0; net.maxInFlight = 0; net.strictParents = false;
+    net.fs = {}; net.json = {}; net.writeGate = null; net.unpaired = false; net.inFlight = 0; net.maxInFlight = 0; net.strictParents = false;
   },
 };
 const reply = (status, text, hdr) => ({
@@ -103,6 +103,7 @@ async function fakeFetch(url, opts = {}) {
   try {
     await null;
     if (p === '/api/fs/list' && gate) await gate;
+    if (p === '/api/fs/write' && net.writeGate) await net.writeGate;   // a write held "on the wire"
     if (net.failing.has(p) || net.failing.has('*')) throw new TypeError('Failed to fetch');
     if (net.unpaired && p.startsWith('/api/')) return reply(401, 'unauthorized');
     if (net.status.has(p)) return reply(net.status.get(p), '{}');
@@ -947,19 +948,42 @@ test('mv: a failed move is reported and creates nothing', async () => {
 // Found on a real Cardputer: closing the window fires BOTH visibilitychange (hidden) and pagehide, and a
 // batch save can still be running — two concurrent writes of history.jsonl, and the single-task httpd
 // reset one of them (ERR_CONNECTION_RESET). Saves of the same file must never overlap.
-test('history: overlapping saves never hit the device twice at once, and the newest list lands', async () => {
+test('history: a close that adds nothing never writes the same list twice at once', async () => {
   reset();
   net.fs['/apps/terminal/data'] = [];
   await T.loadPersisted();
   T.remember('one');
   net.maxInFlight = 0;
-  const first = T.saveHistory(false);
-  T.remember('two');
-  const second = T.saveHistory(true);
-  const third = T.saveHistory(true);            // pagehide right after visibilitychange: nothing new
+  const first = T.saveHistory(false);           // a batch save on the wire…
+  const second = T.saveHistory(true);           // …visibilitychange (hidden)…
+  const third = T.saveHistory(true);            // …and pagehide: nothing new since the batch
   await Promise.all([first, second, third]);
-  assert.equal(net.maxInFlight, 1, 'one write at a time');
   const ws = net.writes.filter((x) => x.path === '/apps/terminal/data/history.jsonl');
-  assert.ok(ws.length <= 2, 'an identical list is not re-sent: ' + ws.length + ' writes');
-  assert.deepEqual(ws.pop().body.split(String.fromCharCode(10)).map((l) => JSON.parse(l)), ['one', 'two']);
+  assert.equal(ws.length, 1, 'one write in all — the identical list is never re-sent, so nothing can overlap');
+  assert.deepEqual(ws[0].body.split(String.fromCharCode(10)).map((l) => JSON.parse(l)), ['one']);
+});
+
+// Review finding: the page is going away while a batch save runs and the user typed one more command. A
+// keepalive save that only queued behind the running write never ran after the teardown: the last
+// commands were lost. It is sent at once (once, even when hidden and pagehide both fire), and the newest
+// list is what lands.
+test('history: closing mid-save with new commands sends them at once, once, and they land', async () => {
+  reset();
+  net.fs['/apps/terminal/data'] = [];
+  await T.loadPersisted();
+  let release; net.writeGate = new Promise((r) => { release = r; });
+  T.remember('one');
+  const first = T.saveHistory(false);           // a batch save, held on the wire
+  T.remember('two');
+  const hidden = T.saveHistory(true);           // the page is going away…
+  const pagehide = T.saveHistory(true);
+  for (let i = 0; i < 20; i++) await null;      // let the calls reach the network
+  // What is on the wire NOW is all a torn-down page ever sends: a save queued behind the batch never runs.
+  const onWire = net.calls.filter((c) => c.path === '/api/fs/write' && c.param === '/apps/terminal/data/history.jsonl').map((c) => String(c.body));
+  assert.ok(onWire.some((b) => b.includes('"two"')), 'the last command is sent before the page dies');
+  assert.equal(onWire.filter((b) => b.includes('"two"')).length, 1, 'hidden + pagehide send it once');
+  net.writeGate = null; release();
+  await Promise.all([first, hidden, pagehide]);
+  const all = net.writes.filter((x) => x.path === '/apps/terminal/data/history.jsonl').map((w) => w.body);
+  assert.deepEqual(JSON.parse('[' + all[all.length - 1].split(String.fromCharCode(10)).join(',') + ']'), ['one', 'two'], 'the newest list lands last');
 });

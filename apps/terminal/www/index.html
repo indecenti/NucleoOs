@@ -2410,20 +2410,37 @@
     // One history write at a time. Closing the window fires both visibilitychange and pagehide while a
     // batch save may still be running, and the device's single-task httpd reset one of two concurrent
     // writes of the same file (seen on a real Cardputer). A save asked for meanwhile runs once after the
-    // current one, and only if the list changed since what was written.
-    let histSaving = null, histAgain = false, histAgainKeep = false;
+    // current one, and only if the list changed since what was written. Exception: a keepalive save (the
+    // page is going away) with commands the running write does not carry is sent AT ONCE — a queued one
+    // would never run after the teardown, and losing the last commands is worse than a possible reset.
+    let histSaving = null, histAgain = false;
+    const histInFlight = new Set();   // bodies of the history writes on the wire right now
+    const histBody = () => hist.map((h) => JSON.stringify(h)).join('\n');
     async function saveHistory(keepalive) {
       if (!histLoaded) return;
       clearT(histTimer); histTimer = 0; histNew = 0; histFirstAt = 0;
-      if (histSaving) { histAgain = true; histAgainKeep = histAgainKeep || !!keepalive; return histSaving; }
+      if (histSaving) {
+        if (keepalive) {
+          const body = histBody();
+          if (histInFlight.has(body)) return histSaving;    // a write on the wire already carries it
+          histAgain = true;                                 // if the page lives on, re-save in sequence too
+          histInFlight.add(body);
+          try { await writeApp(APPDIR + '/history.jsonl', body, true); } finally { histInFlight.delete(body); }
+          return;
+        }
+        histAgain = true; return histSaving;
+      }
       histSaving = (async () => {
         let keep = !!keepalive, last = null;
         for (;;) {
           histAgain = false;
-          const body = hist.map((h) => JSON.stringify(h)).join('\n');
-          if (body !== last) { last = body; await writeApp(APPDIR + '/history.jsonl', body, keep); }
+          const body = histBody();
+          if (body !== last && !histInFlight.has(body)) {   // never a second write of a body already on the wire
+            last = body; histInFlight.add(body);
+            try { await writeApp(APPDIR + '/history.jsonl', body, keep); } finally { histInFlight.delete(body); }
+          }
           if (!histAgain) break;
-          keep = histAgainKeep; histAgainKeep = false;
+          keep = false;
         }
       })();
       try { await histSaving; } finally { histSaving = null; }

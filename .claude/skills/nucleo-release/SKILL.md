@@ -109,7 +109,8 @@ check the live port, don't assume.
 in `/api/status` (`version`), `/proc/version`, the mDNS `ver` TXT record and the serial boot banner.
 - Just building/OTA? Nothing to do — the counter auto-increments.
 - Cutting a real release? `tools\version-bump.ps1 -Bump patch|minor|major` first (resets the counter),
-  then release; commit the `firmware/version/*` change. `-NoBump` rebuilds the same version.
+  then release; commit the `firmware/version/*` change together with the `package.json`, `CITATION.cff`
+  and `CHANGELOG.md` the script updated (CI fails on version drift). `-NoBump` rebuilds the same version.
 See `docs/versioning.md`.
 
 ## Firmware RAM: boot-test before OTA (the gate does NOT catch this)
