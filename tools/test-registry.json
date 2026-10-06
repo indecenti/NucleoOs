@@ -1738,6 +1738,36 @@
       "anima": false
     },
     {
+      "id": "gate-sdcontent-sd-self-install-policy",
+      "label": "sdcontent (SD self-install policy)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/sdcontent-check.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-sdcontent-e2e-sd-download-end-to-end",
+      "label": "sdcontent-e2e (SD download, end to end)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/sdcontent-e2e.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
       "id": "gate-setup-store-reset-sd-secrets",
       "label": "setup-store (reset + SD secrets)",
       "category": "connect-transfer",
@@ -1783,6 +1813,22 @@
       "anima": true
     },
     {
+      "id": "gate-app-catalog",
+      "label": "app catalog",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/gen-app-catalog.mjs",
+        "--check"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
       "id": "gate-web-mode-handoff-page",
       "label": "web-mode handoff page",
       "category": "cascade-infra",
@@ -1791,6 +1837,21 @@
       "args": [
         "tools/gen-handoff.mjs",
         "--check"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-registry-per-app-scan",
+      "label": "registry per-app scan",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/regscan-check.mjs"
       ],
       "verifies": "",
       "nl": false,
@@ -2153,6 +2214,22 @@
       "anima": true
     },
     {
+      "id": "gate-agent-runtime-real-loop",
+      "label": "agent-runtime (real loop)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/agent-runtime.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
       "id": "gate-agent-contract-multi-provider",
       "label": "agent-contract (multi-provider)",
       "category": "cascade-infra",
@@ -2244,6 +2321,38 @@
       "anima": false
     },
     {
+      "id": "unit-agent-sh",
+      "label": "agent-sh.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/agent-sh.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-agent-tool-guard",
+      "label": "agent-tool-guard.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/agent-tool-guard.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
       "id": "unit-ai-models",
       "label": "ai-models.test.mjs",
       "category": "app-shell",
@@ -2268,6 +2377,22 @@
       "args": [
         "--test",
         "tools/anima-host/agent-helpers.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-agent-runtime",
+      "label": "agent-runtime.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-host/agent-runtime.test.mjs"
       ],
       "verifies": "",
       "nl": false,
@@ -3370,6 +3495,22 @@
       "anima": false
     },
     {
+      "id": "unit-device-session",
+      "label": "device-session.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/device-session.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
       "id": "unit-device-ui",
       "label": "device-ui.test.mjs",
       "category": "app-device",
@@ -3378,6 +3519,22 @@
       "args": [
         "--test",
         "tools/device-ui.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-edit-replace",
+      "label": "edit-replace.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/edit-replace.test.mjs"
       ],
       "verifies": "",
       "nl": false,
@@ -3506,6 +3663,22 @@
       "args": [
         "--test",
         "tools/sd-policy.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-seq-import",
+      "label": "seq-import.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/seq-import.test.mjs"
       ],
       "verifies": "",
       "nl": false,
@@ -4047,6 +4220,36 @@
       "lang": "na",
       "in_gate": false,
       "anima": false
+    },
+    {
+      "id": "extra-js-syntax-every-shipped-source",
+      "label": "js syntax (every shipped source)",
+      "category": "build-lint",
+      "kind": "extra",
+      "cmd": "node",
+      "args": [
+        "tools/js-syntax-gate.mjs"
+      ],
+      "verifies": "Ogni .js/.mjs, ogni <script> inline delle pagine e ogni .json di web/shell e apps/*/www si analizza con acorn: un errore di sintassi in uno script modulo svuota tutta l’app senza altri sintomi.",
+      "nl": false,
+      "lang": "na",
+      "in_gate": false,
+      "anima": false
+    },
+    {
+      "id": "extra-junk-input-bare-date-number",
+      "label": "junk input (bare date/number)",
+      "category": "nl-hallucination",
+      "kind": "extra",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/junk-check.mjs"
+      ],
+      "verifies": "Una data, un numero, un orario o una stringa senza parole non riceve MAI un fatto inventato (tier=none); le domande vere restano risposte.",
+      "nl": true,
+      "lang": "na",
+      "in_gate": false,
+      "anima": true
     },
     {
       "id": "extra-gz-freshness",

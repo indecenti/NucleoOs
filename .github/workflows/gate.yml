@@ -28,6 +28,9 @@ jobs:
       - name: Gzip twins in sync (EOL-normalized)
         run: node tools/check-gz.mjs
 
+      - name: Every shipped web source parses (JS, inline scripts, JSON)
+        run: node tools/js-syntax-gate.mjs
+
       - name: API spec matches firmware routes
         run: node tools/gen-api-spec.mjs --check
 

@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
   <title data-t="appTitle">Impostazioni</title>
   <style>
+    /* Native controls (audio/video bars, date/time pickers, file inputs, selects) follow the app theme. */
+    :root { color-scheme: dark; } html[data-theme="light"] { color-scheme: light; }
     :root{
       --bg:#0b1020; --panel:#121a30; --panel2:#0e1526; --line:#22304f; --ink:#e8eefc; --dim:#8aa0c8;
       --accent:#5ee0a0; --accent2:#6aa8ff; --warn:#ffd166; --bad:#ff6b6b; --ok:#5ee0a0;
@@ -1239,15 +1241,16 @@ async function wpLoadGallery() {
   const container = $('wp-container'); if (!container) return;
   try {
     const r = await fetch('/api/fs/list?path=/data/Pictures', { cache: 'no-store' });
-    if (!r.ok) { container.innerHTML = `<div class="hint" style="padding:10px">${T('unreachable')}</div>`; return; }
-    const imgs = ((await r.json()).entries || []).filter((e) => e.type === 'file' && /\.(png|jpe?g|webp)$/i.test(e.name));
+    if (!r.ok && r.status !== 404) { container.innerHTML = `<div class="hint" style="padding:10px">${T('unreachable')}</div>`; return; }
+    // No /data/Pictures yet answers 404: that is no wallpapers yet, not an unreachable device.
+    const imgs = ((r.status === 404 ? {} : await r.json()).entries || []).filter((e) => e.type === 'file' && /\.(png|jpe?g|webp)$/i.test(e.name));
     if (!imgs.length) { container.innerHTML = `<div class="hint" style="padding:10px">${T('wpEmpty')}</div>`; return; }
     container.innerHTML = '';
     for (const img of imgs) {
       const path = '/data/Pictures/' + img.name;
       const el = document.createElement('div'); el.className = 'wp-item'; el.dataset.path = path;
       el.style.backgroundImage = `url("/api/fs/read?path=${encodeURIComponent(path)}")`;
-      el.innerHTML = `<div class="wp-name">${img.name}</div>`;
+      const nm = document.createElement('div'); nm.className = 'wp-name'; nm.textContent = img.name; el.appendChild(nm);   // a file name is data, never markup
       el.addEventListener('click', () => { wpModel = { type: 'image', path, fit: wpModel.fit || 'cover' }; wpApply(); wpMarkActive(); });
       container.appendChild(el);
     }
