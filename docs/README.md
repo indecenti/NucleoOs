@@ -51,7 +51,7 @@ ANIMA is NucleoOS's offline natural-language assistant (retrieval + reasoning in
 | [anima-online.md](anima-online.md) | How ANIMA behaves with Wi-Fi up — structured knowledge + a cloud teacher that leaves the device permanently smarter offline. |
 | [anima-agent.md](anima-agent.md) | Micro-agent design: intent routing, tool use with strict schemas, multi-domain RAG within 512 KB. *(design)* |
 | [anima-roadmap.md](anima-roadmap.md) | The ordered, verifiable build plan for ANIMA — north star, invariants, phased gates. *(roadmap)* |
-| [anima-local-first-plan.md](anima-local-first-plan.md) | A local-first agent plan — keep the device minimal, run everything heavy in the browser / on the user's PC. *(plan; proposed, awaiting approval)* |
+| [anima-local-first-plan.md](anima-local-first-plan.md) | A local-first agent plan — keep the device minimal, run everything heavy in the browser / on the user's PC. *(plan; approved — phases 1, 2, 4-core done, 3 open)* |
 | [anima-memory.md](anima-memory.md) | The SRAM / flash (XIP) / SD memory hierarchy that lets the brain hold far more than RAM. *(design)* |
 | [anima-knowledge-graph.md](anima-knowledge-graph.md) | Typed entities, faceted relations and indexed retrieval (Wikidata-derived). *(durable plan; SD index not yet built)* |
 | [anima-knowledge-scale.md](anima-knowledge-scale.md) | Scaling the offline knowledge brain to 50–60 GB of certain, bilingual content. *(durable plan)* |
@@ -63,6 +63,7 @@ ANIMA is NucleoOS's offline natural-language assistant (retrieval + reasoning in
 | [anima-atelier.md](anima-atelier.md) | Sketch-conditioned on-device image generation (SDXS + ControlNet on the browser's WebGPU). *(design)* |
 | [ai-models.md](ai-models.md) | How every cloud-LLM surface picks a model live from the key's own `/models` and turns failures into one actionable sentence. |
 | [ai-roadmap.md](ai-roadmap.md) | The AI strategy record — a 2026-08 design review's ranked proposals, with the judge's reasoning. *(roadmap)* |
+| [kryonos-integration-plan.md](kryonos-integration-plan.md) | Three ideas adopted from KryonOS — a rescue page, a release `type`, and a parked third. *(plan; items 1 and 3 host-tested, firmware halves flash-pending; item 2 parked)* |
 
 ## Building apps & protocols
 

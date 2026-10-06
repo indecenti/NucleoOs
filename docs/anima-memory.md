@@ -1,6 +1,6 @@
 # ANIMA — memory hierarchy: a brain that uses every bit of the device
 
-How ANIMA's hyperdimensional brain ([`anima-hdc.md`](anima-hdc.md)) is sized across the three storage
+How ANIMA's hyperdimensional brain ([`nucleo_anima_hdc.c`](../firmware/components/nucleo_anima/nucleo_anima_hdc.c)) is sized across the three storage
 tiers of the Cardputer, so it holds **tens of thousands of concepts** offline and reasons over them in
 **single-digit milliseconds**, without ever leaving the device. Measured by `tools/anima/mem-hier.mjs`.
 
@@ -22,7 +22,7 @@ ESP-IDF's `esp_partition_mmap` maps a flash partition into the CPU address space
 Put the binary hypervector codebook there and a popcount scan runs over flash **with zero copy to SRAM**,
 at flash-cache speed. A 4 MB brain partition = **4096** hypervectors resident; 8 MB = **8192**. Compared
 to SRAM-only (~64), that is **~64–128× more knowledge** — and at ~60 facts per hypervector
-([`anima-hdc.md`](anima-hdc.md) capacity bench) an 8 MB brain holds on the order of **~490 000 facts**.
+([`nucleo_anima_hdc.c`](../firmware/components/nucleo_anima/nucleo_anima_hdc.c) capacity bench) an 8 MB brain holds on the order of **~490 000 facts**.
 
 ### The coarse-prefix prefilter (makes the full tier scannable)
 Reading 8192 × 1 KB from flash to score them all is ~200 ms — too slow. So each HV gets an 8-byte
@@ -58,5 +58,5 @@ swap file. Instead:
    writes the partition wear-leveled; the LRU lives in the ANIMA SRAM arena.
 4. Optional flash encryption for the brain partition.
 
-This is the storage substrate for the reasoning core in [`anima-hdc.md`](anima-hdc.md) and the
+This is the storage substrate for the reasoning core in [`nucleo_anima_hdc.c`](../firmware/components/nucleo_anima/nucleo_anima_hdc.c) and the
 deductive KGE; together they make a genuinely large, fast, **offline** brain on a $15 MCU.

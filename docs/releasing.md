@@ -153,9 +153,11 @@ After either, reload the shell in the browser; the bumped SW pulls the new asset
 Everything below is CI; you push a tag and nothing else. **How to cut a release:**
 
 ```
-# 1. bump the human version (semver) and land it on main
+# 1. bump the human version (semver) and land it on main. VERSION is the source of truth;
+#    package.json "version", CITATION.cff "version" and a CHANGELOG.md "## [0.3.1]" section
+#    must match it (tools/version-consistency.test.mjs fails the gate otherwise)
 echo 0.3.1 > firmware/version/VERSION
-git add firmware/version/VERSION && git commit -m "release: v0.3.1"
+git add firmware/version/VERSION package.json CITATION.cff CHANGELOG.md && git commit -m "release: v0.3.1"
 git push origin main            # CI (ci.yml) runs the gate on main
 
 # 2. tag it (the tag MUST equal v<VERSION> — the pipeline enforces this)

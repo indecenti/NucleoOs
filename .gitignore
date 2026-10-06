@@ -104,3 +104,9 @@ oversized-assets/parts/teacher-npy/
 
 # Cached paired session per device for the dev tools (tools/lib/device-session.mjs) — a secret
 tools/.device-sessions.json
+
+# Local backups and throwaways — never committed (a 2026-10 cleanup removed ~24 MB of them)
+*.bak
+*.bak[0-9]
+/tools/scratch_*
+/tools/nucleo-tts/_*.txt

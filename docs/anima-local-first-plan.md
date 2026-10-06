@@ -1,6 +1,6 @@
 # ANIMA — local-first agent plan (2026-09)
 
-Status: **proposed**, awaiting approval. Built from a code audit of every inference path, every AI
+Status: **approved 2026-09-29**; phases 1, 2 and the phase-4 agent core done (2026-09-30), phase 3 (Settings "AI & Models") open. Built from a code audit of every inference path, every AI
 configuration surface, live measurements on the dev PC (Chrome 154, RTX 5070 8 GB, Ollama 0.34.4) and
 current docs. Guiding rules: the Cardputer does as little as possible; everything heavy runs in the
 browser or on the user's own PC; every UI string ships in it/en/es/fr/de; every step is tested.

@@ -6,6 +6,27 @@ All notable user-facing changes to NucleoOS. Format loosely follows
 
 ## [Unreleased]
 
+## [0.6.0] — 2026-10-04
+
+### Added
+- **The screen turns off while an app is open, too** — the idle screen-off now also applies inside
+  open apps, not only on the launcher, so a forgotten app no longer drains the battery.
+- **Smarter SD-content install** — the installer notices content you copied to the card by hand and
+  offers only what is actually missing.
+
+### Changed
+- **More free memory** — apps and the MP3 decoder release their RAM when idle (~31.8 KB more heap),
+  USB networking's 19 KB buffer is only allocated while USB-web is in use, and the assistant's search
+  and learning scratch memory exists only while it is working.
+- **A smaller firmware image** — the assistant's people table is read from the SD instead of flash
+  (−38.5 KB), keeping the image inside the M5Launcher slot; a build gate now keeps it there.
+- **Control Center** — scrolls in large type, keeps the focused card centred and eases smoothly.
+
+### Fixed
+- **SD-content download** — one keep-alive connection with windowed range requests, so large files
+  finish reliably on a busy network.
+- **Control Center** — no stale rows left on screen while scrolling.
+
 ## [0.5.0] — 2026-10-01
 
 ### Added
