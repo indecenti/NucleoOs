@@ -1,5 +1,8 @@
 {
   "_lang": "it",
   "header_name": "Immagini",
-  "btn_wallpaper": "Imposta come sfondo"
+  "btn_wallpaper": "Imposta come sfondo",
+  "img_failed": "Impossibile caricare {path}",
+  "dir_failed": "Impossibile leggere {dir} — il dispositivo è raggiungibile?",
+  "dir_empty": "Nessuna immagine in {dir}"
 }

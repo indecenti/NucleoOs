@@ -6,6 +6,8 @@
   <!-- Offline-first: rely on the system font stack ('Outfit', system-ui, sans-serif) instead of a
        render-blocking remote webfont — the device often has no internet. -->
   <style>
+    /* Native controls (audio/video bars, date/time pickers, file inputs, selects) follow the app theme. */
+    :root { color-scheme: dark; } html[data-theme="light"] { color-scheme: light; }
     :root {
       --bg-color: #0b0f17;
       --panel-bg: rgba(15, 23, 42, 0.65);

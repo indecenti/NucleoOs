@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Terminal</title>
   <style>
+    /* Native controls and scrollbars follow the app theme. */
+    :root { color-scheme: dark; } html[data-theme="light"] { color-scheme: light; }
     :root { --bg:#0e1830; --panel:#18233a; --text:#e8eefc; --muted:#8aa0c8; --accent:#4ea1ff;
       --line:#2a3a5e; --field:#0b1220; --ok:#2fd07a; --err:#e2576b; --warn:#f5b13d; }
     html[data-theme="light"] { --bg:#eef2fb; --panel:#ffffff; --text:#10203a; --muted:#5a6a86;
@@ -272,6 +274,19 @@
     // One sentence for every filesystem failure, and it always names the reason. "mkdir: failed"
     // is the difference between a bug report and a shrug — and 401 has to say 401, because
     // "cannot read" reads like a broken card when the truth is an unpaired browser.
+    // A text's lines: a final newline ends the last line, it does not start an empty one (cat -n, wc -l agree).
+    function textLines(txt) {
+      const l = String(txt).split(/\r?\n/);
+      if (l.length > 1 && l[l.length - 1] === '') l.pop();
+      return l;
+    }
+    // head/tail count: `-n N`, `-nN` and the classic `-N` (what everyone types); the rest is the file.
+    function lineCountArgs(arg) {
+      const m = String(arg || '').match(/^(?:-n\s*(\d+)|-(\d+))(?:\s+(.*))?$/);
+      const n = m ? parseInt(m[1] || m[2], 10) : 10;
+      const rest = (m ? (m[3] || '') : String(arg || '')).trim();
+      return { n, file: rest ? norm(rest.replace(/^"|"$/g, '')) : '' };
+    }
     function fsFail(name, path, r) {
       if (!r) emit(`${name}: cannot reach the file API (running outside the OS?)`, 'err');
       else if (r.status === 401) emit(`${name}: not paired (401)`, 'err');
@@ -738,64 +753,50 @@
         emit(`found ${count} item(s)`, 'dim');
       },
       async wc(arg, ctx) {
-        const count = (txt, tail) => {
-          const lines = txt.split(/\r?\n/).length;
+        // -l / -w / -c print the number alone (POSIX, so `… | wc -l` composes); no flag keeps the summary line.
+        const fm = String(arg || '').match(/^-([lwc])\b\s*(.*)$/);
+        const only = fm ? fm[1] : '';
+        const rest = fm ? fm[2] : String(arg || '');
+        const count = (txt, file) => {
+          const lines = textLines(txt).length;
           const words = txt.trim().split(/\s+/).filter(Boolean).length;
-          emit(`  ${lines} lines, ${words} words, ${new Blob([txt]).size} bytes${tail}`);
+          const bytes = new Blob([txt]).size;
+          if (only) emit(`${only === 'l' ? lines : only === 'w' ? words : bytes}${file ? ' ' + file : ''}`);
+          else emit(`  ${lines} lines, ${words} words, ${bytes} bytes${file ? ' for ' + file : ''}`);
         };
-        if (!arg) {
+        if (!rest) {
           if (ctx?.stdin != null) { count(ctx.stdin, ''); return; }
-          emit('usage: wc <file>', 'err'); return;
+          emit('usage: wc [-l|-w|-c] <file>', 'err'); return;
         }
-        const file = norm(arg.replace(/^"|"$/g, ''));
+        const file = norm(rest.replace(/^"|"$/g, ''));
         try {
           const r = await api('read', file);
           if (!r.ok) { fsFail('wc', file, r); return; }
-          count(await r.text(), ' for ' + file);
+          count(await r.text(), file);
         } catch { emit('wc: file API unavailable', 'err'); }
       },
       async head(arg, ctx) {
-        let file = '';
-        let n = 10;
-        const m = arg && arg.match(/^-n\s+(\d+)\s*(.*)$/);
-        if (m) {
-          n = parseInt(m[1]);
-          if (m[2]) file = norm(m[2].replace(/^"|"$/g, ''));
-        } else if (arg) {
-          file = norm(arg.replace(/^"|"$/g, ''));
-        }
-        if (!file && ctx?.stdin != null) { emit(ctx.stdin.split(/\r?\n/).slice(0, n).join('\n')); return; }
+        const { n, file } = lineCountArgs(arg);
+        if (!file && ctx?.stdin != null) { emit(textLines(ctx.stdin).slice(0, n).join('\n')); return; }
         if (!file) { emit('usage: head [-n <lines>] <file>', 'err'); return; }
         try {
           const r = await api('read', file);
           if (!r.ok) { fsFail('head', file, r); return; }
-          const txt = await r.text();
-          const lines = txt.split(/\r?\n/).slice(0, n);
-          emit(lines.join('\n'));
+          emit(textLines(await r.text()).slice(0, n).join('\n'));
         } catch { emit('head: file API unavailable', 'err'); }
       },
       async tail(arg, ctx) {
-        let file = '';
-        let n = 10;
-        const m = arg && arg.match(/^-n\s+(\d+)\s*(.*)$/);
-        if (m) {
-          n = parseInt(m[1]);
-          if (m[2]) file = norm(m[2].replace(/^"|"$/g, ''));
-        } else if (arg) {
-          file = norm(arg.replace(/^"|"$/g, ''));
-        }
+        const { n, file } = lineCountArgs(arg);
         if (!file && ctx?.stdin != null) {
-          const all = ctx.stdin.split(/\r?\n/);
+          const all = textLines(ctx.stdin);
           emit(all.slice(Math.max(0, all.length - n)).join('\n')); return;
         }
         if (!file) { emit('usage: tail [-n <lines>] <file>', 'err'); return; }
         try {
           const r = await api('read', file);
           if (!r.ok) { fsFail('tail', file, r); return; }
-          const txt = await r.text();
-          const allLines = txt.split(/\r?\n/);
-          const lines = allLines.slice(Math.max(0, allLines.length - n));
-          emit(lines.join('\n'));
+          const all = textLines(await r.text());
+          emit(all.slice(Math.max(0, all.length - n)).join('\n'));
         } catch { emit('tail: file API unavailable', 'err'); }
       },
       async df() {
@@ -2362,8 +2363,10 @@
       let r;
       try { r = await api('write', path, opts); } catch { return false; }
       if (r.ok) return true;
-      // The app's own mount is created on first use: nothing ships it on the SD image.
-      if (r.status === 404) {
+      // The app's own mount is created on first use: nothing ships it on the SD image. A write into a missing
+      // folder fails with 500 "open" on the device (nucleo_fsapi never creates parents) — this used to wait
+      // for a 404 that never came, so the history was never saved on a real Cardputer.
+      if (r.status === 404 || r.status === 500) {
         try {
           await fetch('/api/fs/mkdir?path=' + encodeURIComponent(APPDIR), { method: 'POST' });
           const again = await api('write', path, opts);
@@ -2684,7 +2687,7 @@
     // source, which used to break silently the moment a binding was renamed.
     globalThis.__T = { COMMANDS, run, exec, norm, api, fmtBytes, setCwd, hist, envVars, aliases,
       tokenize, parse, expandWord, submit, LIMITS, completions, applyCompletion, ctokens, lcp,
-      cacheGet, cachePut, cacheDrop, animaDigest, encTrim, b64encode, b64decode, remember };
+      cacheGet, cachePut, cacheDrop, animaDigest, encTrim, b64encode, b64decode, remember, saveHistory, loadPersisted };
 
     // ---- boot ------------------------------------------------------------------
     async function init() {

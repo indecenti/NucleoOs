@@ -415,7 +415,13 @@ async function fsApi(req, res, url) {
       return res.end(data);
     }
     if (op === 'write') {
-      await writeFile(abs, await readBody(req)); publish('fs.changed', { op: 'write', path: p });
+      const body = await readBody(req);
+      // MIRROR THE FIRMWARE (nucleo_fsapi.c): /api/fs/write never creates parent folders — fopen fails and the
+      // device answers 500 "open". This answered 404 (the generic ENOENT catch below), so an app that created
+      // its folder only on a 404 passed here and never saved anything on a real Cardputer (Terminal history).
+      try { await writeFile(abs, body); }
+      catch (e) { if (e.code === 'ENOENT' || e.code === 'ENOTDIR') return send(res, 500, 'text/plain', 'open'); throw e; }
+      publish('fs.changed', { op: 'write', path: p });
       // MIRROR THE FIRMWARE (nucleo_fsapi fstwin.c): writing a file webfs serves gz-first drops its stale .gz twin.
       if (/^\/(www\/shell|apps\/[^/]+\/www)\/./i.test(p) && !/\.gz$/i.test(p)) await rm(abs + '.gz', { force: true }).catch(() => {});
       return sendJSON(res, { ok: true });

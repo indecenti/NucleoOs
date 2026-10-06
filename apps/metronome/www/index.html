@@ -106,7 +106,7 @@
     import I18N from '/nucleo-i18n.js';
     import { Metronome, makeTapTempo, detectPitch, noteFromFreq, startBrowserMic, startDeviceMic } from './app.js';
     const t = await I18N.init('metronome');
-    const lang = (localStorage.getItem('nucleo.lang') || document.documentElement.lang || 'en').slice(0, 2);
+    const lang = I18N.lang;   // the OS language (anima.lang); 'nucleo.lang' was never written
     const $ = (id) => document.getElementById(id);
 
     // ── tabs ──

@@ -6,7 +6,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { convert, parseCommand, runCommand, resolveUnit } from '../../apps/unit-converter/www/convert.js';
+import { convert, parseCommand, runCommand, resolveUnit, fmt } from '../../apps/unit-converter/www/convert.js';
 import { validateManifest, lintApp, planRegistryUpdate } from '../../apps/agent/www/app-publish.js';
 
 const near = (a, b, eps = 1e-3) => Math.abs(a - b) <= eps * Math.max(1, Math.abs(b));
@@ -118,3 +118,14 @@ test('pipeline install: registry upsert is safe + enables the app', () => {
 });
 
 console.log(`— ${EN.length + IT.length} NL cases (EN ${EN.length} + IT ${IT.length})`);
+
+// Found on a real Cardputer: in Italian, 1 km showed "0.621371 mi". The number follows the OS locale.
+test('fmt: numbers follow the locale, the engine default stays plain', () => {
+  assert.equal(fmt(0.621371), '0.621371');
+  assert.equal(fmt(0.621371, 'it-IT'), '0,621371');
+  assert.equal(fmt(1234.5, 'it-IT'), '1234,5');
+  assert.equal(fmt(1234567.25, 'en-US'), '1,234,567.25');
+  assert.equal(fmt(1609.344, 'de-DE'), '1.609,344');
+  assert.equal(fmt(1e-9, 'it-IT'), '1,0000e-9', 'scientific notation uses the locale decimal mark too');
+  assert.equal(fmt(Infinity, 'it-IT'), '—');
+});

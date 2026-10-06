@@ -465,3 +465,32 @@ test('run: effettua correttamente l\'espansione delle variabili d\'ambiente', as
   await run('cd $TARGET_DIR');
   assert.equal(sandbox.cwd, '/system/config');
 });
+
+// Found on a real Cardputer: `head -3` and `echo ciao | wc -c` read the flag as a FILE name
+// ("no such file: /data/-3"). The forms everyone types now work, and a file that ends with a newline
+// (almost all of them) no longer shows an empty last line in tail nor counts one line too many.
+test('head/tail: -N and -nN work like -n N', async () => {
+  resetTest();
+  mockedFs['/data/t.txt'] = '1\n2\n3\n4\n5\n';
+  await COMMANDS.head('-3 /data/t.txt');
+  await COMMANDS.head('-n2 /data/t.txt');
+  await COMMANDS.tail('-2 /data/t.txt');
+  assert.deepEqual(emitted.map((e) => e.text), ['1\n2\n3', '1\n2', '4\n5']);
+});
+
+test('tail: a trailing newline is not an empty last line', async () => {
+  resetTest();
+  mockedFs['/data/t.txt'] = 'alpha\nbeta\n';
+  await COMMANDS.tail('-n 1 /data/t.txt');
+  assert.equal(emitted[0].text, 'beta');
+});
+
+test('wc: -l / -w / -c print the number alone, from a file or a pipe', async () => {
+  resetTest();
+  mockedFs['/data/t.txt'] = 'one two\nthree\n';
+  await COMMANDS.wc('-l /data/t.txt');
+  await COMMANDS.wc('-w /data/t.txt');
+  await COMMANDS.wc('-c', { stdin: 'ciao' });
+  await COMMANDS.wc('/data/t.txt');
+  assert.deepEqual(emitted.map((e) => e.text.trim()), ['2 /data/t.txt', '3 /data/t.txt', '4', '2 lines, 3 words, 14 bytes for /data/t.txt']);
+});

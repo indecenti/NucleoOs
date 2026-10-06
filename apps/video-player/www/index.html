@@ -7,6 +7,8 @@
   <!-- Offline-first: rely on the system font stack ('Outfit', system-ui, sans-serif) instead of a
        render-blocking remote webfont — the device often has no internet. -->
   <style>
+    /* Native controls (audio/video bars, date/time pickers, file inputs, selects) follow the app theme. */
+    :root { color-scheme: dark; } html[data-theme="light"] { color-scheme: light; }
     :root {
       --bg: #070a12;
       --panel: #0f1521;
@@ -1076,8 +1078,9 @@
     async function probeSd() {
       try {
         const res = await fetch('/api/fs/list?path=' + encodeURIComponent(DEFAULT_VIDS_DIR));
-        if (!res.ok) throw new Error();
-        const data = await res.json();
+        // No videos folder yet answers 404: the card IS reachable, it just holds no videos ("SD offline" was wrong).
+        if (!res.ok && res.status !== 404) throw new Error();
+        const data = res.status === 404 ? { entries: [] } : await res.json();
         const n = (data.entries || []).filter(e => e.type === 'file' && VIDEO_RE.test(e.name)).length;
         $('sd-status-dot').classList.add('online');
         sdStatus = { online: true, count: n };

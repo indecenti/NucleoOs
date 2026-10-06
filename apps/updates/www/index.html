@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Updates</title>
 <style>
+    /* Native controls (audio/video bars, date/time pickers, file inputs, selects) follow the app theme. */
+    :root { color-scheme: dark; } html[data-theme="light"] { color-scheme: light; }
   :root { --bg:#0b1220; --panel:#18233a; --panel2:#1f2d4a; --accent:#4ea1ff;
           --text:#e8eefc; --muted:#8aa0c8; --line:#2a3a5e;
           /* Status hues mixed toward --text so they stay readable in BOTH OS themes
@@ -55,7 +57,7 @@
   </div>
 
   <div class="card">
-    <h2 data-i18n="fw_update_title">Firmware update (over the air)</h2>
+    <h2 data-i18n="fw_update_title">Firmware update over Wi-Fi (OTA)</h2>
     <p class="note" data-i18n-html="fw_update_desc">Pick a <code>nucleoos.bin</code> and install it wirelessly — no USB cable. The image is written to the
       <b>spare flash slot</b> and only booted if it is valid; if the new firmware fails to start, the device
       <b>automatically rolls back</b> to this one. So it always stays bootable.</p>

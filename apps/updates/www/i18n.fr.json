@@ -6,7 +6,7 @@
   "fw_slot": "Emplacement du firmware",
   "image_state": "État de l'image",
   "free_memory": "Mémoire libre",
-  "fw_update_title": "Mise à jour du firmware (par les airs)",
+  "fw_update_title": "Mise à jour du firmware par Wi-Fi (OTA)",
   "fw_update_desc": "Choisissez un <code>nucleoos.bin</code> et installez-le sans fil — sans câble USB. L'image est écrite dans l'<b>emplacement flash de secours</b> et n'est démarrée que si elle est valide ; si le nouveau firmware ne démarre pas, l'appareil <b>revient automatiquement</b> à celui-ci. Il reste ainsi toujours démarrable.",
   "install_fw": "Installer le firmware",
   "keep_powered": "⚠ Gardez l'appareil alimenté pendant la mise à jour. Il redémarre automatiquement à la fin.",

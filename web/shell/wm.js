@@ -281,28 +281,35 @@ export function open(app, query, opts = {}) {
 // and drag it back. Called by the shell on resize. Maximized/snapped windows re-derive their own
 // rectangle, so they are left alone.
 export function clampIntoView() {
-  const A = workArea();
   let moved = false;
-  for (const w of windows.values()) {
-    if (w.max || w.snap) continue;
-    const el = w.el;
-    // Read the STYLE, not the layout: a minimised window is display:none, so offsetLeft/offsetWidth
-    // are 0 — and those are exactly the windows that reappear off-screen when they are restored.
-    const curLeft = parseInt(el.style.left) || 0, curTop = parseInt(el.style.top) || 0;
-    const width = parseInt(el.style.width) || el.offsetWidth || 320;
-    // Always leave a grabbable strip of title bar on screen, never a fully off-screen window.
-    const maxLeft = Math.max(0, A.w - Math.min(width, 120));
-    const maxTop = Math.max(0, A.h - 34);
-    const left = Math.min(Math.max(0, curLeft), maxLeft);
-    const top = Math.min(Math.max(0, curTop), maxTop);
-    if (left !== curLeft || top !== curTop) {
-      el.style.left = left + 'px'; el.style.top = top + 'px'; moved = true;
-    }
-  }
+  // Always leave a grabbable strip of title bar on screen, never a fully off-screen window.
+  for (const w of windows.values()) if (!w.max && !w.snap && placeInView(w, false)) moved = true;
   // Deliberately NOT onChange(): this is a DISPLAY correction for the current viewport. Persisting it
   // would let one session on a small screen (a projector, a rotated tablet) permanently collapse a
-  // layout built on a large one — the user never asked to move those windows.
+  // layout built on a large one — the user never asked to move those windows. serialize() reports the
+  // remembered place for as long as the window stays where the correction put it (w.viewFix).
   return moved;
+}
+
+// Move one floating window into the work area: `full` fits the whole window when it can (a window being
+// OPENED), otherwise only a grabbable strip of title bar is guaranteed (a viewport that shrank under open
+// windows). Records the correction in w.viewFix so it is never saved as the user's own choice.
+function placeInView(w, full) {
+  const A = workArea(), el = w.el;
+  // Read the STYLE, not the layout: a minimised window is display:none, so offsetLeft/offsetWidth
+  // are 0 — and those are exactly the windows that reappear off-screen when they are restored.
+  const curLeft = parseInt(el.style.left) || 0, curTop = parseInt(el.style.top) || 0;
+  const width = parseInt(el.style.width) || el.offsetWidth || 320;
+  const height = parseInt(el.style.height) || el.offsetHeight || 240;
+  const maxLeft = Math.max(0, A.w - (full ? width : Math.min(width, 120)));
+  const maxTop = Math.max(0, A.h - (full ? height : 34));
+  const left = Math.min(Math.max(0, curLeft), maxLeft);
+  const top = Math.min(Math.max(0, curTop), maxTop);
+  if (left === curLeft && top === curTop) return false;
+  const from = w.viewFix ? w.viewFix.from : { x: curLeft, y: curTop };
+  w.viewFix = { from, to: { x: left, y: top } };
+  el.style.left = left + 'px'; el.style.top = top + 'px';
+  return true;
 }
 
 // ---- geometry helpers --------------------------------------------------------------------
@@ -426,7 +433,10 @@ export function serialize() {
   const out = [];
   for (const w of windows.values()) {
     const g = ((w.max || w.snap) && w.prev) ? w.prev : curGeom(w);   // floating geom, so restore works
-    out.push({ id: w.app.id, x: parseInt(g.left) || 0, y: parseInt(g.top) || 0,
+    let x = parseInt(g.left) || 0, y = parseInt(g.top) || 0;
+    // Still where a display correction put it (placeInView) → the user did not move it: keep their place.
+    if (w.viewFix && x === w.viewFix.to.x && y === w.viewFix.to.y) { x = w.viewFix.from.x; y = w.viewFix.from.y; }
+    out.push({ id: w.app.id, x, y,
       w: parseInt(g.width) || 0, h: parseInt(g.height) || 0,
       min: !!w.min, max: !!w.max, snap: w.snap || null, z: parseInt(w.el.style.zIndex) || 0,
       url: liveUrl(w) });
@@ -451,6 +461,10 @@ export function applyGeom(id, g) {
   if (g.w) w.el.style.width = g.w + 'px';
   if (g.h) w.el.style.height = g.h + 'px';
   if (g.z) { w.el.style.zIndex = g.z; if (g.z > z) z = g.z; }
+  // A rectangle remembered on a wider screen must not open off this one (seen on a real device: Settings
+  // at x=1385 on a 1366-px laptop). Fit it — for display only, see placeInView / serialize.
+  w.viewFix = null;
+  placeInView(w, true);
   // A window restored MINIMISED must not be materialised on the way in. maximize()/applySnap() both
   // end in focus(), which builds the iframe — precisely the load being deferred — so a
   // minimised-AND-maximised window still paid for its app at boot. Hold materialisation across the

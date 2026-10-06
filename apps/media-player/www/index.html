@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Media Player</title>
   <style>
+    /* Native controls (audio/video bars, date/time pickers, file inputs, selects) follow the app theme. */
+    :root { color-scheme: dark; } html[data-theme="light"] { color-scheme: light; }
     :root { --bg:#0e1830; --panel:#18233a; --text:#e8eefc; --muted:#8aa0c8; --accent:#4ea1ff; --line:#2a3a5e; }
     * { box-sizing: border-box; } html, body { height: 100%; margin: 0; }
     body { display: flex; flex-direction: column; background: var(--bg); color: var(--text); font: 14px system-ui, sans-serif; }
@@ -42,11 +44,18 @@
     }
     player.addEventListener('ended', () => { if (idx >= 0 && idx < tracks.length - 1) playIdx(idx + 1); });
     async function load() {
+      const note = (key) => { list.innerHTML = ''; const li = document.createElement('li'); li.className = 'muted'; li.textContent = t(key); list.appendChild(li); };
       let data;
-      try { data = await (await fetch('/api/fs/list?path=' + encodeURIComponent(DIR))).json(); }
-      catch { list.innerHTML = ''; const li = document.createElement('li'); li.className = 'muted'; li.textContent = t('load_failed'); list.appendChild(li); return; }
+      try {
+        const r = await fetch('/api/fs/list?path=' + encodeURIComponent(DIR));
+        // A card without /data/Music answers 404: that is an EMPTY library, not an unreachable device
+        // (it said "is the device online?" while the device was answering).
+        data = r.status === 404 ? { entries: [] } : (r.ok ? await r.json() : null);
+      } catch { data = null; }
+      if (!data) { note('load_failed'); return; }
       tracks = (data.entries || []).filter(e => e.type === 'file' && /\.(mp3|wav)$/i.test(e.name));
-      list.innerHTML = tracks.length ? '' : '<li class="muted" data-i18n="empty_list">No audio in /data/Music</li>';
+      if (!tracks.length) { note('empty_list'); return; }   // t(): inserted after the page was translated
+      list.innerHTML = '';
       tracks.forEach((tr, i) => {
         const li = document.createElement('li');
         const note = document.createElement('span'); note.textContent = '♪';

@@ -32,7 +32,21 @@ async function turn(page, ask, { timeout = 6 * 60 * 1000 } = {}) {
   return got && { ...got, ms: Date.now() - t0 };
 }
 
+// Start from an empty GPU. A model left resident by anything else (measured: the 35B, 22.5 GB on an 8 GB card)
+// made Ollama swap models inside the first task, which then ran past its 6-minute window — the suite failed
+// 1–4 cases depending on what had run before, with the same code. Unloading costs nothing; the first task
+// then pays one plain load of the model it picks.
+async function unloadOllamaModels() {
+  try {
+    const ps = await (await fetch('http://localhost:11434/api/ps', { signal: AbortSignal.timeout(5000) })).json();
+    for (const m of (ps.models || [])) {
+      await fetch('http://localhost:11434/api/generate', { method: 'POST', body: JSON.stringify({ model: m.name, keep_alive: 0 }), signal: AbortSignal.timeout(60000) }).catch(() => {});
+    }
+  } catch {}
+}
+
 test('ANIMA Code on the PC model (real Ollama), Private, workspace on the SD', { skip, timeout: 40 * 60 * 1000 }, async (t) => {
+  await unloadOllamaModels();
   const sim = await startSim({ seed: SEED });
   const browser = await launchBrowser();
   t.after(async () => { await browser.close(); await sim.stop(); });

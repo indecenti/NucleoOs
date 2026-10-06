@@ -79,11 +79,11 @@ const chips = () => Array.from(strip.children).map((c) => ({ cls: c.className, t
 // ---- a network that records every call and has no catch-all -------------------------
 const net = {
   calls: [], fs: {}, json: {}, status: new Map(), failing: new Set(),
-  unpaired: false, inFlight: 0, maxInFlight: 0, writes: [],
+  unpaired: false, inFlight: 0, maxInFlight: 0, writes: [], strictParents: false,
   count(p) { return net.calls.filter((c) => c.path === p).length; },
   reset() {
     net.calls.length = 0; net.writes.length = 0; net.status.clear(); net.failing.clear();
-    net.fs = {}; net.json = {}; net.unpaired = false; net.inFlight = 0; net.maxInFlight = 0;
+    net.fs = {}; net.json = {}; net.unpaired = false; net.inFlight = 0; net.maxInFlight = 0; net.strictParents = false;
   },
 };
 const reply = (status, text, hdr) => ({
@@ -114,6 +114,8 @@ async function fakeFetch(url, opts = {}) {
       const e = net.fs[param];
       return typeof e === 'string' ? reply(200, e) : reply(404, 'no file');
     }
+    // strictParents = the real firmware: /api/fs/write never creates folders, a missing parent is 500 "open".
+    if (p === '/api/fs/write' && net.strictParents && !Array.isArray(net.fs[param.slice(0, param.lastIndexOf('/')) || '/'])) return reply(500, 'open');
     if (p === '/api/fs/write') { net.writes.push({ path: param, body: String(opts.body ?? '') }); net.fs[param] = String(opts.body ?? ''); return reply(200, ''); }
     if (p === '/api/fs/mkdir') { net.fs[param] = []; return reply(200, ''); }
     if (p === '/api/fs/delete') { delete net.fs[param]; return reply(200, ''); }
@@ -515,6 +517,21 @@ test('history: a line starting with a space is never recorded', () => {
   reset();
   T.remember(' secret --token abc');
   assert.equal(T.hist.length, 0);
+});
+
+// Found on a real Cardputer: the history was never saved. The device answers 500 "open" for a write into a
+// folder that does not exist yet (/apps/terminal/data on a fresh card); the app created it only on a 404.
+test('history: saved on a fresh card, where the device answers 500 for the missing folder', async () => {
+  reset();
+  net.strictParents = true;
+  net.fs['/apps/terminal'] = [];
+  await T.loadPersisted();
+  T.remember('ls'); T.remember('pwd');
+  await T.saveHistory(false);
+  assert.ok(net.calls.some((c) => c.path === '/api/fs/mkdir' && c.param === '/apps/terminal/data'), 'the folder is created');
+  const w = net.writes.filter((x) => x.path === '/apps/terminal/data/history.jsonl').pop();   // the latest save wins
+  assert.ok(w, 'the history reaches the card');
+  assert.deepEqual(w.body.split(String.fromCharCode(10)).map((l) => JSON.parse(l)), ['ls', 'pwd']);
 });
 
 test('history: the list is capped', () => {

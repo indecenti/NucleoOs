@@ -1,5 +1,8 @@
 {
   "_lang": "es",
   "header_name": "Imágenes",
-  "btn_wallpaper": "Establecer como fondo"
+  "btn_wallpaper": "Establecer como fondo",
+  "img_failed": "No se pudo cargar {path}",
+  "dir_failed": "No se pudo leer {dir}: ¿el dispositivo está accesible?",
+  "dir_empty": "No hay imágenes en {dir}"
 }
