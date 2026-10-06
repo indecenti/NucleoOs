@@ -152,3 +152,16 @@ test('cat -n numbers lines (it was read as a file name)', async () => {
   const { sh } = shell(FILES);
   assert.equal((await sh.run('cat -n notes/todo.md')).out, '     1\t- latte\n     2\t- uova\n     3\t- pane');
 });
+
+// The hint after a long file says "read it in parts with sed -n 'A,Bp'" — so those parts must be reachable.
+// readBytes used to be 256 KB: sed past that point printed nothing. grep -r still skips big files (scanBytes),
+// so one recursive search never pulls megabytes off the Cardputer.
+test('sed -n reaches lines past 256 KB; grep -r still skips big files', async () => {
+  const big = Array.from({ length: 30000 }, (_, i) => 'entry ' + (i + 1) + ' ' + 'x'.repeat(4)).join('\n') + '\n';   // ~460 KB
+  assert.ok(big.length > 256 * 1024);
+  const { sh } = shell({ ...FILES, '/data/agent/log/big.txt': big });
+  assert.equal((await sh.run("sed -n '29999,30000p' log/big.txt")).out, 'entry 29999 xxxx\nentry 30000 xxxx');
+  assert.equal((await sh.run('tail -n 1 log/big.txt')).out, 'entry 30000 xxxx');
+  assert.equal((await sh.run('grep -rn "entry 29999" .')).out, '', 'recursive search does not download the big file');
+  assert.match((await sh.run('grep -n "entry 29999" log/big.txt')).out, /^29999:entry 29999/, 'naming the file reads it');
+});

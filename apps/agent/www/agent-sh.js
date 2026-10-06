@@ -13,7 +13,9 @@
 
 const OPS = ['&&', '||', '>>', '|', '>', '<', ';'];
 const MUTATING_CMDS = new Set(['mkdir', 'touch', 'cp', 'mv', 'rm']);
-export const SH_LIMITS = { maxOut: 12 * 1024, maxRows: 200, maxMatches: 200, maxListCalls: 60, maxDepth: 6, maxStages: 8, readBytes: 256 * 1024 };
+export const SH_LIMITS = { maxOut: 12 * 1024, maxRows: 200, maxMatches: 200, maxListCalls: 60, maxDepth: 6, maxStages: 8, readBytes: 2 * 1024 * 1024, scanBytes: 256 * 1024 };
+// readBytes: the largest file cat/sed/tail/grep FILE can see (fsclient fetches it whole anyway; maxOut caps
+// what reaches the model). scanBytes: grep -r skips files above it, so one search never drains megabytes.
 
 // ---- grammar (after the Terminal's tokenize / expandWord / parse) ------------------------------------
 function tokenize(line) {
@@ -114,7 +116,7 @@ export function createAgentShell({ fs, device = {}, confirm = async () => true, 
   async function readText(p) {
     const r = await fs.read(path(p), { maxBytes: L.readBytes });
     if (!r.ok) throw new Error(`${p}: ${r.error === 'not-found' ? 'No such file' : r.error}`);
-    return r.content + (r.truncated ? `\n… (file larger than ${Math.round(L.readBytes / 1024)} KB: read it in parts with sed -n 'A,Bp')` : '');
+    return r.content + (r.truncated ? `\n… (file larger than ${Math.round(L.readBytes / 1024)} KB: only its first ${Math.round(L.readBytes / 1024)} KB can be read here)` : '');
   }
   async function isDir(p) { const r = await fs.list(path(p)); return r.ok; }
   // Bounded walk: depth + number of list calls, like the Terminal's find (the device lists slowly).
@@ -217,7 +219,7 @@ export function createAgentShell({ fs, device = {}, confirm = async () => true, 
       for (const t of targets) {
         if (await isDir(t)) {
           if (!f.r) { out.push(`grep: ${t}: Is a directory (use -r)`); continue; }
-          const w = await walk(t, {}, async (p, e) => { if (e.type !== 'dir' && total < L.maxMatches && isTextName(e.name) && (e.size || 0) < L.readBytes) { try { scan(await readText(p), show(p)); } catch {} } });
+          const w = await walk(t, {}, async (p, e) => { if (e.type !== 'dir' && total < L.maxMatches && isTextName(e.name) && (e.size || 0) < L.scanBytes) { try { scan(await readText(p), show(p)); } catch {} } });
           if (w.capped) out.push('grep: (directory scan stopped early: narrow the path)');
         } else scan(await readText(t), t);
       }

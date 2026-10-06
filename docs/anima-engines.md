@@ -93,8 +93,24 @@ and `/api/apps` kept the old list until a reboot.
   with "NOT installed", whatever the model wrote; `scaffold_app` never overwrites an app already in the workspace.
 - Page scripts and files are linted with `checkSyntax(code, { bare: true })` (no sandbox parameters): the sandbox
   wrapper's `os` made every agent app — the starter included — fail its own lint.
+- **The plan rides on every tool result** (`planReminder`, appended in `guardedExec` — every loop passes there):
+  one line `[plan 1/3 done · now: … · next: …]` while work is open, nothing once it is all done; with nothing
+  in progress it asks the model to mark the next step. Small models otherwise forget the checklist and stop halfway.
+- **Read paging** (`withLineNumbers`): the read budget (`READ_CAP` 24 000 chars, `LOCAL_READ_CAP` 9 000 for a PC
+  model) bounds the line WINDOW, not the file — `read_file` decodes up to 2 MB and pages to any line; the tail says
+  `lines A-B of N shown; M more lines — call read_file with offset=K to continue` (the total matters: told only
+  "M more lines", qwen3.5:9b crept to the end 5 lines a read); one line over 2 000 chars (minified code) is cut.
+  Live, qwen3.5:9b + the real runtime: "code in the LAST line of a 4 000-line file" → 2–3 reads, 3/3 correct.
+  `sh` likewise reads files up to 2 MB (`cat`/`sed -n`/`tail`; its reply is capped at 12 KB) while `grep -r`
+  skips files over 256 KB, so one recursive search never drains megabytes off the Cardputer.
+- **Out of steps → a summary**, in every loop (`budgetSummary`): one last call without tools — `tool_choice:
+  "none"` for Anthropic and OpenAI-compatible providers (the history's tool calls require the tools to stay
+  declared; Anthropic's request rides in the last user turn so roles alternate), `noTools` for the PC model —
+  then "(step budget exhausted — the task may be incomplete)". A provider that refuses costs only the summary.
 
 Tests: `tools/anima-live-status.test.mjs`, `tools/fsclient-root.test.mjs`, `tools/edit-replace.test.mjs`,
 `tools/agent-tool-guard.test.mjs`, `tools/shell-ai-engines.test.mjs`, `tools/anima-host/contextkit-check.mjs`,
 `tools/agent-sh.test.mjs`, `tools/ai-models.test.mjs` (rate limit vs quota), `tools/device-session.test.mjs`,
-`tools/anima-host/app-publish-check.mjs` (real lint), `tools/anima-host/app-ops-check.mjs`.
+`tools/anima-host/app-publish-check.mjs` (real lint), `tools/anima-host/app-ops-check.mjs`,
+`tools/anima-host/agent-runtime.test.mjs` (the REAL `runtime.js` on the host — `tools/lib/web-paths-loader.mjs`
+maps the device URLs — driven by a scripted model: plan reminder, read paging, budget summary incl. Anthropic).

@@ -26,7 +26,7 @@ import { makeFS } from '/apps/anima/fsclient.js';
 import { compact } from '/apps/anima/context.js';
 // Provider-agnostic contract layer (node+browser safe, host-testable): tool surface + the Groq/OpenAI
 // tool-use machinery so the multi-agent works on Grok too, not just Claude.
-import { CLIENT_TOOLS, MUTATING, ALWAYS_CONFIRM, GROQ_MODELS, GEMINI_MODELS, toOpenAITools, callOpenAIChat as rawOpenAIChat, runOpenAIToolLoop, runLocalToolLoop, localToolDefs, searchFallbackTerms, extractJson, guardPlan, withLineNumbers, verifyCode, fenceUntrusted, normalizePlan, renderPlan, osApiIndex, osApiRoute, osApiManifest, OSAPI_RULES } from './agent-tools.js';
+import { CLIENT_TOOLS, MUTATING, ALWAYS_CONFIRM, GROQ_MODELS, GEMINI_MODELS, toOpenAITools, callOpenAIChat as rawOpenAIChat, runOpenAIToolLoop, runLocalToolLoop, localToolDefs, searchFallbackTerms, extractJson, guardPlan, withLineNumbers, verifyCode, fenceUntrusted, normalizePlan, renderPlan, planReminder, budgetSummary, BUDGET_ASK, osApiIndex, osApiRoute, osApiManifest, OSAPI_RULES } from './agent-tools.js';
 import { checkSyntax, loadParser } from '/apps/code-runner/nucleo-run.js';   // parse-only JS check (host-safe) for the write→lint loop
 import { toAgentTools as hwAgentTools, capabilityForTool, callCapability, HW_MUTATING, HW_CAPABILITIES } from '/apps/code-runner/nucleo-hw.js';   // F2: the Cardputer's real hardware as GATED agent tools
 // "Create a NucleoOS app" skill — PURE orchestration (scaffold/publish/manage) + the advisory review,
@@ -53,8 +53,10 @@ export const MODELS = {
 const MAX_STEPS = 14;            // tool-use rounds per worker
 const MAX_PAUSE = 6;             // server-tool (web_search) continuations
 const MAX_PARALLEL = 3;          // concurrent cloud workers
-const READ_CAP = 24000;          // bytes returned to the model per read (keeps context lean)
+const READ_CAP = 24000;          // chars of file text returned to the model per read (keeps context lean)
 const LOCAL_READ_CAP = 9000;     // ...and to a local model, whose whole window is AGENT_CTX tokens
+const READ_SRC_MAX = 2 * 1024 * 1024;   // largest file read_file can page through (the decode bound, not the reply)
+const READ_LINE_MAX = 2000;      // one longer line (minified code) is cut so it cannot fill the read alone
 const RUN_OUT_CAP = 6000;        // chars of run_js stdout handed back to the model
 const AGENT_CTX = 16384;         // Ollama num_ctx for the agent: measured 2026-09-30, qwen3.5:9b 8k -> 16k costs +0.27 GB
 
@@ -82,12 +84,12 @@ function authHeaders(cfg) {
 
 // Low-level Anthropic /v1/messages call with retry/backoff and a one-step model fallback. Throws on
 // definite failure. `tools` may be omitted for a plain (toolless) call.
-async function callAnthropic(cfg, { model, system, messages, tools, maxTokens = 2048, signal, fallback }) {
+async function callAnthropic(cfg, { model, system, messages, tools, toolChoice, maxTokens = 2048, signal, fallback }) {
   const body = { model, max_tokens: maxTokens, messages };
   // Cache the (turn-stable) system prompt so the loop's 2nd…Nth steps reuse it instead of re-billing the
   // full block each round — the seeded workspace context makes this worth it. Ignored by APIs without caching.
   if (system) body.system = [{ type: 'text', text: system, cache_control: { type: 'ephemeral' } }];
-  if (tools && tools.length) body.tools = tools;
+  if (tools && tools.length) { body.tools = tools; if (toolChoice) body.tool_choice = toolChoice; }
   const base = (cfg.base || 'https://api.anthropic.com').replace(/\/+$/, '');
   for (let attempt = 0; attempt < 3; attempt++) {
     let resp, j;
@@ -251,7 +253,12 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
       if (ui && ui.toolEnd) ui.toolEnd({ name, input, label, ts: Date.now() }, g.content, true);
       return { content: g.content, is_error: true };
     }
-    return execTool(g.name, input, label);
+    const r = await execTool(g.name, input, label);
+    // Every loop reads its tool results back, so the open plan rides on each one (update_plan already
+    // returns the full checklist). Added after toolEnd: the human's transcript shows the bare result.
+    const rem = g.name === 'update_plan' ? '' : planReminder(taskPlan);
+    if (rem && r && typeof r.content === 'string') r.content += '\n\n' + rem;
+    return r;
   }        // Settings-tunable loop budget (default 14, hard-capped so a fat-fingered value can't runaway)
   const PARALLEL = Math.min(6, (maxParallel | 0) > 0 ? (maxParallel | 0) : MAX_PARALLEL);
 
@@ -373,10 +380,13 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
         }
         case 'list_files': { const r = await withRetry(() => dq.read(() => fs.list(input.path || '.'))); if (!r.ok) return done(t('rt_err', { op: 'list', error: r.error }), true);
           return done((r.entries || []).map((e) => (e.type === 'dir' ? '📁 ' : '📄 ') + e.name + (e.type === 'dir' ? '/' : '') + (e.type === 'file' ? ' (' + (e.size || 0) + 'b)' : '')).join('\n') || t('rt_dir_empty')); }
-        case 'read_file': { const r = await withRetry(() => dq.read(() => fs.read(input.path, { maxBytes: readCap }))); if (!r.ok) return done(t('rt_err', { op: 'read', error: r.error }), true);
+        case 'read_file': {
+          // fsclient fetches the whole file anyway; READ_SRC_MAX only bounds the decode. The model's budget
+          // (readCap) is applied to the line WINDOW, so offset reaches any line and the tail names the next one.
+          const r = await withRetry(() => dq.read(() => fs.read(input.path, { maxBytes: READ_SRC_MAX }))); if (!r.ok) return done(t('rt_err', { op: 'read', error: r.error }), true);
           // Fence the file body as UNTRUSTED data (prompt-injection defense): instructions inside a
           // file must never be obeyed. Line numbers stay inside the fence for reference.
-          return done(fenceUntrusted('file', { path: input.path }, withLineNumbers(r.content, { offset: input.offset, limit: input.limit }) + (r.truncated ? t('rt_truncated', { n: readCap }) : ''))); }
+          return done(fenceUntrusted('file', { path: input.path }, withLineNumbers(r.content, { offset: input.offset, limit: input.limit, maxChars: readCap, lineMax: READ_LINE_MAX }) + (r.truncated ? t('rt_truncated', { n: READ_SRC_MAX }) : ''))); }
         case 'search_files': { const r = await withRetry(() => dq.read(() => fs.search(input.query, { glob: input.glob, maxFiles: 40, maxMatches: 80 }))); if (!r.ok) return done(t('rt_err', { op: 'search', error: r.error }), true);
           let matches = r.matches || [], note = '';
           // No hit for a phrase: retry its most distinctive term (grep leniency — see searchFallbackTerms).
@@ -629,7 +639,7 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
   async function runWorkerOpenAI({ wcfg = cfg, model, system, messages, maxTokens = 2048 }) {
     const oaTools = toOpenAITools([...CLIENT_TOOLS, ...hwToolDefs]);
     const msgs = [{ role: 'system', content: system }, ...messages];
-    const callModel = (m) => callOpenAIChat(deviceFetch, wcfg, { model, messages: m, tools: oaTools, toolChoice: 'auto', maxTokens, temperature: 0.3, signal: aborter && aborter.signal });
+    const callModel = (m, o = {}) => callOpenAIChat(deviceFetch, wcfg, { model, messages: m, tools: oaTools, toolChoice: o.toolChoice || 'auto', maxTokens, temperature: 0.3, signal: aborter && aborter.signal });
     return runOpenAIToolLoop({ callModel, execTool: guardedExec, messages: msgs, maxSteps: STEPS,
       abort: aborter && aborter.signal, onEvent: (e) => { if (e.type === 'tool' && ui && ui.status) ui.status('⚙ ' + e.name); } });
   }
@@ -658,7 +668,15 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
       if (resp.stop_reason === 'pause_turn') { if (++pauses > MAX_PAUSE) break; step--; continue; }   // server tool (web_search) running — don't burn a tool-use step
       return textOf(resp.content) || '(nessuna risposta testuale)';
     }
-    return '(step budget exhausted — the task may be incomplete)';
+    // Out of steps: the summary request rides in the last user turn (it holds the tool_results — roles must
+    // alternate) and tool_choice "none" keeps the tools declared, as the history's tool_use blocks require.
+    return budgetSummary(async () => {
+      const lastMsg = messages[messages.length - 1];
+      if (lastMsg && lastMsg.role === 'user' && Array.isArray(lastMsg.content)) lastMsg.content.push({ type: 'text', text: BUDGET_ASK });
+      else return '';                                   // a paused server tool ended the loop: no clean turn to extend
+      const resp = await callAnthropicServed(wcfg, { model, system, messages, tools, toolChoice: { type: 'none' }, maxTokens, signal: aborter && aborter.signal, fallback: MODELS.small });
+      return textOf(resp.content);
+    }, aborter && aborter.signal);
   }
 
   // LOCAL SERVER worker: the same tool surface through the PC's own model (native tool calling). The model

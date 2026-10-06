@@ -683,6 +683,12 @@ const gates = [
     // tag neutralised), and VALID Gemini model ids (guards the dead 'gemini-3.5-flash' regression).
     // (Also swept by 'unit tests'; named here so a regression is attributed, not buried.)
     ok: (code) => code === 0, summary: (o) => (o.match(/[#ℹ] pass \d+/) || ['tests']).concat(o.match(/[#ℹ] fail \d+/) || []).join('  ') },
+  { name: 'agent-runtime (real loop)', cmd: 'node', args: ['--test', 'tools/anima-host/agent-runtime.test.mjs'],
+    // The REAL apps/agent/www/runtime.js on the host (tools/lib/web-paths-loader.mjs maps the device URLs),
+    // driven by a scripted model: the open plan rides on every tool result, read_file pages to any line of a
+    // file past the read budget, and out of steps the turn ends with a summary — local loop and Anthropic
+    // (valid tool_choice "none" request, roles still alternating).
+    ok: (code) => code === 0, summary: (o) => (o.match(/[#ℹ] pass \d+/) || ['tests']).concat(o.match(/[#ℹ] fail \d+/) || []).join('  ') },
   { name: 'agent-contract (multi-provider)', cmd: 'node', args: ['tools/anima-host/agent-contract-check.mjs'],
     // The online multi-agent's tool contract (apps/agent): tool schema ↔ OpenAI mapping (so Groq/Grok/Gemini
     // get the SAME OS tools as Claude), the tool-use loop threading, the deterministic plan guard, and the
