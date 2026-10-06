@@ -287,3 +287,73 @@ test('registry unreadable: built-in apps stay trusted, everything else is sandbo
   await page.eval(openApp('calculator'));   // (not notepad: the agent app above is hosted on notepad's route)
   assert.ok(await page.waitFor(`${frameState({ src: '/apps/calculator/' })} === 'trusted'`, { timeout: 20000 }), 'a built-in app was broken by a failed registry read');
 });
+
+// ---- v151: regressions of the v149/v150 fixes ----------------------------------------------------------
+
+// Runs `code` INSIDE the window's iframe (so e.source is the app's own window, as for a real app message).
+const inFrame = (by, code) => `(() => { const f = ${WIN(by)}?.querySelector('iframe'); if (!f) return 'no-frame'; f.contentWindow.eval(${J(code)}); return 'ok'; })()`;
+const frameReady = (by) => `(() => { const f = ${WIN(by)}?.querySelector('iframe'); try { return !!f && f.contentDocument.readyState === 'complete' && f.contentWindow.location.href !== 'about:blank'; } catch { return false; } })()`;
+
+test('registry AND built-in list unreadable at boot: apps wait, are never sandboxed for it, and load trusted once the reads recover', { skip }, async (t) => {
+  const sim = await startSdRegistrySim({ seed: { '/system/registry/apps.json': '{ this is not json', '/system/config/session.json': { windows: [], geom: {} } } });
+  const browser = await launchBrowser({ args: [HOST_RULES] });
+  t.after(async () => { await browser.close(); await sim.stop(); });
+  await sim.control('/api/_sim/fault', { route: '/app-catalog.json', status: 503 });   // until cleared
+  const page = await browser.newPage();
+  await page.setViewport(1280, 800);
+  assert.ok(await bootShell(page, sim, { lang: 'en' }), 'desktop never came up');
+  await page.eval(openApp('settings'));
+  assert.ok(await page.waitFor(`${frameState({ name: 'Settings' })} !== 'no-window'`, { timeout: 8000 }), 'the Settings window did not open');
+  await sleep(4000);
+  assert.equal(await page.eval(frameState({ name: 'Settings' })), 'held', 'a failed provenance read settled a built-in app (Settings) as sandboxed for the whole session');
+  // The device recovers: the registry is readable again and the built-in list is served.
+  const { writeFile } = await import('node:fs/promises');
+  await writeFile(join(sim.sd, 'system', 'registry', 'apps.json'), J(SD_REG));
+  await sim.control('/api/_sim/fault', { clear: true });
+  assert.ok(await page.waitFor(`${frameState({ name: 'Settings' })} === 'trusted'`, { timeout: 45000 }), 'the held built-in window never loaded once the reads recovered');
+});
+
+test('shell review fixes (v151)', { skip }, async (t) => {
+  // A user-installed (not agent-written, not built-in) app: only the registry vouches for it.
+  const reg = { ...SD_REG, installed: [...SD_REG.installed, { id: 'userapp', version: '0.1.0', path: '/apps/userapp', enabled: true, autostart: false, permissions: [] }] };
+  const sim = await startSdRegistrySim({ seed: { '/system/registry/apps.json': reg, '/system/config/session.json': { windows: [], geom: {} },
+    '/data/Documents/keep.txt': 'hello' } });
+  const browser = await launchBrowser({ args: [HOST_RULES] });
+  t.after(async () => { await browser.close(); await sim.stop(); });
+  await sim.control('/api/_sim/apps', { add: { ...simApp('userapp', 'User App'), route: '/apps/calculator/' } });   // calculator never retitles its window
+  const page = await browser.newPage();
+  await page.setViewport(1280, 800);
+  assert.ok(await bootShell(page, sim, { lang: 'en' }), 'desktop never came up');
+
+  await t.test('an app refresh with the registry unreadable keeps an open trusted window trusted, and its messages accepted', async () => {
+    await page.eval(openApp('userapp'));
+    assert.ok(await page.waitFor(`${frameState({ name: 'User App' })} === 'trusted'`, { timeout: 10000 }), 'the registry-vouched app did not open trusted');
+    assert.ok(await page.waitFor(frameReady({ name: 'User App' }), { timeout: 10000 }));
+    const { writeFile } = await import('node:fs/promises');
+    await writeFile(join(sim.sd, 'system', 'registry', 'apps.json'), '{ this is not json');
+    await sim.control('/api/_sim/publish', { t: 'apps.changed', d: {} });   // → refreshApps → the registry re-read fails
+    await sleep(4000);
+    assert.equal(await page.eval(inFrame({ name: 'User App' }, `parent.postMessage({ type: 'set-window-title', title: 'Still mine' }, location.origin)`)), 'ok');
+    const accepted = await page.waitFor(`[...document.querySelectorAll('.win .bar .t')].some((x) => x.textContent.includes('Still mine'))`, { timeout: 4000 });
+    await writeFile(join(sim.sd, 'system', 'registry', 'apps.json'), J(reg));
+    assert.ok(accepted, 'after a failed registry re-read the open, trusted window was demoted: the shell now drops its messages');
+    await closeAllWindows(page);
+  });
+
+  await t.test('open-app with reload:true reloads an open window; without it, it only focuses it', async () => {
+    await closeAllWindows(page).catch(() => {});
+    await page.eval(openApp('notepad'));
+    assert.ok(await page.waitFor(frameReady({ src: '/apps/notepad/' }), { timeout: 10000 }));
+    await page.eval(`${WIN({ src: '/apps/notepad/' })}.querySelector('iframe').contentWindow.__mark = 'before'`);
+    await page.eval(openApp('notepad'));
+    await sleep(1500);
+    assert.equal(await page.eval(`${WIN({ src: '/apps/notepad/' })}.querySelector('iframe').contentWindow.__mark || null`), 'before', 'a bare re-open reloaded the app');
+    await page.eval(`window.postMessage({ type: 'open-app', id: 'notepad', reload: true }, location.origin)`);
+    assert.ok(await page.waitFor(`(() => { const f = ${WIN({ src: '/apps/notepad/' })}?.querySelector('iframe'); try { return !!f && f.contentDocument.readyState === 'complete' && f.contentWindow.location.href !== 'about:blank' && f.contentWindow.__mark === undefined; } catch { return false; } })()`, { timeout: 8000 }),
+      'open-app {reload:true} did not reload the open window (an updated app / a newly installed game stays stale)');
+    // reload together with a query: the query wins (one navigation to it).
+    await page.eval(`window.postMessage({ type: 'open-app', id: 'notepad', reload: true, query: ${J('path=' + encodeURIComponent('/data/Documents/keep.txt'))} }, location.origin)`);
+    assert.ok(await page.waitFor(`(${WIN({ src: '/apps/notepad/' })}.querySelector('iframe').getAttribute('src') || '').includes('keep.txt')`, { timeout: 5000 }));
+    await closeAllWindows(page);
+  });
+});

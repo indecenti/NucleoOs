@@ -118,3 +118,27 @@ async function closeAll(page) {
   await page.eval(`document.querySelectorAll('.win button.close').forEach((b) => b.click())`);
   await page.waitFor(`document.querySelectorAll('.win').length === 0`, { timeout: 4000 });
 }
+
+// v150's guard reported ANY failed same-origin <script>/<link>, at any time: an app that lazy-loads a script
+// after it has loaded (Dictation's local vosk.js with its CDN fallback, ANIMA voice, Video Studio's ffmpeg)
+// was reloaded 800 ms later — the dictation, the chat, the project in progress, gone. Only a failure while
+// the window is still loading may reload it (the two cases above keep that half honest).
+test('a script an app lazy-loads AFTER it has loaded may fail without the window being reloaded', { skip }, async (t) => {
+  const sim = await startSim({ seed: { '/system/config/session.json': { windows: [], geom: {} } } });
+  const browser = await launchBrowser({ args: [HOST_RULES] });
+  t.after(async () => { await browser.close(); await sim.stop(); });
+  const page = await browser.newPage();
+  await page.setViewport(1280, 800);
+  assert.ok(await bootShell(page, sim, { lang: 'en' }));
+  await page.eval(`window.postMessage({ type: 'open-app', id: 'notepad' }, location.origin)`);
+  const frame = `[...document.querySelectorAll('.win iframe')].find((f) => (f.getAttribute('src') || '').startsWith('/apps/notepad/'))`;
+  assert.ok(await page.waitFor(`(() => { const f = ${frame}; try { return !!f && f.contentDocument.readyState === 'complete' && f.contentWindow.location.href !== 'about:blank'; } catch { return false; } })()`, { timeout: 12000 }));
+  await new Promise((r) => setTimeout(r, 500));
+  await sim.control('/api/_sim/fault', { route: '/missing-lazy.js', status: 503 });
+  await page.eval(`(() => { const f = ${frame}; f.contentWindow.__work = 'unsaved'; const s = f.contentDocument.createElement('script'); s.src = '/missing-lazy.js'; f.contentDocument.head.appendChild(s); return true; })()`);
+  await new Promise((r) => setTimeout(r, 3000));
+  try {
+    assert.equal(await page.eval(`(() => { try { return ${frame}.contentWindow.__work || null; } catch { return 'gone'; } })()`), 'unsaved',
+      'a lazy script that failed after load reloaded the window: the work in it is gone');
+  } finally { await sim.control('/api/_sim/fault', { clear: true }); }
+});

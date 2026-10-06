@@ -118,7 +118,7 @@ test('dos-importer: picked files become a valid js-dos bundle on the SD, with th
   assert.doesNotMatch(c, /\[sblaster\]/, 'sound off = no Sound Blaster section');
   assert.match(c, /^xms=true$/m);
   assert.deepEqual(autoexec(c), ['@echo off', 'mount c .', 'c:', 'PRINCE.EXE'], 'the bundle starts the chosen program');
-  assert.deepEqual(await page.eval(`window.__msgs.filter((m) => m && m.type === 'open-app')`), [{ type: 'open-app', id: 'dosbox' }], 'DOS Box is surfaced once');
+  assert.deepEqual(await page.eval(`window.__msgs.filter((m) => m && m.type === 'open-app')`), [{ type: 'open-app', id: 'dosbox', reload: true }], 'DOS Box is surfaced once');
   assert.equal(await page.eval(`window.__xss`), undefined);
 });
 

@@ -158,3 +158,26 @@ test('a long upload is never aborted by the write gate, and does not freeze othe
   const { res: r2 } = await sw.dispatch('/api/fs/write?path=' + encodeURIComponent('/data/x.bin'), { method: 'POST', body: big });
   assert.equal(r2.status, 200);
 });
+
+test('a write stuck past the exclusive budget gives back EVERY permit: a second write and the reads behind it still run', async () => {
+  // timeScale 0.002: the 15 s exclusive budget becomes 30 ms. The first write never answers (a hung upload).
+  // It used to keep ONE permit for ever; with MAX_INFLIGHT = 2 the next write (which needs both) then sat at
+  // the head of the FIFO for good, and every read queued behind it froze with it — the whole desktop.
+  const net = async (r) => {
+    const u = new URL(r.url);
+    if (u.pathname === '/api/fs/write' && u.searchParams.get('path') === '/data/hung.bin') return new Promise(() => {});
+    return new Response(u.pathname === '/api/fs/write' ? '{"ok":true}' : '[]');
+  };
+  const sw = loadSw({ net, timeScale: 0.002 });
+  const within = (p, ms, what) => Promise.race([p, sleep(ms).then(() => { throw new Error(what + ' never ran (the device gate is wedged)'); })]);
+  sw.dispatch('/api/fs/write?path=' + encodeURIComponent('/data/hung.bin'), { method: 'POST', body: 'x' });   // never settles
+  await sleep(120);                                                       // well past the (scaled) budget
+  const w2 = sw.dispatch('/api/fs/write?path=' + encodeURIComponent('/data/ok.txt'), { method: 'POST', body: 'y' });
+  const r1 = sw.dispatch('/api/fs/list?path=%2Fdata');                    // queued BEHIND the second write
+  const { res: wr } = await within(w2, 1500, 'a second write');
+  assert.equal(wr.status, 200);
+  const { res: lr } = await within(r1, 1500, 'a read queued behind the second write');
+  assert.equal(lr.status, 200);
+  const { res: r2 } = await within(sw.dispatch(readUrl('/data/notes.txt')), 1500, 'a later read');
+  assert.equal(r2.status, 200);
+});

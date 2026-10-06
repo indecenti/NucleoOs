@@ -3399,6 +3399,22 @@
       "anima": false
     },
     {
+      "id": "unit-authenticator-totp-edge",
+      "label": "authenticator-totp-edge.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/authenticator-totp-edge.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
       "id": "unit-browser-check",
       "label": "browser-check.test.mjs",
       "category": "app-shell",
@@ -3655,6 +3671,22 @@
       "anima": false
     },
     {
+      "id": "unit-micgate",
+      "label": "micgate.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/micgate.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
       "id": "unit-nfv",
       "label": "nfv.test.mjs",
       "category": "app-shell",
@@ -3663,6 +3695,22 @@
       "args": [
         "--test",
         "tools/nfv/nfv.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-qr-encoder",
+      "label": "qr-encoder.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/qr-encoder.test.mjs"
       ],
       "verifies": "",
       "nl": false,
@@ -3991,6 +4039,22 @@
       "anima": false
     },
     {
+      "id": "unit-shell-undeclared-calls",
+      "label": "shell-undeclared-calls.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/shell-undeclared-calls.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
       "id": "unit-shortcuts",
       "label": "shortcuts.test.mjs",
       "category": "app-shell",
@@ -4151,6 +4215,22 @@
       "anima": false
     },
     {
+      "id": "unit-version-bump",
+      "label": "version-bump.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/version-bump.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
       "id": "unit-version-consistency",
       "label": "version-consistency.test.mjs",
       "category": "app-shell",
@@ -4159,6 +4239,22 @@
       "args": [
         "--test",
         "tools/version-consistency.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-wifi-scanner-auto-hint",
+      "label": "wifi-scanner-auto-hint.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/wifi-scanner-auto-hint.test.mjs"
       ],
       "verifies": "",
       "nl": false,
