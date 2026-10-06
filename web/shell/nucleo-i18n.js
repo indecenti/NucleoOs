@@ -49,6 +49,7 @@ const loaded = new Set();          // namespaces whose files we've already fetch
 const subscribers = new Set();     // onChange callbacks (this document only)
 let activeLang = null;             // resolved once on first access
 let installed = false;             // global listeners installed?
+let senderGuard = null;            // optional extra check on set-language senders (the shell wires its trustedSender)
 
 // --- language resolution & persistence --------------------------------------
 
@@ -249,6 +250,10 @@ const I18N = {
   // Return a namespace-bound t() without re-loading (use after init for convenience).
   scope(ns) { return (key, vars) => translate(ns, key, vars); },
 
+  // The shell knows WHICH frames are curated (same-origin AND not sandboxed); it hands that check in here
+  // so the set-language relay below obeys the same trust boundary as the shell's own message router.
+  setSenderGuard(fn) { senderGuard = typeof fn === 'function' ? fn : null; },
+
   // The raw catalog of ONE namespace in ANY language (not only the active one) — for callers that must
   // match text across languages, e.g. the shell's app search finding "Rechner" while the UI is in
   // Italian. Shares the in-memory dedup, so the base/active files already loaded cost nothing again.
@@ -377,10 +382,15 @@ function install() {
       subscribers.forEach((cb) => { try { cb(activeLang); } catch {} });
     }
   });
-  // Same-frame relay (e.g. the shell tells its children, or a test dispatches it directly).
+  // Same-frame relay (e.g. the shell tells its children, or a test dispatches it directly). Same-origin
+  // senders only: a sandboxed (opaque-origin) agent app or a foreign page in the Browser app used to be able
+  // to switch the whole OS language with one postMessage.
   window.addEventListener('message', (e) => {
     const d = e && e.data;
-    if (d && d.type === 'set-language') { const l = normalize(d.lang); if (l && l !== activeLang) applyNewLang(l); }
+    if (!d || d.type !== 'set-language') return;
+    if (e.origin !== location.origin) return;
+    try { if (senderGuard && !senderGuard(e)) return; } catch { return; }
+    const l = normalize(d.lang); if (l && l !== activeLang) applyNewLang(l);
   });
 }
 

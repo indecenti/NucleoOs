@@ -5,10 +5,10 @@
 //   /apps/<id>/<rest> -> apps/<id>/www/<rest> ;  /<asset> -> web/shell/<asset>
 // Usage: node tools/serve-shell.mjs   (http://localhost:5599)
 import { createServer } from 'node:http';
-import { readFile, writeFile, readdir, stat, rm, mkdir, rename } from 'node:fs/promises';
+import { readFile, writeFile, readdir, stat, rm, rmdir, mkdir, rename } from 'node:fs/promises';
 import { readFileSync, existsSync, writeFileSync } from 'node:fs';   // sync reads for the ANIMA agenda/capabilities executor
 import { createHash, randomBytes, randomInt } from 'node:crypto';
-import { join, dirname, extname, normalize } from 'node:path';
+import { join, dirname, extname, normalize, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Mind } from './anima/hdc.mjs';   // hyperdimensional reasoning core (offline compose/recall/analogy)
 import { KG } from './anima/kge.mjs';      // permutation-KGE deductive core (inverse/transitive/multi-hop)
@@ -345,7 +345,10 @@ async function transcribeApi(req, res, url) {
 }
 
 // ---- file API (sandboxed to tools/sd-sim) ----
-const sdPath = (p) => { const abs = normalize(join(SD, p || '/')); return abs.startsWith(SD) ? abs : null; };
+// Contained means the SD root itself or something BELOW it: a bare startsWith(SD) also let a sibling whose
+// name merely begins with the root (<sd>-x, <sd>.bak) through '../<sd>-x/...'.
+const SD_DIR = SD.endsWith(sep) ? SD : SD + sep;
+const sdPath = (p) => { const abs = normalize(join(SD, p || '/')); return (abs === SD || abs === SD_DIR.slice(0, -1) || abs.startsWith(SD_DIR)) ? abs : null; };
 // Collect the body as a Buffer (NOT a string): string concatenation mangles binary
 // uploads (e.g. an .exe), so the OTA push would see every binary as "changed" forever.
 // Rejecting on 'error' keeps the Promise from hanging if the socket dies mid-upload.
@@ -426,7 +429,16 @@ async function fsApi(req, res, url) {
       if (/^\/(www\/shell|apps\/[^/]+\/www)\/./i.test(p) && !/\.gz$/i.test(p)) await rm(abs + '.gz', { force: true }).catch(() => {});
       return sendJSON(res, { ok: true });
     }
-    if (op === 'delete') { await rm(abs, { recursive: true }); publish('fs.changed', { op: 'delete', path: p }); return sendJSON(res, { ok: true }); }
+    if (op === 'delete') {
+      // MIRROR THE FIRMWARE (nucleo_fsapi.c delete_post): remove() then rmdir() — a file or an EMPTY folder.
+      // A non-empty folder (or a missing path) is 404 "no entry". The sim used to rm -r, so a client that
+      // deleted a whole folder in one call worked here and failed on every real Cardputer.
+      let st; try { st = await stat(abs); } catch { return send(res, 404, 'text/plain', 'no entry'); }
+      try { if (st.isDirectory()) await rmdir(abs); else await rm(abs); }
+      catch { return send(res, 404, 'text/plain', 'no entry'); }
+      publish('fs.changed', { op: 'delete', path: p });
+      return sendJSON(res, { ok: true });
+    }
     if (op === 'mkdir') {
       let existed = true; try { await stat(abs); } catch { existed = false; }
       await mkdir(abs, { recursive: true });
@@ -541,6 +553,7 @@ function isAskable(q) {
 //   POST /api/_sim/ws-drop                       kill the live socket once (WiFi blip)
 //   GET  /api/_sim/stats                         request counters (the E2E device-load budget)
 //   POST /api/_sim/apps  {add:{…}} | {clear:true}  inject extra /api/apps records (hostile-manifest tests)
+//   POST /api/_sim/publish {t:'apps.changed', d:{…}}  push one event on the live socket (e.g. "an app was installed")
 const SIM = { faults: [], offline: false, extraApps: [], stats: { total: 0, inflight: 0, peak: 0, byPath: {} } };
 const simFaultFor = (path) => SIM.faults.find((f) => (f.route === '*' || path.startsWith(f.route)) && (f.times === 0 || f.left > 0));
 async function simControl(req, res, path) {
@@ -560,6 +573,11 @@ async function simControl(req, res, path) {
     if (b.clear) SIM.extraApps = [];
     if (b.add && typeof b.add === 'object') SIM.extraApps.push(b.add);
     return sendJSON(res, { ok: true, n: SIM.extraApps.length });
+  }
+  if (path === '/api/_sim/publish') {
+    if (typeof b.t !== 'string' || !b.t) return send(res, 400, 'text/plain', 'need t');
+    publish(b.t, b.d && typeof b.d === 'object' ? b.d : {});
+    return sendJSON(res, { ok: true, clients: sockets.size });
   }
   if (path === '/api/_sim/ws-drop') {
     const n = sockets.size;
@@ -3630,4 +3648,7 @@ function deviceTurn(req, res) {
 }
 function turnStart(req) { if (req.__start) req.__start(); }
 
-server.listen(PORT, () => console.log(`NucleoOS device simulator on http://localhost:${server.address().port}`));
+// Loopback only by default: /api/_dev/pin hands the pairing PIN to whoever asks, which is fine for the PC
+// running the simulator and not for the whole LAN. SIM_HOST=0.0.0.0 opts in (e.g. to try a phone/tablet).
+const HOST = process.env.SIM_HOST || '127.0.0.1';
+server.listen(PORT, HOST, () => console.log(`NucleoOS device simulator on http://localhost:${server.address().port}` + (HOST === '127.0.0.1' ? '' : ` (listening on ${HOST})`)));

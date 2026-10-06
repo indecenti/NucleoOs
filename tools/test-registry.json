@@ -3335,6 +3335,22 @@
       "anima": true
     },
     {
+      "id": "unit-app-i18n-keys",
+      "label": "app-i18n-keys.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/app-i18n-keys.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
       "id": "unit-app-shortcuts",
       "label": "app-shortcuts.test.mjs",
       "category": "app-shell",
@@ -3527,6 +3543,22 @@
       "anima": false
     },
     {
+      "id": "unit-docs-links",
+      "label": "docs-links.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/docs-links.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
       "id": "unit-edit-replace",
       "label": "edit-replace.test.mjs",
       "category": "app-shell",
@@ -3679,6 +3711,22 @@
       "args": [
         "--test",
         "tools/seq-import.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-serve-shell-sandbox",
+      "label": "serve-shell-sandbox.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/serve-shell-sandbox.test.mjs"
       ],
       "verifies": "",
       "nl": false,
@@ -3911,6 +3959,22 @@
       "anima": false
     },
     {
+      "id": "unit-shell-sw",
+      "label": "shell-sw.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/shell-sw.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
       "id": "unit-shortcuts",
       "label": "shortcuts.test.mjs",
       "category": "app-shell",
@@ -4063,6 +4127,22 @@
       "args": [
         "--test",
         "tools/usb-hid.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-version-consistency",
+      "label": "version-consistency.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/version-consistency.test.mjs"
       ],
       "verifies": "",
       "nl": false,
