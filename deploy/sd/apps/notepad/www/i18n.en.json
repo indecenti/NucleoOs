@@ -11,6 +11,7 @@
 
   "loaded": "Loaded {name}",
   "could_not_open": "Could not open {name}",
+  "open_failed_unbound": "Could not read {name} — the file is untouched; Save will ask where to save.",
   "open_hint": "Open a file from File Commander to edit it here.",
   "saved_file": "Saved {name}",
   "save_failed": "Save failed ({status})",

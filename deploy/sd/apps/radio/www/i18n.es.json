@@ -63,5 +63,7 @@
   "toast_removed": "Eliminada “{name}”",
   "toast_saved_changes": "Cambios guardados",
   "toast_added": "Añadida “{name}”",
-  "confirm_remove": "¿Eliminar “{name}” de la lista de emisoras?"
+  "confirm_remove": "¿Eliminar “{name}” de la lista de emisoras?",
+  "read_failed": "No se pudieron leer tus emisoras del Cardputer: la edición está en pausa para no sobrescribirlas. Inténtalo de nuevo en breve.",
+  "read_corrupt": "El archivo de emisoras del Cardputer no se puede leer: no lo modifico para no perderlo."
 }

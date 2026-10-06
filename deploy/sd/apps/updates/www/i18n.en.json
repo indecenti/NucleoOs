@@ -6,7 +6,7 @@
   "fw_slot": "Firmware slot",
   "image_state": "Image state",
   "free_memory": "Free memory",
-  "fw_update_title": "Firmware update (over the air)",
+  "fw_update_title": "Firmware update over Wi-Fi (OTA)",
   "fw_update_desc": "Pick a <code>nucleoos.bin</code> and install it wirelessly — no USB cable. The image is written to the <b>spare flash slot</b> and only booted if it is valid; if the new firmware fails to start, the device <b>automatically rolls back</b> to this one. So it always stays bootable.",
   "install_fw": "Install firmware",
   "keep_powered": "⚠ Keep the device powered during the update. It reboots automatically when done.",

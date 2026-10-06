@@ -98,6 +98,7 @@
   "dlg_save_title": "Guardar hoja",
   "dlg_open_title": "Abrir hoja",
   "confirm_new": "¿Crear una hoja nueva? Se perderán los cambios.",
+  "confirm_open": "¿Abrir otro archivo? Se perderán los cambios no guardados.",
   "confirm_exit": "¿Salir sin guardar?",
 
   "find_results": "{n} resultados",

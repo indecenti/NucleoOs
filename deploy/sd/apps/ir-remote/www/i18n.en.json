@@ -92,5 +92,6 @@
   "b_power": "Power", "b_input": "Input", "b_menu": "Menu", "b_home": "Home", "b_back": "Back",
   "b_vol_up": "Volume up", "b_vol_down": "Volume down", "b_mute": "Mute",
   "b_ch_up": "Channel up", "b_ch_down": "Channel down",
-  "b_up": "Up", "b_down": "Down", "b_left": "Left", "b_right": "Right", "b_ok": "OK"
+  "b_up": "Up", "b_down": "Down", "b_left": "Left", "b_right": "Right", "b_ok": "OK",
+  "sd_read_failed": "Couldn't read your saved favourites and buttons from the SD: changes stay in this browser until it can be read again."
 }

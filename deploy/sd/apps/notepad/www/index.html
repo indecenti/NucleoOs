@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Notepad</title>
   <style>
+    /* Native controls and scrollbars follow the app theme. */
+    :root { color-scheme: dark; } html[data-theme="light"] { color-scheme: light; }
     :root { --bg:#0e1830; --panel:#18233a; --text:#e8eefc; --muted:#8aa0c8; --accent:#4ea1ff; --line:#2a3a5e; }
     * { box-sizing: border-box; }
     html, body { height: 100%; margin: 0; }
@@ -77,11 +79,20 @@
 
     async function load(p) {
       if (!p) { path = ''; ed.value = ''; savedValue = ''; setDirty(false); setStats(); setTitle(); ed.focus(); return; }
+      // A read that FAILED (503, offline, 401…) is not an empty file. When the editor is bound to that
+      // very path (the ?path= open) it holds none of the file's text, so drop the binding: Save must
+      // ask where to save, never write the editor over a file it could not read. Only a definite 404
+      // (a new file at a chosen path) keeps it, so Save creates the file there.
+      const failed = () => {
+        if (path !== p) { setStatus('could_not_open', { name: baseName(p) }); return; }
+        path = ''; setTitle(); setStatus('open_failed_unbound', { name: baseName(p) });
+      };
       try {
         const r = await fetch('/api/fs/read?path=' + encodeURIComponent(p));
         if (r.ok) { ed.value = await r.text(); savedValue = ed.value; path = p; setDirty(false); setStats(); setTitle(); setStatus('loaded', { name: baseName(p) }); }
-        else setStatus('could_not_open', { name: baseName(p) });
-      } catch { setStatus('open_hint'); }
+        else if (r.status === 404) setStatus('could_not_open', { name: baseName(p) });
+        else failed();
+      } catch { failed(); }
       ed.focus();
     }
 

@@ -1,5 +1,8 @@
 {
   "_lang": "fr",
   "header_name": "Images",
-  "btn_wallpaper": "Définir comme fond d'écran"
+  "btn_wallpaper": "Définir comme fond d'écran",
+  "img_failed": "Impossible de charger {path}",
+  "dir_failed": "Impossible de lire {dir} — l’appareil est-il joignable ?",
+  "dir_empty": "Aucune image dans {dir}"
 }

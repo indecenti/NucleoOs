@@ -7,6 +7,8 @@
   <!-- Offline-first: use the system font stack (see --font-sans/--font-mono fallbacks below)
        instead of render-blocking remote webfonts — the device often has no internet. -->
   <style>
+    /* Native controls (audio/video bars, date/time pickers, file inputs, selects) follow the app theme. */
+    :root { color-scheme: dark; } html[data-theme="light"] { color-scheme: light; }
     :root {
       --bg: #080c16;
       --bg-gradient: radial-gradient(circle at 80% 20%, #171d38 0%, #080c16 100%);

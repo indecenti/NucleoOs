@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title data-i18n="app_title">Tasks</title>
   <style>
+    /* Native controls and scrollbars follow the app theme. */
+    :root { color-scheme: dark; } html[data-theme="light"] { color-scheme: light; }
     :root { --bg:#0e1830; --panel:#18233a; --text:#e8eefc; --muted:#8aa0c8; --accent:#4ea1ff;
       --line:#2a3a5e; --field:#0b1220; --ok:#2fd07a; --hi:#e2576b; --med:#f5b13d; }
     html[data-theme="light"] { --bg:#eef2fb; --panel:#ffffff; --text:#10203a; --muted:#5a6a86;
@@ -216,7 +218,11 @@
     function add() {
       const v = $('text').value.trim();
       if (!v || !canEdit()) return;               // blocked: the typed text stays in the box
-      tasks.push({ id: 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), text: v, done: false, pri: newPri, ts: tasks.length });
+      // ts orders tasks of equal priority (oldest first). It was tasks.length, which after a deletion
+      // repeats or undercuts a surviving task's stamp and jumps the new task above older ones. A clock
+      // stamp, never below the newest stamp on the list (old lists carry 0,1,2…; a clock can step back).
+      const ts = tasks.reduce((m, x) => (Number.isFinite(x.ts) && x.ts >= m ? x.ts + 1 : m), Date.now());
+      tasks.push({ id: 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), text: v, done: false, pri: newPri, ts });
       $('text').value = '';
       scheduleSave(); render(); $('text').focus();
     }

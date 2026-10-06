@@ -74,6 +74,7 @@
   "errAccessDenied": "Access denied — make sure you are paired with the device",
   "errSdWrite": "SD write failed ({status}): {detail}",
   "errMkdir": "Mkdir failed ({status}): {detail}",
+  "errDlBusy": "Another download is already in progress — try again shortly",
 
   "toastBookmarkRemoved": "Bookmark removed",
   "toastBookmarkAdded": "Bookmark added",

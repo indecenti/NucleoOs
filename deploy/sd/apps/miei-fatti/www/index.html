@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>I Miei Fatti</title>
 <style>
+    /* Native controls (audio/video bars, date/time pickers, file inputs, selects) follow the app theme. */
+    :root { color-scheme: dark; } html[data-theme="light"] { color-scheme: light; }
   :root { --bg:#0e1830; --panel:#18233a; --panel2:#1f2d4a; --text:#e8eefc; --muted:#8aa0c8;
     --accent:#8a5cff; --accent2:#21d4c4; --line:#2a3a5e; --field:#0b1220; --ok:#2fd07a; --hi:#e2576b; --med:#f5b13d; }
   html[data-theme="light"] { --bg:#eef2fb; --panel:#ffffff; --panel2:#e9edf8; --text:#10203a; --muted:#5a6a86;
@@ -254,9 +256,30 @@
   async function writeJSON(p,o){ try{ const r=await fetch('/api/fs/write?path='+encodeURIComponent(p),{method:'POST',body:JSON.stringify(o,null,2)}); return r.ok; }catch{ return false; } }
   async function anima(q){ try{ const r=await fetch('/api/anima?q='+encodeURIComponent(q)+'&lang='+lang(),{cache:'no-store'}); return r.ok?await r.json():null; }catch{ return null; } }
 
-  function scheduleSave(){ dirty=true; $('save').textContent=t().teaching?'…':''; $('save').textContent='…'; clearTimeout(saveTimer);
+  // Typed read of the facts file. A FAILED read (offline, 401, 503, corrupt JSON) is NOT "no facts": the old
+  // code kept the empty default and the next teach/edit saved it over the real file. 404 = none yet.
+  async function readFacts(){
+    try{ const r=await fetch('/api/fs/read?path='+encodeURIComponent(FILE),{cache:'no-store'});
+      if(r.status===404) return {ok:true,data:null};
+      if(!r.ok) return {ok:false,status:r.status};
+      const txt=(await r.text()).trim(); if(!txt) return {ok:true,data:null};
+      const d=JSON.parse(txt);
+      if(d&&typeof d==='object'&&!Array.isArray(d)&&(Array.isArray(d.facts)||!Object.keys(d).length)) return {ok:true,data:Array.isArray(d.facts)?d:null};
+      return {ok:false,status:'corrupt'};
+    }catch(e){ return {ok:false,status:e instanceof SyntaxError?'corrupt':0}; }
+  }
+  let readOk=false, readStatus=0;            // saving is allowed only once the REAL file was read (or is known not to exist)
+  const readFailText=(st)=>st===401||st===403?t().notPaired:st==='corrupt'?t().readCorrupt:t().readFailed;
+  // Every edit asks first: while the real file is unknown, re-read it; if it still fails, say so and refuse.
+  async function canEdit(msgEl){
+    if(readOk) return true;
+    await load(); if(readOk){ if(msgEl!==$('profmsg')) loadProfileInputs(); render(); return true; }   // never wipe a profile being typed
+    if(msgEl){ msgEl.className='ask err'; msgEl.textContent=readFailText(readStatus); }
+    $('save').textContent='⚠'; return false;
+  }
+  function scheduleSave(){ if(!readOk) return; dirty=true; $('save').textContent=t().teaching?'…':''; $('save').textContent='…'; clearTimeout(saveTimer);
     saveTimer=setTimeout(async()=>{ const ok=await writeJSON(FILE,state); dirty=false; $('save').textContent=ok?'✓':'⚠'; setTimeout(()=>{ if(!dirty)$('save').textContent=''; },1400); },350); }
-  async function flushSave(){ clearTimeout(saveTimer); const ok=await writeJSON(FILE,state); dirty=false; $('save').textContent=ok?'✓':'⚠'; setTimeout(()=>{ if(!dirty)$('save').textContent=''; },1400); }
+  async function flushSave(){ if(!readOk) return; clearTimeout(saveTimer); const ok=await writeJSON(FILE,state); dirty=false; $('save').textContent=ok?'✓':'⚠'; setTimeout(()=>{ if(!dirty)$('save').textContent=''; },1400); }
 
   // ---- teach / verify engine -------------------------------------------------
   function classify(j){
@@ -355,7 +378,7 @@
         <div class="val">${esc(v.value)}</div><div class="ask" data-role="msg"></div></div>${actionsHtml()}`;
       ul.appendChild(li);
     }
-    if(n===0) $('empty').textContent=t().empty;
+    if(n===0) $('empty').textContent=readOk?t().empty:readFailText(readStatus);
     // deductions
     deds = deduce();
     $('ded-card').hidden = state.rels.length===0;
@@ -395,6 +418,7 @@
   async function doTeach(){
     const subject=$('subj').value.trim(), value=$('val').value.trim(), cat=$('cat').value, msg=$('addmsg');
     if(!subject||!value){ msg.className='ask err'; msg.textContent=t().needboth; return; }
+    if(!(await canEdit(msg))) return;                         // what was typed stays in the fields
     msg.className='ask'; msg.textContent=t().teaching; $('teach').disabled=true;
     const rec={ id:nextId(), kind:'flat', cat, subject, value, cop:copulaForCat(cat), status:'new', ts:Date.now() };
     const {k,reply}=await teachItem(viewOf(rec,lang())); $('teach').disabled=false;
@@ -413,6 +437,7 @@
   async function addRel(){
     const a=$('rel-a').value.trim(), b=$('rel-b').value.trim(), type=$('rel-r').value, msg=$('relmsg');
     if(!a||!b){ msg.className='ask err'; msg.textContent=t().needrel; return; }
+    if(!(await canEdit(msg))) return;
     msg.className='ask'; msg.textContent=t().teaching; $('addrel').disabled=true;
     const rec={ id:nextId(), kind:'rel', type, a, b, status:'new', ts:Date.now() };
     const {k,reply}=await teachItem(viewOf(rec,lang())); $('addrel').disabled=false;
@@ -471,7 +496,7 @@
       de:{name:`ich heiße ${value}`,age:`ich bin ${value} Jahre alt`,city:`ich wohne in ${value}`,job:`mein Beruf ist ${value}`,email:`meine E-Mail ist ${value}`,birthday:`mein Geburtstag ist ${value}`},
     };
     return (M[l]||M.en)[field]||null; }
-  async function saveProfile(){ $('saveprof').disabled=true; const msg=$('profmsg'); msg.className='ask'; msg.textContent=t().teaching;
+  async function saveProfile(){ if(!(await canEdit($('profmsg')))) return; $('saveprof').disabled=true; const msg=$('profmsg'); msg.className='ask'; msg.textContent=t().teaching;
     for(const k of PF){ const v=$('p-'+k).value.trim(); state.profile[k]=v; const s=profileSentence(k,v,lang()); if(s) await anima(s); }
     scheduleSave(); $('saveprof').disabled=false; msg.innerHTML='<b>'+t().profSaved+'</b>'; }
   async function askProfile(){ const msg=$('profmsg'); msg.className='ask'; msg.textContent=t().asking;
@@ -505,8 +530,11 @@
     if(!['it','en','es','fr','de'].includes(cur) && ['it','en','es','fr','de'].includes(s?.ui?.language)) localStorage.setItem('anima.lang',s.ui.language); }
 
   // ---- boot ------------------------------------------------------------------
-  async function load(){ const d=await readJSON(FILE);
-    if(d&&typeof d==='object'&&Array.isArray(d.facts)){ state={ schema:2, profile:{name:'',age:'',city:'',job:'',email:'',birthday:''}, facts:[], rels:[], ...d };
+  async function load(){ const r=await readFacts(); readOk=r.ok; readStatus=r.ok?0:r.status;
+    if(!r.ok){ $('save').textContent='⚠'; $('save').title=readFailText(r.status); return; }
+    if($('save').textContent==='⚠'){ $('save').textContent=''; $('save').title=''; }
+    const d=r.data;
+    if(d){ state={ schema:2, profile:{name:'',age:'',city:'',job:'',email:'',birthday:''}, facts:[], rels:[], ...d };
       state.profile={name:'',age:'',city:'',job:'',email:'',birthday:'',...(d.profile||{})}; state.rels=Array.isArray(d.rels)?d.rels:[]; }
     seq=[...state.facts,...state.rels].reduce((m,x)=>Math.max(m,(x.id|0)+1),1); }
   async function init(){ await loadTheme(); await loadStrings('en'); if(lang()!=='en') await loadStrings(lang()); await load(); applyStrings(); loadProfileInputs();

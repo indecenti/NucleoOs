@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>DOS Box</title>
   <style>
+    /* Native controls and scrollbars follow the app theme. */
+    :root { color-scheme: dark; } html[data-theme="light"] { color-scheme: light; }
     :root { --bg:#0b0f1a; --panel:#18233a; --panel2:#1f2d4a; --text:#e8eefc; --muted:#8aa0c8;
             --accent:#4ea1ff; --line:#2a3a5e; --warn:#ffcf66; --err:#ff8093; --ok:#4cd07d; }
     * { box-sizing: border-box; } html, body { height: 100%; margin: 0; }
@@ -254,8 +256,11 @@
 
     async function loadLibrary() {
       let data;
-      try { data = await (await fetch('/api/fs/list?path=' + encodeURIComponent(DIR))).json(); }
-      catch { bar.innerHTML = '<span class="muted">' + esc(t('fs_unavailable')) + '</span>'; return []; }
+      try {
+        const r = await fetch('/api/fs/list?path=' + encodeURIComponent(DIR));
+        data = r.status === 404 ? { entries: [] } : (r.ok ? await r.json() : null);   // no folder yet = empty library
+      } catch { data = null; }
+      if (!data) { bar.innerHTML = '<span class="muted">' + esc(t('fs_unavailable')) + '</span>'; return []; }
       const meta = await loadMeta();
       const items = (data.entries || []).filter((e) => e.type === 'file' && RUNNABLE.test(e.name)).map((e) => {
         const m = meta[e.name] || {};

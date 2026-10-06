@@ -30,5 +30,12 @@
   "compress_complete": "Komprimierung abgeschlossen!",
   "saved_x": "Gespeichert {name}",
   "compress_error": "Komprimierungsfehler",
-  "no_files": "Keine Dateien zum Komprimieren"
+  "no_files": "Keine Dateien zum Komprimieren",
+  "err_read_file": "Das Archiv konnte nicht vom Cardputer gelesen werden (Fehler {status}).",
+  "err_write_file": "{name} konnte nicht geschrieben werden (Fehler {status}).",
+  "err_mkdir": "Der Ordner {name} konnte nicht erstellt werden (Fehler {status}).",
+  "err_list_dir": "Der Ordner {name} konnte nicht aufgelistet werden (Fehler {status}).",
+  "err_read_src": "{name} konnte nicht gelesen werden (Fehler {status}).",
+  "err_save_archive": "{name} konnte nicht gespeichert werden (Fehler {status}).",
+  "confirm_overwrite": { "one": "{count} Datei existiert bereits und wird überschrieben:\n{names}\n\nTrotzdem entpacken?", "other": "{count} Dateien existieren bereits und werden überschrieben:\n{names}\n\nTrotzdem entpacken?" }
 }

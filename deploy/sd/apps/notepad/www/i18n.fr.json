@@ -11,6 +11,7 @@
 
   "loaded": "Chargé {name}",
   "could_not_open": "Impossible d'ouvrir {name}",
+  "open_failed_unbound": "Impossible de lire {name} : le fichier reste intact ; Enregistrer demandera où enregistrer.",
   "open_hint": "Ouvrez un fichier depuis File Commander pour le modifier ici.",
   "saved_file": "Enregistré {name}",
   "save_failed": "Échec de l'enregistrement ({status})",

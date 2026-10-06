@@ -11,6 +11,7 @@
 
   "loaded": "Caricato {name}",
   "could_not_open": "Impossibile aprire {name}",
+  "open_failed_unbound": "Impossibile leggere {name}: il file resta intatto, Salva chiederà dove salvare.",
   "open_hint": "Apri un file da File Commander per modificarlo qui.",
   "saved_file": "Salvato {name}",
   "save_failed": "Salvataggio non riuscito ({status})",

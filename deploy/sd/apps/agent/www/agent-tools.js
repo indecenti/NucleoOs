@@ -59,17 +59,29 @@ export const GEMINI_MODELS = {
 // ───────────────────────── helpers ─────────────────────────
 // Claude-Code-style line-numbered read ("12→code"). offset is 1-based; limit caps the lines. The
 // model reads with numbers to reference/edit precise lines; edit_file still matches the RAW text.
-export function withLineNumbers(content, { offset = 1, limit } = {}) {
+// Paging (after OpenCode's read tool): `maxChars` is the budget of the whole window — it stops at a whole
+// line — and `lineMax` cuts one huge line (minified code) so it cannot eat that budget alone. When lines are
+// left, the tail names the EXACT offset to resume from, so the model can page through a file of any size.
+export function withLineNumbers(content, { offset = 1, limit, maxChars = 0, lineMax = 0 } = {}) {
   const lines = String(content == null ? '' : content).split('\n');
   // A file ending in "\n" has no extra line after it (cat -n agrees). Numbering that empty tail made models
   // count one item too many — measured: Qwen3-1.7B read a 3-item list as "4 elements".
   if (lines.length > 1 && lines[lines.length - 1] === '') lines.pop();
   const start = Math.max(1, offset | 0);
+  if (start > lines.length) return '(offset ' + start + ' is past the end — the file has ' + lines.length + ' lines)';
   const end = limit ? Math.min(lines.length, start - 1 + (limit | 0)) : lines.length;
   const out = [];
-  for (let i = start; i <= end; i++) out.push(i + '→' + lines[i - 1]);
+  let size = 0, last = start - 1;
+  for (let i = start; i <= end; i++) {
+    let text = lines[i - 1];
+    if (lineMax > 0 && text.length > lineMax) text = text.slice(0, lineMax) + '…(line cut at ' + lineMax + ' chars)';
+    const row = i + '→' + text;
+    if (maxChars > 0 && out.length && size + row.length + 1 > maxChars) break;   // always show at least one line
+    out.push(row); size += row.length + 1; last = i;
+  }
   let s = out.join('\n');
-  if (end < lines.length) s += '\n… (' + (lines.length - end) + ' more lines — read with a higher offset)';
+  // The total too: told only "339 more lines", qwen3.5:9b crept to the end 5 lines a read (9 reads, measured).
+  if (last < lines.length) s += '\n… (lines ' + start + '-' + last + ' of ' + lines.length + ' shown; ' + (lines.length - last) + ' more lines — call read_file with offset=' + (last + 1) + ' to continue)';
   return s;
 }
 
@@ -203,6 +215,19 @@ export function renderPlan(steps) {
   const done = steps.filter((s) => s.status === 'done').length;
   return steps.map((s) => mark[s.status] + ' ' + s.title).join('\n')
     + `\n(${done}/${steps.length} done)`;
+}
+
+// The plan, re-shown to the model on EVERY tool result while work is open (OpenCode re-injects its todo list
+// each step; a small model otherwise forgets the checklist two reads after writing it and stops halfway).
+// One line, so it costs ~tens of tokens; '' when there is no plan or it is all done.
+export function planReminder(steps) {
+  if (!Array.isArray(steps) || !steps.length) return '';
+  const done = steps.filter((s) => s.status === 'done').length;
+  if (done === steps.length) return '';
+  const cur = steps.find((s) => s.status === 'doing');
+  const next = steps.filter((s) => s.status === 'todo').slice(0, 2).map((s) => s.title);
+  return `[plan ${done}/${steps.length} done` + (cur ? ` · now: ${cur.title}` : ' · nothing in progress: mark the next step "doing" with update_plan')
+    + (next.length ? ` · next: ${next.join('; ')}` : '') + ']';
 }
 
 // Map the Anthropic-shaped tool list to the OpenAI function-calling schema (the Groq contract).
@@ -341,7 +366,23 @@ export async function runOpenAIToolLoop({ callModel, execTool, messages, maxStep
       if (onEvent) onEvent({ type: 'tool_result', name: fn.name, is_error: !!(r && r.is_error) });
     }
   }
-  return '(step budget exhausted — the task may be incomplete)';
+  return budgetSummary(async () => {
+    messages.push({ role: 'user', content: BUDGET_ASK });
+    const msg = await callModel(messages, { toolChoice: 'none' });   // tools stay declared: the history holds tool calls
+    return msg && msg.content;
+  }, abort);
+}
+
+// Out of steps: one last answer WITHOUT tools, so the human learns what was done and what is left instead of
+// a bare "budget exhausted". Shared by every loop; a provider that refuses the call costs nothing but the summary.
+export const BUDGET_NOTE = '(step budget exhausted — the task may be incomplete)';
+export const BUDGET_ASK = 'Step budget reached. Stop using tools and summarize briefly what you did and what is left.';
+export async function budgetSummary(ask, abort) {
+  try {
+    const text = String((await ask()) || '').trim();
+    if (text) return text + '\n\n' + BUDGET_NOTE;
+  } catch (e) { if (abort && abort.aborted) throw new Error('stopped'); }
+  return BUDGET_NOTE;
 }
 
 // ───────────────────────── LOCAL-SERVER loop (Ollama / LM Studio on the user's PC) ─────────────────────────
@@ -463,11 +504,8 @@ export async function runLocalToolLoop({ chat, execTool, messages, tools = [], m
       if (onEvent) onEvent({ type: 'tool_result', name, is_error: !!out.is_error });
     }
   }
-  // Out of steps: one last call WITHOUT tools, so the human gets a summary of what was done instead of silence.
-  try {
-    messages.push({ role: 'user', content: 'Step budget reached. Stop using tools and summarize briefly what you did and what is left.' });
-    const r = (await chat(messages, { noTools: true })) || {};
-    if (r.text) return String(r.text) + '\n\n(step budget exhausted — the task may be incomplete)';
-  } catch (e) { if (abort && abort.aborted) throw new Error('stopped'); }
-  return '(step budget exhausted — the task may be incomplete)';
+  return budgetSummary(async () => {
+    messages.push({ role: 'user', content: BUDGET_ASK });
+    return ((await chat(messages, { noTools: true })) || {}).text;
+  }, abort);
 }

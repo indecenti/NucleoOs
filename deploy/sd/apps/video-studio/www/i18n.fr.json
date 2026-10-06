@@ -1,6 +1,6 @@
 {
   "_lang": "fr",
-  "app_title": "NucleoOS Video Studio",
+  "app_title": "Studio vidéo NucleoOS",
   "sub": "Convertit les vidéos en <b>.nfv</b> <b>dans le navigateur</b> (aucun logiciel sur votre PC) et les écrit directement sur la SD du Cardputer.",
   "drop": "<b>Glissez vos vidéos ici</b> — ou cliquez pour les choisir<br><small>mp4 · mov · webm · mkv · avi … la conversion s'exécute localement dans le navigateur (ffmpeg.wasm)</small>",
   "lbl_profile": "Profil",

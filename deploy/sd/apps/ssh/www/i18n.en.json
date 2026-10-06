@@ -51,5 +51,8 @@
   "hostkey_ok": "host key verified: {fp}",
   "hostkey_mismatch": "HOST KEY CHANGED! pinned {old} — received {fp}. Possible MITM: session refused. If the change is legitimate (reinstalled server), accept the new key.",
   "hostkey_mismatch_short": "host key changed — session refused",
-  "hostkey_accept": "Accept new key"
+  "hostkey_accept": "Accept new key",
+  "read_failed": "Couldn't read your saved hosts from the Cardputer: nothing is saved so they aren't overwritten. Try again shortly.",
+  "read_corrupt": "The saved-hosts file on the Cardputer can't be read: it is left untouched so nothing is lost.",
+  "not_paired": "This browser isn't paired with the Cardputer — pair it to save hosts."
 }

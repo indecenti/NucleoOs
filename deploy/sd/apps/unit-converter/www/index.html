@@ -93,7 +93,7 @@
     import I18N from '/nucleo-i18n.js';
     import { UNITS, unitsInCategory, categoryOf, convert, fmt, runCommand } from './convert.js';
     const t = await I18N.init('unit-converter');
-    const lang = (localStorage.getItem('nucleo.lang') || document.documentElement.lang || 'en').slice(0, 2);
+    const lang = I18N.lang;   // the OS language (anima.lang); 'nucleo.lang' was never written, so this read the page default
 
     const $ = (id) => document.getElementById(id);
     // Friendly display labels; anything not listed shows its canonical symbol as-is.
@@ -135,7 +135,7 @@
       from = $('from').value; to = $('to').value;
       const r = convert($('val').value, from, to);
       $('unit').textContent = label(to);
-      $('big').textContent = r.ok ? fmt(r.value) : '—';
+      $('big').textContent = r.ok ? fmt(r.value, I18N.locale()) : '—';
     }
     $('val').addEventListener('input', doConvert);
     $('from').addEventListener('change', doConvert);
@@ -177,7 +177,7 @@
       if (!h.length) { const li = document.createElement('li'); li.className = 'muted'; li.textContent = t('empty'); ul.appendChild(li); return; }
       for (const e of h) {
         const li = document.createElement('li');
-        li.innerHTML = `${e.value} ${label(e.from)} → <span class="r">${fmt(e.result)} ${label(e.to)}</span>`;
+        li.innerHTML = `${e.value} ${label(e.from)} → <span class="r">${fmt(e.result, I18N.locale())} ${label(e.to)}</span>`;
         li.addEventListener('click', () => { selectCat(e.cat, true); from = e.from; to = e.to; $('val').value = e.value; fillSelect($('from'), from); fillSelect($('to'), to); doConvert(); });
         ul.appendChild(li);
       }

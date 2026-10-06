@@ -79,5 +79,8 @@
   "listhint": "{n}/128 fatti insegnabili ad ANIMA. Oltre, i più vecchi vengono dimenticati dal dispositivo (la lista qui resta).",
   "reteachDone": "Re-insegnati {o}/{n}.",
   "verifyDone": "Verificati {o}/{n}.",
-  "dedDone": "Insegnate {o}/{n} deduzioni."
+  "dedDone": "Insegnate {o}/{n} deduzioni.",
+  "readFailed": "Impossibile leggere i tuoi fatti dal Cardputer: le modifiche sono sospese per non sovrascriverli. Riprova tra poco.",
+  "readCorrupt": "Il file dei fatti sul Cardputer non è leggibile: non lo modifico per non perderlo.",
+  "notPaired": "Questo browser non è abbinato al Cardputer: abbinalo per salvare i fatti."
 }

@@ -74,6 +74,7 @@
   "errAccessDenied": "Zugriff verweigert — stelle sicher, dass du mit dem Gerät gekoppelt bist",
   "errSdWrite": "SD-Schreibfehler ({status}): {detail}",
   "errMkdir": "Mkdir fehlgeschlagen ({status}): {detail}",
+  "errDlBusy": "Ein anderer Download läuft bereits – versuche es gleich erneut",
 
   "toastBookmarkRemoved": "Lesezeichen entfernt",
   "toastBookmarkAdded": "Lesezeichen hinzugefügt",

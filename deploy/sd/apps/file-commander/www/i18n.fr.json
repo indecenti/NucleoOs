@@ -74,7 +74,7 @@
   "del_kind_file": "le fichier",
   "del_kind_folder": "le dossier",
   "sub_local_perm": "Les éléments locaux ignorent la Corbeille — c'est définitif.",
-  "sub_folder_perm": "Tout son contenu est supprimé définitivement.",
+  "sub_folder_perm": "Les dossiers ne passent pas par la Corbeille et sont supprimés définitivement. Seul un dossier vide peut être supprimé.",
   "sub_to_trash": "Il va à la Corbeille (Ctrl+Z pour annuler).",
   "sub_files_to_trash": "Les fichiers vont à la Corbeille (Ctrl+Z pour annuler).",
 
@@ -105,5 +105,13 @@
   "up_net_error": "erreur réseau",
   "up_aborted": "annulé",
   "up_read_fail": "lecture impossible (vide, absent ou au-delà de la limite de taille du pont)",
-  "to_sd_label": "{name}  →  SD:{path}"
+  "to_sd_label": "{name}  →  SD:{path}",
+
+  "err_trash_failed": "« {name} » n'a pas été supprimé : impossible de le déplacer dans la Corbeille.",
+  "err_trash_index": "Impossible de lire la Corbeille pour le moment — rien n'a été supprimé. Réessayez.",
+  "err_restore_failed": "Impossible de restaurer « {name} » — il est toujours dans la Corbeille.",
+  "err_move_kept": { "one": "{count} élément n'a pas pu être déplacé — l'original a été conservé.", "other": "{count} éléments n'ont pas pu être déplacés — les originaux ont été conservés." },
+  "err_copy_failed": { "one": "{count} élément n'a pas pu être copié.", "other": "{count} éléments n'ont pas pu être copiés." },
+  "err_folder_not_empty": "Le dossier « {name} » n'a pas été supprimé : il n'est pas vide. Supprimez d'abord son contenu.",
+  "err_new_file": "Impossible de créer « {name} »."
 }

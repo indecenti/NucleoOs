@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
   <title data-t="appTitle">Impostazioni</title>
   <style>
+    /* Native controls (audio/video bars, date/time pickers, file inputs, selects) follow the app theme. */
+    :root { color-scheme: dark; } html[data-theme="light"] { color-scheme: light; }
     :root{
       --bg:#0b1020; --panel:#121a30; --panel2:#0e1526; --line:#22304f; --ink:#e8eefc; --dim:#8aa0c8;
       --accent:#5ee0a0; --accent2:#6aa8ff; --warn:#ffd166; --bad:#ff6b6b; --ok:#5ee0a0;
@@ -1239,15 +1241,16 @@ async function wpLoadGallery() {
   const container = $('wp-container'); if (!container) return;
   try {
     const r = await fetch('/api/fs/list?path=/data/Pictures', { cache: 'no-store' });
-    if (!r.ok) { container.innerHTML = `<div class="hint" style="padding:10px">${T('unreachable')}</div>`; return; }
-    const imgs = ((await r.json()).entries || []).filter((e) => e.type === 'file' && /\.(png|jpe?g|webp)$/i.test(e.name));
+    if (!r.ok && r.status !== 404) { container.innerHTML = `<div class="hint" style="padding:10px">${T('unreachable')}</div>`; return; }
+    // No /data/Pictures yet answers 404: that is no wallpapers yet, not an unreachable device.
+    const imgs = ((r.status === 404 ? {} : await r.json()).entries || []).filter((e) => e.type === 'file' && /\.(png|jpe?g|webp)$/i.test(e.name));
     if (!imgs.length) { container.innerHTML = `<div class="hint" style="padding:10px">${T('wpEmpty')}</div>`; return; }
     container.innerHTML = '';
     for (const img of imgs) {
       const path = '/data/Pictures/' + img.name;
       const el = document.createElement('div'); el.className = 'wp-item'; el.dataset.path = path;
       el.style.backgroundImage = `url("/api/fs/read?path=${encodeURIComponent(path)}")`;
-      el.innerHTML = `<div class="wp-name">${img.name}</div>`;
+      const nm = document.createElement('div'); nm.className = 'wp-name'; nm.textContent = img.name; el.appendChild(nm);   // a file name is data, never markup
       el.addEventListener('click', () => { wpModel = { type: 'image', path, fit: wpModel.fit || 'cover' }; wpApply(); wpMarkActive(); });
       container.appendChild(el);
     }
@@ -1629,26 +1632,40 @@ $('voice-always-on').addEventListener('change', toggleVoiceAlways);
 
   // Add a SECONDARY provider key (image=xAI, Whisper=Groq) into teacher.json.keys{} WITHOUT changing the
   // active chat provider — the real fix for "Claude can't draw / transcribe" without losing Claude as chat.
+  // Returns true, or the (localized) reason nothing was written. A FAILED read (offline, 503) or a corrupt
+  // teacher.json is NOT an empty one: the old code then wrote {keys:{<new>}} over the file and erased the
+  // active Anthropic key + config. Only a 404 means "no teacher.json yet" (a fresh file is fine).
   async function addSecondaryKey(provider, key) {
+    let j = {};
     try {
       const r = await fetch('/api/fs/read?path=' + encodeURIComponent(TPATH), { cache: 'no-store' });
-      if (r.status === 401 || r.status === 403) { status(EN() ? 'Pair the browser first.' : 'Accoppia prima il browser.', false); return false; }
-      let j = {}; if (r.ok) { try { j = JSON.parse(await r.text()) || {}; } catch {} }
-      j.keys = (j.keys && typeof j.keys === 'object') ? j.keys : {};
-      const bases = { xai: 'https://api.x.ai/v1', openai: 'https://api.groq.com/openai/v1' };
-      const defs = { xai: 'grok-2-latest', openai: 'llama-3.1-8b-instant' };
-      j.keys[provider] = { base: bases[provider], model: defs[provider], key };
+      if (r.status === 401 || r.status === 403) return T('settingsNotPaired');
+      if (r.status !== 404) {
+        if (!r.ok) return T('teacherReadFailed');
+        const txt = (await r.text()).trim();
+        if (txt) {
+          try { j = JSON.parse(txt); } catch { return T('teacherReadCorrupt'); }
+          if (!j || typeof j !== 'object' || Array.isArray(j)) return T('teacherReadCorrupt');
+        }
+      }
+    } catch { return T('teacherReadFailed'); }
+    j.keys = (j.keys && typeof j.keys === 'object' && !Array.isArray(j.keys)) ? j.keys : {};
+    const bases = { xai: 'https://api.x.ai/v1', openai: 'https://api.groq.com/openai/v1' };
+    const defs = { xai: 'grok-2-latest', openai: 'llama-3.1-8b-instant' };
+    j.keys[provider] = { base: bases[provider], model: defs[provider], key };
+    try {
       const w = await fetch('/api/fs/write?path=' + encodeURIComponent(TPATH), { method: 'POST', body: JSON.stringify(j) });
-      return w.ok;
-    } catch { return false; }
+      return w.ok ? true : (w.status === 401 || w.status === 403 ? T('settingsNotPaired') : T('saveFailed'));
+    } catch { return T('saveFailed'); }
   }
   async function addKeyFlow(provider) {
     const name = provider === 'xai' ? 'Grok (xAI)' : 'Groq';
     const k = prompt((EN() ? 'Paste the ' : 'Incolla la chiave ') + name + (EN() ? ' key (kept on device, used only for that feature):' : ' (resta sul dispositivo, usata solo per quella funzione):'));
     if (!k || !k.trim()) return;
     status(EN() ? 'saving…' : 'salvo…');
-    const ok = await addSecondaryKey(provider, k.trim());
-    status(ok ? (name + (EN() ? ' key added' : ' chiave aggiunta')) : (EN() ? 'save failed (pair the browser?)' : 'salvataggio fallito (browser accoppiato?)'), ok);
+    const res = await addSecondaryKey(provider, k.trim());
+    const ok = res === true;
+    status(ok ? (name + (EN() ? ' key added' : ' chiave aggiunta')) : res, ok);
     if (ok) { await refreshCaps(); reEval(); }
   }
 

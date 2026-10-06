@@ -151,6 +151,29 @@ function workerMain() {
 
 const RUN_SRC = '(' + workerMain.toString() + ')();';
 
+// The snippet runs as the body of `new AsyncFunction(params…, '"use strict";\n' + code)`: the engine's own
+// header lines plus "use strict" shift every reported line (measured: a throw on line 4 → nucleo-script.js:7).
+// Measure the shift ONCE with a probe built exactly the same way — same engine as the worker, so it holds for
+// V8 and SpiderMonkey alike — and map `nucleo-script.js:LINE:COL` back to the line the user wrote.
+let _lineShift = null;
+function scriptLineShift() {
+  if (_lineShift !== null) return _lineShift;
+  _lineShift = 0;
+  try {
+    const AsyncFn = Object.getPrototypeOf(async function () {}).constructor;
+    const probe = new AsyncFn('os', 'console', 'print', 'args', 'env', '"use strict";\nthrow new Error("probe");\n//# sourceURL=nucleo-probe.js');
+    probe().catch((e) => { const m = /nucleo-probe\.js:(\d+):/.exec(String(e && e.stack)); if (m) _lineShift = (+m[1]) - 1; });
+  } catch {}
+  return _lineShift;
+}
+// The probe settles on a microtask: start it at load so it is measured long before any real error arrives.
+scriptLineShift();
+export function fixStackLines(stack) {
+  const shift = scriptLineShift();
+  if (!stack || !shift) return stack;
+  return String(stack).replace(/nucleo-script\.js:(\d+):(\d+)/g, (m, l, c) => 'nucleo-script.js:' + Math.max(1, (+l) - shift) + ':' + c);
+}
+
 // Parse-only syntax check (NO execution) — host-safe (works in Node, no Worker/DOM). Used by the
 // ANIMA agent loop's VERIFY gate (mode:'check') so a candidate is validated before it can be
 // applied/run. Compiling an AsyncFunction parses the body without invoking it.
@@ -338,7 +361,7 @@ export function createRunner(opts) {
       return;
     }
     if (d.type === 'done')  { settle({ ok: true,  hasValue: d.hasValue, value: d.valueText, ms: d.ms }); return; }
-    if (d.type === 'error') { settle({ ok: false, error: d.message, stack: d.stack, ms: d.ms }); return; }
+    if (d.type === 'error') { settle({ ok: false, error: d.message, stack: fixStackLines(d.stack), ms: d.ms }); return; }
   }
 
   function ensure() {

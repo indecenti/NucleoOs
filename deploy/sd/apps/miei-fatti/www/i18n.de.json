@@ -79,5 +79,8 @@
   "listhint": "{n}/128 Fakten für ANIMA lernbar. Darüber hinaus vergisst das Gerät die ältesten (diese Liste bleibt).",
   "reteachDone": "Neu beigebracht {o}/{n}.",
   "verifyDone": "Geprüft {o}/{n}.",
-  "dedDone": "{o}/{n} Schlussfolgerungen beigebracht."
+  "dedDone": "{o}/{n} Schlussfolgerungen beigebracht.",
+  "readFailed": "Deine Fakten konnten nicht vom Cardputer gelesen werden: Bearbeiten ist pausiert, damit nichts überschrieben wird. Versuche es gleich erneut.",
+  "readCorrupt": "Die Faktendatei auf dem Cardputer ist nicht lesbar: sie bleibt unverändert, damit nichts verloren geht.",
+  "notPaired": "Dieser Browser ist nicht mit dem Cardputer gekoppelt – kopple ihn, um deine Fakten zu speichern."
 }

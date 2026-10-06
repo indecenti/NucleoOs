@@ -1,5 +1,5 @@
 {
-  "generated": "2026-10-01T10:53:32.215Z",
+  "generated": "2026-10-06T19:24:18.352Z",
   "base": "en",
   "langs": [
     "en",
@@ -23,7 +23,7 @@
     "de": 100
   },
   "surfaces": 48,
-  "totalKeys": 2956,
+  "totalKeys": 2959,
   "namespaces": {
     "core": 156,
     "shell": 279,
@@ -56,7 +56,7 @@
     "notepad": 17,
     "paint": 117,
     "passkeys": 32,
-    "photo-viewer": 2,
+    "photo-viewer": 5,
     "qr": 45,
     "radio": 53,
     "recorder": 103,

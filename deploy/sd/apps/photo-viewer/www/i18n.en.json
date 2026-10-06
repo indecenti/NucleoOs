@@ -1,5 +1,8 @@
 {
   "_lang": "en",
   "header_name": "Pictures",
-  "btn_wallpaper": "Set as wallpaper"
+  "btn_wallpaper": "Set as wallpaper",
+  "img_failed": "Could not load {path}",
+  "dir_failed": "Could not read {dir} — is the device reachable?",
+  "dir_empty": "No pictures in {dir}"
 }

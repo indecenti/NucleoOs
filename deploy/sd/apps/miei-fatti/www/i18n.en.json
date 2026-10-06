@@ -79,5 +79,8 @@
   "listhint": "{n}/128 facts teachable to ANIMA. Beyond that the device forgets the oldest (this list stays).",
   "reteachDone": "Re-taught {o}/{n}.",
   "verifyDone": "Verified {o}/{n}.",
-  "dedDone": "Taught {o}/{n} deductions."
+  "dedDone": "Taught {o}/{n} deductions.",
+  "readFailed": "Couldn't read your facts from the Cardputer: editing is paused so nothing gets overwritten. Try again shortly.",
+  "readCorrupt": "The facts file on the Cardputer can't be read: it is left untouched so nothing is lost.",
+  "notPaired": "This browser isn't paired with the Cardputer — pair it to save your facts."
 }

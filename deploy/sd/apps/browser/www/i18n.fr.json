@@ -74,6 +74,7 @@
   "errAccessDenied": "Accès refusé — assurez-vous d'être associé à l'appareil",
   "errSdWrite": "Échec de l'écriture sur la SD ({status}) : {detail}",
   "errMkdir": "Échec de Mkdir ({status}) : {detail}",
+  "errDlBusy": "Un autre téléchargement est déjà en cours — réessayez dans un instant",
 
   "toastBookmarkRemoved": "Favori retiré",
   "toastBookmarkAdded": "Favori ajouté",

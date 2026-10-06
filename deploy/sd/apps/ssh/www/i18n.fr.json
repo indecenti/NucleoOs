@@ -51,5 +51,8 @@
   "hostkey_ok": "clé d’hôte vérifiée : {fp}",
   "hostkey_mismatch": "CLÉ D’HÔTE MODIFIÉE ! mémorisée {old} — reçue {fp}. Possible MITM : session refusée. Si le changement est légitime (serveur réinstallé), acceptez la nouvelle clé.",
   "hostkey_mismatch_short": "clé d’hôte modifiée — session refusée",
-  "hostkey_accept": "Accepter la nouvelle clé"
+  "hostkey_accept": "Accepter la nouvelle clé",
+  "read_failed": "Impossible de lire les hôtes enregistrés du Cardputer : rien n'est enregistré pour ne pas les écraser. Réessayez dans un instant.",
+  "read_corrupt": "Le fichier des hôtes enregistrés du Cardputer est illisible : il n'est pas modifié pour ne rien perdre.",
+  "not_paired": "Ce navigateur n'est pas associé au Cardputer — associez-le pour enregistrer les hôtes."
 }

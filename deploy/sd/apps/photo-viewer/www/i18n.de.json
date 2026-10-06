@@ -1,5 +1,8 @@
 {
   "_lang": "de",
   "header_name": "Bilder",
-  "btn_wallpaper": "Als Hintergrund festlegen"
+  "btn_wallpaper": "Als Hintergrund festlegen",
+  "img_failed": "{path} konnte nicht geladen werden",
+  "dir_failed": "{dir} konnte nicht gelesen werden — ist das Gerät erreichbar?",
+  "dir_empty": "Keine Bilder in {dir}"
 }

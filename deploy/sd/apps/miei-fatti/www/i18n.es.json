@@ -79,5 +79,8 @@
   "listhint": "{n}/128 datos enseñables a ANIMA. Más allá, el dispositivo olvida los más antiguos (esta lista permanece).",
   "reteachDone": "Reenseñados {o}/{n}.",
   "verifyDone": "Verificados {o}/{n}.",
-  "dedDone": "Enseñadas {o}/{n} deducciones."
+  "dedDone": "Enseñadas {o}/{n} deducciones.",
+  "readFailed": "No se pudieron leer tus datos del Cardputer: la edición está en pausa para no sobrescribirlos. Inténtalo de nuevo en breve.",
+  "readCorrupt": "El archivo de datos del Cardputer no se puede leer: no lo modifico para no perderlo.",
+  "notPaired": "Este navegador no está vinculado al Cardputer: vincúlalo para guardar tus datos."
 }

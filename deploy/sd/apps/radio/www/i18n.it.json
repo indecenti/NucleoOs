@@ -63,5 +63,7 @@
   "toast_removed": "Rimossa “{name}”",
   "toast_saved_changes": "Modifiche salvate",
   "toast_added": "Aggiunta “{name}”",
-  "confirm_remove": "Rimuovere “{name}” dalla lista delle stazioni?"
+  "confirm_remove": "Rimuovere “{name}” dalla lista delle stazioni?",
+  "read_failed": "Impossibile leggere le tue stazioni dal Cardputer: le modifiche sono sospese per non sovrascriverle. Riprova tra poco.",
+  "read_corrupt": "Il file delle stazioni sul Cardputer non è leggibile: non lo modifico per non perderlo."
 }

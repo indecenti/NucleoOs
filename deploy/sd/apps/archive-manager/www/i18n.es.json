@@ -30,5 +30,12 @@
   "compress_complete": "¡Compresión completada!",
   "saved_x": "Guardado {name}",
   "compress_error": "Error de compresión",
-  "no_files": "Ningún archivo que comprimir"
+  "no_files": "Ningún archivo que comprimir",
+  "err_read_file": "No se pudo leer el archivo comprimido del Cardputer (error {status}).",
+  "err_write_file": "No se pudo escribir {name} (error {status}).",
+  "err_mkdir": "No se pudo crear la carpeta {name} (error {status}).",
+  "err_list_dir": "No se pudo listar la carpeta {name} (error {status}).",
+  "err_read_src": "No se pudo leer {name} (error {status}).",
+  "err_save_archive": "No se pudo guardar {name} (error {status}).",
+  "confirm_overwrite": { "one": "{count} archivo ya existe y se sobrescribirá:\n{names}\n\n¿Extraer de todos modos?", "other": "{count} archivos ya existen y se sobrescribirán:\n{names}\n\n¿Extraer de todos modos?" }
 }

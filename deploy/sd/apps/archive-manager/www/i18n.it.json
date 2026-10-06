@@ -1,6 +1,6 @@
 {
   "_lang": "it",
-  "app_title": "Gestione Archivi",
+  "app_title": "Archivi ZIP",
   "extract_here": "Estrai qui",
   "compress": "Comprimi",
   "status_idle": "Nessun archivio caricato. In attesa di un archivio...",
@@ -30,5 +30,12 @@
   "compress_complete": "Compressione completata!",
   "saved_x": "Salvato {name}",
   "compress_error": "Errore di compressione",
-  "no_files": "Nessun file da comprimere"
+  "no_files": "Nessun file da comprimere",
+  "err_read_file": "Impossibile leggere l'archivio dal Cardputer (errore {status}).",
+  "err_write_file": "Impossibile scrivere {name} (errore {status}).",
+  "err_mkdir": "Impossibile creare la cartella {name} (errore {status}).",
+  "err_list_dir": "Impossibile elencare la cartella {name} (errore {status}).",
+  "err_read_src": "Impossibile leggere {name} (errore {status}).",
+  "err_save_archive": "Impossibile salvare {name} (errore {status}).",
+  "confirm_overwrite": { "one": "{count} file esiste già e verrà sovrascritto:\n{names}\n\nEstrarre comunque?", "other": "{count} file esistono già e verranno sovrascritti:\n{names}\n\nEstrarre comunque?" }
 }

@@ -1880,12 +1880,17 @@ function itemGlyph(item) {
   const a = byId(state.assoc.default_open[ext]);
   return a ? a.glyph : '📄';
 }
+function isDefaultAppLabel(label, a) {
+  const l = String(label).trim().toLowerCase();
+  return l === String(a.name || '').toLowerCase() || l === String(a.id).replace(/[-_]+/g, ' ').toLowerCase();
+}
 function itemLabel(item) {
   if (item.type === 'app') {
     const a = byId(item.target);
-    // Desktops seeded before app names were localised carry the manifest name as `label`; that is the
-    // default, not a rename, so it localises too. Any other label is the user's own and wins.
-    if (item.label && !(a && item.label === a.name)) return item.label;
+    // Desktops seeded before app names were localised carry the manifest name as `label` — or, from an
+    // older shell, the id title-cased ("Ir Remote", "Dosbox", seen on a real device). Both are defaults,
+    // not renames, so they localise too. Any other label is the user's own and wins.
+    if (item.label && !(a && isDefaultAppLabel(item.label, a))) return item.label;
     return a ? appName(a) : item.target;
   }
   if (item.label) return item.label;

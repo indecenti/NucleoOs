@@ -127,15 +127,23 @@ export function convert(value, from, to) {
   return { ok: true, value: n * f[uf] / f[ut], from: uf, to: ut, category: cat };
 }
 
-// Round for display without trailing-zero noise; keeps ~6 significant digits.
-export function fmt(x) {
+// Round for display without trailing-zero noise (6 decimals). With a `locale` the number is written the
+// way that language writes it — "0,621371" in Italian, "1.609,344" in German; without, plain JS digits.
+export function fmt(x, locale) {
   if (!isFinite(x)) return '—';
   if (x === 0) return '0';
   const abs = Math.abs(x);
-  let s;
-  if (abs >= 1e12 || abs < 1e-6) s = x.toExponential(4);
-  else s = String(Math.round(x * 1e6) / 1e6);
-  return s;
+  if (abs >= 1e12 || abs < 1e-6) {
+    const s = x.toExponential(4);
+    return locale ? s.replace('.', decimalMark(locale)) : s;
+  }
+  const r = Math.round(x * 1e6) / 1e6;
+  if (!locale) return String(r);
+  try { return new Intl.NumberFormat(locale, { maximumFractionDigits: 6 }).format(r); } catch { return String(r); }
+}
+function decimalMark(locale) {
+  try { return (new Intl.NumberFormat(locale).formatToParts(1.5).find((p) => p.type === 'decimal') || {}).value || '.'; }
+  catch { return '.'; }
 }
 
 // ── The natural-language command parser (EN + IT), offline & deterministic ─────────────────────

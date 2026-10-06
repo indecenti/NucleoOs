@@ -30,5 +30,12 @@
   "compress_complete": "Compression terminée !",
   "saved_x": "Enregistré {name}",
   "compress_error": "Erreur de compression",
-  "no_files": "Aucun fichier à compresser"
+  "no_files": "Aucun fichier à compresser",
+  "err_read_file": "Impossible de lire l'archive depuis le Cardputer (erreur {status}).",
+  "err_write_file": "Impossible d'écrire {name} (erreur {status}).",
+  "err_mkdir": "Impossible de créer le dossier {name} (erreur {status}).",
+  "err_list_dir": "Impossible de lister le dossier {name} (erreur {status}).",
+  "err_read_src": "Impossible de lire {name} (erreur {status}).",
+  "err_save_archive": "Impossible d'enregistrer {name} (erreur {status}).",
+  "confirm_overwrite": { "one": "{count} fichier existe déjà et sera écrasé :\n{names}\n\nExtraire quand même ?", "other": "{count} fichiers existent déjà et seront écrasés :\n{names}\n\nExtraire quand même ?" }
 }

@@ -19,5 +19,9 @@
   "confirm_empty": {
     "one": "Permanently delete {count} item? This cannot be undone.",
     "other": "Permanently delete {count} items? This cannot be undone."
-  }
+  },
+  "confirm_purge": "Permanently delete “{name}”? This cannot be undone.",
+  "toast_delete_failed": "Delete failed — the item is still in the bin",
+  "err_index_unreadable": "Cannot read the Recycle Bin right now — nothing was changed. Try again.",
+  "load_failed": "Cannot read the Recycle Bin right now. Try again in a moment."
 }

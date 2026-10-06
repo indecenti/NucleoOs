@@ -98,6 +98,7 @@
   "dlg_save_title": "Salva foglio",
   "dlg_open_title": "Apri foglio",
   "confirm_new": "Creare un nuovo foglio? Le modifiche andranno perse.",
+  "confirm_open": "Aprire un altro file? Le modifiche non salvate andranno perse.",
   "confirm_exit": "Uscire senza salvare?",
 
   "find_results": "{n} risultati",

@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Photo Viewer</title>
   <style>
+    /* Native controls and scrollbars follow the app theme. */
+    :root { color-scheme: dark; } html[data-theme="light"] { color-scheme: light; }
     :root { --bg:#0b0f1a; --panel:#18233a; --text:#e8eefc; --muted:#8aa0c8; --accent:#4ea1ff; --line:#2a3a5e; }
     * { box-sizing: border-box; } html, body { height: 100%; margin: 0; }
     body { display: flex; flex-direction: column; background: var(--bg); color: var(--text); font: 14px system-ui, sans-serif; }
@@ -48,15 +50,18 @@
       name.removeAttribute('data-i18n'); name.textContent = path;
       mark();
     }
-    img.onerror = () => { img.hidden = true; msg.textContent = 'Failed to load ' + current; msg.hidden = false; };
+    img.onerror = () => { img.hidden = true; msg.textContent = t('img_failed', { path: current }); msg.hidden = false; };
     document.getElementById('wall').onclick = () => current && window.parent.postMessage({ type: 'set-wallpaper', path: current }, '*');
     async function load() {
       let data;
-      try { data = await (await fetch('/api/fs/list?path=' + encodeURIComponent(DIR))).json(); }
-      catch { if (!current) { msg.textContent = 'Cannot read ' + DIR; msg.hidden = false; } return; }
+      try {
+        const r = await fetch('/api/fs/list?path=' + encodeURIComponent(DIR));
+        data = r.status === 404 ? { entries: [] } : (r.ok ? await r.json() : null);   // no folder yet = no pictures yet
+      } catch { data = null; }
+      if (!data) { if (!current) { msg.textContent = t('dir_failed', { dir: DIR }); msg.hidden = false; } return; }
       const imgs = (data.entries || []).filter(e => e.type === 'file' && /\.(png|jpe?g|gif|bmp|svg)$/i.test(e.name));
       bar.innerHTML = ''; chips = []; list = imgs.map(im => DIR + '/' + im.name);
-      if (!list.length && !current) { msg.textContent = 'No pictures in ' + DIR; msg.hidden = false; }
+      if (!list.length && !current) { msg.textContent = t('dir_empty', { dir: DIR }); msg.hidden = false; }
       imgs.forEach((im, i) => {
         const c = document.createElement('div'); c.className = 'chip'; c.textContent = im.name;
         c.onclick = () => show(DIR + '/' + im.name);

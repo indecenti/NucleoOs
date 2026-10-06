@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>DJ Mix</title>
 <style>
+    /* Native controls and scrollbars follow the app theme. */
+    :root { color-scheme: dark; } html[data-theme="light"] { color-scheme: light; }
   :root { --bg:#0c1220; --bg2:#111b2e; --bg3:#1a2640; --acc:#ff7eb6; --grn:#7cfc9a;
           --org:#fd8c40; --blue:#4fb8ff; --dim:#3a4c66; --txt:#e8ecf4; --mut:#6b7fa0; }
   * { box-sizing:border-box; }
@@ -159,7 +161,9 @@ function renderList() {
   ul.innerHTML = '';
   for (const it of lib) {
     const li = document.createElement('li');
-    li.innerHTML = `<span>♪</span><span class="grow name">${it.name}</span><span class="b">${t('cue')}</span>`;
+    li.innerHTML = `<span>♪</span><span class="grow name"></span><span class="b"></span>`;
+    li.querySelector('.name').textContent = it.name;          // a file name from the SD is text, never markup
+    li.querySelector('.b').textContent = t('cue');
     li.onclick = () => cueTrack(it.path, li);
     it._li = li; ul.appendChild(li);
   }

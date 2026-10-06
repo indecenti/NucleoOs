@@ -16,7 +16,7 @@
   "load_fail_hint": "For offline use, place <code>js-dos.js</code> and <code>js-dos.css</code> (plus the emulator wasm assets) in <code>apps/dosbox/www/vendor/</code> on the SD card.",
   "start_fail": "Failed to start {name}:",
   "fs_unavailable": "Device file API unavailable.",
-  "empty_lib": "No programs in {dir}. Use the <b>DOS Importer</b> app to add a game (.jsdos / .zip / .img / .exe), or <code>tools/add-win311.mjs</code> for Windows 3.11.",
+  "empty_lib": "No programs in {dir}. Use the <b>DOS Importer</b> app to add a game (.jsdos / .zip / .img / .exe).",
   "cat_systems": "Systems",
   "cat_games": "Games",
   "cat_programs": "Programs",

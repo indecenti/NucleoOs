@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Radio Index</title>
   <style>
+    /* Native controls (audio/video bars, date/time pickers, file inputs, selects) follow the app theme. */
+    :root { color-scheme: dark; } html[data-theme="light"] { color-scheme: light; }
     :root {
       --bg:#0b1426; --panel:#121d35; --panel2:#16223d; --text:#e8eefc; --muted:#8aa0c8;
       --accent:#4ea1ff; --accent2:#5ec8ff; --line:#243653; --line2:#2c4163;
@@ -262,22 +264,40 @@
     let npTimer = null, tickTimer = null, npAbort = null, npPull = null;
 
     // ---------- persistence (the bridge to the C app) ----------
+    // Editing is allowed only once the REAL list was read (or is known not to exist). On a failed read
+    // (503, offline, 401, corrupt JSON) the curated seed is still shown so the radio can play, but the old
+    // code then let the next star / add / reorder save that seed over the user's own station list.
+    let readOk = false, readStatus = 0;
+    const readFailText = (st) => st === 401 || st === 403 ? t('toast_readonly') : st === 'corrupt' ? t('read_corrupt') : t('read_failed');
     async function load() {
       let status = 0, j = null;
       try {
         const r = await fetch('/api/fs/read?path=' + encodeURIComponent(CONFIG) + '&t=' + Date.now(), { cache: 'no-store' });
         status = r.status;
-        if (r.ok) j = await r.json();
-      } catch { status = 0; }                                  // network error / unreachable
+        if (r.ok) { const txt = (await r.text()).trim(); j = txt ? JSON.parse(txt) : {}; if (!j || typeof j !== 'object' || Array.isArray(j)) status = 'corrupt'; }
+      } catch (e) { status = e instanceof SyntaxError ? 'corrupt' : 0; }   // corrupt file / network error / unreachable
+      readOk = status === 404 || (typeof status === 'number' && status >= 200 && status < 300);
+      readStatus = readOk ? 0 : status;
 
-      if (j && Array.isArray(j.stations) && j.stations.length) { model = normalize(j); render(); return; }
+      if (readOk && j && Array.isArray(j.stations) && j.stations.length) { model = normalize(j); render(); if ($('save').classList.contains('err')) setSave('', ''); return; }
 
       // No usable list. Show the curated seed so the UI is never empty, but only WRITE it back when
-      // the file is genuinely missing (404) — never clobber on an auth (401) or transport error.
+      // the file is genuinely missing (404) — never clobber on an auth (401), transport or parse error.
       model = normalize(structuredClone(SEED));
       render();
       if (status === 404) await persist(t('toast_seeded'));
-      else if (status === 401 || status === 403) toast(t('toast_readonly'));
+      else if (!readOk) setSave('err', readFailText(status));
+      else if ($('save').classList.contains('err')) setSave('', '');
+    }
+    // Every edit goes through here. While the real list is unknown nothing may change: re-read it, and say
+    // why if it still fails. Returns true only when the edit may go ahead on the list now on screen.
+    let reloading = null;
+    async function canEdit({ afterReload = false } = {}) {
+      if (readOk) return true;
+      reloading = reloading || load().finally(() => { reloading = null; });
+      await reloading;
+      if (!readOk) { setSave('err', readFailText(readStatus)); toast(readFailText(readStatus)); return false; }
+      return afterReload;      // index-based edits must be redone on the list that just loaded
     }
     function normalize(j) {
       const stations = (j.stations || []).filter(s => s && s.stream).map(s => ({
@@ -292,6 +312,7 @@
     // so a save is the moment a web edit becomes real on the device. No debounce to drop or race.
     function scheduleSave(msg) { persist(msg); }
     async function persist(msg) {
+      if (!readOk) { setSave('err', readFailText(readStatus)); return; }   // never write over a list we could not read
       setSave('busy', t('saving'));
       try {
         const body = JSON.stringify(model, null, 2) + '\n';
@@ -448,14 +469,16 @@
     }
 
     // ---------- mutations (each persists -> reaches the device) ----------
-    function setDefault(i) { model.default = model.stations[i].id; render(); scheduleSave(t('toast_default', { name: model.stations[i].name })); }
-    function move(i, dir) {
+    async function setDefault(i) { if (!(await canEdit())) return; model.default = model.stations[i].id; render(); scheduleSave(t('toast_default', { name: model.stations[i].name })); }
+    async function move(i, dir) {
+      if (!(await canEdit())) return;
       const j = i + dir; if (j < 0 || j >= model.stations.length) return;
       [model.stations[i], model.stations[j]] = [model.stations[j], model.stations[i]];
       if (sel === i) sel = j; else if (sel === j) sel = i;
       render(); scheduleSave();
     }
-    function removeStation(i) {
+    async function removeStation(i) {
+      if (!(await canEdit())) return;
       const s = model.stations[i];
       if (!confirm(t('confirm_remove', { name: s.name }))) return;
       if (s.id === curId) { audio.pause(); audio.removeAttribute('src'); curId = null; stopNowPlaying(); $('npStation').textContent = t('np_idle'); $('npTrack').textContent = ''; }
@@ -467,7 +490,8 @@
 
     // ---------- editor ----------
     let editIdx = -1;
-    function openEditor(i) {
+    async function openEditor(i) {
+      if (i >= 0 && !(await canEdit())) return;     // editing a station of a list we could not read
       editIdx = i;
       const s = i >= 0 ? model.stations[i] : { name:'', genre:'', stream:'http://', nowplaying:'' };
       const dt = $('dlgTitle');
@@ -483,10 +507,13 @@
       if (/^https:/i.test(v)) { note.className = 'note warn'; note.removeAttribute('data-i18n'); note.textContent = t('note_stream_warn'); }
       else { note.className = 'note'; note.setAttribute('data-i18n', 'note_stream'); note.textContent = t('note_stream'); }
     }
-    function saveEditor() {
+    async function saveEditor() {
       const name = $('fName').value.trim(), stream = $('fStream').value.trim();
       if (!name) { $('fName').focus(); return; }
       if (!/^https?:\/\//i.test(stream)) { $('fStream').focus(); checkStream(); return; }
+      // An ADD can go ahead on the list that just loaded; the editor stays open (nothing typed is lost) while
+      // the real list still cannot be read.
+      if (!(await canEdit({ afterReload: editIdx < 0 }))) return;
       const data = { name, genre: $('fGenre').value.trim(), stream, nowplaying: $('fNp').value.trim() };
       const wasEdit = editIdx >= 0;   // closeEditor() resets editIdx before the toast below reads it
       if (editIdx >= 0) {

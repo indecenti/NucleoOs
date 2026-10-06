@@ -5,6 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Mail</title>
   <style>
+    /* Native controls (audio/video bars, date/time pickers, file inputs, selects) follow the app theme. */
+    :root { color-scheme: dark; } html[data-theme="light"] { color-scheme: light; }
     :root { --bg:#0e1830; --panel:#18233a; --text:#e8eefc; --muted:#8aa0c8; --accent:#4ea1ff;
       --line:#2a3a5e; --field:#0b1220; --ok:#2fd07a; --warn:#f5b13d; --err:#e2576b; }
     html[data-theme="light"] { --bg:#eef2fb; --panel:#ffffff; --text:#10203a; --muted:#5a6a86;
@@ -316,6 +318,9 @@
       await loadData(); renderAccounts();
     }
     async function delAccount(idx) {
+      const a = accounts.find((x) => x.idx === idx); if (!a) return;
+      // The stored SMTP password goes with it and cannot be read back: always ask first.
+      if (!confirm(t('confirm_delete_account', { name: a.name || a.user || a.host }))) return;
       const r = await fetch('/api/mail/accounts', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ idx, delete: true }) }).catch(() => null);
       if (r && r.status === 401) { setStatus('err', t('need_pair')); return; }

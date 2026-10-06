@@ -63,5 +63,7 @@
   "toast_removed": "“{name}” entfernt",
   "toast_saved_changes": "Änderungen gespeichert",
   "toast_added": "“{name}” hinzugefügt",
-  "confirm_remove": "“{name}” aus der Senderliste entfernen?"
+  "confirm_remove": "“{name}” aus der Senderliste entfernen?",
+  "read_failed": "Deine Sender konnten nicht vom Cardputer gelesen werden: Bearbeiten ist pausiert, damit nichts überschrieben wird. Versuche es gleich erneut.",
+  "read_corrupt": "Die Senderdatei auf dem Cardputer ist nicht lesbar: sie bleibt unverändert, damit nichts verloren geht."
 }

@@ -6,7 +6,7 @@
   "fw_slot": "Firmware-Slot",
   "image_state": "Image-Status",
   "free_memory": "Freier Speicher",
-  "fw_update_title": "Firmware-Update (über die Luft)",
+  "fw_update_title": "Firmware-Update über WLAN (OTA)",
   "fw_update_desc": "Wähle eine <code>nucleoos.bin</code> und installiere sie drahtlos — ohne USB-Kabel. Das Image wird in den <b>Ersatz-Flash-Slot</b> geschrieben und nur gebootet, wenn es gültig ist; startet die neue Firmware nicht, kehrt das Gerät <b>automatisch zu dieser zurück</b>. So bleibt es immer startfähig.",
   "install_fw": "Firmware installieren",
   "keep_powered": "⚠ Halte das Gerät während des Updates mit Strom versorgt. Es startet danach automatisch neu.",

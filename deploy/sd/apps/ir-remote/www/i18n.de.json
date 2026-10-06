@@ -92,5 +92,6 @@
   "b_power": "Ein/Aus", "b_input": "Quelle", "b_menu": "Menü", "b_home": "Home", "b_back": "Zurück",
   "b_vol_up": "Lauter", "b_vol_down": "Leiser", "b_mute": "Stumm",
   "b_ch_up": "Kanal +", "b_ch_down": "Kanal -",
-  "b_up": "Oben", "b_down": "Unten", "b_left": "Links", "b_right": "Rechts", "b_ok": "OK"
+  "b_up": "Oben", "b_down": "Unten", "b_left": "Links", "b_right": "Rechts", "b_ok": "OK",
+  "sd_read_failed": "Deine gespeicherten Favoriten und Tasten konnten nicht von der SD gelesen werden: Änderungen bleiben in diesem Browser, bis sie wieder lesbar ist."
 }

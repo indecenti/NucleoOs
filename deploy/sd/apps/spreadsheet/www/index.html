@@ -6,6 +6,8 @@
 <title data-i18n="title">Spreadsheet V2</title>
 <style>
 /* ===== NucleoOS Design System ===== */
+    /* Native controls and scrollbars follow the app theme. */
+    :root { color-scheme: dark; } html[data-theme="light"] { color-scheme: light; }
 :root {
   --bg:#0e1830; --panel:#18233a; --panel2:#1f2d4a; --text:#e8eefc;
   --muted:#8aa0c8; --accent:#4ea1ff; --line:#2a3a5e; --field:#0b1220;
@@ -1226,7 +1228,7 @@ window.addEventListener('message', e => {
     else if (d.action === 'copy') doCopy(); else if (d.action === 'paste') doPaste();
     return;
   }
-  if (d.type === 'open-file' && d.path) { loadFromPath(d.path); return; }
+  if (d.type === 'open-file' && d.path) { if (confirmOpen()) loadFromPath(d.path); return; }
 });
 
 function newSheet() {
@@ -1240,8 +1242,13 @@ async function saveAs() {
   const p = await fileDialog('save', filePath ? filePath.substring(0, filePath.lastIndexOf('/')) : '/data', filePath ? filePath.split('/').pop() : 'foglio.csv');
   if (p) writeTo(p);
 }
+// Opening another file replaces the sheet: ask first, like New and Exit do (asked once a file is
+// actually picked, so cancelling the dialog never prompts).
+function confirmOpen() {
+  return !dirty || confirm(spT('confirm_open', null, 'Aprire un altro file? Le modifiche non salvate andranno perse.'));
+}
 async function openFile() {
-  const p = await fileDialog('open'); if (p) loadFromPath(p);
+  const p = await fileDialog('open'); if (p && confirmOpen()) loadFromPath(p);
 }
 function exit() {
   if (dirty && !confirm(spT('confirm_exit', null, 'Uscire senza salvare?'))) return;
