@@ -1228,7 +1228,7 @@ window.addEventListener('message', e => {
     else if (d.action === 'copy') doCopy(); else if (d.action === 'paste') doPaste();
     return;
   }
-  if (d.type === 'open-file' && d.path) { loadFromPath(d.path); return; }
+  if (d.type === 'open-file' && d.path) { if (confirmOpen()) loadFromPath(d.path); return; }
 });
 
 function newSheet() {
@@ -1242,8 +1242,13 @@ async function saveAs() {
   const p = await fileDialog('save', filePath ? filePath.substring(0, filePath.lastIndexOf('/')) : '/data', filePath ? filePath.split('/').pop() : 'foglio.csv');
   if (p) writeTo(p);
 }
+// Opening another file replaces the sheet: ask first, like New and Exit do (asked once a file is
+// actually picked, so cancelling the dialog never prompts).
+function confirmOpen() {
+  return !dirty || confirm(spT('confirm_open', null, 'Aprire un altro file? Le modifiche non salvate andranno perse.'));
+}
 async function openFile() {
-  const p = await fileDialog('open'); if (p) loadFromPath(p);
+  const p = await fileDialog('open'); if (p && confirmOpen()) loadFromPath(p);
 }
 function exit() {
   if (dirty && !confirm(spT('confirm_exit', null, 'Uscire senza salvare?'))) return;

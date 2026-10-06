@@ -218,7 +218,11 @@
     function add() {
       const v = $('text').value.trim();
       if (!v || !canEdit()) return;               // blocked: the typed text stays in the box
-      tasks.push({ id: 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), text: v, done: false, pri: newPri, ts: tasks.length });
+      // ts orders tasks of equal priority (oldest first). It was tasks.length, which after a deletion
+      // repeats or undercuts a surviving task's stamp and jumps the new task above older ones. A clock
+      // stamp, never below the newest stamp on the list (old lists carry 0,1,2…; a clock can step back).
+      const ts = tasks.reduce((m, x) => (Number.isFinite(x.ts) && x.ts >= m ? x.ts + 1 : m), Date.now());
+      tasks.push({ id: 't' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), text: v, done: false, pri: newPri, ts });
       $('text').value = '';
       scheduleSave(); render(); $('text').focus();
     }

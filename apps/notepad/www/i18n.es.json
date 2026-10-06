@@ -11,6 +11,7 @@
 
   "loaded": "Cargado {name}",
   "could_not_open": "No se pudo abrir {name}",
+  "open_failed_unbound": "No se pudo leer {name}: el archivo queda intacto; Guardar preguntará dónde guardar.",
   "open_hint": "Abre un archivo desde File Commander para editarlo aquí.",
   "saved_file": "Guardado {name}",
   "save_failed": "No se pudo guardar ({status})",

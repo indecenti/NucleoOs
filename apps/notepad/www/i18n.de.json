@@ -11,6 +11,7 @@
 
   "loaded": "{name} geladen",
   "could_not_open": "{name} konnte nicht geöffnet werden",
+  "open_failed_unbound": "{name} konnte nicht gelesen werden – die Datei bleibt unverändert; Speichern fragt nach dem Speicherort.",
   "open_hint": "Öffne eine Datei aus File Commander, um sie hier zu bearbeiten.",
   "saved_file": "{name} gespeichert",
   "save_failed": "Speichern fehlgeschlagen ({status})",

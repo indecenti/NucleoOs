@@ -98,6 +98,7 @@
   "dlg_save_title": "Enregistrer la feuille",
   "dlg_open_title": "Ouvrir la feuille",
   "confirm_new": "Créer une nouvelle feuille ? Les modifications seront perdues.",
+  "confirm_open": "Ouvrir un autre fichier ? Les modifications non enregistrées seront perdues.",
   "confirm_exit": "Quitter sans enregistrer ?",
 
   "find_results": "{n} résultats",

@@ -626,20 +626,29 @@
         if (!m) { emit('usage: mv <source> <dest>', 'err'); return; }
         const src = norm(m[1].replace(/^"|"$/g, ''));
         const dest = norm(m[2].replace(/^"|"$/g, ''));
+        // The firmware's atomic rename (POST /api/fs/move): the bytes never cross the wire, a folder
+        // moves as well as a file, and a dropped connection cannot leave a half-copied pair behind.
+        // Unix semantics: `mv file dir` moves it INTO the folder, and an existing destination FILE is
+        // replaced. The firmware refuses an existing destination (400 "destination exists") unless
+        // overwrite=1, so overwrite is only asked for once a listing has proven the target is a file.
+        const move = (to, ow) => fetch('/api/fs/move?from=' + encodeURIComponent(src) + '&to=' + encodeURIComponent(to) + (ow ? '&overwrite=1' : ''), { method: 'POST' });
+        const exists = async (r) => r.status === 400 && /exist/i.test(await r.text().catch(() => ''));
         try {
           emit(`moving ${src} to ${dest} ...`, 'dim');
-          const rRead = await api('read', src);
-          if (!rRead.ok) { fsFail('mv', src, rRead); return; }
-          const buf = await rRead.arrayBuffer();
-          const rWrite = await api('write', dest, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/octet-stream' },
-            body: buf
-          });
-          if (!rWrite.ok) { fsFail('mv', dest, rWrite); return; }
-          const rDel = await api('delete', src, { method: 'POST' });
-          if (rDel.ok) emit('moved successfully', 'ok');
-          else emit('mv: copied to destination but failed to delete source', 'warn');
+          let to = dest;
+          let r = await move(to);
+          if (await exists(r)) {
+            const l = await api('list', dest);
+            if (l.ok) {                      // a folder: move INTO it (replacing a same-name file there)
+              to = norm(dest + '/' + src.split('/').pop());
+              r = await move(to);
+              if (await exists(r)) r = await move(to, true);
+            } else if (l.status === 404) {   // not a folder: an existing file, replaced as Unix mv does
+              r = await move(to, true);
+            } else { emit(`mv: cannot tell what ${dest} is (status ${l.status}) — nothing moved`, 'err'); return; }
+          }
+          if (r.ok) emit(to === dest ? 'moved successfully' : `moved to ${to}`, 'ok');
+          else fsFail('mv', src, r);
         } catch { emit('mv: file API unavailable', 'err'); }
       },
       async mkdir(arg) {
@@ -650,9 +659,19 @@
       },
       async touch(arg) {
         if (!arg) { emit('touch: missing name', 'err'); return; }
-        try { const r = await api('write', norm(arg), { method: 'POST', body: '' });
-          if (r.ok) emit('created ' + norm(arg), 'ok'); else fsFail('touch', norm(arg), r); }
-        catch { fsFail('touch', norm(arg), null); }
+        const p = norm(arg);
+        // touch never truncates: probe one byte (a Range read, cheap on any size) and create the file
+        // only on a definite 404. An existing file is left alone; an unreadable one (503, offline) is
+        // reported, never overwritten with an empty body.
+        let r;
+        try { r = await fetch('/api/fs/read?path=' + encodeURIComponent(p), { cache: 'no-store', headers: { Range: 'bytes=0-0' } }); }
+        catch { fsFail('touch', p, null); return; }
+        // 416 = the file exists but is empty (no byte 0 to range over) on some servers.
+        if (r.ok || r.status === 416) { emit(`${p} exists — left unchanged`, 'dim'); return; }
+        if (r.status !== 404) { fsFail('touch', p, r); return; }
+        try { const w = await api('write', p, { method: 'POST', body: '' });
+          if (w.ok) emit('created ' + p, 'ok'); else fsFail('touch', p, w); }
+        catch { fsFail('touch', p, null); }
       },
       async rm(arg) {
         if (!arg) { emit('rm: missing path', 'err'); return; }
@@ -1885,7 +1904,15 @@
       const p = norm(outTo.path);
       let body = buf.join('\n');
       if (outTo.op === '>>') {
-        try { const r = await api('read', p); if (r.ok) { const old = await r.text(); if (old) body = old.replace(/\n$/, '') + '\n' + body; } } catch {}
+        // Append = read + rewrite, so the read must succeed (or be a definite 404 = new file). A read
+        // that failed (503, offline, dropped mid-body) must never let the write replace the file with
+        // the new output alone.
+        const keep = `${name}: cannot append to ${p} — file left unchanged`;
+        try {
+          const r = await api('read', p);
+          if (r.ok) { const old = await r.text(); if (old) body = old.replace(/\n$/, '') + '\n' + body; }
+          else if (r.status !== 404) { emit(`${keep} (status ${r.status})`, 'err'); return { out: '', code: 1 }; }
+        } catch { emit(`${keep} (file API unavailable)`, 'err'); return { out: '', code: 1 }; }
       }
       try {
         const w = await api('write', p, { method: 'POST', body });

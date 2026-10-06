@@ -98,6 +98,7 @@
   "dlg_save_title": "Tabelle speichern",
   "dlg_open_title": "Tabelle öffnen",
   "confirm_new": "Neue Tabelle erstellen? Änderungen gehen verloren.",
+  "confirm_open": "Eine andere Datei öffnen? Nicht gespeicherte Änderungen gehen verloren.",
   "confirm_exit": "Ohne Speichern beenden?",
 
   "find_results": "{n} Ergebnisse",

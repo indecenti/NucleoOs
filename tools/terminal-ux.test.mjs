@@ -119,6 +119,15 @@ async function fakeFetch(url, opts = {}) {
     if (p === '/api/fs/write') { net.writes.push({ path: param, body: String(opts.body ?? '') }); net.fs[param] = String(opts.body ?? ''); return reply(200, ''); }
     if (p === '/api/fs/mkdir') { net.fs[param] = []; return reply(200, ''); }
     if (p === '/api/fs/delete') { delete net.fs[param]; return reply(200, ''); }
+    // MIRROR THE FIRMWARE (nucleo_fsapi.c move_post): one atomic rename; an existing destination is
+    // refused (400 "destination exists") unless overwrite=1; a missing source fails the rename (500).
+    if (p === '/api/fs/move') {
+      const from = u.searchParams.get('from'), to = u.searchParams.get('to');
+      if (net.fs[from] === undefined) return reply(500, 'rename');
+      if (net.fs[to] !== undefined && u.searchParams.get('overwrite') !== '1') return reply(400, 'destination exists');
+      net.fs[to] = net.fs[from]; delete net.fs[from];
+      return reply(200, '{"ok":true}');
+    }
     if (p === '/proc') return reply(200, 'version\nuname\nmeminfo\ncpuinfo\n');
     if (net.json[p]) return reply(200, JSON.stringify(net.json[p]));
     if (p === '/api/status') return reply(200, JSON.stringify({ os: 'NucleoOS', version: '0.1.0', uptime_s: 1, free_heap: 1000, ota: { running: 'factory', next: 'ota_0', state: 'valid', rollback_enabled: true } }));
@@ -810,4 +819,127 @@ test('persistence: the mount is created on first use, because nothing ships it',
   T.COMMANDS.alias('ll=ls -l');
   await settle();
   assert.ok(net.calls.some((c) => c.path === '/api/fs/mkdir' && c.param === '/apps/terminal/data'));
+});
+
+// ---- FILE SAFETY: commands that must never destroy what is already on the card ---------------
+// Found by review: `touch` POSTed an empty body (an existing file was truncated), a failed read
+// under `>>` was swallowed (the file was replaced by the new output alone), and `mv` copied the
+// bytes through the browser instead of the firmware's atomic rename.
+test('touch: an existing file is left exactly as it was — touch never truncates', async () => {
+  reset();
+  net.fs['/data/notes.txt'] = 'my precious notes';
+  await T.run('touch /data/notes.txt'); await settle();
+  assert.equal(net.fs['/data/notes.txt'], 'my precious notes');
+  assert.equal(net.count('/api/fs/write'), 0, 'an existing file must not be rewritten');
+  assert.ok(!body().some((l) => l.cls === 'err'), last());
+});
+
+test('touch: an existing EMPTY file (a 416 to the one-byte probe) is left alone too', async () => {
+  reset();
+  net.fs['/data/empty.txt'] = '';
+  net.status.set('/api/fs/read', 416);
+  const code = await T.run('touch /data/empty.txt'); await settle();
+  assert.equal(code, 0);
+  assert.equal(net.count('/api/fs/write'), 0);
+});
+
+test('touch: a missing file is created empty', async () => {
+  reset();
+  await T.run('touch /data/new.txt'); await settle();
+  assert.equal(net.count('/api/fs/write'), 1);
+  assert.equal(net.fs['/data/new.txt'], '');
+});
+
+test('touch: a file that cannot be read (503) is reported and never overwritten', async () => {
+  reset();
+  net.fs['/data/notes.txt'] = 'keep';
+  net.status.set('/api/fs/read', 503);
+  const code = await T.run('touch /data/notes.txt'); await settle();
+  assert.notEqual(code, 0);
+  assert.equal(net.count('/api/fs/write'), 0);
+  assert.equal(net.fs['/data/notes.txt'], 'keep');
+  assert.equal(body().pop().cls, 'err');
+});
+
+test('redirect: >> whose read fails (503) reports it and does not replace the file', async () => {
+  reset();
+  net.fs['/data/log'] = 'old line';
+  net.status.set('/api/fs/read', 503);
+  const code = await T.run('pwd >> /data/log'); await settle();
+  assert.notEqual(code, 0);
+  assert.equal(net.count('/api/fs/write'), 0, 'the file was replaced by the new output alone');
+  assert.equal(net.fs['/data/log'], 'old line');
+  assert.equal(body().pop().cls, 'err');
+});
+
+test('redirect: >> whose read cannot reach the device does not replace the file', async () => {
+  reset();
+  net.fs['/data/log'] = 'old line';
+  net.failing.add('/api/fs/read');
+  const code = await T.run('pwd >> /data/log'); await settle();
+  assert.notEqual(code, 0);
+  assert.equal(net.count('/api/fs/write'), 0);
+  assert.equal(net.fs['/data/log'], 'old line');
+});
+
+test('redirect: >> to a missing file creates it', async () => {
+  reset();
+  const code = await T.run('pwd >> /data/fresh.log'); await settle();
+  assert.equal(code, 0);
+  assert.equal(net.fs['/data/fresh.log'], '/');
+});
+
+test('mv: one atomic move request — the bytes never travel through the browser', async () => {
+  reset();
+  net.fs['/data/a.txt'] = 'payload';
+  const code = await T.run('mv /data/a.txt /data/b.txt'); await settle();
+  assert.equal(code, 0);
+  assert.equal(net.count('/api/fs/move'), 1);
+  assert.equal(net.count('/api/fs/read'), 0);
+  assert.equal(net.count('/api/fs/write'), 0);
+  assert.equal(net.count('/api/fs/delete'), 0);
+  assert.equal(net.calls.find((c) => c.path === '/api/fs/move').method, 'POST');
+  assert.equal(net.fs['/data/b.txt'], 'payload');
+  assert.equal(net.fs['/data/a.txt'], undefined);
+});
+
+test('mv: an existing destination file is replaced, as Unix mv does', async () => {
+  reset();
+  net.fs['/data/a.txt'] = 'new';
+  net.fs['/data/b.txt'] = 'old';
+  const code = await T.run('mv /data/a.txt /data/b.txt'); await settle();
+  assert.equal(code, 0);
+  assert.equal(net.fs['/data/b.txt'], 'new');
+  assert.equal(net.fs['/data/a.txt'], undefined);
+  assert.equal(net.count('/api/fs/read'), 0, 'still an atomic rename, never a copy through the browser');
+});
+
+test('mv: a same-name file inside the destination folder is replaced too', async () => {
+  reset();
+  net.fs['/data/a.txt'] = 'new';
+  net.fs['/data/dir'] = [];
+  net.fs['/data/dir/a.txt'] = 'old';
+  const code = await T.run('mv /data/a.txt /data/dir'); await settle();
+  assert.equal(code, 0);
+  assert.equal(net.fs['/data/dir/a.txt'], 'new');
+  assert.equal(net.fs['/data/a.txt'], undefined);
+  assert.ok(Array.isArray(net.fs['/data/dir']), 'the folder itself is never replaced');
+});
+
+test('mv: a destination directory receives the file under its own name', async () => {
+  reset();
+  net.fs['/data/a.txt'] = 'payload';
+  net.fs['/data/dir'] = [];
+  const code = await T.run('mv /data/a.txt /data/dir'); await settle();
+  assert.equal(code, 0);
+  assert.equal(net.fs['/data/dir/a.txt'], 'payload');
+  assert.equal(net.fs['/data/a.txt'], undefined);
+});
+
+test('mv: a failed move is reported and creates nothing', async () => {
+  reset();
+  const code = await T.run('mv /data/ghost.txt /data/b.txt'); await settle();
+  assert.notEqual(code, 0);
+  assert.equal(body().pop().cls, 'err');
+  assert.equal(net.fs['/data/b.txt'], undefined);
 });

@@ -98,6 +98,7 @@
   "dlg_save_title": "Save sheet",
   "dlg_open_title": "Open sheet",
   "confirm_new": "Create a new sheet? Changes will be lost.",
+  "confirm_open": "Open another file? Unsaved changes will be lost.",
   "confirm_exit": "Exit without saving?",
 
   "find_results": "{n} results",
