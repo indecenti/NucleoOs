@@ -116,8 +116,9 @@
   import I18N from '/nucleo-i18n.js';
   const t = await I18N.init('system-monitor');
   const $ = (id)=>document.getElementById(id);
-  const fmt = (b)=> b>=1e9?(b/1e9).toFixed(2)+' GB' : b>=1e6?(b/1e6).toFixed(1)+' MB' : b>=1e3?(b/1e3).toFixed(0)+' KB' : (b|0)+' B';
-  const upfmt = (s)=>{ s|=0; const d=s/86400|0,h=s%86400/3600|0,m=s%3600/60|0; return d?`${d}g ${h}h`:h?`${h}h ${m}m`:m?`${m}m ${s%60}s`:`${s}s`; };
+  // A missing/garbled reading shows '—', never a fake '0 B' or 'NaN'.
+  const fmt = (b)=> (typeof b!=='number'||!isFinite(b)) ? '—' : b>=1e9?(b/1e9).toFixed(2)+' GB' : b>=1e6?(b/1e6).toFixed(1)+' MB' : b>=1e3?(b/1e3).toFixed(0)+' KB' : (b|0)+' B';
+  const upfmt = (s)=>{ if(typeof s!=='number'||!isFinite(s)) return '—'; s|=0; const d=s/86400|0,h=s%86400/3600|0,m=s%3600/60|0; return d?`${d}g ${h}h`:h?`${h}h ${m}m`:m?`${m}m ${s%60}s`:`${s}s`; };
   // Flicker-free text: touch the DOM only when the rendered value actually changes.
   const setText = (el,v)=>{ if(!el) return; if(el.__v!==v){ el.__v=v; el.textContent=v; } };
   const setW = (el,pct)=>{ if(!el) return; const w=Math.max(0,Math.min(100,pct)).toFixed(1)+'%'; if(el.__w!==w){ el.__w=w; el.style.width=w; } };
@@ -170,7 +171,8 @@
 
   // ---- Renderers (each only writes changed cells) ---------------------------
   function renderOverview(s){
-    setText($('o_os'), s.os+' v'+s.version);
+    if(!s || typeof s!=='object') return;   // a broken broadcast keeps the last good values
+    setText($('o_os'), s.os ? s.os+(s.version ? ' v'+s.version : '') : '—');
     setText($('o_up'), upfmt(s.uptime_s));
     setText($('o_heap'), fmt(s.free_heap));
     const bt=s.battery||{}; const bp=bt.pct;
@@ -178,7 +180,7 @@
     setText($('o_apps'), String(s.apps?.installed ?? '—'));
     const st=s.storage||{}; const used=(st.total_bytes||0)-(st.free_bytes||0);
     setText($('o_sd'), st.mounted ? t('sd_free',{size:fmt(st.free_bytes)}) : t('not_mounted'));
-    setText($('o_sd_sub'), st.mounted ? `${st.fs} · ${fmt(used)} / ${fmt(st.total_bytes)}` : (st.error_name||''));
+    setText($('o_sd_sub'), st.mounted ? `${st.fs||'—'} · ${fmt(used)} / ${fmt(st.total_bytes)}` : (st.error_name||''));
     setW($('o_sdbar'), st.total_bytes ? 100*used/st.total_bytes : 0);
     const nt=s.network||{};
     setText($('o_net'), nt.ip||'—');
@@ -261,8 +263,11 @@
     const ev=e.data; if(!ev||!ev.t) return;
     if(ev.t==='os-visibility'){ osVisible = !!(ev.d && ev.d.visible); if(osVisible) tick(true); return; }
     if(ev.t==='status.snapshot'){ lastSnap = ev.d; if(active==='overview') renderOverview(ev.d); return; }
+    // Event names and payloads are device data (file names, SSIDs, app names): text, never markup.
     const line=document.createElement('div');
-    line.innerHTML=`<span class="t">#${ev.seq??'-'}</span> <span class="ev">${ev.t}</span> ${JSON.stringify(ev.d??{})}`;
+    const seq=document.createElement('span'); seq.className='t'; seq.textContent='#'+(ev.seq??'-');
+    const name=document.createElement('span'); name.className='ev'; name.textContent=String(ev.t);
+    line.append(seq,' ',name,' '+JSON.stringify(ev.d??{}));
     const feed=$('feed'); feed.prepend(line);
     while(feed.childElementCount>80) feed.lastElementChild.remove();   // bound the DOM
   });

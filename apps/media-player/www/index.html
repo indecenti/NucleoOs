@@ -31,8 +31,9 @@
     const player = document.getElementById('player');
     const list = document.getElementById('list');
     const src = (p) => '/api/fs/read?path=' + encodeURIComponent(p);
-    let tracks = [], idx = -1;
+    let tracks = [], idx = -1, current = '';
     function play(path, li, i) {
+      current = path;
       player.src = src(path); player.play().catch(() => {});
       idx = (typeof i === 'number') ? i : -1;
       [...list.children].forEach(c => c.classList.remove('active'));
@@ -65,6 +66,10 @@
         li.onclick = () => playIdx(i);
         list.appendChild(li);
       });
+      // A track opened from Files (?path=) started before the library loaded: adopt its position, so
+      // next/previous and auto-advance continue from it instead of restarting at the first track.
+      const at = tracks.findIndex((tr) => DIR + '/' + tr.name === current);
+      if (idx < 0 && at >= 0) { idx = at; list.children[at].classList.add('active'); }
     }
     document.addEventListener('keydown', (e) => {
       if (e.code === 'Space') { e.preventDefault(); player.paused ? player.play().catch(() => {}) : player.pause(); }

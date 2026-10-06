@@ -128,7 +128,9 @@ function renderStarter() {
   if (el) el.innerHTML = html;
 }
 
-function esc(s) { return s.replace(/'/g, "\\'"); }
+// For a '…' JS string inside a double-quoted onclick="…" attribute: JS-escape, then HTML-escape — the
+// attribute is entity-decoded BEFORE the handler compiles, so a name holding &#39; would close the string.
+function esc(s) { return escH(String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'")); }
 function escH(s) { return String(s).replace(/[&<>"\']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }  // HTML-escape for text rendered into innerHTML (esc() only handles JS-string quotes)
 
 async function deleteTrigger(word) {
