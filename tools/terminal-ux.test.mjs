@@ -943,3 +943,23 @@ test('mv: a failed move is reported and creates nothing', async () => {
   assert.equal(body().pop().cls, 'err');
   assert.equal(net.fs['/data/b.txt'], undefined);
 });
+
+// Found on a real Cardputer: closing the window fires BOTH visibilitychange (hidden) and pagehide, and a
+// batch save can still be running — two concurrent writes of history.jsonl, and the single-task httpd
+// reset one of them (ERR_CONNECTION_RESET). Saves of the same file must never overlap.
+test('history: overlapping saves never hit the device twice at once, and the newest list lands', async () => {
+  reset();
+  net.fs['/apps/terminal/data'] = [];
+  await T.loadPersisted();
+  T.remember('one');
+  net.maxInFlight = 0;
+  const first = T.saveHistory(false);
+  T.remember('two');
+  const second = T.saveHistory(true);
+  const third = T.saveHistory(true);            // pagehide right after visibilitychange: nothing new
+  await Promise.all([first, second, third]);
+  assert.equal(net.maxInFlight, 1, 'one write at a time');
+  const ws = net.writes.filter((x) => x.path === '/apps/terminal/data/history.jsonl');
+  assert.ok(ws.length <= 2, 'an identical list is not re-sent: ' + ws.length + ' writes');
+  assert.deepEqual(ws.pop().body.split(String.fromCharCode(10)).map((l) => JSON.parse(l)), ['one', 'two']);
+});
