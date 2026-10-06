@@ -11,6 +11,14 @@ import { startSim } from './sim.mjs';
 import { bootShell } from './shell.mjs';
 
 const HOST_RULES = '--host-resolver-rules=MAP nucleo.test 127.0.0.1';
+// Chrome's Local Network Access: a page served from the network (the Cardputer) may reach localhost only once the
+// user allows "Local network access" for the site. Headless Chrome reports it 'denied' and cannot grant it (CDP:
+// "can't be granted in current context"), so the device-like cases ran into 'blocked' and never reached Ollama's
+// CORS answer they exist to check. GRANTED = the user allowed it: the check is off and the permission reads granted.
+const LNA_OFF = '--disable-features=LocalNetworkAccessChecks';
+const LNA_GRANTED = `(() => { const q = navigator.permissions && navigator.permissions.query && navigator.permissions.query.bind(navigator.permissions);
+  if (!q) return; const lna = new Set(['loopback-network', 'local-network-access', 'local-network']);
+  navigator.permissions.query = (d) => (d && lna.has(d.name)) ? Promise.resolve({ state: 'granted', name: d.name, onchange: null }) : q(d); })();`;
 let ollamaUp = false;
 try { ollamaUp = (await fetch('http://localhost:11434/api/version', { signal: AbortSignal.timeout(1500) })).ok; } catch {}
 const skip = (!findChrome() && 'no Chrome/Edge installed') || (!ollamaUp && 'no Ollama on localhost:11434');
@@ -18,7 +26,9 @@ const skip = (!findChrome() && 'no Chrome/Edge installed') || (!ollamaUp && 'no 
 test('local AI server (real Ollama) from the browser', { skip, timeout: 10 * 60 * 1000 }, async (t) => {
   const sim = await startSim();
   const browser = await launchBrowser({ args: [HOST_RULES] });
-  t.after(async () => { await browser.close(); await sim.stop(); });
+  const granted = await launchBrowser({ args: [HOST_RULES, LNA_OFF] });
+  t.after(async () => { await browser.close(); await granted.close(); await sim.stop(); });
+  const grantedPage = async () => { const p = await granted.newPage(); await p.initScript(LNA_GRANTED); return p; };
 
   await t.test('secure origin: detect, pick, and call a tool in Italian with the right date', async () => {
     const page = await browser.newPage();
@@ -89,7 +99,7 @@ test('local AI server (real Ollama) from the browser', { skip, timeout: 10 * 60 
   // exact command for this OS with this page's origin in it — in the OS language.
   for (const [lang, word] of [['it', 'PowerShell'], ['fr', 'PowerShell']]) {
     await t.test(`device-like origin (${lang}): ANIMA points to the OLLAMA_ORIGINS fix with the exact command`, async () => {
-      const page = await browser.newPage();
+      const page = await grantedPage();
       await bootShell(page, sim, { lang, wait: false });
       await page.eval(`localStorage.setItem('anima.mode','private'); localStorage.setItem('anima.modeSet','1'); sessionStorage.clear(); true`);
       await page.goto(sim.origin + '/apps/anima/');
@@ -112,9 +122,27 @@ test('local AI server (real Ollama) from the browser', { skip, timeout: 10 * 60 
   }
 
   await t.test('device-like origin: the probe reports CORS (the OLLAMA_ORIGINS fix), not "down"', async () => {
-    const page = await browser.newPage();
+    const page = await grantedPage();
     await bootShell(page, sim, { lang: 'it', wait: false });
     const status = await page.eval(`(async () => { const E = await import('/ai-engines.js'); const [ol] = await E.detectServers({ servers: [E.DEFAULT_SERVERS[0]] }); return ol.status; })()`);
     assert.equal(status, 'cors');
   });
+
+  // The other real case: the browser does NOT allow local network access (Chrome's default on a site served from
+  // the Cardputer). Nothing reaches Ollama, so ANIMA must say what to allow, in the OS language — never "down".
+  for (const lang of ['it', 'en', 'es', 'fr', 'de']) {
+    await t.test(`device-like origin, local network access denied (${lang}): ANIMA says what to allow`, async () => {
+      const page = await browser.newPage();
+      await bootShell(page, sim, { lang, wait: false });
+      const status = await page.eval(`(async () => { const E = await import('/ai-engines.js'); const [ol] = await E.detectServers({ servers: [E.DEFAULT_SERVERS[0]] }); return ol.status; })()`);
+      assert.equal(status, 'blocked');
+      await page.eval(`localStorage.setItem('anima.mode','private'); localStorage.setItem('anima.modeSet','1'); sessionStorage.clear(); true`);
+      await page.goto(sim.origin + '/apps/anima/');
+      assert.ok(await page.waitFor(`!!document.getElementById('q') && !!document.getElementById('send')`, { timeout: 20000 }));
+      await page.eval(`(() => { const q = document.getElementById('q'); q.value = 'Ciao'; q.dispatchEvent(new Event('input', { bubbles: true })); document.getElementById('send').click(); return true; })()`);
+      const hint = await page.waitFor(`(() => { const h = document.querySelector('.lai-hint'); return h ? h.textContent : null; })()`, { timeout: 60000 });
+      const c = JSON.parse((await import('node:fs')).readFileSync(new URL(`../../apps/anima/www/i18n.${lang}.json`, import.meta.url), 'utf8'));
+      assert.ok(hint && hint.includes(c.engPcBlocked), `${lang}: the hint explains the browser block: ${hint}`);
+    });
+  }
 });
