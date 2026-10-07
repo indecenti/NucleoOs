@@ -70,6 +70,8 @@ export async function launchBrowser({ args = [], gpu = false, profileDir = null 
     ...(gpu ? ['--enable-unsafe-webgpu', '--ignore-gpu-blocklist', '--force_high_performance_gpu'] : ['--disable-gpu']), '--disable-background-timer-throttling', '--disable-renderer-backgrounding',
     '--disable-backgrounding-occluded-windows', '--disable-features=Translate,MediaRouter',
     '--autoplay-policy=no-user-gesture-required', '--window-size=1440,900',
+    // CI only: Ubuntu 24.04 runners restrict the unprivileged user namespaces Chrome's sandbox needs.
+    ...(process.env.CI ? ['--no-sandbox'] : []),
     ...args, 'about:blank',
   ], { stdio: ['ignore', 'ignore', 'pipe'] });
   const wsUrl = await new Promise((resolve, reject) => {

@@ -20,3 +20,21 @@ concurrency:
 jobs:
   gate:
     uses: ./.github/workflows/gate.yml
+
+  # Browser E2E: real headless Chrome against the zero-dependency device simulator (tools/serve-shell.mjs),
+  # in http-on-a-LAN-name mode like the Cardputer — every app opened in 5 languages, data-safety, security,
+  # resilience and per-app behaviour suites. The suites that need a local AI server (Ollama) or a GPU skip
+  # themselves here. Kept out of gate.yml (which also gates releases) until it has proven stable on CI.
+  e2e:
+    needs: gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Browser E2E (Chrome + device simulator)
+        env:
+          CHROME_PATH: /usr/bin/google-chrome
+        run: node tools/web-e2e/run.mjs
