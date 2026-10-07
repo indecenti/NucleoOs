@@ -733,7 +733,9 @@ function doStartMatch(opts, rematch) {
 function failGrok(reason) {
   brainCfg = null;
   sys(t('llm_blocked', { reason }));
-  $('#status').innerHTML = `<span style="color:#fb7185">${t('llm_unavailable', { reason })}</span>`;
+  // The reason is provider/network text: data, never markup.
+  const st = document.createElement('span'); st.style.color = '#fb7185'; st.textContent = t('llm_unavailable', { reason });
+  $('#status').replaceChildren(st);
   show('#offlineBtn', true); show('#gbOffline', barOpen || immersive);
   if (barOpen) syncBarButtons();
   return false;
