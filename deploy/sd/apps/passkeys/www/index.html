@@ -108,7 +108,14 @@ async function refresh(){
       left.querySelector('.u').textContent = (c.user || '') + '  ·  #' + c.signCount;
       const b = document.createElement('button'); b.className='del danger'; b.textContent=t('del');
       b.onclick = async () => {
+        // A resident passkey may be the only way into that account and cannot be restored: always ask.
+        if (!confirm(t('askdel', { rp: c.rp || '?', user: c.user || '' }))) return;
         try {
+          // The device deletes by list INDEX. If the list changed since this render (native UI, another
+          // tab), that index now names a DIFFERENT passkey: re-read and refuse unless it is still this one.
+          const now = await api('/api/fido/creds');
+          const cur = Array.isArray(now) ? now.find((x) => x.index === c.index) : null;
+          if (!cur || cur.rp !== c.rp || cur.user !== c.user) { msg(t('stale'), 'bad'); refresh(); return; }
           const r = await api('/api/fido/cred/delete',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({index:c.index})});
           msg(r.ok?t('delok'):t('err'), r.ok?'good':'bad');
         } catch(e){ msg(t('err'),'bad'); }

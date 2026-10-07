@@ -783,8 +783,9 @@
       playlistTitleLabel.textContent = t('playlistTitle', { dir });
       try {
         const res = await fetch('/api/fs/list?path=' + encodeURIComponent(dir));
-        if (!res.ok) throw new Error();
-        const data = await res.json();
+        // No such folder answers 404: the card is reachable, the playlist is just empty (like probeSd()).
+        if (!res.ok && res.status !== 404) throw new Error();
+        const data = res.status === 404 ? { entries: [] } : await res.json();
         playlist = (data.entries || [])
           .filter(e => e.type === 'file' && VIDEO_RE.test(e.name))
           .map(e => ({ name: e.name, path: dir + '/' + e.name }));
@@ -872,7 +873,7 @@
     function srtToVtt(srt) {
       const body = srt.replace(/\r+/g, '')
         .replace(/^﻿/, '')
-        .replace(/^\d+\s*$/gm, '')                                   // cue index lines
+        .replace(/^\d+[ \t]*\n(?=[ \t]*\d{1,2}:\d{2}:\d{2}[,.]\d{3}[ \t]*-->)/gm, '')   // cue index lines (only before a timing line: "1984" can be dialogue)
         .replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2');           // , -> . in timestamps
       return 'WEBVTT\n\n' + body.trim() + '\n';
     }
@@ -915,7 +916,7 @@
       let html = '<div class="pop-label" data-i18n="menuSubs">Sottotitoli</div>';
       html += `<div class="pop-opt ${activeSub === -1 ? 'active' : ''}" data-sub="-1"><span class="tick">✓</span><span class="opt-name" data-i18n="subOff">Disattivati</span></div>`;
       subTracks.forEach((tr, i) => {
-        html += `<div class="pop-opt ${activeSub === i ? 'active' : ''}" data-sub="${i}"><span class="tick">✓</span><span class="opt-name">${tr.label}</span>${tr.lang ? `<span class="opt-tag">${tr.lang}</span>` : ''}</div>`;
+        html += `<div class="pop-opt ${activeSub === i ? 'active' : ''}" data-sub="${i}"><span class="tick">✓</span><span class="opt-name">${esc(tr.label)}</span>${tr.lang ? `<span class="opt-tag">${esc(tr.lang)}</span>` : ''}</div>`;
       });
       html += '<div class="pop-divider"></div>';
       html += '<div class="pop-opt" id="sub-load-opt"><span class="tick"></span><span class="opt-name" data-i18n="loadFile">Carica file…</span></div>';
@@ -938,7 +939,7 @@
       } else {
         for (let i = 0; i < tracks.length; i++) {
           const tk = tracks[i];
-          html += `<div class="pop-opt ${tk.enabled ? 'active' : ''}" data-audio="${i}"><span class="tick">✓</span><span class="opt-name">${tk.label || tk.language || t('trackN', { n: i + 1 })}</span>${tk.language ? `<span class="opt-tag">${tk.language}</span>` : ''}</div>`;
+          html += `<div class="pop-opt ${tk.enabled ? 'active' : ''}" data-audio="${i}"><span class="tick">✓</span><span class="opt-name">${esc(tk.label || tk.language || t('trackN', { n: i + 1 }))}</span>${tk.language ? `<span class="opt-tag">${esc(tk.language)}</span>` : ''}</div>`;
         }
       }
       audioPop.innerHTML = html;
@@ -1011,7 +1012,7 @@
     async function loadSdDir() {
       const parts = sdCwd.split('/').filter(Boolean);
       let acc = '', crumbs = '<span class="crumbs-seg" data-path="/">SD</span>';
-      parts.forEach(seg => { acc += '/' + seg; crumbs += ' › <span class="crumbs-seg" data-path="' + acc + '">' + seg + '</span>'; });
+      parts.forEach(seg => { acc += '/' + seg; crumbs += ' › <span class="crumbs-seg" data-path="' + esc(acc) + '">' + esc(seg) + '</span>'; });
       modalCrumbs.innerHTML = crumbs;
       modalCrumbs.querySelectorAll('.crumbs-seg').forEach(el => el.onclick = () => { sdCwd = el.dataset.path; loadSdDir(); });
 

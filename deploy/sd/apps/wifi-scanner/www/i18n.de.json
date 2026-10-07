@@ -2,7 +2,7 @@
   "_lang": "de",
   "title": "WiFi-Manager",
   "btn_auto": "Auto",
-  "auto_hint": "Automatische Aktualisierung alle 8s",
+  "auto_hint": "Automatische Aktualisierung alle 25s",
   "connect": "Verbinden",
   "reconnect": "Neu verbinden",
   "forget": "Vergessen",
@@ -30,7 +30,7 @@
   "sec_open": "offen",
   "sec_open_hint": "Offenes Netzwerk",
   "hidden_ssid": "(versteckt)",
-  "src_connected_only": "nur verbundener AP — Scan-API ausstehend",
-  "src_demo": "Demodaten — Gerät offline",
+  "src_failed": "Scan fehlgeschlagen — Gerät nicht erreichbar oder beschäftigt",
+  "src_need_pair": "nicht gekoppelt — koppel diesen Browser zum Scannen",
   "src_live": "Live-Scan"
 }

@@ -2,7 +2,7 @@
   "_lang": "it",
   "title": "Gestione WiFi",
   "btn_auto": "Auto",
-  "auto_hint": "Aggiornamento automatico ogni 8s",
+  "auto_hint": "Aggiornamento automatico ogni 25s",
   "connect": "Connetti",
   "reconnect": "Riconnetti",
   "forget": "Dimentica",
@@ -30,7 +30,7 @@
   "sec_open": "aperta",
   "sec_open_hint": "Rete aperta",
   "hidden_ssid": "(nascosta)",
-  "src_connected_only": "solo AP connesso — API di scansione in arrivo",
-  "src_demo": "dati demo — dispositivo offline",
+  "src_failed": "scansione non riuscita — dispositivo irraggiungibile o occupato",
+  "src_need_pair": "non associato — associa questo browser per scansionare",
   "src_live": "scansione live"
 }

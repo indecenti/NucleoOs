@@ -307,8 +307,10 @@
         const r = await fetch('/api/mail/accounts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
         if (r.status === 401) { setStatus('err', t('need_pair')); return; }
         const j = await r.json().catch(() => null);
-        if (j) { accounts = j.accounts || []; def = j.default; editing = null; renderAccounts(); }
-        else setStatus('err', t('send_fail', { err: r.status }));
+        // Only a 2xx carrying the account list is a save: a refusal (503 busy, 500 full…) may be JSON too,
+        // and taking it as the list emptied the screen and closed the form as if it had worked.
+        if (r.ok && j && Array.isArray(j.accounts)) { accounts = j.accounts; def = j.default; editing = null; renderAccounts(); }
+        else setStatus('err', t('device_failed', { err: (j && j.error) || ('HTTP ' + r.status) }));
       } catch (e) { setStatus('err', t('send_fail', { err: String(e) })); }
     }
 
@@ -325,9 +327,15 @@
       const r = await fetch('/api/mail/accounts', { method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ idx, delete: true }) }).catch(() => null);
       if (r && r.status === 401) { setStatus('err', t('need_pair')); return; }
-      if (r) { const j = await r.json().catch(() => null); if (j) { accounts = j.accounts || []; def = j.default; } else await loadData(); }
-      else await loadData();
+      const j = r ? await r.json().catch(() => null) : null;
+      if (r && r.ok) {
+        if (j && Array.isArray(j.accounts)) { accounts = j.accounts; def = j.default; } else await loadData();
+        renderAccounts();
+        return;
+      }
+      // Refused or unreachable: nothing was deleted — keep the list on screen and say so.
       renderAccounts();
+      setStatus('err', t('device_failed', { err: (j && j.error) || (r ? 'HTTP ' + r.status : '—') }));
     }
 
     // ---- shell ---------------------------------------------------------------

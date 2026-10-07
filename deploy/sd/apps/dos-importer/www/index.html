@@ -332,7 +332,7 @@
         const r = await fetch('/api/fs/write?path=' + encodeURIComponent(path), { method: 'POST', body: bytes });
         if (!r.ok) throw new Error((await r.text().catch(() => '')) || ('HTTP ' + r.status));
         setStatus('ok', t('st_installed', { path, size: fmt(bytes.length) }));
-        window.parent.postMessage({ type: 'open-app', id: 'dosbox' }, '*');   // best-effort: shell may surface DOS Box
+        window.parent.postMessage({ type: 'open-app', id: 'dosbox', reload: true }, '*');   // best-effort; reload: an open DOS Box must list the new game
       } catch (e) { setStatus('err', t('err_install_failed', { msg: e.message })); }
       finally { $('install').disabled = false; }
     }
@@ -343,13 +343,14 @@
     const drop = $('drop');
     ['dragenter', 'dragover'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); drop.classList.add('over'); }));
     ['dragleave', 'drop'].forEach((ev) => drop.addEventListener(ev, (e) => { e.preventDefault(); if (ev !== 'dragover') drop.classList.remove('over'); }));
-    drop.addEventListener('drop', async (e) => { setStatus('busy', t('st_reading')); try { await ingest(await entriesFromDataTransfer(e.dataTransfer)); if (state.files.length || state.isBundle) setStatus('', ''); } catch (err) { setStatus('err', err.message); } });
+    // ingest() always leaves the final status (ok, or WHY not: not a ZIP, nothing runnable…) — don't clear it here.
+    drop.addEventListener('drop', async (e) => { setStatus('busy', t('st_reading')); try { await ingest(await entriesFromDataTransfer(e.dataTransfer)); } catch (err) { setStatus('err', err.message); } });
     $('picker').addEventListener('change', async (e) => {
       const fs = [...e.target.files]; if (!fs.length) return;
       setStatus('busy', t('st_reading'));
       const files = []; let topName = null;
       for (const f of fs) { const rel = f.webkitRelativePath || f.name; files.push({ name: rel, data: new Uint8Array(await f.arrayBuffer()) }); if (!topName) topName = (f.webkitRelativePath ? f.webkitRelativePath.split('/')[0] : f.name); }
-      await ingest({ files, topName }); setStatus('', '');
+      await ingest({ files, topName });
     });
     $('install').addEventListener('click', install);
     $('reset').addEventListener('click', reset);

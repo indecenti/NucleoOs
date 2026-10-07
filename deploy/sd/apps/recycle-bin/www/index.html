@@ -77,12 +77,21 @@
     let r; try { r = await api('read', TRASH_DB); } catch { return null; }
     if (r.status === 404) return { items: [] };
     if (!r.ok) return null;
+    let txt; try { txt = await r.text(); } catch { return null; }   // a read that broke off is not an index
+    if (!txt.trim()) return { items: [] };                            // a 0-byte index = an empty bin
     try {
-      const d = JSON.parse(await r.text());
+      const d = JSON.parse(txt);
       if (d && typeof d === 'object' && !Array.isArray(d)) {
         if (d.items === undefined) return { ...d, items: [] };
         if (Array.isArray(d.items)) return d;
       }
+    } catch {}
+    // A readable but CORRUPT index used to block every delete for good. Keep it aside byte for byte (the
+    // trashed files stay in /system/.trash, and the old list stays recoverable) and start a fresh index; if
+    // even that copy cannot be written, change nothing.
+    try {
+      const k = await api('write', TRASH_DB.replace(/.json$/, '.corrupt.json'), { method: 'POST', body: txt });
+      if (k && k.ok) return { items: [] };
     } catch {}
     return null;
   }

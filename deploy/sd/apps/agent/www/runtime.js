@@ -427,7 +427,7 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
             + (shown ? '\nstdout:\n' + shown : '') + saved); }
         case 'open_in_os': { try {
             if (input.path) { const abs = fs.resolve(input.path); window.parent && window.parent.postMessage({ type: 'open-file', path: abs }, '*'); return done(t('rt_open_file_ok', { path: input.path })); }
-            if (input.app) { window.parent && window.parent.postMessage({ type: 'open-app', id: String(input.app) }, '*'); return done(t('rt_open_app_ok', { app: input.app })); }
+            if (input.app) { window.parent && window.parent.postMessage({ type: 'open-app', id: String(input.app), reload: true /* it may be open with an older build */ }, '*'); return done(t('rt_open_app_ok', { app: input.app })); }
             return done(t('rt_open_specify'), true);
           } catch (e) { return done(t('rt_open_err', { error: String(e.message || e) }), true); } }
         case 'get_os_api': {

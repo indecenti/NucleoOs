@@ -31,5 +31,7 @@
   "resetok": "Autenticatore resettato.",
   "delok": "Passkey cancellata.",
   "err": "Richiesta fallita.",
-  "tries": "tentativi"
+  "tries": "tentativi",
+  "askdel": "Cancellare la passkey per {rp} ({user})? Non potrai più accedere a {rp} con questa passkey. Operazione irreversibile.",
+  "stale": "L'elenco delle passkey è cambiato sul dispositivo — non è stato cancellato nulla. Controlla l'elenco e riprova."
 }

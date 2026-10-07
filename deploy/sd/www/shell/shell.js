@@ -51,6 +51,9 @@ const appSearchNames = (a) => [a.name, ...(appAliases.get(a.id) || [])];
 WM.setLabeler(appName);         // window title bars + iframe titles use the same localised name
 WM.setTranslator((k) => t(k));  // ...and the window chrome (Minimize/Maximize/Restore/Close tooltips)
 I18N.setSenderGuard((e) => trustedSender(e));   // set-language obeys the same trust boundary as the OS router
+// A window opened while its app's provenance is still undecided: if the reads are waiting out a backoff
+// (they failed), try again now rather than leave the user on a placeholder for up to a minute.
+WM.setOnTrustHold(() => { if (trustRetryTimer) retryTrustNow(); });
 
 // The OS-wide AI copilot is loaded lazily in initOS(); held here so OS-level handlers
 // (Escape, the unified search row) can talk to it. null until copilot.js initialises.
@@ -915,32 +918,56 @@ function stopStatusPolling() {
 // Anything else runs sandboxed. It used to be the other way round: a registry read that failed or timed
 // out (swallowed), or an app published a moment ago, left created_by unset and the agent's app opened
 // with the shell's origin — cookie, /api/*, key vault.
+//
+// A failed read decides NOTHING. If neither the registry nor the shipped list can be read, an undecided app
+// stays 'pending' (its window waits) and the reads are retried with backoff — v149 settled every app,
+// Settings and File Commander included, as 'sandbox' for the whole session after one bad boot. And when only
+// the registry is unreadable (an app refresh during a busy moment), only apps still 'pending' are decided:
+// an app the registry already vouched for keeps its decision — demoting it swapped the record of an open,
+// trusted window and the router then dropped every message it sent.
 let builtinIds = null;   // Set of app ids shipped with the OS, once read
 async function loadBuiltinIds() {
   if (builtinIds) return builtinIds;
   try {
     const cat = await fetchJSON('/app-catalog.json', { tries: 3, timeout: 4000 });
-    builtinIds = new Set(Object.keys((cat && cat.apps) || {}));
+    if (!cat || typeof cat.apps !== 'object' || !cat.apps) throw new Error('no apps map');
+    builtinIds = new Set(Object.keys(cat.apps));
     return builtinIds;
   } catch (e) {
-    console.warn('[shell] built-in app list unreadable → unconfirmed apps stay sandboxed:', (e && e.message) || e);
-    return new Set();     // not cached: the next registry pass tries again
+    console.warn('[shell] built-in app list unreadable → apps only it could vouch for wait:', (e && e.message) || e);
+    return null;          // unknown — not cached: the next pass tries again
   }
 }
+// Retry schedule while some app's provenance is still undecided: 2 s, 4 s … 60 s, then every 60 s.
+const TRUST_RETRY_MS = [2000, 4000, 8000, 16000, 32000, 60000];
+let trustRetryTimer = null, trustRetryStep = 0;
+function scheduleTrustRetry() {
+  if (trustRetryTimer) return;
+  const ms = TRUST_RETRY_MS[Math.min(trustRetryStep++, TRUST_RETRY_MS.length - 1)];
+  trustRetryTimer = setTimeout(retryTrustNow, ms);
+}
+function retryTrustNow() {
+  clearTimeout(trustRetryTimer); trustRetryTimer = null;
+  permsReady = null; beginLoadAppPermissions();
+}
 async function loadAppPermissions() {
-  let reg = null;
+  let installed = null;   // the registry's app list, or null when it could not be read
   try {
-    reg = await fetchJSON('/api/fs/read?path=' + encodeURIComponent('/system/registry/apps.json'), { tries: 2, timeout: 4000 });
+    const reg = await fetchJSON('/api/fs/read?path=' + encodeURIComponent('/system/registry/apps.json'), { tries: 2, timeout: 4000 });
+    if (!reg || !Array.isArray(reg.installed)) throw new Error('no installed[] list');
+    installed = reg.installed;
   } catch (e) {
-    // Permissions: keep the pre-existing permissive default rather than mute dictation/recorder/ANIMA on a
-    // blip. Provenance: NOT permissive — see above.
-    console.warn('[shell] registry unreadable → permissive feature policy; provenance from the built-in list:', (e && e.message) || e);
+    // Permissions: keep what each app had (the permissive default if never read) rather than mute
+    // dictation/recorder/ANIMA on a blip. Provenance: NOT permissive — see above.
+    console.warn('[shell] registry unreadable → feature policy unchanged; provenance only for undecided apps:', (e && e.message) || e);
   }
   // created_by travels with the permissions: it is what decides whether the app gets an origin at all.
-  const byIdReg = new Map(((reg && Array.isArray(reg.installed) && reg.installed) || []).filter((a) => a && a.id).map((a) => [a.id, a]));
-  const apps = state.apps;
-  const builtin = apps.some((a) => !byIdReg.has(a.id)) ? await loadBuiltinIds() : new Set();
-  let n = 0, boxed = 0;
+  const byIdReg = new Map((installed || []).filter((a) => a && a.id).map((a) => [a.id, a]));
+  const decided = (a) => a.trust === 'trusted' || a.trust === 'sandbox';
+  // Apps the shipped list must decide: the registry is silent about them, or unreadable and they are undecided.
+  const askCatalog = (a) => !byIdReg.has(a.id) && a.created_by !== 'agent' && (installed || !decided(a));
+  const builtin = state.apps.some(askCatalog) ? await loadBuiltinIds() : null;
+  let n = 0, boxed = 0, waiting = 0;
   for (const a of state.apps) {
     const e = byIdReg.get(a.id);
     if (e) {
@@ -948,13 +975,18 @@ async function loadAppPermissions() {
       if (e.created_by) a.created_by = e.created_by;
       a.trust = e.created_by === 'agent' ? 'sandbox' : 'trusted';
       n++;
-    } else {
-      a.trust = builtin.has(a.id) && a.created_by !== 'agent' ? 'trusted' : 'sandbox';
+    } else if (a.created_by === 'agent') {
+      a.trust = 'sandbox';
+    } else if (askCatalog(a) && builtin) {
+      a.trust = builtin.has(a.id) ? 'trusted' : 'sandbox';
     }
+    // else: unchanged — an earlier decision stands, or the app stays 'pending' until a read succeeds
     if (a.trust === 'sandbox') boxed++;
+    if (a.trust === 'pending') waiting++;
   }
-  bootLog('permissions applied to ' + n + '/' + state.apps.length + ' app frames; sandboxed ' + boxed);
+  bootLog('permissions applied to ' + n + '/' + state.apps.length + ' app frames; sandboxed ' + boxed + (waiting ? '; ' + waiting + ' undecided → retrying' : ''));
   WM.settleTrust(byId);    // load the windows that were waiting for this answer
+  if (waiting) scheduleTrustRetry(); else trustRetryStep = 0;
 }
 // Started as EARLY as the app list allows and awaited later, so the window in which a user-opened app
 // could still get the permissive default is as small as we can make it without holding the boot screen
@@ -1477,8 +1509,10 @@ function wireMessages() {
       if (e.source) try { e.source.postMessage({ type: 'clipboard-data', item: clipboardLatest() }, '*'); } catch {}
       return;
     }
-    // ANIMA (and other apps) can ask the shell to launch an app by id.
-    if (d.type === 'open-app' && d.id) { const a = byId(d.id); if (a) WM.open(a, d.query || ''); return; }
+    // ANIMA (and other apps) can ask the shell to launch an app by id. `reload: true` also reloads the window
+    // when it is already open (the caller just changed that app: an agent update, a newly installed game);
+    // without it a re-open only focuses it, so unsaved work survives.
+    if (d.type === 'open-app' && d.id) { const a = byId(d.id); if (a) WM.open(a, d.query || '', d.reload === true ? { reload: true } : {}); return; }
 
     // The ANIMA model installer is running a blocking download → make the OS "wait or cancel".
     if (d.type === 'os-install-modal') {

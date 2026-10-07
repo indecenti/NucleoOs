@@ -60,7 +60,7 @@
         data = r.status === 404 ? { entries: [] } : (r.ok ? await r.json() : null);   // no folder yet = no pictures yet
       } catch { data = null; }
       if (!data) { if (!current) { msg.textContent = t('dir_failed', { dir: DIR }); msg.hidden = false; } return; }
-      const imgs = (data.entries || []).filter(e => e.type === 'file' && /\.(png|jpe?g|gif|bmp|svg)$/i.test(e.name));
+      const imgs = (data.entries || []).filter(e => e.type === 'file' && /\.(png|jpe?g|gif|bmp|svg|webp)$/i.test(e.name));
       bar.innerHTML = ''; chips = []; list = imgs.map(im => DIR + '/' + im.name);
       if (!list.length && !current) { msg.textContent = t('dir_empty', { dir: DIR }); msg.hidden = false; }
       imgs.forEach((im, i) => {

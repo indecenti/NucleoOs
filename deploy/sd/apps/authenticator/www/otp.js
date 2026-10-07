@@ -117,7 +117,10 @@ function counterBytes(counter) {
   return b;
 }
 export function hotp(secretBytes, counter, { digits = 6, algorithm = 'SHA1' } = {}) {
-  const h = HASHERS[String(algorithm).toUpperCase()] || HASHERS.SHA1;
+  // An algorithm we cannot compute must THROW (the UI then shows dashes): silently falling back to SHA-1
+  // produced plausible codes that never log in. Absent (old vault entries) still means SHA1.
+  const h = HASHERS[String(algorithm || 'SHA1').toUpperCase().replace('-', '')];
+  if (!h) throw new Error('unsupported algorithm: ' + algorithm);
   const hs = hmac(h.fn, h.block, secretBytes, counterBytes(counter));
   const offset = hs[hs.length - 1] & 0x0f;
   const bin = ((hs[offset] & 0x7f) << 24) | (hs[offset + 1] << 16) | (hs[offset + 2] << 8) | hs[offset + 3];
@@ -144,7 +147,8 @@ export function parseOtpauth(uri) {
   const q = u.searchParams;
   const secret = (q.get('secret') || '').replace(/\s/g, '');
   if (!secret || !isValidBase32(secret)) return null;
-  const rawLabel = decodeURIComponent((u.pathname || '').replace(/^\//, ''));
+  // A raw "%" in a label ("100% Pure") makes decodeURIComponent throw: decode only the valid %XX runs.
+  const rawLabel = (u.pathname || '').replace(/^\//, '').replace(/(%[0-9a-f]{2})+/gi, (m) => { try { return decodeURIComponent(m); } catch { return m; } });
   let issuer = q.get('issuer') || '', account = rawLabel;
   if (rawLabel.includes(':')) { const [i, ...rest] = rawLabel.split(':'); if (!issuer) issuer = i.trim(); account = rest.join(':').trim(); }
   return {

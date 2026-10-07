@@ -2,7 +2,7 @@
   "_lang": "fr",
   "title": "Gestionnaire WiFi",
   "btn_auto": "Auto",
-  "auto_hint": "Actualisation automatique toutes les 8s",
+  "auto_hint": "Actualisation automatique toutes les 25s",
   "connect": "Se connecter",
   "reconnect": "Se reconnecter",
   "forget": "Oublier",
@@ -30,7 +30,7 @@
   "sec_open": "ouvert",
   "sec_open_hint": "Réseau ouvert",
   "hidden_ssid": "(caché)",
-  "src_connected_only": "seul l'AP connecté — API de scan à venir",
-  "src_demo": "données de démo — appareil hors ligne",
+  "src_failed": "échec du scan — appareil injoignable ou occupé",
+  "src_need_pair": "non appairé — appairez ce navigateur pour scanner",
   "src_live": "scan en direct"
 }

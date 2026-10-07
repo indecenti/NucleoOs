@@ -2,7 +2,7 @@
   "_lang": "es",
   "title": "Gestor WiFi",
   "btn_auto": "Auto",
-  "auto_hint": "Actualización automática cada 8s",
+  "auto_hint": "Actualización automática cada 25s",
   "connect": "Conectar",
   "reconnect": "Reconectar",
   "forget": "Olvidar",
@@ -30,7 +30,7 @@
   "sec_open": "abierta",
   "sec_open_hint": "Red abierta",
   "hidden_ssid": "(oculta)",
-  "src_connected_only": "solo AP conectado — API de escaneo en camino",
-  "src_demo": "datos de demo — dispositivo sin conexión",
+  "src_failed": "escaneo fallido — dispositivo inaccesible u ocupado",
+  "src_need_pair": "no emparejado — empareja este navegador para escanear",
   "src_live": "escaneo en vivo"
 }

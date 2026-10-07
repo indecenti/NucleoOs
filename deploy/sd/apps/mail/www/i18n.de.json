@@ -46,5 +46,6 @@
   "gmail_hint": "Gmail/Yahoo/iCloud benötigen ein App-Passwort (mit 2FA), nicht dein Anmeldepasswort.",
   "body_label": "Nachricht",
   "err_password_required": "Gib das Konto-Passwort ein.",
-  "confirm_delete_account": "Konto „{name}“ löschen? Das auf dem Cardputer gespeicherte Passwort wird ebenfalls gelöscht."
+  "confirm_delete_account": "Konto „{name}“ löschen? Das auf dem Cardputer gespeicherte Passwort wird ebenfalls gelöscht.",
+  "device_failed": "Der Cardputer hat die Änderung nicht angenommen ({err}) — nichts wurde geändert."
 }

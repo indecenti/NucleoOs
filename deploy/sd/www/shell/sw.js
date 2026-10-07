@@ -3,11 +3,11 @@
 // Bump this on every shell change that must reach already-installed clients. The reason for each
 // roll goes in docs/shell-cache-log.md — NOT here: it used to be one 10.5 KB comment on this line,
 // half the whole service worker, re-shipped to every browser on every update check.
-const CACHE = 'nucleo-shell-v150';   // v150 — a window that lost a module reloads once (see docs/shell-cache-log.md)
+const CACHE = 'nucleo-shell-v151';   // v151 — fixes for v149/v150 regressions (see docs/shell-cache-log.md)
 // Per-version cache for app assets (/apps/<id>/...). Tied to the shell version so a deploy (which
 // bumps CACHE) drops it; the shell also flushes it on apps.changed (OTA app update) via postMessage.
 const APP_CACHE = CACHE + '-apps';
-const ASSETS = ['./', 'index.html', 'style.css', 'copilot.css', 'notify.css', 'onboarding.css', 'shell.js', 'boot-fetch.js', 'copilot.js', 'anima-mode.js', 'notify.js', 'onboarding.js', 'ambient.js', 'ai.js', 'ai-keys.js', 'shortcuts.js', 'search-rank.js', 'appbroker.js', 'wm.js', 'fsindex.js', 'busy.js', 'dlgate.js', 'micgate.js', 'system-ui.js', 'nucleo-i18n.js', 'update-check.js', 'update-core.js', 'sha256.js', 'ai-engines.js', 'capabilities.js', 'local-ai-help.js', 'seq-import.js', 'i18n/core.it.json', 'i18n/core.en.json', 'i18n/core.es.json', 'i18n/core.fr.json', 'i18n/core.de.json', 'i18n/shell.it.json', 'i18n/shell.en.json', 'i18n/shell.es.json', 'i18n/shell.fr.json', 'i18n/shell.de.json', 'manifest.webmanifest', 'icon.png', 'icons.json'];   // NB: wallpaper.png removed — it's a 535KB JPEG-misnamed-.png never displayed (live wallpaper = /data/Pictures/wallpaper.png) that only tripped the webfs low-heap defer
+const ASSETS = ['./', 'index.html', 'style.css', 'copilot.css', 'notify.css', 'onboarding.css', 'shell.js', 'boot-fetch.js', 'copilot.js', 'anima-mode.js', 'notify.js', 'onboarding.js', 'ambient.js', 'ai.js', 'ai-keys.js', 'shortcuts.js', 'search-rank.js', 'appbroker.js', 'wm.js', 'fsindex.js', 'busy.js', 'dlgate.js', 'micgate.js', 'system-ui.js', 'nucleo-i18n.js', 'update-check.js', 'update-core.js', 'sha256.js', 'ai-engines.js', 'capabilities.js', 'local-ai-help.js', 'seq-import.js', 'i18n/core.it.json', 'i18n/core.en.json', 'i18n/core.es.json', 'i18n/core.fr.json', 'i18n/core.de.json', 'i18n/shell.it.json', 'i18n/shell.en.json', 'i18n/shell.es.json', 'i18n/shell.fr.json', 'i18n/shell.de.json', 'manifest.webmanifest', 'icon.png', 'icons.json', 'app-catalog.json'];   // NB: wallpaper.png removed — it's a 535KB JPEG-misnamed-.png never displayed (live wallpaper = /data/Pictures/wallpaper.png) that only tripped the webfs low-heap defer
 
 // --- Device request gate (shared reads, exclusive writes) ----------------------
 // The firmware httpd has max_open_sockets=4 + lru_purge_enable (it deliberately RESETS
@@ -57,16 +57,17 @@ async function netFetch(req) {
 // A write holds the WHOLE pool — but only for so long. It used to be ABORTED after 15 s, which killed
 // every multi-MB upload (desktop drop, File Commander) mid-transfer: 504, then retried three times. The
 // SW cannot see a body's size (Content-Length is not exposed on a FetchEvent request), so it never aborts
-// a write; instead, past EXCLUSIVE_MAX_MS it hands back all but one permit and the upload carries on as
-// an ordinary shared request. A hung write therefore can no longer freeze the desktop either. Callers
-// that want a deadline (the shell's small config saves) set their own — that abort reaches us through
-// req.signal.
+// a write; instead, past EXCLUSIVE_MAX_MS it hands back EVERY permit and the upload carries on ungated.
+// (Keeping one, as v149 did, wedged the gate: with MAX_INFLIGHT = 2 the next write needs both, so it sat
+// at the head of the FIFO for as long as the first one hung — and every read queued behind it froze.)
+// A hung write therefore can no longer freeze the desktop either. Callers that want a deadline (the
+// shell's small config saves) set their own — that abort reaches us through req.signal.
 const EXCLUSIVE_MAX_MS = 15000;
 async function gatedFetch(req, exclusive) {
   const need = exclusive ? MAX_INFLIGHT : 1;
   await acquire(need);
   let held = need;
-  const downgrade = exclusive ? setTimeout(() => { if (held > 1) { const give = held - 1; held = 1; release(give); } }, EXCLUSIVE_MAX_MS) : null;
+  const downgrade = exclusive ? setTimeout(() => { const give = held; held = 0; if (give) release(give); }, EXCLUSIVE_MAX_MS) : null;
   try {
     return await netFetch(req);
   } finally { clearTimeout(downgrade); release(held); }

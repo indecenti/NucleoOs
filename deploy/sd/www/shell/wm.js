@@ -11,6 +11,7 @@ let pinnedTopId = null, pinnedTopZ = '';
 const windows = new Map(); // id -> { el, app, min, max, snap, prev, ro }
 let onChange = () => {};
 let onFrameLoad = () => {};
+let onTrustHold = () => {};   // shell-supplied: a window was built frameless because its app's provenance is still pending
 let geomFor = () => null;  // shell-supplied: last-known geometry for an app id (survives close)
 let labelFor = (app) => (app && app.name) || '';   // shell-supplied: the app's name in the active UI language
 // Shell-supplied translator for the window chrome (tooltips, the no-route placeholder): this module has no
@@ -27,6 +28,9 @@ export function setTranslator(fn) { if (typeof fn === 'function') tr = (k) => { 
 // Called with (iframe, app) each time an app's iframe finishes loading, so the shell can
 // inject OS-wide keyboard shortcuts into the app document (same-origin apps only).
 export function setOnFrameLoad(fn) { onFrameLoad = fn; }
+// Called with (app) when a window opens HELD (its app's trust still 'pending'): the shell can retry the
+// provenance read right away instead of leaving the user on a placeholder until its next backoff tick.
+export function setOnTrustHold(fn) { if (typeof fn === 'function') onTrustHold = fn; }
 // The shell remembers each app's window geometry across closes/reboots and hands it back here.
 export function setGeomProvider(fn) { geomFor = fn; }
 export function list() { return [...windows.values()]; }
@@ -136,12 +140,31 @@ function chromeTitles(w) {
 // app dead until it is reopened. The app reports it (the inline guard first in every app's <head>); reload
 // that window ONCE per materialisation, after a short pause for the device to drain. Never a loop: a
 // resource that keeps failing is left alone. → true when a reload was scheduled.
+// Only while the frame is still LOADING: once its 'load' event has fired, a failed script/stylesheet is
+// one the app added itself, lazily (Dictation's local vosk.js before its CDN fallback, ANIMA voice, Video
+// Studio's ffmpeg) — the app handles that, and reloading the window would throw away the dictation, the
+// chat or the project the user is in the middle of.
 const RESOURCE_RETRY_MS = 800;
+// The iframe's 'load' event reaches the shell a moment BEFORE a report the guard posted during that very
+// load (measured: ~2 ms — the report is still queued as a posted message). So "loaded" is flagged through
+// the same queue: a MessageChannel hop lands behind every message the frame posted before it finished.
+function flagLoaded(w) {
+  const gen = w.loadGen = (w.loadGen || 0) + 1;
+  const set = () => { if (w.loadGen === gen) w.frameLoaded = true; };
+  try {
+    const ch = new MessageChannel();
+    ch.port1.onmessage = () => { set(); ch.port1.close(); };
+    ch.port2.postMessage(0);
+  } catch { set(); }
+}
+// A new document is about to load in this window's frame (a fresh materialisation, a navigation the caller
+// asked for): it gets its own one retry, accepted only while it loads.
+function frameLoading(w) { w.loadGen = (w.loadGen || 0) + 1; w.frameLoaded = false; w.resourceRetried = false; }
 export function retryFrame(source) {
   for (const w of windows.values()) {
     const f = w.el.querySelector('iframe');
     if (!f || f.contentWindow !== source) continue;
-    if (w.resourceRetried) return false;
+    if (w.resourceRetried || w.frameLoaded) return false;
     w.resourceRetried = true;
     setTimeout(() => { try { f.contentWindow.location.reload(); } catch { f.src = f.src; } }, RESOURCE_RETRY_MS);
     return true;
@@ -156,12 +179,13 @@ function materialise(w) {
   if (!w || !w.pending || w.holdDeferred || trustPending(w.app)) return;   // provenance unknown: no frame yet
   const src = w.pending;
   w.pending = null;
-  w.resourceRetried = false;                                               // a new frame gets its own one retry
+  frameLoading(w);                                                         // a new frame gets its own one retry, while it loads
   const host = w.el.querySelector('.body');
   if (!host) return;
   host.innerHTML = frameHtml(w.app, src);
   const frame = host.querySelector('iframe');
   if (frame) frame.addEventListener('load', () => {
+    flagLoaded(w);
     try { onFrameLoad(frame, w.app); } catch {}
     try { const d = frame.contentDocument; if (d) d.addEventListener('pointerdown', () => focus(w.app.id), true); } catch {}
   });
@@ -256,19 +280,23 @@ export function toggle(id) {
 // window is focused. Session restore uses it for windows that were minimised: they belong in the
 // taskbar, but creating their iframe at boot means N simultaneous app loads on a device with 4-6
 // sockets — for windows the user cannot even see.
+//
+// opts.reload = reload an ALREADY-OPEN window (to its route, plus `query` if given) — for a caller that has
+// just changed the app under it (the agent after updating an app, DOS Importer after installing a game).
+// Without it a re-open only focuses the window.
 export function open(app, query, opts = {}) {
   const src = app.route ? app.route + (query ? '?' + query : '') : '';
   if (windows.has(app.id)) {                       // already open: optionally navigate, then focus
     const w = windows.get(app.id);
     const iframe = w.el.querySelector('iframe');
-    // Navigate ONLY when the caller asked for something (a file, a query). A bare re-open — a Start/taskbar
-    // click, open-app without a query — used to reassign the plain route, which RELOADS the app: Notepad
-    // lost its unsaved text just because the user clicked its icon again.
-    if (iframe && query) iframe.src = src;
+    // Navigate ONLY when the caller asked for something (a file, a query, an explicit reload). A bare
+    // re-open — a Start/taskbar click, open-app without a query — used to reassign the plain route, which
+    // RELOADS the app: Notepad lost its unsaved text just because the user clicked its icon again.
+    if (iframe && src && (query || opts.reload)) { frameLoading(w); iframe.src = src; }
     // A DEFERRED window has no iframe yet, so setting .src silently did nothing and it later
     // materialised its OLD pending URL: double-clicking a file with that app minimised opened
     // yesterday's document, with no error to explain it. Retarget the pending load instead.
-    else if (!iframe && src && (query || !w.pending)) w.pending = src;
+    else if (!iframe && src && (query || opts.reload || !w.pending)) w.pending = src;
     focus(app.id);
     return;
   }
@@ -300,10 +328,13 @@ export function open(app, query, opts = {}) {
     `<div class="win-resizer sw" data-dir="sw"></div><div class="win-resizer se" data-dir="se"></div>`;
 
   layer.appendChild(el);
-  windows.set(app.id, { el, app, min: false, max: false, snap: null, prev: null, pending: (opts.deferred || hold) ? src : null, trustHold: hold });
+  const rec = { el, app, min: false, max: false, snap: null, prev: null, pending: (opts.deferred || hold) ? src : null, trustHold: hold, frameLoaded: false };
+  windows.set(app.id, rec);
+  if (hold) { try { onTrustHold(app); } catch {} }
 
   const frame = el.querySelector('iframe');
   if (frame) frame.addEventListener('load', () => {
+    flagLoaded(rec);
     try { onFrameLoad(frame, app); } catch {}
     // Raise this window the instant the user touches its (same-origin) content. Capture phase so it
     // fires even if the app stops propagation; re-added per navigation since the document is fresh.
