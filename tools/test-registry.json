@@ -1663,6 +1663,36 @@
       "anima": false
     },
     {
+      "id": "gate-fw-hardening-radio-peers",
+      "label": "fw-hardening (radio peers)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/fw-hardening-check.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
+      "id": "gate-solve-bounds-calculator",
+      "label": "solve-bounds (calculator)",
+      "category": "cascade-infra",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/anima-host/solve-bounds-check.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": true
+    },
+    {
       "id": "gate-mesh-seam-swarm",
       "label": "mesh-seam (swarm)",
       "category": "cascade-infra",
@@ -3647,6 +3677,22 @@
       "args": [
         "--test",
         "tools/games-catalog-i18n.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-games-hub-status-text",
+      "label": "games-hub-status-text.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/games-hub-status-text.test.mjs"
       ],
       "verifies": "",
       "nl": false,
