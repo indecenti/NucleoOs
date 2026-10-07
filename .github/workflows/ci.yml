@@ -37,4 +37,8 @@ jobs:
       - name: Browser E2E (Chrome + device simulator)
         env:
           CHROME_PATH: /usr/bin/google-chrome
-        run: node tools/web-e2e/run.mjs
+        # spec for the log + one error annotation per failed test (visible on the run page without signing in)
+        run: >-
+          node tools/web-e2e/run.mjs
+          --test-reporter=spec --test-reporter-destination=stdout
+          --test-reporter=./tools/web-e2e/gh-reporter.mjs --test-reporter-destination=stdout
