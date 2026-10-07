@@ -60,13 +60,24 @@ export class DjEngine {
 
   // --- load a track into a deck: decode audio + parse its .npx ---
   async loadDeck(which, audioPath, fetchImpl = fetch) {
-    const dk = this.decks[which];
+    return this.setDeck(which, await this.fetchTrack(audioPath, fetchImpl));
+  }
+
+  // Decode a track WITHOUT touching any deck, so a caller can drop a load that a later click (or a mix in
+  // progress) has made stale. Assigning half-way through, as loadDeck used to, let two overlapping loads
+  // leave a deck with one track's audio and the other's .npx.
+  async fetchTrack(audioPath, fetchImpl = fetch) {
     const r = await fetchImpl('/api/fs/read?path=' + encodeURIComponent(audioPath));
     if (!r.ok) throw new Error('audio fetch ' + r.status);
     const ab = await r.arrayBuffer();
-    dk.buffer = await this.ctx.decodeAudioData(ab);
-    dk.npx = await loadNpx(audioPath, fetchImpl);
-    dk.path = audioPath;
+    const buffer = await this.ctx.decodeAudioData(ab);
+    const npx = await loadNpx(audioPath, fetchImpl);
+    return { buffer, npx, path: audioPath };
+  }
+
+  setDeck(which, track) {
+    const dk = this.decks[which];
+    dk.buffer = track.buffer; dk.npx = track.npx; dk.path = track.path;
     return dk;
   }
 

@@ -311,6 +311,22 @@ async function sdWrite(path, bytes) {
   const r = await fetch('/api/fs/write?path=' + encodeURIComponent(path), { method: 'POST', body: bytes });
   if (!r.ok) throw new Error('HTTP ' + r.status);
 }
+// Like sdRead, but tells "no save yet" (404 / empty) apart from "could not read it" (busy / offline).
+async function sdReadSave(path) {
+  try {
+    const r = await fetch('/api/fs/read?path=' + encodeURIComponent(path), { cache: 'no-store' });
+    if (r.status === 404) return { state: 'none' };
+    if (!r.ok) return { state: 'error' };
+    const b = new Uint8Array(await r.arrayBuffer());
+    return b.length ? { state: 'ok', bytes: b } : { state: 'none' };
+  } catch (e) { return { state: 'error' }; }
+}
+// The battery-save auto-sync (periodic flush, the core's save event, Esc / exit, the pagehide beacon) may
+// only WRITE once we know what the card holds: its save was loaded into the emulator, or there is none.
+// Until then — and for the whole run if the read keeps failing — the emulator's SRAM is its own blank or
+// this browser's stale copy, and writing it would overwrite the card's save. That is what happened when the
+// device answered 503 to the save read right after streaming the ROM and core (sdRead said "no save").
+let sramGuard = true, sramStartDone = false;
 async function sdRead(path) {
   try {
     const r = await fetch('/api/fs/read?path=' + encodeURIComponent(path), { cache: 'no-store' });
@@ -359,6 +375,12 @@ async function flushSram(silent) {
   flushing = true;
   try {
     if (!window.EJS_emulator || !SAVE_BASE) return;
+    if (sramGuard) {
+      if (!sramStartDone) return;                       // the start-up read is still running
+      const g = await sdReadSave(sdPath('.srm'));        // only "the card has no save" lifts the guard
+      if (g.state !== 'none') return;
+      sramGuard = false;
+    }
     const bytes = await readSram();
     if (!bytes) { if (!silent) toast(t('p_sram_none')); return; }
     const sig = sramSig(bytes);
@@ -397,13 +419,14 @@ function installSaveHooks() {
       if (!bytes || !bytes.length) return toast(t('p_sram_none'));
       await sdWrite(sdPath('.srm'), bytes);
       lastSramSig = sramSig(bytes);
+      sramGuard = false;                                  // the player chose to put this save on the card
       toast(t('p_sram_saved'));
     } catch (err) { toast(t('p_state_save_err') + ' (' + err.message + ')', true); }
   };
   window.EJS_onLoadSave = async () => {
     const bytes = await sdRead(sdPath('.srm'));
     if (!bytes) return toast(t('p_sram_none'), true);
-    try { pushSramIntoEmu(bytes); lastSramSig = sramSig(bytes); toast(t('p_sram_loaded')); }
+    try { pushSramIntoEmu(bytes); lastSramSig = sramSig(bytes); sramGuard = false; toast(t('p_sram_loaded')); }
     catch (e) { toast(t('p_state_load_err'), true); }
   };
 
@@ -411,8 +434,17 @@ function installSaveHooks() {
   // browser's IndexedDB remembers — the card travels with the device, the browser does not.
   window.EJS_onGameStart = async () => {
     ensureSaveDir();   // eager: the pagehide beacon cannot mkdir, so the dir must exist before it fires
-    const bytes = await sdRead(sdPath('.srm'));
-    if (bytes) { try { pushSramIntoEmu(bytes); lastSramSig = sramSig(bytes); } catch (e) {} }
+    // The device is often busy right after streaming the ROM and core: retry a "could not read" briefly.
+    let got = { state: 'error' };
+    for (let i = 1; i <= 4; i++) {
+      got = await sdReadSave(sdPath('.srm'));
+      if (got.state !== 'error') break;
+      if (i < 4) await new Promise((r) => setTimeout(r, 500 * i));
+    }
+    if (got.state === 'ok') { try { pushSramIntoEmu(got.bytes); lastSramSig = sramSig(got.bytes); sramGuard = false; } catch (e) {} }
+    else if (got.state === 'none') sramGuard = false;
+    else toast(t('p_sram_unread'), true);                 // auto-save to the SD stays off: the card's save is safe
+    sramStartDone = true;
     // Periodic background sync + EmulatorJS's own save-interval event both feed the SD copy.
     setInterval(() => flushSram(true), 60000);
     try { window.EJS_emulator.on('saveSaveFiles', () => flushSram(true)); } catch (e) {}
@@ -569,7 +601,7 @@ document.addEventListener('keydown', (e) => {
 window.addEventListener('pagehide', () => {
   try {
     const gm = window.EJS_emulator && window.EJS_emulator.gameManager;
-    if (!gm || !SAVE_BASE) return;
+    if (!gm || !SAVE_BASE || sramGuard) return;          // never blind-write over a save we could not read
     // No time to await the async dump here — read whatever the last dump left. The periodic flush
     // and EmulatorJS's own save interval keep that file fresh, so this only papers a small window.
     const bytes = gm.getSaveFile(false);

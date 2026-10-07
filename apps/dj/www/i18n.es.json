@@ -14,6 +14,7 @@
   "plan_hint": "Carga dos pistas y pulsa <b>MIX</b>.",
   "library": "Biblioteca",
   "empty_library": "No hay pistas en /data/Music",
+  "library_failed": "No se pudo leer /data/Music del dispositivo: inténtalo de nuevo en un momento.",
   "cue": "cue",
   "harm_perfect": "clave de oro",
   "harm_compatible": "clave compatible",

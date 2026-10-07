@@ -14,6 +14,7 @@
   "plan_hint": "Chargez deux pistes et appuyez sur <b>MIX</b>.",
   "library": "Bibliothèque",
   "empty_library": "Aucune piste dans /data/Music",
+  "library_failed": "Impossible de lire /data/Music sur l’appareil : réessaie dans un instant.",
   "cue": "cue",
   "harm_perfect": "tonalité en or",
   "harm_compatible": "tonalité compatible",

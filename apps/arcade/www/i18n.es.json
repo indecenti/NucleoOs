@@ -9,6 +9,8 @@
   "empty": "vacío",
   "filter": "Filtrar…",
   "no_games": "Todavía no hay juegos en este sistema.",
+  "list_failed": "No se pudo leer la biblioteca de ROMs del dispositivo: inténtalo de nuevo en un momento.",
+  "unreadable": "no legible",
   "add_roms": "Añade ROMs a",
   "on_sd": "en la tarjeta SD y luego vuelve a abrir este sistema.",
   "no_systems": "No hay sistemas configurados.",
@@ -57,6 +59,7 @@
   "p_sram_saved": "Partida guardada escrita en la tarjeta SD",
   "p_sram_none": "Este juego todavía no tiene datos de guardado",
   "p_sram_loaded": "Partida cargada desde la tarjeta SD",
+  "p_sram_unread": "No se pudo leer la partida guardada en la SD: el guardado en la SD está en pausa para no sobrescribirla.",
   "p_rom_corrupt": "Archivo ROM dañado: archivo zip truncado.",
   "p_start_failed": "Error al iniciar"
 }

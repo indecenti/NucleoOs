@@ -9,6 +9,8 @@
   "empty": "vide",
   "filter": "Filtrer…",
   "no_games": "Aucun jeu dans ce système pour l’instant.",
+  "list_failed": "Impossible de lire la bibliothèque de ROM sur l’appareil : réessaie dans un instant.",
+  "unreadable": "illisible",
   "add_roms": "Ajoutez des ROMs à",
   "on_sd": "sur la carte SD, puis rouvrez ce système.",
   "no_systems": "Aucun système configuré.",
@@ -57,6 +59,7 @@
   "p_sram_saved": "Sauvegarde du jeu écrite sur la carte SD",
   "p_sram_none": "Ce jeu n’a pas encore de données de sauvegarde",
   "p_sram_loaded": "Sauvegarde chargée depuis la carte SD",
+  "p_sram_unread": "Impossible de lire la sauvegarde sur la carte SD : l’enregistrement sur la SD est suspendu pour ne pas l’écraser.",
   "p_rom_corrupt": "Fichier ROM corrompu : archive zip tronquée.",
   "p_start_failed": "Échec du démarrage"
 }

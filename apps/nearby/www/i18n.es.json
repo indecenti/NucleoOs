@@ -9,6 +9,7 @@
 
   "peers_title": "Dispositivos cercanos",
   "peers_empty": "No hay dispositivos. Pulsa «Buscar».",
+  "peers_failed": "El dispositivo no responde: no se pueden leer los dispositivos cercanos. Reintentando…",
   "recipient_x": "Destinatario: {name}",
 
   "send_title": "Enviar archivo",

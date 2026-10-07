@@ -83,6 +83,16 @@ function opts() {
   return { profile: $('#profile').value, fps: $('#fps').value, fit: $('#fit').value };
 }
 
+// Refuse what cannot be a video BEFORE queueing: the old drop handler took any file (a .txt, a photo, an
+// empty file), loaded the ~30 MB engine for it and failed minutes later with a cryptic message.
+const VIDEO_EXT = new Set(['mp4', 'm4v', 'mov', 'mkv', 'webm', 'avi', 'mpg', 'mpeg', 'wmv', 'flv', '3gp', 'ts', 'mts', 'm2ts', 'ogv']);
+function inputProblem(file) {
+  const ext = ((/\.([^.]+)$/.exec(file.name || '') || [])[1] || '').toLowerCase();
+  if (!(String(file.type || '').startsWith('video/') || VIDEO_EXT.has(ext))) return 'err_not_video';
+  if (!file.size) return 'err_empty';
+  return null;
+}
+
 function addJob(file) {
   const id = 'j' + Math.round(performance.now()) + '-' + Math.floor(performance.now() % 1000);
   const card = document.createElement('div');
@@ -102,6 +112,8 @@ function addJob(file) {
     setBadge(t, cls) { job.badge.textContent = t; job.badge.className = 'badge ' + cls; },
     setError(m) { job.setBadge(t('badge_error'), 'err'); const e = document.createElement('div'); e.className = 'err'; e.textContent = '⚠ ' + m; job.card.appendChild(e); },
   };
+  const bad = inputProblem(file);
+  if (bad) { job.setError(t(bad)); return; }
   queue.push(job);
   pump();
 }

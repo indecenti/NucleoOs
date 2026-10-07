@@ -37,6 +37,7 @@
   "f_stream": "URL du flux",
   "note_stream": "Le MP3 http:// simple se lit aussi sur le Cardputer. https:// se lit ici mais pas sur l'appareil.",
   "note_stream_warn": "⚠ https se lit dans le navigateur mais PAS sur le Cardputer (pas de TLS). Utilise http:// pour la prise en charge sur l'appareil.",
+  "note_stream_invalid": "⚠ Saisis l'adresse complète du flux, p. ex. http://host:8000/stream",
   "f_np": "URL now-playing",
   "optional": "(facultatif)",
   "note_np": "Métadonnées JSON pour la ligne du morceau — laisse vide pour un flux live simple.",

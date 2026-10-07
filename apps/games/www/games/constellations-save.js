@@ -54,24 +54,36 @@ function progressGreater(a, b) {
   return false;
 }
 
+// The device copy, read for real. 'none' ONLY on a 404; a failed or garbled read THROWS — it is not
+// "no save". A save of another struct version comes back as 'newer' / 'older' (never normalized into ours).
+async function readDisk() {
+  const r = await fetch(URL, { credentials: 'same-origin', cache: 'no-store' });
+  if (r.status === 404) return { state: 'none' };
+  if (!r.ok) throw new Error('GET ' + r.status);
+  const s = await r.json();
+  if (!s || typeof s !== 'object' || Array.isArray(s)) throw new Error('save unreadable');
+  if (s.ver !== SAVE_VER) return { state: s.ver > SAVE_VER ? 'newer' : 'older' };
+  return { state: 'ok', save: normalize(s) };
+}
+
 // Read the shared run. Returns the save object, or null if there is no continuable run
 // (no save.bin / incompatible version / network error).
 export async function loadSave() {
   try {
-    const r = await fetch(URL, { credentials: 'same-origin', cache: 'no-store' });
-    if (r.status === 404) return null;
-    if (!r.ok) throw new Error('GET ' + r.status);
-    const s = await r.json();
-    if (!s || s.ver !== SAVE_VER) return null;     // future/incompatible struct → no continue, never corrupt
-    return normalize(s);
+    const d = await readDisk();
+    return d.state === 'ok' ? d.save : null;       // future/incompatible struct → no continue, never corrupt
   } catch (e) { console.warn('[costellazioni] loadSave failed', e); return null; }
 }
 
 // Persist the run. Epoch-merge guard: if the device copy has progressed beyond `save`, abort and
 // return { ok:false, conflict:true, disk } so the UI can reload from disk and warn the player.
+// The guard needs the device copy: when it cannot be read (busy, offline, garbled) or it is a save from a
+// NEWER firmware, this THROWS instead of writing blind — the old code took a failed re-read for "no save"
+// and POSTed straight over the Cardputer's run.
 export async function storeSave(save) {
-  const disk = await loadSave();
-  if (disk && progressGreater(disk, save)) return { ok: false, conflict: true, disk };
+  const disk = await readDisk();
+  if (disk.state === 'newer') throw new Error('the card holds a save from a newer version');
+  if (disk.state === 'ok' && progressGreater(disk.save, save)) return { ok: false, conflict: true, disk: disk.save };
   const body = normalize(save); body.ver = SAVE_VER;
   const r = await fetch(URL, {
     method: 'POST', credentials: 'same-origin',

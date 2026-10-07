@@ -14,6 +14,7 @@
   "plan_hint": "Carica due brani e premi <b>MIX</b>.",
   "library": "Libreria",
   "empty_library": "Nessun brano in /data/Music",
+  "library_failed": "Impossibile leggere /data/Music dal dispositivo: riprova tra poco.",
   "cue": "cue",
   "harm_perfect": "key d'oro",
   "harm_compatible": "key compatibile",

@@ -37,6 +37,7 @@
   "f_stream": "Stream URL",
   "note_stream": "Plain http:// MP3 plays on the Cardputer too. https:// plays here but not on the device.",
   "note_stream_warn": "⚠ https plays in the browser but NOT on the Cardputer (no TLS). Use http:// for device support.",
+  "note_stream_invalid": "⚠ Enter the full stream address, e.g. http://host:8000/stream",
   "f_np": "Now-playing URL",
   "optional": "(optional)",
   "note_np": "JSON metadata for the track line — leave empty for a plain live feed.",

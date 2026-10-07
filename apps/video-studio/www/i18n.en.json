@@ -26,5 +26,7 @@
   "stage_writing": "Writing to the device SD…",
   "stage_ready": "Ready · {frames} frames @ {fps}fps → {path}",
   "err_no_frames": "no frames produced (unsupported file?)",
+  "err_not_video": "not a video file — pick an mp4, mov, mkv, webm or avi",
+  "err_empty": "the file is empty",
   "err_write_failed": "write failed (HTTP {status}) for {path}"
 }

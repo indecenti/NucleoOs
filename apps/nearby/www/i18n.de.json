@@ -9,6 +9,7 @@
 
   "peers_title": "Geräte in der Nähe",
   "peers_empty": "Keine Geräte. Drücke „Scannen“.",
+  "peers_failed": "Das Gerät antwortet nicht – Geräte in der Nähe können nicht gelesen werden. Neuer Versuch…",
   "recipient_x": "Empfänger: {name}",
 
   "send_title": "Datei senden",

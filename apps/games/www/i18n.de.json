@@ -62,6 +62,7 @@
 
   "record": "{w}S {l}N {d}U",
   "record_short": "{w}S-{l}N",
+  "stats_not_saved": "⚠ Ergebnis nicht in deiner Gamercard gespeichert (das Gerät hat nicht geantwortet).",
   "no_games": "Noch keine Spiele",
 
   "suffix_you": " (du)",

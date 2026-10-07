@@ -9,6 +9,7 @@
 
   "peers_title": "Nearby devices",
   "peers_empty": "No devices. Press “Scan”.",
+  "peers_failed": "The device isn’t answering — can’t read nearby devices. Retrying…",
   "recipient_x": "Recipient: {name}",
 
   "send_title": "Send file",

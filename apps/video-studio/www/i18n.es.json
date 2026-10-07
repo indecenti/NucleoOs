@@ -26,5 +26,7 @@
   "stage_writing": "Escribiendo en la SD del dispositivo…",
   "stage_ready": "Listo · {frames} fotogramas @ {fps} fps → {path}",
   "err_no_frames": "no se produjo ningún fotograma (¿archivo no compatible?)",
+  "err_not_video": "no es un archivo de vídeo — elige un mp4, mov, mkv, webm o avi",
+  "err_empty": "el archivo está vacío",
   "err_write_failed": "escritura fallida (HTTP {status}) para {path}"
 }
