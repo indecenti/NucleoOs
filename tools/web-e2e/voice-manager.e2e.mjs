@@ -79,11 +79,19 @@ test('voice-manager: a command name is text everywhere — also inside the Retra
   const m = page.mark();
 
   await t.test('Retrain opens the recording wizard for THAT exact phrase', async () => {
+    // The failing arm request closes the wizard again within milliseconds — on a fast runner before a
+    // 100 ms poll could see it open. Record every moment it IS open instead (a MutationObserver sees them all).
+    await page.eval(`(() => {
+      window.__shown = [];
+      const seen = () => { const p = document.getElementById('panel-record'); if (p && p.classList.contains('active')) window.__shown.push(document.getElementById('display-word').textContent); };
+      new MutationObserver(seen).observe(document.body, { subtree: true, attributes: true, childList: true, characterData: true });
+      return true;
+    })()`);
     for (const n of NAMES) {
       // keep the device out of it: this ONE arm request fails (one-shot fault) → the wizard closes again
       await sim.control('/api/_sim/fault', { route: '/api/voice/learn', status: 503, times: 1 });
-      await page.eval(`${customRow(n)}.querySelector('.act:not(.del)').click(), true`);
-      const shown = await page.waitFor(`document.getElementById('panel-record').classList.contains('active') && document.getElementById('display-word').textContent`, { timeout: 3000 });
+      await page.eval(`window.__shown.length = 0, ${customRow(n)}.querySelector('.act:not(.del)').click(), true`);
+      const shown = await page.waitFor(`window.__shown.includes(${JSON.stringify(n)}) ? ${JSON.stringify(n)} : (window.__shown.length && window.__shown[window.__shown.length - 1])`, { timeout: 8000 });
       assert.equal(shown, n, 'the wizard asks for the exact phrase');
       assert.ok(await page.waitFor(`!document.getElementById('panel-record').classList.contains('active')`, { timeout: 8000 }), 'the wizard closed');
       await sim.control('/api/_sim/fault', { clear: true });
