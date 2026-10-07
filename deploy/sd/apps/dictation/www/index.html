@@ -324,12 +324,22 @@ onMicStatus((holder)=>{ const otherHolds = !!(holder && holder!=='Dettatura' && 
 });
 $('btnScreen').addEventListener('click', ()=> setScreen(!screenOff));
 $('btnSave').addEventListener('click', ()=> saveNow());
-$('btnNew').addEventListener('click', ()=>{
+$('btnNew').addEventListener('click', async ()=>{
   if(finalText.trim() && !confirm(t('new_confirm'))) return;
-  saveNow();
+  // Save the current transcript BEFORE clearing it, and only move on once the device has it: a
+  // fire-and-forget save that failed (offline, 503, full card) used to wipe the only copy.
+  if(finalText.trim()){
+    clearTimeout(saveTimer);
+    while(saving) await new Promise(r=>setTimeout(r,50));
+    await saveNow();
+    if(finalText !== savedText){ const n=$('notice'); n.classList.add('show'); n.textContent=t('new_unsaved'); return; }
+  }
+  hideNotice();
   file = `trascrizione-${stamp()}.txt`; localStorage.setItem('dictation.file', file);
   finalText=''; partial=''; savedText=null; persistLocal(); render(); markSaved();
 });
+// The markup highlights EN; show the remembered recognition language instead (it is what asr.start uses).
+for(const x of $('lang').children) x.classList.toggle('on', x.dataset.l===lang);
 for(const b of $('lang').children) b.addEventListener('click', ()=>{
   if(b.dataset.l===lang) return;
   lang = b.dataset.l; localStorage.setItem('dictation.lang', lang);

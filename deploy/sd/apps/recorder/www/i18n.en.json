@@ -102,5 +102,7 @@
   "suggestTitle": "Suggest a title",
   "promptTitle": "Propose ONE short title (max 5 words) for this voice note. Reply with the title only:\n",
   "contextTranscript": "\n\n(Context — transcript of \"",
-  "recordingInProgress": "Recording in progress…"
+  "recordingInProgress": "Recording in progress…",
+  "listFailed": "Could not read the recordings — the device is unreachable. Try again shortly.",
+  "deleteFailed": "Not deleted — the device refused. The recording and its transcript are kept."
 }

@@ -9,6 +9,7 @@
 
   "peers_title": "Dispositivi vicini",
   "peers_empty": "Nessun dispositivo. Premi «Cerca».",
+  "peers_failed": "Il dispositivo non risponde: impossibile leggere i dispositivi vicini. Riprovo…",
   "recipient_x": "Destinatario: {name}",
 
   "send_title": "Invia file",

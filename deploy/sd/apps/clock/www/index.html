@@ -246,9 +246,25 @@ async function loadSettings() {
   if (s?.ui?.theme)     document.documentElement.dataset.theme = s.ui.theme;
   if (s?.device?.locale) locale = s.device.locale;
 }
+// clock.json read with its outcome: a 404 (never saved) or an unparsable file is "nothing to keep", but a
+// failed read (offline, 401, 503) leaves the saved prefs unknown -> prefsKnown stays false and no toggle may
+// write defaults over them until a later read succeeds.
+let prefsKnown = false;
+async function readPrefsFile() {
+  try {
+    const r = await fetch('/api/fs/read?path=' + encodeURIComponent(CFG_PATH), { cache: 'no-store' });
+    if (r.status === 404) return { ok: true, data: null };
+    if (!r.ok) return { ok: false };
+    let data = null; try { data = JSON.parse(await r.text()); } catch {}
+    return { ok: true, data: data && typeof data === 'object' && !Array.isArray(data) ? data : null };
+  } catch { return { ok: false }; }
+}
 async function loadPrefs() {
-  const p = await readJSON(CFG_PATH);
-  if (p && typeof p === 'object') Object.assign(prefs, p);
+  const res = await readPrefsFile();
+  if (res.ok) { prefsKnown = true; if (res.data) Object.assign(prefs, res.data); }
+  syncPrefsUI();
+}
+function syncPrefsUI() {
   $('o24').checked  = !!prefs.format24;
   $('osec').checked = !!prefs.showSeconds;
   $('oanal').checked = prefs.analog !== false;
@@ -307,9 +323,15 @@ function tick() {
   const el = $('time');
   el.innerHTML = ts + (suffix ? `<span id="ampm">${suffix}</span>` : '');
   el.className = prefs.showSeconds ? '' : 'nosec';
-  $('date').textContent = d.toLocaleDateString(locale,
-    { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+  $('date').textContent = fmtDate(d);
   if (prefs.analog !== false) updateAnalog(d);
+}
+// settings.json's locale is free text: a malformed tag ("it_IT") makes toLocaleDateString throw a
+// RangeError on every tick, which froze the date line and the analog hands. Fall back to the browser's.
+const DATE_OPTS = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+function fmtDate(d) {
+  try { return d.toLocaleDateString(locale, DATE_OPTS); }
+  catch { locale = undefined; return d.toLocaleDateString(undefined, DATE_OPTS); }
 }
 
 // ── Device badge + silent browser-time push ───────────────────────────────────
@@ -363,7 +385,7 @@ document.querySelectorAll('.tab').forEach(btn => {
 
 // ── Stopwatch ─────────────────────────────────────────────────────────────────
 let swBase = 0, swStart = 0, swRunning = false, swRaf;
-let lapTimes = [], lapCum = [];
+let lapTimes = [], lapCum = [], lapCount = 0;   // lapCount: laps taken since reset (only the last 10 are shown)
 const swDisp = $('sw-disp'), lapsEl = $('laps');
 
 function showSw(ms) {
@@ -386,16 +408,16 @@ $('sl').onclick = () => {
   const elapsed = swBase + (swRunning ? performance.now() - swStart : 0);
   if (elapsed < 100) return;
   const prev = lapCum.length ? lapCum[lapCum.length - 1] : 0;
-  lapCum.push(elapsed); lapTimes.unshift(elapsed - prev);
+  lapCum.push(elapsed); lapTimes.unshift(elapsed - prev); lapCount++;
   if (lapTimes.length > 10) { lapTimes.pop(); lapCum.shift(); }
   lapsEl.innerHTML = lapTimes.map((ms, i) => {
-    const n = lapTimes.length - i;
+    const n = lapCount - i;
     const m = Math.floor(ms / 60000), s = Math.floor(ms % 60000 / 1000), cs = Math.floor(ms % 1000 / 10);
     return `<div class="lap-row"><span class="lap-num">${t('lap')} ${n}</span><span>${pad(m)}:${pad(s)}.${pad(cs)}</span></div>`;
   }).join('');
 };
 $('sr').onclick = () => {
-  swRunning = false; swBase = 0; lapTimes = []; lapCum = [];
+  swRunning = false; swBase = 0; lapTimes = []; lapCum = []; lapCount = 0;
   cancelAnimationFrame(swRaf); lapsEl.innerHTML = ''; showSw(0);
   $('se').textContent = t('start'); $('se').className = 'btn primary';
 };
@@ -487,12 +509,21 @@ showTimer(timerTotal);
 $('gear').onclick     = () => $('cfg').classList.add('open');
 $('cfgclose').onclick = () => $('cfg').classList.remove('open');
 
-async function onPrefChange() {
-  prefs.format24    = $('o24').checked;
-  prefs.showSeconds = $('osec').checked;
-  prefs.analog      = $('oanal').checked;
+const PREF_OF = { o24: 'format24', osec: 'showSeconds', oanal: 'analog' };
+async function onPrefChange(e) {
+  const key = PREF_OF[e.target.id], val = e.target.checked;
+  prefs[key] = val;
   tick(); applyAnalog();
   $('cfgsave').textContent = t('saving');
+  if (!prefsKnown) {
+    // The boot read failed: the saved prefs are unknown. Re-read now and change ONLY this field on top of
+    // them; if the device still can't be read, write nothing (defaults would replace the user's choices).
+    const res = await readPrefsFile();
+    if (!res.ok) { $('cfgsave').textContent = t('save_unread'); return; }
+    prefsKnown = true;
+    Object.assign(prefs, { format24: true, showSeconds: true, analog: true }, res.data || {}, { [key]: val });
+    syncPrefsUI(); tick();
+  }
   $('cfgsave').textContent = (await writeJSON(CFG_PATH, prefs)) ? t('save_ok') : t('save_fail');
 }
 $('o24').onchange   = onPrefChange;

@@ -26,5 +26,7 @@
   "stage_writing": "Scrittura sulla SD del device…",
   "stage_ready": "Pronto · {frames} frame @ {fps}fps → {path}",
   "err_no_frames": "nessun frame prodotto (file non supportato?)",
+  "err_not_video": "non è un file video — scegli un mp4, mov, mkv, webm o avi",
+  "err_empty": "il file è vuoto",
   "err_write_failed": "scrittura fallita (HTTP {status}) per {path}"
 }

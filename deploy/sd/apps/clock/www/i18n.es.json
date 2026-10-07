@@ -16,5 +16,6 @@
   "dev_browser_set": "hora ajustada desde el navegador",
   "timer_done": "¡Tiempo agotado!",
   "save_ok": "Guardado en el dispositivo",
-  "save_fail": "No se pudo guardar — dispositivo no accesible"
+  "save_fail": "No se pudo guardar — dispositivo no accesible",
+  "save_unread": "No guardado — no se pudieron leer los ajustes guardados. Vuelve a intentarlo cuando el dispositivo esté disponible."
 }

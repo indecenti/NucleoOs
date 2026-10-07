@@ -9,6 +9,8 @@
   "empty": "leer",
   "filter": "Filtern…",
   "no_games": "Noch keine Spiele in diesem System.",
+  "list_failed": "Die ROM-Bibliothek konnte nicht vom Gerät gelesen werden – versuche es gleich noch einmal.",
+  "unreadable": "nicht lesbar",
   "add_roms": "ROMs hinzufügen zu",
   "on_sd": "auf der SD-Karte, dann dieses System erneut öffnen.",
   "no_systems": "Keine Systeme konfiguriert.",
@@ -57,6 +59,7 @@
   "p_sram_saved": "Spielstand auf die SD-Karte geschrieben",
   "p_sram_none": "Dieses Spiel hat noch keine Speicherdaten",
   "p_sram_loaded": "Spielstand von der SD-Karte geladen",
+  "p_sram_unread": "Der Spielstand auf der SD-Karte konnte nicht gelesen werden – das Speichern auf die SD ist pausiert, damit er nicht überschrieben wird.",
   "p_rom_corrupt": "ROM-Datei beschädigt: unvollständiges Zip-Archiv.",
   "p_start_failed": "Start fehlgeschlagen"
 }

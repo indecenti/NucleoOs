@@ -16,5 +16,6 @@
   "dev_browser_set": "Uhrzeit vom Browser gesetzt",
   "timer_done": "Zeit abgelaufen!",
   "save_ok": "Auf dem Gerät gespeichert",
-  "save_fail": "Speichern fehlgeschlagen — Gerät nicht erreichbar"
+  "save_fail": "Speichern fehlgeschlagen — Gerät nicht erreichbar",
+  "save_unread": "Nicht gespeichert — die gespeicherten Einstellungen konnten nicht gelesen werden. Versuche es erneut, wenn das Gerät erreichbar ist."
 }

@@ -14,6 +14,7 @@
   "plan_hint": "Load two tracks and hit <b>MIX</b>.",
   "library": "Library",
   "empty_library": "No tracks in /data/Music",
+  "library_failed": "Couldn’t read /data/Music from the device — try again shortly.",
   "cue": "cue",
   "harm_perfect": "golden key",
   "harm_compatible": "compatible key",

@@ -9,6 +9,7 @@
 
   "peers_title": "Appareils à proximité",
   "peers_empty": "Aucun appareil. Appuyez sur « Scanner ».",
+  "peers_failed": "L’appareil ne répond pas : impossible de lire les appareils à proximité. Nouvel essai…",
   "recipient_x": "Destinataire : {name}",
 
   "send_title": "Envoyer un fichier",

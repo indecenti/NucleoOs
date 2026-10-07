@@ -73,15 +73,17 @@ export function detectPitch(buf, sampleRate) {
   const minLag = Math.max(2, Math.floor(sampleRate / 1200));
   const maxLag = Math.min(Math.floor(sampleRate / 60), N >> 1);
   const d = new Float32Array(maxLag + 1);             // difference function
-  for (let lag = minLag; lag <= maxLag; lag++) {
+  for (let lag = 1; lag <= maxLag; lag++) {          // from lag 1, not minLag: the cumulative mean below needs it
     let sum = 0;
     for (let i = 0, e = N - maxLag; i < e; i++) { const diff = buf[i] - buf[i + lag]; sum += diff * diff; }
     d[lag] = sum;
   }
-  // Cumulative mean normalised difference d'[lag] = d[lag] / (mean of d[1..lag]).
+  // Cumulative mean normalised difference d'[lag] = d[lag] / (mean of d[1..lag]). The mean MUST start at lag 1:
+  // starting it at minLag left out the large mid-period values, so a note whose period sits just above
+  // minLag (D6 ~1175 Hz at 44.1/16 kHz) never crossed the gate and was reported an octave low.
   const cmnd = new Float32Array(maxLag + 1);
   let running = 0;
-  for (let lag = minLag; lag <= maxLag; lag++) { running += d[lag]; cmnd[lag] = d[lag] * (lag - minLag + 1) / (running || 1); }
+  for (let lag = 1; lag <= maxLag; lag++) { running += d[lag]; cmnd[lag] = d[lag] * lag / (running || 1); }
   const THRESH = 0.12;
   let tau = -1;
   for (let lag = minLag; lag <= maxLag; lag++) {

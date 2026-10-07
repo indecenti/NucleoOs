@@ -91,7 +91,8 @@ const view = $('#view');
 let proto = 'nucleo';
 let tab = 'peers';
 let peers = [];
-let target = 0;
+let targetMac = null;   // the chosen recipient: a DEVICE (its MAC), never a row number — see tgtIndex()
+let linkErr = false;    // the last peer query failed (device / radio not answering)
 let dir = '/data';
 let entries = [];
 let selFile = null;
@@ -143,7 +144,20 @@ async function transport({ system, user, history, actions, signal }) {
 }
 
 // ── data loaders ───────────────────────────────────────────────────────────
-async function loadPeers() { const r = await api('/api/link/peers'); peers = r.peers || []; if (r.name) $('#dev').textContent = r.name; if (r.channel) $('#chan').textContent = 'ch' + r.channel; if (target >= peers.length) target = 0; if (tab === 'peers' || tab === 'send' || tab === 'cmd') render(); }
+// The device addresses a peer by its index in ITS list, and that list is rebuilt whenever its radio
+// restarts — so index N can name another device a moment later. The app therefore remembers the chosen
+// device by MAC and maps it to the device's CURRENT index only when a request goes out; if that device
+// is gone there is no recipient (the old code fell through to whoever was now at index 0 / N).
+const tgtIndex = () => (targetMac ? peers.findIndex((p) => p.mac === targetMac) : -1);
+const curTarget = () => peers[tgtIndex()] || null;
+async function fetchPeers() {
+  const r = await api('/api/link/peers');
+  linkErr = !Array.isArray(r.peers);
+  if (!linkErr) peers = r.peers;            // a failed query keeps the last known list (and says so)
+  if (r.name) $('#dev').textContent = r.name; if (r.channel) $('#chan').textContent = 'ch' + r.channel;
+  if (!targetMac && peers.length) targetMac = peers[0].mac;   // the first device found is the default recipient
+}
+async function loadPeers() { await fetchPeers(); if (tab === 'peers' || tab === 'send' || tab === 'cmd') render(); }
 async function loadDir() { const r = await api('/api/fs/list?path=' + encodeURIComponent(dir)); entries = (r.entries || []).slice().sort((a, b) => (a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'dir' ? -1 : 1)); if (tab === 'send') render(); }
 function setProto(p) { proto = p; for (const b of $('#proto').children) b.classList.toggle('on', b.dataset.p === p); }
 
@@ -158,18 +172,18 @@ function render() {
 function renderPeers() {
   view.innerHTML = `<div class="card"><div class="flex"><h2 class="grow">${t('peers_title')}</h2>
     <button class="act" id="scan">${t('search')}</button></div>
-    <div id="plist">${peers.length ? '' : '<div class="empty">' + t('peers_empty') + '</div>'}</div></div>`;
+    <div id="plist">${linkErr ? '<div class="empty red">' + t('peers_failed') + '</div>' : peers.length ? '' : '<div class="empty">' + t('peers_empty') + '</div>'}</div></div>`;
   const pl = $('#plist');
-  peers.forEach((p, i) => {
-    const el = document.createElement('div'); el.className = 'row' + (i === target ? ' sel' : '');
+  peers.forEach((p) => {
+    const el = document.createElement('div'); el.className = 'row' + (p.mac === targetMac ? ' sel' : '');
     el.innerHTML = `<span class="nm">${esc(p.name)}</span><span class="pill ${p.proto}">${p.proto.toUpperCase()}</span><span class="dim">${esc(p.mac)}</span>`;
-    el.onclick = () => { target = i; render(); toast(t('recipient_x', { name: p.name })); };
+    el.onclick = () => { targetMac = p.mac; render(); toast(t('recipient_x', { name: p.name })); };
     pl.appendChild(el);
   });
   $('#scan').onclick = async () => { $('#scan').disabled = true; await post('/api/link/discover', { proto }); setTimeout(async () => { await loadPeers(); }, 400); };
 }
 function renderSend() {
-  const tgt = peers[target];
+  const tgt = curTarget();
   view.innerHTML = `<div class="card">
     <div class="flex"><h2 class="grow">${t('send_title')}</h2><span class="badge">${tgt ? '→ ' + esc(tgt.name) : t('no_recipient')}</span></div>
     <div class="crumb">📁 ${esc(dir)}</div>
@@ -187,7 +201,10 @@ function renderSend() {
     fl.appendChild(el);
   });
   $('#dosend') && ($('#dosend').onclick = async () => {
-    const r = await post('/api/link/send', { peer: target, path: selFile.path, proto });
+    await fetchPeers();                     // index the device's list as it is NOW
+    const i = tgtIndex();
+    if (i < 0 || !selFile) { toast(t('no_recipient')); render(); return; }
+    const r = await post('/api/link/send', { peer: i, path: selFile.path, proto });
     toast(r.ok ? t('send_started') : t('send_failed'));
   });
 }
@@ -198,12 +215,18 @@ function renderRecv() {
   refreshOffer();
 }
 function renderCmd() {
-  const tgt = peers[target];
+  // The view is rebuilt on every peer poll: carry over what is being typed (and the caret) so a command
+  // half-written is not wiped every 5 s.
+  const old = $('#cmdin'), keep = old ? old.value : '', hadFocus = !!old && document.activeElement === old;
+  const caret = old ? [old.selectionStart, old.selectionEnd] : null;
+  const tgt = curTarget();
   view.innerHTML = `<div class="card"><div class="flex"><h2 class="grow">${t('cmd_title')}</h2><span class="badge">${tgt ? '→ ' + esc(tgt.name) : t('no_recipient')}</span></div>
     <div class="flex"><input id="cmdin" placeholder="${t('cmd_ph')}" /><button class="act" id="cmdsend" ${tgt ? '' : 'disabled'}>${t('send')}</button></div>
     <div class="dim" style="margin-top:8px">${t('cmd_note')}</div>
     <div id="incoming"></div></div>`;
-  $('#cmdsend') && ($('#cmdsend').onclick = async () => { const v = $('#cmdin').value.trim(); if (!v) return; const r = await post('/api/link/cmd', { peer: target, command: v, proto }); toast(r.ok ? t('cmd_sent') : t('send_failed')); $('#cmdin').value = ''; });
+  const inp = $('#cmdin'); inp.value = keep;
+  if (hadFocus) { inp.focus(); try { inp.setSelectionRange(caret[0], caret[1]); } catch {} }
+  $('#cmdsend') && ($('#cmdsend').onclick = async () => { const v = $('#cmdin').value.trim(); if (!v) return; await fetchPeers(); const i = tgtIndex(); if (i < 0) { toast(t('no_recipient')); render(); return; } const r = await post('/api/link/cmd', { peer: i, command: v, proto }); toast(r.ok ? t('cmd_sent') : t('send_failed')); $('#cmdin').value = ''; });
   refreshCmd();
 }
 let chat = [];

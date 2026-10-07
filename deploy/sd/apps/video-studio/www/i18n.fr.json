@@ -26,5 +26,7 @@
   "stage_writing": "Écriture sur la SD de l'appareil…",
   "stage_ready": "Prêt · {frames} images @ {fps} fps → {path}",
   "err_no_frames": "aucune image produite (fichier non pris en charge ?)",
+  "err_not_video": "ce n’est pas une vidéo — choisis un mp4, mov, mkv, webm ou avi",
+  "err_empty": "le fichier est vide",
   "err_write_failed": "échec de l'écriture (HTTP {status}) pour {path}"
 }

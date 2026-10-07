@@ -8,6 +8,8 @@
   "empty": "empty",
   "filter": "Filter…",
   "no_games": "No games in this system yet.",
+  "list_failed": "Couldn’t read the ROM library from the device — try again in a moment.",
+  "unreadable": "not readable",
   "add_roms": "Add ROMs to",
   "on_sd": "on the SD card, then reopen this system.",
   "no_systems": "No systems configured.",
@@ -56,6 +58,7 @@
   "p_sram_saved": "Game save stored on the SD card",
   "p_sram_none": "This game has no save data yet",
   "p_sram_loaded": "Game save loaded from the SD card",
+  "p_sram_unread": "Couldn’t read this game’s save on the SD card — saving to the SD is paused so it isn’t overwritten.",
   "p_rom_corrupt": "Corrupt ROM file: truncated zip archive.",
   "p_start_failed": "Start failed"
 }

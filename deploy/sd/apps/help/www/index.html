@@ -803,6 +803,10 @@
       return list;
     }
 
+    // Manual records are DATA: synopses like "cat <file>" must reach the card as text. Interpolated raw,
+    // every <placeholder> became an unknown HTML element and vanished (72 of 77 topics lost text).
+    const h = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
     // Formatta la stringa JSON applicandovi colori Swagger premium
     function syntaxHighlightJSON(jsonStr) {
       if (typeof jsonStr !== 'string') {
@@ -871,7 +875,7 @@
           <div class="card-header">
             <div class="card-meta">
               <span class="category">${manual.category === 'guide' ? t('label_guides') : t('label_commands')}</span>
-              <h2>${data.title}</h2>
+              <h2>${h(data.title)}</h2>
             </div>
             ${(manual.category !== 'guide' && manual.category !== 'system') ? `
               <button class="exec-btn" id="exec-cmd-btn">
@@ -885,20 +889,20 @@
 
           <div class="section-title">${t('synopsis')}</div>
           <div class="synopsis-box">
-            <code>${data.synopsis}</code>
+            <code>${h(data.synopsis)}</code>
             <button class="copy-btn" id="copy-synopsis">
               <span>${t('copy')}</span>
             </button>
           </div>
 
           <div class="section-title">${t('description')}</div>
-          <p class="description-text">${data.description}</p>
+          <p class="description-text">${h(data.description)}</p>
       `;
 
       if (data.details) {
         html += `
           <div class="section-title">${t('details')}</div>
-          <pre class="details-box">${data.details}</pre>
+          <pre class="details-box">${h(data.details)}</pre>
         `;
       }
 
@@ -943,32 +947,32 @@
           let inputType = '';
           if (p.name === 'reset') {
             inputType = `
-              <select class="param-input" id="param-${p.name}" style="background:var(--code-bg); color:var(--text); border:1px solid var(--border)">
+              <select class="param-input" id="param-${h(p.name)}" style="background:var(--code-bg); color:var(--text); border:1px solid var(--border)">
                 <option value="0" ${p.default === '0' ? 'selected' : ''}>0 (No / Keep Context)</option>
                 <option value="1" ${p.default === '1' ? 'selected' : ''}>1 (Yes / Reset Context)</option>
               </select>
             `;
           } else if (p.name === 'lang' && manual.id === 'api-anima') {
             inputType = `
-              <select class="param-input" id="param-${p.name}" style="background:var(--code-bg); color:var(--text); border:1px solid var(--border)">
+              <select class="param-input" id="param-${h(p.name)}" style="background:var(--code-bg); color:var(--text); border:1px solid var(--border)">
                 <option value="it" ${p.default === 'it' ? 'selected' : ''}>it (Italiano)</option>
                 <option value="en" ${p.default === 'en' ? 'selected' : ''}>en (English)</option>
               </select>
             `;
           } else if (p.type === 'textarea') {
-            inputType = `<textarea class="param-input textarea" id="param-${p.name}" placeholder="${p.default || ''}">${p.default || ''}</textarea>`;
+            inputType = `<textarea class="param-input textarea" id="param-${h(p.name)}" placeholder="${h(p.default)}">${h(p.default)}</textarea>`;
           } else {
-            inputType = `<input type="text" class="param-input" id="param-${p.name}" value="${p.default || ''}" placeholder="${p.default || ''}">`;
+            inputType = `<input type="text" class="param-input" id="param-${h(p.name)}" value="${h(p.default)}" placeholder="${h(p.default)}">`;
           }
 
           paramsHtml += `
             <div class="param-row">
               <div class="param-label">
-                <span class="param-name">${p.name}</span>
+                <span class="param-name">${h(p.name)}</span>
                 <span class="param-type">${p.type === 'textarea' ? t('body_param') : t('query_param')}</span>
                 ${labelRequired}
               </div>
-              <div class="param-desc">${desc}</div>
+              <div class="param-desc">${h(desc)}</div>
               ${inputType}
             </div>
           `;
@@ -980,19 +984,19 @@
       content.innerHTML = `
         <div class="api-card">
           <div class="api-header">
-            <span class="api-badge ${manual.method.toLowerCase()}">${manual.method}</span>
-            <h2>${manual.path}</h2>
+            <span class="api-badge ${h(manual.method.toLowerCase())}">${h(manual.method)}</span>
+            <h2>${h(manual.path)}</h2>
           </div>
 
           <div>
             <div class="api-section-title">${t('description')}</div>
-            <p class="description-text">${data.description}</p>
+            <p class="description-text">${h(data.description)}</p>
           </div>
 
           ${data.details ? `
             <div>
               <div class="api-section-title">${t('details')}</div>
-              <pre class="details-box" style="margin-bottom:0">${data.details}</pre>
+              <pre class="details-box" style="margin-bottom:0">${h(data.details)}</pre>
             </div>
           ` : ''}
 
@@ -1112,7 +1116,7 @@
               }
             }
           } catch (e) {
-            text = t('read_error', { msg: e.message });
+            text = h(t('read_error', { msg: e.message }));
           }
 
           if (text === '') text = t('empty_response');
@@ -1149,7 +1153,7 @@
                 <span>${t('status')}: <span class="status-badge status-5xx">✗ ${t('conn_error')}</span></span>
                 <span>${t('time')}: <span class="response-time">${latency} ms</span></span>
               </div>
-              <pre class="response-body" style="color:#ff6b6b"><code>${error.message}\n\n${t('conn_note')}</code></pre>
+              <pre class="response-body" style="color:#ff6b6b"><code>${h(error.message)}\n\n${h(t('conn_note'))}</code></pre>
             </div>
           `;
         } finally {

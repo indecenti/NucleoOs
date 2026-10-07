@@ -58,5 +58,6 @@
   "hdr_date": "Data",
   "hdr_start": "Ora inizio",
   "hdr_lang": "Lingua",
-  "hdr_engine": "Motore"
+  "hdr_engine": "Motore",
+  "new_unsaved": "Non avviata: la trascrizione corrente non è stata salvata sul dispositivo. Resta qui — riprova quando il dispositivo è raggiungibile."
 }

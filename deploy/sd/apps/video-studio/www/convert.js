@@ -18,6 +18,9 @@ export const PROFILES = {
 
 const ext = (n) => { const m = /\.[^.]+$/.exec(n || ''); return m ? m[0] : '.bin'; };
 const base = (n) => (n || 'video').replace(/\.[^.]+$/, '');
+// The SD is FAT: a name with : < > ? * " | \ / (or a trailing dot/space) cannot be created there, so a video
+// picked on a Mac/Linux box ("Talk: part 1.mov") converted for minutes and then failed on the write.
+export const sdSafe = (n) => String(n).replace(/[\u0000-\u001f<>:"/\\|?*]/g, '_').replace(/[. ]+$/, '') || 'video';
 
 function loadScript(src) {
   return new Promise((res, rej) => {
@@ -75,6 +78,12 @@ export async function convertFile(file, opts = {}, onStage = () => {}) {
   const onProg = ({ progress }) => { if (progress >= 0 && progress <= 1) onStage(stageLabel, Math.min(99, Math.round(stageBase + progress * stageSpan))); };
   ff.on('progress', onProg);
 
+  // ffmpeg.wasm's virtual FS outlives a conversion, and ffmpeg will not overwrite an existing output without
+  // -y. A conversion that failed half-way used to leave its a.mp3 behind, and the next (silent) video was
+  // delivered with that soundtrack. Start and end every conversion with a clean slate.
+  const scratch = [inName, 'a.mp3', 'v.mjpeg'];
+  const clean = async () => { for (const f of scratch) { try { await ff.deleteFile(f); } catch {} } };
+  await clean();
   try {
     onStage(t('stage_reading'), 0);
     await ff.writeFile(inName, new Uint8Array(await file.arrayBuffer()));
@@ -82,18 +91,22 @@ export async function convertFile(file, opts = {}, onStage = () => {}) {
     // 1) audio → mono mp3 (optional; many clips have it, some don't)
     let mp3 = null;
     stageLabel = t('stage_audio'); stageBase = 0; stageSpan = 30;
+    // exec() resolves ffmpeg's exit code (it does not throw): only a 0 means a.mp3 is this video's audio.
     try {
       // -map_metadata -1 + -id3v2_version 0: bare MP3, no ID3 tag, so the player's CBR byte-map seek is exact.
-      await ff.exec(['-i', inName, '-vn', '-ac', '1', '-ar', String(prof.ar), '-c:a', 'libmp3lame', '-b:a', prof.ab, '-map_metadata', '-1', '-id3v2_version', '0', 'a.mp3']);
-      const d = await ff.readFile('a.mp3');
-      if (d && d.length > 0) mp3 = new Blob([d], { type: 'audio/mpeg' });
+      const code = await ff.exec(['-i', inName, '-vn', '-ac', '1', '-ar', String(prof.ar), '-c:a', 'libmp3lame', '-b:a', prof.ab, '-map_metadata', '-1', '-id3v2_version', '0', 'a.mp3']);
+      if (code === 0) {
+        const d = await ff.readFile('a.mp3');
+        if (d && d.length > 0) mp3 = new Blob([d], { type: 'audio/mpeg' });
+      }
     } catch { /* no audio stream — fine */ }
 
     // 2) video → concatenated MJPEG → frames
     stageLabel = t('stage_video'); stageBase = 30; stageSpan = 60;
-    await ff.exec(['-i', inName, '-an', '-vf', vf(fit, prof.fps), '-q:v', String(prof.q), '-c:v', 'mjpeg', '-f', 'image2pipe', 'v.mjpeg']);
-    const mjpeg = await ff.readFile('v.mjpeg');
-    const frames = splitMjpeg(mjpeg);
+    const vcode = await ff.exec(['-i', inName, '-an', '-vf', vf(fit, prof.fps), '-q:v', String(prof.q), '-c:v', 'mjpeg', '-f', 'image2pipe', 'v.mjpeg']);
+    // A failed pass leaves no v.mjpeg: say "no frames", not the virtual FS's cryptic "ErrnoError: FS error".
+    const mjpeg = vcode === 0 ? await ff.readFile('v.mjpeg').catch(() => null) : null;
+    const frames = mjpeg ? splitMjpeg(mjpeg) : [];
     if (!frames.length) throw new Error(t('err_no_frames'));
 
     // 3) assemble .nfv (v2, indexed)
@@ -101,12 +114,10 @@ export async function convertFile(file, opts = {}, onStage = () => {}) {
     onStage(stageLabel, 95);
     const nfv = buildNfv(frames, { fps: prof.fps, hasAudio: !!mp3 });
 
-    // cleanup MEMFS so a second conversion starts clean
-    for (const f of [inName, 'a.mp3', 'v.mjpeg']) { try { await ff.deleteFile(f); } catch {} }
-
-    return { nfv, mp3, frames: frames.length, fps: prof.fps, base: base(file.name) };
+    return { nfv, mp3, frames: frames.length, fps: prof.fps, base: sdSafe(base(file.name)) };
   } finally {
     try { ff.off('progress', onProg); } catch {}
+    await clean();                      // success OR failure: nothing may leak into the next conversion
   }
 }
 

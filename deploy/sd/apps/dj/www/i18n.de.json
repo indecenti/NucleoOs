@@ -14,6 +14,7 @@
   "plan_hint": "Lade zwei Tracks und drücke <b>MIX</b>.",
   "library": "Bibliothek",
   "empty_library": "Keine Tracks in /data/Music",
+  "library_failed": "/data/Music konnte nicht vom Gerät gelesen werden – versuche es gleich noch einmal.",
   "cue": "cue",
   "harm_perfect": "goldene Tonart",
   "harm_compatible": "kompatible Tonart",

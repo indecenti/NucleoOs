@@ -16,5 +16,6 @@
   "dev_browser_set": "heure définie depuis le navigateur",
   "timer_done": "Temps écoulé !",
   "save_ok": "Enregistré sur l'appareil",
-  "save_fail": "Échec de l'enregistrement — appareil injoignable"
+  "save_fail": "Échec de l'enregistrement — appareil injoignable",
+  "save_unread": "Non enregistré — impossible de lire les réglages enregistrés. Réessayez quand l’appareil est joignable."
 }

@@ -139,7 +139,7 @@ const t = await I18N.init('arcade');   // init already fills [data-i18n] with th
 const $ = (id) => document.getElementById(id);
 const main = $('main');
 let SYSTEMS = [], curSys = null, curGames = [], lastCounts = null, savedSet = new Set();
-let sel = 0, playing = false;   // sel = keyboard/gamepad cursor within the current view
+let sel = 0, playing = false, listErr = false;   // sel = keyboard/gamepad cursor within the current view
 // The OS already had a ROM library here (the deploy manifest and .gitignore both name it), so the
 // app reads the EXISTING folder rather than inventing a second one at /roms.
 const ROM_DIR = 'data/ROMs/';
@@ -165,10 +165,23 @@ async function jget(url) {
   catch (e) { return null; }
 }
 
+// A folder listing that tells "not there" (404: an empty system) apart from "the device did not answer"
+// (busy / offline: null). Folding both into "empty" told the user to go and add ROMs to a card that has them.
+async function jlist(path) {
+  try {
+    const r = await fetch('/api/fs/list?path=' + encodeURIComponent(path), { cache: 'no-store' });
+    if (r.status === 404) return { entries: [] };
+    if (!r.ok) return null;
+    const d = await r.json();
+    return d && Array.isArray(d.entries) ? d : null;
+  } catch (e) { return null; }
+}
+
 // Count games in a system folder without downloading them — one directory listing, extension-filtered.
+// null = could not be read.
 async function countSystem(sys) {
-  const d = await jget('/api/fs/list?path=' + encodeURIComponent(ROM_DIR + sys.id));
-  if (!d || !Array.isArray(d.entries)) return 0;
+  const d = await jlist(ROM_DIR + sys.id);
+  if (!d) return null;
   const ex = new Set(sys.exts), bios = (sys.bios || '').toLowerCase();
   return d.entries.filter((e) => e.type === 'file' && ex.has(extOf(e.name)) && e.name.toLowerCase() !== bios).length;
 }
@@ -223,7 +236,7 @@ async function showSystems() {
   // Count every system; hide the ones that don't exist on the card at all, but keep
   // configured-but-empty ones dimmed so the user knows where to drop ROMs.
   lastCounts = await mapLimited(SYSTEMS, 3, countSystem);
-  $('sub').textContent = t('games_count', { count: lastCounts.reduce((a, b) => a + b, 0) });
+  $('sub').textContent = t('games_count', { count: lastCounts.reduce((a, b) => a + (b || 0), 0) });
   renderSystems('');
 }
 
@@ -281,13 +294,16 @@ function renderSystems(q) {
     el.innerHTML = `${n > 0 ? `<div class="badge">${n}</div>` : ''}<div class="glyph">${glyphOf(sys)}</div>
       <div class="nm"></div><div class="ct"></div>`;
     el.querySelector('.nm').textContent = sys.name;
-    el.querySelector('.ct').textContent = n > 0 ? t('games_count', { count: n }) : t('empty');
-    if (n > 0) { el.onclick = () => showGames(sys); }
+    el.querySelector('.ct').textContent = n === null ? t('unreadable') : n > 0 ? t('games_count', { count: n }) : t('empty');
+    if (n !== 0) { el.onclick = () => showGames(sys); }    // an unreadable system stays openable: it re-reads
     grid.appendChild(el); shown++;
   });
   main.appendChild(grid);
   sel = 0; paintSel();
-  if (!q && lastCounts.every((c) => c === 0)) {
+  if (!q && lastCounts.some((c) => c === null)) {
+    const m = document.createElement('div'); m.className = 'msg'; m.textContent = t('list_failed');
+    main.appendChild(m);
+  } else if (!q && lastCounts.every((c) => c === 0)) {
     const m = document.createElement('div'); m.className = 'msg';
     m.innerHTML = `${t('add_roms')} <code>/sd/data/ROMs/&lt;system&gt;</code> ${t('on_sd')}`;
     main.appendChild(m);
@@ -298,9 +314,10 @@ async function showGames(sys) {
   curSys = sys; setChrome();
   main.innerHTML = '<div class="spin"></div>';
   const [d, sv] = await Promise.all([
-    jget('/api/fs/list?path=' + encodeURIComponent(ROM_DIR + sys.id)),
-    jget('/api/fs/list?path=' + encodeURIComponent(ROM_DIR + sys.id + '/' + SAVE_DIR)),
+    jlist(ROM_DIR + sys.id),
+    jlist(ROM_DIR + sys.id + '/' + SAVE_DIR),
   ]);
+  listErr = !d;
   const ex = new Set(sys.exts);
   // The BIOS is a support file the core loads, not a game — never list it as playable.
   const bios = (sys.bios || '').toLowerCase();
@@ -328,7 +345,7 @@ function sortGames(list) {
 
 function renderGames(q) {
   q = (q || '').toLowerCase();
-  if (!curGames.length) { main.innerHTML = `<div class="msg">${t('no_games')}</div>`; return; }
+  if (!curGames.length) { main.innerHTML = `<div class="msg">${t(listErr ? 'list_failed' : 'no_games')}</div>`; return; }
   const list = sortGames(curGames.filter((g) => g.title.toLowerCase().includes(q)));
   main.innerHTML = '';
   // Arcade cores are romset-version locked and fail with a cryptic core error rather than degrading

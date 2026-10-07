@@ -147,7 +147,10 @@
       "coreFile": "fbneo",
       "warn": {
         "it": "Set richiesto: FBNeo moderno",
-        "en": "Needs a modern FBNeo romset"
+        "en": "Needs a modern FBNeo romset",
+        "es": "Requiere un romset FBNeo moderno",
+        "fr": "Nécessite un romset FBNeo récent",
+        "de": "Benötigt ein aktuelles FBNeo-Romset"
       }
     },
     {
@@ -161,7 +164,10 @@
       "coreFile": "fbalpha2012_cps1",
       "warn": {
         "it": "Set richiesto: FB Alpha 0.2.97.28",
-        "en": "Needs an FB Alpha 0.2.97.28 romset"
+        "en": "Needs an FB Alpha 0.2.97.28 romset",
+        "es": "Requiere un romset FB Alpha 0.2.97.28",
+        "fr": "Nécessite un romset FB Alpha 0.2.97.28",
+        "de": "Benötigt ein FB-Alpha-0.2.97.28-Romset"
       }
     },
     {
@@ -175,7 +181,10 @@
       "coreFile": "fbalpha2012_cps2",
       "warn": {
         "it": "Set richiesto: FB Alpha 0.2.97.28",
-        "en": "Needs an FB Alpha 0.2.97.28 romset"
+        "en": "Needs an FB Alpha 0.2.97.28 romset",
+        "es": "Requiere un romset FB Alpha 0.2.97.28",
+        "fr": "Nécessite un romset FB Alpha 0.2.97.28",
+        "de": "Benötigt ein FB-Alpha-0.2.97.28-Romset"
       }
     }
   ],

@@ -8,6 +8,8 @@
   "empty": "vuoto",
   "filter": "Filtra…",
   "no_games": "Ancora nessun gioco in questo sistema.",
+  "list_failed": "Impossibile leggere la libreria ROM dal dispositivo: riprova tra poco.",
+  "unreadable": "non leggibile",
   "add_roms": "Aggiungi ROM in",
   "on_sd": "sulla scheda SD, poi riapri questo sistema.",
   "no_systems": "Nessun sistema configurato.",
@@ -56,6 +58,7 @@
   "p_sram_saved": "Salvataggio del gioco scritto sulla scheda SD",
   "p_sram_none": "Questo gioco non ha ancora dati di salvataggio",
   "p_sram_loaded": "Salvataggio caricato dalla scheda SD",
+  "p_sram_unread": "Impossibile leggere il salvataggio sulla SD: il salvataggio sulla SD è sospeso per non sovrascriverlo.",
   "p_rom_corrupt": "File ROM corrotto: archivio zip troncato.",
   "p_start_failed": "Avvio fallito"
 }

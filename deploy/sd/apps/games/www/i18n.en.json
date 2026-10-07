@@ -62,6 +62,7 @@
 
   "record": "{w}W {l}L {d}D",
   "record_short": "{w}W-{l}L",
+  "stats_not_saved": "⚠ Result not saved to your gamercard (the device did not answer).",
   "no_games": "No games yet",
 
   "suffix_you": " (you)",

@@ -312,7 +312,16 @@
     // Mutations are discrete (a click), so persist immediately — the C app reads this file on open,
     // so a save is the moment a web edit becomes real on the device. No debounce to drop or race.
     function scheduleSave(msg) { persist(msg); }
-    async function persist(msg) {
+    // Saves run ONE AT A TIME, in order. Each write sends the whole list as it is when that write starts,
+    // so the last one always carries the latest edit. Fired concurrently, a slow first write (busy SD, WiFi
+    // retry) used to land AFTER a quicker second one and leave the device on the older list.
+    let saveChain = Promise.resolve();
+    function persist(msg) {
+      const run = saveChain.then(() => writeList(msg));
+      saveChain = run.catch(() => {});
+      return run;
+    }
+    async function writeList(msg) {
       if (!readOk) { setSave('err', readFailText(readStatus)); return; }   // never write over a list we could not read
       setSave('busy', t('saving'));
       try {
@@ -503,6 +512,16 @@
       $('scrim').classList.add('on'); setTimeout(() => $('fName').focus(), 30);
     }
     function closeEditor() { $('scrim').classList.remove('on'); editIdx = -1; }
+    // A stream must be a complete http(s) URL with a host. The prefilled "http://" alone, a bare host or an
+    // address with spaces used to be saved as a station neither this page nor the Cardputer can ever play.
+    function validStream(v) {
+      if (!v || /\s/.test(v) || !/^https?:\/\/[^/?#]/i.test(v)) return false;
+      try { const u = new URL(v); return (u.protocol === 'http:' || u.protocol === 'https:') && !!u.hostname; } catch { return false; }
+    }
+    function streamInvalid() {
+      const note = $('streamNote');
+      note.className = 'note warn'; note.removeAttribute('data-i18n'); note.textContent = t('note_stream_invalid');
+    }
     function checkStream() {
       const v = $('fStream').value.trim(), note = $('streamNote');
       if (/^https:/i.test(v)) { note.className = 'note warn'; note.removeAttribute('data-i18n'); note.textContent = t('note_stream_warn'); }
@@ -511,7 +530,7 @@
     async function saveEditor() {
       const name = $('fName').value.trim(), stream = $('fStream').value.trim();
       if (!name) { $('fName').focus(); return; }
-      if (!/^https?:\/\//i.test(stream)) { $('fStream').focus(); checkStream(); return; }
+      if (!validStream(stream)) { $('fStream').focus(); streamInvalid(); return; }
       // An ADD can go ahead on the list that just loaded; the editor stays open (nothing typed is lost) while
       // the real list still cannot be read.
       if (!(await canEdit({ afterReload: editIdx < 0 }))) return;

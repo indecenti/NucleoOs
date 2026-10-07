@@ -92,7 +92,12 @@ const $ = (id) => document.getElementById(id);
 const DIR = '/data/Music';
 let engine = null, brain = new DjBrain();
 let deckA = null, deckB = null;     // {path, title, npx, family, energy, duration_sec}
-let lib = [], refBpm = 0, autoDJ = false, autoTimer = null;
+let lib = [], libErr = false, refBpm = 0, autoDJ = false, autoTimer = null;
+// cueSeq: only the LATEST cue may land on deck B (a slow load clicked first used to finish last and win).
+// mixing: a crossfade is running — deck B is the incoming track on air, so neither another MIX nor a cue may
+// touch it until promoteBtoA() hands it to deck A (a second MIX promoted twice and left A empty; a cue
+// replaced the incoming deck's label and became "A" while the old audio played).
+let cueSeq = 0, mixing = false;
 
 const ctxReady = () => {
   if (!engine) engine = new DjEngine();
@@ -147,18 +152,23 @@ function showDeck(which, tr) {
 }
 
 async function listLibrary() {
+  libErr = false;
   try {
     const r = await fetch('/api/fs/list?path=' + encodeURIComponent(DIR));
-    const d = await r.json();
-    const files = (d.entries || []).filter((e) => e.type === 'file' && /\.(mp3|wav)$/i.test(e.name));
-    lib = files.map((e) => ({ path: DIR + '/' + e.name, name: e.name }));
-  } catch { lib = []; }
+    if (r.status === 404) lib = [];                     // no /data/Music yet: an empty library
+    else {
+      if (!r.ok) throw new Error('HTTP ' + r.status);  // busy / unreachable: say so, it is not "no tracks"
+      const d = await r.json();
+      const files = (d.entries || []).filter((e) => e.type === 'file' && /\.(mp3|wav)$/i.test(e.name));
+      lib = files.map((e) => ({ path: DIR + '/' + e.name, name: e.name }));
+    }
+  } catch { lib = []; libErr = true; }
   renderList();
 }
 
 function renderList() {
   const ul = $('list');
-  if (!lib.length) { ul.innerHTML = `<li class="meta">${t('empty_library')}</li>`; return; }
+  if (!lib.length) { ul.innerHTML = `<li class="meta">${t(libErr ? 'library_failed' : 'empty_library')}</li>`; return; }
   ul.innerHTML = '';
   for (const it of lib) {
     const li = document.createElement('li');
@@ -171,17 +181,21 @@ function renderList() {
 }
 
 async function cueTrack(path, li) {
+  if (mixing) { $('status').textContent = t('st_mixing'); return; }
   ctxReady();
+  const my = ++cueSeq;
   $('status').textContent = t('st_loading_b');
   try {
-    await engine.loadDeck('b', path);
-    deckB = trackOf(path, engine.decks.b.npx);
+    const tr = await engine.fetchTrack(path);
+    if (my !== cueSeq || mixing) return;              // a later cue (or a mix) owns deck B now
+    engine.setDeck('b', tr);
+    deckB = trackOf(path, tr.npx);
     showDeck('b', deckB);
     [...$('list').children].forEach((c) => c.classList.remove('cued'));
     li && li.classList.add('cued');
     previewPlan();
     $('status').textContent = t('st_b_ready');
-  } catch (e) { $('status').textContent = t('st_b_error'); console.error(e); }
+  } catch (e) { if (my === cueSeq) $('status').textContent = t('st_b_error'); console.error(e); }
 }
 
 function dp() { return brain.context(); }
@@ -207,6 +221,7 @@ function renderPlan(p) {
 }
 
 async function doMix() {
+  if (mixing) { $('status').textContent = t('st_mixing'); return; }
   ctxReady();
   if (!deckA) {                          // first play: just start B as A
     if (!deckB) { $('status').textContent = t('st_load_track'); return; }
@@ -218,6 +233,7 @@ async function doMix() {
   }
   if (!deckB) { $('status').textContent = t('st_cue_b'); return; }
   const p = previewPlan();
+  mixing = true; cueSeq++;                 // drop any cue still loading: deck B is going on air
   engine.mix(p, 'a', 'b');
   refBpm = p.eff_bpm_b || deckB.npx?.bpm || refBpm;
   animateXfade(p.xfade);
@@ -227,6 +243,7 @@ async function doMix() {
 
 function promoteBtoA() {
   // B is now the live deck. Move engine deck b -> a logically by reloading.
+  mixing = false;
   deckA = deckB; deckB = null;
   brain.note(deckA);
   // swap engine decks: make 'a' point at what 'b' was by re-decoding is heavy;
@@ -265,9 +282,12 @@ async function pickAndCue() {
   const libTracks = lib.map((it) => trackOf(it.path, null));
   const next = brain.pickNext(libTracks, deckA);
   if (!next) return null;
+  const my = ++cueSeq;
   try {
-    await engine.loadDeck('b', next.path);
-    deckB = trackOf(next.path, engine.decks.b.npx);
+    const tr = await engine.fetchTrack(next.path);
+    if (my !== cueSeq || mixing) return null;
+    engine.setDeck('b', tr);
+    deckB = trackOf(next.path, tr.npx);
     showDeck('b', deckB);
     return previewPlan();
   } catch { return null; }

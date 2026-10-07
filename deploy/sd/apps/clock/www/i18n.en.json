@@ -16,5 +16,6 @@
   "dev_browser_set": "time set from browser",
   "timer_done": "Time's up!",
   "save_ok": "Saved to device",
-  "save_fail": "Save failed — device unreachable"
+  "save_fail": "Save failed — device unreachable",
+  "save_unread": "Not saved — your saved settings could not be read. Try again when the device is reachable."
 }
