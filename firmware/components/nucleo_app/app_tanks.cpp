@@ -738,7 +738,7 @@ static void build_match(int mode, uint32_t seed, int wind, int t0x, int t1x, int
     s_ufo.on = false;
     s_bonus = 0; s_shooter = 0; s_shot_hits = 0; s_shot_long = false;   // fresh bonus tally each round
     s_last_rx = s_last_aim = now_ms();
-    s_active = starter;
+    s_active = starter & 1;                                       // off the wire (TK_START): indexes s_tk[2]
     s_cam = s_camtgt = clampf(s_tk[s_active].x - W / 2, 0, WW - W);
     // NB: the net win tally is NOT reset here — it's zeroed once when the lobby opens (menu -> picker),
     // so a MP "rematch" (host re-START from game-over) carries the best-of series across boards.
@@ -1217,9 +1217,10 @@ static void net_send_fire(void) {   // tell the peer we just fired, with the exa
     memcpy(b + 6, &e, 2); memcpy(b + 8, &p, 2); memcpy(b + 10, &w, 2); pnet_send(s_peer, b, 12);
 }
 static void room_add(const uint8_t *mac, const char *name) {
-    for (int i = 0; i < s_nroom; i++) if (!memcmp(s_rooms[i].mac, mac, 6)) { s_rooms[i].seen = now_ms(); snprintf(s_rooms[i].name, 22, "%s", name); return; }
+    // name = the 22-byte HELLO wire field, maybe unterminated: "%.21s" never reads past it
+    for (int i = 0; i < s_nroom; i++) if (!memcmp(s_rooms[i].mac, mac, 6)) { s_rooms[i].seen = now_ms(); snprintf(s_rooms[i].name, 22, "%.21s", name); return; }
     if (s_nroom >= NROOM) return;
-    memcpy(s_rooms[s_nroom].mac, mac, 6); snprintf(s_rooms[s_nroom].name, 22, "%s", (name && name[0]) ? name : "?"); s_rooms[s_nroom].seen = now_ms(); s_nroom++;
+    memcpy(s_rooms[s_nroom].mac, mac, 6); snprintf(s_rooms[s_nroom].name, 22, "%.21s", (name && name[0]) ? name : "?"); s_rooms[s_nroom].seen = now_ms(); s_nroom++;
 }
 static void rooms_prune(void) {
     for (int i = 0; i < s_nroom; ) { if (now_ms() - s_rooms[i].seen > 4000) { for (int k = i; k < s_nroom - 1; k++) s_rooms[k] = s_rooms[k + 1]; s_nroom--; } else i++; }
@@ -1280,37 +1281,40 @@ static void apply_result(const TkResult *r) {                   // PASSIVE: appl
     }
     s_wind = r->wind; s_last_rx = now_ms();
     if (r->winner) net_over(r->winner);
-    else { s_active = r->next; start_turn(); }
+    else { s_active = r->next & 1; start_turn(); }             // off the wire: indexes s_tk[2]
 }
 static void net_handle(const pnet_pkt_t *p) {
     if (p->len < 4 || p->buf[0] != TK_M0 || p->buf[1] != TK_M1 || p->buf[2] != TK_VER) return;
     int type = p->buf[3];
-    if (type == TK_ACK) { if (s_rel_on && p->len >= 8) { uint32_t a; memcpy(&a, p->buf + 4, 4); if (a == s_resseq) s_rel_on = false; } return; }
-    if (type == TK_BYE) { s_peerleft = true; return; }
+    // Session packets (ACK/BYE/START) only from the bound peer: any nearby device could forge them.
+    // In browse, s_peer is the room we joined — the host that sends TK_WELCOME and then TK_START.
+    bool from_peer = s_haspeer && !memcmp(p->mac, s_peer, 6);
+    if (type == TK_ACK) { if (from_peer && s_rel_on && p->len >= 8) { uint32_t a; memcpy(&a, p->buf + 4, 4); if (a == s_resseq) s_rel_on = false; } return; }
+    if (type == TK_BYE) { if (from_peer) s_peerleft = true; return; }
     // Rematch: the host re-STARTs from game-over while the guest sits in ST_OVER. Accept the new board
     // right here (peer + seat already known) and drop straight back into play, ACKing like a first join.
-    if (type == TK_START && s_screen == ST_OVER && s_seat == 1 && p->len >= (int)sizeof(TkStart)) {
+    if (type == TK_START && from_peer && s_screen == ST_OVER && s_seat == 1 && p->len >= (int)sizeof(TkStart)) {
         const TkStart *st = (const TkStart *)p->buf; s_haspeer = true;
         build_match(MODE_GUEST, st->seed, st->wind, st->t0x, st->t1x, st->starter);
         net_ack(0); go(ST_PLAY); return;
     }
     if (s_screen == ST_BROWSE) {
         if (type == TK_HELLO && p->len >= 28) room_add(p->mac, (const char *)p->buf + 4);
-        else if (type == TK_WELCOME && s_join_pending) { memcpy(s_peer, p->mac, 6); s_haspeer = true; s_join_pending = false; s_welcomed = true; sfx(2); }
-        else if (type == TK_START && p->len >= (int)sizeof(TkStart)) {
-            const TkStart *st = (const TkStart *)p->buf; memcpy(s_peer, p->mac, 6); s_haspeer = true; s_seat = 1;
+        else if (type == TK_WELCOME && s_join_pending && from_peer) { s_join_pending = false; s_welcomed = true; sfx(2); }
+        else if (type == TK_START && from_peer && (s_join_pending || s_welcomed) && p->len >= (int)sizeof(TkStart)) {
+            const TkStart *st = (const TkStart *)p->buf; s_seat = 1;
             build_match(MODE_GUEST, st->seed, st->wind, st->t0x, st->t1x, st->starter);
             net_ack(0); go(ST_PLAY);
         }
         return;
     }
     if (s_screen == ST_HOST) {
-        if (type == TK_JOIN && p->len >= 26) { memcpy(s_peer, p->mac, 6); s_haspeer = true; s_guest_in = true; snprintf(s_peer_name, 22, "%s", (const char *)p->buf + 4);
+        if (type == TK_JOIN && p->len >= 26) { memcpy(s_peer, p->mac, 6); s_haspeer = true; s_guest_in = true; snprintf(s_peer_name, 22, "%.21s", (const char *)p->buf + 4);
             uint8_t b[4] = { TK_M0, TK_M1, TK_VER, TK_WELCOME }; pnet_send(s_peer, b, 4); }
         return;
     }
     if (s_screen == ST_PLAY || s_screen == ST_OVER) {
-        if (!s_haspeer || memcmp(p->mac, s_peer, 6)) return;
+        if (!from_peer) return;
         if (type == TK_AIM && !local_active() && p->len >= 10) {
             int wp = p->buf[4]; if (wp >= NWEAP) wp = 0;   // clamp the peer weapon index (mirror TK_FIRE) — else OOB WEAPS[]/ammo[]
             s_tk[s_active].weap = wp; int16_t e, pw; memcpy(&e, p->buf + 6, 2); memcpy(&pw, p->buf + 8, 2);

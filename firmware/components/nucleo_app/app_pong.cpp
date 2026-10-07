@@ -584,10 +584,10 @@ static void send_bye(void) { if (s_haspeer) { uint8_t b[4] = { PG_M0, PG_M1, PG_
 
 static void host_add(const uint8_t *mac, const char *name) {
     for (int i = 0; i < s_nhost; i++)
-        if (!memcmp(s_hosts[i].mac, mac, 6)) { s_hosts[i].seen = s_now; snprintf(s_hosts[i].name, 22, "%s", name); return; }
+        if (!memcmp(s_hosts[i].mac, mac, 6)) { s_hosts[i].seen = s_now; snprintf(s_hosts[i].name, 22, "%.21s", name); return; }
     if (s_nhost >= NHOST) return;
     memcpy(s_hosts[s_nhost].mac, mac, 6);
-    snprintf(s_hosts[s_nhost].name, 22, "%s", (name && name[0]) ? name : "?");
+    snprintf(s_hosts[s_nhost].name, 22, "%.21s", (name && name[0]) ? name : "?");   // 22-byte wire field, maybe unterminated
     s_hosts[s_nhost].seen = s_now; s_nhost++;
 }
 static void hosts_prune(void) {

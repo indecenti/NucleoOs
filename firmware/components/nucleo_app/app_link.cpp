@@ -19,6 +19,7 @@
 #include "launcher_theme.h"
 #include "app_gfx.h"
 #include "app_ui.h"            // shared focused-list widget + type-ahead/quick-select nav
+#include "nucleo_i18n.h"       // TR5: 5-language strings
 #include <M5GFX.h>
 #include <string.h>
 #include <strings.h>
@@ -70,6 +71,10 @@ static Ent *s_ent = nullptr; static int s_nent = 0, s_fsel = 0;
 
 // command input
 static char s_cbuf[120]; static int s_clen = 0;
+// A peer command is confirmed on ONE size-2 line of the card, then runs IN FULL: anything longer than
+// what that line shows can't be confirmed honestly, so it is refused (what you see is what runs).
+#define CMD_SHOW 18
+static const char *cmd_too_long(void) { return TR5("Comando troppo lungo", "Command too long", "Comando muy largo", "Commande trop longue", "Befehl zu lang"); }
 
 static void toast(const char *it, const char *en) { snprintf(s_msg, sizeof s_msg, "%s", s_en ? en : it); s_msg_t = 20; }
 static const char *tab_label(int i) { return s_en ? TABS_EN[i] : TABS[i]; }
@@ -270,10 +275,10 @@ static void draw_peer(int ch) {
     draw_progress(ch);
 }
 // Green/red decision chips, shared by RECV (offer) and CMD (command). Draw at (x,y).
-static void draw_yn_chips(int x, int y) {
+static void draw_yn_chips(int x, int y, bool yes = true) {
     const int bw = 78, bh = 20, gap = 8;
-    d.fillRoundRect(x, y, bw, bh, 6, GRN);        txt(x + 8, y + 6, s_en ? "Y Accept" : "Y Accetta", INK, GRN, 1);
-    d.fillRoundRect(x + bw + gap, y, bw, bh, 6, REDC); txt(x + bw + gap + 8, y + 6, s_en ? "N Reject" : "N Rifiuta", INK, REDC, 1);
+    if (yes) { d.fillRoundRect(x, y, bw, bh, 6, GRN); txt(x + 8, y + 6, s_en ? "Y Accept" : "Y Accetta", INK, GRN, 1); x += bw + gap; }
+    d.fillRoundRect(x, y, bw, bh, 6, REDC); txt(x + 8, y + 6, s_en ? "N Reject" : "N Rifiuta", INK, REDC, 1);
 }
 static void draw_recv(int ch) {
     const char *ib = nlink_svc_inbox(); const char *ibn = strrchr(ib, '/'); ibn = ibn ? ibn + 1 : ib;
@@ -302,9 +307,10 @@ static void draw_cmd(int ch) {
         int cx = 8, cw = W - 16, cy = y0 + 2, chh = 66;
         d.fillRoundRect(cx, cy, cw, chh, 9, CAP);
         d.drawRoundRect(cx, cy, cw, chh, 9, AMB);
-        txt(cx + 12, cy + 7, s_en ? "Requested command:" : "Comando richiesto:", MUTED, CAP, 1);
-        char c[24]; snprintf(c, sizeof c, "%.18s", cmd); txt(cx + 12, cy + 20, c, AMB, CAP, 2);
-        draw_yn_chips(cx + 12, cy + chh - 26);
+        bool lng = (int)strlen(cmd) > CMD_SHOW;          // not fully visible -> only N (refuse) is offered
+        txt(cx + 12, cy + 7, lng ? cmd_too_long() : (s_en ? "Requested command:" : "Comando richiesto:"), lng ? REDC : MUTED, CAP, 1);
+        char c[24]; snprintf(c, sizeof c, "%.*s", CMD_SHOW, cmd); txt(cx + 12, cy + 20, c, AMB, CAP, 2);
+        draw_yn_chips(cx + 12, cy + chh - 26, !lng);
         return;
     }
     char rt[24]; snprintf(rt, sizeof rt, "-> %.13s", peer_target_name());
@@ -429,9 +435,15 @@ static void on_key(int key, char ch) {
     // Y/N answers (RECV offer, CMD pending) — only when something is actually pending.
     if ((s_tab == T_RECV || s_tab == T_CMD) && (ch == 'y' || ch == 'Y' || ch == 'n' || ch == 'N')) {
         bool ok = (ch == 'y' || ch == 'Y');
-        char tmp[8], tf[8];
+        char tmp[CMD_SHOW + 2], tf[8];
         if (s_tab == T_RECV && nlink_svc_offer_pending(tmp, 0, tf, 0, 0)) { nlink_svc_offer_answer(ok); toast(ok ? "Accettato" : "Rifiutato", ok ? "Accepted" : "Rejected"); nucleo_app_request_draw(); return; }
-        if (s_tab == T_CMD && nlink_svc_cmd_pending(tmp, 0, tf, 0)) { nlink_svc_cmd_confirm(ok); toast(ok ? "Eseguito" : "Scartato", ok ? "Run" : "Discarded"); nucleo_app_request_draw(); return; }
+        if (s_tab == T_CMD && nlink_svc_cmd_pending(tmp, sizeof tmp, tf, 0)) {
+            if (ok && (int)strlen(tmp) > CMD_SHOW) {      // never run text the card could not show in full
+                nlink_svc_cmd_confirm(false);
+                snprintf(s_msg, sizeof s_msg, "%s", cmd_too_long()); s_msg_t = 20;
+            } else { nlink_svc_cmd_confirm(ok); toast(ok ? "Eseguito" : "Scartato", ok ? "Run" : "Discarded"); }
+            nucleo_app_request_draw(); return;
+        }
     }
 
     // CMD input typing (only while no command is pending confirmation)

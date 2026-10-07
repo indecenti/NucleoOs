@@ -1014,7 +1014,7 @@ static void host_add(const uint8_t*mac,const char*name){
         if(!memcmp(s_hosts[i].mac,mac,6)){ s_hosts[i].seen=s_now; return; }
     if(s_nhost>=NHOST) return;
     memcpy(s_hosts[s_nhost].mac,mac,6);
-    snprintf(s_hosts[s_nhost].name,22,"%s",(name&&name[0])?name:"?");
+    snprintf(s_hosts[s_nhost].name,22,"%.21s",(name&&name[0])?name:"?");   // 22-byte wire field, maybe unterminated
     s_hosts[s_nhost].seen=s_now; s_nhost++;
 }
 static void hosts_prune(void){
@@ -1089,9 +1089,10 @@ static void net_handle(const pnet_pkt_t *p){
         return;
     }
     if((s_state==GS_PLAY||s_state==GS_SHOP||s_state==GS_PAUSE||s_state==GS_OVER)&&s_haspeer){
-        if(!memcmp(p->mac,s_peer,6)&&type==TD_BYE){ s_peerleft=true; return; }
+        if(memcmp(p->mac,s_peer,6)) return;      // in-match: ONLY the peer may drive INPUT/BUY/STATE (as Pong/Snake/Brawler)
+        if(type==TD_BYE){ s_peerleft=true; return; }
         // guest missed our ACCEPT and is still retrying JOIN → re-ACCEPT (don't let it time out)
-        if(s_mode==GM_HOST&&type==TD_JOIN&&!memcmp(p->mac,s_peer,6)){ send_accept(); s_last_rx=s_now; return; }
+        if(s_mode==GM_HOST&&type==TD_JOIN){ send_accept(); s_last_rx=s_now; return; }
         if(s_mode==GM_HOST&&type==TD_INPUT&&p->len>=(int)sizeof(td_input_t)){
             const td_input_t*in=(const td_input_t*)p->buf;
             if(in->seq<s_rxseq) return;
@@ -1131,7 +1132,7 @@ static void net_handle(const pnet_pkt_t *p){
             s_rxseq=st->seq;
             s_tanks[0].x=st->p1x; s_tanks[0].y=st->p1y;
             s_tanks[1].x=st->p2x; s_tanks[1].y=st->p2y;
-            s_tanks[0].dir=st->p1dir; s_tanks[1].dir=st->p2dir;
+            s_tanks[0].dir=st->p1dir&3; s_tanks[1].dir=st->p2dir&3;   // off the wire: indexes BDX/BDY[4]
             // remote (host) tank facing from its 4-way dir; own tank keeps local prediction
             { static const float FX[4]={0,1,0,-1}, FY[4]={-1,0,1,0};
               int d0=st->p1dir&3; s_tanks[0].fx=FX[d0]; s_tanks[0].fy=FY[d0]; }

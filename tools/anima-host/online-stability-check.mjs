@@ -77,6 +77,33 @@ ok(/\bbool\s+acted\b/.test(excl) && /return\s+acted\s*;/.test(excl),
    'nucleo_exclusive_enter must compute and "return acted" (this-call ownership) so a paired enter/exit ' +
    'caller never tears down a window another owner still holds');
 
+// --- 7) teacher.json: never silently truncated into "no key" (2026-10 review) -----------------------
+// A multi-provider teacher.json outgrew the old fixed 1535-byte read -> cJSON failed -> "no key", no log.
+// The reader must size-check (too big -> ESP_LOGW + explicit fail), and EVERY read must go through it
+// (no stray direct fread of teacher.json into a fixed stack buffer).
+{
+  const rf = (src.match(/static\s+char\s*\*\s*teacher_read_file\s*\([\s\S]*?\n\}/) || [''])[0];
+  ok(!!rf, 'teacher_read_file must return a heap buffer (char *) sized to the file, caller frees');
+  ok(/st_size|ftell/.test(rf) && /ESP_LOGW/.test(rf) && /TEACHER_JSON_MAX/.test(rf),
+     'teacher_read_file: size-check against TEACHER_JSON_MAX and ESP_LOGW when the file is too big');
+  ok((src.match(/fopen\(\s*NUCLEO_SD_MOUNT\s*"\/data\/anima\/teacher\.json"/g) || []).length === 1,
+     'teacher.json must be opened in ONE place (teacher_read_file) — direct fread copies truncate silently');
+}
+
+// --- 8) summarize_file: the partials buffer is capped, and the merge request is clipped ---------------
+{
+  const sf = (src.match(/int\s+nucleo_anima_summarize_file\s*\([\s\S]*?\n\}/) || [''])[0];
+  ok(/SUM_PARTIALS_MAX/.test(sf) && !/realloc\(/.test(sf),
+     'nucleo_anima_summarize_file: partials must be capped at SUM_PARTIALS_MAX (no unbounded realloc +2048 per window)');
+  ok(/SUM_MERGE_MAX/.test(sf), 'nucleo_anima_summarize_file: clip partials to SUM_MERGE_MAX before the merge call (like %.3100s)');
+}
+
+// --- 9) clip_reply: a truncated multibyte lead must not advance p past the terminating NUL ----------
+{
+  const cr = (src.match(/static\s+void\s+clip_reply\s*\([\s\S]*?\n\}/) || [''])[0];
+  ok(!!cr && !/p\s*\+=\s*len/.test(cr), 'clip_reply: no blind `p += len` — bound the advance by checking p[k] for k < len');
+}
+
 if (fails.length) {
   console.error('[online-stability] FAIL:\n  - ' + fails.join('\n  - '));
   process.exit(1);

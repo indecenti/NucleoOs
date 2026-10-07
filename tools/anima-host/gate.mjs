@@ -463,6 +463,15 @@ const gates = [
     // RESUME from the contiguous prefix, where Bruce's naive share would corrupt the file. Also asserts the
     // Bruce-codec stays wire-compatible (248-byte Message layout). Pure C, no device.
     ok: (code) => code === 0, summary: (o) => (o.match(/RESULT:[^\n]*/) || [lastLine(o)])[0].trim() },
+  { name: 'fw-hardening (radio peers)', cmd: 'node', args: ['tools/anima-host/fw-hardening-check.mjs'],
+    // Source invariants for the ESP-NOW apps no host build compiles: in-match frames only from the paired
+    // MAC (Tanks / Tank Duel), peer indices and directions masked, peer names bounded, Vicino command and
+    // file-name guards, swarm/pnet start-stop lifecycle. A review found an unauthenticated OOB write here.
+    ok: (code) => code === 0, summary: (o) => (o.match(/\[fw-hardening\][^\n]*/) || [lastLine(o)])[0] },
+  { name: 'solve-bounds (calculator)', cmd: 'node', args: ['tools/anima-host/solve-bounds-check.mjs'],
+    // anima_solve.c under a guard-band harness: register substitution never writes past its buffer, base
+    // conversion declines on 64-bit overflow or a truncated token instead of answering a wrong number.
+    ok: (code) => code === 0, summary: (o) => (o.match(/\[solve-bounds\][^\n]*/) || [lastLine(o)])[0] },
   { name: 'mesh-seam (swarm)', cmd: 'node', args: ['tools/anima-host/mesh-check.mjs'],
     // The MESH gossip seam (firmware/components/nucleo_mesh), host-compiled with MinGW: extends the
     // event bus across ESP-NOW peers. Asserts the ADR invariants (docs/swarm-architecture.md) — only

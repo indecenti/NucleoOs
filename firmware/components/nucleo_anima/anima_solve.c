@@ -12,6 +12,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <stdbool.h>
+#include <limits.h>
 #include <math.h>
 #include <time.h>
 
@@ -957,8 +958,9 @@ static bool a_from_base(const char *s, int base, unsigned long long *val)
     for (const char *p = s; *p; p++) {
         int d = a_b36(*p);
         if (d < 0 || d >= base) return false;
+        if (v > (ULLONG_MAX - (unsigned)d) / (unsigned)base) return false;   // would wrap: decline, never a wrong answer
         v = v * (unsigned)base + (unsigned)d;
-        if (++seen > 64) return false;            // length cap (overflow guard)
+        if (++seen > 64) return false;            // length cap
     }
     if (!seen) return false;
     *val = v; return true;
@@ -979,10 +981,12 @@ static bool a_solve_base(const char *raw, bool en, anima_result_t *r)
 {
     char norm[160]; a_norm_solve(raw, norm, sizeof(norm));
     char wd[24][20]; int nw = 0;                  // alnum word tokens
+    uint32_t cut = 0;                             // bit i: token i was longer than 19 chars (split)
     for (const char *p = norm; *p && nw < 24; ) {
         while (*p && !isalnum((unsigned char)*p)) p++;
         if (!*p) break;
         int l = 0; while (*p && isalnum((unsigned char)*p) && l < 19) wd[nw][l++] = *p++;
+        if (isalnum((unsigned char)*p)) cut |= 1u << nw;
         wd[nw][l] = 0; nw++;
     }
     for (int i = 0; i < nw; i++)                   // "log in base 2 di 8" is a logarithm, not a radix
@@ -1019,10 +1023,10 @@ static bool a_solve_base(const char *raw, bool en, anima_result_t *r)
     }
     if (!sawKw) return false;
     // value = first unused token containing a digit; else a pure hex-letter token (assume base 16).
-    const char *val = NULL;
+    const char *val = NULL; int vi = -1;
     for (int i = 0; i < nw && !val; i++) {
         if (used[i]) continue;
-        for (const char *p = wd[i]; *p; p++) if (*p >= '0' && *p <= '9') { val = wd[i]; break; }
+        for (const char *p = wd[i]; *p; p++) if (*p >= '0' && *p <= '9') { val = wd[i]; vi = i; break; }
     }
     // Letter-only value (e.g. "FF") = hex ONLY with positive evidence: a conversion verb, an
     // explicit hex word, or a known hex source. Guards against IT/EN words that are valid hex
@@ -1031,9 +1035,9 @@ static bool a_solve_base(const char *raw, bool en, anima_result_t *r)
         if (used[i] || strlen(wd[i]) < 2) continue;
         bool hexonly = true;
         for (const char *p = wd[i]; *p; p++) if (!(*p >= 'a' && *p <= 'f')) { hexonly = false; break; }
-        if (hexonly) { val = wd[i]; if (!srcBase) srcBase = 16; }
+        if (hexonly) { val = wd[i]; vi = i; if (!srcBase) srcBase = 16; }
     }
-    if (!val) return false;
+    if (!val || (cut & (1u << vi))) return false;   // a value the tokenizer split is NOT the user's number
     char vbuf[40]; int vl = 0;                     // copy, then strip an 0x/0b/0o prefix
     for (const char *p = val; *p && vl < 39; p++) vbuf[vl++] = *p;
     vbuf[vl] = 0;
@@ -2799,24 +2803,27 @@ static bool a_solve_equation(const char *raw, bool en, anima_result_t *r)
 // ============================================================================
 
 // Replace every whole-word token of `in` that names a SET register with its value. Returns how many it
-// substituted (0 = nothing). Only existing names match, so ordinary words are untouched — this is what
-// lets a stored result flow into a later expression or chain step ("usa r per l'area", "A + 5").
+// substituted (0 = nothing), or -1 if the result did not fit in `out`: a clipped expression would compute
+// a WRONG value, so callers decline instead. Only existing names match, so ordinary words are untouched —
+// this is what lets a stored result flow into a later expression or chain step ("usa r per l'area", "A + 5").
 static int a_subst_regs(const char *in, char *out, size_t cap)
 {
-    int o = 0, nsub = 0;
-    for (const char *p = in; *p && o < (int)cap - 1; ) {
+    int o = 0, nsub = 0; bool clip = false; const char *p = in;
+    while (*p && !clip) {
+        if (o >= (int)cap - 1) { clip = true; break; }
         if (isalpha((unsigned char)*p)) {
             const char *st = p; char name[16]; int nl = 0;
             while (isalnum((unsigned char)*p)) { if (nl < 15) name[nl++] = (char)tolower((unsigned char)*p); p++; }
             name[nl] = 0;
             double v;
             if (anima_reg_get(name, &v)) { char vb[40]; a_fmt_num(v, vb, sizeof vb);
-                o += snprintf(out + o, cap - o, "%s", vb); nsub++; }
-            else for (const char *q = st; q < p && o < (int)cap - 1; q++) out[o++] = *q;
+                int w = snprintf(out + o, cap - o, "%s", vb); nsub++;   // w = UNtruncated length: never o += w blindly
+                if (w > (int)cap - 1 - o) { o = (int)cap - 1; clip = true; } else o += w; }
+            else for (const char *q = st; q < p; q++) { if (o >= (int)cap - 1) { clip = true; break; } out[o++] = *q; }
         } else out[o++] = *p++;
     }
     out[o] = 0;
-    return nsub;
+    return clip ? -1 : nsub;
 }
 
 static bool a_chain_anaphor(const char *w)
@@ -2938,7 +2945,7 @@ static bool a_solve_chain(const char *raw, bool en, anima_result_t *r)
     char body[920]; int bl = 0; double prev = 0; bool haveprev = false; char finalrep[200] = "";
     for (int s = 0; s < nseg; s++) {
         char step[200], sub[256];
-        a_subst_regs(seg[s], step, sizeof step);               // let stored registers feed a step ("A + 5")
+        if (a_subst_regs(seg[s], step, sizeof step) < 0) return false;   // registers feed a step ("A + 5"); too long -> decline
         if (s == 0 || !haveprev) snprintf(sub, sizeof sub, "%s", step);
         else a_followup_rewrite(step, prev, sub, sizeof sub);
         anima_result_t sr; memset(&sr, 0, sizeof sr);

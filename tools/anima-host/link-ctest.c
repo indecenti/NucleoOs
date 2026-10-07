@@ -227,6 +227,33 @@ static void test_bruce(void) {
           "320B in 150B chunks reconstructs identically");
 }
 
+// Peer-supplied names/commands are HOSTILE input: the receiver builds "<inbox>/<name>" from the name and
+// shows/runs the command. The sanitiser must leave only a bare basename (no traversal, no hidden file,
+// no control bytes) and the command cleaner must drop control bytes (no terminal/escape tricks on screen).
+static void test_sanitise(void) {
+    char o[64];
+    check("name: plain kept",        nlink_safe_name("photo.jpg", 30, o, sizeof o) && !strcmp(o, "photo.jpg"), o);
+    check("name: inlen bound",       nlink_safe_name("abcdef", 3, o, sizeof o) && !strcmp(o, "abc"), "stops at inlen (unterminated wire field)");
+    check("name: utf-8 kept",        nlink_safe_name("caff\xc3\xa8.txt", 30, o, sizeof o), "non-ASCII bytes are fine on FAT");
+    const char *bad[] = { "", ".", "..", "../x", "a/b", "/etc", "a\\b", "..\\x", ".hidden", "a\nb", "x\x7f", "\x1b[2J", NULL };
+    int all = 1;
+    for (int i = 0; bad[i]; i++) {
+        char b[64] = "junk";
+        if (nlink_safe_name(bad[i], 30, b, sizeof b) || b[0]) { all = 0; printf("    accepted: [%s]\n", bad[i]); }
+    }
+    check("name: hostile rejected",  all, "empty / . / .. / slash / backslash / leading dot / control -> false + empty out");
+    check("name: NULL rejected",     !nlink_safe_name(NULL, 30, o, sizeof o) && !o[0], NULL);
+    char longn[80]; memset(longn, 'a', 79); longn[79] = 0;
+    check("name: too long rejected", !nlink_safe_name(longn, 79, o, 16) && !o[0], "never silently truncated into the inbox path");
+    char c[32];
+    int n = nlink_clean_cmd("ls\x1b[2J\r\nrm\t-x", 64, c, sizeof c);
+    check("cmd: control stripped",   n == 9 && !strcmp(c, "ls[2Jrm-x"), c);
+    n = nlink_clean_cmd("apri calcolatrice", 5, c, sizeof c);
+    check("cmd: inlen bound",        n == 5 && !strcmp(c, "apri "), c);
+    n = nlink_clean_cmd("0123456789abcdefghij", 64, c, 8);
+    check("cmd: cap bound",          n == 7 && !strcmp(c, "0123456"), c);
+}
+
 int main(void) {
     seed(0xA11CE);
     printf("nucleo_link host gate\n");
@@ -243,6 +270,8 @@ int main(void) {
     test_decline();
     test_dup_offer();
     test_discovery();
+    printf("Hostile peer input:\n");
+    test_sanitise();
     printf(FAILS ? "\nRESULT: %d FAILED\n" : "\nRESULT: all passed\n", FAILS);
     return FAILS ? 1 : 0;
 }

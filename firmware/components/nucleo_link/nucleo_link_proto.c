@@ -28,6 +28,32 @@ uint32_t nlink_crc32(uint32_t crc, const uint8_t *p, size_t n) {
     return ~crc;
 }
 
+// Peer names land in "<inbox>/<name>": anything but a bare, visible basename could escape the inbox
+// ("../x"), hide a file (".x") or smuggle control bytes. Reject instead of repairing — the caller falls
+// back to a fixed name, so a hostile name can never pick the path.
+bool nlink_safe_name(const char *in, int inlen, char *out, int cap) {
+    int n = 0;
+    if (cap > 0) out[0] = 0;
+    if (!in || cap <= 1 || in[0] == '.') return false;
+    for (; n < inlen && in[n]; n++) {
+        unsigned char c = (unsigned char)in[n];
+        if (c < 0x20 || c == 0x7F || c == '/' || c == '\\' || n >= cap - 1) { out[0] = 0; return false; }
+        out[n] = (char)c;
+    }
+    out[n] = 0;
+    return n > 0;
+}
+// Commands are shown for confirmation then run: drop control bytes so what is shown is what runs.
+int nlink_clean_cmd(const char *in, int inlen, char *out, int cap) {
+    int o = 0;
+    for (int i = 0; in && i < inlen && in[i] && o < cap - 1; i++) {
+        unsigned char c = (unsigned char)in[i];
+        if (c >= 0x20 && c != 0x7F) out[o++] = (char)c;
+    }
+    if (cap > 0) out[o] = 0;
+    return o;
+}
+
 // ---- frame emit ------------------------------------------------------------
 static int hdr(uint8_t *b, uint8_t type, uint32_t session) {
     b[0] = 'N'; b[1] = 'L'; b[2] = NLINK_VER; b[3] = type;

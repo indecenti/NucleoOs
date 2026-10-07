@@ -28,6 +28,9 @@ static const uint8_t BCAST[6] = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};
 #define BRUCE_PACE_MS 40            // Bruce has no flow control; pace like its delay(100), a bit faster
 #define MAXPEERS      8
 #define INBOX_DEF     NUCLEO_SD_MOUNT "/data/Vicino"
+// Bruce frames are written with NO receiver confirmation (Bruce has no offer step), so bound what one
+// unconfirmed peer can push onto the SD. 2 MB = ~10 min at Bruce's pacing — far above a real Bruce share.
+#define BRUCE_RX_MAX  (2u * 1024u * 1024u)
 
 typedef struct { uint8_t mac[6]; int len; uint8_t buf[256]; } rxpkt_t;
 
@@ -65,7 +68,7 @@ static int              s_npeers;
 
 // Bruce-mode (naive) send/recv run alongside the core.
 static struct { bool active; FILE *f; bruce_msg_t msg; uint32_t total, sent, last_ms; uint8_t dst[6]; } s_bsend;
-static struct { bool active; FILE *f; char path[160]; uint32_t total, got; } s_brecv;
+static struct { bool active; FILE *f; char path[160]; uint32_t total, got; uint8_t mac[6]; } s_brecv;
 
 static void lock(void)   { if (s_lock) xSemaphoreTakeRecursive(s_lock, portMAX_DELAY); }
 static void unlock(void) { if (s_lock) xSemaphoreGiveRecursive(s_lock); }
@@ -106,7 +109,9 @@ static void mkdirs(const char *path) {
 }
 static void unique_dest(const char *name, char *out, int cap) {
     mkdirs(s_inbox);
-    const char *base = name && name[0] ? name : "file.bin";
+    // The name comes off the air: only a sanitised basename may reach the path (no "../", no '/').
+    char base[NLINK_NAME_MAX + 1];
+    if (!nlink_safe_name(name, NLINK_NAME_MAX, base, sizeof base)) snprintf(base, sizeof base, "file.bin");
     char stem[96], ext[32]; const char *dot = strrchr(base, '.');
     if (dot) { snprintf(stem, sizeof stem, "%.*s", (int)(dot - base), base); snprintf(ext, sizeof ext, "%s", dot); }
     else     { snprintf(stem, sizeof stem, "%s", base); ext[0] = 0; }
@@ -161,7 +166,7 @@ static void finish(bool ok) {
     s_st.state = NL_ST_DONE; s_st.done = s_st.total;
     if (!s_st.sending) {
         if (s_is_cmd) {                                   // received a command -> gate it
-            snprintf(s_cmd_buf, sizeof s_cmd_buf, "%.*s", (int)s_mem_len, (char *)s_mem);
+            nlink_clean_cmd((const char *)s_mem, (int)s_mem_len, s_cmd_buf, sizeof s_cmd_buf);   // no control bytes
             snprintf(s_cmd_from, sizeof s_cmd_from, "%s", s_offer_from);
             s_cmd_pending = true;
         } else if (s_part[0] && s_final[0]) {             // received a file -> publish from .part
@@ -219,20 +224,28 @@ static void bruce_on_frame(const uint8_t *mac, const uint8_t *data) {
         add_peer(mac, NULL, NLINK_PROTO_BRUCE); return;
     }
     if (m->pong) { add_peer(mac, NULL, NLINK_PROTO_BRUCE); return; }
-    // file frame (Bruce sends filename/filepath every frame)
+    // file frame (Bruce sends filename/filepath every frame). A receive is PINNED to the device that
+    // started it: frames from any other MAC would otherwise splice into (or end) this file.
+    if (s_brecv.active && memcmp(mac, s_brecv.mac, 6)) return;
     if (!s_brecv.active) {
+        if (m->totalBytes > BRUCE_RX_MAX) { ESP_LOGW(TAG, "bruce rx %u B > cap, ignored", (unsigned)m->totalBytes); return; }
         char nm[BRUCE_FILENAME_SIZE + 1]; snprintf(nm, sizeof nm, "%.*s", BRUCE_FILENAME_SIZE, m->filename);
-        unique_dest(nm[0] ? nm : "bruce.bin", s_brecv.path, sizeof s_brecv.path);
+        unique_dest(nm, s_brecv.path, sizeof s_brecv.path);
         s_brecv.f = fopen(s_brecv.path, "wb");
         s_brecv.active = s_brecv.f != NULL; s_brecv.total = m->totalBytes; s_brecv.got = 0;
+        memcpy(s_brecv.mac, mac, 6);
         s_st.active = 1; s_st.sending = 0; s_st.proto = NLINK_PROTO_BRUCE; s_st.state = NL_ST_RUN;
-        snprintf(s_st.name, sizeof s_st.name, "%s", nm);
+        snprintf(s_st.name, sizeof s_st.name, "%s", strrchr(s_brecv.path, '/') + 1);   // the name actually saved
     }
     if (s_brecv.f && m->dataSize) {
         // dataSize comes verbatim off the ESP-NOW frame (only the SENDER clamps it). m->data is just
         // BRUCE_DATA_SIZE bytes inside the fixed rx packet — clamp so a hostile peer can't drive fwrite
         // past data[] (OOB read of the packet/stack, or a huge bogus write).
         size_t dn = m->dataSize > BRUCE_DATA_SIZE ? BRUCE_DATA_SIZE : m->dataSize;
+        if (s_brecv.got + dn > BRUCE_RX_MAX) {           // totalBytes is only a claim: cap what we WRITE
+            fclose(s_brecv.f); s_brecv.f = NULL; remove(s_brecv.path); s_brecv.active = false;
+            s_st.state = NL_ST_FAIL; s_st.active = 0; return;
+        }
         fwrite(m->data, 1, dn, s_brecv.f);
         s_brecv.got += dn; s_st.done = s_brecv.got; s_st.total = s_brecv.total;
     }

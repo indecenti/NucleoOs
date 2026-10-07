@@ -17,12 +17,13 @@ static QueueHandle_t s_rxq;
 
 // The ESP-NOW recv callback runs in the Wi-Fi task: do the minimum (copy into the queue) and return.
 static void recv_cb(const esp_now_recv_info_t *info, const uint8_t *data, int len) {
-    if (!s_rxq || len <= 0 || len > PNET_MAXMSG) return;
+    QueueHandle_t q = s_rxq;    // read ONCE: pnet_stop() may NULL it from the app task meanwhile
+    if (!q || len <= 0 || len > PNET_MAXMSG) return;
     pnet_pkt_t p;
     memcpy(p.mac, info->src_addr, 6);
     p.len = len;
     memcpy(p.buf, data, len);
-    xQueueSend(s_rxq, &p, 0);   // drop on overflow — a stale game frame is worthless anyway
+    xQueueSend(q, &p, 0);       // drop on overflow — a stale game frame is worthless anyway
 }
 
 // Register a peer once (idempotent). channel 0 = "use the current Wi-Fi channel".
@@ -68,11 +69,14 @@ bool pnet_start(void) {
 
 void pnet_stop(void) {
     if (!s_inited) return;
+    // Teardown order matters: mark down + unhook + NULL the queue first, stop ESP-NOW, THEN free the
+    // queue — so a recv_cb already running in the Wi-Fi task never posts to a deleted queue.
+    s_inited = false;
+    QueueHandle_t q = s_rxq; s_rxq = NULL;
     esp_now_unregister_recv_cb();
     esp_now_deinit();
-    if (s_rxq) { vQueueDelete(s_rxq); s_rxq = NULL; }
+    if (q) vQueueDelete(q);
     esp_wifi_set_ps(WIFI_PS_MIN_MODEM);   // restore the system default power-save
-    s_inited = false;
 }
 
 const char *pnet_name(void) {

@@ -225,7 +225,7 @@ static void clip_reply(char *dst, int cap, const char *src)
         unsigned char c = *p;
         int len = (c < 0x80) ? 1 : (c < 0xE0) ? 2 : (c < 0xF0) ? 3 : 4;
         bool drop = (c >= 0xD0 && c <= 0xDF) || (c >= 0xE3 && c <= 0xED);   // Cyrillic/Arabic/Hebrew · CJK/kana/Hangul
-        if (drop) { p += len; gap = true; continue; }
+        if (drop) { for (int k = 0; k < len && *p; k++) p++; gap = true; continue; }   // a cut lead byte must not skip the NUL
         if (gap && o > 0 && clean[o-1] != ' ') clean[o++] = ' ';            // collapse a dropped run to one space
         gap = false;
         for (int k = 0; k < len && *p && o < (int)sizeof(clean) - 1; k++) clean[o++] = (char)*p++;
@@ -1086,13 +1086,27 @@ typedef struct {
     char version[24];    // anthropic-version (Anthropic only)
 } teacher_cfg_t;
 
-// Read the whole teacher.json into a caller-owned buffer. true if non-empty.
-static bool teacher_read_file(char *buf, int cap)
+// Read the whole teacher.json into a HEAP buffer sized to the file (caller frees; NULL = none/unusable).
+// A multi-provider file outgrew the old fixed 1.5 KB stack read and was silently cut -> cJSON failed ->
+// "no key" with no log. Heap (transient: freed right after cJSON_Parse, whose tree dwarfs it anyway)
+// instead of a bigger stack buffer: the callers run on the anima worker / httpd / recorder task stacks,
+// which must not grow. Hard cap so a junk file can't take the heap; too big = one ESP_LOGW + explicit fail.
+#define TEACHER_JSON_MAX 4096
+static char *teacher_read_file(void)
 {
+    static bool s_warned;
     FILE *f = fopen(NUCLEO_SD_MOUNT "/data/anima/teacher.json", "r");
-    if (!f) { if (cap) buf[0] = 0; return false; }
-    size_t n = fread(buf, 1, cap - 1, f); fclose(f); buf[n] = 0;
-    return n > 0;
+    if (!f) return NULL;
+    long n = (fseek(f, 0, SEEK_END) == 0) ? ftell(f) : -1; fseek(f, 0, SEEK_SET);
+    if (n <= 0 || n > TEACHER_JSON_MAX) {
+        if (n > TEACHER_JSON_MAX && !s_warned) { s_warned = true; ESP_LOGW(TAG, "teacher.json %ld B > %d B cap: ignored (no online key)", n, TEACHER_JSON_MAX); }
+        fclose(f); return NULL;
+    }
+    char *buf = malloc((size_t)n + 1);
+    if (!buf) { ESP_LOGW(TAG, "teacher.json: no heap for %ld B", n); fclose(f); return NULL; }
+    size_t rd = fread(buf, 1, (size_t)n, f); fclose(f); buf[rd] = 0;
+    if (!rd) { free(buf); return NULL; }
+    return buf;
 }
 
 // Classify the cloud teacher from its base URL. "anthropic" (Claude) and "google" (Gemini) and "xai"
@@ -1132,9 +1146,9 @@ static void teacher_strip_slash(char *base) { for (int n = (int)strlen(base); n 
 static bool teacher_load(teacher_cfg_t *c)
 {
     memset(c, 0, sizeof *c);
-    char buf[1536];                                  // freed on return, before any TLS/L1 reclaim
-    if (!teacher_read_file(buf, sizeof buf)) return false;
-    cJSON *o = cJSON_Parse(buf); if (!o) return false;
+    char *buf = teacher_read_file();                 // freed right after parse, before any TLS/L1 reclaim
+    if (!buf) return false;
+    cJSON *o = cJSON_Parse(buf); free(buf); if (!o) return false;
     bool have = teacher_obj_to_cfg(o, c);
     cJSON_Delete(o);
     if (!have) return false;
@@ -1285,9 +1299,8 @@ int nucleo_anima_transcribe(const char *path, const char *lang_hint,
     char base[160], cmodel[80], key[160], wmodel[64] = "whisper-large-v3";
     if (!teacher_cfg(base, sizeof base, cmodel, sizeof cmodel, key, sizeof key)) return -1;  // no key -> offline
     // Optional "whisper" model override from teacher.json (else whisper-large-v3).
-    { FILE *cf = fopen(NUCLEO_SD_MOUNT "/data/anima/teacher.json", "r");
-      if (cf) { char b[1536]; size_t cn = fread(b, 1, sizeof b - 1, cf); fclose(cf); b[cn] = 0;
-        cJSON *co = cJSON_Parse(b);
+    { char *b = teacher_read_file();
+      if (b) { cJSON *co = cJSON_Parse(b); free(b);
         if (co) { cJSON *w = cJSON_GetObjectItem(co, "whisper");
           if (cJSON_IsString(w) && w->valuestring[0]) snprintf(wmodel, sizeof wmodel, "%s", w->valuestring);
           cJSON_Delete(co); } } }
@@ -1922,9 +1935,8 @@ int nucleo_anima_transcribe_long(const char *path, const char *lang_hint, const 
     char base[160], cmodel[80], key[160], wmodel[64] = "whisper-large-v3";
     if (!teacher_cfg(base, sizeof base, cmodel, sizeof cmodel, key, sizeof key)) return -1;
     bool want_adpcm = true;              // default on; "tx_codec":"pcm" in teacher.json opts out
-    { FILE *cf = fopen(NUCLEO_SD_MOUNT "/data/anima/teacher.json", "r");
-      if (cf) { char b[1536]; size_t cn = fread(b, 1, sizeof b - 1, cf); fclose(cf); b[cn] = 0;
-        cJSON *co = cJSON_Parse(b);
+    { char *b = teacher_read_file();
+      if (b) { cJSON *co = cJSON_Parse(b); free(b);
         if (co) { cJSON *w = cJSON_GetObjectItem(co, "whisper");
           if (cJSON_IsString(w) && w->valuestring[0]) snprintf(wmodel, sizeof wmodel, "%s", w->valuestring);
           cJSON *tc = cJSON_GetObjectItem(co, "tx_codec");
@@ -2031,9 +2043,13 @@ int nucleo_anima_summarize_file(const char *txt_path, const char *lang, const ch
     fseek(fp, 0, SEEK_END); long sz = ftell(fp); fseek(fp, 0, SEEK_SET);
     if (sz <= 0) { fclose(fp); return -1; }
 
+    // partials: ONE fixed block (was 8 KB, grown +2 KB per window with no limit, for a long recording on an
+    // ~18 KB heap). Notes past the cap are dropped (logged); the merge request is clipped to SUM_MERGE_MAX.
+    #define SUM_PARTIALS_MAX 6144
+    #define SUM_MERGE_MAX    3100                    // same request bound as the other callers' %.3100s
     char *win = malloc(6144); char *acc = malloc(4096); char *partials = NULL;
     if (!win || !acc) { free(win); free(acc); fclose(fp); return -1; }
-    size_t pcap = 8192, plen = 0; partials = malloc(pcap);
+    size_t pcap = SUM_PARTIALS_MAX, plen = 0; partials = malloc(pcap);
     if (!partials) { free(win); free(acc); fclose(fp); return -1; }
     partials[0] = 0;
 
@@ -2044,9 +2060,9 @@ int nucleo_anima_summarize_file(const char *txt_path, const char *lang, const ch
         snprintf(sys, sizeof sys, "Summarize THIS part of a long transcript in %s as terse notes (facts, decisions, action items). No preamble.",
                  (!strcmp(lang, "en")) ? "English" : "Italian");
         if (teacher_complete(sys, win, 0.3, acc, 4096) > 0) {              // custom-prompt completion (provider-aware)
-            size_t need = plen + strlen(acc) + 2;
-            if (need > pcap) { size_t nc = need + 2048; char *g = realloc(partials, nc); if (g) { partials = g; pcap = nc; } }
-            if (need <= pcap) { plen += snprintf(partials + plen, pcap - plen, "%s\n\n", acc); }
+            size_t need = plen + strlen(acc) + 3;            // + "\n\n" + NUL
+            if (need <= pcap) plen += snprintf(partials + plen, pcap - plen, "%s\n\n", acc);
+            else ESP_LOGW(TAG, "summarize: notes cap %d B reached, part %d dropped", SUM_PARTIALS_MAX, npieces + 1);
             npieces++;
         }
         nucleo_anima_l1_unload_if_idle();
@@ -2058,6 +2074,10 @@ int nucleo_anima_summarize_file(const char *txt_path, const char *lang, const ch
     if (npieces == 1) {                                  // single window: the partial IS the summary
         FILE *sf = fopen(sum_path, "w"); if (sf) { fwrite(partials, 1, plen, sf); fclose(sf); rc = (int)plen; }
     } else {
+        if (plen > SUM_MERGE_MAX) {                      // clip at a codepoint boundary (bounds the request heap)
+            size_t c = SUM_MERGE_MAX; while (c > 0 && ((unsigned char)partials[c] & 0xC0) == 0x80) c--;
+            partials[c] = 0; plen = c;
+        }
         char sys[200];
         snprintf(sys, sizeof sys, "Merge these section notes of one recording into a single coherent summary in %s: bullet points for decisions and key facts, then an \"Action items\" list. Remove duplicates.",
                  (!strcmp(lang, "en")) ? "English" : "Italian");
@@ -2142,9 +2162,9 @@ static int teacher_complete(const char *sys_prompt, const char *user_prompt, dou
 
     // 2. Cascade fallback: iterate keys.{groq,openai,google,anthropic,...} in order.
     //    Skip any sub-key whose key string is identical to primary (same endpoint already tried).
-    char buf[1536];
-    if (!teacher_read_file(buf, sizeof buf)) return -1;
-    cJSON *root = cJSON_Parse(buf); if (!root) return -1;
+    char *buf = teacher_read_file();
+    if (!buf) return -1;
+    cJSON *root = cJSON_Parse(buf); free(buf); if (!root) return -1;
     cJSON *keys = cJSON_GetObjectItem(root, "keys");
     if (keys && cJSON_IsObject(keys)) {
         cJSON *child;
@@ -3241,9 +3261,9 @@ bool nucleo_anima_online_is_live(const char *input, bool en)
 static bool teacher_cfg(char *base, int bcap, char *model, int mcap, char *key, int kcap)
 {
     base[0] = 0; model[0] = 0; key[0] = 0;
-    char buf[1536];
-    if (!teacher_read_file(buf, sizeof buf)) return false;
-    cJSON *root = cJSON_Parse(buf); if (!root) return false;
+    char *buf = teacher_read_file();
+    if (!buf) return false;
+    cJSON *root = cJSON_Parse(buf); free(buf); if (!root) return false;
 
     teacher_cfg_t c; memset(&c, 0, sizeof c); bool ok = false;
     teacher_cfg_t top; memset(&top, 0, sizeof top);

@@ -571,7 +571,7 @@ static void apply_state(const sn_state_t* st, int plen) {
         cam_update();
         Snake& dead=(s_winner==1)?s_s2:s_s1;
         uint16_t dc=(s_winner==1)?0xF81F:C_GREEN;
-        parts_spawn(sx_(dead.bx[0])+(float)CELL/2, sy_(dead.bx[0])+(float)CELL/2, dc, 16);
+        parts_spawn(sx_(dead.bx[0])+(float)CELL/2, sy_(dead.by[0])+(float)CELL/2, dc, 16);
         s_flash=10; s_st=ST_OVER;
     }
     nucleo_app_request_draw();

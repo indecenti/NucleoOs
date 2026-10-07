@@ -148,8 +148,10 @@ bool swarm_svc_start(void) {
     if (s_inited) return true;
     s_lock = xSemaphoreCreateRecursiveMutex();
     s_rxq  = xQueueCreate(16, sizeof(rxpkt_t));
-    if (!s_lock || !s_rxq) { ESP_LOGE(TAG, "alloc"); return false; }
-    if (esp_now_init() != ESP_OK) { ESP_LOGE(TAG, "esp_now_init"); return false; }
+    if (!s_lock || !s_rxq) { ESP_LOGE(TAG, "alloc"); goto fail; }
+    // esp_now is a global singleton (Vicino / pnet may have left it inited): EXIST is success, as in nucleo_pnet.c.
+    { esp_err_t e = esp_now_init();
+      if (e != ESP_OK && e != ESP_ERR_ESPNOW_EXIST) { ESP_LOGE(TAG, "esp_now_init %s", esp_err_to_name(e)); goto fail; } }
     esp_now_register_recv_cb(recv_cb);
     ensure_peer(BCAST);
     lock_channel();
@@ -162,6 +164,10 @@ bool swarm_svc_start(void) {
     s_inited = true; s_run = true;
     xTaskCreate(svc_task, "swarm", 4096, NULL, tskIDLE_PRIORITY + 2, &s_task);
     return true;
+fail:                                                    // a failed start must not leak the queue/mutex
+    if (s_rxq)  { vQueueDelete(s_rxq);  s_rxq = NULL; }
+    if (s_lock) { vSemaphoreDelete(s_lock); s_lock = NULL; }
+    return false;
 }
 
 void swarm_svc_stop(void) {

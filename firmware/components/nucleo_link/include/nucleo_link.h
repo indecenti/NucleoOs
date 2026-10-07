@@ -126,6 +126,12 @@ static inline bool nlink_busy(const nlink_ctx_t *c) {
 
 // ---- util ------------------------------------------------------------------
 uint32_t nlink_crc32(uint32_t crc, const uint8_t *p, size_t n);  // seed with 0
+// PEER-SUPPLIED file name (Nucleo offer / Bruce frame) -> bare basename for "<inbox>/<name>". Reads at
+// most inlen bytes (wire fields may be unterminated). false + out="" if empty, too long for cap, has
+// '/' or '\', starts with '.' (covers "." / ".." / hidden files) or holds a control byte.
+bool nlink_safe_name(const char *in, int inlen, char *out, int cap);
+// PEER-SUPPLIED command -> printable text: drops control bytes (< 0x20, 0x7F). Returns out length.
+int  nlink_clean_cmd(const char *in, int inlen, char *out, int cap);
 
 #ifdef __cplusplus
 }

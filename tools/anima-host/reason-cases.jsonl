@@ -51,3 +51,9 @@
 {"turns":[{"q":"let x = 7"},{"q":"x times 3","expect":"21"}],"lang":"en"}
 {"turns":[{"q":"chiamalo z","expect":"da salvare"}],"lang":"it"}
 {"turns":[{"q":"sia a = 5"},{"q":"a casa mia","reject":true}],"lang":"it"}
+// --- BOUNDS (2026-10 review): an overflowing substitution / radix value must DECLINE, never a wrong number ---
+{"turns": [{"q": "sia a = 123456789"}, {"q": "a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a + a poi per 2", "reject": true}, {"q": "quanto vale a", "expect": "123456789"}], "lang": "it"}
+{"q": "converti 1111111111111111111111111 da binario in decimale", "reject": true, "lang": "it"}
+{"q": "converti FFFFFFFFFFFFFFFFFF in decimale", "reject": true, "lang": "it"}
+{"q": "convert 0xFFFFFFFFFFFFFFFFFF to decimal", "reject": true, "lang": "en"}
+{"q": "converti FFFFFFFFFFFFFFFF in decimale", "expect": "18446744073709551615", "lang": "it"}
