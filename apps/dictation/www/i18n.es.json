@@ -58,5 +58,6 @@
   "hdr_date": "Fecha",
   "hdr_start": "Hora de inicio",
   "hdr_lang": "Idioma",
-  "hdr_engine": "Motor"
+  "hdr_engine": "Motor",
+  "new_unsaved": "No iniciada: la transcripción actual no se pudo guardar en el dispositivo. Se conserva aquí — vuelve a intentarlo cuando el dispositivo esté disponible."
 }

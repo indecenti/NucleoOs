@@ -102,5 +102,7 @@
   "suggestTitle": "Titel vorschlagen",
   "promptTitle": "Schlage EINEN kurzen Titel (max. 5 Wörter) für diese Sprachnotiz vor. Antworte nur mit dem Titel:\n",
   "contextTranscript": "\n\n(Kontext — Transkript von \"",
-  "recordingInProgress": "Aufnahme läuft…"
+  "recordingInProgress": "Aufnahme läuft…",
+  "listFailed": "Die Aufnahmen konnten nicht gelesen werden — das Gerät ist nicht erreichbar. Versuche es gleich noch einmal.",
+  "deleteFailed": "Nicht gelöscht — das Gerät hat abgelehnt. Die Aufnahme und ihr Transkript bleiben erhalten."
 }

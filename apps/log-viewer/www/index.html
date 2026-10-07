@@ -199,14 +199,20 @@
       if (r.ok) {
         const text = await r.text();
         const lines = text.split('\n').filter((l) => l.trim());
+        // Newest CAP *events*, walking back from the end: a torn or garbled line (power loss mid-append,
+        // a truncated payload, a bare `null`) is skipped on its own — it used to throw and lose them all.
         const hist = [];
-        for (const line of lines.slice(-CAP)) { try { hist.push(JSON.parse(line)); } catch {} }
+        for (let i = lines.length - 1; i >= 0 && hist.length < CAP; i--) {
+          let e = null; try { e = JSON.parse(lines[i]); } catch {}
+          if (e && typeof e === 'object' && typeof e.t === 'string' && e.t) hist.push(e);
+        }
+        hist.reverse();
         const seen = new Set(hist.map((h) => h.seq));
         const live = events.filter((e) => e.seq == null || !seen.has(e.seq));
         events.length = 0; events.push(...hist, ...live);
         if (events.length > CAP) events.splice(0, events.length - CAP);
         srcEl.textContent = t('src_journal', { lines: lines.length });
-      } else { srcEl.textContent = t('src_none'); }
+      } else { srcEl.textContent = t(r.status === 404 ? 'src_none' : 'src_error'); }   // 503/401 = unreadable, not absent
     } catch { srcEl.textContent = t('src_error'); }
     restoreBtn();
     render();

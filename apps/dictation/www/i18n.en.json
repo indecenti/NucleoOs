@@ -58,5 +58,6 @@
   "hdr_date": "Date",
   "hdr_start": "Start time",
   "hdr_lang": "Language",
-  "hdr_engine": "Engine"
+  "hdr_engine": "Engine",
+  "new_unsaved": "Not started: the current transcript could not be saved to the device. It is kept here — try again when the device is reachable."
 }

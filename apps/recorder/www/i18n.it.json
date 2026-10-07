@@ -102,5 +102,7 @@
   "suggestTitle": "Suggerisci un titolo",
   "promptTitle": "Proponi UN titolo breve (max 5 parole) per questa nota vocale. Rispondi solo col titolo:\n",
   "contextTranscript": "\n\n(Contesto — trascrizione di \"",
-  "recordingInProgress": "Registrazione in corso…"
+  "recordingInProgress": "Registrazione in corso…",
+  "listFailed": "Impossibile leggere le registrazioni — dispositivo non raggiungibile. Riprova tra poco.",
+  "deleteFailed": "Non eliminata — il dispositivo ha rifiutato. La registrazione e la trascrizione restano."
 }

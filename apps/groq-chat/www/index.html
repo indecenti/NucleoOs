@@ -277,7 +277,10 @@
     }
     const addUser = t => { const b = row('me', '›'); b.textContent = t; };
     const addSys  = t => { const b = row('sys', '·'); b.textContent = t; };
-    const addErr  = t => { const b = row('err', '✕'); b.textContent = t; };
+    // A provider (or a gateway on a custom endpoint) may quote the request back in its error text — the
+    // Authorization header included. The explained error keeps that detail, so mask the key before showing it.
+    const redactKey = (s) => (S.key ? String(s).split(S.key).join(AI.maskKey(S.key)) : String(s));
+    const addErr  = t => { const b = row('err', '✕'); b.textContent = redactKey(t); };
 
     function hello() {
       logEl.innerHTML = '';

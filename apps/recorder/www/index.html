@@ -275,7 +275,8 @@
 
   // ---- fs helpers ------------------------------------------------------------
   const fs = {
-    list:  async(p)=>{try{return (await (await fetch('/api/fs/list?path='+enc(p))).json()).entries||[];}catch{return[];}},
+    // null = the listing FAILED (offline/503): never shown as an empty library. A 404 is a folder not made yet.
+    list:  async(p)=>{try{const r=await fetch('/api/fs/list?path='+enc(p)); if(r.status===404) return []; if(!r.ok) return null; return (await r.json()).entries||[];}catch{return null;}},
     write: async(p,blob)=>fetch('/api/fs/write?path='+enc(p),{method:'POST',body:blob}),
     del:   async(p)=>fetch('/api/fs/delete?path='+enc(p),{method:'POST'}),
     move:  async(a,b)=>fetch('/api/fs/move?from='+enc(a)+'&to='+enc(b),{method:'POST'}),
@@ -394,7 +395,7 @@
         onstart(){ acked = true; resolve(); },                 // recording really started → release the button
         onstatus(s){ if(s.level!=null) pushLevel(s.level/100); },
         onerror(kind, who){ if(!acked) reject(new Error(
-          kind==='busy' ? (t('micBusy')+(who?(' · '+who):'')) :
+          kind==='busy' ? (t('micBusy')+(who&&who!=='Recording'?(' · '+who):'')) :   /* the gate names the lock holder: during our own start attempt that is us */
           kind==='auth' ? t('deviceNotPaired') : t('micUnavailable'))); },
       });
       devRec.done.then((s)=>{ devRec=null; if(s && s.path) deviceFinalize(s.path); });
@@ -542,8 +543,11 @@
 
   // ============================ LIBRARY =======================================
   let openPanel = null;   // base name whose AI panel is expanded
+  let listFailed = false;  // the last listing failed: say so instead of "no recordings"
   async function loadList(){
     const entries = await fs.list(DIR);
+    listFailed = entries === null;
+    if(listFailed){ files = []; renderList(); return; }
     const names = new Set(entries.map(e=>e.name));
     files = entries.filter(e=>e.type==='file' && /\.(mp3|wav)$/i.test(e.name));
     for(const f of files){ const b=f.name.replace(/\.(mp3|wav)$/i,'');
@@ -566,17 +570,19 @@
     let arr=files.filter(f=>!q||f.name.toLowerCase().includes(q));
     arr=sortFiles(arr.slice());
     el.count.textContent = files.length? `${files.length} file` : '';
-    if(!arr.length){ el.list.innerHTML=`<div class="empty">${files.length?t('noResults'):t('noRecordings')}</div>`; return; }
+    if(!arr.length){ const e=document.createElement('div'); e.className='empty'; e.textContent=listFailed?t('listFailed'):files.length?t('noResults'):t('noRecordings'); el.list.replaceChildren(e); return; }
     el.list.innerHTML='';
     for(const f of arr){
       const path=DIR+'/'+f.name, isWav=/\.wav$/i.test(f.name);
       const li=document.createElement('li'); li.className='rec'+(selected&&selected.name===f.name?' sel':'');
       const top=document.createElement('div'); top.className='top';
-      top.innerHTML=`<span class="nm" title="${f.name}">${prettyName(f.name)}</span>`+
-        `<span class="badge ${isWav?'wav':'mp3'}">${isWav?'WAV':'MP3'}</span>`+
-        `<span class="badge">${fmtSize(f.size||0)}</span>`;
+      // File names are TEXT: an SD name like "Tom &amp; Jerry.mp3" must not be decoded as HTML.
+      const nm=document.createElement('span'); nm.className='nm'; nm.title=f.name; nm.textContent=prettyName(f.name);
+      const kind=document.createElement('span'); kind.className='badge '+(isWav?'wav':'mp3'); kind.textContent=isWav?'WAV':'MP3';
+      const size=document.createElement('span'); size.className='badge'; size.textContent=fmtSize(f.size||0);
+      top.append(nm,kind,size);
       const audio=document.createElement('audio'); audio.controls=true; audio.preload='none'; audio.src=readUrl(path);
-      if(f._sum) top.innerHTML += `<span class="badge ai" title="${t('summaryAvailable')}">✨</span>`;
+      if(f._sum){ const ai=document.createElement('span'); ai.className='badge ai'; ai.title=t('summaryAvailable'); ai.textContent='✨'; top.appendChild(ai); }
       const acts=document.createElement('div'); acts.className='acts';
       [
         mkBtn(t('rename'),()=>renameRec(f,top)),
@@ -689,7 +695,11 @@
     const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=name;
     document.body.appendChild(a); a.click(); a.remove(); setTimeout(()=>URL.revokeObjectURL(a.href),4000); }
   async function delRec(path){ if(!confirm(t('confirmDelete')))return;
-    await fs.del(path); await delSidecars(path);
+    // The sidecars (transcript, summary, journals) go only once the audio is really gone: a refused delete
+    // used to keep the take but wipe its transcript, and still say "Deleted".
+    let ok=false; try{ ok=(await fs.del(path)).ok; }catch{}
+    if(!ok){ toast(t('deleteFailed')); loadList(); return; }
+    await delSidecars(path);
     if(selected&&selected.path===path) selectNone(); toast(t('deleted')); loadList(); }
   async function convertWav(path,name,btn){ const o=btn.textContent; btn.disabled=true; btn.textContent='…';
     try{ const buf=await (await fetch(readUrl(path))).arrayBuffer(); const {samples,rate}=parseWav(buf);

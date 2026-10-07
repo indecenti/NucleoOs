@@ -16,5 +16,6 @@
   "dev_browser_set": "ora impostata dal browser",
   "timer_done": "Tempo scaduto!",
   "save_ok": "Salvato sul dispositivo",
-  "save_fail": "Salvataggio non riuscito — dispositivo non raggiungibile"
+  "save_fail": "Salvataggio non riuscito — dispositivo non raggiungibile",
+  "save_unread": "Non salvato — impossibile leggere le impostazioni salvate. Riprova quando il dispositivo è raggiungibile."
 }

@@ -58,5 +58,6 @@
   "hdr_date": "Datum",
   "hdr_start": "Startzeit",
   "hdr_lang": "Sprache",
-  "hdr_engine": "Engine"
+  "hdr_engine": "Engine",
+  "new_unsaved": "Nicht gestartet: Das aktuelle Transkript konnte nicht auf dem Gerät gespeichert werden. Es bleibt hier erhalten — versuche es erneut, wenn das Gerät erreichbar ist."
 }
