@@ -3655,6 +3655,38 @@
       "anima": false
     },
     {
+      "id": "unit-games-save-safety",
+      "label": "games-save-safety.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/games-save-safety.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-help-manual",
+      "label": "help-manual.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/help-manual.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
       "id": "unit-log-viewer-diag",
       "label": "log-viewer-diag.test.mjs",
       "category": "app-shell",
@@ -3663,6 +3695,22 @@
       "args": [
         "--test",
         "tools/log-viewer-diag.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-metronome-engine",
+      "label": "metronome-engine.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/metronome-engine.test.mjs"
       ],
       "verifies": "",
       "nl": false,
@@ -3807,6 +3855,22 @@
       "args": [
         "--test",
         "tools/shell-ai-engines.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-shell-ai-redact",
+      "label": "shell-ai-redact.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/shell-ai-redact.test.mjs"
       ],
       "verifies": "",
       "nl": false,

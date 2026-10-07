@@ -318,6 +318,14 @@ export function aiErrorKind(status, text) {
   if (status >= 500 || /overloaded/.test(m)) return 'provider_down';
   return 'bad_request';
 }
+// Provider errors can echo the request's credentials ("Invalid API key: gsk_…", "Bearer sk-…"), and that text
+// reaches every app's UI through explainAiError. Mask the configured key and anything key-shaped.
+export function redactSecrets(text, key) {
+  let s = String(text == null ? '' : text);
+  if (key && String(key).length >= 8) s = s.split(String(key)).join(maskKey(String(key)));
+  return s.replace(/(Bearers+)[A-Za-z0-9._~+/=-]{8,}/gi, '$1***')
+    .replace(/(sk-ant-|sk-|gsk_|xai-|AIza)[A-Za-z0-9_-]{6,}/g, '$1***');
+}
 // Build an AiError from a failed provider response (reads its JSON/text body once).
 export async function aiErrorFromResponse(resp, cfg, bodyText) {
   let text = bodyText;
@@ -326,12 +334,12 @@ export async function aiErrorFromResponse(resp, cfg, bodyText) {
   try { const j = JSON.parse(text); const e = j && (j.error || j); msg = [e.code, e.type, e.message || (typeof e === 'string' ? e : '')].filter(Boolean).join(' · '); } catch { msg = String(text || '').slice(0, 300); }
   const kind = aiErrorKind(resp.status, msg || text);
   const ra = Number(resp.headers && resp.headers.get && resp.headers.get('retry-after')) || retryAfterFromText(msg || text);
-  return new AiError(kind, msg || ('HTTP ' + resp.status), { status: resp.status, provider: cfg && cfg.provider, model: cfg && cfg.model, retryAfter: ra });
+  return new AiError(kind, redactSecrets(msg, cfg && cfg.key) || ('HTTP ' + resp.status), { status: resp.status, provider: cfg && cfg.provider, model: cfg && cfg.model, retryAfter: ra });
 }
 // Wrap anything thrown around a provider call (network TypeError, abort, an AiError already) as an AiError.
 export function toAiError(e, cfg) {
   if (e instanceof AiError) return e;
-  const name = e && e.name, msg = String((e && e.message) || e || '');
+  const name = e && e.name, msg = redactSecrets((e && e.message) || e || '', cfg && cfg.key);
   const extra = { provider: cfg && cfg.provider, model: cfg && cfg.model, cause: e };
   if (e && e.partial) extra.partial = e.partial;   // a stream that died mid-answer keeps what already arrived
   if (name === 'AbortError') return new AiError('stopped', msg, extra);
@@ -442,7 +450,7 @@ export function explainAiError(e, lang, opts = {}) {
   const row = AI_ERR_TEXT[err.kind] || AI_ERR_TEXT.bad_request;
   const tpl = row[l] || row.en;
   const P = providerOf(err.provider).label || err.provider || 'AI';
-  const detail = String(err.message || '').replace(/\s+/g, ' ').slice(0, 160);
+  const detail = redactSecrets(err.message || '').replace(/\s+/g, ' ').slice(0, 160);   // last line of defence
   return tpl.replace(/\{SET\}/g, opts.settings || AI_SETTINGS_AT[l] || AI_SETTINGS_AT.en)
     .replace(/\{P\}/g, P).replace(/\{M\}/g, err.model || '?')
     .replace('{R}', err.retryAfter ? ' (' + (err.retryAfter < 90 ? err.retryAfter + ' s' : Math.ceil(err.retryAfter / 60) + ' min') + ')' : '')
