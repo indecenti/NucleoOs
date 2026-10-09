@@ -166,6 +166,15 @@ if (Test-Path $irpack) {
     if ($LASTEXITCODE -ne 0) { throw "ir-pack.mjs failed ($LASTEXITCODE)" }
 }
 
+# 0c) Codegen: the native games' es/fr/de language packs (tools/game-i18n/*.json -> /sd/system/i18n/games,
+#     read by firmware/components/nucleo_app/game_text.cpp). Runs BEFORE staging so fresh packs ship.
+$gtpack = Join-Path $PSScriptRoot 'game-i18n\build.mjs'
+if (Test-Path $gtpack) {
+    Write-Host "Codegen: game language packs ->" -NoNewline
+    & node $gtpack
+    if ($LASTEXITCODE -ne 0) { throw "game-i18n/build.mjs failed ($LASTEXITCODE)" }
+}
+
 # 1) Assemble repo -> deploy/sd (incremental)
 $man = Load-Manifest $sd; $seen = @{}; $stat = @{ copied = 0; skipped = 0; deleted = 0; bytes = 0 }
 Sync-Dir "$repo\registry"          $sd 'system/registry'        $man $seen $stat
@@ -177,6 +186,7 @@ Sync-Dir "$repo\web\shell"         $sd 'www/shell'              $man $seen $stat
 # between the two copies on every run and shipped 15 unreferenced shards (~72 MB).
 Sync-Dir "$repo\tools\sd-sim\data" $sd 'data'                   $man $seen $stat @('data/anima/akb5', 'data/anima/anima-it-akb5.bin')
 Sync-Dir "$repo\tools\sd-sim\system\ir" $sd 'system/ir'         $man $seen $stat   # IR preset pack (presets.bin)
+if (Test-Path "$repo\tools\sd-sim\system\i18n") { Sync-Dir "$repo\tools\sd-sim\system\i18n" $sd 'system/i18n' $man $seen $stat }   # game language packs
 # Staging static assets from deploy/sd-safe
 Sync-Dir "$repo\deploy\sd-safe\data\anima\akb5" $sd 'data/anima/akb5' $man $seen $stat
 if (Test-Path "$repo\deploy\sd-safe\data\anima\anima-it-akb5.bin") {

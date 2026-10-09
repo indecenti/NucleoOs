@@ -114,7 +114,11 @@ const char *nucleo_tr5(const char *it, const char *en, const char *es, const cha
     switch (nh_lang_ix()) { case 1: return en; case 2: return es ? es : en; case 3: return fr ? fr : en; case 4: return de ? de : en; }
     return it;
 }
-uint32_t nucleo_i18n_gen(void) { return 1; }
+uint32_t nucleo_i18n_gen(void) {                     // bumps when a scenario switches g_nh.lang, like a live OS change
+    static const char *last; static uint32_t gen;
+    if (g_nh.lang != last) { last = g_nh.lang; gen++; }
+    return gen;
+}
 
 // ---- audio (counted, never played) ------------------------------------------------------------------------
 static int nh_tones, nh_plays;

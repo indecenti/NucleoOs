@@ -56,9 +56,11 @@ bool sdc_path_writable(const char *path)
         return true;
     }
 
-    // system/registry/ and system/ir/ — the app table and the IR preset pack.
+    // system/registry/, system/ir/ and system/i18n/ — the app table, the IR preset pack and the native
+    // games' es/fr/de language packs (game_text.cpp).
     if (under(path, "system/registry/")) return true;
     if (under(path, "system/ir/")) return true;
+    if (under(path, "system/i18n/")) return true;
 
     // data/anima/ — brain files ONLY; the API-key vault, learned caches, sessions and profile are the
     // user's and must never be shipped over.

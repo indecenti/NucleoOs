@@ -15,6 +15,8 @@
     "system/registry/apps.json": true,
     "system/registry/manual/files.info": true,
     "system/ir/presets.bin": true,
+    "system/i18n/games/pong.de": true,
+    "system/i18n": false,
     "system/config/settings.json": false,
     "system/keys/device.key": false,
     "system/sessions/abc": false,

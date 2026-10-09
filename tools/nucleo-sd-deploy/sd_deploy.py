@@ -73,6 +73,9 @@ SOURCE_MAP = [
     # IR remote presets (read-only, firmware nucleo_ir reads /system/ir/presets.bin). Built by
     # tools/ir-pack.mjs into the sd-sim tree; deploy.ps1 already shipped it, this map had missed it.
     dict(dest="system/ir",       kind="tree", gz=False, src=_src("tools/sd-sim/system/ir")),
+    # The native games' es/fr/de text (firmware game_text.cpp reads /system/i18n/games/<game>.<lang>).
+    # Built by tools/game-i18n/build.mjs from tools/game-i18n/*.json; system part, never user state.
+    dict(dest="system/i18n",     kind="tree", gz=False, src=_src("tools/sd-sim/system/i18n")),
     # SPOKEN voice: concatenative TTS clip bank (nucleo_tts), IT+EN. clips.pcm is oversized
     # (fetched by oversized-assets/rejoin.mjs); index.bin is committed. System part, not user
     # state -> always written, never deleted. (The LISTENING voice — split-part Vosk models —
@@ -585,7 +588,7 @@ def release_path_allowed(rel):
             return "app-data"                           # apps/<id>/data/** is the app's user data
         return ""
     if top == "system":
-        return "" if len(parts) > 2 and parts[1] in ("registry", "ir") else "system"
+        return "" if len(parts) > 2 and parts[1] in ("registry", "ir", "i18n") else "system"
     if top == "data":
         if len(parts) >= 3 and parts[1] == "anima":
             name = parts[2]

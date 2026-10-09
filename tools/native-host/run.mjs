@@ -30,27 +30,10 @@ const GCC = existsSync(`${MINGW}/gcc.exe`) ? `${MINGW}/gcc.exe` : 'gcc';
 const env = { ...process.env, PATH: `${MINGW};${process.env.PATH}` };
 const CJSON = 'C:/esp/esp-idf/components/json/cJSON';   // nucleo_theme.cpp reads theme.json with it
 
-// id -> the game's source, its registration function, helper sources linked beside it, and the SD folders
-// copied from deploy/sd/data into the sandbox (atlases, sound packs) so the game loads its real assets.
-export const GAMES = {
-  brawler:   { src: 'app_brawler.cpp', reg: 'nucleo_register_brawler', extra: ['brawler_chars.cpp', 'brawler_combat.cpp', 'brawler_enemies.cpp', 'brawler_fx.cpp', 'brawler_levels.cpp', 'brawler_menu.cpp', 'brawler_net.cpp', 'brawler_scene.cpp', 'brawler_sfx.cpp'], data: ['brawler'] },
-  cardler:   { src: 'app_cardler.cpp', reg: 'nucleo_register_cardler', data: ['Cardler'] },
-  stelle:    { src: 'app_constellations.cpp', reg: 'nucleo_register_constellations', data: ['costellazioni'] },
-  dice:      { src: 'app_dice.cpp', reg: 'nucleo_register_dice', ui: true },
-  pinball:   { src: 'app_pinball.cpp', reg: 'nucleo_register_pinball', data: ['pinball'] },
-  poker:     { src: 'app_poker.cpp', reg: 'nucleo_register_poker', data: ['poker'] },
-  pong:      { src: 'app_pong.cpp', reg: 'nucleo_register_pong', data: ['pong'] },
-  reactor:   { src: 'app_reactor.cpp', reg: 'nucleo_register_reactor', data: ['reattore'] },
-  giardino:  { src: 'app_sandgarden.cpp', reg: 'nucleo_register_sandgarden', data: ['giardino'] },
-  slots:     { src: 'app_slots.cpp', reg: 'nucleo_register_slots', data: ['slots'] },
-  snake:     { src: 'app_snake.cpp', reg: 'nucleo_register_snake', data: ['snake'] },
-  tankd:     { src: 'app_tankduel.cpp', reg: 'nucleo_register_tankduel', data: ['tankduel'] },
-  orde:      { src: 'app_vs.cpp', reg: 'nucleo_register_vs', extra: ['vs_sim.c'], data: ['Orde'] },
-  yahtzee:   { src: 'app_yahtzee.cpp', reg: 'nucleo_register_yahtzee', ui: true, data: ['yahtzee'] },
-};
+import { GAMES } from './games.mjs';
 
 const [which = 'all', scenario = 'all', seed = '7'] = process.argv.slice(2);
-const ids = which === 'all' ? Object.keys(GAMES) : which.split(',');
+const ids = which === 'all' ? Object.keys(GAMES).filter((k) => !GAMES[k].ownHarness) : which.split(',');
 for (const id of ids) if (!GAMES[id]) { console.error(`native-host: unknown game '${id}' (${Object.keys(GAMES).join(', ')})`); process.exit(2); }
 
 if (!existsSync(LGFX_OBJ) || !readdirSync(LGFX_OBJ).some((f) => f.endsWith('.o'))) {
@@ -126,7 +109,7 @@ for (const id of ids) {
       objs.push(obj);
     }
     // the theme palette (THEME_* globals) every game links; the shared list/tab widgets for the games that use them
-    for (const src of [join(FW, 'nucleo_ui', 'nucleo_theme.cpp'), join(CJSON, 'cJSON.c'), ...(g.ui ? [join(APPS, 'app_ui.cpp')] : [])]) {
+    for (const src of [join(FW, 'nucleo_ui', 'nucleo_theme.cpp'), join(CJSON, 'cJSON.c'), join(APPS, 'game_text.cpp'), ...(g.ui ? [join(APPS, 'app_ui.cpp')] : [])]) {
       const obj = join(OUT, 'obj', `${id}_ui_${src.split(/[\\/]/).pop()}.o`);
       execFileSync(src.endsWith('.c') ? GCC : GPP, [...(src.endsWith('.c') ? CC : CXX), '-c', src, '-o', obj], { env, stdio: 'pipe' });
       objs.push(obj);
@@ -138,6 +121,9 @@ for (const id of ids) {
   }
   const box = join(OUT, 'box', id);
   rmSync(box, { recursive: true, force: true }); mkdirSync(join(box, 'sd', 'data'), { recursive: true });
+  // the games' es/fr/de language packs (tools/game-i18n/build.mjs) at /sd/system/i18n/games, as on the card
+  const packs = join(root, 'tools', 'sd-sim', 'system', 'i18n');
+  if (existsSync(packs)) cpSync(packs, join(box, 'sd', 'system', 'i18n'), { recursive: true });
   for (const d of g.data || []) { const s = join(root, 'deploy', 'sd', 'data', d); if (existsSync(s)) cpSync(s, join(box, 'sd', 'data', d), { recursive: true }); }
   const run = spawnSync(join(OUT, `${id}.exe`), [scenario, seed], { cwd: box, env, encoding: 'utf8', timeout: 600000 });
   process.stdout.write(`[${id}]\n${run.stdout || ''}`);
