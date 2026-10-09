@@ -28,6 +28,10 @@ extern "C" {
 #include "esp_timer.h"
 #include "esp_random.h"
 }
+#include "game_text.h"
+#include "game_ui.h"
+extern "C" const char *nucleo_i18n_lang(void) { return "it"; }
+extern "C" uint32_t nucleo_i18n_gen(void) { return 1; }
 
 #define nucleo_register_tanks nucleo_register_tanks_A
 namespace TA {

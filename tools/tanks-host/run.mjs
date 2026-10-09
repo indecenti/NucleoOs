@@ -37,11 +37,14 @@ const INC = [
   '-I', join(here, 'shim'), '-I', join(root, 'tools', 'ui-host', 'shim'), '-I', GFX,
   '-I', join(FW, 'nucleo_app', 'include'), '-I', join(FW, 'nucleo_app'), '-I', join(FW, 'nucleo_kbd', 'include'),
   '-I', join(FW, 'nucleo_ui', 'include'), '-I', join(FW, 'nucleo_audio', 'include'), '-I', join(FW, 'nucleo_pnet', 'include'),
+  '-I', join(FW, 'nucleo_storage', 'include'), '-I', join(FW, 'nucleo_board', 'include'),
 ];
+// the shared game pieces the game links (the console kit + the 5-language text)
+const KIT = [join(FW, 'nucleo_app', 'game_ui.cpp'), join(FW, 'nucleo_app', 'game_text.cpp')];
 const t0 = Date.now();
 try {
   execFileSync(GPP, ['-std=gnu++17', '-O1', '-g', '-Wall', '-Wno-unused-function', '-Wno-unused-variable',
-    '-include', join(here, 'shim', 'tanks_host_fs.h'), ...INC, join(here, 'harness.cpp'), ...lgfxObjs, '-o', EXE], { env, stdio: 'inherit' });
+    '-include', join(here, 'shim', 'tanks_host_fs.h'), ...INC, join(here, 'harness.cpp'), ...KIT, ...lgfxObjs, '-o', EXE], { env, stdio: 'inherit' });
 } catch {
   console.error('tanks-host: BUILD FAILED');
   process.exit(1);
@@ -50,7 +53,7 @@ const MP_EXE = join(OUT, 'tanks_mp.exe');
 if (scenario === 'all' || scenario === 'mp') {
   try {
     execFileSync(GPP, ['-std=gnu++17', '-O1', '-g', '-w', '-include', join(here, 'shim', 'tanks_host_fs.h'), ...INC,
-      join(here, 'mp.cpp'), ...lgfxObjs, '-o', MP_EXE], { env, stdio: 'inherit' });
+      join(here, 'mp.cpp'), ...KIT, ...lgfxObjs, '-o', MP_EXE], { env, stdio: 'inherit' });
   } catch {
     console.error('tanks-host: MP BUILD FAILED');
     process.exit(1);

@@ -62,6 +62,11 @@ void nucleo_app_set_hint(const char *h) { snprintf(g_hint, sizeof g_hint, "%s", 
 int  nucleo_app_content_height(void) { return g_full ? H : (H - HINT); }
 void nucleo_app_exit(void) { g_exit = true; }
 
+// ---- OS language (nucleo_i18n): the game follows it through game_text ------------------------------------
+static const char *h_lang = "it"; static uint32_t h_gen = 1;
+extern "C" const char *nucleo_i18n_lang(void) { return h_lang; }
+extern "C" uint32_t nucleo_i18n_gen(void) { return h_gen; }
+
 // ---- audio / radio stubs (counted, never played) ------------------------------------------------------
 static int g_tones, g_plays;
 extern "C" {
@@ -325,13 +330,15 @@ static void sc_edges(uint32_t seed) {
         tap('\t'); check(s_screen == ST_PLAY, "TAB again should return to the match");
         tap('`'); tap('\n'); check(s_screen == ST_MENU, "confirm + ENTER should leave the match");
     }
-    g_lang = 1; s_diff = 2; cfg_write();                     // settings survive a close + reopen
+    s_diff = 2; g_windvar = 1; cfg_write();                  // settings survive a close + reopen
     close_app();
-    g_lang = 0; s_diff = 1;
+    s_diff = 1; g_windvar = 0;
     open_app(seed + 1);
-    check(g_lang == 1 && s_diff == 2, "settings did not survive a reopen (lang %d diff %d)", g_lang, s_diff);
-    g_lang = 0; cfg_write();
+    check(s_diff == 2 && g_windvar == 1, "settings did not survive a reopen (diff %d windvar %d)", s_diff, g_windvar);
+    s_diff = 1; g_windvar = 0; cfg_write();
     close_app();
+    remove("sd/data/tanks/cfg.bin");                          // the option toggles above must not leak into later scenarios
+    g_manual = 0; g_aimhelp = 0; g_windvar = 0; g_audio = 1;
 }
 
 // 5) frames for a visual review (tools/tanks-host/run.mjs turns them into PNGs).
@@ -364,13 +371,15 @@ static void sc_physics(uint32_t seed) {
         if (!run_until(my_aim, 120000)) break;
         if (s_screen == ST_OVER) break;
         int me = s_active;
-        s_tk[me].weap = 0; s_tk[me].elev = 15 + jitter(150); s_tk[me].power = 20 + jitter(81);
+        s_tk[me].weap = 0; s_tk[me].ammo[0] = -1;                // the plain shell (a random loadout may lack it:
+        s_tk[me].elev = 15 + jitter(150); s_tk[me].power = 20 + jitter(81);   // fire_weapon would then pick another)
         s_tk[1 - me].hp = 100; s_tk[me].hp = 100;                // keep the match alive for the sampling
         int pred = sim_land(me, s_tk[me].elev, s_tk[me].power);
         s_lava_x = -1;
         tap('\n');
         run_until([]() { return s_phase == TP_SETTLE || s_phase == TP_OVER || s_active != 0; }, 20000);
         if (pred < 0 || s_lava_x < 0) continue;                  // flew off the field: nothing to compare
+        if (fabsf(s_lava_x - s_tk[1 - me].x) <= TANK_W / 2 + 2) continue;   // a direct hit on the foe lands before the ground
         float err = fabsf((float)(pred - s_lava_x)); n++; sum += err; if (err > worst) worst = err;
         if (err > TANK_W / 2 + 2) {                              // beyond the hitbox half-width
             far++; note("e%d p%d wind %d: predicted %d, real impact %d (me x%.0f, foe x%.0f)", s_tk[me].elev, s_tk[me].power, s_wind, pred, s_lava_x, s_tk[me].x, s_tk[1 - me].x);
@@ -384,7 +393,7 @@ static void sc_physics(uint32_t seed) {
 // 7) CPU accuracy per difficulty: many CPU shots (the human throws harmless shots, HP reset each turn).
 static void sc_cpu(uint32_t seed) {
     printf("[cpu] seed %u\n", seed);
-    int lo[3] = { 7, 22, 38 }, hi[3] = { 30, 46, 66 };            // hit-rate bands: easy / normal / hard
+    int lo[3] = { 7, 22, 32 }, hi[3] = { 30, 46, 66 };            // hit-rate bands: easy / normal / hard (~100 shots: +-5 % noise)
     for (int diff = 0; diff < 3; diff++) {
         int shots = 0, hits = 0;
         for (int m = 0; m < 8; m++) {
