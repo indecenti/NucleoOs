@@ -105,7 +105,11 @@ int title(const char *name, const char *sub, uint16_t accent)
     d.drawFastHLine(ux - 6, uy, 6, mix(rgb(0, 0, 0), accent, 120));
     d.drawFastHLine(ux + tw, uy, 6, mix(rgb(0, 0, 0), accent, 120));
     int y = uy + 4;
-    if (sub && sub[0]) { text(sub, W / 2, y, 1, F_SMALL, mix(rgb(255, 255, 255), accent, 90), rgb(0, 0, 0)); y += font_h(F_SMALL); }
+    if (sub && sub[0]) {                                                   // a subtitle too wide for Font2 drops to the 6 px face
+        uint16_t sc = mix(rgb(255, 255, 255), accent, 90);
+        if (text_width(sub, F_SMALL) <= W - 8) { text(sub, W / 2, y, 1, F_SMALL, sc, rgb(0, 0, 0)); y += font_h(F_SMALL); }
+        else { d.setTextDatum(textdatum_t::top_center); d.setTextColor(sc); d.drawString(sub, W / 2, y + 3); d.setTextDatum(textdatum_t::top_left); y += 12; }
+    }
     return y + 2;
 }
 

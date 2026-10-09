@@ -34,6 +34,11 @@ for (const id of want) {
   if (!uses) { if (process.argv[2]) { out.push(`FAIL ${id}: no GT() strings yet`); bad++; } continue; }
   games++;
   const lits = [...src.matchAll(GT_OK)].map((m) => ({ it: unC(m[1]), en: unC(m[2]) }));
+  if (process.argv.includes('--missing')) {          // print a JSON skeleton of the strings still lacking es/fr/de
+    const jf0 = join(here, `${id}.json`), have = existsSync(jf0) ? JSON.parse(readFileSync(jf0, 'utf8')).strings : {};
+    const miss = {}; for (const { it, en } of lits) if (!have[en]) miss[en] = { it, es: '', fr: '', de: '' };
+    console.log(JSON.stringify(miss, null, 2)); continue;
+  }
   const problems = [];
   if (lits.length !== uses) problems.push(`${uses - lits.length} GT() call(s) whose arguments are not two plain string literals`);
   const jf = join(here, `${id}.json`);
