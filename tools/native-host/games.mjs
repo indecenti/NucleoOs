@@ -5,7 +5,7 @@ export const GAMES = {
   brawler:   { src: 'app_brawler.cpp', reg: 'nucleo_register_brawler', extra: ['brawler_chars.cpp', 'brawler_combat.cpp', 'brawler_enemies.cpp', 'brawler_fx.cpp', 'brawler_levels.cpp', 'brawler_menu.cpp', 'brawler_net.cpp', 'brawler_scene.cpp', 'brawler_sfx.cpp'], data: ['brawler'] },
   cardler:   { src: 'app_cardler.cpp', reg: 'nucleo_register_cardler', data: ['Cardler'] },
   stelle:    { src: 'app_constellations.cpp', reg: 'nucleo_register_constellations', data: ['costellazioni'] },
-  dice:      { src: 'app_dice.cpp', reg: 'nucleo_register_dice', ui: true },
+  dice:      { src: 'app_dice.cpp', reg: 'nucleo_register_dice', ui: true, data: ['dice'] },
   pinball:   { src: 'app_pinball.cpp', reg: 'nucleo_register_pinball', data: ['pinball'] },
   poker:     { src: 'app_poker.cpp', reg: 'nucleo_register_poker', data: ['poker'] },
   pong:      { src: 'app_pong.cpp', reg: 'nucleo_register_pong', data: ['pong'] },

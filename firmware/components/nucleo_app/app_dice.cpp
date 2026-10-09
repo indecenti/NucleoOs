@@ -1,18 +1,22 @@
-// Dadi 3D — Games. Polyhedral dice (d4/d6/d8/d20) on the fx3d engine, full-screen, no overlap.
+// Dadi 3D — Games. Polyhedral dice (d4/d6/d8/d20) on the fx3d engine, no overlap.
 //
 // INTERACTION — a "charge / shuffle" model (no twitchy auto-roll): SHAKE the device, HOLD the GO button,
 // or SCROLL (up/down) to MIX — the dice whirl in place and build energy; STOP / release and they are
 // THROWN, the harder you charged the more violently they tumble and the longer they settle. ENTER does a
 // quick standard roll. TAB opens settings (number of dice, die type). Honest randomness from the ESP32
-// hardware TRNG. Works without the IMU too (GO / keys). Engine: draw_model_ex (3-axis) + project (pips).
+// hardware TRNG. Works without the IMU too (GO / keys). Engine: fx3d::rot3, one rotation per die per frame.
+// Every die always shows its value: the settle pose turns the value's face to the camera in a 3/4 view,
+// and the header total is the sum of exactly those faces.
 #include "nucleo_app.h"
-#include "app_ui.h"
 #include "launcher_theme.h"
 #include "nucleo_imu.h"
 #include "nucleo_fx3d.h"
-#include "nucleo_audio.h"   // procedural SFX (dice clack)
+#include "nucleo_audio.h"
 #include "nucleo_exclusive.h"  // NX_NET_APP: dedicate RAM like every other native game
+#include "game_text.h"
+#include "game_ui.h"
 #include <math.h>
+#include <sys/stat.h>
 #include "esp_random.h"
 #include "esp_timer.h"
 #include "app_gfx.h"
@@ -46,16 +50,20 @@ static const fx3d::Tri ICOT[20] = {
 };
 static const fx3d::Model ICOSA = { ICOV, 12, ICOT, 20 };
 
-struct DieType { const fx3d::Model *m; int faces; float rscale; const char *name; };
+// rscale = 1 / the shape's on-screen radius in model units (a tumbling cube reaches ~1.45, the tetra ~1.75),
+// so every type fills its cell the same and never spills into a neighbour or the header. tilt = how far the
+// settled die turns into a 3/4 view: it must stay under half the angle between two faces' normals, or a
+// neighbour face would become the front one (d20 faces are only 42 deg apart: no tilt, it reads 3D anyway).
+struct DieType { const fx3d::Model *m; int faces; float rscale, tilt; const char *name; };
 static const DieType TYPES[4] = {
-    { &CUBE,  6,  1.00f, "d6"  },
-    { &TETRA, 4,  1.15f, "d4"  },
-    { &OCTA,  8,  1.12f, "d8"  },
-    { &ICOSA, 20, 0.64f, "d20" },
+    { &CUBE,  6,  0.69f, 1.0f, "d6"  },
+    { &TETRA, 4,  0.57f, 1.0f, "d4"  },
+    { &OCTA,  8,  0.89f, 0.6f, "d8"  },
+    { &ICOSA, 20, 0.53f, 0.0f, "d20" },
 };
 #define NTYPES 4
 
-// d6 settle poses (turn the value's face toward the camera) — pips read the value
+// d6 face-on poses (turn the value's face toward the camera) — pips read the value
 static const float POSE_Y[6] = { (float)M_PI, (float)(M_PI/2), 0, 0, (float)(-M_PI/2), 0 };
 static const float POSE_P[6] = { 0, 0, (float)(-M_PI/2), (float)(M_PI/2), 0, 0 };
 struct FaceFrame { float n[3], u[3], v[3]; };
@@ -63,7 +71,6 @@ static const FaceFrame FACE[6] = {
     { { 0, 0, 1}, {1,0,0}, {0,1,0} }, { { 1, 0, 0}, {0,0,-1},{0,1,0} }, { { 0, 1, 0}, {1,0,0}, {0,0,-1} },
     { { 0,-1, 0}, {1,0,0}, {0,0,1} }, { {-1, 0, 0}, {0,0,1}, {0,1,0} }, { { 0, 0,-1}, {1,0,0}, {0,-1,0} },
 };
-static const int   PIPN[7] = { 0,1,2,3,4,5,6 };
 static const float PIPS[7][6][2] = {
     {{0,0}}, {{0,0}}, {{-0.5f,0.5f},{0.5f,-0.5f}}, {{-0.55f,0.55f},{0,0},{0.55f,-0.55f}},
     {{-0.5f,-0.5f},{-0.5f,0.5f},{0.5f,-0.5f},{0.5f,0.5f}},
@@ -72,20 +79,38 @@ static const float PIPS[7][6][2] = {
 };
 
 #define MAXDICE 6
+#define HEAD 22                        // header band (title + total); the felt is below it
 enum { ST_IDLE, ST_CHARGE, ST_ROLL };
-struct Die { float yaw, pitch, bank;  float y0, p0, ye, pe, wob;  int value; };
-static Die   s_d[MAXDICE];
+struct Die { float yaw, pitch, bank;  float y0, p0, b0, ye, pe, be, wob;  int value; };
+static Die  *s_d;                      // MAXDICE entries, APP_RAM (posed by enter())
 static int   s_state = ST_IDLE;
-static int   s_n = 2, s_type = 0;
+static int   s_n = 2, s_type = 0;      // kept across opens (static), like a real dice cup
 static float s_charge;                 // 0..1 (mixing energy)
 static int64_t s_roll_us, s_dur_us, s_last_us, s_keymix_us;
 static bool  s_go_held;
-static bool  s_settings;               // settings overlay open
-static int   s_set_sel;
-static uint16_t COL_IVORY, COL_PIP, COL_PIP1, COL_FELT, COL_FELTG;
+static bool  s_settings;               // settings sheet open
+static gui::Menu s_setm;              // settings rows: dice count, die type
+static const char *s_hint;             // footer text on screen (set only when it changes)
 
-static float frand(void) { return (float)(esp_random() & 0xFFFFFF) / 16777215.0f; }
 static int   randn(int n) { return (int)(esp_random() % (uint32_t)n); }   // uniform 0..n-1 (TRNG)
+// Sound: the PC-rendered pack (tools/sfx-gen/games/dice.py -> /sd/data/dice/pack): the cup rattle while
+// mixing, the throw, the landing clacks. A missing WAV plays a short tone; nothing is synthesized here.
+static void sfx(const char *name, int hz)
+{
+    char p[40]; snprintf(p, sizeof p, "/sd/data/dice/pack/%s.wav", name);
+    struct stat st;
+    if (stat(p, &st) != 0 || st.st_size <= 44 || nucleo_audio_play(p) != ESP_OK) nucleo_audio_tone(hz, 40, 55);
+}
+static int64_t s_rattle_us;                // next cup rattle while mixing
+
+// ---- rotation with the trig done ONCE per die per frame (fx3d::project recomputes 6 sin/cos per point) ----
+struct Rot { float cy, sy, cp, sp, cb, sb; };
+static Rot rot_of(float yaw, float pitch, float bank) { return { cosf(yaw), sinf(yaw), cosf(pitch), sinf(pitch), cosf(bank), sinf(bank) }; }
+static float rot_pt(const Rot &r, float x, float y, float z, float *ox, float *oy)
+{
+    float z2; fx3d::rot3(x, y, z, r.cy, r.sy, r.cp, r.sp, r.cb, r.sb, ox, oy, &z2);
+    return z2;
+}
 
 // ---- polyhedron face geometry (numbers ON the real faces for d4/d8/d20) ----
 static void face_normal(const fx3d::Model &m, int t, float *o)
@@ -100,20 +125,39 @@ static void face_normal(const fx3d::Model &m, int t, float *o)
     float inv = 1.0f / (sqrtf(nx * nx + ny * ny + nz * nz) + 1e-6f);
     o[0] = nx * inv; o[1] = ny * inv; o[2] = nz * inv;
 }
-static void face_centroid(const fx3d::Model &m, int t, float *o)
+
+// The settle pose of `value` for the current type: the value's face turned to the camera (d6: POSE table;
+// d4/d8/d20: from the face normal), then tilted into a 3/4 view so the die reads as a solid. The combined
+// rotation is decomposed back into the engine's yaw (Y) / pitch (X) / bank (Z) angles.
+static void settle_pose(int value, float *yaw, float *pitch, float *bank)
 {
-    const fx3d::Tri &tr = m.t[t];
-    o[0] = (m.v[tr.a].x + m.v[tr.b].x + m.v[tr.c].x) / 3.0f;
-    o[1] = (m.v[tr.a].y + m.v[tr.b].y + m.v[tr.c].y) / 3.0f;
-    o[2] = (m.v[tr.a].z + m.v[tr.b].z + m.v[tr.c].z) / 3.0f;
+    float py, pp;
+    if (TYPES[s_type].faces == 6) { py = POSE_Y[value - 1]; pp = POSE_P[value - 1]; }
+    else {
+        float n[3]; face_normal(*TYPES[s_type].m, value - 1, n);
+        py = atan2f(-n[0], n[2]);
+        pp = atan2f(n[1], sqrtf(n[0] * n[0] + n[2] * n[2])) + (float)M_PI;
+    }
+    float k = TYPES[s_type].tilt;
+    Rot p = rot_of(py, pp, 0), t = rot_of(0.40f * k, 0.36f * k, 0);   // pose, then the 3/4 tilt
+    float m[3][3];                                                   // m[row][col] = (T*P) e_col
+    for (int c = 0; c < 3; c++) {
+        float x, y, z = rot_pt(p, c == 0, c == 1, c == 2, &x, &y), x2, y2, z2 = rot_pt(t, x, y, z, &x2, &y2);
+        m[0][c] = x2; m[1][c] = y2; m[2][c] = z2;
+    }
+    *pitch = asinf(m[2][1] > 1 ? 1 : (m[2][1] < -1 ? -1 : m[2][1]));
+    *yaw = atan2f(-m[2][0], m[2][2]);
+    *bank = atan2f(-m[0][1], m[1][1]);
 }
-// yaw,pitch that turn face t's outward normal toward the camera (-z): the settle pose for that value
-static void pose_for_face(const fx3d::Model &m, int t, float *yaw, float *pitch)
+// Give every die a fresh value resting in its pose (launch, type change): the faces always match the total.
+static void pose_all(void)
 {
-    float n[3]; face_normal(m, t, n);
-    float r = sqrtf(n[0] * n[0] + n[2] * n[2]);
-    *yaw = atan2f(-n[0], n[2]);
-    *pitch = atan2f(n[1], r) + (float)M_PI;
+    for (int i = 0; i < MAXDICE; i++) {
+        Die &dd = s_d[i];
+        dd.value = 1 + randn(TYPES[s_type].faces);
+        settle_pose(dd.value, &dd.yaw, &dd.pitch, &dd.bank);
+        dd.ye = dd.yaw; dd.pe = dd.pitch; dd.be = dd.bank;
+    }
 }
 
 // ---- throw: decide results + set up the eased tumble; vigor/duration scale with `charge` ----
@@ -121,24 +165,18 @@ static void throw_dice(float charge)
 {
     if (charge < 0.05f) charge = 0.05f;
     if (charge > 1.0f)  charge = 1.0f;
-    nucleo_audio_blip(0, (int)(charge * 85) + 15);              // throw rumble (louder the harder you charged)
+    nucleo_audio_stop(); sfx("throw", 900);
     s_dur_us = (int64_t)((0.9f + 1.6f * charge) * 1000000.0f);   // 0.9–2.5 s
     s_roll_us = esp_timer_get_time();
     s_state = ST_ROLL;
-    int faces = TYPES[s_type].faces;
-    for (int i = 0; i < s_n; i++) {
+    for (int i = 0; i < MAXDICE; i++) {                         // all of them: a die added later is posed too
         Die &dd = s_d[i];
-        dd.y0 = dd.yaw; dd.p0 = dd.pitch;
-        dd.value = 1 + randn(faces);
+        dd.y0 = dd.yaw; dd.p0 = dd.pitch; dd.b0 = dd.bank;
+        dd.value = 1 + randn(TYPES[s_type].faces);
         int spins = 2 + (int)(charge * 5.0f) + randn(2);         // more charge -> more turns
-        if (faces == 6) {
-            dd.ye = POSE_Y[dd.value - 1] + TWO_PI * spins;       // d6 lands on the value face (pips)
-            dd.pe = POSE_P[dd.value - 1] + TWO_PI * (spins - 1);
-        } else {                                                  // d4/d8/d20: land the RESULT face toward the camera
-            float ty, tp; pose_for_face(*TYPES[s_type].m, dd.value - 1, &ty, &tp);
-            dd.ye = ty + TWO_PI * spins;
-            dd.pe = tp + TWO_PI * (spins - 1);
-        }
+        settle_pose(dd.value, &dd.ye, &dd.pe, &dd.be);
+        dd.ye += TWO_PI * spins;
+        dd.pe += TWO_PI * (spins - 1);
         dd.wob = 0.2f + 0.5f * charge;
     }
 }
@@ -150,16 +188,17 @@ static void sim(float dt)
     if (s_state == ST_ROLL) {
         float t = (float)(now - s_roll_us) / (float)s_dur_us; if (t > 1) t = 1;
         float e = 1.0f - (1.0f - t) * (1.0f - t) * (1.0f - t);   // ease-out cubic
-        for (int i = 0; i < s_n; i++) {
+        float wob = (1.0f - t) * sinf(t * 16.0f);
+        for (int i = 0; i < MAXDICE; i++) {
             Die &dd = s_d[i];
             dd.yaw = dd.y0 + (dd.ye - dd.y0) * e;
             dd.pitch = dd.p0 + (dd.pe - dd.p0) * e;
-            dd.bank = dd.wob * (1.0f - t) * sinf(t * 16.0f);
+            dd.bank = dd.b0 + (dd.be - dd.b0) * e + dd.wob * wob;
         }
         if (t >= 1.0f) {
             s_state = ST_IDLE;
-            for (int i = 0; i < s_n; i++) s_d[i].bank = 0;
-            nucleo_audio_blip(1, 65);                  // sharp settle clack
+            for (int i = 0; i < MAXDICE; i++) { s_d[i].yaw = fmodf(s_d[i].ye, TWO_PI); s_d[i].pitch = fmodf(s_d[i].pe, TWO_PI); s_d[i].bank = s_d[i].be; }
+            nucleo_audio_stop(); sfx("land", 180);     // the dice hit the felt
         }
         return;
     }
@@ -174,12 +213,14 @@ static void sim(float dt)
     }
     if (in > 0.0f) {
         s_state = ST_CHARGE;
+        if (now >= s_rattle_us && !nucleo_audio_is_playing()) { sfx("shake", 1500); s_rattle_us = now + 260000; }
         s_charge += in * dt * 0.9f; if (s_charge > 1.0f) s_charge = 1.0f;
-        float spd = (2.5f + 14.0f * s_charge);                    // whirl faster as it charges
-        for (int i = 0; i < s_n; i++) {
-            s_d[i].yaw += spd * dt * (0.8f + 0.4f * i * 0.1f);
-            s_d[i].pitch += spd * 0.7f * dt;
-            s_d[i].bank = 0.15f * sinf((float)now * 1e-6f * 9.0f + i);
+        float spd = (2.5f + 14.0f * s_charge) * dt;               // whirl faster as it charges
+        float bank = 0.15f * sinf((float)now * 9e-6f);
+        for (int i = 0; i < MAXDICE; i++) {
+            s_d[i].yaw += spd * (0.8f + 0.04f * i);
+            s_d[i].pitch += spd * 0.7f;
+            s_d[i].bank = bank;
         }
     } else if (s_state == ST_CHARGE) {
         if (s_charge >= 0.12f) { throw_dice(s_charge); s_charge = 0; }   // input ended with enough -> THROW
@@ -187,148 +228,159 @@ static void sim(float dt)
     }
 }
 
-// ---- pips (d6 only) ----
-static bool face_visible(int v, float yaw, float pitch, float bank)
+// ---- drawing ----
+// RGB332-exact palette (the canvas is 8bpp, and it has no neutral grey but black and white): white faces
+// shading cool, like white plastic in shadow; ink / red pips; faint marks on the side faces.
+#define RGB(r, g, b) (uint16_t)((((r) & 0xF8) << 8) | (((g) & 0xFC) << 3) | ((b) >> 3))
+static const uint16_t SHADE[4] = { RGB(255, 255, 255), RGB(219, 219, 255), RGB(182, 182, 170), RGB(109, 109, 170) };
+static const uint16_t COL_PIP = 0, COL_PIP1 = RGB(219, 0, 0), COL_SOFT = RGB(146, 146, 170);
+
+// A convex die drawn the crisp way: back faces culled, every camera-facing face ONE flat shade from a key
+// light just above the camera (a generic mesh shader lights each triangle apart, which on 8bpp leaves a
+// seam and a tint across every cube face), over a dark rim made of the same faces 1.6 px bigger — the
+// silhouette of a convex solid is the union of its front faces.
+static void draw_solid(const fx3d::Model &m, const Rot &r, float cx, float cy, float sc)
 {
-    fx3d::V3 nrm = { FACE[v - 1].n[0], FACE[v - 1].n[1], FACE[v - 1].n[2] };
-    int dx, dy; float dz;
-    fx3d::project(nrm, 0, 0, 1.0f, yaw, pitch, bank, &dx, &dy, &dz);
-    return dz < -0.12f;
-}
-static void draw_pips(int v, float cx, float cy, float sc, float yaw, float pitch, float bank)
-{
-    const FaceFrame &f = FACE[v - 1];
-    int pr = (int)(sc * 0.12f); if (pr < 2) pr = 2;
-    for (int k = 0; k < PIPN[v]; k++) {
-        float pu = PIPS[v][k][0] * 1.5f, pv = PIPS[v][k][1] * 1.5f;
-        fx3d::V3 p = {
-            f.n[0]*1.03f + f.u[0]*pu*0.42f + f.v[0]*pv*0.42f,
-            f.n[1]*1.03f + f.u[1]*pu*0.42f + f.v[1]*pv*0.42f,
-            f.n[2]*1.03f + f.u[2]*pu*0.42f + f.v[2]*pv*0.42f,
-        };
-        int px, py; float pz;
-        fx3d::project(p, cx, cy, sc, yaw, pitch, bank, &px, &py, &pz);
-        d.fillCircle(px, py, pr, (v == 1) ? COL_PIP1 : COL_PIP);
+    float px[12], py[12];
+    int8_t shade[24];
+    for (int i = 0; i < m.nv; i++) rot_pt(r, m.v[i].x, m.v[i].y, m.v[i].z, &px[i], &py[i]);
+    for (int t = 0; t < m.nt; t++) {
+        float n[3], nx, ny; face_normal(m, t, n);
+        float nz = rot_pt(r, n[0], n[1], n[2], &nx, &ny);
+        float k = -0.2f * nx - 0.35f * ny - 0.92f * nz;           // Lambert toward the light
+        shade[t] = nz >= 0 ? -1 : k > 0.72f ? 0 : k > 0.5f ? 1 : k > 0.25f ? 2 : 3;
+    }
+    for (int pass = 0; pass < 2; pass++) {
+        float s = pass ? sc : sc + 1.6f;
+        for (int t = 0; t < m.nt; t++) {
+            if (shade[t] < 0) continue;
+            const fx3d::Tri &tr = m.t[t];
+            d.fillTriangle((int)(cx + px[tr.a] * s), (int)(cy + py[tr.a] * s), (int)(cx + px[tr.b] * s), (int)(cy + py[tr.b] * s),
+                           (int)(cx + px[tr.c] * s), (int)(cy + py[tr.c] * s), pass ? SHADE[shade[t]] : 0x0000);
+        }
     }
 }
-
-// a digit centred at (px,py), size ts, with a 1px drop shadow so it pops off the face
-static void draw_digit(int px, int py, int val, int ts, uint16_t col)
+// d6: pips on every camera-facing face; the result face in full ink, the side faces faint.
+static void draw_pips(const Rot &r, float cx, float cy, float sc)
 {
-    char b[6]; snprintf(b, sizeof(b), "%d", val);
-    int x = px - (int)strlen(b) * 3 * ts, y = py - 4 * ts;
-    d.setTextSize(ts);
-    d.setTextColor(fx3d::rgb(8, 8, 12)); d.setCursor(x + 1, y + 1); d.print(b);   // shadow
-    d.setTextColor(col);                 d.setCursor(x, y);         d.print(b);
+    float pr = sc * 0.15f; if (pr < 2) pr = 2;
+    int front = 0; float fz = 1e9f, nz[6];
+    for (int v = 1; v <= 6; v++) { float x, y; nz[v - 1] = rot_pt(r, FACE[v - 1].n[0], FACE[v - 1].n[1], FACE[v - 1].n[2], &x, &y); if (nz[v - 1] < fz) { fz = nz[v - 1]; front = v; } }
+    for (int v = 1; v <= 6; v++) {
+        if (nz[v - 1] >= -0.12f) continue;                        // back / edge-on face
+        const FaceFrame &f = FACE[v - 1];
+        uint16_t col = v != front ? COL_SOFT : (v == 1 ? COL_PIP1 : COL_PIP);
+        for (int k = 0; k < v; k++) {
+            float pu = PIPS[v][k][0] * 0.63f, pv = PIPS[v][k][1] * 0.63f, x, y;
+            rot_pt(r, f.n[0] * 1.03f + f.u[0] * pu + f.v[0] * pv, f.n[1] * 1.03f + f.u[1] * pu + f.v[1] * pv,
+                   f.n[2] * 1.03f + f.u[2] * pu + f.v[2] * pv, &x, &y);
+            d.fillSmoothCircle((int)(cx + x * sc), (int)(cy + y * sc), v != front ? pr * 0.75f : v == 1 ? pr * 1.5f : pr, col);   // anti-aliased
+        }
+    }
 }
 
 // d4/d8/d20: number every camera-facing face (its fixed value = face index+1); the front-most (the
-// settled result) is highlighted. Numbers ride the real faces, so they tumble and settle correctly.
-static void draw_face_numbers(const fx3d::Model &m, float cx, float cy, float sc, float yaw, float pitch, float bank)
+// settled result) is big and red, the others small and faint. Numbers ride the real faces.
+static void draw_face_numbers(const fx3d::Model &m, const Rot &r, float cx, float cy, float sc)
 {
-    float fnz[24];                                        // cache each face's rotated normal-z (avoid 2x work)
-    int frontT = -1; float frontZ = 1e9f;
+    float fnz[24];
+    int frontT = 0; float frontZ = 1e9f;
     for (int t = 0; t < m.nt; t++) {
-        float n[3]; face_normal(m, t, n);
-        fx3d::V3 nv = { n[0], n[1], n[2] };
-        int dx, dy; fx3d::project(nv, 0, 0, 1.0f, yaw, pitch, bank, &dx, &dy, &fnz[t]);
-        if (fnz[t] < frontZ && fnz[t] < -0.30f) { frontZ = fnz[t]; frontT = t; }
+        float n[3], x, y; face_normal(m, t, n);
+        fnz[t] = rot_pt(r, n[0], n[1], n[2], &x, &y);
+        if (fnz[t] < frontZ) { frontZ = fnz[t]; frontT = t; }
     }
     for (int t = 0; t < m.nt; t++) {
-        float nz = fnz[t];
-        if (nz > -0.32f) continue;                       // skip back / grazing faces
-        float ce[3]; face_centroid(m, t, ce);
-        fx3d::V3 cv = { ce[0] * 1.02f, ce[1] * 1.02f, ce[2] * 1.02f };
-        int px, py; float pz; fx3d::project(cv, cx, cy, sc, yaw, pitch, bank, &px, &py, &pz);
-        bool front = (t == frontT);
-        float headon = -nz;                              // 1 = facing us straight on
-        int ts = (int)(sc * (front ? 0.11f : 0.075f) * (0.55f + 0.45f * headon));
-        if (ts < 1) ts = 1;
-        if (ts > 3) ts = 3;
-        draw_digit(px, py, t + 1, ts, front ? COL_PIP1 : COL_PIP);
+        if (fnz[t] > -0.32f || (t != frontT && sc < 16)) continue;   // back / grazing faces; small dice: the result only
+        const fx3d::Tri &tr = m.t[t];
+        float x, y;
+        rot_pt(r, (m.v[tr.a].x + m.v[tr.b].x + m.v[tr.c].x) * 0.34f, (m.v[tr.a].y + m.v[tr.b].y + m.v[tr.c].y) * 0.34f,
+               (m.v[tr.a].z + m.v[tr.b].z + m.v[tr.c].z) * 0.34f, &x, &y);
+        bool front = t == frontT;
+        char b[4]; snprintf(b, sizeof b, "%d", t + 1);
+        int px = (int)(cx + x * sc), py = (int)(cy + y * sc);
+        d.setTextDatum(textdatum_t::middle_center);
+        if (front) {                                              // the result: bold face, red, soft shadow
+            d.setFont(sc >= 20 ? &fonts::FreeSansBold12pt7b : &fonts::FreeSansBold9pt7b);
+            d.setTextColor(SHADE[2]); d.drawString(b, px + 1, py + 1);
+            d.setTextColor(COL_PIP1); d.drawString(b, px, py);
+        } else { d.setFont(&fonts::Font0); d.setTextColor(COL_SOFT); d.drawString(b, px, py); }
     }
+    d.setFont(&fonts::Font0); d.setTextDatum(textdatum_t::top_left);
 }
 
-// grid layout: rows/cols chosen to fill the screen and keep dice apart
-static void layout(int n, int idx, int top, int bottom, int *cx, int *cy, float *sc)
+// grid layout: rows/cols chosen to fill the felt and keep dice apart
+static void layout(int idx, int top, int bottom, int *cx, int *cy, float *sc)
 {
-    int rows = (n <= 3) ? 1 : 2;
-    int cols = (n + rows - 1) / rows;
+    int rows = (s_n <= 3) ? 1 : 2;
+    int cols = (s_n + rows - 1) / rows;
     int r = idx / cols, c = idx % cols;
-    int inrow = (r == rows - 1) ? (n - cols * (rows - 1)) : cols;   // last row may have fewer
+    int inrow = (r == rows - 1) ? (s_n - cols * (rows - 1)) : cols;   // last row may have fewer
     int cellw = W / cols, cellh = (bottom - top) / rows;
     *cx = (W - inrow * cellw) / 2 + c * cellw + cellw / 2;
     *cy = top + r * cellh + cellh / 2;
-    float s = (cellw < cellh ? cellw : cellh) * 0.40f;
-    if (s > 36) s = 36;
-    if (s < 13) s = 13;
+    float s = (cellw < cellh ? cellw : cellh) * 0.46f;               // the die's radius: ~92% of the cell
+    if (s > 46) s = 46;
     *sc = s * TYPES[s_type].rscale;
 }
 
-static void draw_settings(int top, int h)
+static void draw_settings(void)
 {
-    int bw = 196, bx = (W - bw) / 2, by = top + 6, bh = h - 12;
-    d.fillRoundRect(bx, by, bw, bh, 8, INK);
-    d.drawRoundRect(bx, by, bw, bh, 8, C_GREEN);
-    d.setTextSize(2); d.setTextColor(C_GREEN, INK);
-    d.setCursor(bx + 12, by + 8); d.print("Impostazioni");
-    char rows[2][32];
-    snprintf(rows[0], 32, "Dadi:  %d", s_n);
-    snprintf(rows[1], 32, "Tipo:  %s", TYPES[s_type].name);
-    for (int i = 0; i < 2; i++) {
-        bool sel = (i == s_set_sel);
-        int ry = by + 36 + i * 24;
-        if (sel) d.fillRoundRect(bx + 6, ry - 2, bw - 12, 22, 5, fx3d::rgb(40, 70, 50));
-        d.setTextSize(2); d.setTextColor(sel ? C_GREEN : FG, sel ? fx3d::rgb(40,70,50) : INK);
-        d.setCursor(bx + 14, ry); d.print(rows[i]);
-    }
-    d.setTextSize(1); d.setTextColor(MUTED, INK);
-    d.setCursor(bx + 12, by + bh - 12); d.print("su/giu  <-/->  TAB chiude");
+    char r0[24], r1[24];
+    snprintf(r0, sizeof r0, "%s: %d", GT("Dadi", "Dice"), s_n);
+    snprintf(r1, sizeof r1, "%s: %s", GT("Tipo", "Type"), TYPES[s_type].name);
+    const char *rows[2] = { r0, r1 };
+    int y = gui::title(GT("Impostazioni", "Settings"), nullptr, C_GREEN);
+    gui::menu(s_setm, rows, 2, y + 4, nucleo_app_content_height(), C_GREEN);
+}
+
+static void set_hint(void)
+{
+    const char *h = s_settings ? GT("su/giu  sx/dx cambia  INVIO ok", "UP/DN  L/R change  ENTER ok")
+                  : s_state == ST_CHARGE ? GT("rilascia per lanciare", "release to throw")
+                  : GT("INVIO lancia  su/giu mescola  TAB", "ENTER roll  UP/DN mix  TAB setup");
+    if (h != s_hint) { s_hint = h; nucleo_app_set_hint(h); }
 }
 
 static void draw(void)
 {
-    int top = nucleo_app_content_top(), h = nucleo_app_content_height(), bottom = top + h;
-    d.fillRect(0, top, W, h, fx3d::rgb(8, 22, 14));
-    fx3d::Grid g = { top + 12, bottom - 1, (float)(W/2), 0.0f, (float)(W*0.8f), 7, 9, COL_FELT, COL_FELTG, 150 };
-    fx3d::grid(g);
+    int top = nucleo_app_content_top(), bottom = top + nucleo_app_content_height();
+    set_hint();
+    if (s_settings) { draw_settings(); return; }
+    // header: title + "NdX" on the left, the big total on the right
+    gui::vgradient(0, top, W, HEAD, gui::rgb(0, 72, 36), gui::rgb(0, 18, 0));
+    d.drawFastHLine(0, top + HEAD - 1, W, gui::rgb(72, 182, 85));
+    int tw = gui::text(GT("Dadi", "Dice"), 6, top + 3, 0, gui::F_BODY, C_GREEN, 0);
+    char rt[16]; snprintf(rt, sizeof rt, "%d%s", s_n, TYPES[s_type].name);
+    gui::text(rt, 14 + tw, top + 4, 0, gui::F_SMALL, gui::rgb(182, 182, 170), 0);
+    int total = 0; for (int i = 0; i < s_n; i++) total += s_d[i].value;
+    if (s_state == ST_IDLE) snprintf(rt, sizeof rt, "%d", total);
+    else if (s_state == ST_CHARGE) snprintf(rt, sizeof rt, "%d%%", (int)(s_charge * 100));
+    else snprintf(rt, sizeof rt, "...");
+    gui::text(rt, W - 6, top + 3, 2, gui::F_BODY, s_state == ST_IDLE ? 0xFFFF : C_YELLOW, 0);
 
-    int total = 0;
+    // felt: a dithered pool of light + a perspective grid, the dice clipped to it (a big tumbling die
+    // never paints the header or the footer)
+    int ft = top + HEAD;
+    gui::vgradient(0, ft, W, bottom - ft, gui::rgb(0, 36, 0), gui::rgb(0, 109, 36));
+    fx3d::Grid g = { ft + 10, bottom - 1, (float)(W/2), 0.0f, (float)(W*0.8f), 7, 9, gui::rgb(36, 109, 36), gui::rgb(36, 146, 85), 150 };
+    fx3d::grid(g);
+    d.setClipRect(0, ft, W, bottom - ft);
+    const fx3d::Model &mdl = *TYPES[s_type].m;
     for (int i = 0; i < s_n; i++) {
         Die &dd = s_d[i];
-        if (s_state == ST_IDLE) total += dd.value;
-        const fx3d::Model &mdl = *TYPES[s_type].m;
-        int cx, cy; float sc; layout(s_n, i, top + 2, bottom, &cx, &cy, &sc);
-        fx3d::dither_disc(cx, cy + (int)(sc * 1.02f), (int)(sc * 0.78f), fx3d::rgb(0, 0, 0));   // soft contact shadow
-        // outline trick: a slightly bigger DARK solid behind reads as a clean rim around the silhouette
-        fx3d::draw_model_ex(mdl, (float)cx, (float)cy, sc + 1.6f, dd.yaw, dd.pitch, dd.bank, fx3d::rgb(10, 12, 18), false);
-        fx3d::draw_model_ex(mdl, (float)cx, (float)cy, sc, dd.yaw, dd.pitch, dd.bank, COL_IVORY, false);
-        if (TYPES[s_type].faces == 6) {
-            for (int v = 1; v <= 6; v++)
-                if (face_visible(v, dd.yaw, dd.pitch, dd.bank)) draw_pips(v, (float)cx, (float)cy, sc, dd.yaw, dd.pitch, dd.bank);
-        } else {
-            draw_face_numbers(mdl, (float)cx, (float)cy, sc, dd.yaw, dd.pitch, dd.bank);   // numbers ON the faces
-        }
+        int cx, cy; float sc; layout(i, ft, bottom, &cx, &cy, &sc);
+        fx3d::dither_disc(cx, cy + (int)(sc * 0.95f), (int)(sc * 0.85f), 0);                    // soft contact shadow
+        Rot r = rot_of(dd.yaw, dd.pitch, dd.bank);
+        draw_solid(mdl, r, (float)cx, (float)cy, sc);
+        if (TYPES[s_type].faces == 6) draw_pips(r, (float)cx, (float)cy, sc);
+        else draw_face_numbers(mdl, r, (float)cx, (float)cy, sc);
     }
-
-    char rt[24];
-    if (s_state == ST_CHARGE) snprintf(rt, sizeof(rt), "mescolo %d%%", (int)(s_charge * 100));
-    else if (s_state == ST_ROLL) snprintf(rt, sizeof(rt), "...");
-    else snprintf(rt, sizeof(rt), "= %d", total);
-    app_ui_title("Dadi", s_state == ST_IDLE ? C_GREEN : C_YELLOW, rt);
-
-    // charge meter while mixing
-    if (s_state == ST_CHARGE) {
-        int mw = (int)((W - 20) * s_charge);
-        d.fillRoundRect(10, bottom - 8, W - 20, 5, 2, fx3d::rgb(30, 40, 34));
-        d.fillRoundRect(10, bottom - 8, mw, 5, 2, fx3d::mix(C_YELLOW, C_GREEN, (int)(s_charge * 255)));
-    } else if (s_state == ST_IDLE) {
-        d.setTextSize(1); d.setTextColor(MUTED, fx3d::rgb(8, 22, 14));
-        d.setCursor(6, bottom - 9);
-        d.print(nucleo_imu_present() ? "scuoti/GO/scroll per mescolare  INVIO lancia  TAB opz"
-                                     : "tieni GO o scrolla per mescolare  INVIO lancia  TAB opz");
+    d.clearClipRect();
+    if (s_state == ST_CHARGE) {                                   // charge meter while mixing
+        d.fillSmoothRoundRect(10, bottom - 8, W - 20, 6, 3, gui::rgb(0, 36, 0));
+        d.fillSmoothRoundRect(10, bottom - 8, 6 + (int)((W - 26) * s_charge), 6, 3, gui::mix(C_YELLOW, C_GREEN, (int)(s_charge * 256)));
     }
-    if (s_settings) draw_settings(top, h);
 }
 
 static bool poll(void)
@@ -337,7 +389,7 @@ static bool poll(void)
     float dt = s_last_us ? (float)(now - s_last_us) / 1000000.0f : 0.02f;
     if (dt > 0.05f) dt = 0.05f;
     s_last_us = now;
-    if (s_settings) { return false; }                        // frozen while settings open
+    if (s_settings) return gui::menu_tick(s_setm, (int)(dt * 1000));   // dice frozen; only the cursor glides
     int prev = s_state;
     sim(dt);
     return (s_state != ST_IDLE) || (prev != ST_IDLE);        // redraw while anything is moving
@@ -350,63 +402,74 @@ static void ptt(bool on)
     nucleo_app_request_draw();
 }
 
+// settings row change: dice count 1..6 or die type (a new type re-poses the dice so faces match the total)
+static void set_change(int dir)
+{
+    if (s_setm.sel == 0) { s_n += dir; if (s_n < 1) s_n = 1; if (s_n > MAXDICE) s_n = MAXDICE; }
+    else { s_type = (s_type + NTYPES + dir) % NTYPES; pose_all(); }
+    nucleo_audio_tone(880, 25, 40);
+    nucleo_app_request_draw();
+}
+
 static void on_key(int key, char ch)
 {
     if (s_settings) {
-        if (key == NK_UP || key == NK_DOWN) { s_set_sel ^= 1; nucleo_app_request_draw(); }
-        else if (key == NK_RIGHT) { if (s_set_sel == 0) { if (s_n < MAXDICE) s_n++; } else s_type = (s_type + 1) % NTYPES; nucleo_app_request_draw(); }
+        if (gui::menu_key(s_setm, key, 2)) nucleo_app_request_draw();
+        else if (key == NK_RIGHT) set_change(+1);
+        else if (key == NK_ENTER) { s_settings = false; nucleo_app_request_draw(); }
         return;
     }
     if (key == NK_ENTER || ch == ' ') { if (s_state != ST_ROLL) throw_dice(0.5f); return; }   // quick standard roll
     if (key == NK_UP || key == NK_DOWN) {
+        if (s_state == ST_ROLL) return;
         s_charge += 0.10f;
         if (s_charge > 1) s_charge = 1;
         s_state = ST_CHARGE;
         s_keymix_us = esp_timer_get_time() + 350000;
         nucleo_app_request_draw();
     }
-    if (ch >= '1' && ch <= '6') { s_n = ch - '0'; nucleo_app_request_draw(); }
+    if (ch >= '1' && ch <= '6' && s_state == ST_IDLE) { s_n = ch - '0'; nucleo_app_request_draw(); }   // quick count
 }
 
 // LEFT/BACK route here. In settings: LEFT = decrease; BACK closes settings (not the app). Else: BACK exits.
 static bool back(int key)
 {
     if (s_settings) {
-        if (key == NK_LEFT) { if (s_set_sel == 0) { if (s_n > 1) s_n--; } else s_type = (s_type + NTYPES - 1) % NTYPES; nucleo_app_request_draw(); return true; }
-        s_settings = false; nucleo_app_request_draw(); return true;   // BACK closes the panel
+        if (key == NK_LEFT) set_change(-1);
+        else { s_settings = false; nucleo_app_request_draw(); }
+        return true;
     }
-    return false;
+    return key == NK_LEFT;                                    // LEFT does nothing on the table; Esc leaves
 }
 
-static void tab(void) { s_settings = !s_settings; s_set_sel = 0; nucleo_app_request_draw(); }
+static void tab(void) { if (s_state == ST_ROLL) return; s_settings = !s_settings; s_setm = {}; s_state = ST_IDLE; s_charge = 0; nucleo_app_request_draw(); }
 
 static void enter(void)
 {
-    COL_IVORY = fx3d::rgb(233, 227, 208);
-    COL_PIP   = fx3d::rgb(30, 26, 38);
-    COL_PIP1  = fx3d::rgb(196, 44, 44);
-    COL_FELT  = fx3d::rgb(28, 96, 56);
-    COL_FELTG = fx3d::rgb(46, 150, 88);
-    for (int i = 0; i < MAXDICE; i++) {
-        s_d[i].value = 1 + randn(TYPES[s_type].faces);
-        s_d[i].yaw = frand() * TWO_PI; s_d[i].pitch = frand() * TWO_PI; s_d[i].bank = 0;
-        s_d[i].ye = s_d[i].yaw; s_d[i].pe = s_d[i].pitch;
-    }
-    s_state = ST_IDLE; s_charge = 0; s_go_held = false; s_settings = false; s_last_us = 0; s_keymix_us = 0;
-    nucleo_app_set_fullscreen(true);
+    game_text_open("dice");
+    pose_all();
+    s_state = ST_IDLE; s_charge = 0; s_go_held = false; s_settings = false; s_last_us = 0; s_keymix_us = 0; s_hint = nullptr;
     nucleo_app_set_poll_handler(poll);
     nucleo_app_set_tab_handler(tab);
     nucleo_app_set_back_handler(back);
     nucleo_app_set_ptt_handler(ptt);
     nucleo_app_request_draw();
 }
+static void on_exit(void) { game_text_close(); }
+
+// Working RAM: allocated (zeroed) by the framework before enter(), freed after on_exit(). Foreground-only.
+static const nucleo_app_ram_t APP_RAM[] = {
+    { (void **)&s_d, sizeof(Die) * MAXDICE },
+    { nullptr, 0 }
+};
 
 extern "C" void nucleo_register_dice(void)
 {
     static const nucleo_app_def_t app = {
         "dice", "Dadi", "Games", "Dadi 3D d4/d6/d8/d20 (scuoti o tieni GO)",
-        'D', C_RED, enter, on_key, nullptr, draw, nullptr,
-        NX_NET_APP   // dedicate RAM + free the shared I2S line, consistent with the other games
+        'D', C_RED, enter, on_key, nullptr, draw, on_exit,
+        NX_NET_APP,  // dedicate RAM + free the shared I2S line, consistent with the other games
+        APP_RAM
     };
     nucleo_app_register(&app);
 }

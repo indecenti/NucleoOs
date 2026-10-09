@@ -1,0 +1,11 @@
+{
+  "game": "dice",
+  "strings": {
+    "Dice": { "es": "Dados", "fr": "Des", "de": "Wuerfel" },
+    "Type": { "es": "Tipo", "fr": "Type", "de": "Typ" },
+    "Settings": { "es": "Ajustes", "fr": "Reglages", "de": "Optionen" },
+    "UP/DN  L/R change  ENTER ok": { "es": "AR/AB  IZ/DE cambia  INTRO ok", "fr": "HT/BAS  G/D change  ENTREE ok", "de": "AUF/AB  L/R aendert  ENTER ok" },
+    "release to throw": { "es": "suelta para lanzar", "fr": "relache pour lancer", "de": "loslassen zum Werfen" },
+    "ENTER roll  UP/DN mix  TAB setup": { "es": "INTRO tira  AR/AB mezcla  TAB ajustes", "fr": "ENTREE lance  HT/BAS mele  TAB regl.", "de": "ENTER wirft  AUF/AB mischt  TAB Opt." }
+  }
+}
