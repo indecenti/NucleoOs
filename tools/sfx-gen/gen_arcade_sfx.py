@@ -12,7 +12,7 @@
 # Output: 16-bit PCM MONO WAV. The player reads the rate from the header, so any rate is fine;
 # 22050 Hz balances crispness and size. Names MUST match the game's sfx_name() table.
 #
-#   python gen_arcade_sfx.py --game pinball --out ../../deploy/sd/data/pinball/pack
+#   python gen_arcade_sfx.py --game pinball          (writes tools/sd-sim/data/pinball/pack; --out to override)
 #
 # Pure standard library (no numpy) so it runs anywhere Python 3 does.
 
@@ -312,14 +312,37 @@ def tanks():
     return s
 
 GAMES = {'pinball': pinball, 'slots': slots, 'tanks': tanks}
+# Where each pack lives in the SD source tree (tools/sd-sim/data/<dir>/pack -> /sd/data/<dir>/pack):
+# deploy.ps1 stages it and the release ships it. A game's dir is the one its firmware reads (DIRR).
+DIRS = {'pinball': 'pinball', 'slots': 'slots', 'tanks': 'tanks'}
+
+# One module per game in games/<id>.py, so each game's sounds are edited on their own:
+#     DIR = 'snake'                      # the game's /sd/data/<DIR>
+#     def pack(sx): return {'eat': sx.env(sx.tone('square', 600, 900, 0.06), decay=20.0), ...}
+# sx is this module (tone/env/mix/seq/crush/arp/notes). Names MUST match the game's sfx_name() table.
+def _load_game_modules():
+    import importlib.util, sys
+    here = os.path.dirname(os.path.abspath(__file__))
+    gdir = os.path.join(here, 'games')
+    if not os.path.isdir(gdir): return
+    for f in sorted(os.listdir(gdir)):
+        if not f.endswith('.py') or f.startswith('_'): continue
+        gid = f[:-3]
+        spec = importlib.util.spec_from_file_location(f'sfx_game_{gid}', os.path.join(gdir, f))
+        mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
+        GAMES[gid] = (lambda m: (lambda: m.pack(sys.modules[__name__])))(mod)
+        DIRS[gid] = getattr(mod, 'DIR', gid)
+_load_game_modules()
 
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--game', default='pinball', choices=list(GAMES))
-    ap.add_argument('--out', required=True)
+    ap.add_argument('--out', help='default: tools/sd-sim/data/<dir>/pack (the SD source tree)')
     ap.add_argument('--seed', type=int, default=1234)
     a = ap.parse_args()
     random.seed(a.seed)                       # deterministic noise -> reproducible pack
+    if not a.out:
+        a.out = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'sd-sim', 'data', DIRS[a.game], 'pack')
     os.makedirs(a.out, exist_ok=True)
     pack = GAMES[a.game]()
     total = 0

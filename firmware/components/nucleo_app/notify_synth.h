@@ -163,15 +163,17 @@ static inline int notify_synth_voices_wav(const notify_voice_t *v, int nv, const
     memcpy(h + 36, "data", 4);  notify__put32(h + 40, data_len);
     fwrite(h, 1, 44, f);
 
-    // Pass 2: stream normalized samples.
+    // Pass 2: stream normalized samples, 64 at a time (one fwrite per 2 bytes cost more than the synthesis).
+    uint8_t b[128]; int nb = 0; bool ok = true;
     for (int i = 0; i < total; i++) {
         float s = notify__sample(v, nv, rate, i) * norm;
         if (s > 1.0f) s = 1.0f; else if (s < -1.0f) s = -1.0f;
-        int16_t pcm = (int16_t)(s * 32767.0f);
-        uint8_t b[2]; notify__put16(b, (uint16_t)pcm);
-        fwrite(b, 1, 2, f);
+        notify__put16(b + nb, (uint16_t)(int16_t)(s * 32767.0f)); nb += 2;
+        if (nb == (int)sizeof b) { ok = ok && fwrite(b, 1, nb, f) == (size_t)nb; nb = 0; }
     }
-    fclose(f);
+    if (nb) ok = ok && fwrite(b, 1, nb, f) == (size_t)nb;
+    if (fclose(f) != 0) ok = false;
+    if (!ok) { remove(path); return -1; }         // a short write (full card) must not leave a cut WAV behind
     return 0;
 }
 

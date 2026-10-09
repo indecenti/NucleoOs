@@ -46,6 +46,13 @@ static void test_allow(void)
     OK(!sdc_path_writable("data/anima/teacher.json"), "api-key vault refused");
     OK(!sdc_path_writable("data/anima/learned/cache.jsonl"), "learned cache refused");
     OK(!sdc_path_writable("data/anima/sessions.json"), "anima sessions refused");
+    OK(sdc_path_writable("system/i18n/games/pong.de"), "game language pack allowed");
+    OK(sdc_path_writable("data/tanks/pack/boom.wav"), "game sound pack allowed");
+    OK(sdc_path_writable("data/pinball/pack/FLIP.WAV"), "game sound pack allowed (FAT case)");
+    OK(!sdc_path_writable("data/tanks/pack/sub/boom.wav"), "game pack: nothing deeper");
+    OK(!sdc_path_writable("data/tanks/cfg.bin"), "game save beside the pack refused");
+    OK(!sdc_path_writable("data/tanks/pack/readme.txt"), "game pack: only .wav");
+    OK(!sdc_path_writable("data//pack/x.wav"), "game pack: empty game name refused");
     OK(sdc_path_writable("data/tts/it/clips.pcm"), "tts bank it allowed (pipeline parity)");
     OK(sdc_path_writable("data/tts/en/index.bin"), "tts bank en allowed (pipeline parity)");
     OK(!sdc_path_writable("data/tts/speak.cfg"), "tts runtime cfg refused");

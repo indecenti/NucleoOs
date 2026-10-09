@@ -2,6 +2,7 @@
 // unchanged into the firmware AND by the host gate (tools/anima-host/sdcontent-check.mjs).
 #include "content_policy.h"
 #include <string.h>
+#include <strings.h>   // strcasecmp
 #include <stdlib.h>
 #include <stdio.h>
 #include <ctype.h>
@@ -61,6 +62,17 @@ bool sdc_path_writable(const char *path)
     if (under(path, "system/registry/")) return true;
     if (under(path, "system/ir/")) return true;
     if (under(path, "system/i18n/")) return true;
+
+    // data/<game>/pack/<cue>.wav — a native game's arcade sound pack (tools/sfx-gen). Exactly that depth:
+    // the game's saves and settings beside the pack are the user's.
+    if (under(path, "data/")) {
+        const char *game = path + 5, *s1 = strchr(game, '/');
+        if (s1 && s1 > game && strncmp(s1, "/pack/", 6) == 0) {
+            const char *file = s1 + 6;
+            size_t n = strlen(file);
+            if (n > 4 && !strchr(file, '/') && strcasecmp(file + n - 4, ".wav") == 0) return true;
+        }
+    }
 
     // data/anima/ — brain files ONLY; the API-key vault, learned caches, sessions and profile are the
     // user's and must never be shipped over.

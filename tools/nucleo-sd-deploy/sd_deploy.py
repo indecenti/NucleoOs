@@ -601,6 +601,10 @@ def release_path_allowed(rel):
             return "anima-state"
         if len(parts) == 4 and parts[1] == "tts" and parts[2] in ("it", "en"):
             return ""
+        # a game's arcade sound pack (data/<game>/pack/<cue>.wav, rendered by tools/sfx-gen): shipped
+        # content, never the game's own saves/config next to it
+        if len(parts) == 4 and parts[2] == "pack" and parts[3].lower().endswith(".wav"):
+            return ""
         return "data"
     if top in ("wallpapers", "evilportal"):
         return "" if len(parts) > 1 else "root"

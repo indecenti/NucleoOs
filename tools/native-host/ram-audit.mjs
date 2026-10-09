@@ -54,7 +54,7 @@ for (const id of which) {
   const g = GAMES[id];
   if (!g) { console.error(`ram-audit: unknown game ${id}`); process.exit(2); }
   const srcs = [g.src, ...(g.extra || [])];
-  let bss = 0, data = 0, text = 0, rodata = 0;
+  let bss = 0, data = 0, text = 0, rodata = 0, broken = false;
   const frames = [];
   for (const s of srcs) {
     const e = cc.find((x) => x.file.replace(/\\/g, '/').endsWith(`/nucleo_app/${s}`));
@@ -65,7 +65,7 @@ for (const id of which) {
     a[oi + 1] = obj;
     a.splice(1, 0, '-fstack-usage');
     try { execFileSync(a[0], a.slice(1), { cwd: e.directory, stdio: 'pipe' }); }
-    catch (err) { console.error(`ram-audit: ${s} does not compile for the device:\n${String(err.stderr).split('\n').filter((l) => /error/.test(l)).slice(0, 8).join('\n')}`); bad++; continue; }
+    catch (err) { console.error(`ram-audit: ${s} does not compile for the device:\n${String(err.stderr).split('\n').filter((l) => /error/.test(l)).slice(0, 8).join('\n')}`); broken = true; continue; }
     const m = tool(a[0]);
     const size = execFileSync(`${m[1]}size${m[3] || ''}`, ['-A', obj], { encoding: 'utf8' });
     for (const line of size.split('\n')) {
@@ -85,6 +85,7 @@ for (const id of which) {
   frames.sort((x, y) => y.bytes - x.bytes);
   const top = frames.slice(0, 3).map((f) => `${f.fn} ${f.bytes}${f.kind.includes('dynamic') ? '+dyn' : ''}`).join(', ');
   const stat = bss + data, big = frames.filter((f) => f.bytes > FRAME_MAX);
+  if (broken) { bad++; rows.push(`FAIL ${id.padEnd(9)} does not compile for the device (see above)`); continue; }
   const fail = stat > STATIC_MAX || big.length;
   if (fail) bad++;
   rows.push(`${fail ? 'FAIL' : 'ok  '} ${id.padEnd(9)} static ${String(stat).padStart(6)} B (bss ${bss}, data ${data})  flash ${String(text + rodata).padStart(7)} B  stack top: ${top}`);

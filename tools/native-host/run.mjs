@@ -124,7 +124,7 @@ for (const id of ids) {
   // the games' es/fr/de language packs (tools/game-i18n/build.mjs) at /sd/system/i18n/games, as on the card
   const packs = join(root, 'tools', 'sd-sim', 'system', 'i18n');
   if (existsSync(packs)) cpSync(packs, join(box, 'sd', 'system', 'i18n'), { recursive: true });
-  for (const d of g.data || []) { const s = join(root, 'deploy', 'sd', 'data', d); if (existsSync(s)) cpSync(s, join(box, 'sd', 'data', d), { recursive: true }); }
+  for (const d of g.data || []) { const s = [join(root, 'tools', 'sd-sim', 'data', d), join(root, 'deploy', 'sd', 'data', d)].find((x) => existsSync(x)); if (s) cpSync(s, join(box, 'sd', 'data', d), { recursive: true }); }
   const run = spawnSync(join(OUT, `${id}.exe`), [scenario, seed], { cwd: box, env, encoding: 'utf8', timeout: 600000 });
   process.stdout.write(`[${id}]\n${run.stdout || ''}`);
   if (run.error || run.status === null || (run.status !== 0 && run.status !== 1)) {
