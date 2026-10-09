@@ -46,6 +46,8 @@
     "ui:shots": "node tools/ui-host/run.mjs",
     "tanks:test": "node tools/tanks-host/run.mjs",
     "games:native": "node tools/native-host/run.mjs",
+    "games:ram": "node tools/native-host/ram-audit.mjs",
+    "games:i18n": "node tools/game-i18n/check.mjs",
     "otalisten:test": "node tools/anima-host/ota-listen-check.mjs",
     "ble:test": "node tools/anima-host/ble-check.mjs",
     "mail:test": "node tools/anima-host/mail-check.mjs",

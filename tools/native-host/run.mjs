@@ -109,7 +109,7 @@ for (const id of ids) {
       objs.push(obj);
     }
     // the theme palette (THEME_* globals) every game links; the shared list/tab widgets for the games that use them
-    for (const src of [join(FW, 'nucleo_ui', 'nucleo_theme.cpp'), join(CJSON, 'cJSON.c'), join(APPS, 'game_text.cpp'), ...(g.ui ? [join(APPS, 'app_ui.cpp')] : [])]) {
+    for (const src of [join(FW, 'nucleo_ui', 'nucleo_theme.cpp'), join(CJSON, 'cJSON.c'), join(APPS, 'game_text.cpp'), join(APPS, 'game_ui.cpp'), ...(g.ui ? [join(APPS, 'app_ui.cpp')] : [])]) {
       const obj = join(OUT, 'obj', `${id}_ui_${src.split(/[\\/]/).pop()}.o`);
       execFileSync(src.endsWith('.c') ? GCC : GPP, [...(src.endsWith('.c') ? CC : CXX), '-c', src, '-o', obj], { env, stdio: 'pipe' });
       objs.push(obj);
