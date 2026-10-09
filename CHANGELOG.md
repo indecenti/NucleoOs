@@ -6,6 +6,39 @@ All notable user-facing changes to NucleoOS. Format loosely follows
 
 ## [Unreleased]
 
+## [0.7.0] — 2026-10-09
+
+### Added
+- **The assistant's agent keeps its plan in view** — the open checklist rides on every tool result,
+  files can be read from any line (exact offset and total shown), and when the step budget runs out
+  the agent ends with its own summary instead of stopping mid-task.
+- **Browser tests in CI** — every app in 5 languages, data safety, security and resilience run in a
+  real headless Chrome against the device simulator on every push and pull request.
+
+### Changed
+- **Settings in your language** — the AI profile panel and the Security & sessions section are now
+  fully translated into Spanish, French and German.
+- **An app window that loses a file while loading reloads itself once** — the device's small web
+  server can drop a connection under load; the window now recovers instead of staying broken.
+
+### Fixed
+- **Your data is never overwritten by a failed read** — Terminal, Notepad, Tasks, Spreadsheet, SSH,
+  Settings (AI keys), Radio, IR Remote, Clock, Games and Arcade saves no longer replace the real file
+  with an empty one when the card is busy or offline. Terminal `touch` no longer empties a file.
+- **File Commander and Recycle Bin never delete a file they failed to copy** — move, trash, restore
+  and paste delete the original last and roll back on failure.
+- **Security** — apps start untrusted until the registry vouches for them; desktop links inherit
+  their target's sandbox; AI error messages never show an API key; names, events and help text from
+  files or other devices are shown as text, never run as markup. On the device, ESP-NOW games and
+  Nearby accept frames only from the joined peer, cap and sanitise received files, and refuse
+  commands longer than the confirmation dialog shows.
+- **Updates** only reports "complete" when the device really restarted, and refuses files that can
+  never be a firmware image before sending a byte.
+- **Around 50 further app fixes** found by new behaviour tests (QR, Media/Video/Photo players, System
+  Monitor, Voice Manager, Recorder, Dictation, Help, Mail, Authenticator, Passkeys, Wi-Fi…) and by
+  testing all 46 apps on a real Cardputer: windows stay on screen, labels follow the OS language,
+  controls follow the theme, the wallpaper gallery works again.
+
 ## [0.6.0] — 2026-10-04
 
 ### Added
