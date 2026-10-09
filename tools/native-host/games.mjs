@@ -18,4 +18,6 @@ export const GAMES = {
   yahtzee:   { src: 'app_yahtzee.cpp', reg: 'nucleo_register_yahtzee', ui: true, data: ['yahtzee'] },
   // tanks has its own deeper harness (tools/tanks-host); listed here for the language checker
   tanks:     { src: 'app_tanks.cpp', reg: 'nucleo_register_tanks', data: ['tanks'], ownHarness: true },
+  // the console front-end (not a game): listed for the language checker only
+  gamefront: { src: 'gamefront.cpp', ownHarness: true },
 };

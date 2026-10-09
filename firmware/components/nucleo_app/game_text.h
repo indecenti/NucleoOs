@@ -17,3 +17,6 @@ void game_text_close(void);
 const char *game_text(const char *it, const char *en);
 
 #define GT(it_, en_) game_text((it_), (en_))
+// A pair kept in a const table and translated where it is shown: { GTK("Salta", "Jump") } stores both
+// literals; draw with game_text(row.it, row.en). tools/game-i18n/check.mjs collects GTK pairs like GT.
+#define GTK(it_, en_) (it_), (en_)

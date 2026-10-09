@@ -20,7 +20,7 @@ const APPS = join(root, 'firmware', 'components', 'nucleo_app');
 
 const unC = (s) => s.replace(/\\(x[0-9a-fA-F]{2}|.)/g, (_, e) => e[0] === 'x' ? String.fromCharCode(parseInt(e.slice(1), 16)) : e === 'n' ? '\n' : e === 't' ? '\t' : e);
 const LIT = '"((?:[^"\\\\\\n]|\\\\.)*)"';
-const GT_OK = new RegExp(`\\bGT\\(\\s*${LIT}\\s*,\\s*${LIT}\\s*\\)`, 'g');
+const GT_OK = new RegExp(`\\bGTK?\\(\\s*${LIT}\\s*,\\s*${LIT}\\s*\\)`, 'g');   // GT() calls and GTK() table pairs
 
 const want = process.argv[2] ? process.argv[2].split(',') : Object.keys(GAMES);
 let bad = 0, games = 0;
@@ -30,7 +30,7 @@ for (const id of want) {
   if (!g) { console.error(`game-i18n: unknown game ${id}`); process.exit(2); }
   const files = [g.src, ...(g.extra || [])].map((f) => join(APPS, f));
   const src = files.map((f) => readFileSync(f, 'utf8')).join('\n');
-  const uses = [...src.matchAll(/\bGT\(/g)].length;
+  const uses = [...src.matchAll(/\bGTK?\(/g)].length - [...src.matchAll(/#define GTK?\(/g)].length;
   if (!uses) { if (process.argv[2]) { out.push(`FAIL ${id}: no GT() strings yet`); bad++; } continue; }
   games++;
   const lits = [...src.matchAll(GT_OK)].map((m) => ({ it: unC(m[1]), en: unC(m[2]) }));

@@ -10,6 +10,7 @@
 #include "launcher_render.h"
 #include "nucleo_kbd.h"
 #include "nucleo_ui.h"      // panel readback for Solo-mode / direct-draw screenshots
+#include "game_text.h"     // GT: the front-end in the five OS languages (pack "gamefront")
 #include <M5GFX.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -57,24 +58,26 @@ enum { GM_1P = 0x01, GM_CPU = 0x02, GM_2P = 0x04, GM_LAN = 0x08, GM_COOP = 0x10 
 // for games whose real-world reference is naturally vertical (pinball's flipper table).
 enum { GF_LANDSCAPE = 0, GF_PORTRAIT = 1 };
 
-typedef struct { const char *id; const char *title; unsigned modes; const char *tag; unsigned char shape; } META_t;
+// The title shown is the launcher's localized name (launcher_app_localized_name), upper-cased; the tagline
+// is an IT/EN pair whose es/fr/de come from the SD pack (game_text, pack "gamefront").
+typedef struct { const char *id; unsigned modes; const char *tag_it, *tag_en; unsigned char shape; } META_t;
 static const META_t META[] = {
-    { "reactor",  "REATTORE",       GM_1P,           "Bilancia potenza e raffreddamento. Evita il meltdown.", GF_LANDSCAPE },
-    { "stelle",   "COSTELLAZIONI",  GM_1P,           "Sparatutto spaziale arcade fra le stelle.", GF_LANDSCAPE },
-    { "giardino", "GIARDINO",       GM_1P,           "Sandbox di elementi che cadono. Relax puro.", GF_LANDSCAPE },
-    { "slots",    "SLOT",           GM_1P,           "Tira la leva e insegui il jackpot.", GF_LANDSCAPE },
-    { "poker",    "POKER",          GM_1P,           "5 carte: tieni le buone, punta alla scala reale.", GF_LANDSCAPE },
-    { "pinball",  "FLIPPER",        GM_1P,           "Flipper verticale: respingenti, spinner, punti.", GF_PORTRAIT },
-    { "pong",     "PONG",           GM_CPU | GM_LAN, "1v1 in rete fra due Cardputer, o contro la CPU.", GF_LANDSCAPE },
-    { "tanks",    "TANKS",          GM_CPU | GM_2P,  "Artiglieria a turni: terreno distruttibile, vento, 29 armi.", GF_LANDSCAPE },
-    { "brawler",  "SCORRIBANDA",    GM_1P | GM_COOP, "Picchiaduro noir a scorrimento, anche in co-op.", GF_LANDSCAPE },
-    { "dice",     "DADI",           GM_1P,           "Tiro di dadi: scuoti il device o premi invio.", GF_LANDSCAPE },
-    { "snake",    "SNAKE",          GM_CPU | GM_LAN, "Serpente 1v1 in rete (ESP-NOW), o contro l'IA.", GF_LANDSCAPE },
-    { "tankd",    "TANK DUEL",      GM_CPU | GM_LAN, "Arena 1v1 in rete: shop conteso, 4 carri, upgrade.", GF_LANDSCAPE },
-    { "yahtzee",  "YAHTZEE",        GM_2P | GM_CPU,  "Yahtzee a turni, 1-4 giocatori + CPU, dadi 3D.", GF_LANDSCAPE },
-    { "orde",     "ORDE",           GM_1P,           "Mini vampire-survivors: piu' armi auto-sparano, sopravvivi alle orde.", GF_LANDSCAPE },
-    { "cardler",  "CARDLER",        GM_1P,           "Mini RPG top-down: esplora il mondo, parla con gli NPC, raccogli oro.", GF_LANDSCAPE },
-    { nullptr, nullptr, 0, nullptr, GF_LANDSCAPE },
+    { "reactor",  GM_1P,           GTK("Bilancia potenza e raffreddamento. Evita il meltdown.", "Balance power and cooling. Avoid the meltdown."), GF_LANDSCAPE },
+    { "stelle",   GM_1P,           GTK("Commercia e combatti fra le stelle.", "Trade and fight among the stars."), GF_LANDSCAPE },
+    { "giardino", GM_1P,           GTK("Unisci le piante e fai crescere l'albero d'oro.", "Merge plants and grow the golden tree."), GF_LANDSCAPE },
+    { "slots",    GM_1P,           GTK("Tira la leva e insegui il jackpot.", "Pull the lever and chase the jackpot."), GF_LANDSCAPE },
+    { "poker",    GM_1P,           GTK("5 carte: tieni le buone, punta alla scala reale.", "5 cards: hold the good ones, go for the royal flush."), GF_LANDSCAPE },
+    { "pinball",  GM_1P,           GTK("Flipper verticale: respingenti, spinner, punti.", "Vertical pinball: bumpers, spinners, points."), GF_PORTRAIT },
+    { "pong",     GM_CPU | GM_LAN, GTK("1v1 in rete fra due Cardputer, o contro la CPU.", "1v1 between two Cardputers, or against the CPU."), GF_LANDSCAPE },
+    { "tanks",    GM_CPU | GM_2P,  GTK("Artiglieria a turni: terreno distruttibile, vento, 29 armi.", "Turn-based artillery: destructible terrain, wind, 29 weapons."), GF_LANDSCAPE },
+    { "brawler",  GM_1P | GM_COOP, GTK("Picchiaduro noir a scorrimento, anche in co-op.", "Side-scrolling noir brawler, co-op too."), GF_LANDSCAPE },
+    { "dice",     GM_1P,           GTK("Tiro di dadi: scuoti il device o premi invio.", "Roll the dice: shake the device or press enter."), GF_LANDSCAPE },
+    { "snake",    GM_CPU | GM_LAN, GTK("Serpente 1v1 in rete (ESP-NOW), o contro l'IA.", "1v1 snake over ESP-NOW, or against the AI."), GF_LANDSCAPE },
+    { "tankd",    GM_CPU | GM_LAN, GTK("Arena 1v1 in rete: shop conteso, 4 carri, upgrade.", "1v1 arena: contested shop, 4 tanks, upgrades."), GF_LANDSCAPE },
+    { "yahtzee",  GM_2P | GM_CPU,  GTK("Yahtzee a turni, 1-4 giocatori + CPU, dadi 3D.", "Turn-based Yahtzee, 1-4 players + CPU, 3D dice."), GF_LANDSCAPE },
+    { "orde",     GM_1P,           GTK("Sopravvivi alle orde: le armi sparano da sole.", "Survive the hordes: your weapons fire on their own."), GF_LANDSCAPE },
+    { "cardler",  GM_1P,           GTK("Mini RPG: esplora, parla con gli NPC, raccogli oro.", "Mini RPG: explore, talk to NPCs, collect gold."), GF_LANDSCAPE },
+    { nullptr, 0, nullptr, nullptr, GF_LANDSCAPE },
 };
 
 // A game's cover box: landscape (wide, default) sized to fill a real screenshot, or portrait
@@ -178,11 +181,15 @@ static int gf_at(int sel)   // registry index of the sel-th match, or -1
     return -1;
 }
 
-// Custom marquee title for a game: META override, else the registry name.
+extern "C" const char *launcher_app_localized_name(const char *id);
+// Marquee title: the game's name in the OS language (the launcher's table), upper-cased like a cabinet.
 static const char *gf_title(const nucleo_app_def_t *g)
 {
-    const META_t *m = gf_meta(g->id);
-    return (m && m->title) ? m->title : g->name;
+    static char t[24];
+    const char *n = launcher_app_localized_name(g->id);
+    snprintf(t, sizeof t, "%s", n ? n : g->name);
+    for (char *p = t; *p; p++) *p = (char)toupper((unsigned char)*p);
+    return t;
 }
 
 // Greedy word-wrap under the CURRENT font. Draws lines [scroll, scroll+maxLines) of `s` into a
@@ -219,7 +226,7 @@ static void load_tag(const nucleo_app_def_t *g, int regidx)
     char p[192]; snprintf(p, sizeof p, "%s/%s.txt", GF_DIR, g->id);
     FILE *f = fopen(p, "rb");
     if (f) { size_t n = fread(s_tag, 1, sizeof s_tag - 1, f); s_tag[n] = 0; fclose(f); }
-    if (!s_tag[0]) { const META_t *m = gf_meta(g->id); if (m && m->tag) snprintf(s_tag, sizeof s_tag, "%s", m->tag); }
+    if (!s_tag[0]) { const META_t *m = gf_meta(g->id); if (m && m->tag_it) snprintf(s_tag, sizeof s_tag, "%s", game_text(m->tag_it, m->tag_en)); }
     if (!s_tag[0]) snprintf(s_tag, sizeof s_tag, "%s", g->desc ? g->desc : "");
     s_tag_for = regidx;
 }
@@ -233,7 +240,7 @@ static uint16_t mode_col(unsigned f)
 }
 static const char *mode_lbl(unsigned f)
 {
-    switch (f) { case GM_1P: return "1 Giocatore"; case GM_CPU: return "vs CPU"; case GM_2P: return "2P locale";
+    switch (f) { case GM_1P: return GT("1 Giocatore", "1 Player"); case GM_CPU: return "vs CPU"; case GM_2P: return GT("2P locale", "2P local");
                  case GM_LAN: return "Online / LAN"; case GM_COOP: return "Co-op"; } return "?";
 }
 
@@ -428,7 +435,7 @@ template <typename T> static void draw_topbar(T *c, uint16_t acc, int sel, int c
 
     int ty = (MARQ_H - 8) / 2;                                  // vertical-centre the 8px Font0 glyphs
     c->setFont(&fonts::Font0); c->setTextSize(1);
-    c->setTextColor(mix565(acc, FG, 0.58f)); c->setCursor(5, ty); c->print("GIOCHI");   // kicker
+    c->setTextColor(mix565(acc, FG, 0.58f)); c->setCursor(5, ty); c->print(GT("GIOCHI", "GAMES"));   // kicker
 
     if (s_filter[0]) {                                          // filter takes the right slot when active
         char fb[20]; snprintf(fb, sizeof fb, "/%.12s", s_filter);
@@ -489,11 +496,11 @@ template <typename T> static void draw_gf(T *c)
         for (int yy = 0; yy < MARQ_H; yy++) c->drawFastHLine(0, yy, W, mix565(C_RED, INK, 0.6f));
         c->drawFastHLine(0, MARQ_H - 1, W, mix565(C_RED, FG, 0.45f));
         c->setFont(&fonts::Font0); c->setTextColor(mix565(C_RED, FG, 0.58f));
-        c->setCursor(5, (MARQ_H - 8) / 2); c->print("GIOCHI");
+        c->setCursor(5, (MARQ_H - 8) / 2); c->print(GT("GIOCHI", "GAMES"));
         c->setFont(&fonts::Font2); c->setTextColor(DIM);
-        const char *m = s_filter[0] ? "Nessun risultato" : "Nessun gioco";
+        const char *m = s_filter[0] ? GT("Nessun risultato", "No results") : GT("Nessun gioco", "No games");
         c->setCursor((W - (int)c->textWidth(m)) / 2, H / 2 - 8); c->print(m);
-        draw_footer(c, s_filter[0] ? "DEL cancella filtro   ESC" : "ESC esci");
+        draw_footer(c, s_filter[0] ? GT("DEL cancella filtro   ESC", "DEL clear filter   ESC") : GT("ESC esci", "ESC quit"));
         return;
     }
 
@@ -516,8 +523,8 @@ template <typename T> static void draw_gf(T *c)
     draw_title(c, g, g->color);
     draw_badges(c, modes);
 
-    draw_footer(c, s_filter[0] ? "DEL canc   < > scegli   INVIO   ESC"
-                               : "TAB info   < > gioco   INVIO   ESC");
+    draw_footer(c, s_filter[0] ? GT("DEL canc   < > scegli   INVIO   ESC", "DEL clear   < > pick   ENTER   ESC")
+                               : GT("TAB info   < > gioco   INVIO   ESC", "TAB info   < > game   ENTER   ESC"));
 }
 
 // ---- TAB info card: tagline + supported play modes --------------------------
@@ -561,12 +568,13 @@ template <typename T> static void draw_info(T *c, const nucleo_app_def_t *g)
         px += pw + 5;
     }
 
-    draw_footer(c, "TAB/ESC chiudi   < > gioco   INVIO gioca");
+    draw_footer(c, GT("TAB/ESC chiudi   < > gioco   INVIO gioca", "TAB/ESC close   < > game   ENTER play"));
 }
 
 // ---- public API -------------------------------------------------------------
 void gamefront_open(void)
 {
+    game_text_open("gamefront");                   // es/fr/de taglines + labels while the front-end is up
     s_ngames = 0;
     int n = nucleo_app_count();
     for (int i = 0; i < n && s_ngames < GF_MAX; i++) {
@@ -609,6 +617,7 @@ int gamefront_key(int key, char ch, char *launch_id, int cap)
         }
         case NK_BACK:                                  // clear the filter first, then close (like the launcher)
             if (s_filter[0]) { s_filter[0] = 0; s_sel = 0; return GF_REDRAW; }
+            game_text_close();                         // back to the launcher: the text pack's heap goes too
             return GF_CLOSE;
         case NK_DEL: {
             int l = (int)strlen(s_filter);

@@ -167,7 +167,7 @@ void dialog(const char *head, const char *l1, const char *l2, const char *keys, 
     int lines = (l1 && l1[0]) + (l2 && l2[0]);
     int h = 30 + lines * 17 + (keys && keys[0] ? 18 : 0), w = 208;
     int x = (W - w) / 2, y = (ch - h) / 2;
-    panel(x, y, w, h, rgb(18, 22, 40), accent);
+    panel(x, y, w, h, rgb(0, 36, 85), accent);                             // navy: exact in RGB332 (18,22,40 snapped to olive)
     int ty = y + 6;
     text(head, W / 2, ty, 1, F_BODY, accent, rgb(0, 0, 0)); ty += 22;
     if (l1 && l1[0]) { text(l1, W / 2, ty, 1, F_SMALL, rgb(255, 255, 255), rgb(0, 0, 0)); ty += 17; }

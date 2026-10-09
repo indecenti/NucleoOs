@@ -1,0 +1,30 @@
+{
+  "game": "gamefront",
+  "strings": {
+    "Balance power and cooling. Avoid the meltdown.": { "es": "Equilibra potencia y refrigeracion. Evita la fusion.", "fr": "Equilibre puissance et refroidissement. Evite la fusion.", "de": "Leistung und Kuehlung im Gleichgewicht. Keine Kernschmelze." },
+    "Trade and fight among the stars.": { "es": "Comercia y lucha entre las estrellas.", "fr": "Commerce et combats parmi les etoiles.", "de": "Handeln und kaempfen zwischen den Sternen." },
+    "Merge plants and grow the golden tree.": { "es": "Une plantas y cultiva el arbol de oro.", "fr": "Fusionne les plantes, fais pousser l'arbre d'or.", "de": "Pflanzen vereinen und den Goldbaum ziehen." },
+    "Pull the lever and chase the jackpot.": { "es": "Tira de la palanca y persigue el bote.", "fr": "Tire le levier et vise le jackpot.", "de": "Zieh den Hebel und jag den Jackpot." },
+    "5 cards: hold the good ones, go for the royal flush.": { "es": "5 cartas: guarda las buenas, busca la escalera real.", "fr": "5 cartes : garde les bonnes, vise la quinte royale.", "de": "5 Karten: behalte die guten, ziel auf den Royal Flush." },
+    "Vertical pinball: bumpers, spinners, points.": { "es": "Pinball vertical: bumpers, spinners, puntos.", "fr": "Flipper vertical : bumpers, spinners, points.", "de": "Senkrechter Flipper: Bumper, Spinner, Punkte." },
+    "1v1 between two Cardputers, or against the CPU.": { "es": "1v1 entre dos Cardputer, o contra la CPU.", "fr": "1v1 entre deux Cardputer, ou contre le CPU.", "de": "1v1 zwischen zwei Cardputern oder gegen die CPU." },
+    "Turn-based artillery: destructible terrain, wind, 29 weapons.": { "es": "Artilleria por turnos: terreno destructible, viento, 29 armas.", "fr": "Artillerie au tour par tour : terrain destructible, vent, 29 armes.", "de": "Rundenartillerie: zerstoerbares Gelaende, Wind, 29 Waffen." },
+    "Side-scrolling noir brawler, co-op too.": { "es": "Beat'em up noir de scroll lateral, tambien cooperativo.", "fr": "Beat'em up noir a defilement, aussi en coop.", "de": "Noir-Prugelspiel mit Scrolling, auch im Koop." },
+    "Roll the dice: shake the device or press enter.": { "es": "Tira los dados: agita el aparato o pulsa enter.", "fr": "Lance les des : secoue l'appareil ou appuie sur entree.", "de": "Wuerfeln: Geraet schuetteln oder Enter druecken." },
+    "1v1 snake over ESP-NOW, or against the AI.": { "es": "Serpiente 1v1 por ESP-NOW, o contra la IA.", "fr": "Serpent 1v1 en ESP-NOW, ou contre l'IA.", "de": "Snake 1v1 ueber ESP-NOW oder gegen die KI." },
+    "1v1 arena: contested shop, 4 tanks, upgrades.": { "es": "Arena 1v1: tienda disputada, 4 tanques, mejoras.", "fr": "Arene 1v1 : boutique disputee, 4 chars, ameliorations.", "de": "1v1-Arena: umkaempfter Shop, 4 Panzer, Upgrades." },
+    "Turn-based Yahtzee, 1-4 players + CPU, 3D dice.": { "es": "Yahtzee por turnos, 1-4 jugadores + CPU, dados 3D.", "fr": "Yahtzee au tour par tour, 1-4 joueurs + CPU, des 3D.", "de": "Yahtzee in Runden, 1-4 Spieler + CPU, 3D-Wuerfel." },
+    "Survive the hordes: your weapons fire on their own.": { "es": "Sobrevive a las hordas: tus armas disparan solas.", "fr": "Survis aux hordes : tes armes tirent toutes seules.", "de": "Ueberlebe die Horden: deine Waffen feuern von selbst." },
+    "Mini RPG: explore, talk to NPCs, collect gold.": { "es": "Mini RPG: explora, habla con los NPC, junta oro.", "fr": "Mini RPG : explore, parle aux PNJ, ramasse de l'or.", "de": "Mini-RPG: erkunden, mit NPCs reden, Gold sammeln." },
+    "1 Player": { "es": "1 Jugador", "fr": "1 Joueur", "de": "1 Spieler" },
+    "2P local": { "es": "2J local", "fr": "2J local", "de": "2S lokal" },
+    "GAMES": { "es": "JUEGOS", "fr": "JEUX", "de": "SPIELE" },
+    "No results": { "es": "Sin resultados", "fr": "Aucun resultat", "de": "Keine Treffer" },
+    "No games": { "es": "Sin juegos", "fr": "Aucun jeu", "de": "Keine Spiele" },
+    "DEL clear filter   ESC": { "es": "DEL borrar filtro   ESC", "fr": "DEL effacer filtre   ESC", "de": "DEL Filter loeschen   ESC" },
+    "ESC quit": { "es": "ESC salir", "fr": "ESC quitter", "de": "ESC Ende" },
+    "DEL clear   < > pick   ENTER   ESC": { "es": "DEL borrar   < > elegir   ENTER   ESC", "fr": "DEL effacer   < > choisir   ENTREE   ESC", "de": "DEL loeschen   < > waehlen   ENTER   ESC" },
+    "TAB info   < > game   ENTER   ESC": { "es": "TAB info   < > juego   ENTER   ESC", "fr": "TAB info   < > jeu   ENTREE   ESC", "de": "TAB Info   < > Spiel   ENTER   ESC" },
+    "TAB/ESC close   < > game   ENTER play": { "es": "TAB/ESC cerrar   < > juego   ENTER jugar", "fr": "TAB/ESC fermer   < > jeu   ENTREE jouer", "de": "TAB/ESC zu   < > Spiel   ENTER spielen" }
+  }
+}
