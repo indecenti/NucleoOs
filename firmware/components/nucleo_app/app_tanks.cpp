@@ -456,14 +456,19 @@ static bool sfx_important(int id) {
     return id == 4 || id == 6 || id == 9 || id == 10 || id == 12 || id == 14
         || (id >= 30 && id <= 38) || id == 41 || id == 48 || id == 49;
 }
+// A playable WAV = present AND longer than its 44-byte header. A cache file cut short by a reset mid-write
+// (0 bytes) must not count as "cached".
+static bool wav_ok(const char *p) { struct stat st; return stat(p, &st) == 0 && st.st_size > 44; }
 static void sfx(int id) {
     if (!g_audio || id <= 0) return;
     if (!sfx_important(id) && nucleo_audio_is_playing()) return;
-    char p[80]; snprintf(p, sizeof p, DIRR "/pack/%s.wav", sfx_name(id));   // 1) deployed arcade WAV pack (best, real chiptune)
-    FILE *f = fopen(p, "rb");
-    if (!f) { snprintf(p, sizeof p, DIRR "/sfx/%s.wav", sfx_name(id)); f = fopen(p, "rb"); }   // 2) on-device synth cache
-    if (!f) return;                 // 3) NOT available -> skip. NEVER synthesize inline here: a multi-voice
-    fclose(f);                      // synth+SD-write on the game task blocks for seconds = frozen screen at turn change.
+    char p[80]; snprintf(p, sizeof p, DIRR "/pack/%s.wav", sfx_name(id));   // 1) deployed arcade WAV pack (covers every cue)
+    if (!wav_ok(p)) { snprintf(p, sizeof p, DIRR "/sfx/%s.wav", sfx_name(id)); }   // 2) legacy on-device synth cache
+    if (!wav_ok(p)) {               // 3) no WAV -> a short tone from the cue's first voice. NEVER synthesize a WAV
+        notify_voice_t v[16];       // here: a multi-voice synth+SD-write blocks the app task for seconds.
+        if (sfx_important(id) && build_voices(id, v) > 0) nucleo_audio_tone((int)v[0].hz, 45, 55);
+        return;
+    }
     if (sfx_important(id)) nucleo_audio_stop();
     nucleo_audio_play(p);
 }
@@ -481,18 +486,10 @@ static void play_hit_sfx(int wp) {
     }
     sfx(hit_sfx[wp]);                                         // digger/cluster/rain/beam/... keep their cue
 }
-static void ensure_dirs(void) { mkdir("/sd/data", 0777); mkdir(DIRR, 0777); mkdir(DIRR "/sfx", 0777); }
-static void presynth(void) {
-    if (!g_audio) return;
-    notify_voice_t v[16];
-    for (int id = 1; id <= NSFX; id++) {
-        char p[80]; snprintf(p, sizeof p, DIRR "/sfx/%s.wav", sfx_name(id));
-        FILE *f = fopen(p, "rb");
-        if (f) { fclose(f); continue; }
-        int nv = build_voices(id, v);
-        if (nv > 0) notify_synth_voices_wav(v, nv, p, 12000);
-    }
-}
+// No presynth: bulk-synthesizing the 42 cues in on_enter ran >8 s on the app task (subscribed to the Task WDT)
+// and rebooted the device on any SD without the cache. The deployed pack (deploy/sd/data/tanks/pack) is the
+// sound source; sfx() falls back to a tone without it.
+static void ensure_dirs(void) { mkdir("/sd/data", 0777); mkdir(DIRR, 0777); }
 
 // ============================ persistence ====================================
 #define CFG_MAGIC 0x544E4B36u   // 'TNK6' (bumped: adds the variable-wind toggle)
@@ -2288,7 +2285,7 @@ static void tab_handler(void) {
 }
 static void opt_change(int i, int dir) {
     switch (i) {
-        case 0: g_audio ^= 1; if (g_audio) presynth(); break;   // cache all sfx now (menu ctx) so the game task never synthesizes
+        case 0: g_audio ^= 1; break;
         case 1: g_lang ^= 1; set_hint(); break;
         case 2: s_diff = (s_diff + (dir < 0 ? 2 : 1)) % 3; break;
         case 3: g_manual ^= 1; if (g_manual && local_active()) seed_entry(); break;   // seed for whoever is actually aiming (host OR guest)
@@ -2596,7 +2593,6 @@ static void on_enter(void) {
     cfg_read();
     ld_ensure_valid();                         // start from a legal 10-weapon loadout (saved or default)
     if (nucleo_audio_volume() < 40) nucleo_audio_set_volume(80);
-    presynth();
     s_screen = ST_MENU; s_msel = 0; s_anim = 0; s_wins[0] = s_wins[1] = 0;
     s_now = s_last = s_frame = now_ms(); s_inE = s_inP = 0;
     s_mode = MODE_AI; s_seat = 0; s_haspeer = false; s_join_pending = false; s_guest_in = false; s_nroom = s_rsel = 0; s_rel_on = false;
