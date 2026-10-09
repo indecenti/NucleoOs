@@ -45,6 +45,7 @@
     "launcher:test": "node tools/launcher-host/check.mjs",
     "ui:shots": "node tools/ui-host/run.mjs",
     "tanks:test": "node tools/tanks-host/run.mjs",
+    "games:native": "node tools/native-host/run.mjs",
     "otalisten:test": "node tools/anima-host/ota-listen-check.mjs",
     "ble:test": "node tools/anima-host/ble-check.mjs",
     "mail:test": "node tools/anima-host/mail-check.mjs",

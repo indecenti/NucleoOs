@@ -1,0 +1,156 @@
+#!/usr/bin/env node
+// Native games host gate (npm run games:native).
+//
+// Compiles each REAL native game (firmware/components/nucleo_app/app_<x>.cpp + its helper sources) on the PC
+// with MinGW and the REAL LovyanGFX core (objects cached by tools/ui-host), links it with tools/native-host/
+// core.h — a simulated Cardputer: the app framework, key routing + the driver's auto-repeat, a ~50 Hz loop on
+// a virtual clock, the 8bpp canvas, a sandboxed SD, ADV/IMU/language knobs — and runs its scenario:
+//   tools/native-host/games/<id>.cpp   game-specific checks (mechanics, rules, layout, regressions)
+//   (none)                             the built-in smoke: menus + 3 seeded rounds of random key mashing on
+//                                      both boards, frames dumped, Esc must leave the app
+// Bounds/null/return UB traps are compiled in (-fsanitize=...-trap-on-error): an out-of-range index on a
+// fixed-size array crashes the run instead of silently corrupting memory as it would on the device.
+//   node tools/native-host/run.mjs [id|all] [scenario] [seed]
+import { spawnSync, execFileSync } from 'node:child_process';
+import { mkdirSync, readFileSync, writeFileSync, existsSync, readdirSync, rmSync, cpSync } from 'node:fs';
+import { join, dirname } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import zlib from 'node:zlib';
+
+const here = dirname(fileURLToPath(import.meta.url));
+const root = join(here, '..', '..');
+const FW = join(root, 'firmware', 'components');
+const APPS = join(FW, 'nucleo_app');
+const GFX = join(root, 'firmware', 'managed_components', 'm5stack__m5gfx', 'src');
+const OUT = join(root, 'build', 'native-host');
+const LGFX_OBJ = join(root, 'build', 'ui-host', 'lgfx');
+const MINGW = 'C:/msys64/mingw64/bin';
+const GPP = existsSync(`${MINGW}/g++.exe`) ? `${MINGW}/g++.exe` : 'g++';
+const GCC = existsSync(`${MINGW}/gcc.exe`) ? `${MINGW}/gcc.exe` : 'gcc';
+const env = { ...process.env, PATH: `${MINGW};${process.env.PATH}` };
+const CJSON = 'C:/esp/esp-idf/components/json/cJSON';   // nucleo_theme.cpp reads theme.json with it
+
+// id -> the game's source, its registration function, helper sources linked beside it, and the SD folders
+// copied from deploy/sd/data into the sandbox (atlases, sound packs) so the game loads its real assets.
+export const GAMES = {
+  brawler:   { src: 'app_brawler.cpp', reg: 'nucleo_register_brawler', extra: ['brawler_chars.cpp', 'brawler_combat.cpp', 'brawler_enemies.cpp', 'brawler_fx.cpp', 'brawler_levels.cpp', 'brawler_menu.cpp', 'brawler_net.cpp', 'brawler_scene.cpp', 'brawler_sfx.cpp'], data: ['brawler'] },
+  cardler:   { src: 'app_cardler.cpp', reg: 'nucleo_register_cardler', data: ['Cardler'] },
+  stelle:    { src: 'app_constellations.cpp', reg: 'nucleo_register_constellations', data: ['costellazioni'] },
+  dice:      { src: 'app_dice.cpp', reg: 'nucleo_register_dice', ui: true },
+  pinball:   { src: 'app_pinball.cpp', reg: 'nucleo_register_pinball', data: ['pinball'] },
+  poker:     { src: 'app_poker.cpp', reg: 'nucleo_register_poker', data: ['poker'] },
+  pong:      { src: 'app_pong.cpp', reg: 'nucleo_register_pong', data: ['pong'] },
+  reactor:   { src: 'app_reactor.cpp', reg: 'nucleo_register_reactor', data: ['reattore'] },
+  giardino:  { src: 'app_sandgarden.cpp', reg: 'nucleo_register_sandgarden', data: ['giardino'] },
+  slots:     { src: 'app_slots.cpp', reg: 'nucleo_register_slots', data: ['slots'] },
+  snake:     { src: 'app_snake.cpp', reg: 'nucleo_register_snake', data: ['snake'] },
+  tankd:     { src: 'app_tankduel.cpp', reg: 'nucleo_register_tankduel', data: ['tankduel'] },
+  orde:      { src: 'app_vs.cpp', reg: 'nucleo_register_vs', extra: ['vs_sim.c'], data: ['Orde'] },
+  yahtzee:   { src: 'app_yahtzee.cpp', reg: 'nucleo_register_yahtzee', ui: true, data: ['yahtzee'] },
+};
+
+const [which = 'all', scenario = 'all', seed = '7'] = process.argv.slice(2);
+const ids = which === 'all' ? Object.keys(GAMES) : which.split(',');
+for (const id of ids) if (!GAMES[id]) { console.error(`native-host: unknown game '${id}' (${Object.keys(GAMES).join(', ')})`); process.exit(2); }
+
+if (!existsSync(LGFX_OBJ) || !readdirSync(LGFX_OBJ).some((f) => f.endsWith('.o'))) {
+  console.log('native-host: building the LovyanGFX core via tools/ui-host (one time)...');
+  spawnSync(process.execPath, [join(root, 'tools', 'ui-host', 'run.mjs'), '--only', 'launcher'], { stdio: 'inherit', env });
+}
+const lgfxObjs = readdirSync(LGFX_OBJ).filter((f) => f.endsWith('.o')).map((f) => join(LGFX_OBJ, f));
+
+const INC = [
+  '-I', join(here, 'shim'), '-I', join(root, 'tools', 'ui-host', 'shim'), '-I', GFX, '-I', OUT,
+  '-I', join(FW, 'nucleo_app', 'include'), '-I', APPS, '-I', join(FW, 'nucleo_kbd', 'include'),
+  '-I', join(FW, 'nucleo_ui', 'include'), '-I', join(FW, 'nucleo_audio', 'include'), '-I', join(FW, 'nucleo_pnet', 'include'),
+  '-I', join(FW, 'nucleo_imu', 'include'), '-I', join(FW, 'nucleo_storage', 'include'), '-I', join(FW, 'nucleo_auth', 'include'),
+  '-I', join(FW, 'nucleo_anima', 'include'), '-I', CJSON,
+];
+const SAN = ['-fsanitize=bounds,null,return,vla-bound', '-fsanitize-undefined-trap-on-error'];
+const FS = ['-include', join(here, 'shim', 'nh_fs.h')];
+const CXX = ['-std=gnu++17', '-O1', '-g', '-w', ...SAN, ...FS, ...INC];
+const CC = ['-std=gnu11', '-O1', '-g', '-w', ...SAN, ...FS, ...INC];
+
+// The built-in smoke scenario for a game without its own file.
+const smoke = (id, g) => `// generated by tools/native-host/run.mjs: the built-in smoke scenario
+#define NH_GAME_NAME "${id}"
+#include "${join(APPS, g.src).replace(/\\/g, '/')}"
+#include "${join(here, 'core.h').replace(/\\/g, '/')}"
+void nh_register(void) { ${g.reg}(); }
+void nh_scenarios(const char *, uint32_t seed) {
+    for (int round = 0; round < 3; round++) {
+        g_nh.adv = g_nh.imu = (round == 2);
+        nh_open_app(seed + round * 101);
+        nh_loop_ms(800);
+        if (round == 0) { nh_dump("menu"); nh_check_hint("menu"); }
+        nh_fuzz(90000);
+        if (round == 0) nh_dump("fuzz");
+        for (int i = 0; i < 8 && !nh_exit; i++) { nh_tap('\`', 60, 300); if (!nh_exit && i == 3) nh_tap('\\n'); }
+        nh_check(nh_exit, "round %d: Esc (with an ENTER to confirm) never left the app", round);
+        nh_close_app();
+    }
+}
+`;
+
+function png(rgb, W = 240, H = 135, S = 3) {
+  const w = W * S, h = H * S, raw = Buffer.alloc((w * 3 + 1) * h);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const s = (Math.floor(y / S) * W + Math.floor(x / S)) * 3;
+    rgb.copy(raw, y * (w * 3 + 1) + 1 + x * 3, s, s + 3);
+  }
+  const crcT = new Int32Array(256).map((_, n) => { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; return c; });
+  const crc = (b) => { let c = -1; for (const x of b) c = crcT[(c ^ x) & 255] ^ (c >>> 8); return (c ^ -1) >>> 0; };
+  const chunk = (type, data) => {
+    const len = Buffer.alloc(4); len.writeUInt32BE(data.length);
+    const td = Buffer.concat([Buffer.from(type), data]); const c = Buffer.alloc(4); c.writeUInt32BE(crc(td));
+    return Buffer.concat([len, td, c]);
+  };
+  const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(w, 0); ihdr.writeUInt32BE(h, 4); ihdr[8] = 8; ihdr[9] = 2;
+  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
+}
+
+mkdirSync(join(OUT, 'obj'), { recursive: true });
+const shotsOut = join(OUT, 'shots'); mkdirSync(shotsOut, { recursive: true });
+let failed = 0;
+const summary = [];
+for (const id of ids) {
+  const g = GAMES[id];
+  const custom = join(here, 'games', `${id}.cpp`);
+  const tu = existsSync(custom) ? custom : join(OUT, `smoke_${id}.cpp`);
+  if (!existsSync(custom)) writeFileSync(tu, smoke(id, g));
+  const objs = [];
+  try {
+    for (const x of g.extra || []) {
+      const src = join(APPS, x), obj = join(OUT, 'obj', `${id}_${x}.o`);
+      execFileSync(x.endsWith('.c') ? GCC : GPP, [...(x.endsWith('.c') ? CC : CXX), '-c', src, '-o', obj], { env, stdio: 'pipe' });
+      objs.push(obj);
+    }
+    // the theme palette (THEME_* globals) every game links; the shared list/tab widgets for the games that use them
+    for (const src of [join(FW, 'nucleo_ui', 'nucleo_theme.cpp'), join(CJSON, 'cJSON.c'), ...(g.ui ? [join(APPS, 'app_ui.cpp')] : [])]) {
+      const obj = join(OUT, 'obj', `${id}_ui_${src.split(/[\\/]/).pop()}.o`);
+      execFileSync(src.endsWith('.c') ? GCC : GPP, [...(src.endsWith('.c') ? CC : CXX), '-c', src, '-o', obj], { env, stdio: 'pipe' });
+      objs.push(obj);
+    }
+    execFileSync(GPP, [...CXX, '-DNH_GAME_ID="' + id + '"', tu, ...objs, ...lgfxObjs, '-o', join(OUT, `${id}.exe`)], { env, stdio: 'pipe' });
+  } catch (e) {
+    const msg = String(e.stderr || e.message).split('\n').filter((l) => /error|undefined reference/.test(l)).slice(0, 12).join('\n');
+    console.log(`FAIL ${id}: build\n${msg}`); failed++; summary.push(`${id}: BUILD FAILED`); continue;
+  }
+  const box = join(OUT, 'box', id);
+  rmSync(box, { recursive: true, force: true }); mkdirSync(join(box, 'sd', 'data'), { recursive: true });
+  for (const d of g.data || []) { const s = join(root, 'deploy', 'sd', 'data', d); if (existsSync(s)) cpSync(s, join(box, 'sd', 'data', d), { recursive: true }); }
+  const run = spawnSync(join(OUT, `${id}.exe`), [scenario, seed], { cwd: box, env, encoding: 'utf8', timeout: 600000 });
+  process.stdout.write(`[${id}]\n${run.stdout || ''}`);
+  if (run.error || run.status === null || (run.status !== 0 && run.status !== 1)) {
+    const why = run.error?.code === 'ETIMEDOUT' ? 'HUNG (10 min timeout)' : `CRASHED (status ${run.status ?? run.signal}${run.status === 3221225477 ? ' = access violation' : run.status === 3221225501 ? ' = illegal instruction / UB trap' : ''})`;
+    console.log(`FAIL ${id}: ${why}`); failed++; summary.push(`${id}: ${why}`); continue;
+  }
+  if (run.status !== 0) failed++;
+  summary.push((run.stdout.match(new RegExp(`${id}: \\d+ checks[^\\n]*`)) || [`${id}: exit ${run.status}`])[0]);
+  const shots = join(box, 'shots');
+  if (existsSync(shots)) for (const f of readdirSync(shots).filter((f) => f.endsWith('.rgb')))
+    writeFileSync(join(shotsOut, f.replace(/\.rgb$/, '.png')), png(readFileSync(join(shots, f))));
+}
+console.log(`native-host: ${ids.length - failed}/${ids.length} games green — ${summary.join(' | ')}`);
+console.log('native-host: frames in build/native-host/shots/');
+process.exit(failed ? 1 : 0);
