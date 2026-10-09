@@ -8,6 +8,7 @@
 #include "esp_http_client.h"
 #include "esp_crt_bundle.h"
 #include "esp_app_desc.h"
+#include "esp_idf_version.h"
 #include "esp_log.h"
 #include "esp_heap_caps.h"
 #include "esp_system.h"
@@ -24,6 +25,17 @@ extern const char *nucleo_setup_ip(void);                              // nucleo
 extern const char *nucleo_i18n_lang(void) __attribute__((weak));       // nucleo_storage (resolved at link)
 
 static const char *TAG = "sdcontent";
+
+// esp_http_client_is_persistent_connection() exists from IDF 5.4.4 (the CI pin). An older local IDF can't
+// tell whether the link survives an error response, so it is treated as not reusable (dropped).
+static bool cli_persistent(esp_http_client_handle_t c)
+{
+#if ESP_IDF_VERSION >= ESP_IDF_VERSION_VAL(5, 4, 4)
+    return esp_http_client_is_persistent_connection(c);
+#else
+    (void)c; return false;
+#endif
+}
 
 #define SDC_BASE_HOST   "https://indecenti.github.io/NucleoOs/"   // == UPD_BASE (OTA updater)
 #define SDC_NVS_NS      "sdc"
@@ -209,7 +221,7 @@ static int dev_get(void *ctx, const char *url, uint32_t off, uint32_t len, uint8
     int st = esp_http_client_get_status_code(s_cli);
     *status = st;
     if (st != 206 && st != 200) {                                        // 404 / 416 / 5xx: no body we want
-        if (esp_http_client_flush_response(s_cli, NULL) != ESP_OK || !esp_http_client_is_persistent_connection(s_cli)) cli_drop();
+        if (esp_http_client_flush_response(s_cli, NULL) != ESP_OK || !cli_persistent(s_cli)) cli_drop();
         return -1;
     }
     // A server that ignored Range on a long body would now send 16 KB records the TLS layer cannot take.
@@ -221,7 +233,7 @@ static int dev_get(void *ctx, const char *url, uint32_t off, uint32_t len, uint8
         if (r == 0) break;
         got += r;
     }
-    if (esp_http_client_flush_response(s_cli, NULL) != ESP_OK || !esp_http_client_is_persistent_connection(s_cli)) cli_drop();
+    if (esp_http_client_flush_response(s_cli, NULL) != ESP_OK || !cli_persistent(s_cli)) cli_drop();
     return got;
 }
 
