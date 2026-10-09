@@ -27,6 +27,8 @@
 {"ts":"2026-09-24T00:40:51","health":{"hallucinations":0,"nl_cases":7610,"route_drift":0,"green":[200,201]}}
 {"ts":"2026-09-24T19:35:29","health":{"hallucinations":0,"nl_cases":7610,"route_drift":0,"green":[201,201]}}
 {"ts":"2026-09-30T07:02:26","health":{"hallucinations":0,"nl_cases":7610,"route_drift":0,"green":[218,221]}}
+{"ts":"2026-09-30T08:32:35","health":{"hallucinations":0,"nl_cases":7610,"route_drift":1,"green":[218,223]}}
+{"ts":"2026-09-30T09:26:06","health":{"hallucinations":0,"nl_cases":7610,"route_drift":0,"green":[222,223]}}
 {"ts":"2026-10-01T20:06:55","health":{"hallucinations":0,"nl_cases":7610,"route_drift":0,"green":[230,232]}}
 {"ts":"2026-10-06T14:47:55","health":{"hallucinations":0,"nl_cases":7610,"route_drift":0,"green":[232,233]}}
 {"ts":"2026-10-06T20:35:15","health":{"hallucinations":0,"nl_cases":7610,"route_drift":0,"green":[231,233]}}

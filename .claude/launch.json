@@ -178,6 +178,15 @@
       "port": 5618
     },
     {
+      "name": "site",
+      "runtimeExecutable": "node",
+      "runtimeArgs": [
+        "../nucleos_sites/tools/build.mjs",
+        "--serve"
+      ],
+      "port": 5630
+    },
+    {
       "name": "cz",
       "runtimeExecutable": "node",
       "runtimeArgs": [
