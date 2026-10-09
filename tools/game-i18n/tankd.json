@@ -1,0 +1,375 @@
+{
+  "game": "tankd",
+  "strings": {
+    " (you)": {
+      "es": " (tu)",
+      "fr": " (toi)",
+      "de": " (du)"
+    },
+    "%.12s - channel %d": {
+      "es": "%.12s - canal %d",
+      "fr": "%.12s - canal %d",
+      "de": "%.12s - Kanal %d"
+    },
+    "+1 HP every half second": {
+      "es": "+1 HP cada medio segundo",
+      "fr": "+1 PV chaque demi-seconde",
+      "de": "+1 HP jede halbe Sekunde"
+    },
+    "+20% speed": {
+      "es": "+20% velocidad",
+      "fr": "+20% vitesse",
+      "de": "+20% Tempo"
+    },
+    "-1 damage taken": {
+      "es": "-1 de dano recibido",
+      "fr": "-1 degat subi",
+      "de": "-1 Schaden erlitten"
+    },
+    "20 s, hidden from the rival's map": {
+      "es": "20 s, oculto en el mapa rival",
+      "fr": "20 s, cache sur la carte rivale",
+      "de": "20 s, auf der Gegnerkarte unsichtbar"
+    },
+    "3-pellet spread": {
+      "es": "3 perdigones en abanico",
+      "fr": "3 plombs en eventail",
+      "de": "3 Schrot im Faecher"
+    },
+    "A/D tab  W/S scroll  K ok  Esc": {
+      "es": "A/D pestana  W/S mover  K ok  Esc",
+      "fr": "A/D onglet  W/S defile  K ok  Esc",
+      "de": "A/D Reiter  W/S rollen  K ok  Esc"
+    },
+    "Armor +1": {
+      "es": "Blindaje +1",
+      "fr": "Blindage +1",
+      "de": "Panzerung +1"
+    },
+    "Armored, slow, very tough": {
+      "es": "Blindado, lento, durisimo",
+      "fr": "Blinde, lent, tres robuste",
+      "de": "Gepanzert, langsam, zaeh"
+    },
+    "BUY": {
+      "es": "COMPRAR",
+      "fr": "ACHAT",
+      "de": "KAUFEN"
+    },
+    "Balanced all-rounder": {
+      "es": "Equilibrado y preciso",
+      "fr": "Equilibre et precis",
+      "de": "Ausgewogener Allrounder"
+    },
+    "Bots destroyed: %d   Wave: %d": {
+      "es": "Bots destruidos: %d  Oleada: %d",
+      "fr": "Bots detruits: %d  Vague: %d",
+      "de": "Bots zerstoert: %d  Welle: %d"
+    },
+    "Co-op vs bots": {
+      "es": "Coop vs bots",
+      "fr": "Coop vs bots",
+      "de": "Koop gegen Bots"
+    },
+    "Connecting...": {
+      "es": "Conectando...",
+      "fr": "Connexion...",
+      "de": "Verbinde..."
+    },
+    "Credits: hit +2, kill +15": {
+      "es": "Creditos: impacto +2, baja +15",
+      "fr": "Credits: touche +2, detruit +15",
+      "de": "Credits: Treffer +2, Abschuss +15"
+    },
+    "Defeat": {
+      "es": "Derrota",
+      "fr": "Defaite",
+      "de": "Niederlage"
+    },
+    "Draw": {
+      "es": "Empate",
+      "fr": "Egalite",
+      "de": "Unentschieden"
+    },
+    "Duel + bots": {
+      "es": "Duelo + bots",
+      "fr": "Duel + bots",
+      "de": "Duell + Bots"
+    },
+    "Duel 1v1": {
+      "es": "Duelo 1v1",
+      "fr": "Duel 1v1",
+      "de": "Duell 1v1"
+    },
+    "Duel vs CPU": {
+      "es": "Duelo vs CPU",
+      "fr": "Duel vs CPU",
+      "de": "Duell gegen CPU"
+    },
+    "ENTER or Esc: menu": {
+      "es": "INTRO o Esc: menu",
+      "fr": "ENTREE ou Esc: menu",
+      "de": "ENTER oder Esc: Menue"
+    },
+    "ENTER rematch  Esc menu": {
+      "es": "INTRO revancha  Esc menu",
+      "fr": "ENTREE revanche  Esc menu",
+      "de": "ENTER Revanche  Esc Menue"
+    },
+    "ENTER resume   Esc leave": {
+      "es": "INTRO sigue   Esc salir",
+      "fr": "ENTREE reprendre  Esc quitter",
+      "de": "ENTER weiter   Esc verlassen"
+    },
+    "ESP-NOW not started  Esc": {
+      "es": "ESP-NOW no iniciado  Esc",
+      "fr": "ESP-NOW non demarre  Esc",
+      "de": "ESP-NOW nicht aktiv  Esc"
+    },
+    "Esc back": {
+      "es": "Esc atras",
+      "fr": "Esc retour",
+      "de": "Esc zurueck"
+    },
+    "Esc pause (again: leave)": {
+      "es": "Esc pausa (otra vez: salir)",
+      "fr": "Esc pause (encore: quitter)",
+      "de": "Esc Pause (nochmal: Ende)"
+    },
+    "Host a match": {
+      "es": "Crear partida",
+      "fr": "Creer partie",
+      "de": "Spiel hosten"
+    },
+    "How to play": {
+      "es": "Como se juega",
+      "fr": "Comment jouer",
+      "de": "Spielregeln"
+    },
+    "Join a match": {
+      "es": "Unirse",
+      "fr": "Rejoindre",
+      "de": "Beitreten"
+    },
+    "K fire   L use the power-up": {
+      "es": "K dispara   L usa el power-up",
+      "fr": "K tire   L utilise le bonus",
+      "de": "K Feuer   L Power-up nutzen"
+    },
+    "Looking for matches...": {
+      "es": "Buscando partidas...",
+      "fr": "Recherche de parties...",
+      "de": "Suche Spiele..."
+    },
+    "Machine gun": {
+      "es": "Ametralladora",
+      "fr": "Mitrailleuse",
+      "de": "Maschinengewehr"
+    },
+    "Nothing to sell": {
+      "es": "Nada que vender",
+      "fr": "Rien a vendre",
+      "de": "Nichts zu verkaufen"
+    },
+    "Opponent disconnected": {
+      "es": "Rival desconectado",
+      "fr": "Adversaire deconnecte",
+      "de": "Gegner getrennt"
+    },
+    "Other device: Tank Duel > Host": {
+      "es": "En el otro: Tank Duel > Crear",
+      "fr": "Sur l'autre: Tank Duel > Creer",
+      "de": "Am anderen: Tank Duel > Hosten"
+    },
+    "PAUSED": {
+      "es": "PAUSA",
+      "fr": "PAUSE",
+      "de": "PAUSE"
+    },
+    "Pick your tank": {
+      "es": "Elige tu tanque",
+      "fr": "Choisis ton tank",
+      "de": "Panzer waehlen"
+    },
+    "RCKT": {
+      "es": "COHE",
+      "fr": "ROQU",
+      "de": "RAKE"
+    },
+    "Repair": {
+      "es": "Reparacion",
+      "fr": "Reparation",
+      "de": "Reparatur"
+    },
+    "Rockets": {
+      "es": "Cohetes",
+      "fr": "Roquettes",
+      "de": "Raketen"
+    },
+    "SELL": {
+      "es": "VENDER",
+      "fr": "VENTE",
+      "de": "VERKAUF"
+    },
+    "SHOP": {
+      "es": "TIENDA",
+      "fr": "BOUTIQUE",
+      "de": "LADEN"
+    },
+    "Shield": {
+      "es": "Escudo",
+      "fr": "Bouclier",
+      "de": "Schild"
+    },
+    "Shop: drive onto the green pad.": {
+      "es": "Tienda: entra en la zona verde.",
+      "fr": "Boutique: va sur la zone verte.",
+      "de": "Laden: aufs gruene Feld fahren."
+    },
+    "Sold out": {
+      "es": "Agotado",
+      "fr": "Epuise",
+      "de": "Ausverkauft"
+    },
+    "Speed +1": {
+      "es": "Velocidad +1",
+      "fr": "Vitesse +1",
+      "de": "Tempo +1"
+    },
+    "Sturdy and tough": {
+      "es": "Robusto y resistente",
+      "fr": "Solide et resistant",
+      "de": "Robust und zaeh"
+    },
+    "Survival": {
+      "es": "Supervivencia",
+      "fr": "Survie",
+      "de": "Ueberleben"
+    },
+    "The match goes on!": {
+      "es": "La partida sigue!",
+      "fr": "Le match continue !",
+      "de": "Das Spiel laeuft weiter!"
+    },
+    "UP/DN  ENTER join  Esc back": {
+      "es": "AR/AB  INTRO entra  Esc atras",
+      "fr": "HT/BAS  ENTREE va  Esc retour",
+      "de": "AUF/AB  ENTER rein  Esc zur."
+    },
+    "UP/DN  ENTER pick  Esc quit": {
+      "es": "AR/AB  INTRO elige  Esc sale",
+      "fr": "HT/BAS  ENTREE ok  Esc quitte",
+      "de": "AUF/AB  ENTER waehlt  Esc Ende"
+    },
+    "UP/DN mode  Esc cancel": {
+      "es": "AR/AB modo  Esc cancela",
+      "fr": "HT/BAS mode  Esc annule",
+      "de": "AUF/AB Modus  Esc Abbruch"
+    },
+    "UP/DN tank  ENTER ok  Esc back": {
+      "es": "AR/AB tanque  INTRO ok  Esc atras",
+      "fr": "HT/BAS tank  ENTREE ok  Esc ret.",
+      "de": "AUF/AB Panzer  ENTER ok  Esc zur."
+    },
+    "Very fast but fragile": {
+      "es": "Rapidisimo pero fragil",
+      "fr": "Tres rapide mais fragile",
+      "de": "Sehr schnell, aber fragil"
+    },
+    "W%d x%d": {
+      "es": "O%d x%d",
+      "fr": "V%d x%d",
+      "de": "W%d x%d"
+    },
+    "W/E/R up  A left  S down  D right": {
+      "es": "W/E/R arr  A izq  S abajo  D der",
+      "fr": "W/E/R haut  A gau  S bas  D dro",
+      "de": "W/E/R hoch  A li  S runter  D re"
+    },
+    "Waiting for a rival": {
+      "es": "Esperando rival",
+      "fr": "Attente d'un rival",
+      "de": "Warte auf Gegner"
+    },
+    "You lose": {
+      "es": "Has perdido",
+      "fr": "Perdu",
+      "de": "Verloren"
+    },
+    "You survived!": {
+      "es": "Sobreviviste!",
+      "fr": "Tu as survecu !",
+      "de": "Ueberlebt!"
+    },
+    "You win!": {
+      "es": "Has ganado!",
+      "fr": "Gagne !",
+      "de": "Gewonnen!"
+    },
+    "already bought": {
+      "es": "ya comprado",
+      "fr": "deja achete",
+      "de": "schon gekauft"
+    },
+    "area blast + recoil": {
+      "es": "explosion en area + retroceso",
+      "fr": "explosion de zone + recul",
+      "de": "Flaechenexplosion + Rueckstoss"
+    },
+    "blocks 1 hit": {
+      "es": "para 1 impacto",
+      "fr": "bloque 1 tir",
+      "de": "blockt 1 Treffer"
+    },
+    "channel %d": {
+      "es": "canal %d",
+      "fr": "canal %d",
+      "de": "Kanal %d"
+    },
+    "fast piercing beam": {
+      "es": "rayo rapido que atraviesa",
+      "fr": "rayon rapide perforant",
+      "de": "schneller Durchschlagstrahl"
+    },
+    "full HP": {
+      "es": "HP al maximo",
+      "fr": "PV au maximum",
+      "de": "volle HP"
+    },
+    "high damage, pierces twice": {
+      "es": "mucho dano, atraviesa 2",
+      "fr": "gros degats, perce 2 fois",
+      "de": "hoher Schaden, durchschlaegt 2x"
+    },
+    "pellet cloud, short range": {
+      "es": "nube de perdigones, corto",
+      "fr": "nuee de plombs, courte portee",
+      "de": "Schrotwolke, kurze Reichweite"
+    },
+    "pierces walls": {
+      "es": "atraviesa muros",
+      "fr": "perce les murs",
+      "de": "durchschlaegt Mauern"
+    },
+    "rapid bursts": {
+      "es": "rafagas rapidas",
+      "fr": "rafales rapides",
+      "de": "schnelle Salven"
+    },
+    "rapid fire, low damage": {
+      "es": "fuego rapido, poco dano",
+      "fr": "tir rapide, faibles degats",
+      "de": "schnelles Feuer, wenig Schaden"
+    },
+    "sell: + credits": {
+      "es": "vender: + creditos",
+      "fr": "vendre: + credits",
+      "de": "verkaufen: + Credits"
+    },
+    "stuns enemies nearby": {
+      "es": "aturde enemigos cercanos",
+      "fr": "etourdit les ennemis proches",
+      "de": "betaeubt nahe Gegner"
+    }
+  }
+}

@@ -1,0 +1,240 @@
+{
+  "game": "pong",
+  "strings": {
+    "%.12s - channel %d": {
+      "es": "%.12s - canal %d",
+      "fr": "%.12s - canal %d",
+      "de": "%.12s - Kanal %d"
+    },
+    "+ grow you  - shrink the rival": {
+      "es": "+ creces  - encoge al rival",
+      "fr": "+ grandir  - rapetisse l'autre",
+      "de": "+ du wachst  - Gegner schrumpft"
+    },
+    "Best level: %u": {
+      "es": "Mejor nivel: %u",
+      "fr": "Meilleur niveau: %u",
+      "de": "Bestes Level: %u"
+    },
+    "CPU wins": {
+      "es": "Gana la CPU",
+      "fr": "La CPU gagne",
+      "de": "CPU gewinnt"
+    },
+    "Create room": {
+      "es": "Crear sala",
+      "fr": "Creer salle",
+      "de": "Raum erstellen"
+    },
+    "ENTER rematch  Esc menu": {
+      "es": "INTRO revancha  Esc menu",
+      "fr": "ENTREE revanche  Esc menu",
+      "de": "ENTER Revanche  Esc Menue"
+    },
+    "ENTER resume   Esc leave": {
+      "es": "INTRO sigue   Esc salir",
+      "fr": "ENTREE reprendre  Esc quitter",
+      "de": "ENTER weiter   Esc verlassen"
+    },
+    "ESP-NOW not started  Esc": {
+      "es": "ESP-NOW no iniciado  Esc",
+      "fr": "ESP-NOW non demarre  Esc",
+      "de": "ESP-NOW nicht aktiv  Esc"
+    },
+    "Easy": {
+      "es": "Facil",
+      "fr": "Facile",
+      "de": "Leicht"
+    },
+    "Esc back": {
+      "es": "Esc atras",
+      "fr": "Esc retour",
+      "de": "Esc zurueck"
+    },
+    "First to 7 points wins.": {
+      "es": "Gana quien llega a 7.",
+      "fr": "Le premier a 7 gagne.",
+      "de": "Wer zuerst 7 hat, gewinnt."
+    },
+    "GUEST": {
+      "es": "INVITADO",
+      "fr": "INVITE",
+      "de": "GAST"
+    },
+    "Hard": {
+      "es": "Dificil",
+      "fr": "Difficile",
+      "de": "Schwer"
+    },
+    "Hit with the edge to angle it": {
+      "es": "Con el borde: tiro en angulo",
+      "fr": "Avec le bord: tir en angle",
+      "de": "Mit der Kante: schraeg"
+    },
+    "How to play": {
+      "es": "Como se juega",
+      "fr": "Comment jouer",
+      "de": "Spielregeln"
+    },
+    "Join room": {
+      "es": "Unirse a sala",
+      "fr": "Rejoindre",
+      "de": "Raum beitreten"
+    },
+    "L%d": {
+      "es": "N%d",
+      "fr": "N%d",
+      "de": "L%d"
+    },
+    "L/R or ENTER changes": {
+      "es": "IZ/DE o INTRO cambia",
+      "fr": "G/D ou ENTREE change",
+      "de": "L/R oder ENTER aendert"
+    },
+    "Level %d": {
+      "es": "Nivel %d",
+      "fr": "Niveau %d",
+      "de": "Level %d"
+    },
+    "Looking for rooms...": {
+      "es": "Buscando salas...",
+      "fr": "Recherche de salles...",
+      "de": "Suche Raeume..."
+    },
+    "Match over": {
+      "es": "Fin de partida",
+      "fr": "Fin du match",
+      "de": "Spiel aus"
+    },
+    "Normal": {
+      "es": "Normal",
+      "fr": "Normal",
+      "de": "Normal"
+    },
+    "Off": {
+      "es": "No",
+      "fr": "Non",
+      "de": "Aus"
+    },
+    "On": {
+      "es": "Si",
+      "fr": "Oui",
+      "de": "An"
+    },
+    "Opponent left": {
+      "es": "El rival se fue",
+      "fr": "Adversaire parti",
+      "de": "Gegner ist weg"
+    },
+    "Other device: Pong > Create": {
+      "es": "En el otro: Pong > Crear",
+      "fr": "Sur l'autre: Pong > Creer",
+      "de": "Am anderen: Pong > Erstellen"
+    },
+    "Other device: Pong > Join": {
+      "es": "En el otro: Pong > Unirse",
+      "fr": "Sur l'autre: Pong > Rejoindre",
+      "de": "Am anderen: Pong > Beitreten"
+    },
+    "PAUSED": {
+      "es": "PAUSA",
+      "fr": "PAUSE",
+      "de": "PAUSE"
+    },
+    "Play vs CPU": {
+      "es": "Jugar vs CPU",
+      "fr": "Jouer vs CPU",
+      "de": "Gegen CPU"
+    },
+    "Power-ups (to the last hitter):": {
+      "es": "Power-ups (al ultimo que golpea):",
+      "fr": "Bonus (au dernier tireur):",
+      "de": "Power-ups (fuer den Schuetzen):"
+    },
+    "S slow  F fast  * free point": {
+      "es": "S lenta  F rapida  * punto",
+      "fr": "S lente  F rapide  * point",
+      "de": "S langsam  F schnell  * Punkt"
+    },
+    "Scores": {
+      "es": "Records",
+      "fr": "Records",
+      "de": "Rekorde"
+    },
+    "Settings": {
+      "es": "Opciones",
+      "fr": "Reglages",
+      "de": "Optionen"
+    },
+    "Sound": {
+      "es": "Sonido",
+      "fr": "Son",
+      "de": "Ton"
+    },
+    "The match goes on!": {
+      "es": "La partida sigue!",
+      "fr": "Le match continue !",
+      "de": "Das Spiel laeuft weiter!"
+    },
+    "UP/DN  ENTER join  Esc back": {
+      "es": "AR/AB  INTRO entra  Esc atras",
+      "fr": "HT/BAS  ENTREE va  Esc retour",
+      "de": "AUF/AB  ENTER rein  Esc zur."
+    },
+    "UP/DN  ENTER pick  Esc quit": {
+      "es": "AR/AB  INTRO elige  Esc sale",
+      "fr": "HT/BAS  ENTREE ok  Esc quitte",
+      "de": "AUF/AB  ENTER waehlt  Esc Ende"
+    },
+    "UP/DN  L/R change  Esc done": {
+      "es": "AR/AB  IZ/DE cambia  Esc ok",
+      "fr": "HT/BAS  G/D change  Esc ok",
+      "de": "AUF/AB  L/R aendert  Esc ok"
+    },
+    "UP/DN or Z/N: move your paddle": {
+      "es": "AR/AB o Z/N: mueve la pala",
+      "fr": "HT/BAS ou Z/N: la raquette",
+      "de": "AUF/AB oder Z/N: Schlaeger"
+    },
+    "Wait for the host  Esc menu": {
+      "es": "Espera al host  Esc menu",
+      "fr": "Attends l'hote  Esc menu",
+      "de": "Warte auf Host  Esc Menue"
+    },
+    "Waiting for rival": {
+      "es": "Esperando rival",
+      "fr": "Attente rival",
+      "de": "Warte auf Gegner"
+    },
+    "Waiting...  Esc cancel": {
+      "es": "Esperando...  Esc cancela",
+      "fr": "Attente...  Esc annule",
+      "de": "Warte...  Esc Abbruch"
+    },
+    "YOU": {
+      "es": "TU",
+      "fr": "TOI",
+      "de": "DU"
+    },
+    "You lose": {
+      "es": "Has perdido",
+      "fr": "Perdu",
+      "de": "Verloren"
+    },
+    "You win!": {
+      "es": "Has ganado!",
+      "fr": "Gagne !",
+      "de": "Gewonnen!"
+    },
+    "channel %d": {
+      "es": "canal %d",
+      "fr": "canal %d",
+      "de": "Kanal %d"
+    },
+    "weak signal...": {
+      "es": "senal debil...",
+      "fr": "signal faible...",
+      "de": "schwaches Signal..."
+    }
+  }
+}

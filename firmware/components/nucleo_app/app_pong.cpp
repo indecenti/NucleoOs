@@ -18,17 +18,20 @@
 // Pairing / channel: nucleo_pnet rides the current Wi-Fi channel when on a network (STA or SoftAP) — so
 // two Cardputers on the same Wi-Fi meet automatically — else both park on channel 1 for a local match.
 //
-// Constraints: exclusive_flags = NX_NET_APP (free ~70KB; Wi-Fi STA, which ESP-NOW rides, stays up); ALL
-// state static (NO heap — PSRAM-less chip); buffered `d.` drawing (one blit/frame); the keyboard has no
-// key-up and only auto-repeats after 350ms, so paddle control is momentum-based (a hold glides, a tap
-// nudges). ASCII only. Never name a local `d`. LEFT/Back route to the back handler (framework rule).
+// Constraints: exclusive_flags = NX_NET_APP (free ~70KB; Wi-Fi STA, which ESP-NOW rides, stays up); small
+// state static, particle/ring/room tables in APP_RAM (0 B while closed); buffered `d.` drawing (one blit per
+// frame) into the 8bpp RGB332 canvas, so UI colours sit on that grid. The keyboard has no key-up events: the
+// paddle follows the physically-held key (nucleo_kbd_char_down) with a short speed ramp (a tap nudges, a hold
+// glides, release stops). Text goes through game_text (5 languages). ASCII only. Never name a local `d`. LEFT/Back route to the
+// back handler (framework rule).
 
 #include "nucleo_app.h"
 #include "nucleo_kbd.h"
 #include "nucleo_exclusive.h"
 #include "launcher_theme.h"
 #include "app_gfx.h"
-#include "notify_synth.h"
+#include "game_text.h"
+#include "game_ui.h"
 #include <M5GFX.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -97,12 +100,12 @@ static uint16_t hsv(float h, float sa, float v) {          // h 0..360, sa/v 0..
 #endif
 #define BR         3
 #define TARGET     7                   // first to 7 points wins the match
-#define MAXLEVEL   12
+#define MAXLEVEL   7                   // the level follows the rally count: (6+6)/2+1 at most
 
 #define BASE_SPD   0.118f              // ball speed at level 1 (px/ms)
 #define MAX_SPD    0.360f
 #define PAD_SPD    0.175f              // human paddle speed (px/ms)
-#define HOLD_MS    380                 // motion window per key event (> the 350ms kbd repeat delay)
+#define PAD_RAMP   220                 // ms of hold before the paddle reaches full speed (taps nudge)
 
 // ============================ protocol (over nucleo_pnet) ====================
 #define PG_M0 'P'
@@ -134,10 +137,8 @@ enum { PH_COUNT = 0, PH_PLAY, PH_POINT, PH_OVER };
 enum { PU_NONE = 0, PU_GROW, PU_SHRINK, PU_SLOW, PU_FAST, PU_POINT, PU_N };
 
 static int    s_screen, s_mode;
-static int    s_msel;                  // menu selection
-static int    s_optsel;                // settings-screen selection
 static int    s_diff = 1;              // 0 easy, 1 normal, 2 hard
-static int    g_lang = 0;              // 0 = Italiano, 1 = English (bilingual via tx())
+static bool   s_paused;
 static int64_t s_now, s_last, s_frame;
 static unsigned s_anim;
 
@@ -181,7 +182,9 @@ static Wave   *s_wave;                  // NWAVE entries, APP_RAM
 static int    s_flash;                   // full-field flash timer on a scored point (ms)
 static uint16_t s_flashcol;
 
-// local input (momentum)
+static int    s_hold_ms;                // how long the local paddle key has been held (speed ramp)
+static float  s_ai_err;                 // CPU aim error for the current shot (px, rerolled per shot)
+static int    s_ai_dir;                 // ball direction the error was rolled for
 
 // net
 static uint8_t  s_peer[6];
@@ -209,66 +212,27 @@ static float    xrf(void) { return (xr() & 0xFFFF) / 65535.0f; }
 
 // ============================ text helpers ===================================
 static void txt(int x, int y, int sz, uint16_t col, const char *s) { d.setTextSize(sz); d.setTextColor(col); d.setCursor(x, y); d.print(s); }
-static const char *tx(const char *it, const char *en) { return g_lang ? en : it; }   // bilingual string pick
 static void txt_c(int cx, int y, int sz, uint16_t col, const char *s) { txt(cx - (int)strlen(s) * 3 * sz, y, sz, col, s); }
 static void txt_r(int rx, int y, int sz, uint16_t col, const char *s) { txt(rx - (int)strlen(s) * 6 * sz, y, sz, col, s); }
 
-// ============================ audio (synth -> SD cache, like Flipper) ========
+// ============================ audio (WAV pack on the SD) =======================
+// The cues are a chiptune pack rendered on the PC (tools/sfx-gen/games/pong.py -> /sd/data/pong/pack): zero
+// device CPU, nothing synthesized on the app task. A cue whose WAV is missing plays as a short tone.
+// Important cues (serve, point, power-up, level, jingles) cut what plays; small blips never stack.
 #define DIRR "/sd/data/pong"
 #define NSFX 13
-static const char *sfx_name(int id) {
-    switch (id) {
-        case 1: return "nav";   case 2: return "sel";   case 3: return "back";  case 4: return "count";
-        case 5: return "serve"; case 6: return "wall";  case 7: return "hit";   case 8: return "obst";
-        case 9: return "power"; case 10:return "score"; case 11:return "win";   case 12:return "lose";
-        case 13:return "level"; default: return "x";
-    }
-}
-static int build_voices(int id, notify_voice_t *v) {
-    switch (id) {
-        case 1:  notify__voice(&v[0], 760, 0, 0.04f); v[0].amp = 0.5f; return 1;
-        case 2:  notify__voice(&v[0], 659.25f, 0, 0.06f); notify__voice(&v[1], 987.77f, 0.04f, 0.09f); return 2;
-        case 3:  notify__voice(&v[0], 520, 0, 0.06f); notify__voice(&v[1], 350, 0.05f, 0.09f); return 2;
-        case 4:  notify__voice(&v[0], 880, 0, 0.05f); v[0].amp = 0.6f; return 1;                    // countdown blip
-        case 5:  notify__voice(&v[0], 300, 0, 0.04f); notify__voice(&v[1], 600, 0.03f, 0.06f); return 2; // serve whoosh
-        case 6:  notify__voice(&v[0], 420, 0, 0.025f); v[0].amp = 0.7f; return 1;                   // wall tick
-        case 7:  notify__voice(&v[0], 540, 0, 0.03f); v[0].amp = 0.9f; notify__voice(&v[1], 820, 0, 0.02f); return 2; // paddle pock
-        case 8:  notify__voice(&v[0], 240, 0, 0.04f); notify__voice(&v[1], 360, 0.02f, 0.04f); return 2; // obstacle thunk
-        case 9:  notify__voice(&v[0], 880, 0, 0.05f); notify__voice(&v[1], 1174.7f, 0.05f, 0.06f);  // power-up sparkle
-                 notify__voice(&v[2], 1568.0f, 0.10f, 0.10f); return 3;
-        case 10: notify__voice(&v[0], 523.25f, 0, 0.07f); notify__voice(&v[1], 392, 0.06f, 0.10f); return 2; // point
-        case 11: notify__voice(&v[0], 523.25f, 0, 0.10f); notify__voice(&v[1], 659.25f, 0.08f, 0.10f);   // win fanfare
-                 notify__voice(&v[2], 783.99f, 0.16f, 0.12f); notify__voice(&v[3], 1046.5f, 0.24f, 0.18f); return 4;
-        case 12: notify__voice(&v[0], 392, 0, 0.12f); notify__voice(&v[1], 294, 0.10f, 0.14f);          // lose toll
-                 notify__voice(&v[2], 196, 0.22f, 0.22f); return 3;
-        case 13: notify__voice(&v[0], 659.25f, 0, 0.07f); notify__voice(&v[1], 988, 0.06f, 0.08f);      // level-up
-                 notify__voice(&v[2], 1318.5f, 0.13f, 0.13f); return 3;
-    }
-    return 0;
-}
-static bool sfx_important(int id) { return id == 5 || id == 9 || id == 10 || id == 11 || id == 12 || id == 13; }
+static const char *const SFX_NAME[NSFX + 1] = { "", "nav", "sel", "back", "count", "serve", "wall", "hit", "obst", "power", "score", "win", "lose", "level" };
+static const uint16_t SFX_HZ[NSFX + 1] = { 0, 760, 988, 520, 880, 600, 226, 459, 300, 1175, 490, 1047, 294, 1319 };
+static bool sfx_important(int id) { return id == 5 || id >= 9; }
 static void sfx(int id) {
-    if (!g_audio || id <= 0) return;
+    if (!g_audio || id <= 0 || id > NSFX) return;
     if (!sfx_important(id) && nucleo_audio_is_playing()) return;
-    char p[80]; snprintf(p, sizeof p, DIRR "/sfx/%s.wav", sfx_name(id));
-    FILE *f = fopen(p, "rb");
-    if (f) fclose(f);
-    else { notify_voice_t v[8]; int nv = build_voices(id, v); if (nv <= 0 || notify_synth_voices_wav(v, nv, p, 12000) != 0) return; }
+    char p[48]; snprintf(p, sizeof p, DIRR "/pack/%s.wav", SFX_NAME[id]);
+    struct stat st;
     if (sfx_important(id)) nucleo_audio_stop();
-    nucleo_audio_play(p);
+    if (stat(p, &st) != 0 || st.st_size <= 44 || nucleo_audio_play(p) != ESP_OK) nucleo_audio_tone(SFX_HZ[id], 45, 55);
 }
-static void ensure_dirs(void) { mkdir("/sd/data", 0777); mkdir(DIRR, 0777); mkdir(DIRR "/sfx", 0777); }
-static void presynth(void) {
-    if (!g_audio) return;
-    notify_voice_t v[8];
-    for (int id = 1; id <= NSFX; id++) {
-        char p[80]; snprintf(p, sizeof p, DIRR "/sfx/%s.wav", sfx_name(id));
-        FILE *f = fopen(p, "rb");
-        if (f) { fclose(f); continue; }
-        int nv = build_voices(id, v);
-        if (nv > 0) notify_synth_voices_wav(v, nv, p, 12000);
-    }
-}
+static void ensure_dirs(void) { mkdir("/sd/data", 0777); mkdir(DIRR, 0777); }
 
 // ============================ persistence ====================================
 #define CFG_MAGIC 0x504F4E47u   // 'PONG'
@@ -276,7 +240,7 @@ static void cfg_write(void) {
     ensure_dirs();
     FILE *f = fopen(DIRR "/cfg.bin", "wb");
     if (!f) return;
-    struct { uint32_t m; int audio, diff, lang; unsigned best; unsigned top[NTOP]; } c = { CFG_MAGIC, g_audio, s_diff, g_lang, g_best_level, { 0 } };
+    struct { uint32_t m; int audio, diff, lang; unsigned best; unsigned top[NTOP]; } c = { CFG_MAGIC, g_audio, s_diff, 0, g_best_level, { 0 } };   // lang: unused (the OS language rules)
     for (int i = 0; i < NTOP; i++) c.top[i] = g_top[i];
     fwrite(&c, sizeof c, 1, f);
     fclose(f);
@@ -289,7 +253,6 @@ static void cfg_read(void) {
     fclose(f);
     if (n == 1 && c.m == CFG_MAGIC) {
         g_audio = c.audio ? 1 : 0; s_diff = (c.diff >= 0 && c.diff <= 2) ? c.diff : 1;
-        g_lang = c.lang ? 1 : 0;
         g_best_level = c.best;
         for (int i = 0; i < NTOP; i++) g_top[i] = c.top[i];
     }
@@ -460,6 +423,8 @@ static void reflect_paddle(int side) {             // side 1 left, 2 right
     vx = (side == 1) ? fabsf(vx) : -fabsf(vx);
     vy += rel * 0.10f;
     float n = sqrtf(vx * vx + vy * vy); if (n > 0.0001f) { vx = vx / n * sp; vy = vy / n * sp; }
+    // cap the bounce at ~57 deg: repeated edge hits used to leave a near-vertical ball crawling across
+    if (fabsf(vx) < 0.55f * sp) { float ny = sqrtf(sp * sp * (1.0f - 0.55f * 0.55f)); vx = (side == 1 ? 0.55f : -0.55f) * sp; vy = vy < 0 ? -ny : ny; }
     bx = (side == 1) ? (PADL_FACE + BR + 0.5f) : (PADR_FACE - BR - 0.5f);
     s_lasthit = side;
     if (side == 1) s_hitl = 160; else s_hitr = 160;
@@ -468,22 +433,9 @@ static void reflect_paddle(int side) {             // side 1 left, 2 right
     shake(3.0f);
     sfx(7);
 }
-static void phys_step(float dt) {
-    if (s_phase == PH_COUNT) {
-        int prev = s_cnt;
-        s_phtimer -= (int)dt;
-        s_cnt = s_phtimer / 600 + 1; if (s_cnt < 1) s_cnt = 1;
-        if (s_cnt != prev) sfx(4);
-        if (s_phtimer <= 0) { s_phase = PH_PLAY; sfx(5); }
-        return;
-    }
-    if (s_phase == PH_POINT) {
-        s_phtimer -= (int)dt;
-        if (s_phtimer <= 0) { serve(); s_phase = PH_PLAY; sfx(5); }
-        return;
-    }
-    if (s_phase != PH_PLAY) return;
-
+// One sub-step of ball flight + collisions; false once a point was scored. Sub-steps keep every move under
+// 3 px: at top speed a whole frame (up to 60 ms) is ~20 px, which jumped clean over a 5 px paddle.
+static bool ball_step(float dt) {
     bx += vx * dt; by += vy * dt;
 
     if (by < COURT_TOP + BR) { by = COURT_TOP + BR; vy = -vy; sfx(6); spark_burst(bx, by, 3, th_glow); wave_spawn(bx, by, 15, th_glow); }
@@ -507,18 +459,38 @@ static void phys_step(float dt) {
         break;
     }
 
-    // power-up pickup collision
-    if (s_pu_on) {
+    // power-up pickup: only a ball somebody hit can take it (before the first touch it would go to nobody)
+    if (s_pu_on && s_lasthit) {
         float dx = bx - s_pu_x, dy = by - s_pu_y;
-        if (dx * dx + dy * dy < (BR + 7) * (BR + 7)) { s_pu_on = false; apply_pu(s_pu_type, s_lasthit); }
+        if (dx * dx + dy * dy < (BR + 7) * (BR + 7)) { s_pu_on = false; apply_pu(s_pu_type, s_lasthit); if (s_phase != PH_PLAY) return false; }
     }
 
-    if (bx < -3)         { score_point(2); return; }
-    else if (bx > W + 3) { score_point(1); return; }
+    if (bx < -3)         { score_point(2); return false; }
+    else if (bx > W + 3) { score_point(1); return false; }
 
     // clamp crazy speeds
     float sp = sqrtf(vx * vx + vy * vy);
     if (sp > MAX_SPD) { vx *= MAX_SPD / sp; vy *= MAX_SPD / sp; }
+    return true;
+}
+static void phys_step(float dt) {
+    if (s_phase == PH_COUNT) {
+        int prev = s_cnt;
+        s_phtimer -= (int)dt;
+        s_cnt = s_phtimer / 600 + 1; if (s_cnt < 1) s_cnt = 1;
+        if (s_cnt != prev) sfx(4);
+        if (s_phtimer <= 0) { s_phase = PH_PLAY; sfx(5); }
+        return;
+    }
+    if (s_phase == PH_POINT) {
+        s_phtimer -= (int)dt;
+        if (s_phtimer <= 0) { serve(); s_phase = PH_PLAY; sfx(5); }
+        return;
+    }
+    if (s_phase != PH_PLAY) return;
+    float dist = (fabsf(vx) + fabsf(vy)) * dt;
+    int n = (int)(dist / 3.0f) + 1;
+    for (int i = 0; i < n; i++) if (!ball_step(dt / n)) break;
 }
 // Host owns power-up spawning (guest receives it in the snapshot).
 static void pu_spawn_step(int dt) {
@@ -528,33 +500,52 @@ static void pu_spawn_step(int dt) {
     if (s_pu_next > 0) return;
     int unlocked = 2 + s_level / 2; if (unlocked > PU_N - 1) unlocked = PU_N - 1;
     s_pu_type = 1 + (int)(esp_random() % (uint32_t)unlocked);
-    s_pu_x = frnd(78, W - 78);
+    s_pu_x = frnd(84, W - 84);                     // clear of the obstacle columns (x <= 80 and mirrored)
     s_pu_y = frnd(COURT_TOP + 16, COURT_BOT - 16);
     s_pu_on = true;
     s_pu_next = 6000 + (int)frnd(0, 6000);
 }
 
+// The CPU reads where the ball will cross its face (walls folded in), then aims there with a per-shot error
+// and a reaction line it waits for: Easy reacts late and sloppily, Hard early and tight. The error can exceed
+// the paddle's reach, so even Hard misses now and then (about 1 return in 15) — never a wall tracking ball y.
+static float predict_y(float x) {
+    if (vx <= 0) return (COURT_TOP + COURT_BOT) / 2.0f;
+    float lo = COURT_TOP + BR, span = (COURT_BOT - BR) - lo;
+    float y = by + vy * ((x - bx) / vx) - lo;
+    y = fmodf(y, 2 * span); if (y < 0) y += 2 * span;
+    return lo + (y > span ? 2 * span - y : y);
+}
 static void ai_step(float dt) {
-    static const float SPD[3] = { 0.090f, 0.130f, 0.168f };
-    static const float DZ[3]  = { 11.0f, 6.0f, 3.0f };
-    float spd = SPD[s_diff], dz = DZ[s_diff];
-    float target = (s_phase == PH_PLAY && vx > 0) ? by : (COURT_TOP + COURT_BOT) / 2.0f;
+    static const float SPD[3]   = { 0.085f, 0.120f, 0.160f };
+    static const float ERR[3]   = { 1.55f, 1.2f, 1.07f };     // aim error, in paddle reaches (> 1 can miss)
+    static const float REACT[3] = { 0.62f, 0.45f, 0.25f };      // fraction of the court the ball must cross first
+    float spd = SPD[s_diff];
+    int dir = (s_phase == PH_PLAY && vx > 0) ? 1 : -1;
+    if (dir != s_ai_dir) { s_ai_dir = dir; s_ai_err = frnd(-ERR[s_diff], ERR[s_diff]) * (s_rh / 2 + BR); }
+    float target = (COURT_TOP + COURT_BOT) / 2.0f;
+    if (dir > 0 && bx > W * REACT[s_diff]) target = predict_y(PADR_FACE - BR) + s_ai_err;
     float dy = target - pr, step = spd * dt;
-    if (fabsf(dy) > dz) pr += (dy > 0 ? 1 : -1) * (fabsf(dy) < step ? fabsf(dy) : step);
+    if (fabsf(dy) > 2.0f) pr += (dy > 0 ? 1 : -1) * (fabsf(dy) < step ? fabsf(dy) : step);
     float lo = COURT_TOP + s_rh / 2, hi = COURT_BOT - s_rh / 2;
     if (pr < lo) pr = lo;
     if (pr > hi) pr = hi;
 }
 static void move_local_paddle(float dt) {
-    // smooth continuous movement from physically-held keys (no jittery momentum):
-    // arrows ; (up) / . (down), plus Z (up) / N (down)
+    // follows the physically-held key: ; (up) / . (down), plus Z (up) / N (down). The speed ramps up over
+    // PAD_RAMP ms, so a tap is a fine nudge and a hold glides; release stops at once.
     int dir = 0;
-    if (nucleo_kbd_char_down(';') || nucleo_kbd_char_down('z')) dir -= 1;
-    if (nucleo_kbd_char_down('.') || nucleo_kbd_char_down('n')) dir += 1;
+    if (!s_paused) {
+        if (nucleo_kbd_char_down(';') || nucleo_kbd_char_down('z')) dir -= 1;
+        if (nucleo_kbd_char_down('.') || nucleo_kbd_char_down('n')) dir += 1;
+    }
+    if (!dir) { s_hold_ms = 0; return; }
+    s_hold_ms += (int)dt;
+    float ramp = s_hold_ms >= PAD_RAMP ? 1.0f : 0.35f + 0.65f * s_hold_ms / PAD_RAMP;
     bool guest = (s_mode == MODE_GUEST);
     float *p = guest ? &pr : &pl;
     float ph = guest ? s_rh : s_lh;
-    *p += dir * PAD_SPD * dt;
+    *p += dir * PAD_SPD * ramp * dt;
     float lo = COURT_TOP + ph / 2, hi = COURT_BOT - ph / 2;
     if (*p < lo) *p = lo;
     if (*p > hi) *p = hi;
@@ -655,7 +646,14 @@ static void net_handle(const pnet_pkt_t *p) {
     }
 }
 
-// ============================ rendering: play ================================
+/// ============================ rendering: play ================================
+// The frame lands in the shared 8bpp (RGB332) canvas: only 8 red/green and 4 blue levels survive, so the
+// UI colours below sit on that grid (a 'dark grey' would come out olive or vanish to black).
+#define COL_BG    0x0000
+#define COL_PANEL rgb(0, 40, 90)          // selection / card fill (navy)
+#define COL_EDGE  rgb(80, 110, 190)       // card border
+#define COL_LINE  rgb(40, 40, 90)         // rules
+#define ACCENT    COL_PL
 // neon paddle: an outer glow whose size/brightness pulses with ball proximity, a bright core, a hot edge.
 static void draw_paddle(int facex, bool left, float cy, float h, int flsh, int glow) {
     int x = left ? facex - PAD_W : facex;
@@ -663,7 +661,7 @@ static void draw_paddle(int facex, bool left, float cy, float h, int flsh, int g
     uint16_t base = left ? COL_PL : COL_PR;
     int gw = 2 + glow / 55;
     int gmix = 205 - glow; if (gmix < 40) gmix = 40;
-    d.fillRoundRect(x - gw, y - gw, PAD_W + 2 * gw, ih + 2 * gw, 3, mix(base, rgb(4, 5, 12), gmix));
+    d.fillRoundRect(x - gw, y - gw, PAD_W + 2 * gw, ih + 2 * gw, 3, mix(base, COL_BG, gmix));
     uint16_t c = flsh > 0 ? COL_WHITE : base;
     d.fillRoundRect(x, y, PAD_W, ih, 2, c);
     d.fillRect(x + (left ? 1 : PAD_W - 2), y + 2, 1, ih - 4, mix(c, COL_WHITE, 170));
@@ -671,7 +669,7 @@ static void draw_paddle(int facex, bool left, float cy, float h, int flsh, int g
 // synthwave depth grid behind the court (perspective fan + scrolling floor lines), tinted by the level.
 static void grid_bg(int ox, int oy) {
     int ft = s_flash > 0 ? (s_flash * 90 / 170) : 0;
-    uint16_t base = ft ? mix(rgb(4, 5, 12), s_flashcol, ft) : rgb(4, 5, 12);
+    uint16_t base = ft ? mix(COL_BG, s_flashcol, ft) : COL_BG;
     d.fillRect(0, 0, W, H, base);
     int hy = COURT_TOP + 1;
     uint16_t gcol = mix(th_net, base, 120);
@@ -688,8 +686,18 @@ static void grid_bg(int ox, int oy) {
         int t = (int)(40 + 200 * f); if (t > 256) t = 256;
         d.drawFastHLine(0, y + oy, W, mix(gcol, th_glow, t));
     }
-    d.drawFastHLine(0, COURT_TOP + oy, W, mix(th_net, COL_WHITE, 70));
     d.drawFastHLine(0, COURT_BOT + oy, W, mix(th_net, COL_WHITE, 70));
+}
+// first-to-TARGET progress pips under a player's tag
+static void score_pips(int x, int y, int n, uint16_t col, bool right) {
+    for (int i = 0; i < TARGET; i++) {
+        int px = right ? x - (i + 1) * 6 : x + i * 6;
+        if (i < n) d.fillRect(px, y, 5, 4, col); else d.drawRect(px, y, 5, 4, mix(col, COL_BG, 150));
+    }
+}
+static const char *side_tag(int side) {             // who plays the left (1) / right (2) paddle
+    if (side == 1) return s_mode == MODE_GUEST ? "HOST" : GT("TU", "YOU");
+    return s_mode == MODE_AI ? "CPU" : s_mode == MODE_HOST ? GT("OSPITE", "GUEST") : GT("TU", "YOU");
 }
 static void draw_play(void) {
     int ox = 0, oy = 0;
@@ -704,7 +712,7 @@ static void draw_play(void) {
     // obstacles (neon blocks)
     for (int i = 0; i < s_nobs; i++) {
         Obs *o = &s_obs[i];
-        d.fillRoundRect((int)o->x - 1 + ox, (int)o->y - 1 + oy, (int)o->w + 2, (int)o->h + 2, 2, mix(th_obs, rgb(4, 5, 12), 150));
+        d.fillRoundRect((int)o->x - 1 + ox, (int)o->y - 1 + oy, (int)o->w + 2, (int)o->h + 2, 2, mix(th_obs, COL_BG, 150));
         d.fillRoundRect((int)o->x + ox, (int)o->y + oy, (int)o->w, (int)o->h, 2, th_obs);
         d.fillRect((int)o->x + 1 + ox, (int)o->y + 1 + oy, (int)o->w - 2, 1, mix(th_obs, COL_WHITE, 130));
     }
@@ -713,19 +721,20 @@ static void draw_play(void) {
         if (s_wave[i].life <= 0) continue;
         int a = s_wave[i].life * 256 / s_wave[i].lmax;
         int X = (int)s_wave[i].x + ox, Y = (int)s_wave[i].y + oy, R = (int)s_wave[i].r;
-        d.drawCircle(X, Y, R, mix(rgb(4, 5, 12), s_wave[i].col, a));
-        if (R > 3) d.drawCircle(X, Y, R - 1, mix(rgb(4, 5, 12), s_wave[i].col, a / 2));
+        d.drawCircle(X, Y, R, mix(COL_BG, s_wave[i].col, a));
+        if (R > 3) d.drawCircle(X, Y, R - 1, mix(COL_BG, s_wave[i].col, a / 2));
     }
-    // power-up pickup: pulsing orb + rotating ring + glyph
+    // power-up pickup: pulsing orb + orbiting spark + glyph
     if (s_pu_on) {
         uint16_t pc = pu_color(s_pu_type);
         int X = (int)s_pu_x + ox, Y = (int)s_pu_y + oy, pr0 = 7 + ((s_anim >> 1) & 3);
-        d.fillCircle(X, Y, pr0 + 2, mix(pc, rgb(4, 5, 12), 170));
+        d.fillCircle(X, Y, pr0 + 2, mix(pc, COL_BG, 170));
         d.drawCircle(X, Y, pr0, pc);
-        float a = s_anim * 0.4f;
-        d.fillCircle(X + (int)(cosf(a) * pr0), Y + (int)(sinf(a) * pr0), 1, COL_WHITE);
-        d.fillCircle(X, Y, 4, mix(pc, COL_WHITE, 90));
-        txt_c(X, Y - 3, 1, rgb(8, 10, 18), pu_glyph(s_pu_type));
+        static const int8_t ORB[8][2] = { {9,0}, {6,6}, {0,9}, {-6,6}, {-9,0}, {-6,-6}, {0,-9}, {6,-6} };   // no per-frame trig
+        int k = (s_anim >> 1) & 7;
+        d.fillCircle(X + ORB[k][0] * pr0 / 9, Y + ORB[k][1] * pr0 / 9, 1, COL_WHITE);
+        d.fillCircle(X, Y, 5, mix(pc, COL_WHITE, 90));
+        txt_c(X, Y - 3, 1, COL_BG, pu_glyph(s_pu_type));
     }
     // paddles — glow pulses with how near the ball is to each side
     int gl = (int)(120 - fabsf(bx - PADL_FACE)); if (gl < 20) gl = 20;
@@ -735,11 +744,10 @@ static void draw_play(void) {
     // ball — a plasma comet: fading trail, CRT chromatic split, white-hot core
     if (s_phase == PH_PLAY) {
         float rbx = bx, rby = by;
-        if (s_mode == MODE_GUEST) { float age = (float)(s_now - s_state_ms); if (age > 60) age = 60; rbx = bx + vx * age; rby = by + vy * age; }
-        for (int i = 0; i < NTRAIL; i++) {
+        if (s_mode == MODE_GUEST && !s_paused) { float age = (float)(s_now - s_state_ms); if (age > 60) age = 60; rbx = bx + vx * age; rby = by + vy * age; }
+        for (int i = 1; i < NTRAIL; i++) {
             int idx = (s_ti - 1 - i + NTRAIL * 2) % NTRAIL;
-            int t = 220 - i * 24; if (t < 0) t = 0;
-            d.fillCircle((int)s_tx[idx] + ox, (int)s_ty[idx] + oy, ((BR + 1) * (NTRAIL - i)) / NTRAIL, mix(rgb(4, 5, 12), th_glow, t));
+            d.fillCircle((int)s_tx[idx] + ox, (int)s_ty[idx] + oy, i < 4 ? 2 : 1, mix(th_ball, COL_BG, 40 + i * 24));
         }
         if (rbx < 1) rbx = 1;
         if (rbx > W - 1) rbx = W - 1;
@@ -753,214 +761,157 @@ static void draw_play(void) {
     for (int i = 0; i < NSPK; i++) {
         if (s_spk[i].life <= 0) continue;
         int f = s_spk[i].life * 256 / (s_spk[i].max > 0 ? s_spk[i].max : 1);
-        d.fillCircle((int)s_spk[i].x + ox, (int)s_spk[i].y + oy, f > 130 ? 2 : 1, mix(rgb(4, 5, 12), s_spk[i].col, f));
+        d.fillCircle((int)s_spk[i].x + ox, (int)s_spk[i].y + oy, f > 130 ? 2 : 1, mix(COL_BG, s_spk[i].col, f));
     }
-    // HUD: scores + level (crisp, on top)
-    char b[8];
-    snprintf(b, sizeof b, "%d", sl); txt_c(W / 2 - 36, 2, 3, COL_PL, b);
-    snprintf(b, sizeof b, "%d", sr); txt_c(W / 2 + 36, 2, 3, COL_PR, b);
-    char lv[12]; snprintf(lv, sizeof lv, "LIV %d", s_level); txt_c(W / 2, 4, 1, COL_GOLD, lv);
+    // HUD band above the court: tags + first-to-7 pips at the sides, big scores, the level in a pill
+    d.fillRect(0, 0, W, COURT_TOP, COL_BG);
+    d.drawFastHLine(0, COURT_TOP, W, mix(th_net, COL_WHITE, 70));
+    txt(4, 3, 1, COL_PL, side_tag(1));
+    txt_r(W - 4, 3, 1, COL_PR, side_tag(2));
+    score_pips(4, 14, sl, COL_PL, false);
+    score_pips(W - 4, 14, sr, COL_PR, true);
+    char b[12];
+    snprintf(b, sizeof b, "%d", sl); txt_r(W / 2 - 22, 0, 3, COL_PL, b);
+    snprintf(b, sizeof b, "%d", sr); txt(W / 2 + 22, 0, 3, COL_PR, b);
+    d.fillRoundRect(W / 2 - 16, 3, 32, 14, 4, COL_PANEL);
+    snprintf(b, sizeof b, GT("L%d", "L%d"), s_level); txt_c(W / 2, 7, 1, COL_GOLD, b);
     if (s_phase == PH_COUNT) {
         snprintf(b, sizeof b, "%d", s_cnt);
         int rr = 26 - (s_phtimer % 600) / 30;
-        d.drawCircle(W / 2 + ox, H / 2 + oy, rr, th_glow);
-        d.drawCircle(W / 2 + ox, H / 2 + oy, rr + 6, mix(th_glow, rgb(4, 5, 12), 150));
-        txt_c(W / 2 + ox, H / 2 - 14 + oy, 4, ((s_anim >> 1) & 1) ? COL_WHITE : COL_GOLD, b);
+        d.drawCircle(W / 2 + ox, H / 2 + 6 + oy, rr, th_glow);
+        d.drawCircle(W / 2 + ox, H / 2 + 6 + oy, rr + 6, mix(th_glow, COL_BG, 150));
+        txt_c(W / 2 + ox, H / 2 - 8 + oy, 4, ((s_anim >> 1) & 1) ? COL_WHITE : COL_GOLD, b);
     }
-    const char *who = s_mode == MODE_AI ? tx("VS CPU", "VS CPU") : s_mode == MODE_HOST ? "HOST" : tx("OSPITE", "GUEST");
-    txt(4, COURT_TOP + 2, 1, COL_DIM, who);
-    if (s_netlost) txt_c(W / 2, H - 12, 1, COL_RED, "segnale debole...");
+    if (s_netlost) txt_c(W / 2, H - 12, 1, COL_RED, GT("segnale debole...", "weak signal..."));
+    if (s_paused) {                                   // pause card over a dimmed field
+        for (int y = COURT_TOP + 1; y < H; y += 2) d.drawFastHLine(0, y, W, COL_BG);
+        gui::dialog(GT("PAUSA", "PAUSED"), s_mode == MODE_AI ? nullptr : GT("La partita continua!", "The match goes on!"), nullptr,
+                    GT("INVIO riprendi   Esc esci", "ENTER resume   Esc leave"), ACCENT);
+    }
 }
 
-// ============================ rendering: menus ===============================
-static void felt(int ch) {
-    d.fillRect(0, 0, W, ch, rgb(8, 10, 20));
-    for (int y = 0; y < ch; y += 6) d.drawFastHLine(0, y, W, rgb(14, 18, 34));
-}
+/// ============================ rendering: menus ===============================
+// Titles, lists and the pause card come from the console kit (game_ui.h), like every other game.
+static gui::Menu s_menu, s_omenu, s_bmenu;           // main menu / settings / room list (selection + glide)
 static void mini_court(int cx, int cy) {
-    d.drawRoundRect(cx - 20, cy - 13, 40, 26, 3, rgb(54, 64, 104));
-    for (int y = cy - 11; y < cy + 12; y += 6) d.fillRect(cx - 1, y, 2, 3, rgb(54, 64, 104));
-    d.fillRect(cx - 17, cy - 4, 2, 8, COL_PL);
-    d.fillRect(cx + 15, cy - 1, 2, 8, COL_PR);
-    d.fillCircle(cx + 3, cy, 2, COL_WHITE);
+    d.drawRoundRect(cx - 18, cy - 11, 36, 22, 3, COL_EDGE);
+    for (int y = cy - 9; y < cy + 10; y += 6) d.fillRect(cx - 1, y, 2, 3, COL_EDGE);
+    d.fillRect(cx - 15, cy - 4, 2, 8, COL_PL);
+    d.fillRect(cx + 13, cy - 2, 2, 8, COL_PR);
+    d.fillCircle(cx + 5, cy - 3, 2, COL_WHITE);
 }
-#define NMENU 6
+#define NMENU  6
 static const char *menu_label(int i) {
     switch (i) {
-        case 0: return tx("Gioca vs CPU", "Play vs CPU");
-        case 1: return tx("Crea stanza", "Create room");
-        case 2: return tx("Entra in stanza", "Join room");
-        case 3: return tx("Impostazioni", "Settings");
-        case 4: return tx("Record", "Scores");
-        default: return tx("Come si gioca", "How to play");
+        case 0: return GT("Gioca vs CPU", "Play vs CPU");
+        case 1: return GT("Crea stanza", "Create room");
+        case 2: return GT("Entra in stanza", "Join room");
+        case 3: return GT("Impostazioni", "Settings");
+        case 4: return GT("Record", "Scores");
+        default: return GT("Come si gioca", "How to play");
     }
 }
 static void draw_menu(int ch) {
-    felt(ch);
-    mini_court(22, 18); mini_court(W - 22, 18);
-    txt_c(W / 2 + 1, 5, 4, mix(COL_PL, rgb(8, 10, 20), 110), "PONG");
-    txt_c(W / 2, 3, 4, ((s_anim >> 3) & 1) ? COL_WHITE : COL_PL, "PONG");
-    // windowed list (selection + two neighbours each side), ALL at size 2 (bigger, legible), wrapped
-    const int cy = 46, rowh = 17;
-    for (int dlt = -2; dlt <= 2; dlt++) {
-        int i = (s_msel + dlt + NMENU) % NMENU, y = cy + (dlt + 2) * rowh;
-        if (dlt == 0) {
-            d.fillRoundRect(12, y - 1, W - 24, rowh + 1, 5, rgb(28, 40, 70));
-            d.drawRoundRect(12, y - 1, W - 24, rowh + 1, 5, ((s_anim >> 3) & 1) ? rgb(120, 150, 220) : rgb(70, 92, 150));
-            d.fillRect(15, y + 1, 3, rowh - 3, COL_GOLD);
-            txt_c(W / 2 + 4, y + 1, 2, COL_WHITE, menu_label(i));
-        } else {
-            int fade = (dlt == -2 || dlt == 2) ? 120 : 55;
-            txt_c(W / 2, y + 1, 2, mix(COL_MUT, rgb(12, 16, 30), fade), menu_label(i));
-        }
-    }
+    const char *items[NMENU]; for (int i = 0; i < NMENU; i++) items[i] = menu_label(i);
+    int y = gui::title("PONG", nullptr, ACCENT);
+    mini_court(24, 14); mini_court(W - 24, 14);
+    gui::menu(s_menu, items, NMENU, y, ch, ACCENT);
 }
-static const char *opt_label(int i) {
-    switch (i) {
-        case 0: return tx("Difficolta", "Difficulty");
-        case 1: return "Audio";
-        default: return tx("Lingua", "Language");
-    }
-}
-#define NOPT 3
-static void opt_value(int i, char *out, int cap, uint16_t *col) {
-    *col = COL_GOLD;
-    switch (i) {
-        case 0: snprintf(out, cap, "%s", s_diff == 0 ? tx("Facile", "Easy") : s_diff == 1 ? tx("Normale", "Normal") : tx("Difficile", "Hard")); break;
-        case 1: snprintf(out, cap, "%s", g_audio ? "On" : "Off"); if (!g_audio) *col = COL_DIM; break;
-        default: snprintf(out, cap, "%s", g_lang ? "English" : "Italiano"); break;
-    }
-}
+#define NOPT 2
 static void draw_options(int ch) {
-    felt(ch);
-    txt_c(W / 2 + 1, 7, 3, mix(COL_GOLD, rgb(8, 10, 20), 130), tx("IMPOSTAZIONI", "SETTINGS"));
-    txt_c(W / 2, 6, 3, COL_GOLD, tx("IMPOSTAZIONI", "SETTINGS"));
-    d.drawFastHLine(14, 30, W - 28, rgb(54, 64, 104));
-    int y = 40;
-    for (int i = 0; i < NOPT; i++) {
-        bool sel = (i == s_optsel);
-        char vb[16]; uint16_t vc; opt_value(i, vb, sizeof vb, &vc);
-        if (sel) {
-            d.fillRoundRect(12, y, W - 24, 22, 5, rgb(28, 40, 70));
-            d.drawRoundRect(12, y, W - 24, 22, 5, ((s_anim >> 3) & 1) ? rgb(120, 150, 220) : rgb(70, 92, 150));
-            d.fillRect(15, y + 3, 3, 16, COL_GOLD);
-            txt(22, y + 4, 2, COL_WHITE, opt_label(i));
-            char vv[20]; snprintf(vv, sizeof vv, "< %s >", vb); txt_r(W - 18, y + 7, 1, vc, vv);
-            y += 26;
-        } else {
-            txt(22, y + 3, 2, COL_MUT, opt_label(i));
-            txt_r(W - 18, y + 6, 1, mix(vc, rgb(8, 10, 20), 60), vb);
-            y += 22;
-        }
-    }
-    txt_c(W / 2, ch - 9, 1, COL_DIM, tx("SU/GIU scegli  SX/DX cambia  Esc esci", "UP/DN pick  L/R change  Esc back"));
+    char a[32], b[32];
+    snprintf(a, sizeof a, "%s: %s", "CPU", s_diff == 0 ? GT("Facile", "Easy") : s_diff == 1 ? GT("Normale", "Normal") : GT("Difficile", "Hard"));
+    snprintf(b, sizeof b, "%s: %s", GT("Suoni", "Sound"), g_audio ? GT("Attivi", "On") : GT("Spenti", "Off"));
+    const char *items[NOPT] = { a, b };
+    int y = gui::title(GT("Impostazioni", "Settings"), GT("SX/DX o INVIO cambia", "L/R or ENTER changes"), COL_GOLD);
+    gui::menu(s_omenu, items, NOPT, y, ch, COL_GOLD);
+}
+static void wait_dots(int cy, uint16_t col) {      // three dots lighting up in turn
+    for (int i = 0; i < 3; i++) d.fillCircle(W / 2 - 12 + i * 12, cy, 2, (s_now / 300) % 3 == i ? col : COL_LINE);
 }
 static void draw_host(int ch) {
-    felt(ch);
-    txt_c(W / 2 + 1, 7, 3, mix(COL_PL, rgb(8, 10, 20), 90), tx("Crea stanza", "Create room"));
-    txt_c(W / 2, 6, 3, COL_PL, tx("Crea stanza", "Create room"));
-    d.drawFastHLine(14, 30, W - 28, rgb(54, 64, 104));
-    d.fillRoundRect(20, 36, W - 40, 30, 6, rgb(24, 30, 50));
-    char nm[24]; snprintf(nm, sizeof nm, "%.11s", pnet_name()); txt_c(W / 2, 40, 2, COL_GOLD, nm);
-    char cc[28]; snprintf(cc, sizeof cc, tx("canale %d", "channel %d"), pnet_channel()); txt_c(W / 2, 56, 1, COL_GREEN, cc);
-    char dots[5] = "    "; for (int i = 0; i < (int)((s_anim >> 2) % 4); i++) dots[i] = '.';
-    char l[48]; snprintf(l, sizeof l, "%s%s", tx("Attendo sfidante", "Waiting for rival"), dots);
-    txt_c(W / 2, 80, 2, COL_WHITE, l);
-    txt_c(W / 2, 104, 1, COL_DIM, tx("sull'altro: Entra in stanza, stesso canale", "on the other: Join room, same channel"));
+    (void)ch;
+    char sub[32]; snprintf(sub, sizeof sub, GT("%.12s - canale %d", "%.12s - channel %d"), pnet_name(), pnet_channel());
+    int y = gui::title(GT("Crea stanza", "Create room"), sub, ACCENT);
+    gui::text(GT("Attendo sfidante", "Waiting for rival"), W / 2, y + 4, 1, gui::F_BODY, COL_WHITE, COL_BG);
+    wait_dots(y + 34, ACCENT);
+    gui::text(GT("Sull'altro: Pong > Entra", "Other device: Pong > Join"), W / 2, y + 44, 1, gui::F_SMALL, COL_DIM, COL_BG);
 }
 static void draw_browse(int ch) {
-    felt(ch);
-    txt_c(W / 2 + 1, 7, 2, mix(rgb(8, 10, 18), COL_PR, 90), tx("Entra in stanza", "Join room"));
-    txt_c(W / 2, 6, 2, COL_PR, tx("Entra in stanza", "Join room"));
-    char cc[28]; snprintf(cc, sizeof cc, tx("canale %d", "channel %d"), pnet_channel());
-    txt_r(W - 8, 10, 1, COL_GREEN, cc);
-    d.drawFastHLine(10, 26, W - 20, rgb(54, 64, 104));
+    char sub[24]; snprintf(sub, sizeof sub, GT("canale %d", "channel %d"), pnet_channel());
+    int y = gui::title(GT("Entra in stanza", "Join room"), sub, COL_PR);
     if (s_join_pending) {                                // joining: name the room + animate so the guest gets clear feedback
-        char dots[5] = "    "; for (int i = 0; i < (int)((s_anim >> 2) % 4); i++) dots[i] = '.';
-        txt_c(W / 2, 46, 1, COL_DIM, tx("Entro nella stanza", "Joining room"));
-        char rn[16]; snprintf(rn, sizeof rn, "%.10s", s_joinname); txt_c(W / 2 + 1, 61, 2, rgb(8, 10, 18), rn); txt_c(W / 2, 60, 2, COL_GOLD, rn);
-        char w[24]; snprintf(w, sizeof w, "%s%s", tx("contatto", "reaching"), dots); txt_c(W / 2, 86, 1, COL_DIM, w);
+        char rn[24]; snprintf(rn, sizeof rn, "%.15s", s_joinname);
+        gui::text(rn, W / 2, y + 4, 1, gui::F_BODY, COL_GOLD, COL_BG);
+        wait_dots(y + 34, COL_PR);
         return;
     }
     if (s_nhost == 0) {
-        txt_c(W / 2, 50, 1, COL_WHITE, tx("Nessuna stanza trovata", "No rooms found"));
-        txt_c(W / 2, 66, 1, COL_DIM, tx("Sull'altro Cardputer apri Pong", "On the other Cardputer open Pong"));
-        txt_c(W / 2, 78, 1, COL_DIM, tx("e scegli Crea stanza.", "and choose Create room."));
+        gui::text(GT("Cerco stanze...", "Looking for rooms..."), W / 2, y + 4, 1, gui::F_SMALL, COL_WHITE, COL_BG);
+        wait_dots(y + 30, COL_PR);
+        gui::text(GT("Sull'altro: Pong > Crea", "Other device: Pong > Create"), W / 2, y + 44, 1, gui::F_SMALL, COL_DIM, COL_BG);
         return;
     }
-    txt(12, 30, 1, COL_DIM, tx("Scegli una stanza:", "Pick a room:"));
-    int y = 42;
-    for (int i = 0; i < s_nhost; i++) {
-        bool f = (i == s_bsel);
-        if (f) {
-            d.fillRoundRect(10, y, W - 20, 22, 5, rgb(40, 30, 24)); d.drawRoundRect(10, y, W - 20, 22, 5, COL_PR);
-            d.fillRect(12, y + 2, 3, 18, COL_PR);
-            char nm[24]; snprintf(nm, sizeof nm, "%.11s", s_hosts[i].name); txt(20, y + 4, 2, COL_WHITE, nm);
-            txt_r(W - 16, y + 8, 1, ((s_anim >> 2) & 1) ? COL_GREEN : COL_WHITE, "INVIO>");
-            y += 26;
-        } else {
-            char nm[24]; snprintf(nm, sizeof nm, "%.18s", s_hosts[i].name); txt(20, y + 3, 1, COL_MUT, nm);
-            y += 16;
-        }
-        if (y > ch - 14) break;
-    }
+    const char *items[NHOST]; for (int i = 0; i < s_nhost; i++) items[i] = s_hosts[i].name;
+    s_bmenu.sel = (int8_t)s_bsel;
+    gui::menu(s_bmenu, items, s_nhost, y, ch, COL_PR);
 }
 static void draw_scores(int ch) {
-    felt(ch);
-    txt_c(W / 2 + 1, 7, 3, mix(COL_GOLD, rgb(8, 10, 20), 130), tx("RECORD", "SCORES"));
-    txt_c(W / 2, 6, 3, COL_GOLD, tx("RECORD", "SCORES"));
-    char bl[28]; snprintf(bl, sizeof bl, "%s %u", tx("Livello max:", "Best level:"), g_best_level);
-    txt_c(W / 2, 32, 1, COL_GREEN, bl);
-    d.drawFastHLine(20, 44, W - 40, rgb(54, 64, 104));
+    (void)ch;
+    char bl[32]; snprintf(bl, sizeof bl, GT("Livello max: %u", "Best level: %u"), g_best_level);
+    int y = gui::title(GT("Record", "Scores"), bl, COL_GOLD);
     for (int i = 0; i < NTOP; i++) {
-        int col = i / 4, row = i % 4, x = 16 + col * 116, y = 50 + row * 16;
-        char r[5]; snprintf(r, sizeof r, "%d.", i + 1);
-        txt(x, y, 1, i < 3 ? COL_GOLD : COL_DIM, r);
-        char s[14]; snprintf(s, sizeof s, "%u", g_top[i]);
-        txt(x + 18, y, 1, g_top[i] ? (i < 3 ? COL_WHITE : COL_MUT) : COL_DIM, g_top[i] ? s : "---");
+        int x = 12 + (i / 4) * 116, ry = y + (i % 4) * 18;
+        char r[16]; snprintf(r, sizeof r, "%d.", i + 1);
+        gui::text(r, x + 14, ry, 2, gui::F_SMALL, i < 3 ? COL_GOLD : COL_DIM, COL_BG);
+        if (g_top[i]) snprintf(r, sizeof r, "%u", g_top[i]); else snprintf(r, sizeof r, "---");
+        gui::text(r, x + 20, ry, 0, gui::F_SMALL, g_top[i] ? (i < 3 ? COL_WHITE : COL_MUT) : COL_DIM, COL_BG);
     }
 }
 static void draw_over(int ch) {
-    felt(ch);
+    (void)ch;
     bool iwon = (s_mode == MODE_GUEST) ? (s_winner == 2) : (s_winner == 1);
-    bool good = (s_mode == MODE_AI) ? (s_winner == 1) : iwon;
-    const char *t = (s_mode == MODE_AI) ? (s_winner == 1 ? tx("HAI VINTO!", "YOU WIN!") : tx("VINCE LA CPU", "CPU WINS")) : (iwon ? tx("HAI VINTO!", "YOU WIN!") : tx("HAI PERSO", "YOU LOSE"));
-    txt_c(W / 2 + 1, 15, 3, rgb(8, 10, 18), t); txt_c(W / 2, 14, 3, good ? COL_GOLD : COL_RED, t);
-    char sc[16]; snprintf(sc, sizeof sc, "%d  -  %d", sl, sr);
-    txt_c(W / 2, 46, 4, COL_WHITE, sc);
-    char lv[20]; snprintf(lv, sizeof lv, "%s %d", tx("Livello", "Level"), s_level);
-    txt_c(W / 2, 84, 1, COL_GREEN, lv);
-    if (s_peerleft) txt_c(W / 2, 100, 1, COL_RED, tx("Avversario uscito", "Opponent left"));
-    else if (s_mode == MODE_GUEST) txt_c(W / 2, 100, 1, ((s_anim >> 2) & 1) ? COL_WHITE : COL_DIM, tx("in attesa dell'host...", "waiting for host..."));
-    else txt_c(W / 2, 100, 1, ((s_anim >> 2) & 1) ? COL_WHITE : COL_DIM, tx("INVIO rigioca   Esc menu", "ENTER replay   Esc menu"));
+    const char *t = s_peerleft ? GT("Fine partita", "Match over")
+                  : (s_mode == MODE_AI && !iwon) ? GT("Vince la CPU", "CPU wins")
+                  : iwon ? GT("Hai vinto!", "You win!") : GT("Hai perso", "You lose");
+    uint16_t tc = s_peerleft ? COL_MUT : iwon ? COL_GOLD : COL_RED;
+    char lv[24]; snprintf(lv, sizeof lv, GT("Livello %d", "Level %d"), s_level);
+    int y = gui::title(t, lv, tc);
+    char sc[8];
+    snprintf(sc, sizeof sc, "%d", sl); txt_r(W / 2 - 16, y + 4, 4, COL_PL, sc);
+    snprintf(sc, sizeof sc, "%d", sr); txt(W / 2 + 16, y + 4, 4, COL_PR, sc);
+    d.fillRect(W / 2 - 6, y + 18, 12, 4, COL_MUT);
+    gui::text(side_tag(1), W / 4 - 6, y + 12, 1, gui::F_SMALL, COL_PL, COL_BG);
+    gui::text(side_tag(2), W * 3 / 4 + 6, y + 12, 1, gui::F_SMALL, COL_PR, COL_BG);
+    if (s_peerleft) gui::text(GT("Avversario uscito", "Opponent left"), W / 2, y + 42, 1, gui::F_SMALL, COL_RED, COL_BG);
 }
 static void draw_help(int ch) {
-    felt(ch);
-    txt_c(W / 2 + 1, 7, 3, mix(COL_PL, rgb(8, 10, 20), 110), tx("Come si gioca", "How to play"));
-    txt_c(W / 2, 6, 3, COL_PL, tx("Come si gioca", "How to play"));
-    d.drawFastHLine(14, 30, W - 28, rgb(54, 64, 104));
-    txt(14, 36, 1, COL_WHITE, tx("SU/GIU o Z (su) / N (giu)", "UP/DN or Z (up) / N (down)"));
-    txt(14, 50, 1, COL_WHITE, tx("Primo a 7 punti vince.", "First to 7 points wins."));
-    txt(14, 66, 1, COL_GOLD,  tx("Power-up sul campo:", "Power-ups on court:"));
-    txt(14, 78, 1, COL_GREEN, tx("+ ingrandisci   - rimpicc. avv.", "+ grow self   - shrink rival"));
-    txt(14, 90, 1, rgb(120, 180, 255), tx("S lento  F veloce  * punto", "S slow  F fast  * point"));
-    txt(14, 104, 1, COL_DIM, tx("Livelli: arena e colori cambiano.", "Levels: arena and colours change."));
+    (void)ch;
+    int y = gui::title(GT("Come si gioca", "How to play"), nullptr, ACCENT);
+    txt(6, y, 1, COL_WHITE, GT("SU/GIU o Z/N: muovi la racchetta", "UP/DN or Z/N: move your paddle"));
+    txt(6, y + 11, 1, COL_WHITE, GT("Primo a 7 punti vince.", "First to 7 points wins."));
+    txt(6, y + 22, 1, COL_WHITE, GT("Colpisci col bordo: tiro angolato", "Hit with the edge to angle it"));
+    txt(6, y + 36, 1, COL_GOLD, GT("Power-up (a chi ha tirato):", "Power-ups (to the last hitter):"));
+    txt(6, y + 47, 1, COL_GREEN, GT("+ ingrandisci  - rimpicciolisci", "+ grow you  - shrink the rival"));
+    txt(6, y + 58, 1, rgb(120, 180, 255), GT("S lenta  F veloce  * punto", "S slow  F fast  * free point"));
 }
 
 // ============================ input / hint ===================================
 static void set_hint(void) {
     switch (s_screen) {
-        case ST_MENU:   nucleo_app_set_hint(tx("SU/GIU  INVIO scegli  Esc esci", "UP/DN  ENTER pick  Esc quit")); break;
-        case ST_OPT:    nucleo_app_set_hint(tx("SU/GIU  SX/DX cambia  Esc esci", "UP/DN  L/R change  Esc back")); break;
-        case ST_HOST:   nucleo_app_set_hint(tx("In attesa...  Esc annulla", "Waiting...  Esc cancel")); break;
-        case ST_BROWSE: nucleo_app_set_hint(tx("SU/GIU  INVIO entra  Esc indietro", "UP/DN  ENTER join  Esc back")); break;
-        case ST_OVER:   nucleo_app_set_hint(tx("INVIO rigioca  Esc menu", "ENTER replay  Esc menu")); break;
-        case ST_SCORES: case ST_HELP: nucleo_app_set_hint(tx("Esc indietro", "Esc back")); break;
+        case ST_MENU:   nucleo_app_set_hint(GT("SU/GIU  INVIO scegli  Esc esci", "UP/DN  ENTER pick  Esc quit")); break;
+        case ST_OPT:    nucleo_app_set_hint(GT("SU/GIU  SX/DX cambia  Esc ok", "UP/DN  L/R change  Esc done")); break;
+        case ST_HOST:   nucleo_app_set_hint(GT("In attesa...  Esc annulla", "Waiting...  Esc cancel")); break;
+        case ST_BROWSE: nucleo_app_set_hint(GT("SU/GIU  INVIO entra  Esc indietro", "UP/DN  ENTER join  Esc back")); break;
+        case ST_OVER:   if (s_mode == MODE_GUEST && !s_peerleft) nucleo_app_set_hint(GT("Attendi l'host  Esc menu", "Wait for the host  Esc menu"));
+                        else nucleo_app_set_hint(GT("INVIO rivincita  Esc menu", "ENTER rematch  Esc menu"));
+                        break;
+        case ST_SCORES: case ST_HELP: nucleo_app_set_hint(GT("Esc indietro", "Esc back")); break;
         default: break;
     }
 }
 static void go(int s) {
-    s_screen = s;
+    s_screen = s; s_paused = false;
     nucleo_app_set_fullscreen(s == ST_PLAY);
     set_hint();
     nucleo_app_request_draw();
@@ -968,7 +919,7 @@ static void go(int s) {
 static void leave_to_menu(void) {
     send_bye();
     s_haspeer = false; s_join_pending = false;
-    s_msel = 0; go(ST_MENU);
+    go(ST_MENU);
 }
 static void record_match(void) {                   // store a vs-CPU result to the leaderboard
     if (s_mode != MODE_AI) return;
@@ -979,36 +930,33 @@ static void record_match(void) {                   // store a vs-CPU result to t
 }
 
 static void opt_change(int i, int dir) {
-    switch (i) {
-        case 0: s_diff = (s_diff + (dir < 0 ? 2 : 1)) % 3; break;
-        case 1: g_audio ^= 1; break;
-        default: g_lang ^= 1; set_hint(); break;     // language flips the whole UI -> refresh the hint bar too
-    }
+    if (i == 0) s_diff = (s_diff + (dir < 0 ? 2 : 1)) % 3;
+    else g_audio ^= 1;
     cfg_write(); sfx(2); nucleo_app_request_draw();
 }
 static void on_key(int k, char ch) {
     (void)ch;
     switch (s_screen) {
         case ST_MENU:
-            if (k == NK_UP)        { s_msel = (s_msel + NMENU - 1) % NMENU; sfx(1); nucleo_app_request_draw(); }
-            else if (k == NK_DOWN) { s_msel = (s_msel + 1) % NMENU; sfx(1); nucleo_app_request_draw(); }
+            if (gui::menu_key(s_menu, k, NMENU)) { sfx(1); nucleo_app_request_draw(); }
             else if (k == NK_ENTER) {
-                if (s_msel == 0)      { sfx(2); new_match(MODE_AI); go(ST_PLAY); }
-                else if (s_msel == 1) { sfx(2); s_nhost = 0; s_haspeer = false; go(ST_HOST); send_hello(HS_HOSTING); }
-                else if (s_msel == 2) { sfx(2); s_nhost = 0; s_bsel = 0; go(ST_BROWSE); }
-                else if (s_msel == 3) { s_optsel = 0; sfx(2); go(ST_OPT); }
-                else if (s_msel == 4) { sfx(2); go(ST_SCORES); }
-                else                  { sfx(2); go(ST_HELP); }
+                sfx(2);
+                switch (s_menu.sel) {
+                    case 0:  new_match(MODE_AI); go(ST_PLAY); break;
+                    case 1:  s_nhost = 0; s_haspeer = false; go(ST_HOST); send_hello(HS_HOSTING); break;
+                    case 2:  s_nhost = 0; s_bsel = 0; s_bmenu = { 0, 0 }; go(ST_BROWSE); break;
+                    case 3:  go(ST_OPT); break;
+                    case 4:  go(ST_SCORES); break;
+                    default: go(ST_HELP); break;
+                }
             }
             return;
         case ST_OPT:
-            if (k == NK_UP)        { s_optsel = (s_optsel + NOPT - 1) % NOPT; sfx(1); nucleo_app_request_draw(); }
-            else if (k == NK_DOWN) { s_optsel = (s_optsel + 1) % NOPT; sfx(1); nucleo_app_request_draw(); }
-            else if (k == NK_RIGHT || k == NK_ENTER) opt_change(s_optsel, +1);
+            if (gui::menu_key(s_omenu, k, NOPT)) { sfx(1); nucleo_app_request_draw(); }
+            else if (k == NK_RIGHT || k == NK_ENTER) opt_change(s_omenu.sel, +1);
             return;
         case ST_BROWSE:
-            if (k == NK_UP)        { if (s_bsel > 0) s_bsel--; sfx(1); nucleo_app_request_draw(); }
-            else if (k == NK_DOWN) { if (s_bsel < s_nhost - 1) s_bsel++; sfx(1); nucleo_app_request_draw(); }
+            if (s_nhost > 0 && !s_join_pending && gui::menu_key(s_bmenu, k, s_nhost)) { s_bsel = s_bmenu.sel; sfx(1); nucleo_app_request_draw(); }
             else if (k == NK_ENTER && s_nhost > 0 && !s_join_pending) {
                 memcpy(s_peer, s_hosts[s_bsel].mac, 6); s_haspeer = true;
                 snprintf(s_joinname, sizeof s_joinname, "%.21s", s_hosts[s_bsel].name);   // remember the room for named feedback
@@ -1020,14 +968,14 @@ static void on_key(int k, char ch) {
             }
             return;
         case ST_PLAY:
-            // paddle is polled continuously in poll() via nucleo_kbd_char_down (smooth hold): arrows + Z/N
-            (void)ch;
+            // the paddle is polled in poll() via nucleo_kbd_char_down (smooth hold); ENTER resumes a pause
+            if (s_paused && k == NK_ENTER) { s_paused = false; s_last = now_ms(); sfx(2); nucleo_app_request_draw(); }
             return;
         case ST_OVER:
             if (k == NK_ENTER) {
                 if (s_mode == MODE_AI) { sfx(2); new_match(MODE_AI); go(ST_PLAY); }
                 else if (s_mode == MODE_HOST && !s_peerleft) { sfx(2); new_match(MODE_HOST); go(ST_PLAY); }
-                else leave_to_menu();
+                else if (s_peerleft) leave_to_menu();
             }
             return;
         default: return;
@@ -1035,14 +983,17 @@ static void on_key(int k, char ch) {
 }
 static bool on_back(int key) {
     if (key == NK_LEFT) {
-        if (s_screen == ST_OPT) opt_change(s_optsel, -1);
+        if (s_screen == ST_OPT) opt_change(s_omenu.sel, -1);
         return true;                               // never let LEFT close the app
     }
     sfx(3);
     switch (s_screen) {
         case ST_MENU: return false;                // close app
-        case ST_PLAY: case ST_OVER: leave_to_menu(); return true;
-        default: s_haspeer = false; s_join_pending = false; s_msel = 0; go(ST_MENU); return true;
+        case ST_PLAY:                              // first Esc pauses (vs CPU the match freezes), the second leaves
+            if (!s_paused) { s_paused = true; nucleo_app_request_draw(); return true; }
+            leave_to_menu(); return true;
+        case ST_OVER: leave_to_menu(); return true;
+        default: s_haspeer = false; s_join_pending = false; go(ST_MENU); return true;
     }
 }
 
@@ -1070,26 +1021,30 @@ static bool poll(void) {
     while (pnet_recv(&p)) net_handle(&p);
 
     bool live = false;
-    if (s_shake > 0.4f) s_shake *= 0.86f; else s_shake = 0;
-    if (s_hitl > 0) s_hitl -= dt;
-    if (s_hitr > 0) s_hitr -= dt;
-    if (s_flash > 0) s_flash -= dt;
-    sparks_step(dt);
-    waves_step(dt);
-
-    if (s_screen == ST_HOST) {
-        if (s_now - s_last_hello > 400) { send_hello(HS_HOSTING); s_last_hello = s_now; }
-        live = true;
-    } else if (s_screen == ST_BROWSE) {
-        hosts_prune();
-        if (s_join_pending && s_now - s_join_t0 > 3000) { s_join_pending = false; s_haspeer = false; }
-        live = true;
+    if (s_screen == ST_MENU) return gui::menu_tick(s_menu, dt);      // redraw only while the cursor glides
+    if (s_screen == ST_OPT) return gui::menu_tick(s_omenu, dt);
+    if (s_screen == ST_HOST || s_screen == ST_BROWSE) {
+        if (s_screen == ST_HOST && s_now - s_last_hello > 400) { send_hello(HS_HOSTING); s_last_hello = s_now; }
+        if (s_screen == ST_BROWSE) {
+            hosts_prune();
+            if (s_join_pending && s_now - s_join_t0 > 3000) { s_join_pending = false; s_haspeer = false; }
+            if (gui::menu_tick(s_bmenu, dt)) return true;
+        }
+        if (s_now - s_frame < 150) return false;          // the waiting dots need ~7 Hz, not 60
+        s_frame = s_now; return true;
     } else if (s_screen == ST_PLAY) {
+        if (s_paused && s_mode == MODE_AI) return false;   // frozen match under a static pause card: no redraw
+        if (s_shake > 0.4f) s_shake *= 0.86f; else s_shake = 0;
+        if (s_hitl > 0) s_hitl -= dt;
+        if (s_hitr > 0) s_hitr -= dt;
+        if (s_flash > 0) s_flash -= dt;
+        sparks_step(dt);
+        waves_step(dt);
         move_local_paddle((float)dt);
         if (s_mode == MODE_GUEST) {
             if (s_now - s_last_tx > 25) send_input();
             s_netlost = (s_now - s_last_rx > 1200);
-            if (s_peerleft || s_now - s_last_rx > 3500) { s_phase = PH_OVER; go(ST_OVER); return true; }
+            if (s_peerleft || s_now - s_last_rx > 3500) { s_peerleft = true; s_phase = PH_OVER; go(ST_OVER); return true; }
             if (s_phase == PH_OVER) { go(ST_OVER); return true; }   // host won -> follow to the over screen
         } else {
             heights_step(dt);
@@ -1099,7 +1054,7 @@ static bool poll(void) {
             if (s_mode == MODE_HOST) {
                 if (s_now - s_last_tx > 25) send_state();
                 s_netlost = (s_now - s_last_rx > 1200);
-                if (s_peerleft || s_now - s_last_rx > 3500) { s_phase = PH_OVER; go(ST_OVER); return true; }
+                if (s_peerleft || s_now - s_last_rx > 3500) { s_peerleft = true; s_phase = PH_OVER; go(ST_OVER); return true; }
             }
             if (s_phase == PH_OVER) { record_match(); go(ST_OVER); return true; }
         }
@@ -1108,8 +1063,7 @@ static bool poll(void) {
         live = true;
     } else if (s_screen == ST_OVER) {
         if (s_mode == MODE_HOST && s_now - s_last_tx > 60) send_state();
-        if (s_mode == MODE_GUEST && s_phase != PH_OVER) { go(ST_PLAY); return true; }
-        live = true;
+        if (s_mode == MODE_GUEST && s_phase != PH_OVER && !s_peerleft) { go(ST_PLAY); return true; }
     }
 
     if (!live) return false;
@@ -1118,23 +1072,23 @@ static bool poll(void) {
     return true;
 }
 static void on_enter(void) {
+    game_text_open("pong");
     ensure_dirs();
     cfg_read();
     if (nucleo_audio_volume() < 40) nucleo_audio_set_volume(80);
-    presynth();
-    s_screen = ST_MENU; s_msel = 0; s_anim = 0;
+    s_screen = ST_MENU; s_menu = { 0, 0 }; s_omenu = { 0, 0 }; s_anim = 0; s_paused = false;
     s_haspeer = s_join_pending = s_netlost = s_peerleft = false;
     s_nhost = s_bsel = 0; s_txseq = s_rxseq = 0;
     s_now = s_last = s_frame = now_ms();
     s_last_hello = 0;
-    if (!pnet_start()) nucleo_app_set_hint(tx("ESP-NOW non avviato  Esc", "ESP-NOW not started  Esc"));
     nucleo_app_set_back_handler(on_back);
     nucleo_app_set_poll_handler(poll);
     nucleo_app_set_fullscreen(false);
     set_hint();
+    if (!pnet_start()) nucleo_app_set_hint(GT("ESP-NOW non avviato  Esc", "ESP-NOW not started  Esc"));
     nucleo_app_request_draw();
 }
-static void on_exit(void) { send_bye(); pnet_stop(); nucleo_audio_stop(); cfg_write(); }
+static void on_exit(void) { send_bye(); pnet_stop(); nucleo_audio_stop(); cfg_write(); game_text_close(); }
 
 static const nucleo_app_ram_t APP_RAM[] = {
     { (void **)&s_spk, sizeof(Spark) * NSPK }, { (void **)&s_wave, sizeof(Wave) * NWAVE },

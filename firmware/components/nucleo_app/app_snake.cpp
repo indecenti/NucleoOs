@@ -1,33 +1,39 @@
 // app_snake.cpp — Snake Duel: 1v1 over the network (ESP-NOW) or vs AI
 // World 80×40 cells, CELL=8px, the camera follows your own snake (like Tank Duel).
 // Host-authoritative. HUD with a minimap. NX_SOLO only: httpd is left untouched in Solo boot.
-// Power-up: SPEED, SLOW, SHORT, GHOST.
+// Power-up: SPEED, SLOW, SHORT, GHOST, SHIELD.
+//
+// Play is fullscreen (HUD 23 px + 14 rows of cells = 135 px); menus keep the footer hint. Frames land in the
+// shared 8bpp RGB332 canvas, so the colours sit on that grid. Text goes through game_text (5 languages).
+// Esc in a match pauses (vs CPU the match freezes), Esc again leaves; ENTER resumes.
 #include "app_gfx.h"
 #include "game_sfx.h"
+#include "game_text.h"
+#include "game_ui.h"
 #include "launcher_theme.h"
 #include "nucleo_app.h"
 #include "nucleo_kbd.h"
 #include "nucleo_pnet.h"
 #include "nucleo_exclusive.h"
-#include "nucleo_i18n.h"    // TR(it,en): hint bar follows the system language
 #include "esp_timer.h"
 #include <math.h>
 #include <string.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <sys/stat.h>
 
 // ─── world / camera ──────────────────────────────────────────────────────────
 #define WORLD_W   80
 #define WORLD_H   40
 #define CELL       8      // px per cell
-#define HUD_H     25
+#define HUD_H     23
 #define PLAY_Y    HUD_H
 #define VIEW_W    30      // visible cells X: 240/8=30
-#define VIEW_H    13      // visible cells Y: floor(110/8)=13
+#define VIEW_H    14      // visible cells Y: (135-23)/8=14 (fullscreen play)
 
 // Minimap in the HUD
-#define MM_X      100
-#define MM_Y        2
+#define MM_X      (W-42)
+#define MM_Y        1
 #define MM_W       40     // 1px = 2 cells X (WORLD_W/MM_W = 2)
 #define MM_H       20     // 1px = 2 cells Y (WORLD_H/MM_H = 2)
 
@@ -35,6 +41,7 @@
 #define MOVE_MS      200LL
 #define FAST_MS      110LL
 #define SLOW_MS      340LL
+#define READY_MS    1800LL   // 3-2-1 before the snakes move
 #define PU_TICKS       8
 #define HELLO_US  400000LL
 #define TX_US      40000LL
@@ -48,33 +55,44 @@
 #define NET_SEG   38
 #define MAX_HOSTS  6
 #define N_PARTS   24
+#define AI_REACH 120      // flood-fill budget (cells) when the AI checks a move for a dead end
 
 // ─── directions ───────────────────────────────────────────────────────────────
 enum { DUP=0, DRT=1, DDN=2, DLT=3 };
 static const int8_t DX[4]={0,1,0,-1}, DY[4]={-1,0,1,0};
 #define OPP(d_) ((d_)^2)
 
+// ─── colours (RGB332-safe) ───────────────────────────────────────────────────
+#define COL_P1    0x07E0              // green snake (you, or the host)
+#define COL_P1D   0x0560
+#define COL_P2    0xF81F              // magenta snake
+#define COL_P2D   0xA815
+#define COL_BGK   0x0000
+#define COL_PANEL 0x0151              // navy card (0,40,136)
+#define COL_EDGE  0x5D7F              // light blue border
+#define COL_TXT   0xFFFF
+#define COL_MUTE  0xB5B6
+#define COL_DIMC  0x6B5F              // (109,109,255)-ish dim text
+#define COL_GOLD  0xFE60
+#define COL_ROCK  0x9A86              // (152,80,48)
+#define COL_ROCKH 0xDD0C
+#define COL_WALL  0x2110              // (36,36,128)
+#define COL_WALLH 0x4A5F
+
 // ─── power-up ─────────────────────────────────────────────────────────────────
 enum { PU_NONE=0, PU_SPEED, PU_SLOW, PU_SHORT, PU_GHOST, PU_SHIELD, PU_COUNT };
-static const uint16_t PU_COL[PU_COUNT]={0, C_YELLOW, C_PURPLE, C_PINK, C_GREY, 0x07FF};
+static const uint16_t PU_COL[PU_COUNT]={0, 0xFFE0, 0xA01F, 0xFC1F, 0xBDF7, 0x07FF};
 static const char     PU_SYM[PU_COUNT]={' ','F','L','X','G','S'};
 
 // ─── states ───────────────────────────────────────────────────────────────────
 enum { ST_MENU=0, ST_HOST, ST_BROWSE, ST_PLAY, ST_OVER, ST_HELP, ST_SCORES };
 enum { MODE_AI=0, MODE_HOST=1, MODE_GUEST=2 };
 #define N_MENU 5
-static const char* MENU_ITEMS[N_MENU]={
-    "1P vs CPU",
-    "Crea Partita",
-    "Entra Partita",
-    "Classifica",
-    "Come si gioca"
-};
 
 // ─── protocol ─────────────────────────────────────────────────────────────────
 #define SN_M0 'S'
 #define SN_M1 'N'
-#define SN_VER 1
+#define SN_VER 2          // 2: rocks never block the start lanes (the map from a seed changed — v1 never pairs)
 enum { SN_HELLO=1, SN_JOIN, SN_ACCEPT, SN_STATE, SN_INPUT, SN_BYE };
 
 #pragma pack(push,1)
@@ -115,62 +133,26 @@ struct Snake {
 // ─── obstacles ───────────────────────────────────────────────────────────────
 // Heap-on-enter (was .bss ~3.1 KB): a Solo-boot game is closed during normal OS boot, so this map
 // held boot RAM for nothing. calloc in on_enter(), freed on_exit; readers skip cleanly if null.
-static uint8_t (*s_obstacles)[WORLD_W] = nullptr;  // 0=free, 1=wall
-
-// ─── trail ────────────────────────────────────────────────────────────────────
-struct Trail { int8_t x,y; int life; };
-struct SnakeTrail { Trail pts[8]; int cnt; };
-static SnakeTrail s_trail1, s_trail2;
+// Bit 0 = rock/wall; bits 6/7 are the AI's scratch marks (snake bodies / flood-fill visited).
+static uint8_t (*s_obstacles)[WORLD_W] = nullptr;
+#define OB_ROCK  0x01
+#define OB_BODY  0x40
+#define OB_SEEN  0x80
 
 // ─── particles ───────────────────────────────────────────────────────────────
 struct Part { float x,y,vx,vy; int life; uint16_t col; };
 
 // ─── SFX ──────────────────────────────────────────────────────────────────────
+// A chiptune pack rendered on the PC (tools/sfx-gen/games/snake.py -> /sd/data/snake/pack), played by
+// game_sfx: nothing is synthesized on the device; a cue without its WAV plays a short tone at SFX_HZ.
 static const int SFX_ENABLED = 1;
 enum { SX_EAT=1, SX_PU, SX_DIE, SX_WIN, SX_NAV, SX_START, SX_COUNT=SX_START };
-
-static const char* sn_sfx_name(int id) {
-    switch(id) {
-        case SX_EAT:   return "eat";
-        case SX_PU:    return "pu";
-        case SX_DIE:   return "die";
-        case SX_WIN:   return "win";
-        case SX_NAV:   return "nav";
-        case SX_START: return "start";
-        default: return "?";
-    }
-}
+static const char *const SFX_NAME[SX_COUNT+1]={"","eat","pu","die","win","nav","start"};
+static const uint16_t SFX_HZ[SX_COUNT+1]={0,880,1100,220,1047,440,880};
+static const char* sn_sfx_name(int id) { return (id>0&&id<=SX_COUNT)?SFX_NAME[id]:"?"; }
 static int sn_sfx_recipe(int id, notify_voice_t* v) {
-    switch(id) {
-        case SX_EAT:
-            notify__voice(&v[0], 880.f,  0.00f, 0.08f); v[0].amp=0.7f;
-            notify__voice(&v[1], 1320.f, 0.05f, 0.08f); v[1].amp=0.6f;
-            return 2;
-        case SX_PU:
-            notify__voice(&v[0], 660.f,  0.00f, 0.10f); v[0].amp=0.9f;
-            notify__voice(&v[1], 880.f,  0.06f, 0.10f); v[1].amp=0.9f;
-            notify__voice(&v[2], 1100.f, 0.12f, 0.12f); v[2].amp=0.9f;
-            return 3;
-        case SX_DIE:
-            notify__voice(&v[0], 330.f,  0.00f, 0.12f); v[0].amp=0.9f;
-            notify__voice(&v[1], 220.f,  0.10f, 0.14f); v[1].amp=0.9f;
-            notify__voice(&v[2], 140.f,  0.22f, 0.20f); v[2].amp=0.9f;
-            return 3;
-        case SX_WIN:
-            notify__voice(&v[0], 523.f,  0.00f, 0.12f); v[0].amp=0.8f;
-            notify__voice(&v[1], 659.f,  0.10f, 0.12f); v[1].amp=0.8f;
-            notify__voice(&v[2], 784.f,  0.20f, 0.18f); v[2].amp=0.9f;
-            notify__voice(&v[3], 1047.f, 0.32f, 0.25f); v[3].amp=1.0f;
-            return 4;
-        case SX_NAV:
-            notify__voice(&v[0], 440.f,  0.00f, 0.04f); v[0].amp=0.4f;
-            return 1;
-        case SX_START:
-            notify__voice(&v[0], 440.f,  0.00f, 0.08f); v[0].amp=0.7f;
-            notify__voice(&v[1], 880.f,  0.10f, 0.12f); v[1].amp=0.9f;
-            return 2;
-        default: return 0;
-    }
+    if(id<=0||id>SX_COUNT) return 0;
+    notify__voice(&v[0],SFX_HZ[id],0,0.1f); return 1;
 }
 static bool sn_sfx_important(int id) { return id==SX_WIN || id==SX_DIE; }
 
@@ -199,16 +181,17 @@ static int      s_pu_life;
 static int      s_pu_next;
 static uint32_t s_rng;
 static uint8_t  s_tick;
-static int64_t  s_last_us;
+static int64_t  s_last_us, s_go_us, s_pause_us;
 static int      s_winner;
-static int      s_wins1, s_wins2;
-static int      s_hisc;
+static int      s_wins1, s_wins2;       // persisted: matches won by you / by the rival
+static int      s_hisc;                 // persisted: most food in one match
 static int      s_flash;
-static int      s_menu_sel;
-static int      s_menu_top;     // windowed-list scroll top (keeps the footer clear)
 static int      s_browse_sel;
 static int      s_help_pg;
+static gui::Menu s_menu, s_bmenu;          // main menu / match list (selection + glide)
 static int      s_cam_x, s_cam_y;   // top-left of the viewport in world cells
+static bool     s_paused, s_peerleft;
+static unsigned s_anim;
 
 static uint8_t  s_peer[6];
 static int64_t  s_last_tx_us;
@@ -224,7 +207,6 @@ static HostEntry *s_hosts;               // MAX_HOSTS entries, APP_RAM (only tou
 static int       s_n_hosts;
 
 static Part *s_parts;                    // N_PARTS entries, APP_RAM
-static int  s_logo_off;
 
 // ─── RNG ──────────────────────────────────────────────────────────────────────
 static uint32_t rng_next(void) {
@@ -234,12 +216,24 @@ static int rng_range(int lo, int hi) {
     return lo+(int)(rng_next()%(uint32_t)(hi-lo+1));
 }
 
-// ─── colors ───────────────────────────────────────────────────────────────────
-static uint16_t dim565(uint16_t c, int n, int d_) {
-    int r=((c>>11)&0x1F)*n/d_;
-    int g=((c>>5)&0x3F)*n/d_;
-    int b=(c&0x1F)*n/d_;
-    return (uint16_t)((r<<11)|(g<<5)|b);
+// ─── text ───────────────────────────────────────────────────────────
+static void txt(int x,int y,int sz,uint16_t col,const char*s){ d.setTextSize(sz); d.setTextColor(col); d.setCursor(x,y); d.print(s); }
+static void txc(int cx,int y,int sz,uint16_t col,const char*s){ txt(cx-(int)strlen(s)*3*sz,y,sz,col,s); }
+static void txr(int rx,int y,int sz,uint16_t col,const char*s){ txt(rx-(int)strlen(s)*6*sz,y,sz,col,s); }
+
+// ─── persistence (wins + record survive a relaunch) ─────────────────────────
+#define STATS_PATH  "/sd/data/snake/stats.bin"
+#define STATS_MAGIC 0x534E4B31u    // 'SNK1'
+static void stats_save(void) {
+    mkdir("/sd/data",0777); mkdir("/sd/data/snake",0777);
+    FILE *f=fopen(STATS_PATH,"wb"); if(!f) return;
+    int32_t v[4]={(int32_t)STATS_MAGIC,s_wins1,s_wins2,s_hisc}; fwrite(v,sizeof v,1,f); fclose(f);
+}
+static void stats_load(void) {
+    s_wins1=s_wins2=s_hisc=0;
+    FILE *f=fopen(STATS_PATH,"rb"); if(!f) return;
+    int32_t v[4]; if(fread(v,sizeof v,1,f)==1&&(uint32_t)v[0]==STATS_MAGIC){ s_wins1=v[1]; s_wins2=v[2]; s_hisc=v[3]; }
+    fclose(f);
 }
 
 // ─── camera ───────────────────────────────────────────────────────────────────
@@ -263,14 +257,20 @@ static inline bool inv_(int8_t c, int8_t r) {
 
 // ─── snake helpers ────────────────────────────────────────────────────────────
 static void snake_init(Snake& s, int8_t hx, int8_t hy, int8_t dir, const char* nm) {
+    char keep[13]; snprintf(keep,sizeof keep,"%s",nm);   // nm may point into s.name (memset below)
     memset(&s,0,sizeof(s));
-    s.dir=s.next_dir=dir; s.alive=true; s.len=4;
-    strncpy(s.name,nm,12);
-    for(int i=0;i<4;i++){s.bx[i]=hx-DX[dir]*i; s.by[i]=hy-DY[dir]*i;}
+    s.dir=s.next_dir=dir; s.alive=true; s.len=5;
+    memcpy(s.name,keep,sizeof keep);
+    for(int i=0;i<s.len;i++){s.bx[i]=hx-DX[dir]*i; s.by[i]=hy-DY[dir]*i;}
 }
 static bool snake_has(const Snake& s, int8_t x, int8_t y, int skip=0) {
     for(int i=skip;i<s.len;i++) if(s.bx[i]==x&&s.by[i]==y) return true;
     return false;
+}
+// Grow by n: the new tail segments sit on the current tail (they unfold as the snake moves). The old code
+// only bumped len, which exposed a stale segment from an earlier, longer body for one step.
+static void snake_grow(Snake& s, int n) {
+    for(int k=0;k<n&&s.len<MAX_SEG;k++){ s.bx[s.len]=s.bx[s.len-1]; s.by[s.len]=s.by[s.len-1]; s.len++; }
 }
 
 // ─── obstacle map ─────────────────────────────────────────────────────────────
@@ -278,28 +278,20 @@ static void gen_obstacles(void) {
     if(!s_obstacles) return;
     memset(s_obstacles,0,(size_t)WORLD_H*WORLD_W);
     // Borders
-    for(int c=0;c<WORLD_W;c++) s_obstacles[0][c]=s_obstacles[WORLD_H-1][c]=1;
-    for(int r=0;r<WORLD_H;r++) s_obstacles[r][0]=s_obstacles[r][WORLD_W-1]=1;
-    // Scattered rocks: ~15 random 2×2 blocks
+    for(int c=0;c<WORLD_W;c++) s_obstacles[0][c]=s_obstacles[WORLD_H-1][c]=OB_ROCK;
+    for(int r=0;r<WORLD_H;r++) s_obstacles[r][0]=s_obstacles[r][WORLD_W-1]=OB_ROCK;
+    // Scattered rocks: ~15 random 2×2 blocks, never in the two start lanes (row WORLD_H/2 ±3 from the wall
+    // to 10 cells past each start) — a rock there killed a snake before its player could steer.
     for(int i=0;i<15;i++) {
         int x=rng_range(4,WORLD_W-5), y=rng_range(4,WORLD_H-5);
-        for(int dy=0;dy<2&&y+dy<WORLD_H;dy++)
-            for(int dx=0;dx<2&&x+dx<WORLD_W;dx++)
-                s_obstacles[y+dy][x+dx]=1;
+        bool lane=(y+1>=WORLD_H/2-3&&y<=WORLD_H/2+3)&&(x<=24||x+1>=WORLD_W-25);
+        if(lane) continue;
+        for(int dy=0;dy<2;dy++) for(int dx=0;dx<2;dx++) s_obstacles[y+dy][x+dx]=OB_ROCK;
     }
 }
 static inline bool is_obstacle(int8_t x, int8_t y) {
     if(!s_obstacles) return true;
-    return (x<0||x>=WORLD_W||y<0||y>=WORLD_H) ? true : s_obstacles[y][x];
-}
-
-// ─── trail ────────────────────────────────────────────────────────────────────
-static void trail_add(SnakeTrail& tr, int8_t x, int8_t y) {
-    if(tr.cnt<8) { tr.pts[tr.cnt].x=x; tr.pts[tr.cnt].y=y; tr.pts[tr.cnt].life=24; tr.cnt++; }
-    else { for(int i=0;i<7;i++) tr.pts[i]=tr.pts[i+1]; tr.pts[7].x=x; tr.pts[7].y=y; tr.pts[7].life=24; }
-}
-static void trail_step(SnakeTrail& tr) {
-    for(int i=0;i<tr.cnt;i++) if(tr.pts[i].life>0) tr.pts[i].life--;
+    return (x<0||x>=WORLD_W||y<0||y>=WORLD_H) ? true : (s_obstacles[y][x]&OB_ROCK);
 }
 
 // ─── particles ───────────────────────────────────────────────────────────────
@@ -318,10 +310,11 @@ static void parts_step(void) {
 }
 
 // ─── field: food / power-up ────────────────────────────────────────────────
+// A free cell: no rock (food inside a rock could never be eaten), no snake, no other item.
 static void spawn_free(int8_t& ox, int8_t& oy) {
     for(int t=0;t<600;t++) {
         int8_t cx=rng_range(1,WORLD_W-2), cy=rng_range(1,WORLD_H-2);
-        if(!snake_has(s_s1,cx,cy)&&!snake_has(s_s2,cx,cy)
+        if(!is_obstacle(cx,cy)&&!snake_has(s_s1,cx,cy)&&!snake_has(s_s2,cx,cy)
            &&!(s_pu_type&&cx==s_pu_x&&cy==s_pu_y)
            &&!(cx==s_fx&&cy==s_fy)
            &&!(cx==s_fx2&&cy==s_fy2)){ox=cx;oy=cy;return;}
@@ -358,6 +351,12 @@ static int64_t snake_interval(const Snake& s) {
 }
 
 // ─── step one snake (HOST only) ────────────────────────────────────────────
+static void eat(Snake& s, int8_t nx, int8_t ny, uint16_t col) {
+    snake_grow(s,2);
+    s.score++; if(s.score>s_hisc)s_hisc=s.score;
+    parts_spawn((float)(sx_(nx)+CELL/2), (float)(sy_(ny)+CELL/2), col, 12);
+    SFX(SX_EAT);
+}
 static bool snake_step(Snake& s, Snake& opp) {
     if(!s.alive) return false;
     // Pop one buffered turn per step so quick double-taps (e.g. up-then-left to dodge) all register.
@@ -376,27 +375,11 @@ static bool snake_step(Snake& s, Snake& opp) {
         }
         s.alive=false; return false;
     }
-    int cp=(s.len<MAX_SEG)?s.len:MAX_SEG-1;
-    memmove(&s.bx[1],&s.bx[0],cp);
-    memmove(&s.by[1],&s.by[0],cp);
-    // Trail: append the old head position
-    SnakeTrail& tr=(&s==&s_s1)?s_trail1:s_trail2;
-    trail_add(tr, s.bx[0], s.by[0]);
+    memmove(&s.bx[1],&s.bx[0],s.len-1);
+    memmove(&s.by[1],&s.by[0],s.len-1);
     s.bx[0]=nx; s.by[0]=ny;
-    // Food 1 (grows by 2)
-    if(nx==s_fx&&ny==s_fy) {
-        if(s.len<MAX_SEG-1) s.len+=2; else if(s.len<MAX_SEG) s.len++;
-        s.score++; if(s.score>s_hisc)s_hisc=s.score;
-        parts_spawn((float)(sx_(nx)+CELL/2), (float)(sy_(ny)+CELL/2), C_RED, 12);
-        spawn_food(); SFX(SX_EAT);
-    }
-    // Food 2 (grows by 2)
-    if(nx==s_fx2&&ny==s_fy2) {
-        if(s.len<MAX_SEG-1) s.len+=2; else if(s.len<MAX_SEG) s.len++;
-        s.score++; if(s.score>s_hisc)s_hisc=s.score;
-        parts_spawn((float)(sx_(nx)+CELL/2), (float)(sy_(ny)+CELL/2), 0xFD00, 12);
-        spawn_food2(); SFX(SX_EAT);
-    }
+    if(nx==s_fx&&ny==s_fy)   { eat(s,nx,ny,0xF800); spawn_food(); }
+    if(nx==s_fx2&&ny==s_fy2) { eat(s,nx,ny,COL_GOLD); spawn_food2(); }
     if(s_pu_type&&nx==s_pu_x&&ny==s_pu_y){
         parts_spawn((float)(sx_(nx)+CELL/2), (float)(sy_(ny)+CELL/2), PU_COL[s_pu_type], 16);
         apply_pu(s,opp,s_pu_type);s_pu_type=PU_NONE;
@@ -405,11 +388,37 @@ static bool snake_step(Snake& s, Snake& opp) {
 }
 
 // ─── AI ───────────────────────────────────────────────────────────────────────
+// Free cells reachable from (x,y), capped at AI_REACH: a move into a pocket smaller than the snake is a
+// slow death the old one-step lookahead walked straight into. Bodies are pre-marked OB_BODY; visited cells
+// get OB_SEEN and are cleared again from the queue itself (no extra map). Stack: 2 x AI_REACH bytes.
+static int ai_reach(int8_t x, int8_t y, bool wrap) {
+    int8_t qx[AI_REACH], qy[AI_REACH]; int n=0, h=0;
+    if(s_obstacles[y][x]&(OB_ROCK|OB_BODY)) return 0;
+    s_obstacles[y][x]|=OB_SEEN; qx[n]=x; qy[n]=y; n++;
+    while(h<n&&n<AI_REACH){
+        int8_t cx=qx[h], cy=qy[h]; h++;
+        for(int k=0;k<4&&n<AI_REACH;k++){
+            int nx=cx+DX[k], ny=cy+DY[k];
+            if(wrap){ nx=(nx+WORLD_W)%WORLD_W; ny=(ny+WORLD_H)%WORLD_H; }
+            else if(nx<0||nx>=WORLD_W||ny<0||ny>=WORLD_H) continue;
+            uint8_t &c=s_obstacles[ny][nx];
+            if(c&(OB_ROCK|OB_BODY|OB_SEEN)) continue;
+            c|=OB_SEEN; qx[n]=(int8_t)nx; qy[n]=(int8_t)ny; n++;
+        }
+    }
+    for(int i=0;i<n;i++) s_obstacles[qy[i]][qx[i]]&=(uint8_t)~OB_SEEN;
+    return n;
+}
+static void mark_bodies(uint8_t on) {
+    for(int k=0;k<2;k++){ const Snake& s=s_snk[k]; if(!s.alive) continue;
+        for(int i=0;i<s.len-1;i++){ uint8_t &c=s_obstacles[s.by[i]][s.bx[i]]; c=on?(c|OB_BODY):(c&(uint8_t)~OB_BODY); } }
+}
 static int8_t ai_choose(void) {
     const Snake& me=s_s2; const Snake& op=s_s1;
     int8_t hx=me.bx[0], hy=me.by[0];
     int best=me.dir, bsc=-99999;
     bool ghost=(me.pu==PU_GHOST);
+    mark_bodies(1);
     for(int dd=0;dd<4;dd++) {
         if(dd==OPP(me.dir)) continue;
         int8_t nx=hx+DX[dd], ny=hy+DY[dd];
@@ -419,43 +428,40 @@ static int8_t ai_choose(void) {
         for(int i=1;i<me.len-1;i++) if(me.bx[i]==nx&&me.by[i]==ny){hit=true;break;}
         if(hit) continue;
         bool opp_body=snake_has(op,nx,ny,1);
-        bool head_clash=(nx==op.bx[0]&&ny==op.by[0]);
-        // Lookahead: count free neighbours
-        int free_nb=0;
-        for(int d2=0;d2<4;d2++) {
-            int8_t nnx=nx+DX[d2], nny=ny+DY[d2];
-            if(ghost){nnx=(int8_t)((nnx+WORLD_W)%WORLD_W);nny=(int8_t)((nny+WORLD_H)%WORLD_H);}
-            else if(nnx<0||nnx>=WORLD_W||nny<0||nny>=WORLD_H) continue;
-            bool blk=false;
-            for(int i=0;i<me.len-2;i++) if(me.bx[i]==nnx&&me.by[i]==nny){blk=true;break;}
-            if(!blk&&!snake_has(op,nnx,nny)) free_nb++;
-        }
+        bool head_clash=(abs(nx-op.bx[0])+abs(ny-op.by[0])<=1);   // the cell the rival's head can reach next
+        int room=ai_reach(nx,ny,ghost);
         // Aim at whichever food is closer
         int d1=abs(nx-s_fx)+abs(ny-s_fy);
         int d2c=abs(nx-s_fx2)+abs(ny-s_fy2);
         int dist=d1<d2c?d1:d2c;
-        int sc = -dist*3 - (opp_body?50:0) - (head_clash?80:0) + free_nb*8;
+        int sc = -dist*3 - (opp_body?500:0) - (head_clash?80:0) + (room<AI_REACH?room*4-2000:0)
+               + (room<me.len+4?-3000:0);
         if(sc>bsc){bsc=sc;best=dd;}
     }
+    mark_bodies(0);
     return (int8_t)best;
 }
 
 // ─── game over ────────────────────────────────────────────────────────────────
+static void go(int st);
+static bool i_won(void){ return s_winner==((s_mode==MODE_GUEST)?2:1); }
 static void on_death(void) {
     bool d1=!s_s1.alive, d2=!s_s2.alive;
-    if(d1&&!d2)     { s_winner=2; s_wins2++; }
-    else if(d2&&!d1){ s_winner=1; s_wins1++; }
-    else            { s_winner=(s_s1.score>=s_s2.score)?1:2;
-                      if(s_winner==1)s_wins1++;else s_wins2++; }
+    if(d1&&!d2)      s_winner=2;
+    else if(d2&&!d1) s_winner=1;
+    else             s_winner=(s_s1.score>=s_s2.score)?1:2;
+    if(i_won()) s_wins1++; else s_wins2++;
     // Explosion in screen coordinates (camera already updated before game_step)
-    if(d1) parts_spawn(sx_(s_s1.bx[0])+(float)CELL/2, sy_(s_s1.by[0])+(float)CELL/2, C_GREEN, 20);
-    if(d2) parts_spawn(sx_(s_s2.bx[0])+(float)CELL/2, sy_(s_s2.by[0])+(float)CELL/2, 0xF81F, 20);
-    SFX(s_winner==1?SX_WIN:SX_DIE);
-    s_flash=10; s_st=ST_OVER;
+    if(d1) parts_spawn(sx_(s_s1.bx[0])+(float)CELL/2, sy_(s_s1.by[0])+(float)CELL/2, COL_P1, 20);
+    if(d2) parts_spawn(sx_(s_s2.bx[0])+(float)CELL/2, sy_(s_s2.by[0])+(float)CELL/2, COL_P2, 20);
+    SFX(i_won()?SX_WIN:SX_DIE);
+    stats_save();
+    s_flash=10; go(ST_OVER);
 }
 
 // ─── game logic (HOST/AI only) ────────────────────────────────────────────────
 static void game_step(int64_t now) {
+    if(now<s_go_us) return;                                   // 3-2-1: nobody moves yet
     if(s_mode==MODE_AI&&s_s2.alive) s_s2.next_dir=ai_choose();
     if(s_s1.pu&&--s_s1.pu_t<=0) s_s1.pu=PU_NONE;
     if(s_s2.pu&&--s_s2.pu_t<=0) s_s2.pu=PU_NONE;
@@ -482,10 +488,6 @@ static void game_step(int64_t now) {
                      &&s_s2.bx[0]==old_h1x&&s_s2.by[0]==old_h1y);
         if(same_cell||swap){ s_s1.alive=false; s_s2.alive=false; }
     }
-    // Update particles and trail
-    parts_step();
-    trail_step(s_trail1);
-    trail_step(s_trail2);
     s_tick++;
     if(!s_s1.alive||!s_s2.alive) on_death();
 }
@@ -499,6 +501,10 @@ static void send_hello(void) {
     strncpy(pk.name,pnet_name(),11); pk.name[11]=0;
     pk.status=(s_st==ST_PLAY)?1:0;
     pnet_send(nullptr,&pk,sizeof(pk));
+}
+static void send_bye(void) {
+    if(s_mode!=MODE_HOST&&s_mode!=MODE_GUEST) return;
+    sn_bye_t bye; fill_hdr(&bye,SN_BYE); pnet_send(s_peer,&bye,sizeof(bye));
 }
 static sn_state_t *s_stpk;                // send_state() scratch, APP_RAM (sent only from poll_fn)
 static void send_state(void) {
@@ -531,21 +537,21 @@ static void start_game(uint32_t seed) {
     gen_obstacles();
     const char* nm1=(s_mode==MODE_GUEST)?s_s1.name:pnet_name();
     const char* nm2=(s_mode==MODE_GUEST)?pnet_name():(s_mode==MODE_AI?"CPU":s_s2.name);
-    snake_init(s_s1, 12, WORLD_H/2, DRT, nm1);   s_s1.len=5;
-    snake_init(s_s2, WORLD_W-13, WORLD_H/2, DLT, nm2); s_s2.len=5;
+    snake_init(s_s1, 12, WORLD_H/2, DRT, nm1);
+    snake_init(s_s2, WORLD_W-13, WORLD_H/2, DLT, nm2);
     memset(s_parts,0,sizeof(Part)*N_PARTS);
-    memset(&s_trail1,0,sizeof(s_trail1)); memset(&s_trail2,0,sizeof(s_trail2));
     s_pu_type=PU_NONE; s_pu_next=rng_range(6,12);
-    s_winner=0; s_flash=0; s_tick=0;
-    s_cam_x=0; s_cam_y=WORLD_H/2-VIEW_H/2;
+    s_fx=s_fy=s_fx2=s_fy2=0;
+    s_winner=0; s_flash=0; s_tick=0; s_peerleft=false;
     spawn_food(); spawn_food2();
     int64_t now=esp_timer_get_time();
-    s_s1.move_next_us=now+MOVE_MS*1000LL;
-    s_s2.move_next_us=now+MOVE_MS*1000LL;
+    s_go_us=now+READY_MS*1000LL;
+    s_s1.move_next_us=s_go_us;
+    s_s2.move_next_us=s_go_us;
     s_last_rx_us=now; s_last_tx_us=now;
-    s_st=ST_PLAY;
+    go(ST_PLAY);
     cam_update();
-    nucleo_app_request_draw();
+    SFX(SX_START);
 }
 
 // ─── apply state (guest) ─────────────────────────────────────────────────────
@@ -554,25 +560,26 @@ static void apply_state(const sn_state_t* st, int plen) {
     if(n1>NET_SEG||n2>NET_SEG) return;   // wire lengths are peer-controlled; a legit host caps at NET_SEG(38<MAX_SEG). Reject before the copy loops overrun bx/by[MAX_SEG] and clobber the len field.
     int need=(int)(offsetof(sn_state_t,segs)+(n1+n2)*2);
     if(plen<need) return;
-    s_s1.len=n1; s_s1.dir=st->s1_dir; s_s1.alive=st->s1_alive;
+    s_s1.len=n1; s_s1.dir=st->s1_dir&3; s_s1.alive=st->s1_alive;
     s_s1.pu=(st->s1_pu<PU_COUNT)?st->s1_pu:0; s_s1.pu_t=st->s1_put; s_s1.score=st->s1_score;   // pu indexes PU_COL[PU_COUNT]
     for(int i=0;i<n1;i++){s_s1.bx[i]=st->segs[i*2];s_s1.by[i]=st->segs[i*2+1];}
     int off=n1*2;
-    s_s2.len=n2; s_s2.dir=st->s2_dir; s_s2.alive=st->s2_alive;
+    s_s2.len=n2; s_s2.dir=st->s2_dir&3; s_s2.alive=st->s2_alive;
     s_s2.pu=(st->s2_pu<PU_COUNT)?st->s2_pu:0; s_s2.pu_t=st->s2_put; s_s2.score=st->s2_score;
     for(int i=0;i<n2;i++){s_s2.bx[i]=st->segs[off+i*2];s_s2.by[i]=st->segs[off+i*2+1];}
     s_fx=st->fx; s_fy=st->fy; s_fx2=st->fx2; s_fy2=st->fy2;
     s_pu_type=(st->pu_type<PU_COUNT)?st->pu_type:0; s_pu_x=st->pu_x; s_pu_y=st->pu_y;   // indexes PU_COL/PU_SYM[PU_COUNT]
     if(st->phase==ST_OVER&&s_st==ST_PLAY) {
         s_winner=(st->s1_alive)?1:2;
-        if(s_winner==2)s_wins2++;else s_wins1++;
-        SFX(s_winner==2?SX_WIN:SX_DIE);
+        if(i_won()) s_wins1++; else s_wins2++;
+        stats_save();
+        SFX(i_won()?SX_WIN:SX_DIE);
         // Explosion on the guest side
         cam_update();
         Snake& dead=(s_winner==1)?s_s2:s_s1;
-        uint16_t dc=(s_winner==1)?0xF81F:C_GREEN;
+        uint16_t dc=(s_winner==1)?COL_P2:COL_P1;
         parts_spawn(sx_(dead.bx[0])+(float)CELL/2, sy_(dead.by[0])+(float)CELL/2, dc, 16);
-        s_flash=10; s_st=ST_OVER;
+        s_flash=10; go(ST_OVER);
     }
     nucleo_app_request_draw();
 }
@@ -623,7 +630,6 @@ static void net_handle(const pnet_pkt_t* pkt) {
                 const sn_accept_t* ac=(const sn_accept_t*)pkt->buf;
                 memcpy(s_peer,pkt->mac,6);
                 strncpy(s_s1.name,ac->host,12); s_s1.name[12]=0;
-                strncpy(s_s2.name,pnet_name(),12); s_s2.name[12]=0;
                 s_join_pending=false;
                 s_mode=MODE_GUEST;
                 start_game(ac->seed);
@@ -649,9 +655,9 @@ static void net_handle(const pnet_pkt_t* pkt) {
 
         case SN_BYE:
             if(memcmp(pkt->mac,s_peer,6)==0&&s_st==ST_PLAY) {
-                s_winner=(s_mode==MODE_HOST)?1:2;
-                if(s_winner==1)s_wins1++;else s_wins2++;
-                s_st=ST_OVER; nucleo_app_request_draw();
+                s_winner=(s_mode==MODE_HOST)?1:2; s_peerleft=true;
+                s_wins1++; stats_save();
+                go(ST_OVER);
             }
             break;
     }
@@ -665,15 +671,20 @@ static bool poll_fn(void) {
 
     pnet_pkt_t pkt;
     while(pnet_recv(&pkt)) net_handle(&pkt);
+    s_anim++;
 
     if(s_st==ST_HOST) {
         if(now-s_hello_us>HELLO_US){ send_hello(); s_hello_us=now; }
+        return (s_anim&3)==0;                       // ~8 Hz is plenty for the waiting dots
+    } else if(s_st==ST_MENU) {
+        return gui::menu_tick(s_menu,(int)(FRAME_US/1000));   // redraw only while the cursor glides
     } else if(s_st==ST_BROWSE) {
         for(int i=0;i<s_n_hosts;) {
             if(now-s_hosts[i].ts>4000000LL){
                 s_hosts[i]=s_hosts[--s_n_hosts]; nucleo_app_request_draw();
             } else i++;
         }
+        if(s_browse_sel>=s_n_hosts) s_browse_sel=s_n_hosts>0?s_n_hosts-1:0;
         if(s_join_pending) {
             if(now-s_join_first_us>JOIN_TIMEOUT){ s_join_pending=false; nucleo_app_request_draw(); }
             else if(now-s_join_retry_us>JOIN_RETRY) {
@@ -685,7 +696,9 @@ static bool poll_fn(void) {
                 }
             }
         }
+        return gui::menu_tick(s_bmenu,(int)(FRAME_US/1000))||(s_anim&3)==0;
     } else if(s_st==ST_PLAY) {
+        if(s_paused&&s_mode==MODE_AI) return false;   // frozen under a static pause card
         // Camera updated BEFORE game_step → explosions land at the correct position
         cam_update();
         if(s_mode==MODE_HOST||s_mode==MODE_AI) {
@@ -693,186 +706,151 @@ static bool poll_fn(void) {
             if(s_mode==MODE_HOST&&now-s_last_tx_us>TX_US){
                 s_last_tx_us=now; send_state();
             }
-            if(s_mode==MODE_HOST&&now-s_last_rx_us>RX_TIMEOUT){
-                s_winner=1; s_wins1++; s_st=ST_OVER; nucleo_app_request_draw();
+            if(s_st==ST_PLAY&&s_mode==MODE_HOST&&now-s_last_rx_us>RX_TIMEOUT){
+                s_winner=1; s_peerleft=true; s_wins1++; stats_save(); go(ST_OVER);
             }
         } else {
             if(now-s_last_tx_us>TX_US){
                 s_last_tx_us=now; send_input(s_s2.next_dir);
             }
             if(now-s_last_rx_us>RX_TIMEOUT){
-                s_winner=2; s_wins2++; s_st=ST_OVER; nucleo_app_request_draw();
+                s_winner=2; s_peerleft=true; s_wins1++; stats_save(); go(ST_OVER);
             }
         }
         parts_step();
         if(s_flash>0) s_flash--;
-    } else if(s_st==ST_OVER&&s_mode==MODE_HOST) {
-        if(now-s_last_tx_us>TX_US){ s_last_tx_us=now; send_state(); }
+        return true;
+    } else if(s_st==ST_OVER) {
+        if(s_mode==MODE_HOST&&now-s_last_tx_us>TX_US){ s_last_tx_us=now; send_state(); }
+        bool fx=s_flash>0; parts_step(); if(s_flash>0) s_flash--;
+        return fx;                                   // settle the death burst, then stay static
     }
-
-    if(s_st==ST_MENU) s_logo_off=(s_logo_off+1)%40;
-    return true;
+    return false;                                    // menus / help / scores: redraw on input only
 }
 
 // ─── HUD with minimap ────────────────────────────────────────────────────────
+static void hud_side(const Snake& s, uint16_t col, bool right) {
+    char sc[8]; snprintf(sc,sizeof sc,"%d",s.score);
+    char nm[9]; snprintf(nm,sizeof nm,"%.8s",s.name);
+    int x0=right?MM_X-4:3;                      // outer edge of this player's block
+    if(right){ txr(x0,4,2,COL_TXT,sc); int sw=(int)strlen(sc)*12; txr(x0-sw-4,3,1,col,nm); }
+    else     { txt(x0,4,2,COL_TXT,sc); int sw=(int)strlen(sc)*12; txt(x0+sw+4,3,1,col,nm); }
+    if(s.pu) {                                  // active power-up: letter chip + draining bar
+        int full=(s.pu==PU_SHIELD)?PU_TICKS*3:PU_TICKS, bw=(s.pu_t*36)/full; if(bw<0) bw=0;
+        int sw=(int)strlen(sc)*12, bx0=right?x0-sw-4-46:x0+sw+4;
+        d.fillRoundRect(bx0,12,8,8,2,PU_COL[s.pu]);
+        char sy[2]={PU_SYM[s.pu],0}; txt(bx0+1,12,1,COL_BGK,sy);
+        d.fillRect(bx0+10,15,36,3,0x2104);
+        d.fillRect(right?bx0+10+36-bw:bx0+10,15,bw,3,PU_COL[s.pu]);
+    }
+}
 static void draw_hud(void) {
-    d.fillRect(0,0,W,HUD_H,0x1082);
-    d.drawFastHLine(0,HUD_H-1,W,0x2945);
-
-    // P1 (green) — left side
-    d.setTextColor(C_GREEN); d.setTextSize(1);
-    char buf[14]; strncpy(buf,s_s1.name,8); buf[8]=0;
-    d.setCursor(3,4); d.print(buf);
-    d.setTextSize(1); snprintf(buf,sizeof buf,"%d",s_s1.score);
-    d.setCursor(3,14); d.setTextColor(0xFFFF); d.print(buf);
-    if(s_s1.pu) {
-        int bw=(s_s1.pu_t*30)/PU_TICKS;
-        d.fillRect(3,HUD_H-3,bw,2,PU_COL[s_s1.pu]);
-    }
-
-    // P2 (magenta) — right side
-    d.setTextColor(0xF81F); d.setTextSize(1);
-    strncpy(buf,s_s2.name,8); buf[8]=0;
-    int nw=(int)strlen(buf)*6;
-    d.setCursor(W-MM_W-6-nw,4); d.print(buf);
-    snprintf(buf,sizeof buf,"%d",s_s2.score);
-    int sw=(int)strlen(buf)*6;
-    d.setCursor(W-MM_W-6-sw,14); d.setTextColor(0xFFFF); d.print(buf);
-    if(s_s2.pu) {
-        int bw=(s_s2.pu_t*30)/PU_TICKS;
-        d.fillRect(W-MM_W-6-bw,HUD_H-3,bw,2,PU_COL[s_s2.pu]);
-    }
-
-    // Minimap — center right
-    d.fillRect(W-MM_W-2, MM_Y, MM_W, MM_H, 0x0821);
-    d.drawRect(W-MM_W-2, MM_Y, MM_W, MM_H, 0x4228);
-    int mx=W-MM_W-2;
-    // Viewport rect on the map
-    int vrx=mx+s_cam_x/2, vry=MM_Y+s_cam_y/2;
-    d.drawRect(vrx, vry, VIEW_W/2, VIEW_H/2, 0x52AA);
-    // Food
-    d.drawPixel(mx+s_fx/2,  MM_Y+s_fy/2,  C_RED);
-    d.drawPixel(mx+s_fx2/2, MM_Y+s_fy2/2, 0xFD00);
-    // PU
+    d.fillRect(0,0,W,HUD_H,COL_BGK);
+    d.drawFastHLine(0,HUD_H-1,W,COL_EDGE);
+    hud_side(s_s1,COL_P1,false);
+    hud_side(s_s2,COL_P2,true);
+    // Minimap
+    int mx=MM_X;
+    d.fillRect(mx, MM_Y, MM_W, MM_H, COL_PANEL);
+    d.drawRect(mx-1, MM_Y-1, MM_W+2, MM_H+2, COL_EDGE);
+    d.drawRect(mx+s_cam_x/2, MM_Y+s_cam_y/2, VIEW_W/2, VIEW_H/2, 0x6B6D);   // viewport
+    d.drawPixel(mx+s_fx/2,  MM_Y+s_fy/2,  0xF800);
+    d.drawPixel(mx+s_fx2/2, MM_Y+s_fy2/2, COL_GOLD);
     if(s_pu_type) d.drawPixel(mx+s_pu_x/2, MM_Y+s_pu_y/2, PU_COL[s_pu_type]);
-    // Snake bodies (every 3rd segment)
-    for(int i=2;i<s_s1.len;i+=3) d.drawPixel(mx+s_s1.bx[i]/2, MM_Y+s_s1.by[i]/2, dim565(C_GREEN,5,8));
-    for(int i=2;i<s_s2.len;i+=3) d.drawPixel(mx+s_s2.bx[i]/2, MM_Y+s_s2.by[i]/2, dim565(0xF81F,5,8));
-    // Heads
-    d.fillRect(mx+s_s1.bx[0]/2, MM_Y+s_s1.by[0]/2, 2, 2, C_GREEN);
-    d.fillRect(mx+s_s2.bx[0]/2, MM_Y+s_s2.by[0]/2, 2, 2, 0xF81F);
+    for(int i=2;i<s_s1.len;i+=3) d.drawPixel(mx+s_s1.bx[i]/2, MM_Y+s_s1.by[i]/2, COL_P1D);
+    for(int i=2;i<s_s2.len;i+=3) d.drawPixel(mx+s_s2.bx[i]/2, MM_Y+s_s2.by[i]/2, COL_P2D);
+    d.fillRect(mx+s_s1.bx[0]/2, MM_Y+s_s1.by[0]/2, 2, 2, COL_P1);
+    d.fillRect(mx+s_s2.bx[0]/2, MM_Y+s_s2.by[0]/2, 2, 2, COL_P2);
 }
 
 // ─── draw snake with camera ──────────────────────────────────────────────────
-static void draw_snake(const Snake& s, uint16_t col) {
-    for(int i=s.len-1;i>=0;i--) {
+// A continuous body: each segment fills the union of its cell and the next one toward the head (inset 1 px,
+// the last two taper to 2 px), in two alternating shades; the head is a rounded block with eyes + tongue.
+static void draw_snake(const Snake& s, uint16_t col, uint16_t dark) {
+    bool ghost=(s.pu==PU_GHOST);
+    for(int i=s.len-1;i>=1;i--) {
         int8_t cx=s.bx[i], cy=s.by[i];
         if(!inv_(cx,cy)) continue;
-        int bright=8-(i*5/s.len); if(bright<2)bright=2;
-        uint16_t sc=(i==0)?col:dim565(col,bright,8);
+        int in=(i>=s.len-2)?2:1;
+        uint16_t c=((i>>1)&1)?dark:col;
+        if(ghost&&(i&1)) continue;                       // see-through while ghosting
         int px=sx_(cx), py=sy_(cy);
-        if(i==0) {
-            // Active power-up aura around the head (visual feedback).
-            int hcx=px+CELL/2, hcy=py+CELL/2;
-            if(s.pu==PU_SHIELD){ d.drawCircle(hcx,hcy,CELL/2+2,0x07FF); d.drawCircle(hcx,hcy,CELL/2+1,dim565((uint16_t)0x07FF,1,2)); }
-            else if(s.pu==PU_GHOST){ d.drawRoundRect(px-2,py-2,CELL+4,CELL+4,3,dim565((uint16_t)0xC618,1,2)); }
-            else if(s.pu==PU_SPEED){ d.drawFastHLine(px-3,hcy,2,C_YELLOW); d.drawFastHLine(px+CELL+1,hcy,2,C_YELLOW); }
-            // Head with eyes
-            d.fillRoundRect(px,py,CELL,CELL,2,sc);
-            d.drawRoundRect(px,py,CELL,CELL,2,dim565(sc,14,8));
-            // Eyes based on direction
-            if(s.dir==DRT){ d.fillRect(px+5,py+1,2,2,0); d.fillRect(px+5,py+5,2,2,0); }
-            else if(s.dir==DLT){ d.fillRect(px+1,py+1,2,2,0); d.fillRect(px+1,py+5,2,2,0); }
-            else if(s.dir==DUP){ d.fillRect(px+2,py+1,2,2,0); d.fillRect(px+4,py+1,2,2,0); }
-            else              { d.fillRect(px+2,py+5,2,2,0); d.fillRect(px+4,py+5,2,2,0); }
-        } else {
-            int inset=(i==1)?1:2;
-            d.fillRect(px+inset,py+inset,CELL-inset*2,CELL-inset*2,sc);
-        }
+        int dx=s.bx[i-1]-cx, dy=s.by[i-1]-cy;
+        int x0=px+in, y0=py+in, x1=px+CELL-in, y1=py+CELL-in;
+        if(abs(dx)+abs(dy)==1){ if(dx>0)x1+=CELL; if(dx<0)x0-=CELL; if(dy>0)y1+=CELL; if(dy<0)y0-=CELL; }
+        if(y0<PLAY_Y) y0=PLAY_Y;
+        d.fillRect(x0,y0,x1-x0,y1-y0,c);
+        if(!(i&1)) d.fillRect(px+3,py+3,2,2,col|0x8410);                 // scales (a lighter tint of the body)
     }
-}
-
-// ─── visible world borders ───────────────────────────────────────────────────
-static void draw_borders(void) {
-    uint16_t wc=0x528A; // dark blue-grey for wall
-    if(s_cam_x==0)            d.fillRect(0,PLAY_Y,2,H-PLAY_Y,wc);
-    if(s_cam_x+VIEW_W>=WORLD_W) d.fillRect(W-2,PLAY_Y,2,H-PLAY_Y,wc);
-    if(s_cam_y==0)            d.fillRect(0,PLAY_Y,W,2,wc);
-    if(s_cam_y+VIEW_H>=WORLD_H) {
-        int yw=PLAY_Y+(WORLD_H-s_cam_y)*CELL;
-        if(yw<H) d.fillRect(0,yw,W,H-yw,wc);
+    if(!inv_(s.bx[0],s.by[0])) return;
+    int px=sx_(s.bx[0]), py=sy_(s.by[0]);
+    int hcx=px+CELL/2, hcy=py+CELL/2;
+    // Active power-up aura around the head (visual feedback).
+    if(s.pu==PU_SHIELD){ d.drawCircle(hcx,hcy,CELL/2+3,0x07FF); d.drawCircle(hcx,hcy,CELL/2+2,0x0410); }
+    else if(s.pu==PU_SPEED){ d.drawFastHLine(px-4,hcy-2,3,0xFFE0); d.drawFastHLine(px-5,hcy+1,3,0xFFE0); d.drawFastHLine(px+CELL+1,hcy-2,3,0xFFE0); }
+    d.fillRoundRect(px-1,py-1,CELL+2,CELL+2,3,col);
+    d.drawRoundRect(px-1,py-1,CELL+2,CELL+2,3,dark);
+    // eyes (white, black pupil looking ahead) on the leading side
+    int fx=DX[s.dir], fy=DY[s.dir];
+    int ex1,ey1,ex2,ey2;
+    if(fx){ ex1=ex2=hcx+fx*2-1; ey1=py+1; ey2=py+5; } else { ey1=ey2=hcy+fy*2-1; ex1=px+1; ex2=px+5; }
+    d.fillRect(ex1,ey1,2,2,COL_TXT); d.fillRect(ex2,ey2,2,2,COL_TXT);
+    d.drawPixel(ex1+(fx>0),ey1+(fy>0),COL_BGK); d.drawPixel(ex2+(fx>0),ey2+(fy>0),COL_BGK);
+    if((s_anim>>2)&1){                                    // flicking tongue
+        int tx=hcx+fx*(CELL/2+1), ty=hcy+fy*(CELL/2+1);
+        if(fx) d.drawFastHLine(fx>0?tx:tx-2,hcy,3,0xF800); else d.drawFastVLine(hcx,fy>0?ty:ty-2,3,0xF800);
     }
 }
 
 // ─── draw field ───────────────────────────────────────────────────────────────
 static void draw_play(void) {
-    // Simple background
-    d.fillRect(0,PLAY_Y,W,H-PLAY_Y,0x0821);
-
-    // Obstacles (minimal)
+    // floor: black with a navy dot on every cell corner, so speed and position read at a glance
+    d.fillRect(0,PLAY_Y,W,H-PLAY_Y,COL_BGK);
+    for(int gx_=0;gx_<VIEW_W;gx_++) for(int gy_=0;gy_<VIEW_H;gy_++) d.drawPixel(gx_*CELL,PLAY_Y+gy_*CELL,0x0010);
+    // rocks (round boulders) and the border wall (bricks)
     for(int gx_=s_cam_x;gx_<s_cam_x+VIEW_W&&gx_<WORLD_W;gx_++) {
         for(int gy_=s_cam_y;gy_<s_cam_y+VIEW_H&&gy_<WORLD_H;gy_++) {
-            if(!s_obstacles||gx_<0||gx_>=WORLD_W||gy_<0||gy_>=WORLD_H||!s_obstacles[gy_][gx_]) continue;
+            if(!s_obstacles||!(s_obstacles[gy_][gx_]&OB_ROCK)) continue;
             int sx=sx_((int8_t)gx_), sy=sy_((int8_t)gy_);
-            d.fillRect(sx+1,sy+1,CELL-2,CELL-2,0x6A48);
+            if(gx_==0||gy_==0||gx_==WORLD_W-1||gy_==WORLD_H-1){
+                d.fillRect(sx,sy,CELL,CELL,COL_WALL);
+                d.drawFastHLine(sx,sy+3,CELL,COL_WALLH); d.drawFastHLine(sx,sy+7,CELL,COL_WALLH);
+                d.drawFastVLine(sx+((gy_&1)?2:6),sy,3,COL_WALLH); d.drawFastVLine(sx+((gy_&1)?6:2),sy+4,3,COL_WALLH);
+            } else {
+                d.fillRoundRect(sx,sy,CELL,CELL,3,COL_ROCK);
+                d.drawFastHLine(sx+2,sy+1,3,COL_ROCKH); d.drawPixel(sx+1,sy+2,COL_ROCKH);
+                d.drawFastHLine(sx+2,sy+CELL-1,CELL-4,0x4100);
+            }
         }
     }
-
-    draw_borders();
-
-    // Food 1 — pulsing red + glow
+    int pulse=(s_anim>>3)&1;
+    // Food 1 — an apple: red body, white glint, green leaf
     if(inv_(s_fx,s_fy)) {
-        int fpx=sx_(s_fx)+CELL/2, fpy=sy_(s_fy)+CELL/2;
-        int frad=(s_tick&8)?3:4;
-        int glow=((s_tick>>1)&3);
-        d.drawCircle(fpx,fpy,frad+3+glow,dim565(C_RED,2,8));
-        d.drawCircle(fpx,fpy,frad+2,dim565(C_RED,4,8));
-        d.fillCircle(fpx,fpy,frad,C_RED);
+        int cx=sx_(s_fx)+CELL/2, cy=sy_(s_fy)+CELL/2;
+        if(pulse) d.drawCircle(cx,cy,6,0x6000);
+        d.fillCircle(cx,cy+1,3,0xF800);
+        d.drawPixel(cx-1,cy,COL_TXT);
+        d.drawFastHLine(cx,cy-3,3,0x07E0); d.drawPixel(cx,cy-2,0x8200);
     }
-    // Food 2 — orange + glow
+    // Food 2 — a golden coin with a rim
     if(inv_(s_fx2,s_fy2)) {
-        uint16_t oc=0xFD00;
-        int fpx=sx_(s_fx2)+CELL/2, fpy=sy_(s_fy2)+CELL/2;
-        int frad=(s_tick&8)?4:3;
-        int glow=((s_tick>>1)&3);
-        d.drawCircle(fpx,fpy,frad+3+glow,dim565(oc,2,8));
-        d.drawCircle(fpx,fpy,frad+2,dim565(oc,4,8));
-        d.fillCircle(fpx,fpy,frad,oc);
+        int cx=sx_(s_fx2)+CELL/2, cy=sy_(s_fy2)+CELL/2;
+        if(!pulse) d.drawCircle(cx,cy,6,0x6300);
+        d.fillCircle(cx,cy,4,0xFC00);
+        d.fillCircle(cx,cy,3,COL_GOLD);
+        d.drawFastVLine(cx,cy-2,4,0xFFF0);
     }
-
-    // Power-up on the field with an aura
+    // Power-up on the field: a lettered chip with a blinking ring
     if(s_pu_type&&inv_(s_pu_x,s_pu_y)) {
-        int ppx=sx_(s_pu_x)+CELL/2, ppy=sy_(s_pu_y)+CELL/2;
+        int cx=sx_(s_pu_x)+CELL/2, cy=sy_(s_pu_y)+CELL/2;
         uint16_t pc=PU_COL[s_pu_type];
-        int pr=(s_tick&8)?3:4;
-        int aura=((s_tick>>1)&2);
-        d.drawCircle(ppx,ppy,pr+2+aura,dim565(pc,3,8));
-        d.fillCircle(ppx,ppy,pr,pc);
-        // Symbol above the orb
-        d.setTextColor(0xFFFF); d.setTextSize(1);
-        char sym[2]={PU_SYM[s_pu_type],0};
-        d.setCursor(ppx-3, ppy-CELL-1); d.print(sym);
+        if(pulse||s_pu_life>5) d.drawRoundRect(cx-7,cy-7,14,14,4,pc);
+        d.fillRoundRect(cx-5,cy-5,11,11,3,pc);
+        char sym[2]={PU_SYM[s_pu_type],0}; txt(cx-2,cy-3,1,COL_BGK,sym);
     }
-
-    // Trail behind the snakes
-    for(int i=0;i<s_trail1.cnt;i++) {
-        if(!s_trail1.pts[i].life) continue;
-        int tx=sx_(s_trail1.pts[i].x), ty=sy_(s_trail1.pts[i].y);
-        int alpha=s_trail1.pts[i].life*255/24;
-        uint16_t tc=dim565(C_GREEN,alpha,255);
-        d.fillRect(tx+2,ty+2,CELL-4,CELL-4,tc);
-    }
-    for(int i=0;i<s_trail2.cnt;i++) {
-        if(!s_trail2.pts[i].life) continue;
-        int tx=sx_(s_trail2.pts[i].x), ty=sy_(s_trail2.pts[i].y);
-        int alpha=s_trail2.pts[i].life*255/24;
-        uint16_t tc=dim565(0xF81F,alpha,255);
-        d.fillRect(tx+2,ty+2,CELL-4,CELL-4,tc);
-    }
-
     // Snakes: opponent below, own above
-    if(s_mode==MODE_GUEST){ draw_snake(s_s1,C_GREEN);  draw_snake(s_s2,0xF81F); }
-    else                  { draw_snake(s_s2,0xF81F);   draw_snake(s_s1,C_GREEN); }
+    if(s_mode==MODE_GUEST){ draw_snake(s_s1,COL_P1,COL_P1D);  draw_snake(s_s2,COL_P2,COL_P2D); }
+    else                  { draw_snake(s_s2,COL_P2,COL_P2D);  draw_snake(s_s1,COL_P1,COL_P1D); }
 
     // Explosion particles
     for(int i=0;i<N_PARTS;i++)
@@ -880,172 +858,129 @@ static void draw_play(void) {
 
     // Screen-edge flash on death
     if(s_flash>0) {
-        uint16_t fc=(s_winner==1)?C_GREEN:0xF81F;
+        uint16_t fc=(s_winner==1)?COL_P1:COL_P2;
         for(int t=0;t<(s_flash>5?2:1);t++)
             d.drawRect(t,PLAY_Y+t,W-2*t,H-PLAY_Y-2*t,fc);
     }
-
     draw_hud();
+
+    if(s_st!=ST_PLAY) return;
+    int64_t now=esp_timer_get_time();
+    if(s_paused) {
+        for(int y=PLAY_Y+1;y<H;y+=2) d.drawFastHLine(0,y,W,COL_BGK);
+        gui::dialog(GT("PAUSA","PAUSED"),s_mode==MODE_AI?nullptr:GT("La partita continua!","The match goes on!"),nullptr,
+                    GT("INVIO riprendi   Esc esci","ENTER resume   Esc leave"),COL_P1);
+    } else if(now<s_go_us) {                              // 3-2-1 over the field
+        char n[2]={(char)('1'+(int)((s_go_us-now)/(READY_MS*1000LL/3))),0};
+        d.fillRoundRect(W/2-22,PLAY_Y+30,44,44,8,COL_PANEL);
+        d.drawRoundRect(W/2-22,PLAY_Y+30,44,44,8,COL_EDGE);
+        txc(W/2,PLAY_Y+38,4,COL_GOLD,n);
+        txc(W/2,PLAY_Y+80,1,COL_TXT,GT("Pronti...","Get ready..."));
+    }
 }
 
-// ─── menu screens ────────────────────────────────────────────────────────────
-static void draw_menu(void) {
-    d.fillScreen(BG);
-
-    // Header band: a soft dark-green gradient with the wordmark + a bright accent baseline.
-    for(int y=0;y<22;y++) d.drawFastHLine(0,y,W, dim565(C_GREEN, 22-y, 64));
-    d.drawFastHLine(0,21,W, dim565(C_GREEN,1,2));
-    d.drawFastHLine(0,22,W, dim565(C_GREEN,1,4));
-    d.setTextSize(2);
-    d.setTextColor(dim565(C_GREEN,1,3)); d.setCursor(21,4); d.print("SNAKE");   // drop shadow
-    d.setTextColor(C_GREEN);             d.setCursor(20,3); d.print("SNAKE");
-    d.setTextColor(0xF81F);              d.setCursor(92,3); d.print("DUEL");
-
-    // Windowed list — scrolls so the selection is always visible and the footer stays clear.
-    const int ITEM_H=18, TOP=28, VIS=5, FY=H-13;
-    int maxtop = N_MENU>VIS ? N_MENU-VIS : 0;
-    if(s_menu_sel < s_menu_top) s_menu_top=s_menu_sel;
-    if(s_menu_sel >= s_menu_top+VIS) s_menu_top=s_menu_sel-VIS+1;
-    if(s_menu_top>maxtop) s_menu_top=maxtop;
-    if(s_menu_top<0) s_menu_top=0;
-    int shown = (N_MENU-s_menu_top<VIS) ? N_MENU-s_menu_top : VIS;
-
-    for(int k=0;k<shown;k++){
-        int i=s_menu_top+k, py=TOP+k*ITEM_H;
-        bool sel=(i==s_menu_sel);
-        if(sel){
-            d.fillRoundRect(4,py-1,W-8,ITEM_H-2,4, dim565(C_GREEN,1,6));
-            d.drawRoundRect(4,py-1,W-8,ITEM_H-2,4, C_GREEN);
-            d.fillRect(4,py,3,ITEM_H-3, C_GREEN);                    // left accent bar
-            d.setTextColor(FG);
-        } else d.setTextColor(MUTED);
-        d.setTextSize(2);
-        d.setCursor(15,py+1); d.print(MENU_ITEMS[i]);
+/// ─── menu screens ────────────────────────────────────────────────────────────
+// Titles, lists and the pause / result cards come from the console kit (game_ui.h), like every other game.
+static void wait_dots(int cy,uint16_t col) {
+    for(int i=0;i<3;i++) d.fillCircle(W/2-12+i*12,cy,2,(esp_timer_get_time()/300000)%3==i?col:0x2104);
+}
+static const char *menu_label(int i) {
+    switch(i){
+        case 0: return GT("Gioca vs CPU","Play vs CPU");
+        case 1: return GT("Crea partita","Host a match");
+        case 2: return GT("Entra in partita","Join a match");
+        case 3: return GT("Record","Scores");
+        default: return GT("Come si gioca","How to play");
     }
-    // Scroll chevrons when the list overflows the window.
-    int mid=W/2;
-    if(s_menu_top>0)          d.fillTriangle(mid-4,TOP-3, mid+4,TOP-3, mid,TOP-7, C_GREEN);
-    if(s_menu_top+VIS<N_MENU){ int yb=TOP+VIS*ITEM_H-2; d.fillTriangle(mid-4,yb, mid+4,yb, mid,yb+4, C_GREEN); }
-
-    // Footer stats.
-    d.drawFastHLine(0,FY-3,W,LINE);
-    d.setTextColor(DIM); d.setTextSize(1);
-    char buf[44];
-    snprintf(buf,sizeof buf,"Vinte %d-%d   Record %d   Ch.%d",s_wins1,s_wins2,s_hisc,pnet_channel());
-    d.setCursor(4,FY); d.print(buf);
+}
+// a little snake curling beside the title
+static void menu_snake(int x,int y,uint16_t col,uint16_t dark,int dir) {
+    for(int i=0;i<6;i++) d.fillRect(x+i*5*dir,y+(i>2?0:4),5,5,(i>>1)&1?dark:col);
+    int hx=dir>0?x+30:x-32;
+    d.fillRoundRect(hx,y-1,7,7,2,col); d.fillRect(hx+(dir>0?4:1),y+1,2,2,COL_TXT);
+}
+static void draw_menu(void) {
+    const char *items[N_MENU]; for(int i=0;i<N_MENU;i++) items[i]=menu_label(i);
+    int y=gui::title("Snake Duel",nullptr,COL_P1);
+    menu_snake(6,10,COL_P1,COL_P1D,1);
+    menu_snake(W-12,10,COL_P2,COL_P2D,-1);
+    gui::menu(s_menu,items,N_MENU,y,nucleo_app_content_height(),COL_P1);
 }
 
 static void draw_host(void) {
-    d.fillScreen(BG);
-    d.setTextColor(C_GREEN); d.setTextSize(2);
-    d.setCursor(6,8); d.print("Crea Partita");
-    d.drawFastHLine(0,28,W,LINE);
-    d.setTextColor(FG); d.setTextSize(1);
-    d.setCursor(6,38); d.print("In attesa avversario...");
-    static int dot_t;
-    for(int i=0;i<(dot_t/10)%4;i++){d.setCursor(6+i*8,54);d.print(".");}
-    dot_t++;
-    d.setTextColor(MUTED);
-    char buf[32];
-    d.setCursor(6,70); snprintf(buf,sizeof buf,"Dispositivo: %s",pnet_name()); d.print(buf);
-    d.setCursor(6,82); snprintf(buf,sizeof buf,"Canale: %d",pnet_channel()); d.print(buf);
-    d.setTextColor(DIM); d.setCursor(6,H-12); d.print("ESC = indietro");
+    char sub[32]; snprintf(sub,sizeof sub,GT("%.12s - canale %d","%.12s - channel %d"),pnet_name(),pnet_channel());
+    int y=gui::title(GT("Crea partita","Host a match"),sub,COL_P1);
+    gui::text(GT("Attendo sfidante","Waiting for rival"),W/2,y+4,1,gui::F_BODY,COL_TXT,COL_BGK);
+    wait_dots(y+34,COL_P1);
+    gui::text(GT("Sull'altro: Snake > Entra","Other device: Snake > Join"),W/2,y+44,1,gui::F_SMALL,COL_DIMC,COL_BGK);
 }
 
 static void draw_browse(void) {
-    d.fillScreen(BG);
-    d.setTextColor(0xF81F); d.setTextSize(2);
-    d.setCursor(6,8); d.print("Entra Partita");
-    d.drawFastHLine(0,28,W,LINE);
-    if(s_n_hosts==0) {
-        d.setTextColor(MUTED); d.setTextSize(1);
-        d.setCursor(6,42); d.print("Cerco partite...");
-        static int dt2;
-        for(int i=0;i<(dt2/10)%4;i++){d.setCursor(100+i*8,42);d.print(".");}
-        dt2++;
-    } else {
-        for(int i=0;i<s_n_hosts;i++) {
-            int py=36+i*18;
-            bool sel=(i==s_browse_sel);
-            if(sel){d.fillRoundRect(2,py-2,W-4,16,2,0x2104);d.setTextColor(FG);}
-            else   {d.setTextColor(MUTED);}
-            d.setTextSize(1);
-            if(sel){d.setCursor(4,py);d.print(">");}
-            d.setCursor(14,py); d.print(s_hosts[i].name);
-        }
-        if(s_join_pending){
-            d.setTextColor(C_YELLOW); d.setTextSize(1);
-            d.setCursor(6,H-22); d.print("Connessione in corso...");
-        }
+    int y=gui::title(GT("Entra in partita","Join a match"),nullptr,COL_P2);
+    if(s_join_pending){
+        char nm[16]; snprintf(nm,sizeof nm,"%.12s",s_browse_sel<s_n_hosts?s_hosts[s_browse_sel].name:"?");
+        gui::text(GT("Mi collego a","Connecting to"),W/2,y+2,1,gui::F_SMALL,COL_DIMC,COL_BGK);
+        gui::text(nm,W/2,y+20,1,gui::F_BODY,COL_GOLD,COL_BGK);
+        wait_dots(y+50,COL_P2);
+        return;
     }
-    d.setTextColor(DIM); d.setTextSize(1);
-    d.setCursor(6,H-12); d.print("INVIO=entra  ESC=indietro");
+    if(s_n_hosts==0) {
+        gui::text(GT("Cerco partite...","Looking for matches..."),W/2,y+4,1,gui::F_SMALL,COL_TXT,COL_BGK);
+        wait_dots(y+30,COL_P2);
+        gui::text(GT("Sull'altro: Snake > Crea","Other device: Snake > Host"),W/2,y+44,1,gui::F_SMALL,COL_DIMC,COL_BGK);
+        return;
+    }
+    const char *items[MAX_HOSTS]; for(int i=0;i<s_n_hosts;i++) items[i]=s_hosts[i].name;
+    s_bmenu.sel=(int8_t)s_browse_sel;
+    gui::menu(s_bmenu,items,s_n_hosts,y,nucleo_app_content_height(),COL_P2);
 }
 
 static void draw_over(void) {
+    d.setClipRect(0,0,W,H-HINT);                          // the field behind the card stays above the footer
     draw_play();
-    for(int y=PLAY_Y+20;y<H-10;y+=2) d.drawFastHLine(8,y,W-16,0x0000);
-    d.fillRoundRect(8,PLAY_Y+18,W-16,H-PLAY_Y-28,4,0x1082);
-    d.drawRoundRect(8,PLAY_Y+18,W-16,H-PLAY_Y-28,4,LINE);
-    const char* wname=(s_winner==1)?s_s1.name:s_s2.name;
-    uint16_t wcol=(s_winner==1)?C_GREEN:0xF81F;
-    d.setTextColor(wcol); d.setTextSize(2);
-    char buf[32];
-    char wn[7]; strncpy(wn,wname,6); wn[6]=0;
-    snprintf(buf,sizeof buf,"%s VINCE",wn);
-    int tw=(int)strlen(buf)*12;
-    d.setCursor((W-tw)/2,PLAY_Y+28); d.print(buf);
-    d.setTextColor(FG); d.setTextSize(1);
-    snprintf(buf,sizeof buf,"%s %d   %s %d",s_s1.name,s_s1.score,s_s2.name,s_s2.score);
-    buf[30]=0;
-    d.setCursor(14,PLAY_Y+52); d.print(buf);
-    d.setTextColor(DIM); d.setCursor(14,PLAY_Y+66);
-    d.print("INVIO=rivincita  ESC=menu");
+    for(int y=PLAY_Y;y<H-HINT;y+=2) d.drawFastHLine(0,y,W,COL_BGK);
+    d.clearClipRect();
+    bool won=i_won();
+    const char* t=s_peerleft?GT("Fine partita","Match over"):won?GT("Hai vinto!","You win!"):
+                  s_mode==MODE_AI?GT("Vince la CPU","CPU wins"):GT("Hai perso","You lose");
+    char sc[40]; snprintf(sc,sizeof sc,"%.8s  %d - %d  %.8s",s_s1.name,s_s1.score,s_s2.score,s_s2.name);
+    char r[40]; if(s_peerleft) snprintf(r,sizeof r,"%s",GT("Avversario disconnesso","Opponent disconnected"));
+                else snprintf(r,sizeof r,GT("Record cibo: %d","Food record: %d"),s_hisc);
+    gui::dialog(t,sc,r,nullptr,s_peerleft?COL_MUTE:won?COL_GOLD:0xF8A2);
 }
 
+static void help_row(int y,char sym,uint16_t col,const char *t) {
+    d.fillRoundRect(8,y-1,10,10,3,col); char s[2]={sym,0}; txt(10,y,1,COL_BGK,s);
+    txt(24,y,1,COL_TXT,t);
+}
 static void draw_help(void) {
-    d.fillScreen(BG);
-    d.setTextColor(C_YELLOW); d.setTextSize(1);
+    int y=gui::title(s_help_pg==0?GT("Come si gioca","How to play"):GT("POWER-UP","POWER-UPS"),nullptr,0xFFE0);
     if(s_help_pg==0) {
-        d.setCursor(4,4); d.print("[ CONTROLLI ]");
-        d.setTextColor(FG);
-        d.setCursor(4,18); d.print("W/A/S/D o Frecce = direz.");
-        d.setCursor(4,30); d.print("ESC              = esci");
-        d.setCursor(4,48); d.print("Mondo grande: camera segue");
-        d.setCursor(4,58); d.print("il tuo serpente.");
-        d.setTextColor(DIM); d.setCursor(4,74);
-        d.print("La minimappa in alto destra");
-        d.setCursor(4,84); d.print("mostra l'intero campo.");
+        txt(6,y,1,COL_TXT,GT("Frecce o W/A/S/D: gira","Arrows or W/A/S/D: turn"));
+        txt(6,y+11,1,COL_TXT,GT("Mangia per crescere e fare punti","Eat to grow and score"));
+        txt(6,y+22,1,COL_TXT,GT("Muri, rocce e corpi uccidono","Walls, rocks and bodies kill"));
+        txt(6,y+33,1,COL_TXT,GT("Vince chi resta vivo","Last snake alive wins"));
+        txt(6,y+50,1,COL_GOLD,GT("TAB: power-up","TAB: power-ups"));
     } else {
-        d.setCursor(4,4); d.print("[ POWER-UP ]");
-        d.setTextColor(C_YELLOW);  d.setCursor(4,18); d.print("F = FAST   ");
-        d.setTextColor(FG);        d.print("vai piu veloce");
-        d.setTextColor(C_PURPLE);  d.setCursor(4,30); d.print("L = LENTO  ");
-        d.setTextColor(FG);        d.print("avversario rallenta");
-        d.setTextColor(C_PINK);    d.setCursor(4,42); d.print("X = TAGLIA ");
-        d.setTextColor(FG);        d.print("perdi 6 segmenti");
-        d.setTextColor(C_GREY);    d.setCursor(4,54); d.print("G = GHOST  ");
-        d.setTextColor(FG);        d.print("attraversi i muri");
-        d.setTextColor(0x07FF);    d.setCursor(4,66); d.print("S = SCUDO  ");
-        d.setTextColor(FG);        d.print("salva da 1 schianto");
+        help_row(y+1,'F',PU_COL[PU_SPEED], GT("veloce per un po'","faster for a while"));
+        help_row(y+14,'L',PU_COL[PU_SLOW],  GT("rallenta l'avversario","slows your rival"));
+        help_row(y+27,'X',PU_COL[PU_SHORT], GT("perdi 6 segmenti","drop 6 segments"));
+        help_row(y+40,'G',PU_COL[PU_GHOST], GT("attraversi i muri","pass through walls"));
+        help_row(y+53,'S',PU_COL[PU_SHIELD],GT("salva da 1 schianto","survive one crash"));
+        txt(6,y+70,1,COL_GOLD,GT("TAB: regole","TAB: rules"));
     }
-    d.setTextColor(DIM); d.setCursor(4,H-12);
-    d.print("TAB=pagina  ESC=indietro");
 }
 
 static void draw_scores(void) {
-    d.fillScreen(BG);
-    d.setTextColor(C_YELLOW); d.setTextSize(2);
-    d.setCursor(4,4); d.print("Classifica");
-    d.drawFastHLine(0,26,W,LINE);
-    d.setTextColor(C_GREEN); d.setTextSize(1);
-    char buf[32];
-    d.setCursor(4,34); snprintf(buf,sizeof buf,"P1 vittorie: %d",s_wins1); d.print(buf);
-    d.setTextColor(0xF81F);
-    d.setCursor(4,46); snprintf(buf,sizeof buf,"P2 vittorie: %d",s_wins2); d.print(buf);
-    d.setTextColor(C_YELLOW);
-    d.setCursor(4,62); snprintf(buf,sizeof buf,"Record cibo: %d",s_hisc); d.print(buf);
-    d.setTextColor(DIM); d.setCursor(4,H-12); d.print("ESC = menu");
+    int y=gui::title(GT("Record","Scores"),nullptr,COL_GOLD);
+    char buf[16];
+    gui::text(GT("Vinte da te","Your wins"),W/4+4,y,1,gui::F_SMALL,COL_P1,COL_BGK);
+    gui::text(GT("Vinte dai rivali","Rival wins"),W*3/4-4,y,1,gui::F_SMALL,COL_P2,COL_BGK);
+    snprintf(buf,sizeof buf,"%d",s_wins1); gui::text(buf,W/4+4,y+16,1,gui::F_BIG,COL_TXT,COL_BGK);
+    snprintf(buf,sizeof buf,"%d",s_wins2); gui::text(buf,W*3/4-4,y+16,1,gui::F_BIG,COL_TXT,COL_BGK);
+    snprintf(buf,sizeof buf,"%d",s_hisc);
+    char r[48]; snprintf(r,sizeof r,"%s: %s",GT("Record cibo","Food record"),buf);
+    gui::text(r,W/2,y+48,1,gui::F_SMALL,COL_GOLD,COL_BGK);
 }
 
 static void on_draw(void) {
@@ -1060,9 +995,34 @@ static void on_draw(void) {
     }
 }
 
+// ─── state / hint ────────────────────────────────────────────────────────────
+static void set_hint(void) {
+    switch(s_st){
+        case ST_MENU:   nucleo_app_set_hint(GT("SU/GIU  INVIO scegli  Esc esci","UP/DN  ENTER pick  Esc quit")); break;
+        case ST_HOST:   nucleo_app_set_hint(GT("In attesa...  Esc annulla","Waiting...  Esc cancel")); break;
+        case ST_BROWSE: nucleo_app_set_hint(GT("SU/GIU  INVIO entra  Esc indietro","UP/DN  ENTER join  Esc back")); break;
+        case ST_OVER:   if(s_mode==MODE_AI) nucleo_app_set_hint(GT("INVIO rivincita  Esc menu","ENTER rematch  Esc menu"));
+                        else nucleo_app_set_hint(GT("INVIO o Esc: menu","ENTER or Esc: menu"));
+                        break;
+        case ST_HELP:   nucleo_app_set_hint(GT("TAB pagina  Esc indietro","TAB page  Esc back")); break;
+        default:        nucleo_app_set_hint(GT("Esc indietro","Esc back")); break;
+    }
+}
+static void go(int st) {
+    s_st=st; s_paused=false;
+    nucleo_app_set_fullscreen(st==ST_PLAY);
+    set_hint();
+    nucleo_app_request_draw();
+}
+static void leave_to_menu(void) {
+    if(s_st==ST_PLAY) send_bye();
+    s_join_pending=false; s_mode=MODE_AI;
+    go(ST_MENU);
+}
+
 // ─── input ────────────────────────────────────────────────────────────────────
 static void set_dir(int8_t dir) {
-    if(s_st!=ST_PLAY) return;
+    if(s_st!=ST_PLAY||s_paused) return;
     if(s_mode==MODE_GUEST){ if(dir!=OPP(s_s2.dir)) s_s2.next_dir=dir; return; }
     // Local snake: queue up to 2 turns vs the LAST intended heading (so rapid up-then-left both land),
     // dropping reversals and repeats. snake_step pops one per move.
@@ -1073,25 +1033,22 @@ static void set_dir(int8_t dir) {
 }
 
 static void on_key(int key, char ch) {
-    SFX(SX_NAV);
     switch(s_st) {
         case ST_MENU:
-            if(key==NK_UP  &&s_menu_sel>0)       { s_menu_sel--;  nucleo_app_request_draw(); }
-            if(key==NK_DOWN&&s_menu_sel<N_MENU-1){ s_menu_sel++;  nucleo_app_request_draw(); }
-            if(key==NK_ENTER||ch=='\r') {
-                switch(s_menu_sel) {
-                    case 0: s_mode=MODE_AI; strncpy(s_s2.name,"CPU",12); start_game((uint32_t)esp_timer_get_time()); break;
-                    case 1: s_rng=(uint32_t)esp_timer_get_time(); s_n_hosts=0; s_hello_us=0; s_st=ST_HOST; nucleo_app_request_draw(); break;
-                    case 2: s_n_hosts=0; s_browse_sel=0; s_join_pending=false; s_st=ST_BROWSE; nucleo_app_request_draw(); break;
-                    case 3: s_st=ST_SCORES; nucleo_app_request_draw(); break;
-                    case 4: s_help_pg=0; s_st=ST_HELP; nucleo_app_request_draw(); break;
+            if(gui::menu_key(s_menu,key,N_MENU)){ SFX(SX_NAV); nucleo_app_request_draw(); }
+            if(key==NK_ENTER) {
+                switch(s_menu.sel) {
+                    case 0: s_mode=MODE_AI; start_game((uint32_t)esp_timer_get_time()); break;
+                    case 1: s_rng=(uint32_t)esp_timer_get_time(); s_n_hosts=0; s_hello_us=0; go(ST_HOST); break;
+                    case 2: s_n_hosts=0; s_browse_sel=0; s_bmenu={0,0}; s_join_pending=false; go(ST_BROWSE); break;
+                    case 3: go(ST_SCORES); break;
+                    case 4: s_help_pg=0; go(ST_HELP); break;
                 }
             }
             break;
         case ST_BROWSE:
-            if(key==NK_UP  &&s_browse_sel>0)           { s_browse_sel--; nucleo_app_request_draw(); }
-            if(key==NK_DOWN&&s_browse_sel<s_n_hosts-1){ s_browse_sel++; nucleo_app_request_draw(); }
-            if((key==NK_ENTER||ch=='\r')&&s_n_hosts>0&&!s_join_pending) {
+            if(s_n_hosts>0&&!s_join_pending&&gui::menu_key(s_bmenu,key,s_n_hosts)){ s_browse_sel=s_bmenu.sel; SFX(SX_NAV); nucleo_app_request_draw(); }
+            if(key==NK_ENTER&&s_n_hosts>0&&!s_join_pending) {
                 s_join_pending=true;
                 s_join_first_us=esp_timer_get_time(); s_join_retry_us=s_join_first_us;
                 sn_join_t jn; fill_hdr(&jn,SN_JOIN);
@@ -1101,6 +1058,11 @@ static void on_key(int key, char ch) {
             }
             break;
         case ST_PLAY:
+            if(s_paused){
+                if(key==NK_ENTER){ s_paused=false; int64_t gap=esp_timer_get_time()-s_pause_us;   // the clock stood still
+                    s_go_us+=gap; s_s1.move_next_us+=gap; s_s2.move_next_us+=gap; nucleo_app_request_draw(); }
+                break;
+            }
             // NK_LEFT → on_back intercepts it and calls set_dir(DLT)
             if(key==NK_UP  ||ch=='w'||ch=='W') set_dir(DUP);
             if(key==NK_DOWN||ch=='s'||ch=='S') set_dir(DDN);
@@ -1108,13 +1070,13 @@ static void on_key(int key, char ch) {
             if(ch=='a'||ch=='A')               set_dir(DLT);
             break;
         case ST_OVER:
-            if(key==NK_ENTER||ch=='\r') {
+            if(key==NK_ENTER) {
                 if(s_mode==MODE_AI) start_game((uint32_t)esp_timer_get_time());
-                else { s_st=ST_MENU; nucleo_app_request_draw(); }
+                else leave_to_menu();
             }
             break;
         case ST_HELP:
-            if(key==NK_TAB){ s_help_pg^=1; nucleo_app_request_draw(); }
+            if(key==NK_ENTER||key==NK_RIGHT||key==NK_UP||key==NK_DOWN){ s_help_pg^=1; nucleo_app_request_draw(); }
             break;
         default: break;
     }
@@ -1122,19 +1084,12 @@ static void on_key(int key, char ch) {
 
 static bool on_back(int key) {
     if(s_st==ST_PLAY&&key==NK_LEFT){ set_dir(DLT); return true; }
+    if(key==NK_LEFT){ if(s_st==ST_HELP){ s_help_pg^=1; nucleo_app_request_draw(); } return true; }   // never closes the app
+    if(s_st==ST_MENU) return false;
     SFX(SX_NAV);
-    if(s_st==ST_PLAY) {
-        if(s_mode==MODE_HOST||s_mode==MODE_GUEST){
-            sn_bye_t bye; fill_hdr(&bye,SN_BYE);
-            pnet_send(s_peer,&bye,sizeof(bye));
-        }
-        s_st=ST_MENU; nucleo_app_request_draw(); return true;
-    }
-    if(s_st==ST_OVER||s_st==ST_HOST||s_st==ST_HELP||s_st==ST_SCORES){
-        s_st=ST_MENU; nucleo_app_request_draw(); return true;   // ST_BROWSE is handled separately below
-    }
-    if(s_st==ST_BROWSE){ s_join_pending=false; s_st=ST_MENU; nucleo_app_request_draw(); return true; }
-    return false;
+    if(s_st==ST_PLAY&&!s_paused){ s_paused=true; s_pause_us=esp_timer_get_time(); nucleo_app_request_draw(); return true; }
+    leave_to_menu();
+    return true;
 }
 
 static void on_tab(void) {
@@ -1143,27 +1098,25 @@ static void on_tab(void) {
 
 // ─── app lifecycle ───────────────────────────────────────────────────────────
 static void on_enter(void) {
+    game_text_open("snake");
     if(!s_obstacles) s_obstacles=(uint8_t(*)[WORLD_W])calloc(WORLD_H,WORLD_W);  // ~3.1 KB only while playing
-    s_st=ST_MENU; s_menu_sel=0;
+    stats_load();
+    s_st=ST_MENU; s_menu={0,0}; s_bmenu={0,0}; s_mode=MODE_AI; s_paused=false; s_anim=0;
     memset(s_parts,0,sizeof(Part)*N_PARTS);
     s_cam_x=0; s_cam_y=0;
     s_last_us=esp_timer_get_time();
-    if (!pnet_start()) nucleo_app_set_hint(TR5("ESP-NOW non avviato   esc", "ESP-NOW not started   esc", "ESP-NOW no iniciado   esc", "ESP-NOW non demarr   esc", "ESP-NOW nicht gestart   esc"));
-    else nucleo_app_set_hint(TR5("\x18\x19 scegli   invio avvia   esc esci", "\x18\x19 pick   enter start   esc back", "\x18\x19 elige   intro juega   esc sale", "\x18\x19 choix   entree joue   esc ret", "\x18\x19 waehle   enter start   esc zur"));
     nucleo_app_set_poll_handler(poll_fn);
     nucleo_app_set_back_handler(on_back);
     nucleo_app_set_tab_handler(on_tab);
-    nucleo_app_set_fullscreen(false);
-    nucleo_app_request_draw();
+    go(ST_MENU);
+    if (!pnet_start()) nucleo_app_set_hint(GT("ESP-NOW non avviato  Esc","ESP-NOW not started  Esc"));
 }
 static void on_exit(void) {
-    if(s_mode==MODE_HOST||s_mode==MODE_GUEST){
-        sn_bye_t bye; fill_hdr(&bye,SN_BYE);
-        pnet_send(s_peer,&bye,sizeof(bye));
-    }
+    if(s_st==ST_PLAY) send_bye();
     pnet_stop();
     nucleo_app_set_fullscreen(false);
     free(s_obstacles); s_obstacles=nullptr;   // back to zero .bss until relaunched
+    game_text_close();
 }
 
 // ─── registration ────────────────────────────────────────────────────────────

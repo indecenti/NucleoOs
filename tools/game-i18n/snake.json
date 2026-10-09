@@ -1,0 +1,225 @@
+{
+  "game": "snake",
+  "strings": {
+    "%.12s - channel %d": {
+      "es": "%.12s - canal %d",
+      "fr": "%.12s - canal %d",
+      "de": "%.12s - Kanal %d"
+    },
+    "Arrows or W/A/S/D: turn": {
+      "es": "Flechas o W/A/S/D: girar",
+      "fr": "Fleches ou W/A/S/D: tourner",
+      "de": "Pfeile oder W/A/S/D: lenken"
+    },
+    "CPU wins": {
+      "es": "Gana la CPU",
+      "fr": "La CPU gagne",
+      "de": "CPU gewinnt"
+    },
+    "Connecting to": {
+      "es": "Conectando con",
+      "fr": "Connexion a",
+      "de": "Verbinde mit"
+    },
+    "ENTER or Esc: menu": {
+      "es": "INTRO o Esc: menu",
+      "fr": "ENTREE ou Esc: menu",
+      "de": "ENTER oder Esc: Menue"
+    },
+    "ENTER rematch  Esc menu": {
+      "es": "INTRO revancha  Esc menu",
+      "fr": "ENTREE revanche  Esc menu",
+      "de": "ENTER Revanche  Esc Menue"
+    },
+    "ENTER resume   Esc leave": {
+      "es": "INTRO sigue   Esc salir",
+      "fr": "ENTREE reprendre  Esc quitter",
+      "de": "ENTER weiter   Esc verlassen"
+    },
+    "ESP-NOW not started  Esc": {
+      "es": "ESP-NOW no iniciado  Esc",
+      "fr": "ESP-NOW non demarre  Esc",
+      "de": "ESP-NOW nicht aktiv  Esc"
+    },
+    "Eat to grow and score": {
+      "es": "Come para crecer y puntuar",
+      "fr": "Mange pour grandir et marquer",
+      "de": "Fressen: wachsen und punkten"
+    },
+    "Esc back": {
+      "es": "Esc atras",
+      "fr": "Esc retour",
+      "de": "Esc zurueck"
+    },
+    "Food record": {
+      "es": "Record comida",
+      "fr": "Record nourriture",
+      "de": "Futter-Rekord"
+    },
+    "Food record: %d": {
+      "es": "Record comida: %d",
+      "fr": "Record nourriture: %d",
+      "de": "Futter-Rekord: %d"
+    },
+    "Get ready...": {
+      "es": "Preparados...",
+      "fr": "Prets...",
+      "de": "Achtung..."
+    },
+    "Host a match": {
+      "es": "Crear partida",
+      "fr": "Creer partie",
+      "de": "Spiel hosten"
+    },
+    "How to play": {
+      "es": "Como se juega",
+      "fr": "Comment jouer",
+      "de": "Spielregeln"
+    },
+    "Join a match": {
+      "es": "Unirse",
+      "fr": "Rejoindre",
+      "de": "Beitreten"
+    },
+    "Last snake alive wins": {
+      "es": "Gana la ultima serpiente viva",
+      "fr": "Le dernier serpent vivant gagne",
+      "de": "Die letzte Schlange gewinnt"
+    },
+    "Looking for matches...": {
+      "es": "Buscando partidas...",
+      "fr": "Recherche de parties...",
+      "de": "Suche Spiele..."
+    },
+    "Match over": {
+      "es": "Fin de partida",
+      "fr": "Fin du match",
+      "de": "Spiel aus"
+    },
+    "Opponent disconnected": {
+      "es": "Rival desconectado",
+      "fr": "Adversaire deconnecte",
+      "de": "Gegner getrennt"
+    },
+    "Other device: Snake > Host": {
+      "es": "En el otro: Snake > Crear",
+      "fr": "Sur l'autre: Snake > Creer",
+      "de": "Am anderen: Snake > Hosten"
+    },
+    "Other device: Snake > Join": {
+      "es": "En el otro: Snake > Unirse",
+      "fr": "Sur l'autre: Snake > Rejoindre",
+      "de": "Am anderen: Snake > Beitreten"
+    },
+    "PAUSED": {
+      "es": "PAUSA",
+      "fr": "PAUSE",
+      "de": "PAUSE"
+    },
+    "POWER-UPS": {
+      "es": "POWER-UPS",
+      "fr": "BONUS",
+      "de": "POWER-UPS"
+    },
+    "Play vs CPU": {
+      "es": "Jugar vs CPU",
+      "fr": "Jouer vs CPU",
+      "de": "Gegen CPU"
+    },
+    "Rival wins": {
+      "es": "Gana el rival",
+      "fr": "Victoires rival",
+      "de": "Siege Gegner"
+    },
+    "Scores": {
+      "es": "Records",
+      "fr": "Records",
+      "de": "Rekorde"
+    },
+    "TAB page  Esc back": {
+      "es": "TAB pagina  Esc atras",
+      "fr": "TAB page  Esc retour",
+      "de": "TAB Seite  Esc zurueck"
+    },
+    "TAB: power-ups": {
+      "es": "TAB: power-ups",
+      "fr": "TAB: bonus",
+      "de": "TAB: Power-ups"
+    },
+    "TAB: rules": {
+      "es": "TAB: reglas",
+      "fr": "TAB: regles",
+      "de": "TAB: Regeln"
+    },
+    "The match goes on!": {
+      "es": "La partida sigue!",
+      "fr": "Le match continue !",
+      "de": "Das Spiel laeuft weiter!"
+    },
+    "UP/DN  ENTER join  Esc back": {
+      "es": "AR/AB  INTRO entra  Esc atras",
+      "fr": "HT/BAS  ENTREE va  Esc retour",
+      "de": "AUF/AB  ENTER rein  Esc zur."
+    },
+    "UP/DN  ENTER pick  Esc quit": {
+      "es": "AR/AB  INTRO elige  Esc sale",
+      "fr": "HT/BAS  ENTREE ok  Esc quitte",
+      "de": "AUF/AB  ENTER waehlt  Esc Ende"
+    },
+    "Waiting for rival": {
+      "es": "Esperando rival",
+      "fr": "Attente rival",
+      "de": "Warte auf Gegner"
+    },
+    "Waiting...  Esc cancel": {
+      "es": "Esperando...  Esc cancela",
+      "fr": "Attente...  Esc annule",
+      "de": "Warte...  Esc Abbruch"
+    },
+    "Walls, rocks and bodies kill": {
+      "es": "Muros, rocas y cuerpos matan",
+      "fr": "Murs, rochers, corps: mortels",
+      "de": "Mauern, Felsen, Koerper toeten"
+    },
+    "You lose": {
+      "es": "Has perdido",
+      "fr": "Perdu",
+      "de": "Verloren"
+    },
+    "You win!": {
+      "es": "Has ganado!",
+      "fr": "Gagne !",
+      "de": "Gewonnen!"
+    },
+    "Your wins": {
+      "es": "Tus victorias",
+      "fr": "Tes victoires",
+      "de": "Deine Siege"
+    },
+    "drop 6 segments": {
+      "es": "pierdes 6 segmentos",
+      "fr": "perds 6 segments",
+      "de": "6 Glieder weniger"
+    },
+    "faster for a while": {
+      "es": "mas rapida un rato",
+      "fr": "plus rapide un moment",
+      "de": "eine Weile schneller"
+    },
+    "pass through walls": {
+      "es": "atraviesas los muros",
+      "fr": "traverse les murs",
+      "de": "durch Mauern gleiten"
+    },
+    "slows your rival": {
+      "es": "frena al rival",
+      "fr": "ralentit le rival",
+      "de": "bremst den Gegner"
+    },
+    "survive one crash": {
+      "es": "salva de 1 choque",
+      "fr": "survit a 1 choc",
+      "de": "ueberlebt 1 Crash"
+    }
+  }
+}

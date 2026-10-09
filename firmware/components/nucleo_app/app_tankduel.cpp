@@ -6,15 +6,20 @@
 // Tank hides from minimap while inside shop — opponent can only guess.
 // ESP-NOW host-authoritative or vs CPU. NX_NET_APP exclusive.
 //
-// Controls: W/E/R=up  A=left  S=down  D=right  K=fire  L=powerup  ESC=pause
+// Controls: W/E/R=up  A=left  S=down  D=right  K=fire  L=powerup  ESC=pause (vs CPU the match freezes;
+// online it keeps running), ESC again leaves.
+// Frames land in the shared 8bpp RGB332 canvas, so the colours sit on that grid. Text goes through game_text
+// (5 languages). SFX come from the deployed pack; a missing cue is synthesized one per menu frame, never at
+// launch (bulk synthesis on the app task is what rebooted Tanks).
 
 #include "nucleo_app.h"
 #include "nucleo_kbd.h"
 #include "nucleo_exclusive.h"
 #include "launcher_theme.h"
-#include "nucleo_i18n.h"        // TR(it,en): hints follow the system language
+#include "game_text.h"
+#include "game_ui.h"
 #include "app_gfx.h"
-#include "notify_synth.h"
+
 #include "game_sfx.h"
 #include <M5GFX.h>
 #include <stdint.h>
@@ -27,10 +32,7 @@ extern "C" {
 #include "nucleo_audio.h"
 #include "esp_timer.h"
 #include "esp_random.h"
-#include "esp_log.h"
 }
-#define TDTAG "TANKD"
-static const char* s_over_why="?";   // DEBUG: reason for the last GS_OVER
 
 // ========================== color helpers =====================================
 static inline uint16_t rgb(int r,int g,int b){
@@ -120,6 +122,7 @@ struct Tank {
     int   behav;      // bots: behaviour personality (BB_*)
     int   aim_ms;     // bots: reaction/pause gate between shots (no continuous fire)
     bool  is_boss;    // bots: boss variant (stronger, different looks)
+    int   stun_ms;    // EMP stun: half speed, no fire, until it runs out
 };
 // bot personalities
 enum { BB_RUSHER=0, BB_SNIPER, BB_FLANKER, BB_BRAWLER, BB_COUNT };
@@ -177,7 +180,7 @@ static int       s_bot_kills;           // total bots killed this match
 static int       s_bot_level_cd;        // ms until the next time-based level-up
 
 static int  s_state, s_mode, s_local;   // local player index
-static int  s_msel, s_tsel;             // menu / tank select cursor
+static int  s_tsel;                     // tank select cursor
 static int  s_shop_sel, s_shop_scroll;
 static int  s_shop_tab;                 // 0=BUY 1=SELL
 static int  s_cam_x, s_cam_y;           // camera top-left world px
@@ -195,8 +198,8 @@ static int      s_flash;                // global screen flash (white) intensity
 
 // ========================== SFX ==============================================
 // 1=fire 2=hit 3=kill 4=shop 5=powerup 6=win 7=lose 8=buy 9=sell 10=nav 11=sel
-// Real arcade WAVs live in /sd/data/tankduel/pack/<name>.wav (deployed); the synth recipes
-// below are only the never-mute fallback if the SD pack is missing.
+// Arcade WAVs in /sd/data/tankduel/pack/<name>.wav (deployed with the SD content), played by game_sfx: nothing
+// is synthesized on the device; a cue without its WAV plays a short tone at SFX_HZ.
 #define TD_SFX_DIR "/sd/data/tankduel"
 #define SFX_FIRE 1
 #define SFX_HIT  2
@@ -209,52 +212,12 @@ static int      s_flash;                // global screen flash (white) intensity
 #define SFX_SELL 9
 #define SFX_NAV  10
 #define SFX_SEL  11
-static const char* sfx_td_name(int id){
-    switch(id){ case 1:return"fire"; case 2:return"hit"; case 3:return"kill";
-                case 4:return"shop"; case 5:return"pu";  case 6:return"win"; case 7:return"lose";
-                case 8:return"buy";  case 9:return"sell";case 10:return"nav"; default:return"sel"; }
-}
+static const char *const SFX_NAME[12]={"","fire","hit","kill","shop","pu","win","lose","buy","sell","nav","sel"};
+static const uint16_t SFX_HZ[12]={0,320,220,300,880,660,1047,392,784,1047,520,660};
+static const char* sfx_td_name(int id){ return (id>0&&id<12)?SFX_NAME[id]:"sel"; }
 static int sfx_td_recipe(int id, notify_voice_t*v){
-    switch(id){
-        case 1: // fire — sharp bark
-            notify__voice(&v[0], 320, 0,     0.025f); v[0].amp=0.9f;
-            notify__voice(&v[1], 160, 0.015f,0.035f); v[1].amp=0.6f; return 2;
-        case 2: // hit — thud
-            notify__voice(&v[0], 220, 0,     0.04f);  v[0].amp=0.8f;
-            notify__voice(&v[1], 110, 0.02f, 0.05f);  v[1].amp=0.7f; return 2;
-        case 3: // kill — explosion descend
-            notify__voice(&v[0], 300, 0,     0.05f);  v[0].amp=1.0f;
-            notify__voice(&v[1], 180, 0.04f, 0.08f);  v[1].amp=0.9f;
-            notify__voice(&v[2],  90, 0.10f, 0.14f);  v[2].amp=0.8f; return 3;
-        case 4: // shop open — cash ding
-            notify__voice(&v[0], 880, 0,     0.05f);  v[0].amp=0.7f;
-            notify__voice(&v[1],1174.7f,0.04f,0.06f); v[1].amp=0.6f; return 2;
-        case 5: // powerup — sparkle
-            notify__voice(&v[0], 660, 0,     0.04f);  v[0].amp=0.6f;
-            notify__voice(&v[1], 988, 0.03f, 0.05f);  v[1].amp=0.5f;
-            notify__voice(&v[2],1320, 0.07f, 0.07f);  v[2].amp=0.4f; return 3;
-        case 6: // win fanfare
-            notify__voice(&v[0], 523.25f,0,    0.08f); v[0].amp=0.8f;
-            notify__voice(&v[1], 659.25f,0.07f,0.09f); v[1].amp=0.7f;
-            notify__voice(&v[2], 783.99f,0.15f,0.10f); v[2].amp=0.6f;
-            notify__voice(&v[3],1046.5f, 0.24f,0.18f); v[3].amp=0.7f; return 4;
-        case 7: // lose — toll
-            notify__voice(&v[0], 392, 0,     0.10f); v[0].amp=0.8f;
-            notify__voice(&v[1], 294, 0.09f, 0.12f); v[1].amp=0.7f;
-            notify__voice(&v[2], 196, 0.20f, 0.20f); v[2].amp=0.6f; return 3;
-        case 8: // buy — cha-ching up
-            notify__voice(&v[0], 784, 0,     0.04f); v[0].amp=0.7f;
-            notify__voice(&v[1],1046.5f,0.03f,0.06f);v[1].amp=0.6f; return 2;
-        case 9: // sell — coins down
-            notify__voice(&v[0],1046.5f,0,   0.04f); v[0].amp=0.6f;
-            notify__voice(&v[1], 659.25f,0.03f,0.06f);v[1].amp=0.6f; return 2;
-        case 10: // nav — soft tick
-            notify__voice(&v[0], 520, 0, 0.02f); v[0].amp=0.4f; return 1;
-        case 11: // sel — confirm blip
-            notify__voice(&v[0], 660, 0, 0.03f); v[0].amp=0.6f;
-            notify__voice(&v[1], 880, 0.02f, 0.04f); v[1].amp=0.5f; return 2;
-    }
-    return 0;
+    if(id<=0||id>11) return 0;
+    notify__voice(&v[0],SFX_HZ[id],0,0.05f); return 1;
 }
 static bool sfx_td_important(int id){ return id==3||id==6||id==7||id==8||id==9; }
 static const game_sfx_t s_sfx = {
@@ -291,30 +254,30 @@ static void txr(int rx,int y,int sz,uint16_t col,const char*s){
 }
 
 // ========================== shop catalog =====================================
-static const struct { const char* name; int cost; } SHOP_CAT[SI_COUNT] = {
-    {"Corazza +1", 20},
-    {"Velocita +1",15},
-    {"Riparazione",30},
-    {"Scudo",      20},
-    {"EMP",        25},
-    {"Mitragl.",   25},
-    {"Railgun",    35},
-    {"Shotgun",    30},
-    {"Flak",       30},
-    {"Lanciarazzi",40},
-    {"Laser",      35},
-    {"Sniper",     45},
-    {"Minigun",    28},
-    {"Regen",      35},
-};
+static const uint8_t SHOP_COST[SI_COUNT] = { 20, 15, 30, 20, 25, 25, 35, 30, 30, 40, 35, 45, 28, 35 };
+static const char* shop_name(int t){
+    switch(t){
+        case SI_ARMOR:     return GT("Corazza +1","Armor +1");
+        case SI_SPEED:     return GT("Velocita +1","Speed +1");
+        case SI_REPAIR:    return GT("Riparazione","Repair");
+        case SI_SHIELD:    return GT("Scudo","Shield");
+        case SI_EMP:       return "EMP";
+        case SI_WP_MG:     return GT("Mitragliatrice","Machine gun");
+        case SI_WP_RAIL:   return "Railgun";
+        case SI_WP_SHOT:   return "Shotgun";
+        case SI_WP_FLAK:   return "Flak";
+        case SI_WP_ROCKET: return GT("Lanciarazzi","Rockets");
+        case SI_WP_LASER:  return "Laser";
+        case SI_WP_SNIPER: return "Sniper";
+        case SI_WP_MINIGUN:return "Minigun";
+        default:           return "Regen";
+    }
+}
 
 static const char* wp_short(int w){
     switch(w){ case WP_MG: return "MG"; case WP_RAIL: return "RAIL"; case WP_SHOT: return "SHOT";
-               case WP_FLAK: return "FLAK"; case WP_ROCKET: return "RAZZO"; case WP_LASER: return "LASER";
+               case WP_FLAK: return "FLAK"; case WP_ROCKET: return GT("RAZZO","RCKT"); case WP_LASER: return "LASER";
                case WP_SNIPER: return "SNIP"; case WP_MINIGUN: return "MINI"; default: return "CANN"; }
-}
-static const char* pu_short(int p){
-    switch(p){ case PU_SHIELD: return "SCUD"; case PU_BOOST: return "BOOS"; case PU_BURST: return "BURS"; case PU_EMP: return "EMP"; case PU_REGEN: return "RGEN"; default: return "----"; }
 }
 static uint16_t pu_color(int p){
     switch(p){ case PU_SHIELD: return rgb(90,170,255); case PU_BOOST: return COL_GOLD;
@@ -480,6 +443,9 @@ static void sparks_step(int dt){
 }
 static void shake_set(float a){ if(a>s_shake) s_shake=a; }
 
+// did the local player win? (co-op: the human team survived)
+static bool local_won(void){ return s_match_type==MT_COOP ? s_winner==WIN_HUMANS : s_winner==s_local; }
+
 // ========================== credits ==========================================
 static void earn(int player, int amount){
     if(player>=0&&player<2) s_tanks[player].credits+=amount;   // only the two human slots bank credits
@@ -526,8 +492,10 @@ static float wp_recoil(int wp){ return wp==WP_ROCKET?9.0f : wp==WP_SNIPER?2.0f :
 static bool cell_free(float cx,float cy);   // fwd (recoil needs it)
 // core fire: any combatant Tank with its owner-id (0,1 humans, 2.. bots)
 static void fire_owner(Tank &t, int owner){
-    if(!t.alive||t.in_shop||t.fire_cd>0) return;
-    int burst=(t.pu==PU_BURST)?3:1;
+    if(!t.alive||t.in_shop||t.fire_cd>0||t.stun_ms>0) return;
+    // an ACTIVE burst triples the fire rate; it used to triple the cooldown instead — holding the pickup
+    // (or firing it) made the gun three times slower
+    bool burst=(t.pu==PU_BURST&&t.pu_ms>0);
     int wp=t.weapon;
     int pellets=wp_pellets(wp);
     float fx=t.fx, fy=t.fy;
@@ -545,7 +513,7 @@ static void fire_owner(Tank &t, int owner){
             break;
         }
     }
-    t.fire_cd=fire_cd_for(wp)*burst;
+    t.fire_cd=fire_cd_for(wp)/(burst?3:1);
     t.flash_ms=100;  // longer flash
     // rocket kickback — shove the tank backwards if there's room
     float rc=wp_recoil(wp);
@@ -645,7 +613,8 @@ static bool cell_free(float cx,float cy){
 static void drive_tank(Tank &t, int mvx, int mvy, float dt){
     if(!t.alive||t.in_shop||(mvx==0&&mvy==0)) return;
     float spd=t.spd;
-    if(t.pu==PU_BOOST) spd*=1.8f;
+    if(t.pu==PU_BOOST&&t.pu_ms>0) spd*=1.8f;
+    if(t.stun_ms>0) spd*=0.5f;
     if(tile_water((int)(t.x/TILE_PX),(int)(t.y/TILE_PX))) spd*=0.5f;
     float vx=(float)mvx, vy=(float)mvy;
     if(mvx&&mvy){ vx*=0.70711f; vy*=0.70711f; }   // normalize diagonal speed
@@ -679,7 +648,7 @@ static void tank_move(int who, int dir, float dt){
 static void shop_gen_items(int pidx, int tx, int ty){
     (void)tx; (void)ty;
     // every shop sells the full catalogue (deterministic, host==guest) — all weapons always available
-    for(int i=0;i<SHOP_N;i++){ s_shop_items[pidx][i]={i,SHOP_CAT[i].cost,false}; }
+    for(int i=0;i<SHOP_N;i++){ s_shop_items[pidx][i]={i,SHOP_COST[i],false}; }
 }
 static void shop_try_spawn(void){
     for(int si=0;si<MAX_SHOPS;si++){
@@ -733,20 +702,19 @@ static void shop_apply(Tank &t, int item_type){
 // ---- selling (refund 60% — balanced: upgrades stay worth keeping) -------------
 enum { SELL_WP=0, SELL_ARMOR, SELL_SHIELD, SELL_EMP };
 struct SellRow { int type; char label[16]; int refund; };
-static int weapon_cost(int wp){
-    switch(wp){ case WP_MG:return 25; case WP_RAIL:return 35; case WP_SHOT:return 30;
-                case WP_FLAK:return 30; case WP_ROCKET:return 40; case WP_LASER:return 35; default:return 0; }
-}
+// the catalogue price of a weapon (WP_MG..WP_MINIGUN map in order onto SI_WP_MG..SI_WP_MINIGUN); a private
+// copy of the prices used to miss Sniper and Minigun, so selling them refunded 0
+static int weapon_cost(int wp){ return (wp>=WP_MG&&wp<=WP_MINIGUN)?SHOP_COST[SI_WP_MG+wp-WP_MG]:0; }
 // build the tank's current sellable assets; returns count (0..4)
 static int build_sell_list(int who, SellRow out[4]){
     Tank &t=s_tanks[who]; int n=0;
     if(t.weapon!=WP_CANNON){
         out[n].type=SELL_WP; out[n].refund=weapon_cost(t.weapon)*3/5;
-        snprintf(out[n].label,sizeof out[n].label,"Vendi %s",wp_short(t.weapon)); n++;
+        snprintf(out[n].label,sizeof out[n].label,"%s",shop_name(SI_WP_MG+t.weapon-WP_MG)); n++;
     }
-    if(t.armor>0){ out[n].type=SELL_ARMOR; out[n].refund=12; snprintf(out[n].label,16,"Vendi Corazza"); n++; }
-    if(t.pu==PU_SHIELD){ out[n].type=SELL_SHIELD; out[n].refund=12; snprintf(out[n].label,16,"Vendi Scudo"); n++; }
-    if(t.pu==PU_EMP){ out[n].type=SELL_EMP; out[n].refund=15; snprintf(out[n].label,16,"Vendi EMP"); n++; }
+    if(t.armor>0){ out[n].type=SELL_ARMOR; out[n].refund=12; snprintf(out[n].label,16,"%s",shop_name(SI_ARMOR)); n++; }
+    if(t.pu==PU_SHIELD){ out[n].type=SELL_SHIELD; out[n].refund=12; snprintf(out[n].label,16,"%s",shop_name(SI_SHIELD)); n++; }
+    if(t.pu==PU_EMP){ out[n].type=SELL_EMP; out[n].refund=15; snprintf(out[n].label,16,"EMP"); n++; }
     return n;
 }
 static void shop_sell(Tank &t, int type){
@@ -858,11 +826,17 @@ static void pu_use(int who){
         case PU_BURST: t.pu_ms=3000; break;
         case PU_REGEN: t.pu_ms=5000; break;  // heal for 5 seconds
         case PU_EMP: {
-            int enemy=1-who;
-            Tank &e=s_tanks[enemy];
-            if(e.alive){ e.fire_cd=2500; e.spd*=0.5f; e.pu_ms+=2500; }
+            // stun every enemy in range (the rival AND bots) for 2.5 s: half speed, no fire. It used to halve
+            // the rival's speed for good and add 2.5 s to ITS powerup timer — arming the rival's own boost.
+            int nc=BOT_OWNER0+s_nbots;
+            for(int id=0;id<nc;id++){
+                if(id==who||!id_active(id)||!can_hit(who,id)) continue;
+                Tank &e=combatant(id); if(!e.alive) continue;
+                float dx=e.x-t.x, dy=e.y-t.y; if(dx*dx+dy*dy>150.0f*150.0f) continue;
+                e.stun_ms=2500; spark_burst(e.x,e.y,14,rgb(180,120,255)); ring_add(e.x,e.y,rgb(180,120,255),300);
+            }
+            ring_add(t.x,t.y,rgb(180,120,255),520);
             t.pu=PU_NONE; t.pu_ms=0;
-            spark_burst(e.x,e.y,14,COL_GOLD);
             shake_set(5.0f);
             break;
         }
@@ -1182,7 +1156,7 @@ static void net_handle(const pnet_pkt_t *p){
             if(!s_tanks[1].in_shop&&wasShop&&s_state==GS_SHOP) go(GS_PLAY);
             for(int i=0;i<SHOP_N;i++) s_shop_items[1][i].sold=((st->gsold>>i)&1)!=0;
             if(st->phase==0){ s_winner=(int)st->winner-1;
-                if(s_state!=GS_OVER){ s_over_why="guest:phase0"; go(GS_OVER); } }   // update result once
+                if(s_state!=GS_OVER){ go(GS_OVER); } }   // update result once
             s_last_rx=s_now;
         }
     }
@@ -1462,6 +1436,7 @@ static void bots_step(int dt){
         if(b.hurt_ms>0) b.hurt_ms-=dt;
         if(b.flash_ms>0) b.flash_ms-=dt;
         if(b.aim_ms>0) b.aim_ms-=dt;
+        if(b.stun_ms>0) b.stun_ms-=dt;
         bot_ai(i,dt);
     }
     // escalation: bots get tougher over time (waves feel)
@@ -1550,25 +1525,23 @@ static void draw_map(void){
         int sx=tx2s(tx), sy=ty2s(ty);
         uint8_t t=s_map[ty][tx];
         if(t==T_FLOOR){
-            // checkerboard concrete: two tones + faint inset panel + corner rivets
-            bool chk=((tx^ty)&1);
-            uint16_t bc=chk?rgb(30,33,40):rgb(35,39,47);
-            d.fillRect(sx,sy,TILE_PX,TILE_PX,bc);
-            d.drawFastHLine(sx,sy,TILE_PX,mix(bc,COL_WHITE,16));        // top sheen
-            d.drawFastHLine(sx,sy+TILE_PX-1,TILE_PX,mix(bc,COL_BLACK,70)); // bottom seam
-            d.drawFastVLine(sx+TILE_PX-1,sy,TILE_PX,mix(bc,COL_BLACK,70)); // right seam
-            // rivet dots on the darker tiles for texture
-            if(chk){ uint16_t rv=mix(bc,COL_WHITE,40); d.drawPixel(sx+3,sy+3,rv); d.drawPixel(sx+8,sy+8,rv); }
+            // steel deck plates (RGB332-exact slate/navy: the old greys came out olive-green on the 8bpp
+            // canvas): every other plate has a recessed centre, seams bottom-right, rivets on the corners
+            d.fillRect(sx,sy,TILE_PX,TILE_PX,rgb(36,36,85));
+            if((tx^ty)&1) d.fillRect(sx+3,sy+3,TILE_PX-6,TILE_PX-6,rgb(0,36,85));
+            else { d.drawPixel(sx+2,sy+2,rgb(73,73,170)); d.drawPixel(sx+TILE_PX-4,sy+TILE_PX-4,rgb(73,73,170)); }
+            d.drawFastHLine(sx,sy+TILE_PX-1,TILE_PX,rgb(0,0,85));     // bottom seam
+            d.drawFastVLine(sx+TILE_PX-1,sy,TILE_PX,rgb(0,0,85));     // right seam
         } else if(t==T_WATER){
             // animated two-tone dithered water + scrolling ripples + glint
-            uint16_t deep=rgb(20,46,92), shal=rgb(34,72,134);
+            uint16_t deep=rgb(0,36,170), shal=rgb(0,73,170);
             d.fillRect(sx,sy,TILE_PX,TILE_PX,deep);
             for(int yy=0;yy<TILE_PX;yy+=2){
                 int off=((wphase+yy+tx)&3);
                 uint16_t c=(off<2)?shal:deep;
                 d.drawFastHLine(sx+(off&1),sy+yy,TILE_PX-(off&1),c);
             }
-            uint16_t rip=((wphase+tx+ty)&3)?rgb(60,110,180):rgb(120,170,220);
+            uint16_t rip=((wphase+tx+ty)&3)?rgb(73,146,255):rgb(182,219,255);
             d.drawFastHLine(sx+2,sy+((wphase+ty)&7),TILE_PX-4,rip);
         } else {
             // walls / bunker: chunky 3D block with bevel + shadow skirt
@@ -1752,7 +1725,7 @@ static void draw_tanks(void){
             int a=(s_anim<<3)&0xFF; float an=a*0.0245f;
             d.fillCircle(sx+(int)(cosf(an)*13),sy+(int)(sinf(an)*13),2,COL_WHITE);
         }
-        if(t.pu==PU_BOOST&&!t.in_shop){
+        if(t.pu==PU_BOOST&&t.pu_ms>0&&!t.in_shop){
             static const int BDX[4]={0,1,0,-1}, BDY[4]={-1,0,1,0};
             int sx=wx2s(t.x)-BDX[t.dir]*10, sy=wy2s(t.y)-BDY[t.dir]*10;
             d.fillCircle(sx,sy,3,((s_anim&1)?COL_GOLD:COL_RED));
@@ -1869,443 +1842,278 @@ static void draw_flash(void){
     for(int y=HUD_H;y<H;y+=2) d.drawFastHLine((y&2)?0:1,y,W,mix(rgb(10,12,20),COL_WHITE,a));
 }
 
-// ========================== draw: HUD =========================================
-// segmented HP bar (4px pips, team color, low-HP pulse). Returns end-x of the bar.
-static int hud_hp(int x,int y,int who,uint16_t col,bool rightAlign){
+/// ========================== draw: HUD =========================================
+// One row, nothing overlapping (the old two-row HUD drew the credits over the HP pips and the clock over the
+// cooldown bar):  [P1 pips][$]  [weapon/cooldown][powerup chip]  [clock]  [P2 pips | wave+kills]  [minimap]
+#define HUD_BG   rgb(0,0,40)
+static void hud_pips(int x,int who,uint16_t col,bool right){
     Tank &t=s_tanks[who];
-    int seg=t.hp_max>16?16:t.hp_max;
-    int per=(t.hp_max>16)?(t.hp*16/t.hp_max):t.hp;
-    bool low=(t.hp*4<=t.hp_max);
-    uint16_t on=low&&((s_anim>>2)&1)?COL_RED:col;
+    int seg=t.hp_max>12?12:t.hp_max, per=t.hp_max>12?(t.hp*12/t.hp_max):t.hp;
+    bool low=(t.hp*4<=t.hp_max)&&((s_anim>>2)&1);
     for(int i=0;i<seg;i++){
-        int bx=rightAlign? x-(i+1)*5 : x+i*5;
-        uint16_t c=(i<per)?on:rgb(30,34,46);
-        d.fillRect(bx,y,4,8,c);
-        if(i<per){ d.drawFastHLine(bx,y,4,mix(c,COL_WHITE,110)); d.drawFastVLine(bx,y,8,mix(c,COL_WHITE,60)); }
+        int bx=right?x-(i+1)*4:x+i*4;
+        if(i<per){ d.fillRect(bx,3,3,8,low?COL_RED:col); d.drawFastHLine(bx,3,3,COL_WHITE); }
+        else d.drawRect(bx,3,3,8,rgb(36,36,85));
     }
-    return rightAlign? x-seg*5 : x+seg*5;
 }
 static void draw_hud(void){
-    // panel + bright underline
-    d.fillRect(0,0,W,HUD_H,rgb(15,17,25));
-    d.drawFastHLine(0,0,W,rgb(30,34,48));
-    d.drawFastHLine(0,HUD_H-2,W,rgb(38,46,64));
-    d.drawFastHLine(0,HUD_H-1,W,rgb(64,78,104));
-    // ---- minimap pinned top-right, full HUD height (fog: foe hidden while shopping)
-    int mmw=24, mmh=10, mmx=W-mmw-2, mmy=2;
-    d.fillRect(mmx,mmy,mmw,mmh,rgb(16,19,27));
-    d.drawRect(mmx-1,mmy-1,mmw+2,mmh+2,rgb(58,70,94));
+    d.fillRect(0,0,W,HUD_H,HUD_BG);
+    d.drawFastHLine(0,HUD_H-1,W,rgb(73,109,170));
+    Tank &lt=s_tanks[s_local];
+    uint16_t mycol=s_local==0?COL_P1:COL_P2;
+    hud_pips(2,s_local,mycol,false);
+    char b[16]; snprintf(b,sizeof b,"$%d",lt.credits); txt(4+(lt.hp_max>12?12:lt.hp_max)*4,4,1,COL_GOLD,b);
+    // weapon + cooldown underline (green = ready)
+    int wx=82; txt(wx,3,1,lt.stun_ms>0?rgb(182,109,255):COL_WHITE,wp_short(lt.weapon));
+    int cd_max=fire_cd_for(lt.weapon), cd=lt.fire_cd>0?lt.fire_cd:0;
+    d.fillRect(wx,11,30,2,rgb(36,36,85));
+    d.fillRect(wx,11,cd?30-30*cd/cd_max:30,2,cd?COL_RED:COL_GREEN);
+    // powerup chip: filled while active, outlined while held, empty slot otherwise
+    int px=114;
+    if(lt.pu!=PU_NONE){
+        uint16_t pc=pu_color(lt.pu);
+        if(lt.pu_ms>0||lt.pu==PU_SHIELD){ d.fillRoundRect(px,2,10,10,2,pc); txt(px+3,3,1,COL_BLACK,pu_letter(lt.pu)); }
+        else { d.drawRoundRect(px,2,10,10,2,((s_anim>>3)&1)?pc:COL_WHITE); txt(px+3,3,1,pc,pu_letter(lt.pu)); }
+    } else d.drawRoundRect(px,2,10,10,2,rgb(36,36,85));
+    int sec=s_match_ms/1000;
+    snprintf(b,sizeof b,"%d:%02d",sec/60,sec%60); txt(128,4,1,sec<=10&&((s_anim>>3)&1)?COL_RED:COL_GREEN,b);
+    // right block: the rival's pips, or the survival wave + kills
+    int mmw=24, mmh=10, mmx=W-mmw-2, mmy=2, rx=mmx-4;
+    if(s_nplayers>=2) hud_pips(rx,1-s_local,s_local==0?COL_P2:COL_P1,true);
+    else if(s_nbots>0){ snprintf(b,sizeof b,GT("O%d x%d","W%d x%d"),s_bot_level+1,s_bot_kills); txr(rx,4,1,COL_RED,b); }
+    // minimap (fog: a rival in a shop is hidden)
+    d.fillRect(mmx,mmy,mmw,mmh,COL_BLACK);
+    d.drawRect(mmx-1,mmy-1,mmw+2,mmh+2,rgb(73,109,170));
     for(int si=0;si<MAX_SHOPS;si++){
         if(!s_shops[si].active) continue;
-        int gx=mmx+(int)((s_shops[si].tx+1)*mmw/MAP_W);
-        int gy=mmy+(int)((s_shops[si].ty+1)*mmh/MAP_H);
-        d.fillRect(gx,gy,2,2,((s_anim>>2)&1)?COL_GREEN:rgb(40,120,60));
+        d.fillRect(mmx+(s_shops[si].tx+1)*mmw/MAP_W,mmy+(s_shops[si].ty+1)*mmh/MAP_H,2,2,((s_anim>>2)&1)?COL_GREEN:rgb(36,146,36));
     }
-    // bots on the minimap (red), so you can read the horde around you
-    // boss appears as bright gold dot
     for(int i=0;i<s_nbots;i++){
         if(!s_bots[i].alive) continue;
-        int dx=mmx+(int)(s_bots[i].x*mmw/WORLD_W);
-        int dy=mmy+(int)(s_bots[i].y*mmh/WORLD_H);
-        if(dx<mmx) dx=mmx;
-        if(dx>mmx+mmw-1) dx=mmx+mmw-1;
-        if(dy<mmy) dy=mmy;
-        if(dy>mmy+mmh-1) dy=mmy+mmh-1;
-        uint16_t bot_col=s_bots[i].is_boss?COL_GOLD:tank_col(BOT_OWNER0+i);
-        d.drawPixel(dx,dy,bot_col);
-        if(s_bots[i].is_boss) d.drawPixel(dx,dy-1,mix(bot_col,COL_WHITE,100));  // extra glow
+        int dx=mmx+(int)(s_bots[i].x*mmw/WORLD_W), dy=mmy+(int)(s_bots[i].y*mmh/WORLD_H);
+        d.drawPixel(dx<mmx+mmw?dx:mmx+mmw-1,dy<mmy+mmh?dy:mmy+mmh-1,s_bots[i].is_boss?COL_GOLD:COL_RED);
     }
     for(int p=0;p<s_nplayers;p++){
         if(p!=s_local&&s_tanks[p].in_shop) continue;
-        int dx=mmx+(int)(s_tanks[p].x*mmw/WORLD_W);
-        int dy=mmy+(int)(s_tanks[p].y*mmh/WORLD_H);
-        if(dx<mmx) dx=mmx;
+        int dx=mmx+(int)(s_tanks[p].x*mmw/WORLD_W), dy=mmy+(int)(s_tanks[p].y*mmh/WORLD_H);
         if(dx>mmx+mmw-2) dx=mmx+mmw-2;
-        if(dy<mmy) dy=mmy;
         if(dy>mmy+mmh-2) dy=mmy+mmh-2;
         d.fillRect(dx,dy,2,2,p==0?COL_P1:COL_P2);
     }
-    // ---- P1 (left): HP pips row, credits below
-    hud_hp(2,1,0,COL_P1,false);
-    char b1[12]; snprintf(b1,sizeof b1,"$%d",s_tanks[0].credits);
-    txt(2,HUD_H-8,1,COL_GOLD,b1);
-    // ---- P2 (right of minimap): HP pips + credits — only when a 2nd human plays;
-    //      in solo survival show the live bot count instead
-    int p2x=mmx-4;
-    if(s_nplayers>=2){
-        hud_hp(p2x,1,1,COL_P2,true);
-        char b2[12]; snprintf(b2,sizeof b2,"$%d",s_tanks[1].credits);
-        txr(p2x,HUD_H-8,1,COL_GOLD,b2);
-    } else if(s_nbots>0){
-        char w1[12]; snprintf(w1,sizeof w1,"OND.%d",s_bot_level+1);
-        txr(p2x,2,1,tank_col(BOT_OWNER0),w1);
-        char w2[12]; snprintf(w2,sizeof w2,"x%d",s_bot_kills);
-        txr(p2x,HUD_H-8,1,COL_GOLD,w2);
-    }
-    // ---- center: weapon/powerup (top) + cooldown bar + match timer (bottom)
-    Tank &lt=s_tanks[s_local];
-    char cent[16]; snprintf(cent,sizeof cent,"%s|%s",wp_short(lt.weapon),pu_short(lt.pu));
-    bool puon=(lt.pu!=PU_NONE);
-    txc(W/2,1,1,puon&&((s_anim>>3)&1)?COL_GOLD:COL_MUT,cent);
-
-    // weapon cooldown bar (red when ready, dark when cooling)
-    int cd_max=fire_cd_for(lt.weapon);
-    int cd_left=lt.fire_cd;
-    int bar_w=20, bar_x=W/2-bar_w/2;
-    uint16_t cd_col=(cd_left<=0)?COL_GREEN:mix(COL_RED,COL_BLACK,cd_left*255/cd_max);
-    d.fillRect(bar_x,6,bar_w,3,rgb(20,20,30));
-    if(cd_left>0) d.fillRect(bar_x,6,(bar_w*cd_left)/cd_max,3,cd_col);
-    else d.drawRect(bar_x,6,bar_w,3,COL_GREEN);
-
-    int sec=s_match_ms/1000;
-    char tm[8]; snprintf(tm,sizeof tm,"%d:%02d",sec/60,sec%60);
-    txc(W/2,HUD_H-8,1,sec<=10?COL_RED:COL_GREEN,tm);
+    if(lt.stun_ms>0&&((s_anim>>2)&1)) gui::text("EMP",W/2,HUD_H+4,1,gui::F_BODY,rgb(182,109,255),COL_BLACK);
 }
 
 // ========================== draw: shop overlay ================================
 static const char* shop_effect(int sitype){
     switch(sitype){
-        case SI_ARMOR:  return "-1 danno subito";
-        case SI_SPEED:  return "+20% velocita";
-        case SI_REPAIR: return "HP al massimo";
-        case SI_SHIELD: return "para 1 colpo";
-        case SI_EMP:    return "stordisce nemico";
-        case SI_WP_MG:  return "raffica rapida";
-        case SI_WP_RAIL:return "perfora i muri";
-        case SI_WP_SHOT:return "3 pallini a ventaglio";
-        case SI_WP_FLAK:return "rosa di piombini, corto raggio";
-        case SI_WP_ROCKET:return "esplosione ad area + rinculo";
-        case SI_WP_LASER:return "raggio veloce che trapassa";
-        case SI_WP_SNIPER:return "danno alto, trafora 2 volte";
-        case SI_WP_MINIGUN:return "fuoco rapido, poco danno";
-        case SI_REGEN:  return "guarisce 1 HP ogni 500ms";
+        case SI_ARMOR:  return GT("-1 danno subito","-1 damage taken");
+        case SI_SPEED:  return GT("+20% velocita","+20% speed");
+        case SI_REPAIR: return GT("HP al massimo","full HP");
+        case SI_SHIELD: return GT("para 1 colpo","blocks 1 hit");
+        case SI_EMP:    return GT("stordisce chi e' vicino","stuns enemies nearby");
+        case SI_WP_MG:  return GT("raffica rapida","rapid bursts");
+        case SI_WP_RAIL:return GT("perfora i muri","pierces walls");
+        case SI_WP_SHOT:return GT("3 pallini a ventaglio","3-pellet spread");
+        case SI_WP_FLAK:return GT("rosa di pallini, corto raggio","pellet cloud, short range");
+        case SI_WP_ROCKET:return GT("esplosione ad area + rinculo","area blast + recoil");
+        case SI_WP_LASER:return GT("raggio veloce che trapassa","fast piercing beam");
+        case SI_WP_SNIPER:return GT("danno alto, trafigge 2 volte","high damage, pierces twice");
+        case SI_WP_MINIGUN:return GT("fuoco rapido, poco danno","rapid fire, low damage");
+        case SI_REGEN:  return GT("+1 HP ogni mezzo secondo","+1 HP every half second");
     }
     return "";
 }
-#define SHOP_ROW   23
-#define SHOP_LIST0 33
+#define SHOP_ROW   18
+#define SHOP_LIST0 34
+#define SHOP_DESC  (H-24)              // the selected item's effect, under the list
 static void draw_shop(void){
     Tank &me=s_tanks[s_local];
     SellRow sell[4]; int nsell=build_sell_list(s_local,sell);
     int count=(s_shop_tab==0)?SHOP_N:nsell;
-    int vis=(H-12-SHOP_LIST0)/SHOP_ROW;                 // visible rows
+    int vis=(SHOP_DESC-SHOP_LIST0)/SHOP_ROW;            // visible rows
     if(s_shop_sel>=count) s_shop_sel=count>0?count-1:0;
     if(s_shop_sel<s_shop_scroll) s_shop_scroll=s_shop_sel;
     if(s_shop_sel>=s_shop_scroll+vis) s_shop_scroll=s_shop_sel-vis+1;
     if(s_shop_scroll<0) s_shop_scroll=0;
 
-    // ---- backdrop
-    d.fillRect(0,0,W,H,rgb(10,13,20));
-    // ---- header: title + big credits + countdown
-    d.fillRect(0,0,W,15,rgb(18,46,24));
-    d.drawFastHLine(0,15,W,rgb(40,120,60));
-    txt(4,1,2,COL_WHITE,"NEGOZIO");
+    gui::vgradient(0,0,W,H,rgb(0,73,0),COL_BLACK);
+    // ---- header: title + credits + countdown
+    gui::text(GT("NEGOZIO","SHOP"),4,-1,0,gui::F_BODY,COL_GREEN,COL_BLACK);
     char cr[12]; snprintf(cr,sizeof cr,"$%d",me.credits);
-    txr(W-30,1,2,COL_GOLD,cr);
+    gui::text(cr,W-26,-1,2,gui::F_BODY,COL_GOLD,COL_BLACK);
     int sec=me.shop_ms/1000;
     char tt[6]; snprintf(tt,sizeof tt,"%ds",sec);
     txr(W-2,4,1,sec<=5?COL_RED:COL_GREEN,tt);
     // ---- tabs
-    const char* tabs[2]={"COMPRA","VENDI"};
     for(int i=0;i<2;i++){
         int x0=i*(W/2), tw=W/2;
         bool on=(s_shop_tab==i);
-        d.fillRect(x0,16,tw,15,on?rgb(30,60,36):rgb(16,20,28));
-        if(on){ d.drawFastHLine(x0,16,tw,COL_GREEN); d.fillRect(x0,29,tw,2,COL_GREEN); }
-        d.drawFastVLine(W/2,16,15,rgb(40,48,64));
-        txc(x0+tw/2,18,2,on?COL_WHITE:COL_DIM,tabs[i]);
+        d.fillRect(x0,16,tw,15,on?rgb(0,109,0):rgb(0,0,40));
+        if(on) d.fillRect(x0,29,tw,2,COL_GREEN);
+        gui::text(i?GT("VENDI","SELL"):GT("COMPRA","BUY"),x0+tw/2,15,1,gui::F_SMALL,on?COL_WHITE:COL_DIM,COL_BLACK);
     }
-    // ---- timer bar
+    // ---- time left in the shop
     int tbar=(me.shop_ms*W)/20000; if(tbar>W) tbar=W;
-    d.fillRect(0,31,W,2,rgb(24,30,40));
+    d.fillRect(0,31,W,2,rgb(0,0,85));
     d.fillRect(0,31,tbar,2,sec<=5?COL_RED:COL_GREEN);
 
-    // ---- list
-    if(count==0){
-        txc(W/2,H/2-6,2,COL_DIM, s_shop_tab? "NIENTE DA VENDERE":"ESAURITO");
-    }
+    // ---- list: name + price on one line; what it does goes in the strip below (smartwatch preview)
+    if(count==0) gui::text(s_shop_tab?GT("Niente da vendere","Nothing to sell"):GT("Esaurito","Sold out"),W/2,H/2-12,1,gui::F_BODY,COL_DIM,COL_BLACK);
+    const char *eff_sel=nullptr;
     int y=SHOP_LIST0;
-    for(int i=s_shop_scroll;i<count&&y<H-12;i++){
+    for(int i=s_shop_scroll;i<count&&i<s_shop_scroll+vis;i++){
         bool sel=(i==s_shop_sel);
-        const char* name; const char* eff; int price; bool can; uint16_t accent;
+        const char* name; const char* eff; int price; bool can, soldOut=false; uint16_t accent;
         if(s_shop_tab==0){
             ShopItem &it=s_shop_items[s_local][i];
-            name=SHOP_CAT[it.type].name; eff=shop_effect(it.type); price=it.cost;
-            can=!it.sold&&me.credits>=it.cost; accent=COL_GREEN;
-            if(it.sold){ name=SHOP_CAT[it.type].name; }
+            name=shop_name(it.type); eff=shop_effect(it.type); price=it.cost;
+            soldOut=it.sold; can=!it.sold&&me.credits>=it.cost; accent=COL_GREEN;
         } else {
-            name=sell[i].label; eff="+ crediti"; price=sell[i].refund; can=true; accent=COL_GOLD;
+            name=sell[i].label; eff=GT("vendi: + crediti","sell: + credits"); price=sell[i].refund; can=true; accent=COL_GOLD;
         }
-        bool soldOut=(s_shop_tab==0&&s_shop_items[s_local][i].sold);
-        uint16_t bg = soldOut?rgb(26,26,30) : sel?(s_shop_tab?rgb(48,40,18):rgb(22,46,26)) : rgb(16,19,26);
-        d.fillRect(0,y,W,SHOP_ROW-1,bg);
-        if(sel){ d.drawRect(0,y,W,SHOP_ROW-1,accent); d.fillRect(0,y,3,SHOP_ROW-1,accent); }
-        uint16_t nc = soldOut?COL_DIM : can?COL_WHITE : mix(COL_RED,COL_WHITE,90);
-        txt(8,y+2,2,nc,name);
-        txt(8,y+15,1,sel?COL_MUT:COL_DIM,soldOut?"VENDUTO":eff);
-        // price chip right
+        if(sel){ eff_sel=soldOut?GT("gia' comprato","already bought"):eff;
+                 d.fillRoundRect(2,y,W-4,SHOP_ROW-1,4,s_shop_tab?rgb(73,73,0):rgb(0,73,0)); d.drawRoundRect(2,y,W-4,SHOP_ROW-1,4,accent); }
+        uint16_t nc = soldOut?COL_DIM : can?COL_WHITE : rgb(255,146,146);
+        gui::text(name,10,y+1,0,gui::F_SMALL,nc,COL_BLACK);
         char pc[8]; snprintf(pc,sizeof pc,(s_shop_tab?"+%d":"$%d"),price);
-        txr(W-6,y+4,2, soldOut?COL_DIM : s_shop_tab?COL_GOLD : can?COL_GOLD:COL_RED, pc);
-        if(sel&&can&&!soldOut) txr(W-6,y+16,1,accent,"K");
+        gui::text(soldOut?"--":pc,W-10,y+1,2,gui::F_SMALL,soldOut?COL_DIM:s_shop_tab?COL_GOLD:can?COL_GOLD:COL_RED,COL_BLACK);
         y+=SHOP_ROW;
     }
-    // ---- scroll arrows
-    if(s_shop_scroll>0)            txc(W-12,SHOP_LIST0-1,1,COL_GREEN,"^"); // more above
-    if(s_shop_scroll+vis<count)    txc(W-12,H-13,1,COL_GREEN,"v");         // more below
-    // ---- footer
-    d.fillRect(0,H-11,W,11,rgb(14,17,24));
-    d.drawFastHLine(0,H-11,W,rgb(34,40,54));
-    txt(2,H-9,1,COL_MUT,"A/D scheda  W/S scorri");
-    txr(W-2,H-9,1,COL_MUT,"K ok  ESC esci");
+    if(s_shop_scroll>0)         d.fillTriangle(W/2-4,SHOP_LIST0-1,W/2,SHOP_LIST0-5,W/2+4,SHOP_LIST0-1,COL_GREEN);
+    if(s_shop_scroll+vis<count) d.fillTriangle(W/2-4,SHOP_DESC-3,W/2,SHOP_DESC+1,W/2+4,SHOP_DESC-3,COL_GREEN);
+    if(eff_sel){ d.fillRect(0,SHOP_DESC+2,W,11,rgb(0,0,40)); txc(W/2,SHOP_DESC+4,1,COL_GOLD,eff_sel); }
+    // ---- footer (play is fullscreen: the shop names its own keys)
+    d.fillRect(0,H-10,W,10,COL_BLACK);
+    txc(W/2,H-9,1,COL_MUT,GT("A/D scheda  W/S scorri  K ok  Esc","A/D tab  W/S scroll  K ok  Esc"));
 }
 
-// ========================== draw: felt bg =====================================
-// cheap full-screen backdrop: vertical gradient (1 hline/row) + parallax stars + grid
-static void felt(void){
-    uint16_t top=rgb(10,14,30), bot=rgb(20,12,28);
-    for(int y=0;y<H;y++) d.drawFastHLine(0,y,W,mix(top,bot,y*256/H));
-    // faint perspective grid toward horizon
-    for(int y=H/2;y<H;y+=6){ int sh=(y-H/2); d.drawFastHLine(0,y,W,mix(bot,rgb(40,30,60),40+sh)); }
-    // drifting stars (deterministic positions, scroll with s_anim)
-    for(int i=0;i<26;i++){
-        int bx=(i*97)%W;
-        int sx=(bx + (int)(s_anim>>2) + i*13) % W;
-        int sy=(i*53)%(H/2);
-        uint16_t c=(i&3)?rgb(60,70,110):rgb(120,140,200);
-        d.drawPixel(sx,sy,c);
-        if((i&7)==0) d.drawPixel((sx+1)%W,sy,mix(c,COL_BLACK,80));
-    }
-}
-
-// ========================== draw: menu ========================================
+// ========================== draw: menus =======================================
+#define ACCENT  COL_P1
 #define NMENU 5
+static gui::Menu s_menu, s_bmenu;           // main menu / room list (selection + glide)
 static const char* menu_label(int i){
-    switch(i){ case 0: return "Duello vs CPU"; case 1: return "Sopravvivenza"; case 2: return "Crea partita";
-               case 3: return "Entra in partita"; default: return "Come si gioca"; }
+    switch(i){ case 0: return GT("Duello vs CPU","Duel vs CPU"); case 1: return GT("Sopravvivenza","Survival");
+               case 2: return GT("Crea partita","Host a match"); case 3: return GT("Entra in partita","Join a match");
+               default: return GT("Come si gioca","How to play"); }
 }
 static const char* mtype_name(int m){
-    switch(m){ case MT_COOP: return "Co-op vs Bot"; case MT_BRAWL: return "Duello + Bot"; default: return "Duello 1v1"; }
-}
-// little tank emblem for the menu header
-static void menu_emblem(int cx,int cy,uint16_t col,int dir){
-    static const int BDX[4]={0,1,0,-1}, BDY[4]={-1,0,1,0};
-    d.fillRoundRect(cx-6,cy-5,12,11,2,mix(col,COL_BLACK,70));
-    d.drawFastHLine(cx-4,cy-5,8,mix(col,COL_WHITE,110));
-    d.fillRoundRect(cx-3,cy-3,7,7,1,mix(col,COL_WHITE,40));
-    d.drawLine(cx,cy,cx+BDX[dir]*9,cy+BDY[dir]*9,rgb(90,96,110));
-    d.fillRect(cx-7,cy-6,3,13,rgb(40,42,50)); d.fillRect(cx+5,cy-6,3,13,rgb(40,42,50));
+    switch(m){ case MT_COOP: return GT("Co-op vs bot","Co-op vs bots"); case MT_BRAWL: return GT("Duello + bot","Duel + bots"); default: return GT("Duello 1v1","Duel 1v1"); }
 }
 static void draw_menu(void){
-    felt();
-    // title with chunky drop-shadow + chrome shimmer
-    int blink=(s_anim>>3)&1;
-    txc(W/2+2,6,3,rgb(8,8,16),"TANK DUEL");
-    txc(W/2+1,5,3,mix(COL_P1,COL_BLACK,120),"TANK DUEL");
-    txc(W/2,4,3,blink?COL_WHITE:COL_P1,"TANK DUEL");
-    d.drawFastHLine(W/2-58,24,116,mix(COL_P1,COL_BLACK,80));
-    d.drawFastHLine(W/2-46,26,92,rgb(40,50,80));
-    // flanking tank emblems facing inward
-    menu_emblem(20,14,COL_P1,1);
-    menu_emblem(W-20,14,COL_P2,3);
-    // fixed list (no carousel wrap → no duplicated entry)
-    int cy=30, rh=19;
-    for(int i=0;i<NMENU;i++){
-        int y=cy+i*rh;
-        bool sel=(i==s_msel);
-        if(sel){
-            d.fillRoundRect(10,y,W-20,rh-3,4,rgb(26,40,68));
-            d.fillRoundRect(10,y,W-20,3,4,rgb(40,60,100));     // top sheen
-            d.drawRoundRect(10,y,W-20,rh-3,4,blink?COL_GOLD:COL_P1);
-            d.fillRect(14,y+3,3,rh-9,COL_GOLD);
-            txc(W/2+4,y+1,2,COL_WHITE,menu_label(i));
-            txt(W-26,y+2,1,blink?COL_GOLD:COL_MUT,">");
-        } else {
-            txc(W/2,y+1,2,COL_MUT,menu_label(i));
-        }
-    }
-    txc(W/2,H-9,1,COL_DIM,"SU/GIU scegli   K conferma");
+    const char *items[NMENU]; for(int i=0;i<NMENU;i++) items[i]=menu_label(i);
+    int y=gui::title("TANK DUEL",nullptr,ACCENT);
+    // the two rival tanks flank the title
+    Tank a={}; a.type=TT_BULLDOG; a.dir=1; a.fx=1; a.alive=true; a.x=s_cam_x+18; a.y=s_cam_y-HUD_H+16;
+    s_shx=s_shy=0; draw_tank_sprite(a,COL_P1);
+    a.type=TT_VIPER; a.dir=3; a.fx=-1; a.x=s_cam_x+W-19; draw_tank_sprite(a,COL_P2);
+    gui::menu(s_menu,items,NMENU,y,nucleo_app_content_height(),ACCENT);
 }
 static void draw_how(void){
-    felt();
-    txc(W/2,3,2,COL_P1,"CONTROLLI");
-    d.drawFastHLine(10,20,W-20,COL_DIM);
-    txt(6,24,1,COL_WHITE,"W/E/R = su    A = sx    S = giu    D = dx");
-    txt(6,36,1,COL_WHITE,"K = spara   L = usa powerup");
-    txt(6,48,1,COL_WHITE,"ESC = pausa / menu");
-    d.drawFastHLine(10,60,W-20,COL_DIM);
-    txc(W/2,64,1,COL_GOLD,"SHOP");
-    txt(6,74,1,COL_WHITE,"Entra nel riquadro verde per comprare.");
-    txt(6,84,1,COL_WHITE,"20 secondi max. Sei nascosto dalla mappa.");
-    txt(6,94,1,COL_WHITE,"Guadagni crediti: colpire +2, uccidere +15.");
-    txc(W/2,H-10,1,COL_DIM,"ESC indietro");
+    int y=gui::title(GT("Come si gioca","How to play"),nullptr,ACCENT);
+    txt(6,y,1,COL_WHITE,GT("W/E/R su  A sinistra  S giu  D destra","W/E/R up  A left  S down  D right"));
+    txt(6,y+11,1,COL_WHITE,GT("K spara   L usa il power-up","K fire   L use the power-up"));
+    txt(6,y+22,1,COL_WHITE,GT("Esc pausa (di nuovo: esci)","Esc pause (again: leave)"));
+    txt(6,y+37,1,COL_GOLD,GT("Negozio: entra nel riquadro verde.","Shop: drive onto the green pad."));
+    txt(6,y+48,1,COL_WHITE,GT("20 s, invisibile sulla mappa rivale","20 s, hidden from the rival's map"));
+    txt(6,y+59,1,COL_WHITE,GT("Crediti: colpo +2, distrutto +15","Credits: hit +2, kill +15"));
+}
+static const char* tank_desc(int t){
+    switch(t){ case TT_VIPER: return GT("Velocissimo ma fragile","Very fast but fragile");
+               case TT_PHANTOM: return GT("Bilanciato, buon miratore","Balanced all-rounder");
+               case TT_CRUSHER: return GT("Corazzato, lento, durissimo","Armored, slow, very tough");
+               default: return GT("Robusto e resistente","Sturdy and tough"); }
+}
+// one tank at a time, smartwatch style: the real sprite big on the left, its stats as bars, UP/DOWN cycles
+static void stat_bar(int x,int y,const char *lab,int v,int vmax,uint16_t col){
+    txt(x,y,1,COL_MUT,lab);
+    d.fillRoundRect(x+30,y,90,7,3,rgb(0,0,85));
+    d.fillRoundRect(x+30,y,90*v/vmax,7,3,col);
 }
 static void draw_tank_select(void){
-    felt();
-    static const struct{ const char*name; int hp; int spd; int arm; const char*desc; } TYPES[TT_COUNT]={
-        {"BULLDOG", 8,40,1,"Robusto e resistente, lento"},
-        {"VIPER",   4,80,0,"Velocissimo ma fragile"},
-        {"PHANTOM", 5,60,0,"Bilanciato, buon miratore"},
-        {"CRUSHER",10,25,2,"Corazzato, lentissimo, duro"},
-    };
-    // header
-    d.fillRect(0,0,W,16,rgb(20,28,46));
-    d.drawFastHLine(0,16,W,rgb(60,90,150));
-    txc(W/2,1,2,COL_GOLD,"SCEGLI IL TANK");
-    // rows
-    int cy=20, rh=22;
-    for(int i=0;i<TT_COUNT;i++){
-        bool sel=(i==s_tsel);
-        int y=cy+i*rh;
-        uint16_t bc=sel?rgb(24,42,72):rgb(13,15,22);
-        d.fillRect(0,y,W,rh-1,bc);
-        if(sel){ d.drawRect(0,y,W,rh-1,COL_P1); d.fillRect(0,y,3,rh-1,COL_GOLD); }
-        menu_emblem(18,y+rh/2-1, sel?COL_P1:COL_DIM, 1);
-        txt(32,y+3,2,sel?COL_WHITE:COL_MUT,TYPES[i].name);
-        char st[24]; snprintf(st,sizeof st,"HP%d SPD%d ARM%d",TYPES[i].hp,TYPES[i].spd,TYPES[i].arm);
-        txr(W-6,y+7,1,sel?COL_GREEN:COL_DIM,st);
-    }
-    // selected description strip
-    int dy=cy+TT_COUNT*rh+2;
-    d.fillRect(0,dy,W,11,rgb(16,20,30));
-    txc(W/2,dy+2,1,COL_GREEN,TYPES[s_tsel].desc);
-    // footer
-    txc(W/2,H-9,1,COL_DIM,"W/S scegli   K conferma   ESC indietro");
+    static const uint8_t HP[TT_COUNT]={8,4,5,10}, SPD[TT_COUNT]={42,80,60,25}, ARM[TT_COUNT]={1,0,0,2};
+    int y=gui::title(GT("Scegli il tank","Pick your tank"),nullptr,ACCENT);
+    gui::panel(6,y,70,64,rgb(0,0,85),rgb(73,109,170));
+    Tank a={}; a.type=s_tsel; a.dir=0; a.fy=-1; a.alive=true; a.x=s_cam_x+41; a.y=s_cam_y-HUD_H+y+36;
+    s_shx=s_shy=0; draw_tank_sprite(a,COL_P1);
+    gui::text(tank_name(s_tsel),84,y,0,gui::F_BODY,COL_WHITE,COL_BLACK);
+    stat_bar(84,y+22,"HP",HP[s_tsel],10,COL_GREEN);
+    stat_bar(84,y+33,"SPD",SPD[s_tsel],80,COL_GOLD);
+    stat_bar(84,y+44,"ARM",ARM[s_tsel],2,rgb(109,182,255));
+    for(int i=0;i<TT_COUNT;i++) d.fillCircle(96+i*10,y+58,2,i==s_tsel?ACCENT:rgb(36,36,85));
+    gui::text(tank_desc(s_tsel),W/2,y+67,1,gui::F_SMALL,COL_GREEN,COL_BLACK);
+}
+static void wait_dots(int cy){
+    for(int i=0;i<3;i++) d.fillCircle(W/2-12+i*12,cy,2,(s_now/300)%3==i?ACCENT:rgb(36,36,85));
 }
 static void draw_host_screen(void){
-    felt();
-    txc(W/2,4,2,COL_P1,"CREA PARTITA");
-    d.drawFastHLine(10,21,W-20,COL_DIM);
-    char nm[24]; snprintf(nm,sizeof nm,"%.18s",pnet_name()); txc(W/2,26,2,COL_GOLD,nm);
-    char ch[24]; snprintf(ch,sizeof ch,"canale %d  -  Tank %s",pnet_channel(),tank_name(s_tanks[0].type));
-    txc(W/2,44,1,COL_GREEN,ch);
-    // ---- match-type selector (SU/GIU)
-    d.fillRect(20,56,W-40,18,rgb(24,34,56));
-    d.drawRect(20,56,W-40,18,COL_P1);
-    txt(26,61,1,COL_MUT,"Modalita:");
-    txr(W-26,60,2,((s_anim>>3)&1)?COL_WHITE:COL_GOLD,mtype_name(s_match_type));
-    txc(W/2,78,1,COL_DIM,"SU/GIU cambia modalita");
-    char dots[5]="    "; for(int i=0;i<(int)((s_anim>>2)%4);i++) dots[i]='.';
-    char w[40]; snprintf(w,sizeof w,"Attendo sfidante%s",dots);
-    txc(W/2,96,1,COL_WHITE,w);
-    txc(W/2,H-9,1,COL_DIM,"ESC annulla");
+    char sub[40]; snprintf(sub,sizeof sub,GT("%.12s - canale %d","%.12s - channel %d"),pnet_name(),pnet_channel());
+    int y=gui::title(GT("Crea partita","Host a match"),sub,ACCENT);
+    gui::panel(14,y+2,W-28,24,rgb(0,0,85),COL_GOLD);
+    gui::text("<",22,y+5,0,gui::F_BODY,COL_GOLD,COL_BLACK);
+    gui::text(">",W-22,y+5,2,gui::F_BODY,COL_GOLD,COL_BLACK);
+    gui::text(mtype_name(s_match_type),W/2,y+5,1,gui::F_BODY,COL_WHITE,COL_BLACK);
+    gui::text(GT("Attendo sfidante","Waiting for a rival"),W/2,y+32,1,gui::F_SMALL,COL_WHITE,COL_BLACK);
+    wait_dots(y+54);
 }
 static void draw_browse_screen(void){
-    felt();
-    txc(W/2,5,2,COL_P2,"ENTRA IN PARTITA");
-    char ch[24]; snprintf(ch,sizeof ch,"canale %d",pnet_channel()); txr(W-8,8,1,COL_GREEN,ch);
-    d.drawFastHLine(10,22,W-20,COL_DIM);
+    char sub[24]; snprintf(sub,sizeof sub,GT("canale %d","channel %d"),pnet_channel());
+    int y=gui::title(GT("Entra in partita","Join a match"),sub,COL_P2);
     if(s_join_pending){
-        txc(W/2,50,1,COL_DIM,"Connessione...");
-        char dots[5]="    "; for(int i=0;i<(int)((s_anim>>2)%4);i++) dots[i]='.';
-        char w[30]; snprintf(w,sizeof w,"contatto%s",dots); txc(W/2,70,1,COL_WHITE,w);
+        gui::text(GT("Mi collego...","Connecting..."),W/2,y+8,1,gui::F_BODY,COL_WHITE,COL_BLACK);
+        wait_dots(y+40);
         return;
     }
     if(s_nhost==0){
-        txc(W/2,50,1,COL_WHITE,"Nessuna partita trovata");
-        txc(W/2,66,1,COL_DIM,"Sull'altro Cardputer:");
-        txc(W/2,78,1,COL_DIM,"Tank Duel > Crea partita");
+        gui::text(GT("Cerco partite...","Looking for matches..."),W/2,y+2,1,gui::F_SMALL,COL_WHITE,COL_BLACK);
+        wait_dots(y+26);
+        gui::text(GT("Sull'altro: Tank Duel > Crea","Other device: Tank Duel > Host"),W/2,y+36,1,gui::F_SMALL,COL_DIM,COL_BLACK);
         return;
     }
-    txt(10,28,1,COL_DIM,"Partite disponibili:");
-    int y=40;
-    for(int i=0;i<s_nhost&&y<H-14;i++){
-        bool sel=(i==s_bsel);
-        if(sel){
-            d.fillRoundRect(8,y,W-16,20,4,rgb(36,28,20));
-            d.drawRoundRect(8,y,W-16,20,4,COL_P2);
-            txr(W-14,y+5,1,((s_anim>>2)&1)?COL_GREEN:COL_WHITE,"INVIO>");
-        }
-        txt(16,y+5,1,sel?COL_WHITE:COL_MUT,s_hosts[i].name);
-        y+=sel?24:18;
-    }
+    const char *items[NHOST]; for(int i=0;i<s_nhost;i++) items[i]=s_hosts[i].name;
+    s_bmenu.sel=(int8_t)s_bsel;
+    gui::menu(s_bmenu,items,s_nhost,y,nucleo_app_content_height(),COL_P2);
 }
 static void draw_pause(void){
-    // semi-transparent overlay
-    for(int y=H/2-22;y<H/2+24;y+=2) d.drawFastHLine(0,y,W,rgb(14,16,24));
-    d.fillRoundRect(20,H/2-24,W-40,48,6,rgb(16,20,36));
-    d.drawRoundRect(20,H/2-24,W-40,48,6,COL_P1);
-    txc(W/2,H/2-16,2,COL_GOLD,"PAUSA");
-    txc(W/2,H/2-2,1,COL_WHITE,"K = riprendi  ESC = abbandona");
+    gui::dialog(GT("PAUSA","PAUSED"),s_mode==GM_CPU?nullptr:GT("La partita continua!","The match goes on!"),nullptr,
+                GT("INVIO riprendi   Esc esci","ENTER resume   Esc leave"),ACCENT);
 }
 static void draw_over(void){
-    felt();
-    bool coop=(s_match_type==MT_COOP);
+    bool coop=(s_match_type==MT_COOP), won=local_won();
     const char* t; uint16_t tc;
-    if(coop){
-        bool win=(s_winner==WIN_HUMANS);
-        t=win?"VITTORIA":"SCONFITTA"; tc=win?COL_GREEN:COL_RED;
-    } else {
-        bool iwon=(s_winner==s_local);
-        t=s_winner<0?"PAREGGIO":iwon?"HAI VINTO":"HAI PERSO";
-        tc=s_winner<0?COL_GOLD:iwon?COL_GREEN:COL_RED;
-    }
-    // ---- big banner with framed title
-    d.fillRect(0,6,W,34,mix(tc,COL_BLACK,205));
-    d.drawFastHLine(0,6,W,tc);
-    d.drawFastHLine(0,7,W,mix(tc,COL_WHITE,40));
-    d.drawFastHLine(0,39,W,tc);
-    txc(W/2+2,13,3,rgb(6,8,14),t);            // drop shadow
-    txc(W/2,11,3,((s_anim>>3)&1)?COL_WHITE:tc,t);
-    // ---- result rows for the active human players (winner row highlighted)
+    if(coop){ t=won?GT("Sopravvissuto!","You survived!"):GT("Sconfitta","Defeat"); tc=won?COL_GREEN:COL_RED; }
+    else { t=s_winner<0?GT("Pareggio","Draw"):won?GT("Hai vinto!","You win!"):GT("Hai perso","You lose"); tc=s_winner<0?COL_GOLD:won?COL_GREEN:COL_RED; }
+    int elapsed=(180000-s_match_ms)/1000;
+    char sub[48]; snprintf(sub,sizeof sub,"%s - %d:%02d",coop?GT("Sopravvivenza","Survival"):mtype_name(s_match_type),elapsed/60,elapsed%60);
+    int y=gui::title(t,sub,tc);
+    // one row per human: colour tag, tank, HP left, credits; the winner framed in gold
     for(int p=0;p<s_nplayers;p++){
-        int y=48+p*22;
-        bool isLocal=(p==s_local);
-        bool isWin=(s_winner==p)||(coop&&s_winner==WIN_HUMANS);
+        int ry=y+p*20;
+        bool isWin=(s_winner==p)||(coop&&won);
         uint16_t col=p==0?COL_P1:COL_P2;
-        d.fillRect(16,y,W-32,19,isWin?mix(col,COL_BLACK,150):rgb(15,18,26));
-        d.fillRect(16,y,4,19,col);
-        if(isWin) d.drawRect(16,y,W-32,19,COL_GOLD);
-        char lbl[16]; snprintf(lbl,sizeof lbl,"%s%s",p==0?"P1":"P2",isLocal?" (tu)":"");
-        txt(26,y+6,1,col,lbl);
-        char st[20]; snprintf(st,sizeof st,"HP %d/%d  $%d",s_tanks[p].hp,s_tanks[p].hp_max,s_tanks[p].credits);
-        txr(W-22,y+6,1,COL_WHITE,st);
-        if(isWin) txt(W/2-8,y+6,1,COL_GOLD,"WIN");
+        gui::panel(10,ry,W-20,17,isWin?rgb(36,73,0):rgb(0,0,40),isWin?COL_GOLD:rgb(36,36,85));
+        d.fillRect(14,ry+4,4,9,col);
+        char lbl[24]; snprintf(lbl,sizeof lbl,"%s%s",tank_name(s_tanks[p].type),p==s_local?GT(" (tu)"," (you)"):"");
+        txt(22,ry+5,1,col,lbl);
+        char st[24]; snprintf(st,sizeof st,"HP %d/%d  $%d",s_tanks[p].hp<0?0:s_tanks[p].hp,s_tanks[p].hp_max,s_tanks[p].credits);
+        txr(W-16,ry+5,1,COL_WHITE,st);
     }
-    // ---- co-op / survival score line + stats
-    int stats_y=(coop||s_nbots==0)?94:82;
-    if(s_nbots>0){
-        char sc[40]; snprintf(sc,sizeof sc,"Bot eliminati: %d   Ondata: %d",s_bot_kills,s_bot_level+1);
-        txc(W/2,stats_y,1,COL_GOLD,sc);
-        stats_y+=12;
-    }
-    // damage stats: P1 vs P2
-    if(!coop && s_nplayers>=2){
-        int p1dmg=s_tanks[0].hp_max-s_tanks[0].hp;
-        int p2dmg=s_tanks[1].hp_max-s_tanks[1].hp;
-        char dstr[32]; snprintf(dstr,sizeof dstr,"Danno subito: %d vs %d",p1dmg,p2dmg);
-        txc(W/2,stats_y,1,COL_WHITE,dstr);
-        stats_y+=10;
-    }
-    // match time
-    int elapsed=180000-s_match_ms;
-    char tm[32]; snprintf(tm,sizeof tm,"Tempo: %d:%02d",(elapsed/1000)/60,(elapsed/1000)%60);
-    txc(W/2,stats_y,1,COL_GREEN,tm);
-    // disconnect notice
-    if(s_peerleft) txc(W/2,stats_y+12,1,COL_RED,"Avversario disconnesso");
-    // ---- footer prompt, clear of the bottom edge
-    d.fillRect(0,H-12,W,12,rgb(14,17,24));
-    d.drawFastHLine(0,H-12,W,rgb(34,40,54));
-    txc(W/2,H-10,1,((s_anim>>3)&1)?COL_WHITE:COL_DIM,"INVIO rigioca    ESC menu");
+    int sy=y+s_nplayers*20+3;
+    char sc[40];
+    if(s_nbots>0){ snprintf(sc,sizeof sc,GT("Bot distrutti: %d   Ondata: %d","Bots destroyed: %d   Wave: %d"),s_bot_kills,s_bot_level+1); txc(W/2,sy,1,COL_GOLD,sc); sy+=11; }
+    if(s_peerleft) txc(W/2,sy,1,COL_RED,GT("Avversario disconnesso","Opponent disconnected"));
 }
 
 // ========================== draw: main ========================================
+static void draw_field(void){ draw_map(); draw_picks(); draw_tanks(); draw_bullets(); draw_sparks(); draw_flash(); draw_hud(); }
 static void on_draw(void){
     switch(s_state){
         case GS_MENU:   draw_menu(); break;
         case GS_SELECT: draw_tank_select(); break;
         case GS_HOST:   draw_host_screen(); break;
         case GS_BROWSE: draw_browse_screen(); break;
-        case GS_SHOP:   draw_map(); draw_picks(); draw_tanks(); draw_bullets(); draw_sparks(); draw_flash(); draw_hud(); draw_shop(); break;
-        case GS_PAUSE:  draw_map(); draw_picks(); draw_tanks(); draw_bullets(); draw_sparks(); draw_hud(); draw_pause(); break;
-        case GS_PLAY:
-            draw_map();
-            draw_picks();
-            draw_tanks();
-            draw_bullets();
-            draw_sparks();
-            draw_flash();
-            draw_hud();
-            break;
+        case GS_SHOP:   draw_field(); draw_shop(); break;
+        case GS_PAUSE:  draw_field(); draw_pause(); break;
+        case GS_PLAY:   draw_field(); break;
         case GS_OVER:   draw_over(); break;
         case GS_HOW:    draw_how(); break;
         default: break;
@@ -2313,10 +2121,12 @@ static void on_draw(void){
 }
 
 // ========================== state transitions ================================
+static void set_hint(void);
 static void go(int state){
     s_state=state;
     nucleo_app_set_fullscreen(state==GS_PLAY||state==GS_SHOP||state==GS_PAUSE);
-    if(state==GS_OVER) sfx_play((s_winner==s_local)?6:7);
+    if(state==GS_OVER) sfx_play(local_won()?6:7);    // co-op wins used to play the defeat jingle
+    set_hint();
     nucleo_app_request_draw();
 }
 static void start_match(int mode, int t1type, int t2type){
@@ -2343,21 +2153,34 @@ static void start_match(int mode, int t1type, int t2type){
 }
 static void leave_to_menu(void){
     send_bye(); s_haspeer=false; s_join_pending=false;
-    s_nhost=0; s_msel=0; go(GS_MENU);
+    s_nhost=0; go(GS_MENU);
+}
+// the footer hint of the screens that keep it (play, shop and pause are fullscreen)
+static void set_hint(void){
+    switch(s_state){
+        case GS_MENU:   nucleo_app_set_hint(GT("SU/GIU  INVIO scegli  Esc esci","UP/DN  ENTER pick  Esc quit")); break;
+        case GS_SELECT: nucleo_app_set_hint(GT("SU/GIU tank  INVIO ok  Esc indietro","UP/DN tank  ENTER ok  Esc back")); break;
+        case GS_HOST:   nucleo_app_set_hint(GT("SU/GIU modalita  Esc annulla","UP/DN mode  Esc cancel")); break;
+        case GS_BROWSE: nucleo_app_set_hint(GT("SU/GIU  INVIO entra  Esc indietro","UP/DN  ENTER join  Esc back")); break;
+        case GS_OVER:   if(s_mode==GM_CPU) nucleo_app_set_hint(GT("INVIO rivincita  Esc menu","ENTER rematch  Esc menu"));
+                        else nucleo_app_set_hint(GT("INVIO o Esc: menu","ENTER or Esc: menu"));
+                        break;
+        case GS_HOW:    nucleo_app_set_hint(GT("Esc indietro","Esc back")); break;
+        default: break;
+    }
 }
 
 // ========================== input ============================================
-static bool s_was_fire=false, s_was_pu=false;
+static int s_pu_req;          // guest: input packets still to carry the "use powerup" bit (lossy link: 4 tries)
 
 static void on_key(int k, char ch){
     (void)k;
     switch(s_state){
         case GS_MENU:
-            if(k==NK_UP)    { s_msel=(s_msel+NMENU-1)%NMENU; sfx_play(SFX_NAV); nucleo_app_request_draw(); }
-            else if(k==NK_DOWN){ s_msel=(s_msel+1)%NMENU;    sfx_play(SFX_NAV); nucleo_app_request_draw(); }
+            if(gui::menu_key(s_menu,k,NMENU)){ sfx_play(SFX_NAV); nucleo_app_request_draw(); }
             else if((k==NK_ENTER)||ch=='k'){
                 sfx_play(SFX_SEL);
-                if(s_msel<=3){ s_tsel=0; go(GS_SELECT); }   // 0..3 pick a tank first
+                if(s_menu.sel<=3) go(GS_SELECT);            // 0..3 pick a tank first (the last pick is kept)
                 else go(GS_HOW);
             }
             return;
@@ -2368,13 +2191,13 @@ static void on_key(int k, char ch){
                 { s_tsel=(s_tsel+1)%TT_COUNT; sfx_play(SFX_NAV); nucleo_app_request_draw(); }
             else if(ch=='k'||(k==NK_ENTER)){
                 sfx_play(SFX_SEL);
-                if(s_msel==0){                        // Duello vs CPU
+                if(s_menu.sel==0){                    // Duello vs CPU
                     s_match_type=MT_DUEL;
                     start_match(GM_CPU,s_tsel,(int)(esp_random()%TT_COUNT));
-                } else if(s_msel==1){                  // Sopravvivenza (solo + bot)
+                } else if(s_menu.sel==1){              // Sopravvivenza (solo + bot)
                     s_match_type=MT_COOP;
                     start_match(GM_CPU,s_tsel,TT_BULLDOG);
-                } else if(s_msel==2){                  // Crea partita (match type cycled on host screen)
+                } else if(s_menu.sel==2){              // Crea partita (match type cycled on host screen)
                     s_match_type=MT_DUEL;
                     tank_init(s_tanks[0],s_tsel,true);
                     s_haspeer=false; s_nhost=0;
@@ -2391,8 +2214,7 @@ static void on_key(int k, char ch){
             else if((k==NK_DOWN)||ch=='s'){ s_match_type=(s_match_type+1)%MT_COUNT; sfx_play(SFX_NAV); nucleo_app_request_draw(); }
             return;
         case GS_BROWSE:
-            if((k==NK_UP)||ch=='w')  { if(s_bsel>0){ s_bsel--; sfx_play(SFX_NAV);} nucleo_app_request_draw(); }
-            else if((k==NK_DOWN)||ch=='s'){ if(s_bsel<s_nhost-1){ s_bsel++; sfx_play(SFX_NAV);} nucleo_app_request_draw(); }
+            if(s_nhost>0&&!s_join_pending&&gui::menu_key(s_bmenu,k,s_nhost)){ s_bsel=s_bmenu.sel; sfx_play(SFX_NAV); nucleo_app_request_draw(); }
             else if((ch=='k'||(k==NK_ENTER))&&s_nhost>0&&!s_join_pending){
                 sfx_play(SFX_SEL);
                 memcpy(s_peer,s_hosts[s_bsel].mac,6); s_haspeer=true;
@@ -2401,10 +2223,9 @@ static void on_key(int k, char ch){
             }
             return;
         case GS_PLAY:
-            // movement + fire polled continuously in poll()
-            // L = use powerup (tap)
-            if(ch=='l'&&!s_was_pu){ pu_use(s_local); s_was_pu=true; }
-            else if(ch!='l') s_was_pu=false;
+            // movement + fire polled continuously in poll(); L = use powerup (letters never auto-repeat, so every
+            // event is a real press — the old latch ignored a second L unless another key came in between)
+            if(ch=='l'){ if(s_mode==GM_GUEST) s_pu_req=4; else pu_use(s_local); }
             return;
         case GS_SHOP: {
             Tank &me=s_tanks[s_local];
@@ -2422,7 +2243,7 @@ static void on_key(int k, char ch){
             } else if((k==NK_DOWN)||ch=='s'){
                 if(s_shop_sel<count-1){ s_shop_sel++; sfx_play(SFX_NAV); }
                 nucleo_app_request_draw();
-            } else if(ch=='k'){
+            } else if(ch=='k'||k==NK_ENTER){
                 if(s_shop_tab==0&&s_shop_sel<SHOP_N){
                     ShopItem &it=s_shop_items[s_local][s_shop_sel];
                     if(!it.sold&&me.credits>=it.cost){
@@ -2441,7 +2262,7 @@ static void on_key(int k, char ch){
             return;
         }
         case GS_PAUSE:
-            if(ch=='k') go(GS_PLAY);
+            if(ch=='k'||k==NK_ENTER){ s_last=now_ms(); go(GS_PLAY); }
             return;
         case GS_OVER:
             if(ch=='k'||(k==NK_ENTER)){
@@ -2466,7 +2287,7 @@ static bool on_back(int key){
             go(GS_PLAY); return true;
         }
         case GS_OVER:   leave_to_menu(); return true;
-        default: s_msel=0; go(GS_MENU); return true;
+        default: go(GS_MENU); return true;
     }
 }
 
@@ -2488,33 +2309,33 @@ static bool poll(void){
     bool live=false;
 
     if(s_state==GS_OVER){
-        live=true;   // host re-broadcasts the result (ESP-NOW lossy); also lets the prompt blink
+        // static result (no redraw); the host keeps re-broadcasting it (ESP-NOW is lossy)
         if(s_mode==GM_HOST&&s_haspeer&&s_now-s_last_tx>80) send_state();
+        return false;
     } else if(s_state==GS_MENU||s_state==GS_SELECT||s_state==GS_HOW){
-        // STATIC screens — redraw only on input (request_draw). Per-frame repaint of the
-        // full-screen felt()/stars caused visible flicker; Pong keeps its menu static too.
-        live=false;
+        // static screens: redraw on input, and while the menu cursor glides
+        return s_state==GS_MENU&&gui::menu_tick(s_menu,dt);
     } else if(s_state==GS_HOST){
         if(s_now-s_last_hello>400){ send_hello(HS_HOSTING); s_last_hello=s_now; }
-        live=true;
+        if(s_now-s_frame<150) return false;                 // the waiting dots need ~7 Hz, not 60
+        s_frame=s_now; return true;
     } else if(s_state==GS_BROWSE){
         hosts_prune();
         if(s_join_pending){
             if(s_now-s_join_resend>350){ send_join(); s_join_resend=s_now; }  // ESP-NOW is lossy: retry
             if(s_now-s_join_t>6000) s_join_pending=false;                       // give up after 6 s
         }
-        live=true;
+        if(gui::menu_tick(s_bmenu,dt)) return true;
+        if(s_now-s_frame<150) return false;
+        s_frame=s_now; return true;
     } else if(s_state==GS_PLAY||s_state==GS_SHOP||s_state==GS_PAUSE){
         sparks_step(dt);
         live=true;
 
-        // PAUSE freezes the sim, but keep the MP link alive with a heartbeat
-        if(s_state==GS_PAUSE){
-            if(s_mode==GM_HOST&&s_now-s_last_tx>200) send_state();
-            else if(s_mode==GM_GUEST&&s_now-s_last_tx>200) send_input(false,false,0,0);
-            if(s_mode!=GM_CPU&&s_now-s_last_rx>6000){ s_winner=(s_mode==GM_HOST)?0:-1; s_over_why="pause:rxto"; go(GS_OVER); return true; }
-            goto frame_check;
-        }
+        // vs CPU a pause freezes the match under a static card. Online it cannot (the host's pause froze the
+        // guest's game with no explanation): the match runs on and only this player's controls are idle.
+        if(s_state==GS_PAUSE&&s_mode==GM_CPU) return false;
+        bool ctl=(s_state==GS_PLAY);
 
         // shop timers
         for(int si=0;si<MAX_SHOPS;si++){
@@ -2545,7 +2366,7 @@ static bool poll(void){
                 // time up: co-op humans survived → win; duel/brawl → most HP wins
                 if(s_match_type==MT_COOP) s_winner=WIN_HUMANS;
                 else s_winner=(s_tanks[0].hp>s_tanks[1].hp)?0:(s_tanks[1].hp>s_tanks[0].hp)?1:-1;
-                s_over_why="timeup"; go(GS_OVER);
+                go(GS_OVER);
                 if(s_mode==GM_HOST) send_state();
                 return true;
             }
@@ -2560,25 +2381,26 @@ static bool poll(void){
             Tank &lt=s_tanks[s_local];
             bool shopping=lt.in_shop;
             if(shopping){ lt.shop_ms-=dt; if(lt.shop_ms<0) lt.shop_ms=0; }
-            bool up=!shopping&&(nucleo_kbd_char_down('w')||nucleo_kbd_char_down('e')||nucleo_kbd_char_down('r'));
-            bool lt_=!shopping&&nucleo_kbd_char_down('a');
-            bool dn=!shopping&&nucleo_kbd_char_down('s');
-            bool rt=!shopping&&nucleo_kbd_char_down('d');
-            bool fire=!shopping&&nucleo_kbd_char_down('k');
+            bool live=!shopping&&ctl;
+            bool up=live&&(nucleo_kbd_char_down('w')||nucleo_kbd_char_down('e')||nucleo_kbd_char_down('r'));
+            bool lt_=live&&nucleo_kbd_char_down('a');
+            bool dn=live&&nucleo_kbd_char_down('s');
+            bool rt=live&&nucleo_kbd_char_down('d');
+            bool fire=live&&nucleo_kbd_char_down('k');
             int mvx=(rt?1:0)-(lt_?1:0), mvy=(dn?1:0)-(up?1:0);   // 8-way intent
             if(mvx||mvy) tank_drive(s_local,mvx,mvy,(float)dt);  // local prediction
             if(fire) tank_fire(s_local);
             for(int p=0;p<2;p++) if(s_tanks[p].flash_ms>0) s_tanks[p].flash_ms-=dt;
             for(int p=0;p<2;p++) if(s_tanks[p].hurt_ms>0) s_tanks[p].hurt_ms-=dt;
-            if(s_now-s_last_tx>25) send_input(fire,false,mvx,mvy);
+            if(s_now-s_last_tx>25){ send_input(fire,s_pu_req>0,mvx,mvy); if(s_pu_req>0) s_pu_req--; }
             cam_update();
-            if(s_now-s_last_rx>3500){ s_winner=-1; s_over_why="guest:rxto"; go(GS_OVER); return true; }
+            if(s_now-s_last_rx>3500){ s_winner=-1; s_peerleft=true; go(GS_OVER); return true; }
             goto frame_check;
         }
 
         // Host or CPU: run full simulation
         // local tank input — read BOTH axes for 8-way diagonal movement
-        {
+        if(ctl){
             bool up=nucleo_kbd_char_down('w')||nucleo_kbd_char_down('e')||nucleo_kbd_char_down('r');
             bool lt_=nucleo_kbd_char_down('a');
             bool dn=nucleo_kbd_char_down('s');
@@ -2588,8 +2410,8 @@ static bool poll(void){
             if(mvx||mvy) tank_drive(s_local,mvx,mvy,(float)dt);
             if(fire) tank_fire(s_local);
         }
-        // fire cooldowns
-        for(int p=0;p<2;p++) if(s_tanks[p].fire_cd>0) s_tanks[p].fire_cd-=dt;
+        // fire cooldowns + EMP stun
+        for(int p=0;p<2;p++){ if(s_tanks[p].fire_cd>0) s_tanks[p].fire_cd-=dt; if(s_tanks[p].stun_ms>0) s_tanks[p].stun_ms-=dt; }
         // powerup timers
         for(int p=0;p<2;p++){
             Tank &t=s_tanks[p];
@@ -2626,7 +2448,7 @@ static bool poll(void){
         if(s_state==GS_SHOP&&!s_tanks[s_local].in_shop) go(GS_PLAY);
         // check victory
         if(match_over_check()){
-            s_over_why="elim"; go(GS_OVER);              // state=OVER first so send_state carries phase=0
+            go(GS_OVER);              // state=OVER first so send_state carries phase=0
             if(s_mode==GM_HOST) send_state();
             return true;
         }
@@ -2635,7 +2457,7 @@ static bool poll(void){
         // host: send state + check remote
         if(s_mode==GM_HOST){
             if(s_now-s_last_tx>25) send_state();
-            if(s_peerleft||s_now-s_last_rx>4000){ s_winner=0; s_over_why=s_peerleft?"host:peerleft":"host:rxto"; go(GS_OVER); return true; }
+            if(s_peerleft||s_now-s_last_rx>4000){ s_winner=0; s_peerleft=true; go(GS_OVER); return true; }
         }
     }
 
@@ -2648,29 +2470,28 @@ frame_check:
 
 // ========================== lifecycle ========================================
 static void on_enter(void){
+    game_text_open("tankd");
     mkdir("/sd/data",0777); mkdir("/sd/data/tankduel",0777);
-    game_sfx_ensure(&s_sfx);
-    s_state=GS_MENU; s_msel=0; s_tsel=0; s_anim=0;
+    s_state=GS_MENU; s_menu={0,0}; s_bmenu={0,0}; s_tsel=0; s_anim=0;
     s_haspeer=s_join_pending=s_peerleft=false;
     s_nhost=s_bsel=0; s_txseq=s_rxseq=0;
     s_now=s_last=s_frame=now_ms();
     s_last_hello=s_last_tx=s_last_rx=0;
-    s_was_fire=s_was_pu=false;
+    s_pu_req=0;
     s_ai_fire_last=0;
     s_join_pending=false; s_join_t=s_join_resend=0;
     s_match_type=MT_DUEL; s_nbots=0; s_nplayers=2; memset(s_bots,0,sizeof(Tank)*MAX_BOTS);
     // Start ESP-NOW immediately (like Pong) so the lobby's HELLO discovery works the instant
     // you enter Create/Join — pnet also disables WiFi power-save so broadcasts aren't dropped.
-    if(!pnet_start()) nucleo_app_set_hint(TR5("ESP-NOW KO   esc esci", "ESP-NOW failed   esc back", "ESP-NOW fall   esc atras", "ESP-NOW echec   esc retour", "ESP-NOW fehler   esc zurueck"));
     nucleo_app_set_back_handler(on_back);
     nucleo_app_set_poll_handler(poll);
-    nucleo_app_set_fullscreen(false);
-    nucleo_app_set_hint(TR5("su/giu   K scegli   esc esci", "up/dn   K pick   esc back", "ar/ab   K elige   esc atras", "haut/bas   K pick   esc ret", "auf/ab   K waehle   esc zur"));
-    nucleo_app_request_draw();
+    go(GS_MENU);
+    if(!pnet_start()) nucleo_app_set_hint(GT("ESP-NOW non avviato  Esc","ESP-NOW not started  Esc"));
 }
 static void on_exit(void){
     send_bye();
     pnet_stop();
+    game_text_close();
 }
 
 static const nucleo_app_ram_t APP_RAM[] = {
