@@ -28,7 +28,7 @@
 #include "nucleo_exclusive.h"
 #include "launcher_theme.h"
 #include "app_gfx.h"
-#include "notify_synth.h"
+#include "game_sfx.h"       // pack lookup + tone fallback (and notify_voice_t for the recipes)
 #include <M5GFX.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -213,7 +213,7 @@ static const char *tx(const char *it, const char *en) { return g_lang ? en : it;
 static void txt_c(int cx, int y, int sz, uint16_t col, const char *s) { txt(cx - (int)strlen(s) * 3 * sz, y, sz, col, s); }
 static void txt_r(int rx, int y, int sz, uint16_t col, const char *s) { txt(rx - (int)strlen(s) * 6 * sz, y, sz, col, s); }
 
-// ============================ audio (synth -> SD cache, like Flipper) ========
+// ============================ audio (WAV pack baked on the PC from these recipes) ====
 #define DIRR "/sd/data/pong"
 #define NSFX 13
 static const char *sfx_name(int id) {
@@ -250,25 +250,17 @@ static bool sfx_important(int id) { return id == 5 || id == 9 || id == 10 || id 
 static void sfx(int id) {
     if (!g_audio || id <= 0) return;
     if (!sfx_important(id) && nucleo_audio_is_playing()) return;
-    char p[80]; snprintf(p, sizeof p, DIRR "/sfx/%s.wav", sfx_name(id));
-    FILE *f = fopen(p, "rb");
-    if (f) fclose(f);
-    else { notify_voice_t v[8]; int nv = build_voices(id, v); if (nv <= 0 || notify_synth_voices_wav(v, nv, p, 12000) != 0) return; }
+    char p[80];
+    if (!game_sfx_find(DIRR, sfx_name(id), p, sizeof p)) {   // pack -> legacy cache; NEVER synth here (blocks the task)
+        if (sfx_important(id)) { nucleo_audio_stop(); game_sfx_tone(build_voices, id); }
+        return;
+    }
     if (sfx_important(id)) nucleo_audio_stop();
     nucleo_audio_play(p);
 }
 static void ensure_dirs(void) { mkdir("/sd/data", 0777); mkdir(DIRR, 0777); mkdir(DIRR "/sfx", 0777); }
-static void presynth(void) {
-    if (!g_audio) return;
-    notify_voice_t v[8];
-    for (int id = 1; id <= NSFX; id++) {
-        char p[80]; snprintf(p, sizeof p, DIRR "/sfx/%s.wav", sfx_name(id));
-        FILE *f = fopen(p, "rb");
-        if (f) { fclose(f); continue; }
-        int nv = build_voices(id, v);
-        if (nv > 0) notify_synth_voices_wav(v, nv, p, 12000);
-    }
-}
+// No presynth: bulk-synthesizing every cue on the app task (subscribed to the 8 s Task WDT) rebooted the
+// device on an SD without the cache. The deployed pack (deploy/sd/data/pong/pack) is the sound source.
 
 // ============================ persistence ====================================
 #define CFG_MAGIC 0x504F4E47u   // 'PONG'
@@ -1121,7 +1113,6 @@ static void on_enter(void) {
     ensure_dirs();
     cfg_read();
     if (nucleo_audio_volume() < 40) nucleo_audio_set_volume(80);
-    presynth();
     s_screen = ST_MENU; s_msel = 0; s_anim = 0;
     s_haspeer = s_join_pending = s_netlost = s_peerleft = false;
     s_nhost = s_bsel = 0; s_txseq = s_rxseq = 0;

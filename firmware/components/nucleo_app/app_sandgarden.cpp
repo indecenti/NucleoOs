@@ -14,7 +14,7 @@
 #include "nucleo_kbd.h"
 #include "launcher_theme.h"
 #include "app_gfx.h"
-#include "notify_synth.h"
+#include "game_sfx.h"       // pack lookup + tone fallback (and notify_voice_t for the recipes)
 #include "nucleo_exclusive.h"
 #include <M5GFX.h>
 #include <stdint.h>
@@ -210,14 +210,10 @@ static void sfx(int id)
     if (!g_audio || id <= 0) return;
     if (!sfx_important(id) && nucleo_audio_is_playing()) return;
     static char p[80];
-    snprintf(p, sizeof p, DIRG "/custom/%s.wav", sfx_name(id));
-    FILE *f = fopen(p, "rb");
-    if (f) fclose(f);
-    else {
-        snprintf(p, sizeof p, DIRG "/sfx/%s.wav", sfx_name(id));
-        f = fopen(p, "rb");
-        if (f) fclose(f);
-        else { notify_voice_t v[6]; int nv = build_voices(id, v); if (nv <= 0 || notify_synth_voices_wav(v, nv, p, 12000) != 0) return; }
+    snprintf(p, sizeof p, DIRG "/custom/%s.wav", sfx_name(id));   // player-supplied override first
+    if (!game_sfx_wav_ok(p) && !game_sfx_find(DIRG, sfx_name(id), p, sizeof p)) {   // pack -> legacy cache
+        if (sfx_important(id)) { nucleo_audio_stop(); game_sfx_tone(build_voices, id); }   // NEVER synth here
+        return;
     }
     if (sfx_important(id)) nucleo_audio_stop();
     nucleo_audio_play(p);
@@ -233,18 +229,8 @@ static void sfx_cache_check(void)
     f = fopen(DIRG "/sfx/ver.bin", "wb");
     if (f) { int vv = SFX_VER; fwrite(&vv, sizeof vv, 1, f); fclose(f); }
 }
-static void presynth(void)
-{
-    if (!g_audio) return;
-    notify_voice_t v[6];
-    for (int id = 1; id <= 9; id++) {
-        char p[80]; snprintf(p, sizeof p, DIRG "/sfx/%s.wav", sfx_name(id));
-        FILE *f = fopen(p, "rb");
-        if (f) { fclose(f); continue; }
-        int nv = build_voices(id, v);
-        if (nv > 0) notify_synth_voices_wav(v, nv, p, 12000);
-    }
-}
+// No presynth: bulk-synthesizing every cue on the app task (subscribed to the 8 s Task WDT) rebooted the
+// device on an SD without the cache. The deployed pack (deploy/sd/data/giardino/pack) is the sound source.
 
 // ============================ text helpers ===================================
 static void text_at(int x, int y, int sz, uint16_t col, const char *s) { d.setTextSize(sz); d.setTextColor(col); d.setCursor(x, y); d.print(s); }
@@ -888,7 +874,6 @@ static void on_enter(void)
     scores_load();
     if (nucleo_audio_volume() < 40) nucleo_audio_set_volume(85);
     sfx_cache_check();
-    presynth();
     s_rng ^= (uint32_t)esp_timer_get_time();
     s_screen = ST_MENU; s_msel = 0; s_anim = 0; s_over_ms = 900;
     s_capY = cap_target();

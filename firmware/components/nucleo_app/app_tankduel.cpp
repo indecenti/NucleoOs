@@ -195,8 +195,8 @@ static int      s_flash;                // global screen flash (white) intensity
 
 // ========================== SFX ==============================================
 // 1=fire 2=hit 3=kill 4=shop 5=powerup 6=win 7=lose 8=buy 9=sell 10=nav 11=sel
-// Real arcade WAVs live in /sd/data/tankduel/pack/<name>.wav (deployed); the synth recipes
-// below are only the never-mute fallback if the SD pack is missing.
+// Real arcade WAVs live in /sd/data/tankduel/pack/<name>.wav (deployed); the recipes below only
+// give the pitch of the short tone an important cue falls back to if the SD pack is missing.
 #define TD_SFX_DIR "/sd/data/tankduel"
 #define SFX_FIRE 1
 #define SFX_HIT  2

@@ -29,7 +29,7 @@ extern "C" {
 #include "vs_sim.h"
 }
 
-// ---- sound cues (WAV pack at /sd/data/Orde/pack/<name>.wav, else synth tone) ----
+// ---- sound cues (CC0 WAV pack at /sd/data/Orde/pack/<name>.wav, else a short tone for important cues) ----
 enum { SFX_START = 1, SFX_SHOT, SFX_DIE, SFX_PICKUP, SFX_LEVELUP, SFX_HURT, SFX_WAVE, SFX_OVER, SFX_SELECT, SFX_N };
 static int s_audio_on = 1;
 static const char *sfx_name(int id)
@@ -41,7 +41,7 @@ static const char *sfx_name(int id)
     }
     return "x";
 }
-static int sfx_recipe(int id, notify_voice_t *v)   // tone fallback if a pack WAV is missing
+static int sfx_recipe(int id, notify_voice_t *v)   // pitch of the tone fallback if a pack WAV is missing
 {
     float hz = 440;
     switch (id) {

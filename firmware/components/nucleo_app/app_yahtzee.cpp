@@ -120,8 +120,8 @@ static void spawn_burst(bool rain)
     }
 }
 
-// ---- SD-cached SFX: synthesize each cue ONCE to a mono WAV on the SD (notify_synth), then play it
-// async via nucleo_audio. Same engine as Poker/Pinball — richer than raw beeps and ~zero runtime RAM. ----
+// ---- SFX: each cue is a WAV in the deployed pack (/sd/data/yahtzee/pack, baked on the PC from these
+// recipes), played async via nucleo_audio by the shared game_sfx engine — ~zero runtime RAM, no synth. ----
 static int g_audio = 1;
 static const char *sfx_name(int id)
 {
@@ -172,7 +172,7 @@ static int build_voices(int id, notify_voice_t *v)
     return 0;
 }
 static bool sfx_important(int id) { return id == 5 || (id >= 7 && id <= 12) || id == 14; } // settle + scores/fanfares/over/turn/holdall
-// All cache/synth/play/fallback logic lives in the shared game_sfx engine (bump `ver` to rebuild).
+// All pack/play/fallback logic lives in the shared game_sfx engine (bump `ver` to wipe a stale legacy cache).
 static const game_sfx_t SFX = { DIRR, sfx_name, build_voices, NSFX, 2, 12000, sfx_important, &g_audio };
 static inline void sfx(int id) { game_sfx_play(&SFX, id); }
 // thin, readable wrappers over the cued SFX ids
@@ -958,7 +958,7 @@ static void enter(void)
     COL_FELTG = fx3d::rgb(46, 150, 88);
     // (The shared 32 KB canvas is re-acquired centrally by open_app_def() after on_enter for every buffered
     //  app — see ANTI-FLICKER.md technique 1 — so no per-app acquire is needed here anymore.)
-    game_sfx_ensure(&SFX);                                           // build the SD WAV cache once (cheap on later launches)
+    game_sfx_ensure(&SFX);                                           // SD folder + stale-cache gate (no synthesis)
     s_phase = PH_SETUP; s_setsel = 0; s_last_us = 0; s_toast_us = 0; s_cele_us = 0; s_anim = false;
     s_npart = 0; s_cele_start = 0; s_sel = 0; s_scroll = 0;
     s_suggest_us = 0; s_contrib_flash_us = 0; memset(s_suggest, 0, sizeof(s_suggest));

@@ -24,7 +24,7 @@
 #include "nucleo_kbd.h"
 #include "launcher_theme.h"
 #include "app_gfx.h"
-#include "notify_synth.h"
+#include "game_sfx.h"       // pack lookup + tone fallback (and notify_voice_t for the recipes)
 #include "nucleo_exclusive.h"   // NX_NET_APP: dedicate RAM + free the shared I2S line so SFX play
 #include <M5GFX.h>
 #include <stdint.h>
@@ -306,14 +306,15 @@ static void sfx(int id)
     if (!g_audio || id <= 0) return;
     if (!sfx_important(id) && nucleo_audio_is_playing()) return;
     char p[80];
-    snprintf(p, sizeof p, DIRR "/sfx/%s.wav", sfx_name(id));
-    FILE *f = fopen(p, "rb");
-    if (f) fclose(f);
-    else { notify_voice_t v[40]; int nv = build_voices(id, v); if (nv <= 0 || notify_synth_voices_wav(v, nv, p, 12000) != 0) return; }
+    if (!game_sfx_find(DIRR, sfx_name(id), p, sizeof p)) {   // pack -> legacy cache; NEVER synth here (blocks the task)
+        if (sfx_important(id)) { nucleo_audio_stop(); game_sfx_tone(build_voices, id); }
+        return;
+    }
     if (sfx_important(id)) nucleo_audio_stop();
     nucleo_audio_play(p);
 }
-// bump whenever a build_voices() clip changes so stale cached WAVs are rebuilt on next launch.
+// bump whenever a build_voices() clip changes so a stale legacy cache is wiped on next launch
+// (re-bake the pack too: tools/sfx-gen/bake-recipe-packs.mjs).
 #define SFX_VER 3
 static void sfx_cache_check(void)
 {
@@ -325,18 +326,8 @@ static void sfx_cache_check(void)
     f = fopen(DIRR "/sfx/ver.bin", "wb");
     if (f) { int vv = SFX_VER; fwrite(&vv, sizeof vv, 1, f); fclose(f); }
 }
-static void presynth(void)
-{
-    if (!g_audio) return;
-    notify_voice_t v[40];
-    for (int id = 1; id <= NSFX; id++) {
-        char p[80]; snprintf(p, sizeof p, DIRR "/sfx/%s.wav", sfx_name(id));
-        FILE *f = fopen(p, "rb");
-        if (f) { fclose(f); continue; }
-        int nv = build_voices(id, v);
-        if (nv > 0) notify_synth_voices_wav(v, nv, p, 12000);
-    }
-}
+// No presynth: bulk-synthesizing all 18 cues (the Ode to Joy alone is 28 voices) on the app task ran past
+// the 8 s Task WDT on an SD without the cache. The deployed pack (deploy/sd/data/poker/pack) is the source.
 
 // ============================ text helpers ===================================
 static void text_at(int x, int y, int sz, uint16_t col, const char *s) { d.setTextSize(sz); d.setTextColor(col); d.setCursor(x, y); d.print(s); }
@@ -1142,7 +1133,6 @@ static void on_enter(void)
     cfg_read();
     if (nucleo_audio_volume() < 40) nucleo_audio_set_volume(85);
     sfx_cache_check();
-    presynth();
     if (!s_coin) s_coin = (Coin *)calloc(NPART, sizeof *s_coin);   // freed in on_exit; null-guarded everywhere
     else memset(s_coin, 0, NPART * sizeof *s_coin);
     memset(s_fw, 0, sizeof s_fw);

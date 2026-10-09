@@ -20,7 +20,7 @@
 #include "nucleo_kbd.h"
 #include "launcher_theme.h"
 #include "app_gfx.h"
-#include "notify_synth.h"
+#include "game_sfx.h"       // pack lookup + tone fallback (and notify_voice_t for the recipes)
 #include "nucleo_exclusive.h"
 #include "pinball_levels.h"
 #include <M5GFX.h>
@@ -360,12 +360,11 @@ static void sfx(int id)
         if (now < s_sfx_guard) return;                         // a fanfare is sounding -> leave it intact
         if (nucleo_audio_is_playing() && !snappy) return;      // non-snappy & busy -> don't pile up
     }
-    const char *nm = sfx_name(id);
     char p[80];
-    snprintf(p, sizeof p, DIRR "/pack/%s.wav", nm);  // WAV arcade pack only (no fallback)
-    FILE *f = fopen(p, "rb");
-    if (!f) return;  // silent if WAV missing (avoid synth CPU burn)
-    fclose(f);
+    if (!game_sfx_find(DIRR, sfx_name(id), p, sizeof p)) {   // WAV arcade pack (-> legacy cache); NEVER synth here
+        if (important) { nucleo_audio_stop(); game_sfx_tone(build_voices, id); }
+        return;
+    }
     if (important || snappy) nucleo_audio_stop();
     nucleo_audio_play(p);
     if (important) s_sfx_guard = now + 700;
@@ -381,18 +380,8 @@ static void sfx_cache_check(void)
     f = fopen(DIRR "/sfx/ver.bin", "wb");
     if (f) { int vv = SFX_VER; fwrite(&vv, sizeof vv, 1, f); fclose(f); }
 }
-static void presynth(void)
-{
-    if (!g_audio) return;
-    notify_voice_t v[8];
-    for (int id = 1; id <= NSFX; id++) {
-        char p[80]; snprintf(p, sizeof p, DIRR "/sfx/%s.wav", sfx_name(id));
-        FILE *f = fopen(p, "rb");
-        if (f) { fclose(f); continue; }
-        int nv = build_voices(id, v);
-        if (nv > 0) notify_synth_voices_wav(v, nv, p, 12000);
-    }
-}
+// No presynth: it synthesized all 28 cues into a cache sfx() never even read, on the app task subscribed to
+// the 8 s Task WDT -> TASK_WDT reset on an SD without that cache. The deployed pack is the sound source.
 
 // ============================ DMD events =====================================
 static void dmd_show(const char *line, const char *sub, uint16_t col, int ms)
@@ -1381,7 +1370,6 @@ static void on_enter(void)
     cfg_read();
     if (nucleo_audio_volume() < 40) nucleo_audio_set_volume(85);
     sfx_cache_check();
-    presynth();
     if (!s_spk) s_spk = (Spark *)calloc(NSPK, sizeof *s_spk);   // freed in on_exit; null = sparks no-op
     s_level = 1; s_lv_score = 0; s_xfade_ms = 0; s_charging = false; s_launch_ms = 0;
     apply_level(1);
