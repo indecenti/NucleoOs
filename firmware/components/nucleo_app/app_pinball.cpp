@@ -20,7 +20,8 @@
 #include "nucleo_kbd.h"
 #include "launcher_theme.h"
 #include "app_gfx.h"
-#include "notify_synth.h"
+#include "game_text.h"
+#include "game_ui.h"
 #include "nucleo_exclusive.h"
 #include "pinball_levels.h"
 #include <M5GFX.h>
@@ -154,11 +155,10 @@ enum { ST_MENU = 0, ST_SCORES, ST_HELP, ST_SET, ST_PLAY, ST_OPT, ST_OVER };
 enum { BP_READY = 0, BP_PLAY, BP_DRAIN };          // ball phase within ST_PLAY
 #define START_BALLS 3
 
-static int   g_lang = 0, g_audio = 1, g_nudge = 1;
+static int   g_audio = 1, g_nudge = 1;
 static unsigned g_hi = 0;
 
-static int   s_screen, s_msel, s_setsel, s_help, s_optsel;
-static float s_capY;
+static int   s_screen, s_help;
 static int64_t s_now, s_last, s_frame;
 static unsigned s_anim;
 
@@ -178,7 +178,8 @@ static int   s_stuck_ms;                            // anti-stuck timer
 // flippers: pivot P, rest tip R, up tip U, swing 0..1, swing velocity, held (hold-to-flip), consecutive hits
 struct Flip { float px, py, rx, ry, ux, uy, sw, sv; bool held; int hits; };
 static Flip s_fl, s_fr;
-static int  s_ltap_ms, s_rtap_ms;        // tap timers (key '1' / RIGHT) — drive a momentary flip
+static int  s_ltap_ms, s_rtap_ms;        // tap timers: a press shorter than a frame still swings the bat
+static int  s_warn_ms;                   // tilt warnings fade one step per second
 static uint8_t s_mods_prev;              // last modifier bitmask (OPT hold + CTRL tilt edge)
 // static guide rails (inlane/outlane funnels) — line segments the ball bounces off
 struct Seg { float ax, ay, bx2, by2; };
@@ -244,20 +245,19 @@ static char  s_dmd_line[20];                        // big line
 static char  s_dmd_sub[20];                         // small line (optional)
 static uint16_t s_dmd_col;
 
-static inline const char *tx(const char *it, const char *en) { return g_lang ? en : it; }
 static void dec(int *v, int n) { *v -= n; if (*v < 0) *v = 0; }
 static void go(int s);
 
 // ============================ persistence ====================================
 #define DIRR "/sd/data/pinball"
 #define CFG_MAGIC 0x50494E43u   // 'PINC' (v2: adds the top-10 leaderboard)
-static void ensure_dirs(void) { mkdir("/sd/data", 0777); mkdir(DIRR, 0777); mkdir(DIRR "/sfx", 0777); }
+static void ensure_dirs(void) { mkdir("/sd/data", 0777); mkdir(DIRR, 0777); }
 static void cfg_write(void)
 {
     ensure_dirs();
     FILE *f = fopen(DIRR "/cfg.bin", "wb");
     if (!f) return;
-    struct { uint32_t m, hi; int l, a, n; unsigned top[NTOP]; } c = { CFG_MAGIC, g_hi, g_lang, g_audio, g_nudge, { 0 } };
+    struct { uint32_t m, hi; int l, a, n; unsigned top[NTOP]; } c = { CFG_MAGIC, g_hi, 0, g_audio, g_nudge, { 0 } };   // l: retired language slot
     for (int i = 0; i < NTOP; i++) c.top[i] = g_top[i];
     fwrite(&c, sizeof c, 1, f);
     fclose(f);
@@ -270,7 +270,7 @@ static void cfg_read(void)
     size_t n = fread(&c, sizeof c, 1, f);
     fclose(f);
     if (n == 1 && c.m == CFG_MAGIC) {
-        g_hi = c.hi; g_lang = c.l ? 1 : 0; g_audio = c.a ? 1 : 0; g_nudge = c.n ? 1 : 0;
+        g_hi = c.hi; g_audio = c.a ? 1 : 0; g_nudge = c.n ? 1 : 0;
         for (int i = 0; i < NTOP; i++) g_top[i] = c.top[i];
     }
 }
@@ -300,54 +300,6 @@ static const char *sfx_name(int id)
         default: return "x";
     }
 }
-#define NSFX 28
-static int build_voices(int id, notify_voice_t *v)
-{
-    switch (id) {
-        case 1:  notify__voice(&v[0], 760, 0, 0.04f); v[0].amp = 0.55f; return 1;
-        case 2:  notify__voice(&v[0], 659.25f, 0, 0.07f); notify__voice(&v[1], 987.77f, 0.05f, 0.10f); return 2;
-        case 3:  notify__voice(&v[0], 587.33f, 0, 0.07f); notify__voice(&v[1], 392, 0.05f, 0.10f); return 2;
-        case 4:  notify__voice(&v[0], 160, 0, 0.05f); notify__voice(&v[1], 320, 0.04f, 0.06f);                 // launch — rising whoosh
-                 notify__voice(&v[2], 520, 0.09f, 0.07f); notify__voice(&v[3], 780, 0.15f, 0.10f); return 4;
-        case 5:  notify__voice(&v[0], 240, 0, 0.03f); v[0].amp = 0.8f; notify__voice(&v[1], 900, 0, 0.02f); return 2;  // flipper clack
-        case 6:  notify__voice(&v[0], 523.25f, 0, 0.05f); notify__voice(&v[1], 784, 0.02f, 0.05f); v[0].amp = 0.9f; return 2; // bumper pop
-        case 7:  notify__voice(&v[0], 300, 0, 0.04f); notify__voice(&v[1], 1200, 0, 0.02f); v[0].amp = 0.9f; return 2; // slingshot snap
-        case 8:  notify__voice(&v[0], 1046.5f, 0, 0.04f); notify__voice(&v[1], 1318.5f, 0.03f, 0.06f); return 2;       // target ding
-        case 9:  notify__voice(&v[0], 392, 0, 0.10f); notify__voice(&v[1], 294, 0.08f, 0.12f); v[0].amp = 0.6f;        // drain — sad slide
-                 notify__voice(&v[2], 196, 0.18f, 0.20f); return 3;
-        case 10: notify__voice(&v[0], 523.25f, 0.00f, 0.10f); notify__voice(&v[1], 659.25f, 0.07f, 0.10f);            // jackpot fanfare
-                 notify__voice(&v[2], 783.99f, 0.14f, 0.12f); notify__voice(&v[3], 1046.5f, 0.21f, 0.16f);
-                 notify__voice(&v[4], 1318.5f, 0.28f, 0.22f); return 5;
-        case 11: notify__voice(&v[0], 880, 0, 0.05f); notify__voice(&v[1], 1174.7f, 0.05f, 0.06f);                    // bonus chime
-                 notify__voice(&v[2], 1567.98f, 0.10f, 0.10f); return 3;
-        case 12: notify__voice(&v[0], 110, 0, 0.16f); v[0].amp = 0.9f; notify__voice(&v[1], 104, 0.05f, 0.16f); v[1].amp = 0.9f; return 2; // tilt buzz
-        case 13: notify__voice(&v[0], 659.25f, 0, 0.06f); notify__voice(&v[1], 987.77f, 0.05f, 0.06f);                // extra ball
-                 notify__voice(&v[2], 1318.5f, 0.10f, 0.12f); return 3;
-        case 14: notify__voice(&v[0], 392, 0.00f, 0.14f); notify__voice(&v[1], 330, 0.13f, 0.14f);                    // game over toll
-                 notify__voice(&v[2], 262, 0.26f, 0.14f); notify__voice(&v[3], 196, 0.39f, 0.30f); return 4;
-        case 15: notify__voice(&v[0], 523.25f, 0, 0.05f); notify__voice(&v[1], 1046.5f, 0.02f, 0.04f); v[0].amp = 0.9f; return 2;  // bumper pops (pentatonic: C D E G A)
-        case 16: notify__voice(&v[0], 587.33f, 0, 0.05f); notify__voice(&v[1], 1174.7f, 0.02f, 0.04f); v[0].amp = 0.9f; return 2;
-        case 17: notify__voice(&v[0], 659.25f, 0, 0.05f); notify__voice(&v[1], 1318.5f, 0.02f, 0.04f); v[0].amp = 0.9f; return 2;
-        case 18: notify__voice(&v[0], 783.99f, 0, 0.05f); notify__voice(&v[1], 1568.0f, 0.02f, 0.04f); v[0].amp = 0.9f; return 2;
-        case 19: notify__voice(&v[0], 880.00f, 0, 0.05f); notify__voice(&v[1], 1760.0f, 0.02f, 0.04f); v[0].amp = 0.9f; return 2;
-        case 20: notify__voice(&v[0], 180, 0, 0.06f); notify__voice(&v[1], 360, 0.05f, 0.07f);                        // power launch — strong rising whoosh
-                 notify__voice(&v[2], 620, 0.11f, 0.08f); notify__voice(&v[3], 980, 0.18f, 0.13f); v[3].amp = 0.9f; return 4;
-        case 21: notify__voice(&v[0], 659.25f, 0, 0.10f); notify__voice(&v[1], 880, 0.08f, 0.10f);                    // level-up fanfare (ascending)
-                 notify__voice(&v[2], 1046.5f, 0.16f, 0.12f); notify__voice(&v[3], 1318.5f, 0.24f, 0.14f);
-                 notify__voice(&v[4], 1760.0f, 0.32f, 0.24f); return 5;
-        case 22: notify__voice(&v[0], 140, 0, 0.08f); v[0].amp = 0.8f; notify__voice(&v[1], 130, 0.04f, 0.08f); v[1].amp = 0.8f; return 2; // tilt warning
-        case 23: notify__voice(&v[0], 988, 0, 0.06f); notify__voice(&v[1], 1319, 0.06f, 0.10f); return 2;                              // coin / arcade insert
-        case 24: notify__voice(&v[0], 784, 0, 0.05f); notify__voice(&v[1], 988, 0.05f, 0.05f);                                         // 2X — bright ascending arcade run
-                 notify__voice(&v[2], 1319, 0.10f, 0.06f); notify__voice(&v[3], 1568, 0.16f, 0.13f); return 4;
-        case 25: notify__voice(&v[0], 880, 0, 0.10f); notify__voice(&v[1], 660, 0.09f, 0.10f);                                         // slow-mo — descending warble
-                 notify__voice(&v[2], 440, 0.18f, 0.18f); return 3;
-        case 26: notify__voice(&v[0], 90, 0, 0.18f); v[0].amp = 1.0f; notify__voice(&v[1], 160, 0.02f, 0.10f);                         // blast — low boom + bright crack
-                 notify__voice(&v[2], 1200, 0, 0.05f); notify__voice(&v[3], 1800, 0.04f, 0.08f); return 4;
-        case 27: notify__voice(&v[0], 600, 0, 0.05f); v[0].amp = 1.0f; notify__voice(&v[1], 950, 0, 0.03f); v[1].amp = 0.7f; return 2;   // spinner ratchet tick (bright, full)
-        case 28: notify__voice(&v[0], 360, 0, 0.03f); v[0].amp = 0.6f; notify__voice(&v[1], 1500, 0, 0.015f); return 2;     // rail/deflector tick
-    }
-    return 0;
-}
 static bool sfx_important(int id) { return id == 4 || id == 9 || id == 10 || id == 11 || id == 14 || id == 20 || id == 21 || (id >= 23 && id <= 26); }   // fanfares/launch/power-ups always play
 static bool sfx_snappy(int id) { return id == 5 || id == 6 || id == 7 || id == 8 || (id >= 15 && id <= 19) || id == 27 || id == 28; }  // brief impacts: retrigger crisply, never pile up
 static int64_t s_sfx_guard = 0;   // ms: until then a fanfare owns the channel and quick hits won't cut it
@@ -362,38 +314,14 @@ static void sfx(int id)
     }
     const char *nm = sfx_name(id);
     char p[80];
-    snprintf(p, sizeof p, DIRR "/pack/%s.wav", nm);  // WAV arcade pack only (no fallback)
-    FILE *f = fopen(p, "rb");
-    if (!f) return;  // silent if WAV missing (avoid synth CPU burn)
+    snprintf(p, sizeof p, DIRR "/pack/%s.wav", nm);  // the deployed WAV arcade pack covers every cue; nothing is
+    FILE *f = fopen(p, "rb");                        // ever synthesized on the device (a 28-cue synth on open
+    if (!f) return;                                  // used to stall the app task for seconds)
     fclose(f);
     if (important || snappy) nucleo_audio_stop();
     nucleo_audio_play(p);
     if (important) s_sfx_guard = now + 700;
 }
-#define SFX_VER 5
-static void sfx_cache_check(void)
-{
-    int ver = 0;
-    FILE *f = fopen(DIRR "/sfx/ver.bin", "rb");
-    if (f) { if (fread(&ver, sizeof ver, 1, f) != 1) ver = 0; fclose(f); }
-    if (ver == SFX_VER) return;
-    for (int id = 1; id <= NSFX; id++) { char p[80]; snprintf(p, sizeof p, DIRR "/sfx/%s.wav", sfx_name(id)); remove(p); }
-    f = fopen(DIRR "/sfx/ver.bin", "wb");
-    if (f) { int vv = SFX_VER; fwrite(&vv, sizeof vv, 1, f); fclose(f); }
-}
-static void presynth(void)
-{
-    if (!g_audio) return;
-    notify_voice_t v[8];
-    for (int id = 1; id <= NSFX; id++) {
-        char p[80]; snprintf(p, sizeof p, DIRR "/sfx/%s.wav", sfx_name(id));
-        FILE *f = fopen(p, "rb");
-        if (f) { fclose(f); continue; }
-        int nv = build_voices(id, v);
-        if (nv > 0) notify_synth_voices_wav(v, nv, p, 12000);
-    }
-}
-
 // ============================ DMD events =====================================
 static void dmd_show(const char *line, const char *sub, uint16_t col, int ms)
 {
@@ -510,6 +438,19 @@ static void ball_to_lane(void)             // park the ball at the bottom of the
     s_fl.hits = 0; s_fr.hits = 0;  // reset flipper consecutive hits
 }
 
+// The level's theme name for the DMD (dot-matrix glyphs: A-Z 0-9 - . ! : + / only).
+static const char *theme_name(void)
+{
+    switch (s_lv.theme) {
+        case 0:  return GT("COBALTO", "COBALT");
+        case 1:  return GT("MAGENTA", "MAGENTA");
+        case 2:  return GT("SMERALDO", "EMERALD");
+        case 3:  return GT("INFERNO", "INFERNO");
+        case 4:  return GT("OCEANO", "OCEAN");
+        default: return GT("REALE", "ROYAL");
+    }
+}
+
 // ============================ game flow ======================================
 static void add_score(unsigned pts)
 {
@@ -521,7 +462,7 @@ static void apply_level(int n);                     // fwd
 static void new_game(void)
 {
     s_score = 0; s_disp_score = 0; s_balls = START_BALLS; s_mult = 1; s_combo = 0; s_combo_ms = 0;
-    s_tilt = 0; s_tilt_warn = 0;
+    s_tilt = 0; s_tilt_warn = 0; s_warn_ms = 0;
     s_ltap_ms = 0; s_rtap_ms = 0; s_mods_prev = nucleo_kbd_mods();    // ignore a modifier already held at kickoff
     s_level = 1; s_lv_score = 0; s_xfade_ms = 0; s_charging = false; s_launch_ms = 0;
     apply_level(1);
@@ -530,7 +471,7 @@ static void new_game(void)
     s_trn = 0; s_2x_ms = 0; s_slow_ms = 0; s_pw_rot = 0; s_stuck_ms = 0; s_go_held = false;
     ball_to_lane();
     s_dmd_ms = 0;
-    dmd_show(tx("FLIPPER", "PINBALL"), s_lv.theme, COL_CYAN, 1600);
+    dmd_show(GT("FLIPPER", "PINBALL"), theme_name(), COL_CYAN, 1600);
     sfx(23);                                  // arcade "insert coin"
 }
 static void launch_ball(float power)
@@ -552,8 +493,8 @@ static void level_up(void)
     s_xfade_ms = 1700; s_xfade_age = 0; // fullscreen wow transition
     sfx(21);                            // level-up fanfare
     ball_to_lane();
-    char b[16]; snprintf(b, sizeof b, "%s %d", tx("LIVELLO", "LEVEL"), s_level);
-    dmd_show(b, s_lv.theme, COL_GOLDL, 1900);
+    char b[20]; snprintf(b, sizeof b, GT("LIVELLO %d", "LEVEL %d"), s_level);
+    dmd_show(b, theme_name(), COL_GOLDL, 1900);
 }
 static void lose_ball(void)
 {
@@ -566,12 +507,12 @@ static void lose_ball(void)
         bool hs = leaderboard_qualifies(s_score);
         leaderboard_add(s_score);
         cfg_write();
-        dmd_show(tx("FINE PARTITA", "GAME OVER"), hs ? tx("IN CLASSIFICA!", "TOP 10!") : NULL, hs ? COL_GOLD : COL_RED, 100);
+        dmd_show(GT("FINE PARTITA", "GAME OVER"), hs ? GT("IN CLASSIFICA!", "TOP 10!") : NULL, hs ? COL_GOLD : COL_RED, 1600);   // the toll reads before the card
         sfx(14);
         return;
     }
-    char b[20]; snprintf(b, sizeof b, "%s %d", tx("PALLA", "BALL"), START_BALLS - s_balls + 1);
-    dmd_show(b, tx("LANCIA", "SHOOT"), COL_AMBER, 1400);
+    char b[20]; snprintf(b, sizeof b, GT("PALLA %d", "BALL %d"), START_BALLS - s_balls + 1);
+    dmd_show(b, GT("LANCIA", "SHOOT"), COL_AMBER, 1400);
 }
 
 // ============================ physics ========================================
@@ -600,13 +541,18 @@ static void hit_flipper(Flip *f)
     float cx, cy; closest_seg(f->px, f->py, tx2, ty2, bx, by, &cx, &cy);
     float dx = bx - cx, dy = by - cy, dist = sqrtf(dx * dx + dy * dy);
     float rr = BR + 3.2f;                                          // wider catch zone (3.2 vs 2.8) -> harder to drain on outlanes
-    if (dist > rr || dist < 0.0001f) return;
-    float nx = dx / dist, ny = dy / dist;
-    float vn = vx * nx + vy * ny;
-    if (vn < 0) { vx -= 1.72f * vn * nx; vy -= 1.72f * vn * ny; }  // reflect off the bat face
+    if (dist > rr) return;
     // contact position along the bat: 0 at the pivot, 1 at the tip
     float sx = tx2 - f->px, sy = ty2 - f->py, sl2 = sx * sx + sy * sy;
     float t = sl2 > 0.0001f ? ((cx - f->px) * sx + (cy - f->py) * sy) / sl2 : 0.5f;
+    float nx, ny;
+    float sl = sqrtf(sl2 > 0.0001f ? sl2 : 0.0001f), ux = -sy / sl, uy = sx / sl;   // bat normal...
+    if (uy > 0) { ux = -ux; uy = -uy; }                                             // ...on the playfield side
+    if (t > 0.0f && t < 1.0f && dx * ux + dy * uy < 0.05f) { nx = ux; ny = uy; }    // on/under the face: always out the TOP
+    else if (dist < 0.0001f) return;
+    else { nx = dx / dist; ny = dy / dist; }
+    float vn = vx * nx + vy * ny;
+    if (vn < 0) { vx -= 1.72f * vn * nx; vy -= 1.72f * vn * ny; }  // reflect off the bat face
     if (t < 0) t = 0;
     if (t > 1) t = 1;
     // kick base: 0.50 (vs 0.45), minus 0.08 per consecutive hit (capped at 0.10 min)
@@ -637,7 +583,7 @@ static void hit_round(Bump *o, int kick_sfx, bool is_sling)
     if (!is_sling) {
         s_combo++; s_combo_ms = 1400;
         if (s_combo == 5) { dmd_show("COMBO X5", NULL, COL_PURPLE, 1100); add_score(500); }
-        else if (s_combo == 10) { dmd_show(tx("SUPER COMBO", "SUPER COMBO"), NULL, COL_GOLD, 1300); add_score(2000); sfx(10); }
+        else if (s_combo == 10) { dmd_show(GT("SUPER COMBO", "SUPER COMBO"), NULL, COL_GOLD, 1300); add_score(2000); sfx(10); }
     }
 }
 static void blast(void)        // BONUS BLAST power-up: pop every bumper + post at once
@@ -650,9 +596,9 @@ static void blast(void)        // BONUS BLAST power-up: pop every bumper + post 
 static void grant_powerup(void)    // escalating reward each time the target bank is cleared (2X -> slow -> blast)
 {
     s_pw_rot = (s_pw_rot + 1) % 3;
-    if (s_pw_rot == 1)      { s_2x_ms = 9000;   dmd_show(tx("PUNTI X2", "2X SCORE"), tx("9 SEC", "9 SEC"), COL_GOLD, 1700); sfx(24); }
-    else if (s_pw_rot == 2) { s_slow_ms = 6000; dmd_show(tx("RALLENTA", "SLOW-MO"),  tx("6 SEC", "6 SEC"), COL_CYAN, 1700); sfx(25); }
-    else                    { dmd_show(tx("ESPLOSIONE", "BLAST"), NULL, COL_RED, 1500); blast(); }
+    if (s_pw_rot == 1)      { s_2x_ms = 9000;   dmd_show(GT("PUNTI X2", "2X SCORE"), "9 SEC", COL_GOLD, 1700); sfx(24); }
+    else if (s_pw_rot == 2) { s_slow_ms = 6000; dmd_show(GT("RALLENTA", "SLOW-MO"), "6 SEC", COL_CYAN, 1700); sfx(25); }
+    else                    { dmd_show(GT("ESPLOSIONE", "BLAST"), NULL, COL_RED, 1500); blast(); }
 }
 static void check_targets(void)
 {
@@ -665,7 +611,7 @@ static void check_targets(void)
             s_targets_hit++;
             if (s_targets_hit == 3 && s_2x_ms <= 0) {  // 3 targets hit -> 2x bumper for 9s
                 s_2x_ms = 9000;
-                dmd_show(tx("MULTIMODE!", "MULTIMODE!"), tx("X2 BUMPERS", "X2 BUMPERS"), COL_GOLD, 1500);
+                dmd_show(GT("MULTIMODE!", "MULTIMODE!"), GT("PUNTI X2", "2X SCORE"), COL_GOLD, 1500);
                 sfx(24);  // power-up sound
                 s_targets_hit = 0;  // reset counter
             }
@@ -683,11 +629,15 @@ static void nudge(int dir)
 {
     if (!g_nudge || s_tilt > 0 || s_bp != BP_PLAY) return;
     vx += dir * 0.15f; vy -= 0.06f;
-    s_tilt_warn += 2;
+    s_tilt_warn += 2; s_warn_ms = 0;                     // warnings fade one step a second (step_ball)
     if (s_tilt_warn >= 7) { s_tilt = 1500; sfx(12); dmd_show("TILT", NULL, COL_RED, 1500); }
+    else if (s_tilt_warn >= 4) { sfx(22); dmd_show(GT("ATTENZIONE", "DANGER"), NULL, COL_ORANGE, 700); }   // one more = TILT
     else sfx(7);
 }
-static void step_ball(int dt)
+// l0/r0 = the flippers' swing at the start of this frame (poll already stepped them to their end value): the
+// sub-steps sweep the bats between the two, so a bat that swings ~14 px in one frame can't jump over the
+// ball (1 ball in 5 went through a flipping bat before).
+static void step_ball(int dt, float l0, float r0)
 {
     if (s_bp != BP_PLAY) return;
     trail_push();
@@ -706,7 +656,7 @@ static void step_ball(int dt)
                 float sp = sqrtf(vx * vx + vy * vy);
                 if (sp > 3.0f) { vx *= 3.0f / sp; vy *= 3.0f / sp; }
                 s_launch_ms = 280;
-                dmd_show(tx("IN GIOCO", "BALL LIVE"), NULL, COL_GREEN, 1100);
+                dmd_show(GT("IN GIOCO", "BALL LIVE"), NULL, COL_GREEN, 1100);
                 break;
             }
             if (by >= BWALL - 7 && vy >= 0) { ball_to_lane(); return; }   // too weak -> rolled back, re-rack
@@ -716,19 +666,32 @@ static void step_ball(int dt)
     // timers once per frame
     if (s_save_ms > 0) dec(&s_save_ms, dt);
     if (s_tilt > 0) { dec(&s_tilt, dt); if (s_tilt == 0) s_tilt_warn = 0; }
+    else if (s_tilt_warn > 0 && (s_warn_ms += dt) >= 1000) { s_tilt_warn--; s_warn_ms = 0; }   // a nudge now and then never tilts
     if (s_combo_ms > 0) { dec(&s_combo_ms, dt); if (s_combo_ms == 0) s_combo = 0; }
     float g = s_slow_ms > 0 ? s_grav * 0.5f : s_grav;   // per-level gravity (slow-mo halves it)
-    int nsub = (int)(kk * 2.0f) + 1; if (nsub > 9) nsub = 9;     // SUB-STEP so each move stays small (no tunneling, esp. fast balls)
+    float l1 = s_fl.sw, r1 = s_fr.sw;
+    int nsub = (int)(kk * 2.0f) + 1;                             // SUB-STEP so each move stays small (no tunneling, esp. fast balls)
+    int nfl = (int)(fmaxf(fabsf(l1 - l0), fabsf(r1 - r0)) * 10.0f) + 1;   // ...and each bat moves <= ~2 px per sub-step
+    if (nfl > nsub) nsub = nfl;
+    if (nsub > 12) nsub = 12;
     float k = kk / nsub;
     bool drained = false;
     for (int sub = 0; sub < nsub; sub++) {
+        float a = (float)(sub + 1) / nsub;
+        s_fl.sw = l0 + (l1 - l0) * a; s_fr.sw = r0 + (r1 - r0) * a;
         vy += g * k;
         if (s_tilt > 0) vx *= 0.996f;                            // tilt: lose control
         bx += vx * k; by += vy * k;
         if (bx < LWALL + BR) { bx = LWALL + BR; vx = -vx * 0.56f; }   // walls absorb more now (less pinballing)
         if (bx > RWALL - BR) { bx = RWALL - BR; vx = -vx * 0.56f; }
         if (by < TWALL + BR) { by = TWALL + BR; vy = -vy * 0.60f; }
-        if (by > BWALL - BR) { lose_ball(); drained = true; break; }   // past the flipper line -> DRAINED (the flippers were the only save)
+        if (by > BWALL - BR) {                                     // past the flipper line -> DRAINED
+            if (s_save_ms > 0 && s_tilt == 0) {                    // ...unless the ball saver is lit (it used to be
+                ball_to_lane(); sfx(13);                           // only a SAFE sign: the ball was lost anyway)
+                dmd_show(GT("ANCORA", "SHOOT AGAIN"), NULL, COL_GREEN, 1300);
+            } else lose_ball();
+            drained = true; break;
+        }
         if (s_tilt == 0) {
             for (int i = 0; i < NWALL; i++) {                                            // guide-rail bounces
                 float cx, cy; closest_seg(s_wall[i].ax, s_wall[i].ay, s_wall[i].bx2, s_wall[i].by2, bx, by, &cx, &cy);
@@ -751,6 +714,7 @@ static void step_ball(int dt)
               } }
         }
     }
+    s_fl.sw = l1; s_fr.sw = r1;
     if (drained) return;
     vx *= 0.990f; vy *= 0.994f;                                                          // a bit more friction -> the ball settles sooner (credible, less endless bouncing)
     // anti-stuck: a ball loitering in a pocket (deflectors/slings/outlanes) gets nudged out fast — but NOT one
@@ -832,9 +796,22 @@ static void draw_field(void)
         pbox(LWALL, ly, RWALL - LWALL, 4, mix(th_field, th_field2, t));
     }
     draw_bg_motif(s_level - 1);   // per-level background SHAPE (varies with the theme), woven faintly into the table
-    // pulsing radial glow from the lower-centre
-    int gc = 26 + (int)(22 * sinf(s_anim * 0.06f));
-    for (int r = 0; r < 4; r++) pcirc_o(67, 130, 28 + r * 18, mix(th_field, th_accent, gc - r * 5 > 0 ? gc - r * 5 : 0));
+    // playfield inserts (the lamps under the glass): a chevron chase pointing up the table, and the bonus
+    // multiplier lamps X2..X5 above the flippers, lit as the multiplier climbs
+    int chase = (s_anim / 5) % 4;
+    for (int i = 0; i < 3; i++) {
+        float cy = 168 - i * 9;
+        uint16_t c = (i == chase) ? mix(th_accent, COL_WHITE, 120) : mix(th_field2, th_accent, 70);
+        ptri(67, cy - 5, 59, cy + 2, 75, cy + 2, c);
+        ptri(67, cy - 1, 61, cy + 3, 73, cy + 3, mix(th_field, th_field2, 160));   // hollow chevron
+    }
+    for (int m = 2; m <= 5; m++) {
+        float lx = 67 + (m - 3.5f) * 13, ly = 186;
+        bool on = s_mult >= m;
+        if (on) pcircle(lx, ly, 5, mix(th_field, COL_GOLD, 90));                 // lamp glow
+        pcircle(lx, ly, 3, on ? COL_GOLDL : mix(th_field2, COL_GOLD, 60));
+        pcircle(lx - 1, ly - 1, 1, on ? COL_WHITE : mix(th_field2, COL_GOLD, 110));
+    }
     // drifting energy motes rising up the table (computed, zero storage)
     for (int i = 0; i < 9; i++) {
         float mx = LWALL + 6 + ((i * 41) % (RWALL - LWALL - 14));
@@ -850,14 +827,17 @@ static void draw_field(void)
         pthick(s_wall[i].ax, s_wall[i].ay, s_wall[i].bx2, s_wall[i].by2, 0.7f, COL_STEELL);
     }
 }
+// Top targets: an unlit target is a bright face still to hit; a hit one sinks dark with its lamp lit
+// beside it, so the bank reads "what is left" at a glance.
 static void draw_targets(void)
 {
     for (int i = 0; i < s_ntgt; i++) {
-        uint16_t c = s_tgt[i].lit ? th_accent : COL_DIM;
-        if (s_tgt[i].hit_ms > 0) c = COL_WHITE;
+        bool lit = s_tgt[i].lit;
+        uint16_t face = s_tgt[i].hit_ms > 0 ? COL_WHITE : lit ? mix(COL_DARK, th_accent2, 90) : th_accent2;
         pbox_round(s_tgt[i].x - 8, s_tgt[i].y - 4, 16, 8, 2, COL_DARK);                       // socket
-        pbox_round(s_tgt[i].x - 7, s_tgt[i].y - 3, 14, 6, 2, mix(COL_DARK, c, s_tgt[i].lit ? 220 : 110));
-        pbox(s_tgt[i].x - 6, s_tgt[i].y - 2, 12, 1, mix(c, COL_WHITE, 160));                  // top gleam
+        pbox_round(s_tgt[i].x - 7, s_tgt[i].y - 3, 14, 6, 2, face);
+        if (!lit) pbox(s_tgt[i].x - 6, s_tgt[i].y - 2, 12, 1, mix(face, COL_WHITE, 170));     // top gleam
+        pcircle(s_tgt[i].x, s_tgt[i].y + 9, 2, lit ? th_accent : mix(th_field2, th_accent, 50));   // its lamp
     }
 }
 static void draw_bumper(const Bump *o)
@@ -880,21 +860,23 @@ static void draw_sling(const Bump *o)
     pthick(ax, ay, bx2, by2, bw, mix(o->col, COL_WHITE, glow));            // rubber band on the kicking face
     pcircle(ax, ay, 1, COL_STEELL); pcircle(bx2, by2, 1, COL_STEELL);      // posts
 }
+// A real flipper bat: an anti-aliased WEDGE, fat at the pivot and tapering to the tip (drawWedgeLine), with
+// a dark outline, the themed body, a bright rubber core that flashes white on the flip, a chrome pivot.
 static void draw_flipper(const Flip *f, bool left)
 {
     float tx2, ty2; flip_tip(f, &tx2, &ty2);
     uint16_t col = left ? th_accent : th_accent2;
-    if (f->sw > 0.05f) pthick(f->px, f->py, tx2, ty2, 6.2f, mix(th_field, col, (int)(f->sw * 70)));  // colored glow halo while raised
-    pthick(f->px, f->py, tx2, ty2, 4.8f, COL_DARK);                                   // dark outline (contrast vs field)
-    pthick(f->px, f->py, tx2, ty2, 3.9f, col);                                        // bold themed body
-    pthick(f->px, f->py, tx2, ty2, 1.8f, mix(COL_WHITE, col, 60 + (int)(f->sw * 90)));// bright core, flashes white on flip
-    pcircle(f->px, f->py, 4, COL_STEELL); pcircle(f->px, f->py, 2, COL_DARK);         // pivot hub
-    pcircle(tx2, ty2, 2, COL_WHITE);                                                  // tip cap
+    int x0 = SX(f->py), y0 = SY(f->px), x1 = SX(ty2), y1 = SY(tx2);
+    if (f->sw > 0.05f) d.drawWedgeLine(x0, y0, x1, y1, 7.0f, 4.5f, mix(th_field, col, (int)(f->sw * 80)));   // glow while raised
+    d.drawWedgeLine(x0, y0, x1, y1, 5.4f, 3.2f, COL_DARK);                             // outline
+    d.drawWedgeLine(x0, y0, x1, y1, 4.4f, 2.3f, col);                                  // body
+    d.drawWedgeLine(x0, y0, x1, y1, 1.8f, 0.9f, mix(COL_WHITE, col, 60 + (int)(f->sw * 90)));   // rubber core
+    pcircle(f->px, f->py, 3, COL_STEELL); pcircle(f->px - 0.6f, f->py - 0.6f, 1, COL_WHITE);  // chrome pivot
 }
 static void draw_ball(void)
 {
     pcircle(bx + 1, by + 2, BR, mix(th_field2, COL_DARK, 150));   // soft drop shadow (offset = floats above table)
-    pcircle(bx, by, BR, COL_STEEL);                              // chrome body
+    d.fillSmoothCircle(SX(by), SY(bx), (int)BR, COL_STEEL);      // chrome body, anti-aliased edge
     pcircle(bx - 0.7f, by - 0.7f, BR - 1, COL_STEELL);           // lit crescent up-left = roundness
     pcircle(bx - 1, by - 1, 1, COL_WHITE);                       // specular highlight
 }
@@ -939,11 +921,11 @@ static void draw_xfade(void)
         int rr = (age - 170) / 3 - r * 16;
         if (rr > 2 && rr < 280) { uint16_t c = mix(COL_BG, (r & 1) ? th_accent : th_wallL, fade); d.drawCircle(cx, cy, rr, c); d.drawCircle(cx, cy, rr + 1, c); }
     }
-    char b[16]; snprintf(b, sizeof b, "%s %d", tx("LIV", "LVL"), s_level);
+    char b[16]; snprintf(b, sizeof b, GT("LIV %d", "LVL %d"), s_level);
     int wn = dmd_width(b, 3);
     dmd_text((PW - wn) / 2.0f, PH / 2 - 28, b, 3, 1, ((s_anim >> 1) & 1) ? th_accent : COL_WHITE, 0, 0);
-    int wt = dmd_width(s_lv.theme, 2);
-    dmd_text((PW - wt) / 2.0f, PH / 2 + 8, s_lv.theme, 2, 1, th_accent2, 0, 0);
+    const char *tn = theme_name();
+    dmd_text((PW - dmd_width(tn, 2)) / 2.0f, PH / 2 + 8, tn, 2, 1, th_accent2, 0, 0);
 }
 // render one string's LIT dots into the DMD grid at row gridRow; centres if it fits, else marquee-scrolls
 static void dmd_grid_line(float px, float py, int P, int cols, int rows, int gridRow, const char *str, unsigned anim, uint16_t on)
@@ -1019,14 +1001,15 @@ static void draw_play(void)
         pthick(bx, by, bx, by + 16, 2, mix(th_field, COL_WHITE, s_launch_ms * 220 / 280));
     draw_ball();
     if (s_bp == BP_READY) {                                             // FX3 power gauge along the (invisible) chute
-        int GH = BWALL - 20 - CHTOP, gx = CHX - 9;
-        pbox(gx, CHTOP, 4, GH, mix(COL_DARK, th_field2, 150));          // gauge track
+        int GH = BWALL - 20 - CHTOP, gx = CHX - 8;
+        pbox(gx, CHTOP, 2, GH, mix(th_field, th_field2, 200));          // slim gauge track beside the lane
         int bh = (int)(s_plunge * GH);
-        pbox(gx, CHTOP + (GH - bh), 4, bh, mix(COL_GREEN, COL_RED, (int)(s_plunge * 256)));   // fill green->red as it charges
-        pbox(gx - 1, CHTOP - 1, 6, 2, s_plunge >= 0.99f ? ((s_anim & 2) ? COL_WHITE : COL_RED) : COL_DIM);   // MAX marker (flashes when full)
-        const char *pp = s_charging ? tx("RILASCIA!", "RELEASE!") : tx("TIENI CTRL: CARICA", "HOLD CTRL: CHARGE");
+        pbox(gx, CHTOP + (GH - bh), 2, bh, mix(COL_GREEN, COL_RED, (int)(s_plunge * 256)));   // fill green->red as it charges
+        for (int q = 1; q < 4; q++) pbox(gx - 1, CHTOP + GH * q / 4, 4, 0, COL_DIM);          // quarter ticks
+        pbox(gx - 1, CHTOP - 1, 4, 2, s_plunge >= 0.99f ? ((s_anim & 2) ? COL_WHITE : COL_RED) : COL_DIM);   // MAX marker (flashes when full)
+        const char *pp = s_charging ? GT("RILASCIA!", "RELEASE!") : GT("TIENI CTRL: CARICA", "HOLD CTRL: CHARGE");
         uint16_t ac = ((s_anim >> 2) & 1) ? COL_GOLDL : COL_GOLD;
-        dmd_text((PW - dmd_width(pp, 1)) / 2.0f, BWALL - 26, pp, 1, 1, s_charging ? COL_RED : ac, 0, 0);
+        dmd_text((PW - dmd_width(pp, 1)) / 2.0f, 122, pp, 1, 1, s_charging ? COL_RED : ac, 0, 0);   // mid-table, clear of the bats
     }
     if (s_save_ms > 0) {                                                // ball saver grace period visual
         const char *safe = "SAFE";
@@ -1049,218 +1032,171 @@ static void draw_play(void)
 }
 
 // ============================ rendering: menus (landscape) ===================
-static void felt(void)
-{
-    int ch = nucleo_app_content_height();
-    d.fillRect(0, 0, W, ch, COL_BG);
-    for (int y = 0; y < ch; y += 5) d.drawFastHLine(0, y, W, mix(COL_BG, COL_FIELD, 40));
-}
-static void mini_table(int cx, int cy)            // little pinball glyph for the menu
-{
-    d.fillRoundRect(cx - 14, cy - 22, 28, 44, 6, COL_FIELD2);
-    d.drawRoundRect(cx - 14, cy - 22, 28, 44, 6, COL_WALLL);
-    d.fillCircle(cx - 6, cy - 8, 4, COL_CYAN); d.fillCircle(cx + 6, cy - 10, 4, COL_PINK); d.fillCircle(cx, cy + 2, 4, COL_GREEN);
-    d.drawLine(cx - 9, cy + 16, cx - 1, cy + 12, COL_STEELL); d.drawLine(cx + 9, cy + 16, cx + 1, cy + 12, COL_STEELL);
-    d.fillCircle(cx + 8, cy + 8, 2, COL_STEELL);
-}
-#define MENU_Y0 50
-#define MENU_DY 17
-#define NMENU 4
-static int menu_item_y(int i) { return MENU_Y0 + i * MENU_DY; }
+// The landscape screens are the shared console kit (game_ui.h): the same title, menu and cards as every
+// other game. They keep the OS footer (hints), so everything fits the 121 rows above it (CH).
+#define CH    (H - HINT)
+#define ACC   gui::rgb(80, 220, 255)            // the table's neon cyan, RGB332-exact
+#define WHITE gui::rgb(255, 255, 255)
+#define BLACK gui::rgb(0, 0, 0)
+#define MUTED gui::rgb(150, 160, 190)
+#define NMENU 3
+#define NSET  3
+static gui::Menu s_menu;                       // the title / settings list cursor (selection + glide)
+
 static void draw_menu(void)
 {
-    felt();
-    mini_table(26, 56); mini_table(W - 26, 56);
-    const char *title = tx("FLIPPER", "PINBALL");
-    int lw = (int)strlen(title) * 18;
-    ltext((W - lw) / 2 + 1, 9, 3, COL_WALL, title);
-    ltext((W - lw) / 2, 8, 3, ((s_anim >> 3) & 1) ? COL_WALLL : COL_CYAN, title);
-    char hb[28]; snprintf(hb, sizeof hb, "%s %lu", tx("Record", "High"), (unsigned long)g_hi);
-    ltext_c(W / 2, 34, 1, COL_GOLDL, hb);
-    const char *items[NMENU] = { tx("Gioca", "Play"), tx("Classifica", "Scores"), tx("Come si gioca", "How to play"), tx("Impostazioni", "Settings") };
-    int selw = (int)strlen(items[s_msel]) * 12;
-    d.fillRoundRect((W - selw) / 2 - 10, (int)s_capY - 1, selw + 20, 16, 5, mix(COL_DARK, COL_CYAN, 50));
-    for (int i = 0; i < NMENU; i++) ltext_c(W / 2, menu_item_y(i), 2, i == s_msel ? COL_WHITE : COL_GREY, items[i]);
+    char sub[32]; snprintf(sub, sizeof sub, GT("Record %lu", "Best %lu"), (unsigned long)g_hi);
+    int y = gui::title(GT("FLIPPER", "PINBALL"), sub, ACC);
+    const char *items[NMENU] = { GT("Gioca", "Play"), GT("Classifica", "Scores"), GT("Impostazioni", "Settings") };
+    gui::menu(s_menu, items, NMENU, y, CH, ACC);
 }
 static void draw_scores(void)
 {
-    felt();
-    ltext_c(W / 2, 8, 2, COL_GOLD, tx("CLASSIFICA", "HIGH SCORES"));
-    d.drawFastHLine(20, 28, W - 40, COL_WALL);
+    int y = gui::title(GT("Classifica", "High scores"), nullptr, ACC);
     for (int i = 0; i < NTOP; i++) {
-        int col = i / 5, row = i % 5, x = 14 + col * 118, y = 36 + row * 16;
-        char r[6]; snprintf(r, sizeof r, "%2d", i + 1);
-        ltext(x, y, 1, i < 3 ? COL_GOLDL : COL_GREY, r);
-        char s[14]; snprintf(s, sizeof s, "%lu", (unsigned long)g_top[i]);
-        ltext(x + 18, y, 1, g_top[i] ? (i < 3 ? COL_CREAM : COL_GREY) : COL_DIM, g_top[i] ? s : "---");
+        int x = 10 + (i / 5) * 116, ry = y + (i % 5) * 16;
+        char r[6]; snprintf(r, sizeof r, "%d.", i + 1);
+        gui::text(r, x + 22, ry, 2, gui::F_SMALL, i < 3 ? COL_GOLD : MUTED, BLACK);
+        char sc[14]; snprintf(sc, sizeof sc, "%lu", (unsigned long)g_top[i]);
+        gui::text(g_top[i] ? sc : "---", x + 28, ry, 0, gui::F_SMALL, g_top[i] ? (i < 3 ? WHITE : MUTED) : COL_DIM, BLACK);
     }
 }
+// Help: three pages of five lines in the small UI face; a key column + its action where it is a key list.
 static void draw_help(void)
 {
-    int ch = nucleo_app_content_height();
-    felt();
-    const char *titles[3] = { tx("Obiettivo", "Objective"), tx("Comandi", "Controls"), tx("Punti", "Scoring") };
-    ltext_c(W / 2, 6, 2, COL_CYAN, titles[s_help]);
-    d.drawFastHLine(20, 26, W - 40, COL_WALL);
+    const char *titles[3] = { GT("Obiettivo", "Objective"), GT("Comandi", "Controls"), GT("Punti", "Scoring") };
+    int y = gui::title(titles[s_help], nullptr, ACC);
+    for (int i = 0; i < 3; i++) d.fillCircle(W - 26 + i * 8, 14, i == s_help ? 3 : 2, i == s_help ? ACC : COL_DIM);   // page dots
+    const char *k[5], *a[5];
     if (s_help == 0) {
-        ltext(12, 34, 1, COL_CREAM, tx("Tieni il device IN VERTICALE", "Hold the device VERTICAL"));
-        ltext(12, 48, 1, COL_CREAM, tx("(ruota: bordo destro in alto).", "(rotate: right edge up)."));
-        ltext(12, 66, 1, COL_CREAM, tx("Lancia la palla, colpisci respingenti", "Launch the ball, hit bumpers"));
-        ltext(12, 80, 1, COL_CREAM, tx("e bersagli. Non farla cadere!", "and targets. Don't let it drain!"));
-        ltext(12, 98, 1, COL_GOLD, tx("3 bersagli accesi = BONUS + molt.", "3 targets lit = BONUS + mult."));
-    } else if (s_help == 1) {
-        ltext(12, 34, 1, COL_GREY, tx("1  /  FN", "1  /  FN"));          ltext(150, 34, 1, COL_CYAN, tx("flipper sx (tieni)", "left flip (hold)"));
-        ltext(12, 50, 1, COL_GREY, tx("0  /  OPT", "0  /  OPT"));         ltext(150, 50, 1, COL_CYAN, tx("flipper dx (tieni)", "right flip (hold)"));
-        ltext(12, 66, 1, COL_GREY, tx("CTRL / GO", "CTRL / GO"));        ltext(150, 66, 1, COL_GREEN, tx("tieni: carica lancio", "hold: charge"));
-        ltext(12, 82, 1, COL_GREY, "SPAZIO");                            ltext(150, 82, 1, COL_GOLD, tx("lancio pieno", "full launch"));
-        ltext(12, 98, 1, COL_GREY, tx("ALT / TAB", "ALT / TAB"));        ltext(150, 98, 1, COL_ORANGE, tx("tilt / opzioni", "tilt / options"));
-    } else {
-        ltext(14, 36, 1, COL_CREAM, tx("Respingente", "Bumper"));      ltext_r(W - 14, 36, 1, COL_GOLD, "100");
-        ltext(14, 52, 1, COL_CREAM, tx("Slingshot", "Slingshot"));     ltext_r(W - 14, 52, 1, COL_GOLD, "50");
-        ltext(14, 68, 1, COL_CREAM, tx("Bersaglio", "Target"));        ltext_r(W - 14, 68, 1, COL_GOLD, "150");
-        ltext(14, 84, 1, COL_CREAM, tx("Bonus 3/3", "Bonus 3/3"));     ltext_r(W - 14, 84, 1, COL_GOLDL, "1000");
-        ltext(14, 100, 1, COL_PURPLE, tx("Combo respingenti", "Bumper combo")); ltext_r(W - 14, 100, 1, COL_GOLDL, "x");
+        const char *l[5] = { GT("Tieni il device in verticale", "Hold the device upright"),
+                             GT("(bordo destro in alto).", "(right edge up)."),
+                             GT("Colpisci respingenti e bersagli,", "Hit bumpers and targets,"),
+                             GT("non far cadere la palla.", "do not let the ball drain."),
+                             GT("Barra piena: nuovo livello!", "Bar full: next level!") };
+        for (int i = 0; i < 5; i++) gui::text(l[i], 10, y + i * 16, 0, gui::F_SMALL, i == 4 ? COL_GOLD : WHITE, BLACK);
+        return;
     }
-    int gap = 12, x0 = W / 2 - gap;
-    for (int i = 0; i < 3; i++) d.fillCircle(x0 + i * gap, ch - 8, i == s_help ? 3 : 2, i == s_help ? COL_CYAN : COL_DIM);
+    if (s_help == 1) {
+        k[0] = "1  ,  FN";  a[0] = GT("flipper sinistro", "left flipper");
+        k[1] = "0  /  OPT"; a[1] = GT("flipper destro", "right flipper");
+        k[2] = "CTRL  GO";  a[2] = GT("tieni: carica il lancio", "hold: charge the launch");
+        k[3] = GT("SPAZIO", "SPACE"); a[3] = GT("lancio a piena forza", "full-power launch");
+        k[4] = "N  ALT";    a[4] = GT("colpetto (troppi: TILT)", "nudge (too many: TILT)");
+    } else {
+        k[0] = GT("Respingente", "Bumper");    a[0] = "100+";
+        k[1] = GT("Fionda / palo", "Sling / post"); a[1] = "50 / 75";
+        k[2] = GT("Bersaglio", "Target");      a[2] = "150";
+        k[3] = GT("Tutti i bers.", "All targets"); a[3] = GT("1000, molt. +1, bonus", "1000, mult +1, bonus");
+        k[4] = "Spinner";                      a[4] = GT("50 + 25 a giro", "50 + 25 a turn");
+    }
+    int ax = 0;                                    // the action column starts after the widest key
+    for (int i = 0; i < 5; i++) { int w = gui::text_width(k[i], gui::F_SMALL); if (w > ax) ax = w; }
+    ax += 18;
+    for (int i = 0; i < 5; i++) {
+        gui::text(k[i], 10, y + i * 16, 0, gui::F_SMALL, MUTED, BLACK);
+        if (gui::text_width(a[i], gui::F_SMALL) <= W - 4 - ax) gui::text(a[i], ax, y + i * 16, 0, gui::F_SMALL, i == 3 ? COL_GOLD : WHITE, BLACK);
+        else ltext(ax, y + i * 16 + 4, 1, i == 3 ? COL_GOLD : WHITE, a[i]);   // a long translation: the 6x8 face
+    }
 }
 static void draw_settings(void)
 {
-    felt();
-    ltext_c(W / 2, 8, 2, COL_CYAN, tx("Impostazioni", "Settings"));
-    const char *names[4] = { tx("Lingua", "Language"), "Audio", tx("Colpetto", "Nudge"), tx("Indietro", "Back") };
-    char v[3][16];
-    snprintf(v[0], 16, "%s", g_lang ? "English" : "Italiano");
-    snprintf(v[1], 16, "%s", g_audio ? "On" : "Off");
-    snprintf(v[2], 16, "%s", g_nudge ? "On" : "Off");
-    d.fillRoundRect(16, (int)s_capY, W - 32, 18, 5, mix(COL_DARK, COL_CYAN, 50));
-    for (int i = 0; i < 4; i++) {
-        int y = 32 + i * 20;
-        ltext(26, y, 2, i == s_setsel ? COL_WHITE : COL_GREY, names[i]);
-        if (i < 3) ltext_r(W - 18, y + 4, 1, COL_GOLD, v[i]);
-    }
+    int y = gui::title(GT("Impostazioni", "Settings"), nullptr, ACC);
+    char a[32], n[32];
+    snprintf(a, sizeof a, "%s: %s", GT("Audio", "Audio"), g_audio ? GT("Si", "On") : GT("No", "Off"));
+    snprintf(n, sizeof n, "%s: %s", GT("Colpetto", "Nudge"), g_nudge ? GT("Si", "On") : GT("No", "Off"));
+    const char *items[NSET] = { a, n, GT("Come si gioca", "How to play") };
+    gui::menu(s_menu, items, NSET, y, CH, ACC);
 }
-static void draw_over(void)
+static void draw_pause(void)                       // the pause card over the frozen table
 {
-    int ch = nucleo_app_content_height();
-    felt();
+    draw_play();
+    char l1[32], l2[40];
+    snprintf(l1, sizeof l1, GT("Punti %lu", "Score %lu"), (unsigned long)s_score);
+    snprintf(l2, sizeof l2, GT("Palla %d  Livello %d", "Ball %d  Level %d"), START_BALLS - s_balls + 1, s_level);
+    gui::dialog(GT("PAUSA", "PAUSED"), l1, l2, GT("INVIO riprendi  Esc esci", "ENTER resume  Esc leave"), ACC);
+}
+static void draw_over(void)                        // the game-over card over the last table
+{
+    draw_play();
     bool hs = (s_score >= g_hi && s_score > 0);
-    ltext_c(W / 2, 12, 2, hs ? COL_GOLD : COL_RED, hs ? tx("NUOVO RECORD!", "HIGH SCORE!") : tx("FINE PARTITA", "GAME OVER"));
-    char b[28]; snprintf(b, sizeof b, "%lu", (unsigned long)s_score);
-    ltext_c(W / 2, 44, 3, COL_WHITE, b);
-    char hb[28]; snprintf(hb, sizeof hb, "%s %lu", tx("Record", "Best"), (unsigned long)g_hi);
-    ltext_c(W / 2, 78, 1, COL_GOLDL, hb);
-    ltext_c(W / 2, ch - 14, 1, ((s_anim >> 2) & 1) ? COL_WHITE : COL_CYAN, tx("INVIO per rigiocare", "ENTER to play again"));
+    char l1[32], l2[40];
+    snprintf(l1, sizeof l1, GT("Punti %lu", "Score %lu"), (unsigned long)s_score);
+    int rank = -1;
+    for (int i = 0; i < NTOP && s_score > 0; i++) if (g_top[i] == s_score) { rank = i + 1; break; }
+    if (rank > 0) snprintf(l2, sizeof l2, GT("Classifica: %d. posto", "Leaderboard: #%d"), rank);
+    else snprintf(l2, sizeof l2, GT("Record %lu", "Best %lu"), (unsigned long)g_hi);
+    gui::dialog(hs ? GT("NUOVO RECORD!", "HIGH SCORE!") : GT("FINE PARTITA", "GAME OVER"), l1, l2,
+                GT("INVIO rigioca  Esc menu", "ENTER replay  Esc menu"), hs ? COL_GOLD : COL_RED);
 }
 
 // ============================ input + hint ===================================
 static void set_hint(void)
 {
     switch (s_screen) {
-        case ST_MENU: nucleo_app_set_hint(tx("SU/GIU scegli  INVIO ok  Esc esci", "UP/DN pick  ENTER ok  Esc quit")); break;
-        case ST_SCORES: nucleo_app_set_hint(tx("INVIO/Esc indietro", "ENTER/Esc back")); break;
-        case ST_HELP: nucleo_app_set_hint(tx("SX/DX pagine  Esc indietro", "LEFT/RIGHT pages  Esc back")); break;
-        case ST_SET:  nucleo_app_set_hint(tx("SU/GIU  INVIO cambia  Esc", "UP/DN  ENTER change  Esc")); break;
-        case ST_OPT:  nucleo_app_set_hint(tx("SU/GIU  INVIO cambia  TAB chiudi", "UP/DN  ENTER change  TAB close")); break;
-        case ST_OVER: nucleo_app_set_hint(tx("INVIO rigioca  Esc menu", "ENTER replay  Esc menu")); break;
+        case ST_MENU:   nucleo_app_set_hint(GT("SU/GIU scegli  INVIO ok  Esc esci", "UP/DN pick  ENTER ok  Esc quit")); break;
+        case ST_SCORES: nucleo_app_set_hint(GT("Esc indietro", "Esc back")); break;
+        case ST_HELP:   nucleo_app_set_hint(GT("SX/DX pagine  Esc indietro", "LEFT/RIGHT pages  Esc back")); break;
+        case ST_SET:    nucleo_app_set_hint(GT("SU/GIU  INVIO cambia  Esc menu", "UP/DN  ENTER change  Esc menu")); break;
+        case ST_OPT:    nucleo_app_set_hint(GT("INVIO riprendi  Esc esci", "ENTER resume  Esc leave")); break;
+        case ST_OVER:   nucleo_app_set_hint(GT("INVIO rigioca  Esc menu", "ENTER replay  Esc menu")); break;
         default: break;   // ST_PLAY is fullscreen portrait: no landscape footer
     }
 }
-static float cap_target(void)
-{
-    if (s_screen == ST_MENU) return (float)menu_item_y(s_msel);
-    if (s_screen == ST_SET)  return (float)(32 + s_setsel * 20);
-    return s_capY;
-}
 static void go(int s)
 {
+    if (s == ST_MENU || s == ST_SET) { s_menu.sel = 0; s_menu.pos = 0; }
     s_screen = s;
     nucleo_app_set_fullscreen(s == ST_PLAY);     // the table owns the whole panel (portrait); menus keep the footer
-    s_capY = cap_target();
     set_hint();
     nucleo_app_request_draw();
 }
+// Pause (TAB or Esc): the first Esc pauses, a second one leaves the game; ENTER / TAB resume.
 static void tab_handler(void)
 {
-    if (s_screen == ST_PLAY) { s_optsel = 0; go(ST_OPT); sfx(2); }
+    if (s_screen == ST_PLAY) { go(ST_OPT); sfx(2); }
     else if (s_screen == ST_OPT) { go(ST_PLAY); sfx(3); }
-}
-static void opt_change(void)
-{
-    switch (s_optsel) {
-        case 0: g_audio ^= 1; sfx(2); break;
-        case 1: g_nudge ^= 1; sfx(2); break;
-        case 2: g_lang ^= 1; set_hint(); sfx(2); break;
-        default: break;
-    }
-    cfg_write(); nucleo_app_request_draw();
-}
-static void draw_options(void)                    // a small landscape panel over a frozen table is awkward; keep it simple/landscape
-{
-    felt();
-    ltext_c(W / 2, 10, 2, COL_CYAN, tx("OPZIONI", "OPTIONS"));
-    const char *names[3] = { "Audio", tx("Colpetto", "Nudge"), tx("Lingua", "Language") };
-    char v[3][16];
-    snprintf(v[0], 16, "%s", g_audio ? "On" : "Off");
-    snprintf(v[1], 16, "%s", g_nudge ? "On" : "Off");
-    snprintf(v[2], 16, "%s", g_lang ? "English" : "Italiano");
-    for (int i = 0; i < 3; i++) {
-        int y = 40 + i * 20;
-        if (i == s_optsel) d.fillRoundRect(16, y - 3, W - 32, 18, 4, mix(COL_DARK, COL_CYAN, 60));
-        ltext(26, y, 2, i == s_optsel ? COL_WHITE : COL_GREY, names[i]);
-        ltext_r(W - 22, y + 4, 1, COL_GOLDL, v[i]);
-    }
-    ltext_c(W / 2, 110, 1, COL_DIM, tx("TAB torna al tavolo", "TAB back to table"));
 }
 static void menu_select(void)
 {
     sfx(2);
-    if (s_msel == 0) { new_game(); go(ST_PLAY); }
-    else if (s_msel == 1) go(ST_SCORES);
-    else if (s_msel == 2) { s_help = 0; go(ST_HELP); }
-    else { s_setsel = 0; go(ST_SET); }
+    if (s_menu.sel == 0) { new_game(); go(ST_PLAY); }
+    else if (s_menu.sel == 1) go(ST_SCORES);
+    else go(ST_SET);
 }
-static void settings_change(void)
+static void settings_change(int key)
 {
-    switch (s_setsel) {
-        case 0: g_lang ^= 1; cfg_write(); set_hint(); sfx(2); break;
-        case 1: g_audio ^= 1; cfg_write(); sfx(2); break;
-        case 2: g_nudge ^= 1; cfg_write(); sfx(2); break;
-        default: sfx(3); s_msel = 2; go(ST_MENU); return;
-    }
+    if (s_menu.sel == 0) { g_audio ^= 1; cfg_write(); sfx(2); }
+    else if (s_menu.sel == 1) { g_nudge ^= 1; cfg_write(); sfx(2); }
+    else if (key == NK_ENTER) { sfx(2); s_help = 0; go(ST_HELP); return; }
     nucleo_app_request_draw();
 }
 static void on_key(int k, char ch)
 {
     switch (s_screen) {
         case ST_MENU:
-            if (k == NK_UP)        { s_msel = (s_msel + NMENU - 1) % NMENU; s_capY = cap_target(); sfx(1); nucleo_app_request_draw(); }
-            else if (k == NK_DOWN) { s_msel = (s_msel + 1) % NMENU; s_capY = cap_target(); sfx(1); nucleo_app_request_draw(); }
+            if (gui::menu_key(s_menu, k, NMENU)) { sfx(1); nucleo_app_request_draw(); }
+            else if (ch >= '1' && ch < '1' + NMENU) { s_menu.sel = (int8_t)(ch - '1'); menu_select(); }   // 1-3 quick pick
             else if (k == NK_ENTER || k == NK_RIGHT) menu_select();
             return;
         case ST_SCORES:
-            if (k == NK_ENTER || k == NK_RIGHT) { sfx(3); go(ST_MENU); }
+            if (k == NK_ENTER) { sfx(3); go(ST_MENU); }
             return;
         case ST_HELP:
-            if (k == NK_RIGHT)      { s_help = (s_help + 1) % 3; sfx(1); nucleo_app_request_draw(); }
-            else if (k == NK_ENTER) { sfx(3); go(ST_MENU); }
+            if (k == NK_RIGHT || k == NK_ENTER) { s_help = (s_help + 1) % 3; sfx(1); nucleo_app_request_draw(); }
             return;
         case ST_SET:
-            if (k == NK_UP)        { s_setsel = (s_setsel + 3) % 4; s_capY = cap_target(); sfx(1); nucleo_app_request_draw(); }
-            else if (k == NK_DOWN) { s_setsel = (s_setsel + 1) % 4; s_capY = cap_target(); sfx(1); nucleo_app_request_draw(); }
-            else if (k == NK_ENTER || k == NK_RIGHT) settings_change();
+            if (gui::menu_key(s_menu, k, NSET)) { sfx(1); nucleo_app_request_draw(); }
+            else if (k == NK_ENTER || k == NK_RIGHT) settings_change(k);
             return;
         case ST_OPT:
-            if (k == NK_UP)        { s_optsel = (s_optsel + 2) % 3; sfx(1); nucleo_app_request_draw(); }
-            else if (k == NK_DOWN) { s_optsel = (s_optsel + 1) % 3; sfx(1); nucleo_app_request_draw(); }
-            else if (k == NK_ENTER) opt_change();
+            if (k == NK_ENTER) { go(ST_PLAY); sfx(3); }
             return;
         case ST_PLAY:
             if (s_bp == BP_READY && (ch == ' ' || k == NK_ENTER || k == NK_DOWN || k == NK_UP)) launch_ball(1.0f);   // tap = full-power launch
-            else if (ch == '1') { s_ltap_ms = 150; sfx(5); }                    // '1' -> left flipper (tap)
-            else if (k == NK_RIGHT) { s_rtap_ms = 150; sfx(5); }                // RIGHT -> right flipper (tap; OPT is the hold)
+            else if (ch == '1') s_ltap_ms = 120;                                // a tap shorter than a frame still swings
+            else if (ch == '0' || k == NK_RIGHT) s_rtap_ms = 120;               // (the clack is poll's, on the press edge)
             else if (ch == 'n' || ch == 'N') nudge((s_anim & 1) ? 1 : -1);
-            else if ((ch == ' ' || k == NK_ENTER) && s_bp == BP_DRAIN && s_balls > 0) ball_to_lane();
             return;
         case ST_OVER:
             if (k == NK_ENTER || ch == ' ') { new_game(); go(ST_PLAY); }
@@ -1271,15 +1207,16 @@ static void on_key(int k, char ch)
 static bool on_back(int key)
 {
     if (key == NK_LEFT) {                          // LEFT routes here (back handler) — use it for the left flipper in play
-        if (s_screen == ST_PLAY) { s_ltap_ms = 150; sfx(5); return true; }
+        if (s_screen == ST_PLAY) { s_ltap_ms = 120; return true; }
         if (s_screen == ST_HELP) { s_help = (s_help + 2) % 3; sfx(1); nucleo_app_request_draw(); return true; }
-        if (s_screen == ST_SET)  { settings_change(); return true; }
+        if (s_screen == ST_SET)  { if (s_menu.sel < 2) settings_change(key); return true; }
+        if (s_screen != ST_MENU) return true;      // LEFT never leaves a screen; Esc does
     }
     switch (s_screen) {                            // Esc / Back
         case ST_MENU: return false;                // close app
-        case ST_OPT:  go(ST_PLAY); sfx(3); return true;
-        case ST_PLAY: sfx(3); s_msel = 0; go(ST_MENU); return true;
-        default: sfx(3); s_msel = 0; go(ST_MENU); return true;
+        case ST_PLAY: go(ST_OPT); sfx(2); return true;          // the first Esc pauses...
+        case ST_HELP: sfx(3); go(ST_SET); s_menu.sel = 2; s_menu.pos = 2; return true;
+        default: sfx(3); go(ST_MENU); return true;              // ...a second one (in the pause) leaves
     }
 }
 
@@ -1292,7 +1229,7 @@ static void on_draw(void)
         case ST_HELP: draw_help(); break;
         case ST_SET:  draw_settings(); break;
         case ST_PLAY: draw_play(); break;
-        case ST_OPT:  draw_options(); break;
+        case ST_OPT:  draw_pause(); break;
         case ST_OVER: draw_over(); break;
         default: break;
     }
@@ -1302,7 +1239,6 @@ static bool poll(void)
     s_now = esp_timer_get_time() / 1000;
     int dt = (int)(s_now - s_last); if (dt < 0) dt = 0; if (dt > 60) dt = 60;
     s_last = s_now;
-    bool menu_glide = false;
 
     // eased score readout
     if (s_disp_score != s_score) {
@@ -1331,15 +1267,19 @@ static bool poll(void)
         // Physical FN -> NK_MOD_CTRL, OPT -> NK_MOD_ALT, CTRL -> NK_MOD_FN, ALT -> NK_MOD_GUI.
         static bool s_l1_prev = false, s_r0_prev = false;
         bool inplay    = (s_bp == BP_PLAY);
-        bool leftKey   = nucleo_kbd_char_down('1');  // '1' held -> left flipper STAYS up (printable keys are reliable)
-        bool rightKey  = nucleo_kbd_char_down('0');  // '0' held -> right flipper STAYS up
+        // '1' / ',' held -> left flipper STAYS up, '0' / '/' -> right. The physical key state, not key events:
+        // ',' and '/' auto-repeat only after 350 ms, so a bat driven by their events dropped mid-hold.
+        bool leftKey   = nucleo_kbd_char_down('1') || nucleo_kbd_char_down(',');
+        bool rightKey  = nucleo_kbd_char_down('0') || nucleo_kbd_char_down('/');
         bool leftMod   = (m & NK_MOD_CTRL) != 0;     // physical FN   -> left flipper (HOLD), alternative
         bool rightMod  = (m & NK_MOD_ALT)  != 0;     // physical OPT  -> right flipper (HOLD), alternative
         bool chargeMod = (m & NK_MOD_FN)   != 0;     // physical CTRL -> charge the plunger
-        bool leftHeld  = leftKey  || leftMod;
-        bool rightHeld = rightKey || rightMod;
-        if (inplay && leftHeld  && !s_l1_prev) sfx(5);                           // flipper clack on press (either input)
-        if (inplay && rightHeld && !s_r0_prev) sfx(5);
+        if (s_ltap_ms > 0) dec(&s_ltap_ms, dt);
+        if (s_rtap_ms > 0) dec(&s_rtap_ms, dt);
+        bool leftHeld  = inplay && (leftKey  || leftMod  || s_ltap_ms > 0);
+        bool rightHeld = inplay && (rightKey || rightMod || s_rtap_ms > 0);
+        if (leftHeld  && !s_l1_prev) sfx(5);                                     // ONE flipper clack per press (any input)
+        if (rightHeld && !s_r0_prev) sfx(5);
         s_l1_prev = leftHeld; s_r0_prev = rightHeld;
         if ((m & NK_MOD_GUI) && !(s_mods_prev & NK_MOD_GUI)) nudge((s_anim & 1) ? 1 : -1);   // physical ALT -> tilt (rising edge)
         if (s_bp == BP_READY) {                                  // FX3 plunger: hold CTRL (or GO) to charge, release to fire
@@ -1352,24 +1292,21 @@ static bool poll(void)
         }
         s_mods_prev = m;
         if (s_launch_ms > 0) dec(&s_launch_ms, dt);
-        if (s_ltap_ms > 0) dec(&s_ltap_ms, dt);
-        if (s_rtap_ms > 0) dec(&s_rtap_ms, dt);
-        s_fl.held = inplay && (leftHeld  || s_ltap_ms > 0);                      // '1'/FN held (or LEFT tap) -> left flipper STAYS up
-        s_fr.held = inplay && (rightHeld || s_rtap_ms > 0);                      // '0'/OPT held (or RIGHT tap) -> right flipper STAYS up
+        s_fl.held = leftHeld;                                                    // held (or a fresh tap) -> the bat STAYS up
+        s_fr.held = rightHeld;
+        float l0 = s_fl.sw, r0 = s_fr.sw;
         flipper_step(&s_fl, dt); flipper_step(&s_fr, dt);
-        step_ball(dt);
+        step_ball(dt, l0, r0);
         if (s_bp == BP_PLAY) { if (s_2x_ms > 0) dec(&s_2x_ms, dt); if (s_slow_ms > 0) dec(&s_slow_ms, dt); }
         if (s_xfade_ms > 0) { s_xfade_age += dt; dec(&s_xfade_ms, dt); }
         if (s_bp == BP_PLAY && s_xfade_ms <= 0 && s_lv_score >= (unsigned)s_lv.goal) level_up();  // reached the level goal -> advance
         if (s_bp == BP_DRAIN && s_balls <= 0 && s_dmd_ms <= 0) { go(ST_OVER); return true; }   // game over screen after the DMD toll
         if (s_bp == BP_DRAIN && s_balls > 0 && s_dmd_ms <= 0) ball_to_lane();                   // auto-serve the next ball
     } else if (s_screen == ST_MENU || s_screen == ST_SET) {
-        float tgt = cap_target();
-        if (s_capY != tgt) { s_capY += (tgt - s_capY) * 0.45f; if (fabsf(tgt - s_capY) < 0.5f) s_capY = tgt; menu_glide = true; }
+        return gui::menu_tick(s_menu, dt);                             // the pill glides; a settled menu is still
     }
 
-    if (s_screen == ST_HELP || s_screen == ST_OPT || s_screen == ST_SCORES) return false;   // static
-    if ((s_screen == ST_MENU || s_screen == ST_SET) && !menu_glide && s_dmd_ms <= 0) return false;
+    if (s_screen != ST_PLAY) return false;                             // help / scores / cards are still (drawn on input)
     if (s_now - s_frame < 20) return false;                            // ~50 Hz for smooth physics
     s_frame = s_now; s_anim++;
     return true;
@@ -1377,19 +1314,17 @@ static bool poll(void)
 static void ptt_fn(bool on) { s_go_held = on; }     // GO button held -> charge the plunger
 static void on_enter(void)
 {
+    game_text_open("pinball");
     ensure_dirs();
     cfg_read();
     if (nucleo_audio_volume() < 40) nucleo_audio_set_volume(85);
-    sfx_cache_check();
-    presynth();
     if (!s_spk) s_spk = (Spark *)calloc(NSPK, sizeof *s_spk);   // freed in on_exit; null = sparks no-op
     s_level = 1; s_lv_score = 0; s_xfade_ms = 0; s_charging = false; s_launch_ms = 0;
     apply_level(1);
     if (s_spk) memset(s_spk, 0, sizeof(Spark) * NSPK);
     s_score = s_disp_score = 0; s_balls = START_BALLS; s_mult = 1; s_dmd_ms = 0;
     s_bp = BP_READY; ball_to_lane();
-    s_screen = ST_MENU; s_msel = 0; s_anim = 0;
-    s_capY = cap_target();
+    s_screen = ST_MENU; s_anim = 0; s_menu.sel = 0; s_menu.pos = 0;
     s_now = s_last = s_frame = esp_timer_get_time() / 1000;
     nucleo_app_set_back_handler(on_back);
     nucleo_app_set_poll_handler(poll);
@@ -1400,7 +1335,7 @@ static void on_enter(void)
     sfx(2);
     nucleo_app_request_draw();
 }
-static void on_exit(void) { nucleo_audio_stop(); cfg_write(); free(s_spk); s_spk = nullptr; }
+static void on_exit(void) { nucleo_audio_stop(); cfg_write(); free(s_spk); s_spk = nullptr; game_text_close(); }
 
 extern "C" void nucleo_register_pinball(void)
 {

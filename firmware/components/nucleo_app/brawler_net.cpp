@@ -26,7 +26,7 @@ extern "C" {
 // ============================ protocol ======================================
 #define SB_M0  'S'
 #define SB_M1  'B'
-#define SB_VER 1
+#define SB_VER 2         // v2: heroes carry their jump height, enemies their facing + swing phase, + lives
 enum { SB_HELLO = 1, SB_JOIN, SB_ACCEPT, SB_STATE, SB_INPUT, SB_BYE };
 enum { SB_HS_IDLE = 0, SB_HS_HOSTING };
 
@@ -35,7 +35,7 @@ enum { SB_HS_IDLE = 0, SB_HS_HOSTING };
 #define SB_BTN_K 0x02   // kick
 #define SB_BTN_L 0x04   // jump
 
-// Hero in the snapshot: x,z float, hp int16, state/dir/anim/player/kind in bytes. 15 bytes.
+// Hero in the snapshot: x,z float, hp int16, state/dir/anim/player/kind/jump in bytes. 16 bytes.
 typedef struct __attribute__((packed)) {
     float   x, z;
     int16_t hp;
@@ -44,15 +44,17 @@ typedef struct __attribute__((packed)) {
     uint8_t anim;     // anim * 255
     uint8_t player;
     uint8_t kind;     // character index (the guest rebuilds the correct build/color)
+    uint8_t yoff;     // jump height (px) — without it the guest saw jumps on the ground
 } sb_hero_t;
 
-// Enemy in the snapshot: kind, x(int16), z(uint8*255), hp(int16), st. 7 bytes.
+// Enemy in the snapshot: kind, x(int16), z(uint8*255), hp(int16), st|facing, anim. 8 bytes.
 typedef struct __attribute__((packed)) {
     uint8_t kind;
     int16_t x;
     uint8_t z;
     int16_t hp;
-    uint8_t st;
+    uint8_t st;       // BrState in the low 7 bits, bit 7 = facing left
+    uint8_t anim;     // anim * 255 (the swing pose)
 } sb_enemy_t;
 
 typedef struct __attribute__((packed)) {
@@ -72,7 +74,7 @@ typedef struct __attribute__((packed)) {
     uint32_t session;
 } sb_accept_t;
 
-// HOST → GUEST ~30 Hz. ~ 4+4 + 2*14 + 1 + 6*7 + 4 + 4 + 1 + 1 + 4 = 95 bytes (< 200).
+// HOST -> GUEST ~30 Hz. 4+4 + 2*16 + 1 + 6*8 + 4+4 + 1+1 + 4 + 1+1 = 105 bytes (< 200).
 typedef struct __attribute__((packed)) {
     uint8_t   m0, m1, ver, type;
     uint32_t  seq;
@@ -85,6 +87,7 @@ typedef struct __attribute__((packed)) {
     uint8_t   level;
     int32_t   score;
     uint8_t   hostscreen;     // host's screen (BrScreen): the guest follows play/pause/over/clear
+    uint8_t   lives;          // shared lives (the guest's HUD)
 } sb_state_t;
 
 // GUEST → HOST ~30 Hz.
@@ -152,6 +155,7 @@ static void send_state(void) {
             float a = fr->anim; if (a < 0) a = 0; if (a > 1) a = 1;
             h->anim = (uint8_t)(a * 255.0f);
             h->kind = (uint8_t)fr->kind;
+            h->yoff = (uint8_t)(fr->yoff < 0 ? 0 : fr->yoff > 255 ? 255 : fr->yoff);
         } else {
             h->hp = 0; h->st = (uint8_t)BS_DOWN;   // absent/KO
         }
@@ -166,13 +170,16 @@ static void send_state(void) {
         float z = fr->z; if (z < 0) z = 0; if (z > 1) z = 1;
         e->z = (uint8_t)(z * 255.0f);
         e->hp = (int16_t)fr->hp;
-        e->st = (uint8_t)fr->st;
+        e->st = (uint8_t)(fr->st | (fr->dir < 0 ? 0x80 : 0));
+        float a = fr->anim; if (a < 0) a = 0; if (a > 1) a = 1;
+        e->anim = (uint8_t)(a * 255.0f);
     }
     s.nenemy = (uint8_t)n;
     s.camx = g.camx; s.gatex = g.gatex;
     s.wave = (uint8_t)g.wave; s.level = (uint8_t)g.level;
     s.score = (int32_t)g.score;
     s.hostscreen = (uint8_t)g.screen;     // the guest mirrors play/pause/over/clear
+    s.lives = (uint8_t)g.lives;
     pnet_send(s_peer, &s, sizeof s);
     s_last_tx_ms = now_ms();
 }
@@ -217,17 +224,13 @@ static void host_apply_input(const sb_input_t *in) {
         else fr->vz = 0;
         if (in->mvx || in->mvz) { if (fr->st == BS_IDLE) fr->st = BS_WALK; }
         else if (fr->st == BS_WALK) fr->st = BS_IDLE;
-
-        // rising-edge → begins attacks (one hit per press)
-        uint8_t rise = (uint8_t)(in->buttons & ~s_prev_btn);
-        if (rise & SB_BTN_J) combat_begin_attack(fr, BS_PUNCH);
-        else if (rise & SB_BTN_K) combat_begin_attack(fr, BS_KICK);
-        else if (rise & SB_BTN_L) {
-            // jump: if already airborne start the jumpkick, otherwise jump
-            if (fr->yoff > 0.5f) combat_begin_attack(fr, BS_JKICK);
-            else { fr->st = BS_JUMP; fr->vy = -260.0f; }
-        }
-    }
+    } else if (fr) fr->vz = 0;                     // busy: no depth drift while striking / hurt
+    // rising-edge -> the same attack/jump rules as player 1 (one action per press). It used to jump with
+    // a NEGATIVE vy (the arc integrates +vy upward), so the guest's jump landed the same frame.
+    uint8_t rise = (uint8_t)(in->buttons & ~s_prev_btn);
+    if (rise & SB_BTN_J) br_hero_act(fr, 0);
+    else if (rise & SB_BTN_K) br_hero_act(fr, 1);
+    else if (rise & SB_BTN_L) br_hero_act(fr, 2);
     s_prev_btn = in->buttons;
 }
 
@@ -236,11 +239,13 @@ static void guest_apply_state(const sb_state_t *s) {
     if (s->seq && s->seq < s_rxseq) return;      // stale: superseded by the next one
     s_rxseq = s->seq;
 
+    if (s->level != g.level) { g.banner = 0; g.banner_t = 2.2f; }   // a new street: the stage card
     g.camx = s->camx;
     g.gatex = s->gatex;
     g.wave = s->wave;
     g.level = s->level;
     g.score = (long)s->score;
+    g.lives = s->lives;
 
     // heroes: rebuild slots 0/1 from scratch (host-authoritative) — kind included so the guest's
     // build/color match the host's.
@@ -257,9 +262,12 @@ static void guest_apply_state(const sb_state_t *s) {
         fr->st = (BrState)h->st;
         fr->dir = h->dir ? 1 : -1;
         fr->anim = (float)h->anim / 255.0f;
+        fr->yoff = (float)h->yoff;
     }
 
     // enemies: rebuild the non-hero slots from scratch (host-authoritative).
+    bool had_boss = false;
+    for (int i = 2; i < BR_MAXF; i++) if (g.f[i].on && g.f[i].kind == 3) had_boss = true;
     int idx = 0;
     for (int i = 0; i < BR_MAXF; i++) {
         Fighter *fr = &g.f[i];
@@ -274,8 +282,11 @@ static void guest_apply_state(const sb_state_t *s) {
             fr->x = (float)e->x;
             fr->z = (float)e->z / 255.0f;
             fr->hp = (int)e->hp;
-            fr->st = (BrState)e->st;
+            fr->st = (BrState)(e->st & 0x7F);
+            fr->dir = (e->st & 0x80) ? -1 : 1;
+            fr->anim = (float)e->anim / 255.0f;
             fr->maxhp = def->maxhp;
+            if (e->kind == 3 && !had_boss) { g.banner = 1; g.banner_t = 2.0f; had_boss = true; }
         } else {
             fr->on = false;
         }

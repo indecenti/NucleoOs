@@ -1,9 +1,8 @@
 // brawler_levels.cpp — SCORRIBANDA: the 6 levels (waves) + the "Double Dragon" gate.
 //
-// Fully data-driven: each level is a LevelDef with a "white paper" palette (background BR_PAPER, lines only
-// in the BR_GREY_* greys, slightly bolder as the level goes up) and a wave table (WaveDef[]). Adding
-// entries to LEVELS automatically extends the game (brawler_level_count() = array size). The enemies'
-// blue and the blood's red live in other modules: only white and greys here.
+// Fully data-driven: each level is a LevelDef (street length + a wave table). Adding entries to LEVELS
+// automatically extends the game (brawler_level_count() = array size); give the new level a name in
+// brawler_level_name().
 //
 // Double Dragon-style progression: heroes cannot pass g.gatex until the wave is cleared;
 // once a wave is cleared, the gate slides forward and the next wave starts. Live-enemy cap BR_MAXENEMY: the
@@ -14,12 +13,8 @@
 // Calls the other modules ONLY via brawler.h (brawler_spawn_enemy / brawler_live_enemies / br_*).
 
 #include "brawler.h"
+#include "game_text.h"
 #include <math.h>
-
-// ----------------------------------------------------------------- palette helper (white look)
-// Minimal "white paper" look: background BR_PAPER, lines only in the BR_GREY_* greys. No other colors here
-// (enemy blue and blood red live in other modules). Levels vary ONLY by mixing the greys.
-// fx3d::mix(a,b,t) with t 0..255: t=0 -> a, t=255 -> b. We use it to move within the frozen palette.
 
 // ----------------------------------------------------------------- wave tables
 // Enemy types 0..3 (see brawler_enemies.cpp): 0=thug, 1=brawler, 2=thrower, 3=BOSS (gang leader).
@@ -68,75 +63,37 @@ static const WaveDef WAVES_L6[] = {
 };
 
 // ----------------------------------------------------------------- level definitions
-// Palette: greys that get gradually darker and colder. (sky_top, sky_bot, build_far, build_near,
-// floor_far, floor_near, floor_line). build_near darker than build_far -> depth.
-// NB: NOT const — the color fields are computed at runtime (br_rgb isn't constexpr); a const would end up
-// in flash/.rodata and the write would crash on the ESP32. The WaveDef pointers stay as const tables.
-static LevelDef LEVELS[] = {
-    // L1 — The Alley (warm night, medium greys)
-    { "Il Vicolo", "The Alley", 1000.0f,
-      0,  0,  0,  0,  0,  0,  0,   // placeholder palette filled in below at init (see note)
-      (uint8_t)(sizeof(WAVES_L1)/sizeof(WAVES_L1[0])), WAVES_L1 },
-    // L2 — The Market
-    { "Il Mercato", "The Market", 1100.0f,
-      0,0,0,0,0,0,0,
-      (uint8_t)(sizeof(WAVES_L2)/sizeof(WAVES_L2[0])), WAVES_L2 },
-    // L3 — The Subway
-    { "La Metro", "The Subway", 1200.0f,
-      0,0,0,0,0,0,0,
-      (uint8_t)(sizeof(WAVES_L3)/sizeof(WAVES_L3[0])), WAVES_L3 },
-    // L4 — The Warehouses
-    { "I Magazzini", "The Warehouse", 1300.0f,
-      0,0,0,0,0,0,0,
-      (uint8_t)(sizeof(WAVES_L4)/sizeof(WAVES_L4[0])), WAVES_L4 },
-    // L5 — The Rooftops
-    { "I Tetti", "The Rooftops", 1400.0f,
-      0,0,0,0,0,0,0,
-      (uint8_t)(sizeof(WAVES_L5)/sizeof(WAVES_L5[0])), WAVES_L5 },
-    // L6 — The Harbor (climax, boss)
-    { "Il Porto", "The Docks", 1500.0f,
-      0,0,0,0,0,0,0,
-      (uint8_t)(sizeof(WAVES_L6)/sizeof(WAVES_L6[0])), WAVES_L6 },
+// Length + waves only (const, in flash). The street's grey shade is derived from the level index by
+// scene_draw(); the name comes from brawler_level_name() in the OS language.
+#define NW(w) (uint8_t)(sizeof(w) / sizeof(w[0])), w
+static const LevelDef LEVELS[] = {
+    { 1000.0f, NW(WAVES_L1) },   // L1 the alley
+    { 1100.0f, NW(WAVES_L2) },   // L2 the market
+    { 1200.0f, NW(WAVES_L3) },   // L3 the subway
+    { 1300.0f, NW(WAVES_L4) },   // L4 the warehouses
+    { 1400.0f, NW(WAVES_L5) },   // L5 the rooftops
+    { 1500.0f, NW(WAVES_L6) },   // L6 the docks (climax, boss)
 };
-
-// Palettes are computed at runtime (br_rgb isn't constexpr): a small lazy init writes them into the
-// table's 565 slots the first time a level is requested. The table stays data-driven.
-// White look: the sky is paper (BR_PAPER), the building lines are in greys (far->mid), the floor
-// stays very light (paper -> barely perceptible grey) and the ground line is a soft grey. Going up
-// levels we mix the greys a touch (t grows) to give depth without EVER leaving the palette.
-static bool s_pal_init = false;
-static void levels_palettes_init(void) {
-    if (s_pal_init) return;
-    s_pal_init = true;
-    const int N = (int)(sizeof(LEVELS) / sizeof(LEVELS[0]));
-    for (int i = 0; i < N; i++) {
-        // 0..40: as it advances the greys get slightly bolder (small step, we stay "paper").
-        int t = (N > 1) ? (i * 40 / (N - 1)) : 0;             // 0 (L1) .. 40 (L6) — subtle variation
-        LevelDef *L = &LEVELS[i];
-        // Sky: essentially paper. Full BR_PAPER at the top, a hint of the far grey at the bottom.
-        L->sky_top    = BR_PAPER;
-        L->sky_bot    = fx3d::mix(BR_PAPER, BR_GREY_FAR, 28 + t);   // veil of grey further up
-        // Buildings (line-art): far grey in the distance, mid grey nearby; a touch bolder going up.
-        L->build_far  = fx3d::mix(BR_GREY_FAR, BR_GREY_MID, t);
-        L->build_near = fx3d::mix(BR_GREY_MID, BR_GREY_NEAR, t);
-        // Floor: stays paper. Clean paper in the distance, a barely-hinted grey nearby.
-        L->floor_far  = BR_PAPER;
-        L->floor_near = fx3d::mix(BR_PAPER, BR_GREY_FAR, 40 + t);
-        // Ground line: near grey but soft (mixed toward mid) -> presence without a grid.
-        L->floor_line = fx3d::mix(BR_GREY_MID, BR_GREY_NEAR, 90 + t);
-    }
-}
 
 // ----------------------------------------------------------------- table API
 int brawler_level_count(void) { return (int)(sizeof(LEVELS) / sizeof(LEVELS[0])); }
 
 const LevelDef *brawler_level(int i) {
-    levels_palettes_init();
     int n = brawler_level_count();
-    if (n <= 0) return 0;
     if (i < 0) i = 0;
     if (i >= n) i = n - 1;
     return &LEVELS[i];
+}
+
+const char *brawler_level_name(int i) {
+    switch (i) {
+        case 0:  return GT("Il Vicolo", "The Alley");
+        case 1:  return GT("Il Mercato", "The Market");
+        case 2:  return GT("La Metro", "The Subway");
+        case 3:  return GT("I Magazzini", "The Warehouse");
+        case 4:  return GT("I Tetti", "The Rooftops");
+        default: return GT("Il Porto", "The Docks");
+    }
 }
 
 // ----------------------------------------------------------------- runtime state (queue/flags)
@@ -150,17 +107,6 @@ struct LevelRun {
     bool    began;                   // levels_begin called
 };
 static LevelRun s_run = {0};
-
-static inline float clampf(float v, float lo, float hi) {
-    return v < lo ? lo : (v > hi ? hi : v);
-}
-
-// Reference hero for positioning spawns (player 0; fallback player 1).
-static Fighter *ref_hero(void) {
-    Fighter *h = br_hero(0);
-    if (!h || !h->on) h = br_hero(1);
-    return h;
-}
 
 // ----------------------------------------------------------------- wave spawn
 // Queues the current wave; whatever enters right away (under the live cap) happens here, the rest trickles in during step.
@@ -188,11 +134,12 @@ static bool drip_one(void) {
     if (s_run.qhead >= s_run.qn) return false;
     if (brawler_live_enemies() >= BR_MAXENEMY) return false;
 
-    Fighter *h = ref_hero();
-    float hx = h ? h->x : g.camx + BR_SW * 0.5f;
-    float side = (br_frnd() < 0.5f) ? -1.0f : 1.0f;
-    float x = hx + side * (BR_SW * 0.55f + br_frnd() * 60.0f);
-    x = clampf(x, 40.0f, g.level_len - 40.0f);
+    // Enter just past a screen edge so a foe always walks IN (a spawn clamped to the street start used to
+    // pop up in plain view). No room behind (street start) -> come from ahead, and vice versa.
+    float off = 16.0f + br_frnd() * 50.0f;
+    float x = (br_frnd() < 0.5f) ? g.camx - off : g.camx + BR_SW + off;
+    if (x < 8.0f) x = g.camx + BR_SW + off;
+    else if (x > g.level_len - 8.0f) x = g.camx - off;
     float z = 0.3f + br_frnd() * 0.6f;                    // belt depth 0.3..0.9
 
     int type = s_run.qtype[s_run.qhead];
@@ -204,7 +151,6 @@ static bool drip_one(void) {
 
 // ----------------------------------------------------------------- begin
 void levels_begin(int level) {
-    levels_palettes_init();
     int n = brawler_level_count();
     if (level < 0) level = 0;
     if (level >= n) level = n - 1;
@@ -228,6 +174,7 @@ void levels_begin(int level) {
     s_run.began = true;
 
     spawn_wave();                                         // queue wave 0 (will enter during step)
+    g.banner = 0; g.banner_t = 2.2f;                      // the stage card slides in over the street
 }
 
 // ----------------------------------------------------------------- step
@@ -257,6 +204,7 @@ void levels_step(float dt) {
             spawn_wave();
         } else {
             // Last wave cleared: gate fully open, the hero can reach the exit.
+            if (!s_run.wave_done) bsfx(BSFX_GO);          // the street is open: GO (the HUD arrow blinks)
             g.gatex = g.level_len;
             s_run.wave_done = true;
         }

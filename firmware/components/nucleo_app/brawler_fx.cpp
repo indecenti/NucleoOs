@@ -1,9 +1,8 @@
-// brawler_fx.cpp — SCORRIBANDA: blood spray + ground pools (the noir's one bright colour).
+// brawler_fx.cpp — SCORRIBANDA: blood spray, impact sparks + ground pools.
 //
-// Built on fxfx (Field = ballistic droplets, PoolRing = ground decals). RED is the only saturated
-// hue in the whole game; everything else is black-on-grey, so a hit literally splashes colour onto
-// the scene. Droplets fly under gravity (BR_GRAV), settle on a per-particle floor (the belt feet-y
-// for the victim's depth), and each landing leaves a dark pool. HEAP-FREE: two fixed static pools.
+// Built on fxfx (Field = ballistic particles, PoolRing = ground decals). Droplets fly under gravity
+// (BR_GRAV), settle on a per-particle floor (the belt feet-y for the victim's depth), and each landing
+// leaves a dark pool. One heap block while the game is open (see BrFx), nothing static.
 //
 // Draw order, set by the shell: pools BEHIND the fighters (ground decals), drops IN FRONT (airborne).
 // Both fold camera scroll + shake into their x offset via -g.camx + g.shake.ox(), so positions stored
@@ -17,44 +16,34 @@
 static const uint16_t BRFX_RED      = BR_BLOOD;                       // fresh airborne blood (palette source)
 static const uint16_t BRFX_POOLDARK = fx3d::scl(BR_BLOOD, 155, 255);  // congealed ground pool — clearly red, a touch deep
 
-// Particle stores. The two Fields (droplets + sparks, ~3.8 KB together) are HEAP buffers allocated on
-// app enter via brfx_reset() and freed on app exit via brfx_shutdown(), so they hold ZERO static RAM at
-// boot when the game is closed. The tiny PoolRing stays inline. Every access path is null-guarded so a
-// failed alloc (or use before enter) degrades to no-op rather than dereferencing null.
-static fxfx::Field<72>   *s_drops  = nullptr;   // 72 droplets in flight
-static fxfx::PoolRing<28> s_pools;              // 28 lingering ground pools (inline, tiny)
-
-// Impact sparks: a separate field of short-lived bright pips with little/no gravity. These are NOT blood
-// (no colour reserve broken — the caller passes white / a duller grey for blocks), they just make a
-// connect READ as a stamp. They never land (landY parked off-screen); they die by life only.
-static fxfx::Field<48>   *s_sparks = nullptr;
+// Particle stores: blood droplets, impact sparks (bright pips with little gravity that die by life only —
+// they never land: landY parked off-screen) and the ground pools, all in ONE heap block allocated on app
+// enter (brfx_reset) and freed on exit (brfx_shutdown): zero static RAM while the game is closed. Both
+// fields share one size so the particle code is compiled once. Null-guarded: a failed alloc = no fx.
+struct BrFx { fxfx::Field<60> drops, sparks; fxfx::PoolRing<28> pools; };
+static BrFx *s_fx = nullptr;
 static const float SPARK_GRAV = 90.0f;   // a faint pull so the burst arcs slightly, far below BR_GRAV
 
 // Landing callback: a settled droplet becomes a small dark pool on the floor. Sizes jitter so pools
 // read organic rather than stamped. Fires from Field::step when a falling particle reaches landY.
 static void onLand(float x, float y)
 {
-    s_pools.add(x, y, 3 + (int)(br_frnd() * 3), 1 + (int)(br_frnd() * 2), BRFX_POOLDARK);
+    s_fx->pools.add(x, y, 3 + (int)(br_frnd() * 3), 1 + (int)(br_frnd() * 2), BRFX_POOLDARK);
 }
 
 // Clear every store — called on app enter and on each level (re)start so blood/sparks don't carry across
-// scenes. Doubles as the heap-alloc site: the two Fields are created here on first use (idempotent — a
-// re-entry that already holds them just clears). If an alloc fails the pointer stays null and every
-// access path below skips cleanly.
+// scenes. Doubles as the heap-alloc site (idempotent: a re-entry that already holds the block just clears).
 void brfx_reset(void)
 {
-    if (!s_drops)  s_drops  = (fxfx::Field<72>*)calloc(1, sizeof *s_drops);
-    if (!s_sparks) s_sparks = (fxfx::Field<48>*)calloc(1, sizeof *s_sparks);
-    if (s_drops)  s_drops->clear();
-    if (s_sparks) s_sparks->clear();
-    s_pools.clear();
+    if (!s_fx) s_fx = (BrFx *)calloc(1, sizeof *s_fx);
+    if (!s_fx) return;
+    s_fx->drops.clear(); s_fx->sparks.clear(); s_fx->pools.clear();
 }
 
-// Free the heap Fields — called on app exit so they hold ZERO RAM while the game is closed.
+// Free the heap block — called on app exit so it holds ZERO RAM while the game is closed.
 void brfx_shutdown(void)
 {
-    free(s_drops);  s_drops  = nullptr;
-    free(s_sparks); s_sparks = nullptr;
+    free(s_fx); s_fx = nullptr;
 }
 
 // Impact spark: a brief radial burst of small bright pips at (worldx, screeny). `col` is the spark hue
@@ -63,7 +52,7 @@ void brfx_shutdown(void)
 // not a lingering shower. Parks landY off-screen so step() never converts a spark into a ground pool.
 void brfx_spark(float worldx, float screeny, uint16_t col, int n)
 {
-    if (!s_sparks) return;
+    if (!s_fx) return;
     if (n < 1) n = 1; else if (n > 16) n = 16;
     const float parkY = screeny + 4000.0f;        // never reached -> dies by life, leaves no decal
     for (int i = 0; i < n; i++) {
@@ -72,7 +61,7 @@ void brfx_spark(float worldx, float screeny, uint16_t col, int n)
         float vx  = cosf(ang) * spd;
         float vy  = sinf(ang) * spd - 30.0f;       // slight upward bias so the burst lifts off the hit
         float life = 0.10f + br_frnd() * 0.12f;    // short: 0.10..0.22s
-        s_sparks->spawn(worldx, screeny, vx, vy, life, parkY, col);
+        s_fx->sparks.spawn(worldx, screeny, vx, vy, life, parkY, col);
     }
 }
 
@@ -82,8 +71,8 @@ void brfx_spark(float worldx, float screeny, uint16_t col, int n)
 // br_frnd2 via tiny lambdas so the spread stays deterministic-friendly and owns no RNG state.
 void brfx_blood(float worldx, float screeny, int dir, int amount, float landY)
 {
-    if (!s_drops) return;
-    s_drops->spray(worldx, screeny, dir, amount, 130.0f, landY, BRFX_RED,
+    if (!s_fx) return;
+    s_fx->drops.spray(worldx, screeny, dir, amount, 130.0f, landY, BRFX_RED,
                    [] { return br_frnd(); },
                    [] { return br_frnd2(); });
 }
@@ -92,14 +81,15 @@ void brfx_blood(float worldx, float screeny, int dir, int amount, float landY)
 // (no land callback -> they vanish when their short life runs out, leaving the floor clean).
 void brfx_step(float dt)
 {
-    if (s_drops)  s_drops->step(dt, BR_GRAV, &onLand);
-    if (s_sparks) s_sparks->step(dt, SPARK_GRAV, NULL);
+    if (!s_fx) return;
+    s_fx->drops.step(dt, BR_GRAV, &onLand);
+    s_fx->sparks.step(dt, SPARK_GRAV, NULL);
 }
 
 // Ground decals — drawn behind the fighters. Camera + shake folded into the x offset.
 void brfx_draw_pools(void)
 {
-    s_pools.draw(-g.camx + g.shake.ox());
+    if (s_fx) s_fx->pools.draw(-g.camx + g.shake.ox());
 }
 
 // Airborne droplets + impact sparks — drawn in front of the fighters. Sparks paint last so the bright
@@ -107,6 +97,7 @@ void brfx_draw_pools(void)
 void brfx_draw_drops(void)
 {
     float xoff = -g.camx + g.shake.ox();
-    if (s_drops)  s_drops->draw(xoff);
-    if (s_sparks) s_sparks->draw(xoff);
+    if (!s_fx) return;
+    s_fx->drops.draw(xoff);
+    s_fx->sparks.draw(xoff);
 }

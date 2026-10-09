@@ -6,7 +6,6 @@
 // same, and difficulty/variety rise forever. No heap, no globals — pb_gen_level() just fills the struct.
 #pragma once
 #include <stdint.h>
-#include <stdio.h>
 #include <math.h>
 
 #define PBL_MAXBMP 5
@@ -19,7 +18,7 @@ typedef struct {
     int   grav_e4;       // gravity * 10000 (e.g. 55 -> 0.0055 px/ms^2)
     int   bmp_score;     // per-bumper score this level
     int   goal;          // points to clear the level (advance)
-    char  theme[12];     // short theme name shown on the level card
+    int   theme;         // theme index 0..5 (app_pinball names it in the OS language)
 } PbLevel;
 
 static inline uint16_t pbl_rgb(int r, int g, int b)
@@ -39,8 +38,7 @@ static inline void pb_gen_level(int n, PbLevel *L)
     uint32_t s = (uint32_t)n * 2654435761u + 12345u;
 
     // ---- theme palette (6 schemes, cycling) ----
-    static const char *NAMES[6] = { "COBALTO", "MAGENTA", "SMERALDO", "INFERNO", "OCEANO", "REALE" };
-    int th = (n - 1) % 6;
+    int th = (n - 1) % 6;   // cobalt, magenta, emerald, inferno, ocean, royal
     switch (th) {
         case 0: L->field = pbl_rgb(18,18,52);  L->field2 = pbl_rgb(30,28,92);  L->wall = pbl_rgb(70,90,200);   L->wallL = pbl_rgb(150,180,255); L->accent = pbl_rgb(96,212,236);  L->accent2 = pbl_rgb(255,122,182); break;
         case 1: L->field = pbl_rgb(40,14,50);  L->field2 = pbl_rgb(70,24,86);  L->wall = pbl_rgb(180,60,200);  L->wallL = pbl_rgb(255,150,255); L->accent = pbl_rgb(255,90,205);  L->accent2 = pbl_rgb(120,140,255); break;
@@ -49,7 +47,7 @@ static inline void pb_gen_level(int n, PbLevel *L)
         case 4: L->field = pbl_rgb(8,36,44);   L->field2 = pbl_rgb(14,60,72);  L->wall = pbl_rgb(40,150,170);  L->wallL = pbl_rgb(150,240,255); L->accent = pbl_rgb(96,236,224);  L->accent2 = pbl_rgb(120,200,255); break;
         default:L->field = pbl_rgb(26,18,52);  L->field2 = pbl_rgb(44,30,84);  L->wall = pbl_rgb(190,158,44);  L->wallL = pbl_rgb(255,220,120); L->accent = pbl_rgb(255,196,64);  L->accent2 = pbl_rgb(192,112,232); break;
     }
-    snprintf(L->theme, sizeof L->theme, "%s", NAMES[th]);
+    L->theme = th;
 
     // ---- bumpers: count grows, arrangement varies by pattern ----
     int nb = 3 + ((n - 1) / 2) % 3;            // 3,3,4,4,5,5,...

@@ -37,6 +37,10 @@ void combat_begin_attack(Fighter *fr, BrState kind)
                  : (kind == BS_KICK)  ? 1.0f / 0.34f
                  : (kind == BS_BLOCK) ? 1.0f / 0.45f    // a guard held briefly, then dropped
                                       : 1.0f / 0.30f;   // jump-kick
+    // Enemies swing ~1.8x slower than heroes: the wind-up before their active window (anim 0.28) is the
+    // TELL (~130-170 ms, drawn as a glint by the shell) a player can see and answer. At hero speed it was
+    // 73 ms: hits out of nowhere.
+    if (!fr->is_hero && kind != BS_BLOCK) fr->aspd *= 0.55f;
     // Hero punch combo: a FRESH string opens on the JAB (var 0); only a genuine chain-link advances the
     // step (var 1 = cross ... var == combo_len-1 = FINISHER). Pre-incrementing skipped the jab and made
     // MOLE's first tap a knockdown finisher.
@@ -60,7 +64,8 @@ void fighter_take_hit(Fighter *victim, Fighter *src, int dmg, float knock)
     victim->anim     = 0.0f;
     victim->aspd     = 1.0f / 0.30f;
     victim->hit_done = true;
-    if (victim->is_hero && victim->hp <= 0) victim->cool = 0.7f;   // KO lie-time; the shell resolves life/respawn
+    if (victim->is_hero) victim->cool = victim->hp <= 0 ? 0.7f    // KO lie-time; the shell resolves life/respawn
+                                                       : 0.45f;  // mercy frames: no stun-lock between two foes
 
     // Blood: spray from the chest, settling on the belt under the victim.
     float fy    = scene_floor_y(victim->z);
@@ -68,6 +73,7 @@ void fighter_take_hit(Fighter *victim, Fighter *src, int dmg, float knock)
     brfx_blood(victim->x, chest, src->dir, (victim->hp <= 0 ? 14 : 6) + dmg / 3, fy);
 
     g.hitstop = (victim->hp <= 0) ? 0.09f : 0.05f;
+    if (!victim->is_hero && victim->hp <= 0 && brawler_live_enemies() == 0) g.hitstop = 0.25f;   // the wave's last KO lingers
     g.shake.add(victim->hp <= 0 ? 5.0f : 3.0f);
     bsfx(victim->hp <= 0 ? BSFX_KO : (victim->is_hero ? BSFX_HURT : BSFX_HIT));
 }
@@ -128,8 +134,10 @@ void combat_step(float dt)
                                 fr->st = BS_RISE; fr->anim = 0.0f; fr->aspd = 1.0f / 0.50f;
                             } else if (fr->is_hero) {
                                 fr->anim = 1.0f;                 // KO'd hero: stay down, the shell respawns/ends
-                            } else {
-                                fr->on = false; g.score += brawler_enemy(fr->kind)->score;  // dead enemy: clear + score
+                            } else if (fr->var >= 0) {
+                                fr->var = -1; fr->cool = 0.8f;   // a dead foe lies there a moment (it blinks)...
+                            } else if ((fr->cool -= dt) <= 0.0f) {
+                                fr->on = false; g.score += brawler_enemy(fr->kind)->score;  // ...then clears + scores
                             }
                             break;
                         case BS_RISE:
@@ -232,7 +240,7 @@ void combat_resolve(float dt)
             Fighter *vic = &g.f[v];
             if (vic == att || !vic->on) continue;
             if (vic->is_hero == att->is_hero) continue;   // only the opposite team
-            if (vic->st == BS_DOWN) continue;             // can't hit a floored body
+            if (vic->st == BS_DOWN || br_invuln(vic)) continue;   // a floored body / a respawn shield
 
             float dx = (vic->x - att->x) * att->dir;      // ahead, in facing direction
             float dz = fabsf(vic->z - att->z);
@@ -249,10 +257,10 @@ void combat_resolve(float dt)
                 vic->hp -= chip;
                 vic->vx += att->dir * 30.0f;
                 vic->flash = 0.35f;                       // a faint pop, less than a clean hit
-                brfx_spark(ix, iy, BR_GREY_NEAR, 3);      // dull grey sparks read as "parried", not blood
+                brfx_spark(ix, iy, BR_MUTED, 3);          // dull grey sparks read as "parried", not blood
                 g.hitstop = 0.025f;
                 g.shake.add(1.5f);
-                bsfx(BSFX_WHIFF);                         // a guard "thud", not the meaty hit cue
+                bsfx(BSFX_BLOCK);                         // a guard thud, not the meaty hit cue
                 if (vic->hp <= 0) {                       // chip finished a guard-down foe: floor it cleanly
                     vic->st   = BS_DOWN;
                     vic->anim = 0.0f;
@@ -274,6 +282,7 @@ void combat_resolve(float dt)
                 g.hitstop = 0.03f + mp.weight * 0.06f;    // jab ~0.03s .. heavy ~0.09s
                 g.shake.add(2.5f + mp.weight * 4.0f);     // light tap .. solid jolt
                 brfx_spark(ix, iy, 0xFFFF, spn);          // bright WHITE impact stamp
+                if (vic->hp > 0 && mp.weight >= 0.9f) bsfx(vic->is_hero ? BSFX_HURT : BSFX_HEAVY);   // finisher/kick lands heavier
 
                 if (att->is_hero) {
                     g.combo++;

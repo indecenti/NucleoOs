@@ -4,12 +4,12 @@
 // brawler_*.cpp leans on, runs the app lifecycle (on_enter/on_exit), routes input (taps -> attacks,
 // held W/A/S/D -> movement, Esc/TAB -> pause, Left -> menu nav), drives the ~50 Hz main loop
 // (poll: movement, AI, combat, fx, camera follow, KO/lives, level progression), composites every
-// frame (scene -> shadows -> blood pools -> depth-sorted silhouettes -> blood drops -> HUD -> menus),
-// and registers the app. It calls the other sections ONLY through brawler.h.
+// frame (night street -> shadows -> blood pools -> depth-sorted outlined fighters + attack tells -> blood
+// drops + sparks -> HUD -> cards), and registers the app. It calls the other sections ONLY through brawler.h.
 //
-// Constraints (house rules): exclusive_flags = NX_NET_APP; ALL state in `g` + fixed locals (NO heap);
-// buffered d.* drawing; controls FIXED (W/A/S/D move, J punch, K kick, L/Space jump, Esc/TAB pause,
-// repeated J = combo). Silhouette look, blood is the only bright colour. Bilingual IT/EN via g.lang.
+// Constraints (house rules): exclusive_flags = NX_NET_APP; state in `g` + fixed locals (the fx particles are
+// one heap block while open); buffered d.* drawing; controls FIXED (E/S/A/D move, J punch, K kick, L/Space
+// jump, Esc/TAB pause, repeated J = combo). Text in the OS language (GT).
 
 #include "brawler.h"
 #include "nucleo_app.h"
@@ -17,6 +17,7 @@
 #include "nucleo_exclusive.h"
 #include "launcher_theme.h"
 #include "app_gfx.h"
+#include "game_text.h"
 #include <math.h>
 #include <string.h>
 
@@ -76,32 +77,21 @@ static inline float fighter_scale(const Fighter *fr)
 }
 
 // ============================ input: attacks (taps) ===========================
-// A hero "punch": chain it if we're already mid-punch in the active window (reads as 1-2-3), else open a
-// fresh strike when free. combat_begin_attack walks the combo `var` itself for hero punches.
-static void try_punch(Fighter *h)
+// One entry point for both heroes (P1 keyboard, P2 co-op stream). A punch chains if we're already mid-punch
+// in the active window (reads as 1-2-3), else opens a fresh strike when free; airborne J/K = jump-kick.
+void br_hero_act(Fighter *h, int act)
 {
     if (!h || h->hp <= 0) return;
-    if (h->yoff > 0.0f) { combat_begin_attack(h, BS_JKICK); return; }   // airborne jab -> jump-kick
-    if (h->st == BS_PUNCH && h->anim > 0.45f) { combat_begin_attack(h, BS_PUNCH); return; }  // combo link
-    if (!fighter_busy(h)) combat_begin_attack(h, BS_PUNCH);
-}
-static void try_kick(Fighter *h)
-{
-    if (!h || h->hp <= 0) return;
-    if (h->yoff > 0.0f) { combat_begin_attack(h, BS_JKICK); return; }   // airborne -> jump-kick
-    if (h->st == BS_KICK && h->anim > 0.45f) { combat_begin_attack(h, BS_KICK); return; }
-    if (!fighter_busy(h)) combat_begin_attack(h, BS_KICK);
-}
-static void try_jump(Fighter *h)
-{
-    if (!h || h->hp <= 0) return;
-    if (h->yoff <= 0.0f && !fighter_busy(h)) {   // grounded + free
-        h->vy = 380.0f;
-        h->st = BS_JUMP;
-        h->anim = 0.0f;
-        h->aspd = 1.0f / 0.55f;
+    if (act == 2) {                                   // jump: grounded + free only
+        if (h->yoff > 0.0f || fighter_busy(h)) return;
+        h->vy = 380.0f; h->st = BS_JUMP; h->anim = 0.0f; h->aspd = 1.0f / 0.55f;
         bsfx(BSFX_JUMP);
+        return;
     }
+    BrState mv = act ? BS_KICK : BS_PUNCH;
+    if (h->yoff > 0.0f) { if (h->st != BS_JKICK) combat_begin_attack(h, BS_JKICK); return; }
+    if (h->st == mv && h->anim > 0.45f) { combat_begin_attack(h, mv); return; }   // combo link
+    if (!fighter_busy(h)) combat_begin_attack(h, mv);
 }
 
 // ============================ lifecycle: input =================================
@@ -111,6 +101,7 @@ static void tab_handler(void)
 {
     if (g.screen == SC_PLAY)       { g.paused = true;  menu_goto(SC_PAUSE); }
     else if (g.screen == SC_PAUSE) { g.paused = false; g.screen = SC_PLAY;  }
+    nucleo_app_request_draw();
 }
 
 static void on_key(int k, char ch)
@@ -134,26 +125,29 @@ static void on_key(int k, char ch)
         }
     }
     menu_key(k, ch);
+    nucleo_app_request_draw();          // menus are drawn on demand (poll returns false on a still screen)
 }
 
 // Back/Left routing. Left is menu navigation (and so never closes the app). Esc/back: pause toggles in
 // play, resumes from pause, closes the app only from the title screen, otherwise returns to the title.
 static bool on_back(int key)
 {
-    if (key == NK_LEFT) { menu_key(NK_LEFT, 0); return true; }
+    if (key == NK_LEFT) { menu_key(NK_LEFT, 0); nucleo_app_request_draw(); return true; }
     // In any co-op state (lobby or in-game) Esc tears the ESP-NOW session down and returns to the menu —
     // no networked pause to keep in sync. Solo play is unaffected (g.net is false).
     if (g.net) { bnet_stop(); g.net = false; g.paused = false; menu_goto(SC_MENU); return true; }
     switch (g.screen) {
-        case SC_PLAY:  g.paused = true;  menu_goto(SC_PAUSE); return true;
-        case SC_PAUSE: g.paused = false; g.screen = SC_PLAY;  return true;
+        case SC_PLAY:  g.paused = true;  menu_goto(SC_PAUSE); return true;   // the first Esc pauses...
+        case SC_PAUSE: g.paused = false; menu_goto(SC_MENU);  return true;   // ...the second leaves the fight
         case SC_MENU:  return false;   // let the framework close the app
+        case SC_HELP:  menu_goto(SC_OPT); return true;
         default:       menu_goto(SC_MENU); return true;
     }
 }
 
 // ============================ lifecycle: main loop =============================
 static uint32_t s_last_poll = 0;   // reset on enter so the first frame after re-open isn't a huge dt
+static const char *s_hint;         // footer text last handed to the OS (reset on enter)
 static bool poll(void)
 {
     g.now = br_now_ms();
@@ -161,8 +155,11 @@ static bool poll(void)
     s_last_poll = g.now;
     if (dt < 0.0f) dt = 0.0f; else if (dt > 0.06f) dt = 0.06f;
 
-    // Fullscreen only while the action is on screen (pause still shows the field under the overlay).
+    // Fullscreen only while the action is on screen (pause still shows the field under the overlay);
+    // every other screen keeps the OS footer with its hint (refreshed when the text changes).
     nucleo_app_set_fullscreen(g.screen == SC_PLAY);
+    const char *hint = menu_hint();
+    if (hint != s_hint) { s_hint = hint; nucleo_app_set_hint(hint); }
 
     // Co-op networking runs EVERY frame (lobby pairing + in-game stream). On the host bnet_poll applies
     // the guest's input and broadcasts the snapshot; on the guest it sends input and applies the host's
@@ -181,6 +178,7 @@ static bool poll(void)
             // GUEST: the host is authoritative. The snapshot (applied in bnet_poll above) drives g.f[]
             // and the camera; we only render here. If the host drops, fall back to the menu.
             if (!bnet_available()) { bnet_stop(); g.net = false; menu_goto(SC_MENU); }
+            if (g.banner_t > 0.0f) g.banner_t -= dt;
         } else if (g.hitstop > 0.0f) {
             g.hitstop -= dt;   // freeze the sim, keep drawing
         } else {
@@ -231,18 +229,16 @@ static bool poll(void)
 
             // --- attacks polled from the LIVE matrix (edge-detected) -> move + strike at the same time ---
             // (movement reads char_down too; a tap through on_key wouldn't register while a WASD key is
-            // held). Rising edge = exactly one strike per press. try_* themselves gate on busy/airborne.
+            // held). Rising edge = exactly one strike per press. br_hero_act gates on busy/airborne.
             {
                 static bool pj = false, pk = false, pl = false;
                 bool dj = nucleo_kbd_char_down('j');
                 bool dk = nucleo_kbd_char_down('k');
                 bool dl = nucleo_kbd_char_down('l') || nucleo_kbd_char_down(' ');
                 Fighter *ha = br_hero(0);
-                if (ha) {
-                    if (dj && !pj) try_punch(ha);
-                    if (dk && !pk) try_kick(ha);
-                    if (dl && !pl) try_jump(ha);
-                }
+                if (dj && !pj) br_hero_act(ha, 0);
+                if (dk && !pk) br_hero_act(ha, 1);
+                if (dl && !pl) br_hero_act(ha, 2);
                 pj = dj; pk = dk; pl = dl;
             }
 
@@ -257,6 +253,7 @@ static bool poll(void)
             if (g.floorscroll >= 1.0f) g.floorscroll -= 1.0f;
 
             if (g.combo_t > 0.0f) { g.combo_t -= dt; if (g.combo_t <= 0.0f) { g.combo_t = 0.0f; g.combo = 0; } }
+            if (g.banner_t > 0.0f) g.banner_t -= dt;
 
             // --- camera follow: horizontal deadzone + look-ahead, eased, locked at the wave gate ---
             // The camera holds still while the hero stays inside a central band; only when he leaves it
@@ -295,7 +292,9 @@ static bool poll(void)
             // This recovers a solo co-op death instead of soft-locking, and never leaves a walking hp<=0 hero.
             for (int p = 0; p < 2; p++) {
                 Fighter *hp_ = &g.f[p];
-                if (!hp_->on || !hp_->is_hero || hp_->hp > 0 || hp_->st != BS_DOWN) continue;
+                if (!hp_->on || !hp_->is_hero) continue;
+                if (hp_->hp > 0) { if (hp_->cool > 0.0f) hp_->cool -= dt; continue; }   // respawn shield
+                if (hp_->st != BS_DOWN) continue;
                 hp_->cool -= dt;
                 if (hp_->cool > 0.0f) continue;
                 if (g.lives > 0) {
@@ -305,7 +304,8 @@ static bool poll(void)
                     hp_->x = clampf_(g.camx + BR_SW * 0.28f + p * 22.0f, g.camx + 12.0f, g.gatex - 12.0f);
                     hp_->z = 0.62f; hp_->vx = hp_->vz = hp_->vy = hp_->yoff = 0.0f;
                     hp_->dir = 1; hp_->st = BS_IDLE; hp_->anim = 0.0f; hp_->flash = 0.0f;
-                    hp_->var = 0; hp_->hit_done = false; hp_->cool = 0.0f;
+                    hp_->var = 0; hp_->hit_done = false;
+                    hp_->cool = 2.0f;                  // 2 s untouchable (blinks): no instant re-KO in the crowd
                     g.combo = 0; g.combo_t = 0.0f;
                 } else {
                     hp_->on = false;   // out of lives -> this hero is gone
@@ -318,15 +318,27 @@ static bool poll(void)
             }
 
             // --- level cleared -> the clear screen drives next-level / victory (and resets the combo) ---
-            if (g.screen == SC_PLAY && levels_is_clear()) { g.screen = SC_CLEAR; g.sel = 0; bsfx(BSFX_CLEAR); }
+            if (g.screen == SC_PLAY && levels_is_clear()) { menu_goto(SC_CLEAR); bsfx(BSFX_CLEAR); }
         }
     }
 
     g.shake.step(dt);
-    return true;   // we drive our own clock; always composite a fresh frame
+    // the fight always composites a fresh frame; a still menu / card returns false (the run loop then
+    // pushes nothing) and is redrawn on input or when a screen changes
+    return g.net || g.screen == SC_PLAY || g.screen == SC_LOBBY || menu_animating((int)(dt * 1000.0f));
 }
 
 // ============================ lifecycle: draw =================================
+// The one place a fighter is inked (the fight, the title poster, the select cards): fxfig::figure is a
+// header-inline, so every other call site would compile another copy of it into flash.
+void br_figure(const Fighter *fr, float sx, float feetY, float sc, uint16_t body, uint16_t rim)
+{
+    fxfig::Pt j[fxfig::FX_NJ];
+    fighter_pose(fr, j);
+    float girth = fr->is_hero ? brawler_hero(fr->kind)->girth : brawler_enemy(fr->kind)->girth;
+    fxfig::figure(j, sx, feetY, sc, fr->dir, body, rim, girth);
+}
+
 // Insertion-sort the live-fighter indices by depth z ascending so far bodies paint first (painter order).
 static int sort_by_depth(int *order)
 {
@@ -342,23 +354,17 @@ static int sort_by_depth(int *order)
 
 static void on_draw(void)
 {
-    if (g.screen == SC_PLAY || g.screen == SC_PAUSE) {
+    if (g.screen == SC_PLAY || g.screen == SC_PAUSE || g.screen == SC_OVER || g.screen == SC_CLEAR) {
         scene_draw();
 
-        // soft contact shadows under each fighter (drawn before the bodies). On the white "paper" floor
-        // a dark blob would read as a hole, so the shadow is a LIGHT grey ellipse — still flattened and
-        // scaled with depth (near = bigger), just toned to sit on the page. Greys-only, per the palette.
+        // dark contact shadows under each fighter (before the bodies), flattened and scaled with depth;
+        // a jumping fighter's shadow stays on the ground and shrinks with the height
         for (int i = 0; i < BR_MAXF; i++) {
             Fighter *fr = &g.f[i];
             if (!fr->on) continue;
             float sc = scene_scale(fr->z) * fighter_scale(fr);
-            int sx = (int)br_screen_x(fr->x);
-            int sy = (int)(scene_floor_y(fr->z) + g.shake.oy());
-            int rx = (int)(0.35f * sc); if (rx < 2) rx = 2;
-            int ry = rx / 3; if (ry < 1) ry = 1;
-            // far figures get the faintest grey, near ones a touch firmer — both light on white.
-            uint16_t shc = (fr->z < 0.5f) ? BR_GREY_FAR : BR_GREY_MID;
-            fxfig::puddle(sx, sy, rx, ry, shc);
+            int rx = (int)(0.38f * sc - fr->yoff * 0.08f); if (rx < 3) rx = 3;
+            fxfig::puddle((int)br_screen_x(fr->x), (int)(scene_floor_y(fr->z) + g.shake.oy()), rx, rx / 3 + 1, BR_INK);
         }
 
         brfx_draw_pools();   // ground blood decals (behind fighters)
@@ -367,36 +373,41 @@ static void on_draw(void)
         int n = sort_by_depth(order);
         for (int idx = 0; idx < n; idx++) {
             Fighter fr = g.f[order[idx]];
-            fxfig::Pt pose[fxfig::FX_NJ];
-            fighter_pose(&fr, pose);
+            if (br_invuln(&fr) && ((g.now / 70) & 1)) continue;   // mercy / respawn frames: the hero blinks
+            if (!fr.is_hero && fr.hp <= 0 && fr.st == BS_DOWN && fr.anim >= 1.0f && ((g.now / 80) & 1)) continue;   // a body blinks out
             float sc = scene_scale(fr.z) * fighter_scale(&fr);
-            float feetY = scene_floor_y(fr.z) - fr.yoff;
-            float girth = fr.is_hero ? brawler_hero(fr.kind)->girth : brawler_enemy(fr.kind)->girth;
-            // White-look outline (passed as the figure's edge/rim arg): heroes get a pure-black edge so
-            // the silhouette bites the paper; enemies get BR_ENEMY_DK so the steel-blue separates from
-            // the white floor with a crisp darker hue-matched line. (Greys/black/blue only.)
-            uint16_t body    = fighter_body(&fr);
-            uint16_t outline = fr.is_hero ? 0 : fx3d::scl(body, 150, 255);  // per-type darker edge -> each foe's hue pops on paper
-            fxfig::figure(pose, br_screen_x(fr.x), feetY + g.shake.oy(), sc, fr.dir,
-                          body, outline, girth);
+            float feetY = scene_floor_y(fr.z) - fr.yoff + g.shake.oy();
+            float sx = br_screen_x(fr.x);
+            // a bright body with a black outline (0x0001: black on the 8bpp canvas; 0 would mean "none")
+            br_figure(&fr, sx, feetY, sc, fighter_body(&fr), 0x0001);
+            float head = feetY - 2.05f * sc;
+            if (!fr.is_hero && (fr.st == BS_PUNCH || fr.st == BS_KICK) && fr.anim < 0.28f) {
+                // the TELL: a red-hot glint over a foe winding up, growing until the blow lands
+                int r = 2 + (int)(fr.anim * 12.0f);
+                d.fillTriangle((int)sx, (int)head - 4 - r, (int)sx - r, (int)head - 4, (int)sx + r, (int)head - 4, BR_BLOOD);
+                d.drawPixel((int)sx, (int)head - 5, BR_WHITE);
+            } else if (fr.is_hero && g.nplayers > 1) {
+                uint16_t pc = fr.player ? br_rgb(109, 255, 255) : BR_GOLD;       // P1 / P2 marker
+                d.fillTriangle((int)sx - 3, (int)head - 7, (int)sx + 3, (int)head - 7, (int)sx, (int)head - 3, pc);
+            }
         }
 
         brfx_draw_drops();   // airborne blood (in front of fighters)
         hud_draw();
-        menu_draw();         // pause overlay if any; a no-op on SC_PLAY
+        menu_draw();         // the pause / game-over / cleared card over the frozen fight; a no-op on SC_PLAY
         return;
     }
 
-    // Title / select / options / game-over / clear / help — fully owned by the menu module.
+    // Title / select / options / co-op / help — fully owned by the menu module.
     menu_draw();
 }
 
 // ============================ lifecycle: enter / exit =========================
 static void on_enter(void)
 {
+    game_text_open("brawler");
     memset(&g, 0, sizeof g);
     g.audio  = true;
-    g.lang   = 0;            // Italiano di default
     g.diff   = 1;            // normale
     g.screen = SC_MENU;
     g.paused = false;
@@ -406,10 +417,9 @@ static void on_enter(void)
     g.shake.reset();
 
     if (nucleo_audio_volume() < 40) nucleo_audio_set_volume(80);
-    bsfx_presynth();
     brfx_reset();
 
-    s_last_poll = 0;
+    s_last_poll = 0; s_hint = nullptr;
     nucleo_app_set_back_handler(on_back);
     nucleo_app_set_poll_handler(poll);
     nucleo_app_set_tab_handler(tab_handler);   // TAB pauses (else it would open the global Control Center)
@@ -422,6 +432,7 @@ static void on_exit(void)
     bnet_stop();
     nucleo_audio_stop();
     brfx_shutdown();   // free the heap particle Fields -> zero static RAM while the game is closed
+    game_text_close();
 }
 
 // ============================ registration ====================================

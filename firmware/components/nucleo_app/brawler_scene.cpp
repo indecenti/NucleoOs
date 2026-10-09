@@ -1,78 +1,109 @@
-// brawler_scene.cpp — SCORRIBANDA: belt depth plane + MINIMAL backdrop on white paper.
+// brawler_scene.cpp — SCORRIBANDA: the belt depth plane + the night-street backdrop.
 //
-// Art direction: no dark noir. Warm-white "paper" background (BR_PAPER), LINE-ONLY shapes in
-// grey (outlines, not filled boxes), lots of white space, MULTI-LAYER parallax and a few small
-// idle animations. No ground grid: depth reads from the fighters' SCALE.
-// Characters stay as clean black silhouettes; blood is the only red. Everything goes through the
-// reusable fxscene primitives (ridge/props/clean_floor) — only backdrop greys, no other color here.
+// Art direction: a noir NIGHT street per level, 16-bit beat'em-up style — a banded dusk sky, a far skyline
+// of hazy silhouettes with scattered lit windows, a near row of buildings with lit windows and a flickering
+// neon sign, lamp posts on the kerb, a sidewalk + kerb and lane dashes that scroll 1:1
+// with the camera (the ground itself shows you walking). Three parallax layers + the belt. Each street has
+// its own palette (one small table). Colours are RGB332-exact (gui::rgb) so the 8bpp canvas shows them as
+// authored. Procedural from a hash of the tile index: zero RAM, no bitmaps. Cheap: ~150 fill calls/frame.
 //
 // Owns: BR_BELT (the depth plane every module uses to measure feet/scale) + scene_draw().
 
 #include "brawler.h"
+#include "game_ui.h"
 #include <math.h>
 
 // Belt depth mapping: z=0 (far, small, high) .. z=1 (near, large, low).
-//   horizonY = 60  : horizon line, where the skyline rests and the ground begins.
-//   frontY   = 130 : near edge of the belt (leaves breathing room for the HUD below, on 135px).
-//   farS/nearS = 12/42 : figure scale per unit, far .. near. WIDE RANGE -> anyone heading to the back
-//                        visibly shrinks (pronounced depth, per user request).
-const fxfig::Belt BR_BELT = { 60.0f, 130.0f, 12.0f, 42.0f };
+//   horizonY = 62  : where the sidewalk meets the buildings.
+//   frontY   = 130 : near edge of the belt.
+//   farS/nearS = 18/38 : figure scale per unit, far .. near — enough depth to read, never ant-sized.
+const fxfig::Belt BR_BELT = { 62.0f, 130.0f, 18.0f, 38.0f };
 
-// Feet (screen-y) for a given depth — used by blood/shadows/draw ordering.
 float scene_floor_y(float z) { return fxfig::belt_y(BR_BELT, z); }
-
-// Figure scale for a given depth.
 float scene_scale(float z) { return fxfig::belt_s(BR_BELT, z); }
 
-// Backdrop: white paper -> far ridge -> mid props -> near props -> clean ground (no grid).
-// Back-to-front composition, parallax driven by g.camx, animation from br_now_ms()/g.floorscroll.
-// Per-level variety via the seeds (g.level) and a grey tint from the LevelDef fields (now greys).
+// Per-street palette, RGB triples: sky top, sky at the horizon, far skyline, near buildings, lit window,
+// neon, asphalt.
+static const uint8_t PAL[6][7][3] = {
+    { {0,0,85},  {109,36,170}, {36,36,85},  {0,0,85},   {255,219,85},  {255,73,170}, {36,36,85} },   // the alley: indigo night
+    { {73,0,85}, {255,109,85}, {109,36,85}, {36,0,85},  {255,219,170}, {255,219,0},  {73,36,85} },   // the market: dusk
+    { {0,36,0},  {36,146,85},  {0,73,85},   {0,36,0},   {182,255,170}, {0,255,170},  {36,73,85} },   // the subway: sodium green
+    { {36,0,0},  {146,73,0},   {73,36,0},   {36,0,0},   {255,182,85},  {255,146,0},  {73,36,0} },    // the warehouses: rust
+    { {36,0,85}, {146,73,255}, {73,36,170}, {36,0,85},  {255,255,170}, {109,219,255},{73,73,85} },   // the rooftops: moonlit
+    { {0,36,85}, {36,146,170}, {0,73,85},   {0,36,85},  {255,219,85},  {255,73,85},  {36,73,85} },   // the docks: storm teal
+};
+static uint16_t pc(int lv, int k) { const uint8_t *c = PAL[lv][k]; return gui::rgb(c[0], c[1], c[2]); }
+
+static inline uint32_t hsh(uint32_t x) { x ^= x >> 16; x *= 0x7feb352du; x ^= x >> 15; x *= 0x846ca68bu; x ^= x >> 16; return x; }
+
+// One layer of buildings tiled in world space every `sp` px, scrolled by camx * par. Heights / widths come
+// from a hash of the tile index; windows light up from the same hash (`lit` = how many in 16), and the near
+// layer hangs a neon sign on some fronts.
+static void buildings(int lv, int base, int sp, float par, int hmin, int hmax, uint16_t col, uint16_t win, int lit, bool near_, uint32_t t)
+{
+    int off = (int)(g.camx * par);
+    for (int i = off / sp - 1; ; i++) {
+        int bx = i * sp - off;
+        if (bx > BR_SW) break;
+        uint32_t h = hsh((uint32_t)i * 2654435761u + lv * 977u + (near_ ? 31u : 7u));
+        int w = sp - 4 - (int)(h % (unsigned)(sp / 3)), bh = hmin + (int)((h >> 8) % (unsigned)(hmax - hmin + 1));
+        d.fillRect(bx, base - bh, w, bh, col);
+        if (near_) d.drawFastHLine(bx, base - bh, w, gui::mix(col, win, 60));      // a lit roof edge
+        // windows: a grid, each lit from a hash bit (a few flicker)
+        int cw = near_ ? 7 : 5, rh = near_ ? 8 : 6;
+        for (int r = 0; r < (bh - 8) / rh && r < 6; r++)
+            for (int c = 0; c < (w - 4) / cw && c < 8; c++) {
+                uint32_t q = hsh(h + r * 131u + c * 17u);
+                if ((int)(q & 15) >= lit) continue;
+                bool flick = near_ && (q & 0x300) == 0x300 && ((t / 180 + (q >> 12)) & 7) == 0;
+                d.fillRect(bx + 3 + c * cw, base - bh + 5 + r * rh, near_ ? 3 : 2, near_ ? 4 : 2, flick ? col : win);
+            }
+        // a neon sign on one front in three: blinks on its own phase (palette-cycling feel)
+        if (near_ && (h & 3) == 0 && w > 30) {
+            uint16_t neon = pc(lv, 5);
+            bool on = ((t / 400 + (h >> 20)) % 5) != 0;
+            d.drawRect(bx + 6, base - 14, w - 12, 7, on ? neon : gui::mix(col, neon, 70));
+            if (on) d.drawFastHLine(bx + 8, base - 11, w - 16, gui::mix(neon, 0xFFFF, 120));
+        }
+    }
+}
+
 void scene_draw(void)
 {
-    const LevelDef *L = brawler_level(g.level);
+    int lv = g.level < 0 ? 0 : g.level > 5 ? 5 : g.level;
     int hy = (int)BR_BELT.horizonY;
+    uint32_t t = br_now_ms();
 
-    // Timer for idle animations: slow skyline drift + sway of the near props.
-    float t = br_now_ms() * 0.001f;
+    // (1) a banded dusk sky (8 bands, the retro look) + stars on the clear nights, a moon over the rooftops
+    uint16_t top = pc(lv, 0), hor = pc(lv, 1);
+    for (int b = 0; b < 8; b++) d.fillRect(0, b * hy / 8, BR_SW, hy / 8 + 1, gui::mix(top, hor, b * 256 / 7));
+    if (lv == 0 || lv == 4) for (int s = 0; s < 14; s++) {
+        uint32_t q = hsh(s * 7919u + lv);
+        int sx = (int)((q % 260) - (int)(g.camx * 0.05f) % 260); if (sx < 0) sx += 260;
+        d.drawPixel(sx, (q >> 9) % (hy / 2), (q >> 20) & 1 ? 0xFFFF : gui::mix(top, 0xFFFF, 140));
+    }
+    if (lv == 4) { d.fillCircle(186 - (int)(g.camx * 0.03f), 14, 7, gui::rgb(255, 255, 170)); d.fillCircle(183 - (int)(g.camx * 0.03f), 12, 6, top); }
 
-    // (1) base: white paper across the whole sky (above the horizon). Lots of white by design.
-    d.fillRect(0, 0, BR_SW, hy, BR_PAPER);
+    // (2) far skyline (hazy, slow) and (3) near buildings (lit windows, neon), resting on the sidewalk
+    buildings(lv, hy, 26, 0.15f, 12, 34, pc(lv, 2), gui::mix(pc(lv, 2), pc(lv, 4), 110), 3, false, t);
+    buildings(lv, hy, 64, 0.45f, 22, 46, pc(lv, 3), pc(lv, 4), 5, true, t);
 
-    // The backdrop greys come from the LevelDef (filled in brawler_levels): far->near get darker by
-    // a touch going up a level -> each stage has its own shade while staying within the palette.
-    uint16_t c_far  = L->build_far;     // far ridge + mid prop base
-    uint16_t c_near = L->build_near;     // mid ridge
-    uint16_t c_line = L->floor_line;     // near props + horizon line (bolder grey)
-
-    // (2) FAR ridge: low profile, tight spacing, slow parallax + slight drift over time.
-    //     Soft fill (a touch darker than the paper) so the distant mass reads softly.
-    uint16_t far_fill = fx3d::mix(BR_PAPER, c_far, 60);
-    fxscene::ridge(hy, /*minH*/8, /*maxH*/26, /*spacing*/22, c_far, far_fill,
-                   /*parallax*/0.10f, g.camx, /*seed*/0x51u + g.level,
-                   /*drift*/sinf(t * 0.15f) * 6.0f);
-
-    // (2b) MID-FAR ridge: a second city band for depth, intermediate spacing and parallax.
-    fxscene::ridge(hy, /*minH*/12, /*maxH*/34, /*spacing*/28, fx3d::mix(c_far, c_near, 90), 0,
-                   /*parallax*/0.16f, g.camx, /*seed*/0x77u + g.level * 11u,
-                   /*drift*/sinf(t * 0.11f + 1.0f) * 4.0f);
-
-    // (3) MID ridge: taller and sparser, medium parallax, no fill (line only).
-    fxscene::ridge(hy, /*minH*/16, /*maxH*/44, /*spacing*/34, c_near, 0,
-                   /*parallax*/0.24f, g.camx, /*seed*/0xA3u + g.level * 7u, /*drift*/0.0f);
-
-    // (4) MID props: shopfronts/arches in outline, medium parallax, static (no motion).
-    fxscene::props(hy, /*spacing*/64, c_near, /*parallax*/0.40f, g.camx,
-                   /*seed*/0x1Du + g.level * 3u, /*phase*/0.0f, /*kind*/2 /*shopfronts*/);
-
-    // (5) NEAR props: lampposts and foliage in outline, fast parallax, slight sway.
-    fxscene::props(hy, /*spacing*/92, c_line, /*parallax*/0.70f, g.camx,
-                   /*seed*/0xC7u + g.level * 5u, /*phase*/t * 1.6f, /*kind*/-1 /*mixed*/);
-
-    // (5b) FOREGROUND props: a few large elements very close, parallax almost 1:1, wider sway.
-    fxscene::props(hy + 6, /*spacing*/140, c_line, /*parallax*/0.95f, g.camx,
-                   /*seed*/0x2Fu + g.level * 13u, /*phase*/t * 2.1f, /*kind*/-1 /*mixed*/);
-
-    // (6) CLEAN ground: no grid. A grey band just below the paper + a single horizon line,
-    //     both from the level palette -> variety without leaving the greys.
-    fxscene::clean_floor(BR_BELT, L->floor_near, c_line);
+    // (4) the street: sidewalk + kerb, then asphalt that lightens toward the camera, lane dashes and lamp
+    // posts — all at 1:1 with the camera (the belt's own scroll)
+    uint16_t road = pc(lv, 6);
+    int cam = (int)g.camx;
+    d.fillRect(0, hy, BR_SW, 8, gui::mix(road, 0xFFFF, 50));
+    for (int x = -(cam % 24); x < BR_SW; x += 24) d.drawFastVLine(x, hy, 8, road);   // paving joints
+    d.drawFastHLine(0, hy + 8, BR_SW, gui::mix(road, 0xFFFF, 110));                // the kerb's lit edge
+    for (int b = 0; b < 4; b++) {
+        int y0 = hy + 9 + b * (BR_SH - hy - 9) / 4;
+        d.fillRect(0, y0, BR_SW, (BR_SH - hy - 9) / 4 + 1, gui::mix(road, gui::mix(road, 0xFFFF, 40), b * 85));
+    }
+    for (int x = -(cam % 160); x < BR_SW + 40; x += 160) {                         // lamp posts on the kerb
+        d.fillRect(x - 1, hy - 34, 2, 42, gui::rgb(73, 73, 85));
+        d.fillRect(x - 5, hy - 37, 11, 3, gui::rgb(73, 73, 85));
+        d.fillRect(x - 4, hy - 34, 9, 2, pc(lv, 4));
+    }
+    int ly = (int)scene_floor_y(0.62f);
+    for (int x = -(cam % 48); x < BR_SW; x += 48) d.fillRect(x, ly, 22, 2, gui::mix(road, gui::rgb(255, 219, 85), 120));   // lane dashes
 }

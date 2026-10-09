@@ -5,6 +5,8 @@
 // HEAP-FREE: a single const table + stack-only pose math. Draws nothing (no `d` access) — it only
 // composes fxanim primitives and hands the joints back.
 #include "brawler.h"
+#include "game_text.h"
+#include "game_ui.h"
 #include <math.h>
 
 #ifndef BR_PI
@@ -12,11 +14,10 @@
 #endif
 
 // ------------------------------------------------------------------ hero roster
-// Three archetypes, one silhouette language: same near-black BR_INK body, but a DISTINCT BUILD so they
-// read apart by shape alone — scale = overall HEIGHT, girth = WIDTH/limb thickness (and the head tracks
-// girth in the renderer, so a burly fighter is also broad-headed). Reach, speed and combo length give
-// each a different feel in the hand. On the white-paper look heroes are pure black silhouettes and need
-// NO outline — rim is 0 for all (the renderer treats 0 as "no outline"). They read apart by build.
+// Three archetypes, each in its own colour (COLS below) AND a DISTINCT BUILD so they read apart by shape
+// too — scale = overall HEIGHT, girth = WIDTH/limb thickness (and the head tracks girth in the renderer,
+// so a burly fighter is also broad-headed). Reach, speed and combo length give each a different feel in
+// the hand. (`rim` is unused: every fighter gets the shell's black outline.)
 //
 //   OMBRA  — the technician: average height/build, fast 3-hit string, balanced everything. The baseline.
 //   MOLE   — the bruiser:    tall AND wide (scale 1.14, girth 1.44), slow, only a 2-hit string but each
@@ -24,13 +25,18 @@
 //   VIPERA — the striker:    short and lean (scale 0.92, girth 0.80), very fast, long reach, a 4-hit
 //                            flurry of light snaps. Fragile but slippery.
 static const HeroDef HEROES[3] = {
-    // name      style_it                     style_en                     maxhp speed  pdmg kdmg reach girth rim combo scale
-    { "OMBRA",  "Equilibrato", "Balanced", 100,  78.f,   7,  10, 30.f, 1.00f, 0, 3, 1.00f },
-    { "MOLE",   "Devastante",  "Heavy",    150,  56.f,  12,  16, 26.f, 1.44f, 0, 2, 1.14f },
-    { "VIPERA", "Velocissima", "Fast",      80, 100.f,   5,   8, 38.f, 0.80f, 0, 4, 0.92f },
+    // name     maxhp speed  pdmg kdmg reach girth rim combo scale
+    { "OMBRA",  100,  78.f,   7,  10, 30.f, 1.00f, 0, 3, 1.00f },
+    { "MOLE",   150,  56.f,  12,  16, 26.f, 1.44f, 0, 2, 1.14f },
+    { "VIPERA",  80, 100.f,   5,   8, 38.f, 0.80f, 0, 4, 0.92f },
 };
 
 int brawler_hero_count(void) { return 3; }
+
+const char *brawler_hero_style(int i)
+{
+    return i == 1 ? GT("Potente", "Heavy") : i == 2 ? GT("Veloce", "Fast") : GT("Equilibrato", "Balanced");
+}
 
 const HeroDef *brawler_hero(int i)
 {
@@ -225,32 +231,26 @@ void fighter_pose(const Fighter *fr, fxfig::Pt out[fxfig::FX_NJ])
     }
 }
 
-// ------------------------------------------------------------------ per-type enemy hue
-// One distinct hue PER enemy TYPE so foes read apart at a glance (the user's complaint: all the same
-// blue). These are the FROZEN BR_EN_* palette from brawler.h — never the legacy steel-blue roster body,
-// never red (that's blood). kind: 0 thug, 1 brute, 2 blade, 3 boss.
-static inline uint16_t enemy_hue(int kind)
+// ------------------------------------------------------------------ colours
+// Every fighter is a bright, outlined figure on the night street: the three heroes in light "player"
+// colours, each enemy TYPE in its own hue, so friend / foe / which foe read at a glance. RGB332-exact.
+// Order: OMBRA, MOLE, VIPERA, then thug, brute, blade, boss.
+static const uint8_t COLS[7][3] = {
+    {219, 219, 255}, {255, 219, 85}, {109, 255, 255},          // pale steel, gold, cyan
+    {73, 109, 255},  {182, 109, 36}, {36, 182, 36}, {182, 73, 255},   // blue, rust, green, purple
+};
+uint16_t brawler_hero_color(int kind)
 {
-    switch (kind) {
-    case 0:  return BR_EN_THUG;    // steel blue
-    case 1:  return BR_EN_BRUTE;   // ochre / khaki
-    case 2:  return BR_EN_BLADE;   // teal green
-    case 3:  return BR_EN_BOSS;    // purple
-    default: return BR_EN_THUG;
-    }
+    const uint8_t *c = COLS[kind < 0 ? 0 : kind > 2 ? 2 : kind];
+    return gui::rgb(c[0], c[1], c[2]);
 }
 
-// ------------------------------------------------------------------ silhouette colour
-// Body ink for fr: heroes are pure BR_INK (near-black on white paper); enemies use their PER-TYPE hue so
-// the roster reads apart at a glance. A non-zero flash folds in a white hit-pop (0..1 -> up to ~86% toward
-// white) so a connect reads as a bright stamp on the frame. Palette-strict: only BR_INK / a BR_EN_* hue /
-// white ever appear here.
+// Body colour for fr; a non-zero flash folds in a white hit-pop (0..1 -> up to ~86% toward white) so a
+// connect reads as a bright stamp on the frame.
 uint16_t fighter_body(const Fighter *fr)
 {
-    uint16_t base = fr->is_hero ? BR_INK : enemy_hue(fr->kind);
-    if (fr->flash > 0.0f) {
-        int t = (int)(fr->flash * 220.0f);
-        return fx3d::mix(base, 0xFFFF, t);
-    }
+    const uint8_t *c = COLS[fr->is_hero ? (fr->kind < 0 ? 0 : fr->kind > 2 ? 2 : fr->kind) : 3 + (fr->kind < 0 ? 0 : fr->kind > 3 ? 3 : fr->kind)];
+    uint16_t base = gui::rgb(c[0], c[1], c[2]);
+    if (fr->flash > 0.0f) return gui::mix(base, 0xFFFF, (int)(fr->flash * 220.0f));
     return base;
 }

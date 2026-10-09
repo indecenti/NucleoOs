@@ -30,38 +30,23 @@ enum { ET_THUG = 0, ET_BRUTE = 1, ET_BLADE = 2, ET_BOSS = 3 };
 //   LAMA  — small & lean (girth 0.78, scale 0.90): very fast, fragile, the LONGEST reach (a knife at arm's
 //           length) so it can poke from outside and slip away.
 //   BOSS  — towering & broad (girth 1.52, scale 1.34): the most hp, strong, good reach, decent speed.
-// Fields: name_it name_en | hp speed(px/s) dmg reach(px) girth body score scale.
+// Fields: hp speed(px/s) dmg reach(px) girth score scale.
 static const EnemyDef ENEMIES[] = {
-    { "Teppista",   "Thug",       24, 64.0f,  6, 26.0f, 1.00f, 0,  100, 1.00f }, // 0 baseline
-    { "Bruto",      "Bruiser",    72, 36.0f, 15, 24.0f, 1.46f, 0,  280, 1.18f }, // 1 big slow tank
-    { "Lama",       "Blade",      14, 104.0f, 7, 40.0f, 0.78f, 0,  180, 0.90f }, // 2 small fast fragile, long reach
-    { "Capobanda",  "Boss",      180, 60.0f, 16, 34.0f, 1.52f, 0, 1000, 1.34f }, // 3 towering all-round
+    {  24, 64.0f,  6, 26.0f, 1.00f,  100, 1.00f }, // 0 teppista: baseline
+    {  72, 36.0f, 15, 24.0f, 1.46f,  280, 1.18f }, // 1 bruto: big slow tank
+    {  14, 104.0f, 7, 40.0f, 0.78f,  180, 0.90f }, // 2 lama: small fast fragile, long reach
+    { 180, 60.0f, 16, 34.0f, 1.52f, 1000, 1.34f }, // 3 capobanda: towering all-round
 };
 #define ENEMY_N ((int)(sizeof(ENEMIES) / sizeof(ENEMIES[0])))
 
-// br_rgb() is a runtime fn, so the per-type hue can't be const-folded into the table. Resolve once into a
-// cache on first access. Palette: one DISTINCT hue per TYPE (none red — red is blood only); heroes stay
-// BR_INK, backdrop stays white + greys. The draw loop derives each outline from the body shade.
-static EnemyDef s_def[ENEMY_N];
-static bool     s_def_ready = false;
-static void enemy_defs_init(void)
-{
-    if (s_def_ready) return;
-    for (int i = 0; i < ENEMY_N; i++) s_def[i] = ENEMIES[i];
-    s_def[ET_THUG].body  = BR_EN_THUG;   // steel blue
-    s_def[ET_BRUTE].body = BR_EN_BRUTE;  // ochre / khaki
-    s_def[ET_BLADE].body = BR_EN_BLADE;  // teal green
-    s_def[ET_BOSS].body  = BR_EN_BOSS;   // purple
-    s_def_ready = true;
-}
+// The per-type hue lives in brawler_chars.cpp (enemy_hue): the table stays const, in flash.
 
 int brawler_enemy_count(void) { return ENEMY_N; }
 
 const EnemyDef *brawler_enemy(int t)
 {
-    enemy_defs_init();
     if (t < 0 || t >= ENEMY_N) return NULL;
-    return &s_def[t];
+    return &ENEMIES[t];
 }
 
 // ---------------------------------------------------------------- per-slot AI scratch (heap-free)
@@ -113,6 +98,14 @@ static void ai_scratch_clear(int slot)
     s_reshuf[slot]    = 0.0f;
 }
 
+// Drop into RETREAT with the back-off NOT yet armed (retreat_t < 0). The phase arms it once (back-off time +
+// recover cooldown), then returns to APPROACH when both have run out. It used to test "both ran out" to ARM
+// as well, so it re-armed forever: after its first swing a foe never came back (a stalemate at the gate).
+static void enter_retreat(int slot)
+{
+    s_phase[slot] = AS_RETREAT; s_seq_step[slot] = 0; s_seq_len[slot] = 0; s_retreat_t[slot] = -1.0f;
+}
+
 // Clamp helper — keep z inside the walkable belt band, etc.
 static inline float clampf(float v, float lo, float hi) { return v < lo ? lo : (v > hi ? hi : v); }
 
@@ -134,9 +127,8 @@ static Fighter *nearest_hero_to(float x, float z)
 
 Fighter *brawler_spawn_enemy(int type, float x, float z)
 {
-    enemy_defs_init();
     if (type < 0 || type >= ENEMY_N) return NULL;
-    const EnemyDef *e = &s_def[type];
+    const EnemyDef *e = &ENEMIES[type];
 
     // Slots 0,1 are reserved for heroes; enemies live in 2..BR_MAXF-1.
     int slot = -1;
@@ -171,6 +163,8 @@ Fighter *brawler_spawn_enemy(int type, float x, float z)
 
     ai_scratch_clear(slot);
     ai_pick_spot(slot);
+
+    if (type == ET_BOSS) { g.banner = 1; g.banner_t = 2.0f; }   // the boss's entrance gets the HUD banner
 
     // Face the nearest hero on entry.
     Fighter *h = nearest_hero_to(x, z);
@@ -276,7 +270,6 @@ static float link_cooldown(int kind)
 // ---------------------------------------------------------------- AI
 void enemies_ai(float dt)
 {
-    enemy_defs_init();
 
     // Global swing budget: never let the player be dogpiled. +1 on hard.
     const int atk_budget = (g.diff >= 2) ? 3 : 2;
@@ -311,12 +304,12 @@ void enemies_ai(float dt)
         // and retreat so a stunned foe never resumes a stale combo. ---
         if (fighter_busy(e)) {
             if (s_phase[i] == AS_SEQUENCE && (e->st == BS_HIT || e->st == BS_DOWN || e->st == BS_RISE)) {
-                s_phase[i] = AS_RETREAT; s_seq_step[i] = 0; s_seq_len[i] = 0; s_retreat_t[i] = 0.0f;
+                enter_retreat(i);
             }
             continue;
         }
 
-        const EnemyDef *def = &s_def[e->kind];
+        const EnemyDef *def = &ENEMIES[e->kind];
         Fighter *h = nearest_hero_to(e->x, e->z);
         if (!h) {
             e->vx = 0.0f; e->vz = 0.0f;
@@ -356,14 +349,14 @@ void enemies_ai(float dt)
                 if (e->st != BS_PUNCH && e->st != BS_KICK) e->st = BS_IDLE;
                 continue;
             }
-            s_phase[i] = AS_RETREAT; s_seq_step[i] = 0; s_seq_len[i] = 0; s_retreat_t[i] = 0.0f;
+            enter_retreat(i);
         }
 
         // ============================================================ RETREAT phase
         // Back off a SHORT beat (re-picking a fresh surround angle) then sit out the recover cooldown,
         // drifting toward the new depth meanwhile so the foe keeps moving rather than freezing.
         if (s_phase[i] == AS_RETREAT) {
-            if (s_retreat_t[i] <= 0.0f && e->cool <= 0.0f) {
+            if (s_retreat_t[i] < 0.0f) {                     // arm the back-off once
                 s_retreat_t[i] = (e->kind == ET_BLADE) ? (0.35f + br_frnd() * 0.30f)
                                                        : (0.20f + br_frnd() * 0.25f);
                 e->cool        = recover_cooldown(e->kind);
@@ -445,7 +438,7 @@ void enemies_ai(float dt)
             BrState mv = sequence_move(e->kind, 0, len);
             combat_begin_attack(e, mv); atk_now++; s_seq_step[i] = 1;
             if (len > 1) { s_phase[i] = AS_SEQUENCE; e->cool = link_cooldown(e->kind); }
-            else         { s_phase[i] = AS_RETREAT;  e->cool = 0.0f; }
+            else         { enter_retreat(i); e->cool = 0.0f; }
             continue;
         }
 

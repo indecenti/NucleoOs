@@ -2,14 +2,14 @@
 //
 // This is the one source of cross-module truth. Every brawler_*.cpp implements the functions declared
 // for its section and calls other sections only through here, so the modules build in parallel and link
-// cleanly. Game state lives in ONE BrCtx `g`; rendering is silhouettes via the reusable fx* toolkit.
+// cleanly. Game state lives in ONE BrCtx `g`; fighters are outlined figures drawn by the reusable fx* kit.
 //
 //   app_brawler.cpp     shell: lifecycle, input routing, main loop, `g`, br_* helpers, registration
 //   brawler_chars.cpp   3 heroes + per-fighter pose composition (fighter_pose)
 //   brawler_enemies.cpp enemy roster + AI brains
 //   brawler_combat.cpp  hitboxes, damage, knockback, combos, KO
 //   brawler_levels.cpp  6 levels of waves + the Double-Dragon gate/progression
-//   brawler_scene.cpp   per-level parallax backdrop + belt
+//   brawler_scene.cpp   per-level night-street parallax backdrop + belt
 //   brawler_fx.cpp      blood spray + ground pools (built on fxfx)
 //   brawler_menu.cpp    title / character-select / options / pause / game-over / HUD
 //   brawler_sfx.cpp     procedural sound effects
@@ -28,26 +28,16 @@
 #define BR_MAXENEMY  6          // simultaneous live enemies
 #define BR_GRAV      900.0f     // px/s^2 for jumps & blood
 
-// ------------------------------------------------------------------ STRICT palette (minimal, C&D-on-white)
-// The whole game uses ONLY these. White "paper" backdrop, grey LINE-ART shapes, black heroes, ONE colour
-// for enemies (steel blue), red ONLY for blood. Introduce no other hue anywhere. (br_rgb is declared
-// below; these macros expand at the call site, exactly like the menu's MN_* colours.)
-#define BR_PAPER     br_rgb(243, 243, 238)   // background base — warm white
-#define BR_GREY_FAR  br_rgb(214, 216, 219)   // faint far backdrop lines
-#define BR_GREY_MID  br_rgb(176, 179, 184)   // mid backdrop lines
-#define BR_GREY_NEAR br_rgb(132, 136, 142)   // near backdrop lines / ground shade
-#define BR_INK       br_rgb(22, 22, 26)      // heroes — near-black silhouette + strongest outlines
-#define BR_ENEMY     br_rgb(36, 92, 150)     // (legacy) generic enemy blue
-#define BR_ENEMY_DK  br_rgb(22, 60, 104)     // (legacy) generic enemy outline
-#define BR_BLOOD     br_rgb(206, 26, 28)     // blood — reserved exclusively for blood (NEVER an enemy hue)
-
-// Enemy VARIETY (user-requested): one distinct hue PER TYPE so foes read apart at a glance. None may be
-// red (that's blood). Heroes stay BR_INK (black); the backdrop stays white + greys. The per-fighter
-// outline is just the darker shade of the body (computed at draw time), so the colour pops on paper.
-#define BR_EN_THUG   br_rgb(36, 92, 150)     // type0 teppista  — steel blue
-#define BR_EN_BRUTE  br_rgb(150, 110, 40)    // type1 bruto     — ochre / khaki
-#define BR_EN_BLADE  br_rgb(34, 140, 96)     // type2 lama      — teal green
-#define BR_EN_BOSS   br_rgb(120, 60, 150)    // type3 capobanda — purple
+// ------------------------------------------------------------------ palette
+// A noir NIGHT street (brawler_scene.cpp, its own per-street table), bright OUTLINED fighters — the heroes
+// in light player colours, each enemy type in its own hue (brawler_chars.cpp) — and red for blood and
+// danger. All RGB332-exact so the 8bpp canvas shows them as authored. (br_rgb is declared below; these
+// macros expand at the call site.)
+#define BR_INK       br_rgb(0, 0, 0)         // outlines, contact shadows
+#define BR_BLOOD     br_rgb(219, 0, 0)       // blood, low health, combo, danger
+#define BR_WHITE     br_rgb(255, 255, 255)   // HUD type, sparks
+#define BR_MUTED     br_rgb(146, 146, 170)   // secondary HUD type, a parried spark
+#define BR_GOLD      br_rgb(255, 219, 0)     // health, the GO arrow
 
 // ------------------------------------------------------------------ fighters
 enum BrState {
@@ -100,11 +90,13 @@ struct BrCtx {
     uint32_t   now;            // ms (refreshed each poll)
     float      floorscroll;    // belt scroll phase
     bool       audio;
-    int        lang;           // 0 = it, 1 = en
     int        diff;           // 0 easy, 1 normal, 2 hard
     bool       net;            // co-op session active
     bool       is_host;
     bool       paused;
+    uint32_t   lock_until;     // ms: a result screen ignores keys until then (mashed J/K must not skip it)
+    float      banner_t;       // s left on the HUD banner (stage intro / boss entrance)
+    uint8_t    banner;         // 0 = "Street n: name", 1 = the boss walks in
 };
 extern BrCtx g;                // defined in app_brawler.cpp
 
@@ -117,11 +109,17 @@ float    br_frnd2(void);                // -1..1
 float    br_screen_x(float worldx);     // worldx - camx + shake.ox()
 Fighter *br_hero(int player);           // heroes only (NULL if absent)
 void     br_reset_fighters(void);
+// Ink fighter fr (its pose for its state) at screen (sx, feetY), scale sc, in body with a rim outline.
+void     br_figure(const Fighter *fr, float sx, float feetY, float sc, uint16_t body, uint16_t rim);
+// A hero's attack/jump input (P1 from the keyboard, P2 from the co-op stream): 0 punch, 1 kick, 2 jump.
+// Airborne punch/kick = jump-kick, a punch in the chain window links the combo, a busy hero ignores it.
+void     br_hero_act(Fighter *h, int act);
+// A respawned hero is untouchable while hp > 0 and cool > 0 (cool doubles as the KO lie-time at hp <= 0).
+static inline bool br_invuln(const Fighter *f) { return f->is_hero && f->hp > 0 && f->cool > 0.0f; }
 
 // ------------------------------------------------------------------ characters (brawler_chars.cpp)
 struct HeroDef {
     const char *name;
-    const char *style_it, *style_en;
     int      maxhp;
     float    speed;        // px/s
     int      pdmg, kdmg;   // punch / kick damage
@@ -133,20 +131,20 @@ struct HeroDef {
 };
 int            brawler_hero_count(void);
 const HeroDef *brawler_hero(int i);
+const char    *brawler_hero_style(int i);  // one-word style blurb, in the OS language
 // Fill the 11-joint pose for fr's current state/anim (composes fxanim + per-character flavour).
 void           fighter_pose(const Fighter *fr, fxfig::Pt out[fxfig::FX_NJ]);
-// Silhouette body colour for fr (folds in hit-flash). Used by the draw loop.
+// Body colour for fr (folds in hit-flash). Used by the draw loop.
 uint16_t       fighter_body(const Fighter *fr);
+uint16_t       brawler_hero_color(int kind);   // a hero's own colour (select cards, HUD)
 
 // ------------------------------------------------------------------ enemies (brawler_enemies.cpp)
 struct EnemyDef {
-    const char *name_it, *name_en;
     int      maxhp;
     float    speed;
     int      dmg;
     float    reach;
     float    girth;
-    uint16_t body;
     int      score;
     float    scale;        // overall body-size multiplier (boss big, lama small); 0/unset -> 1.0
 };
@@ -159,15 +157,13 @@ void            enemies_ai(float dt);
 // ------------------------------------------------------------------ levels / waves (brawler_levels.cpp)
 struct WaveDef { uint8_t types[BR_MAXENEMY]; uint8_t count; };
 struct LevelDef {
-    const char *name_it, *name_en;
     float    length;                                   // world px
-    uint16_t sky_top, sky_bot, build_far, build_near;  // backdrop palette
-    uint16_t floor_far, floor_near, floor_line;
     uint8_t  nwaves;
     const WaveDef *waves;
 };
 int             brawler_level_count(void);
 const LevelDef *brawler_level(int i);
+const char     *brawler_level_name(int i);   // street name, in the OS language
 void            levels_begin(int level);   // load level: reset camera/gate/wave, spawn wave 0
 void            levels_step(float dt);     // advance gate, spawn next wave when cleared
 bool            levels_is_clear(void);     // all waves of the level defeated
@@ -210,13 +206,15 @@ void  menu_draw(void);                 // renders the current non-play screen
 void  hud_draw(void);                  // health/score/lives/combo over the action
 bool  menu_key(int key, char ch);      // consume a key on menu screens; true if handled
 void  menu_goto(BrScreen s);           // switch screen (resets cursors, plays a cue)
+const char *menu_hint(void);           // OS footer hint for the current non-play screen
+bool  menu_animating(int dt_ms);       // a non-play screen still moving (glide / posing heroes): keep drawing
 void  menu_coop_start(void);           // co-op: both peers paired -> configure heroes + enter SC_PLAY
                                        // (host sims + streams; guest renders the host snapshot)
 
 // ------------------------------------------------------------------ sound (brawler_sfx.cpp)
-enum { BSFX_NAV = 1, BSFX_SEL, BSFX_BACK, BSFX_WHIFF, BSFX_HIT, BSFX_KO, BSFX_HURT, BSFX_JUMP, BSFX_CLEAR, BSFX_OVER };
-void  bsfx_presynth(void);   // pre-generate WAVs to SD on app open (async-safe play later)
-void  bsfx(int id);          // play a cue (no-op if g.audio off or busy)
+enum { BSFX_NAV = 1, BSFX_SEL, BSFX_BACK, BSFX_WHIFF, BSFX_HIT, BSFX_KO, BSFX_HURT, BSFX_JUMP, BSFX_CLEAR, BSFX_OVER,
+       BSFX_HEAVY, BSFX_BLOCK, BSFX_GO };
+void  bsfx(int id);          // play a cue from the SD pack (no-op if g.audio off; small cues never stack)
 
 // ------------------------------------------------------------------ co-op net (brawler_net.cpp)
 bool  bnet_start(void);      // bring up ESP-NOW for this app
