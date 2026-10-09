@@ -406,7 +406,6 @@ static void on_enter(void)
     g.shake.reset();
 
     if (nucleo_audio_volume() < 40) nucleo_audio_set_volume(80);
-    bsfx_presynth();
     brfx_reset();
 
     s_last_poll = 0;

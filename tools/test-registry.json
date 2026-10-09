@@ -4554,6 +4554,21 @@
       "anima": true
     },
     {
+      "id": "extra-sfx-packs-cue-coverage",
+      "label": "sfx packs · cue coverage",
+      "category": "build-lint",
+      "kind": "extra",
+      "cmd": "node",
+      "args": [
+        "tools/sfx-gen/bake-recipe-packs.mjs"
+      ],
+      "verifies": "Every native game’s WAV pack (deploy/sd/data/<game>/pack) covers every cue its firmware can play, as a valid 16-bit mono PCM WAV: the games never synthesize on the device (Task-WDT reboot), so a gap is a silent or beeping cue. Compiles the REAL sfx_name/build_voices with MinGW g++.",
+      "nl": false,
+      "lang": "na",
+      "in_gate": false,
+      "anima": false
+    },
+    {
       "id": "extra-gz-freshness",
       "label": "gz freshness",
       "category": "build-lint",

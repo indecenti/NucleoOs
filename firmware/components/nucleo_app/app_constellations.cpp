@@ -22,9 +22,10 @@
 //   • Input: the framework routes LEFT/BACK to the back-handler and everything else to on_key — so
 //     LEFT is handled in on_back (screen-local nav) and BACK pops a screen, closing the app only at
 //     the title (same split app_theme/app_recorder use).
-//   • Audio: short chiptune cues are synthesized once to SD WAVs (notify_synth) and cached. If the
-//     player drops a real WAV at /sd/data/costellazioni/custom/<name>.wav it is used instead — so
-//     downloaded sounds "just work" without bloating the build. WAV needs no canvas release.
+//   • Audio: short chiptune cues play from the deployed WAV pack (/sd/data/costellazioni/pack, baked on
+//     the PC from build_voices — never synthesized on the device). If the player drops a real WAV at
+//     /sd/data/costellazioni/custom/<name>.wav it is used instead — so downloaded sounds "just work"
+//     without bloating the build. WAV needs no canvas release.
 //   • Persistence: a small binary save + a tiny settings file on SD, written atomically (tmp+rename).
 //
 // Texts are ASCII only (the M5GFX bitmap font has no accents): Italian uses the apostrophe form.
@@ -36,7 +37,7 @@
 #include "nucleo_fx3d.h"     // reusable pseudo-3D toolkit: Mode-7 grid + flat-shaded polygon ships
 #include "nucleo_exclusive.h" // NX_NET_APP: free ~60KB before on_enter so the heap pools always allocate
 #include "nucleo_ui.h"        // nucleo_ui_is_adv(): gate the tilt setting to the ADV
-#include "notify_synth.h"     // notify_voice_t + notify_synth_voices_wav (pure inline, stdio+math)
+#include "game_sfx.h"        // pack lookup + tone fallback (and notify_voice_t for the recipes)
 // BMI270 tilt seam. Forward-declared (not #include "nucleo_imu.h") so we don't pull nucleo_imu's
 // include dir into the whole nucleo_app component and recompile every sibling source. Symbols
 // resolve at final link since main already pulls nucleo_imu in — same trick as nucleo_anima_l1_unload().
@@ -796,13 +797,11 @@ static const char *sfx_path(int id)
     snprintf(p, sizeof p, DIR "/custom/%s.wav", sfx_name(id));   // player-supplied override?
     FILE *f = fopen(p, "rb");
     if (f) { fclose(f); return p; }
-    snprintf(p, sizeof p, DIR "/sfx/%s.v2.wav", sfx_name(id));    // cached synth (v2: bumped -> regen on first play)
-    f = fopen(p, "rb");
-    if (f) { fclose(f); return p; }
-    notify_voice_t v[8];                                          // synth once, cache on SD
-    int nv = build_voices(id, v);
-    if (nv > 0 && notify_synth_voices_wav(v, nv, p, 12000) == 0) return p;
-    return nullptr;
+    snprintf(p, sizeof p, DIR "/pack/%s.wav", sfx_name(id));     // deployed pack (baked on the PC from build_voices)
+    if (game_sfx_wav_ok(p)) return p;
+    snprintf(p, sizeof p, DIR "/sfx/%s.v2.wav", sfx_name(id));    // legacy on-device synth cache
+    if (game_sfx_wav_ok(p)) return p;
+    return nullptr;                                               // NEVER synth here: it blocked the game task
 }
 static void sfx(int id)
 {
@@ -814,7 +813,7 @@ static void sfx(int id)
                       id == SFX_ALARM || id == SFX_SHIELD_DOWN);
     if (!important && nucleo_audio_is_playing()) return;
     const char *p = sfx_path(id);
-    if (!p) return;
+    if (!p) { if (important) { nucleo_audio_stop(); game_sfx_tone(build_voices, id); } return; }
     if (important) nucleo_audio_stop();
     nucleo_audio_play(p);
 }

@@ -16,7 +16,7 @@
 #include "nucleo_kbd.h"
 #include "launcher_theme.h"
 #include "app_gfx.h"
-#include "notify_synth.h"
+#include "game_sfx.h"       // pack lookup + tone fallback (and notify_voice_t for the recipes)
 #include "nucleo_exclusive.h"   // NX_NET_APP: dedicate RAM + free the shared I2S line so SFX play
 #include <M5GFX.h>
 #include <stdint.h>
@@ -206,14 +206,10 @@ static void sfx(int id)
     if (!g_audio || id <= 0) return;
     if (!sfx_important(id) && nucleo_audio_is_playing()) return;
     static char p[80];
-    snprintf(p, sizeof p, DIRR "/custom/%s.wav", sfx_name(id));
-    FILE *f = fopen(p, "rb");
-    if (f) fclose(f);
-    else {
-        snprintf(p, sizeof p, DIRR "/sfx/%s.wav", sfx_name(id));
-        f = fopen(p, "rb");
-        if (f) fclose(f);
-        else { notify_voice_t v[6]; int nv = build_voices(id, v); if (nv <= 0 || notify_synth_voices_wav(v, nv, p, 12000) != 0) return; }
+    snprintf(p, sizeof p, DIRR "/custom/%s.wav", sfx_name(id));   // player-supplied override first
+    if (!game_sfx_wav_ok(p) && !game_sfx_find(DIRR, sfx_name(id), p, sizeof p)) {   // pack -> legacy cache
+        if (sfx_important(id)) { nucleo_audio_stop(); game_sfx_tone(build_voices, id); }   // NEVER synth here
+        return;
     }
     if (sfx_important(id)) nucleo_audio_stop();
     nucleo_audio_play(p);
@@ -230,21 +226,8 @@ static void sfx_cache_check(void)
     f = fopen(DIRR "/sfx/ver.bin", "wb");
     if (f) { int vv = SFX_VER; fwrite(&vv, sizeof vv, 1, f); fclose(f); }
 }
-// synthesize every clip to SD up-front (RAM is free under exclusive mode) so playback during the
-// game never has to synth mid-frame, and any SD problem surfaces at open rather than as silence.
-static void presynth(void)
-{
-    if (!g_audio) return;
-    notify_voice_t v[6];
-    for (int id = 1; id <= 12; id++) {
-        char p[80];
-        snprintf(p, sizeof p, DIRR "/sfx/%s.wav", sfx_name(id));
-        FILE *f = fopen(p, "rb");
-        if (f) { fclose(f); continue; }
-        int nv = build_voices(id, v);
-        if (nv > 0) notify_synth_voices_wav(v, nv, p, 12000);
-    }
-}
+// No presynth: bulk-synthesizing every clip on the app task (subscribed to the 8 s Task WDT) rebooted the
+// device on an SD without the cache. The deployed pack (deploy/sd/data/reattore/pack) is the sound source.
 
 // ============================ draw helpers ===================================
 // transparent text (single-arg colour) — avoids opaque glyph boxes punching holes in rings/bars
@@ -814,8 +797,7 @@ static void on_enter(void)
     cfg_read();
     scores_load();
     if (nucleo_audio_volume() < 40) nucleo_audio_set_volume(85);   // never start the game inaudibly low
-    sfx_cache_check();                                             // rebuild cached clips if their sounds changed
-    presynth();                                                    // cache every clip (RAM is free under exclusive)
+    sfx_cache_check();                                             // drop a stale legacy cache if the sounds changed
     s_screen = ST_MENU; s_msel = 0; s_anim = 0;
     s_capY = cap_target();
     s_now = s_last = s_frame = esp_timer_get_time() / 1000;

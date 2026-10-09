@@ -201,6 +201,15 @@ $apk = "$repo\web\downloads\NucleoMind.apk"
 if (Test-Path $apk) { Copy-IfChanged $apk (Join-Path $sd 'www\shell\downloads\NucleoMind.apk') 'www/shell/downloads/NucleoMind.apk' $man $seen $stat }
 else { Write-Warning "NucleoMind.apk missing - build nucleomind in Android Studio, then copy app-debug.apk to web\downloads\NucleoMind.apk" }
 
+# Native-game SFX packs (data/<game>/pack/*.wav) live IN the staging tree: baked/copied there by
+# tools/sfx-gen (npm run sfx:bake), there is no other source to stage them from. The games never synthesize
+# on the device, so these WAVs are their only sound. Register them (in place: src = dst, never copied) so
+# the manifest-driven Wi-Fi sync (push-ota --sync) ships them too, not only a card copy (sd-sync.ps1).
+Get-ChildItem -LiteralPath (Join-Path $sd 'data') -Directory -ErrorAction SilentlyContinue | ForEach-Object {
+    $pk = Join-Path $_.FullName 'pack'
+    if (Test-Path -LiteralPath $pk) { Sync-Dir $pk $sd "data/$($_.Name)/pack" $man $seen $stat }
+}
+
 Write-Host "Compressing Web App files (GZIP) to save network RAM..."
 Get-ChildItem -Path $sd -Recurse -Include *.js,*.css,*.html | ForEach-Object {
     $out = "$($_.FullName).gz"

@@ -23,7 +23,7 @@
 #include "nucleo_kbd.h"
 #include "launcher_theme.h"
 #include "app_gfx.h"
-#include "notify_synth.h"
+#include "game_sfx.h"       // pack lookup + tone fallback (and notify_voice_t for the recipes)
 #include "nucleo_exclusive.h"   // NX_NET_APP: dedicate RAM + free the shared I2S line so SFX play
 #include <M5GFX.h>
 #include <stdint.h>
@@ -313,18 +313,13 @@ static void sfx(int id)
 {
     if (!g_audio || id <= 0) return;
     if (!sfx_important(id) && nucleo_audio_is_playing()) return;
-    const char *nm = sfx_name(id);
     char p[80];
-    snprintf(p, sizeof p, DIRR "/pack/%s.wav", nm);           // 1) deployed arcade pack (best, zero synth CPU)
-    FILE *f = fopen(p, "rb");
-    if (f) fclose(f);
-    else {
-        snprintf(p, sizeof p, DIRR "/sfx/%s.wav", nm);        // 2) on-device synth cache (legacy)
-        f = fopen(p, "rb");
-        if (f) fclose(f);
-        else return;   // 3) NEVER synth at runtime: the inline synth ran on the UI task and, on a cold/incomplete
-                       // pack, blocked it past the 8 s Task-WDT -> reboot when opening Slots. A missing clip is now
-                       // simply SILENT. The deployed /pack/ WAVs are the sound source (ship them; never synth live).
+    if (!game_sfx_find(DIRR, sfx_name(id), p, sizeof p)) {   // 1) deployed arcade pack  2) legacy on-device cache
+        // 3) NEVER synth at runtime: the inline synth ran on the UI task and, on a cold/incomplete pack, blocked
+        // it past the 8 s Task-WDT -> reboot when opening Slots. No WAV -> an important cue beeps, the rest stay
+        // silent. The deployed /pack/ WAVs are the sound source (ship them; never synth live).
+        if (sfx_important(id)) { nucleo_audio_stop(); game_sfx_tone(build_voices, id); }
+        return;
     }
     if (sfx_important(id)) nucleo_audio_stop();
     nucleo_audio_play(p);
@@ -1236,10 +1231,9 @@ static void on_enter(void)
     build_strips();
     if (nucleo_audio_volume() < 40) nucleo_audio_set_volume(85);
     sfx_cache_check();
-    // NO bulk pre-synth here: sfx() already synthesizes each clip lazily on its first play (pack -> cache ->
-    // "synth now"), exactly like pinball/poker/pong. Pre-synthesizing all 24 SFX synchronously on the UI task
-    // at launch (the old presynth() call) blocked it past the 8 s Task-WDT on a cold cache (first launch /
-    // SFX_VER bump) -> TASK_WDT reset on opening Slots. Lazy synth spreads that cost one clip at a time.
+    // NO bulk pre-synth here: pre-synthesizing all 24 SFX synchronously on the UI task at launch (the old
+    // presynth() call) blocked it past the 8 s Task-WDT on a cold cache (first launch / SFX_VER bump) ->
+    // TASK_WDT reset on opening Slots. sfx() plays the deployed pack and never synthesizes.
     memset(s_coin, 0, sizeof(Coin) * NPART);
     memset(s_fw, 0, sizeof s_fw);
     reset_win_marks();

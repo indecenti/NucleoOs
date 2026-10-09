@@ -1,26 +1,21 @@
-// brawler_sfx.cpp — SCORRIBANDA: procedural sound effects.
+// brawler_sfx.cpp — SCORRIBANDA: sound effects.
 //
-// Same trick as Pong/Tanks: synthesise each cue ADDITIVELY to a mono WAV on SD exactly once
-// (notify_synth), then play the cached file async (nucleo_audio). No PCM buffer, ~zero RAM — CPU
-// paid once, never per frame. Cues are short and punchy to fit a belt-scroll brawler: nav blips,
+// Each cue is a WAV in the deployed pack (/sd/data/brawler/pack/<name>.wav), baked on the PC from the
+// recipes below (tools/sfx-gen/bake-recipe-packs.mjs) and played async (nucleo_audio) — no PCM buffer,
+// ~zero RAM, zero CPU on the device. Cues are short and punchy to fit a belt-scroll brawler: nav blips,
 // dry whiffs, low thuds for connecting blows, descending KO, dissonant hurt, fanfares.
 //
-// Policy mirrors Pong's sfx(): no-op if g.audio is off; non-critical cues are dropped while a clip
-// is still playing (avoids stomping a fanfare with a footstep), critical cues stop+replace.
+// Policy mirrors the shared game_sfx engine: no-op if g.audio is off; non-critical cues are dropped while
+// a clip is still playing (avoids stomping a fanfare with a footstep), critical cues stop+replace. Nothing
+// is synthesized here: without a WAV a critical cue degrades to a short tone, the rest stay silent.
 
 #include "brawler.h"
-#include "notify_synth.h"
+#include "game_sfx.h"          // pack lookup + tone fallback (and notify_voice_t for the recipes)
 #include <stdio.h>
 #include <string.h>
-#include <sys/stat.h>
 
-extern "C" {
-#include "nucleo_audio.h"
-}
-
-// ---------------------------------------------------------------- cache layout
+// ---------------------------------------------------------------- pack layout
 #define DIRR   "/sd/data/brawler"
-#define BNSFX  10          // BSFX_NAV(1) .. BSFX_OVER(10)
 
 static const char *bsfx_name(int id) {
     switch (id) {
@@ -93,38 +88,14 @@ static bool bsfx_important(int id) {
     return id == BSFX_HIT || id == BSFX_KO || id == BSFX_CLEAR || id == BSFX_OVER;
 }
 
-// ---------------------------------------------------------------- SD plumbing
-static void ensure_dirs(void) {
-    mkdir("/sd/data", 0777);
-    mkdir(DIRR, 0777);
-    mkdir(DIRR "/sfx", 0777);
-}
-
-static void presynth(void) {
-    if (!g.audio) return;
-    notify_voice_t v[8];
-    for (int id = 1; id <= BNSFX; id++) {
-        char p[80]; snprintf(p, sizeof p, DIRR "/sfx/%s.wav", bsfx_name(id));
-        FILE *f = fopen(p, "rb");
-        if (f) { fclose(f); continue; }                 // already cached
-        int nv = build_voices(id, v);
-        if (nv > 0) notify_synth_voices_wav(v, nv, p, 12000);
-    }
-}
-
 // ---------------------------------------------------------------- public API
-void bsfx_presynth(void) { ensure_dirs(); presynth(); }
-
 void bsfx(int id) {
     if (!g.audio || id <= 0) return;
     if (!bsfx_important(id) && nucleo_audio_is_playing()) return;       // drop non-critical when busy
-    char p[80]; snprintf(p, sizeof p, DIRR "/sfx/%s.wav", bsfx_name(id));
-    FILE *f = fopen(p, "rb");
-    if (f) fclose(f);
-    else {                                                              // synth-on-miss (first play of the session)
-        notify_voice_t v[8];
-        int nv = build_voices(id, v);
-        if (nv <= 0 || notify_synth_voices_wav(v, nv, p, 12000) != 0) return;
+    char p[80];
+    if (!game_sfx_find(DIRR, bsfx_name(id), p, sizeof p)) {            // pack -> legacy cache; never synth here
+        if (bsfx_important(id)) { nucleo_audio_stop(); game_sfx_tone(build_voices, id); }
+        return;
     }
     if (bsfx_important(id)) nucleo_audio_stop();
     nucleo_audio_play(p);

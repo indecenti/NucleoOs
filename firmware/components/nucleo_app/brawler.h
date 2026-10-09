@@ -215,8 +215,7 @@ void  menu_coop_start(void);           // co-op: both peers paired -> configure 
 
 // ------------------------------------------------------------------ sound (brawler_sfx.cpp)
 enum { BSFX_NAV = 1, BSFX_SEL, BSFX_BACK, BSFX_WHIFF, BSFX_HIT, BSFX_KO, BSFX_HURT, BSFX_JUMP, BSFX_CLEAR, BSFX_OVER };
-void  bsfx_presynth(void);   // pre-generate WAVs to SD on app open (async-safe play later)
-void  bsfx(int id);          // play a cue (no-op if g.audio off or busy)
+void  bsfx(int id);          // play a cue from the WAV pack (no-op if g.audio off or busy; never synthesizes)
 
 // ------------------------------------------------------------------ co-op net (brawler_net.cpp)
 bool  bnet_start(void);      // bring up ESP-NOW for this app
