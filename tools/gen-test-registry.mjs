@@ -69,7 +69,7 @@ const gateCat = {
   'hdc-eval': 'nl-reasoning', 'combinator-eval': 'nl-reasoning', 'typed-facets (KG)': 'nl-reasoning',
   'typed-nl (facet)': 'nl-knowledge', 'entity-detect (online)': 'nl-knowledge', 'clean-extract (wiki)': 'nl-knowledge',
   'auto-evolution (VKL)': 'knowledge-graph', 'ledger-attack (VKL)': 'knowledge-graph', 'akb5-content (sharded)': 'nl-knowledge',
-  'arbiter (concurrency)': 'cascade-infra',
+  'arbiter (concurrency)': 'cascade-infra', 'tanks (native game)': 'app-device',
   'link-proto (espnow)': 'connect-transfer', 'nearby-skill (scoped)': 'connect-transfer',
   'wifi-policy (supervisor/hotspot)': 'connect-transfer',
   'setup-store (reset + SD secrets)': 'connect-transfer',

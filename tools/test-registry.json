@@ -1965,6 +1965,22 @@
       "anima": true
     },
     {
+      "id": "gate-tanks-native-game",
+      "label": "tanks (native game)",
+      "category": "app-device",
+      "kind": "gate",
+      "cmd": "node",
+      "args": [
+        "tools/tanks-host/run.mjs",
+        "all"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "both",
+      "in_gate": true,
+      "anima": false
+    },
+    {
       "id": "gate-fs-list-stream",
       "label": "fs-list (stream)",
       "category": "cascade-infra",

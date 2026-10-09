@@ -588,6 +588,14 @@ const gates = [
     // pixel change vs tools/ui-host/golden.json: look at build/ui-host/sheets/*.png, then accept a
     // deliberate change with `npm run ui:shots -- --update`. No device.
     ok: (code) => code === 0, summary: (o) => (o.match(/ui-shots: [^\n]*/) || [lastLine(o)])[0].trim() },
+  { name: 'tanks (native game)', cmd: 'node', args: ['tools/tanks-host/run.mjs', 'all'],
+    // The REAL app_tanks.cpp, host-compiled with the REAL LovyanGFX core and driven like the device run loop
+    // (~50 Hz with jitter, the keyboard driver's 350/90 ms auto-repeat, physically-held keys, the 8bpp canvas):
+    // a tap moves the aim exactly one step and a hold stops on release; all 29 weapons at every kind of aim
+    // resolve their turn; best-of series always end; the predictor matches the real flight; CPU hit rate per
+    // difficulty stays in its band; and TWO devices over a lossy simulated ESP-NOW link (15-30% loss) end every
+    // turn agreeing on terrain, HP, positions, wind and turn. Frames for review: build/tanks-host/shots/.
+    ok: (code) => code === 0, summary: (o) => (o.match(/tanks-host: \d+ checks[^\n]*/) || [lastLine(o)])[0].trim() + ' | ' + ((o.match(/tanks-mp: [^\n]*/) || [''])[0].trim()) },
   { name: 'fs-list (stream)', cmd: 'node', args: ['tools/anima-host/fslist-check.mjs'],
     // The streaming GET /api/fs/list body (firmware/components/nucleo_fsapi/fslist.c), host-compiled
     // with MinGW — O(1) RAM in the entries, so a big folder no longer answers 503 "oom" and makes

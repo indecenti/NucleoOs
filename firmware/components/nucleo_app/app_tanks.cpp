@@ -151,7 +151,7 @@ enum { MODE_AI = 0, MODE_HOST, MODE_GUEST };
 // ---- multiplayer (active-authoritative over nucleo_pnet) ----
 #define TK_M0 'T'
 #define TK_M1 'K'
-#define TK_VER 1
+#define TK_VER 2            // 2: TK_RESULT carries 12 terrain ops (was 8) — a v1 peer would misread it, so it never pairs
 enum { TK_HELLO = 1, TK_JOIN, TK_WELCOME, TK_START, TK_AIM, TK_RESULT, TK_ACK, TK_BYE, TK_FIRE };
 static int     s_mode;                  // MODE_AI / MODE_HOST / MODE_GUEST
 static int     s_seat;                  // 0 = host/left, 1 = guest/right
@@ -180,6 +180,7 @@ static unsigned s_anim;
 // terrain / theme
 static uint8_t *s_h;        // WW columns, APP_RAM
 static uint8_t *s_dug;      // WW columns, APP_RAM. 1 = column was cratered/raised -> show exposed dirt, no grass rim
+static uint8_t *s_snap;     // 2*WW, APP_RAM: s_h + s_dug as they were when a spectated net shot began (see apply_result)
 static int     s_atmo;                 // current atmosphere (time of day / weather)
 static uint16_t th_skyT, th_skyM, th_skyB, th_ground, th_ground2, th_rim, th_accent, th_glow, th_sun, th_cloud;
 static int     s_starN, s_sunR, s_sunX, s_sunY; static bool s_moon, s_rain;
@@ -245,7 +246,7 @@ struct Ufo { bool on; int phase, t; float x, y, vx, vy, hx, hy; int owner, foe, 
 static Ufo    s_ufo;
 static int    s_ai_tgtE, s_ai_tgtP;
 // terrain ops recorded during the active player's shot (packaged into the multiplayer RESULT)
-#define NOPS 8
+#define NOPS 12            // terrain ops one net RESULT carries: Hail drops 10 bomblets (8 lost two craters per shot)
 struct Op { uint8_t kind; int16_t x; uint8_t y, r; };   // kind 0 = crater (x,y,r); 1 = raise (x=cx, y=height, r=radius)
 static Op   s_ops[NOPS]; static int s_nops; static bool s_rec;
 static bool s_spectate;   // net passive: locally re-simulating the opponent's shot so the camera can follow it
@@ -277,14 +278,18 @@ static int64_t s_lava_t;
 static float  s_cl_x[NCLOUD], s_cl_y[NCLOUD], s_cl_s[NCLOUD];
 
 // input momentum — discrete on tap (precise ±1), auto-repeat with acceleration on hold.
+// The hold is read from the PHYSICAL key state (nucleo_kbd_char_down), not inferred from key events: the
+// driver's auto-repeat starts only after 350 ms, so an event-refreshed deadline either coasted on after
+// release (+4..6 past the target) or added a stray second step to a plain tap.
 static int     s_inE, s_inP;            // active direction (-1/0/+1) for elevation / power
-static int64_t s_inUntil;               // hold deadline: cleared when no key event refreshes it
+static char    s_inKey;                 // the arrow key (; . , /) driving the hold: released -> the hold ends at once
+static int64_t s_inSeen;                // last key event for the hold (the driver repeats every 90 ms): a lost release can't run away
 static int64_t s_inNext;                // next auto-repeat instant
 static int64_t s_inT0;                  // when the current hold began (for ramp acceleration)
 static int64_t s_wbar_t;                // weapon quick-card visible until this time (set on weapon change)
 static int64_t s_hud_t;                 // last aim interaction: the HUD auto-hides once idle, ceding the screen to the scene
 static bool    s_confirm;               // in-match: Esc raises a "leave match?" confirm instead of bailing instantly
-#define HOLD_MS 230
+#define HOLD_DELAY_MS 380               // a key still down this long after its tap starts the auto-repeat ramp
 #define HUD_SHOW_MS 2600                // full HUD chrome stays this long after the last input...
 #define HUD_FADE_MS 480                 // ...then fades over this long, leaving just the big glance readout
 
@@ -965,15 +970,18 @@ static void step_proj_once(int dt) {
         }
     }
 }
+#define SIM_STEP_MS 4                            // the physics sub-step; every predictor integrates with the SAME step
 static void step_proj(int dt) {                  // sub-step: fast shells never tunnel through tanks/terrain (≤4 ms = ≤~6 px/step)
-    while (dt > 0) { int s = dt > 4 ? 4 : dt; step_proj_once(s); dt -= s; }
+    while (dt > 0) { int s = dt > SIM_STEP_MS ? SIM_STEP_MS : dt; step_proj_once(s); dt -= s; }
 }
 static int sim_land(int who, int elev, int power) {
     float e = elev * (float)M_PI / 180.0f, dir = (who == 0) ? 1.0f : -1.0f, v = v0_of(power);
     float x = s_tk[who].x + cosf(e) * dir * BARREL, y = s_tk[who].y - 3 - sinf(e) * BARREL;
     float vx = cosf(e) * dir * v, vy = -sinf(e) * v, g = 0.00040f, wind = s_wind / 100.0f * WIND_ACCEL;
-    for (int it = 0; it < 4000; it++) {
-        vy += g * 16; vx += wind * 16; x += vx * 16; y += vy * 16;
+    // SIM_STEP_MS = the live sub-step (step_proj): at 16 ms a flat fast shell moved ~9 px per step and
+    // jumped thin crater rims the real shell hits, so the CPU (and the alien ship's lock) aimed through walls.
+    for (int it = 0; it < 16000; it++) {
+        vy += g * SIM_STEP_MS; vx += wind * SIM_STEP_MS; x += vx * SIM_STEP_MS; y += vy * SIM_STEP_MS;
         if (x < 0 || x > WW - 1) return -1;
         if (y >= surf((int)x)) return (int)x;
     }
@@ -1101,24 +1109,75 @@ static void ufo_step(int dt) {
 }
 
 // ============================ AI =============================================
+// Where `wp` really ends up, for the CPU's aim search: the plain arc of sim_land() plus what the special
+// shells do to it — Sniper flies 2.2x faster, Homing seeks the foe, MIRV warheads shed forward speed at the
+// apex, a Grenade hops before it blows, Roller/Bowling roll on toward the foe. Planning every weapon as a
+// plain shell made the CPU waste exactly the weapons that differ (they missed by a wide margin).
+static int sim_land_w(int who, int elev, int power, int wp) {
+    const Weap *w = &WEAPS[wp];
+    const float k = SIM_STEP_MS;                               // the live physics step (see sim_land)
+    float e = elev * (float)M_PI / 180.0f, dir = (who == 0) ? 1.0f : -1.0f, v = v0_of(power) * (wp == SNIPE_WP ? 2.2f : 1.0f);
+    float x = s_tk[who].x + cosf(e) * dir * BARREL, y = s_tk[who].y - 3 - sinf(e) * BARREL;
+    float vx = cosf(e) * dir * v, vy = -sinf(e) * v, g = 0.00040f, wind = s_wind / 100.0f * WIND_ACCEL;
+    int foe = 1 - who, bnc = (w->beh == WB_BOUNCE) ? 3 : 0; bool split = false;
+    for (int it = 0; it < 16000; it++) {
+        vy += g * k; vx += wind * k;
+        if (w->beh == WB_HOMING && !s_tk[foe].dead) {
+            float tx2 = s_tk[foe].x - x, ty2 = s_tk[foe].y - y, l = sqrtf(tx2 * tx2 + ty2 * ty2) + 1e-3f;
+            vx += (tx2 / l) * 0.00018f * k; vy += (ty2 / l) * 0.00018f * k;
+        }
+        x += vx * k; y += vy * k;
+        if (w->beh == WB_MIRV && !split && vy >= 0) { split = true; vx *= 0.45f; vy += 0.05f; }   // the centre warhead
+        if (x < 0 || x > WW - 1) return -1;
+        if (fabsf(s_tk[foe].x - x) <= TANK_W / 2 + 2 && y >= s_tk[foe].y - 10 && y <= s_tk[foe].y + 5) return (int)s_tk[foe].x;   // direct hit
+        if (y >= surf((int)x)) {
+            if (bnc > 0 && vy > 0) { bnc--; y = surf((int)x) - 2; vy = -fabsf(vy) * 0.55f; vx *= 0.72f; continue; }
+            if (w->beh == WB_ROLLER)                             // rolls up to 1400 ms at 0.06 px/ms, stops on a tank
+                for (int r = 0; r < 84 && x > 4 && x < WW - 4; r++) { if (fabsf(s_tk[foe].x - x) < 8) return (int)s_tk[foe].x; x += dir; }
+            return (int)x;
+        }
+    }
+    return -1;
+}
+// Beam: a straight ray from the barrel. The elevation that points it at the foe, or -1 if terrain blocks it.
+static int beam_elev(int me, int foe) {
+    float dx = fabsf(s_tk[foe].x - s_tk[me].x), dy = (s_tk[me].y - 3) - s_tk[foe].y;
+    int e = (int)lroundf(atan2f(dy, dx) * 180.0f / (float)M_PI);
+    if (e < ELEV_MIN || e > 88) return -1;
+    float a = e * (float)M_PI / 180.0f, sx = cosf(a) * (me == 0 ? 1.0f : -1.0f), sy = -sinf(a);
+    float rx = s_tk[me].x + sx * BARREL, ry = s_tk[me].y - 3 + sy * BARREL;
+    for (int s = 0; s < 900; s++) {                              // the same march fire_weapon() does
+        rx += sx * 1.5f; ry += sy * 1.5f;
+        if (rx < 0 || rx > WW - 1 || ry > H) return -1;
+        if (fabsf(s_tk[foe].x - rx) < TANK_W / 2 + 2 && fabsf(s_tk[foe].y - ry) < TANK_H + 2) return e;
+        if (ry >= surf((int)rx)) return -1;
+    }
+    return -1;
+}
 static void ai_plan(void) {
     int me = s_active, foe = 1 - me, wp = 0, tries = 0;
     do { wp = (int)(esp_random() % NWEAP); tries++; } while (s_tk[me].ammo[wp] == 0 && tries < 30);
     // CPU sticks to offence: skip teleport, jump, shield/med (utility) — they don't aim at the foe
     if (s_tk[me].ammo[wp] == 0 || WEAPS[wp].beh == WB_TELE || WEAPS[wp].beh == WB_SHIELD || wp == JETS_WP) wp = firstweap(me);
-    s_tk[me].weap = wp;
     int bestE = 45, bestP = 60; float bestD = 1e9f;
-    for (int e = 20; e <= 80; e += 5)
-        for (int pw = 45; pw <= 100; pw += 5) {
-            int lx = sim_land(me, e, pw);
+    static const int err[3] = { 12, 7, 3 };                      // aim error by difficulty (easy / normal / hard): ~22% / 33% / 50% hits
+    if (WEAPS[wp].beh == WB_BEAM) {                              // straight ray: aim it, or switch if the line is blocked
+        int be = beam_elev(me, foe);
+        if (be >= 0) { s_tk[me].weap = wp; s_ai_tgtE = clampi(be + (int)frnd(-err[s_diff], err[s_diff]) / 2, ELEV_MIN, 88); s_ai_tgtP = s_tk[me].power; return; }
+        wp = s_tk[me].ammo[0] != 0 ? 0 : firstweap(me);
+        if (WEAPS[wp].beh == WB_BEAM) wp = 0;
+    }
+    s_tk[me].weap = wp;
+    for (int e = 10; e <= 85; e += 5)
+        for (int pw = 10; pw <= 100; pw += 5) {
+            int lx = sim_land_w(me, e, pw, wp);
             if (lx < 0) continue;
             float dd = fabsf(lx - s_tk[foe].x);
             if (dd < bestD) { bestD = dd; bestE = e; bestP = pw; }
         }
-    int err[3] = { 10, 5, 2 };
     bestE += (int)frnd(-err[s_diff], err[s_diff]);
     bestP += (int)frnd(-err[s_diff] * 2, err[s_diff] * 2);
-    s_ai_tgtE = clampi(bestE, 5, 88); s_ai_tgtP = clampi(bestP, 20, 100);   // barrel eases onto target in poll
+    s_ai_tgtE = clampi(bestE, 5, 88); s_ai_tgtP = clampi(bestP, 10, 100);   // same floor as the search grid   // barrel eases onto target in poll
 }
 
 // ============================ turn flow ======================================
@@ -1197,6 +1256,8 @@ struct __attribute__((packed)) TkResult {
     uint8_t nfire; TkFire fire[NFIRE];
     int16_t wind; uint8_t next, winner;
 };
+static_assert(sizeof(TkResult) <= REL_MAX, "TK_RESULT must fit the reliable resend buffer");
+static_assert(sizeof(TkResult) <= PNET_MAXMSG, "TK_RESULT must fit one ESP-NOW datagram");
 static bool local_active(void) { return s_mode == MODE_AI ? (s_active == 0) : (s_active == s_seat); }
 static void net_ack(uint32_t seq) { uint8_t b[8] = { TK_M0, TK_M1, TK_VER, TK_ACK }; memcpy(b + 4, &seq, 4); pnet_send(s_peer, b, 8); }
 static void send_reliable(const void *buf, int len) { memcpy(s_rel, buf, len); s_rel_len = len; s_rel_on = true; s_rel_next = now_ms() + 160; pnet_send(s_peer, buf, len); }
@@ -1262,6 +1323,11 @@ static void apply_result(const TkResult *r) {                   // PASSIVE: appl
     s_resseq = r->seq;
     bool spectated = s_spectate; s_spectate = false;            // did we already re-sim this shot locally (saw arc+blast)?
     for (int i = 0; i < NPROJ; i++) s_pr[i].on = false;         // end any in-flight spectator projectiles
+    s_ufo.on = false;                                           // ...and the spectator's saucer: its laser would hit again after the rewind
+    // The local re-sim was for the camera only: its random bomblets / rain landed elsewhere, and a Builder
+    // mound would be raised twice (raise_wall adds). Rewind the board to the shot's start, so the
+    // authoritative ops below leave it IDENTICAL to the active device's.
+    if (spectated) { memcpy(s_h, s_snap, WW); memcpy(s_dug, s_snap + WW, WW); }
     int wp = (r->weapon < NWEAP) ? r->weapon : 0;   // guard: weapon id comes off the wire (uint8_t, so >=0 implicitly)
     for (int i = 0; i < r->nops && i < NOPS; i++) {
         if (r->op[i].kind == 0) { carve(r->op[i].x, r->op[i].y, r->op[i].r); if (!spectated) { spark_burst(r->op[i].x, r->op[i].y, 8, COL_GOLD); ring_spawn(r->op[i].x, r->op[i].y, r->op[i].r * 1.5f, COL_GOLD); } }
@@ -1321,6 +1387,7 @@ static void net_handle(const pnet_pkt_t *p) {
             int wp = p->buf[4]; if (wp >= NWEAP) wp = 0;   // p->buf is uint8_t, so wp is already >= 0
             s_tk[s_active].weap = wp; s_tk[s_active].elev = e; s_tk[s_active].power = pw; s_wind = wd; s_last_rx = now_ms();
             if (s_tk[s_active].ammo[wp] == 0) s_tk[s_active].ammo[wp] = 9;   // keep fire_weapon from switching weapons
+            memcpy(s_snap, s_h, WW); memcpy(s_snap + WW, s_dug, WW);         // apply_result rewinds to this board
             s_spectate = true; fire_weapon(s_active);                        // re-simulate the shot locally so the camera follows the arc
         } else if (type == TK_RESULT && p->len >= (int)sizeof(TkResult)) {
             apply_result((const TkResult *)p->buf);
@@ -1544,11 +1611,15 @@ static void draw_traj(int camx, int ox, int oy) {
     float x = s_tk[who].x + cosf(e) * dir * BARREL, y = s_tk[who].y - 3 - sinf(e) * BARREL;
     float vx = cosf(e) * dir * v, vy = -sinf(e) * v, g = 0.00040f, wind = s_wind / 100.0f * WIND_ACCEL;
     float ix = x, iy = y; bool landed = false;
-    for (int n = 0; n < 30; n++) {
-        for (int s = 0; s < 6; s++) { vy += g * 16; vx += wind * 16; x += vx * 16; y += vy * 16; }
-        ix = x; iy = y;
-        if (x < 0 || x > WW - 1) break;                               // flew off the field: no ground marker
-        if (y >= surf((int)x)) { iy = surf((int)x); landed = true; break; }
+    bool off = false;
+    for (int n = 0; n < 48 && !landed && !off; n++) {                 // 48 x 96 ms: a full-power lob flies ~3.2 s (30 lost its reticle)
+        for (int s = 0; s < 96 / SIM_STEP_MS; s++) {                   // the live physics step, ground-tested every step
+            vy += g * SIM_STEP_MS; vx += wind * SIM_STEP_MS; x += vx * SIM_STEP_MS; y += vy * SIM_STEP_MS;
+            if (x < 0 || x > WW - 1) { off = true; break; }            // flew off the field: no ground marker
+            if (y >= surf((int)x)) { landed = true; break; }
+        }
+        ix = x; iy = landed ? surf((int)x) : y;
+        if (landed || off) break;
         int px = (int)x - camx + ox, py = (int)y + oy;
         if (px >= 0 && px < W && py >= 0 && py < H && (n & 1)) {
             d.drawPixel(px, py, outline_for(bg_at((int)x, (int)y)));   // dark on snow, light on night
@@ -1887,6 +1958,8 @@ static void draw_play(void) {
         if (s_dp[i].msg) snprintf(b, sizeof b, "%s +%d", s_dp[i].msg, s_dp[i].val);   // juicy bonus banner
         else             snprintf(b, sizeof b, "-%d", s_dp[i].val);                   // plain damage number
         int dpx = (int)s_dp[i].x - camx + ox, dpy = (int)s_dp[i].y + oy, da = s_dp[i].life * 256 / 900;
+        int half = (int)strlen(b) * 3 + 1;                                  // a banner straddling the edge slides fully on
+        if (dpx > -half && dpx < W + half) dpx = clampi(dpx, half, W - half); // screen; one far off-camera stays off
         txt_c(dpx + 1, dpy + 1, 1, COL_INK, b);                      // drop shadow, matches HUD HP text
         txt_c(dpx, dpy, 1, mix(COL_INK, s_dp[i].col, da), b);
     }
@@ -1955,7 +2028,8 @@ static void draw_menu(int ch) {
     txt_c(W / 2, 2, 4, ((s_anim >> 3) & 1) ? COL_WHITE : COL_GOLD, "TANKS");
     // windowed list: the selection + two neighbours each side, ALL at size 2 (bigger, legible), the
     // far rows dimmed so the focus is obvious. Wraps smoothly => a clean carousel that fits 7 items.
-    const int cy = 46, rowh = 17;
+    // five rows must END above the hint bar (ch): at cy 46 / rowh 17 the last one was cut in half by it
+    const int rowh = 16, cy = ch - 5 * rowh - 1;
     for (int dlt = -2; dlt <= 2; dlt++) {
         int i = (s_msel + dlt + NMENU) % NMENU, y = cy + (dlt + 2) * rowh;
         if (dlt == 0) {
@@ -2269,7 +2343,8 @@ static void set_hint(void) {
         case ST_HOST:   nucleo_app_set_hint(tx("INVIO avvia (con sfidante)  Esc", "ENTER start (with challenger)  Esc")); break;
         case ST_BROWSE: nucleo_app_set_hint(tx("SU/GIU  INVIO entra  Esc", "UP/DN  ENTER join  Esc")); break;
         case ST_SCORES: case ST_HELP: nucleo_app_set_hint(tx("Esc indietro", "Esc back")); break;
-        case ST_LOADOUT: nucleo_app_set_hint(tx("SU/GIU  SPAZIO scegli  ALT casuali  DEL azzera  INVIO avvia  Esc", "UP/DN  SPACE pick  ALT random  DEL clear  ENTER start  Esc")); break;
+        // the footer shows 39 chars: the old 64-char hint lost "INVIO avvia" (how to start) off its end
+        case ST_LOADOUT: nucleo_app_set_hint(tx("SPAZIO scegli  ALT a caso  INVIO via", "SPACE pick  ALT random  ENTER go")); break;
         default: break;
     }
 }
@@ -2315,17 +2390,18 @@ static void aim_nudge(int axis, int dir, int step) {     // axis 0=elevation, 1=
     else           s_tk[me].power = clampi(s_tk[me].power + dir * step, 5, 100);
     s_hud_t = now_ms();
 }
-// A key event on an aim axis: a fresh tap nudges exactly ±1 NOW (precise), and arms the
-// accelerating auto-repeat for as long as the key stays held (handled in poll()).
-static void aim_input(int axis, int dir) {
+// A key event on an aim axis: a fresh press nudges exactly ±1 NOW (precise) and arms the accelerating
+// auto-repeat, which poll() runs only while `key` is PHYSICALLY held. The driver's own repeat events for
+// a hold we already track are ignored, so they can never add steps on top of the ramp.
+static void aim_input(int axis, int dir, char key) {
     int64_t t = now_ms();
     int *cur = axis ? &s_inP : &s_inE;
-    bool fresh = (*cur != dir);                          // new press / reversal -> one immediate step
+    s_hud_t = t; s_inSeen = t;
+    if (*cur == dir && s_inKey == key) return;           // auto-repeat of the tracked hold: poll() owns it
     s_inE = (axis == 0) ? dir : 0;                       // one axis at a time (UP/DOWN vs LEFT/RIGHT)
     s_inP = (axis == 1) ? dir : 0;
-    s_inUntil = t + HOLD_MS;                             // refreshed by every auto-repeat key event
-    s_hud_t = t;
-    if (fresh) { aim_nudge(axis, dir, 1); s_inT0 = t; s_inNext = t + 230; }   // delay before the hold ramp kicks in
+    s_inKey = key;
+    aim_nudge(axis, dir, 1); s_inT0 = t; s_inNext = t + HOLD_DELAY_MS;
 }
 static void on_key(int k, char ch) {
     switch (s_screen) {
@@ -2395,9 +2471,9 @@ static void on_key(int k, char ch) {
             int me = s_active;                                    // the tank we control this turn (0 host/AI, 1 guest)
             s_hud_t = now_ms();                                   // any input wakes the HUD chrome back up
             if (g_manual) { entry_key(k, ch); return; }
-            if (k == NK_UP)        aim_input(0, +1);
-            else if (k == NK_DOWN) aim_input(0, -1);
-            else if (k == NK_RIGHT)aim_input(1, +1);
+            if (k == NK_UP)        aim_input(0, +1, ';');     // the arrow legends: ; . , /
+            else if (k == NK_DOWN) aim_input(0, -1, '.');
+            else if (k == NK_RIGHT)aim_input(1, +1, '/');
             else if (ch == 'w' || ch == 'W') cycle_weapon(+1);
             else if (ch == 'q' || ch == 'Q') cycle_weapon(-1);
             else if ((ch >= '1' && ch <= '9') || ch == '0') {          // 1..9,0 -> the ten quick-bar slots
@@ -2426,7 +2502,7 @@ static void on_key(int k, char ch) {
 }
 static bool on_back(int key) {
     if (key == NK_LEFT) {
-        if (s_screen == ST_PLAY && local_active() && s_phase == TP_AIM && !g_manual) aim_input(1, -1);
+        if (s_screen == ST_PLAY && local_active() && s_phase == TP_AIM && !g_manual) aim_input(1, -1, ',');
         else if (s_screen == ST_OPT && !s_optguide) opt_change(s_optsel, -1);
         else if (s_screen == ST_LOADOUT) { s_ldsel = (s_ldsel + NWEAP - 1) % NWEAP; sfx(1); nucleo_app_request_draw(); }
         return true;
@@ -2509,7 +2585,9 @@ static bool poll(void) {
     if (s_screen != ST_PLAY) { if (s_now - s_frame < 60) return false; s_frame = s_now; s_anim++; return true; }
 
     fx_step(dt);
-    if (s_now > s_inUntil) { s_inE = s_inP = 0; }
+    // released: stop at once, no coasting. Backstop: a hold past the driver's 350 ms repeat delay that hears no
+    // repeat for 700 ms is over even if its release event was lost (the ADV's TCA FIFO can drop one).
+    if ((s_inE || s_inP) && (!nucleo_kbd_char_down(s_inKey) || (s_now - s_inT0 > 450 && s_now - s_inSeen > 700))) { s_inE = s_inP = 0; }
     bool ai_turn = (s_mode == MODE_AI && s_active == 1);
     bool sim_here = (s_mode == MODE_AI) || local_active();      // this device runs the turn's simulation
     // net: lost opponent -> back to menu
@@ -2525,7 +2603,7 @@ static bool poll(void) {
     if (panx) { s_camfree += panx * 0.22f * dt; s_camfree = clampf(s_camfree, -s_cam, (WW - W) - s_cam); }
     else { s_camfree *= (s_phase == TP_AIM && sim_here) ? 1.0f : 0.88f; if (fabsf(s_camfree) < 0.5f) s_camfree = 0; }
     if (pany) s_camY = clampf(s_camY + pany * 0.16f * dt, -14, 10); else s_camY *= 0.90f;
-    if (s_phase == TP_AIM && sim_here && !ai_turn && !g_manual && (s_inE || s_inP) && s_now <= s_inUntil && s_now >= s_inNext) {
+    if (s_phase == TP_AIM && sim_here && !ai_turn && !g_manual && (s_inE || s_inP) && s_now >= s_inNext) {
         int held = (int)(s_now - s_inT0);
         int step = held > 1500 ? 3 : held > 650 ? 2 : 1;          // tap stays a precise ±1; hold ramps up to sweep 5..100 fast
         if (s_inE) aim_nudge(0, s_inE, step);
@@ -2567,10 +2645,14 @@ static bool poll(void) {
         if (!s_ai_planned && s_aiwait <= 0) { ai_plan(); s_ai_planned = true; s_aiwait = 700; }
         s_aiwait -= dt;
         if (s_ai_planned) {                                   // visibly swing the barrel onto the planned aim
-            if (s_tk[1].elev  < s_ai_tgtE) s_tk[1].elev++;  else if (s_tk[1].elev  > s_ai_tgtE) s_tk[1].elev--;
-            if (s_tk[1].power < s_ai_tgtP) s_tk[1].power += 2; else if (s_tk[1].power > s_ai_tgtP) s_tk[1].power -= 2;
+            int k = dt / 16 > 1 ? dt / 16 : 1;                   // time-based: the same swing speed at any frame rate
+            s_tk[1].elev  += clampi(s_ai_tgtE - s_tk[1].elev, -k, k);
+            s_tk[1].power += clampi(s_ai_tgtP - s_tk[1].power, -2 * k, 2 * k);   // never steps PAST the target (an odd
+                                                                                // gap used to oscillate, or overshoot to 101)
         }
-        if (s_ai_planned && s_aiwait <= 0) fire_weapon(1);
+        // Fire only once the barrel has actually reached the plan: at the device's real frame rate the swing
+        // (1 deg per frame) used to be cut short by the 700 ms wait, so the CPU shot from a half-turned barrel.
+        if (s_ai_planned && s_aiwait <= 0 && s_tk[1].elev == s_ai_tgtE && s_tk[1].power == s_ai_tgtP) fire_weapon(1);
     } else if (s_phase == TP_FIRE && (sim_here || s_spectate)) {
         step_proj(dt); if (ufo_active()) ufo_step(dt);
         if (!any_proj() && !ufo_active()) s_phase = TP_SETTLE;   // spectator(passive): sim the arc for the camera, then hold for the authoritative RESULT
@@ -2609,7 +2691,7 @@ static void on_exit(void) { net_send_bye(); pnet_stop(); nucleo_audio_stop(); cf
 
 // Match/lobby/FX state only: settings, loadout and leaderboard stay static (they survive close/reopen).
 static const nucleo_app_ram_t APP_RAM[] = {
-    { (void **)&s_h, WW }, { (void **)&s_dug, WW }, { (void **)&s_tk, sizeof(Tank) * 2 },
+    { (void **)&s_h, WW }, { (void **)&s_dug, WW }, { (void **)&s_snap, WW * 2 }, { (void **)&s_tk, sizeof(Tank) * 2 },
     { (void **)&s_pr, sizeof(Proj) * NPROJ }, { (void **)&s_spk, sizeof(Spark) * NSPK }, { (void **)&s_sh, sizeof(Shat) * NSHAT },
     { (void **)&s_rg, sizeof(Ring) * NRING }, { (void **)&s_dp, sizeof(Dpop) * NDMG }, { (void **)&s_rooms, sizeof(Room) * NROOM },
     { (void **)&s_rel, REL_MAX }, { nullptr, 0 } };

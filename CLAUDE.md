@@ -58,6 +58,7 @@ Native UI (launcher, Control Center, Settings) is verified on the PC too, never 
 buffered / direct / short path — `.short` = the ADV's 240x130 fitted canvas, and it FAILS on any panel row
 left unrepainted below it) under `build/ui-host/` and diffs them against `tools/ui-host/golden.json`.
 Look at `build/ui-host/sheets/*.png` after any native UI change; accept with `-- --update`.
+Native games: `npm run tanks:test` drives the real `app_tanks.cpp` (input timing, all weapons, CPU, 2-device MP).
 
 **Library/API docs:** when touching a third-party API (ESP-IDF, Three.js, Vosk, js-dos, the
 LLM providers, web platform APIs), use the **context7** MCP (`.mcp.json`) — `resolve-library-id`

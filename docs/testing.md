@@ -128,6 +128,17 @@ the user — or another firmware on a shared M5Launcher card — keeps there, it
 | `node --test tools/sd-payload.test.mjs` | the release SD payload (`sd_deploy.py release`) and the shared write allow-list vectors |
 | `node tools/anima-host/registry-check.mjs` | the firmware registry limits and byte-identical `/api/apps` fields |
 
+## Native apps on the PC (no flash)
+
+The native UI and games are host-compiled with MinGW against the REAL LovyanGFX core, so their pixels and
+their logic are checked without a device.
+
+| Command | What it proves |
+|---|---|
+| `npm run launcher:test` | the launcher model against the real app table (capacity, categories, Spotlight, pins) |
+| `npm run ui:shots` | every native UI scene in 5 languages × 4 themes, pixel-diffed against `tools/ui-host/golden.json` |
+| `npm run tanks:test` | Nucleo Tanks (`tools/tanks-host/`): the REAL `app_tanks.cpp` driven like the device run loop (~50 Hz with jitter, the keyboard driver's 350/90 ms auto-repeat, physically-held keys, the 8bpp canvas). A tap moves the aim exactly one step and a hold stops on release; all 29 weapons at every kind of aim resolve their turn; best-of series always end; the shared predictor matches the real flight; the CPU hit rate stays in its band per difficulty; and `mp.cpp` runs TWO copies of the game (namespaces) over a lossy simulated ESP-NOW link, checking after every turn that both boards agree on terrain, HP, positions, wind and turn. Review frames: `build/tanks-host/shots/`. `node tools/tanks-host/run.mjs <aim\|weapons\|series\|edges\|physics\|cpu\|frames\|mp> [seed]` runs one scenario. |
+
 ## Determinism and validity
 
 - **No unseeded RNG, no wall-clock** in the tests (the `date` skill is excluded from the generators to
