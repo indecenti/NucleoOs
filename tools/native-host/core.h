@@ -47,6 +47,34 @@ struct NhKnobs {
 };
 static NhKnobs g_nh;
 
+// ---- heap accounting: every malloc/calloc/realloc/free in the process (game, helpers AND LovyanGFX sprite
+// buffers) goes through these -Wl,--wrap hooks, so a scenario sees the game's real heap footprint: the live
+// total, its peak since nh_open_app() and the largest single block (fragmentation: on the device one block
+// must fit the largest FREE block, ~21-31 KB at the launcher).
+struct NhHeap { long live, peak, largest, allocs; bool on; };
+static NhHeap nh_heap;
+extern "C" {
+void *__real_malloc(size_t); void __real_free(void *); void *__real_calloc(size_t, size_t); void *__real_realloc(void *, size_t);
+static void nh_heap_add(long n) { nh_heap.live += n; if (nh_heap.live > nh_heap.peak) nh_heap.peak = nh_heap.live; if (n > nh_heap.largest) nh_heap.largest = n; nh_heap.allocs++; }
+void *__wrap_malloc(size_t n) {
+    size_t *p = (size_t *)__real_malloc(n + 16); if (!p) return nullptr;
+    p[0] = n; if (nh_heap.on) nh_heap_add((long)n); else p[0] |= (size_t)1 << 62; return (char *)p + 16;
+}
+void __wrap_free(void *q) {
+    if (!q) return; size_t *p = (size_t *)((char *)q - 16);
+    if (!(p[0] >> 62)) nh_heap.live -= (long)p[0];
+    __real_free(p);
+}
+void *__wrap_calloc(size_t a, size_t b) { void *q = __wrap_malloc(a * b); if (q) memset(q, 0, a * b); return q; }
+void *__wrap_realloc(void *q, size_t n) {
+    if (!q) return __wrap_malloc(n);
+    size_t *p = (size_t *)((char *)q - 16), old = p[0] & (((size_t)1 << 62) - 1);
+    void *r = __wrap_malloc(n); if (!r) return nullptr;
+    memcpy(r, q, old < n ? old : n); __wrap_free(q); return r;
+}
+}
+static void nh_heap_reset(void) { nh_heap.live = 0; nh_heap.peak = 0; nh_heap.largest = 0; nh_heap.allocs = 0; nh_heap.on = true; }
+
 // ---- virtual clock + deterministic RNG --------------------------------------------------------------
 static int64_t nh_us = 5000000;
 extern "C" int64_t esp_timer_get_time(void) { return nh_us; }
@@ -281,6 +309,7 @@ static void nh_check_hint(const char *where) { nh_check(strlen(nh_hint) <= 39, "
 
 // ---- app lifecycle ----------------------------------------------------------------------------------------
 static void nh_open_app(uint32_t seed) {
+    nh_heap_reset();                                   // the game's heap is measured from here (APP_RAM included)
     nh_rng = seed ? seed : 1; nh_jit_rng = seed * 7 + 1;
     for (const nucleo_app_ram_t *r = nh_app->ram; r && r->ptr; r++) *r->ptr = calloc(1, r->bytes);
     nh_back = nullptr; nh_tab = nullptr; nh_poll = nullptr; nh_ptt = nullptr; nh_exit = false; nh_full = false; nh_direct = false;
@@ -288,9 +317,24 @@ static void nh_open_app(uint32_t seed) {
     nh_canvas.fillScreen(0);
     if (nh_app->on_enter) nh_app->on_enter();
 }
+// Device heap budget for one game (the 32 KB shared canvas is the framework's, not counted). A game that
+// declares exclusive mode (NX_NET_APP / NX_SOLO...) gets the RAM the OS frees for it; one that does not must
+// live in what the launcher leaves. Every block must also fit the largest FREE block (~21 KB measured at the
+// launcher), and closing must give everything back.
+static long nh_budget_peak(void) { return nh_app->exclusive_flags ? 64 * 1024 : 16 * 1024; }
+static long nh_budget_block(void) { return nh_app->exclusive_flags ? 28 * 1024 : 16 * 1024; }
+static long nh_worst_peak, nh_worst_block;
 static void nh_close_app(void) {
+    long app_ram = 0;
+    for (const nucleo_app_ram_t *r = nh_app->ram; r && r->ptr; r++) app_ram += r->bytes;
     if (nh_app->on_exit) nh_app->on_exit();
     for (const nucleo_app_ram_t *r = nh_app->ram; r && r->ptr; r++) { free(*r->ptr); *r->ptr = nullptr; }
+    if (nh_heap.peak > nh_worst_peak) nh_worst_peak = nh_heap.peak;
+    if (nh_heap.largest > nh_worst_block) nh_worst_block = nh_heap.largest;
+    nh_check(nh_heap.peak <= nh_budget_peak(), "RAM: heap peak %ld B is over the %ld B budget (APP_RAM %ld B)", nh_heap.peak, nh_budget_peak(), app_ram);
+    nh_check(nh_heap.largest <= nh_budget_block(), "RAM: a single %ld B block will not fit the device's largest free block (budget %ld B)", nh_heap.largest, nh_budget_block());
+    nh_check(nh_heap.live == 0, "RAM: %ld B still allocated after the game closed (leak)", nh_heap.live);
+    nh_heap.on = false;
 }
 
 void nh_register(void);
@@ -305,6 +349,7 @@ int main(int argc, char **argv) {
     const char *which = argc > 1 ? argv[1] : "all";
     uint32_t seed = argc > 2 ? (uint32_t)strtoul(argv[2], nullptr, 10) : 7;
     nh_scenarios(which, seed);
+    printf("%s: heap peak %ld B, largest block %ld B (budget %ld / %ld B)\n", NH_GAME_NAME, nh_worst_peak, nh_worst_block, nh_budget_peak(), nh_budget_block());
     printf("%s: %d checks, %d failed (%d frames, %d drawn)\n", NH_GAME_NAME, nh_nchecks, nh_nfail, nh_frames, nh_draws);
     return nh_nfail ? 1 : 0;
 }

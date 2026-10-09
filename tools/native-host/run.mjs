@@ -114,7 +114,7 @@ for (const id of ids) {
       execFileSync(src.endsWith('.c') ? GCC : GPP, [...(src.endsWith('.c') ? CC : CXX), '-c', src, '-o', obj], { env, stdio: 'pipe' });
       objs.push(obj);
     }
-    execFileSync(GPP, [...CXX, '-DNH_GAME_ID="' + id + '"', tu, ...objs, ...lgfxObjs, '-o', join(OUT, `${id}.exe`)], { env, stdio: 'pipe' });
+    execFileSync(GPP, [...CXX, '-DNH_GAME_ID="' + id + '"', tu, ...objs, ...lgfxObjs, '-Wl,--wrap=malloc,--wrap=free,--wrap=calloc,--wrap=realloc', '-o', join(OUT, `${id}.exe`)], { env, stdio: 'pipe' });
   } catch (e) {
     const msg = String(e.stderr || e.message).split('\n').filter((l) => /error|undefined reference/.test(l)).slice(0, 12).join('\n');
     console.log(`FAIL ${id}: build\n${msg}`); failed++; summary.push(`${id}: BUILD FAILED`); continue;
