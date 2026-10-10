@@ -1,0 +1,1099 @@
+{
+  "_doc": "Art for the web Costellazioni (docs/costellazioni.md, tools/costellazioni-assets/lore.md). Qwen-Image 2.1 turbo int8 via ComfyUI (gen-images.mjs), 20 steps, cfg 1, euler/simple. kind 'cast' = the recurring characters' reference portraits (generated first); an entry with 'refs' is generated with those portraits as reference images so the faces stay the same. 'style' keys are appended to the prompt. No text in any image. 'out' = shipped WebP size.",
+  "styles": {
+    "base": "cinematic science fiction key art, painterly digital matte painting with visible confident brushwork, rich fine detail, retro-futurist industrial design, chunky lived-in hard surfaces, dramatic volumetric light and atmospheric depth, deep space colours, no text, no letters, no logo, no watermark",
+    "gilda": "palette of polished brass, ivory and deep royal blue, warm orderly interior light",
+    "custodi": "palette of verdigris green, candle gold and pale white stone, incense haze, sacred silence",
+    "relitti": "palette of rust, sodium-vapour orange and oil black, sparks and grime, improvised and alive",
+    "eco": "palette of cyan and violet lattice light on deep black, crystalline geometry, eerie beauty",
+    "portrait": "cinematic character concept painting, head and shoulders, realistic detailed expressive face, weathered skin and worn clothes with fine detail, dramatic rim light, painterly dark background, no text",
+    "emblem": "heraldic emblem, a single centred symbol on a plain dark background, flat painted graphic design, crisp edges, symmetric, no text, no letters"
+  },
+  "images": [
+    {
+      "id": "pilot",
+      "kind": "cast",
+      "w": 1024,
+      "h": 1024,
+      "out": [
+        384,
+        384
+      ],
+      "seed": 2001,
+      "style": [
+        "portrait"
+      ],
+      "prompt": "Ren Calloway, an independent courier pilot, man in his late thirties, short dark hair with grey at the temples, stubble, worn olive flight jacket with a faded courier patch on the shoulder, tired kind eyes, looking slightly off camera"
+    },
+    {
+      "id": "broker",
+      "kind": "cast",
+      "w": 1024,
+      "h": 1024,
+      "out": [
+        384,
+        384
+      ],
+      "seed": 2002,
+      "style": [
+        "portrait",
+        "gilda"
+      ],
+      "prompt": "Vesna Ardali, a guild trade broker, woman in her fifties, sharp face, silver hair in a tight chignon, a small brass monocle implant over her left eye, high-collared ivory coat with royal blue piping, shrewd half smile"
+    },
+    {
+      "id": "admiral",
+      "kind": "cast",
+      "w": 1024,
+      "h": 1024,
+      "out": [
+        384,
+        384
+      ],
+      "seed": 2003,
+      "style": [
+        "portrait",
+        "gilda"
+      ],
+      "prompt": "Admiral Teodor Raske, a broad man in his sixties, short trimmed white beard, a scar across his right cheek, royal blue uniform with brass epaulettes, stern gaze"
+    },
+    {
+      "id": "abbess",
+      "kind": "cast",
+      "w": 1024,
+      "h": 1024,
+      "out": [
+        384,
+        384
+      ],
+      "seed": 2004,
+      "style": [
+        "portrait",
+        "custodi"
+      ],
+      "prompt": "Mother Ilse of the Lamp, a very old serene abbess, deep wrinkles, hood of pale grey wool, fine gold glyph tattoos on her forehead, her left eye clouded white, candle light on her face"
+    },
+    {
+      "id": "novice",
+      "kind": "cast",
+      "w": 1024,
+      "h": 1024,
+      "out": [
+        384,
+        384
+      ],
+      "seed": 2005,
+      "style": [
+        "portrait",
+        "custodi"
+      ],
+      "prompt": "Brother Nilo, a teenage monk novice, shaved head, freckles, oversized verdigris green robe, holding a small glowing crystal lantern, curious eyes"
+    },
+    {
+      "id": "matriarch",
+      "kind": "cast",
+      "w": 1024,
+      "h": 1024,
+      "out": [
+        384,
+        384
+      ],
+      "seed": 2006,
+      "style": [
+        "portrait",
+        "relitti"
+      ],
+      "prompt": "Mara Okonkwo called Rustmother, a woman in her forties with dark skin, long braids tied with copper wire, a cybernetic left arm made of scavenged parts, welding goggles pushed up on her forehead, fierce and proud"
+    },
+    {
+      "id": "mechanic",
+      "kind": "cast",
+      "w": 1024,
+      "h": 1024,
+      "out": [
+        384,
+        384
+      ],
+      "seed": 2007,
+      "style": [
+        "portrait",
+        "relitti"
+      ],
+      "prompt": "Pip, a sixteen year old ship mechanic girl, red hair in a messy bun, grease on her cheeks, oversized orange coveralls, a big wrench resting on her shoulder, cheeky grin"
+    },
+    {
+      "id": "echo",
+      "kind": "cast",
+      "w": 1024,
+      "h": 1024,
+      "out": [
+        384,
+        384
+      ],
+      "seed": 2008,
+      "style": [
+        "portrait",
+        "eco"
+      ],
+      "prompt": "The Voice of the Echo, an abstract calm face made only of glowing cyan and violet crystal lattice lines, no skin, two bright nodes as eyes, unknowable"
+    },
+    {
+      "id": "ace_gutter",
+      "kind": "cast",
+      "w": 1024,
+      "h": 1024,
+      "out": [
+        384,
+        384
+      ],
+      "seed": 2009,
+      "style": [
+        "portrait",
+        "relitti"
+      ],
+      "prompt": "Scarlet Gutter, a wiry pirate ace pilot woman, holding a cracked red flight helmet under her arm, crooked grin with a gold tooth, scarred knuckles"
+    },
+    {
+      "id": "ace_lancer",
+      "kind": "cast",
+      "w": 1024,
+      "h": 1024,
+      "out": [
+        384,
+        384
+      ],
+      "seed": 2010,
+      "style": [
+        "portrait",
+        "gilda"
+      ],
+      "prompt": "Lancer Prime Dax Oren, a young chiselled elite pilot, chrome flight helmet with the visor up, piercing blue eyes, immaculate blue and ivory uniform"
+    },
+    {
+      "id": "ace_bram",
+      "kind": "cast",
+      "w": 1024,
+      "h": 1024,
+      "out": [
+        384,
+        384
+      ],
+      "seed": 2011,
+      "style": [
+        "portrait",
+        "relitti"
+      ],
+      "prompt": "One-Eye Bram, a big old smuggler, leather eyepatch, long grey coat, tattooed knuckles, amused weary smile"
+    },
+    {
+      "id": "ace_vigil",
+      "kind": "cast",
+      "w": 1024,
+      "h": 1024,
+      "out": [
+        384,
+        384
+      ],
+      "seed": 2012,
+      "style": [
+        "portrait",
+        "custodi"
+      ],
+      "prompt": "Sister Vigil, a warrior nun pilot in her thirties, shaved head, ceremonial white and gold armour, calm grey eyes"
+    },
+    {
+      "id": "title",
+      "kind": "art",
+      "w": 1344,
+      "h": 768,
+      "out": [
+        1280,
+        720
+      ],
+      "seed": 3001,
+      "style": [
+        "base"
+      ],
+      "prompt": "Epic wide key art. In the foreground a small battered courier starship with a warm orange engine glow banks toward the viewer, its hull scratched and patched. Behind it a vast spiral galaxy fills the sky. Colossal ancient crystalline beacon spires float at different distances, each a faceted tower of pale crystal wrapped in old metal rings, connected to distant suns by thin threads of golden light; most threads are broken and fade into darkness, only a few still shine. A huge banded gas giant with a thin ring curves across the lower right. Tiny particles of dust catch the light. Mood of wonder, loneliness and hope"
+    },
+    {
+      "id": "emblem_gilda",
+      "kind": "emblem",
+      "w": 1024,
+      "h": 1024,
+      "out": [
+        384,
+        384
+      ],
+      "seed": 3101,
+      "style": [
+        "emblem",
+        "gilda"
+      ],
+      "prompt": "a golden balance scale with ivory pans inside a ring of eight small stars, engraved brass on a deep royal blue enamel disc"
+    },
+    {
+      "id": "emblem_custodi",
+      "kind": "emblem",
+      "w": 1024,
+      "h": 1024,
+      "out": [
+        384,
+        384
+      ],
+      "seed": 3102,
+      "style": [
+        "emblem",
+        "custodi"
+      ],
+      "prompt": "a slender stylized beacon tower radiating a single beam of candle-gold light, inside a circle of small dots, carved in pale white stone with verdigris bronze inlay"
+    },
+    {
+      "id": "emblem_relitti",
+      "kind": "emblem",
+      "w": 1024,
+      "h": 1024,
+      "out": [
+        384,
+        384
+      ],
+      "seed": 3103,
+      "style": [
+        "emblem",
+        "relitti"
+      ],
+      "prompt": "a broken ship anchor crossed with a salvage hook over a cracked cog wheel, rusted iron welded together, sodium orange paint chipped"
+    },
+    {
+      "id": "emblem_eco",
+      "kind": "emblem",
+      "w": 1024,
+      "h": 1024,
+      "out": [
+        384,
+        384
+      ],
+      "seed": 3104,
+      "style": [
+        "emblem",
+        "eco"
+      ],
+      "prompt": "an abstract eye made of concentric glowing hexagons and thin lattice lines, cyan and violet light, perfectly symmetric"
+    },
+    {
+      "id": "hall_gilda",
+      "kind": "art",
+      "w": 1344,
+      "h": 768,
+      "out": [
+        1280,
+        720
+      ],
+      "seed": 3201,
+      "refs": [
+        "broker"
+      ],
+      "style": [
+        "base",
+        "gilda"
+      ],
+      "prompt": "The woman from <image1>, the guild broker Vesna Ardali, stands at a brass railing in the foreground, looking down with a shrewd half smile. Behind her opens the Ardali Exchange, the grand trading hall of a merchant space station: tall arched windows of riveted brass show a blue ocean planet, tiers of balconies crowded with brokers in ivory coats, floating holographic price columns glowing soft amber, cargo cranes and docking ships beyond the glass, polished marble floor reflecting the warm light"
+    },
+    {
+      "id": "hall_custodi",
+      "kind": "art",
+      "w": 1344,
+      "h": 768,
+      "out": [
+        1280,
+        720
+      ],
+      "seed": 3202,
+      "refs": [
+        "abbess",
+        "novice"
+      ],
+      "style": [
+        "base",
+        "custodi"
+      ],
+      "prompt": "Inside the Lamp Monastery, built within the cold hollow shell of a dead stellar beacon. In the foreground the old abbess from <image1> lights a candle while the young novice from <image2> holds his small crystal lantern beside her. Behind them rises the dormant crystalline core of the beacon, huge and dark, veined with faint gold, surrounded by hundreds of candles on stone ledges. Pale stone galleries and stairways wind up the curved walls, thin shafts of starlight fall through cracks, incense smoke drifts in the beams"
+    },
+    {
+      "id": "hall_relitti",
+      "kind": "art",
+      "w": 1344,
+      "h": 768,
+      "out": [
+        1280,
+        720
+      ],
+      "seed": 3203,
+      "refs": [
+        "matriarch",
+        "mechanic"
+      ],
+      "style": [
+        "base",
+        "relitti"
+      ],
+      "prompt": "Hulk-town Gutterdeep, a crowded market town built inside the gutted hull of a giant freighter. In the foreground the woman from <image1>, Mara the Rustmother, stands with arms crossed, and the girl mechanic from <image2> sits on a crate with her wrench, grinning. Behind them: stacked stalls of salvaged engine parts, hanging sodium lamps, laundry lines between catwalks, a welder throwing a fountain of sparks, children running, steam pipes, a patched starfighter hanging from chains under the ribbed ceiling"
+    },
+    {
+      "id": "hall_eco",
+      "kind": "art",
+      "w": 1344,
+      "h": 768,
+      "out": [
+        1280,
+        720
+      ],
+      "seed": 3204,
+      "style": [
+        "base",
+        "eco"
+      ],
+      "prompt": "Inside the Choir, an immense alien structure made entirely of light: endless cathedral-like vaults of glowing cyan and violet crystal lattice folding into impossible geometry, beams of light weaving between floating polyhedra. At the very centre a tiny human starship hovers with its lights on, dwarfed and in awe. Deep black space visible through gaps in the lattice"
+    },
+    {
+      "id": "hangar",
+      "kind": "art",
+      "w": 1344,
+      "h": 768,
+      "out": [
+        1280,
+        720
+      ],
+      "seed": 3205,
+      "refs": [
+        "pilot",
+        "mechanic"
+      ],
+      "style": [
+        "base",
+        "relitti"
+      ],
+      "prompt": "A cluttered repair hangar inside a wreck. The girl mechanic from <image2> is half inside an open engine pod of a rugged olive and cream courier starship, sparks flying from her tool, while the pilot from <image1> leans on a crate drinking from a dented mug and watching her. Hanging lamps, chains, spare parts, oil stains, a big hangar door open on the stars"
+    },
+    {
+      "id": "brief_patrol",
+      "kind": "art",
+      "w": 1344,
+      "h": 768,
+      "out": [
+        1024,
+        576
+      ],
+      "seed": 3301,
+      "refs": [
+        "admiral"
+      ],
+      "style": [
+        "base",
+        "gilda"
+      ],
+      "prompt": "The admiral from <image1>, Teodor Raske, stands on the bridge of a guild cruiser with hands behind his back, seen at three quarters, lit by blue instrument panels and brass fittings. Through the wide bridge window a wing of four sleek ivory and blue interceptors flies in tight formation past a field of tumbling asteroids, engine trails glowing"
+    },
+    {
+      "id": "brief_bounty",
+      "kind": "art",
+      "w": 1344,
+      "h": 768,
+      "out": [
+        1024,
+        576
+      ],
+      "seed": 3302,
+      "refs": [
+        "ace_gutter"
+      ],
+      "style": [
+        "base",
+        "relitti"
+      ],
+      "prompt": "The pirate pilot from <image1>, Scarlet Gutter, leans against the nose of her customized red pirate fighter, cracked red helmet under her arm, crooked grin. The fighter is covered in painted kill marks and trophies welded to the hull. They are in the shadow of a huge rusted wreck, orange light from a distant star cutting through holes in the hull"
+    },
+    {
+      "id": "brief_escort",
+      "kind": "art",
+      "w": 1344,
+      "h": 768,
+      "out": [
+        1024,
+        576
+      ],
+      "seed": 3303,
+      "refs": [
+        "ace_bram"
+      ],
+      "style": [
+        "base",
+        "gilda"
+      ],
+      "prompt": "The smuggler from <image1>, One-Eye Bram, in the cockpit of an old cargo hauler, looking back over his shoulder. Through the canopy, a long slow convoy of armoured cargo haulers crosses a coloured nebula of rose and teal, small escort fighters weaving around them, distant red threat lights in the dark"
+    },
+    {
+      "id": "brief_defend",
+      "kind": "art",
+      "w": 1344,
+      "h": 768,
+      "out": [
+        1024,
+        576
+      ],
+      "seed": 3304,
+      "refs": [
+        "ace_vigil"
+      ],
+      "style": [
+        "base",
+        "custodi"
+      ],
+      "prompt": "The warrior nun pilot from <image1>, Sister Vigil, in the foreground in her white and gold armour, calm, helmet in hand. Behind her through a great window a beacon station is under siege: its turrets firing streams of gold tracer, swarms of enemy fighters, and a huge dark capital ship emerging from the shadows"
+    },
+    {
+      "id": "brief_rival",
+      "kind": "art",
+      "w": 1344,
+      "h": 768,
+      "out": [
+        1024,
+        576
+      ],
+      "seed": 3305,
+      "refs": [
+        "ace_lancer"
+      ],
+      "style": [
+        "base",
+        "gilda"
+      ],
+      "prompt": "The elite pilot from <image1>, Lancer Prime Dax Oren, in the cockpit of his chrome and ivory interceptor, visor up, staring straight ahead with cold confidence, blue instrument light on his face, his wingmen in formation visible through the canopy"
+    },
+    {
+      "id": "lore_beacon_lit",
+      "kind": "art",
+      "w": 1344,
+      "h": 768,
+      "out": [
+        1280,
+        720
+      ],
+      "seed": 3401,
+      "style": [
+        "base"
+      ],
+      "prompt": "An ancient beacon of the Costellatori in its prime, nine centuries ago: a colossal faceted crystalline spire floating in deep space, wrapped in rotating rings of pale metal engraved with star charts, blazing from within with white and gold light. Beams of light reach out from its tip toward distant stars, forming a luminous network. Tiny elegant ships approach along the beams"
+    },
+    {
+      "id": "lore_beacon_dead",
+      "kind": "art",
+      "w": 1344,
+      "h": 768,
+      "out": [
+        1280,
+        720
+      ],
+      "seed": 3402,
+      "style": [
+        "base",
+        "custodi"
+      ],
+      "prompt": "The dark dormant shell of a colossal crystalline beacon drifting in silence, its facets frosted and cracked, its metal rings stopped. A single small monastic shuttle with warm candle-lit windows is docked at its base, the only light in the scene. A faint nebula far behind"
+    },
+    {
+      "id": "lore_beacon_relight",
+      "kind": "art",
+      "w": 1344,
+      "h": 768,
+      "out": [
+        1280,
+        720
+      ],
+      "seed": 3403,
+      "style": [
+        "base",
+        "eco"
+      ],
+      "prompt": "A dead beacon reigniting: light bursts from its crystalline core outward through every crack, rings of white light expanding in a shockwave through space, the metal rings starting to turn again. In the shockwave strange cyan and violet lattice shapes begin to unfold, like something waking up. A small courier ship is pushed back by the blast"
+    },
+    {
+      "id": "lore_costellatori",
+      "kind": "art",
+      "w": 1344,
+      "h": 768,
+      "out": [
+        1280,
+        720
+      ],
+      "seed": 3404,
+      "style": [
+        "base"
+      ],
+      "prompt": "An ancient bas-relief mural carved in pale stone on a ruined wall: a vanished civilization of tall graceful robed beings with elongated heads, mapping the stars by stretching threads of light between them, constellations and orbit diagrams carved around them, weathered and cracked, moss and dust in the grooves, lit by a low warm sun"
+    },
+    {
+      "id": "lore_dimming",
+      "kind": "art",
+      "w": 1344,
+      "h": 768,
+      "out": [
+        1280,
+        720
+      ],
+      "seed": 3405,
+      "style": [
+        "base"
+      ],
+      "prompt": "A vast galaxy seen from above like a living map: luminous golden routes between stars go dark one by one, darkness spreading like ink across the spiral arms, only a few scattered islands of light remain glowing. Melancholic and grand"
+    },
+    {
+      "id": "lore_echo_voice",
+      "kind": "art",
+      "w": 1344,
+      "h": 768,
+      "out": [
+        1280,
+        720
+      ],
+      "seed": 3406,
+      "refs": [
+        "pilot",
+        "echo"
+      ],
+      "style": [
+        "base",
+        "eco"
+      ],
+      "prompt": "Night in a cramped dark cockpit. The pilot from <image1>, Ren Calloway, leans toward the glowing comms screen, his face lit cyan. On the screen, out of static interference, the abstract face of light from <image2> takes shape. Switches, worn leather seat, a dangling good-luck charm, stars outside the canopy"
+    },
+    {
+      "id": "lore_echo_fleet",
+      "kind": "art",
+      "w": 1344,
+      "h": 768,
+      "out": [
+        1280,
+        720
+      ],
+      "seed": 3407,
+      "style": [
+        "base",
+        "eco"
+      ],
+      "prompt": "A fleet of alien ships made of glowing crystal lattice unfolding out of a reawakened beacon: each ship a geometric arrangement of cyan and violet light planes, some small and sharp like shards, some huge like cathedrals of light, moving in perfect formation. Beautiful and frightening"
+    },
+    {
+      "id": "lore_warden",
+      "kind": "art",
+      "w": 1344,
+      "h": 768,
+      "out": [
+        1280,
+        720
+      ],
+      "seed": 3408,
+      "style": [
+        "base",
+        "eco"
+      ],
+      "prompt": "The Warden of the Dark: a colossal entity of black crystal and violet light the size of a moon, a crown of slowly rotating lattice rings around a single burning white core like an eye. Tiny fighters with engine trails swarm around it like insects. Deep dark space, an ominous violet glow"
+    },
+    {
+      "id": "lore_graveyard",
+      "kind": "art",
+      "w": 1344,
+      "h": 768,
+      "out": [
+        1280,
+        720
+      ],
+      "seed": 3409,
+      "style": [
+        "base",
+        "relitti"
+      ],
+      "prompt": "A ship graveyard in orbit around a swollen red giant star: hundreds of broken hulls of every age drifting in a slow ring, torn plating, frozen debris. Salvage crews in small tugs with bright work lights cut into the wrecks, cutting torches throwing sparks"
+    },
+    {
+      "id": "lore_deep",
+      "kind": "art",
+      "w": 1344,
+      "h": 768,
+      "out": [
+        1280,
+        720
+      ],
+      "seed": 3410,
+      "style": [
+        "base",
+        "eco"
+      ],
+      "prompt": "A lonely deep sector at the edge of the galaxy: very few stars, a vast dark nebula with faint violet edges, the galaxy itself a distant glowing band behind. A single faint beacon light far away. Silence and vastness"
+    },
+    {
+      "id": "lore_truth",
+      "kind": "art",
+      "w": 1344,
+      "h": 768,
+      "out": [
+        1280,
+        720
+      ],
+      "seed": 3411,
+      "refs": [
+        "abbess"
+      ],
+      "style": [
+        "base",
+        "custodi"
+      ],
+      "prompt": "The old abbess from <image1> stands before a wall of glowing ancient script in a ruin, her hand on the stone, her face lit gold with dread. The carved script and diagrams show stars being deliberately extinguished one by one and a great shape beyond the edge of the galaxy"
+    },
+    {
+      "id": "lore_beyond",
+      "kind": "art",
+      "w": 1344,
+      "h": 768,
+      "out": [
+        1280,
+        720
+      ],
+      "seed": 3412,
+      "style": [
+        "base",
+        "eco"
+      ],
+      "prompt": "Beyond the edge of the galaxy: in the intergalactic void, a vast unknowable shape made of darkness and faint red light watches the spiral galaxy from afar, so large that the galaxy looks small. Cosmic dread, minimal and haunting"
+    },
+    {
+      "id": "world_rocky",
+      "kind": "art",
+      "w": 1344,
+      "h": 768,
+      "out": [
+        1280,
+        720
+      ],
+      "seed": 3501,
+      "style": [
+        "base"
+      ],
+      "prompt": "Alien rocky planet surface at dawn: layered ochre mesas and deep canyons, a thin pale atmosphere, two moons in a peach sky. In the foreground pale stone ruins of the Costellatori half buried in sand, a broken arch carved with star charts. A small landed courier ship near the ruins"
+    },
+    {
+      "id": "world_desert",
+      "kind": "art",
+      "w": 1344,
+      "h": 768,
+      "out": [
+        1280,
+        720
+      ],
+      "seed": 3502,
+      "style": [
+        "base"
+      ],
+      "prompt": "Alien desert world: towering dunes of copper sand under a huge white sun, giant fossil ribs of an unknown creature arching over the dunes, a crashed starship half buried, heat haze, a caravan of hover sleds in the distance"
+    },
+    {
+      "id": "world_ocean",
+      "kind": "art",
+      "w": 1344,
+      "h": 768,
+      "out": [
+        1280,
+        720
+      ],
+      "seed": 3503,
+      "style": [
+        "base"
+      ],
+      "prompt": "Alien ocean world: endless turquoise sea with floating islands of bioluminescent coral glowing at dusk, curtains of rain in the distance, a ringed planet rising on the horizon, a floating harbour on stilts with warm lights"
+    },
+    {
+      "id": "world_ice",
+      "kind": "art",
+      "w": 1344,
+      "h": 768,
+      "out": [
+        1280,
+        720
+      ],
+      "seed": 3504,
+      "style": [
+        "base"
+      ],
+      "prompt": "Frozen alien world: blue glaciers and tall ice spires, green and violet aurora in a dark sky, a half frozen crystalline monument of the Costellatori emerging from the ice, a small expedition with lights at its base"
+    },
+    {
+      "id": "world_jungle",
+      "kind": "art",
+      "w": 1344,
+      "h": 768,
+      "out": [
+        1280,
+        720
+      ],
+      "seed": 3505,
+      "style": [
+        "base"
+      ],
+      "prompt": "Alien jungle world: giant spiral trees with glowing teal fruit, mist between the trunks, strange winged creatures in flight, overgrown ancient stairs of pale stone climbing toward a hidden temple, shafts of golden light"
+    },
+    {
+      "id": "world_volcanic",
+      "kind": "art",
+      "w": 1344,
+      "h": 768,
+      "out": [
+        1280,
+        720
+      ],
+      "seed": 3506,
+      "style": [
+        "base"
+      ],
+      "prompt": "Volcanic alien world: rivers of glowing lava under black basalt cliffs, ash storms with lightning, a fortified mining outpost of rusted metal glowing orange on a cliff edge, cargo shuttles landing"
+    },
+    {
+      "id": "world_gas",
+      "kind": "art",
+      "w": 1344,
+      "h": 768,
+      "out": [
+        1280,
+        720
+      ],
+      "seed": 3507,
+      "style": [
+        "base",
+        "gilda"
+      ],
+      "prompt": "A floating cloud city above a banded gas giant at sunset: elegant brass and ivory towers on a great disc held up by glowing engines, golden storm bands below, gas harvester ships trailing vapour, airships and shuttles"
+    },
+    {
+      "id": "world_crystal",
+      "kind": "art",
+      "w": 1344,
+      "h": 768,
+      "out": [
+        1280,
+        720
+      ],
+      "seed": 3508,
+      "style": [
+        "base",
+        "eco"
+      ],
+      "prompt": "A world touched by the alien lattice: a landscape of hills and trees slowly turned into crystal geometry, glowing cyan veins running through the ground, floating shards above a lake, an eerie silent beauty under a violet sky"
+    },
+    {
+      "id": "ruin_gate",
+      "kind": "art",
+      "w": 1344,
+      "h": 768,
+      "out": [
+        1024,
+        576
+      ],
+      "seed": 3601,
+      "refs": [
+        "pilot"
+      ],
+      "style": [
+        "base"
+      ],
+      "prompt": "The pilot from <image1>, Ren Calloway, seen small from behind in the foreground, stands before the Gate of Threads: an enormous ancient gate of pale stone on a rocky alien plain, star charts and threads carved around its arch, a faint golden light pulsing inside the gate. Dust in the air, low sun"
+    },
+    {
+      "id": "ruin_archive",
+      "kind": "art",
+      "w": 1344,
+      "h": 768,
+      "out": [
+        1024,
+        576
+      ],
+      "seed": 3602,
+      "refs": [
+        "novice"
+      ],
+      "style": [
+        "base",
+        "custodi"
+      ],
+      "prompt": "The young novice from <image1> raises his small crystal lantern in the Silent Archive: a vast underground hall of tall shelves holding thousands of glowing crystal tablets, dust in the lantern light, carved columns, darkness beyond"
+    },
+    {
+      "id": "ruin_observatory",
+      "kind": "art",
+      "w": 1344,
+      "h": 768,
+      "out": [
+        1024,
+        576
+      ],
+      "seed": 3603,
+      "style": [
+        "base"
+      ],
+      "prompt": "The Last Observatory: a ruined alien observatory dome on a mountain peak above a sea of clouds, its great broken lens still pointed at a colourful nebula, stars wheeling above, wind-torn banners"
+    },
+    {
+      "id": "ship_courier",
+      "kind": "art",
+      "w": 1344,
+      "h": 768,
+      "out": [
+        1024,
+        576
+      ],
+      "seed": 3700,
+      "style": [
+        "base"
+      ],
+      "prompt": "The player courier starship in a hangar bay: a compact rugged ship with a stubby fuselage, two swivelling engine pods, a big cargo hatch, olive and cream paint scratched and patched, a faded courier stripe, warm hangar lights, tools and crates around it"
+    },
+    {
+      "id": "ship_lancer",
+      "kind": "art",
+      "w": 1344,
+      "h": 768,
+      "out": [
+        1024,
+        576
+      ],
+      "seed": 3701,
+      "style": [
+        "base",
+        "gilda"
+      ],
+      "prompt": "A sleek guild interceptor starfighter with forward swept wings, ivory hull with royal blue stripes and brass trim, blue engine glow, three quarter view flying against a nebula"
+    },
+    {
+      "id": "ship_bastion",
+      "kind": "art",
+      "w": 1344,
+      "h": 768,
+      "out": [
+        1024,
+        576
+      ],
+      "seed": 3702,
+      "style": [
+        "base",
+        "gilda"
+      ],
+      "prompt": "A heavily armoured guild heavy fighter, thick ivory armour plates with brass rivets, twin long cannons, glowing blue shield emitters, three quarter view in front of a station"
+    },
+    {
+      "id": "ship_scrapwing",
+      "kind": "art",
+      "w": 1344,
+      "h": 768,
+      "out": [
+        1024,
+        576
+      ],
+      "seed": 3703,
+      "style": [
+        "base",
+        "relitti"
+      ],
+      "prompt": "A cobbled-together pirate fighter made of mismatched salvaged parts, exposed engines, painted shark teeth on the nose, rust and orange paint, three quarter view flying through debris"
+    },
+    {
+      "id": "ship_hulk",
+      "kind": "art",
+      "w": 1344,
+      "h": 768,
+      "out": [
+        1024,
+        576
+      ],
+      "seed": 3704,
+      "style": [
+        "base",
+        "relitti"
+      ],
+      "prompt": "A converted freighter turned pirate warship, bristling with improvised turrets, welded armour plates and spikes, glowing orange windows, smoke trailing, three quarter view"
+    },
+    {
+      "id": "ship_censer",
+      "kind": "art",
+      "w": 1344,
+      "h": 768,
+      "out": [
+        1024,
+        576
+      ],
+      "seed": 3705,
+      "style": [
+        "base",
+        "custodi"
+      ],
+      "prompt": "An elegant ceremonial bomber of a monastic order, white hull with green-gold filigree like a reliquary, glowing torpedo bays, banners, three quarter view against a pale nebula"
+    },
+    {
+      "id": "ship_lattice",
+      "kind": "art",
+      "w": 1344,
+      "h": 768,
+      "out": [
+        1024,
+        576
+      ],
+      "seed": 3706,
+      "style": [
+        "base",
+        "eco"
+      ],
+      "prompt": "An alien interceptor made of folding planes of crystal lattice and light, cyan and violet, its shape shifting mid flight with trailing light fragments"
+    },
+    {
+      "id": "station_ardali",
+      "kind": "art",
+      "w": 1344,
+      "h": 768,
+      "out": [
+        1280,
+        720
+      ],
+      "seed": 3801,
+      "style": [
+        "base",
+        "gilda"
+      ],
+      "prompt": "Exterior of the Ardali Exchange, a grand merchant space station: a great ring of ivory and brass with domed halls and spires, hundreds of lit windows, traffic lanes of small ships with lights flowing in and out of the docks, a blue ocean planet below"
+    },
+    {
+      "id": "station_lamp",
+      "kind": "art",
+      "w": 1344,
+      "h": 768,
+      "out": [
+        1280,
+        720
+      ],
+      "seed": 3802,
+      "style": [
+        "base",
+        "custodi"
+      ],
+      "prompt": "Exterior of the Lamp Monastery: the dark crystalline shell of a dead beacon with a monastery of white stone and bronze built into its flank, small warm windows, bell towers, a procession of candle-lit shuttles approaching"
+    },
+    {
+      "id": "station_gutterdeep",
+      "kind": "art",
+      "w": 1344,
+      "h": 768,
+      "out": [
+        1280,
+        720
+      ],
+      "seed": 3803,
+      "style": [
+        "base",
+        "relitti"
+      ],
+      "prompt": "Exterior of Hulk-town Gutterdeep: the enormous gutted hull of an ancient freighter, its breaches patched with scrap and lit by orange lamps, improvised docks and cranes sticking out, smaller wrecks chained to it, small ships coming and going"
+    },
+    {
+      "id": "battle_asteroids",
+      "kind": "art",
+      "w": 1344,
+      "h": 768,
+      "out": [
+        1280,
+        720
+      ],
+      "seed": 3901,
+      "style": [
+        "base"
+      ],
+      "prompt": "A dogfight in a dense asteroid field: an ivory guild interceptor chases a rusty pirate fighter between tumbling rocks, bright laser bolts, an explosion flash lighting the asteroids, motion and speed, cinematic action"
+    },
+    {
+      "id": "battle_capital",
+      "kind": "art",
+      "w": 1344,
+      "h": 768,
+      "out": [
+        1280,
+        720
+      ],
+      "seed": 3902,
+      "style": [
+        "base",
+        "gilda"
+      ],
+      "prompt": "A great space battle: two capital ships exchange broadsides of glowing tracer fire, one of them burning, swarms of fighters and missile trails between them, debris and explosions, a planet curve below, epic scale"
+    },
+    {
+      "id": "battle_lattice",
+      "kind": "art",
+      "w": 1344,
+      "h": 768,
+      "out": [
+        1280,
+        720
+      ],
+      "seed": 3903,
+      "style": [
+        "base",
+        "eco"
+      ],
+      "prompt": "A lattice storm: alien crystal ships of cyan and violet light attack a desperate human fleet, beams of light cutting through hulls, shards of light everywhere, a reawakened beacon blazing in the background"
+    },
+    {
+      "id": "jump_beacon",
+      "kind": "art",
+      "w": 1344,
+      "h": 768,
+      "out": [
+        1280,
+        720
+      ],
+      "seed": 3904,
+      "style": [
+        "base"
+      ],
+      "prompt": "A small courier ship making a jump along a thread of golden light between two beacons, space stretching into streaks of light around it, the beacon behind it blazing, the destination beacon a bright point far away"
+    },
+    {
+      "id": "planet_descent",
+      "kind": "art",
+      "w": 1344,
+      "h": 768,
+      "out": [
+        1280,
+        720
+      ],
+      "seed": 3905,
+      "style": [
+        "base"
+      ],
+      "prompt": "A small courier ship descending through the clouds of an alien planet at sunrise, heat glow on its nose, vast mountains and a winding river below, the curve of the horizon, the beacon visible as a point of light in the sky"
+    },
+    {
+      "id": "trade_market",
+      "kind": "art",
+      "w": 1344,
+      "h": 768,
+      "out": [
+        1280,
+        720
+      ],
+      "seed": 3906,
+      "refs": [
+        "broker"
+      ],
+      "style": [
+        "base",
+        "gilda"
+      ],
+      "prompt": "A busy cargo dock of a merchant station: the broker from <image1> checks a glowing manifest tablet while dock workers in exosuits move stacked crates of spices, ore and crystal, cargo ships with open bays, brass cranes, warm light and steam"
+    }
+  ]
+}

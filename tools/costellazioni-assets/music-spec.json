@@ -1,0 +1,42 @@
+{
+  "_doc": "Costellazioni soundtrack (docs/costellazioni.md: 4 tracks max, compressed). Rendered with local ACE-Step 1.5 through hardstyle-lora/scripts/run_until_done.sh; the FLACs land in ~/Music/Costellazioni - Original Soundtrack and are copied to tools/costellazioni-assets/music/<id>.flac, then build-assets.py encodes Ogg Opus 64 kbps. The motif sentence is identical in every caption so the beacon motif recurs across the score.",
+  "_motivo": "A recurring five-note motif on a shimmering synth lead rises like a signal through the track.",
+  "band": "Costellazioni",
+  "album": "Original Soundtrack",
+  "master": false,
+  "lm": true,
+  "meta": { "genre": "Soundtrack", "date": "2026", "performer": "ACE-Step 1.5", "comment": "AI-generated game score for NucleoOS Costellazioni" },
+  "model": "acestep-v15-xl-turbo-bf16",
+  "style": "An epic, emotional cinematic orchestral piece with a wide, sweeping feel, like a space adventure film score.",
+  "defaults": { "bpm": 90, "duration": 170, "instrumental": true, "vocalLanguage": "en", "timeSignature": "4" },
+  "tracks": [
+    {
+      "_id": "theme",
+      "title": "Costellazioni",
+      "bpm": 88, "keyScale": "D major", "duration": 160,
+      "style": "An epic, emotional cinematic orchestral piece with a wide, sweeping feel, like a space adventure film score. It opens with soft, sustained strings and warm analog synth pads over a starry, atmospheric texture. A recurring five-note motif on a shimmering synth lead rises like a signal through the track. French horns and low brass take up the noble main theme, supported by deep timpani and driving percussion. The orchestra builds to a soaring, triumphant climax with full strings and powerful drums. The track is fully instrumental, with no vocals. It ends with the motif alone over soft pads, fading into silence. The production is wide, rich and high-fidelity.",
+      "lyrics": "[Intro - strings]\n\n[Main Theme - brass]\n\n[Build]\n\n[Climax - powerful]\n\n[Outro - synth]"
+    },
+    {
+      "_id": "islands",
+      "title": "Islands of Light",
+      "bpm": 96, "keyScale": "A major", "duration": 210,
+      "style": "A calm, dreamy cinematic ambient piece with a gentle, hopeful feel, made for slow space exploration. It is built on a soft, steady pulse of arpeggiated synths and a warm, deep bassline. Lush synth pads, delicate piano and soft strings move slowly in wide, shimmering layers. A recurring five-note motif on a shimmering synth lead rises like a signal through the track. The music drifts and builds gently to a warm, uplifting peak, then settles back into the soft arpeggios. The track is fully instrumental, with no vocals. The production is warm, spacious and high-fidelity, with long reverb.",
+      "lyrics": "[Intro - synth]\n\n[Main Theme]\n\n[Breakdown - piano]\n\n[Main Theme]\n\n[Outro - fade out]"
+    },
+    {
+      "_id": "dimming",
+      "title": "The Dimming",
+      "bpm": 70, "keyScale": "C minor", "duration": 190,
+      "style": "A dark, sparse and melancholic ambient piece with a lonely, mysterious atmosphere, set in the empty depths of space. It opens with a deep, slow drone and distant, reverb-drenched piano notes. Low cello and sustained strings swell and fade like slow breathing, with subtle analog synth textures and soft sub-bass. A recurring five-note motif on a shimmering synth lead rises like a signal through the track. The music stays quiet and introspective, with a slow, tense build and no drums. The track is fully instrumental, with no vocals. The production is dark, wide and atmospheric.",
+      "lyrics": "[Intro - piano]\n\n[Main Theme - strings]\n\n[Build]\n\n[Main Theme]\n\n[Outro - fade out]"
+    },
+    {
+      "_id": "storm",
+      "title": "Lattice Storm",
+      "bpm": 140, "keyScale": "D minor", "duration": 170,
+      "style": "An intense, high-energy cinematic orchestral battle track with driving electronic elements, like a space combat film score. It is driven by pounding taiko drums, relentless percussion and a pulsing, sidechained synth bass. Aggressive brass stabs and rapid strings play urgent, rhythmic figures over heavy kicks. A recurring five-note motif on a shimmering synth lead rises like a signal through the track. The music builds through rising tension to an explosive, triumphant climax, then drops back to the drums and pulsing bass. The track is fully instrumental, with no vocals. The production is massive, punchy and modern.",
+      "lyrics": "[Intro - drums]\n\n[Main Theme - brass]\n\n[Build]\n\n[Climax - powerful]\n\n[Breakdown - drums]\n\n[Main Theme - brass]\n\n[Outro - drums]"
+    }
+  ]
+}

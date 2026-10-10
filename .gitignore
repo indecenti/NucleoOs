@@ -110,3 +110,7 @@ tools/.device-sessions.json
 *.bak[0-9]
 /tools/scratch_*
 /tools/nucleo-tts/_*.txt
+
+# Costellazioni art/music sources (regenerable from prompts.json + seeds; only the compressed set ships)
+tools/costellazioni-assets/raw/
+tools/costellazioni-assets/music/

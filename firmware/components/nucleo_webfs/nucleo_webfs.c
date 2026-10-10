@@ -130,7 +130,12 @@ static const char *content_type(const char *path)
     if (!strcmp(e, ".svg")) return "image/svg+xml; charset=utf-8";
     if (!strcmp(e, ".png")) return "image/png";
     if (!strcmp(e, ".jpg") || !strcmp(e, ".jpeg")) return "image/jpeg";
+    if (!strcmp(e, ".webp")) return "image/webp";
+    if (!strcmp(e, ".avif")) return "image/avif";
     if (!strcmp(e, ".wav")) return "audio/wav";
+    if (!strcmp(e, ".ogg") || !strcmp(e, ".opus")) return "audio/ogg";
+    if (!strcmp(e, ".mp3")) return "audio/mpeg";
+    if (!strcmp(e, ".glb")) return "model/gltf-binary";
     if (!strcmp(e, ".wasm")) return "application/wasm";   // WebAssembly streaming compile needs this MIME (wllama/WebLLM libs)
     return "application/octet-stream";                     // .bin / .gguf model weights, etc.
 }

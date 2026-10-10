@@ -110,15 +110,22 @@ the game is playable after the code + first track; images stream in the backgrou
 |---|---|---|---|
 | Code (Three.js r160 already shipped) | repo | ES modules, .gz twins | ~1.5 MB |
 | Ship models | procedural kit + existing GLB | geometry in code | ~0.5 MB |
-| Illustrations (lore codex, faction emblems, station interiors, briefing art, planet/ruin vistas, title art) | **Qwen-Image 2.1** local (ComfyUI) | WebP q72, 1280x720 / 768x768 | ~45-60 images, ~14 MB |
-| Portraits (faction contacts, named aces, Keeper abbots, Echo "faces") | Qwen-Image 2.1 | WebP 512x512 | ~20, ~2 MB |
-| Music: 1 main theme, 2 exploration (calm / deep), 1 combat | **ACE-Step 1.5** local | Opus 64 kbps mono/stereo | 4 tracks, ~6 MB |
+| Illustrations (title, lore codex, faction emblems, station interiors/exteriors, briefings, battles, planet/ruin vistas, ships) | **Qwen-Image 2.1 base** local (ComfyUI), 20 steps | AVIF q54, 1280x720 / 1024x576, emblems 384x384 | 54 images, ~4 MB |
+| Portraits (the recurring cast of `tools/costellazioni-assets/lore.md`) | Qwen-Image 2.1 base | AVIF q62, 384x384 | 12, ~0.2 MB |
+| Music: 1 main theme, 2 exploration (calm / deep), 1 combat | **ACE-Step 1.5** local (`music-spec.json`) | Ogg Opus 64 kbps VBR stereo | 4 tracks, ~6 MB |
 | SFX | tools/sfx-gen + layered procedural | Opus / WAV small | ~1.5 MB |
 
 Art direction: painterly sci-fi concept art with a consistent palette per faction (Gilda: brass/ivory/blue;
 Custodi: verdigris/candle gold/white stone; Relitti: rust/sodium orange/oil black; Eco: cyan-violet lattice
 light on black), cinematic light, no text in images. Prompts and seeds are versioned in
-`tools/costellazioni-assets/` so every image can be regenerated. Licence: Qwen-Image 2.1 weights are under
+`tools/costellazioni-assets/` so every image can be regenerated:
+- `prompts.json` (prompt, seed, size, style keys) -> `gen-images.mjs` (ComfyUI API; the **base** model at 20 steps,
+  cfg 1, euler/simple — the turbo distillate over-sharpens skin and texture past its native 8 steps) -> `raw/`
+  (git-ignored). The cast portraits are generated first; every scene with a cast member passes those portraits as
+  reference images (`refs`, written `<image1>`... in the prompt), so faces, clothes and implants stay the same.
+- `build-assets.py` -> AVIF (about 27% smaller than WebP q72 at the same look) with a content hash in the file name,
+  plus `assets/manifest.json` (size, kind, load priority, two-colour placeholder gradient).
+- `games/stelle/assets.js` is the only loader: IndexedDB blob store keyed by the hashed name (see caching below). Licence: Qwen-Image 2.1 weights are under
 the Qwen licence (research/non-commercial terms flagged by some guides) — NucleoOS is non-commercial; the
 generated images are credited in the codex and the asset manifest.
 
