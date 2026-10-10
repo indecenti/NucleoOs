@@ -7,19 +7,20 @@
 //   · relit[sector]    — beacons you relit, kept after the sector advances (the shared beacon_lit resets);
 //   · scanned["sec:sys"] — surveyed worlds (bit per point of interest);
 //   · codex{id:order}  — unlocked codex entries, and seen{id:1} for the ones already read;
-//   · relights         — how many beacons you lit (the Echo weighs it).
+//   · relights         — how many beacons you lit (the Echo weighs it);
+//   · found["sec:sys:w"] / looted[...] — sites discovered on world w of a system, relics recovered there (bit per site).
 // Keyed by the run's seed: a new run (new seed) starts a fresh web save. Writes are debounced and best-effort.
 const PATH = '/data/costellazioni/web.json', DIR = '/data/costellazioni';
 const LS = 'cz.web';
 export const WEB_VER = 1;
 
 export function freshWeb(seed) {
-  return { ver: WEB_VER, seed: seed >>> 0, visited: {}, relit: {}, scanned: {}, codex: {}, seen: {}, relights: 0, n: 0 };
+  return { ver: WEB_VER, seed: seed >>> 0, visited: {}, relit: {}, scanned: {}, codex: {}, seen: {}, found: {}, looted: {}, relights: 0, n: 0 };
 }
 function sane(w, seed) {
   if (!w || typeof w !== 'object' || w.ver !== WEB_VER || (w.seed >>> 0) !== (seed >>> 0)) return null;
   const o = freshWeb(seed);
-  for (const k of ['visited', 'relit', 'scanned', 'codex', 'seen']) if (w[k] && typeof w[k] === 'object' && !Array.isArray(w[k])) o[k] = w[k];
+  for (const k of ['visited', 'relit', 'scanned', 'codex', 'seen', 'found', 'looted']) if (w[k] && typeof w[k] === 'object' && !Array.isArray(w[k])) o[k] = w[k];
   o.relights = Number.isFinite(w.relights) ? w.relights : 0; o.n = Number.isFinite(w.n) ? w.n : 0;
   return o;
 }
@@ -80,3 +81,10 @@ export const scanned = (w, sector, sys, poi) => !!w && bit(w.scanned[sector + ':
 export const hasCodex = (w, id) => !!w && w.codex[id] != null;
 export function unlock(w, id) { if (!w || w.codex[id] != null) return false; w.codex[id] = Object.keys(w.codex).length; return true; }
 export function markSeen(w, id) { if (!w || w.seen[id]) return false; w.seen[id] = 1; return true; }
+// M3: surface sites (per world of a system: "sector:sys:world" -> bitmask of site indices)
+const wkey = (sector, sys, wi) => sector + ':' + sys + ':' + wi;
+export const foundMask = (w, sector, sys, wi) => (w && w.found ? (w.found[wkey(sector, sys, wi)] >>> 0) || 0 : 0);
+export function markFound(w, sector, sys, wi, i) { if (!w) return false; w.found = w.found || {}; const k = wkey(sector, sys, wi), m = w.found[k] >>> 0; if (bit(m, i)) return false; w.found[k] = (m | (1 << i)) >>> 0; return true; }
+export const wasLooted = (w, sector, sys, wi, i) => !!w && !!w.looted && bit(w.looted[wkey(sector, sys, wi)] || 0, i);
+export function markLooted(w, sector, sys, wi, i) { if (!w) return false; w.looted = w.looted || {}; const k = wkey(sector, sys, wi), m = w.looted[k] >>> 0; if (bit(m, i)) return false; w.looted[k] = (m | (1 << i)) >>> 0; return true; }
+export const foundCount = (w) => { let n = 0; if (w && w.found) for (const k in w.found) { let m = w.found[k] >>> 0; while (m) { n += m & 1; m >>>= 1; } } return n; };

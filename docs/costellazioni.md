@@ -188,6 +188,86 @@ edges, mastered to the same loudness. The beacon motif recurs in all four.
   seed): visited systems per sector, relit beacons (kept after the sector advances), surveys, codex unlocks. The
   shared save contract and the generator output are unchanged.
 
+## What the web game shows today (M3 — worlds)
+Every landable world of every system is a whole planet you can fly down to, with no loading screen.
+New modules under `apps/games/www/games/stelle/`: `noise.js`, `planet.js`, `chunk.js`, `terrain-worker.js`,
+`terrain.js`, `atmo.js`, `props.js`, `surface.js` (about 170 KB of source, 57 KB gzipped).
+
+- **The worlds move** (`world.js`): universe time is `Date.now()/1000 − 1767225600` (tests pin it with `__czClock`).
+  Planets orbit their star in 3–9 days and spin; moons orbit their planet; the home planet keeps its place (the
+  station's frame). Inside a world's sphere of influence its frame carries everything (ships, bolts, missiles,
+  flares, pickups in the sim; particles, debris and trails in the renderer), so a landed ship stays landed.
+- **Descent** (`surface.js`, one state machine in the 60 Hz sim): `SPACE → DESCENT → ENTRY → FLIGHT → LANDING →
+  LANDED → TAKEOFF → FLIGHT → ASCENT → SPACE`. From orbit `L` ("Descend to …", "Dive into the clouds of …" on a gas
+  giant) starts an automatic dive: the cruise drops out, the ship brakes, dives, heats (hull heat bar, a plasma
+  sheath, embers, the hull glows), the air bleeds the speed, and below the clouds "you have the helm". Flying in
+  fast by hand is an entry too (drag and heat, yours to steer). The cruise drive is refused low in the air and the
+  jump drive and docking anywhere in it. `L` again lands (gear, a flat spot picked off any ruin's own ground, dust
+  or spray), takes off, or leaves the atmosphere (an automatic climb to orbit).
+- **Terrain**: a cube-sphere quadtree. Each chunk is 33×33 vertices plus skirts (1 221), built in module workers
+  from pooled typed arrays (ping-pong transfer, no per-frame allocation) and kept in an LRU slot pool. The lattice
+  is an exact binary fraction of each face, so neighbouring chunks compute the same height at the same vertex
+  (bit-identical seams, checked by the host test); CDLOD geomorphing hides level changes; frustum and horizon
+  culling. Height comes from an integer-hash gradient noise that is bit-identical in JS and GLSL (`noise.js`), on
+  web-only hash domains (`VDOM.SURF`, `FLORA`, `SITE`, `WEATHER`, `ORBIT`), seeded from the world; the orbital view
+  bakes the same macro shape and colours, so the planet seen from orbit is the one you land on. The shared
+  generator output is unchanged (the host test checks its digest).
+- **Biomes** (one rule set per type in `planet.js`, one shading branch per type in `terrain.js`): rocky — mesas,
+  terraces and canyons in banded red stone, snow on the highest peaks; desert — dune seas, wind-cut rock, salt
+  flats; ocean — islands with beaches, grass and dark cliffs, water with waves, sky reflection, sun glint and
+  shore foam; ice — packed snow, blue ice walls, crevasses, a frozen sea; jungle — river valleys, moss and mud,
+  mossy rock; volcanic — basalt, ash, cones, glowing fissures and a lava sea; crystal — violet ground, glassy
+  facets, cyan veins and glowing lakes; gas giant — no ground: three cloud decks coloured by its own bands,
+  the lowest one a pressure floor ("refuses gracefully": no landing, the pressure warning pushes you up). Detail
+  is triplanar procedural texture at four scales with slope/height blending and per-pixel relief; cloud shadows,
+  the ship's shadow, a headlight at night.
+- **Sky and weather** (`atmo.js`): single scattering (Rayleigh + Mie with an absorbing dust term, soft planet shadow)
+  drawn as a full-screen pass, with aerial perspective on terrain, flora and ship hulls; the sun's colour, the
+  sky light on the hulls, the exposure and the stars (hidden by day) all come from the same model (a JS twin of the
+  shader). A cloud shell plus billboard cloud puffs you fly through; weather per type (dust, rain, snow, ash, motes,
+  wind) with storms.
+- **Flora and props** (`props.js`): instanced kinds per biome — hoodoos and shrubs; fossil ribs and rock spires;
+  palms and coral; ice spires and frost; spiral trees with glowing fruit, ferns and glow pods; basalt columns, dead
+  trees and embers; crystal shards and lattices — scattered deterministically per ~300 m cell, faded with
+  distance (big kinds seen further), density and range by quality tier.
+- **Sites** (placed per world from its seed): Costellatori ruins (the Gate of Threads, the Silent Archive, the Last
+  Observatory on the highest ground), relic shrines, crashed ships, faction outposts. A passive scanner ping every
+  8 s in the air shows signals within 2.6 km; `Y` pings 7 km; `N` cycles the signals. A site is found by flying low
+  over it (under 240 m, within 320 m, 2.4 s) or landing near it: a banner, a radio line, credits and reputation,
+  the codex (the ruin entries and the Costellatori; the Archive brings the novice; the world type's entry on
+  arrival). Landing beside a found shrine (or a ruin that holds one) recovers a relic (cargo, or 220 cr when the
+  hold is full) and the Echo's sentinels rise; raiders come for a guarded wreck.
+- **Surface flight**: ground effect, speed lines, a terrain assist (`U`: levels off, pulls up before the ground),
+  terrain collision, bolts strike the ground, the AI keeps off it.
+- **Planet HUD** (`hud.js`): pitch ladder and horizon, flight-path marker, heading tape (planet north), altitude
+  above ground and sea, climb, ground speed, gear and assist, site markers with distance (signals until found),
+  the ping ring, survey and recovery bars, `PULL UP`, hull heat, pressure, landing line, context prompts. All text
+  at least 13 px; on phones the altitude panel stacks above the prompt and the speed panel, clear of the touch
+  buttons, the scanner has its own `SCN` button and the missile / flare counts ride on their buttons. Gamepad: R3
+  context action, L3 scan in the air; Back/B/Start close the jump map. Five languages.
+- **Web save**: `found` and `looted` bitmasks per `sector:system:world` in `/sd/data/costellazioni/web.json`
+  (never in the shared struct).
+- **Quality tiers** (terrain LOD distance `K`, finest vertex spacing, chunk pool, flora density and range, workers,
+  cloud puffs, weather particles): low 2.1 / 4.2 m / 300 / 0.32 × 380 m / 1 / 48 / 700; medium 2.5 / 2.6 m / 420 /
+  0.62 × 650 m / 2 / 90 / 1300; high 2.9 / 1.7 m / 540 / 1.0 × 950 m / 2 / 140 / 2200. Big flora kinds switch to a
+  light far mesh beyond ~320 m (the spiral tree: 1 031 → 288 triangles) and thin out with distance; the instance caps
+  fill from the camera out. The dynamic resolution steps down past 18 ms a frame (to 60 % of the tier's scale) and
+  back up under 12.5 ms.
+- **Measured** (1920×1080, 100 m over the jungle in rain, `E2E_GPU=1`, after the dynamic resolution settles;
+  frame interval avg / p95, then the frame's cost with the GPU waited for): Intel Arc 140T iGPU — auto (= medium,
+  scale 0.78) 15.5 / 16.9 ms, 16.5 ms; low 8.4 / 9.2 ms, 10.1 ms; medium (0.92) 16.0 / 16.8 ms, 18.0 ms; high (0.90)
+  15.2 / 16.0 ms, 18.9 ms. RTX 5070 Laptop — every tier at the 120 Hz cap (8.3 / 8.5 ms); cost auto (= high, 1.35)
+  9.6 ms, high 9.7 ms, medium 6.8 ms, low 4.9 ms.
+- **Tests**: `tools/games-host/test-costellazioni-worlds.mjs` (noise JS↔GLSL twin, terrain determinism and a digest
+  of the generated worlds — update `GOLDEN` deliberately when a surface rule changes —, chunk seams, POI
+  placement, flora, atmosphere, discovery persistence, the descent / landing / take-off state machine);
+  `tools/web-e2e/costellazioni.e2e.mjs` (a world visited end to end with a discovery and the web save, a phone
+  with touch emulation, the gamepad and the jump map, `E2E_GPU=1` frame times over a world per tier on the
+  discrete and the integrated GPU — `launchBrowser({ gpu: 'low-power' })`, `__czSync` for the GPU-waited cost);
+  `tools/web-e2e/costellazioni-shots.mjs --scenes worlds,entry,ruin,groundfight,worldhud --gpu` for review shots
+  (dev hooks `__cz.dev.overWorld(world, alt, sunEl, az, v)` and `__cz.dev.nearSite(world, kinds, dist, alt, v,
+  sunEl)`, flags `__czAutoLand`, `__czAutoSites`, `__czClock`).
+
 ## Native (Cardputer) — kept in step
 The native game keeps the shared numeric layer and save. It gets the same lore names and faction identities,
 a richer 8bpp look (dithered nebulae, lit planets, outlined ships, juicy combat) and the same mission types —
@@ -218,7 +298,7 @@ Budget: about 74 KB flash, 749 B static RAM, deepest frame 768 B (`npm run games
 2. **M2 Galaxy** — galaxy map, jumps and hyperspace, procedural planets (shaders) with atmosphere/rings/moons,
    stations by faction, docking into the hub, beacons relighting with Echo response.
 3. **M3 Worlds** — orbital descent, surface patch terrain + biomes + flora, ruins and relics, surface threats,
-   take-off.
+   take-off. Shipped on the web: see "What the web game shows today (M3 — worlds)".
 4. **M4 Story and sound** — codex and lore fragments, contacts and aces with portraits, the four tracks with a
    dynamic music system, Eco and Custodi rosters, the boss, polish.
 

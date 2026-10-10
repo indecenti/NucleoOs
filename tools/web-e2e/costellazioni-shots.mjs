@@ -3,7 +3,10 @@
 //   node tools/web-e2e/costellazioni-shots.mjs                       → every scene, build/web-e2e/costellazioni/review/
 //   node tools/web-e2e/costellazioni-shots.mjs --scenes kit,stations --gpu --size 1440x900
 //   --lang it   --out <dir>   --gpu (real GPU, like E2E_GPU=1)
+//   node tools/web-e2e/costellazioni-shots.mjs --scenes worlds --gpu --biomes ocean,ice   → M3 worlds, some biomes
 // Scenes are plain async functions below; each gets a fresh page with a seeded run (sector 1, credits, a relic).
+// M3 scenes (worlds, entry, ruin, groundfight, worldhud) place the ship with the __cz.dev hooks (overWorld,
+// nearSite) and pin the universe clock (__czClock) so the same light comes back on every run.
 import { join } from 'node:path';
 import { mkdirSync, existsSync, rmSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
@@ -56,6 +59,21 @@ const KIT_ROWS = {
   'kit-capitals-a': { list: [['warden', 0, false], ['hauler', 0, false]], o: {} },
   'kit-capitals-b': { list: [['hulk', 2, false], ['reliquary', 1, false]], o: {} },
 };
+
+// M3: a world of each type in sector 1 of the seed — [system, planet, azimuth round the sub-solar point where the
+// review flies: picked (at the pinned clock) so its signature flora stands ahead]
+export const BIOMES = { rocky: [9, 0, 30], ocean: [2, 0, 40], jungle: [5, 0, 300], ice: [6, 0, 240], desert: [6, 3, 20], volcanic: [2, 1, 100], crystal: [1, 0, 160], gas: [3, 1, 20] };
+const CLOCK = 1000;
+async function launch(page) {
+  await toHub(page); await key(page, '1'); await sleep(200); await key(page, 'Enter');
+  if (!await page.waitFor(`!!(window.__cz.game.flight && window.__cz.game.flight.t > 1)`, { timeout: 30000 })) throw new Error('launch');
+}
+const surf = (page) => page.eval(`(() => { const F = window.__cz.game.flight; if (!F) return null; const U = F.surf; return { st: U.st, alt: U.alt | 0, agl: U.agl | 0, found: U.found, heat: U.heat, d: U.nav >= 0 && U.sites[U.nav] ? U.sites[U.nav].d | 0 : -1 }; })()`);
+async function until(page, fn, timeout = 120000) { const end = Date.now() + timeout; for (;;) { const v = await surf(page); if (v && fn(v)) return v; if (Date.now() > end) throw new Error('timed out: ' + JSON.stringify(v)); await sleep(120); } }
+// nose down by `k` (0..1 of a right angle) along the current heading, or at the world's limb from orbit
+const lookDown = (page, k) => page.eval(`import('/apps/games/games/stelle/sim.js').then((S) => { const F = window.__cz.game.flight, U = F.surf, p = F.player, f = { x: 0, y: 0, z: 0 }; S.shipFwd(p, f); const c = Math.cos(${k} * Math.PI / 2), s = Math.sin(${k} * Math.PI / 2); S.qlook(p.q, f.x * c - U.up.x * s, f.y * c - U.up.y * s, f.z * c - U.up.z * s, U.up.x, U.up.y, U.up.z); F.input.aimReset = true; U.assist = false; return 1; })`);
+const lookAtWorld = (page, pi) => page.eval(`import('/apps/games/games/stelle/sim.js').then((S) => { const F = window.__cz.game.flight, W = F.worlds[${pi}], p = F.player; S.qlook(p.q, W.c.x - p.pos.x + W.R * 0.4, W.c.y - p.pos.y + W.R * 0.2, W.c.z - p.pos.z); F.input.aimReset = true; return 1; })`);
+const blank = (page) => page.goto('about:blank').catch(() => {});
 
 const SCENES = {
   async title(browser) {
@@ -182,6 +200,93 @@ const SCENES = {
       for (let i = 0; i < 5; i++) await key(page, 'ArrowRight');
       await sleep(1200); await artSettled(page); await shot(page, 'codex-contacts');
       await key(page, 'ArrowLeft'); await sleep(2200); await shot(page, 'codex-hangar');
+    } finally { await sim.stop(); }
+  },
+  // M3 — every biome from orbit, mid-descent (2.6 km, nose down) and low over the ground, in daylight
+  async worlds(browser) {
+    for (const b of arg('biomes', Object.keys(BIOMES).join(',')).split(',')) {
+      const [sys, pi, az] = BIOMES[b];
+      const sim = await startSim({ seed: { [SAVE_PATH]: { ...SAVE_SEED, sys } } });
+      try {
+        const page = await openGame(browser, sim, { flags: { __czEncounter: false, __czGod: true, __czClock: CLOCK } });
+        await launch(page);
+        await page.eval(`window.__cz.dev.overWorld(${pi}, 16000, 35, ${az}, 0), true`); await lookAtWorld(page, pi); await sleep(3500); await shot(page, `world-${b}-orbit`);
+        await page.eval(`window.__cz.dev.overWorld(${pi}, 2600, 35, ${az}, 140), true`); await sleep(300); await lookDown(page, 0.38); await sleep(4500); await shot(page, `world-${b}-descent`);
+        await page.eval(`window.__cz.dev.overWorld(${pi}, ${b === 'gas' ? 900 : 70}, 35, ${az}, 140), window.__cz.game.flight.surf.assist = true, true`); await sleep(6500); await shot(page, `world-${b}-surface`);
+        await blank(page);
+      } finally { await sim.stop(); }
+    }
+  },
+  // M3 — the dive from orbit: the autopilot descends, the hull heats, plasma, the air takes the speed
+  async entry(browser) {
+    const sim = await startSim({ seed: { [SAVE_PATH]: { ...SAVE_SEED, sys: 2 } } });
+    try {
+      const page = await openGame(browser, sim, { flags: { __czEncounter: false, __czGod: true, __czClock: CLOCK, __czAutopilot: true, __czAutoLand: true } });
+      await launch(page);
+      await page.eval(`window.__cz.dev.overWorld(0, 30000, 80, 20, 0), true`); await sleep(500);
+      await page.eval(`import('/apps/games/games/stelle/sim.js').then((S) => S.cmd(window.__cz.game.flight, 'descend'))`);
+      await until(page, (v) => v.st === 1 && v.heat > 0.45, 180000); await shot(page, 'world-entry');
+      await sleep(2500); await shot(page, 'world-entry-b');
+      await until(page, (v) => v.st === 2, 180000); await sleep(1500); await shot(page, 'world-helm');
+      await blank(page);
+    } finally { await sim.stop(); }
+  },
+  // M3 — a Costellatori ruin: the approach on its signal, landing beside it (the discovery), the take-off
+  async ruin(browser) {
+    const sim = await startSim({ seed: { [SAVE_PATH]: { ...SAVE_SEED, sys: 9 } } });
+    try {
+      const page = await openGame(browser, sim, { flags: { __czEncounter: false, __czGod: true, __czClock: CLOCK, __czAutopilot: true, __czAutoLand: true } });
+      await launch(page);
+      // a short final: 280 m out, slow and low, then land — the discovery is made on the ground, the camera shows the ruin
+      let si = await page.eval(`window.__cz.dev.nearSite(0, ['gate'], 280, 90, 25, 30)`); if (si < 0) si = await page.eval(`window.__cz.dev.nearSite(0, ['archive', 'observatory'], 280, 90, 25, 30)`);
+      if (si < 0) throw new Error('no ruin on this world');
+      await sleep(800); await page.eval(`import('/apps/games/games/stelle/sim.js').then((S) => S.cmd(window.__cz.game.flight, 'land'))`);
+      await until(page, (v) => v.st === 3, 20000); await sleep(2500); await shot(page, 'world-ruin-approach');
+      await until(page, (v) => v.found > 0); await sleep(900); await shot(page, 'world-ruin-discovery');
+      await until(page, (v) => v.st === 5); await sleep(1300); await shot(page, 'world-takeoff');
+      await blank(page);
+    } finally { await sim.stop(); }
+  },
+  // M3 — a relic recovered from a jungle shrine: the Echo's sentinels rise and the fight is low over the canopy
+  async groundfight(browser) {
+    const sim = await startSim({ seed: { [SAVE_PATH]: { ...SAVE_SEED, sys: 5 } } });
+    try {
+      const page = await openGame(browser, sim, { flags: { __czEncounter: false, __czGod: true, __czClock: CLOCK, __czAutopilot: true, __czAutoLand: true } });
+      await launch(page);
+      let si = -1;
+      for (let pi = 0; pi < 6 && si < 0; pi++) si = await page.eval(`window.__cz.dev.nearSite(${pi}, ['relic'], 280, 90, 25, 40)`);
+      if (si < 0) throw new Error('no relic in this system');
+      await sleep(800); await page.eval(`import('/apps/games/games/stelle/sim.js').then((S) => S.cmd(window.__cz.game.flight, 'land'))`);
+      await page.waitFor(`window.__cz.game.flight.ships.some((s) => s.alive && s.nameKey === 'cz_ship_sentinel')`, { timeout: 120000, interval: 200 });
+      await until(page, (v) => v.st === 2, 60000);
+      // hands to the combat autopilot: it turns on the drones instead of flying on to the next signal
+      await page.eval(`window.__cz.game.flight.autoLand = false, true`);
+      await page.waitFor(`(() => { const F = window.__cz.game.flight, p = F.player; return F.ships.some((s) => s.alive && s.nameKey === 'cz_ship_sentinel' && Math.hypot(s.pos.x - p.pos.x, s.pos.y - p.pos.y, s.pos.z - p.pos.z) < 900); })()`, { timeout: 30000, interval: 200 });
+      await sleep(2500); await shot(page, 'world-combat');
+      await sleep(2500); await shot(page, 'world-combat-b');
+      await blank(page);
+    } finally { await sim.stop(); }
+  },
+  // M3 — the planet HUD flying at a signal: 1440x900 (or --size) and a phone with touch controls
+  async worldhud(browser) {
+    const sim = await startSim({ seed: { [SAVE_PATH]: { ...SAVE_SEED, sys: 9 } } });
+    try {
+      for (const [name, vp, mobile] of [['world-hud', [W, H], false], ['world-hud-phone', [390, 844], true]]) {
+        const page = await browser.newPage();
+        await page.setViewport(vp[0], vp[1], mobile);
+        if (mobile) await page.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
+        await page.initScript(`Object.assign(window, ${JSON.stringify({ __czEncounter: false, __czGod: true, __czClock: CLOCK })});`);
+        await bootShell(page, sim, { lang: LANG, wait: false });
+        await page.goto(`${sim.origin}/apps/games/?host=constellations`);
+        if (!await page.waitFor(`document.getElementById('startBtn') && !document.getElementById('startBtn').disabled && document.getElementById('startBtn').offsetWidth > 0`, { timeout: 45000 })) throw new Error('waiting room');
+        await page.eval(`document.getElementById('startBtn').click(), true`);
+        await page.waitFor(`(() => { const m = document.querySelector('[data-modal]'), h = document.querySelector('[data-hub]'); return (m && m.style.display === 'flex' && m.querySelector('.cz-btn')) || (h && h.style.display === 'block'); })()`, { timeout: 45000 });
+        await launch(page);
+        await page.eval(`window.__cz.dev.nearSite(0, ['gate', 'observatory', 'archive'], 2600, 180, 120, 30)`);
+        await sleep(2500); await page.eval(`import('/apps/games/games/stelle/sim.js').then((S) => S.cmd(window.__cz.game.flight, 'scan'))`);
+        await sleep(1400); await shot(page, name);
+        await blank(page);
+      }
     } finally { await sim.stop(); }
   },
   async kit(browser) {

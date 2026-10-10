@@ -9,6 +9,7 @@
 // with a throttle sweet spot, boost, drift. The AI drives ships through the same controls the
 // player uses, so what it can do is what you can do — readable, fair, and it looks like flying.
 import { rng, vhash, VDOM, moonPos } from './world.js';
+import { initSurface, worldsStep, surfaceControl, surfaceAssist, surfacePost, cmdSurface, aiGround, surfaceObjective, autoSurface, autoFly } from './surface.js';
 
 export const DT = 1 / 60;
 export const TEAM_P = 0, TEAM_E = 1, TEAM_N = 2;
@@ -21,6 +22,8 @@ export const EV = {
   BOOST: 19, OVERHEAT: 20, CAPKILL: 21, BOARD: 22, PIPS: 23, TARGET: 24, WAVE: 25, END: 26, BUMP: 27,
   CHAIN: 28, LOCKING: 29, NOAMMO: 30, CRUISE: 31,
   PHASE: 32, CHORD: 33, DOCK: 35, JUMP: 36, RELIGHT: 37, SCAN: 38, TORP: 40, CHARGE: 41,
+  // M3 — worlds: a = state / note (stelle/surface.js), a site scanned / found / its relic recovered, a ship meets the ground
+  SURF: 42, SCANPING: 43, DISCOVER: 44, LOOT: 45, GROUND: 46,
 };
 
 // ---- ship classes ------------------------------------------------------------------------------
@@ -172,7 +175,7 @@ function mkShip(i) {
     tether: null, tetherT: 0, breakT: 0, tetheredBy: null, board: null, boardT: 0, carryT: 0,
     warpT: 0, darkWake: 0, decoy: false, fleeT: 0, kills: 0, path: null, pathI: 0, spawnT: 0, objective: false, dieT: 0,
     blink: 0, evadeCd: 0,
-    tetherCd: undefined, carrier: null, saidHit: false, decoyT: 0, jumped: false,
+    tetherCd: undefined, carrier: null, saidHit: false, decoyT: 0, jumped: false, spdCmd: 0, accCmd: 0, hover: false,
     phaseT: 0, phaseCd: 0, blinkV: v3(), trip: 0, leash: null, orbit: null, links: [], linkT: 0, chordT: null, torps: null, torpCd: 2.5,
   };
 }
@@ -210,6 +213,8 @@ export function createFlight(opts) {
   p.dmgMul = 1; p.skill = 0.8; p.nameKey = 'cz_ship_player';
   setupMission(F);
   buildPois(F);
+  F.autoLand = !!opts.autoLand; F.autoSites = opts.autoSites | 0 || 1;
+  initSurface(F, opts);   // M3: the worlds move, their air and their ground (stelle/surface.js)
   if (F.mission.kind === 'explore') updateObjective(F);
   return F;
 }
@@ -484,7 +489,7 @@ function updateObjective(F) {
   F.enemyLeft = left;
   O.bars.length = 0;
   for (const s of M.protect) O.bars.push(s);
-  O.marker = null; O.a = O.a || {};
+  O.marker = null; O.a = O.a || {}; O.a.site = '';
   if (F.outcome === 1) { O.key = 'cz_obj_complete'; return; }
   if (M.kind === 'explore' || M.kind === 'relight') {
     const L = M.relight;
@@ -492,6 +497,7 @@ function updateObjective(F) {
     if (L && L.ph === 'answer' && !L.calm) { O.key = 'cz_obj_echo'; O.a.n = left; O.marker = null; return; }
     if (L) { O.key = 'cz_obj_relight_done'; O.marker = null; return; }
     if (left > 0) { O.key = 'cz_obj_survive'; O.a.n = left; O.marker = null; return; }
+    if (F.surf && F.surf.w >= 0 && F.surf.st !== 0 && surfaceObjective(F, O)) return;
     const P = F.pois && F.pois[F.nav];
     if (!P) { O.key = 'cz_obj_free'; return; }
     const a = approach(F, P, p.pos.x, p.pos.y, p.pos.z); F.navAt[0] = a[0]; F.navAt[1] = a[1]; F.navAt[2] = a[2];
@@ -537,6 +543,7 @@ export function stepFlight(F) {
   for (let i = 0; i < NSHIP; i++) { const s = ships[i]; if (s.alive || s.dieT > 0) { cpy(s.ppos, s.pos); s.pq.x = s.q.x; s.pq.y = s.q.y; s.pq.z = s.q.z; s.pq.w = s.q.w; } }
   for (const b of F.bolts) if (b.alive) { b.px = b.x; b.py = b.y; b.pz = b.z; }
   for (const m of F.msls) if (m.alive) cpy(m.ppos, m.pos);
+  worldsStep(F);
   if (F.briefT > 0) F.briefT -= DT;
   // player controls
   const p = F.player;
@@ -550,6 +557,7 @@ export function stepFlight(F) {
   }
   // physics
   for (let i = 0; i < NSHIP; i++) { const s = ships[i]; if (s.alive) flyShip(F, s); }
+  surfacePost(F);
   weaponsStep(F);
   boltsStep(F);
   missilesStep(F);
@@ -579,6 +587,7 @@ function flyShip(F, s) {
   const twx = s.cp * C.pr * tm, twy = -s.cy * C.yr * tm, twz = -s.cr * C.rr * (s.drift ? 1.2 : 1);
   s.w.x += (twx - s.w.x) * k; s.w.y += (twy - s.w.y) * k; s.w.z += (twz - s.w.z) * k;
   qintegrate(s.q, s.w.x, s.w.y, s.w.z, DT);
+  if (s.hover) { s.pos.x += s.vel.x * DT; s.pos.y += s.vel.y * DT; s.pos.z += s.vel.z * DT; return; }   // landing gear work: surface.js flies the velocity
   // boost meter
   if (s.boosting) {
     s.boost -= DT * (s.tetheredBy ? 0.55 : 0.36);
@@ -591,10 +600,11 @@ function flyShip(F, s) {
   const cruising = s.isPlayer && ((F.cruise === 2 && F.cruiseV > 0) || (F.dock && F.dock.ph === 0 && s.spdCap > 320));
   if (cruising) { want = F.dock ? s.spdCap : F.cruiseV; s.boosting = false; }
   else if (towed) want = Math.min(want, s.spdCap);
+  if (s.spdCmd > 0) { want = s.spdCmd; }   // the computer flies (descent, entry, ascent: stelle/surface.js)
   if (!s.engOk) want *= 0.35;
   if (s.tetheredBy) want = Math.min(want, C.maxSpd * 0.5 * (s.boosting ? 1.5 : 1));
   if (!s.isPlayer && F.E && s.team === TEAM_E && !s.cap) want *= F.E.spd;
-  const acc = cruising ? 900 : s.boosting ? C.acc * 2.2 : C.acc;
+  const acc = s.spdCmd > 0 ? s.accCmd : cruising ? 900 : s.boosting ? C.acc * 2.2 : C.acc;
   s.spd += clamp(want - s.spd, -(s.spd > C.boostSpd * 1.1 ? 1400 : acc * 1.4) * DT, acc * DT);   // a cruise drop-out sheds speed fast
   fwd(s, T);
   // velocity aligns to the nose with grip; drifting keeps momentum while the nose swings
@@ -688,10 +698,12 @@ function playerControl(F, p) {
   scanStep(F, p);
   if (F.dock) { dockStep(F, p); return; }
   if (F.undock) { undockStep(F, p); return; }
+  if (F.autopilot) autoSurface(F, p);
+  if (surfaceControl(F, p)) return;   // M3: descent, entry, landing, take-off, ascent
   if (F.arriveT > 0) { F.arriveT -= DT; p.cp = p.cy = p.cr = 0; p.fire = false; p.thr = 0.55; p.boosting = false; return; }
   if (F.jump) jumpStep(F, p);
   if (F.cruise) cruiseStep(F, p);
-  if (F.autopilot) { aiStep(F, p); autoCruise(F, p); autoExplore(F, p); return; }
+  if (F.autopilot) { if (autoFly(F, p)) { surfaceAssist(F, p); return; } aiStep(F, p); autoCruise(F, p); autoExplore(F, p); surfaceAssist(F, p); return; }
   if (F.briefT > 0.6 && !I.touched) { p.cp = 0; p.cy = 0; p.cr = 0; p.fire = false; return; }
   // throttle
   if (I.thrRate) I.thr = clamp(I.thr + I.thrRate * DT * 0.75, 0, 1);
@@ -704,6 +716,7 @@ function playerControl(F, p) {
     p.cr = clamp(p.cr + I.roll, -1, 1);
   } else { p.cp = clamp(I.pitch, -1, 1); p.cy = clamp(I.yaw, -1, 1); p.cr = clamp(I.roll, -1, 1); }
   p.fire = !!I.fire && F.cruise !== 2;
+  surfaceAssist(F, p);
 }
 
 // ---- cruise drive: in-system travel at up to 2.6 km/s ------------------------------------------------------
@@ -718,6 +731,8 @@ function hostileNear(F, p, r) {
 function cruiseBlock(F, p) {
   if (F.outcome || F.retreat > 0 || !p.alive || F.dock || F.undock || F.jump || F.arriveT > 0) return 'cz_cr_blocked';
   if (p.tetheredBy) return 'cz_cr_tethered';
+  if (F.surf && F.surf.st !== 0 && F.surf.st !== 2) return 'cz_cr_blocked';
+  if (F.surf && F.surf.st === 2 && F.surf.S && F.surf.alt < F.surf.S.atmo.top * 0.5) return 'cz_cr_atmo';
   if (hostileNear(F, p, MASS_LOCK)) return 'cz_cr_masslock';
   return '';
 }
@@ -751,6 +766,9 @@ function cruiseStep(F, p) {
     if (d < 900 && toward > 0) { cruiseSet(F, false, 'cz_cr_arrived'); return; }
   }
   const fc = F.bp.field; if (fc && Math.hypot(fc.center[0] - p.pos.x, fc.center[1] - p.pos.y, fc.center[2] - p.pos.z) < fc.radius * 1.3) v = Math.min(v, CRUISE_MAX);
+  const U = F.surf; if (U && U.w >= 0 && U.S && U.alt < U.S.atmo.top * 1.3) v = Math.min(v, 330 + 2600 * sstep(U.S.atmo.top * 0.5, U.S.atmo.top * 1.3, U.alt));   // the air holds the drive back
+  // a world ahead: the drive brakes on a curve it can follow (v^2 = 2 a d to half the air's depth)
+  if (F.worlds) for (const W of F.worlds) { const d = Math.hypot(p.pos.x - W.c.x, p.pos.y - W.c.y, p.pos.z - W.c.z) - W.R - (W.S ? W.S.atmo.top * 0.5 : 1500); if (d < 60000) v = Math.min(v, 330 + Math.sqrt(2 * 900 * Math.max(0, d))); }
   // obstacle ahead within ~1.2 s of travel -> drop out
   const look = Math.min(8000, Math.max(300, p.spd * 1.2));
   for (let k = 1; k <= 8; k++) {
@@ -1065,6 +1083,7 @@ function aiCap(F, s) {
 }
 function avoid(F, s) {
   if (s.cap) return;
+  aiGround(F, s);
   // look ahead along the velocity for rocks / hulls; steer away from the nearest threat
   const look = 1.1 + s.spd * 0.004;
   const px = s.pos.x + s.vel.x * look, py = s.pos.y + s.vel.y * look, pz = s.pos.z + s.vel.z * look;
@@ -1557,6 +1576,7 @@ export function cmd(F, name, arg) {
   const p = F.player;
   if (!p.alive && name !== 'retreat') return false;
   const m2 = cmdM2(F, name, arg); if (m2 !== null) return m2;
+  const m3 = cmdSurface(F, name); if (m3 !== null) return m3;
   switch (name) {
     case 'pips': { const ok = pipsAdd(p.pips, arg); if (ok) { const e = ev(F, EV.PIPS); e.a = arg; } return ok; }
     case 'shields': { p.shFocus = p.shFocus === arg ? 0 : arg; const tot = p.shF + p.shB, f = p.shFocus === 1 ? 0.7 : p.shFocus === -1 ? 0.3 : 0.5; p.shF = tot * f; p.shB = tot - p.shF; const e = ev(F, EV.PIPS); e.a = 4 + p.shFocus; return true; }
@@ -1650,8 +1670,8 @@ export function navDistance(F, i) {
 function collideWorlds(F, s) {
   if (!F.pois) return;
   for (const P of F.pois) {
-    if (P.kind !== 'planet' && P.kind !== 'moon') continue;
-    const dx = s.pos.x - P.pos[0], dy = s.pos.y - P.pos[1], dz = s.pos.z - P.pos[2], R = P.r * 1.06, d2 = dx * dx + dy * dy + dz * dz;
+    if (P.kind !== 'moon') continue;   // M3: planets have air and ground (stelle/surface.js); moons stay solid spheres
+    const dx = s.pos.x - P.pos[0], dy = s.pos.y - P.pos[1], dz = s.pos.z - P.pos[2], R = P.r * 1.02, d2 = dx * dx + dy * dy + dz * dz;
     if (d2 < R * R) {
       const d = Math.sqrt(d2) || 1, nx = dx / d, ny = dy / d, nz = dz / d;
       s.pos.x = P.pos[0] + nx * R; s.pos.y = P.pos[1] + ny * R; s.pos.z = P.pos[2] + nz * R;
@@ -1707,7 +1727,7 @@ function setupExplore(F) {
 function jumpStart(F, to) {
   const p = F.player;
   if (F.jump || F.dock || F.outcome) return false;
-  const why = F.outcome || !p.alive ? 'cz_cr_blocked' : p.tetheredBy ? 'cz_cr_tethered' : hostileNear(F, p, MASS_LOCK) ? 'cz_cr_masslock' : '';
+  const why = F.outcome || !p.alive ? 'cz_cr_blocked' : p.tetheredBy ? 'cz_cr_tethered' : F.surf && F.surf.st !== 0 ? 'cz_cr_atmo_jump' : hostileNear(F, p, MASS_LOCK) ? 'cz_cr_masslock' : '';
   if (why) { const e = ev(F, EV.JUMP, p.pos.x, p.pos.y, p.pos.z); e.a = -1; e.k = why; return false; }
   if (F.cruise) cruiseSet(F, false);
   F.jump = { t: 0, to };
@@ -1733,6 +1753,7 @@ function dockStart(F) {
   if (F.dock) { if (F.dock.ph <= 1) { F.dock = null; const e = ev(F, EV.DOCK, p.pos.x, p.pos.y, p.pos.z); e.a = -2; return true; } return false; }
   const no = (k) => { const e = ev(F, EV.DOCK, p.pos.x, p.pos.y, p.pos.z); e.a = -1; e.k = k; return false; };
   if (!P) return no('cz_hud_dock_none');
+  if (F.surf && F.surf.st !== 0) return no('cz_cr_atmo_jump');
   if (F.outcome || F.jump || !p.alive || F.mission.relight && F.mission.relight.ph !== 'done' && F.mission.relight.ph !== 'approach') return no('cz_cr_blocked');
   if (hostileNear(F, p, 2600)) { comms(F, 'cz_c_dock_deny', null, { ctl: F.bp.faction }, 3); return no(''); }
   const d = Math.hypot(P.mouth[0] - p.pos.x, P.mouth[1] - p.pos.y, P.mouth[2] - p.pos.z);
@@ -2047,3 +2068,5 @@ function autoExplore(F, p) {
   if (F.autoDock && P.kind === 'station' && !M.relight && !hostileNear(F, p, 2600)) dockStart(F);
 }
 
+// internals the surface module (stelle/surface.js) drives the flight with
+export const _int = { ev, comms, squad, spawn, hostileNear, cruiseSet, updateObjective, damage, steerToward, launchShip };

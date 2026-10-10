@@ -14,7 +14,10 @@ import { makeUI } from '/apps/games/games/constellations-ui.js';
 import { sfx } from '/apps/games/games/constellations-sfx.js';
 import { CLS, EV, F_PLAYER, F_GILDA, F_RELITTI, F_CUSTODI, TEAM_P, TEAM_E, frame as simFrame, localToWorld } from '/apps/games/games/stelle/sim.js';
 import { createHud } from '/apps/games/games/stelle/hud.js';
-import { stationBlueprint } from '/apps/games/games/stelle/world.js';
+import { stationBlueprint, planetAt, planetQuat, universeTime } from '/apps/games/games/stelle/world.js';
+import { surfaceFor } from '/apps/games/games/stelle/planet.js';
+import { AU, setAU, atmoParams, ambientAt, ambientRes } from '/apps/games/games/stelle/atmo.js';
+import { SURF, groundAt, REST } from '/apps/games/games/stelle/surface.js';
 import { createGalaxy } from '/apps/games/games/stelle/galaxy.js';
 import { entriesOf, CATS } from '/apps/games/games/constellations-codex.js';
 import I18N from '/nucleo-i18n.js';
@@ -51,21 +54,21 @@ const FAC_SHIELD = { [F_PLAYER]: [0.4, 1.4, 0.8], [F_GILDA]: [0.45, 0.8, 1.8], [
 export async function createRenderer(canvas, api) {
   let gl = null;
   try { gl = canvas.getContext('webgl2', { antialias: false, alpha: false, powerPreference: window.__czPowerPref || 'high-performance', stencil: false, preserveDrawingBuffer: !!window.__czPreserve }); } catch {}
-  let THREE = null, POST = null, KIT = null, SPACE = null, FX = null;
+  let THREE = null, POST = null, KIT = null, SPACE = null, FX = null, TERRAIN = null;
   if (gl) {
     try {
-      [THREE, POST, KIT, SPACE, FX] = await Promise.all([import('/apps/games/vendor/three.module.min.js'), import('/apps/games/vendor/three-postfx.js'),
-        import('/apps/games/games/stelle/kit.js'), import('/apps/games/games/stelle/space.js'), import('/apps/games/games/stelle/fx.js')]);
+      [THREE, POST, KIT, SPACE, FX, TERRAIN] = await Promise.all([import('/apps/games/vendor/three.module.min.js'), import('/apps/games/vendor/three-postfx.js'),
+        import('/apps/games/games/stelle/kit.js'), import('/apps/games/games/stelle/space.js'), import('/apps/games/games/stelle/fx.js'), import('/apps/games/games/stelle/terrain.js')]);
     } catch (e) { console.warn('[costellazioni] 3D modules unavailable -> 2D', e); THREE = null; }
   }
   const ui = makeUI(canvas);
   const hud = createHud(canvas);
-  return THREE ? build3D({ THREE, POST, KIT, SPACE, FX }, canvas, gl, ui, hud) : build2D(canvas, ui, hud);
+  return THREE ? build3D({ THREE, POST, KIT, SPACE, FX, TERRAIN }, canvas, gl, ui, hud) : build2D(canvas, ui, hud);
 }
 
 // ================================= WebGL ===========================================================================
 function build3D(M, canvas, gl, ui, hud) {
-  const { THREE, POST, KIT, SPACE, FX } = M;
+  const { THREE, POST, KIT, SPACE, FX, TERRAIN } = M;
   const tier = pickTier(gl), Q = TIERS[tier.name];
   const renderer = new THREE.WebGLRenderer({ canvas, context: gl, antialias: false, powerPreference: 'high-performance' });
   const dpr = Math.min(2, window.devicePixelRatio || 1);
@@ -73,24 +76,29 @@ function build3D(M, canvas, gl, ui, hud) {
   renderer.setPixelRatio(scale * (tier.name === 'high' ? dpr : 1) || 1);
   renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.05;
   renderer.setClearColor(0x000000, 1);
-  const cam = new THREE.PerspectiveCamera(70, 1.6, 0.4, 30000), farCam = new THREE.PerspectiveCamera(70, 1.6, 20, 600000);
+  // the near camera reaches past a whole world (terrain to the horizon from orbit); depth precision is set by the
+  // near plane, not the far one, so this costs nothing up close
+  const cam = new THREE.PerspectiveCamera(70, 1.6, 0.4, 400000), farCam = new THREE.PerspectiveCamera(70, 1.6, 20, 600000);
   const space = SPACE.createSpace(THREE, renderer, Q);
   space.near.add(cam); cam.add(space.flares); cam.add(space.tunnel);
   const camFill = new THREE.DirectionalLight(0x8fa6c8, 0.55); camFill.position.set(0.3, 0.6, 1); cam.add(camFill); cam.add(camFill.target); camFill.target.position.set(0, 0, -1);   // keeps hulls readable against the dark
   const fx = FX.createFx(THREE, space.near, Q);
+  const WORLD = TERRAIN.createWorld(THREE, renderer, space.near, tier.name);
+  space.near.add(WORLD.group);
   const GAL = createGalaxy(THREE, canvas, tr), emptyScene = new THREE.Scene();
   let mapMode = false;
 
   // ---- post chain ------------------------------------------------------------------------------------------
   let composer = null, bloom = null, grade = null, farPass = null, nearPass = null;
   const GRADE = {
-    uniforms: { tDiffuse: { value: null }, uVig: { value: 0.55 }, uAber: { value: 0.0 }, uFlash: { value: 0 }, uFlashCol: { value: new THREE.Color(1, 1, 1) }, uDmg: { value: 0 }, uSat: { value: 1 }, uTime: { value: 0 }, uFade: { value: 0 } },
+    uniforms: { tDiffuse: { value: null }, uVig: { value: 0.55 }, uAber: { value: 0.0 }, uFlash: { value: 0 }, uFlashCol: { value: new THREE.Color(1, 1, 1) }, uDmg: { value: 0 }, uSat: { value: 1 }, uTime: { value: 0 }, uFade: { value: 0 }, uHeat: { value: 0 } },
     vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-    fragmentShader: `uniform sampler2D tDiffuse; uniform float uVig, uAber, uFlash, uDmg, uSat, uTime, uFade; uniform vec3 uFlashCol; varying vec2 vUv;
+    fragmentShader: `uniform sampler2D tDiffuse; uniform float uVig, uAber, uFlash, uDmg, uSat, uTime, uFade, uHeat; uniform vec3 uFlashCol; varying vec2 vUv;
       void main() { vec2 c = vUv - 0.5; float r = length(c); vec2 off = c * uAber * r;
         vec3 col = vec3(texture2D(tDiffuse, vUv + off).r, texture2D(tDiffuse, vUv).g, texture2D(tDiffuse, vUv - off).b);
         float l = dot(col, vec3(0.2126, 0.7152, 0.0722)); col = mix(vec3(l), col, uSat);
         col += vec3(0.8, 0.04, 0.02) * uDmg * smoothstep(0.32, 0.78, r);
+        col += vec3(1.0, 0.42, 0.12) * uHeat * smoothstep(0.22, 0.85, r) * (0.8 + 0.2 * sin(uTime * 37.0 + vUv.y * 40.0));
         col *= 1.0 - uVig * smoothstep(0.42, 0.98, r);
         col += uFlashCol * uFlash;
         col *= 1.0 - uFade;
@@ -176,15 +184,17 @@ function build3D(M, canvas, gl, ui, hud) {
 
   // ---- state ----------------------------------------------------------------------------------------------------
   let F = null, lastF = null, mode = 'hub', last = performance.now(), evCur = 0, trauma = 0, time = 0, camMode = 'chase';
-  let relightCam = 0;
+  let relightCam = 0, landAng = 0; const entOff = new THREE.Vector3();
   let lastPh = '', cruiseK = 0, expo = 1.05, baseFov = 70, departT = -1, arriveHub = -1, fadeK = 0, cineK = 0, lastModel = null, jumpK = 0, codexShown = '';
   const hubPark = new THREE.Vector3(), _fwd = new THREE.Vector3();
   const SPO = { stretch: 0.05, dust: 0.2, pxScale: 1, flare: 1, farPos: null };   // space.update options, reused every frame
   let bpKey = '', pendingBp = null, tunnelT = -1, flashK = 0, hitAber = 0, sysReady = false, hubAng = 0, deathCam = null, intro = 0;
   const camPos = new THREE.Vector3(), camQ = new THREE.Quaternion(), camVel = new THREE.Vector3(), lastCamPos = new THREE.Vector3();
-  const perf = { frames: 0, ms: 0, ema: 16.7, worst: 0, hist: new Float32Array(240), hi: 0, simSteps: 0, scale, tier: tier.name, auto: tier.auto, renderer: pickTier.renderer || '' };
+  const perf = { frames: 0, ms: 0, ema: 16.7, worst: 0, hist: new Float32Array(240), hi: 0, simSteps: 0, scale, tier: tier.name, auto: tier.auto, renderer: pickTier.renderer || '',
+    work: new Float32Array(240), wi: 0 };   // work: frame cost with the GPU waited for (tests set __czSync; vsync hides it otherwise)
+  const SYNC_PX = new Uint8Array(4);
   window.__cz = window.__cz || {}; window.__cz.perf = perf;
-  window.__cz.r3d = { get composer() { return composer; }, get bloom() { return bloom; }, get grade() { return grade; }, renderer, cam, space, fx };
+  window.__cz.r3d = { get composer() { return composer; }, get bloom() { return bloom; }, get grade() { return grade; }, renderer, cam, space, fx, get world() { return WORLD; }, get worldIdx() { return wIdx; }, setCamera: (m) => { camMode = m; } };
   hud.setOptions({ camera: () => camMode, setCamera: (m) => { camMode = m; }, quality: () => (tier.auto ? 'auto' : tier.name), setQuality: (n) => { setQuality(n); } });
 
   function fit(w, h) {
@@ -213,6 +223,7 @@ function build3D(M, canvas, gl, ui, hud) {
     space.beaconFx({ threads: dirs });
   }
   function doBuild(bp) {
+    switchWorld(-1);
     space.build(bp); bpKey = bp.key; sysReady = true;
     if (hubShip) { hubShip.removeFromParent(); hubShip.material.dispose(); hubShip = null; }
     hubShip = new THREE.Mesh(KIT.shipGeometry(THREE, 'lucciola', F_PLAYER, false), KIT.hullMaterial(THREE, {})); space.near.add(hubShip);
@@ -334,6 +345,11 @@ function build3D(M, canvas, gl, ui, hud) {
           break;
         }
         case EV.SCAN: { if (e.v && (e.k === 'planet' || e.k === 'moon')) { hud.note('cz_hud_scanned', 'good', { name: e.v.name }); sfx.lock && sfx.lock(); } break; }
+        case EV.SURF: surfEvent(e); break;
+        case EV.DISCOVER: { hud.banner && hud.banner(tr('cz_site_' + e.k), '#ffd66b', 4); hud.discovered && hud.discovered(e); sfx.victory && sfx.victory(); flashK = Math.max(flashK, 0.12); break; }
+        case EV.LOOT: { hud.banner && hud.banner(tr('cz_hud_relic'), '#ffe7a8', 3.5); sfx.powerup && sfx.powerup('shield'); fx.flash(e.x, e.y, e.z, 1, 0.8, 0.45, 3, 200, 1.2); break; }
+        case EV.GROUND: groundEvent(e); break;
+        case EV.SCANPING: { hud.ping && hud.ping(e.b, e.a); sfx.lock && sfx.lock(); break; }
         case EV.TORP: { sfx.missile && sfx.missile(); if (e.s2 && e.s2.isPlayer) sfx.missileWarn && sfx.missileWarn(); break; }
         case EV.PHASE: { fx.add.add(e.x, e.y, e.z, 0, 0, 0, 0.35, 4, 26, 0.6, 1.6, 2.6, 1, 0.3, 0.2, 1.2, 0, 0); fx.shock(e.x, e.y, e.z, 40, 0.5, 1.2, 2.2, 0.35); if (camDist(e.x, e.y, e.z) < 1500) sfx.lockTone && sfx.lockTone(e.a ? 0.9 : 0.4); break; }
         case EV.CHORD: { fx.muzzle(e.x, e.y, e.z, 0, 0, 0, 0.6, 1.4, 2.4, 14); if (camDist(e.x, e.y, e.z) < 2600) { sfx.lock && sfx.lock(); } break; }
@@ -483,6 +499,200 @@ function build3D(M, canvas, gl, ui, hud) {
     for (const s of ships) if (s.alive && s.links && s.links.length && s.ck === 'choir') for (const o of s.links) if (o.alive) fx.beam(bi++, s.pos.x, s.pos.y, s.pos.z, o.pos.x, o.pos.y, o.pos.z, cam, 1.8, 0.35, 1.1, 1.9);
   }
 
+
+  // ---- M3: the world below — terrain, sky, clouds, weather, flora and sites; the light of its air on everything ----------
+  const amb = ambientRes(), SKYU = KIT.hullSky(THREE);
+  let wIdx = -1, wA = null, wFade = 0, wExpo = 1, wAirK = 0;
+  const _wc = [0, 0, 0], _wq = [0, 0, 0, 1], _wc0 = [0, 0, 0], _wqd = [0, 0, 0, 1], _wsun = [0, 0, 0], _wI = [0, 0, 0];
+  const _qPrev = new THREE.Quaternion(), _qNow = new THREE.Quaternion(), _qD = new THREE.Quaternion();
+  const sunBase = { col: new THREE.Color(), k: 3, set: false };
+  const WO = { center: _wc, quat: _wq, amb, T: 0, fade: 0, shadow: [0, 0, 0, 0], head: { k: 0, pos: new THREE.Vector3(), dir: new THREE.Vector3() }, weather: null };
+  function switchWorld(i) {
+    if (i === wIdx) return;
+    if (wIdx >= 0) { space.planetMode(wIdx, true); WORLD.clear(); }
+    wIdx = i; wA = null; wFade = 0;
+    if (sunBase.set) { space.sun.color.copy(sunBase.col); space.sun.intensity = sunBase.k; sunBase.set = false; }
+    if (i < 0) { setAU(null, 0, 0, 0); SKYU.uEnvK.value = 1; SKYU.uSkyIrr.value.set(0, 0, 0); SKYU.uSkyRad.value.set(0, 0, 0); space.sys.group.visible = true; space.daylight(0); space.dispMat.uniforms.uCol.value.setScalar(0.32); wExpo = 1; return; }
+    const bp = space.sys.bp, S = surfaceFor(bp, i), body = space.sys.planets.find((x) => x.idx === i && x.moonOf < 0);
+    WORLD.set(S, { aux: body ? body.rt.aux.texture : null, surf: body ? body.rt.surf.texture : null });
+    wA = atmoParams(S);
+    space.planetMode(i, false);
+    sunBase.col.copy(space.sun.color); sunBase.k = space.sun.intensity; sunBase.set = true;
+    planetQuat(bp.planets[i], WO.T, _wq); _qPrev.set(_wq[0], _wq[1], _wq[2], _wq[3]);
+    planetAt(bp.planets[i], i, WO.T, _wc0);
+  }
+  const sstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+  function worldUpdate(dt) {
+    const bp = space.sys.bp; if (!bp || !sysReady) return;
+    const T = SPO.T; WO.T = T;
+    // which world: the nearest one whose air (or ground, from orbit) the camera is close enough to draw
+    let best = -1, bd = Infinity;
+    if (!mapMode && (F || cxShowing() === false)) for (let i = 0; i < bp.planets.length; i++) {
+      const pl = bp.planets[i], S = surfaceFor(bp, i); if (!S) continue;
+      planetAt(pl, i, T, _wc);
+      const alt = Math.hypot(cam.position.x - _wc[0], cam.position.y - _wc[1], cam.position.z - _wc[2]) - pl.radius;
+      const act = Math.max(S.atmo.top * 2.6, pl.radius * 0.45) * (i === wIdx ? 1.08 : 1);
+      if (alt < act && alt < bd) { bd = alt; best = i; }
+    }
+    if (best !== wIdx) switchWorld(best);
+    if (wIdx < 0) return;
+    const pl = bp.planets[wIdx], S = WORLD.S;
+    planetAt(pl, wIdx, T, _wc); planetQuat(pl, T, _wq);
+    // the world spun and moved since the last frame: carry the effects with it
+    _qNow.set(_wq[0], _wq[1], _wq[2], _wq[3]); _qD.copy(_qNow).multiply(_qPrev.invert());
+    _wqd[0] = _qD.x; _wqd[1] = _qD.y; _wqd[2] = _qD.z; _wqd[3] = _qD.w;
+    const R2 = Math.pow(pl.radius + S.atmo.top * 2, 2);
+    if (Math.abs(_qD.w) < 0.9999999999 || _wc0[0] !== _wc[0] || _wc0[1] !== _wc[1] || _wc0[2] !== _wc[2]) fx.frameDrag(_wc0, _wc, _wqd, R2);
+    _qPrev.copy(_qNow); _wc0[0] = _wc[0]; _wc0[1] = _wc[1]; _wc0[2] = _wc[2];
+    // the air: shared uniforms, the light it lets through, the sky's ambient
+    const sd = space.sys.sunDir, I = space.sys.sunI; _wsun[0] = sd.x; _wsun[1] = sd.y; _wsun[2] = sd.z; _wI[0] = I.x; _wI[1] = I.y; _wI[2] = I.z;
+    setAU(wA, _wc[0], _wc[1], _wc[2], _wsun, _wI);
+    ambientAt(wA, cam.position.x - _wc[0], cam.position.y - _wc[1], cam.position.z - _wc[2], _wsun, _wI, amb);
+    const alt = amb.alt, tp = S.atmo.top;
+    wAirK = sstep(tp * 1.4, tp * 0.55, alt);
+    const act = Math.max(tp * 2.6, pl.radius * 0.45);
+    wFade = sstep(act * 0.95, act * 0.72, alt) * WORLD.coverage();
+    // sun light through the air; the sky's light on every hull instead of the nebula's
+    const sm = Math.max(1e-3, amb.sun[0], amb.sun[1], amb.sun[2]), k = sstep(tp * 2, tp * 0.8, alt);
+    space.sun.color.setRGB(sunBase.col.r + (amb.sun[0] / sm - sunBase.col.r) * k, sunBase.col.g + (amb.sun[1] / sm - sunBase.col.g) * k, sunBase.col.b + (amb.sun[2] / sm - sunBase.col.b) * k);
+    space.sun.intensity = sunBase.k + (sm - sunBase.k) * k;
+    const zr = amb.zen, hr = amb.hzSun, ha = amb.hzAnti;
+    SKYU.uEnvK.value = 1 - 0.8 * wAirK;
+    SKYU.uSkyIrr.value.set((zr[0] * 2 + hr[0] + ha[0]) * 0.78 * wAirK, (zr[1] * 2 + hr[1] + ha[1]) * 0.78 * wAirK, (zr[2] * 2 + hr[2] + ha[2]) * 0.78 * wAirK);
+    SKYU.uSkyRad.value.set((zr[0] + hr[0] * 0.5 + ha[0] * 0.5) * 0.6 * wAirK, (zr[1] + hr[1] * 0.5 + ha[1] * 0.5) * 0.6 * wAirK, (zr[2] + hr[2] * 0.5 + ha[2] * 0.5) * 0.6 * wAirK);
+    space.amb.intensity = 0.4 * (1 - wAirK); space.bounce.intensity = 0.55 * (1 - wAirK); camFill.intensity = 0.55 * (1 - 0.7 * wAirK);
+    // the station and the asteroid field are specks beyond the sky: drop them deep in the air
+    space.sys.group.visible = alt > tp * 0.6;
+    // eye: a bright sky closes the iris a little, a night opens it
+    const skyL = (zr[0] * 0.2 + zr[1] * 0.7 + zr[2] * 0.1) + (hr[1] + ha[1]) * 0.3;
+    wExpo = 1 + wAirK * (Math.min(1.4, Math.max(0.62, 0.32 / (skyL + 0.12))) - 1);
+    // the ship's shadow on the ground, the headlight at night
+    const p = F && F.player, U = F && F.surf;
+    WO.shadow[3] = 0; WO.head.k = 0;
+    if (p && U && U.w === wIdx && p.alive) {
+      const up = U.up, su = sd.x * up.x + sd.y * up.y + sd.z * up.z;
+      if (U.agl < 420 && su > 0.05) { const d = U.agl / Math.max(su, 0.22); WO.shadow[0] = p.pos.x - sd.x * d; WO.shadow[1] = p.pos.y - sd.y * d; WO.shadow[2] = p.pos.z - sd.z * d; WO.shadow[3] = 8 + U.agl * 0.05; }
+      const night = 1 - sstep(-0.06, 0.12, su);
+      if (night > 0.02 && U.agl < 900) {
+        const pv = V[p.i]; if (pv) { _fwd.set(0, -0.18, -1).normalize().applyQuaternion(pv.g.quaternion); WO.head.pos.copy(pv.g.position).addScaledVector(_fwd, 6); WO.head.dir.copy(_fwd); WO.head.k = night * 2.2; }
+      }
+    }
+    WO.fade = wFade;
+    if (U && U.w === wIdx) for (let i = 0; i < U.sites.length; i++) WORLD.setLooted(i, U.sites[i].looted);
+    WORLD.update(dt, cam, WO);
+    // daylight hides the nebula; at night the stars come back over the ground
+    const sunUp = (sd.x * (cam.position.x - _wc[0]) + sd.y * (cam.position.y - _wc[1]) + sd.z * (cam.position.z - _wc[2])) / Math.max(1, alt + pl.radius);
+    space.daylight(wAirK * sstep(-0.08, 0.15, sunUp) * sstep(tp * 1.1, tp * 0.6, alt));   // a quarter of the air above you still hides the stars by day
+    // night: starlight and the glow of the sky keep the ground readable (blue, faint)
+    const nightK = 1 - sstep(-0.12, 0.08, sunUp);
+    WORLD.SU.uNight.value.set(0.006 + 0.03 * nightK, 0.008 + 0.038 * nightK, 0.012 + 0.06 * nightK);
+    // dust lines turn into faint air streaks
+    space.dispMat.uniforms.uCol.value.setScalar(0.32 * (1 - wAirK * 0.75));
+  }
+  const cxShowing = () => !!show;
+  // keep a point (the camera) a margin above the ground of the world we are in
+  function groundClamp(v, m) {
+    if (!F || !F.surf || F.surf.w < 0 || F.surf.w !== wIdx) return;
+    const a = groundAt(F, v.x, v.y, v.z);
+    if (a < m) { const W = F.worlds[F.surf.w]; _v.set(v.x - W.c.x, v.y - W.c.y, v.z - W.c.z).normalize(); v.addScaledVector(_v, m - a); }
+  }
+
+  // the plasma sheath of an entry, the dust and spray of low flight, the landing gear
+  const plasmaGeo = new THREE.SphereGeometry(1, 28, 18);
+  const plasmaMat = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide,
+    uniforms: { uK: { value: 0 }, uT: { value: 0 }, uMap: { value: WORLD.detail } },
+    vertexShader: `varying vec3 vP; varying vec3 vN; varying vec3 vV; void main() { vP = position; vN = normalize(normalMatrix * normal); vec4 mv = modelViewMatrix * vec4(position, 1.0); vV = normalize(-mv.xyz); gl_Position = projectionMatrix * mv; }`,
+    fragmentShader: `uniform float uK, uT; uniform sampler2D uMap; varying vec3 vP; varying vec3 vN; varying vec3 vV;
+      void main() {
+        float rim = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 2.2);
+        float nose = smoothstep(-0.2, -1.0, vP.z);   // the front (local -Z) burns white-hot, the sheath trails off in flames
+        float a = atan(vP.y, vP.x);
+        float st = texture2D(uMap, vec2(a * 0.6, vP.z * 0.35 - uT * 2.2)).g * 0.8 + texture2D(uMap, vec2(a * 1.3 + 0.3, vP.z * 0.9 - uT * 3.1)).r * 0.7;
+        st = smoothstep(0.35, 1.2, st);
+        vec3 c = mix(vec3(1.4, 0.36, 0.08), vec3(2.4, 1.5, 0.9), nose) * (rim * (0.6 + nose * 1.4) + nose * nose * 0.5) * (0.3 + st * 1.4);
+        float tail = smoothstep(1.0, -0.2, vP.z);
+        gl_FragColor = vec4(c * uK * tail, 1.0);
+      }` });
+  const plasma = new THREE.Mesh(plasmaGeo, plasmaMat); plasma.visible = false; plasma.frustumCulled = false; plasma.renderOrder = 8; space.near.add(plasma);
+  const gearGeo = (() => {
+    const parts = [];
+    const leg = (x, z, h) => { const c = new THREE.CylinderGeometry(0.16, 0.2, h, 6); c.translate(x, -h / 2, z); parts.push(c); const f = new THREE.CylinderGeometry(0.55, 0.6, 0.18, 8); f.translate(x, -h, z); parts.push(f); };
+    leg(0, -4.0, 2.2); leg(-2.4, 2.6, 2.3); leg(2.4, 2.6, 2.3);
+    let n = 0; for (const g of parts) n += g.attributes.position.count;
+    const pos = new Float32Array(n * 3), nrm = new Float32Array(n * 3), idx = []; let o = 0;
+    for (const g of parts) { pos.set(g.attributes.position.array, o * 3); nrm.set(g.attributes.normal.array, o * 3); for (const i of g.index.array) idx.push(i + o); o += g.attributes.position.count; g.dispose(); }
+    const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('normal', new THREE.BufferAttribute(nrm, 3)); geo.setIndex(idx); return geo;
+  })();
+  const gearMat = new THREE.MeshStandardMaterial({ color: 0x8a8d92, metalness: 0.7, roughness: 0.45 });
+  const gear = new THREE.Mesh(gearGeo, gearMat); gear.visible = false;
+  let dustT = 0, lastHeat = 0;
+  function surfaceFx(dt) {
+    const p = F.player, U = F.surf, pv = V[p.i];
+    if (!U || !pv) { plasma.visible = false; return; }
+    // landing gear: drops out of the belly
+    if (gear.parent !== pv.g) pv.g.add(gear);
+    gear.visible = U.gear > 0.02 && pv.g.visible; gear.scale.set(1, Math.max(0.02, U.gear), 1);
+    // the entry: plasma sheath, glowing hull, embers, the shake
+    const h = U.w >= 0 ? U.heat : 0;
+    plasma.visible = h > 0.02 && p.alive;
+    if (plasma.visible) {
+      _v.set(p.vel.x, p.vel.y, p.vel.z); const vl = _v.length() || 1; _v.divideScalar(vl);
+      plasma.position.copy(pv.g.position).addScaledVector(_v, 2.5);
+      plasma.quaternion.setFromUnitVectors(_v2.set(0, 0, -1), _v);
+      const r = (p.cls.rad || 7) * 0.72; plasma.scale.set(r, r * 0.62, r * (1.2 + h * 1.4));
+      plasma.position.copy(pv.g.position).addScaledVector(_v, r * 0.35);
+      plasmaMat.uniforms.uK.value = h * 0.55; plasmaMat.uniforms.uT.value = time;
+      const U0 = pv.mat.userData.U; U0.uFlash.value = Math.max(U0.uFlash.value, h * 0.22); U0.uFlashCol.value.setRGB(1.0, 0.42, 0.14);
+      for (let k = 0; k < Math.round(h * 6); k++) { const s = Math.random(); fx.add.add(pv.g.position.x + (Math.random() - 0.5) * 8, pv.g.position.y + (Math.random() - 0.5) * 8, pv.g.position.z + (Math.random() - 0.5) * 8,
+        -_v.x * vl * (0.05 + s * 0.1), -_v.y * vl * (0.05 + s * 0.1), -_v.z * vl * (0.05 + s * 0.1), 0.35 + s * 0.4, 1.5 + s * 2, 0.3, 4, 1.6, 0.4, 1, 1.5, 0.3, 0.05, 0, 1, 0.04); }
+      trauma = Math.min(0.55, trauma + h * dt * 2.2);
+    } else if (lastHeat > 0.02) { const U0 = pv.mat.userData.U; U0.uFlashCol.value.setRGB(1, 1, 1); }
+    lastHeat = h;
+    // low flight: dust, snow, ash or spray kicked up under the ship
+    if (U.w >= 0 && U.agl < 32 && p.alive && U.st !== SURF.LANDED) {
+      dustT -= dt;
+      const k = (1 - U.agl / 32) * Math.min(1, (p.spd + (U.st === SURF.LANDING || U.st === SURF.TAKEOFF ? 60 : 0)) / 80);
+      if (dustT <= 0 && k > 0.05) {
+        dustT = 0.025;
+        const up = U.up, gx = p.pos.x - up.x * U.agl, gy = p.pos.y - up.y * U.agl, gz = p.pos.z - up.z * U.agl;
+        const c = groundDustCol();
+        for (let i = 0; i < 3; i++) {
+          const a = Math.random() * 6.283, sp = 6 + Math.random() * 14 * k;
+          _v.set(Math.cos(a), 0, Math.sin(a)); _v2.set(up.x, up.y, up.z); _v.addScaledVector(_v2, -_v.dot(_v2)).normalize();
+          fx.smoke.add(gx + _v.x * 3, gy + _v.y * 3, gz + _v.z * 3, _v.x * sp + p.vel.x * 0.25 + up.x * 3, _v.y * sp + p.vel.y * 0.25 + up.y * 3, _v.z * sp + p.vel.z * 0.25 + up.z * 3,
+            1.1 + Math.random(), 2 + k * 3, 7 + k * 10, c[0], c[1], c[2], 0.5 * k, c[0], c[1], c[2], 0, 2, 0, 1.2);
+        }
+      }
+    }
+  }
+  function groundDustCol() {
+    const S = WORLD.S; if (!S) return [0.5, 0.5, 0.5];
+    if (F.surf.water) return [0.85, 0.9, 0.95];
+    switch (S.type) { case 'ice': return [0.85, 0.9, 0.95]; case 'volcanic': return [0.16, 0.14, 0.14]; case 'desert': return [0.72, 0.55, 0.38]; case 'rocky': return [0.62, 0.45, 0.35]; case 'crystal': return [0.5, 0.45, 0.75]; case 'jungle': return [0.38, 0.36, 0.28]; default: return [0.55, 0.52, 0.48]; }
+  }
+  function surfEvent(e) {
+    if (e.a === -1) { const n = e.v && e.v.name; hud.note('cz_hud_soi', 'info', { name: n }); return; }
+    if (e.a === -2) { if (e.k) hud.note(e.k, 'bad'); sfx.deny(); return; }
+    if (e.a === -3) { hud.note(e.k, 'info'); sfx.blip(); return; }
+    if (e.a === -4) { hud.note(e.k, 'bad'); return; }
+    if (e.a === SURF.ENTRY) { hud.banner && hud.banner(tr(e.k), '#ffb070', 3); sfx.warp && sfx.warp(0.8); trauma = Math.min(1, trauma + 0.4); flashK = Math.max(flashK, 0.15); if (grade) grade.uniforms.uFlashCol.value.setRGB(1, 0.6, 0.35); return; }
+    if (e.a === SURF.DESCENT || e.a === SURF.ASCENT) { hud.banner && hud.banner(tr(e.k), '#9fe8ff', 2.4); sfx.cruiseSpool && sfx.cruiseSpool(); return; }
+    if (e.a === SURF.LANDED) { hud.note(e.k, 'good'); sfx.clang && sfx.clang(); return; }
+    if (e.k) hud.note(e.k, e.a === SURF.SPACE || e.a === SURF.FLIGHT ? 'good' : 'info');
+  }
+  function groundEvent(e) {
+    const c = groundDustCol();
+    if (e.b) {   // touchdown: a ring of dust
+      for (let i = 0; i < 26; i++) { const a = i / 26 * 6.283, U = F.surf; _v.set(Math.cos(a), 0.15, Math.sin(a)); _v2.set(U.up.x, U.up.y, U.up.z); _v.addScaledVector(_v2, -_v.dot(_v2)).normalize().multiplyScalar(8 + Math.random() * 6);
+        fx.smoke.add(e.x, e.y, e.z, _v.x + U.up.x * 2, _v.y + U.up.y * 2, _v.z + U.up.z * 2, 1.8, 2, 9, c[0], c[1], c[2], 0.55, c[0], c[1], c[2], 0, 2, 0, 1.6); }
+      shakeAt(e.x, e.y, e.z, 0.25); return;
+    }
+    if (e.a < 6) return;
+    fx.hitSparks(e.x, e.y, e.z, F.surf.up.x, F.surf.up.y, F.surf.up.z, 1.2, 0.8, 0.5, Math.min(24, 6 + e.a));
+    for (let i = 0; i < 8; i++) fx.smoke.add(e.x, e.y, e.z, (Math.random() - 0.5) * 12, (Math.random() - 0.5) * 12, (Math.random() - 0.5) * 12, 1.4, 2, 8, c[0], c[1], c[2], 0.5, c[0], c[1], c[2], 0, 2, 0, 1);
+    if (e.s && e.s.isPlayer) { sfx.clang && sfx.clang(); shakeAt(e.x, e.y, e.z, Math.min(1, e.a / 40)); }
+  }
+
   // ---- camera rig ------------------------------------------------------------------------------------------------------------
   const off = new THREE.Vector3(), look = new THREE.Vector3(), up = new THREE.Vector3();
   function flightCamera(dt) {
@@ -534,6 +744,7 @@ function build3D(M, canvas, gl, ui, hud) {
       _v2.set(0, 1.6, 0).applyQuaternion(g.quaternion).add(g.position);
       const free = camFree(_v2, camPos);
       if (free < 1) camPos.sub(_v2).multiplyScalar(Math.max(0.34, free)).add(_v2);
+      groundClamp(camPos, 2.2);
       cam.position.copy(camPos); cam.quaternion.copy(camQ);
       // keep the camera level with the ship's heading: the hull rides in the lower third, the reticle above it
       cam.rotateX(0.015);
@@ -566,10 +777,47 @@ function build3D(M, canvas, gl, ui, hud) {
     return t < 1 ? Math.max(0, t - 2.5 / L) : 1;
   }
   // the hands-off moments of a flight get a director: leaving the bay, the docking approach, the arrival from a jump
-  const _cs = new THREE.Vector3(), _cu = new THREE.Vector3();
+  const _cs = new THREE.Vector3(), _cu = new THREE.Vector3(), _v3 = new THREE.Vector3();
   function cineCamera(dt, g) {
     const st = F.pois && F.pois.find((x) => x.kind === 'station');
     let goal = null;
+    const U = F.surf;
+    if (U && U.w >= 0 && (U.auto && (U.st === SURF.DESCENT || U.st === SURF.ENTRY) || U.st === SURF.LANDED || U.st === SURF.LANDING || U.st === SURF.TAKEOFF)) {
+      // entry: off the wing, low, the plasma on the nose and the world ahead; landed: a slow walk round the ship
+      const up = U.up;
+      _cu.set(up.x, up.y, up.z);
+      _fwd.set(0, 0, -1).applyQuaternion(g.quaternion);
+      _cs.crossVectors(_fwd, _cu); if (_cs.lengthSq() < 1e-4) _cs.set(1, 0, 0); _cs.normalize();
+      if (U.st === SURF.LANDED || U.st === SURF.LANDING || U.st === SURF.TAKEOFF) {
+        landAng += dt * (U.st === SURF.LANDED ? 0.12 : 0.05);
+        // a site close by: the ship in front, the site behind it (the reveal), the camera drifting a little to the side
+        let site = null; for (const s of U.sites) if (s.d < 700 && (!site || s.d < site.d)) site = s;
+        if (site) {
+          _v.set(site.pos.x - g.position.x, site.pos.y - g.position.y, site.pos.z - g.position.z); _v.addScaledVector(_cu, -_v.dot(_cu));
+          const dd = Math.max(1, _v.length()); _v.multiplyScalar(1 / dd); _cs.crossVectors(_v, _cu).normalize();
+          const sw = Math.sin(landAng * 0.7);
+          goal = _v2.copy(g.position).addScaledVector(_v, -(30 + dd * 0.04)).addScaledVector(_cs, 12 + sw * 9).addScaledVector(_cu, 7 + dd * 0.03 + (U.st === SURF.TAKEOFF ? 4 : 0));
+          look.copy(g.position).lerp(_v3.set(site.pos.x, site.pos.y, site.pos.z), Math.min(0.45, 60 / dd + 0.15)).addScaledVector(_cu, 3);
+        } else {
+          const R = U.st === SURF.LANDED ? 26 : 34, ca = Math.cos(landAng), sa = Math.sin(landAng);
+          goal = _v2.copy(g.position).addScaledVector(_cs, ca * R).addScaledVector(_fwd, sa * R).addScaledVector(_cu, U.st === SURF.LANDED ? 5 : 9);
+          look.copy(g.position).addScaledVector(_cu, 1.5);
+        }
+        groundClamp(goal, 2.5);
+        if (cineK < 0.99) camPos.copy(goal); else camPos.lerp(goal, 1 - Math.exp(-2 * dt));
+        cam.position.copy(camPos); cam.up.copy(_cu); cam.lookAt(look); cam.up.set(0, 1, 0);
+        camQ.copy(cam.quaternion); cockpit.visible = false; cam.fov += (58 - cam.fov) * (1 - Math.exp(-2 * dt));
+        return true;
+      }
+      // the offset from the ship eases (the ship itself moves at km/s: the camera rides with it, no lag)
+      const k = U.heat;
+      _v.set(0, 0, 0).addScaledVector(_cs, 9 + 4 * k).addScaledVector(_cu, 6.5 - 2 * k).addScaledVector(_fwd, -27 + 6 * k);
+      if (cineK < 0.99) entOff.copy(_v); else entOff.lerp(_v, 1 - Math.exp(-3 * dt));
+      camPos.copy(g.position).add(entOff);
+      cam.position.copy(camPos); look.copy(g.position).addScaledVector(_fwd, 14).addScaledVector(_cu, 2.5); cam.up.copy(_cu); cam.lookAt(look); cam.up.set(0, 1, 0);
+      camQ.copy(cam.quaternion); cockpit.visible = false; cam.fov += (64 + k * 6 - cam.fov) * (1 - Math.exp(-3 * dt));
+      return true;
+    }
     if (F.undock && st) {
       const n = st.n; _cu.set(0, 1, 0); _cs.set(n[0], n[1], n[2]).cross(_cu).normalize();
       goal = _v2.set(st.mouth[0] + n[0] * 110 + _cs.x * 46, st.mouth[1] + n[1] * 110 + 20, st.mouth[2] + n[2] * 110 + _cs.z * 46);
@@ -777,7 +1025,7 @@ function build3D(M, canvas, gl, ui, hud) {
     }
     if (ph !== 'combat' && ph !== 'debrief' && F) {   // back at the hub
       if (F.outcome === 3) fadeK = 1;   // docked: the bay doors close on black, the hub fades in
-      F = null; clearVisuals(); space.setNavs(null, null); hud.stop(); sfx.stopDrone(); sfx.engineStop && sfx.engineStop(); if (hubShip) hubShip.visible = true; deathCam = null; cineK = 0; jumpK = 0;
+      F = null; clearVisuals(); space.setNavs(null, null); hud.stop(); switchWorld(-1); sfx.stopDrone(); sfx.engineStop && sfx.engineStop(); if (hubShip) hubShip.visible = true; deathCam = null; cineK = 0; jumpK = 0;
       hubShip && hubShip.position.copy(hubPark);
     }
     // codex ship dossiers: the model turns in the hangar on the left of the screen
@@ -798,6 +1046,7 @@ function build3D(M, canvas, gl, ui, hud) {
       perf.simSteps += steps;
       events();
       syncFlight(dt, F.alpha);
+      surfaceFx(dt);
       flightCamera(dt);
       applyShake(dt);
       cam.updateMatrixWorld(); cam.updateProjectionMatrix();
@@ -826,11 +1075,13 @@ function build3D(M, canvas, gl, ui, hud) {
     fx.update(ph === 'combat' && F && F.hitStop > 0 ? dt * 0.08 : dt, cam);
     if (F && ph === 'combat') fx.trailsBuild(1); else fx.trailsBuild(0.6);
     SPO.stretch = F && F.cruise === 2 ? 0.03 : 0.05; SPO.dust = F ? 0.32 : 0.2; SPO.pxScale = canvas.height / 900; SPO.farPos = cam.position;
+    SPO.T = F ? F.T0 + F.t : universeTime();
     space.update(dt, cam, camVel, SPO);
+    worldUpdate(dt);
     // eye adaptation: looking into the star closes the iris a little (the HUD stays readable, the star still burns)
     let sunK = 0;
     if (space.sys.sunDir) { _v.copy(space.sys.sunDir).applyQuaternion(_q.copy(cam.quaternion).invert()); const c = -_v.z / (_v.length() || 1); sunK = c > 0.6 ? Math.min(1, (c - 0.6) / 0.38) : 0; }
-    expo += (1.05 * (1 - 0.24 * sunK * sunK) - expo) * (1 - Math.exp(-2.5 * dt)); renderer.toneMappingExposure = expo;
+    expo += (1.05 * (1 - 0.24 * sunK * sunK) * wExpo - expo) * (1 - Math.exp(-2.5 * dt)); renderer.toneMappingExposure = expo;
     // grade
     flashK = Math.max(0, flashK - dt * 1.8); hitAber = Math.max(0, hitAber - dt * 2.5);
     if (grade) {
@@ -839,12 +1090,14 @@ function build3D(M, canvas, gl, ui, hud) {
       grade.uniforms.uAber.value = 0.0015 + hitAber * 0.03 + (p && p.boosting ? 0.006 : 0) + (tunnelT >= 0 ? 0.02 : 0) + cruiseK * 0.012;
       grade.uniforms.uDmg.value = p && ph === 'combat' ? Math.max(0, 0.35 - hullF) * 2.2 + (p.alive ? 0 : 0.3) : 0;
       grade.uniforms.uSat.value = p && ph === 'combat' ? 0.75 + 0.25 * Math.min(1, hullF * 2.5) : 1;
+      grade.uniforms.uHeat.value = F && ph === 'combat' && F.surf ? F.surf.heat * 0.55 : 0;
       if (!(F && (F.dock || F.outcome === 3))) fadeK = Math.max(0, fadeK - dt * 1.4);
       grade.uniforms.uFade.value = mapMode ? 0 : fadeK;
       if (flashK <= 0.01) grade.uniforms.uFlashCol.value.setRGB(1, 1, 1);
     }
     fx.plumesEnd();
     render();
+    if (window.__czSync && gl) { gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, SYNC_PX); perf.work[perf.wi++ % perf.work.length] = performance.now() - now; }
     adaptResolution(ph);
   }
 
@@ -856,13 +1109,13 @@ function build3D(M, canvas, gl, ui, hud) {
     adaptT = 0;
     const base = renderer.getPixelRatio(), maxS = Math.min(Q.scale, 1.35) * (tier.name === 'high' ? dpr : 1), minS = maxS * 0.6;
     let ns = base;
-    if (perf.ema > 21 && base > minS + 0.01) ns = Math.max(minS, base * 0.85);
-    else if (perf.ema < 13 && base < maxS - 0.01) ns = Math.min(maxS, base * 1.1);
+    if (perf.ema > 18 && base > minS + 0.01) ns = Math.max(minS, base * (perf.ema > 24 ? 0.85 : 0.92));
+    else if (perf.ema < 12.5 && base < maxS - 0.01) ns = Math.min(maxS, base * 1.08);
     if (Math.abs(ns - base) > 0.01) { renderer.setPixelRatio(ns); perf.scale = ns; fit(canvas.clientWidth || 960, canvas.clientHeight || 540); }
   }
 
   function dispose() {
-    clearVisuals(); fx.dispose(); space.dispose(); GAL.dispose(); if (composer) composer.dispose(); hud.dispose(); ui.dispose();
+    clearVisuals(); fx.dispose(); WORLD.dispose(); space.dispose(); GAL.dispose(); plasmaMat.dispose(); plasmaGeo.dispose(); gearGeo.dispose(); gearMat.dispose(); if (composer) composer.dispose(); hud.dispose(); ui.dispose();
     mslGeo.dispose(); mslMat.dispose(); pkGeo.dispose(); pkMats.forEach((m) => m.dispose()); cockpit.geometry.dispose(); cockpit.material.dispose();
     if (hubShip) hubShip.material.dispose();
     sfx.stopDrone(); sfx.engineStop && sfx.engineStop();

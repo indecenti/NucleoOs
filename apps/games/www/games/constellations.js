@@ -17,8 +17,9 @@ import { loadSave, storeSave, newSave } from '/apps/games/games/constellations-s
 import { unitBuy, unitSell, refuelPrice, jumpCost, sysDist, cargoUsed, beaconsLit, beaconsTotal } from '/apps/games/games/constellations-econ.js';
 import { SHOP, shopMaxed, shopCost, shopBuy, repairCost } from '/apps/games/games/constellations-shop.js';
 import { createFlight, ACE_NAMES, cmd as simCmd, OUT, EV, CLS } from '/apps/games/games/stelle/sim.js';
+import { placeOver, placeNearSite } from '/apps/games/games/stelle/surface.js';
 import { systemBlueprint } from '/apps/games/games/stelle/world.js';
-import { loadWeb, saveWeb, freshWeb, markVisited, markRelit, markScanned, unlock, markSeen } from '/apps/games/games/constellations-web.js';
+import { loadWeb, saveWeb, freshWeb, markVisited, markRelit, markScanned, unlock, markSeen, foundMask, markFound, markLooted, wasLooted } from '/apps/games/games/constellations-web.js';
 import { ENTRIES, BY_ID, entriesOf, CATS } from '/apps/games/games/constellations-codex.js';
 
 const G_RELIQ = 6, F_CUSTODI = 1;   // relic good index / Keepers faction (beacon relight bookkeeping)
@@ -90,7 +91,30 @@ function codexOnFlight(F) {
     } else if (e.n === EV.SCAN && e.v) {
       if (e.k === 'planet' || e.k === 'moon') { codexUnlock('w_' + e.v.type); if (markScanned(WEB, RUN.sector, RUN.sys, e.a)) saveWeb(WEB); }
     } else if (e.n === EV.RELIGHT) { codexUnlock('relight'); codexUnlock('c_novice'); codexUnlock('beacon_lit'); }
+    else if (e.n === EV.DISCOVER && e.v) onDiscover(e.v);
+    else if (e.n === EV.LOOT && e.v) onLoot(e.v);
+    else if (e.n === EV.SURF && e.a === -1 && e.v && e.v.type) codexUnlock('w_' + e.v.type);
   }
+}
+// M3: a site found on a world pays once (the web save remembers it); ruins open their codex entry; a relic comes aboard
+const RUIN_CODEX = { gate: 'gate', archive: 'archive', observatory: 'observatory' };
+function onDiscover(v) {
+  if (!WEB || !RUN) return;
+  if (!markFound(WEB, RUN.sector, RUN.sys, v.w, v.i)) return;
+  const L = v.loot || {};
+  if (L.cr) RUN.credits = Math.min(9999999, RUN.credits + L.cr);
+  if (L.rep >= 0 && L.rep < 4 && L.repN) RUN.rep[L.rep] = Math.max(-100, Math.min(100, RUN.rep[L.rep] + L.repN));
+  if (RUIN_CODEX[v.kind]) { codexUnlock(RUIN_CODEX[v.kind]); codexUnlock('costellatori'); if (v.kind === 'archive') codexUnlock('c_novice'); }
+  if (v.type) codexUnlock('w_' + v.type);
+  if (FLIGHT) FLIGHT.earned += L.cr || 0;
+  saveWeb(WEB); persist();
+}
+function onLoot(v) {
+  if (!WEB || !RUN || wasLooted(WEB, RUN.sector, RUN.sys, v.w, v.i)) return;
+  markLooted(WEB, RUN.sector, RUN.sys, v.w, v.i);
+  if (cargoUsed(RUN) < RUN.cargo_max) RUN.cargo[G_RELIQ] = (RUN.cargo[G_RELIQ] | 0) + 1;
+  else RUN.credits = Math.min(9999999, RUN.credits + 220);   // no room: the Keepers buy it off you on the spot
+  saveWeb(WEB); persist();
 }
 async function persist() {
   DIRTY = true;                          // mark the latest RUN as needing a write
@@ -148,7 +172,11 @@ function startCombat(state, cc, flavor) {
   MISSION_FLAVOR = flavor || null;
   const w = typeof window !== 'undefined' ? window : {};
   FLIGHT = createFlight({ bp: currentBlueprint(), cc, run: RUN, seed: RUN.seed >>> 0, sector: RUN.sector >>> 0, sys: RUN.sys, slot: cc.slot | 0,
-    autopilot: !!w.__czAutopilot, autoDock: !!w.__czAutoDock, god: !!w.__czGod, brief: w.__czNoBrief || cc.kind === 'explore' ? false : undefined, timeScale: w.__czTimeScale | 0 });
+    autopilot: !!w.__czAutopilot, autoDock: !!w.__czAutoDock, god: !!w.__czGod, brief: w.__czNoBrief || cc.kind === 'explore' ? false : undefined, timeScale: w.__czTimeScale | 0,
+    autoLand: !!w.__czAutoLand, autoSites: w.__czAutoSites | 0, clock: w.__czClock != null ? +w.__czClock : undefined,
+    // M3: what the web save already found on this system's worlds (found sites do not pay twice)
+    discovered: (wi) => (WEB ? foundMask(WEB, RUN.sector >>> 0, RUN.sys, wi) : 0),
+    looted: (wi) => (WEB && WEB.looted ? (WEB.looted[(RUN.sector >>> 0) + ':' + RUN.sys + ':' + wi] >>> 0) || 0 : 0) });
   evCursor = FLIGHT.evHead;
   lastTickAt = (typeof performance !== 'undefined' ? performance.now() : 0);
   return { ...state, phase: 'combat', cc, result: 0, flightNo: (state.flightNo || 0) + 1 };
@@ -309,7 +337,10 @@ function MODEL() {
 // test hook (games-host / e2e): read-only view of the live run and flight
 export const __cz = { get run() { return RUN; }, get flight() { return FLIGHT; }, get bp() { return currentBlueprint(); }, get web() { return WEB; }, get model() { return MODEL(); } };
 // review / test hook: look at another system of the sector from the hub (in memory only — never persisted)
-const __dev = { goto(i) { if (!RUN || !SECTOR || i < 0 || i >= SECTOR.length || FLIGHT) return false; RUN.sys = i; rebuildSector(); return true; } };
+const __dev = { goto(i) { if (!RUN || !SECTOR || i < 0 || i >= SECTOR.length || FLIGHT) return false; RUN.sys = i; rebuildSector(); return true; },
+  // M3 review: over world wi of this system, in daylight (sun sunEl degrees up), at height alt
+  overWorld(wi, alt, sunEl, az, v) { return !!FLIGHT && placeOver(FLIGHT, wi, alt, sunEl, az, v); },
+  nearSite(wi, kinds, dist, alt, v, sunEl) { return FLIGHT ? placeNearSite(FLIGHT, wi, kinds, dist, alt, v, sunEl) : -1; } };
 if (typeof window !== 'undefined') { window.__cz = window.__cz || {}; window.__cz.game = __cz; window.__cz.dev = __dev; }
 
 // ---- input vocabulary (one keymap, phase-interpreted) ------------------------------------------

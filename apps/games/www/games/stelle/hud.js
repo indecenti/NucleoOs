@@ -9,6 +9,7 @@
 // the mission tracker. Five languages through the games catalog (cz_* keys).
 import I18N from '/nucleo-i18n.js';
 import { cmd, cycleSub, leadPoint, CLS, TEAM_P, TEAM_E, TEAM_N, F_GILDA, F_CUSTODI, F_RELITTI, ST } from './sim.js';
+import { SURF, nearestLandable } from './surface.js';
 import * as A from './assets.js';
 import { flavorText, ACE_PORTRAIT } from '../constellations-ui.js';
 
@@ -49,7 +50,7 @@ const CSS = `
 .sh-touch{position:absolute;inset:0;display:none;pointer-events:none}
 .sh-touch.on{display:block}
 .sh-tb{position:absolute;pointer-events:auto;border-radius:50%;border:2px solid rgba(189,243,255,.35);background:rgba(10,24,40,.45);color:#e8f6ff;font:700 13px inherit;display:grid;place-items:center;touch-action:none;letter-spacing:.06em}
-.sh-tb.on{background:rgba(120,220,255,.35)}
+.sh-tb.on{background:rgba(120,220,255,.35)}.sh-tb small{display:block;text-align:center;font-size:13px;color:#ffd66b;line-height:1}
 .sh-stick{position:absolute;left:4%;bottom:6%;width:150px;height:150px;border-radius:50%;border:2px solid rgba(189,243,255,.25);pointer-events:auto;touch-action:none}
 .sh-knob{position:absolute;left:50%;top:50%;width:56px;height:56px;margin:-28px 0 0 -28px;border-radius:50%;background:rgba(189,243,255,.3)}
 .sh-thr{position:absolute;right:2.5%;top:22%;width:46px;height:44%;border-radius:23px;border:2px solid rgba(189,243,255,.25);pointer-events:auto;touch-action:none}
@@ -80,7 +81,8 @@ export function createHud(canvas) {
   const cv = root.querySelector('canvas'), g = cv.getContext('2d');
   const commsEl = root.querySelector('.sh-comms'), banEl = root.querySelector('.sh-ban'), cardEl = root.querySelector('.sh-card');
   const pauseEl = root.querySelector('.sh-pause'), pbox = root.querySelector('.sh-pbox'), touchEl = root.querySelector('.sh-touch');
-  root.addEventListener('pointerdown', (e) => { if (e.target.closest('.sh-pause,.sh-tb,.sh-stick,.sh-thr')) e.stopPropagation(); }, true);
+  // bubble phase: the touch buttons hear their own pointerdown first (a capture-phase stop here silenced them all)
+  root.addEventListener('pointerdown', (e) => { if (e.target.closest('.sh-pause,.sh-tb,.sh-stick,.sh-thr')) e.stopPropagation(); });
   let W = 960, H = 540, S = 1, dpr = 1, MINPX = 13, compact = false, F = null, model = null, cam = null, opts = {}, isPaused = false, active = false;
   A.loadManifest().catch(() => {});
 
@@ -112,7 +114,8 @@ export function createHud(canvas) {
       case 'c': cmd(F, 'cruise'); break;
       case 'v': if (opts.setCamera) opts.setCamera(opts.camera() === 'chase' ? 'cockpit' : 'chase'); break;
       case 'h': toggleHelp(); break;
-      case 'n': cmd(F, 'nav'); break; case 'l': interact(); break; case 'k': jumpNow(); break; case 'p': openMap(true); break;
+      case 'n': if (inAir()) cmd(F, 'snav'); else cmd(F, 'nav'); break; case 'l': interact(); break; case 'k': jumpNow(); break; case 'p': openMap(true); break;
+      case 'y': cmd(F, 'scan'); break; case 'u': cmd(F, 'assist'); break;
     }
   }
   function onKeyUp(e) { const k = e.key.length === 1 ? e.key.toLowerCase() : e.key; keys.delete(k); }
@@ -166,7 +169,7 @@ export function createHud(canvas) {
 
   function pollInput(dt) {
     const I = F.input, p = F.player;
-    if (!aimInit) { shipFwd(p, aim); aimInit = true; }
+    if (!aimInit || I.aimReset) { shipFwd(p, aim); aimInit = true; I.aimReset = false; }
     let pitch = 0, yaw = 0, roll = 0, thrRate = 0, rateMode = false;
     const kd = (k) => keys.has(k);
     if (kd('ArrowUp')) { pitch += 1; rateMode = true; } if (kd('ArrowDown')) { pitch -= 1; rateMode = true; }
@@ -188,7 +191,9 @@ export function createHud(canvas) {
       const edge = (i, fn) => { const d = bt(i); if (d && !pad.prev[i]) fn(); pad.prev[i] = d; };
       edge(6, () => cmd(F, 'missile')); edge(4, () => cmd(F, 'flare')); edge(0, () => cmd(F, 'target', 'ahead')); edge(1, () => cmd(F, 'target', 'attacker'));
       edge(2, () => cmd(F, 'target', 'next')); edge(3, () => opts.setCamera && opts.setCamera(opts.camera() === 'chase' ? 'cockpit' : 'chase'));
-      edge(14, () => cmd(F, 'pips', 0)); edge(12, () => cmd(F, 'pips', 1)); edge(15, () => cmd(F, 'pips', 2)); edge(13, () => cmd(F, 'pips', 3)); edge(11, () => cmd(F, 'cruise')); edge(8, () => openMap(!mapOn));
+      edge(14, () => cmd(F, 'pips', 0)); edge(12, () => cmd(F, 'pips', 1)); edge(15, () => cmd(F, 'pips', 2)); edge(13, () => cmd(F, 'pips', 3)); edge(8, () => openMap(!mapOn));
+      if (inAir()) { edge(11, () => interact()); edge(10, () => cmd(F, 'scan')); drift = false; } else edge(11, () => cmd(F, 'cruise'));
+      edge(9, () => interact());
       if (fire || boost || lx || ly || rx || ry) I.touched = true;
     }
     // touch
@@ -205,6 +210,7 @@ export function createHud(canvas) {
     I.thrRate = thrRate; I.boost = boost; I.drift = drift; I.fire = fire && !isPaused;
     if (touch.on && touch.thr != null) I.thr = touch.thr;
   }
+  function tbCount(b, label, n) { if (b._n === n) return; b._n = n; b.innerHTML = `<span>${label}<small>${n}</small></span>`; }
   function activePad() { const pads = (navigator.getGamepads && navigator.getGamepads()) || []; for (const p of pads) if (p && p.connected && p.mapping === 'standard') return p; for (const p of pads) if (p && p.connected) return p; return null; }
 
   // ---------------------------------------------------------------- touch controls
@@ -215,15 +221,16 @@ export function createHud(canvas) {
       b.addEventListener('pointerdown', (e) => { e.preventDefault(); b.classList.add('on'); if (F) F.input.touched = true; down(); });
       const rel = () => { b.classList.remove('on'); if (up) up(); }; b.addEventListener('pointerup', rel); b.addEventListener('pointercancel', rel); b.addEventListener('pointerleave', rel); touchEl.appendChild(b); return b; };
     btn('FIRE', 'right:10%;bottom:8%;width:96px;height:96px', () => { touch.fire = true; }, () => { touch.fire = false; });
-    btn('MSL', 'right:22%;bottom:6%;width:62px;height:62px', () => F && cmd(F, 'missile'));
+    touch.mslB = btn('MSL', 'right:22%;bottom:6%;width:62px;height:62px', () => F && cmd(F, 'missile'));
     btn('BST', 'right:9%;bottom:28%;width:62px;height:62px', () => { touch.boost = true; }, () => { touch.boost = false; });
-    btn('FLR', 'right:22%;bottom:22%;width:54px;height:54px', () => F && cmd(F, 'flare'));
+    touch.flrB = btn('FLR', 'right:22%;bottom:22%;width:54px;height:54px', () => F && cmd(F, 'flare'));
     btn('TGT', 'right:3%;bottom:40%;width:54px;height:54px', () => F && cmd(F, 'target', 'ahead'));
     btn('II', 'right:2%;top:2%;width:44px;height:44px;border-radius:10px', () => setPause(!isPaused));
     // travel: the context action (dock / relight), the next destination, the jump map
     btn('L', 'right:3%;bottom:52%;width:52px;height:52px', () => interact());
     btn('NAV', 'right:3%;bottom:62%;width:52px;height:52px', () => F && cmd(F, 'nav'));
     btn('MAP', 'right:3%;bottom:72%;width:52px;height:52px', () => openMap(!mapOn));
+    btn('SCN', 'right:13%;bottom:52%;width:52px;height:52px', () => F && cmd(F, 'scan'));
     const stick = touchEl.querySelector('.sh-stick'), knob = stick.querySelector('.sh-knob');
     const move = (e) => { const r = stick.getBoundingClientRect(), x = (e.clientX - r.left) / r.width * 2 - 1, y = (e.clientY - r.top) / r.height * 2 - 1, l = Math.hypot(x, y), k = l > 1 ? 1 / l : 1; touch.sx = x * k; touch.sy = y * k; knob.style.transform = `translate(${touch.sx * 45}px,${touch.sy * 45}px)`; };
     stick.addEventListener('pointerdown', (e) => { e.preventDefault(); stick.setPointerCapture(e.pointerId); move(e); if (F) F.input.touched = true; });
@@ -248,7 +255,7 @@ export function createHud(canvas) {
   function toggleHelp() { helpOn = !helpOn; if (!isPaused) setPause(true); else buildPause(); }
   function keysHtml() {
     const rows = [['🖱', 'cz_k_aim'], ['LMB / Enter', 'cz_k_fire'], ['RMB / M', 'cz_k_missile'], ['W / S · wheel', 'cz_k_throttle'], ['A / D', 'cz_k_roll'], ['Q / E', 'cz_k_yaw'], ['↑ ↓ ← →', 'cz_k_pitchyaw'],
-      ['Shift', 'cz_k_boost'], ['Space', 'cz_k_drift'], ['C', 'cz_k_cruise'], ['N', 'cz_k_nav'], ['L', 'cz_k_interact'], ['P · K', 'cz_k_jump'], ['1 2 3 · 4', 'cz_k_pips'], ['Z / X', 'cz_k_shields'], ['F', 'cz_k_flares'], ['T · R · G · B', 'cz_k_target'], ['V', 'cz_k_camera'], ['Esc', 'cz_k_pause'],
+      ['Shift', 'cz_k_boost'], ['Space', 'cz_k_drift'], ['C', 'cz_k_cruise'], ['N', 'cz_k_nav'], ['L', 'cz_k_interact'], ['Y', 'cz_k_scan'], ['U', 'cz_k_assist'], ['P · K', 'cz_k_jump'], ['1 2 3 · 4', 'cz_k_pips'], ['Z / X', 'cz_k_shields'], ['F', 'cz_k_flares'], ['T · R · G · B', 'cz_k_target'], ['V', 'cz_k_camera'], ['Esc', 'cz_k_pause'],
       ['🎮', 'cz_k_pad']];
     return '<div class="sh-keys">' + rows.map(([k, s]) => `<kbd>${esc(k)}</kbd><span>${esc(tr(s))}</span>`).join('') + '</div>';
   }
@@ -283,6 +290,7 @@ export function createHud(canvas) {
     if (e.v && e.v.voice) return { name: tr('cz_spk_control_3'), col: '#9fe8ff', portrait: 'echo', fac: 3 };
     if (e.v && e.v.who === 'abbess') return { name: tr('cz_cx_c_abbess_t'), col: '#e8c069', portrait: 'abbess', fac: 1 };
     if (e.v && e.v.who === 'vigil') return { name: tr('cz_cx_c_ace_vigil_t'), col: '#e8c069', portrait: 'ace_vigil', fac: 1 };
+    if (e.v && e.v.who === 'novice') return { name: tr('cz_cx_c_novice_t'), col: '#c9e6a0', portrait: 'novice', fac: 1 };
     if (e.v && e.v.who === 'raider') return { name: tr('cz_cs_2'), col: COL.hostile, portrait: null, fac: 2, emblem: EMBLEM[2] };
     if (e.v && e.v.ctl != null) { const f = e.v.ctl; return f === 3 ? { name: tr('cz_spk_control_3'), col: '#9fe8ff', portrait: 'echo', fac: 3 } : { name: tr('cz_spk_control_' + f), col: FAC_COL[f] || COL.hud, portrait: CONTACT[f], fac: f }; }
     if (!s) { const fac = F && F.mission ? (e.k === 'cz_c_capital' || e.k === 'cz_c_contacts' || e.k === 'cz_c_ambush' ? F.mission.offer : F.mission.offer) : 0; return { name: tr('cz_spk_control_' + fac), col: FAC_COL[fac] || COL.hud, portrait: CONTACT[fac], fac }; }
@@ -327,6 +335,7 @@ export function createHud(canvas) {
     const O = F.obj; if (!O.key) return '';
     const a = { ...O.a }; if (a.d != null) a.d = fmtDist(a.d);
     if (a.kind) a.name = poiLabel({ kind: a.kind, name: a.name });
+    if (a.site) a.name = tr('cz_site_' + a.site);
     return tr(O.key, a);
   }
   const fmtDist = (d) => d >= 1000 ? (d / 1000).toFixed(1) + ' km' : Math.round(d) + ' m';
@@ -527,7 +536,7 @@ export function createHud(canvas) {
       const k = q.t / 1.6;
       text('+' + q.v + ' cr', P.x, P.y - (1 - k) * 40 * S, 14, `rgba(255,214,107,${Math.min(1, k * 1.6)})`, 'center', 800);
     }
-    if (!briefing) { drawBottom(p); drawRadar(p); drawTracker(); drawPrompts(p); drawTravel(p); }
+    if (!briefing) { drawBottom(p); drawRadar(p); drawTracker(); if (inAir()) drawSurface(p, dt); else drawPrompts(p); drawTravel(p); }
     // ---- notes (right of centre)
     let ny = H * 0.62;
     for (let i = notes.length - 1; i >= 0; i--) { const n = notes[i]; n.t -= dt; if (n.t <= 0) { notes.splice(i, 1); continue; } text(n.s, cx, ny, 13, n.kind === 'bad' ? COL.bad : n.kind === 'good' ? COL.friend : COL.hud, 'center', 700); ny += 18 * S; }
@@ -635,6 +644,7 @@ export function createHud(canvas) {
     const cxs = compact ? [W / 2, W / 2] : [W / 2 - r - 10 * S, W / 2 + r + 10 * S];
     for (let k = 0; k < (compact ? 1 : 2); k++) { g.fillStyle = 'rgba(4,10,18,0.62)'; g.beginPath(); g.arc(cxs[k], cy, r, 0, 6.29); g.fill(); arc(cxs[k], cy, r, 0, 6.29, COL.dim, 1); arc(cxs[k], cy, r * 0.5, 0, 6.29, COL.faint, 1); }
     if (!compact) { text(tr('cz_hud_front'), cxs[0], cy - r - 6 * S, 9, COL.dim, 'center', 700); text(tr('cz_hud_rear'), cxs[1], cy - r - 6 * S, 9, COL.dim, 'center', 700); }
+    else if (touch.on && touch.mslB) { tbCount(touch.mslB, 'MSL', p.msl); tbCount(touch.flrB, 'FLR', p.flares); }   // phones: the count rides on the button
     else text(tr('cz_hud_msl') + ' ' + p.msl + '  ·  ' + tr('cz_hud_flr') + ' ' + p.flares, W / 2, cy + r + 16 * S, 10, COL.gold, 'center', 700);
     const q = p.q;
     for (const s of F.ships) {
@@ -685,7 +695,14 @@ export function createHud(canvas) {
   // the context action (L): seat the relic at a dark beacon, or ask the station for a bay
   function interact() {
     if (!F || F.outcome) return;
+    const U = F.surf;
+    if (U && U.w >= 0 && U.st !== SURF.SPACE) {
+      if (U.st === SURF.LANDED) cmd(F, 'takeoff');
+      else if (U.st === SURF.FLIGHT) cmd(F, U.agl < 450 ? 'land' : 'ascend');
+      return;
+    }
     const b = near('beacon', 2600), M = F.mission;
+    if (!(b && !b.lit && !M.relight) && !near('station', 9000) && F.surf && nearestLandable(F, 1.6)) { cmd(F, 'descend'); return; }
     if (b && !b.lit && !M.relight) {
       const r = model && model.run;
       if (!r || r.cargo[6] < 1) { note('cz_t_need_relic', 'bad'); return; }
@@ -720,8 +737,21 @@ export function createHud(canvas) {
   function openMap(on) {
     if (on && (!F || F.outcome || !model || !model.actions)) return;
     mapOn = on; mapEl.classList.toggle('on', on);
+    // the pad button that toggled the map is still held: both pollers start from the pad as it is now
+    const gp = activePad(); if (gp) for (let i = 0; i < gp.buttons.length; i++) { const d = !!(gp.buttons[i] && (gp.buttons[i].pressed || gp.buttons[i].value > 0.35)); mapPad[i] = d; pad.prev[i] = d; }
     if (on) { keys.clear(); mouseFire = false; if (document.pointerLockElement) document.exitPointerLock(); if (model.plot < 0) { const r = mapRows().find((x) => x.J.ok); if (r) model.actions.plot(r.j); } buildMap(); }
     else { try { const q = canvas.requestPointerLock && canvas.requestPointerLock(); if (q && q.catch) q.catch(() => {}); } catch {} }
+  }
+  let mapPad = {};
+  function mapPadPoll() {
+    const gp = activePad(); if (!gp) return;
+    const bt = (i) => !!(gp.buttons[i] && (gp.buttons[i].pressed || gp.buttons[i].value > 0.35));
+    const edge = (i, fn) => { const d = bt(i); if (d && !mapPad[i]) fn(); mapPad[i] = d; };
+    const ay = (gp.axes[1] || 0), dn = ay > 0.6, upk = ay < -0.6;
+    edge(1, () => openMap(false)); edge(8, () => openMap(false)); edge(9, () => openMap(false));
+    edge(0, () => jumpNow());
+    edge(13, () => mapKey('ArrowDown')); edge(12, () => mapKey('ArrowUp'));
+    if (dn && !mapPad.ad) mapKey('ArrowDown'); if (upk && !mapPad.au) mapKey('ArrowUp'); mapPad.ad = dn; mapPad.au = upk;
   }
   function mapKey(k) {
     if (k === 'Escape' || k === 'p' || k === 'Enter') { openMap(false); return; }
@@ -740,7 +770,7 @@ export function createHud(canvas) {
   mapEl.addEventListener('pointerdown', (e) => e.stopPropagation());
   // points of interest on the canvas: stations, the beacon, worlds and moons; the nav target in gold
   function drawPois(p) {
-    if (!F.pois) return;
+    if (!F.pois || (inAir() && F.surf.alt < F.surf.S.atmo.top * 0.8)) return;
     const exp = isExplore();
     for (let i = 0; i < F.pois.length; i++) {
       const P0 = F.pois[i], sel = exp && i === F.nav;
@@ -773,25 +803,29 @@ export function createHud(canvas) {
     }
   }
   // what you can do here, said at the bottom (with the key)
-  // the prompt line is rebuilt only when what you can do changes (no per-frame strings)
-  let promptKey = -2, promptStr = '', promptW = 0;
+  // the prompt line is rebuilt only when what you can do changes (no per-frame strings). Where it goes: bottom centre;
+  // on phones left-aligned just above the speed panel, clear of the touch buttons and the throttle
+  function promptY() { return compact ? touchTop() - 144 * S : H - 158 * S; }
+  function promptMaxW() { return compact ? W - 14 * S - 0.03 * W - 60 * dpr : W - 20 * S; }
+  function promptDraw(str, w, col = COL.hud) { const y = promptY(), x = compact ? 14 * S : W / 2 - w / 2; plate(x, y - 17 * S, w, 25 * S, 6); text(str, x + w / 2, y, 12, col, 'center', 700); }
+  let promptKey = -2, promptStr = '', promptW = 0, descW = null;
   function drawPrompts(p) {
     if (!isExplore() || F.outcome || F.dock || F.jump || !p.alive) return;
     const b = near('beacon', 2600), st = near('station', 9000), plot = model && model.plot >= 0 && model.sector && model.sector[model.plot] ? model.plot : -1;
-    const ctx = (b && !b.lit && !F.mission.relight ? 1 : st && !F.mission.relight ? 2 : 0) + (compact ? 4 : 0) + (plot + 1) * 8 + Math.round(S * 100) * 1024;
+    const wl = !(b && !b.lit) && !st && F.surf && (F.step % 20 === 0 ? (descW = nearestLandable(F, 1.6)) : descW);
+    const ctx = (b && !b.lit && !F.mission.relight ? 1 : st && !F.mission.relight ? 2 : wl ? 3 : 0) + (compact ? 4 : 0) + (plot + 1) * 8 + Math.round(S * 100) * 1024 + (wl ? wl.i * 1048576 : 0);
     if (ctx !== promptKey) {
       promptKey = ctx;
       const parts = [];
       if ((ctx & 3) === 1) parts.push('[L] ' + tr('cz_hud_p_relight')); else if ((ctx & 3) === 2) parts.push('[L] ' + tr('cz_hud_p_dock'));
+      else if ((ctx & 3) === 3 && wl) parts.push('[L] ' + tr(wl.gas ? 'cz_hud_p_clouds' : 'cz_hud_p_descend', { name: wl.pl.name }));
       if (!compact) parts.push('[N] ' + tr('cz_hud_p_nav'), '[C] ' + tr('cz_hud_p_cruise'), '[P] ' + tr('cz_hud_p_map'));
       if (plot >= 0) parts.push('[K] ' + tr('cz_hud_p_jump', { name: model.sector[plot].it }));
-      promptStr = parts.join('    '); promptW = promptStr ? Math.min(W - 20 * S, tw(promptStr, 12, 700) + 28 * S) : 0;
+      promptStr = parts.join('    '); promptW = promptStr ? Math.min(promptMaxW(), tw(promptStr, 12, 700) + 28 * S) : 0;
       if (promptStr) promptStr = fit(promptStr, 12, promptW - 20 * S, 700);
     }
     if (!promptStr) return;
-    const y = compact ? touchTop() - 96 * S : H - 158 * S;
-    plate(W / 2 - promptW / 2, y - 17 * S, promptW, 25 * S, 6);
-    text(promptStr, W / 2, y, 12, COL.hud, 'center', 700);
+    promptDraw(promptStr, promptW);
   }
   function drawTravel(p) {
     // jump drive spool
@@ -816,6 +850,141 @@ export function createHud(canvas) {
       bar(W / 2 - 70 * S, H * 0.74 + 7 * S, 140 * S, 3 * S, k, COL.shield);
     }
   }
+
+  // ---------------------------------------------------------------- planets: the instruments of flight in the air
+  const inAir = () => !!(F && F.surf && F.surf.w >= 0 && F.surf.st !== SURF.SPACE && F.surf.S);
+  let pingT = 0, pingN = 0, pingQuiet = false;   // the passive ping speaks only when it finds something
+  const finds = [];
+  const SV = { x: 0, y: 0, z: 0 }, AX = { x: 0, y: 0, z: 0 }, NO = { x: 0, y: 0, z: 0 }, EA = { x: 0, y: 0, z: 0 };
+  const fmtAlt = (m) => (Math.abs(m) >= 10000 ? (m / 1000).toFixed(1) + ' km' : Math.round(m) + ' m');
+  const SITE_COL = { gate: COL.gold, archive: COL.gold, observatory: COL.gold, relic: '#ffe7a8', wreck: '#ff9a5a', outpost: '#9fd3ff' };
+  function drawSurface(p, dt) {
+    const U = F.surf, cx = W / 2, cy = H / 2, m = cam.matrixWorld.elements;
+    const up = U.up, W0 = F.worlds[U.w];
+    // camera basis vs the local vertical
+    const cfx = -m[8], cfy = -m[9], cfz = -m[10], crx = m[0], cry = m[1], crz = m[2], cux = m[4], cuy = m[5], cuz = m[6];
+    const pitch = Math.asin(Math.max(-1, Math.min(1, cfx * up.x + cfy * up.y + cfz * up.z)));
+    const roll = Math.atan2(crx * up.x + cry * up.y + crz * up.z, cux * up.x + cuy * up.y + cuz * up.z);
+    const foc = (H / 2) / Math.tan(cam.fov * Math.PI / 360);
+    const lowUI = compact ? 0.82 : 1;
+    // ---- artificial horizon and pitch ladder (around the centre, turning with the roll)
+    if (U.st !== SURF.LANDED) {
+      g.save(); g.translate(cx, cy); g.rotate(-roll);
+      const span = Math.min(W, H) * 0.34 * lowUI;
+      for (let a = -30; a <= 30; a += 10) {
+        const t = a * Math.PI / 180 - pitch; if (Math.abs(t) > 0.7) continue;
+        const y = Math.tan(t) * foc; if (Math.abs(y) > H * 0.42) continue;
+        g.globalAlpha = (a === 0 ? 0.75 : 0.42) * (1 - Math.abs(y) / (H * 0.42));
+        g.strokeStyle = a === 0 ? COL.hud : COL.dim; g.lineWidth = (a === 0 ? 1.6 : 1.1) * S;
+        const L = a === 0 ? span : span * 0.32, gap = a === 0 ? 60 * S : 34 * S;
+        if (a < 0) g.setLineDash([6 * S, 5 * S]);
+        line(-gap - L, -y, -gap, -y); line(gap, -y, gap + L, -y); g.setLineDash([]);
+        if (a !== 0) { line(-gap - L, -y, -gap - L, -y + (a > 0 ? 5 : -5) * S); line(gap + L, -y, gap + L, -y + (a > 0 ? 5 : -5) * S); text(String(a), gap + L + 6 * S, -y + 4 * S, 11, COL.dim, 'left', 700); }
+      }
+      g.restore(); g.globalAlpha = 1 - flick * 0.6;
+      // flight path marker: where the ship is actually going
+      const k = 8; proj(p.pos.x + p.vel.x * k, p.pos.y + p.vel.y * k, p.pos.z + p.vel.z * k);
+      if (P.ok && p.spd > 8) { const r = 7 * S; arc(P.x, P.y, r, 0, 6.29, U.pull ? COL.bad : COL.friend, 1.6); g.strokeStyle = U.pull ? COL.bad : COL.friend; line(P.x - r * 2.4, P.y, P.x - r, P.y); line(P.x + r, P.y, P.x + r * 2.4, P.y); line(P.x, P.y - r, P.x, P.y - r * 2); }
+    }
+    // ---- heading tape (top centre): planet north from its axis
+    qr(W0.q, 0, 1, 0, AX);
+    const ud = AX.x * up.x + AX.y * up.y + AX.z * up.z;
+    NO.x = AX.x - up.x * ud; NO.y = AX.y - up.y * ud; NO.z = AX.z - up.z * ud; let nl = Math.hypot(NO.x, NO.y, NO.z) || 1; NO.x /= nl; NO.y /= nl; NO.z /= nl;
+    EA.x = NO.y * up.z - NO.z * up.y; EA.y = NO.z * up.x - NO.x * up.z; EA.z = NO.x * up.y - NO.y * up.x;
+    const hdg = (Math.atan2(cfx * EA.x + cfy * EA.y + cfz * EA.z, cfx * NO.x + cfy * NO.y + cfz * NO.z) * 180 / Math.PI + 360) % 360;
+    // phones: below the mission tracker and the menu button; desktops: top centre
+    const tw2 = Math.min(W * (compact ? 0.7 : 0.34), 420 * S), ty = compact ? 132 * S : 34 * S, tx0 = cx - tw2 / 2;
+    plate(tx0 - 8 * S, ty - 20 * S, tw2 + 16 * S, 36 * S, 6);
+    g.save(); g.beginPath(); g.rect(tx0, ty - 22 * S, tw2, 40 * S); g.clip();
+    const ppd = tw2 / 90;
+    for (let d = Math.floor((hdg - 50) / 5) * 5; d <= hdg + 50; d += 5) {
+      const x = cx + (d - hdg) * ppd, dd = ((d % 360) + 360) % 360;
+      g.strokeStyle = COL.dim; g.lineWidth = 1 * S; line(x, ty + 10 * S, x, ty + (dd % 15 === 0 ? 2 : 6) * S);
+      if (dd % 30 === 0) text(dd === 0 ? 'N' : dd === 90 ? 'E' : dd === 180 ? 'S' : dd === 270 ? 'W' : String(dd), x, ty - 2 * S, 12, dd % 90 === 0 ? COL.gold : COL.hud, 'center', 800);
+    }
+    // the nav signal's bearing on the tape
+    const ns = U.sites[U.nav];
+    if (ns) {
+      const dx = ns.pos.x - p.pos.x, dy = ns.pos.y - p.pos.y, dz = ns.pos.z - p.pos.z;
+      const b = (Math.atan2(dx * EA.x + dy * EA.y + dz * EA.z, dx * NO.x + dy * NO.y + dz * NO.z) * 180 / Math.PI + 360) % 360;
+      let rel = ((b - hdg + 540) % 360) - 180; rel = Math.max(-45, Math.min(45, rel));
+      g.fillStyle = COL.gold; const x = cx + rel * ppd; g.beginPath(); g.moveTo(x, ty + 16 * S); g.lineTo(x - 5 * S, ty + 10 * S); g.lineTo(x + 5 * S, ty + 10 * S); g.closePath(); g.fill();
+    }
+    g.restore();
+    g.fillStyle = '#fff'; g.beginPath(); g.moveTo(cx, ty + 12 * S); g.lineTo(cx - 5 * S, ty + 19 * S); g.lineTo(cx + 5 * S, ty + 19 * S); g.closePath(); g.fill();
+    text(String(Math.round(hdg)).padStart(3, '0') + '°', cx, ty + 34 * S, 13, '#fff', 'center', 800);
+    // ---- altitude / climb / ground speed (right of centre; on phones stacked on the left above the prompt and speed)
+    const ax = compact ? 24 * S : cx + Math.min(W, H) * 0.36, ay = compact ? promptY() - 107 * S : cy - 58 * S, aw = compact ? 150 * S : 132 * S;
+    plate(ax - 10 * S, ay - 22 * S, aw, (compact ? 104 : 116) * S, 8);
+    text(tr('cz_hud_alt'), ax, ay - 4 * S, 10, COL.dim, 'left', 800);
+    const lowAlt = U.agl < 60 && U.st === SURF.FLIGHT;
+    text(fmtAlt(U.agl), ax, ay + 20 * S, 22, lowAlt ? COL.warn : '#fff', 'left', 800);
+    text(tr('cz_hud_asl') + ' ' + fmtAlt(U.alt), ax, ay + 38 * S, 11, COL.dim, 'left', 700);
+    const vs = U.vs, vsc = vs < -25 && U.agl < 300 ? COL.bad : vs < -1 ? COL.warn : COL.friend;
+    text((vs >= 0 ? '▲ ' : '▼ ') + Math.abs(vs).toFixed(Math.abs(vs) < 10 ? 1 : 0) + ' m/s', ax, ay + 58 * S, 13, vsc, 'left', 800);
+    text(tr('cz_hud_gs') + ' ' + Math.round(U.gs) + ' m/s', ax, ay + 76 * S, 11, COL.hud, 'left', 700);
+    if (!compact) text((U.gear > 0.5 ? '▼ ' + tr('cz_hud_gear') : '') + (U.assist ? (U.gear > 0.5 ? '  ' : '') + tr('cz_hud_assist') : ''), ax, ay + 92 * S, 10, U.assistK > 0.05 ? COL.warn : COL.dim, 'left', 800);
+    // ---- sites: markers with distance; unfound ones are signals, found ones are named
+    for (let i = 0; i < U.sites.length; i++) {
+      const s = U.sites[i]; if (!s.seen) continue;
+      const sel = i === U.nav, col = s.found ? (SITE_COL[s.kind] || COL.gold) : '#7fe0ff';
+      proj(s.pos.x, s.pos.y, s.pos.z);
+      const d = s.d < 1e8 ? s.d : Math.hypot(s.pos.x - p.pos.x, s.pos.y - p.pos.y, s.pos.z - p.pos.z);
+      const lab = s.found ? tr('cz_site_' + s.kind) : tr('cz_hud_signal');
+      if (P.ok) {
+        const r = (sel ? 9 : 7) * S;
+        g.save(); g.translate(P.x, P.y); g.rotate(Math.PI / 4); g.strokeStyle = col; g.lineWidth = (sel ? 2.2 : 1.4) * S; g.strokeRect(-r, -r, r * 2, r * 2); if (s.found) { g.fillStyle = col; g.globalAlpha = 0.35; g.fillRect(-r * 0.5, -r * 0.5, r, r); g.globalAlpha = 1 - flick * 0.6; } g.restore();
+        if (!s.found) text('?', P.x, P.y + 5 * S, 13, col, 'center', 800);
+        if (sel || d < 6000) { text(lab, P.x, P.y - r - 8 * S, sel ? 13 : 12, col, 'center', 800); text(fmtDist(d), P.x, P.y + r + 17 * S, sel ? 12 : 11, sel ? COL.gold : COL.dim, 'center', 700); }
+      } else if (sel) {
+        const e = edgePoint(P.behind ? -P.vx : P.vx, P.behind ? -P.vy : P.vy, 70 * S); chevron(e.x, e.y, e.a, 10 * S, col, true);
+        text(lab + ' · ' + fmtDist(d), e.x - Math.cos(e.a) * 40 * S, e.y - Math.sin(e.a) * 30 * S + 4 * S, 12, col, 'center', 700);
+      }
+    }
+    // ---- scanner ping
+    if (pingT > 0) {
+      pingT -= dt; const k = 1 - pingT / 1.4;
+      arc(cx, cy, Math.min(W, H) * (0.08 + k * 0.5), 0, 6.29, `rgba(127,224,255,${Math.max(0, 0.7 * (1 - k))})`, 2.5);
+      if (!pingQuiet) text(tr(pingN ? 'cz_hud_ping_n' : 'cz_hud_ping_0', { n: pingN }), cx, H * 0.7, 13, '#7fe0ff', 'center', 800);
+    }
+    // ---- discovery / recovery progress
+    if (U.scanI >= 0 && U.sites[U.scanI]) {
+      const s = U.sites[U.scanI], k = Math.min(1, U.scanT / 2.4);
+      text(tr('cz_hud_surveying', { name: tr('cz_site_' + s.kind) }), cx, H * 0.74, 13, '#7fe0ff', 'center', 800);
+      bar(cx - 80 * S, H * 0.74 + 8 * S, 160 * S, 4 * S, k, '#7fe0ff');
+    }
+    if (U.lootT > 0) { text(tr('cz_hud_recovering'), cx, H * 0.78, 13, COL.gold, 'center', 800); bar(cx - 80 * S, H * 0.78 + 8 * S, 160 * S, 4 * S, Math.min(1, U.lootT / 3), COL.gold); }
+    for (let i = finds.length - 1; i >= 0; i--) {
+      const f = finds[i]; f.t -= dt; if (f.t <= 0) { finds.splice(i, 1); continue; }
+      const a = Math.min(1, f.t / 0.8), y = H * 0.33 + i * 26 * S;
+      g.globalAlpha = a; text(tr('cz_hud_found', { name: tr('cz_site_' + f.kind) }) + (f.cr ? '  +' + f.cr + ' cr' : ''), cx, y, 15, COL.gold, 'center', 800); g.globalAlpha = 1 - flick * 0.6;
+    }
+    // ---- warnings: pull up, heat, pressure
+    const blink = (F.t * 4) % 1 < 0.65;
+    if (U.pull && blink) text(tr('cz_hud_pullup'), cx, H * 0.36, 22, COL.bad, 'center', 800);
+    if (U.heat > 0.06) {
+      const w = Math.min(W * 0.3, 300 * S);
+      text(tr('cz_hud_heat', { n: Math.round(U.heat * 100) }), cx, H * 0.22, 15, U.heat > 0.6 ? COL.bad : COL.warn, 'center', 800);
+      bar(cx - w / 2, H * 0.22 + 8 * S, w, 5 * S, U.heat, U.heat > 0.6 ? COL.bad : COL.warn);
+    }
+    if (U.press > 0.05 && blink) text(tr('cz_hud_pressure'), cx, H * 0.4, 18, COL.warn, 'center', 800);
+    if (U.st === SURF.LANDING) { const ls = tr('cz_hud_landing') + '  ' + fmtAlt(U.agl); if (compact) promptDraw(ls, Math.min(promptMaxW(), tw(ls, 12, 700) + 28 * S)); else text(ls, cx, H * 0.67, 14, COL.hud, 'center', 800); }
+    // ---- what you can do here
+    let ctx = 0;
+    if (U.st === SURF.LANDED) ctx = 1; else if (U.st === SURF.FLIGHT) ctx = U.agl < 450 ? 2 : 3;
+    const key = ctx + (U.sites.length ? 0 : 4) + (compact ? 8 : 0) + Math.round(S * 100) * 16;
+    if (key !== spKey) {
+      spKey = key; const parts = [];
+      if (ctx === 1) parts.push('[L] ' + tr('cz_hud_p_takeoff')); else if (ctx === 2) parts.push('[L] ' + tr('cz_hud_p_land')); else if (ctx === 3) parts.push('[L] ' + tr('cz_hud_p_ascend'));
+      if (!compact && U.sites.length) parts.push('[Y] ' + tr('cz_hud_p_scan'), '[N] ' + tr('cz_hud_p_signal'));
+      spStr = parts.join('    '); spW = spStr ? Math.min(promptMaxW(), tw(spStr, 12, 700) + 28 * S) : 0; if (spStr) spStr = fit(spStr, 12, spW - 20 * S, 700);
+    }
+    if (spStr && U.st !== SURF.LANDING && U.st !== SURF.TAKEOFF && U.st !== SURF.ASCENT && U.st !== SURF.ENTRY && U.st !== SURF.DESCENT) {
+      promptDraw(spStr, spW);
+    }
+  }
+  let spKey = -1, spStr = '', spW = 0;
+  function qr(q, x, y, z, o) { const ix = q.w * x + q.y * z - q.z * y, iy = q.w * y + q.z * x - q.x * z, iz = q.w * z + q.x * y - q.y * x, iw = -q.x * x - q.y * y - q.z * z; o.x = ix * q.w + iw * -q.x + iy * -q.z - iz * -q.y; o.y = iy * q.w + iw * -q.y + iz * -q.x - ix * -q.z; o.z = iz * q.w + iw * -q.z + ix * -q.y - iy * -q.x; return o; }
   // undocking, the docking run and the arrival play as cut-scenes: letterbox and a caption
   function drawCinematic() {
     const h = H * 0.09;
@@ -834,6 +1003,7 @@ export function createHud(canvas) {
     F = F_; cam = camera; active = true;
     root.style.display = 'block';
     if (!cam) { g.setTransform(1, 0, 0, 1, 0, 0); g.clearRect(0, 0, W, H); return; }
+    if (mapOn) mapPadPoll();
     if (!paused && !F.outcome) pollInput(dt); else if (F.input) { F.input.fire = false; F.input.boost = false; }
     if (F.outcome) { F.input.fire = false; }
     for (let i = msgs.length - 1; i >= 0; i--) { const m = msgs[i]; m.t += dt; if (m.t > m.life) m.el.classList.add('out'); if (m.t > m.life + 0.7) { m.el.remove(); msgs.splice(i, 1); } }
@@ -870,6 +1040,8 @@ export function createHud(canvas) {
     hitMarker(kill) { hitT = 0.22; hitKill = !!kill; },
     kill(s, v) { hitT = 0.3; hitKill = true; if (v) pops.push({ x: s.pos.x, y: s.pos.y, z: s.pos.z, v, t: 1.6 }); if (s.cap) banner(tr('cz_hud_capkill', { name: CLS[s.ck].name }), COL.gold, 2.4); else if (s.ace) banner(tr('cz_hud_acekill', { name: s.name }), COL.gold, 2.4); },
     flashLock() { lockFlash = 1; },
+    ping(R, n) { pingT = 1.4; pingN = n | 0; pingQuiet = !pingN && R < 7000; },
+    discovered(e) { const v = e.v || {}; finds.push({ t: 4.5, kind: v.kind, cr: v.loot ? v.loot.cr : 0, world: v.world }); if (finds.length > 2) finds.shift(); },
     comms: commsLine,
     subsys(s, k) { note('cz_hud_subdown', 'good', { sub: tr('cz_sub_' + k) }); },
     hurt(x, y, z, hull) { hurts.push({ x, y, z, t: 1, hull }); if (hurts.length > 6) hurts.shift(); },

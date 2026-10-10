@@ -10,7 +10,8 @@ import { hash3 } from '../constellations-gen.js';
 const u32 = (x) => x >>> 0;
 // Web visual domains: kept far from DOM.* (1..8) by a fixed high base, then one sub-domain per layer.
 const VD = 0x57E11E00;
-export const VDOM = { STAR: 1, PLANET: 2, NEB: 3, ROCK: 4, STATION: 5, LAYOUT: 6, MISSION: 7, TRAFFIC: 8, NAME: 9, SKY: 10, MOON: 11, GALAXY: 12, POI: 13 };
+export const VDOM = { STAR: 1, PLANET: 2, NEB: 3, ROCK: 4, STATION: 5, LAYOUT: 6, MISSION: 7, TRAFFIC: 8, NAME: 9, SKY: 10, MOON: 11, GALAXY: 12, POI: 13,
+  SURF: 14, FLORA: 15, SITE: 16, WEATHER: 17, ORBIT: 18 };   // M3: surfaces, flora, sites on the ground, weather, orbits
 export const vhash = (seed, sector, sys, dom, salt) =>
   hash3(u32(seed ^ u32(VD + Math.imul(dom, 0x9E37))), u32(sector), u32(((sys & 0xff) << 16) | (salt & 0xffff)));
 
@@ -161,7 +162,9 @@ export function systemBlueprint(seed, sector, sysIdx, sys, litBeacon = false) {
   // physically bigger the farther they hang) — the cruise drive reaches any of them in seconds
   planets.forEach((p, i) => {
     p.dist = i === 0 ? 40000 : Math.round(70000 + rp() * 120000);
-    p.radius = Math.round(Math.tan(p.angR * Math.PI / 180) * p.dist);
+    // worlds you can land on are at least 4.5 km in radius (M3: room for a horizon and low flight)
+    p.radius = Math.max(p.type === 'gas' ? 0 : 4500, Math.round(Math.tan(p.angR * Math.PI / 180) * p.dist));
+    p.angR = Math.atan(p.radius / p.dist) * 180 / Math.PI;
     p.pos = [p.dir[0] * p.dist, p.dir[1] * p.dist, p.dir[2] * p.dist];
     p.moons = moonsOf(seed, sector, sysIdx, i, p);
   });
@@ -199,11 +202,53 @@ export function moonsOf(seed, sector, sysIdx, pi, p) {
   }
   return out;
 }
-// world-space centre of moon k of planet p (orbits are frozen: a sortie lasts minutes, an orbit days)
+// world-space centre of moon k of planet p at its reference phase (the blueprint's layout)
 export function moonPos(p, m, out = [0, 0, 0]) {
   const a = m.phase, R = p.radius * m.orbit, ct = Math.cos(m.tilt), st = Math.sin(m.tilt);
   const x = Math.cos(a) * R, z = Math.sin(a) * R;
   out[0] = p.pos[0] + x; out[1] = p.pos[1] + z * st; out[2] = p.pos[2] + z * ct;
+  return out;
+}
+
+// ---- M3: the sky moves. Universe time T (seconds since 2026-01-01 UTC) drives every orbit and spin, so the
+// same moment looks the same in every session. The home world (index 0) is the frame the station and the
+// battle space live in: it spins but stays put; the other worlds drift round the star (days per orbit), moons
+// circle their worlds in minutes. Everything here is a pure function of (blueprint, T).
+export const EPOCH = 1767225600;
+export const universeTime = () => Date.now() / 1000 - EPOCH;
+const TAU = Math.PI * 2;
+const ORB = new WeakMap();   // per-blueprint-planet orbit constants (not stored on the blueprint: it stays plain data)
+function orbitOf(p) {
+  let o = ORB.get(p); if (o) return o;
+  const r = rng(u32(p.seed ^ 0x0B17));
+  const rxz = Math.hypot(p.pos[0], p.pos[2]);
+  o = { rxz, a0: Math.atan2(p.pos[2], p.pos[0]), w: rxz > 1 ? TAU / (r.range(3, 9) * 86400) * (r() < 0.5 ? -1 : 1) : 0 };
+  ORB.set(p, o); return o;
+}
+// centre of planet p (index i in the blueprint) at time T
+export function planetAt(p, i, T, out = [0, 0, 0]) {
+  if (i === 0 || !p.pos) { out[0] = p.pos[0]; out[1] = p.pos[1]; out[2] = p.pos[2]; return out; }
+  const o = orbitOf(p), a = o.a0 + o.w * T;
+  out[0] = Math.cos(a) * o.rxz; out[1] = p.pos[1]; out[2] = Math.sin(a) * o.rxz;
+  return out;
+}
+// spin angle (about the world's own axis) and the orientation quaternion [x, y, z, w] = Rz(tilt) * Ry(spin)
+export const spinRate = (p) => (p.rot != null ? p.rot : (p.spin || 0.004)) * 0.25;
+export function planetQuat(p, T, out = [0, 0, 0, 1]) {
+  const th = (spinRate(p) * T) % TAU, tl = p.tilt != null ? p.tilt : (p.tiltAxis || 0);
+  const cy = Math.cos(th / 2), sy = Math.sin(th / 2), cz = Math.cos(tl / 2), sz = Math.sin(tl / 2);
+  // qz * qy with qz = (0,0,sz,cz), qy = (0,sy,0,cy)
+  out[0] = -sz * sy; out[1] = cz * sy; out[2] = sz * cy; out[3] = cz * cy;
+  return out;
+}
+export const moonPeriod = (m) => 240 * Math.pow(m.orbit, 1.5);
+// moon k of planet p (planet index i) at time T
+const _pc = [0, 0, 0];
+export function moonAt(p, i, m, T, out = [0, 0, 0]) {
+  planetAt(p, i, T, _pc);
+  const a = m.phase + (TAU * T / moonPeriod(m)) % TAU, R = p.radius * m.orbit, ct = Math.cos(m.tilt), st = Math.sin(m.tilt);
+  const x = Math.cos(a) * R, z = Math.sin(a) * R;
+  out[0] = _pc[0] + x; out[1] = _pc[1] + z * st; out[2] = _pc[2] + z * ct;
   return out;
 }
 

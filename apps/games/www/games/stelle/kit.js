@@ -13,6 +13,7 @@
 // bomber, crystal lance (Lattice), chandelier (Choir), box train (Hauler), collared corvette (Warden),
 // welded freighter (Hulk), cathedral barge (Reliquary). Gun/engine/turret points come from sim.js CLS,
 // so muzzle flashes, plumes and turrets sit exactly where the simulation fires from.
+import { AU, ATMO_GLSL } from './atmo.js';
 import { CLS, F_GILDA, F_CUSTODI, F_RELITTI, F_ECO, F_PLAYER } from './sim.js';
 import { rng } from './world.js';
 
@@ -1404,18 +1405,30 @@ export function cockpitGeometry(THREE) {
 // hit flash / scorch uniform. One shared program for every hull ('stelle-hull'): all knobs are uniforms in
 // material.userData.U — uFlash, uFlashCol, uGlowMul, uEngine (engine glow: ~0.25 idle, 1 cruise, 2 boost),
 // uPanel, uPanelK, uScorch, uRock, uBump, uNearFade.
+// M3: every hull lives in the same air as the world below it — one set of uniforms for all of them: the near
+// scene's atmosphere (atmo.js AU, aerial perspective per fragment) and the sky light that replaces the nebula's
+// reflections in daylight (uEnvK scales the space environment, uSkyIrr / uSkyRad add the sky).
+let HULL_SKY = null;
+export function hullSky(THREE) { return HULL_SKY || (HULL_SKY = { uEnvK: { value: 1 }, uSkyIrr: { value: new THREE.Vector3() }, uSkyRad: { value: new THREE.Vector3() } }); }
 export function hullMaterial(THREE, o = {}) {
   const m = new THREE.MeshStandardMaterial({ vertexColors: true, metalness: o.metal != null ? o.metal : 0.5, roughness: o.rough != null ? o.rough : 0.46, envMapIntensity: o.env != null ? o.env : 0.9 });
   const U = { uFlash: { value: 0 }, uFlashCol: { value: new THREE.Color(1, 1, 1) }, uGlowMul: { value: 1 }, uEngine: { value: o.engine != null ? o.engine : 1 }, uPanel: { value: o.panel || 0.55 }, uPanelK: { value: o.panelK != null ? o.panelK : 1 }, uScorch: { value: 0 },
     uRock: { value: o.rock ? 1 : 0 }, uBump: { value: o.bump != null ? o.bump : (o.rock ? 1.0 : 0.35) }, uNearFade: { value: o.nearFade || 0 } };
   m.userData.U = U;
+  const SKY = hullSky(THREE);
   m.onBeforeCompile = (sh) => {
-    Object.assign(sh.uniforms, U);
+    Object.assign(sh.uniforms, U, AU, SKY);
     sh.vertexShader = sh.vertexShader
-      .replace('#include <common>', '#include <common>\nattribute float aGlow;\nvarying float vGlow;\nvarying vec3 vObj;\nvarying vec3 vObjN;')
-      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvGlow = aGlow; vObj = position; vObjN = objectNormal;');
+      .replace('#include <common>', '#include <common>\nattribute float aGlow;\nvarying float vGlow;\nvarying vec3 vObj;\nvarying vec3 vObjN;\nvarying vec3 vCzW;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvGlow = aGlow; vObj = position; vObjN = objectNormal;')
+      .replace('#include <project_vertex>', '#include <project_vertex>\n{ vec4 czWp = vec4(transformed, 1.0);\n#ifdef USE_INSTANCING\nczWp = instanceMatrix * czWp;\n#endif\nvCzW = (modelMatrix * czWp).xyz; }');
     sh.fragmentShader = sh.fragmentShader
+      .replace('#include <lights_fragment_maps>', '#include <lights_fragment_maps>\niblIrradiance = iblIrradiance * uEnvK + uSkyIrr; radiance = radiance * uEnvK + uSkyRad;')
+      .replace('#include <opaque_fragment>', `#include <opaque_fragment>
+if (uAtR.y > 0.0) { float czT = length(vCzW - cameraPosition); vec3 czTr, czIn = czAtmo(cameraPosition - uAtC, (vCzW - cameraPosition) / max(czT, 1e-3), czT, 6, czTr); gl_FragColor.rgb = gl_FragColor.rgb * czTr + czIn; }`)
       .replace('#include <common>', `#include <common>
+${ATMO_GLSL}
+uniform float uEnvK; uniform vec3 uSkyIrr, uSkyRad; varying vec3 vCzW;
 uniform float uFlash; uniform vec3 uFlashCol; uniform float uGlowMul; uniform float uEngine; uniform float uPanel; uniform float uPanelK; uniform float uScorch; uniform float uRock; uniform float uBump; uniform float uNearFade;
 float hullH = 0.0, hullWear = 0.0, hullPaint = 1.0, hullBare = 0.0, hullGloss = 0.0;
 varying float vGlow; varying vec3 vObj; varying vec3 vObjN;

@@ -539,7 +539,9 @@ function maybeLock() {
   try { const r = c.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch {}   // no user activation (synthetic key) -> a rejected promise, not an error
 }
 function releaseLock() { if (document.pointerLockElement && document.exitPointerLock) document.exitPointerLock(); }
-function showLockHint(on) { $('#lockHint').classList.toggle('on', !!on && barOpen === false); }
+// touch-only devices have no mouse to capture: never offer it there
+const NO_MOUSE = !!(window.matchMedia && matchMedia('(hover:none) and (pointer:coarse)').matches);
+function showLockHint(on) { $('#lockHint').classList.toggle('on', !!on && barOpen === false && !NO_MOUSE); }
 // A gesture anywhere lets a guest (who entered playing via the network) claim real fullscreen + lock.
 function onUserGesture() {
   if (!immersive || barOpen) return;

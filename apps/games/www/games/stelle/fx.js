@@ -426,6 +426,22 @@ export function createFx(THREE, scene, Q) {
     for (const m of shields) if (m.visible) { const u = m.userData; u.t += dt; const k = u.t / u.dur; m.material.uniforms.uTime.value = T.value; if (k >= 1) { m.visible = false; m.removeFromParent(); u.owner = null; continue; } m.material.uniforms.uAge.value = k; }
     for (const l of lights) { const u = l.userData; if (u.t < u.dur) { u.t += dt; const k = 1 - u.t / u.dur; l.intensity = u.k * k * k; } else l.intensity = 0; }
   }
+  // a spinning world carries its air: move what lives inside radius sqrt(r2) of (cx, cy, cz) with the frame's rotation q
+  // over the last frame (p' = c1 + q (p - c0)), so dust, smoke, debris and trails stay put on the ground
+  function rotP(arr, i, q, c0, c1) {
+    const x = arr[i] - c0[0], y = arr[i + 1] - c0[1], z = arr[i + 2] - c0[2];
+    const ix = q[3] * x + q[1] * z - q[2] * y, iy = q[3] * y + q[2] * x - q[0] * z, iz = q[3] * z + q[0] * y - q[1] * x, iw = -q[0] * x - q[1] * y - q[2] * z;
+    arr[i] = ix * q[3] + iw * -q[0] + iy * -q[2] - iz * -q[1] + c1[0];
+    arr[i + 1] = iy * q[3] + iw * -q[1] + iz * -q[0] - ix * -q[2] + c1[1];
+    arr[i + 2] = iz * q[3] + iw * -q[2] + ix * -q[1] - iy * -q[0] + c1[2];
+  }
+  const Z3 = [0, 0, 0];
+  function frameDrag(c0, c1, q, r2) {
+    const inR = (arr, i) => { const x = arr[i] - c0[0], y = arr[i + 1] - c0[1], z = arr[i + 2] - c0[2]; return x * x + y * y + z * z < r2; };
+    for (const P of [add, smoke]) for (let i = 0; i < P.N; i++) if (P.alive[i] && inR(P.p, i * 3)) { rotP(P.p, i * 3, q, c0, c1); rotP(P.v, i * 3, q, Z3, Z3); }
+    for (let i = 0; i < ND; i++) if (D.alive[i] && inR(D.p, i * 3)) { rotP(D.p, i * 3, q, c0, c1); rotP(D.v, i * 3, q, Z3, Z3); }
+    for (const t of trails) if (t.used && t.n && inR(t.pts, 0)) for (let k = 0; k < t.n; k++) rotP(t.pts, k * 3, q, c0, c1);
+  }
   function clear() { add.clear(); smoke.clear(); D.alive.fill(0); deb.count = 0; for (const m of shocks) m.visible = false; for (const m of shields) { m.visible = false; m.removeFromParent(); } trailsClear(); for (const l of lights) l.intensity = 0; }
   function dispose() {
     add.dispose(); smoke.dispose(); bg.dispose(); bMat.dispose(); deb.dispose(); dMat.dispose(); shellGeo.dispose();
@@ -433,5 +449,5 @@ export function createFx(THREE, scene, Q) {
     tg.dispose(); trailMesh.material.dispose(); beamGeo.dispose(); beams.forEach((m) => m.material.dispose()); atlas.dispose();
   }
   return { add, smoke, explosion, hitSparks, muzzle, warp, shock, shieldHit, flash, debris, plume, plumesBegin, plumesEnd, trailFor, trailPush, trailsBuild, trailsClear,
-    boltsBegin, bolt, boltsEnd, beamsBegin, beam, update, clear, dispose, T };
+    boltsBegin, bolt, boltsEnd, beamsBegin, beam, update, clear, dispose, frameDrag, T };
 }

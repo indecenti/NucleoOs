@@ -9,8 +9,11 @@
 //   - M2: free flight from the bridge ends docked at the station; the 3D galaxy map plots a jump that plays as a
 //     cinematic and lands in the new system; the relight is flown and the lit beacon persists in the shared save
 //     (beacon_lit) while visited systems / relit history / codex go to the web save next to it; the codex pages;
-//   - (E2E_GPU=1) frame-time budget on the real GPU at the auto quality tier, in combat and in free flight, and no
-//     non-finite (NaN/Inf) pixels in the HDR frame.
+//   - M3: a world visited end to end (the dive, the entry, the helm, low flight to a signal, landing = a discovery
+//     paid into the run and kept in the web save, take-off, the climb back to orbit); a phone viewport with touch
+//     emulation (touch controls on screen, SCN pings, L lands and takes off); a gamepad opens and closes the jump map;
+//   - (E2E_GPU=1) frame-time budget on the real GPU at the auto quality tier, in combat, in free flight and low over
+//     a world (plus frame times per tier there), and no non-finite (NaN/Inf) pixels in the HDR frame.
 // Screenshots for review land in build/web-e2e/costellazioni/.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -276,4 +279,144 @@ test('costellazioni: frame-time budget on the real GPU (auto tier)', { skip: ski
   assert.ok(p.avg < 17.5 && p.p95 < 25, `60 fps budget: avg ${p.avg.toFixed(1)} ms, p95 ${p.p95.toFixed(1)} ms on ${p.renderer}`);
   const nan = await page.eval(`JSON.stringify(window.__cz.nanScan(480, 300).filter((x) => x.nan))`);
   assert.equal(nan, '[]', 'no non-finite pixels in the HDR frame (combat)');
+});
+
+// ---- M3: worlds ---------------------------------------------------------------------------------------------------------
+const surfState = (page) => page.eval(`(() => { const F = window.__cz.game.flight; if (!F || !F.surf) return null; const U = F.surf; return { st: U.st, alt: Math.round(U.alt), agl: Math.round(U.agl), heat: U.heat, found: U.found, w: U.w, left: !!U.left, world: window.__cz.r3d ? window.__cz.r3d.worldIdx : -2 }; })()`);
+const frameStats = (page, ms = 4000) => page.eval(`new Promise((res) => { const P = window.__cz.perf; const h0 = P.hi, w0 = P.wi; setTimeout(() => { const st = (H, i1, i0) => { const n = Math.min(i1 - i0, H.length), a = []; for (let i = 0; i < n; i++) a.push(H[(i1 - 1 - i) % H.length]); a.sort((x, y) => x - y); return n ? { n, avg: +(a.reduce((s, x) => s + x, 0) / n).toFixed(2), p95: +a[Math.floor(n * 0.95)].toFixed(2) } : { n: 0, avg: 0, p95: 0 }; }; const f = st(P.hist, P.hi, h0), w = st(P.work, P.wi, w0), W = window.__cz.r3d.world; res({ tier: P.tier, scale: +(+P.scale).toFixed(2), n: f.n, avg: f.avg, p95: f.p95, work: w.avg, workP95: w.p95, chunks: W ? W.stats.visible : 0, flora: W ? W.stats.flora : 0, gpu: (() => { try { const gl = document.createElement('canvas').getContext('webgl2'), e = gl.getExtension('WEBGL_debug_renderer_info'); return String(gl.getParameter(e.UNMASKED_RENDERER_WEBGL)).split('(0x')[0].replace('ANGLE (', '').trim(); } catch { return ''; } })() }); }, ${ms}); })`);
+const SURF = { SPACE: 0, ENTRY: 1, FLIGHT: 2, LANDING: 3, LANDED: 4, TAKEOFF: 5, ASCENT: 6, DESCENT: 7 };
+async function launchFlight(page) {
+  await toHub(page);
+  await key(page, '1'); await sleep(200); await key(page, 'Enter');
+  assert.ok(await page.waitFor(`!!(window.__cz.game.flight && window.__cz.game.flight.t > 1)`, { timeout: 30000 }), 'launched');
+}
+
+// the rocky home world of system 9: launch, nav to it, the test autopilot flies the whole visit — the dive, the entry
+// (heat, plasma), the helm, low flight to a signal, landing next to it (a discovery), take-off, the climb back to orbit
+test('costellazioni: a world visited — descent, entry, surface flight, a discovery, take-off to orbit', { skip, timeout: 12 * 60 * 1000 }, async (t) => {
+  const sim = await startSim({ seed: { [SAVE]: { ...SAVE0, sys: 9 } } });
+  const browser = await launchBrowser({ gpu: process.env.E2E_GPU === '1', args: [HOST_RULES] });
+  t.after(async () => { await browser.close(); await sim.stop(); });
+  const page = await openGame(browser, sim, { flags: { __czAutopilot: true, __czAutoLand: true, __czEncounter: false, __czGod: true, __czTimeScale: 4, __czClock: 1000 } });
+  await launchFlight(page);
+  const credits0 = await page.eval('window.__cz.game.run.credits');
+  await page.eval(`(() => { const F = window.__cz.game.flight; F.undock = null; F.nav = F.pois.findIndex((p) => p.kind === 'planet' && p.i === 0); return F.nav; })()`);
+  const seen = new Set(); let heat = 0, shot = 0, worldDrawn = false;
+  const t0 = Date.now();
+  while (Date.now() - t0 < 9 * 60 * 1000) {
+    const s = await surfState(page);
+    if (s) { seen.add(s.st); heat = Math.max(heat, s.heat); if (s.world === 0) worldDrawn = true; }
+    if (s && s.st === SURF.ENTRY && shot === 0) { shot++; await frames(page); await page.screenshot(join(OUT, 'world-entry.png')); }
+    if (s && s.st === SURF.FLIGHT && s.agl < 400 && shot === 1) { shot++; await frames(page); await page.screenshot(join(OUT, 'world-surface.png')); }
+    if (s && s.st === SURF.LANDED && shot === 2) { shot++; await sleep(500); await frames(page); await page.screenshot(join(OUT, 'world-landed.png')); }
+    if (s && s.left) break;
+    await sleep(150);
+  }
+  for (const [k, v] of Object.entries(SURF)) assert.ok(seen.has(v), `the visit passed through ${k} (seen ${[...seen].sort().join(',')})`);
+  assert.ok(heat > 0.3, `the entry heated the hull (${(heat * 100).toFixed(0)}%)`);
+  assert.ok(worldDrawn, 'the renderer drew the world terrain');
+  const fin = await surfState(page);
+  assert.ok(fin && fin.st === SURF.SPACE && fin.found >= 1, 'back in space with a site found: ' + JSON.stringify(fin));
+  // the discovery: paid into the shared run, remembered in the web save next to it (never in the shared struct)
+  let web = null; for (let i = 0; i < 40; i++) { web = await readJson(sim, WEB); if (web && web.found && Object.values(web.found).some((m) => m)) break; await sleep(300); }
+  assert.ok(web && web.found && Object.values(web.found).some((m) => m), 'the web save on the card holds the found site: ' + JSON.stringify(web && web.found));
+  const credits = await page.eval('window.__cz.game.run.credits');
+  assert.ok(credits > credits0, `the discovery paid (${credits - credits0} cr)`);
+  const disk = await readJson(sim, SAVE);
+  assert.deepEqual(Object.keys(disk).sort(), Object.keys(SAVE0).sort(), 'the shared save keeps its contract');
+  assert.deepEqual(gameErrors(page), [], 'no errors');
+});
+
+// a phone: the touch controls are there in flight, and over a world SCN pings the scanner and L lands the ship
+test('costellazioni: phone viewport — touch controls on a world (scanner, landing)', { skip, timeout: 5 * 60 * 1000 }, async (t) => {
+  const sim = await startSim({ seed: { [SAVE]: { ...SAVE0, sys: 9 } } });
+  const browser = await launchBrowser({ gpu: process.env.E2E_GPU === '1', args: [HOST_RULES] });
+  t.after(async () => { await browser.close(); await sim.stop(); });
+  const page = await browser.newPage();
+  await page.setViewport(390, 844, true);
+  await page.send('Emulation.setTouchEmulationEnabled', { enabled: true, maxTouchPoints: 5 });
+  await page.initScript(`Object.assign(window, ${JSON.stringify({ __czEncounter: false, __czGod: true, __czClock: 1000 })});`);
+  await bootShell(page, sim, { lang: 'en', wait: false });
+  await page.goto(`${sim.origin}/apps/games/?host=constellations`);
+  assert.ok(await page.waitFor(`document.getElementById('startBtn') && !document.getElementById('startBtn').disabled && document.getElementById('startBtn').offsetWidth > 0`, { timeout: 45000 }), 'waiting room');
+  await page.eval(`document.getElementById('startBtn').click(), true`);
+  assert.ok(await page.waitFor(`(() => { const m = document.querySelector('[data-modal]'), h = document.querySelector('[data-hub]'); return (m && m.style.display === 'flex') || (h && h.style.display === 'block'); })()`, { timeout: 45000 }), 'the game opened');
+  await launchFlight(page);
+  assert.ok(await page.eval(`document.querySelector('.sh-touch').classList.contains('on') && document.querySelector('.sh-stick').getBoundingClientRect().width > 60`), 'the touch stick is shown');
+  const btns = await page.eval(`[...document.querySelectorAll('.sh-tb')].map((b) => b.textContent)`);
+  for (const b of ['FIRE', 'L', 'SCN', 'MAP', 'NAV']) assert.ok(btns.includes(b), `touch button ${b} (${btns.join(',')})`);
+  const inside = await page.eval(`[...document.querySelectorAll('.sh-tb')].every((b) => { const r = b.getBoundingClientRect(); return r.left >= 0 && r.top >= 0 && r.right <= innerWidth && r.bottom <= innerHeight; })`);
+  assert.ok(inside, 'every touch button is on the screen');
+  await page.eval(`window.__cz.dev.overWorld(0, 150, 45, 0, 60), true`);
+  assert.ok(await page.waitFor(`window.__cz.game.flight.surf.st === 2 && window.__cz.r3d.worldIdx === 0`, { timeout: 15000 }), 'low over the world');
+  await sleep(1500);
+  const tap = (label) => page.eval(`(() => { const b = [...document.querySelectorAll('.sh-tb')].find((x) => x.textContent === ${JSON.stringify(label)}); const r = b.getBoundingClientRect(); for (const ty of ['pointerdown', 'pointerup']) b.dispatchEvent(new PointerEvent(ty, { bubbles: true, cancelable: true, pointerType: 'touch', pointerId: 7, clientX: r.x + r.width / 2, clientY: r.y + r.height / 2 })); return true; })()`);
+  // (the passive 2.6 km ping runs every 8 s; the scanner's own 7 km ping answers once the last one has faded)
+  assert.ok(await page.waitFor(`(() => { const F = window.__cz.game.flight; return F.t - F.surf.pingT > 4.5 && F.t - F.surf.pingT < 7; })()`, { timeout: 12000, interval: 100 }));
+  await tap('SCN'); await sleep(300);
+  assert.ok(await page.eval(`(() => { const F = window.__cz.game.flight; return F.surf.pingR === 7000 && F.t - F.surf.pingT < 1; })()`), 'SCN pings the scanner');
+  await tap('L');
+  assert.ok(await page.waitFor(`window.__cz.game.flight.surf.st === 3 || window.__cz.game.flight.surf.st === 4`, { timeout: 20000 }), 'L lands the ship');
+  assert.ok(await page.waitFor(`window.__cz.game.flight.surf.st === 4`, { timeout: 40000 }), 'touchdown');
+  await sleep(800); await frames(page); await page.screenshot(join(OUT, 'world-phone.png'));
+  await tap('L');
+  assert.ok(await page.waitFor(`window.__cz.game.flight.surf.st === 5 || window.__cz.game.flight.surf.st === 2`, { timeout: 10000 }), 'L takes off again');
+  assert.deepEqual(gameErrors(page), [], 'no errors');
+});
+
+// M2 leftover: the pad that opens the jump map (Back) closes it too (B, Back, Start) — the held button must not bounce it
+test('costellazioni: a gamepad opens and closes the jump map', { skip, timeout: 3 * 60 * 1000 }, async (t) => {
+  const sim = await startSim({ seed: { [SAVE]: { ...SAVE0, sys: 6 } } });
+  const browser = await launchBrowser({ args: [HOST_RULES] });
+  t.after(async () => { await browser.close(); await sim.stop(); });
+  const pad = `window.__pad = new Array(17).fill(false); navigator.getGamepads = () => [{ id: 'test pad', index: 0, connected: true, mapping: 'standard', axes: [0, 0, 0, 0], buttons: window.__pad.map((p) => ({ pressed: p, touched: p, value: p ? 1 : 0 })) }];`;
+  const page = await openGame(browser, sim, { flags: { __czEncounter: false, __czGod: true } });
+  await page.eval(`${pad} true`);
+  await launchFlight(page);
+  const press = async (i) => { await page.eval(`window.__pad[${i}] = true, true`); await sleep(300); await page.eval(`window.__pad[${i}] = false, true`); await sleep(300); };
+  const mapOn = `document.querySelector('.sh-map').classList.contains('on')`;
+  await press(8);
+  assert.ok(await page.waitFor(mapOn, { timeout: 4000 }), 'Back opens the jump map');
+  await sleep(500); assert.ok(await page.eval(mapOn), 'and it stays open after the button is let go');
+  await press(1);
+  assert.ok(await page.waitFor(`!${mapOn}`, { timeout: 4000 }), 'B closes it');
+  await press(8); assert.ok(await page.waitFor(mapOn, { timeout: 4000 }), 'Back opens it again');
+  await press(8); assert.ok(await page.waitFor(`!${mapOn}`, { timeout: 4000 }), 'Back closes it too');
+  await sleep(500); assert.ok(!(await page.eval(mapOn)), 'and it stays shut');
+  assert.deepEqual(gameErrors(page), [], 'no errors');
+});
+
+// frame time low over a world (the jungle home world of system 5: forest, rain, clouds) at 1080p, per quality tier, on
+// the discrete GPU and on the integrated one of a dual-GPU laptop (Chrome's low-power adapter). `avg`/`p95` are frame
+// intervals (vsync-bound); `work` is the frame's cost with the GPU waited for (__czSync), what a slower GPU would show.
+test('costellazioni: frame time over a world on the real GPU, per quality tier', { skip: skip || (process.env.E2E_GPU !== '1' && 'set E2E_GPU=1 (needs a GPU)'), timeout: 20 * 60 * 1000 }, async (t) => {
+  const sim = await startSim({ seed: { [SAVE]: { ...SAVE0, sys: 5 } } });
+  t.after(async () => { await sim.stop(); });
+  for (const gpu of (process.env.CZ_GPUS || 'high-performance,low-power').split(',')) for (const q of (process.env.CZ_TIERS || 'auto,low,medium,high').split(',')) {
+    const browser = await launchBrowser({ gpu: gpu === 'low-power' ? 'low-power' : true, args: [HOST_RULES] });
+    try {
+      const page = await browser.newPage();
+      await page.setViewport(1920, 1080);
+      await page.initScript(`Object.assign(window, ${JSON.stringify({ __czEncounter: false, __czGod: true, __czClock: 1000, __czPowerPref: gpu })}); try { ${q === 'auto' ? "localStorage.removeItem('stelle.quality')" : `localStorage.setItem('stelle.quality', '${q}')`} } catch {}`);
+      await bootShell(page, sim, { lang: 'en', wait: false });
+      await page.goto(`${sim.origin}/apps/games/?host=constellations`);
+      assert.ok(await page.waitFor(`document.getElementById('startBtn') && !document.getElementById('startBtn').disabled && document.getElementById('startBtn').offsetWidth > 0`, { timeout: 45000 }));
+      await page.eval(`document.getElementById('startBtn').click(), true`);
+      assert.ok(await page.waitFor(`(() => { const m = document.querySelector('[data-modal]'), h = document.querySelector('[data-hub]'); return (m && m.style.display === 'flex' && m.querySelector('.cz-btn')) || (h && h.style.display === 'block'); })()`, { timeout: 45000 }));
+      await launchFlight(page);
+      await page.eval(`window.__cz.dev.overWorld(0, 100, 40, 300, 150), true`);
+      assert.ok(await page.waitFor(`window.__cz.r3d.worldIdx === 0 && window.__cz.r3d.world.coverage() > 0.95`, { timeout: 30000 }), 'the terrain streamed in');
+      await sleep(5000);   // flora cells in, the dynamic resolution settled
+      const p = await frameStats(page);
+      // then the same flight with the GPU waited for each frame: the cost under the vsync cap
+      await page.eval('window.__czSync = true'); const w = await frameStats(page, 2500); await page.eval('window.__czSync = false');
+      p.work = w.work; p.workP95 = w.workP95;
+      console.log(`  frame time over a world [${gpu} / ${q}]`, JSON.stringify(p));
+      if (q === 'auto') {
+        assert.ok(p.avg < 17.5 && p.p95 < 25, `60 fps over a world on ${p.gpu} (auto = ${p.tier}): avg ${p.avg} ms, p95 ${p.p95} ms`);
+        if (gpu !== 'low-power') assert.equal(await page.eval(`JSON.stringify(window.__cz.nanScan(480, 300).filter((x) => x.nan))`), '[]', 'no non-finite pixels in the HDR frame over a world');
+      }
+      assert.deepEqual(gameErrors(page), [], 'no errors');
+    } finally { await browser.close(); }
+  }
 });
