@@ -64,6 +64,10 @@ SW's device gate (2 in flight, exclusive writes, app cache) never runs there. Pa
 - `web/shell/seq-import.js`: an app's own module graph fetched ONE file at a time and linked in the browser (blob URLs;
   shared modules keep their real URL). ANIMA loads the agent runtime with it — a parallel `import()` of ~12 modules lost
   one on the 4-socket httpd and the browser kept the failure until a reload. `tools/seq-import.test.mjs`.
+  A blob-linked module cannot resolve a root-relative `import('/x')` on the device's http origin ("Failed to resolve
+  module specifier"), so seq-import makes relative AND root-relative dynamic imports absolute — the agent's run_js had
+  been "Sandbox unavailable" whenever its runtime was linked. The sandbox itself loads one file at a time, with a fresh
+  URL on retry (the httpd once reset nucleo-run.js and the browser remembered it).
 - ANIMA's SD copy of the conversations (`sessions.json`, the cross-device sync) is written after 3 quiet minutes or when
   ANIMA is hidden / closed (keepalive), ≤56 KB — not ~100 KB after every turn (37 s, heap down to 1.5 KB).
 - If the agent still fails to load, ANIMA says so (`agentLoadFail`) instead of a tool-less chat "applying" changes.
@@ -121,6 +125,10 @@ and `/api/apps` kept the old list until a reboot.
   refused with a pointer to `>` (approved). Live, the agent had written somma.js and could not run it.
 - `run_js` returns what the code **printed** (stdout, capped) — before, it reached only the UI and the model guessed
   its own numbers; `save_to` writes the printed output to a file so results are never retyped.
+- Files the final answer claims (created / saved / updated, five languages) are checked on the SD (`claimedMissing`):
+  a PC-model loop gets one nudge to really write a missing one, and every answer that still claims it ends with
+  `rt_file_not_written` ("I've created totali.csv" with nothing written, real Cardputer). The reply language also
+  rides in the user turn ("(Reply in English.)") — the 9B ignored the system-prompt note.
 - Truth over the model's last word: `guardPlan` forces file/code requests to a task (the cloud triage answered
   them with scripts to run); a turn whose last `publish_app` failed — or whose post-publish smoke failed — ends
   with "NOT installed", whatever the model wrote; `scaffold_app` never overwrites an app already in the workspace.
