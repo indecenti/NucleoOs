@@ -682,6 +682,14 @@ static void ensure_dir(const char *path)
 static void put32(uint8_t *b, uint32_t v) { b[0] = v; b[1] = v >> 8; b[2] = v >> 16; b[3] = v >> 24; }
 static void put16(uint8_t *b, uint16_t v) { b[0] = v; b[1] = v >> 8; }
 
+// Row scratch for the BMP writers. Screenshots and covers are rare, so it lives on the heap only while
+// a file is written (it was 4.9 KB of .bss, resident even with GameFront closed). Allocated before the
+// file is opened: no memory means no truncated file.
+struct BmpRows {
+    union { lgfx::rgb888_t rgb[320]; uint16_t raw[320]; } in;
+    uint8_t out[320 * 3 + 4];
+};
+
 // Save a 24-bit BMP of dstW x dstH, sampled from the source crop rect (sx0,sy0,cw,ch). The crop lets
 // the cover preserve the game's aspect (centre-crop) instead of squashing the whole frame.
 static bool save_bmp(LovyanGFX *src, const char *path, int dstW, int dstH,
@@ -690,7 +698,8 @@ static bool save_bmp(LovyanGFX *src, const char *path, int dstW, int dstH,
     int sw = src->width(), sh = src->height();
     if (sw <= 0 || sh <= 0 || dstW <= 0 || dstH <= 0 || dstW > 320) return false;
     if (cw <= 0 || ch <= 0) { sx0 = 0; sy0 = 0; cw = sw; ch = sh; }   // no crop -> full frame
-    FILE *f = fopen(path, "wb"); if (!f) return false;
+    BmpRows *r = (BmpRows *)malloc(sizeof *r); if (!r) return false;
+    FILE *f = fopen(path, "wb"); if (!f) { free(r); return false; }
 
     int rowSize = (dstW * 3 + 3) & ~3;
     uint32_t imgSize = (uint32_t)rowSize * dstH;
@@ -703,8 +712,8 @@ static bool save_bmp(LovyanGFX *src, const char *path, int dstW, int dstH,
     // Use rgb888_t so M5GFX handles hardware-display endianness and RGB/BGR conversion
     // internally. Reading as uint16_t from a hardware panel returns big-endian bytes
     // that get misinterpreted as little-endian RGB565, corrupting all colours.
-    static lgfx::rgb888_t prow[320];
-    uint8_t orow[320 * 3 + 4];
+    lgfx::rgb888_t *prow = r->in.rgb;
+    uint8_t *orow = r->out;
     for (int oy = 0; oy < dstH; oy++) {
         int sy = sy0 + oy * ch / dstH; if (sy >= sh) sy = sh - 1; if (sy < 0) sy = 0;
         src->readRect(0, sy, sw, 1, prow);
@@ -719,6 +728,7 @@ static bool save_bmp(LovyanGFX *src, const char *path, int dstW, int dstH,
         fwrite(orow, 1, rowSize, f);
     }
     fclose(f);
+    free(r);
     return true;
 }
 
@@ -785,7 +795,8 @@ static bool panel_bmp_to(const char *path)
 {
     int w = 0, h = 0; nucleo_ui_panel_size(&w, &h);
     if (w <= 0 || h <= 0 || w > 320) return false;
-    FILE *f = fopen(path, "wb"); if (!f) return false;
+    BmpRows *r = (BmpRows *)malloc(sizeof *r); if (!r) return false;
+    FILE *f = fopen(path, "wb"); if (!f) { free(r); return false; }
     int rowSize = (w * 3 + 3) & ~3;
     uint32_t imgSize = (uint32_t)rowSize * h;
     uint8_t hd[54]; memset(hd, 0, sizeof hd);
@@ -793,7 +804,8 @@ static bool panel_bmp_to(const char *path)
     put32(hd + 14, 40); put32(hd + 18, w); put32(hd + 22, h);
     put16(hd + 26, 1); put16(hd + 28, 24); put32(hd + 38, 2835); put32(hd + 42, 2835);
     fwrite(hd, 1, 54, f);
-    static uint16_t prow[320]; static uint8_t orow[320 * 3 + 4];
+    uint16_t *prow = r->in.raw;
+    uint8_t *orow = r->out;
     for (int y = h - 1; y >= 0; y--) {                 // BMP rows bottom-up
         if (!nucleo_ui_read_row(y, w, prow)) memset(prow, 0, (size_t)w * 2);
         memset(orow, 0, rowSize);
@@ -807,6 +819,7 @@ static bool panel_bmp_to(const char *path)
         fwrite(orow, 1, rowSize, f);
     }
     fclose(f);
+    free(r);
     return true;
 }
 
@@ -828,7 +841,8 @@ bool gamefront_save_panel_cover(const char *id)
     if (pw <= 0 || ph <= 0 || pw > 320) return false;
     ensure_dir(GF_DIR);
     char path[192]; snprintf(path, sizeof path, "%s/%s.bmp", GF_DIR, id);
-    FILE *f = fopen(path, "wb"); if (!f) return false;
+    BmpRows *r = (BmpRows *)malloc(sizeof *r); if (!r) return false;
+    FILE *f = fopen(path, "wb"); if (!f) { free(r); return false; }
 
     const META_t *m = gf_meta(id);
     const int W = gf_hero_w(m ? m->shape : (unsigned)GF_LANDSCAPE), H = HERO_H;   // output = exact carousel box for this game's shape
@@ -846,7 +860,8 @@ bool gamefront_save_panel_cover(const char *id)
     put16(hd + 26, 1); put16(hd + 28, 24); put32(hd + 38, 2835); put32(hd + 42, 2835);
     fwrite(hd, 1, 54, f);
 
-    static uint16_t prow[320]; static uint8_t orow[HERO_W * 3 + 4];
+    uint16_t *prow = r->in.raw;
+    uint8_t *orow = r->out;
 
     // PORTRAIT box (pinball): un-rotate the 90°-rotated portrait playfield so the cover is UPRIGHT and
     // fills the tall box (see the matching branch in gamefront_save_canvas_cover). Column-by-column.
@@ -865,6 +880,7 @@ bool gamefront_save_panel_cover(const char *id)
             fwrite(orow, 1, rowSize, f);
         }
         fclose(f);
+        free(r);
         return true;
     }
 
@@ -886,6 +902,7 @@ bool gamefront_save_panel_cover(const char *id)
         fwrite(orow, 1, rowSize, f);
     }
     fclose(f);
+    free(r);
     return true;
 }
 
@@ -902,7 +919,8 @@ bool gamefront_save_canvas_cover(const char *id)
     if (pw <= 0 || ph <= 0 || pw > 320) return false;
     ensure_dir(GF_DIR);
     char path[192]; snprintf(path, sizeof path, "%s/%s.bmp", GF_DIR, id);
-    FILE *f = fopen(path, "wb"); if (!f) return false;
+    BmpRows *r = (BmpRows *)malloc(sizeof *r); if (!r) return false;
+    FILE *f = fopen(path, "wb"); if (!f) { free(r); return false; }
 
     const META_t *m = gf_meta(id);
     const int W = gf_hero_w(m ? m->shape : (unsigned)GF_LANDSCAPE), H = HERO_H;
@@ -920,7 +938,8 @@ bool gamefront_save_canvas_cover(const char *id)
     put16(hd + 26, 1); put16(hd + 28, 24); put32(hd + 38, 2835); put32(hd + 42, 2835);
     fwrite(hd, 1, 54, f);
 
-    static lgfx::rgb888_t prow[320]; static uint8_t orow[HERO_W * 3 + 4];
+    lgfx::rgb888_t *prow = r->in.rgb;
+    uint8_t *orow = r->out;
 
     // PORTRAIT box (pinball): the live playfield is a 90°-rotated portrait table on the landscape
     // panel (app_pinball's SX/SY: screen_x = (pw-1)-ly, screen_y = lx). Un-rotate it so the cover is
@@ -940,6 +959,7 @@ bool gamefront_save_canvas_cover(const char *id)
             fwrite(orow, 1, rowSize, f);
         }
         fclose(f);
+        free(r);
         return true;
     }
 
@@ -959,6 +979,7 @@ bool gamefront_save_canvas_cover(const char *id)
         fwrite(orow, 1, rowSize, f);
     }
     fclose(f);
+    free(r);
     return true;
 }
 
