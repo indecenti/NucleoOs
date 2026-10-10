@@ -17,7 +17,9 @@ import { join } from 'node:path';
 const ROOT = process.cwd();
 const TOOL = 'tools/nucleo-sd-deploy/sd_deploy.py';
 const PY = ['python', 'python3'].find((b) => spawnSync(b, ['--version']).status === 0);
-const CORE_BUDGET = 64 * 1048576;          // a regression alarm, not a target: core is ~51 MB today
+// A regression alarm, not a target: core was ~54 MB, then ~64 MB with the Costellazioni art and score
+// (9.1 MB of AVIF + Opus, apps/games/www/games/stelle/assets) and the 3D web game.
+const CORE_BUDGET = 72 * 1048576;
 const TOTAL_BUDGET = 150 * 1048576;
 
 function py(code) {
