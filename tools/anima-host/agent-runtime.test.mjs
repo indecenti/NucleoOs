@@ -169,6 +169,9 @@ test('runtime: the reply language is named, and a PC model is told to list apps 
   assert.equal(await rt.run('¿qué apps de música hay?', [], { replyLang: 'es' }), 'Hecho.');
   const sys = calls[0].msgs[0].content;
   assert.match(sys, /LINGUA DELLA RISPOSTA: l'utente ha scritto in español/);
+  const user = calls[0].msgs[calls[0].msgs.length - 1];
+  assert.equal(user.role, 'user');
+  assert.match(user.content, /\(Responde en español\.\)$/, 'the language rides in the user turn too');
   assert.match(sys, /comando apps le elenca TUTTE/);
   assert.doesNotMatch(sys, /list_apps: elenca/, 'no tool the local model does not have');
   await rt.run('ciao', [], { replyLang: 'it' });
@@ -206,4 +209,32 @@ test('runtime: a named file is written, not turned into an app to publish', asyn
   const toolMsg = calls[1].msgs.find((m) => m.role === 'tool');
   assert.match(toolMsg.content, /asked for the file timer\.html/);
   assert.match(store.get('/data/agent/timer.html'), /Avvia/);
+});
+
+// "I've created totali.csv" with nothing written (qwen3.5:9b on the real Cardputer): one nudge, and if the file is
+// still missing the answer says so under it — the workspace is the truth, not the model's last word.
+test('runtime: a file the answer claims but the workspace lacks is nudged, then flagged', async () => {
+  const store = fakeDevice({ '/data/agent/vendite.csv': 'regione,importo' });
+  const ok = scriptedEngine([
+    () => ({ text: "I've created totali.csv with the totals." }),
+    () => ({ tools: [call('write_file', { path: 'totali.csv', content: 'regione,totale' })] }),
+    () => ({ text: 'Saved totali.csv.' }),
+  ]);
+  const ui = { autoApprove: () => true, confirm: async () => true };
+  let rt = createRuntime({ cfg: {}, lang: 'en', ui, localServer: { engines: async () => ok.E, first: () => true } });
+  assert.equal(await rt.run('total vendite.csv by region into totali.csv'), 'Saved totali.csv.');
+  assert.match(ok.calls[1].msgs[ok.calls[1].msgs.length - 1].content, /does not exist in the workspace/);
+  assert.equal(store.get('/data/agent/totali.csv'), 'regione,totale');
+  const liar = scriptedEngine([() => ({ text: "I've created report.md." })]);
+  const { readFileSync } = await import('node:fs');
+  const EN = JSON.parse(readFileSync(new URL('../../apps/agent/www/i18n.en.json', import.meta.url), 'utf8'));
+  const t = (k, v) => String(EN[k] || k).replace(/\{(\w+)\}/g, (m, n) => (v && v[n] != null ? v[n] : m));
+  rt = createRuntime({ cfg: {}, lang: 'en', ui, t, localServer: { engines: async () => liar.E, first: () => true } });
+  const out = await rt.run('make report.md');
+  assert.match(out, /report\.md: not written in the workspace/);
+  // no claim, no nudge: a missing file named in a plain answer is not a lie
+  const plain = scriptedEngine([() => ({ text: 'There is no file called notes.txt here.' })]);
+  rt = createRuntime({ cfg: {}, lang: 'en', ui, localServer: { engines: async () => plain.E, first: () => true } });
+  assert.equal(await rt.run('is there notes.txt?'), 'There is no file called notes.txt here.');
+  assert.equal(plain.calls.length, 1);
 });

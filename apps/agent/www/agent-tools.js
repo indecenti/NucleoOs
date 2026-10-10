@@ -480,10 +480,13 @@ export function trimOldToolResults(messages, { budget = 36000, keep = 4, stub = 
 export const ANNOUNCES_WORK = /(?<!\p{L})(faccio|modifico|procedo|vado a|sto per|ora (?:modifico|creo|scrivo|pubblico|ripubblico|eseguo|leggo)|poi (?:ripubblico|pubblico|eseguo|salvo)|i'?ll|i will|let me|i'?m going to|next,? i|voy a|ahora (?:modifico|creo)|je vais|maintenant je|ich werde|jetzt (?:ändere|erstelle|schreibe)|aggiungo|creo|scrivo|correggo|rinomino|sposto|salvo|inserisco|sostituisco|aggiorno|i'?m (?:adding|creating|writing|updating|fixing|editing|renaming|saving|appending)|i am (?:adding|creating|writing|updating|fixing|editing)|añado|agrego|escribo|corrijo|guardo|actualizo|renombro|inserto|j'?ajoute|je crée|je cree|j'?écris|j'?ecris|je corrige|je modifie|je renomme|j'?enregistre|je remplace|ich (?:füge|fuge|erstelle|schreibe|ändere|andere|korrigiere|speichere|benenne|ersetze|aktualisiere))(?!\p{L})/iu;
 const NUDGE_DO_IT = 'You described what you will do, but you did not call any tool, so NOTHING has changed yet. Do it now with the tools (edit_file, write_file, publish_app, …). If it is truly already done, give the final answer.';
 
-export async function runLocalToolLoop({ chat, execTool, messages, tools = [], maxSteps = 12, abort, onEvent, budget = 36000 }) {
+// checkFinal(text) → a message | null: the caller's check of a final answer against reality (a file it says it wrote
+// that is not there). One such nudge per turn, like the announcement one.
+export async function runLocalToolLoop({ chat, execTool, messages, tools = [], maxSteps = 12, abort, onEvent, budget = 36000, checkFinal = null }) {
   const known = new Set(tools.map((t) => (t.function ? t.function.name : t.name)).filter(Boolean));
   const seen = new Map();                                  // call signature → how many times it ran
   let nudged = false;                                      // one "you only announced it" nudge per turn
+  let checked = false;                                     // one "that file is not there" nudge per turn
   for (let step = 0; step < maxSteps; step++) {
     if (abort && abort.aborted) throw new Error('stopped');
     trimOldToolResults(messages, { budget });
@@ -497,6 +500,7 @@ export async function runLocalToolLoop({ chat, execTool, messages, tools = [], m
     if (onEvent) onEvent({ type: 'assistant', content: text, calls: calls.map((c) => c.name) });
     if (!calls.length) {
       if (!nudged && known.size && ANNOUNCES_WORK.test(text)) { nudged = true; messages.push({ role: 'user', content: NUDGE_DO_IT }); continue; }
+      if (!checked && checkFinal) { checked = true; let m = null; try { m = await checkFinal(text); } catch {} if (m) { messages.push({ role: 'user', content: m }); continue; } }
       return text;
     }
     for (const tc of asst.tool_calls) {

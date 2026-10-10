@@ -206,7 +206,7 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
     return ((r && r.apps) || []).filter((a) => a.enabled !== false)
       .map((a) => ({ ...a, category: (info[a.id] || {}).category || '', description: (info[a.id] || {}).description || '' }));
   }
-  let sandbox = null, sandboxTried = false;
+  let sandbox = null, sandboxTried = 0, sandboxTries = 0;   // sandboxTried: when the last load failed (ms)
   const runOut = [];                 // what the current run_js printed — handed back to the model with the result
   let osapiSpecMemo, osapiManifestMemo;            // get_os_api: the 112 KB spec is read from SD once per session
   let aborter = null;
@@ -311,10 +311,24 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
   function stop() { if (aborter) try { aborter.abort('stopped'); } catch {} }
 
   async function ensureSandbox() {
-    if (sandbox || sandboxTried) return sandbox;
-    sandboxTried = true;
+    // A failed load is retried on the next call (at most every 3 s): remembered for the whole session, one lost module
+    // left run_js and `node` "unavailable" for every later task (seen in a long run on the real Cardputer).
+    if (sandbox) return sandbox;
+    if (sandboxTried && Date.now() - sandboxTried < 3000) return null;
+    sandboxTried = Date.now();
     try {
-      const mod = await import('/apps/code-runner/nucleo-run.js');   // no /www/ — see the import note at the top
+      // ONE FILE AT A TIME, and a fresh URL on every retry: the Cardputer's 4-socket httpd resets a module now and then
+      // (live: ERR_CONNECTION_RESET on nucleo-run.js while ANIMA booted) and the browser then refuses that URL until a
+      // reload — run_js and `node` answered "sandbox unavailable" for the rest of the session.
+      let mod = null;
+      for (let i = 0; i < 2 && !mod; i++) {
+        if (i) await new Promise((r) => setTimeout(r, 700));
+        try { const { seqImport } = await import('/seq-import.js'); mod = await seqImport('/apps/code-runner/nucleo-run.js', { own: ['/apps/code-runner/'] }); }
+        catch { try { const u = '/apps/code-runner/nucleo-run.js?try=' + (++sandboxTries);   // no /www/ — see the import note at the top
+          // absolute: this module may be blob-linked by seqImport, where a bare '/…' does not resolve
+          mod = await import(typeof location !== 'undefined' && location.href ? new URL(u, location.href).href : u); } catch { mod = null; } }
+      }
+      if (!mod) throw new Error('sandbox module not loaded');
       // PURE COMPUTE: fs/http/anima all DISABLED. The sandbox's own resolver does NOT confine absolute
       // paths to cwd and its fs RPC bypasses our device throttle — so giving it fs would let run_js
       // escape the workspace and hammer the chip. File work goes through the dedicated file tools
@@ -736,7 +750,8 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
     readCap = LOCAL_READ_CAP;
     try {
       return await runLocalToolLoop({ chat, execTool: guardedExec, messages: [{ role: 'system', content: system }, ...messages], tools, maxSteps: STEPS,
-        abort: aborter && aborter.signal, onEvent: (e) => { if (e.type === 'tool' && ui && ui.status) ui.status('⚙ ' + e.name); } });
+        abort: aborter && aborter.signal, onEvent: (e) => { if (e.type === 'tool' && ui && ui.status) ui.status('⚙ ' + e.name); },
+        checkFinal: async (text) => { const miss = await claimedMissing(text); return miss.length ? NUDGE_NOT_WRITTEN(miss.join(', ')) : null; } });
     } finally { readCap = READ_CAP; }
   }
   // The local-server rung with its failure handled: a dead/refusing server is a note, never the end of the turn.
@@ -975,16 +990,39 @@ Sii conservativo: in dubbio scegli "task". Considera il contesto della conversaz
     }
 
     // single task (default): route to the best model across all configured keys, with cross-provider fallback.
-    return publishTruth(await runWorkerWithFallback({
+    // The reply language also rides in the user turn, in that language: a 9B model ignored the system-prompt note and
+    // answered an English task in Italian (real Cardputer, 2026-10-10); it follows its own user turn far better.
+    const REPLY_IN = { en: '(Reply in English.)', es: '(Responde en español.)', fr: '(Réponds en français.)', de: '(Antworte auf Deutsch.)', it: '(Rispondi in italiano.)' };
+    const userTurn = langNote && REPLY_IN[opts.replyLang] ? userMsg + '\n\n' + REPLY_IN[opts.replyLang] : userMsg;
+    // fileTruth: a file the answer still claims but the workspace does not have is said plainly under it
+    return await fileTruth(publishTruth(await runWorkerWithFallback({
       spec: { difficulty: plan.hard ? 'hard' : 'mid', capability: plan.capability },
       system: workerSystem(seedExtra),
-      baseMessages: [...histMsgs, { role: 'user', content: userMsg }],
-    }));
+      baseMessages: [...histMsgs, { role: 'user', content: userTurn }],
+    })));
   }
 
   // The model's last word is not the record: qwen3.5:9b answered "Contatore created and installed!" after BOTH its
   // publish_app calls had been refused (nothing reached /apps). When the turn's last publish failed, the reply
   // says so — deterministically, from the tool result, whatever the model wrote.
+  // Files the final answer says were created / saved / updated that do NOT exist in the workspace. A 9B model computed the
+  // right CSV with run_js and answered "I've created totali.csv" — nothing had been written (real Cardputer, 2026-10-10).
+  // Only a file named right after a claim word counts ("non trovo foo.txt" is no claim).
+  const CLAIM_RE = /(?<!\p{L})(?:creat|cread|creé|cré|erstellt|creato|creata|salvat|saved|guardad|enregistr|gespeichert|scritt|written|wrote|escrit|écrit|ecrit|geschrieben|aggiornat|updated|actualizad|mis à jour|aktualisiert)\p{L}*/giu;
+  const FILE_RE = /[\w./-]*[\w-]\.(?:csv|txt|md|json|js|mjs|html?|css|py|svg|xml|log|tsv)\b/gi;
+  async function claimedMissing(text) {
+    const s = String(text || ''), named = new Set();
+    for (const m of s.matchAll(CLAIM_RE)) for (const f of s.slice(m.index, m.index + 90).match(FILE_RE) || []) named.add(f.replace(/^\.?\//, ''));
+    const miss = [];
+    for (const f of [...named].slice(0, 6)) { try { const st = await fs.stat(f); if (st && st.exists === false) miss.push(f); } catch {} }
+    return miss;
+  }
+  const NUDGE_NOT_WRITTEN = (files) => 'You said you created or saved ' + files + ', but it does not exist in the workspace: nothing was written. '
+    + 'Write it now with the tools (run_js with save_to for computed output, write_file for text), then answer. If it truly cannot be done, say so.';
+  async function fileTruth(reply) {
+    const miss = await claimedMissing(reply).catch(() => []);
+    return miss.length ? String(reply || '').trimEnd() + '\n\n⚠ ' + t('rt_file_not_written', { files: miss.join(', ') }) : reply;
+  }
   function publishTruth(reply) {
     if (lastPublish && lastPublish.ok && lastPublish.runtimeErrors)
       return String(reply || '').trimEnd() + '\n\n⚠ ' + t('rt_app_runtime_err', { errors: lastPublish.runtimeErrors.join(' | ') });

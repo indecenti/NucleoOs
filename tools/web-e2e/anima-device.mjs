@@ -41,6 +41,7 @@ const only = arg('only', '') ? arg('only').split(',').map((s) => s.trim()) : nul
 const pinModel = arg('model', '');
 const overlay = flag('overlay') && !flag('sim');
 const noLocal = flag('nolocal');   // no model on this PC: what a user without Ollama gets (cloud key / device only)
+const privateMode = flag('private');   // ANIMA's Private mode: no Internet rung, the PC model answers everything
 const OLLAMA = 'http://localhost:11434';
 
 // ── the device (or the simulator) ────────────────────────────────────────────────────────────────────
@@ -255,7 +256,7 @@ try {
   const paired = await page.eval(`(async () => {
     localStorage.setItem('anima.lang', ${JSON.stringify(uiLang)}); localStorage.setItem('nucleo.onboarded', '1');
     localStorage.setItem('anima.agentauto', '1'); localStorage.setItem('anima.agents', '1');
-    localStorage.setItem('anima.mode', 'auto'); localStorage.setItem('anima.modeSet', '1');
+    localStorage.setItem('anima.mode', ${JSON.stringify(privateMode ? 'private' : 'auto')}); localStorage.setItem('anima.modeSet', '1');
     localStorage.setItem('anima.ws', JSON.stringify({ root: ${JSON.stringify(WS)}, recents: [] }));
     ${noLocal ? "localStorage.setItem('ai.local.engines', JSON.stringify({ enabled: false, servers: [], models: {} }));" : ''}
     ${pinModel ? `localStorage.setItem('ai.local.engines', JSON.stringify({ enabled: true, servers: [{ id: 'ollama', kind: 'ollama', name: 'Ollama', base: '${OLLAMA}', enabled: true }],

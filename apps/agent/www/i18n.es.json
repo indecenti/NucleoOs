@@ -70,6 +70,7 @@
   "rt_unknown": "desconocido",
   "rt_run_ok": "✔ ejecutado",
   "rt_publish_not_done": "La app «{id}» NO se ha instalado: la última publicación fue rechazada ({why}). Corrígela y pídeme que la publique de nuevo.",
+  "rt_file_not_written": "{files}: no se ha escrito en el espacio de trabajo — la respuesta de arriba lo da por hecho, pero el archivo no está.",
   "rt_app_runtime_err": "La app está instalada pero falla al arrancar: {errors}. Corrige el código y vuelve a publicarla.",
   "rt_open_file_ok": "✔ abriendo {path} en el OS",
   "rt_open_app_ok": "✔ lanzando app {app}",

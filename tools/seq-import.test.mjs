@@ -22,6 +22,11 @@ test('specifiers and rewriting touch import lines only', () => {
   assert.match(out, /from 'blob:http:\/\/dev\/apps\/b\.js'/);
   assert.match(out, /const s = 'import x from "no"'/, 'a string that looks like an import is left alone');
   assert.match(out, /import\('http:\/\/dev\/apps\/x\/lazy\.mjs'\)/, 'relative dynamic import made absolute');
+  // root-relative too: in a blob-linked module '/x' does not resolve (the agent's run_js on the Cardputer, 2026-10-10)
+  const rr = rewriteModule("const n = await import('/apps/code-runner/nucleo-run.js');\nconst s = await import(\"/seq-import.js\");\nconst h = await import('https://cdn/x.js');", 'http://dev/apps/agent/runtime.js', (u) => u);
+  assert.match(rr, /import\('http:\/\/dev\/apps\/code-runner\/nucleo-run\.js'\)/);
+  assert.match(rr, /import\("http:\/\/dev\/seq-import\.js"\)/);
+  assert.match(rr, /import\('https:\/\/cdn\/x\.js'\)/, 'an absolute URL is left as it is');
 });
 
 test('the graph is fetched sequentially, linked deps-first, and shared modules keep their real URL', async () => {

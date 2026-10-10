@@ -13,7 +13,10 @@
 // single instance with the rest of the page — and imports the linked root. Relative dynamic imports
 // ('./vendor/x.mjs') become absolute. Any problem (a cycle, a fetch error) falls back to a plain import().
 const STATIC_RE = /(^|[;\n}])(\s*(?:import|export)\s+(?:[^'"`;]*?\sfrom\s*)?)(['"])([^'"\n]+)\3/g;
-const DYN_REL_RE = /\bimport\(\s*(['"])(\.{1,2}\/[^'"\n]+)\1\s*\)/g;
+// Relative AND root-relative ('/x') dynamic imports: a blob-linked module has no path of its own to resolve '/x'
+// against — on the Cardputer's http origin "Failed to resolve module specifier '/apps/code-runner/nucleo-run.js'",
+// so the agent's run_js stayed "unavailable" whenever its runtime had been linked here (2026-10-10).
+const DYN_REL_RE = /\bimport\(\s*(['"])((?:\.{1,2})?\/[^'"\n]+)\1\s*\)/g;
 
 // The specifiers of one module's static imports / re-exports (side-effect imports included).
 export function staticSpecifiers(src) {
