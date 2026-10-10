@@ -184,6 +184,70 @@ export function parseConvert(q, { lang = 'it' } = {}) {
   return { value: Number(out.toFixed(d)), shown: fmt(v, 6) + sp(ua.sym) + ' = ' + fmt(out, d) + sp(ub.sym) };
 }
 
+// ---- calendar questions, five languages ------------------------------------------------------------
+// "Che giorno della settimana sarà il 25 dicembre 2026?", "how many days until Christmas?", "¿qué día será dentro de 10
+// días?" — exact from the clock (they reached a model: slow, and a small one gets weekdays wrong). → { reply } | null
+const MONTH_N = { gennaio: 1, febbraio: 2, marzo: 3, aprile: 4, maggio: 5, giugno: 6, luglio: 7, agosto: 8, settembre: 9, ottobre: 10, novembre: 11, dicembre: 12,
+  january: 1, february: 2, march: 3, april: 4, may: 5, june: 6, july: 7, august: 8, september: 9, october: 10, november: 11, december: 12,
+  enero: 1, febrero: 2, abril: 4, mayo: 5, junio: 6, julio: 7, septiembre: 9, octubre: 10, noviembre: 11, diciembre: 12,
+  janvier: 1, fevrier: 2, mars: 3, avril: 4, mai: 5, juin: 6, juillet: 7, aout: 8, octobre: 10, decembre: 12,
+  januar: 1, februar: 2, marz: 3, juni: 6, juli: 7, oktober: 10, dezember: 12 };
+const FEAST = { natale: [12, 25], christmas: [12, 25], navidad: [12, 25], noel: [12, 25], weihnachten: [12, 25],
+  capodanno: [1, 1], 'new year': [1, 1], "new year's day": [1, 1], 'ano nuevo': [1, 1], 'nouvel an': [1, 1], 'jour de l an': [1, 1], neujahr: [1, 1],
+  ferragosto: [8, 15], 'san valentino': [2, 14], "valentine's day": [2, 14], 'san valentin': [2, 14], 'saint-valentin': [2, 14], valentinstag: [2, 14],
+  halloween: [10, 31], epifania: [1, 6], befana: [1, 6] };
+const MONTH_RE = Object.keys(MONTH_N).join('|');
+const FEAST_RE = Object.keys(FEAST).sort((a, b) => b.length - a.length).map((k) => k.replace(/[']/g, "'?")).join('|');
+// "25 dicembre (2026)", "25 de diciembre (de 2026)", "25. Dezember (2026)", "december 25(, 2026)", or a feast
+const DATE_RE = String.raw`(?:(?:il|el|le|der|den|am|the)\s+)?(?:(\d{1,2})(?:\.|º|°|st|nd|rd|th)?\s+(?:de\s+)?(${MONTH_RE})(?:\s+(?:de\s+)?(\d{4}))?|(${MONTH_RE})\s+(\d{1,2})(?:st|nd|rd|th)?(?:,?\s+(\d{4}))?|(${FEAST_RE}))`;
+const WEEKDAY_Q = new RegExp(String.raw`^(?:che giorno(?: della settimana)?|quale giorno(?: della settimana)?|what day(?: of the week)?|which day(?: of the week)?|que dia(?: de la semana)?|quel jour(?: de la semaine)?|welcher (?:wochen)?tag|an welchem (?:wochen)?tag)\s+(?:e|era|sara|cade|cadra|is|was|will|does|es|era|sera|cae|caera|est|etait|tombe|tombera|ist|war|wird|fallt|liegt)?\s*(?:it\s+be\s+on\s+|be\s+on\s+|on\s+|fall\s+on\s+)?${DATE_RE}(?:\s+(?:be|fall|sein|sera))?$`);
+const UNTIL_Q = new RegExp(String.raw`^(?:quanti giorni (?:mancano|ci sono|restano)(?: ancora)?|how many days (?:are )?(?:left )?(?:until|till|to|before)|cuantos dias (?:faltan|quedan)(?: para| hasta)?|combien de jours (?:reste-t-il |il reste |y a-t-il )?(?:avant|jusqu'a|jusqu a|d'ici)|wie viele tage (?:sind es |noch )?(?:bis)(?: zu| zum)?)\s+(?:a|al|alla|all'|all|per|a|para|el|la|le|a la|au|zu|zum|zur)?\s*${DATE_RE}$`);
+const INN_Q = new RegExp(String.raw`^(?:che giorno|che data|quale giorno|what day|what date|which day|que dia|que fecha|quel jour|quelle date|welcher tag|welches datum)\s+(?:sara|saremo|will it be|is it|sera|seremos|es|serons-nous|sera-t-il|sera-ce|ist|haben wir|ist es)?\s*(?:tra|fra|in|dentro de|dans|en)\s+(\d{1,4})\s+(giorni|giorno|settimane|settimana|days|day|weeks|week|dias|dia|semanas|semana|jours|jour|semaines|semaine|tagen|tag|wochen|woche)$`);
+const CAL_T = {
+  it: { wd: (d, w, past) => `Il ${d} ${past ? 'era' : 'è'} ${w}.`, until: (n, d) => n === 0 ? `È oggi: ${d}.` : `Mancano **${n}** giorni a ${d}.`, inN: (n, d) => `Tra ${n} giorni sarà ${d}.` },
+  en: { wd: (d, w, past) => `${d} ${past ? 'was' : 'is'} a ${w}.`, until: (n, d) => n === 0 ? `It's today: ${d}.` : `**${n}** days until ${d}.`, inN: (n, d) => `In ${n} days it will be ${d}.` },
+  es: { wd: (d, w, past) => `El ${d} ${past ? 'fue' : 'es'} ${w}.`, until: (n, d) => n === 0 ? `Es hoy: ${d}.` : `Faltan **${n}** días para el ${d}.`, inN: (n, d) => `Dentro de ${n} días será ${d}.` },
+  fr: { wd: (d, w, past) => `Le ${d} ${past ? 'était' : 'est'} un ${w}.`, until: (n, d) => n === 0 ? `C’est aujourd’hui : ${d}.` : `Il reste **${n}** jours avant le ${d}.`, inN: (n, d) => `Dans ${n} jours, nous serons le ${d}.` },
+  de: { wd: (d, w, past) => `Der ${d} ${past ? 'war' : 'ist'} ein ${w}.`, until: (n, d) => n === 0 ? `Das ist heute: ${d}.` : `Noch **${n}** Tage bis zum ${d}.`, inN: (n, d) => `In ${n} Tagen ist ${d}.` },
+};
+function dateFrom(m, now, futureOnly) {
+  let day, mon, year;
+  if (m.feast) { [mon, day] = FEAST[m.feast.replace(/'/g, "'")] || FEAST[m.feast] || []; }
+  else { day = +m.day; mon = MONTH_N[m.month]; year = m.year ? +m.year : undefined; }
+  if (!day || !mon || day > 31) return null;
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  let d = new Date(year || now.getFullYear(), mon - 1, day);
+  if (d.getMonth() !== mon - 1) return null;                     // 31 febbraio
+  if (!year && futureOnly && d < today) d = new Date(now.getFullYear() + 1, mon - 1, day);
+  return d;
+}
+const pick = (x, i) => ({ day: x[i], month: x[i + 1], year: x[i + 2], day2: x[i + 4], month2: x[i + 3], year2: x[i + 5], feast: x[i + 6] });
+function norm6(p) { return p.day ? p : (p.month2 ? { day: p.day2, month: p.month2, year: p.year2 } : { feast: p.feast }); }
+export function parseCalendar(q, { lang = 'it', now = new Date() } = {}) {
+  const t = fold(q).replace(/[?!¿¡]+/g, ' ').replace(/,/g, ' ').replace(/\s+/g, ' ').trim().replace(TAIL, '').trim();
+  const loc = LOCALE[lang] || 'en-GB', T = CAL_T[lang] || CAL_T.en;
+  const long = (d) => d.toLocaleDateString(loc, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  const dm = (d) => d.toLocaleDateString(loc, { day: 'numeric', month: 'long', year: 'numeric' });
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  let m;
+  if ((m = WEEKDAY_Q.exec(t))) {
+    const d = dateFrom(norm6(pick(m, 1)), now, false); if (!d) return null;
+    return { reply: T.wd(dm(d), '**' + d.toLocaleDateString(loc, { weekday: 'long' }) + '**', d < today) };
+  }
+  if ((m = UNTIL_Q.exec(t))) {
+    const d = dateFrom(norm6(pick(m, 1)), now, true); if (!d) return null;
+    const n = Math.round((d - today) / 86400000); if (n < 0) return null;
+    return { reply: T.until(n, dm(d)), value: n };
+  }
+  if ((m = INN_Q.exec(t))) {
+    const k = +m[1], u = m[2]; if (k > 3650) return null;
+    const days = /^(settiman|week|seman|semain|woche)/.test(u) ? k * 7 : k;
+    const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() + days);   // calendar days: +N×24 h lands a day early past a DST change
+    return { reply: T.inN(days, '**' + long(d) + '**') };
+  }
+  return null;
+}
+
 // The reply: the working, then the result in bold — the only number in bold, and the right one.
 export function mathReply(res) {
   const i = res.shown.lastIndexOf(' = ');

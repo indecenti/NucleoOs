@@ -3210,7 +3210,7 @@
         else { eng=TR('Online · maestro Grok', 'Online · Grok teacher');   // grok / teacher / generic remote
                model=r.model||(keyCfg&&keyCfg.model)||'auto'; host=hostOf((keyCfg&&keyCfg.base)||''); }
       } else if(T==='browser'){                                     // an exact rule run in this page: arithmetic, an app launch (no model, no device)
-        kind='wasm'; icon='◆'; eng=TR('Browser · regola esatta', 'Browser · exact rule'); model=I==='calc'?TR('calcolo', 'arithmetic'):I==='launch'?TR('avvio app', 'app launch'):I;
+        kind='wasm'; icon='◆'; eng=TR('Browser · regola esatta', 'Browser · exact rule'); model=I==='calc'?TR('calcolo', 'arithmetic'):I==='launch'?TR('avvio app', 'app launch'):I==='date'?TR('calendario', 'calendar'):I;
       } else if(r.status){                                          // an exact value read from the Cardputer's /api/status (no model involved)
         kind='device'; icon='▣'; eng=L('engLiveStatus'); model='/api/status';
       } else if(r.web){                                             // in-browser WEB INDEX — live Wikipedia/Wikidata from the browser, or a cached recall (never the MCU)
@@ -4825,14 +4825,18 @@
       if(!nums) return null;
       return nums[nums.length-1].replace(/\.+$/,'');
     }
+    // a calendar question may carry no digit ("quanti giorni mancano a Natale?")
+    const CAL_HINT=/(giorn|settiman|\bday|week|d[ií]as?\b|seman|jour|\btag|woche|natale|christmas|navidad|no[eë]l|weihnacht|capodanno|new year|a[nñ]o nuevo|nouvel an|neujahr|halloween|valentin|ferragosto|epifania|befana)/i;
     async function browserMath(q, prev){
-      if(!/\d/.test(q) && prev==null) return null;                 // nothing to compute: never load the module
+      if(!/\d/.test(q) && prev==null && !CAL_HINT.test(q)) return null;   // nothing to compute: never load the module
       const M=await nlmathMod(), P=await cascadeMod();
-      const qLang=(ctxkit.userLanguage && ctxkit.userLanguage(q)) || (P.guessLang && P.guessLang(q)) || lang;
+      const qLang=qLangOf(q, P);
       // arithmetic, else a unit conversion ("quanti chilometri sono 26,2 miglia", "70 kg to pounds") — both exact
       const res=M.parseMath(q, { lang:qLang, prev: prev!=null ? Number(prev) : null }) || (M.parseConvert && M.parseConvert(q, { lang:qLang }));
-      if(!res) return null;
-      return { reply:M.mathReply(res), value:res.value, intent:'calc', domain:'calc', tier:'browser', confidence:99 };
+      if(res) return { reply:M.mathReply(res), value:res.value, intent:'calc', domain:'calc', tier:'browser', confidence:99 };
+      // …else a calendar question: a weekday, days until a date or a feast, the date in N days — from the clock
+      const cal=M.parseCalendar && M.parseCalendar(q, { lang:qLang, now:new Date() });
+      return cal ? { reply:cal.reply, value:cal.value, intent:'date', domain:'calc', tier:'browser', confidence:99 } : null;
     }
     function chainMath(q){
       const isUnary=CHAIN_UNARY.test(q), isOp=CHAIN_OP.test(q);

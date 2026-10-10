@@ -197,7 +197,7 @@ function parseDate(tokens, lang, now) {
       const n = parseInt(tokens[i + 1], 10);
       if (['en', 'dans', 'in'].includes(tokens[i]) && Number.isFinite(n) && ['dias', 'dia', 'jours', 'jour', 'tagen', 'tage', 'tag'].includes(tokens[i + 2])) {
         hit.add(tokens[i]); hit.add(tokens[i + 1]); hit.add(tokens[i + 2]);
-        return { dayOffset: n, tooFar: n > FORECAST_HORIZON, dateLabel: name(new Date(today.getTime() + n * dayMs), { day: 'numeric', month: 'long' }), hitTokens: hit };
+        return { dayOffset: n, tooFar: n > FORECAST_HORIZON, dateLabel: name(new Date(today.getFullYear(), today.getMonth(), today.getDate() + n), { day: 'numeric', month: 'long' }), hitTokens: hit };
       }
     }
     for (let i = 0; i < tokens.length; i++) {
@@ -212,7 +212,7 @@ function parseDate(tokens, lang, now) {
     }
     for (const t of tokens) if (weekdayOf(t, lang) !== undefined) {
       let off = (weekdayOf(t, lang) - today.getDay() + 7) % 7; if (off === 0) off = 7; hit.add(t);
-      return { dayOffset: off, tooFar: off > FORECAST_HORIZON, dateLabel: name(new Date(today.getTime() + off * dayMs), { weekday: 'long' }), hitTokens: hit };
+      return { dayOffset: off, tooFar: off > FORECAST_HORIZON, dateLabel: name(new Date(today.getFullYear(), today.getMonth(), today.getDate() + off), { weekday: 'long' }), hitTokens: hit };
     }
     if (has('wochenende') || joined.includes(' fin de semana ') || has('weekend')) {
       ['wochenende', 'fin', 'semana', 'weekend'].forEach((t) => hit.add(t));
@@ -239,7 +239,7 @@ function parseDate(tokens, lang, now) {
       const unit = tokens[i + 2];
       if (Number.isFinite(n) && (unit === 'giorni' || unit === 'giorno' || unit === 'days' || unit === 'day')) {
         hit.add(tokens[i]); hit.add(tokens[i + 1]); if (unit) hit.add(unit);
-        const d = new Date(today.getTime() + n * dayMs);
+        const d = new Date(today.getFullYear(), today.getMonth(), today.getDate() + n);
         return { dayOffset: n, tooFar: n > FORECAST_HORIZON, dateLabel: labelDate(d), hitTokens: hit };
       }
     }

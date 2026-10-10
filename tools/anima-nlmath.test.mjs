@@ -4,7 +4,27 @@
 // non-arithmetic word stays with the normal ladder.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseMath, mathReply, parseConvert } from '../apps/anima/www/local/nlmath.js';
+import { parseMath, mathReply, parseConvert, parseCalendar } from '../apps/anima/www/local/nlmath.js';
+
+// Calendar questions, five languages, from the clock (now = Saturday 10 Oct 2026, before the 25 Oct DST change).
+test('calendar questions: weekday of a date, days until, the date in N days — DST-safe', () => {
+  const now = new Date(2026, 9, 10);
+  const cal = (q, lang) => { const r = parseCalendar(q, { lang, now }); return r && r.reply; };
+  assert.equal(cal('Che giorno della settimana sarà il 25 dicembre 2026?', 'it'), 'Il 25 dicembre 2026 è **venerdì**.');
+  assert.equal(cal('What day is December 25, 2026?', 'en'), '25 December 2026 is a **Friday**.');
+  assert.equal(cal('¿Qué día de la semana es el 25 de diciembre de 2026?', 'es'), 'El 25 de diciembre de 2026 es **viernes**.');
+  assert.equal(cal('Welcher Wochentag ist der 25. Dezember 2026?', 'de'), 'Der 25. Dezember 2026 ist ein **Freitag**.');
+  assert.equal(cal('che giorno era il 4 luglio 1776', 'it'), 'Il 4 luglio 1776 era **giovedì**.');
+  assert.equal(cal('Quanti giorni mancano a Natale?', 'it'), 'Mancano **76** giorni a 25 dicembre 2026.');
+  assert.equal(cal('Combien de jours avant Noël ?', 'fr'), 'Il reste **76** jours avant le 25 décembre 2026.');
+  assert.equal(cal('quanti giorni mancano al 1 gennaio', 'it'), 'Mancano **83** giorni a 1 gennaio 2027.');
+  // across the 25 October DST change: calendar days, not N×24 h (gave 8 November / 17 January)
+  assert.equal(cal('Che giorno sarà tra 30 giorni?', 'it'), 'Tra 30 giorni sarà **lunedì 9 novembre 2026**.');
+  assert.equal(cal('Quel jour serons-nous dans 100 jours ?', 'fr'), 'Dans 100 jours, nous serons le **lundi 18 janvier 2027**.');
+  assert.equal(cal('Welcher Tag ist in 3 Wochen?', 'de'), 'In 21 Tagen ist **Samstag, 31. Oktober 2026**.');
+  for (const q of ['che giorno è oggi', 'quanti giorni ha febbraio', 'chi è nato il 25 dicembre', 'che giorno è il 31 febbraio 2027'])
+    assert.equal(parseCalendar(q, { lang: 'it', now }), null, q);
+});
 
 // Unit conversions, five languages: "Quanti chilometri sono 26,2 miglia?" had reached a model.
 test('unit conversions in five languages, exact, and nothing else', () => {

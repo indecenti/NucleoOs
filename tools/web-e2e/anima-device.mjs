@@ -176,6 +176,9 @@ const CASES = [
   { id: 'x-chain-it-2', tags: 'exact math', lang: 'it', follow: true, ask: 'e poi meno 44', checks: [has(/\*\*100\*\*/)] },
   { id: 'x-conv-it', tags: 'exact math', lang: 'it', ask: 'Quanti chilometri sono 26,2 miglia?', checks: [has(/\*\*42,16 km\*\*/), engine(/regola esatta|exact rule/i)] },
   { id: 'x-conv-fr', tags: 'exact math', lang: 'fr', ask: 'Combien de degrés Fahrenheit font 30 degrés Celsius ?', checks: [has(/\*\*86\s?°F\*\*/)] },
+  { id: 'x-cal-es', tags: 'exact', lang: 'es', ask: '¿Qué día de la semana es el 25 de diciembre de 2026?', checks: [has(/viernes/i), engine(/regola esatta|exact rule/i)] },
+  { id: 'x-cal-de', tags: 'exact', lang: 'de', ask: 'Wie viele Tage bis Weihnachten?', checks: [(r) => { const t = new Date(); const x = new Date(t.getFullYear(), 11, 25); if (x < new Date(t.getFullYear(), t.getMonth(), t.getDate())) x.setFullYear(x.getFullYear() + 1);
+    const n = Math.round((x - new Date(t.getFullYear(), t.getMonth(), t.getDate())) / 86400000); return r.reply.includes('**' + n + '**') || `not ${n} days`; }, has(/Tage/)] },
   { id: 'x-launch-es', tags: 'exact device', lang: 'es', ask: 'abre la calculadora', checks: [opened(/calc/i)] },
   { id: 'x-launch-fr', tags: 'exact device', lang: 'fr', ask: 'ouvre les réglages', checks: [opened(/settings|impostazioni|r.glages/i)] },
   { id: 'x-launch-en', tags: 'exact device', lang: 'en', ask: 'open the clock', checks: [opened(/clock|orologio/i)] },
