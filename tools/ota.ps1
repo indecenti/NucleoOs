@@ -57,7 +57,7 @@ for ($attempt = 1; $attempt -le 3 -and -not $ok; $attempt++) {
         }
     }
     try {
-        $resp = Invoke-WebRequest "http://$DeviceHost/api/ota" -Method Post -InFile $bin -ContentType 'application/octet-stream' -WebSession $session -TimeoutSec 180 -UseBasicParsing
+        $resp = Invoke-WebRequest "http://$DeviceHost/api/ota" -Method Post -InFile $bin -ContentType 'application/octet-stream' -WebSession $session -TimeoutSec 900 -UseBasicParsing   # a slow link (3 KB/s seen) needs ~15 min for 3 MB
         Write-Host "Device: $($resp.Content)"
         Write-Host "OK - device is rebooting into the new firmware (~5s)."
         $ok = $true

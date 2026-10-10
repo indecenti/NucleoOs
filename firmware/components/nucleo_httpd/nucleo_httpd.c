@@ -878,8 +878,17 @@ static esp_err_t ota_post(httpd_req_t *req)
     esp_err_t err = esp_ota_begin(part, OTA_SIZE_UNKNOWN, &h);
     if (err != ESP_OK) { ESP_LOGE(TAG, "ota_begin: %s", esp_err_to_name(err)); OTA_BAIL(); httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "ota_begin"); return ESP_FAIL; }
 
-    char buf[1024]; int r, total = 0;
-    while ((r = httpd_req_recv(req, buf, sizeof(buf))) > 0) {
+    // A weak Wi-Fi link can go quiet for longer than recv_wait_timeout (30 s): forgive those timeouts like the
+    // file upload does (nucleo_fsapi) instead of throwing away a 3 MB transfer at 2.8 MB, but cap the silence
+    // so a vanished client can't hold the OTA slot forever (~30 s * 10).
+    const int MAX_IDLE = 10;
+    char buf[1024]; int r, total = 0, idle = 0;
+    while ((r = httpd_req_recv(req, buf, sizeof(buf))) != 0) {
+        if (r < 0) {
+            if (r == HTTPD_SOCK_ERR_TIMEOUT && ++idle <= MAX_IDLE) continue;
+            break;
+        }
+        idle = 0;
         if (total == 0 && (unsigned char)buf[0] != 0xE9) {   // ESP image magic — reject junk uploads fast
             esp_ota_abort(h); OTA_BAIL();
             httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "not an ESP firmware image");
