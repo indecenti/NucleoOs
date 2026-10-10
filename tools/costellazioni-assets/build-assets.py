@@ -24,6 +24,7 @@ BUDGET = 40 * 1024 * 1024                      # the user's total asset budget (
 QUALITY = {'art': 54, 'cast': 62, 'emblem': 60}
 PRIORITY = {'title': 0, 'emblem': 1, 'cast': 2}   # lower loads first; everything else streams after
 MUSIC_KBPS = 64                                   # Opus, stereo: transparent enough for synth-orchestral
+MUSIC_LUFS = -16.0                                # one level for the whole score
 
 
 def short_hash(data):
@@ -78,6 +79,14 @@ def build_images(spec, man):
         }
 
 
+def loudness(path):
+    """Integrated loudness (LUFS) of a track, EBU R128."""
+    r = subprocess.run(['ffmpeg', '-hide_banner', '-nostats', '-i', path, '-af', 'ebur128=framelog=quiet',
+                        '-f', 'null', '-'], capture_output=True, text=True, check=True)
+    lines = [l for l in r.stderr.splitlines() if l.strip().startswith('I:')]
+    return float(lines[-1].split()[1])
+
+
 def build_music(man):
     if not os.path.isdir(MUSIC):
         return
@@ -85,7 +94,14 @@ def build_music(man):
         base, ext = os.path.splitext(f)
         if ext.lower() not in ('.wav', '.flac', '.mp3'):
             continue
-        r = subprocess.run(['ffmpeg', '-v', 'error', '-i', os.path.join(MUSIC, f), '-c:a', 'libopus',
+        src = os.path.join(MUSIC, f)
+        # every track at the same level, under the game's effects; the trailing silence trimmed so the
+        # player's loop crossfade starts on music, with a short fade so the cut never clicks
+        gain = MUSIC_LUFS - loudness(src)
+        af = (f'volume={gain:.2f}dB,alimiter=limit=0.89:level=false,'
+              'areverse,silenceremove=start_periods=1:start_threshold=-50dB:start_silence=0.3,'
+              'afade=t=in:d=0.6,areverse')
+        r = subprocess.run(['ffmpeg', '-v', 'error', '-i', src, '-af', af, '-fflags', '+bitexact', '-flags:a', '+bitexact', '-c:a', 'libopus',
                             '-b:a', f'{MUSIC_KBPS}k', '-vbr', 'on', '-compression_level', '10',
                             '-application', 'audio', '-map_metadata', '-1', '-f', 'ogg', '-'],
                            capture_output=True, check=True)

@@ -659,12 +659,12 @@
         1280,
         720
       ],
-      "seed": 3412,
+      "seed": 3414,
       "style": [
         "base",
         "eco"
       ],
-      "prompt": "Beyond the edge of the galaxy: in the intergalactic void, a vast unknowable shape made of darkness and faint red light watches the spiral galaxy from afar, so large that the galaxy looks small. Cosmic dread, minimal and haunting"
+      "prompt": "Beyond the rim of the galaxy, in the intergalactic void: a colossal dark shape larger than the galaxy, like a coiled serpent of shadow, clearly outlined by a glowing deep red rim light, its single faint eye looking at a small bright spiral galaxy in the lower corner. A tiny beacon light shines at the edge of the galaxy toward it. Cosmic dread, epic scale, minimal composition"
     },
     {
       "id": "world_rocky",
@@ -880,12 +880,12 @@
         1024,
         576
       ],
-      "seed": 3702,
+      "seed": 3707,
       "style": [
         "base",
         "gilda"
       ],
-      "prompt": "A heavily armoured guild heavy fighter, thick ivory armour plates with brass rivets, twin long cannons, glowing blue shield emitters, three quarter view in front of a station"
+      "prompt": "A heavily armoured guild heavy starfighter spacecraft flying in space: a wide wedge-shaped hull with thick ivory armour plates and brass rivets, twin long cannons under the nose, glowing blue shield emitters on the wingtips, blue engine glow, three quarter view in front of a ring station. A spaceship with wings, not a robot, no legs"
     },
     {
       "id": "ship_scrapwing",
@@ -912,12 +912,12 @@
         1024,
         576
       ],
-      "seed": 3704,
+      "seed": 3709,
       "style": [
         "base",
         "relitti"
       ],
-      "prompt": "A converted freighter turned pirate warship, bristling with improvised turrets, welded armour plates and spikes, glowing orange windows, smoke trailing, three quarter view"
+      "prompt": "A converted freighter turned pirate warship drifting in deep black space among asteroids and stars: bristling with improvised turrets, welded armour plates and spikes, glowing orange windows, vapour venting from hull breaches, three quarter view. Starry space all around, no water, no sky"
     },
     {
       "id": "ship_censer",
@@ -928,12 +928,12 @@
         1024,
         576
       ],
-      "seed": 3705,
+      "seed": 3708,
       "style": [
         "base",
         "custodi"
       ],
-      "prompt": "An elegant ceremonial bomber of a monastic order, white hull with green-gold filigree like a reliquary, glowing torpedo bays, banners, three quarter view against a pale nebula"
+      "prompt": "An elegant ceremonial bomber spaceship of a monastic order flying in deep space among stars: a long white hull with green-gold filigree like a reliquary, glowing torpedo bays, small banners on short masts, a pale green nebula far behind, three quarter view. Black starry space all around, no clouds, no sky"
     },
     {
       "id": "ship_lattice",
@@ -997,7 +997,7 @@
         "base",
         "relitti"
       ],
-      "prompt": "Exterior of Hulk-town Gutterdeep: the enormous gutted hull of an ancient freighter, its breaches patched with scrap and lit by orange lamps, improvised docks and cranes sticking out, smaller wrecks chained to it, small ships coming and going"
+      "prompt": "Exterior of Hulk-town Gutterdeep floating in deep black space: the enormous gutted hull of an ancient freighter, its breaches patched with scrap and lit by orange lamps, improvised docks and cranes sticking out, smaller wrecks chained to it, small ships with lights coming and going, a dim red star in the distance. Starry space all around, no water, no ground"
     },
     {
       "id": "battle_asteroids",
@@ -1055,11 +1055,11 @@
         1280,
         720
       ],
-      "seed": 3904,
+      "seed": 3907,
       "style": [
         "base"
       ],
-      "prompt": "A small courier ship making a jump along a thread of golden light between two beacons, space stretching into streaks of light around it, the beacon behind it blazing, the destination beacon a bright point far away"
+      "prompt": "Seen from behind, a small rugged courier starship (a compact wedge-shaped spacecraft with a stubby fuselage, two engine pods glowing orange, olive and cream paint), clearly a spaceship and not a boat jumps along a thread of golden light between two beacons: space stretches into streaks of light around it like a tunnel, the colossal crystalline beacon behind it blazing white and gold, the destination beacon a bright point far ahead"
     },
     {
       "id": "planet_descent",
@@ -1070,11 +1070,11 @@
         1280,
         720
       ],
-      "seed": 3905,
+      "seed": 3908,
       "style": [
         "base"
       ],
-      "prompt": "A small courier ship descending through the clouds of an alien planet at sunrise, heat glow on its nose, vast mountains and a winding river below, the curve of the horizon, the beacon visible as a point of light in the sky"
+      "prompt": "a small rugged courier starship (a compact wedge-shaped spacecraft with a stubby fuselage, two engine pods glowing orange, olive and cream paint), clearly a spaceship and not a boat descends through the clouds of an alien planet at sunrise, heat glow on its nose and engine trails behind, vast mountains and a winding river far below, the curve of the horizon, a beacon visible as a point of light in the sky"
     },
     {
       "id": "trade_market",
