@@ -1,7 +1,10 @@
-// constellations-sfx.js — procedural space-combat sound for Costellazioni 3D. 100% Web Audio synthesis
-// (no asset files on the tiny SD): every event is a short burst of oscillators/noise through a shared
-// limiter bus, with a cheap feedback-delay "reverb" and a dynamic minor-key music bed. Lazy context,
-// resumed on the first user gesture.
+// constellations-sfx.js — sound for Costellazioni. Effects are 100% Web Audio synthesis (no files):
+// short bursts of oscillators / cached noise through a shared limiter bus with a cheap feedback-delay
+// "reverb", stereo-panned and distance-scaled for the 6DOF flight, plus a continuous engine voice that
+// follows throttle and boost. Music: the four ACE-Step tracks from stelle/assets.js when present
+// (theme / islands / dimming / storm, looped, ducked under big explosions), else the procedural
+// minor-key bed. Lazy context, resumed on the first user gesture.
+import * as A from '/apps/games/games/stelle/assets.js';
 
 export class SFX {
   constructor() {
@@ -199,8 +202,121 @@ export class SFX {
     m.delay.delayTime.setTargetAtTime(0.34 - k * 0.10, t, 0.3);
     m.step++; m.timer = setTimeout(() => this._musicStep(), dt * 1000);
   }
-  startDrone() { this.startMusic(); }
-  stopDrone() { this.stopMusic(); }
+  startDrone() { this.combatMusic(true); }
+  stopDrone() { this.combatMusic(false); }
+
+  // ── 6DOF flight layer ───────────────────────────────────────────────────────────────────────
+  _nbuf() {   // one cached 2 s white-noise buffer, read at random offsets (no per-shot allocation)
+    if (this._nb) return this._nb;
+    const ac = this.ac, n = ac.sampleRate * 2, b = ac.createBuffer(1, n, ac.sampleRate), d = b.getChannelData(0);
+    for (let i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+    return (this._nb = b);
+  }
+  _out(pan, dest) {
+    if (!pan || !this.ac.createStereoPanner) return dest || this.master;
+    const p = this.ac.createStereoPanner(); p.pan.value = Math.max(-1, Math.min(1, pan)); p.connect(dest || this.master); return p;
+  }
+  _n(t0, dur, { gain = 0.2, freq = 1200, q = 0.7, type = 'bandpass', pan = 0, glide = 0, dest = null } = {}) {
+    const ac = this.ac, src = ac.createBufferSource(); src.buffer = this._nbuf();
+    const f = ac.createBiquadFilter(); f.type = type; f.frequency.setValueAtTime(freq, t0); f.Q.value = q;
+    if (glide) f.frequency.exponentialRampToValueAtTime(Math.max(30, freq * glide), t0 + dur);
+    const g = ac.createGain(); g.gain.setValueAtTime(gain, t0); g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    src.connect(f); f.connect(g); g.connect(this._out(pan, dest)); src.start(t0, Math.random() * 1.5); src.stop(t0 + dur + 0.02);
+  }
+  _tp(freq, t0, dur, o = {}) { const dest = this._out(o.pan || 0, o.dest); return this._tone(freq, t0, dur, { ...o, dest }); }
+  _ok() { return this._ensure() && !this.muted; }
+  laserP(pan = 0) {
+    if (!this._ok()) return; const t = this.ac.currentTime;
+    if (t - this._lastLaser < 0.03) return; this._lastLaser = t;
+    this._tp(1900 + Math.random() * 120, t, 0.12, { type: 'sawtooth', gain: 0.13, glide: 0.12, pan });
+    this._tp(980, t, 0.07, { type: 'square', gain: 0.06, glide: 0.4, pan });
+    this._tp(140, t, 0.06, { type: 'sine', gain: 0.12, glide: 0.5 });
+    this._n(t, 0.03, { gain: 0.05, freq: 4200, type: 'highpass', pan });
+  }
+  laserFar(vol, pan = 0, heavy = false) {
+    if (!this._ok() || vol < 0.04) return; const t = this.ac.currentTime;
+    if (t - (this._lastFar || 0) < 0.07) return; this._lastFar = t;
+    const v = vol * vol;
+    this._tp(heavy ? 700 : 1300 + Math.random() * 300, t, 0.1, { type: 'sawtooth', gain: 0.07 * v, glide: 0.25, pan });
+    this._n(t, 0.05, { gain: 0.04 * v, freq: heavy ? 900 : 2500, q: 1, pan });
+  }
+  shieldHit() {
+    if (!this._ok()) return; const t = this.ac.currentTime;
+    if (t - (this._lastSh || 0) < 0.05) return; this._lastSh = t;
+    this._n(t, 0.18, { gain: 0.13, freq: 3200, q: 3, glide: 0.35 });
+    this._tone(1600, t, 0.14, { type: 'sine', gain: 0.07, glide: 0.5 });
+    this._tone(400, t, 0.12, { type: 'triangle', gain: 0.06, glide: 0.6 });
+  }
+  boomAt(size = 1, vol = 1, pan = 0) {
+    if (!this._ok() || vol < 0.03) return; const t = this.ac.currentTime;
+    const k = Math.min(2.5, size), v = Math.min(1, vol) * (0.5 + 0.2 * k);
+    this._n(t, 0.05, { gain: 0.3 * v, freq: 4000, type: 'highpass', pan });
+    this._n(t, 0.35 + k * 0.25, { gain: 0.32 * v, freq: 520 - k * 120, type: 'lowpass', pan });
+    this._tp(70 - k * 10, t, 0.3 + k * 0.2, { type: 'sine', gain: 0.4 * v, glide: 0.4 });
+    this._n(t + 0.07, 0.25, { gain: 0.08 * v, freq: 1800, pan });
+    if (k >= 1.5) { this._duck(0.35, 1.2 + k * 0.4); this._tp(43, t, 1.2, { type: 'sine', gain: 0.35 * v, glide: 0.5 }); this._n(t + 0.1, 1.3, { gain: 0.12 * v, freq: 300, type: 'lowpass' }); }
+  }
+  _duck(to, dur) {
+    const g = this._musicGain(); if (!g) return; const t = this.ac.currentTime, base = this._musicLevel || 0.14;
+    g.gain.cancelScheduledValues(t); g.gain.setValueAtTime(g.gain.value, t); g.gain.linearRampToValueAtTime(base * to, t + 0.05); g.gain.linearRampToValueAtTime(base, t + dur);
+  }
+  lockTone(p) { if (!this._ok()) return; const t = this.ac.currentTime; this._tone(900 + p * 900, t, 0.045, { type: 'square', gain: 0.05 }); }
+  missileWarn() { if (!this._ok()) return; const t = this.ac.currentTime; for (let i = 0; i < 3; i++) { this._tone(1250, t + i * 0.12, 0.07, { type: 'square', gain: 0.08 }); this._tone(1860, t + i * 0.12 + 0.05, 0.05, { type: 'square', gain: 0.06 }); } }
+  flare() { if (!this._ok()) return; const t = this.ac.currentTime; for (let i = 0; i < 4; i++) { this._n(t + i * 0.06, 0.18, { gain: 0.1, freq: 2600, q: 0.8, glide: 0.4 }); this._tone(300, t + i * 0.06, 0.05, { type: 'square', gain: 0.06, glide: 0.5 }); } }
+  boost() { if (!this._ok()) return; const t = this.ac.currentTime; this._n(t, 0.7, { gain: 0.16, freq: 400, q: 0.6, glide: 4, type: 'bandpass' }); this._tone(60, t, 0.25, { type: 'sine', gain: 0.25, glide: 0.6 }); }
+  pip(k = 0) { if (!this._ok()) return; const t = this.ac.currentTime; this._tone([520, 660, 800, 600, 700, 760][k % 6] || 600, t, 0.05, { type: 'square', gain: 0.06 }); this._tone(1400, t + 0.03, 0.03, { type: 'sine', gain: 0.03 }); }
+  overheat() { if (!this._ok()) return; const t = this.ac.currentTime; this._tone(880, t, 0.3, { type: 'square', gain: 0.07, glide: 0.5 }); this._n(t, 0.5, { gain: 0.07, freq: 3000, type: 'highpass' }); }
+  comms() { if (!this._ok()) return; const t = this.ac.currentTime; this._n(t, 0.09, { gain: 0.05, freq: 1800, q: 2 }); this._tone(1320, t + 0.02, 0.04, { type: 'sine', gain: 0.04 }); this._tone(1760, t + 0.07, 0.04, { type: 'sine', gain: 0.035 }); }
+  warp(k = 1) { if (!this._ok()) return; const t = this.ac.currentTime, v = Math.max(0.2, k); this._tone(120, t, 0.7, { type: 'sawtooth', gain: 0.12 * v, glide: 9 }); this._n(t, 0.8, { gain: 0.1 * v, freq: 600, glide: 6, q: 0.6 }); this._tone(55, t + 0.6, 0.6, { type: 'sine', gain: 0.25 * v, glide: 0.5 }); }
+  clang() { if (!this._ok()) return; const t = this.ac.currentTime; this._tone(320, t, 0.25, { type: 'square', gain: 0.1, glide: 0.7 }); this._tone(467, t, 0.3, { type: 'sine', gain: 0.08 }); this._n(t, 0.12, { gain: 0.14, freq: 900, q: 1.2 }); }
+  cruiseSpool() { if (!this._ok()) return; const t = this.ac.currentTime; this._tone(70, t, 1.4, { type: 'sawtooth', gain: 0.1, glide: 3.5 }); this._n(t, 1.4, { gain: 0.08, freq: 300, glide: 8, q: 0.8 }); this._tone(880, t + 1.3, 0.12, { type: 'sine', gain: 0.06 }); }
+  tether() { if (!this._ok()) return; const t = this.ac.currentTime; this._tone(90, t, 0.6, { type: 'sawtooth', gain: 0.12, glide: 1.6 }); this._n(t, 0.5, { gain: 0.08, freq: 5000, q: 4 }); }
+  // continuous engine: two detuned oscillators + filtered noise; pitch and level follow throttle / boost
+  engineStart() {
+    if (!this._ok() || this._eng) return;
+    const ac = this.ac, t = ac.currentTime;
+    const g = ac.createGain(); g.gain.value = 0; g.connect(this.master);
+    const lp = ac.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 400; lp.Q.value = 2; lp.connect(g);
+    const o1 = ac.createOscillator(), o2 = ac.createOscillator(); o1.type = 'sawtooth'; o2.type = 'square'; o1.frequency.value = 48; o2.frequency.value = 72; o2.detune.value = 9;
+    const og = ac.createGain(); og.gain.value = 0.35; o1.connect(og); o2.connect(og); og.connect(lp);
+    const ns = ac.createBufferSource(); ns.buffer = this._nbuf(); ns.loop = true; const nf = ac.createBiquadFilter(); nf.type = 'bandpass'; nf.frequency.value = 700; nf.Q.value = 0.7;
+    const ng = ac.createGain(); ng.gain.value = 0.5; ns.connect(nf); nf.connect(ng); ng.connect(lp);
+    o1.start(t); o2.start(t); ns.start(t);
+    this._eng = { g, lp, o1, o2, ns, nf, ng };
+  }
+  engineSet(thr, boost, paused) {
+    const e = this._eng; if (!e || !this.ac) return; const t = this.ac.currentTime;
+    const lvl = paused ? 0 : 0.035 + thr * 0.05 + (boost ? 0.06 : 0);
+    e.g.gain.setTargetAtTime(lvl, t, 0.15);
+    e.lp.frequency.setTargetAtTime(260 + thr * 700 + (boost ? 1400 : 0), t, 0.2);
+    e.o1.frequency.setTargetAtTime(42 + thr * 30 + (boost ? 26 : 0), t, 0.3); e.o2.frequency.setTargetAtTime(63 + thr * 45 + (boost ? 40 : 0), t, 0.3);
+    e.nf.frequency.setTargetAtTime(500 + thr * 900 + (boost ? 1800 : 0), t, 0.2);
+  }
+  engineStop() { const e = this._eng; if (!e) return; this._eng = null; const t = this.ac.currentTime; e.g.gain.setTargetAtTime(0, t, 0.1); setTimeout(() => { try { e.o1.stop(); e.o2.stop(); e.ns.stop(); } catch {} try { e.g.disconnect(); } catch {} }, 500); }
+  // ── music: asset tracks when the manifest has them ─────────────────────────────────────────────
+  _musicGain() { return this._track ? this._track.g : (this.music ? this.music.bus : null); }
+  async playTrack(id, level = 0.16) {
+    if (!this._ensure()) return false;
+    if (this._track && this._track.id === id) return true;
+    try { await A.loadManifest(); } catch { return false; }
+    if (!A.has('music', id)) return false;
+    const want = (this._wantTrack = id);
+    let buf;
+    try { buf = await this.ac.decodeAudioData(await A.musicBuffer(id)); } catch { return false; }
+    if (this._wantTrack !== want) return false;
+    this.stopTrack();
+    const ac = this.ac, t = ac.currentTime, g = ac.createGain(); g.gain.value = 0; g.gain.linearRampToValueAtTime(this.muted ? 0 : level, t + 2); g.connect(this.master);
+    const src = ac.createBufferSource(); src.buffer = buf; src.loop = true; src.connect(g); src.start(t);
+    this._track = { id, g, src }; this._musicLevel = level;
+    return true;
+  }
+  stopTrack() { const tk = this._track; if (!tk) return; this._track = null; const t = this.ac.currentTime; tk.g.gain.cancelScheduledValues(t); tk.g.gain.setValueAtTime(tk.g.gain.value, t); tk.g.gain.linearRampToValueAtTime(0.0001, t + 1.2); setTimeout(() => { try { tk.src.stop(); tk.g.disconnect(); } catch {} }, 1400); }
+  // flight music: the combat track if present, else the procedural bed; hub: calm / deep exploration
+  combatMusic(on) {
+    if (on) { this._wantTrack = 'storm'; this.playTrack('storm', 0.15).then((ok) => { if (ok) this.stopMusic(); else if (this._wantTrack === 'storm' || !this._track) this.startMusic(); }); }
+    else { this.stopMusic(); if (this._track && this._track.id === 'storm') this.stopTrack(); this._wantTrack = null; }
+  }
+  hubMusic(deep) { const id = deep ? 'dimming' : 'islands'; if (this._track && this._track.id === id) return; this.playTrack(id, 0.12); }
 }
 
 // One shared instance for the whole game (renderer + UI import the same module singleton).

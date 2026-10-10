@@ -1,19 +1,23 @@
 // constellations.js — "Costellazioni 3D": the web Game Center continuation of the Cardputer space
 // game. It CONTINUES THE SAME RUN: loads /sd/data/costellazioni/save.bin via the firmware endpoint
 // (constellations-save.js), regenerates the current sector from (seed, sector) with the SHARED
-// deterministic generator (constellations-gen.js, byte-identical to the firmware), runs a real-time
-// first-person dogfight rendered in Three.js (constellations-3d.js), and writes credits/kills back to
-// the save — so the campaign is shared both ways with the Cardputer.
+// deterministic generator (constellations-gen.js, byte-identical to the firmware), flies its missions
+// as 6DOF space combat (stelle/sim.js, drawn by constellations-3d.js) in a system whose look comes from
+// a web-only blueprint (stelle/world.js), and writes credits/kills/hull back to the save — so the
+// campaign is shared both ways with the Cardputer.
 //
-// Single-player, real-time. The harness gives us the canvas + input (keyboard/mouse/gamepad). Campaign
-// numbers live in the module-global RUN (the save); the harness `state` carries only the live phase +
-// dogfight sim (pure tick/reduce). On debrief we mutate RUN and POST it (epoch/sector-merge guarded).
+// Single-player, real-time. Campaign numbers live in the module-global RUN (the save); the harness
+// `state` carries the phase + hub navigation; the live flight is the module-global FLIGHT, advanced at
+// a fixed 60 Hz by the renderer (input: stelle/hud.js). On debrief we mutate RUN and POST it
+// (epoch/sector-merge guarded) with the same reward rules as the rail shooter it replaces.
 import { defineGame } from '/apps/games/nucleo-game.js';
 import CONTENT from '/apps/games/games/constellations-content.js';
 import { genSector, genMissions, beaconsPerSector, F_ECO } from '/apps/games/games/constellations-gen.js';
 import { loadSave, storeSave, newSave } from '/apps/games/games/constellations-save.js';
 import { unitBuy, unitSell, refuelPrice, jumpCost, sysDist, cargoUsed, beaconsLit, beaconsTotal } from '/apps/games/games/constellations-econ.js';
 import { SHOP, shopMaxed, shopCost, shopBuy, repairCost } from '/apps/games/games/constellations-shop.js';
+import { createFlight, ACE_NAMES } from '/apps/games/games/stelle/sim.js';
+import { systemBlueprint } from '/apps/games/games/stelle/world.js';
 
 const G_RELIQ = 6, F_CUSTODI = 1;   // relic good index / Keepers faction (beacon relight bookkeeping)
 let conflictPending = null;          // set by persist() when the device advanced the run (-> conflict screen)
@@ -54,61 +58,59 @@ async function persist() {
   finally { SAVING = false; }
 }
 
-// ---- combat tuning (mirrors the Cardputer rail shooter, in normalized space) -------------------
-const ZFAR = 260, ZNEAR = 6, AIM_SPD = 1.7;        // reticle units/sec (screen is [-1..1])
-export const FOCAL = 25;                           // shared projection: foes spread to the rim as they near
-export const project = (ex, ey, ez) => { const inv = FOCAL / ez; return { sx: ex * inv, sy: ey * inv, scale: inv }; };
+// ---- flight setup: the shared mission numbers -> a 6DOF sortie (stelle/sim.js) --------------------
+// The mission row from the shared generator is passed through unchanged (waves, per_wave, foe_hp,
+// foe_dmg, rewards, reputation); the sim condenses it into 2-5 engagements and reports kills + hull.
+let FLIGHT = null;          // the live flight (null outside combat)
+let BP = null, BPKEY = '';  // web-only visual blueprint of the current system (stelle/world.js)
+let lastTickAt = 0;         // harness tick heartbeat: the game bar pauses the tick -> pause the flight too
+let MISSION_FLAVOR = null;  // flavor of the launched mission (for the mission card)
 function combatFromMission(m) {
+  const fl = m.flavor || {};
   return { type: m.type, foeFac: m.foe_fac, waves: m.waves, perWave: m.per_wave,
     foeHp: m.foe_hp, foeDmg: m.foe_dmg, foeSpeed: m.foe_speed_pml * 0.1, ace: m.ace,
     rewardCr: m.reward_cr, killCr: m.kill_cr, repFac: m.offer_fac, repGain: m.rep_gain,
-    enemyRepFac: m.foe_fac, enemyRepLoss: m.enemy_rep_loss, mission: true };
+    enemyRepFac: m.foe_fac, enemyRepLoss: m.enemy_rep_loss, mission: true,
+    arch: fl.archK, gang: fl.gangI, targetName: fl.aceI >= 0 ? ACE_NAMES[fl.aceI] : (fl.nameBase || fl.name || ''), aceId: fl.aceI != null ? fl.aceI : -1, slot: m.slot };
+}
+// An interception: Wreck raiders, unless this is Echo space (its lattice drones) or the station's own faction
+// has turned on you (reputation -25 or worse) — the same rule as the firmware's ambush_faction().
+function ambushFaction() {
+  const sf = SECTOR[RUN.sys].faction;
+  if (sf === F_ECO) return F_ECO;
+  return (sf !== 2 && RUN.rep[sf & 3] <= -25) ? sf : 2;
 }
 function ambushCfg() {
   const tier = 1 + Math.min(12, RUN.sector);
-  return { type: MT.PATROL, foeFac: 2, waves: 2 + (tier >= 6 ? 1 : 0), perWave: 2 + (tier & 1), foeHp: 30 + tier * 6,
+  const ff = ambushFaction();
+  return { type: MT.PATROL, foeFac: ff, waves: 2 + (tier >= 6 ? 1 : 0), perWave: 2 + (tier & 1), foeHp: 30 + tier * 6,
     foeDmg: 7 + tier, foeSpeed: 7.8 + tier * 0.4, ace: 0, rewardCr: 0, killCr: 18 + tier * 4,
-    repFac: -1, repGain: 0, enemyRepFac: 2, enemyRepLoss: 2, mission: false };
+    repFac: -1, repGain: 0, enemyRepFac: ff, enemyRepLoss: 2, mission: false, slot: 15 };
 }
-function spawnWave(s) {
-  const cc = s.cc, last = s.wavesLeft === 1;
-  for (let i = 0; i < cc.perWave; i++) s.foes.push(mkFoe(cc, 0));
-  if (last && cc.ace) s.foes.push(mkFoe(cc, 3));
-  s.wave++; s.wavesLeft--; s.spawnTimer = 1300;
-  s.banner = 'WAVE ' + s.wave + '/' + cc.waves; s.bannerUntil = s.clock + 1400;
+function currentBlueprint() {
+  if (!RUN || !SECTOR) return null;
+  const lit = ((RUN.beacon_lit >>> 0) & (1 << RUN.sys)) !== 0;
+  const key = RUN.seed + ':' + RUN.sector + ':' + RUN.sys + ':' + (lit ? 1 : 0);
+  if (key !== BPKEY) { BP = systemBlueprint(RUN.seed >>> 0, RUN.sector >>> 0, RUN.sys, SECTOR[RUN.sys], lit); BPKEY = key; }
+  return BP;
 }
-function mkFoe(cc, kind) {
-  const hp = kind === 3 ? cc.foeHp * 2.2 + 30 : (kind === 1 ? cc.foeHp * 0.6 : (kind === 2 ? cc.foeHp * 1.8 + 20 : cc.foeHp));
-  const engageZ = 36 + (kind === 2 ? 20 : kind === 1 ? -2 : 8) + Math.random() * 26;   // varied depth -> a real 3D battlefield
-  const hx = Math.random() * 2.8 - 1.4, hy = Math.random() * 1.5 - 0.75;               // wide home "lanes" — foes fill the screen (Wing Commander), never bunch centre
-  return { id: (FOE_ID = (FOE_ID + 1) >>> 0), ex: hx, ey: hy, hx, hy, ez: 150 + Math.random() * 80,   // id -> missiles can home a specific ship
-    wphase: Math.random() * 6.28, hp, hpmax: hp, fireCd: 800 + Math.random() * 900,
-    strafeCd: 2800 + Math.random() * 3500, engageZ, strafe: 0, kind };
+function startCombat(state, cc, flavor) {
+  MISSION_FLAVOR = flavor || null;
+  const w = typeof window !== 'undefined' ? window : {};
+  FLIGHT = createFlight({ bp: currentBlueprint(), cc, run: RUN, seed: RUN.seed >>> 0, sector: RUN.sector >>> 0, sys: RUN.sys, slot: cc.slot | 0,
+    autopilot: !!w.__czAutopilot, god: !!w.__czGod, brief: w.__czNoBrief ? false : undefined, timeScale: w.__czTimeScale | 0 });
+  lastTickAt = (typeof performance !== 'undefined' ? performance.now() : 0);
+  return { ...state, phase: 'combat', cc, result: 0, flightNo: (state.flightNo || 0) + 1 };
 }
-function maybeDrop(s, f) {
-  if (Math.random() < 0.16) {                                      // ~1 in 6 kills drops a power-up
-    const r = Math.random(), kind = r < 0.45 ? 'missile' : r < 0.75 ? 'shield' : 'repair';   // missile favoured (the scarce resource)
-    s.pickups.push({ ex: f.ex, ey: f.ey, ez: f.ez, kind, life: 6000 });
-  }
-}
-function startCombat(state, cc) {
-  return { ...state, phase: 'combat', cc, foes: [], bolts: [], parts: [], pmiss: [], pickups: [],
-    wave: 0, wavesLeft: cc.waves, spawnTimer: 0, clock: 0,
-    aimx: 0, aimy: 0, ah: 0, av: 0, fire: false, fireCd: 0, lock: -1,
-    missiles: 3, missileCd: 0, launchMissile: false,                 // homing interceptors (limited; refill via pickups)
-    shield: RUN.shield_max, shieldMax: RUN.shield_max, hull: RUN.hull, hullMax: RUN.hull_max, kills: 0, shake: 0,
-    banner: '', bannerUntil: 0, result: 0, ev: [] };
-}
-let FOE_ID = 0;
 
 // ---- bridge (pre-flight) actions ---------------------------------------------------------------
 export default defineGame({
   id: 'constellations', name: 'Costellazioni 3D',
-  minPlayers: 1, maxPlayers: 1, aiCapable: false, realtime: true, tickHz: 30,
+  minPlayers: 1, maxPlayers: 1, aiCapable: false, realtime: true, tickHz: 20,
   renderMode: '3d', fillViewport: true, capturesPointer: true, pointerAxes: 'xy', category: 'arcade',
   // The host (index.html) reads this to lock the pointer ONLY in the dogfight — the hub menu keeps the
   // system cursor visible/clickable. Falls back to the static capturesPointer for other games.
-  wantsPointerLock(s) { return !!s && s.phase === 'combat' && !s.result; },
+  wantsPointerLock(s) { return !!s && s.phase === 'combat' && !!FLIGHT && !FLIGHT.outcome; },
 
   setup() {
     return {
@@ -125,7 +127,7 @@ export default defineGame({
     if (p === 'loading') return state;
     if (p === 'new_run') { if (a.type === 'confirm') { startNewRun(); return enterScreen({ ...state, phase: 'hub' }, 'bridge'); } return state; }
     if (p === 'conflict') { if (a.type === 'confirm' || a.type === 'back') return enterScreen({ ...state, phase: 'hub', toast: null }, 'bridge'); return state; }
-    if (p === 'combat' && !state.result) return combatReduce(state, a);
+    if (p === 'combat') return state;   // flight input is read directly by stelle/hud.js
     if (p === 'debrief') { if (['confirm', 'back', 'fire', 'click'].includes(a.type)) return enterScreen({ ...state, phase: 'hub' }, 'bridge'); return state; }
     if (p === 'hub') return hubReduce(state, a);
     return state;
@@ -133,8 +135,12 @@ export default defineGame({
 
   tick(state, dtMs) {
     if (state.phase === 'loading') { if (RUN) return enterScreen({ ...state, phase: 'hub' }, 'bridge'); if (BOOTED) return { ...state, phase: 'new_run' }; return state; }
-    if (conflictPending && state.phase === 'hub') { conflictPending = null; return { ...state, phase: 'conflict', toast: { text: 'Il Cardputer ha fatto avanzare la run', kind: 'warn' } }; }
-    if (state.phase === 'combat' && !state.result) return stepCombat(state, dtMs);
+    if (conflictPending && state.phase === 'hub') { conflictPending = null; return { ...state, phase: 'conflict', toast: { key: 'cz_t_conflict', kind: 'warn' } }; }
+    if (state.phase === 'combat') {
+      lastTickAt = (typeof performance !== 'undefined' ? performance.now() : 0);
+      if (FLIGHT && FLIGHT.done) return endCombat(state, FLIGHT.outcome === 1 ? 1 : FLIGHT.outcome === 2 ? 2 : -1);
+      return state;
+    }
     if (state.toast && state.toast.until && (state.clock || 0) + dtMs > state.toast.until) return { ...state, clock: (state.clock || 0) + dtMs, toast: null };
     return { ...state, clock: (state.clock || 0) + dtMs };
   },
@@ -157,7 +163,7 @@ export default defineGame({
   mount(canvas, api) { ensureRenderer(canvas, api); if (!RUN && !BOOTED) bootRun(); },
   render(api, state) {
     // leaving the dogfight -> hand the system cursor back for the hub menu (the host only re-locks in combat)
-    if (state && state.phase !== 'combat' && typeof document !== 'undefined' && document.pointerLockElement) { try { document.exitPointerLock(); } catch {} }
+    if (state && (state.phase !== 'combat' || (FLIGHT && FLIGHT.outcome)) && typeof document !== 'undefined' && document.pointerLockElement) { try { document.exitPointerLock(); } catch {} }
     if (R3D) R3D.frame(state, MODEL(), api);
   },
   resize(w, h) { if (R3D) R3D.resize(w, h); },
@@ -165,11 +171,20 @@ export default defineGame({
 });
 
 // The live model handed to the renderer/UI (run + generated sector/missions + econ/shop helpers).
+const _model = { run: null, sector: null, missions: null, MT_NAME, CONTENT,
+  econ: { unitBuy, unitSell, refuelPrice, jumpCost, sysDist, cargoUsed, beaconsLit, beaconsTotal, beaconsPerSector },
+  shop: { SHOP, shopMaxed, shopCost, repairCost }, flight: null, bp: null, paused: false, flavor: null, sysName: '' };
 function MODEL() {
-  return { run: RUN, sector: SECTOR, missions: MISSIONS, MT_NAME, CONTENT,
-    econ: { unitBuy, unitSell, refuelPrice, jumpCost, sysDist, cargoUsed, beaconsLit, beaconsTotal, beaconsPerSector },
-    shop: { SHOP, shopMaxed, shopCost, repairCost } };
+  const m = _model;
+  m.run = RUN; m.sector = SECTOR; m.missions = MISSIONS; m.flight = FLIGHT; m.bp = currentBlueprint(); m.flavor = MISSION_FLAVOR;
+  m.sysName = SECTOR && RUN ? SECTOR[RUN.sys].it : '';
+  // the harness stops ticking while the Game Center menu is open: freeze the flight with it
+  m.paused = !!FLIGHT && typeof performance !== 'undefined' && performance.now() - lastTickAt > 400;
+  return m;
 }
+// test hook (games-host / e2e): read-only view of the live run and flight
+export const __cz = { get run() { return RUN; }, get flight() { return FLIGHT; }, get bp() { return currentBlueprint(); } };
+if (typeof window !== 'undefined') { window.__cz = window.__cz || {}; window.__cz.game = __cz; }
 
 // ---- input vocabulary (one keymap, phase-interpreted) ------------------------------------------
 function mapKey(k) {
@@ -198,152 +213,27 @@ function mapKey(k) {
   if (k === 'm' || k === 'Shift') return { type: 'missile' };   // secondary weapon: homing interceptor
   return null;
 }
-function combatReduce(state, a) {
-  const t = a.type;
-  if (t === 'navkey') { const k = a.k; if (k === 'L') return { ...state, ah: -1, ahU: state.clock + 150 }; if (k === 'R') return { ...state, ah: 1, ahU: state.clock + 150 }; if (k === 'U') return { ...state, av: -1, avU: state.clock + 150 }; if (k === 'D') return { ...state, av: 1, avU: state.clock + 150 }; }
-  if (t === 'navrel') { if (a.k === 'H') return { ...state, ah: 0 }; if (a.k === 'V') return { ...state, av: 0 }; }
-  if (t === 'pad') return { ...state, ah: a.x, av: a.y, ahU: state.clock + 150, avU: state.clock + 150 };
-  if (t === 'aim') { const ns = { ...state, aimy: a.y, usedMouse: true }; if (a.x != null) ns.aimx = Math.max(-1, Math.min(1, a.x)); return ns; }   // usedMouse -> lighter aim assist (precise mouse wins)
-  if (t === 'missile' || t === 'col') return { ...state, launchMissile: true };   // secondary fire (key m/x, pad X)
-  if (t === 'confirm' || t === 'click') return { ...state, fire: true };
-  if (t === 'back') return endCombat(state, -1);
-  return state;
-}
-
-// ---- combat simulation (pure-ish on `state`) ---------------------------------------------------
-function foeSpeedMul(k) { return k === 1 ? 1.55 : k === 2 ? 0.72 : k === 3 ? 1.3 : 1.0; }
-function stepCombat(state, dtMs) {
-  const dt = Math.min(0.05, dtMs / 1000), ms = dtMs;
-  const s = { ...state, clock: state.clock + dtMs, foes: state.foes.map(f => ({ ...f })),
-    bolts: state.bolts.filter(b => b.life > 0).map(b => ({ ...b })), parts: state.parts.filter(p => p.life > 0).map(p => ({ ...p })),
-    pmiss: (state.pmiss || []).filter(m => m.life > 0).map(m => ({ ...m })),
-    pickups: (state.pickups || []).filter(pk => pk.life > 0).map(pk => ({ ...pk })), ev: [] };
-  const prevFoe = (state.lock >= 0 && state.lock < s.foes.length) ? s.foes[state.lock] : null;   // lock identity by REFERENCE (the foes array is compacted below, so indices shift)
-  // reticle steering (intent windows) + mouse absolute already set in reduce
-  if (s.clock < (s.ahU || 0)) s.aimx += s.ah * AIM_SPD * dt;
-  if (s.clock < (s.avU || 0)) s.aimy += s.av * AIM_SPD * dt;
-  s.aimx = Math.max(-1, Math.min(1, s.aimx)); s.aimy = Math.max(-0.85, Math.min(0.85, s.aimy));
-  if (s.shake > 0) s.shake = Math.max(0, s.shake - dt * 2.4);
-  // shield regen — slower recharge so damage matters (the player can't dodge; shield is the skill buffer)
-  if (s.shield < s.shieldMax && s.clock - (s.shieldHit || -9999) > 1500) s.shield = Math.min(s.shieldMax, s.shield + 17 * dt);
-  // enemy AI: a real dogfight. Foes approach to an engage distance and HOLD there, weaving and firing;
-  // they die ONLY to player fire (no free fly-through win). Occasionally a foe makes a strafing run —
-  // dives to point-blank, deals a hit, then retreats — for pressure. You must kill them all to advance.
-  const closeF = 30 + s.cc.foeSpeed * 0.3;
-  for (const f of s.foes) {
-    const spd = closeF * foeSpeedMul(f.kind);
-    f.wphase += dt * (f.kind === 1 ? 2.9 : f.kind === 3 ? 2.5 : 1.6);
-    if (f.strafe) {                                                  // diving in for a close pass
-      f.ez -= spd * 2.4 * dt;
-      if (f.ez <= ZNEAR) { hurt(s, s.cc.foeDmg + 3); s.shake = 1.0; s.ev.push({ t: 'pass', ex: f.ex, ey: f.ey }); f.ez = 90 + Math.random() * 20; f.strafe = 0; f.strafeCd = 3200 + Math.random() * 3500; }
-    } else {
-      if (f.ez > f.engageZ) f.ez = Math.max(f.engageZ, f.ez - spd * dt);   // close to engage range…
-      else f.ez = f.engageZ + Math.sin(f.wphase * 0.6) * 7;                // …then bob around it (alive, not a sitting duck)
-      f.strafeCd -= ms;
-      if (f.strafeCd <= 0 && f.ez < f.engageZ + 16) f.strafe = 1;          // launch a strafing run
-    }
-    const amp = (0.22 + (130 - Math.min(130, f.ez)) * 0.0016) * (f.kind === 1 ? 1.8 : f.kind === 2 ? 0.6 : 1);
-    f.ex += ((f.hx || 0) + Math.sin(f.wphase) * amp - f.ex) * 1.4 * dt;            // weave around the home lane, not screen centre
-    f.ey += ((f.hy || 0) + Math.sin(f.wphase * 0.7 + 1) * amp * 0.55 - f.ey) * 1.4 * dt;
-    f.fireCd -= ms;
-    if (f.fireCd <= 0 && f.ez < 130 && !f.strafe) { s.bolts.push({ ex: f.ex, ey: f.ey, ez: f.ez, life: 1000 }); f.fireCd = (f.kind === 3 ? 800 : 1300) + Math.random() * 600; }   // fiercer fire
-  }
-  s.foes = s.foes.filter(f => f.hp > 0);   // foes leave the field ONLY by dying to the player
-  // enemy bolts converge to camera centre
-  for (const b of s.bolts) { b.ez -= (b.ez / 0.9) * dt; b.life -= ms; if (b.ez < ZNEAR) { b.life = 0; hurt(s, s.cc.foeDmg); s.shake = 0.6; } }
-  // lock-on: nearest foe to reticle, radius grows with the target's on-screen size (like the native),
-  // with hysteresis (by foe IDENTITY, not index) so an acquired lock sticks rather than flickering.
-  s.lock = -1; let best = Infinity;
-  for (let i = 0; i < s.foes.length; i++) {
-    const f = s.foes[i]; const sc = FOCAL / f.ez; const sx = f.ex * sc, sy = f.ey * sc;
-    const dx = sx - s.aimx, dy = sy - s.aimy, dd = dx * dx + dy * dy;
-    const base = 0.16 + 0.42 * sc;                       // floor + grows as the foe nears (mirror of native 10+26*sc px)
-    const r = (f === prevFoe) ? base * 1.5 : base;       // hysteresis: keep the SAME ship locked longer
-    if (dd < r * r && dd < best) { best = dd; s.lock = i; }
-  }
-  if (s.lock >= 0 && s.foes[s.lock] !== prevFoe) s.ev.push({ t: 'lock' });   // edge -> renderer pulses the box + sound
-  // aim assist: glide toward the locked foe. Keyboard idle = full glide onto target; once the player has
-  // touched the MOUSE, only a light sticky nudge so their precise absolute aim always wins.
-  if (s.lock >= 0) {
-    const f = s.foes[s.lock]; const sc = FOCAL / f.ez, tx = f.ex * sc, ty = f.ey * sc;
-    const kbSteer = s.clock < (s.ahU || 0) || s.clock < (s.avU || 0);
-    const k = s.usedMouse ? 0.05 : (kbSteer ? 0.04 : Math.min(0.3, 4 * dt));   // lighter assist -> more skill
-    s.aimx += (tx - s.aimx) * k; s.aimy += (ty - s.aimy) * k;
-  }
-  // player fire (hitscan on lock)
-  s.fireCd -= ms;
-  if (s.fire && s.fireCd <= 0 && s.lock >= 0) {
-    s.fireCd = Math.max(110, 240 - RUN.weapon * 28); s.muz = s.clock + 80;
-    const f = s.foes[s.lock]; f.hp -= 18 + RUN.weapon * 8;
-    s.ev.push({ t: 'laser', ex: f.ex, ey: f.ey, ez: f.ez });
-    if (f.hp <= 0) { s.kills++; s.lock = -1; s.shake = f.kind === 3 ? 0.7 : 0.4; s.ev.push({ t: 'boom', ex: f.ex, ey: f.ey, ez: f.ez, big: f.kind === 3 }); maybeDrop(s, f); }
-    else { f.hitAt = s.clock; s.ev.push({ t: 'hit', ex: f.ex, ey: f.ey, ez: f.ez }); }   // hitAt -> renderer white-flashes the struck ship
-  }
-  s.fire = false;
-  // homing interceptors: launch at the locked foe (limited ammo), then fly out and track it
-  s.missileCd -= ms;
-  if (s.launchMissile && s.missiles > 0 && s.missileCd <= 0 && s.lock >= 0) {
-    s.missiles--; s.missileCd = 450; const f = s.foes[s.lock];
-    s.pmiss.push({ ex: s.aimx * 0.4, ey: s.aimy * 0.4, ez: 14, tid: f.id, life: 4000 });
-    s.ev.push({ t: 'mfire' });
-  }
-  s.launchMissile = false;
-  for (const m of s.pmiss) {
-    m.life -= ms; m.ez += 230 * dt;
-    const tf = s.foes.find(ff => ff.id === m.tid && ff.hp > 0);
-    if (tf) {
-      m.ex += (tf.ex - m.ex) * Math.min(1, 7 * dt); m.ey += (tf.ey - m.ey) * Math.min(1, 7 * dt);
-      if (m.ez >= tf.ez - 5) { tf.hp -= 70 + RUN.weapon * 10; m.life = 0; s.ev.push({ t: 'boom', ex: tf.ex, ey: tf.ey, ez: tf.ez, big: true }); if (tf.hp <= 0) { s.kills++; s.shake = 0.7; maybeDrop(s, tf); } }
-    } else if (m.ez > ZFAR) m.life = 0;     // target gone -> the missile flies off and expires
-  }
-  s.pmiss = s.pmiss.filter(m => m.life > 0);
-  // power-up drops drift toward the player and AUTO-COLLECT at the near plane (no aiming needed)
-  for (const pk of s.pickups) {
-    pk.ez -= 64 * dt; pk.life -= ms;
-    pk.ex += (0 - pk.ex) * Math.min(1, 1.2 * dt); pk.ey += (0 - pk.ey) * Math.min(1, 1.2 * dt);
-    if (pk.ez <= ZNEAR) {
-      if (pk.kind === 'missile') s.missiles = Math.min(5, s.missiles + 1);
-      else if (pk.kind === 'shield') s.shield = s.shieldMax;
-      else if (pk.kind === 'repair') s.hull = Math.min(s.hullMax, s.hull + 30);
-      s.ev.push({ t: 'pickup', kind: pk.kind });
-      s.banner = pk.kind === 'missile' ? 'MISSILE +1' : pk.kind === 'shield' ? 'SCUDO CARICO' : 'SCAFO RIPARATO'; s.bannerUntil = s.clock + 1100;
-      pk.life = 0;
-    }
-  }
-  s.pickups = s.pickups.filter(pk => pk.life > 0);
-  s.foes = s.foes.filter(f => f.hp > 0);
-  if (s.result) return s;
-  // wave flow / win
-  if (s.foes.length === 0) {
-    if (s.wavesLeft > 0) { s.spawnTimer -= ms; if (s.spawnTimer <= 0) spawnWave(s); }
-    else return endCombat(s, 1);
-  }
-  return s;
-}
-function hurt(s, dmg) {
-  s.shieldHit = s.clock;
-  if (s.ev) s.ev.push({ t: 'hurt' });                            // -> renderer plays the damage thud
-  if (s.shield > 0) { const a = Math.min(s.shield, dmg); s.shield -= a; dmg -= a; }
-  if (dmg > 0) { s.hull -= dmg; if (s.hull < 0) s.hull = 0; }
-  if (s.hull <= 0 && !s.result) { Object.assign(s, endCombat(s, 2)); }
-}
 // Resolve combat -> debrief AND apply rewards to the shared run. The RUN mutation + async persist are
 // a deliberate side-effect here (single-player: no netcode peers to keep in lockstep); the returned
 // snapshot itself is fresh (we never mutate the passed `state`), and the debrief shows the real reward.
 function endCombat(state, result) {
-  const cc = state.cc;
+  const cc = state.cc, F = FLIGHT;
+  const kills = F ? F.kills : 0;
   let earn = 0;
-  if (result === 1) earn = cc.rewardCr + cc.killCr * state.kills;
-  else if (!cc.mission) earn = cc.killCr * state.kills;          // ambush salvage even on retreat
+  if (result === 1) earn = cc.rewardCr + cc.killCr * kills;
+  else if (!cc.mission) earn = cc.killCr * kills;               // ambush salvage even on retreat
   RUN.credits = Math.min(9999999, RUN.credits + earn);
-  RUN.kills = (RUN.kills >>> 0) + state.kills;
+  RUN.kills = (RUN.kills >>> 0) + kills;
   if (result === 1) {
     if (cc.repFac >= 0) RUN.rep[cc.repFac] = Math.max(-100, Math.min(100, RUN.rep[cc.repFac] + cc.repGain));
     if (cc.enemyRepFac >= 0) RUN.rep[cc.enemyRepFac] = Math.max(-100, Math.min(100, RUN.rep[cc.enemyRepFac] - cc.enemyRepLoss));
   }
-  RUN.hull = Math.max(1, Math.round(state.hull));                // keep the run alive (never write hull 0)
+  RUN.hull = Math.max(1, Math.min(RUN.hull_max, Math.round(F ? F.player.hull : RUN.hull)));   // keep the run alive (never write hull 0)
   persist();                                                     // write the shared save (cross-play)
-  return { ...state, phase: 'debrief', result, earnCr: earn, dbKills: state.kills };
+  const st = F ? F.stats : null;
+  const dbStats = st ? { time: Math.round(F.t), shots: st.shots, hits: st.hits, acc: st.shots ? Math.round(st.hits / st.shots * 100) : 0,
+    dmgIn: Math.round(st.dmgIn), aceKill: st.aceKill, capKill: st.capKill, kind: F.mission.kind } : null;
+  return { ...state, phase: 'debrief', result, earnCr: earn, dbKills: kills, dbStats };
 }
 
 // ---- hub navigation + economy (mutates the shared RUN + persists; single-player side-effect) ----
@@ -357,7 +247,7 @@ function enterScreen(state, sc) {
 }
 function firstOther() { for (let i = 0; i < SECTOR.length; i++) if (i !== RUN.sys) return i; return 0; }
 function moveFocus(state, sc, n, d) { const i = ((state.focus[sc] + d) % n + n) % n; return { ...state, focus: { ...state.focus, [sc]: i } }; }
-function deny(state, msg) { return { ...state, toast: { text: msg, kind: 'bad', until: state.clock + 1600 }, flash: { kind: 'shake', until: state.clock + 240 } }; }
+function deny(state, key, v) { return { ...state, toast: { key, v, kind: 'bad', until: state.clock + 1600 }, flash: { kind: 'shake', until: state.clock + 240 } }; }
 const beaconLitIdx = (i) => ((RUN.beacon_lit >>> 0) & (1 << i)) !== 0;
 
 function hubReduce(state, a) {
@@ -400,28 +290,28 @@ function mapReduce(state, a) {
   return state;
 }
 function doJump(state) {
-  const t = state.target; if (t < 0 || t === RUN.sys) return deny(state, 'Seleziona una destinazione');
+  const t = state.target; if (t < 0 || t === RUN.sys) return deny(state, 'cz_t_pick_dest');
   const d = sysDist(CONTENT, RUN.sys, t), cost = jumpCost(d);
-  if (d > RUN.jump_range) return deny(state, 'Fuori portata');
-  if (RUN.fuel < cost) return deny(state, 'Celle insufficienti');
+  if (d > RUN.jump_range) return deny(state, 'cz_t_out_of_range');
+  if (RUN.fuel < cost) return deny(state, 'cz_t_no_cells');
   RUN.sys = t; RUN.fuel -= cost; RUN.epoch = (RUN.epoch >>> 0) + 1;
   rebuildSector(); persist();
   return { ...state, target: cycleTarget(RUN.sys, 1), focus: { ...state.focus, map: 0, missions: 0 }, flash: { kind: 'warp', until: state.clock + 600 } };   // new system -> fresh mission list
 }
 function doRelight(state) {
   if (!(SECTOR[RUN.sys].beacon && !beaconLitIdx(RUN.sys))) return state;
-  if (RUN.credits < 300) return deny(state, 'Servono 300 cr');
-  if (RUN.cargo[G_RELIQ] < 1) return deny(state, 'Serve 1 Reliquia');
+  if (RUN.credits < 300) return deny(state, 'cz_t_need_cr', { n: 300 });
+  if (RUN.cargo[G_RELIQ] < 1) return deny(state, 'cz_t_need_relic');
   RUN.credits -= 300; RUN.cargo[G_RELIQ] -= 1;
   RUN.rep[F_CUSTODI] = Math.max(-100, Math.min(100, RUN.rep[F_CUSTODI] + 12));
   RUN.beacon_lit = (RUN.beacon_lit >>> 0) | (1 << RUN.sys);
   if (beaconsLit(CONTENT, RUN) >= beaconsTotal(CONTENT)) {
     RUN.sector = (RUN.sector >>> 0) + 1; RUN.beacon_lit = 0; RUN.sys = 0; RUN.epoch = (RUN.epoch >>> 0) + 1;
     rebuildSector(); persist();
-    return enterScreen({ ...state, flash: { kind: 'sector', until: state.clock + 1500 }, toast: { text: 'SETTORE ' + RUN.sector, kind: 'good', until: state.clock + 1900 } }, 'map');
+    return enterScreen({ ...state, flash: { kind: 'sector', until: state.clock + 1500 }, toast: { key: 'cz_t_sector', v: { n: RUN.sector }, kind: 'good', until: state.clock + 1900 } }, 'map');
   }
   persist();
-  return { ...state, flash: { kind: 'ignite', until: state.clock + 800 }, toast: { text: 'Faro acceso', kind: 'good', until: state.clock + 1400 } };
+  return { ...state, flash: { kind: 'ignite', until: state.clock + 800 }, toast: { key: 'cz_t_beacon_lit', kind: 'good', until: state.clock + 1400 } };
 }
 function marketReduce(state, a) {
   const rows = CONTENT.goods.length + 1;            // 8 goods + refuel
@@ -441,12 +331,12 @@ function marketReduce(state, a) {
 function doBuy(state, g) {
   const price = unitBuy(CONTENT, RUN.sys, g, RUN.epoch, RUN.rep);
   const q = Math.min(state.marketQty, Math.floor(RUN.credits / price), RUN.cargo_max - cargoUsed(RUN));
-  if (q <= 0) return deny(state, RUN.credits < price ? 'Crediti insufficienti' : 'Stiva piena');
+  if (q <= 0) return deny(state, RUN.credits < price ? 'cz_t_no_credits' : 'cz_t_hold_full');
   RUN.credits -= price * q; RUN.cargo[g] += q; persist();
   return { ...state, flash: { kind: 'pop', until: state.clock + 400 } };
 }
 function doSell(state, g) {
-  if (RUN.cargo[g] <= 0) return deny(state, 'Niente da vendere');
+  if (RUN.cargo[g] <= 0) return deny(state, 'cz_t_nothing_to_sell');
   const price = unitSell(CONTENT, RUN.sys, g, RUN.epoch, RUN.rep), q = Math.min(state.marketQty, RUN.cargo[g]);
   RUN.credits = Math.min(9999999, RUN.credits + price * q); RUN.cargo[g] -= q; persist();
   return { ...state, flash: { kind: 'pop', until: state.clock + 400 } };
@@ -454,7 +344,7 @@ function doSell(state, g) {
 function doRefuel(state) {
   const price = refuelPrice(CONTENT, RUN.sys);
   const n = Math.min(state.marketQty, RUN.fuel_max - RUN.fuel, Math.floor(RUN.credits / price));
-  if (n <= 0) return deny(state, RUN.fuel >= RUN.fuel_max ? 'Serbatoio pieno' : 'Crediti insufficienti');
+  if (n <= 0) return deny(state, RUN.fuel >= RUN.fuel_max ? 'cz_t_tank_full' : 'cz_t_no_credits');
   RUN.credits -= price * n; RUN.fuel += n; persist();
   return { ...state, flash: { kind: 'pop', until: state.clock + 400 } };
 }
@@ -464,14 +354,14 @@ function shipyardReduce(state, a) {
   if (a.type === 'confirm') {
     const r = state.focus.shipyard, key = r < SHOP.length ? SHOP[r].key : 'repair';
     if (shopBuy(key, RUN)) { persist(); return { ...state, flash: { kind: 'pop', until: state.clock + 400 } }; }
-    return deny(state, 'Non disponibile');
+    return deny(state, 'cz_t_unavailable');
   }
   return state;
 }
 function missionsReduce(state, a) {
   const n = (MISSIONS ? MISSIONS.length : 0) + 1;
   if (a.type === 'navkey' && (a.k === 'U' || a.k === 'D')) { const ns = moveFocus(state, 'missions', n, a.k === 'D' ? 1 : -1); ns.sel = ns.focus.missions; return ns; }
-  if (a.type === 'confirm') { const slot = state.focus.missions; const cc = (slot < (MISSIONS ? MISSIONS.length : 0)) ? combatFromMission(MISSIONS[slot]) : ambushCfg(); return startCombat({ ...state, sel: slot }, cc); }
+  if (a.type === 'confirm') { const slot = state.focus.missions; const has = slot < (MISSIONS ? MISSIONS.length : 0); const cc = has ? combatFromMission(MISSIONS[slot]) : ambushCfg(); return startCombat({ ...state, sel: slot }, cc, has ? MISSIONS[slot].flavor : null); }
   return state;
 }
 

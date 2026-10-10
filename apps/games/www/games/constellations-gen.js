@@ -146,5 +146,13 @@ function genMissionFlavor(seed, sector, m, sysFac) {
   const mods = [];
   if ((h2 >>> 6) % 3 === 0) mods.push(MODS[(h2 >>> 8) % MODS.length]);
   if (m.tier >= 4 && (h2 >>> 12) % 3 === 0) { const x = MODS[(h2 >>> 14) % MODS.length]; if (!mods.includes(x)) mods.push(x); }
-  return { arch, title, brief, name, gang, rarity, star: RAR[rarity][0], color: RAR[rarity][1], rarityName: RAR[rarity][2], mods };
+  // index form of the same draws, so the web UI can show the flavor in any of the five languages
+  const archK = m.type === 1 ? (arch === 'Duello' ? 2 : 1) : m.type === 2 ? 3 : m.type === 3 ? (arch === 'Bonifica' ? 4 : 5) : 0;
+  const modI = mods.map((x) => MODS.indexOf(x));
+  const nameBase = NPC_PRE[h % NPC_PRE.length] + NPC_SUF[(h >>> 5) % NPC_SUF.length];
+  return { arch, title, brief, name, gang, rarity, star: RAR[rarity][0], color: RAR[rarity][1], rarityName: RAR[rarity][2], mods,
+    archK, gangI: (h >>> 16) % GANG.length, epiI: m.ace ? (h >>> 10) % EPI.length : -1, nameBase, modI,
+    // the named ace of the cast who flies this contract (mirrors the firmware's ace_cast): 0 Dax Oren (Gilda),
+    // 1 Sister Vigil (Custodi), 2 Scarlet Gutter / 4 One-Eye Bram (Relitti), 3 Warden of the Dark (Echo)
+    aceI: m.ace ? (m.foe_fac === 0 ? 0 : m.foe_fac === 1 ? 1 : m.foe_fac === 3 ? 3 : (((h >>> 10) & 3) ? 2 : 4)) : -1 };
 }

@@ -536,7 +536,7 @@ function maybeLock() {
   if (!immersive || barOpen || !wantsLock() || (play && play.spectator)) return;
   const c = $('#board');
   if (document.pointerLockElement === c || !c.requestPointerLock) return;
-  try { c.requestPointerLock(); } catch {}
+  try { const r = c.requestPointerLock(); if (r && r.catch) r.catch(() => {}); } catch {}   // no user activation (synthetic key) -> a rejected promise, not an error
 }
 function releaseLock() { if (document.pointerLockElement && document.exitPointerLock) document.exitPointerLock(); }
 function showLockHint(on) { $('#lockHint').classList.toggle('on', !!on && barOpen === false); }
