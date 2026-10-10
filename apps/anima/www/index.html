@@ -4829,7 +4829,8 @@
       if(!/\d/.test(q) && prev==null) return null;                 // nothing to compute: never load the module
       const M=await nlmathMod(), P=await cascadeMod();
       const qLang=(ctxkit.userLanguage && ctxkit.userLanguage(q)) || (P.guessLang && P.guessLang(q)) || lang;
-      const res=M.parseMath(q, { lang:qLang, prev: prev!=null ? Number(prev) : null });
+      // arithmetic, else a unit conversion ("quanti chilometri sono 26,2 miglia", "70 kg to pounds") — both exact
+      const res=M.parseMath(q, { lang:qLang, prev: prev!=null ? Number(prev) : null }) || (M.parseConvert && M.parseConvert(q, { lang:qLang }));
       if(!res) return null;
       return { reply:M.mathReply(res), value:res.value, intent:'calc', domain:'calc', tier:'browser', confidence:99 };
     }

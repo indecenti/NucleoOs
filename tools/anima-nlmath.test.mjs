@@ -4,7 +4,22 @@
 // non-arithmetic word stays with the normal ladder.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseMath, mathReply } from '../apps/anima/www/local/nlmath.js';
+import { parseMath, mathReply, parseConvert } from '../apps/anima/www/local/nlmath.js';
+
+// Unit conversions, five languages: "Quanti chilometri sono 26,2 miglia?" had reached a model.
+test('unit conversions in five languages, exact, and nothing else', () => {
+  const cv = (q, lang) => { const r = parseConvert(q, { lang }); return r && mathReply(r); };
+  assert.equal(cv('Quanti chilometri sono 26,2 miglia?', 'it'), '26,2 mi = **42,16 km**');
+  assert.equal(cv('convert 70 kg to pounds', 'en'), '70 kg = **154.3 lb**');
+  assert.equal(cv('¿Cuántos grados Fahrenheit son 30 grados Celsius?', 'es'), '30°C = **86°F**');
+  assert.equal(cv('combien de litres font 2 gallons', 'fr'), '2 gal = **7,57 l**');
+  assert.equal(cv('Wie viele Meilen sind 10 km?', 'de'), '10 km = **6,21 mi**');
+  assert.equal(cv('100 km/h in mph', 'it'), '100 km/h = **62,14 mph**');
+  assert.equal(cv('32 °F in °C', 'en'), '32°F = **0°C**');
+  assert.equal(cv('quanti chili sono 10 libbre', 'it'), '10 lb = **4,54 kg**');
+  for (const q of ['5 km in kg', 'quanti anni ha Mario', 'what is 5 miles', 'converti 3 metri in metri', 'quanti gradi ci sono a Roma', 'apri le note'])
+    assert.equal(parseConvert(q, { lang: 'it' }), null, q);
+});
 
 const val = (q, o) => { const r = parseMath(q, o); return r && r.value; };
 

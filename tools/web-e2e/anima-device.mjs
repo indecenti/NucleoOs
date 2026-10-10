@@ -174,6 +174,8 @@ const CASES = [
   { id: 'x-div-fr', tags: 'exact math', lang: 'fr', ask: 'Combien font 100 divisé par 8 ?', checks: [has(/12,5/)] },
   { id: 'x-chain-it-1', tags: 'exact math', lang: 'it', ask: 'quanto fa 12 per 12', checks: [has(/\*\*144\*\*/)] },
   { id: 'x-chain-it-2', tags: 'exact math', lang: 'it', follow: true, ask: 'e poi meno 44', checks: [has(/\*\*100\*\*/)] },
+  { id: 'x-conv-it', tags: 'exact math', lang: 'it', ask: 'Quanti chilometri sono 26,2 miglia?', checks: [has(/\*\*42,16 km\*\*/), engine(/regola esatta|exact rule/i)] },
+  { id: 'x-conv-fr', tags: 'exact math', lang: 'fr', ask: 'Combien de degrés Fahrenheit font 30 degrés Celsius ?', checks: [has(/\*\*86\s?°F\*\*/)] },
   { id: 'x-launch-es', tags: 'exact device', lang: 'es', ask: 'abre la calculadora', checks: [opened(/calc/i)] },
   { id: 'x-launch-fr', tags: 'exact device', lang: 'fr', ask: 'ouvre les réglages', checks: [opened(/settings|impostazioni|r.glages/i)] },
   { id: 'x-launch-en', tags: 'exact device', lang: 'en', ask: 'open the clock', checks: [opened(/clock|orologio/i)] },

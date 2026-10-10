@@ -130,6 +130,60 @@ export function parseMath(q, { lang = 'it', prev = null } = {}) {
 }
 const LOCALE = { it: 'it-IT', en: 'en-GB', es: 'es-ES', fr: 'fr-FR', de: 'de-DE' };
 
+// ---- unit conversion, five languages ----------------------------------------------------------------
+// "Quanti chilometri sono 26,2 miglia?", "convert 70 kg to pounds", "¿cuántos grados Fahrenheit son 30 grados?",
+// "combien de litres font 2 gallons", "wie viele Meilen sind 10 km" — a number, a unit, a target unit of the same
+// kind, and nothing else (the same whole-sentence discipline as parseMath). Factors to the SI base of each kind.
+const U = [
+  // [kind, symbol, factor to base (or 'temp'), aliases (folded)]
+  ['len', 'km', 1000, ['km', 'chilometri', 'chilometro', 'kilometri', 'kilometers', 'kilometres', 'kilometer', 'kilometre', 'kilometros', 'kilometro']],
+  ['len', 'm', 1, ['m', 'metri', 'metro', 'meters', 'metres', 'meter', 'metre', 'metros']],
+  ['len', 'cm', 0.01, ['cm', 'centimetri', 'centimetro', 'centimeters', 'centimetres', 'centimeter', 'centimetros', 'zentimeter']],
+  ['len', 'mm', 0.001, ['mm', 'millimetri', 'millimetro', 'millimeters', 'millimetres', 'milimetros', 'millimeter']],
+  ['len', 'mi', 1609.344, ['mi', 'miglia', 'miglio', 'miles', 'mile', 'millas', 'milla', 'milles', 'meilen', 'meile']],
+  ['len', 'ft', 0.3048, ['ft', 'piedi', 'piede', 'feet', 'foot', 'pies', 'pieds', 'pied', 'fuss']],
+  ['len', 'in', 0.0254, ['pollici', 'pollice', 'inches', 'inch', 'pulgadas', 'pulgada', 'pouces', 'pouce', 'zoll']],
+  ['len', 'yd', 0.9144, ['yd', 'iarde', 'iarda', 'yards', 'yard', 'yardas']],
+  ['mass', 'kg', 1, ['kg', 'chili', 'chilo', 'chilogrammi', 'chilogrammo', 'kilogrammi', 'kilograms', 'kilogram', 'kilos', 'kilo', 'kilogramos', 'kilogrammes', 'kilogramm']],
+  ['mass', 'g', 0.001, ['g', 'grammi', 'grammo', 'grams', 'gram', 'gramos', 'grammes', 'gramm']],
+  ['mass', 'lb', 0.45359237, ['lb', 'lbs', 'libbre', 'libbra', 'pounds', 'pound', 'libras', 'libra', 'livres', 'livre', 'pfund']],
+  ['mass', 'oz', 0.028349523125, ['oz', 'once', 'oncia', 'ounces', 'ounce', 'onzas', 'onza', 'onces', 'unzen', 'unze']],
+  ['vol', 'l', 1, ['l', 'litri', 'litro', 'liters', 'litres', 'liter', 'litre', 'litros']],
+  ['vol', 'ml', 0.001, ['ml', 'millilitri', 'millilitro', 'milliliters', 'millilitres', 'mililitros', 'milliliter']],
+  ['vol', 'gal', 3.785411784, ['gal', 'galloni', 'gallone', 'gallons', 'gallon', 'galones', 'galon', 'gallonen']],
+  ['speed', 'km/h', 1 / 3.6, ['km/h', 'kmh', 'chilometri orari', 'chilometri all ora', 'kilometers per hour', 'kilometros por hora', 'kilometres par heure', 'stundenkilometer']],
+  ['speed', 'mph', 0.44704, ['mph', 'miglia orarie', 'miglia all ora', 'miles per hour', 'millas por hora']],
+  ['speed', 'm/s', 1, ['m/s', 'metri al secondo', 'meters per second', 'metros por segundo', 'metres par seconde']],
+  ['temp', '°C', 'temp', ['°c', 'c', 'celsius', 'gradi celsius', 'gradi centigradi', 'grados celsius', 'degres celsius', 'grad celsius', 'gradi', 'grados', 'degres', 'grad']],
+  ['temp', '°F', 'temp', ['°f', 'f', 'fahrenheit', 'gradi fahrenheit', 'grados fahrenheit', 'degres fahrenheit', 'grad fahrenheit']],
+  ['temp', 'K', 'temp', ['kelvin']],
+];
+const UNIT = new Map(); for (const [kind, sym, f, al] of U) for (const a of al) if (!UNIT.has(a)) UNIT.set(a, { kind, sym, f });
+const UNIT_RE = [...UNIT.keys()].sort((a, b) => b.length - a.length).map((a) => a.replace(/[/°]/g, (c) => '\\' + c)).join('|');
+const NUM_RE = String.raw`(-?\d[\d.,  ']*)`;
+const CONV_LEAD = String.raw`(?:converti(?:mi)?|convert|convierte|convertis|konvertiere|rechne|quanto (?:fa|fanno|sono|e)|quant'e|how much is|what is|what's|cuanto (?:es|son)|combien (?:font|fait)|wie viel (?:sind|ist))?\s*`;
+const TO = String.raw`(?:in|to|into|a|en|nach)`;
+const HOW_MANY = String.raw`(?:quanti|quante|how many|cuantos|cuantas|combien de|combien d'|wie viele|wieviel|wie viel)`;
+const CONV_A = new RegExp(String.raw`^${CONV_LEAD}${NUM_RE}\s*(${UNIT_RE})\s+${TO}\s+(${UNIT_RE})$`);
+const CONV_B = new RegExp(String.raw`^${HOW_MANY}\s*(${UNIT_RE})\s+(?:sono|ci sono in|fa|fanno|are(?: there)? in|is|are|son|hay en|font|y a-t-il dans|sind|hat|ergeben|in|en)\s+${NUM_RE}\s*(${UNIT_RE})$`);
+function toBase(v, u) { if (u.f !== 'temp') return v * u.f; return u.sym === '°C' ? v + 273.15 : u.sym === '°F' ? (v - 32) * 5 / 9 + 273.15 : v; }
+function fromBase(v, u) { if (u.f !== 'temp') return v / u.f; return u.sym === '°C' ? v - 273.15 : u.sym === '°F' ? (v - 273.15) * 9 / 5 + 32 : v; }
+export function parseConvert(q, { lang = 'it' } = {}) {
+  const t = fold(q).replace(/[?!¿¡=]+/g, ' ').replace(/\s+/g, ' ').trim().replace(TAIL, '').trim();
+  let m = CONV_A.exec(t), n, a, b;
+  if (m) { n = m[1]; a = m[2]; b = m[3]; }
+  else if ((m = CONV_B.exec(t))) { b = m[1]; n = m[2]; a = m[3]; }
+  else return null;
+  const ua = UNIT.get(a), ub = UNIT.get(b), v = num(n.replace(/[.,]$/, ''), lang);
+  if (!ua || !ub || ua.kind !== ub.kind || ua.sym === ub.sym || !Number.isFinite(v)) return null;
+  // bare "gradi/grados/degrés/Grad" is a temperature only next to an explicit °C/°F on the other side
+  const out = Number(fromBase(toBase(v, ua), ub).toPrecision(10));
+  const fmt = (x, d) => { try { return x.toLocaleString(LOCALE[lang] || 'en-GB', { maximumFractionDigits: d }); } catch { return String(x); } };
+  const d = Math.abs(out) >= 100 ? 1 : 2;
+  const sp = (s) => (s.startsWith('°') ? '' : ' ') + s;
+  return { value: Number(out.toFixed(d)), shown: fmt(v, 6) + sp(ua.sym) + ' = ' + fmt(out, d) + sp(ub.sym) };
+}
+
 // The reply: the working, then the result in bold — the only number in bold, and the right one.
 export function mathReply(res) {
   const i = res.shown.lastIndexOf(' = ');

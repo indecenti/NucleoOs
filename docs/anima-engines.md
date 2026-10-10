@@ -34,6 +34,8 @@ both exist; `ai.local.engines.prefer`) and the PC model pick (`ai.local.engines.
    pure arithmetic in any of the five languages ("combien font 17 fois 23, divisé ensuite par 5", "y dividido entre
    3") is computed exactly — every word must be a number, an operator word or a known filler, else the ladder goes on.
    The reply is the working + ONE bold result; the value rides in the turn's `meta.value` for the next follow-up.
+   **Unit conversions** too (`parseConvert`): length, mass, volume, speed, temperature, five languages ("quanti
+   chilometri sono 26,2 miglia", "70 kg to pounds", "wie viele Meilen sind 10 km") — whole sentence or nothing.
 2. Weather (browser, Open-Meteo) · 🌐 Web (Groq compound, Auto only) · translation ladder.
 3. Local agent (a task: files, code, app) → local server chat → cloud (with a key) → local server as fallback →
    browser GPU (WebLLM, HTTPS only) → browser WASM brain + web index → the Cardputer.
