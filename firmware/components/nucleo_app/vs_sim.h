@@ -26,6 +26,15 @@ typedef int32_t vfix;
 #define VS_TOFIX(x) ((vfix)((x) << VS_FP))
 #define VS_TOINT(x) ((int)((x) >> VS_FP))
 
+// ---- shared tables / rules (one source of truth for the sim and the app) ----
+extern const int16_t vs_cos32[32], vs_sin32[32];   // 32-direction unit circle, 8.8 (the app draws orbs with it)
+static inline int vs_xp_req(int level) { return 8 + level * 3; }   // xp needed for the next level
+
+// ---- events of the last vs_step (bit flags in VS.ev): the app turns them into sound + juice ----
+enum { VS_EV_KILL = 1, VS_EV_GEM = 2, VS_EV_HURT = 4, VS_EV_HEAL = 8, VS_EV_BOMB = 16, VS_EV_BOSS = 32,
+       VS_EV_WAVE = 64, VS_EV_LEVEL = 128, VS_EV_NOVA = 256 };
+#define VS_NFX 8          // death puffs on screen at once (ring)
+
 // ---- spatial grid: a camera-centred window, 16 px cells ----
 #define VS_CELL  16
 #define VS_GW    32           // 32*16 = 512 px window width
@@ -97,6 +106,9 @@ typedef struct {
     uint32_t rng;
     uint32_t frame;
     int      kills;
+    uint16_t ev;                   // VS_EV_* raised by the last vs_step
+    int16_t  fxx[VS_NFX], fxy[VS_NFX];   // death puffs (world px), drawn by the app while fxt > 0
+    uint8_t  fxt[VS_NFX], fxk[VS_NFX], fx_rr;   // frames left, kind (0 grunt, 1 elite, 2 boss), ring cursor
 
     // instrumentation (Step 0 proof)
     uint32_t checks;       // distance comparisons this frame

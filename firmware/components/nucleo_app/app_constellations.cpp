@@ -10,11 +10,10 @@
 // no-hoarding rule still holds. Laser and Shield are shipyard upgrades, tying trade money to
 // combat power; pilot rank grows with kills.
 //
-//   • RAM / exclusive-mode: the game-state pools (systems cache + combat arrays, ~3 KB) are HEAP,
-//     allocated on enter and freed on exit (zero boot-time cost). Because that calloc must succeed in
-//     the tight, fragmented runtime heap, the app declares exclusive_flags = NX_NET_APP: the framework
-//     frees ~60 KB (httpd/mDNS/voice/L1) BEFORE on_enter, so the pools always fit (no launch OOM) and
-//     the freed I2S line makes the chiptune SFX reliable — same contract as Reactor/Slots/Sandgarden.
+//   • RAM / exclusive-mode: the game-state pools (systems cache, combat + juice arrays, starfield, the
+//     composed mission texts, ~4 KB) are the framework's per-app RAM (APP_RAM): allocated before on_enter,
+//     freed after on_exit, nothing resident while the game is closed. The app declares NX_NET_APP: the
+//     framework frees ~60 KB (httpd/mDNS/voice/L1) first, so the pools always fit and the WAV player has room.
 //   • Flicker: we draw only with d.<...> in on_draw(); the run loop composites the whole frame into
 //     the shared canvas and blits once (ANTI-FLICKER technique 1). For smooth motion we register a
 //     ~30 Hz poll handler that animates ONLY the live screens (title / map / cinematics) and returns
@@ -22,12 +21,16 @@
 //   • Input: the framework routes LEFT/BACK to the back-handler and everything else to on_key — so
 //     LEFT is handled in on_back (screen-local nav) and BACK pops a screen, closing the app only at
 //     the title (same split app_theme/app_recorder use).
-//   • Audio: short chiptune cues are synthesized once to SD WAVs (notify_synth) and cached. If the
-//     player drops a real WAV at /sd/data/costellazioni/custom/<name>.wav it is used instead — so
-//     downloaded sounds "just work" without bloating the build. WAV needs no canvas release.
-//   • Persistence: a small binary save + a tiny settings file on SD, written atomically (tmp+rename).
+//   • Audio: the shared game_sfx.h engine plays the PC-rendered pack /sd/data/costellazioni/pack/<name>.wav
+//     (tools/sfx-gen/games/stelle.py) and never synthesizes during play; without the pack a cue is a tone.
+//   • Persistence: a small binary save + a tiny settings file on SD. The save is written to a temp file and
+//     swapped in only when it flushed completely; the previous one is kept as save.bak until then, and a save
+//     that does not read back is never overwritten by "Continue" (only by an explicit New Game).
+//   • Look: title, settings and modal cards are the shared console kit (game_ui.h); the station screens keep
+//     their own fisheye lists (rows carry prices / levels / badges).
 //
-// Texts are ASCII only (the M5GFX bitmap font has no accents): Italian uses the apostrophe form.
+// Texts follow the OS language (game_text.h: it/en here, es/fr/de from the SD pack); ASCII only (the TFT
+// fonts have no accents): Italian uses the apostrophe form.
 
 #include "nucleo_app.h"
 #include "nucleo_kbd.h"
@@ -46,6 +49,10 @@ extern "C" {
     void nucleo_imu_recenter(void);
 }
 #include "constellations_content.h"
+#include "game_text.h"         // the five OS languages (it/en in flash, es/fr/de from the SD pack)
+#include "game_ui.h"           // gui:: the console kit (title, menu, dialog)
+#include "game_sfx.h"          // shared SFX: the PC-rendered pack, else a tone
+#include "tile_blit.h"         // direct-to-canvas stipple (translucent nebulae, glows, shadows, edge flashes)
 #include <M5GFX.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -125,7 +132,6 @@ static Save g;
 static Sys *cur_sys;   // NSYS — heap, allocated on app enter / freed on exit (zero boot-time .bss)
 #define SYSTEMS cur_sys
 
-static int  g_lang  = LANG_IT;   // mirrored in the settings file so the menu remembers it
 static int  g_audio = 1;
 static int  g_tilt  = 0;         // tilt controller on/off (Cardputer ADV BMI270); persisted in cfg
 
@@ -136,13 +142,17 @@ static int64_t s_now, s_last_frame;
 static unsigned s_anim;
 static float s_scroll[3];
 
-static int  s_msel, s_setsel, s_hubsel, s_mktsel, s_yardsel, s_evsel, s_target;
+static int  s_hubsel, s_mktsel, s_yardsel, s_evsel, s_target;
+static gui::Menu s_tmenu, s_smenu;     // title + settings lists (the console kit)
+static bool s_del_armed;              // "Delete save" asks once more before it wipes
+static bool s_save_bad;               // a save file is there but does not read back (never overwritten by Continue)
+static int64_t s_flee_until;          // combat: a second Esc before this disengages
 static int  s_cine, s_ev;
 static int64_t s_cine_t0;
 static char s_status[40];        // transient one-liner on market/shipyard
 
 // ---- action combat: first-person pseudo-3D rail shooter (Star-Wars arcade) --
-// Everything here is static (.bss), no heap: the no-hoarding rule kept by owning nothing.
+// The pools are APP_RAM (see the table at the end): nothing resident while the game is closed.
 // The camera sits in the cockpit looking down +ez; enemies fly toward you, growing by 1/ez.
 #define NBOLT 18                     // enemy laser tracers (player fire is hitscan, not a projectile)
 #define NFOE  6
@@ -162,11 +172,11 @@ static char s_status[40];        // transient one-liner on market/shipyard
 #define AIM_FRIC   6.5f
 struct Bolt { float ex, ey, ez, tx, ty, vz; int16_t life; uint8_t on, foe, aimward; };
 struct Foe  { float ex, ey, ez, wphase, bank, engagez; int16_t hp, hpmax, firecd, strafecd, hitms; uint8_t on, kind, passed, strafe; };
-static Bolt *s_bolt;                          // NBOLT — heap, allocated on enter / freed on exit
-static Foe  *s_foe;                           // NFOE  — idem
+static Bolt *s_bolt;                          // NBOLT (APP_RAM)
+static Foe  *s_foe;                           // NFOE  (APP_RAM)
 struct Warp { float ex, ey, ez; };
 static Warp *s_warp;                          // NWARP — forward-streaking starfield
-// ---- juice pools (all .bss, no heap) ----------------------------------------
+// ---- juice pools (APP_RAM) -------------------------------------------------
 #define NPART 40        // debris + spark particles (shared round-robin pool)
 #define NSHK  3         // expanding shockwave rings
 #define NRIP  2         // shield-absorb ripples on the canopy
@@ -174,20 +184,21 @@ enum { PK_DEBRIS = 0, PK_SPARK, PK_STREAK };
 struct Part { float ex, ey, ez, vx, vy, vz; int16_t life, life0; uint8_t on, kind; uint16_t col; };
 struct Shk  { float cx_, cy_; int16_t life, life0; uint8_t on; uint16_t col; };
 struct Rip  { int x, y; int16_t life, life0; uint8_t on; };
-static Part *s_part;                          // NPART — heap, allocated on enter / freed on exit
-static Shk  s_shk[NSHK];
-static Rip  s_rip[NRIP];
+static Part *s_part;                          // NPART
+static Shk  *s_shk;                           // NSHK
+static Rip  *s_rip;                           // NRIP
 // model-shatter deaths: a tiny pool that keeps a killed foe's pose so its FLASH model can be exploded
-// into cooling, tumbling shards for ~0.4 s (fx3d::shatter). Pose only -> ~128 B .bss, no heap.
+// into cooling, tumbling shards for ~0.4 s (fx3d::shatter). Pose only.
 #define NDEATH 4
 struct Death { uint8_t on, model; int16_t x, y, r; float yaw, bank; uint16_t col; int16_t t, t0; };
-static Death s_death[NDEATH];
+static Death *s_death;                        // NDEATH
 static int  s_part_rr;                 // round-robin cursor
 static int64_t s_flash_until;          // brief dim full-frame flash window
 static float   s_flash_x, s_flash_y;   // core-flash centre
 static int     s_flash_r0;             // core-flash radius (capped)
 static int64_t s_muz_until;            // twin muzzle-flash window
 static int64_t s_hullvig_until;        // red edge vignette on a hull hit
+static int64_t s_shieldvig_until;      // cyan edge flash when the shield soaks a hit
 static int64_t s_nearmiss_ms;          // rate-limit for the pass-by whoosh
 static int64_t s_alarm_ms;             // rate-limit for the hull-critical klaxon
 static int64_t s_smoke_ms;             // rate-limit for the wounded-foe ember trail
@@ -221,17 +232,16 @@ static int   s_ward_hp, s_ward_max;
 static float s_ward_x, s_ward_vx;
 
 // ---- arcade layer: player missiles, power-ups, combo, per-wave look ---------
-// All .bss (no heap), like s_shk/s_rip — the no-hoarding rule kept by owning nothing.
 #define NMSL 3                       // missiles airborne at once (also the ammo cap = "max 3")
 struct Msl { float ex, ey, ez; int target; uint8_t on; };
-static Msl s_msl[NMSL];
+static Msl *s_msl;                   // NMSL (APP_RAM)
 static int     s_msl_ammo;           // reserve missiles 0..NMSL (refills slowly)
 static float   s_msl_reload;         // ms accumulator toward the next +1 missile
 static int64_t s_rapid_until;        // rapid-fire power-up window
 #define NPU 3                        // power-ups drifting toward the cockpit at once
 enum { PU_SHIELD = 0, PU_REPAIR, PU_MISSILE, PU_RAPID, PU_KINDS };
 struct Pickup { float ex, ey, ez; int16_t life; uint8_t on, kind; };
-static Pickup s_pu[NPU];
+static Pickup *s_pu;                 // NPU (APP_RAM)
 static int     s_combo; static int64_t s_combo_until;     // arcade kill combo
 static uint16_t s_wave_tint;         // per-wave enemy + backdrop colour (rotates each wave)
 static char    s_toast[28]; static int64_t s_toast_until; // brief power-up pickup banner
@@ -242,8 +252,7 @@ static int  eligible_missions(int *out);
 static inline uint16_t shade(uint16_t c, int num, int den);   // defined lower; draw_warp uses it earlier
 
 // ============================ tiny helpers ===================================
-static inline const char *tx(const char *it, const char *en) { return g_lang ? en : it; }
-static inline const char *lp(const char *const p[2]) { return p[g_lang ? 1 : 0]; }
+static inline const char *lp(const char *const p[2]) { return game_text(p[0], p[1]); }   // a content {IT, EN} pair
 static inline uint32_t bit(int b) { return 1u << b; }
 static inline bool flag(int b) { return (g.flags & bit(b)) != 0; }
 static inline int  clampi(int v, int lo, int hi) { if (v < lo) return lo; if (v > hi) return hi; return v; }
@@ -290,45 +299,50 @@ static void ensure_dirs(void)
 {
     mkdir("/sd/data", 0777);
     mkdir(DIR, 0777);
-    mkdir(DIR "/sfx", 0777);
-    mkdir(DIR "/custom", 0777);
 }
-static bool save_read(Save *out)
+static bool save_read_file(const char *path, Save *out)
 {
-    FILE *f = fopen(DIR "/save.bin", "rb");
+    FILE *f = fopen(path, "rb");
     if (!f) return false;
     size_t n = fread(out, sizeof *out, 1, f);
     fclose(f);
-    return n == 1 && out->magic == SAVE_MAGIC && out->ver == SAVE_VER;
+    return n == 1 && out->magic == SAVE_MAGIC && out->ver == SAVE_VER && out->sys >= 0 && out->sys < NSYS &&
+           out->fuel_max > 0 && out->hull_max > 0 && out->cargo_max > 0;
 }
-// Atomically write a given Save to SD (tmp + rename). Shared by the game and the web save endpoint.
+// The save, or the previous one kept while a new one was being swapped in (power lost mid-swap).
+static bool save_read(Save *out) { return save_read_file(DIR "/save.bin", out) || save_read_file(DIR "/save.bak", out); }
+// Write a Save to SD: temp file, flushed and closed OK, then swapped in; the old save survives as save.bak
+// until the swap succeeded. Shared by the game and the web save endpoint.
 static bool save_write_buf(const Save *src)
 {
     ensure_dirs();
     FILE *f = fopen(DIR "/save.bin.tmp", "wb");
     if (!f) return false;
-    size_t n = fwrite(src, sizeof *src, 1, f);
-    fclose(f);
-    if (n != 1) { remove(DIR "/save.bin.tmp"); return false; }
-    remove(DIR "/save.bin");
-    rename(DIR "/save.bin.tmp", DIR "/save.bin");
+    bool ok = fwrite(src, sizeof *src, 1, f) == 1;
+    ok = (fclose(f) == 0) && ok;                      // fclose flushes: a full card fails here, not later
+    if (!ok) { remove(DIR "/save.bin.tmp"); return false; }
+    remove(DIR "/save.bak");
+    rename(DIR "/save.bin", DIR "/save.bak");          // FAT rename does not replace: move the old one aside
+    if (rename(DIR "/save.bin.tmp", DIR "/save.bin") != 0) { rename(DIR "/save.bak", DIR "/save.bin"); return false; }
+    remove(DIR "/save.bak");
     return true;
 }
 static bool save_write(void)
 {
+    if (!s_ingame) return false;                      // a dead / finished run is never written back
     g.magic = SAVE_MAGIC; g.ver = SAVE_VER;
     if (!save_write_buf(&g)) return false;
     s_has_save = true;
     return true;
 }
-static void save_wipe(void) { remove(DIR "/save.bin"); s_has_save = false; }
+static void save_wipe(void) { remove(DIR "/save.bin"); remove(DIR "/save.bak"); s_has_save = false; }
 
 static void cfg_write(void)
 {
     ensure_dirs();
     FILE *f = fopen(DIR "/cfg.bin", "wb");
     if (!f) return;
-    struct { uint32_t m; int l, a, t; } c = { CFG_MAGIC, g_lang, g_audio, g_tilt };
+    struct { uint32_t m; int l, a, t; } c = { CFG_MAGIC, 0, g_audio, g_tilt };   // l: the old language slot, unused
     fwrite(&c, sizeof c, 1, f);
     fclose(f);
 }
@@ -338,13 +352,13 @@ static void cfg_read(void)
     if (!f) return;
     struct { uint32_t m; int l, a, t; } c;
     size_t n = fread(&c, sizeof c, 1, f);
-    if (n == 1 && c.m == CFG_MAGIC) { g_lang = c.l ? 1 : 0; g_audio = c.a ? 1 : 0; g_tilt = c.t ? 1 : 0; fclose(f); return; }
+    if (n == 1 && c.m == CFG_MAGIC) { g_audio = c.a ? 1 : 0; g_tilt = c.t ? 1 : 0; fclose(f); return; }
     // Older 3-field cfg (pre-tilt): re-read just {magic,lang,audio} so the prefs survive the upgrade.
     rewind(f);
     struct { uint32_t m; int l, a; } o;
     n = fread(&o, sizeof o, 1, f);
     fclose(f);
-    if (n == 1 && o.m == CFG_MAGIC) { g_lang = o.l ? 1 : 0; g_audio = o.a ? 1 : 0; }
+    if (n == 1 && o.m == CFG_MAGIC) g_audio = o.a ? 1 : 0;
 }
 
 // ============================ cross-play save endpoint =======================
@@ -361,19 +375,22 @@ static esp_err_t cstl_save_get(httpd_req_t *req)
     Save s;
     httpd_resp_set_type(req, "application/json");
     if (!save_read(&s)) { httpd_resp_set_status(req, "404 Not Found"); httpd_resp_sendstr(req, "{\"error\":\"nosave\"}"); return ESP_OK; }
-    char out[720];
+    char out[200];                                    // streamed in three chunks: a small frame on the httpd task
     snprintf(out, sizeof out,
         "{\"ver\":%u,\"credits\":%d,\"fuel\":%d,\"fuel_max\":%d,\"hull\":%d,\"hull_max\":%d,"
-        "\"cargo_max\":%d,\"jump_range\":%d,\"sensors\":%d,\"weapon\":%d,\"shield_max\":%d,\"sys\":%d,"
-        "\"cargo\":[%d,%d,%d,%d,%d,%d,%d,%d],\"rep\":[%d,%d,%d,%d],"
-        "\"flags\":%u,\"beacon_lit\":%u,\"epoch\":%u,\"missions_done\":%u,\"kills\":%u,\"seed\":%u,\"sector\":%u}",
+        "\"cargo_max\":%d,\"jump_range\":%d,\"sensors\":%d,\"weapon\":%d,\"shield_max\":%d,\"sys\":%d,",
         s.ver, s.credits, s.fuel, s.fuel_max, s.hull, s.hull_max, s.cargo_max, s.jump_range, s.sensors,
-        s.weapon, s.shield_max, s.sys,
+        s.weapon, s.shield_max, s.sys);
+    httpd_resp_send_chunk(req, out, HTTPD_RESP_USE_STRLEN);
+    snprintf(out, sizeof out, "\"cargo\":[%d,%d,%d,%d,%d,%d,%d,%d],\"rep\":[%d,%d,%d,%d],",
         s.cargo[0], s.cargo[1], s.cargo[2], s.cargo[3], s.cargo[4], s.cargo[5], s.cargo[6], s.cargo[7],
-        s.rep[0], s.rep[1], s.rep[2], s.rep[3],
+        s.rep[0], s.rep[1], s.rep[2], s.rep[3]);
+    httpd_resp_send_chunk(req, out, HTTPD_RESP_USE_STRLEN);
+    snprintf(out, sizeof out, "\"flags\":%u,\"beacon_lit\":%u,\"epoch\":%u,\"missions_done\":%u,\"kills\":%u,\"seed\":%u,\"sector\":%u}",
         (unsigned)s.flags, (unsigned)s.beacon_lit, (unsigned)s.epoch, (unsigned)s.missions_done,
         (unsigned)s.kills, (unsigned)s.seed, (unsigned)s.sector);
-    httpd_resp_sendstr(req, out);
+    httpd_resp_send_chunk(req, out, HTTPD_RESP_USE_STRLEN);
+    httpd_resp_send_chunk(req, NULL, 0);
     return ESP_OK;
 }
 static esp_err_t cstl_save_post(httpd_req_t *req)
@@ -382,20 +399,23 @@ static esp_err_t cstl_save_post(httpd_req_t *req)
     httpd_resp_set_type(req, "application/json");
     int len = req->content_len;
     if (len <= 0 || len > 1024) { httpd_resp_set_status(req, "400 Bad Request"); httpd_resp_sendstr(req, "{\"error\":\"badlen\"}"); return ESP_OK; }
-    char buf[1100];
+    char *buf = (char *)malloc(len + 1);              // heap, not a 1 KB frame on the httpd task
+    if (!buf) { httpd_resp_set_status(req, "500 Internal Server Error"); httpd_resp_sendstr(req, "{\"error\":\"mem\"}"); return ESP_OK; }
     int got = 0;
     while (got < len) {
         int r = httpd_req_recv(req, buf + got, len - got);
-        if (r <= 0) { httpd_resp_set_status(req, "400 Bad Request"); httpd_resp_sendstr(req, "{\"error\":\"recv\"}"); return ESP_OK; }
+        if (r <= 0) { free(buf); httpd_resp_set_status(req, "400 Bad Request"); httpd_resp_sendstr(req, "{\"error\":\"recv\"}"); return ESP_OK; }
         got += r;
     }
     buf[got] = 0;
     cJSON *j = cJSON_Parse(buf);
+    free(buf);
     if (!j) { httpd_resp_set_status(req, "400 Bad Request"); httpd_resp_sendstr(req, "{\"error\":\"json\"}"); return ESP_OK; }
     Save s; memset(&s, 0, sizeof s);
     s.magic = SAVE_MAGIC; s.ver = SAVE_VER;
+    int missing = 0;                                  // a partial save must not replace a whole one
 #define JI(name, field, lo, hi) do { cJSON *it = cJSON_GetObjectItem(j, name); \
-        if (cJSON_IsNumber(it)) s.field = clampi((int)it->valuedouble, lo, hi); } while (0)
+        if (cJSON_IsNumber(it)) s.field = clampi((int)it->valuedouble, lo, hi); else missing++; } while (0)
 #define JU(name, field) do { cJSON *it = cJSON_GetObjectItem(j, name); \
         if (cJSON_IsNumber(it) && it->valuedouble >= 0) s.field = (uint32_t)it->valuedouble; } while (0)
     JI("credits", credits, 0, 9999999);
@@ -416,7 +436,10 @@ static esp_err_t cstl_save_post(httpd_req_t *req)
 #undef JI
 #undef JU
     cJSON_Delete(j);
+    if (missing) { httpd_resp_set_status(req, "400 Bad Request"); httpd_resp_sendstr(req, "{\"error\":\"fields\"}"); return ESP_OK; }
     if (s.epoch < 1) s.epoch = 1;
+    if (s.hull > s.hull_max) s.hull = s.hull_max;
+    if (s.fuel > s.fuel_max) s.fuel = s.fuel_max;
     bool ok = save_write_buf(&s);
     if (ok) s_has_save = true;
     char out[96];
@@ -446,9 +469,9 @@ static inline uint32_t pg_rng_sys(uint32_t seed, uint32_t sector, uint32_t idx, 
 static inline uint32_t pg_rng_mis(uint32_t seed, uint32_t sector, uint32_t sysIdx, uint32_t slot, uint32_t dom, uint32_t salt)
 { return pg_hash3(seed ^ dom, ((sector & 0xffffff) << 8) | (sysIdx & 0xff), ((slot & 0xff) << 8) | (salt & 0xff)); }
 
-static const char *PG_PRE[16] = { "Ve","Ach","El","Ty","Cu","Ro","For","Qui","Ze","Ab","Xan","Or","Ka","Ny","Vor","Lu" };
-static const char *PG_MID[8]  = { "per","ron","iso","cho","sta","rax","mir","" };
-static const char *PG_SUF[8]  = { "","Primo","Nova","Reach","IX","Gate","Hub","Cluster" };
+static const char *const PG_PRE[16] = { "Ve","Ach","El","Ty","Cu","Ro","For","Qui","Ze","Ab","Xan","Or","Ka","Ny","Vor","Lu" };
+static const char *const PG_MID[8]  = { "per","ron","iso","cho","sta","rax","mir","" };
+static const char *const PG_SUF[8]  = { "","Primo","Nova","Reach","IX","Gate","Hub","Cluster" };
 static const int   PG_FAC_LADDER[4] = { 40, 65, 88, 100 };
 static const int   PG_FAC_RIVAL[4]  = { F_RELITTI, F_RELITTI, F_GILDA, F_RELITTI };
 
@@ -574,7 +597,7 @@ static int entry_slot(uint32_t sector)
 }
 
 // ---- procedural missions templated into the existing Mission struct -------------------------
-static const char *MT_WIN[4][2] = {
+static const char *const MT_WIN[4][2] = {
     { "Rotte ripulite. Crediti accreditati.",          "Lanes cleared. Credits paid." },
     { "L'asso e' abbattuto. Le stelle brindano a te.", "The ace is down. The stars toast you." },
     { "Convoglio al sicuro. Buon lavoro, pilota.",     "Convoy safe. Good work, pilot." },
@@ -586,34 +609,33 @@ static const char *MT_WIN[4][2] = {
 // combat modifiers. It is drawn from a DEDICATED hash domain (PG_FLAVOR) that NEVER perturbs the
 // numeric draws above, so the cross-play universe stays byte-identical; the firmware was simply
 // missing the layer the web twin already had. Italian matches the JS verbatim; English is the twin.
-static const char *FV_PRE[16] = { "Vex","Krull","Mor","Zar","Drix","Nyx","Hask","Orla","Veng","Skar","Rann","Tox","Grim","Vael","Korr","Zael" };
-static const char *FV_SUF[16] = { "nor","ax","is","oth","ek","ul","ar","ix","one","ag","eth","os","un","ire","um","or" };
-static const char *FV_EPI[10][2] = {
+static const char *const FV_PRE[16] = { "Vex","Krull","Mor","Zar","Drix","Nyx","Hask","Orla","Veng","Skar","Rann","Tox","Grim","Vael","Korr","Zael" };
+static const char *const FV_SUF[16] = { "nor","ax","is","oth","ek","ul","ar","ix","one","ag","eth","os","un","ire","um","or" };
+static const char *const FV_EPI[10][2] = {
     { "il Rosso","the Red" }, { "Occhio-Morto","Deadeye" }, { "la Lama","the Blade" }, { "il Corvo","the Crow" },
     { "Senza-Volto","the Faceless" }, { "il Flagello","the Scourge" }, { "Mano-Fredda","Coldhand" },
     { "l'Avvoltoio","the Vulture" }, { "il Cremisi","the Crimson" }, { "lo Spettro","the Wraith" } };
-static const char *FV_GANG[8][2] = {
+static const char *const FV_GANG[8][2] = {
     { "Corsari Cremisi","Crimson Corsairs" }, { "Lupi del Vuoto","Void Wolves" }, { "Sciacalli della Cenere","Ash Jackals" },
     { "Predoni di Ferro","Iron Raiders" }, { "Flotta Fantasma","Ghost Fleet" }, { "Branco di Dramir","Dramir Pack" },
     { "Mietitori Neri","Black Reapers" }, { "Vipere del Vuoto","Void Vipers" } };
-static const char *FV_MODS[7][2] = {
+static const char *const FV_MODS[7][2] = {
     { "Nebulosa densa","Dense nebula" }, { "Campo di asteroidi","Asteroid field" }, { "Squadriglia d'elite","Elite squadron" },
     { "Veterani","Veterans" }, { "Branco","Pack" }, { "Taglia maggiorata","Bounty raised" }, { "Tempesta ionica","Ion storm" } };
-static const char *FV_RARNAME[4][2] = { { "Comune","Common" }, { "Raro","Rare" }, { "Epico","Epic" }, { "Leggendario","Legendary" } };
+static const char *const FV_RARNAME[4][2] = { { "Comune","Common" }, { "Raro","Rare" }, { "Epico","Epic" }, { "Leggendario","Legendary" } };
 static uint16_t fv_rarcol(int r)   // rarity colour, matching the web (grey / cyan / purple / gold)
 {
     switch (r) { case 1: return rgb(94,230,255); case 2: return rgb(180,107,224); case 3: return rgb(224,177,59); default: return rgb(159,176,191); }
 }
 enum { FA_PATROL = 0, FA_HUNT, FA_DUEL, FA_ESCORT, FA_SWEEP, FA_DEFEND };
-static const char *FA_NAME[6][2] = {
+static const char *const FA_NAME[6][2] = {
     { "Pattuglia","Patrol" }, { "Caccia","Hunt" }, { "Duello","Duel" },
     { "Scorta","Escort" }, { "Bonifica","Sweep" }, { "Difesa","Defense" } };
 
 struct Flavor { int rarity, arch, gang, mod[2], nmod; bool has_enemy; };
 static Flavor s_fv;                          // filled by cur_mission(); read by the board/brief painters
-static char s_mn_it[40], s_mn_en[40];        // generated mission title (IT/EN)
-static char s_brief_it[96], s_brief_en[96];  // flavored brief (IT/EN)
-static char s_en_it[28], s_en_en[28];        // named target (epithet differs by language)
+struct MisTxt { char name[40], brief[104], target[32]; };   // the composed mission texts (APP_RAM)
+static MisTxt *s_mt;
 static Mission s_genm;
 #define NMISS_PER_SYS 4
 
@@ -630,53 +652,36 @@ static const Mission *cur_mission(int slot)
     bool ace = gm.ace != 0;
     // named raider captain (+ epithet for aces)
     const char *pre = FV_PRE[h % 16], *suf = FV_SUF[(h >> 5) % 16];
-    if (ace) {
-        int e = (int)((h >> 10) % 10);
-        snprintf(s_en_it, sizeof s_en_it, "%s%s %s", pre, suf, FV_EPI[e][0]);
-        snprintf(s_en_en, sizeof s_en_en, "%s%s %s", pre, suf, FV_EPI[e][1]);
-    } else {
-        snprintf(s_en_it, sizeof s_en_it, "%s%s", pre, suf);
-        snprintf(s_en_en, sizeof s_en_en, "%s%s", pre, suf);
-    }
+    if (ace) snprintf(s_mt->target, sizeof s_mt->target, "%s%s %s", pre, suf, lp(FV_EPI[(h >> 10) % 10]));
+    else     snprintf(s_mt->target, sizeof s_mt->target, "%s%s", pre, suf);
     s_fv.gang = (int)((h >> 16) % 8);
-    // archetype + title + brief by mission type (mirror the JS branch-for-branch)
-    const char *ti, *te, *bi, *be;
-    bool sub_name = false, sub_gang = false;
+    // archetype + title + brief by mission type (mirror the JS branch-for-branch), in the OS language
+    const char *ti, *bi, *sub = lp(FV_GANG[s_fv.gang]);
     if (t == MT_BOUNTY) {
         bool duel = ace && (h2 & 1u);
         s_fv.arch = duel ? FA_DUEL : FA_HUNT;
-        ti = duel ? "Duello: %s" : "Caccia: %s"; te = duel ? "Duel: %s" : "Hunt: %s";
-        bi = duel ? "Solo tu e %s. Niente gregari, niente fughe." : "Taglia su %s: arriva con la sua scorta.";
-        be = duel ? "Just you and %s. No wingmen, no escape." : "Bounty on %s: it arrives with an escort.";
-        sub_name = true;
+        ti = duel ? GT("Duello: %s", "Duel: %s") : GT("Caccia: %s", "Hunt: %s");
+        bi = duel ? GT("Solo tu e %s. Niente gregari, niente fughe.", "Just you and %s. No wingmen, no escape.")
+                  : GT("Taglia su %s: arriva con la sua scorta.", "Bounty on %s: it arrives with an escort.");
+        sub = s_mt->target;
     } else if (t == MT_ESCORT) {
         s_fv.arch = FA_ESCORT;
-        ti = "Scorta convoglio"; te = "Convoy escort";
-        bi = "Tieni vivo il convoglio: i %s lo vogliono fermo.";
-        be = "Keep the convoy alive: the %s want it stopped.";
-        sub_gang = true;
+        ti = GT("Scorta convoglio", "Convoy escort");
+        bi = GT("Tieni vivo il convoglio: i %s lo vogliono fermo.", "Keep the convoy alive: the %s want it stopped.");
     } else if (t == MT_DEFEND) {
         bool sweep = (h2 & 2u);
         s_fv.arch = sweep ? FA_SWEEP : FA_DEFEND;
-        ti = sweep ? "Bonifica sciame" : "Difesa faro"; te = sweep ? "Swarm sweep" : "Beacon defense";
-        bi = sweep ? "Sciame di droni-saccheggio: tanti, fragili, ovunque." : "Proteggi il faro dai %s finche' non cedono.";
-        be = sweep ? "A swarm of scavenger drones: many, fragile, everywhere." : "Protect the beacon from the %s until they break.";
-        sub_gang = !sweep;
+        ti = sweep ? GT("Bonifica sciame", "Swarm sweep") : GT("Difesa faro", "Beacon defense");
+        bi = sweep ? GT("Sciame di droni-saccheggio: tanti, fragili, ovunque.", "A swarm of scavenger drones: many, fragile, everywhere.")
+                   : GT("Proteggi il faro dai %s finche' non cedono.", "Protect the beacon from the %s until they break.");
     } else {
         s_fv.arch = FA_PATROL;
-        ti = "Pattuglia"; te = "Patrol";
-        bi = "I %s battono la zona. Ricacciali indietro.";
-        be = "The %s comb the area. Drive them back.";
-        sub_gang = true;
+        ti = GT("Pattuglia", "Patrol");
+        bi = GT("I %s battono la zona. Ricacciali indietro.", "The %s comb the area. Drive them back.");
     }
-    s_fv.has_enemy = sub_name;
-    // title (with the named target where the archetype calls for it)
-    if (sub_name) { snprintf(s_mn_it, sizeof s_mn_it, ti, s_en_it); snprintf(s_mn_en, sizeof s_mn_en, te, s_en_en); }
-    else          { snprintf(s_mn_it, sizeof s_mn_it, "%s", ti);    snprintf(s_mn_en, sizeof s_mn_en, "%s", te); }
-    // brief (substitute the named target or the gang)
-    if (sub_name)      { snprintf(s_brief_it, sizeof s_brief_it, bi, s_en_it); snprintf(s_brief_en, sizeof s_brief_en, be, s_en_en); }
-    else if (sub_gang) { snprintf(s_brief_it, sizeof s_brief_it, bi, FV_GANG[s_fv.gang][0]); snprintf(s_brief_en, sizeof s_brief_en, be, FV_GANG[s_fv.gang][1]); }
-    else               { snprintf(s_brief_it, sizeof s_brief_it, "%s", bi); snprintf(s_brief_en, sizeof s_brief_en, "%s", be); }
+    s_fv.has_enemy = (t == MT_BOUNTY);
+    snprintf(s_mt->name, sizeof s_mt->name, ti, s_mt->target);     // a title without %s ignores the argument
+    snprintf(s_mt->brief, sizeof s_mt->brief, bi, sub);
     // rarity + modifiers (mirror the JS score thresholds and modifier rolls exactly)
     int score = gm.tier + (ace ? 2 : 0) + (gm.waves >= 5 ? 1 : 0) + (int)((h2 >> 3) % 3);
     s_fv.rarity = score >= 9 ? 3 : score >= 7 ? 2 : score >= 5 ? 1 : 0;
@@ -684,144 +689,44 @@ static const Mission *cur_mission(int slot)
     if ((h2 >> 6) % 3 == 0) s_fv.mod[s_fv.nmod++] = (int)((h2 >> 8) % 7);
     if (gm.tier >= 4 && (h2 >> 12) % 3 == 0) { int x = (int)((h2 >> 14) % 7); if (s_fv.nmod == 0 || s_fv.mod[0] != x) s_fv.mod[s_fv.nmod++] = x; }
 
-    s_genm.name[0] = s_mn_it; s_genm.name[1] = s_mn_en;
-    s_genm.brief[0] = s_brief_it; s_genm.brief[1] = s_brief_en;
-    s_genm.win[0] = MT_WIN[t][0];   s_genm.win[1] = MT_WIN[t][1];
+    s_genm.name = s_mt->name; s_genm.brief = s_mt->brief; s_genm.win = lp(MT_WIN[t]);
     s_genm.type = gm.type; s_genm.offer_fac = gm.offer_fac; s_genm.foe_fac = gm.foe_fac;
     s_genm.waves = gm.waves; s_genm.per_wave = gm.per_wave; s_genm.foe_hp = gm.foe_hp;
     s_genm.foe_dmg = gm.foe_dmg; s_genm.foe_speed_pml = gm.foe_speed_pml; s_genm.ace = gm.ace;
     s_genm.reward_cr = gm.reward_cr; s_genm.kill_cr = gm.kill_cr; s_genm.rep_gain = gm.rep_gain;
-    s_genm.enemy_rep_loss = gm.enemy_rep_loss; s_genm.req_flag = -1; s_genm.forbid_flag = -1;
-    s_genm.once = 0; s_genm.set_flag = -1;
+    s_genm.enemy_rep_loss = gm.enemy_rep_loss;
     return &s_genm;
 }
 
-// ============================ audio (chiptune + file override) ===============
+// ============================ audio ==========================================
+// The PC-rendered pack (tools/sfx-gen/games/stelle.py -> /sd/data/costellazioni/pack) through game_sfx.h:
+// never synthesized during play; without the pack a cue is a short tone at its pitch. Big cues interrupt;
+// small blips (laser / hit / lock) are dropped while something plays, which rate-limits combat SFX.
 static const char *sfx_name(int id)
 {
-    switch (id) {
-        case SFX_MOVE: return "move";  case SFX_OK: return "ok";      case SFX_BACK: return "back";
-        case SFX_BUY:  return "buy";   case SFX_DENY: return "deny";  case SFX_JUMP: return "jump";
-        case SFX_EVENT:return "event"; case SFX_BEACON: return "beacon"; case SFX_TITLE: return "title";
-        case SFX_WIN:  return "win";   case SFX_LOSE: return "lose";
-        case SFX_LASER:return "laser"; case SFX_HIT:  return "hit";   case SFX_BOOM: return "boom";
-        case SFX_LAUNCH:return "launch"; case SFX_LOCK: return "lock";
-        case SFX_HULL: return "hull";  case SFX_SHIELD_DOWN: return "shielddown";
-        case SFX_ALARM:return "alarm"; case SFX_PASS: return "pass";  default: return "x";
-    }
+    static const char *const N[NSFX] = { "x", "move", "ok", "back", "buy", "deny", "jump", "event", "beacon", "title",
+        "win", "lose", "laser", "hit", "boom", "launch", "lock", "hull", "shielddown", "alarm", "pass" };
+    return id > 0 && id < NSFX ? N[id] : "x";
 }
-static int build_voices(int id, notify_voice_t *v)
+static int sfx_recipe(int id, notify_voice_t *v)
 {
-    switch (id) {
-        case SFX_MOVE:  notify__voice(&v[0], 880, 0, 0.045f); v[0].amp = 0.7f; return 1;
-        case SFX_OK:    notify__voice(&v[0], 659.25f, 0, 0.07f); notify__voice(&v[1], 987.77f, 0.05f, 0.09f); return 2;
-        case SFX_BACK:  notify__voice(&v[0], 659.25f, 0, 0.07f); notify__voice(&v[1], 440, 0.05f, 0.09f); return 2;
-        case SFX_BUY:   notify__voice(&v[0], 1046.5f, 0, 0.06f); notify__voice(&v[1], 1568, 0.04f, 0.10f); return 2;
-        case SFX_DENY:  notify__voice(&v[0], 196, 0, 0.16f); notify__voice(&v[1], 185, 0, 0.16f); v[0].amp = 0.8f; v[1].amp = 0.8f; return 2;
-        case SFX_JUMP:  notify__voice(&v[0], 392, 0, 0.10f); notify__voice(&v[1], 523.25f, 0.08f, 0.10f);
-                        notify__voice(&v[2], 659.25f, 0.16f, 0.10f); notify__voice(&v[3], 1046.5f, 0.24f, 0.22f); return 4;
-        case SFX_EVENT: notify__voice(&v[0], 659.25f, 0, 0.10f); notify__voice(&v[1], 880, 0.09f, 0.14f); return 2;
-        case SFX_BEACON:notify__voice(&v[0], 523.25f, 0, 0.70f); notify__voice(&v[1], 659.25f, 0.05f, 0.70f);
-                        notify__voice(&v[2], 783.99f, 0.10f, 0.75f); notify__voice(&v[3], 1046.5f, 0.18f, 0.80f); return 4;
-        case SFX_TITLE: notify__voice(&v[0], 523.25f, 0, 0.18f); notify__voice(&v[1], 659.25f, 0.16f, 0.18f);
-                        notify__voice(&v[2], 783.99f, 0.32f, 0.20f); notify__voice(&v[3], 1046.5f, 0.48f, 0.50f); return 4;
-        case SFX_WIN:   notify__voice(&v[0], 523.25f, 0, 0.16f); notify__voice(&v[1], 659.25f, 0.14f, 0.16f);
-                        notify__voice(&v[2], 783.99f, 0.28f, 0.16f); notify__voice(&v[3], 1046.5f, 0.42f, 0.18f);
-                        notify__voice(&v[4], 1318.5f, 0.56f, 0.60f); return 5;
-        case SFX_LOSE:  notify__voice(&v[0], 392, 0, 0.30f); notify__voice(&v[1], 329.63f, 0.22f, 0.30f);
-                        notify__voice(&v[2], 261.63f, 0.46f, 0.70f); return 3;
-        case SFX_LASER: // twin "pew" with a downward chirp + attack tick + a low snap for weight
-            notify__voice(&v[0], 2100, 0.000f, 0.018f); v[0].amp = 0.50f;
-            notify__voice(&v[1], 1400, 0.014f, 0.018f); v[1].amp = 0.50f;
-            notify__voice(&v[2],  900, 0.026f, 0.030f); v[2].amp = 0.45f;
-            notify__voice(&v[3], 2040, 0.000f, 0.018f); v[3].amp = 0.40f;
-            notify__voice(&v[4], 1360, 0.014f, 0.018f); v[4].amp = 0.40f;
-            notify__voice(&v[5], 3200, 0.000f, 0.008f); v[5].amp = 0.30f;
-            notify__voice(&v[6],  300, 0.000f, 0.022f); v[6].amp = 0.42f;   // low snap = body
-            return 7;
-        case SFX_HIT:   // bright metallic shield ping (inharmonic partials) + a low crunch for impact
-            notify__voice(&v[0], 1760, 0.000f, 0.045f); v[0].amp = 0.55f;
-            notify__voice(&v[1], 2637, 0.000f, 0.040f); v[1].amp = 0.40f;
-            notify__voice(&v[2], 3520, 0.004f, 0.030f); v[2].amp = 0.30f;
-            notify__voice(&v[3], 4699, 0.004f, 0.022f); v[3].amp = 0.22f;
-            notify__voice(&v[4], 1245, 0.000f, 0.020f); v[4].amp = 0.30f;
-            notify__voice(&v[5],  210, 0.000f, 0.030f); v[5].amp = 0.46f;   // low crunch = impact body
-            return 6;
-        case SFX_BOOM:  // big layered kill: low detuned rumble + dissonant crunch + decaying sparkle
-            notify__voice(&v[0], 73.4f, 0.000f, 0.34f); v[0].amp = 1.00f;
-            notify__voice(&v[1], 62.0f, 0.000f, 0.34f); v[1].amp = 0.95f;
-            notify__voice(&v[2], 98.0f, 0.020f, 0.26f); v[2].amp = 0.70f;
-            notify__voice(&v[3], 311.1f, 0.000f, 0.10f); v[3].amp = 0.55f;
-            notify__voice(&v[4], 329.6f, 0.000f, 0.10f); v[4].amp = 0.55f;
-            notify__voice(&v[5], 1900, 0.000f, 0.055f); v[5].amp = 0.45f;
-            notify__voice(&v[6], 2700, 0.010f, 0.045f); v[6].amp = 0.35f;
-            notify__voice(&v[7], 3700, 0.020f, 0.035f); v[7].amp = 0.25f;
-            return 8;
-        case SFX_LAUNCH:notify__voice(&v[0], 261.63f, 0, 0.10f); notify__voice(&v[1], 392, 0.08f, 0.10f);
-                        notify__voice(&v[2], 523.25f, 0.16f, 0.10f); notify__voice(&v[3], 784, 0.24f, 0.18f); return 4;
-        case SFX_LOCK:  // rising acquire
-            notify__voice(&v[0], 1174.7f, 0.000f, 0.055f); v[0].amp = 0.55f;
-            notify__voice(&v[1], 1567.98f, 0.050f, 0.070f); v[1].amp = 0.60f;
-            notify__voice(&v[2], 3135.96f, 0.095f, 0.040f); v[2].amp = 0.30f;
-            return 3;
-        case SFX_HULL:  // dull low thud + clang (hull hit)
-            notify__voice(&v[0], 110, 0.000f, 0.090f); v[0].amp = 0.95f;
-            notify__voice(&v[1], 82.4f, 0.000f, 0.110f); v[1].amp = 0.90f;
-            notify__voice(&v[2], 165, 0.000f, 0.045f); v[2].amp = 0.45f;
-            notify__voice(&v[3], 55, 0.020f, 0.120f); v[3].amp = 0.60f;
-            return 4;
-        case SFX_SHIELD_DOWN: // descending power-loss into an ominous landing
-            notify__voice(&v[0], 1245, 0.000f, 0.070f); v[0].amp = 0.60f;
-            notify__voice(&v[1], 830, 0.060f, 0.080f); v[1].amp = 0.60f;
-            notify__voice(&v[2], 554, 0.130f, 0.090f); v[2].amp = 0.60f;
-            notify__voice(&v[3], 311, 0.210f, 0.160f); v[3].amp = 0.70f;
-            return 4;
-        case SFX_ALARM: // two-beat dissonant klaxon
-            notify__voice(&v[0], 880, 0.000f, 0.090f); v[0].amp = 0.85f;
-            notify__voice(&v[1], 622, 0.110f, 0.090f); v[1].amp = 0.85f;
-            notify__voice(&v[2], 880, 0.230f, 0.090f); v[2].amp = 0.85f;
-            notify__voice(&v[3], 622, 0.340f, 0.110f); v[3].amp = 0.85f;
-            return 4;
-        case SFX_PASS:  // fast down-glide whoosh
-            notify__voice(&v[0], 1300, 0.000f, 0.040f); v[0].amp = 0.45f;
-            notify__voice(&v[1], 700, 0.030f, 0.050f); v[1].amp = 0.40f;
-            notify__voice(&v[2], 380, 0.065f, 0.060f); v[2].amp = 0.35f;
-            return 3;
-    }
-    return 0;
+    static const uint16_t HZ[NSFX] = { 0, 880, 988, 440, 1568, 196, 1046, 880, 1046, 1046, 1318, 262, 1400, 1760, 73, 784,
+                                       1568, 110, 554, 880, 700 };
+    notify__voice(&v[0], HZ[id > 0 && id < NSFX ? id : 1], 0.0f, 0.07f);
+    return 1;
 }
-static const char *sfx_path(int id)
+static bool sfx_important(int id)
 {
-    static char p[96];
-    snprintf(p, sizeof p, DIR "/custom/%s.wav", sfx_name(id));   // player-supplied override?
-    FILE *f = fopen(p, "rb");
-    if (f) { fclose(f); return p; }
-    snprintf(p, sizeof p, DIR "/sfx/%s.v2.wav", sfx_name(id));    // cached synth (v2: bumped -> regen on first play)
-    f = fopen(p, "rb");
-    if (f) { fclose(f); return p; }
-    notify_voice_t v[8];                                          // synth once, cache on SD
-    int nv = build_voices(id, v);
-    if (nv > 0 && notify_synth_voices_wav(v, nv, p, 12000) == 0) return p;
-    return nullptr;
+    return id == SFX_JUMP || id == SFX_BEACON || id == SFX_TITLE || id == SFX_WIN || id == SFX_LOSE ||
+           id == SFX_LAUNCH || id == SFX_BOOM || id == SFX_ALARM || id == SFX_SHIELD_DOWN;
 }
-static void sfx(int id)
-{
-    if (!g_audio || id == SFX_NONE) return;
-    // Big cues interrupt; small blips (incl. rapid laser/hit/lock) are dropped while busy, which
-    // naturally rate-limits combat SFX so the SD WAV channel never thrashes.
-    bool important = (id == SFX_JUMP || id == SFX_BEACON || id == SFX_TITLE || id == SFX_WIN ||
-                      id == SFX_LOSE || id == SFX_LAUNCH || id == SFX_BOOM ||
-                      id == SFX_ALARM || id == SFX_SHIELD_DOWN);
-    if (!important && nucleo_audio_is_playing()) return;
-    const char *p = sfx_path(id);
-    if (!p) return;
-    if (important) nucleo_audio_stop();
-    nucleo_audio_play(p);
-}
+static const game_sfx_t s_sfx = { DIR, sfx_name, sfx_recipe, NSFX - 1, 1, 16000, sfx_important, &g_audio };
+static void sfx(int id) { game_sfx_play(&s_sfx, id); }
 
 // ============================ starfield ======================================
 #define NSTAR 84
-static struct { uint8_t x, y, layer, tw; } star[NSTAR];
+struct Star { uint8_t x, y, layer, tw; int8_t ca, sa; };   // ca/sa: the warp streak direction (x127), set once
+static Star *star;                                             // NSTAR (APP_RAM)
 static void stars_init(void)
 {
     uint32_t r = 0x9e3779b9u;
@@ -831,6 +736,8 @@ static void stars_init(void)
         star[i].y = (uint8_t)((r >> 16) % 121);
         star[i].layer = (uint8_t)((r >> 5) % 3);
         star[i].tw = (uint8_t)((r >> 2) % 64);
+        float ang = (float)star[i].tw * 0.0982f + i;              // was cosf/sinf per star per warp frame
+        star[i].ca = (int8_t)(cosf(ang) * 127.0f); star[i].sa = (int8_t)(sinf(ang) * 127.0f);
     }
 }
 static void stars_draw(int ch)
@@ -853,12 +760,13 @@ static void stars_draw(int ch)
 // ============================ text helpers ===================================
 static void text_at(int x, int y, int size, uint16_t col, const char *s)
 {
-    d.setTextSize(size); d.setTextColor(col, COL_SPACE); d.setCursor(x, y); d.print(s);
+    d.setTextSize(size); d.setTextColor(col); d.setCursor(x, y); d.print(s);
 }
 static void center(int y, int size, uint16_t col, const char *s)
 {
-    int w = (int)strlen(s) * 6 * size;
-    text_at((W - w) / 2, y, size, col, s);
+    int len = (int)strlen(s);
+    while (size > 1 && len * 6 * size > W - 8) size--;          // translations run longer: shrink, never clip
+    text_at((W - len * 6 * size) / 2, y, size, col, s);
 }
 static void mini_bar(int x, int y, int w, int h, int pct, uint16_t col)
 {
@@ -870,7 +778,7 @@ static void mini_bar(int x, int y, int w, int h, int pct, uint16_t col)
 static int draw_wrapped_n(int x, int y, int maxw, int lineh, uint16_t col, const char *s, int maxlines)
 {
     int cpl = maxw / 6; if (cpl < 1) cpl = 1; if (cpl > 60) cpl = 60;
-    d.setTextSize(1); d.setTextColor(col, COL_SPACE);
+    d.setTextSize(1); d.setTextColor(col);
     char line[64];
     int ln = 0;
     while (*s && ln < maxlines) {
@@ -906,12 +814,18 @@ static void text_vr(int xr, int y0, int h, int size, uint16_t col, const char *s
     int w = (int)strlen(s) * 6 * size;
     text_at(xr - w, y0 + (h - 8 * size) / 2, size, col, s);
 }
-// compact title band (y 0..HDR_H): big cyan title left, optional grey caption right
+// A heading in the console's bold face (FreeSansBold 9 pt, game_ui.h), or its small face when it would not
+// fit maxw — readable at a glance, never clipped, and the same type as every other game's menus.
+static void label(int x, int y, int maxw, uint16_t col, const char *s)
+{
+    gui::text(s, x, y, 0, gui::text_width(s, gui::F_BODY) <= maxw ? gui::F_BODY : gui::F_SMALL, col, 0x0000);
+}
+// compact title band (y 0..HDR_H): bold cyan title left, optional grey caption right
 static void title_band(const char *title, const char *right)
 {
-    d.fillRect(0, 0, W, HDR_H, COL_PANEL);
+    gui::vgradient(0, 0, W, HDR_H, COL_PANEL, COL_SPACE);
     d.drawFastHLine(0, HDR_H, W, rgb(46, 60, 96));
-    text_vc(MARGIN, 0, HDR_H, fit_size(title, 150, 2), COL_CYAN, title);
+    label(MARGIN, 4, 150, COL_CYAN, title);
     if (right && right[0]) text_vr(W - MARGIN, 0, HDR_H, fit_size(right, 96, 1), COL_GREY, right);
 }
 
@@ -1024,6 +938,7 @@ static void draw_planet(int cx, int cy, int r, int sys)
 {
     uint16_t base = faction_col(SYSTEMS[sys].faction);
     int br = (base >> 11) & 31, bg = (base >> 5) & 63, bb = base & 31;
+    if (r >= 6) tile_dither_ellipse(cx, cy, r + 3, r + 3, tile_c332(rgb(br * 8 + 60, bg * 4 + 60, bb * 8 + 90)));   // atmosphere halo
     d.fillCircle(cx, cy, r, base);
     for (int dy = -r + 2; dy < r - 1; dy += 3) {                  // banding
         int hw = (int)sqrtf((float)(r * r - dy * dy));
@@ -1031,8 +946,21 @@ static void draw_planet(int cx, int cy, int r, int sys)
         uint16_t cc = rgb((br + shade) * 8, (bg + shade) * 4, (bb + shade) * 8);
         d.drawFastHLine(cx - hw, cy + dy, 2 * hw, cc);
     }
+    // night side: stipple black over the part outside a lit disc offset toward the light (upper left) ->
+    // a crescent terminator; the lit side keeps a specular glint and a bright rim
+    TileFb fb;
+    if (r >= 4 && tile_fb(&fb)) {
+        int lx = cx - r / 2, ly = cy - r / 2, R2 = r * r * 4 / 3;
+        for (int dy = -r; dy <= r; dy++) {
+            int y = cy + dy, hw = (int)sqrtf((float)(r * r - dy * dy));
+            if (y < fb.y0 || y >= fb.y1) continue;
+            int ry = y - ly, xt = ry * ry >= R2 ? cx - hw : lx + (int)sqrtf((float)(R2 - ry * ry));
+            if (xt < cx - hw) xt = cx - hw;
+            for (int x = xt + ((xt + y) & 1); x <= cx + hw; x += 2) if (x >= fb.x0 && x < fb.x1) fb.px[y * fb.w + x] = 0;
+        }
+    }
     d.fillCircle(cx - r / 3, cy - r / 3, r / 5, rgb(255, 255, 255)); // specular highlight
-    d.drawCircle(cx, cy, r, rgb(br * 8 + 40, bg * 4 + 40, bb * 8 + 40));
+    d.drawArc(cx, cy, r, r - 1, 150, 300, rgb(br * 8 + 90, bg * 4 + 90, bb * 8 + 90));   // lit rim (upper left)
     if (SYSTEMS[sys].beacon) {                                    // orbital beacon ring
         bool lit = (g.beacon_lit & bit(sys)) != 0;
         uint16_t rc = lit ? COL_CYAN : rgb(120, 50, 50);
@@ -1061,7 +989,6 @@ static void start_cine(int id)
     if (id == CINE_INTRO) sfx(SFX_TITLE);
     else if (id == CINE_JUMP) sfx(SFX_JUMP);
     else if (id == CINE_BEACON) sfx(SFX_BEACON);
-    else if (id == CINE_WIN) sfx(SFX_WIN);
     else if (id == CINE_LOSE) sfx(SFX_LOSE);
     else if (id == CINE_SECTOR) sfx(SFX_WIN);
     set_hint_for(ST_CINE); req();
@@ -1080,7 +1007,7 @@ static void new_game(void)
 }
 static void continue_game(void)
 {
-    if (!save_read(&g)) { new_game(); return; }
+    if (!save_read(&g)) { s_has_save = false; s_save_bad = true; s_tmenu.sel = 0; sfx(SFX_DENY); req(); return; }
     regen_sector();                                               // rebuild the saved sector
     if (g.sys < 0 || g.sys >= NSYS) g.sys = entry_slot(g.sector);
     s_ingame = true; s_target = (g.sys + 1) % NSYS; s_hubsel = 0;
@@ -1161,7 +1088,7 @@ static void apply_choice(void)
         else { int room = g.cargo_max - cargo_used(); int q = e->qty; if (q > room) q = room; if (q > 0) g.cargo[e->good] += q; }
     }
     sfx(e->sfx);
-    if (g.hull <= 0) { start_cine(CINE_LOSE); return; }
+    if (g.hull <= 0) { s_ingame = false; save_wipe(); start_cine(CINE_LOSE); return; }
     if (e->act == ACT_RELIGHT) { g.beacon_lit |= bit(g.sys); save_write(); start_cine(CINE_BEACON); return; }
     if (e->next >= 0) { start_event(e->next); return; }
     go(ST_SYSTEM); save_write();
@@ -1173,9 +1100,9 @@ static void do_jump(void)
     int t = s_target;
     if (t < 0 || t == g.sys) { sfx(SFX_DENY); return; }
     float dd = sys_dist(g.sys, t);
-    if (dd > g.jump_range) { snprintf(s_status, sizeof s_status, "%s", tx("Fuori portata", "Out of range")); sfx(SFX_DENY); req(); return; }
+    if (dd > g.jump_range) { snprintf(s_status, sizeof s_status, "%s", GT("Fuori portata", "Out of range")); sfx(SFX_DENY); req(); return; }
     int cost = jump_cost(dd);
-    if (g.fuel < cost) { snprintf(s_status, sizeof s_status, "%s", tx("Celle insufficienti", "Not enough cells")); sfx(SFX_DENY); req(); return; }
+    if (g.fuel < cost) { snprintf(s_status, sizeof s_status, "%s", GT("Celle insufficienti", "Not enough cells")); sfx(SFX_DENY); req(); return; }
     g.fuel -= cost; g.sys = t; g.epoch++;
     s_status[0] = 0;
     start_cine(CINE_JUMP);
@@ -1185,7 +1112,7 @@ static void do_jump(void)
 static int cine_dur(int id)
 {
     switch (id) { case CINE_INTRO: return 7200; case CINE_JUMP: return 1300;
-                  case CINE_BEACON: return 1700; case CINE_WIN: return 6500; case CINE_LOSE: return 4200;
+                  case CINE_BEACON: return 1700; case CINE_LOSE: return 4200;
                   case CINE_SECTOR: return 3600; default: return 1200; }
 }
 static void cine_end(void)
@@ -1194,8 +1121,7 @@ static void cine_end(void)
         case CINE_INTRO:  g.flags |= bit(FL_INTRO); go(ST_SYSTEM); save_write(); break;
         case CINE_JUMP:   arrive(); break;
         case CINE_BEACON: after_beacon(); break;
-        case CINE_WIN:    go(ST_TITLE); s_ingame = false; break;
-        case CINE_LOSE:   save_wipe(); s_ingame = false; go(ST_TITLE); break;
+        case CINE_LOSE:   s_tmenu.sel = 0; s_tmenu.pos = 0; go(ST_TITLE); break;   // the save was wiped at the death
         case CINE_SECTOR: go(ST_SYSTEM); save_write(); break;
         default:          go(ST_SYSTEM); break;
     }
@@ -1207,10 +1133,9 @@ static void draw_warp(int ch, float k)   // k in 0..1 intensity
     int bloom = (int)(2 + k * 8);                                  // wormhole throat: a soft central bloom
     for (int r = bloom; r >= 1; r--) d.fillCircle(cx, cy, r, shade(COL_CYAN, bloom + 2 - r, bloom + 2));
     for (int i = 0; i < NSTAR; i++) {
-        float ang = (float)(star[i].tw) * 0.0982f + i;
         float reach = 6 + k * 130;
         float d0 = 6 + (float)((star[i].x + s_anim) % 40);
-        float ca = cosf(ang), sa = sinf(ang);
+        float ca = star[i].ca * (1.0f / 127), sa = star[i].sa * (1.0f / 127);
         int x0 = cx + (int)(ca * d0), y0 = cy + (int)(sa * d0);
         int x1 = cx + (int)(ca * (d0 + reach)), y1 = cy + (int)(sa * (d0 + reach));
         uint16_t c = (i & 3) ? (k > 0.7f ? COL_WHITE : COL_CYAN) : COL_WHITE;
@@ -1231,19 +1156,19 @@ static void draw_cine(void)
         draw_ship(40 + (int)(p * 30), ch / 2 - 24, 4, COL_AMBER);
         if (p < 0.30f) {
             uint16_t c = rgb(60 + (int)(p * 600), 140 + (int)(p * 380), 255);
-            center(ch / 2 - 8, 2, c, "COSTELLAZIONI");        // size 2 = 156px (size 3 overflowed)
+            gui::text(GT("Costellazioni", "Constellations"), W / 2, ch / 2 - 14, 1, gui::F_TITLE, c, 0x0000);
         } else {
-            center(20, 2, COL_CYAN, "COSTELLAZIONI");
+            gui::text(GT("Costellazioni", "Constellations"), W / 2, 12, 1, gui::F_TITLE, COL_CYAN, 0x0000);
             int shown = (int)((p - 0.30f) / 0.70f * NINTRO) + 1;
             if (shown > NINTRO) shown = NINTRO;
             int y = 50;
             for (int i = 0; i < shown; i++) { center(y, 1, i == shown - 1 ? COL_WHITE : COL_GREY, lp(INTRO_LINES[i])); y += 12; }
         }
-        center(ch - 12, 1, COL_DIM, tx("- premi un tasto -", "- press any key -"));
+        center(ch - 12, 1, COL_DIM, GT("- premi un tasto -", "- press any key -"));
     } else if (s_cine == CINE_JUMP) {
         draw_warp(ch, p < 0.8f ? p / 0.8f : 1.0f);
         if (p > 0.86f) d.fillRect(0, 0, W, ch, rgb(220, 240, 255));   // arrival flash
-        else center(ch - 14, 1, COL_DIM, tx("salto iperspaziale", "hyperspace jump"));
+        else center(ch - 14, 1, COL_DIM, GT("salto iperspaziale", "hyperspace jump"));
     } else if (s_cine == CINE_BEACON) {
         stars_draw(ch);
         int cx = W / 2, cy = ch / 2 + 6;
@@ -1251,23 +1176,18 @@ static void draw_cine(void)
         for (int k = 0; k < 3; k++) d.drawCircle(cx, cy, rr - k * 6, k == 0 ? COL_WHITE : COL_CYAN);  // expanding burst
         d.fillRect(cx - 3, cy - 26, 6, 30, rgb(120, 130, 160));       // tower
         d.fillCircle(cx, cy - 28, 4 + (int)(p * 4), p > 0.2f ? COL_CYAN : COL_DIM);
-        center(18, 2, COL_CYAN, tx("FARO ACCESO", "BEACON LIT"));
+        center(18, 2, COL_CYAN, GT("FARO ACCESO", "BEACON LIT"));
         char b[28]; snprintf(b, sizeof b, "%d / %d", beacons_lit(), beacons_total());
         center(ch - 16, 1, COL_AMBER, b);
-    } else if (s_cine == CINE_WIN) {
-        stars_draw(ch);
-        center(18, 3, COL_CYAN, tx("VITTORIA", "VICTORY"));
-        int shown = (int)(p * (NWIN + 1)); int y = 56;
-        for (int i = 0; i < NWIN && i < shown; i++) { center(y, 1, COL_WHITE, lp(WIN_LINES[i])); y += 14; }
     } else if (s_cine == CINE_SECTOR) {
         draw_warp(ch, p < 0.6f ? p / 0.6f : 1.0f);            // hyperspace surge into the new sector
-        center(16, 2, COL_CYAN, tx("SETTORE RIPULITO", "SECTOR CLEARED"));
-        char b[28]; snprintf(b, sizeof b, "%s %u", tx("SETTORE", "SECTOR"), (unsigned)g.sector);
+        center(16, 2, COL_CYAN, GT("SETTORE RIPULITO", "SECTOR CLEARED"));
+        char b[28]; snprintf(b, sizeof b, "%s %u", GT("SETTORE", "SECTOR"), (unsigned)g.sector);
         center(ch / 2 - 8, 3, COL_AMBER, b);
-        center(ch - 16, 1, COL_DIM, tx("Piu' profondo, piu' pericoloso", "Deeper, deadlier"));
+        center(ch - 16, 1, COL_DIM, GT("Piu' profondo, piu' pericoloso", "Deeper, deadlier"));
     } else { // LOSE
         stars_draw(ch);
-        center(ch / 2 - 18, 3, COL_RED, tx("FINE", "GAME OVER"));
+        center(ch / 2 - 18, 3, COL_RED, GT("FINE", "GAME OVER"));
         int shown = (int)(p * (NLOSE + 1)); int y = ch / 2 + 14;
         for (int i = 0; i < NLOSE && i < shown; i++) { center(y, 1, COL_GREY, lp(LOSE_LINES[i])); y += 13; }
     }
@@ -1385,59 +1305,20 @@ static void spawn_streak(float sx, float sy)        // ram pass-through: a brigh
 static inline float kind_speed(int k) { switch (k) { case FOE_SCOUT: return 1.55f; case FOE_HEAVY: return 0.72f; case FOE_ACE: return 1.30f; default: return 1.0f; } }
 static inline float kind_wrate(int k) { switch (k) { case FOE_SCOUT: return 2.9f;  case FOE_HEAVY: return 0.9f;  case FOE_ACE: return 2.5f;  default: return 1.6f; } }
 static inline float kind_wamp(int k)  { switch (k) { case FOE_SCOUT: return 1.7f;  case FOE_HEAVY: return 0.5f;  default: return 1.0f; } }
-static inline int   kind_firems(int k){ switch (k) { case FOE_SCOUT: return 1700;  case FOE_HEAVY: return 650;   case FOE_ACE: return 700;   default: return 1100; } }
+static inline int   kind_firems(int k){ switch (k) { case FOE_SCOUT: return 1300;  case FOE_HEAVY: return 650;   case FOE_ACE: return 650;   default: return 900;  } }
 static inline float kind_rscale(int k){ switch (k) { case FOE_SCOUT: return 0.75f; case FOE_HEAVY: return 1.4f;  default: return 1.0f; } }
 
-// detailed wireframe TIE-style fighter; size r grows as it nears, banks/shears with b
-static void draw_tie(int x, int y, int r, int b, int kind, uint16_t col)
+// far LOD (< 7 px): a glint, then a tiny TIE silhouette (two wing panels, spar, pod, engine spark); from
+// 7 px up the flat-shaded model takes over (draw_ship3d)
+static void draw_tie(int x, int y, int r, int kind, uint16_t col)
 {
-    if (r <= 3) {                                       // far: glint + engine spark
-        d.fillRect(x - 1, y - 1, 2, 2, col);
-        d.drawPixel(x, y + 1, kind == FOE_ACE ? COL_AMBER : COL_CYAN); return;
-    }
-    // The per-wave colour `col` drives the hull; the class only adds a distinguishing accent.
-    uint16_t panel = shade(col, 2, 5), edge = col;
-    uint16_t accent = (kind == FOE_ACE) ? COL_AMBER : (kind == FOE_HEAVY) ? rgb(230, 150, 60)
-                    : (kind == FOE_SCOUT) ? COL_WHITE : col;
-    int bk = (b * r) / 2;                               // horizontal bank shift
-    int sh = clampi(b / 2, -3, 3);                      // vertical wing shear (parallax)
-    int pw = 3 + r / 6;
-    int lx = x - r - pw, rx = x + r;
-    d.fillTriangle(lx, y - r + sh, lx + pw, y - r + sh, lx + pw / 2, y - r - 2 + sh, panel);
-    d.fillRect    (lx, y - r + sh, pw, 2 * r, panel);
-    d.fillTriangle(lx, y + r + sh, lx + pw, y + r + sh, lx + pw / 2, y + r + 2 + sh, panel);
-    d.drawRect    (lx, y - r + sh, pw, 2 * r, edge);
-    d.drawLine    (lx + pw / 2, y - r - 2 + sh, lx + pw / 2, y + r + 2 + sh, edge);
-    d.fillTriangle(rx, y - r - sh, rx + pw, y - r - sh, rx + pw / 2, y - r - 2 - sh, panel);
-    d.fillRect    (rx, y - r - sh, pw, 2 * r, panel);
-    d.fillTriangle(rx, y + r - sh, rx + pw, y + r - sh, rx + pw / 2, y + r + 2 - sh, panel);
-    d.drawRect    (rx, y - r - sh, pw, 2 * r, edge);
-    d.drawLine    (rx + pw / 2, y - r - 2 - sh, rx + pw / 2, y + r + 2 - sh, edge);
-    if (r >= 10) { d.drawLine(lx, y + sh, lx + pw, y + sh, shade(edge, 3, 5));
-                   d.drawLine(rx, y - sh, rx + pw, y - sh, shade(edge, 3, 5)); }
-    d.drawLine(x - r, y, x + r, y, edge);              // spar
-    if (r >= 7) d.drawLine(x - r, y - 1, x + r, y - 1, shade(edge, 2, 5));
-    int br = (2 * r) / 3, fr = br > 22 ? 22 : br, cxp = x + bk / 3;     // pod fill radius capped (perf)
-    d.fillCircle(cxp, y, fr, rgb(24, 28, 44));
-    d.drawCircle(cxp, y, br, edge);
-    if (r >= 6) { d.fillCircle(cxp, y, fr / 2, shade(edge, 3, 5));
-                  d.drawPixel(cxp - br / 3, y - br / 3, COL_WHITE); }   // window glint
-    if (r >= 8) { d.drawLine(cxp - r / 2, y, cxp + r / 2, y, edge);
-                  d.drawLine(cxp, y - r / 2, cxp, y + r / 2, edge); }
-    int gx = cxp - bk / 2, gy = y + br / 2 + 1;                          // engine glow
-    uint16_t glow = accent;
-    d.fillRect(gx - 1, gy, 2, 2, glow);
-    if (r >= 6) { d.drawPixel(gx, gy + 2, shade(glow, 3, 5)); d.drawPixel(gx - bk / 4, gy + 3, COL_DIM); }
-    if (kind == FOE_ACE) {
-        d.drawCircle(x, y, br + 2, accent);
-        d.drawLine(lx, y - r + sh, lx - 2, y - r - 2 + sh, accent);
-        d.drawLine(rx + pw, y - r - sh, rx + pw + 2, y - r - 2 - sh, accent);
-        d.fillRect(gx + 2, gy, 2, 2, COL_RED);
-    } else if (kind == FOE_HEAVY && r >= 5) {              // armoured: double hull ring
-        d.drawCircle(cxp, y, br + 2, edge);
-    } else if (kind == FOE_SCOUT && r >= 4) {              // sleek: forward nose spike
-        d.drawLine(x, y, x, y - r - 3, edge);
-    }
+    uint16_t spark = kind == FOE_ACE ? COL_AMBER : kind == FOE_HEAVY ? rgb(230, 150, 60) : COL_CYAN;
+    if (r <= 3) { d.fillRect(x - 1, y - 1, 2, 2, col); d.drawPixel(x, y + 1, spark); return; }
+    d.fillRect(x - r - 1, y - r + 1, 2, 2 * r - 1, shade(col, 3, 5));
+    d.fillRect(x + r, y - r + 1, 2, 2 * r - 1, shade(col, 3, 5));
+    d.drawFastHLine(x - r, y, 2 * r, col);
+    d.fillCircle(x, y, r / 2, col);
+    d.drawPixel(x, y + r / 2 + 1, spark);
 }
 // ---- 3D ship MODEL LIBRARY (the NEAR LOD tier; below ~7px we fall back to the wireframe TIE) --------
 // Four distinct silhouettes so the wing reads at a glance: a sleek SCOUT dart, the balanced FIGHTER, a
@@ -1492,12 +1373,13 @@ static const fx3d::Model *ship_model(int kind)
 }
 static void draw_ship3d(int x, int y, int r, float bank, int kind, uint16_t col)
 {
-    if (r < 7) { draw_tie(x, y, r, (int)(bank * 2.0f), kind, col); return; }   // far LOD: keep the wireframe
+    if (r < 7) { draw_tie(x, y, r, kind, col); return; }                       // far LOD
     float sc  = (float)r / 1.25f;
     float bk  = fmaxf(-0.9f, fminf(0.9f, bank * 0.18f));
     float yaw = bank * 0.32f;                                // a banking turn reads as a touch of yaw
     int fl = r / 2 + (int)(s_anim & 1);                      // thruster flame behind the hull (flickers)
     uint16_t flame = kind == FOE_SCOUT ? COL_CYAN : kind == FOE_HEAVY ? rgb(236, 150, 70) : COL_AMBER;
+    tile_dither_ellipse(x, y + r / 2 + fl / 2, r / 3 + 1, r / 4 + 1, tile_c332(flame));   // engine glow
     d.fillTriangle(x - r / 4, y + r / 2, x + r / 4, y + r / 2, x, y + r / 2 + fl, flame);
     d.fillTriangle(x - r / 6, y + r / 2, x + r / 6, y + r / 2, x, y + r / 2 + fl * 2 / 3, COL_WHITE);
     fx3d::draw_model(*ship_model(kind), (float)x, (float)y, sc, yaw, bk, col);
@@ -1556,8 +1438,8 @@ static void draw_backdrop(float top, int ch, int jx, int jy)
         int nx = 18 + (int)(hp % (W - 36)) - parx;
         int ny = t0 + 4 + (int)((hp >> 9) % (h > 8 ? h - 8 : 1)) - pary;
         int nr = 14 + (int)((hp >> 18) % 16) + breath;          // ~14..30
-        d.fillCircle(nx, ny, nr, shade(fc, 1, 10));             // dim outer haze
-        d.fillCircle(nx, ny, nr * 3 / 5, shade(fc, 1, 7));      // softer core
+        tile_dither_ellipse(nx, ny, nr, nr * 3 / 4, tile_c332(shade(fc, 1, 3)));          // stippled haze (translucent)
+        tile_dither_ellipse(nx + nr / 4, ny - nr / 6, nr / 2, nr * 3 / 8, tile_c332(shade(fc, 3, 5)));   // brighter knot
     }
 
     // (2) faint parallax far stars (fixed field, drifted by the reticle) under the moving warp streaks.
@@ -1570,7 +1452,8 @@ static void draw_backdrop(float top, int ch, int jx, int jy)
 
     // (3) vanishing-point depth: a subtle radial bloom where the warp streaks converge (kept dim so it
     //     reads as the throat of the tunnel, NOT a sun), plus two faint rings for the tunnel mouth.
-    for (int r = 16; r >= 2; r -= 2) d.fillCircle(vx, vy, r, shade(fc, 9 - r / 3, 36));
+    tile_dither_ellipse(vx, vy, 18, 14, tile_c332(shade(fc, 1, 3)));
+    tile_dither_ellipse(vx, vy, 7, 6, tile_c332(shade(fc, 2, 3)));
     d.drawCircle(vx, vy, 34, shade(fc, 2, 11));
     d.drawCircle(vx, vy, 58, shade(fc, 1, 11));
 
@@ -1595,7 +1478,7 @@ static void spawn_foe(int kind, int hp)
         f->ex = (float)(rnd(161) - 80); f->ey = (float)(rnd(101) - 50);
         f->wphase = (float)rnd(628) * 0.01f; f->bank = 0;
         f->engagez = 40.0f + (kind == FOE_HEAVY ? 22.0f : kind == FOE_SCOUT ? -2.0f : 8.0f) + (float)rnd(10);   // hold-and-fight distance
-        f->hp = f->hpmax = (int16_t)hp; f->firecd = (int16_t)(700 + rnd(900)); f->strafecd = (int16_t)(2800 + rnd(3500));
+        f->hp = f->hpmax = (int16_t)hp; f->firecd = (int16_t)(350 + rnd(700)); f->strafecd = (int16_t)(2800 + rnd(3500));
         f->hitms = 0;
         return;
     }
@@ -1614,7 +1497,7 @@ static void combat_spawn_wave(void)
     s_wave++; s_wave_left--;
     s_wave_tint = WAVE_PAL[(s_wave - 1) % 6];       // each wave recolours enemies + backdrop
     s_spawn_timer = 1300.0f;                       // gap before the next wave once this one is clear
-    snprintf(s_cmsg, sizeof s_cmsg, "%s %d/%d", tx("ONDATA", "WAVE"), s_wave, s_cc.waves);
+    snprintf(s_cmsg, sizeof s_cmsg, "%s %d/%d", GT("ONDATA", "WAVE"), s_wave, s_cc.waves);
     s_cmsg_until = s_now + 1400; sfx(SFX_LOCK);
     if (last && s_cc.ace) sfx(SFX_ALARM);          // dramatic incoming-ace klaxon
 }
@@ -1624,17 +1507,12 @@ static void combat_end(int result)   // 1 = win, -1 = fail/retreat, 2 = destroye
     nucleo_app_set_fullscreen(false);    // leaving the action screen -> the hint footer comes back
     s_result = result; s_earn_cr = 0;
     g.kills += s_mkills;
-    if (result == 2) { g.hull = 0; save_write(); start_cine(CINE_LOSE); return; }
+    if (result == 2) { g.hull = 0; s_ingame = false; save_wipe(); start_cine(CINE_LOSE); return; }
     if (result == 1) {
         s_earn_cr = s_cc.reward_cr + s_cc.kill_cr * s_mkills;
         g.credits = clampi(g.credits + s_earn_cr, 0, 9999999);
         if (s_cc.rep_fac >= 0)       g.rep[s_cc.rep_fac]       = clampi(g.rep[s_cc.rep_fac] + s_cc.rep_gain, -100, 100);
         if (s_cc.enemy_rep_fac >= 0) g.rep[s_cc.enemy_rep_fac] = clampi(g.rep[s_cc.enemy_rep_fac] - s_cc.enemy_rep_loss, -100, 100);
-        if (s_mission >= 0) {
-            const Mission *m = cur_mission(s_mission);
-            if (m->once) g.missions_done |= bit(s_mission);
-            if (m->set_flag >= 0) g.flags |= bit(m->set_flag);
-        }
         sfx(SFX_WIN);
     } else {                                        // retreat / objective lost: salvage only on ambushes
         if (s_mission < 0) { s_earn_cr = s_cc.kill_cr * s_mkills; g.credits = clampi(g.credits + s_earn_cr, 0, 9999999); }
@@ -1665,10 +1543,10 @@ static void maybe_drop_pickup(float ex, float ey, float ez)
 static void apply_pickup(int kind)
 {
     switch (kind) {
-        case PU_SHIELD:  s_shield = clampi(s_shield + 30, 0, s_shieldmax);  toast(tx("SCUDO +", "SHIELD +"));     break;
-        case PU_REPAIR:  g.hull   = clampi(g.hull + 18, 0, g.hull_max);     toast(tx("SCAFO +", "HULL +"));       break;
-        case PU_MISSILE: if (s_msl_ammo < NMSL) s_msl_ammo++;               toast(tx("MISSILE +", "MISSILE +"));  break;
-        default:         s_rapid_until = s_now + 6000;                      toast(tx("FUOCO RAPIDO", "RAPID FIRE")); break;  // PU_RAPID
+        case PU_SHIELD:  s_shield = clampi(s_shield + 30, 0, s_shieldmax);  toast(GT("SCUDO +", "SHIELD +"));     break;
+        case PU_REPAIR:  g.hull   = clampi(g.hull + 18, 0, g.hull_max);     toast(GT("SCAFO +", "HULL +"));       break;
+        case PU_MISSILE: if (s_msl_ammo < NMSL) s_msl_ammo++;               toast(GT("MISSILE +", "MISSILE +"));  break;
+        default:         s_rapid_until = s_now + 6000;                      toast(GT("FUOCO RAPIDO", "RAPID FIRE")); break;  // PU_RAPID
     }
     sfx(SFX_BUY);
 }
@@ -1707,7 +1585,7 @@ static void missile_fire(void)
 
 static void player_fire(void)
 {
-    int cd = 170 - g.weapon * 26; if (cd < 70) cd = 70;      // faster base fire than before...
+    int cd = 200 - g.weapon * 20;                             // 5 shots/s, 8.3 at laser 4...
     if (s_now < s_rapid_until) cd = cd / 2 + 8;              // ...rapid-fire power-up roughly doubles the rate
     if (s_now - s_pfire_ms < cd) return;
     s_pfire_ms = s_now;
@@ -1716,7 +1594,7 @@ static void player_fire(void)
     sfx(SFX_LASER);
     if (s_lock >= 0 && s_foe[s_lock].on) {                    // targeting computer: a lock is a guaranteed hit
         Foe *f = &s_foe[s_lock];
-        f->hp -= 18 + g.weapon * 8; f->hitms = 90; s_hitmark_until = s_now + 110;
+        f->hp -= 12 + g.weapon * 5; f->hitms = 90; s_hitmark_until = s_now + 110;
         float sx = 0, sy = 0, sc = 0; bool vis = project(f->ex, f->ey, f->ez, &sx, &sy, &sc);
         if (f->hp <= 0) kill_foe(f, sx, sy, sc, vis);
         else { if (vis) spawn_sparks(f->ex, f->ey, f->ez, COL_AMBER); sfx(SFX_HIT); }
@@ -1739,7 +1617,7 @@ static void hurt_player(int dmg)
             s_rip[i].on = 1; s_rip[i].life = s_rip[i].life0 = 260;
             s_rip[i].x = (int)s_aimx; s_rip[i].y = (int)s_aimy; break;
         }
-        s_shake = 4.0f; sfx(SFX_HIT);
+        s_shake = 4.0f; sfx(SFX_HIT); s_shieldvig_until = s_now + 120;
     }
     int crit = g.hull_max / 4;                         // hull-critical klaxon (rate-limited; lets the thud ring)
     if (g.hull > 0 && hull_hit && g.hull < crit && s_now - s_alarm_ms > 1500) { s_alarm_ms = s_now; sfx(SFX_ALARM); }
@@ -1759,7 +1637,7 @@ static void combat_reset_common(void)
     for (int i = 0; i < NPU; i++)   s_pu[i].on = 0;
     s_msl_ammo = NMSL; s_msl_reload = 0; s_rapid_until = 0;
     s_combo = 0; s_combo_until = 0; s_toast[0] = 0; s_toast_until = 0; s_wave_tint = WAVE_PAL[0];
-    s_part_rr = 0; s_flash_until = s_muz_until = s_hullvig_until = s_nearmiss_ms = s_alarm_ms = 0;
+    s_part_rr = 0; s_flash_until = s_muz_until = s_hullvig_until = s_shieldvig_until = s_nearmiss_ms = s_alarm_ms = 0;
     s_hitmark_until = s_smoke_ms = 0;
     s_cy = (pf_top() + nucleo_app_content_height()) * 0.5f;
     s_aimx = CX; s_aimy = s_cy; s_aim_hv = s_aim_vv = 0; s_aim_h_until = s_aim_v_until = 0;
@@ -1773,8 +1651,8 @@ static void combat_reset_common(void)
 static void combat_launch(void)
 {
     s_wave_left = s_cc.waves; s_spawn_timer = 0;
-    if (s_cc.type == MT_ESCORT)      { s_ward_on = 1; s_ward_max = s_ward_hp = 120; s_ward_x = -40; s_ward_vx = 6; }
-    else if (s_cc.type == MT_DEFEND) { s_ward_on = 1; s_ward_max = s_ward_hp = 170; s_ward_x = 0;   s_ward_vx = 0; }
+    if (s_cc.type == MT_ESCORT)      { s_ward_on = 1; s_ward_max = s_ward_hp = 200 + 20 * (int)g.sector; s_ward_x = -40; s_ward_vx = 6; }
+    else if (s_cc.type == MT_DEFEND) { s_ward_on = 1; s_ward_max = s_ward_hp = 260 + 25 * (int)g.sector; s_ward_x = 0;   s_ward_vx = 0; }
     combat_spawn_wave();
     go(ST_COMBAT); sfx(SFX_LAUNCH);
 }
@@ -1883,8 +1761,8 @@ static void combat_step(float dt)
     for (int i = 0; i < NWARP; i++) { s_warp[i].ez -= rail * dt; if (s_warp[i].ez < ZNEAR) respawn_warp(i); }
 
     // (d) shield regen — quick recharge between hits (the player can't dodge; shield is the skill buffer)
-    if (s_shield < s_shieldmax && (s_now - s_shield_hit_ms) > 1100) {
-        s_regen_acc += dt * 26.0f;
+    if (s_shield < s_shieldmax && (s_now - s_shield_hit_ms) > 1300) {
+        s_regen_acc += dt * 20.0f;
         while (s_regen_acc >= 1.0f && s_shield < s_shieldmax) { s_shield++; s_regen_acc -= 1.0f; }
     }
     // (d2) missile reserve slowly refills back up to the cap (max 3)
@@ -1905,7 +1783,7 @@ static void combat_step(float dt)
         Foe *f = &s_foe[i];
         if (!f->on) continue;
         if (f->hitms > 0) f->hitms -= ms;                       // hit-flash decay
-        bool huntward = (s_ward_on && (i & 1));                 // half the wing hunts the ward
+        bool huntward = s_ward_on && i % 3 == 1;               // a third of the wing hunts the ward (marked on screen)
         float spd = closeF * kind_speed(f->kind);
         f->wphase += dt * kind_wrate(f->kind);
         if (f->strafe) {                                        // diving in for a close pass
@@ -1931,9 +1809,9 @@ static void combat_step(float dt)
         f->ey += (wy - f->ey) * 1.4f * dt;
         f->bank += (sinf(f->wphase) * 0.8f - f->bank) * 4.0f * dt;
         if (f->firecd > 0) f->firecd -= ms;
-        if (f->firecd <= 0 && f->ez < 130.0f && !f->strafe) {
+        if (f->firecd <= 0 && f->ez < 160.0f && !f->strafe) {
             spawn_tracer(f, huntward);
-            f->firecd = (int16_t)(kind_firems(f->kind) + 600 + rnd(600));
+            f->firecd = (int16_t)((kind_firems(f->kind) + 600 + rnd(600)) * (g.sector < 3 ? 13 - (int)g.sector : 10) / 10);   // gentler first sectors
         }
         if (f->hp * 3 < f->hpmax && (s_now - s_smoke_ms) > 110) {       // wounded: trails embers (damaged read)
             s_smoke_ms = s_now;
@@ -1954,7 +1832,7 @@ static void combat_step(float dt)
             m->ey += (f->ey - m->ey) * 4.5f * dt;
             if (m->ez >= f->ez - 4.0f) {
                 float sx = 0, sy = 0, sc = 0; bool vis = project(f->ex, f->ey, f->ez, &sx, &sy, &sc);
-                f->hp -= 70 + g.weapon * 12; f->hitms = 130; s_hitmark_until = s_now + 140;
+                f->hp -= 60 + g.weapon * 10; f->hitms = 130; s_hitmark_until = s_now + 140;
                 if (f->hp <= 0) kill_foe(f, sx, sy, sc, vis);
                 else { if (vis) spawn_boom(f->ex, f->ey, f->ez, sc * 0.7f, COL_AMBER, false); sfx(SFX_BOOM); }
                 m->on = 0;
@@ -1992,7 +1870,7 @@ static void combat_step(float dt)
             Foe *f = &s_foe[i]; if (!f->on) continue;
             float sx, sy, sc; if (!project(f->ex, f->ey, f->ez, &sx, &sy, &sc)) continue;
             float dx = sx - s_aimx, dy = sy - s_aimy, dd = dx * dx + dy * dy;
-            float r = 9.0f + 19.0f * sc;                        // lock window: forgiving enough to track weavers
+            float r = 7.0f + 15.0f * sc;                        // lock window: forgiving enough to track weavers
             if (dd < r * r && dd < best) { best = dd; s_lock = i; }
         }
     }
@@ -2019,8 +1897,8 @@ static void combat_step(float dt)
         bo->life -= ms;
         if (bo->life <= 0 || bo->ez < ZNEAR) {
             if (bo->ez < ZNEAR && bo->life > 0) {
-                if (bo->aimward && s_ward_on) s_ward_hp -= s_cc.foe_dmg;
-                else if (!bo->aimward) { hurt_player(s_cc.foe_dmg); if (s_result) return; }
+                if (bo->aimward && s_ward_on) s_ward_hp -= s_cc.foe_dmg / 2;   // a freighter is armoured
+                else if (!bo->aimward) { hurt_player(s_cc.foe_dmg * 3 / 5); if (s_result) return; }   // a tracer grazes, a strafe rams
             }
             bo->on = 0;
         }
@@ -2111,8 +1989,12 @@ static void draw_combat(void)
         if (f->hp * 3 < f->hpmax) fcol = cmix(fcol, COL_RED, 110);   // wounded -> reddens
         if (f->hitms > 0)         fcol = cmix(fcol, COL_WHITE, 180);  // hit-flash
         draw_ship3d(x, y, r, f->bank, f->kind, fcol);
+        if (s_ward_on && order[o] % 3 == 1) {                        // ward hunter: a red chevron to prioritise
+            int my = y - r - 9;
+            d.fillTriangle(x - 4, my, x + 4, my, x, my + 5, ((s_anim >> 2) & 1) ? COL_RED : COL_AMBER);
+        }
         if (f->hitms > 55 && r >= 5) fx3d::dither_disc(x, y, clampi(r + 2, 6, 20), COL_CYAN);  // dithered shield bubble (hit, bounded)
-        if (f->firecd > 0 && f->firecd < 240 && f->ez < 130.0f && !f->strafe) {    // charging to fire: telegraph
+        if (f->firecd > 0 && f->firecd < 240 && f->ez < 160.0f && !f->strafe) {    // charging to fire: telegraph
             d.fillCircle(x, y - r / 3, 2 + (f->firecd < 120 ? 1 : 0), ((s_anim >> 1) & 1) ? COL_RED : COL_AMBER);
         }
         if (f->hp < f->hpmax && r >= 5) {
@@ -2179,9 +2061,9 @@ static void draw_combat(void)
     }
     if (s_now < s_flash_until) {                          // localized boom bloom (replaces the old full-frame flash)
         int x = (int)s_flash_x + jx, y = (int)s_flash_y + jy;
-        d.fillCircle(x, y, s_flash_r0 + 4, shade(COL_AMBER, 2, 6));   // soft outer glow, anchored at the kill
-        d.fillCircle(x, y, s_flash_r0, COL_AMBER);
-        d.fillCircle(x, y, s_flash_r0 / 2, COL_WHITE);
+        tile_dither_ellipse(x, y, s_flash_r0 + 8, s_flash_r0 + 6, tile_c332(COL_AMBER));   // translucent fireball, anchored at the kill
+        d.fillCircle(x, y, s_flash_r0 * 2 / 3, COL_AMBER);
+        d.fillCircle(x, y, s_flash_r0 / 3, COL_WHITE);
     }
 
     // targeting-computer box on the locked foe
@@ -2221,9 +2103,12 @@ static void draw_combat(void)
         d.drawCircle(s_rip[i].x + jx, s_rip[i].y + jy, R, t < 0.5f ? COL_CYAN : COL_DIM);
     }
     draw_cockpit(ch);
-    if (s_now < s_hullvig_until) {                    // red hull-hit vignette (steady, no jitter)
-        d.drawRect(0, (int)top, W, ch - (int)top, COL_RED);
-        d.drawRect(1, (int)top + 1, W - 2, ch - (int)top - 2, rgb(140, 40, 36));
+    if (s_now < s_hullvig_until || s_now < s_shieldvig_until) {   // translucent edge flash: hull red / shield cyan
+        uint8_t vc = tile_c332(s_now < s_hullvig_until ? COL_RED : COL_CYAN);
+        int t0 = (int)top;
+        tile_dither_rect(0, t0, W, 6, vc); tile_dither_rect(0, ch - 6, W, 6, vc);
+        tile_dither_rect(0, t0 + 6, 6, ch - t0 - 12, vc); tile_dither_rect(W - 6, t0 + 6, 6, ch - t0 - 12, vc);
+        if (s_now < s_hullvig_until) d.drawRect(0, t0, W, ch - t0, COL_RED);
     }
 
     // off-screen enemy arrows: point toward any foe outside the frame (red if it's closing fast). Steady
@@ -2264,11 +2149,11 @@ static void draw_combat(void)
     if (s_now < s_rapid_until) d.drawFastHLine(99, 12, 19, COL_PURPLE);   // rapid-fire active
     if (s_ward_on) {
         int wpct = s_ward_max ? s_ward_hp * 100 / s_ward_max : 0;
-        text_at(126, 3, 1, (wpct < 35 && blink) ? COL_RED : COL_GREEN, s_cc.type == MT_DEFEND ? tx("FAR", "BCN") : "CNV");
+        text_at(126, 3, 1, (wpct < 35 && blink) ? COL_RED : COL_GREEN, s_cc.type == MT_DEFEND ? GT("FAR", "BCN") : "CNV");
         mini_bar(150, 4, 24, 6, wpct, wpct < 35 ? COL_RED : COL_GREEN);
         d.drawRoundRect(150, 4, 24, 6, 1, rgb(40, 50, 80));
     } else {
-        snprintf(b, sizeof b, "%s%d/%d", tx("O", "W"), s_wave, s_cc.waves);
+        snprintf(b, sizeof b, "%s%d/%d", GT("O", "W"), s_wave, s_cc.waves);
         text_at(128, 3, 1, COL_GREY, b);
     }
     snprintf(b, sizeof b, "K%d", s_kills); text_at(226 - (int)strlen(b) * 6, 3, 1, COL_AMBER, b);
@@ -2277,15 +2162,18 @@ static void draw_combat(void)
         text_at(226 - (int)strlen(b) * 6, 16, 1, blink ? COL_WHITE : COL_PURPLE, b);
     }
 
-    if (s_cmsg[0]  && s_now < s_cmsg_until)  center(ch / 2 - 4, 2, COL_CYAN, s_cmsg);
+    if (s_cmsg[0]  && s_now < s_cmsg_until) { tile_dither_rect(0, ch / 2 - 8, W, 24, 0x00); center(ch / 2 - 4, 2, COL_CYAN, s_cmsg); }
     if (s_toast[0] && s_now < s_toast_until) center(ch / 2 + 16, 1, COL_GREEN, s_toast);
     if (s_now - s_combat_t0 < 3500)          // opening control legend (the hint footer is hidden in combat)
-        center(ch - 31, 1, COL_DIM, tx("Frecce mira  A spara  S missile  Esc fuga",
-                                       "Arrows aim  A fire  S missile  Esc flee"));
+    {
+        tile_dither_rect(10, ch - 38, W - 20, 26, 0x00);
+        center(ch - 34, 1, COL_WHITE, GT("Frecce mira   A fuoco   S missile", "Arrows aim   A fire   S missile"));
+        center(ch - 24, 1, COL_GREY, GT("Esc due volte: fuga", "Esc twice: flee"));
+    }
 }
 
 // ============================ screens: mission bay ===========================
-static int s_elig[NMISSIONS];   // cached eligible-mission indices (set in draw_missions)
+static int s_elig[NMISS_PER_SYS];   // cached eligible-mission indices (set in draw_missions)
 // `n` rarity pips (small diamonds) right-aligned ending at xr; n=0 (Common) draws nothing.
 static void draw_stars(int xr, int y, int n, uint16_t col)
 {
@@ -2302,7 +2190,7 @@ static void miss_row_fn(int idx, int bx, int by, int bw, int bh, int tier)
     int x0 = row_x0(bx), xr = row_xr(bx, bw);
     char rew[12]; snprintf(rew, sizeof rew, "%d cr", m->reward_cr);
     if (tier == TIER_FOCUS) {
-        text_at(x0, by + 2, fit_size(lp(m->name), xr - x0 - 28, 2), rc, lp(m->name));   // title in rarity colour
+        label(x0, by + 1, xr - x0 - 28, rc, m->name);   // title in rarity colour
         draw_stars(xr, by + 4, s_fv.rarity, rc);                                        // rarity pips, top-right
         text_at(x0, by + 19, 1, COL_AMBER, rew);                                        // reward
         text_at(x0 + 46, by + 19, 1, COL_DIM, lp(FA_NAME[s_fv.arch]));                  // archetype tag
@@ -2311,7 +2199,7 @@ static void miss_row_fn(int idx, int bx, int by, int bw, int bh, int tier)
     } else {
         int rw = (int)strlen(rew) * 6;
         uint16_t nc = (tier == TIER_NEAR) ? rc : tier_col(tier);
-        text_vc(x0, by, bh, fit_size(lp(m->name), xr - rw - 8 - x0, 1), nc, lp(m->name));
+        text_vc(x0, by, bh, fit_size(m->name, xr - rw - 8 - x0, 1), nc, m->name);
         text_vr(xr, by, bh, 1, COL_AMBER, rew);
     }
 }
@@ -2320,9 +2208,9 @@ static void draw_missions(void)
     int ch = nucleo_app_content_height();
     d.fillRect(0, 0, W, ch, COL_SPACE);
     stars_draw(ch);
-    title_band(tx("MISSIONI", "MISSIONS"), SYSTEMS[g.sys].name);
+    title_band(GT("MISSIONI", "MISSIONS"), SYSTEMS[g.sys].name);
     int n = eligible_missions(s_elig);
-    if (n == 0) { center(56, 2, COL_DIM, tx("Nessun contratto", "No contracts")); return; }
+    if (n == 0) { center(56, 2, COL_DIM, GT("Nessun contratto", "No contracts")); return; }
     if (s_misssel >= n) s_misssel = n - 1;
     list_fisheye(s_misssel, n, 28, 120, miss_row_fn);
 }
@@ -2335,27 +2223,27 @@ static void draw_brief(void)
     uint16_t rc = fv_rarcol(s_fv.rarity);
     d.fillRoundRect(6, 2, 228, 116, 6, COL_PANEL);
     d.drawRoundRect(6, 2, 228, 116, 6, rc);               // panel border tinted by rarity
-    text_at(14, 5, fit_size(lp(m->name), 150, 2), rc, lp(m->name));
+    label(14, 4, 150, rc, m->name);
     text_vr(228, 6, 8, 1, rc, lp(FV_RARNAME[s_fv.rarity]));   // rarity name, top-right
-    draw_wrapped_n(14, 24, 212, 11, COL_WHITE, lp(m->brief), 3);   // flavored brief (y24..57)
+    draw_wrapped_n(14, 24, 212, 11, COL_WHITE, m->brief, 3);   // flavored brief (y24..57)
     char b[72];
     // intel line: named target (bounty) or gang, then any combat modifiers — clamped to the panel.
-    int li = s_fv.has_enemy ? snprintf(b, sizeof b, "%s: %s", tx("Bersaglio", "Target"), g_lang ? s_en_en : s_en_it)
-                            : snprintf(b, sizeof b, "%s: %s", tx("Banda", "Gang"), lp(FV_GANG[s_fv.gang]));
+    int li = s_fv.has_enemy ? snprintf(b, sizeof b, "%s: %s", GT("Bersaglio", "Target"), s_mt->target)
+                            : snprintf(b, sizeof b, "%s: %s", GT("Banda", "Gang"), lp(FV_GANG[s_fv.gang]));
     for (int i = 0; i < s_fv.nmod && li > 0 && li < (int)sizeof b - 1; i++)
         li += snprintf(b + li, sizeof b - li, " . %s", lp(FV_MODS[s_fv.mod[i]]));
     if ((int)strlen(b) > 35) b[35] = 0;                   // keep it inside the panel width
     text_at(14, 59, 1, COL_CYAN, b);
-    snprintf(b, sizeof b, "%s: %d x%d%s  vs %s", tx("Ostili", "Hostiles"),
-             m->waves, m->per_wave, m->ace ? " +ASSO" : "", lp(FAC_NAME[m->foe_fac]));
+    snprintf(b, sizeof b, "%s: %d x%d%s  vs %s", GT("Ostili", "Hostiles"),
+             m->waves, m->per_wave, m->ace ? GT(" +ASSO", " +ACE") : "", lp(FAC_NAME[m->foe_fac]));
     text_at(14, 70, 1, COL_GREY, b);
     if (m->offer_fac >= 0)
-        snprintf(b, sizeof b, "%s %d cr (+%d/%s)  %s +%d", tx("Paga", "Pay"), m->reward_cr,
-                 m->kill_cr, tx("abb", "kill"), lp(FAC_NAME[m->offer_fac]), m->rep_gain);
+        snprintf(b, sizeof b, "%s %d cr (+%d/%s)  %s +%d", GT("Paga", "Pay"), m->reward_cr,
+                 m->kill_cr, GT("abb", "kill"), lp(FAC_NAME[m->offer_fac]), m->rep_gain);
     else
-        snprintf(b, sizeof b, "%s %d cr (+%d/%s)", tx("Paga", "Pay"), m->reward_cr, m->kill_cr, tx("abb", "kill"));
+        snprintf(b, sizeof b, "%s %d cr (+%d/%s)", GT("Paga", "Pay"), m->reward_cr, m->kill_cr, GT("abb", "kill"));
     text_at(14, 81, 1, COL_AMBER, b);
-    const char *opt[2] = { tx("Accetta e lancia", "Accept & launch"), tx("Annulla", "Decline") };
+    const char *opt[2] = { GT("Accetta e lancia", "Accept & launch"), GT("Annulla", "Decline") };
     int oy = 95;
     for (int i = 0; i < 2; i++) {
         bool sel = (i == s_briefsel);
@@ -2370,14 +2258,14 @@ static void draw_debrief(void)
     d.fillRect(0, 0, W, ch, COL_SPACE);
     stars_draw(ch);
     bool win = (s_result == 1);
-    center(14, 3, win ? COL_CYAN : COL_RED, win ? tx("VITTORIA", "VICTORY") : tx("RITIRATA", "RETREAT"));
-    if (win && s_mission >= 0) draw_wrapped_n(MARGIN, 44, CW, 10, COL_WHITE, lp(cur_mission(s_mission)->win), 2);
+    center(14, 3, win ? COL_CYAN : COL_RED, win ? GT("VITTORIA", "VICTORY") : GT("RITIRATA", "RETREAT"));
+    if (win && s_mission >= 0) draw_wrapped_n(MARGIN, 44, CW, 10, COL_WHITE, cur_mission(s_mission)->win, 2);
     char b[40];
-    snprintf(b, sizeof b, "%s: %d", tx("Abbattuti", "Kills"), s_mkills);
+    snprintf(b, sizeof b, "%s: %d", GT("Abbattuti", "Kills"), s_mkills);
     center(72, 2, COL_GREY, b);
     snprintf(b, sizeof b, "+%d cr", s_earn_cr);
     center(92, 2, COL_AMBER, b);
-    center(112, 1, COL_DIM, tx("- INVIO continua -", "- ENTER continue -"));
+    center(112, 1, COL_DIM, GT("- INVIO continua -", "- ENTER continue -"));
 }
 
 // ============================ screens: title / settings ======================
@@ -2389,91 +2277,34 @@ static int title_items(int *act)   // returns count; fills action ids
     act[n++] = 2;                   // Settings
     return n;
 }
-static void title_row_fn(int idx, int bx, int by, int bw, int bh, int tier)
-{
-    int act[4]; title_items(act);
-    const char *lbl[3] = { tx("Continua", "Continue"), tx("Nuova Partita", "New Game"), tx("Impostazioni", "Settings") };
-    const char *t = lbl[act[idx]];
-    int x0 = row_x0(bx), xr = row_xr(bx, bw);
-    int sz = fit_size(t, xr - x0, tier == TIER_FOCUS ? 2 : 1);
-    text_vc(x0, by, bh, sz, tier_col(tier), t);
-}
-// Shared menu backdrop: deep-space stars + a dim Mode-7 neon floor that recedes to the horizon, panned
-// a few px by the IMU so physically tilting the Cardputer parallaxes the grid (ADV only; a harmless
-// no-op otherwise). The floor scrolls slowly toward you -> a living 3D menu, not a flat star field.
-static void menu_backdrop(int ch)
-{
-    d.fillRect(0, 0, W, ch, COL_SPACE);
-    stars_draw(ch);
-    static float s_menu_panx = 0.0f;                       // IMU read throttled to ~8 Hz (I2C; pure eye-candy)
-    if (nucleo_imu_present() && (s_anim & 3) == 0) { float ttx, tty; if (nucleo_imu_tilt(&ttx, &tty)) s_menu_panx = ttx; }
-    fx3d::Grid gc;
-    gc.horizon = (int)(ch * 0.46f); gc.bottom = ch - 1;
-    gc.vanx = (float)W * 0.5f + s_menu_panx * 80.0f;
-    gc.scroll = fmodf((float)s_anim * 0.02f, 1.0f);
-    gc.xspread = 252.0f; gc.nv = 7; gc.nh = 9;
-    gc.col = shade(COL_CYAN, 4, 6); gc.glow = shade(COL_CYAN, 2, 6);
-    gc.intensity = 110;
-    fx3d::grid(gc);
-}
 static void draw_title(void)
 {
     int ch = nucleo_app_content_height();
-    menu_backdrop(ch);                                         // Mode-7 neon floor + stars (IMU parallax)
-    center(7, 2, shade(COL_CYAN, 2, 6), "COSTELLAZIONI");       // soft drop shadow
-    center(6, 2, COL_CYAN, "COSTELLAZIONI");                    // 13*12=156 -> x42..198
-    center(24, 1, COL_DIM, tx("mercante tra le stelle", "trader among the stars"));
-    d.drawFastHLine(50, 35, W - 100, shade(COL_CYAN, 2, 5));    // cyan rule with a small flagship emblem
-    d.fillCircle(W / 2 + 9, 35, 2, shade(COL_CYAN, 3, 5));      // engine glow
-    draw_ship(W / 2, 35, 1, COL_AMBER);
+    int y = gui::title(GT("Costellazioni", "Constellations"), GT("Mercante tra le stelle", "Trader among the stars"), COL_CYAN);
+    draw_ship(26, 16, 3, COL_AMBER);                           // the Lucciola and a far world flank the title
+    draw_planet(W - 24, 17, 10, 0);
     int act[4]; int n = title_items(act);
-    if (s_msel >= n) s_msel = n - 1;
-    list_fisheye(s_msel, n, 44, 120, title_row_fn);
+    const char *items[3];
+    for (int i = 0; i < n; i++)
+        items[i] = act[i] == 0 ? GT("Continua", "Continue") : act[i] == 1 ? GT("Nuova partita", "New game") : GT("Impostazioni", "Settings");
+    gui::menu(s_tmenu, items, n, y, ch - (s_save_bad ? 10 : 0), COL_CYAN);
+    if (s_save_bad) center(ch - 10, 1, COL_RED, GT("Salvataggio illeggibile", "Save file unreadable"));
 }
 // Settings rows. The TILT row exists only on the Cardputer ADV (it owns a BMI270); on the original
 // board it is not shown at all, so the row count and the idx->kind map both depend on is_adv().
-enum { SET_LANG = 0, SET_AUDIO, SET_TILT, SET_DELETE };
-static int set_count(void) { return nucleo_ui_is_adv() ? 4 : 3; }
-static int set_kind(int idx)
-{
-    if (nucleo_ui_is_adv()) return idx;                  // 0 lang, 1 audio, 2 tilt, 3 delete
-    return (idx >= 2) ? SET_DELETE : idx;                // base: 0 lang, 1 audio, 2 delete
-}
-static void set_row_fn(int idx, int bx, int by, int bw, int bh, int tier)
-{
-    int kind = set_kind(idx);
-    const char *nm = kind == SET_LANG  ? tx("Lingua", "Language")
-                   : kind == SET_AUDIO ? tx("Audio", "Audio")
-                   : kind == SET_TILT  ? tx("Inclinazione", "Tilt control")
-                   :                      tx("Cancella salvataggio", "Delete save");
-    int x0 = row_x0(bx), xr = row_xr(bx, bw);
-    int vx = 150;                                               // value zone left edge
-    int sz = fit_size(nm, vx - 8 - x0, tier == TIER_FOCUS ? 2 : 1);
-    text_vc(x0, by, bh, sz, tier_col(tier), nm);
-    int cy = by + bh / 2;
-    if (kind == SET_LANG || kind == SET_AUDIO || kind == SET_TILT) {  // segmented toggle chips
-        // Tilt with no working IMU yet (config blob not vendored) reads "n/d" instead of a toggle.
-        if (kind == SET_TILT && !nucleo_imu_present()) { text_vr(xr, by, bh, 1, COL_AMBER, tx("n/d", "n/a")); return; }
-        const char *a = kind == SET_LANG ? "IT" : "ON", *b = kind == SET_LANG ? "EN" : "OFF";
-        bool left = kind == SET_LANG ? (g_lang == 0) : kind == SET_AUDIO ? (g_audio != 0) : (g_tilt != 0);
-        d.fillRoundRect(vx,      cy - 8, 36, 16, 3, left ? COL_GREEN : COL_TRACK);
-        d.fillRoundRect(vx + 40, cy - 8, 36, 16, 3, !left ? COL_GREEN : COL_TRACK);
-        d.setTextSize(1);                                       // transparent bg over the chips
-        d.setTextColor(left ? COL_SPACE : COL_GREY);
-        d.setCursor(vx + 18 - (int)strlen(a) * 3, cy - 3); d.print(a);
-        d.setTextColor(!left ? COL_SPACE : COL_GREY);
-        d.setCursor(vx + 58 - (int)strlen(b) * 3, cy - 3); d.print(b);
-    } else {                                                    // delete-save chip
-        const char *v = s_has_save ? tx("Cancella", "Reset") : "-";
-        text_vr(xr, by, bh, 1, s_has_save ? COL_RED : COL_DIM, v);
-    }
-}
+enum { SET_AUDIO = 0, SET_TILT, SET_DELETE };
+static int set_count(void) { return nucleo_ui_is_adv() ? 3 : 2; }
+static int set_kind(int idx) { return (!nucleo_ui_is_adv() && idx == 1) ? SET_DELETE : idx; }
 static void draw_settings(void)
 {
-    int ch = nucleo_app_content_height();
-    menu_backdrop(ch);
-    title_band(tx("Impostazioni", "Settings"), NULL);
-    list_fisheye(s_setsel, set_count(), 28, 120, set_row_fn);
+    char r[3][40];
+    snprintf(r[0], 40, "%s: %s", GT("Suoni", "Sound"), g_audio ? "ON" : "OFF");
+    snprintf(r[1], 40, "%s: %s", GT("Inclinazione", "Tilt control"), !nucleo_imu_present() ? GT("n/d", "n/a") : g_tilt ? "ON" : "OFF");
+    snprintf(r[2], 40, "%s", !s_has_save ? GT("Nessun salvataggio", "No save") : s_del_armed ? GT("Sicuro? INVIO cancella", "Sure? ENTER deletes")
+                                                                                          : GT("Cancella salvataggio", "Delete save"));
+    const char *rows[3] = { r[0], nucleo_ui_is_adv() ? r[1] : r[2], r[2] };
+    int y = gui::title(GT("Impostazioni", "Settings"), nullptr, COL_CYAN);
+    gui::menu(s_smenu, rows, set_count(), y + 4, nucleo_app_content_height(), s_del_armed ? COL_RED : COL_CYAN);
 }
 
 // ============================ screens: map ===================================
@@ -2505,6 +2336,7 @@ static void draw_map(void)
     for (int i = 0; i < NSYS; i++) {
         int x = map_x(SYSTEMS[i].x), y = map_y(SYSTEMS[i].y);
         uint16_t c = faction_col(SYSTEMS[i].faction);
+        tile_dither_ellipse(x, y, 7, 7, tile_c332(shade(c, 3, 4)));
         if (SYSTEMS[i].beacon) {
             bool lit = (g.beacon_lit & bit(i)) != 0;
             d.drawCircle(x, y, 5, lit ? COL_CYAN : rgb(120, 50, 50));
@@ -2532,9 +2364,9 @@ static void draw_map(void)
         d.drawRoundRect(MARGIN, 89, CW, 28, 4, COL_FOCUS2);
         const char *nm = SYSTEMS[s_target].name;
         char b[40];
-        snprintf(b, sizeof b, "%s %d  %s %d", tx("cel", "cel"), cost, tx("dist", "dist"), (int)dd);
+        snprintf(b, sizeof b, "%s %d  %s %d", GT("cel", "cel"), cost, GT("dist", "dist"), (int)dd);
         int vw = (int)strlen(b) * 6;
-        text_at(14, 92, fit_size(nm, CW - 12 - vw - 8, 2), COL_WHITE, nm);
+        label(14, 91, CW - 12 - vw - 8, COL_WHITE, nm);
         text_vr(226, 92, 16, 1, reach ? COL_GREEN : COL_RED, b);
         snprintf(b, sizeof b, "%s . %s", lp(ECON_NAME[SYSTEMS[s_target].econ]), lp(FAC_NAME[SYSTEMS[s_target].faction]));
         text_at(14, 108, 1, COL_GREY, b);
@@ -2546,12 +2378,12 @@ static void draw_map(void)
 static const char *hub_label(int i)
 {
     switch (i) {
-        case 0: return tx("Mercato", "Market");
-        case 1: return tx("Cantiere", "Shipyard");
-        case 2: return tx("Sala missioni", "Mission Bay");
-        case 3: return tx("Plancia", "Bridge");
-        case 4: return tx("Mappa stellare", "Star map");
-        default: return tx("Salva & Titolo", "Save & Title");
+        case 0: return GT("Mercato", "Market");
+        case 1: return GT("Cantiere", "Shipyard");
+        case 2: return GT("Sala missioni", "Mission Bay");
+        case 3: return GT("Plancia", "Bridge");
+        case 4: return GT("Mappa stellare", "Star map");
+        default: return GT("Salva & Titolo", "Save & Title");
     }
 }
 static int s_jobs;   // cached eligible-mission count for the hub badge (set in draw_system)
@@ -2559,12 +2391,13 @@ static void hub_row_fn(int idx, int bx, int by, int bw, int bh, int tier)
 {
     int x0 = row_x0(bx), xr = row_xr(bx, bw);
     char badge[16]; badge[0] = 0; uint16_t bc = COL_AMBER;
-    if (idx == 2 && s_jobs > 0) { snprintf(badge, sizeof badge, "%d %s", s_jobs, tx("lavori", "jobs")); bc = COL_AMBER; }
+    if (idx == 2 && s_jobs > 0) { snprintf(badge, sizeof badge, "%d %s", s_jobs, GT("lavori", "jobs")); bc = COL_AMBER; }
     else if (idx == 3)          { snprintf(badge, sizeof badge, "%d/%d", beacons_lit(), beacons_total()); bc = COL_CYAN; }
     int bw_px = (int)strlen(badge) * 6 * (tier == TIER_FOCUS ? 2 : 1);
     int avail = badge[0] ? (xr - bw_px - 8 - x0) : (xr - x0);
     const char *nm = hub_label(idx);
-    text_vc(x0, by, bh, fit_size(nm, avail, tier == TIER_FOCUS ? 2 : 1), tier_col(tier), nm);
+    if (tier == TIER_FOCUS) label(x0, by + 5, avail, COL_WHITE, nm);
+    else text_vc(x0, by, bh, fit_size(nm, avail, 1), tier_col(tier), nm);
     if (badge[0]) text_vr(xr, by, bh, tier == TIER_FOCUS ? 2 : 1, bc, badge);
 }
 static void draw_system(void)
@@ -2580,12 +2413,12 @@ static void draw_system(void)
     char b[40];
     snprintf(b, sizeof b, "%d cr", g.credits);
     int crw = (int)strlen(b) * 6;                       // credits reserved on the econ line
-    text_at(30, 3, fit_size(s->name, W - MARGIN - 30, 2), COL_CYAN, s->name);
+    label(30, 0, W - MARGIN - 30, COL_CYAN, s->name);
     text_vr(W - MARGIN, 16, 8, 1, COL_AMBER, b);
     snprintf(b, sizeof b, "%s . %s", lp(ECON_NAME[s->econ]), lp(FAC_NAME[s->faction]));
     int el2 = fit_size(b, (W - MARGIN - crw - 6) - 30, 1);
     text_at(30, 18, el2, COL_GREY, b);
-    int el[NMISSIONS]; s_jobs = eligible_missions(el);
+    int el[NMISS_PER_SYS]; s_jobs = eligible_missions(el);
     list_fisheye(s_hubsel, 6, 28, 120, hub_row_fn);
 }
 
@@ -2593,40 +2426,51 @@ static void draw_system(void)
 static void buy_good(int gd)
 {
     int price = unit_buy(g.sys, gd);
-    if (cargo_used() >= g.cargo_max) { snprintf(s_status, sizeof s_status, "%s", tx("Stiva piena", "Hold full")); sfx(SFX_DENY); return; }
-    if (g.credits < price) { snprintf(s_status, sizeof s_status, "%s", tx("Crediti insuff.", "Not enough cr")); sfx(SFX_DENY); return; }
+    if (cargo_used() >= g.cargo_max) { snprintf(s_status, sizeof s_status, "%s", GT("Stiva piena", "Hold full")); sfx(SFX_DENY); return; }
+    if (g.credits < price) { snprintf(s_status, sizeof s_status, "%s", GT("Crediti insuff.", "Not enough cr")); sfx(SFX_DENY); return; }
     g.credits -= price; g.cargo[gd]++; sfx(SFX_BUY);
-    snprintf(s_status, sizeof s_status, "%s %s -%d", tx("Comprato", "Bought"), lp(GOODS[gd].name), price);
+    snprintf(s_status, sizeof s_status, "%s %s -%d", GT("Comprato", "Bought"), lp(GOODS[gd].name), price);
 }
 static void sell_good(int gd)
 {
     if (g.cargo[gd] <= 0) { sfx(SFX_DENY); return; }
     int price = unit_sell(g.sys, gd);
     g.credits += price; g.cargo[gd]--; sfx(SFX_OK);
-    snprintf(s_status, sizeof s_status, "%s %s +%d", tx("Venduto", "Sold"), lp(GOODS[gd].name), price);
+    snprintf(s_status, sizeof s_status, "%s %s +%d", GT("Venduto", "Sold"), lp(GOODS[gd].name), price);
 }
 static void buy_fuel(void)
 {
-    if (g.fuel >= g.fuel_max) { snprintf(s_status, sizeof s_status, "%s", tx("Serbatoio pieno", "Tank full")); sfx(SFX_DENY); return; }
+    if (g.fuel >= g.fuel_max) { snprintf(s_status, sizeof s_status, "%s", GT("Serbatoio pieno", "Tank full")); sfx(SFX_DENY); return; }
     int price = refuel_price(g.sys);
-    if (g.credits < price) { sfx(SFX_DENY); return; }
+    if (g.credits < price) {
+        // Stranded — no credits for a cell, an empty hold, not enough cells to reach any system: the Keepers
+        // tow in a full tank for some standing, so a run can never soft-lock (Echo systems offer no contracts).
+        int need = 99;
+        for (int i = 0; i < NSYS; i++) if (i != g.sys && sys_dist(g.sys, i) <= g.jump_range && jump_cost(sys_dist(g.sys, i)) < need) need = jump_cost(sys_dist(g.sys, i));
+        if (cargo_used() == 0 && g.fuel < need) {
+            g.fuel = g.fuel_max; g.rep[F_CUSTODI] = clampi(g.rep[F_CUSTODI] - 5, -100, 100);
+            snprintf(s_status, sizeof s_status, "%s", GT("Soccorso: serbatoio pieno", "Rescue: tank refilled"));
+            sfx(SFX_OK); save_write(); return;
+        }
+        snprintf(s_status, sizeof s_status, "%s", GT("Crediti insuff.", "Not enough cr")); sfx(SFX_DENY); return;
+    }
     g.credits -= price; g.fuel++; sfx(SFX_BUY);
-    snprintf(s_status, sizeof s_status, "%s +1 (-%d)", tx("Cella", "Cell"), price);
+    snprintf(s_status, sizeof s_status, "%s +1 (-%d)", GT("Cella", "Cell"), price);
 }
 // market row: focused = big name + a detail line (price/owned); neighbours = one compact line.
 static void mkt_row_fn(int idx, int bx, int by, int bw, int bh, int tier)
 {
     int x0 = row_x0(bx), xr = row_xr(bx, bw);
     bool fuel = (idx == NGOODS);
-    const char *name = fuel ? tx("Carburante", "Fuel") : lp(GOODS[idx].name);
+    const char *name = fuel ? GT("Carburante", "Fuel") : lp(GOODS[idx].name);
     int price = fuel ? refuel_price(g.sys) : unit_buy(g.sys, idx);
     uint16_t pc = fuel ? COL_CYAN
                        : (price < GOODS[idx].base ? COL_GREEN : (price > GOODS[idx].base ? COL_RED : COL_GREY));
     char b[20];
     if (tier == TIER_FOCUS) {
-        text_at(x0, by + 2, fit_size(name, xr - x0, 2), COL_WHITE, name);
-        if (fuel) snprintf(b, sizeof b, "%s %d", tx("Cella", "Cell"), price);
-        else      snprintf(b, sizeof b, "%s %d", tx("Compra", "Buy"), price);
+        label(x0, by + 1, xr - x0, COL_WHITE, name);
+        if (fuel) snprintf(b, sizeof b, "%s %d", GT("Cella", "Cell"), price);
+        else      snprintf(b, sizeof b, "%s %d", GT("Compra", "Buy"), price);
         text_at(x0, by + 19, 1, pc, b);
         if (fuel) snprintf(b, sizeof b, "%d/%d", g.fuel, g.fuel_max);
         else      snprintf(b, sizeof b, "x%d", g.cargo[idx]);
@@ -2646,7 +2490,7 @@ static void draw_market(void)
     int ch = nucleo_app_content_height();
     d.fillRect(0, 0, W, ch, COL_SPACE);
     char cap[24]; snprintf(cap, sizeof cap, "%dcr %d/%d", g.credits, cargo_used(), g.cargo_max);
-    title_band(tx("MERCATO", "MARKET"), cap);
+    title_band(GT("MERCATO", "MARKET"), cap);
     int bot = s_status[0] ? 110 : 120;
     list_fisheye(s_mktsel, NGOODS + 1, 28, bot, mkt_row_fn);
     if (s_status[0]) center(112, 1, COL_GREEN, s_status);
@@ -2689,10 +2533,10 @@ static void buy_upgrade(int item)
 static const char *yard_name(int i)
 {
     switch (i) {
-        case 0: return tx("Stiva +10", "Hold +10");      case 1: return tx("Serbatoio +4", "Tank +4");
-        case 2: return tx("Iperdrive +12", "Hyperdrive +12"); case 3: return tx("Scafo +25", "Hull +25");
-        case 4: return tx("Sensori +1", "Sensors +1");   case 5: return tx("Laser +1", "Laser +1");
-        case 6: return tx("Scudo +30", "Shield +30");    default: return tx("Riparazione", "Repair");
+        case 0: return GT("Stiva +10", "Hold +10");      case 1: return GT("Serbatoio +4", "Tank +4");
+        case 2: return GT("Iperdrive +12", "Hyperdrive +12"); case 3: return GT("Scafo +25", "Hull +25");
+        case 4: return GT("Sensori +1", "Sensors +1");   case 5: return GT("Laser +1", "Laser +1");
+        case 6: return GT("Scudo +30", "Shield +30");    default: return GT("Riparazione", "Repair");
     }
 }
 static void yard_row_fn(int idx, int bx, int by, int bw, int bh, int tier)
@@ -2700,14 +2544,14 @@ static void yard_row_fn(int idx, int bx, int by, int bw, int bh, int tier)
     int x0 = row_x0(bx), xr = row_xr(bx, bw);
     char b[16]; bool dim = false;
     if (idx == 7) {
-        if (g.hull >= g.hull_max) { snprintf(b, sizeof b, "%s", tx("integro", "intact")); dim = true; }
+        if (g.hull >= g.hull_max) { snprintf(b, sizeof b, "%s", GT("integro", "intact")); dim = true; }
         else snprintf(b, sizeof b, "%d cr", up_cost(7));
     } else if (up_level(idx) >= 4) { snprintf(b, sizeof b, "MAX"); dim = true; }
     else snprintf(b, sizeof b, "%d cr", up_cost(idx));
     const char *nm = yard_name(idx);
     uint16_t vc = dim ? COL_DIM : COL_AMBER;
     if (tier == TIER_FOCUS) {
-        text_at(x0, by + 2, fit_size(nm, xr - x0, 2), COL_WHITE, nm);
+        label(x0, by + 1, xr - x0, COL_WHITE, nm);
         text_at(x0, by + 19, 1, vc, b);
         if (idx < 7) {                                       // level pips (0..4) on the focus row
             int lvl = up_level(idx);
@@ -2724,7 +2568,7 @@ static void draw_shipyard(void)
     int ch = nucleo_app_content_height();
     d.fillRect(0, 0, W, ch, COL_SPACE);
     char cap[16]; snprintf(cap, sizeof cap, "%d cr", g.credits);
-    title_band(tx("CANTIERE", "SHIPYARD"), cap);
+    title_band(GT("CANTIERE", "SHIPYARD"), cap);
     list_fisheye(s_yardsel, 8, 28, 120, yard_row_fn);
 }
 
@@ -2732,11 +2576,11 @@ static void draw_shipyard(void)
 static const char *rank_name(void)
 {
     int k = (int)g.kills;
-    if (k >= 60) return tx("Asso leggendario", "Legendary Ace");
-    if (k >= 30) return tx("Asso", "Ace");
-    if (k >= 15) return tx("Veterano", "Veteran");
-    if (k >= 5)  return tx("Pilota", "Pilot");
-    return tx("Recluta", "Rookie");
+    if (k >= 60) return GT("Asso leggendario", "Legendary Ace");
+    if (k >= 30) return GT("Asso", "Ace");
+    if (k >= 15) return GT("Veterano", "Veteran");
+    if (k >= 5)  return GT("Pilota", "Pilot");
+    return GT("Recluta", "Rookie");
 }
 static void draw_plancia(void)
 {
@@ -2744,20 +2588,20 @@ static void draw_plancia(void)
     d.fillRect(0, 0, W, ch, COL_SPACE);
     stars_draw(ch);
     draw_hud();
-    text_at(MARGIN, 16, 2, COL_CYAN, tx("Plancia", "Bridge"));
+    label(MARGIN, 15, 120, COL_CYAN, GT("Plancia", "Bridge"));
     char b[44];
     snprintf(b, sizeof b, "%s K%d", rank_name(), (int)g.kills);          // pilot rank + kill tally
     text_vr(W - MARGIN, 16, 16, 1, COL_GREY, b);
-    text_at(MARGIN, 33, 2, COL_WHITE, "Lucciola");
-    snprintf(b, sizeof b, "%s %d/%d   %s %d", tx("scafo", "hull"), g.hull, g.hull_max,
-             tx("scudo", "shield"), g.shield_max);
+    label(MARGIN, 32, 120, COL_WHITE, GT("Lucciola", "Firefly"));
+    snprintf(b, sizeof b, "%s %d/%d   %s %d", GT("scafo", "hull"), g.hull, g.hull_max,
+             GT("scudo", "shield"), g.shield_max);
     text_at(MARGIN, 53, 1, COL_GREY, b);
-    snprintf(b, sizeof b, "cr %d   cel %d   rng %d", g.credits, g.fuel, g.jump_range);
+    snprintf(b, sizeof b, GT("cr %d   celle %d   raggio %d", "cr %d   cells %d   range %d"), g.credits, g.fuel, g.jump_range);
     text_at(MARGIN, 63, 1, COL_GREY, b);
-    snprintf(b, sizeof b, "%s %d/4   %s %d   %s %d/%d", tx("laser", "laser"), g.weapon,
-             tx("sens", "sens"), g.sensors, tx("fari", "bcn"), beacons_lit(), beacons_total());
+    snprintf(b, sizeof b, "%s %d/4   %s %d   %s %d/%d", GT("laser", "laser"), g.weapon,
+             GT("sens", "sens"), g.sensors, GT("fari", "bcn"), beacons_lit(), beacons_total());
     text_at(MARGIN, 73, 1, COL_CYAN, b);
-    text_at(MARGIN, 83, 1, COL_AMBER, tx("Reputazione", "Reputation"));
+    text_at(MARGIN, 83, 1, COL_AMBER, GT("Reputazione", "Reputation"));
     int y = 91;
     for (int i = 0; i < NFAC; i++) {                          // 4 rows: 91,98,105,112 -> last bar 112..118
         text_at(14, y, 1, COL_GREY, lp(FAC_NAME[i]));
@@ -2778,7 +2622,7 @@ static void draw_event(void)
     const Event *e = &EVENTS[s_ev];
     d.fillRoundRect(6, 2, 228, 116, 6, COL_PANEL);
     d.drawRoundRect(6, 2, 228, 116, 6, COL_FOCUS2);
-    text_at(14, 7, fit_size(lp(e->title), 212, 2), COL_CYAN, lp(e->title));
+    label(14, 5, 212, COL_CYAN, lp(e->title));
     draw_wrapped_n(14, 28, 212, 11, COL_WHITE, lp(e->body), 3);        // clamp prose to 3 lines
     int oy = 70;                                                       // choices anchored low, always fit
     for (int i = 0; i < e->nch; i++) {
@@ -2796,42 +2640,40 @@ static void draw_event(void)
 static void set_hint_for(int screen)
 {
     switch (screen) {
-        case ST_TITLE:    nucleo_app_set_hint(tx("SU/GIU scegli  INVIO ok  Esc esci", "UP/DN pick  ENTER ok  Esc quit")); break;
-        case ST_SETTINGS: nucleo_app_set_hint(tx("SU/GIU  INVIO cambia  Esc indietro", "UP/DN  ENTER change  Esc back")); break;
-        case ST_CINE:     nucleo_app_set_hint(tx("premi un tasto per saltare", "press any key to skip")); break;
-        case ST_MAP:      nucleo_app_set_hint(tx("frecce mira  INVIO salta  Esc", "arrows aim  ENTER jump  Esc")); break;
-        case ST_SYSTEM:   nucleo_app_set_hint(tx("SU/GIU  INVIO apri  Esc titolo", "UP/DN  ENTER open  Esc title")); break;
-        case ST_MARKET:   nucleo_app_set_hint(tx("SU/GIU  DX/B compra  SX/S vendi", "UP/DN  R/B buy  L/S sell")); break;
-        case ST_SHIPYARD: nucleo_app_set_hint(tx("SU/GIU  INVIO compra  Esc", "UP/DN  ENTER buy  Esc")); break;
-        case ST_PLANCIA:  nucleo_app_set_hint(tx("Esc indietro", "Esc back")); break;
-        case ST_EVENT:    nucleo_app_set_hint(tx("SU/GIU scegli  INVIO conferma", "UP/DN pick  ENTER confirm")); break;
-        case ST_MISSIONS: nucleo_app_set_hint(tx("SU/GIU scegli  INVIO briefing  Esc", "UP/DN pick  ENTER brief  Esc")); break;
-        case ST_BRIEF:    nucleo_app_set_hint(tx("SU/GIU  INVIO conferma  Esc", "UP/DN  ENTER confirm  Esc")); break;
-        case ST_COMBAT:   nucleo_app_set_hint(g_tilt && nucleo_imu_present()
-                              ? tx("Inclina/Frecce mira  A spara  S missile  Esc fuggi", "Tilt/Arrows aim  A fire  S missile  Esc flee")
-                              : tx("Frecce mira  A spara  S missile  Esc fuggi", "Arrows aim  A fire  S missile  Esc flee")); break;
-        case ST_DEBRIEF:  nucleo_app_set_hint(tx("INVIO continua", "ENTER continue")); break;
+        case ST_TITLE:    nucleo_app_set_hint(GT("SU/GIU  INVIO scegli  Esc esci", "UP/DN  ENTER pick  Esc quit")); break;
+        case ST_SETTINGS: nucleo_app_set_hint(GT("SU/GIU  INVIO cambia  Esc indietro", "UP/DN  ENTER change  Esc back")); break;
+        case ST_CINE:     nucleo_app_set_hint(GT("premi un tasto per saltare", "press any key to skip")); break;
+        case ST_MAP:      nucleo_app_set_hint(GT("frecce mira  INVIO salta  Esc", "arrows aim  ENTER jump  Esc")); break;
+        case ST_SYSTEM:   nucleo_app_set_hint(GT("SU/GIU  INVIO apri  Esc titolo", "UP/DN  ENTER open  Esc title")); break;
+        case ST_MARKET:   nucleo_app_set_hint(GT("SU/GIU  DX/B compra  SX/S vendi", "UP/DN  R/B buy  L/S sell")); break;
+        case ST_SHIPYARD: nucleo_app_set_hint(GT("SU/GIU  INVIO compra  Esc", "UP/DN  ENTER buy  Esc")); break;
+        case ST_PLANCIA:  nucleo_app_set_hint(GT("Esc indietro", "Esc back")); break;
+        case ST_EVENT:    nucleo_app_set_hint(GT("SU/GIU scegli  INVIO conferma", "UP/DN pick  ENTER confirm")); break;
+        case ST_MISSIONS: nucleo_app_set_hint(GT("SU/GIU scegli  INVIO briefing  Esc", "UP/DN pick  ENTER brief  Esc")); break;
+        case ST_BRIEF:    nucleo_app_set_hint(GT("SU/GIU  INVIO conferma  Esc", "UP/DN  ENTER confirm  Esc")); break;
+        case ST_COMBAT:   nucleo_app_set_hint(GT("Frecce mira  A fuoco  S missile", "Arrows aim  A fire  S missile")); break;
+        case ST_DEBRIEF:  nucleo_app_set_hint(GT("INVIO continua", "ENTER continue")); break;
         default: break;
     }
 }
 static void title_enter(void)
 {
     int act[4]; int n = title_items(act);
-    int a = act[clampi(s_msel, 0, n - 1)];
+    int a = act[clampi(s_tmenu.sel, 0, n - 1)];
     sfx(SFX_OK);
     if (a == 0) continue_game();
-    else if (a == 1) new_game();
-    else { s_setsel = 0; go(ST_SETTINGS); }
+    else if (a == 1) { s_save_bad = false; new_game(); }
+    else { s_smenu.sel = 0; s_smenu.pos = 0; s_del_armed = false; go(ST_SETTINGS); }
 }
 static void settings_activate(void)
 {
-    switch (set_kind(s_setsel)) {
-        case SET_LANG:  g_lang ^= 1; cfg_write(); sfx(SFX_OK); break;
+    switch (set_kind(s_smenu.sel)) {
         case SET_AUDIO: g_audio ^= 1; cfg_write(); sfx(SFX_OK); break;
         case SET_TILT:  if (!nucleo_imu_present()) { sfx(SFX_DENY); break; }   // no IMU -> can't enable
                         g_tilt ^= 1; cfg_write(); sfx(SFX_OK); break;
-        case SET_DELETE: if (s_has_save) { save_wipe(); sfx(SFX_BACK); } else sfx(SFX_DENY); break;
-        default: break;
+        default:        if (!s_has_save) { sfx(SFX_DENY); break; }
+                        if (!s_del_armed) { s_del_armed = true; sfx(SFX_DENY); break; }   // ask once more
+                        save_wipe(); s_ingame = false; s_del_armed = false; sfx(SFX_BACK); break;
     }
     req();
 }
@@ -2856,19 +2698,16 @@ static void hub_open(void)
 
 static void on_key(int k, char ch)
 {
-    if (!cur_sys) return;          // OOM error state: ignore input (Esc closes via on_back at ST_TITLE)
     switch (s_screen) {
         case ST_CINE: cine_end(); return;
         case ST_TITLE: {
             int act[4]; int n = title_items(act);
-            if (k == NK_UP)   { s_msel = (s_msel - 1 + n) % n; sfx(SFX_MOVE); req(); }
-            else if (k == NK_DOWN) { s_msel = (s_msel + 1) % n; sfx(SFX_MOVE); req(); }
+            if (gui::menu_key(s_tmenu, k, n)) { sfx(SFX_MOVE); req(); }
             else if (k == NK_ENTER || k == NK_RIGHT) title_enter();
             return;
         }
         case ST_SETTINGS:
-            if (k == NK_UP)   { s_setsel = (s_setsel + set_count() - 1) % set_count(); sfx(SFX_MOVE); req(); }
-            else if (k == NK_DOWN) { s_setsel = (s_setsel + 1) % set_count(); sfx(SFX_MOVE); req(); }
+            if (gui::menu_key(s_smenu, k, set_count())) { s_del_armed = false; sfx(SFX_MOVE); req(); }
             else if (k == NK_ENTER || k == NK_RIGHT) settings_activate();
             return;
         case ST_MAP:
@@ -2899,7 +2738,7 @@ static void on_key(int k, char ch)
             return;
         }
         case ST_MISSIONS: {
-            int el[NMISSIONS]; int n = eligible_missions(el);
+            int el[NMISS_PER_SYS]; int n = eligible_missions(el);
             if (n == 0) return;
             if (k == NK_UP)   { s_misssel = (s_misssel - 1 + n) % n; sfx(SFX_MOVE); req(); }
             else if (k == NK_DOWN) { s_misssel = (s_misssel + 1) % n; sfx(SFX_MOVE); req(); }
@@ -2937,7 +2776,7 @@ static bool on_back(int key)
     if (key == NK_LEFT) {
         switch (s_screen) {
             case ST_TITLE:    break;                                // Left has no meaning on the title
-            case ST_SETTINGS: settings_activate(); break;
+            case ST_SETTINGS: if (set_kind(s_smenu.sel) != SET_DELETE) settings_activate(); break;
             case ST_MAP:      map_cycle(-1); break;
             case ST_SYSTEM:   s_hubsel = (s_hubsel + 5) % 6; sfx(SFX_MOVE); req(); break;
             case ST_MARKET:   if (s_mktsel < NGOODS) { sell_good(s_mktsel); req(); } break;
@@ -2953,11 +2792,16 @@ static bool on_back(int key)
         case ST_TITLE:    return false;                       // let the framework close the app
         case ST_CINE:     cine_end(); return true;
         case ST_EVENT:    return true;                        // must choose
-        case ST_SETTINGS: sfx(SFX_BACK); go(ST_TITLE); return true;
+        case ST_SETTINGS: s_del_armed = false; sfx(SFX_BACK); go(ST_TITLE); return true;
         case ST_MAP: case ST_MARKET: case ST_SHIPYARD: case ST_PLANCIA: case ST_MISSIONS:
                           sfx(SFX_BACK); go(ST_SYSTEM); return true;
         case ST_BRIEF:    sfx(SFX_BACK); go(ST_MISSIONS); return true;
-        case ST_COMBAT:   if (!s_result) combat_end(-1); return true;   // disengage = mission failed
+        case ST_COMBAT:                                  // disengaging fails the mission: Esc twice
+            if (s_result) return true;
+            if (s_now < s_flee_until) { combat_end(-1); return true; }
+            s_flee_until = s_now + 2000; s_cmsg_until = s_flee_until; sfx(SFX_DENY);
+            snprintf(s_cmsg, sizeof s_cmsg, "%s", GT("Esc di nuovo: fuga", "Esc again: flee"));
+            return true;
         case ST_DEBRIEF:  go(ST_SYSTEM); return true;
         case ST_SYSTEM:   save_write(); sfx(SFX_BACK); go(ST_TITLE); return true;
         default:          return false;
@@ -2967,12 +2811,6 @@ static bool on_back(int key)
 // ============================ draw / tick / poll =============================
 static void on_draw(void)
 {
-    if (!cur_sys) {                // OOM at enter: honest message instead of dereferencing NULL pools
-        d.fillScreen(COL_SPACE);
-        d.setTextSize(1); d.setTextColor(COL_RED, COL_SPACE);
-        d.setCursor(12, H / 2 - 4); d.print(g_lang ? "Out of memory - Esc" : "Memoria insufficiente - Esc");
-        return;
-    }
     switch (s_screen) {
         case ST_TITLE:    draw_title(); break;
         case ST_SETTINGS: draw_settings(); break;
@@ -2993,15 +2831,16 @@ static void on_draw(void)
 // ~30 Hz animation only on the live screens; static screens repaint on input.
 static bool poll(void)
 {
-    if (!cur_sys) return false;
+    int64_t prev = s_now;
     s_now = esp_timer_get_time() / 1000;
+    if (s_screen == ST_TITLE)    return gui::menu_tick(s_tmenu, (int)(s_now - prev));   // still menus push nothing
+    if (s_screen == ST_SETTINGS) return gui::menu_tick(s_smenu, (int)(s_now - prev));
     // The title is a menu: it repaints on input only (request_draw / go()), so it sits perfectly
     // still instead of re-blitting the starfield at ~30 Hz (the idle flicker). Map / cinematic /
     // combat are motion screens and keep animating.
     // TITLE/SETTINGS now animate too: the Mode-7 menu floor scrolls and the IMU parallax tracks live.
     // The double buffer composites off-screen and blits once, so this is flicker-free (same as combat).
-    bool animated = (s_screen == ST_MAP || s_screen == ST_CINE || s_screen == ST_COMBAT ||
-                     s_screen == ST_TITLE || s_screen == ST_SETTINGS);
+    bool animated = (s_screen == ST_MAP || s_screen == ST_CINE || s_screen == ST_COMBAT);
     if (!animated) return false;
     int64_t elapsed = s_now - s_last_frame;
     if (elapsed < 33) return false;
@@ -3017,42 +2856,17 @@ static bool poll(void)
     return true;
 }
 
-// EXCLUSIVE-MODE RAM: the game state (systems cache + combat pools) lives on the HEAP only while the
-// app is open — allocated here, freed in on_exit — so it costs ZERO RAM at boot (the no-hoarding rule).
-static bool cstl_alloc(void)
-{
-    cur_sys = (Sys  *)calloc(NSYS,  sizeof(Sys));
-    s_warp  = (Warp *)calloc(NWARP, sizeof(Warp));
-    s_part  = (Part *)calloc(NPART, sizeof(Part));
-    s_bolt  = (Bolt *)calloc(NBOLT, sizeof(Bolt));
-    s_foe   = (Foe  *)calloc(NFOE,  sizeof(Foe));
-    return cur_sys && s_warp && s_part && s_bolt && s_foe;
-}
-static void cstl_free(void)
-{
-    free(cur_sys); cur_sys = nullptr;
-    free(s_warp);  s_warp  = nullptr;
-    free(s_part);  s_part  = nullptr;
-    free(s_bolt);  s_bolt  = nullptr;
-    free(s_foe);   s_foe   = nullptr;
-}
-
 static void on_enter(void)
 {
+    game_text_open("stelle");
     ensure_dirs();
     cfg_read();
-    if (!cstl_alloc()) {            // OOM: harmless error state (on_draw/poll/on_key guard on cur_sys)
-        cstl_free();
-        s_screen = ST_TITLE;
-        nucleo_app_set_back_handler(on_back);
-        nucleo_app_set_hint(tx("Memoria insufficiente - Esc", "Out of memory - Esc"));
-        req();
-        return;
-    }
     s_rng ^= (uint32_t)esp_timer_get_time();
     s_has_save = save_read(&g);     // peek (g is overwritten by new/continue anyway)
-    s_ingame = false;
-    s_screen = ST_TITLE; s_msel = 0; s_anim = 0; s_status[0] = 0;
+    struct stat st;
+    s_save_bad = !s_has_save && stat(DIR "/save.bin", &st) == 0;   // there, but it does not read back
+    s_ingame = false; s_del_armed = false; s_flee_until = 0;
+    s_screen = ST_TITLE; s_tmenu.sel = 0; s_tmenu.pos = 0; s_anim = 0; s_status[0] = 0;
     s_scroll[0] = s_scroll[1] = s_scroll[2] = 0;
     s_now = s_last_frame = esp_timer_get_time() / 1000;
     stars_init();
@@ -3065,16 +2879,29 @@ static void on_enter(void)
 static void on_exit(void)
 {
     if (s_ingame) save_write();
+    s_ingame = false;
     nucleo_audio_stop();
-    cstl_free();                   // release the game-state heap -> back to ZERO RAM until next open
+    nucleo_app_set_fullscreen(false);
+    game_text_close();
 }
+
+// Per-app RAM: allocated by the framework before on_enter, freed after on_exit (zero while closed).
+static const nucleo_app_ram_t APP_RAM[] = {
+    { (void **)&cur_sys, sizeof(Sys) * NSYS },     { (void **)&s_warp, sizeof(Warp) * NWARP },
+    { (void **)&s_part, sizeof(Part) * NPART },    { (void **)&s_bolt, sizeof(Bolt) * NBOLT },
+    { (void **)&s_foe, sizeof(Foe) * NFOE },       { (void **)&s_shk, sizeof(Shk) * NSHK },
+    { (void **)&s_rip, sizeof(Rip) * NRIP },       { (void **)&s_death, sizeof(Death) * NDEATH },
+    { (void **)&s_msl, sizeof(Msl) * NMSL },       { (void **)&s_pu, sizeof(Pickup) * NPU },
+    { (void **)&star, sizeof(Star) * NSTAR },      { (void **)&s_mt, sizeof(MisTxt) },
+    { nullptr, 0 } };
 
 extern "C" void nucleo_register_constellations(void)
 {
     static const nucleo_app_def_t app = {
         "stelle", "Costellazioni", "Games", "Mercante stellare: riaccendi i Fari",
         'C', C_BLUE, on_enter, on_key, nullptr, on_draw, on_exit,
-        NX_NET_APP   // free ~60KB (httpd/mDNS/voice/L1) before on_enter so the combat pools always fit -> no launch OOM
+        NX_NET_APP,  // free ~60KB (httpd/mDNS/voice/L1) before on_enter so the pools always fit -> no launch OOM
+        APP_RAM
     };
     nucleo_app_register(&app);
 }

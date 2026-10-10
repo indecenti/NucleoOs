@@ -21,7 +21,7 @@ const out = Buffer.alloc(n);
 for (let i = 0; i < n; i++) {
   const px = src.readUInt16LE(i * 2);
   if (px === 0xF81F) { out[i] = TKEY; continue; }             // 565 magenta -> 332 magenta
-  let c = (((px >> 13) & 7) << 5) | (((px >> 8) & 7) << 2) | ((px >> 2) & 3);
+  let c = (((px >> 13) & 7) << 5) | (((px >> 8) & 7) << 2) | ((px >> 3) & 3);   // blue: top 2 of 5 bits (was >> 2: wrong blues, fixed 2026-10)
   if (c === TKEY) c = 0xE7;                                    // nudge a real-magenta opaque pixel off the key
   out[i] = c;
 }

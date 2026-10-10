@@ -1,13 +1,13 @@
 // constellations_content.h — static content for the "Costellazioni" space-trader game.
 //
-// PURE DATA: bilingual text pairs {IT, EN}, goods, economies, systems, factions, narrative
-// events, and cinematic copy. Included by exactly ONE translation unit (app_constellations.cpp),
-// so every `static const` table has internal linkage with a single copy in flash (.rodata) —
-// ZERO RAM cost (honours the no-hoarding rule). All display strings are ASCII only: the M5GFX
-// bitmap font has no accents, so Italian uses the apostrophe form ("citta'") like the rest of the OS.
+// PURE DATA: text pairs {IT, EN} (Spanish/French/German come from the game's language pack, keyed by the
+// English text: tools/game-i18n/stelle.json), goods, economies, factions, narrative events and cinematic
+// copy. Included by exactly ONE translation unit (app_constellations.cpp); every table is `const` all the
+// way down (pointer arrays too: `const char *const`), so it lives in flash (.rodata) — ZERO RAM cost.
+// All display strings are ASCII only: the TFT fonts have no accents, so Italian uses the apostrophe form.
+// tools/gen-constellations-content.mjs parses GOODS / ECON_NAME / ECONMOD / FAC_NAME and the enums
+// from this file for the web twin — keep their shape.
 #pragma once
-
-enum { LANG_IT = 0, LANG_EN = 1 };
 
 // ---- goods ------------------------------------------------------------------
 enum { G_GRANO = 0, G_ACQUA, G_MINERALI, G_LEGHE, G_COMP, G_MEDIC, G_RELIQ, G_CONTRA, NGOODS };
@@ -27,7 +27,7 @@ static const Good GOODS[NGOODS] = {
 
 // ---- economies --------------------------------------------------------------
 enum { EC_AGRI = 0, EC_MINE, EC_INDU, EC_TECH, EC_REFU, NECON };
-static const char *ECON_NAME[NECON][2] = {
+static const char *const ECON_NAME[NECON][2] = {
     { "Agricolo", "Agri" }, { "Minerario", "Mining" }, { "Industriale", "Industry" },
     { "Tecnologico", "HiTech" }, { "Rifugio", "Refuge" },
 };
@@ -42,7 +42,7 @@ static const int ECONMOD[NECON][NGOODS] = {
 
 // ---- factions ---------------------------------------------------------------
 enum { F_GILDA = 0, F_CUSTODI, F_RELITTI, F_ECO, NFAC };
-static const char *FAC_NAME[NFAC][2] = {
+static const char *const FAC_NAME[NFAC][2] = {
     { "Gilda", "Guild" }, { "Custodi", "Keepers" }, { "Relitti", "Wrecks" }, { "Eco", "Echo" },
 };
 
@@ -74,9 +74,9 @@ enum {
 };
 
 // ---- cinematics -------------------------------------------------------------
-enum { CINE_INTRO = 0, CINE_JUMP, CINE_BEACON, CINE_WIN, CINE_LOSE, CINE_SECTOR };
+enum { CINE_INTRO = 0, CINE_JUMP, CINE_BEACON, CINE_LOSE, CINE_SECTOR };
 
-static const char *INTRO_LINES[][2] = {
+static const char *const INTRO_LINES[][2] = {
     { "Il Glomo di Vesper era unito dai Fari.", "The Cluster was bound by the Beacons." },
     { "Poi il Silenzio: i Fari si spensero.",   "Then the Silence: the Beacons died." },
     { "Le navi saltano cieche, senza celle.",   "Ships jump blind, starved of cells." },
@@ -85,14 +85,7 @@ static const char *INTRO_LINES[][2] = {
 };
 #define NINTRO ((int)(sizeof(INTRO_LINES)/sizeof(INTRO_LINES[0])))
 
-static const char *WIN_LINES[][2] = {
-    { "L'ultimo Faro arde.", "The last Beacon burns." },
-    { "Le rotte tornano a brillare nel buio.", "The lanes shine again in the dark." },
-    { "Il Glomo respira. L'Eco tace, in pace.", "The Cluster breathes. Echo at peace." },
-};
-#define NWIN ((int)(sizeof(WIN_LINES)/sizeof(WIN_LINES[0])))
-
-static const char *LOSE_LINES[][2] = {
+static const char *const LOSE_LINES[][2] = {
     { "La Lucciola si spegne nel vuoto.", "The Firefly goes dark in the void." },
     { "Un relitto alla deriva nel Silenzio.", "One more wreck adrift in the Silence." },
 };
@@ -210,19 +203,16 @@ static const Event EVENTS[] = {
 #define NEVENTS ((int)(sizeof(EVENTS)/sizeof(EVENTS[0])))
 
 // ---- action missions (Wing-Commander-style dogfights) -----------------------
-// A mission is a self-contained "sortie": dock -> Mission Bay -> briefing -> launch a
-// real-time dogfight in the system's space -> debrief & reward. ALL combat state lives in
-// static arrays in the .cpp (no heap), honouring the no-hoarding rule. Missions are pure
-// flash data here, just like the goods/systems/events tables above.
+// A mission is a self-contained "sortie": dock -> Mission Bay -> briefing -> launch a real-time dogfight
+// in the system's space -> debrief & reward. Missions are PROCEDURAL (pg_mission / cur_mission in the
+// .cpp, byte-identical to the web generator); this is the shape they are templated into.
 enum { MT_PATROL = 0, MT_BOUNTY, MT_ESCORT, MT_DEFEND };  // mission archetypes
 enum { FOE_FIGHTER = 0, FOE_SCOUT, FOE_HEAVY, FOE_ACE };  // enemy ship classes (scout=fast/weak, heavy=tanky)
 
 struct Mission {
-    const char *name[2];
-    const char *brief[2];
-    const char *win[2];        // debrief success line
+    const char *name, *brief, *win;  // in the OS language (composed by cur_mission)
     int type;                  // MT_*
-    int offer_fac;             // shown only at systems of this faction (-1 = any inhabited)
+    int offer_fac;             // faction offering it (reputation reward)
     int foe_fac;               // enemy colour/allegiance
     int waves, per_wave;       // dogfight shape
     int foe_hp, foe_dmg;       // per-fighter toughness / bite
@@ -231,52 +221,4 @@ struct Mission {
     int reward_cr, kill_cr;    // base payout + bonus per kill
     int rep_gain;              // reputation to offer_fac on success
     int enemy_rep_loss;        // reputation lost with foe_fac on success
-    int req_flag, forbid_flag; // gating flags (-1 = none)
-    int once;                  // 1 = vanishes once completed (story); 0 = repeatable
-    int set_flag;              // flag SET on success (-1 = none)
 };
-
-static const Mission MISSIONS[] = {
-    // 0 — Guild patrol: sweep raiders (repeatable bread-and-butter)
-    { { "Pattuglia Vesper", "Vesper Patrol" },
-      { "La Gilda paga per ripulire le rotte dai predoni Relitti. Due ondate di caccia leggeri: spazzali via.",
-        "The Guild pays to sweep raiders off the lanes. Two waves of light fighters: clear them out." },
-      { "Rotte ripulite. La Gilda annota il tuo nome.", "Lanes cleared. The Guild notes your name." },
-      MT_PATROL, F_GILDA, F_RELITTI, 3, 2, 30, 8, 850, 0, 230, 25, 5, 4, -1, -1, 0, -1 },
-
-    // 1 — Bounty: the Rust Ace (one-shot story sortie)
-    { { "Asso Ruggine", "Bounty: Rust Ace" },
-      { "Un asso dei Relitti terrorizza il Glomo. Batti la sua scorta, poi affronta lui: veloce, blindato, spietato.",
-        "A Wreck ace terrorises the Cluster. Beat his escort, then face him: fast, armoured, merciless." },
-      { "L'Asso Ruggine non vola piu'. Le stelle brindano al tuo nome.", "The Rust Ace flies no more. The stars toast your name." },
-      MT_BOUNTY, F_GILDA, F_RELITTI, 3, 2, 34, 10, 900, 1, 700, 30, 9, 8, -1, FL_ACE_DEAD, 1, FL_ACE_DEAD },
-
-    // 2 — Escort: keep a freighter alive across three waves (repeatable)
-    { { "Scorta convoglio", "Convoy Escort" },
-      { "Un mercantile della Gilda deve attraversare il settore. Tienilo vivo per tre ondate: se cade, hai fallito.",
-        "A Guild freighter must cross the sector. Keep it alive through three waves: if it falls, you fail." },
-      { "Il convoglio e' al sicuro. Buon lavoro, pilota.", "The convoy is safe. Good work, pilot." },
-      MT_ESCORT, F_GILDA, F_RELITTI, 4, 2, 30, 9, 820, 0, 470, 20, 6, 5, -1, -1, 0, -1 },
-
-    // 3 — Defend: hold the Beacon platform for the Keepers (repeatable)
-    { { "Veglia sul Faro", "Beacon Vigil" },
-      { "I Custodi temono un raid sulla piattaforma del Faro. Difendila a ogni costo: tre ondate la cercano.",
-        "The Keepers fear a raid on the Beacon platform. Defend it at all costs: three waves want it." },
-      { "La piattaforma regge. I Custodi ti benedicono.", "The platform holds. The Keepers bless you." },
-      MT_DEFEND, F_CUSTODI, F_RELITTI, 4, 2, 32, 9, 800, 0, 560, 20, 7, 6, -1, -1, 0, -1 },
-
-    // 4 — Wreck contract: raid a Guild patrol (grey work: pays Wrecks, costs Guild standing)
-    { { "Razzia rotte", "Lane Raid" },
-      { "I Relitti pagano per colpire una pattuglia della Gilda. Sporco, ma redditizio. La Gilda non dimentichera'.",
-        "The Wrecks pay to hit a Guild patrol. Dirty, but it pays. The Guild will not forget." },
-      { "Bottino diviso. I Relitti ti vogliono ancora.", "Loot split. The Wrecks want you again." },
-      MT_PATROL, F_RELITTI, F_GILDA, 3, 2, 32, 9, 880, 0, 410, 25, 6, 7, -1, -1, 0, -1 },
-
-    // 5 — Open sweep: a quick single wave, available anywhere (repeatable easy money)
-    { { "Bonifica settore", "Sector Sweep" },
-      { "Segnali ostili nei dintorni. Un giro di pulizia veloce: una sola ondata di predoni.",
-        "Hostiles pinged nearby. A quick clean-up run: a single wave of raiders." },
-      { "Settore tranquillo. Crediti accreditati.", "Sector quiet. Credits paid." },
-      MT_PATROL, -1, F_RELITTI, 2, 3, 26, 7, 800, 0, 180, 22, 3, 3, -1, -1, 0, -1 },
-};
-#define NMISSIONS ((int)(sizeof(MISSIONS)/sizeof(MISSIONS[0])))

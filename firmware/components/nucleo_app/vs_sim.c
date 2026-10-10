@@ -8,12 +8,15 @@
 
 // 32-direction unit circle in 8.8 (cos, sin scaled by 256). Precomputed constant table — the
 // 16-bit way to place spawns / aim / orbit without trig at runtime.
-static const int16_t VS_COS[32] = {
+const int16_t vs_cos32[32] = {
     256, 251, 237, 213, 181, 142, 98, 50, 0, -50, -98, -142, -181, -213, -237, -251,
    -256,-251,-237,-213,-181,-142, -98,-50, 0,  50,  98,  142,  181,  213,  237,  251 };
-static const int16_t VS_SIN[32] = {
+const int16_t vs_sin32[32] = {
       0,  50,  98, 142, 181, 213, 237, 251, 256, 251, 237, 213, 181, 142, 98, 50,
       0, -50, -98,-142,-181,-213,-237,-251,-256,-251,-237,-213,-181,-142, -98,-50 };
+
+#define VS_COS vs_cos32
+#define VS_SIN vs_sin32
 
 static uint32_t rnd(VS *w) { w->rng = w->rng * 1664525u + 1013904223u; return w->rng; }
 
@@ -94,6 +97,7 @@ static void spawn_boss(VS *w)
     w->ealive[slot] = 1; w->eranged[slot] = 1; w->eelite[slot] = 1; w->eboss[slot] = 1; w->ehflash[slot] = 0;
     w->efire_cd[slot] = 60;
     w->en_count++; w->boss_alive = 1; w->boss_hpmax = w->ehp[slot];
+    w->ev |= VS_EV_BOSS;
 }
 
 // ---- weapon inventory helpers (exposed for the app's level-up chooser) ----
@@ -193,7 +197,7 @@ static int nearest_enemy(VS *w)
     int pc = cell_of(w, w->ppx, w->ppy);
     if (pc < 0) return -1;
     int pcx = pc % VS_GW, pcy = pc / VS_GW, best = -1; long bestd = 1L << 30;
-    for (int dy = -5; dy <= 5; dy++) for (int dx = -5; dx <= 5; dx++) {
+    for (int dy = -8; dy <= 8; dy++) for (int dx = -8; dx <= 8; dx++) {   // +-128 px: what is on screen
         int cx = pcx + dx, cy = pcy + dy;
         if (cx < 0 || cx >= VS_GW || cy < 0 || cy >= VS_GH) continue;
         for (int i = w->head[cy * VS_GW + cx]; i >= 0; i = w->nxt[i]) {
@@ -220,7 +224,10 @@ static void hurt_enemy(VS *w, int i, int dmg)
             spawn_gem(w, w->ex[i], w->ey[i], w->eelite[i] ? 6 : 1);
             if (w->eelite[i]) { int en = (int)(w->frame / 900); spawn_pickup(w, w->ex[i], w->ey[i], (en % 3 == 0) ? 1 : 0); }
         }
-        w->ealive[i] = 0; w->en_count--; w->kills++;
+        int k = w->fx_rr++ % VS_NFX;                      // a death puff for the app to draw
+        w->fxx[k] = (int16_t)VS_TOINT(w->ex[i]); w->fxy[k] = (int16_t)VS_TOINT(w->ey[i]);
+        w->fxt[k] = 10; w->fxk[k] = w->eboss[i] ? 2 : w->eelite[i] ? 1 : 0;
+        w->ealive[i] = 0; w->en_count--; w->kills++; w->ev |= VS_EV_KILL;
     }
 }
 
@@ -318,6 +325,7 @@ static void fire_piromane(VS *w, int lv)                   // periodic AoE nova 
 {
     int R = 40 + lv * 10 + w->up_area * 6;
     hit_radius(w, w->ppx, w->ppy, R, dmg_base(w, 2));
+    w->ev |= VS_EV_NOVA;
     int slot = free_proj(w); if (slot < 0) return;         // expanding-ring visual
     w->px[slot] = w->ppx; w->py[slot] = w->ppy; w->pvx[slot] = 0; w->pvy[slot] = 0;
     w->plife[slot] = 12; w->ppierce[slot] = 0; w->powner[slot] = 0;
@@ -358,6 +366,8 @@ void vs_step(VS *w)
 {
     w->frame++;
     w->checks = 0;
+    w->ev = 0;
+    for (int k = 0; k < VS_NFX; k++) if (w->fxt[k]) w->fxt[k]--;
 
     // 0) player: integrate velocity (the app eases + owns deceleration, so no friction here)
     w->ppx += w->ppvx; w->ppy += w->ppvy;
@@ -434,7 +444,7 @@ void vs_step(VS *w)
 
         if (w->powner[p]) {                            // enemy bolt: hits the player, never pierces
             if (sqd(w->px[p], w->py[p], w->ppx, w->ppy) <= HIT2) {
-                w->php -= 3; w->palive[p] = 0; w->pr_count--; if (w->shake < 4) w->shake = 4;
+                w->php -= 3; w->palive[p] = 0; w->pr_count--; if (w->shake < 4) w->shake = 4; w->ev |= VS_EV_HURT;
             }
             continue;
         }
@@ -468,7 +478,7 @@ void vs_step(VS *w)
                     if (!w->ealive[i]) continue;
                     w->checks++;
                     if (w->hurt_cd == 0 && sqd(w->ppx, w->ppy, w->ex[i], w->ey[i]) <= CON2) {
-                        w->php -= w->eboss[i] ? 8 : (w->eelite[i] ? 4 : 1); w->hurt_cd = 20;
+                        w->php -= w->eboss[i] ? 8 : (w->eelite[i] ? 4 : 1); w->hurt_cd = 20; w->ev |= VS_EV_HURT;
                         if (w->shake < 4) w->shake = 4;
                     }
                 }
@@ -483,9 +493,8 @@ void vs_step(VS *w)
         long d = sqd(w->gx[g], w->gy[g], w->ppx, w->ppy);
         if (d < mag) { vfix ox, oy; steer(w->ppx - w->gx[g], w->ppy - w->gy[g], VS_TOFIX(3), &ox, &oy); w->gx[g] += ox; w->gy[g] += oy; }
         if (d < 8 * 8) {
-            w->galive[g] = 0; w->gem_count--; w->pxp += w->gval[g];
-            int req = 8 + w->plevel * 3;
-            while (w->pxp >= req) { w->pxp -= req; w->plevel++; w->pending_up++; req = 8 + w->plevel * 3; }
+            w->galive[g] = 0; w->gem_count--; w->pxp += w->gval[g]; w->ev |= VS_EV_GEM;
+            while (w->pxp >= vs_xp_req(w->plevel)) { w->pxp -= vs_xp_req(w->plevel); w->plevel++; w->pending_up++; w->ev |= VS_EV_LEVEL; }
         }
     }
 
@@ -494,8 +503,8 @@ void vs_step(VS *w)
         if (!w->kalive[k]) continue;
         if (sqd(w->kx[k], w->ky[k], w->ppx, w->ppy) <= 12 * 12) {
             w->kalive[k] = 0;
-            if (w->ktype[k] == 0) { w->php += 25; if (w->php > w->phpmax) w->php = w->phpmax; }
-            else                  { w->want_bomb = 8; }     // bomb: clear the screen (below) + flash (app)
+            if (w->ktype[k] == 0) { w->php += 25; if (w->php > w->phpmax) w->php = w->phpmax; w->ev |= VS_EV_HEAL; }
+            else                  { w->want_bomb = 8; w->ev |= VS_EV_BOMB; }   // bomb: clear the screen (below) + flash (app)
         }
     }
     if (w->want_bomb) {
@@ -514,7 +523,7 @@ void vs_step(VS *w)
     if (--w->wave_cd <= 0) {
         int ring_rad = 150 + w->plevel * 4; if (ring_rad > 230) ring_rad = 230;
         spawn_ring(w, 10 + w->plevel, ring_rad);
-        w->wave_cd = 540;
+        w->wave_cd = 540; w->ev |= VS_EV_WAVE;
     }
     // a BOSS every minute (1800 f); an elite on the OFF half-minutes so pacing stays lively
     if (w->frame >= 1800 && (w->frame % 1800) == 0) spawn_boss(w);
