@@ -23,7 +23,7 @@ const GW = join(root, 'apps/games/www/games');
 const url = (p) => pathToFileURL(join(GW, p)).href;
 let pass = 0, fail = 0; const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL:', m); } };
 // regression digests of the generated worlds (update deliberately, with the docs, when a surface rule changes)
-const GOLDEN = { surfaces: '6c4542fe4ccc1e038a8e4b320ad05b6349dd1171a0e470918e833ae98b8ad709' };
+const GOLDEN = { surfaces: '22bd7770b389c9a9531aedcef885a67ca770774f41da1480c01762c80cdbd7c2' };
 
 const G = await import(url('constellations-gen.js'));
 const W = await import(url('stelle/world.js'));

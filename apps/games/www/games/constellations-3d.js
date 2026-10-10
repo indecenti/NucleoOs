@@ -57,7 +57,7 @@ export async function createRenderer(canvas, api) {
   let THREE = null, POST = null, KIT = null, SPACE = null, FX = null, TERRAIN = null;
   if (gl) {
     try {
-      [THREE, POST, KIT, SPACE, FX, TERRAIN] = await Promise.all([import('/apps/games/vendor/three.module.min.js'), import('/apps/games/vendor/three-postfx.js'),
+      [THREE, POST, KIT, SPACE, FX, TERRAIN] = await Promise.all([import('/apps/games/vendor/three.module.min.js'), import('/apps/games/games/stelle/post.js'),
         import('/apps/games/games/stelle/kit.js'), import('/apps/games/games/stelle/space.js'), import('/apps/games/games/stelle/fx.js'), import('/apps/games/games/stelle/terrain.js')]);
     } catch (e) { console.warn('[costellazioni] 3D modules unavailable -> 2D', e); THREE = null; }
   }
@@ -84,49 +84,18 @@ function build3D(M, canvas, gl, ui, hud) {
   const camFill = new THREE.DirectionalLight(0x8fa6c8, 0.55); camFill.position.set(0.3, 0.6, 1); cam.add(camFill); cam.add(camFill.target); camFill.target.position.set(0, 0, -1);   // keeps hulls readable against the dark
   const fx = FX.createFx(THREE, space.near, Q);
   const WORLD = TERRAIN.createWorld(THREE, renderer, space.near, tier.name);
+  WORLD.compileTarget = () => (post ? post.target : null);   // a world's programs are compiled for the target they draw into
   space.near.add(WORLD.group);
   const GAL = createGalaxy(THREE, canvas, tr), emptyScene = new THREE.Scene();
   let mapMode = false;
 
-  // ---- post chain ------------------------------------------------------------------------------------------
-  let composer = null, bloom = null, grade = null, farPass = null, nearPass = null;
-  const GRADE = {
-    uniforms: { tDiffuse: { value: null }, uVig: { value: 0.55 }, uAber: { value: 0.0 }, uFlash: { value: 0 }, uFlashCol: { value: new THREE.Color(1, 1, 1) }, uDmg: { value: 0 }, uSat: { value: 1 }, uTime: { value: 0 }, uFade: { value: 0 }, uHeat: { value: 0 } },
-    vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
-    fragmentShader: `uniform sampler2D tDiffuse; uniform float uVig, uAber, uFlash, uDmg, uSat, uTime, uFade, uHeat; uniform vec3 uFlashCol; varying vec2 vUv;
-      void main() { vec2 c = vUv - 0.5; float r = length(c); vec2 off = c * uAber * r;
-        vec3 col = vec3(texture2D(tDiffuse, vUv + off).r, texture2D(tDiffuse, vUv).g, texture2D(tDiffuse, vUv - off).b);
-        float l = dot(col, vec3(0.2126, 0.7152, 0.0722)); col = mix(vec3(l), col, uSat);
-        col += vec3(0.8, 0.04, 0.02) * uDmg * smoothstep(0.32, 0.78, r);
-        col += vec3(1.0, 0.42, 0.12) * uHeat * smoothstep(0.22, 0.85, r) * (0.8 + 0.2 * sin(uTime * 37.0 + vUv.y * 40.0));
-        col *= 1.0 - uVig * smoothstep(0.42, 0.98, r);
-        col += uFlashCol * uFlash;
-        col *= 1.0 - uFade;
-        col += (fract(sin(dot(vUv * 913.0 + uTime, vec2(12.9898, 78.233))) * 43758.5453) - 0.5) * 0.01;
-        col = min(max(col, vec3(0.0)), vec3(64.0));
-        gl_FragColor = vec4(col, 1.0); }`,
-  };
-  // bright pass: soft knee above the threshold, then compress what feeds the blur (a 30x sun counts like a ~3x lamp),
-  // so highlights glow tight instead of flooding the frame; the clamp is only a last safety net
-  const BRIGHT_FRAG = `uniform sampler2D tDiffuse; uniform float luminosityThreshold; varying vec2 vUv;
-    void main() { vec3 c = min(max(texture2D(tDiffuse, vUv).rgb, vec3(0.0)), vec3(64.0));
-      float l = dot(c, vec3(0.2126, 0.7152, 0.0722)), knee = 0.45, x = clamp(l - luminosityThreshold + knee, 0.0, 2.0 * knee);
-      c *= max(x * x / (4.0 * knee + 1e-4), l - luminosityThreshold) / max(l, 1e-4);
-      float lc = dot(c, vec3(0.2126, 0.7152, 0.0722)); c *= 2.6 / (2.6 + lc);
-      gl_FragColor = vec4(c, 1.0); }`;
+  // ---- post chain (stelle/post.js): one multisampled scene target, a dual-filter bloom, sun shafts, one final pass -----------
+  let post = null, bloom = null, grade = null;
   function setupPost() {
-    if (composer) { composer.dispose(); composer = null; }
-    if (!Q.bloom) return;
+    if (!Q.bloom) { if (post) { post.dispose(); post = null; } bloom = grade = null; return; }
+    if (!post) post = POST.createPost(THREE, renderer, Q);
     const sz = renderer.getDrawingBufferSize(new THREE.Vector2());
-    const rt = new THREE.WebGLRenderTarget(Math.max(2, sz.x), Math.max(2, sz.y), { type: THREE.HalfFloatType, samples: Q.msaa });
-    composer = new POST.EffectComposer(renderer, rt);
-    composer.setPixelRatio(1); composer.setSize(Math.max(2, sz.x), Math.max(2, sz.y));
-    farPass = new POST.RenderPass(space.far, farCam);
-    nearPass = new POST.RenderPass(space.near, cam); nearPass.clear = false; nearPass.clearDepth = true;
-    bloom = new POST.UnrealBloomPass(new THREE.Vector2(sz.x, sz.y), 0.42, 0.16, 1.0);
-    bloom.materialHighPassFilter.fragmentShader = BRIGHT_FRAG; bloom.materialHighPassFilter.needsUpdate = true;
-    grade = new POST.ShaderPass(GRADE);
-    composer.addPass(farPass); composer.addPass(nearPass); composer.addPass(bloom); composer.addPass(grade); composer.addPass(new POST.OutputPass());
+    post.setSize(sz.x, sz.y); bloom = post.bloom; grade = post.grade; bloom.strength = 0.34;
   }
 
   // ---- ship visuals bound to sim slots ----------------------------------------------------------------------------
@@ -164,6 +133,7 @@ function build3D(M, canvas, gl, ui, hud) {
         g.add(base); turrets.push({ k, base, head, gun });
       });
     }
+    g.traverse((o) => { if (o.isMesh) o.layers.enable(WORLD.SHADOW_LAYER); });   // hulls cast into the world's shadow map
     space.near.add(g);
     return { gen: s.gen, g, body, mat, plumes, ec, pods, podA: 0.4, turrets, trail: null, smokeT: 0, flash: 0, dead: false, chain: 0, chainT: 0, warpShown: false, rad: s.cls.rad };
   }
@@ -191,10 +161,10 @@ function build3D(M, canvas, gl, ui, hud) {
   let bpKey = '', pendingBp = null, tunnelT = -1, flashK = 0, hitAber = 0, sysReady = false, hubAng = 0, deathCam = null, intro = 0;
   const camPos = new THREE.Vector3(), camQ = new THREE.Quaternion(), camVel = new THREE.Vector3(), lastCamPos = new THREE.Vector3();
   const perf = { frames: 0, ms: 0, ema: 16.7, worst: 0, hist: new Float32Array(240), hi: 0, simSteps: 0, scale, tier: tier.name, auto: tier.auto, renderer: pickTier.renderer || '',
-    work: new Float32Array(240), wi: 0 };   // work: frame cost with the GPU waited for (tests set __czSync; vsync hides it otherwise)
+    work: new Float32Array(240), wi: 0, cpu: 0 };   // work: frame cost with the GPU waited for (tests set __czSync; vsync hides it otherwise)
   const SYNC_PX = new Uint8Array(4);
   window.__cz = window.__cz || {}; window.__cz.perf = perf;
-  window.__cz.r3d = { get composer() { return composer; }, get bloom() { return bloom; }, get grade() { return grade; }, renderer, cam, space, fx, get world() { return WORLD; }, get worldIdx() { return wIdx; }, setCamera: (m) => { camMode = m; } };
+  window.__cz.r3d = { get post() { return post; }, get bloom() { return bloom; }, get grade() { return grade; }, renderer, cam, space, fx, get world() { return WORLD; }, get worldIdx() { return wIdx; }, setCamera: (m) => { camMode = m; } };
   hud.setOptions({ camera: () => camMode, setCamera: (m) => { camMode = m; }, quality: () => (tier.auto ? 'auto' : tier.name), setQuality: (n) => { setQuality(n); } });
 
   function fit(w, h) {
@@ -506,7 +476,7 @@ function build3D(M, canvas, gl, ui, hud) {
   const _wc = [0, 0, 0], _wq = [0, 0, 0, 1], _wc0 = [0, 0, 0], _wqd = [0, 0, 0, 1], _wsun = [0, 0, 0], _wI = [0, 0, 0];
   const _qPrev = new THREE.Quaternion(), _qNow = new THREE.Quaternion(), _qD = new THREE.Quaternion();
   const sunBase = { col: new THREE.Color(), k: 3, set: false };
-  const WO = { center: _wc, quat: _wq, amb, T: 0, fade: 0, shadow: [0, 0, 0, 0], head: { k: 0, pos: new THREE.Vector3(), dir: new THREE.Vector3() }, weather: null };
+  const WO = { center: _wc, quat: _wq, amb, T: 0, fade: 0, shadow: [0, 0, 0, 0], head: { k: 0, pos: new THREE.Vector3(), dir: new THREE.Vector3() }, weather: null, sunDir: _wsun, atmo: null };
   function switchWorld(i) {
     if (i === wIdx) return;
     if (wIdx >= 0) { space.planetMode(wIdx, true); WORLD.clear(); }
@@ -535,7 +505,7 @@ function build3D(M, canvas, gl, ui, hud) {
       if (alt < act && alt < bd) { bd = alt; best = i; }
     }
     if (best !== wIdx) switchWorld(best);
-    if (wIdx < 0) return;
+    if (wIdx < 0) { ambienceOff(); return; }
     const pl = bp.planets[wIdx], S = WORLD.S;
     planetAt(pl, wIdx, T, _wc); planetQuat(pl, T, _wq);
     // the world spun and moved since the last frame: carry the effects with it
@@ -579,7 +549,9 @@ function build3D(M, canvas, gl, ui, hud) {
     }
     WO.fade = wFade;
     if (U && U.w === wIdx) for (let i = 0; i < U.sites.length; i++) WORLD.setLooted(i, U.sites[i].looted);
+    WO.atmo = wA;
     WORLD.update(dt, cam, WO);
+    ambience(S, U, p, alt, tp);
     // daylight hides the nebula; at night the stars come back over the ground
     const sunUp = (sd.x * (cam.position.x - _wc[0]) + sd.y * (cam.position.y - _wc[1]) + sd.z * (cam.position.z - _wc[2])) / Math.max(1, alt + pl.radius);
     space.daylight(wAirK * sstep(-0.08, 0.15, sunUp) * sstep(tp * 1.1, tp * 0.6, alt));   // a quarter of the air above you still hides the stars by day
@@ -590,6 +562,24 @@ function build3D(M, canvas, gl, ui, hud) {
     space.dispMat.uniforms.uCol.value.setScalar(0.32 * (1 - wAirK * 0.75));
   }
   const cxShowing = () => !!show;
+  // the sound of the world: wind with the speed in the air, the roar of an entry, rain, the biome's own bed, thunder
+  const AMB = { k: 0, biome: '', spd: 0, dens: 0, agl: 1e4, heat: 0, rain: 0, snow: 0, dust: 0, ash: 0, storm: 0, water: 0, night: 0, landed: false, paused: false };
+  let ambOn = false, ambBolts = 0, ambPaused = false;
+  function ambience(S, U, p, alt, tp) {
+    if (!sfx.ambSet) return;
+    if (!ambOn) { sfx.ambStart(); ambOn = true; ambBolts = WORLD.bolt.events; }
+    const wk = S.weather.k, kind = S.weather.kind, low = 1 - Math.min(1, Math.max(0, (alt - S.cloud.alt * 0.8) / 300));
+    AMB.k = Math.min(1, Math.max(0, (tp * 1.5 - alt) / (tp * 0.9))); AMB.biome = S.type; AMB.dens = amb.dens || 0;
+    AMB.spd = p ? p.spd : 0; AMB.agl = U && U.w === wIdx ? U.agl : alt; AMB.heat = U && U.w === wIdx ? U.heat : 0;
+    AMB.rain = kind === 'rain' ? wk * low : 0; AMB.snow = kind === 'snow' ? wk * low : 0; AMB.dust = kind === 'dust' || kind === 'wind' ? wk * low : 0; AMB.ash = kind === 'ash' ? wk * low : 0;
+    AMB.storm = S.weather.storm || S.type === 'gas' ? Math.max(0.4, wk) * low : 0;
+    AMB.water = U && U.w === wIdx && U.water ? 1 : S.sea > 0 && S.liquid !== 3 && S.liquid !== 2 ? 0.25 * low : 0;
+    AMB.night = 1 - Math.min(1, Math.max(0, ((space.sys.sunDir.x * (cam.position.x - _wc[0]) + space.sys.sunDir.y * (cam.position.y - _wc[1]) + space.sys.sunDir.z * (cam.position.z - _wc[2])) / Math.max(1, alt + S.R) + 0.1) / 0.25));
+    AMB.landed = !!(U && U.st === SURF.LANDED); AMB.paused = ambPaused;
+    sfx.ambSet(AMB);
+    if (WORLD.bolt.events !== ambBolts) { ambBolts = WORLD.bolt.events; const d = WORLD.lastStrike || 2000; if (sfx.thunder) sfx.thunder(d); if (d < 700 && sfx.lightningCrackle) sfx.lightningCrackle(); }
+  }
+  function ambienceOff() { if (ambOn && sfx.ambStop) sfx.ambStop(); ambOn = false; }
   // keep a point (the camera) a margin above the ground of the world we are in
   function groundClamp(v, m) {
     if (!F || !F.surf || F.surf.w < 0 || F.surf.w !== wIdx) return;
@@ -973,9 +963,9 @@ function build3D(M, canvas, gl, ui, hud) {
     farCam.quaternion.copy(cam.quaternion); farCam.fov = cam.fov; farCam.position.copy(cam.position);
     if (cam.view && cam.view.enabled) farCam.setViewOffset(cam.view.fullWidth, cam.view.fullHeight, cam.view.offsetX, cam.view.offsetY, cam.view.width, cam.view.height); else farCam.clearViewOffset();
     farCam.updateProjectionMatrix(); cam.updateProjectionMatrix();
-    if (composer) {
-      farPass.scene = mapMode ? GAL.scene : space.far; farPass.camera = mapMode ? GAL.cam : farCam; nearPass.enabled = !mapMode;
-      grade.uniforms.uTime.value = time % 100; composer.render();
+    if (post) {
+      grade.uniforms.uTime.value = time % 100;
+      if (mapMode) post.render(GAL.scene, GAL.cam, null, null); else post.render(space.far, farCam, space.near, cam);
     } else if (mapMode) { renderer.autoClear = true; renderer.setRenderTarget(null); renderer.render(GAL.scene, GAL.cam); }
     else { renderer.autoClear = false; renderer.setRenderTarget(null); renderer.clear(); renderer.render(space.far, farCam); renderer.clearDepth(); renderer.render(space.near, cam); }
   }
@@ -1039,6 +1029,7 @@ function build3D(M, canvas, gl, ui, hud) {
     if (model && model.notes && model.notes.length && ph === 'combat' && F) { const id = model.notes.shift(); hud.note('cz_t_codex', 'good', { name: tr('cz_cx_' + id + '_t') }); }
     if (ph === 'combat' && F) {
       const paused = !!(model.paused || hud.paused() || mapMode);
+      ambPaused = paused;
       // the dock: fade to black while the bay takes the ship
       if (F.dock && F.dock.ph === 3) fadeK = Math.min(1, F.dock.t / 1.4); else if (F.outcome === 3) fadeK = 1;
       F.paused = paused;
@@ -1091,12 +1082,30 @@ function build3D(M, canvas, gl, ui, hud) {
       grade.uniforms.uDmg.value = p && ph === 'combat' ? Math.max(0, 0.35 - hullF) * 2.2 + (p.alive ? 0 : 0.3) : 0;
       grade.uniforms.uSat.value = p && ph === 'combat' ? 0.75 + 0.25 * Math.min(1, hullF * 2.5) : 1;
       grade.uniforms.uHeat.value = F && ph === 'combat' && F.surf ? F.surf.heat * 0.55 : 0;
+      if (grade.uniforms.uWater) { const Sw = wIdx >= 0 ? WORLD.S : null; grade.uniforms.uWater.value = Sw && Sw.sea > 0 && (Sw.liquid === 1 || Sw.liquid === 4) && amb.alt < -0.3 ? 1 : 0; }   // the camera under the sea surface
       if (!(F && (F.dock || F.outcome === 3))) fadeK = Math.max(0, fadeK - dt * 1.4);
       grade.uniforms.uFade.value = mapMode ? 0 : fadeK;
       if (flashK <= 0.01) grade.uniforms.uFlashCol.value.setRGB(1, 1, 1);
     }
+    // sun shafts in the air: the sun's place on screen; the rays strongest with the sun low and through broken cloud
+    if (post) {
+      const ps = post.sun; ps.on = false;
+      if (wIdx >= 0 && wAirK > 0.2 && space.sys.sunDir) {
+        const sdv = space.sys.sunDir;
+        _v.copy(sdv).multiplyScalar(5000).add(cam.position).project(cam);
+        const facing = _v2.copy(sdv).applyQuaternion(_q.copy(cam.quaternion).invert()).z < 0;
+        if (facing && Math.abs(_v.x) < 1.6 && Math.abs(_v.y) < 1.6) {
+          const ux = cam.position.x - _wc[0], uy = cam.position.y - _wc[1], uz = cam.position.z - _wc[2], ul = Math.max(1, Math.hypot(ux, uy, uz));
+          const lowSun = 1 - Math.min(1, Math.max(0, (sdv.x * ux + sdv.y * uy + sdv.z * uz) / ul) * 1.6);
+          ps.on = true; ps.x = _v.x * 0.5 + 0.5; ps.y = _v.y * 0.5 + 0.5;
+          ps.k = wAirK * (0.35 + 0.65 * lowSun) * (1 - Math.max(0, Math.max(Math.abs(_v.x), Math.abs(_v.y)) - 1) / 0.6) * 0.55;
+          const s = amb.sun, m = Math.max(1e-3, s[0], s[1], s[2]); grade.uniforms.uShaftCol.value.setRGB(s[0] / m, s[1] / m, s[2] / m);
+        }
+      }
+    }
     fx.plumesEnd();
     render();
+    perf.cpu += (performance.now() - now - perf.cpu) * 0.05;   // the frame's main-thread cost (GL calls queued, not waited for)
     if (window.__czSync && gl) { gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, SYNC_PX); perf.work[perf.wi++ % perf.work.length] = performance.now() - now; }
     adaptResolution(ph);
   }
@@ -1105,7 +1114,7 @@ function build3D(M, canvas, gl, ui, hud) {
   let adaptT = 0;
   function adaptResolution(ph) {
     adaptT += 1;
-    if (adaptT < 90 || ph !== 'combat') return;
+    if (adaptT < 90 || ph !== 'combat' || window.__czNoDynRes) return;   // the flag pins the scale (perf probes)
     adaptT = 0;
     const base = renderer.getPixelRatio(), maxS = Math.min(Q.scale, 1.35) * (tier.name === 'high' ? dpr : 1), minS = maxS * 0.6;
     let ns = base;
@@ -1115,7 +1124,7 @@ function build3D(M, canvas, gl, ui, hud) {
   }
 
   function dispose() {
-    clearVisuals(); fx.dispose(); WORLD.dispose(); space.dispose(); GAL.dispose(); plasmaMat.dispose(); plasmaGeo.dispose(); gearGeo.dispose(); gearMat.dispose(); if (composer) composer.dispose(); hud.dispose(); ui.dispose();
+    clearVisuals(); fx.dispose(); WORLD.dispose(); space.dispose(); GAL.dispose(); plasmaMat.dispose(); plasmaGeo.dispose(); gearGeo.dispose(); gearMat.dispose(); if (post) post.dispose(); hud.dispose(); ui.dispose();
     mslGeo.dispose(); mslMat.dispose(); pkGeo.dispose(); pkMats.forEach((m) => m.dispose()); cockpit.geometry.dispose(); cockpit.material.dispose();
     if (hubShip) hubShip.material.dispose();
     sfx.stopDrone(); sfx.engineStop && sfx.engineStop();

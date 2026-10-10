@@ -146,10 +146,13 @@ test('costellazioni: illustrations and music download once, then come from Index
   t.after(async () => { await browser.close(); await sim.stop(); });
   const page = await openGame(browser, sim);
   await toHub(page);
-  const fetched = () => page.eval(`performance.getEntriesByType('resource').filter((e) => /\\/stelle\\/assets\\/(img|music)\\//.test(e.name)).map((e) => e.name.split('/').pop())`);
+  // compare by <name>.<hash>: a file over the device's large-file gate is fetched as <name>.<hash>.partN slices and
+  // stored joined under its logical <name>.<hash>.<ext> (assets.js)
+  const stem = (f) => f.replace(/\.(part\d+|[a-z0-9]+)$/, '');
+  const fetched = async () => [...new Set((await page.eval(`performance.getEntriesByType('resource').filter((e) => /\\/stelle\\/assets\\/(img|music)\\//.test(e.name)).map((e) => e.name.split('/').pop())`)).map(stem))];
   assert.ok(await page.waitFor(`performance.getEntriesByType('resource').some((e) => /\\/stelle\\/assets\\/img\\//.test(e.name))`, { timeout: 30000 }), 'the hub streamed its illustrations');
   // wait until what the first visit downloaded is in the store (the hub plays a track, paints its art)
-  const stored = () => page.eval(`new Promise((res) => { const rq = indexedDB.open('stelle-assets', 1); rq.onsuccess = () => { const t = rq.result.transaction('files', 'readonly').objectStore('files').getAllKeys(); t.onsuccess = () => res(t.result.map((k) => k.split('/').pop())); t.onerror = () => res([]); }; rq.onerror = () => res([]); })`);
+  const stored = async () => (await page.eval(`new Promise((res) => { const rq = indexedDB.open('stelle-assets', 1); rq.onsuccess = () => { const t = rq.result.transaction('files', 'readonly').objectStore('files').getAllKeys(); t.onsuccess = () => res(t.result.map((k) => k.split('/').pop())); t.onerror = () => res([]); }; rq.onerror = () => res([]); })`)).map(stem);
   let first = [];
   for (let i = 0; i < 60; i++) { first = await fetched(); const s = await stored(); if (first.length && first.every((f) => s.includes(f))) break; await sleep(500); }
   assert.deepEqual((await stored()).filter((f) => first.includes(f)).sort(), [...new Set(first)].sort(), 'everything downloaded is stored in IndexedDB');

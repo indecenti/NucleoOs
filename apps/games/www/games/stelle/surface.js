@@ -288,7 +288,7 @@ export function surfaceControl(F, p) {
         const e = _int.ev(F, EV.GROUND, p.pos.x - up.x * REST, p.pos.y - up.y * REST, p.pos.z - up.z * REST); e.a = Math.abs(U.vs); e.b = 1; e.s = p;
         setState(F, SURF.LANDED, 'cz_hud_landed');
       }
-      if (U.t > 25) { p.hover = false; setState(F, SURF.FLIGHT, 'cz_hud_land_abort'); }
+      if (U.t > 40) { p.hover = false; setState(F, SURF.FLIGHT, 'cz_hud_land_abort'); }
       return true;
     }
     case SURF.LANDED: {
@@ -301,7 +301,10 @@ export function surfaceControl(F, p) {
       const k = Math.min(1, U.t / 2.6);
       fwdOf(p, V); let fx = V.x - up.x * (V.x * up.x + V.y * up.y + V.z * up.z), fy = V.y - up.y * (V.x * up.x + V.y * up.y + V.z * up.z), fz = V.z - up.z * (V.x * up.x + V.y * up.y + V.z * up.z);
       const fl = Math.hypot(fx, fy, fz) || 1; levelTo(p, fx / fl, fy / fl, fz / fl, up, 2);
-      const vsW = U.agl < 45 ? 14 * (0.4 + k) : 2, fwdW = k * 50;
+      // a cliff or a butte ahead: rise straight up until the way is clear (sampled 70 m and 150 m along the heading)
+      const blocked = groundAt(F, p.pos.x + fx / fl * 70, p.pos.y + fy / fl * 70, p.pos.z + fz / fl * 70) < 28 || groundAt(F, p.pos.x + fx / fl * 150, p.pos.y + fy / fl * 150, p.pos.z + fz / fl * 150) < 22;
+      const vsW = blocked ? 18 : U.agl < 45 ? 14 * (0.4 + k) : 2, fwdW = blocked ? 0 : k * 50;
+      if (blocked) U.t = Math.min(U.t, 3.0);
       p.vel.x = up.x * vsW + fx / fl * fwdW; p.vel.y = up.y * vsW + fy / fl * fwdW; p.vel.z = up.z * vsW + fz / fl * fwdW; p.spd = Math.hypot(p.vel.x, p.vel.y, p.vel.z);
       p.hover = true; p.thr = 0.5; p.fire = false;
       if (U.agl > 22) U.gear = Math.max(0, U.gear - DT * 1.2);
@@ -509,11 +512,14 @@ export function autoSurface(F, p) {
   if (U.st === SURF.FLIGHT) {
     if (U.done) { if (!_int.hostileNear(F, p, 1500)) cmdSurface(F, 'ascend'); return false; }
     let t = U.sites[U.nav];
-    if (!t || t.found || (U.t < 0.3 && !U.picked)) {
+    // a site found by flying over it stays the target while it is close: the visit still lands beside it
+    if (!t || (t.found && t.d > 450) || (U.t < 0.3 && !U.picked)) {
       U.picked = true; let bd = Infinity; for (let i = 0; i < U.sites.length; i++) { const s = U.sites[i]; if (!s.found && s.d < bd) { bd = s.d; U.nav = i; } } t = U.sites[U.nav]; }
     if (!t) { U.done = true; return false; }
-    const hd = t.d;
-    if (hd < 170 && p.spd < 200) cmdSurface(F, 'land');
+    // over the ground, not through it: the horizontal distance (the ship flies 100-200 m up over tall ground)
+    const up = U.up, dx = t.pos.x - p.pos.x, dy = t.pos.y - p.pos.y, dz = t.pos.z - p.pos.z, vu = dx * up.x + dy * up.y + dz * up.z;
+    const hd = Math.hypot(dx - up.x * vu, dy - up.y * vu, dz - up.z * vu);
+    if (hd < 170 && p.spd < 210) cmdSurface(F, 'land');
   } else if (U.st === SURF.LANDED) {
     let t = null; for (const s of U.sites) if (!t || s.d < t.d) t = s;   // the site we came down next to
     const ready = U.t > 4 && (!t || t.d > 420 || (t.found && (t.looted || !t.st.loot.relic || t.d > 300)));
@@ -525,9 +531,9 @@ export function autoSurface(F, p) {
 export function autoFly(F, p) {
   const U = F.surf; if (!U || !F.autoLand || U.st !== SURF.FLIGHT) return false;
   const t = U.sites[U.nav]; if (!t || U.done) return false;
-  const up = U.up, want = 170 - Math.min(130, Math.max(0, 400 - t.d) * 0.35);
-  const dx = t.pos.x - p.pos.x, dy = t.pos.y - p.pos.y, dz = t.pos.z - p.pos.z, vert = dx * up.x + dy * up.y + dz * up.z;
+  const up = U.up, dx = t.pos.x - p.pos.x, dy = t.pos.y - p.pos.y, dz = t.pos.z - p.pos.z, vert = dx * up.x + dy * up.y + dz * up.z;
   const hx = dx - up.x * vert, hy = dy - up.y * vert, hz = dz - up.z * vert, hd = Math.hypot(hx, hy, hz) || 1;
+  const want = 170 - Math.min(120, Math.max(0, 450 - hd) * 0.35);   // come down on the final approach (horizontal distance)
   flyLevel(p, hx / hd, hy / hd, hz / hd, clamp((want - U.agl) / 160, -0.3, 0.4), up);
   p.thr = hd < 600 ? 0.4 : 0.85; p.boosting = hd > 2500 && U.agl > 120 && p.boost > 0.3 && !p.boostLock; p.fire = false;
   return true;

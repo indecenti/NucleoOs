@@ -4,6 +4,7 @@
 //   node tools/web-e2e/costellazioni-shots.mjs --scenes kit,stations --gpu --size 1440x900
 //   --lang it   --out <dir>   --gpu (real GPU, like E2E_GPU=1)
 //   node tools/web-e2e/costellazioni-shots.mjs --scenes worlds --gpu --biomes ocean,ice   → M3 worlds, some biomes
+//   --suffix -v2   appends to every file name (keep a before / after pair side by side)
 // Scenes are plain async functions below; each gets a fresh page with a seeded run (sector 1, credits, a relic).
 // M3 scenes (worlds, entry, ruin, groundfight, worldhud) place the ship with the __cz.dev hooks (overWorld,
 // nearSite) and pin the universe clock (__czClock) so the same light comes back on every run.
@@ -19,6 +20,7 @@ const flag = (k) => process.argv.includes('--' + k);
 const [W, H] = arg('size', '1440x900').split('x').map(Number);
 const OUT = arg('out', join(REPO, 'build', 'web-e2e', 'costellazioni', 'review'));
 const LANG = arg('lang', 'en');
+const SUFFIX = arg('suffix', '');
 const GPU = flag('gpu') || process.env.E2E_GPU === '1';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 export const SAVE_PATH = '/data/games/costellazioni.json';
@@ -27,7 +29,7 @@ export const SAVE_SEED = { ver: 3, credits: 4200, fuel: 8, fuel_max: 8, hull: 10
 
 const key = (page, k) => page.eval(`window.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(k)}, bubbles: true })), true`);
 const frames = (page, n = 2) => page.eval(`new Promise(r => { let k = ${n}; const f = () => (--k > 0 ? requestAnimationFrame(f) : setTimeout(r, 30)); requestAnimationFrame(f); })`);
-async function shot(page, name) { await frames(page, 3); const f = join(OUT, name + '.png'); const ok = await page.screenshot(f); console.log((ok ? '  ✓ ' : '  ✗ ') + f); return f; }
+async function shot(page, name) { await frames(page, 3); const f = join(OUT, name + SUFFIX + '.png'); const ok = await page.screenshot(f); console.log((ok ? '  ✓ ' : '  ✗ ') + f); return f; }
 
 export async function openGame(browser, sim, { lang = LANG, flags = {}, viewport = [W, H], mobile = false } = {}) {
   const page = await browser.newPage();
@@ -202,7 +204,7 @@ const SCENES = {
       await key(page, 'ArrowLeft'); await sleep(2200); await shot(page, 'codex-hangar');
     } finally { await sim.stop(); }
   },
-  // M3 — every biome from orbit, mid-descent (2.6 km, nose down) and low over the ground, in daylight
+  // M3 — every biome from orbit, mid-descent (2.6 km, nose down), at 300 m and low over the ground (70 m), in daylight
   async worlds(browser) {
     for (const b of arg('biomes', Object.keys(BIOMES).join(',')).split(',')) {
       const [sys, pi, az] = BIOMES[b];
@@ -212,6 +214,7 @@ const SCENES = {
         await launch(page);
         await page.eval(`window.__cz.dev.overWorld(${pi}, 16000, 35, ${az}, 0), true`); await lookAtWorld(page, pi); await sleep(3500); await shot(page, `world-${b}-orbit`);
         await page.eval(`window.__cz.dev.overWorld(${pi}, 2600, 35, ${az}, 140), true`); await sleep(300); await lookDown(page, 0.38); await sleep(4500); await shot(page, `world-${b}-descent`);
+        if (b !== 'gas') { await page.eval(`window.__cz.dev.overWorld(${pi}, 300, 35, ${az}, 140), window.__cz.game.flight.surf.assist = true, true`); await sleep(6500); await shot(page, `world-${b}-300m`); }
         await page.eval(`window.__cz.dev.overWorld(${pi}, ${b === 'gas' ? 900 : 70}, 35, ${az}, 140), window.__cz.game.flight.surf.assist = true, true`); await sleep(6500); await shot(page, `world-${b}-surface`);
         await blank(page);
       } finally { await sim.stop(); }

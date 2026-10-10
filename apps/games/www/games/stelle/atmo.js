@@ -41,8 +41,10 @@ vec3 czAtmo(vec3 ro, vec3 rd, float tMax, int N, out vec3 T) {
   float pr = 0.0596831 * (1.0 + mu * mu);
   float pm = 0.1193662 * (1.0 - g2) * (1.0 + mu * mu) / ((2.0 + g2) * pow(max(1e-4, 1.0 + g2 - 2.0 * g * mu), 1.5));
   vec3 sR = vec3(0.0), sM = vec3(0.0), BMe = czMieExt(); float oR = 0.0, oM = 0.0;
-  for (int i = 0; i < 24; i++) {
-    if (i >= N) break;
+  // a loop the shader compiler cannot unroll (its bound comes from a uniform, which is 0): one copy of the body, so
+  // the D3D compiler behind ANGLE builds every program that samples the air in a fraction of the time
+  int n = min(N, 24) + int(uAtG.w);
+  for (int i = 0; i < n; i++) {
     vec3 p = ro + rd * (t0 + (float(i) + 0.5) * dt); float r = length(p), h = r - uAtR.x;
     float dR = exp(-h / uAtR.z) * dt, dM = exp(-h / uAtR.w) * dt;
     oR += dR * 0.5; oM += dM * 0.5;
@@ -73,6 +75,24 @@ export function setAU(A, cx, cy, cz, sun, I) {
   for (let k = 0; k < 3; k++) { u.uBR.value[k] = A.bR[k]; u.uBM.value[k] = A.bM[k]; u.uSunDir.value[k] = sun[k]; u.uSunI.value[k] = I[k]; }
   u.uAtG.value[0] = A.g; u.uAtG.value[1] = A.gain; u.uAtG.value[2] = A.abs;
 }
+
+// ---- the sun's shadow map of the near scene (one cascade that follows the camera; terrain.js renders it) --------------
+// Every receiver (terrain, grass, flora, sites, ship hulls) samples the same map through these shared uniforms:
+// uShMat world -> shadow texture space ([0,1]^3), uShP = (strength 0..1, texel, normal-offset bias in metres, -).
+// uShP.x = 0 means no shadow map (low tier, space): czSunShadow returns 1 at once.
+export const SH = { uShMap: { value: null }, uShMat: { value: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1] }, uShP: { value: [0, 1 / 1024, 0.3, 0] } };
+export const SHADOW_GLSL = /* glsl */`
+uniform highp sampler2DShadow uShMap; uniform mat4 uShMat; uniform vec4 uShP;
+float czSunShadow(vec3 wp, vec3 n, float ndl) {
+  if (uShP.x <= 0.0) return 1.0;
+  vec3 s = (uShMat * vec4(wp + n * uShP.z * (1.0 + 2.0 * (1.0 - clamp(ndl, 0.0, 1.0))), 1.0)).xyz;
+  float edge = min(min(s.x, 1.0 - s.x), min(s.y, 1.0 - s.y));
+  if (edge <= 0.0 || s.z >= 1.0) return 1.0;
+  float t = uShP.y * 0.75; s.z -= uShP.y * 0.6;
+  float v = (texture(uShMap, s + vec3(-t, -t, 0.0)) + texture(uShMap, s + vec3(t, -t, 0.0)) + texture(uShMap, s + vec3(-t, t, 0.0)) + texture(uShMap, s + vec3(t, t, 0.0))) * 0.25;
+  return mix(1.0, v, uShP.x * smoothstep(0.0, 0.06, edge));
+}
+`;
 
 // ---- JS twin -------------------------------------------------------------------------------------------------------
 // A = { R, Rt, HR, HM, bR: [3], bM: [3], g, gain }, sun = unit [3], I = sun irradiance [3]

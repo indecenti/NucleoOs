@@ -139,8 +139,11 @@ edges, mastered to the same loudness. The beacon motif recurs in all four.
 - Three.js r160 (vendored), WebGL2, no build step: plain ES modules under `apps/games/www/games/stelle/…`
   (split by concern: flight, combat, ai, galaxy, planet shaders, surface, ui, audio, assets loader).
   Every shipped file gets its `.gz` twin (`npm run gz:check`).
-- Post-processing: bloom (vendored UnrealBloomPass), tone mapping ACES, optional FXAA; quality tiers auto
-  (integrated GPU / phone vs discrete) with a manual override.
+- Post-processing (`stelle/post.js`, medium / high): the far and near passes into one multisampled half-float target
+  (resolved once), a dual-filter bloom pyramid from half resolution down to 1/32, sun shafts, then one final pass
+  (bloom, grade, ACES tone mapping, sRGB) straight to the canvas — about a third of the old EffectComposer chain on
+  an integrated GPU. Low draws straight to the canvas. Quality tiers auto (integrated GPU / phone vs discrete) with a
+  manual override.
 - Performance: instancing for debris/asteroids/flora, LOD for planets/terrain, pooled particles, fixed-step
   sim at 60 Hz decoupled from render, no per-frame allocation.
 - Assets: a manifest with sizes and priorities; a loader that streams after first paint.
@@ -191,7 +194,7 @@ edges, mastered to the same loudness. The beacon motif recurs in all four.
 ## What the web game shows today (M3 — worlds)
 Every landable world of every system is a whole planet you can fly down to, with no loading screen.
 New modules under `apps/games/www/games/stelle/`: `noise.js`, `planet.js`, `chunk.js`, `terrain-worker.js`,
-`terrain.js`, `atmo.js`, `props.js`, `surface.js` (about 170 KB of source, 57 KB gzipped).
+`terrain.js`, `matgen.js`, `atmo.js`, `props.js`, `surface.js`, `post.js`.
 
 - **The worlds move** (`world.js`): universe time is `Date.now()/1000 − 1767225600` (tests pin it with `__czClock`).
   Planets orbit their star in 3–9 days and spin; moons orbit their planet; the home planet keeps its place (the
@@ -207,36 +210,101 @@ New modules under `apps/games/www/games/stelle/`: `noise.js`, `planet.js`, `chun
 - **Terrain**: a cube-sphere quadtree. Each chunk is 33×33 vertices plus skirts (1 221), built in module workers
   from pooled typed arrays (ping-pong transfer, no per-frame allocation) and kept in an LRU slot pool. The lattice
   is an exact binary fraction of each face, so neighbouring chunks compute the same height at the same vertex
-  (bit-identical seams, checked by the host test); CDLOD geomorphing hides level changes; frustum and horizon
-  culling. Height comes from an integer-hash gradient noise that is bit-identical in JS and GLSL (`noise.js`), on
-  web-only hash domains (`VDOM.SURF`, `FLORA`, `SITE`, `WEATHER`, `ORBIT`), seeded from the world; the orbital view
-  bakes the same macro shape and colours, so the planet seen from orbit is the one you land on. The shared
-  generator output is unchanged (the host test checks its digest).
-- **Biomes** (one rule set per type in `planet.js`, one shading branch per type in `terrain.js`): rocky — mesas,
-  terraces and canyons in banded red stone, snow on the highest peaks; desert — dune seas, wind-cut rock, salt
-  flats; ocean — islands with beaches, grass and dark cliffs, water with waves, sky reflection, sun glint and
-  shore foam; ice — packed snow, blue ice walls, crevasses, a frozen sea; jungle — river valleys, moss and mud,
-  mossy rock; volcanic — basalt, ash, cones, glowing fissures and a lava sea; crystal — violet ground, glassy
-  facets, cyan veins and glowing lakes; gas giant — no ground: three cloud decks coloured by its own bands,
-  the lowest one a pressure floor ("refuses gracefully": no landing, the pressure warning pushes you up). Detail
-  is triplanar procedural texture at four scales with slope/height blending and per-pixel relief; cloud shadows,
-  the ship's shadow, a headlight at night.
-- **Sky and weather** (`atmo.js`): single scattering (Rayleigh + Mie with an absorbing dust term, soft planet shadow)
-  drawn as a full-screen pass, with aerial perspective on terrain, flora and ship hulls; the sun's colour, the
-  sky light on the hulls, the exposure and the stars (hidden by day) all come from the same model (a JS twin of the
-  shader). A cloud shell plus billboard cloud puffs you fly through; weather per type (dust, rain, snow, ash, motes,
-  wind) with storms.
-- **Flora and props** (`props.js`): instanced kinds per biome — hoodoos and shrubs; fossil ribs and rock spires;
-  palms and coral; ice spires and frost; spiral trees with glowing fruit, ferns and glow pods; basalt columns, dead
-  trees and embers; crystal shards and lattices — scattered deterministically per ~300 m cell, faded with
-  distance (big kinds seen further), density and range by quality tier.
-- **Sites** (placed per world from its seed): Costellatori ruins (the Gate of Threads, the Silent Archive, the Last
-  Observatory on the highest ground), relic shrines, crashed ships, faction outposts. A passive scanner ping every
+  (bit-identical seams, checked by the host test); CDLOD geomorphing hides level changes; horizon culling, and the
+  split distance of what lies outside the view counts double (coarser behind you, refined in a few frames when you
+  turn) so the pool holds the near ground at its finest. A drawn-over ancestor stays cached but is recycled first.
+  Height comes from an integer-hash gradient noise that is bit-identical in JS and GLSL (`noise.js`), on web-only
+  hash domains (`VDOM.SURF`, `FLORA`, `SITE`, `WEATHER`, `ORBIT`), seeded from the world; the orbital view bakes the
+  same macro shape and colours, so the planet seen from orbit is the one you land on. Everything finer than the
+  macro field is JS-only and **metric** (wavelengths in metres, whatever the world's size): a domain warp, an
+  "eroded" fractal (`efbm`: each octave damped by the slope the coarser ones built — wide soft valleys, crisp
+  crests; `noise3d` gives the analytic gradient) and a cellular noise (`cell3`) for buttes, cones, karst towers and
+  crystal mesas. Each chunk vertex also carries `aEx` (four bytes): open sky ↔ crevice, wetness (on volcanic worlds:
+  the lava's light), a second type mask and convexity. The shared generator output is unchanged (the host test
+  checks its digest).
+- **Biomes** (one rule set per type in `planet.js`, one material table and shading branch per type in `terrain.js`):
+  - rocky — three levels (basin, plateau, high mesa) with ~150 m escarpments and talus aprons, ragged buttes standing
+    in the basins, canyons cut in two steps with sand floors, ridged ranges; banded sandstone cliffs, red dust and
+    scree, snow on the highest peaks;
+  - desert — dune seas across a wind axis fixed per world (gentle windward slopes, steep slip faces, crests 10–36 m
+    that meander, a second small set at an angle, wind ripples in the sand layer), wind-cut mesas, pale salt playas;
+  - ocean — islands with flat sand beaches, eroded hills and, on some coasts, sea cliffs; shallow shelves;
+  - ice — glacier shelves stepping down in sheer blue ice walls, sharp ridged ranges, long crevasses across the
+    ice's flow in fields; wind-packed snow, scoured blue ice, glitter in the sun, a frozen sea;
+  - jungle — eroded hills, river valleys with wet mud banks, and in places karst towers (pale limestone, grass caps)
+    rising out of the canopy;
+  - volcanic — basalt shelves, cones with craters (some still glowing), lava rivers down to a lava sea under a
+    drifting crust, ash drifts; the rock next to the lava takes its light;
+  - crystal — faceted terraces, knife ridges, crystal mesas; violet facets with thin cyan veins that pulse;
+  - gas giant — no ground: three cloud decks coloured by its own bands, the lowest one a pressure floor ("refuses
+    gracefully": no landing, the pressure warning pushes you up), lightning in the decks.
+  A take-off that faces a cliff rises straight up until the way is clear.
+- **Ground materials** (`matgen.js`): ten tileable layers generated once per session on the GPU into a texture array
+  (512² on medium / high, 256² on low; normal xy, height, tone; mipmapped; one small program per layer plus a normal
+  pass, compiled off the main thread, one layer a frame; a neutral layer stands in until then): rock, sand ripples,
+  grass and moss, gravel, snow with sastrugi, ash crust, ice fractures, crystal facets, dirt, weathered sandstone. Each
+  world paints four of them with its own palette (two colours per slot, mixed by the tone): a flat ground, a second
+  ground, the cliff rock and a special one (canyon sand, salt, beach, blue ice walls, karst, lava crust, facets), chosen by
+  slope, elevation, moisture and the worker's masks and **height-blended** (sand fills the cracks, stones poke
+  through). Biplanar projection (the two dominant planes of the normal) at two scales (a wide one always, the near
+  one fading out by ~240 m) plus a 410 m patch field: no visible tiling from the air. Per-pixel detail normals,
+  cavity and valley occlusion, strata bands by elevation on the cliffs, wet ground darkened and glossy, snow on the
+  peaks, emissive lava cracks and crystal veins. Far away the ground blends into the orbital colour ramp.
+- **Light**: the sun through the air and the cloud shadows as before, plus **one shadow-map cascade** that follows the
+  camera (medium 1024² over ±150 m, high 2048² over ±230 m; texel-snapped, normal-offset PCF): terrain, flora, sites
+  and ship hulls cast and receive it — the hull material reads it for the sun light, so trees, ruins and the
+  nacelles shade the ship (one depth material for every caster: geomorph and instancing included; only the plants
+  inside the box are drawn into it). A sky-coloured hemisphere with the ground's own bounce for what faces down;
+  aerial perspective as before and a low **height fog** (valley mist, dust, ash; denser at dawn, dusk and in rain)
+  lit by the same sky; the sky itself is a **sky-view table** (192×108, the UE4 parameterisation, rendered each
+  frame from the same scattering model) that the sky pass and the water read in one fetch. Sun shafts: a radial
+  blur of the bloom's bright level toward the sun when it is on screen in the air.
+- **Water**: four Gerstner waves along the world's wind (the sea state from its weather), displaced near the camera and
+  shaded with analytic normals plus scrolling ripples, both in a tangent frame anchored near the camera (re-anchored
+  with a cross-fade every 2 km, so the swell never swims); each wave fades out where it would be smaller than a few
+  pixels (no moiré). Fresnel reflection of the real sky (the table) and of the cloud deck, the sun's glitter (a core,
+  a sheen and sparkles), depth colour over the shelf (the sand shows through the shallows), light through the crests,
+  foam bands running up the shore and whitecaps in a blow; rain rings on the surface; a tint if the camera goes
+  under. The lava sea glows only in the open cracks of its crust; the frozen sea shows fractures and a gloss.
+- **Ground cover**: on the finest chunks near the camera (medium 70 m, high 115 m), one tuft per terrain quad built on
+  the GPU straight from the chunk's own vertex buffers (no CPU work, nothing streamed): 6–9 blades placed, sized and
+  coloured by hash and by the masks (lush grass, dry tufts, frost needles, ash with cinders, glowing crystal needles),
+  bent by a gust field that travels over the ground, shrunk to nothing at the range; in rain the same buffers feed
+  the splash rings.
+- **Sky and weather** (`atmo.js`): single scattering (Rayleigh + Mie with an absorbing dust term, soft planet shadow),
+  with aerial perspective on terrain, flora and ship hulls; the sun's colour, the sky light on the hulls, the
+  exposure and the stars (hidden by day) all come from the same model (a JS twin of the shader). The cloud deck is
+  lit as a volume would be (darker where more cloud stands toward the sun, a silver lining, darker bases) under a
+  thin high veil of streaks; billboard puffs you fly through; weather per type (dust, rain, snow, ash, motes, wind)
+  with storms: rain rings on the ground, **lightning** in storms and on gas giants (a jagged bolt, the flash in the
+  sky, the clouds and the ground, thunder by distance), **aurora** curtains on ice worlds at night.
+- **Flora and props** (`props.js`): instanced kinds per biome, now several species each — rocky: hoodoos, gnarled
+  junipers, boulders, shrubs; desert: fossil ribs, rock spires, columnar cacti with glowing buds, boulders; ocean:
+  palms, mangroves on stilt roots, blue coral spires with glowing tips, kelp at the water line, coral, bushes;
+  ice: ice spires, clusters of hexagonal ice crystals, frost, snow-capped boulders; jungle: umbrella canopy trees
+  (18–32 m, glowing pods), spiral trees, tree ferns, ferns, bushes, glow pods, bioluminescent mushrooms; volcanic:
+  basalt columns, ash-covered dead trees with ember cracks, obsidian shards, embers; crystal: crystal trees,
+  shards, lattices, glowing geodes. Scattered deterministically per ~300 m cell; size and hue vary per plant; what
+  faces the sky takes the world's cover (snow, moss, ash, dust); occlusion toward the root, light through the
+  leaves, the shadow map. Small kinds end at 60–70 % of the range; big kinds switch to a light far mesh (150 / 220
+  / 300 m by tier) and, beyond the flora range, become **impostor cards** (painted once per world from the far mesh
+  into an atlas) out to 3.4 km (medium) / 5 km (high), so the forests reach the horizon.
+- **Sites** (placed per world from its seed): Costellatori ruins (the Gate of Threads — on about half the worlds with a
+  broken arch —, the Silent Archive, the Last Observatory on the highest ground), relic shrines, crashed ships,
+  faction outposts, all carved: bevelled weathered blocks, recessed panels, gold star-map glyphs on verdigris plates,
+  fallen blocks and column drums, debris fields out to ~45 m, sized to read from the air. A passive scanner ping every
   8 s in the air shows signals within 2.6 km; `Y` pings 7 km; `N` cycles the signals. A site is found by flying low
   over it (under 240 m, within 320 m, 2.4 s) or landing near it: a banner, a radio line, credits and reputation,
   the codex (the ruin entries and the Costellatori; the Archive brings the novice; the world type's entry on
   arrival). Landing beside a found shrine (or a ruin that holds one) recovers a relic (cargo, or 220 cr when the
   hold is full) and the Echo's sentinels rise; raiders come for a guarded wreck.
+- **Sound** (`constellations-sfx.js`, all procedural): a world's ambience under the music — wind that rises with the
+  speed and the air's density, the roar and crackle of an entry, rain, snow hush, grit; a bed per biome (jungle insects
+  and calls, frogs at night; surf; lava rumble and bubbling; ice wind and cracks; dry wind and rockfall; crystal
+  chimes; the roar of a gas giant), thunder after each strike at the speed of sound. No allocation per frame: the
+  renderer calls `ambSet` every frame, the bed updates at ~15 Hz.
+- **Engines**: the nozzle sprite is a small hot heart in the engine's own colour (white only at its tightest point),
+  not a lamp, so the chase view over a world shows the exhaust, not two white discs.
 - **Surface flight**: ground effect, speed lines, a terrain assist (`U`: levels off, pulls up before the ground),
   terrain collision, bolts strike the ground, the AI keeps off it.
 - **Planet HUD** (`hud.js`): pitch ladder and horizon, flight-path marker, heading tape (planet north), altitude
@@ -248,25 +316,36 @@ New modules under `apps/games/www/games/stelle/`: `noise.js`, `planet.js`, `chun
 - **Web save**: `found` and `looted` bitmasks per `sector:system:world` in `/sd/data/costellazioni/web.json`
   (never in the shared struct).
 - **Quality tiers** (terrain LOD distance `K`, finest vertex spacing, chunk pool, flora density and range, workers,
-  cloud puffs, weather particles): low 2.1 / 4.2 m / 300 / 0.32 × 380 m / 1 / 48 / 700; medium 2.5 / 2.6 m / 420 /
-  0.62 × 650 m / 2 / 90 / 1300; high 2.9 / 1.7 m / 540 / 1.0 × 950 m / 2 / 140 / 2200. Big flora kinds switch to a
-  light far mesh beyond ~320 m (the spiral tree: 1 031 → 288 triangles) and thin out with distance; the instance caps
-  fill from the camera out. The dynamic resolution steps down past 18 ms a frame (to 60 % of the tier's scale) and
-  back up under 12.5 ms.
+  cloud puffs, weather particles; shadow map; ground cover; impostors): low 2.1 / 4.2 m / 380 / 0.32 × 380 m / 1 / 48 /
+  700, no shadow map, no ground cover, no impostors, 256² ground layers, no high veil, no post chain (scale 0.72);
+  medium 2.5 / 2.6 m / 640 / 0.62 × 650 m / 2 / 90 / 1300, shadow 1024² over ±150 m, cover to 70 m (6 blades a
+  quad), impostors to 3.4 km (16 000 cards); high 2.9 / 1.7 m / 860 / 1.0 × 950 m / 2 / 140 / 2200, shadow 2048²
+  over ±230 m, cover to 115 m (9 blades), impostors to 5 km (30 000 cards). Big flora kinds switch to their far mesh
+  beyond 150 / 220 / 300 m and thin out with distance; small kinds end at 60 % (70 % on high) of the flora range; the
+  instance caps fill from the camera out. The dynamic resolution steps down past 18 ms a frame (to 60 % of the tier's
+  scale) and back up under 12.5 ms (`__czNoDynRes` pins it for probes).
 - **Measured** (1920×1080, 100 m over the jungle in rain, `E2E_GPU=1`, after the dynamic resolution settles;
   frame interval avg / p95, then the frame's cost with the GPU waited for): Intel Arc 140T iGPU — auto (= medium,
-  scale 0.78) 15.5 / 16.9 ms, 16.5 ms; low 8.4 / 9.2 ms, 10.1 ms; medium (0.92) 16.0 / 16.8 ms, 18.0 ms; high (0.90)
-  15.2 / 16.0 ms, 18.9 ms. RTX 5070 Laptop — every tier at the 120 Hz cap (8.3 / 8.5 ms); cost auto (= high, 1.35)
-  9.6 ms, high 9.7 ms, medium 6.8 ms, low 4.9 ms.
+  scale 0.85) 13.4 / 14.7 ms, 14.5 ms; low 8.3 / 8.6 ms (the 120 Hz cap), 10.5 ms; medium (1.0) 12.9 / 13.8 ms,
+  15.9 ms; high (0.97) 15.8 / 16.7 ms, 18.8 ms. RTX 5070 Laptop — every tier at the 120 Hz cap (8.3 / 8.5 ms); cost
+  auto (= high, 1.35) 10.3 ms, high 10.3 ms, medium 6.2 ms, low 3.7 ms. GPU timer queries on the iGPU (same place,
+  150 m/s, scale pinned at 1.0 with `__czNoDynRes`): medium 10.4 ms a frame (far 0.8, shadow map 0.8, near 8.2 —
+  terrain ~2.7, flora ~3.0, sky 0.5, clouds 0.7 —, bloom 0.3, final pass 0.3), main thread 2.2 ms; low 5.7 ms at
+  0.72; high 20 ms at 1.35 (its 2048² shadow map 2.2 ms), so high leans on the dynamic resolution there. Before this
+  pass the same medium frame took about 19 ms of GPU, two thirds of it in the old post chain. Entering a world for the
+  first time costs one frame of about 150 ms (the world's programs are compiled off the main thread before it shows).
 - **Tests**: `tools/games-host/test-costellazioni-worlds.mjs` (noise JS↔GLSL twin, terrain determinism and a digest
-  of the generated worlds — update `GOLDEN` deliberately when a surface rule changes —, chunk seams, POI
-  placement, flora, atmosphere, discovery persistence, the descent / landing / take-off state machine);
-  `tools/web-e2e/costellazioni.e2e.mjs` (a world visited end to end with a discovery and the web save, a phone
-  with touch emulation, the gamepad and the jump map, `E2E_GPU=1` frame times over a world per tier on the
-  discrete and the integrated GPU — `launchBrowser({ gpu: 'low-power' })`, `__czSync` for the GPU-waited cost);
-  `tools/web-e2e/costellazioni-shots.mjs --scenes worlds,entry,ruin,groundfight,worldhud --gpu` for review shots
-  (dev hooks `__cz.dev.overWorld(world, alt, sunEl, az, v)` and `__cz.dev.nearSite(world, kinds, dist, alt, v,
-  sunEl)`, flags `__czAutoLand`, `__czAutoSites`, `__czClock`).
+  of the generated worlds — `GOLDEN` was updated for the metric relief of this pass; update it deliberately when a
+  surface rule changes —, chunk seams, POI placement, flora and its far meshes, atmosphere, discovery persistence, the
+  descent / landing / take-off state machine — a take-off under a cliff rises first, the autopilot lands beside a
+  site it has just flown over); `tools/web-e2e/costellazioni.e2e.mjs` (a world visited end to end with a discovery
+  and the web save, a phone with touch emulation, the gamepad and the jump map, `E2E_GPU=1` frame times over a world
+  per tier on the discrete and the integrated GPU — `launchBrowser({ gpu: 'low-power' })`, `__czSync` for the
+  GPU-waited cost); `tools/web-e2e/costellazioni-shots.mjs --scenes worlds,entry,ruin,groundfight,worldhud --gpu` for
+  review shots (`--suffix -v2` keeps a before / after pair; the worlds scene shoots orbit, descent, 300 m and 70 m;
+  dev hooks `__cz.dev.overWorld(world, alt, sunEl, az, v)` and `__cz.dev.nearSite(world, kinds, dist, alt, v,
+  sunEl)`, flags `__czAutoLand`, `__czAutoSites`, `__czClock`, `__czNoDynRes`; `__cz.perf.cpu` is the main thread's
+  share of a frame).
 
 ## Native (Cardputer) — kept in step
 The native game keeps the shared numeric layer and save. It gets the same lore names and faction identities,

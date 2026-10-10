@@ -7,6 +7,7 @@
 //   aMor      (vec4)  xyz = coarse - fine (the position this vertex takes in the parent's mesh: CDLOD geomorph),
 //                     w = level + rockiness (fract)
 //   aSrf      (vec4)  elevation (m, true, negative under liquids), macro height h01, moisture, type mask
+//   aEx       (u8 x4) open sky (1) .. crevice (0), wetness, second type mask, convexity (normalised bytes)
 // The main thread lends its buffers with every request (transferred, not copied) and gets them back filled:
 // in the steady state nothing is allocated on either side.
 import { elevation, cubeDir, nodeSize, GRID } from './planet.js';
@@ -14,12 +15,12 @@ import { elevation, cubeDir, nodeSize, GRID } from './planet.js';
 const N = GRID, V = N + 1, B = V + 2;            // vertices per side, with one border ring
 const NV = V * V + 4 * V;                        // grid + skirts
 const gx = new Float64Array(B * B), gy = new Float64Array(B * B), gz = new Float64Array(B * B);   // true ground positions (planet frame)
-const ge = new Float64Array(B * B), gh = new Float32Array(B * B), gm = new Float32Array(B * B), g1 = new Float32Array(B * B), g2 = new Float32Array(B * B);
+const ge = new Float64Array(B * B), gh = new Float32Array(B * B), gm = new Float32Array(B * B), g1 = new Float32Array(B * B), g2 = new Float32Array(B * B), gx4 = new Uint8Array(B * B * 4);
 const fx = new Float64Array(V * V), fy = new Float64Array(V * V), fz = new Float64Array(V * V);   // displayed positions
-const D = [0, 0, 0], C = [0, 0, 0], EX = { h: 0, mo: 0, m1: 0, m2: 0 };
+const D = [0, 0, 0], C = [0, 0, 0], EX = { h: 0, mo: 0, m1: 0, m2: 0, ao: 1, wet: 0, m3: 0, cv: 0.5 };
 
 export const VERTS = NV, SIDE = V;
-export const newChunkBufs = () => ({ pos: new Float32Array(NV * 3), nrm: new Float32Array(NV * 3), mor: new Float32Array(NV * 4), srf: new Float32Array(NV * 4) });
+export const newChunkBufs = () => ({ pos: new Float32Array(NV * 3), nrm: new Float32Array(NV * 3), mor: new Float32Array(NV * 4), srf: new Float32Array(NV * 4), ex: new Uint8Array(NV * 4) });
 // index buffer: grid triangles (diagonal i,j -> i+1,j+1) + the skirt strips, one per chunk shape
 export function chunkIndex() {
   const idx = [];
@@ -44,8 +45,9 @@ export function buildChunk(S, f, L, ix, iy, out) {
     cubeDir(f, u, v, D);
     const e = elevation(S, D[0], D[1], D[2], EX), r = R + e;
     gx[k] = D[0] * r; gy[k] = D[1] * r; gz[k] = D[2] * r; ge[k] = e; gh[k] = EX.h; gm[k] = EX.mo; g1[k] = EX.m1; g2[k] = EX.m2;
+    gx4[k * 4] = Math.round(EX.ao * 255); gx4[k * 4 + 1] = Math.round(EX.wet * 255); gx4[k * 4 + 2] = Math.round(EX.m3 * 255); gx4[k * 4 + 3] = Math.round(EX.cv * 255);
   }
-  const P = out.pos, Nn = out.nrm, Mo = out.mor, Sr = out.srf;
+  const P = out.pos, Nn = out.nrm, Mo = out.mor, Sr = out.srf, Ex = out.ex;
   for (let j = 0; j < V; j++) for (let i = 0; i < V; i++) {
     const k = (j + 1) * B + (i + 1), o = j * V + i;
     let x = gx[k], y = gy[k], z = gz[k];
@@ -64,6 +66,7 @@ export function buildChunk(S, f, L, ix, iy, out) {
     if (liquid && e < 0) { nx = x; ny = y; nz = z; nl = Math.hypot(x, y, z); }
     Nn[o * 3] = nx / nl; Nn[o * 3 + 1] = ny / nl; Nn[o * 3 + 2] = nz / nl;
     Sr[o * 4] = e; Sr[o * 4 + 1] = gh[k]; Sr[o * 4 + 2] = gm[k]; Sr[o * 4 + 3] = g1[k];
+    Ex[o * 4] = gx4[k * 4]; Ex[o * 4 + 1] = gx4[k * 4 + 1]; Ex[o * 4 + 2] = gx4[k * 4 + 2]; Ex[o * 4 + 3] = gx4[k * 4 + 3];
     Mo[o * 4 + 3] = L + Math.min(0.999, Math.max(0, g2[k]));
   }
   // positions relative to the centre + the geomorph target (the parent mesh: odd vertices sit on the line / diagonal
@@ -85,7 +88,7 @@ export function buildChunk(S, f, L, ix, iy, out) {
     const l = Math.hypot(fx[o], fy[o], fz[o]), k = (l - drop) / l;
     P[s * 3] = fx[o] * k - cx; P[s * 3 + 1] = fy[o] * k - cy; P[s * 3 + 2] = fz[o] * k - cz;
     for (let c = 0; c < 3; c++) Nn[s * 3 + c] = Nn[o * 3 + c];
-    for (let c = 0; c < 4; c++) { Mo[s * 4 + c] = Mo[o * 4 + c]; Sr[s * 4 + c] = Sr[o * 4 + c]; }
+    for (let c = 0; c < 4; c++) { Mo[s * 4 + c] = Mo[o * 4 + c]; Sr[s * 4 + c] = Sr[o * 4 + c]; Ex[s * 4 + c] = Ex[o * 4 + c]; }
     s++;
   };
   for (let i = 0; i < V; i++) edge(i);                       // v = 0 row

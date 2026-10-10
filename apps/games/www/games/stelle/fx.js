@@ -73,7 +73,7 @@ void main() {
   vec3 toCam = cameraPosition - iP; float dl = length(toCam);
   float face = dl > 1e-3 ? dot(iAx, toCam / dl) : 0.0;
   vec4 mv = modelViewMatrix * vec4(iP + iAx * iD.x * 0.12, 1.0);
-  float sz = iD.x * (0.8 + 0.22 * iC.a + 0.45 * iD.y);
+  float sz = iD.x * (0.55 + 0.14 * iC.a + 0.35 * iD.y);   // a small hot heart, not a lamp
   mv.xy += position.xy * sz;
   gl_Position = projectionMatrix * mv;
   vUv = position.xy * 2.0; vCol = iC.rgb; vK = iC.a * smoothstep(-0.2, 0.55, face);
@@ -82,9 +82,10 @@ const NOZ_FRAG = /* glsl */`
 varying vec2 vUv; varying vec3 vCol; varying float vK;
 void main() {
   float r2 = dot(vUv, vUv); if (r2 > 1.0) discard;
-  float core = exp(-r2 * 20.0), halo = exp(-r2 * 4.5) * 0.18;
-  vec3 c = mix(vec3(1.0, 0.97, 0.9), vCol, smoothstep(0.02, 0.35, r2));
-  gl_FragColor = vec4(c * (core * 1.7 + halo) * vK, 1.0);
+  float core = exp(-r2 * 34.0), halo = exp(-r2 * 6.0) * 0.12;
+  vec3 hot = vCol * 1.45 + vec3(0.16, 0.14, 0.12);   // white-hot only at its tightest point, the engine's own colour round it
+  vec3 c = mix(hot, vCol, smoothstep(0.0, 0.22, r2));
+  gl_FragColor = vec4(c * (core * 1.2 + halo) * vK, 1.0);
 }`;
 const RIB_VERT = /* glsl */`
 attribute vec3 iP; attribute vec3 iAx; attribute vec4 iC; attribute vec4 iD;

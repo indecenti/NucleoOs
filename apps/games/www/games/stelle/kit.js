@@ -13,7 +13,7 @@
 // bomber, crystal lance (Lattice), chandelier (Choir), box train (Hauler), collared corvette (Warden),
 // welded freighter (Hulk), cathedral barge (Reliquary). Gun/engine/turret points come from sim.js CLS,
 // so muzzle flashes, plumes and turrets sit exactly where the simulation fires from.
-import { AU, ATMO_GLSL } from './atmo.js';
+import { AU, ATMO_GLSL, SH, SHADOW_GLSL } from './atmo.js';
 import { CLS, F_GILDA, F_CUSTODI, F_RELITTI, F_ECO, F_PLAYER } from './sim.js';
 import { rng } from './world.js';
 
@@ -1417,17 +1417,20 @@ export function hullMaterial(THREE, o = {}) {
   m.userData.U = U;
   const SKY = hullSky(THREE);
   m.onBeforeCompile = (sh) => {
-    Object.assign(sh.uniforms, U, AU, SKY);
+    Object.assign(sh.uniforms, U, AU, SKY, SH);
     sh.vertexShader = sh.vertexShader
       .replace('#include <common>', '#include <common>\nattribute float aGlow;\nvarying float vGlow;\nvarying vec3 vObj;\nvarying vec3 vObjN;\nvarying vec3 vCzW;')
       .replace('#include <begin_vertex>', '#include <begin_vertex>\nvGlow = aGlow; vObj = position; vObjN = objectNormal;')
       .replace('#include <project_vertex>', '#include <project_vertex>\n{ vec4 czWp = vec4(transformed, 1.0);\n#ifdef USE_INSTANCING\nczWp = instanceMatrix * czWp;\n#endif\nvCzW = (modelMatrix * czWp).xyz; }');
     sh.fragmentShader = sh.fragmentShader
+      // the sun (directional light 0) through the world's shadow map: trees, ruins and the ship's own nacelles shade the hull
+      .replace('#include <lights_fragment_begin>', 'vec3 czWn = inverseTransformDirection(normal, viewMatrix);\nfloat czSunSh = czSunShadow(vCzW, czWn, dot(czWn, uSunDir));\n' + THREE.ShaderChunk.lights_fragment_begin.replace('getDirectionalLightInfo( directionalLight, directLight );', 'getDirectionalLightInfo( directionalLight, directLight );\n\t\tif ( UNROLLED_LOOP_INDEX == 0 ) directLight.color *= czSunSh;'))
       .replace('#include <lights_fragment_maps>', '#include <lights_fragment_maps>\niblIrradiance = iblIrradiance * uEnvK + uSkyIrr; radiance = radiance * uEnvK + uSkyRad;')
       .replace('#include <opaque_fragment>', `#include <opaque_fragment>
 if (uAtR.y > 0.0) { float czT = length(vCzW - cameraPosition); vec3 czTr, czIn = czAtmo(cameraPosition - uAtC, (vCzW - cameraPosition) / max(czT, 1e-3), czT, 6, czTr); gl_FragColor.rgb = gl_FragColor.rgb * czTr + czIn; }`)
       .replace('#include <common>', `#include <common>
 ${ATMO_GLSL}
+${SHADOW_GLSL}
 uniform float uEnvK; uniform vec3 uSkyIrr, uSkyRad; varying vec3 vCzW;
 uniform float uFlash; uniform vec3 uFlashCol; uniform float uGlowMul; uniform float uEngine; uniform float uPanel; uniform float uPanelK; uniform float uScorch; uniform float uRock; uniform float uBump; uniform float uNearFade;
 float hullH = 0.0, hullWear = 0.0, hullPaint = 1.0, hullBare = 0.0, hullGloss = 0.0;
