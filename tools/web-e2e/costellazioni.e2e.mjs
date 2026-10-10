@@ -6,7 +6,11 @@
 //     Cardputer expects: credits = old + reward + kill_cr × kills, kills added, hull ≥ 1, contract unchanged;
 //   - pause and retreat from the in-flight menu;
 //   - illustrations and music are stored once: a reload reads them from IndexedDB, not the network;
-//   - (E2E_GPU=1) frame-time budget on the real GPU at the auto quality tier.
+//   - M2: free flight from the bridge ends docked at the station; the 3D galaxy map plots a jump that plays as a
+//     cinematic and lands in the new system; the relight is flown and the lit beacon persists in the shared save
+//     (beacon_lit) while visited systems / relit history / codex go to the web save next to it; the codex pages;
+//   - (E2E_GPU=1) frame-time budget on the real GPU at the auto quality tier, in combat and in free flight, and no
+//     non-finite (NaN/Inf) pixels in the HDR frame.
 // Screenshots for review land in build/web-e2e/costellazioni/.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -53,7 +57,7 @@ async function openGame(browser, sim, { lang = 'en', flags = {}, viewport = [128
 }
 async function toHub(page) {
   if (await page.eval(`document.querySelector('[data-modal]').style.display === 'flex'`)) await key(page, 'Enter');
-  assert.ok(await page.waitFor(`document.querySelector('[data-hub]').style.display === 'block' && document.querySelectorAll('.cz-tab').length === 5`, { timeout: 30000 }), 'hub painted');
+  assert.ok(await page.waitFor(`document.querySelector('[data-hub]').style.display === 'block' && document.querySelectorAll('.cz-tab').length === 6`, { timeout: 30000 }), 'hub painted');
 }
 
 test('costellazioni: the hub paints in all five languages, from the catalog, with no errors', { skip, timeout: 8 * 60 * 1000 }, async (t) => {
@@ -66,9 +70,9 @@ test('costellazioni: the hub paints in all five languages, from the catalog, wit
     // the first language starts the run (it is saved to the card); the others continue it
     if (lang === LANGS[0]) assert.equal(await page.eval(`document.querySelector('[data-modal] h3') && document.querySelector('[data-modal] h3').textContent`), c.cz_ui_no_run, lang + ': new-run offer');
     await toHub(page);
-    const tabs = await page.eval(`[...document.querySelectorAll('.cz-tab')].map((x) => x.textContent)`);
-    assert.deepEqual(tabs, [c.cz_tab_bridge, c.cz_tab_map, c.cz_tab_market, c.cz_tab_shipyard, c.cz_tab_missions], lang + ': tabs');
-    for (const scr of ['1', '2', '3', '4', '5']) {
+    const tabs = await page.eval(`[...document.querySelectorAll('.cz-tab')].map((x) => x.textContent.replace('●', '').trim())`);
+    assert.deepEqual(tabs, [c.cz_tab_bridge, c.cz_tab_map, c.cz_tab_market, c.cz_tab_shipyard, c.cz_tab_missions, c.cz_tab_codex], lang + ': tabs');
+    for (const scr of ['1', '2', '3', '4', '5', '6']) {
       await key(page, scr); await sleep(250);
       const txt = await page.eval(`document.querySelector('[data-cz]').innerText`);
       assert.ok(!/\bcz_[a-z_0-9]+/.test(txt), `${lang}: no raw catalog keys on screen ${scr}: ${(txt.match(/\bcz_[a-z_0-9]+/) || [])[0]}`);
@@ -158,6 +162,107 @@ test('costellazioni: illustrations and music download once, then come from Index
   assert.deepEqual(again, [], 'a reload downloads nothing it already stored: ' + again.join(', '));
 });
 
+const WEB = '/data/costellazioni/web.json';
+const readJson = async (sim, p) => { try { return JSON.parse(await sim.readSd(p)); } catch { return null; } };
+
+test('costellazioni: free flight from the bridge, docking, and the web save next to the shared one', { skip, timeout: 6 * 60 * 1000 }, async (t) => {
+  const sim = await startSim({ seed: { [SAVE]: { ...SAVE0, sys: 6 } } });
+  const browser = await launchBrowser({ args: [HOST_RULES] });
+  t.after(async () => { await browser.close(); await sim.stop(); });
+  const page = await openGame(browser, sim, { flags: { __czAutopilot: true, __czAutoDock: true, __czEncounter: false, __czGod: true, __czTimeScale: 4 } });
+  await toHub(page);
+  await key(page, '1'); await sleep(200); await key(page, 'Enter');
+  assert.ok(await page.waitFor(`!!(window.__cz.game.flight && window.__cz.game.flight.mission.kind === 'explore')`, { timeout: 20000 }), 'launch = free flight');
+  const pois = await page.eval(`window.__cz.game.flight.pois.map((p) => p.kind)`);
+  assert.ok(pois.includes('station') && pois.includes('planet'), 'destinations: ' + pois.join(','));
+  assert.ok(await page.waitFor(`!!(window.__cz.game.flight && window.__cz.game.flight.dock && window.__cz.game.flight.dock.ph >= 1)`, { timeout: 120000, interval: 300 }), 'clearance and the docking run');
+  await frames(page); await page.screenshot(join(OUT, 'docking.png'));
+  assert.ok(await page.waitFor(`document.querySelector('[data-hub]').style.display === 'block' && !window.__cz.game.flight`, { timeout: 120000, interval: 300 }) || await page.waitFor(`document.querySelector('[data-hub]').style.display === 'block'`, { timeout: 5000 }), 'docked: back at the hub');
+  let web = null; for (let i = 0; i < 30 && !web; i++) { web = await readJson(sim, WEB); if (!web) await sleep(300); }
+  assert.ok(web && web.seed === SAVE0.seed && ((web.visited[SAVE0.sector] >>> 0) & (1 << 6)), 'the web save on the card records the visited system');
+  assert.ok(web.codex && web.codex.costellatori != null && web.codex.gilda != null, 'and the codex entries');
+  const disk = await readJson(sim, SAVE);
+  assert.deepEqual(Object.keys(disk).sort(), Object.keys(SAVE0).sort(), 'the shared save keeps its contract');
+  assert.deepEqual(gameErrors(page), [], 'no errors');
+});
+
+test('costellazioni: the 3D galaxy map plots a jump that plays out and lands in the new system', { skip, timeout: 5 * 60 * 1000 }, async (t) => {
+  const sim = await startSim({ seed: { [SAVE]: { ...SAVE0, sys: 6 } } });
+  const browser = await launchBrowser({ args: [HOST_RULES] });
+  t.after(async () => { await browser.close(); await sim.stop(); });
+  const page = await openGame(browser, sim);
+  await toHub(page);
+  await key(page, '2'); await sleep(1500);
+  assert.ok(await page.waitFor(`[...document.querySelectorAll('div')].some((d) => d.style.zIndex === '28' && d.style.display === 'block' && d.children.length >= 10)`, { timeout: 10000 }), 'the 3D map shows its system labels');
+  await key(page, 'Tgt:5'); await sleep(400);
+  assert.equal(await page.eval(`document.querySelector('.cz-mapinfo') && document.querySelector('.cz-mapinfo').innerText.includes(window.__cz.game.model.sector[5].it)`), true, 'the panel shows the picked system');
+  await frames(page); await page.screenshot(join(OUT, 'galaxy-map.png'));
+  const fuel0 = (await readJson(sim, SAVE)).fuel;
+  await key(page, 'Enter');
+  assert.ok(await page.waitFor(`document.querySelector('[data-cz]').classList.contains('cine')`, { timeout: 5000 }), 'the hub steps aside for the jump');
+  assert.ok(await page.waitFor(`window.__cz.game.run.sys === 5 && !document.querySelector('[data-cz]').classList.contains('cine')`, { timeout: 20000 }), 'and comes back in the new system');
+  let disk = null; for (let i = 0; i < 30; i++) { disk = await readJson(sim, SAVE); if (disk.sys === 5) break; await sleep(250); }
+  assert.ok(disk.sys === 5 && disk.fuel < fuel0, 'the jump is in the shared save (system, fuel)');
+  assert.deepEqual(gameErrors(page), [], 'no errors');
+});
+
+test('costellazioni: the relight is flown and the beacon stays lit (shared beacon_lit + web history)', { skip, timeout: 8 * 60 * 1000 }, async (t) => {
+  const sim = await startSim({ seed: { [SAVE]: { ...SAVE0, sys: 7, cargo: [0, 0, 0, 0, 0, 0, 1, 0], credits: 2000 } } });
+  const browser = await launchBrowser({ args: [HOST_RULES] });
+  t.after(async () => { await browser.close(); await sim.stop(); });
+  const page = await openGame(browser, sim, { flags: { __czAutopilot: true, __czGod: true, __czTimeScale: 6 } });
+  await toHub(page);
+  await key(page, '2'); await sleep(600); await key(page, 'ArrowDown'); await sleep(200); await key(page, 'Enter');
+  assert.ok(await page.waitFor(`!!(window.__cz.game.flight && window.__cz.game.flight.mission.relightWanted)`, { timeout: 20000 }), 'the relight flight starts');
+  assert.ok(await page.waitFor(`!!(window.__cz.game.flight && window.__cz.game.flight.mission.relight)`, { timeout: 90000, interval: 300 }), 'the relic is seated, the charge begins');
+  assert.ok(await page.waitFor(`!!(window.__cz.game.flight && window.__cz.game.flight.relit)`, { timeout: 240000, interval: 500 }), 'the beacon bursts into light');
+  await frames(page); await page.screenshot(join(OUT, 'relight.png'));
+  assert.ok(await page.waitFor(`document.querySelector('[data-deb]').style.display === 'flex'`, { timeout: 180000, interval: 500 }), 'the debrief');
+  const it = cat('en');
+  assert.equal(await page.eval(`document.querySelector('.cz-deb .t').textContent`), it.cz_deb_relit);
+  let disk = null; for (let i = 0; i < 40; i++) { disk = await readJson(sim, SAVE); if ((disk.beacon_lit >>> 0) & (1 << 7)) break; await sleep(250); }
+  assert.ok((disk.beacon_lit >>> 0) & (1 << 7), 'beacon_lit bit 7 is set on the card');
+  assert.equal(disk.cargo[6], 0, 'the relic is spent');
+  assert.deepEqual(Object.keys(disk).sort(), Object.keys(SAVE0).sort(), 'the shared save keeps its contract');
+  let web = null; for (let i = 0; i < 30; i++) { web = await readJson(sim, WEB); if (web && web.relights) break; await sleep(300); }
+  assert.ok(web && web.relights >= 1 && ((web.relit[SAVE0.sector] >>> 0) & (1 << 7)), 'the web save keeps the relit beacon');
+  assert.ok(web.codex.relight != null, 'and unlocks its codex entry');
+  assert.deepEqual(gameErrors(page), [], 'no errors');
+});
+
+test('costellazioni: the codex pages through its categories in the OS language', { skip, timeout: 3 * 60 * 1000 }, async (t) => {
+  const sim = await startSim({ seed: { [SAVE]: SAVE0 } });
+  const browser = await launchBrowser({ args: [HOST_RULES] });
+  t.after(async () => { await browser.close(); await sim.stop(); });
+  const page = await openGame(browser, sim, { lang: 'de' });
+  await toHub(page);
+  const de = cat('de');
+  await key(page, '6'); await sleep(500);
+  assert.equal(await page.eval(`document.querySelector('.cz-cxdet h2').textContent`), de.cz_cx_costellatori_t, 'opens on the first lore entry, in German');
+  for (let i = 0; i < 4; i++) await key(page, 'ArrowRight');
+  await sleep(1200);
+  assert.ok(await page.eval(`!!document.querySelector('.cz-hangar')`), 'ship dossiers open the hangar');
+  assert.ok(await page.waitFor(`window.__cz.r3d && document.querySelector('.cz-cxtxt h2') && document.querySelector('.cz-cxtxt h2').textContent === ${JSON.stringify(de.cz_cx_s_courier_t)}`, { timeout: 5000 }), 'the courier dossier is open');
+  const txt = await page.eval(`document.querySelector('[data-cz]').innerText`);
+  assert.ok(!/\bcz_[a-z_0-9]+/.test(txt), 'no raw keys');
+  assert.deepEqual(gameErrors(page), [], 'no errors');
+});
+
+test('costellazioni: free-flight frame time on the real GPU, and a clean HDR frame', { skip: skip || (process.env.E2E_GPU !== '1' && 'set E2E_GPU=1 (needs a GPU)'), timeout: 5 * 60 * 1000 }, async (t) => {
+  const sim = await startSim({ seed: { [SAVE]: { ...SAVE0, sys: 6 } } });
+  const browser = await launchBrowser({ gpu: true, args: [HOST_RULES] });
+  t.after(async () => { await browser.close(); await sim.stop(); });
+  const page = await openGame(browser, sim, { flags: { __czAutopilot: true, __czEncounter: false, __czGod: true }, viewport: [1920, 1080] });
+  await toHub(page);
+  await key(page, '1'); await sleep(200); await key(page, 'Enter');
+  assert.ok(await page.waitFor(`!!(window.__cz.game.flight && window.__cz.game.flight.t > 6)`, { timeout: 60000 }));
+  const p = await page.eval(`new Promise((res) => { const P = window.__cz.perf; const h0 = P.hi; setTimeout(() => { const n = Math.min(P.hi - h0, P.hist.length), a = []; for (let i = 0; i < n; i++) a.push(P.hist[(P.hi - 1 - i) % P.hist.length]); a.sort((x, y) => x - y); res({ tier: P.tier, scale: P.scale, n, avg: a.reduce((s, x) => s + x, 0) / n, p95: a[Math.floor(n * 0.95)] }); }, 4000); })`);
+  console.log('  frame time (free flight)', JSON.stringify(p));
+  assert.ok(p.avg < 17.5 && p.p95 < 25, `60 fps budget in free flight: avg ${p.avg.toFixed(1)} ms, p95 ${p.p95.toFixed(1)} ms`);
+  assert.equal(await page.eval(`JSON.stringify(window.__cz.nanScan(480, 300).filter((x) => x.nan))`), '[]', 'no non-finite pixels in the HDR frame (free flight)');
+});
+
+
 test('costellazioni: frame-time budget on the real GPU (auto tier)', { skip: skip || (process.env.E2E_GPU !== '1' && 'set E2E_GPU=1 (needs a GPU)'), timeout: 5 * 60 * 1000 }, async (t) => {
   const sim = await startSim({ seed: { [SAVE]: SAVE0 } });
   const browser = await launchBrowser({ gpu: true, args: [HOST_RULES] });
@@ -167,6 +272,8 @@ test('costellazioni: frame-time budget on the real GPU (auto tier)', { skip: ski
   await key(page, '5'); await sleep(300); await key(page, 'Enter');
   assert.ok(await page.waitFor(`!!(window.__cz.game.flight && window.__cz.game.flight.t > 8)`, { timeout: 60000 }));
   const p = await page.eval(`new Promise((res) => { const P = window.__cz.perf; const h0 = P.hi; setTimeout(() => { const n = Math.min(P.hi - h0, P.hist.length), a = []; for (let i = 0; i < n; i++) a.push(P.hist[(P.hi - 1 - i) % P.hist.length]); a.sort((x, y) => x - y); res({ tier: P.tier, scale: P.scale, renderer: P.renderer, n, avg: a.reduce((s, x) => s + x, 0) / n, p95: a[Math.floor(n * 0.95)] }); }, 4000); })`);
-  console.log('  frame time', JSON.stringify(p));
+  console.log('  frame time (combat)', JSON.stringify(p));
   assert.ok(p.avg < 17.5 && p.p95 < 25, `60 fps budget: avg ${p.avg.toFixed(1)} ms, p95 ${p.p95.toFixed(1)} ms on ${p.renderer}`);
+  const nan = await page.eval(`JSON.stringify(window.__cz.nanScan(480, 300).filter((x) => x.nan))`);
+  assert.equal(nan, '[]', 'no non-finite pixels in the HDR frame (combat)');
 });

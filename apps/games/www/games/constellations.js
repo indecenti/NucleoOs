@@ -16,8 +16,10 @@ import { genSector, genMissions, beaconsPerSector, F_ECO } from '/apps/games/gam
 import { loadSave, storeSave, newSave } from '/apps/games/games/constellations-save.js';
 import { unitBuy, unitSell, refuelPrice, jumpCost, sysDist, cargoUsed, beaconsLit, beaconsTotal } from '/apps/games/games/constellations-econ.js';
 import { SHOP, shopMaxed, shopCost, shopBuy, repairCost } from '/apps/games/games/constellations-shop.js';
-import { createFlight, ACE_NAMES } from '/apps/games/games/stelle/sim.js';
+import { createFlight, ACE_NAMES, cmd as simCmd, OUT, EV, CLS } from '/apps/games/games/stelle/sim.js';
 import { systemBlueprint } from '/apps/games/games/stelle/world.js';
+import { loadWeb, saveWeb, freshWeb, markVisited, markRelit, markScanned, unlock, markSeen } from '/apps/games/games/constellations-web.js';
+import { ENTRIES, BY_ID, entriesOf, CATS } from '/apps/games/games/constellations-codex.js';
 
 const G_RELIQ = 6, F_CUSTODI = 1;   // relic good index / Keepers faction (beacon relight bookkeeping)
 let conflictPending = null;          // set by persist() when the device advanced the run (-> conflict screen)
@@ -25,6 +27,10 @@ let BOOTED = false;                  // true once the initial loadSave settles (
 
 // ---- shared module state (one active run at a time) --------------------------------------------
 let RUN = null;            // the campaign save (credits, hull, seed, sector, ...)
+let SYNCED = null;         // the copy of RUN last read from / written to the card (storeSave's base)
+let WEB = null;            // the web-only progress next to it (constellations-web.js): visited, codex, relit history
+let PLOT = -1;             // the system the jump drive is plotted to (in flight)
+const CODEX_NEW = [];      // codex entries unlocked since the last toast
 let SECTOR = null;         // genSector(RUN.seed, RUN.sector) — the 10 procedural systems
 let MISSIONS = null;       // genMissions at the current system
 let SAVING = false;        // a POST is in flight
@@ -37,13 +43,55 @@ function rebuildSector() {
   if (RUN.sys < 0 || RUN.sys >= SECTOR.length) RUN.sys = 0;
   CONTENT.systems = SECTOR;              // feed the economy module the live sector (for trade screens)
   MISSIONS = genMissions(RUN.seed, RUN.sector, RUN.sys, SECTOR[RUN.sys].faction);
+  if (PLOT === RUN.sys || PLOT >= SECTOR.length) PLOT = -1;
+  if (WEB) { if (markVisited(WEB, RUN.sector, RUN.sys)) saveWeb(WEB); codexOnSystem(); }
 }
 async function bootRun() {
   RUN = await loadSave();                 // continue the Cardputer run, or null -> offer a New Run
+  SYNCED = RUN ? JSON.parse(JSON.stringify(RUN)) : null;
+  if (RUN) { WEB = await loadWeb(RUN.seed); codexStart(); }
   BOOTED = true;
   if (RUN) rebuildSector();
 }
-function startNewRun() { RUN = newSave(); rebuildSector(); persist(); }
+function startNewRun() { RUN = newSave(); WEB = freshWeb(RUN.seed); codexStart(); rebuildSector(); persist(); saveWeb(WEB); }
+
+// ---- codex: what play unlocks (the web save keeps it; a toast / HUD note says so) --------------------------------
+function codexUnlock(id) { if (!WEB || !BY_ID[id] || !unlock(WEB, id)) return false; CODEX_NEW.push(id); saveWeb(WEB); return true; }
+function codexStart() { for (const e of ENTRIES) if (e.start) unlock(WEB, e.id); }
+const FAC_CODEX = ['gilda', 'custodi', 'relitti', 'eco'];
+function codexOnSystem() {
+  const s = SECTOR[RUN.sys];
+  codexUnlock(FAC_CODEX[s.faction]);
+  if (s.faction === F_ECO) codexUnlock('eco');
+  if (s.beacon) codexUnlock(beaconLitIdx(RUN.sys) ? 'beacon_lit' : 'beacon_dead');
+  if (RUN.sector >= 3) codexUnlock('deep');
+  if (RUN.sector >= 6) codexUnlock('warden');
+  if (RUN.sector >= 9) codexUnlock('beyond');
+  if (RUN.rep[0] >= 25) codexUnlock('c_admiral');
+}
+function codexOnDock() {
+  const f = SECTOR[RUN.sys].faction;
+  if (f === 0) codexUnlock('ardali');
+  if (f === 1) { codexUnlock('lamp'); codexUnlock('c_abbess'); }
+  if (f === 2) { codexUnlock('gutterdeep'); codexUnlock('graveyard'); codexUnlock('c_matriarch'); }
+}
+const ACE_CODEX = ['c_ace_lancer', 'c_ace_vigil', 'c_ace_gutter', null, 'c_ace_bram'];
+let evCursor = 0;
+// flight events the codex cares about (kills, the Voice, surveys, the cast aces), read behind the renderer
+function codexOnFlight(F) {
+  if (F.evHead - evCursor > 500) evCursor = F.evHead - 500;
+  while (evCursor < F.evHead) {
+    const e = F.ev[evCursor % 512]; evCursor++;
+    if ((e.n === EV.KILL || e.n === EV.CAPKILL) && e.s && !e.s.isPlayer && e.s.team === 1) codexUnlock('s_' + e.s.ck);
+    else if (e.n === EV.WARPIN && e.s && e.s.fac === F_ECO) { if (e.s.ck === 'lattice' || e.s.ck === 'choir') { codexUnlock('s_' + e.s.ck); if (e.s.team === 1) codexUnlock('echo_fleet'); } }
+    else if (e.n === EV.COMMS) {
+      if (e.v && e.v.voice) { codexUnlock('voice'); codexUnlock('c_echo'); }
+      const m = /^cz_c_acequip_(\d)$/.exec(e.k || ''); if (m && ACE_CODEX[+m[1]]) codexUnlock(ACE_CODEX[+m[1]]);
+    } else if (e.n === EV.SCAN && e.v) {
+      if (e.k === 'planet' || e.k === 'moon') { codexUnlock('w_' + e.v.type); if (markScanned(WEB, RUN.sector, RUN.sys, e.a)) saveWeb(WEB); }
+    } else if (e.n === EV.RELIGHT) { codexUnlock('relight'); codexUnlock('c_novice'); codexUnlock('beacon_lit'); }
+  }
+}
 async function persist() {
   DIRTY = true;                          // mark the latest RUN as needing a write
   if (SAVING) return;                    // a POST is already running; it will flush the new delta below
@@ -51,8 +99,10 @@ async function persist() {
   try {
     while (DIRTY) {                       // re-POST until the in-RAM RUN matches what we last sent
       DIRTY = false;
-      const r = await storeSave(RUN);
-      if (r && r.conflict && r.disk) { RUN = r.disk; rebuildSector(); conflictPending = r.disk; break; }
+      const snap = JSON.parse(JSON.stringify(RUN));
+      const r = await storeSave(snap, SYNCED);
+      if (r && r.conflict && r.disk) { RUN = r.disk; SYNCED = JSON.parse(JSON.stringify(r.disk)); rebuildSector(); conflictPending = r.disk; break; }
+      if (r && r.ok) SYNCED = snap;
     }
   } catch (e) { console.warn('[costellazioni] save failed', e); }
   finally { SAVING = false; }
@@ -98,9 +148,63 @@ function startCombat(state, cc, flavor) {
   MISSION_FLAVOR = flavor || null;
   const w = typeof window !== 'undefined' ? window : {};
   FLIGHT = createFlight({ bp: currentBlueprint(), cc, run: RUN, seed: RUN.seed >>> 0, sector: RUN.sector >>> 0, sys: RUN.sys, slot: cc.slot | 0,
-    autopilot: !!w.__czAutopilot, god: !!w.__czGod, brief: w.__czNoBrief ? false : undefined, timeScale: w.__czTimeScale | 0 });
+    autopilot: !!w.__czAutopilot, autoDock: !!w.__czAutoDock, god: !!w.__czGod, brief: w.__czNoBrief || cc.kind === 'explore' ? false : undefined, timeScale: w.__czTimeScale | 0 });
+  evCursor = FLIGHT.evHead;
   lastTickAt = (typeof performance !== 'undefined' ? performance.now() : 0);
   return { ...state, phase: 'combat', cc, result: 0, flightNo: (state.flightNo || 0) + 1 };
+}
+// Free flight in the current system: launched from the station (undock), arrived by jump, or flown to the beacon
+// to relight it. A chance encounter waits in some systems (the Echo's drones in Echo space, raiders elsewhere).
+function exploreCfg(o = {}) {
+  const tier = 1 + Math.min(12, RUN.sector), ff = ambushFaction(), sf = SECTOR[RUN.sys].faction;
+  const chance = o.relight ? 0 : sf === F_ECO ? 0.85 : (sf !== 2 && RUN.rep[sf & 3] <= -25) ? 0.75 : 0.4;
+  const w = typeof window !== 'undefined' ? window : {};
+  return { kind: 'explore', type: 0, foeFac: ff, waves: 2, perWave: 3, foeHp: 30 + tier * 6, foeDmg: 7 + tier, foeSpeed: 7.8 + tier * 0.4, ace: 0, rewardCr: 0, killCr: 18 + tier * 4,
+    repFac: -1, repGain: 0, enemyRepFac: ff, enemyRepLoss: 2, mission: false, slot: 13,
+    encounter: w.__czEncounter != null ? !!w.__czEncounter : Math.random() < chance, encounterAt: w.__czEncounterAt || 0,
+    undock: !!o.undock, arrive: !!o.arrive, relight: !!o.relight,
+    // the Echo answers the first beacon of a sector by measuring you; every further one, by fighting
+    echoCalm: beaconsLit(CONTENT, RUN) === 0, litCount: beaconsLit(CONTENT, RUN), keepers: RUN.rep[F_CUSTODI] > -25 };
+}
+function startExplore(state, o) { return startCombat(state, exploreCfg(o), null); }
+// the shared numbers of a relight (the hub used to do this on the spot; now it happens when the light bursts out)
+function applyRelight() {
+  RUN.credits = Math.max(0, RUN.credits - 300); RUN.cargo[G_RELIQ] = Math.max(0, RUN.cargo[G_RELIQ] - 1);
+  RUN.rep[F_CUSTODI] = Math.max(-100, Math.min(100, RUN.rep[F_CUSTODI] + 12));
+  RUN.beacon_lit = (RUN.beacon_lit >>> 0) | (1 << RUN.sys);
+  if (WEB) { markRelit(WEB, RUN.sector, RUN.sys); saveWeb(WEB); }
+  let sectorUp = false;
+  if (beaconsLit(CONTENT, RUN) >= beaconsTotal(CONTENT)) { RUN.sector = (RUN.sector >>> 0) + 1; RUN.beacon_lit = 0; RUN.sys = 0; RUN.epoch = (RUN.epoch >>> 0) + 1; sectorUp = true; }
+  persist();
+  return sectorUp;
+}
+// after the flight: kills, salvage and hull go back to the shared run
+function settleFlight(F, cc) {
+  const kills = F ? F.kills : 0, earn = cc.killCr * kills;
+  RUN.credits = Math.min(9999999, RUN.credits + earn); RUN.kills = (RUN.kills >>> 0) + kills;
+  RUN.hull = Math.max(1, Math.min(RUN.hull_max, Math.round(F ? F.player.hull : RUN.hull)));
+  return earn;
+}
+function dockedEnd(state) {
+  const earn = settleFlight(FLIGHT, state.cc);
+  if (FLIGHT.sectorUp) rebuildSector();
+  persist(); codexOnDock(); FLIGHT = null;
+  return enterScreen({ ...state, phase: 'hub', toast: { key: earn ? 'cz_t_docked_salvage' : 'cz_t_docked', v: { name: SECTOR[RUN.sys].it, cr: earn }, kind: 'good', until: (state.clock || 0) + 2400 } }, 'bridge');
+}
+// the drive fired in flight: the shared jump (fuel, epoch) and a new free flight that drops out in the target system
+function jumpedEnd(state) {
+  const to = FLIGHT.jumpedTo;
+  settleFlight(FLIGHT, state.cc);
+  const d = sysDist(CONTENT, RUN.sys, to), cost = jumpCost(d);
+  if (to >= 0 && to < SECTOR.length && to !== RUN.sys && RUN.fuel >= cost) { RUN.sys = to; RUN.fuel -= cost; RUN.epoch = (RUN.epoch >>> 0) + 1; }
+  PLOT = -1; rebuildSector(); persist();
+  return startExplore({ ...state, focus: { ...state.focus, missions: 0 } }, { arrive: true });
+}
+function jumpInfo(t) {
+  if (!RUN || !SECTOR || t < 0 || t >= SECTOR.length || t === RUN.sys) return { ok: false, why: 'cz_t_pick_dest' };
+  const d = sysDist(CONTENT, RUN.sys, t), cost = jumpCost(d);
+  const why = d > RUN.jump_range ? 'cz_t_out_of_range' : RUN.fuel < cost ? 'cz_t_no_cells' : '';
+  return { ok: !why, why, cost, d: Math.round(d), name: SECTOR[t].it, fac: SECTOR[t].faction };
 }
 
 // ---- bridge (pre-flight) actions ---------------------------------------------------------------
@@ -115,7 +219,7 @@ export default defineGame({
   setup() {
     return {
       phase: RUN ? 'hub' : (BOOTED ? 'new_run' : 'loading'),
-      screen: 'bridge', focus: { bridge: 0, map: 0, market: 0, shipyard: 0, missions: 0 },
+      screen: 'bridge', focus: { bridge: 0, map: 0, market: 0, shipyard: 0, missions: 0, codex: 0 }, codexCat: 0,
       marketCol: 0, marketQty: 1, target: -1, padArmed: true,
       toast: null, flash: null, sel: 0, clock: 0, ev: [],
     };
@@ -128,7 +232,7 @@ export default defineGame({
     if (p === 'new_run') { if (a.type === 'confirm') { startNewRun(); return enterScreen({ ...state, phase: 'hub' }, 'bridge'); } return state; }
     if (p === 'conflict') { if (a.type === 'confirm' || a.type === 'back') return enterScreen({ ...state, phase: 'hub', toast: null }, 'bridge'); return state; }
     if (p === 'combat') return state;   // flight input is read directly by stelle/hud.js
-    if (p === 'debrief') { if (['confirm', 'back', 'fire', 'click'].includes(a.type)) return enterScreen({ ...state, phase: 'hub' }, 'bridge'); return state; }
+    if (p === 'debrief') { if (['confirm', 'back', 'fire', 'click'].includes(a.type)) { FLIGHT = null; return enterScreen({ ...state, phase: 'hub' }, 'bridge'); } return state; }
     if (p === 'hub') return hubReduce(state, a);
     return state;
   },
@@ -138,8 +242,20 @@ export default defineGame({
     if (conflictPending && state.phase === 'hub') { conflictPending = null; return { ...state, phase: 'conflict', toast: { key: 'cz_t_conflict', kind: 'warn' } }; }
     if (state.phase === 'combat') {
       lastTickAt = (typeof performance !== 'undefined' ? performance.now() : 0);
-      if (FLIGHT && FLIGHT.done) return endCombat(state, FLIGHT.outcome === 1 ? 1 : FLIGHT.outcome === 2 ? 2 : -1);
+      if (FLIGHT) {
+        codexOnFlight(FLIGHT);
+        if (FLIGHT.relit && !FLIGHT.relitDone) { FLIGHT.relitDone = true; FLIGHT.sectorUp = applyRelight(); }
+        if (FLIGHT.done) {
+          if (FLIGHT.outcome === OUT.DOCKED) return dockedEnd(state);
+          if (FLIGHT.outcome === OUT.JUMPED) return jumpedEnd(state);
+          return endCombat(state, FLIGHT.outcome === 1 ? 1 : FLIGHT.outcome === 2 ? 2 : -1);
+        }
+      }
       return state;
+    }
+    if (CODEX_NEW.length && state.phase === 'hub' && !(state.toast && state.toast.until > (state.clock || 0))) {
+      const id = CODEX_NEW.shift();
+      return { ...state, clock: (state.clock || 0) + dtMs, toast: { key: 'cz_t_codex', v: { cx: id }, kind: 'good', until: (state.clock || 0) + 2600 } };
     }
     if (state.toast && state.toast.until && (state.clock || 0) + dtMs > state.toast.until) return { ...state, clock: (state.clock || 0) + dtMs, toast: null };
     return { ...state, clock: (state.clock || 0) + dtMs };
@@ -173,18 +289,28 @@ export default defineGame({
 // The live model handed to the renderer/UI (run + generated sector/missions + econ/shop helpers).
 const _model = { run: null, sector: null, missions: null, MT_NAME, CONTENT,
   econ: { unitBuy, unitSell, refuelPrice, jumpCost, sysDist, cargoUsed, beaconsLit, beaconsTotal, beaconsPerSector },
-  shop: { SHOP, shopMaxed, shopCost, repairCost }, flight: null, bp: null, paused: false, flavor: null, sysName: '' };
+  shop: { SHOP, shopMaxed, shopCost, repairCost }, flight: null, bp: null, paused: false, flavor: null, sysName: '', web: null, plot: -1, notes: CODEX_NEW,
+  // what the in-flight HUD may ask of the game (the jump drive needs the shared run's fuel and range)
+  actions: {
+    plot(i) { PLOT = i; },
+    jumpInfo,
+    jump() { const J = jumpInfo(PLOT); if (!J.ok) return J.why; return FLIGHT && simCmd(FLIGHT, 'jump', PLOT) ? '' : 'cz_cr_blocked'; },
+    seen(id) { if (markSeen(WEB, id)) saveWeb(WEB); },
+  } };
 function MODEL() {
   const m = _model;
-  m.run = RUN; m.sector = SECTOR; m.missions = MISSIONS; m.flight = FLIGHT; m.bp = currentBlueprint(); m.flavor = MISSION_FLAVOR;
+  m.run = RUN; m.sector = SECTOR; m.missions = MISSIONS; m.flight = FLIGHT; m.bp = FLIGHT ? FLIGHT.bp : currentBlueprint(); m.flavor = MISSION_FLAVOR;
+  m.web = WEB; m.plot = PLOT;
   m.sysName = SECTOR && RUN ? SECTOR[RUN.sys].it : '';
   // the harness stops ticking while the Game Center menu is open: freeze the flight with it
   m.paused = !!FLIGHT && typeof performance !== 'undefined' && performance.now() - lastTickAt > 400;
   return m;
 }
 // test hook (games-host / e2e): read-only view of the live run and flight
-export const __cz = { get run() { return RUN; }, get flight() { return FLIGHT; }, get bp() { return currentBlueprint(); } };
-if (typeof window !== 'undefined') { window.__cz = window.__cz || {}; window.__cz.game = __cz; }
+export const __cz = { get run() { return RUN; }, get flight() { return FLIGHT; }, get bp() { return currentBlueprint(); }, get web() { return WEB; }, get model() { return MODEL(); } };
+// review / test hook: look at another system of the sector from the hub (in memory only — never persisted)
+const __dev = { goto(i) { if (!RUN || !SECTOR || i < 0 || i >= SECTOR.length || FLIGHT) return false; RUN.sys = i; rebuildSector(); return true; } };
+if (typeof window !== 'undefined') { window.__cz = window.__cz || {}; window.__cz.game = __cz; window.__cz.dev = __dev; }
 
 // ---- input vocabulary (one keymap, phase-interpreted) ------------------------------------------
 function mapKey(k) {
@@ -194,6 +320,7 @@ function mapKey(k) {
     if (k.startsWith('Tab:')) return { type: 'screen', to: +k.slice(4) };
     if (k.startsWith('Buy:')) return { type: 'buy', g: +k.slice(4) };     // market: click the buy cell
     if (k.startsWith('Sell:')) return { type: 'sell', g: +k.slice(5) };   // market: click the sell cell
+    if (k.startsWith('Cat:')) return { type: 'codexCat', i: +k.slice(4) };   // codex: click a category
   }
   if (k === 'ArrowLeft' || k === 'a') return { type: 'navkey', k: 'L' };
   if (k === 'ArrowRight' || k === 'd') return { type: 'navkey', k: 'R' };
@@ -201,7 +328,7 @@ function mapKey(k) {
   if (k === 'ArrowDown' || k === 's') return { type: 'navkey', k: 'D' };
   if (k === ' ' || k === 'Enter' || k === 'j') return { type: 'confirm' };
   if (k === 'Escape' || k === 'q' || k === 'Backspace') return { type: 'back' };
-  if (k >= '1' && k <= '5') return { type: 'screen', to: +k - 1 };
+  if (k >= '1' && k <= '6') return { type: 'screen', to: +k - 1 };
   if (k === '[') return { type: 'tab', d: -1 };
   if (k === ']') return { type: 'tab', d: 1 };
   if (k === ',') return { type: 'qty', d: -1 };
@@ -222,6 +349,8 @@ function endCombat(state, result) {
   let earn = 0;
   if (result === 1) earn = cc.rewardCr + cc.killCr * kills;
   else if (!cc.mission) earn = cc.killCr * kills;               // ambush salvage even on retreat
+  const relit = !!(F && F.relit);
+  if (F && F.sectorUp) rebuildSector();
   RUN.credits = Math.min(9999999, RUN.credits + earn);
   RUN.kills = (RUN.kills >>> 0) + kills;
   if (result === 1) {
@@ -232,17 +361,18 @@ function endCombat(state, result) {
   persist();                                                     // write the shared save (cross-play)
   const st = F ? F.stats : null;
   const dbStats = st ? { time: Math.round(F.t), shots: st.shots, hits: st.hits, acc: st.shots ? Math.round(st.hits / st.shots * 100) : 0,
-    dmgIn: Math.round(st.dmgIn), aceKill: st.aceKill, capKill: st.capKill, kind: F.mission.kind } : null;
+    dmgIn: Math.round(st.dmgIn), aceKill: st.aceKill, capKill: st.capKill, kind: F.mission.kind, relit, sectorUp: !!F.sectorUp, sector: RUN.sector } : null;
   return { ...state, phase: 'debrief', result, earnCr: earn, dbKills: kills, dbStats };
 }
 
 // ---- hub navigation + economy (mutates the shared RUN + persists; single-player side-effect) ----
-const SCREENS = ['bridge', 'map', 'market', 'shipyard', 'missions'];
-const BRIDGE_ACT = ['map', 'market', 'shipyard', 'missions', 'missions'];
+const SCREENS = ['bridge', 'map', 'market', 'shipyard', 'missions', 'codex'];
+const BRIDGE_ACT = ['launch', 'map', 'market', 'shipyard', 'missions', 'codex'];
 function enterScreen(state, sc) {
   const ns = { ...state, screen: sc };
   if (sc === 'map') { ns.target = firstOther(); ns.focus = { ...state.focus, map: 0 }; }
   if (sc === 'missions') { const n = MISSIONS ? MISSIONS.length : 0; const f = Math.min(state.focus.missions || 0, n); ns.focus = { ...state.focus, missions: f }; ns.sel = f; }   // clamp: the list shrinks at F_ECO systems (0 missions)
+  if (sc === 'codex') codexSeen(ns);
   return ns;
 }
 function firstOther() { for (let i = 0; i < SECTOR.length; i++) if (i !== RUN.sys) return i; return 0; }
@@ -253,9 +383,10 @@ const beaconLitIdx = (i) => ((RUN.beacon_lit >>> 0) & (1 << i)) !== 0;
 function hubReduce(state, a) {
   const t = a.type, sc = state.screen;
   if (t === 'screen') return enterScreen(state, SCREENS[a.to] || 'bridge');
-  if (t === 'tab') { const i = SCREENS.indexOf(sc); return enterScreen(state, SCREENS[(i + a.d + 5) % 5]); }
-  if (t === 'hover') return (a.screen === sc && state.focus[sc] !== a.i) ? { ...state, focus: { ...state.focus, [sc]: a.i } } : state;
+  if (t === 'tab') { const i = SCREENS.indexOf(sc); return enterScreen(state, SCREENS[(i + a.d + SCREENS.length) % SCREENS.length]); }
+  if (t === 'hover') { if (a.screen !== sc || state.focus[sc] === a.i) return state; const ns = { ...state, focus: { ...state.focus, [sc]: a.i } }; if (sc === 'codex') codexSeen(ns); return ns; }
   if (t === 'mapTarget' && sc === 'map') return { ...state, target: a.i };
+  if (t === 'codexCat') return codexReduce(enterScreen(state, 'codex'), a);
   if (t === 'pad') return padNav(state, a);
   if (t === 'back') return sc !== 'bridge' ? enterScreen(state, 'bridge') : state;
   if (sc === 'bridge') return bridgeReduce(state, a);
@@ -263,7 +394,18 @@ function hubReduce(state, a) {
   if (sc === 'market') return marketReduce(state, a);
   if (sc === 'shipyard') return shipyardReduce(state, a);
   if (sc === 'missions') return missionsReduce(state, a);
+  if (sc === 'codex') return codexReduce(state, a);
   return state;
+}
+function codexSeen(st) { const e = entriesOf(st.codexCat | 0)[st.focus.codex | 0]; if (e && WEB && WEB.codex[e.id] != null && markSeen(WEB, e.id)) saveWeb(WEB); }
+function codexReduce(state, a) {
+  const cat = state.codexCat | 0, n = entriesOf(cat).length;
+  let ns = state;
+  if (a.type === 'codexCat') ns = { ...state, codexCat: a.i % CATS.length, focus: { ...state.focus, codex: 0 } };
+  else if (a.type === 'navkey' && (a.k === 'L' || a.k === 'R')) ns = { ...state, codexCat: (cat + (a.k === 'R' ? 1 : -1) + CATS.length) % CATS.length, focus: { ...state.focus, codex: 0 } };
+  else if (a.type === 'navkey' && (a.k === 'U' || a.k === 'D')) ns = moveFocus(state, 'codex', n, a.k === 'D' ? 1 : -1);
+  if (ns !== state) codexSeen(ns);
+  return ns;
 }
 function padNav(state, a) {                          // edge-triggered analog stick -> discrete nav
   const dz = 0.35, th = 0.6;
@@ -275,8 +417,8 @@ function padNav(state, a) {                          // edge-triggered analog st
   return act ? hubReduce({ ...state, padArmed: false }, act) : state;
 }
 function bridgeReduce(state, a) {
-  if (a.type === 'navkey' && (a.k === 'U' || a.k === 'D')) return moveFocus(state, 'bridge', 5, a.k === 'D' ? 1 : -1);
-  if (a.type === 'confirm') return enterScreen(state, BRIDGE_ACT[state.focus.bridge] || 'map');
+  if (a.type === 'navkey' && (a.k === 'U' || a.k === 'D')) return moveFocus(state, 'bridge', BRIDGE_ACT.length, a.k === 'D' ? 1 : -1);
+  if (a.type === 'confirm') { const act = BRIDGE_ACT[state.focus.bridge] || 'map'; return act === 'launch' ? startExplore(state, { undock: true }) : enterScreen(state, act); }
   return state;
 }
 function mapActions() { const acts = ['jump']; if (SECTOR[RUN.sys].beacon && !beaconLitIdx(RUN.sys)) acts.push('relight'); acts.push('back'); return acts; }
@@ -296,22 +438,16 @@ function doJump(state) {
   if (RUN.fuel < cost) return deny(state, 'cz_t_no_cells');
   RUN.sys = t; RUN.fuel -= cost; RUN.epoch = (RUN.epoch >>> 0) + 1;
   rebuildSector(); persist();
-  return { ...state, target: cycleTarget(RUN.sys, 1), focus: { ...state.focus, map: 0, missions: 0 }, flash: { kind: 'warp', until: state.clock + 600 } };   // new system -> fresh mission list
+  // the renderer flies the jump (drive, tunnel, arrival); you land on the bridge of the new system
+  return enterScreen({ ...state, target: cycleTarget(RUN.sys, 1), focus: { ...state.focus, map: 0, missions: 0, bridge: 0 } }, 'bridge');
 }
+// The relight is flown: the relic is carried to the spire, the beacon charges while you hold it, then the light
+// bursts out and the Echo answers (sim.js relight*). The shared numbers change when the light bursts (applyRelight).
 function doRelight(state) {
   if (!(SECTOR[RUN.sys].beacon && !beaconLitIdx(RUN.sys))) return state;
   if (RUN.credits < 300) return deny(state, 'cz_t_need_cr', { n: 300 });
   if (RUN.cargo[G_RELIQ] < 1) return deny(state, 'cz_t_need_relic');
-  RUN.credits -= 300; RUN.cargo[G_RELIQ] -= 1;
-  RUN.rep[F_CUSTODI] = Math.max(-100, Math.min(100, RUN.rep[F_CUSTODI] + 12));
-  RUN.beacon_lit = (RUN.beacon_lit >>> 0) | (1 << RUN.sys);
-  if (beaconsLit(CONTENT, RUN) >= beaconsTotal(CONTENT)) {
-    RUN.sector = (RUN.sector >>> 0) + 1; RUN.beacon_lit = 0; RUN.sys = 0; RUN.epoch = (RUN.epoch >>> 0) + 1;
-    rebuildSector(); persist();
-    return enterScreen({ ...state, flash: { kind: 'sector', until: state.clock + 1500 }, toast: { key: 'cz_t_sector', v: { n: RUN.sector }, kind: 'good', until: state.clock + 1900 } }, 'map');
-  }
-  persist();
-  return { ...state, flash: { kind: 'ignite', until: state.clock + 800 }, toast: { key: 'cz_t_beacon_lit', kind: 'good', until: state.clock + 1400 } };
+  return startExplore(state, { relight: true });
 }
 function marketReduce(state, a) {
   const rows = CONTENT.goods.length + 1;            // 8 goods + refuel
@@ -353,7 +489,7 @@ function shipyardReduce(state, a) {
   if (a.type === 'navkey' && (a.k === 'U' || a.k === 'D')) return moveFocus(state, 'shipyard', rows, a.k === 'D' ? 1 : -1);
   if (a.type === 'confirm') {
     const r = state.focus.shipyard, key = r < SHOP.length ? SHOP[r].key : 'repair';
-    if (shopBuy(key, RUN)) { persist(); return { ...state, flash: { kind: 'pop', until: state.clock + 400 } }; }
+    if (shopBuy(key, RUN)) { persist(); if (key !== 'repair' && SECTOR[RUN.sys].faction === 2) codexUnlock('c_mechanic'); return { ...state, flash: { kind: 'pop', until: state.clock + 400 } }; }
     return deny(state, 'cz_t_unavailable');
   }
   return state;

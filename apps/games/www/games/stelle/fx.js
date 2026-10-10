@@ -51,7 +51,7 @@ void main() { vec4 t = texture2D(uMap, vUv); gl_FragColor = vec4(vCol.rgb * t.rg
 const SHIELD_FRAG = /* glsl */`
 uniform vec3 uCol, uHit; uniform float uAge, uK, uTime; varying vec3 vN; varying vec3 vO; varying vec3 vV;
 void main() {
-  vec3 n = normalize(vN); float fr = pow(1.0 - abs(dot(n, normalize(vV))), 2.2);
+  vec3 n = normalize(vN); float fr = pow(1.0 - min(abs(dot(n, vV / max(length(vV), 1e-4))), 1.0), 2.2);
   float d = distance(normalize(vO), uHit);
   float ring = smoothstep(0.16, 0.0, abs(d - uAge * 1.8)) * (1.0 - uAge);
   float spot = exp(-d * d * 14.0) * (1.0 - uAge) * 2.2;
@@ -62,14 +62,57 @@ void main() {
 const SHELL_VERT = /* glsl */`varying vec3 vN; varying vec3 vO; varying vec3 vV;
 void main() { vO = position; vN = normalize(mat3(modelMatrix) * normal); vec4 w = modelMatrix * vec4(position, 1.0); vV = cameraPosition - w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`;
 const SHOCK_FRAG = /* glsl */`uniform vec3 uCol; uniform float uAge; varying vec3 vN; varying vec3 vO; varying vec3 vV;
-void main() { float fr = pow(1.0 - abs(dot(normalize(vN), normalize(vV))), 3.0); float a = (1.0 - uAge); gl_FragColor = vec4(uCol * fr * a * a * 2.5, 1.0); }`;
-const PLUME_VERT = /* glsl */`varying vec2 vUv; varying vec3 vN; varying vec3 vV;
-void main() { vUv = uv; vN = normalize(mat3(modelMatrix) * normal); vec4 w = modelMatrix * vec4(position, 1.0); vV = cameraPosition - w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`;
-const PLUME_FRAG = /* glsl */`uniform vec3 uCol; uniform float uTime; varying vec2 vUv; varying vec3 vN; varying vec3 vV;
-void main() { float t = 1.0 - vUv.y; float fl = 0.82 + 0.18 * sin(uTime * 70.0 + vUv.x * 40.0 + vUv.y * 9.0);
-  float edge = pow(abs(dot(normalize(vN), normalize(vV))), 2.0);
-  float a = pow(t, 2.2) * edge * fl;
-  gl_FragColor = vec4((uCol * 0.7 + vec3(0.6) * pow(t, 8.0)) * a, 1.0); }`;
+void main() { float fr = pow(1.0 - min(abs(dot(normalize(vN), vV / max(length(vV), 1e-4))), 1.0), 3.0); float a = max(1.0 - uAge, 0.0); gl_FragColor = vec4(uCol * fr * a * a * 2.5, 1.0); }`;
+// Engine exhaust, two instanced layers: a tight hot core sprite at each nozzle (bright only when you look
+// into the nozzle) and a camera-facing ribbon along the exhaust axis that tapers and cools with distance.
+// Peak HDR stays a few units on a few pixels, so the bloom gives a tight glow instead of a white-out.
+const NOZ_VERT = /* glsl */`
+attribute vec3 iP; attribute vec3 iAx; attribute vec4 iC; attribute vec4 iD;
+varying vec2 vUv; varying vec3 vCol; varying float vK;
+void main() {
+  vec3 toCam = cameraPosition - iP; float dl = length(toCam);
+  float face = dl > 1e-3 ? dot(iAx, toCam / dl) : 0.0;
+  vec4 mv = modelViewMatrix * vec4(iP + iAx * iD.x * 0.12, 1.0);
+  float sz = iD.x * (0.8 + 0.22 * iC.a + 0.45 * iD.y);
+  mv.xy += position.xy * sz;
+  gl_Position = projectionMatrix * mv;
+  vUv = position.xy * 2.0; vCol = iC.rgb; vK = iC.a * smoothstep(-0.2, 0.55, face);
+}`;
+const NOZ_FRAG = /* glsl */`
+varying vec2 vUv; varying vec3 vCol; varying float vK;
+void main() {
+  float r2 = dot(vUv, vUv); if (r2 > 1.0) discard;
+  float core = exp(-r2 * 20.0), halo = exp(-r2 * 4.5) * 0.18;
+  vec3 c = mix(vec3(1.0, 0.97, 0.9), vCol, smoothstep(0.02, 0.35, r2));
+  gl_FragColor = vec4(c * (core * 1.7 + halo) * vK, 1.0);
+}`;
+const RIB_VERT = /* glsl */`
+attribute vec3 iP; attribute vec3 iAx; attribute vec4 iC; attribute vec4 iD;
+varying vec2 vUv; varying vec3 vCol; varying float vK; varying float vB; varying float vSeed;
+void main() {
+  vec4 a = modelViewMatrix * vec4(iP, 1.0), b = modelViewMatrix * vec4(iP + iAx * iD.z, 1.0);
+  float za = max(-a.z, 0.1), zb = max(-b.z, 0.1);
+  vec2 d = b.xy / zb - a.xy / za; float L = length(d);
+  vec2 dir = L > 1e-6 ? d / L : vec2(0.0, 1.0); vec2 n = vec2(-dir.y, dir.x);
+  float wA = iD.x * 1.15, wB = iD.x * 0.3;
+  vec4 p = mix(a, b, position.y);
+  p.xy += n * position.x * mix(wA, wB, position.y);
+  gl_Position = projectionMatrix * p;
+  // seen end-on the ribbon collapses: fade it out and let the nozzle core carry the look
+  float ratio = L / max(wA / za, 1e-4);
+  vUv = vec2(position.x * 2.0, position.y); vCol = iC.rgb; vK = iC.a * smoothstep(0.35, 1.6, ratio); vB = iD.y; vSeed = iD.w;
+}`;
+const RIB_FRAG = /* glsl */`
+uniform float uTime; varying vec2 vUv; varying vec3 vCol; varying float vK; varying float vB; varying float vSeed;
+void main() {
+  float x = abs(vUv.x), t = vUv.y;
+  float core = exp(-x * x * 10.0), edge = exp(-x * x * 2.6) * 0.3;
+  float fall = pow(1.0 - t, 1.7) * smoothstep(0.0, 0.05, t);
+  float fl = 0.86 + 0.14 * sin(uTime * 57.0 + t * 26.0 + vSeed * 6.0);
+  float diamonds = 1.0 + vB * 0.8 * pow(0.5 + 0.5 * cos(t * 34.0 - uTime * 24.0), 8.0) * (1.0 - t);
+  vec3 c = mix(vec3(1.0, 0.95, 0.88), vCol, smoothstep(0.0, 0.3, t + x * 0.45));
+  gl_FragColor = vec4(c * (core * 1.05 + edge) * fall * fl * diamonds * vK, 1.0);
+}`;
 const TRAIL_VERT = /* glsl */`attribute vec3 aNext; attribute float aSide; attribute float aT; attribute vec4 aCol; varying vec4 vCol; varying float vT; varying float vD;
 void main() { vec4 a = modelViewMatrix * vec4(position, 1.0), b = modelViewMatrix * vec4(aNext, 1.0);
   vec2 d = b.xy / max(-b.z, 0.1) - a.xy / max(-a.z, 0.1); float L = length(d); vec2 dir = L > 1e-6 ? d / L : vec2(0.0, 1.0);
@@ -242,18 +285,39 @@ export function createFx(THREE, scene, Q) {
     m.material.uniforms.uCol.value.setRGB(col[0], col[1], col[2]); m.material.uniforms.uK.value = Math.min(2.2, 0.7 + k);
   }
 
-  // ---- engine plumes (shared cone; one material per colour) --------------------------------------------------------
-  const plumeGeo = new THREE.ConeGeometry(1, 1, 14, 1, true); plumeGeo.rotateX(Math.PI / 2); plumeGeo.translate(0, 0, 0.5);
-  // base on the nozzle (z = 0), tip trailing behind (z = 1); cone uv.y = 1 at the tip, 0 at the base
-  const plumeMats = new Map();
+  // ---- engine plumes: nozzle cores + exhaust ribbons, one instanced draw each ------------------------------------------
+  const NPL = 320;
+  const mkPlumeGeo = (verts, idx) => {
+    const g = new THREE.InstancedBufferGeometry();
+    g.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3)); g.setIndex(idx);
+    return g;
+  };
+  const noz = mkPlumeGeo([-1, -1, 0, 1, -1, 0, 1, 1, 0, -1, 1, 0], [0, 1, 2, 0, 2, 3]);
+  const rib = mkPlumeGeo([-0.5, 0, 0, 0.5, 0, 0, 0.5, 1, 0, -0.5, 1, 0], [0, 1, 2, 0, 2, 3]);
+  const pA = { P: new THREE.InstancedBufferAttribute(new Float32Array(NPL * 3), 3), Ax: new THREE.InstancedBufferAttribute(new Float32Array(NPL * 3), 3),
+    C: new THREE.InstancedBufferAttribute(new Float32Array(NPL * 4), 4), D: new THREE.InstancedBufferAttribute(new Float32Array(NPL * 4), 4) };
+  for (const a of Object.values(pA)) a.setUsage(THREE.DynamicDrawUsage);
+  for (const g of [noz, rib]) { g.setAttribute('iP', pA.P); g.setAttribute('iAx', pA.Ax); g.setAttribute('iC', pA.C); g.setAttribute('iD', pA.D); g.instanceCount = 0; }
   const T = { value: 0 };
-  function plumeMat(r, g, b) {
-    const key = ((r * 255) | 0) + ':' + ((g * 255) | 0) + ':' + ((b * 255) | 0);
-    let m = plumeMats.get(key);
-    if (!m) { m = new THREE.ShaderMaterial({ vertexShader: PLUME_VERT, fragmentShader: PLUME_FRAG, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, uniforms: { uCol: { value: new THREE.Color(r, g, b) }, uTime: T } }); plumeMats.set(key, m); }
-    return m;
+  const plumeMatOf = (v, f, ro) => new THREE.ShaderMaterial({ vertexShader: v, fragmentShader: f, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, uniforms: { uTime: T } });
+  const nozMesh = new THREE.Mesh(noz, plumeMatOf(NOZ_VERT, NOZ_FRAG)), ribMesh = new THREE.Mesh(rib, plumeMatOf(RIB_VERT, RIB_FRAG));
+  for (const m of [nozMesh, ribMesh]) { m.frustumCulled = false; m.renderOrder = 3; scene.add(m); }
+  let npl = 0;
+  function plumesBegin() { npl = 0; }
+  // nozzle exit (x,y,z), exhaust axis (unit, pointing away from the ship), radius, ribbon length, colour, intensity k (0..2), boost 0..1
+  function plume(x, y, z, ax, ay, az, r, len, cr, cg, cb, k, boost = 0) {
+    if (npl >= NPL || k <= 0.001) return;
+    const i3 = npl * 3, i4 = npl * 4;
+    pA.P.array[i3] = x; pA.P.array[i3 + 1] = y; pA.P.array[i3 + 2] = z;
+    pA.Ax.array[i3] = ax; pA.Ax.array[i3 + 1] = ay; pA.Ax.array[i3 + 2] = az;
+    pA.C.array[i4] = cr; pA.C.array[i4 + 1] = cg; pA.C.array[i4 + 2] = cb; pA.C.array[i4 + 3] = k;
+    pA.D.array[i4] = r; pA.D.array[i4 + 1] = boost; pA.D.array[i4 + 2] = len; pA.D.array[i4 + 3] = npl * 0.618;
+    npl++;
   }
-  function plume(r, g, b) { const m = new THREE.Mesh(plumeGeo, plumeMat(r, g, b)); m.frustumCulled = false; m.renderOrder = 3; return m; }
+  function plumesEnd() {
+    noz.instanceCount = npl; rib.instanceCount = npl;
+    if (npl) { rng(pA.P, npl * 3); rng(pA.Ax, npl * 3); rng(pA.C, npl * 4); rng(pA.D, npl * 4); }
+  }
 
   // ---- trails (ribbons) ------------------------------------------------------------------------------------------------
   const NT = Q.trails, TP = 22, SEG = TP - 1;
@@ -311,8 +375,9 @@ export function createFx(THREE, scene, Q) {
   for (let i = 0; i < 8; i++) { const m = new THREE.Mesh(beamGeo, new THREE.ShaderMaterial({ vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`, fragmentShader: BEAM_FRAG, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, uniforms: { uCol: { value: new THREE.Color(1.2, 0.55, 0.15) }, uTime: T } })); m.visible = false; m.frustumCulled = false; scene.add(m); beams.push(m); }
   const _ba = new THREE.Vector3(), _bb = new THREE.Vector3(), _bd = new THREE.Vector3(), _bc = new THREE.Vector3(), _bx = new THREE.Vector3(), _bz = new THREE.Vector3();
   function beamsBegin() { for (const b of beams) b.visible = false; }
-  function beam(i, ax, ay, az, bx, by, bz, cam, w = 3) {
+  function beam(i, ax, ay, az, bx, by, bz, cam, w = 3, cr = 1.2, cg = 0.55, cb = 0.15) {
     const m = beams[i]; if (!m) return;
+    m.material.uniforms.uCol.value.setRGB(cr, cg, cb);
     _ba.set(ax, ay, az); _bb.set(bx, by, bz); _bd.subVectors(_bb, _ba); const L = _bd.length(); if (L < 1) return;
     _bd.divideScalar(L); _bc.subVectors(cam.position, _ba); _bx.crossVectors(_bd, _bc).normalize();
     _bz.crossVectors(_bx, _bd);
@@ -364,9 +429,9 @@ export function createFx(THREE, scene, Q) {
   function clear() { add.clear(); smoke.clear(); D.alive.fill(0); deb.count = 0; for (const m of shocks) m.visible = false; for (const m of shields) { m.visible = false; m.removeFromParent(); } trailsClear(); for (const l of lights) l.intensity = 0; }
   function dispose() {
     add.dispose(); smoke.dispose(); bg.dispose(); bMat.dispose(); deb.dispose(); dMat.dispose(); shellGeo.dispose();
-    shocks.forEach((m) => m.material.dispose()); shields.forEach((m) => m.material.dispose()); plumeGeo.dispose(); plumeMats.forEach((m) => m.dispose());
+    shocks.forEach((m) => m.material.dispose()); shields.forEach((m) => m.material.dispose()); noz.dispose(); rib.dispose(); nozMesh.material.dispose(); ribMesh.material.dispose();
     tg.dispose(); trailMesh.material.dispose(); beamGeo.dispose(); beams.forEach((m) => m.material.dispose()); atlas.dispose();
   }
-  return { add, smoke, explosion, hitSparks, muzzle, warp, shock, shieldHit, flash, debris, plume, plumeMat, trailFor, trailPush, trailsBuild, trailsClear,
+  return { add, smoke, explosion, hitSparks, muzzle, warp, shock, shieldHit, flash, debris, plume, plumesBegin, plumesEnd, trailFor, trailPush, trailsBuild, trailsClear,
     boltsBegin, bolt, boltsEnd, beamsBegin, beam, update, clear, dispose, T };
 }

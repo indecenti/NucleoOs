@@ -8,7 +8,7 @@
 // One flight model for everyone (player, wingmen, enemies, capital ships): pitch/yaw/roll rates
 // with a throttle sweet spot, boost, drift. The AI drives ships through the same controls the
 // player uses, so what it can do is what you can do — readable, fair, and it looks like flying.
-import { rng, vhash, VDOM } from './world.js';
+import { rng, vhash, VDOM, moonPos } from './world.js';
 
 export const DT = 1 / 60;
 export const TEAM_P = 0, TEAM_E = 1, TEAM_N = 2;
@@ -20,6 +20,7 @@ export const EV = {
   WARPOUT: 11, TETHER: 12, UNTETHER: 13, PICKUP: 14, COMMS: 15, OBJ: 16, SUBSYS: 17, PHURT: 18,
   BOOST: 19, OVERHEAT: 20, CAPKILL: 21, BOARD: 22, PIPS: 23, TARGET: 24, WAVE: 25, END: 26, BUMP: 27,
   CHAIN: 28, LOCKING: 29, NOAMMO: 30, CRUISE: 31,
+  PHASE: 32, CHORD: 33, DOCK: 35, JUMP: 36, RELIGHT: 37, SCAN: 38, TORP: 40, CHARGE: 41,
 };
 
 // ---- ship classes ------------------------------------------------------------------------------
@@ -43,6 +44,16 @@ export const CLS = {
     hull: 0.75, shield: 0.7, armor: 0, guns: [[-1.45, 0, -5.2], [1.45, 0, -5.2]], eng: [[0, 0, 6.1, 1.35]], rate: 6.2, bolt: 1060, dmg: 0.8, skill: 0.55 },
   shard: { name: 'Shard', fac: F_ECO, role: 'fighter', len: 8, rad: 4.8, maxSpd: 186, acc: 105, boostSpd: 300, pr: 2.3, yr: 1.6, rr: 4, resp: 9, grip: 3.6,
     hull: 0.45, shield: 0.35, armor: 0, guns: [[0, 0, -4.2]], eng: [[0, 0, 3.6, 0.9]], rate: 4.5, bolt: 1150, dmg: 0.6, skill: 0.5 },
+  // Custodi bomber: slow, armoured, stands off and lobs homing torpedoes (shootable) at capitals, stations and you
+  censer: { name: 'Censer', fac: F_CUSTODI, role: 'bomber', len: 20, rad: 10, maxSpd: 118, acc: 44, boostSpd: 196, pr: 0.95, yr: 0.75, rr: 1.7, resp: 4.2, grip: 2.2,
+    hull: 1.7, shield: 1.0, armor: 0.15, guns: [[0, -2.2, -9.4]], eng: [[-2.6, 0.2, 9.6, 1.4], [2.6, 0.2, 9.6, 1.4]], rate: 2.4, bolt: 900, dmg: 1.0, skill: 0.5, torp: 4, torpAt: [0, -1.4, -10.4], flares: 1 },
+  // Echo interceptor: a crystal lance that phases out of the line of fire and blinks sideways
+  lattice: { name: 'Lattice', fac: F_ECO, role: 'phase', len: 13, rad: 6, maxSpd: 194, acc: 118, boostSpd: 318, pr: 2.4, yr: 1.7, rr: 4.2, resp: 10, grip: 3.9,
+    hull: 0.62, shield: 0.55, armor: 0, guns: [[-1.1, 0, -6.2], [1.1, 0, -6.2]], eng: [[0, 0, 5.6, 1.0]], rate: 5.4, bolt: 1220, dmg: 0.72, skill: 0.66 },
+  // Echo support: a slow chandelier of lattice that re-shields its kin and sings chords of slow bolts
+  choir: { name: 'Choir', fac: F_ECO, role: 'support', len: 44, rad: 22, maxSpd: 84, acc: 26, boostSpd: 120, pr: 0.55, yr: 0.45, rr: 0.9, resp: 2.2, grip: 1.8,
+    hull: 4.2, shield: 2.4, armor: 0.1, guns: [[0, 0, -18]], eng: [[0, 0, 20, 2.4]], rate: 0, bolt: 520, dmg: 1.2, skill: 0.6,
+    hsph: [[0, 0, -12, 10], [0, 0, 0, 13], [0, 0, 12, 10]] },
   hauler: { name: 'Hauler', role: 'hauler', len: 92, rad: 48, maxSpd: 58, acc: 10, boostSpd: 58, pr: 0.2, yr: 0.16, rr: 0.3, resp: 1.4, grip: 1.4, cap: true,
     hull: 9, shield: 3, armor: 0.25, guns: [], eng: [[-7, 0, 47, 4.5], [7, 0, 47, 4.5]],
     hsph: [[0, 1, -36, 12], [0, 0, -14, 14], [0, 0, 8, 14], [0, 0, 30, 14], [0, 0, 44, 10]], sub: [{ k: 'engine', p: [0, 0, 45], r: 12, hp: 3 }] },
@@ -57,6 +68,13 @@ export const CLS = {
     sub: [{ k: 'turret', p: [-16, 22, -60], r: 7, hp: 2.2 }, { k: 'turret', p: [18, 24, -10], r: 7, hp: 2.2 }, { k: 'turret', p: [-20, 24, 30], r: 7, hp: 2.2 },
       { k: 'turret', p: [0, -24, -30], r: 7, hp: 2.2, down: true }, { k: 'turret', p: [14, -22, 50], r: 7, hp: 2.2, down: true },
       { k: 'engine', p: [0, 0, 90], r: 14, hp: 3 }, { k: 'reactor', p: [0, 0, 46], r: 10, hp: 3.5, weak: true }] },
+  // Custodi capital: a white-stone cathedral barge with a bell tower (its bridge, the weak point) and point defence
+  reliquary: { name: 'Reliquary', fac: F_CUSTODI, role: 'capital', len: 160, rad: 82, maxSpd: 38, acc: 6, boostSpd: 38, pr: 0.13, yr: 0.11, rr: 0.22, resp: 1.1, grip: 1.1, cap: true,
+    hull: 20, shield: 8, armor: 0.25, guns: [], eng: [[-12, -4, 80, 6.5], [12, -4, 80, 6.5], [0, 8, 80, 5]],
+    hsph: [[0, 0, -64, 13], [0, 0, -40, 18], [0, 2, -12, 21], [0, 2, 16, 21], [0, 1, 42, 18], [0, 0, 66, 14], [0, 30, 4, 10]],
+    sub: [{ k: 'turret', p: [-14, 16, -44], r: 6, hp: 2 }, { k: 'turret', p: [14, 16, -44], r: 6, hp: 2 }, { k: 'turret', p: [-16, 18, 30], r: 6, hp: 2 },
+      { k: 'turret', p: [16, 18, 30], r: 6, hp: 2 }, { k: 'turret', p: [0, -20, -6], r: 6, hp: 2, down: true },
+      { k: 'shield', p: [0, 20, -24], r: 7, hp: 3 }, { k: 'engine', p: [0, 0, 76], r: 12, hp: 3 }, { k: 'bridge', p: [0, 38, 4], r: 7, hp: 3.2, weak: true }] },
   station: { name: 'Station', role: 'static', len: 400, rad: 300, maxSpd: 0, acc: 0, boostSpd: 0, pr: 0, yr: 0, rr: 0, resp: 1, grip: 1, cap: true, hull: 60, shield: 0, armor: 0.4, guns: [], eng: [] },
   beacon: { name: 'Beacon', role: 'static', len: 260, rad: 140, maxSpd: 0, acc: 0, boostSpd: 0, pr: 0, yr: 0, rr: 0, resp: 1, grip: 1, cap: true, hull: 34, shield: 0, armor: 0.3, guns: [], eng: [] },
 };
@@ -136,7 +154,7 @@ export function pipsAdd(p, sys) {
 
 // ---- the flight ----------------------------------------------------------------------------------
 const NSHIP = 72, NBOLT = 640, NMSL = 40, NFLARE = 32, NPICK = 12, NEV = 512;
-const ST = { FORM: 0, ATTACK: 1, EVADE: 2, EXTEND: 3, TETHER: 4, BOARD: 5, CAP: 6, FLEE: 7, DARK: 8, ESCORT: 9, PATH: 10, WARP: 11, STATIC: 12, HOLD: 13 };
+const ST = { FORM: 0, ATTACK: 1, EVADE: 2, EXTEND: 3, TETHER: 4, BOARD: 5, CAP: 6, FLEE: 7, DARK: 8, ESCORT: 9, PATH: 10, WARP: 11, STATIC: 12, HOLD: 13, ORBIT: 14 };
 export { ST };
 
 function mkShip(i) {
@@ -154,6 +172,8 @@ function mkShip(i) {
     tether: null, tetherT: 0, breakT: 0, tetheredBy: null, board: null, boardT: 0, carryT: 0,
     warpT: 0, darkWake: 0, decoy: false, fleeT: 0, kills: 0, path: null, pathI: 0, spawnT: 0, objective: false, dieT: 0,
     blink: 0, evadeCd: 0,
+    tetherCd: undefined, carrier: null, saidHit: false, decoyT: 0, jumped: false,
+    phaseT: 0, phaseCd: 0, blinkV: v3(), trip: 0, leash: null, orbit: null, links: [], linkT: 0, chordT: null, torps: null, torpCd: 2.5,
   };
 }
 
@@ -167,8 +187,8 @@ export function createFlight(opts) {
     player: null, kills: 0, earned: 0, obj: { key: '', a: {}, marker: null, bars: [] },
     stats: { shots: 0, hits: 0, dmgOut: 0, dmgIn: 0, aceKill: 0, capKill: 0, t0: 0 },
     input: { pitch: 0, yaw: 0, roll: 0, thr: 0.55, thrRate: 0, boost: false, drift: false, fire: false, missile: false, aim: null, aimMode: 0 },
-    bp, cc, run, R, mission: null, squads: [], wave: 0, waves: 0, enemyLeft: 0, comms: 0, autopilot: !!opts.autopilot, god: !!opts.god, timeScale: Math.max(1, Math.min(16, opts.timeScale | 0 || 1)),
-    grid: null, obs: null, retreat: 0, boltI: 0, cruise: 0, cruiseT: 0, cruiseV: 0, briefT: opts.brief === false ? 0 : 3.2, paused: false, tier: clamp(1 + (opts.sector | 0), 1, 12),
+    bp, cc, run, R, mission: null, squads: [], wave: 0, waves: 0, enemyLeft: 0, comms: 0, autopilot: !!opts.autopilot, autoDock: !!opts.autoDock, god: !!opts.god, timeScale: Math.max(1, Math.min(16, opts.timeScale | 0 || 1)),
+    grid: null, obs: null, retreat: 0, boltI: 0, cruise: 0, cruiseT: 0, cruiseV: 0, pois: null, nav: 0, navAt: [0, 0, 0], dock: null, undock: null, jump: null, arriveT: 0, relit: false, jumpedTo: -1, scanI: -1, scanT: 0, scanned: 0, briefT: opts.brief === false ? 0 : 3.2, paused: false, tier: clamp(1 + (opts.sector | 0), 1, 12),
   };
   for (let i = 0; i < NSHIP; i++) F.ships.push(mkShip(i));
   for (let i = 0; i < NBOLT; i++) F.bolts.push({ alive: false, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0, px: 0, py: 0, pz: 0, life: 0, dmg: 0, team: 0, own: null, fac: 0, kind: 0, len: 18 });
@@ -189,6 +209,8 @@ export function createFlight(opts) {
   p.pips = [2, 2, 2]; p.wpnDmg = 7.5 + (run.weapon | 0) * 2.4; p.lockTime = clamp(1.6 - (run.sensors | 0) * 0.18, 0.75, 1.6);
   p.dmgMul = 1; p.skill = 0.8; p.nameKey = 'cz_ship_player';
   setupMission(F);
+  buildPois(F);
+  if (F.mission.kind === 'explore') updateObjective(F);
   return F;
 }
 const vset = (v, x, y, z) => { v.x = x; v.y = y; v.z = z; return v; };
@@ -302,14 +324,14 @@ function setupMission(F) {
   // M1 rosters: Gilda and Relitti in full; Custodi patrols (reputation <= -25) fly Votives, Echo space wakes Shards
   const ef = cc.foeFac === F_GILDA || cc.foeFac === F_CUSTODI || cc.foeFac === F_ECO ? cc.foeFac : F_RELITTI;
   const offer = cc.repFac >= 0 ? cc.repFac : F_GILDA;
-  const kind = cc.mission === false ? 'ambush' : cc.type === 1 ? (cc.arch === 2 ? 'duel' : 'hunt') : cc.type === 2 ? 'escort' : cc.type === 3 ? (cc.arch === 4 ? 'sweep' : 'defend') : 'patrol';
+  const kind = cc.kind === 'explore' ? 'explore' : cc.mission === false ? 'ambush' : cc.type === 1 ? (cc.arch === 2 ? 'duel' : 'hunt') : cc.type === 2 ? 'escort' : cc.type === 3 ? (cc.arch === 4 ? 'sweep' : 'defend') : 'patrol';
   const total = clamp(Math.round((cc.waves || 3) * (cc.perWave || 3) * 0.42), 6, 22);
   let nW = clamp(Math.round((cc.waves || 3) / 3), 2, 4);
   const M = F.mission = { kind, ef, offer, total, nW, waves: [], waveI: 0, nav: [], navI: 0, protect: [], ace: null, aceName: cc.targetName || '', gangKey: cc.gang != null ? 'cz_gang_' + cc.gang : '',
     route: null, jump: null, capital: null, startT: 0, timer: 0, ended: false, defended: null, swarm: kind === 'sweep' };
   const fighter = ef === F_GILDA ? 'lancer' : ef === F_CUSTODI ? 'votive' : ef === F_ECO ? 'shard' : 'scrapwing';
-  const heavy = ef === F_GILDA ? 'bastion' : ef === F_CUSTODI ? 'votive' : ef === F_ECO ? 'shard' : 'harpoon';
-  const capCls = ef === F_GILDA ? 'warden' : ef === F_RELITTI ? 'hulk' : null;
+  const heavy = ef === F_GILDA ? 'bastion' : ef === F_CUSTODI ? 'censer' : ef === F_ECO ? 'lattice' : 'harpoon';
+  const capCls = ef === F_GILDA ? 'warden' : ef === F_RELITTI ? 'hulk' : ef === F_CUSTODI ? 'reliquary' : null;
   const wingCls = offer === F_GILDA ? 'lancer' : offer === F_CUSTODI ? 'votive' : 'scrapwing';
   const p = F.player;
   // composition helper: n ships for wave w
@@ -361,6 +383,8 @@ function setupMission(F) {
     const per = perW(nW);
     for (let w = 0; w < nW; w++) M.waves.push({ trig: w === 0 ? 'time' : 'route', at: w === 0 ? 7 : 0, frac: (w + 0.4) / (nW + 0.4), ships: comp(per, w, ef === F_RELITTI ? (w === 0 ? ['harpoon'] : ['gutter', 'harpoon']) : []), how: 'warp' });
     if (tier >= 6) M.waves[nW - 1].cap = capCls;
+  } else if (kind === 'explore') {
+    setupExplore(F);
   } else if (kind === 'defend' || kind === 'sweep') {
     let obj = null;
     if (kind === 'defend') {
@@ -380,7 +404,7 @@ function setupMission(F) {
     }
   }
   // wingmen from the offering faction (not in a duel, not on a free ambush)
-  if (kind !== 'duel' && kind !== 'ambush') {
+  if (kind !== 'duel' && kind !== 'ambush' && kind !== 'explore') {
     const nWing = kind === 'escort' || kind === 'defend' ? 2 : 1;
     qrot(p.q, 0, 0, 1, T);
     const sq = squad(F, new Array(nWing).fill(wingCls), TEAM_P, offer, p.pos.x + 40, p.pos.y + 6, p.pos.z + 40, 0, 0, -1, { state: ST.FORM, form: 'V', speed: 70 });
@@ -420,7 +444,7 @@ function spawnWave(F, w) {
       gx = k[0] + Math.cos(a) * d; gy = k[1] + R.range(-90, 90); gz = k[2] + Math.sin(a) * d;
     }
     else { gx += R.range(-260, 260) * gi; gy += R.range(-120, 120); gz += R.range(-260, 260) * gi; }
-    const sq = squad(F, g, TEAM_E, M.ef, gx, gy, gz, -dx, -dy, -dz, { warp: w.how !== 'dark', dark: w.how === 'dark', form: M.swarm ? 'W' : 'V' });
+    const sq = squad(F, g, TEAM_E, w.ef != null ? w.ef : M.ef, gx, gy, gz, -dx, -dy, -dz, { warp: w.how !== 'dark', dark: w.how === 'dark', form: M.swarm ? 'W' : 'V' });
     made += sq.members.length;
     if (w.how === 'dark') sq.members.forEach((s) => { s.darkWake = 1300 + R.range(-200, 300); });
   });
@@ -447,7 +471,8 @@ function spawnWave(F, w) {
   }
   F.wave++;
   const e = ev(F, EV.WAVE); e.a = F.wave; e.b = F.waves;
-  if (M.ef === F_ECO && F.wave === 1) comms(F, 'cz_c_echo_wake', null, { voice: 1 }, 3);   // the Voice speaks first
+  if (M.kind === 'relight') { if (w.ef != null) comms(F, F.wave === 1 ? 'cz_c_relight_raiders' : 'cz_c_relight_hold', null, { who: F.wave === 1 ? 'raider' : 'vigil' }, 2); }
+  else if (M.ef === F_ECO && F.wave === 1) comms(F, 'cz_c_echo_wake', null, { voice: 1 }, 3);   // the Voice speaks first
   else if (w.how === 'dark') comms(F, 'cz_c_ambush', null, null, 2);
   else comms(F, 'cz_c_contacts', null, { n: made }, 2);
   if (M.wing && firstAlive(M.wing.members) && F.R() < 0.7) comms(F, 'cz_c_wing_engage', firstAlive(M.wing.members));
@@ -461,6 +486,19 @@ function updateObjective(F) {
   for (const s of M.protect) O.bars.push(s);
   O.marker = null; O.a = O.a || {};
   if (F.outcome === 1) { O.key = 'cz_obj_complete'; return; }
+  if (M.kind === 'explore' || M.kind === 'relight') {
+    const L = M.relight;
+    if (L && L.ph === 'charge') { O.key = 'cz_obj_relight_charge'; O.a.n = Math.round(L.k * 100); O.marker = null; return; }
+    if (L && L.ph === 'answer' && !L.calm) { O.key = 'cz_obj_echo'; O.a.n = left; O.marker = null; return; }
+    if (L) { O.key = 'cz_obj_relight_done'; O.marker = null; return; }
+    if (left > 0) { O.key = 'cz_obj_survive'; O.a.n = left; O.marker = null; return; }
+    const P = F.pois && F.pois[F.nav];
+    if (!P) { O.key = 'cz_obj_free'; return; }
+    const a = approach(F, P, p.pos.x, p.pos.y, p.pos.z); F.navAt[0] = a[0]; F.navAt[1] = a[1]; F.navAt[2] = a[2];
+    O.key = M.relightWanted && P.kind === 'beacon' ? 'cz_obj_relight_go' : 'cz_obj_explore'; O.a.name = P.name; O.a.kind = P.kind; O.a.d = Math.hypot(a[0] - p.pos.x, a[1] - p.pos.y, a[2] - p.pos.z);
+    O.marker = F.navAt;
+    return;
+  }
   if (M.kind === 'patrol' || M.kind === 'ambush') {
     const pending = M.waves[M.waveI];
     if (pending && pending.trig === 'nav' && left === 0) { const n = M.nav[pending.nav]; O.key = 'cz_obj_nav'; O.a.n = pending.nav + 1; O.marker = n; O.a.d = n ? Math.hypot(n[0] - p.pos.x, n[1] - p.pos.y, n[2] - p.pos.z) : 0; }
@@ -549,8 +587,10 @@ function flyShip(F, s) {
   if (s.boostLock && s.boost > 0.25) s.boostLock = false;
   // speed along the nose
   let want = s.boosting ? C.boostSpd * (0.9 + engM * 0.1) : s.thr * C.maxSpd * engM;
-  const cruising = s.isPlayer && F.cruise === 2 && F.cruiseV > 0;
-  if (cruising) { want = F.cruiseV; s.boosting = false; }
+  const towed = s.isPlayer && (F.dock || F.undock);
+  const cruising = s.isPlayer && ((F.cruise === 2 && F.cruiseV > 0) || (F.dock && F.dock.ph === 0 && s.spdCap > 320));
+  if (cruising) { want = F.dock ? s.spdCap : F.cruiseV; s.boosting = false; }
+  else if (towed) want = Math.min(want, s.spdCap);
   if (!s.engOk) want *= 0.35;
   if (s.tetheredBy) want = Math.min(want, C.maxSpd * 0.5 * (s.boosting ? 1.5 : 1));
   if (!s.isPlayer && F.E && s.team === TEAM_E && !s.cap) want *= F.E.spd;
@@ -588,7 +628,7 @@ function flyShip(F, s) {
   if (s.heat > 0) s.heat = Math.max(0, s.heat - DT * 0.42 * (pips ? WPN_COOL[pips[1]] : 1));
   if (s.overT > 0) s.overT -= DT;
   // static obstacle collision
-  if (!s.cap) collideStatic(F, s);
+  if (!s.cap) { if (!(s.isPlayer && (F.undock || (F.dock && F.dock.ph >= 1))) && !(s.phaseT > 0)) collideStatic(F, s); if (s.isPlayer) collideWorlds(F, s); }
   else if (s.ck !== 'station' && s.ck !== 'beacon') collideCap(F, s);
 }
 function collideStatic(F, s) {
@@ -645,8 +685,13 @@ function playerControl(F, p) {
     if (F.retreat <= 0 && F.outcome === 0) { const e = ev(F, EV.WARPOUT, p.pos.x, p.pos.y, p.pos.z); e.s = p; p.alive = false; p.dieT = 0.5; finish(F, -1); }
     return;
   }
+  scanStep(F, p);
+  if (F.dock) { dockStep(F, p); return; }
+  if (F.undock) { undockStep(F, p); return; }
+  if (F.arriveT > 0) { F.arriveT -= DT; p.cp = p.cy = p.cr = 0; p.fire = false; p.thr = 0.55; p.boosting = false; return; }
+  if (F.jump) jumpStep(F, p);
   if (F.cruise) cruiseStep(F, p);
-  if (F.autopilot) { aiStep(F, p); autoCruise(F, p); return; }
+  if (F.autopilot) { aiStep(F, p); autoCruise(F, p); autoExplore(F, p); return; }
   if (F.briefT > 0.6 && !I.touched) { p.cp = 0; p.cy = 0; p.cr = 0; p.fire = false; return; }
   // throttle
   if (I.thrRate) I.thr = clamp(I.thr + I.thrRate * DT * 0.75, 0, 1);
@@ -671,7 +716,7 @@ function hostileNear(F, p, r) {
   return false;
 }
 function cruiseBlock(F, p) {
-  if (F.outcome || F.retreat > 0 || !p.alive) return 'cz_cr_blocked';
+  if (F.outcome || F.retreat > 0 || !p.alive || F.dock || F.undock || F.jump || F.arriveT > 0) return 'cz_cr_blocked';
   if (p.tetheredBy) return 'cz_cr_tethered';
   if (hostileNear(F, p, MASS_LOCK)) return 'cz_cr_masslock';
   return '';
@@ -702,13 +747,14 @@ function cruiseStep(F, p) {
     const d = Math.hypot(mk[0] - p.pos.x, mk[1] - p.pos.y, mk[2] - p.pos.z);
     fwd(p, T);
     const toward = ((mk[0] - p.pos.x) * T.x + (mk[1] - p.pos.y) * T.y + (mk[2] - p.pos.z) * T.z) / (d || 1);
-    if (toward > 0.5) v = clamp((d - 700) * 0.85, 260, CRUISE_MAX);
+    if (toward > 0.5) v = clamp((d - 700) * 0.85, 260, Math.min(42000, Math.max(CRUISE_MAX, d * 0.42)));
     if (d < 900 && toward > 0) { cruiseSet(F, false, 'cz_cr_arrived'); return; }
   }
+  const fc = F.bp.field; if (fc && Math.hypot(fc.center[0] - p.pos.x, fc.center[1] - p.pos.y, fc.center[2] - p.pos.z) < fc.radius * 1.3) v = Math.min(v, CRUISE_MAX);
   // obstacle ahead within ~1.2 s of travel -> drop out
-  const look = Math.min(3000, Math.max(300, p.spd * 1.2));
-  for (let k = 1; k <= 4; k++) {
-    const t = look * k / 4, x = p.pos.x + T.x * t, y = p.pos.y + T.y * t, z = p.pos.z + T.z * t;
+  const look = Math.min(8000, Math.max(300, p.spd * 1.2));
+  for (let k = 1; k <= 8; k++) {
+    const t = look * k / 8, x = p.pos.x + T.x * t, y = p.pos.y + T.y * t, z = p.pos.z + T.z * t;
     const list = cellList(F, x, y, z), O = F.obs;
     for (let j = 0; j < list.length; j++) { const i = list[j], dx = x - O.x[i], dy = y - O.y[i], dz = z - O.z[i], R = O.r[i] + 60; if (dx * dx + dy * dy + dz * dz < R * R) { cruiseSet(F, false, 'cz_cr_obstacle'); return; } }
   }
@@ -761,12 +807,14 @@ function aiStep(F, s) {
     if ((p.alive && dist2(p.pos, s.pos) < s.darkWake * s.darkWake) || F.t - s.lastHitT < 0.2 || s.stT > 40) wakeSquad(F, s);
     return;
   }
+  if (s.st === ST.ORBIT) { aiOrbit(F, s); return; }
   if (s.board) return;
+  if (s.ck === 'lattice' && latticeStep(F, s)) return;
   s.thinkT -= DT;
   if (s.thinkT <= 0) { s.thinkT = 0.12 + (s.i % 5) * 0.02; aiThink(F, s); }
   switch (s.st) {
     case ST.FORM: aiForm(F, s); break;
-    case ST.ATTACK: aiAttack(F, s); break;
+    case ST.ATTACK: if (s.leash && leashStep(F, s)) break; if (s.cls.role === 'bomber') aiCenser(F, s); else if (s.cls.role === 'support') aiChoir(F, s); else aiAttack(F, s); break;
     case ST.EVADE: aiEvade(F, s); break;
     case ST.EXTEND: aiExtend(F, s); break;
     case ST.TETHER: aiAttack(F, s); break;
@@ -796,6 +844,7 @@ function aiThink(F, s) {
     if (o === s.target) d *= 0.6;
     if (o.isPlayer) d *= 0.8;
     if (s.isPlayer && ((o.cap && F.mission.waveI >= F.mission.waves.length) || o === F.mission.ace)) d *= 0.4;   // autopilot: go for the objective
+    if (role === 'bomber' && (o.cap || o.ck === 'hauler')) d *= 0.35;
     if (role === 'tether' || role === 'board') { if (o.ck === 'hauler' || o.ck === 'station' || o.ck === 'beacon') d *= role === 'board' ? 0.2 : 0.45; else if (role === 'board') d *= 3; }
     else if (o.cap && !s.cap) d *= (o.ck === 'station' || o.ck === 'beacon') ? (F.mission.kind === 'defend' && s.cls.role === 'heavy' ? 0.5 : 2.2) : 1.8;
     if (s.team === TEAM_P && s.squad && s.squad.wing && p.target && o === p.target) d *= 0.7;
@@ -1027,6 +1076,14 @@ function avoid(F, s) {
   }
   for (const c of F.ships) {
     if (!c.alive || c === s || (!c.cap && !(c.squad && c.squad === s.squad))) continue;
+    if (c.st === ST.STATIC && c.hs) {   // stations / beacons: steer around their hull spheres, not one huge bubble
+      for (const h of c.hs) {
+        qrot(c.q, h[0], h[1], h[2], T2);
+        const R = h[3] + s.cls.rad + 30, dx = px - c.pos.x - T2.x, dy = py - c.pos.y - T2.y, dz = pz - c.pos.z - T2.z, d2 = dx * dx + dy * dy + dz * dz;
+        if (d2 < R * R) { const d = Math.sqrt(d2) || 1, w = (R - d) / R; ax += dx / d * w; ay += dy / d * w; az += dz / d * w; hit++; }
+      }
+      continue;
+    }
     const R = c.cap ? c.cls.rad * 0.9 + 40 : 22;
     const dx = px - c.pos.x, dy = py - c.pos.y, dz = pz - c.pos.z, d2 = dx * dx + dy * dy + dz * dz;
     if (d2 < R * R) { const d = Math.sqrt(d2) || 1, w = (R - d) / R; ax += dx / d * w; ay += dy / d * w; az += dz / d * w; hit++; }
@@ -1135,7 +1192,7 @@ function fireMissile(F, s, t) {
   qrot(s.q, 0, -1.5, -3, T); fwd(s, T2);
   m.alive = true; m.gen++; vset(m.pos, s.pos.x + T.x, s.pos.y + T.y, s.pos.z + T.z); cpy(m.ppos, m.pos);
   m.spd = Math.max(160, s.spd + 40); vset(m.vel, T2.x * m.spd, T2.y * m.spd, T2.z * m.spd);
-  m.tgt = t; m.tgtGen = t.gen; m.flare = null; m.life = 6.5; m.team = s.team; m.own = s; m.armT = 0.25;
+  m.tgt = t; m.tgtGen = t.gen; m.flare = null; m.life = 6.5; m.team = s.team; m.own = s; m.armT = 0.25; m.torp = false; m.hp = 1;
   m.dmg = s.isPlayer ? 95 + (F.run.weapon | 0) * 12 : F.E.dmg * 2.0 * (s.ace ? 1.2 : 1);
   const e = ev(F, EV.MFIRE, m.pos.x, m.pos.y, m.pos.z); e.s = s; e.s2 = t;
 }
@@ -1151,7 +1208,7 @@ function dropFlares(F, s) {
   }
   const e = ev(F, EV.FLARE, s.pos.x, s.pos.y, s.pos.z); e.s = s;
   // decoy any missile tracking s within 1100 m
-  for (const m of F.msls) if (m.alive && m.tgt === s && !m.flare && dist2(m.pos, s.pos) < 1100 * 1100 && F.R() < 0.85) m.flare = F.flares.find((x) => x.alive && x.team === s.team) || null;
+  for (const m of F.msls) if (m.alive && m.tgt === s && !m.flare && !m.torp && dist2(m.pos, s.pos) < 1100 * 1100 && F.R() < 0.85) m.flare = F.flares.find((x) => x.alive && x.team === s.team) || null;
 }
 function turretsStep(F, s) {
   const C = s.cls;
@@ -1203,12 +1260,13 @@ function boltsStep(F) {
     b.life -= DT;
     if (b.life <= 0) { b.alive = false; continue; }
     const nx = b.x + b.vx * DT, ny = b.y + b.vy * DT, nz = b.z + b.vz * DT;
+    if (torpHits(F, b, nx, ny, nz)) continue;
     // ships: segment vs sphere (relative motion ignored at 60 Hz; bolts are 10x faster than ships)
     let hit = null, hitT = 2;
     const sx = nx - b.x, sy = ny - b.y, sz = nz - b.z, sl2 = sx * sx + sy * sy + sz * sz;
     for (let i = 0; i < ships.length; i++) {
       const s = ships[i];
-      if (!s.alive || s.team === b.team || s === b.own || s.st === ST.WARP && s.warpT > 0.8) continue;
+      if (!s.alive || s.team === b.team || s === b.own || s.st === ST.WARP && s.warpT > 0.8 || s.phaseT > 0 || s.team === TEAM_N) continue;
       const R = s.cls.rad + (s.cap ? 4 : 1.5);
       const cx = s.pos.x - b.x, cy = s.pos.y - b.y, cz = s.pos.z - b.z;
       if (cx * cx + cy * cy + cz * cz > (R + 40) * (R + 40) && Math.abs(cx) > 60 + R) continue;
@@ -1260,13 +1318,13 @@ function missilesStep(F) {
     if (!m.flare && m.tgt && m.tgt.alive && m.tgt.gen === m.tgtGen) {
       tgt = m.tgt; leadPoint(m.pos.x, m.pos.y, m.pos.z, 0, 0, 0, tgt, m.spd, T3); tx = T3.x; ty = T3.y; tz = T3.z;
     }
-    m.spd = Math.min(430, m.spd + 260 * DT);
+    m.spd = m.torp ? Math.min(230, m.spd + 34 * DT) : Math.min(430, m.spd + 260 * DT);
     const vl = Math.hypot(m.vel.x, m.vel.y, m.vel.z) || 1;
     let fx = m.vel.x / vl, fy = m.vel.y / vl, fz = m.vel.z / vl;
     if (tx !== undefined) {
       let dx = tx - m.pos.x, dy = ty - m.pos.y, dz = tz - m.pos.z; const d = Math.hypot(dx, dy, dz) || 1; dx /= d; dy /= d; dz /= d;
       // turn toward with a max rate (missiles can be out-turned at the sweet spot)
-      const c = clamp(fx * dx + fy * dy + fz * dz, -1, 1), ang = Math.acos(c), maxA = 2.1 * DT;
+      const c = clamp(fx * dx + fy * dy + fz * dz, -1, 1), ang = Math.acos(c), maxA = (m.torp ? 0.7 : 2.1) * DT;
       const k = ang > maxA ? maxA / ang : 1;
       fx += (dx - fx) * k; fy += (dy - fy) * k; fz += (dz - fz) * k; const fl = Math.hypot(fx, fy, fz) || 1; fx /= fl; fy /= fl; fz /= fl;
       // proximity fuse
@@ -1363,7 +1421,10 @@ export function damage(F, s, dmg, src, hx, hy, hz, kind = 0) {
   s.hull -= left; s.hullHitT = F.t;
   const e = ev(F, EV.HIT, hx, hy, hz); e.s = s; e.a = left; e.b = kind; e.s2 = src;
   if (s.isPlayer) { const e2 = ev(F, EV.PHURT, hx, hy, hz); e2.a = left / s.hullMax; e2.b = 1; e2.s = src; }
-  if (s.objective && F.R() < 0.06) comms(F, s.ck === 'hauler' ? 'cz_c_convoy_hit' : 'cz_c_station_hit', null, null, 1);
+  if (s.objective && F.R() < 0.06) {
+    if (s.ck === 'beacon' && F.mission.relight) { if (F.t - (F.mission.saidHit || -99) > 12) { F.mission.saidHit = F.t; comms(F, 'cz_c_relight_hold', null, { who: 'vigil' }, 1); } }
+    else comms(F, s.ck === 'hauler' ? 'cz_c_convoy_hit' : 'cz_c_station_hit', null, null, 1);
+  }
   if (s.squad && s.squad.wing && s.hull < s.hullMax * 0.5 && !s.saidHit) { s.saidHit = true; comms(F, 'cz_c_wing_hit', s); }
   if (s.hull <= 0) kill(F, s, src, hx, hy, hz);
 }
@@ -1436,7 +1497,7 @@ function directorStep(F) {
   }
   if (F.briefT > 0) return;
   // the combat zone: 9 km around the action (the convoy, or where the flight began)
-  if (p.alive && F.retreat <= 0) {
+  if (p.alive && F.retreat <= 0 && M.kind !== 'explore' && M.kind !== 'relight') {
     const h = firstAlive(M.protect);
     const d0 = Math.hypot(p.pos.x, p.pos.y, p.pos.z), d1 = h ? Math.sqrt(dist2(p.pos, h.pos)) : d0;
     if (Math.min(d0, d1) > 9000) { F.outT = (F.outT || 0) + DT; if (F.outT > 12) cmd(F, 'retreat'); } else F.outT = 0;
@@ -1449,8 +1510,16 @@ function directorStep(F) {
     if (w.trig === 'time') go = M.timer >= (w.at || 0) + 3.2;
     else if (w.trig === 'clear') go = left <= (M.swarm ? 2 : 1) && M.timer - (M.lastWaveT || 0) > 6 || M.timer - (M.lastWaveT || 0) > 70;
     else if (w.trig === 'nav') { const n = M.nav[w.nav]; go = n && Math.hypot(n[0] - p.pos.x, n[1] - p.pos.y, n[2] - p.pos.z) < (left === 0 ? 650 : 0); if (!go && left === 0 && M.timer - (M.lastWaveT || 0) > 110) go = true; }
+    else if (w.trig === 'charge') go = !!(M.relight && M.relight.ph === 'charge' && M.relight.k >= w.at);
     else if (w.trig === 'route') { const h = firstAlive(M.protect); go = (h && routeFrac(M, h) >= w.frac) || (left === 0 && M.timer - (M.lastWaveT || 0) > 14); }
     if (go) { M.waveI++; M.lastWaveT = M.timer; spawnWave(F, w); left = F.enemyLeft = left + 1; }
+  }
+  if (M.kind === 'explore' || M.kind === 'relight') {
+    if (M.relight) {
+      relightStep(F);
+      if (M.relight.ph === 'charge' && M.defended && !M.defended.alive) { comms(F, 'cz_c_relight_fail', null, { who: 'abbess' }, 3); finish(F, OUT.RETREAT); }
+    }
+    return;
   }
   // outcome
   const protAlive = countAlive(M.protect);
@@ -1487,6 +1556,7 @@ function finish(F, r) {
 export function cmd(F, name, arg) {
   const p = F.player;
   if (!p.alive && name !== 'retreat') return false;
+  const m2 = cmdM2(F, name, arg); if (m2 !== null) return m2;
   switch (name) {
     case 'pips': { const ok = pipsAdd(p.pips, arg); if (ok) { const e = ev(F, EV.PIPS); e.a = arg; } return ok; }
     case 'shields': { p.shFocus = p.shFocus === arg ? 0 : arg; const tot = p.shF + p.shB, f = p.shFocus === 1 ? 0.7 : p.shFocus === -1 ? 0.3 : 0.5; p.shF = tot * f; p.shB = tot - p.shF; const e = ev(F, EV.PIPS); e.a = 4 + p.shFocus; return true; }
@@ -1534,3 +1604,446 @@ export function cycleSub(F) {
 export function localToWorld(s, x, y, z, out) { qrot(s.q, x, y, z, out); out.x += s.pos.x; out.y += s.pos.y; out.z += s.pos.z; return out; }
 export function shipFwd(s, out) { return fwd(s, out); }
 export { pipsAdd as _pipsAdd, turnMul as _turnMul, steerToward as _steer, NSHIP, NBOLT };
+
+// ================================================================================================================
+// M2 — travel, docking, the jump drive, points of interest, the beacon relight, and the Custodi / Echo behaviours.
+// A free flight is a sortie of kind 'explore' (no waves to win; it ends by docking, jumping or retreating);
+// the relight is an explore flight that turns into an event at the beacon. Outcomes: OUT below.
+// ================================================================================================================
+export const OUT = { WIN: 1, DEAD: 2, RETREAT: -1, DOCKED: 3, JUMPED: 4 };
+const DOCK_RANGE = 9000, JUMP_SPOOL = 4.2, RELIGHT_TIME = 64, SCAN_TIME = 2.6;
+
+// ---- points of interest: what the nav computer can point you at ---------------------------------------------------
+function buildPois(F) {
+  const bp = F.bp, P = [];
+  if (bp.station) {
+    const st = bp.station, d = st.dock;
+    const mouth = d ? [st.pos[0] + d.p[0], st.pos[1] + d.p[1], st.pos[2] + d.p[2]] : [st.pos[0], st.pos[1], st.pos[2] + st.radius];
+    const n = d ? d.n : [0, 0, 1];
+    P.push({ kind: 'station', name: bp.name, pos: st.pos, r: st.radius, fac: bp.faction, mouth, n, at: [mouth[0] + n[0] * 1100, mouth[1] + n[1] * 1100, mouth[2] + n[2] * 1100], stop: 700 });
+  }
+  if (bp.beacon) { const b = bp.beacon; P.push({ kind: 'beacon', name: bp.name, pos: [b.pos[0], b.pos[1] + b.height * 0.5, b.pos[2]], base: b.pos, r: b.radius, lit: b.lit, at: null, stop: 900 }); }
+  bp.planets.forEach((p, i) => {
+    P.push({ kind: 'planet', i, name: p.name, type: p.type, pos: p.pos, r: p.radius, at: null, stop: 600 });
+    (p.moons || []).forEach((m, k) => { P.push({ kind: 'moon', i, k, name: m.name, type: m.type, pos: moonPos(p, m), r: p.radius * m.size, at: null, stop: 500 }); });
+  });
+  if (bp.field) P.push({ kind: 'field', name: '', pos: bp.field.center, r: bp.field.radius, at: null, stop: 300 });
+  F.pois = P;
+  F.nav = Math.max(0, P.findIndex((x) => x.kind === (F.mission && F.mission.relightWanted ? 'beacon' : 'station')));
+  F.scanned = 0; F.scanT = 0;
+}
+// approach point of a POI as seen from (x,y,z): stations have a fixed lane, round things a stand-off sphere
+const AP = [0, 0, 0];
+function approach(F, P, x, y, z) {
+  if (P.at) return P.at;
+  const dx = P.pos[0] - x, dy = P.pos[1] - y, dz = P.pos[2] - z, d = Math.hypot(dx, dy, dz) || 1;
+  const off = P.kind === 'beacon' ? P.r + 480 : P.kind === 'field' ? P.r * 0.6 : P.r * 1.3 + 350;
+  AP[0] = P.pos[0] - dx / d * off; AP[1] = P.pos[1] - dy / d * off; AP[2] = P.pos[2] - dz / d * off;
+  return AP;
+}
+export function navDistance(F, i) {
+  const P = F.pois && F.pois[i], p = F.player; if (!P) return 0;
+  const a = approach(F, P, p.pos.x, p.pos.y, p.pos.z);
+  return Math.hypot(a[0] - p.pos.x, a[1] - p.pos.y, a[2] - p.pos.z);
+}
+// planets and moons are solid: the player bounces off the atmosphere (no damage — the descent is a later chapter)
+function collideWorlds(F, s) {
+  if (!F.pois) return;
+  for (const P of F.pois) {
+    if (P.kind !== 'planet' && P.kind !== 'moon') continue;
+    const dx = s.pos.x - P.pos[0], dy = s.pos.y - P.pos[1], dz = s.pos.z - P.pos[2], R = P.r * 1.06, d2 = dx * dx + dy * dy + dz * dz;
+    if (d2 < R * R) {
+      const d = Math.sqrt(d2) || 1, nx = dx / d, ny = dy / d, nz = dz / d;
+      s.pos.x = P.pos[0] + nx * R; s.pos.y = P.pos[1] + ny * R; s.pos.z = P.pos[2] + nz * R;
+      const vn = s.vel.x * nx + s.vel.y * ny + s.vel.z * nz;
+      if (vn < 0) { s.vel.x -= vn * nx; s.vel.y -= vn * ny; s.vel.z -= vn * nz; }
+      if (s.isPlayer && F.cruise) cruiseSet(F, false, 'cz_cr_obstacle');
+    }
+  }
+}
+
+// ---- free flight setup ---------------------------------------------------------------------------------------------
+function setupExplore(F) {
+  const cc = F.cc, bp = F.bp, R = F.R, p = F.player;
+  const M = F.mission;
+  M.objective = 'explore';
+  // a chance encounter: raiders (or the Echo's drones in Echo space) after a while in the system
+  if (cc.encounter) {
+    const ef = M.ef, fighter = ef === F_ECO ? 'shard' : ef === F_GILDA ? 'lancer' : ef === F_CUSTODI ? 'votive' : 'scrapwing';
+    const n = 3 + (F.tier >= 4 ? 1 : 0) + (F.tier >= 8 ? 1 : 0);
+    const ships = new Array(n).fill(fighter);
+    if (ef === F_ECO) { ships[0] = 'lattice'; if (F.tier >= 3) ships[1] = 'lattice'; }
+    else if (ef === F_CUSTODI) ships[0] = 'censer';
+    else if (ef === F_RELITTI && F.tier >= 2) ships[0] = 'harpoon';
+    M.waves.push({ trig: 'time', at: cc.encounterAt || R.range(50, 95), ships, how: ef === F_RELITTI && R() < 0.6 ? 'dark' : 'warp' });
+  }
+  // where the flight begins
+  const st = bp.station, beacon = bp.beacon;
+  if (cc.undock && st && st.dock) {
+    const d = st.dock, mx = st.pos[0] + d.p[0], my = st.pos[1] + d.p[1], mz = st.pos[2] + d.p[2];
+    vset(p.pos, mx - d.n[0] * 14, my - d.n[1] * 14, mz - d.n[2] * 14); cpy(p.ppos, p.pos);
+    qlook(p.q, d.n[0], d.n[1], d.n[2]); p.spd = 0; vset(p.vel, 0, 0, 0); F.input.thr = 0.45;
+    F.undock = { t: 0, n: d.n };
+    comms(F, 'cz_c_undock_' + Math.min(2, bp.faction), null, { sys: bp.name, ctl: bp.faction }, 3);
+  } else if (cc.arrive) {
+    let ax = bp.edge[0], ay = bp.edge[1], az = bp.edge[2];
+    if (beacon && beacon.lit) { const t = st ? st.pos : [0, 0, 0], dx = t[0] - beacon.pos[0], dz = t[2] - beacon.pos[2], dl = Math.hypot(dx, dz) || 1; ax = beacon.pos[0] + dx / dl * 900; ay = beacon.pos[1] + beacon.height * 0.4; az = beacon.pos[2] + dz / dl * 900; }
+    const look = st ? st.pos : bp.planets[0].pos;
+    vset(p.pos, ax, ay, az); cpy(p.ppos, p.pos);
+    qlook(p.q, look[0] - ax, look[1] - ay, look[2] - az);
+    p.spd = 3200; fwd(p, T); vset(p.vel, T.x * 3200, T.y * 3200, T.z * 3200); F.input.thr = 0.55;
+    F.arriveT = 2.6;
+    comms(F, 'cz_c_arrive_' + bp.faction, null, { sys: bp.name, ctl: bp.faction }, 3);
+  } else if (cc.relight && beacon) {
+    const t = st ? st.pos : [0, 0, 0], dx = t[0] - beacon.pos[0], dz = t[2] - beacon.pos[2], dl = Math.hypot(dx, dz) || 1;
+    vset(p.pos, beacon.pos[0] + dx / dl * 2400, beacon.pos[1] + beacon.height * 0.45, beacon.pos[2] + dz / dl * 2400); cpy(p.ppos, p.pos);
+    qlook(p.q, beacon.pos[0] - p.pos.x, beacon.pos[1] + beacon.height * 0.5 - p.pos.y, beacon.pos[2] - p.pos.z);
+    p.spd = 120; fwd(p, T); vset(p.vel, T.x * 120, T.y * 120, T.z * 120);
+  }
+  M.relightWanted = !!cc.relight;
+}
+
+// ---- the jump drive: spool, then out ------------------------------------------------------------------------------
+function jumpStart(F, to) {
+  const p = F.player;
+  if (F.jump || F.dock || F.outcome) return false;
+  const why = F.outcome || !p.alive ? 'cz_cr_blocked' : p.tetheredBy ? 'cz_cr_tethered' : hostileNear(F, p, MASS_LOCK) ? 'cz_cr_masslock' : '';
+  if (why) { const e = ev(F, EV.JUMP, p.pos.x, p.pos.y, p.pos.z); e.a = -1; e.k = why; return false; }
+  if (F.cruise) cruiseSet(F, false);
+  F.jump = { t: 0, to };
+  const e = ev(F, EV.JUMP, p.pos.x, p.pos.y, p.pos.z); e.a = 1; e.b = to;
+  return true;
+}
+function jumpStep(F, p) {
+  const J = F.jump;
+  J.t += DT;
+  const why = !p.alive ? 'cz_cr_blocked' : p.tetheredBy ? 'cz_cr_tethered' : hostileNear(F, p, MASS_LOCK) ? 'cz_cr_masslock' : '';
+  if (why) { F.jump = null; const e = ev(F, EV.JUMP, p.pos.x, p.pos.y, p.pos.z); e.a = -1; e.k = why; return; }
+  p.boosting = J.t > JUMP_SPOOL - 1.2; p.boost = Math.max(p.boost, 0.6); p.fire = false; p.thr = 1;
+  if (J.t >= JUMP_SPOOL) {
+    const e = ev(F, EV.WARPOUT, p.pos.x, p.pos.y, p.pos.z); e.s = p; e.a = 3; e.b = J.to;
+    p.alive = false; p.dieT = 0.4; F.jumpedTo = J.to; F.jump = null;
+    finish(F, OUT.JUMPED);
+  }
+}
+
+// ---- docking: clearance, approach lane, align, slide in ----------------------------------------------------------
+function dockStart(F) {
+  const p = F.player, P = F.pois && F.pois.find((x) => x.kind === 'station');
+  if (F.dock) { if (F.dock.ph <= 1) { F.dock = null; const e = ev(F, EV.DOCK, p.pos.x, p.pos.y, p.pos.z); e.a = -2; return true; } return false; }
+  const no = (k) => { const e = ev(F, EV.DOCK, p.pos.x, p.pos.y, p.pos.z); e.a = -1; e.k = k; return false; };
+  if (!P) return no('cz_hud_dock_none');
+  if (F.outcome || F.jump || !p.alive || F.mission.relight && F.mission.relight.ph !== 'done' && F.mission.relight.ph !== 'approach') return no('cz_cr_blocked');
+  if (hostileNear(F, p, 2600)) { comms(F, 'cz_c_dock_deny', null, { ctl: F.bp.faction }, 3); return no(''); }
+  const d = Math.hypot(P.mouth[0] - p.pos.x, P.mouth[1] - p.pos.y, P.mouth[2] - p.pos.z);
+  if (d > DOCK_RANGE) return no('cz_hud_dock_far');
+  F.nav = F.pois.indexOf(P);
+  F.dock = { ph: 0, t: 0, P, bay: 1 + (F.R.int(9)) };
+  if (F.cruise) cruiseSet(F, false);
+  comms(F, 'cz_c_dock_ok_' + Math.min(2, F.bp.faction), null, { bay: F.dock.bay, sys: F.bp.name, ctl: F.bp.faction }, 3);
+  const e = ev(F, EV.DOCK, p.pos.x, p.pos.y, p.pos.z); e.a = 1;
+  return true;
+}
+function dockStep(F, p) {
+  const D = F.dock, P = D.P, n = P.n;
+  D.t += DT; p.fire = false; p.boosting = false; p.drift = false;
+  const lane = 700;
+  const ax = P.mouth[0] + n[0] * lane, ay = P.mouth[1] + n[1] * lane, az = P.mouth[2] + n[2] * lane;
+  if (D.ph === 0) {   // fly to the head of the approach lane
+    const dx = ax - p.pos.x, dy = ay - p.pos.y, dz = az - p.pos.z, d = Math.hypot(dx, dy, dz);
+    steerToward(p, dx, dy, dz, false);
+    const want = clamp(d * 0.35, 40, 1800);
+    p.spdCap = want; p.thr = 1;
+    if (d < 90) { D.ph = 1; D.t = 0; const e = ev(F, EV.DOCK, p.pos.x, p.pos.y, p.pos.z); e.a = 2; }
+  } else if (D.ph === 1) {   // align with the bay, settle
+    const off = steerToward(p, -n[0], -n[1], -n[2], true);
+    p.spdCap = 26; p.thr = 0.3;
+    // drift onto the lane axis
+    const kx = ax - p.pos.x, ky = ay - p.pos.y, kz = az - p.pos.z;
+    p.pos.x += kx * 0.02; p.pos.y += ky * 0.02; p.pos.z += kz * 0.02;
+    if (off < 0.06 && D.t > 1.2) { D.ph = 2; D.t = 0; const e = ev(F, EV.DOCK, p.pos.x, p.pos.y, p.pos.z); e.a = 3; }
+  } else if (D.ph === 2) {   // slide in along the lane on the station's tractor
+    steerToward(p, -n[0], -n[1], -n[2], true);
+    const ix = P.mouth[0] - n[0] * 24, iy = P.mouth[1] - n[1] * 24, iz = P.mouth[2] - n[2] * 24;
+    const dx = ix - p.pos.x, dy = iy - p.pos.y, dz = iz - p.pos.z, d = Math.hypot(dx, dy, dz);
+    const v = clamp(d * 0.32, 5, 60);
+    p.spdCap = v; p.thr = 0.25;
+    // the tractor holds the ship on the lane axis
+    const along = (p.pos.x - P.mouth[0]) * n[0] + (p.pos.y - P.mouth[1]) * n[1] + (p.pos.z - P.mouth[2]) * n[2];
+    const lx = P.mouth[0] + n[0] * along, ly = P.mouth[1] + n[1] * along, lz = P.mouth[2] + n[2] * along;
+    p.pos.x += (lx - p.pos.x) * 0.06; p.pos.y += (ly - p.pos.y) * 0.06; p.pos.z += (lz - p.pos.z) * 0.06;
+    if (d < 6 || along < -18) { D.ph = 3; D.t = 0; p.spdCap = 0; const e = ev(F, EV.DOCK, p.pos.x, p.pos.y, p.pos.z); e.a = 4; }
+  } else {
+    p.spdCap = 0; p.thr = 0; p.cp = p.cy = p.cr = 0;
+    p.vel.x *= 0.9; p.vel.y *= 0.9; p.vel.z *= 0.9;
+    if (D.t > 1.6) finish(F, OUT.DOCKED);
+  }
+}
+// leaving the bay: the station's tractor pushes you out along the lane, then the ship is yours
+function undockStep(F, p) {
+  const U = F.undock; U.t += DT;
+  p.fire = false; p.cp = p.cy = p.cr = 0; p.boosting = false;
+  p.spdCap = U.t < 1.2 ? 12 : 12 + (U.t - 1.2) * 70; p.thr = 1;
+  if (U.t > 4.2) { F.undock = null; p.spdCap = 1; F.input.thr = 0.55; p.thr = 0.55; const e = ev(F, EV.DOCK, p.pos.x, p.pos.y, p.pos.z); e.a = 5; }
+}
+
+// ---- surveys: hold near a world for a moment and the scan logs it -----------------------------------------------------
+function scanStep(F, p) {
+  if (!F.pois || (F.step % 10) !== 0) return;
+  let near = -1;
+  for (let i = 0; i < F.pois.length; i++) {
+    const P = F.pois[i]; if (P.kind !== 'planet' && P.kind !== 'moon') continue;
+    if (P.scanned) continue;
+    const reach = P.r * 1.9 + 1500;
+    if (Math.hypot(P.pos[0] - p.pos.x, P.pos[1] - p.pos.y, P.pos[2] - p.pos.z) < reach) { near = i; break; }
+  }
+  if (near < 0) { F.scanT = 0; F.scanI = -1; return; }
+  if (F.scanI !== near) { F.scanI = near; F.scanT = 0; }
+  F.scanT += DT * 10;
+  if (F.scanT >= SCAN_TIME) {
+    const P = F.pois[near]; P.scanned = true; F.scanned++; F.scanT = 0; F.scanI = -1;
+    const e = ev(F, EV.SCAN, P.pos[0], P.pos[1], P.pos[2]); e.a = near; e.k = P.kind; e.v = { name: P.name, type: P.type || '' };
+    if (P.kind === 'planet' || P.kind === 'moon') comms(F, 'cz_c_scan', F.player, { name: P.name }, 1);
+  }
+}
+
+// ---- the relight: seat the relic, hold the light while it charges, then the Echo answers ------------------------------------
+function relightBegin(F) {
+  const M = F.mission, bp = F.bp, b = bp.beacon, p = F.player;
+  if (!b || b.lit || M.relight) return false;
+  const obj = spawn(F, 'beacon', TEAM_P, F_CUSTODI, b.pos[0], b.pos[1] + b.height * 0.5, b.pos[2], 0, 0, -1);
+  obj.hs = [[0, -b.height * 0.3, 0, b.radius * 0.8], [0, 0, 0, b.radius], [0, b.height * 0.3, 0, b.radius * 0.8]];
+  obj.nameKey = 'cz_ship_beacon'; obj.hullMax = obj.hull = Math.round(2600 + F.tier * 260); obj.st = ST.STATIC; obj.objective = true; obj.spd = 0; vset(obj.vel, 0, 0, 0);
+  M.protect.push(obj); M.defended = obj;
+  const lit = F.cc.litCount | 0, calm = !!F.cc.echoCalm;
+  M.relight = { ph: 'charge', k: 0, t: 0, obj, calm, lit, said: 0, answerT: 0 };
+  M.kind = 'relight'; M.objective = 'relight';
+  comms(F, 'cz_c_relight_start', null, { voice: 0, who: 'abbess' }, 3);
+  // the Keepers send a watch: a Censer and two Votives that stay by the spire
+  if (F.cc.keepers !== false) {
+    const sq = squad(F, ['censer', 'votive', 'votive'], TEAM_P, F_CUSTODI, b.pos[0] + 300, b.pos[1] + b.height * 0.6, b.pos[2] + 260, -1, 0, -0.3, { warp: true, speed: 90 });
+    sq.members.forEach((s, k) => { s.nameKey = 'cz_cs_1'; s.name = String(k + 2); s.leash = obj; s.hullMax = s.hull = Math.round(s.hullMax * 1.5); });
+    M.keepers = sq;
+    // in the Keepers' own space (or deep enough) their cathedral barge comes to witness, point defence awake
+    if (F.bp.faction === F_CUSTODI || F.tier >= 4) {
+      const rq = spawn(F, 'reliquary', TEAM_P, F_CUSTODI, b.pos[0] - 1500, b.pos[1] + b.height * 0.5, b.pos[2] + 900, 1, 0, -0.4);
+      if (rq) { rq.st = ST.CAP; rq.warpT = 2.2; launchShip(rq, 60); rq.nameKey = 'cz_ship_reliquary'; const e = ev(F, EV.WARPIN, rq.pos.x, rq.pos.y, rq.pos.z); e.s = rq; e.a = 1; e.b = 0; e.c = -0.4; e.c2 = 1; }
+    }
+  }
+  // raiders smell the crystal: two waves during the charge, aimed at the spire
+  const ef = M.ef === F_ECO ? F_RELITTI : M.ef, fighter = ef === F_GILDA ? 'lancer' : ef === F_CUSTODI ? 'votive' : 'scrapwing', heavy = ef === F_GILDA ? 'bastion' : ef === F_CUSTODI ? 'censer' : 'harpoon';
+  const n = 3 + Math.min(3, F.tier >> 1);
+  M.waves.length = 0; M.waveI = 0;
+  M.waves.push({ trig: 'charge', at: 0.12, ships: [heavy].concat(new Array(n - 1).fill(fighter)), how: 'warp', ef });
+  M.waves.push({ trig: 'charge', at: 0.5, ships: [heavy, heavy].concat(new Array(n).fill(fighter)), how: 'warp', ef, gutter: ef === F_RELITTI });
+  F.waves = 2; F.wave = 0;
+  const e = ev(F, EV.CHARGE, b.pos[0], b.pos[1], b.pos[2]); e.a = 0;
+  return true;
+}
+function relightStep(F) {
+  const M = F.mission, L = M.relight, p = F.player, b = F.bp.beacon;
+  L.t += DT;
+  if (L.ph === 'charge') {
+    if (!L.obj.alive) return;   // the director loses the event
+    const d = Math.hypot(p.pos.x - L.obj.pos.x, p.pos.y - L.obj.pos.y, p.pos.z - L.obj.pos.z);
+    const rate = (p.alive && d < 2600 ? 1 : 0.25) / RELIGHT_TIME;
+    const k0 = L.k; L.k = Math.min(1, L.k + rate * DT);
+    if (k0 < 0.5 && L.k >= 0.5) comms(F, 'cz_c_relight_half', null, { who: 'abbess' }, 2);
+    if ((F.step % 30) === 0) { const e = ev(F, EV.CHARGE, b.pos[0], b.pos[1], b.pos[2]); e.a = L.k; }
+    if (L.k >= 1) {   // the light bursts out
+      L.ph = 'burst'; L.t = 0; F.relit = true;
+      const e = ev(F, EV.RELIGHT, b.pos[0], b.pos[1] + b.height * 0.82, b.pos[2]); e.a = L.calm ? 1 : 0;
+      comms(F, 'cz_c_relight_burst', null, { who: 'abbess' }, 3);
+      for (const s of F.ships) if (s.alive && s.team === TEAM_E) { setSt(s, ST.FLEE); s.fleeT = 4; }   // the raiders scatter
+      F.hitStop = 0.12; F.slow = 1.6; F.slowK = 0.3;
+    }
+  } else if (L.ph === 'burst') {
+    if (L.t > 2.4) { L.ph = 'answer'; L.t = 0; echoAnswer(F); }
+  } else if (L.ph === 'answer') {
+    L.answerT += DT;
+    if (L.calm) {
+      if (L.said < 3 && L.answerT > 1.5 + L.said * 4.2) { comms(F, 'cz_c_voice_calm_' + L.said, null, { voice: 1 }, 3); L.said++; }
+      if (L.answerT > 15) {
+        for (const s of F.ships) if (s.alive && s.team === TEAM_N && s.fac === F_ECO) { const e = ev(F, EV.WARPOUT, s.pos.x, s.pos.y, s.pos.z); e.s = s; s.alive = false; s.dieT = 0.5; }
+        comms(F, 'cz_c_echo_leave', null, { who: 'abbess' }, 2);
+        L.ph = 'done'; win(F);
+      }
+    } else if (L.answerT > 2) {
+      let left = 0; for (const s of F.ships) if (s.alive && s.team === TEAM_E && !s.decoy) left++;
+      if (left === 0 && L.answerT > 6) { L.ph = 'done'; win(F); }
+    }
+  }
+}
+// the Echo answers a relit beacon: a patient pilot it only measures; one who relights too much, too fast, it fights
+function echoAnswer(F) {
+  const M = F.mission, L = M.relight, b = F.bp.beacon, R = F.R;
+  const cx = b.pos[0], cy = b.pos[1] + b.height * 0.6, cz = b.pos[2];
+  if (L.calm) {
+    for (let k = 0; k < 4; k++) {
+      const a = k / 4 * Math.PI * 2, ck = k === 3 ? 'choir' : 'lattice', rr = ck === 'choir' ? 900 : 520 + k * 60;
+      const s = spawn(F, ck, TEAM_N, F_ECO, cx + Math.cos(a) * rr, cy + (k - 1.5) * 40, cz + Math.sin(a) * rr, -Math.sin(a), 0, Math.cos(a));
+      if (!s) continue;
+      s.st = ST.ORBIT; s.orbit = { c: [cx, cy, cz], r: rr, w: (ck === 'choir' ? 0.05 : 0.16) * (k & 1 ? 1 : -1), a }; s.warpT = 1.2;
+      launchShip(s, 60); s.nameKey = 'cz_cs_3';
+      const e = ev(F, EV.WARPIN, s.pos.x, s.pos.y, s.pos.z); e.s = s; e.a = -Math.sin(a); e.b = 0; e.c = Math.cos(a);
+    }
+    M.echoSeen = true;
+  } else {
+    const n = 2 + Math.min(4, L.lit + (F.tier >> 2));
+    const ships = new Array(n).fill('lattice').concat(['shard', 'shard', 'shard']);
+    ships.push('choir'); if (L.lit >= 2) ships.push('choir');
+    M.ef = F_ECO; F.waves = F.wave + 1;   // the answer is the event's last wave
+    spawnWave(F, { ships, how: 'warp', nav: null });
+    for (let k = 0; k < 3; k++) comms(F, 'cz_c_voice_warn_' + k, null, { voice: 1 }, k ? 1 : 3);
+    M.echoFought = true;
+  }
+}
+function aiOrbit(F, s) {
+  const O = s.orbit; O.a += O.w * DT;
+  const tx = O.c[0] + Math.cos(O.a) * O.r, ty = O.c[1] + Math.sin(O.a * 0.5) * 60, tz = O.c[2] + Math.sin(O.a) * O.r;
+  steerToward(s, tx - s.pos.x, ty - s.pos.y, tz - s.pos.z, false);
+  s.thr = 0.45; s.fire = false; s.boosting = false;
+}
+
+// ---- Custodi: the Censer stands off and lobs torpedoes; the watch never strays far from what it guards --------------------
+function aiCenser(F, s) {
+  const t = s.target;
+  if (!t || !t.alive) { aiAttack(F, s); return; }
+  const C = s.cls, d = Math.sqrt(dist2(s.pos, t.pos));
+  const stand = t.cap ? 1500 : 1100;
+  if (d > stand + 250) { steerToward(s, t.pos.x - s.pos.x, t.pos.y - s.pos.y, t.pos.z - s.pos.z, false); s.thr = 1; }
+  else if (d < stand - 350) { fwd(t, T2); steerToward(s, s.pos.x - t.pos.x + T2.y * 300, s.pos.y - t.pos.y + 200, s.pos.z - t.pos.z - T2.x * 300, false); s.thr = 0.8; }
+  else { steerToward(s, t.pos.x - s.pos.x, t.pos.y - s.pos.y, t.pos.z - s.pos.z, false); s.thr = 0.4; }
+  s.boosting = false; s.drift = false;
+  fwd(s, T); const c = ((t.pos.x - s.pos.x) * T.x + (t.pos.y - s.pos.y) * T.y + (t.pos.z - s.pos.z) * T.z) / (d || 1);
+  s.torpCd = (s.torpCd || 2.5) - DT;
+  if (s.torpCd <= 0 && c > 0.86 && d < 2400 && (s.torps == null ? (s.torps = C.torp || 4) : s.torps) > 0) { fireTorpedo(F, s, t); s.torps--; s.torpCd = 6.5 + F.R() * 3; }
+  s.fire = c > 0.992 && d < 900;
+}
+function fireTorpedo(F, s, t) {
+  const m = F.msls.find((x) => !x.alive); if (!m) return;
+  const at = s.cls.torpAt || [0, 0, -s.cls.len * 0.5];
+  qrot(s.q, at[0], at[1], at[2], T); fwd(s, T2);
+  m.alive = true; m.gen++; vset(m.pos, s.pos.x + T.x, s.pos.y + T.y, s.pos.z + T.z); cpy(m.ppos, m.pos);
+  m.spd = 120; vset(m.vel, T2.x * 120, T2.y * 120, T2.z * 120);
+  m.tgt = t; m.tgtGen = t.gen; m.flare = null; m.life = 15; m.team = s.team; m.own = s; m.armT = 0.6;
+  m.torp = true; m.hp = 2; m.dmg = (F.E ? F.E.dmg : 10) * (s.team === TEAM_P ? 9 : 5.5);
+  const e = ev(F, EV.TORP, m.pos.x, m.pos.y, m.pos.z); e.s = s; e.s2 = t;
+}
+// the watch: escorts drift back to what they guard instead of chasing past ~1.6 km
+function leashStep(F, s) {
+  const h = s.leash; if (!h || !h.alive) return false;
+  const d2 = dist2(s.pos, h.pos);
+  if (d2 > 1600 * 1600 && s.st === ST.ATTACK) { steerToward(s, h.pos.x - s.pos.x, h.pos.y - s.pos.y, h.pos.z - s.pos.z, false); s.thr = 1; s.fire = false; return true; }
+  return false;
+}
+
+// ---- Echo: the Lattice phases out of your fire and blinks sideways; it fires in triplets ---------------------------------
+function latticeStep(F, s) {
+  if (s.phaseT > 0) {
+    s.phaseT -= DT;
+    // slide along the blink vector while out of phase
+    s.pos.x += s.blinkV.x * DT; s.pos.y += s.blinkV.y * DT; s.pos.z += s.blinkV.z * DT;
+    if (s.phaseT <= 0) { const e = ev(F, EV.PHASE, s.pos.x, s.pos.y, s.pos.z); e.s = s; e.a = 0; }
+    return true;
+  }
+  if (s.phaseCd > 0) s.phaseCd -= DT;
+  const threat = F.t - s.lastHitT < 0.25 || (s.evadeCd <= 0 && linedUpBy(F, s) > 0.85);
+  if (threat && (s.phaseCd || 0) <= 0) {
+    const side = F.R() < 0.5 ? -1 : 1, up = (F.R() - 0.5) * 0.8;
+    qrot(s.q, side, up, -0.3, T);
+    const L = 160 + F.R() * 120, dur = 0.5;
+    s.blinkV = s.blinkV || v3(); vset(s.blinkV, T.x * L / dur, T.y * L / dur, T.z * L / dur);
+    s.phaseT = dur; s.phaseCd = 2.6 + F.R() * 2.2 - s.skill;
+    const e = ev(F, EV.PHASE, s.pos.x, s.pos.y, s.pos.z); e.s = s; e.a = 1;
+    return true;
+  }
+  // rhythm: triplets
+  if (s.fire) { s.trip = (s.trip || 0) + DT; if (s.trip > 0.55) { s.fire = false; if (s.trip > 1.05) s.trip = 0; } } else s.trip = 0;
+  return false;
+}
+// the Choir hangs back, re-shields its kin through lattice links and sings chords of slow bolts
+function aiChoir(F, s) {
+  const t = s.target;
+  s.fire = false; s.boosting = false;
+  if (t && t.alive) {
+    const dx = t.pos.x - s.pos.x, dy = t.pos.y - s.pos.y, dz = t.pos.z - s.pos.z, d = Math.hypot(dx, dy, dz) || 1;
+    if (d < 1000) { steerToward(s, -dx, -dy + 150, -dz, false); s.thr = 0.8; }
+    else if (d > 1600) { steerToward(s, dx, dy, dz, false); s.thr = 0.7; }
+    else { steerToward(s, -dz, 0, dx, false); s.thr = 0.35; }
+    s.chordT = (s.chordT == null ? 3 : s.chordT) - DT;
+    if (s.chordT <= 0 && d < 2200) { chord(F, s, t); s.chordT = 5.2 + F.R() * 2; }
+  } else { s.thr = 0.2; s.cp = s.cy = s.cr = 0; }
+  // links: up to three kin within 900 m get their shields back
+  s.linkT = (s.linkT || 0) - DT;
+  if (s.linkT <= 0) {
+    s.linkT = 0.5; s.links = s.links || []; s.links.length = 0;
+    for (const o of F.ships) {
+      if (s.links.length >= 3) break;
+      if (!o.alive || o === s || o.team !== s.team || o.fac !== F_ECO || o.shMax <= 0) continue;
+      if (dist2(o.pos, s.pos) < 900 * 900) s.links.push(o);
+    }
+  }
+  if (s.links) for (const o of s.links) if (o.alive) { const r = o.shMax * 0.16 * DT; o.shF = Math.min(o.shMax * 0.5, o.shF + r); o.shB = Math.min(o.shMax * 0.5, o.shB + r); }
+}
+function chord(F, s, t) {
+  leadPoint(s.pos.x, s.pos.y, s.pos.z, 0, 0, 0, t, s.cls.bolt, T3);
+  let dx = T3.x - s.pos.x, dy = T3.y - s.pos.y, dz = T3.z - s.pos.z; const dl = Math.hypot(dx, dy, dz) || 1; dx /= dl; dy /= dl; dz /= dl;
+  // a ring of seven slow bolts around the aim line (orthonormal basis around it)
+  let ux = Math.abs(dy) < 0.9 ? 0 : 1, uy = Math.abs(dy) < 0.9 ? 1 : 0, uz = 0;
+  let rx = uy * dz - uz * dy, ry = uz * dx - ux * dz, rz = ux * dy - uy * dx; const rl = Math.hypot(rx, ry, rz) || 1; rx /= rl; ry /= rl; rz /= rl;
+  ux = dy * rz - dz * ry; uy = dz * rx - dx * rz; uz = dx * ry - dy * rx;
+  for (let k = 0; k < 7; k++) {
+    const a = k / 7 * Math.PI * 2, sp = 0.09;
+    const b = allocBolt(F); if (!b) break;
+    const vx = dx + (rx * Math.cos(a) + ux * Math.sin(a)) * sp, vy = dy + (ry * Math.cos(a) + uy * Math.sin(a)) * sp, vz = dz + (rz * Math.cos(a) + uz * Math.sin(a)) * sp;
+    b.alive = true; b.x = b.px = s.pos.x + dx * 20; b.y = b.py = s.pos.y + dy * 20; b.z = b.pz = s.pos.z + dz * 20;
+    b.vx = vx * s.cls.bolt; b.vy = vy * s.cls.bolt; b.vz = vz * s.cls.bolt;
+    b.life = 4.2; b.team = s.team; b.own = s; b.fac = s.fac; b.kind = 3; b.len = 26;
+    b.dmg = F.E.dmg * s.dmgMul * 0.5;
+  }
+  const e = ev(F, EV.CHORD, s.pos.x, s.pos.y, s.pos.z); e.s = s; e.s2 = t;
+}
+// player bolts can shoot torpedoes down
+function torpHits(F, b, nx, ny, nz) {
+  for (const m of F.msls) {
+    if (!m.alive || !m.torp || m.team === b.team) continue;
+    const dx = nx - m.pos.x, dy = ny - m.pos.y, dz = nz - m.pos.z;
+    if (dx * dx + dy * dy + dz * dz < 7 * 7) {
+      b.alive = false; m.hp--;
+      if (m.hp <= 0) { m.alive = false; const e = ev(F, EV.MHIT, m.pos.x, m.pos.y, m.pos.z); e.a = 2; if (b.own && b.own.isPlayer) F.stats.hits++; }
+      else { const e = ev(F, EV.SPARK, m.pos.x, m.pos.y, m.pos.z); e.a = 0; e.b = 1; e.c = 0; }
+      return true;
+    }
+  }
+  return false;
+}
+// commands added by M2 (called from cmd())
+function cmdM2(F, name, arg) {
+  switch (name) {
+    case 'nav': { if (!F.pois || !F.pois.length) return false; F.nav = arg == null ? (F.nav + 1) % F.pois.length : clamp(arg | 0, 0, F.pois.length - 1); updateObjective(F); const e = ev(F, EV.TARGET); e.a = 1; return true; }
+    case 'dock': return dockStart(F);
+    case 'dockNow': {   // the pause menu's way home: straight into the bay when nothing hostile is around
+      if (!F.pois || !F.pois.some((x) => x.kind === 'station') || hostileNear(F, F.player, 2600) || F.outcome || (F.mission.relight && F.mission.relight.ph !== 'done')) return false;
+      finish(F, OUT.DOCKED); return true;
+    }
+    case 'jump': return jumpStart(F, arg);
+    case 'relight': {
+      const P = F.pois && F.pois.find((x) => x.kind === 'beacon');
+      if (!P || P.lit || F.mission.relight) return false;
+      if (Math.hypot(P.pos[0] - F.player.pos.x, P.pos[1] - F.player.pos.y, P.pos[2] - F.player.pos.z) > 2600) { const e = ev(F, EV.CHARGE); e.a = -1; e.k = 'cz_hud_relight_far'; return false; }
+      return relightBegin(F);
+    }
+  }
+  return null;
+}
+// autopilot (tests / attract mode): seat the relic at the beacon, ask for docking at the station
+function autoExplore(F, p) {
+  const M = F.mission;
+  if ((M.kind !== 'explore' && M.kind !== 'relight') || F.outcome || F.dock || (F.step % 30) !== 0) return;
+  const P = F.pois && F.pois[F.nav]; if (!P) return;
+  const d = Math.hypot(P.pos[0] - p.pos.x, P.pos[1] - p.pos.y, P.pos[2] - p.pos.z);
+  if (M.relightWanted && !M.relight && P.kind === 'beacon' && d < 2400) { relightBegin(F); return; }
+  if (F.autoDock && P.kind === 'station' && !M.relight && !hostileNear(F, p, 2600)) dockStart(F);
+}
+

@@ -8,7 +8,7 @@
 // band, power pips, dual-hemisphere radar, front/back shields + hull, missiles and flares. Top-left:
 // the mission tracker. Five languages through the games catalog (cz_* keys).
 import I18N from '/nucleo-i18n.js';
-import { cmd, cycleSub, leadPoint, CLS, TEAM_P, TEAM_E, F_GILDA, F_CUSTODI, F_RELITTI, ST } from './sim.js';
+import { cmd, cycleSub, leadPoint, CLS, TEAM_P, TEAM_E, TEAM_N, F_GILDA, F_CUSTODI, F_RELITTI, ST } from './sim.js';
 import * as A from './assets.js';
 import { flavorText, ACE_PORTRAIT } from '../constellations-ui.js';
 
@@ -22,39 +22,51 @@ const EMBLEM = ['emblem_gilda', 'emblem_custodi', 'emblem_relitti', 'emblem_eco'
 const CSS = `
 .sh-root{position:absolute;inset:0;pointer-events:none;z-index:25;font-family:'Segoe UI',system-ui,sans-serif;color:#bdf3ff;user-select:none}
 .sh-root canvas{position:absolute;inset:0;width:100%;height:100%;background:transparent!important;border:0!important;border-radius:0!important;box-shadow:none!important}
-.sh-comms{position:absolute;left:18px;top:38%;width:min(420px,40vw);display:flex;flex-direction:column;gap:8px}
+.sh-comms{position:absolute;left:18px;top:36%;width:min(470px,42vw);display:flex;flex-direction:column;gap:8px}
 .sh-msg{display:flex;gap:10px;align-items:flex-start;padding:8px 12px 8px 8px;background:linear-gradient(90deg,rgba(6,14,24,.78),rgba(6,14,24,.35));border-left:2px solid var(--c,#bdf3ff);border-radius:4px;animation:shin .25s ease-out;transition:opacity .6s}
 .sh-msg.out{opacity:0}
 .sh-pt{flex:0 0 44px;height:44px;border-radius:4px;background:#0b1622 center/cover;border:1px solid rgba(189,243,255,.25);display:grid;place-items:center;font-weight:800;font-size:18px;color:var(--c)}
-.sh-msg b{display:block;font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--c)}
-.sh-msg span{font-size:14px;line-height:1.3;color:#e8f6ff}
+.sh-msg b{display:block;font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--c)}
+.sh-msg span{font-size:15px;line-height:1.32;color:#f2f9ff;text-shadow:0 1px 3px #000}
 @keyframes shin{from{opacity:0;transform:translateX(-14px)}to{opacity:1;transform:none}}
 .sh-card{position:absolute;left:50%;top:18%;transform:translateX(-50%);width:min(620px,86vw);padding:20px 24px;background:linear-gradient(180deg,rgba(6,12,22,.86),rgba(6,12,22,.62));border:1px solid rgba(189,243,255,.22);border-radius:10px;text-align:center;transition:opacity .8s,transform .8s;overflow:hidden}
 .sh-card.out{opacity:0;transform:translateX(-50%) translateY(-12px)}
 .sh-card .art{position:absolute;inset:0;background:center/cover;opacity:.28}
-.sh-card .k{position:relative;font-size:11px;letter-spacing:.3em;color:#ffd66b;text-transform:uppercase}
+.sh-card .k{position:relative;font-size:12px;letter-spacing:.3em;color:#ffd66b;text-transform:uppercase}
 .sh-card h2{position:relative;margin:6px 0 8px;font-size:clamp(22px,3.4vw,34px);letter-spacing:.04em;font-weight:800;color:#fff}
-.sh-card p{position:relative;margin:0;font-size:15px;color:#cfe8f5}
-.sh-card .o{position:relative;margin-top:12px;font-size:13px;letter-spacing:.12em;color:#ffd66b;text-transform:uppercase}
+.sh-card p{position:relative;margin:0;font-size:16px;line-height:1.4;color:#e2f1fa}
+.sh-card .o{position:relative;margin-top:12px;font-size:14px;letter-spacing:.12em;color:#ffd66b;text-transform:uppercase}
 .sh-ban{position:absolute;left:0;right:0;top:24%;text-align:center;font-weight:800;font-size:clamp(20px,3.6vw,38px);letter-spacing:.18em;text-transform:uppercase;opacity:0;transition:opacity .35s;text-shadow:0 0 18px currentColor}
 .sh-pause{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:rgba(2,6,12,.55);pointer-events:auto;backdrop-filter:blur(3px)}
 .sh-pause.on{display:flex}
 .sh-pbox{width:min(560px,92vw);max-height:90%;overflow:auto;padding:22px;background:rgba(7,14,26,.94);border:1px solid rgba(189,243,255,.25);border-radius:12px}
-.sh-pbox h3{margin:0 0 14px;letter-spacing:.2em;text-transform:uppercase;font-size:14px;color:#ffd66b}
+.sh-pbox h3{margin:0 0 14px;letter-spacing:.2em;text-transform:uppercase;font-size:15px;color:#ffd66b}
 .sh-btn{display:block;width:100%;margin:6px 0;padding:11px 14px;border-radius:8px;border:1px solid rgba(189,243,255,.28);background:#0c1a2c;color:#e8f6ff;font:600 15px inherit;text-align:left;cursor:pointer}
 .sh-btn:hover,.sh-btn:focus{border-color:#bdf3ff;outline:none;background:#12263e}
 .sh-btn.bad{border-color:rgba(255,91,74,.5);color:#ffb0a6}
-.sh-keys{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;margin-top:12px;font-size:13px;color:#cfe8f5}
+.sh-keys{display:grid;grid-template-columns:auto 1fr;gap:5px 14px;margin-top:12px;font-size:14px;color:#cfe8f5}
 .sh-keys kbd{font:600 12px inherit;padding:1px 6px;border-radius:4px;border:1px solid rgba(189,243,255,.3);background:#0b1726;color:#fff;white-space:nowrap}
 .sh-touch{position:absolute;inset:0;display:none;pointer-events:none}
 .sh-touch.on{display:block}
-.sh-tb{position:absolute;pointer-events:auto;border-radius:50%;border:2px solid rgba(189,243,255,.35);background:rgba(10,24,40,.35);color:#e8f6ff;font:700 12px inherit;display:grid;place-items:center;touch-action:none;letter-spacing:.06em}
+.sh-tb{position:absolute;pointer-events:auto;border-radius:50%;border:2px solid rgba(189,243,255,.35);background:rgba(10,24,40,.45);color:#e8f6ff;font:700 13px inherit;display:grid;place-items:center;touch-action:none;letter-spacing:.06em}
 .sh-tb.on{background:rgba(120,220,255,.35)}
 .sh-stick{position:absolute;left:4%;bottom:6%;width:150px;height:150px;border-radius:50%;border:2px solid rgba(189,243,255,.25);pointer-events:auto;touch-action:none}
 .sh-knob{position:absolute;left:50%;top:50%;width:56px;height:56px;margin:-28px 0 0 -28px;border-radius:50%;background:rgba(189,243,255,.3)}
 .sh-thr{position:absolute;right:2.5%;top:22%;width:46px;height:44%;border-radius:23px;border:2px solid rgba(189,243,255,.25);pointer-events:auto;touch-action:none}
 .sh-thr i{position:absolute;left:4px;right:4px;bottom:4px;border-radius:18px;background:rgba(255,179,92,.45)}
 @media (prefers-reduced-motion:reduce){.sh-msg,.sh-card{animation:none;transition:none}}
+.sh-map{position:absolute;right:18px;top:78px;bottom:70px;width:min(370px,44vw);display:none;flex-direction:column;gap:8px;padding:16px;background:rgba(7,14,26,.9);border:1px solid rgba(189,243,255,.25);border-radius:12px;pointer-events:auto;color:#e8f6ff}
+.sh-map.on{display:flex}.sh-map h3{margin:0;letter-spacing:.18em;text-transform:uppercase;font-size:15px;color:#ffd66b}.sh-map .sub{font-size:13px;color:#9fc0d4}
+.sh-map .rows{flex:1 1 auto;overflow:auto;display:flex;flex-direction:column;gap:6px;min-height:0}
+.sh-mrow{display:grid;grid-template-columns:12px 1fr auto;gap:2px 10px;align-items:center;padding:9px 12px;border-radius:9px;border:1px solid rgba(189,243,255,.18);background:#0c1a2c;cursor:pointer;font-size:14px}
+.sh-mrow i{width:10px;height:10px;border-radius:50%}.sh-mrow span{color:#9fc0d4;font-size:13px}.sh-mrow em{grid-column:2/4;font-style:normal;color:#ff8a7a;font-size:12px}
+.sh-mrow.on{border-color:#ffd66b;background:#1d2a3a;box-shadow:0 0 14px rgba(255,214,107,.25)}.sh-mrow.no b{color:#9aa8b8}
+.sh-map .btns{display:flex;gap:8px}.sh-map .btns .sh-btn{margin:0;flex:1;text-align:center}
+.sh-btn kbd{font:600 11px inherit;padding:0 5px;border-radius:4px;border:1px solid rgba(189,243,255,.3);margin-left:6px}
+.sh-root.compact .sh-map{left:10px;right:10px;width:auto;top:auto;bottom:10px;height:46%}
+.sh-root.compact .sh-comms{left:10px;top:19%;width:min(74vw,420px)}
+.sh-root.compact .sh-msg span{font-size:14px}
+.sh-root.compact .sh-card{top:12%;padding:14px 16px}
 `;
 
 export function createHud(canvas) {
@@ -69,7 +81,7 @@ export function createHud(canvas) {
   const commsEl = root.querySelector('.sh-comms'), banEl = root.querySelector('.sh-ban'), cardEl = root.querySelector('.sh-card');
   const pauseEl = root.querySelector('.sh-pause'), pbox = root.querySelector('.sh-pbox'), touchEl = root.querySelector('.sh-touch');
   root.addEventListener('pointerdown', (e) => { if (e.target.closest('.sh-pause,.sh-tb,.sh-stick,.sh-thr')) e.stopPropagation(); }, true);
-  let W = 960, H = 540, S = 1, dpr = 1, F = null, model = null, cam = null, opts = {}, isPaused = false, active = false;
+  let W = 960, H = 540, S = 1, dpr = 1, MINPX = 13, compact = false, F = null, model = null, cam = null, opts = {}, isPaused = false, active = false;
   A.loadManifest().catch(() => {});
 
   // ---------------------------------------------------------------- input state
@@ -87,6 +99,7 @@ export function createHud(canvas) {
     if (e.repeat) { keys.add(k); return; }
     keys.add(k);
     F.input.touched = true;
+    if (mapOn) { mapKey(k); return; }
     if (k === 'Escape') { setPause(!isPaused); return; }
     if (isPaused) { if (k === 'Enter') setPause(false); return; }
     if (F.outcome && k === 'Enter') return;
@@ -99,23 +112,24 @@ export function createHud(canvas) {
       case 'c': cmd(F, 'cruise'); break;
       case 'v': if (opts.setCamera) opts.setCamera(opts.camera() === 'chase' ? 'cockpit' : 'chase'); break;
       case 'h': toggleHelp(); break;
+      case 'n': cmd(F, 'nav'); break; case 'l': interact(); break; case 'k': jumpNow(); break; case 'p': openMap(true); break;
     }
   }
   function onKeyUp(e) { const k = e.key.length === 1 ? e.key.toLowerCase() : e.key; keys.delete(k); }
   function onMouseMove(e) {
-    if (!active || !F || isPaused) return;
+    if (!active || !F || isPaused || mapOn) return;
     mouseLocked = document.pointerLockElement === canvas;
     if (mouseLocked) { if (cam) rotateAim(-e.movementX * 0.0021, -e.movementY * 0.0021); F.input.touched = true; }
     else { const r = canvas.getBoundingClientRect(); curX = e.clientX - r.left; curY = e.clientY - r.top; curT = performance.now(); }
   }
   function onMouseDown(e) {
-    if (!active || !F || isPaused) return;
+    if (!active || !F || isPaused || mapOn) return;
     if (e.button === 0) mouseFire = true;
     if (e.button === 2) cmd(F, 'missile');
     F.input.touched = true;
   }
   function onMouseUp(e) { if (e.button === 0) mouseFire = false; }
-  function onWheel(e) { if (!active || !F) return; F.input.thr = Math.max(0, Math.min(1, F.input.thr - Math.sign(e.deltaY) * 0.06)); e.preventDefault(); }
+  function onWheel(e) { if (!active || !F || mapOn) return; F.input.thr = Math.max(0, Math.min(1, F.input.thr - Math.sign(e.deltaY) * 0.06)); e.preventDefault(); }
   window.addEventListener('keydown', onKeyDown, true); window.addEventListener('keyup', onKeyUp, true);
   document.addEventListener('mousemove', onMouseMove); canvas.addEventListener('mousedown', onMouseDown); window.addEventListener('mouseup', onMouseUp);
   canvas.addEventListener('wheel', onWheel, { passive: false });
@@ -174,7 +188,7 @@ export function createHud(canvas) {
       const edge = (i, fn) => { const d = bt(i); if (d && !pad.prev[i]) fn(); pad.prev[i] = d; };
       edge(6, () => cmd(F, 'missile')); edge(4, () => cmd(F, 'flare')); edge(0, () => cmd(F, 'target', 'ahead')); edge(1, () => cmd(F, 'target', 'attacker'));
       edge(2, () => cmd(F, 'target', 'next')); edge(3, () => opts.setCamera && opts.setCamera(opts.camera() === 'chase' ? 'cockpit' : 'chase'));
-      edge(14, () => cmd(F, 'pips', 0)); edge(12, () => cmd(F, 'pips', 1)); edge(15, () => cmd(F, 'pips', 2)); edge(13, () => cmd(F, 'pips', 3)); edge(11, () => cmd(F, 'cruise'));
+      edge(14, () => cmd(F, 'pips', 0)); edge(12, () => cmd(F, 'pips', 1)); edge(15, () => cmd(F, 'pips', 2)); edge(13, () => cmd(F, 'pips', 3)); edge(11, () => cmd(F, 'cruise')); edge(8, () => openMap(!mapOn));
       if (fire || boost || lx || ly || rx || ry) I.touched = true;
     }
     // touch
@@ -206,6 +220,10 @@ export function createHud(canvas) {
     btn('FLR', 'right:22%;bottom:22%;width:54px;height:54px', () => F && cmd(F, 'flare'));
     btn('TGT', 'right:3%;bottom:40%;width:54px;height:54px', () => F && cmd(F, 'target', 'ahead'));
     btn('II', 'right:2%;top:2%;width:44px;height:44px;border-radius:10px', () => setPause(!isPaused));
+    // travel: the context action (dock / relight), the next destination, the jump map
+    btn('L', 'right:3%;bottom:52%;width:52px;height:52px', () => interact());
+    btn('NAV', 'right:3%;bottom:62%;width:52px;height:52px', () => F && cmd(F, 'nav'));
+    btn('MAP', 'right:3%;bottom:72%;width:52px;height:52px', () => openMap(!mapOn));
     const stick = touchEl.querySelector('.sh-stick'), knob = stick.querySelector('.sh-knob');
     const move = (e) => { const r = stick.getBoundingClientRect(), x = (e.clientX - r.left) / r.width * 2 - 1, y = (e.clientY - r.top) / r.height * 2 - 1, l = Math.hypot(x, y), k = l > 1 ? 1 / l : 1; touch.sx = x * k; touch.sy = y * k; knob.style.transform = `translate(${touch.sx * 45}px,${touch.sy * 45}px)`; };
     stick.addEventListener('pointerdown', (e) => { e.preventDefault(); stick.setPointerCapture(e.pointerId); move(e); if (F) F.input.touched = true; });
@@ -230,7 +248,7 @@ export function createHud(canvas) {
   function toggleHelp() { helpOn = !helpOn; if (!isPaused) setPause(true); else buildPause(); }
   function keysHtml() {
     const rows = [['🖱', 'cz_k_aim'], ['LMB / Enter', 'cz_k_fire'], ['RMB / M', 'cz_k_missile'], ['W / S · wheel', 'cz_k_throttle'], ['A / D', 'cz_k_roll'], ['Q / E', 'cz_k_yaw'], ['↑ ↓ ← →', 'cz_k_pitchyaw'],
-      ['Shift', 'cz_k_boost'], ['Space', 'cz_k_drift'], ['C', 'cz_k_cruise'], ['1 2 3 · 4', 'cz_k_pips'], ['Z / X', 'cz_k_shields'], ['F', 'cz_k_flares'], ['T · R · G · B', 'cz_k_target'], ['V', 'cz_k_camera'], ['Esc', 'cz_k_pause'],
+      ['Shift', 'cz_k_boost'], ['Space', 'cz_k_drift'], ['C', 'cz_k_cruise'], ['N', 'cz_k_nav'], ['L', 'cz_k_interact'], ['P · K', 'cz_k_jump'], ['1 2 3 · 4', 'cz_k_pips'], ['Z / X', 'cz_k_shields'], ['F', 'cz_k_flares'], ['T · R · G · B', 'cz_k_target'], ['V', 'cz_k_camera'], ['Esc', 'cz_k_pause'],
       ['🎮', 'cz_k_pad']];
     return '<div class="sh-keys">' + rows.map(([k, s]) => `<kbd>${esc(k)}</kbd><span>${esc(tr(s))}</span>`).join('') + '</div>';
   }
@@ -241,7 +259,8 @@ export function createHud(canvas) {
       <button class="sh-btn" data-a="cam">🎥 ${esc(tr('cz_pause_camera'))}: ${esc(tr(opts.camera && opts.camera() === 'cockpit' ? 'cz_cam_cockpit' : 'cz_cam_chase'))}</button>
       <button class="sh-btn" data-a="q">✦ ${esc(tr('cz_pause_quality'))}: ${esc(tr('cz_q_' + q))}</button>
       <button class="sh-btn" data-a="help">⌨ ${esc(tr('cz_pause_controls'))}</button>
-      <button class="sh-btn bad" data-a="retreat">⇥ ${esc(tr('cz_pause_retreat'))}</button>
+      ${isExplore() ? `<button class="sh-btn" data-a="map">✦ ${esc(tr('cz_pause_map'))} <kbd>P</kbd></button>${near('station', 1e9) ? `<button class="sh-btn" data-a="home">⌂ ${esc(tr('cz_pause_home'))}</button>` : ''}` : ''}
+      <button class="sh-btn bad" data-a="retreat">⇥ ${esc(tr(isExplore() ? 'cz_pause_leave' : 'cz_pause_retreat'))}</button>
       ${helpOn ? keysHtml() : ''}`;
   }
   pbox.addEventListener('click', (e) => {
@@ -252,6 +271,8 @@ export function createHud(canvas) {
     else if (a === 'q') { const order = ['auto', 'low', 'medium', 'high'], cur = opts.quality(), nx = order[(order.indexOf(cur) + 1) % order.length]; opts.setQuality(nx); qPending = nx; buildPause(); note('cz_hud_quality_next', 'info'); }
     else if (a === 'help') { helpOn = !helpOn; buildPause(); }
     else if (a === 'retreat') { cmd(F, 'retreat'); setPause(false); }
+    else if (a === 'map') { setPause(false); openMap(true); }
+    else if (a === 'home') { if (cmd(F, 'dockNow')) setPause(false); else { setPause(false); note('cz_hud_home_no', 'bad'); } }
   });
   let qPending = null;
 
@@ -260,6 +281,10 @@ export function createHud(canvas) {
   function speaker(e) {
     const s = e.s;
     if (e.v && e.v.voice) return { name: tr('cz_spk_control_3'), col: '#9fe8ff', portrait: 'echo', fac: 3 };
+    if (e.v && e.v.who === 'abbess') return { name: tr('cz_cx_c_abbess_t'), col: '#e8c069', portrait: 'abbess', fac: 1 };
+    if (e.v && e.v.who === 'vigil') return { name: tr('cz_cx_c_ace_vigil_t'), col: '#e8c069', portrait: 'ace_vigil', fac: 1 };
+    if (e.v && e.v.who === 'raider') return { name: tr('cz_cs_2'), col: COL.hostile, portrait: null, fac: 2, emblem: EMBLEM[2] };
+    if (e.v && e.v.ctl != null) { const f = e.v.ctl; return f === 3 ? { name: tr('cz_spk_control_3'), col: '#9fe8ff', portrait: 'echo', fac: 3 } : { name: tr('cz_spk_control_' + f), col: FAC_COL[f] || COL.hud, portrait: CONTACT[f], fac: f }; }
     if (!s) { const fac = F && F.mission ? (e.k === 'cz_c_capital' || e.k === 'cz_c_contacts' || e.k === 'cz_c_ambush' ? F.mission.offer : F.mission.offer) : 0; return { name: tr('cz_spk_control_' + fac), col: FAC_COL[fac] || COL.hud, portrait: CONTACT[fac], fac }; }
     if (s.ace) return { name: s.name, col: '#ff6a5a', portrait: s.aceId >= 0 ? ACE_PORTRAIT[s.aceId] : null, fac: s.fac, emblem: EMBLEM[s.fac] };
     return { name: tr(s.nameKey || 'cz_cs_' + s.fac) + (s.name ? ' ' + s.name : ''), col: s.team === TEAM_P ? COL.friend : COL.hostile, portrait: null, fac: s.fac, emblem: EMBLEM[s.fac] };
@@ -286,10 +311,10 @@ export function createHud(canvas) {
   let cardT = 0;
   function showCard(F, model) {
     const M = F.mission, fl = model && model.flavor ? flavorText({ flavor: model.flavor }) : null;
-    const kindKey = 'cz_mk_' + M.kind;
+    const kind = M.relightWanted ? 'relight' : M.kind, kindKey = 'cz_mk_' + kind;
     const title = (fl && fl.title) || tr(kindKey);
-    const brief = (fl && fl.brief) || tr('cz_mb_' + M.kind);
-    const art = { patrol: 'brief_patrol', ambush: 'brief_patrol', hunt: 'brief_bounty', duel: 'brief_bounty', escort: 'brief_escort', defend: 'brief_defend', sweep: 'brief_defend' }[M.kind];
+    const brief = (fl && fl.brief) || tr('cz_mb_' + kind);
+    const art = { patrol: 'brief_patrol', ambush: 'brief_patrol', hunt: 'brief_bounty', duel: 'brief_bounty', escort: 'brief_escort', defend: 'brief_defend', sweep: 'brief_defend', relight: 'lore_beacon_relight' }[kind];
     cardEl.innerHTML = `<div class="art"></div><div class="k"></div><h2></h2><p></p><div class="o"></div>`;
     cardEl.querySelector('.k').textContent = (model && model.sysName ? model.sysName + ' · ' : '') + tr(kindKey);
     cardEl.querySelector('h2').textContent = title; cardEl.querySelector('p').textContent = brief;
@@ -301,6 +326,7 @@ export function createHud(canvas) {
   function objText(F) {
     const O = F.obj; if (!O.key) return '';
     const a = { ...O.a }; if (a.d != null) a.d = fmtDist(a.d);
+    if (a.kind) a.name = poiLabel({ kind: a.kind, name: a.name });
     return tr(O.key, a);
   }
   const fmtDist = (d) => d >= 1000 ? (d / 1000).toFixed(1) + ' km' : Math.round(d) + ' m';
@@ -325,8 +351,20 @@ export function createHud(canvas) {
   function brackets(x, y, r, col, k = 0.32, lw = 1.5) { g.strokeStyle = col; g.lineWidth = lw * S; const a = r * k; g.beginPath(); for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { g.moveTo(x + sx * r, y + sy * (r - a)); g.lineTo(x + sx * r, y + sy * r); g.lineTo(x + sx * (r - a), y + sy * r); } g.stroke(); }
   function bar(x, y, w, h, f, col, bg = COL.faint) { g.fillStyle = bg; g.fillRect(x, y, w, h); g.fillStyle = col; g.fillRect(x, y, w * Math.max(0, Math.min(1, f)), h); }
   const fonts = new Map();   // cached font strings (no per-call template allocation)
-  function font(size, weight) { const k = weight * 1000 + Math.round(size * S); let f = fonts.get(k); if (!f) { f = `${weight} ${Math.round(size * S)}px 'Segoe UI',system-ui,sans-serif`; fonts.set(k, f); } return f; }
-  function text(s, x, y, size, col, align = 'left', weight = 600) { g.font = font(size, weight); g.textAlign = align; g.fillStyle = col; g.fillText(s, x, y); }
+  let fpx = 13;
+  function font(size, weight) { fpx = Math.round(Math.max(size * S * 1.1, MINPX)); const k = weight * 1000 + fpx; let f = fonts.get(k); if (!f) { f = `${weight} ${fpx}px 'Segoe UI',system-ui,sans-serif`; fonts.set(k, f); } return f; }
+  // every HUD string gets a dark outline: readable over a white star, a lit planet or an explosion
+  function text(s, x, y, size, col, align = 'left', weight = 600) {
+    g.font = font(size, weight); g.textAlign = align; g.lineJoin = 'round';
+    g.lineWidth = Math.max(2, fpx * 0.2); g.strokeStyle = 'rgba(2,7,13,0.78)'; g.strokeText(s, x, y);
+    g.fillStyle = col; g.fillText(s, x, y);
+  }
+  function tw(s, size, weight = 600) { g.font = font(size, weight); return g.measureText(s).width; }
+  function fit(s, size, maxW, weight = 600) { if (tw(s, size, weight) <= maxW) return s; let t = s; while (t.length > 3 && tw(t + '…', size, weight) > maxW) t = t.slice(0, -1); return t + '…'; }
+  function plate(x, y, w, h, r = 8) {
+    g.fillStyle = 'rgba(3,9,16,0.5)'; g.strokeStyle = 'rgba(189,243,255,0.14)'; g.lineWidth = 1 * S;
+    g.beginPath(); if (g.roundRect) g.roundRect(x, y, w, h, r * S); else g.rect(x, y, w, h); g.fill(); g.stroke();
+  }
   function arc(x, y, r, a0, a1, col, lw) { g.strokeStyle = col; g.lineWidth = lw * S; g.beginPath(); g.arc(x, y, r, a0, a1); g.stroke(); }
   function chevron(x, y, ang, size, col, fill) { g.save(); g.translate(x, y); g.rotate(ang); g.beginPath(); g.moveTo(size, 0); g.lineTo(-size * 0.7, size * 0.7); g.lineTo(-size * 0.3, 0); g.lineTo(-size * 0.7, -size * 0.7); g.closePath(); if (fill) { g.fillStyle = col; g.fill(); } else { g.strokeStyle = col; g.lineWidth = 1.5 * S; g.stroke(); } g.restore(); }
   function edgePoint(vx, vy, inset) {   // view-space direction -> point on an inset ellipse
@@ -349,6 +387,8 @@ export function createHud(canvas) {
     const crit = p.alive && p.hull < p.hullMax * 0.3;
     flick = crit && Math.random() < 0.06 ? 0.4 + Math.random() * 0.4 : Math.max(0, flick - dt * 4);
     g.globalAlpha = 1 - flick * 0.6;
+    if (cinematic()) { drawCinematic(); g.globalAlpha = 1; return; }
+    if (mapOn) { g.globalAlpha = 1; return; }
     const cx = W / 2, cy = H / 2;
     const briefing = F.briefT > 0.6;
     // ---- reticle at the gun convergence point
@@ -385,7 +425,7 @@ export function createHud(canvas) {
       if (s.st === ST.WARP && s.warpT > 0.25) continue;
       const d = Math.hypot(s.pos.x - p.pos.x, s.pos.y - p.pos.y, s.pos.z - p.pos.z);
       const hostile = s.team === TEAM_E, obj = s.objective;
-      const col = obj ? COL.gold : hostile ? COL.hostile : COL.friend;
+      const col = obj ? COL.gold : hostile ? COL.hostile : s.team === TEAM_N ? '#9fe8ff' : COL.friend;
       sp(s, al);
       if (P.ok) {
         const r = Math.max(9 * S, Math.min(H * 0.4, pxRadius(s.cls.rad * 1.2, -P.vz)));
@@ -395,7 +435,7 @@ export function createHud(canvas) {
         brackets(P.x, P.y, r, col, 0.3, hostile ? 1.4 : 1.1);
         if (obj) { bar(P.x - r, P.y + r + 4 * S, r * 2, 3 * S, s.hull / s.hullMax, COL.gold); }
         if (s.ace) text(s.name, P.x, P.y - r - 5 * S, 11, '#ff8a7a', 'center', 700);
-        else if (s.cap) text(CLS[s.ck].name, P.x, P.y - r - 5 * S, 11, col, 'center');
+        else if (s.cap && s.ck !== 'beacon' && s.ck !== 'station') text(CLS[s.ck].name, P.x, P.y - r - 5 * S, 11, col, 'center');   // statics carry their POI label
         if (s.tetheredBy || (s.board)) text('⛓', P.x + r + 4 * S, P.y, 12, COL.warn);
       } else if (hostile || obj) {
         if (d > 6000 && !obj && s !== tgt) continue;
@@ -444,8 +484,9 @@ export function createHud(canvas) {
       }
       drawTargetPanel(tgt, dT);
     }
+    drawPois(p);
     // ---- objective marker (nav / jump gate)
-    if (F.obj.marker && !briefing) {
+    if (F.obj.marker && !briefing && !isExplore()) {
       const m = F.obj.marker; proj(m[0], m[1], m[2]);
       const d = Math.hypot(m[0] - p.pos.x, m[1] - p.pos.y, m[2] - p.pos.z);
       if (P.ok) { g.save(); g.translate(P.x, P.y); g.rotate(Math.PI / 4); g.strokeStyle = COL.gold; g.lineWidth = 2 * S; g.strokeRect(-8 * S, -8 * S, 16 * S, 16 * S); g.restore(); text(fmtDist(d), P.x, P.y + 24 * S, 12, COL.gold, 'center'); }
@@ -486,7 +527,7 @@ export function createHud(canvas) {
       const k = q.t / 1.6;
       text('+' + q.v + ' cr', P.x, P.y - (1 - k) * 40 * S, 14, `rgba(255,214,107,${Math.min(1, k * 1.6)})`, 'center', 800);
     }
-    if (!briefing) { drawBottom(p); drawRadar(p); drawTracker(); }
+    if (!briefing) { drawBottom(p); drawRadar(p); drawTracker(); drawPrompts(p); drawTravel(p); }
     // ---- notes (right of centre)
     let ny = H * 0.62;
     for (let i = notes.length - 1; i >= 0; i--) { const n = notes[i]; n.t -= dt; if (n.t <= 0) { notes.splice(i, 1); continue; } text(n.s, cx, ny, 13, n.kind === 'bad' ? COL.bad : n.kind === 'good' ? COL.friend : COL.hud, 'center', 700); ny += 18 * S; }
@@ -503,66 +544,98 @@ export function createHud(canvas) {
   }
   function shipLabel(s) { if (s.ace) return s.name; if (s.nameKey === 'cz_ship_hauler') return tr('cz_ship_hauler') + ' ' + (s.name || ''); return CLS[s.ck] ? CLS[s.ck].name : s.ck; }
   function drawTargetPanel(s, d) {
-    const w = 230 * S, x = W - w - 18 * S, y = 70 * S, h = 86 * S;
-    g.fillStyle = 'rgba(6,14,24,0.6)'; g.fillRect(x, y, w, h);
-    g.fillStyle = COL.hostile; g.fillRect(x, y, 3 * S, h);
-    text(shipLabel(s), x + 12 * S, y + 22 * S, 16, '#fff', 'left', 800);
-    text(tr('cz_fac_' + s.fac) + (s.ace ? ' · ' + tr('cz_hud_ace') : '') , x + 12 * S, y + 39 * S, 11, FAC_COL[s.fac] || COL.hud, 'left', 700);
-    text(fmtDist(d), x + w - 10 * S, y + 22 * S, 14, COL.hud, 'right', 700);
-    const sh = s.shMax > 0 ? (s.shF + s.shB) / s.shMax : 0;
-    if (s.shMax > 0) { text(tr('cz_hud_shd'), x + 12 * S, y + 59 * S, 10, COL.shield); bar(x + 50 * S, y + 52 * S, w - 62 * S, 6 * S, sh, COL.shield); }
-    text(tr('cz_hud_hull'), x + 12 * S, y + 76 * S, 10, COL.hull); bar(x + 50 * S, y + 69 * S, w - 62 * S, 6 * S, s.hull / s.hullMax, s.hull < s.hullMax * 0.3 ? COL.bad : COL.hull);
+    const w = (compact ? 168 : 250) * S, x = W - w - (compact ? 10 : 18) * S, y = (compact ? 58 : 70) * S, h = (compact ? 78 : 92) * S;
+    plate(x, y, w, h, 6);
+    g.fillStyle = COL.hostile; g.fillRect(x, y + 4 * S, 3 * S, h - 8 * S);
+    text(fit(shipLabel(s), 15, w - 70 * S, 800), x + 12 * S, y + 22 * S, 15, '#fff', 'left', 800);
+    text(tr('cz_fac_' + s.fac) + (s.ace ? ' · ' + tr('cz_hud_ace') : ''), x + 12 * S, y + 40 * S, 11, FAC_COL[s.fac] || COL.hud, 'left', 700);
+    text(fmtDist(d), x + w - 10 * S, y + 22 * S, 13, COL.hud, 'right', 700);
+    const sh = s.shMax > 0 ? (s.shF + s.shB) / s.shMax : 0, bx = x + (compact ? 52 : 60) * S, bw = x + w - 12 * S - bx;
+    if (s.shMax > 0) { text(tr('cz_hud_shd'), x + 12 * S, y + h - 26 * S, 10, COL.shield, 'left', 700); bar(bx, y + h - 33 * S, bw, 6 * S, sh, COL.shield); }
+    text(tr('cz_hud_hull'), x + 12 * S, y + h - 9 * S, 10, COL.hull, 'left', 700); bar(bx, y + h - 16 * S, bw, 6 * S, s.hull / s.hullMax, s.hull < s.hullMax * 0.3 ? COL.bad : COL.hull);
   }
   function drawBottom(p) {
+    if (compact) return drawBottomCompact(p);
     const y0 = H - 22 * S;
-    // throttle (left)
-    const bx = 26 * S, bh = 130 * S, bw = 12 * S, by = y0 - bh;
+    // throttle + speed + boost + power (left)
+    const bx = 30 * S, bh = 130 * S, bw = 12 * S, by = y0 - bh;
+    const px0 = bx + bw + 104 * S;
+    plate(bx - 16 * S, by - 16 * S, px0 + 3 * 36 * S - bx + 22 * S, bh + 30 * S, 10);
     g.fillStyle = COL.faint; g.fillRect(bx, by, bw, bh);
     g.fillStyle = 'rgba(120,240,160,0.22)'; g.fillRect(bx - 3 * S, by + bh * (1 - 0.65), bw + 6 * S, bh * 0.3);
     g.fillStyle = p.boosting ? COL.warn : COL.hud; g.fillRect(bx, by + bh * (1 - p.thr), bw, bh * p.thr);
     const sf = Math.min(1, p.spd / (p.cls.boostSpd || 300));
     g.fillStyle = '#fff'; g.fillRect(bx - 5 * S, by + bh * (1 - sf) - 1 * S, bw + 10 * S, 2 * S);
     const kms = p.spd >= 1000;
-    text(kms ? (p.spd / 1000).toFixed(2) : String(Math.round(p.spd)), bx + bw + 10 * S, by + 14 * S, 22, F.cruise === 2 ? COL.shield : '#fff', 'left', 800);
-    text(kms ? 'km/s' : 'm/s', bx + bw + 10 * S, by + 28 * S, 10, COL.dim);
-    if (F.cruise) {
-      const k = F.cruise === 1 ? 1 - Math.max(0, F.cruiseT) / 1.4 : 1;
-      text(tr(F.cruise === 1 ? 'cz_hud_cruise_spool' : 'cz_hud_cruise'), W / 2, H * 0.68, 15, COL.shield, 'center', 800);
-      bar(W / 2 - 70 * S, H * 0.68 + 7 * S, 140 * S, 3 * S, k, COL.shield);
-    }
-    text(tr('cz_hud_boost'), bx + bw + 10 * S, by + 50 * S, 10, COL.dim);
-    bar(bx + bw + 10 * S, by + 55 * S, 70 * S, 4 * S, p.boost, p.boostLock ? COL.bad : COL.warn);
-    if (p.drift) text(tr('cz_hud_drift'), bx + bw + 10 * S, by + 74 * S, 12, COL.gold, 'left', 800);
-    // power pips
-    const px0 = bx + bw + 96 * S, labels = ['cz_hud_eng', 'cz_hud_wpn', 'cz_hud_shd'], cols = [COL.eng, COL.wpn, COL.shd];
-    for (let k = 0; k < 3; k++) {
-      const x = px0 + k * 34 * S;
-      for (let i = 0; i < 4; i++) { g.fillStyle = i < p.pips[k] ? cols[k] : COL.faint; g.fillRect(x, y0 - 20 * S - i * 13 * S, 22 * S, 9 * S); }
-      text(tr(labels[k]), x + 11 * S, y0, 10, cols[k], 'center', 700);
-      text(String(k + 1), x + 11 * S, y0 - 76 * S, 10, COL.dim, 'center');
-    }
-    // ship status (right): shields front/back arcs around a hull icon
-    const sx = W - 110 * S, sy = y0 - 62 * S, sr = 44 * S;
-    const ff = p.shF / Math.max(1, p.shMax * (p.shFocus === 1 ? 0.7 : p.shFocus === -1 ? 0.3 : 0.5)), fb = p.shB / Math.max(1, p.shMax * (p.shFocus === -1 ? 0.7 : p.shFocus === 1 ? 0.3 : 0.5));
-    arc(sx, sy, sr, Math.PI * 1.1, Math.PI * 1.9, COL.faint, 6); if (ff > 0.01) arc(sx, sy, sr, Math.PI * 1.1, Math.PI * 1.1 + Math.PI * 0.8 * Math.min(1, ff), COL.shield, 6);
-    arc(sx, sy, sr, Math.PI * 0.1, Math.PI * 0.9, COL.faint, 6); if (fb > 0.01) arc(sx, sy, sr, Math.PI * 0.9 - Math.PI * 0.8 * Math.min(1, fb), Math.PI * 0.9, COL.shield, 6);
-    if (p.shFocus) text(p.shFocus === 1 ? '▲' : '▼', sx + sr + 8 * S, sy + 4 * S, 11, COL.shield);
-    g.fillStyle = COL.hud; g.beginPath(); g.moveTo(sx, sy - 16 * S); g.lineTo(sx + 11 * S, sy + 12 * S); g.lineTo(sx, sy + 7 * S); g.lineTo(sx - 11 * S, sy + 12 * S); g.closePath(); g.fill();
+    text(kms ? (p.spd / 1000).toFixed(2) : String(Math.round(p.spd)), bx + bw + 10 * S, by + 18 * S, 22, F.cruise === 2 ? COL.shield : '#fff', 'left', 800);
+    text(kms ? 'km/s' : 'm/s', bx + bw + 10 * S, by + 36 * S, 10, COL.dim, 'left', 700);
+    cruiseBanner();
+    text(tr('cz_hud_boost'), bx + bw + 10 * S, by + 62 * S, 10, COL.dim, 'left', 700);
+    bar(bx + bw + 10 * S, by + 68 * S, 78 * S, 5 * S, p.boost, p.boostLock ? COL.bad : COL.warn);
+    if (p.drift) text(tr('cz_hud_drift'), bx + bw + 10 * S, by + 92 * S, 12, COL.gold, 'left', 800);
+    pipsAt(p, px0, y0, 36, 22, 10, 13);
+    // ship status (right): shields front/back arcs around a hull icon, ordnance
+    const sx = W - 112 * S, sy = y0 - 66 * S, sr = 46 * S, ox = W - 252 * S;
+    plate(ox - 16 * S, y0 - 136 * S, W - 10 * S - (ox - 16 * S), 150 * S, 10);
+    shieldRing(p, sx, sy, sr, 6);
     const hf = p.hull / p.hullMax;
-    text(Math.max(0, Math.round(hf * 100)) + '%', sx, sy + 38 * S, 20, hf < 0.3 ? COL.bad : '#fff', 'center', 800);
-    text(tr('cz_hud_hull'), sx, sy + 51 * S, 10, COL.dim, 'center');
+    text(Math.max(0, Math.round(hf * 100)) + '%', sx, sy + 40 * S, 19, hf < 0.3 ? COL.bad : '#fff', 'center', 800);
+    text(tr('cz_hud_hull'), sx, sy + 56 * S, 10, COL.dim, 'center', 700);
     bar(sx - 50 * S, y0 + 2 * S, 100 * S, 4 * S, hf, hf < 0.3 ? COL.bad : COL.hull);
-    // ordnance
-    const ox = W - 230 * S;
-    text(tr('cz_hud_msl'), ox, y0 - 54 * S, 10, COL.dim);
-    for (let i = 0; i < Math.max(p.msl, 4); i++) { g.fillStyle = i < p.msl ? COL.gold : COL.faint; g.fillRect(ox + i * 12 * S, y0 - 48 * S, 8 * S, 16 * S); }
-    text(tr('cz_hud_flr'), ox, y0 - 16 * S, 10, COL.dim);
-    for (let i = 0; i < 3; i++) { g.fillStyle = i < p.flares ? '#ff7adf' : COL.faint; g.beginPath(); g.arc(ox + 5 * S + i * 13 * S, y0 - 4 * S, 4.5 * S, 0, 6.29); g.fill(); }
+    text(tr('cz_hud_msl'), ox, y0 - 104 * S, 10, COL.dim, 'left', 700);
+    for (let i = 0; i < Math.max(p.msl, 4); i++) { g.fillStyle = i < p.msl ? COL.gold : COL.faint; g.fillRect(ox + i * 13 * S, y0 - 96 * S, 9 * S, 18 * S); }
+    text(tr('cz_hud_flr'), ox, y0 - 52 * S, 10, COL.dim, 'left', 700);
+    for (let i = 0; i < 3; i++) { g.fillStyle = i < p.flares ? '#ff7adf' : COL.faint; g.beginPath(); g.arc(ox + 6 * S + i * 15 * S, y0 - 36 * S, 5 * S, 0, 6.29); g.fill(); }
+  }
+  function cruiseBanner() {
+    if (!F.cruise) return;
+    const k = F.cruise === 1 ? 1 - Math.max(0, F.cruiseT) / 1.4 : 1;
+    text(tr(F.cruise === 1 ? 'cz_hud_cruise_spool' : 'cz_hud_cruise'), W / 2, H * 0.68, 15, COL.shield, 'center', 800);
+    bar(W / 2 - 70 * S, H * 0.68 + 8 * S, 140 * S, 3 * S, k, COL.shield);
+  }
+  function pipsAt(p, x0, y0, step, pw, ph, gap) {
+    const labels = ['cz_hud_eng', 'cz_hud_wpn', 'cz_hud_shd'], cols = [COL.eng, COL.wpn, COL.shd];
+    for (let k = 0; k < 3; k++) {
+      const x = x0 + k * step * S;
+      for (let i = 0; i < 4; i++) { g.fillStyle = i < p.pips[k] ? cols[k] : COL.faint; g.fillRect(x, y0 - 22 * S - i * gap * S, pw * S, ph * S); }
+      text(tr(labels[k]), x + pw * S / 2, y0, 10, cols[k], 'center', 800);
+      if (!compact) text(String(k + 1), x + pw * S / 2, y0 - 22 * S - 4 * gap * S - 4 * S, 10, COL.dim, 'center', 700);
+    }
+  }
+  function shieldRing(p, sx, sy, sr, lw) {
+    const ff = p.shF / Math.max(1, p.shMax * (p.shFocus === 1 ? 0.7 : p.shFocus === -1 ? 0.3 : 0.5)), fb = p.shB / Math.max(1, p.shMax * (p.shFocus === -1 ? 0.7 : p.shFocus === 1 ? 0.3 : 0.5));
+    arc(sx, sy, sr, Math.PI * 1.1, Math.PI * 1.9, COL.faint, lw); if (ff > 0.01) arc(sx, sy, sr, Math.PI * 1.1, Math.PI * 1.1 + Math.PI * 0.8 * Math.min(1, ff), COL.shield, lw);
+    arc(sx, sy, sr, Math.PI * 0.1, Math.PI * 0.9, COL.faint, lw); if (fb > 0.01) arc(sx, sy, sr, Math.PI * 0.9 - Math.PI * 0.8 * Math.min(1, fb), Math.PI * 0.9, COL.shield, lw);
+    if (p.shFocus) text(p.shFocus === 1 ? '▲' : '▼', sx + sr + 8 * S, sy + 4 * S, 11, COL.shield);
+    const k = sr / (46 * S);
+    g.fillStyle = COL.hud; g.beginPath(); g.moveTo(sx, sy - 16 * S * k); g.lineTo(sx + 11 * S * k, sy + 12 * S * k); g.lineTo(sx, sy + 7 * S * k); g.lineTo(sx - 11 * S * k, sy + 12 * S * k); g.closePath(); g.fill();
+  }
+  // phones: the touch stick and buttons own the bottom corners, so the instruments stack above the stick
+  function touchTop() { return H - 0.06 * H - 150 * dpr - 10 * S; }
+  function drawBottomCompact(p) {
+    const x = 14 * S, w = 150 * S, y1 = touchTop(), h = 128 * S, y = y1 - h;
+    plate(x - 6 * S, y - 6 * S, w + 12 * S, h + 10 * S, 8);
+    const kms = p.spd >= 1000;
+    text(kms ? (p.spd / 1000).toFixed(2) : String(Math.round(p.spd)), x + 4 * S, y + 22 * S, 22, F.cruise === 2 ? COL.shield : '#fff', 'left', 800);
+    text(kms ? 'km/s' : 'm/s', x + w - 6 * S, y + 22 * S, 10, COL.dim, 'right', 700);
+    bar(x + 4 * S, y + 30 * S, w - 10 * S, 4 * S, p.boost, p.boostLock ? COL.bad : COL.warn);
+    const hf = p.hull / p.hullMax;
+    text(tr('cz_hud_hull') + ' ' + Math.max(0, Math.round(hf * 100)) + '%', x + 4 * S, y + 54 * S, 12, hf < 0.3 ? COL.bad : '#fff', 'left', 800);
+    bar(x + 4 * S, y + 60 * S, w - 10 * S, 4 * S, hf, hf < 0.3 ? COL.bad : COL.hull);
+    const half = Math.max(1, p.shMax * 0.5);
+    text(tr('cz_hud_shd'), x + 4 * S, y + 80 * S, 10, COL.shield, 'left', 700);
+    bar(x + 40 * S, y + 73 * S, (w - 50 * S) / 2 - 3 * S, 5 * S, p.shF / half, COL.shield); bar(x + 40 * S + (w - 50 * S) / 2 + 3 * S, y + 73 * S, (w - 50 * S) / 2 - 3 * S, 5 * S, p.shB / half, COL.shield);
+    pipsAt(p, x + 8 * S, y + h - 4 * S, 46, 30, 5, 8);
+    cruiseBanner();
   }
   function drawRadar(p) {
-    const r = 46 * S, cy = H - r - 18 * S, cxs = [W / 2 - r - 8 * S, W / 2 + r + 8 * S];
-    for (let k = 0; k < 2; k++) { g.fillStyle = 'rgba(6,14,24,0.5)'; g.beginPath(); g.arc(cxs[k], cy, r, 0, 6.29); g.fill(); arc(cxs[k], cy, r, 0, 6.29, COL.faint, 1); arc(cxs[k], cy, r * 0.5, 0, 6.29, COL.faint, 1); }
-    text(tr('cz_hud_front'), cxs[0], cy - r - 5 * S, 9, COL.dim, 'center'); text(tr('cz_hud_rear'), cxs[1], cy - r - 5 * S, 9, COL.dim, 'center');
+    // wide: front and rear hemispheres side by side; compact: one disc (rear contacts hollow, mirrored)
+    const r = (compact ? 36 : 48) * S;
+    const cy = compact ? touchTop() - r - 10 * S : H - r - 20 * S;
+    const cxs = compact ? [W / 2, W / 2] : [W / 2 - r - 10 * S, W / 2 + r + 10 * S];
+    for (let k = 0; k < (compact ? 1 : 2); k++) { g.fillStyle = 'rgba(4,10,18,0.62)'; g.beginPath(); g.arc(cxs[k], cy, r, 0, 6.29); g.fill(); arc(cxs[k], cy, r, 0, 6.29, COL.dim, 1); arc(cxs[k], cy, r * 0.5, 0, 6.29, COL.faint, 1); }
+    if (!compact) { text(tr('cz_hud_front'), cxs[0], cy - r - 6 * S, 9, COL.dim, 'center', 700); text(tr('cz_hud_rear'), cxs[1], cy - r - 6 * S, 9, COL.dim, 'center', 700); }
+    else text(tr('cz_hud_msl') + ' ' + p.msl + '  ·  ' + tr('cz_hud_flr') + ' ' + p.flares, W / 2, cy + r + 16 * S, 10, COL.gold, 'center', 700);
     const q = p.q;
     for (const s of F.ships) {
       if (!s.alive || s.isPlayer || s.st === ST.DARK) continue;
@@ -572,10 +645,11 @@ export function createHud(canvas) {
       const ang = Math.acos(Math.min(1, Math.abs(RV.z) / d)) / (Math.PI / 2);   // 0 = dead ahead/behind
       const pl = Math.hypot(RV.x, RV.y) || 1;
       const x = cxs[k] + RV.x / pl * ang * r * (front ? 1 : -1), y = cy - RV.y / pl * ang * r;
-      const col = s.objective ? COL.gold : s.team === TEAM_E ? COL.hostile : COL.friend;
-      const sz = (s.cap ? 3.5 : s === p.target ? 3 : 2) * S;
-      g.fillStyle = col; g.globalAlpha = Math.max(0.35, 1 - d / 6000);
-      g.fillRect(x - sz, y - sz, sz * 2, sz * 2);
+      const col = s.objective ? COL.gold : s.team === TEAM_E ? COL.hostile : s.team === TEAM_P ? COL.friend : COL.hud;
+      const sz = (s.cap ? 3.5 : s === p.target ? 3 : 2.2) * S;
+      g.globalAlpha = Math.max(0.4, 1 - d / 6000);
+      if (compact && !front) { g.strokeStyle = col; g.lineWidth = 1.2 * S; g.strokeRect(x - sz, y - sz, sz * 2, sz * 2); }
+      else { g.fillStyle = col; g.fillRect(x - sz, y - sz, sz * 2, sz * 2); }
       if (s === p.target) { g.strokeStyle = '#fff'; g.lineWidth = 1 * S; g.strokeRect(x - sz - 2 * S, y - sz - 2 * S, sz * 2 + 4 * S, sz * 2 + 4 * S); }
     }
     g.globalAlpha = 1 - flick * 0.6;
@@ -584,16 +658,175 @@ export function createHud(canvas) {
   function invRot(q, x, y, z) { const qx = -q.x, qy = -q.y, qz = -q.z, qw = q.w; const ix = qw * x + qy * z - qz * y, iy = qw * y + qz * x - qx * z, iz = qw * z + qx * y - qy * x, iw = -qx * x - qy * y - qz * z; RV.x = ix * qw + iw * -qx + iy * -qz - iz * -qy; RV.y = iy * qw + iw * -qy + iz * -qx - ix * -qz; RV.z = iz * qw + iw * -qz + ix * -qy - iy * -qx; }
   function drawTracker() {
     const x = 18 * S; let y = 30 * S;
-    const M = F.mission;
-    text(tr('cz_mk_' + M.kind), x, y, 11, COL.gold, 'left', 800); y += 20 * S;
-    const ot = objText(F); if (ot) { text(ot, x, y, 15, '#fff', 'left', 700); y += 18 * S; }
-    if (F.waves > 1 && M.kind !== 'escort') { text(tr('cz_hud_wave', { w: Math.max(1, Math.min(F.wave, F.waves)), m: F.waves }), x, y, 11, COL.dim); y += 16 * S; }
+    const M = F.mission, maxW = compact ? W - x - 196 * S : Math.min(W * 0.36, 460 * S);
+    const lines = 2 + (F.waves > 1 && M.kind !== 'escort' ? 1 : 0) + F.obj.bars.length, ot0 = objText(F);
+    const pw = Math.min(maxW, Math.max(tw(tr('cz_mk_' + M.kind), 11, 800), ot0 ? tw(ot0, 15, 700) : 0, F.obj.bars.length ? 230 * S : 0, 150 * S));
+    plate(x - 10 * S, y - 22 * S, pw + 20 * S, (lines * 19 + 26) * S, 8);
+    text(tr('cz_mk_' + M.kind), x, y, 11, COL.gold, 'left', 800); y += 21 * S;
+    const ot = objText(F); if (ot) { text(fit(ot, 15, maxW, 700), x, y, 15, '#fff', 'left', 700); y += 20 * S; }
+    if (F.waves > 1 && M.kind !== 'escort') { text(tr('cz_hud_wave', { w: Math.max(1, Math.min(F.wave, F.waves)), m: F.waves }), x, y, 11, COL.hud, 'left', 700); y += 18 * S; }
     for (const s of F.obj.bars) {
       const lab = s.ck === 'hauler' ? tr('cz_ship_hauler') + ' ' + s.name : tr(s.nameKey);
-      text(lab, x, y + 9 * S, 11, s.alive ? COL.gold : COL.dim); bar(x + 90 * S, y + 3 * S, 120 * S, 5 * S, s.alive ? s.hull / s.hullMax : 0, s.alive ? COL.gold : COL.faint); y += 16 * S;
+      text(lab, x, y + 9 * S, 11, s.alive ? COL.gold : COL.dim, 'left', 700); bar(x + 100 * S, y + 2 * S, Math.min(130 * S, maxW - 104 * S), 6 * S, s.alive ? s.hull / s.hullMax : 0, s.alive ? COL.gold : COL.faint); y += 18 * S;
     }
-    const p = F.player;
-    text(tr('cz_hud_kills', { n: F.kills }) + '   ' + '+' + F.earned + ' cr', x, y + 10 * S, 11, COL.dim);
+    text(tr('cz_hud_kills', { n: F.kills }) + '   ' + '+' + F.earned + ' cr', x, y + 10 * S, 11, COL.hud, 'left', 700);
+  }
+
+  // ---------------------------------------------------------------- travel: nav, docking, the jump drive, the relight
+  const POI_COL = { station: '#bfe3ff', beacon: '#7fd8ff', planet: '#d8e6f2', moon: '#aebccc', field: '#9aa8b8' };
+  const isExplore = () => F && F.mission && (F.mission.kind === 'explore' || F.mission.kind === 'relight');
+  const cinematic = () => F && (F.undock || (F.dock && F.dock.ph >= 1) || F.arriveT > 0);
+  function poiLabel(P0) { return P0.kind === 'station' ? tr('cz_poi_station', { name: P0.name }) : P0.kind === 'beacon' ? tr('cz_poi_beacon') : P0.kind === 'field' ? tr('cz_poi_field') : P0.name; }
+  function near(kind, range) {
+    if (!F || !F.pois) return null; const p = F.player;
+    for (const P0 of F.pois) if (P0.kind === kind) { const m = P0.mouth || P0.pos; if (Math.hypot(m[0] - p.pos.x, m[1] - p.pos.y, m[2] - p.pos.z) < range) return P0; }
+    return null;
+  }
+  // the context action (L): seat the relic at a dark beacon, or ask the station for a bay
+  function interact() {
+    if (!F || F.outcome) return;
+    const b = near('beacon', 2600), M = F.mission;
+    if (b && !b.lit && !M.relight) {
+      const r = model && model.run;
+      if (!r || r.cargo[6] < 1) { note('cz_t_need_relic', 'bad'); return; }
+      if (r.credits < 300) { note('cz_t_need_cr', 'bad', { n: 300 }); return; }
+      cmd(F, 'relight'); return;
+    }
+    cmd(F, 'dock');
+  }
+  function jumpNow() {
+    if (!F || !model || !model.actions) return;
+    if (model.plot < 0) { openMap(true); return; }
+    const why = model.actions.jump(); if (why) note(why, 'bad');
+    if (mapOn) openMap(false);
+  }
+  // the jump-plot overlay: the renderer draws the galaxy behind it while it is open (the flight holds still)
+  let mapOn = false;
+  const mapEl = document.createElement('div'); mapEl.className = 'sh-map'; root.appendChild(mapEl);
+  function mapRows() {
+    const r = model.run, S = model.sector, W = model.web, out = [];
+    for (let j = 0; j < S.length; j++) { if (j === r.sys) continue; out.push({ j, J: model.actions.jumpInfo(j), been: W && ((W.visited[r.sector] >>> 0) & (1 << j)) !== 0 }); }
+    out.sort((a, b) => a.J.d - b.J.d);
+    return out;
+  }
+  function buildMap() {
+    if (!model || !model.sector) return;
+    const rows = mapRows(), sel = model.plot;
+    mapEl.innerHTML = `<h3>${esc(tr('cz_map_plot'))}</h3><div class="sub">${esc(tr('cz_map_fuel', { f: model.run.fuel, fm: model.run.fuel_max, r: model.run.jump_range }))}</div>`
+      + `<div class="rows">${rows.map((x) => `<div class="sh-mrow ${x.j === sel ? 'on' : ''} ${x.J.ok ? '' : 'no'}" data-j="${x.j}"><i style="background:${FAC_COL[x.J.fac] || '#888'}"></i><b style="${x.been ? '' : 'opacity:.75;font-style:italic'}">${esc(x.J.name)}</b>`
+      + `<span>${x.J.d} · ${esc(tr('cz_map_cells', { n: x.J.cost }))}</span>${x.J.ok ? '' : `<em>${esc(tr(x.J.why))}</em>`}</div>`).join('')}</div>`
+      + `<div class="btns"><button class="sh-btn" data-a="jumpgo">⟫ ${esc(tr('cz_map_jump'))} <kbd>K</kbd></button><button class="sh-btn" data-a="mapclose">✓ ${esc(tr('cz_map_close'))} <kbd>Esc</kbd></button></div>`;
+  }
+  function openMap(on) {
+    if (on && (!F || F.outcome || !model || !model.actions)) return;
+    mapOn = on; mapEl.classList.toggle('on', on);
+    if (on) { keys.clear(); mouseFire = false; if (document.pointerLockElement) document.exitPointerLock(); if (model.plot < 0) { const r = mapRows().find((x) => x.J.ok); if (r) model.actions.plot(r.j); } buildMap(); }
+    else { try { const q = canvas.requestPointerLock && canvas.requestPointerLock(); if (q && q.catch) q.catch(() => {}); } catch {} }
+  }
+  function mapKey(k) {
+    if (k === 'Escape' || k === 'p' || k === 'Enter') { openMap(false); return; }
+    if (k === 'k') { jumpNow(); return; }
+    if (typeof k === 'string' && k.startsWith('Tgt:')) { model.actions.plot(+k.slice(4)); buildMap(); return; }
+    if (k === 'ArrowDown' || k === 'ArrowUp' || k === 's' || k === 'w') {
+      const rows = mapRows(); let i = rows.findIndex((x) => x.j === model.plot); i = (i + ((k === 'ArrowDown' || k === 's') ? 1 : -1) + rows.length) % rows.length;
+      model.actions.plot(rows[i].j); buildMap();
+    }
+  }
+  mapEl.addEventListener('click', (e) => {
+    const row = e.target.closest('[data-j]'); if (row) { model.actions.plot(+row.dataset.j); buildMap(); return; }
+    const b = e.target.closest('[data-a]'); if (!b) return;
+    if (b.dataset.a === 'jumpgo') jumpNow(); else openMap(false);
+  });
+  mapEl.addEventListener('pointerdown', (e) => e.stopPropagation());
+  // points of interest on the canvas: stations, the beacon, worlds and moons; the nav target in gold
+  function drawPois(p) {
+    if (!F.pois) return;
+    const exp = isExplore();
+    for (let i = 0; i < F.pois.length; i++) {
+      const P0 = F.pois[i], sel = exp && i === F.nav;
+      const d = Math.hypot(P0.pos[0] - p.pos.x, P0.pos[1] - p.pos.y, P0.pos[2] - p.pos.z);
+      if (!sel && (P0.kind === 'field' || (P0.kind === 'moon' && d > 60000))) continue;
+      proj(P0.pos[0], P0.pos[1], P0.pos[2]);
+      const col = sel ? COL.gold : P0.kind === 'beacon' && P0.lit ? COL.gold : POI_COL[P0.kind] || COL.hud;
+      const dd = P0.kind === 'planet' || P0.kind === 'moon' ? Math.max(0, d - P0.r) : d;
+      if (P.ok) {
+        const r = (P0.kind === 'planet' ? 7 : 5.5) * S;
+        g.strokeStyle = col; g.lineWidth = (sel ? 2 : 1.3) * S; g.globalAlpha = sel ? 1 : 0.8;
+        g.beginPath();
+        if (P0.kind === 'station') g.rect(P.x - r, P.y - r, r * 2, r * 2);
+        else if (P0.kind === 'beacon') { g.moveTo(P.x, P.y - r * 1.5); g.lineTo(P.x + r, P.y); g.lineTo(P.x, P.y + r * 1.5); g.lineTo(P.x - r, P.y); g.closePath(); }
+        else g.arc(P.x, P.y, r, 0, 6.29);
+        g.stroke();
+        if (sel || d < 40000 || P0.kind === 'planet' || P0.kind === 'station') {
+          text(poiLabel(P0), P.x, P.y - r - 6 * S, sel ? 13 : 11, col, 'center', sel ? 800 : 700);
+          text(fmtDist(dd), P.x, P.y + r + 15 * S, sel ? 12 : 10, sel ? COL.gold : COL.dim, 'center', 700);
+        }
+        g.globalAlpha = 1 - flick * 0.6;
+        // a relight in progress: the charge ring around the spire
+        if (P0.kind === 'beacon' && F.mission.relight && F.mission.relight.ph === 'charge') {
+          arc(P.x, P.y, 26 * S, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * F.mission.relight.k, COL.gold, 4); arc(P.x, P.y, 26 * S, 0, 6.29, COL.faint, 1);
+        }
+      } else if (sel) {
+        const e = edgePoint(P.behind ? -P.vx : P.vx, P.behind ? -P.vy : P.vy, 70 * S); chevron(e.x, e.y, e.a, 10 * S, COL.gold, true);
+        text(poiLabel(P0) + ' · ' + fmtDist(dd), e.x - Math.cos(e.a) * 34 * S, e.y - Math.sin(e.a) * 30 * S + 4 * S, 11, COL.gold, 'center', 700);
+      }
+    }
+  }
+  // what you can do here, said at the bottom (with the key)
+  // the prompt line is rebuilt only when what you can do changes (no per-frame strings)
+  let promptKey = -2, promptStr = '', promptW = 0;
+  function drawPrompts(p) {
+    if (!isExplore() || F.outcome || F.dock || F.jump || !p.alive) return;
+    const b = near('beacon', 2600), st = near('station', 9000), plot = model && model.plot >= 0 && model.sector && model.sector[model.plot] ? model.plot : -1;
+    const ctx = (b && !b.lit && !F.mission.relight ? 1 : st && !F.mission.relight ? 2 : 0) + (compact ? 4 : 0) + (plot + 1) * 8 + Math.round(S * 100) * 1024;
+    if (ctx !== promptKey) {
+      promptKey = ctx;
+      const parts = [];
+      if ((ctx & 3) === 1) parts.push('[L] ' + tr('cz_hud_p_relight')); else if ((ctx & 3) === 2) parts.push('[L] ' + tr('cz_hud_p_dock'));
+      if (!compact) parts.push('[N] ' + tr('cz_hud_p_nav'), '[C] ' + tr('cz_hud_p_cruise'), '[P] ' + tr('cz_hud_p_map'));
+      if (plot >= 0) parts.push('[K] ' + tr('cz_hud_p_jump', { name: model.sector[plot].it }));
+      promptStr = parts.join('    '); promptW = promptStr ? Math.min(W - 20 * S, tw(promptStr, 12, 700) + 28 * S) : 0;
+      if (promptStr) promptStr = fit(promptStr, 12, promptW - 20 * S, 700);
+    }
+    if (!promptStr) return;
+    const y = compact ? touchTop() - 96 * S : H - 158 * S;
+    plate(W / 2 - promptW / 2, y - 17 * S, promptW, 25 * S, 6);
+    text(promptStr, W / 2, y, 12, COL.hud, 'center', 700);
+  }
+  function drawTravel(p) {
+    // jump drive spool
+    if (F.jump) {
+      const k = Math.min(1, F.jump.t / 4.2), S2 = model && model.sector, nm = S2 && S2[F.jump.to] ? S2[F.jump.to].it : '';
+      arc(W / 2, H / 2, 64 * S, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * k, COL.shield, 3); arc(W / 2, H / 2, 64 * S, 0, 6.29, COL.faint, 1);
+      text(tr('cz_hud_jumping', { name: nm }), W / 2, H * 0.3, 18, COL.shield, 'center', 800);
+      text(Math.round(k * 100) + '%', W / 2, H * 0.3 + 24 * S, 14, COL.hud, 'center', 700);
+    }
+    // relight charge (also in the tracker): the long bar under the tracker line
+    const L = F.mission.relight;
+    if (L && L.ph === 'charge') {
+      const w = Math.min(W * 0.36, 420 * S), x = W / 2 - w / 2, y = (compact ? 150 : 92) * S;
+      plate(x - 10 * S, y - 22 * S, w + 20 * S, 40 * S, 6);
+      text(tr('cz_hud_charge', { n: Math.round(L.k * 100) }), W / 2, y - 4 * S, 12, COL.gold, 'center', 800);
+      bar(x, y + 4 * S, w, 6 * S, L.k, COL.gold);
+    }
+    // surveys
+    if (F.scanI >= 0 && F.scanT > 0 && F.pois[F.scanI]) {
+      const P0 = F.pois[F.scanI], k = Math.min(1, F.scanT / 2.6);
+      text(tr('cz_hud_scanning', { name: poiLabel(P0) }), W / 2, H * 0.74, 12, COL.shield, 'center', 700);
+      bar(W / 2 - 70 * S, H * 0.74 + 7 * S, 140 * S, 3 * S, k, COL.shield);
+    }
+  }
+  // undocking, the docking run and the arrival play as cut-scenes: letterbox and a caption
+  function drawCinematic() {
+    const h = H * 0.09;
+    g.fillStyle = '#000'; g.fillRect(0, 0, W, h); g.fillRect(0, H - h, W, h);
+    const bp = F.bp;
+    if (F.arriveT > 0) {
+      const a = Math.min(1, (2.6 - F.arriveT) * 1.5);
+      g.globalAlpha = a; text(bp.name, W / 2, H - h - 44 * S, 30, '#fff', 'center', 800);
+      text(tr('cz_fac_' + bp.faction) + (bp.station ? ' · ' + tr('cz_poi_station', { name: bp.name }) : ''), W / 2, H - h - 18 * S, 13, FAC_COL[bp.faction] || COL.hud, 'center', 700); g.globalAlpha = 1;
+    } else if (F.dock) text(tr('cz_hud_docking', { bay: F.dock.bay }), W / 2, H - h * 0.45, 15, COL.hud, 'center', 700);
+    else if (F.undock) text(tr('cz_hud_undocking'), W / 2, H - h * 0.45, 15, COL.hud, 'center', 700);
   }
 
   // ---------------------------------------------------------------- api
@@ -613,20 +846,26 @@ export function createHud(canvas) {
     const r = canvas.getBoundingClientRect();
     const cw = Math.max(2, Math.round((r.width || w) * dpr)), ch = Math.max(2, Math.round((r.height || h) * dpr));
     cv.width = cw; cv.height = ch; W = cw; H = ch;
-    S = Math.max(0.8, Math.min(2.4, Math.min(cw / 1280, ch / 760)));
+    // layout unit in CSS px from the viewport (clamped), times the device ratio; text never under 13 CSS px
+    const cssW = cw / dpr, cssH = ch / dpr;
+    compact = cssW < 760 || (cssW < 980 && cssH > cssW * 1.1);
+    const U = compact ? Math.max(0.85, Math.min(1.15, Math.min(cssW / 400, cssH / 800))) : Math.max(0.9, Math.min(1.75, Math.min(cssW / 1180, cssH / 760)));
+    S = U * dpr; MINPX = 13 * dpr;
+    root.classList.toggle('compact', compact);
     fonts.clear();
   }
   function begin(F_, m) {
     F = F_; model = m; active = true; isPaused = false; pauseEl.classList.remove('on'); aimInit = false; keys.clear(); mouseFire = false;
     commsEl.innerHTML = ''; msgs.length = 0; notes.length = 0; pops.length = 0; hurts.length = 0; endT = -1; banEl.style.opacity = 0;
-    root.style.display = 'block';
-    showCard(F_, m);
+    root.style.display = 'block'; openMap(false);
+    if (!isExplore() || F_.mission.relightWanted) showCard(F_, m);
   }
   return {
     setOptions(o) { opts = o || {}; },
     resize, begin, frame,
     hide() { root.style.display = 'none'; active = false; },
-    stop() { active = false; F = null; isPaused = false; pauseEl.classList.remove('on'); root.style.display = 'none'; },
+    stop() { active = false; F = null; isPaused = false; pauseEl.classList.remove('on'); mapOn = false; mapEl.classList.remove('on'); root.style.display = 'none'; },
+    mapOpen: () => mapOn, banner,
     paused: () => isPaused,
     hitMarker(kill) { hitT = 0.22; hitKill = !!kill; },
     kill(s, v) { hitT = 0.3; hitKill = true; if (v) pops.push({ x: s.pos.x, y: s.pos.y, z: s.pos.z, v, t: 1.6 }); if (s.cap) banner(tr('cz_hud_capkill', { name: CLS[s.ck].name }), COL.gold, 2.4); else if (s.ace) banner(tr('cz_hud_acekill', { name: s.name }), COL.gold, 2.4); },
@@ -636,7 +875,7 @@ export function createHud(canvas) {
     hurt(x, y, z, hull) { hurts.push({ x, y, z, t: 1, hull }); if (hurts.length > 6) hurts.shift(); },
     note, pickup(k) { note(['cz_pick_missile', 'cz_pick_shield', 'cz_pick_repair'][k] || 'cz_pick_repair', 'good'); },
     wave(a, b) { if (a > 1 || b > 1) banner(tr('cz_hud_wave', { w: a, m: b }), COL.warn, 1.8); },
-    end(r) { if (r == null) return; endRes = r; banner(tr(r === 1 ? 'cz_hud_complete' : r === 2 ? 'cz_hud_destroyed' : 'cz_hud_retreat'), r === 1 ? COL.gold : r === 2 ? COL.bad : COL.hud, 4); },
+    end(r) { if (r == null || r === 3 || r === 4) return; endRes = r; banner(tr(r === 1 ? 'cz_hud_complete' : r === 2 ? 'cz_hud_destroyed' : 'cz_hud_retreat'), r === 1 ? COL.gold : r === 2 ? COL.bad : COL.hud, 4); },
     dispose() {
       document.removeEventListener('pointerlockchange', onLockChange);
       window.removeEventListener('keydown', onKeyDown, true); window.removeEventListener('keyup', onKeyUp, true); document.removeEventListener('mousemove', onMouseMove);

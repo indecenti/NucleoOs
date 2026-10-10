@@ -10,7 +10,7 @@
 // Far things (sky, star, planets) live in `far` and are drawn with the camera's rotation only; the
 // battle space (`near`) is drawn on top with a fresh depth buffer — no depth-precision fights at 1e5 m.
 import { stationGeometry, beaconGeometry, rockGeometry, hullMaterial } from './kit.js';
-import { rng } from './world.js';
+import { rng, moonPos } from './world.js';
 
 const lin3 = (c) => [Math.pow(c[0], 2.2), Math.pow(c[1], 2.2), Math.pow(c[2], 2.2)];
 
@@ -139,7 +139,7 @@ const PLANET_FRAG = /* glsl */`
 uniform sampler2D uSurf, uAux; uniform vec3 uSun, uSunCol, uAtmo, uLightCol; uniform float uAtmoK, uSea, uType, uBump;
 uniform mat3 uRot;
 varying vec3 vN; varying vec3 vW; varying vec3 vV;
-vec2 eq(vec3 n) { return vec2(atan(n.z, n.x) / 6.2831853 + 0.5, asin(clamp(n.y, -1.0, 1.0)) / 3.14159265 + 0.5); }
+vec2 eq(vec3 n) { return vec2(atan(n.z, n.x + (abs(n.x) + abs(n.z) < 1e-6 ? 1e-6 : 0.0)) / 6.2831853 + 0.5, asin(clamp(n.y, -1.0, 1.0)) / 3.14159265 + 0.5); }
 void main() {
   vec3 n = normalize(vN);
   vec2 uv = eq(n);
@@ -167,7 +167,7 @@ uniform sampler2D uAux; uniform vec3 uSun, uSunCol, uAtmo; uniform float uK, uTi
 varying vec3 vN; varying vec3 vW; varying vec3 vV;
 void main() {
   vec3 n = normalize(vN);
-  vec2 uv = vec2(atan(n.z, n.x) / 6.2831853 + 0.5 + uTime, asin(clamp(n.y, -1.0, 1.0)) / 3.14159265 + 0.5);
+  vec2 uv = vec2(atan(n.z, n.x + (abs(n.x) + abs(n.z) < 1e-6 ? 1e-6 : 0.0)) / 6.2831853 + 0.5 + uTime, asin(clamp(n.y, -1.0, 1.0)) / 3.14159265 + 0.5);
   float c = texture2D(uAux, uv).r * uK;
   float ndl = dot(normalize(vW), normalize(uSun));
   float lit = smoothstep(-0.12, 0.35, ndl);
@@ -175,17 +175,22 @@ void main() {
   col = mix(col, col * mix(vec3(1.0), vec3(1.0, 0.55, 0.35), smoothstep(0.3, 0.0, abs(ndl))), 0.6 * lit);
   gl_FragColor = vec4(col, clamp(c, 0.0, 1.0) * 0.92);
 }`;
+// atmosphere shell (1.05 R, additive): optical depth grows toward the limb, Rayleigh tint on the day side, a warm
+// band along the terminator and a forward-scattering halo when the star is behind the world
 const ATMO_FRAG = /* glsl */`
 uniform vec3 uSun, uAtmo; uniform float uK;
 varying vec3 vN; varying vec3 vW; varying vec3 vV;
 void main() {
   vec3 N = normalize(vW), V = normalize(vV), L = normalize(uSun);
-  float rim = pow(1.0 - abs(dot(N, V)), 3.2);
-  float ndl = dot(N, L);
-  float day = smoothstep(-0.35, 0.5, ndl);
-  vec3 c = mix(uAtmo, vec3(1.0, 0.5, 0.25), smoothstep(0.4, -0.05, ndl) * day * 0.8);
-  float fwd = pow(max(dot(-V, L), 0.0), 8.0) * 2.0;          // forward scattering when back-lit
-  gl_FragColor = vec4(c * rim * (day * 1.6 + fwd) * uK, 1.0);
+  float h = 1.0 - min(abs(dot(N, V)), 1.0);
+  float depth = pow(h, 2.6) * 0.55 + pow(h, 9.0) * 1.9;
+  float sl = dot(N, L);
+  float day = smoothstep(-0.3, 0.45, sl);
+  vec3 c = uAtmo * depth * (0.12 + day * 1.5);
+  c += vec3(1.0, 0.45, 0.2) * pow(h, 5.0) * smoothstep(0.38, 0.0, abs(sl + 0.04)) * 1.25;
+  float fwd = pow(max(dot(-V, L), 0.0), 10.0);
+  c += mix(uAtmo, vec3(1.0, 0.92, 0.8), 0.55) * fwd * pow(h, 3.0) * 2.4;
+  gl_FragColor = vec4(c * uK, 1.0);
 }`;
 const RING_FRAG = /* glsl */`
 uniform vec3 uSun, uSunCol, uCol, uCenter; uniform float uIn, uOut, uR, uDens, uSeed;
@@ -218,10 +223,10 @@ const CORONA_FRAG = /* glsl */`
 uniform vec3 uCol; uniform float uK, uTime, uFlare; varying vec2 vUv;
 ${NOISE}
 void main() {
-  vec2 p = vUv * 2.0 - 1.0; float r = length(p), a = atan(p.y, p.x);
+  vec2 p = vUv * 2.0 - 1.0; float r = length(p), a = atan(p.y, p.x + (r < 1e-6 ? 1e-6 : 0.0));
   float core = exp(-r * 9.0) * 1.6;
   float str = fbm4(vec3(cos(a) * 2.2, sin(a) * 2.2, r * 2.0 - uTime * 0.04)) ;
-  float streamers = pow(str, 3.0) * exp(-r * 3.4) * (1.6 + uFlare * 2.0);
+  float streamers = pow(max(str, 0.0), 3.0) * exp(-r * 3.4) * (1.6 + uFlare * 2.0);
   float halo = exp(-r * 4.0) * 0.4;
   gl_FragColor = vec4(uCol * (core + streamers + halo) * uK * smoothstep(1.0, 0.7, r), 1.0);
 }`;
@@ -283,9 +288,9 @@ export function createSpace(THREE, renderer, Q) {
   const U = { time: { value: 0 } };
 
   // shared geometries
-  const sphere = keep(new THREE.SphereGeometry(1, 96, 64));
+  const sphere = keep(new THREE.SphereGeometry(1, Q.planet >= 2048 ? 144 : Q.planet >= 1024 ? 112 : 72, Q.planet >= 2048 ? 96 : Q.planet >= 1024 ? 72 : 48));   // worlds are seen up close now: finer limbs on the bigger tiers
   const quad = keep(new THREE.PlaneGeometry(2, 2));
-  const rockMat = hullMaterial(THREE, { metal: 0.04, rough: 0.92, panelK: 0, env: 0.6, rock: true, nearFade: 60 });
+  const rockMat = hullMaterial(THREE, { metal: 0.04, rough: 0.92, panelK: 0, env: 0.6, rock: true, nearFade: 75 });
 
   // ---- dust (speed lines) — persistent across systems --------------------------------------------------
   const ND = Q.dust;
@@ -314,10 +319,10 @@ export function createSpace(THREE, renderer, Q) {
   for (const [k, s, ring, c] of GHOST) { const m = new THREE.Mesh(quad, flareMat(ring)); m.userData = { k, s, base: c }; m.material.uniforms.uCol.value.setRGB(c[0], c[1], c[2]); m.frustumCulled = false; m.renderOrder = 998; flares.add(m); }
 
   // ---- star (far) ---------------------------------------------------------------------------------------------
-  const sunCore = new THREE.Mesh(sphere, new THREE.ShaderMaterial({ vertexShader: PLANET_VERT.replace('vN = normal;', 'vN = normal;'), fragmentShader: SUN_FRAG, uniforms: { uCol: { value: new THREE.Color() }, uK: { value: 30 }, uTime: U.time } }));
+  const sunCore = new THREE.Mesh(sphere, new THREE.ShaderMaterial({ vertexShader: PLANET_VERT.replace('vN = normal;', 'vN = normal;'), fragmentShader: SUN_FRAG, uniforms: { uCol: { value: new THREE.Color() }, uK: { value: 14 }, uTime: U.time } }));
   sunCore.material.vertexShader = `varying vec3 vN; varying vec3 vV; void main() { vN = normalize(mat3(modelMatrix) * normal); vec4 w = modelMatrix * vec4(position, 1.0); vV = normalize(cameraPosition - w.xyz); gl_Position = projectionMatrix * viewMatrix * w; }`;
-  const corona = new THREE.Mesh(quad, new THREE.ShaderMaterial({ vertexShader: BILL_VERT, fragmentShader: CORONA_FRAG, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, uniforms: { uCol: { value: new THREE.Color() }, uK: { value: 3 }, uTime: U.time, uFlare: { value: 0.4 } } }));
-  const glare = new THREE.Mesh(quad, new THREE.ShaderMaterial({ vertexShader: BILL_VERT, fragmentShader: GLARE_FRAG, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, uniforms: { uCol: { value: new THREE.Color() }, uK: { value: 0.6 } } }));
+  const corona = new THREE.Mesh(quad, new THREE.ShaderMaterial({ vertexShader: BILL_VERT, fragmentShader: CORONA_FRAG, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, uniforms: { uCol: { value: new THREE.Color() }, uK: { value: 2.2 }, uTime: U.time, uFlare: { value: 0.4 } } }));
+  const glare = new THREE.Mesh(quad, new THREE.ShaderMaterial({ vertexShader: BILL_VERT, fragmentShader: GLARE_FRAG, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, uniforms: { uCol: { value: new THREE.Color() }, uK: { value: 0.42 } } }));
   corona.renderOrder = 2; glare.renderOrder = 3;
   far.add(sunCore); far.add(corona); far.add(glare);
 
@@ -348,6 +353,40 @@ export function createSpace(THREE, renderer, Q) {
     return { surf, aux };
   }
 
+  // one world (planet or moon): baked surface + clouds + atmosphere shell + rings, lit live
+  function makeBody(pl, pos, radius, res, rings) {
+    const g = new THREE.Group(); g.position.set(pos[0], pos[1], pos[2]); g.scale.setScalar(radius);
+    const rt = bakePlanet(pl, res);
+    const rot = new THREE.Matrix3(), atmo = lin3(pl.atmoColor), sd = sys.sunDir;
+    const mPl = new THREE.ShaderMaterial({ vertexShader: PLANET_VERT, fragmentShader: PLANET_FRAG,
+      uniforms: { uSurf: { value: rt.surf.texture }, uAux: { value: rt.aux.texture }, uSun: { value: sd }, uSunCol: { value: sys.sunCol }, uAtmo: { value: new THREE.Vector3(...atmo) },
+        uLightCol: { value: new THREE.Vector3(1.0, 0.72, 0.4) }, uAtmoK: { value: pl.atmo }, uSea: { value: pl.ocean }, uType: { value: TYPE[pl.type] }, uBump: { value: pl.type === 'gas' ? 0 : 3.5 }, uRot: { value: rot } } });
+    const body = new THREE.Mesh(sphere, mPl); body.rotation.z = pl.tilt != null ? pl.tilt : (pl.tiltAxis || 0); g.add(body);
+    const mats = [mPl];
+    let clouds = null;
+    if (pl.clouds > 0.05) {
+      const mC = new THREE.ShaderMaterial({ vertexShader: PLANET_VERT, fragmentShader: CLOUD_FRAG, transparent: true, depthWrite: false,
+        uniforms: { uAux: { value: rt.aux.texture }, uSun: { value: sd }, uSunCol: { value: sys.sunCol }, uAtmo: { value: new THREE.Vector3(...atmo) }, uK: { value: Math.min(1.2, pl.clouds * 1.4) }, uTime: { value: 0 }, uRot: { value: rot } } });
+      clouds = new THREE.Mesh(sphere, mC); clouds.scale.setScalar(1.012); clouds.rotation.z = body.rotation.z; g.add(clouds); mats.push(mC);
+    }
+    if (pl.atmo > 0.1) {
+      const mA = new THREE.ShaderMaterial({ vertexShader: PLANET_VERT, fragmentShader: ATMO_FRAG, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
+        uniforms: { uSun: { value: sd }, uAtmo: { value: new THREE.Vector3(...atmo) }, uK: { value: Math.min(1.4, pl.atmo * 1.3) } } });
+      const shell = new THREE.Mesh(sphere, mA); shell.scale.setScalar(1.05); g.add(shell); mats.push(mA);
+    }
+    let ringGeo = null;
+    if (rings && pl.rings) {
+      ringGeo = new THREE.RingGeometry(pl.rings.inner, pl.rings.outer, 160, 1);
+      const rc = lin3(pl.rings.color);
+      const mR = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, side: THREE.DoubleSide,
+        vertexShader: `varying vec3 vPos; varying vec3 vWP; void main() { vPos = position; vec4 w = modelMatrix * vec4(position, 1.0); vWP = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
+        fragmentShader: RING_FRAG, uniforms: { uSun: { value: sd }, uSunCol: { value: sys.sunCol }, uCol: { value: new THREE.Vector3(...rc) }, uCenter: { value: g.position }, uIn: { value: pl.rings.inner }, uOut: { value: pl.rings.outer }, uR: { value: radius }, uDens: { value: pl.rings.dens }, uSeed: { value: (pl.seed % 100) } } });
+      const ring = new THREE.Mesh(ringGeo, mR); ring.rotation.x = Math.PI / 2 + pl.rings.tilt; ring.rotation.z = (pl.tilt || 0) * 0.5; g.add(ring); mats.push(mR);
+    }
+    sys.farGroup.add(g);
+    return { group: g, body, clouds, rt, mats, pl, ringGeo, rot, radius };
+  }
+
   // ---- system build / teardown ----------------------------------------------------------------------------------------
   function clearSystem() {
     for (const p of sys.planets) { p.group.removeFromParent(); p.rt.surf.dispose(); p.rt.aux.dispose(); p.mats.forEach((m) => m.dispose()); if (p.ringGeo) p.ringGeo.dispose(); }
@@ -358,6 +397,7 @@ export function createSpace(THREE, renderer, Q) {
     if (sys.stationLights) { sys.stationLights.removeFromParent(); sys.stationLights.geometry.dispose(); sys.stationLights = null; }
     if (sys.beacon) { sys.beacon.removeFromParent(); sys.beacon.geometry.dispose(); sys.beacon = null; }
     if (sys.beaconGlow) { sys.beaconGlow.removeFromParent(); sys.beaconGlow = null; }
+    pillar.visible = false; threadLines.visible = false; sys.beaconCore = null; bfx.charge = 0; bfx.burst = 0;
     if (starPts) { starPts.removeFromParent(); starPts.geometry.dispose(); starPts = null; }
     for (const n of sys.navs || []) n.removeFromParent();
     sys.navs = [];
@@ -386,10 +426,10 @@ export function createSpace(THREE, renderer, Q) {
     sunCore.position.copy(sd).multiplyScalar(D); sunCore.scale.setScalar(R);
     sunCore.material.uniforms.uCol.value.setRGB(sc[0], sc[1], sc[2]);
     corona.position.copy(sunCore.position); corona.scale.setScalar(R * 4.2 * S.corona); corona.material.uniforms.uCol.value.setRGB(sc[0], sc[1], sc[2]); corona.material.uniforms.uFlare.value = S.flare;
-    glare.position.copy(sunCore.position).multiplyScalar(0.98); glare.scale.setScalar(R * 22); glare.material.uniforms.uCol.value.setRGB(sc[0] * 0.9 + 0.1, sc[1] * 0.9 + 0.1, sc[2] * 0.9 + 0.1);
+    glare.position.copy(sunCore.position).multiplyScalar(0.98); glare.scale.setScalar(R * 15); glare.material.uniforms.uCol.value.setRGB(sc[0] * 0.9 + 0.1, sc[1] * 0.9 + 0.1, sc[2] * 0.9 + 0.1);
     sun.color.setRGB(Math.min(1, sc[0] * 1.1 + 0.05), Math.min(1, sc[1] * 1.1 + 0.05), Math.min(1, sc[2] * 1.1 + 0.05));
     sun.intensity = S.lux; sun.position.copy(sd).multiplyScalar(1000); sun.target.position.set(0, 0, 0);
-    sys.sunDir = sd.clone(); sys.sunCol = new THREE.Color(sc[0], sc[1], sc[2]);
+    sys.sunDir = sd.clone(); sys.sunCol = new THREE.Color(sc[0], sc[1], sc[2]); sys.sunD = D;
     // stars
     const r = rng(N.seed ^ 0x5151), NS = Q.stars;
     const sp = new Float32Array(NS * 3), ss = new Float32Array(NS), scl = new Float32Array(NS * 3);
@@ -405,43 +445,13 @@ export function createSpace(THREE, renderer, Q) {
     const sg = new THREE.BufferGeometry(); sg.setAttribute('position', new THREE.BufferAttribute(sp, 3)); sg.setAttribute('aSize', new THREE.BufferAttribute(ss, 1)); sg.setAttribute('aCol', new THREE.BufferAttribute(scl, 3));
     starPts = new THREE.Points(sg, starMat); starPts.frustumCulled = false; starPts.renderOrder = 1; sys.farGroup.add(starPts);
     // planets
-    const PD = 40000;
+    // planets (and their moons) at their real places: the far camera rides along with the player, so they parallax
+    // and you can cruise to them; the sky, the starfield and the sun stay at infinity
     let bcol = [0.1, 0.12, 0.16];
     bp.planets.forEach((pl, idx) => {
-      const g = new THREE.Group(); const pr = Math.tan(pl.angR * Math.PI / 180) * PD;
-      const dir = new THREE.Vector3(...pl.dir).normalize();
-      g.position.copy(dir).multiplyScalar(PD * (1 + idx * 0.02)); g.scale.setScalar(pr);
-      const rt = bakePlanet(pl, pl.angR > 8 ? Q.planet : Math.max(256, Q.planet / 2));
-      const rot = new THREE.Matrix3();
-      const atmo = lin3(pl.atmoColor);
-      const mPl = new THREE.ShaderMaterial({ vertexShader: PLANET_VERT, fragmentShader: PLANET_FRAG,
-        uniforms: { uSurf: { value: rt.surf.texture }, uAux: { value: rt.aux.texture }, uSun: { value: sd }, uSunCol: { value: sys.sunCol }, uAtmo: { value: new THREE.Vector3(...atmo) },
-          uLightCol: { value: new THREE.Vector3(1.0, 0.72, 0.4) }, uAtmoK: { value: pl.atmo }, uSea: { value: pl.ocean }, uType: { value: TYPE[pl.type] }, uBump: { value: pl.type === 'gas' ? 0 : 3.5 }, uRot: { value: rot } } });
-      const body = new THREE.Mesh(sphere, mPl); body.rotation.z = pl.tilt; g.add(body);
-      const mats = [mPl];
-      let clouds = null;
-      if (pl.clouds > 0.05) {
-        const mC = new THREE.ShaderMaterial({ vertexShader: PLANET_VERT, fragmentShader: CLOUD_FRAG, transparent: true, depthWrite: false,
-          uniforms: { uAux: { value: rt.aux.texture }, uSun: { value: sd }, uSunCol: { value: sys.sunCol }, uAtmo: { value: new THREE.Vector3(...atmo) }, uK: { value: Math.min(1.2, pl.clouds * 1.4) }, uTime: { value: 0 }, uRot: { value: rot } } });
-        clouds = new THREE.Mesh(sphere, mC); clouds.scale.setScalar(1.012); clouds.rotation.z = pl.tilt; g.add(clouds); mats.push(mC);
-      }
-      if (pl.atmo > 0.1) {
-        const mA = new THREE.ShaderMaterial({ vertexShader: PLANET_VERT, fragmentShader: ATMO_FRAG, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
-          uniforms: { uSun: { value: sd }, uAtmo: { value: new THREE.Vector3(...atmo) }, uK: { value: Math.min(1.4, pl.atmo * 1.3) } } });
-        const shell = new THREE.Mesh(sphere, mA); shell.scale.setScalar(1.045); g.add(shell); mats.push(mA);
-      }
-      let ringGeo = null;
-      if (pl.rings) {
-        ringGeo = new THREE.RingGeometry(pl.rings.inner, pl.rings.outer, 160, 1);
-        const rc = lin3(pl.rings.color);
-        const mR = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, side: THREE.DoubleSide,
-          vertexShader: `varying vec3 vPos; varying vec3 vWP; void main() { vPos = position; vec4 w = modelMatrix * vec4(position, 1.0); vWP = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
-          fragmentShader: RING_FRAG, uniforms: { uSun: { value: sd }, uSunCol: { value: sys.sunCol }, uCol: { value: new THREE.Vector3(...rc) }, uCenter: { value: g.position }, uIn: { value: pl.rings.inner }, uOut: { value: pl.rings.outer }, uR: { value: pr }, uDens: { value: pl.rings.dens }, uSeed: { value: (pl.seed % 100) } } });
-        const ring = new THREE.Mesh(ringGeo, mR); ring.rotation.x = Math.PI / 2 + pl.rings.tilt; ring.rotation.z = pl.tilt * 0.5; g.add(ring); mats.push(mR);
-      }
-      sys.farGroup.add(g);
-      sys.planets.push({ group: g, body, clouds, rt, mats, pl, ringGeo, rot });
-      if (idx === 0) { const s0 = pl.ramp[2]; bcol = [s0[0] * 0.5, s0[1] * 0.5, s0[2] * 0.5]; bounce.position.copy(dir).multiplyScalar(1000); }
+      sys.planets.push(makeBody(pl, pl.pos, pl.radius, pl.angR > 8 ? Q.planet : Math.max(256, Q.planet / 2), true));
+      for (const m of pl.moons || []) sys.planets.push(makeBody(m, moonPos(pl, m), pl.radius * m.size, Math.max(256, Q.planet / 4), false));
+      if (idx === 0) { const s0 = pl.ramp[2]; bcol = [s0[0] * 0.5, s0[1] * 0.5, s0[2] * 0.5]; bounce.position.set(pl.dir[0], pl.dir[1], pl.dir[2]).multiplyScalar(1000); }
     });
     bounce.color.setRGB(bcol[0] + 0.05, bcol[1] + 0.05, bcol[2] + 0.07); bounce.intensity = 0.55;
     amb.color.setRGB(la[0] * 0.3 + 0.02, la[1] * 0.3 + 0.02, la[2] * 0.3 + 0.03);
@@ -471,6 +481,8 @@ export function createSpace(THREE, renderer, Q) {
       const bc = beaconGeometry(THREE, bp.beacon);
       const mat = hullMaterial(THREE, { metal: 0.7, rough: 0.35, panel: 0.2, env: 1.2 });
       sys.beacon = new THREE.Mesh(bc.geo, mat); sys.beacon.position.set(...bp.beacon.pos); sys.group.add(sys.beacon);
+      sys.beaconCore = [bp.beacon.pos[0] + bc.core[0], bp.beacon.pos[1] + bc.core[1], bp.beacon.pos[2] + bc.core[2]]; sys.beaconLit = !!bp.beacon.lit;
+      pillar.position.set(sys.beaconCore[0], sys.beaconCore[1], sys.beaconCore[2]); pillar.visible = sys.beaconLit; pillarMat.uniforms.uK.value = sys.beaconLit ? 0.55 : 0;
       const gm = new THREE.Mesh(quad, new THREE.ShaderMaterial({ vertexShader: BILL_VERT, fragmentShader: GLARE_FRAG, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending,
         uniforms: { uCol: { value: bp.beacon.lit ? new THREE.Color(1.0, 0.75, 0.35) : new THREE.Color(0.35, 0.75, 1.0) }, uK: { value: bp.beacon.lit ? 1.6 : 0.45 } } }));
       gm.position.set(bp.beacon.pos[0] + bc.core[0], bp.beacon.pos[1] + bc.core[1], bp.beacon.pos[2] + bc.core[2]); gm.scale.setScalar(bp.beacon.lit ? 240 : 120);
@@ -482,6 +494,38 @@ export function createSpace(THREE, renderer, Q) {
       void main() { vec4 mv = modelViewMatrix * vec4(position, 1.0); gl_Position = projectionMatrix * mv; float b = 0.5 + 0.5 * sin(uTime * 2.2 + aPh); b = pow(b, 6.0);
         vC = aCol * (0.15 + b); gl_PointSize = clamp(2600.0 * uScale / -mv.z, 2.0, 40.0) * (0.6 + b * 0.6); }`,
     fragmentShader: `varying vec3 vC; void main() { float d = length(gl_PointCoord - 0.5); float a = pow(smoothstep(0.5, 0.0, d), 2.0); gl_FragColor = vec4(vC * a, 1.0); }` });
+
+  // ---- beacon light: the pillar of a lit beacon, the charge glow, the burst, the golden threads to other lit beacons -------
+  const pillarGeo = keep(new THREE.CylinderGeometry(1, 1, 1, 24, 1, true)); pillarGeo.translate(0, 0.5, 0);
+  const pillarMat = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, uniforms: { uK: { value: 0 }, uTime: U.time },
+    vertexShader: `varying vec2 vUv; varying vec3 vN; varying vec3 vV; void main() { vUv = uv; vN = normalize(mat3(modelMatrix) * normal); vec4 w = modelMatrix * vec4(position, 1.0); vV = cameraPosition - w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
+    fragmentShader: `uniform float uK, uTime; varying vec2 vUv; varying vec3 vN; varying vec3 vV;
+      void main() { float f = abs(dot(normalize(vN), vV / max(length(vV), 1e-4))); float core = pow(f, 3.0);
+        float y = vUv.y, fade = smoothstep(0.0, 0.02, y) * pow(1.0 - y, 2.2);
+        float pulse = 0.75 + 0.25 * sin(y * 90.0 - uTime * 6.0);
+        gl_FragColor = vec4(vec3(1.0, 0.78, 0.4) * core * fade * pulse * uK * 2.2, 1.0); }` });
+  const pillar = new THREE.Mesh(pillarGeo, pillarMat); pillar.scale.set(16, 9000, 16); pillar.visible = false; pillar.frustumCulled = false; pillar.renderOrder = 4; near.add(pillar);
+  const NTH = 12, thPos = new Float32Array(NTH * 2 * 3), thT = new Float32Array(NTH * 2);
+  for (let i = 0; i < NTH; i++) { thT[i * 2] = 0; thT[i * 2 + 1] = 1; }
+  const thGeo = keep(new THREE.BufferGeometry()); thGeo.setAttribute('position', new THREE.BufferAttribute(thPos, 3).setUsage(THREE.DynamicDrawUsage)); thGeo.setAttribute('aT', new THREE.BufferAttribute(thT, 1)); thGeo.setDrawRange(0, 0);
+  const thMat = new THREE.ShaderMaterial({ transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, uniforms: { uTime: U.time, uK: { value: 1 } },
+    vertexShader: `attribute float aT; varying float vT; void main() { vT = aT; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+    fragmentShader: `uniform float uTime, uK; varying float vT;
+      void main() { float run = pow(0.5 + 0.5 * sin(vT * 60.0 - uTime * 3.0), 12.0); float a = (1.0 - vT) * (0.35 + run * 1.6);
+        gl_FragColor = vec4(vec3(1.0, 0.8, 0.42) * a * uK, 1.0); }` });
+  const threadLines = new THREE.LineSegments(thGeo, thMat); threadLines.frustumCulled = false; threadLines.visible = false; threadLines.renderOrder = 4; near.add(threadLines);
+  const bfx = { charge: 0, burst: 0 };
+  // charge 0..1 while a relight runs; burst() when the light bursts out; threads = unit directions to the other lit beacons
+  function beaconFx(o) {
+    if (!sys.beaconCore) return;
+    if (o.charge != null) bfx.charge = o.charge;
+    if (o.burst) { bfx.burst = 1; sys.beaconLit = true; pillar.visible = true; }
+    if (o.threads) {
+      const n = Math.min(NTH, o.threads.length), c = sys.beaconCore;
+      for (let i = 0; i < n; i++) { const d = o.threads[i]; thPos.set([c[0], c[1], c[2], c[0] + d[0] * 14000, c[1] + d[1] * 14000, c[2] + d[2] * 14000], i * 6); }
+      thGeo.setDrawRange(0, n * 2); thGeo.attributes.position.needsUpdate = true; threadLines.visible = n > 0 && sys.beaconLit;
+    }
+  }
 
   // ---- nav markers (patrol waypoints / convoy jump point) ---------------------------------------------------------------
   const navGeo = keep(new THREE.TorusGeometry(60, 1.6, 6, 64));
@@ -500,10 +544,29 @@ export function createSpace(THREE, renderer, Q) {
     // billboards face the camera
     corona.quaternion.copy(cam.quaternion); glare.quaternion.copy(cam.quaternion);
     if (sys.beaconGlow) sys.beaconGlow.quaternion.copy(cam.quaternion);
+    // things at infinity ride along with the far camera
+    const fp = opts.farPos;
+    if (fp && sys.sunDir) {
+      if (starPts) starPts.position.copy(fp);
+      sunCore.position.copy(sys.sunDir).multiplyScalar(sys.sunD).add(fp); corona.position.copy(sunCore.position);
+      glare.position.copy(sys.sunDir).multiplyScalar(sys.sunD * 0.98).add(fp);
+    }
     for (const p of sys.planets) {
-      p.body.rotation.y += dt * p.pl.rot * 0.25;
+      const rot = p.pl.rot != null ? p.pl.rot : (p.pl.spin || 0.004);
+      p.body.rotation.y += dt * rot * 0.25;
       p.rot.setFromMatrix4(p.body.matrixWorld);   // object normal -> world for lighting
-      if (p.clouds) { p.clouds.rotation.y = p.body.rotation.y; p.clouds.material.uniforms.uTime.value = time * p.pl.rot * 0.08; p.clouds.material.uniforms.uRot.value = p.rot; }
+      if (p.clouds) { p.clouds.rotation.y = p.body.rotation.y; p.clouds.material.uniforms.uTime.value = time * rot * 0.08; p.clouds.material.uniforms.uRot.value = p.rot; }
+    }
+    // the beacon: charge glow, burst flash, the pillar of a lit beacon
+    if (sys.beaconGlow) {
+      bfx.burst = Math.max(0, bfx.burst - dt * 0.35);
+      const lit = sys.beaconLit, k = bfx.charge, b = bfx.burst;
+      const gu = sys.beaconGlow.material.uniforms;
+      gu.uCol.value.setRGB(lit ? 1.0 : 0.35 + k * 0.65, lit ? 0.75 : 0.75, lit ? 0.35 : 1.0 - k * 0.65);
+      gu.uK.value = (lit ? 1.6 : 0.45 + k * 1.6) + b * 2.2; sys.beaconGlow.scale.setScalar((lit ? 240 : 120 + k * 140) * (1 + b * 1.2));
+      if (sys.beacon && sys.beacon.material.userData.U) sys.beacon.material.userData.U.uGlowMul.value = 1 + k * 2.2 + b * 4 + (lit ? 0.6 : 0);
+      pillarMat.uniforms.uK.value = lit ? 0.55 + b * 1.6 : 0; pillar.scale.x = pillar.scale.z = 16 + b * 34;
+      thMat.uniforms.uK.value = 1 + b * 2;
     }
     for (const n of sys.navs || []) { n.rotation.y += dt * (n.userData.gate ? 0.15 : 0.6); n.lookAt(cam.position); n.rotateZ(time * 0.4); }
     // dust
@@ -519,7 +582,7 @@ export function createSpace(THREE, renderer, Q) {
       const tanH = Math.tan(cam.fov * Math.PI / 360), sx = (_v.x / -_v.z) / (tanH * cam.aspect), sy = (_v.y / -_v.z) / tanH;
       const edge = Math.max(Math.abs(sx), Math.abs(sy));
       let k = (1 - Math.min(1, Math.max(0, (edge - 0.6) / 0.6))) * (opts.flare != null ? opts.flare : 1);
-      for (const pl of sys.planets) { _c.copy(pl.group.position).normalize(); const ang = Math.acos(Math.min(1, _c.dot(sys.sunDir))); if (ang < Math.atan(pl.group.scale.x / pl.group.position.length())) k = 0; }
+      for (const pl of sys.planets) { _c.copy(pl.group.position); if (fp) _c.sub(fp); const L = _c.length(); _c.divideScalar(L || 1); const ang = Math.acos(Math.min(1, _c.dot(sys.sunDir))); if (ang < Math.atan(pl.group.scale.x / Math.max(L, 1))) k = 0; }
       for (const m of fl) {
         const f = m.userData.k, x = sx * f, y = sy * f;
         m.position.set(x * tanH * cam.aspect, y * tanH, -1); m.scale.setScalar(m.userData.s * (1 + Math.abs(f) * 0.2));
@@ -532,11 +595,11 @@ export function createSpace(THREE, renderer, Q) {
     clearSystem();
     for (const d of disposables) d.dispose();
     if (skyRT) skyRT.dispose(); if (envRT) envRT.dispose(); pmrem.dispose();
-    dMat.dispose(); tMat.dispose(); starMat.dispose(); blinkMat.dispose(); navMat.dispose(); rockMat.dispose();
+    dMat.dispose(); tMat.dispose(); starMat.dispose(); blinkMat.dispose(); navMat.dispose(); rockMat.dispose(); pillarMat.dispose(); thMat.dispose();
     sunCore.material.dispose(); corona.material.dispose(); glare.material.dispose();
     for (const m of flares.children) m.material.dispose();
   }
-  return { far, near, sys, sun, build, update, setNavs, tunnel, tunnelMat: tMat, flares, dust, dispose, U };
+  return { far, near, sys, sun, build, update, setNavs, beaconFx, tunnel, tunnelMat: tMat, flares, dust, dispose, U };
 }
 
 function kelvinRGB(k) {

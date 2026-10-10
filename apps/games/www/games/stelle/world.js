@@ -10,7 +10,7 @@ import { hash3 } from '../constellations-gen.js';
 const u32 = (x) => x >>> 0;
 // Web visual domains: kept far from DOM.* (1..8) by a fixed high base, then one sub-domain per layer.
 const VD = 0x57E11E00;
-export const VDOM = { STAR: 1, PLANET: 2, NEB: 3, ROCK: 4, STATION: 5, LAYOUT: 6, MISSION: 7, TRAFFIC: 8, NAME: 9, SKY: 10 };
+export const VDOM = { STAR: 1, PLANET: 2, NEB: 3, ROCK: 4, STATION: 5, LAYOUT: 6, MISSION: 7, TRAFFIC: 8, NAME: 9, SKY: 10, MOON: 11, GALAXY: 12, POI: 13 };
 export const vhash = (seed, sector, sys, dom, salt) =>
   hash3(u32(seed ^ u32(VD + Math.imul(dom, 0x9E37))), u32(sector), u32(((sys & 0xff) << 16) | (salt & 0xffff)));
 
@@ -157,11 +157,14 @@ export function systemBlueprint(seed, sector, sysIdx, sys, litBeacon = false) {
     }
     planets.push(p);
   }
-  if (rp() < 0.55) {   // a moon hanging near the home world
-    const hd = planets[0].dir, side = norm([hd[0] + rp.range(0.15, 0.3) * rp.sign(), hd[1] + rp.range(0.1, 0.22), hd[2]]);
-    planets.push({ ...planets[planets.length - 1], name: name + ' ' + ROMAN[0] + '-a', type: 'rocky', dir: side, angR: rp.range(1.4, 2.6), seed: u32(rp() * 4294967296),
-      ramp: PT.rocky.ramp.map(([h, s, l]) => hsl(h, s * 0.6, l)), ocean: 0, clouds: 0, atmo: 0.05, lights: 0, rings: null, moonOf: 0, bands: 0 });
-  }
+  // real places: the home world 40 km out, the others 70-190 km (same apparent size as before, so they are
+  // physically bigger the farther they hang) — the cruise drive reaches any of them in seconds
+  planets.forEach((p, i) => {
+    p.dist = i === 0 ? 40000 : Math.round(70000 + rp() * 120000);
+    p.radius = Math.round(Math.tan(p.angR * Math.PI / 180) * p.dist);
+    p.pos = [p.dir[0] * p.dist, p.dir[1] * p.dist, p.dir[2] * p.dist];
+    p.moons = moonsOf(seed, sector, sysIdx, i, p);
+  });
 
   // battle space anchors (metres): the player starts at the origin heading -Z
   const rl = R(VDOM.LAYOUT);
@@ -171,57 +174,117 @@ export function systemBlueprint(seed, sector, sysIdx, sys, litBeacon = false) {
   const fieldCenter = [rl.range(1900, 3000), rl.range(-500, 300), rl.range(-3600, -1800)];   // across the lane from the station
   const field = asteroidField(seed, sector, sysIdx, fieldCenter, rl.range(1500, 2300), sector);
 
+  // where a jump drops you: at a lit beacon (the network holds you), else at the edge of the system, 13 km out,
+  // looking in at the home world and the station
+  const ra = R(VDOM.POI), toward = station ? station.pos : [0, 0, -2500];
+  const edgeDir = norm([ra.range(-0.6, 0.6), ra.range(-0.12, 0.2), 1]);
+  const edge = [toward[0] + edgeDir[0] * 13000, toward[1] + edgeDir[1] * 13000, toward[2] + edgeDir[2] * 13000];
   return { key: `${seed}:${sector}:${sysIdx}`, name, faction: fac, star, nebula, planets, station, beacon, field,
-    sunDir, deep, inhabited };
+    sunDir, deep, inhabited, edge };
+}
+
+// ---- moons: 0-3 per world on a dedicated hash domain (orbit radius in planet radii, size, type) ------
+const MOON_TYPES = ['rocky', 'ice', 'volcanic', 'desert', 'crystal'];
+export function moonsOf(seed, sector, sysIdx, pi, p) {
+  const r = rng(vhash(seed, sector, sysIdx, VDOM.MOON, pi));
+  const n = p.type === 'gas' ? 1 + r.int(3) : r() < 0.55 ? 1 + (r() < 0.25 ? 1 : 0) : 0;
+  const out = [], tilt = r.range(-0.35, 0.35);
+  for (let k = 0; k < n; k++) {
+    const type = p.type === 'crystal' ? 'crystal' : MOON_TYPES[r.int(p.type === 'gas' ? 4 : 2)];
+    const def = PT[type], hj = r.range(-0.05, 0.05);
+    out.push({ name: p.name + ' ' + String.fromCharCode(97 + k), type, seed: u32(r() * 4294967296),
+      orbit: r.range(2.0, 3.4) + k * 1.1, phase: r.range(0, Math.PI * 2), tilt, size: r.range(0.1, type === 'volcanic' ? 0.2 : 0.27), spin: r.range(0.002, 0.006),
+      ramp: def.ramp.map(([h, s, l]) => hsl(h + hj, s * 0.8, l)), ocean: 0, oceanColor: hsl(0.58, 0.5, 0.3), clouds: 0, atmo: type === 'volcanic' ? 0.25 : 0.05,
+      atmoColor: hsl(type === 'volcanic' ? 0.04 : 0.58, 0.5, 0.6), lights: 0, noise: r.range(2.2, 3.6), bands: 0, rings: null, tiltAxis: r.range(-0.4, 0.4) });
+  }
+  return out;
+}
+// world-space centre of moon k of planet p (orbits are frozen: a sortie lasts minutes, an orbit days)
+export function moonPos(p, m, out = [0, 0, 0]) {
+  const a = m.phase, R = p.radius * m.orbit, ct = Math.cos(m.tilt), st = Math.sin(m.tilt);
+  const x = Math.cos(a) * R, z = Math.sin(a) * R;
+  out[0] = p.pos[0] + x; out[1] = p.pos[1] + z * st; out[2] = p.pos[2] + z * ct;
+  return out;
 }
 
 // ---- station blueprint: a faction-styled set of modules (pure data, the renderer builds meshes) --
 export function stationBlueprint(seed, sector, sysIdx, fac, rl) {
   const r = rng(vhash(seed, sector, sysIdx, VDOM.STATION, 0));
   const pos = rl ? [rl.range(-1700, -900), rl.range(-160, 160), rl.range(-3300, -2500)] : [-1200, 0, -2900];
-  const mods = [];
+  // Modules are pure data (stelle/kit.js builds the meshes from them). collide = conservative spheres over the
+  // solid parts (local to pos); dock = the bay mouth p and its outward unit normal n: the lane p .. p + n*700 and
+  // the bay ~25 m inside p stay clear of geometry and spheres. yaw turns the whole layout about Y (mods, spheres
+  // and dock are built in the layout frame, then turned here so sim and renderer agree).
+  const mods = [], collide = [], TAU = Math.PI * 2;
   const M = (kind, p, size, o = {}) => mods.push({ kind, p, size, ...o });
+  const C = (x, y, z, rad) => collide.push([x, y, z, rad]);
+  let yaw = 0, radius = 300, dock = null;
   if (fac === 2) {
-    // Relitti: welded hulks at odd angles, cranes, sodium lights — asymmetric and alive
-    const n = 5 + r.int(4);
-    M('hulk', [0, 0, 0], [70, 60, 260], { rot: [0, 0, 0] });
-    for (let i = 0; i < n; i++) {
-      const a = r.range(0, Math.PI * 2), d = r.range(40, 130);
-      M(r() < 0.5 ? 'hulk' : 'can', [Math.cos(a) * d, r.range(-80, 80), r.range(-120, 120)],
-        [r.range(25, 60), r.range(20, 50), r.range(60, 160)], { rot: [r.range(-0.5, 0.5), r.range(-1, 1), r.range(-0.6, 0.6)] });
+    // Relitti: Gutterdeep, the hulk-town inside the freighter "Patience" — a bulging patched hull with lit
+    // openings, cranes on its back, boats moored on cables; built along Z, turned so the bay faces +Z
+    yaw = -Math.PI / 2;
+    const Lh = r.range(400, 460), h2 = Lh / 2;
+    const secs = [[h2, 26, 24, 6, 8, 7], [h2 - 25, 80, 70, 4, 24, 20], [h2 - 90, 116, 96, 2, 34, 28], [0, 126, 102, 0, 37, 30], [-h2 + 90, 114, 94, -2, 33, 28], [-h2 + 25, 72, 62, -4, 21, 18], [-h2, 28, 26, -6, 8, 7]];
+    const at = (z) => { for (let i = 0; i < secs.length - 1; i++) { const a = secs[i], b = secs[i + 1]; if (z <= a[0] && z >= b[0]) { const t = (a[0] - z) / (a[0] - b[0]); return [a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t]; } } return [secs[6][1], secs[6][2]]; };
+    const dz = r.range(-40, 40), D = 52, W = 46, H = 30;
+    M('freighter', [0, 0, 0], [126, 102, Lh], { secs, dz });
+    M('dockhouse', [63 + D, -10, dz], [W, H, D], { a: Math.PI / 2, style: 2, foot: 0 });
+    for (let z = -h2 + 34; z <= h2 - 34; z += 44) { const s = at(z); C(0, 0, z, Math.max(s[0], s[1]) * 0.55); }
+    C(63 + D / 2, -10 + H / 2 + 16, dz, 13); C(63 + D / 2, -10 - H / 2 - 16, dz, 13);
+    for (let i = 0; i < 3; i++) { const z = -h2 * 0.6 + i * h2 * 0.6 + r.range(-20, 20), s = at(z); M('rcrane', [r.range(-20, 20), s[1] / 2 - 4, z], [r.range(50, 80), r.range(60, 100), 0], { a: r.range(0, TAU) }); }
+    for (let i = 0; i < 4; i++) { const z = r.range(-h2 * 0.5, h2 * 0.5), s = at(z); M('stack', [r.range(-24, 24), s[1] / 2 - 3, z], [r.range(18, 30), r.range(14, 30), r.range(20, 36)]); }
+    for (let i = 0; i < 6; i++) {
+      const side = i % 2 ? 1 : -1;
+      let z = r.range(-h2 + 70, h2 - 70); if (side > 0 && Math.abs(z - dz) < 90) z = dz + (z < dz ? -90 : 90);
+      const s = at(z), x = side * (s[0] / 2 + r.range(26, 44)), y = r.range(-36, 30), L = r.range(24, 38);
+      M('moored', [x, y, z], [L * 0.32, L * 0.24, L], { side, hull: [side * s[0] * 0.45, y * 0.5, z + r.range(-10, 10)] });
+      C(x, y, z, L * 0.55);
     }
-    for (let i = 0; i < 3; i++) M('crane', [r.range(-60, 60), r.range(40, 90), r.range(-100, 100)], [6, r.range(80, 140), 6], { rot: [r.range(-0.6, 0.6), 0, r.range(-0.6, 0.6)] });
-    M('dock', [0, -42, -150], [40, 22, 50]);
-    M('tank', [r.range(-90, -50), r.range(-40, 40), r.range(-60, 60)], [32, 32, 32]);
-    M('tank', [r.range(50, 90), r.range(-40, 40), r.range(-60, 60)], [26, 26, 26]);
+    dock = { p: [63 + D, -10, dz], n: [1, 0, 0] };
+    radius = h2 + 40;
   } else if (fac === 1) {
-    // Custodi: a white-stone cathedral spire, verdigris domes, rings of candle-gold light
-    const h = r.range(380, 520);
-    M('spire', [0, 0, 0], [46, h, 46]);
-    M('dome', [0, -h * 0.18, 0], [110, 70, 110]);
-    for (let i = 0; i < 3; i++) M('halo', [0, -h * 0.05 + i * h * 0.16, 0], [140 - i * 30, 6, 140 - i * 30]);
-    for (let i = 0; i < 4; i++) { const a = i * Math.PI / 2 + Math.PI / 4; M('chapel', [Math.cos(a) * 95, -h * 0.22, Math.sin(a) * 95], [34, 60, 34]); }
-    M('dock', [0, -h * 0.42, 0], [70, 30, 70]);
+    // Custodi: the Lamp Monastery — white-stone terraces, towers and a pagoda hall built inside the cracked
+    // shell of the dead beacon Lumen, broken open towards +Z; candle lanterns float in the breach
+    const Rs = r.range(155, 175), open = r.range(1.0, 1.1), fy = -Rs * 0.32;
+    M('shell', [0, 0, 0], [Rs, 11, 0], { open });
+    M('ledge', [0, fy, -10], [Rs, 60, 0]);
+    M('terrace', [0, fy + 9, 0], [190, 18, 150]); M('terrace', [0, fy + 27, -14], [150, 18, 116]); M('terrace', [0, fy + 45, -26], [110, 18, 80]);
+    M('pagoda', [0, fy + 54, -28], [72, 0, 56], { tiers: 3 });
+    for (const sx of [-1, 1]) { M('hall', [sx * 72, fy + 18, -6], [28, 24, 52]); C(sx * 72, fy + 32, -6, 30); }
+    const towers = [[-84, fy + 18, 60, r.range(46, 64)], [84, fy + 18, 60, r.range(46, 64)], [-64, fy + 36, -58, r.range(56, 80)], [64, fy + 36, -58, r.range(56, 80)], [-30, fy + 54, -62, r.range(40, 52)], [30, fy + 54, -62, r.range(40, 52)]];
+    for (const [x, y, z, h] of towers) { M('ctower', [x, y, z], [12, h, 12]); C(x, y + h * 0.5, z, h * 0.5 + 4); }
+    M('stairs', [0, fy + 18, 57], [30, 18, 26]);
+    const mouth = [0, fy + 20, 119];
+    M('dockhouse', mouth, [36, 22, 40], { a: 0, style: 1, foot: 12 });
+    M('lanterns', [0, fy, 0], [Rs, 0, 0], { n: 40, lane: mouth });
+    const N = 46, ga = Math.PI * (3 - Math.sqrt(5));
+    for (let k = 0; k < N; k++) { const z = 1 - 2 * (k + 0.5) / N, q = Math.sqrt(1 - z * z), ph = k * ga; if (Math.acos(z) > open + 0.16) C(q * Math.cos(ph) * (Rs - 6), q * Math.sin(ph) * (Rs - 6), z * (Rs - 6), 46); }
+    C(-70, fy - 40, -20, 55); C(70, fy - 40, -20, 55); C(0, fy - 45, 35, 55);
+    C(-55, fy + 9, 30, 48); C(55, fy + 9, 30, 48); C(-55, fy + 9, -40, 48); C(55, fy + 9, -40, 48);
+    C(0, fy + 50, -26, 64); C(0, fy + 47, 99, 12);
+    dock = { p: mouth, n: [0, 0, 1] };
+    radius = Rs * 1.3 + 12;
   } else {
-    // Gilda: an ivory-and-brass wheel — hub spindle, habitat ring(s), spokes, docking arms, solar wings
-    const ringR = r.range(230, 320);
-    M('hub', [0, 0, 0], [70, 70, 300]);
-    M('ring', [0, 0, 0], [ringR, 26, 40]);
-    if (r() < 0.5) M('ring', [0, 0, r.range(70, 110)], [ringR * 0.72, 18, 28]);
-    const sp = 3 + r.int(3);
-    for (let i = 0; i < sp; i++) M('spoke', [0, 0, 0], [ringR, 9, 9], { a: (i / sp) * Math.PI * 2 });
-    M('arm', [0, 0, -190], [22, 22, 120]);
-    M('dock', [0, 0, -260], [60, 60, 40]);
-    for (let i = 0; i < 2; i++) M('panel', [(i ? 1 : -1) * (ringR * 0.55), 0, 140], [ringR * 0.8, 3, 60]);
-    M('spire', [0, 0, 170], [12, 120, 12], { rot: [Math.PI / 2, 0, 0] });
+    // Gilda: the Ardali Exchange — a brass-and-ivory ring city (domed districts, spires, blue window bands)
+    // round a hub crowned by a golden dome, piers between them; the dock house juts from the ring towards +Z
+    const R = r.range(240, 300), W = 44, H = 30, da = -Math.PI / 2, D = 54;
+    M('gring', [0, 0, 0], [R, W, H], { n: 34 + r.int(6), da });
+    M('ghub', [0, 0, 0], [64, 0, 0]);
+    for (let i = 0; i < 6; i++) M('gpier', [0, 0, 0], [R - W / 2, 7, 9], { a: da + (i + 0.5) / 6 * TAU });
+    const mouth = [0, 0, R + W / 2 + D];
+    M('dockhouse', mouth, [40, 26, D], { a: 0, style: 0, foot: 0 });
+    for (let k = 0; k < 32; k++) { const a = k / 32 * TAU; C(R * Math.cos(a), 0, -R * Math.sin(a), 34); if (k % 2 === 0) C(R * Math.cos(a), H / 2 + 24, -R * Math.sin(a), 24); }
+    C(0, 0, 0, 70); C(0, 74, 0, 40); C(0, -46, 0, 34);
+    C(0, 13 + 14, R + W / 2 + D / 2, 13); C(0, -13 - 14, R + W / 2 + D / 2, 13);
+    dock = { p: mouth, n: [0, 0, 1] };
+    radius = R + W / 2 + D + 76;
   }
-  // collision volumes: one sphere per module footprint (generous), plus a hub sphere
-  const collide = mods.filter((m) => m.kind !== 'panel' && m.kind !== 'crane' && m.kind !== 'spoke' && m.kind !== 'halo').map((m) => {
-    const rad = m.kind === 'ring' ? 0 : Math.max(m.size[0], m.size[2]) * 0.55 + (m.kind === 'spire' ? 0 : 6);
-    return [m.p[0], m.p[1], m.p[2], rad];
-  }).filter((c) => c[3] > 0);
-  const radius = fac === 0 ? 360 : fac === 1 ? 300 : 260;
-  return { pos, faction: fac, mods, collide, radius, seed: u32(r() * 4294967296), lights: 30 + r.int(30) };
+  if (yaw) {   // turn spheres and dock from the layout frame into the station frame (same rotation as the meshes)
+    const c = Math.cos(yaw), s = Math.sin(yaw), rot = (v) => [c * v[0] + s * v[2], v[1], -s * v[0] + c * v[2]];
+    for (const k of collide) { const v = rot(k); k[0] = v[0]; k[2] = v[2]; }
+    dock = { p: rot(dock.p), n: rot(dock.n).map((v) => (Math.abs(v) < 1e-9 ? 0 : v)) };
+  }
+  return { pos, faction: fac, mods, collide, radius, seed: u32(r() * 4294967296), lights: 30 + r.int(30), dock, yaw };
 }
 
 // ---- asteroid field: the collidable rocks (same list for sim and renderer) -----------------------

@@ -8,7 +8,8 @@ in one is there in the other — the save is shared (`/sd/data/costellazioni/sav
 `/api/game/costellazioni/save`, see `constellations-save.js`).
 
 Status: v1 web (rail dogfight + hub) and native exist. This document is the target for the rebuild started
-2026-10-10. Milestones at the end.
+2026-10-10. Milestones at the end. M1 (space combat) and M2 (galaxy, travel, docking, relight) are in the web game;
+see "What the web game shows today (M2)" below.
 
 ## Pillars
 1. **Wonder** — every system looks different and worth seeing: a star you can feel, planets with weather and
@@ -156,6 +157,36 @@ edges, mastered to the same loudness. The beacon motif recurs in all four.
   lives in a separate web save next to it (`/sd/data/costellazioni/web.json`), never in the shared struct.
 - Tests: `tools/web-e2e/` (headless Chrome against `tools/serve-shell.mjs`): boot, fly, fight, dock, trade,
   jump, descend, save round-trip, five languages, no console errors, frame-time budget.
+
+## What the web game shows today (M2)
+- **Hub** (docked): six screens — Bridge (hall illustration cropped on its focal point, faction emblem, the
+  station's contact), 3D galaxy map, Market, Shipyard, Missions, Codex. **Launch** undocks into free flight.
+- **Galaxy map** (`stelle/galaxy.js`): a spiral galaxy; the current sector's ten systems in 3D (shared x/y, web-only
+  height on hash domain `VDOM.GALAXY`), star colour by class, faction territories, beacons as crystal spires, golden
+  threads only between two lit beacons (dim, broken otherwise), routes in jump range, the jump-range ring, charted /
+  uncharted from the web save, neighbouring sectors along the arm (past ones keep the threads you lit). Drag, wheel,
+  pinch; click picks a system. A hub jump plays as a drive burn, the tunnel and an arrival at the new station.
+- **Free flight** (`sim.js` kind `explore`): points of interest (station, beacon, planets, moons, the field); `N`
+  cycles the destination, the cruise drive scales with the distance (up to ~40 km/s) and drops out at the target;
+  planets sit at their real distance (40–190 km, far camera rides with the player) and are surveyed from orbit
+  (codex: worlds). `L` requests docking (clearance, a lane along the station's `dock` normal, a tractor slide-in,
+  fade) or seats the relic at a dark beacon; `P` opens the galaxy map over the paused flight, `K` spools the jump
+  drive (mass lock, 4.2 s), the tunnel, then an arrival fly-in in the target system. Random encounters: raiders, or
+  the Echo's drones in Echo space.
+- **Relight**: carry a relic to the beacon; it charges for about a minute while raiders come for the crystal and the
+  Keepers' watch (a Censer and two Votives) holds near the spire; the light bursts out (pillar, golden threads to the
+  other lit beacons) and the shared save gets the relight (bit, relic, 300 cr, Keepers +12). The Echo answers the
+  first beacon of a sector by measuring you (lattice ships circle, the Voice speaks, they leave) and every further one
+  by fighting (Lattice interceptors that phase out of your fire and blink sideways, a Choir that re-shields its kin
+  through links and sings chords of slow bolts, Shards).
+- **Rosters added**: Custodi Censer (stand-off bomber, slow homing torpedoes you can shoot down) and Reliquary barge
+  (capital, point defence, bell-tower bridge); Echo Lattice and Choir.
+- **Codex** (`constellations-codex.js`): 57 entries in six categories (lore, factions, places, worlds, ships, contacts)
+  with the lore / station / world illustrations and the cast portraits; ship dossiers turn the live model in the
+  hangar. Unlocked by play (systems visited, docking, surveys, kills, the Voice, relights, sector depth).
+- **Web save** (`constellations-web.js`, `/sd/data/costellazioni/web.json` + a localStorage mirror, keyed by the run
+  seed): visited systems per sector, relit beacons (kept after the sector advances), surveys, codex unlocks. The
+  shared save contract and the generator output are unchanged.
 
 ## Native (Cardputer) — kept in step
 The native game keeps the shared numeric layer and save. It gets the same lore names and faction identities,

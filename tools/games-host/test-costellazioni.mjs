@@ -6,6 +6,10 @@
 //   4. every mission kind (patrol, hunt, duel, escort, defend, sweep, free ambush) runs to completion with
 //      the Gilda and Relitti rosters, within a per-step time budget;
 //   5. the save contract: a won sortie writes credits / kills / hull / reputation exactly like the rail shooter.
+//   6. M2: the web-only world (planets you can reach, moons, the arrival point), free flight with points of
+//      interest and the supercruise, docking, the jump drive, the beacon relight (the Echo's calm and hostile
+//      answers), the Custodi / Echo rosters (torpedoes, phase blinks, shield links, chords), the codex catalog in
+//      five languages, and the web save written NEXT TO the shared save, which keeps its contract.
 // Run: node tools/games-host/test-costellazioni.mjs (part of `npm run games:gate`).
 import { readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -192,7 +196,15 @@ console.log(`  sim: ${steps} steps, ${(per * 1000).toFixed(1)} µs/step`);
   writeFileSync(join(T, 'constellations.mjs'), src);
   let disk = null; const posts = [];
   globalThis.window = { __czAutopilot: true, __czGod: true, __czNoBrief: true };
+  let webDisk = null; const webPaths = new Set();
   globalThis.fetch = async (u, o) => {
+    const url = String(u);
+    if (url.startsWith('/api/fs/')) {   // the web-only save lives next to the shared one, through the fs API
+      const path = decodeURIComponent((url.split('path=')[1] || '').split('&')[0]);
+      if (url.startsWith('/api/fs/mkdir')) return { ok: true, status: 200, json: async () => ({ ok: true }) };
+      if (url.startsWith('/api/fs/write')) { webPaths.add(path); webDisk = JSON.parse(o.body); return { ok: true, status: 200, json: async () => ({ ok: true }) }; }
+      if (url.startsWith('/api/fs/read')) return webDisk ? { ok: true, status: 200, text: async () => JSON.stringify(webDisk) } : { ok: false, status: 404, text: async () => '' };
+    }
     if (o && o.method === 'POST') { disk = JSON.parse(o.body); posts.push(disk); return { ok: true, status: 200, json: async () => ({ ok: true }) }; }
     if (!disk) return { ok: false, status: 404, json: async () => ({}) };
     return { ok: true, status: 200, json: async () => JSON.parse(JSON.stringify(disk)) };
@@ -227,8 +239,173 @@ console.log(`  sim: ${steps} steps, ${(per * 1000).toFixed(1)} µs/step`);
   if (won && cc.repFac >= 0) ok(run.rep[cc.repFac] === Math.min(100, before.rep[cc.repFac] + cc.repGain), 'reputation with the offering faction rises');
   const last = posts[posts.length - 1];
   ok(last && last.credits === run.credits && last.kills === run.kills && Object.keys(last).sort().join() === Object.keys(run).sort().join(), 'the POSTed save has the unchanged contract shape');
+  // ---- M2 through the game module: launch -> dock, the jump drive, the relight; shared vs web save ------------------
+  {
+    const shape = Object.keys(run).sort().join();
+    // fly a flight the way the page does: the sim at 60 Hz, the game's tick at ~15 Hz (it reads the flight's events)
+    const step = (F, max = 900) => { while (!F.done && F.t < max) { S.stepFlight(F); if ((F.step % 4) === 0) { st = g.tick(st, 50); if (st.phase !== 'combat' || cz.flight !== F) return; } } };
+    st = g.tick(st, 50); st = g.reduce(st, { type: 'confirm' });   // debrief -> hub
+    ok(st.phase === 'hub', 'the debrief returns to the hub');
+    // launch: an explore flight; the autopilot asks for a bay and docks
+    globalThis.window.__czAutoDock = true; globalThis.window.__czEncounter = false;
+    const sys0 = cz.run.sys;
+    if (cz.model.sector[sys0].faction === 3) { cz.run.sys = cz.model.sector.findIndex((s) => s.faction !== 3); }
+    globalThis.window.__cz.dev.goto(cz.run.sys);
+    st = g.reduce(st, { type: 'screen', to: 0 }); st = { ...st, focus: { ...st.focus, bridge: 0 } }; st = g.reduce(st, { type: 'confirm' });
+    ok(st.phase === 'combat' && cz.flight && cz.flight.mission.kind === 'explore', 'the bridge launches a free flight');
+    ok(cz.flight.pois.some((x) => x.kind === 'station') && cz.flight.pois.some((x) => x.kind === 'planet'), 'free flight lists the station and the worlds as destinations');
+    let F = cz.flight; step(F, 400); if (st.phase === 'combat' && cz.flight === F) st = g.tick(st, 50);
+    ok(F.outcome === 3 && st.phase === 'hub' && st.screen === 'bridge', `docking ends the flight at the hub (outcome ${F.outcome}, ${F.t.toFixed(0)} s)`);
+    // the jump drive in flight: the shared jump (fuel, epoch) and a new flight that arrives in the target system
+    globalThis.window.__czAutoDock = false;
+    st = { ...st, focus: { ...st.focus, bridge: 0 } }; st = g.reduce(st, { type: 'confirm' });
+    const before = { sys: cz.run.sys, fuel: cz.run.fuel, epoch: cz.run.epoch };
+    const S0 = cz.model.sector, to = S0.findIndex((x, i) => i !== before.sys && Math.hypot(x.x - S0[before.sys].x, x.y - S0[before.sys].y) <= cz.run.jump_range);
+    cz.model.actions.plot(to);
+    for (const s of cz.flight.ships) if (s.alive && s.team === S.TEAM_E) s.alive = false;
+    const why = cz.model.actions.jump();
+    ok(why === '', 'the jump drive spools for a plotted system in range (' + why + ')');
+    F = cz.flight; step(F, 60); if (cz.flight === F) st = g.tick(st, 50);
+    ok(F.outcome === 4 && cz.run.sys === to && cz.run.fuel < before.fuel && cz.run.epoch === before.epoch + 1, 'the jump moves the shared run (system, fuel, epoch)');
+    ok(st.phase === 'combat' && cz.flight !== F && cz.flight.arriveT > 0, 'and drops out into a free flight in the new system');
+    ok(Object.keys(cz.run).sort().join() === shape, 'the shared save keeps its contract after travel');
+    // the relight, flown: relic + 300 cr are taken when the light bursts, the bit is set, the Keepers are pleased
+    cz.flight.done = true; cz.flight.outcome = 3; st = g.tick(st, 50);
+    const bsys = cz.model.sector.findIndex((s, i) => s.beacon && !((cz.run.beacon_lit >>> i) & 1));
+    globalThis.window.__cz.dev.goto(bsys);
+    cz.run.cargo[6] = 1; cz.run.credits = Math.max(cz.run.credits, 1000);
+    const pre = { cr: cz.run.credits, kp: cz.run.rep[1], lit: cz.run.beacon_lit >>> 0, sector: cz.run.sector };
+    st = g.reduce(st, { type: 'screen', to: 1 }); st = { ...st, focus: { ...st.focus, map: 1 } }; st = g.reduce(st, { type: 'confirm' });
+    ok(st.phase === 'combat' && cz.flight.mission.relightWanted, 'the map sends you to relight the beacon');
+    F = cz.flight; step(F, 500); if (st.phase === 'combat' && cz.flight === F) st = g.tick(st, 50);
+    ok(F.relit && F.outcome === 1 && st.phase === 'debrief' && st.dbStats && st.dbStats.relit, `the relight is flown to the end (outcome ${F.outcome}, ${F.t.toFixed(0)} s)`);
+    const litNow = ((cz.run.beacon_lit >>> 0) & (1 << bsys)) !== 0 || cz.run.sector > pre.sector;
+    ok(litNow && cz.run.cargo[6] === 0 && cz.run.rep[1] === Math.min(100, pre.kp + 12), 'the shared numbers of a relight: beacon bit, relic spent, Keepers +12');
+    ok(cz.run.credits === pre.cr - 300 + F.kills * st.cc.killCr, 'the relight costs 300 cr (salvage added)');
+    ok(Object.keys(cz.run).sort().join() === shape && Object.keys(posts[posts.length - 1]).sort().join() === shape, 'the shared save keeps its contract after a relight');
+    await new Promise((r) => setTimeout(r, 900));   // the web save is debounced
+    const web = webDisk;
+    ok(webPaths.has('/data/costellazioni/web.json') && web && web.seed === cz.run.seed >>> 0, 'the web save is written next to the shared one (/data/costellazioni/web.json)');
+    ok(web && web.relights >= 1 && Object.values(web.relit).some((m) => m), 'it remembers the relit beacon');
+    ok(web && ((web.visited[pre.sector] >>> 0) & (1 << bsys)), 'and the systems visited');
+    ok(web && web.codex.relight != null && web.codex.costellatori != null, 'and the codex entries unlocked');
+    ok(!posts.some((p) => 'codex' in p || 'visited' in p), 'nothing web-only ever reaches the shared save');
+  }
+
   delete globalThis.window; Math.random = realRandom;
   try { rmSync(T, { recursive: true, force: true }); } catch {}
+}
+
+// ---- 6. M2 at the sim level ---------------------------------------------------------------------------------------------
+{
+  // the web-only world: reachable planets, moons on their own hash domain, an arrival point; new domains do not collide
+  const vd = Object.values(W.VDOM); ok(new Set(vd).size === vd.length, 'web visual hash domains are distinct');
+  const b = bp(1);
+  ok(b.planets.every((p) => p.pos && p.radius > 500 && p.dist >= 40000 && Array.isArray(p.moons)), 'every world has a place, a size and its moons');
+  ok(b.planets[0].dist === 40000 && b.planets.slice(1).every((p) => p.dist > 60000), 'the home world hangs 40 km out, the others further');
+  let moons = 0; for (let i = 0; i < 10; i++) for (const p of bp(i).planets) for (const m of p.moons) { moons++; const mp = W.moonPos(p, m), d = Math.hypot(mp[0] - p.pos[0], mp[1] - p.pos[1], mp[2] - p.pos[2]); ok(Math.abs(d - p.radius * m.orbit) < 1, 'a moon orbits at its radius'); }
+  ok(moons > 2, 'the sector has moons (' + moons + ')');
+  ok(Array.isArray(b.edge) && Math.hypot(...b.edge) > 8000, 'a system has an arrival point at its edge');
+}
+const xcc = (o = {}) => ({ kind: 'explore', type: 0, foeFac: 2, waves: 2, perWave: 3, foeHp: 50, foeDmg: 10, foeSpeed: 85, ace: 0, rewardCr: 0, killCr: 20, repFac: -1, mission: false, slot: 13, ...o });
+const SECn = (fn) => { for (let i = 0; i < SEC.length; i++) if (fn(SEC[i], i)) return i; return -1; };
+const stSys = SECn((s) => s.faction !== 3), bSys = SECn((s) => s.beacon);
+const evs = (F, n) => { let k = 0; for (const e of F.ev) if (e.n === n) k++; return k; };
+{ // free flight: destinations, supercruise to a world, the survey
+  const F = flight(xcc({ arrive: true }), { sys: stSys, autopilot: true, god: true });
+  ok(F.mission.kind === 'explore' && F.pois.length >= 4 && F.arriveT > 0, 'an arrival starts a free flight with destinations');
+  ok(F.player.spd > 2000, 'the arrival drops out of the jump at speed');
+  for (let i = 0; i < 200; i++) S.stepFlight(F);
+  ok(F.player.spd < 400 && F.arriveT <= 0, 'and settles into normal flight');
+  const pi = F.pois.findIndex((p) => p.kind === 'planet'); S.cmd(F, 'nav', pi);
+  ok(F.nav === pi && F.obj.key === 'cz_obj_explore' && F.obj.marker, 'the nav computer points at a world');
+  let vmax = 0; while (F.t < 120 && !F.pois[pi].scanned) { S.stepFlight(F); vmax = Math.max(vmax, F.player.spd); }
+  ok(F.pois[pi].scanned && evs(F, S.EV.SCAN) >= 1, `the world is reached and surveyed (${F.t.toFixed(0)} s)`);
+  ok(vmax > 2600, `the cruise speeds up with the distance to go (${Math.round(vmax)} m/s)`);
+  const P0 = F.pois[pi]; ok(Math.hypot(P0.pos[0] - F.player.pos.x, P0.pos[1] - F.player.pos.y, P0.pos[2] - F.player.pos.z) > P0.r, 'worlds are solid: you stop at the atmosphere');
+  S.cmd(F, 'nav'); ok(F.nav === (pi + 1) % F.pois.length, 'N cycles the destinations');
+}
+{ // docking: clearance, lane, slide in, docked; denied with hostiles around
+  const F = flight(xcc({}), { sys: stSys, god: true });
+  F.mission.waves.length = 0;
+  ok(S.cmd(F, 'dock') && F.dock && F.dock.ph === 0, 'docking clearance from within 9 km');
+  while (!F.done && F.t < 200) S.stepFlight(F);
+  ok(F.outcome === S.OUT.DOCKED && evs(F, S.EV.DOCK) >= 4, `the docking run ends in the bay (${F.t.toFixed(0)} s)`);
+  const G2 = flight(xcc({}), { sys: stSys, god: true });
+  const e = G2.ships.find((s) => !s.alive); Object.assign(e, { alive: true }); e.cls = S.CLS.scrapwing; e.ck = 'scrapwing'; e.team = S.TEAM_E; e.st = 13; e.hull = e.hullMax = 50; e.gen++; e.pos.x = G2.player.pos.x + 900; e.pos.y = G2.player.pos.y; e.pos.z = G2.player.pos.z;
+  ok(!S.cmd(G2, 'dock') && !G2.dock, 'no clearance with hostiles close');
+  ok(!S.cmd(G2, 'jump', 2) && !G2.jump, 'the jump drive is mass-locked too');
+}
+{ // the jump drive
+  const F = flight(xcc({}), { sys: stSys, god: true });
+  F.mission.waves.length = 0;
+  ok(S.cmd(F, 'jump', 3) && F.jump, 'the drive spools');
+  while (!F.done && F.t < 30) S.stepFlight(F);
+  ok(F.outcome === S.OUT.JUMPED && F.jumpedTo === 3 && F.t > 4, `and jumps after the spool (${F.t.toFixed(1)} s)`);
+}
+{ // the relight: calm (the Voice measures you) and hostile (the lattice ships come)
+  for (const calm of [true, false]) {
+    const F = flight(xcc({ relight: true, echoCalm: calm, litCount: calm ? 0 : 2 }), { sys: bSys, autopilot: true, god: true });
+    const seen = new Set(); let neutral = 0, linked = 0, bursts = 0, cur = F.evHead;
+    while (!F.done && F.t < 500) {
+      S.stepFlight(F);
+      for (; cur < F.evHead; cur++) if (F.ev[cur % F.ev.length].n === S.EV.RELIGHT) bursts++;
+      for (const s of F.ships) if (s.alive && !s.isPlayer) { seen.add(s.ck + ':' + s.team); if (s.team === S.TEAM_N) neutral++; if (s.ck === 'choir' && s.links && s.links.length) linked++; }
+    }
+    const tag = calm ? 'calm' : 'hostile';
+    ok(F.relit && F.outcome === 1, `relight (${tag}): the beacon is lit and the event won (outcome ${F.outcome}, ${F.t.toFixed(0)} s)`);
+    ok(bursts === 1 && F.mission.relight.k >= 1, `relight (${tag}): one burst, full charge`);
+    ok(seen.has('censer:0') && seen.has('votive:0'), `relight (${tag}): the Keepers' watch flies (Censer + Votives)`);
+    ok(seen.has('reliquary:0'), `relight (${tag}): deep enough, the Keepers' Reliquary barge comes to witness`);
+    if (calm) ok(neutral > 0 && !seen.has('lattice:1'), 'calm: the lattice ships come, measure, and leave without firing');
+    else ok(seen.has('lattice:1') && seen.has('choir:1') && evs(F, S.EV.PHASE) > 0, 'hostile: Lattice interceptors (phasing) and a Choir attack');
+    if (!calm) ok(linked > 0, 'hostile: the Choir links its kin');
+  }
+}
+{ // rosters up close: torpedoes are slow and can be shot down; a phased Lattice is not there; links restore shields
+  const F = flight(xcc({}), { sys: stSys, god: true }); quiet(F);
+  const p = F.player, f = { x: 0, y: 0, z: 0 }; S.shipFwd(p, f);
+  const mk = (ck, team, fac, d) => { const s = F.ships.find((x) => !x.alive); Object.assign(s, { alive: true }); s.cls = S.CLS[ck]; s.ck = ck; s.team = team; s.fac = fac; s.hull = s.hullMax = 400; s.shMax = 100; s.shF = s.shB = 10; s.st = 13; s.gen++; s.pos.x = p.pos.x + f.x * d; s.pos.y = p.pos.y + f.y * d; s.pos.z = p.pos.z + f.z * d; s.vel.x = s.vel.y = s.vel.z = 0; s.q = { ...p.q }; return s; };
+  const c = mk('censer', S.TEAM_E, 1, 1500); c.target = p; c.st = 1;
+  let torp = null; for (let i = 0; i < 1200 && !torp; i++) { S.stepFlight(F); torp = F.msls.find((m) => m.alive && m.torp); }
+  ok(!!torp && torp.spd < 260, 'the Censer launches a slow torpedo');
+  if (torp) {
+    const bl = F.bolts.find((x) => !x.alive); Object.assign(bl, { alive: true, x: torp.pos.x + 30, y: torp.pos.y, z: torp.pos.z, px: torp.pos.x + 30, py: torp.pos.y, pz: torp.pos.z, vx: -1800, vy: 0, vz: 0, life: 1, team: S.TEAM_P, own: p, fac: 4, dmg: 10, kind: 0 });
+    torp.vel.x = torp.vel.y = torp.vel.z = 0; torp.spd = 0;
+    for (let i = 0; i < 4; i++) S.stepFlight(F);
+    ok(torp.hp < 2 || !torp.alive, 'a bolt hits a torpedo (two hits bring it down)');
+  }
+  const L = mk('lattice', S.TEAM_E, 3, 700); L.st = 1; L.target = p; L.lastHitT = F.t; L.phaseCd = 0;
+  for (let i = 0; i < 3; i++) S.stepFlight(F);
+  ok(L.phaseT > 0, 'a hit Lattice phases out');
+  const bl2 = F.bolts.find((x) => !x.alive); Object.assign(bl2, { alive: true, x: L.pos.x + 10, y: L.pos.y, z: L.pos.z, px: L.pos.x + 10, py: L.pos.y, pz: L.pos.z, vx: -1500, vy: 0, vz: 0, life: 1, team: S.TEAM_P, own: p, fac: 4, dmg: 50, kind: 0 });
+  const h0 = L.hull; S.stepFlight(F); ok(L.hull === h0, 'and bolts pass through it while it is out of phase');
+  const ch = mk('choir', S.TEAM_E, 3, 2500); ch.st = 1; ch.target = p; L.shF = L.shB = 0; L.phaseT = 0; L.pos.x = ch.pos.x + 200; L.pos.y = ch.pos.y; L.pos.z = ch.pos.z;
+  for (let i = 0; i < 120; i++) S.stepFlight(F);
+  ok(L.shF > 0 && ch.links.includes(L), 'the Choir re-shields a Lattice through its link');
+}
+{ // the codex: every entry has its title, text and hint in five languages; its art exists; its model is a ship class
+  const CX = await import(url('constellations-codex.js'));
+  const cats = Object.fromEntries(['it', 'en', 'es', 'fr', 'de'].map((l) => [l, JSON.parse(readFileSync(join(root, 'apps/games/www/i18n.' + l + '.json'), 'utf8'))]));
+  const man = JSON.parse(readFileSync(join(GW, 'stelle/assets/manifest.json'), 'utf8'));
+  let missing = [];
+  for (const e of CX.ENTRIES) {
+    for (const l of Object.keys(cats)) for (const k of ['_t', '_b', '_h']) if (!cats[l]['cz_cx_' + e.id + k]) missing.push(l + ':' + e.id + k);
+    if (e.img && !man.images[e.img]) missing.push('img:' + e.img);
+    if (e.emblem && !man.images[e.emblem]) missing.push('img:' + e.emblem);
+    if (e.model && !S.CLS[e.model[0]]) missing.push('model:' + e.model[0]);
+  }
+  ok(missing.length === 0, 'codex entries complete in five languages with art / models' + (missing.length ? ': ' + missing.slice(0, 6).join(', ') : ''));
+  ok(CX.ENTRIES.length >= 50 && CX.CATS.every((c, i) => CX.entriesOf(i).length > 0), 'the codex has ' + CX.ENTRIES.length + ' entries over ' + CX.CATS.length + ' categories');
+  for (const ck of ['censer', 'lattice', 'choir', 'reliquary']) ok(CX.ENTRIES.some((e) => e.model && e.model[0] === ck), 'codex dossier for ' + ck);
+}
+{ // the web save module: per run, merge, helpers
+  const WS = await import(url('constellations-web.js'));
+  const w = WS.freshWeb(42);
+  ok(WS.markVisited(w, 3, 5) && WS.visited(w, 3, 5) && !WS.markVisited(w, 3, 5), 'visited systems are a per-sector bitmask');
+  ok(WS.unlock(w, 'relight') && !WS.unlock(w, 'relight') && WS.hasCodex(w, 'relight'), 'codex unlocks once');
+  WS.markRelit(w, 3, 7); ok(WS.wasRelit(w, 3, 7) && w.relights === 1, 'relit beacons outlive the sector');
+  ok(WS.markScanned(w, 3, 5, 2) && WS.scanned(w, 3, 5, 2), 'surveys are kept per system');
 }
 
 console.log(`\ncostellazioni: ${pass} passed, ${fail} failed`);

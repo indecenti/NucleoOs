@@ -103,6 +103,18 @@ test('costellazioni: the Cardputer moved the run forward -> conflict, the device
   assert.deepEqual(dev.writes, []);
 });
 
+test('costellazioni: spending credits (a purchase, a relight) on the copy this tab last synced is written, not rolled back', async () => {
+  const base = run({ epoch: 3, credits: 2000, kills: 12 });
+  const dev = device({ [SAVE]: JSON.stringify(base) });
+  const r = await S.storeSave(run({ epoch: 3, credits: 1700, kills: 12, beacon_lit: 1 << 7 }), base);
+  assert.equal(r.ok, true, 'the card still holds what this tab synced: a continuation');
+  assert.equal(JSON.parse(dev.files[SAVE]).credits, 1700);
+  const moved = run({ epoch: 3, credits: 2600, kills: 20 });   // the Cardputer played meanwhile
+  const dev2 = device({ [SAVE]: JSON.stringify(moved) });
+  const r2 = await S.storeSave(run({ epoch: 3, credits: 1700, kills: 12 }), base);
+  assert.equal(r2.conflict, true, 'a card that moved on still wins'); assert.deepEqual(dev2.writes, []);
+});
+
 test('costellazioni: no save on the card yet (404) -> a new run is written', async () => {
   const dev = device();
   assert.equal(await S.loadSave(), null, 'no run to continue');

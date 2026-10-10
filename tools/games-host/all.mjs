@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const here = dirname(fileURLToPath(import.meta.url));
-const files = ['test-foundation.mjs', 'test-multiplayer.mjs', 'test-forza4.mjs', 'test-tris.mjs', 'test-pong.mjs', 'test-brain.mjs', 'test-costellazioni.mjs'];
+const files = ['test-foundation.mjs', 'test-multiplayer.mjs', 'test-forza4.mjs', 'test-tris.mjs', 'test-pong.mjs', 'test-brain.mjs', 'test-costellazioni.mjs', 'test-costellazioni-kit.mjs'];
 
 for (const f of files) {
   const p = spawnSync(process.execPath, [join(here, f)], { stdio: 'inherit' });

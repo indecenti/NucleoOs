@@ -1,5 +1,5 @@
 {
-  "generated": "2026-10-10T01:44:41.383Z",
+  "generated": "2026-10-10T04:01:56.172Z",
   "base": "en",
   "langs": [
     "en",
@@ -23,7 +23,7 @@
     "de": 100
   },
   "surfaces": 48,
-  "totalKeys": 3345,
+  "totalKeys": 3629,
   "namespaces": {
     "core": 156,
     "shell": 290,
@@ -43,7 +43,7 @@
     "dos-importer": 55,
     "dosbox": 21,
     "file-commander": 101,
-    "games": 443,
+    "games": 727,
     "groq-chat": 38,
     "help": 32,
     "ir-remote": 112,
