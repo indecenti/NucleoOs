@@ -329,16 +329,6 @@ static bool poll(void)
 }
 
 // ============================ lifecycle: draw =================================
-// The one place a fighter is inked (the fight, the title poster, the select cards): fxfig::figure is a
-// header-inline, so every other call site would compile another copy of it into flash.
-void br_figure(const Fighter *fr, float sx, float feetY, float sc, uint16_t body, uint16_t rim)
-{
-    fxfig::Pt j[fxfig::FX_NJ];
-    fighter_pose(fr, j);
-    float girth = fr->is_hero ? brawler_hero(fr->kind)->girth : brawler_enemy(fr->kind)->girth;
-    fxfig::figure(j, sx, feetY, sc, fr->dir, body, rim, girth);
-}
-
 // Insertion-sort the live-fighter indices by depth z ascending so far bodies paint first (painter order).
 static int sort_by_depth(int *order)
 {
@@ -378,8 +368,8 @@ static void on_draw(void)
             float sc = scene_scale(fr.z) * fighter_scale(&fr);
             float feetY = scene_floor_y(fr.z) - fr.yoff + g.shake.oy();
             float sx = br_screen_x(fr.x);
-            // a bright body with a black outline (0x0001: black on the 8bpp canvas; 0 would mean "none")
-            br_figure(&fr, sx, feetY, sc, fighter_body(&fr), 0x0001);
+            // nearer lanes are bigger AND brighter: the far lane is graded into the stage's haze
+            br_figure(&fr, sx, feetY, sc, (int)((1.0f - fr.z) * 90.0f), scene_haze(), scene_rim());
             float head = feetY - 2.05f * sc;
             if (!fr.is_hero && (fr.st == BS_PUNCH || fr.st == BS_KICK) && fr.anim < 0.28f) {
                 // the TELL: a red-hot glint over a foe winding up, growing until the blow lands

@@ -35,15 +35,15 @@ static float s_trail[2];                 // HUD: health shown by each hero's dam
 // A posed silhouette of hero `kind` in state `st`, drawn at screen (sx, feetY) at base scale `sc` facing
 // dir, in `body` with a `rim` outline. The hero's OWN build is honoured (scale = height, girth = width) so
 // the roster's differences read on the line-up. Pure flavour: no animation state owned here.
-static void pose_hero(int kind, BrState st, float anim, float sx, float feetY, float sc, int dir, uint16_t body, uint16_t rim) {
+static void pose_hero(int kind, BrState st, float anim, float sx, float feetY, float sc, int dir, int shade, uint16_t rim) {
     Fighter fr;
     memset(&fr, 0, sizeof fr);
     fr.on = true; fr.is_hero = true; fr.kind = kind;
     fr.dir = dir; fr.st = st; fr.anim = anim; fr.aspd = 1.0f;
     const HeroDef *h = brawler_hero(kind);
     fr.maxhp = fr.hp = h->maxhp;
-    d.fillEllipse((int)sx, (int)feetY, (int)(0.32f * sc * h->scale), 2, gui::mix(BLACK, body, 70));   // contact shadow
-    br_figure(&fr, sx, feetY, sc * h->scale, body, rim);
+    d.fillEllipse((int)sx, (int)feetY, (int)(0.32f * sc * h->scale), 2, BLACK);   // contact shadow
+    br_figure(&fr, sx, feetY, sc * h->scale, shade, BLACK, rim);
 }
 
 // The picked hero performs a SIGNATURE move on a loop so the pick feels alive: idle -> its strike -> idle.
@@ -66,9 +66,8 @@ static void draw_title(void) {
     uint32_t now = br_now_ms();
     BrState st; float an;
     hero_signature(0, (now % 2400) / 2400.0f, &st, &an);
-    uint16_t body = BLACK, rim = ACC;
-    pose_hero(0, st, an, 30, CH - 4, 30, +1, body, rim);
-    pose_hero(1, BS_IDLE, (now % 4000) / 4000.0f, BR_SW - 30, CH - 4, 30, -1, body, rim);
+    pose_hero(0, st, an, 26, CH - 4, 28, +1, 150, ACC);
+    pose_hero(1, BS_IDLE, (now % 4000) / 4000.0f, BR_SW - 26, CH - 4, 28, -1, 150, ACC);
     const char *it[NM_ITEMS] = { GT("Gioca", "Play"), GT("Co-op 2 giocatori", "Co-op 2 players"), GT("Opzioni", "Options") };
     gui::menu(s_menu, it, NM_ITEMS, y, CH, ACC);
 }
@@ -102,8 +101,7 @@ static void hero_card(int idx, int x, int cw) {
     uint32_t now = br_now_ms();
     BrState pst = BS_IDLE; float panim = (now % 3000) / 3000.0f + idx * 0.33f;
     if (sel) hero_signature(idx, (now % 1600) / 1600.0f, &pst, &panim);
-    uint16_t hc = brawler_hero_color(idx);
-    pose_hero(idx, pst, panim, x + cw / 2, top + 55, 16, +1, sel ? hc : gui::mix(hc, BLACK, 130), 0x0001);
+    pose_hero(idx, pst, panim, x + cw / 2, top + 55, 17, +1, sel ? 0 : 130, sel ? ACC : 0);
     gui::text(brawler_hero_style(idx), x + cw / 2, top + 56, 1, gui::F_SMALL, sel ? WHITE : MUTED, BLACK);
 }
 // The picked hero's four stats under the cards, relative to the roster (power in red: the edge).

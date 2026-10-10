@@ -109,8 +109,9 @@ float    br_frnd2(void);                // -1..1
 float    br_screen_x(float worldx);     // worldx - camx + shake.ox()
 Fighter *br_hero(int player);           // heroes only (NULL if absent)
 void     br_reset_fighters(void);
-// Ink fighter fr (its pose for its state) at screen (sx, feetY), scale sc, in body with a rim outline.
-void     br_figure(const Fighter *fr, float sx, float feetY, float sc, uint16_t body, uint16_t rim);
+// Draw fighter fr (its costume, posed for its state) at screen (sx, feetY), scale sc: every colour graded
+// `shade` (0..256) toward `tint` (lane depth / stage haze / a dimmed card), `rim` = rim-light colour or 0.
+void     br_figure(const Fighter *fr, float sx, float feetY, float sc, int shade, uint16_t tint, uint16_t rim);
 // A hero's attack/jump input (P1 from the keyboard, P2 from the co-op stream): 0 punch, 1 kick, 2 jump.
 // Airborne punch/kick = jump-kick, a punch in the chain window links the combo, a busy hero ignores it.
 void     br_hero_act(Fighter *h, int act);
@@ -134,8 +135,6 @@ const HeroDef *brawler_hero(int i);
 const char    *brawler_hero_style(int i);  // one-word style blurb, in the OS language
 // Fill the 11-joint pose for fr's current state/anim (composes fxanim + per-character flavour).
 void           fighter_pose(const Fighter *fr, fxfig::Pt out[fxfig::FX_NJ]);
-// Body colour for fr (folds in hit-flash). Used by the draw loop.
-uint16_t       fighter_body(const Fighter *fr);
 uint16_t       brawler_hero_color(int kind);   // a hero's own colour (select cards, HUD)
 
 // ------------------------------------------------------------------ enemies (brawler_enemies.cpp)
@@ -200,6 +199,8 @@ extern const fxfig::Belt BR_BELT;
 float scene_floor_y(float z);  // belt feet-y for a depth (handy for blood landing + shadows)
 float scene_scale(float z);    // figure scale for a depth
 void  scene_draw(void);        // sky + parallax skyline + belt for g.level
+uint16_t scene_haze(void);     // this street's air colour (far fighters are graded into it)
+uint16_t scene_rim(void);      // this street's neon (the fighters' rim light)
 
 // ------------------------------------------------------------------ menu / HUD / screens (brawler_menu.cpp)
 void  menu_draw(void);                 // renders the current non-play screen
