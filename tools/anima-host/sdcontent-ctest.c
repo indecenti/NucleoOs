@@ -53,6 +53,10 @@ static void test_allow(void)
     OK(!sdc_path_writable("data/tanks/cfg.bin"), "game save beside the pack refused");
     OK(!sdc_path_writable("data/tanks/pack/readme.txt"), "game pack: only .wav");
     OK(!sdc_path_writable("data//pack/x.wav"), "game pack: empty game name refused");
+    OK(sdc_path_writable("data/Cardler/atlas.bin"), "game tile atlas allowed");
+    OK(sdc_path_writable("data/Orde/ATLAS.BIN"), "game tile atlas allowed (FAT case)");
+    OK(!sdc_path_writable("data/Orde/sub/atlas.bin"), "game atlas: nothing deeper");
+    OK(!sdc_path_writable("data//atlas.bin"), "game atlas: empty game name refused");
     OK(sdc_path_writable("data/tts/it/clips.pcm"), "tts bank it allowed (pipeline parity)");
     OK(sdc_path_writable("data/tts/en/index.bin"), "tts bank en allowed (pipeline parity)");
     OK(!sdc_path_writable("data/tts/speak.cfg"), "tts runtime cfg refused");

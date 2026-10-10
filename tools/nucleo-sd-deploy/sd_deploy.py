@@ -603,7 +603,10 @@ def release_path_allowed(rel):
             return ""
         # a game's arcade sound pack (data/<game>/pack/<cue>.wav, rendered by tools/sfx-gen): shipped
         # content, never the game's own saves/config next to it
-        if len(parts) == 4 and parts[2] == "pack" and parts[3].lower().endswith(".wav"):
+        if len(parts) == 4 and parts[1] and parts[2] == "pack" and parts[3].lower().endswith(".wav"):
+            return ""
+        # a native game's tile atlas (data/<game>/atlas.bin, assets/*/build_atlas): read-only art
+        if len(parts) == 3 and parts[1] and parts[2].lower() == "atlas.bin":
             return ""
         return "data"
     if top in ("wallpapers", "evilportal"):

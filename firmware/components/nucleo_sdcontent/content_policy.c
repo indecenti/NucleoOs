@@ -72,6 +72,8 @@ bool sdc_path_writable(const char *path)
             size_t n = strlen(file);
             if (n > 4 && !strchr(file, '/') && strcasecmp(file + n - 4, ".wav") == 0) return true;
         }
+        // data/<game>/atlas.bin — a native game's read-only tile atlas (Cardler, Orde)
+        if (s1 && s1 > game && strcasecmp(s1, "/atlas.bin") == 0) return true;
     }
 
     // data/anima/ — brain files ONLY; the API-key vault, learned caches, sessions and profile are the
