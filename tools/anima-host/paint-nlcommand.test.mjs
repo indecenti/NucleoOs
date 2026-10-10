@@ -66,3 +66,35 @@ test('gibberish / unrelated text → unknown (never fabricates an action)', () =
     assert.equal(kind(s), 'unknown', `"${s}" must be unknown`);
   }
 });
+
+// Five languages (2026-10-10): es/fr/de phrases were all "unknown", and every non-English UI got Italian replies.
+test('editing phrases map to the correct op (ES / FR / DE), replies in that language', () => {
+  const cases = {
+    es: { 'gira a la derecha':'rotcw', 'gira a la izquierda':'rotccw', 'quita el fondo':'removeBg', 'escala de grises':'fxGray', 'invierte los colores':'fxInvert',
+      'desenfoca la imagen':'fxBlur', 'nueva capa':'layerAdd', 'duplica la capa':'layerDup', 'elimina la capa':'layerDel', 'deshacer':'undo', 'guarda':'save', 'voltea en vertical':'flipv' },
+    fr: { 'tourne à droite':'rotcw', 'tourne à gauche':'rotccw', "supprime l'arrière-plan":'removeBg', 'noir et blanc':'fxGray', 'inverse les couleurs':'fxInvert',
+      'ajoute un flou':'fxBlur', 'nouveau calque':'layerAdd', 'supprime le calque':'layerDel', 'annule':'undo', 'enregistre':'save', 'miroir horizontal':'fliph', 'aplatis l image':'layerFlatten' },
+    de: { 'nach rechts drehen':'rotcw', 'nach links drehen':'rotccw', 'Hintergrund entfernen':'removeBg', 'Graustufen':'fxGray', 'Farben invertieren':'fxInvert',
+      'weichzeichnen':'fxBlur', 'neue Ebene':'layerAdd', 'Ebene löschen':'layerDel', 'rückgängig':'undo', 'speichern':'save', 'vertikal spiegeln':'flipv', 'Raster':'toggleGrid' },
+  };
+  for (const [lang, m] of Object.entries(cases)) for (const [phrase, want] of Object.entries(m)) assert.equal(op(phrase, lang), want, `${lang}: "${phrase}" → ${want}`);
+  assert.equal(parseCommand('gira a la derecha', 'es').reply, 'Giro a la derecha');
+  assert.equal(parseCommand('nouveau calque', 'fr').reply, 'Nouveau calque');
+  assert.equal(parseCommand('neue Ebene', 'de').reply, 'Neue Ebene');
+  assert.match(parseCommand('xyz qqq', 'de').reply, /nicht verstanden/);
+  let d = parseCommand('sube el brillo', 'es'); assert.equal(d.which, 'brightness'); assert.equal(d.value, 20); assert.match(d.reply, /^Brillo/);
+  d = parseCommand('Helligkeit auf 50', 'de'); assert.equal(d.which, 'brightness'); assert.equal(d.mode, 'set'); assert.equal(d.value, 50);
+  d = parseCommand('baisse le contraste', 'fr'); assert.equal(d.which, 'contrast'); assert.equal(d.value, -20);
+  d = parseCommand('rellena de rojo', 'es'); assert.equal(d.op, 'fill'); assert.equal(d.color, '#ed1c24');
+  d = parseCommand('fülle mit weiß', 'de'); assert.equal(d.op, 'fill'); assert.equal(d.color, '#ffffff');
+});
+
+test('generation in ES / FR / DE, and no cross-language false friends', () => {
+  let d = parseCommand('crea un icono de un gato', 'es'); assert.equal(d.kind, 'generate'); assert.equal(d.style, 'icon'); assert.match(d.prompt, /gato/);
+  d = parseCommand('dessine-moi un dragon', 'fr'); assert.equal(d.kind, 'generate'); assert.match(d.prompt, /^dragon/);
+  d = parseCommand('zeichne mir einen Drachen', 'de'); assert.equal(d.kind, 'generate'); assert.match(d.prompt, /^drachen/);
+  d = parseCommand('erstelle ein Logo für ein Café', 'de'); assert.equal(d.style, 'logo'); assert.match(d.prompt, /cafe/);
+  d = parseCommand('pinta una rosa', 'es'); assert.equal(d.kind, 'generate', 'a drawing of a rose, not a pink fill');
+  assert.notEqual(op('guarda come viene', 'it'), 'save', 'Italian "guarda" = look');
+  assert.equal(kind('sposta il livello in fondo', 'it') === 'generate', false, 'Italian "in fondo" is not a background');
+});
