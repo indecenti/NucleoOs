@@ -51,14 +51,35 @@ async function prune() {
   if (dead.length) tx('readwrite', (s) => { for (const k of dead) s.delete(k); });
 }
 
-function blobOf(file) {
+const TYPES = { avif: 'image/avif', webp: 'image/webp', ogg: 'audio/ogg' };
+const wait = (ms) => new Promise((res) => setTimeout(res, ms));
+
+// The device answers 503 + Retry-After when its heap is short for a moment: back off and try again.
+async function fetchBytes(path) {
+  for (let i = 0; ; i++) {
+    let r = null;
+    try { r = await fetch(new URL(path, BASE)); } catch { /* network blip */ }
+    if (r && r.ok) return r.blob();
+    if (i >= 5 || (r && r.status !== 503 && r.status !== 429)) throw new Error(`${path}: ${r ? r.status : 'network'}`);
+    const after = r && +r.headers.get('Retry-After');
+    await wait((after > 0 ? after * 1000 : 800) * (1 + i * 0.5));
+  }
+}
+
+// A manifest entry -> its Blob. Files over the server's large-file gate ship as byte slices ("parts")
+// that are joined back into the original bytes; the store keeps the joined file under its logical name.
+function blobOf(e) {
+  const file = e.f;
   if (inflight.has(file)) return inflight.get(file);
   const p = (async () => {
     const hit = await tx('readonly', (s) => s.get(file));
     if (hit) return hit;
-    const r = await fetch(new URL(file, BASE));
-    if (!r.ok) throw new Error(`${file}: ${r.status}`);
-    const b = await r.blob();
+    let b;
+    if (e.parts) {
+      const parts = [];
+      for (const part of e.parts) parts.push(await fetchBytes(part));   // one at a time: gentle on the device
+      b = new Blob(parts, { type: TYPES[file.split('.').pop()] || '' });
+    } else b = await fetchBytes(file);
     tx('readwrite', (s) => s.put(b, file));
     return b;
   })();
@@ -76,21 +97,21 @@ function entry(group, id) {
 /** Object URL of an image (for <img>, CSS backgrounds), ready to use. */
 export async function imageUrl(id) {
   await loadManifest();
-  const { f } = entry('images', id);
-  if (!urls.has(f)) urls.set(f, URL.createObjectURL(await blobOf(f)));
-  return urls.get(f);
+  const e = entry('images', id);
+  if (!urls.has(e.f)) urls.set(e.f, URL.createObjectURL(await blobOf(e)));
+  return urls.get(e.f);
 }
 
 /** Decoded image for a Three.js texture or a canvas. */
 export async function imageBitmap(id) {
   await loadManifest();
-  return createImageBitmap(await blobOf(entry('images', id).f));
+  return createImageBitmap(await blobOf(entry('images', id)));
 }
 
 /** Encoded track bytes for AudioContext.decodeAudioData. */
 export async function musicBuffer(id) {
   await loadManifest();
-  return (await blobOf(entry('music', id).f)).arrayBuffer();
+  return (await blobOf(entry('music', id))).arrayBuffer();
 }
 
 /** CSS gradient painted while an image streams in. */
@@ -110,7 +131,7 @@ export async function prefetch(onProgress) {
   const worker = async () => {
     while (i < all.length) {
       const e = all[i++];
-      try { await blobOf(e.f); } catch { /* retried on next use */ }
+      try { await blobOf(e); } catch { /* retried on next use */ }
       done += e.b;
       if (onProgress) onProgress(done, total);
     }

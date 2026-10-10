@@ -25,6 +25,7 @@ QUALITY = {'art': 54, 'cast': 62, 'emblem': 60}
 PRIORITY = {'title': 0, 'emblem': 1, 'cast': 2}   # lower loads first; everything else streams after
 MUSIC_KBPS = 64                                   # Opus, stereo: transparent enough for synth-orchestral
 MUSIC_LUFS = -16.0                                # one level for the whole score
+PART_MAX = 448 * 1024                             # under the device web server's 512 KB large-file gate
 
 
 def short_hash(data):
@@ -45,19 +46,30 @@ def placeholder(im):
     return ['#%02x%02x%02x' % t.getpixel((0, 0)), '#%02x%02x%02x' % t.getpixel((0, 1))]
 
 
-def write_unique(sub, base, ext, data):
-    """assets/<sub>/<base>.<hash>.<ext>; older hashes of the same asset are removed."""
-    d = os.path.join(OUT, sub)
-    os.makedirs(d, exist_ok=True)
-    name = f'{base}.{short_hash(data)}.{ext}'
-    for f in os.listdir(d):
-        if f.startswith(base + '.') and f.endswith('.' + ext) and f != name and f.count('.') == 2:
-            os.remove(os.path.join(d, f))
-    p = os.path.join(d, name)
+def put(path, data):
+    p = os.path.join(OUT, path.replace('/', os.sep))
+    os.makedirs(os.path.dirname(p), exist_ok=True)
     if not os.path.exists(p):
         with open(p, 'wb') as fh:
             fh.write(data)
-    return f'{sub}/{name}'
+
+
+def write_unique(sub, base, ext, data):
+    """assets/<sub>/<base>.<hash>.<ext> -> {'f': name}. A file over PART_MAX is stored as byte slices
+    <base>.<hash>.part<i> instead ({'f': logical name, 'parts': [...]}): the device web server only streams
+    a file over 512 KB when 32 KB of contiguous RAM is free, and answers 503 otherwise; slices never hit that
+    gate. assets.js joins them back into the exact original bytes. Stale names are pruned by main()."""
+    name = f'{sub}/{base}.{short_hash(data)}.{ext}'
+    if len(data) <= PART_MAX:
+        put(name, data)
+        return {'f': name}
+    stem = name[:-(len(ext) + 1)]
+    parts = []
+    for i in range(0, len(data), PART_MAX):
+        part = f'{stem}.part{i // PART_MAX}'
+        put(part, data[i:i + PART_MAX])
+        parts.append(part)
+    return {'f': name, 'parts': parts}
 
 
 def build_images(spec, man):
@@ -74,7 +86,7 @@ def build_images(spec, man):
         im.save(buf, 'AVIF', quality=QUALITY.get(kind, 54), speed=2, subsampling='4:2:0')
         data = buf.getvalue()
         man['images'][img['id']] = {
-            'f': write_unique('img', img['id'], 'avif', data), 'w': w, 'h': h, 'b': len(data), 'k': kind,
+            **write_unique('img', img['id'], 'avif', data), 'w': w, 'h': h, 'b': len(data), 'k': kind,
             'p': PRIORITY.get(img['id'], PRIORITY.get(kind, 3)), 'ph': placeholder(im),
         }
 
@@ -105,7 +117,7 @@ def build_music(man):
                             '-b:a', f'{MUSIC_KBPS}k', '-vbr', 'on', '-compression_level', '10',
                             '-application', 'audio', '-map_metadata', '-1', '-f', 'ogg', '-'],
                            capture_output=True, check=True)
-        man['music'][base] = {'f': write_unique('music', base, 'ogg', r.stdout), 'b': len(r.stdout),
+        man['music'][base] = {**write_unique('music', base, 'ogg', r.stdout), 'b': len(r.stdout),
                               'p': 0 if base == 'theme' else 4}
 
 
@@ -115,7 +127,7 @@ def main():
     build_images(spec, man)
     build_music(man)
     # drop files that no manifest entry points to any more (renamed or removed assets)
-    live = {e['f'] for g in ('images', 'music') for e in man[g].values()}
+    live = {p for g in ('images', 'music') for e in man[g].values() for p in e.get('parts', [e['f']])}
     for sub in ('img', 'music'):
         d = os.path.join(OUT, sub)
         for f in (os.listdir(d) if os.path.isdir(d) else []):
