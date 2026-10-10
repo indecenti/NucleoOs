@@ -35,7 +35,7 @@ import { orchestrateScaffold, orchestratePublish, orchestrateManage } from './ap
 import { buildReviewPrompt, parseReviewVerdict, reviewNote } from './app-review.js';
 import { createDeviceQueue } from './device-queue.js';
 import { createToolGuard } from './tool-guard.js';
-import { createAgentShell } from './agent-sh.js';          // the `sh` tool: ls/cat/grep/find/sed -n/… over the workspace      // tool-name repair + doom-loop stop before every tool call (OpenCode-style)
+import { createAgentShell, nodePrelude } from './agent-sh.js';          // the `sh` tool: ls/cat/grep/find/sed -n/… over the workspace      // tool-name repair + doom-loop stop before every tool call (OpenCode-style)
 import { runWorkerLocal } from './local-worker.js';   // the LOCAL transport (F0): grammar-constrained loop on an injected browser-local engine
 import { smokeApp, smokeSummary, stageAppRecipe } from './app-recipe.js';   // F5: install-and-smoke on the device + app-recipe learning   // ONE intelligent queue for every device-touching call (reads pooled, writes + Gemini proxy exclusive)
 import { routeFor, providerOf, PROVIDERS, CAPMATRIX, servedModel, toAiError } from '/ai.js';   // multi-model router + capability matrix (image/whisper) for the capability tools
@@ -245,6 +245,16 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
       status: () => dq.read(() => fetch('/api/status', { cache: 'no-store' }).then((x) => x.json())),
       apps: () => installedApps(),
       open: async (x) => (await execTool('open_in_os', x)).content,
+      // `node FILE.js`: the same sandbox and stdout capture as run_js; the script's files arrive as data (nodePrelude)
+      runJs: async (code, opts = {}) => {
+        const sb = await ensureSandbox(); if (!sb) throw new Error(t('rt_sandbox_na'));
+        runOut.length = 0;
+        const out = await sb.run(nodePrelude(opts) + '\n' + String(code || ''), {}, {});
+        const printed = runOut.join('\n');
+        if (out.timeout) throw new Error(t('rt_run_timeout') + (printed ? '\n' + printed : ''));
+        if (!out.ok) throw new Error((out.error || t('rt_unknown')) + (printed ? '\nstdout:\n' + printed : ''));
+        return printed || (out.hasValue ? String(out.value) : '');
+      },
     },
     confirm: async ({ cmd, writes, destructive }) => {
       if (!ui || !ui.confirm) return false;
@@ -822,7 +832,7 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
     return `Sei un AGENTE operativo di NucleoOS — un vero sistema operativo multi-app su un M5Stack Cardputer, guidato dal browser dell'utente. ${CLOUD_ONLY_MARK} e PROGRAMMI come uno sviluppatore esperto. Porti a termine il compito USANDO gli strumenti reali.
 
 STRUMENTI:
-• sh: una shell POSIX sui file dello spazio di lavoro (root ${root}) — PREFERISCILA per esplorare e per le operazioni semplici: ls, cat, head, tail, sed -n 'A,Bp', wc -l, grep -rn, find -name, tree, mkdir -p, cp, mv, rm, echo > / >>, con pipe | e ; && ||. Sul Cardputer: df, free, uptime, date, uname, apps (id, nome, categoria, cosa fa — es. apps | grep -i audio), open APP. Per domande sulle app installate usa SEMPRE apps/list_apps: non elencare app a memoria. Per cambiare testo DENTRO un file usa edit_file.
+• sh: una shell POSIX sui file dello spazio di lavoro (root ${root}) — PREFERISCILA per esplorare e per le operazioni semplici: ls, cat, head, tail, sed -n 'A,Bp', wc -l, grep -rn, find -name, tree, mkdir -p, cp, mv, rm, echo > / >>, con pipe | e ; && ||. Sul Cardputer: df, free, uptime, date, uname, apps (id, nome, categoria, cosa fa — es. apps | grep -i audio), open APP. Script: node FILE.js [ARGS] esegue uno script del workspace (require('fs').readFileSync legge i file che nomina; stampa i risultati e salvali con >). Per domande sulle app installate usa SEMPRE apps/list_apps: non elencare app a memoria. Per cambiare testo DENTRO un file usa edit_file.
 • File (se non usi sh): list_files, read_file, search_files, make_dir, write_file, edit_file, append_file, delete_file, move_file.
 • run_js: esegue JavaScript in sandbox (~5s; niente DOM/rete/file) per CALCOLARE o trasformare dati; ciò che stampi con console.log ti torna come stdout. Per un file con risultati calcolati (report, tabella, CSV) stampa TUTTO il testo e passa save_to: viene scritto così com'è — non ricopiare mai i numeri a mano in write_file.
 • open_in_os: LANCIA un'app del device (es. calculator, notepad, media-player, radio, photo-viewer, calendar) o apre un file nell'app giusta. È così che "apri la calcolatrice", "metti la musica", ecc.

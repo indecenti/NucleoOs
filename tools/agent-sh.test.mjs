@@ -165,3 +165,28 @@ test('sed -n reaches lines past 256 KB; grep -r still skips big files', async ()
   assert.equal((await sh.run('grep -rn "entry 29999" .')).out, '', 'recursive search does not download the big file');
   assert.match((await sh.run('grep -n "entry 29999" log/big.txt')).out, /^29999:entry 29999/, 'naming the file reads it');
 });
+
+// `node FILE.js`: the script runs in a run_js-like sandbox (an AsyncFunction with os/console/print/args/env, no file
+// access); the files it names are read first through the confined workspace fs and served to require('fs').
+// Live on the Cardputer the agent wrote somma.js and could not run it ("no awk, sed, xargs…").
+test('node runs a workspace script, reading the files it names; writing stays with the shell', async () => {
+  const dev = fakeDevice({ '/data/agent/numeri.txt': '12\n7\n30\n5\n46\n',
+    '/data/agent/somma.js': "const fs = require('fs');\nconst n = fs.readFileSync('numeri.txt', 'utf8').trim().split(/\\s+/).map(Number);\nconsole.log('Somma:', n.reduce((a, b) => a + b, 0));\n",
+    '/data/agent/scrivi.js': "require('fs').writeFileSync('out.txt', 'x');\n",
+    '/data/agent/argv.js': "console.log(process.argv.slice(2).join('+'));\n" });
+  const { nodePrelude } = await import('../apps/agent/www/agent-sh.js');
+  const AsyncFn = Object.getPrototypeOf(async function () {}).constructor;
+  const runJs = async (code, opts) => {          // what the runtime does: prelude + code in the sandbox, stdout back
+    const out = []; const con = { log: (...a) => out.push(a.join(' ')), error: (...a) => out.push(a.join(' ')) };
+    await new AsyncFn('os', 'console', 'print', 'args', 'env', '"use strict";\n' + nodePrelude(opts) + '\n' + code)({}, con, () => {}, [], {});
+    return out.join('\n');
+  };
+  const sh = createAgentShell({ fs: makeFS('/data/agent'), device: { runJs } });
+  assert.match((await sh.run('node somma.js')).out, /Somma: 100/);
+  assert.match((await sh.run('node argv.js a b')).out, /a\+b/);
+  const w = await sh.run('node scrivi.js');
+  assert.ok(w.code !== 0 && /writeFileSync is not available/.test(w.out), 'no hidden writes: ' + w.out);
+  assert.equal(dev.store.has('/data/agent/out.txt'), false);
+  assert.match((await sh.run('node somma.js > risultato.txt')).out, /^$|risultato/);   // the shell's own > writes it
+  assert.match(dev.store.get('/data/agent/risultato.txt') || '', /Somma: 100/);
+});
