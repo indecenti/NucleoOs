@@ -246,7 +246,7 @@ const TOOLISH = /\b(che\s+or[ae]|che\s+giorno|data\s+di\s+oggi|quanto\s+spazio|s
 // the user's real files: gpt-oss-120b on Groq triaged "fix the bug in demo/somma.js" as an "answer" and replied
 // with a script for the user to run — nothing was read, fixed or verified.
 const FILEISH = /(?:^|[\s"'`(@])(?:\.{0,2}\/)?(?:[\w.-]+\/)*[\w-]+\.(?:m?js|cjs|ts|json|html?|css|md|txt|py|csv|svg|xml|ya?ml|ini|sh|c|h|cpp|log)\b|(?:^|\s)\/(?:data|apps|sd)\/\S+/i;
-const CODE_ACT = /\b(correggi|sistema|modifica|rinomina|analizza|esegui|salva|scrivi|crea|cancella|elimina|fix|edit|rename|analy[sz]e|run|execute|save|write|create|delete|corrige|modifica|ejecuta|guarda|escribe|crea|borra|corriger|modifie|execute|enregistre|ecris|cree|supprime|korrigiere|bearbeite|fuhre|speichere|schreibe|erstelle|losche)/i;   // no end boundary: "correggilo", "salvalo", "scrivilo"
+const CODE_ACT = /\b(correggi|sistema|modifica|rinomina|analizza|esegui|salva|scrivi|crea|cancella|elimina|fix|edit|rename|analy[sz]e|run|execute|save|write|create|delete|corrige|modifica|ejecuta|guarda|escribe|crea|borra|corriger|modifie|execute|enregistre|ecris|cree|supprime|korrigiere|bearbeite|fuhre|speichere|schreibe|erstelle|losche|rimuovi|togli|aggiungi|sostituisci|converti|conta|calcola|ordina|unisci|remove|add|replace|convert|count|sort|merge|append|quita|anade|reemplaza|convierte|cuenta|ordena|elimina|retire|enleve|ajoute|remplace|convertis|compte|trie|fusionne|entferne|fuge|ersetze|konvertiere|zahle|sortiere)/i;   // no end boundary: "correggilo", "salvalo", "scrivilo"
 export function guardPlan(plan, userMsg) {
   const q = String(userMsg || '');
   if (plan && plan.mode === 'answer' && (TOOLISH.test(q) || (FILEISH.test(q) && CODE_ACT.test(q.normalize('NFD').replace(/[̀-ͯ]/g, ''))))) {
@@ -291,7 +291,13 @@ export function fitMessages(messages, maxChars) {
 
 // One Groq/OpenAI-compatible chat call. Returns the assistant MESSAGE object (so the caller sees
 // `tool_calls`), not just text. fetchFn is injected. Retries on 429/5xx with backoff.
-export async function callOpenAIChat(fetchFn, cfg, { model, messages, tools, toolChoice, responseFormat, maxTokens = 1024, temperature = 0.4, signal }) {
+// Every failure names its provider and model: told nothing, the user-facing explanation fell back to "Claude"
+// for a Groq rate limit ("Claude sta limitando le richieste", real Cardputer, 2026-10-10).
+export async function callOpenAIChat(fetchFn, cfg, opts) {
+  try { return await openAIChatOnce(fetchFn, cfg, opts); }
+  catch (e) { if (e && typeof e === 'object' && !e.provider && e.message !== 'stopped') { e.provider = cfg && cfg.provider; e.model = (opts && opts.model) || (cfg && cfg.model); } throw e; }
+}
+async function openAIChatOnce(fetchFn, cfg, { model, messages, tools, toolChoice, responseFormat, maxTokens = 1024, temperature = 0.4, signal }) {
   const base = (cfg.base || 'https://api.groq.com/openai/v1').replace(/\/+$/, '');
   // CORS-less providers (Gemini, cfg.proxy) are relayed through the device same-origin /api/llm proxy —
   // without this, the agentic tool loop (orchestrator + workers) on a Gemini key would be browser-blocked.

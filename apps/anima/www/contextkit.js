@@ -199,11 +199,11 @@ export const replyLanguage = (lang) => LANG_NAME[lang] || 'English';
 // Spanish file task in Italian (ADV battery, 2026-10-10) — the prompt now NAMES the language when it differs.
 // Function words only (no content words), Unicode edges; a few letters only one language uses count double.
 const LANG_WORDS = {
-  it: /(?<!\p{L})(il|lo|gli|che|non|per|sono|della|delle|dello|nella|questo|questa|quanto|quanti|quante|come|cosa|perché|dimmi|scrivi|ciao|grazie|anche|più|è|ho|hai|di|mi)(?!\p{L})/giu,
-  en: /(?<!\p{L})(the|is|are|and|what|how|you|with|this|that|of|to|my|please|tell|can|do|does|which|it|me|an|be|from|on)(?!\p{L})/giu,
-  es: /(?<!\p{L})(el|los|las|es|está|están|por|para|qué|cómo|cuánto|cuántos|cuál|dime|hola|gracias|del|también|más|y|tengo|hay|mis|sin|lo|en)(?!\p{L})/giu,
-  fr: /(?<!\p{L})(le|les|est|des|et|une|pour|avec|vous|je|quel|quelle|quels|combien|dans|du|sur|pas|ce|cette|moi|bonjour|merci|au|aux|qu|il|sont|en|par)(?!\p{L})/giu,
-  de: /(?<!\p{L})(der|die|das|ist|und|nicht|mit|ein|eine|einen|für|ich|du|wie|was|welche|welcher|bitte|den|dem|auf|zu|wir|sie|im|von|mir|mich)(?!\p{L})/giu,
+  it: /(?<!\p{L})(il|lo|gli|che|non|per|sono|della|delle|dello|nella|questo|questa|quanto|quanti|quante|come|cosa|perché|dimmi|scrivi|ciao|grazie|anche|più|è|ho|hai|di|mi|da|dal|dalla|nel|sul|sulla|rimuovi|togli|leggi|mostra|mostrami|apri|aggiungi|cancella|cerca|trova|correggi|salva|cambia|metti)(?!\p{L})/giu,
+  en: /(?<!\p{L})(the|is|are|and|what|how|you|with|this|that|of|to|my|please|tell|can|do|does|which|it|me|an|be|from|on|remove|delete|create|write|read|show|add|find|fix|save|rename|replace)(?!\p{L})/giu,
+  es: /(?<!\p{L})(el|los|las|es|está|están|por|para|qué|cómo|cuánto|cuántos|cuál|dime|hola|gracias|del|también|más|y|tengo|hay|mis|sin|lo|en|quita|escribe|lee|muestra|abre|añade|anade|busca|cambia|borra)(?!\p{L})/giu,
+  fr: /(?<!\p{L})(le|les|est|des|et|une|pour|avec|vous|je|quel|quelle|quels|combien|dans|du|sur|pas|ce|cette|moi|bonjour|merci|au|aux|qu|il|sont|en|par|supprime|crée|écris|lis|montre|ouvre|ajoute|cherche|enregistre|remplace|renomme)(?!\p{L})/giu,
+  de: /(?<!\p{L})(der|die|das|ist|und|nicht|mit|ein|eine|einen|für|ich|du|wie|was|welche|welcher|bitte|den|dem|auf|zu|wir|sie|im|von|mir|mich|entferne|lösche|erstelle|schreibe|lies|zeige|öffne|füge|suche|korrigiere|speichere|ändere|ersetze|benenne)(?!\p{L})/giu,
 };
 // accents one language owns here: Spanish acute on a/i/o/u (Italian and French use the grave or none), German umlauts,
 // French circumflex / cedilla; "qu'" and "j'" (l' and d' are Italian too: l'app, dell'utente)

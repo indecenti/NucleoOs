@@ -16,7 +16,7 @@ import { join } from 'node:path';
 import { launchBrowser, findChrome } from './cdp.mjs';
 import { waitDesktop, appRows, openAppAt, closeAllWindows, defects } from './shell.mjs';
 import { REPO } from './sim.mjs';
-import { enableOverlay } from './overlay.mjs';
+import { enableOverlay, OVERLAY_ARGS } from './overlay.mjs';
 
 const arg = (k, d) => { const i = process.argv.indexOf('--' + k); return i > 0 ? process.argv[i + 1] : d; };
 const cfg = JSON.parse(readFileSync(join(REPO, 'tools', 'release.local.json'), 'utf8').replace(/^﻿/, ''));
@@ -43,7 +43,9 @@ const WIN_NOW = `(() => { const w = [...document.querySelectorAll('.win')].pop()
   try { const d = f.contentDocument; return { bodyLen: d && d.body ? d.body.innerText.trim().length : 0,
     loaded: f.contentWindow.performance.getEntriesByType('resource').filter((e) => e.responseStatus === 200 && e.name.startsWith(location.origin)).map((e) => new URL(e.name).pathname) };
   } catch { return null; } })()`;
-const browser = await launchBrowser();
+// With --overlay the document is served by Chrome itself, so Local Network Access would treat it as public and block
+// its /api/* calls to the device's private address: switched off, as for a user who allowed it.
+const browser = await launchBrowser(overlay ? { args: OVERLAY_ARGS } : {});
 const report = [];
 let exitCode = 0, sessionBefore = null;
 try {

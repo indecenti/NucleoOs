@@ -160,6 +160,7 @@
   "agentCode": "Code:",
   "agentSaveTo": "Die Ausgabe wird in {path} gespeichert",
   "agentLoadFail": "⚠ Die Agent-Engine wurde nicht geladen: der Cardputer war beschäftigt und eine Datei ging verloren. Keine Datei wurde geändert. Lade ANIMA neu (F5) und versuche es erneut.",
+  "agentFailed": "Ich konnte die Aufgabe nicht mit dem Agenten ausführen ({why}). Keine Datei wurde geändert: versuch es gleich noch einmal.",
   "agentMoreLines": "… ({n} weitere Zeilen)",
   "devWebMode": "Im Web-Modus pausiert der Cardputer sein Offline-Gehirn, damit der Desktop den ganzen Speicher hat",
   "noEngine": "Keine Engine konnte antworten. Drei Wege: Starte eine lokale KI auf diesem PC (Ollama oder LM Studio, ANIMA nutzt sie selbst), installiere das Offline-Gehirn in diesem Browser unter Einstellungen ▸ Modelle, oder hinterlege einen Cloud-Schlüssel unter Einstellungen ▸ KI und nutze Auto.",

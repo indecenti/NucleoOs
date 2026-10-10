@@ -140,3 +140,14 @@ test('a Groq free-tier limit is a wait, not a spent credit (its text links to bi
   assert.match(AI.explainAiError(e, 'it'), /\(8 min\)/);
   assert.equal(AI.aiErrorKind(404, 'HTTP 404'), 'model', 'the old boundary was a backspace char and never matched');
 });
+
+// A thrown error that names its provider is explained with THAT provider; an unknown one is "AI", never "Claude"
+// (a Groq rate limit inside the agent read "Claude sta limitando le richieste" on the real Cardputer, 2026-10-10).
+test('explainAiError names the provider the error carries, and no invented one', async () => {
+  const AI = await import('../web/shell/ai.js');
+  const g = Object.assign(new Error('rate limited'), { status: 429, retryAfter: 30, provider: 'openai' });
+  assert.match(AI.explainAiError(g, 'it'), /^Groq sta limitando/);
+  const u = Object.assign(new Error('rate limited'), { status: 429 });
+  assert.doesNotMatch(AI.explainAiError(u, 'it'), /Claude/);
+  assert.match(AI.explainAiError(u, 'en'), /^AI /);
+});

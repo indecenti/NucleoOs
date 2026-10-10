@@ -1,7 +1,10 @@
 // Working-tree overlay for the REAL-device browser tests: every web file (the shell, the apps) is served to the page
 // from this repo's working tree, while every /api/* call still goes to the Cardputer. A fix is then proven on the real
 // hardware — its SD, live status, executors, the 4-socket httpd — BEFORE anything is copied to the card.
-// Used by anima-device.mjs and device-smoke.mjs (--overlay).
+// Used by anima-device.mjs, paint-device.mjs and device-smoke.mjs (--overlay).
+// Launch Chrome with OVERLAY_ARGS: a document Chrome fulfils itself has no network address, Local Network Access
+// counts it as public, and every /api/* call to the device's private IP then fails (net::ERR_FAILED).
+export const OVERLAY_ARGS = ['--disable-features=LocalNetworkAccessChecks'];
 import { readFileSync, existsSync, statSync } from 'node:fs';
 import { join, extname } from 'node:path';
 import { REPO } from './sim.mjs';

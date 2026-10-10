@@ -13,7 +13,9 @@ async function loadPicker() { return pickerMod || (pickerMod = await import('./e
 let hwPerms = null;
 async function loadHwPerms() {
   if (hwPerms) return hwPerms;
-  try { const r = await fetch('/apps/agent/manifest.json', { cache: 'no-store' }); const m = r.ok ? await r.json() : null; hwPerms = (m && Array.isArray(m.permissions)) ? m.permissions : []; }
+  // Through the file API: the device's webfs serves only www/ under /apps/agent/, so the manifest (one level up)
+  // answered 404 on every Cardputer and the app ran with no declared permissions (found by device-smoke, 2026-10-10).
+  try { const r = await fetch('/api/fs/read?path=' + encodeURIComponent('/apps/agent/manifest.json'), { cache: 'no-store' }); const m = r.ok ? await r.json() : null; hwPerms = (m && Array.isArray(m.permissions)) ? m.permissions : []; }
   catch { hwPerms = []; }
   return hwPerms;
 }

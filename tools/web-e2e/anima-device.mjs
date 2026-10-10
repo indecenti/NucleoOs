@@ -15,6 +15,7 @@
 //   node tools/web-e2e/anima-device.mjs [--host 192.168.0.104] [--only id,id|tag] [--lang it] [--model qwen3.5:9b]
 //   node tools/web-e2e/anima-device.mjs --sim          # the same battery against the device simulator
 //   node tools/web-e2e/anima-device.mjs --overlay      # the WORKING TREE's web payload on the real device (see below)
+//   --nolocal: no model on this PC (local engines off) — the configuration of a user without Ollama
 //
 // --overlay: every web file (shell, apps) is served to the browser from this repo's working tree while every /api/*
 // call still goes to the real Cardputer — so a fix is proven on the real hardware (its SD, status, executor, httpd)
@@ -39,6 +40,7 @@ const uiLang = arg('lang', 'it');
 const only = arg('only', '') ? arg('only').split(',').map((s) => s.trim()) : null;
 const pinModel = arg('model', '');
 const overlay = flag('overlay') && !flag('sim');
+const noLocal = flag('nolocal');   // no model on this PC: what a user without Ollama gets (cloud key / device only)
 const OLLAMA = 'http://localhost:11434';
 
 // ── the device (or the simulator) ────────────────────────────────────────────────────────────────────
@@ -226,6 +228,7 @@ try {
     localStorage.setItem('anima.agentauto', '1'); localStorage.setItem('anima.agents', '1');
     localStorage.setItem('anima.mode', 'auto'); localStorage.setItem('anima.modeSet', '1');
     localStorage.setItem('anima.ws', JSON.stringify({ root: ${JSON.stringify(WS)}, recents: [] }));
+    ${noLocal ? "localStorage.setItem('ai.local.engines', JSON.stringify({ enabled: false, servers: [], models: {} }));" : ''}
     ${pinModel ? `localStorage.setItem('ai.local.engines', JSON.stringify({ enabled: true, servers: [{ id: 'ollama', kind: 'ollama', name: 'Ollama', base: '${OLLAMA}', enabled: true }],
       models: { ollama: { agent: ${JSON.stringify(pinModel)}, chat: ${JSON.stringify(pinModel)}, code: ${JSON.stringify(pinModel)} } } }));` : ''}
     const r = await fetch('/api/pair', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pin: ${JSON.stringify(pin)} }) });
@@ -297,7 +300,7 @@ try {
   }
 
   const picked = CASES.filter((c) => !only || only.some((o) => c.id === o || c.id.startsWith(o) || c.tags.split(' ').includes(o)));
-  console.log(`\n${picked.length} cases · UI ${uiLang}${pinModel ? ' · model pinned ' + pinModel : ''}\n`);
+  console.log(`\n${picked.length} cases · UI ${uiLang}${pinModel ? ' · model pinned ' + pinModel : ''}${noLocal ? ' · no PC model' : ''}\n`);
   for (const c of picked) {
     if (!c.follow) await page.eval(IN_ANIMA(`const q = d.getElementById('q'); q.value = '/new'; q.dispatchEvent(new Event('input', { bubbles: true })); d.getElementById('send').click(); return true;`)).catch(() => {});
     await sleep(600);

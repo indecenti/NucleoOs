@@ -36,6 +36,11 @@ ok('guard forces task: time', guardPlan({ mode: 'answer', answer: 'Sono le 12' }
 ok('guard forces task: weather', guardPlan({ mode: 'answer', answer: 'Sole' }, 'che tempo fa a Roma?').mode === 'task');
 ok('guard forces task: open app', guardPlan({ mode: 'answer', answer: 'ok' }, 'apri la calcolatrice').mode === 'task');
 ok('guard forces task: space', guardPlan({ mode: 'answer', answer: '10GB' }, 'quanto spazio libero ho?').mode === 'task');
+// an edit INSIDE a named file, five languages (live: "Rimuovi le righe vuote da testo.txt" was triaged an answer → a script)
+for (const q of ['Rimuovi le righe vuote da testo.txt', 'Quita las líneas vacías de texto.txt', 'Supprime les lignes vides de texte.txt',
+  'Entferne die leeren Zeilen aus text.txt', 'Add a line to saluti.txt', 'Converti config.json in config.csv', 'Conta le parole di testo.txt'])
+  ok('guard forces task: ' + q, guardPlan({ mode: 'answer', answer: 'x' }, q).mode === 'task');
+ok('a question ABOUT a file type stays an answer', guardPlan({ mode: 'answer', answer: 'x' }, "che cos'è un file csv?").mode === 'answer');
 ok('guard forces task: write file', guardPlan({ mode: 'answer' }, 'scrivi un file note.txt').mode === 'task');
 ok('guard forces task EN', guardPlan({ mode: 'answer' }, 'what time is it?').mode === 'task');
 ok('guard keeps chitchat as answer', guardPlan({ mode: 'answer', answer: 'Bene!' }, 'ciao come stai?').mode === 'answer');

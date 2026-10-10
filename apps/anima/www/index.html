@@ -4967,7 +4967,14 @@
           const wsx = await wsxOnce();   // built ONCE - shared by the loop seed and fallback
           if(loopEligible && !sig.aborted){
             _agentDidMutate = false; _agentCancelled = false; _agentWsAsked = false; _agentLocalFirst = lcfg.prefer==='local';
-            try{ r = await agentAsk(sendQ, think, wsx); }catch(e){ r = null; noteAiErr(e); }
+            let agentErr=null;
+            try{ r = await agentAsk(sendQ, think, wsx); }catch(e){ r = null; agentErr=e; noteAiErr(e); }
+            // A TASK on the user's files that the agent could not run must not fall to the tool-less chat below: it
+            // "applies" the change in prose (live on the Cardputer: "¡Claro! Corregiré…" + code, app.js untouched).
+            if(!r && agentErr && !sig.aborted && String(agentErr.message)!=='stopped' && ctxkit.wantsAgent(sendQ, { workspace:fs.hasRoot() })){
+              const why=(AI.explainAiError && AI.explainAiError(agentErr, lang)) || String(agentErr.message||agentErr).slice(0,160);
+              r={ reply:'⚠ '+L('agentFailed',{ why }), tier:'remote', intent:'agent', confidence:0, domain:'online', notDone:true };
+            }
           }
           if(!r && !sig.aborted){
             // Streamed: tokens render as they arrive. A connection that dies mid-answer keeps what came.

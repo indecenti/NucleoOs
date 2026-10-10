@@ -177,6 +177,24 @@ ok('usageTokens ratio clamped', u.ratio > 0 && u.ratio <= 1 && u.budget === MODE
   ok('math: null-safe', plainMath(null) === '' && plainMath(undefined) === '');
 }
 
+/* ---- the reply language is NAMED when the user writes in another language (real Cardputer, 2026-10-10) ---- */
+// "Reply in the language of the user's latest message" alone did not hold: qwen3.5:9b answered "Turn the brightness
+// down" and Spanish tasks in Italian; and "Rimuovi le righe vuote da testo.txt" once scored French on "le".
+{
+  const { userLanguage } = await import('../../apps/anima/www/contextkit.js');
+  for (const [q, lg] of [['Turn the brightness down', 'en'], ['Corrige la función somma en app.js: debe sumar, no restar.', 'es'],
+    ['Renomme le fichier note/idee.txt en note/idees.txt.', 'fr'], ['Welche Dateien liegen im Projekt?', 'de'], ['Leggi spesa.md e dimmi quanti elementi ci sono.', 'it'],
+    ['Rimuovi le righe vuote da testo.txt', 'it'], ['Quita las líneas vacías de texto.txt', 'es'], ['Supprime les lignes vides de texte.txt', 'fr'],
+    ['Entferne die leeren Zeilen aus text.txt', 'de'], ['y dividido entre 3', 'es']]) ok(`userLanguage: ${q} → ${lg}`, userLanguage(q) === lg);
+  for (const q of ['ok', '42', 'Traduci in tedesco: "buongiorno, come stai?"'.replace('Traduci in tedesco', 'x')]) ok(`userLanguage: "${q}" is unclear`, userLanguage(q) === null);
+  const a = assemble({ history: [], user: 'Turn the brightness down', mode: 'server', lang: 'it' });
+  ok('the Italian prompt names English as the reply language', /LINGUA DELLA RISPOSTA: l'ultimo messaggio dell'utente è in inglese/.test(a.system));
+  const b = assemble({ history: [], user: 'Wie spät ist es in Tokio?', mode: 'only', provider: 'anthropic', lang: 'en' });
+  ok('the English prompt names German', /REPLY LANGUAGE: the user's latest message is in German/.test(b.system));
+  const c = assemble({ history: [], user: 'Che cosa è il Cardputer?', mode: 'server', lang: 'it' });
+  ok('nothing to name when it is the OS language', !/LINGUA DELLA RISPOSTA/.test(c.system));
+}
+
 /* ---- report ---- */
 console.log(`\ncontextkit-check: ${pass} passed, ${fail} failed`);
 if (fail) { console.log('FAILED:\n - ' + fails.join('\n - ')); process.exit(1); }
