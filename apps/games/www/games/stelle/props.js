@@ -676,6 +676,60 @@ function floraBuild(THREE, kind) {
       half(0.1, 0.2, 0.3, 0.82, 5);
       break;
     }
+
+    // ---- the third kit: what reads from the air on the dry worlds ------------------------------------------------------
+    case 'outcrop': {   // a wind-cut sandstone outcrop: beds stacked with ledges and overhangs, each bed its own shade, a rubble apron
+      const beds = [[0, 0.27, 0.5, 0.42, 0, 0, 0.84], [0.27, 0.22, 0.4, 0.35, 0.07, -0.03, 0.97], [0.49, 0.29, 0.47, 0.34, -0.05, 0.02, 0.78], [0.78, 0.18, 0.3, 0.24, 0.02, 0.04, 0.92]];
+      beds.forEach(([y0, h, rx, rz, ox, oz, sh], i) => {
+        const col = (p, n) => { const top = n[1] > 0.7 ? 1.08 : n[1] < -0.5 ? 0.6 : 1, b = 0.92 + 0.08 * Math.sin(p[1] * 70 + i); return K(sh * top * b, sh * top * b * (i % 2 ? 0.9 : 0.8), sh * top * b * (i % 2 ? 0.76 : 0.64), 1, 0, 0); };
+        rock(g, [ox, y0 + h * 0.5, oz], [rx, h * 0.75, rz], rn, 0.24, [[[0, 1, 0], h * 0.5], [[0, -1, 0], h * 0.5], [[1, 0.08, 0.15], rx * 0.8], [[-1, 0.05, -0.2], rx * 0.78], [[0.15, 0, 1], rz * 0.84], [[-0.25, 0.1, -1], rz * 0.8]], col);
+      });
+      for (let k = 0; k < (LO ? 3 : 7); k++) { const a = k * 0.9 + r() * 0.6, d = r.range(0.5, 0.72), sz = r.range(0.05, 0.11); rock(g, [Math.cos(a) * d, sz * 0.3, Math.sin(a) * d], [sz * 1.3, sz, sz * 1.1], rn, 0.4, [[[r.range(-0.4, 0.4), 1, r.range(-0.4, 0.4)], sz * 0.5]], () => K(0.8, 0.66, 0.54, 1, 0, 0), { lo: true, floor: -sz * 0.4 }); }
+      break;
+    }
+    case 'skeleton': {   // the fossil of something huge lying in the sand: a spine arching over a ribcage, a skull, the tail under the dunes
+      const bone = (t) => K(0.94 - t * 0.08, 0.88 - t * 0.09, 0.76 - t * 0.1, 0.25, 0, 0);
+      const sp = [], sr = [];
+      for (let k = 0; k <= 14; k++) { const t = k / 14, x = -0.62 + t * 1.18; sp.push([x, 0.05 + 0.3 * Math.sin(Math.min(1, t * 1.25) * Math.PI) * (t < 0.8 ? 1 : 1 - (t - 0.8) * 2.5) - 0.06 * t, Math.sin(t * 2.4) * 0.05]); sr.push(0.026 * (1 - t * 0.6)); }
+      tube(g, sp, sr, 7, (t) => bone(t));
+      // vertebrae: a knuckle and a dorsal spine on each joint
+      for (let k = 1; k < 14; k += LO ? 2 : 1) { const q = sp[k], t = k / 14; blob(g, q[0], q[1], q[2], 0.04 * (1 - t * 0.5), 0.034 * (1 - t * 0.5), 0.042 * (1 - t * 0.5), r, 0.25, () => bone(t)); if (!LO) prism(g, q[0], q[1] + 0.02, q[2], [0.25, 1, 0], 0.012, 0.07 * (1 - t * 0.6), 4, 0.02, () => bone(t)); }
+      // ribs: pairs hanging from the spine and curving out and down into the sand, longest over the chest
+      for (let k = 2; k <= 9; k += LO ? 2 : 1) {
+        const q = sp[k], len = 0.36 + 0.12 * Math.sin((k - 2) / 7 * Math.PI);
+        for (const sd of [-1, 1]) {
+          const pts = [], rad = [];
+          for (let j = 0; j <= 6; j++) { const u = j / 6, a = u * 1.85; pts.push([q[0] + u * 0.06, q[1] - (1 - Math.cos(a)) * len * 0.62 - u * 0.05, q[2] + sd * Math.sin(a) * len * 0.62]); rad.push(0.014 * (1 - u * 0.55)); }
+          tube(g, pts, rad, 5, (t) => bone(0.3 + t * 0.4), false);
+        }
+      }
+      // the skull: a long half-buried cranium, a brow, a jaw sunk beside it, two dark sockets
+      const sk = sp[14];
+      blob(g, sk[0] + 0.09, 0.05, sk[2], 0.15, 0.08, 0.075, r, 0.18, (y) => bone(0.2 - y));
+      blob(g, sk[0] + 0.21, 0.025, sk[2] + 0.02, 0.09, 0.045, 0.05, r, 0.2, () => bone(0.3));
+      blob(g, sk[0] + 0.15, 0.0, sk[2] - 0.09, 0.13, 0.03, 0.035, r, 0.3, () => bone(0.5));
+      if (!LO) for (const sd of [-1, 1]) blob(g, sk[0] + 0.07, 0.085, sk[2] + sd * 0.05, 0.03, 0.022, 0.022, r, 0.1, () => K(0.12, 0.1, 0.08, 0, 0, 0));
+      break;
+    }
+    case 'wreckage': {   // a derelict from the Dimming: a torn hull section nosed into the ground, its frames bare, a fallen nacelle, plates
+      const metal = (p, n) => { const h = hash(Math.floor(p[0] * 14), Math.floor(p[1] * 9 + p[2] * 11)), rust = h < 0.3, top = n[1] > 0.6 ? 0.85 : 1;
+        return rust ? K(0.46 * top, 0.27 * top, 0.15 * top, 0.15, 0, 0) : K((0.6 + h * 0.12) * top, (0.58 + h * 0.1) * top, (0.53 + h * 0.08) * top, 0.2, 0, 0); };
+      const start = g.p.length / 3;
+      const prof = [[0.12, -0.3], [0.17, -0.22], [0.19, 0.0], [0.18, 0.22], [0.165, 0.34]];
+      lathe(g, [0, 0, 0], [0, 1, 0], prof, 10, (t, s, n, k) => metal([s * 0.1, t, k * 0.2], n), { flat: true, cap0: 0.4, squash: 0.8, rmod: (k, s) => (k === prof.length - 1 ? 1 + (hash(s, 7) - 0.5) * 0.25 : 1), hmod: (k, s) => (k === prof.length - 1 ? (hash(s, 3) - 0.6) * 0.14 : 0) });
+      // the bare frames at the torn end
+      for (let k = 0; k < (LO ? 1 : 3); k++) { const y = 0.38 + k * 0.08, rr = 0.16 - k * 0.012, P = []; for (let j = 0; j <= 10; j++) { const a = j / 10 * Math.PI * 1.55 - 0.2; P.push([Math.cos(a) * rr, y, Math.sin(a) * rr * 0.8]); } tube(g, P, P.map(() => 0.012), 4, () => K(0.36, 0.22, 0.13, 0.15, 0, 0), false); }
+      xform(g, start, (q) => add(rotZ(-1.05)(rotY(0.3)(q)), [0.05, 0.1, 0]), (q) => rotZ(-1.05)(rotY(0.3)(q)));
+      // a nacelle fallen beside it, and a fin standing out of the ground
+      const s2 = g.p.length / 3;
+      lathe(g, [0, 0, 0], [0, 1, 0], [[0.05, 0], [0.075, 0.04], [0.075, 0.24], [0.06, 0.3]], 8, (t, s, n, k) => (k === 0 ? K(0.08, 0.07, 0.07, 0, 0, 0) : metal([s * 0.2 + 3, t * 2, k], n)), { flat: true, cap1: true });
+      xform(g, s2, (q) => add(rotX(1.4)(rotY(0.6)(q)), [-0.3, 0.06, 0.32]), (q) => rotX(1.4)(rotY(0.6)(q)));
+      poly(g, [[-0.42, -0.04, -0.2], [-0.12, -0.04, -0.26], [-0.2, 0.26, -0.3], [-0.38, 0.2, -0.24]], (n) => metal([1, 2, 3], n), [-0.25, 0.1, 0]);
+      poly(g, [[-0.42, -0.04, -0.2], [-0.38, 0.2, -0.24], [-0.2, 0.26, -0.3], [-0.12, -0.04, -0.26]], (n) => metal([1, 2, 4], n), [-0.25, 0.1, -0.6]);
+      for (let k = 0; k < (LO ? 2 : 6); k++) { const a = r() * 6.28, d = r.range(0.35, 0.6), w = r.range(0.04, 0.09), x = Math.cos(a) * d, z = Math.sin(a) * d, tilt = r.range(-0.3, 0.3);
+        poly(g, [[x - w, 0.01, z - w * 0.6], [x + w, 0.01 + tilt * w, z - w * 0.5], [x + w * 0.8, 0.012, z + w * 0.7], [x - w * 0.9, 0.01 - tilt * w, z + w * 0.5]], (n) => metal([x * 9, z * 9, k], n), [x, -1, z]); }
+      break;
+    }
     default: blob(g, 0, 0.3, 0, 0.5, 0.4, 0.5, r, 0.4, () => K(0.7, 0.7, 0.7, 1, 0, 0));
   }
   return g.build(THREE);
@@ -683,7 +737,8 @@ function floraBuild(THREE, kind) {
 const lerp3 = (a, b, t) => [lerp(a[0], b[0], t), lerp(a[1], b[1], t), lerp(a[2], b[2], t)];
 // big kinds are seen from further away (they shape the skyline)
 export const FLORA_BIG = new Set(['hoodoo', 'rib', 'spire', 'icespire', 'spiral', 'basalt', 'lattice', 'palm',
-  'juniper', 'mangrove', 'coralspire', 'treefern', 'canopy', 'icecrystal', 'ashtree', 'crystree']);
+  'juniper', 'mangrove', 'coralspire', 'treefern', 'canopy', 'icecrystal', 'ashtree', 'crystree',
+  'boulder', 'outcrop', 'skeleton', 'wreckage']);   // (boulders too: the fields of them read from the air)
 
 // ---- sites -------------------------------------------------------------------------------------------------------------
 // Palettes (linear albedo). The Costellatori built in a pale warm ivory stone with verdigris bronze and candle-gold

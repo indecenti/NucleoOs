@@ -22,8 +22,9 @@ const here = dirname(fileURLToPath(import.meta.url)), root = join(here, '..', '.
 const GW = join(root, 'apps/games/www/games');
 const url = (p) => pathToFileURL(join(GW, p)).href;
 let pass = 0, fail = 0; const ok = (c, m) => { if (c) pass++; else { fail++; console.log('  FAIL:', m); } };
-// regression digests of the generated worlds (update deliberately, with the docs, when a surface rule changes)
-const GOLDEN = { surfaces: '22bd7770b389c9a9531aedcef885a67ca770774f41da1480c01762c80cdbd7c2' };
+// regression digests of the generated worlds (update deliberately, with the docs, when a surface rule changes; last:
+// the dune profile's sharp brink and the seabed of the water worlds — reefs, ridges, sand waves)
+const GOLDEN = { surfaces: '81250957ffb969f4c578e2a892ae308ed8854f3a34ce72ebe69e348ceae1e687' };
 
 const G = await import(url('constellations-gen.js'));
 const W = await import(url('stelle/world.js'));
@@ -143,13 +144,17 @@ const surf = (t) => PL.surfaceFor(byType[t].bp, byType[t].k);
   ok(inside, 'the chunk bounding sphere holds every vertex');
   const r0 = Math.hypot(...wp(A, 0)), rs = Math.hypot(...wp(A, V * V));
   ok(rs < r0 - 2, 'skirts hang below their edge');
-  // liquids are flat at sea level; their elevation attribute keeps the depth
-  const So = surf('ocean'); let flat = true, deep = 0;
-  for (let f = 0; f < 6 && deep < 50; f++) {
-    const c = { b: CH.newChunkBufs() }; c.info = CH.buildChunk(So, f, 2, 1, 1, c.b);
-    for (let o = 0; o < V * V; o++) if (c.b.srf[o * 4] < 0) { deep++; if (Math.abs(Math.hypot(...wp(c, o)) - So.R) > 0.01) flat = false; }
-  }
-  ok(deep > 0 && flat, `ocean: water vertices sit on the sea-level sphere (${deep} checked)`);
+  // a water world keeps its seabed (the terrain's water pass draws the surface over it); lava and frozen seas are flat
+  // at sea level; the elevation attribute always keeps the depth
+  const seaChunks = (Sx, test) => { let n = 0, good = true; for (let f = 0; f < 6 && n < 50; f++) { const c = { b: CH.newChunkBufs() }; c.info = CH.buildChunk(Sx, f, 2, 1, 1, c.b); for (let o = 0; o < V * V; o++) if (c.b.srf[o * 4] < 0) { n++; if (!test(Math.hypot(...wp(c, o)), c.b.srf[o * 4])) good = false; } } return [n, good]; };
+  const [nO, bedO] = seaChunks(surf('ocean'), (r, e) => Math.abs(r - (surf('ocean').R + e)) < 0.02);
+  ok(nO > 0 && bedO, `ocean: the seabed carries on under the water at its true depth (${nO} checked)`);
+  const [nV, flatV] = seaChunks(surf('volcanic'), (r) => Math.abs(r - surf('volcanic').R) < 0.01);
+  ok(nV > 0 && flatV, `volcanic: the lava sea lies flat on the sea-level sphere (${nV} checked)`);
+  // the dune sea's phase and height ride along for the shader's per-pixel brinks (0 off the sand, and on other worlds)
+  { const Sd = surf('desert'), c = { b: CH.newChunkBufs() }; c.info = CH.buildChunk(Sd, 2, 5, 9, 9, c.b); let sand = 0, anyPh = false; for (let o = 0; o < V * V; o++) { if (c.b.dn[o * 2 + 1] > 0) sand++; if (c.b.dn[o * 2] !== 0) anyPh = true; }
+    const cr = { b: CH.newChunkBufs() }; cr.info = CH.buildChunk(surf('rocky'), 2, 5, 9, 9, cr.b);
+    ok(cr.b.dn.every((x) => x === 0) && (sand === 0 || anyPh), `dunes: phase and height per vertex on the sand (${sand} of ${V * V}), none on a rocky world`); }
 }
 
 // ---- 4. sites, flora, orbits ----------------------------------------------------------------------------------------------
@@ -262,9 +267,16 @@ const flightAt = (t, o = {}) => { const { bp, i } = byType[t]; const F = S.creat
   ok(!F.cruise, 'the cruise drive drops in thick air');
   // straight into the ground, assist off: a bounce that hurts, never through
   U.assist = false; S.shipFwd(p, f); S.qlook(p.q, f.x - up.x * 3, f.y - up.y * 3, f.z - up.z * 3, up.x, up.y, up.z);
-  const h0 = p.hull; let hit = 0, cur = F.evHead, low = 1e9;
-  for (let i = 0; i < 60 * 30 && !hit; i++) { S.stepFlight(F); F.input.thr = 1; low = Math.min(low, F.surf.agl); for (; cur < F.evHead; cur++) if (F.ev[cur % F.ev.length].n === S.EV.GROUND) hit++; }
-  ok(hit > 0 && low > -1 && p.hull < h0, `the ground is solid: impact, damage ${(h0 - p.hull).toFixed(0)}, lowest ${low.toFixed(1)} m`);
+  // (an ocean world: the sea can be dived into — a splash, the water takes the speed, the guns go safe — its bed cannot)
+  const h0 = p.hull; let hit = 0, cur = F.evHead, low = 1e9, splash = 0, subMax = 0, subSpd = 0, subFire = false;
+  for (let i = 0; i < 60 * 40 && !hit; i++) {
+    F.input.fire = true; S.stepFlight(F); F.input.thr = 1; low = Math.min(low, F.surf.hard);
+    if (F.surf.sub > 3) { subMax = Math.max(subMax, F.surf.sub); subSpd = Math.max(subSpd, F.surf.sub > 25 ? p.spd : 0); subFire = subFire || p.fire; }
+    for (; cur < F.evHead; cur++) { const e = F.ev[cur % F.ev.length]; if (e.n === S.EV.GROUND) { if (e.k === 'splash_in') splash++; else hit++; } }
+  }
+  F.input.fire = false;
+  ok(hit > 0 && low > -1 && p.hull < h0, `the ground is solid: impact, damage ${(h0 - p.hull).toFixed(0)}, lowest ${low.toFixed(1)} m over it`);
+  ok(splash === 1 && subMax > 10 && subSpd < 75 && !subFire, `the sea can be dived into: a splash, ${subMax.toFixed(0)} m down, the water holds her to ${subSpd.toFixed(0)} m/s, guns safe`);
   // no landing on open water
   if (F.surf.water || true) {
     SF.placeOver(F, k, 120, 50, 0, 40);

@@ -76,21 +76,38 @@ export function setAU(A, cx, cy, cz, sun, I) {
   u.uAtG.value[0] = A.g; u.uAtG.value[1] = A.gain; u.uAtG.value[2] = A.abs;
 }
 
-// ---- the sun's shadow map of the near scene (one cascade that follows the camera; terrain.js renders it) --------------
-// Every receiver (terrain, grass, flora, sites, ship hulls) samples the same map through these shared uniforms:
-// uShMat world -> shadow texture space ([0,1]^3), uShP = (strength 0..1, texel, normal-offset bias in metres, -).
-// uShP.x = 0 means no shadow map (low tier, space): czSunShadow returns 1 at once.
-export const SH = { uShMap: { value: null }, uShMat: { value: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1] }, uShP: { value: [0, 1 / 1024, 0.3, 0] } };
+// ---- the sun's shadow maps of the near scene (terrain.js renders them) ------------------------------------------------
+// Two cascades that follow the camera: a sharp one over the nearest hundred-odd metres (every caster), a wide one out to
+// a kilometre or two (terrain, sites, the far trees: the long shadows of ridges, valleys in shade). Both live side by
+// side in ONE depth texture (an atlas): on the integrated GPU a second shadow sampler bound to every draw cost more than
+// the whole wide cascade. Every receiver (terrain, grass, flora, sites, ship hulls) samples it through these shared
+// uniforms: uShMat* world -> the cascade's own [0,1]^3, uShA* its rectangle in the atlas (scale xy, offset zw), uShP* =
+// (strength 0..1, texel of the cascade, normal-offset bias in metres, -). uShP.x = 0 means no shadow map at all (low
+// tier, space): czSunShadow returns 1 at once; uShP2.x = 0, no wide cascade.
+export const SH = { uShMap: { value: null }, uShMat: { value: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1] }, uShP: { value: [0, 1 / 1024, 0.3, 0] }, uShA: { value: [1, 1, 0, 0] },
+  uShMat2: { value: [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1] }, uShP2: { value: [0, 1 / 1024, 1.5, 0] }, uShA2: { value: [1, 1, 0, 0] } };
 export const SHADOW_GLSL = /* glsl */`
-uniform highp sampler2DShadow uShMap; uniform mat4 uShMat; uniform vec4 uShP;
+uniform highp sampler2DShadow uShMap; uniform mat4 uShMat, uShMat2; uniform vec4 uShP, uShP2, uShA, uShA2;
+// (explicit-LOD compares: the D3D compiler behind ANGLE keeps them inside the branches — with implicit derivatives it
+// flattens the branches and fetches both cascades for every pixel)
+float czShTap(vec3 s, float tx, vec4 A) {
+  vec2 t = tx * 0.75 * A.xy; vec3 q = vec3(s.xy * A.xy + A.zw, s.z - tx * 0.6);
+  return (textureLod(uShMap, q + vec3(-t.x, -t.y, 0.0), 0.0) + textureLod(uShMap, q + vec3(t.x, -t.y, 0.0), 0.0) + textureLod(uShMap, q + vec3(-t.x, t.y, 0.0), 0.0) + textureLod(uShMap, q + vec3(t.x, t.y, 0.0), 0.0)) * 0.25;
+}
 float czSunShadow(vec3 wp, vec3 n, float ndl) {
   if (uShP.x <= 0.0) return 1.0;
-  vec3 s = (uShMat * vec4(wp + n * uShP.z * (1.0 + 2.0 * (1.0 - clamp(ndl, 0.0, 1.0))), 1.0)).xyz;
-  float edge = min(min(s.x, 1.0 - s.x), min(s.y, 1.0 - s.y));
-  if (edge <= 0.0 || s.z >= 1.0) return 1.0;
-  float t = uShP.y * 0.75; s.z -= uShP.y * 0.6;
-  float v = (texture(uShMap, s + vec3(-t, -t, 0.0)) + texture(uShMap, s + vec3(t, -t, 0.0)) + texture(uShMap, s + vec3(-t, t, 0.0)) + texture(uShMap, s + vec3(t, t, 0.0))) * 0.25;
-  return mix(1.0, v, uShP.x * smoothstep(0.0, 0.06, edge));
+  float k = 1.0 + 2.0 * (1.0 - clamp(ndl, 0.0, 1.0));
+  vec3 s = (uShMat * vec4(wp + n * uShP.z * k, 1.0)).xyz;
+  float edge = min(min(s.x, 1.0 - s.x), min(s.y, 1.0 - s.y)), v = 1.0, f = 0.0;
+  if (edge > 0.0 && s.z < 1.0) { v = czShTap(s, uShP.y, uShA); f = smoothstep(0.0, 0.08, edge); }
+  if (f < 1.0 && uShP2.x > 0.0) {   // past the sharp cascade (and across its border): the wide one
+    vec3 s2 = (uShMat2 * vec4(wp + n * uShP2.z * k, 1.0)).xyz;
+    float e2 = min(min(s2.x, 1.0 - s2.x), min(s2.y, 1.0 - s2.y)), v2 = 1.0;
+    // (one hardware 2x2 compare: its texels are metres wide already)
+    if (e2 > 0.0 && s2.z < 1.0) v2 = mix(1.0, textureLod(uShMap, vec3(s2.xy * uShA2.xy + uShA2.zw, s2.z - uShP2.y * 0.6), 0.0), smoothstep(0.0, 0.1, e2));
+    v = mix(v2, v, f);
+  } else v = mix(1.0, v, f);
+  return mix(1.0, v, uShP.x);
 }
 `;
 

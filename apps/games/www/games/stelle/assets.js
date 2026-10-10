@@ -108,6 +108,14 @@ export async function imageBitmap(id) {
   return createImageBitmap(await blobOf(entry('images', id)));
 }
 
+/** Object URL of a stored track, for an <audio> element (streams; never decoded whole). */
+export async function musicUrl(id) {
+  await loadManifest();
+  const e = entry('music', id);
+  if (!urls.has(e.f)) urls.set(e.f, URL.createObjectURL(await blobOf(e)));
+  return urls.get(e.f);
+}
+
 /** Encoded track bytes for AudioContext.decodeAudioData. */
 export async function musicBuffer(id) {
   await loadManifest();

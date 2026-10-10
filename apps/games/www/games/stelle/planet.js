@@ -21,10 +21,12 @@ export const landable = (type) => type !== 'gas';
 // per world type: relief (fraction of the radius), mountain weight, what fills the low ground, the haze, the
 // sky profile, the weather and the flora kit. Read with the world_* illustrations next to it.
 const KIND = {
-  rocky: { relief: 0.05, mnt: 0.9, liquid: 0, haze: 0.12, abs: 1.4, sky: [0.42, 0.55, 0.9], dust: [1.0, 0.8, 0.64], weather: 'dust', wk: 0.3,
-    flora: [['hoodoo', 0.00006, 6, 18], ['juniper', 0.00022, 5, 12], ['boulder', 0.0002, 1.5, 6], ['rock', 0.0009, 0.8, 3.4], ['shrub', 0.0012, 0.6, 1.6]] },
-  desert: { relief: 0.032, mnt: 0.6, liquid: 0, haze: 0.3, abs: 2.4, sky: [0.55, 0.55, 0.8], dust: [1.0, 0.72, 0.46], weather: 'dust', wk: 0.75,
-    flora: [['rib', 0.000012, 18, 34], ['spire', 0.00005, 8, 22], ['cactus', 0.00035, 2, 7], ['boulder', 0.00012, 1.5, 5], ['rock', 0.0005, 0.8, 3.0], ['shrub', 0.0003, 0.5, 1.2]] },
+  rocky: { relief: 0.05, mnt: 0.9, liquid: 0, haze: 0.11, abs: 1.4, sky: [0.38, 0.54, 0.95], dust: [1.0, 0.8, 0.62], weather: 'dust', wk: 0.3,
+    flora: [['hoodoo', 0.00006, 6, 18], ['juniper', 0.00022, 5, 12], ['boulder', 0.0005, 1.5, 6], ['rock', 0.0016, 0.8, 3.4], ['shrub', 0.0012, 0.6, 1.6],
+      ['outcrop', 0.00003, 6, 18], ['wreckage', 0.0000035, 16, 30]] },
+  desert: { relief: 0.032, mnt: 0.6, liquid: 0, haze: 0.22, abs: 2.0, sky: [0.38, 0.53, 0.95], dust: [1.0, 0.76, 0.5], weather: 'dust', wk: 0.75,
+    flora: [['rib', 0.000012, 18, 34], ['spire', 0.00005, 8, 22], ['cactus', 0.00035, 2, 7], ['boulder', 0.00045, 1.5, 5], ['rock', 0.0012, 0.8, 3.0], ['shrub', 0.0003, 0.5, 1.2],
+      ['outcrop', 0.00004, 7, 20], ['skeleton', 0.000006, 28, 52], ['wreckage', 0.000005, 18, 34]] },
   ocean: { relief: 0.045, mnt: 0.5, liquid: 1, haze: 0.07, sky: [0.2, 0.52, 1.0], dust: [0.9, 0.95, 1.0], weather: 'rain', wk: 0.55,
     flora: [['palm', 0.001, 6, 13], ['mangrove', 0.0004, 7, 14], ['coralspire', 0.00022, 6, 14], ['kelp', 0.0016, 2, 6], ['coral', 0.0014, 0.8, 3.2], ['bush', 0.0014, 1, 3], ['rock', 0.0005, 0.8, 2.6]] },
   ice: { relief: 0.04, mnt: 0.8, liquid: 2, haze: 0.05, sky: [0.22, 0.5, 1.0], dust: [0.95, 0.97, 1.0], weather: 'snow', wk: 0.65,
@@ -39,7 +41,8 @@ const KIND = {
 };
 // (new kinds go at the end: an instance carries its kind's index)
 export const FLORA_KINDS = ['rock', 'shrub', 'hoodoo', 'rib', 'spire', 'palm', 'coral', 'icespire', 'frost', 'spiral', 'fern', 'glowpod', 'basalt', 'deadtree', 'ember', 'shard', 'lattice',
-  'boulder', 'cactus', 'juniper', 'kelp', 'mangrove', 'coralspire', 'bush', 'treefern', 'canopy', 'mushroom', 'icecrystal', 'ashtree', 'obsidian', 'crystree', 'geode'];
+  'boulder', 'cactus', 'juniper', 'kelp', 'mangrove', 'coralspire', 'bush', 'treefern', 'canopy', 'mushroom', 'icecrystal', 'ashtree', 'obsidian', 'crystree', 'geode',
+  'outcrop', 'skeleton', 'wreckage'];
 export const SITE_KINDS = ['gate', 'archive', 'observatory', 'relic', 'wreck', 'outpost'];
 
 // ---- the surface description (plain data: it crosses into the worker) --------------------------------------------
@@ -115,12 +118,20 @@ export function macro(S, x, y, z, out = MAC) {
 // ex (optional) receives the shading masks the terrain shader uses: h, mo (macro), m1 (type mask: canyon floor, sand,
 // beach, crevasse, river, lava, crystal vein), m2 (rockiness), ao (open sky 1 .. crevice 0), wet (0..1), m3 (a second
 // type mask: scree / playa / sea cliff / shelf wall / karst / ash / facet), cv (convexity: crests 1, hollows 0)
-const EX = { h: 0, mo: 0, m1: 0, m2: 0, ao: 1, wet: 0, m3: 0, cv: 0.5 };
+// (ph, du: the dune sea's unwrapped wave phase and its height in metres — the terrain shader redraws the crests per pixel)
+const EX = { h: 0, mo: 0, m1: 0, m2: 0, ao: 1, wet: 0, m3: 0, cv: 0.5, ph: 0, du: 0 };
+// the dune profile over one wave (t = phase 0..1): a long windward rise that still climbs at the brink, then the slip
+// face dropping steeply from a sharp brink and easing into the trough (dprof is its slope, d/dt)
+export const DUNE_CREST = 0.72;
+export function duneProf(t) {
+  if (t < DUNE_CREST) { const u = t / DUNE_CREST; return 0.5 * u + 0.5 * u * u * (3 - 2 * u); }
+  return Math.pow(1 - (t - DUNE_CREST) / (1 - DUNE_CREST), 1.35);
+}
 const terrace = (x, steps, k) => { const s = x * steps, f = s - Math.floor(s); return (Math.floor(s) + sstep(0.5 - k, 0.5 + k, f)) / steps; };
 const CL = [0, 0, 0];
 export function elevationRaw(S, x, y, z, ex = EX) {
   const M = macro(S, x, y, z), A = S.A, sd = S.seeds, F = S.F;
-  if (!A) { ex.h = M.h; ex.mo = M.mo; ex.m1 = 0; ex.m2 = 0; ex.ao = 1; ex.wet = 0; ex.m3 = 0; ex.cv = 0.5; return 0; }
+  if (!A) { ex.h = M.h; ex.mo = M.mo; ex.m1 = 0; ex.m2 = 0; ex.ao = 1; ex.wet = 0; ex.m3 = 0; ex.cv = 0.5; ex.ph = 0; ex.du = 0; return 0; }
   const px = x * F, py = y * F, pz = z * F, sea = S.sea, R = S.R;
   const mx = x * R, my = y * R, mz = z * R;                      // metres
   const hills = fbm(px * 18 + M.qx, py * 18 + M.qy, pz * 18 + M.qz, 5, sd[4]);
@@ -132,7 +143,7 @@ export function elevationRaw(S, x, y, z, ex = EX) {
   // eroded detail: wide soft valleys, crisp crests (wavelength 1.4 km down to ~22 m)
   const eq = 1 / 1400, E = efbm(ux * eq, uy * eq, uz * eq, 7, sd[5], 0.5);
   const fq = 1 / 46, fine = fbm(mx * fq, my * fq, mz * fq, 3, (sd[5] ^ 0x3c3c) >>> 0);   // boulders to pebbles (46 m .. 11 m)
-  let e, m1 = 0, m3 = 0, wet = 0, ao = sstep(-0.42, 0.22, E), fineK = 2.2, cvo = 0, cvK = 0;
+  let e, m1 = 0, m3 = 0, wet = 0, ao = sstep(-0.42, 0.22, E), fineK = 2.2, cvo = 0, cvK = 0, dph = 0, ddu = 0;
   const m2 = clamp(0.5 + hills * 1.6, 0, 1);
   const land = sea > 0 ? (M.h - sea) / (1 - sea) : M.h;
   switch (S.ti) {
@@ -159,8 +170,7 @@ export function elevationRaw(S, x, y, z, ex = EX) {
       // the dunes run across a wind axis fixed per world; crests meander and grow and shrink over the field
       const ax = S.wind[0], ay = S.wind[1], az = S.wind[2];
       const ph = (mx * ax + my * ay + mz * az) / S.duneL + fbm(mx / 700, my / 700, mz / 700, 2, sd[6]) * 1.7 + fbm(mx / 2600, my / 2600, mz / 2600, 2, (sd[6] ^ 9) >>> 0) * 2.2;
-      const tt = ph - Math.floor(ph), crest = 0.76;
-      const prof = tt < crest ? Math.pow(sstep(0, crest, tt), 1.25) : 1 - sstep(crest, 1, tt) * 0.98;   // windward rise, slip face
+      const tt = ph - Math.floor(ph), prof = duneProf(tt);   // windward rise, a sharp brink, the slip face
       const hd = 10 + 26 * sstep(-0.4, 0.5, fbm(mx / 1900, my / 1900, mz / 1900, 2, sd[7]));
       const ph2 = (mx * az - mz * ax + my * 0.3) / 48 + fbm(mx / 160, my / 160, mz / 160, 2, (sd[7] ^ 5) >>> 0) * 1.2, t2 = ph2 - Math.floor(ph2);
       const dune = prof * hd + (t2 < 0.7 ? t2 / 0.7 : (1 - t2) / 0.3) * 2.6;
@@ -171,6 +181,7 @@ export function elevationRaw(S, x, y, z, ex = EX) {
       if (M.c < -0.18) { playa = sstep(-0.18, -0.3, M.c); e = e * (1 - playa) + A * 0.06 * playa; }
       m1 = sand * (1 - playa); m3 = playa; ao = Math.max(ao, sand * 0.8); fineK = 1.6 * (1 - sand) + 0.25;
       cvo = prof; cvK = sand * (1 - playa);   // the dune crests are the convex lines the shader brightens
+      dph = ph; ddu = hd * sand * (1 - playa);
       break;
     }
     case 2: {   // ocean: islands with beaches, hills and, on some coasts, sea cliffs; shallow shelves
@@ -253,10 +264,20 @@ export function elevationRaw(S, x, y, z, ex = EX) {
   if (sea > 0 && land < 0) {   // under the sea: a shelf near the coast, then the deep
     const d = clamp(-land * (1 - sea) / Math.max(sea, 0.05), 0, 1);
     e = -S.depth * Math.pow(d, 1.25) - 0.5;
+    if (S.liquid === 1 || S.liquid === 4) {
+      // a seabed you can see through the water and dive to: eroded ridges and reefs on the shelf, sand waves across the
+      // shallows (along the world's wind axis), all fading out at the shore so the beaches stay; it never breaks the surface
+      const k = sstep(0.0, 0.12, d), ax = S.wind[0], ay = S.wind[1], az = S.wind[2];
+      const sw = (mx * ax + my * ay + mz * az) / 23 + fbm(mx / 170, my / 170, mz / 170, 2, (sd[6] ^ 0x5a) >>> 0) * 1.6, st = sw - Math.floor(sw);
+      const waves = (st < 0.7 ? st / 0.7 : (1 - st) / 0.3) * 0.9 * sstep(0.45, 0.08, d);
+      e = Math.min(e + (E * A * 0.075 + waves) * k + A * 0.05 * M.mn * M.mn * k, -0.5 - 6 * d);
+      m3 = Math.max(m3, sstep(0.05, 0.35, E) * k);   // reef rock (the ridges) vs the sand between them
+    }
   }
   e += fine * fineK;
   if (sea > 0 && S.liquid !== 3) wet = Math.max(wet, sstep(2.5, 0.2, e));
   ex.h = M.h; ex.mo = M.mo; ex.m1 = m1; ex.m2 = m2; ex.ao = ao; ex.wet = wet; ex.m3 = m3; ex.cv = sstep(-0.15, 0.4, E) * (1 - cvK) + cvo * cvK;
+  ex.ph = dph; ex.du = ddu;
   return e;
 }
 // the ground as built: sites sit on levelled pads that blend back into the land
@@ -326,7 +347,7 @@ function placeSites(S, seed, sector, sysIdx, pi, fac) {
   if (r() < 0.6) plan.push('relic');
   for (let i = 0, n = 1 + r.int(2); i < n; i++) plan.push('wreck');
   if (fac !== 3) for (let i = 0, n = 1 + r.int(2); i < n; i++) plan.push('outpost');
-  const out = [], d = [0, 0, 0], tmp = { h: 0, mo: 0, m1: 0, m2: 0, ao: 1, wet: 0, m3: 0, cv: 0.5 }, minSep = Math.min(0.5, 1600 / S.R);
+  const out = [], d = [0, 0, 0], tmp = { h: 0, mo: 0, m1: 0, m2: 0, ao: 1, wet: 0, m3: 0, cv: 0.5, ph: 0, du: 0 }, minSep = Math.min(0.5, 1600 / S.R);
   const slopeAt = (x, y, z, e0) => {   // worst rise over 30 m in four directions
     let ux = -z, uy = 0, uz = x; if (Math.abs(y) > 0.9) { ux = 1; uy = 0; uz = 0; }
     let l = Math.hypot(ux, uy, uz); ux /= l; uy /= l; uz /= l;
@@ -378,7 +399,7 @@ export function scatterFlora(S, f, level, ix, iy, density, out, cx, cy, cz, only
   if (!S.flora.length) return 0;
   const n = 1 << level, size = nodeSize(S, level), area = size * size;
   const r = rng(vhash(S.seeds[7], f, level, VDOM.FLORA, (ix * 4099 + iy) & 0xffff) ^ (ix * 0x9E3779B1) ^ (iy * 0x85EBCA77));
-  const ex = { h: 0, mo: 0, m1: 0, m2: 0, ao: 1, wet: 0, m3: 0, cv: 0.5 }, cap = out.length / FLORA_STRIDE;
+  const ex = { h: 0, mo: 0, m1: 0, m2: 0, ao: 1, wet: 0, m3: 0, cv: 0.5, ph: 0, du: 0 }, cap = out.length / FLORA_STRIDE, clumped = S.type === 'desert' || S.type === 'rocky';
   let k = 0;
   for (const fk of S.flora) {
     if (only && only.indexOf(fk.id) < 0) continue;
@@ -387,6 +408,10 @@ export function scatterFlora(S, f, level, ix, iy, density, out, cx, cy, cz, only
     for (let j = 0; j < cnt && k < cap; j++) {
       const u = -1 + 2 * (ix + r()) / n, v = -1 + 2 * (iy + r()) / n;
       cubeDir(f, u, v, FL);
+      if (clumped && (fk.kind === 'boulder' || fk.kind === 'rock')) {   // boulder fields: thick in patches, rare between them
+        const R = S.R, fld = fbm(FL[0] * R / 260, FL[1] * R / 260, FL[2] * R / 260, 2, (S.seeds[5] ^ 0xb0b0) >>> 0);
+        if (r() > (fld > 0.12 ? 1 : fld > -0.05 ? 0.35 : 0.08)) continue;
+      }
       const e = elevation(S, FL[0], FL[1], FL[2], ex);
       if (!floraOk(S, fk.kind, e, ex, r)) continue;
       // slope check with a second sample ~2 m away
@@ -394,8 +419,8 @@ export function scatterFlora(S, f, level, ix, iy, density, out, cx, cy, cz, only
       const e2 = elevation(S, FL2[0], FL2[1], FL2[2]);
       const slope = Math.abs(e2 - e) / 2;
       const kd = fk.kind;
-      if (slope > (kd === 'rock' || kd === 'basalt' || kd === 'shard' || kd === 'boulder' || kd === 'obsidian' || kd === 'geode' ? 1.4 : kd === 'hoodoo' || kd === 'spire' || kd === 'icespire' || kd === 'icecrystal' ? 0.6 : kd === 'canopy' || kd === 'mangrove' ? 0.45 : 0.7)) continue;
-      const rr = S.R + e - (fk.kind === 'rib' ? 3 : 0.25);
+      if (slope > (kd === 'rock' || kd === 'basalt' || kd === 'shard' || kd === 'boulder' || kd === 'obsidian' || kd === 'geode' ? 1.4 : kd === 'hoodoo' || kd === 'spire' || kd === 'icespire' || kd === 'icecrystal' || kd === 'outcrop' ? 0.6 : kd === 'canopy' || kd === 'mangrove' || kd === 'skeleton' || kd === 'wreckage' ? 0.45 : 0.7)) continue;
+      const rr = S.R + e - (fk.kind === 'rib' ? 3 : fk.kind === 'skeleton' || fk.kind === 'wreckage' ? 0.8 : 0.25);
       const o = k * FLORA_STRIDE;
       out[o] = FL[0] * rr - cx; out[o + 1] = FL[1] * rr - cy; out[o + 2] = FL[2] * rr - cz;
       const t = Math.pow(r(), 1.8);
@@ -408,9 +433,10 @@ export function scatterFlora(S, f, level, ix, iy, density, out, cx, cy, cz, only
 }
 function floraOk(S, kind, e, ex, r) {
   const wet = S.sea > 0;
-  if (wet && e < (kind === 'coral' || kind === 'coralspire' ? -1.2 : kind === 'kelp' ? -1.0 : kind === 'mangrove' ? 0.2 : 0.8)) return false;
-  if (kind === 'coral') return e < 3.5 && r() < 0.9;
-  if (kind === 'kelp') return e < 0.9;
+  const deepOk = S.liquid === 1 || S.liquid === 4;   // a seabed you can see: coral heads and kelp forests down the shelf
+  if (wet && e < (kind === 'coral' ? (deepOk ? -24 : -1.2) : kind === 'coralspire' ? (deepOk ? -6 : -1.2) : kind === 'kelp' ? (deepOk ? -30 : -1.0) : kind === 'mangrove' ? 0.2 : 0.8)) return false;
+  if (kind === 'coral') return e < 3.5 && (e > -1.2 || ex.m3 > 0.25 || r() < 0.3) && r() < 0.9;
+  if (kind === 'kelp') return e < 0.9 && (e > -1.0 || (ex.m3 < 0.5 && r() < 0.8));
   if (kind === 'coralspire') return e < 4.5 && r() < 0.8;
   if (kind === 'mangrove') return e < 3.5 && ex.mo > 0.3;
   const hi = S.A ? e / S.A : 0;
@@ -435,6 +461,8 @@ function floraOk(S, kind, e, ex, r) {
     case 'icecrystal': return hi > 0.05;
     case 'ashtree': return hi < 0.6 && ex.m1 < 0.3;
     case 'crystree': return ex.m1 < 0.6 && hi < 0.8;
+    case 'skeleton': return ex.m1 > 0.5 || S.type !== 'desert';
+    case 'outcrop': return S.type !== 'desert' || ex.m1 < 0.7;
     default: return true;
   }
 }

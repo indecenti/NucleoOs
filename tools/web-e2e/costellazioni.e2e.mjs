@@ -59,7 +59,10 @@ async function openGame(browser, sim, { lang = 'en', flags = {}, viewport = [128
   return page;
 }
 async function toHub(page) {
-  if (await page.eval(`document.querySelector('[data-modal]').style.display === 'flex'`)) await key(page, 'Enter');
+  // a choice (continue / new run) may come up first — but not the "syncing your run" card: an Enter pressed on that
+  // one carries into the hub a moment later and launches a flight
+  await page.waitFor(`(() => { const m = document.querySelector('[data-modal]'), h = document.querySelector('[data-hub]'); return (m && m.style.display === 'flex' && m.querySelector('.cz-btn')) || (h && h.style.display === 'block'); })()`, { timeout: 30000 });
+  if (await page.eval(`(() => { const m = document.querySelector('[data-modal]'); return m.style.display === 'flex' && !!m.querySelector('.cz-btn'); })()`)) await key(page, 'Enter');
   assert.ok(await page.waitFor(`document.querySelector('[data-hub]').style.display === 'block' && document.querySelectorAll('.cz-tab').length === 6`, { timeout: 30000 }), 'hub painted');
 }
 

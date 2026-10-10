@@ -96,6 +96,7 @@ function build3D(M, canvas, gl, ui, hud) {
     if (!post) post = POST.createPost(THREE, renderer, Q);
     const sz = renderer.getDrawingBufferSize(new THREE.Vector2());
     post.setSize(sz.x, sz.y); bloom = post.bloom; grade = post.grade; bloom.strength = 0.34;
+    if (post.vol && !post.vol.draw) { post.vol.draw = (d, rt, c) => WORLD.vol.draw(d, rt, c); post.vol.on = true; post.fx.noise = WORLD.detail; }
   }
 
   // ---- ship visuals bound to sim slots ----------------------------------------------------------------------------
@@ -133,7 +134,7 @@ function build3D(M, canvas, gl, ui, hud) {
         g.add(base); turrets.push({ k, base, head, gun });
       });
     }
-    g.traverse((o) => { if (o.isMesh) o.layers.enable(WORLD.SHADOW_LAYER); });   // hulls cast into the world's shadow map
+    g.traverse((o) => { if (o.isMesh) { o.layers.enable(WORLD.SHADOW_LAYER); o.layers.enable(WORLD.SHADOW_LAYER2); } });   // hulls cast into the world's shadow maps
     space.near.add(g);
     return { gen: s.gen, g, body, mat, plumes, ec, pods, podA: 0.4, turrets, trail: null, smokeT: 0, flash: 0, dead: false, chain: 0, chainT: 0, warpShown: false, rad: s.cls.rad };
   }
@@ -472,7 +473,7 @@ function build3D(M, canvas, gl, ui, hud) {
 
   // ---- M3: the world below — terrain, sky, clouds, weather, flora and sites; the light of its air on everything ----------
   const amb = ambientRes(), SKYU = KIT.hullSky(THREE);
-  let wIdx = -1, wA = null, wFade = 0, wExpo = 1, wAirK = 0;
+  let wIdx = -1, wA = null, wFade = 0, wExpo = 1, wAirK = 0, wShim = 0;
   const _wc = [0, 0, 0], _wq = [0, 0, 0, 1], _wc0 = [0, 0, 0], _wqd = [0, 0, 0, 1], _wsun = [0, 0, 0], _wI = [0, 0, 0];
   const _qPrev = new THREE.Quaternion(), _qNow = new THREE.Quaternion(), _qD = new THREE.Quaternion();
   const sunBase = { col: new THREE.Color(), k: 3, set: false };
@@ -482,7 +483,7 @@ function build3D(M, canvas, gl, ui, hud) {
     if (wIdx >= 0) { space.planetMode(wIdx, true); WORLD.clear(); }
     wIdx = i; wA = null; wFade = 0;
     if (sunBase.set) { space.sun.color.copy(sunBase.col); space.sun.intensity = sunBase.k; sunBase.set = false; }
-    if (i < 0) { setAU(null, 0, 0, 0); SKYU.uEnvK.value = 1; SKYU.uSkyIrr.value.set(0, 0, 0); SKYU.uSkyRad.value.set(0, 0, 0); space.sys.group.visible = true; space.daylight(0); space.dispMat.uniforms.uCol.value.setScalar(0.32); wExpo = 1; return; }
+    if (i < 0) { wShim = 0; setAU(null, 0, 0, 0); SKYU.uEnvK.value = 1; SKYU.uSkyIrr.value.set(0, 0, 0); SKYU.uSkyRad.value.set(0, 0, 0); space.sys.group.visible = true; space.daylight(0); space.dispMat.uniforms.uCol.value.setScalar(0.32); wExpo = 1; return; }
     const bp = space.sys.bp, S = surfaceFor(bp, i), body = space.sys.planets.find((x) => x.idx === i && x.moonOf < 0);
     WORLD.set(S, { aux: body ? body.rt.aux.texture : null, surf: body ? body.rt.surf.texture : null });
     wA = atmoParams(S);
@@ -536,6 +537,7 @@ function build3D(M, canvas, gl, ui, hud) {
     // eye: a bright sky closes the iris a little, a night opens it
     const skyL = (zr[0] * 0.2 + zr[1] * 0.7 + zr[2] * 0.1) + (hr[1] + ha[1]) * 0.3;
     wExpo = 1 + wAirK * (Math.min(1.4, Math.max(0.62, 0.32 / (skyL + 0.12))) - 1);
+    if (WORLD.under) wExpo *= 1.45;   // under the sea the eye opens up to the dimmer blue
     // the ship's shadow on the ground, the headlight at night
     const p = F && F.player, U = F && F.surf;
     WO.shadow[3] = 0; WO.head.k = 0;
@@ -554,6 +556,9 @@ function build3D(M, canvas, gl, ui, hud) {
     ambience(S, U, p, alt, tp);
     // daylight hides the nebula; at night the stars come back over the ground
     const sunUp = (sd.x * (cam.position.x - _wc[0]) + sd.y * (cam.position.y - _wc[1]) + sd.z * (cam.position.z - _wc[2])) / Math.max(1, alt + pl.radius);
+    // heat shimmer over hot ground by day, low down (the post chain's final pass)
+    const hot = S.type === 'desert' ? 1 : S.type === 'volcanic' ? 0.75 : S.type === 'rocky' ? 0.45 : 0;
+    wShim = hot * sstep(0.12, 0.5, sunUp) * sstep(1600, 250, alt) * (WORLD.under ? 0 : 1);
     space.daylight(wAirK * sstep(-0.08, 0.15, sunUp) * sstep(tp * 1.1, tp * 0.6, alt));   // a quarter of the air above you still hides the stars by day
     // night: starlight and the glow of the sky keep the ground readable (blue, faint)
     const nightK = 1 - sstep(-0.12, 0.08, sunUp);
@@ -563,7 +568,7 @@ function build3D(M, canvas, gl, ui, hud) {
   }
   const cxShowing = () => !!show;
   // the sound of the world: wind with the speed in the air, the roar of an entry, rain, the biome's own bed, thunder
-  const AMB = { k: 0, biome: '', spd: 0, dens: 0, agl: 1e4, heat: 0, rain: 0, snow: 0, dust: 0, ash: 0, storm: 0, water: 0, night: 0, landed: false, paused: false };
+  const AMB = { k: 0, biome: '', spd: 0, dens: 0, agl: 1e4, heat: 0, rain: 0, snow: 0, dust: 0, ash: 0, storm: 0, water: 0, night: 0, landed: false, paused: false, under: false };
   let ambOn = false, ambBolts = 0, ambPaused = false;
   function ambience(S, U, p, alt, tp) {
     if (!sfx.ambSet) return;
@@ -575,16 +580,20 @@ function build3D(M, canvas, gl, ui, hud) {
     AMB.storm = S.weather.storm || S.type === 'gas' ? Math.max(0.4, wk) * low : 0;
     AMB.water = U && U.w === wIdx && U.water ? 1 : S.sea > 0 && S.liquid !== 3 && S.liquid !== 2 ? 0.25 * low : 0;
     AMB.night = 1 - Math.min(1, Math.max(0, ((space.sys.sunDir.x * (cam.position.x - _wc[0]) + space.sys.sunDir.y * (cam.position.y - _wc[1]) + space.sys.sunDir.z * (cam.position.z - _wc[2])) / Math.max(1, alt + S.R) + 0.1) / 0.25));
-    AMB.landed = !!(U && U.st === SURF.LANDED); AMB.paused = ambPaused;
+    AMB.landed = !!(U && U.st === SURF.LANDED); AMB.paused = ambPaused; AMB.under = WORLD.under;
     sfx.ambSet(AMB);
     if (WORLD.bolt.events !== ambBolts) { ambBolts = WORLD.bolt.events; const d = WORLD.lastStrike || 2000; if (sfx.thunder) sfx.thunder(d); if (d < 700 && sfx.lightningCrackle) sfx.lightningCrackle(); }
   }
   function ambienceOff() { if (ambOn && sfx.ambStop) sfx.ambStop(); ambOn = false; }
   // keep a point (the camera) a margin above the ground of the world we are in
+  // (a ship under the sea keeps the camera under it too, over the seabed; above the water it stays above the surface)
+  let camSub = false, noteSubT = -99;
   function groundClamp(v, m) {
     if (!F || !F.surf || F.surf.w < 0 || F.surf.w !== wIdx) return;
-    const a = groundAt(F, v.x, v.y, v.z);
-    if (a < m) { const W = F.worlds[F.surf.w]; _v.set(v.x - W.c.x, v.y - W.c.y, v.z - W.c.z).normalize(); v.addScaledVector(_v, m - a); }
+    const U = F.surf; camSub = U.subOk && (camSub ? U.sub > 0.25 : U.sub > 1.1);
+    const a = groundAt(F, v.x, v.y, v.z, camSub), W = F.worlds[U.w];
+    if (a < m) { _v.set(v.x - W.c.x, v.y - W.c.y, v.z - W.c.z).normalize(); v.addScaledVector(_v, m - a); }
+    if (camSub) { _v.set(v.x - W.c.x, v.y - W.c.y, v.z - W.c.z); const r = _v.length(), lim = W.R - 0.9; if (r > lim) v.addScaledVector(_v.divideScalar(r), lim - r); }
   }
 
   // the plasma sheath of an entry, the dust and spray of low flight, the landing gear
@@ -638,8 +647,18 @@ function build3D(M, canvas, gl, ui, hud) {
       trauma = Math.min(0.55, trauma + h * dt * 2.2);
     } else if (lastHeat > 0.02) { const U0 = pv.mat.userData.U; U0.uFlashCol.value.setRGB(1, 1, 1); }
     lastHeat = h;
+    // under the sea: bubbles stream from the engines and rise
+    if (U.sub > 0.5 && p.alive) {
+      dustT -= dt;
+      if (dustT <= 0) {
+        dustT = 0.03; const up = U.up, k = Math.min(1, 0.3 + p.thr);
+        for (let i = 0; i < 3; i++) { _v.set((Math.random() - 0.5) * 4, (Math.random() - 0.5) * 2, 3 + Math.random() * 2).applyQuaternion(pv.g.quaternion);
+          fx.smoke.add(pv.g.position.x + _v.x, pv.g.position.y + _v.y, pv.g.position.z + _v.z, up.x * (2 + Math.random() * 3) + (Math.random() - 0.5) * 2, up.y * (2 + Math.random() * 3) + (Math.random() - 0.5) * 2, up.z * (2 + Math.random() * 3) + (Math.random() - 0.5) * 2,
+            0.25 + Math.random() * 0.3, 0.6 * k, 1.6 * k, 0.75, 0.9, 1.0, 0.55, 0.6, 0.8, 0.95, 0, 0, 0, 1.0); }
+      }
+    } else
     // low flight: dust, snow, ash or spray kicked up under the ship
-    if (U.w >= 0 && U.agl < 32 && p.alive && U.st !== SURF.LANDED) {
+    if (U.w >= 0 && U.agl < 32 && U.agl > -0.5 && p.alive && U.st !== SURF.LANDED) {
       dustT -= dt;
       const k = (1 - U.agl / 32) * Math.min(1, (p.spd + (U.st === SURF.LANDING || U.st === SURF.TAKEOFF ? 60 : 0)) / 80);
       if (dustT <= 0 && k > 0.05) {
@@ -671,6 +690,15 @@ function build3D(M, canvas, gl, ui, hud) {
     if (e.k) hud.note(e.k, e.a === SURF.SPACE || e.a === SURF.FLIGHT ? 'good' : 'info');
   }
   function groundEvent(e) {
+    if (e.k === 'splash_in' || e.k === 'splash_out') {   // through the sea surface: a crown of spray, a hiss and a thump
+      const U = F.surf, k = Math.min(1, e.a / 20);
+      for (let i = 0; i < 28; i++) { const a = i / 28 * 6.283, sp = 4 + Math.random() * 10 * (0.4 + k); _v.set(Math.cos(a), 0, Math.sin(a)); _v2.set(U.up.x, U.up.y, U.up.z); _v.addScaledVector(_v2, -_v.dot(_v2)).normalize();
+        fx.smoke.add(e.x + _v.x * 3, e.y + _v.y * 3, e.z + _v.z * 3, _v.x * sp + U.up.x * (5 + Math.random() * 10 * k), _v.y * sp + U.up.y * (5 + Math.random() * 10 * k), _v.z * sp + U.up.z * (5 + Math.random() * 10 * k), 0.9 + Math.random() * 0.6, 0.8, 2.5 + k * 3.5, 0.9, 0.95, 1.0, 0.6, 0.85, 0.9, 1.0, 0, 2, 0, 1.4); }
+      if (sfx.splash) sfx.splash(0.4 + 0.6 * k, e.k === 'splash_in');
+      if (e.k === 'splash_in' && time - noteSubT > 25) { noteSubT = time; hud.note('cz_hud_underwater', 'info'); }
+      if (camDist(e.x, e.y, e.z) < 60) shakeAt(e.x, e.y, e.z, 0.15 + k * 0.2);
+      return;
+    }
     const c = groundDustCol();
     if (e.b) {   // touchdown: a ring of dust
       for (let i = 0; i < 26; i++) { const a = i / 26 * 6.283, U = F.surf; _v.set(Math.cos(a), 0.15, Math.sin(a)); _v2.set(U.up.x, U.up.y, U.up.z); _v.addScaledVector(_v2, -_v.dot(_v2)).normalize().multiplyScalar(8 + Math.random() * 6);
@@ -1082,13 +1110,14 @@ function build3D(M, canvas, gl, ui, hud) {
       grade.uniforms.uDmg.value = p && ph === 'combat' ? Math.max(0, 0.35 - hullF) * 2.2 + (p.alive ? 0 : 0.3) : 0;
       grade.uniforms.uSat.value = p && ph === 'combat' ? 0.75 + 0.25 * Math.min(1, hullF * 2.5) : 1;
       grade.uniforms.uHeat.value = F && ph === 'combat' && F.surf ? F.surf.heat * 0.55 : 0;
-      if (grade.uniforms.uWater) { const Sw = wIdx >= 0 ? WORLD.S : null; grade.uniforms.uWater.value = Sw && Sw.sea > 0 && (Sw.liquid === 1 || Sw.liquid === 4) && amb.alt < -0.3 ? 1 : 0; }   // the camera under the sea surface
+      if (grade.uniforms.uWater) grade.uniforms.uWater.value = 0;   // (under the sea the materials carry the water themselves)
       if (!(F && (F.dock || F.outcome === 3))) fadeK = Math.max(0, fadeK - dt * 1.4);
       grade.uniforms.uFade.value = mapMode ? 0 : fadeK;
       if (flashK <= 0.01) grade.uniforms.uFlashCol.value.setRGB(1, 1, 1);
     }
     // sun shafts in the air: the sun's place on screen; the rays strongest with the sun low and through broken cloud
     if (post) {
+      post.fx.shimmer = wIdx >= 0 ? wShim : 0;
       const ps = post.sun; ps.on = false;
       if (wIdx >= 0 && wAirK > 0.2 && space.sys.sunDir) {
         const sdv = space.sys.sunDir;

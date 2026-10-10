@@ -9,7 +9,9 @@
 //                    LANDED -> TAKEOFF -> FLIGHT -> ASCENT -> SPACE; flying into the air fast by hand is an ENTRY too;
 //   · sites        — scanner pings, discovery by flying low or landing near, relics to recover, salvage; sentinels
 //                    (Echo drones) rise when a relic is taken, raiders come for a wreck;
-//   · the AI keeps off the ground; bolts strike it.
+//   · the AI keeps off the ground; bolts strike it;
+//   · the seas of water worlds can be dived into: the player's ship goes under the surface (the water takes most of its
+//     speed, the guns are safe), down to the seabed it can hit; the AI, the bolts and the landing gear keep to the surface.
 // The web save remembers what was found (constellations.js + constellations-web.js); nothing here touches the run.
 import { surfaceFor, surfaceElevation, elevation, landable } from './planet.js';
 import { planetAt, planetQuat, moonAt, spinRate } from './world.js';
@@ -22,6 +24,9 @@ const V = { x: 0, y: 0, z: 0 }, V2 = { x: 0, y: 0, z: 0 }, V3 = { x: 0, y: 0, z:
 const A3 = [0, 0, 0], A4 = [0, 0, 0, 1];
 export const REST = 2.6;          // a landed courier's centre above the ground (gear down)
 const AIR_V = 330;                // what the air lets you keep (m/s) low down
+const WATER_V = 60;               // ... and the water, under the surface
+// a world whose sea you can dive into (water: not lava, ice or the crystal lakes' glass)
+export const diveOk = (S) => !!S && S.sea > 0 && S.liquid === 1;
 
 // ---- setup ------------------------------------------------------------------------------------------------------
 export function initSurface(F, opts) {
@@ -32,7 +37,7 @@ export function initSurface(F, opts) {
     return { i, pl, S: null, c: { x: c[0], y: c[1], z: c[2] }, q: { x: q[0], y: q[1], z: q[2], w: q[3] }, R: pl.radius, gas: pl.type === 'gas', land: landable(pl.type) };
   });
   F.surf = { w: -1, S: null, st: SURF.SPACE, t: 0, auto: false, alt: 1e9, agl: 1e9, vs: 0, gs: 0, ground: 0, up: { x: 0, y: 1, z: 0 }, heat: 0, dens: 0, gear: 0, assist: true,
-    pull: 0, press: 0, water: false, sites: [], nav: -1, scanI: -1, scanT: 0, ping: 0, pingT: 0, pingR: 0, lootT: 0, ticks: 0, found: 0, dive: null, why: '',
+    pull: 0, press: 0, water: false, sub: 0, bed: 0, hard: 1e9, subOk: false, wasSub: false, sites: [], nav: -1, scanI: -1, scanT: 0, ping: 0, pingT: 0, pingR: 0, lootT: 0, ticks: 0, found: 0, dive: null, why: '',
     disc: typeof opts.discovered === 'function' ? opts.discovered : () => 0, lootM: typeof opts.looted === 'function' ? opts.looted : () => 0, slope: 0, land: null, gT: 0, entryV: 0, lvl: 0 };
   // planet and moon destinations follow their worlds (copies: the blueprint stays as it was generated)
   for (const P of F.pois || []) if (P.kind === 'planet' || P.kind === 'moon') P.pos = P.pos.slice();
@@ -98,10 +103,12 @@ function sitesPos(F, W) {
 // the player's height, ground, climb, the air around it
 const LOC = { x: 0, y: 0, z: 0 };
 function localOf(W, x, y, z, out) { qinv(W.q, x - W.c.x, y - W.c.y, z - W.c.z, out); return out; }
-export function groundAt(F, x, y, z) {   // -> agl at a world point in the active world (and fills LOC with the local position)
+// -> agl at a world point in the active world (and fills LOC with the local position); hard: over what can be hit (the
+// seabed under a sea you can dive into, else the surface)
+export function groundAt(F, x, y, z, hard = false) {
   const W = F.worlds[F.surf.w], S = F.surf.S;
   localOf(W, x, y, z, LOC); const r = Math.hypot(LOC.x, LOC.y, LOC.z) || 1;
-  const g = S.A ? surfaceElevation(S, LOC.x / r, LOC.y / r, LOC.z / r) : (W.gas ? 120 : 0);
+  const g = S.A ? (hard && F.surf.subOk ? elevation(S, LOC.x / r, LOC.y / r, LOC.z / r) : surfaceElevation(S, LOC.x / r, LOC.y / r, LOC.z / r)) : (W.gas ? 120 : 0);
   return r - S.R - g;
 }
 function metrics(F) {
@@ -114,17 +121,22 @@ function metrics(F) {
   U.water = S.sea > 0 && e < 0 && S.liquid !== 2;
   U.ground = W.gas ? 120 : (S.sea > 0 ? Math.max(e, 0) : e);
   U.alt = r - S.R; U.agl = U.alt - U.ground;
+  // under the surface of a sea you can dive into: the depth, and the clearance over the seabed (what can be hit)
+  U.subOk = diveOk(S); U.bed = e;
+  U.sub = U.subOk && U.water && U.alt < 0 ? -U.alt : 0;
+  U.hard = U.subOk && U.water ? U.alt - e : U.agl;
   U.vs = p.vel.x * U.up.x + p.vel.y * U.up.y + p.vel.z * U.up.z;
   U.gs = Math.sqrt(Math.max(0, p.vel.x * p.vel.x + p.vel.y * p.vel.y + p.vel.z * p.vel.z - U.vs * U.vs));
   U.dens = Math.exp(-Math.max(0, U.alt) / S.atmo.HR);
   U.inAir = U.alt < top(S);
   // pull-up warning: seconds to impact (straight-line along the velocity, checked at two look-ahead points)
   let tti = U.vs < -1 ? U.agl / -U.vs : 99;
-  if ((F.step & 3) === 0 && U.st === SURF.FLIGHT && U.agl < 400) {
-    for (const k of [1.0, 2.0, 3.2]) { const a = groundAt(F, p.pos.x + p.vel.x * k, p.pos.y + p.vel.y * k, p.pos.z + p.vel.z * k); if (a < 18) tti = Math.min(tti, k * Math.max(0.2, (a + 30) / 48)); }
+  if (U.subOk) tti = U.vs < -1 ? U.hard / -U.vs : 99;   // (the water is not a wall: the seabed is)
+  if ((F.step & 3) === 0 && U.st === SURF.FLIGHT && U.hard < 400) {
+    for (const k of [1.0, 2.0, 3.2]) { const a = groundAt(F, p.pos.x + p.vel.x * k, p.pos.y + p.vel.y * k, p.pos.z + p.vel.z * k, true); if (a < 18) tti = Math.min(tti, k * Math.max(0.2, (a + 30) / 48)); }
     U.tti = tti;
   } else U.tti = tti;
-  U.pull = U.st === SURF.FLIGHT && Math.min(tti, U.tti || 99) < 3 && U.agl < 300 ? 1 : 0;
+  U.pull = U.st === SURF.FLIGHT && Math.min(tti, U.tti || 99) < 3 && U.hard < 300 && (U.sub <= 0 || p.spd > 18) ? 1 : 0;
   U.press = W.gas ? sstep(500, 140, U.alt) : 0;
 }
 function setState(F, st, k) {
@@ -328,6 +340,7 @@ export function surfaceControl(F, p) {
 // after the pilot's input (FLIGHT): terrain-following assist, the level-off after an entry, gear up
 export function surfaceAssist(F, p) {
   const U = F.surf; if (!U || U.w < 0 || U.st !== SURF.FLIGHT) return;
+  if (U.sub > 0.5) { p.fire = false; p.boosting = false; }   // under water: the guns are safe, the boost would only boil it
   if (U.lvl > 0) {   // the entry hands over level: hold the horizon for a moment
     U.lvl -= DT; fwdOf(p, V); const up = U.up, c = V.x * up.x + V.y * up.y + V.z * up.z;
     if (c < -0.05 && !F.input.touched) p.cp = Math.max(p.cp, clamp(-c * 3, 0, 1));
@@ -335,11 +348,11 @@ export function surfaceAssist(F, p) {
   U.gear = Math.max(0, U.gear - DT * 0.8);
   if (!U.assist || p.hover) return;
   // auto-GCAS: when the ground ahead (or below a sinking ship) would come within ~25 m, pull up, wings level
-  const lim = 26 + p.spd * 0.08;
+  const lim = (U.sub > 0 ? 8 : 26) + p.spd * 0.08, agl = U.hard;
   let need = 0;
-  if (U.agl < lim * 3 || (U.tti || 99) < 4) {
+  if (agl < lim * 3 || (U.tti || 99) < 4) {
     const a1 = U.tti != null && U.tti < 3.5 ? 1 - U.tti / 3.5 : 0;
-    need = Math.max(a1, sstep(lim, lim * 0.35, U.agl) * (U.vs < 4 ? 1 : 0.3));
+    need = Math.max(a1, sstep(lim, lim * 0.35, agl) * (U.vs < 4 ? 1 : 0.3));
   }
   if (need > 0.02) {
     fwdOf(p, V); const up = U.up, c = V.x * up.x + V.y * up.y + V.z * up.z;
@@ -365,11 +378,22 @@ export function surfacePost(F) {
       if (p.spd > cap) { const k = cap / p.spd; p.spd = cap; p.vel.x *= k; p.vel.y *= k; p.vel.z *= k; }
       if (p.spd < AIR_V + 40) setState(F, SURF.FLIGHT, 'cz_hud_helm');
     }
+    if (U.subOk) {
+      const inW = U.wasSub ? U.sub > 0.1 : U.sub > 0.6;
+      if (inW !== U.wasSub) {   // through the surface: a splash (no harm), the water closes over the hull or lets it go
+        U.wasSub = inW;
+        const e = _int.ev(F, EV.GROUND, p.pos.x - U.up.x * Math.min(U.alt, 0), p.pos.y - U.up.y * Math.min(U.alt, 0), p.pos.z - U.up.z * Math.min(U.alt, 0)); e.a = Math.min(30, Math.abs(U.vs) * 0.6 + p.spd * 0.08); e.c = 1; e.k = inW ? 'splash_in' : 'splash_out';
+      }
+      if (U.sub > 0) {
+        const cap = WATER_V + Math.max(0, p.spd - WATER_V) * Math.exp(-(3 + 12 * sstep(0, 6, U.sub)) * DT);
+        if (p.spd > cap) { const k = cap / p.spd; p.spd = cap; p.vel.x *= k; p.vel.y *= k; p.vel.z *= k; }
+      }
+    }
     if (U.st === SURF.FLIGHT) {
       // the cruise drive needs thin air
       if (F.cruise && U.alt < tp * 0.5) _int.cruiseSet(F, false, 'cz_cr_atmo');
       // ground effect: a cushion and a little extra pace in the last 15 m
-      if (U.agl < 15 && !U.water) { const k = (1 - U.agl / 15) * 0.15; p.vel.x += U.up.x * k; p.vel.y += U.up.y * k; p.vel.z += U.up.z * k; }
+      if (U.agl < 15 && U.agl > 0 && !U.water) { const k = (1 - U.agl / 15) * 0.15; p.vel.x += U.up.x * k; p.vel.y += U.up.y * k; p.vel.z += U.up.z * k; }
     }
     if (U.st !== SURF.LANDED && U.st !== SURF.LANDING && U.st !== SURF.TAKEOFF) { metrics(F); groundCollide(F, p, true); }
     if (W.gas && U.alt < 380) {   // the pressure floor: refuse gracefully, push back up
@@ -400,20 +424,20 @@ export function surfacePost(F) {
 // keep a ship above the ground; the player bounces (and gets hurt) like off a rock, the AI is shoved up
 function groundCollide(F, s, isP) {
   const U = F.surf, W = F.worlds[U.w];
-  const agl = isP ? U.agl : groundAt(F, s.pos.x, s.pos.y, s.pos.z);
+  const agl = isP ? U.hard : groundAt(F, s.pos.x, s.pos.y, s.pos.z);
   const clr = isP ? REST * 0.9 : s.cls.rad * 0.6;
   if (agl >= clr) return;
   const rx = s.pos.x - W.c.x, ry = s.pos.y - W.c.y, rz = s.pos.z - W.c.z, r = Math.hypot(rx, ry, rz) || 1, ux = rx / r, uy = ry / r, uz = rz / r;
   const push = clr - agl;
   s.pos.x += ux * push; s.pos.y += uy * push; s.pos.z += uz * push;
-  if (isP) { U.agl = clr; U.alt += push; }
+  if (isP) { U.alt += push; U.agl += push; U.hard = clr; }
   const vn = s.vel.x * ux + s.vel.y * uy + s.vel.z * uz;
   if (vn < 0) {
     s.vel.x -= 1.5 * vn * ux; s.vel.y -= 1.5 * vn * uy; s.vel.z -= 1.5 * vn * uz; s.spd *= isP ? 0.75 : 0.6;
     const hard = -vn;
     const dmg = Math.max(0, hard - 14) * (isP ? 0.9 : 0.6);
     if (dmg > 0 && !(isP && F.god)) _int.damage(F, s, dmg, null, s.pos.x - ux * clr, s.pos.y - uy * clr, s.pos.z - uz * clr, 2);
-    const e = _int.ev(F, EV.GROUND, s.pos.x - ux * clr, s.pos.y - uy * clr, s.pos.z - uz * clr); e.a = hard; e.b = 0; e.s = s; e.c = U.water ? 1 : 0;
+    const e = _int.ev(F, EV.GROUND, s.pos.x - ux * clr, s.pos.y - uy * clr, s.pos.z - uz * clr); e.a = hard; e.b = 0; e.s = s; e.c = U.water && !(isP && U.sub > 0) ? 1 : 0;
     if (isP) { const e2 = _int.ev(F, EV.BUMP, e.x, e.y, e.z); e2.a = hard * 4; e2.s = s; }
   }
 }
@@ -541,7 +565,9 @@ export function autoFly(F, p) {
 
 // review / test hook: put the player over world wi at height alt, where the sun stands sunEl degrees up (az: degrees
 // round the sub-solar point), flying level at speed v — the shots and the e2e use it to look at a world in daylight
-export function placeOver(F, wi, alt = 300, sunEl = 40, az = 0, v = 140) {
+// hdg turns the heading (degrees, positive to the left) from straight away from the sun: 0 keeps the sun behind the
+// shoulder (flat front light), ~90-110 rakes it across the view so crests, dunes and ridges show a lit and a shaded side
+export function placeOver(F, wi, alt = 300, sunEl = 40, az = 0, v = 140, hdg = 0) {
   const W = F.worlds[wi]; if (!W) return false;
   if (!W.S) W.S = surfaceFor(F.bp, wi);
   const S = W.S, sd = F.bp.star.dir, th = (90 - sunEl) * Math.PI / 180, a = az * Math.PI / 180;
@@ -554,6 +580,10 @@ export function placeOver(F, wi, alt = 300, sunEl = 40, az = 0, v = 140) {
   p.pos.x = W.c.x + dx * r; p.pos.y = W.c.y + dy * r; p.pos.z = W.c.z + dz * r; p.ppos.x = p.pos.x; p.ppos.y = p.pos.y; p.ppos.z = p.pos.z;
   // fly away from the sun along the ground (it lights the view from behind the shoulder)
   let fx = px, fy = py, fz = pz; const fd = fx * dx + fy * dy + fz * dz; fx -= dx * fd; fy -= dy * fd; fz -= dz * fd;
+  if (hdg) {   // turn the heading about the local up (Rodrigues; f is already tangent)
+    const h = hdg * Math.PI / 180, c = Math.cos(h), s = Math.sin(h), cx = dy * fz - dz * fy, cy = dz * fx - dx * fz, cz = dx * fy - dy * fx;
+    fx = fx * c + cx * s; fy = fy * c + cy * s; fz = fz * c + cz * s;
+  }
   qlook(p.q, fx, fy, fz, dx, dy, dz); p.pq.x = p.q.x; p.pq.y = p.q.y; p.pq.z = p.q.z; p.pq.w = p.q.w;
   const fl = Math.hypot(fx, fy, fz) || 1; p.vel.x = fx / fl * v; p.vel.y = fy / fl * v; p.vel.z = fz / fl * v; p.spd = v; p.w.x = p.w.y = p.w.z = 0;
   F.undock = null; F.arriveT = 0; F.cruise = 0; F.input.thr = Math.min(1, v / 165);

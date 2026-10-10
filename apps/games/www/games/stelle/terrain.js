@@ -20,21 +20,26 @@
 //     the cloud deck and the puffs you fly through, weather (rain, snow, dust, ash, spores, motes), instanced flora with
 //     distance fade and a far LOD, and the sites (ruins, shrines, wrecks, outposts).
 // Everything sits in one group placed at the planet centre with the planet's orientation each frame.
-import { cubeDir, nodeSize, GRID, maxLevel, MACRO_GLSL, FLORA_KINDS, FLORA_STRIDE } from './planet.js';
+import { cubeDir, nodeSize, GRID, maxLevel, MACRO_GLSL, FLORA_KINDS, FLORA_STRIDE, DUNE_CREST, elevation } from './planet.js';
 import { ATMO_GLSL, AU, SH, SHADOW_GLSL } from './atmo.js';
-import { VERTS, SIDE, chunkIndex, newChunkBufs } from './chunk.js';
+import { VERTS, SIDE, chunkIndex, newChunkBufs, chunkTransfer } from './chunk.js';
 import { floraGeometry, FLORA_BIG, siteGeometry } from './props.js';
-import { makeMaterials, MAT } from './matgen.js';
+import { makeMaterials, makeNoise3D, MAT } from './matgen.js';
 import { hullMaterial, shipGeometry } from './kit.js';
 const SITE_SCALE = { gate: 1.6, archive: 1.4, observatory: 1.6 };
 
 // world settings per quality tier: LOD distance factor K, finest vertex spacing, chunk pool, flora density and range,
-// workers, cloud puffs, weather particles, requests in flight; shadow map size and half-extent (m), ground cover range
-// (m) and blades per terrain quad, the material layers' size, a second (upper) cloud layer
+// workers, cloud puffs, weather particles, requests in flight; shadow map size and half-extent (m), the wide cascade
+// (size, half-extent m, every n-th frame), ground cover range (m) and blades per terrain quad, its far ring (range,
+// blades), the material layers' size, a second (upper) cloud layer; the volumetric clouds (march steps, light steps;
+// 0 = the cloud shell and its puffs instead)
 const WT = {
-  low: { K: 2.1, spacing: 4.2, pool: 380, flora: 0.32, floraR: 380, workers: 1, puffs: 48, weather: 700, inflight: 3, floraLod: 150, smallK: 0.6, imp: 0, impCap: 0, shadow: 0, shBox: 0, grass: 0, blades: 0, mat: 256, cloud2: false, near: false },
-  medium: { K: 2.5, spacing: 2.6, pool: 640, flora: 0.62, floraR: 650, workers: 2, puffs: 90, weather: 1300, inflight: 4, floraLod: 220, smallK: 0.6, imp: 3400, impCap: 16000, shadow: 1024, shBox: 150, grass: 70, blades: 6, mat: 512, cloud2: true, near: true },
-  high: { K: 2.9, spacing: 1.7, pool: 860, flora: 1.0, floraR: 950, workers: 2, puffs: 140, weather: 2200, inflight: 5, floraLod: 300, smallK: 0.7, imp: 5000, impCap: 30000, shadow: 2048, shBox: 230, grass: 115, blades: 9, mat: 512, cloud2: true, near: true },
+  low: { K: 2.1, spacing: 4.2, pool: 380, flora: 0.32, floraR: 380, workers: 1, puffs: 48, weather: 700, inflight: 3, floraLod: 150, smallK: 0.6, imp: 0, impCap: 0, shadow: 0, shBox: 0, sh2: 0, sh2Box: 0, sh2N: 2,
+    grass: 0, blades: 0, grass2: 0, blades2: 0, mat: 256, cloud2: false, near: false, vol: 0, volL: 0, devils: 2 },
+  medium: { K: 2.5, spacing: 2.6, pool: 640, flora: 0.62, floraR: 650, workers: 2, puffs: 90, weather: 1300, inflight: 4, floraLod: 220, smallK: 0.6, imp: 3400, impCap: 16000, shadow: 1024, shBox: 150, sh2: 1024, sh2Box: 1100, sh2N: 2,
+    grass: 70, blades: 6, grass2: 150, blades2: 3, mat: 512, cloud2: true, near: true, vol: 14, volL: 2, devils: 4, sh2Flora: false },
+  high: { K: 2.9, spacing: 1.7, pool: 860, flora: 1.0, floraR: 950, workers: 2, puffs: 140, weather: 2200, inflight: 5, floraLod: 300, smallK: 0.7, imp: 5000, impCap: 30000, shadow: 2048, shBox: 230, sh2: 2048, sh2Box: 1700, sh2N: 2,
+    grass: 115, blades: 9, grass2: 240, blades2: 4, mat: 512, cloud2: true, near: true, vol: 22, volL: 3, devils: 6, sh2Flora: true },
 };
 const lin3 = (c) => [Math.pow(c[0], 2.2), Math.pow(c[1], 2.2), Math.pow(c[2], 2.2)];
 
@@ -158,41 +163,48 @@ vec3 czWaves(vec3 p, out vec2 disp, out vec3 T1, out vec3 T2) {
 }
 `;
 const TERRAIN_VERT = /* glsl */`
-attribute vec4 aMor; attribute vec4 aSrf; attribute vec4 aEx;
+attribute vec4 aMor; attribute vec4 aSrf; attribute vec4 aEx; attribute vec2 aDun;
 uniform vec2 uLod; uniform mat3 uPInv;
-varying vec3 vW; varying vec3 vN; varying vec3 vL; varying vec4 vSrf; varying float vRock; varying vec3 vIns; varying vec3 vTr; varying vec3 vSunT; varying float vDist; varying vec4 vEx;
+varying vec3 vW; varying vec3 vN; varying vec3 vL; varying vec4 vSrf; varying float vLev; varying vec3 vIns; varying vec3 vTr; varying vec3 vSunT; varying float vDist; varying vec4 vEx; varying vec2 vDun;
 ${ATMO_GLSL}
-${WAVES_GLSL}
 void main() {
   float lev = floor(aMor.w), dl = uLod.x * uLod.y * exp2(-lev);
-  float d0 = length((modelViewMatrix * vec4(position, 1.0)).xyz);
-  vec3 pos = position + aMor.xyz * smoothstep(1.35 * dl, 1.85 * dl, d0);
-  // the sea near the camera rises and falls (object space = the planet's own frame, shifted to the chunk)
-  if (uWave.x > 0.0 && aSrf.x < 0.0 && d0 < 1100.0) {
-    vec3 pl = uPInv * ((modelMatrix * vec4(pos, 1.0)).xyz - uAtC), T1, T2; vec2 disp;
-    vec3 wv = czWaves(pl, disp, T1, T2);
-    float f = 1.0 - smoothstep(500.0, 1100.0, d0);
-    pos += (normalize(pl) * wv.x + T1 * disp.x + T2 * disp.y) * f * smoothstep(0.0, 1.5, -aSrf.x);
-  }
+  float d0 = length((modelViewMatrix * vec4(position, 1.0)).xyz), mk = smoothstep(1.35 * dl, 1.85 * dl, d0);
+  vec3 pos = position + aMor.xyz * mk;
   vec4 mv = modelViewMatrix * vec4(pos, 1.0), w = modelMatrix * vec4(pos, 1.0);
   vW = w.xyz; vN = normalize(mat3(modelMatrix) * normal); vL = uPInv * (w.xyz - uAtC);
-  vSrf = aSrf; vRock = fract(aMor.w); vDist = length(mv.xyz); vEx = aEx;
+  vSrf = aSrf; vLev = lev + mk; vDist = length(mv.xyz); vEx = aEx; vDun = aDun;
   vIns = czAtmo(cameraPosition - uAtC, (w.xyz - cameraPosition) / max(vDist, 1e-3), vDist, 8, vTr);
   vSunT = czSunT(w.xyz - uAtC);
   gl_Position = projectionMatrix * mv;
 }`;
+// light through water (shared by the ground, the water pass and the flora): uUnder = (camera under the surface 0/1,
+// its depth m, the depth past which the sea is opaque, 1 on a world whose seabed you see); uWAbs the water's
+// absorption per metre (red goes first), uWScat the colour it scatters into a long path (lit by the sun and the sky)
+const WATERPATH_GLSL = /* glsl */`
+uniform vec4 uUnder; uniform vec3 uWAbs, uWScat;
+// a point under the sea surface seen from the camera: the water between them — in through the surface from above (its
+// depth below the surface along the refracted ray) or, from under it, the whole way
+vec3 czUnderwater(vec3 col, float depth, float dist, vec3 V, vec3 up) {
+  float path;
+  if (uUnder.x > 0.5) path = dist;
+  else { float c = max(dot(V, up), 0.0), ct = sqrt(max(0.05, 1.0 - (1.0 - c * c) * 0.5653)); path = depth / ct; }
+  vec3 T = exp(-uWAbs * path);
+  return col * T + uWScat * (1.0 - T);
+}
+`;
 const TERRAIN_FRAG = /* glsl */`
-precision highp sampler2DArray;
+precision highp sampler2DArray; precision highp sampler3D;
 ${MACRO_UNIFORMS}
 uniform vec3 uGlow, uWater, uDeep, uHeadDir; uniform vec4 uShadow, uHead; uniform float uFade, uSnow, uA, uNear;
 uniform sampler2DArray uMat; uniform vec4 uMS[4]; uniform vec3 uMA[4]; uniform vec3 uMB[4]; uniform vec4 uStrata;
-varying vec3 vW; varying vec3 vN; varying vec3 vL; varying vec4 vSrf; varying float vRock; varying vec3 vIns; varying vec3 vTr; varying vec3 vSunT; varying float vDist; varying vec4 vEx;
+uniform sampler3D uNoise3; uniform vec4 uDune; uniform vec3 uMacA, uMacB, uMacC, uClumpC; uniform vec4 uLook; uniform vec2 uLod;
+varying vec3 vW; varying vec3 vN; varying vec3 vL; varying vec4 vSrf; varying float vLev; varying vec3 vIns; varying vec3 vTr; varying vec3 vSunT; varying float vDist; varying vec4 vEx; varying vec2 vDun;
 ${ATMO_GLSL}
 ${MACRO_GLSL}
 ${COMMON}
 ${SHADOW_GLSL}
-${WAVES_GLSL}
-${SKYVIEW_GLSL}
+${WATERPATH_GLSL}
 // ---- biplanar projection of the ground layers (iq): the two dominant planes of the normal, at two scales -------------
 // (axis vectors instead of indices: no dynamic indexing — the D3D shader compiler behind ANGLE chokes on it)
 vec3 gA1, gA2, gB1, gB2; vec2 gW;
@@ -220,6 +232,16 @@ vec2 czSlot(vec4 ms, vec3 P, float kN, out vec3 d) {
   if (kN > 0.01) { vec2 n = czTex(ms.x, P / ms.y, d, kN * ms.z); r = mix(r, vec2((r.x + n.x) * 0.5, n.y), kN); }
   return r;
 }
+// the dune profile (planet.js duneProf: a windward rise that still climbs at the brink, then the slip face) and its slope
+const float DC = ${DUNE_CREST.toFixed(4)};
+float czDune(float t) { if (t < DC) { float u = t / DC; return 0.5 * u + 0.5 * u * u * (3.0 - 2.0 * u); } return pow(1.0 - (t - DC) / (1.0 - DC), 1.35); }
+float czDuneD(float t) { if (t < DC) { float u = t / DC; return (0.5 + 3.0 * u * (1.0 - u)) / DC; } return -1.35 * pow(max(1.0 - (t - DC) / (1.0 - DC), 1e-4), 0.35) / (1.0 - DC); }
+// light on the sea floor: two drifting nets of ridges where they cross (the surface's waves focusing the sun)
+float czCaustics(vec3 P, float t) {
+  vec2 q = vec2(dot(P, gA1), dot(P, gA2));
+  float a = texture2D(uDetail, q / 6.3 + vec2(t * 0.013, t * 0.008)).g, b = texture2D(uDetail, q.yx / 4.9 + vec2(-t * 0.011, t * 0.015) + 0.37).g;
+  return pow(clamp(a * b * 1.3, 0.0, 1.0), 5.0) * 2.4;
+}
 void main() {
   if (uFade < 0.999 && czH12(gl_FragCoord.xy) > uFade) discard;
   vec3 Ng = normalize(vN), N = Ng, up = normalize(vW - uAtC), V = normalize(cameraPosition - vW), L = uSunDir;
@@ -228,26 +250,22 @@ void main() {
   float ao = vEx.x, wetM = vEx.y, m3 = vEx.z, cv = vEx.w;
   vec3 macroA = czAlbedo(vec4(h, mo, 0.0, 0.0), lat, wet);
   float nearK = 1.0 - smoothstep(2500.0, 9000.0, vDist);
-  vec3 alb = macroA, emit = vec3(0.0); float spec = 0.0, rough = 0.8;
+  vec3 alb = macroA, emit = vec3(0.0); float spec = 0.0;
   vec3 Ll = uPInv * L;
   float cs = czCloudShadow(vL, e, Ll);
+  bool sub = uUnder.w > 0.5 && e < 0.0;   // the seabed of a water world (the water pass draws the surface over it)
   vec3 col;
-  if (uSea > 0.0 && e < 0.0) {
-    // ---- the liquid: water, a frozen sea, lava, a crystal lake
-    float depth = -e, t = uTime;
-    czBiplanar(upL);   // the layers lie flat on the liquid
-    vec2 disp; vec3 T1, T2; czWaveD = vDist; vec3 wv = czWaves(vL, disp, T1, T2);
-    float wk = (1.0 - smoothstep(400.0, 2500.0, vDist)) * uWave.x;
-    vec3 nL = normalize(upL - (T1 * wv.y + T2 * wv.z) * (1.0 - smoothstep(600.0, 3000.0, vDist)));
+  if (uSea > 0.0 && e < 0.0 && uUnder.w < 0.5) {
+    // ---- the flat seas: a lava sea, a frozen sea
+    float t = uTime;
+    czBiplanar(upL);
+    vec3 T1 = normalize(cross(upL, abs(upL.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0))), T2 = cross(upL, T1);
     vec2 wq = vec2(dot(vL, T1), dot(vL, T2));
-    vec2 g = vec2(texture2D(uDetail, wq / 31.0 + vec2(t * 0.011, t * 0.004)).r + texture2D(uDetail, wq.yx / 23.0 - vec2(t * 0.007, t * 0.012)).a - 1.0,
-                  texture2D(uDetail, wq / 27.0 + vec2(-t * 0.009, t * 0.006) + 0.5).r + texture2D(uDetail, wq.yx / 19.0 + vec2(t * 0.013, -t * 0.005) + 0.25).a - 1.0);
     float sunUp = max(dot(up, L), 0.0);
     float shw = czSunShadow(vW, up, sunUp);
     if (uType > 4.5 && uType < 5.5) {   // lava: plates of dark crust drifting on open channels of glowing rock
-      vec3 dd;
+      vec3 dd, dd2;
       // the crust at two scales: its cracks (the layer's dark edges) glow as thin lines; wide molten pools open and close
-      vec3 dd2;
       vec2 cr = czTex(5.0, vL / 34.0 + vec3(t * 0.02, 0.0, t * 0.013), dd, 1.0), cr2 = czTex(5.0, vL / 113.0 + vec3(0.31, t * 0.006, 0.17), dd2, 0.5);
       float lines = 1.0 - smoothstep(0.02, 0.13, min(cr.y, cr2.y + 0.04));
       float pool = smoothstep(0.64, 0.86, texture2D(uDetail, wq / 520.0 + vec2(t * 0.002, 0.0)).r * 0.75 + texture2D(uDetail, wq / 190.0 - vec2(0.0, t * 0.003)).g * 0.35 + 0.06 * sin(t * 0.21));
@@ -258,51 +276,16 @@ void main() {
       vec3 nl = normalize(upL + dd * 0.6 * crust);
       N = normalize(transpose(uPInv) * nl);
       col = alb * (uSunI * vSunT * max(dot(N, L), 0.0) * 0.3183 * cs * shw + uAmbZ * (0.6 + 0.4 * dot(N, up)) + uAmbH * 0.3 + uNight) + emit;
-    } else if (uType > 2.5 && uType < 3.5) {   // the frozen sea: pale blue ice, pressure ridges, fractures, a gloss
+    } else {   // the frozen sea: pale blue ice, pressure ridges, fractures, a gloss
       vec3 dd;
       vec2 ic = czTex(6.0, vL / 22.0, dd, 1.0);
       vec3 nw = normalize(transpose(uPInv) * normalize(upL + dd * 0.35));
-      alb = mix(vec3(0.5, 0.68, 0.86), vec3(0.88, 0.93, 0.98), smoothstep(0.25, 0.85, ic.y)) * (0.85 + 0.25 * texture2D(uDetail, vL.xz / 300.0).r);
+      alb = mix(vec3(0.5, 0.68, 0.86), vec3(0.88, 0.93, 0.98), smoothstep(0.25, 0.85, ic.y)) * (0.85 + 0.25 * texture2D(uDetail, wq / 300.0).r);
       vec3 R = reflect(-V, nw), sky = mix(uAmbH, uAmbZ, clamp(dot(R, up) * 2.0, 0.0, 1.0)) * 1.4;
       float fr = 0.03 + 0.97 * pow(1.0 - max(dot(nw, V), 0.0), 5.0);
       col = alb * (uSunI * vSunT * max(dot(nw, L), 0.0) * 0.3183 * cs * shw + uAmbZ * 1.1 + uAmbH * 0.3 + uNight);
       col = mix(col, sky, fr * 0.6) + uSunI * vSunT * cs * shw * pow(max(dot(R, L), 0.0), 250.0) * 1.5;
       N = nw;
-    } else {   // water (and the violet glass of the crystal lakes)
-      vec3 nl = normalize(nL + (T1 * g.x + T2 * g.y) * (0.14 * (0.2 + 0.8 * (1.0 - smoothstep(40.0, 900.0, vDist)))));
-      vec3 nw = normalize(transpose(uPInv) * nl);
-      N = nw;
-      // depth colour: the shelf's sand shows through the shallows, turquoise, then the deep
-      float sh = exp(-depth * 0.32), mid = exp(-depth / 16.0);
-      vec3 bed = uMA[3] * (0.55 + 0.3 * texture2D(uDetail, vL.xz / 17.0).r);
-      vec3 wc = mix(uDeep, mix(uWater, bed * mix(vec3(1.0), uWater * 3.0, 0.55), sh * 0.85), mid);
-      vec3 R = reflect(-V, nw); R = normalize(R + up * max(0.0, -dot(R, up)) * 1.05);
-      vec3 sky = czSkyView(R).rgb * 1.15 + uAmbZ * 0.25;
-      if (uCloudK > 0.01) {   // the cloud deck in the water
-        vec3 Rl = uPInv * R; float ru = max(dot(Rl, upL), 0.06);
-        vec2 cuv = czEq(normalize(vL + Rl * (uCloudAlt - e) / ru)); cuv.x += uCloudOff;
-        float cc = smoothstep(0.32, 0.75, texture2D(uCloud, cuv).r * uCloudK);
-        sky = mix(sky, uSunI * vSunT * 0.32 * cs + uAmbZ * 1.6 + uAmbH * 0.4, cc * 0.85);
-      }
-      float fr = 0.02 + 0.98 * pow(1.0 - max(dot(nw, V), 0.0), 5.0);
-      vec3 sunC = uSunI * vSunT * cs * shw;
-      col = wc * (sunC * sunUp * 0.3183 * 0.75 + (uAmbZ + uAmbH * 0.3) * 0.95 + uNight);
-      col = mix(col, sky, fr);
-      float crest = clamp(wv.x / max(uWave.x * 0.55, 0.05), 0.0, 1.0) * (1.0 - smoothstep(80.0, 900.0, vDist));
-      col += uWater * uSunI * vSunT * cs * crest * crest * (0.25 + 0.75 * pow(max(dot(-V, L), 0.0), 3.0)) * 0.22 * (1.0 - fr);
-      float rl = max(dot(R, L), 0.0);
-      // the sun's glitter: a tight core, a broad sheen, and sparkles where the ripples catch it
-      float sp = pow(rl, 900.0) * 9.0 + pow(rl, 90.0) * 0.25 + pow(rl, 18.0) * 0.02;
-      float glit = step(0.93, czH12(floor(vL.xz * 2.3 + vL.y * 0.7) + floor(t * 6.0))) * pow(rl, 30.0) * 3.0 * (1.0 - smoothstep(30.0, 400.0, vDist));
-      col += sunC * (sp + glit);
-      // foam: bands that run up the shore, the swash on the sand, whitecaps on the crests in a blow
-      float fn = texture2D(uDetail, wq / 7.0 + vec2(t * 0.02, 0.0)).a + texture2D(uDetail, wq.yx / 4.0 - vec2(0.0, t * 0.03)).r * 0.6;
-      float bands = smoothstep(0.62, 0.95, 0.5 + 0.5 * sin(depth * 4.5 - t * 1.4 + fn * 3.0));
-      float foam = (1.0 - smoothstep(0.0, 2.4, depth)) * smoothstep(0.55, 1.1, fn + bands * 0.6 + (1.0 - smoothstep(0.0, 0.5, depth)) * 0.6);
-      foam = max(foam, smoothstep(0.65, 1.0, wv.x / max(uWave.x * 0.9, 0.05)) * smoothstep(0.6, 1.0, fn) * uWave.x * 0.8 * (1.0 - smoothstep(200.0, 1200.0, vDist)));
-      col = mix(col, (sunC * sunUp * 0.3183 + uAmbZ * 1.2 + uAmbH * 0.4) * 0.95, clamp(foam, 0.0, 1.0) * 0.9);
-      if (uType > 6.5) col += uGlow * 0.12 * smoothstep(0.8, 0.95, texture2D(uDetail, vL.xz / 9.0).g);
-      alb = wc;
     }
   } else {
     // ---- the ground: ten material layers in four slots per world (stelle/matgen.js), masks from the worker
@@ -312,12 +295,25 @@ void main() {
     float kD = 1.0 - smoothstep(600.0, 4000.0, vDist);
     vec4 mv4 = texture2D(uDetail, vec2(dot(P, gA1), dot(P, gA2)) / 410.0);   // big soft patches (and the strata warp)
     float mv = mv4.r * 0.65 + mv4.a * 0.35;
+    // the macro look from the air, in a 3D noise (no plane, no seam): patches of a warmer / cooler / paler ground over
+    // kilometres, and clumps at tens of metres (shrubs and growth, stone clusters, drifts) with their own relief
+    vec4 nz1 = texture(uNoise3, P / 2300.0), nz2 = texture(uNoise3, P / 640.0 + vec3(0.31, 0.17, 0.53));
+    float macA = smoothstep(0.3, 0.7, nz1.a), macB = smoothstep(0.42, 0.78, nz2.a * 0.7 + nz1.g * 0.3);
+    float clump = 0.0, bump = 0.0;
+    if (uLook.x > 0.0 && vDist < 2200.0) {
+      vec3 cq = P / uLook.y + vec3(0.7, 0.2, 0.4);
+      float c0 = texture(uNoise3, cq).g + (nz2.a - 0.5) * 0.45;
+      clump = smoothstep(0.5, 0.74, c0) * (1.0 - smoothstep(1400.0, 2200.0, vDist));
+      // their relief toward the sun (an emboss: the side facing the light brighter, the far side in shade)
+      vec3 Lt = Ll - upL * dot(Ll, upL);
+      bump = (c0 - (texture(uNoise3, cq + Lt * (2.2 / uLook.y)).g + (nz2.a - 0.5) * 0.45)) * uLook.z * (1.0 - smoothstep(700.0, 1600.0, vDist));
+    }
     float slope = 1.0 - clamp(dot(Ng, up), 0.0, 1.0);
     float cliff = smoothstep(0.3, 0.5, slope + (mv - 0.5) * 0.25);
     // slot weights by world type: 0 flat ground, 1 second ground, 2 cliff rock, 3 the special one
     float w0 = 1.0, w1 = 0.0, w3 = 0.0;
     if (uType < 0.5) {            // rocky: red dust and sand, gravel and scree, banded cliffs, pale canyon sand
-      w3 = clamp(m1 * 1.3 - 0.15, 0.0, 1.0); w1 = clamp(m3 * 1.4 + smoothstep(0.62, 0.82, mv) * 0.6, 0.0, 1.0) * (1.0 - w3);
+      w3 = clamp(m1 * 1.3 - 0.15, 0.0, 1.0); w1 = clamp(m3 * 1.4 + smoothstep(0.62, 0.82, mv) * 0.6 + clump * 0.5, 0.0, 1.0) * (1.0 - w3);
       cliff = max(cliff, smoothstep(0.17, 0.32, slope) * 0.75);
     } else if (uType < 1.5) {     // desert: rippled dune sand, wind-cut gravel flats, layered rock, salt pans
       w3 = m3; w1 = (1.0 - m1) * (1.0 - w3); w0 = m1;
@@ -336,6 +332,10 @@ void main() {
     }
     float w2 = cliff; w0 *= 1.0 - w2; w1 *= 1.0 - w2; w3 *= (uType > 2.5 && uType < 4.5) ? 1.0 : 1.0 - w2;
     if (uType > 2.5 && uType < 4.5) w2 *= 1.0 - w3;
+    if (sub) {   // the seabed: sand in the shallows and between the reefs, rock on the reefs and walls, sea grass meadows
+      float reef = m3, grassB = smoothstep(0.45, 0.7, mv) * smoothstep(-1.5, -5.0, e) * smoothstep(-38.0, -14.0, e) * (1.0 - reef);
+      w2 = max(cliff, reef * 0.85); w0 = grassB * (1.0 - w2); w1 = smoothstep(-25.0, -60.0, e) * (1.0 - w2) * (1.0 - grassB); w3 = max(0.0, 1.0 - w0 - w1 - w2);
+    }
     float ws = w0 + w1 + w2 + w3; w0 /= ws; w1 /= ws; w2 /= ws; w3 /= ws;
     vec3 d0 = vec3(0.0), d1 = vec3(0.0), d2 = vec3(0.0), d3 = vec3(0.0);
     vec2 t0 = vec2(0.5), t1 = vec2(0.5), t2 = vec2(0.5), t3 = vec2(0.5);
@@ -350,21 +350,60 @@ void main() {
     float hm = max(max(hb.x, hb.y), max(hb.z, hb.w)) - 0.35;
     vec4 ww = max(hb - hm, 0.0) * step(0.01, vec4(w0, w1, w2, w3)); ww /= max(ww.x + ww.y + ww.z + ww.w, 1e-4);
     vec3 c0 = mix(uMA[0], uMB[0], t0.y), c1 = mix(uMA[1], uMB[1], t1.y), c3 = mix(uMA[3], uMB[3], t3.y);
-    // the cliffs: bedding bands by elevation (warped), each band its own shade between the cliff's two colours
+    if (sub) c0 = mix(vec3(0.05, 0.16, 0.06), vec3(0.16, 0.3, 0.1), t0.y);   // sea grass
+    // the cliffs: bedding bands by elevation (warped), each band its own shade between the cliff's two colours; on the
+    // rock and sand worlds some bands run pale (caliche) or purple-grey (shale), and desert varnish streaks the faces
     float bz = e / uStrata.x + (mv4.g - 0.5) * uStrata.y + dot(P, vec3(0.013, 0.007, 0.011));
     float bh = fract(sin(floor(bz) * 91.7 + 3.1) * 4375.85), bf = fract(bz);
     vec3 c2 = mix(uMA[2], uMB[2], clamp(t2.y * 0.55 + bh * 0.6 * uStrata.z, 0.0, 1.0)) * (1.0 - uStrata.w * 0.22 * smoothstep(0.0, 0.08, bf) * smoothstep(0.2, 0.08, bf));
+    if (uLook.w > 0.0) {
+      c2 *= mix(vec3(1.0), bh > 0.8 ? vec3(1.3, 1.24, 1.12) : bh < 0.17 ? vec3(0.78, 0.72, 0.86) : vec3(1.0), uLook.w);
+      vec3 hz = normalize(cross(upL, Nl) + 1e-4);
+      float varn = smoothstep(0.5, 0.78, texture2D(uDetail, vec2(dot(P, hz) / 7.0, e / 85.0)).r) * smoothstep(0.35, 0.6, slope);
+      c2 *= 1.0 - 0.5 * varn * uLook.w;
+    }
     alb = c0 * ww.x + c1 * ww.y + c2 * ww.z + c3 * ww.w;
     float th = t0.x * ww.x + t1.x * ww.y + t2.x * ww.z + t3.x * ww.w;
     vec3 dN = (d0 * ww.x + d1 * ww.y + d2 * ww.z * 1.3 + d3 * ww.w) * kD;
     spec = uMS[0].w * ww.x + uMS[1].w * ww.y + uMS[2].w * ww.z + uMS[3].w * ww.w;
     alb *= 0.84 + 0.32 * mv;                                      // big soft patches: no tile repeats from the air
+    // macro tints (the world's own two or three grounds) and the clumps (on the open ground, not the cliffs)
+    alb *= mix(mix(uMacA, uMacB, macA), uMacC, macB * 0.85);
+    float open = 1.0 - ww.z;
+    alb *= mix(vec3(1.0), uClumpC, clump * open * uLook.x);
+    if (uType > 0.5 && uType < 1.5 && vDun.y > 0.5) {
+      // the dune sea: the brink and the slip face redrawn per pixel from the phase (the mesh rounds them off between its
+      // vertices: what it already shows — its slope averaged over two vertex spacings — is taken out, the sharp one put in)
+      float ph = vDun.x, tt = fract(ph), dl = uDune.w, sp = uLod.y * exp2(-floor(vLev)) / 32.0 * (1.0 + fract(vLev)), w = sp / dl;
+      float gf = (czDune(fract(ph + w)) - czDune(fract(ph - w))) / (2.0 * w);
+      float aa = 1.0 - smoothstep(0.12, 0.45, fwidth(ph));
+      float corr = (czDuneD(tt) - gf) * vDun.y / dl * aa * ww.x;
+      vec3 wt = uDune.xyz - upL * dot(uDune.xyz, upL);
+      Nl = normalize(Nl - normalize(wt + 1e-5) * corr);
+      // fresh slip faces a shade deeper and warmer, the brink pale, the interdune troughs coarser and greyer
+      float slip = step(DC, tt), pr = czDune(tt);
+      alb *= mix(vec3(1.0), slip > 0.5 ? vec3(1.03, 0.95, 0.85) : vec3(1.03, 1.01, 0.96), ww.x * 0.8);
+      alb = mix(alb, alb * vec3(0.86, 0.84, 0.82), smoothstep(0.16, 0.0, pr) * ww.x * 0.7);
+      // wind ripples: across the wind on the windward slopes and the flats (none on the slip face), a fine set and the
+      // big ripples that read from the air
+      vec2 rq = vec2(dot(P, gA1), dot(P, gA2));
+      float wv = (texture2D(uDetail, rq / 31.0).r - 0.5) * 2.6 + (texture2D(uDetail, rq / 9.0).a - 0.5) * 0.7;
+      vec3 wn = normalize(wt + 1e-5);
+      float r1 = dot(P, wn) / 0.85 + wv * 1.4, r2 = dot(P, wn) / 6.5 + wv * 0.9;
+      float f1 = fract(r1), f2 = fract(r2);
+      float s1 = (f1 < 0.7 ? 1.0 : -2.33) * smoothstep(0.0, 0.08, f1) * smoothstep(1.0, 0.92, f1);
+      float s2 = (f2 < 0.72 ? 1.0 : -2.57) * smoothstep(0.0, 0.06, f2) * smoothstep(1.0, 0.94, f2);
+      float k1 = 0.16 * (1.0 - smoothstep(0.2, 0.55, fwidth(r1))), k2 = 0.1 * (1.0 - smoothstep(0.2, 0.55, fwidth(r2)));
+      Nl = normalize(Nl - wn * (s1 * k1 + s2 * k2) * ww.x * (1.0 - slip * 0.85));
+    }
     if (uType > 0.5 && uType < 1.5) alb *= mix(1.0, 0.72 + 0.5 * cv, ww.x);   // dune crests catch the light, troughs and slip faces darken
     alb = mix(alb, macroA * (dot(alb, vec3(0.333)) / max(dot(macroA, vec3(0.333)), 0.02)), 0.12);   // a touch of the orbital colour
     // emissive: lava in the cracks of the crust, crystal veins
     if (uType > 4.5 && uType < 5.5) {
-      float crack = 1.0 - smoothstep(0.05, 0.35, t3.y);
-      emit = uGlow * ww.w * (0.12 + 0.75 * crack * crack) * (1.0 + 0.3 * sin(uTime * 1.7 + mv * 11.0)) * 0.7;
+      // the lava crust: dark plates, the heat only in its cracks — fine ones from the layer, a coarse network that reads
+      // from the air — and a dull glow where the crust is thin at the flow's edge
+      float crack = 1.0 - smoothstep(0.05, 0.35, t3.y), net = smoothstep(0.78, 0.96, texture2D(uDetail, vec2(dot(P, gA1), dot(P, gA2)) / 37.0).g);
+      emit = uGlow * ww.w * (0.025 + 0.85 * crack * crack + 0.7 * net + 0.12 * smoothstep(0.6, 0.2, ww.w)) * (1.0 + 0.3 * sin(uTime * 1.7 + mv * 11.0)) * 0.7;
       emit += uGlow * 0.3 * smoothstep(0.94, 0.99, mv4.b) * (1.0 - cliff) * ww.y;   // embers in the crust
     } else if (uType > 6.5) {
       // veins: the crystal's own facet edges light up along the vein lines (thin, pulsing), a faint glow round them
@@ -374,22 +413,29 @@ void main() {
     }
     // water nearby darkens the ground and makes it shine; snow on the high ground
     bool lavaW = uType > 4.5 && uType < 5.5;
-    float wk = lavaW ? 0.0 : clamp(wetM * (uSea > 0.0 && uType > 1.5 ? 1.0 : 0.7), 0.0, 1.0) * (1.0 - ww.z * 0.5);
+    float wk = lavaW || sub ? 0.0 : clamp(wetM * (uSea > 0.0 && uType > 1.5 ? 1.0 : 0.7), 0.0, 1.0) * (1.0 - ww.z * 0.5);
     if (lavaW) emit += (alb * 2.0 + 0.03) * uGlow * wetM * wetM * (0.16 + 0.05 * sin(uTime * 1.3 + mv * 7.0));   // the lava's glow on the rock round it
     alb *= 1.0 - 0.42 * wk; spec = max(spec, wk * 0.55);
+    if (sub) spec = 0.0;
     if (uSnow > 0.0) {
       float sn = smoothstep(uSnow, uSnow + 45.0, e + (mv - 0.5) * 70.0 + cv * 20.0) * (1.0 - smoothstep(0.38, 0.62, slope));
       alb = mix(alb, vec3(0.86, 0.9, 0.96) * (0.92 + 0.12 * th), sn); spec = max(spec, sn * 0.3); dN *= 1.0 - sn * 0.6;
     }
     alb = mix(macroA, alb, nearK);
-    ao = mix(1.0, clamp(ao * (0.6 + 0.55 * th), 0.0, 1.0), 0.65 * nearK) * (0.88 + 0.12 * cv);
+    ao = mix(1.0, clamp(ao * (0.6 + 0.55 * th), 0.0, 1.0), 0.65 * nearK) * (0.88 + 0.12 * cv) * (1.0 - clump * open * 0.18 * uLook.x);
     vec3 nl = normalize(Nl + dN);
     N = normalize(transpose(uPInv) * nl);
     float ndl = dot(N, L), shw = czSunShadow(vW, Ng, dot(Ng, L));
     if (uShadow.w > 0.0) shw *= 1.0 - 0.72 * (1.0 - smoothstep(uShadow.w * 0.3, uShadow.w, distance(vW, uShadow.xyz)));
-    vec3 sunC = uSunI * vSunT * cs * shw;
+    vec3 sunC = uSunI * vSunT * cs * shw * clamp(1.0 + bump * open, 0.55, 1.45);
     float hup = dot(N, up) * 0.5 + 0.5;
-    vec3 amb = (uAmbZ * (0.35 + 0.65 * hup) + uAmbH * 0.3 + uGround * (1.0 - hup)) * ao + uNight;
+    // the sky's light: the zenith on what faces up, the bright horizon band mostly on what faces sideways
+    vec3 amb = (uAmbZ * (0.35 + 0.65 * hup) + uAmbH * (0.2 + 0.2 * (1.0 - abs(dot(N, up)))) + uGround * (1.0 - hup)) * ao + uNight;
+    if (sub) {   // under the water: the sun dimmed by the depth (and focused into caustics), the sky's light dimmer still
+      float dep = -e;
+      sunC *= exp(-uWAbs * dep * 1.25) * (0.55 + czCaustics(P, uTime) * smoothstep(-26.0, -0.5, e));
+      amb *= exp(-uWAbs * dep * 0.7);
+    }
     col = alb * (sunC * max(ndl, 0.0) * 0.3183 * (0.7 + 0.3 * ao) + amb);
     if (spec > 0.01) {
       vec3 H = normalize(L + V); float sh = mix(18.0, 160.0, spec);
@@ -404,9 +450,133 @@ void main() {
   if (uHead.w > 0.0) { vec3 hv = vW - uHead.xyz; float hd = length(hv); vec3 hn = hv / hd;
     col += alb * uHead.w * smoothstep(0.8, 0.95, dot(hn, uHeadDir)) * max(dot(N, -hn), 0.0) / (1.0 + hd * hd * 0.0003); }
   if (uBolt.w > 0.0) col += alb * uBolt.xyz * uBolt.w * (0.5 + 0.5 * max(dot(N, up), 0.0));
-  col = col * vTr + vIns;
-  col = czFog(col, e, vDist);
+  if (uUnder.x > 0.5) col = czUnderwater(col, -e, vDist, V, up);   // seen from under the sea: only water between
+  else {
+    if (sub) col = czUnderwater(col, -e, vDist, V, up);
+    col = col * vTr + vIns;
+    col = czFog(col, e, vDist);
+  }
   gl_FragColor = vec4(col, 1.0);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
+}`;
+// the sea surface of a water world: a second draw of the chunks that hold sea, projected onto the sea-level sphere
+// (Gerstner waves near the camera), over the seabed the ground pass drew. Seen from above it adds what the surface
+// reflects (the sky table, the cloud deck, the sun's glitter), foam and the light through the crests, blended over the
+// seabed by its Fresnel term (the seabed shader already put the water between it and the eye); past the opaque depth it
+// is the deep itself. From below: Snell's window — the sky bent into a bright disc overhead, the surface a mirror of
+// the deep outside it.
+const WATER_VERT = /* glsl */`
+attribute vec4 aSrf; attribute vec4 aMor;
+uniform mat3 uPInv; uniform vec2 uLod; uniform vec4 uUnder;
+varying vec3 vW; varying vec3 vL; varying float vDep; varying float vDist; varying vec3 vIns; varying vec3 vTr; varying vec3 vSunT;
+${ATMO_GLSL}
+${WAVES_GLSL}
+void main() {
+  vec3 pl = uPInv * ((modelMatrix * vec4(position, 1.0)).xyz - uAtC), n = normalize(pl);
+  // onto the sea-level sphere (the chunk's axes are the planet's). Where a coarser neighbour meets it, its odd vertices
+  // sink onto that neighbour's chords as the geomorph runs out (no cracks to see the sky through from below); the
+  // skirts hang a little below
+  float lev = floor(aMor.w), sp = uLod.y * exp2(-lev) / 32.0, dl = uLod.x * uLod.y * exp2(-lev);
+  float d0 = length((modelViewMatrix * vec4(position, 1.0)).xyz), mk = smoothstep(1.35 * dl, 1.85 * dl, d0);
+  int id = gl_VertexID; bool skirt = id >= ${VERTS - 4 * SIDE};
+  int gj = id / ${SIDE}, gi = id - gj * ${SIDE};
+  float odd = skirt ? 0.0 : float((gi & 1) + (gj & 1)), sag = mk * odd * sp * sp / (2.0 * uAtR.x);
+  if (skirt) {   // a skirt vertex sits on its edge vertex: the same sag (from under the sea it is that vertex, folded away)
+    int k = id - ${SIDE * SIDE}, b = k / ${SIDE}, t = k - b * ${SIDE};
+    gi = b == 0 ? t : b == 1 ? t : b == 2 ? 0 : ${SIDE - 1}; gj = b == 0 ? 0 : b == 1 ? ${SIDE - 1} : t;
+    sag = mk * float((gi & 1) + (gj & 1)) * sp * sp / (2.0 * uAtR.x);
+  }
+  float sk = skirt && uUnder.x < 0.5 ? 0.5 + sp * sp / (2.0 * uAtR.x) : 0.0;
+  vec3 pos = position + n * (uAtR.x - sk - sag - length(pl));
+  d0 = length((modelViewMatrix * vec4(pos, 1.0)).xyz);
+  if (uWave.x > 0.0 && d0 < 1100.0) {   // (the skirts ride the swell with their edge)
+    vec3 T1, T2; vec2 disp; vec3 wv = czWaves(n * uAtR.x, disp, T1, T2);
+    pos += (n * wv.x + T1 * disp.x + T2 * disp.y) * (1.0 - smoothstep(500.0, 1100.0, d0)) * smoothstep(0.0, 1.5, -aSrf.x);
+  }
+  vec4 mv = modelViewMatrix * vec4(pos, 1.0), w = modelMatrix * vec4(pos, 1.0);
+  vW = w.xyz; vL = uPInv * (w.xyz - uAtC); vDep = -aSrf.x; vDist = length(mv.xyz);
+  vIns = czAtmo(cameraPosition - uAtC, (w.xyz - cameraPosition) / max(vDist, 1e-3), vDist, 5, vTr);
+  vSunT = czSunT(w.xyz - uAtC);
+  gl_Position = projectionMatrix * mv;
+}`;
+const WATER_FRAG = /* glsl */`
+${MACRO_UNIFORMS}
+uniform vec3 uGlow, uWater; uniform float uFade;
+varying vec3 vW; varying vec3 vL; varying float vDep; varying float vDist; varying vec3 vIns; varying vec3 vTr; varying vec3 vSunT;
+${ATMO_GLSL}
+${COMMON}
+${SHADOW_GLSL}
+${WAVES_GLSL}
+${SKYVIEW_GLSL}
+${WATERPATH_GLSL}
+void main() {
+  if (vDep < 0.0) discard;   // dry land stands over the sea level here: the shoreline is where the ground crosses it
+  if (uFade < 0.999 && czH12(gl_FragCoord.xy) > uFade) discard;
+  float depth = vDep, t = uTime;
+  vec3 up = normalize(vW - uAtC), V = normalize(cameraPosition - vW), L = uSunDir, upL = normalize(vL);
+  vec2 disp; vec3 T1, T2; czWaveD = vDist; vec3 wv = czWaves(vL, disp, T1, T2);
+  vec3 nL = normalize(upL - (T1 * wv.y + T2 * wv.z) * (1.0 - smoothstep(600.0, 3000.0, vDist)));
+  vec2 wq = vec2(dot(vL, T1), dot(vL, T2));
+  vec2 g = vec2(texture2D(uDetail, wq / 31.0 + vec2(t * 0.011, t * 0.004)).r + texture2D(uDetail, wq.yx / 23.0 - vec2(t * 0.007, t * 0.012)).a - 1.0,
+                texture2D(uDetail, wq / 27.0 + vec2(-t * 0.009, t * 0.006) + 0.5).r + texture2D(uDetail, wq.yx / 19.0 + vec2(t * 0.013, -t * 0.005) + 0.25).a - 1.0);
+  vec3 nl = normalize(nL + (T1 * g.x + T2 * g.y) * (0.14 * (0.2 + 0.8 * (1.0 - smoothstep(40.0, 900.0, vDist)))));
+  vec3 nw = normalize(transpose(uPInv) * nl);
+  float sunUp = max(dot(up, L), 0.0), shw = czSunShadow(vW, up, sunUp), cs = czCloudShadow(vL, 0.0, uPInv * L);
+  vec3 sunC = uSunI * vSunT * cs * shw;
+  if (!gl_FrontFacing) {
+    // from under the surface: Snell's window overhead, total internal reflection outside it
+    vec3 n = -nw; float c = max(dot(V, n), 0.0), s2 = (1.0 - c * c) * 1.7689;
+    // outside the window the surface mirrors the deep (the swell and the ripples ruffle it); inside, the sky
+    vec3 col = uWScat * (0.3 + 0.3 * clamp(0.5 + 6.0 * dot(nl - upL, T1 + T2), 0.0, 1.0));
+    if (s2 < 1.0) {
+      // (radiance going into the denser water grows by n^2 = 1.77: the whole sky packed into the window is bright)
+      vec3 rd = refract(-V, n, 1.33);
+      float ct = sqrt(1.0 - s2), rs = (1.33 * c - ct) / (1.33 * c + ct), rp = (c - 1.33 * ct) / (c + 1.33 * ct), Fr = clamp(0.5 * (rs * rs + rp * rp), 0.0, 1.0);
+      vec3 sky = (czSkyView(rd).rgb * 1.15 + uAmbZ * 0.3) * 1.77 * 1.25 + sunC * pow(max(dot(rd, L), 0.0), 400.0) * 40.0;
+      col = mix(mix(sky, col, Fr), col, smoothstep(0.86, 1.0, s2));
+    }
+    col = czUnderwater(col, 0.0, vDist, V, up);
+    gl_FragColor = vec4(col, 1.0);
+    #include <tonemapping_fragment>
+    #include <colorspace_fragment>
+    return;
+  }
+  vec3 R = reflect(-V, nw); R = normalize(R + up * max(0.0, -dot(R, up)) * 1.05);
+  vec3 sky = czSkyView(R).rgb * 1.15 + uAmbZ * 0.25;
+  if (uCloudK > 0.01) {   // the cloud deck in the water
+    vec3 Rl = uPInv * R; float ru = max(dot(Rl, upL), 0.06);
+    vec2 cuv = czEq(normalize(vL + Rl * uCloudAlt / ru)); cuv.x += uCloudOff;
+    float cc = smoothstep(0.32, 0.75, texture2D(uCloud, cuv).r * uCloudK);
+    sky = mix(sky, uSunI * vSunT * 0.32 * cs + uAmbZ * 1.6 + uAmbH * 0.4, cc * 0.85);
+  }
+  float fr = 0.02 + 0.98 * pow(1.0 - max(dot(nw, V), 0.0), 5.0);
+  float rl = max(dot(R, L), 0.0);
+  // the sun's glitter: a tight core, a broad sheen, and sparkles where the ripples catch it
+  float sp = pow(rl, 900.0) * 9.0 + pow(rl, 90.0) * 0.25 + pow(rl, 18.0) * 0.02;
+  float glit = step(0.93, czH12(floor(wq * 2.3) + floor(t * 6.0))) * pow(rl, 30.0) * 3.0 * (1.0 - smoothstep(30.0, 400.0, vDist));
+  // premultiplied: what the surface adds (reflection by Fresnel, glitter), how much of the seabed it hides
+  vec3 src = sky * fr + sunC * (sp + glit); float a = fr;
+  // light through the crests, a turquoise rim on the swell seen against the sun
+  float crest = clamp(wv.x / max(uWave.x * 0.55, 0.05), 0.0, 1.0) * (1.0 - smoothstep(80.0, 900.0, vDist));
+  src += uWater * sunC * crest * crest * (0.25 + 0.75 * pow(max(dot(-V, L), 0.0), 3.0)) * 0.22 * (1.0 - fr);
+  // the deep: the seabed is no longer drawn below it (and would only be the water's own colour): opaque
+  float deep = smoothstep(uUnder.z * 0.66, uUnder.z, depth);
+  src = mix(src, sky * fr + uWScat * (1.0 - fr) + sunC * (sp + glit), deep); a = mix(a, 1.0, deep);
+  // foam: bands that run up the shore, the swash on the sand, whitecaps on the crests in a blow
+  float fn = texture2D(uDetail, wq / 7.0 + vec2(t * 0.02, 0.0)).a + texture2D(uDetail, wq.yx / 4.0 - vec2(0.0, t * 0.03)).r * 0.6;
+  float bands = smoothstep(0.62, 0.95, 0.5 + 0.5 * sin(depth * 4.5 - t * 1.4 + fn * 3.0));
+  float foam = (1.0 - smoothstep(0.0, 2.4, depth)) * smoothstep(0.55, 1.1, fn + bands * 0.6 + (1.0 - smoothstep(0.0, 0.5, depth)) * 0.6);
+  foam = max(foam, smoothstep(0.65, 1.0, wv.x / max(uWave.x * 0.9, 0.05)) * smoothstep(0.6, 1.0, fn) * uWave.x * 0.8 * (1.0 - smoothstep(200.0, 1200.0, vDist)));
+  foam = clamp(foam, 0.0, 1.0) * 0.9;
+  vec3 foamC = (sunC * sunUp * 0.3183 + uAmbZ * 1.2 + uAmbH * 0.4) * 0.95;
+  src = src * (1.0 - foam) + foamC * foam; a = a * (1.0 - foam) + foam;
+  if (uType > 6.5) src += uGlow * 0.12 * smoothstep(0.8, 0.95, texture2D(uDetail, wq / 9.0).g);   // the crystal lakes' glow
+  // the air in front of it (premultiplied: the in-scatter and the fog take the share of the surface that covers)
+  src = src * vTr + vIns * a;
+  if (uFog.x > 0.0) { float b = uFog.y, hc = uFog.z, dh = -hc, k = abs(dh * b) > 1e-3 ? (1.0 - exp(-b * dh)) / (b * dh) : 1.0;
+    float f = min(1.0 - exp(-uFog.x * vDist * exp(-b * max(hc, -20.0)) * k), uFog.w); src = mix(src, uFogC * a, f); }
+  gl_FragColor = vec4(src, a);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
 }`;
@@ -491,7 +661,7 @@ void main() {
     // long streaks: the detail stretched along one axis, thinned by a slow mask so whole regions of sky stay clear
     float st = texture2D(uDetail, vec2(vL.x / 24000.0 + uTime * 0.0004, vL.z / 1500.0)).g * 0.65 + texture2D(uDetail, vec2(vL.z / 30000.0, vL.y / 1100.0 + uTime * 0.0006)).r * 0.35;
     float mask = smoothstep(0.45, 0.75, texture2D(uDetail, n.xz * 1.7 + 0.31).r);
-    a = smoothstep(0.6, 0.84, st) * mask * 0.14;
+    a = smoothstep(0.6, 0.84, st) * mask * 0.14 * smoothstep(0.03, 0.22, abs(dot(V, up)));   // (thin edge-on: no rings of streaks round the horizon)
     if (a < 0.004) discard;
     lit = 1.0;
   }
@@ -505,6 +675,92 @@ void main() {
   gl_FragColor = vec4(col * T + ins, a * 0.94 * smoothstep(20.0, 160.0, dist));
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
+}`;
+// the volumetric cloud layer (medium / high, the post chain's half-resolution pass): a slab round the world from the
+// deck's base to its tops, its coverage the orbital bake's (the clouds you saw from space), its shape a tileable 3D
+// noise (billows) eroded by a finer one, rounded bases and tops that climb where the cover is thick; marched front to
+// back (a static interleaved-gradient jitter: no shimmer from frame to frame) up to the ground the depth buffer holds,
+// lit by the sun through a few steps toward it (shadowed bellies, lit crowns, a silver lining against the light) and
+// by the sky above and the ground below; you fly through it on the way down. Output: (light, transmittance).
+const VOL_FRAG = /* glsl */`
+precision highp sampler3D;
+uniform sampler2D tDepth; uniform sampler3D uNoise3; uniform mat4 uInvProj, uCamW; uniform vec2 uNF; uniform vec3 uCamPos;
+uniform vec4 uVol, uVolK; uniform vec3 uWindO;
+varying vec2 vUv;
+${ATMO_GLSL}
+${COMMON}
+vec2 czSph(vec3 ro, vec3 rd, float R) { float b = dot(ro, rd), c = dot(ro, ro) - R * R, d = b * b - c; if (d < 0.0) return vec2(1e9, -1e9); d = sqrt(d); return vec2(-b - d, -b + d); }
+float czHG(float mu, float g) { float g2 = g * g; return 0.0795775 * (1.0 - g2) / pow(max(1e-4, 1.0 + g2 - 2.0 * g * mu), 1.5); }
+float gH;   // the height in the slab of the last sample (0 base .. 1 top)
+float czDens(vec3 pw, float lod) {   // pw: from the planet's centre, world axes
+  vec3 pl = uPInv * pw; float r = length(pl);
+  gH = (r - uVol.x) / (uVol.y - uVol.x);
+  if (gH <= 0.0 || gH >= 1.0) return 0.0;
+  vec2 uv = czEq(pl / r); uv.x += uCloudOff;
+  float cov = texture2D(uCloud, uv).r * uCloudK * uVolK.y;
+  if (cov < 0.1) return 0.0;
+  // where the cloud stands: the bake's cover plus the billows; its tops climb where it is thick, its base is flat
+  float sh = textureLod(uNoise3, (pl + uWindO) / 2900.0, lod).r * 0.7 + textureLod(uNoise3, (pl + uWindO * 1.3) / 1150.0 + 0.41, lod).r * 0.3;
+  float m = cov + (sh - 0.5) * 1.1, top = 0.22 + 0.78 * smoothstep(0.4, 0.95, m);
+  float d = smoothstep(0.38, 0.58, m) * smoothstep(0.0, 0.08, gH) * smoothstep(top, top * 0.55, gH);
+  if (d <= 0.0) return 0.0;
+  float det = textureLod(uNoise3, (pl + uWindO * 1.7) / 560.0 + 0.17, lod).g;
+  return clamp(d - (1.0 - det) * uVolK.z * (1.0 - d) * (1.0 - 0.5 * gH), 0.0, 1.0) * uVolK.x;
+}
+void main() {
+  float dz = texture2D(tDepth, vUv).r;
+  vec4 vp = uInvProj * vec4(vUv * 2.0 - 1.0, 1.0, 1.0); vec3 rdv = normalize(vp.xyz / vp.w);
+  vec3 rd = normalize(mat3(uCamW) * rdv), ro = uCamPos - uAtC;
+  float tS = dz < 1.0 ? (uNF.x * uNF.y / max(uNF.y - dz * (uNF.y - uNF.x), 1e-3)) / max(-rdv.z, 1e-4) : 1e9;
+  vec2 tb = czSph(ro, rd, uVol.x), tt = czSph(ro, rd, uVol.y);
+  float r0 = length(ro), t0, t1; bool inside = false;
+  if (tt.y <= 0.0) { gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0); return; }
+  if (r0 < uVol.x) { t0 = tb.y; t1 = tt.y; }
+  else if (r0 < uVol.y) { t0 = 0.0; t1 = tb.x > 0.0 ? tb.x : tt.y; inside = true; }
+  else { t0 = tt.x; t1 = tb.x > 0.0 ? tb.x : tt.y; }
+  t1 = min(t1, min(tS, 26000.0));   // (and the far clouds fade into the air before that: no rings of slices at the horizon)
+  if (t1 <= t0) { gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0); return; }
+  vec3 L = uSunDir; float mu = dot(rd, L);
+  float ph = 0.3 + 1.2 * mix(czHG(mu, 0.55), czHG(mu, -0.25), 0.25);
+  vec3 sunC = uSunI * czSunT(ro + rd * (t0 + (t1 - t0) * 0.3));
+  vec3 ambTop = uAmbZ * 1.5 + uAmbH * 0.4, ambBot = uAmbH * 0.22 + uGround * 0.8 + uAmbZ * 0.3;
+  // the march: long strides through clear air, short ones inside a cloud; inside the slab they start short and grow
+  // with the distance (fly-through)
+  float N = uVol.z, len = t1 - t0, j = fract(52.9829189 * fract(dot(gl_FragCoord.xy, vec2(0.06711056, 0.00583715))));
+  float base = clamp(len / N, 20.0, 140.0), t = t0;
+  float st0 = inside ? min(base, 5.0) : base; t += st0 * j;
+  vec3 S = vec3(0.0); float T = 1.0, tw = 0.0, wsum = 0.0;
+  for (int i = 0; i < 56; i++) {
+    if (t >= t1) break;
+    float stp = (inside ? min(base, 5.0 + t * 0.07) : base) * (1.0 + t / 7000.0);
+    vec3 p = ro + rd * t;
+    float lod = clamp(log2(max(t, 1.0) / 1800.0), 0.0, 4.0);
+    float d = czDens(p, lod) * (1.0 - smoothstep(8000.0, 24000.0, t)), h = gH;
+    if (d > 1e-4) {
+      float dt = min(stp * 0.6, t1 - t);
+      // toward the sun: up to three taps (shadowed bellies, lit crowns); a share that never darkens fully (the light that
+      // bounces round inside a cloud)
+      float od = czDens(p + L * 70.0, lod + 0.5) * 90.0;
+      if (uVol.w > 1.5) od += czDens(p + L * 240.0, lod + 1.0) * 200.0;
+      if (uVol.w > 2.5) od += czDens(p + L * 560.0, lod + 1.5) * 360.0;
+      float beer = max(exp(-od), exp(-od * 0.25) * 0.55), powder = 1.0 - exp(-d * 160.0);
+      vec3 Lin = sunC * ph * beer * mix(0.65, 1.0, powder) + mix(ambBot, ambTop, h) * (0.55 + 0.45 * h);
+      float Ts = exp(-d * dt);
+      S += T * Lin * (1.0 - Ts);
+      tw += t * T * (1.0 - Ts); wsum += T * (1.0 - Ts);
+      T *= Ts;
+      if (T < 0.02) break;
+      t += dt * (0.7 + 0.6 * fract(j + float(i) * 0.618034));   // (each stride jittered: no slicing bands)
+    } else t += stp * (1.2 + 0.6 * fract(j + float(i) * 0.618034));
+  }
+  float k = uVolK.w;   // the world's fade
+  T = mix(1.0, T, k); S *= k;
+  if (wsum > 1e-4) {   // the air between the camera and the cloud
+    float tc = tw / wsum; vec3 Tr, ins = czAtmo(ro, rd, tc, 6, Tr);
+    S = S * Tr + ins * (1.0 - T);
+  }
+  S += uBolt.xyz * uBolt.w * 0.5 * (1.0 - T);
+  gl_FragColor = vec4(S, T);
 }`;
 // gas giants: three cloud decks coloured by the world's own bands (the orbital bake), the lowest one opaque — the floor
 const DECK_FRAG = /* glsl */`
@@ -598,7 +854,7 @@ void main() { float a = vA * uK; if (uPts > 0.5) { vec2 c = gl_PointCoord - 0.5;
 const FLORA_VERT = /* glsl */`
 attribute vec3 aMat;
 uniform float uTime, uWind, uRange; uniform vec3 uWindDir;
-varying vec3 vN; varying vec3 vC; varying vec3 vW; varying float vGlow; varying vec3 vIns; varying vec3 vTr; varying vec3 vSunT; varying float vFade; varying vec3 vUp; varying float vHt; varying float vE;
+varying vec3 vN; varying vec3 vC; varying vec3 vW; varying float vGlow; varying vec3 vIns; varying vec3 vTr; varying vec3 vSunT; varying float vFade; varying vec3 vUp; varying float vHt; varying float vE; varying float vEv;
 ${ATMO_GLSL}
 void main() {
   vec3 p = position;
@@ -619,16 +875,17 @@ void main() {
   #endif
   vC = color * mix(vec3(1.0), tint, aMat.x); vGlow = aMat.y;
   vUp = normalize(base.xyz - uAtC); vHt = clamp(position.y, 0.0, 1.2);
-  vE = length(base.xyz - uAtC) - uAtR.x;
+  vE = length(base.xyz - uAtC) - uAtR.x; vEv = length(w.xyz - uAtC) - uAtR.x;
   vIns = czAtmo(cameraPosition - uAtC, (w.xyz - cameraPosition) / max(d, 1e-3), d, 4, vTr);
   vSunT = czSunT(base.xyz - uAtC);
   gl_Position = projectionMatrix * mv;
 }`;
 const FLORA_FRAG = /* glsl */`
 uniform vec3 uAmbZ, uAmbH, uNight, uGlow, uGround; uniform vec4 uHead; uniform vec3 uHeadDir; uniform vec4 uCap; uniform vec3 uCapC; uniform vec4 uFog; uniform vec3 uFogC; uniform vec4 uBolt;
-varying vec3 vN; varying vec3 vC; varying vec3 vW; varying float vGlow; varying vec3 vIns; varying vec3 vTr; varying vec3 vSunT; varying float vFade; varying vec3 vUp; varying float vHt; varying float vE;
+varying vec3 vN; varying vec3 vC; varying vec3 vW; varying float vGlow; varying vec3 vIns; varying vec3 vTr; varying vec3 vSunT; varying float vFade; varying vec3 vUp; varying float vHt; varying float vE; varying float vEv;
 ${ATMO_GLSL}
 ${SHADOW_GLSL}
+${WATERPATH_GLSL}
 vec3 czFog(vec3 col, float e, float dist) {
   if (uFog.x <= 0.0) return col;
   float b = uFog.y, hc = uFog.z, dh = e - hc, k = abs(dh * b) > 1e-3 ? (1.0 - exp(-b * dh)) / (b * dh) : 1.0;
@@ -649,12 +906,20 @@ void main() {
   float trans = pow(max(dot(-V, L), 0.0), 4.0) * 0.6 * step(0.15, vHt) * (1.0 - cap);   // light through the leaves
   vec3 sun = uSunI * vSunT * sh;
   float hup = dot(N, vUp) * 0.5 + 0.5;
-  vec3 col = alb * (sun * (wrap * 0.3183 + trans * 0.25) + (uAmbZ * (0.45 + 0.55 * hup) + uAmbH * 0.3 + uGround * (1.0 - hup)) * occ + uNight);
+  vec3 ambF = (uAmbZ * (0.45 + 0.55 * hup) + uAmbH * 0.3 + uGround * (1.0 - hup)) * occ;
+  bool wet = uUnder.w > 0.5 && vEv < 0.0;   // kelp and coral under the sea: the light comes down through the water
+  if (wet) { sun *= exp(-uWAbs * (-vEv) * 1.25); ambF *= exp(-uWAbs * (-vEv) * 0.7); }
+  vec3 col = alb * (sun * (wrap * 0.3183 + trans * 0.25) + ambF + uNight);
   col += vC * uGlow * vGlow;
   if (uHead.w > 0.0) { vec3 hv = vW - uHead.xyz; float hd = length(hv); col += alb * uHead.w * smoothstep(0.8, 0.95, dot(hv / hd, uHeadDir)) / (1.0 + hd * hd * 0.0003); }
   if (uBolt.w > 0.0) col += alb * uBolt.xyz * uBolt.w * 0.4;
-  col = col * vTr + vIns;
-  col = czFog(col, vE, length(vW - cameraPosition));
+  float dist = length(vW - cameraPosition);
+  if (uUnder.x > 0.5) col = czUnderwater(col, -vEv, dist, V, vUp);
+  else {
+    if (wet) col = czUnderwater(col, -vEv, dist, V, vUp);
+    col = col * vTr + vIns;
+    col = czFog(col, vE, dist);
+  }
   gl_FragColor = vec4(col, 1.0);
   #include <tonemapping_fragment>
   #include <colorspace_fragment>
@@ -665,8 +930,9 @@ void main() {
 const GRASS_VERT = /* glsl */`
 attribute vec3 iP0; attribute vec3 iP1; attribute vec3 iP2; attribute vec3 iP3; attribute vec3 iN; attribute vec4 iS; attribute vec4 iX;
 // position = the blade vertex: x across (-1..1), y up (0..1), z the blade's index in the tuft
+precision highp sampler3D;
 uniform float uTime, uWind, uRange, uGH, uGW, uDens, uSide, uKind, uSea; uniform vec3 uWindDir, uAtC; uniform sampler2D uDetail; uniform mat3 uPInv;
-uniform vec3 uGA, uGB, uGT;
+uniform vec3 uGA, uGB, uGT; uniform sampler3D uNoise3; uniform vec4 uLook, uRing;
 varying vec3 vC; varying vec3 vW; varying float vY; varying vec3 vN; varying float vD; varying float vE;
 float hh(float n) { return fract(sin(n) * 43758.5453123); }
 void main() {
@@ -684,8 +950,12 @@ void main() {
   else if (uKind < 3.5) dens *= (1.0 - smoothstep(0.3, 0.5, slope)) * (0.3 + 0.7 * m3);
   else dens *= 1.0 - smoothstep(0.35, 0.55, slope);
   if (uSea > 0.0 && e < 0.6) dens = 0.0;
-  float dc = distance(wp, cameraPosition), fade = 1.0 - smoothstep(uRange * 0.55, uRange, dc);
-  float H = uGH * (0.55 + 0.9 * r2) * (0.65 + 0.35 * smoothstep(0.3, 0.7, mo)) * fade, Wd = uGW * (0.7 + 0.6 * hh(sd * 3.3));
+  // the clumps the ground shows from the air (terrain shader, same noise): denser and taller growth in them
+  float cl = 0.0;
+  if (uLook.x > 0.0) { vec3 pq = uPInv * (wp - uAtC); cl = smoothstep(0.5, 0.74, texture(uNoise3, pq / uLook.y + vec3(0.7, 0.2, 0.4)).g + (texture(uNoise3, pq / 640.0 + vec3(0.31, 0.17, 0.53)).a - 0.5) * 0.45); dens *= mix(0.5, 1.4, cl * uLook.x); }
+  if (uRing.z > 1.5) dens *= 0.6;
+  float dc = distance(wp, cameraPosition), fade = (1.0 - smoothstep(uRange * 0.55, uRange, dc)) * smoothstep(uRing.x, uRing.y, dc);
+  float H = uGH * uRing.w * (0.55 + 0.9 * r2) * (0.65 + 0.35 * smoothstep(0.3, 0.7, mo)) * fade * mix(1.0, 1.3, cl * uLook.x), Wd = uGW * uRing.z * (0.7 + 0.6 * hh(sd * 3.3));
   if (r >= dens || col == side - 1 || H < 0.02) { gl_Position = vec4(2.0, 2.0, 2.0, 1.0); vC = vec3(0.0); vW = wp; vY = 0.0; vN = n; vD = dc; vE = e; return; }
   float a = hh(sd * 5.1) * 6.2831853;
   vec3 t0 = normalize(cross(n, abs(n.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0))), t1 = cross(n, t0);
@@ -727,7 +997,7 @@ void main() {
 // the ground cover), two per terrain quad, each on its own beat
 const RAIN_VERT = /* glsl */`
 attribute vec3 iP0; attribute vec3 iP1; attribute vec3 iP2; attribute vec3 iP3; attribute vec4 iS;
-uniform float uTime, uSide, uRange, uRain; uniform vec3 uAtC;
+uniform float uTime, uSide, uRange, uRain; uniform vec3 uAtC; uniform vec4 uAtR;
 varying vec2 vUv; varying float vA;
 float hh(float n) { return fract(sin(n) * 43758.5453123); }
 void main() {
@@ -736,6 +1006,7 @@ void main() {
   float u = hh(sd * 12.9898), v = hh(sd * 78.233), rate = 1.2 + hh(sd * 3.1);
   float ph = fract(uTime * rate + hh(sd * 9.7));
   vec3 wp = (modelMatrix * vec4(mix(mix(iP0, iP1, u), mix(iP2, iP3, u), v), 1.0)).xyz, up = normalize(wp - uAtC);
+  if (iS.x < 0.0) wp = uAtC + up * uAtR.x;   // over a seabed: the drops land on the water
   float dc = distance(wp, cameraPosition);
   vA = (1.0 - ph) * (1.0 - smoothstep(uRange * 0.5, uRange, dc)) * step(hh(sd * 5.5), uRain);
   vec3 t0 = normalize(cross(up, abs(up.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0))), t1 = cross(up, t0);
@@ -746,6 +1017,47 @@ void main() {
 }`;
 const RAIN_FRAG = /* glsl */`uniform vec3 uRainC; varying vec2 vUv; varying float vA;
 void main() { float r = length(vUv), ring = smoothstep(0.7, 0.9, r) * smoothstep(1.0, 0.9, r) + smoothstep(0.25, 0.0, r) * 0.25; if (ring * vA < 0.01) discard; gl_FragColor = vec4(uRainC * ring * vA, 1.0); }`;
+// dust devils (the sand and rock worlds by day): a few twisting columns of dust that wander with the wind — a funnel
+// that widens as it climbs and leans and sways, a skirt of dust at its foot, streaks spiralling up it
+const DEVIL_VERT = /* glsl */`
+attribute vec4 aD0; attribute vec4 aD1;   // planet-local base, height (m); radius (m), phase, strength, -
+uniform float uTime; uniform vec3 uWindL;
+varying vec2 vQ; varying float vA; varying vec3 vIns; varying vec3 vTr; varying vec3 vSunT; varying vec3 vN; varying vec3 vV;
+${ATMO_GLSL}
+void main() {
+  vec3 up = normalize(aD0.xyz), e1 = normalize(cross(up, abs(up.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0))), e2 = cross(up, e1);
+  float h = position.y, ph = aD1.y, spin = uTime * (1.6 + 0.4 * fract(ph * 7.1)) + h * 2.4;
+  float ang = atan(position.z, position.x) + spin;
+  float r = aD1.x * (0.22 + 3.0 * pow(h, 1.5)) * (1.0 + 0.12 * sin(h * 11.0 - uTime * 3.0 + ph)) + aD1.x * 1.6 * (1.0 - smoothstep(0.0, 0.12, h));
+  vec3 wl = normalize(uWindL - up * dot(uWindL, up) + 1e-4);
+  vec3 bend = (e1 * sin(uTime * 0.6 + ph) + e2 * cos(uTime * 0.45 + ph * 2.0)) * aD1.x * 1.6 * h * h + wl * aD0.w * 0.18 * h * h;
+  vec3 dir = e1 * cos(ang) + e2 * sin(ang);
+  vec3 pl = aD0.xyz + up * h * aD0.w + dir * r + bend;
+  vec4 w = modelMatrix * vec4(pl, 1.0), mv = viewMatrix * w;
+  vQ = vec2(ang / 6.2831853, h); vN = normalize(mat3(modelMatrix) * dir); vV = normalize(cameraPosition - w.xyz);
+  float d = length(mv.xyz);
+  vA = aD1.z * smoothstep(40.0, 120.0, d);
+  vIns = czAtmo(cameraPosition - uAtC, (w.xyz - cameraPosition) / max(d, 1e-3), d, 4, vTr);
+  vSunT = czSunT(w.xyz - uAtC);
+  gl_Position = projectionMatrix * mv;
+}`;
+const DEVIL_FRAG = /* glsl */`
+uniform sampler2D uDetail; uniform float uTime; uniform vec3 uDustC, uAmbZ, uAmbH;
+varying vec2 vQ; varying float vA; varying vec3 vIns; varying vec3 vTr; varying vec3 vSunT; varying vec3 vN; varying vec3 vV;
+${ATMO_GLSL}
+void main() {
+  float n = texture2D(uDetail, vec2(vQ.x * 3.0 - vQ.y * 1.2, vQ.y * 1.6 - uTime * 0.5)).r * 0.65 + texture2D(uDetail, vec2(vQ.x * 6.0 + vQ.y * 0.7, vQ.y * 3.5 - uTime * 0.9)).a * 0.35;
+  float rim = abs(dot(normalize(vN), vV));   // thin where seen edge-on: a soft, round column
+  float a = min(0.85, smoothstep(0.24, 0.72, n) * (1.0 - smoothstep(0.55, 1.0, vQ.y)) * smoothstep(0.0, 0.04, vQ.y) * (0.45 + 0.55 * rim) * vA * 1.9);
+  if (a < 0.004) discard;
+  // sunlit dust: paler and brighter than the ground it came from, its shaded side cooler (the sky's light)
+  float lit = 0.35 + 0.65 * max(dot(normalize(vN), uSunDir), 0.0);
+  vec3 dust = mix(uDustC, vec3(dot(uDustC, vec3(0.333))) * vec3(1.1, 1.0, 0.86), 0.2) * 1.1;
+  vec3 col = dust * (uSunI * vSunT * lit * 0.3183 * 0.95 + uAmbZ * 1.3 + uAmbH * 0.35);
+  gl_FragColor = vec4(col * vTr + vIns, a);
+  #include <tonemapping_fragment>
+  #include <colorspace_fragment>
+}`;
 // lightning: a jagged bolt from the cloud base to the ground (rebuilt per strike), HDR white-violet, additive
 const BOLT_FRAG = /* glsl */`uniform vec4 uBolt; void main() { gl_FragColor = vec4(vec3(1.4, 1.3, 2.4) * uBolt.w * 6.0, 1.0); }`;
 // impostors: the big kinds beyond the flora range as camera-facing cards (turning about the local up), painted once
@@ -798,16 +1110,16 @@ function palette(S) {
     grass: null, cap: [0, 0.6, 0, 0], capC: [1, 1, 1], fog: [0, 1 / 80, 0.35] };
   switch (S.type) {
     case 'rocky': P.slots = [
-      slot(MAT.dirt, 7, 1.0, 0.02, mix(L(0.5, 0.27, 0.16), R[2], 0.25), mix(L(0.74, 0.46, 0.3), R[3], 0.25)),
-      slot(MAT.gravel, 4.5, 1.2, 0.05, L(0.42, 0.25, 0.17), L(0.7, 0.52, 0.4)),
-      slot(MAT.strata, 9, 1.3, 0.04, mix(L(0.55, 0.3, 0.19), R[1], 0.3), mix(L(0.86, 0.66, 0.5), R[3], 0.2)),
-      slot(MAT.sand, 6, 0.9, 0.02, L(0.78, 0.52, 0.34), L(0.92, 0.7, 0.5))];
+      slot(MAT.dirt, 7, 1.0, 0.02, mix(L(0.52, 0.26, 0.15), R[2], 0.2), mix(L(0.78, 0.47, 0.29), R[3], 0.2)),
+      slot(MAT.gravel, 4.5, 1.2, 0.05, L(0.4, 0.27, 0.21), L(0.66, 0.54, 0.44)),
+      slot(MAT.strata, 9, 1.3, 0.04, mix(L(0.58, 0.28, 0.17), R[1], 0.2), mix(L(0.9, 0.66, 0.48), R[3], 0.15)),
+      slot(MAT.sand, 6, 0.9, 0.02, L(0.82, 0.54, 0.33), L(0.95, 0.74, 0.52))];
       P.snow = S.A * 0.85; P.strata = [7, 1.6, 1, 1]; P.grass = { kind: 1, h: 0.5, w: 0.06, dens: 0.45, a: L(0.56, 0.42, 0.24), b: L(0.66, 0.52, 0.3), t: L(0.86, 0.74, 0.48) };
       P.cap = [0.35, 0.55, 0, 0]; P.capC = L(0.62, 0.42, 0.3); P.fog = [0.00004, 1 / 120, 0.25]; break;
     case 'desert': P.slots = [
-      slot(MAT.sand, 5, 1.1, 0.03, mix(L(0.8, 0.5, 0.26), R[3], 0.25), mix(L(0.96, 0.72, 0.46), R[4] || R[3], 0.15)),
-      slot(MAT.gravel, 4, 1.1, 0.04, mix(L(0.5, 0.34, 0.22), R[1], 0.3), L(0.72, 0.56, 0.4)),
-      slot(MAT.strata, 10, 1.3, 0.04, mix(L(0.46, 0.27, 0.16), R[1], 0.25), mix(L(0.8, 0.58, 0.4), R[2], 0.25)),
+      slot(MAT.sand, 5, 1.1, 0.03, mix(L(0.9, 0.64, 0.33), R[3], 0.08), mix(L(1.0, 0.84, 0.56), R[4] || R[3], 0.05)),
+      slot(MAT.gravel, 4, 1.1, 0.04, mix(L(0.46, 0.31, 0.21), R[1], 0.25), L(0.7, 0.54, 0.38)),
+      slot(MAT.strata, 10, 1.3, 0.04, mix(L(0.5, 0.26, 0.15), R[1], 0.2), mix(L(0.84, 0.6, 0.4), R[2], 0.2)),
       slot(MAT.snow, 12, 0.5, 0.15, L(0.82, 0.78, 0.7), L(0.94, 0.92, 0.86))];
       P.strata = [6, 1.2, 1, 1]; P.grass = { kind: 1, h: 0.35, w: 0.05, dens: 0.18, a: L(0.5, 0.42, 0.25), b: L(0.58, 0.5, 0.3), t: L(0.8, 0.72, 0.5) };
       P.cap = [0.5, 0.5, 0, 0]; P.capC = L(0.88, 0.7, 0.5); P.fog = [0.00008, 1 / 90, 0.4]; break;
@@ -851,13 +1163,30 @@ function palette(S) {
       P.cap = [0, 0.5, 0, 0]; P.fog = [0.00005, 1 / 80, 0.3]; break;
     default: P.slots = [0, 1, 2, 3].map(() => slot(MAT.rock, 8, 1, 0.05, R[1], R[3]));
   }
+  // the look from the air: three macro grounds (multipliers over kilometres), the clumps at tens of metres (strength,
+  // size m, relief, their colour), pale and dark bands plus varnish on the cliffs; the water you see through
+  const LK = LOOK[S.type] || LOOK.rocky;
+  P.mac = LK.mac; P.clump = LK.clump; P.cliffLook = LK.cliff;
+  P.wabs = LK.wabs || [0.3, 0.06, 0.05];
   return P;
 }
+const LOOK = {
+  rocky: { mac: [[1.12, 0.86, 0.7], [0.84, 0.79, 0.9], [1.16, 1.08, 0.86]], clump: [0.8, 38, 2.0, [0.62, 0.68, 0.52]], cliff: 1 },
+  desert: { mac: [[1.07, 1.01, 0.84], [1.1, 0.92, 0.7], [0.97, 0.94, 0.86]], clump: [0.55, 26, 1.5, [0.74, 0.65, 0.54]], cliff: 0.75 },
+  ocean: { mac: [[1.06, 1.04, 0.84], [0.8, 0.96, 0.9], [1.1, 1.0, 0.8]], clump: [1, 22, 2.5, [0.55, 0.7, 0.55]], cliff: 0, wabs: [0.17, 0.034, 0.028] },
+  ice: { mac: [[1.0, 1.0, 1.02], [0.88, 0.94, 1.05], [1.04, 1.02, 0.98]], clump: [0.5, 30, 1.6, [0.86, 0.92, 1.02]], cliff: 0 },
+  jungle: { mac: [[1.04, 1.07, 0.84], [0.78, 0.92, 0.88], [1.07, 0.97, 0.8]], clump: [1, 18, 2.6, [0.5, 0.66, 0.5]], cliff: 0, wabs: [0.3, 0.085, 0.085] },
+  volcanic: { mac: [[1.0, 0.96, 0.94], [1.1, 0.86, 0.74], [0.78, 0.76, 0.8]], clump: [0.6, 26, 1.8, [0.7, 0.66, 0.64]], cliff: 0.3 },
+  crystal: { mac: [[1.0, 0.95, 1.08], [0.86, 1.0, 1.12], [1.12, 0.9, 1.05]], clump: [0.5, 30, 1.6, [0.8, 0.78, 1.1]], cliff: 0, wabs: [0.12, 0.17, 0.04] },
+  gas: { mac: [[1, 1, 1], [1, 1, 1], [1, 1, 1]], clump: [0, 30, 0, [1, 1, 1]], cliff: 0 },
+};
 // the colour each flora kind takes on this world (instances vary around it)
 function floraTint(S, kind) {
   const R = S.ramp.length ? S.ramp : [[0.3, 0.3, 0.3], [0.3, 0.3, 0.3], [0.3, 0.3, 0.3], [0.3, 0.3, 0.3], [0.3, 0.3, 0.3]];
   switch (kind) {
-    case 'rock': case 'hoodoo': case 'spire': case 'boulder': return S.type === 'rocky' || S.type === 'desert' ? lin3([0.78, 0.55, 0.42]) : S.type === 'ice' ? lin3([0.5, 0.52, 0.56]) : S.type === 'volcanic' ? lin3([0.25, 0.23, 0.23]) : S.type === 'crystal' ? lin3([0.42, 0.36, 0.6]) : lin3([0.42, 0.4, 0.38]);
+    case 'skeleton': return lin3([0.95, 0.9, 0.82]);
+    case 'wreckage': return S.type === 'desert' || S.type === 'rocky' ? lin3([0.86, 0.72, 0.58]) : lin3([0.7, 0.7, 0.7]);
+    case 'rock': case 'hoodoo': case 'spire': case 'boulder': case 'outcrop': return S.type === 'rocky' || S.type === 'desert' ? lin3([0.78, 0.55, 0.42]) : S.type === 'ice' ? lin3([0.5, 0.52, 0.56]) : S.type === 'volcanic' ? lin3([0.25, 0.23, 0.23]) : S.type === 'crystal' ? lin3([0.42, 0.36, 0.6]) : lin3([0.42, 0.4, 0.38]);
     case 'shrub': return lin3([0.52, 0.5, 0.3]);
     case 'palm': return lin3([0.42, 0.68, 0.28]);
     case 'coral': return lin3([0.75, 0.85, 1.0]);
@@ -912,8 +1241,14 @@ export function createWorld(THREE, renderer, scene, tierName) {
   const TU = { uLod: { value: new THREE.Vector2(2.5, 1) }, uFade: { value: 1 }, uSnow: { value: -1 }, uA: { value: 100 }, uNear: { value: T.near ? 1 : 0 },
     uGlow: { value: new THREE.Vector3() }, uWater: { value: new THREE.Vector3() }, uDeep: { value: new THREE.Vector3() },
     uMat: { value: null }, uMS: { value: [0, 1, 2, 3].map(() => new THREE.Vector4()) }, uMA: { value: [0, 1, 2, 3].map(() => new THREE.Vector3()) }, uMB: { value: [0, 1, 2, 3].map(() => new THREE.Vector3()) },
-    uStrata: { value: new THREE.Vector4(8, 1, 1, 1) } };
-  const terrainMat = new THREE.ShaderMaterial({ vertexShader: TERRAIN_VERT, fragmentShader: TERRAIN_FRAG, uniforms: { ...AU, ...SU, ...MU, ...TU, ...WU, ...SH } });
+    uStrata: { value: new THREE.Vector4(8, 1, 1, 1) },
+    uNoise3: { value: null }, uDune: { value: new THREE.Vector4(1, 0, 0, 160) }, uMacA: { value: new THREE.Vector3(1, 1, 1) }, uMacB: { value: new THREE.Vector3(1, 1, 1) }, uMacC: { value: new THREE.Vector3(1, 1, 1) },
+    uClumpC: { value: new THREE.Vector3(1, 1, 1) }, uLook: { value: new THREE.Vector4(0, 30, 0, 0) } };
+  // the sea you can see into and dive under: (camera under 0/1, its depth, the opaque depth, a seabed world 0/1)
+  const WP = { uUnder: { value: new THREE.Vector4(0, 0, 60, 0) }, uWAbs: { value: new THREE.Vector3(0.3, 0.06, 0.05) }, uWScat: { value: new THREE.Vector3() } };
+  const terrainMat = new THREE.ShaderMaterial({ vertexShader: TERRAIN_VERT, fragmentShader: TERRAIN_FRAG, uniforms: { ...AU, ...SU, ...MU, ...TU, ...WU, ...SH, ...WP } });
+  // the 3D noise volume (macro ground patches and clumps, the clouds): a grey stand-in until it is generated
+  let noise3 = null; const grey3 = new THREE.Data3DTexture(new Uint8Array([128, 128, 128, 128]), 1, 1, 1); grey3.needsUpdate = true; TU.uNoise3.value = grey3;
   // drawn FIRST, in the opaque list (renderOrder), so the ground and every hull cover it with their own aerial perspective
   const AUR = { uAur: { value: new THREE.Vector4() } };
   const SKYV = { uSkyLut: { value: null }, uSkyUp: { value: new THREE.Vector3(0, 1, 0) }, uSkyS1: { value: new THREE.Vector3(1, 0, 0) }, uSkyS2: { value: new THREE.Vector3(0, 0, 1) }, uSkyHz: { value: new THREE.Vector2(Math.PI / 2, Math.PI / 2) } };
@@ -921,7 +1256,12 @@ export function createWorld(THREE, renderer, scene, tierName) {
   skyRT.texture.wrapS = THREE.ClampToEdgeWrapping; skyRT.texture.wrapT = THREE.ClampToEdgeWrapping; SKYV.uSkyLut.value = skyRT.texture;
   const lutMat = new THREE.ShaderMaterial({ vertexShader: `varying vec2 vUv; void main() { vUv = position.xy * 0.5 + 0.5; gl_Position = vec4(position.xy, 0.0, 1.0); }`, fragmentShader: SKYLUT_FRAG, uniforms: { ...AU, ...SKYV }, depthTest: false, depthWrite: false, toneMapped: false });
   const lutScene = new THREE.Scene(), lutCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1), lutQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), lutMat); lutQuad.frustumCulled = false; lutScene.add(lutQuad);
-  Object.assign(terrainMat.uniforms, SKYV);   // the water reflects the sky table
+  Object.assign(terrainMat.uniforms, SKYV);
+  // the sea surface: the chunks that hold sea drawn again over their seabed (premultiplied blend: what the surface
+  // reflects, by how much it hides what lies below)
+  const waterMat = new THREE.ShaderMaterial({ vertexShader: WATER_VERT, fragmentShader: WATER_FRAG, uniforms: { ...AU, ...SU, ...MU, ...WU, ...SH, ...SKYV, ...WP, uLod: TU.uLod, uGlow: TU.uGlow, uWater: TU.uWater, uFade: TU.uFade },
+    transparent: true, depthWrite: true, side: THREE.DoubleSide, blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.OneFactor, blendDst: THREE.OneMinusSrcAlphaFactor,
+    blendSrcAlpha: THREE.OneFactor, blendDstAlpha: THREE.OneMinusSrcAlphaFactor });
   const skyMat = new THREE.ShaderMaterial({ vertexShader: SKY_VERT, fragmentShader: SKY_FRAG, uniforms: { ...AU, ...AUR, ...SKYV, uBolt: SU.uBolt, uDetail: SU.uDetail, uPInv: SU.uPInv }, depthTest: false, depthWrite: false, transparent: false,
     blending: THREE.CustomBlending, blendEquation: THREE.AddEquation, blendSrc: THREE.OneFactor, blendDst: THREE.SrcAlphaFactor, blendSrcAlpha: THREE.ZeroFactor, blendDstAlpha: THREE.OneFactor });
   const sky = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), skyMat); sky.frustumCulled = false; sky.renderOrder = -1000; sky.visible = false; scene.add(sky);
@@ -936,6 +1276,24 @@ export function createWorld(THREE, renderer, scene, tierName) {
     const d = new THREE.Mesh(cloudGeo, m); d.frustumCulled = false; d.renderOrder = 3 + i; d.visible = false; return d;
   });
   const GAS_DECK = [60, 700, 1650];
+  // the volumetric clouds (medium / high): drawn by the post chain (post.vol) at half resolution over the scene's depth
+  const volU = { tDepth: { value: null }, uNoise3: TU.uNoise3, uInvProj: { value: new THREE.Matrix4() }, uCamW: { value: new THREE.Matrix4() }, uNF: { value: new THREE.Vector2(0.4, 4e5) },
+    uCamPos: { value: new THREE.Vector3() }, uVol: { value: new THREE.Vector4(1, 2, T.vol, T.volL) }, uVolK: { value: new THREE.Vector4(0.035, 1.15, 0.55, 1) }, uWindO: { value: new THREE.Vector3() } };
+  const volMat = T.vol ? new THREE.ShaderMaterial({ vertexShader: `varying vec2 vUv; void main() { vUv = position.xy * 0.5 + 0.5; gl_Position = vec4(position.xy, 0.0, 1.0); }`, fragmentShader: VOL_FRAG,
+    uniforms: { ...AU, ...SU, ...volU }, depthTest: false, depthWrite: false, toneMapped: false }) : null;
+  const volScene = new THREE.Scene(), volCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  if (volMat) { const q = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), volMat); q.frustumCulled = false; volScene.add(q); }
+  let volReady = false;   // its program compiled (off the main thread) before the first world shows it
+  const vol = {
+    on: false,
+    draw(depthTex, rt, cam) {
+      if (!volMat || !vol.on || !volReady) return false;
+      volU.tDepth.value = depthTex; volU.uInvProj.value.copy(cam.projectionMatrixInverse); volU.uCamW.value.copy(cam.matrixWorld);
+      volU.uNF.value.set(cam.near, cam.far); volU.uCamPos.value.setFromMatrixPosition(cam.matrixWorld);
+      const prev = renderer.getRenderTarget(); renderer.setRenderTarget(rt); renderer.render(volScene, volCam); renderer.setRenderTarget(prev);
+      return true;
+    },
+  };
   // puffs
   const NP = T.puffs, pGeo = new THREE.InstancedBufferGeometry();
   pGeo.setAttribute('position', new THREE.Float32BufferAttribute([-1, -1, 0, 1, -1, 0, 1, 1, 0, -1, 1, 0], 3)); pGeo.setIndex([0, 1, 2, 0, 2, 3]);
@@ -963,7 +1321,7 @@ export function createWorld(THREE, renderer, scene, tierName) {
   // flora
   const floraU = { uTime: SU.uTime, uWind: { value: 1 }, uRange: { value: T.floraR * T.smallK }, uWindDir: { value: new THREE.Vector3(1, 0, 0) }, uGlow: { value: new THREE.Vector3(1, 1, 1) },
     uCap: { value: new THREE.Vector4(0, 0.6, 0, 0) }, uCapC: { value: new THREE.Vector3(1, 1, 1) } };
-  const floraUni = (range) => ({ ...AU, ...SU, ...SH, ...floraU, uRange: range ? { value: range } : floraU.uRange });
+  const floraUni = (range) => ({ ...AU, ...SU, ...SH, ...WP, ...floraU, uRange: range ? { value: range } : floraU.uRange });
   const floraMat = new THREE.ShaderMaterial({ vertexShader: FLORA_VERT, fragmentShader: FLORA_FRAG, uniforms: floraUni(0), vertexColors: true, side: THREE.DoubleSide });
   // the big ones (trees, spires, ribs) shape the skyline: they are drawn (and fade) twice as far out
   const floraMatBig = new THREE.ShaderMaterial({ vertexShader: FLORA_VERT, fragmentShader: FLORA_FRAG, uniforms: floraUni(T.floraR * 2.2), vertexColors: true, side: THREE.DoubleSide });
@@ -972,50 +1330,76 @@ export function createWorld(THREE, renderer, scene, tierName) {
   const siteMat = hullMaterial(THREE, { metal: 0.08, rough: 0.82, panelK: 0.25, panel: 0.12, env: 0.35 });
   const wreckMat = hullMaterial(THREE, { metal: 0.5, rough: 0.6, panel: 0.4, env: 0.5 }); wreckMat.userData.U.uScorch.value = 0.75;
 
-  // ---- the sun's shadow map: one cascade that follows the camera (medium / high) --------------------------------------
-  const SHADOW_LAYER = 3;
-  let shRT = null, shCam = null, depthMat = null;
+  // ---- the sun's shadow maps: two cascades that follow the camera (medium / high), side by side in one depth atlas -----
+  // the sharp one (every caster, a hundred-odd metres) is drawn every frame; the wide one (terrain, sites, the far trees
+  // on high and the ships, a kilometre or two: long shadows of ridges, valleys in shade) every other frame — it lives in
+  // world space, so a frame-old map still lines up
+  const SHADOW_LAYER = 3, SHADOW_LAYER2 = 4;
+  let depthMat = null;
   // a 1x1 depth map stands in when there is no shadow map (low tier, before a world): a shadow sampler must always
   // have a depth texture with a compare mode behind it, or the draw that declares it is dropped
   const shDummy = new THREE.WebGLRenderTarget(1, 1, { depthBuffer: true }); shDummy.depthTexture = new THREE.DepthTexture(1, 1, THREE.UnsignedIntType); shDummy.depthTexture.compareFunction = THREE.LessEqualCompare;
   { const prev = renderer.getRenderTarget(); renderer.setRenderTarget(shDummy); renderer.clear(true, true, false); renderer.setRenderTarget(prev); }
   if (!SH.uShMap.value) SH.uShMap.value = shDummy.depthTexture;
   const shU = { uLod: TU.uLod, uMainCam: { value: new THREE.Vector3() } };
+  let shRT = null, sh1 = null, sh2 = null;
   if (T.shadow) {
-    shRT = new THREE.WebGLRenderTarget(T.shadow, T.shadow, { depthBuffer: true });
-    shRT.depthTexture = new THREE.DepthTexture(T.shadow, T.shadow, THREE.UnsignedIntType);
-    shRT.depthTexture.compareFunction = THREE.LessEqualCompare; shRT.depthTexture.minFilter = shRT.depthTexture.magFilter = THREE.LinearFilter;
-    shCam = new THREE.OrthographicCamera(-T.shBox, T.shBox, T.shBox, -T.shBox, 1, 6000); shCam.layers.set(SHADOW_LAYER);
     depthMat = new THREE.ShaderMaterial({ vertexShader: DEPTH_VERT, fragmentShader: DEPTH_FRAG, uniforms: shU, side: THREE.DoubleSide });
     depthMat.defaultAttributeValues = { ...depthMat.defaultAttributeValues, aMor: [0, 0, 0, 0] };
+    const AW = T.shadow + (T.sh2 || 0), AH = Math.max(T.shadow, T.sh2 || 0);
+    shRT = new THREE.WebGLRenderTarget(AW, AH, { depthBuffer: true });
+    shRT.depthTexture = new THREE.DepthTexture(AW, AH, THREE.UnsignedIntType);
+    shRT.depthTexture.compareFunction = THREE.LessEqualCompare; shRT.depthTexture.minFilter = shRT.depthTexture.magFilter = THREE.LinearFilter;
     SH.uShMap.value = shRT.depthTexture;
+    // allocated (and cleared to "lit") at once: a shadow sampler bound to a depth texture that was never a render target
+    // has no storage behind it, and every draw that declares it is dropped — the ground would vanish at night
+    { const prev = renderer.getRenderTarget(); renderer.setRenderTarget(shRT); renderer.clear(true, true, false); renderer.setRenderTarget(prev); }
+    const cascade = (size, box, layer, far, x0, P0, matKey, aKey) => {
+      const cam = new THREE.OrthographicCamera(-box, box, box, -box, 1, far); cam.layers.set(layer);
+      const A = SH[aKey].value; A[0] = size / AW; A[1] = size / AH; A[2] = x0 / AW; A[3] = 0;
+      return { cam, size, box, far, x0, P: SH[P0], matKey, mat: new THREE.Matrix4(), frame: 0, on: false };
+    };
+    sh1 = cascade(T.shadow, T.shBox, SHADOW_LAYER, 6000, 0, 'uShP', 'uShMat', 'uShA');
+    if (T.sh2) sh2 = cascade(T.sh2, T.sh2Box, SHADOW_LAYER2, 12000, T.shadow, 'uShP2', 'uShMat2', 'uShA2');
   }
-  const shMat = new THREE.Matrix4(), shBias = new THREE.Matrix4().set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1);
+  const shBias = new THREE.Matrix4().set(0.5, 0, 0, 0.5, 0, 0.5, 0, 0.5, 0, 0, 0.5, 0.5, 0, 0, 0, 1);
   const shFocus = new THREE.Vector3(), shUp = new THREE.Vector3();
   let shadowOn = false;
-  function renderShadow(cam, sunDir, active) {
-    if (!shRT) { SH.uShP.value[0] = 0; return; }
-    if (!active || api.shadowOff) { SH.uShP.value[0] = 0; return; }
-    // the box: centred a little ahead of the camera, its texels snapped in light space (no shimmer as you move)
+  function drawCascade(C, cam, sunDir, lead, flora) {
+    // the box: centred ahead of the camera, its texels snapped in light space (no shimmer as you move)
     _v.set(0, 0, -1).applyQuaternion(cam.quaternion);
-    shFocus.copy(cam.position).addScaledVector(_v, T.shBox * 0.35);
+    shFocus.copy(cam.position).addScaledVector(_v, C.box * lead);
     const L = _v2.set(sunDir[0], sunDir[1], sunDir[2]).normalize();
     shUp.copy(Math.abs(L.y) < 0.95 ? _v3.set(0, 1, 0) : _v3.set(1, 0, 0));
-    shCam.position.copy(shFocus).addScaledVector(L, 3000); shCam.up.copy(shUp); shCam.lookAt(shFocus); shCam.updateMatrixWorld(true);
-    const texel = (2 * T.shBox) / T.shadow;
-    _v.copy(shFocus).applyMatrix4(shCam.matrixWorldInverse);
+    C.cam.position.copy(shFocus).addScaledVector(L, C.far * 0.5); C.cam.up.copy(shUp); C.cam.lookAt(shFocus); C.cam.updateMatrixWorld(true);
+    const texel = (2 * C.box) / C.size;
+    _v.copy(shFocus).applyMatrix4(C.cam.matrixWorldInverse);
     const sx = Math.round(_v.x / texel) * texel - _v.x, sy = Math.round(_v.y / texel) * texel - _v.y;
-    shCam.left = -T.shBox + sx; shCam.right = T.shBox + sx; shCam.top = T.shBox + sy; shCam.bottom = -T.shBox + sy; shCam.updateProjectionMatrix();
+    C.cam.left = -C.box + sx; C.cam.right = C.box + sx; C.cam.top = C.box + sy; C.cam.bottom = -C.box + sy; C.cam.updateProjectionMatrix();
     shU.uMainCam.value.copy(cam.position);
     const prevRT = renderer.getRenderTarget(), prevAuto = renderer.autoClear, prevOv = scene.overrideMaterial, prevBg = scene.background;
     scene.overrideMaterial = depthMat; scene.background = null; renderer.autoClear = false;
+    // its own rectangle of the atlas (the scissor keeps the clear to it)
+    shRT.viewport.set(C.x0, 0, C.size, C.size); shRT.scissor.set(C.x0, 0, C.size, C.size); shRT.scissorTest = true;
     renderer.setRenderTarget(shRT); renderer.clear(true, true, false);
-    for (const k in floraMeshes) { const fm = floraMeshes[k]; fm.full = fm.im.count; fm.im.count = Math.min(fm.im.count, fm.shN || 0); }
-    renderer.render(scene, shCam);
-    for (const k in floraMeshes) { const fm = floraMeshes[k]; fm.im.count = fm.full; }
+    // only the plants inside the box are drawn into it (the instances fill from the camera out); the wide cascade takes
+    // the trees only on high, and then their light far meshes (a forest of full ones costs more than all the ground)
+    const wide = flora === 'shN2';
+    for (const k in floraMeshes) { const fm = floraMeshes[k]; fm.full = fm.im.count; fm.im.count = wide ? 0 : Math.min(fm.im.count, fm[flora] || 0); if (fm.lo) { fm.fullLo = fm.lo.count; fm.lo.count = wide && T.sh2Flora ? Math.min(fm.lo.count, fm.shLo2 || 0) : 0; } }
+    renderer.render(scene, C.cam);
+    for (const k in floraMeshes) { const fm = floraMeshes[k]; fm.im.count = fm.full; if (fm.lo) fm.lo.count = fm.fullLo; }
+    shRT.scissorTest = false;
     scene.overrideMaterial = prevOv; scene.background = prevBg; renderer.setRenderTarget(prevRT); renderer.autoClear = prevAuto;
-    shMat.multiplyMatrices(shCam.projectionMatrix, shCam.matrixWorldInverse).premultiply(shBias);
-    SH.uShMat.value = shMat.elements; SH.uShP.value[0] = 0.92; SH.uShP.value[1] = 1 / T.shadow; SH.uShP.value[2] = texel * 1.4;
+    C.mat.multiplyMatrices(C.cam.projectionMatrix, C.cam.matrixWorldInverse).premultiply(shBias);
+    SH[C.matKey].value = C.mat.elements; C.P.value[1] = 1 / C.size; C.P.value[2] = texel * 1.4;
+    return texel;
+  }
+  function renderShadow(cam, sunDir, active) {
+    if (!sh1 || !active || api.shadowOff) { SH.uShP.value[0] = 0; SH.uShP2.value[0] = 0; if (sh2) { sh2.frame = 0; sh2.on = false; } return; }
+    drawCascade(sh1, cam, sunDir, 0.35, 'shN'); SH.uShP.value[0] = 0.92;
+    // the wide cascade: at once when it comes on, then every T.sh2N frames
+    if (sh2 && !api.shadow2Off) { if (!sh2.on || ++sh2.frame >= T.sh2N) { sh2.frame = 0; drawCascade(sh2, cam, sunDir, 0.45, 'shN2'); sh2.on = true; } SH.uShP2.value[0] = 0.92; }
+    else { SH.uShP2.value[0] = 0; if (sh2) sh2.on = false; }
     shadowOn = true;
   }
 
@@ -1024,7 +1408,13 @@ export function createWorld(THREE, renderer, scene, tierName) {
   const GU_ = { uGH: { value: 0.6 }, uGW: { value: 0.07 }, uDens: { value: 0.8 }, uSide: { value: SIDE }, uKind: { value: 0 }, uRange: { value: T.grass },
     uGA: { value: new THREE.Vector3() }, uGB: { value: new THREE.Vector3() }, uGT: { value: new THREE.Vector3() },
     uNearAir: { value: new THREE.Vector4() }, uNearIns: { value: new THREE.Vector3() } };
-  const grassMat = T.grass ? new THREE.ShaderMaterial({ vertexShader: GRASS_VERT, fragmentShader: GRASS_FRAG, uniforms: { ...AU, ...SU, ...SH, ...GU_, uTime: SU.uTime, uWind: floraU.uWind, uWindDir: floraU.uWindDir, uGlow: floraU.uGlow, uSea: MU.uSea }, side: THREE.DoubleSide }) : null;
+  GU_.uRing = { value: new THREE.Vector4(-1, 0, 1, 1) };   // (fade in from, to (m), blade width x, height x)
+  const grassU = (G) => ({ ...AU, ...SU, ...SH, ...G, uTime: SU.uTime, uWind: floraU.uWind, uWindDir: floraU.uWindDir, uGlow: floraU.uGlow, uSea: MU.uSea, uNoise3: TU.uNoise3, uLook: TU.uLook });
+  const grassMat = T.grass ? new THREE.ShaderMaterial({ vertexShader: GRASS_VERT, fragmentShader: GRASS_FRAG, uniforms: grassU(GU_), side: THREE.DoubleSide }) : null;
+  // the far ring: fewer, broader, taller tufts on the next coarser chunks, growing in where the near ring shrinks away
+  const GU2 = { ...GU_, uRange: { value: T.grass2 }, uRing: { value: new THREE.Vector4(T.grass * 0.62, T.grass * 0.95, 2.2, 1.3) } };
+  const grassMat2 = T.grass2 ? new THREE.ShaderMaterial({ vertexShader: GRASS_VERT, fragmentShader: GRASS_FRAG, uniforms: grassU(GU2), side: THREE.DoubleSide }) : null;
+  let grass2Geo = null;
   function bladeGeometry(n) {
     // a tuft: n blades of 5 vertices (two tapering sections and a tip), position = (across, up, blade index)
     const p = [], idx = [];
@@ -1061,6 +1451,12 @@ export function createWorld(THREE, renderer, scene, tierName) {
     return { m };
   };
   const grassOf = (s) => { if (!s.grass) s.grass = fieldMesh(s, grassGeo, grassMat, 1); fieldOf(s); return s.grass; };
+  const grass2Of = (s) => { if (!s.grass2) s.grass2 = fieldMesh(s, grass2Geo, grassMat2, 1); fieldOf(s); return s.grass2; };
+  const waterOf = (s) => {
+    if (!s.water) { s.water = new THREE.Mesh(s.geo, waterMat); s.water.renderOrder = 2; s.water.visible = false; s.water.position.copy(s.mesh.position); group.add(s.water); }
+    else if (s.water.parent !== group) group.add(s.water);
+    return s.water;
+  };
   const rainOf = (s) => { if (!s.rain) s.rain = fieldMesh(s, rainGeo, rainMat, 7); fieldOf(s); return s.rain; };
   const RU = { uRain: { value: 0 }, uRange: { value: 38 }, uRainC: { value: new THREE.Vector3(1, 1, 1) }, uSide: GU_.uSide };
   const rainMat = new THREE.ShaderMaterial({ vertexShader: RAIN_VERT, fragmentShader: RAIN_FRAG, uniforms: { ...AU, uTime: SU.uTime, ...RU }, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending });
@@ -1074,10 +1470,11 @@ export function createWorld(THREE, renderer, scene, tierName) {
   function newSlot() {
     const b = newChunkBufs(), geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(b.pos, 3)); geo.setAttribute('normal', new THREE.BufferAttribute(b.nrm, 3));
-    geo.setAttribute('aMor', new THREE.BufferAttribute(b.mor, 4)); geo.setAttribute('aSrf', new THREE.BufferAttribute(b.srf, 4)); geo.setAttribute('aEx', new THREE.BufferAttribute(b.ex, 4, true)); geo.setIndex(index);
+    geo.setAttribute('aMor', new THREE.BufferAttribute(b.mor, 4)); geo.setAttribute('aSrf', new THREE.BufferAttribute(b.srf, 4)); geo.setAttribute('aEx', new THREE.BufferAttribute(b.ex, 4, true));
+    geo.setAttribute('aDun', new THREE.BufferAttribute(b.dn, 2)); geo.setIndex(index);
     geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 1);
-    const mesh = new THREE.Mesh(geo, terrainMat); mesh.visible = false; mesh.matrixAutoUpdate = true; mesh.layers.enable(SHADOW_LAYER); group.add(mesh);
-    const s = { geo, mesh, node: null, seen: 0, grass: null, stamp: 0 }; slots.push(s); return s;
+    const mesh = new THREE.Mesh(geo, terrainMat); mesh.visible = false; mesh.matrixAutoUpdate = true; mesh.layers.enable(SHADOW_LAYER); mesh.layers.enable(SHADOW_LAYER2); group.add(mesh);
+    const s = { geo, mesh, node: null, seen: 0, grass: null, grass2: null, water: null, stamp: 0 }; slots.push(s); return s;
   }
   for (let i = 0; i < 6; i++) spare.push(newChunkBufs());
 
@@ -1097,7 +1494,8 @@ export function createWorld(THREE, renderer, scene, tierName) {
   }
 
   // ---- state for the current world -----------------------------------------------------------------------------------
-  let S = null, P = null, lmax = 8, frameNo = 0, faceSize = 1, gas = false;
+  let S = null, P = null, lmax = 8, frameNo = 0, faceSize = 1, gas = false, seaSeen = false, under = false;
+  const DEEP = 60;   // m of water past which the seabed no longer shows from above
   const nodes = new Map(), visible = [], wantReq = [];
   const camL = new THREE.Vector3();
   let floraCells = new Map(), floraDirty = false, floraKinds = [], floraMeshes = {}, sites = [];
@@ -1118,6 +1516,12 @@ export function createWorld(THREE, renderer, scene, tierName) {
     P.slots.forEach((s, i) => { TU.uMS.value[i].set(s.layer, s.tile, s.nk, s.spec); TU.uMA.value[i].set(...s.a); TU.uMB.value[i].set(...s.b); });
     TU.uStrata.value.set(...P.strata);
     TU.uGlow.value.set(...P.glow); TU.uWater.value.set(...P.water); TU.uDeep.value.set(...P.deep);
+    TU.uDune.value.set(S.wind[0], S.wind[1], S.wind[2], S.duneL);
+    TU.uMacA.value.set(...P.mac[0]); TU.uMacB.value.set(...P.mac[1]); TU.uMacC.value.set(...P.mac[2]);
+    TU.uClumpC.value.set(...P.clump[3]); TU.uLook.value.set(P.clump[0], P.clump[1], P.clump[2], P.cliffLook);
+    seaSeen = S.sea > 0 && (S.liquid === 1 || S.liquid === 4); under = false;
+    WP.uUnder.value.set(0, 0, DEEP, seaSeen ? 1 : 0); WP.uWAbs.value.set(...P.wabs);
+    if (!noise3) noise3 = makeNoise3D(THREE, renderer, 64, (tex) => { TU.uNoise3.value = tex; });
     floraU.uGlow.value.set(...(S.type === 'jungle' ? [0.5, 2.2, 1.8] : S.type === 'crystal' ? [0.6, 1.2, 2.4] : S.type === 'ocean' ? [0.5, 1.4, 2.4] : S.type === 'volcanic' ? [2.6, 0.9, 0.2] : [1.2, 1.2, 1.2]));
     floraU.uCap.value.set(P.cap[0], P.cap[1], 0, 0); floraU.uCapC.value.set(...P.capC);
     // the sea: wind-driven swell (water worlds); calm lakes on the crystal worlds, none on lava or ice
@@ -1129,10 +1533,13 @@ export function createWorld(THREE, renderer, scene, tierName) {
       GU_.uGH.value = P.grass.h; GU_.uGW.value = P.grass.w; GU_.uDens.value = P.grass.dens; GU_.uKind.value = P.grass.kind;
       GU_.uGA.value.set(...P.grass.a); GU_.uGB.value.set(...P.grass.b); GU_.uGT.value.set(...P.grass.t);
       if (!grassGeo) grassGeo = bladeGeometry(T.blades);
+      if (grassMat2 && !grass2Geo) grass2Geo = bladeGeometry(T.blades2);
     }
     SU.uR.value = S.R; SU.uCloud.value = body && body.aux ? body.aux : blank; SU.uCloudAlt.value = S.cloud.alt; SU.uCloudK.value = S.cloud.cover;
     gas = S.type === 'gas';
-    clouds.scale.setScalar(S.R + S.cloud.alt); group.add(clouds); clouds.visible = !gas && S.cloud.cover > 0.05;
+    clouds.scale.setScalar(S.R + S.cloud.alt); group.add(clouds); clouds.visible = !gas && S.cloud.cover > 0.05 && !volMat;
+    { const H = Math.min(1500, Math.max(650, S.cloud.thick * 5.5)); volU.uVol.value.x = S.R + S.cloud.alt - H * 0.3; volU.uVol.value.y = S.R + S.cloud.alt + H * 0.7; }
+    if (volMat && !volReady) { try { renderer.compileAsync(volScene, volCam).then(() => { volReady = true; }, () => { volReady = true; }); } catch (e) { volReady = true; } }
     veil.scale.setScalar(S.R + Math.min(S.atmo.top * 0.85, S.cloud.alt * 2.3)); group.add(veil); veil.visible = T.cloud2 && !gas;
     puffU.uDeckR.value = S.R + S.cloud.alt; puffU.uThick.value = S.cloud.thick;
     if (gas) {   // the decks of a gas giant; its puffs live on the middle deck, everywhere
@@ -1140,6 +1547,7 @@ export function createWorld(THREE, renderer, scene, tierName) {
       SU.uCloud.value = white; SU.uCloudK.value = 0.62; SU.uCloudAlt.value = GAS_DECK[1]; puffU.uDeckR.value = S.R + GAS_DECK[1]; puffU.uThick.value = 420;
     }
     BOLT.next = 4 + Math.random() * 8; BOLT.k = 0; SU.uBolt.value.w = 0;
+    { const c = P.slots[0].b; dvU.uDustC.value.set(c[0] * 0.85, c[1] * 0.82, c[2] * 0.8); dvSeed = (S.seeds[2] % 2147483646) + 1; for (let i = 0; i < DV.length; i++) { DV[i].on = false; DV[i].wait = 2 + i * 6; } group.add(devils); devils.visible = false; }
     // flora kinds of this world
     floraKinds = S.flora.map((f) => f.kind);
     for (const k of floraKinds) {
@@ -1148,14 +1556,14 @@ export function createWorld(THREE, renderer, scene, tierName) {
       const im = new THREE.InstancedMesh(floraGeo[k], FLORA_BIG.has(k) ? floraMatBig : floraMat, cap); im.count = 0; im.frustumCulled = false;
       im.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(cap * 3), 3);
       im.instanceMatrix.setUsage(THREE.DynamicDrawUsage); im.instanceColor.setUsage(THREE.DynamicDrawUsage);
-      im.layers.enable(SHADOW_LAYER);
-      group.add(im); floraMeshes[k] = { im, cap, tint: floraTint(S, k), big: FLORA_BIG.has(k), lo: null, capLo: 0 };
+      im.layers.enable(SHADOW_LAYER); if (FLORA_BIG.has(k)) im.layers.enable(SHADOW_LAYER2);
+      group.add(im); floraMeshes[k] = { im, cap, tint: floraTint(S, k), big: FLORA_BIG.has(k), lo: null, capLo: 0, shN: 0, shN2: 0, shLo2: 0 };
       if (FLORA_BIG.has(k)) {   // the far LOD: a second instanced mesh with the light version of the kind
         if (!floraGeoLo[k]) floraGeoLo[k] = floraGeometry(THREE, k, true);
         const capLo = Math.round(3200 * T.flora + 600), lo = new THREE.InstancedMesh(floraGeoLo[k], floraMatBig, capLo); lo.count = 0; lo.frustumCulled = false;
         lo.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(capLo * 3), 3);
         lo.instanceMatrix.setUsage(THREE.DynamicDrawUsage); lo.instanceColor.setUsage(THREE.DynamicDrawUsage);
-        group.add(lo); floraMeshes[k].lo = lo; floraMeshes[k].capLo = capLo;
+        lo.layers.enable(SHADOW_LAYER2); group.add(lo); floraMeshes[k].lo = lo; floraMeshes[k].capLo = capLo;
       }
     }
     if (impMat) { impInit(); bakeImpostors(); if (impKinds.length) group.add(impMesh); }
@@ -1167,11 +1575,11 @@ export function createWorld(THREE, renderer, scene, tierName) {
       g.position.set(d[0] * r, d[1] * r, d[2] * r);
       _q.setFromUnitVectors(_v.set(0, 1, 0), _v2.set(d[0], d[1], d[2])); g.quaternion.copy(_q); g.rotateY(st.yaw);
       g.scale.setScalar(SITE_SCALE[st.kind] || 1);   // the Costellatori built big: their ruins stand over the ridges
-      const m = new THREE.Mesh(sg.geo, siteMat); m.layers.enable(SHADOW_LAYER); g.add(m);
+      const m = new THREE.Mesh(sg.geo, siteMat); m.layers.enable(SHADOW_LAYER); m.layers.enable(SHADOW_LAYER2); g.add(m);
       let crystal = null;
       if (sg.crystal) { crystal = new THREE.Mesh(sg.crystal, siteMat); crystal.position.y = 6.5; crystal.layers.enable(SHADOW_LAYER); g.add(crystal); }
       if (st.kind === 'wreck') {
-        const hull = new THREE.Mesh(shipGeometry(THREE, ['hauler', 'warden', 'hulk'][st.seed % 3], st.seed % 3 === 2 ? 2 : 0, false), wreckMat); hull.userData.shared = true; hull.layers.enable(SHADOW_LAYER);
+        const hull = new THREE.Mesh(shipGeometry(THREE, ['hauler', 'warden', 'hulk'][st.seed % 3], st.seed % 3 === 2 ? 2 : 0, false), wreckMat); hull.userData.shared = true; hull.layers.enable(SHADOW_LAYER); hull.layers.enable(SHADOW_LAYER2);
         const sc = st.seed % 3 === 0 ? 0.6 : 0.32; hull.scale.setScalar(sc); hull.rotation.set(0.25 + (st.seed % 7) * 0.05, 0, 0.35 - (st.seed % 5) * 0.12); hull.position.y = 3; g.add(hull);
       }
       group.add(g);
@@ -1185,10 +1593,13 @@ export function createWorld(THREE, renderer, scene, tierName) {
     // stand-ins for what is not built yet (the chunks arrive from the workers; the shadow pass's two variants)
     if (!terrainProxy) {
       terrainProxy = new THREE.Mesh(slotGeoProxy(), terrainMat); terrainProxy.frustumCulled = false;
+      waterProxy = new THREE.Mesh(terrainProxy.geometry, waterMat); waterProxy.frustumCulled = false;
       if (depthMat) { depthProxy = new THREE.Mesh(terrainProxy.geometry, depthMat); depthProxy.frustumCulled = false; depthIProxy = new THREE.InstancedMesh(terrainProxy.geometry, depthMat, 1); depthIProxy.frustumCulled = false; }
     }
-    for (const o of [terrainProxy, depthProxy, depthIProxy]) if (o) { o.visible = false; group.add(o); }
-    const done = () => { if (S !== myS) return; progReady = true; group.visible = true; for (const o of [grassProxy, rainProxy, terrainProxy, depthProxy, depthIProxy]) if (o) o.removeFromParent(); };
+    for (const o of [terrainProxy, depthProxy, depthIProxy, seaSeen ? waterProxy : null]) if (o) { o.visible = false; group.add(o); }
+    if (grassProxy && grassMat2 && grass2Geo && !grass2Proxy) { grass2Proxy = new THREE.Mesh(grass2Geo, grassMat2); grass2Proxy.frustumCulled = false; }
+    if (grass2Proxy) { grass2Proxy.visible = false; group.add(grass2Proxy); }
+    const done = () => { if (S !== myS) return; progReady = true; group.visible = true; for (const o of [grassProxy, grass2Proxy, rainProxy, terrainProxy, waterProxy, depthProxy, depthIProxy]) if (o) o.removeFromParent(); };
     // compiled for the target the near pass draws into (the post chain's: no tone mapping in the shader), the sky table too
     try {
       const prev = renderer.getRenderTarget();
@@ -1201,7 +1612,7 @@ export function createWorld(THREE, renderer, scene, tierName) {
     if (window.__cz) window.__cz.world = api;
   }
   function clear() {
-    for (const s of slots) { s.mesh.visible = false; s.node = null; if (s.grass) s.grass.m.visible = false; if (s.rain) s.rain.m.visible = false; }
+    for (const s of slots) { s.mesh.visible = false; s.node = null; if (s.grass) s.grass.m.visible = false; if (s.grass2) s.grass2.m.visible = false; if (s.rain) s.rain.m.visible = false; if (s.water) s.water.visible = false; }
     nodes.clear(); visible.length = 0; wantReq.length = 0;
     for (const [id, p] of pending) { if (p.cell) p.dead = true; else p.dead = true; }
     for (const k in floraMeshes) { const fm = floraMeshes[k]; fm.im.removeFromParent(); fm.im.dispose(); if (fm.lo) { fm.lo.removeFromParent(); fm.lo.dispose(); } }
@@ -1210,7 +1621,7 @@ export function createWorld(THREE, renderer, scene, tierName) {
     for (const s of sites) { s.g.removeFromParent(); s.g.traverse((o) => { if (o.isMesh && o.geometry && !o.userData.shared) o.geometry.dispose(); }); }
     sites = [];
     if (S) for (const w of workers) w.w.postMessage({ op: 'drop', key: S.key });
-    clouds.removeFromParent(); clouds.visible = false; veil.removeFromParent(); veil.visible = false; sky.visible = false; puffs.visible = false; wLines.visible = wPts.visible = false; bolt.visible = false;
+    clouds.removeFromParent(); clouds.visible = false; vol.on = false; devils.removeFromParent(); devils.visible = false; veil.removeFromParent(); veil.visible = false; sky.visible = false; puffs.visible = false; wLines.visible = wPts.visible = false; bolt.visible = false;
     for (const d of decks) { d.removeFromParent(); d.visible = false; } gas = false;
     SH.uShP.value[0] = 0; SU.uBolt.value.w = 0; AUR.uAur.value.x = 0; SU.uFog.value.x = 0;
     group.visible = false; S = null;
@@ -1267,9 +1678,15 @@ export function createWorld(THREE, renderer, scene, tierName) {
     return false;
   }
   function show(n, d) {
-    const s = n.slot; s.seen = frameNo; s.mesh.visible = true; visible.push(s.mesh);
-    // the finest chunks near the camera grow their ground cover
-    if (grassMat && grassGeo && grassObj.visible && n.L >= lmax - 1 && d < T.grass && P && P.grass) { const g = grassOf(s); g.m.visible = true; grassShown.push(g.m); }
+    const s = n.slot; s.seen = frameNo;
+    // a seabed too deep to show through the water is not drawn from above (the surface turns opaque there)
+    if (!(seaSeen && !under && n.emax < -DEEP)) { s.mesh.visible = true; visible.push(s.mesh); }
+    if (seaSeen && n.emin < -0.25) { const w = waterOf(s); w.visible = true; visible.push(w); }
+    // the finest chunks near the camera grow their ground cover; a sparser far ring of bigger tufts reaches further
+    if (grassMat && grassGeo && grassObj.visible && P && P.grass) {
+      if (n.L >= lmax - 1 && d < T.grass) { const g = grassOf(s); g.m.visible = true; grassShown.push(g.m); }
+      if (grassMat2 && n.L >= lmax - 2 && d < T.grass2 && d + 2 * n.rad > T.grass * 0.7) { const g = grass2Of(s); g.m.visible = true; grassShown.push(g.m); }
+    }
     if (rainOn && n.L >= lmax - 1 && d < RU.uRange.value) { const r = rainOf(s); r.m.visible = true; grassShown.push(r.m); }
   }
   const grassShown = [];
@@ -1284,7 +1701,7 @@ export function createWorld(THREE, renderer, scene, tierName) {
       const w = workers.reduce((a, b) => (b.busy < a.busy ? b : a));
       const id = reqId++; pending.set(id, { node: n, w });
       n.req = true; w.busy++; inflight++;
-      w.w.postMessage({ op: 'chunk', id, key: S.key, f: n.f, L: n.L, x: n.x, y: n.y, bufs }, [bufs.pos.buffer, bufs.nrm.buffer, bufs.mor.buffer, bufs.srf.buffer, bufs.ex.buffer]);
+      w.w.postMessage({ op: 'chunk', id, key: S.key, f: n.f, L: n.L, x: n.x, y: n.y, bufs }, chunkTransfer(bufs));
     }
     wantReq.length = 0;
     stats.inflight = inflight;
@@ -1304,10 +1721,10 @@ export function createWorld(THREE, renderer, scene, tierName) {
     const n = p.node, s = freeSlot();
     if (!s) { spare.push(m.bufs); n.req = false; return; }
     const a = s.geo.attributes;
-    spare.push({ pos: a.position.array, nrm: a.normal.array, mor: a.aMor.array, srf: a.aSrf.array, ex: a.aEx.array });
-    a.position.array = m.bufs.pos; a.normal.array = m.bufs.nrm; a.aMor.array = m.bufs.mor; a.aSrf.array = m.bufs.srf; a.aEx.array = m.bufs.ex;
-    a.position.needsUpdate = a.normal.needsUpdate = a.aMor.needsUpdate = a.aSrf.needsUpdate = a.aEx.needsUpdate = true;
-    const I = m.info; s.mesh.position.set(I.cx, I.cy, I.cz); s.geo.boundingSphere.radius = I.rad;
+    spare.push({ pos: a.position.array, nrm: a.normal.array, mor: a.aMor.array, srf: a.aSrf.array, ex: a.aEx.array, dn: a.aDun.array });
+    a.position.array = m.bufs.pos; a.normal.array = m.bufs.nrm; a.aMor.array = m.bufs.mor; a.aSrf.array = m.bufs.srf; a.aEx.array = m.bufs.ex; a.aDun.array = m.bufs.dn;
+    a.position.needsUpdate = a.normal.needsUpdate = a.aMor.needsUpdate = a.aSrf.needsUpdate = a.aEx.needsUpdate = a.aDun.needsUpdate = true;
+    const I = m.info; s.mesh.position.set(I.cx, I.cy, I.cz); s.geo.boundingSphere.radius = I.rad; if (s.water) s.water.position.copy(s.mesh.position);
     n.cx = I.cx; n.cy = I.cy; n.cz = I.cz; n.rad = I.rad; n.emax = I.emax; n.emin = I.emin;
     s.node = n; n.slot = s; n.ready = true; n.req = false; s.seen = frameNo; s.stamp++;
     stats.built++;
@@ -1359,8 +1776,8 @@ export function createWorld(THREE, renderer, scene, tierName) {
   const floraSorted = [];
   function rebuildFlora() {
     floraDirty = false;
-    const counts = {}, countsLo = {}; for (const k of floraKinds) { counts[k] = countsLo[k] = 0; floraMeshes[k].shN = 0; }
-    const shR = T.shBox * 1.9;
+    const counts = {}, countsLo = {}; for (const k of floraKinds) { counts[k] = countsLo[k] = 0; floraMeshes[k].shN = floraMeshes[k].shN2 = floraMeshes[k].shLo2 = 0; }
+    const shR = T.shBox * 1.9, shR2 = T.sh2Box * 1.5;
     let total = 0;
     // nearest cells first (the instance caps fill from the camera out); beyond the near range only the big kinds,
     // thinned with distance — the skyline keeps its silhouettes, the caps hold
@@ -1382,7 +1799,7 @@ export function createWorld(THREE, renderer, scene, tierName) {
         // size and hue vary per plant: a warmer or cooler shade of the kind's colour
         const tr = c.buf[o + 6], t = 0.8 + tr * 0.4, hs = (tr * 7.31) % 1 - 0.5;
         _col.setRGB(fm.tint[0] * t * (1 + hs * 0.18), fm.tint[1] * t, fm.tint[2] * t * (1 - hs * 0.18)); im.setColorAt(ci, _col);
-        if (useLo) countsLo[kind] = ci + 1; else { counts[kind] = ci + 1; if (c.d < shR) fm.shN = ci + 1; } total++;
+        if (useLo) { countsLo[kind] = ci + 1; if (c.d < shR2) fm.shLo2 = ci + 1; } else { counts[kind] = ci + 1; if (c.d < shR) fm.shN = ci + 1; if (c.d < shR2) fm.shN2 = ci + 1; } total++;
       }
     }
     for (const k of floraKinds) {
@@ -1473,6 +1890,66 @@ export function createWorld(THREE, renderer, scene, tierName) {
     impGeo.instanceCount = n; impA.needsUpdate = impB.needsUpdate = true; stats.imp = n;
   }
 
+  // ---- dust devils: a few columns that live a minute and drift with the wind (instanced; their bases from planet.js) ----
+  const ND = T.devils, dvA = new Float32Array(ND * 4), dvB = new Float32Array(ND * 4);
+  const dvGeo = new THREE.InstancedBufferGeometry();
+  { const p = [], idx = [], SIDES = 14, RINGS = 14; for (let j = 0; j <= RINGS; j++) for (let i = 0; i <= SIDES; i++) { const a = i / SIDES * Math.PI * 2; p.push(Math.cos(a), j / RINGS, Math.sin(a)); }
+    for (let j = 0; j < RINGS; j++) for (let i = 0; i < SIDES; i++) { const a = j * (SIDES + 1) + i, b = a + 1, c = a + SIDES + 1, d = c + 1; idx.push(a, c, b, b, c, d); }
+    dvGeo.setAttribute('position', new THREE.Float32BufferAttribute(p, 3)); dvGeo.setIndex(idx); }
+  const dvAttrA = new THREE.InstancedBufferAttribute(dvA, 4).setUsage(THREE.DynamicDrawUsage), dvAttrB = new THREE.InstancedBufferAttribute(dvB, 4).setUsage(THREE.DynamicDrawUsage);
+  dvGeo.setAttribute('aD0', dvAttrA); dvGeo.setAttribute('aD1', dvAttrB); dvGeo.instanceCount = 0;
+  const dvU = { uWindL: { value: new THREE.Vector3(1, 0, 0) }, uDustC: { value: new THREE.Vector3(0.6, 0.45, 0.3) } };
+  const devilMat = new THREE.ShaderMaterial({ vertexShader: DEVIL_VERT, fragmentShader: DEVIL_FRAG, uniforms: { ...AU, uTime: SU.uTime, uDetail: SU.uDetail, uAmbZ: SU.uAmbZ, uAmbH: SU.uAmbH, ...dvU },
+    transparent: true, depthWrite: false, side: THREE.DoubleSide });
+  const devils = new THREE.Mesh(dvGeo, devilMat); devils.frustumCulled = false; devils.renderOrder = 6; devils.visible = false;
+  const DV = []; for (let i = 0; i < ND; i++) DV.push({ on: false, x: 0, y: 0, z: 0, h: 0, r: 0, ph: 0, age: 0, life: 0, k: 0, eT: 0, wait: 2 + i * 7 });
+  let dvSeed = 1, lastCam = null;
+  const dvR = () => ((dvSeed = (dvSeed * 16807) % 2147483647) / 2147483647);
+  const dvEx = { h: 0, mo: 0, m1: 0, m2: 0, ao: 1, wet: 0, m3: 0, cv: 0.5, ph: 0, du: 0 };
+  // review / test hook: a dust devil `dist` metres from the camera, `ang` degrees right of the view (on the ground), at once
+  let devilAt = -1, devilAng = 0;
+  function devilAhead(dist = 700, ang = 25) { devilAt = dist; devilAng = ang * Math.PI / 180; }
+  function devilsUpdate(dt, sunUp, alt) {
+    const dusty = S && (S.type === 'desert' || S.type === 'rocky') && ND > 0;
+    if (!dusty || sunUp < 0.12 || alt > 2800 || under) { devils.visible = false; for (const d of DV) d.on = false; return; }
+    const wl = dvU.uWindL.value.set(S.weather.wind[0], 0.0, S.weather.wind[1]); if (wl.lengthSq() < 1e-6) wl.set(1, 0, 0); wl.normalize();
+    const cl = Math.sqrt(camL.x * camL.x + camL.y * camL.y + camL.z * camL.z) || 1, ux = camL.x / cl, uy = camL.y / cl, uz = camL.z / cl;
+    let n = 0;
+    for (let i = 0; i < ND; i++) {
+      const d = DV[i];
+      if (devilAt > 0 && i === 0 && lastCam) {   // (the hook: straight ahead along the view, on the ground)
+        _v.set(Math.sin(devilAng), 0, -Math.cos(devilAng)).applyQuaternion(lastCam.quaternion).applyQuaternion(_q); const fu = _v.x * ux + _v.y * uy + _v.z * uz; _v.x -= ux * fu; _v.y -= uy * fu; _v.z -= uz * fu; _v.normalize();
+        let px = ux + _v.x * devilAt / S.R, py = uy + _v.y * devilAt / S.R, pz = uz + _v.z * devilAt / S.R; const pl = Math.hypot(px, py, pz); px /= pl; py /= pl; pz /= pl;
+        const e = elevation(S, px, py, pz); devilAt = -1;
+        d.on = true; d.age = 8; d.life = 90; d.h = 140; d.r = 6.5; d.ph = 3; d.k = 1; d.eT = 0; d.x = px * (S.R + e); d.y = py * (S.R + e); d.z = pz * (S.R + e);
+      }
+      if (!d.on) {
+        d.wait -= dt; if (d.wait > 0) continue;
+        // a spot 0.4 .. 2.4 km from the camera on open, level ground (on a dune world: on the sand)
+        let e1x = -uz, e1z = ux; const el = Math.hypot(e1x, e1z) || 1; e1x /= el; e1z /= el;
+        const e2x = uy * e1z, e2y = uz * e1x - ux * e1z, e2z = -uy * e1x, a = dvR() * Math.PI * 2, dist = 400 + dvR() * 2000, k = dist / S.R;
+        let px = ux + (e1x * Math.cos(a) + e2x * Math.sin(a)) * k, py = uy + e2y * Math.sin(a) * k, pz = uz + (e1z * Math.cos(a) + e2z * Math.sin(a)) * k;
+        const pl = Math.hypot(px, py, pz); px /= pl; py /= pl; pz /= pl;
+        const e = elevation(S, px, py, pz, dvEx), qx = px + e1x * 25 / S.R, qz = pz + e1z * 25 / S.R, ql = Math.hypot(qx, py, qz), e2 = elevation(S, qx / ql, py / ql, qz / ql);
+        d.wait = 3 + dvR() * 9;
+        if (Math.abs(e2 - e) > 9 || (S.type === 'desert' && dvEx.m1 < 0.4) || (S.sea > 0 && e < 1)) continue;
+        d.on = true; d.age = 0; d.life = 35 + dvR() * 45; d.h = 60 + dvR() * 110; d.r = 3.5 + dvR() * 4.5; d.ph = dvR() * 50; d.k = 0.6 + dvR() * 0.4; d.eT = 0;
+        d.x = px * (S.R + e); d.y = py * (S.R + e); d.z = pz * (S.R + e);
+      }
+      d.age += dt;
+      if (d.age > d.life) { d.on = false; d.wait = 4 + dvR() * 10; continue; }
+      // it wanders downwind; its foot follows the ground
+      const r = Math.hypot(d.x, d.y, d.z), wx = wl.x - d.x / r * (wl.x * d.x + wl.y * d.y + wl.z * d.z) / r, wy = wl.y - d.y / r * (wl.x * d.x + wl.y * d.y + wl.z * d.z) / r, wz = wl.z - d.z / r * (wl.x * d.x + wl.y * d.y + wl.z * d.z) / r;
+      const sp = (6 + 5 * Math.sin(d.age * 0.13 + d.ph)) * dt; d.x += wx * sp; d.y += wy * sp; d.z += wz * sp;
+      d.eT -= dt; if (d.eT <= 0) { d.eT = 0.5; const rr = Math.hypot(d.x, d.y, d.z), e = elevation(S, d.x / rr, d.y / rr, d.z / rr); const kk = (S.R + e - 0.5) / rr; d.x *= kk; d.y *= kk; d.z *= kk; }
+      const life = Math.min(1, d.age / 6) * Math.min(1, (d.life - d.age) / 8);
+      dvA[n * 4] = d.x; dvA[n * 4 + 1] = d.y; dvA[n * 4 + 2] = d.z; dvA[n * 4 + 3] = d.h;
+      dvB[n * 4] = d.r; dvB[n * 4 + 1] = d.ph; dvB[n * 4 + 2] = d.k * life; dvB[n * 4 + 3] = 0; n++;
+    }
+    dvGeo.instanceCount = n; devils.visible = n > 0;
+    if (n) { dvAttrA.needsUpdate = dvAttrB.needsUpdate = true; }
+  }
+
   // ---- lightning: a strike rebuilt in the segment pool, the flash decays with flicker -----------------------------------
   function strike(cam, up) {
     if (!S) return;
@@ -1544,6 +2021,28 @@ export function createWorld(THREE, renderer, scene, tierName) {
       WU.uWT1.value.copy(wfA.t1); WU.uWT2.value.copy(wfA.t2); WU.uWT1b.value.copy(wfB.t1); WU.uWT2b.value.copy(wfB.t2);
       WU.uWave.value.z = o.T % 100000; WU.uWave.value.w = waveBlend;
     }
+    // under the sea surface? (a world whose seabed shows: the camera below the swell at its spot)
+    under = false;
+    if (seaSeen) {
+      const camE = camD - S.R;
+      if (camE < 3) {
+        let h = 0;
+        if (WU.uWave.value.x > 0 && waveFrame) {
+          const x = camL.x * wfA.t1.x + camL.y * wfA.t1.y + camL.z * wfA.t1.z, z = camL.x * wfA.t2.x + camL.y * wfA.t2.y + camL.z * wfA.t2.z, t = WU.uWave.value.z;
+          for (let i = 0; i < 4; i++) { const w = WU.uWD.value[i], k = 6.2831853 / w.z; h += w.w * WU.uWave.value.x * Math.cos(k * (w.x * x + w.y * z) - Math.sqrt(9.81 * k) * t + i * 1.7); }
+        }
+        under = camE < h - 0.08;
+      }
+    }
+    api.under = under;
+    {   // the colour the water scatters into a long path: its deep colour lit by the sun through the air and the sky,
+      // darker the deeper the camera dives
+      const dv = _v3.copy(TU.uDeep.value).lerp(TU.uWater.value, 0.22), dep = under ? Math.max(0, S.R - camD) : 0, k0 = sunUp * 0.3183 * 0.75;
+      const lr = am.sun[0] * k0 + (SU.uAmbZ.value.x + SU.uAmbH.value.x * 0.3) * 0.95, lg = am.sun[1] * k0 + (SU.uAmbZ.value.y + SU.uAmbH.value.y * 0.3) * 0.95, lb = am.sun[2] * k0 + (SU.uAmbZ.value.z + SU.uAmbH.value.z * 0.3) * 0.95;
+      const a = WP.uWAbs.value;
+      WP.uWScat.value.set(dv.x * 2.2 * lr * Math.exp(-a.x * dep * 0.5), dv.y * 2.2 * lg * Math.exp(-a.y * dep * 0.5), dv.z * 2.2 * lb * Math.exp(-a.z * dep * 0.5));
+      WP.uUnder.value.x = under ? 1 : 0; WP.uUnder.value.y = dep;
+    }
     // rain rings on the ground (near it, in rain)
     { const wk0 = o.weather != null ? o.weather : S.weather.k; rainOn = S.weather.kind === 'rain' && wk0 > 0.05 && alt < 90 && T.grass > 0; RU.uRain.value = Math.min(1, wk0 * (S.weather.storm ? 1.5 : 1)); RU.uRainC.value.set(SU.uAmbZ.value.x * 2.2 + 0.05, SU.uAmbZ.value.y * 2.2 + 0.05, SU.uAmbZ.value.z * 2.2 + 0.06); }
     // terrain selection
@@ -1577,7 +2076,9 @@ export function createWorld(THREE, renderer, scene, tierName) {
     floraU.uWind.value = 0.6 + S.weather.k * 1.2 + (S.weather.storm ? 0.6 : 0); floraU.uWindDir.value.set(S.weather.wind[0], 0, S.weather.wind[1]).normalize();
     // cloud puffs round the camera when near the deck
     const deck = gas ? GAS_DECK[1] : S.cloud.alt, near = Math.abs(alt - deck) < (gas ? 420 : S.cloud.thick) * 4 + 600;
-    puffs.visible = near && (gas || S.cloud.cover > 0.1);
+    puffs.visible = near && (gas || S.cloud.cover > 0.1) && (gas || !volMat);
+    vol.on = !!volMat && !gas && S.cloud.cover > 0.05 && group.visible && !under;
+    if (vol.on) { volU.uVolK.value.w = o.fade; volU.uWindO.value.set(S.weather.wind[0], 0.15, S.weather.wind[1]).multiplyScalar((o.T % 100000) * (3 + S.weather.k * 6)); }
     if (puffs.visible) {
       puffU.uCamL.value.copy(camL);
       const ax = Math.abs(camL.x), ay = Math.abs(camL.y), az = Math.abs(camL.z);
@@ -1590,7 +2091,7 @@ export function createWorld(THREE, renderer, scene, tierName) {
     const wAlt = kind === 'rain' || kind === 'snow' ? 1 - Math.max(0, Math.min(1, (alt - deck * 0.8) / 300)) : 1 - Math.max(0, Math.min(1, (alt - 300) / 500));
     const wVis = wk * wAlt;
     const pts = kind === 'snow' || kind === 'ash' || kind === 'motes' || kind === 'spores';
-    wLines.visible = wVis > 0.02 && !pts; wPts.visible = wVis > 0.02 && pts;
+    wLines.visible = wVis > 0.02 && !pts && !under; wPts.visible = wVis > 0.02 && pts && !under;
     if (wVis > 0.02) {
       const upv = _v.copy(_cam).sub(group.position).normalize();
       const wx = S.weather.wind[0], wz = S.weather.wind[1];
@@ -1616,6 +2117,7 @@ export function createWorld(THREE, renderer, scene, tierName) {
     // aurora: ice worlds (and some crystal ones) at night
     const night = 1 - Math.min(1, Math.max(0, (up.x * sd[0] + up.y * sd[1] + up.z * sd[2] + 0.08) / 0.2));
     AUR.uAur.value.set((S.type === 'ice' ? 1 : S.type === 'crystal' && (S.seeds[3] & 1) ? 0.6 : 0) * night, o.T % 10000, 0, 0);
+    lastCam = cam; devilsUpdate(dt, sunUp, alt);
     // the shadow map of the sun (after everything that casts has moved)
     renderShadow(cam, sd, !gas && alt < 3500 && sunUp > 0.02 && o.fade > 0.5);
     // the relic crystals turn
@@ -1626,27 +2128,31 @@ export function createWorld(THREE, renderer, scene, tierName) {
   }
   function setLooted(i, v) { const s = sites[i]; if (s) s.looted = !!v; }
   // how much of the ground is built (0..1, from the last frame's walk): the terrain fades in over the orbital body by it
-  let covK = 0, progReady = false, grassProxy = null, rainProxy = null, terrainProxy = null, depthProxy = null, depthIProxy = null;
-  const slotGeoProxy = () => { const b = newChunkBufs(), g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(b.pos, 3)); g.setAttribute('normal', new THREE.BufferAttribute(b.nrm, 3)); g.setAttribute('aMor', new THREE.BufferAttribute(b.mor, 4)); g.setAttribute('aSrf', new THREE.BufferAttribute(b.srf, 4)); g.setAttribute('aEx', new THREE.BufferAttribute(b.ex, 4, true)); g.setIndex(index); return g; };
+  let covK = 0, progReady = false, grassProxy = null, grass2Proxy = null, rainProxy = null, terrainProxy = null, waterProxy = null, depthProxy = null, depthIProxy = null;
+  const slotGeoProxy = () => { const b = newChunkBufs(), g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.BufferAttribute(b.pos, 3)); g.setAttribute('normal', new THREE.BufferAttribute(b.nrm, 3)); g.setAttribute('aMor', new THREE.BufferAttribute(b.mor, 4)); g.setAttribute('aSrf', new THREE.BufferAttribute(b.srf, 4)); g.setAttribute('aEx', new THREE.BufferAttribute(b.ex, 4, true)); g.setAttribute('aDun', new THREE.BufferAttribute(b.dn, 2)); g.setIndex(index); return g; };
   const compileCam = new THREE.PerspectiveCamera();
   function coverage() { return S && progReady ? covK : 0; }
   function dispose() {
     clear();
     for (const w of workers) w.w.terminate();
-    for (const s of slots) { s.geo.dispose(); if (s.grass) s.grass.m.geometry.dispose(); if (s.rain) s.rain.m.geometry.dispose(); }
-    rainMat.dispose(); rainGeo.dispose();
+    for (const s of slots) { s.geo.dispose(); if (s.grass) s.grass.m.geometry.dispose(); if (s.grass2) s.grass2.m.geometry.dispose(); if (s.rain) s.rain.m.geometry.dispose(); }
+    rainMat.dispose(); rainGeo.dispose(); waterMat.dispose(); devilMat.dispose(); dvGeo.dispose(); if (volMat) { volMat.dispose(); volScene.children[0].geometry.dispose(); } grey3.dispose(); if (noise3) noise3.dispose();
+    if (grassMat2) grassMat2.dispose(); if (grass2Geo) grass2Geo.dispose();
     terrainMat.dispose(); skyMat.dispose(); lutMat.dispose(); lutQuad.geometry.dispose(); skyRT.dispose(); cloudMat.dispose(); veilMat.dispose(); cloudGeo.dispose(); for (const d of decks) d.material.dispose(); white.dispose(); puffMat.dispose(); pGeo.dispose(); wLineMat.dispose(); wPtsMat.dispose(); wGeo.dispose(); floraMat.dispose(); floraMatBig.dispose(); siteMat.dispose(); wreckMat.dispose();
     bGeo.dispose(); boltMat.dispose(); bolt.removeFromParent();
     if (impMat) impMat.dispose(); bakeMat.dispose(); if (impRT) impRT.dispose(); if (impGeo) impGeo.dispose();
     if (grassMat) grassMat.dispose(); if (grassGeo) grassGeo.dispose();
-    if (shRT) { shRT.depthTexture.dispose(); shRT.dispose(); depthMat.dispose(); }
-    SH.uShMap.value = null; SH.uShP.value[0] = 0; shDummy.depthTexture.dispose(); shDummy.dispose();
+    if (shRT) { shRT.depthTexture.dispose(); shRT.dispose(); }
+    if (depthMat) depthMat.dispose();
+    SH.uShMap.value = null; SH.uShP.value[0] = 0; SH.uShP2.value[0] = 0; shDummy.depthTexture.dispose(); shDummy.dispose();
     if (mats) mats.dispose();
     for (const k in floraGeo) { if (floraGeo[k]) floraGeo[k].dispose(); if (floraGeoLo[k]) floraGeoLo[k].dispose(); }
     detail.dispose(); blank.dispose(); sky.geometry.dispose(); sky.removeFromParent(); puffs.removeFromParent(); wLines.removeFromParent(); wPts.removeFromParent(); group.removeFromParent();
   }
   for (const [m, n] of [[terrainMat, 'cz-terrain'], [lutMat, 'cz-skylut'], [skyMat, 'cz-sky'], [cloudMat, 'cz-cloud'], [veilMat, 'cz-veil'], [puffMat, 'cz-puff'], [floraMat, 'cz-flora'], [floraMatBig, 'cz-flora-big'], [grassMat, 'cz-grass'], [rainMat, 'cz-rain'], [impMat, 'cz-imp'], [depthMat, 'cz-depth']]) if (m) m.name = n;   // (names show in the GPU debuggers)
-  const api = { group, set, clear, update, dispose, coverage, setLooted, stats, sky, get S() { return S; }, get lmax() { return lmax; }, get sites() { return sites; }, detail, SU, TU, grass: grassObj, shadowOff: false, SHADOW_LAYER, lastStrike: 0, bolt: BOLT };
+  // (devils: the live dust devils' feet, planet-local — review shots aim at one)
+  const api = { group, set, clear, update, dispose, coverage, setLooted, stats, sky, vol, get devils() { return DV.filter((d) => d.on); }, devilAhead, get S() { return S; }, get lmax() { return lmax; }, get sites() { return sites; }, detail, SU, TU, WP, grass: grassObj, shadowOff: false, shadow2Off: false,
+    SHADOW_LAYER, SHADOW_LAYER2, lastStrike: 0, bolt: BOLT, under: false, get noise3() { return TU.uNoise3.value; } };
   return api;
 }
 export { WT as WORLD_TIERS };

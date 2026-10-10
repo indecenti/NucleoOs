@@ -5,6 +5,7 @@
 //   --lang it   --out <dir>   --gpu (real GPU, like E2E_GPU=1)
 //   node tools/web-e2e/costellazioni-shots.mjs --scenes worlds --gpu --biomes ocean,ice   → M3 worlds, some biomes
 //   --suffix -v2   appends to every file name (keep a before / after pair side by side)
+//   node tools/web-e2e/costellazioni-shots.mjs --scenes worlds,underwater,clouds,shadows,dunes --gpu --suffix -v3
 // Scenes are plain async functions below; each gets a fresh page with a seeded run (sector 1, credits, a relic).
 // M3 scenes (worlds, entry, ruin, groundfight, worldhud) place the ship with the __cz.dev hooks (overWorld,
 // nearSite) and pin the universe clock (__czClock) so the same light comes back on every run.
@@ -29,7 +30,7 @@ export const SAVE_SEED = { ver: 3, credits: 4200, fuel: 8, fuel_max: 8, hull: 10
 
 const key = (page, k) => page.eval(`window.dispatchEvent(new KeyboardEvent('keydown', { key: ${JSON.stringify(k)}, bubbles: true })), true`);
 const frames = (page, n = 2) => page.eval(`new Promise(r => { let k = ${n}; const f = () => (--k > 0 ? requestAnimationFrame(f) : setTimeout(r, 30)); requestAnimationFrame(f); })`);
-async function shot(page, name) { await frames(page, 3); const f = join(OUT, name + SUFFIX + '.png'); const ok = await page.screenshot(f); console.log((ok ? '  ✓ ' : '  ✗ ') + f); return f; }
+async function shot(page, name) { await page.eval(`(() => { const h = document.getElementById('lockHint'); if (h) h.classList.remove('on'); return 1; })()`).catch(() => {}); await frames(page, 3); const f = join(OUT, name + SUFFIX + '.png'); const ok = await page.screenshot(f); console.log((ok ? '  ✓ ' : '  ✗ ') + f); return f; }
 
 export async function openGame(browser, sim, { lang = LANG, flags = {}, viewport = [W, H], mobile = false } = {}) {
   const page = await browser.newPage();
@@ -43,7 +44,9 @@ export async function openGame(browser, sim, { lang = LANG, flags = {}, viewport
   return page;
 }
 export async function toHub(page) {
-  if (await page.eval(`document.querySelector('[data-modal]').style.display === 'flex'`)) await key(page, 'Enter');
+  // (only a modal that offers a choice takes the Enter: one pressed on the "syncing your run" card launches a flight)
+  await page.waitFor(`(() => { const m = document.querySelector('[data-modal]'), h = document.querySelector('[data-hub]'); return (m && m.style.display === 'flex' && m.querySelector('.cz-btn')) || (h && h.style.display === 'block'); })()`, { timeout: 30000 });
+  if (await page.eval(`(() => { const m = document.querySelector('[data-modal]'); return m.style.display === 'flex' && !!m.querySelector('.cz-btn'); })()`)) await key(page, 'Enter');
   if (!await page.waitFor(`document.querySelector('[data-hub]').style.display === 'block' && document.querySelectorAll('.cz-tab').length >= 5`, { timeout: 30000 })) throw new Error('hub');
   await page.waitFor(`!!(window.__cz && window.__cz.perf && window.__cz.perf.frames > 20)`, { timeout: 30000 });
 }
@@ -65,6 +68,9 @@ const KIT_ROWS = {
 // M3: a world of each type in sector 1 of the seed — [system, planet, azimuth round the sub-solar point where the
 // review flies: picked (at the pinned clock) so its signature flora stands ahead]
 export const BIOMES = { rocky: [9, 0, 30], ocean: [2, 0, 40], jungle: [5, 0, 300], ice: [6, 0, 240], desert: [6, 3, 20], volcanic: [2, 1, 100], crystal: [1, 0, 160], gas: [3, 1, 20] };
+// the light the low shots are taken in: [sun elevation (deg), heading from straight down-sun (deg): ~100 rakes the light
+// across the view so every crest and ridge shows a lit side and a shaded one (the sun behind the camera flattens them)]
+export const LIGHT = { rocky: [26, 100], ocean: [38, 75], jungle: [34, 95], ice: [24, 100], desert: [27, 100], volcanic: [30, 95], crystal: [30, 100], gas: [35, 0] };
 const CLOCK = 1000;
 async function launch(page) {
   await toHub(page); await key(page, '1'); await sleep(200); await key(page, 'Enter');
@@ -204,21 +210,93 @@ const SCENES = {
       await key(page, 'ArrowLeft'); await sleep(2200); await shot(page, 'codex-hangar');
     } finally { await sim.stop(); }
   },
-  // M3 — every biome from orbit, mid-descent (2.6 km, nose down), at 300 m and low over the ground (70 m), in daylight
+  // M3 — every biome from orbit, mid-descent (2.6 km, nose down), at 300 m and low over the ground (70 m), in daylight;
+  // the low shots in a raking light (LIGHT) with the nose a little down, so the ground — not the sky — fills the frame
   async worlds(browser) {
     for (const b of arg('biomes', Object.keys(BIOMES).join(',')).split(',')) {
-      const [sys, pi, az] = BIOMES[b];
+      const [sys, pi, az] = BIOMES[b], [el, hdg] = LIGHT[b];
       const sim = await startSim({ seed: { [SAVE_PATH]: { ...SAVE_SEED, sys } } });
       try {
         const page = await openGame(browser, sim, { flags: { __czEncounter: false, __czGod: true, __czClock: CLOCK } });
         await launch(page);
         await page.eval(`window.__cz.dev.overWorld(${pi}, 16000, 35, ${az}, 0), true`); await lookAtWorld(page, pi); await sleep(3500); await shot(page, `world-${b}-orbit`);
         await page.eval(`window.__cz.dev.overWorld(${pi}, 2600, 35, ${az}, 140), true`); await sleep(300); await lookDown(page, 0.38); await sleep(4500); await shot(page, `world-${b}-descent`);
-        if (b !== 'gas') { await page.eval(`window.__cz.dev.overWorld(${pi}, 300, 35, ${az}, 140), window.__cz.game.flight.surf.assist = true, true`); await sleep(6500); await shot(page, `world-${b}-300m`); }
-        await page.eval(`window.__cz.dev.overWorld(${pi}, ${b === 'gas' ? 900 : 70}, 35, ${az}, 140), window.__cz.game.flight.surf.assist = true, true`); await sleep(6500); await shot(page, `world-${b}-surface`);
+        if (b !== 'gas') { await page.eval(`window.__cz.dev.overWorld(${pi}, 300, ${el}, ${az}, 110, ${hdg}), window.__cz.game.flight.surf.assist = true, true`); await sleep(6000); await lookDown(page, 0.2); await sleep(1100); await shot(page, `world-${b}-300m`); }
+        await page.eval(`window.__cz.dev.overWorld(${pi}, ${b === 'gas' ? 900 : 70}, ${el}, ${az}, 110, ${hdg}), window.__cz.game.flight.surf.assist = true, true`); await sleep(6000);
+        if (b !== 'gas') { await lookDown(page, 0.08); await sleep(900); }
+        await shot(page, `world-${b}-surface`);
         await blank(page);
       } finally { await sim.stop(); }
     }
+  },
+  // M3 — under the sea of an ocean world: over a shallow reef from above, then down among the coral and kelp (the
+  // seabed, caustics, the water's own blue), and looking up at the surface (Snell's window)
+  async underwater(browser) {
+    const [sys, pi] = BIOMES.ocean;
+    const sim = await startSim({ seed: { [SAVE_PATH]: { ...SAVE_SEED, sys } } });
+    try {
+      const page = await openGame(browser, sim, { flags: { __czEncounter: false, __czGod: true, __czClock: CLOCK } });
+      await launch(page);
+      // a reef 7 .. 16 m down, found by walking round the sub-solar point
+      const az = await page.eval(`(() => { const F = window.__cz.game.flight; for (let a = 0; a < 360; a += 3) { window.__cz.dev.overWorld(${pi}, 30, 55, a, 30, 40); if (F.surf.water && F.surf.bed < -7 && F.surf.bed > -16) return a; } return 40; })()`);
+      await page.eval(`window.__cz.dev.overWorld(${pi}, 26, 55, ${az}, 30, 40), true`); await sleep(5500); await lookDown(page, 0.32); await sleep(1100); await shot(page, 'world-ocean-shallows');
+      // under: 4 m below the surface, slow, nose a little down at the reef
+      const dive = (k) => page.eval(`import('/apps/games/games/stelle/sim.js').then((S) => { const F = window.__cz.game.flight, U = F.surf, p = F.player; window.__cz.dev.overWorld(${pi}, 1, 55, ${az}, 8, 40);
+        const d = U.alt + ${k < 0 ? 7 : 4.5}; p.pos.x -= U.up.x * d; p.pos.y -= U.up.y * d; p.pos.z -= U.up.z * d; p.ppos.x = p.pos.x; p.ppos.y = p.pos.y; p.ppos.z = p.pos.z;
+        const f = { x: 0, y: 0, z: 0 }; S.shipFwd(p, f); const c = Math.cos(${k} * Math.PI / 2), s = Math.sin(${k} * Math.PI / 2);
+        S.qlook(p.q, f.x * c - U.up.x * s, f.y * c - U.up.y * s, f.z * c - U.up.z * s, U.up.x, U.up.y, U.up.z); p.pq.x = p.q.x; p.pq.y = p.q.y; p.pq.z = p.q.z; p.pq.w = p.q.w;
+        p.vel.x = p.vel.y = p.vel.z = 0; p.spd = 0; F.input.aimReset = true; U.assist = false; F.input.thr = 0.02; return 1; })`);
+      await dive(0.12); await sleep(3500); await shot(page, 'world-ocean-underwater');
+      await dive(-0.42); await sleep(2000); await shot(page, 'world-ocean-surface-below');
+      await blank(page);
+    } finally { await sim.stop(); }
+  },
+  // M3 — the volumetric clouds: over their tops, then inside the layer on the way down
+  async clouds(browser) {
+    for (const b of arg('biomes', 'jungle,ice').split(',')) {
+      const [sys, pi, az] = BIOMES[b];
+      const sim = await startSim({ seed: { [SAVE_PATH]: { ...SAVE_SEED, sys } } });
+      try {
+        const page = await openGame(browser, sim, { flags: { __czEncounter: false, __czGod: true, __czClock: CLOCK } });
+        await launch(page);
+        await page.eval(`window.__cz.dev.overWorld(${pi}, 3000, 30, ${az}, 140, 95), true`); await sleep(400);
+        const top = await page.eval(`(() => { const W = window.__cz.r3d.world, S = W.S; return S ? S.cloud.alt + Math.min(1500, Math.max(650, S.cloud.thick * 5.5)) * 0.7 : 2000; })()`);
+        await page.eval(`window.__cz.dev.overWorld(${pi}, ${Math.round(top + 250)}, 30, ${az}, 140, 95), true`); await sleep(5500); await lookDown(page, 0.14); await sleep(1000); await shot(page, `world-${b}-cloudtops`);
+        const mid = await page.eval(`(() => { const S = window.__cz.r3d.world.S; return S ? S.cloud.alt : 1500; })()`);
+        await page.eval(`window.__cz.dev.overWorld(${pi}, ${Math.round(mid)}, 30, ${az}, 120, 95), true`); await sleep(5000); await shot(page, `world-${b}-incloud`);
+        await blank(page);
+      } finally { await sim.stop(); }
+    }
+  },
+  // M3 — long shadows: a low sun behind the shoulder over the rock world's mesas (the wide cascade: buttes and ridges
+  // shade the basins out to a kilometre and more), and the same view without the wide cascade for comparison
+  async shadows(browser) {
+    const [sys, pi, az] = BIOMES.rocky;
+    const sim = await startSim({ seed: { [SAVE_PATH]: { ...SAVE_SEED, sys } } });
+    try {
+      const page = await openGame(browser, sim, { flags: { __czEncounter: false, __czGod: true, __czClock: CLOCK } });
+      await launch(page);
+      // one placement, two frames ~150 ms apart (the toggle lands on the next frame), so the pair differs only in the cascade
+      await page.eval(`window.__cz.r3d.world.shadow2Off = false, window.__cz.dev.overWorld(${pi}, 600, 17, ${az}, 60, 150), true`); await sleep(6500); await lookDown(page, 0.3); await sleep(1100);
+      await shot(page, 'world-rocky-longshadows');
+      await page.eval(`window.__cz.r3d.world.shadow2Off = true, true`); await sleep(150); await shot(page, 'world-rocky-longshadows-off');
+      await page.eval(`window.__cz.r3d.world.shadow2Off = false, true`);
+      await blank(page);
+    } finally { await sim.stop(); }
+  },
+  // M3 — the dune sea low and slow in a raking light; then a dust devil, the nose turned at it
+  async dunes(browser) {
+    const [sys, pi, az] = BIOMES.desert;
+    const sim = await startSim({ seed: { [SAVE_PATH]: { ...SAVE_SEED, sys } } });
+    try {
+      const page = await openGame(browser, sim, { flags: { __czEncounter: false, __czGod: true, __czClock: CLOCK } });
+      await launch(page);
+      await page.eval(`window.__cz.dev.overWorld(${pi}, 110, 25, ${az}, 50, 100), window.__cz.game.flight.surf.assist = true, true`); await sleep(6000); await lookDown(page, 0.16); await sleep(1100); await shot(page, 'world-desert-dunes');
+      // a dust devil raised 700 m ahead (the world's review hook), seen side-lit from 90 m
+      await page.eval(`window.__cz.dev.overWorld(${pi}, 90, 22, ${az}, 15, 100), window.__cz.game.flight.surf.assist = true, true`); await sleep(5000);
+      await page.eval(`window.__cz.r3d.world.devilAhead(600, 24), true`); await sleep(3500); await shot(page, 'world-desert-devil');
+      await blank(page);
+    } finally { await sim.stop(); }
   },
   // M3 — the dive from orbit: the autopilot descends, the hull heats, plasma, the air takes the speed
   async entry(browser) {

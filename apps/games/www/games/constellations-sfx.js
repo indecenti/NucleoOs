@@ -2,7 +2,8 @@
 // short bursts of oscillators / cached noise through a shared limiter bus with a cheap feedback-delay
 // "reverb", stereo-panned and distance-scaled for the 6DOF flight, plus a continuous engine voice that
 // follows throttle and boost. Music: the four ACE-Step tracks from stelle/assets.js when present
-// (theme / islands / dimming / storm, looped, ducked under big explosions), else the procedural
+// (theme / islands / dimming / storm, streamed through <audio> elements — never decoded whole —, looped, ducked under
+// big explosions), else the procedural
 // minor-key bed. Lazy context, resumed on the first user gesture.
 // Planet ambience (ambStart / ambSet / ambStop / thunder / lightningCrackle): a procedural bed under the
 // music — wind + gusts, re-entry roar, rain / snow / dust, surf, ground rush, a baked biome bed (insects,
@@ -265,12 +266,24 @@ const BAKE = {
 const SEED = { jday: 11, jnight: 23, crystal: 37, gas: 41, volcanic: 53 };
 const CHIME = [784, 980, 1176, 1568, 1960, 2352];
 
+// 0.05 s of silence as a WAV Blob URL (made once): what the music players play inside the unlocking gesture
+let SILENT = '';
+function silentWav() {
+  if (SILENT) return SILENT;
+  const n = 1200, b = new ArrayBuffer(44 + n * 2), v = new DataView(b), w = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
+  w(0, 'RIFF'); v.setUint32(4, 36 + n * 2, true); w(8, 'WAVE'); w(12, 'fmt '); v.setUint32(16, 16, true); v.setUint16(20, 1, true); v.setUint16(22, 1, true);
+  v.setUint32(24, 24000, true); v.setUint32(28, 48000, true); v.setUint16(32, 2, true); v.setUint16(34, 16, true); w(36, 'data'); v.setUint32(40, n * 2, true);
+  return (SILENT = URL.createObjectURL(new Blob([b], { type: 'audio/wav' })));
+}
+
 export class SFX {
   constructor() {
     this.ac = null; this.master = null; this.muted = false; this.music = null; this._fx = null; this._lastLaser = 0;
     this._amb = null; this._ambOn = false; this._ambVol = 1; this._ambLvl = 0; this._ambNext = 0; this._ambLast = 0; this._ambPz = false;
     this._ambQuiet = 0; this._ambWd = 0; this._ambStopT = 0; this._ab = null; this._abG = null; this._abO = null; this._abk = null; this._engAmb = 1; this._engLvl = 0;
-    const unlock = () => { if (this._ensure() && this.ac.resume) this.ac.resume(); };
+    // the first gesture unlocks the context and the music players (iOS / Android Chrome lock both until then): a play()
+    // refused before it is retried, the players get their gesture-blessed play() now
+    const unlock = () => { if (this._ensure() && this.ac.resume) this.ac.resume(); this._unlockMusic(); };
     ['pointerdown', 'keydown', 'touchstart'].forEach(e => window.addEventListener(e, unlock, { passive: true }));
   }
   _ensure() {
@@ -280,7 +293,9 @@ export class SFX {
     this.master = this.ac.createGain(); this.master.gain.value = 0.85;
     const lim = this.ac.createDynamicsCompressor();
     lim.threshold.value = -10; lim.knee.value = 8; lim.ratio.value = 14; lim.attack.value = 0.003; lim.release.value = 0.18;
-    this.master.connect(lim); lim.connect(this.ac.destination);
+    // under the sea everything reaches the ear through the water: a low-pass on the whole mix (open in the air)
+    this.uw = this.ac.createBiquadFilter(); this.uw.type = 'lowpass'; this.uw.frequency.value = 22000; this.uw.Q.value = 0.5; this._under = false;
+    this.master.connect(this.uw); this.uw.connect(lim); lim.connect(this.ac.destination);
     return true;
   }
   setMuted(m) { this.muted = m; if (this.master) this.master.gain.value = m ? 0 : 0.85; }
@@ -554,24 +569,66 @@ export class SFX {
     e.nf.frequency.setTargetAtTime(500 + thr * 900 + (boost ? 1800 : 0), t, 0.2);
   }
   engineStop() { const e = this._eng; if (!e) return; this._eng = null; const t = this.ac.currentTime; e.g.gain.setTargetAtTime(0, t, 0.1); setTimeout(() => { try { e.o1.stop(); e.o2.stop(); e.ns.stop(); } catch {} try { e.g.disconnect(); } catch {} }, 500); }
-  // ── music: asset tracks when the manifest has them ─────────────────────────────────────────────
+  // ── music: asset tracks when the manifest has them, STREAMED ─────────────────────────────────
+  // Each track plays from an <audio> element — its stored bytes as a Blob URL, made once per track — routed through a
+  // MediaElementSource into its own gain, so the browser decodes a few seconds ahead instead of holding the whole track
+  // as PCM (decodeAudioData kept ~60-80 MB per track). The elements loop natively; a change of track fades the old
+  // player out over 1.2 s while the new one rises over 2 s (a third player covers a change in mid-fade).
   _musicGain() { return this._track ? this._track.g : (this.music ? this.music.bus : null); }
+  _newPlayer() {
+    const el = new Audio(); el.loop = true; el.preload = 'auto';
+    const src = this.ac.createMediaElementSource(el), g = this.ac.createGain(); g.gain.value = 0; src.connect(g); g.connect(this.master);
+    const p = { el, src, g, busy: false, stopT: 0 }; (this._players = this._players || []).push(p); return p;
+  }
+  _player() {
+    const P = (this._players = this._players || []);
+    for (const p of P) if (!p.busy) return p;
+    if (P.length < 3) return this._newPlayer();
+    const p = P.find((x) => !this._track || x !== this._track.p) || P[0];   // all busy: take a fading one at once
+    clearTimeout(p.stopT); p.el.pause(); p.busy = false; return p;
+  }
+  async _trackUrl(id) {
+    const U = (this._urls = this._urls || {});
+    if (!U[id]) U[id] = A.musicUrl(id);           // the stored Blob itself: no ArrayBuffer copy
+    try { return await U[id]; } catch (e) { delete U[id]; throw e; }
+  }
+  _playEl(p) {
+    const pr = p.el.play();
+    if (pr && pr.catch) pr.catch(() => { if (this._track && this._track.p === p) this._pendingPlay = p; });   // locked: retried at the unlock
+  }
+  _unlockMusic() {
+    if (!this.ac) return;
+    const pend = this._pendingPlay; this._pendingPlay = null;
+    if (pend && this._track && this._track.p === pend) this._playEl(pend);
+    if (this._mUnlocked) return; this._mUnlocked = true;
+    // bless the players inside this gesture (iOS lets an element play() later only after one play() in a gesture)
+    while ((this._players || []).length < 2) this._newPlayer();
+    for (const p of this._players) if (p.el.paused && !(this._track && this._track.p === p)) { try { if (!p.el.src) p.el.src = silentWav(); const pr = p.el.play(); if (pr && pr.then) pr.then(() => { if (!(this._track && this._track.p === p)) p.el.pause(); }, () => {}); } catch {} }
+  }
   async playTrack(id, level = 0.16) {
     if (!this._ensure()) return false;
     if (this._track && this._track.id === id) return true;
     try { await A.loadManifest(); } catch { return false; }
     if (!A.has('music', id)) return false;
     const want = (this._wantTrack = id);
-    let buf;
-    try { buf = await this.ac.decodeAudioData(await A.musicBuffer(id)); } catch { return false; }
+    let url;
+    try { url = await this._trackUrl(id); } catch { return false; }
     if (this._wantTrack !== want) return false;
     this.stopTrack();
-    const ac = this.ac, t = ac.currentTime, g = ac.createGain(); g.gain.value = 0; g.gain.linearRampToValueAtTime(this.muted ? 0 : level, t + 2); g.connect(this.master);
-    const src = ac.createBufferSource(); src.buffer = buf; src.loop = true; src.connect(g); src.start(t);
-    this._track = { id, g, src }; this._musicLevel = level;
+    const p = this._player(), ac = this.ac, t = ac.currentTime;
+    p.busy = true; clearTimeout(p.stopT);
+    if (p.el.src !== url) p.el.src = url; else p.el.currentTime = 0;
+    p.g.gain.cancelScheduledValues(t); p.g.gain.setValueAtTime(0, t); p.g.gain.linearRampToValueAtTime(this.muted ? 0 : level, t + 2);
+    this._track = { id, g: p.g, p }; this._musicLevel = level;
+    this._playEl(p);
     return true;
   }
-  stopTrack() { const tk = this._track; if (!tk) return; this._track = null; const t = this.ac.currentTime; tk.g.gain.cancelScheduledValues(t); tk.g.gain.setValueAtTime(tk.g.gain.value, t); tk.g.gain.linearRampToValueAtTime(0.0001, t + 1.2); setTimeout(() => { try { tk.src.stop(); tk.g.disconnect(); } catch {} }, 1400); }
+  stopTrack() {
+    const tk = this._track; if (!tk) return; this._track = null;
+    const t = this.ac.currentTime, p = tk.p; if (this._pendingPlay === p) this._pendingPlay = null;
+    tk.g.gain.cancelScheduledValues(t); tk.g.gain.setValueAtTime(tk.g.gain.value, t); tk.g.gain.linearRampToValueAtTime(0.0001, t + 1.2);
+    clearTimeout(p.stopT); p.stopT = setTimeout(() => { if (this._track && this._track.p === p) return; p.el.pause(); p.busy = false; }, 1400);
+  }
   // flight music: the combat track if present, else the procedural bed; hub: calm / deep exploration
   combatMusic(on) {
     if (on) { this._wantTrack = 'storm'; this.playTrack('storm', 0.15).then((ok) => { if (ok) this.stopMusic(); else if (this._wantTrack === 'storm' || !this._track) this.startMusic(); }); }
@@ -593,7 +650,21 @@ export class SFX {
     if (this._aPrep() && !this._amb) this._amb = this._aBuild();     // else the tick builds it once the buffers are ready
     if (!this._ambWd) this._ambWd = setInterval(() => this._ambWatch(), 400);
   }
+  // the camera under the sea surface: muffle the mix (a quick close, a slower open as she breaks the surface)
+  underwater(on) {
+    on = !!on; if (on === this._under || !this.uw) return; this._under = on;
+    this.uw.frequency.setTargetAtTime(on ? 480 : 22000, this.ac.currentTime, on ? 0.06 : 0.25);
+  }
+  // through the sea surface: a hiss of spray and a hollow thump (deeper going in)
+  splash(k = 1, into = true) {
+    if (!this._ensure() || this.muted) return;
+    const t = this.ac.currentTime;
+    this._noise(t, 0.7, { gain: 0.22 * k, freq: 2400, q: 0.5, type: 'bandpass' });
+    this._noise(t + 0.02, 0.35, { gain: 0.3 * k, freq: 420, q: 0.7, type: 'lowpass' });
+    this._tone(into ? 110 : 160, t, 0.32, { type: 'sine', gain: 0.24 * k, glide: 0.45 });
+  }
   ambSet(o) {
+    if (o) this.underwater(o.under);
     if (!this._ambOn || !o) return;
     const now = performance.now(); this._ambLast = now;
     if (now < this._ambNext && !o.paused === !this._ambPz) return;     // ~15 Hz; a pause toggle goes through at once
@@ -601,7 +672,7 @@ export class SFX {
     this._ambTick(o);
   }
   ambStop() {
-    this._ambOn = false;
+    this._ambOn = false; this.underwater(false);
     if (this._ambWd) { clearInterval(this._ambWd); this._ambWd = 0; }
     this._engScale(1);
     const a = this._amb; if (!a || this._ambStopT) return;

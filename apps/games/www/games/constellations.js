@@ -339,7 +339,7 @@ export const __cz = { get run() { return RUN; }, get flight() { return FLIGHT; }
 // review / test hook: look at another system of the sector from the hub (in memory only — never persisted)
 const __dev = { goto(i) { if (!RUN || !SECTOR || i < 0 || i >= SECTOR.length || FLIGHT) return false; RUN.sys = i; rebuildSector(); return true; },
   // M3 review: over world wi of this system, in daylight (sun sunEl degrees up), at height alt
-  overWorld(wi, alt, sunEl, az, v) { return !!FLIGHT && placeOver(FLIGHT, wi, alt, sunEl, az, v); },
+  overWorld(wi, alt, sunEl, az, v, hdg) { return !!FLIGHT && placeOver(FLIGHT, wi, alt, sunEl, az, v, hdg); },
   nearSite(wi, kinds, dist, alt, v, sunEl) { return FLIGHT ? placeNearSite(FLIGHT, wi, kinds, dist, alt, v, sunEl) : -1; } };
 if (typeof window !== 'undefined') { window.__cz = window.__cz || {}; window.__cz.game = __cz; window.__cz.dev = __dev; }
 

@@ -188,3 +188,74 @@ export function makeMaterials(THREE, renderer, size = 512, onReady = null) {
   }).catch((e) => console.warn('[world] material layers', e));
   return res;
 }
+
+// ---- a tileable 3D noise volume (64³ RGBA8, generated once on the GPU, shared by the clouds and the ground) -------------
+//   R  Perlin-Worley (billowy, connected: the cloud's base shape)   G  Worley fbm, 4 cells a tile (clumps, cloud detail)
+//   B  Worley fbm, 8 cells a tile (finer erosion)                    A  gradient-noise fbm 0..1 (macro colour patches)
+// Every channel wraps on all three axes, so a world samples it at any scale with no seam (and no cube-face plane).
+const NOISE3_FRAG = /* glsl */`
+varying vec2 vUv; uniform float uZ;
+float h31(vec3 p) { p = fract(p * vec3(0.1031, 0.1030, 0.0973)); p += dot(p, p.yxz + 33.33); return fract((p.x + p.y) * p.z); }
+vec3 g31(vec3 c) { float a = h31(c) * 6.2831853, z = h31(c + 17.17) * 2.0 - 1.0, r = sqrt(1.0 - z * z); return vec3(r * cos(a), r * sin(a), z); }
+float pn3(vec3 p, float P) {   // periodic gradient noise, period P
+  vec3 i = floor(p), f = fract(p), u = f * f * f * (f * (f * 6.0 - 15.0) + 10.0);
+  float n000 = dot(g31(mod(i, P)), f), n100 = dot(g31(mod(i + vec3(1, 0, 0), P)), f - vec3(1, 0, 0));
+  float n010 = dot(g31(mod(i + vec3(0, 1, 0), P)), f - vec3(0, 1, 0)), n110 = dot(g31(mod(i + vec3(1, 1, 0), P)), f - vec3(1, 1, 0));
+  float n001 = dot(g31(mod(i + vec3(0, 0, 1), P)), f - vec3(0, 0, 1)), n101 = dot(g31(mod(i + vec3(1, 0, 1), P)), f - vec3(1, 0, 1));
+  float n011 = dot(g31(mod(i + vec3(0, 1, 1), P)), f - vec3(0, 1, 1)), n111 = dot(g31(mod(i + vec3(1, 1, 1), P)), f - vec3(1, 1, 1));
+  return mix(mix(mix(n000, n100, u.x), mix(n010, n110, u.x), u.y), mix(mix(n001, n101, u.x), mix(n011, n111, u.x), u.y), u.z);
+}
+float pw3(vec3 p, float P) {   // periodic Worley F1 (0 at a feature point)
+  vec3 i = floor(p), f = fract(p); float d = 9.0;
+  for (int z = -1; z <= 1; z++) for (int y = -1; y <= 1; y++) for (int x = -1; x <= 1; x++) {
+    vec3 o = vec3(float(x), float(y), float(z)), c = mod(i + o, P);
+    vec3 q = o + vec3(h31(c), h31(c + 7.31), h31(c + 13.7)) - f; d = min(d, dot(q, q));
+  }
+  return sqrt(d);
+}
+float pfbm(vec3 p, float P, int n) { float s = 0.0, a = 0.5, t = 0.0; for (int i = 0; i < 6; i++) { if (i >= n) break; s += a * pn3(p * P, P); t += a; a *= 0.5; P *= 2.0; } return s / t; }
+float wfbm(vec3 p, float P) { return 1.0 - (pw3(p * P, P) * 0.625 + pw3(p * P * 2.0, P * 2.0) * 0.25 + pw3(p * P * 4.0, P * 4.0) * 0.125); }
+void main() {
+  vec3 p = vec3(vUv, uZ);
+  float pf = pfbm(p, 4.0, 4) * 0.5 + 0.5, w4 = wfbm(p, 4.0), w8 = wfbm(p, 8.0);
+  float pwr = clamp((pf - 0.5) * 1.5 + (w4 - 0.55) * 1.1 + 0.5, 0.0, 1.0);   // Perlin-Worley: billows with connected bodies
+  float macroN = clamp(pfbm(p + 0.37, 3.0, 5) * 0.9 + 0.5, 0.0, 1.0);
+  gl_FragColor = vec4(pwr, w4, w8, macroN);
+}`;
+// returns { tex, ready, dispose }: tex is a 1x1x1 grey stand-in until the volume exists (onReady(tex) then)
+export function makeNoise3D(THREE, renderer, size = 64, onReady = null) {
+  const ph = new THREE.Data3DTexture(new Uint8Array([128, 128, 128, 128]), 1, 1, 1); ph.needsUpdate = true;
+  const res = { tex: ph, ready: false, dead: false, rt: null, dispose() { res.dead = true; ph.dispose(); if (res.rt) res.rt.dispose(); } };
+  const geo = new THREE.PlaneGeometry(2, 2), scene = new THREE.Scene(), cam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+  const mat = new THREE.ShaderMaterial({ vertexShader: QUAD_VERT, fragmentShader: NOISE3_FRAG, uniforms: { uZ: { value: 0 } }, depthTest: false, depthWrite: false, toneMapped: false });
+  const q = new THREE.Mesh(geo, mat); q.frustumCulled = false; scene.add(q);
+  const rt = new THREE.WebGL3DRenderTarget(size, size, size, { depthBuffer: false, type: THREE.UnsignedByteType, format: THREE.RGBAFormat });
+  const tex = rt.texture;
+  tex.wrapS = tex.wrapT = tex.wrapR = THREE.RepeatWrapping; tex.magFilter = THREE.LinearFilter; tex.minFilter = THREE.LinearFilter; tex.generateMipmaps = false;
+  const cleanup = () => { mat.dispose(); geo.dispose(); };
+  const prev0 = renderer.getRenderTarget(); renderer.setRenderTarget(rt, 0);
+  const ready = renderer.compileAsync(scene, cam); renderer.setRenderTarget(prev0);
+  ready.then(() => {
+    if (res.dead) { cleanup(); rt.dispose(); return; }
+    // eight slices an animation frame (64 frames of a few hundred microseconds would do too; this is ~8 frames)
+    let z = 0;
+    const step = () => {
+      if (res.dead) { cleanup(); rt.dispose(); return; }
+      const prev = renderer.getRenderTarget(), auto = renderer.autoClear; renderer.autoClear = false;
+      for (let k = 0; k < 8 && z < size; k++, z++) { mat.uniforms.uZ.value = (z + 0.5) / size; renderer.setRenderTarget(rt, z); renderer.render(scene, cam); }
+      renderer.setRenderTarget(prev); renderer.autoClear = auto;
+      if (z < size) { requestAnimationFrame(step); return; }
+      try {   // mipmaps (three r160 does not build them for 3D render targets): far clouds and ground stay calm
+        const gl = renderer.getContext(), wt = renderer.properties.get(tex).__webglTexture;
+        gl.bindTexture(gl.TEXTURE_3D, wt); gl.texParameteri(gl.TEXTURE_3D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+        gl.generateMipmap(gl.TEXTURE_3D); gl.bindTexture(gl.TEXTURE_3D, null);
+        renderer.resetState();
+      } catch (e) { console.warn('[world] noise volume mipmaps', e); }
+      cleanup();
+      res.rt = rt; res.tex = tex; res.ready = true;
+      if (onReady) onReady(tex);
+    };
+    requestAnimationFrame(step);
+  }).catch((e) => console.warn('[world] noise volume', e));
+  return res;
+}

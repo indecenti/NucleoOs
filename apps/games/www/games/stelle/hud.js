@@ -916,10 +916,16 @@ export function createHud(canvas) {
     // ---- altitude / climb / ground speed (right of centre; on phones stacked on the left above the prompt and speed)
     const ax = compact ? 24 * S : cx + Math.min(W, H) * 0.36, ay = compact ? promptY() - 107 * S : cy - 58 * S, aw = compact ? 150 * S : 132 * S;
     plate(ax - 10 * S, ay - 22 * S, aw, (compact ? 104 : 116) * S, 8);
-    text(tr('cz_hud_alt'), ax, ay - 4 * S, 10, COL.dim, 'left', 800);
-    const lowAlt = U.agl < 60 && U.st === SURF.FLIGHT;
-    text(fmtAlt(U.agl), ax, ay + 20 * S, 22, lowAlt ? COL.warn : '#fff', 'left', 800);
-    text(tr('cz_hud_asl') + ' ' + fmtAlt(U.alt), ax, ay + 38 * S, 11, COL.dim, 'left', 700);
+    if (U.sub > 0.3) {   // under the sea: the depth, and the clearance over the seabed
+      text(tr('cz_hud_depth'), ax, ay - 4 * S, 10, COL.dim, 'left', 800);
+      text(fmtAlt(U.sub), ax, ay + 20 * S, 22, '#7fe0ff', 'left', 800);
+      text(tr('cz_hud_bed') + ' ' + fmtAlt(U.hard), ax, ay + 38 * S, 11, U.hard < 12 ? COL.warn : COL.dim, 'left', 700);
+    } else {
+      text(tr('cz_hud_alt'), ax, ay - 4 * S, 10, COL.dim, 'left', 800);
+      const lowAlt = U.agl < 60 && U.st === SURF.FLIGHT;
+      text(fmtAlt(U.agl), ax, ay + 20 * S, 22, lowAlt ? COL.warn : '#fff', 'left', 800);
+      text(tr('cz_hud_asl') + ' ' + fmtAlt(U.alt), ax, ay + 38 * S, 11, COL.dim, 'left', 700);
+    }
     const vs = U.vs, vsc = vs < -25 && U.agl < 300 ? COL.bad : vs < -1 ? COL.warn : COL.friend;
     text((vs >= 0 ? '▲ ' : '▼ ') + Math.abs(vs).toFixed(Math.abs(vs) < 10 ? 1 : 0) + ' m/s', ax, ay + 58 * S, 13, vsc, 'left', 800);
     text(tr('cz_hud_gs') + ' ' + Math.round(U.gs) + ' m/s', ax, ay + 76 * S, 11, COL.hud, 'left', 700);
