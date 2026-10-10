@@ -16,12 +16,13 @@
 //   node tools/web-e2e/anima-device.mjs --sim          # the same battery against the device simulator
 //   node tools/web-e2e/anima-device.mjs --overlay      # the WORKING TREE's web payload on the real device (see below)
 //   --nolocal: no model on this PC (local engines off) — the configuration of a user without Ollama
+//   --restore: only put back the user's state from a backup an interrupted run left in build/web-e2e/anima-device/
 //
 // --overlay: every web file (shell, apps) is served to the browser from this repo's working tree while every /api/*
 // call still goes to the real Cardputer — so a fix is proven on the real hardware (its SD, status, executor, httpd)
 // BEFORE anything is copied to the card. The first load stays the device's own, so it hands off into the web profile
 // exactly as for a user; the overlay starts with the reload after it.
-import { readFileSync, mkdirSync, writeFileSync } from 'node:fs';
+import { readFileSync, mkdirSync, writeFileSync, existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { enableOverlay } from './overlay.mjs';
 import { launchBrowser, findChrome } from './cdp.mjs';
@@ -238,14 +239,26 @@ const IN_ANIMA = (body) => `(async () => { const f = ${AW}; if (!f) throw new Er
 const WIN_TITLES = `[...document.querySelectorAll('.win')].map((w) => ((w.querySelector('.title, .tt, header') || {}).textContent || '') + ' ' + ((w.querySelector('iframe') || {}).src || ''))`;
 
 const backups = {};
-let browser = null, exitCode = 0, brightness0 = null;
+const BACKUP_FILE = join(OUT, 'backup-' + origin.replace(/^https?:\/\//, '').replace(/[^\w.-]+/g, '_') + '.json');   // the user's state, until restored
+let browser = null, exitCode = 0, brightness0 = null, backupsTaken = false;
 const results = [];
 try {
   await pairNode();
   const s0 = await status();
   console.log(`device ${origin}: v${s0 && s0.version}, profile ${s0 && s0.profile}, heap ${s0 && s0.free_heap} B (block ${s0 && s0.largest_free_block})`);
+  // A backup left by an earlier run whose restore failed is the TRUE original: restore it first, never overwrite it.
+  if (!sim && existsSync(BACKUP_FILE)) {
+    const old = JSON.parse(readFileSync(BACKUP_FILE, 'utf8'));
+    console.log('an earlier run left its backup — restoring it first');
+    if (!(await restoreAll(old))) throw new Error('could not restore the earlier backup ' + BACKUP_FILE);
+  }
+  if (flag('restore')) { console.log('restore only: nothing left to restore'); process.exit(0); }
   for (const p of BACKUPS) backups[p] = await sdRead(p);
   if (!sim) { const d = await dev('/api/display?on=1', { method: 'POST' }).then((r) => r.ok ? r.json() : null).catch(() => null); brightness0 = d && Number.isFinite(d.brightness) ? d.brightness : null; }
+  // on disk BEFORE anything changes: a crash or a failed restore can always be undone with --restore
+  if (!sim) writeFileSync(BACKUP_FILE, JSON.stringify({ host: origin, at: new Date().toISOString(), files: backups, brightness: brightness0 }));
+  backupsTaken = true;
+  console.log(`backed up: ${Object.entries(backups).map(([p, b]) => p + (b == null ? ' (absent)' : ' ' + b.length + ' B')).join(', ')}${brightness0 != null ? ', brightness ' + brightness0 + '%' : ''}`);
   await seedWorkspace();
 
   browser = await launchBrowser({ args: [...HOST_RULES, LNA_OFF] });
@@ -365,18 +378,30 @@ try {
   writeFileSync(join(OUT, `report-${uiLang}${overlay ? '-overlay' : ''}${sim ? '-sim' : ''}.json`), JSON.stringify(results, null, 2));
   if (browser) await browser.close();
   // after the browser is gone, so its last debounced saves cannot land on top
-  try {
-    await sleep(500); await pairNode();
-    for (const [p, body] of Object.entries(backups)) {
-      if (body == null) continue;                        // it did not exist before: leave whatever is there now
-      const ok = await sdWrite(p, body) && (await sdRead(p)) === body;
-      console.log(ok ? `restored ${p}` : `⚠ could not restore ${p} — check it on the device`);
-    }
-    if (brightness0 != null) {
-      const r = await dev('/api/anima/act', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ tool: 'set_brightness', arg: String(brightness0), lang: 'en' }) }).catch(() => null);
-      console.log(r && r.ok ? `brightness back to ${brightness0}%` : `⚠ could not restore the brightness (${brightness0}%)`);
-    }
-  } catch (e) { console.error('⚠ restore failed: ' + (e && e.message)); }
+  if (backupsTaken) await restoreAll({ files: backups, brightness: brightness0 });
   if (sim) await sim.stop();
 }
 process.exit(exitCode);
+
+// Put the user's state back, retrying: right after the browser closes, its last keepalive writes keep the 4-socket
+// httpd busy, and ONE reset pair request used to abort the whole restore (the ADV, 2026-10-10: "fetch failed", with
+// the backups held only in memory). Every step retries with a growing pause; the backup file stays until it worked.
+async function restoreAll({ files, brightness }) {
+  const tryHard = async (label, fn) => {
+    for (let i = 0; i < 6; i++) {
+      try { await sleep(i ? 1500 * i : 600); await pairNode(); if (await fn()) { console.log('restored ' + label); return true; } } catch {}
+    }
+    console.log(`⚠ could not restore ${label} — run again with --restore`); return false;
+  };
+  let all = true;
+  for (const [p, body] of Object.entries(files || {})) {
+    if (body == null) continue;                          // it did not exist before: leave whatever is there now
+    all = await tryHard(p, async () => await sdWrite(p, body) && (await sdRead(p)) === body) && all;
+  }
+  if (brightness != null) all = await tryHard(`brightness ${brightness}%`, async () => {
+    const r = await dev('/api/anima/act', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ tool: 'set_brightness', arg: String(brightness), lang: 'en' }) });
+    return r.ok;
+  }) && all;
+  if (all) { try { rmSync(BACKUP_FILE); } catch {} }
+  return all;
+}
