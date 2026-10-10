@@ -4240,10 +4240,13 @@
     async function pcAgentReady(){ return useAgents && await pcServerLive(); }
     // The EXACT answer to a live question the status carries (SD space, battery, time, network, RAM…), in the language
     // the user wrote in — never a model's guess. null = not one of those (agenda, season) or no status.
+    // The language a question was written in, for the replies the browser composes itself: the general detector
+    // first, the short-question cues second ("ouvre les réglages" was answered "Apro Impostazioni"), else the OS one.
+    const qLangOf=(q, P)=>{ const l=(ctxkit.userLanguage && ctxkit.userLanguage(q)) || (P && P.guessLang && P.guessLang(q)) || lang; return ['it','en','es','fr','de'].includes(l) ? l : lang; };
     async function liveStatusReply(q, P){
       const k=P.liveKind && P.liveKind(q); if(!k) return null;
       const st=await statusNow(1500);
-      const txt=st && P.liveFromStatus(k, st, (P.guessLang && P.guessLang(q)) || lang);
+      const txt=st && P.liveFromStatus(k, st, qLangOf(q, P));
       return txt ? { reply:txt, intent:'live_'+k, domain:'system', tier:'status', status:true, confidence:95 } : null;
     }
     // The desktop's own app names (shell i18n app_<id>) for the browser-side launch resolver: fetched once per language,
@@ -4259,7 +4262,7 @@
     }
     async function browserLaunch(q, P){
       if(!P.launchTarget) return null;
-      const qLang=(P.guessLang && P.guessLang(q)) || lang;
+      const qLang=qLangOf(q, P);
       const names=await appNamesFor([...new Set([qLang, lang, 'en'])]);
       const id=P.launchTarget(q, names); if(!id) return null;
       return { reply:P.launchReply((names[id] && names[id][0]) || id, qLang), action:'launch', arg:id, intent:'launch', domain:'app', tier:'browser', confidence:90 };
@@ -4271,7 +4274,7 @@
       // SEVERAL live values in one question ("spazio sulla SD e da quanto è acceso?"): every clause answered exactly.
       const kinds=P.liveKinds ? P.liveKinds(q) : null;
       if(kinds && kinds.length>1){
-        const st=await statusNow(); const lg=(P.guessLang && P.guessLang(q)) || lang;
+        const st=await statusNow(); const lg=qLangOf(q, P);
         const parts=st ? kinds.map((k)=>P.liveFromStatus(k, st, lg)).filter(Boolean) : [];
         if(parts.length===kinds.length) return { reply:parts.join(' '), intent:'live_multi', domain:'system', tier:'status', status:true, confidence:95 };
       }
@@ -4280,7 +4283,7 @@
       // The device's engine and the browser's copy of it read Italian and English only: a live question asked in
       // es/fr/de is answered exactly from the status, in that language — the engines answered it in Italian ("connesso
       // a …" to a French question) or not at all, and "¿Qué hora es ahora?" reached a model or "Non lo so".
-      if(hint==='live' && !/^(it|en)$/.test((P.guessLang && P.guessLang(q)) || lang)){ const s=await liveStatusReply(q, P); if(s) return s; }
+      if(hint==='live' && !/^(it|en)$/.test(qLangOf(q, P))){ const s=await liveStatusReply(q, P); if(s) return s; }
       // A launch the browser can resolve itself (the desktop's own app names, five languages) opens at once — no device
       // round-trip, no engine that reads only it/en ("Öffne den Taschenrechner" got a chat-written JS calculator).
       if(hint==='launch'){ const b=await browserLaunch(q, P); if(b) return b; }
@@ -4288,7 +4291,7 @@
       // read it/en only, and a wording they missed ("Turn the brightness down") reached a chat that said it couldn't.
       if(hint==='act' && P.settingAct){ const a=P.settingAct(q);
         if(a){ const acted=await deviceAct(a);
-          if(acted && acted.done===true) return { ...acted, reply:P.settingReply(a.tool, acted.reply, (P.guessLang && P.guessLang(q)) || lang) };
+          if(acted && acted.done===true) return { ...acted, reply:P.settingReply(a.tool, acted.reply, qLangOf(q, P)) };
           if(acted) return notPerformed(acted, 'failed'); } }
       // The real classifier: the in-browser engine when it is already here (no download), else the device.
       if(await browserProvisioned()){
@@ -4323,7 +4326,7 @@
       if(hint==='act' && d.err==='busy' && P.settingAct){
         const a=P.settingAct(q);
         if(a){ const acted=await deviceAct(a);
-          if(acted && acted.done===true) return { ...acted, reply:P.settingReply(a.tool, acted.reply, (P.guessLang && P.guessLang(q)) || lang) };
+          if(acted && acted.done===true) return { ...acted, reply:P.settingReply(a.tool, acted.reply, qLangOf(q, P)) };
           if(acted) return notPerformed(acted, 'failed'); }
       }
       if((hint==='act' || hint==='live' || hint==='launch') && d.err!=='unpaired' && d.err!=='stopped' && await pcAgentReady()){ _turnForceAgent=true; return null; }

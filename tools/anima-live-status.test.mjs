@@ -39,6 +39,10 @@ test('the ADV web-OS battery (2026-10-10): device subject, IP / firmware wording
   }
   assert.deepEqual(liveKinds('How much free space is left on the SD card, and how long has the device been on?'), ['space', 'uptime']);
   assert.deepEqual(liveKinds('Wie viel RAM ist frei und welche Firmware-Version läuft?'), ['ram', 'version']);
+  // more device wordings (2026-10-10 exact-layer run: these reached the cloud)
+  assert.equal(liveKind('Wie viel Speicherplatz ist auf der SD frei?'), 'space');
+  assert.equal(liveKind('Combien de batterie reste-t-il ?'), 'battery');
+  assert.equal(liveKind('¿A qué red wifi estoy conectado?'), 'network');
   // still not status reads
   for (const q of ['what is an IP address', 'che versione di python devo usare', 'how long has the Eiffel tower been there']) assert.equal(liveKind(q), null, q);
   // a setting order is answered in ITS language ("Mets la luminosité à 40 %" got "Brillo al 40 %")

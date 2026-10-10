@@ -21,6 +21,9 @@ test('five languages, operator words and symbols', () => {
   assert.equal(val('calcola 2 elevato a 10', { lang: 'it' }), 1024);
   assert.equal(val('12 al quadrato', { lang: 'it' }), 144);
   assert.equal(val('20% di 150', { lang: 'it' }), 30);
+  assert.equal(val('Quanto fa il 20% di 150?', { lang: 'it' }), 30, 'a leading article');
+  assert.equal(val('What is 20 percent of 150?', { lang: 'en' }), 30, 'spelled-out percent');
+  assert.equal(val('calcola il 15 per cento di 80', { lang: 'it' }), 12);
   assert.equal(val('100 diviso 8', { lang: 'it' }), 12.5);
   assert.equal(val('0,1 + 0,2', { lang: 'it' }), 0.3, 'no floating-point noise');
 });

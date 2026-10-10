@@ -33,6 +33,8 @@ const TAIL = /\s*(?:per favore|please|por favor|s'il te plait|s'il vous plait|bi
 const THEN = /\b(?:e poi|poi|quindi|and then|then|y luego|luego|despues|et puis|puis|ensuite|und dann|dann|danach)\b/g;
 const OP_HEAD = /\b(divise|multiplie|diviso|moltiplicato|divided|multiplied|dividido|multiplicado|geteilt|multipliziert)\s+(?:e poi|poi|quindi|then|luego|despues|puis|ensuite|dann|danach)\s+/g;
 const JOIN = /^(?:e|ed|and|y|et|und|also|anche)\s+/;
+const ART = /^(?:il|lo|la|l'|the|el|le|les|der|die|das|un|una|uno|a|an)\s+/;   // "quanto fa IL 20% di 150"
+const PCT = /\s*\b(?:percento|per cento|percent|por ciento|pour cent|prozent)\b/g;   // "20 percent of 150"
 
 // One number in the user's notation. "2.430" / "1.000.000" are thousands in it/es/de/fr; "1,000" in English; a lone
 // comma or a dot with not exactly three digits after it is a decimal point.
@@ -100,7 +102,8 @@ export function parseMath(q, { lang = 'it', prev = null } = {}) {
   t = t.replace(LEAD, '').replace(TAIL, '').trim();
   if (!t || !/\d/.test(t) && prev == null) return null;
   const fmt = (v) => { try { return v.toLocaleString(LOCALE[lang] || 'en-GB', { maximumFractionDigits: 10 }); } catch { return String(v); } };
-  const steps = t.replace(OP_HEAD, '$1 ').replace(THEN, ' | ').replace(/,\s+/g, ' | ').split('|').map((x) => x.trim().replace(JOIN, '').trim()).filter(Boolean);
+  t = t.replace(PCT, '%').replace(/(\d)\s+%/g, '$1%');
+  const steps = t.replace(OP_HEAD, '$1 ').replace(THEN, ' | ').replace(/,\s+/g, ' | ').split('|').map((x) => x.trim().replace(JOIN, '').replace(ART, '').trim()).filter(Boolean);
   if (!steps.length) return null;
   let acc = null, shown = '', ops = 0;
   for (let i = 0; i < steps.length; i++) {
