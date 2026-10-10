@@ -90,6 +90,21 @@ static inline uint16_t rgb(int r, int g, int b)
 #define COL_GREY   rgb(150, 160, 184)
 #define COL_DIM    rgb(78, 88, 116)
 #define COL_PURPLE rgb(168, 130, 230)
+// compile-time RGB565 (const tables stay in flash: no runtime initialiser)
+#define C565(r, g, b) ((uint16_t)((((r) & 0xF8) << 8) | (((g) & 0xFC) << 3) | ((b) >> 3)))
+#define COL_GOLD   C565(255, 200, 70)
+#define COL_THREAD C565(255, 200, 0)      // a lit beacon thread: used by nothing else on the map
+// Faction looks (tools/costellazioni-assets/lore.md): Gilda brass / ivory / royal blue, Custodi verdigris /
+// candle gold / pale stone, Relitti rust / sodium orange / oil black, Eco cyan + violet lattice on black.
+// hull + accent paint the ships, glow is engines / titles / emblems, deep tints headers + nebulae, trim is the
+// second nebula tone and the header rule.
+struct FacLook { uint16_t hull, accent, glow, deep, trim; };
+static const FacLook FAC_LOOK[4] = {
+    { C565(236, 228, 200), C565( 60,  96, 220), C565(150, 196, 255), C565(  0,  40, 110), C565(214, 170,  70) },
+    { C565(232, 228, 210), C565(236, 180,  60), C565(255, 210, 110), C565(  0,  76,  70), C565( 70, 160, 130) },
+    { C565(160,  84,  40), C565(118, 112,  96), C565(255, 140,  30), C565( 70,  26,   0), C565(230, 110,  20) },
+    { C565( 44,  20,  90), C565( 90, 220, 255), C565(190, 120, 255), C565( 30,   0,  80), C565( 60, 200, 230) },
+};
 
 // ---- watch-UI layout constants (Wear-OS-style big-row lists) ----------------
 #define MARGIN   8                  // frame inset both edges -> content x in [8..232]
@@ -101,8 +116,8 @@ static inline uint16_t rgb(int r, int g, int b)
 #define PILL_H   26                 // selection pill height inside ROW_H
 #define ACC_W    4                  // left accent rail width
 // additive palette (no existing macro changed)
-#define COL_FOCUS  rgb(28, 50, 96)    // selection pill fill
-#define COL_FOCUS2 rgb(70, 120, 200)  // pill border + accent rail + scroll thumb
+#define COL_FOCUS  gui::mix(COL_SPACE, FAC_LOOK[cur_fac()].glow, 60)   // selection pill fill, in the station's faction tone
+#define COL_FOCUS2 (FAC_LOOK[cur_fac()].glow)                           // pill border + accent rail + scroll thumb
 #define COL_FADE   rgb(58, 66, 92)    // far neighbour text (curved-rim fade)
 #define COL_TRACK  rgb(28, 34, 54)    // scroll track / empty pips
 enum { TIER_FAR = 0, TIER_NEAR = 1, TIER_FOCUS = 2 };   // row painter focus tier
@@ -170,8 +185,13 @@ static char s_status[40];        // transient one-liner on market/shipyard
 #define AIM_PUSH 150.0f
 #define AIM_VMAX 240.0f
 #define AIM_FRIC   6.5f
-struct Bolt { float ex, ey, ez, tx, ty, vz; int16_t life; uint8_t on, foe, aimward; };
-struct Foe  { float ex, ey, ez, wphase, bank, engagez; int16_t hp, hpmax, firecd, strafecd, hitms; uint8_t on, kind, passed, strafe; };
+// A tracer flies from the ship that fired it (o) to its target point (t) over life0 ms: you see it leave the
+// gun and come at you, and its origin tells the damage-direction indicator where the hit came from.
+// foe = the hit's weight in fifths of the shooter's damage (a tracer grazes: 3; an ace's burst round: 2).
+struct Bolt { float ex, ey, ez, ox, oy, oz, tx, ty, tz; int16_t life, life0; uint8_t on, foe, aimward; };
+// v* = velocity (world units/s: engine trails + the lead pip); ph/phms/shots = an ace's duel pattern.
+struct Foe  { float ex, ey, ez, vx, vy, vz, wphase, bank, engagez; int16_t hp, hpmax, firecd, strafecd, hitms, phms;
+              uint8_t on, kind, passed, strafe, ph, shots; };
 static Bolt *s_bolt;                          // NBOLT (APP_RAM)
 static Foe  *s_foe;                           // NFOE  (APP_RAM)
 struct Warp { float ex, ey, ez; };
@@ -182,7 +202,7 @@ static Warp *s_warp;                          // NWARP — forward-streaking sta
 #define NRIP  2         // shield-absorb ripples on the canopy
 enum { PK_DEBRIS = 0, PK_SPARK, PK_STREAK };
 struct Part { float ex, ey, ez, vx, vy, vz; int16_t life, life0; uint8_t on, kind; uint16_t col; };
-struct Shk  { float cx_, cy_; int16_t life, life0; uint8_t on; uint16_t col; };
+struct Shk  { float cx_, cy_; int16_t life, life0; uint8_t on, r0; uint16_t col; };   // fireball + shock ring + smoke
 struct Rip  { int x, y; int16_t life, life0; uint8_t on; };
 static Part *s_part;                          // NPART
 static Shk  *s_shk;                           // NSHK
@@ -193,9 +213,6 @@ static Rip  *s_rip;                           // NRIP
 struct Death { uint8_t on, model; int16_t x, y, r; float yaw, bank; uint16_t col; int16_t t, t0; };
 static Death *s_death;                        // NDEATH
 static int  s_part_rr;                 // round-robin cursor
-static int64_t s_flash_until;          // brief dim full-frame flash window
-static float   s_flash_x, s_flash_y;   // core-flash centre
-static int     s_flash_r0;             // core-flash radius (capped)
 static int64_t s_muz_until;            // twin muzzle-flash window
 static int64_t s_hullvig_until;        // red edge vignette on a hull hit
 static int64_t s_shieldvig_until;      // cyan edge flash when the shield soaks a hit
@@ -225,8 +242,7 @@ static int   s_mission;              // MISSIONS index, or -1 for a random ambus
 static int   s_pick;                 // mission highlighted on the board/brief
 static int   s_misssel, s_briefsel;
 static int   s_result, s_earn_cr;    // debrief: 0 run / 1 win / -1 fail; credits earned
-static char  s_cmsg[40];
-static int64_t s_cmsg_until, s_combat_t0;
+static int64_t s_combat_t0;
 static uint8_t s_ward_on;            // escort/defend protectee present
 static int   s_ward_hp, s_ward_max;
 static float s_ward_x, s_ward_vx;
@@ -243,8 +259,17 @@ enum { PU_SHIELD = 0, PU_REPAIR, PU_MISSILE, PU_RAPID, PU_KINDS };
 struct Pickup { float ex, ey, ez; int16_t life; uint8_t on, kind; };
 static Pickup *s_pu;                 // NPU (APP_RAM)
 static int     s_combo; static int64_t s_combo_until;     // arcade kill combo
-static uint16_t s_wave_tint;         // per-wave enemy + backdrop colour (rotates each wave)
-static char    s_toast[28]; static int64_t s_toast_until; // brief power-up pickup banner
+// Combat presentation + duel state (APP_RAM, like the pools: nothing resident while the game is closed).
+enum { ACE_WEAVE = 0, ACE_CHARGE, ACE_BURST, ACE_EVADE };   // an ace's duel pattern (Foe.ph)
+#define NO_ACE 0xFF
+struct Fx {
+    char cmsg[40], toast[28];                    // centre banner (wave / flee) and pickup toast
+    int64_t cmsg_until, toast_until, comm_until; // comm_until: the ace's radio line under the HUD
+    int64_t dmg_until, hitstop_until;            // damage-direction indicator / kill freeze
+    float dmg_ang;                               // where the last hit came from (screen angle, radians)
+    uint8_t dmg_hull, ace_id, ace_down, comm_id; // hull (red) or shield (cyan) hit; the ace's cast index; it fell; who talks
+};
+static Fx *s_fx;
 
 // forward decls used before their definitions
 static void combat_begin_ambush(void);
@@ -611,10 +636,6 @@ static const char *const MT_WIN[4][2] = {
 // missing the layer the web twin already had. Italian matches the JS verbatim; English is the twin.
 static const char *const FV_PRE[16] = { "Vex","Krull","Mor","Zar","Drix","Nyx","Hask","Orla","Veng","Skar","Rann","Tox","Grim","Vael","Korr","Zael" };
 static const char *const FV_SUF[16] = { "nor","ax","is","oth","ek","ul","ar","ix","one","ag","eth","os","un","ire","um","or" };
-static const char *const FV_EPI[10][2] = {
-    { "il Rosso","the Red" }, { "Occhio-Morto","Deadeye" }, { "la Lama","the Blade" }, { "il Corvo","the Crow" },
-    { "Senza-Volto","the Faceless" }, { "il Flagello","the Scourge" }, { "Mano-Fredda","Coldhand" },
-    { "l'Avvoltoio","the Vulture" }, { "il Cremisi","the Crimson" }, { "lo Spettro","the Wraith" } };
 static const char *const FV_GANG[8][2] = {
     { "Corsari Cremisi","Crimson Corsairs" }, { "Lupi del Vuoto","Void Wolves" }, { "Sciacalli della Cenere","Ash Jackals" },
     { "Predoni di Ferro","Iron Raiders" }, { "Flotta Fantasma","Ghost Fleet" }, { "Branco di Dramir","Dramir Pack" },
@@ -631,6 +652,38 @@ enum { FA_PATROL = 0, FA_HUNT, FA_DUEL, FA_ESCORT, FA_SWEEP, FA_DEFEND };
 static const char *const FA_NAME[6][2] = {
     { "Pattuglia","Patrol" }, { "Caccia","Hunt" }, { "Duello","Duel" },
     { "Scorta","Escort" }, { "Bonifica","Sweep" }, { "Difesa","Defense" } };
+
+// ---- the recurring cast (lore.md) ----------------------------------------------------------------
+// The named aces: who flies the ace of a contract follows its enemy faction (the Wrecks field two). Callsigns are
+// proper names (the same in every language); their radio line is translated. Livery: hull, accent, trim.
+enum { ACE_DAX = 0, ACE_VIGIL, ACE_GUTTER, ACE_WARDEN, ACE_BRAM, NACE };
+static const char *const ACE_NAME[NACE] = { "Lancer Prime Dax Oren", "Sister Vigil", "Scarlet Gutter", "Warden of the Dark", "One-Eye Bram" };
+static const char *const ACE_QUIP[NACE + 1][2] = {
+    { GTK("La Gilda ti manda i suoi saluti.", "The Guild sends its regards.") },
+    { GTK("La Lampada perdona. Io no.", "The Lamp forgives. I do not.") },
+    { GTK("Bella nave. Me la prendo.", "Nice ship. I'll take it.") },
+    { GTK("TROPPO IN FRETTA. FERMATI.", "TOO FAST. TOO MANY. STOP.") },
+    { GTK("Niente di personale, corriere.", "Nothing personal, courier.") },
+    { GTK("Ci svegli. Perche'?", "You wake us. Why?") },          // NACE: the Voice, when the Echo ambushes you
+};
+static const uint16_t ACE_PAL[NACE][3] = {
+    { C565(240, 244, 255), C565( 40,  80, 230), C565(220, 180,  60) },   // chrome, royal blue, brass
+    { C565(255, 244, 210), C565(240, 190,  50), C565( 60, 170, 140) },   // white-gold, gold, verdigris
+    { C565(220,  30,  30), C565(255, 200,   0), C565( 40,  24,  10) },   // scarlet, gold, oil black
+    { C565( 70,  20, 140), C565(120, 240, 255), C565(255, 255, 255) },   // violet, cyan, white
+    { C565( 80,  76,  70), C565(160,  84,  40), C565(255, 140,  30) },   // gunmetal, rust, sodium
+};
+static int ace_cast(int foe_fac, uint32_t h)
+{
+    switch (foe_fac) { case F_GILDA: return ACE_DAX; case F_CUSTODI: return ACE_VIGIL; case F_ECO: return ACE_WARDEN;
+                       default: return ((h >> 10) & 3) ? ACE_GUTTER : ACE_BRAM; }
+}
+// Who hands you a contract at a faction's station (the Echo offers none).
+static const char *giver(int fac)
+{
+    switch (fac) { case F_GILDA: return "Vesna Ardali"; case F_CUSTODI: return GT("Madre Ilse", "Mother Ilse");
+                   case F_RELITTI: return "Mara \"Rustmother\""; default: return GT("La Voce", "The Voice"); }
+}
 
 struct Flavor { int rarity, arch, gang, mod[2], nmod; bool has_enemy; };
 static Flavor s_fv;                          // filled by cur_mission(); read by the board/brief painters
@@ -650,9 +703,9 @@ static const Mission *cur_mission(int slot)
     uint32_t h  = pg_rng_mis(g.seed, g.sector, g.sys, slot, PG_FLAVOR, 1);
     uint32_t h2 = pg_rng_mis(g.seed, g.sector, g.sys, slot, PG_FLAVOR, 2);
     bool ace = gm.ace != 0;
-    // named raider captain (+ epithet for aces)
+    // the target: a named ace of the cast when the contract has one, else a raider captain of the gang
     const char *pre = FV_PRE[h % 16], *suf = FV_SUF[(h >> 5) % 16];
-    if (ace) snprintf(s_mt->target, sizeof s_mt->target, "%s%s %s", pre, suf, lp(FV_EPI[(h >> 10) % 10]));
+    if (ace) snprintf(s_mt->target, sizeof s_mt->target, "%s", ACE_NAME[ace_cast(gm.foe_fac, h)]);
     else     snprintf(s_mt->target, sizeof s_mt->target, "%s%s", pre, suf);
     s_fv.gang = (int)((h >> 16) % 8);
     // archetype + title + brief by mission type (mirror the JS branch-for-branch), in the OS language
@@ -742,6 +795,7 @@ static void stars_init(void)
 }
 static void stars_draw(int ch)
 {
+    LovyanGFX &G = d;
     for (int i = 0; i < NSTAR; i++) {
         int L = star[i].layer;
         int x = (int)(star[i].x - s_scroll[L]);
@@ -752,33 +806,48 @@ static void stars_draw(int ch)
         if (L == 0) c = twk ? COL_GREY : COL_DIM;
         else if (L == 1) c = COL_GREY;
         else c = twk ? COL_CYAN : COL_WHITE;
-        if (L == 2) d.fillRect(x, y, 2, 2, c);
-        else d.drawPixel(x, y, c);
+        if (L == 2) G.fillRect(x, y, 2, 2, c);
+        else G.drawPixel(x, y, c);
     }
 }
 
 // ============================ text helpers ===================================
+#ifdef NH_GAME_NAME
+static int s_overflow, s_overflow_line;   // host harness only: text that did not fit its room (must stay 0), and where
+#define OVERFLOW() (s_overflow++, s_overflow_line = __LINE__)
+#else
+#define OVERFLOW() ((void)0)
+#endif
 static void text_at(int x, int y, int size, uint16_t col, const char *s)
 {
-    d.setTextSize(size); d.setTextColor(col); d.setCursor(x, y); d.print(s);
+    LovyanGFX &G = d;
+    G.setTextSize(size); G.setTextColor(col); G.setCursor(x, y); G.print(s);
 }
 static void center(int y, int size, uint16_t col, const char *s)
 {
     int len = (int)strlen(s);
     while (size > 1 && len * 6 * size > W - 8) size--;          // translations run longer: shrink, never clip
+    if (len * 6 > W) OVERFLOW();
     text_at((W - len * 6 * size) / 2, y, size, col, s);
+}
+// size-1 text with a 1 px black shadow: readable over nebulae and ships
+static void text_sh(int x, int y, uint16_t col, const char *s)
+{
+    text_at(x + 1, y + 1, 1, 0x0000, s); text_at(x, y, 1, col, s);
 }
 static void mini_bar(int x, int y, int w, int h, int pct, uint16_t col)
 {
+    LovyanGFX &G = d;
     pct = clampi(pct, 0, 100);
-    d.fillRoundRect(x, y, w, h, 1, rgb(30, 34, 52));
-    if (pct > 0) d.fillRoundRect(x, y, w * pct / 100, h, 1, col);
+    G.fillRoundRect(x, y, w, h, 1, rgb(30, 34, 52));
+    if (pct > 0) G.fillRoundRect(x, y, w * pct / 100, h, 1, col);
 }
 // like draw_wrapped but stops after maxlines (keeps prose from spilling into UI below)
 static int draw_wrapped_n(int x, int y, int maxw, int lineh, uint16_t col, const char *s, int maxlines)
 {
+    LovyanGFX &G = d;
     int cpl = maxw / 6; if (cpl < 1) cpl = 1; if (cpl > 60) cpl = 60;
-    d.setTextSize(1); d.setTextColor(col);
+    G.setTextSize(1); G.setTextColor(col);
     char line[64];
     int ln = 0;
     while (*s && ln < maxlines) {
@@ -788,10 +857,11 @@ static int draw_wrapped_n(int x, int y, int maxw, int lineh, uint16_t col, const
         if (s[n] && lastsp > 0) take = lastsp;
         if (take > 63) take = 63;
         memcpy(line, s, take); line[take] = 0;
-        d.setCursor(x, y); d.print(line);
+        G.setCursor(x, y); G.print(line);
         s += take; while (*s == ' ') s++;
         y += lineh; ln++;
     }
+    if (*s) OVERFLOW();                // prose cut by the line cap
     return y;
 }
 
@@ -816,17 +886,36 @@ static void text_vr(int xr, int y0, int h, int size, uint16_t col, const char *s
 }
 // A heading in the console's bold face (FreeSansBold 9 pt, game_ui.h), or its small face when it would not
 // fit maxw — readable at a glance, never clipped, and the same type as every other game's menus.
+// Last resort: the 6 px face, cut to the room left (counted by the host harness, which wants none).
 static void label(int x, int y, int maxw, uint16_t col, const char *s)
 {
-    gui::text(s, x, y, 0, gui::text_width(s, gui::F_BODY) <= maxw ? gui::F_BODY : gui::F_SMALL, col, 0x0000);
+    if (gui::text_width(s, gui::F_BODY) <= maxw)  { gui::text(s, x, y, 0, gui::F_BODY, col, 0x0000); return; }
+    if (gui::text_width(s, gui::F_SMALL) <= maxw) { gui::text(s, x, y, 0, gui::F_SMALL, col, 0x0000); return; }
+    char b[48]; int fit = clampi(maxw / 6, 1, 47);
+    if ((int)strlen(s) > fit) OVERFLOW();
+    snprintf(b, sizeof b, "%.*s", fit, s);
+    text_at(x, y + 4, 1, col, b);
 }
-// compact title band (y 0..HDR_H): bold cyan title left, optional grey caption right
+static void draw_emblem(int cx, int cy, int r, int fac);
+static inline int cur_fac(void);
+// The station header (y 0..HDR_H), themed by the system's faction: its tone fades down to space, its emblem
+// leads the title (in the faction's glow), its trim rules the band; an optional grey caption on the right.
 static void title_band(const char *title, const char *right)
 {
-    gui::vgradient(0, 0, W, HDR_H, COL_PANEL, COL_SPACE);
-    d.drawFastHLine(0, HDR_H, W, rgb(46, 60, 96));
-    label(MARGIN, 4, 150, COL_CYAN, title);
-    if (right && right[0]) text_vr(W - MARGIN, 0, HDR_H, fit_size(right, 96, 1), COL_GREY, right);
+    int f = cur_fac();
+    gui::vgradient(0, 0, W, HDR_H, FAC_LOOK[f].deep, COL_SPACE);
+    d.drawFastHLine(0, HDR_H, W, FAC_LOOK[f].trim);
+    draw_emblem(MARGIN + 6, HDR_H / 2, 7, f);
+    int rw = right && right[0] ? (int)strlen(right) * 6 : 0;
+    label(MARGIN + 17, 4, W - MARGIN - rw - 8 - (MARGIN + 17), FAC_LOOK[f].glow, title);
+    if (rw) text_vr(W - MARGIN, 0, HDR_H, 1, COL_GREY, right);
+}
+// Dark space behind the station lists: only the dim far stars, so nothing sparkles between the letters.
+static void sky(int ch)
+{
+    LovyanGFX &G = d;
+    G.fillRect(0, 0, W, ch, COL_SPACE);
+    for (int i = 0; i < NSTAR; i += 2) G.drawPixel(star[i].x, star[i].y % (ch > 0 ? ch : 121), star[i].layer == 2 ? COL_DIM : COL_TRACK);
 }
 
 // ---- reusable fisheye scrolling list ----------------------------------------
@@ -836,6 +925,7 @@ static void title_band(const char *title, const char *right)
 typedef void (*row_fn)(int idx, int bx, int by, int bw, int bh, int tier);
 static void list_fisheye(int sel, int count, int top, int bot, row_fn render)
 {
+    LovyanGFX &G = d;
     if (count <= 0) return;
     sel = clampi(sel, 0, count - 1);
     int avail = bot - top;
@@ -852,9 +942,9 @@ static void list_fisheye(int sel, int count, int top, int bot, row_fn render)
         if (y + h > bot) break;
         if (i == sel) {
             int py = y + (ROW_H - PILL_H) / 2;
-            d.fillRoundRect(MARGIN, py, CW, PILL_H, 6, COL_FOCUS);
-            d.drawRoundRect(MARGIN, py, CW, PILL_H, 6, COL_FOCUS2);
-            d.fillRect(MARGIN, py + 4, ACC_W, PILL_H - 8, COL_FOCUS2);
+            G.fillRoundRect(MARGIN, py, CW, PILL_H, 6, COL_FOCUS);
+            G.drawRoundRect(MARGIN, py, CW, PILL_H, 6, COL_FOCUS2);
+            G.fillRect(MARGIN, py + 4, ACC_W, PILL_H - 8, COL_FOCUS2);
         }
         int tier = (i == sel) ? TIER_FOCUS : ((i == sel - 1 || i == sel + 1) ? TIER_NEAR : TIER_FAR);
         render(i, MARGIN, y, CW, h, tier);
@@ -863,11 +953,11 @@ static void list_fisheye(int sel, int count, int top, int bot, row_fn render)
     // proportional scroll thumb on the right rim
     int win = last - first + 1;
     if (count > win) {
-        d.fillRect(SCRL_X + 1, top, 1, avail, COL_TRACK);
+        G.fillRect(SCRL_X + 1, top, 1, avail, COL_TRACK);
         int th = avail * win / count; if (th < 6) th = 6;
         int denom = count - win; if (denom < 1) denom = 1;
         int ty = top + (avail - th) * first / denom;
-        d.fillRoundRect(SCRL_X, ty, 3, th, 1, COL_FOCUS2);
+        G.fillRoundRect(SCRL_X, ty, 3, th, 1, COL_FOCUS2);
     }
 }
 // row helpers: shared text origins inside a list band
@@ -878,105 +968,204 @@ static inline uint16_t tier_col(int tier)
     return tier == TIER_FOCUS ? COL_WHITE : (tier == TIER_NEAR ? COL_GREY : COL_FADE);
 }
 
+// ============================ painted art (8bpp, dithered) ====================
+// These write RGB332 bytes straight into the composited frame (tile_fb) over a bounded box — never a full-screen
+// pixel loop — and fall back to flat GFX shapes (or nothing) on the direct-to-panel path.
+static const uint8_t BAY[16] = { 0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5 };   // 4x4 Bayer
+static inline bool lit_beacon(int i) { return SYSTEMS[i].beacon && (g.beacon_lit & bit(i)); }
+static inline int cur_fac(void) { return SYSTEMS[g.sys].faction & 3; }
+// The 8bpp frame, clipped to the app's content (never the hint footer under it).
+static bool fb_get(TileFb *f)
+{
+    if (!tile_fb(f)) return false;
+    int ch = nucleo_app_content_height();
+    if (f->y1 > ch) f->y1 = ch;
+    return true;
+}
+
+// A soft cloud: ordered-dither density falling from `peak` (0..16) at the centre to 0 at the rim. Nebulae,
+// dust lanes (a dark tone over a bright one), smoke, fireballs, engine glows.
+static void blob(int cx, int cy, int rx, int ry, uint16_t col, int peak)
+{
+    TileFb f;
+    if (rx < 1 || ry < 1 || peak <= 0 || !fb_get(&f)) return;
+    uint8_t c = tile_c332(col);
+    int ix = (1 << 20) / (rx * rx), iy = (1 << 20) / (ry * ry);
+    for (int dy = -ry; dy <= ry; dy++) {
+        int y = cy + dy, ny = (dy * dy * iy) >> 12;
+        if (y < f.y0 || y >= f.y1 || ny >= 256) continue;
+        int hw = (int)(rx * sqrtf((256 - ny) * (1.0f / 256)));
+        int x0 = cx - hw < f.x0 ? f.x0 : cx - hw, x1 = cx + hw >= f.x1 ? f.x1 - 1 : cx + hw;
+        const uint8_t *bz = BAY + ((y & 3) << 2);
+        uint8_t *row = f.px + y * f.w;
+        for (int x = x0; x <= x1; x++) {
+            int dx = x - cx, n = ny + ((dx * dx * ix) >> 12);
+            if (n < 256 && bz[x & 3] < ((peak * (256 - n)) >> 8)) row[x] = c;
+        }
+    }
+}
+
+// Worlds: night, dusk, day, highlight + the atmosphere limb. Picked per system from a visual-only hash (never the
+// generator's draws); Echo systems are crystal worlds.
+enum { WD_OCEAN = 0, WD_DESERT, WD_ICE, WD_LAVA, WD_GAS, WD_JUNGLE, WD_CRYSTAL };
+static const uint16_t WORLD[7][5] = {
+    { C565(0, 10, 40),  C565(0, 50, 120),  C565(40, 120, 200),  C565(150, 220, 255), C565(170, 230, 255) },
+    { C565(40, 10, 0),  C565(120, 50, 10), C565(200, 130, 60),  C565(255, 220, 150), C565(255, 210, 160) },
+    { C565(10, 20, 50), C565(80, 90, 130), C565(160, 190, 230), C565(250, 250, 255), C565(200, 240, 255) },
+    { C565(30, 0, 0),   C565(110, 10, 0),  C565(220, 70, 0),    C565(255, 190, 40),  C565(255, 120, 60) },
+    { C565(40, 10, 40), C565(120, 50, 80), C565(200, 120, 90),  C565(255, 200, 150), C565(255, 200, 170) },
+    { C565(0, 30, 10),  C565(10, 80, 40),  C565(50, 150, 50),   C565(160, 220, 90),  C565(170, 255, 170) },
+    { C565(20, 0, 50),  C565(80, 30, 140), C565(120, 100, 230), C565(120, 230, 255), C565(190, 140, 255) },
+};
+static int world_of(int sys)
+{
+    return SYSTEMS[sys].faction == F_ECO ? WD_CRYSTAL : (int)(pg_hash3(g.seed ^ 0x3077u, g.sector, (uint32_t)sys) % 6);
+}
+// A lit sphere: Lambert light from (lx, ly) (screen space, toward the viewer) picks the ramp tone, the Bayer
+// matrix blends neighbouring tones (a soft terminator in 8 bits), belts stripe a gas giant, the day-side limb
+// glows with the atmosphere.
+static void paint_world(int cx, int cy, int r, int type, float lx, float ly)
+{
+    const uint16_t *wp = WORLD[type];
+    TileFb f;
+    if (r < 2) return;
+    if (!fb_get(&f)) { d.fillCircle(cx, cy, r, wp[2]); return; }
+    uint8_t c[4] = { tile_c332(wp[0]), tile_c332(wp[1]), tile_c332(wp[2]), tile_c332(wp[3]) }, rim = tile_c332(wp[4]);
+    float lz = sqrtf(fmaxf(0.05f, 1.0f - lx * lx - ly * ly)), inv = 1.0f / (float)r;
+    for (int dy = -r; dy <= r; dy++) {
+        int y = cy + dy;
+        if (y < f.y0 || y >= f.y1) continue;
+        int hw = (int)sqrtf((float)(r * r - dy * dy)), band = type == WD_GAS ? ((((dy + r) * 7) / r) & 1) * 7 - 3 : 0;
+        float ny = dy * inv;
+        const uint8_t *bz = BAY + ((y & 3) << 2);
+        uint8_t *row = f.px + y * f.w;
+        for (int dx = -hw; dx <= hw; dx++) {
+            int x = cx + dx;
+            if (x < f.x0 || x >= f.x1) continue;
+            float nx = dx * inv, nz = sqrtf(fmaxf(0.0f, 1.0f - nx * nx - ny * ny)), L = nx * lx + ny * ly + nz * lz;
+            int v = (int)((L + 0.22f) * 40.0f) + band;
+            v = v < 0 ? 0 : v > 47 ? 47 : v;
+            uint8_t px = c[v >> 4];
+            if ((v >> 4) < 3 && bz[x & 3] < (v & 15)) px = c[(v >> 4) + 1];
+            row[x] = (nz < 0.3f && L > 0.05f) ? rim : px;
+        }
+    }
+}
+static void draw_planet(int cx, int cy, int r, int sys)
+{
+    int w = world_of(sys);
+    paint_world(cx, cy, r, w, -0.55f, -0.5f);
+    d.drawArc(cx, cy, r + 2, r + 1, 160, 300, shade(WORLD[w][4], 1, 2));   // the atmosphere's glow on the lit limb
+}
+
+// A Costellatori beacon (lore.md): a lattice spire — a tall crystal with a lit and a shaded face, a core line and a
+// crown node. Lit: candle-gold faces, a glow and a four-point sparkle; dark: cold slate with a dead ember.
+static void draw_spire(int x, int y, int h, bool lit)
+{
+    LovyanGFX &G = d;
+    int w = h / 5 + 1, my = y - h * 2 / 5;
+    if (lit) blob(x, y - h / 2, h / 2 + 3, h * 2 / 3 + 2, COL_GOLD, 7);
+    G.fillTriangle(x, y - h, x - w, my, x, y, lit ? C565(180, 120, 40) : C565(40, 46, 74));
+    G.fillTriangle(x, y - h, x + w, my, x, y, lit ? C565(255, 226, 140) : C565(96, 106, 140));
+    G.drawFastVLine(x, y - h + 2, h - 3, lit ? COL_WHITE : C565(130, 140, 170));
+    if (lit) {
+        int s = h / 4 + 2;
+        G.drawFastHLine(x - s, y - h, 2 * s + 1, COL_GOLD); G.drawFastVLine(x, y - h - s, 2 * s + 1, COL_GOLD);
+        G.fillRect(x - 1, y - h - 1, 3, 3, COL_WHITE);
+    } else G.drawPixel(x, y - h, C565(170, 60, 50));
+}
+
+// Pixel-art glyphs, 2 bits a pixel (0 clear, 1..3 the caller's three colours), n x n drawn at s x s by nearest
+// sampling — straight into the 8bpp frame when composited, pixel by pixel on the fallback. The faction emblems
+// (headers, cards, the map, events, the bridge) and the HUD icons (a bar reads at a glance, not by a letter).
+static const uint8_t ICON7[9][13] = {   // 7x7, 2 bpp
+    { 0x55, 0x55, 0xA9, 0x55, 0x6A, 0x95, 0x5A, 0x94, 0x05, 0x54, 0x00, 0x04, 0x00 },   // SHIELD
+    { 0x50, 0x01, 0x54, 0x50, 0x55, 0x55, 0x55, 0x55, 0x15, 0x54, 0x00, 0x15, 0x00 },   // HULL
+    { 0x50, 0x01, 0x55, 0x41, 0x40, 0x90, 0x1A, 0xA4, 0x06, 0xA9, 0x41, 0x55, 0x00 },   // FUEL
+    { 0x55, 0x55, 0x88, 0x54, 0x55, 0x85, 0x48, 0x21, 0x52, 0x88, 0x54, 0x55, 0x01 },   // CARGO
+    { 0x41, 0x00, 0x41, 0x00, 0x41, 0x00, 0x41, 0x10, 0x04, 0x41, 0x10, 0x04, 0x00 },   // BOOST
+    { 0x50, 0x01, 0x11, 0x11, 0x04, 0x55, 0x57, 0x41, 0x10, 0x11, 0x01, 0x15, 0x00 },   // KILL
+    { 0x40, 0x00, 0x54, 0x00, 0x00, 0x10, 0x10, 0x15, 0x15, 0x00, 0x00, 0x00, 0x00 },   // WAVE
+    { 0x40, 0x00, 0x44, 0x40, 0x40, 0x04, 0x40, 0x04, 0x04, 0x44, 0x00, 0x04, 0x00 },   // PIP
+    { 0x40, 0x00, 0x54, 0x40, 0x55, 0x54, 0x57, 0x54, 0x05, 0x54, 0x00, 0x04, 0x00 },   // PIPON
+};
+static const uint8_t EMB13[4][43] = {   // 13x13, 2 bpp: 1 trim, 2 hull, 3 glow
+    { 0x00, 0x55, 0x01, 0x40, 0x01, 0x50, 0x40, 0x00, 0x02, 0x04, 0x01, 0x08, 0x10, 0x01, 0xA8, 0x00, 0x05, 0xA8, 0x0A, 0x14, 0xAA, 0xAB, 0x52, 0x80, 0xAA, 0x40, 0x01, 0xA8, 0x00, 0x11, 0x80, 0x00, 0x41, 0x00, 0x02, 0x04, 0x14, 0x00, 0x05, 0x00, 0x55, 0x01, 0x00 },   // GILDA
+    { 0x00, 0x30, 0x00, 0x00, 0xC0, 0x00, 0x00, 0xC0, 0x0F, 0x00, 0x00, 0x3F, 0x00, 0x00, 0xEF, 0x03, 0x00, 0xAC, 0x0E, 0x00, 0xB0, 0x3A, 0x00, 0x00, 0x3F, 0x00, 0x00, 0x00, 0x00, 0x54, 0x55, 0x55, 0x45, 0x55, 0x55, 0x05, 0x50, 0x55, 0x01, 0x00, 0x54, 0x00, 0x00 },   // CUSTODI
+    { 0x00, 0xFC, 0x00, 0xC0, 0xF3, 0xF3, 0x00, 0xAF, 0xEA, 0x03, 0xA0, 0xAA, 0x02, 0xA0, 0x02, 0x2A, 0xBC, 0x0A, 0xA8, 0xFF, 0x2B, 0xA0, 0xFF, 0xAB, 0x80, 0xFA, 0xA0, 0x02, 0x2A, 0x00, 0xAA, 0x2A, 0x00, 0xAF, 0xEA, 0x03, 0x3C, 0x3F, 0x0F, 0x00, 0xFC, 0x00, 0x00 },   // RELITTI
+    { 0x00, 0x55, 0x01, 0x00, 0x01, 0x10, 0x00, 0x01, 0x03, 0x01, 0x01, 0x33, 0x10, 0x01, 0x03, 0x03, 0x05, 0x83, 0x30, 0x14, 0x83, 0x0A, 0x53, 0x30, 0x08, 0x43, 0x01, 0x03, 0x03, 0x11, 0x30, 0x03, 0x01, 0x01, 0x03, 0x01, 0x10, 0x00, 0x01, 0x00, 0x55, 0x01, 0x00 },   // ECO
+};
+
+static void glyph(const uint8_t *gl, int n, int x, int y, int s, const uint16_t *pal)
+{
+    TileFb f; bool fb = fb_get(&f);
+    uint8_t c[3] = { tile_c332(pal[0]), tile_c332(pal[1]), tile_c332(pal[2]) };
+    for (int j = 0; j < s; j++) {
+        int yy = y + j;
+        if (fb && (yy < f.y0 || yy >= f.y1)) continue;
+        for (int i = 0; i < s; i++) {
+            int k = (j * n / s) * n + i * n / s, v = (gl[k >> 2] >> ((k & 3) * 2)) & 3, xx = x + i;
+            if (!v) continue;
+            if (!fb) d.drawPixel(xx, yy, pal[v - 1]);
+            else if (xx >= f.x0 && xx < f.x1) f.px[yy * f.w + xx] = c[v - 1];
+        }
+    }
+}
+// The Guild's brass seal, the Keepers' lamp, the Wrecks' salvage cog, the Echo's lattice eye; r = 3..7 px.
+static void draw_emblem(int cx, int cy, int r, int fac)
+{
+    const FacLook &L = FAC_LOOK[fac & 3];
+    uint16_t pal[3] = { L.trim, (uint16_t)((fac & 3) == F_ECO ? COL_WHITE : L.hull), L.glow };
+    glyph(EMB13[fac & 3], 13, cx - r, cy - r, 2 * r + 1, pal);
+}
+enum { IC_SHIELD = 0, IC_HULL, IC_FUEL, IC_CARGO, IC_BOOST, IC_KILL, IC_WAVE, IC_PIP, IC_PIPON };
+static void icon(int k, int x, int y, uint16_t c)
+{
+    uint16_t pal[3] = { c, shade(c, 1, 2), COL_WHITE };
+    glyph(ICON7[k], 7, x, y, 7, pal);
+}
+
 // ============================ HUD ============================================
 static void draw_hud(void)
 {
-    d.fillRect(0, 0, W, 13, COL_SPACE);
-    d.drawFastHLine(0, 13, W, rgb(40, 50, 80));
+    LovyanGFX &G = d;
+    G.fillRect(0, 0, W, 13, COL_SPACE);
+    G.drawFastHLine(0, 13, W, FAC_LOOK[cur_fac()].trim);
     char b[24];
     snprintf(b, sizeof b, "%d cr", g.credits);
     text_at(4, 3, 1, COL_AMBER, b);
-    // fuel
-    int fx = 92;
-    text_at(fx, 3, 1, COL_GREY, "F");
-    int fpct = g.fuel_max ? g.fuel * 100 / g.fuel_max : 0;
-    mini_bar(fx + 8, 4, 22, 6, fpct, fpct < 25 ? COL_RED : COL_CYAN);
-    snprintf(b, sizeof b, "%d", g.fuel); text_at(fx + 32, 3, 1, COL_GREY, b);
-    // hull
-    int hx = 142;
-    text_at(hx, 3, 1, COL_GREY, "H");
-    int hpct = g.hull_max ? g.hull * 100 / g.hull_max : 0;
-    mini_bar(hx + 8, 4, 22, 6, hpct, hpct < 30 ? COL_RED : COL_GREEN);
-    // cargo
-    snprintf(b, sizeof b, "C %d/%d", cargo_used(), g.cargo_max);
+    int fpct = g.fuel_max ? g.fuel * 100 / g.fuel_max : 0, hpct = g.hull_max ? g.hull * 100 / g.hull_max : 0;
+    icon(IC_FUEL, 90, 3, fpct < 25 ? COL_RED : COL_CYAN);
+    mini_bar(99, 4, 22, 6, fpct, fpct < 25 ? COL_RED : COL_CYAN);
+    snprintf(b, sizeof b, "%d", g.fuel); text_at(124, 3, 1, COL_GREY, b);
+    icon(IC_HULL, 142, 3, hpct < 30 ? COL_RED : COL_GREEN);
+    mini_bar(151, 4, 22, 6, hpct, hpct < 30 ? COL_RED : COL_GREEN);
+    icon(IC_CARGO, 182, 3, COL_GREY);
+    snprintf(b, sizeof b, "%d/%d", cargo_used(), g.cargo_max);
     text_at(192, 3, 1, COL_GREY, b);
 }
-
-// ============================ procedural planet ==============================
-static uint16_t faction_col(int f)
-{
-    switch (f) {
-        case F_GILDA:   return rgb(70, 120, 200);
-        case F_CUSTODI: return rgb(40, 170, 150);
-        case F_RELITTI: return rgb(176, 96, 52);
-        default:        return COL_PURPLE;        // Eco
-    }
-}
-// Per-wave colour: enemies + backdrop shift hue every wave so each one reads distinct (arcade).
-static const uint16_t WAVE_PAL[6] = {
-    rgb(80, 140, 220), rgb(40, 180, 150), rgb(210, 110, 60),
-    rgb(170, 120, 235), rgb(225, 90, 130), rgb(120, 195, 90),
-};
-static inline uint16_t wave_col(void) { return s_wave_tint ? s_wave_tint : COL_CYAN; }
 static uint16_t pu_col(int k)
 {
     switch (k) { case PU_SHIELD: return COL_CYAN; case PU_REPAIR: return COL_GREEN;
                  case PU_MISSILE: return COL_AMBER; default: return COL_PURPLE; }   // PU_RAPID
 }
-// Per-kind identity tint blended into the wave colour so each foe class reads at a glance:
-// scout = pale ice, heavy = hot orange, ace = gold, fighter = neutral (wave colour only).
-static uint16_t kind_hue(int kind)
+static uint16_t faction_col(int f)      // the map's system colours (bright enough to read as a star)
 {
-    switch (kind) {
-        case FOE_SCOUT: return rgb(206, 228, 245);
-        case FOE_HEAVY: return rgb(236, 150, 70);
-        case FOE_ACE:   return COL_AMBER;
-        default:        return 0;          // FOE_FIGHTER: no tint
-    }
-}
-static void draw_planet(int cx, int cy, int r, int sys)
-{
-    uint16_t base = faction_col(SYSTEMS[sys].faction);
-    int br = (base >> 11) & 31, bg = (base >> 5) & 63, bb = base & 31;
-    if (r >= 6) tile_dither_ellipse(cx, cy, r + 3, r + 3, tile_c332(rgb(br * 8 + 60, bg * 4 + 60, bb * 8 + 90)));   // atmosphere halo
-    d.fillCircle(cx, cy, r, base);
-    for (int dy = -r + 2; dy < r - 1; dy += 3) {                  // banding
-        int hw = (int)sqrtf((float)(r * r - dy * dy));
-        int shade = ((dy + r) / 3) & 1 ? -6 : 6;
-        uint16_t cc = rgb((br + shade) * 8, (bg + shade) * 4, (bb + shade) * 8);
-        d.drawFastHLine(cx - hw, cy + dy, 2 * hw, cc);
-    }
-    // night side: stipple black over the part outside a lit disc offset toward the light (upper left) ->
-    // a crescent terminator; the lit side keeps a specular glint and a bright rim
-    TileFb fb;
-    if (r >= 4 && tile_fb(&fb)) {
-        int lx = cx - r / 2, ly = cy - r / 2, R2 = r * r * 4 / 3;
-        for (int dy = -r; dy <= r; dy++) {
-            int y = cy + dy, hw = (int)sqrtf((float)(r * r - dy * dy));
-            if (y < fb.y0 || y >= fb.y1) continue;
-            int ry = y - ly, xt = ry * ry >= R2 ? cx - hw : lx + (int)sqrtf((float)(R2 - ry * ry));
-            if (xt < cx - hw) xt = cx - hw;
-            for (int x = xt + ((xt + y) & 1); x <= cx + hw; x += 2) if (x >= fb.x0 && x < fb.x1) fb.px[y * fb.w + x] = 0;
-        }
-    }
-    d.fillCircle(cx - r / 3, cy - r / 3, r / 5, rgb(255, 255, 255)); // specular highlight
-    d.drawArc(cx, cy, r, r - 1, 150, 300, rgb(br * 8 + 90, bg * 4 + 90, bb * 8 + 90));   // lit rim (upper left)
-    if (SYSTEMS[sys].beacon) {                                    // orbital beacon ring
-        bool lit = (g.beacon_lit & bit(sys)) != 0;
-        uint16_t rc = lit ? COL_CYAN : rgb(120, 50, 50);
-        int pr = r + 6 + (lit ? (int)((s_anim / 4) % 3) : 0);
-        d.drawCircle(cx, cy, pr, rc);
-        d.drawCircle(cx, cy, pr + 1, rc);
-        d.fillCircle(cx, cy - pr, 2, lit ? COL_WHITE : rc);
+    switch (f) {
+        case F_GILDA:   return rgb(90, 140, 230);
+        case F_CUSTODI: return rgb(60, 190, 150);
+        case F_RELITTI: return rgb(220, 110, 50);
+        default:        return COL_PURPLE;        // Eco
     }
 }
 
 // little vector ship (the Lucciola), pointing right
 static void draw_ship(int cx, int cy, int s, uint16_t col)
 {
-    d.fillTriangle(cx + 2 * s, cy, cx - 2 * s, cy - s, cx - 2 * s, cy + s, col);
-    d.fillTriangle(cx - 2 * s, cy - s, cx - 2 * s, cy + s, cx - 3 * s, cy, rgb(40, 50, 80));
-    d.fillCircle(cx, cy, s / 2 + 1, COL_CYAN);
+    LovyanGFX &G = d;
+    G.fillTriangle(cx + 2 * s, cy, cx - 2 * s, cy - s, cx - 2 * s, cy + s, col);
+    G.fillTriangle(cx - 2 * s, cy - s, cx - 2 * s, cy + s, cx - 3 * s, cy, rgb(40, 50, 80));
+    G.fillCircle(cx, cy, s / 2 + 1, COL_CYAN);
 }
 
 // ============================ navigation between screens =====================
@@ -1127,58 +1316,78 @@ static void cine_end(void)
     }
 }
 
-static void draw_warp(int ch, float k)   // k in 0..1 intensity
+// Hyperspace: a tunnel of rings rushing out of the throat (cyan / violet, brighter as they near), streaks that
+// stretch from a dim tail to a white head, and a dithered glow in the throat. k in 0..1 is the intensity.
+static void draw_warp(int ch, float k)
 {
+    LovyanGFX &G = d;
     int cx = W / 2, cy = ch / 2;
-    int bloom = (int)(2 + k * 8);                                  // wormhole throat: a soft central bloom
-    for (int r = bloom; r >= 1; r--) d.fillCircle(cx, cy, r, shade(COL_CYAN, bloom + 2 - r, bloom + 2));
+    for (int i = 0; i < 5; i++) {
+        int ph = (int)((s_now / 3 + i * 26) % 130), rr = 3 + ph * ph / 70;
+        G.drawEllipse(cx, cy, rr * 3 / 2, rr, shade((i & 1) ? C565(130, 90, 255) : C565(60, 170, 255), 1 + ph / 26, 6));
+    }
+    blob(cx, cy, 8 + (int)(k * 22), 6 + (int)(k * 16), C565(150, 220, 255), 10);
+    G.fillCircle(cx, cy, 1 + (int)(k * 3), COL_WHITE);
+    float reach = 6 + k * 120;
     for (int i = 0; i < NSTAR; i++) {
-        float reach = 6 + k * 130;
-        float d0 = 6 + (float)((star[i].x + s_anim) % 40);
-        float ca = star[i].ca * (1.0f / 127), sa = star[i].sa * (1.0f / 127);
-        int x0 = cx + (int)(ca * d0), y0 = cy + (int)(sa * d0);
+        float d0 = 8 + (float)((star[i].x + s_anim * 2) % 50) * (0.5f + k);
+        float ca = star[i].ca * (1.0f / 127), sa = star[i].sa * (1.0f / 127), dm = d0 + reach * 0.4f;
+        int x0 = cx + (int)(ca * d0), y0 = cy + (int)(sa * d0), xm = cx + (int)(ca * dm), ym = cy + (int)(sa * dm);
         int x1 = cx + (int)(ca * (d0 + reach)), y1 = cy + (int)(sa * (d0 + reach));
-        uint16_t c = (i & 3) ? (k > 0.7f ? COL_WHITE : COL_CYAN) : COL_WHITE;
-        d.drawLine(x0, y0, x1, y1, c);
-        if (k > 0.6f && (i & 1)) d.drawLine(x0, y0 + 1, x1, y1 + 1, shade(c, 2, 5));   // thicken the fast streaks
+        uint16_t c = (i & 3) ? (k > 0.7f ? COL_WHITE : COL_CYAN) : C565(200, 170, 255);
+        G.drawLine(x0, y0, xm, ym, shade(c, 2, 5));
+        G.drawLine(xm, ym, x1, y1, c);
+        if (k > 0.6f && (i & 1)) G.drawLine(xm, ym + 1, x1, y1 + 1, shade(c, 3, 5));   // thicken the fast streaks
     }
 }
 static void draw_cine(void)
 {
+    LovyanGFX &G = d;
     int ch = nucleo_app_content_height();
-    d.fillRect(0, 0, W, ch, COL_SPACE);
+    G.fillRect(0, 0, W, ch, COL_SPACE);
     int64_t el = s_now - s_cine_t0;
     float p = (float)el / cine_dur(s_cine);
     if (p > 1) p = 1;
 
     if (s_cine == CINE_INTRO) {
         stars_draw(ch);
-        draw_ship(40 + (int)(p * 30), ch / 2 - 24, 4, COL_AMBER);
+        paint_world(W + 8, ch + 16, 44, WD_OCEAN, -0.7f, -0.45f);   // a world turning under the story
+        draw_ship(40 + (int)(p * 30), 36, 4, COL_AMBER);
         if (p < 0.30f) {
             uint16_t c = rgb(60 + (int)(p * 600), 140 + (int)(p * 380), 255);
             gui::text(GT("Costellazioni", "Constellations"), W / 2, ch / 2 - 14, 1, gui::F_TITLE, c, 0x0000);
         } else {
-            gui::text(GT("Costellazioni", "Constellations"), W / 2, 12, 1, gui::F_TITLE, COL_CYAN, 0x0000);
+            gui::text(GT("Costellazioni", "Constellations"), W / 2, 10, 1, gui::F_TITLE, COL_GOLD, 0x0000);
             int shown = (int)((p - 0.30f) / 0.70f * NINTRO) + 1;
             if (shown > NINTRO) shown = NINTRO;
-            int y = 50;
-            for (int i = 0; i < shown; i++) { center(y, 1, i == shown - 1 ? COL_WHITE : COL_GREY, lp(INTRO_LINES[i])); y += 12; }
+            for (int i = 0; i < shown; i++) center(46 + i * 11, 1, i == shown - 1 ? COL_WHITE : COL_GREY, lp(INTRO_LINES[i]));
         }
-        center(ch - 12, 1, COL_DIM, GT("- premi un tasto -", "- press any key -"));
     } else if (s_cine == CINE_JUMP) {
         draw_warp(ch, p < 0.8f ? p / 0.8f : 1.0f);
-        if (p > 0.86f) d.fillRect(0, 0, W, ch, rgb(220, 240, 255));   // arrival flash
-        else center(ch - 14, 1, COL_DIM, GT("salto iperspaziale", "hyperspace jump"));
+        if (p > 0.86f) G.fillRect(0, 0, W, ch, rgb(220, 240, 255));   // arrival flash
+        else {
+            center(ch - 34, 1, COL_DIM, GT("salto iperspaziale", "hyperspace jump"));
+            gui::text(SYSTEMS[g.sys].name, W / 2, ch - 24, 1, gui::F_BODY, COL_WHITE, FAC_LOOK[cur_fac()].deep);
+        }
     } else if (s_cine == CINE_BEACON) {
+        // the spire wakes: its crown ignites, golden threads race out to the rest of the network, rings ripple
         stars_draw(ch);
-        int cx = W / 2, cy = ch / 2 + 6;
-        int rr = (int)(p * 70);
-        for (int k = 0; k < 3; k++) d.drawCircle(cx, cy, rr - k * 6, k == 0 ? COL_WHITE : COL_CYAN);  // expanding burst
-        d.fillRect(cx - 3, cy - 26, 6, 30, rgb(120, 130, 160));       // tower
-        d.fillCircle(cx, cy - 28, 4 + (int)(p * 4), p > 0.2f ? COL_CYAN : COL_DIM);
-        center(18, 2, COL_CYAN, GT("FARO ACCESO", "BEACON LIT"));
+        int cx = W / 2, by = ch - 8, top = by - 64;
+        bool on = p > 0.22f;
+        if (on) {
+            int len = (int)((p - 0.22f) * 420);
+            for (int k = 0; k < 6; k++) {
+                float a = -2.85f + k * 0.5f;
+                G.drawLine(cx, top, cx + (int)(cosf(a) * len), top + (int)(sinf(a) * len * 0.6f), k & 1 ? COL_GOLD : COL_THREAD);
+            }
+            int rr = (int)((p - 0.22f) * 110);
+            for (int k = 0; k < 3; k++) if (rr - k * 7 > 0) G.drawCircle(cx, top, rr - k * 7, k == 0 ? COL_WHITE : COL_GOLD);
+        }
+        draw_spire(cx, by, 64, on);
+        center(6, 2, COL_GOLD, GT("FARO ACCESO", "BEACON LIT"));
         char b[28]; snprintf(b, sizeof b, "%d / %d", beacons_lit(), beacons_total());
-        center(ch - 16, 1, COL_AMBER, b);
+        center(26, 1, COL_AMBER, b);
+        if (p > 0.62f && ((s_anim >> 2) & 3)) center(ch - 30, 1, FAC_LOOK[F_ECO].glow, GT("L'Eco risponde.", "The Echo answers."));
     } else if (s_cine == CINE_SECTOR) {
         draw_warp(ch, p < 0.6f ? p / 0.6f : 1.0f);            // hyperspace surge into the new sector
         center(16, 2, COL_CYAN, GT("SETTORE RIPULITO", "SECTOR CLEARED"));
@@ -1202,7 +1411,7 @@ static inline int pf_top(void) { return 14; }   // playfield top (under the comb
 static float s_regen_acc;                        // sub-unit shield-regen accumulator
 
 // perspective: world (ex,ey,ez) -> screen (sx,sy); sc multiplies a world radius into px.
-static inline bool project(float ex, float ey, float ez, float *sx, float *sy, float *sc)
+__attribute__((noinline)) static bool project(float ex, float ey, float ez, float *sx, float *sy, float *sc)
 {
     if (ez < ZNEAR) return false;
     float inv = FOCAL / ez;
@@ -1217,16 +1426,17 @@ static void respawn_warp(int i)
     s_warp[i].ey = (float)(rnd(401) - 200);
     s_warp[i].ez = ZNEAR + (float)rnd((int)(ZFAR - ZNEAR));
 }
-static void spawn_tracer(Foe *f, bool huntward)
+// A tracer leaves the ship that fired and converges on the cockpit (or on the ward) over 0.9 s.
+#define ACE_EVADE_MS 700
+static void spawn_tracer(Foe *f, bool huntward, float spread)
 {
     for (int b = 0; b < NBOLT; b++) if (!s_bolt[b].on) {
         Bolt *bo = &s_bolt[b];
-        bo->on = 1; bo->foe = 1; bo->aimward = huntward ? 1 : 0;
-        bo->ex = f->ex; bo->ey = f->ey; bo->ez = f->ez;
-        bo->tx = (huntward ? s_ward_x : 0.0f) + (float)(rnd(31) - 15);   // slight spread
-        bo->ty = (float)(rnd(31) - 15);
-        bo->vz = -(f->ez / 0.9f);                                        // reaches the cockpit in ~0.9s
-        bo->life = 1000;
+        bo->on = 1; bo->foe = f->kind == FOE_ACE ? 2 : 3; bo->aimward = huntward ? 1 : 0;
+        bo->ox = bo->ex = f->ex; bo->oy = bo->ey = f->ey; bo->oz = bo->ez = f->ez;
+        if (huntward) { bo->tx = s_ward_x + (float)(rnd(21) - 10); bo->ty = (float)(rnd(9) - 4); bo->tz = ZWARD; }
+        else          { bo->tx = spread + (float)(rnd(9) - 4) * 0.1f; bo->ty = (float)(rnd(9) - 4) * 0.1f; bo->tz = ZNEAR; }
+        bo->life = bo->life0 = 900;
         return;
     }
 }
@@ -1249,8 +1459,10 @@ static Part *part_alloc(void)
         if (!s_part[i].on) { s_part_rr = (i + 1) % NPART; return &s_part[i]; } }
     Part *p = &s_part[s_part_rr]; s_part_rr = (s_part_rr + 1) % NPART; return p;   // steal oldest
 }
-// explosion at a foe's WORLD point; sc = its projection scale (bigger = closer = fiercer)
-static void spawn_boom(float ex, float ey, float ez, float sc, uint16_t col, bool big)
+// Explosion at a WORLD point; sc = its projection scale (bigger = closer = fiercer). Debris in the ship's own
+// paint (hull + accent) and fire; a fireball that blooms white -> gold -> orange and cools into smoke while a
+// shock ring runs out (one Shk slot).
+static void spawn_boom(float ex, float ey, float ez, float sc, uint16_t col, uint16_t col2, bool big)
 {
     int n = (int)(10 + 12 * sc); if (n > (big ? 22 : 16)) n = big ? 22 : 16;
     float spd = 50.0f + 120.0f * sc;
@@ -1260,12 +1472,13 @@ static void spawn_boom(float ex, float ey, float ez, float sc, uint16_t col, boo
         p->on = 1; p->kind = PK_DEBRIS; p->ex = ex; p->ey = ey; p->ez = ez;
         p->vx = cosf(a) * s; p->vy = sinf(a) * s; p->vz = (float)(rnd(90) - 30);
         p->life = p->life0 = (int16_t)(320 + rnd(280));
-        p->col = (i & 1) ? col : ((i & 2) ? COL_AMBER : COL_WHITE);
+        p->col = i % 3 == 0 ? col : i % 3 == 1 ? col2 : COL_AMBER;
     }
-    for (int s = 0; s < NSHK; s++) if (!s_shk[s].on) {
-        float sx, sy, scc; if (!project(ex, ey, ez, &sx, &sy, &scc)) break;
-        s_shk[s].on = 1; s_shk[s].cx_ = sx; s_shk[s].cy_ = sy;
-        s_shk[s].life = s_shk[s].life0 = (int16_t)(big ? 420 : 320); s_shk[s].col = col;
+    float sx, sy, scc;
+    if (project(ex, ey, ez, &sx, &sy, &scc)) for (int s = 0; s < NSHK; s++) if (!s_shk[s].on) {
+        s_shk[s].on = 1; s_shk[s].cx_ = sx; s_shk[s].cy_ = sy; s_shk[s].col = col;
+        s_shk[s].r0 = (uint8_t)clampi((int)(7 + 10 * sc), 5, big ? 22 : 16);
+        s_shk[s].life = s_shk[s].life0 = (int16_t)(big ? 620 : 480);
         break;
     }
     int ns = big ? 9 : 5;                                  // white-hot core spark burst (extra punch)
@@ -1275,12 +1488,6 @@ static void spawn_boom(float ex, float ey, float ez, float sc, uint16_t col, boo
         p->vx = cosf(a) * s; p->vy = sinf(a) * s; p->vz = (float)(rnd(90) - 30);
         p->life = p->life0 = (int16_t)(90 + rnd(120)); p->col = (i & 1) ? COL_WHITE : COL_AMBER;
     }
-    float fsx, fsy, fsc;
-    if (project(ex, ey, ez, &fsx, &fsy, &fsc)) {
-        s_flash_until = s_now + (big ? 110 : 70); s_flash_x = fsx; s_flash_y = fsy;
-        int r0 = (int)(7 + 10 * sc); if (r0 > 16) r0 = 16;
-        s_flash_r0 = r0;
-    }
 }
 static void spawn_sparks(float ex, float ey, float ez, uint16_t col)
 {
@@ -1289,7 +1496,7 @@ static void spawn_sparks(float ex, float ey, float ez, uint16_t col)
         Part *p = part_alloc(); float a = (float)rnd(628) * 0.01f, s = 40.0f + rnd(60);
         p->on = 1; p->kind = PK_SPARK; p->ex = ex; p->ey = ey; p->ez = ez;
         p->vx = cosf(a) * s; p->vy = sinf(a) * s; p->vz = (float)(rnd(60) - 20);
-        p->life = p->life0 = (int16_t)(120 + rnd(120)); p->col = col;
+        p->life = p->life0 = (int16_t)(120 + rnd(120)); p->col = i ? col : COL_WHITE;
     }
 }
 static void spawn_streak(float sx, float sy)        // ram pass-through: a bright slash past the canopy
@@ -1306,166 +1513,230 @@ static inline float kind_speed(int k) { switch (k) { case FOE_SCOUT: return 1.55
 static inline float kind_wrate(int k) { switch (k) { case FOE_SCOUT: return 2.9f;  case FOE_HEAVY: return 0.9f;  case FOE_ACE: return 2.5f;  default: return 1.6f; } }
 static inline float kind_wamp(int k)  { switch (k) { case FOE_SCOUT: return 1.7f;  case FOE_HEAVY: return 0.5f;  default: return 1.0f; } }
 static inline int   kind_firems(int k){ switch (k) { case FOE_SCOUT: return 1300;  case FOE_HEAVY: return 650;   case FOE_ACE: return 650;   default: return 900;  } }
-static inline float kind_rscale(int k){ switch (k) { case FOE_SCOUT: return 0.75f; case FOE_HEAVY: return 1.4f;  default: return 1.0f; } }
+static inline float kind_rscale(int k){ switch (k) { case FOE_SCOUT: return 0.75f; case FOE_HEAVY: return 1.4f;  case FOE_ACE: return 1.15f; default: return 1.0f; } }
 
-// far LOD (< 7 px): a glint, then a tiny TIE silhouette (two wing panels, spar, pod, engine spark); from
-// 7 px up the flat-shaded model takes over (draw_ship3d)
-static void draw_tie(int x, int y, int r, int kind, uint16_t col)
+#define TELE_MS 420                  // a foe's guns glow this long before it fires: the readable telegraph
+#define LEAD_S  0.25f                // the lead pip: where the target will be this many seconds ahead
+static inline bool charging(const Foe *f)
 {
-    uint16_t spark = kind == FOE_ACE ? COL_AMBER : kind == FOE_HEAVY ? rgb(230, 150, 60) : COL_CYAN;
-    if (r <= 3) { d.fillRect(x - 1, y - 1, 2, 2, col); d.drawPixel(x, y + 1, spark); return; }
-    d.fillRect(x - r - 1, y - r + 1, 2, 2 * r - 1, shade(col, 3, 5));
-    d.fillRect(x + r, y - r + 1, 2, 2 * r - 1, shade(col, 3, 5));
-    d.drawFastHLine(x - r, y, 2 * r, col);
-    d.fillCircle(x, y, r / 2, col);
-    d.drawPixel(x, y + r / 2 + 1, spark);
+    return f->kind == FOE_ACE ? f->ph == ACE_CHARGE : (!f->strafe && f->ez < 160.0f && f->firecd > 0 && f->firecd < TELE_MS);
 }
-// ---- 3D ship MODEL LIBRARY (the NEAR LOD tier; below ~7px we fall back to the wireframe TIE) --------
-// Four distinct silhouettes so the wing reads at a glance: a sleek SCOUT dart, the balanced FIGHTER, a
-// wide blocky HEAVY cruiser, and an ornate ACE with swept wings + dorsal fin. Each is `const` -> it
-// lives in FLASH, costing ZERO runtime RAM (the whole point on a no-PSRAM board). The mesh banks/yaws
-// with the foe's bank so every fighter tumbles as a solid shaded object instead of a flat decal.
-static const fx3d::V3 MDL_FIGHTER_V[8] = {
-    { 0.00f,  0.00f, -1.35f}, { 0.00f, -0.42f,  0.30f}, { 0.00f,  0.42f,  0.30f}, {-0.50f,  0.00f,  0.30f},
-    { 0.50f,  0.00f,  0.30f}, { 0.00f,  0.05f,  1.05f}, {-1.30f,  0.06f,  0.55f}, { 1.30f,  0.06f,  0.55f},
-};
-static const fx3d::Tri MDL_FIGHTER_T[12] = {
-    {0,1,4},{0,4,2},{0,2,3},{0,3,1}, {5,4,1},{5,2,4},{5,3,2},{5,1,3}, {3,6,2},{3,1,6}, {4,2,7},{4,7,1},
-};
-static const fx3d::Model MDL_FIGHTER = { MDL_FIGHTER_V, 8, MDL_FIGHTER_T, 12 };
-
-static const fx3d::V3 MDL_SCOUT_V[8] = {       // long sleek dart, thin fins
-    { 0.00f,  0.00f, -1.70f}, { 0.00f, -0.28f,  0.40f}, { 0.00f,  0.28f,  0.40f}, {-0.32f,  0.00f,  0.40f},
-    { 0.32f,  0.00f,  0.40f}, { 0.00f,  0.00f,  0.95f}, {-0.95f,  0.02f,  0.70f}, { 0.95f,  0.02f,  0.70f},
-};
-static const fx3d::Tri MDL_SCOUT_T[10] = {
-    {0,1,4},{0,4,2},{0,2,3},{0,3,1}, {5,4,1},{5,2,4},{5,3,2},{5,1,3}, {3,6,5},{4,5,7},
-};
-static const fx3d::Model MDL_SCOUT = { MDL_SCOUT_V, 8, MDL_SCOUT_T, 10 };
-
-static const fx3d::V3 MDL_HEAVY_V[8] = {       // wide blocky cruiser, big wings
-    { 0.00f, -0.05f, -1.15f}, {-0.75f, -0.50f,  0.15f}, { 0.75f, -0.50f,  0.15f}, {-0.75f,  0.50f,  0.15f},
-    { 0.75f,  0.50f,  0.15f}, { 0.00f,  0.00f,  1.00f}, {-1.55f,  0.12f,  0.50f}, { 1.55f,  0.12f,  0.50f},
-};
-static const fx3d::Tri MDL_HEAVY_T[10] = {
-    {0,1,2},{0,2,4},{0,4,3},{0,3,1}, {5,2,1},{5,4,2},{5,3,4},{5,1,3}, {1,6,3},{2,4,7},
-};
-static const fx3d::Model MDL_HEAVY = { MDL_HEAVY_V, 8, MDL_HEAVY_T, 10 };
-
-static const fx3d::V3 MDL_ACE_V[9] = {         // swept wings + dorsal fin
-    { 0.00f,  0.00f, -1.50f}, { 0.00f, -0.45f,  0.30f}, { 0.00f,  0.42f,  0.30f}, {-0.50f,  0.00f,  0.30f},
-    { 0.50f,  0.00f,  0.30f}, { 0.00f,  0.05f,  1.15f}, {-1.30f,  0.12f,  0.95f}, { 1.30f,  0.12f,  0.95f},
-    { 0.00f, -0.95f,  0.75f},
-};
-static const fx3d::Tri MDL_ACE_T[12] = {
-    {0,1,4},{0,4,2},{0,2,3},{0,3,1}, {5,4,1},{5,2,4},{5,3,2},{5,1,3}, {3,6,2},{4,2,7}, {1,8,5},{1,0,8},
-};
-static const fx3d::Model MDL_ACE = { MDL_ACE_V, 9, MDL_ACE_T, 12 };
-
-static const fx3d::Model *ship_model(int kind)
+// An ace evading cannot be locked; the Keeper's shield and the Echo's phase also turn every hit aside.
+static inline bool ace_evading(const Foe *f) { return f->kind == FOE_ACE && f->ph == ACE_EVADE; }
+static inline bool ace_immune(const Foe *f) { return ace_evading(f) && (s_cc.foe_fac == F_CUSTODI || s_cc.foe_fac == F_ECO); }
+static bool lead_pip(const Foe *f, float *x, float *y)
 {
-    switch (kind) {
-        case FOE_SCOUT: return &MDL_SCOUT;
-        case FOE_HEAVY: return &MDL_HEAVY;
-        case FOE_ACE:   return &MDL_ACE;
-        default:        return &MDL_FIGHTER;     // FOE_FIGHTER
+    float sc; return project(f->ex + f->vx * LEAD_S, f->ey + f->vy * LEAD_S, f->ez + f->vz * LEAD_S, x, y, &sc);
+}
+static bool on_pip(float lx, float ly, float sc)     // the reticle sits on a lead pip (sc: the target's scale)
+{
+    float dx = lx - s_aimx, dy = ly - s_aimy, r = 5 + 4 * sc;
+    return dx * dx + dy * dy < r * r;
+}
+
+// ---- the faction ship kit (the NEAR tier; below 7 px a per-faction glyph) ---------------------------------
+// int8 vertices in 1/64 units (a quarter of the flash of float meshes); each face carries its paint: 0 hull,
+// 1 accent, 2 trim. Silhouettes follow the web kit (games/stelle/kit.js) seen nose-on: the Guild's Lancer
+// needle and "H" Bastion, the Wrecks' lopsided Scrapwing and forked Harpoon, the Keepers' Votive (+ its halo)
+// and lantern Censer, the Echo's Shard and hexagram Lattice drawn as a dark solid with glowing edges.
+struct Mdl { const int8_t (*v)[3]; const uint8_t (*t)[4]; uint8_t nv, nt; };
+#define MDL_NV 14
+#define MDL_NT 16
+#define CONE4(n, t) { 0, 1, 4, t }, { 0, 4, 2, t }, { 0, 2, 3, t }, { 0, 3, 1, t }, { n, 4, 1, t }, { n, 2, 4, t }, { n, 3, 2, t }, { n, 1, 3, t }
+static const int8_t  GL_V[9][3]  = { { 0, 0, -100 }, { 0, -14, 0 }, { 0, 12, 0 }, { -16, 0, 6 }, { 16, 0, 6 }, { 0, 0, 54 }, { -66, 6, 46 }, { 66, 6, 46 }, { 0, -40, 54 } };
+static const uint8_t GL_T[11][4] = { CONE4(5, 0), { 3, 6, 5, 1 }, { 4, 7, 5, 1 }, { 1, 8, 5, 2 } };
+static const int8_t  GB_V[14][3] = { { 0, 0, -80 }, { 0, -18, 0 }, { 0, 16, 0 }, { -20, 0, 4 }, { 20, 0, 4 }, { 0, 0, 56 },
+                                     { -56, 0, -44 }, { -58, -30, 16 }, { -58, 30, 16 }, { -76, 0, 32 },
+                                     { 56, 0, -44 }, { 58, -30, 16 }, { 58, 30, 16 }, { 76, 0, 32 } };
+static const uint8_t GB_T[16][4] = { CONE4(5, 0), { 6, 7, 9, 1 }, { 6, 9, 8, 1 }, { 6, 8, 7, 1 }, { 10, 11, 13, 1 }, { 10, 13, 12, 1 }, { 10, 12, 11, 1 },
+                                     { 3, 6, 5, 2 }, { 4, 10, 5, 2 } };
+static const int8_t  RS_V[10][3] = { { 6, 0, -86 }, { 0, -15, 0 }, { 0, 13, 0 }, { -16, 0, 6 }, { 16, 0, 6 }, { 0, 0, 52 },
+                                     { -86, 8, 34 }, { -40, 6, 56 }, { 38, -2, 24 }, { 30, -40, 40 } };
+static const uint8_t RS_T[12][4] = { CONE4(5, 0), { 3, 6, 7, 1 }, { 3, 7, 5, 1 }, { 4, 8, 5, 0 }, { 8, 9, 5, 2 } };
+static const int8_t  RH_V[9][3]  = { { -24, 0, -94 }, { 24, 0, -94 }, { 0, -22, 0 }, { 0, 20, 0 }, { -32, 0, 4 }, { 32, 0, 4 }, { 0, 0, 60 }, { -68, 16, 40 }, { 70, -10, 46 } };
+static const uint8_t RH_T[10][4] = { { 0, 2, 4, 0 }, { 0, 4, 3, 0 }, { 1, 2, 5, 0 }, { 1, 5, 3, 0 }, { 2, 4, 6, 0 }, { 4, 3, 6, 0 }, { 3, 5, 6, 0 }, { 5, 2, 6, 0 },
+                                     { 4, 7, 6, 1 }, { 5, 8, 6, 2 } };
+static const int8_t  CV_V[10][3] = { { 0, 0, -74 }, { 0, -22, 0 }, { 0, 22, 0 }, { -22, 0, 0 }, { 22, 0, 0 }, { 0, 0, 52 }, { 0, -40, 26 }, { 0, 40, 26 }, { -42, 0, 30 }, { 42, 0, 30 } };
+static const uint8_t CV_T[12][4] = { CONE4(5, 0), { 1, 6, 5, 1 }, { 2, 7, 5, 1 }, { 3, 8, 5, 2 }, { 4, 9, 5, 2 } };
+static const int8_t  CC_V[10][3] = { { 0, 0, -62 }, { 0, -32, 0 }, { 0, 32, 0 }, { -32, 0, 0 }, { 32, 0, 0 }, { 0, 0, 62 },
+                                     { -48, -48, 22 }, { 48, -48, 22 }, { -48, 48, 22 }, { 48, 48, 22 } };
+static const uint8_t CC_T[12][4] = { CONE4(5, 0), { 1, 6, 5, 1 }, { 1, 7, 5, 1 }, { 2, 8, 5, 2 }, { 2, 9, 5, 2 } };
+static const int8_t  ES_V[6][3]  = { { 0, 0, -72 }, { 0, -36, 0 }, { 0, 36, 0 }, { -28, 0, 0 }, { 28, 0, 0 }, { 0, 0, 46 } };
+static const uint8_t ES_T[8][4]  = { CONE4(5, 0) };
+static const int8_t  EL_V[8][3]  = { { 0, -54, 0 }, { -47, 27, 0 }, { 47, 27, 0 }, { 0, 0, -42 }, { 0, 54, 0 }, { -47, -27, 0 }, { 47, -27, 0 }, { 0, 0, 42 } };
+static const uint8_t EL_T[8][4]  = { { 0, 1, 3, 0 }, { 1, 2, 3, 0 }, { 2, 0, 3, 0 }, { 0, 1, 2, 0 }, { 4, 5, 7, 0 }, { 5, 6, 7, 0 }, { 6, 4, 7, 0 }, { 4, 6, 5, 0 } };
+static const Mdl MDL[4][2] = {
+    { { GL_V, GL_T, 9, 11 }, { GB_V, GB_T, 14, 16 } }, { { CV_V, CV_T, 10, 12 }, { CC_V, CC_T, 10, 12 } },
+    { { RS_V, RS_T, 10, 12 }, { RH_V, RH_T, 9, 10 } }, { { ES_V, ES_T, 6, 8 },    { EL_V, EL_T, 8, 8 } },
+};
+#define CAM_PITCH 0.55f              // the camera rides a little above the fight: you see the ships' planform
+// Flat-shaded, painter-sorted, three-paint mesh seen from the camera's pitch. The engine glow goes first, at the
+// tail; then the silhouette 1 px fatter in near-black (the outline that pops it off the nebula); then each face lit
+// (two-sided Lambert from the upper left). wire: the Echo's lattice — dark faces, every edge glowing in the accent,
+// every node in the trim.
+static void render_mdl(const Mdl &m, int x, int y, float sc, float yaw, float bank, const uint16_t *pal, bool wire, uint16_t glow, int gr)
+{
+    LovyanGFX &G = d;
+    float cy_ = cosf(yaw), sy_ = sinf(yaw), cb = cosf(bank), sb = sinf(bank), cp = cosf(CAM_PITCH), sp = sinf(CAM_PITCH), k = sc * (1.0f / 64);
+    float rx[MDL_NV], ry[MDL_NV], rz[MDL_NV]; int px[MDL_NV], py[MDL_NV], tail = 0; uint8_t ord[MDL_NT];
+    for (int i = 0; i < m.nv; i++) {
+        float vx = m.v[i][0], vy = m.v[i][1], vz = m.v[i][2], x1 = vx * cy_ + vz * sy_, z1 = -vx * sy_ + vz * cy_;
+        float y1 = vy * cp - z1 * sp;
+        rz[i] = vy * sp + z1 * cp; rx[i] = x1 * cb - y1 * sb; ry[i] = x1 * sb + y1 * cb;
+        px[i] = x + (int)(rx[i] * k); py[i] = y + (int)(ry[i] * k);
+        if (rz[i] > rz[tail]) tail = i;
+    }
+    if (gr > 0) { blob(px[tail], py[tail], gr + 2, gr + 2, glow, 10); G.fillCircle(px[tail], py[tail], gr / 3, COL_WHITE); }
+    for (int i = 0; i < m.nt; i++) {                     // far -> near (insertion sort on the summed depth)
+        int j = i; float z = rz[m.t[i][0]] + rz[m.t[i][1]] + rz[m.t[i][2]];
+        while (j > 0 && rz[m.t[ord[j - 1]][0]] + rz[m.t[ord[j - 1]][1]] + rz[m.t[ord[j - 1]][2]] < z) { ord[j] = ord[j - 1]; j--; }
+        ord[j] = (uint8_t)i;
+    }
+    for (int i = 0; i < m.nt; i++) {
+        const uint8_t *t = m.t[i]; int q[6];
+        for (int v = 0; v < 3; v++) { q[v * 2] = px[t[v]] + (px[t[v]] > x) - (px[t[v]] < x); q[v * 2 + 1] = py[t[v]] + (py[t[v]] > y) - (py[t[v]] < y); }
+        G.fillTriangle(q[0], q[1], q[2], q[3], q[4], q[5], wire ? pal[1] : C565(8, 8, 16));
+    }
+    for (int o = 0; o < m.nt; o++) {
+        const uint8_t *t = m.t[ord[o]]; int a = t[0], b = t[1], c = t[2];
+        float e1x = rx[b] - rx[a], e1y = ry[b] - ry[a], e1z = rz[b] - rz[a], e2x = rx[c] - rx[a], e2y = ry[c] - ry[a], e2z = rz[c] - rz[a];
+        float nx = e1y * e2z - e1z * e2y, ny = e1z * e2x - e1x * e2z, nz = e1x * e2y - e1y * e2x;
+        float l = fabsf(-0.42f * nx - 0.56f * ny - 0.71f * nz) / (sqrtf(nx * nx + ny * ny + nz * nz) + 1e-3f);
+        uint16_t col = wire ? shade(pal[0], 4 + (int)(l * 4), 8) : shade(pal[t[3]], 120 + (int)(135 * l), 255);
+        G.fillTriangle(px[a], py[a], px[b], py[b], px[c], py[c], col);
+        if (wire) { G.drawLine(px[a], py[a], px[b], py[b], pal[1]); G.drawLine(px[b], py[b], px[c], py[c], pal[1]); G.drawLine(px[c], py[c], px[a], py[a], pal[1]); }
+    }
+    if (wire) for (int i = 0; i < m.nv; i++) G.fillRect(px[i] - (sc > 14), py[i] - (sc > 14), 1 + (sc > 14), 1 + (sc > 14), pal[2]);
+}
+// The same mesh blown apart into cooling, tumbling shards (fx3d::shatter, from the flash tables).
+static void shatter_mdl(const Mdl &m, int x, int y, float sc, float yaw, float bank, uint16_t col, float pr)
+{
+    fx3d::V3 v[MDL_NV]; fx3d::Tri t[MDL_NT];
+    for (int i = 0; i < m.nv; i++) v[i] = { m.v[i][0] * (1.0f / 64), m.v[i][1] * (1.0f / 64), m.v[i][2] * (1.0f / 64) };
+    for (int i = 0; i < m.nt; i++) t[i] = { m.t[i][0], m.t[i][1], m.t[i][2] };
+    fx3d::Model mm = { v, m.nv, t, m.nt };
+    fx3d::shatter(mm, (float)x, (float)y, sc, yaw, bank, col, pr);
+}
+// A foe's paint: its faction's (or the ace's livery), washed white by a hit, reddened when wounded, sunk into the
+// dark with distance.
+static void foe_paint(const Foe *f, uint16_t *pal)
+{
+    const FacLook &L = FAC_LOOK[s_cc.foe_fac & 3];
+    bool ace = f->kind == FOE_ACE && s_fx->ace_id < NACE;
+    pal[0] = ace ? ACE_PAL[s_fx->ace_id][0] : L.hull; pal[1] = ace ? ACE_PAL[s_fx->ace_id][1] : L.accent; pal[2] = ace ? ACE_PAL[s_fx->ace_id][2] : L.trim;
+    for (int i = 0; i < 3; i++) {
+        if (f->ez > 95.0f) pal[i] = cmix(pal[i], COL_SPACE, clampi((int)((f->ez - 95.0f) * 1.2f), 0, 150));
+        if (f->hp * 3 < f->hpmax) pal[i] = cmix(pal[i], COL_RED, 90);
+        if (f->hitms > 0) pal[i] = cmix(pal[i], COL_WHITE, 170);
     }
 }
-static void draw_ship3d(int x, int y, int r, float bank, int kind, uint16_t col)
+static void draw_foe(const Foe *f, int x, int y, int r)
 {
-    if (r < 7) { draw_tie(x, y, r, kind, col); return; }                       // far LOD
-    float sc  = (float)r / 1.25f;
-    float bk  = fmaxf(-0.9f, fminf(0.9f, bank * 0.18f));
-    float yaw = bank * 0.32f;                                // a banking turn reads as a touch of yaw
-    int fl = r / 2 + (int)(s_anim & 1);                      // thruster flame behind the hull (flickers)
-    uint16_t flame = kind == FOE_SCOUT ? COL_CYAN : kind == FOE_HEAVY ? rgb(236, 150, 70) : COL_AMBER;
-    tile_dither_ellipse(x, y + r / 2 + fl / 2, r / 3 + 1, r / 4 + 1, tile_c332(flame));   // engine glow
-    d.fillTriangle(x - r / 4, y + r / 2, x + r / 4, y + r / 2, x, y + r / 2 + fl, flame);
-    d.fillTriangle(x - r / 6, y + r / 2, x + r / 6, y + r / 2, x, y + r / 2 + fl * 2 / 3, COL_WHITE);
-    fx3d::draw_model(*ship_model(kind), (float)x, (float)y, sc, yaw, bk, col);
-    if (kind == FOE_ACE)        d.drawCircle(x, y, r + 2, COL_AMBER);          // ace halo
-    else if (kind == FOE_HEAVY) d.drawCircle(x, y, (r * 5) / 6, shade(col, 3, 5));
+    LovyanGFX &G = d;
+    int fac = s_cc.foe_fac & 3;
+    const FacLook &L = FAC_LOOK[fac];
+    uint16_t pal[3]; foe_paint(f, pal);
+    bool flare = f->strafe || (f->strafecd > 0 && f->strafecd < 450 && f->ez < f->engagez + 16.0f);   // about to dive: engines blaze
+    if (r < 7) {                                                  // far glyphs, still per faction, with an engine spark
+        switch (fac) {
+        case F_GILDA:   G.drawFastHLine(x - r, y, 2 * r + 1, pal[1]); G.drawFastVLine(x, y - r / 2 - 1, r + 1, pal[0]); break;
+        case F_RELITTI: G.drawFastHLine(x - r - 2, y, r + 2, pal[1]); G.drawFastHLine(x, y, r / 2 + 1, pal[0]); G.drawPixel(x + r / 2, y - 1, pal[2]); break;
+        case F_CUSTODI: G.drawCircle(x, y, r > 2 ? r - 1 : 1, pal[1]); break;
+        default:        G.drawLine(x, y - r, x + r, y, pal[1]); G.drawLine(x + r, y, x, y + r, pal[1]); G.drawLine(x, y + r, x - r, y, pal[1]); G.drawLine(x - r, y, x, y - r, pal[1]);
+        }
+        G.fillRect(x - 1, y - 1, 2, 2, pal[0]);
+        G.drawPixel(x, y - 2, flare ? COL_WHITE : L.glow);
+        return;
+    }
+    float sc = (float)r / 1.25f, bk = fmaxf(-0.9f, fminf(0.9f, f->bank * 0.18f)), yaw = f->bank * 0.32f;
+    bool ev = ace_evading(f);
+    if (ev && !ace_immune(f)) bk = (ACE_EVADE_MS - f->phms) * (6.283f / ACE_EVADE_MS);   // the ace's barrel roll
+    if (!(ev && fac == F_ECO && (s_anim & 1)))                               // the Echo ace flickers out of phase
+        render_mdl(MDL[fac][f->kind == FOE_HEAVY], x, y, sc, yaw, bk, pal, fac == F_ECO, flare ? COL_WHITE : L.glow, r / 5 + (flare ? 3 : 1));
+    if (fac == F_CUSTODI && f->kind != FOE_HEAVY) {                         // the Votive's halo ring
+        int ry = (int)(r * (0.3f + 0.25f * fabsf(cosf(bk)))) + 1;
+        G.drawEllipse(x, y + r / 6, r + 2, ry, pal[1]); G.drawEllipse(x, y + r / 6, r + 1, ry > 1 ? ry - 1 : 1, shade(pal[1], 2, 3));
+    }
+    if (f->kind == FOE_ACE) {
+        if (ace_immune(f)) { blob(x, y, r + 5, r + 5, pal[1], 8); G.drawCircle(x, y, r + 5 + (int)(s_anim & 1), pal[1]); }
+        int my = y - r - 8;                                                  // ace marker: two livery chevrons
+        for (int i = 0; i < 2; i++) { G.drawLine(x - 4, my + i * 3, x, my + 3 + i * 3, pal[1]); G.drawLine(x, my + 3 + i * 3, x + 4, my + i * 3, pal[1]); }
+    }
 }
 static void draw_target_box(int x, int y, int r)                        // green corner brackets (pulsing)
 {
+    LovyanGFX &G = d;
     uint16_t gc = COL_GREEN; int L = clampi(r / 2, 4, 10);
     r += (int)((s_anim >> 2) & 1);                                       // breathe the bracket 1px (lock juice)
     int x0 = x - r, x1 = x + r, y0 = y - r, y1 = y + r;
-    d.drawFastHLine(x0, y0, L, gc);     d.drawFastVLine(x0, y0, L, gc);
-    d.drawFastHLine(x1 - L, y0, L, gc); d.drawFastVLine(x1, y0, L, gc);
-    d.drawFastHLine(x0, y1, L, gc);     d.drawFastVLine(x0, y1 - L, L, gc);
-    d.drawFastHLine(x1 - L, y1, L, gc); d.drawFastVLine(x1, y1 - L, L, gc);
+    G.drawFastHLine(x0, y0, L, gc);     G.drawFastVLine(x0, y0, L, gc);
+    G.drawFastHLine(x1 - L, y0, L, gc); G.drawFastVLine(x1, y0, L, gc);
+    G.drawFastHLine(x0, y1, L, gc);     G.drawFastVLine(x0, y1 - L, L, gc);
+    G.drawFastHLine(x1 - L, y1, L, gc); G.drawFastVLine(x1, y1 - L, L, gc);
 }
 static void draw_reticle(int x, int y, bool locked)
 {
+    LovyanGFX &G = d;
     uint16_t c = locked ? COL_RED : COL_CYAN;
-    d.drawCircle(x, y, 5, c);
-    d.drawFastHLine(x - 9, y, 5, c); d.drawFastHLine(x + 5, y, 5, c);
-    d.drawFastVLine(x, y - 9, 5, c); d.drawFastVLine(x, y + 5, 5, c);
-    d.drawPixel(x, y, COL_WHITE);
+    G.drawCircle(x, y, 5, c);
+    G.drawFastHLine(x - 9, y, 5, c); G.drawFastHLine(x + 5, y, 5, c);
+    G.drawFastVLine(x, y - 9, 5, c); G.drawFastVLine(x, y + 5, 5, c);
+    G.drawPixel(x, y, COL_WHITE);
 }
-static void draw_cockpit(int ch)                                        // static canopy struts + gun ports
+// Canopy struts from the top corners and two low consoles; the left one carries the radar.
+static void draw_cockpit(int ch)
 {
-    uint16_t f = rgb(34, 40, 60), e = rgb(70, 84, 120);
-    d.fillTriangle(0, ch - 1, 46, ch - 1, 0, ch - 22, f);
-    d.fillTriangle(W - 1, ch - 1, W - 47, ch - 1, W - 1, ch - 22, f);
-    d.drawLine(0, 14, 70, 36, e); d.drawLine(W - 1, 14, W - 71, 36, e);
-    d.drawFastHLine(0, ch - 1, W, e);
-    d.fillRect(1, ch - 4, 4, 4, COL_RED); d.fillRect(W - 5, ch - 4, 4, 4, COL_RED);
+    LovyanGFX &G = d;
+    uint16_t f = C565(24, 28, 44), e = C565(70, 84, 120), hi = C565(120, 136, 180);
+    G.drawLine(0, 14, 66, 34, e); G.drawLine(0, 15, 66, 35, f); G.drawLine(W - 1, 14, W - 67, 34, e); G.drawLine(W - 1, 15, W - 67, 35, f);
+    G.fillTriangle(0, ch - 1, 52, ch - 1, 0, ch - 27, f); G.fillTriangle(W - 1, ch - 1, W - 53, ch - 1, W - 1, ch - 27, f);
+    G.drawLine(0, ch - 27, 52, ch - 1, hi); G.drawLine(W - 1, ch - 27, W - 53, ch - 1, hi);
+    G.fillRect(1, ch - 4, 4, 4, COL_RED); G.fillRect(W - 5, ch - 4, 4, 4, COL_RED);
 }
-// Per-wave deep-space backdrop — an OPEN VOID, by design. The player asked for no sun on the backdrop
-// and no horizontal scanline banding, so this draws ZERO full-width horizontal fills/lines: the flat
-// space the caller already laid stays as the base, and ALL depth comes from RADIAL cues — a few soft
-// nebula PUFFS (filled discs), faint parallax stars, and a dim bloom + tunnel rings where the warp
-// streaks converge. Per (seed,sector,system) so each sortie reads distinct; recoloured per wave.
-// Cheap (small circles + dots, no full-frame fills, no per-row sine), no heap.
-static void draw_backdrop(float top, int ch, int jx, int jy)
+// Top-down radar on the left console: you at the bottom centre, ahead is up. Hostiles red (gold: the ace, white:
+// your lock), the ward cyan.
+static void draw_radar(int ch)
 {
-    (void)jx; (void)jy;
-    uint16_t fc = wave_col();
-    int t0 = (int)top, h = ch - t0; if (h < 1) h = 1;
-    int vx = (int)CX, vy = (int)s_cy;
-    // gentle view parallax: the far field drifts opposite the reticle so panning your aim feels like
-    // turning your head in the cockpit (a few px at most). A cheap depth cue, no extra draw passes.
-    int parx = (int)((s_aimx - CX) * 0.05f), pary = (int)((s_aimy - s_cy) * 0.05f);
-
-    // (1) nebula puffs: soft filled discs (dim halo + a slightly brighter core), placed per system.
-    //     Discs, never lines -> no horizontal striping; a slow breath via s_anim keeps them alive.
-    uint32_t hh = pg_hash3(g.seed ^ 0x51A7u, g.sector, (uint32_t)g.sys);
-    int breath = (int)(2.0f * sinf(s_anim * 0.04f));
-    for (int i = 0; i < 3; i++) {
-        uint32_t hp = pg_hash3(hh, (uint32_t)i, 0x9E37u);
-        int nx = 18 + (int)(hp % (W - 36)) - parx;
-        int ny = t0 + 4 + (int)((hp >> 9) % (h > 8 ? h - 8 : 1)) - pary;
-        int nr = 14 + (int)((hp >> 18) % 16) + breath;          // ~14..30
-        tile_dither_ellipse(nx, ny, nr, nr * 3 / 4, tile_c332(shade(fc, 1, 3)));          // stippled haze (translucent)
-        tile_dither_ellipse(nx + nr / 4, ny - nr / 6, nr / 2, nr * 3 / 8, tile_c332(shade(fc, 3, 5)));   // brighter knot
+    LovyanGFX &G = d;
+    int cx = 19, cy = ch - 2;
+    G.fillArc(cx, cy, 0, 15, 180, 360, C565(0, 34, 24));
+    G.drawArc(cx, cy, 15, 15, 180, 360, C565(50, 170, 120));
+    G.drawArc(cx, cy, 8, 8, 180, 360, C565(20, 90, 64));
+    for (int i = 0; i <= NFOE; i++) {                           // the wing, then the ward
+        const Foe *f = &s_foe[i < NFOE ? i : 0];
+        if (i < NFOE ? !f->on : !s_ward_on) continue;
+        float ex = i < NFOE ? f->ex : s_ward_x, ez = i < NFOE ? f->ez : ZWARD;
+        uint16_t c = i == NFOE ? COL_CYAN : i == s_lock ? COL_WHITE : f->kind == FOE_ACE ? COL_GOLD : COL_RED;
+        G.fillRect(cx + clampi((int)(ex * 0.09f), -9, 8), cy - 3 - clampi((int)(ez * 0.05f), 0, 10), 2, 2, c);
     }
-
-    // (2) faint parallax far stars (fixed field, drifted by the reticle) under the moving warp streaks.
-    for (int i = 0; i < NSTAR; i += 3) {
+}
+// The system's sky behind the dogfight: a nebula in its faction's tones (a soft cloud, a brighter knot, a dust lane
+// across them), far stars, the system's own world lit from the side and — where it has one — its beacon spire,
+// lit or dark. Placed by a visual-only hash, so every system is a different place; the layers drift against the
+// reticle like a head turning in the cockpit, nearer ones more. No sun (by request), no horizontal bands.
+static void draw_backdrop(float top, int ch)
+{
+    const FacLook &L = FAC_LOOK[cur_fac()];
+    int t0 = (int)top, h = ch - t0;
+    int parx = (int)((s_aimx - CX) * 0.05f), pary = (int)((s_aimy - s_cy) * 0.05f);
+    uint32_t hh = pg_hash3(g.seed ^ 0x51A7u, g.sector, (uint32_t)g.sys);
+    int nx = 50 + (int)(hh % 140) - parx, ny = t0 + 26 + (int)((hh >> 8) % (uint32_t)(h - 52)) - pary;
+    for (int i = 0; i < 4; i++) {                                     // the cloud: four soft lobes along a slant
+        uint32_t q = pg_hash32(hh + (uint32_t)i * 0x9E37u);
+        int dx = (i - 2) * 26 + (int)(q % 21) - 10, dy = ((hh >> 30) & 1 ? 1 : -1) * (i - 2) * 9 + (int)((q >> 8) % 13) - 6;
+        blob(nx + dx, ny + dy, 24 + (int)((q >> 16) % 22), 12 + (int)((q >> 22) % 10), L.deep, 7 + (int)((q >> 27) % 5));
+    }
+    blob(nx + 10 - (int)((hh >> 16) & 31), ny - 4, 30, 13, shade(L.trim, 1, 2), 6);   // a brighter knot
+    blob(nx - 6, ny + 5, 54, 4, COL_SPACE, 10);                                          // a dust lane across it
+    for (int i = 0; i < NSTAR; i += 2) {
         if (((s_anim + star[i].tw) & 63) < 2) continue;                  // occasional twinkle-out
         int xx = ((int)star[i].x - parx) % W; if (xx < 0) xx += W;
-        int yy = t0 + ((((int)star[i].y - pary) % h) + h) % h;
-        d.drawPixel(xx, yy, star[i].layer == 2 ? COL_GREY : COL_DIM);
+        d.drawPixel(xx, t0 + ((((int)star[i].y - pary) % h) + h) % h, star[i].layer == 2 ? COL_GREY : COL_DIM);
     }
-
-    // (3) vanishing-point depth: a subtle radial bloom where the warp streaks converge (kept dim so it
-    //     reads as the throat of the tunnel, NOT a sun), plus two faint rings for the tunnel mouth.
-    tile_dither_ellipse(vx, vy, 18, 14, tile_c332(shade(fc, 1, 3)));
-    tile_dither_ellipse(vx, vy, 7, 6, tile_c332(shade(fc, 2, 3)));
-    d.drawCircle(vx, vy, 34, shade(fc, 2, 11));
-    d.drawCircle(vx, vy, 58, shade(fc, 1, 11));
-
-    // (4) battle-deck: a dim Mode-7 energy grid fanning down from the vanishing point -> a real ground
-    //     reference that sells the 3D WITHOUT any full-width horizontal line (nh=0, so no scanline
-    //     striping). It shares the reticle parallax and flares briefly with screen-shake (hit intensity).
-    fx3d::Grid gc;
-    gc.horizon = vy; gc.bottom = ch - 1; gc.vanx = CX - (float)parx; gc.scroll = 0.0f;
-    gc.xspread = 168.0f; gc.nv = 6; gc.nh = 0;
-    gc.col = shade(fc, 3, 6); gc.glow = 0;
-    gc.intensity = 56 + (int)(s_shake * 6.0f); if (gc.intensity > 150) gc.intensity = 150;
-    fx3d::grid(gc);
+    int side = (hh >> 20) & 1 ? 1 : -1, pr = 12 + (int)((hh >> 21) % 11);
+    int px = (side > 0 ? W - 32 : 32) - parx * 2, py = t0 + 40 + (int)((hh >> 25) % 36) - pary * 2;
+    draw_planet(px, py, pr, g.sys);
+    if (SYSTEMS[g.sys].beacon) draw_spire(px - side * (pr + 12), py + pr / 2 + 8, 22, lit_beacon(g.sys));
 }
 static int foes_alive(void) { int n = 0; for (int i = 0; i < NFOE; i++) if (s_foe[i].on) n++; return n; }
 
@@ -1473,13 +1744,14 @@ static void spawn_foe(int kind, int hp)
 {
     for (int i = 0; i < NFOE; i++) if (!s_foe[i].on) {
         Foe *f = &s_foe[i];
-        f->on = 1; f->kind = (uint8_t)kind; f->passed = 0; f->strafe = 0;
+        memset(f, 0, sizeof *f);
+        f->on = 1; f->kind = (uint8_t)kind;
         f->ez = 150.0f + (float)rnd(60);                     // emerge closer -> reaches engage range fast
         f->ex = (float)(rnd(161) - 80); f->ey = (float)(rnd(101) - 50);
-        f->wphase = (float)rnd(628) * 0.01f; f->bank = 0;
+        f->wphase = (float)rnd(628) * 0.01f;
         f->engagez = 40.0f + (kind == FOE_HEAVY ? 22.0f : kind == FOE_SCOUT ? -2.0f : 8.0f) + (float)rnd(10);   // hold-and-fight distance
         f->hp = f->hpmax = (int16_t)hp; f->firecd = (int16_t)(350 + rnd(700)); f->strafecd = (int16_t)(2800 + rnd(3500));
-        f->hitms = 0;
+        f->ph = ACE_WEAVE; f->phms = 1800;
         return;
     }
 }
@@ -1493,13 +1765,17 @@ static void combat_spawn_wave(void)
         else                { kind = FOE_FIGHTER; hp = s_cc.foe_hp; }
         spawn_foe(kind, hp);
     }
-    if (last && s_cc.ace) spawn_foe(FOE_ACE, s_cc.foe_hp * 22 / 10 + 30);
     s_wave++; s_wave_left--;
-    s_wave_tint = WAVE_PAL[(s_wave - 1) % 6];       // each wave recolours enemies + backdrop
     s_spawn_timer = 1300.0f;                       // gap before the next wave once this one is clear
-    snprintf(s_cmsg, sizeof s_cmsg, "%s %d/%d", GT("ONDATA", "WAVE"), s_wave, s_cc.waves);
-    s_cmsg_until = s_now + 1400; sfx(SFX_LOCK);
-    if (last && s_cc.ace) sfx(SFX_ALARM);          // dramatic incoming-ace klaxon
+    if (last && s_cc.ace && s_fx->ace_id < NACE) {  // the named ace joins the last wave: callsign, radio line, klaxon
+        spawn_foe(FOE_ACE, s_cc.foe_hp * 22 / 10 + 30);
+        snprintf(s_fx->cmsg, sizeof s_fx->cmsg, "%s", ACE_NAME[s_fx->ace_id]);
+        s_fx->cmsg_until = s_now + 1800; s_fx->comm_until = s_now + 4200; s_fx->comm_id = s_fx->ace_id;
+        sfx(SFX_ALARM);
+    } else {
+        snprintf(s_fx->cmsg, sizeof s_fx->cmsg, "%s %d/%d", GT("ONDATA", "WAVE"), s_wave, s_cc.waves);
+        s_fx->cmsg_until = s_now + 1400; sfx(SFX_LOCK);
+    }
 }
 
 static void combat_end(int result)   // 1 = win, -1 = fail/retreat, 2 = destroyed
@@ -1524,7 +1800,7 @@ static void combat_end(int result)   // 1 = win, -1 = fail/retreat, 2 = destroye
 }
 
 // ---- arcade helpers: combo, power-up drops/pickup, missiles --------------------------------
-static void toast(const char *s) { snprintf(s_toast, sizeof s_toast, "%s", s); s_toast_until = s_now + 1300; }
+static void toast(const char *s) { snprintf(s_fx->toast, sizeof s_fx->toast, "%s", s); s_fx->toast_until = s_now + 1300; }
 static void register_kill(void)   // arcade combo: chained kills keep the meter alive
 {
     if (s_now < s_combo_until) { if (s_combo < 99) s_combo++; } else s_combo = 1;
@@ -1550,26 +1826,32 @@ static void apply_pickup(int kind)
     }
     sfx(SFX_BUY);
 }
-// kill bookkeeping shared by laser + missile: count, combo, shake, boom SFX, maybe a drop
+// kill bookkeeping shared by laser + missile: count, combo, shake, boom SFX, maybe a drop; the ace's fall
+// freezes the frame for a beat and is written to the story flags (Scarlet Gutter: FL_ACE_DEAD).
 static void kill_foe(Foe *f, float sx, float sy, float sc, bool vis)
 {
+    bool ace = f->kind == FOE_ACE;
     if (vis) {
-        spawn_boom(f->ex, f->ey, f->ez, sc, wave_col(), f->kind == FOE_ACE);
-        int rr = clampi((int)(9.0f * sc * kind_rscale(f->kind)), 4, 60);       // shatter the flash model
+        uint16_t pal[3]; foe_paint(f, pal);
+        spawn_boom(f->ex, f->ey, f->ez, sc, pal[0], pal[1], ace);
+        int rr = clampi((int)(9.0f * sc * kind_rscale(f->kind)), 4, 60);       // shatter the mesh
         for (int i = 0; i < NDEATH; i++) if (!s_death[i].on) {
             s_death[i].on = 1; s_death[i].model = (uint8_t)f->kind;
             s_death[i].x = (int16_t)sx; s_death[i].y = (int16_t)sy; s_death[i].r = (int16_t)rr;
-            uint16_t dc = wave_col(); { uint16_t kh = kind_hue(f->kind); if (kh) dc = cmix(dc, kh, 120); }
-            s_death[i].bank = f->bank; s_death[i].yaw = f->bank * 0.32f; s_death[i].col = dc;
-            s_death[i].t = s_death[i].t0 = (int16_t)(f->kind == FOE_ACE ? 520 : 360);
+            s_death[i].bank = f->bank; s_death[i].yaw = f->bank * 0.32f; s_death[i].col = pal[0];
+            s_death[i].t = s_death[i].t0 = (int16_t)(ace ? 520 : 360);
             break;
         }
     }
     float kx = f->ex, ky = f->ey, kz = f->ez;
     f->on = 0; s_kills++; s_mkills++;
-    s_shake = (f->kind == FOE_ACE) ? 7.0f : 4.0f;
+    s_shake = ace ? 7.0f : 4.0f;
+    if (ace) {
+        s_fx->ace_down = 1; s_fx->hitstop_until = s_now + 140; s_fx->comm_until = 0;
+        snprintf(s_fx->cmsg, sizeof s_fx->cmsg, "%s", GT("ASSO ABBATTUTO", "ACE DOWN")); s_fx->cmsg_until = s_now + 1700;
+        if (s_fx->ace_id == ACE_GUTTER) g.flags |= bit(FL_ACE_DEAD);
+    }
     sfx(SFX_BOOM); register_kill(); maybe_drop_pickup(kx, ky, kz);
-    (void)sx; (void)sy;
 }
 static void missile_fire(void)
 {
@@ -1583,6 +1865,9 @@ static void missile_fire(void)
     s_muz_until = s_now + 80; sfx(SFX_LAUNCH);
 }
 
+// Twin lasers on the locked fighter (a lock is a hit). With the reticle on the LEAD PIP the shot is a "lead hit":
+// half as much again, and if that foe was charging its guns (the red ring) the shot it was about to fire is spoiled
+// — an ace's burst too. The Keeper's shield and the Echo's phase turn hits aside while they last.
 static void player_fire(void)
 {
     int cd = 200 - g.weapon * 20;                             // 5 shots/s, 8.3 at laser 4...
@@ -1592,30 +1877,42 @@ static void player_fire(void)
     s_fire_flash_until = s_now + 80;                          // twin-laser FX window
     s_muz_until = s_now + 60;                                 // gun-port muzzle flash
     sfx(SFX_LASER);
-    if (s_lock >= 0 && s_foe[s_lock].on) {                    // targeting computer: a lock is a guaranteed hit
-        Foe *f = &s_foe[s_lock];
-        f->hp -= 12 + g.weapon * 5; f->hitms = 90; s_hitmark_until = s_now + 110;
-        float sx = 0, sy = 0, sc = 0; bool vis = project(f->ex, f->ey, f->ez, &sx, &sy, &sc);
-        if (f->hp <= 0) kill_foe(f, sx, sy, sc, vis);
-        else { if (vis) spawn_sparks(f->ex, f->ey, f->ez, COL_AMBER); sfx(SFX_HIT); }
+    if (s_lock < 0 || !s_foe[s_lock].on) return;
+    Foe *f = &s_foe[s_lock];
+    float sx = 0, sy = 0, sc = 0; bool vis = project(f->ex, f->ey, f->ez, &sx, &sy, &sc);
+    if (ace_immune(f)) { if (vis) spawn_sparks(f->ex, f->ey, f->ez, FAC_LOOK[s_cc.foe_fac & 3].glow); sfx(SFX_HIT); return; }
+    int dmg = 12 + g.weapon * 5;
+    float lx, ly;
+    if (vis && lead_pip(f, &lx, &ly) && on_pip(lx, ly, sc)) {
+        dmg = dmg * 3 / 2;
+        if (charging(f)) {
+            if (f->kind == FOE_ACE) { f->ph = ACE_EVADE; f->phms = 700; } else f->firecd = (int16_t)(kind_firems(f->kind) + 500);
+            if (vis) spawn_sparks(f->ex, f->ey, f->ez, COL_CYAN);
+        }
     }
+    f->hp -= dmg; f->hitms = 90; s_hitmark_until = s_now + 110;
+    if (f->hp <= 0) kill_foe(f, sx, sy, sc, vis);
+    else { if (vis) spawn_sparks(f->ex, f->ey, f->ez, COL_AMBER); sfx(SFX_HIT); }
 }
-static void hurt_player(int dmg)
+// (sx, sy): where on screen the hit came from — the damage-direction arcs point there.
+static void hurt_player(int dmg, float sx, float sy)
 {
     s_shield_hit_ms = s_now;
     bool had_shield = (s_shield > 0);
     if (s_shield > 0) { int a = dmg < s_shield ? dmg : s_shield; s_shield -= a; dmg -= a; }
     bool hull_hit = (dmg > 0);
     if (hull_hit) { g.hull -= dmg; if (g.hull < 0) g.hull = 0; }
+    float dx = sx - CX, dy = sy - s_cy, ang = atan2f(dy, dx);
+    if (fabsf(dx) + fabsf(dy) > 6.0f) { s_fx->dmg_ang = ang; s_fx->dmg_until = s_now + 650; s_fx->dmg_hull = hull_hit; }
 
     if (had_shield && s_shield == 0) {                 // shields just dropped
         sfx(SFX_SHIELD_DOWN); s_shake = 6.0f;
     } else if (hull_hit) {                             // hull thud + red vignette
         sfx(SFX_HULL); s_hullvig_until = s_now + 200; s_shake = 9.0f;
-    } else {                                           // fully absorbed by shields -> canopy ripple
+    } else {                                           // fully absorbed by shields -> a ripple where it struck
         for (int i = 0; i < NRIP; i++) if (!s_rip[i].on) {
-            s_rip[i].on = 1; s_rip[i].life = s_rip[i].life0 = 260;
-            s_rip[i].x = (int)s_aimx; s_rip[i].y = (int)s_aimy; break;
+            s_rip[i].on = 1; s_rip[i].life = s_rip[i].life0 = 300;
+            s_rip[i].x = (int)(CX + cosf(ang) * 44.0f); s_rip[i].y = (int)(s_cy + sinf(ang) * 30.0f); break;
         }
         s_shake = 4.0f; sfx(SFX_HIT); s_shieldvig_until = s_now + 120;
     }
@@ -1635,9 +1932,10 @@ static void combat_reset_common(void)
     for (int i = 0; i < NDEATH; i++) s_death[i].on = 0;
     for (int i = 0; i < NMSL; i++)  s_msl[i].on = 0;
     for (int i = 0; i < NPU; i++)   s_pu[i].on = 0;
+    memset(s_fx, 0, sizeof *s_fx); s_fx->ace_id = NO_ACE;
     s_msl_ammo = NMSL; s_msl_reload = 0; s_rapid_until = 0;
-    s_combo = 0; s_combo_until = 0; s_toast[0] = 0; s_toast_until = 0; s_wave_tint = WAVE_PAL[0];
-    s_part_rr = 0; s_flash_until = s_muz_until = s_hullvig_until = s_shieldvig_until = s_nearmiss_ms = s_alarm_ms = 0;
+    s_combo = 0; s_combo_until = 0;
+    s_part_rr = 0; s_muz_until = s_hullvig_until = s_shieldvig_until = s_nearmiss_ms = s_alarm_ms = 0;
     s_hitmark_until = s_smoke_ms = 0;
     s_cy = (pf_top() + nucleo_app_content_height()) * 0.5f;
     s_aimx = CX; s_aimy = s_cy; s_aim_hv = s_aim_vv = 0; s_aim_h_until = s_aim_v_until = 0;
@@ -1646,7 +1944,7 @@ static void combat_reset_common(void)
     for (int i = 0; i < NWARP; i++) respawn_warp(i);
     s_shieldmax = g.shield_max; s_shield = s_shieldmax; s_shield_hit_ms = 0; s_regen_acc = 0;
     s_kills = s_mkills = 0; s_wave = 0; s_result = 0; s_earn_cr = 0;
-    s_cmsg[0] = 0; s_cmsg_until = 0; s_combat_t0 = s_now; s_ward_on = 0;
+    s_combat_t0 = s_now; s_ward_on = 0;
 }
 static void combat_launch(void)
 {
@@ -1665,19 +1963,31 @@ static void combat_begin_mission(int mid)
     s_cc.reward_cr = m->reward_cr; s_cc.kill_cr = m->kill_cr;
     s_cc.rep_fac = m->offer_fac; s_cc.rep_gain = m->rep_gain;
     s_cc.enemy_rep_fac = m->foe_fac; s_cc.enemy_rep_loss = m->enemy_rep_loss;
-    combat_reset_common(); combat_launch();
+    combat_reset_common();
+    if (m->ace) s_fx->ace_id = (uint8_t)ace_cast(m->foe_fac, pg_rng_mis(g.seed, g.sector, g.sys, mid, PG_FLAVOR, 1));
+    combat_launch();
+}
+// An interception on arrival: Wreck raiders, unless this is Echo space (its lattice drones) or the station's own
+// faction has turned on you (reputation -25 or worse: its patrols hunt you on its turf).
+static int ambush_faction(void)
+{
+    int sf = SYSTEMS[g.sys].faction;
+    if (sf == F_ECO) return F_ECO;
+    return (sf != F_RELITTI && g.rep[sf & 3] <= -25) ? sf : F_RELITTI;
 }
 static void combat_begin_ambush(void)
 {
     s_mission = -1;
     int tier = 1 + (int)g.sector; if (tier > 12) tier = 12;            // sector-tier (matches web ambushCfg)
-    s_cc.type = MT_PATROL; s_cc.foe_fac = F_RELITTI;
+    s_cc.type = MT_PATROL; s_cc.foe_fac = ambush_faction();
     s_cc.waves = 2 + (tier >= 6 ? 1 : 0); s_cc.per_wave = 2 + (tier & 1);
     s_cc.foe_hp = 30 + tier * 6; s_cc.foe_dmg = 7 + tier; s_cc.foe_speed = 78.0f + tier * 4;
     s_cc.ace = 0;
     s_cc.reward_cr = 0; s_cc.kill_cr = 18 + tier * 4;
-    s_cc.rep_fac = -1; s_cc.rep_gain = 0; s_cc.enemy_rep_fac = F_RELITTI; s_cc.enemy_rep_loss = 2;
-    combat_reset_common(); combat_launch();
+    s_cc.rep_fac = -1; s_cc.rep_gain = 0; s_cc.enemy_rep_fac = s_cc.foe_fac; s_cc.enemy_rep_loss = 2;
+    combat_reset_common();
+    if (s_cc.foe_fac == F_ECO) { s_fx->comm_until = s_now + 4000; s_fx->comm_id = NACE; }   // the Voice speaks first
+    combat_launch();
 }
 
 // Procedural mission slots offered at the current system (count scaled by sector; 0 at Echo systems).
@@ -1718,6 +2028,24 @@ static float tilt_shape(float v)
     return s * a;
 }
 
+// An ace flies a duel pattern on top of the dogfight AI: WEAVE (strafes allowed) -> CHARGE (holds, guns glowing:
+// a lead hit spoils it) -> BURST (3, the Lancer 4, quick tracers fanned across you) -> EVADE (a barrel roll that
+// cannot be locked; the Keeper raises a shield, the Echo phases out and reappears mirrored) -> WEAVE.
+static void ace_step(Foe *f, int ms, bool huntward)        // huntward: it is after the ward, so are its bursts
+{
+    f->phms -= ms;
+    if (f->phms > 0) return;
+    switch (f->ph) {
+    case ACE_WEAVE:  if (!f->strafe) { f->ph = ACE_CHARGE; f->phms = 750; } break;
+    case ACE_CHARGE: f->ph = ACE_BURST; f->shots = s_cc.foe_fac == F_GILDA ? 4 : 3; f->phms = 0; break;
+    case ACE_BURST:
+        if (f->shots > 0) { spawn_tracer(f, huntward, (f->shots - 2) * 0.35f); sfx(SFX_LASER); f->shots--; f->phms = 130; }
+        else { f->ph = ACE_EVADE; f->phms = ACE_EVADE_MS; sfx(SFX_PASS); }
+        break;
+    default: f->ph = ACE_WEAVE; f->phms = (int16_t)(3000 + rnd(1500)); if (s_cc.foe_fac == F_ECO) f->ex = -f->ex; break;
+    }
+}
+
 static void combat_step(float dt)
 {
     int   ch  = nucleo_app_content_height();
@@ -1725,6 +2053,7 @@ static void combat_step(float dt)
     int   ms  = (int)(dt * 1000.0f);
 
     for (int i = 0; i < NDEATH; i++) if (s_death[i].on) { s_death[i].t -= ms; if (s_death[i].t <= 0) s_death[i].on = 0; }
+    if (s_now < s_fx->hitstop_until) return;               // the ace's fall: the world holds its breath (draws go on)
 
     // (a0) tilt controller (ADV BMI270): when the device is actively tilted, ease the reticle velocity
     //      toward the tilt-commanded velocity. A flat device produces 0 (deadzone) -> arrows still work
@@ -1741,8 +2070,9 @@ static void combat_step(float dt)
 
     // (a) reticle glide: arrow impulses (aim_steer) decay under drag here -> smooth acceleration while
     //     a key is held and a soft inertial stop on release, with no stop-go across the keyboard's
-    //     repeat gap. Drag is framerate-independent (expf), velocity settles to a true dead stop.
-    float fr = expf(-dt * AIM_FRIC);
+    //     repeat gap. Drag is framerate-independent (expf), velocity settles to a true dead stop. Over the
+    //     locked target the drag doubles (aim "magnetism"): the reticle settles on it instead of sliding past.
+    float fr = expf(-dt * (s_lock >= 0 ? AIM_FRIC * 2.0f : AIM_FRIC));
     s_aim_hv *= fr; s_aim_vv *= fr;
     if (s_aim_hv > -3.0f && s_aim_hv < 3.0f) s_aim_hv = 0;
     if (s_aim_vv > -3.0f && s_aim_vv < 3.0f) s_aim_vv = 0;
@@ -1777,22 +2107,26 @@ static void combat_step(float dt)
 
     // (f) enemy AI: a real dogfight — foes close to an engage distance and HOLD there, weaving + firing;
     // they die ONLY to player fire. Periodically one makes a strafing run (dives in, deals a hit, retreats).
-    // Ward-hunters dive on the escort instead of the player. No free fly-through clear.
+    // Ward-hunters dive on the escort instead of the player. No free fly-through clear. An ace adds its
+    // duel pattern (ace_step) and fires in bursts instead.
     float closeF = 30.0f + s_cc.foe_speed * 0.3f;
     for (int i = 0; i < NFOE; i++) {
         Foe *f = &s_foe[i];
         if (!f->on) continue;
+        float ox = f->ex, oy = f->ey, oz = f->ez;
+        bool ace = f->kind == FOE_ACE;
         if (f->hitms > 0) f->hitms -= ms;                       // hit-flash decay
         bool huntward = s_ward_on && i % 3 == 1;               // a third of the wing hunts the ward (marked on screen)
+        if (ace) ace_step(f, ms, huntward);
         float spd = closeF * kind_speed(f->kind);
-        f->wphase += dt * kind_wrate(f->kind);
+        f->wphase += dt * kind_wrate(f->kind) * (ace_evading(f) ? 3.0f : 1.0f);
         if (f->strafe) {                                        // diving in for a close pass
             f->ez -= spd * 2.4f * dt;
             if (!f->passed && f->ez < 30.0f) { f->passed = 1; if ((s_now - s_nearmiss_ms) > 350) { s_nearmiss_ms = s_now; sfx(SFX_PASS); } }
             if (f->ez <= ZNEAR) {                               // contact: hit, then retreat (NOT removed)
                 float sx, sy, sc; bool vis = project(f->ex, f->ey, ZNEAR + 0.5f, &sx, &sy, &sc);
                 if (huntward) { s_ward_hp -= s_cc.foe_dmg + 3; sfx(SFX_PASS); }
-                else { hurt_player(s_cc.foe_dmg + 3); if (vis) spawn_streak(sx, sy); }
+                else { hurt_player(s_cc.foe_dmg + 3, sx, sy); if (vis) spawn_streak(sx, sy); }
                 f->ez = 90.0f + (float)rnd(20); f->strafe = 0; f->passed = 0; f->strafecd = (int16_t)(3200 + rnd(3500));
                 if (s_result) return;
             }
@@ -1800,19 +2134,21 @@ static void combat_step(float dt)
             if (f->ez > f->engagez) { f->ez -= spd * dt; if (f->ez < f->engagez) f->ez = f->engagez; }
             else f->ez = f->engagez + sinf(f->wphase * 0.6f) * 7.0f;     // bob around engage range
             if (f->strafecd > 0) f->strafecd -= ms;
-            if (f->strafecd <= 0 && f->ez < f->engagez + 16.0f) f->strafe = 1;
+            if (f->strafecd <= 0 && f->ez < f->engagez + 16.0f && (!ace || f->ph == ACE_WEAVE)) f->strafe = 1;
         }
         float amp = (18.0f + (130.0f - (f->ez < 130.0f ? f->ez : 130.0f)) * 0.16f) * kind_wamp(f->kind);
+        if (ace) amp *= f->ph == ACE_CHARGE ? 0.25f : f->ph == ACE_EVADE ? 1.8f : 1.0f;   // holds to aim, then dashes
         float tgtx = huntward ? s_ward_x : 0.0f;
         float wx = sinf(f->wphase) * amp, wy = sinf(f->wphase * 0.7f + 1.0f) * amp * 0.5f;
         f->ex += (tgtx + wx - f->ex) * 1.4f * dt;
         f->ey += (wy - f->ey) * 1.4f * dt;
         f->bank += (sinf(f->wphase) * 0.8f - f->bank) * 4.0f * dt;
         if (f->firecd > 0) f->firecd -= ms;
-        if (f->firecd <= 0 && f->ez < 160.0f && !f->strafe) {
-            spawn_tracer(f, huntward);
+        if (!ace && f->firecd <= 0 && f->ez < 160.0f && !f->strafe) {
+            spawn_tracer(f, huntward, 0.0f);
             f->firecd = (int16_t)((kind_firems(f->kind) + 600 + rnd(600)) * (g.sector < 3 ? 13 - (int)g.sector : 10) / 10);   // gentler first sectors
         }
+        if (dt > 0) { f->vx = (f->ex - ox) / dt; f->vy = (f->ey - oy) / dt; f->vz = (f->ez - oz) / dt; }
         if (f->hp * 3 < f->hpmax && (s_now - s_smoke_ms) > 110) {       // wounded: trails embers (damaged read)
             s_smoke_ms = s_now;
             Part *sp = part_alloc(); float a = (float)rnd(628) * 0.01f;
@@ -1832,14 +2168,14 @@ static void combat_step(float dt)
             m->ey += (f->ey - m->ey) * 4.5f * dt;
             if (m->ez >= f->ez - 4.0f) {
                 float sx = 0, sy = 0, sc = 0; bool vis = project(f->ex, f->ey, f->ez, &sx, &sy, &sc);
-                f->hp -= 60 + g.weapon * 10; f->hitms = 130; s_hitmark_until = s_now + 140;
+                if (!ace_immune(f)) { f->hp -= 60 + g.weapon * 10; f->hitms = 130; s_hitmark_until = s_now + 140; }
                 if (f->hp <= 0) kill_foe(f, sx, sy, sc, vis);
-                else { if (vis) spawn_boom(f->ex, f->ey, f->ez, sc * 0.7f, COL_AMBER, false); sfx(SFX_BOOM); }
+                else { if (vis) spawn_boom(f->ex, f->ey, f->ez, sc * 0.7f, COL_AMBER, COL_WHITE, false); sfx(SFX_BOOM); }
                 m->on = 0;
             }
         } else {                                                // lock lost: fly straight out and fizz far away
             m->target = -1;
-            if (m->ez > ZFAR) { spawn_boom(m->ex, m->ey, ZFAR - 1.0f, 0.3f, COL_AMBER, false); m->on = 0; }
+            if (m->ez > ZFAR) { spawn_boom(m->ex, m->ey, ZFAR - 1.0f, 0.3f, COL_AMBER, COL_WHITE, false); m->on = 0; }
         }
     }
     // (f1b) power-ups drift toward the cockpit; auto-collected on arrival
@@ -1862,45 +2198,45 @@ static void combat_step(float dt)
     for (int i = 0; i < NRIP; i++) { if (!s_rip[i].on) continue;
         s_rip[i].life -= ms; if (s_rip[i].life <= 0) s_rip[i].on = 0; }
 
-    // (g) lock-on: the on-screen foe nearest the reticle
-    s_lock = -1;
+    // (g) lock-on: the on-screen foe nearest the reticle — on its hull or on its lead pip. The current lock holds
+    //     in a wider window (1.6x) so a weaving target is not dropped at every twitch; an evading ace slips any lock.
+    int prev = s_lock; s_lock = -1;
     {
         float best = 1e9f;
         for (int i = 0; i < NFOE; i++) {
-            Foe *f = &s_foe[i]; if (!f->on) continue;
+            Foe *f = &s_foe[i]; if (!f->on || ace_evading(f)) continue;
             float sx, sy, sc; if (!project(f->ex, f->ey, f->ez, &sx, &sy, &sc)) continue;
-            float dx = sx - s_aimx, dy = sy - s_aimy, dd = dx * dx + dy * dy;
-            float r = 7.0f + 15.0f * sc;                        // lock window: forgiving enough to track weavers
+            float dx = sx - s_aimx, dy = sy - s_aimy, dd = dx * dx + dy * dy, lx, ly;
+            if (lead_pip(f, &lx, &ly)) { float dl = (lx - s_aimx) * (lx - s_aimx) + (ly - s_aimy) * (ly - s_aimy); if (dl < dd) dd = dl; }
+            float r = (7.0f + 15.0f * sc) * (i == prev ? 1.6f : 1.0f);
             if (dd < r * r && dd < best) { best = dd; s_lock = i; }
         }
     }
-    if (s_lock >= 0) { if (!s_lock_since) { s_lock_since = s_now; sfx(SFX_LOCK); } }
+    if (s_lock >= 0) { if (!s_lock_since || s_lock != prev) { s_lock_since = s_now; sfx(SFX_LOCK); } }
     else s_lock_since = 0;
 
-    // (g2) gentle aim assist: when you are NOT steering an axis, the reticle eases onto the locked foe
+    // (g2) aim assist: when you are NOT steering an axis, the reticle eases onto the locked foe's lead pip (the
+    //      bonus spot), or its hull if the pip is off-screen — it helps you lead, it does not aim for you.
     if (s_lock >= 0) {
-        float sx, sy, sc;
-        if (project(s_foe[s_lock].ex, s_foe[s_lock].ey, s_foe[s_lock].ez, &sx, &sy, &sc) &&
-            sx > 8 && sx < W - 8 && sy > top + 8 && sy < ch - 8) {
-            if (s_now >= s_aim_h_until) s_aimx += (sx - s_aimx) * 2.0f * dt;   // gentle pull only (was 5.0): helps tracking, not aiming
-            if (s_now >= s_aim_v_until) s_aimy += (sy - s_aimy) * 2.0f * dt;
+        float sx, sy;
+        if (lead_pip(&s_foe[s_lock], &sx, &sy) && sx > 8 && sx < W - 8 && sy > top + 8 && sy < ch - 8) {
+            if (s_now >= s_aim_h_until) s_aimx += (sx - s_aimx) * 2.4f * dt;
+            if (s_now >= s_aim_v_until) s_aimy += (sy - s_aimy) * 2.4f * dt;
         }
     }
 
-    // (h) enemy tracers converge toward you / the ward; damage on arrival
+    // (h) enemy tracers fly from the gun to you / the ward; damage on arrival, with the shooter's screen position
     for (int b = 0; b < NBOLT; b++) {
         Bolt *bo = &s_bolt[b]; if (!bo->on) continue;
-        bo->ez += bo->vz * dt;
-        float t = bo->ez / ZCONV;
-        if (t > 1) t = 1; else if (t < 0) t = 0;
-        bo->ex = bo->tx * t; bo->ey = bo->ty * t;
         bo->life -= ms;
-        if (bo->life <= 0 || bo->ez < ZNEAR) {
-            if (bo->ez < ZNEAR && bo->life > 0) {
-                if (bo->aimward && s_ward_on) s_ward_hp -= s_cc.foe_dmg / 2;   // a freighter is armoured
-                else if (!bo->aimward) { hurt_player(s_cc.foe_dmg * 3 / 5); if (s_result) return; }   // a tracer grazes, a strafe rams
-            }
-            bo->on = 0;
+        float s = 1.0f - (float)bo->life / bo->life0; if (s > 1) s = 1;
+        bo->ex = bo->ox + (bo->tx - bo->ox) * s; bo->ey = bo->oy + (bo->ty - bo->oy) * s; bo->ez = bo->oz + (bo->tz - bo->oz) * s;
+        if (bo->life > 0) continue;
+        bo->on = 0;
+        if (bo->aimward) { if (s_ward_on) s_ward_hp -= s_cc.foe_dmg / 2; }   // a freighter is armoured
+        else {                                                                // a tracer grazes, a strafe rams
+            float sx = CX, sy = s_cy, sc; project(bo->ox, bo->oy, bo->oz, &sx, &sy, &sc);
+            hurt_player(s_cc.foe_dmg * bo->foe / 5, sx, sy); if (s_result) return;
         }
     }
 
@@ -1927,51 +2263,67 @@ static void draw_foe_arrow(int top, int ch, float sx, float sy, uint16_t col)
     int wx = (int)(-ny * 3.0f), wy = (int)(nx * 3.0f);               // base half-width (perpendicular)
     d.fillTriangle(tx_, ty_, bx + wx, by + wy, bx - wx, by - wy, col);
 }
+// A HUD bar cut into 4 px cells (reads as a gauge, not a smear).
+static void bar_cells(int x, int y, int w, int pct, uint16_t col)
+{
+    LovyanGFX &G = d;
+    G.fillRect(x, y, w, 5, C565(26, 30, 48));
+    int fw = w * clampi(pct, 0, 100) / 100;
+    if (fw > 0) G.fillRect(x, y, fw, 5, col);
+    for (int i = x + 4; i < x + w; i += 5) G.drawFastVLine(i, y, 5, COL_SPACE);
+}
+// The objective line under the HUD: what this sortie is (the contract's name, or who ambushed you).
+static void objective(char *b, int n)
+{
+    if (s_mission >= 0) snprintf(b, n, "%s", s_mt->name);
+    else snprintf(b, n, "%s: %s", GT("Imboscata", "Ambush"), lp(FAC_NAME[s_cc.foe_fac & 3]));
+}
 
 static void draw_combat(void)
 {
+    LovyanGFX &G = d;
     int ch = nucleo_app_content_height();
     float top = (float)pf_top();
     int jx = s_shake > 0 ? (rnd(3) - 1) : 0, jy = s_shake > 0 ? (rnd(3) - 1) : 0;   // hit shake
-    d.fillRect(0, 0, W, ch, COL_SPACE);
-    // ALWAYS paint the scene. The old code hid the whole backdrop behind a flat-gray fill during each
-    // boom's s_flash_until window; with several foes dying in a wave those windows overlapped and the
-    // background strobed dark<->bright -> the "flicker in battle". The boom now reads from the LOCAL
-    // core-flash + shockwave + debris below, which are spatially anchored and never strobe.
-    draw_backdrop(top, ch, jx, jy);
+    int fac = s_cc.foe_fac & 3;
+    G.fillRect(0, 0, W, ch, COL_SPACE);
+    draw_backdrop(top, ch);
 
-    // 3D warp starfield: radial streaks from the vanishing point
+    // speed streaks: points far ahead, lines as they rush past; nearer = longer + brighter, boost stretches them
+    float slen = 10.0f + s_throttle10 * 1.6f;
     for (int i = 0; i < NWARP; i++) {
         float sx, sy, sc; if (!project(s_warp[i].ex, s_warp[i].ey, s_warp[i].ez, &sx, &sy, &sc)) continue;
         if (sy < top || sy >= ch || sx < 0 || sx >= W) continue;   // cull off-screen (avoid huge drawLines)
-        if (s_warp[i].ez > 180) { d.drawPixel((int)sx + jx, (int)sy + jy, COL_DIM); }
-        else {
-            float tx2, ty2, tc; project(s_warp[i].ex, s_warp[i].ey, s_warp[i].ez + 14.0f, &tx2, &ty2, &tc);
-            d.drawLine((int)tx2 + jx, (int)ty2 + jy, (int)sx + jx, (int)sy + jy, s_warp[i].ez < 80 ? COL_WHITE : COL_GREY);
-        }
+        if (s_warp[i].ez > 170) { G.drawPixel((int)sx + jx, (int)sy + jy, COL_DIM); continue; }
+        float tx2 = sx, ty2 = sy, tc; project(s_warp[i].ex, s_warp[i].ey, s_warp[i].ez + slen, &tx2, &ty2, &tc);
+        uint16_t c = s_warp[i].ez < 60 ? COL_WHITE : s_warp[i].ez < 115 ? COL_GREY : COL_DIM;
+        G.drawLine((int)tx2 + jx, (int)ty2 + jy, (int)sx + jx, (int)sy + jy, c);
+        if (s_warp[i].ez < 40) G.drawLine((int)tx2 + jx + 1, (int)ty2 + jy, (int)sx + jx + 1, (int)sy + jy, COL_GREY);
     }
 
-    // ward at fixed depth
+    // ward at fixed depth: the convoy freighter or the beacon platform you defend
     if (s_ward_on) {
         float sx, sy, sc;
         if (project(s_ward_x, 0.0f, ZWARD, &sx, &sy, &sc)) {
             int x = (int)sx + jx, y = (int)sy + jy, r = (int)(10 * sc); if (r < 3) r = 3;
             uint16_t wc = (s_ward_hp * 3 < s_ward_max) ? COL_RED : COL_CYAN;
-            if (s_cc.type == MT_DEFEND) { d.drawRect(x - r, y - r, 2 * r, 2 * r, wc); d.fillCircle(x, y, r / 2, rgb(60, 70, 100)); }
-            else { d.fillTriangle(x - r, y, x + r, y - r / 2, x + r, y + r / 2, rgb(70, 80, 110)); d.drawLine(x + r, y - r / 2, x + r, y + r / 2, wc); }
+            if (s_cc.type == MT_DEFEND) { G.drawRect(x - r, y - r, 2 * r, 2 * r, wc); draw_spire(x, y + r, 2 * r + 4, lit_beacon(g.sys)); }
+            else { G.fillTriangle(x - r, y, x + r, y - r / 2, x + r, y + r / 2, rgb(70, 80, 110)); G.drawLine(x + r, y - r / 2, x + r, y + r / 2, wc); }
         }
     }
 
-    // enemy tracers (red, grow toward you)
+    // enemy tracers: from the gun toward you, a hot streak with a bright head as it nears
     for (int b = 0; b < NBOLT; b++) {
         Bolt *bo = &s_bolt[b]; if (!bo->on) continue;
         float sx, sy, sc; if (!project(bo->ex, bo->ey, bo->ez, &sx, &sy, &sc)) continue;
-        float tx2, ty2, tc; project(bo->ex, bo->ey, bo->ez + 18.0f, &tx2, &ty2, &tc);
-        d.drawLine((int)tx2 + jx, (int)ty2 + jy, (int)sx + jx, (int)sy + jy, COL_RED);
-        if (bo->ez < 60) d.fillRect((int)sx + jx - 1, (int)sy + jy - 1, 3, 3, COL_RED);
+        float s = 1.0f - (float)bo->life / bo->life0, st = s > 0.12f ? s - 0.12f : 0.0f, tx2, ty2, tc;
+        if (!project(bo->ox + (bo->tx - bo->ox) * st, bo->oy + (bo->ty - bo->oy) * st, bo->oz + (bo->tz - bo->oz) * st, &tx2, &ty2, &tc)) continue;
+        int hx = (int)sx + jx, hy = (int)sy + jy, ttx = clampi((int)tx2 + jx, hx - 36, hx + 36), tty = clampi((int)ty2 + jy, hy - 36, hy + 36);
+        G.drawLine(ttx, tty, hx, hy, COL_RED);
+        if (s > 0.5f) { G.drawLine(ttx + 1, tty, hx + 1, hy, C565(255, 120, 100)); G.fillRect(hx - 1, hy - 1, 3, 3, C565(255, 220, 200)); }
     }
 
-    // enemies, painted back-to-front
+    // enemies, painted back-to-front, with their tells: the hunter chevron, the gun-charge ring, the hp bar
     int order[NFOE], nord = 0;
     for (int i = 0; i < NFOE; i++) if (s_foe[i].on) order[nord++] = i;
     for (int a = 1; a < nord; a++) {
@@ -1983,34 +2335,34 @@ static void draw_combat(void)
         Foe *f = &s_foe[order[o]]; float sx, sy, sc;
         if (!project(f->ex, f->ey, f->ez, &sx, &sy, &sc)) continue;
         int x = (int)sx + jx, y = (int)sy + jy, r = clampi((int)(9.0f * sc * kind_rscale(f->kind)), 2, 60);
-        uint16_t fcol = wave_col();
-        { uint16_t kh = kind_hue(f->kind); if (kh) fcol = cmix(fcol, kh, 120); }   // per-kind identity
-        if (f->ez > 95.0f) fcol = cmix(fcol, COL_DIM, clampi((int)((f->ez - 95.0f) * 1.1f), 0, 120));  // atmospheric haze: far foes sink into the void
-        if (f->hp * 3 < f->hpmax) fcol = cmix(fcol, COL_RED, 110);   // wounded -> reddens
-        if (f->hitms > 0)         fcol = cmix(fcol, COL_WHITE, 180);  // hit-flash
-        draw_ship3d(x, y, r, f->bank, f->kind, fcol);
+        draw_foe(f, x, y, r);
         if (s_ward_on && order[o] % 3 == 1) {                        // ward hunter: a red chevron to prioritise
             int my = y - r - 9;
-            d.fillTriangle(x - 4, my, x + 4, my, x, my + 5, ((s_anim >> 2) & 1) ? COL_RED : COL_AMBER);
+            G.fillTriangle(x - 4, my, x + 4, my, x, my + 5, ((s_anim >> 2) & 1) ? COL_RED : COL_AMBER);
         }
-        if (f->hitms > 55 && r >= 5) fx3d::dither_disc(x, y, clampi(r + 2, 6, 20), COL_CYAN);  // dithered shield bubble (hit, bounded)
-        if (f->firecd > 0 && f->firecd < 240 && f->ez < 160.0f && !f->strafe) {    // charging to fire: telegraph
-            d.fillCircle(x, y - r / 3, 2 + (f->firecd < 120 ? 1 : 0), ((s_anim >> 1) & 1) ? COL_RED : COL_AMBER);
+        if (f->hitms > 55 && r >= 5) blob(x, y, r + 3, r + 3, FAC_LOOK[fac].glow, 9);          // its shield flares where the hit lands
+        if (charging(f)) {                                            // guns charging: a ring closing in + a hot muzzle
+            float u = f->kind == FOE_ACE ? f->phms / 750.0f : f->firecd / (float)TELE_MS;
+            u = u < 0 ? 0 : u > 1 ? 1 : u;
+            uint16_t c = ((s_anim >> 1) & 1) ? COL_RED : COL_AMBER;
+            int rr = r + 3 + (int)(u * (f->kind == FOE_ACE ? 16 : 10));
+            G.drawCircle(x, y, rr, c);
+            if (f->kind == FOE_ACE) G.drawCircle(x, y, rr + 2, c);
+            G.fillCircle(x, y - r / 4, 1 + (int)((1 - u) * 2), COL_WHITE);
         }
-        if (f->hp < f->hpmax && r >= 5) {
+        if (f->kind != FOE_ACE && f->hp < f->hpmax && r >= 5) {
             int w = r * 2, fw = w * f->hp / f->hpmax;
-            d.drawFastHLine(x - r, y - r - 3, w, rgb(60, 30, 30));
-            d.drawFastHLine(x - r, y - r - 3, fw, COL_RED);
+            G.drawFastHLine(x - r, y - r - 3, w, rgb(60, 30, 30));
+            G.drawFastHLine(x - r, y - r - 3, fw, COL_RED);
         }
     }
 
-    // model-shatter deaths: blow each killed foe's flash model apart into cooling, spinning shards.
+    // mesh-shatter deaths: each killed foe's model blown apart into cooling, spinning shards
     for (int i = 0; i < NDEATH; i++) {
         if (!s_death[i].on) continue;
         float pr  = 1.0f - (float)s_death[i].t / (float)s_death[i].t0;
-        float dsc = (float)s_death[i].r / 1.25f;
-        fx3d::shatter(*ship_model(s_death[i].model), (float)(s_death[i].x + jx), (float)(s_death[i].y + jy),
-                      dsc, s_death[i].yaw + pr * 2.2f, s_death[i].bank, s_death[i].col, pr);
+        shatter_mdl(MDL[fac][s_death[i].model == FOE_HEAVY], s_death[i].x + jx, s_death[i].y + jy, (float)s_death[i].r / 1.25f,
+                    s_death[i].yaw + pr * 2.2f, s_death[i].bank, s_death[i].col, pr);
     }
 
     // player missiles streaking downrange (homing) with a short trail
@@ -2019,9 +2371,9 @@ static void draw_combat(void)
         float sx, sy, sc; if (!project(m->ex, m->ey, m->ez, &sx, &sy, &sc)) continue;
         int x = (int)sx + jx, y = (int)sy + jy;
         float tx2, ty2, tc; if (project(m->ex, m->ey, m->ez - 18.0f, &tx2, &ty2, &tc))
-            d.drawLine((int)tx2 + jx, (int)ty2 + jy, x, y, COL_AMBER);
+            G.drawLine((int)tx2 + jx, (int)ty2 + jy, x, y, COL_AMBER);
         int r = clampi((int)(3.0f * sc), 1, 4);
-        d.fillCircle(x, y, r, COL_WHITE); d.drawCircle(x, y, r + 1, COL_AMBER);
+        G.fillCircle(x, y, r, COL_WHITE); G.drawCircle(x, y, r + 1, COL_AMBER);
     }
     // power-ups: pulsing diamond, colour-coded by kind, drifting in
     for (int i = 0; i < NPU; i++) {
@@ -2029,49 +2381,49 @@ static void draw_combat(void)
         float sx, sy, sc; if (!project(p->ex, p->ey, p->ez, &sx, &sy, &sc)) continue;
         int x = (int)sx + jx, y = (int)sy + jy, r = clampi((int)(6.0f * sc), 3, 11);
         uint16_t c = pu_col(p->kind);
-        d.fillTriangle(x, y - r, x - r, y, x + r, y, c);
-        d.fillTriangle(x, y + r, x - r, y, x + r, y, shade(c, 3, 5));
-        d.drawCircle(x, y, r + 2 + ((s_anim >> 1) & 1), c);
-        d.drawPixel(x, y, COL_WHITE);
+        G.fillTriangle(x, y - r, x - r, y, x + r, y, c);
+        G.fillTriangle(x, y + r, x - r, y, x + r, y, shade(c, 3, 5));
+        G.drawCircle(x, y, r + 2 + ((s_anim >> 1) & 1), c);
+        G.drawPixel(x, y, COL_WHITE);
     }
 
-    // explosions: 3D debris + sparks, shockwave rings, core flash
+    // explosions: smoke, fireball (white -> gold -> orange -> ember), the shock ring; debris + sparks
+    for (int i = 0; i < NSHK; i++) {
+        Shk *s = &s_shk[i]; if (!s->on) continue;
+        float t = 1.0f - (float)s->life / s->life0; int R0 = s->r0, x = (int)s->cx_ + jx, y = (int)s->cy_ + jy;
+        if (t > 0.3f) blob(x, y - (int)(t * 6), (int)(R0 * (0.8f + t)), (int)(R0 * (0.6f + t * 0.8f)), C565(70, 64, 80), (int)(9 * (1 - t)));
+        if (t < 0.55f) {                                              // the fireball: an outer orange skin, a gold body, a white core
+            int rf = (int)(R0 * (0.5f + 1.4f * t));
+            blob(x, y, rf + 3, rf * 7 / 8 + 3, t < 0.3f ? C565(255, 120, 20) : C565(170, 40, 10), 14 - (int)(t * 16));
+            if (t < 0.4f) blob(x, y, rf, rf * 7 / 8, t < 0.2f ? C565(255, 230, 120) : C565(255, 160, 40), 16 - (int)(t * 20));
+            if (t < 0.25f) G.fillCircle(x, y, (int)(rf * (0.6f - t * 2)), COL_WHITE);
+        }
+        int R = (int)(4 + R0 * 3 * t);
+        uint16_t c = t < 0.35f ? COL_WHITE : (t < 0.7f ? s->col : COL_DIM);
+        G.drawCircle(x, y, R, c);
+        if (t < 0.5f) G.drawCircle(x, y, R - 1, c);
+    }
     for (int i = 0; i < NPART; i++) {
         Part *p = &s_part[i]; if (!p->on) continue;
         float fade = (float)p->life / p->life0;
         if (p->kind == PK_STREAK) {
             int x = (int)p->ex + jx, y = (int)p->ey + jy;
-            d.drawLine(x, y, x - (int)(p->vx * 0.03f), y - (int)(p->vy * 0.03f), p->col);
+            G.drawLine(x, y, x - (int)(p->vx * 0.03f), y - (int)(p->vy * 0.03f), p->col);
             continue;
         }
         float sx, sy, sc; if (!project(p->ex, p->ey, p->ez, &sx, &sy, &sc)) continue;
         int x = (int)sx + jx, y = (int)sy + jy;
-        uint16_t c = (p->kind == PK_SPARK) ? p->col
-                   : (fade > 0.6f ? p->col : (fade > 0.3f ? COL_AMBER : COL_DIM));
-        if (p->kind == PK_DEBRIS && sc > 0.6f && fade > 0.5f) d.fillRect(x - 1, y - 1, 2, 2, c);
-        else d.drawPixel(x, y, c);
-    }
-    for (int i = 0; i < NSHK; i++) {
-        Shk *s = &s_shk[i]; if (!s->on) continue;
-        float t = 1.0f - (float)s->life / s->life0; int R = (int)(4 + 44 * t);
-        int x = (int)s->cx_ + jx, y = (int)s->cy_ + jy;
-        uint16_t c = t < 0.4f ? COL_WHITE : (t < 0.7f ? s->col : COL_DIM);
-        d.drawCircle(x, y, R, c);
-        if (t < 0.5f) d.drawCircle(x, y, R - 1, c);
-    }
-    if (s_now < s_flash_until) {                          // localized boom bloom (replaces the old full-frame flash)
-        int x = (int)s_flash_x + jx, y = (int)s_flash_y + jy;
-        tile_dither_ellipse(x, y, s_flash_r0 + 8, s_flash_r0 + 6, tile_c332(COL_AMBER));   // translucent fireball, anchored at the kill
-        d.fillCircle(x, y, s_flash_r0 * 2 / 3, COL_AMBER);
-        d.fillCircle(x, y, s_flash_r0 / 3, COL_WHITE);
+        uint16_t c = (p->kind == PK_SPARK) ? p->col : (fade > 0.6f ? p->col : (fade > 0.3f ? COL_AMBER : C565(110, 40, 20)));
+        if (p->kind == PK_DEBRIS && sc > 0.6f && fade > 0.4f) G.fillRect(x - 1, y - 1, 2, 2, c);
+        else G.drawPixel(x, y, c);
     }
 
-    // targeting-computer box on the locked foe
+    // targeting computer: brackets on the lock and its lead pip (a diamond, filled white while you sit on it)
     if (s_lock >= 0 && s_foe[s_lock].on) {
-        float sx, sy, sc;
+        float sx, sy, sc, lx, ly;
         if (project(s_foe[s_lock].ex, s_foe[s_lock].ey, s_foe[s_lock].ez, &sx, &sy, &sc)) {
-            int x = (int)sx + jx, y = (int)sy + jy, r = clampi((int)(9.0f * sc) + 4, 6, 64);
-            draw_target_box(x, y, r);
+            draw_target_box((int)sx + jx, (int)sy + jy, clampi((int)(9.0f * sc) + 4, 6, 64));
+            if (lead_pip(&s_foe[s_lock], &lx, &ly)) { bool on = on_pip(lx, ly, sc); icon(on ? IC_PIPON : IC_PIP, (int)lx + jx - 3, (int)ly + jy - 3, on ? COL_WHITE : COL_GREEN); }
         }
     }
 
@@ -2079,36 +2431,47 @@ static void draw_combat(void)
     if (s_now < s_fire_flash_until) {
         int ax = (int)s_aimx + jx, ay = (int)s_aimy + jy;
         uint16_t gl = shade(COL_RED, 2, 5);
-        d.drawLine(1, ch - 1, ax, ay, gl);          d.drawLine(W - 2, ch - 1, ax, ay, gl);
-        d.drawLine(3, ch - 1, ax, ay, COL_RED);     d.drawLine(W - 4, ch - 1, ax, ay, COL_RED);
-        d.drawLine(4, ch - 1, ax, ay, COL_AMBER);   d.drawLine(W - 5, ch - 1, ax, ay, COL_AMBER);
-        d.drawLine(5, ch - 1, ax, ay, COL_WHITE);   d.drawLine(W - 6, ch - 1, ax, ay, COL_WHITE);
-        d.fillCircle(ax, ay, 3, COL_WHITE); d.drawCircle(ax, ay, 5, COL_AMBER);   // impact flash
+        G.drawLine(1, ch - 1, ax, ay, gl);          G.drawLine(W - 2, ch - 1, ax, ay, gl);
+        G.drawLine(3, ch - 1, ax, ay, COL_RED);     G.drawLine(W - 4, ch - 1, ax, ay, COL_RED);
+        G.drawLine(4, ch - 1, ax, ay, COL_AMBER);   G.drawLine(W - 5, ch - 1, ax, ay, COL_AMBER);
+        G.drawLine(5, ch - 1, ax, ay, COL_WHITE);   G.drawLine(W - 6, ch - 1, ax, ay, COL_WHITE);
+        G.fillCircle(ax, ay, 3, COL_WHITE); G.drawCircle(ax, ay, 5, COL_AMBER);   // impact flash
     }
     if (s_now < s_muz_until) {                        // gun-port muzzle flash
-        d.fillCircle(3, ch - 3, 5, COL_AMBER);   d.fillCircle(3, ch - 3, 3, COL_WHITE);
-        d.fillCircle(W - 4, ch - 3, 5, COL_AMBER); d.fillCircle(W - 4, ch - 3, 3, COL_WHITE);
+        G.fillCircle(3, ch - 3, 5, COL_AMBER);   G.fillCircle(3, ch - 3, 3, COL_WHITE);
+        G.fillCircle(W - 4, ch - 3, 5, COL_AMBER); G.fillCircle(W - 4, ch - 3, 3, COL_WHITE);
     }
 
     draw_reticle((int)s_aimx + jx, (int)s_aimy + jy, s_lock >= 0);
     if (s_now < s_hitmark_until) {                        // hitmarker: four ticks confirm a damaging hit
         int ax = (int)s_aimx + jx, ay = (int)s_aimy + jy;
-        d.drawLine(ax - 8, ay - 8, ax - 4, ay - 4, COL_WHITE); d.drawLine(ax + 8, ay - 8, ax + 4, ay - 4, COL_WHITE);
-        d.drawLine(ax - 8, ay + 8, ax - 4, ay + 4, COL_WHITE); d.drawLine(ax + 8, ay + 8, ax + 4, ay + 4, COL_WHITE);
+        G.drawLine(ax - 8, ay - 8, ax - 4, ay - 4, COL_WHITE); G.drawLine(ax + 8, ay - 8, ax + 4, ay - 4, COL_WHITE);
+        G.drawLine(ax - 8, ay + 8, ax - 4, ay + 4, COL_WHITE); G.drawLine(ax + 8, ay + 8, ax + 4, ay + 4, COL_WHITE);
     }
-    // shield-absorb ripples on the canopy
+    // shield ripples where a hit was soaked: two rings and a stippled flare spreading over the canopy
     for (int i = 0; i < NRIP; i++) {
         if (!s_rip[i].on) continue;
-        float t = 1.0f - (float)s_rip[i].life / s_rip[i].life0; int R = (int)(4 + 16 * t);
-        d.drawCircle(s_rip[i].x + jx, s_rip[i].y + jy, R, t < 0.5f ? COL_CYAN : COL_DIM);
+        float t = 1.0f - (float)s_rip[i].life / s_rip[i].life0; int R = (int)(4 + 13 * t);
+        int x = s_rip[i].x + jx, y = s_rip[i].y + jy;
+        if (t < 0.5f) blob(x, y, R, R * 2 / 3, COL_CYAN, 8 - (int)(t * 14));
+        G.drawEllipse(x, y, R, R * 2 / 3, t < 0.5f ? COL_CYAN : COL_DIM);
+        if (R > 6) G.drawEllipse(x, y, R - 4, (R - 4) * 2 / 3, shade(COL_CYAN, 2, 3));
     }
     draw_cockpit(ch);
+    draw_radar(ch);
     if (s_now < s_hullvig_until || s_now < s_shieldvig_until) {   // translucent edge flash: hull red / shield cyan
         uint8_t vc = tile_c332(s_now < s_hullvig_until ? COL_RED : COL_CYAN);
         int t0 = (int)top;
         tile_dither_rect(0, t0, W, 6, vc); tile_dither_rect(0, ch - 6, W, 6, vc);
         tile_dither_rect(0, t0 + 6, 6, ch - t0 - 12, vc); tile_dither_rect(W - 6, t0 + 6, 6, ch - t0 - 12, vc);
-        if (s_now < s_hullvig_until) d.drawRect(0, t0, W, ch - t0, COL_RED);
+        if (s_now < s_hullvig_until) G.drawRect(0, t0, W, ch - t0, COL_RED);
+    }
+    if (s_now < s_fx->dmg_until) {                        // damage direction: arcs around the centre toward the shooter
+        float u = (float)(s_fx->dmg_until - s_now) / 650.0f;
+        int deg = (int)(s_fx->dmg_ang * 57.2958f), R = 40 + (int)((1.0f - u) * 6);
+        uint16_t c = s_fx->dmg_hull ? COL_RED : COL_CYAN;
+        G.drawArc(CX, (int)s_cy, R, R - 2, deg - 24, deg + 24, c);
+        if (u > 0.45f) G.drawArc(CX, (int)s_cy, R + 5, R + 4, deg - 13, deg + 13, c);
     }
 
     // off-screen enemy arrows: point toward any foe outside the frame (red if it's closing fast). Steady
@@ -2122,53 +2485,74 @@ static void draw_combat(void)
     // hull-critical: a slow red border breath (distinct from the momentary hit vignette above) — a
     // peripheral "you're dying" cue that doesn't block the view.
     if (g.hull_max && g.hull * 100 / g.hull_max < 25 && ((s_anim >> 2) & 3) < 2)
-        d.drawRect(0, (int)top, W, ch - (int)top, rgb(150, 30, 28));
+        G.drawRect(0, (int)top, W, ch - (int)top, rgb(150, 30, 28));
 
-    // HUD band: shield / hull / boost / missiles / wave|ward / kills (+ combo). Bars are outlined and the
-    // shield/hull labels+bars BLINK when critical, so a glance tells you you're hurt. Steady, not jittered.
-    d.fillRect(0, 0, W, 13, COL_SPACE);
-    d.drawFastHLine(0, 13, W, rgb(40, 50, 80));
-    char b[28];
+    // HUD band: shield / hull gauges, boost, missiles, wave (or the ward's gauge), kills. Icons, not letters;
+    // the shield and hull gauges BLINK when critical. Steady, not jittered.
+    G.fillRect(0, 0, W, 13, COL_SPACE);
+    G.drawFastHLine(0, 13, W, FAC_LOOK[fac].trim);
+    char b[48];
     bool blink = ((s_anim >> 2) & 1);
     int spct = s_shieldmax ? s_shield * 100 / s_shieldmax : 0;
     int hpct = g.hull_max ? g.hull * 100 / g.hull_max : 0;
     uint16_t sc_col = (spct <= 0) ? (blink ? COL_RED : COL_DIM) : COL_CYAN;
     uint16_t hc_col = (hpct < 30) ? (blink ? COL_RED : COL_AMBER) : COL_GREEN;
-    text_at(3, 3, 1, sc_col, "S");
-    mini_bar(11, 4, 26, 6, spct, sc_col);
-    d.drawRoundRect(11, 4, 26, 6, 1, rgb(40, 50, 80));
-    text_at(41, 3, 1, (hpct < 30 && blink) ? COL_RED : COL_GREY, "H");
-    mini_bar(49, 4, 26, 6, hpct, hc_col);
-    d.drawRoundRect(49, 4, 26, 6, 1, rgb(40, 50, 80));
-    snprintf(b, sizeof b, "B%d", s_throttle10); text_at(79, 3, 1, COL_AMBER, b);
+    icon(IC_SHIELD, 2, 3, sc_col);  bar_cells(11, 4, 34, spct, sc_col);
+    icon(IC_HULL, 49, 3, hc_col);   bar_cells(58, 4, 34, hpct, hc_col);
+    icon(IC_BOOST, 96, 3, COL_AMBER);
+    for (int i = 0; i < 5; i++) G.fillRect(106 + i * 3, 9 - i, 2, 2 + i, s_throttle10 > i * 2 ? COL_AMBER : COL_TRACK);
     for (int i = 0; i < NMSL; i++) {                       // missile pips: filled = ready to fire
-        int mx = 99 + i * 7;
-        if (i < s_msl_ammo) d.fillTriangle(mx, 3, mx, 11, mx + 5, 7, COL_AMBER);
-        else                d.drawTriangle(mx, 3, mx, 11, mx + 5, 7, COL_DIM);
+        int mx = 124 + i * 7;
+        if (i < s_msl_ammo) G.fillTriangle(mx, 3, mx, 11, mx + 5, 7, COL_AMBER);
+        else                G.drawTriangle(mx, 3, mx, 11, mx + 5, 7, COL_DIM);
     }
-    if (s_now < s_rapid_until) d.drawFastHLine(99, 12, 19, COL_PURPLE);   // rapid-fire active
+    if (s_now < s_rapid_until) G.drawFastHLine(124, 12, 19, COL_PURPLE);   // rapid-fire active
     if (s_ward_on) {
         int wpct = s_ward_max ? s_ward_hp * 100 / s_ward_max : 0;
-        text_at(126, 3, 1, (wpct < 35 && blink) ? COL_RED : COL_GREEN, s_cc.type == MT_DEFEND ? GT("FAR", "BCN") : "CNV");
-        mini_bar(150, 4, 24, 6, wpct, wpct < 35 ? COL_RED : COL_GREEN);
-        d.drawRoundRect(150, 4, 24, 6, 1, rgb(40, 50, 80));
+        uint16_t wc = wpct < 35 ? (blink ? COL_RED : COL_AMBER) : COL_GREEN;
+        if (s_cc.type == MT_DEFEND) draw_spire(151, 11, 9, true); else icon(IC_CARGO, 148, 3, wc);
+        bar_cells(158, 4, 30, wpct, wc);
     } else {
-        snprintf(b, sizeof b, "%s%d/%d", GT("O", "W"), s_wave, s_cc.waves);
-        text_at(128, 3, 1, COL_GREY, b);
+        icon(IC_WAVE, 148, 3, COL_GREY);
+        snprintf(b, sizeof b, "%d/%d", s_wave, s_cc.waves); text_at(158, 3, 1, COL_GREY, b);
     }
-    snprintf(b, sizeof b, "K%d", s_kills); text_at(226 - (int)strlen(b) * 6, 3, 1, COL_AMBER, b);
-    if (s_combo > 1 && s_now < s_combo_until) {            // arcade combo meter, under the kill count
-        snprintf(b, sizeof b, "x%d", s_combo);
-        text_at(226 - (int)strlen(b) * 6, 16, 1, blink ? COL_WHITE : COL_PURPLE, b);
+    snprintf(b, sizeof b, "%d", s_kills);
+    int kw = (int)strlen(b) * 6;
+    text_at(237 - kw, 3, 1, COL_AMBER, b); icon(IC_KILL, 228 - kw, 3, COL_AMBER);
+
+    // under the HUD: the ace's radio line, else the ace's name + hp (a duel bar), else the objective (+ combo)
+    const Foe *ace = nullptr;
+    for (int i = 0; i < NFOE; i++) if (s_foe[i].on && s_foe[i].kind == FOE_ACE) ace = &s_foe[i];
+    if (s_now < s_fx->comm_until && s_fx->comm_id <= NACE) {
+        int id = s_fx->comm_id;
+        tile_dither_rect(0, 14, W, 20, 0x00);
+        text_sh(4, 16, id < NACE ? COL_GOLD : FAC_LOOK[F_ECO].glow, id < NACE ? ACE_NAME[id] : giver(F_ECO));
+        text_sh(10, 25, COL_WHITE, lp(ACE_QUIP[id]));
+    } else if (ace && s_fx->ace_id < NACE) {
+        text_sh(4, 16, COL_GOLD, ACE_NAME[s_fx->ace_id]);
+        int bx = 10 + (int)strlen(ACE_NAME[s_fx->ace_id]) * 6, bw = W - 4 - bx;
+        G.fillRect(bx, 18, bw, 4, C565(60, 20, 20));
+        G.fillRect(bx, 18, bw * clampi(ace->hp, 0, ace->hpmax) / (ace->hpmax ? ace->hpmax : 1), 4, ace_immune(ace) ? COL_GOLD : COL_RED);
+    } else {
+        objective(b, sizeof b);
+        text_sh(4, 16, COL_GREY, b);
+        if (s_combo > 1 && s_now < s_combo_until) {            // arcade combo meter, right
+            snprintf(b, sizeof b, "x%d", s_combo);
+            text_sh(236 - (int)strlen(b) * 6, 16, blink ? COL_WHITE : COL_PURPLE, b);
+        }
     }
 
-    if (s_cmsg[0]  && s_now < s_cmsg_until) { tile_dither_rect(0, ch / 2 - 8, W, 24, 0x00); center(ch / 2 - 4, 2, COL_CYAN, s_cmsg); }
-    if (s_toast[0] && s_now < s_toast_until) center(ch / 2 + 16, 1, COL_GREEN, s_toast);
+    if (s_fx->cmsg[0] && s_now < s_fx->cmsg_until) {
+        tile_dither_rect(0, ch / 2 - 13, W, 24, 0x00);
+        gui::text(s_fx->cmsg, W / 2, ch / 2 - 10, 1, gui::text_width(s_fx->cmsg, gui::F_TITLE) <= W - 8 ? gui::F_TITLE : gui::F_BODY,
+                  s_fx->ace_id < NACE && !strcmp(s_fx->cmsg, ACE_NAME[s_fx->ace_id]) ? COL_GOLD : COL_CYAN, 0x0000);
+    }
+    if (s_fx->toast[0] && s_now < s_fx->toast_until) center(ch / 2 + 16, 1, COL_GREEN, s_fx->toast);
     if (s_now - s_combat_t0 < 3500)          // opening control legend (the hint footer is hidden in combat)
     {
-        tile_dither_rect(10, ch - 38, W - 20, 26, 0x00);
-        center(ch - 34, 1, COL_WHITE, GT("Frecce mira   A fuoco   S missile", "Arrows aim   A fire   S missile"));
-        center(ch - 24, 1, COL_GREY, GT("Esc due volte: fuga", "Esc twice: flee"));
+        tile_dither_rect(22, ch - 34, W - 44, 24, 0x00);
+        center(ch - 31, 1, COL_WHITE, GT("Frecce mira   A fuoco   S missile", "Arrows aim   A fire   S missile"));
+        center(ch - 21, 1, COL_GREY, GT("Esc due volte: fuga", "Esc twice: flee"));
     }
 }
 
@@ -2177,10 +2561,11 @@ static int s_elig[NMISS_PER_SYS];   // cached eligible-mission indices (set in d
 // `n` rarity pips (small diamonds) right-aligned ending at xr; n=0 (Common) draws nothing.
 static void draw_stars(int xr, int y, int n, uint16_t col)
 {
+    LovyanGFX &G = d;
     for (int i = 0; i < n; i++) {
         int cx = xr - 3 - i * 8;
-        d.fillTriangle(cx, y, cx - 3, y + 3, cx + 3, y + 3, col);
-        d.fillTriangle(cx, y + 6, cx - 3, y + 3, cx + 3, y + 3, col);
+        G.fillTriangle(cx, y, cx - 3, y + 3, cx + 3, y + 3, col);
+        G.fillTriangle(cx, y + 6, cx - 3, y + 3, cx + 3, y + 3, col);
     }
 }
 static void miss_row_fn(int idx, int bx, int by, int bw, int bh, int tier)
@@ -2206,66 +2591,99 @@ static void miss_row_fn(int idx, int bx, int by, int bw, int bh, int tier)
 static void draw_missions(void)
 {
     int ch = nucleo_app_content_height();
-    d.fillRect(0, 0, W, ch, COL_SPACE);
-    stars_draw(ch);
+    sky(ch);
     title_band(GT("MISSIONI", "MISSIONS"), SYSTEMS[g.sys].name);
     int n = eligible_missions(s_elig);
     if (n == 0) { center(56, 2, COL_DIM, GT("Nessun contratto", "No contracts")); return; }
     if (s_misssel >= n) s_misssel = n - 1;
     list_fisheye(s_misssel, n, 28, 120, miss_row_fn);
 }
+// The briefing, as the contract's giver hands it over: a header in the offering faction's tone (emblem, the
+// contract name in its rarity colour), who is talking and the rarity, the brief, then intel / hostiles / pay, then
+// the two choices. Every line is measured against the card, so no language spills out of it.
+static void line_fit(int x, int y, int maxw, uint16_t col, const char *s)
+{
+    if ((int)strlen(s) * 6 > maxw) OVERFLOW();
+    char b[48]; snprintf(b, sizeof b, "%.*s", clampi(maxw / 6, 1, 47), s);
+    text_at(x, y, 1, col, b);
+}
 static void draw_brief(void)
 {
+    LovyanGFX &G = d;
     int ch = nucleo_app_content_height();
-    d.fillRect(0, 0, W, ch, COL_SPACE);
-    stars_draw(ch);
+    sky(ch);
     const Mission *m = cur_mission(s_pick);                // also fills s_fv
+    int of = m->offer_fac & 3;
     uint16_t rc = fv_rarcol(s_fv.rarity);
-    d.fillRoundRect(6, 2, 228, 116, 6, COL_PANEL);
-    d.drawRoundRect(6, 2, 228, 116, 6, rc);               // panel border tinted by rarity
-    label(14, 4, 150, rc, m->name);
-    text_vr(228, 6, 8, 1, rc, lp(FV_RARNAME[s_fv.rarity]));   // rarity name, top-right
-    draw_wrapped_n(14, 24, 212, 11, COL_WHITE, m->brief, 3);   // flavored brief (y24..57)
+    gui::panel(4, 1, W - 10, ch - 4, gui::mix(COL_SPACE, FAC_LOOK[of].deep, 110), rc);
+    gui::vgradient(6, 3, W - 14, 18, FAC_LOOK[of].deep, gui::mix(COL_SPACE, FAC_LOOK[of].deep, 110));
+    draw_emblem(16, 12, 6, of);
+    label(26, 3, W - 14 - 26 - 4, rc, m->name);
     char b[72];
-    // intel line: named target (bounty) or gang, then any combat modifiers — clamped to the panel.
+    snprintf(b, sizeof b, "%s:", giver(of));
+    text_at(12, 23, 1, FAC_LOOK[of].glow, b);
+    text_vr(W - 12, 23, 8, 1, rc, lp(FV_RARNAME[s_fv.rarity]));
+    draw_wrapped_n(12, 33, W - 24, 10, COL_WHITE, m->brief, 3);   // flavored brief (y33..62)
+    // intel: the named target (bounty) or the gang, then the modifiers that still fit the line
     int li = s_fv.has_enemy ? snprintf(b, sizeof b, "%s: %s", GT("Bersaglio", "Target"), s_mt->target)
                             : snprintf(b, sizeof b, "%s: %s", GT("Banda", "Gang"), lp(FV_GANG[s_fv.gang]));
-    for (int i = 0; i < s_fv.nmod && li > 0 && li < (int)sizeof b - 1; i++)
-        li += snprintf(b + li, sizeof b - li, " . %s", lp(FV_MODS[s_fv.mod[i]]));
-    if ((int)strlen(b) > 35) b[35] = 0;                   // keep it inside the panel width
-    text_at(14, 59, 1, COL_CYAN, b);
+    for (int i = 0; i < s_fv.nmod; i++) {
+        const char *md = lp(FV_MODS[s_fv.mod[i]]);
+        if (li + 3 + (int)strlen(md) <= 35) li += snprintf(b + li, sizeof b - li, " . %s", md);
+    }
+    line_fit(12, 64, W - 24, COL_CYAN, b);
     snprintf(b, sizeof b, "%s: %d x%d%s  vs %s", GT("Ostili", "Hostiles"),
              m->waves, m->per_wave, m->ace ? GT(" +ASSO", " +ACE") : "", lp(FAC_NAME[m->foe_fac]));
-    text_at(14, 70, 1, COL_GREY, b);
-    if (m->offer_fac >= 0)
-        snprintf(b, sizeof b, "%s %d cr (+%d/%s)  %s +%d", GT("Paga", "Pay"), m->reward_cr,
-                 m->kill_cr, GT("abb", "kill"), lp(FAC_NAME[m->offer_fac]), m->rep_gain);
-    else
-        snprintf(b, sizeof b, "%s %d cr (+%d/%s)", GT("Paga", "Pay"), m->reward_cr, m->kill_cr, GT("abb", "kill"));
-    text_at(14, 81, 1, COL_AMBER, b);
+    line_fit(12, 74, W - 24, COL_GREY, b);
+    snprintf(b, sizeof b, "%s %d cr (+%d/%s)  %s +%d", GT("Paga", "Pay"), m->reward_cr, m->kill_cr, GT("abb", "kill"),
+             lp(FAC_NAME[of]), m->rep_gain);
+    if ((int)strlen(b) * 6 > W - 24) snprintf(b, sizeof b, "%s %d cr  %s +%d", GT("Paga", "Pay"), m->reward_cr, lp(FAC_NAME[of]), m->rep_gain);
+    line_fit(12, 84, W - 24, COL_AMBER, b);
     const char *opt[2] = { GT("Accetta e lancia", "Accept & launch"), GT("Annulla", "Decline") };
-    int oy = 95;
     for (int i = 0; i < 2; i++) {
+        int oy = 95 + i * 12;
         bool sel = (i == s_briefsel);
-        if (sel) { d.fillRoundRect(12, oy, 216, 11, 3, COL_FOCUS); d.fillRect(12, oy + 2, ACC_W, 7, COL_FOCUS2); }
-        text_vc(20, oy, 11, 1, sel ? COL_WHITE : COL_GREY, opt[i]);
-        oy += 12;
+        if (sel) { G.fillRoundRect(10, oy, W - 22, 11, 3, gui::mix(COL_SPACE, FAC_LOOK[of].glow, 70)); G.fillRect(10, oy + 2, ACC_W, 7, FAC_LOOK[of].glow); }
+        text_vc(18, oy, 11, 1, sel ? COL_WHITE : COL_GREY, opt[i]);
     }
 }
+// The debrief: the verdict in the title face, the giver's line, then a card with kills, pay, the reputation that
+// moved and — if one fell — the ace's name.
 static void draw_debrief(void)
 {
+    LovyanGFX &G = d;
     int ch = nucleo_app_content_height();
-    d.fillRect(0, 0, W, ch, COL_SPACE);
-    stars_draw(ch);
+    sky(ch);
     bool win = (s_result == 1);
-    center(14, 3, win ? COL_CYAN : COL_RED, win ? GT("VITTORIA", "VICTORY") : GT("RITIRATA", "RETREAT"));
-    if (win && s_mission >= 0) draw_wrapped_n(MARGIN, 44, CW, 10, COL_WHITE, cur_mission(s_mission)->win, 2);
-    char b[40];
+    const char *v = win ? GT("VITTORIA", "VICTORY") : GT("RITIRATA", "RETREAT");
+    int tw = gui::text(v, W / 2, 3, 1, gui::F_TITLE, win ? COL_GOLD : COL_RED, C565(40, 20, 0));
+    G.fillRect(W / 2 - tw / 2, 26, tw, 2, win ? COL_GOLD : COL_RED);
+    if (win && s_mission >= 0) draw_wrapped_n(MARGIN, 33, CW, 10, COL_WHITE, cur_mission(s_mission)->win, 2);
+    bool rep = win && s_cc.rep_fac >= 0, acedown = s_fx->ace_down && s_fx->ace_id < NACE;
+    int cy = 56;                                           // the card is as tall as what it has to say
+    gui::panel(MARGIN, cy, CW, 24 + (rep ? 12 : 0) + (acedown ? 12 : 0), gui::mix(COL_SPACE, FAC_LOOK[cur_fac()].deep, 120), FAC_LOOK[cur_fac()].glow);
+    char b[48];
+    icon(IC_KILL, MARGIN + 6, cy + 6, COL_AMBER);
     snprintf(b, sizeof b, "%s: %d", GT("Abbattuti", "Kills"), s_mkills);
-    center(72, 2, COL_GREY, b);
+    text_at(MARGIN + 16, cy + 6, 1, COL_GREY, b);
     snprintf(b, sizeof b, "+%d cr", s_earn_cr);
-    center(92, 2, COL_AMBER, b);
-    center(112, 1, COL_DIM, GT("- INVIO continua -", "- ENTER continue -"));
+    gui::text(b, W - MARGIN - 6, cy + 2, 2, gui::F_BODY, COL_AMBER, 0x0000);
+    int y = cy + 22;
+    if (rep) {                                             // the reputation that moved
+        draw_emblem(MARGIN + 9, y + 3, 4, s_cc.rep_fac);
+        snprintf(b, sizeof b, "%s +%d", lp(FAC_NAME[s_cc.rep_fac & 3]), s_cc.rep_gain);
+        text_at(MARGIN + 17, y, 1, COL_GREEN, b);
+        if (s_cc.enemy_rep_fac >= 0) {
+            draw_emblem(W / 2 + 8, y + 3, 4, s_cc.enemy_rep_fac);
+            snprintf(b, sizeof b, "%s -%d", lp(FAC_NAME[s_cc.enemy_rep_fac & 3]), s_cc.enemy_rep_loss);
+            text_at(W / 2 + 16, y, 1, COL_RED, b);
+        }
+        y += 12;
+    }
+    if (acedown) {                                         // a named ace fell to you
+        for (int i = 0; i < 2; i++) { G.drawLine(MARGIN + 6, y + i * 3, MARGIN + 10, y + 3 + i * 3, COL_GOLD); G.drawLine(MARGIN + 10, y + 3 + i * 3, MARGIN + 14, y + i * 3, COL_GOLD); }
+        text_at(MARGIN + 18, y + 1, 1, COL_GOLD, ACE_NAME[s_fx->ace_id]);
+    }
 }
 
 // ============================ screens: title / settings ======================
@@ -2277,17 +2695,41 @@ static int title_items(int *act)   // returns count; fills action ids
     act[n++] = 2;                   // Settings
     return n;
 }
+// The title: a painted night — a violet sky, a nebula, a lit ocean world rising at the bottom, and at the top
+// right a lit beacon spire threading gold light out into the dark, the Lucciola on its way to it. Static: it
+// repaints only on input (battery), so the painting costs nothing while you read the menu.
 static void draw_title(void)
 {
+    LovyanGFX &G = d;
     int ch = nucleo_app_content_height();
-    int y = gui::title(GT("Costellazioni", "Constellations"), GT("Mercante tra le stelle", "Trader among the stars"), COL_CYAN);
-    draw_ship(26, 16, 3, COL_AMBER);                           // the Lucciola and a far world flank the title
-    draw_planet(W - 24, 17, 10, 0);
+    gui::vgradient(0, 0, W, ch, C565(0, 0, 24), C565(40, 8, 70));
+    blob(184, 30, 80, 30, C565(110, 40, 160), 7);
+    blob(204, 22, 44, 16, C565(50, 150, 200), 5);
+    blob(156, 44, 64, 5, C565(0, 0, 24), 9);
+    for (int i = 0; i < NSTAR; i++) {
+        int x = star[i].x, y = star[i].y % ch;
+        G.drawPixel(x, y, star[i].layer == 2 ? COL_WHITE : star[i].layer ? COL_GREY : COL_DIM);
+        if (star[i].layer == 2 && (star[i].tw & 7) == 0) { G.drawFastHLine(x - 2, y, 5, COL_GREY); G.drawFastVLine(x, y - 2, 5, COL_GREY); }
+    }
+    paint_world(34, ch + 36, 60, WD_OCEAN, 0.6f, -0.62f);
+    G.drawArc(34, ch + 36, 62, 61, 252, 320, C565(120, 200, 255));
+    int sx = W - 14, sy = 46;                                   // the beacon and its threads to far, lit stars
+    G.drawLine(sx, sy - 40, W - 1, 6, COL_THREAD); G.drawLine(sx, sy - 40, sx - 30, 2, COL_GOLD);
+    G.drawLine(sx, sy - 40, W - 4, sy - 10, COL_GOLD);
+    draw_spire(sx, sy, 40, true);
+    draw_ship(28, 13, 3, COL_AMBER);                             // the Lucciola, engines lit
+    blob(16, 13, 6, 3, C565(255, 200, 80), 9);
+    int tw = gui::text(GT("Costellazioni", "Constellations"), W / 2, 3, 1, gui::F_TITLE, COL_WHITE, C565(60, 20, 90));
+    G.fillRect(W / 2 - tw / 2, 25, tw, 2, COL_GOLD);
+    G.drawFastHLine(W / 2 - tw / 2 - 6, 25, 6, C565(120, 80, 30)); G.drawFastHLine(W / 2 + tw / 2, 25, 6, C565(120, 80, 30));
+    const char *sub = GT("Mercante tra le stelle", "Trader among the stars");
+    if (gui::text_width(sub, gui::F_SMALL) <= W - 50) gui::text(sub, W / 2, 28, 1, gui::F_SMALL, C565(255, 220, 150), 0x0000);
+    else center(31, 1, C565(255, 220, 150), sub);
     int act[4]; int n = title_items(act);
     const char *items[3];
     for (int i = 0; i < n; i++)
         items[i] = act[i] == 0 ? GT("Continua", "Continue") : act[i] == 1 ? GT("Nuova partita", "New game") : GT("Impostazioni", "Settings");
-    gui::menu(s_tmenu, items, n, y, ch - (s_save_bad ? 10 : 0), COL_CYAN);
+    gui::menu(s_tmenu, items, n, 46, ch - (s_save_bad ? 10 : 0), COL_GOLD);
     if (s_save_bad) center(ch - 10, 1, COL_RED, GT("Salvataggio illeggibile", "Save file unreadable"));
 }
 // Settings rows. The TILT row exists only on the Cardputer ADV (it owns a BMI270); on the original
@@ -2310,70 +2752,95 @@ static void draw_settings(void)
 // ============================ screens: map ===================================
 static int map_x(int lx) { return 12 + lx * 216 / 100; }
 static int map_y(int ly) { return 18 + ly * 99 / 100; }
+// The beacon threads (lore.md): a sector's beacons are joined by their minimum spanning tree — what is left of the
+// Costellatori's network. A thread shines gold only while BOTH its beacons are lit; otherwise it is a dim, broken
+// line. Fills e[k] = { a, b } (system indices); returns the count (<= NSYS - 1).
+static int map_threads(uint8_t (*e)[2])
+{
+    int id[NSYS], n = 0, ne = 0;
+    bool in[NSYS] = { false };
+    for (int i = 0; i < NSYS; i++) if (SYSTEMS[i].beacon) id[n++] = i;
+    in[0] = true;
+    for (int k = 1; k < n; k++) {                                // Prim, on at most a handful of beacons
+        float best = 1e9f; int ba = 0, bb = 0;
+        for (int a = 0; a < n; a++) if (in[a]) for (int b = 0; b < n; b++) if (!in[b]) {
+            float dd = sys_dist(id[a], id[b]);
+            if (dd < best) { best = dd; ba = a; bb = b; }
+        }
+        in[bb] = true; e[ne][0] = (uint8_t)id[ba]; e[ne][1] = (uint8_t)id[bb]; ne++;
+    }
+    return ne;
+}
 static void draw_map(void)
 {
+    LovyanGFX &G = d;
     int ch = nucleo_app_content_height();
-    d.fillRect(0, 0, W, ch, COL_SPACE);
+    G.fillRect(0, 0, W, ch, COL_SPACE);
+    uint32_t hh = pg_hash3(g.seed ^ 0x6A11u, g.sector, 0);       // the sector's own dust (visual hash)
+    blob(50 + (int)(hh % 140), 40 + (int)((hh >> 8) % 50), 80, 24, C565(24, 10, 60), 8);
+    blob(40 + (int)((hh >> 16) % 160), 50 + (int)((hh >> 24) % 40), 50, 18, C565(0, 30, 50), 6);
     stars_draw(ch);
     draw_hud();
 
-    int cx = map_x(SYSTEMS[g.sys].x), cy = map_y(SYSTEMS[g.sys].y);
-    // routes within range
-    for (int i = 0; i < NSYS; i++) {
-        if (i == g.sys) continue;
-        float dd = sys_dist(g.sys, i);
-        if (dd > g.jump_range) continue;
-        int x = map_x(SYSTEMS[i].x), y = map_y(SYSTEMS[i].y);
-        bool ok = g.fuel >= jump_cost(dd);
-        uint16_t lc = ok ? rgb(40, 70, 110) : rgb(60, 30, 30);
-        for (int s = 0; s < 10; s++) {                 // dashed
-            int xa = cx + (x - cx) * s / 10, ya = cy + (y - cy) * s / 10;
-            int xb = cx + (x - cx) * (s * 2 + 1) / 20, yb = cy + (y - cy) * (s * 2 + 1) / 20;
-            d.drawLine(xa, ya, xb, yb, lc);
-        }
+    uint8_t e[NSYS][2]; int ne = map_threads(e);
+    for (int k = 0; k < ne; k++) {
+        int a = e[k][0], b = e[k][1];
+        int xa = map_x(SYSTEMS[a].x), ya = map_y(SYSTEMS[a].y), xb = map_x(SYSTEMS[b].x), yb = map_y(SYSTEMS[b].y);
+        if (lit_beacon(a) && lit_beacon(b)) {                    // a living thread: gold, glowing, light running along it
+            G.drawLine(xa, ya + 1, xb, yb + 1, C565(140, 100, 0));
+            G.drawLine(xa, ya, xb, yb, COL_THREAD);
+            int t = (int)((s_anim * 3 + k * 37) % 100);
+            G.fillRect(xa + (xb - xa) * t / 100 - 1, ya + (yb - ya) * t / 100 - 1, 2, 2, COL_WHITE);
+        } else for (int s = 0; s < 12; s++) if ((s * 7 + a * 3 + b) % 5)        // a dead one: dim, broken
+            G.drawLine(xa + (xb - xa) * s / 12, ya + (yb - ya) * s / 12, xa + (xb - xa) * (2 * s + 1) / 24, ya + (yb - ya) * (2 * s + 1) / 24, C565(60, 66, 100));
     }
-    // systems
-    for (int i = 0; i < NSYS; i++) {
+    int cx = map_x(SYSTEMS[g.sys].x), cy = map_y(SYSTEMS[g.sys].y);
+    bool tsel = s_target >= 0 && s_target != g.sys;
+    float dd = tsel ? sys_dist(g.sys, s_target) : 0;
+    int cost = jump_cost(dd);
+    bool reach = tsel && dd <= g.jump_range && g.fuel >= cost;
+    if (tsel) {                                                  // the route: marching dashes, amber if you can fly it
+        int x1 = map_x(SYSTEMS[s_target].x), y1 = map_y(SYSTEMS[s_target].y);
+        int L = (abs(x1 - cx) > abs(y1 - cy) ? abs(x1 - cx) : abs(y1 - cy)) / 3 + 1;
+        for (int s = 0; s < L; s++) if ((s + (int)(s_anim / 2)) % 3)
+            G.drawLine(cx + (x1 - cx) * s / L, cy + (y1 - cy) * s / L, cx + (x1 - cx) * (s + 1) / L, cy + (y1 - cy) * (s + 1) / L, reach ? COL_AMBER : COL_RED);
+    }
+    for (int i = 0; i < NSYS; i++) {                            // systems: a star in its faction's colour, spires on beacons
         int x = map_x(SYSTEMS[i].x), y = map_y(SYSTEMS[i].y);
         uint16_t c = faction_col(SYSTEMS[i].faction);
-        tile_dither_ellipse(x, y, 7, 7, tile_c332(shade(c, 3, 4)));
-        if (SYSTEMS[i].beacon) {
-            bool lit = (g.beacon_lit & bit(i)) != 0;
-            d.drawCircle(x, y, 5, lit ? COL_CYAN : rgb(120, 50, 50));
+        blob(x, y, 6, 6, c, 7);
+        G.fillRect(x - 1, y - 1, 3, 3, c); G.drawPixel(x, y, COL_WHITE);
+        if (SYSTEMS[i].beacon) draw_spire(x + 6, y + 4, 12, lit_beacon(i));
+        if (i != g.sys && sys_dist(g.sys, i) <= g.jump_range) {   // in jump range: four ticks
+            uint16_t rc = g.fuel >= jump_cost(sys_dist(g.sys, i)) ? C565(60, 140, 90) : C565(110, 50, 50);
+            G.drawFastHLine(x - 8, y, 2, rc); G.drawFastHLine(x + 7, y, 2, rc); G.drawFastVLine(x, y - 8, 2, rc); G.drawFastVLine(x, y + 7, 2, rc);
         }
-        d.fillCircle(x, y, 3, c);
     }
-    // current system pulse + ship
-    int pr = 6 + (int)((s_anim / 3) % 4);
-    d.drawCircle(cx, cy, pr, COL_GREEN);
+    G.drawCircle(cx, cy, 6 + (int)((s_anim / 3) % 4), COL_GREEN);   // you are here
     draw_ship(cx, cy - 1, 2, COL_WHITE);
-    // selected target reticle + info card
-    if (s_target >= 0 && s_target != g.sys) {
-        int x = map_x(SYSTEMS[s_target].x), y = map_y(SYSTEMS[s_target].y);
-        int o = 7 + (int)((s_anim / 2) % 3);
-        uint16_t rc = COL_AMBER;
-        d.drawLine(x - o, y - o, x - o + 3, y - o, rc); d.drawLine(x - o, y - o, x - o, y - o + 3, rc);
-        d.drawLine(x + o, y - o, x + o - 3, y - o, rc); d.drawLine(x + o, y - o, x + o, y - o + 3, rc);
-        d.drawLine(x - o, y + o, x - o + 3, y + o, rc); d.drawLine(x - o, y + o, x - o, y + o - 3, rc);
-        d.drawLine(x + o, y + o, x + o - 3, y + o, rc); d.drawLine(x + o, y + o, x + o, y + o - 3, rc);
-
-        float dd = sys_dist(g.sys, s_target);
-        int cost = jump_cost(dd);
-        bool reach = (dd <= g.jump_range) && (g.fuel >= cost);
-        d.fillRoundRect(MARGIN, 89, CW, 28, 4, COL_PANEL);
-        d.drawRoundRect(MARGIN, 89, CW, 28, 4, COL_FOCUS2);
-        const char *nm = SYSTEMS[s_target].name;
-        char b[40];
-        snprintf(b, sizeof b, "%s %d  %s %d", GT("cel", "cel"), cost, GT("dist", "dist"), (int)dd);
-        int vw = (int)strlen(b) * 6;
-        label(14, 91, CW - 12 - vw - 8, COL_WHITE, nm);
-        text_vr(226, 92, 16, 1, reach ? COL_GREEN : COL_RED, b);
-        snprintf(b, sizeof b, "%s . %s", lp(ECON_NAME[SYSTEMS[s_target].econ]), lp(FAC_NAME[SYSTEMS[s_target].faction]));
-        text_at(14, 108, 1, COL_GREY, b);
+    if (!tsel) return;
+    int x = map_x(SYSTEMS[s_target].x), y = map_y(SYSTEMS[s_target].y), o = 7 + (int)((s_anim / 2) % 3);
+    for (int sx = -1; sx <= 1; sx += 2) for (int sy = -1; sy <= 1; sy += 2) {
+        G.drawFastHLine(sx < 0 ? x - o : x + o - 3, y + sy * o, 4, COL_AMBER);
+        G.drawFastVLine(x + sx * o, sy < 0 ? y - o : y + o - 3, 4, COL_AMBER);
     }
-    if (s_status[0]) center(80, 1, COL_RED, s_status);
+    // the target's card, in its faction's tone; it moves to the top when the system sits low, never hiding it
+    const Sys *t = &SYSTEMS[s_target];
+    int f = t->faction & 3, py = y > 66 ? 16 : 89;
+    gui::panel(MARGIN, py, CW, 28, gui::mix(COL_SPACE, FAC_LOOK[f].deep, 190), FAC_LOOK[f].glow);
+    draw_emblem(MARGIN + 10, py + 10, 6, f);
+    char b[48];
+    snprintf(b, sizeof b, "%d", cost);
+    int cw = (int)strlen(b) * 6;
+    text_at(W - MARGIN - 6 - cw, py + 4, 1, reach ? COL_GREEN : COL_RED, b);
+    icon(IC_FUEL, W - MARGIN - 16 - cw, py + 4, reach ? COL_GREEN : COL_RED);
+    label(MARGIN + 20, py + 1, CW - 20 - cw - 22, COL_WHITE, t->name);
+    if (s_status[0]) snprintf(b, sizeof b, "%s", s_status);
+    else snprintf(b, sizeof b, "%s . %s  %s %d", lp(ECON_NAME[t->econ]), lp(FAC_NAME[f]), GT("dist", "dist"), (int)dd);
+    int bw = t->beacon ? CW - 30 - 12 : CW - 30;
+    line_fit(MARGIN + 20, py + 18, bw, s_status[0] ? COL_RED : COL_GREY, b);
+    if (t->beacon) draw_spire(W - MARGIN - 8, py + 25, 10, lit_beacon(s_target));
 }
-
 // ============================ screens: system hub ============================
 static const char *hub_label(int i)
 {
@@ -2400,28 +2867,30 @@ static void hub_row_fn(int idx, int bx, int by, int bw, int bh, int tier)
     else text_vc(x0, by, bh, fit_size(nm, avail, 1), tier_col(tier), nm);
     if (badge[0]) text_vr(xr, by, bh, tier == TIER_FOCUS ? 2 : 1, bc, badge);
 }
+// The dock: a header in the station faction's tone — the system's own lit world, its beacon spire (if it has
+// one), its name, economy and faction, your credits and the faction emblem — over the hub list.
 static void draw_system(void)
 {
     int ch = nucleo_app_content_height();
-    d.fillRect(0, 0, W, ch, COL_SPACE);
-    stars_draw(ch);
+    sky(ch);
     const Sys *s = &SYSTEMS[g.sys];
-    // top data card: planet + name + econ/faction + credits
-    d.fillRect(0, 0, W, HDR_H, COL_PANEL);
-    d.drawFastHLine(0, HDR_H, W, rgb(46, 60, 96));
+    int f = cur_fac();
+    gui::vgradient(0, 0, W, HDR_H, FAC_LOOK[f].deep, COL_SPACE);
+    d.drawFastHLine(0, HDR_H, W, FAC_LOOK[f].trim);
     draw_planet(13, 13, 10, g.sys);
+    int nx = 30;
+    if (s->beacon) { draw_spire(30, 24, 18, lit_beacon(g.sys)); nx = 38; }
+    draw_emblem(W - MARGIN - 6, 8, 6, f);
     char b[40];
     snprintf(b, sizeof b, "%d cr", g.credits);
     int crw = (int)strlen(b) * 6;                       // credits reserved on the econ line
-    label(30, 0, W - MARGIN - 30, COL_CYAN, s->name);
+    label(nx, 0, W - MARGIN - 16 - nx, COL_WHITE, s->name);
     text_vr(W - MARGIN, 16, 8, 1, COL_AMBER, b);
     snprintf(b, sizeof b, "%s . %s", lp(ECON_NAME[s->econ]), lp(FAC_NAME[s->faction]));
-    int el2 = fit_size(b, (W - MARGIN - crw - 6) - 30, 1);
-    text_at(30, 18, el2, COL_GREY, b);
+    line_fit(nx, 17, W - MARGIN - crw - 6 - nx, FAC_LOOK[f].glow, b);
     int el[NMISS_PER_SYS]; s_jobs = eligible_missions(el);
     list_fisheye(s_hubsel, 6, 28, 120, hub_row_fn);
 }
-
 // ============================ screens: market ================================
 static void buy_good(int gd)
 {
@@ -2582,56 +3051,80 @@ static const char *rank_name(void)
     if (k >= 5)  return GT("Pilota", "Pilot");
     return GT("Recluta", "Rookie");
 }
+// The bridge: your rank in the header; the Lucciola with credits, sector and lit beacons; a two-column sheet of
+// the ship (an icon per row); then the four factions' standing, each on its own 9 px row (emblem, name, gauge,
+// value) — nothing overlaps, in any language.
+static void stat_cell(int x, int y, int ic, uint16_t ic_col, const char *name, const char *val)
+{
+    if (ic >= 0) icon(ic, x, y, ic_col);
+    char b[24]; snprintf(b, sizeof b, "%s %s", name, val);
+    line_fit(x + 10, y, 100, COL_GREY, b);
+}
 static void draw_plancia(void)
 {
+    LovyanGFX &G = d;
     int ch = nucleo_app_content_height();
-    d.fillRect(0, 0, W, ch, COL_SPACE);
-    stars_draw(ch);
-    draw_hud();
-    label(MARGIN, 15, 120, COL_CYAN, GT("Plancia", "Bridge"));
-    char b[44];
+    sky(ch);
+    char b[44], v[16];
     snprintf(b, sizeof b, "%s K%d", rank_name(), (int)g.kills);          // pilot rank + kill tally
-    text_vr(W - MARGIN, 16, 16, 1, COL_GREY, b);
-    label(MARGIN, 32, 120, COL_WHITE, GT("Lucciola", "Firefly"));
-    snprintf(b, sizeof b, "%s %d/%d   %s %d", GT("scafo", "hull"), g.hull, g.hull_max,
-             GT("scudo", "shield"), g.shield_max);
-    text_at(MARGIN, 53, 1, COL_GREY, b);
-    snprintf(b, sizeof b, GT("cr %d   celle %d   raggio %d", "cr %d   cells %d   range %d"), g.credits, g.fuel, g.jump_range);
-    text_at(MARGIN, 63, 1, COL_GREY, b);
-    snprintf(b, sizeof b, "%s %d/4   %s %d   %s %d/%d", GT("laser", "laser"), g.weapon,
-             GT("sens", "sens"), g.sensors, GT("fari", "bcn"), beacons_lit(), beacons_total());
-    text_at(MARGIN, 73, 1, COL_CYAN, b);
-    text_at(MARGIN, 83, 1, COL_AMBER, GT("Reputazione", "Reputation"));
-    int y = 91;
-    for (int i = 0; i < NFAC; i++) {                          // 4 rows: 91,98,105,112 -> last bar 112..118
-        text_at(14, y, 1, COL_GREY, lp(FAC_NAME[i]));
+    title_band(GT("PLANCIA", "BRIDGE"), b);
+    label(MARGIN, 29, 110, COL_WHITE, GT("Lucciola", "Firefly"));
+    snprintf(b, sizeof b, "%d cr", g.credits);
+    text_vr(W - MARGIN, 29, 8, 1, COL_AMBER, b);
+    snprintf(v, sizeof v, "%d/%d", beacons_lit(), beacons_total());
+    int vw = (int)strlen(v) * 6;
+    text_at(W - MARGIN - vw, 39, 1, COL_GOLD, v);
+    draw_spire(W - MARGIN - vw - 6, 47, 9, beacons_lit() > 0);
+    snprintf(b, sizeof b, "%s %u", GT("Settore", "Sector"), (unsigned)g.sector);
+    text_at(W - MARGIN - vw - 16 - (int)strlen(b) * 6, 39, 1, COL_GREY, b);
+    int x2 = W / 2 + 4;
+    snprintf(v, sizeof v, "%d/%d", g.hull, g.hull_max);  stat_cell(MARGIN, 50, IC_HULL, COL_GREEN, GT("scafo", "hull"), v);
+    snprintf(v, sizeof v, "%d", g.shield_max);           stat_cell(x2, 50, IC_SHIELD, COL_CYAN, GT("scudo", "shield"), v);
+    snprintf(v, sizeof v, "%d/4", g.weapon);             stat_cell(MARGIN, 59, IC_KILL, COL_RED, GT("laser", "laser"), v);
+    snprintf(v, sizeof v, "%d", g.sensors);              stat_cell(x2, 59, IC_WAVE, COL_PURPLE, GT("sens", "sens"), v);
+    snprintf(v, sizeof v, "%d/%d", g.fuel, g.fuel_max);  stat_cell(MARGIN, 68, IC_FUEL, COL_CYAN, GT("celle", "cells"), v);
+    snprintf(v, sizeof v, "%d", g.jump_range);           stat_cell(x2, 68, IC_BOOST, COL_AMBER, GT("raggio", "range"), v);
+    text_at(MARGIN, 80, 1, COL_AMBER, GT("Reputazione", "Reputation"));
+    int rw = (int)strlen(GT("Reputazione", "Reputation")) * 6;
+    G.drawFastHLine(MARGIN + rw + 4, 83, W - 2 * MARGIN - rw - 4, C565(60, 50, 30));
+    for (int i = 0; i < NFAC; i++) {
+        int y = 89 + i * 8;
+        draw_emblem(MARGIN + 4, y + 3, 3, i);
+        text_at(MARGIN + 11, y, 1, COL_GREY, lp(FAC_NAME[i]));
         int pct = (g.rep[i] + 100) / 2;     // -100..100 -> 0..100
-        mini_bar(70, y, 86, 6, pct, g.rep[i] >= 0 ? COL_GREEN : COL_RED);
+        mini_bar(80, y + 1, 112, 5, pct, g.rep[i] >= 0 ? COL_GREEN : COL_RED);
+        G.drawFastVLine(80 + 56, y, 7, COL_GREY);        // the neutral mark
         snprintf(b, sizeof b, "%d", g.rep[i]);
-        text_vr(226, y, 8, 1, g.rep[i] >= 0 ? COL_GREEN : COL_RED, b);
-        y += 7;
+        text_vr(W - MARGIN, y, 8, 1, g.rep[i] >= 0 ? COL_GREEN : COL_RED, b);
     }
 }
 
 // ============================ screens: event =================================
+// An encounter is themed by whoever it belongs to: their emblem, their tone on the card and its title; a dark
+// beacon gets its own spire.
 static void draw_event(void)
 {
+    LovyanGFX &G = d;
     int ch = nucleo_app_content_height();
-    d.fillRect(0, 0, W, ch, COL_SPACE);
-    stars_draw(ch);
+    sky(ch);
     const Event *e = &EVENTS[s_ev];
-    d.fillRoundRect(6, 2, 228, 116, 6, COL_PANEL);
-    d.drawRoundRect(6, 2, 228, 116, 6, COL_FOCUS2);
-    label(14, 5, 212, COL_CYAN, lp(e->title));
+    int f = e->need_faction >= 0 ? e->need_faction : e->ch[0].eff.rep_fac;
+    uint16_t acc = s_ev == EV_FARO ? COL_GOLD : f >= 0 ? FAC_LOOK[f & 3].glow : COL_CYAN;
+    gui::panel(6, 2, 226, 115, gui::mix(COL_SPACE, f >= 0 ? FAC_LOOK[f & 3].deep : COL_PANEL, 150), acc);
+    int tx = 14;
+    if (s_ev == EV_FARO) { draw_spire(20, 22, 18, false); tx = 30; }
+    else if (f >= 0) { draw_emblem(21, 13, 7, f); tx = 32; }
+    label(tx, 5, 226 - tx, acc, lp(e->title));
     draw_wrapped_n(14, 28, 212, 11, COL_WHITE, lp(e->body), 3);        // clamp prose to 3 lines
     int oy = 70;                                                       // choices anchored low, always fit
     for (int i = 0; i < e->nch; i++) {
         bool sel = (i == s_evsel);
         bool ok = choice_affordable(&e->ch[i]);
-        if (sel) { d.fillRoundRect(12, oy, 216, 13, 3, COL_FOCUS); d.fillRect(12, oy + 3, ACC_W, 7, COL_FOCUS2); }
+        if (sel) { G.fillRoundRect(12, oy, 214, 13, 3, gui::mix(COL_SPACE, acc, 70)); G.fillRect(12, oy + 3, ACC_W, 7, acc); }
         uint16_t c = !ok ? COL_DIM : (sel ? COL_WHITE : COL_GREY);
-        int sz = fit_size(lp(e->ch[i].label), 200, 1);
-        text_vc(20, oy, 13, sz, c, lp(e->ch[i].label));
+        const char *lb = lp(e->ch[i].label);
+        if ((int)strlen(lb) * 6 > 200) OVERFLOW();
+        text_vc(20, oy, 13, 1, c, lb);
         oy += 15;
     }
 }
@@ -2696,6 +3189,13 @@ static void hub_open(void)
     }
 }
 
+// UP/DOWN on a wrapping list of n rows: true when the key moved the selection (it clicks and repaints).
+static bool list_key(int *sel, int n, int k)
+{
+    if (n <= 0 || (k != NK_UP && k != NK_DOWN)) return false;
+    *sel = (*sel + (k == NK_UP ? n - 1 : 1)) % n; sfx(SFX_MOVE); req();
+    return true;
+}
 static void on_key(int k, char ch)
 {
     switch (s_screen) {
@@ -2715,34 +3215,23 @@ static void on_key(int k, char ch)
             else if (k == NK_ENTER) do_jump();
             return;
         case ST_SYSTEM:
-            if (k == NK_UP)   { s_hubsel = (s_hubsel + 5) % 6; sfx(SFX_MOVE); req(); }
-            else if (k == NK_DOWN) { s_hubsel = (s_hubsel + 1) % 6; sfx(SFX_MOVE); req(); }
-            else if (k == NK_ENTER || k == NK_RIGHT) hub_open();
+            if (!list_key(&s_hubsel, 6, k) && (k == NK_ENTER || k == NK_RIGHT)) hub_open();
             return;
         case ST_MARKET:
-            if (k == NK_UP)   { s_mktsel = (s_mktsel + NGOODS) % (NGOODS + 1); sfx(SFX_MOVE); req(); }
-            else if (k == NK_DOWN) { s_mktsel = (s_mktsel + 1) % (NGOODS + 1); sfx(SFX_MOVE); req(); }
-            else if (k == NK_RIGHT || ch == 'b' || ch == 'B' || k == NK_ENTER) { if (s_mktsel == NGOODS) buy_fuel(); else buy_good(s_mktsel); req(); }
+            if (list_key(&s_mktsel, NGOODS + 1, k)) return;
+            if (k == NK_RIGHT || ch == 'b' || ch == 'B' || k == NK_ENTER) { if (s_mktsel == NGOODS) buy_fuel(); else buy_good(s_mktsel); req(); }
             else if (ch == 's' || ch == 'S') { if (s_mktsel < NGOODS) sell_good(s_mktsel); req(); }
             return;
         case ST_SHIPYARD:
-            if (k == NK_UP)   { s_yardsel = (s_yardsel + 7) % 8; sfx(SFX_MOVE); req(); }
-            else if (k == NK_DOWN) { s_yardsel = (s_yardsel + 1) % 8; sfx(SFX_MOVE); req(); }
-            else if (k == NK_ENTER || k == NK_RIGHT) { buy_upgrade(s_yardsel); req(); }
+            if (!list_key(&s_yardsel, 8, k) && (k == NK_ENTER || k == NK_RIGHT)) { buy_upgrade(s_yardsel); req(); }
             return;
-        case ST_EVENT: {
-            const Event *e = &EVENTS[s_ev];
-            if (k == NK_UP)   { s_evsel = (s_evsel - 1 + e->nch) % e->nch; sfx(SFX_MOVE); req(); }
-            else if (k == NK_DOWN) { s_evsel = (s_evsel + 1) % e->nch; sfx(SFX_MOVE); req(); }
-            else if (k == NK_ENTER || k == NK_RIGHT) apply_choice();
+        case ST_EVENT:
+            if (!list_key(&s_evsel, EVENTS[s_ev].nch, k) && (k == NK_ENTER || k == NK_RIGHT)) apply_choice();
             return;
-        }
         case ST_MISSIONS: {
             int el[NMISS_PER_SYS]; int n = eligible_missions(el);
-            if (n == 0) return;
-            if (k == NK_UP)   { s_misssel = (s_misssel - 1 + n) % n; sfx(SFX_MOVE); req(); }
-            else if (k == NK_DOWN) { s_misssel = (s_misssel + 1) % n; sfx(SFX_MOVE); req(); }
-            else if (k == NK_ENTER || k == NK_RIGHT) { s_pick = el[clampi(s_misssel, 0, n - 1)]; s_briefsel = 0; sfx(SFX_OK); go(ST_BRIEF); }
+            if (n == 0 || list_key(&s_misssel, n, k)) return;
+            if (k == NK_ENTER || k == NK_RIGHT) { s_pick = el[clampi(s_misssel, 0, n - 1)]; s_briefsel = 0; sfx(SFX_OK); go(ST_BRIEF); }
             return;
         }
         case ST_BRIEF:
@@ -2778,9 +3267,9 @@ static bool on_back(int key)
             case ST_TITLE:    break;                                // Left has no meaning on the title
             case ST_SETTINGS: if (set_kind(s_smenu.sel) != SET_DELETE) settings_activate(); break;
             case ST_MAP:      map_cycle(-1); break;
-            case ST_SYSTEM:   s_hubsel = (s_hubsel + 5) % 6; sfx(SFX_MOVE); req(); break;
+            case ST_SYSTEM:   list_key(&s_hubsel, 6, NK_UP); break;
             case ST_MARKET:   if (s_mktsel < NGOODS) { sell_good(s_mktsel); req(); } break;
-            case ST_EVENT:    { const Event *e = &EVENTS[s_ev]; s_evsel = (s_evsel - 1 + e->nch) % e->nch; sfx(SFX_MOVE); req(); } break;
+            case ST_EVENT:    list_key(&s_evsel, EVENTS[s_ev].nch, NK_UP); break;
             case ST_BRIEF:    s_briefsel ^= 1; sfx(SFX_MOVE); req(); break;
             case ST_COMBAT:   if (!s_result) aim_steer(0, -1); break;   // aim left
             default: break;
@@ -2799,8 +3288,8 @@ static bool on_back(int key)
         case ST_COMBAT:                                  // disengaging fails the mission: Esc twice
             if (s_result) return true;
             if (s_now < s_flee_until) { combat_end(-1); return true; }
-            s_flee_until = s_now + 2000; s_cmsg_until = s_flee_until; sfx(SFX_DENY);
-            snprintf(s_cmsg, sizeof s_cmsg, "%s", GT("Esc di nuovo: fuga", "Esc again: flee"));
+            s_flee_until = s_now + 2000; s_fx->cmsg_until = s_flee_until; sfx(SFX_DENY);
+            snprintf(s_fx->cmsg, sizeof s_fx->cmsg, "%s", GT("Esc di nuovo: fuga", "Esc again: flee"));
             return true;
         case ST_DEBRIEF:  go(ST_SYSTEM); return true;
         case ST_SYSTEM:   save_write(); sfx(SFX_BACK); go(ST_TITLE); return true;
@@ -2840,15 +3329,18 @@ static bool poll(void)
     // combat are motion screens and keep animating.
     // TITLE/SETTINGS now animate too: the Mode-7 menu floor scrolls and the IMU parallax tracks live.
     // The double buffer composites off-screen and blits once, so this is flicker-free (same as combat).
+    // Combat and the cinematics run at the ~50 Hz of the main loop (smooth aim, streaks, explosions); the map
+    // breathes at ~30 Hz. s_anim is a 30 Hz clock whatever the frame rate, so blinks keep their pace.
     bool animated = (s_screen == ST_MAP || s_screen == ST_CINE || s_screen == ST_COMBAT);
     if (!animated) return false;
     int64_t elapsed = s_now - s_last_frame;
-    if (elapsed < 33) return false;
+    if (elapsed < (s_screen == ST_MAP ? 33 : 18)) return false;
     s_last_frame = s_now;
-    s_anim++;
-    s_scroll[0] += 0.18f; if (s_scroll[0] >= 240) s_scroll[0] -= 240;
-    s_scroll[1] += 0.45f; if (s_scroll[1] >= 240) s_scroll[1] -= 240;
-    s_scroll[2] += 0.95f; if (s_scroll[2] >= 240) s_scroll[2] -= 240;
+    s_anim = (unsigned)(s_now / 33);
+    float k = elapsed > 100 ? 3.0f : elapsed * (1.0f / 33);
+    s_scroll[0] += 0.18f * k; if (s_scroll[0] >= 240) s_scroll[0] -= 240;
+    s_scroll[1] += 0.45f * k; if (s_scroll[1] >= 240) s_scroll[1] -= 240;
+    s_scroll[2] += 0.95f * k; if (s_scroll[2] >= 240) s_scroll[2] -= 240;
     if (s_screen == ST_COMBAT && !s_result) {
         float dt = elapsed / 1000.0f; if (dt > 0.05f) dt = 0.05f;
         combat_step(dt);
@@ -2893,6 +3385,7 @@ static const nucleo_app_ram_t APP_RAM[] = {
     { (void **)&s_rip, sizeof(Rip) * NRIP },       { (void **)&s_death, sizeof(Death) * NDEATH },
     { (void **)&s_msl, sizeof(Msl) * NMSL },       { (void **)&s_pu, sizeof(Pickup) * NPU },
     { (void **)&star, sizeof(Star) * NSTAR },      { (void **)&s_mt, sizeof(MisTxt) },
+    { (void **)&s_fx, sizeof(Fx) },
     { nullptr, 0 } };
 
 extern "C" void nucleo_register_constellations(void)

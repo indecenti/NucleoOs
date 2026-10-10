@@ -17,11 +17,17 @@ static int below_footer(void)
     for (int y = H - HINT; y < H; y++) for (int x = 0; x < W; x++) if (nh_canvas.readPixel(x, y) != sent) n++;
     return n;
 }
+// Every screen is checked in all five languages (footer clear, hint fits, no text cut to fit its room —
+// s_overflow counts the cuts); the it/de frames are saved for review (de has the longest strings).
 static void screen(const char *name)
 {
     nh_check_hint(name);
     if (!nh_full) nh_check(below_footer() == 0, "%s: %d px drawn under the footer", name, below_footer());
-    char b[64]; snprintf(b, sizeof b, "%s_%s", name, g_nh.lang); nh_dump(b);
+    s_overflow = 0;
+    char b[64]; snprintf(b, sizeof b, "%s_%s", name, g_nh.lang);
+    if (!strcmp(g_nh.lang, "it") || !strcmp(g_nh.lang, "de")) nh_dump(b);
+    else nh_draw_frame();
+    nh_check(s_overflow == 0, "%s: %d text run(s) did not fit their room", b, s_overflow);
 }
 static bool exists(const char *p) { struct stat st; return host_stat(p, &st) == 0; }
 static long fsize(const char *p) { struct stat st; return host_stat(p, &st) == 0 ? (long)st.st_size : -1; }
@@ -42,8 +48,8 @@ static void dock_with_missions(void)
 
 static void scen_screens(uint32_t seed)
 {
-    static const char *langs[] = { "it", "de" };
-    for (int l = 0; l < 2; l++) {
+    static const char *langs[] = { "it", "de", "en", "es", "fr" };
+    for (int l = 0; l < 5; l++) {
         g_nh.lang = langs[l]; g_nh.adv = g_nh.imu = (l == 1); wipe();
         nh_open_app(seed);
         nh_loop_ms(300); screen("title");
@@ -80,7 +86,7 @@ static void scen_death(uint32_t seed)
     nh_check(exists(SAVE), "death: the docked run was never saved");
     dock_with_missions(); hub(2); nh_tap('\n'); nh_tap('\n');
     nh_check(s_screen == ST_COMBAT, "death: no combat");
-    s_shield = 0; g.hull = 1; hurt_player(50);
+    s_shield = 0; g.hull = 1; hurt_player(50, CX + 30, s_cy);
     nh_check(s_screen == ST_CINE && s_cine == CINE_LOSE, "death: no game-over cinematic");
     nh_check(!exists(SAVE), "death: the save survived the death");
     nh_close_app();                                               // quit during the cinematic
@@ -225,7 +231,8 @@ static int bot_mission(uint32_t seed, int sector, int slot, int *secs, int *hull
     }
     *secs = (int)((nh_us - t0) / 1000000); *hull = g.hull;
     int r = s_screen == ST_DEBRIEF ? s_result : (s_screen == ST_CINE ? 2 : 0);
-    if (r != 1) nh_note("  lost: sector %d type %d (ward hp %d/%d) after %d s, result %d", sector, s_cc.type, s_ward_hp, s_ward_max, *secs, r);
+    if (r != 1) nh_note("  lost: sector %d type %d%s (ward hp %d/%d) after %d s, result %d, wave %d/%d", sector, s_cc.type, s_cc.ace ? " +ace" : "",
+                        s_ward_hp, s_ward_max, *secs, r, s_wave, s_cc.waves);
     nh_close_app();
     return r;
 }
@@ -245,6 +252,207 @@ static void scen_balance(uint32_t seed)
         if (k == 0) nh_check(wins >= n - 1, "balance: a competent pilot loses first-sector contracts (%d/%d won)", wins, n);
     }
     nh_draw_every = 1;
+}
+
+// The dogfight gallery: every faction's wing and its named ace (frozen at readable spots, the ace mid-telegraph),
+// an explosion mid-bloom, the Keeper's shield and the Echo's phase. Checks the ambush faction rules and that an
+// explosion's particles, fireball and ring all burn out.
+static void stage(int lock)
+{
+    static const float X[NFOE] = { -50, 4, 46, -34, 34, 10 }, Y[NFOE] = { -10, 14, 2, 30, 26, -16 }, Z[NFOE] = { 60, 48, 64, 80, 98, 72 };
+    for (int i = 0; i < NFOE; i++) if (s_foe[i].on) {
+        Foe *f = &s_foe[i]; f->ex = X[i]; f->ey = Y[i]; f->ez = Z[i]; f->engagez = Z[i]; f->vx = (i & 1 ? 40.0f : -30.0f); f->vy = 8; f->vz = 0;
+        f->bank = (i & 1 ? 0.6f : -0.5f); f->strafe = 0; f->strafecd = 3000; f->hitms = 0;
+    }
+    float sx, sy, sc;
+    if (lock >= 0 && project(s_foe[lock].ex, s_foe[lock].ey, s_foe[lock].ez, &sx, &sy, &sc)) { s_aimx = sx + 6; s_aimy = sy + 1; s_lock = lock; }
+    s_shield = s_shieldmax; g.hull = g.hull_max; s_fx->cmsg_until = 0; s_fx->dmg_until = 0;
+}
+static void scen_gallery(uint32_t seed)
+{
+    static const char *nm[4] = { "gilda", "custodi", "relitti", "eco" };
+    static const int ace[4] = { ACE_DAX, ACE_VIGIL, ACE_GUTTER, ACE_WARDEN };
+    for (int fct = 0; fct < 4; fct++) {
+        g_nh.lang = fct == 3 ? "de" : "it";
+        wipe(); nh_open_app(seed + fct); new_run();
+        SYSTEMS[g.sys].faction = fct == F_RELITTI ? F_GILDA : fct;       // the sky we fight under
+        if (fct == F_GILDA || fct == F_CUSTODI) g.rep[fct] = -40;         // crossed them: their patrols hunt you
+        combat_begin_ambush();
+        nh_check(s_cc.foe_fac == fct, "gallery: an ambush at a %s station came from faction %d", nm[fct], s_cc.foe_fac);
+        nh_loop_ms(3700);                                                 // past the opening legend
+        for (int i = 0; i < NFOE; i++) s_foe[i].on = 0;
+        s_fx->ace_id = (uint8_t)ace[fct];
+        spawn_foe(FOE_FIGHTER, 50); spawn_foe(FOE_HEAVY, 90); spawn_foe(FOE_SCOUT, 30); spawn_foe(FOE_FIGHTER, 50); spawn_foe(FOE_HEAVY, 90); spawn_foe(FOE_ACE, 150);
+        s_foe[5].ph = ACE_CHARGE; s_foe[5].phms = 380; s_foe[0].firecd = 200;
+        stage(1);
+        if (fct == F_RELITTI) { s_fx->comm_until = nh_us / 1000 + 2000; s_fx->comm_id = ACE_GUTTER; }   // her radio line
+        char b[40]; snprintf(b, sizeof b, "combat_%s", nm[fct]); nh_dump(b);
+        if (fct == F_RELITTI) {                                           // a won contract: pay, standing, the ace's fall
+            s_mission = 0; s_cc.rep_fac = F_GILDA; s_cc.rep_gain = 4; s_cc.enemy_rep_fac = F_RELITTI; s_cc.enemy_rep_loss = 2;
+            s_fx->ace_down = 1; s_mkills = 9; combat_end(1);
+            nh_check(s_screen == ST_DEBRIEF, "gallery: a win did not debrief");
+            nh_check(!(g.flags & bit(FL_ACE_DEAD)), "gallery: FL_ACE_DEAD set without a kill");
+            nh_dump("debrief_win");
+            nh_close_app(); continue;
+        }
+        if (fct == F_CUSTODI || fct == F_ECO) {                           // the ace's guard: immune, untargetable
+            s_foe[5].ph = ACE_EVADE; s_foe[5].phms = 600; s_lock = 5;
+            int hp = s_foe[5].hp; s_pfire_ms = 0; player_fire();
+            nh_check(s_foe[5].hp == hp, "gallery: the %s ace took a hit through its guard", nm[fct]);
+            snprintf(b, sizeof b, "combat_%s_guard", nm[fct]); nh_dump(b);
+        }
+        if (fct == F_GILDA) {                                             // a kill: fireball, ring, debris, shards
+            float sx, sy, sc; project(s_foe[1].ex, s_foe[1].ey, s_foe[1].ez, &sx, &sy, &sc);
+            kill_foe(&s_foe[1], sx, sy, sc, true);
+            int maxlife = 0; for (int i = 0; i < NPART; i++) if (s_part[i].on && s_part[i].life0 > maxlife) maxlife = s_part[i].life0;
+            nh_check(maxlife <= 700, "gallery: a particle lives %d ms", maxlife);
+            s_foe[0].on = s_foe[2].on = s_foe[3].on = s_foe[4].on = s_foe[5].on = 0; s_wave_left = 1; s_spawn_timer = 1e9f;   // no win, no next wave
+            int64_t t0 = nh_us; while (nh_us - t0 < 110000) nh_tick(18);
+            nh_dump("combat_boom");
+            t0 = nh_us; while (nh_us - t0 < 1500000 && s_screen == ST_COMBAT) { s_spawn_timer = 1e9f; nh_tick(18); }
+            int on = 0; for (int i = 0; i < NPART; i++) on += s_part[i].on; for (int i = 0; i < NSHK; i++) on += s_shk[i].on;
+            nh_check(on == 0, "gallery: %d explosion particles/rings still alive 1.5 s after the kill", on);
+        }
+        nh_close_app();
+    }
+    g_nh.lang = "it";
+}
+
+// The map's beacon threads: a spanning tree over each sector's beacons (every beacon joined, beacons only), and gold
+// (COL_THREAD, a colour nothing else on the map uses) only where BOTH ends are lit.
+static int count_col(uint16_t c)
+{
+    nh_canvas.drawPixel(0, 0, c); uint32_t want = nh_canvas.readPixel(0, 0);
+    nh_draw_frame();
+    int n = 0;
+    for (int y = 0; y < H; y++) for (int x = 0; x < W; x++) if (nh_canvas.readPixel(x, y) == want) n++;
+    return n;
+}
+static void scen_threads(uint32_t seed)
+{
+    wipe(); nh_open_app(seed); new_run();
+    for (int sec = 0; sec < 9; sec++) {
+        g.sector = (uint32_t)sec; regen_sector();
+        uint8_t e[NSYS][2]; int ne = map_threads(e), nb = beacons_total(), root[NSYS];
+        nh_check(ne == (nb ? nb - 1 : 0), "threads: sector %d has %d beacons and %d threads", sec, nb, ne);
+        for (int i = 0; i < NSYS; i++) root[i] = i;
+        for (int k = 0; k < ne; k++) {
+            nh_check(SYSTEMS[e[k][0]].beacon && SYSTEMS[e[k][1]].beacon, "threads: sector %d joins a system without a beacon", sec);
+            int a = e[k][0], b = e[k][1]; while (root[a] != a) a = root[a]; while (root[b] != b) b = root[b]; root[a] = b;
+        }
+        int comp = 0; for (int i = 0; i < NSYS; i++) if (SYSTEMS[i].beacon && root[i] == i) comp++;
+        nh_check(nb == 0 || comp == 1, "threads: sector %d's beacons fall into %d separate nets", sec, comp);
+    }
+    g.sector = 0; regen_sector(); g.sys = entry_slot(0); s_target = (g.sys + 1) % NSYS;
+    hub(4); nh_check(s_screen == ST_MAP, "threads: no map");
+    uint8_t e[NSYS][2]; int ne = map_threads(e);
+    g.beacon_lit = 0;
+    nh_check(count_col(COL_THREAD) == 0, "threads: a gold thread with no beacon lit");
+    if (ne > 0) {
+        g.beacon_lit = bit(e[0][0]);
+        nh_check(count_col(COL_THREAD) == 0, "threads: a gold thread with only one of its beacons lit");
+        g.beacon_lit = bit(e[0][0]) | bit(e[0][1]);
+        nh_check(count_col(COL_THREAD) > 8, "threads: two lit neighbours drew no gold thread");
+        nh_dump("map_threads");
+    }
+    nh_close_app();
+}
+
+// The dogfight's new rules: a tracer leaves the ship that fired it and the hit points back at it; a lead hit on a
+// charging foe spoils its shot (a hull hit does not); an ace runs its whole duel pattern, and the Keeper's guard
+// turns every shot aside while it lasts.
+static void scen_duel(uint32_t seed)
+{
+    wipe(); nh_open_app(seed); new_run();
+    SYSTEMS[g.sys].faction = F_CUSTODI; g.rep[F_CUSTODI] = -40;
+    combat_begin_ambush();
+    nh_loop_ms(200);
+    for (int i = 0; i < NFOE; i++) s_foe[i].on = 0;
+    for (int i = 0; i < NBOLT; i++) s_bolt[i].on = 0;
+    s_wave_left = 1; s_spawn_timer = 1e9f;
+    g.hull = g.hull_max = 9000; s_shieldmax = s_shield = 0;
+    // a tracer from a foe on the right: it starts on the foe and the hit is shown coming from the right
+    spawn_foe(FOE_FIGHTER, 999); Foe *f = &s_foe[0];
+    f->ex = 70; f->ey = 0; f->ez = 60; f->firecd = 30000; f->strafecd = 30000;
+    float fx, fy, fs; project(f->ex, f->ey, f->ez, &fx, &fy, &fs);
+    spawn_tracer(f, false, 0.0f);
+    int b = -1; for (int i = 0; i < NBOLT; i++) if (s_bolt[i].on) b = i;
+    nh_check(b >= 0, "duel: no tracer");
+    if (b >= 0) {
+        int64_t t0 = nh_us; while (nh_us - t0 < 150000) nh_tick(18);
+        float bx, by, bs; project(s_bolt[b].ex, s_bolt[b].ey, s_bolt[b].ez, &bx, &by, &bs);
+        nh_check(fabsf(bx - fx) < 40 && bx > CX + 20, "duel: a tracer 150 ms out is at x %d, its shooter at %d", (int)bx, (int)fx);
+        t0 = nh_us; while (nh_us - t0 < 1000000 && s_bolt[b].on) nh_tick(18);
+        nh_check(s_now < s_fx->dmg_until && cosf(s_fx->dmg_ang) > 0.5f, "duel: the hit from the right was not shown on the right (%.2f rad)", s_fx->dmg_ang);
+    }
+    // the telegraph: a lead hit spoils the shot; a hull hit does not
+    s_shieldmax = s_shield = 9000;
+    f->vx = 160; f->vy = 0; f->vz = 0; f->firecd = 200;
+    float lx, ly; project(f->ex, f->ey, f->ez, &fx, &fy, &fs); lead_pip(f, &lx, &ly);
+    nh_check(charging(f), "duel: a foe 200 ms from firing is not telegraphing");
+    s_aimx = fx; s_aimy = fy; s_lock = 0; s_pfire_ms = 0; player_fire();
+    nh_check(f->firecd == 200, "duel: a hull hit spoiled the shot (firecd %d)", f->firecd);
+    s_aimx = lx; s_aimy = ly; s_lock = 0; s_pfire_ms = 0; int hp = f->hp; player_fire();
+    nh_check(f->firecd > TELE_MS, "duel: a lead hit on a charging foe did not spoil its shot");
+    nh_check(hp - f->hp == (12 + g.weapon * 5) * 3 / 2, "duel: a lead hit did %d, not 1.5x", hp - f->hp);
+    f->on = 0;
+    // the Keeper ace: weave -> charge -> burst -> evade (guarded) -> weave
+    s_fx->ace_id = ACE_VIGIL;
+    spawn_foe(FOE_ACE, 30000); Foe *a = &s_foe[0];
+    bool seen[4] = { false, false, false, false }; int guarded = 0, leaked = 0, shots = 0;
+    int64_t t0 = nh_us;
+    while (nh_us - t0 < 16000000 && s_screen == ST_COMBAT && a->on) {
+        int nb0 = 0; for (int i = 0; i < NBOLT; i++) nb0 += s_bolt[i].on;
+        nh_tick(18);
+        int nb1 = 0; for (int i = 0; i < NBOLT; i++) nb1 += s_bolt[i].on;
+        if (a->ph == ACE_BURST && nb1 > nb0) shots++;
+        seen[a->ph] = true;
+        if (a->ph == ACE_EVADE) {
+            s_lock = 0; s_pfire_ms = 0; int h = a->hp; player_fire();
+            if (a->hp == h) guarded++; else leaked++;
+        }
+    }
+    nh_check(seen[ACE_WEAVE] && seen[ACE_CHARGE] && seen[ACE_BURST] && seen[ACE_EVADE], "duel: the ace skipped a phase (%d%d%d%d)", seen[0], seen[1], seen[2], seen[3]);
+    nh_check(shots >= 3, "duel: the ace's burst fired %d tracers", shots);
+    nh_check(guarded > 0 && leaked == 0, "duel: the Keeper's guard let %d of %d shots through", leaked, guarded + leaked);
+    nh_close_app();
+}
+
+// Texts that change with the language: every encounter, every contract brief of a few sectors, the intro and the
+// cast. All five languages, nothing cut to fit; an ace bounty names its ace from the cast.
+static void scen_texts(uint32_t seed)
+{
+    static const char *langs[] = { "it", "en", "es", "fr", "de" };
+    int aces = 0;
+    for (int l = 0; l < 5; l++) {
+        g_nh.lang = langs[l]; wipe(); nh_open_app(seed); new_run();
+        for (int ev = 0; ev < NEVENTS; ev++) {
+            start_event(ev); s_overflow = 0; nh_draw_frame();
+            nh_check(s_overflow == 0, "texts: event %d does not fit in %s", ev, g_nh.lang);
+            for (int c = 0; c < EVENTS[ev].nch; c++) nh_check((int)strlen(lp(EVENTS[ev].ch[c].label)) * 6 <= 200, "texts: event %d choice %d is too long in %s", ev, c, g_nh.lang);
+        }
+        for (int i = 0; i < NINTRO; i++) nh_check((int)strlen(lp(INTRO_LINES[i])) * 6 <= W - 8, "texts: intro line %d is %d chars in %s", i, (int)strlen(lp(INTRO_LINES[i])), g_nh.lang);
+        for (int i = 0; i < NACE + 1; i++) nh_check((int)strlen(lp(ACE_QUIP[i])) * 6 <= W - 14, "texts: radio line %d is too long in %s", i, g_nh.lang);
+        for (int sec = 0; sec < 4; sec++) {
+            g.sector = (uint32_t)sec; regen_sector();
+            for (int sy = 0; sy < NSYS; sy++) {
+                g.sys = sy; int el[NMISS_PER_SYS], n = eligible_missions(el);
+                for (int k = 0; k < n; k++) {
+                    s_pick = el[k]; s_screen = ST_BRIEF; s_overflow = 0; nh_draw_frame();
+                    nh_check(s_overflow == 0, "texts: the brief of sector %d system %d slot %d does not fit in %s (line %d: %s / %s)", sec, sy, k, g_nh.lang,
+                             s_overflow_line, cur_mission(el[k])->name, cur_mission(el[k])->brief);
+                    const Mission *m = cur_mission(el[k]);
+                    if (m->type == MT_BOUNTY && m->ace) {
+                        bool cast = false; for (int a = 0; a < NACE; a++) cast |= !strcmp(s_mt->target, ACE_NAME[a]);
+                        nh_check(cast, "texts: an ace bounty hunts '%s', not one of the cast", s_mt->target); aces++;
+                    }
+                }
+            }
+        }
+        nh_close_app();
+    }
+    nh_check(aces > 0, "texts: no ace bounty in four sectors");
+    g_nh.lang = "it";
 }
 
 static void scen_fuzz(uint32_t seed)
@@ -272,6 +480,10 @@ void nh_scenarios(const char *which, uint32_t seed)
     if (all || !strcmp(which, "delete"))  scen_delete(seed);
     if (all || !strcmp(which, "sfx"))     scen_sfx(seed);
     if (all || !strcmp(which, "economy")) scen_economy(seed);
+    if (all || !strcmp(which, "gallery")) scen_gallery(seed);
+    if (all || !strcmp(which, "threads")) scen_threads(seed);
+    if (all || !strcmp(which, "duel"))    scen_duel(seed);
+    if (all || !strcmp(which, "texts"))   scen_texts(seed);
     if (all || !strcmp(which, "balance")) scen_balance(seed);
     if (all || !strcmp(which, "fuzz"))    scen_fuzz(seed);
 }

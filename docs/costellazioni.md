@@ -162,6 +162,24 @@ The native game keeps the shared numeric layer and save. It gets the same lore n
 a richer 8bpp look (dithered nebulae, lit planets, outlined ships, juicy combat) and the same mission types —
 see `app_constellations.cpp` and the native harness `tools/native-host/games/stelle.cpp`.
 
+What the native game shows today:
+- **Combat**: a dithered nebula in the system faction's colours, parallax stars and boost streaks, the system's lit
+  planet and (when there is one) its beacon spire, lit or dark. Each faction has its own outlined ship kit
+  (Gilda ivory/blue needles and H-heavies, Relitti lopsided rust, Custodi white-gold with a halo, Eco cyan
+  lattice). Enemies telegraph before firing (closing red ring, engine blaze before a dive) and their shots
+  leave the shooter; the locked target has a lead pip (+50% damage, a pip hit cancels a charged shot).
+  Explosions are fireball + smoke + shock ring + debris; shield ripple, damage-direction arc, a small radar.
+- **Aces** are the cast (Dax Oren, Sister Vigil, Scarlet Gutter, One-Eye Bram): weave, charge, burst, evade;
+  the Keeper raises a shield, the Echo ace phases out. Radio lines name them in the HUD.
+- **Ambushes**: Echo ships in Echo space; a faction at reputation -25 or worse sends its own patrols. This is
+  native-only (no save field, no generator change) — the web game may choose differently.
+- **HUD**: icon bars, wave/kill counters, an objective line that becomes the ace's radio line and health bar.
+- **Map**: beacons are crystal spires; a gold thread with a running light joins two beacons only when both are
+  lit, otherwise it is dim and broken; the jump plays as a tunnel with the destination name.
+- **Stations and title**: faction-coloured headers with the emblem; contracts come from Vesna Ardali,
+  Mother Ilse or Mara "Rustmother"; the title is a painted 8bpp scene.
+Budget: about 74 KB flash, 749 B static RAM, deepest frame 768 B (`npm run games:ram`).
+
 ## Milestones
 1. **M1 Space combat** — new flight model, power, weapons, shields, AI squads, the roster above (Gilda/Relitti
    first), explosions and feel, procedural ship kit, system space with star/planets/nebula, missions staged in

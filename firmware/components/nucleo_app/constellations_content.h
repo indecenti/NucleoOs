@@ -62,7 +62,7 @@ enum {
     FL_GUILD_PACT,     // signed the Guild contract
     FL_KEEPER_TRUST,   // earned a Keeper's blessing
     FL_SMUGGLER,       // ran contraband at least once
-    FL_ACE_DEAD,       // killed the Rust Ace (bounty mission)
+    FL_ACE_DEAD,       // shot down Scarlet Gutter, the Wrecks' pirate ace (lore.md)
 };
 
 // ---- sound-effect ids (procedural chiptune, file-overridable) ---------------
@@ -76,45 +76,47 @@ enum {
 // ---- cinematics -------------------------------------------------------------
 enum { CINE_INTRO = 0, CINE_JUMP, CINE_BEACON, CINE_LOSE, CINE_SECTOR };
 
+// The cutscene names the pilot (lore.md: Ren Calloway, shown in cutscenes, never in choices). <= 38 chars a line.
 static const char *const INTRO_LINES[][2] = {
-    { "Il Glomo di Vesper era unito dai Fari.", "The Cluster was bound by the Beacons." },
-    { "Poi il Silenzio: i Fari si spensero.",   "Then the Silence: the Beacons died." },
-    { "Le navi saltano cieche, senza celle.",   "Ships jump blind, starved of cells." },
-    { "Piloti la Lucciola. L'Eco ti chiama.",   "You fly the Firefly. The Echo calls." },
-    { "Riaccendi i Fari. Riunisci le stelle.",  "Relight the Beacons. Bind the stars." },
+    { "I Costellatori accesero i Fari.",        "The Costellatori lit the Beacons." },
+    { "Poi l'Oscuramento: si spensero.",        "Then the Dimming: they went dark." },
+    { "Si salta alla cieca, isola per isola.",  "Ships jump blind, isle to isle." },
+    { "Ren Calloway, corriere. Indebitato.",    "Ren Calloway, courier. In debt." },
+    { "Riaccendi i Fari. L'Eco ti aspetta.",    "Relight the Beacons. The Echo waits." },
 };
 #define NINTRO ((int)(sizeof(INTRO_LINES)/sizeof(INTRO_LINES[0])))
 
 static const char *const LOSE_LINES[][2] = {
     { "La Lucciola si spegne nel vuoto.", "The Firefly goes dark in the void." },
-    { "Un relitto alla deriva nel Silenzio.", "One more wreck adrift in the Silence." },
+    { "Un altro relitto alla deriva nel buio.", "One more wreck adrift in the dark." },
 };
 #define NLOSE ((int)(sizeof(LOSE_LINES)/sizeof(LOSE_LINES[0])))
 
 // ---- narrative events -------------------------------------------------------
 // Effect applied when a choice is taken. Sentinels: -1 = none for rep_fac/flag/good/next.
 enum { ACT_NONE = 0, ACT_RELIGHT, ACT_REFUEL, ACT_GAMEOVER };
+// Small fixed ranges, so the fields are packed (int16 / int8): the whole table is ~0.75 KB of flash instead of 1.8.
 struct Effect {
-    int dcred, dfuel, dhull;   // resource deltas
-    int rep_fac, drep;         // reputation: faction index (-1 none) and delta
-    int flag;                  // story flag bit to SET (-1 none)
-    int good, qty;             // cargo grant/seizure (good idx -1 none; qty may be negative)
-    int act;                   // ACT_* special action
-    int sfx;                   // sound to play
-    int next;                  // chain to event id (-1 none)
+    int16_t dcred; int8_t dfuel, dhull;   // resource deltas
+    int8_t rep_fac, drep;      // reputation: faction index (-1 none) and delta
+    int8_t flag;               // story flag bit to SET (-1 none)
+    int8_t good, qty;          // cargo grant/seizure (good idx -1 none; qty may be negative, -99 = all)
+    int8_t act;                // ACT_* special action
+    int8_t sfx;                // sound to play
+    int8_t next;               // chain to event id (-1 none)
 };
 struct Choice { const char *label[2]; Effect eff; };
 struct Event {
     const char *title[2];
     const char *body[2];
     Choice ch[3];
-    int nch;
-    int at_sys;       // -1 = any; else only at this system
-    int req_flag;     // -1 none; else flag bit must be SET
-    int forbid_flag;  // -1 none; else flag bit must be CLEAR
-    int need_faction; // -1 none; else only at a system owned by this faction
-    int story;        // 1 = story (always wins selection), 0 = random flavor
-    int weight;       // random selection weight
+    int8_t nch;
+    int8_t at_sys;       // -1 = any; else only at this system
+    int8_t req_flag;     // -1 none; else flag bit must be SET
+    int8_t forbid_flag;  // -1 none; else flag bit must be CLEAR
+    int8_t need_faction; // -1 none; else only at a system owned by this faction
+    int8_t story;        // 1 = story (always wins selection), 0 = random flavor
+    int8_t weight;       // random selection weight
 };
 
 enum {
@@ -125,8 +127,8 @@ enum {
 static const Event EVENTS[] = {
     // EV_PIRATI — Wrecks ambush (random, dangerous)
     { { "Predoni Relitti", "Wreck Raiders" },
-      { "Tre cacciatorpediniere arrugginiti ti tagliano la rotta. Vogliono pedaggio.",
-        "Three rusted corvettes cut your course. They want a toll." },
+      { "I predoni di Scarlet Gutter ti tagliano la rotta. Vogliono pedaggio.",
+        "Scarlet Gutter's raiders cut your course. They want a toll." },
       { { { "Paga (-120 cr)", "Pay (-120 cr)" },  { -120,0,0,  F_RELITTI,5,  -1, -1,0, ACT_NONE, SFX_OK,   -1 } },
         { { "Sfreccia via",   "Run for it"     },  {    0,-1,-8, F_RELITTI,-3, -1, -1,0, ACT_NONE, SFX_DENY, -1 } },
         { { "Combatti",       "Fight"          },  {  160,0,-22, F_RELITTI,-8, -1, -1,0, ACT_NONE, SFX_DENY, -1 } } },
@@ -151,8 +153,8 @@ static const Event EVENTS[] = {
 
     // EV_DOGANA — Guild customs (only at Guild systems carrying contraband)
     { { "Dogana della Gilda", "Guild Customs" },
-      { "Un incrociatore della Gilda ti aggancia. Scanner accesi sul tuo carico illecito.",
-        "A Guild cruiser locks on. Scanners sweep your illicit hold." },
+      { "L'incrociatore dell'ammiraglio Raske ti aggancia. Scanner sul carico illecito.",
+        "Admiral Raske's cruiser locks on. Scanners sweep your illicit hold." },
       { { { "Corrompi (-200 cr)", "Bribe (-200 cr)" }, { -200,0,0, F_GILDA,2,  FL_SMUGGLER, -1,0,        ACT_NONE, SFX_OK,   -1 } },
         { { "Getta il carico",    "Dump the cargo"  }, {    0,0,0, F_GILDA,4,  -1,           G_CONTRA,-99,ACT_NONE, SFX_DENY, -1 } },
         { { "Sfreccia via",       "Run for it"      }, {    0,-2,-12,F_GILDA,-12,FL_SMUGGLER, -1,0,        ACT_NONE, SFX_DENY, -1 } } },
@@ -160,8 +162,8 @@ static const Event EVENTS[] = {
 
     // EV_CUSTODE — Keeper riddle (at Keeper systems)
     { { "L'enigma del Custode", "The Keeper's Riddle" },
-      { "Una Custode incappucciata ti porge un disco caldo: \"Cosa lega le stelle, e tace?\"",
-        "A hooded Keeper offers a warm disc: \"What binds the stars, yet is silent?\"" },
+      { "Madre Ilse ti porge un disco caldo: \"Cosa lega le stelle, e tace?\"",
+        "Mother Ilse offers a warm disc: \"What binds the stars, yet is silent?\"" },
       { { { "\"La luce\"",   "\"The light\""   }, { 0,0,0, F_CUSTODI,10, FL_KEEPER_TRUST, G_RELIQ,1, ACT_NONE, SFX_OK,   -1 } },
         { { "\"Il Silenzio\"","\"The Silence\"" }, { 0,0,0, F_CUSTODI,4,  -1,              -1,0,      ACT_NONE, SFX_BACK, -1 } },
         { { "Resta in silenzio","Stay silent"  }, { 0,0,0, F_CUSTODI,6,  -1,              -1,0,      ACT_NONE, SFX_OK,   -1 } } },
@@ -178,16 +180,16 @@ static const Event EVENTS[] = {
 
     // EV_ECO — meet the Echo (story, first arrival at the Abyss)
     { { "L'Eco", "The Echo" },
-      { "Nel vuoto una presenza si desta: \"Pilota. I Fari sono i miei occhi. Rendimeli.\"",
-        "In the void a presence stirs: \"Pilot. The Beacons are my eyes. Give them back.\"" },
+      { "Nel vuoto si desta la Voce: \"Pilota. I Fari sono i miei occhi. Rendimeli.\"",
+        "The Voice stirs in the void: \"Pilot. The Beacons are my eyes. Give them back.\"" },
       { { { "\"Lo faro'\"",   "\"I will\""      }, { 200,2,0, F_ECO,15, FL_MET_ECHO, -1,0, ACT_NONE, SFX_OK,   -1 } },
         { { "\"A che prezzo?\"","\"At what cost?\"" }, { 0,0,0, F_ECO,6,  FL_MET_ECHO, -1,0, ACT_NONE, SFX_BACK, -1 } } },
       2, -1, -1, FL_MET_ECHO, -1, 1, 0 },   // at_sys -1: gated by faction F_ECO in arrive() (procedural)
 
     // EV_MERCATONERO — black market (at Wreck systems)
     { { "Mercato nero", "Black Market" },
-      { "Sotto i moli, un Relitto sogghigna: contrabbando a buon prezzo, se hai fegato.",
-        "Below the docks a Wreck grins: cheap contraband, if you have the nerve." },
+      { "Sotto i moli One-Eye Bram sogghigna: contrabbando a buon prezzo, se hai fegato.",
+        "Below the docks One-Eye Bram grins: cheap contraband, if you have the nerve." },
       { { { "Compra (-180 cr)", "Buy (-180 cr)" }, { -180,0,0, F_RELITTI,4, FL_SMUGGLER, G_CONTRA,1, ACT_NONE, SFX_BUY,  -1 } },
         { { "Solo un'occhiata", "Just looking"  }, {    0,0,0, -1,0,        -1,          -1,0,       ACT_NONE, SFX_BACK, -1 } } },
       2, -1, -1, -1, F_RELITTI, 0, 6 },
