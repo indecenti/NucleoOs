@@ -156,11 +156,11 @@ const LIVE_XL = [
   String.raw`que dia es(?: hoy)?|a que (?:dia|fecha) estamos|que fecha es(?: hoy)?|quel jour (?:sommes-nous|sommes nous|on est|est-on)|quelle (?:est la )?date(?: aujourd'hui)?|welcher tag ist(?: heute)?|welches datum (?:ist|haben wir)(?: heute)?|der wievielte ist heute`,
   String.raw`en que ano estamos|que ano es|en quelle annee (?:sommes-nous|sommes nous|on est)|welches jahr (?:ist|haben wir)|en que estacion estamos|quelle saison(?: sommes-nous| est-ce)?|welche jahreszeit(?: ist| haben wir)?`,
   String.raw`(?:cuanta |nivel de )?bateria(?: me queda| queda| tengo| tiene)?|(?:niveau de )?batterie(?: restante)?|combien de batterie(?: il me reste)?|(?:wie viel )?akku(?:stand)?|batteriestand`,
-  String.raw`cuanto espacio (?:libre )?(?:tengo|queda|hay)(?: en la sd)?|espacio (?:libre|disponible)(?: en la sd)?|combien d'espace (?:libre )?(?:il me reste|reste|ai-je|j'ai)?(?: sur la sd)?|espace (?:libre|disponible)(?: sur la sd)?|wie viel (?:freier )?(?:speicher|speicherplatz|platz)(?: habe ich| ist frei| ist noch frei)?(?: auf der sd)?|freier speicher(?:platz)?`,
+  String.raw`cuanto espacio (?:libre )?(?:tengo|queda|hay)(?: libre)?(?: en la (?:tarjeta )?sd)?|espacio (?:libre|disponible)(?: en la (?:tarjeta )?sd)?|combien d'espace (?:libre )?(?:il me reste|reste|ai-je|j'ai|y a-t-il|il reste)?(?: sur la (?:carte )?sd)?|espace (?:libre|disponible)(?: sur la (?:carte )?sd)?|wie viel (?:freier )?(?:speicher|speicherplatz|platz)(?: habe ich| ist frei| ist noch frei)?(?: auf der sd(?:-karte)?)?|freier speicher(?:platz)?(?: auf der sd(?:-karte)?)?`,
   String.raw`cuanta (?:ram|memoria)(?: libre)?(?: tengo)?|memoria libre|combien de (?:ram|memoire)(?: libre)?|memoire libre|wie viel (?:ram|arbeitsspeicher)(?: ist frei)?|freier arbeitsspeicher`,
-  String.raw`cuanto tiempo llevas encendid[oa]|depuis combien de temps es-tu allume|wie lange laufst du schon`,
-  String.raw`que version (?:eres|tienes|de nucleoos|del firmware)|version del firmware|quelle version(?: de nucleoos| du firmware| es-tu)?|welche version(?: von nucleoos| hast du| ist das)?|firmware-version`,
-  String.raw`a que (?:red|wifi) estoy conectado|que (?:red|wifi)(?: es| uso)?|estoy conectado(?: a internet)?|mi (?:direccion )?ip|a quel (?:reseau|wifi) suis-je connecte|quel (?:reseau|wifi)(?: est-ce)?|suis-je connecte(?: a internet)?|mon adresse ip|mit welchem (?:wlan|netz|wifi) bin ich verbunden|welches (?:wlan|netz|wifi)|bin ich verbunden|meine ip(?:-adresse)?`,
+  String.raw`cuanto tiempo (?:llevas?|esta|estas) encendid[oa]|depuis combien de temps (?:es-tu|est-il|il est|est) allume|wie lange (?:laufst du|lauft|bist du an|ist (?:er |es )?(?:an|eingeschaltet))(?: schon)?(?: an)?`,
+  String.raw`que version (?:del firmware |de nucleoos )?(?:eres|tienes|tiene|usas|ejecutas|esta instalada)|que version (?:de nucleoos|del firmware)|version del firmware|quelle (?:est la )?version(?: de nucleoos| du firmware)?(?: es-tu| as-tu| tourne| est installee)?|welche (?:firmware-?)?version(?: von nucleoos)?(?: hast du| ist das| lauft| ist installiert)?|(?:die )?firmware-?version`,
+  String.raw`a que (?:red|wifi) estoy conectado|que (?:red|wifi)(?: es| uso)?|estoy conectado(?: a internet)?|mi (?:direccion )?ip|(?:cual es )?(?:la |tu |su )?direccion ip|a quel (?:reseau|wifi) suis-je connecte|quel (?:reseau|wifi)(?: est-ce)?|suis-je connecte(?: a internet)?|mon adresse ip|(?:quelle est )?(?:l'|son |ton |votre |sa )?adresse ip|mit welchem (?:wlan|netz|wifi) bin ich verbunden|welches (?:wlan|netz|wifi)|bin ich verbunden|meine ip(?:-adresse)?|(?:wie lautet |was ist |welche )?(?:die |deine |seine )?ip(?:-adresse| adresse)?(?: hast du)?`,
   String.raw`que citas tengo(?: hoy| manana)?|(?:mi|la) agenda(?: de hoy)?|qu'est-ce que j'ai (?:aujourd'hui|demain)(?: a l'agenda)?|mon agenda|mes rendez-vous(?: d'aujourd'hui)?|welche termine habe ich(?: heute| morgen)?|meine termine(?: heute)?|mein kalender`,
 ];
 const LIVE = [
@@ -168,11 +168,11 @@ const LIVE = [
   String.raw`che giorno (?:e|siamo)(?: oggi)?|oggi che giorno e|che data e(?: oggi)?|(?:la )?data(?: di oggi)?|what day is (?:it|today)|what'?s the date|what is the date|today'?s date|the date`,
   String.raw`che anno (?:e|siamo)|in che anno siamo|what year is it|che stagione e|in che stagione siamo|what season is it`,
   String.raw`(?:quanta|livello(?: della)?|stato(?: della)?|carica(?: della)?) (?:di )?batteria(?: ho| hai| ha| c'e| rimane| resta)?|batteria|battery(?: level| left| status)?|how much battery(?: is left| do i have| left)?`,
-  String.raw`quanto spazio (?:libero |rimasto )?(?:ho|hai|c'e|resta|rimane)(?: sulla sd| su sd)?|spazio (?:libero|rimasto|disponibile|su sd|sulla sd)|(?:free|disk|sd) space|how much (?:free )?space(?: is left| do i have| left)?|storage left`,
+  String.raw`quanto spazio (?:libero |rimasto )?(?:ho|hai|c'e|resta|rimane)(?: libero)?(?: sulla (?:scheda )?sd| su sd| sulla scheda)?|spazio (?:libero|rimasto|disponibile|su sd|sulla sd)(?: sulla (?:scheda )?sd)?|(?:free|disk|sd) space(?: on (?:the |my |your )?(?:sd(?: card)?|card))?|how much (?:free )?space(?: is)?(?: left| free| available)?(?: do i have)?(?: on (?:the |my |your )?(?:sd(?: card)?|card))?|storage left`,
   String.raw`quanta (?:ram|memoria)(?: libera)?(?: ho| hai| ha| c'e)?|(?:ram|memoria) (?:libera|disponibile)|free (?:ram|memory)|how much (?:free )?(?:ram|memory)(?: is free| do you have| does it have| has it| left)?`,
-  String.raw`uptime|da quanto (?:tempo )?(?:sei|e) acces[oa](?: il (?:cardputer|dispositivo|device))?|how long (?:have you been|has the (?:cardputer|device) been) (?:on|up|running)`,
-  String.raw`(?:che|quale) versione (?:sei|hai|ha|e|di nucleoos|del firmware|del sistema)|versione(?: del)? firmware|firmware version|what version (?:are you|is this|of nucleoos)`,
-  String.raw`(?:a che|a quale) (?:rete(?: wi-?fi)?|wi-?fi) (?:sono|sei|e) (?:connesso|collegato)|(?:che|quale) (?:rete(?: wi-?fi)?|wi-?fi)(?: e| uso| usa| stai usando)?|(?:sono|e) (?:connesso|collegato)(?: a internet)?|am i connected|is it connected|(?:which|what) (?:network|wi-?fi)(?: am i on| is this| is it (?:on|connected to))?|(?:qual e |che )?(?:il mio |l')?(?:indirizzo )?ip(?: ho| ha)?|(?:what'?s )?(?:my |its )?ip(?: address)?|ip address`,
+  String.raw`uptime|da quanto (?:tempo )?(?:sei|e) acces[oa](?: il (?:cardputer|dispositivo|device))?|how long (?:have you been|has the (?:cardputer|device) been|has it been|has been) (?:on|up|running|switched on|turned on)`,
+  String.raw`(?:che|quale) versione (?:sei|hai|ha|e|di nucleoos|del firmware|del sistema)|(?:che|quale) versione (?:del firmware |di nucleoos )?(?:gira|e installata|sta girando)|versione(?: del)? firmware|firmware version|what (?:firmware )?version (?:are you|is this|of nucleoos|is (?:it )?running|is installed|do you have)|which (?:firmware )?version(?: is (?:it )?running| is installed)?`,
+  String.raw`(?:a che|a quale) (?:rete(?: wi-?fi)?|wi-?fi) (?:sono|sei|e) (?:connesso|collegato)|(?:che|quale) (?:rete(?: wi-?fi)?|wi-?fi)(?: e| uso| usa| stai usando)?|(?:sono|e) (?:connesso|collegato)(?: a internet)?|am i connected|is it connected|(?:which|what) (?:network|wi-?fi)(?: am i on| is this| is it (?:on|connected to))?|(?:qual e |che )?(?:il mio |l')?(?:indirizzo )?ip(?: ho| ha)?|(?:what'?s )?(?:my |its )?ip(?: address)?|what(?:'s| is) (?:the |my |its |your )?ip(?: address)?|ip address`,
   String.raw`(?:che|quali) (?:impegni|appuntamenti) ho(?: oggi| domani)?|i miei impegni|impegni(?: di)? oggi|cosa ho (?:in agenda|oggi|domani)|agenda(?: di)? oggi|(?:what'?s|what is) on (?:today|my calendar)|my (?:schedule|agenda|appointments)(?: today)?`,
 ].map((re, i) => new RegExp('^' + LEAD + '(?:' + re + (LIVE_XL[i] ? '|' + LIVE_XL[i] : '') + ')' + TAIL + '$'));
 // "how do I raise the volume on my PC?" is a how-to, not an order: interrogative openers never trigger 'act'.
@@ -186,9 +186,10 @@ const LANG_CUES = {
   // "Imposta la luminosità dello schermo…" scored Spanish on "la" alone and the reply came back as "Brillo al 50 %".
   it: /\b(che|quanto|quanta|quanti|sono|ho|hai|della|dello|delle|degli|sulla|nel|nella|il|lo|gli|oggi|adesso|mi|dimmi|batteria|spazio|ore|imposta|alza|abbassa|metti|schermo|luminosita)\b/g,
   en: /\b(what|how|much|many|is|the|my|do|have|left|time|today|battery|space|which|am)\b/g,
-  es: /\b(que|cuanto|cuanta|tengo|queda|hay|estoy|hoy|es|mi|la|el|bateria|espacio|hora|dime)\b/g,
-  fr: /\b(quel|quelle|combien|est|il|reste|suis|aujourd'hui|mon|ma|de|batterie|espace|heure|sommes)\b/g,
-  de: /\b(wie|viel|ist|es|habe|ich|bin|welche|welches|heute|mein|meine|akku|speicherplatz|spat|uhr|haben|wir)\b/g,
+  // …and the setting verbs: "Mets la luminosité à 40 %" scored Spanish on "la" and was answered "Brillo al 40 %"
+  es: /\b(que|cuanto|cuanta|tengo|queda|hay|estoy|hoy|es|mi|la|el|bateria|espacio|hora|dime|pon|sube|baja|brillo|pantalla|volumen|sonido)\b/g,
+  fr: /\b(quel|quelle|combien|est|il|reste|suis|aujourd'hui|mon|ma|de|batterie|espace|heure|sommes|mets|monte|baisse|augmente|diminue|regle|luminosite|ecran|son)\b/g,
+  de: /\b(wie|viel|ist|es|habe|ich|bin|welche|welches|heute|mein|meine|akku|speicherplatz|spat|uhr|haben|wir|stelle|mach|erhohe|verringere|helligkeit|lautstarke|bildschirm|auf)\b/g,
 };
 export function guessLang(q) {
   const raw = String(q || '').toLowerCase();
@@ -257,7 +258,9 @@ export function liveFromStatus(kind, st, lang = 'it', now = new Date()) {
 // → ['space','uptime'] when every clause is a live question, else null.
 export function liveKinds(q) {
   const one = liveKind(q); if (one) return [one];
-  const clauses = String(q || '').split(/\s*(?:[,;?]|\s(?:e|ed|and|y|et|und|o)\s)\s*/i).map((c) => c.trim()).filter(Boolean);
+  // ", and how long…": the comma splits first, so a clause can START with the conjunction — drop it
+  const clauses = String(q || '').split(/\s*(?:[,;?]|\s(?:e|ed|and|y|et|und|o)\s)\s*/i)
+    .map((c) => c.trim().replace(/^(?:e|ed|and|y|et|und|o|poi|then|also|anche|puis|dann)\s+/i, '')).filter(Boolean);
   if (clauses.length < 2) return null;
   const kinds = [];
   for (const c of clauses) {
@@ -298,10 +301,51 @@ export function commandHint(q) {
         (SETTING_VERB.test(t) || (SETTING_AMOUNT.test(t) && words <= 4))) return 'act';
     if (REMIND.test(t) || (EVENT_VERB.test(t) && EVENT_NOUN.test(t)) || (TIMER.test(t) && TIMER_CUE.test(t))) return 'act';
   }
-  for (const re of LIVE) if (re.test(t)) return 'live';
+  // liveKind, not the bare LIVE list: it drops the device named as the subject ("quanta batteria ha il Cardputer",
+  // "l'adresse IP du Cardputer") — commandHint said null for those and an LLM answered with a guessed value.
+  if (liveKind(q)) return 'live';
   if (LAUNCH.test(t)) return 'launch';
   return null;
 }
+
+// launchTarget(q, names): the app a launch order names, resolved in the BROWSER — for the languages the engines do not
+// read ("Öffne den Taschenrechner" went to a chat model that wrote a JavaScript calculator) and for a wording they miss.
+// names = { appId: ['Rechner', 'Calculator', …] } — the shell's own localized app names (i18n app_<id>); LAUNCH_SYN adds
+// what people say when it is not the app's name. Only a clean "<verb> [article] <app name> [please]" counts: the whole
+// object must BE a name, so "apri il file note.txt" or "ouvre une page avec…" stay with the normal ladder. → id | null
+const LAUNCH_SYN = {
+  calculator: ['calcolatrice', 'calculadora', 'calculatrice', 'taschenrechner', 'rechner'],
+  notepad: ['blocco note', 'note', 'bloc de notas', 'notas', 'bloc-notes', 'bloc notes', 'notizen', 'notizblock', 'editor'],
+  'media-player': ['musica', 'music', 'reproductor', 'reproductor de musica', 'musique', 'lecteur de musique', 'musik', 'musikplayer', 'player'],
+  'photo-viewer': ['foto', 'fotos', 'galeria', 'galerie', 'bilder', 'photos', 'gallery'],
+  settings: ['impostazioni', 'ajustes', 'configuracion', 'parametres', 'reglages', 'einstellungen'],
+  'file-commander': ['file', 'archivos', 'explorador de archivos', 'fichiers', 'gestionnaire de fichiers', 'dateien', 'dateimanager', 'datei-manager'],
+  calendar: ['calendario', 'calendrier', 'kalender', 'agenda'],
+  clock: ['orologio', 'sveglia', 'reloj', 'alarma', 'horloge', 'reveil', 'uhr', 'wecker'],
+  weather: ['meteo', 'tiempo', 'el tiempo', 'clima', 'wetter'],
+  recorder: ['registratore', 'grabadora', 'enregistreur', 'dictaphone', 'rekorder', 'diktiergerat'],
+  paint: ['disegno', 'dibujo', 'dessin', 'malen', 'zeichnen'],
+  browser: ['navegador', 'navigateur'],
+  spreadsheet: ['foglio di calcolo', 'hoja de calculo', 'tableur', 'feuille de calcul', 'tabelle', 'tabellenkalkulation'],
+  contacts: ['contatti', 'contactos', 'kontakte'],
+  tasks: ['attivita', 'tareas', 'taches', 'aufgaben'],
+  games: ['giochi', 'juegos', 'jeux', 'spiele'],
+  mail: ['posta', 'correo', 'courrier', 'courriel'],
+  terminal: ['terminale', 'terminal', 'konsole'],
+};
+const LAUNCH_OBJ = /^(?:(?:apri|avvia|lancia|open|launch|abre|abrir|inicia|ouvre|ouvrir|lance|lancer|offne|offnen|starte)\s+)(?:(?:mi|me|moi|mir)\s+)?(?:(?:il|lo|la|i|gli|le|the|my|el|los|las|mi|mis|tu|tus|un|una|une|les|mon|ma|mes|den|die|das|der|meine?n?|dein(?:e|en)?)\s+|l'\s*)?(?:(?:app|applicazione|aplicacion|application|anwendung)\s+(?:(?:di|de|del|della|des|du|of the|of)\s+)?)?(.+?)(?:\s+(?:app|per favore|please|por favor|s'il te plait|s'il vous plait|bitte))?$/;
+export function launchTarget(q, names = {}) {
+  const t = fold(q).replace(/[?!.,;:¿¡]+/g, ' ').replace(/\s+/g, ' ').trim();
+  if (!LAUNCH.test(t)) return null;
+  const m = LAUNCH_OBJ.exec(t); if (!m) return null;
+  const obj = m[1].replace(/^l'\s*/, '').trim();
+  if (!obj || obj.split(' ').length > 4) return null;            // a description, not an app name
+  for (const [id, list] of Object.entries(names)) for (const n of list || []) if (fold(n) === obj) return id;
+  for (const [id, list] of Object.entries(LAUNCH_SYN)) if (list.includes(obj)) return id;
+  return null;
+}
+const LAUNCH_T = { it: 'Apro {app}.', en: 'Opening {app}.', es: 'Abro {app}.', fr: 'J’ouvre {app}.', de: 'Ich öffne {app}.' };
+export const launchReply = (app, lang = 'it') => (LAUNCH_T[lang] || LAUNCH_T.en).replace('{app}', app);
 
 // settingAct(q): a volume / brightness order read WITHOUT an engine — for a Cardputer whose brain is paused (web
 // mode) and a browser with no WASM brain installed: "luminosità al 50%" said "not carried out" although

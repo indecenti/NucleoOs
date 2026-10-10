@@ -1,7 +1,7 @@
 // Host check for the ANIMA workspace NL parser (apps/anima/www/nlfs.js) and the pure
 // helpers in fsclient.js. Pure modules — no DOM, no network — so they import straight into
 // Node. Run: node tools/anima-host/nlfs-check.mjs
-import { parseFileIntent } from '../../apps/anima/www/nlfs.js';
+import { parseFileIntent, isPlainFileOp } from '../../apps/anima/www/nlfs.js';
 import { normPath, globToRegExp, diffStat, isTextName } from '../../apps/anima/www/fsclient.js';
 
 let pass = 0, fail = 0;
@@ -49,9 +49,47 @@ t('elimina vecchio.txt', { op: 'delete', path: 'vecchio.txt' });
 t('cancella la cartella tmp', { op: 'delete', path: 'tmp' });
 t('rm build.log', { op: 'delete', path: 'build.log' });
 t('rimuovi src/old.c', { op: 'delete', path: 'src/old.c' });
+t('cancella il file vecchio.txt', { op: 'delete', path: 'vecchio.txt' });
+t('elimina index.html', { op: 'delete', path: 'index.html' });
+t('delete the file "old notes.md"', { op: 'delete', path: 'old notes.md' });
 // trap: not files
 t('cancella la conversazione', null);
 t('elimina l’evento di domani', null);
+// trap: the instant path deletes for real — these deleted a whole file (found live on the ADV battery, 2026-10-10).
+// "del" is the Italian "of the"; a delete INSIDE a file is an edit for the agent, not a delete of the file.
+t('Mostrami il contenuto del file config.json', { op: 'read', path: 'config.json' });
+t('Riassumi il documento del cliente.pdf', null);
+t('Cerca in tutti i file del progetto la parola TODO e dimmi in quali file compare.', null);
+t('Trova il file del progetto che contiene somma', null);         // a content search with a question: the agent's
+t('trova il file report.pdf', { op: 'glob', pattern: '**/report.pdf' });
+t('Rimuovi le righe vuote da note.txt', null);
+t('Remove the duplicate lines from names.txt', null);
+t('Elimina i commenti da app.js', null);
+t('Cancella la riga 3 di todo.md', null);
+t('Delete the TODO comments in app.js', null);
+// "lista" is a noun here: the read wins (and the question about its content goes to the agent)
+t('Leggi spesa.md e dimmi quanti elementi ci sono nella lista.', { op: 'read', path: 'spesa.md' });
+t('apri la lista della spesa.md', { op: 'read', path: 'spesa.md' });
+t('lista i file in docs', { op: 'list', path: 'docs' });
+
+// ---------- the instant path does ONE literal op; anything more is a task (isPlainFileOp) ----------
+// Live on the ADV battery these were parsed as a single write and ran without a model: vendite.csv overwritten with
+// nothing, an empty fib.txt, the description written into timer.html.
+function plain(input, expected) {
+  const got = isPlainFileOp(parseFileIntent(input), input);
+  if (got === expected) pass++; else { fail++; fails.push({ input, expected: 'plain=' + expected, got: 'plain=' + got + ' ' + JSON.stringify(parseFileIntent(input)) }); }
+}
+plain('In vendite.csv, compute the total amount for each region and save the result as totali.csv with the columns regione,totale.', false);
+plain('Write and run a JavaScript snippet that computes the first 15 Fibonacci numbers starting from 0, 1 and save its output to fib.txt.', false);
+plain('Crea la pagina timer.html: un conto alla rovescia di 10 secondi che parte quando premi il pulsante Avvia.', false);
+plain('salva appunti.md con contenuto la riunione di oggi', false);            // generated content: the agent (or the device composes)
+plain('crea note.txt', true);
+plain('nuovo file diario/2026.md', true);
+plain('crea diario.txt con scritto ciao mondo', true);
+plain('scrivi nel file todo.md: comprare il latte', true);
+plain('crea index.html con scritto <h1>Ciao</h1>', true);                    // real markup is the source
+plain('leggi note.txt', true);
+plain('rinomina a.txt in b.txt', true);
 
 // ---------- RENAME / MOVE ----------
 t('rinomina a.txt in b.txt', { op: 'move', from: 'a.txt', to: 'b.txt', rename: true });

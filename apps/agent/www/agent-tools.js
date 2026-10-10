@@ -415,7 +415,9 @@ export const LOCAL_EXCLUDED_TOOLS = new Set(['generate_image', 'transcribe', 'li
 export const PRIVATE_EXCLUDED_TOOLS = new Set(['weather']);                       // a network call: never in Private
 
 export function localToolDefs(clientTools = CLIENT_TOOLS, { private: priv = false } = {}) {
-  return clientTools.filter((t) => !LOCAL_EXCLUDED_TOOLS.has(t.name) && !(priv && PRIVATE_EXCLUDED_TOOLS.has(t.name)));
+  return clientTools.filter((t) => !LOCAL_EXCLUDED_TOOLS.has(t.name) && !(priv && PRIVATE_EXCLUDED_TOOLS.has(t.name)))
+    // a description that sends the model to an excluded tool points at the shell command instead
+    .map((t) => t.name === 'open_in_os' ? { ...t, description: t.description.replace('Call list_apps first if unsure of the id.', 'If unsure of the id, run the sh command `apps` first (every installed app: id, name, category, what it does).') } : t);
 }
 
 // Tool calls a model wrote into its text instead of the structured field. Only a call to a KNOWN tool counts,
@@ -467,7 +469,9 @@ export function trimOldToolResults(messages, { budget = 36000, keep = 4, stub = 
 
 // A reply that only ANNOUNCES work ("Faccio le due modifiche… Poi ripubblico l'app.") with no tool call: small
 // local models stop there and the turn ends with nothing done. Five languages, intent / future forms.
-export const ANNOUNCES_WORK = /(?<!\p{L})(faccio|modifico|procedo|vado a|sto per|ora (?:modifico|creo|scrivo|pubblico|ripubblico|eseguo|leggo)|poi (?:ripubblico|pubblico|eseguo|salvo)|i'?ll|i will|let me|i'?m going to|next,? i|voy a|ahora (?:modifico|creo)|je vais|maintenant je|ich werde|jetzt (?:ändere|erstelle|schreibe))(?!\p{L})/iu;
+// …and the first-person PRESENT a small model ends on: "Ich füge die Zeile „Hola“ … hinzu." (qwen3.5:9b, real Cardputer,
+// 2026-10-10) changed nothing — the loop took it as the final answer.
+export const ANNOUNCES_WORK = /(?<!\p{L})(faccio|modifico|procedo|vado a|sto per|ora (?:modifico|creo|scrivo|pubblico|ripubblico|eseguo|leggo)|poi (?:ripubblico|pubblico|eseguo|salvo)|i'?ll|i will|let me|i'?m going to|next,? i|voy a|ahora (?:modifico|creo)|je vais|maintenant je|ich werde|jetzt (?:ändere|erstelle|schreibe)|aggiungo|creo|scrivo|correggo|rinomino|sposto|salvo|inserisco|sostituisco|aggiorno|i'?m (?:adding|creating|writing|updating|fixing|editing|renaming|saving|appending)|i am (?:adding|creating|writing|updating|fixing|editing)|añado|agrego|escribo|corrijo|guardo|actualizo|renombro|inserto|j'?ajoute|je crée|je cree|j'?écris|j'?ecris|je corrige|je modifie|je renomme|j'?enregistre|je remplace|ich (?:füge|fuge|erstelle|schreibe|ändere|andere|korrigiere|speichere|benenne|ersetze|aktualisiere))(?!\p{L})/iu;
 const NUDGE_DO_IT = 'You described what you will do, but you did not call any tool, so NOTHING has changed yet. Do it now with the tools (edit_file, write_file, publish_app, …). If it is truly already done, give the final answer.';
 
 export async function runLocalToolLoop({ chat, execTool, messages, tools = [], maxSteps = 12, abort, onEvent, budget = 36000 }) {

@@ -23,12 +23,35 @@ both exist; `ai.local.engines.prefer`) and the PC model pick (`ai.local.engines.
    - a plain volume / brightness order is set directly with `POST /api/anima/act` (`settingAct`) — no engine needed;
    - actions / launches go to the **local agent** (PC model + real tools); if it cannot, the turn ends
      "not done" — a tool-less chat must never claim an action.
+   The engines (device cascade + its WASM copy) read **Italian and English only**, so the browser decides itself,
+   exactly, in all five languages, before asking them:
+   - a live question asked in es/fr/de (or one an engine did not read) → `liveStatusReply` from `/api/status`;
+     `commandHint` uses `liveKind`, so "quanta batteria ha **il Cardputer**", "l'adresse IP **du** Cardputer" count;
+   - a launch → `launchTarget` (cascade.js) against the desktop's own app names (`/i18n/shell.<lang>.json`
+     `app_<id>`) + `LAUNCH_SYN` ("Öffne den Taschenrechner" had reached a chat that wrote a JS calculator);
+   - a volume / brightness order → `settingAct` → `/api/anima/act` at once (any profile).
+1b. **Arithmetic** (`local/nlmath.js`, loaded only when the turn has a digit or continues a result): a sentence that is
+   pure arithmetic in any of the five languages ("combien font 17 fois 23, divisé ensuite par 5", "y dividido entre
+   3") is computed exactly — every word must be a number, an operator word or a known filler, else the ladder goes on.
+   The reply is the working + ONE bold result; the value rides in the turn's `meta.value` for the next follow-up.
 2. Weather (browser, Open-Meteo) · 🌐 Web (Groq compound, Auto only) · translation ladder.
 3. Local agent (a task: files, code, app) → local server chat → cloud (with a key) → local server as fallback →
    browser GPU (WebLLM, HTTPS only) → browser WASM brain + web index → the Cardputer.
 
 Cloud errors are recorded only when a cloud rung could run (a key, not Private) — never "can't reach Claude"
-for a local failure. Replies follow the language of the user's message (prompt rule in `contextkit.js`).
+for a local failure. Replies follow the language of the user's message: the prompt rule in `contextkit.js`, plus —
+when `userLanguage(text)` sees another language than the OS one — a last line that NAMES it (chat) or `replyLang`
+(agent runtime). The general rule alone did not hold: qwen3.5:9b answered English and Spanish in Italian.
+
+With a cloud key the agent runtime triages every turn. Its triage runs on the cheapest model with no grounding, so
+ANIMA passes `hostAnswers:true`: a "plain answer" verdict returns null and ANIMA's own chat answers (NucleoOS facts,
+device line, date, the user's model) — the triage had called NucleoOS "a Linux IoT OS for STM32 Nucleo boards".
+
+**The instant file path** (`nlfs.js` → `runFileIntent`, no model) does ONE literal op only (`isPlainFileOp`); anything
+more is the agent's. It once overwrote `vendite.csv` with nothing ("compute the totals of vendite.csv and save them as
+totali.csv"), made an empty `fib.txt` ("write and run a script… save its output to fib.txt") and deleted files
+("il contenuto **del** file config.json": `del` was a delete verb). Now: a delete must be the whole request and asks
+first (`/api/fs/delete` is final), a write never empties an existing file, and with no agent a task is not run there.
 
 ## The web client carries the load (http:// has no service worker)
 NucleoOS is opened at `http://<cardputer-ip>`: not a secure origin, so `navigator.serviceWorker` does not exist and the
@@ -48,8 +71,10 @@ calendar service OFF so the desktop gets the RAM. `/api/status` → `"profile": 
 - Navigation is detected by `Accept: text/html` (browsers send `Sec-Fetch-Mode` only to secure origins).
 - The reboot waits 1.5 s after queuing the page (`HANDOFF_FLUSH_MS`), or the page arrives cut.
 - The page reloads when `/api/status` says `profile: "web"`. The WebSocket trigger stays as a fallback.
-- In web mode the device's `/api/anima` answers 503 by design → ANIMA says so (`devWebMode`), the L1
-  setting stands down, and step 1 above takes over.
+- In web mode the device's brain is paused. The firmware (0.7.x) answers `/api/anima` **200 "Non lo so." with
+  `tier:"none"`**, not 503 — `deviceCommand` treats that as `busy` when `/api/status` says `profile:"web"`. Taken as
+  an answer it skipped every fallback below (brightness went to the agent, "che ore sono" to a model). ANIMA says so
+  (`devWebMode`), the L1 setting stands down, and step 1 above takes over.
 
 Pairing sessions survive it: `nucleo_auth` evicts the **least recently used** of its 32 slots
 (`auth_slots.c`, `npm run authslot:test`). The dev tools (`push-files`, `push-ota`, `sd-net-sync`) reuse ONE cached
@@ -108,7 +133,15 @@ and `/api/apps` kept the old list until a reboot.
   declared; Anthropic's request rides in the last user turn so roles alternate), `noTools` for the PC model —
   then "(step budget exhausted — the task may be incomplete)". A provider that refuses costs only the summary.
 
-Tests: `tools/anima-live-status.test.mjs`, `tools/fsclient-root.test.mjs`, `tools/edit-replace.test.mjs`,
+**On the real Cardputer**: `node tools/web-e2e/anima-device.mjs [--host IP] [--only tag] [--overlay]` boots the web OS
+from the device in headless Chrome (Local Network Access granted, so Ollama on this PC is reachable), opens ANIMA from
+the Start menu and runs ~50 tasks in five languages, each judged on the RESULT (the SD file, the opened window, the
+backlight read back, `/api/status`). `--overlay` serves the web files from the working tree (`overlay.mjs`) while
+`/api/*` stays on the device: a fix is proven on the hardware before any SD sync. Test files live in `/data/anima-e2e`;
+the window session, ANIMA's synced conversations/workspace and the brightness are restored. `--sim` runs it on the
+simulator. `device-smoke.mjs --overlay` does the same for every app.
+
+Tests: `tools/anima-live-status.test.mjs`, `tools/anima-nlmath.test.mjs`, `tools/fsclient-root.test.mjs`, `tools/edit-replace.test.mjs`,
 `tools/agent-tool-guard.test.mjs`, `tools/shell-ai-engines.test.mjs`, `tools/anima-host/contextkit-check.mjs`,
 `tools/agent-sh.test.mjs`, `tools/ai-models.test.mjs` (rate limit vs quota), `tools/device-session.test.mjs`,
 `tools/anima-host/app-publish-check.mjs` (real lint), `tools/anima-host/app-ops-check.mjs`,

@@ -1089,7 +1089,7 @@
     // demand (loadLLM / loadForge below). Opening the app now costs the Cardputer ~3 module requests, not
     // ~14: the device httpd has just 4-6 sockets and ~18KB heap, so the parallel boot fan-out WAS the cost.
     import { makeFS, diffLines, isTextName } from './fsclient.js';
-    import { parseFileIntent } from './nlfs.js';
+    import { parseFileIntent, isPlainFileOp } from './nlfs.js';
     import { compact as ctxCompact, usage as ctxUsage } from './context.js';
     import * as ctxkit from './contextkit.js';   // context engine: token-budgeted, injection-safe messages[] for any backend
     import * as AI from '/ai.js';                 // shell registry: the ONE provider table + teacher.json vault + cloud wire
@@ -3209,6 +3209,8 @@
         else if(I==='wikidata'){ eng='Online · Wikidata'; model='REST API'; }
         else { eng=TR('Online · maestro Grok', 'Online · Grok teacher');   // grok / teacher / generic remote
                model=r.model||(keyCfg&&keyCfg.model)||'auto'; host=hostOf((keyCfg&&keyCfg.base)||''); }
+      } else if(T==='browser'){                                     // an exact rule run in this page: arithmetic, an app launch (no model, no device)
+        kind='wasm'; icon='◆'; eng=TR('Browser · regola esatta', 'Browser · exact rule'); model=I==='calc'?TR('calcolo', 'arithmetic'):I==='launch'?TR('avvio app', 'app launch'):I;
       } else if(r.status){                                          // an exact value read from the Cardputer's /api/status (no model involved)
         kind='device'; icon='▣'; eng=L('engLiveStatus'); model='/api/status';
       } else if(r.web){                                             // in-browser WEB INDEX — live Wikipedia/Wikidata from the browser, or a cached recall (never the MCU)
@@ -4047,6 +4049,10 @@
     let _cascade;
     const _cascadeLoad=lazy('./local/cascade.js', (m)=>(_cascade=m));
     function cascadeMod(){ return _cascade ? Promise.resolve(_cascade) : _cascadeLoad(); }
+    // Exact arithmetic from a sentence (five languages, no model): fetched only when a turn could be one.
+    let _nlmath;
+    const _nlmathLoad=lazy('./local/nlmath.js', (m)=>(_nlmath=m));
+    function nlmathMod(){ return _nlmath ? Promise.resolve(_nlmath) : _nlmathLoad(); }
     // Can the browser WASM brain answer with NO network pull? (loaded, or pack already cached). Never downloads.
     async function browserProvisioned(){ if(_edgeReady) return true; try{ return await (await edgeEngine()).ready(); }catch{ return false; } }
     // Run the in-browser WASM cascade. silent=false → explicit Browser mode (blocking provisioning gate, may
@@ -4140,7 +4146,12 @@
         if(resp.status===413 || resp.status===414) return done({ err:'too_long' });
         if(resp.status===503){ await refreshDevProfile(); return done({ err:'busy' }); }
         if(!resp.ok) return done({ err:'unreachable' });
-        try{ const r=await resp.json(); replayPendingSoon(); return done({ r }); }catch{ return done({ err:'unreachable' }); }
+        let r; try{ r=await resp.json(); }catch{ return done({ err:'unreachable' }); }
+        // In the web profile the brain is paused, but the firmware answers 200 "Non lo so." (tier none) — not the 503 the
+        // client was built on. Taken as an answer, it skipped every fallback: "alza la luminosità" reached the agent ("I
+        // can't change the brightness"), "che ore sono" a model (real Cardputer, 2026-10-10). It is "busy".
+        if(r && r.tier==='none' && ((await statusNow()) || {}).profile==='web') return done({ err:'busy' });
+        replayPendingSoon(); return done({ r });
       } finally { st.done(); }
     }
     // Carry out a device action the BROWSER's engine decided (POST /api/anima/act). For a Cardputer that answers
@@ -4227,6 +4238,32 @@
       catch{ return false; }
     }
     async function pcAgentReady(){ return useAgents && await pcServerLive(); }
+    // The EXACT answer to a live question the status carries (SD space, battery, time, network, RAM…), in the language
+    // the user wrote in — never a model's guess. null = not one of those (agenda, season) or no status.
+    async function liveStatusReply(q, P){
+      const k=P.liveKind && P.liveKind(q); if(!k) return null;
+      const st=await statusNow(1500);
+      const txt=st && P.liveFromStatus(k, st, (P.guessLang && P.guessLang(q)) || lang);
+      return txt ? { reply:txt, intent:'live_'+k, domain:'system', tier:'status', status:true, confidence:95 } : null;
+    }
+    // The desktop's own app names (shell i18n app_<id>) for the browser-side launch resolver: fetched once per language,
+    // and only when a launch order needs them.
+    const _appNames={};
+    async function appNamesFor(langs){
+      const names={};
+      for(const l of langs){
+        if(!_appNames[l]){ try{ const r=await fetch('/i18n/shell.'+l+'.json'); if(r.ok) _appNames[l]=await r.json(); }catch{} }
+        for(const [k,v] of Object.entries(_appNames[l]||{})) if(k.startsWith('app_') && typeof v==='string') (names[k.slice(4)] ||= []).push(v);
+      }
+      return names;
+    }
+    async function browserLaunch(q, P){
+      if(!P.launchTarget) return null;
+      const qLang=(P.guessLang && P.guessLang(q)) || lang;
+      const names=await appNamesFor([...new Set([qLang, lang, 'en'])]);
+      const id=P.launchTarget(q, names); if(!id) return null;
+      return { reply:P.launchReply((names[id] && names[id][0]) || id, qLang), action:'launch', arg:id, intent:'launch', domain:'app', tier:'browser', confidence:90 };
+    }
     async function commandFirst(q){
       const P=await cascadeMod();
       const mem=P.memoryHint ? P.memoryHint(q) : null;
@@ -4240,12 +4277,28 @@
       }
       const hint=P.commandHint(q); if(!hint) return null;             // ordinary question: no device round-trip
       try{ const m=await loadLLM(); if(m.isTranslateRequest(q)) return null; }catch{}   // translation has its own ladder
+      // The device's engine and the browser's copy of it read Italian and English only: a live question asked in
+      // es/fr/de is answered exactly from the status, in that language — the engines answered it in Italian ("connesso
+      // a …" to a French question) or not at all, and "¿Qué hora es ahora?" reached a model or "Non lo so".
+      if(hint==='live' && !/^(it|en)$/.test((P.guessLang && P.guessLang(q)) || lang)){ const s=await liveStatusReply(q, P); if(s) return s; }
+      // A launch the browser can resolve itself (the desktop's own app names, five languages) opens at once — no device
+      // round-trip, no engine that reads only it/en ("Öffne den Taschenrechner" got a chat-written JS calculator).
+      if(hint==='launch'){ const b=await browserLaunch(q, P); if(b) return b; }
+      // A plain volume / brightness order needs no engine: the device's own executor sets it (/api/anima/act). The engines
+      // read it/en only, and a wording they missed ("Turn the brightness down") reached a chat that said it couldn't.
+      if(hint==='act' && P.settingAct){ const a=P.settingAct(q);
+        if(a){ const acted=await deviceAct(a);
+          if(acted && acted.done===true) return { ...acted, reply:P.settingReply(a.tool, acted.reply, (P.guessLang && P.guessLang(q)) || lang) };
+          if(acted) return notPerformed(acted, 'failed'); } }
       // The real classifier: the in-browser engine when it is already here (no download), else the device.
       if(await browserProvisioned()){
         let local=null; try{ local=await browserOffline(q, lang, true); }catch{ local=null; }
         _turnLocal={ q, r:local };                                    // rung 3 reuses it if this isn't a command
         const kind=P.classifyCommand(local);
-        if(!kind) return null;
+        if(!kind){                                                    // not read as a command: a live value is still exact
+          if(hint==='live'){ const s=await liveStatusReply(q, P); if(s){ _turnLocal=null; return s; } }
+          return null;
+        }
         if(kind==='client' || kind==='device'){ _turnLocal=null; return local; }   // browser hand-off / run by settleDeviceAction
         const d=await deviceCommand(q);                               // live state: the device is the authority
         if(d.r && P.answered(d.r)){ _turnLocal=null; return d.r; }
@@ -4253,17 +4306,16 @@
         return null;                                                  // both memos stay for the offline rungs
       }
       const d=await deviceCommand(q);
-      if(d.r) return P.classifyCommand(d.r) ? d.r : null;             // not a command after all → normal ladder (rung 4 reuses d)
+      if(d.r){
+        if(P.classifyCommand(d.r)) return d.r;
+        if(hint==='live'){ const s=await liveStatusReply(q, P); if(s) return s; }   // the device engine missed the wording
+        return null;                                                  // not a command after all → normal ladder (rung 4 reuses d)
+      }
       // The device could not take it (web mode, unreachable…). A plain LLM must never "perform" a device change
       // it cannot make — but the PC's model WITH the real tools can: hand the action to the local agent.
       // Live state the status already carries (SD space, battery, time, network…) is answered EXACTLY from it —
       // never by a model: qwen3.5:9b, handed "how much SD space", said 1.4 GB on a card with 18.7 free.
-      if(hint==='live' && d.err!=='unpaired' && d.err!=='stopped' && P.liveKind){
-        const k=P.liveKind(q);
-        if(k){ let st=null; try{ const rs=await fetch('/api/status',{ cache:'no-store' }); if(rs.ok) st=await rs.json(); }catch{}
-          const txt=st && P.liveFromStatus(k, st, (P.guessLang && P.guessLang(q)) || lang);   // answer in the language the user wrote in
-          if(txt) return { reply:txt, intent:'live_'+k, domain:'system', tier:'status', status:true, confidence:95 }; }
-      }
+      if(hint==='live' && d.err!=='unpaired' && d.err!=='stopped'){ const s=await liveStatusReply(q, P); if(s) return s; }
       // Same for live state ("how much SD space") and launching an app: a tool-less chat would guess the value
       // or claim it opened the app; the agent reads device_status / calls open_in_os for real.
       // A plain volume / brightness order needs no engine at all: the device sets it in one call (/api/anima/act),
@@ -4330,7 +4382,9 @@
     async function weatherAsk(q, online){
       if(_turnSig && _turnSig.aborted) return null;
       const w = await weatherMod();
-      const wl = lang==='it' ? 'it' : 'en';                     // the weather NLU speaks it/en, like the engine
+      // the weather NLU reads all five languages; the reply follows the language the question was written in
+      const P=await cascadeMod(); const ql=(ctxkit.userLanguage && ctxkit.userLanguage(q)) || (P.guessLang && P.guessLang(q)) || lang;
+      const wl = ['it','en','es','fr','de'].includes(ql) ? ql : 'en';
       if(!w.parseWeather(q, { lang:wl }).isWeather) return null;
       try{
         return await AM.withStep(_turnSig, AM.STEP_MS.web, (signal)=> w.weatherAnswer(q, wl,
@@ -4338,7 +4392,7 @@
       }catch(e){
         if(_turnSig && _turnSig.aborted) throw e;                 // Stop: the stopped-turn path renders it
         const city = w.parseWeather(q, { lang:wl }).city;         // timeout / network: an honest miss, never an LLM guess
-        return w.weatherResult(q, wl==='en' ? `I couldn't get the weather for ${city}.` : `Non riesco a recuperare il meteo per ${city}.`, 40);
+        return w.weatherResult(q, wl==='it' ? `Non riesco a recuperare il meteo per ${city}.` : `I couldn't get the weather for ${city}.`, 40);
       }
     }
 
@@ -4735,7 +4789,10 @@
       try{
         const rt=await agentRuntime();
         const seed=wsx || await wsContext(q);   // Claude-Code <env>: seed the worker with the workspace tree + @-mentioned files
-        const txt=await rt.run(q, history.slice(0,-1), { seed });   // prior turns (runtime appends q as the current user)
+        const replyLang=ctxkit.userLanguage ? ctxkit.userLanguage(q) : null;   // the language the user wrote in, named to the agent
+        // hostAnswers: a plain question the triage would answer itself (cheapest model, no grounding) comes back null and
+        // is answered by ANIMA's own chat below (cloudAsk / the local server) — NucleoOS facts, device state, date, language.
+        const txt=await rt.run(q, history.slice(0,-1), { seed, replyLang, hostAnswers:true });   // prior turns (runtime appends q as the current user)
         if(!txt) return null;
         const eng=rt.engine;
         // On the PC's own model the turn is named like any local-server answer (engine map "k-server": Ollama · model).
@@ -4758,11 +4815,20 @@
     function lastBotNumber(){
       const last=history.length?history[history.length-1]:null;   // most recent turn = previous bot answer
       if(!last||last.role!=='bot') return null;                   // user turn not pushed yet at call time
+      if(last.meta && typeof last.meta.value==='number') return String(last.meta.value);   // an exact calculation (nlmath)
       const isMath=(last.meta&&MATH_INTENT.test(last.meta.intent||''))||/=\s*-?\d/.test(last.text||'');
       if(!isMath) return null;                                    // last answer wasn't a calculation → chain broken
       const nums=String(last.text||'').match(/-?\d[\d.]*/g);      // "Fa 2430." / "45 × 54 = 2430." → take the result
       if(!nums) return null;
       return nums[nums.length-1].replace(/\.+$/,'');
+    }
+    async function browserMath(q, prev){
+      if(!/\d/.test(q) && prev==null) return null;                 // nothing to compute: never load the module
+      const M=await nlmathMod(), P=await cascadeMod();
+      const qLang=(ctxkit.userLanguage && ctxkit.userLanguage(q)) || (P.guessLang && P.guessLang(q)) || lang;
+      const res=M.parseMath(q, { lang:qLang, prev: prev!=null ? Number(prev) : null });
+      if(!res) return null;
+      return { reply:M.mathReply(res), value:res.value, intent:'calc', domain:'calc', tier:'browser', confidence:99 };
     }
     function chainMath(q){
       const isUnary=CHAIN_UNARY.test(q), isOp=CHAIN_OP.test(q);
@@ -4804,14 +4870,17 @@
       // to write it — heavy for the device and never a real page. Literal ops stay on the instant path.
       // Likewise a read/list/search that carries a QUESTION ("read notes.md and tell me how many items…"): the instant
       // path would only show the file and drop the question.
-      const needsAgent = fintent && ((fintent.op==='write' || fintent.op==='append') && fintent.mode==='auto'
-        || /^(read|list|tree|search|glob)$/.test(fintent.op) && ctxkit.asksAboutContent(q));
+      const plainOp = !!fintent && isPlainFileOp(fintent, q);   // one literal op — else a task (nlfs.js)
+      const needsAgent = fintent && (!plainOp || /^(read|list|tree|search|glob)$/.test(fintent.op) && ctxkit.asksAboutContent(q));
       // A request in SEVERAL steps ("crea la cartella demo e dentro un README…, poi mostramelo") is a task, not one
       // file op: the instant path took only its first op. And with no workspace open, the instant path could only
       // say "open a workspace" — the agent offers the same choice AND can do the job in /data/agent.
       const multiStep = !!fintent && /\b(e poi|poi|quindi|dopo|e dentro|and then|then|after that|inside it|y luego|luego|puis|ensuite|danach|dann)\b/i.test(q);
       const genWrite = (needsAgent || multiStep || (!!fintent && !fs.hasRoot())) && await agentCanRun().catch(()=>false);
-      if(fintent && !genWrite){ if(fs.hasRoot()){ runFileIntent(q, fintent); return; } inviteWorkspace(q); return; }
+      // No agent for a task that is more than one plain op: the ladder below answers (it touches no file) — never a
+      // wrong write. A generated write ('auto') keeps its offline path: the Cardputer composes the content.
+      if(fintent && !genWrite && (plainOp || fintent.mode==='auto')){ if(fs.hasRoot()){ runFileIntent(q, fintent); return; } inviteWorkspace(q); return; }
+      const prevNum = lastBotNumber();   // read BEFORE this turn is pushed: the previous answer's result (a follow-up continues it)
       const sendQ = chainMath(q);   // engine-facing query (may carry the running total); visible msg stays q
       busy=true; interrupt=false; setStop(true); closeSlash(); stopSpeaking();   // un nuovo turno zittisce la risposta precedente
       if(_benchCtl){ try{ _benchCtl.abort(); }catch{} _benchCtl=null; }         // the user comes first: stop a model measurement
@@ -4829,8 +4898,12 @@
       // and anything about the user's personal memory, is resolved by the Cardputer before any LLM rung — even
       // with 🌐 Web armed — see commandFirst().
       try{ r = await commandFirst(sendQ); }catch{ r = null; }
+      // ARITHMETIC: a sentence that is pure arithmetic ("combien font 17 fois 23, divisé par 5", "y dividido entre 3") is
+      // computed here, exactly — the paused device brain used to leave it to a model that put a wrong result in bold.
+      if(!r && !sig.aborted){ try{ r = await browserMath(q, prevNum); }catch{ r = null; } }
       // WEATHER: a forecast question is answered live by the browser (Open-Meteo) — see weatherAsk().
-      if(!r && !sig.aborted){ try{ r = await weatherAsk(sendQ, !isPrivate()); }catch{ r = null; } }
+      // …never for a task on a file ("crea timer.html: un conto alla rovescia…" was answered with a forecast)
+      if(!r && !sig.aborted && !ctxkit.wantsAgent(sendQ, { workspace:fs.hasRoot() })){ try{ r = await weatherAsk(sendQ, !isPrivate()); }catch{ r = null; } }
       // 🌐 WEB: when armed, an explicit web-grounded turn via Groq compound takes precedence over Auto. Private
       // never reaches the network, armed or not. On no key / failure it falls through to the normal ladder.
       if(!r && webCompound && !isPrivate() && !sig.aborted){ await ensureKeyLoaded(); if(hasGroq()){ try{ r = await cloudCompoundChat(sendQ); }catch(e){ r = null; noteAiErr(e, groqCfg() && { provider:'openai' }); } } }
@@ -5005,7 +5078,7 @@
 
       // accumulate a serialisable descriptor of everything we render under the reply
       const entry={ role:'bot', text:reply, engine:true,
-        meta:{domain:r.domain,intent:r.intent,confidence:r.confidence,memory:r.memory,corrected:r.corrected,state:r.state,incoherent:r.incoherent},
+        meta:{domain:r.domain,intent:r.intent,confidence:r.confidence,memory:r.memory,corrected:r.corrected,state:r.state,incoherent:r.incoherent,value:(typeof r.value==='number'?r.value:undefined)},
         trace:null, lines:[], card:null, banner:null, clarify:null, sources:(r.sources&&r.sources.length?r.sources:null) };
       // a stream that died mid-answer, or a personal fact kept in this browser until the Cardputer is back
       if(r.incomplete){ const t='⚠ '+L('streamCut'); entry.lines.push({ text:t, kind:'warn' }); addLined(body, t, 'warn'); }
@@ -6183,11 +6256,20 @@
       try{
         switch(intent.op){
           case 'read':   res=await fs.read(intent.path); break;
-          case 'write':  content=await composeContent(intent); res=await fs.write(intent.path, content); break;
+          case 'write':  content=await composeContent(intent);
+            // nothing to write into a file that exists = wiping it: never on a parse
+            if(!content){ const st=await fs.stat(intent.path); if(st.exists){ res={ ok:false, error:'exists', path:st.path||intent.path }; break; } }
+            res=await fs.write(intent.path, content); break;
           case 'append': content=await composeContent(intent); res=await fs.append(intent.path, content); break;
           case 'edit':   res=await fs.edit(intent.path, intent.old, intent.new, {all:!!intent.all}); break;
           case 'move':   res=await fs.move(intent.from, intent.to); break;
-          case 'delete': res=await fs.del(intent.path); break;
+          // /api/fs/delete is final (no undo, no bin): a delete typed in chat asks first, like the agent's delete_file.
+          case 'delete': {
+            const st=await fs.stat(intent.path);
+            if(!st.exists){ res={ ok:false, error:'not-found', path:intent.path }; break; }
+            const p=st.path||intent.path;
+            if(!(await askDialog({ title:L('fdelTitle',{ p }), body:L('fdelBody'), ok:L('fdelOk'), cancel:L('deny'), danger:true }))){ res={ ok:false, error:'kept', path:p }; break; }
+            res=await fs.del(intent.path); break; }
           case 'mkdir':  res=await fs.mkdir(intent.path); break;
           case 'list':   res=await fs.list(intent.path); break;
           case 'tree':   res=await fs.tree(intent.path,{depth:3,maxEntries:300}); break;
@@ -6234,6 +6316,8 @@
         case 'no-workspace': return TR('Apri prima un workspace.', 'Open a workspace first.');
         case 'escape': return TR('Quel percorso è fuori dal workspace.', 'That path is outside the workspace.');
         case 'not-found': return (TR('Non trovo **', 'Not found: **'))+(p||intent.query||intent.to||'')+'**.';
+        case 'kept': return L('fdelKept',{ p });
+        case 'exists': return L('fexists',{ p });
         case 'not-unique': return (lang!=='it')?('"'+intent.old+'" appears '+res.count+' times in '+p+' — add more context or say "all".'):('"'+intent.old+'" compare '+res.count+' volte in '+p+' — aggiungi contesto o di\' "tutte".');
         case 'empty-old': return TR('Dimmi quale testo sostituire.', 'Tell me which text to replace.');
         case 'dest-exists': return '**'+(intent.to||'')+(TR('** esiste già. Sovrascrivo?', '** already exists. Overwrite?'));
@@ -6245,7 +6329,7 @@
     function buildFileView(intent, res, content){
       const en=lang==='en'; const op=intent.op; const v={status:'ok'};
       if(!res||!res.ok){
-        v.status= (res&&(res.error==='not-unique'||res.error==='dest-exists'))?'warn':'err';
+        v.status= (res&&(res.error==='not-unique'||res.error==='dest-exists'||res.error==='kept'||res.error==='exists'))?'warn':'err';
         v.reply=fileErrMsg(op,intent,res,en);
         v.card={icon:v.status==='warn'?'⚠':'⚠', status:v.status, title:(intent.path||intent.from||intent.query||intent.to||''), sub:TR('non eseguito', 'not done')};
         if(res&&res.error==='dest-exists'&&op==='move') v.card.overwrite={from:intent.from,to:intent.to};

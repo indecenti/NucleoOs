@@ -118,3 +118,25 @@ t('what is rain', 'en', { isWeather: false });
 t('che tempo fa', 'it', { isWeather: true, city: '' });
 t('meteo domani', 'it', { isWeather: true, city: '', dayOffset: 1 });
 t('piove?', 'it', { isWeather: true, city: '', aspect: 'rain' });
+
+// ---- es / fr / de (2026-10-10): "Wie wird das Wetter morgen in Berlin?" was not a weather question at all ----
+t('Wie wird das Wetter morgen in Berlin?', 'de', { isWeather: true, city: 'berlin', dayOffset: 1 });
+t('Regnet es übermorgen in Hamburg?', 'de', { isWeather: true, city: 'hamburg', dayOffset: 2, aspect: 'rain' });
+t('Wetter heute Morgen in München', 'de', { isWeather: true, city: 'munchen', dayOffset: 0 });
+t('Wetter in Frankfurt am Main', 'de', { isWeather: true, city: 'frankfurt' });
+t('¿Qué tiempo hará mañana en Madrid?', 'es', { isWeather: true, city: 'madrid', dayOffset: 1 });
+t('¿Va a llover el sábado en Sevilla?', 'es', { isWeather: true, city: 'sevilla', aspect: 'rain', dayOffset: 4 });
+t('el tiempo en Los Ángeles', 'es', { isWeather: true, city: 'los angeles' });
+t('Quel temps fera-t-il demain à Paris ?', 'fr', { isWeather: true, city: 'paris', dayOffset: 1 });
+t('Est-ce qu\'il va pleuvoir à Lyon après-demain ?', 'fr', { isWeather: true, city: 'lyon', dayOffset: 2, aspect: 'rain' });
+t('météo Marseille dans 3 jours', 'fr', { isWeather: true, city: 'marseille', dayOffset: 3 });
+// the shared it/en tables stay as they were: no es/fr/de word splits a place in an Italian / English question
+t('weather in Los Angeles tomorrow', 'en', { isWeather: true, city: 'los angeles', dayOffset: 1 });
+t('meteo El Paso', 'it', { isWeather: true, city: 'el paso' });
+t('che tempo fa a Frankfurt am Main', 'it', { isWeather: true, city: 'frankfurt am main' });
+// knowledge, not a lookup
+t('¿Qué es la lluvia?', 'es', { isWeather: false });
+t('Was ist Regen?', 'de', { isWeather: false });
+t('el tiempo pasa rápido', 'es', { isWeather: false });
+t('previsti rovesci domani a Bologna?', 'it', { isWeather: true, city: 'bologna', dayOffset: 1 });
+t('Crea la pagina timer.html: un conto alla rovescia di 10 secondi', 'it', { isWeather: false });

@@ -141,6 +141,10 @@ const textOf = (content) => Array.isArray(content) ? content.filter((b) => b && 
 const LOCALES    = { it: 'it-IT',    en: 'en-US',   es: 'es-ES',   fr: 'fr-FR',    de: 'de-DE' };
 const LANG_NAMES = { it: 'italiano', en: 'English', es: 'español', fr: 'français', de: 'Deutsch' };
 const GEO_LANGS = new Set(['it', 'en', 'es', 'fr', 'de']);
+const LIST_APPS_LINE = "• list_apps: elenca le app installate (id, nome, categoria, descrizione) — chiamalo prima di lanciare se non sei sicuro dell'id.";
+// A PC model has no list_apps (LOCAL_EXCLUDED_TOOLS): told to call it, qwen3.5:9b answered "I can't list the installed apps"
+// and listed some from memory. Its line points at the shell command that IS there.
+const LOCAL_APPS_LINE = "• App installate: `sh` con il comando apps le elenca TUTTE (id, nome, categoria, cosa fa — es. apps | grep -i musica). Usalo per OGNI domanda su quali app ci sono e prima di open_in_os se non sei sicuro dell'id; mai rispondere a memoria.";
 const CLOUD_ONLY_MARK = 'Sei ONLINE';            // swapped for the local note on a PC model — see localSystemNote()   // Open-Meteo geocoding `language=` values we ship
 
 // ───────────────────────── runtime ─────────────────────────
@@ -210,6 +214,7 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
   // `plan` — the orchestrator's typed classification — and the two are different things. In memory
   // only; a checklist describes THIS run, so persisting it would resurrect a stale one next question.
   loadParser().catch(() => {});      // acorn, on demand (~60 KB gz): by the first write the module check is ready
+  let turnMsg = '';                                  // the current user request (appNotAsked)
   let taskPlan = [];
   let lastPublish = null;            // {id, ok, why} of this turn's last publish_app — see publishTruth()
   let lastEngine = null;                           // who answered the last run: { kind:'server'|'cloud'|'local', … }
@@ -247,7 +252,20 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
       return !!(await ui.confirm({ op: 'sh', cmd, writes, root }));
     },
   });
+  // The user named a FILE ("crea la pagina timer.html: …") and asked for no app: scaffolding / publishing an app is not
+  // what they asked (live, qwen3.5:9b went for publish_app /apps/timer/ and wrote no timer.html). Told so, the model
+  // writes the file. An app request (app / install / publish / launcher, five languages) passes as before.
+  const NAMES_FILE = /[\w-]+\.(?:html?|m?js|css|json|md|txt|csv|svg|py)\b/i;
+  const WANTS_APP = /(?<!\p{L})(app|apps|applicazion\p{L}*|aplicaci\p{L}*|appli\p{L}*|anwendung\p{L}*|launcher|install\p{L}*|instal\p{L}*|pubblic\p{L}*|publi\p{L}*|veröffentlich\p{L}*)(?!\p{L})/iu;
+  function appNotAsked(name) {
+    if (name !== 'scaffold_app' && name !== 'publish_app') return null;
+    if (!NAMES_FILE.test(turnMsg) || WANTS_APP.test(turnMsg)) return null;
+    const f = (turnMsg.match(NAMES_FILE) || [''])[0];
+    return 'Not run: the user asked for the file ' + f + ' in the workspace, not for an app to install. Write ' + f + ' with write_file (complete, working content); create or publish an app only if the user asks for one.';
+  }
   async function guardedExec(name, input, label) {
+    const na = appNotAsked(name);
+    if (na) { if (ui && ui.toolEnd) ui.toolEnd({ name, input, label, ts: Date.now() }, na, true); return { content: na, is_error: true }; }
     const g = toolGuard.check(name, input);
     if (!g.run) {
       if (ui && ui.toolEnd) ui.toolEnd({ name, input, label, ts: Date.now() }, g.content, true);
@@ -714,7 +732,7 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
   // The local-server rung with its failure handled: a dead/refusing server is a note, never the end of the turn.
   async function tryLocalServer(system, baseMessages) {
     try {
-      const out = await runWorkerLocalServer({ system: system.replace(CLOUD_ONLY_MARK, localSystemNote()), messages: baseMessages.map((m) => ({ ...m })) });
+      const out = await runWorkerLocalServer({ system: system.replace(CLOUD_ONLY_MARK, localSystemNote()).replace(LIST_APPS_LINE, LOCAL_APPS_LINE), messages: baseMessages.map((m) => ({ ...m })) });
       return out == null ? null : { text: out || '' };
     } catch (e) {
       if (String(e && e.message) === 'stopped' || (aborter && aborter.signal.aborted)) throw new Error('stopped');
@@ -808,7 +826,7 @@ STRUMENTI:
 • File (se non usi sh): list_files, read_file, search_files, make_dir, write_file, edit_file, append_file, delete_file, move_file.
 • run_js: esegue JavaScript in sandbox (~5s; niente DOM/rete/file) per CALCOLARE o trasformare dati; ciò che stampi con console.log ti torna come stdout. Per un file con risultati calcolati (report, tabella, CSV) stampa TUTTO il testo e passa save_to: viene scritto così com'è — non ricopiare mai i numeri a mano in write_file.
 • open_in_os: LANCIA un'app del device (es. calculator, notepad, media-player, radio, photo-viewer, calendar) o apre un file nell'app giusta. È così che "apri la calcolatrice", "metti la musica", ecc.
-• list_apps: elenca le app installate (id, nome, categoria, descrizione) — chiamalo prima di lanciare se non sei sicuro dell'id.
+${LIST_APPS_LINE}
 • update_plan: la CHECKLIST viva del lavoro. Su un compito in più passi (costruire un'app, toccare più file) chiamalo SUBITO con 3-7 milestone reali (una sola in "doing"), poi di nuovo dopo ogni passo per segnarla "done" e avviare la successiva. L'umano la vede aggiornarsi in tempo reale e tu ci rileggi a che punto sei. Non costa nulla (nessun accesso al device, nessuna approvazione). Salta il piano solo per le risposte in un colpo solo.
 • scaffold_app + publish_app: PUOI CREARE NUOVE APP per NucleoOS. Flusso: 1) scaffold_app({name, description, category, kind}) genera lo scheletro da un TEMPLATE funzionante (kind: blank/list/timer/converter — scegli il più vicino all'obiettivo) in una cartella di staging nel workspace; 2) MODIFICA <id>/www/index.html (e aggiungi .js/.css se servono) con i tool file per costruire l'app vera — è una pagina web autonoma, dark-theme, può importare /nucleo-i18n.js; 3) publish_app({id}) la installa nel launcher LIVE (l'utente approva, nessun riavvio). Usa questo flusso quando l'utente chiede di "creare/costruire/fare un'app". Tieni l'app leggera e autonoma (niente dipendenze esterne pesanti): gira su un device con poca RAM. Per nascondere o ripristinare un'app che HAI creato usa manage_app({id, action:'disable'|'enable'}) — le app non si possono cancellare dal device, ma si possono disabilitare.
 • get_os_api: il CONTRATTO REALE di NucleoOS — rotte HTTP del device (topic "routes"/"route"), regole del manifest ("manifest"), regole di deploy ("rules"). CONSULTALO prima di scrivere codice che chiama /api/* e prima di publish_app: mai indovinare una rotta o un campo.
@@ -825,7 +843,7 @@ REGOLE:
 - PROGRAMMAZIONE (è il tuo focus, come Claude Code): scrivi codice completo, corretto e RUNNABLE. read_file mostra i NUMERI di riga ("12→…") per citarle, ma la "old" di edit_file deve combaciare col testo GREZZO (senza il prefisso "N→"); leggi sempre un file prima di modificarlo. Dopo write_file/edit_file di codice (.js/.mjs/.json) la SINTASSI è verificata in automatico: se torna un ⚠, correggilo PRIMA di proseguire. Per logica non banale, provala con run_js prima di persistere. Procedi a piccoli passi.
 - Resta DENTRO ${root}; non toccare file di sistema. Le azioni distruttive (scrittura/modifica/eliminazione/spostamento/run_js) richiedono l'OK dell'umano: spiega in una frase cosa stai per fare.
 - Il device ha POCA RAM: niente chiamate inutili, non leggere file enormi, raggruppa le letture.
-- Alla fine: breve riassunto di cosa hai fatto e dove sono i file. Rispondi in ${langName()}.
+- Alla fine: breve riassunto di cosa hai fatto e dove sono i file. LINGUA: rispondi nella lingua dell'ULTIMO messaggio dell'utente (spagnolo → spagnolo, tedesco → tedesco, inglese → inglese…), qualunque sia la lingua di queste istruzioni; se non è chiara, in ${langName()}.
 Data odierna: ${today}.${isAnthropic ? '' : '\nDISCIPLINA: usa gli strumenti quando servono (non descrivere a parole un\'azione che puoi compiere). Quando un tool restituisce un risultato, fidati di QUELLO; non inventare esiti. Niente preamboli prima del codice.'}${extra ? '\n' + extra : ''}`;
   }
 
@@ -856,7 +874,7 @@ Sii conservativo: in dubbio scegli "task". Considera il contesto della conversaz
 
   // Merge parallel sub-results into one coherent answer, on a capable mid model (cross-provider when keys present).
   async function synthesize(userMsg, merged) {
-    const sys = 'Unisci i risultati dei sotto-agenti in UNA risposta coerente e concisa per l\'utente, in ' + langName() + '. Non ripetere i titoli interni.';
+    const sys = 'Unisci i risultati dei sotto-agenti in UNA risposta coerente e concisa per l\'utente, nella lingua della sua richiesta (se non è chiara, in ' + langName() + '). Non ripetere i titoli interni.';
     const user = 'Richiesta originale: ' + userMsg + '\n\nRisultati:\n' + merged;
     const { cfg: scfg, model: smodel } = routeCfg({ difficulty: 'mid' });
     if (scfg.provider === 'anthropic') {
@@ -889,6 +907,7 @@ Sii conservativo: in dubbio scegli "task". Considera il contesto della conversaz
   // caller's workspace-context gathering. Returns the final reply text.
   async function run(userMsg, history = [], opts = {}) {
     aborter = new AbortController();
+    turnMsg = String(userMsg || '');
     taskPlan = [];                                   // each question starts with an empty checklist
     lastPublish = null;                              // …and no app-publish outcome yet (publishTruth)
     toolGuard.reset();                               // …and a clean doom-loop history
@@ -897,7 +916,11 @@ Sii conservativo: in dubbio scegli "task". Considera il contesto della conversaz
     const hist = compact(history, { budget: 20000, lang, minRecent: 8 }).history;   // generous: compaction (ANIMA-tuned) drops old assistant turns, so keep more verbatim
     const histMsgs = hist.map((t) => ({ role: t.role === 'bot' ? 'assistant' : 'user', content: String(t.text || '') }))
       .filter((m) => m.content);   // {role,content} shape — accepted by BOTH Anthropic and Groq/OpenAI
-    const seedExtra = buildSeedExtra(opts.seed);
+    // opts.replyLang: the language the user WROTE in, when the caller can tell. Named in the prompt when it is not the
+    // OS language — told only "reply in the user's language", qwen3.5:9b summed up a Spanish task in Italian.
+    const langNote = opts.replyLang && opts.replyLang !== lang && LANG_NAMES[opts.replyLang]
+      ? 'LINGUA DELLA RISPOSTA: l\'utente ha scritto in ' + LANG_NAMES[opts.replyLang] + ' — scrivi tutta la risposta in ' + LANG_NAMES[opts.replyLang] + '.' : '';
+    const seedExtra = [buildSeedExtra(opts.seed), langNote].filter(Boolean).join('\n\n');
 
     const historyHint = hist.slice(-4).map((t) => (t.role === 'bot' ? 'A: ' : 'U: ') + String(t.text || '').slice(0, 200)).join('\n');
     lastEngine = null;
@@ -911,7 +934,13 @@ Sii conservativo: in dubbio scegli "task". Considera il contesto della conversaz
       plan = await orchestrate(userMsg, historyHint);
     }
 
-    if (plan.mode === 'answer' && plan.answer) { if (ui && ui.status) ui.status('Risposta diretta'); return String(plan.answer); }
+    // opts.hostAnswers: the caller has its own grounded chat (ANIMA: NucleoOS facts, device state, date, the user's
+    // model). The triage runs on the cheapest model with none of that — on the ADV it answered "what is NucleoOS?" with
+    // "a Linux IoT OS for STM32 Nucleo boards". For such a caller the triage only CLASSIFIES; null = "answer it yourself".
+    if (plan.mode === 'answer' && plan.answer) {
+      if (opts.hostAnswers) { if (ui && ui.status) ui.status('Risposta diretta'); return null; }
+      if (ui && ui.status) ui.status('Risposta diretta'); return String(plan.answer);
+    }
 
     if (plan.mode === 'parallel' && Array.isArray(plan.subtasks) && plan.subtasks.length > 1) {
       const subs = plan.subtasks.slice(0, PARALLEL);

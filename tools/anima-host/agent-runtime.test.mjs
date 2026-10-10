@@ -141,3 +141,69 @@ test('runtime (Anthropic): out of steps → a valid tool_choice "none" call, sum
     assert.equal(worker.length, 2, 'exactly maxSteps tool rounds before the summary');
   } finally { globalThis.fetch = device; }
 });
+
+// hostAnswers: ANIMA answers plain questions with its own grounded chat. The triage (cheapest model, no NucleoOS
+// facts) answered "what is NucleoOS?" with "a Linux IoT OS for STM32 Nucleo boards" on the real Cardputer
+// (2026-10-10) — for such a caller its "answer" is a classification only.
+test('runtime: hostAnswers hands a plain question back instead of the triage model\'s own answer', async () => {
+  const device = fakeDevice({});
+  globalThis.fetch = async (url, o = {}) => {
+    const u = new URL(String(url), 'http://dev');
+    if (u.hostname !== 'api.anthropic.com') return device(url, o);
+    const json = (status, j) => ({ ok: status < 300, status, headers: new Map(), json: async () => j, text: async () => JSON.stringify(j) });
+    return json(200, { content: [{ type: 'text', text: '{"mode":"answer","answer":"NucleoOS is a Linux IoT OS for STM32 Nucleo boards."}' }], stop_reason: 'end_turn' });
+  };
+  try {
+    const rt = createRuntime({ cfg: { provider: 'anthropic', key: 'test-key', model: 'claude-haiku-4-5-20251001' }, lang: 'it', ui: {} });
+    assert.equal(await rt.run('che cos\'è NucleoOS?', [], { hostAnswers: true }), null, 'the host answers it');
+    assert.match(await rt.run('che cos\'è NucleoOS?'), /STM32/, 'the Agenti app keeps the direct answer');
+  } finally { globalThis.fetch = device; }
+});
+
+// replyLang + the PC model's app list: the prompt NAMES the user's language when it is not the OS one (a 9B model
+// summed up a Spanish task in Italian), and points a local model at `sh apps` — it has no list_apps.
+test('runtime: the reply language is named, and a PC model is told to list apps with sh', async () => {
+  fakeDevice({});
+  const { E, calls } = scriptedEngine([() => ({ text: 'Hecho.' })]);
+  const rt = createRuntime({ cfg: {}, lang: 'it', ui: {}, localServer: { engines: async () => E, first: () => true } });
+  assert.equal(await rt.run('¿qué apps de música hay?', [], { replyLang: 'es' }), 'Hecho.');
+  const sys = calls[0].msgs[0].content;
+  assert.match(sys, /LINGUA DELLA RISPOSTA: l'utente ha scritto in español/);
+  assert.match(sys, /comando apps le elenca TUTTE/);
+  assert.doesNotMatch(sys, /list_apps: elenca/, 'no tool the local model does not have');
+  await rt.run('ciao', [], { replyLang: 'it' });
+  assert.doesNotMatch(calls[1].msgs[0].content, /LINGUA DELLA RISPOSTA/, 'nothing to name when it is the OS language');
+});
+
+// A small model that ENDS on a present-tense announcement ("Ich füge … hinzu.") had changed nothing: one nudge, then it acts.
+test('runtime: a present-tense announcement with no tool call is nudged once, and the work happens', async () => {
+  const store = fakeDevice({ '/data/agent/saluti.txt': 'Ciao\n' });
+  const { E, calls } = scriptedEngine([
+    () => ({ text: 'Ich füge die Zeile „Hola“ am Ende der Datei saluti.txt hinzu.' }),
+    () => ({ tools: [call('write_file', { path: 'saluti.txt', content: 'Ciao\nHola\n' })] }),
+    () => ({ text: 'Erledigt.' }),
+  ]);
+  const rt = createRuntime({ cfg: {}, lang: 'de', ui: { autoApprove: () => true, confirm: async () => true }, localServer: { engines: async () => E, first: () => true } });   // as ANIMA with auto-approve
+  assert.equal(await rt.run('Füge am Ende dieser Datei noch eine Zeile mit Hola hinzu.'), 'Erledigt.');
+  assert.match(calls[1].msgs[calls[1].msgs.length - 1].content, /did not call any tool/, 'the nudge');
+  assert.equal(store.get('/data/agent/saluti.txt'), 'Ciao\nHola\n');
+  const { ANNOUNCES_WORK } = await import('../../apps/agent/www/agent-tools.js');
+  for (const t of ['Aggiungo la riga in fondo.', 'Añado la línea al final.', "J'ajoute la ligne à la fin.", "I'm adding the line now."]) assert.match(t, ANNOUNCES_WORK, t);
+  for (const t of ['Ho aggiunto la riga.', 'He añadido la línea.', 'Done: the line is there.', 'Die Zeile wurde hinzugefügt.']) assert.doesNotMatch(t, ANNOUNCES_WORK, t);
+});
+
+// The user named a file, not an app: scaffold/publish is refused with a pointer to write_file (live, the 9B went for
+// publish_app /apps/timer/ on "crea la pagina timer.html: …" and wrote no file). An app request still passes.
+test('runtime: a named file is written, not turned into an app to publish', async () => {
+  const store = fakeDevice({});
+  const { E, calls } = scriptedEngine([
+    () => ({ tools: [call('scaffold_app', { name: 'Timer', description: 'countdown', category: 'tools', kind: 'timer' })] }),
+    (msgs) => ({ tools: [call('write_file', { path: 'timer.html', content: '<!doctype html><button>Avvia</button><script>setInterval(()=>{},1000)</script>' })] }),
+    () => ({ text: 'Fatto.' }),
+  ]);
+  const rt = createRuntime({ cfg: {}, lang: 'it', ui: { autoApprove: () => true, confirm: async () => true }, localServer: { engines: async () => E, first: () => true } });
+  assert.equal(await rt.run('Crea la pagina timer.html: un conto alla rovescia di 10 secondi che parte quando premi Avvia.'), 'Fatto.');
+  const toolMsg = calls[1].msgs.find((m) => m.role === 'tool');
+  assert.match(toolMsg.content, /asked for the file timer\.html/);
+  assert.match(store.get('/data/agent/timer.html'), /Avvia/);
+});

@@ -63,10 +63,12 @@ const V = {
   rename: /\b(rinomina|rinominare|rename)\b/i,
   move:   /\b(sposta|spostare|muovi|sposto|move|mv)\b/i,
   append: /\b(aggiungi|aggiungere|accoda|appendi|append)\b/i,
-  delete: /\b(elimina|eliminare|cancella|cancellare|rimuovi|rimuovere|delete|remove|del|rm)\b/i,
+  // no "del": it is the Italian "of the" ("il file del progetto", "il contenuto del file X" were deletes)
+  delete: /\b(elimina|eliminare|cancella|cancellare|rimuovi|rimuovere|delete|remove|rm)\b/i,
   create: /\b(crea|creare|nuov[oa]|scrivi|scrivere|salva|salvare|genera|generare|create|new|write|save|generate|make|touch)\b/i,
   read:   /\b(leggi|leggere|apri|aprire|mostra|mostrami|visualizza|vedi|stampa|cat|read|open|show|view|display|print|dammi)\b/i,
-  list:   /\b(elenca|elencare|lista|elenco|ls|dir|ll)\b/i,
+  // "lista" / "elenco" are nouns far more often ("quanti elementi ci sono nella lista"): verbs only before files/folders
+  list:   /\b(elenca|elencare|ls|dir|ll)\b|\b(?:lista|elenco)\s+(?:(?:i|de[il]|delle|tutti\s+i|tutte\s+le|le)\s+)?(?:file|cartell)/i,
   tree:   /\b(albero|struttura|tree)\b/i,
   search: /\b(cerca|cercare|trova|trovare|grep|search|find|locate)\b/i,
   mkdir:  /\b(mkdir)\b/i,
@@ -146,12 +148,17 @@ export function parseFileIntent(text) {
     // create verb + content but no explicit filename -> let ANIMA name it (returns null here)
   }
 
-  // ---- DELETE: elimina/cancella/rm <file or folder> ----
+  // ---- DELETE: elimina/cancella/rm <file or folder> — the WHOLE request, nothing else ----
+  // The instant path deletes for real, so only the plain order qualifies: "rimuovi le righe vuote da note.txt",
+  // "elimina i commenti da app.js" or "delete the TODO comments in app.js" are EDITS of that file (the agent's
+  // job), and used to delete it whole.
   if (V.delete.test(n)) {
-    const named = afterNoun(raw, /(?:file|cartella|directory|folder|dir)/i);   // explicit "cartella tmp" allows extensionless
-    const path = pickPath(raw) || named;
-    if (path && (looksPath(path) || named)) return { op: 'delete', path };
-    // bare "elimina la conversazione / l'evento" -> not a file -> ANIMA
+    const dm = /^(?:(?:per favore|please)\s+)?(?:elimina|eliminare|cancella|cancellare|rimuovi|rimuovere|delete|remove|rm)\s+(?:-r?f?\s+)?(?:(?:il|lo|la|i|gli|le|the)\s+|l'\s*)?((?:file|cartella|directory|folder|dir)\s+(?:chiamat[oa]\s+|named\s+|called\s+)?)?("[^"]+"|'[^']+'|«[^»]+»|`[^`]+`|\S+)\s*[.!]?\s*(?:(?:per favore|please))?$/i.exec(raw.replace(/[‘’]/g, "'"));
+    if (dm) {
+      const path = cleanPath(dm[2]), quotedName = /^["'«`]/.test(dm[2]);
+      if (path && !STOP.test(path) && (looksPath(path) || (dm[1] && /^[\w.\-/]+$/.test(path)) || (quotedName && (hasExt(path) || dm[1])))) return { op: 'delete', path };
+    }
+    // bare "elimina la conversazione / l'evento", or a delete INSIDE a file -> not ours -> ANIMA / the agent
   }
 
   // ---- GLOB: explicit wildcard, or "tutti i .ext / all .ext" ----
@@ -170,7 +177,7 @@ export function parseFileIntent(text) {
   if (V.search.test(n)) {
     const fileCtx = /\b(nei file|nei documenti|nel workspace|nel progetto|in the files|in files|in the workspace|in the project|nei sorgenti|nel codice|in the code)\b/i.test(n) || /\bgrep\b/i.test(n);
     // "trova il file NAME" -> glob by name
-    if ((m = /\b(?:trova|cerca|find|locate)\s+(?:il\s+|the\s+)?file\s+["'«`]?([\w.\-]+)/i.exec(raw))) {
+    if ((m = /\b(?:trova|cerca|find|locate)\s+(?:il\s+|the\s+)?file\s+["'«`]?([\w.\-]+)/i.exec(raw)) && !STOP.test(m[1]) && !/^(che|that|which|con|with)$/i.test(m[1])) {
       const name = m[1]; return { op: 'glob', pattern: hasExt(name) ? '**/' + name : '**/*' + name + '*' };
     }
     if (fileCtx) {
@@ -214,6 +221,22 @@ export function parseFileIntent(text) {
   }
 
   return null;
+}
+
+// isPlainFileOp(intent, text): may the INSTANT path (no model) carry this out? It does exactly ONE literal file op;
+// a request that says more is a TASK for the agent. Parsed as one write, "In vendite.csv compute the total … and save
+// the result as totali.csv" overwrote vendite.csv with nothing, "write and run a script … save its output to fib.txt"
+// made an empty fib.txt, and "crea timer.html: un conto alla rovescia…" wrote the description into the page
+// (ADV web-OS battery, 2026-10-10).
+const CODE_EXT = /\.(html?|m?js|cjs|css|json|py|svg|xml|sh|c|cpp|h|ts)$/i;
+export function isPlainFileOp(fi, text) {
+  if (!fi) return false;
+  if (fi.op !== 'write' && fi.op !== 'append') return true;
+  if (fi.mode === 'auto') return false;
+  if (!fi.content) return String(text || '').trim().split(/\s+/).length <= 6;   // "crea note.txt", "nuovo file diario/2026.md"
+  // literal text for a code / markup file describes what to build — it is not the source
+  if (CODE_EXT.test(fi.path || '') && !/[<>{};=]/.test(fi.content)) return false;
+  return true;
 }
 
 // Two-path extractor for rename/move: "<verb> A <dest> B".

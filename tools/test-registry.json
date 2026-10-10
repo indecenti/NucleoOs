@@ -3349,6 +3349,22 @@
       "anima": false
     },
     {
+      "id": "unit-anima-nlmath",
+      "label": "anima-nlmath.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/anima-nlmath.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
       "id": "unit-translate",
       "label": "translate.test.mjs",
       "category": "nl-translate",
@@ -3677,6 +3693,22 @@
       "args": [
         "--test",
         "tools/fsclient-root.test.mjs"
+      ],
+      "verifies": "",
+      "nl": false,
+      "lang": "na",
+      "in_gate": true,
+      "anima": false
+    },
+    {
+      "id": "unit-game-text",
+      "label": "game-text.test.mjs",
+      "category": "app-shell",
+      "kind": "unit",
+      "cmd": "node",
+      "args": [
+        "--test",
+        "tools/game-i18n/game-text.test.mjs"
       ],
       "verifies": "",
       "nl": false,

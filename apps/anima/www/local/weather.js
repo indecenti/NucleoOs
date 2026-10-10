@@ -17,7 +17,7 @@
 // Lowercase, strip accents, drop apostrophes, collapse whitespace. Keep digits (dates).
 export function normWeather(s) {
   return String(s || '')
-    .toLowerCase()
+    .toLowerCase().replace(/ß/g, 'ss')
     .normalize('NFD').replace(/[̀-ͯ]/g, '')
     .replace(/['’`]/g, ' ')
     .replace(/[^a-z0-9]+/g, ' ')
@@ -31,11 +31,35 @@ export function normWeather(s) {
 const WX_STRONG = ['meteo','previsioni','previsione','clima','climatic',
   'piove','piover','piova','pioggia','piovoso','piovera','pioggie',
   'sole','soleggiat','nuvol','nubi','sereno','coperto','nebbia','foschia',
-  'neve','nevica','nevicher','grandine','temporale','temporali','rovesci',
+  'neve','nevica','nevicher','grandine','temporale','temporali',
   'temperatura','temperature','gradi','caldo','freddo','afa','umidita','umid','vento','ventoso',
   'weather','forecast','rain','raining','rainy','sunny','cloud','cloudy','snow','snowing','snowy',
   'storm','thunderstorm','fog','foggy','windy','temperature','degrees','hot','cold','chilly','humidity',
   'ombrello','umbrella','bel tempo','brutto tempo'];
+
+// Spanish / French / German weather words, matched as whole TOKENS (never substrings: "sol", "grad", "vent" sit inside
+// other words). Until 2026-10 only Italian and English were understood: "Wie wird das Wetter morgen in Berlin?" went to a
+// model that could only report the current weather.
+const WX_TOKENS_XL = new Set(['lluvia','llueve','llover','llovera','lloviendo','soleado','nublado','nubes','nieve','nieva','nevara','tormenta','tormentas',
+  'grados','calor','frio','viento','pronostico','paraguas','niebla',
+  'pluie','pleut','pleuvoir','pleuvra','soleil','ensoleille','nuageux','nuages','neige','neigera','orage','orages','degres','chaud','froid','vent',
+  'previsions','parapluie','brouillard',
+  'wetter','regen','regnet','regnen','sonne','sonnig','bewolkt','wolken','schnee','schneit','gewitter','sturm','temperatur','grad','kalt','windig',
+  'vorhersage','regenschirm','nebel']);
+const REPORT_XL = /\bque tiempo\b|\btiempo (?:hace|hara|va a hacer)\b|\bel tiempo (?:hoy|manana|en|para)\b|\bquel temps\b|\btemps (?:fait|fera|va)\b|\bwetter\b|\bpronostico\b|\bprevisions? meteo\b|\bvorhersage\b/;
+const PEEL_XL = ['que','como','cual','donde','cuando','hace','hara','va','van','ir','el','los','las','unos','unas','en','del','para','por','manana','hoy','pasado',
+  'esta','este','semana','fin','tiempo','llover','hacer','dime','sabes','estara','sera','habra','hay','mi','ciudad','ahora','tarde','noche','dias','dia','cerca',
+  'quel','quelle','quels','quelles','temps','fait','fera','elle','les','une','du','des','au','aux','dans','pour','sur','demain','aujourd','hui','apres','ce','cette',
+  'soir','matin','semaine','est','sont','dis','moi','va','faire','ville','maintenant','jours','jour','pres','il','y','aura','prevu','prevue',
+  'wie','wird','werden','das','der','die','den','dem','morgen','heute','ubermorgen','im','am','an','um','fur','mit','ist','sein','es','gibt','sag','mir',
+  'bitte','woche','wochenende','abend','nacht','mittag','tagen','tage','tag','jetzt','stadt','bei','nach','von','wetter','wettervorhersage'];
+const PREP_XL = ['en','para','por','cerca','dans','au','aux','pour','pres','im','am','fur','bei','nach','von'];
+const MONTHS_XL = { enero:1, febrero:2, abril:4, mayo:5, junio:6, julio:7, septiembre:9, octubre:10, noviembre:11, diciembre:12,
+  janvier:1, fevrier:2, mars:3, avril:4, mai:5, juin:6, juillet:7, aout:8, octobre:10, decembre:12,
+  januar:1, februar:2, marz:3, juni:6, juli:7, oktober:10, dezember:12 };
+const WEEKDAYS_XL = { domingo:0, lunes:1, martes:2, miercoles:3, jueves:4, viernes:5, sabado:6,
+  dimanche:0, lundi:1, mardi:2, mercredi:3, jeudi:4, vendredi:5, samedi:6,
+  sonntag:0, montag:1, dienstag:2, mittwoch:3, donnerstag:4, freitag:5, samstag:6 };
 
 // Prepositions (a subset of PEEL). A run immediately following one of these is almost always the
 // place ("a roma", "in london") — this beats "longest run" when a stray verb precedes the city.
@@ -100,6 +124,15 @@ const WEEKDAYS = {
   lun:1, mar:2, mer:3, gio:4, ven:5, sab:6, dom:0,
 };
 
+// The es/fr/de tables apply to es/fr/de questions only: merged into the shared ones they would split "Los Angeles",
+// "El Paso", "Frankfurt am Main" in an Italian or English question.
+const PEEL_XL_SET = new Set([...PEEL_XL, ...PREP_XL]), PREP_XL_SET = new Set(PREP_XL);
+const ART_XL = new Set(['el', 'los', 'las', 'le', 'la', 'les', 'der', 'die', 'das', 'den']);   // kept after a preposition: "en Los Ángeles"
+const XL = new Set(['es', 'fr', 'de']);
+const monthOf = (t, lang) => MONTHS[t] || (XL.has(lang) ? MONTHS_XL[t] : undefined);
+const weekdayOf = (t, lang) => (t in WEEKDAYS) ? WEEKDAYS[t] : (XL.has(lang) && (t in WEEKDAYS_XL) ? WEEKDAYS_XL[t] : undefined);
+const LOCALE_XL = { es: 'es-ES', fr: 'fr-FR', de: 'de-DE' };
+
 // Open-Meteo free forecast horizon (days ahead). Beyond this we honestly refuse.
 export const FORECAST_HORIZON = 15;
 
@@ -107,25 +140,28 @@ export const FORECAST_HORIZON = 15;
 // A definition question ("cos'è il clima", "what is rain") is knowledge, not a live lookup.
 function isDefinition(nf) {
   return /\bcos\b|\bcosa e\b|\bche cos|\bche cosa\b|\bsignifica\b|\bdefinizione\b|\bspiega\b/.test(nf)
-      || /\bwhat is\b|\bwhat does\b|\bwhat are\b|\bmeaning of\b|\bdefine\b/.test(nf);
+      || /\bwhat is\b|\bwhat does\b|\bwhat are\b|\bmeaning of\b|\bdefine\b/.test(nf)
+      || /\bque es\b|\bque son\b|\bdefinicion\b|\bqu est ce\b|\bque signifie\b|\bwas ist\b|\bwas sind\b|\bwas bedeutet\b/.test(nf);
 }
 export function isWeatherQuery(nf) {
   // An explicit live-REPORT word ("meteo"/"weather"/"forecast"/"che tempo") makes it a lookup even
   // in a "what is …" frame ("what is the weather like" is NOT a definition of the noun "weather").
   const report = /\bmeteo\b|\bprevision|\bforecast\b|\bweather\b|\bche tempo\b|\btempo fa\b|\btempo fara\b/.test(nf);
-  if (report) return true;
+  if (report || REPORT_XL.test(nf)) return true;
   if (isDefinition(nf)) return false;   // "cos'è il clima", "what is rain" -> knowledge, not a lookup
   for (const w of WX_STRONG) if (nf.includes(w)) return true;
+  // whole tokens: "rovesci" (showers) is inside "conto alla rovescia" (a countdown) — a timer page became a forecast
+  for (const t of nf.split(' ')) if (WX_TOKENS_XL.has(t) || t === 'rovesci') return true;
   return false;
 }
 
 // What facet did they ask about? Lets us answer the actual question, not dump a bulletin.
 function detectAspect(nf) {
-  if (/\bpiov|\bpioggia\b|\brain|\bumbrella\b|\bombrello\b/.test(nf)) return 'rain';
-  if (/\bsole\b|\bsoleggiat|\bsereno\b|\bsunny\b|\bsun\b|\bclear\b/.test(nf)) return 'sun';
-  if (/\bnev|\bsnow/.test(nf)) return 'snow';
-  if (/\btemperatur|\bgradi\b|\bcaldo\b|\bfreddo\b|\bhot\b|\bcold\b|\bwarm\b|\bchilly\b|\bdegrees?\b/.test(nf)) return 'temp';
-  if (/\bvento\b|\bventoso\b|\bwind|\bwindy\b/.test(nf)) return 'wind';
+  if (/\bpiov|\bpioggia\b|\brain|\bumbrella\b|\bombrello\b|\bllu|\bllov|\bparaguas\b|\bpluie\b|\bpleu|\bparapluie\b|\bregen|\bregn/.test(nf)) return 'rain';
+  if (/\bsole\b|\bsoleggiat|\bsereno\b|\bsunny\b|\bsun\b|\bclear\b|\bsoleado\b|\bsoleil\b|\bensoleille\b|\bsonne\b|\bsonnig\b/.test(nf)) return 'sun';
+  if (/\bnev|\bsnow|\bniev|\bneig|\bschnee|\bschneit/.test(nf)) return 'snow';
+  if (/\btemperatur|\bgradi\b|\bcaldo\b|\bfreddo\b|\bhot\b|\bcold\b|\bwarm\b|\bchilly\b|\bdegrees?\b|\bgrados\b|\bcalor\b|\bfrio\b|\bdegres\b|\bchaud\b|\bfroid\b|\bgrad\b|\bkalt\b/.test(nf)) return 'temp';
+  if (/\bvento\b|\bventoso\b|\bwind|\bwindy\b|\bviento\b|\bvent\b/.test(nf)) return 'wind';
   return 'general';
 }
 
@@ -148,6 +184,43 @@ function parseDate(tokens, lang, now) {
 
   const hit = new Set();
   const has = (w) => tokens.includes(w);
+  const joined = ' ' + tokens.join(' ') + ' ';
+  if (XL.has(lang)) {                                    // es / fr / de: labels from the platform's own calendar names
+    const loc = LOCALE_XL[lang];
+    const name = (d, o) => { try { return d.toLocaleDateString(loc, o); } catch { return d.toDateString(); } };
+    const REL = { es: ['hoy', 'mañana', 'pasado mañana', 'este fin de semana'], fr: ["aujourd'hui", 'demain', 'après-demain', 'ce week-end'], de: ['heute', 'morgen', 'übermorgen', 'am Wochenende'] }[lang];
+    const rel = (off, i) => ({ dayOffset: off, tooFar: false, dateLabel: REL[i], hitTokens: hit });
+    if (has('ubermorgen') || joined.includes(' pasado manana ') || joined.includes(' apres demain ')) { ['ubermorgen', 'pasado', 'manana', 'apres', 'demain'].forEach((t) => hit.add(t)); return rel(2, 2); }
+    // "morgen" alone is tomorrow ("heute morgen" = this morning); "manana" too ("esta mañana" = this morning)
+    if ((has('morgen') && !has('heute')) || (has('manana') && !joined.includes(' esta manana ') && !joined.includes(' por la manana ')) || has('demain')) { ['morgen', 'manana', 'demain'].forEach((t) => hit.add(t)); return rel(1, 1); }
+    for (let i = 0; i < tokens.length - 2; i++) {
+      const n = parseInt(tokens[i + 1], 10);
+      if (['en', 'dans', 'in'].includes(tokens[i]) && Number.isFinite(n) && ['dias', 'dia', 'jours', 'jour', 'tagen', 'tage', 'tag'].includes(tokens[i + 2])) {
+        hit.add(tokens[i]); hit.add(tokens[i + 1]); hit.add(tokens[i + 2]);
+        return { dayOffset: n, tooFar: n > FORECAST_HORIZON, dateLabel: name(new Date(today.getTime() + n * dayMs), { day: 'numeric', month: 'long' }), hitTokens: hit };
+      }
+    }
+    for (let i = 0; i < tokens.length; i++) {
+      const m = monthOf(tokens[i], lang); if (!m) continue;
+      const dd = i > 0 && /^\d{1,2}$/.test(tokens[i - 1]) ? +tokens[i - 1] : (/^\d{1,2}$/.test(tokens[i + 1] || '') ? +tokens[i + 1] : 0);
+      if (dd >= 1 && dd <= 31) {
+        hit.add(tokens[i]); hit.add(String(dd));
+        let d = new Date(now.getFullYear(), m - 1, dd); if (offsetOf(d) < 0) d = new Date(now.getFullYear() + 1, m - 1, dd);
+        const off = offsetOf(d);
+        return { dayOffset: off, tooFar: off > FORECAST_HORIZON, dateLabel: name(d, { day: 'numeric', month: 'long' }), hitTokens: hit };
+      }
+    }
+    for (const t of tokens) if (weekdayOf(t, lang) !== undefined) {
+      let off = (weekdayOf(t, lang) - today.getDay() + 7) % 7; if (off === 0) off = 7; hit.add(t);
+      return { dayOffset: off, tooFar: off > FORECAST_HORIZON, dateLabel: name(new Date(today.getTime() + off * dayMs), { weekday: 'long' }), hitTokens: hit };
+    }
+    if (has('wochenende') || joined.includes(' fin de semana ') || has('weekend')) {
+      ['wochenende', 'fin', 'semana', 'weekend'].forEach((t) => hit.add(t));
+      let off = (6 - today.getDay() + 7) % 7; if (off === 0) off = 7; return { ...rel(off, 3) };
+    }
+    ['hoy', 'ahora', 'aujourd', 'hui', 'maintenant', 'heute', 'jetzt'].forEach((t) => { if (has(t)) hit.add(t); });
+    return rel(0, 0);
+  }
 
   // explicit relative words (longest/most-specific first)
   if (has('dopodomani') || (tokens.join(' ').includes('day after tomorrow'))) {
@@ -217,13 +290,15 @@ function parseDate(tokens, lang, now) {
 // Selection: a run immediately following a preposition ("a roma", "in london") is the place — this
 // beats "longest" when a stray verb/filler precedes the city ("ci sono a roma" -> roma, not "sono").
 // With no preposition anywhere ("meteo brescia", "previsioni reggio emilia"), the longest run wins.
-function extractCity(tokens, dateHits) {
+function extractCity(tokens, dateHits, lang = 'it') {
   const runs = [];                       // { text, prep, len }
   let run = [], runPrep = false, prevDropPrep = false;
+  const xl = XL.has(lang);
   const flush = () => { if (run.length) runs.push({ text: run.join(' '), prep: runPrep, len: run.length }); run = []; };
   for (const t of tokens) {
-    const drop = PEEL.has(t) || dateHits.has(t) || /^\d+$/.test(t) || t.length < 2 || (t in MONTHS) || (t in WEEKDAYS);
-    if (drop) { flush(); prevDropPrep = PREP.has(t); }
+    const keepArt = xl && ART_XL.has(t) && prevDropPrep && !run.length;   // "en Los Ángeles", "in Den Haag": part of the name
+    const drop = !keepArt && (PEEL.has(t) || (xl && PEEL_XL_SET.has(t)) || dateHits.has(t) || /^\d+$/.test(t) || t.length < 2 || (t in MONTHS) || (t in WEEKDAYS) || (xl && (t in MONTHS_XL || t in WEEKDAYS_XL)));
+    if (drop) { flush(); prevDropPrep = PREP.has(t) || (xl && PREP_XL_SET.has(t)); }
     else { if (!run.length) runPrep = prevDropPrep; run.push(t); }
   }
   flush();
@@ -235,10 +310,10 @@ function extractCity(tokens, dateHits) {
 
 // ---- top-level -------------------------------------------------------------
 export function parseWeather(q, opts = {}) {
-  const lang = opts.lang === 'en' ? 'en' : 'it';
+  const lang = ['en', 'es', 'fr', 'de'].includes(opts.lang) ? opts.lang : 'it';
   const now = opts.now instanceof Date ? opts.now : new Date();
   const nf = normWeather(q);
-  const out = { isWeather: false, city: '', dayOffset: 0, tooFar: false, aspect: 'general', dateLabel: lang === 'en' ? 'today' : 'oggi' };
+  const out = { isWeather: false, city: '', dayOffset: 0, tooFar: false, aspect: 'general', dateLabel: lang === 'en' ? 'today' : lang === 'it' ? 'oggi' : '' };
   if (!isWeatherQuery(nf)) return out;
   out.isWeather = true;
   out.aspect = detectAspect(nf);
@@ -247,7 +322,7 @@ export function parseWeather(q, opts = {}) {
   out.dayOffset = dt.dayOffset;
   out.tooFar = dt.tooFar;
   out.dateLabel = dt.dateLabel;
-  out.city = extractCity(tokens, dt.hitTokens);
+  out.city = extractCity(tokens, dt.hitTokens, lang);
   return out;
 }
 
@@ -265,16 +340,75 @@ const WMO = {
     71:'snow', 73:'snow', 75:'heavy snow', 77:'snow grains', 80:'showers', 81:'showers', 82:'heavy showers',
     85:'snow showers', 86:'snow showers', 95:'thunderstorm', 96:'thunderstorm with hail', 99:'thunderstorm with hail' },
 };
+WMO.es = { 0:'despejado', 1:'poco nuboso', 2:'poco nuboso', 3:'cubierto', 45:'niebla', 48:'niebla', 51:'llovizna', 53:'llovizna', 55:'llovizna',
+  56:'llovizna helada', 57:'llovizna helada', 61:'lluvia', 63:'lluvia', 65:'lluvia fuerte', 66:'lluvia helada', 67:'lluvia helada', 71:'nieve', 73:'nieve',
+  75:'nieve intensa', 77:'granizo fino', 80:'chubascos', 81:'chubascos', 82:'chubascos fuertes', 85:'chubascos de nieve', 86:'chubascos de nieve',
+  95:'tormenta', 96:'tormenta con granizo', 99:'tormenta con granizo' };
+WMO.fr = { 0:'ciel dégagé', 1:'peu nuageux', 2:'peu nuageux', 3:'couvert', 45:'brouillard', 48:'brouillard', 51:'bruine', 53:'bruine', 55:'bruine',
+  56:'bruine verglaçante', 57:'bruine verglaçante', 61:'pluie', 63:'pluie', 65:'forte pluie', 66:'pluie verglaçante', 67:'pluie verglaçante', 71:'neige', 73:'neige',
+  75:'forte neige', 77:'grains de neige', 80:'averses', 81:'averses', 82:'fortes averses', 85:'averses de neige', 86:'averses de neige',
+  95:'orage', 96:'orage avec grêle', 99:'orage avec grêle' };
+WMO.de = { 0:'klar', 1:'leicht bewölkt', 2:'leicht bewölkt', 3:'bedeckt', 45:'Nebel', 48:'Nebel', 51:'Nieselregen', 53:'Nieselregen', 55:'Nieselregen',
+  56:'gefrierender Nieselregen', 57:'gefrierender Nieselregen', 61:'Regen', 63:'Regen', 65:'starker Regen', 66:'gefrierender Regen', 67:'gefrierender Regen',
+  71:'Schnee', 73:'Schnee', 75:'starker Schneefall', 77:'Schneegriesel', 80:'Schauer', 81:'Schauer', 82:'starke Schauer', 85:'Schneeschauer', 86:'Schneeschauer',
+  95:'Gewitter', 96:'Gewitter mit Hagel', 99:'Gewitter mit Hagel' };
+const VAR = { it: 'variabile', en: 'variable', es: 'variable', fr: 'variable', de: 'wechselhaft' };
 export function wmoText(code, lang) {
-  const tbl = lang === 'en' ? WMO.en : WMO.it;
-  return tbl[code] || (lang === 'en' ? 'variable' : 'variabile');
+  const tbl = WMO[lang] || WMO.it;
+  return tbl[code] || VAR[lang] || VAR.it;
 }
 const isRainCode = (c) => (c >= 51 && c <= 67) || (c >= 80 && c <= 82) || c >= 95;
 const isSnowCode = (c) => (c >= 71 && c <= 77) || c === 85 || c === 86;
 const isSunCode  = (c) => c === 0 || c === 1;
 
 // Build the human reply for a resolved place + day + forecast row, answering the asked aspect.
+// es / fr / de sentences (the it / en ones below are unchanged and tested byte for byte)
+const WX_T = {
+  es: { rel: ['hoy', 'mañana', 'pasado mañana'], at: (p) => `En ${p}`, yesRain: (w, p) => `Sí, ${w} se espera lluvia en ${p}`, noRain: (w, p) => `No, ${w} no se espera lluvia en ${p}`,
+    prob: (pp, d, lo, hi) => ` (probabilidad ${pp} %, ${d}, ${lo}–${hi} °C).`, par: (d, lo, hi) => ` (${d}, ${lo}–${hi} °C).`,
+    yesSun: (w, p) => `Sí, ${w} hará sol en ${p}`, noSun: (w, p, d, lo, hi) => `No del todo: ${w} en ${p}, ${d}, ${lo}–${hi} °C.`,
+    yesSnow: (w, p) => `Sí, ${w} se espera nieve en ${p}`, noSnow: (w, p) => `No, ${w} no se espera nieve en ${p}`,
+    nowT: (p, t, d, lo, hi) => `En ${p} ahora hace ${t} °C (${d}, mín. ${lo} / máx. ${hi} °C).`, day: (at, w, d, lo, hi) => `${at} ${w}: ${d}, mín. ${lo} °C / máx. ${hi} °C.`,
+    dayT: (at, w, d, lo, hi) => `${at} ${w}: ${lo}–${hi} °C (${d}).`, nowG: (p, d, t, lo, hi) => `En ${p} ahora: ${d}, ${t} °C (mín. ${lo} / máx. ${hi} °C).`,
+    city: '¿Qué ciudad? Por ejemplo: "el tiempo en Madrid".', far: (l) => `Solo tengo previsión para unos 15 días: ${l} está demasiado lejos.`,
+    off: 'Necesito internet para consultar el tiempo.', miss: (c) => `No consigo el tiempo de ${c}.` },
+  fr: { rel: ["aujourd'hui", 'demain', 'après-demain'], at: (p) => `À ${p}`, yesRain: (w, p) => `Oui, de la pluie est prévue ${w} à ${p}`, noRain: (w, p) => `Non, pas de pluie prévue ${w} à ${p}`,
+    prob: (pp, d, lo, hi) => ` (probabilité ${pp} %, ${d}, ${lo}–${hi} °C).`, par: (d, lo, hi) => ` (${d}, ${lo}–${hi} °C).`,
+    yesSun: (w, p) => `Oui, ${w} il fera beau à ${p}`, noSun: (w, p, d, lo, hi) => `Pas vraiment : ${w} à ${p}, ${d}, ${lo}–${hi} °C.`,
+    yesSnow: (w, p) => `Oui, de la neige est prévue ${w} à ${p}`, noSnow: (w, p) => `Non, pas de neige prévue ${w} à ${p}`,
+    nowT: (p, t, d, lo, hi) => `À ${p}, il fait ${t} °C en ce moment (${d}, min ${lo} / max ${hi} °C).`, day: (at, w, d, lo, hi) => `${at} ${w} : ${d}, min ${lo} °C / max ${hi} °C.`,
+    dayT: (at, w, d, lo, hi) => `${at} ${w} : ${lo}–${hi} °C (${d}).`, nowG: (p, d, t, lo, hi) => `À ${p} en ce moment : ${d}, ${t} °C (min ${lo} / max ${hi} °C).`,
+    city: 'Quelle ville ? Par exemple : « météo à Paris ».', far: (l) => `Je n’ai des prévisions que sur ~15 jours : ${l}, c’est trop loin.`,
+    off: 'J’ai besoin d’internet pour consulter la météo.', miss: (c) => `Je n’arrive pas à obtenir la météo pour ${c}.` },
+  de: { rel: ['heute', 'morgen', 'übermorgen'], at: (p) => `In ${p}`, yesRain: (w, p) => `Ja, ${w} wird in ${p} Regen erwartet`, noRain: (w, p) => `Nein, ${w} wird in ${p} kein Regen erwartet`,
+    prob: (pp, d, lo, hi) => ` (Wahrscheinlichkeit ${pp} %, ${d}, ${lo}–${hi} °C).`, par: (d, lo, hi) => ` (${d}, ${lo}–${hi} °C).`,
+    yesSun: (w, p) => `Ja, ${w} wird es in ${p} sonnig`, noSun: (w, p, d, lo, hi) => `Eher nicht: ${w} in ${p} ${d}, ${lo}–${hi} °C.`,
+    yesSnow: (w, p) => `Ja, ${w} wird in ${p} Schnee erwartet`, noSnow: (w, p) => `Nein, ${w} wird in ${p} kein Schnee erwartet`,
+    nowT: (p, t, d, lo, hi) => `In ${p} sind es gerade ${t} °C (${d}, min. ${lo} / max. ${hi} °C).`, day: (at, w, d, lo, hi) => `${at} ${w}: ${d}, min. ${lo} °C / max. ${hi} °C.`,
+    dayT: (at, w, d, lo, hi) => `${at} ${w}: ${lo}–${hi} °C (${d}).`, nowG: (p, d, t, lo, hi) => `In ${p} gerade: ${d}, ${t} °C (min. ${lo} / max. ${hi} °C).`,
+    city: 'Welche Stadt? Zum Beispiel: „Wetter in Berlin“.', far: (l) => `Ich habe nur eine Vorhersage für etwa 15 Tage: ${l} ist zu weit weg.`,
+    off: 'Ich brauche Internet, um das Wetter abzurufen.', miss: (c) => `Ich bekomme das Wetter für ${c} nicht.` },
+};
+function formatWeatherXL(parsed, place, fc, lang) {
+  const T = WX_T[lang], desc = wmoText(fc.code, lang);
+  const hi = Math.round(fc.tmax), lo = Math.round(fc.tmin);
+  const when = parsed.dayOffset <= 2 ? T.rel[parsed.dayOffset] : parsed.dateLabel;
+  const pp = (typeof fc.precipProb === 'number') ? fc.precipProb : null;
+  if (parsed.aspect === 'rain') {
+    const willRain = isRainCode(fc.code) || (pp !== null && pp >= 50);
+    return (willRain ? T.yesRain(when, place) : T.noRain(when, place)) + (pp !== null ? T.prob(pp, desc, lo, hi) : T.par(desc, lo, hi));
+  }
+  if (parsed.aspect === 'sun') return isSunCode(fc.code) ? T.yesSun(when, place) + T.par(desc, lo, hi) : T.noSun(when, place, desc, lo, hi);
+  if (parsed.aspect === 'snow') return (isSnowCode(fc.code) ? T.yesSnow(when, place) : T.noSnow(when, place)) + T.par(desc, lo, hi);
+  if (parsed.aspect === 'temp') {
+    if (parsed.dayOffset === 0 && typeof fc.tcur === 'number') return T.nowT(place, Math.round(fc.tcur), desc, lo, hi);
+    return T.dayT(T.at(place), when, desc, lo, hi);
+  }
+  if (parsed.dayOffset === 0 && typeof fc.tcur === 'number') return T.nowG(place, desc, Math.round(fc.tcur), lo, hi);
+  return T.day(T.at(place), when, desc, lo, hi);
+}
 export function formatWeather(parsed, place, fc, lang) {
+  if (WX_T[lang]) return formatWeatherXL(parsed, place, fc, lang);
   const en = lang === 'en';
   const desc = wmoText(fc.code, lang);
   const hi = Math.round(fc.tmax), lo = Math.round(fc.tmin);
@@ -336,7 +470,7 @@ const foldPlace = (s) => String(s || '').toLowerCase().normalize('NFD').replace(
 export async function geocodePlace(city, lang, opts = {}) {
   const f = opts.fetch || globalThis.fetch;
   const search = async (name, count) => {
-    const r = await f(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(name)}&count=${count}&language=${lang === 'en' ? 'en' : 'it'}&format=json`,
+    const r = await f(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(name)}&count=${count}&language=${['en', 'es', 'fr', 'de'].includes(lang) ? lang : 'it'}&format=json`,
       { headers: opts.headers || {} });
     return r.ok ? ((await r.json())?.results || []) : [];
   };
@@ -396,9 +530,17 @@ export function weatherResult(q, reply, confidence) {
 // Answer a weather question end to end, or null when `q` isn't one. Honest replies for the cases with
 // no forecast: no place named, beyond the horizon, no network allowed (opts.online === false), fetch miss.
 export async function weatherAnswer(q, lang, opts = {}) {
-  const en = lang === 'en';
+  const en = lang === 'en', T = WX_T[lang];
   const p = parseWeather(q, { lang, now: opts.now });
   if (!p.isWeather) return null;
+  if (T) {                                               // es / fr / de
+    if (!p.city) return weatherResult(q, T.city, 55);
+    if (p.tooFar) return weatherResult(q, T.far(p.dateLabel), 60);
+    if (opts.online === false) return weatherResult(q, T.off, 45);
+    const fx = await fetchForecast(p.city, p.dayOffset, lang, opts);
+    if (!fx || typeof fx.tmax !== 'number' || typeof fx.tmin !== 'number') return weatherResult(q, T.miss(p.city), 40);
+    return weatherResult(q, formatWeather(p, fx.place, fx, lang), 90);
+  }
   if (!p.city)
     return weatherResult(q, en ? 'Which city? e.g. "weather in Rome".' : 'Per quale città? Es. "che tempo fa a Roma".', 55);
   if (p.tooFar)

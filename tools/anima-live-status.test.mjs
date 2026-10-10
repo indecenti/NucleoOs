@@ -26,6 +26,26 @@ test('the Cardputer named as the subject is still a live question (went to a clo
   assert.equal(liveKinds('il cardputer'), null);
 });
 
+test('the ADV web-OS battery (2026-10-10): device subject, IP / firmware wording, ", and …" clauses', () => {
+  // commandHint said null for these (it did not drop the device subject like liveKind) → an LLM answered
+  for (const [q, k] of [['Quanta batteria ha il Cardputer?', 'battery'], ["Quelle est l'adresse IP du Cardputer ?", 'network'],
+    ['Wie lautet die IP-Adresse?', 'network'], ['¿Cuál es la dirección IP del Cardputer?', 'network'], ['What is the IP address of the device?', 'network'],
+    ['Welche Firmware-Version läuft?', 'version'], ['¿Qué versión del firmware tiene el Cardputer?', 'version'], ['Quelle version du firmware tourne ?', 'version'],
+    ['How much free space is left on the SD card?', 'space'], ['Combien d\'espace libre reste sur la carte SD ?', 'space'],
+    ['How long has the device been on?', 'uptime'], ['¿Cuánto tiempo lleva encendido el Cardputer?', 'uptime'],
+    ['Depuis combien de temps le Cardputer est allumé ?', 'uptime'], ['Wie lange läuft der Cardputer schon?', 'uptime']]) {
+    assert.equal(liveKind(q), k, q);
+    assert.equal(commandHint(q), 'live', q);
+  }
+  assert.deepEqual(liveKinds('How much free space is left on the SD card, and how long has the device been on?'), ['space', 'uptime']);
+  assert.deepEqual(liveKinds('Wie viel RAM ist frei und welche Firmware-Version läuft?'), ['ram', 'version']);
+  // still not status reads
+  for (const q of ['what is an IP address', 'che versione di python devo usare', 'how long has the Eiffel tower been there']) assert.equal(liveKind(q), null, q);
+  // a setting order is answered in ITS language ("Mets la luminosité à 40 %" got "Brillo al 40 %")
+  for (const [q, lg] of [['Mets la luminosité à 40 %', 'fr'], ['Pon el brillo al 30', 'es'], ['Stelle die Helligkeit auf 50', 'de'],
+    ['Imposta la luminosità dello schermo al 50%', 'it'], ['Turn the brightness down', 'en']]) assert.equal(guessLang(q), lg, q);
+});
+
 test('every engine gets one compact line of the live device state', () => {
   const st = { version: '0.4.0', uptime_s: 5025, free_heap: 26820, profile: 'web', storage: { mounted: true, total_bytes: 31998345216, free_bytes: 18714492928 },
     battery: { pct: 100, mv: 4152 }, network: { mode: 'sta', ssid: 'nonnoBob', ip: '192.168.0.104' } };
