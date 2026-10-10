@@ -156,7 +156,8 @@ async function newPage(conn) {
 
   const send = (m, params) => conn.send(m, params, sessionId);
   const page = {
-    log, consoleInfo,
+    log, consoleInfo, sessionId,
+    send,                            // raw CDP on this page's session (e.g. Fetch interception)
     pending: () => [...inflight.values()],
     mark: () => log.length,
     since: (m) => log.slice(m),

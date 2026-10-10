@@ -8,12 +8,15 @@
 // from the command line) and opens apps; it does not change the device language or any config. Apps are
 // opened one at a time with a pause, so the single-task httpd is never flooded.
 //
-//   node tools/web-e2e/device-smoke.mjs [--host 192.168.0.166] [--lang it] [--only settings,notes] [--pause 600]
+//   node tools/web-e2e/device-smoke.mjs [--host 192.168.0.166] [--lang it] [--only settings,notes] [--pause 600] [--overlay]
+// --overlay: the web payload from this repo's working tree, /api/* from the device (tools/web-e2e/overlay.mjs) — the
+// reload pass runs with it, the first visit stays the device's own (its hand-off into the web profile).
 import { readFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import { launchBrowser, findChrome } from './cdp.mjs';
 import { waitDesktop, appRows, openAppAt, closeAllWindows, defects } from './shell.mjs';
 import { REPO } from './sim.mjs';
+import { enableOverlay } from './overlay.mjs';
 
 const arg = (k, d) => { const i = process.argv.indexOf('--' + k); return i > 0 ? process.argv[i + 1] : d; };
 const cfg = JSON.parse(readFileSync(join(REPO, 'tools', 'release.local.json'), 'utf8').replace(/^﻿/, ''));
@@ -24,6 +27,7 @@ const origin = 'http://' + host;
 const lang = arg('lang', 'it');
 const only = arg('only', '') ? arg('only').split(',').map((s) => s.trim().toLowerCase()) : null;
 const pause = +arg('pause', 600);
+const overlay = process.argv.includes('--overlay');
 const SHOTS = join(REPO, 'build', 'web-e2e', 'device');
 mkdirSync(SHOTS, { recursive: true });
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -62,6 +66,7 @@ try {
   // network events miss most of them.
   const loads = [];
   for (const kind of ['first visit', 'reload']) {
+    if (kind === 'reload' && overlay) { await enableOverlay(browser, page, origin); console.log('overlay on: web files from the working tree'); }
     const mark = page.mark();
     const t0 = Date.now();
     await page.goto(origin + '/');
