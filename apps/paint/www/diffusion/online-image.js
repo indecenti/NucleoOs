@@ -128,35 +128,9 @@ export function makeOnlineImageEngine({ cfg, fetchImpl, decode, label } = {}) {
   };
 }
 
-// ── pure chat request/response (the browser wires fetch to these; host tests pin both provider shapes) ──
-// Anthropic and OpenAI-compatible (Grok/Groq) differ in endpoint, auth, system placement AND base convention
-// (Anthropic base has no /v1, the others end in /v1) — so this asymmetry is captured in one tested place.
-export function buildChatRequest(cfg, system, user, maxTokens = 320) {
-  const base = (cfg.base || '').replace(/\/+$/, '');
-  if (cfg.provider === 'anthropic') {
-    return {
-      url: base + '/v1/messages',
-      headers: { 'content-type': 'application/json', 'x-api-key': cfg.key, 'anthropic-version': cfg.version || '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' },
-      body: { model: cfg.model, max_tokens: maxTokens, ...(system ? { system } : {}), messages: [{ role: 'user', content: user }] },
-    };
-  }
-  const direct = base + '/chat/completions';
-  return {
-    // Gemini (cfg.proxy) has no CORS → relay the enhancer call through the device same-origin /api/llm proxy.
-    url: cfg.proxy ? '/api/llm?url=' + encodeURIComponent(direct) : direct,
-    headers: { 'content-type': 'application/json', 'authorization': 'Bearer ' + cfg.key },
-    body: { model: cfg.model, max_tokens: maxTokens, messages: [...(system ? [{ role: 'system', content: system }] : []), { role: 'user', content: user }] },
-  };
-}
-export function parseChatResponse(provider, json) {
-  if (!json) return '';
-  if (provider === 'anthropic') return Array.isArray(json.content) ? json.content.filter((b) => b && b.type === 'text').map((b) => b.text).join('') : '';
-  return (json.choices && json.choices[0] && json.choices[0].message && json.choices[0].message.content) || '';
-}
-
 // ── LLM prompt enhancer — makes the pipeline LLM-driven end to end ──────────────────────────────────────
 // An LLM rewrites the user's idea into ONE professional, concrete image prompt (and, when useful, a
-// negative). `ask(system, user)` is injected (browser: a browser-direct chat call; tests: a stub). On any
+// negative). `ask(system, user)` is injected (browser: /ai-ask.js, the OS-wide engine decision; tests: a stub). On any
 // failure it returns the original prompt unchanged — enhancement is additive, it NEVER blocks generation.
 
 const STYLE_HINT = {

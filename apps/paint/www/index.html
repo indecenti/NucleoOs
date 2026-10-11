@@ -1299,8 +1299,10 @@ setTimeout(()=>{ try{ if(!localStorage.getItem('paint.tour.done')) startTour(fal
   const TEACHER='/data/anima/teacher.json';                              // the device key vault (paired /api/fs)
   const PREF_KEY='paint.atelier.provider';                               // remembers the user's model choice
   let engine=null, engKind='', booting=null, generating=false, el={}, back=null;
-  // online/LLM pipeline state — modules lazy-imported; configs resolved from the key vault, all browser-direct
-  let PIPEMOD=null, aiCfg={chat:null,image:null}, aiLoaded=false, providers=[], selProvider=null, lastInfo=null;
+  // online/LLM pipeline state — modules lazy-imported. image = the online image engine from the key vault;
+  // chat = { kind:'pc'|'cloud', brand } of who the OS-wide decision (/ai-ask.js) would ask to improve the prompt.
+  // privateMode: the OS mode is Private (anima-mode.js) — nothing may leave this computer.
+  let PIPEMOD=null, aiCfg={chat:null,image:null}, aiLoaded=false, providers=[], selProvider=null, lastInfo=null, privateMode=false;
 
   const rnd = ()=> (Math.floor(Math.random()*1e9));
   const escapeHtml = (s)=> String(s==null?'':s).replace(/[&<>"]/g, ch=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[ch]));
@@ -1315,30 +1317,31 @@ setTimeout(()=>{ try{ if(!localStorage.getItem('paint.tour.done')) startTour(fal
     const [P,O,L]=await Promise.all([ import('./diffusion/providers.js'), import('./diffusion/online-image.js'), import('./diffusion/pipeline.js') ]);
     PIPEMOD={ P, O, L }; return PIPEMOD; }
 
-  // Read the device key vault and resolve {chat, image} configs (Claude>Grok>Groq for prompt; xAI Grok for pixels).
+  // The online image engine comes from the device key vault (xAI, or an explicit image endpoint). The LLM that
+  // improves the prompt is NOT resolved here: it is whoever the OS-wide decision would ask (/ai-ask.js) — a model
+  // on the PC with no key, the cloud key the shared router picks, only this computer in Private mode.
+  let _askP=null; const askMod=()=> _askP || (_askP=import('/ai-ask.js').catch((e)=>{ _askP=null; throw e; }));
   async function loadAi(){ if(aiLoaded) return aiCfg; await ensurePipeline();
+    aiCfg={ chat:null, image:null };
     try{ const r=await fetch('/api/fs/read?path='+encodeURIComponent(TEACHER),{cache:'no-store'});
-      if(r.ok){ aiCfg=PIPEMOD.P.resolveConfigs(await r.json()); } }catch{}
+      if(r.ok){ aiCfg.image=PIPEMOD.P.resolveConfigs(await r.json()).image; } }catch{}
+    try{ const M=await import('/anima-mode.js'); privateMode = M.readMode()==='private'; }catch{ privateMode=false; }
+    try{ const A=await askMod(), AI=await aiMod(); const plan=await A.planEngines({ tier:'fast', probe:true }); const k=plan.order[0];
+      aiCfg.chat = k==='pc' ? { kind:'pc', brand:plan.pc.server } : k==='cloud' ? { kind:'cloud', brand:AI.providerOf(plan.cloud.provider).label } : null; }
+    catch{ aiCfg.chat=null; }
     aiLoaded=true; return aiCfg; }
 
   // fetch with a hard timeout (AbortController) so a stuck cloud call can't pin the modal forever.
   function fetchT(url, opts, ms){ const ac=new AbortController(); const t=setTimeout(()=>{ try{ac.abort();}catch{} }, ms||90000);
     return fetch(url, Object.assign({}, opts, {signal:ac.signal})).finally(()=>clearTimeout(t)); }
 
-  // Browser-DIRECT chat completion for the prompt enhancer — the Cardputer never proxies it ("tutto cliente").
-  // Request building + response parsing live in online-image.js (host-tested for both provider shapes).
-  // The model is not pinned: the fastest good one the key serves, re-picked if the provider retired it
-  // (the shared /ai.js withAutoModel — the same rule every NucleoOS AI surface follows).
+  // The prompt enhancer's LLM call: the OS-wide decision (/ai-ask.js), pinned to the engine named on the chip so
+  // the label never lies; browser-direct (the Cardputer never proxies it, "tutto cliente"), 90 s at most.
   let _ai=null; const aiMod=()=> _ai || (_ai=import('/ai.js').catch((e)=>{ _ai=null; throw e; }));
-  async function cloudAsk(cfg, system, user){
-    const AI=await aiMod();
-    return AI.withAutoModel(Object.assign({}, cfg, { tier:'fast' }), async (c)=>{
-      const req=PIPEMOD.O.buildChatRequest(c, system, user, 320);
-      const r=await fetchT(req.url,{method:'POST',headers:req.headers,body:JSON.stringify(req.body)},90000);
-      const text=await r.text().catch(()=>''); let j=null; try{ j=JSON.parse(text); }catch{}
-      if(!r.ok||!j||j.type==='error'||j.error) throw await AI.aiErrorFromResponse(r, c, text);
-      return PIPEMOD.O.parseChatResponse(c.provider, j);
-    });
+  async function llmAsk(system, user){
+    const A=await askMod();
+    const r=await A.askAI({ system, user, tier:'fast', maxTokens:320, pin:aiCfg.chat && aiCfg.chat.kind, signal:AbortSignal.timeout(90000) });
+    return r.text;
   }
 
   // Decode an INLINE data: URL (b64 from the online model) → RGBA on a same-origin canvas (no taint/CORS).
@@ -1353,7 +1356,7 @@ setTimeout(()=>{ try{ if(!localStorage.getItem('paint.tour.done')) startTour(fal
 
   // Build the live capability snapshot the provider list gates on.
   function mkCaps(st){ return { online: navigator.onLine!==false, webgpu: !!(st&&st.webgpu),
-    modelCached: !!(st&&st.cached), modelOnSD: !!(st&&st.onSD), runtimeOk: !!(st&&st.ortOk), lang: uiLang() }; }
+    modelCached: !!(st&&st.cached), modelOnSD: !!(st&&st.onSD), runtimeOk: !!(st&&st.ortOk), private: privateMode, lang: uiLang() }; }
 
   function buildModal(){
     back=document.createElement('div'); back.className='atl-backdrop';
@@ -1483,7 +1486,7 @@ setTimeout(()=>{ try{ if(!localStorage.getItem('paint.tour.done')) startTour(fal
   }
   // The prompt-enhancer toggle appears only when a chat LLM is configured; on by default for the AI providers.
   function updateEnhanceUI(){ if(!el.enhanceWrap) return;
-    if(aiCfg.chat){ const b=PIPEMOD.P.brandOf(aiCfg.chat);
+    if(aiCfg.chat){ const b=aiCfg.chat.brand;
       el.enhanceWrap.style.display=''; el.enhanceLbl.textContent=UL('✨ Migliora il prompt con ','✨ Improve the prompt with ')+b;
       if(el.enhance.dataset.touched!=='1') el.enhance.checked = (selProvider!=='preview');
     } else { el.enhanceWrap.style.display='none'; el.enhance.checked=false; }
@@ -1491,7 +1494,8 @@ setTimeout(()=>{ try{ if(!localStorage.getItem('paint.tour.done')) startTour(fal
   }
   // Resolve the engine for the chosen provider (online cloud / local SDXS already booted / procedural preview).
   async function resolveEngine(id, localEngine){
-    if(id==='online'){ if(!aiCfg.image) throw new Error(UL('nessun provider immagini online — configura xAI/Grok in Impostazioni · IA','no online image provider — configure xAI/Grok in Settings · AI'));
+    if(id==='online'){ if(privateMode) throw new Error(PIPEMOD.P.providerText('private', uiLang()));
+      if(!aiCfg.image) throw new Error(UL('nessun provider immagini online — configura xAI/Grok in Impostazioni · IA','no online image provider — configure xAI/Grok in Settings · AI'));
       // The image model is picked from the key's own list (newest image model; the saved one while served), so a
       // retired grok-2-image can't break Atelier. No list -> the configured id, as before.
       let imgCfg=aiCfg.image;
@@ -1887,7 +1891,7 @@ setTimeout(()=>{ try{ if(!localStorage.getItem('paint.tour.done')) startTour(fal
       const sketch = (mode==='text' || provider==='online') ? null : regionSketch(region);
       const enhanceOn = !!(el.enhance && el.enhance.checked && aiCfg.chat);
       const enhancer = enhanceOn
-        ? PIPEMOD.O.makePromptEnhancer({ cfg:aiCfg.chat, ask:(sys,u)=>cloudAsk(aiCfg.chat,sys,u), label:PIPEMOD.P.brandOf(aiCfg.chat) })
+        ? PIPEMOD.O.makePromptEnhancer({ cfg:aiCfg.chat, ask:(sys,u)=>llmAsk(sys,u), label:aiCfg.chat.brand })
         : null;
       const pipe=PIPEMOD.L.makeImagePipeline({ resolveEngine:(id)=>resolveEngine(id, localEngine), enhancer });
       const r=await pipe.run({ provider, prompt, negativePrompt, style:'image', enhance:enhanceOn, n:nVar, seed:seed0, sketch, controlScale, lang:uiLang(),

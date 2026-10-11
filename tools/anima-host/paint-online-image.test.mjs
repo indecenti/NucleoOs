@@ -6,7 +6,6 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   composeImagePrompt, buildImageRequest, mimeFromB64, parseImageResponse, explainImageError, makeOnlineImageEngine,
-  buildChatRequest, parseChatResponse,
 } from '../../apps/paint/www/diffusion/online-image.js';
 import { PROMPTS, NEGATIVES } from './paint-prompt-corpus.mjs';
 
@@ -152,26 +151,3 @@ test('makeOnlineImageEngine.generate: aspectRatio is forwarded end-to-end into t
   assert.equal(body.aspect_ratio, '16:9');
 });
 
-test('buildChatRequest: Anthropic vs OpenAI shapes (endpoint, auth, system placement, base convention)', () => {
-  const a = buildChatRequest({ provider: 'anthropic', base: 'https://api.anthropic.com', model: 'claude-sonnet-4-6', key: 'sk-ant', version: '2023-06-01' }, 'SYS', 'USR', 200);
-  assert.equal(a.url, 'https://api.anthropic.com/v1/messages');
-  assert.equal(a.headers['x-api-key'], 'sk-ant');
-  assert.equal(a.headers['anthropic-version'], '2023-06-01');
-  assert.equal(a.headers['anthropic-dangerous-direct-browser-access'], 'true');
-  assert.equal(a.body.system, 'SYS', 'system is top-level for Anthropic');
-  assert.equal(a.body.messages[0].content, 'USR');
-  assert.equal(a.body.max_tokens, 200);
-
-  const o = buildChatRequest({ provider: 'openai', base: 'https://api.x.ai/v1', model: 'grok-3-mini', key: 'xai' }, 'SYS', 'USR');
-  assert.equal(o.url, 'https://api.x.ai/v1/chat/completions');
-  assert.equal(o.headers.authorization, 'Bearer xai');
-  assert.equal(o.body.messages[0].role, 'system', 'system is a message for OpenAI-compatible');
-  assert.equal(o.body.messages[1].content, 'USR');
-});
-
-test('parseChatResponse: Anthropic content[] join vs OpenAI choices[].message.content', () => {
-  assert.equal(parseChatResponse('anthropic', { content: [{ type: 'text', text: 'a vivid ' }, { type: 'text', text: 'red cat' }, { type: 'thinking', text: 'IGNORE' }] }), 'a vivid red cat');
-  assert.equal(parseChatResponse('openai', { choices: [{ message: { content: 'a neon dragon' } }] }), 'a neon dragon');
-  assert.equal(parseChatResponse('anthropic', null), '');
-  assert.equal(parseChatResponse('openai', { choices: [] }), '');
-});

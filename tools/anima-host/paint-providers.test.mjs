@@ -1,43 +1,37 @@
 // paint-providers.test.mjs — host gate for Atelier provider resolution (apps/paint/www/diffusion/providers.js).
-// Proves: teacher.json (every real shape) → correct chat + online-image configs; availability gating from
-// live caps; the online→local→preview default cascade; honest brand labels. Pure, deterministic, no I/O.
+// Proves: teacher.json (every real shape) → the right ONLINE image config; availability gating from live caps
+// (connection, Private mode, local model, runtime); the online→local→preview default cascade; honest brand labels;
+// every reason in the five OS languages. The prompt-enhancing LLM is chosen by the OS-wide decision
+// (web/shell/ai-ask.js, tools/shell-ai-ask.test.mjs), not here. Pure, deterministic, no I/O.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { resolveConfigs, listProviders, defaultProvider, brandOf, enhancerLabel } from '../../apps/paint/www/diffusion/providers.js';
+import { resolveConfigs, listProviders, defaultProvider, brandOf, enhancerLabel, providerText } from '../../apps/paint/www/diffusion/providers.js';
 
 test('brandOf: label never lies (Grok ≠ Groq ≠ Claude)', () => {
   assert.equal(brandOf({ provider: 'anthropic' }), 'Claude');
   assert.equal(brandOf({ provider: 'openai', base: 'https://api.x.ai/v1' }), 'Grok');
   assert.equal(brandOf({ provider: 'openai', base: 'https://api.groq.com/openai/v1' }), 'Groq');
   assert.equal(brandOf({ provider: 'openai', base: 'https://api.openai.com/v1' }), 'OpenAI');
+  assert.equal(brandOf({ provider: 'google' }), 'Gemini');
+  assert.equal(brandOf({ provider: 'openai', base: 'https://generativelanguage.googleapis.com/v1beta/openai' }), 'Gemini');
   assert.equal(brandOf(null), null);
 });
 
-test('resolveConfigs: Claude-only → chat=Claude, NO online image (Anthropic has no image API)', () => {
-  const { chat, image } = resolveConfigs({ provider: 'anthropic', key: 'sk-ant-xxx', model: 'claude-sonnet-4-6' });
-  assert.equal(chat.provider, 'anthropic');
-  assert.equal(brandOf(chat), 'Claude');
-  assert.equal(image, null, 'Claude cannot generate images');
+test('resolveConfigs: no image API → no online image (Claude, Groq, Gemini)', () => {
+  assert.equal(resolveConfigs({ provider: 'anthropic', key: 'sk-ant-xxx' }).image, null, 'Claude cannot generate images');
+  assert.equal(resolveConfigs({ key: 'gsk_xxx', base: 'https://api.groq.com/openai/v1' }).image, null, 'Groq has no image API');
+  assert.equal(resolveConfigs({ provider: 'google', key: 'AIzaX' }).image, null, 'Gemini has no image API here');
 });
 
-test('resolveConfigs: xAI Grok key → chat=Grok AND image=grok-2-image', () => {
-  const { chat, image } = resolveConfigs({ keys: { xai: { key: 'xai-abc', base: 'https://api.x.ai/v1' } } });
-  assert.equal(brandOf(chat), 'Grok');
+test('resolveConfigs: an xAI key gives the online image engine — as its own slot, the grok alias, or next to Claude', () => {
+  const { image } = resolveConfigs({ keys: { xai: { key: 'xai-abc', base: 'https://api.x.ai/v1' } } });
   assert.ok(image && image.key === 'xai-abc');
   assert.equal(image.base, 'https://api.x.ai/v1');
-  assert.equal(image.model, 'grok-2-image');
-});
-
-test('resolveConfigs: Groq-only → chat=Groq, NO online image (Groq has no image API)', () => {
-  const { chat, image } = resolveConfigs({ key: 'gsk_xxx', base: 'https://api.groq.com/openai/v1' });
-  assert.equal(brandOf(chat), 'Groq');
-  assert.equal(image, null);
-});
-
-test('resolveConfigs: Claude chat + Grok image together (two-key vault)', () => {
-  const { chat, image } = resolveConfigs({ provider: 'anthropic', key: 'sk-ant-x', keys: { anthropic: { key: 'sk-ant-x' }, xai: { key: 'xai-y' } } });
-  assert.equal(brandOf(chat), 'Claude', 'Claude preferred for enhancement');
-  assert.equal(brandOf(image), 'Grok', 'Grok provides the pixels');
+  assert.equal(image.model, 'grok-2-image', 'a first guess; the live list re-picks at generation time');
+  assert.equal(brandOf(resolveConfigs({ provider: 'grok', key: 'xai-z', base: 'https://api.x.ai/v1' }).image), 'Grok');
+  const two = resolveConfigs({ provider: 'anthropic', key: 'sk-ant-x', keys: { anthropic: { key: 'sk-ant-x' }, xai: { key: 'xai-y' } } });
+  assert.equal(brandOf(two.image), 'Grok', 'Grok provides the pixels');
+  assert.ok(!('chat' in two), 'the chat LLM is the OS-wide decision now (ai-ask.js), not a copy here');
 });
 
 test('resolveConfigs: explicit image slot (any OpenAI-images endpoint) wins', () => {
@@ -46,21 +40,11 @@ test('resolveConfigs: explicit image slot (any OpenAI-images endpoint) wins', ()
   assert.equal(image.model, 'gpt-image-1');
 });
 
-test('resolveConfigs: grok flat-config alias is recognised', () => {
-  const { chat, image } = resolveConfigs({ provider: 'grok', key: 'xai-z', base: 'https://api.x.ai/v1' });
-  assert.equal(brandOf(chat), 'Grok');
-  assert.equal(brandOf(image), 'Grok');
+test('resolveConfigs: empty / garbage → null (no fabrication)', () => {
+  for (const j of [null, {}, { keys: {} }, 'nonsense', 42]) assert.equal(resolveConfigs(j).image, null);
 });
 
-test('resolveConfigs: empty / garbage → both null (no fabrication)', () => {
-  for (const j of [null, {}, { keys: {} }, 'nonsense', 42]) {
-    const r = resolveConfigs(j);
-    assert.equal(r.chat, null);
-    assert.equal(r.image, null);
-  }
-});
-
-test('listProviders: online available only when image key + connection', () => {
+test('listProviders: online available only when image key + connection + not Private', () => {
   const img = { provider: 'openai', base: 'https://api.x.ai/v1', model: 'grok-2-image', key: 'xai' };
   const on = listProviders(img, { online: true, webgpu: true, modelCached: false, runtimeOk: true });
   assert.equal(on.find((p) => p.id === 'online').available, true);
@@ -68,6 +52,10 @@ test('listProviders: online available only when image key + connection', () => {
   assert.equal(off.find((p) => p.id === 'online').available, false, 'no connection → online unavailable');
   const noKey = listProviders(null, { online: true });
   assert.equal(noKey.find((p) => p.id === 'online').available, false, 'no key → online unavailable');
+  const priv = listProviders(img, { online: true, private: true, lang: 'en' });
+  const o = priv.find((p) => p.id === 'online');
+  assert.equal(o.available, false, 'Private mode: the prompt must not leave this computer');
+  assert.match(o.reason, /Private mode/);
 });
 
 test('listProviders: local available only with a model present + runtime ok', () => {
@@ -79,10 +67,23 @@ test('listProviders: local available only with a model present + runtime ok', ()
 });
 
 test('listProviders: preview is always available and honestly non-AI', () => {
-  const list = listProviders(null, { online: false, runtimeOk: false });
+  const list = listProviders(null, { online: false, runtimeOk: false, lang: 'it' });
   const prev = list.find((p) => p.id === 'preview');
   assert.equal(prev.available, true);
-  assert.match(prev.reason, /non IA|not AI/);
+  assert.match(prev.reason, /non IA/);
+  assert.match(listProviders(null, { lang: 'en' }).find((p) => p.id === 'preview').reason, /not AI/);
+});
+
+test('every reason reads in the OS language — es/fr/de used to show Italian', () => {
+  const img = { provider: 'openai', base: 'https://api.x.ai/v1', key: 'xai' };
+  const caps = [{ online: true, runtimeOk: true, modelCached: true, webgpu: true }, { online: false, runtimeOk: false }, { online: true, private: true, runtimeOk: true }];
+  for (const lang of ['es', 'fr', 'de']) for (const c of caps) for (const key of [img, null]) {
+    for (const p of listProviders(key, { ...c, lang })) {
+      for (const it of ['nessun', 'nessuna', 'modalità', 'non disponibile', 'scaricato', 'nel browser', 'procedurale', 'Anteprima'])
+        assert.ok(!p.reason.includes(it) && !p.brand.includes(it), `${lang}: Italian "${it}" in ${p.id}: ${p.reason}`);
+    }
+  }
+  assert.equal(providerText('preview', 'xx'), 'Preview', 'an unknown language reads English');
 });
 
 test('defaultProvider: cascade online → local → preview, honouring an available preference', () => {
@@ -91,39 +92,17 @@ test('defaultProvider: cascade online → local → preview, honouring an availa
   assert.equal(defaultProvider(all), 'online', 'best = online when everything is up');
   const noNet = listProviders(img, { online: false, modelCached: true, runtimeOk: true });
   assert.equal(defaultProvider(noNet), 'local', 'falls to local in-browser model when offline');
+  const priv = listProviders(img, { online: true, private: true, modelCached: true, runtimeOk: true });
+  assert.equal(defaultProvider(priv, 'online'), 'local', 'Private: a saved "online" preference is ignored');
   const bare = listProviders(null, { online: false, modelCached: false, runtimeOk: false });
   assert.equal(defaultProvider(bare), 'preview', 'falls to preview only as last resort');
-  // an available preference overrides the cascade; an unavailable one is ignored
   assert.equal(defaultProvider(all, 'local'), 'local');
   assert.equal(defaultProvider(noNet, 'online'), 'local', 'unavailable preference ignored');
 });
 
-test('enhancerLabel: present only with a chat LLM, brand-accurate + bilingual', () => {
-  const { chat } = resolveConfigs({ provider: 'anthropic', key: 'sk-ant-x' });
-  assert.match(enhancerLabel(chat, 'it'), /Claude/);
-  assert.match(enhancerLabel(chat, 'en'), /enhance with Claude/);
+test('enhancerLabel: names who would rewrite the prompt, in five languages; none without an engine', () => {
+  assert.equal(enhancerLabel('Ollama', 'en'), 'enhance with Ollama');
+  assert.equal(enhancerLabel('Claude', 'it'), 'migliora con Claude');
+  assert.equal(enhancerLabel('Claude', 'de'), 'verbessern mit Claude');
   assert.equal(enhancerLabel(null), null);
-});
-
-test('brandOf: Gemini labelled by provider OR base', () => {
-  assert.equal(brandOf({ provider: 'google' }), 'Gemini');
-  assert.equal(brandOf({ provider: 'openai', base: 'https://generativelanguage.googleapis.com/v1beta/openai' }), 'Gemini');
-});
-
-test('resolveConfigs: Gemini active → chat=Gemini via proxy, NO online image (no image API)', () => {
-  const { chat, image } = resolveConfigs({ provider: 'google', key: 'AIzaX', model: 'gemini-2.5-flash' });
-  assert.equal(brandOf(chat), 'Gemini');
-  assert.equal(chat.proxy, true, 'CORS-blocked → routed via the device /api/llm proxy');
-  assert.equal(image, null, 'Gemini has no image API → pixels fall back to local/preview');
-});
-
-test('resolveConfigs: a saved Gemini key does NOT override an active browser-direct brain (Claude)', () => {
-  const { chat } = resolveConfigs({ provider: 'anthropic', key: 'sk-ant-x', keys: { anthropic: { key: 'sk-ant-x' }, google: { key: 'AIzaY' } } });
-  assert.equal(brandOf(chat), 'Claude', 'browser-direct preferred; Gemini (proxy) only when it is the active/only key');
-});
-
-test('resolveConfigs: Gemini-only saved key (not active) is still usable as last resort', () => {
-  const { chat } = resolveConfigs({ keys: { google: { key: 'AIzaZ' } } });
-  assert.equal(brandOf(chat), 'Gemini');
-  assert.equal(chat.proxy, true);
 });
