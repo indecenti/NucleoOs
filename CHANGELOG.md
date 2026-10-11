@@ -6,6 +6,11 @@ All notable user-facing changes to NucleoOS. Format loosely follows
 
 ## [Unreleased]
 
+## [0.7.1] — 2026-10-11
+
+The first published release since 0.6.0: it also carries everything listed under 0.7.0 in
+[CHANGELOG.md](https://github.com/indecenti/NucleoOs/blob/main/CHANGELOG.md), whose release build never completed.
+
 ### Added
 - **Costellazioni**, the flagship space game — 6DOF combat in procedural star systems, a galaxy to
   cross (map, jumps, docking, beacons to relight) and worlds to land on (seamless descent, eight
