@@ -1150,7 +1150,14 @@ const server = createServer(async (req, res) => {
   if (dm) { const abs = normalize(join(REPO, 'web', 'device', dm[1])); if (!abs.startsWith(join(REPO, 'web', 'device'))) return send(res, 403, 'text/plain', '403'); return sendFile(res, abs); }
 
   const m = path.match(/^\/apps\/([a-z0-9-]+)\/(.*)$/);
-  if (m) { const abs = normalize(join(REPO, 'apps', m[1], 'www', m[2] || 'index.html')); if (!abs.startsWith(join(REPO, 'apps'))) return send(res, 403, 'text/plain', '403'); return sendFile(res, abs); }
+  if (m) {
+    // Like the device's webfs (/apps/<id>/<rest> -> /sd/apps/<id>/www/<rest>): an app the repo does not ship — one
+    // the agent published to the card — is served from the simulated SD.
+    const base = existsSync(join(REPO, 'apps', m[1])) ? join(REPO, 'apps') : join(SD, 'apps');
+    const abs = normalize(join(base, m[1], 'www', m[2] || 'index.html'));
+    if (!abs.startsWith(base)) return send(res, 403, 'text/plain', '403');
+    return sendFile(res, abs);
+  }
 
   const rel = path === '/' ? 'index.html' : path.replace(/^\//, '');
   const abs = normalize(join(SHELL, rel));
