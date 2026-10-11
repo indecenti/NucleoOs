@@ -94,13 +94,47 @@ int auth_rec_decode(const uint8_t *rec, size_t len, char *pin, char (*tok)[AUTH_
     if (!none && !digits) return -1;
     if (digits) { for (int i = 0; i < 6; i++) pin[i] = (char)rec[2 + i]; pin[6] = '\0'; }
     int count = rec[1] < n ? rec[1] : n;
-    for (int k = 0; k < count; k++) {
+    for (int k = 0; k < count; k++) {                            // entry k (newest first) -> slot count-1-k
         const uint8_t *e = rec + AUTH_REC_SIZE(k);
-        for (int b = 0; b < AUTH_TOK_BYTES; b++) { tok[k][2 * b] = hex[e[b] >> 4]; tok[k][2 * b + 1] = hex[e[b] & 15]; }
-        tok[k][AUTH_TOK_HEX] = '\0';
+        char *t = tok[count - 1 - k];
+        for (int b = 0; b < AUTH_TOK_BYTES; b++) { t[2 * b] = hex[e[b] >> 4]; t[2 * b + 1] = hex[e[b] & 15]; }
+        t[AUTH_TOK_HEX] = '\0';
         uint32_t u = 0;
         for (int b = 0; b < 4; b++) u |= (uint32_t)e[AUTH_TOK_BYTES + b] << (8 * b);
-        seen[k] = u;
+        seen[count - 1 - k] = u;
     }
     return count;
+}
+
+// NVS entries (32 B) a blob of len bytes takes: its index entry + up to two chunks (a header each) + the data.
+static long rec_need(size_t len) { return (long)(3 + (len + 31) / 32) * 32; }
+
+int auth_rec_save(const auth_store_t *st, uint8_t *buf, const char *pin, const char (*tok)[AUTH_TOK_HEX + 1],
+                  const int64_t *seen, const uint32_t *lru, int n, int live, bool removed)
+{
+    int r = AUTH_PUT_ERROR;
+    if (buf) {
+        size_t len = auth_rec_encode(buf, AUTH_REC_SIZE(live), pin, tok, seen, lru, n, live);
+        r = len ? st->put(st->ctx, buf, len) : AUTH_PUT_ERROR;
+        if (r == AUTH_PUT_OK) return buf[1];
+    }
+    if (r == AUTH_PUT_NOSPACE) {
+        // Start over from nothing: the old copy may be damaged by the failed write, and without it a fresh
+        // record has twice the room. A power cut in this window loses pairing; it never resurrects a session.
+        st->wipe(st->ctx);
+        long room = st->room ? st->room(st->ctx) : -1;
+        int keep = live;
+        while (room >= 0 && keep > 0 && rec_need(AUTH_REC_SIZE(keep)) > room) keep--;   // pick what fits up front
+        for (;;) {
+            size_t len = auth_rec_encode(buf, AUTH_REC_SIZE(live), pin, tok, seen, lru, n, keep);
+            r = len ? st->put(st->ctx, buf, len) : AUTH_PUT_ERROR;
+            if (r == AUTH_PUT_OK) return buf[1];
+            if (r != AUTH_PUT_NOSPACE || keep == 0) break;
+            keep /= 2;
+        }
+        st->wipe(st->ctx);                                        // a half-written fresh copy goes too
+        return -1;
+    }
+    if (removed) st->wipe(st->ctx);                               // the old record may hold a removed session
+    return -1;
 }

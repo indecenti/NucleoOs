@@ -769,7 +769,7 @@ static esp_err_t diag_get(httpd_req_t *req)
     cJSON_AddNumberToObject(aj, "nvs_kept", ap.nvs_kept);        // < sessions: NVS full, LRU sessions shed
     cJSON_AddNumberToObject(aj, "sessions", ap.sessions);
     cJSON_AddNumberToObject(pj, "nvs_free",  ap.nvs_free);       // NVS entries (32 B): shared with the Launcher on a guest
-    cJSON_AddNumberToObject(pj, "nvs_total", ap.nvs_total);
+    cJSON_AddNumberToObject(pj, "nvs_used",  ap.nvs_used);
 
     // ── anima: the whole point of the "ANIMA health" ask — tier mix, abstain rate, which brain is live ─
     cJSON *an = cJSON_AddObjectToObject(root, "anima");

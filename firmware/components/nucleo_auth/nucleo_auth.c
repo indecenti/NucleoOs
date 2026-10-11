@@ -83,48 +83,53 @@ static fail_ent_t s_fail[FAILTAB_N];
 #define AUTH_NVS_JSON "auth"      // older firmware: the auth.json text — read once to migrate, then erased
 _Static_assert(TOKEN_HEX_LEN == AUTH_TOK_HEX, "the NVS record stores 24-byte tokens");
 
+static bool s_cfg_present;        // /cfg is mounted (probed at init): else no auth.json is built at all
 static bool s_cfg_saved;          // the last save reached /cfg
 static int  s_nvs_kept = -1;      // sessions the last save left in NVS (-1: none yet / failed)
+static bool s_removed;            // a session was revoked / expired / evicted since the last NVS save
 
-// Save the compact record. When NVS cannot place it (the partition is shared and small), first drop the
-// old-format text, then shed sessions — least recently used first — until it fits. The stored set must
-// stay a SUBSET of the live one: a stale fuller copy would bring evicted or revoked sessions back after a
-// reboot, so if not even the PIN fits, the old record is erased. Returns the sessions kept, or -1.
+// The NVS binding of auth_rec_save (auth_slots.h holds the policy and its reasons; host-tested).
+static int nvs_put(void *ctx, const uint8_t *rec, size_t len)
+{
+    nvs_handle_t h = *(nvs_handle_t *)ctx;
+    esp_err_t e = nvs_set_blob(h, AUTH_NVS_REC, rec, len);   // identical content: NVS writes nothing
+    if (e == ESP_OK) e = nvs_commit(h);
+    if (e != ESP_OK) ESP_LOGW(TAG, "NVS save of %u B: %s", (unsigned)len, esp_err_to_name(e));
+    return e == ESP_OK ? AUTH_PUT_OK : e == ESP_ERR_NVS_NOT_ENOUGH_SPACE ? AUTH_PUT_NOSPACE : AUTH_PUT_ERROR;
+}
+
+static void nvs_wipe(void *ctx)
+{
+    nvs_handle_t h = *(nvs_handle_t *)ctx;
+    nvs_erase_key(h, AUTH_NVS_REC); nvs_erase_key(h, AUTH_NVS_JSON); nvs_commit(h);
+}
+
+static long nvs_room(void *ctx)
+{
+    (void)ctx;
+    nvs_stats_t st;
+    return nvs_get_stats(NULL, &st) == ESP_OK ? (long)st.available_entries * 32 : -1;
+}
+
 static int auth_nvs_save(void)
 {
-    uint8_t *rec = malloc(AUTH_REC_SIZE(MAX_TOKENS));
     nvs_handle_t h;
-    if (!rec) return -1;
-    if (nvs_open(AUTH_NVS_NS, NVS_READWRITE, &h) != ESP_OK) { free(rec); return -1; }
-    int kept = -1, keep = s_token_count;
-    bool shed_legacy = false;
-    esp_err_t e;
-    for (;;) {
-        size_t len = auth_rec_encode(rec, AUTH_REC_SIZE(MAX_TOKENS), s_pin, s_tokens, s_tok_seen, s_tok_lru,
-                                     MAX_TOKENS, keep);
-        e = len ? nvs_set_blob(h, AUTH_NVS_REC, rec, len) : ESP_ERR_INVALID_SIZE;
-        if (e == ESP_OK) e = nvs_commit(h);
-        if (e == ESP_OK) { kept = rec[1]; break; }
-        if (e != ESP_ERR_NVS_NOT_ENOUGH_SPACE) break;          // shedding sessions cannot fix this one
-        if (!shed_legacy) {                                    // same data, 2.5x the room: the old text goes first
-            shed_legacy = true;
-            if (nvs_erase_key(h, AUTH_NVS_JSON) == ESP_OK) { nvs_commit(h); continue; }
-        }
-        if (keep == 0) break;
-        keep /= 2;
-    }
+    if (nvs_open(AUTH_NVS_NS, NVS_READWRITE, &h) != ESP_OK) { ESP_LOGE(TAG, "NVS open failed: pairing not saved"); return -1; }
+    const auth_store_t st = { nvs_put, nvs_wipe, nvs_room, &h };
+    uint8_t *rec = malloc(AUTH_REC_SIZE(s_token_count));      // ~0.1-0.9 KB, freed below (NULL: the policy copes)
+    int kept = auth_rec_save(&st, rec, s_pin, (const char (*)[AUTH_TOK_HEX + 1])s_tokens, s_tok_seen, s_tok_lru,
+                             MAX_TOKENS, s_token_count, s_removed);
+    free(rec);
     if (kept >= 0) {
-        if (!shed_legacy && nvs_erase_key(h, AUTH_NVS_JSON) == ESP_OK) nvs_commit(h);   // migrated: free its room
+        s_removed = false;
+        if (nvs_erase_key(h, AUTH_NVS_JSON) == ESP_OK) nvs_commit(h);   // migrated: the old text frees its room
         if (kept < s_token_count)
             ESP_LOGW(TAG, "NVS is full: %d of %d session(s) persisted (the least recently used are lost at reboot)",
                      kept, s_token_count);
     } else {
-        ESP_LOGE(TAG, "NVS save failed (%s): stale record erased so no revoked session can return",
-                 esp_err_to_name(e));
-        nvs_erase_key(h, AUTH_NVS_REC); nvs_erase_key(h, AUTH_NVS_JSON); nvs_commit(h);
+        ESP_LOGE(TAG, "pairing not saved to NVS (the cause is logged above)");
     }
     nvs_close(h);
-    free(rec);
     return kept;
 }
 
@@ -180,6 +185,8 @@ static void save_auth(void)
 
 static void save_auth_now(void)
 {
+    s_cfg_saved = false;
+    if (!s_cfg_present) { s_nvs_kept = auth_nvs_save(); return; }   // no /cfg (Launcher install): NVS only
     cJSON *root = cJSON_CreateObject();
     if (s_pin[0]) cJSON_AddStringToObject(root, "pin", s_pin);   // stable PIN survives reboots
     cJSON *arr = cJSON_AddArrayToObject(root, "tokens");
@@ -195,7 +202,6 @@ static void save_auth_now(void)
 
     // Tier 1: /cfg LittleFS (atomic temp+rename; LittleFS rename overwrites the destination in place, so
     // we don't remove the original first — that old remove-then-rename could lose BOTH copies on failure).
-    s_cfg_saved = false;
     if (out) {
         mkdir(NUCLEO_CFG_MOUNT "/config", 0775);
         char tmp[] = AUTH_JSON ".tmp";
@@ -304,6 +310,8 @@ static void load_required(void)
 void nucleo_auth_init(void)
 {
     s_pin[0] = '\0';
+    // /cfg mounted? (a Launcher install has no such partition; then nothing is built for it on every save)
+    s_cfg_present = mkdir(NUCLEO_CFG_MOUNT "/config", 0775) == 0 || errno == EEXIST;
     load_required();      // s_required + optional s_pin_override
     load_auth();          // restores the persisted PIN (and session tokens), if any
 
@@ -371,7 +379,7 @@ static bool token_valid(const char *tok)
                 s_tok_seen[i] = now; save_auth();
             } else if (now - s_tok_seen[i] > SESSION_TTL_SEC) {
                 s_tokens[i][0] = '\0'; s_tok_seen[i] = 0;   // unused past the TTL -> expire this session (must re-pair)
-                s_tok_lru[i] = 0;
+                s_tok_lru[i] = 0; s_removed = true;
                 count_tokens();
                 save_auth();
                 return false;
@@ -431,7 +439,7 @@ int nucleo_auth_revoke(const char *keep_token)
         s_tokens[i][0] = '\0'; s_tok_seen[i] = 0; s_tok_lru[i] = 0; revoked++;
     }
     count_tokens();
-    if (revoked) save_auth();                                                           // persist the wipe (both tiers)
+    if (revoked) { s_removed = true; save_auth(); }                                     // persist the wipe (both tiers)
     return revoked;
 }
 
@@ -443,7 +451,7 @@ void nucleo_auth_persist_status(nucleo_auth_persist_t *out)
     nvs_stats_t st;
     bool ok = nvs_get_stats(NULL, &st) == ESP_OK;
     out->nvs_free = ok ? (int)st.available_entries : -1;     // free for data (the GC reserve page excluded)
-    out->nvs_total = ok ? (int)st.total_entries : -1;
+    out->nvs_used = ok ? (int)st.used_entries : -1;
 }
 
 bool nucleo_auth_factory_reset(void)
@@ -492,6 +500,7 @@ static void mint_token(char *out)
     bool used[MAX_TOKENS];
     for (int i = 0; i < MAX_TOKENS; i++) used[i] = s_tokens[i][0] != '\0';
     int slot = auth_pick_slot(used, s_tok_lru, MAX_TOKENS);   // free slot, else the least recently used session
+    if (used[slot]) s_removed = true;                         // a full table evicted a session
     strcpy(s_tokens[slot], out);
     { int64_t now = (int64_t)time(NULL);             // stamp last-seen so the idle-TTL has a start point
       s_tok_seen[slot] = now > CLOCK_VALID_EPOCH ? now : 0; }   // 0 if clock cold -> starts on first clocked use

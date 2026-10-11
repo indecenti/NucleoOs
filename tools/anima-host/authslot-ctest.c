@@ -11,6 +11,9 @@
 //      oldest of all, ties by slot order; free slots rank 0.
 //   5. The compact NVS record round-trips the PIN and every session; cut to fit, it keeps the sessions used
 //      most recently; it never persists a free slot or a malformed token, and rejects a corrupt record.
+//   6. Its save policy, against a fake NVS with the real rules (update = old + new room, a failed write may
+//      damage the old copy): the stored sessions are always a SUBSET of the live ones — no evicted or revoked
+//      session comes back after a reboot — and a full NVS keeps the most recently used that fit.
 #include "auth_slots.h"
 #include <stdio.h>
 #include <string.h>
@@ -26,6 +29,66 @@ static int pair(int who, int64_t now) { int s = auth_pick_slot(used, lru, N); us
 static void touch(int s) { lru[s] = ++tick; }
 static bool alive(int who) { for (int i = 0; i < N; i++) if (used[i] && owner[i] == who) return true; return false; }
 static void reboot(void) { tick = auth_rank_seen(used, seen, lru, N); }
+
+// ---- section 6: a fake NVS that follows the real rules, and a model of nucleo_auth's table ----
+// An update is written BEFORE the old version is dropped (room for both); a write that runs out of room may
+// damage the old copy (NVS's multi-page rollback); the old-format text takes room until it is erased.
+#define NEED(len) ((long)(3 + ((len) + 31) / 32) * 32)
+static struct { long cap, legacy; size_t len; bool damaged; int fail_err; uint8_t data[AUTH_REC_SIZE(N)]; } F;
+static uint32_t rng = 12345;
+static uint32_t rnd(void) { rng = rng * 1103515245u + 12345u; return rng >> 8; }
+static int fput(void *c, const uint8_t *r, size_t len)
+{
+    (void)c;
+    if (F.fail_err) return AUTH_PUT_ERROR;
+    long used = F.legacy + (F.len ? NEED(F.len) : 0);
+    if (used + NEED(len) > F.cap) { if (F.len && (rnd() & 1)) F.damaged = true; return AUTH_PUT_NOSPACE; }
+    memcpy(F.data, r, len); F.len = len; F.damaged = false;
+    return AUTH_PUT_OK;
+}
+static void fwipe(void *c) { (void)c; F.len = 0; F.legacy = 0; F.damaged = false; }
+static long froom(void *c) { (void)c; return F.cap - F.legacy - (F.len ? NEED(F.len) : 0); }
+static const auth_store_t FS = { fput, fwipe, froom, NULL };
+
+static char mt[N][AUTH_TOK_HEX + 1]; static int64_t ms[N]; static uint32_t ml[N];
+static uint8_t mbuf[AUTH_REC_SIZE(N)];
+static uint32_t mserial = 1; static int mlive; static bool mremoved;
+static void m_reset(void) { memset(mt, 0, sizeof mt); memset(ms, 0, sizeof ms); memset(ml, 0, sizeof ml); mlive = 0; mremoved = false; }
+static void m_pair(void)                                     // mint_token: a free slot, else evict the LRU
+{
+    bool u[N]; for (int i = 0; i < N; i++) u[i] = mt[i][0] != '\0';
+    int sl = auth_pick_slot(u, ml, N);
+    if (u[sl]) mremoved = true; else mlive++;
+    mserial++;
+    snprintf(mt[sl], sizeof mt[sl], "%08x%040x", (unsigned)mserial, 0u);
+    ml[sl] = mserial; ms[sl] = 1760000000LL + mserial;
+}
+static void m_drop(int i) { if (mt[i][0]) { mt[i][0] = '\0'; ml[i] = 0; mlive--; mremoved = true; } }   // revoke / TTL
+static int m_save(void)
+{
+    int k = auth_rec_save(&FS, mbuf, "123456", (const char (*)[AUTH_TOK_HEX + 1])mt, ms, ml, N, mlive, mremoved);
+    if (k >= 0) mremoved = false;
+    return k;
+}
+static int stored(char (*bk)[AUTH_TOK_HEX + 1])               // decode what the fake holds (-1: damaged/corrupt)
+{
+    static int64_t bs[N]; char pn[7];
+    if (!F.len) return 0;
+    if (F.damaged) return -1;
+    return auth_rec_decode(F.data, F.len, pn, bk, bs, N);
+}
+static bool stored_is_subset(void)                           // every stored session is live right now
+{
+    static char bk[N][AUTH_TOK_HEX + 1];
+    int c = stored(bk);
+    if (c < 0) return false;                                  // a damaged copy left in place = a reboot surprise
+    for (int k = 0; k < c; k++) {
+        bool found = false;
+        for (int i = 0; i < N && !found; i++) found = mt[i][0] && !strcmp(mt[i], bk[k]);
+        if (!found) return false;
+    }
+    return true;
+}
 
 int main(void)
 {
@@ -87,15 +150,17 @@ int main(void)
         CHECK(len == AUTH_REC_SIZE(N) && len == 904, "a full table encodes in 904 bytes (the JSON text was ~2.3 KB)");
         int got = auth_rec_decode(rec, len, pin, back, sb, N);
         bool same = got == N && !strcmp(pin, "123456");
-        for (int k = 0; same && k < N; k++) {                     // decoded newest first: slot N-1-k
-            same = !strcmp(back[k], tk[N - 1 - k]) && sb[k] == sn[N - 1 - k];
+        for (int k = 0; same && k < N; k++) {                     // decoded oldest first: here, the same slots
+            same = !strcmp(back[k], tk[k]) && sb[k] == sn[k];
         }
-        CHECK(same, "round trip keeps the PIN, every token and its last-seen, most recent first");
+        CHECK(same, "round trip keeps the PIN, every token and its last-seen");
+        CHECK(rec[AUTH_REC_HDR] == 0xf1 && rec[AUTH_REC_SIZE(N - 1)] == 0x00,     // tk[31] first, tk[0] last
+              "the record lists the most recently used first");
 
         lr[3] = 1000;                                             // slot 3 is the browser in use right now
         len = auth_rec_encode(rec, sizeof rec, "123456", tk, sn, lr, N, 4);
         got = auth_rec_decode(rec, len, pin, back, sb, N);
-        CHECK(got == 4 && !strcmp(back[0], tk[3]) && !strcmp(back[1], tk[N - 1]) && !strcmp(back[3], tk[N - 3]),
+        CHECK(got == 4 && !strcmp(back[3], tk[3]) && !strcmp(back[2], tk[N - 1]) && !strcmp(back[0], tk[N - 3]),
               "a record cut to fit keeps the sessions used most recently");
         CHECK(back[4][0] == '\0', "slots past the record are cleared on decode");
 
@@ -125,6 +190,75 @@ int main(void)
         rec[0] = AUTH_REC_VER; rec[3] = 'x';
         CHECK(auth_rec_decode(rec, len, pin, back, sb, N) == -1, "a PIN that is not six digits is rejected");
         CHECK(auth_rec_encode(rec, AUTH_REC_SIZE(2), "123456", tk, sn, lr, N, N) == 0, "a short buffer refuses, never overflows");
+
+        // A clock that was never set: every last-seen is 0. After a reboot the session used last must still
+        // rank newest (a new pairing evicts the least recently used), and a re-encode must not reorder.
+        for (int i = 0; i < N; i++) { sn[i] = 0; lr[i] = (uint32_t)(i + 1); }
+        lr[7] = 5000;                                             // slot 7: the browser in use
+        len = auth_rec_encode(rec, sizeof rec, "123456", tk, sn, lr, N, N);
+        got = auth_rec_decode(rec, len, pin, back, sb, N);
+        bool bu[N]; uint32_t bl[N];
+        for (int i = 0; i < N; i++) bu[i] = back[i][0] != '\0';
+        auth_rank_seen(bu, sb, bl, N);
+        int newest = 0;
+        for (int i = 1; i < N; i++) if (bl[i] > bl[newest]) newest = i;
+        CHECK(got == N && !strcmp(back[newest], tk[7]), "equal last-seen: the session used last still ranks newest after a reboot");
+        CHECK(auth_pick_slot(bu, bl, N) != newest, "and a new pairing does not evict it");
+        static uint8_t rec2[AUTH_REC_SIZE(N)];
+        size_t len2 = auth_rec_encode(rec2, sizeof rec2, "123456", (const char (*)[AUTH_TOK_HEX + 1])back, sb, bl, N, N);
+        CHECK(len2 == len && !memcmp(rec, rec2, len), "a reloaded table re-encodes to the same bytes (no rewrite per boot)");
+    }
+
+    // 6. the save policy against the fake NVS: the stored sessions are always a SUBSET of the live ones
+    {
+        static char bk[N][AUTH_TOK_HEX + 1];
+        m_reset(); memset(&F, 0, sizeof F); F.cap = 4096;
+        for (int i = 0; i < 20; i++) m_pair();
+        CHECK(m_save() == 20 && stored_is_subset(), "room to spare: every session is stored");
+
+        F.legacy = 4096 - NEED(F.len) - 64;                       // the old-format text fills NVS
+        m_pair();
+        CHECK(m_save() == 21 && F.legacy == 0 && stored_is_subset(), "old text in the way: dropped, then the full record fits");
+
+        memset(&F, 0, sizeof F); F.cap = NEED(AUTH_REC_SIZE(6));        // nearly full: room for exactly six sessions
+        int inuse = 0; while (!mt[inuse][0]) inuse++;
+        ml[inuse] = mserial + 100;                                // the browser in use (paired long ago)
+        int k = m_save(), c = stored(bk);
+        bool has = false;
+        for (int i = 0; i < c; i++) has = has || !strcmp(bk[i], mt[inuse]);
+        CHECK(k == 6 && c == 6 && has && stored_is_subset(), "NVS nearly full: the most recently used that fit, the one in use among them");
+
+        F.cap = 64; F.len = 0;
+        CHECK(m_save() == -1 && F.len == 0, "no room even for the PIN: -1 and no stale record");
+
+        memset(&F, 0, sizeof F); F.cap = 4096;
+        CHECK(m_save() == mlive, "baseline save");
+        m_pair(); F.fail_err = 1;
+        CHECK(m_save() == -1 && F.len > 0 && stored_is_subset(), "I/O error after an addition: the old record (a subset) stays");
+        m_drop(2);
+        CHECK(m_save() == -1 && F.len == 0, "I/O error after a removal: the old record is erased (fail-closed)");
+        F.fail_err = 0;
+        CHECK(m_save() == mlive, "the next save recovers");
+        m_drop(4);
+        CHECK(auth_rec_save(&FS, NULL, "123456", (const char (*)[AUTH_TOK_HEX + 1])mt, ms, ml, N, mlive, true) == -1 && F.len == 0,
+              "out of memory after a removal: the old record is erased");
+
+        // random pairings, revocations, space pressure, old text and I/O errors
+        m_reset(); memset(&F, 0, sizeof F); F.cap = 2048;
+        bool ok = true; int saved = 0, shed = 0;
+        for (int step = 0; step < 20000 && ok; step++) {
+            uint32_t op = rnd() % 100;
+            if (op < 55) m_pair();
+            else if (op < 75) m_drop((int)(rnd() % N));
+            else if (op < 85) F.cap = 256 + (long)(rnd() % 1600);
+            else if (op < 92) F.legacy = (long)(rnd() % 1200);
+            else { int i = (int)(rnd() % N); if (mt[i][0]) ml[i] = ++mserial; }
+            F.fail_err = (rnd() % 23) == 0;
+            int kk = m_save();
+            saved += kk >= 0; shed += kk >= 0 && kk < mlive;
+            ok = stored_is_subset() && kk <= mlive;
+        }
+        CHECK(ok && saved > 1000 && shed > 100, "20000 random steps: the stored sessions are always a subset of the live ones");
     }
 
     printf("authslot: %d/%d passed\n", g_total - g_fail, g_total);

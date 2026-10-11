@@ -42,5 +42,30 @@ size_t auth_rec_encode(uint8_t *out, size_t cap, const char *pin, const char (*t
                        const int64_t *seen, const uint32_t *lru, int n, int keep);
 
 // Parse a record into pin (7 bytes; "" when the record holds none) and slots 0..count-1 of tok/seen (the
-// rest cleared). Returns count, or -1 for a malformed record (wrong version, length or digits).
+// rest cleared), the OLDEST in slot 0 — so auth_rank_seen, which breaks equal last-seen by slot order, ranks
+// the most recently used session newest even when every last-seen is 0 (a clock that was never set), and a
+// re-encode emits the same order (no needless rewrite). Returns count, or -1 for a malformed record (wrong
+// version, length or digits).
 int auth_rec_decode(const uint8_t *rec, size_t len, char *pin, char (*tok)[AUTH_TOK_HEX + 1], int64_t *seen, int n);
+
+// The save policy for the record, with the storage injected (nucleo_auth.c binds it to NVS, the host gate to
+// a fake that enforces NVS's rules). NVS writes an update BEFORE it drops the old version, so an update needs
+// room for both, and a multi-page write that runs out of room can damage the old copy on its rollback.
+typedef struct {
+    int  (*put)(void *ctx, const uint8_t *rec, size_t len);   // AUTH_PUT_*
+    void (*wipe)(void *ctx);                                  // erase the record and the old-format text
+    long (*room)(void *ctx);                                  // bytes the store can still take, -1 unknown
+    void *ctx;
+} auth_store_t;
+#define AUTH_PUT_OK      0
+#define AUTH_PUT_NOSPACE 1
+#define AUTH_PUT_ERROR   (-1)
+
+// Persist pin + the live sessions (buf: AUTH_REC_SIZE(live) bytes, NULL = out of memory). The full record
+// first; if it does not fit, wipe and write a fresh one holding as many of the most recently used sessions
+// as the room allows, halving down to the PIN alone. The stored sessions must stay a SUBSET of the live
+// ones, or an evicted/revoked session would come back after a reboot: removed = a session was revoked,
+// expired or evicted since the last successful save — then any failure wipes the old record (fail-closed:
+// every browser re-pairs, none returns). Returns the sessions kept, or -1 when nothing new was stored.
+int auth_rec_save(const auth_store_t *st, uint8_t *buf, const char *pin, const char (*tok)[AUTH_TOK_HEX + 1],
+                  const int64_t *seen, const uint32_t *lru, int n, int live, bool removed);

@@ -75,11 +75,16 @@ money/heap, or reveals more than "a NucleoOS device exists here", it is paired-o
   installed by M5Launcher it is the *only* tier, in a 20 KB NVS shared with the Launcher, PHY calibration
   and Wi-Fi. Older firmware kept the `auth.json` text there (~2.3 KB): once NVS could not place it, every
   save failed silently, so each new pairing was lost at the next reboot (the web-profile handoff showed the
-  PIN screen again) and a revocation could come back. Now a save that does not fit drops the old-format
-  text, then sheds the least recently used sessions until it fits; if not even the PIN fits, the stale
-  record is erased. The stored sessions are always a subset of the live ones, so a revoked or evicted
-  session never returns. `/api/diag` → `persist.auth` (`cfg`, `nvs_kept` vs `sessions`) and
-  `persist.nvs_free` show it.
+  PIN screen again) and a revocation could come back. Now a save that does not fit starts over: the old
+  record and the old-format text are erased first (NVS writes an update *before* it drops the old version,
+  and a multi-page write that runs out of room can damage the old copy on its rollback), then a fresh record
+  keeps as many of the most recently used sessions as the free room allows, down to the PIN alone. Any other
+  failure after a revocation, expiry or eviction erases the old record too (fail-closed: browsers re-pair);
+  after additions only, the old record — a subset — stays. So the stored sessions are always a subset of the
+  live ones and a removed session never returns. The policy is `auth_rec_save` (`auth_slots.c`), tested
+  against a fake NVS with those rules; `/api/diag` → `persist.auth` (`cfg`, `nvs_kept` vs `sessions`) and
+  `persist.nvs_free` / `nvs_used` show it on a unit. Going back to an older firmware on such a unit loses the
+  pairing once (it only reads the old text).
 - **Idle-TTL (sliding)**: a session unused for **90 days** is expired server-side and dropped, so a
   cookie sniffed but never replayed dies on its own and abandoned browsers don't leave a live token
   forever. Actively-used sessions never expire — each request re-stamps "last seen" (at most once a

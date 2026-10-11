@@ -47,8 +47,9 @@ int nucleo_auth_session_count(void);
 
 // Where the last save of the pairing state landed, for /api/diag: cfg = /cfg/config/auth.json written;
 // nvs_kept = sessions the NVS record holds (-1 = that save failed; fewer than `sessions` = NVS is full and the
-// least recently used ones are lost at the next reboot); nvs_free/nvs_total = NVS entries (32 B each), -1 if unknown.
-typedef struct { bool cfg; int nvs_kept; int sessions; int nvs_free; int nvs_total; } nucleo_auth_persist_t;
+// least recently used ones are lost at the next reboot); nvs_free/nvs_used = NVS entries (32 B each) free for
+// data (the GC reserve page excluded) / in use; -1 if unknown.
+typedef struct { bool cfg; int nvs_kept; int sessions; int nvs_free; int nvs_used; } nucleo_auth_persist_t;
 void nucleo_auth_persist_status(nucleo_auth_persist_t *out);
 
 // Settings ▸ Factory reset: revoke pairing for good. Drops every session and the PIN in RAM at once, then
