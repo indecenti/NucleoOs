@@ -5,9 +5,10 @@
 ### The web‑native operating system for the M5Stack Cardputer
 
 **The OS runs on the device. Your browser is the rich operator console.**
-One ESP32‑S3, no PSRAM, ~512 KB of RAM — turned into a real, modern, multi‑app OS with an
-offline AI assistant, a bilingual voice, a desktop‑class web shell, native games, a security
-lab, on‑device transcription and offline image generation.
+One ESP32‑S3, no PSRAM, ~512 KB of RAM — turned into a real, modern, multi‑app OS with an AI
+assistant that uses the best brain you have (offline on the device, your own PC's models, or the
+cloud), a desktop‑class web shell, a pocket game console, a security lab, voice transcription and
+image generation.
 
 `ESP32‑S3 / M5StampS3` · `ESP‑IDF firmware` · `PWA web shell` · `English‑only codebase`
 
@@ -16,7 +17,7 @@ lab, on‑device transcription and offline image generation.
 ![Platform: ESP32-S3](https://img.shields.io/badge/platform-ESP32--S3-informational)
 ![Framework: ESP-IDF](https://img.shields.io/badge/firmware-ESP--IDF-red)
 
-<sub>📋 **[What's new in the latest release →](CHANGELOG.md)**</sub>
+**[⬇️ Install](#-install)** · **[📋 What's new in v0.7.1](CHANGELOG.md)** · **[📖 User Guide](docs/user-guide.md)**
 
 <sub>Free for noncommercial use · **commercial use requires a paid license** → niki070585@gmail.com</sub>
 
@@ -62,20 +63,70 @@ once and flash either.
 Product photos © M5Stack.</sub>
 </div>
 
+## ✨ New in v0.7.1
+
+- **Costellazioni** — a full space game: combat, a galaxy to cross and worlds to land on ([see below](#-games--a-pocket-console)).
+- **The web OS loads about six times faster** from the Cardputer — a fresh browser shows the desktop
+  in about 5 s instead of over 30 s.
+- **Models on your PC** — Settings ▸ AI / Models drives Ollama, LM Studio, llama.cpp or Jan on your
+  computer: a model per task, PC or cloud first, free and offline.
+- **A sharper agent and real fixes** — ANIMA's agent writes files where you asked, Groq voice
+  transcription works in Dictation and the agent, the "Auto" AI profile no longer turns on Private mode.
+
+Full notes: [CHANGELOG.md](CHANGELOG.md). Installed devices are offered the update in **Settings ▸ Updates**.
+
+## 🚀 Install
+
+**You need:** a Cardputer (original or ADV), a USB‑C cable and a microSD card formatted **FAT32**.
+
+| | How |
+|---|---|
+| **Web flasher** — easiest | Open **[indecenti.github.io/NucleoOs](https://indecenti.github.io/NucleoOs/)** in Chrome or Edge on a desktop, plug in the Cardputer, click **Connect & install NucleoOS**, then press reset. |
+| **M5Launcher** | Copy the release's `nucleoos-<version>.bin` to the card and install it with the Launcher's SD installer. NucleoOS runs as a guest next to your other firmwares and is updated through the Launcher. |
+| **esptool** | `esptool --chip esp32s3 --baud 921600 write_flash 0x0 nucleoos-latest.bin` |
+
+**The SD card.** NucleoOS serves its apps from the card. Once it is on Wi‑Fi, the first‑boot wizard can
+download that content by itself — verified, resumable, and skippable. Or extract
+`nucleoos-latest-sd.zip` from the **[latest release](https://github.com/indecenti/NucleoOs/releases/latest)** to the
+card root, so that `/apps`, `/www`, `/system` and `/data` sit at the top. The zip is the card content, never a firmware.
+
+**First boot.** A short wizard on the Cardputer's own keyboard asks for the language, the Wi‑Fi network (or
+starts the device's own access point) and a name. The screen then shows an address: open it in a
+browser on the same network and pair with the 6‑digit PIN (Control Center ▸ Web, or Settings ▸ Device).
+
+**Updates** come by themselves. Settings ▸ Updates offers a checksum‑verified one‑click update, with
+A/B slots and automatic rollback. The full walkthrough is in the **[User Guide](docs/user-guide.md)**.
+
 ---
 
 ## ⭐ Headline features
 
-### 🧠 ANIMA — an AI assistant that works fully offline
+### 🧠 ANIMA — an assistant that uses the best brain you have
 
-ANIMA is NucleoOS's assistant, and it runs in **two places at once**:
+ANIMA answers from a ladder of engines and shows which one answered:
 
-- **On the firmware** — a real offline NL engine in C (retrieval cascade L0/L1/L2, neuro‑symbolic
-  reasoning, knowledge graph, math/units, learn & profile tiers). No cloud, no LLM, grounded by
-  construction — so it never hallucinates a fact it doesn't have.
-- **In the web shell** — the same assistant compiled to **WebAssembly**, running *entirely in your
-  browser*: offline, private, instant. It opens apps, does math, tells time/date, creates files,
-  answers questions and learns what you teach it — nothing leaves the device.
+- **Facts and commands first, exactly.** Device actions, battery, Wi‑Fi, storage, time, dates, unit
+  conversions and arithmetic are answered exactly in all five languages. A model never makes these up.
+- **Your own PC's model.** Ollama, LM Studio, llama.cpp or Jan on the computer you browse from is free,
+  offline and needs no key. Set it up in **Settings ▸ AI / Models ▸ Models on your PC**.
+- **A cloud model, if you add a key:** Claude, Groq, Grok (xAI) or Gemini.
+- **In the browser.** A full LLM on WebGPU (Qwen3‑1.7B), or the Cardputer's own brain compiled to
+  **WebAssembly**, offline and private.
+- **On the Cardputer, always.** A real offline NL engine in C: a retrieval cascade, a knowledge graph,
+  math and units. It is grounded by construction, so it never invents a fact it doesn't have.
+
+There are two modes. **Auto** uses the best engine available. **Private** removes every Internet step,
+so nothing leaves your machine.
+
+<div align="center">
+<img src="docs/screenshots/settings-pc-models.png" width="640" alt="Settings ▸ AI / Models ▸ Models on your PC — Ollama found with 7 models, a model per task, PC or cloud first, add a server" />
+<br><sub>Settings ▸ AI / Models ▸ <b>Models on your PC</b>: what runs on this computer, a model per task, who answers first.</sub>
+</div>
+
+**ANIMA's agent works like a small OpenCode on your files.** It gets a workspace folder on the SD and
+tools to read, search, edit (with a diff and your approval), create files and run JavaScript. It also has
+a Linux‑like shell (`ls`, `cat`, `grep`, `sed`, `node FILE.js`). It runs on your PC's model or a cloud
+key. The Cardputer only stores the files and never runs an inference.
 
 **🔊 Bilingual offline voice.** ANIMA *speaks* — a concatenative TTS engine (IT/EN) that
 pre‑vocalizes a finite, grounded vocabulary on the PC and pastes the right clips at runtime:
@@ -91,7 +142,7 @@ When you *do* want a frontier model, NucleoOS wires it in cleanly:
 - **Pluggable providers** — Claude, Groq, Grok (xAI), Gemini. Configure one (or several, with
   automatic fallback). Keys are stored **on the device SD, never logged**, and the browser talks
   to the provider directly — the Cardputer isn't in the loop.
-- **AI Chat** talks straight to the model; **ANIMA** stays offline. You choose per task.
+- **AI Chat** talks straight to the model you pick; **ANIMA** picks the best engine for each turn.
 
 - **ANIMA Code** — a sandboxed JavaScript runtime in the browser with an `os.*` API
   (`os.fs`, `os.http`, `os.anima`, `os.notify`): write a script, hit Run, drive the OS.
@@ -112,11 +163,24 @@ When you *do* want a frontier model, NucleoOS wires it in cleanly:
 icon"*, *"remove the background"*, *"brightness +20"*, *"rotate right"*. Heavy pixels live in the
 browser GPU; the device just stores the result.
 
-### 🎮 Games — native multiplayer, retro emulation + a web Game Center
+### 🎮 Games — a pocket console
 
-- **Native multiplayer** over **ESP‑NOW** (no router): Pong, Snake Duel, Tank Duel, plus a full
-  beat‑'em‑up (Scorribanda), Pinball, Tanks artillery, Poker, Slots, Yahtzee, Dice and 3D
-  constellations — each rebooting into a fresh heap for maximum RAM.
+**Costellazioni** is the flagship: a space game with 6DOF combat in procedural star systems, a galaxy
+to cross (map, jumps, docking, beacons to relight) and worlds to land on — seamless descent from orbit,
+eight biomes, discoveries. It has 66 paintings and an original four‑track score. It plays in the
+browser; a native version runs on the Cardputer itself.
+
+| | | |
+|---|---|---|
+| ![Costellazioni — combat in a procedural star system](docs/screenshots/costellazioni-combat.jpg) | ![Costellazioni — landed next to a discovery on a desert world](docs/screenshots/costellazioni-world.jpg) | ![Costellazioni — the galaxy map, plotting a jump](docs/screenshots/costellazioni-galaxy.jpg) |
+
+- **Native console** on the Cardputer, all with one console look, in five languages, with sound packs:
+  - multiplayer over **ESP‑NOW**, with no router: Pong, Snake Duel and Tank Duel;
+  - Brawl (a beat‑'em‑up), Hordes, Cardler (a mini‑RPG), Pinball, Reactor and Tanks (artillery);
+  - Poker, Slots, Yahtzee and Dice;
+  - the new **Sand Garden**, a merge game.
+
+  Each game reboots into a fresh heap for maximum RAM.
 - **Native Game Boy & Game Gear emulation** — our own cores (no PSRAM tricks, cartridge‑accurate,
   battery‑backed saves), running your own ROMs straight off the SD, zero browser needed.
 - **Arcade (web)** — a second, browser‑side emulator (EmulatorJS: NES, SNES, Game Boy, GBA, Mega
@@ -217,7 +281,8 @@ query → L0  intent/FAQ string match           (<1 ms, no SD, no model)   70–
 ### Browser does the heavy lifting (WebGPU + WASM)
 
 The device never streams model weights. Anything heavy is offloaded to the browser:
-**WebLLM (Qwen2‑0.5B, WebGPU)** and **wllama** for real in‑browser LLM work (Forge),
+**WebLLM (Qwen3‑1.7B, WebGPU)** and **wllama** for real in‑browser LLM work (Forge), **your own PC's
+Ollama / LM Studio** for the agent and chat (reached from the browser — never through the Cardputer),
 **ONNX Runtime Web** for offline diffusion (Paint/Atelier), **ffmpeg.wasm** for Video Studio.
 
 ### Wired Ethernet attack engine (W5500 module)
@@ -261,8 +326,14 @@ Every demanding feature respects a tight set of RAM tricks, validated on hardwar
   delta SD‑sync (never `/MIR`), OS‑wide live i18n in 5 languages (IT/EN/DE/ES/FR; ANIMA and its
   voice stay IT/EN), notifications, an OS‑wide **mic gate** and
   **download gate** (Web Locks), and a service‑worker update gate.
-- **Robustness gates** — a hallucination stress suite (485 metamorphic sentences, 40 gates), corpus
-  dedup/quality gate, and an auto‑evolving knowledge graph (Wikipedia + teacher‑LLM, AUG‑192 encoder).
+- **Robustness gates** run before any build ships:
+  - a 129‑gate ANIMA regression suite that compiles the real firmware C on the PC — 0 fabrications
+    across the hallucination stress, adversarial and metamorphic batteries;
+  - about 850 unit tests;
+  - about 300 browser end‑to‑end tests in real Chrome, in CI on every push;
+  - a smoke run of every web app on a real Cardputer.
+- **Knowledge** — a corpus deduplication and quality gate, and an auto‑evolving knowledge graph
+  (Wikipedia + teacher LLM, AUG‑192 encoder).
 
 ---
 
@@ -278,21 +349,21 @@ Every demanding feature respects a tight set of RAM tricks, validated on hardwar
 | **Media** | Film player (`.nfv` MJPEG+MP3, seek) · MP3 player · Radio (multi‑station) · Photos |
 | **Instruments & sensors** | Torch · Bubble Level · Protractor · Alarm (mic + accelerometer + IMU) · Pedometer · Weather · IR Remote · QR · PixelFix · Screensaver |
 | **System** | WiFi manager · Settings/Theme · Clock · Calendar · Notepad · Calculator · System Monitor · Notifications · Info · Mail (SMTP) · SSH terminal |
-| **Games** | Pong · Snake Duel · Tank Duel · Tanks (artillery) · Scorribanda (brawler) · Pinball · Poker · Slots · Dice · Yahtzee · Constellations (3D) · Reactor · Sand Garden — via the **GameFront** carousel |
+| **Games** | Constellations (3D space) · Pong · Snake Duel · Tank Duel · Tanks (artillery) · Brawl · Pinball · Reactor · Hordes · Cardler · Poker · Slots · Dice · Yahtzee · Sand Garden (merge) — via the **GameFront** carousel |
 | **Emulation** | Game Boy (own core, battery-backed saves) · Game Gear (own VDP/PSG/mapper machine + a permissively-licensed Z80 core) — both native, cartridge-accurate, zero browser needed |
 
 ### Web apps (NucleoOS Web — served by the device, run in your browser)
 
 | Category | Apps |
 |---|---|
-| **AI** | ANIMA (offline WASM) · AI Chat (Claude/Groq/Grok/Gemini) · ANIMA Code · Agents · OS‑wide copilot |
+| **AI** | ANIMA (offline WASM, your PC's models, or the cloud) · AI Chat (Claude/Groq/Grok/Gemini) · ANIMA Code · Agents · OS‑wide copilot |
 | **Creativity & media** | Paint + Atelier (WebGPU image gen) · Video Studio · Video Player · Media Player · Radio · QR |
 | **Productivity** | File Commander · Spreadsheet (+ANIMA copilot) · Notepad · Calculator · Calendar · Tasks · Archive Manager · Mail |
 | **Dev & system** | Code Runner · Terminal · SSH · System Monitor · Settings · Log Viewer · Updates · Recycle Bin · Help · Browser |
 | **Tools** | Weather (Open‑Meteo, browser‑direct: 6‑day forecast, geolocation, offline cache) · Authenticator (2FA TOTP/HOTP, pure‑JS — works over http LAN & offline) · Unit Converter · Passkeys · IR Remote |
 | **Personal** | Contacts (address book — email/phone/org, favorites, vCard export, one‑click Compose in Mail) · Tasks · Calendar · Miei Fatti |
 | **Voice** | Transcription (Vosk WASM, on‑device + remote realtime) · Recorder · Voice Manager · Dictation |
-| **Play & connect** | Game Center (WebRTC P2P) · Games · Arcade (EmulatorJS — NES/SNES/Game Boy/GBA/Mega Drive/PC Engine, your own ROMs, client‑side) · DJ · DOSBox (+ DOS Importer) · Nearby · Swarm |
+| **Play & connect** | Costellazioni (3D space game) · Game Center (WebRTC P2P) · Games · Arcade (EmulatorJS — NES/SNES/Game Boy/GBA/Mega Drive/PC Engine, your own ROMs, client‑side) · DJ · DOSBox (+ DOS Importer) · Nearby · Swarm |
 
 > The **desktop shell** is a real workstation: window snapping (drag‑to‑edge + Snap Layouts), Alt‑Tab,
 > a global search that also asks ANIMA, an OS clipboard with history, a Notification Center (Do‑Not‑Disturb
@@ -360,8 +431,8 @@ serves every app, so you verify in a browser without touching hardware:
 node tools/serve-shell.mjs             # http://localhost:5599
 ```
 
-**Verification matrix:** `npm run validate` · `i18n:gate` · `gz:check` · `gen:api:check` ·
-`anima:gate` · `test:all`. See [`docs/debugging.md`](docs/debugging.md).
+**Verification matrix:** `npm run validate` · `i18n:gate` · `gz:check` · `icons:gate` · `gen:api:check` ·
+`anima:gate` · `test:all` · `node tools/web-e2e/run.mjs` (browser E2E). See [`docs/debugging.md`](docs/debugging.md).
 
 > All screenshots above are captured from this simulator running the **real** shell and apps.
 
