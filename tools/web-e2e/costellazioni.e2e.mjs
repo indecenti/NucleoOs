@@ -307,6 +307,16 @@ test('costellazioni: a world visited — descent, entry, surface flight, a disco
   await launchFlight(page);
   const credits0 = await page.eval('window.__cz.game.run.credits');
   await page.eval(`(() => { const F = window.__cz.game.flight; F.undock = null; F.nav = F.pois.findIndex((p) => p.kind === 'planet' && p.i === 0); return F.nav; })()`);
+  // Every state the visit passes through is recorded IN the page, from the game's own event ring (each surface state
+  // change is an EV.SURF event, e.a = the new state) on every frame. Polling U.st from here every 150 ms missed the
+  // take-off (3.2 s of game time = 0.8 s at 4x) on a busy machine — a flaky red with nothing wrong in the game.
+  await page.eval(`(() => { const seen = window.__czSeen = new Set(); const EV_SURF = 42, NEV = 512; let cur = 0, lastF = null;
+    const tick = () => { const F = window.__cz.game.flight;
+      if (F && F.ev) { if (F !== lastF || F.evHead - cur > NEV || cur > F.evHead) { lastF = F; cur = F.evHead; }
+        while (cur < F.evHead) { const e = F.ev[cur % NEV]; cur++; if (e.n === EV_SURF && e.a >= 0) seen.add(e.a); }
+        if (F.surf) seen.add(F.surf.st); }
+      requestAnimationFrame(tick); };
+    tick(); return true; })()`);
   const seen = new Set(); let heat = 0, shot = 0, worldDrawn = false;
   const t0 = Date.now();
   while (Date.now() - t0 < 9 * 60 * 1000) {
@@ -318,6 +328,7 @@ test('costellazioni: a world visited — descent, entry, surface flight, a disco
     if (s && s.left) break;
     await sleep(150);
   }
+  for (const st of await page.eval('[...window.__czSeen]')) seen.add(st);
   for (const [k, v] of Object.entries(SURF)) assert.ok(seen.has(v), `the visit passed through ${k} (seen ${[...seen].sort().join(',')})`);
   assert.ok(heat > 0.3, `the entry heated the hull (${(heat * 100).toFixed(0)}%)`);
   assert.ok(worldDrawn, 'the renderer drew the world terrain');
