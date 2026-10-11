@@ -38,7 +38,7 @@ import { createToolGuard } from './tool-guard.js';
 import { createAgentShell, nodePrelude } from './agent-sh.js';          // the `sh` tool: ls/cat/grep/find/sed -n/… over the workspace      // tool-name repair + doom-loop stop before every tool call (OpenCode-style)
 import { runWorkerLocal } from './local-worker.js';   // the LOCAL transport (F0): grammar-constrained loop on an injected browser-local engine
 import { smokeApp, smokeSummary, stageAppRecipe } from './app-recipe.js';   // F5: install-and-smoke on the device + app-recipe learning   // ONE intelligent queue for every device-touching call (reads pooled, writes + Gemini proxy exclusive)
-import { routeFor, providerOf, PROVIDERS, CAPMATRIX, servedModel, toAiError } from '/ai.js';   // multi-model router + capability matrix (image/whisper) for the capability tools
+import { routeFor, providerOf, PROVIDERS, CAPMATRIX, servedModel, toAiError, whisperUrl } from '/ai.js';   // multi-model router + capability matrix (image/whisper) for the capability tools
 // NOTE: hardware (IR/WiFi/GPIO) is deliberately NOT a tool here. "ANIMA Code" is a general coding/
 // workspace agent (our Claude Code); device skills live INSIDE the dedicated apps (e.g. the IR Remote
 // app embeds its own scoped ANIMA skill via anima-skill.js). Centralising skills per-app cuts
@@ -639,7 +639,7 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
             fd.append('file', new Blob([got.buf], { type: mime }), nm);
             fd.append('model', 'whisper-large-v3');
             fd.append('response_format', 'json');   // language omitted → Whisper auto-detects
-            const ep = (wcfg.base || 'https://api.groq.com/openai/v1').replace(/\/openai\/v1$/, '/v1').replace(/\/+$/, '') + '/audio/transcriptions';
+            const ep = whisperUrl(wcfg.base);   // Groq serves Whisper only under /openai/v1 (the old rewrite hit a 404)
             const resp = await fetch(ep, { method: 'POST', headers: { authorization: 'Bearer ' + wcfg.key }, body: fd, signal: aborter && aborter.signal });
             const j = await resp.json().catch(() => null);
             if (!resp.ok || !j || j.error) return done(t('rt_tr_err', { error: ((j && j.error && (j.error.message || j.error)) || ('HTTP ' + resp.status)) }), true);

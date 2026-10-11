@@ -155,7 +155,8 @@ A pass over everything *around* the code — what a first-time reader or a licen
 - [ ] Video Player: avi/nfv routed to `<video>` that cannot decode them; no error listener (silent black).
 - [ ] Browser app: Back/Forward/Reload open a new tab each time; `/api/proxy` hides the upstream status (a
   remote 404 is saved as a "successful" download).
-- [ ] Voice Manager delete → 403 under protected `/system/voice`; Dictation Groq URL misses `/openai`.
+- [ ] Voice Manager delete → 403 under protected `/system/voice`. ~~Dictation Groq URL misses `/openai`~~ — fixed
+  2026-10-11 (`ai.js` `whisperUrl`, also the agent's transcribe tool; the route was a 404).
 - [ ] Updates app can report "update complete" when nothing was flashed; duplicate of Settings ▸ Updates.
 - [x] Calculator: `-(2+3)` = 1, `2*-(1+1)` = 0 (unary minus before a bracket) — fixed, 12 cases pinned.
 - [ ] Settings: Wi-Fi/BLE/Swarm/IPv6/device-name/time-zone toggles save but nothing reads them.

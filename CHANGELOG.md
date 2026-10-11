@@ -36,6 +36,8 @@ All notable user-facing changes to NucleoOS. Format loosely follows
 - **ANIMA's agent puts new files where you asked** — a model that wrote the workspace path without its
   leading slash created them in a nested copy of the workspace, then reported them missing.
 - **The Recorder says "Loading…" while it reads the card**, instead of "No recordings yet" before it knows.
+- **Voice transcription with a Groq key works in Dictation and in the agent** — both called a Groq address that
+  does not exist; the Recorder now also finds the Groq key saved in Settings, not only the one typed in AI Chat.
 - Costellazioni music reaches the Cardputer (large files ship in slices); the launcher draws its
   icons from a table (30 KB less flash) and the game front-end gives back 4.9 KB of RAM.
 - The AI key manager in Settings speaks Spanish, French and German instead of falling back to English.

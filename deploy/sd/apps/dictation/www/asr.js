@@ -14,6 +14,7 @@
 // ===========================================================================
 
 import { streamMic } from '/micgate.js';   // OS-wide single-owner gate for the Cardputer mic
+import { whisperUrl } from '/ai.js';        // the ONE Whisper endpoint builder (Groq only serves it under /openai/v1)
 
 // Shared Vosk assets live next to the ANIMA app (same origin, absolute paths so they
 // resolve regardless of which app imports this module).
@@ -215,8 +216,7 @@ async function transcribeAudioSegment(wavBlob, lang, key, base) {
   if (lang) formData.append('language', lang);
   formData.append('response_format', 'json');
 
-  const apiBase = (base && base.includes('api.groq.com')) ? 'https://api.groq.com/v1' : (base || 'https://api.groq.com/v1');
-  const url = apiBase.replace(/\/openai\/v1$/, '/v1').replace(/\/$/, '') + '/audio/transcriptions';
+  const url = whisperUrl(base);   // the old rewrite dropped /openai from Groq's base — a 404: Groq Whisper never worked here
   
   const response = await fetch(url, {
     method: 'POST',

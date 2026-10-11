@@ -106,7 +106,8 @@ async function whisper(wavBlob, lang, key, base, signal) {
   fd.append('response_format', 'text');
   if (lang && lang !== 'auto') fd.append('language', lang);
   fd.append('file', wavBlob, 'chunk.wav');
-  const r = await fetch(base.replace(/\/$/, '') + '/audio/transcriptions', {
+  const AI = await aiMod();
+  const r = await fetch(AI ? AI.whisperUrl(base) : base.replace(/\/$/, '') + '/audio/transcriptions', {
     method: 'POST', headers: { Authorization: 'Bearer ' + key }, body: fd, signal,
   });
   if (!r.ok) {
@@ -143,12 +144,21 @@ async function chat(messages, key, base, signal) {
   catch (e) { const msg = AI.explainAiError(e, undefined, { settings: 'AI Chat ⚙' }); throw new Error(msg || String(e && e.message || e)); }
 }
 
+// The Groq key: the one AI Chat / Dictation keep in this browser, else the OS key vault (Settings ▸ AI). A key set
+// only in Settings used to read as "no key" here, and long recordings fell back to the device's own transcriber.
+async function groqCreds() {
+  const key = (localStorage.getItem('groq.key') || '').trim();
+  if (key) return { key, base: (localStorage.getItem('groq.base') || 'https://api.groq.com/openai/v1').trim() };
+  const AI = await aiMod();
+  const w = AI && AI.whisperKey ? await AI.whisperKey().catch(() => null) : null;
+  return w ? { key: w.key, base: w.base || 'https://api.groq.com/openai/v1' } : { key: '', base: 'https://api.groq.com/openai/v1' };
+}
+
 // ── public API --------------------------------------------------------------------------------------
 // Transcribe a (possibly hours-long) WAV on the device, chunk by chunk, entirely in the browser.
 // onProgress({phase:'transcribe', done, total}) fires per segment. Returns the full transcript string.
 export async function transcribeLong({ path, lang = 'auto', onProgress, signal } = {}) {
-  const key = (localStorage.getItem('groq.key') || '').trim();
-  const base = (localStorage.getItem('groq.base') || 'https://api.groq.com/openai/v1').trim();
+  const { key, base } = await groqCreds();
   if (!key) throw new Error('no-key');
 
   const head = await withRetry(() => fetchRange(path, 0, 255, signal, false), signal);   // enough for any sane header
@@ -181,8 +191,7 @@ export async function transcribeLong({ path, lang = 'auto', onProgress, signal }
 
 // Map-reduce summary of an arbitrarily long transcript. onProgress({phase:'summarize', done, total}).
 export async function summarizeLong({ text, lang = 'it', onProgress, signal } = {}) {
-  const key = (localStorage.getItem('groq.key') || '').trim();
-  const base = (localStorage.getItem('groq.base') || 'https://api.groq.com/openai/v1').trim();
+  const { key, base } = await groqCreds();
   if (!key) throw new Error('no-key');
   const L = LANG_NAMES[lang] || LANG_NAMES.en;
 

@@ -150,6 +150,15 @@ export function routeFor(spec = {}, keys = {}, active = null) {
 }
 
 export const providerOf = (p) => PROVIDERS[p] || PROVIDERS.anthropic;
+
+// Speech -> text (Whisper) endpoint for an OpenAI-compatible base. Groq serves it ONLY under /openai/v1 —
+// https://api.groq.com/v1/audio/transcriptions answers 404 (checked 2026-10-11) — yet Dictation and the agent's
+// transcribe tool rewrote the base to exactly that route. One builder, so the callers cannot drift again.
+export function whisperUrl(base) {
+  let b = String(base || '').trim().replace(/\/+$/, '');
+  try { if (!b || new URL(b).hostname === 'api.groq.com') b = PROVIDERS.openai.base; } catch { b = PROVIDERS.openai.base; }
+  return b + '/audio/transcriptions';
+}
 // Gemini's endpoint has no CORS → a browser fetch is blocked. Relay it through the device same-origin
 // /api/llm proxy (firmware dials it server-side). Other providers go browser-direct (no extra hop).
 export const viaProxy = (provider, url) => (providerOf(provider).proxy ? '/api/llm?url=' + encodeURIComponent(url) : url);
@@ -584,6 +593,18 @@ async function _readTeacher() {
     _teacherCache = cfg; _teacherAt = Date.now();
     return cfg;
   } catch { return null; }
+}
+
+// The vault's key that can transcribe (Groq / OpenAI Whisper) -> { key, base } or null. Same choice as the router
+// (and the firmware): a Whisper-capable configured key, else the legacy keys.groq slot the firmware also reads.
+export async function whisperKey(opts = {}) {
+  const t = await readTeacher(opts);
+  if (!t || t.unpaired) return null;
+  const r = routeFor({ capability: 'whisper' }, t.keys || {}, t);
+  if (r && r.key && !r.audioLLM) return { key: r.key, base: r.base };
+  if (t.provider === 'openai' && t.key) return { key: t.key, base: t.base };
+  const g = t.keys && t.keys.groq;
+  return g && g.key ? { key: g.key, base: g.base || PROVIDERS.openai.base } : null;
 }
 
 // Canonical teacher.json: the active provider at top-level (what the firmware reads) + a keys map
