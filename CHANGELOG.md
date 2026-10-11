@@ -33,6 +33,9 @@ All notable user-facing changes to NucleoOS. Format loosely follows
 - **Choosing the "Auto" AI profile no longer switches ANIMA to Private** when only the browser brain
   was ready; "Local only" now really keeps everything on this computer.
 - **Firmware updates over a slow Wi-Fi link no longer abort at 90 %.**
+- **ANIMA's agent puts new files where you asked** — a model that wrote the workspace path without its
+  leading slash created them in a nested copy of the workspace, then reported them missing.
+- **The Recorder says "Loading…" while it reads the card**, instead of "No recordings yet" before it knows.
 - Costellazioni music reaches the Cardputer (large files ship in slices); the launcher draws its
   icons from a table (30 KB less flash) and the game front-end gives back 4.9 KB of RAM.
 - The AI key manager in Settings speaks Spanish, French and German instead of falling back to English.
