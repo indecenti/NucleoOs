@@ -763,6 +763,13 @@ static esp_err_t diag_get(httpd_req_t *req)
     cJSON_AddBoolToObject(pj, "cfg", ps.cfg_ok);
     cJSON_AddBoolToObject(pj, "nvs", ps.nvs_ok);
     cJSON_AddBoolToObject(pj, "sd",  ps.sd_ok);
+    nucleo_auth_persist_t ap; nucleo_auth_persist_status(&ap);   // the pairing state's own two tiers
+    cJSON *aj = cJSON_AddObjectToObject(pj, "auth");
+    cJSON_AddBoolToObject(aj,   "cfg",      ap.cfg);
+    cJSON_AddNumberToObject(aj, "nvs_kept", ap.nvs_kept);        // < sessions: NVS full, LRU sessions shed
+    cJSON_AddNumberToObject(aj, "sessions", ap.sessions);
+    cJSON_AddNumberToObject(pj, "nvs_free",  ap.nvs_free);       // NVS entries (32 B): shared with the Launcher on a guest
+    cJSON_AddNumberToObject(pj, "nvs_total", ap.nvs_total);
 
     // ── anima: the whole point of the "ANIMA health" ask — tier mix, abstain rate, which brain is live ─
     cJSON *an = cJSON_AddObjectToObject(root, "anima");

@@ -78,27 +78,86 @@ static fail_ent_t s_fail[FAILTAB_N];
 // PIN regenerated every boot there, forcing a re-pair on every restart. NVS also heals a /cfg that got
 // reformatted (mount fault -> format_if_mount_failed). Deliberately NOT mirrored to the SD card: unlike
 // Wi-Fi config, auth.json holds the PIN and LIVE session tokens, which must never sit on removable media.
-#define AUTH_NVS_NS  "nucleoauth"
+#define AUTH_NVS_NS   "nucleoauth"
+#define AUTH_NVS_REC  "rec"       // the compact binary record (auth_slots.h): what the NVS tier holds now
+#define AUTH_NVS_JSON "auth"      // older firmware: the auth.json text — read once to migrate, then erased
+_Static_assert(TOKEN_HEX_LEN == AUTH_TOK_HEX, "the NVS record stores 24-byte tokens");
 
-static bool auth_nvs_write(const char *txt)
+static bool s_cfg_saved;          // the last save reached /cfg
+static int  s_nvs_kept = -1;      // sessions the last save left in NVS (-1: none yet / failed)
+
+// Save the compact record. When NVS cannot place it (the partition is shared and small), first drop the
+// old-format text, then shed sessions — least recently used first — until it fits. The stored set must
+// stay a SUBSET of the live one: a stale fuller copy would bring evicted or revoked sessions back after a
+// reboot, so if not even the PIN fits, the old record is erased. Returns the sessions kept, or -1.
+static int auth_nvs_save(void)
 {
+    uint8_t *rec = malloc(AUTH_REC_SIZE(MAX_TOKENS));
     nvs_handle_t h;
-    if (nvs_open(AUTH_NVS_NS, NVS_READWRITE, &h) != ESP_OK) return false;
-    esp_err_t e = nvs_set_str(h, "auth", txt);
-    if (e == ESP_OK) e = nvs_commit(h);
+    if (!rec) return -1;
+    if (nvs_open(AUTH_NVS_NS, NVS_READWRITE, &h) != ESP_OK) { free(rec); return -1; }
+    int kept = -1, keep = s_token_count;
+    bool shed_legacy = false;
+    esp_err_t e;
+    for (;;) {
+        size_t len = auth_rec_encode(rec, AUTH_REC_SIZE(MAX_TOKENS), s_pin, s_tokens, s_tok_seen, s_tok_lru,
+                                     MAX_TOKENS, keep);
+        e = len ? nvs_set_blob(h, AUTH_NVS_REC, rec, len) : ESP_ERR_INVALID_SIZE;
+        if (e == ESP_OK) e = nvs_commit(h);
+        if (e == ESP_OK) { kept = rec[1]; break; }
+        if (e != ESP_ERR_NVS_NOT_ENOUGH_SPACE) break;          // shedding sessions cannot fix this one
+        if (!shed_legacy) {                                    // same data, 2.5x the room: the old text goes first
+            shed_legacy = true;
+            if (nvs_erase_key(h, AUTH_NVS_JSON) == ESP_OK) { nvs_commit(h); continue; }
+        }
+        if (keep == 0) break;
+        keep /= 2;
+    }
+    if (kept >= 0) {
+        if (!shed_legacy && nvs_erase_key(h, AUTH_NVS_JSON) == ESP_OK) nvs_commit(h);   // migrated: free its room
+        if (kept < s_token_count)
+            ESP_LOGW(TAG, "NVS is full: %d of %d session(s) persisted (the least recently used are lost at reboot)",
+                     kept, s_token_count);
+    } else {
+        ESP_LOGE(TAG, "NVS save failed (%s): stale record erased so no revoked session can return",
+                 esp_err_to_name(e));
+        nvs_erase_key(h, AUTH_NVS_REC); nvs_erase_key(h, AUTH_NVS_JSON); nvs_commit(h);
+    }
     nvs_close(h);
-    return e == ESP_OK;
+    free(rec);
+    return kept;
 }
 
-static char *auth_nvs_read(void)   // malloc'd (caller frees) or NULL
+static bool auth_nvs_load(void)   // the compact record -> PIN + sessions; false if absent or malformed
+{
+    nvs_handle_t h;
+    if (nvs_open(AUTH_NVS_NS, NVS_READONLY, &h) != ESP_OK) return false;
+    size_t sz = 0;
+    uint8_t *rec = NULL;
+    bool ok = false;
+    if (nvs_get_blob(h, AUTH_NVS_REC, NULL, &sz) == ESP_OK && sz >= AUTH_REC_HDR && sz <= AUTH_REC_SIZE(255) &&
+        (rec = malloc(sz)) != NULL) {
+        char pin[7];
+        if (nvs_get_blob(h, AUTH_NVS_REC, rec, &sz) == ESP_OK &&
+            auth_rec_decode(rec, sz, pin, s_tokens, s_tok_seen, MAX_TOKENS) >= 0) {
+            if (pin[0]) strcpy(s_pin, pin);
+            ok = true;
+        }
+        free(rec);
+    }
+    nvs_close(h);
+    return ok;
+}
+
+static char *auth_nvs_read_json(void)   // older firmware's copy; malloc'd (caller frees) or NULL
 {
     nvs_handle_t h;
     if (nvs_open(AUTH_NVS_NS, NVS_READONLY, &h) != ESP_OK) return NULL;
     size_t sz = 0;
-    if (nvs_get_str(h, "auth", NULL, &sz) != ESP_OK || sz == 0) { nvs_close(h); return NULL; }
+    if (nvs_get_str(h, AUTH_NVS_JSON, NULL, &sz) != ESP_OK || sz == 0) { nvs_close(h); return NULL; }
     char *b = malloc(sz);
     if (!b) { nvs_close(h); return NULL; }
-    esp_err_t e = nvs_get_str(h, "auth", b, &sz);
+    esp_err_t e = nvs_get_str(h, AUTH_NVS_JSON, b, &sz);
     nvs_close(h);
     if (e != ESP_OK) { free(b); return NULL; }
     return b;
@@ -133,47 +192,32 @@ static void save_auth_now(void)
         }
     char *out = cJSON_PrintUnformatted(root);
     cJSON_Delete(root);
-    if (!out) return;
 
     // Tier 1: /cfg LittleFS (atomic temp+rename; LittleFS rename overwrites the destination in place, so
     // we don't remove the original first — that old remove-then-rename could lose BOTH copies on failure).
-    mkdir(NUCLEO_CFG_MOUNT "/config", 0775);
-    char tmp[] = AUTH_JSON ".tmp";
-    FILE *f = fopen(tmp, "wb");
-    if (f) {
-        bool ok = (fputs(out, f) >= 0);
-        fclose(f);
-        if (!ok || rename(tmp, AUTH_JSON) != 0) remove(tmp);
+    s_cfg_saved = false;
+    if (out) {
+        mkdir(NUCLEO_CFG_MOUNT "/config", 0775);
+        char tmp[] = AUTH_JSON ".tmp";
+        FILE *f = fopen(tmp, "wb");
+        if (f) {
+            bool ok = (fputs(out, f) >= 0);
+            fclose(f);
+            if (!ok || rename(tmp, AUTH_JSON) != 0) remove(tmp);
+            else s_cfg_saved = true;
+        }
+        cJSON_free(out);
     }
-    // Tier 2: NVS (the guaranteed fallback).
-    auth_nvs_write(out);
-    cJSON_free(out);
+    // Tier 2: NVS (the guaranteed fallback) — the compact record, written even when the JSON text could not
+    // be built (it needs no cJSON tree).
+    s_nvs_kept = auth_nvs_save();
 }
 
-static void load_auth(void)
+// auth.json text -> PIN + sessions. False if it does not parse (the caller tries the next tier).
+static bool apply_json(const char *txt)
 {
-    memset(s_tokens, 0, sizeof(s_tokens));
-    memset(s_tok_seen, 0, sizeof(s_tok_seen));
-    memset(s_tok_lru, 0, sizeof(s_tok_lru));
-    s_token_count = 0; s_lru_tick = 0;
-
-    // Read /cfg first, then the NVS fallback. Size the buffer from the file: a full 32-token ring is
-    // ~2.3 KB, and the old fixed 2 KB read truncated it -> parse failed -> PIN + all sessions wiped.
-    bool from_nvs = false;
-    char *buf = NULL;
-    FILE *f = fopen(AUTH_JSON, "rb");
-    if (f) {
-        fseek(f, 0, SEEK_END); long sz = ftell(f); fseek(f, 0, SEEK_SET);
-        if (sz > 0 && sz < 8192 && (buf = malloc(sz + 1)) != NULL) { size_t n = fread(buf, 1, sz, f); buf[n] = '\0'; }
-        fclose(f);
-    }
-    cJSON *root = NULL;
-    if (buf) { root = cJSON_Parse(buf); free(buf); }
-    if (!root) {                              // /cfg missing or unreadable -> NVS copy
-        buf = auth_nvs_read();
-        if (buf) { root = cJSON_Parse(buf); free(buf); from_nvs = (root != NULL); }
-    }
-    if (!root) return;                        // no tier holds it -> fresh PIN minted by init, safe
+    cJSON *root = cJSON_Parse(txt);
+    if (!root) return false;
     cJSON *pin = cJSON_GetObjectItem(root, "pin");           // restore the persisted PIN
     if (cJSON_IsString(pin) && strlen(pin->valuestring) == 6) strcpy(s_pin, pin->valuestring);
     cJSON *arr = cJSON_GetObjectItem(root, "tokens");
@@ -196,10 +240,36 @@ static void load_auth(void)
         }
     }
     cJSON_Delete(root);
+    return true;
+}
+
+static void load_auth(void)
+{
+    memset(s_tokens, 0, sizeof(s_tokens));
+    memset(s_tok_seen, 0, sizeof(s_tok_seen));
+    memset(s_tok_lru, 0, sizeof(s_tok_lru));
+    s_token_count = 0; s_lru_tick = 0;
+
+    // /cfg first, then the NVS record, then the NVS text an older firmware wrote. Size the /cfg buffer from
+    // the file: a full 32-token ring is ~2.3 KB, and the old fixed 2 KB read truncated it -> parse failed ->
+    // PIN + all sessions wiped.
+    const char *from = NULL;
+    char *buf = NULL;
+    FILE *f = fopen(AUTH_JSON, "rb");
+    if (f) {
+        fseek(f, 0, SEEK_END); long sz = ftell(f); fseek(f, 0, SEEK_SET);
+        if (sz > 0 && sz < 8192 && (buf = malloc(sz + 1)) != NULL) { size_t n = fread(buf, 1, sz, f); buf[n] = '\0'; }
+        fclose(f);
+    }
+    if (buf) { if (apply_json(buf)) from = "/cfg"; free(buf); }
+    if (!from && auth_nvs_load()) from = "NVS";
+    if (!from && (buf = auth_nvs_read_json()) != NULL) { if (apply_json(buf)) from = "NVS (old format)"; free(buf); }
+    if (!from) return;                        // no tier holds it -> fresh PIN minted by init, safe
     count_tokens();
     rank_tokens();
-    if (from_nvs) { save_auth(); ESP_LOGW(TAG, "auth recovered from NVS fallback (/cfg missing) — re-persisted"); }
-    ESP_LOGI(TAG, "loaded %d session token(s)", s_token_count);
+    ESP_LOGI(TAG, "loaded %d session token(s) from %s", s_token_count, from);
+    // nucleo_auth_init saves right after this: /cfg is healed from NVS when it went missing, and an
+    // old-format NVS copy becomes the compact record.
 }
 
 // settings.security.require_pairing — best effort; default ON if SD/settings absent.
@@ -366,6 +436,15 @@ int nucleo_auth_revoke(const char *keep_token)
 }
 
 int nucleo_auth_session_count(void) { return s_token_count; }
+
+void nucleo_auth_persist_status(nucleo_auth_persist_t *out)
+{
+    out->cfg = s_cfg_saved; out->nvs_kept = s_nvs_kept; out->sessions = s_token_count;
+    nvs_stats_t st;
+    bool ok = nvs_get_stats(NULL, &st) == ESP_OK;
+    out->nvs_free = ok ? (int)st.available_entries : -1;     // free for data (the GC reserve page excluded)
+    out->nvs_total = ok ? (int)st.total_entries : -1;
+}
 
 bool nucleo_auth_factory_reset(void)
 {

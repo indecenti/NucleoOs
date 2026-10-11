@@ -1,6 +1,6 @@
-// Session-slot policy for nucleo_auth: which slot a newly paired session takes, and how recency is
-// rebuilt after a reboot. Pure C (no IDF) so tools/anima-host/authslot-check.mjs compiles and tests
-// the real code on the PC.
+// Session-slot policy for nucleo_auth: which slot a newly paired session takes, how recency is
+// rebuilt after a reboot, and the compact record kept in NVS. Pure C (no IDF) so
+// tools/anima-host/authslot-check.mjs compiles and tests the real code on the PC.
 //
 // A new session takes a FREE slot when there is one; only a full table evicts, and then the session
 // used LEAST RECENTLY — never the one a browser is using right now. (The old ring wrote at a head index
@@ -8,6 +8,7 @@
 // session while 31 stale ones survived.)
 #pragma once
 #include <stdbool.h>
+#include <stddef.h>
 #include <stdint.h>
 
 // used[i]: slot i holds a session. lru[i]: recency stamp (larger = used more recently).
@@ -18,3 +19,28 @@ int auth_pick_slot(const bool *used, const uint32_t *lru, int n);
 // clock) survives. Rank the used slots by it — oldest -> 1 ... newest -> k, ties broken by slot order —
 // and write the ranks into lru (free slots get 0). Returns k, the next recency stamp base.
 uint32_t auth_rank_seen(const bool *used, const int64_t *seen, uint32_t *lru, int n);
+
+// ---- compact NVS record (the fallback tier when the unit has no /cfg partition) ----
+// On a unit installed by M5Launcher there is no /cfg: the pairing state lives in NVS alone — a 20 KB
+// partition shared with the Launcher, PHY calibration and the Wi-Fi config. The old copy there was the
+// auth.json text (~72 B per session, ~2.3 KB full), and once NVS could no longer place it every save failed
+// silently: each new pairing was lost at the next reboot (the web-profile handoff showed the PIN screen
+// again) and a revocation could come back. The record below is binary (28 B per session, 904 B full).
+// Layout, little-endian: ver(1) count(1) pin(6 ASCII digits, or zeros) then count x { token(24 bytes)
+// last_seen(u32 seconds; 0 = never seen with a set clock) }.
+#define AUTH_REC_VER       1
+#define AUTH_TOK_HEX       48                       // a session token: 24 random bytes as lowercase hex
+#define AUTH_TOK_BYTES     (AUTH_TOK_HEX / 2)
+#define AUTH_REC_HDR       8
+#define AUTH_REC_ENT       (AUTH_TOK_BYTES + 4)
+#define AUTH_REC_SIZE(n)   ((size_t)AUTH_REC_HDR + (size_t)(n) * AUTH_REC_ENT)
+
+// Write pin + at most `keep` sessions into out (cap bytes), the most recently used first (lru, larger =
+// newer; ties by slot order), so a record cut to fit always holds the sessions in use. Slots that are free
+// or hold a malformed token are skipped. Returns the bytes written (AUTH_REC_SIZE(count)), 0 if cap is short.
+size_t auth_rec_encode(uint8_t *out, size_t cap, const char *pin, const char (*tok)[AUTH_TOK_HEX + 1],
+                       const int64_t *seen, const uint32_t *lru, int n, int keep);
+
+// Parse a record into pin (7 bytes; "" when the record holds none) and slots 0..count-1 of tok/seen (the
+// rest cleared). Returns count, or -1 for a malformed record (wrong version, length or digits).
+int auth_rec_decode(const uint8_t *rec, size_t len, char *pin, char (*tok)[AUTH_TOK_HEX + 1], int64_t *seen, int n);

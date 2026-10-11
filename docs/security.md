@@ -68,8 +68,18 @@ money/heap, or reveals more than "a NucleoOS device exists here", it is paired-o
 - **Tokens**: 48-hex (24 random bytes), delivered as an `HttpOnly; SameSite=Lax` cookie, stored
   alongside the PIN in the same power-loss-safe tier (not the SD), a bounded ring of the last
   sessions. Because they persist, a paired browser keeps working across reboots without
-  re-entering the PIN; the oldest session is evicted when the ring fills. Compared
+  re-entering the PIN; the least recently used session is evicted when the ring fills. Compared
   **constant-time** so a network attacker can't time-probe them.
+- **The NVS tier** (`nucleoauth` namespace, key `rec`) is a compact binary record — PIN + 28 bytes per
+  session, 904 bytes for a full ring (`auth_slots.c`, host-tested by `npm run authslot:test`). On a unit
+  installed by M5Launcher it is the *only* tier, in a 20 KB NVS shared with the Launcher, PHY calibration
+  and Wi-Fi. Older firmware kept the `auth.json` text there (~2.3 KB): once NVS could not place it, every
+  save failed silently, so each new pairing was lost at the next reboot (the web-profile handoff showed the
+  PIN screen again) and a revocation could come back. Now a save that does not fit drops the old-format
+  text, then sheds the least recently used sessions until it fits; if not even the PIN fits, the stale
+  record is erased. The stored sessions are always a subset of the live ones, so a revoked or evicted
+  session never returns. `/api/diag` → `persist.auth` (`cfg`, `nvs_kept` vs `sessions`) and
+  `persist.nvs_free` show it.
 - **Idle-TTL (sliding)**: a session unused for **90 days** is expired server-side and dropped, so a
   cookie sniffed but never replayed dies on its own and abandoned browsers don't leave a live token
   forever. Actively-used sessions never expire — each request re-stamps "last seen" (at most once a

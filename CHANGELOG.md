@@ -18,6 +18,10 @@ All notable user-facing changes to NucleoOS. Format loosely follows
   and Nearby. Before, these apps used the cloud whatever the mode.
 - **Paint's image providers explain themselves in Spanish, French and German** (they showed Italian).
 - **Settings shows a newly added xAI or Groq key at once** instead of offering to add it again for half a minute.
+- **A Cardputer installed with M5Launcher keeps its paired browsers across restarts.** Its pairing sessions
+  live in a small memory area shared with the Launcher; once it filled up, every new pairing was forgotten at
+  the next restart — opening the web desktop for the first time asked for the PIN a second time. They are now
+  stored in a third of the space, and if room still runs out the oldest sessions give way, never the one in use.
 
 ## [0.7.1] — 2026-10-11
 
