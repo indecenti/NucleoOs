@@ -81,6 +81,25 @@ test('manifest header, pack totals and every line match the tree exactly', () =>
   }
 });
 
+test('shipped facets match the firmware-embedded VKL pins (no CRLF smudge, no un-pinned edit)', () => {
+  // The device hashes data/anima/learned/facets.<lang>.jsonl against VKL_FACETS_*_SHA256 baked into the
+  // firmware and ABSTAINS from the whole facet tier on a mismatch. An autocrlf=true checkout that smudged
+  // these to CRLF, or a facets edit that didn't re-bake the pin, would silence facets on every device —
+  // invisibly, since git normalises CRLF working-tree == LF index. This ties the shipped bytes to the pin.
+  const h = readFileSync('firmware/components/nucleo_anima/nucleo_knowledge_manifest.h', 'utf8');
+  const pin = (name) => { const m = new RegExp(`#define ${name}\\s+"([0-9a-f]{64})"`).exec(h); assert.ok(m, `pin ${name} not found`); return m[1]; };
+  const { entries } = parse();
+  for (const [lang, name] of [['it', 'VKL_FACETS_IT_SHA256'], ['en', 'VKL_FACETS_EN_SHA256']]) {
+    const rel = `data/anima/learned/facets.${lang}.jsonl`;
+    const e = entries.find((x) => x.path === rel);
+    assert.ok(e, `${rel} is not in the shipped payload`);
+    const onDisk = createHash('sha256').update(readFileSync(join(out, rel))).digest('hex');
+    assert.equal(onDisk, e.sha, `manifest sha disagrees with the file for ${rel}`);
+    assert.equal(onDisk, pin(name), `${rel} (${onDisk.slice(0, 8)}) != firmware pin ${name} (${pin(name).slice(0, 8)}) — CRLF smudge or stale pin`);
+    assert.ok(!readFileSync(join(out, rel)).includes(0x0d), `${rel} contains CR bytes (CRLF) — pin LF in .gitattributes`);
+  }
+});
+
 test('shared allow-list vectors agree with sd_deploy.py', () => {
   const vec = JSON.parse(readFileSync('tools/nucleo-sd-deploy/allowlist-vectors.json', 'utf8')).allow;
   const got = JSON.parse(py(`import json\nv=json.load(open('tools/nucleo-sd-deploy/allowlist-vectors.json',encoding='utf-8'))['allow']\n`

@@ -21,6 +21,12 @@ nucleomind/**    linguist-vendored
 # ANIMA knowledge corpus is hashed byte-exact (build_akb2.py / check_pack.mjs pack provenance):
 # pin LF in the working tree so autocrlf=true checkouts cannot smudge CRLF and fake a stale index.
 tools/anima/knowledge/*.jsonl text eol=lf
+# ANIMA facets ship on the SD and are hashed byte-exact against a firmware-embedded pin
+# (nucleo_anima_facet.c VKL_FACETS_*): on a mismatch the device ABSTAINS from the whole facet tier.
+# An autocrlf=true checkout that smudged these to CRLF would silence facets on every device the SD is
+# synced from this tree — so pin LF here too. The whole learned/ subtree ships on the SD, so pin it all
+# (facets + the evo/ shards). (Covers deploy/sd and tools/sd-sim copies, at any depth.)
+**/data/anima/learned/**/*.jsonl text eol=lf
 # Generated artifacts whose --check compares the file text byte-exact against the generator's LF
 # output (gen-api-spec.mjs, gen-core-reports.mjs via validate): same reason, pin LF.
 web-api-spec.json text eol=lf
