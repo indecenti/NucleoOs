@@ -106,6 +106,22 @@ function flags(args, spec) {          // spec: { short: 'ilnrv', withValue: { n:
 const lines = (s) => { const t = String(s ?? ''); const ls = t.split('\n'); if (ls.length && ls[ls.length - 1] === '') ls.pop(); return ls; };
 const unescapeC = (s) => String(s).replace(/\\([nt\\"'r0])/g, (m, c) => ({ n: '\n', t: '\t', '\\': '\\', '"': '"', "'": "'", r: '\r', 0: '' }[c]));
 
+// `node FILE.js`: the run_js sandbox has no file access by design (fs:false — its resolver does not confine paths), so
+// the files a script names are read FIRST, through the confined workspace fs like `cat`, and served to a Node-style
+// require('fs').readFileSync as data. Writing is not offered: results are printed and saved with `>` (approved).
+// One line, so a script's reported line numbers move by one at most. Pure — host-tested (tools/agent-sh.test.mjs).
+export function nodePrelude({ file = 'script.js', args = [], files = {} } = {}) {
+  const F = JSON.stringify(files), A = JSON.stringify(args.map(String)), N = JSON.stringify(file);
+  return `const __files=${F};const __key=(p)=>String(p).replace(/^\\.\\//,'');const __filename=${N},__dirname='.';`
+    + `const process={argv:['node',${N},...${A}],env:{},platform:'nucleoos',cwd:()=>'/',exit:()=>{},stdout:{write:(s)=>{console.log(String(s).replace(/\\n$/,''));return true;}}};`
+    + `const __fs={readFileSync:(p)=>{const k=__key(p);if(k in __files)return __files[k];throw new Error('ENOENT: no such file '+p+' (a script can read the workspace files it names)');},`
+    + `existsSync:(p)=>__key(p) in __files,writeFileSync:()=>{throw new Error('writeFileSync is not available here: print the result and save it with the shell (node x.js > out.txt)');},`
+    + `appendFileSync:()=>{throw new Error('appendFileSync is not available here: print the result and append it with >>');},promises:{readFile:async(p)=>__fs.readFileSync(p)}};`
+    + `const require=(m)=>{if(m==='fs'||m==='node:fs')return __fs;if(m==='fs/promises'||m==='node:fs/promises')return __fs.promises;`
+    + `if(m==='path'||m==='node:path')return{join:(...x)=>x.join('/').replace(/\\/+/g,'/'),basename:(p)=>String(p).split('/').pop(),extname:(p)=>(String(p).match(/\\.[^./]*$/)||[''])[0],dirname:(p)=>String(p).split('/').slice(0,-1).join('/')||'.'};`
+    + `throw new Error("Cannot find module '"+m+"' (only fs and path are here)");};`;
+}
+
 export function createAgentShell({ fs, device = {}, confirm = async () => true, limits = {} } = {}) {
   const L = { ...SH_LIMITS, ...limits };
   let cwd = '';                                          // relative to the workspace root ('' = root)
@@ -279,6 +295,19 @@ export function createAgentShell({ fs, device = {}, confirm = async () => true, 
     uname: async () => { const s = device.status && await device.status(); return 'NucleoOS ' + ((s && s.version) || '') + ' esp32s3' + (s && s.profile ? ' (' + s.profile + ' profile)' : ''); },
     // id, name, and — when the catalog has it — category and what the app does, so `apps | grep -i audio` works
     apps: async () => { const l = device.apps ? await device.apps() : []; return l.map((x) => x.id + '\t' + x.name + (x.category ? '\t[' + x.category + ']' : '') + (x.description ? '\t' + x.description : '')).join('\n'); },
+    // node FILE.js [ARGS]: a workspace script in the run_js sandbox (see nodePrelude). Read-only, so no approval.
+    node: async (a) => {
+      if (!device.runJs) throw new Error('node: not available here');
+      const file = a[0]; if (!file) throw new Error('node: usage: node FILE.js [ARGS]');
+      const code = await readText(file);
+      const files = {};
+      for (const m of code.matchAll(/['"`]((?:\.{0,2}\/)?[\w.-]+(?:\/[\w.-]+)*\.[a-z0-9]{1,6})['"`]/gi)) {
+        const p = m[1].replace(/^\.\//, '');
+        if (p in files || Object.keys(files).length >= 8) continue;
+        try { files[p] = await readText(p); } catch { /* not a file of the workspace: the script's own problem */ }
+      }
+      return device.runJs(code, { file: show(file), args: a.slice(1), files });
+    },
     open: async (a) => { if (!device.open) throw new Error('open: not available here'); const x = a[0]; if (!x) throw new Error('open: usage: open APP-ID | FILE'); return await device.open(/[./]/.test(x) ? { path: path(x) } : { app: x }); },
   };
 

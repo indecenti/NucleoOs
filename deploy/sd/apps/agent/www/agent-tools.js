@@ -9,7 +9,7 @@
 export const CLIENT_TOOLS = [
   // FIRST: one POSIX-like shell over the workspace (agent-sh.js). Models already know these commands from their
   // training, so they need no per-tool teaching; for local models it replaces list/search/mkdir/mv/rm/append.
-  { name: 'sh', description: "Run a shell command line on the Cardputer's files, inside the workspace, like a POSIX shell: ls, cat, head, tail, sed -n 'A,Bp', wc, grep -rn, find -name, tree, sort, uniq, echo, mkdir -p, touch, cp, mv, rm -r; pipes | and redirection > >> <, ; && ||. The Cardputer itself: df, free, uptime, date, uname, apps, open APP-ID|FILE. Use it to explore and for simple file operations; use edit_file to change text inside a file. Lines that change files are approved by the human once.", input_schema: { type: 'object', properties: { cmd: { type: 'string', description: 'the command line, e.g. grep -rn TODO src | head -20' } }, required: ['cmd'] } },
+  { name: 'sh', description: "Run a shell command line on the Cardputer's files, inside the workspace, like a POSIX shell: ls, cat, head, tail, sed -n 'A,Bp', wc, grep -rn, find -name, tree, sort, uniq, echo, mkdir -p, touch, cp, mv, rm -r; pipes | and redirection > >> <, ; && ||. The Cardputer itself: df, free, uptime, date, uname, apps, open APP-ID|FILE. Scripts: node FILE.js [ARGS] runs a workspace script (require('fs').readFileSync works on the files it names; print results and save them with >). Use it to explore and for simple file operations; use edit_file to change text inside a file. Lines that change files are approved by the human once.", input_schema: { type: 'object', properties: { cmd: { type: 'string', description: 'the command line, e.g. grep -rn TODO src | head -20' } }, required: ['cmd'] } },
   { name: 'list_files', description: 'List files and folders in a workspace directory. Call this to explore before reading or writing.', input_schema: { type: 'object', properties: { path: { type: 'string', description: 'workspace-relative path, default "."' } }, required: [] } },
   { name: 'read_file', description: 'Read a text file from the workspace. Output is line-numbered ("12→code") so you can reference exact lines — but for edit_file the "old" string must be the RAW text WITHOUT the "N→" prefix. Read a file before editing it. For large files pass offset (1-based first line) and limit (max lines).', input_schema: { type: 'object', properties: { path: { type: 'string' }, offset: { type: 'number', description: 'first line, 1-based (optional)' }, limit: { type: 'number', description: 'max lines to return (optional)' } }, required: ['path'] } },
   { name: 'search_files', description: 'Search workspace file contents by text or regex. Use to locate where something is defined.', input_schema: { type: 'object', properties: { query: { type: 'string' }, glob: { type: 'string', description: 'optional name filter e.g. *.js' } }, required: ['query'] } },
@@ -246,7 +246,7 @@ const TOOLISH = /\b(che\s+or[ae]|che\s+giorno|data\s+di\s+oggi|quanto\s+spazio|s
 // the user's real files: gpt-oss-120b on Groq triaged "fix the bug in demo/somma.js" as an "answer" and replied
 // with a script for the user to run — nothing was read, fixed or verified.
 const FILEISH = /(?:^|[\s"'`(@])(?:\.{0,2}\/)?(?:[\w.-]+\/)*[\w-]+\.(?:m?js|cjs|ts|json|html?|css|md|txt|py|csv|svg|xml|ya?ml|ini|sh|c|h|cpp|log)\b|(?:^|\s)\/(?:data|apps|sd)\/\S+/i;
-const CODE_ACT = /\b(correggi|sistema|modifica|rinomina|analizza|esegui|salva|scrivi|crea|cancella|elimina|fix|edit|rename|analy[sz]e|run|execute|save|write|create|delete|corrige|modifica|ejecuta|guarda|escribe|crea|borra|corriger|modifie|execute|enregistre|ecris|cree|supprime|korrigiere|bearbeite|fuhre|speichere|schreibe|erstelle|losche)/i;   // no end boundary: "correggilo", "salvalo", "scrivilo"
+const CODE_ACT = /\b(correggi|sistema|modifica|rinomina|analizza|esegui|salva|scrivi|crea|cancella|elimina|fix|edit|rename|analy[sz]e|run|execute|save|write|create|delete|corrige|modifica|ejecuta|guarda|escribe|crea|borra|corriger|modifie|execute|enregistre|ecris|cree|supprime|korrigiere|bearbeite|fuhre|speichere|schreibe|erstelle|losche|rimuovi|togli|aggiungi|sostituisci|converti|conta|calcola|ordina|unisci|remove|add|replace|convert|count|sort|merge|append|quita|anade|reemplaza|convierte|cuenta|ordena|elimina|retire|enleve|ajoute|remplace|convertis|compte|trie|fusionne|entferne|fuge|ersetze|konvertiere|zahle|sortiere)/i;   // no end boundary: "correggilo", "salvalo", "scrivilo"
 export function guardPlan(plan, userMsg) {
   const q = String(userMsg || '');
   if (plan && plan.mode === 'answer' && (TOOLISH.test(q) || (FILEISH.test(q) && CODE_ACT.test(q.normalize('NFD').replace(/[̀-ͯ]/g, ''))))) {
@@ -291,7 +291,13 @@ export function fitMessages(messages, maxChars) {
 
 // One Groq/OpenAI-compatible chat call. Returns the assistant MESSAGE object (so the caller sees
 // `tool_calls`), not just text. fetchFn is injected. Retries on 429/5xx with backoff.
-export async function callOpenAIChat(fetchFn, cfg, { model, messages, tools, toolChoice, responseFormat, maxTokens = 1024, temperature = 0.4, signal }) {
+// Every failure names its provider and model: told nothing, the user-facing explanation fell back to "Claude"
+// for a Groq rate limit ("Claude sta limitando le richieste", real Cardputer, 2026-10-10).
+export async function callOpenAIChat(fetchFn, cfg, opts) {
+  try { return await openAIChatOnce(fetchFn, cfg, opts); }
+  catch (e) { if (e && typeof e === 'object' && !e.provider && e.message !== 'stopped') { e.provider = cfg && cfg.provider; e.model = (opts && opts.model) || (cfg && cfg.model); } throw e; }
+}
+async function openAIChatOnce(fetchFn, cfg, { model, messages, tools, toolChoice, responseFormat, maxTokens = 1024, temperature = 0.4, signal }) {
   const base = (cfg.base || 'https://api.groq.com/openai/v1').replace(/\/+$/, '');
   // CORS-less providers (Gemini, cfg.proxy) are relayed through the device same-origin /api/llm proxy —
   // without this, the agentic tool loop (orchestrator + workers) on a Gemini key would be browser-blocked.
@@ -415,7 +421,9 @@ export const LOCAL_EXCLUDED_TOOLS = new Set(['generate_image', 'transcribe', 'li
 export const PRIVATE_EXCLUDED_TOOLS = new Set(['weather']);                       // a network call: never in Private
 
 export function localToolDefs(clientTools = CLIENT_TOOLS, { private: priv = false } = {}) {
-  return clientTools.filter((t) => !LOCAL_EXCLUDED_TOOLS.has(t.name) && !(priv && PRIVATE_EXCLUDED_TOOLS.has(t.name)));
+  return clientTools.filter((t) => !LOCAL_EXCLUDED_TOOLS.has(t.name) && !(priv && PRIVATE_EXCLUDED_TOOLS.has(t.name)))
+    // a description that sends the model to an excluded tool points at the shell command instead
+    .map((t) => t.name === 'open_in_os' ? { ...t, description: t.description.replace('Call list_apps first if unsure of the id.', 'If unsure of the id, run the sh command `apps` first (every installed app: id, name, category, what it does).') } : t);
 }
 
 // Tool calls a model wrote into its text instead of the structured field. Only a call to a KNOWN tool counts,
@@ -467,13 +475,18 @@ export function trimOldToolResults(messages, { budget = 36000, keep = 4, stub = 
 
 // A reply that only ANNOUNCES work ("Faccio le due modifiche… Poi ripubblico l'app.") with no tool call: small
 // local models stop there and the turn ends with nothing done. Five languages, intent / future forms.
-export const ANNOUNCES_WORK = /(?<!\p{L})(faccio|modifico|procedo|vado a|sto per|ora (?:modifico|creo|scrivo|pubblico|ripubblico|eseguo|leggo)|poi (?:ripubblico|pubblico|eseguo|salvo)|i'?ll|i will|let me|i'?m going to|next,? i|voy a|ahora (?:modifico|creo)|je vais|maintenant je|ich werde|jetzt (?:ändere|erstelle|schreibe))(?!\p{L})/iu;
+// …and the first-person PRESENT a small model ends on: "Ich füge die Zeile „Hola“ … hinzu." (qwen3.5:9b, real Cardputer,
+// 2026-10-10) changed nothing — the loop took it as the final answer.
+export const ANNOUNCES_WORK = /(?<!\p{L})(faccio|modifico|procedo|vado a|sto per|ora (?:modifico|creo|scrivo|pubblico|ripubblico|eseguo|leggo)|poi (?:ripubblico|pubblico|eseguo|salvo)|i'?ll|i will|let me|i'?m going to|next,? i|voy a|ahora (?:modifico|creo)|je vais|maintenant je|ich werde|jetzt (?:ändere|erstelle|schreibe)|aggiungo|creo|scrivo|correggo|rinomino|sposto|salvo|inserisco|sostituisco|aggiorno|i'?m (?:adding|creating|writing|updating|fixing|editing|renaming|saving|appending)|i am (?:adding|creating|writing|updating|fixing|editing)|añado|agrego|escribo|corrijo|guardo|actualizo|renombro|inserto|j'?ajoute|je crée|je cree|j'?écris|j'?ecris|je corrige|je modifie|je renomme|j'?enregistre|je remplace|ich (?:füge|fuge|erstelle|schreibe|ändere|andere|korrigiere|speichere|benenne|ersetze|aktualisiere))(?!\p{L})/iu;
 const NUDGE_DO_IT = 'You described what you will do, but you did not call any tool, so NOTHING has changed yet. Do it now with the tools (edit_file, write_file, publish_app, …). If it is truly already done, give the final answer.';
 
-export async function runLocalToolLoop({ chat, execTool, messages, tools = [], maxSteps = 12, abort, onEvent, budget = 36000 }) {
+// checkFinal(text) → a message | null: the caller's check of a final answer against reality (a file it says it wrote
+// that is not there). One such nudge per turn, like the announcement one.
+export async function runLocalToolLoop({ chat, execTool, messages, tools = [], maxSteps = 12, abort, onEvent, budget = 36000, checkFinal = null }) {
   const known = new Set(tools.map((t) => (t.function ? t.function.name : t.name)).filter(Boolean));
   const seen = new Map();                                  // call signature → how many times it ran
   let nudged = false;                                      // one "you only announced it" nudge per turn
+  let checked = false;                                     // one "that file is not there" nudge per turn
   for (let step = 0; step < maxSteps; step++) {
     if (abort && abort.aborted) throw new Error('stopped');
     trimOldToolResults(messages, { budget });
@@ -487,6 +500,7 @@ export async function runLocalToolLoop({ chat, execTool, messages, tools = [], m
     if (onEvent) onEvent({ type: 'assistant', content: text, calls: calls.map((c) => c.name) });
     if (!calls.length) {
       if (!nudged && known.size && ANNOUNCES_WORK.test(text)) { nudged = true; messages.push({ role: 'user', content: NUDGE_DO_IT }); continue; }
+      if (!checked && checkFinal) { checked = true; let m = null; try { m = await checkFinal(text); } catch {} if (m) { messages.push({ role: 'user', content: m }); continue; } }
       return text;
     }
     for (const tc of asst.tool_calls) {

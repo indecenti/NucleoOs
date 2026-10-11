@@ -36,7 +36,10 @@ export const SCOPE = {
 // The snapshot the caller builds (probeSignals). Documented here as the engine's input contract.
 // { online, enabled, hasKey, provider, model, keys:{anthropic,openai,xai,google}, geminiTier,
 //   l1Mode, l1Serving, webgpu, vramMB, deviceMemory, packCached, packUsable, localModelReady, localModelId,
-//   tts, exec }
+//   tts, exec, pcModel, pcServer, pcFirst, pcState, pcLoopback }
+// pc*: a model server on THIS computer (/ai-engines.js) — pcModel = the chat model it would answer with ('' = none),
+// pcFirst = the user put the PC before the cloud (ai.local.engines.prefer), pcState = 'ok' | 'refused' | 'none',
+// pcLoopback = that server is on localhost — the only kind Private mode (Local only, Privacy) may use.
 // A defensive default so the engine never throws on a partial snapshot (offline / pre-pairing).
 export function defaultSig() {
   return {
@@ -44,6 +47,7 @@ export function defaultSig() {
     keys: { anthropic: false, openai: false, xai: false, google: false }, geminiTier: '',
     l1Mode: 'auto', l1Serving: false, webgpu: false, vramMB: null, deviceMemory: null,
     packCached: false, packUsable: false, localModelReady: false, localModelId: null, tts: false, exec: 'browser',
+    pcModel: '', pcServer: '', pcFirst: false, pcState: 'none', pcLoopback: false,
   };
 }
 
@@ -85,6 +89,7 @@ const mk = (landedRung, mode, l1, browserLLM, extra = {}) => Object.assign(
 );
 
 const GPU_LLM = () => ({ it: 'LLM nella GPU del browser', en: 'LLM on the browser GPU', es: 'LLM en la GPU del navegador', fr: 'LLM sur le GPU du navigateur', de: 'LLM auf der Browser-GPU' });
+const PC_LLM = (sig) => { const m = (sig.pcServer ? sig.pcServer + ' · ' : '') + sig.pcModel; return { it: 'Sul PC · ' + m, en: 'On the PC · ' + m, es: 'En el PC · ' + m, fr: 'Sur le PC · ' + m, de: 'Auf dem PC · ' + m }; };
 const WASM_BRAIN = () => ({ it: 'Cervello WASM del browser', en: 'Browser WASM brain', es: 'Cerebro WASM del navegador', fr: 'Cerveau WASM du navigateur', de: 'WASM-Gehirn im Browser' });
 
 // ── PRESETS ──────────────────────────────────────────────────────────────────────────────────────────
@@ -96,7 +101,12 @@ export const PRESETS = [
     id: 'auto', icon: '✨', it: 'Auto', en: 'Auto', es: 'Auto', fr: 'Auto', de: 'Auto',
     intent: { it: 'Sceglie il cervello più forte che è davvero pronto', en: 'Picks the strongest brain that is actually ready', es: 'Elige el cerebro más potente que esté realmente listo', fr: 'Choisit le cerveau le plus puissant réellement prêt', de: 'Wählt das stärkste Gehirn, das wirklich bereit ist' },
     plan(sig, reg) {
-      if (sig.online && sig.enabled && sig.hasKey)
+      const cloudOk = sig.online && sig.enabled && sig.hasKey;
+      // ANIMA's own order (docs/anima-engines.md): the PC's model answers first with no usable cloud key, or when
+      // the user put the PC first; otherwise it is the cloud's fallback.
+      if (sig.pcModel && (sig.pcFirst || !cloudOk))
+        return mk('pc', 'pc', 'auto', false, { using: PC_LLM(sig) });
+      if (cloudOk)
         return mk('cloud', 'only', 'auto', false, { using: same('Cloud · ' + labelOf(sig.provider, reg)) });
       if (sig.webgpu && (sig.vramMB || 0) >= 900 && sig.localModelReady)
         return mk('gpu', 'local', 'auto', true, { localModel: sig.localModelId || 'auto', using: GPU_LLM() });
@@ -134,8 +144,9 @@ export const PRESETS = [
   },
   {
     id: 'local', icon: '💻', it: 'Solo locale', en: 'Local only', es: 'Solo local', fr: 'Local uniquement', de: 'Nur lokal',
-    intent: { it: 'Tutto nel browser, il Cardputer può dormire', en: 'All in the browser, the Cardputer can sleep', es: 'Todo en el navegador, el Cardputer puede dormir', fr: 'Tout dans le navigateur, le Cardputer peut dormir', de: 'Alles im Browser, der Cardputer kann schlafen' },
+    intent: { it: 'Tutto su questo computer, il Cardputer può dormire', en: 'Everything on this computer, the Cardputer can sleep', es: 'Todo en este equipo, el Cardputer puede dormir', fr: 'Tout sur cet ordinateur, le Cardputer peut dormir', de: 'Alles auf diesem Computer, der Cardputer kann schlafen' },
     plan(sig) {
+      if (sig.pcModel && sig.pcLoopback) return mk('pc', 'pc', 'auto', false, { using: PC_LLM(sig) });
       if (sig.webgpu && (sig.vramMB || 0) >= 900 && sig.localModelReady)
         return mk('gpu', 'local', 'auto', true, { localModel: sig.localModelId || 'auto', using: GPU_LLM() });
       if (sig.packUsable)
@@ -143,7 +154,7 @@ export const PRESETS = [
       return mk('wasm', 'edge', 'auto', false, { using: { it: 'Da preparare per funzionare offline', en: 'Needs preparing to run offline', es: 'Hay que prepararlo para funcionar offline', fr: 'À préparer pour fonctionner hors ligne', de: 'Muss für den Offline-Betrieb vorbereitet werden' } });
     },
     feasible(sig) {
-      if (sig.localModelReady || sig.packUsable) return { state: 'available', reason: same('') };
+      if ((sig.pcModel && sig.pcLoopback) || sig.localModelReady || sig.packUsable) return { state: 'available', reason: same('') };
       return { state: 'needs-prep', reason: { it: 'Scarica il cervello (~88 MB) per funzionare offline nel browser', en: 'Download the brain (~88 MB) to run offline in the browser', es: 'Descarga el cerebro (~88 MB) para funcionar offline en el navegador', fr: 'Téléchargez le cerveau (~88 MB) pour fonctionner hors ligne dans le navigateur', de: 'Lade das Gehirn (~88 MB) herunter, um offline im Browser zu laufen' } };
     },
   },
@@ -151,6 +162,7 @@ export const PRESETS = [
     id: 'private', icon: '🔒', it: 'Privacy', en: 'Privacy', es: 'Privacidad', fr: 'Confidentialité', de: 'Privatsphäre',
     intent: { it: 'Niente esce dal dispositivo, nemmeno il web', en: 'Nothing leaves the device, not even the web', es: 'Nada sale del dispositivo, ni siquiera la web', fr: 'Rien ne quitte l’appareil, pas même le web', de: 'Nichts verlässt das Gerät, nicht einmal das Web' },
     plan(sig) {
+      if (sig.pcModel && sig.pcLoopback) return mk('pc', 'pc', 'on', false, { edgeWeb: 0, using: { it: 'Sul PC · ' + sig.pcModel + ' · niente esce in Internet', en: 'On the PC · ' + sig.pcModel + ' · nothing goes to the Internet', es: 'En el PC · ' + sig.pcModel + ' · nada sale a Internet', fr: 'Sur le PC · ' + sig.pcModel + ' · rien ne part sur Internet', de: 'Auf dem PC · ' + sig.pcModel + ' · nichts geht ins Internet' } });
       const mode = sig.packUsable ? 'edge' : 'off';
       return mk(sig.packUsable ? 'wasm' : 'device', mode, 'on', false, { edgeWeb: 0, using: { it: 'Air-gapped · nessuna uscita di rete', en: 'Air-gapped · no network egress', es: 'Air-gapped · sin salida de red', fr: 'Air-gapped · aucune sortie réseau', de: 'Air-gapped · kein ausgehender Netzverkehr' } });
     },
@@ -159,6 +171,8 @@ export const PRESETS = [
 ];
 
 export const PRESET_IDS = PRESETS.map((p) => p.id);
+// The ANIMA mode each preset sets (see applyPreset): only these two keep everything on this machine.
+export const PRESET_MODE = Object.freeze({ private: 'private', local: 'private' });
 const find = (id) => PRESETS.find((p) => p.id === id) || null;
 
 export function planPreset(id, sig, reg) { const p = find(id); return p ? p.plan(sig || defaultSig(), reg || { providers: {} }) : null; }
@@ -201,7 +215,12 @@ export function applyPreset(model, id, sig, reg) {
   const p = preset.plan(sig, reg);
   const feas = preset.feasible(sig, reg);
   const patch = { ai: { preset: id } };
-  const local = { 'anima.mode': p.mode, 'anima.modeSet': '1' };
+  // anima.mode is the OS-wide TWO-mode switch (web/shell/anima-mode.js: auto | private) that ANIMA, the copilot
+  // and Agenti read. p.mode still names the rung the preset lands on (only/local/edge/on/off — verifyNow and the
+  // summary use it), but writing that rung as the mode turned "Auto" with only the browser pack ready into
+  // Private ('edge' → private: no cloud, no web). Private = nothing leaves this machine: the Privacy preset and
+  // Local only (everything in the browser / on this PC). Every other preset is Auto.
+  const local = { 'anima.mode': PRESET_MODE[id] || 'auto', 'anima.modeSet': '1' };
   if (p.localModel) local['anima.localModel'] = p.localModel;
   if (p.edgeWeb !== null && p.edgeWeb !== undefined) local['anima.edgeWeb'] = String(p.edgeWeb);
   return {

@@ -340,7 +340,7 @@ export async function aiErrorFromResponse(resp, cfg, bodyText) {
 export function toAiError(e, cfg) {
   if (e instanceof AiError) return e;
   const name = e && e.name, msg = redactSecrets((e && e.message) || e || '', cfg && cfg.key);
-  const extra = { provider: cfg && cfg.provider, model: cfg && cfg.model, cause: e };
+  const extra = { provider: (cfg && cfg.provider) || (e && e.provider), model: (cfg && cfg.model) || (e && e.model), cause: e };   // a thrown error may carry them
   if (e && e.partial) extra.partial = e.partial;   // a stream that died mid-answer keeps what already arrived
   if (name === 'AbortError') return new AiError('stopped', msg, extra);
   if (name === 'TimeoutError' || /timed? ?out/i.test(msg)) return new AiError('timeout', msg, extra);
@@ -449,7 +449,8 @@ export function explainAiError(e, lang, opts = {}) {
   l = String(l).slice(0, 2);
   const row = AI_ERR_TEXT[err.kind] || AI_ERR_TEXT.bad_request;
   const tpl = row[l] || row.en;
-  const P = providerOf(err.provider).label || err.provider || 'AI';
+  // an unknown provider is "AI" — providerOf() falls back to Anthropic, and a Groq rate limit read "Claude is limiting…"
+  const P = err.provider ? (providerOf(err.provider).label || err.provider) : ({ it: 'IA', es: 'IA', fr: 'IA', de: 'KI' }[l] || 'AI');
   const detail = redactSecrets(err.message || '').replace(/\s+/g, ' ').slice(0, 160);   // last line of defence
   return tpl.replace(/\{SET\}/g, opts.settings || AI_SETTINGS_AT[l] || AI_SETTINGS_AT.en)
     .replace(/\{P\}/g, P).replace(/\{M\}/g, err.model || '?')

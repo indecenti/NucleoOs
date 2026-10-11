@@ -77,13 +77,17 @@ export async function loadSave() {
 
 // Persist the run. Epoch-merge guard: if the device copy has progressed beyond `save`, abort and
 // return { ok:false, conflict:true, disk } so the UI can reload from disk and warn the player.
+// `base` (optional) is the copy this tab last read or wrote: when the card still holds exactly that, nobody else
+// moved the run, so `save` is its continuation even if it ranks lower (spending credits — a purchase, a refuel,
+// a relight — lowers the progress key's last tie-break and used to be refused and rolled back as a "conflict").
 // The guard needs the device copy: when it cannot be read (busy, offline, garbled) or it is a save from a
 // NEWER firmware, this THROWS instead of writing blind — the old code took a failed re-read for "no save"
 // and POSTed straight over the Cardputer's run.
-export async function storeSave(save) {
+export async function storeSave(save, base = null) {
   const disk = await readDisk();
   if (disk.state === 'newer') throw new Error('the card holds a save from a newer version');
-  if (disk.state === 'ok' && progressGreater(disk.save, save)) return { ok: false, conflict: true, disk: disk.save };
+  const untouched = !!base && disk.state === 'ok' && JSON.stringify(disk.save) === JSON.stringify(normalize(base));
+  if (disk.state === 'ok' && !untouched && progressGreater(disk.save, save)) return { ok: false, conflict: true, disk: disk.save };
   const body = normalize(save); body.ver = SAVE_VER;
   const r = await fetch(URL, {
     method: 'POST', credentials: 'same-origin',

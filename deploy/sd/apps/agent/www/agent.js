@@ -13,7 +13,9 @@ async function loadPicker() { return pickerMod || (pickerMod = await import('./e
 let hwPerms = null;
 async function loadHwPerms() {
   if (hwPerms) return hwPerms;
-  try { const r = await fetch('/apps/agent/manifest.json', { cache: 'no-store' }); const m = r.ok ? await r.json() : null; hwPerms = (m && Array.isArray(m.permissions)) ? m.permissions : []; }
+  // Through the file API: the device's webfs serves only www/ under /apps/agent/, so the manifest (one level up)
+  // answered 404 on every Cardputer and the app ran with no declared permissions (found by device-smoke, 2026-10-10).
+  try { const r = await fetch('/api/fs/read?path=' + encodeURIComponent('/apps/agent/manifest.json'), { cache: 'no-store' }); const m = r.ok ? await r.json() : null; hwPerms = (m && Array.isArray(m.permissions)) ? m.permissions : []; }
   catch { hwPerms = []; }
   return hwPerms;
 }
@@ -276,8 +278,14 @@ async function rebuildRuntime() {
       } catch { return { verdict: 'pass' }; }
     },
   };
-  // localServer: first when there is no cloud key (the runtime decides), else the fallback when the cloud fails.
-  const localServer = { first: () => false, private: () => false };
+  // localServer: the PC's own model. First when there is no cloud key (the runtime decides), when the user put the
+  // PC first (ai.local.engines.prefer — Settings ▸ AI / ANIMA's engines panel) or in Private mode, which drops every
+  // cloud rung (anima-mode.js, the OS-wide mode ANIMA and the copilot share). Read live on every turn, as ANIMA does.
+  const [Eng, Mode] = await Promise.all([import('/ai-engines.js').catch(() => null), import('/anima-mode.js').catch(() => null)]);
+  const localServer = {
+    first: () => { try { return !!Eng && Eng.loadLocalConfig().prefer === 'local'; } catch { return false; } },
+    private: () => { try { return !!Mode && Mode.readMode() === 'private'; } catch { return false; } },
+  };
   rt = createRuntime({ cfg, root, lang: lang(), ui, keys, active, t, local: local.grammar ? local : null, hwPerms: await loadHwPerms(), localServer });
   $('model-line').textContent = modelLine();
 }

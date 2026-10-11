@@ -98,6 +98,16 @@
       background:#fff;border-radius:50%;transition:.25s cubic-bezier(.4,0,.2,1);box-shadow:0 2px 4px rgba(0,0,0,0.25)}
     .sw input:checked+span{background:var(--accent)}
     .sw input:checked+span::after{transform:translateX(20px)}
+    /* AI ▸ Models on your PC (pc-models.js) */
+    .pc-srv label{display:flex;align-items:center;gap:8px}
+    .pc-base{font-size:11.5px;color:var(--dim);background:var(--field);border:1px solid var(--line);border-radius:6px;padding:1px 6px;overflow-wrap:anywhere}
+    .pc-st{font-size:12px} .pc-st.ok{color:var(--ok)} .pc-st.warn{color:var(--warn)} .pc-st.bad{color:var(--bad)} .pc-st.dim{color:var(--dim)}
+    .pc-off{opacity:.5;pointer-events:none}
+    .row .pc-tasks{flex-wrap:wrap;gap:10px}
+    .row .pc-task{display:flex;flex-direction:column;gap:3px;flex:1 1 170px;min-width:0;font-size:11.5px;font-weight:500;color:var(--dim)}
+    .row .pc-task select{width:100%}
+    .pc-help{margin:2px 0 10px}
+    .pc-note{margin:-2px 0 8px} .pc-msg.ok{color:var(--ok)} .pc-msg.bad{color:var(--bad)}
 
     /* ---- Updates tab: download/flash progress ---- */
     .up-bar{height:8px;border-radius:4px;background:rgba(128,128,128,.18);overflow:hidden}
@@ -481,17 +491,24 @@
           <div class="scope-legend" id="scope-legend" style="margin-top:11px"></div>
         </div>
 
+        <div class="sect" id="ai-local-sect"><h2><span data-t="pcModels">Modelli sul tuo PC</span> <span class="badge live" data-t="badgePcModels">Gratis · offline</span></h2>
+          <div class="hint" style="margin-bottom:6px" data-t-html="pcModelsHint">Un server IA su <b>questo computer</b> risponde ad ANIMA, al copilota e ad Agenti <b>senza chiave e senza Internet</b>.</div>
+          <div id="pc-models-mount"><span class="hint" data-t="pcDetecting">cerco i server…</span></div>
+        </div>
+
         <details class="adv" id="ai-adv"><summary data-t="advSettings">Impostazioni avanzate · provider, chiave, cervello offline, voce</summary><div class="adv-inner">
         <div class="sect"><h2><span data-t="brainsChain">Cervelli & catena di fallback</span> <span class="badge" data-t="badgeHowItWorks">Come funziona</span></h2>
-          <div class="hint" style="margin-bottom:10px" data-t-html="brainsChainHint">ANIMA ha <b>quattro menti</b> e le prova <b>in ordine</b>, dalla più capace a quella sempre-disponibile. Sfrutta prima la potenza del browser/PC e <b>scala sul Cardputer solo come ultima rete di sicurezza</b>.</div>
+          <div class="hint" style="margin-bottom:10px" data-t-html="brainsChainHint">ANIMA ha <b>cinque menti</b> e le prova <b>in ordine</b>, dalla più capace a quella sempre-disponibile. Sfrutta prima la potenza del browser/PC e <b>scala sul Cardputer solo come ultima rete di sicurezza</b>.</div>
           <div style="display:flex;flex-direction:column;gap:6px">
             <div style="display:flex;gap:10px;align-items:flex-start;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px 12px"><span style="font-size:17px;width:22px;text-align:center">☁</span><div style="flex:1"><div style="font-weight:600;font-size:13px" data-t="brain1Title">1 · IA online (cloud)</div><div class="hint" data-t="brain1Desc">Claude / Groq / Grok — serve chiave + Internet. La più capace.</div></div></div>
             <div style="text-align:center;color:var(--dim)">↓</div>
-            <div style="display:flex;gap:10px;align-items:flex-start;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px 12px"><span style="font-size:17px;width:22px;text-align:center">✦</span><div style="flex:1"><div style="font-weight:600;font-size:13px" data-t="brain2Title">2 · LLM locale (GPU del browser)</div><div class="hint" data-t="brain2Desc">Un LLM completo sulla GPU del browser (WebLLM). Offline dopo il primo download.</div></div></div>
+            <div style="display:flex;gap:10px;align-items:flex-start;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px 12px"><span style="font-size:17px;width:22px;text-align:center">⌂</span><div style="flex:1"><div style="font-weight:600;font-size:13px" data-t="brainPcTitle">2 · Modello sul tuo PC</div><div class="hint" data-t="brainPcDesc">Ollama / LM Studio su questo computer: gratis, offline, privato.</div></div></div>
             <div style="text-align:center;color:var(--dim)">↓</div>
-            <div style="display:flex;gap:10px;align-items:flex-start;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px 12px"><span style="font-size:17px;width:22px;text-align:center">◆</span><div style="flex:1"><div style="font-weight:600;font-size:13px" data-t="brain3Title">3 · Browser — cervello locale (WASM) + indice web</div><div class="hint" data-t-html="brain3Desc">La cascata del Cardputer compilata a WebAssembly, sulla CPU del browser. <b>Ultimo passo prima del Cardputer.</b></div></div></div>
+            <div style="display:flex;gap:10px;align-items:flex-start;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px 12px"><span style="font-size:17px;width:22px;text-align:center">✦</span><div style="flex:1"><div style="font-weight:600;font-size:13px" data-t="brain2Title">3 · LLM locale (GPU del browser)</div><div class="hint" data-t="brain2Desc">Un LLM completo sulla GPU del browser (WebLLM). Offline dopo il primo download.</div></div></div>
             <div style="text-align:center;color:var(--dim)">↓</div>
-            <div style="display:flex;gap:10px;align-items:flex-start;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px 12px"><span style="font-size:17px;width:22px;text-align:center">▣</span><div style="flex:1"><div style="font-weight:600;font-size:13px" data-t="brain4Title">4 · Cardputer (on-device)</div><div class="hint" data-t-html="brain4Desc">Il cervello nel dispositivo. <b>Sempre disponibile e offline</b>: la rete di sicurezza finale.</div></div></div>
+            <div style="display:flex;gap:10px;align-items:flex-start;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px 12px"><span style="font-size:17px;width:22px;text-align:center">◆</span><div style="flex:1"><div style="font-weight:600;font-size:13px" data-t="brain3Title">4 · Browser — cervello locale (WASM) + indice web</div><div class="hint" data-t-html="brain3Desc">La cascata del Cardputer compilata a WebAssembly, sulla CPU del browser. <b>Ultimo passo prima del Cardputer.</b></div></div></div>
+            <div style="text-align:center;color:var(--dim)">↓</div>
+            <div style="display:flex;gap:10px;align-items:flex-start;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px 12px"><span style="font-size:17px;width:22px;text-align:center">▣</span><div style="flex:1"><div style="font-weight:600;font-size:13px" data-t="brain4Title">5 · Cardputer (on-device)</div><div class="hint" data-t-html="brain4Desc">Il cervello nel dispositivo. <b>Sempre disponibile e offline</b>: la rete di sicurezza finale.</div></div></div>
           </div></div>
 
         <div class="sect"><h2><span data-t="offlineBrainL1">Cervello offline (L1)</span> <span class="badge fw">Live · RAM</span></h2>
@@ -681,6 +698,7 @@ let lang = 'en';   // English-first floor until the on-disk model is read
 let dirty = false;
 let caps = { l1Mode: 'auto', l1Serving: false, hasKey: false };
 let screenOn = true;            // optimistic; we never POST on load (would wake a headless device)
+let pcModels = null, pcModelsMounting = false;   // AI ▸ Models on your PC (mounted when the AI tab opens)
 
 const T = (k) => tr(lang, k);
 function status(txt, ok = true) { $('status-text').textContent = txt; $('conn-dot').className = 'dot ' + (ok ? 'ok' : 'err'); }
@@ -725,6 +743,7 @@ function onTabFirstOpen(id) {
   if (id === 'diagnostics') refreshHeapDetail();   // selectTab already refreshes the logs on every open
   if (id === 'device') refreshSessions();
   if (id === 'updates' && Updates) Updates.check(false);   // respects the 24h TTL; "Check now" forces
+  if (id === 'ai') mountPcModelsUI();                      // probes this PC's localhost ports: only once AI is opened
 }
 
 // ═══════════ live data poller (the ONLY timer) ═══════════
@@ -1088,6 +1107,7 @@ function retitle() {
   $('t-displang') && ($('t-displang').textContent = T('displayLang'));
   $('t-region') && ($('t-region').textContent = T('regionFormat'));
   renderLangRegion();
+  if (pcModels) pcModels.render();
 }
 $('theme-light').addEventListener('click', () => { model.ui.theme = 'light'; applyLiveUI(); persistUiSoon(); });
 $('theme-dark').addEventListener('click', () => { model.ui.theme = 'dark'; applyLiveUI(); persistUiSoon(); });
@@ -1419,12 +1439,27 @@ $('voice-always-on').addEventListener('change', toggleVoiceAlways);
   const mountEl = $('ai-keys-mount'); if (!mountEl) return;
   try {
     const { mountKeyManager } = await import('/ai-keys.js');
-    // The key manager is it/en only — tier-2 OS languages get English (the OS base), not Italian.
-    const kmLang = () => (I18N.lang === 'it' ? 'it' : 'en');
+    // The key manager speaks all five OS languages (anything else falls back to English, the OS base).
+    const kmLang = () => (['it', 'en', 'es', 'fr', 'de'].includes(I18N.lang) ? I18N.lang : 'en');
     const km = mountKeyManager(mountEl, { variant: 'full', lang: kmLang(), onChange() { refreshCaps(); } });
     try { I18N.onChange(() => { if (km && km.setLang) km.setLang(kmLang()); }); } catch {}
   } catch (e) { mountEl.innerHTML = '<span class="hint">' + T('keyMgrUnavailable') + ' (' + (e && e.message || e) + ').</span>'; }
 })();
+
+// ═══════════ AI ▸ Models on your PC (pc-models.js on the shared engine layer /ai-engines.js) ═══════════
+// The one full view of ai.local.engines (per browser): on/off, servers, who answers first, the model per task.
+// ANIMA's engines panel is the quick view of the same settings and links here.
+async function mountPcModelsUI() {
+  const host = $('pc-models-mount'); if (!host || pcModels || pcModelsMounting) return;
+  pcModelsMounting = true;
+  try {
+    const [E, H, M] = await Promise.all([import('/ai-engines.js'), import('/local-ai-help.js'), import('./pc-models.js')]);
+    await coreReady;
+    pcModels = M.mountPcModels(host, { T, CT: (k, v) => I18N.t(k, v, 'core'), engines: E, help: H,
+      onChange: () => { if (typeof onCapsRefreshed === 'function') { try { onCapsRefreshed(); } catch {} } } });
+  } catch (e) { host.innerHTML = '<span class="hint">' + T('pcUnavailable') + ' (' + (e && e.message || e) + ')</span>'; }
+  pcModelsMounting = false;
+}
 
 // ═══════════ edge brain (WASM) ═══════════
 (function () {
@@ -1486,6 +1521,22 @@ $('voice-always-on').addEventListener('change', toggleVoiceAlways);
     if (webgpu) { try { const m = await import('/apps/anima/local-llm.js'); localModelReady = await m.localAvailable(); localModelId = m.chosenLocalBuild(); } catch {} }
     let packCached = false;
     try { const m = await import('/apps/anima/local/engine.js'); packCached = await m.packCached(); } catch {}
+    // PC rung: a model server on THIS computer (Ollama, LM Studio … via /ai-engines.js, the probe cached like ANIMA's).
+    // ANIMA asks it first with no cloud key or when the user put the PC first — the presets must say so.
+    let pcModel = '', pcServer = '', pcFirst = false, pcState = 'none', pcLoopback = false;
+    try {
+      const E = await import('/ai-engines.js'); const cfgL = E.loadLocalConfig(); pcFirst = cfgL.prefer === 'local';
+      if (cfgL.enabled !== false) {
+        const live = await E.liveServers({ config: cfgL });
+        const ups = live.filter((x) => x.status === 'ok' && x.models && x.models.length);
+        const up = ups.find((x) => E.isLoopback(x.base)) || ups[0];
+        if (up) {
+          const pin = cfgL.models && cfgL.models[up.id] && cfgL.models[up.id].chat;
+          pcModel = pin || E.pickModel(up.models, 'chat', { perf: E.loadPerf(), base: up.base }) || up.models[0].id;
+          pcServer = up.name; pcState = 'ok'; pcLoopback = E.isLoopback(up.base);
+        } else if (live.some((x) => x.status === 'cors' || x.status === 'blocked')) pcState = 'refused';
+      }
+    } catch {}
     return {
       online: navigator.onLine && (c.online !== false), enabled: c.enabled !== false, hasKey: !!c.hasKey,
       provider: c.provider || 'anthropic', model: c.model || '', keys, geminiTier,
@@ -1493,6 +1544,7 @@ $('voice-always-on').addEventListener('change', toggleVoiceAlways);
       webgpu, vramMB, deviceMemory: navigator.deviceMemory || null,
       packCached, packUsable: packCached, localModelReady, localModelId, gpuCause,
       tts: !!ttsState.available, exec,
+      pcModel, pcServer, pcFirst, pcState, pcLoopback,
     };
   }
 
@@ -1528,6 +1580,7 @@ $('voice-always-on').addEventListener('change', toggleVoiceAlways);
       : (sig.gpuCause === 'insecure' ? CT('cap_gpu_blocked_http') : CT('cap_gpu_none'));
     const rungs = [
       { k: 'cloud', t: T('apRungCloud'), led: cloudOk ? 'on' : (sig.hasKey ? 'warn' : 'off'), s: cloudOk ? ('✓ ' + sig.provider) : (sig.hasKey ? (sig.online ? T('apCloudReady') : T('apOffline')) : T('apNoKey')) },
+      { k: 'pc', t: T('apRungPc'), led: sig.pcModel ? 'on' : (sig.pcState === 'refused' ? 'warn' : 'off'), s: sig.pcModel ? ('✓ ' + sig.pcServer + ' · ' + sig.pcModel) : (sig.pcState === 'refused' ? T('pcStCors') : T('apPcNone')) },
       { k: 'gpu', t: T('apRungGpu'), led: gpuOk ? 'on' : (sig.webgpu ? 'warn' : 'off'), s: gpuS, how: !sig.webgpu },
       { k: 'wasm', t: T('apRungWasm'), led: wasmOk ? 'on' : 'warn', s: wasmOk ? T('apCached') : T('apPackMissing') },
       { k: 'device', t: T('apRungDevice'), led: 'on', s: T('apAlwaysReady') },
@@ -1672,6 +1725,11 @@ $('voice-always-on').addEventListener('change', toggleVoiceAlways);
     const pl = planPreset((model.ai && model.ai.preset) || 'auto', sig, REG) || {};
     const t0 = performance.now();
     try {
+      if (pl.landedRung === 'pc') {                        // the PC's model server: a fresh probe, not a chat turn
+        const E = await import('/ai-engines.js'); const live = await E.liveServers({ fresh: true });
+        const up = live.find((x) => x.status === 'ok' && x.models && x.models.length); const ms = Math.round(performance.now() - t0);
+        if (out) out.textContent = up ? `✓ ${up.name} ${T('apResponds')} · ${ms} ms` : T('apNoAnswer'); return;
+      }
       if (pl.mode === 'only' && sig.exec !== 'device' && sig.hasKey) {
         const ai = await import('/ai.js'); const cfg = await ai.readTeacher();
         if (cfg && cfg.key) { const ok = await ai.cloudPing(cfg); const ms = Math.round(performance.now() - t0);
@@ -1741,6 +1799,13 @@ try {
   const want = localStorage.getItem('nucleo.settings.tab');
   if (want) { localStorage.removeItem('nucleo.settings.tab'); if (TABS.some(([id]) => id === want)) selectTab(want); }
 } catch {}
+// ...and the same hint written while we are ALREADY open (ANIMA's engines panel → "Settings ▸ AI"): an app iframe
+// cannot post into our window, but the shared localStorage tells every other same-origin document.
+window.addEventListener('storage', (e) => {
+  if (e.key !== 'nucleo.settings.tab' || !e.newValue) return;
+  try { localStorage.removeItem('nucleo.settings.tab'); } catch {}
+  if (TABS.some(([id]) => id === e.newValue)) selectTab(e.newValue);
+});
 // Sequential, tiles first: one prime sweep fills every live tile right away (instead of one source
 // per ~3 s tick), then the adaptive loop takes over and the settings model loads. All device
 // traffic already rides the serial gate, so nothing here can overlap on the Cardputer.

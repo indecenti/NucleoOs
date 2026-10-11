@@ -35,7 +35,7 @@ import { orchestrateScaffold, orchestratePublish, orchestrateManage } from './ap
 import { buildReviewPrompt, parseReviewVerdict, reviewNote } from './app-review.js';
 import { createDeviceQueue } from './device-queue.js';
 import { createToolGuard } from './tool-guard.js';
-import { createAgentShell } from './agent-sh.js';          // the `sh` tool: ls/cat/grep/find/sed -n/… over the workspace      // tool-name repair + doom-loop stop before every tool call (OpenCode-style)
+import { createAgentShell, nodePrelude } from './agent-sh.js';          // the `sh` tool: ls/cat/grep/find/sed -n/… over the workspace      // tool-name repair + doom-loop stop before every tool call (OpenCode-style)
 import { runWorkerLocal } from './local-worker.js';   // the LOCAL transport (F0): grammar-constrained loop on an injected browser-local engine
 import { smokeApp, smokeSummary, stageAppRecipe } from './app-recipe.js';   // F5: install-and-smoke on the device + app-recipe learning   // ONE intelligent queue for every device-touching call (reads pooled, writes + Gemini proxy exclusive)
 import { routeFor, providerOf, PROVIDERS, CAPMATRIX, servedModel, toAiError } from '/ai.js';   // multi-model router + capability matrix (image/whisper) for the capability tools
@@ -141,6 +141,10 @@ const textOf = (content) => Array.isArray(content) ? content.filter((b) => b && 
 const LOCALES    = { it: 'it-IT',    en: 'en-US',   es: 'es-ES',   fr: 'fr-FR',    de: 'de-DE' };
 const LANG_NAMES = { it: 'italiano', en: 'English', es: 'español', fr: 'français', de: 'Deutsch' };
 const GEO_LANGS = new Set(['it', 'en', 'es', 'fr', 'de']);
+const LIST_APPS_LINE = "• list_apps: elenca le app installate (id, nome, categoria, descrizione) — chiamalo prima di lanciare se non sei sicuro dell'id.";
+// A PC model has no list_apps (LOCAL_EXCLUDED_TOOLS): told to call it, qwen3.5:9b answered "I can't list the installed apps"
+// and listed some from memory. Its line points at the shell command that IS there.
+const LOCAL_APPS_LINE = "• App installate: `sh` con il comando apps le elenca TUTTE (id, nome, categoria, cosa fa — es. apps | grep -i musica). Usalo per OGNI domanda su quali app ci sono e prima di open_in_os se non sei sicuro dell'id; mai rispondere a memoria.";
 const CLOUD_ONLY_MARK = 'Sei ONLINE';            // swapped for the local note on a PC model — see localSystemNote()   // Open-Meteo geocoding `language=` values we ship
 
 // ───────────────────────── runtime ─────────────────────────
@@ -202,7 +206,7 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
     return ((r && r.apps) || []).filter((a) => a.enabled !== false)
       .map((a) => ({ ...a, category: (info[a.id] || {}).category || '', description: (info[a.id] || {}).description || '' }));
   }
-  let sandbox = null, sandboxTried = false;
+  let sandbox = null, sandboxTried = 0, sandboxTries = 0;   // sandboxTried: when the last load failed (ms)
   const runOut = [];                 // what the current run_js printed — handed back to the model with the result
   let osapiSpecMemo, osapiManifestMemo;            // get_os_api: the 112 KB spec is read from SD once per session
   let aborter = null;
@@ -210,6 +214,7 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
   // `plan` — the orchestrator's typed classification — and the two are different things. In memory
   // only; a checklist describes THIS run, so persisting it would resurrect a stale one next question.
   loadParser().catch(() => {});      // acorn, on demand (~60 KB gz): by the first write the module check is ready
+  let turnMsg = '';                                  // the current user request (appNotAsked)
   let taskPlan = [];
   let lastPublish = null;            // {id, ok, why} of this turn's last publish_app — see publishTruth()
   let lastEngine = null;                           // who answered the last run: { kind:'server'|'cloud'|'local', … }
@@ -240,6 +245,16 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
       status: () => dq.read(() => fetch('/api/status', { cache: 'no-store' }).then((x) => x.json())),
       apps: () => installedApps(),
       open: async (x) => (await execTool('open_in_os', x)).content,
+      // `node FILE.js`: the same sandbox and stdout capture as run_js; the script's files arrive as data (nodePrelude)
+      runJs: async (code, opts = {}) => {
+        const sb = await ensureSandbox(); if (!sb) throw new Error(t('rt_sandbox_na'));
+        runOut.length = 0;
+        const out = await sb.run(nodePrelude(opts) + '\n' + String(code || ''), {}, {});
+        const printed = runOut.join('\n');
+        if (out.timeout) throw new Error(t('rt_run_timeout') + (printed ? '\n' + printed : ''));
+        if (!out.ok) throw new Error((out.error || t('rt_unknown')) + (printed ? '\nstdout:\n' + printed : ''));
+        return printed || (out.hasValue ? String(out.value) : '');
+      },
     },
     confirm: async ({ cmd, writes, destructive }) => {
       if (!ui || !ui.confirm) return false;
@@ -247,7 +262,20 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
       return !!(await ui.confirm({ op: 'sh', cmd, writes, root }));
     },
   });
+  // The user named a FILE ("crea la pagina timer.html: …") and asked for no app: scaffolding / publishing an app is not
+  // what they asked (live, qwen3.5:9b went for publish_app /apps/timer/ and wrote no timer.html). Told so, the model
+  // writes the file. An app request (app / install / publish / launcher, five languages) passes as before.
+  const NAMES_FILE = /[\w-]+\.(?:html?|m?js|css|json|md|txt|csv|svg|py)\b/i;
+  const WANTS_APP = /(?<!\p{L})(app|apps|applicazion\p{L}*|aplicaci\p{L}*|appli\p{L}*|anwendung\p{L}*|launcher|install\p{L}*|instal\p{L}*|pubblic\p{L}*|publi\p{L}*|veröffentlich\p{L}*)(?!\p{L})/iu;
+  function appNotAsked(name) {
+    if (name !== 'scaffold_app' && name !== 'publish_app') return null;
+    if (!NAMES_FILE.test(turnMsg) || WANTS_APP.test(turnMsg)) return null;
+    const f = (turnMsg.match(NAMES_FILE) || [''])[0];
+    return 'Not run: the user asked for the file ' + f + ' in the workspace, not for an app to install. Write ' + f + ' with write_file (complete, working content); create or publish an app only if the user asks for one.';
+  }
   async function guardedExec(name, input, label) {
+    const na = appNotAsked(name);
+    if (na) { if (ui && ui.toolEnd) ui.toolEnd({ name, input, label, ts: Date.now() }, na, true); return { content: na, is_error: true }; }
     const g = toolGuard.check(name, input);
     if (!g.run) {
       if (ui && ui.toolEnd) ui.toolEnd({ name, input, label, ts: Date.now() }, g.content, true);
@@ -283,10 +311,24 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
   function stop() { if (aborter) try { aborter.abort('stopped'); } catch {} }
 
   async function ensureSandbox() {
-    if (sandbox || sandboxTried) return sandbox;
-    sandboxTried = true;
+    // A failed load is retried on the next call (at most every 3 s): remembered for the whole session, one lost module
+    // left run_js and `node` "unavailable" for every later task (seen in a long run on the real Cardputer).
+    if (sandbox) return sandbox;
+    if (sandboxTried && Date.now() - sandboxTried < 3000) return null;
+    sandboxTried = Date.now();
     try {
-      const mod = await import('/apps/code-runner/nucleo-run.js');   // no /www/ — see the import note at the top
+      // ONE FILE AT A TIME, and a fresh URL on every retry: the Cardputer's 4-socket httpd resets a module now and then
+      // (live: ERR_CONNECTION_RESET on nucleo-run.js while ANIMA booted) and the browser then refuses that URL until a
+      // reload — run_js and `node` answered "sandbox unavailable" for the rest of the session.
+      let mod = null;
+      for (let i = 0; i < 2 && !mod; i++) {
+        if (i) await new Promise((r) => setTimeout(r, 700));
+        try { const { seqImport } = await import('/seq-import.js'); mod = await seqImport('/apps/code-runner/nucleo-run.js', { own: ['/apps/code-runner/'] }); }
+        catch { try { const u = '/apps/code-runner/nucleo-run.js?try=' + (++sandboxTries);   // no /www/ — see the import note at the top
+          // absolute: this module may be blob-linked by seqImport, where a bare '/…' does not resolve
+          mod = await import(typeof location !== 'undefined' && location.href ? new URL(u, location.href).href : u); } catch { mod = null; } }
+      }
+      if (!mod) throw new Error('sandbox module not loaded');
       // PURE COMPUTE: fs/http/anima all DISABLED. The sandbox's own resolver does NOT confine absolute
       // paths to cwd and its fs RPC bypasses our device throttle — so giving it fs would let run_js
       // escape the workspace and hammer the chip. File work goes through the dedicated file tools
@@ -708,13 +750,14 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
     readCap = LOCAL_READ_CAP;
     try {
       return await runLocalToolLoop({ chat, execTool: guardedExec, messages: [{ role: 'system', content: system }, ...messages], tools, maxSteps: STEPS,
-        abort: aborter && aborter.signal, onEvent: (e) => { if (e.type === 'tool' && ui && ui.status) ui.status('⚙ ' + e.name); } });
+        abort: aborter && aborter.signal, onEvent: (e) => { if (e.type === 'tool' && ui && ui.status) ui.status('⚙ ' + e.name); },
+        checkFinal: async (text) => { const miss = await claimedMissing(text); return miss.length ? NUDGE_NOT_WRITTEN(miss.join(', ')) : null; } });
     } finally { readCap = READ_CAP; }
   }
   // The local-server rung with its failure handled: a dead/refusing server is a note, never the end of the turn.
   async function tryLocalServer(system, baseMessages) {
     try {
-      const out = await runWorkerLocalServer({ system: system.replace(CLOUD_ONLY_MARK, localSystemNote()), messages: baseMessages.map((m) => ({ ...m })) });
+      const out = await runWorkerLocalServer({ system: system.replace(CLOUD_ONLY_MARK, localSystemNote()).replace(LIST_APPS_LINE, LOCAL_APPS_LINE), messages: baseMessages.map((m) => ({ ...m })) });
       return out == null ? null : { text: out || '' };
     } catch (e) {
       if (String(e && e.message) === 'stopped' || (aborter && aborter.signal.aborted)) throw new Error('stopped');
@@ -804,11 +847,11 @@ export function createRuntime({ cfg, root = '/data/agent', lang = 'it', ui, keys
     return `Sei un AGENTE operativo di NucleoOS — un vero sistema operativo multi-app su un M5Stack Cardputer, guidato dal browser dell'utente. ${CLOUD_ONLY_MARK} e PROGRAMMI come uno sviluppatore esperto. Porti a termine il compito USANDO gli strumenti reali.
 
 STRUMENTI:
-• sh: una shell POSIX sui file dello spazio di lavoro (root ${root}) — PREFERISCILA per esplorare e per le operazioni semplici: ls, cat, head, tail, sed -n 'A,Bp', wc -l, grep -rn, find -name, tree, mkdir -p, cp, mv, rm, echo > / >>, con pipe | e ; && ||. Sul Cardputer: df, free, uptime, date, uname, apps (id, nome, categoria, cosa fa — es. apps | grep -i audio), open APP. Per domande sulle app installate usa SEMPRE apps/list_apps: non elencare app a memoria. Per cambiare testo DENTRO un file usa edit_file.
+• sh: una shell POSIX sui file dello spazio di lavoro (root ${root}) — PREFERISCILA per esplorare e per le operazioni semplici: ls, cat, head, tail, sed -n 'A,Bp', wc -l, grep -rn, find -name, tree, mkdir -p, cp, mv, rm, echo > / >>, con pipe | e ; && ||. Sul Cardputer: df, free, uptime, date, uname, apps (id, nome, categoria, cosa fa — es. apps | grep -i audio), open APP. Script: node FILE.js [ARGS] esegue uno script del workspace (require('fs').readFileSync legge i file che nomina; stampa i risultati e salvali con >). Per domande sulle app installate usa SEMPRE apps/list_apps: non elencare app a memoria. Per cambiare testo DENTRO un file usa edit_file.
 • File (se non usi sh): list_files, read_file, search_files, make_dir, write_file, edit_file, append_file, delete_file, move_file.
 • run_js: esegue JavaScript in sandbox (~5s; niente DOM/rete/file) per CALCOLARE o trasformare dati; ciò che stampi con console.log ti torna come stdout. Per un file con risultati calcolati (report, tabella, CSV) stampa TUTTO il testo e passa save_to: viene scritto così com'è — non ricopiare mai i numeri a mano in write_file.
 • open_in_os: LANCIA un'app del device (es. calculator, notepad, media-player, radio, photo-viewer, calendar) o apre un file nell'app giusta. È così che "apri la calcolatrice", "metti la musica", ecc.
-• list_apps: elenca le app installate (id, nome, categoria, descrizione) — chiamalo prima di lanciare se non sei sicuro dell'id.
+${LIST_APPS_LINE}
 • update_plan: la CHECKLIST viva del lavoro. Su un compito in più passi (costruire un'app, toccare più file) chiamalo SUBITO con 3-7 milestone reali (una sola in "doing"), poi di nuovo dopo ogni passo per segnarla "done" e avviare la successiva. L'umano la vede aggiornarsi in tempo reale e tu ci rileggi a che punto sei. Non costa nulla (nessun accesso al device, nessuna approvazione). Salta il piano solo per le risposte in un colpo solo.
 • scaffold_app + publish_app: PUOI CREARE NUOVE APP per NucleoOS. Flusso: 1) scaffold_app({name, description, category, kind}) genera lo scheletro da un TEMPLATE funzionante (kind: blank/list/timer/converter — scegli il più vicino all'obiettivo) in una cartella di staging nel workspace; 2) MODIFICA <id>/www/index.html (e aggiungi .js/.css se servono) con i tool file per costruire l'app vera — è una pagina web autonoma, dark-theme, può importare /nucleo-i18n.js; 3) publish_app({id}) la installa nel launcher LIVE (l'utente approva, nessun riavvio). Usa questo flusso quando l'utente chiede di "creare/costruire/fare un'app". Tieni l'app leggera e autonoma (niente dipendenze esterne pesanti): gira su un device con poca RAM. Per nascondere o ripristinare un'app che HAI creato usa manage_app({id, action:'disable'|'enable'}) — le app non si possono cancellare dal device, ma si possono disabilitare.
 • get_os_api: il CONTRATTO REALE di NucleoOS — rotte HTTP del device (topic "routes"/"route"), regole del manifest ("manifest"), regole di deploy ("rules"). CONSULTALO prima di scrivere codice che chiama /api/* e prima di publish_app: mai indovinare una rotta o un campo.
@@ -825,7 +868,7 @@ REGOLE:
 - PROGRAMMAZIONE (è il tuo focus, come Claude Code): scrivi codice completo, corretto e RUNNABLE. read_file mostra i NUMERI di riga ("12→…") per citarle, ma la "old" di edit_file deve combaciare col testo GREZZO (senza il prefisso "N→"); leggi sempre un file prima di modificarlo. Dopo write_file/edit_file di codice (.js/.mjs/.json) la SINTASSI è verificata in automatico: se torna un ⚠, correggilo PRIMA di proseguire. Per logica non banale, provala con run_js prima di persistere. Procedi a piccoli passi.
 - Resta DENTRO ${root}; non toccare file di sistema. Le azioni distruttive (scrittura/modifica/eliminazione/spostamento/run_js) richiedono l'OK dell'umano: spiega in una frase cosa stai per fare.
 - Il device ha POCA RAM: niente chiamate inutili, non leggere file enormi, raggruppa le letture.
-- Alla fine: breve riassunto di cosa hai fatto e dove sono i file. Rispondi in ${langName()}.
+- Alla fine: breve riassunto di cosa hai fatto e dove sono i file. LINGUA: rispondi nella lingua dell'ULTIMO messaggio dell'utente (spagnolo → spagnolo, tedesco → tedesco, inglese → inglese…), qualunque sia la lingua di queste istruzioni; se non è chiara, in ${langName()}.
 Data odierna: ${today}.${isAnthropic ? '' : '\nDISCIPLINA: usa gli strumenti quando servono (non descrivere a parole un\'azione che puoi compiere). Quando un tool restituisce un risultato, fidati di QUELLO; non inventare esiti. Niente preamboli prima del codice.'}${extra ? '\n' + extra : ''}`;
   }
 
@@ -856,7 +899,7 @@ Sii conservativo: in dubbio scegli "task". Considera il contesto della conversaz
 
   // Merge parallel sub-results into one coherent answer, on a capable mid model (cross-provider when keys present).
   async function synthesize(userMsg, merged) {
-    const sys = 'Unisci i risultati dei sotto-agenti in UNA risposta coerente e concisa per l\'utente, in ' + langName() + '. Non ripetere i titoli interni.';
+    const sys = 'Unisci i risultati dei sotto-agenti in UNA risposta coerente e concisa per l\'utente, nella lingua della sua richiesta (se non è chiara, in ' + langName() + '). Non ripetere i titoli interni.';
     const user = 'Richiesta originale: ' + userMsg + '\n\nRisultati:\n' + merged;
     const { cfg: scfg, model: smodel } = routeCfg({ difficulty: 'mid' });
     if (scfg.provider === 'anthropic') {
@@ -889,6 +932,7 @@ Sii conservativo: in dubbio scegli "task". Considera il contesto della conversaz
   // caller's workspace-context gathering. Returns the final reply text.
   async function run(userMsg, history = [], opts = {}) {
     aborter = new AbortController();
+    turnMsg = String(userMsg || '');
     taskPlan = [];                                   // each question starts with an empty checklist
     lastPublish = null;                              // …and no app-publish outcome yet (publishTruth)
     toolGuard.reset();                               // …and a clean doom-loop history
@@ -897,7 +941,11 @@ Sii conservativo: in dubbio scegli "task". Considera il contesto della conversaz
     const hist = compact(history, { budget: 20000, lang, minRecent: 8 }).history;   // generous: compaction (ANIMA-tuned) drops old assistant turns, so keep more verbatim
     const histMsgs = hist.map((t) => ({ role: t.role === 'bot' ? 'assistant' : 'user', content: String(t.text || '') }))
       .filter((m) => m.content);   // {role,content} shape — accepted by BOTH Anthropic and Groq/OpenAI
-    const seedExtra = buildSeedExtra(opts.seed);
+    // opts.replyLang: the language the user WROTE in, when the caller can tell. Named in the prompt when it is not the
+    // OS language — told only "reply in the user's language", qwen3.5:9b summed up a Spanish task in Italian.
+    const langNote = opts.replyLang && opts.replyLang !== lang && LANG_NAMES[opts.replyLang]
+      ? 'LINGUA DELLA RISPOSTA: l\'utente ha scritto in ' + LANG_NAMES[opts.replyLang] + ' — scrivi tutta la risposta in ' + LANG_NAMES[opts.replyLang] + '.' : '';
+    const seedExtra = [buildSeedExtra(opts.seed), langNote].filter(Boolean).join('\n\n');
 
     const historyHint = hist.slice(-4).map((t) => (t.role === 'bot' ? 'A: ' : 'U: ') + String(t.text || '').slice(0, 200)).join('\n');
     lastEngine = null;
@@ -911,7 +959,13 @@ Sii conservativo: in dubbio scegli "task". Considera il contesto della conversaz
       plan = await orchestrate(userMsg, historyHint);
     }
 
-    if (plan.mode === 'answer' && plan.answer) { if (ui && ui.status) ui.status('Risposta diretta'); return String(plan.answer); }
+    // opts.hostAnswers: the caller has its own grounded chat (ANIMA: NucleoOS facts, device state, date, the user's
+    // model). The triage runs on the cheapest model with none of that — on the ADV it answered "what is NucleoOS?" with
+    // "a Linux IoT OS for STM32 Nucleo boards". For such a caller the triage only CLASSIFIES; null = "answer it yourself".
+    if (plan.mode === 'answer' && plan.answer) {
+      if (opts.hostAnswers) { if (ui && ui.status) ui.status('Risposta diretta'); return null; }
+      if (ui && ui.status) ui.status('Risposta diretta'); return String(plan.answer);
+    }
 
     if (plan.mode === 'parallel' && Array.isArray(plan.subtasks) && plan.subtasks.length > 1) {
       const subs = plan.subtasks.slice(0, PARALLEL);
@@ -936,16 +990,39 @@ Sii conservativo: in dubbio scegli "task". Considera il contesto della conversaz
     }
 
     // single task (default): route to the best model across all configured keys, with cross-provider fallback.
-    return publishTruth(await runWorkerWithFallback({
+    // The reply language also rides in the user turn, in that language: a 9B model ignored the system-prompt note and
+    // answered an English task in Italian (real Cardputer, 2026-10-10); it follows its own user turn far better.
+    const REPLY_IN = { en: '(Reply in English.)', es: '(Responde en español.)', fr: '(Réponds en français.)', de: '(Antworte auf Deutsch.)', it: '(Rispondi in italiano.)' };
+    const userTurn = langNote && REPLY_IN[opts.replyLang] ? userMsg + '\n\n' + REPLY_IN[opts.replyLang] : userMsg;
+    // fileTruth: a file the answer still claims but the workspace does not have is said plainly under it
+    return await fileTruth(publishTruth(await runWorkerWithFallback({
       spec: { difficulty: plan.hard ? 'hard' : 'mid', capability: plan.capability },
       system: workerSystem(seedExtra),
-      baseMessages: [...histMsgs, { role: 'user', content: userMsg }],
-    }));
+      baseMessages: [...histMsgs, { role: 'user', content: userTurn }],
+    })));
   }
 
   // The model's last word is not the record: qwen3.5:9b answered "Contatore created and installed!" after BOTH its
   // publish_app calls had been refused (nothing reached /apps). When the turn's last publish failed, the reply
   // says so — deterministically, from the tool result, whatever the model wrote.
+  // Files the final answer says were created / saved / updated that do NOT exist in the workspace. A 9B model computed the
+  // right CSV with run_js and answered "I've created totali.csv" — nothing had been written (real Cardputer, 2026-10-10).
+  // Only a file named right after a claim word counts ("non trovo foo.txt" is no claim).
+  const CLAIM_RE = /(?<!\p{L})(?:creat|cread|creé|cré|erstellt|creato|creata|salvat|saved|guardad|enregistr|gespeichert|scritt|written|wrote|escrit|écrit|ecrit|geschrieben|aggiornat|updated|actualizad|mis à jour|aktualisiert)\p{L}*/giu;
+  const FILE_RE = /[\w./-]*[\w-]\.(?:csv|txt|md|json|js|mjs|html?|css|py|svg|xml|log|tsv)\b/gi;
+  async function claimedMissing(text) {
+    const s = String(text || ''), named = new Set();
+    for (const m of s.matchAll(CLAIM_RE)) for (const f of s.slice(m.index, m.index + 90).match(FILE_RE) || []) named.add(f.replace(/^\.?\//, ''));
+    const miss = [];
+    for (const f of [...named].slice(0, 6)) { try { const st = await fs.stat(f); if (st && st.exists === false) miss.push(f); } catch {} }
+    return miss;
+  }
+  const NUDGE_NOT_WRITTEN = (files) => 'You said you created or saved ' + files + ', but it does not exist in the workspace: nothing was written. '
+    + 'Write it now with the tools (run_js with save_to for computed output, write_file for text), then answer. If it truly cannot be done, say so.';
+  async function fileTruth(reply) {
+    const miss = await claimedMissing(reply).catch(() => []);
+    return miss.length ? String(reply || '').trimEnd() + '\n\n⚠ ' + t('rt_file_not_written', { files: miss.join(', ') }) : reply;
+  }
   function publishTruth(reply) {
     if (lastPublish && lastPublish.ok && lastPublish.runtimeErrors)
       return String(reply || '').trimEnd() + '\n\n⚠ ' + t('rt_app_runtime_err', { errors: lastPublish.runtimeErrors.join(' | ') });
