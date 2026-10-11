@@ -103,6 +103,15 @@ function sharedCatalog(url) {
 }
 try { if (globalThis.top === globalThis) globalThis.__nucleoCatalogs = rawCatalogs; } catch {}
 
+// A catalog the LINK failed to deliver is not an empty catalog. The Cardputer answers "503 low memory" under
+// load and its httpd now and then resets a socket mid-response; caching that miss as {} used to leave the whole
+// session in English (the fallback floor) with no way back but a reload. Such a miss is retried here, then
+// handed out as FAILED (empty, so the build still falls back to English) and never cached: buildMerged
+// schedules a repair that fetches it again and repaints once it arrives. A 404 is a real "no catalog".
+const FAILED = Object.freeze({});
+const RETRY_MS = [400, 1200];
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
 function fetchCatalog(url) {
   // In-memory dedup within this document — the PROMISE is stored at once, so concurrent init() calls
   // share one request instead of racing past an empty cache.
@@ -111,15 +120,24 @@ function fetchCatalog(url) {
   if (shared !== undefined) { rawCatalogs.set(url, shared); return Promise.resolve(shared); }
   const job = (async () => {
     let obj = null;
-    try {
-      // No app-level persistent cache on purpose: the service worker already precaches core/shell and
-      // the HTTP cache covers the rest, so fetches are cheap — and a persistent cache would serve a
-      // STALE catalog for the whole session after a deploy/edit. The in-memory Map is enough.
-      const r = await fetch(url, { cache: 'no-cache' });
-      if (r.ok) obj = await r.json();
-    } catch {}
-    // A missing/empty catalog is fine (the namespace just inherits core + falls back to keys).
-    if (obj == null) obj = {};
+    for (let i = 0; ; i++) {
+      let transient = true;                   // a network error, or a body cut short (not JSON)
+      try {
+        // No app-level persistent cache on purpose: the service worker already precaches core/shell and
+        // the HTTP cache covers the rest, so fetches are cheap — and a persistent cache would serve a
+        // STALE catalog for the whole session after a deploy/edit. The in-memory Map is enough.
+        const r = await fetch(url, { cache: 'no-cache' });
+        transient = r.status === 408 || r.status === 429 || r.status >= 500;
+        if (r.ok) obj = await r.json();
+      } catch {}
+      if (obj != null) break;
+      if (!transient) { obj = {}; break; }   // a missing catalog is fine: the namespace inherits core + English
+      if (i >= RETRY_MS.length) {
+        rawCatalogs.delete(url);              // not cached: the next build (or a repair) asks again
+        return FAILED;
+      }
+      await sleep(RETRY_MS[i]);
+    }
     rawCatalogs.set(url, obj);
     return obj;
   })();
@@ -129,9 +147,9 @@ function fetchCatalog(url) {
 
 // Build the resolved lookup table for (ns, lang): core(base) ⊂ core(active) ⊂ ns(base) ⊂ ns(active).
 // Later layers win, so the active language overrides base, and the namespace overrides core.
-async function buildMerged(ns, lang) {
+async function buildMerged(ns, lang, { force = false } = {}) {
   const key = `${ns}|${lang}`;
-  if (merged.has(key)) return merged.get(key);
+  if (!force && merged.has(key)) return merged.get(key);
   // ENGLISH IS THE FALLBACK FLOOR (BASE) for BOTH layers. We always load the base(en) catalog under
   // the active one — for `core` AND for the app namespace — so a key missing from the active-language
   // file resolves to English, never to a raw key on screen. This matters for the tier-2 languages
@@ -139,12 +157,38 @@ async function buildMerged(ns, lang) {
   // to the key. core(en) is service-worker precached; the one extra ns(en) fetch is HTTP-cached and
   // tiny, and buys a guaranteed English fallback everywhere. Order = later wins.
   const langChain = lang === BASE ? [BASE] : [BASE, lang];   // [en] or [en, active]
-  const jobs = langChain.map((L) => fetchCatalog(urlFor('core', L)));
-  if (ns !== 'core') for (const L of langChain) jobs.push(fetchCatalog(urlFor(ns, L)));
-  const layers = await Promise.all(jobs);   // [core(en), core(active), ns(en), ns(active)] — later wins
+  const urls = langChain.map((L) => urlFor('core', L));
+  if (ns !== 'core') for (const L of langChain) urls.push(urlFor(ns, L));
+  const layers = await Promise.all(urls.map(fetchCatalog));   // [core(en), core(active), ns(en), ns(active)] — later wins
   const out = Object.assign({}, ...layers);
-  merged.set(key, out);
+  merged.set(key, out);                     // replaced whole, never deleted: a render meanwhile reads the old table
+  if (layers.includes(FAILED)) {
+    // Keep what arrived (English at worst, never raw keys) and fetch the rest again in the background.
+    incomplete.add(key);
+    urls.forEach((u, i) => { if (layers[i] === FAILED) rawCatalogs.delete(u); });
+    scheduleRepair(ns, lang);
+  } else incomplete.delete(key);
   return out;
+}
+
+// Rebuild a table that was built while a catalog could not be fetched and, once it is complete, repaint this
+// document. Spaced attempts (the device may stay busy for a while); after the last one English stays.
+const incomplete = new Set();       // `${ns}|${lang}` tables built with a FAILED layer
+const repairs = new Map();          // `${ns}|${lang}` -> { n: attempts made, pending }
+const REPAIR_MS = [3000, 8000, 20000, 45000];
+function scheduleRepair(ns, lang) {
+  const key = `${ns}|${lang}`;
+  const st = repairs.get(key) || { n: 0, pending: false };
+  if (st.pending || st.n >= REPAIR_MS.length) return;
+  st.pending = true; repairs.set(key, st);
+  setTimeout(async () => {
+    st.pending = false; st.n++;
+    await buildMerged(ns, lang, { force: true });       // still failing: it schedules the next attempt itself
+    if (incomplete.has(key) || lang !== activeLang) return;
+    syncDocAttrs();
+    I18N.apply(document, defaultNamespace());
+    subscribers.forEach((cb) => { try { cb(lang); } catch {} });
+  }, REPAIR_MS[st.n]);
 }
 
 // --- formatting (the "professional OS" touch: locale-correct dates/numbers) --

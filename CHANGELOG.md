@@ -22,6 +22,9 @@ All notable user-facing changes to NucleoOS. Format loosely follows
   live in a small memory area shared with the Launcher; once it filled up, every new pairing was forgotten at
   the next restart — opening the web desktop for the first time asked for the PIN a second time. They are now
   stored in a third of the space, and if room still runs out the oldest sessions give way, never the one in use.
+- **The desktop no longer gets stuck in English after a hiccup.** When the Cardputer was busy at the moment the
+  desktop loaded its language, the whole session fell back to English until a reload. The language is now
+  retried, and the desktop switches to it by itself as soon as it arrives.
 
 ## [0.7.1] — 2026-10-11
 
