@@ -95,11 +95,16 @@ export function makeFS(initialRoot) {
   const baseDir = () => (cwd ? normPath(root + '/' + cwd) : root);
   // Resolve a user/agent path to an SD-absolute path confined to the workspace.
   // Relative paths join the current dir (root + cwd); absolute paths must sit inside root.
+  // A relative path that starts with the root itself ("data/proj/x" in /data/proj) names the root: models drop the
+  // leading slash of a path they were shown absolute, and joining it nested every write at /data/proj/data/proj/x
+  // (the claim check then said "not written", and the stray data/ folder misled every later turn).
   function resolve(p) {
     if (!root) throw new RangeError('no-workspace');
     const raw = String(p == null ? '' : p).trim();
     const base = baseDir();
-    const joined = raw === '' ? base : (raw[0] === '/' ? raw : base + '/' + raw);
+    const rootRel = root.slice(1), bare = raw.replace(/^(\.\/)+/, '');
+    const rootPrefixed = raw[0] !== '/' && rootRel !== '' && (bare === rootRel || bare.startsWith(rootRel + '/'));
+    const joined = raw === '' ? base : (raw[0] === '/' ? raw : rootPrefixed ? '/' + bare : base + '/' + raw);
     const full = normPath(joined);
     if (full !== root && !full.startsWith(root + '/')) throw new RangeError('escape');
     return full;

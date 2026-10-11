@@ -68,3 +68,24 @@ test('mkdir and move into a missing root work too', async () => {
   assert.equal(mv.ok, true, JSON.stringify(mv));
   assert.equal(dev.files.get('/data/agent/x.md'), 'x');
 });
+
+// Regression (anima-code E2E on the real qwen3.5:9b): the model wrote "data/proj/orologio.html" — the workspace path it
+// had been shown, minus the leading slash — and it was joined to the root: /data/proj/data/proj/orologio.html. The
+// claim check then said the file "was not written", and the stray data/ folder misled every later turn (the next
+// "create bonjour.txt" landed in data/bonjour.txt; a search reported lib/ as empty).
+test('a relative path that repeats the workspace root names the root, not a nested copy of it', async () => {
+  const dev = fakeDevice(['/', '/data', '/data/proj']);
+  const fs = makeFS('/data/proj');
+  assert.equal(fs.resolve('data/proj/orologio.html'), '/data/proj/orologio.html');
+  assert.equal(fs.resolve('./data/proj/lib/format.js'), '/data/proj/lib/format.js');
+  assert.equal(fs.resolve('data/proj'), '/data/proj');
+  assert.equal(fs.resolve('/data/proj/app.js'), '/data/proj/app.js');               // absolute: unchanged
+  assert.equal(fs.resolve('lib/format.js'), '/data/proj/lib/format.js');            // plain relative: unchanged
+  assert.equal(fs.resolve('data/other.txt'), '/data/proj/data/other.txt');          // only the WHOLE root prefix counts
+  assert.equal(fs.resolve('data/project/x.txt'), '/data/proj/data/project/x.txt');  // …segment by segment
+  assert.throws(() => fs.resolve('data/proj/../../etc'), RangeError);               // still confined
+  const r = await fs.write('data/proj/bonjour.txt', 'Bonjour le monde');
+  assert.equal(r.ok, true, JSON.stringify(r));
+  assert.equal(dev.files.get('/data/proj/bonjour.txt'), 'Bonjour le monde');
+  assert.ok(!dev.dirs.has('/data/proj/data'), 'no nested data/ folder was created');
+});

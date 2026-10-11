@@ -346,7 +346,7 @@
                                       },
     "apps/anima/www/anima-skill.js.gz":  {
                                              "size":  "4012",
-                                             "mtime":  "639273132976544613",
+                                             "mtime":  "639273193488483584",
                                              "hash":  "7ac798c54cddb8ed62efcfc79b936c54361bc6e16c04098834c1e55f7f149057"
                                          },
     "apps/anima/www/assets/icon.svg":  {
@@ -356,7 +356,7 @@
                                        },
     "apps/anima/www/assets/icon.svg.gz":  {
                                               "size":  "336",
-                                              "mtime":  "639273132976549593",
+                                              "mtime":  "639273193488490870",
                                               "hash":  "96748f91f70fbbc63254bae2967ef3e4745404882d978775cfa615174b3408a5"
                                           },
     "apps/anima/www/context.js":  {
@@ -366,7 +366,7 @@
                                   },
     "apps/anima/www/context.js.gz":  {
                                          "size":  "1965",
-                                         "mtime":  "639273132976557403",
+                                         "mtime":  "639273193488490870",
                                          "hash":  "a477aa30ff1990f2668ca9a4b4d115bd890ebbfef0883335796fa22e72f7ba12"
                                      },
     "apps/anima/www/contextkit.js":  {
@@ -376,7 +376,7 @@
                                      },
     "apps/anima/www/contextkit.js.gz":  {
                                             "size":  "18600",
-                                            "mtime":  "639273132976580230",
+                                            "mtime":  "639273193488510980",
                                             "hash":  "dda074ca32274196f4dfdea6ff204b7594a00da01fb166c9ada9a3a6318a40fb"
                                         },
     "apps/anima/www/edit-replace.js":  {
@@ -386,7 +386,7 @@
                                        },
     "apps/anima/www/edit-replace.js.gz":  {
                                               "size":  "3098",
-                                              "mtime":  "639273133009334577",
+                                              "mtime":  "639273193494429069",
                                               "hash":  "49a248da5033855594f71fb58620b4feb5d2002f98d8167e0de56f4770436478"
                                           },
     "apps/anima/www/forge/actions.js":  {
@@ -396,7 +396,7 @@
                                         },
     "apps/anima/www/forge/actions.js.gz":  {
                                                "size":  "2242",
-                                               "mtime":  "639273132976601390",
+                                               "mtime":  "639273193488510980",
                                                "hash":  "c847f1b2b499a9e06ab490c2cf5b8dc1a62db04df424a4b4e99f222e5b1a82b1"
                                            },
     "apps/anima/www/forge/capguard.js":  {
@@ -406,7 +406,7 @@
                                          },
     "apps/anima/www/forge/capguard.js.gz":  {
                                                 "size":  "1922",
-                                                "mtime":  "639273132976601390",
+                                                "mtime":  "639273193488531058",
                                                 "hash":  "5bb3997a0c0c09c7a7c055488b6df98fbdba776ddccd4bc32c7d0e436199f085"
                                             },
     "apps/anima/www/forge/client.js":  {
@@ -416,7 +416,7 @@
                                        },
     "apps/anima/www/forge/client.js.gz":  {
                                               "size":  "2524",
-                                              "mtime":  "639273132976601390",
+                                              "mtime":  "639273193488531058",
                                               "hash":  "57a757635128091852e49e4de8f5f490a5928883e216c1ccf4fcbaed51ae294a"
                                           },
     "apps/anima/www/forge/download-manager.js":  {
@@ -426,7 +426,7 @@
                                                  },
     "apps/anima/www/forge/download-manager.js.gz":  {
                                                         "size":  "3177",
-                                                        "mtime":  "639273132976601390",
+                                                        "mtime":  "639273193488531058",
                                                         "hash":  "9fbb1c50ea062b1385b934cb3643c83523f93d32c51012f26d965320acc21e9d"
                                                     },
     "apps/anima/www/forge/download.js":  {
@@ -436,7 +436,7 @@
                                          },
     "apps/anima/www/forge/download.js.gz":  {
                                                 "size":  "1801",
-                                                "mtime":  "639273132976621519",
+                                                "mtime":  "639273193488554807",
                                                 "hash":  "192cc4c8a71263e3868fa1f2a1009d34b9edb05a06d229e138eaba8edc09a72a"
                                             },
     "apps/anima/www/forge/engine-loader.js":  {
@@ -446,7 +446,7 @@
                                               },
     "apps/anima/www/forge/engine-loader.js.gz":  {
                                                      "size":  "1931",
-                                                     "mtime":  "639273132976629353",
+                                                     "mtime":  "639273193488554807",
                                                      "hash":  "44a2d18234167059a307e38148e09d91ecbee719bdbfced5ad21c3294201b28a"
                                                  },
     "apps/anima/www/forge/engine-policy.js":  {
@@ -456,7 +456,7 @@
                                               },
     "apps/anima/www/forge/engine-policy.js.gz":  {
                                                      "size":  "2788",
-                                                     "mtime":  "639273132976635395",
+                                                     "mtime":  "639273193488554807",
                                                      "hash":  "2e8690ae94d0de6d351db153eb679ce0c6ba2f4b09c4a48a5a7b6769d54f0b9f"
                                                  },
     "apps/anima/www/forge/engine.js":  {
@@ -466,7 +466,7 @@
                                        },
     "apps/anima/www/forge/engine.js.gz":  {
                                               "size":  "801",
-                                              "mtime":  "639273132976635395",
+                                              "mtime":  "639273193488575314",
                                               "hash":  "cfccf479b378a2ee36fcee0892a4d7d9e5c861627cd2a9c0b4b5f656f903d1d1"
                                           },
     "apps/anima/www/forge/envelope.js":  {
@@ -476,7 +476,7 @@
                                          },
     "apps/anima/www/forge/envelope.js.gz":  {
                                                 "size":  "1669",
-                                                "mtime":  "639273132976635395",
+                                                "mtime":  "639273193488575314",
                                                 "hash":  "7684cbe78c3832948457c46e8db4f73003ed1a5f04dc2ce0b07e611b50b017af"
                                             },
     "apps/anima/www/forge/extract.js":  {
@@ -486,7 +486,7 @@
                                         },
     "apps/anima/www/forge/extract.js.gz":  {
                                                "size":  "2154",
-                                               "mtime":  "639273132976635395",
+                                               "mtime":  "639273193488595397",
                                                "hash":  "0f6af855b00f0558f23b04cd1549d1b0dc174e403cba151155445ac09f0b4e5b"
                                            },
     "apps/anima/www/forge/grammar.js":  {
@@ -496,7 +496,7 @@
                                         },
     "apps/anima/www/forge/grammar.js.gz":  {
                                                "size":  "1526",
-                                               "mtime":  "639273132976655444",
+                                               "mtime":  "639273193488595397",
                                                "hash":  "fc9c42f782d61215978bb9f79e6c07da0add529f4b19bf3ccd12611a06c52323"
                                            },
     "apps/anima/www/forge/install-flow.js":  {
@@ -506,7 +506,7 @@
                                              },
     "apps/anima/www/forge/install-flow.js.gz":  {
                                                     "size":  "7324",
-                                                    "mtime":  "639273132976655444",
+                                                    "mtime":  "639273193488595397",
                                                     "hash":  "cbb2c3ccf758263e22235fee4c8bf425b11acd6dcd0a072ad8fcf16e3593d61d"
                                                 },
     "apps/anima/www/forge/install-modal.js":  {
@@ -516,7 +516,7 @@
                                               },
     "apps/anima/www/forge/install-modal.js.gz":  {
                                                      "size":  "5834",
-                                                     "mtime":  "639273132976655444",
+                                                     "mtime":  "639273193488615477",
                                                      "hash":  "208b83aa7ddc9ee83022313dd7dc35db45a287652c5f9d113ef11f4a5d42e2ae"
                                                  },
     "apps/anima/www/forge/learn.js":  {
@@ -526,7 +526,7 @@
                                       },
     "apps/anima/www/forge/learn.js.gz":  {
                                              "size":  "4452",
-                                             "mtime":  "639273132976675566",
+                                             "mtime":  "639273193488615477",
                                              "hash":  "8f2ff060e109b25955ed21e136c19615fbf8727b0aded2710866d074401ea255"
                                          },
     "apps/anima/www/forge/lib-resolver.js":  {
@@ -536,7 +536,7 @@
                                              },
     "apps/anima/www/forge/lib-resolver.js.gz":  {
                                                     "size":  "2667",
-                                                    "mtime":  "639273132976675566",
+                                                    "mtime":  "639273193488635564",
                                                     "hash":  "97f06e1d23bef068e909c2bbf65baffd80a82974682b2362b4985df01d67aaf1"
                                                 },
     "apps/anima/www/forge/lib-verify.js":  {
@@ -546,7 +546,7 @@
                                            },
     "apps/anima/www/forge/lib-verify.js.gz":  {
                                                   "size":  "1693",
-                                                  "mtime":  "639273132976675566",
+                                                  "mtime":  "639273193488639560",
                                                   "hash":  "5e1a22bb3c178f4e8bf759661099c711a07c0561476995dff92415d5cfc38070"
                                               },
     "apps/anima/www/forge/local-models.js":  {
@@ -556,7 +556,7 @@
                                              },
     "apps/anima/www/forge/local-models.js.gz":  {
                                                     "size":  "2972",
-                                                    "mtime":  "639273133014521471",
+                                                    "mtime":  "639273193500531858",
                                                     "hash":  "7ac6266145a4cef9e85745a9f7106e795472eab72c1ac70df08fdbac6559b407"
                                                 },
     "apps/anima/www/forge/loop.js":  {
@@ -566,7 +566,7 @@
                                      },
     "apps/anima/www/forge/loop.js.gz":  {
                                             "size":  "4252",
-                                            "mtime":  "639273132976695692",
+                                            "mtime":  "639273193488659682",
                                             "hash":  "bc0f91f08bd7a4b3419fa7684daaa386c6463d4f0dc79c8263a5aa79b5ae4093"
                                         },
     "apps/anima/www/forge/model-fetch.js":  {
@@ -576,7 +576,7 @@
                                             },
     "apps/anima/www/forge/model-fetch.js.gz":  {
                                                    "size":  "3750",
-                                                   "mtime":  "639273132976695692",
+                                                   "mtime":  "639273193488659682",
                                                    "hash":  "877898e4748a4552109ec066cf4e09e94412e1af45082d616d8760e0d6f41ce6"
                                                },
     "apps/anima/www/forge/model-io.js":  {
@@ -586,7 +586,7 @@
                                          },
     "apps/anima/www/forge/model-io.js.gz":  {
                                                 "size":  "2909",
-                                                "mtime":  "639273132976711050",
+                                                "mtime":  "639273193488659682",
                                                 "hash":  "bdedfc893af525f1a98414f92d41b69320d04e6894a48df9f1ae248df85f9d65"
                                             },
     "apps/anima/www/forge/model-store.js":  {
@@ -596,7 +596,7 @@
                                             },
     "apps/anima/www/forge/model-store.js.gz":  {
                                                    "size":  "7828",
-                                                   "mtime":  "639273132976716564",
+                                                   "mtime":  "639273193488679767",
                                                    "hash":  "063ee528645ebf630e7910f4bcbfae0448ad998abb9a4c8b6f109c0d53b4c1a8"
                                                },
     "apps/anima/www/forge/model-url-map.js":  {
@@ -606,7 +606,7 @@
                                               },
     "apps/anima/www/forge/model-url-map.js.gz":  {
                                                      "size":  "883",
-                                                     "mtime":  "639273132976716564",
+                                                     "mtime":  "639273193488679767",
                                                      "hash":  "04db85834759b788e62ac49476487ed520795d00af4ec46871318550bd8e8d27"
                                                  },
     "apps/anima/www/forge/provenance.js":  {
@@ -616,7 +616,7 @@
                                            },
     "apps/anima/www/forge/provenance.js.gz":  {
                                                   "size":  "1303",
-                                                  "mtime":  "639273132976716564",
+                                                  "mtime":  "639273193488679767",
                                                   "hash":  "2781996b628e413642fc8cea3db4dd3d2591812e0bbf2683dcd11e4f601683f1"
                                               },
     "apps/anima/www/forge/readiness.js":  {
@@ -626,7 +626,7 @@
                                           },
     "apps/anima/www/forge/readiness.js.gz":  {
                                                  "size":  "4819",
-                                                 "mtime":  "639273132976736614",
+                                                 "mtime":  "639273193488699840",
                                                  "hash":  "2ace8297c6448c59b734ead764bd8dfec70dbde703c8a0a07cae6c03007ee815"
                                              },
     "apps/anima/www/forge/router.js":  {
@@ -636,7 +636,7 @@
                                        },
     "apps/anima/www/forge/router.js.gz":  {
                                               "size":  "2316",
-                                              "mtime":  "639273132976736614",
+                                              "mtime":  "639273193488699840",
                                               "hash":  "cded3acbee48e2ba203a447378b6d0a78829f67fa8c655c70f854f2cef340afe"
                                           },
     "apps/anima/www/forge/scheduler.js":  {
@@ -646,7 +646,7 @@
                                           },
     "apps/anima/www/forge/scheduler.js.gz":  {
                                                  "size":  "1091",
-                                                 "mtime":  "639273132976736614",
+                                                 "mtime":  "639273193488699840",
                                                  "hash":  "c36dea5b57ae466a529cca01e25d0fd407b0a3b432d8518f2d0abce4e6246dd0"
                                              },
     "apps/anima/www/forge/sd-model-loader.js":  {
@@ -656,7 +656,7 @@
                                                 },
     "apps/anima/www/forge/sd-model-loader.js.gz":  {
                                                        "size":  "2018",
-                                                       "mtime":  "639273132976736614",
+                                                       "mtime":  "639273193488699840",
                                                        "hash":  "b92d779245d24ba1d53d3dca49bc8319348f7176f36115523d7b514aea20cdde"
                                                    },
     "apps/anima/www/forge/selfcheck.js":  {
@@ -666,7 +666,7 @@
                                           },
     "apps/anima/www/forge/selfcheck.js.gz":  {
                                                  "size":  "832",
-                                                 "mtime":  "639273132976756720",
+                                                 "mtime":  "639273193488719910",
                                                  "hash":  "e1dbb6dd640d837ae1d34d9774fd6052686daa477acc19bdfdf1754b283aeda1"
                                              },
     "apps/anima/www/forge/transcript.js":  {
@@ -676,7 +676,7 @@
                                            },
     "apps/anima/www/forge/transcript.js.gz":  {
                                                   "size":  "1703",
-                                                  "mtime":  "639273132976756720",
+                                                  "mtime":  "639273193488719910",
                                                   "hash":  "95ca416e136311e0700857d3230ab36973725e62bf065b034c73a27cbfa4db45"
                                               },
     "apps/anima/www/forge/vendor/.gitattributes":  {
@@ -701,7 +701,7 @@
                                                       },
     "apps/anima/www/forge/vendor/lib-manifest.json.gz":  {
                                                              "size":  "559",
-                                                             "mtime":  "639273132976756720",
+                                                             "mtime":  "639273193488719910",
                                                              "hash":  "a51abc577efd052a97df3aa67c4f9bafca1b4b350b7a88d99b11414c884dc6ed"
                                                          },
     "apps/anima/www/forge/vendor/web-llm.js":  {
@@ -711,7 +711,7 @@
                                                },
     "apps/anima/www/forge/vendor/web-llm.js.gz":  {
                                                       "size":  "2147775",
-                                                      "mtime":  "639273132978541926",
+                                                      "mtime":  "639273193490542493",
                                                       "hash":  "46e87b90074c364060a45ea345df689f99e53fd5ca94717011f944b173f56bc8"
                                                   },
     "apps/anima/www/forge/vendor/wllama.mjs":  {
@@ -721,7 +721,7 @@
                                                },
     "apps/anima/www/forge/vendor/wllama.mjs.gz":  {
                                                       "size":  "9764",
-                                                      "mtime":  "639273132978541926",
+                                                      "mtime":  "639273193490582336",
                                                       "hash":  "936c5197a0d044886515976c363319168f3445ff9d842738231c57ca83920eb9"
                                                   },
     "apps/anima/www/forge/vendor/wllama/multi-thread/wllama.wasm":  {
@@ -741,7 +741,7 @@
                                        },
     "apps/anima/www/forge/verify.js.gz":  {
                                               "size":  "1218",
-                                              "mtime":  "639273132978541926",
+                                              "mtime":  "639273193490602461",
                                               "hash":  "9e769bb53901f83e91324972d675ad8a004569f27f10f695ed751dcbdb87b2b5"
                                           },
     "apps/anima/www/forge/wasm-engine.js":  {
@@ -751,7 +751,7 @@
                                             },
     "apps/anima/www/forge/wasm-engine.js.gz":  {
                                                    "size":  "1662",
-                                                   "mtime":  "639273132978569816",
+                                                   "mtime":  "639273193490602461",
                                                    "hash":  "651a6085f7dc0b4359defb2474fe7d4721b84ee17693869dd28d580ebaf10144"
                                                },
     "apps/anima/www/forge/webllm-engine.js":  {
@@ -761,18 +761,18 @@
                                               },
     "apps/anima/www/forge/webllm-engine.js.gz":  {
                                                      "size":  "3270",
-                                                     "mtime":  "639273132978569816",
+                                                     "mtime":  "639273193490602461",
                                                      "hash":  "1f3d539c0f939d611d7e1729c8d50e917876f4dd2096ccf49032884afce3394a"
                                                  },
     "apps/anima/www/fsclient.js":  {
-                                       "size":  "16700",
-                                       "mtime":  "639264487934411350",
-                                       "hash":  "7812d42da1297c35f530dc4c59dde372f6ba9f9303372c720912771dea2ea4e3"
+                                       "size":  "16936",
+                                       "mtime":  "639273182444535838",
+                                       "hash":  "cd6d6bafe87f27067a7ac31e68db74198e0a2e9f4fb4707547c69138d16d0834"
                                    },
     "apps/anima/www/fsclient.js.gz":  {
-                                          "size":  "5390",
-                                          "mtime":  "639273132978569816",
-                                          "hash":  "c672e53190c5b1e87acc4c3dcfc99532a6e5ae8b044c3fa5ba7a59ffd2b6a02f"
+                                          "size":  "5596",
+                                          "mtime":  "639273193490602461",
+                                          "hash":  "699e1bb12fb62515880bbc658de740de5d90e7fc7b9f4048c8970e0c8b93ce1d"
                                       },
     "apps/anima/www/i18n.de.json":  {
                                         "size":  "16663",
@@ -781,7 +781,7 @@
                                     },
     "apps/anima/www/i18n.de.json.gz":  {
                                            "size":  "6042",
-                                           "mtime":  "639273132978589958",
+                                           "mtime":  "639273193490622546",
                                            "hash":  "bf16670e4d6fde64bbcfb7c839f46b5cd27c0ed4be728843339f7be4b22b5794"
                                        },
     "apps/anima/www/i18n.en.json":  {
@@ -791,7 +791,7 @@
                                     },
     "apps/anima/www/i18n.en.json.gz":  {
                                            "size":  "5435",
-                                           "mtime":  "639273132978589958",
+                                           "mtime":  "639273193490622546",
                                            "hash":  "ace4fc5e4b7111b7444354c7dd67f9ded4c87afa2ff1555254b90c2ad661b82e"
                                        },
     "apps/anima/www/i18n.es.json":  {
@@ -801,7 +801,7 @@
                                     },
     "apps/anima/www/i18n.es.json.gz":  {
                                            "size":  "5874",
-                                           "mtime":  "639273132978589958",
+                                           "mtime":  "639273193490637065",
                                            "hash":  "63d7fb21e59d2f6b4341486259b12fe0f57037783d6dc4e12715508f7d312624"
                                        },
     "apps/anima/www/i18n.fr.json":  {
@@ -811,7 +811,7 @@
                                     },
     "apps/anima/www/i18n.fr.json.gz":  {
                                            "size":  "6087",
-                                           "mtime":  "639273132978589958",
+                                           "mtime":  "639273193490640340",
                                            "hash":  "a0915a462ac84a0d6bc668372e7d460ea83662adf0376fafc42e4aee9624bc85"
                                        },
     "apps/anima/www/i18n.it.json":  {
@@ -821,7 +821,7 @@
                                     },
     "apps/anima/www/i18n.it.json.gz":  {
                                            "size":  "5751",
-                                           "mtime":  "639273132978610113",
+                                           "mtime":  "639273193490660490",
                                            "hash":  "e05b1a7f5d759c7bd2bb1dd69ea350414dba88681117e26e5e163c9754f6d9d4"
                                        },
     "apps/anima/www/index.html":  {
@@ -831,7 +831,7 @@
                                   },
     "apps/anima/www/index.html.gz":  {
                                          "size":  "167679",
-                                         "mtime":  "639273132978792052",
+                                         "mtime":  "639273193490864842",
                                          "hash":  "e755ca6fc07f8b37ef1152ee486b09a33f4866cf20674d8a1c7b5012d76579f1"
                                      },
     "apps/anima/www/local-llm.js":  {
@@ -841,7 +841,7 @@
                                     },
     "apps/anima/www/local-llm.js.gz":  {
                                            "size":  "6760",
-                                           "mtime":  "639273133022938647",
+                                           "mtime":  "639273193506055725",
                                            "hash":  "452526823a34653ba67124ac7b904ba6c0e5afe1da53a843ee5a153cf8f391bf"
                                        },
     "apps/anima/www/local/anima-local.mjs":  {
@@ -851,7 +851,7 @@
                                              },
     "apps/anima/www/local/anima-local.mjs.gz":  {
                                                     "size":  "20749",
-                                                    "mtime":  "639273132978814469",
+                                                    "mtime":  "639273193490904994",
                                                     "hash":  "202bb04056aec5eca4a10e137082161852a18811eddddef92085d89e615f87f5"
                                                 },
     "apps/anima/www/local/anima-local.wasm":  {
@@ -871,7 +871,7 @@
                                         },
     "apps/anima/www/local/cascade.js.gz":  {
                                                "size":  "16269",
-                                               "mtime":  "639273132978814469",
+                                               "mtime":  "639273193490925094",
                                                "hash":  "0b10f453d3805b4abdd920dbd638c87bd18843d33a653e66e21262dc1917129c"
                                            },
     "apps/anima/www/local/engine.js":  {
@@ -881,7 +881,7 @@
                                        },
     "apps/anima/www/local/engine.js.gz":  {
                                               "size":  "12142",
-                                              "mtime":  "639273132978834515",
+                                              "mtime":  "639273193490925094",
                                               "hash":  "0ac20aa79d7e24aeb11edc95cb76f5c182212abe1f65d223082faf39ea6a1396"
                                           },
     "apps/anima/www/local/nlmath.js":  {
@@ -891,7 +891,7 @@
                                        },
     "apps/anima/www/local/nlmath.js.gz":  {
                                               "size":  "8196",
-                                              "mtime":  "639273132978854611",
+                                              "mtime":  "639273193490945169",
                                               "hash":  "9fca1b9cf91e385bb6a3cfb0a55409b045b30869f394f52d4a036d16d9851c5c"
                                           },
     "apps/anima/www/local/weather.js":  {
@@ -901,7 +901,7 @@
                                         },
     "apps/anima/www/local/weather.js.gz":  {
                                                "size":  "13145",
-                                               "mtime":  "639273132978854611",
+                                               "mtime":  "639273193490962696",
                                                "hash":  "9b82ce943bc3be745a32fd089384c5252c4d5f19314c047ed22e153a88780aa0"
                                            },
     "apps/anima/www/local/webindex.js":  {
@@ -911,7 +911,7 @@
                                          },
     "apps/anima/www/local/webindex.js.gz":  {
                                                 "size":  "8261",
-                                                "mtime":  "639273132978854611",
+                                                "mtime":  "639273193490970527",
                                                 "hash":  "5a52b59824432dbdc35d1e93df2e1214cdb16702c9472a6233b88f1930e21f33"
                                             },
     "apps/anima/www/local/webstore.js":  {
@@ -921,7 +921,7 @@
                                          },
     "apps/anima/www/local/webstore.js.gz":  {
                                                 "size":  "1738",
-                                                "mtime":  "639273132978874717",
+                                                "mtime":  "639273193490970527",
                                                 "hash":  "3eef2043dd71c21813d201addbb66c78332b65c21f8de85eaf8745bed0a6a576"
                                             },
     "apps/anima/www/nlfs.js":  {
@@ -931,7 +931,7 @@
                                },
     "apps/anima/www/nlfs.js.gz":  {
                                       "size":  "5757",
-                                      "mtime":  "639273132978898779",
+                                      "mtime":  "639273193490992478",
                                       "hash":  "9d7c66991f68248df3840f41ed253c3f33c973e2693f6ac0813f63bd8556f99d"
                                   },
     "apps/anima/www/stream.js":  {
@@ -941,7 +941,7 @@
                                  },
     "apps/anima/www/stream.js.gz":  {
                                         "size":  "3229",
-                                        "mtime":  "639273133028168129",
+                                        "mtime":  "639273193511275388",
                                         "hash":  "b0d6f41f09844a2ce40e1045d3b643a8d8a833ca6f0c25f12f9431908289bc01"
                                     },
     "apps/anima/www/voice.js":  {
@@ -951,7 +951,7 @@
                                 },
     "apps/anima/www/voice.js.gz":  {
                                        "size":  "6362",
-                                       "mtime":  "639273132978918892",
+                                       "mtime":  "639273193490992478",
                                        "hash":  "22906db4f984004821048d78f46789906e51784d10e60632ee15a0aa8f1158e4"
                                    },
     "apps/anima/www/vosk/models/vosk-model-small-en-us-0.15.tar.gz.000":  {
@@ -1016,7 +1016,7 @@
                                                     },
     "apps/anima/www/vosk/recognizer-processor.js.gz":  {
                                                            "size":  "501",
-                                                           "mtime":  "639273132978918892",
+                                                           "mtime":  "639273193491012613",
                                                            "hash":  "c3c87ae69f58b812b24049374fca35bdda35d241447af672131d3a624d66b9c1"
                                                        },
     "apps/anima/www/vosk/vosk.js":  {
@@ -1026,7 +1026,7 @@
                                     },
     "apps/anima/www/vosk/vosk.js.gz":  {
                                            "size":  "2348497",
-                                           "mtime":  "639273132980231458",
+                                           "mtime":  "639273193492242304",
                                            "hash":  "026a96eb0e2ad814b3d900c3d181231d6dff8fc367b12c4eb7c7b1276269ad4c"
                                        },
     "apps/arcade/manifest.json":  {
@@ -8791,7 +8791,7 @@
                                 },
     "www/shell/ai-engines.js.gz":  {
                                        "size":  "10655",
-                                       "mtime":  "639273138563679861",
+                                       "mtime":  "639273193487687374",
                                        "hash":  "d99c27ef5a76958e960e615daa5c62a35a1aeadd60c369201b185c0179f2ec7a"
                                    },
     "www/shell/ai-keys.js":  {
@@ -8801,7 +8801,7 @@
                              },
     "www/shell/ai-keys.js.gz":  {
                                     "size":  "8369",
-                                    "mtime":  "639273138563679861",
+                                    "mtime":  "639273193487707467",
                                     "hash":  "2816caa070b3a8343bb8aec51f9537b9b413c93948e13ca6c525b1f5240255f2"
                                 },
     "www/shell/ai.js":  {
@@ -8811,7 +8811,7 @@
                         },
     "www/shell/ai.js.gz":  {
                                "size":  "18918",
-                               "mtime":  "639273138563699764",
+                               "mtime":  "639273193487721071",
                                "hash":  "293a2c2ecdbc565eae7ccdb561cf3dadb7113d4ba3b6f65531d12c2cb9b4813b"
                            },
     "www/shell/ambient.js":  {
@@ -8821,7 +8821,7 @@
                              },
     "www/shell/ambient.js.gz":  {
                                     "size":  "3257",
-                                    "mtime":  "639273138563699764",
+                                    "mtime":  "639273193487726241",
                                     "hash":  "bf60379835e9c44830fc15732e365206a1d58bded10ea5f2872338129b9776ce"
                                 },
     "www/shell/anima-mode.js":  {
@@ -8831,7 +8831,7 @@
                                 },
     "www/shell/anima-mode.js.gz":  {
                                        "size":  "3009",
-                                       "mtime":  "639273138566149191",
+                                       "mtime":  "639273193516502461",
                                        "hash":  "d0aa7c35790f88f4f50ba915a20e94337e6bae0121adaa15d2cf259a7f6f3104"
                                    },
     "www/shell/app-catalog.json":  {
@@ -8841,7 +8841,7 @@
                                    },
     "www/shell/app-catalog.json.gz":  {
                                           "size":  "3188",
-                                          "mtime":  "639273138571581627",
+                                          "mtime":  "639273193521806510",
                                           "hash":  "d7781424971f91e06d3d77fbb2651b570511786cb8b2796efad747bdebbe603c"
                                       },
     "www/shell/appbroker.js":  {
@@ -8851,7 +8851,7 @@
                                },
     "www/shell/appbroker.js.gz":  {
                                       "size":  "5799",
-                                      "mtime":  "639273138563719769",
+                                      "mtime":  "639273193487746395",
                                       "hash":  "fd0ff180f6ae1a1bdcc74a6acef9d0e17ea514098ef36715c49d5739715c19bf"
                                   },
     "www/shell/boot-fetch.js":  {
@@ -8861,7 +8861,7 @@
                                 },
     "www/shell/boot-fetch.js.gz":  {
                                        "size":  "2556",
-                                       "mtime":  "639273138563729823",
+                                       "mtime":  "639273193487746395",
                                        "hash":  "0de1c446db2c731af782cdb6d9effcfb738710f8b85e7e2a4f08bc33d8b26887"
                                    },
     "www/shell/busy.js":  {
@@ -8871,7 +8871,7 @@
                           },
     "www/shell/busy.js.gz":  {
                                  "size":  "962",
-                                 "mtime":  "639273138576806540",
+                                 "mtime":  "639273193526916723",
                                  "hash":  "dab845891a434b080cc1fae3a60fd1a536900f7c11b6976ecee663a13c76a5f8"
                              },
     "www/shell/capabilities.js":  {
@@ -8881,7 +8881,7 @@
                                   },
     "www/shell/capabilities.js.gz":  {
                                          "size":  "5112",
-                                         "mtime":  "639273138563739820",
+                                         "mtime":  "639273193487766577",
                                          "hash":  "2fdffcf03d7cc179b47968f2bfa4bfe22529dc44bf3d782ceb7901ee708b8828"
                                      },
     "www/shell/copilot.css":  {
@@ -8891,7 +8891,7 @@
                               },
     "www/shell/copilot.css.gz":  {
                                      "size":  "2553",
-                                     "mtime":  "639273138563749801",
+                                     "mtime":  "639273193487766577",
                                      "hash":  "0a32bfa9b8d7d26701d946248fa0ac2d8ed8f98076675525640dc146f5aefbcd"
                                  },
     "www/shell/copilot.js":  {
@@ -8901,7 +8901,7 @@
                              },
     "www/shell/copilot.js.gz":  {
                                     "size":  "17704",
-                                    "mtime":  "639273138563759769",
+                                    "mtime":  "639273193487786685",
                                     "hash":  "202fa2a3e36496f09e7b2219a1d9d930cb5799bb6eaf03b8856a61055431cea0"
                                 },
     "www/shell/dlgate.js":  {
@@ -8911,7 +8911,7 @@
                             },
     "www/shell/dlgate.js.gz":  {
                                    "size":  "1225",
-                                   "mtime":  "639273138563769854",
+                                   "mtime":  "639273193487786685",
                                    "hash":  "2977c86e21169ee7afd9cbb8b2e981e2bdeec4e9bf4c8738a7e53ed2ebf61b70"
                                },
     "www/shell/downloads/NucleoConnect.exe":  {
@@ -8931,7 +8931,7 @@
                              },
     "www/shell/fsindex.js.gz":  {
                                     "size":  "3816",
-                                    "mtime":  "639273138563769854",
+                                    "mtime":  "639273193487786685",
                                     "hash":  "49adb4e3fce27df46489d7ac377d7db6bdf1cf15d6b8ba1d805b439a05d8e2a0"
                                 },
     "www/shell/i18n/core.de.json":  {
@@ -8941,7 +8941,7 @@
                                     },
     "www/shell/i18n/core.de.json.gz":  {
                                            "size":  "2822",
-                                           "mtime":  "639273138563779829",
+                                           "mtime":  "639273193487786685",
                                            "hash":  "1cca0c3459d4292166d0ac4932a25d3008495f87723297b0ccb3dde454d20256"
                                        },
     "www/shell/i18n/core.en.json":  {
@@ -8951,7 +8951,7 @@
                                     },
     "www/shell/i18n/core.en.json.gz":  {
                                            "size":  "2459",
-                                           "mtime":  "639273138563779829",
+                                           "mtime":  "639273193487804334",
                                            "hash":  "448e06840824cdfda4356da864fd3c1fd17cb2151874c2c1ee05bddeb3b32bf0"
                                        },
     "www/shell/i18n/core.es.json":  {
@@ -8961,7 +8961,7 @@
                                     },
     "www/shell/i18n/core.es.json.gz":  {
                                            "size":  "2715",
-                                           "mtime":  "639273138563789776",
+                                           "mtime":  "639273193487815693",
                                            "hash":  "5de53384c64cbcdeb854a21c7186c4678e104216610c9394675359a05e9c6021"
                                        },
     "www/shell/i18n/core.fr.json":  {
@@ -8971,7 +8971,7 @@
                                     },
     "www/shell/i18n/core.fr.json.gz":  {
                                            "size":  "2801",
-                                           "mtime":  "639273138563789776",
+                                           "mtime":  "639273193487819687",
                                            "hash":  "6720a2da3dc5e9deab47824749a8956c27b463152c9ee8d5eafe82144d19cd56"
                                        },
     "www/shell/i18n/core.it.json":  {
@@ -8981,7 +8981,7 @@
                                     },
     "www/shell/i18n/core.it.json.gz":  {
                                            "size":  "2660",
-                                           "mtime":  "639273138563799762",
+                                           "mtime":  "639273193487819687",
                                            "hash":  "febd608abeb4582c6a07afc5707e727c48567c6e402b669b1426cf3b13b0993d"
                                        },
     "www/shell/i18n/coverage.json":  {
@@ -8991,7 +8991,7 @@
                                      },
     "www/shell/i18n/coverage.json.gz":  {
                                             "size":  "581",
-                                            "mtime":  "639273138563799762",
+                                            "mtime":  "639273193487829775",
                                             "hash":  "f2456aabe9ddedef69e105f14225f6e06cea2e953be342c817855f5c0ba3a8b3"
                                         },
     "www/shell/i18n/shell.de.json":  {
@@ -9001,7 +9001,7 @@
                                      },
     "www/shell/i18n/shell.de.json.gz":  {
                                             "size":  "4888",
-                                            "mtime":  "639273138563809766",
+                                            "mtime":  "639273193487829775",
                                             "hash":  "d85b0f1866ef4e7bde844e37892f9ea9a086777960eb600d692aea02bc786a62"
                                         },
     "www/shell/i18n/shell.en.json":  {
@@ -9011,7 +9011,7 @@
                                      },
     "www/shell/i18n/shell.en.json.gz":  {
                                             "size":  "4287",
-                                            "mtime":  "639273138563819764",
+                                            "mtime":  "639273193487829775",
                                             "hash":  "543e530cdbded53b8f8f12148894b542c91bb9711e1c6d3cb58f454665ae5edc"
                                         },
     "www/shell/i18n/shell.es.json":  {
@@ -9021,7 +9021,7 @@
                                      },
     "www/shell/i18n/shell.es.json.gz":  {
                                             "size":  "4801",
-                                            "mtime":  "639273138563819764",
+                                            "mtime":  "639273193487849853",
                                             "hash":  "567fdccf8cd0fc4c13c6dd950f6ff5f53925e91df60e38c22d1450799d7df27c"
                                         },
     "www/shell/i18n/shell.fr.json":  {
@@ -9031,7 +9031,7 @@
                                      },
     "www/shell/i18n/shell.fr.json.gz":  {
                                             "size":  "4933",
-                                            "mtime":  "639273138563829759",
+                                            "mtime":  "639273193487849853",
                                             "hash":  "09c0bc5b8830b1abfd1199937069d35d1efd049c953004ce62aedececc7378c9"
                                         },
     "www/shell/i18n/shell.it.json":  {
@@ -9041,7 +9041,7 @@
                                      },
     "www/shell/i18n/shell.it.json.gz":  {
                                             "size":  "4631",
-                                            "mtime":  "639273138563839762",
+                                            "mtime":  "639273193487849853",
                                             "hash":  "9c7a2e25de5f344bbe21977ecc15151154e5290146ec3755b9c98f03e80cc409"
                                         },
     "www/shell/icon.png":  {
@@ -9056,7 +9056,7 @@
                              },
     "www/shell/icons.json.gz":  {
                                     "size":  "4375",
-                                    "mtime":  "639273138563851536",
+                                    "mtime":  "639273193487869934",
                                     "hash":  "50f1167b793269167b1f9543d6bb4f20edd7be79e36ac9bf2b9cd983454443a2"
                                 },
     "www/shell/index.html":  {
@@ -9066,7 +9066,7 @@
                              },
     "www/shell/index.html.gz":  {
                                     "size":  "9323",
-                                    "mtime":  "639273138563851536",
+                                    "mtime":  "639273193487869934",
                                     "hash":  "a12285c6e2111458220ce6a4143f2fdbaf7b89a4f487bf5a54eb4198baf91099"
                                 },
     "www/shell/local-ai-help.js":  {
@@ -9076,7 +9076,7 @@
                                    },
     "www/shell/local-ai-help.js.gz":  {
                                           "size":  "2372",
-                                          "mtime":  "639273138563861590",
+                                          "mtime":  "639273193487887335",
                                           "hash":  "fc44107f11d7d30695ff25d434b013866db22a69cead4c84a990296e2cbea7f6"
                                       },
     "www/shell/manifest.webmanifest":  {
@@ -9086,7 +9086,7 @@
                                        },
     "www/shell/manifest.webmanifest.gz":  {
                                               "size":  "242",
-                                              "mtime":  "639273138582345949",
+                                              "mtime":  "639273193532089460",
                                               "hash":  "dabe93a6851d0b40e0d77d2d15fa904b4f1d002d06687945c9295041cc92e712"
                                           },
     "www/shell/micgate.js":  {
@@ -9096,7 +9096,7 @@
                              },
     "www/shell/micgate.js.gz":  {
                                     "size":  "5546",
-                                    "mtime":  "639273138563871598",
+                                    "mtime":  "639273193487898358",
                                     "hash":  "7cc8f8f8c790f37a3c1358e8a32dbbbf48074cf964382a6f79dcc5fc37914102"
                                 },
     "www/shell/notify.css":  {
@@ -9106,7 +9106,7 @@
                              },
     "www/shell/notify.css.gz":  {
                                     "size":  "1483",
-                                    "mtime":  "639273138587536446",
+                                    "mtime":  "639273193537268042",
                                     "hash":  "83c5c74f08126900f245a2d7cb0757feb7766f6a25423eba1567037f77a163e1"
                                 },
     "www/shell/notify.js":  {
@@ -9116,7 +9116,7 @@
                             },
     "www/shell/notify.js.gz":  {
                                    "size":  "6827",
-                                   "mtime":  "639273138563881608",
+                                   "mtime":  "639273193487920248",
                                    "hash":  "f286e2baa8362f1e0ebf9f4ecd14ed4e5eb3dd96f7c475d5b658a38dd0bea610"
                                },
     "www/shell/nucleo-i18n.js":  {
@@ -9126,7 +9126,7 @@
                                  },
     "www/shell/nucleo-i18n.js.gz":  {
                                         "size":  "8328",
-                                        "mtime":  "639273138563891658",
+                                        "mtime":  "639273193487940345",
                                         "hash":  "31d9a8f593686d8cb04d3732c8a5f98805295bade4bd1b7795ced89e6de811cd"
                                     },
     "www/shell/onboarding.css":  {
@@ -9136,7 +9136,7 @@
                                  },
     "www/shell/onboarding.css.gz":  {
                                         "size":  "1605",
-                                        "mtime":  "639273138593943770",
+                                        "mtime":  "639273193542513426",
                                         "hash":  "e0ec63ecc581c383dc99b47ea4f76ef8723d1856161edb187ea967884e509af0"
                                     },
     "www/shell/onboarding.js":  {
@@ -9146,7 +9146,7 @@
                                 },
     "www/shell/onboarding.js.gz":  {
                                        "size":  "10284",
-                                       "mtime":  "639273138600903087",
+                                       "mtime":  "639273193547729825",
                                        "hash":  "f4acef22585336798edf40f223e89770da2c01b044dc8275750756dbbc942e9d"
                                    },
     "www/shell/search-rank.js":  {
@@ -9156,7 +9156,7 @@
                                  },
     "www/shell/search-rank.js.gz":  {
                                         "size":  "2619",
-                                        "mtime":  "639273138563911573",
+                                        "mtime":  "639273193487960464",
                                         "hash":  "e95e191bc04c1aed7f8f4ecf9a66c52a3b695109b1e2d3f27f8d8ea22ac427c8"
                                     },
     "www/shell/seq-import.js":  {
@@ -9166,7 +9166,7 @@
                                 },
     "www/shell/seq-import.js.gz":  {
                                        "size":  "2347",
-                                       "mtime":  "639273138563911573",
+                                       "mtime":  "639273193487960464",
                                        "hash":  "5900e919674a1a0de394449aaa7ba051b52aa74f8fdb8671df79358e41919644"
                                    },
     "www/shell/sha256.js":  {
@@ -9176,7 +9176,7 @@
                             },
     "www/shell/sha256.js.gz":  {
                                    "size":  "1738",
-                                   "mtime":  "639273138607026991",
+                                   "mtime":  "639273193552973319",
                                    "hash":  "333b261a0525dedc5f6ea1bc31133e0d5128c04a3f5370fb1ad773a625ae9049"
                                },
     "www/shell/shell.js":  {
@@ -9186,7 +9186,7 @@
                            },
     "www/shell/shell.js.gz":  {
                                   "size":  "73039",
-                                  "mtime":  "639273138563971669",
+                                  "mtime":  "639273193488018539",
                                   "hash":  "74b0d5e58d98cdecd84b327b25e33bfc24fc7b26ceeab68c12d6a26c16cfc4b0"
                               },
     "www/shell/shortcuts.js":  {
@@ -9196,7 +9196,7 @@
                                },
     "www/shell/shortcuts.js.gz":  {
                                       "size":  "1524",
-                                      "mtime":  "639273138614045926",
+                                      "mtime":  "639273193558138968",
                                       "hash":  "b78d5a2d5fd81d424b0e677a58d9bf9231d930cd09a3d6c63110cc4186664367"
                                   },
     "www/shell/style.css":  {
@@ -9206,18 +9206,18 @@
                             },
     "www/shell/style.css.gz":  {
                                    "size":  "13861",
-                                   "mtime":  "639273138563991645",
+                                   "mtime":  "639273193488038642",
                                    "hash":  "50fbcd1189a705a9af4e2add0221b00d35d958bcee80fd2bba7337795582247e"
                                },
     "www/shell/sw.js":  {
-                            "size":  "17423",
-                            "mtime":  "639273138562560833",
-                            "hash":  "fe7cc37daa9fa1b801007ee4f4cd09c1b1d1810e213748b192964248cb5db8bf"
+                            "size":  "17424",
+                            "mtime":  "639273193486662872",
+                            "hash":  "27876fafca77a359e9bfe8dc354ec3f01dd20fb58df3624d8f7a1055f5584ddc"
                         },
     "www/shell/sw.js.gz":  {
-                               "size":  "6882",
-                               "mtime":  "639273138564301146",
-                               "hash":  "4af5625bbccc9d2ed7dec643f6b7b12fb3d70ecae677c5a955bf69d804a0a5d5"
+                               "size":  "6869",
+                               "mtime":  "639273193488437880",
+                               "hash":  "3f7111c1baeda0ee81c603ae103e79b4bd683c9ba8b23d14409d428ea9fa0853"
                            },
     "www/shell/system-ui.js":  {
                                    "size":  "13529",
@@ -9226,7 +9226,7 @@
                                },
     "www/shell/system-ui.js.gz":  {
                                       "size":  "4739",
-                                      "mtime":  "639273138564311103",
+                                      "mtime":  "639273193488437880",
                                       "hash":  "10c85c6bf5431c427295040afd68b407976896a9ac65352d4a94932b057946d1"
                                   },
     "www/shell/update-check.js":  {
@@ -9236,7 +9236,7 @@
                                   },
     "www/shell/update-check.js.gz":  {
                                          "size":  "1745",
-                                         "mtime":  "639273138564311103",
+                                         "mtime":  "639273193488437880",
                                          "hash":  "4868638cf3dc1ecfb241263d23d1ad5d7b7e849b25092361a1de78913001f19c"
                                      },
     "www/shell/update-core.js":  {
@@ -9246,7 +9246,7 @@
                                  },
     "www/shell/update-core.js.gz":  {
                                         "size":  "2717",
-                                        "mtime":  "639273138564321038",
+                                        "mtime":  "639273193488457989",
                                         "hash":  "7fe90fdfe862242c08cc8c8c3f631294e4ddb1ed493dff1f2c47b0bc03159822"
                                     },
     "www/shell/wallpaper.png":  {
@@ -9261,7 +9261,7 @@
                         },
     "www/shell/wm.js.gz":  {
                                "size":  "15806",
-                               "mtime":  "639273138564331037",
+                               "mtime":  "639273193488470922",
                                "hash":  "e69c9368b209497ddb6f75563ea3817f26033cfa8ab82d94f76d7ef9861148da"
                            }
 }
