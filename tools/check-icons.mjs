@@ -21,8 +21,12 @@ const ALLOW = new Set([
 ]);
 
 function idsFromC(src) {
-  // ui_icon dispatches on: !strcmp(id, "xxx")
+  // ui_icon draws most ids from the op table (ICON_TAB rows: { "xxx", <offset> }) and the rest in
+  // procedural branches that dispatch on: !strcmp(id, "xxx")
   const ids = new Set();
+  const tab = src.match(/ICON_TAB\[\]\s*=\s*\{([\s\S]*?)\n\};/);
+  if (!tab) { console.error('icons:gate: ICON_TAB not found in launcher_render.cpp'); process.exit(1); }
+  for (const m of tab[1].matchAll(/\{\s*"([^"]+)"\s*,\s*\d+\s*\}/g)) ids.add(m[1]);
   for (const m of src.matchAll(/strcmp\(id,\s*"([^"]+)"\)/g)) ids.add(m[1]);
   return ids;
 }

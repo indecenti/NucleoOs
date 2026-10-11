@@ -38,6 +38,10 @@ jobs:
   release:
     needs: gate
     runs-on: ubuntu-latest
+    env:
+      # Exact patch release, matching firmware/dependencies.lock (idf 5.4.4): the managed components resolve
+      # to the locked versions only on the IDF they were locked with — the release must be the build that was tested.
+      IDF_VERSION: v5.4.4
     outputs:
       full: ${{ steps.ver.outputs.full }}
     steps:
@@ -58,12 +62,25 @@ jobs:
         id: ver
         run: echo "full=$(cat firmware/version/VERSION).$(cat firmware/version/BUILD)" >> "$GITHUB_OUTPUT"
 
+      # The v0.7.0 run died here in under a second with docker exit 125 (docker itself failed — no
+      # build ever started) while the identical workflow had published v0.6.0. Pull the image as its
+      # own retried step, so a registry hiccup is retried instead of failing a release, and a real
+      # failure is named in the log (with the free disk space) instead of hidden in the build step.
+      - name: Pull the ESP-IDF image (retried)
+        run: |
+          df -h / | tail -1
+          for i in 1 2 3 4; do
+            docker pull "espressif/idf:${IDF_VERSION}" && exit 0
+            echo "::warning::docker pull espressif/idf:${IDF_VERSION} failed (attempt $i/4)"
+            sleep $((i * 20))
+          done
+          echo "::error::could not pull espressif/idf:${IDF_VERSION} — see the docker errors above"
+          exit 1
+
       - name: Build firmware (ESP-IDF v5.4, esp32s3)
         uses: espressif/esp-idf-ci-action@v1
         with:
-          # Exact patch release, matching firmware/dependencies.lock (idf 5.4.4): the managed components resolve
-          # to the locked versions only on the IDF they were locked with — the release must be the build that was tested.
-          esp_idf_version: v5.4.4
+          esp_idf_version: ${{ env.IDF_VERSION }}
           target: esp32s3
           path: firmware
 
