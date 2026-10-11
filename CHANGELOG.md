@@ -6,6 +6,35 @@ All notable user-facing changes to NucleoOS. Format loosely follows
 
 ## [Unreleased]
 
+### Added
+- **Costellazioni**, the flagship space game — 6DOF combat in procedural star systems, a galaxy to
+  cross (map, jumps, docking, beacons to relight) and worlds to land on (seamless descent, eight
+  biomes, discoveries), with 66 paintings and an original four-track score. The native Cardputer
+  version was reworked too.
+- **Giardino**, a new merge game. Every other native game (Pong, Snake Duel, Tank Duel, Flipper,
+  Reattore, Scorribanda, Poker, Slot, Yahtzee, Dadi, Cardler, Orde) was fixed, retuned and redrawn
+  with the console look, in the five OS languages, with sound packs that never stall play.
+- **Settings ▸ AI / Models ▸ Models on your PC** — one panel for the AI servers on your computer
+  (Ollama, LM Studio, llama.cpp, Jan): what is running, a model per task (chat, code, agent), PC or
+  cloud first, add a server by address, and the exact fix when a server refuses NucleoOS. The AI
+  profiles and the fallback chain now show the PC model as a step, and ANIMA's engines panel links here.
+- **ANIMA** answers unit conversions and calendar questions exactly in five languages, and the agent
+  shell runs workspace scripts with `node FILE.js`.
+
+### Changed
+- **The web OS loads much faster from the Cardputer** — every file the device served waited 1.2 s
+  for memory it could never get in the web profile, so a first load (about 50 files) took over 30 s.
+- **Agenti follows the OS-wide AI choices** — Private mode keeps it off the cloud, and "PC first"
+  makes it use the computer's model first, as ANIMA does.
+
+### Fixed
+- **Choosing the "Auto" AI profile no longer switches ANIMA to Private** when only the browser brain
+  was ready; "Local only" now really keeps everything on this computer.
+- **Firmware updates over a slow Wi-Fi link no longer abort at 90 %.**
+- Costellazioni music reaches the Cardputer (large files ship in slices); the launcher draws its
+  icons from a table (30 KB less flash) and the game front-end gives back 4.9 KB of RAM.
+- The AI key manager in Settings speaks Spanish, French and German instead of falling back to English.
+
 ## [0.7.0] — 2026-10-09
 
 ### Added
