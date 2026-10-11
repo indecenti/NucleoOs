@@ -135,6 +135,7 @@
   "agentDeclined": "The local model ({model}) could not complete this task on your files ({why}), and I will not make up an answer. A bigger model on your PC (Ollama) or a cloud key can do it; or try splitting the request into simpler steps.",
   "engTitle": "ANIMA engines",
   "engClose": "Close",
+  "engMore": "All options: Settings ▸ AI / Models",
   "engModeGroup": "Mode",
   "engAutoDesc": "Uses the best engine available, online included.",
   "engPrivDesc": "No Internet: only this PC and the Cardputer.",

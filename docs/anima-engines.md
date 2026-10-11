@@ -13,6 +13,10 @@ Older deep dives: [anima.md](anima.md), [anima-code.md](anima-code.md), [anima-l
 Defined once in `web/shell/anima-mode.js` (shared with the copilot). The **engines panel** (the "ANIMA · …"
 pill) shows both modes, the live state of every engine, the real order, "cloud first / PC first" (only when
 both exist; `ai.local.engines.prefer`) and the PC model pick (`ai.local.engines.models[server][task]`).
+It is the quick view: **Settings ▸ AI / Models ▸ Models on your PC** (`apps/settings/www/pc-models.js`) is the full
+one — every server (add by address), a model per task, the order, and the `OLLAMA_ORIGINS` fix — and the panel links
+there (`nucleo.settings.tab = 'ai'`; an open Settings window follows it through the `storage` event). Agenti reads the
+same `prefer` and Private mode.
 
 **Order of a turn** (`index.html` send path):
 1. **Commands first** (`commandFirst`): device actions, live state, app launch (`local/cascade.js commandHint`,

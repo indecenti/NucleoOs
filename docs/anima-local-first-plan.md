@@ -1,6 +1,7 @@
 # ANIMA — local-first agent plan (2026-09)
 
-Status: **approved 2026-09-29**; phases 1, 2 and the phase-4 agent core done (2026-09-30), phase 3 (Settings "AI & Models") open. Built from a code audit of every inference path, every AI
+Status: **approved 2026-09-29**; phases 1, 2 and the phase-4 agent core done (2026-09-30); phase 3's Settings center done
+(2026-10-11), its client/key migration still open. Built from a code audit of every inference path, every AI
 configuration surface, live measurements on the dev PC (Chrome 154, RTX 5070 8 GB, Ollama 0.34.4) and
 current docs. Guiding rules: the Cardputer does as little as possible; everything heavy runs in the
 browser or on the user's own PC; every UI string ships in it/en/es/fr/de; every step is tested.
@@ -96,6 +97,15 @@ actions), no duplicate device calls, CDN-first heavy libraries with SD fallback.
    open: the Agent app on the layer, the Settings UI for `prefer`/models + the wizard there (phase 3).
 3. **Settings ▸ AI & Models + migration** — the center, wizards, apps moved to `resolve()`, duplicate
    clients/keys removed, presets fixed.
+   *Status (2026-10-11):* the center is done. Settings ▸ AI / Models ▸ **Models on your PC**
+   (`apps/settings/www/pc-models.js`, host-tested in `tools/settings-pc-models.test.mjs`) edits all of
+   `ai.local.engines`: on/off, the server list (defaults on/off, add by address, remove), `prefer`, a model per task
+   (chat / code / agent) and the `OLLAMA_ORIGINS` wizard for a refusing server. ANIMA's engines panel links there.
+   The presets write only `auto | private` to `anima.mode` (Auto with just the WASM pack had written `edge` = Private)
+   and know the PC rung (`pcModel` in the signal; Local only / Privacy use a localhost server only); the tier band
+   and the fallback chain show it. Agenti honours `prefer` and Private mode. Still open: moving the apps that keep
+   their own cloud client or key copy (Games, Paint, Dictation, Recorder, AI Chat, Spreadsheet, the agent runtime's
+   model tables) onto one resolver.
 4. **Offline agent = a portable "open code"** — unified runtime + tools + retrieval + HTML Viewer app with
    "Create with ANIMA". ANIMA works like a small OpenCode/Claude Code: a workspace (an SD folder mirrored in
    the browser), tools (read, grep, edit with diff + approval, run JS in a sandboxed worker, preview HTML),

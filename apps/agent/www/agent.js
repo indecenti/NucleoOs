@@ -278,8 +278,14 @@ async function rebuildRuntime() {
       } catch { return { verdict: 'pass' }; }
     },
   };
-  // localServer: first when there is no cloud key (the runtime decides), else the fallback when the cloud fails.
-  const localServer = { first: () => false, private: () => false };
+  // localServer: the PC's own model. First when there is no cloud key (the runtime decides), when the user put the
+  // PC first (ai.local.engines.prefer — Settings ▸ AI / ANIMA's engines panel) or in Private mode, which drops every
+  // cloud rung (anima-mode.js, the OS-wide mode ANIMA and the copilot share). Read live on every turn, as ANIMA does.
+  const [Eng, Mode] = await Promise.all([import('/ai-engines.js').catch(() => null), import('/anima-mode.js').catch(() => null)]);
+  const localServer = {
+    first: () => { try { return !!Eng && Eng.loadLocalConfig().prefer === 'local'; } catch { return false; } },
+    private: () => { try { return !!Mode && Mode.readMode() === 'private'; } catch { return false; } },
+  };
   rt = createRuntime({ cfg, root, lang: lang(), ui, keys, active, t, local: local.grammar ? local : null, hwPerms: await loadHwPerms(), localServer });
   $('model-line').textContent = modelLine();
 }

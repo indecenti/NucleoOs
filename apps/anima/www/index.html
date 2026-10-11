@@ -752,6 +752,7 @@
     .eng-list li b{color:var(--text);font-weight:var(--fw-title)}
     .eng-list li .ok{color:var(--accent2)} .eng-list li .off{color:var(--muted)}
     .eng-order{margin:10px 0 0;font-size:11.5px;color:var(--muted)}
+    .eng-more{background:none;border:0;padding:0;color:var(--accent2);font:inherit;cursor:pointer;text-decoration:underline;text-underline-offset:2px}
     .eng-pick{display:flex;align-items:center;gap:8px;margin:12px 0 0;font-size:12px;color:var(--muted)}
     .eng-pick select{flex:1;min-width:0;background:var(--chip-bg);color:var(--text);border:1px solid var(--line2);border-radius:var(--r);padding:5px 6px;font:inherit}
     .set-field.is-off .f-ctl{opacity:.45}
@@ -6002,8 +6003,12 @@
               +'<button type="button" class="eng-mode eng-pref" data-p="cloud" aria-pressed="'+(!st.pcFirst)+'"><b>'+esc(L('engCloudFirst'))+'</b><span>'+esc(L('engCloudFirstDesc',{ p:st.cloud }))+'</span></button>'
               +'<button type="button" class="eng-mode eng-pref" data-p="local" aria-pressed="'+(!!st.pcFirst)+'"><b>'+esc(L('engPcFirst'))+'</b><span>'+esc(L('engPcFirstDesc'))+'</span></button></div>'
             : '')
-          +'<p class="eng-order">'+esc(L(priv ? 'engOrderPriv' : !st.cloud ? 'engOrderAuto' : st.pcFirst && st.pc ? 'engOrderAutoPcFirst' : 'engOrderAutoCloud'))+'</p>';
+          +'<p class="eng-order">'+esc(L(priv ? 'engOrderPriv' : !st.cloud ? 'engOrderAuto' : st.pcFirst && st.pc ? 'engOrderAutoPcFirst' : 'engOrderAutoCloud'))+'</p>'
+          // the full view of the same settings (servers, a model per task, adding a server) lives in Settings ▸ AI
+          +'<p class="eng-order"><button type="button" class="eng-more" id="eng-settings">⚙ '+esc(L('engMore'))+'</button></p>';
         for(const b of el.querySelectorAll('.eng-mode:not(.eng-pref)')) b.addEventListener('click',()=>{ chooseMode(b.dataset.m); render(el); });
+        // Settings reads this one-shot hint at boot, or through the storage event when it is already open
+        el.querySelector('#eng-settings').addEventListener('click',()=>{ try{ localStorage.setItem('nucleo.settings.tab','ai'); }catch{} handoffApp('settings'); });
         const sel=el.querySelector('#eng-model');
         if(sel) sel.addEventListener('change',async()=>{
           try{ const E=await enginesMod(); const cfg=E.loadLocalConfig(); cfg.models=cfg.models||{};

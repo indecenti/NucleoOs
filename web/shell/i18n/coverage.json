@@ -1,5 +1,5 @@
 {
-  "generated": "2026-10-10T12:00:19.570Z",
+  "generated": "2026-10-11T10:58:20.976Z",
   "base": "en",
   "langs": [
     "en",
@@ -23,12 +23,12 @@
     "de": 100
   },
   "surfaces": 48,
-  "totalKeys": 3701,
+  "totalKeys": 3702,
   "namespaces": {
     "core": 156,
     "shell": 290,
     "agent": 160,
-    "anima": 173,
+    "anima": 174,
     "arcade": 59,
     "archive-manager": 38,
     "authenticator": 32,

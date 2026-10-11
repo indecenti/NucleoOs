@@ -135,6 +135,7 @@
   "agentDeclined": "Le modèle local ({model}) n'a pas pu mener à bien cette tâche sur tes fichiers ({why}), et je ne vais pas inventer de réponse. Un modèle plus grand sur ton PC (Ollama) ou une clé cloud peuvent le faire ; ou découpe la demande en étapes plus simples.",
   "engTitle": "Moteurs d’ANIMA",
   "engClose": "Fermer",
+  "engMore": "Toutes les options : Réglages ▸ IA / Modèles",
   "engModeGroup": "Mode",
   "engAutoDesc": "Utilise le meilleur moteur disponible, en ligne compris.",
   "engPrivDesc": "Pas d’Internet : seulement ce PC et le Cardputer.",

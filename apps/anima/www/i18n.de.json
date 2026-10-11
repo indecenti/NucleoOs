@@ -135,6 +135,7 @@
   "agentDeclined": "Das lokale Modell ({model}) konnte diese Aufgabe mit deinen Dateien nicht erledigen ({why}), und ich erfinde keine Antwort. Ein größeres Modell auf deinem PC (Ollama) oder ein Cloud-Schlüssel schafft das; oder teile die Anfrage in einfachere Schritte auf.",
   "engTitle": "ANIMA-Engines",
   "engClose": "Schließen",
+  "engMore": "Alle Optionen: Einstellungen ▸ KI / Modelle",
   "engModeGroup": "Modus",
   "engAutoDesc": "Nutzt die beste verfügbare Engine, auch online.",
   "engPrivDesc": "Kein Internet: nur dieser PC und der Cardputer.",

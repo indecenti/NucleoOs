@@ -87,11 +87,42 @@ test('Privacy kills network egress: edgeWeb off, no cloud, L1 resident', () => {
 test('applyPreset returns ordered DATA only, drives only real endpoints + real localStorage keys', () => {
   const res = applyPreset(clone(DEFAULTS), 'max', withKey('anthropic'), REG);
   assert.equal(res.model.ai.preset, 'max');                                                         // SD intent
-  assert.equal(res.local['anima.mode'], 'only');
+  assert.equal(res.local['anima.mode'], 'auto');                                                    // the OS two-mode switch
   assert.equal(res.local['anima.modeSet'], '1');
   for (const k of Object.keys(res.local)) assert.ok(/^anima\.(mode|modeSet|localModel|edgeWeb)$/.test(k), `unexpected localStorage key ${k}`);
   for (const c of res.apiCalls) { assert.ok(PRESET_ENDPOINTS.includes(c.path), `unknown endpoint ${c.path}`); assert.equal(c.method, 'POST'); }
   assert.equal(res.apiCalls[0].body.mode, 'off');                                                   // L1 policy
+});
+
+test('a model on this PC is a rung: Auto lands on it without a key or when it is put first, Local and Privacy use it on localhost only', () => {
+  const PC = { pcModel: 'qwen3.5:9b', pcServer: 'Ollama', pcState: 'ok', pcLoopback: true };
+  const pc = (over = {}) => sig(Object.assign({}, PC, over));
+  const keyAndPc = (over = {}) => Object.assign(withKey('anthropic'), PC, over);
+  assert.equal(planPreset('auto', pc(), REG).landedRung, 'pc');                                     // no key → the PC
+  assert.equal(planPreset('auto', keyAndPc(), REG).landedRung, 'cloud');                           // key → cloud first, PC is the fallback
+  assert.equal(planPreset('auto', keyAndPc({ pcFirst: true }), REG).landedRung, 'pc');
+  assert.match(planPreset('auto', pc(), REG).using.en, /Ollama · qwen3\.5:9b/);
+  assert.equal(planPreset('local', pc(), REG).landedRung, 'pc');
+  assert.equal(feasibility('local', pc(), REG).state, 'available');                                 // nothing to download
+  assert.equal(planPreset('private', pc(), REG).landedRung, 'pc');
+  assert.equal(planPreset('private', pc(), REG).edgeWeb, 0);
+  // a server on another machine is not "this machine": Private mode (ai-engines) never uses it
+  assert.notEqual(planPreset('private', pc({ pcLoopback: false }), REG).landedRung, 'pc');
+  assert.notEqual(planPreset('local', pc({ pcLoopback: false }), REG).landedRung, 'pc');
+});
+
+test('every preset writes a real ANIMA mode (auto | private), never a rung name', async () => {
+  const { normMode, MODES } = await import('../web/shell/anima-mode.js');
+  const cases = [sig(), sig({ packUsable: true }), sig({ webgpu: true, vramMB: 4000, localModelReady: true }), withKey('anthropic')];
+  for (const id of PRESET_IDS) for (const s of cases) {
+    const m = applyPreset(clone(DEFAULTS), id, s, REG).local['anima.mode'];
+    assert.ok(MODES.includes(m), `${id} wrote anima.mode=${m}`);
+    assert.equal(normMode(m), m);
+  }
+  // the regression: Auto with only the browser pack ready wrote 'edge', which anima-mode reads as Private
+  assert.equal(applyPreset(clone(DEFAULTS), 'auto', sig({ packUsable: true }), REG).local['anima.mode'], 'auto');
+  assert.equal(applyPreset(clone(DEFAULTS), 'private', sig(), REG).local['anima.mode'], 'private');
+  assert.equal(applyPreset(clone(DEFAULTS), 'local', sig({ packUsable: true }), REG).local['anima.mode'], 'private');
 });
 
 test('applyPreset is pure (does not mutate the input model)', () => {
