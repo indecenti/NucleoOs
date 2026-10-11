@@ -54,12 +54,23 @@ test('a sandboxed agent app takes real clicks and keys', { skip }, async (t) => 
   // the app's document is out of process: it says when its handlers are in place
   assert.ok(await page.waitFor('window.__ready', { timeout: 10000 }), 'the app never loaded');
 
-  const box = await page.eval(`(() => { const r = ${FRAME}.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height }; })()`);
-  assert.ok(box.w > 100 && box.h > 60, 'the window has a usable size: ' + J(box));
-  for (let i = 0; i < 3; i++) {
-    for (const type of ['mousePressed', 'mouseReleased']) await page.send('Input.dispatchMouseEvent', { type, x: box.x, y: box.y, button: 'left', clickCount: 1 });
+  // The window animates in (winIn) and an out-of-process frame becomes hit-testable a moment after its document
+  // loads: on a busy machine (three suites at once) the first click landed before that. Wait for a still, unobstructed
+  // frame (elementFromPoint is the frame itself), retry only the FIRST click until it lands — every later input must
+  // land at once, and be counted once.
+  const box = await page.waitFor(`(() => { const f = ${FRAME}; if (!f) return null; const r = f.getBoundingClientRect();
+    const x = r.left + r.width / 2, y = r.top + r.height / 2, now = [r.left, r.top, r.width, r.height].join(',');
+    const still = window.__lastRect === now; window.__lastRect = now;
+    return still && document.elementFromPoint(x, y) === f ? { x, y, w: r.width, h: r.height } : null; })()`, { timeout: 15000, interval: 200 });
+  assert.ok(box && box.w > 100 && box.h > 60, 'the window has a usable, unobstructed size: ' + J(box));
+  const click = async () => { for (const type of ['mousePressed', 'mouseReleased']) await page.send('Input.dispatchMouseEvent', { type, x: box.x, y: box.y, button: 'left', clickCount: 1 }); };
+  let landed = false;
+  for (let i = 0; i < 6 && !landed; i++) { await click(); landed = !!(await page.waitFor(`window.__cnt.length >= 1`, { timeout: 1500 })); }
+  assert.ok(landed, 'clicks never reached the sandboxed app: ' + J(await page.eval('window.__cnt')));
+  for (const n of [2, 3]) {
+    await click();
+    assert.ok(await page.waitFor(`window.__cnt.length >= ${n}`, { timeout: 5000 }), `click ${n} did not land: ` + J(await page.eval('window.__cnt')));
   }
-  assert.ok(await page.waitFor(`window.__cnt.length >= 3`, { timeout: 5000 }), 'clicks did not reach the sandboxed app: ' + J(await page.eval('window.__cnt')));
 
   // the click focused the frame: a key press goes to the app, not the shell
   await page.send('Input.dispatchKeyEvent', { type: 'keyDown', key: '+', text: '+', unmodifiedText: '+' });
