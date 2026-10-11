@@ -1663,7 +1663,8 @@ async function mountPcModelsUI() {
       let j; try { j = JSON.parse(await r.text()) || {}; } catch { return; }
       if (!j.key && !(j.keys && Object.keys(j.keys).length)) return;
       j.model = m; if (j.provider && j.keys && j.keys[j.provider]) j.keys[j.provider].model = m;
-      await fetch('/api/fs/write?path=' + encodeURIComponent(TPATH), { method: 'POST', body: JSON.stringify(j) });
+      const w = await fetch('/api/fs/write?path=' + encodeURIComponent(TPATH), { method: 'POST', body: JSON.stringify(j) });
+      if (w.ok) await forgetVault();
     } catch {}
   }
 
@@ -1685,6 +1686,8 @@ async function mountPcModelsUI() {
   // Returns true, or the (localized) reason nothing was written. A FAILED read (offline, 503) or a corrupt
   // teacher.json is NOT an empty one: the old code then wrote {keys:{<new>}} over the file and erased the
   // active Anthropic key + config. Only a 404 means "no teacher.json yet" (a fresh file is fine).
+  // A raw read-modify-write ON PURPOSE (not AI.writeTeacher): it keeps every field the vault holds (keys.image,
+  // imageKey, exec…) and refuses to overwrite a vault it could not read or parse.
   async function addSecondaryKey(provider, key) {
     let j = {};
     try {
@@ -1700,14 +1703,19 @@ async function mountPcModelsUI() {
       }
     } catch { return T('teacherReadFailed'); }
     j.keys = (j.keys && typeof j.keys === 'object' && !Array.isArray(j.keys)) ? j.keys : {};
-    const bases = { xai: 'https://api.x.ai/v1', openai: 'https://api.groq.com/openai/v1' };
-    const defs = { xai: 'grok-2-latest', openai: 'llama-3.1-8b-instant' };
-    j.keys[provider] = { base: bases[provider], model: defs[provider], key };
+    // base + default model from the ONE provider table (ai.js PROVIDERS) instead of a second hard-coded copy; the
+    // model is only a first guess — the key's live model list re-picks it at call time (withAutoModel).
+    let P = null; try { P = (await import('/ai.js')).PROVIDERS[provider]; } catch {}
+    j.keys[provider] = { base: P ? P.base : '', model: P ? P.def : '', key };
     try {
       const w = await fetch('/api/fs/write?path=' + encodeURIComponent(TPATH), { method: 'POST', body: JSON.stringify(j) });
+      if (w.ok) await forgetVault();
       return w.ok ? true : (w.status === 401 || w.status === 403 ? T('settingsNotPaired') : T('saveFailed'));
     } catch { return T('saveFailed'); }
   }
+  // Our own vault write changed teacher.json: drop the shared 30 s read memo (ai.js readTeacher), or the profiles and
+  // capability chips re-read the OLD vault and kept offering "+ xAI" right after the key was added.
+  async function forgetVault() { try { (await import('/ai.js')).invalidateTeacher(); } catch {} }
   async function addKeyFlow(provider) {
     const name = provider === 'xai' ? 'Grok (xAI)' : 'Groq';
     const k = prompt(T('apPastePre') + name + T('apPastePost'));

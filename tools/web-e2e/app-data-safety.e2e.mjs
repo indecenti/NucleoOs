@@ -103,8 +103,20 @@ test('settings: adding a Groq/xAI key never erases teacher.json when it cannot b
     assert.equal(saved.keys.xai.key, 'xai-test-key');
   });
 
+  await t.test('readable file: right after the key is added the page knows it — "+ xAI" is gone', async () => {
+    // the shared vault memo (ai.js readTeacher, 30 s) is dropped after Settings' own write; it used to keep
+    // offering "+ xAI" for the key it had just saved
+    assert.ok(await page.waitFor(`!document.querySelector('#caps-row button[data-fix="xai"]')`, { timeout: 10000 }), 'the fix button is gone');
+  });
+
   await t.test('no teacher.json yet (404): a fresh file is created', async () => {
     await rm(`${sim.sd}${TP}`);
+    // a user who arrives with no vault at all: Settings opened afresh offers "+ xAI" again
+    await page.goto(`${sim.origin}/apps/settings/`);
+    await page.waitFor(`document.querySelectorAll('.nav-item').length > 4`, { timeout: 45000 });
+    await page.eval(`document.querySelectorAll('.nav-item')[4].click(), true`);
+    assert.ok(await page.waitFor(`!!document.querySelector('#caps-row button[data-fix="xai"]')`, { timeout: 45000 }), 'offered again');
+    await page.eval(`window.prompt = () => 'xai-test-key', true`);
     await page.eval(click);
     assert.ok(await page.waitFor(`(async () => (await fetch('/api/fs/read?path=${encodeURIComponent(TP)}', { cache: 'no-store' })).ok)()`, { timeout: 10000 }), 'written');
     assert.equal(JSON.parse(await sim.readSd(TP)).keys.xai.key, 'xai-test-key');
