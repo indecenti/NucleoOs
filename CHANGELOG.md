@@ -22,8 +22,10 @@ All notable user-facing changes to NucleoOS. Format loosely follows
   shell runs workspace scripts with `node FILE.js`.
 
 ### Changed
-- **The web OS loads much faster from the Cardputer** — every file the device served waited 1.2 s
-  for memory it could never get in the web profile, so a first load (about 50 files) took over 30 s.
+- **The web OS loads about six times faster from the Cardputer** — every file the device served
+  waited 1.2 s for memory it could never get in the web profile. Measured on the original unit over a
+  weak Wi-Fi link: a fresh browser now shows the desktop in about 5 s instead of over 30 s, and the
+  very first visit (which restarts the device into web mode) in 22 s instead of 48 s.
 - **Agenti follows the OS-wide AI choices** — Private mode keeps it off the cloud, and "PC first"
   makes it use the computer's model first, as ANIMA does.
 

@@ -94,7 +94,9 @@ reclaims the idle offline index, and waits (12 × 100 ms) **only if that reclaim
 profile idles at a 31 KB largest block, which no wait can raise. Until 2026-10-11 the wait ran on every request:
 each asset, even a 404, cost a fixed 1.25 s, against 0.1 s for `/api/status`. The single-task server queued about
 50 of them, so a cold load from a fresh browser took 32–48 s, the DOM was ready only at ~23 s, and single TTFBs
-reached 6–14 s (measured on the original unit, weak Wi-Fi, 126 ms RTT).
+reached 6–14 s (measured on the original unit, weak Wi-Fi, 126 ms RTT). After the fix (0.7.0+10), on the
+same unit and link: 0.30 s for that 1 KB asset, a 404 in 0.15 s, a cold load in 4.9–6.2 s (DOM at ~3 s), and
+22 s for the first visit, hand-off reboot included (it was 48.6 s).
 
 Pairing sessions survive it: `nucleo_auth` evicts the **least recently used** of its 32 slots
 (`auth_slots.c`, `npm run authslot:test`). The dev tools (`push-files`, `push-ota`, `sd-net-sync`) reuse ONE cached
