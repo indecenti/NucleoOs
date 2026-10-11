@@ -105,7 +105,8 @@ test('recorder: a failed listing says the device is unreachable, an absent folde
   const sim = await startSim();
   const browser = await launchBrowser({ args: [HOST_RULES] });
   t.after(async () => { await browser.close(); await sim.stop(); });
-  const EMPTY = `(() => { const e = document.querySelector('#list .empty'); return e && e.textContent; })()`;
+  // the settled empty state: "Loading…" until the first listing answers (the app used to say "no recordings" there)
+  const EMPTY = `(() => { const e = document.querySelector('#list .empty'); return e && e.textContent !== ${JSON.stringify(EN.loading)} && e.textContent; })()`;
   const page = await open(browser, sim);
   assert.equal(await page.waitFor(EMPTY, { timeout: 45000 }), EN.noRecordings, 'no folder yet = empty library');
 

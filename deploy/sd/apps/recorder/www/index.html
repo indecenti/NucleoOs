@@ -544,8 +544,10 @@
   // ============================ LIBRARY =======================================
   let openPanel = null;   // base name whose AI panel is expanded
   let listFailed = false;  // the last listing failed: say so instead of "no recordings"
+  let listLoaded = false;  // no listing answered yet: say "loading", never "no recordings" before we know
   async function loadList(){
     const entries = await fs.list(DIR);
+    listLoaded = true;
     listFailed = entries === null;
     if(listFailed){ files = []; renderList(); return; }
     const names = new Set(entries.map(e=>e.name));
@@ -570,7 +572,7 @@
     let arr=files.filter(f=>!q||f.name.toLowerCase().includes(q));
     arr=sortFiles(arr.slice());
     el.count.textContent = files.length? `${files.length} file` : '';
-    if(!arr.length){ const e=document.createElement('div'); e.className='empty'; e.textContent=listFailed?t('listFailed'):files.length?t('noResults'):t('noRecordings'); el.list.replaceChildren(e); return; }
+    if(!arr.length){ const e=document.createElement('div'); e.className='empty'; e.textContent=!listLoaded?t('loading'):listFailed?t('listFailed'):files.length?t('noResults'):t('noRecordings'); el.list.replaceChildren(e); return; }
     el.list.innerHTML='';
     for(const f of arr){
       const path=DIR+'/'+f.name, isWav=/\.wav$/i.test(f.name);
