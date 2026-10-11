@@ -59,7 +59,13 @@ test('the device dropping off the network is shown at once, clearly, and recover
   const shown = await page.waitFor(`(() => { const b = document.getElementById('link-down'); return b && b.classList.contains('show') ? b.textContent : null; })()`, { timeout: 15000 });
   const detectMs = Date.now() - t0;
   assert.ok(shown, 'no "device unreachable" banner');
-  assert.ok(shown.includes(cat(lang).link_down_title) && shown.includes(cat(lang).link_retry), `banner not in French: ${shown}`);
+  if (!(shown.includes(cat(lang).link_down_title) && shown.includes(cat(lang).link_retry))) {
+    // Seen on CI only (2026-10-11): say WHICH language signal disagreed, not just that it did.
+    const st = await page.eval(`(() => { const I = window.NucleoI18N; return { engine: I && I.lang, stored: localStorage.getItem('anima.lang'),
+      html: document.documentElement.lang, now: I && I.t('link_retry', null, 'shell') }; })()`).catch((e) => ({ evalError: String(e) }));
+    const sd = await sim.readSd('/system/config/settings.json').then((s) => JSON.parse(s).ui.language).catch((e) => String(e));
+    assert.fail(`banner not in French: ${shown} — i18n ${JSON.stringify(st)}, settings.json ui.language=${sd}`);
+  }
   assert.ok(detectMs < 10000, `took ${detectMs} ms to tell the user the device is gone`);
   t.diagnostic(`offline detected in ${detectMs} ms`);
   await sim.control('/api/_sim/offline', { on: false });
