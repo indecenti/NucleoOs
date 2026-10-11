@@ -1,114 +1,61 @@
-// llm.js — minimal online-LLM client for the Game Center, mirroring apps/agent/www/runtime.js.
-// Reads the device key vault (/data/anima/teacher.json), picks the best available provider and exposes
-// a single `ask(system, user)` that returns text. Used by the LLM coach to set an opponent's STYLE
-// between points — never to steer the paddle frame-by-frame (that's impossible at LLM latency).
+// llm.js — the Game Center's LLM brain, on the OS-wide AI decision (/ai-ask.js). The game asks whatever engine every
+// NucleoOS surface would use right now: in Private mode only a model on THIS computer plays; a model on the PC
+// (Ollama, LM Studio, llama.cpp, Jan) plays with no key at all; otherwise the cloud key from Settings ▸ AI, chosen
+// by the shared router. It used to read the key vault itself, with its own fixed provider order and hard-coded
+// models, never used a PC model, and called the cloud in Private mode too.
 //
-// PROVIDER TRUTH — the firmware nicknames the cloud teacher "Grok" everywhere, but the actual brand is
-// whatever teacher.json points at. We resolve and LABEL it honestly so the UI can prove which brain ran:
-//   · Anthropic Claude   → api.anthropic.com         (Messages API)
-//   · xAI Grok           → api.x.ai/v1               (OpenAI-compatible, model grok-*)
-//   · Groq (Llama etc.)  → api.groq.com/openai/v1    (OpenAI-compatible, NOT xAI — different company!)
-//   · OpenAI / other     → any OpenAI-compatible /chat/completions endpoint
-// Grok and Groq are different companies; conflating them is the bug we fix here.
+// Used by the coach to set an opponent's STYLE between points, and by the mover to pick a turn-based move — never
+// to steer a paddle frame by frame (impossible at LLM latency).
+//
+// PROVIDER TRUTH: the engine chosen at the preflight is PINNED for the whole match, and the label shown in game
+// ("Groq (llama-…) @ api.groq.com", "Ollama (qwen3.5:9b) @ localhost:11434") is the brain that really plays —
+// Grok (xAI) and Groq are different companies, and the label never conflates them.
 
-const KEY_PATH = '/data/anima/teacher.json';
-
-// Identify the real brand from the endpoint host + provider, so the label never lies.
-export function brandOf(cfg) {
-  if (!cfg) return null;
-  if (cfg.provider === 'anthropic') return 'Claude';
-  if (cfg.provider === 'google') return 'Gemini';
-  const h = (cfg.base || '').toLowerCase();
-  if (h.includes('generativelanguage')) return 'Gemini';
-  if (h.includes('x.ai')) return 'Grok';
-  if (h.includes('groq.com')) return 'Groq';
-  if (h.includes('openai.com')) return 'OpenAI';
-  if (h.includes('mistral')) return 'Mistral';
-  if (h.includes('together')) return 'Together';
-  try { return new URL(cfg.base).host.replace(/^api\./, ''); } catch { return 'LLM'; }
-}
-
-// Human label "Brand (model)" and the bare endpoint host — both shown in-game to verify the real brain.
-export function providerLabel(cfg) { if (!cfg) return null; const b = brandOf(cfg); return cfg.model ? `${b} (${cfg.model})` : b; }
-export function endpointHost(cfg) { if (!cfg) return null; try { return new URL(cfg.base).host; } catch { return cfg.base || null; } }
-
-// Resolve provider config the same way the Agents app does, with explicit xAI-Grok support.
-export async function loadCfg() {
-  let j = null;
-  try { const r = await fetch('/api/fs/read?path=' + encodeURIComponent(KEY_PATH), { cache: 'no-store' }); if (r.ok) j = await r.json(); } catch {}
-  j = j || {};
-  const keys = (j.keys && typeof j.keys === 'object') ? j.keys : {};
-
-  // 0) Google Gemini — OpenAI-compat wire but CORS-blocked, so it MUST go through the device /api/llm proxy
-  //    (proxy:true). Honour it when it's the ACTIVE provider (the user's chosen brain); a saved-but-not-active
-  //    Gemini key is picked up lower down, so a browser-direct provider is preferred when one is also present.
-  if (j.provider === 'google' && j.key) return { provider: 'google', base: j.base || 'https://generativelanguage.googleapis.com/v1beta/openai', model: j.model || 'gemini-2.5-flash', key: j.key, proxy: true };
-
-  // 1) Anthropic Claude (Messages API).
-  const anth = (keys.anthropic && keys.anthropic.key) ? keys.anthropic
-    : (j.provider === 'anthropic' && j.key ? { base: j.base, model: j.model, key: j.key, version: j.version } : null);
-  if (anth && anth.key) return { provider: 'anthropic', base: anth.base || 'https://api.anthropic.com', model: anth.model || 'claude-sonnet-5-5', key: anth.key, version: anth.version || '2023-06-01' };
-
-  // 2) xAI Grok — its own slot (keys.xai / keys.grok) or a flat config whose base points at x.ai.
-  const xai = (keys.xai && keys.xai.key) ? keys.xai : (keys.grok && keys.grok.key) ? keys.grok
-    : (j.key && ((j.provider === 'xai' || j.provider === 'grok') || /x\.ai/i.test(j.base || '')) ? { base: j.base, model: j.model, key: j.key } : null);
-  if (xai && xai.key) return { provider: 'openai', base: xai.base || 'https://api.x.ai/v1', model: xai.model || 'grok-2-latest', key: xai.key };
-
-  // 3) Groq / OpenAI / any other OpenAI-compatible endpoint (flat config or keys.groq/keys.openai).
-  const oa = (keys.groq && keys.groq.key) ? keys.groq : (keys.openai && keys.openai.key) ? keys.openai
-    : (j.key && (!j.provider || j.provider === 'openai' || j.provider === 'groq') ? { base: j.base, model: j.model, key: j.key } : null);
-  if (oa && oa.key) return { provider: 'openai', base: oa.base || 'https://api.groq.com/openai/v1', model: oa.model || 'llama-3.1-8b-instant', key: oa.key };
-
-  // 4) Saved Google Gemini key (no stronger browser-direct key configured) — via the device proxy.
-  const goog = (keys.google && keys.google.key) ? keys.google : (j.key && /generativelanguage/i.test(j.base || '') ? { base: j.base, model: j.model, key: j.key } : null);
-  if (goog && goog.key) return { provider: 'google', base: goog.base || 'https://generativelanguage.googleapis.com/v1beta/openai', model: goog.model || 'gemini-2.5-flash', key: goog.key, proxy: true };
-
-  return null;   // no keys → caller falls back to the local heuristic
-}
-
-function authHeaders(cfg) {
-  return cfg.provider === 'anthropic'
-    ? { 'content-type': 'application/json', 'x-api-key': cfg.key, 'anthropic-version': cfg.version || '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' }
-    : { 'content-type': 'application/json', 'authorization': 'Bearer ' + cfg.key };
-}
-
-// One short completion. Returns text or '' on failure (never throws into the game loop). Logs the exact
-// endpoint hit so "is it really Grok?" is answerable from the browser console / network tab.
-// The model is not pinned: the shared /ai.js picks one the key still serves (fast tier) and re-picks if the
-// provider retired it, and a failure is logged in plain words (what went wrong, how to fix it).
-let _ai = null;
+let _ask = null, _ai = null;
+const askMod = () => _ask || (_ask = import('/ai-ask.js').catch(() => { _ask = null; return null; }));
 const aiMod = () => _ai || (_ai = import('/ai.js').catch(() => { _ai = null; return null; }));
+const hostOf = (base) => { try { return new URL(base).host; } catch { return base || null; } };
+
+// Why the last loadCfg()/ask() had no brain, in one plain sentence (the OS language) — '' when it worked.
 export let lastAiError = '';
+
+// The brain this match would use: { kind: 'pc'|'cloud', brand, model, host } — or null when nothing may play
+// (lastAiError says why: no key and no PC model, or Private mode with no PC model running).
+export async function loadCfg() {
+  lastAiError = '';
+  const A = await askMod(), AI = await aiMod();
+  if (!A || !AI) return null;
+  let plan;
+  try { plan = await A.planEngines({ tier: 'fast', probe: true }); } catch { return null; }
+  const kind = plan.order[0];
+  if (!kind) { lastAiError = AI.explainAiError(new AI.AiError(plan.private ? 'private_no_pc' : 'no_engine', '')); return null; }
+  if (kind === 'pc') return { kind, brand: plan.pc.server, model: plan.pc.model, host: hostOf(plan.pc.base) };
+  const c = plan.cloud;
+  return { kind, provider: c.provider, brand: AI.providerOf(c.provider).label, model: c.model, host: hostOf(c.base) };
+}
+
+// Human label "Brand (model)" and the endpoint host — both shown in game, so the player can verify the real brain.
+export function brandOf(cfg) { return cfg ? cfg.brand : null; }
+export function providerLabel(cfg) { if (!cfg) return null; return cfg.model ? `${cfg.brand} (${cfg.model})` : cfg.brand; }
+export function endpointHost(cfg) { return cfg ? cfg.host : null; }
+
+// One short completion on the pinned engine. Returns text, or '' on failure (never throws into the game loop);
+// a failure is logged in plain words (what went wrong, how to fix it) and left in lastAiError.
 export async function ask(cfg, system, user, opts = {}) {
   if (!cfg) return '';
   lastAiError = '';
-  const AI = await aiMod();
-  if (!AI || !AI.withAutoModel) { try { return await askOnce(cfg, system, user, opts); } catch { return ''; } }
-  try { return await AI.withAutoModel({ ...cfg, tier: 'fast' }, (c) => askOnce(c, system, user, opts)); }
-  catch (e) { lastAiError = AI.explainAiError(e) || ''; if (lastAiError) console.warn('[coach]', lastAiError); return ''; }
-}
-async function askOnce(cfg, system, user, { maxTokens = 300, signal } = {}) {
-  const fail = async (resp, text) => { const e = new Error((() => { try { const j = JSON.parse(text); return (j.error && (j.error.message || j.error)) || ''; } catch { return ''; } })() || ('HTTP ' + resp.status));
-    e.status = resp.status; try { const j = JSON.parse(text); e.code = (j.error && (j.error.code || j.error.type)) || ''; } catch {} return e; };
-  if (cfg.provider === 'anthropic') {
-      const base = (cfg.base || 'https://api.anthropic.com').replace(/\/+$/, '');
-      console.info('[coach] →', brandOf(cfg), base + '/v1/messages', cfg.model);
-      const body = { model: cfg.model, max_tokens: maxTokens, system, messages: [{ role: 'user', content: user }] };
-      const resp = await fetch(base + '/v1/messages', { method: 'POST', headers: authHeaders(cfg), body: JSON.stringify(body), signal });
-      const text = await resp.text().catch(() => ''); let j = null; try { j = JSON.parse(text); } catch {}
-      if (!resp.ok || !j || j.type === 'error') throw await fail(resp, text);
-      return Array.isArray(j.content) ? j.content.filter(b => b && b.type === 'text').map(b => b.text).join('') : '';
-    } else {
-      const base = (cfg.base || 'https://api.groq.com/openai/v1').replace(/\/+$/, '');
-      const ep = base + '/chat/completions';
-      const url = cfg.proxy ? '/api/llm?url=' + encodeURIComponent(ep) : ep;   // Gemini (proxy): relay via the device, no CORS
-      console.info('[coach] →', brandOf(cfg), url, cfg.model);
-      const msgs = [{ role: 'system', content: system }, { role: 'user', content: user }];
-      const resp = await fetch(url, { method: 'POST', headers: authHeaders(cfg), body: JSON.stringify({ model: cfg.model, max_tokens: maxTokens, messages: msgs }), signal });
-      const text = await resp.text().catch(() => ''); let j = null; try { j = JSON.parse(text); } catch {}
-      if (!resp.ok || !j || j.error) throw await fail(resp, text);
-      return (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '';
-    }
+  const A = await askMod();
+  if (!A) return '';
+  try {
+    const r = await A.askAI({ system, user, tier: 'fast', maxTokens: opts.maxTokens || 300, signal: opts.signal, pin: cfg.kind });
+    if (r.engine && r.engine.model) cfg.model = r.engine.model;   // the label follows the model that really answered
+    return r.text || '';
+  } catch (e) {
+    const AI = await aiMod();
+    lastAiError = (AI && AI.explainAiError(e)) || String((e && e.message) || e);
+    if (lastAiError) console.warn('[coach]', lastAiError);
+    return '';
+  }
 }
 
 export function extractJson(text) {

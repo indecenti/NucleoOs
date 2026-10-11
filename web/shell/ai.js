@@ -301,6 +301,7 @@ export async function servedModel(cfg, model, { exclude = [], fresh = false } = 
 // ── errors the user can act on ─────────────────────────────────────────────────────────────────────
 // Every provider failure becomes an AiError with a KIND the UI can explain in plain words (explainAiError):
 // auth | forbidden | model | quota | rate | too_long | provider_down | device_busy | network | timeout | bad_request
+// | no_engine (no key and no PC model) | private_no_pc (Private mode and no model on this computer) — ai-ask.js
 export class AiError extends Error {
   constructor(kind, message, extra = {}) { super(message); this.name = 'AiError'; this.kind = kind; Object.assign(this, extra); }
 }
@@ -441,6 +442,18 @@ const AI_ERR_TEXT = {
     es: '{P} no respondió a tiempo. Inténtalo de nuevo; si se repite, elige un modelo más rápido en {SET}.',
     fr: '{P} n’a pas répondu à temps. Réessayez ; si cela se répète, choisissez un modèle plus rapide dans {SET}.',
     de: '{P} hat nicht rechtzeitig geantwortet. Versuche es erneut; wenn es öfter passiert, wähle ein schnelleres Modell unter {SET}.' },
+  no_engine: {
+    it: 'Nessuna IA disponibile: aggiungi una chiave in {SET} oppure avvia un modello sul tuo PC (Ollama o LM Studio).',
+    en: 'No AI is available: add a key in {SET}, or start a model on your PC (Ollama or LM Studio).',
+    es: 'No hay ninguna IA disponible: añade una clave en {SET} o inicia un modelo en tu PC (Ollama o LM Studio).',
+    fr: 'Aucune IA n’est disponible : ajoutez une clé dans {SET} ou lancez un modèle sur votre PC (Ollama ou LM Studio).',
+    de: 'Keine KI verfügbar: Füge unter {SET} einen Schlüssel hinzu oder starte ein Modell auf deinem PC (Ollama oder LM Studio).' },
+  private_no_pc: {
+    it: 'Modalità Privato: può rispondere solo un modello su questo computer, e nessuno è acceso. Avvia Ollama o LM Studio, oppure passa ad Auto.',
+    en: 'Private mode: only a model on this computer may answer, and none is running. Start Ollama or LM Studio, or switch to Auto.',
+    es: 'Modo Privado: solo puede responder un modelo en este equipo y no hay ninguno en marcha. Inicia Ollama o LM Studio, o cambia a Auto.',
+    fr: 'Mode Privé : seul un modèle sur cet ordinateur peut répondre, et aucun n’est lancé. Lancez Ollama ou LM Studio, ou passez en Auto.',
+    de: 'Privat-Modus: Nur ein Modell auf diesem Computer darf antworten, und keines läuft. Starte Ollama oder LM Studio oder wechsle zu Auto.' },
   bad_request: {
     it: '{P} ha rifiutato la richiesta{D}.',
     en: '{P} rejected the request{D}.',
@@ -634,8 +647,12 @@ export async function writeTeacher(cfg) {
 // Browser-direct completion. Returns the assistant text; throws an AiError (explainAiError() says what to do).
 // The model is auto-chosen and re-picked if the provider retired it (withAutoModel). opts.tier = 'max'|'mid'|'fast'.
 // opts.signal — an AbortSignal so a user-facing Stop can cancel a hung cloud call (copilot.js).
+// opts.meta — an object that receives { model } = the model that actually answered (labels that never lie).
 export async function cloudComplete(cfg, system, user, maxTokens, opts = {}) {
-  return withAutoModel(cfg, (c) => completeOnce(c, system, user, maxTokens, opts), { tier: opts.tier });
+  const run = { tier: opts.tier };
+  const out = await withAutoModel(cfg, (c) => completeOnce(c, system, user, maxTokens, opts), run);
+  if (opts.meta) opts.meta.model = run.used;
+  return out;
 }
 async function completeOnce(cfg, system, user, maxTokens, opts) {
   if (cfg.provider === 'anthropic') {
@@ -669,7 +686,10 @@ async function completeOnce(cfg, system, user, maxTokens, opts) {
 // it replaces each app re-implementing the per-provider wire (the fragmentation we're undoing).
 // The model is auto-chosen like cloudComplete (tier: cfg.tier, else 'mid').
 export async function cloudToolCall(cfg, opts = {}) {
-  return withAutoModel(cfg, (c) => toolCallOnce(c, opts), { tier: opts.tier });
+  const run = { tier: opts.tier };
+  const out = await withAutoModel(cfg, (c) => toolCallOnce(c, opts), run);
+  if (opts.meta) opts.meta.model = run.used;
+  return out;
 }
 async function toolCallOnce(cfg, { system, messages = [], tools = [], signal, maxTokens = 512, temperature = 0.2, responseFormat = null } = {}) {
   if (cfg.provider === 'anthropic') {
