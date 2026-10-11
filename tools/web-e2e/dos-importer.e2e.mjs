@@ -76,8 +76,13 @@ const MAKE_DT = (files) => `const dt = new DataTransfer(); for (const [n, b] of 
 const pick = (files) => `(() => { ${MAKE_DT(files)} const i = document.getElementById('picker'); i.files = dt.files; i.dispatchEvent(new Event('change', { bubbles: true })); return true; })()`;
 const drop = (files) => `(() => { ${MAKE_DT(files)} document.getElementById('drop').dispatchEvent(new DragEvent('drop', { dataTransfer: dt, bubbles: true, cancelable: true })); return true; })()`;
 const STATUS = `(() => { const s = document.getElementById('status'); return { cls: s.className.replace('status', '').trim(), text: s.textContent }; })()`;
-// settled = not "Reading…/Unzipping…" any more
-const settled = (page) => page.waitFor(`(() => { const s = ${STATUS}; return !s.cls.includes('busy') && s; })()`, { timeout: 15000 });
+// settled = not "Reading…/Unzipping…" any more. A timeout is a failure with its own message: it used to return null
+// and the case went on to read an empty name ('' !== 'Game_Pack' on a CI runner starved by a 3D suite next to it).
+const settled = async (page) => {
+  const s = await page.waitFor(`(() => { const s = ${STATUS}; return !s.cls.includes('busy') && s; })()`, { timeout: 30000 });
+  assert.ok(s, 'the import never settled: ' + JSON.stringify(await page.eval(STATUS).catch(() => null)));
+  return s;
+};
 const writes = (sim) => sim.control('/api/_sim/stats').then((s) => s.byPath['/api/fs/write'] || 0);
 const sdFile = (sim, p) => readFile(join(sim.sd, p));
 const sdHas = (sim, p) => stat(join(sim.sd, p)).then(() => true, () => false);
