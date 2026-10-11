@@ -95,14 +95,17 @@ Pick **one** of the two methods.
    offset 0) for you. When it finishes, **press the Cardputer's reset button** to boot it.
 
 ### B) esptool (command line)
-Requires Python: \`pip install esptool\`. Then, with the Cardputer connected:
+Requires Python: \`pip install esptool\`. Then, with the Cardputer connected (\`python -m esptool\`
+works on every esptool version — older installs expose \`esptool.py\`, newer ones \`esptool\`):
 \`\`\`
-esptool --chip esp32s3 --baud 921600 write_flash 0x0 ${binName}
+python -m esptool --chip esp32s3 --baud 921600 write_flash 0x0 ${binName}
 \`\`\`
 (If flashing fails, hold the reset/boot combo or lower the baud to 115200.)
 
-Re-flashing is always safe: it writes the app slot, and the previous firmware survives in the OTA
-backup slot, so you can't brick the device this way.
+A fresh flash writes the whole image at **0x0**, which resets the A/B slots — and the web flasher
+also **erases the chip**, so your saved Wi-Fi and pairing are cleared and you re-run the first-boot
+wizard. The automatic A/B rollback protects **OTA** updates (Settings ▸ Updates, over Wi-Fi), not a
+cable reflash. A reflash cannot brick the device: if a boot ever fails, flash again.
 
 ---
 
@@ -110,7 +113,8 @@ backup slot, so you can't brick the device this way.
 
 NucleoOS serves all of its apps and data from the microSD.
 1. Format the card as **FAT32**.
-2. Extract **\`${sdZip}\`** (${sdSize}) to the **root** of the card. You should end up with these
+2. Extract **\`${sdZip}\`** to the **root** of the card (it expands to ${sdSize} on the card; the
+   \`.zip\` download itself is smaller). You should end up with these
    folders directly on the card: \`/apps\`, \`/www\`, \`/system\`, \`/data\` (not inside another folder).
    Extracting over an existing NucleoOS card keeps your data: the zip carries no settings, keys, learned
    data or documents. It does replace the app list (\`system/registry/apps.json\`), so web apps you created
@@ -140,7 +144,7 @@ Power on. You'll see the animated boot splash, then the desktop. The screen show
 
 ## Adding the optional AI models (not bundled — see below why)
 
-To keep this download small (${sdSize}) and license-clean, the **large machine-learning models are not
+To keep the card footprint small (${sdSize}) and license-clean, the **large machine-learning models are not
 included**. You almost never need to copy them manually: **open the app once while online and it
 downloads its model from a public CDN and caches it in your browser**, after which it runs offline.
 The models on the SD are only needed for a device that is *never* online, or to skip that one-time
