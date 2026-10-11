@@ -51,8 +51,14 @@ test('ANIMA Code on the PC model (real Ollama), Private, workspace on the SD', {
   const browser = await launchBrowser();
   t.after(async () => { await browser.close(); await sim.stop(); });
 
+  // Each case opens ANIMA in a fresh browser context, and an idle ANIMA starts its first measurement of the big PC
+  // models after 25 s (scheduleBench) — on the same GPU. Pages left open from earlier cases measured the 35B in the
+  // background while a later case waited for Ollama (the plain chat turn ran into its 6-minute window). A user has
+  // one ANIMA, whose next turn aborts the measurement; here the previous page is retired before the next one opens.
+  let lastPage = null;
   async function openAnima(lang) {
-    const page = await browser.newPage();
+    if (lastPage) await lastPage.goto('about:blank').catch(() => {});
+    const page = lastPage = await browser.newPage();
     await bootShell(page, sim, { lang, wait: false, origin: sim.local });
     await page.eval(`localStorage.setItem('anima.mode','private'); localStorage.setItem('anima.modeSet','1');
       localStorage.setItem('anima.agentauto','1'); localStorage.setItem('anima.agents','1');
