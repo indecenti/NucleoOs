@@ -32,13 +32,13 @@ export function llmSelected(opts) { return !!(opts && (opts.mente === 'llm' || o
 // Returns the resolved cfg on success, or null (app then blocks the Grok match — no offline substitute).
 export async function preflightBrain(ui) {
   const cfg = await LLM.loadCfg();
-  if (!cfg) { ui.fail(t('err_no_key')); return null; }
+  if (!cfg) { ui.fail(LLM.lastAiError || t('err_no_key')); return null; }   // why: no key and no PC model, or Private
   const brand = LLM.brandOf(cfg);
   ui.note(t('verifying_conn', { provider: LLM.providerLabel(cfg), host: LLM.endpointHost(cfg) }));
   const t0 = performance.now();
   const txt = await LLM.ask(cfg, 'Connectivity test. Reply with a single word: OK.', 'ping', { maxTokens: 5 });
   const ms = Math.round(performance.now() - t0);
-  if (!txt) { ui.fail(t('brand_no_reply', { brand })); return null; }
+  if (!txt) { ui.fail(LLM.lastAiError || t('brand_no_reply', { brand })); return null; }   // the exact cause when known
   ui.ok(cfg, ms, brand);
   return cfg;
 }
@@ -95,7 +95,7 @@ export class Brain {
       const t0 = performance.now();
       const txt = await LLM.ask(this.cfg, req.system, req.user, { maxTokens: req.maxTokens || 120 });
       const ms = Math.round(performance.now() - t0);
-      if (!txt) { this._down(t('reason_no_reply')); this._scheduleRetry(); return null; }
+      if (!txt) { this._down(LLM.lastAiError || t('reason_no_reply')); this._scheduleRetry(); return null; }
       const out = this.def.llm.parse(txt, state, seat);
       if (!out || out.action == null) { this._down(t('reason_bad_move')); this._scheduleRetry(); return null; }
       this._setBrain('live', ms);

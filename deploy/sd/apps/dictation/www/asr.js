@@ -15,6 +15,7 @@
 
 import { streamMic } from '/micgate.js';   // OS-wide single-owner gate for the Cardputer mic
 import { whisperUrl } from '/ai.js';        // the ONE Whisper endpoint builder (Groq only serves it under /openai/v1)
+import { readMode } from '/anima-mode.js';  // the OS-wide mode: Private = no audio leaves this computer
 
 // Shared Vosk assets live next to the ANIMA app (same origin, absolute paths so they
 // resolve regardless of which app imports this module).
@@ -99,6 +100,9 @@ export function createASR() {
     const ac = new AbortController();
     a._ac = ac;
     (async () => {
+      // Private mode: the audio never leaves this computer — no Groq, not even as Vosk's fallback.
+      const priv = (() => { try { return readMode() === 'private'; } catch { return false; } })();
+      if (a.engine === 'groq' && priv) { handlers.onerror && handlers.onerror('private'); stop(); return; }
       let useGroq = (a.engine === 'groq');
       let Vosk = null, model = null;
       try {
@@ -106,7 +110,7 @@ export function createASR() {
         if (!useGroq) {
           try { Vosk = await loadVosk(); model = await getModel(Vosk, lang); }
           catch (err) {
-            if (a.engine !== 'vosk' && a.groqKey) { useGroq = true; a.source = 'online'; }
+            if (a.engine !== 'vosk' && a.groqKey && !priv) { useGroq = true; a.source = 'online'; }
             else throw err;
           }
         } else { a.source = 'online'; }

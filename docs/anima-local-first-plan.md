@@ -103,9 +103,14 @@ actions), no duplicate device calls, CDN-first heavy libraries with SD fallback.
    (chat / code / agent) and the `OLLAMA_ORIGINS` wizard for a refusing server. ANIMA's engines panel links there.
    The presets write only `auto | private` to `anima.mode` (Auto with just the WASM pack had written `edge` = Private)
    and know the PC rung (`pcModel` in the signal; Local only / Privacy use a localhost server only); the tier band
-   and the fallback chain show it. Agenti honours `prefer` and Private mode. Still open: moving the apps that keep
-   their own cloud client or key copy (Games, Paint, Dictation, Recorder, AI Chat, Spreadsheet, the agent runtime's
-   model tables) onto one resolver.
+   and the fallback chain show it. Agenti honours `prefer` and Private mode.
+   *Status (2026-10-11, later):* the migration is done where a copy did harm. `web/shell/ai-ask.js` is the one
+   decision (mode + PC models + routed cloud key) for Games, Paint, the Recorder and Dictation summaries, IR Remote,
+   Nearby and the shell broker; the copies it replaced (two chat resolvers, a Paint chat client, a Recorder
+   Groq-only client, Dictation's Whisper-key rule) are gone, and Private mode now holds in every one of them
+   (including cloud-only steps: online images, Whisper uploads, Spreadsheet's online tier). Kept apart by design:
+   ANIMA's ladder, the agent runtime's clients, AI Chat's key store, the copilot's per-step ladder (same policy).
+   See `docs/anima-engines.md` ("One decision for the other apps").
 4. **Offline agent = a portable "open code"** — unified runtime + tools + retrieval + HTML Viewer app with
    "Create with ANIMA". ANIMA works like a small OpenCode/Claude Code: a workspace (an SD folder mirrored in
    the browser), tools (read, grep, edit with diff + approval, run JS in a sandboxed worker, preview HTML),

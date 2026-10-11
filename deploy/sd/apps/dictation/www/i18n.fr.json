@@ -48,6 +48,8 @@
   "st_mic_busy": "micro occupé",
   "st_not_paired": "non associé",
   "st_no_model": "modèle manquant",
+  "notice_private": "<b>Mode Privé :</b> la transcription en ligne (Groq Whisper) est coupée, car l’audio quitterait cet ordinateur. Utilisez le moteur hors ligne (Vosk) ou passez en Auto.",
+  "st_private": "mode Privé",
   "st_audio_error": "erreur audio",
   "st_mic_in_use_by": "micro utilisé par {holder}",
   "notice_auth": "<b>Appareil non associé.</b> Ouvre NucleoOS, saisis le PIN affiché sur le Cardputer, puis rouvre cette app.",

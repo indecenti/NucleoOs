@@ -1460,13 +1460,17 @@ function wireMessages() {
     onFsChange: () => { try { FsIndex.invalidate(); } catch {} },
     // ai.complete for apps that declared ai.cloud: executed HERE, in the shell's origin, so the user's
     // key never enters the sandbox — only the completion text goes back over the broker. Lazy import:
-    // apps without the permission never cost the ai.js load. Same active-provider config the copilot
-    // uses (readTeacher); exec:'device' means "route via the device", which sandboxed apps must not do.
+    // apps without the permission never cost the load. The OS-wide AI decision (ai-ask.js): a model on the
+    // PC with no key, the cloud key the shared router picks (never exec:'device' — sandboxed apps must not
+    // route through the device), only this computer in Private mode. null when nothing may answer.
     aiComplete: async (prompt, opts) => {
-      const AI = await import('./ai.js');
-      const cfg = await AI.readTeacher();
-      if (!cfg || !cfg.key || cfg.unpaired || (cfg.exec || 'browser') === 'device') return null;
-      return AI.cloudComplete(cfg, null, prompt, (opts && opts.maxTokens) || 256, { signal: opts && opts.signal });
+      const { askAI } = await import('./ai-ask.js');
+      try { return (await askAI({ user: prompt, maxTokens: (opts && opts.maxTokens) || 256, signal: opts && opts.signal, tier: 'fast' })).text || null; }
+      catch (e) {
+        if (e && (e.kind === 'no_engine' || e.kind === 'private_no_pc')) return null;   // the broker answers 'no-ai'
+        const AI = await import('./ai.js');
+        throw new Error(AI.explainAiError(e) || 'AI error');   // plain words, key-free (redacted) — as before
+      }
     },
   });
   window.addEventListener('message', brokerHandler);

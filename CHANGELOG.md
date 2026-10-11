@@ -6,6 +6,19 @@ All notable user-facing changes to NucleoOS. Format loosely follows
 
 ## [Unreleased]
 
+### Changed
+- **One AI decision for the whole OS.** The Game Center's AI opponent, Paint's prompt enhancer, the Recorder's
+  and Dictation's summaries, IR Remote's and Nearby's spoken commands now use the AI you set up once: a model on
+  your PC (Ollama, LM Studio…) with no key, otherwise your cloud key. They used to need a cloud key, and each
+  picked a provider its own way.
+
+### Fixed
+- **Private mode keeps everything on this computer in every app** — games, Paint (no online image generation),
+  the Recorder and Dictation (no audio sent for transcription), the Spreadsheet (ANIMA stays offline), IR Remote
+  and Nearby. Before, these apps used the cloud whatever the mode.
+- **Paint's image providers explain themselves in Spanish, French and German** (they showed Italian).
+- **Settings shows a newly added xAI or Groq key at once** instead of offering to add it again for half a minute.
+
 ## [0.7.1] — 2026-10-11
 
 The first published release since 0.6.0: it also carries everything listed under 0.7.0 in

@@ -48,6 +48,8 @@
   "st_mic_busy": "mic busy",
   "st_not_paired": "not paired",
   "st_no_model": "model missing",
+  "notice_private": "<b>Private mode:</b> online transcription (Groq Whisper) is off, because the audio would leave this computer. Use the offline engine (Vosk) or switch to Auto.",
+  "st_private": "Private mode",
   "st_audio_error": "audio error",
   "st_mic_in_use_by": "mic in use by {holder}",
   "notice_auth": "<b>Device not paired.</b> Open NucleoOS, enter the PIN shown on the Cardputer, then reopen this app.",

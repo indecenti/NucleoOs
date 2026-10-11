@@ -130,17 +130,19 @@ const ops = {
 const findPeer = (name) => { const n = String(name || '').toLowerCase(); return peers.findIndex((p) => p.name.toLowerCase().includes(n)); };
 const skill = makeSkill(buildNearbySpec(ops, { lang: I18N.lang }));
 
-// ── ANIMA transport (cloud → graceful offline-floor fallback) ──────────────
+// ── ANIMA transport on the OS-wide AI decision (/ai-ask.js) → graceful offline-floor fallback ──────────
+// A tool-capable model on the PC with no key, the cloud key the shared router picks, only this computer in
+// Private mode. It was cloud-only (and called the cloud with no key at all). A failure says why, in plain words.
 async function transport({ system, user, history, actions, signal }) {
-  const ai = await import('/ai.js').catch(() => null);
-  if (!ai || !ai.cloudToolCall) throw new Error(t('cloud_unavailable'));
-  const cfg = await ai.readTeacher();
-  const out = await ai.cloudToolCall(cfg, {
-    system, messages: [...(history || []), { role: 'user', content: user }],
-    tools: actions.map((a) => ({ type: 'function', function: { name: a.name, description: a.description, parameters: a.schema } })),
-    signal, maxTokens: 200,
-  });
-  return { action: out.tool, args: out.args || {}, reply: out.text, via: 'cloud' };
+  const A = await import('/ai-ask.js').catch(() => null);
+  if (!A) throw new Error(t('cloud_unavailable'));
+  let out;
+  try {
+    out = await A.askAI({ system, messages: [...(history || []), { role: 'user', content: user }],
+      tools: actions.map((a) => ({ type: 'function', function: { name: a.name, description: a.description, parameters: a.schema } })),
+      signal, maxTokens: 200, tier: 'fast' });
+  } catch (e) { const AI = await import('/ai.js').catch(() => null); throw new Error((AI && AI.explainAiError(e)) || t('cloud_unavailable')); }
+  return { action: out.tool, args: out.args || {}, reply: out.text, via: out.engine && out.engine.kind === 'pc' ? 'pc' : 'cloud' };
 }
 
 // ── data loaders ───────────────────────────────────────────────────────────

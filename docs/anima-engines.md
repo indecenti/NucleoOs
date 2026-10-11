@@ -107,6 +107,24 @@ An app install rewrites `apps.json`; the firmware reloads it **one app object at
 (`nucleo_registry/registry_scan.c`, `npm run regscan:test`) — the whole-document parse ran out of heap in web mode
 and `/api/apps` kept the old list until a reboot.
 
+## One decision for the other apps (`web/shell/ai-ask.js`)
+Every surface that does not need ANIMA's ladder or the agent's tool loop asks `askAI()` instead of carrying its
+own client: the Game Center's LLM brain, Paint's prompt enhancer, the Recorder's and Dictation's summaries, IR
+Remote's and Nearby's commands (tool calls), and the shell broker's `ai.complete` for sandboxed apps.
+- The policy is the one above: **Private** → only a model on this computer (loopback); otherwise the PC first when
+  the user put it first (`prefer: 'local'`) or no usable cloud key exists, else the cloud with the PC as its
+  fallback. The cloud key is `routeFor`'s pick for the tier (`fast` for a game coach, `max` for summaries), never
+  a vault with `exec: 'device'`.
+- `planEngines({ probe: true })` names the exact PC server and model (labels that never lie: a game pins the
+  engine of its preflight for the whole match); `askAI()` returns `{ text, tool?, args?, engine }` or throws an
+  `AiError` — `no_engine` / `private_no_pc` when nothing may answer, explained in five languages.
+- Private mode also covers what is cloud by nature: Paint's online image engine is unavailable, the Recorder and
+  Dictation never upload audio to Groq Whisper (the device path included), Spreadsheet asks the device with
+  `mode=off` and never escalates `=ANIMA()` online. E2E: `recorder`, `dictation`, `spreadsheet-private`.
+- Kept apart on purpose: ANIMA's own ladder (device commands, WebGPU, WASM, streaming, the Groq web search), the
+  agent runtime's clients (prompt caching, tiers), AI Chat's own key store, and the copilot — which applies the same
+  policy with per-step timeouts. Tests: `tools/shell-ai-ask.test.mjs`.
+
 ## Local models on the user's PC (`web/shell/ai-engines.js`)
 - Reached browser → `localhost` (never through the Cardputer); Ollama needs `OLLAMA_ORIGINS`
   (set to `http://192.168.0.*` on the dev PC; ANIMA's help wizard explains it).
