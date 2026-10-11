@@ -65,11 +65,15 @@ export function planLabel(plan, ai = AI) {
 }
 
 // Ask. system + user (one turn) or messages ([{role:'user'|'assistant', content}], a conversation).
+// tools: an OpenAI-style function list — the answer may then be a call { tool, args } (the PC model is picked for
+// the 'agent' task, i.e. tool-capable; the cloud through cloudToolCall). Used by IR Remote and Nearby commands.
 // pin: 'pc' | 'cloud' keeps one engine (a game shows who plays and must not switch brains mid-match).
-// → { text, engine: { kind: 'pc'|'cloud', label, model, server?, provider? } }. Throws an AiError:
+// → { text, tool?, args?, engine: { kind: 'pc'|'cloud', label, model, server?, provider? } }. Throws an AiError:
 // the cloud's own (explainAiError says what to do), 'stopped', or 'no_engine' / 'private_no_pc' when nothing may answer.
 export async function askAI(opts = {}, deps = {}) {
-  const { task = 'chat', system = '', user = '', messages = null, tier = 'mid', maxTokens = 1024, temperature = 0.4, signal, pin = null } = opts;
+  const { system = '', user = '', messages = null, tier = 'mid', maxTokens = 1024, temperature = 0.4, signal, pin = null } = opts;
+  const tools = opts.tools && opts.tools.length ? opts.tools : null;
+  const task = opts.task || (tools ? 'agent' : 'chat');
   const ai = deps.ai || AI, E = deps.engines || Engines;
   const plan = deps.plan || await planEngines({ tier, task, pin }, deps);
   const turns = messages && messages.length ? messages : [{ role: 'user', content: String(user || '') }];
@@ -80,21 +84,24 @@ export async function askAI(opts = {}, deps = {}) {
     if (kind === 'pc') {
       try {
         const out = await E.localComplete(task, { messages: [...(system ? [{ role: 'system', content: system }] : []), ...turns],
-          temperature, maxTokens, loopbackOnly: plan.private, signal, config: plan.local });
-        if (out && out.text) {
+          ...(tools ? { tools } : {}), temperature, maxTokens, loopbackOnly: plan.private, signal, config: plan.local });
+        const call = out && out.toolCalls && out.toolCalls[0];
+        if (out && (out.text || call)) {
           const g = out.engine || {};
-          return { text: out.text, engine: { kind: 'pc', server: g.server, model: g.model, label: [g.server, g.model].filter(Boolean).join(' · ') || 'PC' } };
+          return { text: out.text || '', ...(call ? { tool: call.name, args: call.arguments || {} } : {}),
+            engine: { kind: 'pc', server: g.server, model: g.model, label: [g.server, g.model].filter(Boolean).join(' · ') || 'PC' } };
         }
       } catch (e) { if (signal && signal.aborted) throw stopped(); }   // a PC failure falls through to the next engine
     } else {
       const meta = {};
       try {
-        const text = messages && messages.length
-          ? (((await ai.cloudToolCall(plan.cloud, { system, messages: turns, tools: [], signal, maxTokens, temperature, tier, meta })) || {}).text || '')
-          : await ai.cloudComplete(plan.cloud, system, user, maxTokens, { tier, signal, meta });
-        if (text) {
+        const r = (tools || (messages && messages.length))
+          ? ((await ai.cloudToolCall(plan.cloud, { system, messages: turns, tools: tools || [], signal, maxTokens, temperature, tier, meta })) || {})
+          : { text: await ai.cloudComplete(plan.cloud, system, user, maxTokens, { tier, signal, meta }) };
+        if (r.text || r.tool) {
           const model = meta.model || plan.cloud.model;
-          return { text, engine: { kind: 'cloud', provider: plan.cloud.provider, model, label: `${ai.providerOf(plan.cloud.provider).label} · ${model}` } };
+          return { text: r.text || '', ...(r.tool ? { tool: r.tool, args: r.args || {} } : {}),
+            engine: { kind: 'cloud', provider: plan.cloud.provider, model, label: `${ai.providerOf(plan.cloud.provider).label} · ${model}` } };
         }
       } catch (e) {
         const err = ai.toAiError(e, plan.cloud);

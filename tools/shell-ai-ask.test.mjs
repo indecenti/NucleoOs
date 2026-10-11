@@ -112,3 +112,19 @@ test('the two new error kinds read as one plain sentence in all five languages',
     assert.ok(s.length > 30 && !/\{[A-Z]+\}/.test(s), `${kind}/${l}: ${s}`);
   }
 });
+
+test('tools: the PC answers with a call (tool-capable "agent" model), the cloud through cloudToolCall', async () => {
+  const TOOLS = [{ type: 'function', function: { name: 'press', description: 'press a key', parameters: { type: 'object', properties: { key: { type: 'string' } } } } }];
+  const w = world({ teacher: null });
+  w.deps.engines.localComplete = async (task, o) => { w.calls.pc.push({ task, ...o }); return { text: '', toolCalls: [{ name: 'press', arguments: { key: 'power' } }], engine: { server: 'Ollama', model: 'qwen3.5:9b' } }; };
+  const r = await askAI({ system: 's', user: 'turn on the TV', tools: TOOLS }, w.deps);
+  assert.equal(r.tool, 'press'); assert.deepEqual(r.args, { key: 'power' }); assert.equal(r.engine.kind, 'pc');
+  assert.equal(w.calls.pc[0].task, 'agent'); assert.equal(w.calls.pc[0].tools, TOOLS);
+  const c = world({ teacher: CLAUDE });
+  c.deps.ai.cloudToolCall = async (cfg, o) => { c.calls.tool.push(o); return { tool: 'press', args: { key: 'mute' } }; };
+  const rc = await askAI({ user: 'mute', tools: TOOLS }, c.deps);
+  assert.equal(rc.tool, 'press'); assert.equal(rc.engine.kind, 'cloud'); assert.equal(c.calls.tool[0].tools, TOOLS);
+  const priv = world({ teacher: CLAUDE, mode: 'private' });
+  await assert.rejects(askAI({ user: 'mute', tools: TOOLS }, priv.deps), (e) => e.kind === 'private_no_pc');
+  assert.equal(priv.calls.tool.length, 0, 'Private: no cloud tool call');
+});
