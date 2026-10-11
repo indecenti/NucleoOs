@@ -75,9 +75,13 @@ test('costellazioni: the hub paints in all five languages, from the catalog, wit
   const sim = await startSim();
   const browser = await launchBrowser({ args: [HOST_RULES] });
   t.after(async () => { await browser.close(); await sim.stop(); });
+  // One game page at a time: the earlier languages' pages kept rendering their 3D scene, so the fifth language ran
+  // beside four others — on a GPU-less CI runner (software WebGL) the case ran past its 8 minutes.
+  let prev = null;
   for (const lang of LANGS) {
     const c = cat(lang);
-    const page = await openGame(browser, sim, { lang });
+    if (prev) await prev.goto('about:blank').catch(() => {});
+    const page = prev = await openGame(browser, sim, { lang });
     // the first language starts the run (it is saved to the card); the others continue it
     if (lang === LANGS[0]) assert.equal(await page.eval(`document.querySelector('[data-modal] h3') && document.querySelector('[data-modal] h3').textContent`), c.cz_ui_no_run, lang + ': new-run offer');
     await toHub(page);
