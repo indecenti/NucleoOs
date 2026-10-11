@@ -244,7 +244,7 @@
     dock:$('dock'), chat:$('chat'), ask:$('ask'), ctxName:$('ctxName'), toast:$('toast'),
   };
   import { recordToSd, onMicStatus } from '/micgate.js';  // OS-wide single-owner gate for the Cardputer mic
-  import { transcribeLong, summarizeLong, isLongWav } from './longtranscribe.js';  // browser-side chunked path for long takes
+  import { transcribeLong, summarizeLong, isLongWav, hasWhisperKey, isPrivate } from './longtranscribe.js';  // browser-side chunked path for long takes
   let src = 'device';                        // 'device' | 'browser'
   let recording = false, t0 = 0, timerInt = null, statusPoll = null, devRec = null;
   let selected = null;                       // selected recording {name,path}
@@ -611,10 +611,12 @@
   }
 
   async function runPipeline(f, btn){
+    // Private mode: both paths upload the audio to Groq Whisper (the device path too) — refused, said plainly.
+    if(await isPrivate()){ setStatus(t('privateNoTranscribe'),'err'); toast(t('privateNoTranscribe')); return; }
     const o=btn.textContent; btn.disabled=true; btn.textContent=t('transcribingBtn');
     const path=DIR+'/'+f.name;
     const isWav=/\.wav$/i.test(f.name);
-    const hasKey=!!(localStorage.getItem('groq.key')||'').trim();
+    const hasKey=await hasWhisperKey();   // this browser's Groq key, or the one saved in Settings ▸ AI
     try{
       // CLIENT-SIDE chunked path for WAV when the browser holds a Groq key: the only way long takes
       // (>13 min hit Whisper's 25 MB cap, and the device's single-shot TLS upload is fragile). The device

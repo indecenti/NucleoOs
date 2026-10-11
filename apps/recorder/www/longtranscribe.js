@@ -118,34 +118,25 @@ async function whisper(wavBlob, lang, key, base, signal) {
   return (await r.text()).trim();
 }
 
-// The summary model is not pinned: the saved AI Chat model while Groq still serves it, else the strongest one it
-// serves (the shared /ai.js withAutoModel, which also re-picks a retired model). A failure explains itself.
 let _ai = null;
 const aiMod = () => _ai || (_ai = import('/ai.js').catch(() => { _ai = null; return null; }));
-async function chat(messages, key, base, signal) {
-  const saved = localStorage.getItem('groq.model') || '';
-  const once = async (model) => {
-    const r = await fetch(base.replace(/\/$/, '') + '/chat/completions', {
-      method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: 'Bearer ' + key },
-      body: JSON.stringify({ model, temperature: 0.3, messages }), signal,
-    });
-    const text = await r.text().catch(() => '');
-    if (!r.ok) {
-      const AI = await aiMod();
-      if (AI) throw await AI.aiErrorFromResponse(r, { provider: 'openai', model }, text);
-      throw new Error('summary ' + r.status);
-    }
-    const j = JSON.parse(text);
-    return (j.choices?.[0]?.message?.content || '').trim();
-  };
-  const AI = await aiMod();
-  if (!AI) return once(saved === 'auto' || !saved ? 'llama-3.3-70b-versatile' : saved);
-  try { return await AI.withAutoModel({ provider: 'openai', base, key, model: saved === 'auto' ? '' : saved, tier: 'max' }, (c) => once(c.model)); }
-  catch (e) { const msg = AI.explainAiError(e, undefined, { settings: 'AI Chat ⚙' }); throw new Error(msg || String(e && e.message || e)); }
+// One summary step on the OS-wide AI decision (/ai-ask.js): a model on the PC with no key, the cloud key the shared
+// router picks, only this computer in Private mode. It used to be a Groq-only client of its own. A failure explains
+// itself (explainAiError).
+async function summaryStep(messages, signal) {
+  let A;
+  try { A = await import('/ai-ask.js'); } catch { throw new Error('summary unavailable'); }
+  try { return (await A.askAI({ system: messages[0].content, user: messages[1].content, tier: 'max', maxTokens: 1500, signal })).text || ''; }
+  catch (e) { const AI = await aiMod(); throw new Error((AI && AI.explainAiError(e)) || String((e && e.message) || e)); }
 }
 
 // The Groq key: the one AI Chat / Dictation keep in this browser, else the OS key vault (Settings ▸ AI). A key set
 // only in Settings used to read as "no key" here, and long recordings fell back to the device's own transcriber.
+export async function isPrivate() {
+  try { return (await import('/anima-mode.js')).readMode() === 'private'; } catch { return false; }
+}
+// A Whisper-capable Groq key is at hand (this browser's, or the vault's).
+export async function hasWhisperKey() { return !!(await groqCreds()).key; }
 async function groqCreds() {
   const key = (localStorage.getItem('groq.key') || '').trim();
   if (key) return { key, base: (localStorage.getItem('groq.base') || 'https://api.groq.com/openai/v1').trim() };
@@ -158,6 +149,7 @@ async function groqCreds() {
 // Transcribe a (possibly hours-long) WAV on the device, chunk by chunk, entirely in the browser.
 // onProgress({phase:'transcribe', done, total}) fires per segment. Returns the full transcript string.
 export async function transcribeLong({ path, lang = 'auto', onProgress, signal } = {}) {
+  if (await isPrivate()) throw new Error('private');   // Private mode: the audio never leaves this computer
   const { key, base } = await groqCreds();
   if (!key) throw new Error('no-key');
 
@@ -191,17 +183,15 @@ export async function transcribeLong({ path, lang = 'auto', onProgress, signal }
 
 // Map-reduce summary of an arbitrarily long transcript. onProgress({phase:'summarize', done, total}).
 export async function summarizeLong({ text, lang = 'it', onProgress, signal } = {}) {
-  const { key, base } = await groqCreds();
-  if (!key) throw new Error('no-key');
   const L = LANG_NAMES[lang] || LANG_NAMES.en;
 
   // Short transcript: one pass.
   if (text.length <= SUMMARY_PIECE_CHARS) {
     onProgress?.({ phase: 'summarize', done: 0, total: 1 });
-    const s = await chat([
+    const s = await summaryStep([
       { role: 'system', content: `Summarize the user's transcript in ${L}, as concise bullet points capturing decisions, facts and action items.` + FENCE_RULE },
       { role: 'user', content: fenceUntrusted('transcript', {}, text) },
-    ], key, base, signal);
+    ], signal);
     onProgress?.({ phase: 'summarize', done: 1, total: 1 });
     return s;
   }
@@ -213,16 +203,16 @@ export async function summarizeLong({ text, lang = 'it', onProgress, signal } = 
   for (let i = 0; i < pieces.length; i++) {
     if (signal?.aborted) throw new Error('aborted');
     onProgress?.({ phase: 'summarize', done: i, total: pieces.length + 1 });
-    partials.push(await chat([
+    partials.push(await summaryStep([
       { role: 'system', content: `This is part ${i + 1}/${pieces.length} of a long transcript. Summarize THIS part in ${L} as terse notes (facts, decisions, action items). No preamble.` + FENCE_RULE },
       { role: 'user', content: fenceUntrusted('transcript', { part: i + 1, of: pieces.length }, pieces[i]) },
-    ], key, base, signal));
+    ], signal));
   }
   onProgress?.({ phase: 'summarize', done: pieces.length, total: pieces.length + 1 });
-  const final = await chat([
+  const final = await summaryStep([
     { role: 'system', content: `Merge these section notes of one long recording into a single coherent summary in ${L}: clear bullet points for decisions, key facts, and a final "Action items" list. Remove duplicates.` },
     { role: 'user', content: partials.join('\n\n') },
-  ], key, base, signal);
+  ], signal);
   onProgress?.({ phase: 'summarize', done: pieces.length + 1, total: pieces.length + 1 });
   return final;
 }

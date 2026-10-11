@@ -154,3 +154,26 @@ test('recorder: a busy mic refuses the start (without blaming itself); a free mi
     assert.ok(!onSd(sim, `${DIR}/${row.name.replace(/\.mp3$/, '.wav')}`), 'the device WAV was removed');
   });
 });
+
+// Private mode (anima-mode.js) = nothing leaves this computer. Both transcription paths upload the audio to Groq
+// Whisper — the browser path, and the device path (the firmware streams the file to the same cloud) — so in
+// Private neither runs, and the recorder says why instead of failing silently or uploading anyway.
+test('recorder: in Private mode "transcribe" uploads nothing — not via the browser, not via the device', { skip }, async (t) => {
+  const sim = await startSim({ seed: { [`${DIR}/rec-20261003-080000.mp3`]: MP3, [`${DIR}/rec-20261003-090000.wav`]: 'RIFF....WAVE' } });
+  const browser = await launchBrowser({ args: [HOST_RULES] });
+  t.after(async () => { await browser.close(); await sim.stop(); });
+  const page = await open(browser, sim);
+  await page.eval(`localStorage.setItem('anima.mode', 'private'); localStorage.setItem('groq.key', 'gsk_test_key_never_sent'); true`);
+  await page.goto(`${sim.origin}/apps/recorder/`);
+  assert.ok(await page.waitFor(`document.querySelectorAll('#list li.rec').length === 2`, { timeout: 45000 }), 'two takes listed');
+  const mark = page.mark();
+  for (const name of ['rec-20261003-080000.mp3', 'rec-20261003-090000.wav']) {
+    await page.eval(rowBtn(name, 'button.ai'));
+    assert.ok(await page.waitFor(`${STATUS} === ${JSON.stringify(EN.privateNoTranscribe)}`, { timeout: 5000 }), name + ': says why: ' + await page.eval(STATUS));
+  }
+  await sleep(800);
+  const out = page.since(mark).filter((e) => e.url && (/\/api\/transcribe/.test(e.url) || /groq\.com/.test(e.url)));
+  assert.deepEqual(out, [], 'no request reached /api/transcribe or Groq');
+  const requests = await page.eval(`performance.getEntriesByType('resource').map((r) => r.name).filter((u) => u.includes('/api/transcribe') || u.includes('groq.com'))`);
+  assert.deepEqual(requests, [], 'no transcription request was even attempted');
+});

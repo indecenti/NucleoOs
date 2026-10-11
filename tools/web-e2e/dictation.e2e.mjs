@@ -110,3 +110,18 @@ test('dictation: "New" never throws away a transcript the device failed to save'
     assert.equal(await page.eval(`document.getElementById('words').textContent`), EN.wordCount.other.replace('{count}', '0'));
   });
 });
+
+// Private mode (anima-mode.js) = no audio leaves this computer. The online engine (Groq Whisper) is refused with
+// the reason, even chosen explicitly and with a key; the offline engine (Vosk) is what still works.
+test('dictation: in Private mode the online engine never runs — it says why, and Vosk still listens', { skip }, async (t) => {
+  const sim = await startSim();
+  const browser = await launchBrowser({ args: [HOST_RULES] });
+  t.after(async () => { await browser.close(); await sim.stop(); });
+  const page = await open(browser, sim, { local: { 'anima.mode': 'private', 'dictation.engine': 'groq', 'groq.key': 'gsk_test_key_never_sent' } });
+  assert.ok(await page.waitFor(`${STATUS} === ${JSON.stringify(EN.st_private)}`, { timeout: 30000 }), 'status: Private mode, got: ' + await page.eval(STATUS));
+  assert.ok(await page.eval(`document.getElementById('notice').classList.contains('show') && document.getElementById('notice').textContent.includes('Groq Whisper')`), 'the notice explains it');
+  const groq = await page.eval(`performance.getEntriesByType('resource').map((r) => r.name).filter((u) => u.includes('groq.com'))`);
+  assert.deepEqual(groq, [], 'nothing was sent to Groq');
+  const vosk = await open(browser, sim, { local: { 'anima.mode': 'private', 'dictation.engine': 'vosk' } });
+  assert.ok(await listening(vosk), 'the offline engine listens in Private mode');
+});
