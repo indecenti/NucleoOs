@@ -86,8 +86,8 @@ static esp_err_t serve_handoff(httpd_req_t *req)
 // fires only under the floor, frees only an IDLE offline index (it reloads from SD on the next ANIMA
 // query), and is ungated by any key. Wired at boot to nucleo_anima_l1_unload_if_idle (see nucleo_httpd).
 #define NUCLEO_WEBFS_SERVE_MIN_HEAP  (40 * 1024)   // largest_free_block we want before serving a UI asset
-#define NUCLEO_WEBFS_HEAP_WAIT_STEPS 12            // ...and how patient to be getting there (up to ~1.2 s):
-#define NUCLEO_WEBFS_HEAP_WAIT_MS    100           // we'd rather the FIRST load be slow than truncate an asset
+#define NUCLEO_WEBFS_HEAP_WAIT_STEPS 12            // ...and how patient to be getting there after a reclaim that
+#define NUCLEO_WEBFS_HEAP_WAIT_MS    100           // freed memory (up to ~1.2 s, once — never on every asset)
 static void (*s_reclaim_cb)(void);
 void nucleo_webfs_set_reclaim_cb(void (*cb)(void)) { s_reclaim_cb = cb; }
 
@@ -239,16 +239,21 @@ static esp_err_t static_get(httpd_req_t *req)
         }
     }
 
-    // A client is loading the web OS: GUARANTEE the server has the RAM to serve it before we start. If the
-    // largest contiguous block is under the floor, reclaim the idle ANIMA index (~31 KB) and, if still tight,
-    // WAIT in short steps for the heap pool to coalesce — we'd rather take a little longer than hand back a
-    // truncated asset, so the first load always completes. Bounded (a genuinely stuck heap still returns
-    // control and the serve proceeds best-effort), a no-op when heap is healthy, ungated by any key.
-    for (int i = 0; s_reclaim_cb && i < NUCLEO_WEBFS_HEAP_WAIT_STEPS &&
-         heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) < NUCLEO_WEBFS_SERVE_MIN_HEAP; i++) {
+    // A client is loading the web OS: give the server the RAM to serve it before we start. If the largest
+    // contiguous block is under the floor, reclaim the idle ANIMA index (~31 KB) and, if that handed memory
+    // back but the block is still short, WAIT in short steps for it to settle. Bounded (the serve proceeds
+    // best-effort either way), a no-op when heap is healthy, ungated by any key.
+    // Wait ONLY after a real release: with nothing left to free, the heap simply is this fragmented in this
+    // profile (the web profile idles at a ~31 KB largest block, under the 40 KB floor) and waiting cannot
+    // change it. The old unconditional wait taxed EVERY asset 1.2 s on this single-task server — a cold shell
+    // load (~50 requests) took 30+ s, and even a 404 answered after 1.3 s.
+    if (s_reclaim_cb && heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) < NUCLEO_WEBFS_SERVE_MIN_HEAP) {
+        size_t before = heap_caps_get_free_size(MALLOC_CAP_INTERNAL);
         s_reclaim_cb();                                              // drop the idle index (idempotent once freed)
-        if (heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) >= NUCLEO_WEBFS_SERVE_MIN_HEAP) break;
-        vTaskDelay(pdMS_TO_TICKS(NUCLEO_WEBFS_HEAP_WAIT_MS));        // let the idle task coalesce the freed blocks
+        bool freed = heap_caps_get_free_size(MALLOC_CAP_INTERNAL) > before;
+        for (int i = 0; freed && i < NUCLEO_WEBFS_HEAP_WAIT_STEPS &&
+             heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) < NUCLEO_WEBFS_SERVE_MIN_HEAP; i++)
+            vTaskDelay(pdMS_TO_TICKS(NUCLEO_WEBFS_HEAP_WAIT_MS));
     }
 
     // A Range request (a media seek, or voice.js's 1-byte probe of vosk.js) is served RAW with 206 —

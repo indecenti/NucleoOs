@@ -85,6 +85,13 @@ calendar service OFF so the desktop gets the RAM. `/api/status` → `"profile": 
   an answer it skipped every fallback below (brightness went to the agent, "che ore sono" to a model). ANIMA says so
   (`devWebMode`), the L1 setting stands down, and step 1 above takes over.
 
+Serving the shell in this profile (`nucleo_webfs.c` `static_get`): under a 40 KB largest-free-block floor the handler
+reclaims the idle offline index, and waits (12 × 100 ms) **only if that reclaim actually freed memory**. The web
+profile idles at a 31 KB largest block, which no wait can raise. Until 2026-10-11 the wait ran on every request:
+each asset, even a 404, cost a fixed 1.25 s, against 0.1 s for `/api/status`. The single-task server queued about
+50 of them, so a cold load from a fresh browser took 32–48 s, the DOM was ready only at ~23 s, and single TTFBs
+reached 6–14 s (measured on the original unit, weak Wi-Fi, 126 ms RTT).
+
 Pairing sessions survive it: `nucleo_auth` evicts the **least recently used** of its 32 slots
 (`auth_slots.c`, `npm run authslot:test`). The dev tools (`push-files`, `push-ota`, `sd-net-sync`) reuse ONE cached
 session per device (`tools/lib/device-session.mjs`, cache `tools/.device-sessions.json`, gitignored) — pairing on
