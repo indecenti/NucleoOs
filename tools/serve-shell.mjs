@@ -156,6 +156,41 @@ const jit = (base, spread) => Math.max(0, Math.round(base + (Math.random() * 2 -
 
 // Mock the firmware OTA endpoint so the Updates app can be exercised end-to-end (upload
 // progress + reboot-poll). It just drains the body and reports success — no real flashing.
+// ---- SD content (mirrors nucleo_httpd.c status_get .sdc + POST /api/sdcontent/arm, nucleo_sdcontent.c) ----
+// status codes = nucleo_sdc_status_t; "needed" = missing|partial|outdated, exactly sdc_content_needed().
+// SIM_SDC picks the starting state; a test drives it with POST /api/_sim/sdc {status, card, install_ms, fail}.
+const SDC_ST = { no_sd: 0, missing: 1, partial: 2, outdated: 3, skipped: 4, complete: 5, manual: 6, unknown: 7 };
+const FW3 = FW_VERSION.split('+')[0];
+const SDC_CARD = { no_sd: '', missing: '', partial: FW3, outdated: '0.6.0', skipped: '', complete: FW3, manual: FW3, unknown: '' };
+function sdcInit(name) {
+  const k = Object.hasOwn(SDC_ST, name) ? name : 'complete';
+  return { status: SDC_ST[k], card: SDC_CARD[k], armed: false, diag: '', installMs: 2500, fail: false, absent: false };
+}
+let sdc = sdcInit(process.env.SIM_SDC);
+const sdcView = () => ({ status: sdc.status, card: sdc.card, fw: FW3, needed: [1, 2, 3].includes(sdc.status), armed: sdc.armed });
+// The firmware arms an NVS flag and reboots into the lean install boot (no httpd: the browser loses the
+// device for the whole download), which fetches the changed files and reboots back. Played here as an
+// offline window of installMs, then the card at this firmware's version — or, with fail, the reason
+// persisted for /api/status .sdc_diag (nucleo_sdcontent_last_diag) and the card left as it was.
+async function sdcArmApi(req, res) {
+  if (!isAuthed(req)) return reject401(res);
+  let b = {}; try { b = JSON.parse((await readBody(req)).toString('utf8') || '{}'); } catch {}
+  if (b.on === false) { sdc.armed = false; return sendJSON(res, { ok: true, armed: false }); }
+  sdc.armed = true;
+  sendJSON(res, { ok: true, armed: true, reboot: true });
+  setTimeout(() => {
+    SIM.offline = true;
+    for (const s of sockets) { sockets.delete(s); try { s.destroy(); } catch {} }
+    setTimeout(() => {
+      if (sdc.fail) sdc.diag = 'Content unreachable (HTTP 404)';
+      else { sdc.status = SDC_ST.complete; sdc.card = FW3; sdc.diag = ''; }
+      sdc.armed = false;
+      simState.bootMs = Date.now();
+      SIM.offline = false;
+    }, sdc.installMs);
+  }, 300);
+}
+
 async function otaApi(req, res) {
   let bytes = 0;
   req.on('data', (c) => { bytes += c.length; });
@@ -555,6 +590,8 @@ function isAskable(q) {
 //   GET  /api/_sim/stats                         request counters (the E2E device-load budget)
 //   POST /api/_sim/apps  {add:{…}} | {clear:true}  inject extra /api/apps records (hostile-manifest tests)
 //   POST /api/_sim/publish {t:'apps.changed', d:{…}}  push one event on the live socket (e.g. "an app was installed")
+//   POST /api/_sim/sdc {status:'outdated', card, install_ms, fail, diag, absent}  the SD-content state (/api/status .sdc)
+//   POST /api/_sim/net {mode:'ap'|'sta'}          hotspot-only (no internet) vs joined to a Wi-Fi network
 const SIM = { faults: [], offline: false, extraApps: [], stats: { total: 0, inflight: 0, peak: 0, byPath: {} } };
 const simFaultFor = (path) => SIM.faults.find((f) => (f.route === '*' || path.startsWith(f.route)) && (f.times === 0 || f.left > 0));
 async function simControl(req, res, path) {
@@ -579,6 +616,19 @@ async function simControl(req, res, path) {
     if (typeof b.t !== 'string' || !b.t) return send(res, 400, 'text/plain', 'need t');
     publish(b.t, b.d && typeof b.d === 'object' ? b.d : {});
     return sendJSON(res, { ok: true, clients: sockets.size });
+  }
+  if (path === '/api/_sim/sdc') {                  // {status:'outdated', card?, install_ms?, fail?}: the SD-content state
+    if (b.status) { const keep = { installMs: sdc.installMs, fail: sdc.fail }; sdc = { ...sdcInit(b.status), ...keep }; }
+    if (typeof b.card === 'string') sdc.card = b.card;
+    if (b.install_ms != null) sdc.installMs = Math.max(0, b.install_ms | 0);
+    if (b.fail != null) sdc.fail = !!b.fail;
+    if (b.diag != null) sdc.diag = String(b.diag);
+    if (b.absent != null) sdc.absent = !!b.absent;   // a firmware older than /api/sdcontent: no .sdc at all
+    return sendJSON(res, { ok: true, sdc: sdcView(), diag: sdc.diag });
+  }
+  if (path === '/api/_sim/net') {                  // {mode:'ap'|'sta'}: hotspot-only (no internet) vs joined to Wi-Fi
+    if (b.mode === 'ap' || b.mode === 'sta') apiStatus.network.mode = b.mode;
+    return sendJSON(res, { ok: true, mode: apiStatus.network.mode });
   }
   if (path === '/api/_sim/ws-drop') {
     const n = sockets.size;
@@ -623,6 +673,7 @@ const server = createServer(async (req, res) => {
     simState.minFree = Math.max(9000, simState.minFree - (Math.random() < 0.15 ? jit(120, 100) : 0));   // watermark only ever drops
     return sendJSON(res, { ...apiStatus, uptime_s: up, min_free_heap: simState.minFree, free_heap: jit(74000, 6000),
       largest_free_block: jit(42000, 5000), apps: { installed: a.apps.length },
+      ...(sdc.diag ? { sdc_diag: sdc.diag } : {}), ...(sdc.absent ? {} : { sdc: sdcView() }),
       network: { ...apiStatus.network, time: Math.floor(Date.now() / 1000) } }); }   // live device clock for the Clock app badge
   if (path === '/api/apps') return sendJSON(res, await apiApps());
   // OS language (mirrors nucleo_httpd.c lang_handler): GET reads it, POST sets it and is a config
@@ -1130,6 +1181,7 @@ const server = createServer(async (req, res) => {
   if (path === '/api/ota' && req.method === 'POST' && process.env.SIM_GUEST)   // firmware ota_post under M5Launcher
     return send(res, 409, 'application/json', JSON.stringify({ error: 'hosted', host: 'm5launcher', message: 'Installed by M5Launcher: update NucleoOS from the Launcher (OTA)' }));
   if (path === '/api/ota' && req.method === 'POST') return otaApi(req, res);
+  if (path === '/api/sdcontent/arm' && req.method === 'POST') return sdcArmApi(req, res);
   if (path === '/api/reboot' && req.method === 'POST') { if (!isAuthed(req)) return reject401(res); return sendJSON(res, { ok: true, reboot: true }); }
   if (path === '/api/llm') return llmApi(req, res, url);   // same-origin LLM proxy (mirrors firmware /api/llm)
   if (path === '/api/proxy') return proxyApi(req, res, url);   // same-origin page/file proxy (mirrors firmware /api/proxy)

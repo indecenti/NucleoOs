@@ -158,6 +158,15 @@ static esp_err_t cpu_get(httpd_req_t *req)
 static httpd_handle_t s_server = NULL;
 
 // GET /api/status -> live OS snapshot (device, storage capacity, app count).
+// SD-content state, for the web Updates tab (it has no other way to see the card). nucleo_sdcontent_*
+// via extern (as sdc_diag/sdc_heap already are) to avoid a httpd->sdcontent REQUIRES edge. The status
+// read touches the card (a few small stats), so cache it ~30 s: /api/status is polled every few seconds.
+extern int  nucleo_sdcontent_status(void);          // nucleo_sdc_status_t (0 NO_SD..7 UNKNOWN); enum==int ABI
+extern const char *nucleo_sdcontent_card_tag(void); // release the card's content is from ("" if unknown)
+extern const char *nucleo_sdcontent_fw_tag(void);   // this firmware's x.y.z
+extern bool nucleo_sdcontent_needed(void);          // card missing/partial/outdated for this firmware
+extern bool nucleo_sdcontent_armed(void);           // a download is armed for the next boot
+
 static esp_err_t status_get(httpd_req_t *req)
 {
     nucleo_storage_refresh();
@@ -174,6 +183,24 @@ static esp_err_t status_get(httpd_req_t *req)
       char diag[80]; if (nucleo_sdcontent_last_diag(diag, sizeof diag)) cJSON_AddStringToObject(root, "sdc_diag", diag);
       extern bool nucleo_sdcontent_last_heap(char *, size_t);
       char hp[100]; if (nucleo_sdcontent_last_heap(hp, sizeof hp)) cJSON_AddStringToObject(root, "sdc_heap", hp); }
+    // SD-content state for the web Updates tab (card version vs firmware, and whether an update is due),
+    // cached ~30 s so frequent /api/status polls don't re-stat the card. The status enum is stable between
+    // installs, so a stale-by-30s read is harmless; `armed` is read live (cheap NVS) so the tab reflects a
+    // just-armed download at once.
+    { static int64_t s_sdc_at; static int s_sdc_st = -1; static char s_sdc_card[24], s_sdc_fw[24];
+      int64_t now = esp_timer_get_time();
+      if (s_sdc_st < 0 || now - s_sdc_at > 30000000) {
+          s_sdc_st = nucleo_sdcontent_status();
+          snprintf(s_sdc_card, sizeof s_sdc_card, "%s", nucleo_sdcontent_card_tag());
+          snprintf(s_sdc_fw, sizeof s_sdc_fw, "%s", nucleo_sdcontent_fw_tag());
+          s_sdc_at = now;
+      }
+      cJSON *sd = cJSON_AddObjectToObject(root, "sdc");
+      cJSON_AddNumberToObject(sd, "status", s_sdc_st);   // 0 no_sd,1 missing,2 partial,3 outdated,4 skipped,5 complete,6 manual,7 unknown
+      cJSON_AddStringToObject(sd, "card", s_sdc_card);   // release on the card ("" if unknown)
+      cJSON_AddStringToObject(sd, "fw", s_sdc_fw);       // this firmware's x.y.z
+      cJSON_AddBoolToObject(sd, "needed", nucleo_sdcontent_needed());
+      cJSON_AddBoolToObject(sd, "armed", nucleo_sdcontent_armed()); }
     cJSON_AddNumberToObject(root, "uptime_s", esp_timer_get_time() / 1000000);
     // Which boot profile serves this request. "web" = the lean server-Solo a browser session hands off to:
     // httpd + auth only, the offline brain / voice / IR / recorder / calendar service are OFF to leave the
@@ -906,6 +933,17 @@ static esp_err_t ota_post(httpd_req_t *req)
     }
     if (r < 0) { esp_ota_abort(h); OTA_BAIL(); httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "upload interrupted"); return ESP_FAIL; }   // abort frees the OTA handle
     if (esp_ota_end(h) != ESP_OK) { OTA_BAIL(); httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "incomplete/invalid image"); return ESP_FAIL; }   // end frees it even on failure
+    // Identity gate: esp_ota_end only proved it's a valid ESP app image — a foreign firmware or the merged
+    // 0x0 install image (bootloader+parttable+app) also begins 0xE9 and would pass. Require it to BE NucleoOS
+    // (its app descriptor's project_name) before we make it bootable, so a wrong file picked in the browser
+    // can't replace the OS with something else. The 0x0 merged image's first app descriptor sits past the
+    // bootloader, so its project_name here is not "nucleoos" and it is refused.
+    { esp_app_desc_t desc;
+      if (esp_ota_get_partition_description(part, &desc) != ESP_OK || strcmp(desc.project_name, "nucleoos") != 0) {
+          ESP_LOGE(TAG, "OTA rejected: not a NucleoOS image (project_name=%.32s)",
+                   esp_ota_get_partition_description(part, &desc) == ESP_OK ? desc.project_name : "?");
+          OTA_BAIL(); httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "not a NucleoOS firmware image"); return ESP_FAIL;
+      } }
     if (esp_ota_set_boot_partition(part) != ESP_OK) { OTA_BAIL(); httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "set_boot"); return ESP_FAIL; }
     #undef OTA_BAIL
 
@@ -916,6 +954,36 @@ static esp_err_t ota_post(httpd_req_t *req)
     httpd_resp_sendstr(req, out);
     vTaskDelay(pdMS_TO_TICKS(800));     // let the response flush, then boot the new image
     esp_restart();
+    return ESP_OK;
+}
+
+// POST /api/sdcontent/arm — the web Updates tab's "Update SD content" button. Body {"on":true} (default)
+// arms the incremental SD-content download for the next boot and reboots into the lean install boot (the
+// same path the first-boot wizard uses; it fetches only the changed files and verifies each against the
+// manifest). {"on":false} disarms. Paired-only. Works on an M5Launcher guest too — unlike firmware OTA,
+// the SD download only writes the card, and the reboot keeps NucleoOS selected.
+extern bool nucleo_sdcontent_arm(bool on);
+static esp_err_t sdcontent_arm_post(httpd_req_t *req)
+{
+    NUCLEO_AUTH_GUARD(req);
+    httpd_resp_set_type(req, "application/json");
+    char body[64] = {0}; int total = 0, r;
+    while ((r = httpd_req_recv(req, body + total, sizeof(body) - 1 - total)) > 0) {
+        total += r; if (total >= (int)sizeof(body) - 1) break;
+    }
+    body[total > 0 ? total : 0] = '\0';
+    bool on = true;
+    cJSON *root = cJSON_Parse(body);
+    if (root) { cJSON *o = cJSON_GetObjectItem(root, "on"); if (cJSON_IsBool(o)) on = cJSON_IsTrue(o); cJSON_Delete(root); }
+    if (!on) {
+        httpd_resp_sendstr(req, nucleo_sdcontent_arm(false) ? "{\"ok\":true,\"armed\":false}" : "{\"error\":\"nvs\"}");
+        return ESP_OK;
+    }
+    // Arming reboots into the install boot (nucleo_sdcontent_arm(true) sets the NVS flag then esp_restart()),
+    // so send the response and let it flush first.
+    httpd_resp_sendstr(req, "{\"ok\":true,\"armed\":true,\"reboot\":true}");
+    vTaskDelay(pdMS_TO_TICKS(800));
+    nucleo_sdcontent_arm(true);
     return ESP_OK;
 }
 
@@ -2633,6 +2701,7 @@ esp_err_t nucleo_httpd_start(void)
     httpd_uri_t wifiprio   = { .uri = "/api/wifi/priority",  .method = HTTP_POST, .handler = wifi_priority_post };  // pin/unpin a saved net
     httpd_uri_t wifirecon  = { .uri = "/api/wifi/reconnect", .method = HTTP_POST, .handler = wifi_reconnect_post }; // rejoin best known now
     httpd_uri_t ota = { .uri = "/api/ota", .method = HTTP_POST, .handler = ota_post };
+    httpd_uri_t sdc_arm = { .uri = "/api/sdcontent/arm", .method = HTTP_POST, .handler = sdcontent_arm_post };
     httpd_uri_t reboot = { .uri = "/api/reboot", .method = HTTP_POST, .handler = reboot_post };
     httpd_uri_t anima = { .uri = "/api/anima", .method = HTTP_GET, .handler = anima_get };
     httpd_uri_t anima_verify = { .uri = "/api/anima/verify", .method = HTTP_GET, .handler = anima_verify_get };
@@ -2672,6 +2741,7 @@ esp_err_t nucleo_httpd_start(void)
     httpd_register_uri_handler(server, &wifiprio);   // /api/wifi/priority  (pin/unpin a saved net)
     httpd_register_uri_handler(server, &wifirecon);  // /api/wifi/reconnect (rejoin best known now)
     httpd_register_uri_handler(server, &ota);
+    httpd_register_uri_handler(server, &sdc_arm);     // /api/sdcontent/arm (web "Update SD content")
     httpd_register_uri_handler(server, &reboot);
     httpd_register_uri_handler(server, &anima);
     httpd_register_uri_handler(server, &anima_verify);   // ANIMA Forge cross-substrate grounded verify

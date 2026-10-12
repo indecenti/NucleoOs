@@ -73,6 +73,7 @@ export function initUpdatesTab({ $, T, getStatus, pausePoller, resumePoller }) {
     } else if (cache && cache.tag) setState('—');
     if (e.flash && !busy) { e.flash.hidden = !newer; disarmConfirm(); }
     if (e.auto) e.auto.checked = localStorage.getItem(LS_ENABLED) !== '0';
+    renderSdc();
   }
 
   async function check(force) {
@@ -197,7 +198,16 @@ export function initUpdatesTab({ $, T, getStatus, pausePoller, resumePoller }) {
         try { const r = await fetch('/api/status', { cache: 'no-store', signal: AbortSignal.timeout(4000) }); if (r.ok) s = await r.json(); } catch {}
         if (!s || !s.version) continue;
         const c = cmpSemver(s.version, cache.tag);
-        if (c === 0) { setProgress(false); setState(TT('upDone', { tag: cache.tag })); render(); return; }
+        if (c === 0) {
+          setProgress(false); setState(TT('upDone', { tag: cache.tag })); render();
+          // The new firmware expects the SD content of its own release: if the card is behind, say so where the
+          // fix is, instead of leaving an old web OS under a new firmware (the device can only serve what's there).
+          if (s.sdc && s.sdc.needed) {
+            sdcAfterFlash = true; renderSdc();
+            try { const sect = $('sdc-sect'); if (sect) sect.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch {}
+          }
+          return;
+        }
         // Old version, well past the reboot window → the bootloader rolled the image back.
         if (c < 0 && Date.now() - t0 > 45000) return fail(T('upFailTimeout'));
       }
@@ -210,8 +220,129 @@ export function initUpdatesTab({ $, T, getStatus, pausePoller, resumePoller }) {
     }
   }
 
+  // ---- SD content: the card's web OS, apps and ANIMA knowledge ----------------------------------------
+  // /api/status .sdc = { status, card, fw, needed, armed } (nucleo_sdc_status_t codes) and .sdc_diag = why the
+  // last install failed. POST /api/sdcontent/arm reboots the device into its lean install boot, which fetches
+  // ONLY the changed files from the official site, verifies each against the release manifest (SHA-256) and
+  // reboots back; the user's data, keys and settings are never part of the payload. The browser plays no part
+  // in the transfer — it only arms it, then waits for the device to come back and reports the verdict.
+  const SDC = { NO_SD: 0, MISSING: 1, PARTIAL: 2, OUTDATED: 3, SKIPPED: 4, COMPLETE: 5, MANUAL: 6, UNKNOWN: 7 };
+  const SDC_WAIT_MS = 45 * 60 * 1000;   // a first install is ~70 MB over the device's own Wi-Fi: be patient
+  let sdcBusy = false, sdcConfirm = false, sdcAfterFlash = false, sdcConfirmTimer = 0;
+  let sdcResult = null;   // { msg, until }: the verdict of the last run stays readable over the routine state line
+  const SDC_RESULT_MS = 2 * 60 * 1000;
+  const sdcEls = () => ({ card: $('sdc-card'), fw: $('sdc-fw'), state: $('sdc-state'), go: $('sdc-go'),
+    goLbl: $('sdc-go-lbl'), prog: $('sdc-prog'), progLbl: $('sdc-prog-lbl'), sect: $('sdc-sect') });
+  const vtag = (v) => (v ? 'v' + String(v).replace(/^v/, '') : '—');
+  let sdcLabel = 'sdcUpdate';
+
+  function renderSdc() {
+    if (sdcBusy) return;
+    const e = sdcEls(); if (!e.state) return;
+    const st = getStatus(), s = st && st.sdc;
+    if (!s || typeof s.status !== 'number') {   // a firmware older than this tab: say nothing rather than guess
+      if (e.sect) e.sect.hidden = !!st;
+      return;
+    }
+    if (e.sect) e.sect.hidden = false;
+    e.card.textContent = s.card ? vtag(s.card) : '—';
+    e.fw.textContent = vtag(s.fw);
+    const apOnly = !!(st.network && st.network.mode === 'ap');
+    let msg, canGo = true, primary = false;
+    sdcLabel = 'sdcUpdate';
+    switch (s.status) {
+      case SDC.COMPLETE:
+      case SDC.MANUAL:   msg = TT(s.status === SDC.MANUAL ? 'sdcManual' : 'sdcOk', { tag: vtag(s.card || s.fw) }); sdcLabel = 'sdcRepair'; break;
+      case SDC.OUTDATED: msg = TT('sdcOutdated', { card: vtag(s.card), fw: vtag(s.fw) }); primary = true; break;
+      case SDC.PARTIAL:  msg = T('sdcPartial'); primary = true; sdcLabel = 'sdcResume'; break;
+      case SDC.MISSING:  msg = T('sdcMissing'); primary = true; sdcLabel = 'sdcInstall'; break;
+      case SDC.SKIPPED:  msg = T('sdcSkipped'); sdcLabel = 'sdcInstall'; break;
+      case SDC.UNKNOWN:  msg = T('sdcUnknown'); sdcLabel = 'sdcRepair'; break;
+      default:           msg = T('sdcNoSd'); canGo = false;
+    }
+    if (st.sdc_diag) msg += ' ' + TT('sdcLastFail', { why: st.sdc_diag });
+    if (canGo && apOnly) msg += ' ' + T('sdcNeedNet');
+    if (sdcAfterFlash && primary) msg = T('sdcAfterFlash') + ' ' + msg;
+    if (sdcResult && Date.now() < sdcResult.until) msg = sdcResult.msg;
+    e.state.textContent = sdcConfirm ? T('sdcConfirmHint') : msg;
+    if (e.go) {
+      e.go.hidden = !canGo;
+      e.go.disabled = apOnly;
+      e.go.classList.toggle('primary', primary);
+    }
+    if (e.goLbl) e.goLbl.textContent = T(sdcConfirm ? 'sdcConfirm' : sdcLabel);
+  }
+
+  function sdcProgress(on, label) {
+    const e = sdcEls();
+    if (e.prog) e.prog.hidden = !on;
+    if (label != null && e.progLbl) e.progLbl.textContent = label;
+  }
+
+  async function doSdcUpdate() {
+    if (sdcBusy || busy) return;
+    sdcBusy = true;
+    const e = sdcEls();
+    if (e.go) e.go.disabled = true;
+    const done = (msg) => {
+      sdcProgress(false);
+      sdcResult = { msg, until: Date.now() + SDC_RESULT_MS };
+      if (e.state) e.state.textContent = msg;
+    };
+    try {
+      if (typeof pausePoller === 'function') pausePoller();
+      sdcProgress(true, T('sdcArming'));
+      let r = null;
+      try { r = await fetch('/api/sdcontent/arm', { method: 'POST', headers: { 'content-type': 'application/json' },
+        body: '{"on":true}', signal: AbortSignal.timeout(15000) }); } catch {}
+      if (!r) return done(T('sdcArmFail'));
+      if (r.status === 401) return done(T('upAuthFail'));
+      if (r.status === 404) return done(T('sdcOldFw'));
+      if (!r.ok) return done(T('sdcArmFail'));
+      if (e.state) e.state.textContent = '';   // the progress line below tells the story from here
+
+      // The device reboots into the install boot (no web server there) and comes back when the download is
+      // over. "Back" = it answered after we lost it, or its uptime says it restarted after we armed.
+      const t0 = Date.now();
+      let lost = false;
+      for (;;) {
+        const el = Date.now() - t0;
+        if (el > SDC_WAIT_MS) return done(T('sdcTimeout'));
+        await new Promise((res) => setTimeout(res, 5000));
+        const secs = Math.floor(el / 1000), time = `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+        sdcProgress(true, lost ? TT('sdcDownloading', { time }) : T('sdcRebooting'));
+        let s = null;
+        try { const q = await fetch('/api/status', { cache: 'no-store', signal: AbortSignal.timeout(4000) }); if (q.ok) s = await q.json(); } catch {}
+        if (!s) { lost = true; continue; }
+        const restarted = typeof s.uptime_s === 'number' && s.uptime_s * 1000 < Date.now() - t0 - 3000;
+        if (!(lost || restarted) || !s.sdc || s.sdc.armed) continue;
+        if (s.sdc.status === SDC.COMPLETE) { sdcAfterFlash = false; return done(TT('sdcDone', { tag: vtag(s.sdc.card || s.sdc.fw) })); }
+        return done(s.sdc_diag ? TT('sdcFailed', { why: s.sdc_diag }) : T('sdcNotFinished'));
+      }
+    } finally {
+      sdcBusy = false;
+      sdcConfirm = false;
+      if (e.go) e.go.disabled = false;
+      if (typeof resumePoller === 'function') resumePoller();
+    }
+  }
+
   // ---- wiring ------------------------------------------------------------
   const e = els();
+  const se = sdcEls();
+  if (se.go) se.go.addEventListener('click', () => {
+    if (sdcBusy || busy) return;
+    if (!sdcConfirm) {   // two steps: the device restarts and is away for minutes — say so before it happens
+      sdcConfirm = true;
+      sdcResult = null;
+      renderSdc();
+      clearTimeout(sdcConfirmTimer);
+      sdcConfirmTimer = setTimeout(() => { if (!sdcBusy && sdcConfirm) { sdcConfirm = false; renderSdc(); } }, 15000);
+      return;
+    }
+    clearTimeout(sdcConfirmTimer);
+    doSdcUpdate();
+  });
   if (e.check) e.check.addEventListener('click', () => check(true));
   if (e.flash) e.flash.addEventListener('click', () => {
     if (busy) return;
@@ -223,5 +354,5 @@ export function initUpdatesTab({ $, T, getStatus, pausePoller, resumePoller }) {
     try { localStorage.setItem(LS_ENABLED, e.auto.checked ? '1' : '0'); } catch {}
   });
 
-  return { check, render };
+  return { check, render, renderSdc };
 }

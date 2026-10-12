@@ -1892,6 +1892,38 @@
     "params": []
   },
   {
+    "id": "api-sdcontent-arm",
+    "path": "/api/sdcontent/arm",
+    "method": "POST",
+    "category": "api",
+    "it": {
+      "title": "POST /api/sdcontent/arm - Aggiorna i contenuti della SD",
+      "description": "Arma il download incrementale dei contenuti della scheda SD (il web OS, le app e la conoscenza ANIMA) per il prossimo avvio e riavvia nell'avvio di installazione dedicato; scarica solo i file cambiati e verifica ciascuno contro il manifest. {\"on\":false} annulla l'armamento.",
+      "synopsis": "POST /api/sdcontent/arm  {\"on\":true}",
+      "details": "Richiede autenticazione PIN. Con on=true (default) risponde {\"ok\":true,\"armed\":true,\"reboot\":true} e riavvia dopo 800 ms nell'avvio di installazione (il percorso della procedura guidata al primo avvio). Con on=false risponde {\"ok\":true,\"armed\":false} senza riavviare. Funziona anche sotto M5Launcher: il download scrive solo la scheda e il riavvio mantiene NucleoOS selezionato. Lo stato della scheda e in /api/status .sdc (status, card, fw, needed, armed)."
+    },
+    "en": {
+      "title": "POST /api/sdcontent/arm - Update the SD content",
+      "description": "Arms the incremental download of the SD card's content (the web OS, the apps and the ANIMA knowledge) for the next boot and reboots into the dedicated install boot; it fetches only the changed files and verifies each against the manifest. {\"on\":false} disarms.",
+      "synopsis": "POST /api/sdcontent/arm  {\"on\":true}",
+      "details": "Gated by security PIN auth. With on=true (default) it returns {\"ok\":true,\"armed\":true,\"reboot\":true} and reboots after 800 ms into the install boot (the first-boot wizard's path). With on=false it returns {\"ok\":true,\"armed\":false} without rebooting. Works under M5Launcher too: the download only writes the card and the reboot keeps NucleoOS selected. The card state is in /api/status .sdc (status, card, fw, needed, armed)."
+    },
+    "params": [
+      {
+        "name": "on",
+        "type": "checkbox",
+        "required": false,
+        "default": true,
+        "it": {
+          "description": "true (default) arma il download e riavvia; false annulla l'armamento"
+        },
+        "en": {
+          "description": "true (default) arms the download and reboots; false disarms"
+        }
+      }
+    ]
+  },
+  {
     "id": "api-time-set",
     "path": "/api/time/set",
     "method": "POST",
