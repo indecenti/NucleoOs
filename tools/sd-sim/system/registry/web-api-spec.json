@@ -1779,13 +1779,13 @@
       "title": "POST /api/ota - Aggiornamento Firmware OTA",
       "description": "Carica una nuova immagine firmware (.bin) e la scrive nella partizione OTA inattiva, poi imposta lo slot di boot e riavvia. Il corpo della richiesta è il binario grezzo dell'immagine ESP.",
       "synopsis": "POST /api/ota  (corpo = immagine .bin)",
-      "details": "Richiede autenticazione PIN. Il primo byte deve essere 0xE9 (magic dell'immagine ESP), altrimenti l'upload viene rifiutato subito (400). A scrittura completa imposta la partizione di boot, risponde {\"ok\":true,\"bytes\":N,\"slot\":\"...\",\"reboot\":true} e riavvia dopo 800 ms. NB: l'OTA è inaffidabile su questo dispositivo — preferire il flash seriale."
+      "details": "Richiede autenticazione PIN. Il primo byte deve essere 0xE9 (magic dell'immagine ESP), altrimenti l'upload viene rifiutato subito (400); a scrittura completa il descrittore dell'immagine deve indicare il progetto 'nucleoos' (un firmware estraneo o l'immagine completa 0x0 vengono rifiutati, 400). Risponde {\"ok\":true,\"bytes\":N,\"slot\":\"...\",\"reboot\":true} e riavvia dopo 800 ms; la nuova immagine si conferma da sola dopo ~20 s di funzionamento sano (/api/status ota.state passa da pending a valid), altrimenti torna alla precedente. 409: 'hosted' (M5Launcher: aggiorna dal Launcher), 'layout' (tabella partizioni non riconosciuta: USB), 'pending' (l'aggiornamento precedente si sta ancora confermando: riprova dopo Retry-After). 503 se un altro download è in corso."
     },
     "en": {
       "title": "POST /api/ota - OTA Firmware Update",
       "description": "Uploads a new firmware image (.bin) into the inactive OTA partition, sets it as the boot slot, and reboots. The POST body is the raw ESP image binary.",
       "synopsis": "POST /api/ota  (body = .bin image)",
-      "details": "Gated by security PIN auth. The first byte must be 0xE9 (ESP image magic) or the upload is rejected immediately (400). On a complete write it sets the boot partition, returns {\"ok\":true,\"bytes\":N,\"slot\":\"...\",\"reboot\":true}, and reboots after 800 ms. Note: OTA is unreliable on this device — prefer serial flashing."
+      "details": "Gated by security PIN auth. The first byte must be 0xE9 (ESP image magic) or the upload is rejected immediately (400); once written, the image's app descriptor must name the project 'nucleoos' (a foreign firmware or the merged 0x0 image is refused, 400). Returns {\"ok\":true,\"bytes\":N,\"slot\":\"...\",\"reboot\":true} and reboots after 800 ms; the new image confirms itself after ~20 s of healthy running (/api/status ota.state goes from pending to valid), otherwise it rolls back. 409: 'hosted' (M5Launcher: update from the Launcher), 'layout' (unrecognised partition table: use USB), 'pending' (the previous update is still being confirmed: retry after Retry-After). 503 while another download runs."
     },
     "params": [
       {
@@ -1843,13 +1843,13 @@
       "title": "POST /api/reboot - Riavvia il Dispositivo",
       "description": "Invia una richiesta per chiudere in sicurezza il filesystem SD card ed eseguire l'istruzione hardware esp_restart() per riavviare immediatamente il microcontrollore.",
       "synopsis": "POST /api/reboot",
-      "details": "Richiede l'autenticazione tramite PIN (sessione attiva). Ritorna {\"ok\":true,\"reboot\":true} e avvia il reset hardware dopo 800 millisecondi."
+      "details": "Richiede l'autenticazione tramite PIN (sessione attiva). Ritorna {\"ok\":true,\"reboot\":true} e avvia il reset hardware dopo 800 millisecondi. 409 {\"error\":\"starting\"} + Retry-After nei primi secondi dopo un aggiornamento del firmware (un riavvio in quel momento lo annullerebbe); dopo un minuto di uptime il riavvio è sempre accettato."
     },
     "en": {
       "title": "POST /api/reboot - Reboot Cardputer",
       "description": "Issues a shutdown sequence to flush SD Card handles and invokes a hardware esp_restart() signal to reboot the microcontroller instantly.",
       "synopsis": "POST /api/reboot",
-      "details": "Gated by security PIN auth. Returns {\"ok\":true,\"reboot\":true} and triggers a CPU reset sequence after an 800ms flushing delay."
+      "details": "Gated by security PIN auth. Returns {\"ok\":true,\"reboot\":true} and triggers a CPU reset sequence after an 800ms flushing delay. 409 {\"error\":\"starting\"} + Retry-After during the first seconds after a firmware update (a restart then would undo it); after a minute of uptime a restart is always accepted."
     },
     "params": []
   },
@@ -1900,13 +1900,13 @@
       "title": "POST /api/sdcontent/arm - Aggiorna i contenuti della SD",
       "description": "Arma il download incrementale dei contenuti della scheda SD (il web OS, le app e la conoscenza ANIMA) per il prossimo avvio e riavvia nell'avvio di installazione dedicato; scarica solo i file cambiati e verifica ciascuno contro il manifest. {\"on\":false} annulla l'armamento.",
       "synopsis": "POST /api/sdcontent/arm  {\"on\":true}",
-      "details": "Richiede autenticazione PIN. Con on=true (default) risponde {\"ok\":true,\"armed\":true,\"reboot\":true} e riavvia dopo 800 ms nell'avvio di installazione (il percorso della procedura guidata al primo avvio). Con on=false risponde {\"ok\":true,\"armed\":false} senza riavviare. Funziona anche sotto M5Launcher: il download scrive solo la scheda e il riavvio mantiene NucleoOS selezionato. Lo stato della scheda e in /api/status .sdc (status, card, fw, needed, armed)."
+      "details": "Richiede autenticazione PIN. Con on=true (default) scrive prima il flag (500 {\"error\":\"nvs\"} se la NVS lo rifiuta), poi risponde {\"ok\":true,\"armed\":true,\"reboot\":true} e riavvia dopo 800 ms nell'avvio di installazione (il percorso della procedura guidata al primo avvio). 409 {\"error\":\"starting\"} + Retry-After nei primi secondi dopo un aggiornamento del firmware: riavviare in quel momento annullerebbe l'aggiornamento. Con on=false risponde {\"ok\":true,\"armed\":false} senza riavviare. Funziona anche sotto M5Launcher: il download scrive solo la scheda e il riavvio mantiene NucleoOS selezionato. Lo stato della scheda e in /api/status .sdc (status, card, fw, needed, armed)."
     },
     "en": {
       "title": "POST /api/sdcontent/arm - Update the SD content",
       "description": "Arms the incremental download of the SD card's content (the web OS, the apps and the ANIMA knowledge) for the next boot and reboots into the dedicated install boot; it fetches only the changed files and verifies each against the manifest. {\"on\":false} disarms.",
       "synopsis": "POST /api/sdcontent/arm  {\"on\":true}",
-      "details": "Gated by security PIN auth. With on=true (default) it returns {\"ok\":true,\"armed\":true,\"reboot\":true} and reboots after 800 ms into the install boot (the first-boot wizard's path). With on=false it returns {\"ok\":true,\"armed\":false} without rebooting. Works under M5Launcher too: the download only writes the card and the reboot keeps NucleoOS selected. The card state is in /api/status .sdc (status, card, fw, needed, armed)."
+      "details": "Gated by security PIN auth. With on=true (default) it writes the flag first (500 {\"error\":\"nvs\"} if NVS refuses it), then returns {\"ok\":true,\"armed\":true,\"reboot\":true} and reboots after 800 ms into the install boot (the first-boot wizard's path). 409 {\"error\":\"starting\"} + Retry-After during the first seconds after a firmware update: restarting then would undo that update. With on=false it returns {\"ok\":true,\"armed\":false} without rebooting. Works under M5Launcher too: the download only writes the card and the reboot keeps NucleoOS selected. The card state is in /api/status .sdc (status, card, fw, needed, armed)."
     },
     "params": [
       {

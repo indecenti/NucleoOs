@@ -58,6 +58,12 @@ guest_return_t guest_return_mode(bool has_ddlb, uint8_t ddlb, bool has_on_key, i
 // app's slot (or our own running one). Only the stand-alone layout owns its A/B banks.
 bool guest_self_ota_allowed(bool hosted);
 
+// WHITELIST companion of guest_is_hosted (which only recognises M5Launcher's `test` slot): true only for
+// NucleoOS's OWN two-bank layout (firmware/partitions.csv) — exactly two app partitions, labelled "ota_0"
+// and "ota_1" with the matching subtypes, and we run from one of them. Any other layout (a boot manager
+// without a `test` slot, a factory app, a third bank) is not ours to overwrite, so self-OTA stays off.
+bool guest_layout_is_own(const guest_part_t *parts, int n, uint32_t running_offset);
+
 // What M5Launcher's SD/merged-image installer (Launcher src/sd_functions.cpp, updateFromSD) extracts
 // from an image's embedded table: the FIRST app partition of subtype factory/ota_0/test, plus every
 // SPIFFS/LittleFS/FAT data partition (label kept). Lets the host gate prove our shipped table stays

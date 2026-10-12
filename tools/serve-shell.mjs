@@ -164,7 +164,7 @@ const FW3 = FW_VERSION.split('+')[0];
 const SDC_CARD = { no_sd: '', missing: '', partial: FW3, outdated: '0.6.0', skipped: '', complete: FW3, manual: FW3, unknown: '' };
 function sdcInit(name) {
   const k = Object.hasOwn(SDC_ST, name) ? name : 'complete';
-  return { status: SDC_ST[k], card: SDC_CARD[k], armed: false, diag: '', installMs: 2500, fail: false, absent: false };
+  return { status: SDC_ST[k], card: SDC_CARD[k], armed: false, diag: '', installMs: 2500, fail: false, absent: false, startingUntil: 0 };
 }
 let sdc = sdcInit(process.env.SIM_SDC);
 const sdcView = () => ({ status: sdc.status, card: sdc.card, fw: FW3, needed: [1, 2, 3].includes(sdc.status), armed: sdc.armed });
@@ -176,6 +176,11 @@ async function sdcArmApi(req, res) {
   if (!isAuthed(req)) return reject401(res);
   let b = {}; try { b = JSON.parse((await readBody(req)).toString('utf8') || '{}'); } catch {}
   if (b.on === false) { sdc.armed = false; return sendJSON(res, { ok: true, armed: false }); }
+  // A freshly-OTA'd image whose app loop hasn't run yet (nucleo_ota_settled false): restarting now would roll it back.
+  if (Date.now() < sdc.startingUntil) {
+    res.writeHead(409, { 'content-type': 'application/json', 'retry-after': '2' });
+    return res.end(JSON.stringify({ error: 'starting', retry_after_ms: 2000 }));
+  }
   sdc.armed = true;
   sendJSON(res, { ok: true, armed: true, reboot: true });
   setTimeout(() => {
@@ -191,13 +196,30 @@ async function sdcArmApi(req, res) {
   }, 300);
 }
 
+// After the 2xx the firmware restarts (~800 ms) into the new slot as PENDING_VERIFY and confirms it only once the
+// OS has run (deferred confirm, main.c). POST /api/_sim/ota {rollback:true} plays an image that never confirms:
+// the bootloader boots the previous slot again (another restart), state valid.
+const simOta = { confirmMs: 4000, rollback: false };
 async function otaApi(req, res) {
   let bytes = 0;
   req.on('data', (c) => { bytes += c.length; });
   req.on('end', () => {
     if (bytes === 0) { send(res, 400, 'text/plain', 'empty image'); return; }
-    apiStatus.ota = { running: 'ota_0', next: 'ota_1', state: 'pending', rollback_enabled: true, self_update: true, host: 'standalone' };  // as after a real OTA
+    const before = { ...apiStatus.ota };
     sendJSON(res, { ok: true, bytes, slot: 'ota_0', reboot: true });
+    setTimeout(() => {
+      SIM.offline = true;
+      for (const s of sockets) { sockets.delete(s); try { s.destroy(); } catch {} }
+      setTimeout(() => {
+        simState.bootMs = Date.now();
+        apiStatus.ota = { running: 'ota_0', next: 'ota_1', state: 'pending', rollback_enabled: true, self_update: true, host: 'standalone' };
+        SIM.offline = false;
+        setTimeout(() => {
+          if (simOta.rollback) { simState.bootMs = Date.now(); apiStatus.ota = { ...before, state: 'valid' }; }
+          else apiStatus.ota = { ...apiStatus.ota, state: 'valid' };
+        }, simOta.confirmMs);
+      }, 1500);
+    }, 800);
   });
 }
 
@@ -590,8 +612,9 @@ function isAskable(q) {
 //   GET  /api/_sim/stats                         request counters (the E2E device-load budget)
 //   POST /api/_sim/apps  {add:{…}} | {clear:true}  inject extra /api/apps records (hostile-manifest tests)
 //   POST /api/_sim/publish {t:'apps.changed', d:{…}}  push one event on the live socket (e.g. "an app was installed")
-//   POST /api/_sim/sdc {status:'outdated', card, install_ms, fail, diag, absent}  the SD-content state (/api/status .sdc)
+//   POST /api/_sim/sdc {status:'outdated', card, install_ms, fail, diag, absent, starting_ms}  the SD-content state
 //   POST /api/_sim/net {mode:'ap'|'sta'}          hotspot-only (no internet) vs joined to a Wi-Fi network
+//   POST /api/_sim/ota {rollback, confirm_ms}     after the next firmware upload: confirm it, or roll it back
 const SIM = { faults: [], offline: false, extraApps: [], stats: { total: 0, inflight: 0, peak: 0, byPath: {} } };
 const simFaultFor = (path) => SIM.faults.find((f) => (f.route === '*' || path.startsWith(f.route)) && (f.times === 0 || f.left > 0));
 async function simControl(req, res, path) {
@@ -624,7 +647,13 @@ async function simControl(req, res, path) {
     if (b.fail != null) sdc.fail = !!b.fail;
     if (b.diag != null) sdc.diag = String(b.diag);
     if (b.absent != null) sdc.absent = !!b.absent;   // a firmware older than /api/sdcontent: no .sdc at all
+    if (b.starting_ms != null) sdc.startingUntil = Date.now() + Math.max(0, b.starting_ms | 0);   // arm answers 409 "starting"
     return sendJSON(res, { ok: true, sdc: sdcView(), diag: sdc.diag });
+  }
+  if (path === '/api/_sim/ota') {                  // {rollback, confirm_ms}: what the next firmware upload does after its reboot
+    if (b.rollback != null) simOta.rollback = !!b.rollback;
+    if (b.confirm_ms != null) simOta.confirmMs = Math.max(0, b.confirm_ms | 0);
+    return sendJSON(res, { ok: true, ...simOta });
   }
   if (path === '/api/_sim/net') {                  // {mode:'ap'|'sta'}: hotspot-only (no internet) vs joined to Wi-Fi
     if (b.mode === 'ap' || b.mode === 'sta') apiStatus.network.mode = b.mode;

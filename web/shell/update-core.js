@@ -21,6 +21,7 @@ export const UPDATE_SD_ZIP_URL = `https://github.com/${UPDATE_REPO}/releases/lat
 export const LS_CACHE = 'nucleo.update.cache';       // { etag, tag, name, url, notes, checkedAt }
 export const LS_NOTIFIED = 'nucleo.update.notified'; // [tags already announced in this browser]
 export const LS_ENABLED = 'nucleo.update.enabled';   // '0' = auto-check off (per browser — the check runs here)
+export const LS_BRIDGED = 'nucleo.update.bridged';   // last tag written to the card's update.json (native dialog)
 
 export const UPDATE_TTL_MS = 24 * 3600 * 1000;       // one conditional request per browser per day
 

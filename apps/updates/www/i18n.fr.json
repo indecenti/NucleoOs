@@ -27,6 +27,8 @@
   "upload_done_rebooting": "Envoi terminé ; l'appareil redémarre…",
   "rebooting_short": "L'appareil redémarre…",
   "update_complete": "Mise à jour terminée — l'appareil est de nouveau en ligne. ✔",
+  "confirming": "Le nouveau firmware a démarré : vérification de sa stabilité avant de le confirmer…",
+  "rolled_back": "Le nouveau firmware n'est pas resté stable : l'appareil est revenu seul à la version précédente. Aucune donnée n'a été touchée.",
   "reboot_timeout": "L'appareil n'est pas revenu à temps. Vérifiez-le et actualisez.",
   "reboot_waiting": "Redémarrage… en attente de l'appareil ({tries})",
   "err_empty": "Ce fichier est vide — choisissez l'image firmware nucleoos.bin.",
@@ -34,5 +36,7 @@
   "err_merged": "C'est l'image flash complète (nucleoos-latest.bin, avec bootloader) — réservée au flash USB. Choisissez l'image OTA (…-ota.bin / nucleoos.bin).",
   "err_too_big": "Ce fichier dépasse l'emplacement firmware ({max}) — ce n'est pas une image OTA NucleoOS.",
   "err_busy": "l'appareil est occupé par un autre téléchargement — réessayez dans un instant",
+  "err_pending": "L'appareil confirme encore la mise à jour précédente : réessayez dans quelques secondes.",
+  "err_layout": "Organisation de la mémoire non reconnue : mettez à jour par USB (web flasher).",
   "not_applied": "Connexion perdue et l'appareil n'a pas redémarré — la mise à jour n'a PAS été installée. Réessayez."
 }

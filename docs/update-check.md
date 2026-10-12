@@ -1,13 +1,14 @@
 # Release update check & in-shell updater
 
-How installed devices learn that a new NucleoOS release exists, and how the browser installs it —
-without the device ever contacting the internet.
+How installed devices learn that a new NucleoOS release exists, how the firmware and the SD card's
+content get updated, and why an update can't leave a device unusable.
 
-Two surfaces share one trust model: the **browser** (shell notifier + Settings ▸ Updates) and the
-**native OS** (a boot dialog + on-device installer). Both compare the running firmware version
-against the latest release tag using the SAME semver-triplet rule, and both verify SHA-256 before
-flashing. The web path is in [the section below](#architecture-in-one-paragraph); the native path
-is in [Native OS path](#native-os-path).
+Two surfaces share one trust model: the **browser** (shell notifier + Settings ▸ Updates, which installs)
+and the **native OS** (a boot dialog that says where to update, plus reminders). Both compare the running
+firmware version against the latest release tag using the SAME semver-triplet rule. The device contacts
+only the official release site (`indecenti.github.io`), and only to check versions or to download what
+the user started. The web path is in [the section below](#architecture-in-one-paragraph); the SD content in
+[SD card content](#sd-card-content); the native path in [Native OS path](#native-os-path).
 
 ## Architecture in one paragraph
 
@@ -38,18 +39,26 @@ same-origin POST — the same browser-direct rule the LLM API keys follow.
    (`nucleoos-latest.bin`) is for full flashing only — sending it to `/api/ota` would write a
    bootloader into the app slot.
 6. **Device side** — `/api/ota` is pairing-gated, single-flight (arbiter, `503 + Retry-After` when
-   busy) and manages its own RAM posture. `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y`: an image that
-   fails to boot rolls back automatically.
-7. **Verdict** — after the POST the updater polls `/api/status` until the reported version matches
-   the tag (success), times out honestly, or detects the old version well past the reboot window
-   (rollback happened).
+   busy) and manages its own RAM posture. After `esp_ota_end()` it requires the image's app descriptor
+   to name the project `nucleoos` before making it bootable — a foreign firmware or the merged 0x0 image
+   also starts with `0xE9`. Self-OTA is allowed only on NucleoOS's own two-bank table (`ota_0`/`ota_1`,
+   `guest_layout_is_own`), never under M5Launcher or another boot manager. `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y`.
+7. **Verdict** — after the POST the updater polls `/api/status` until the reported version matches the
+   tag AND `ota.state` is no longer `pending` (the device confirms a new image only once its OS has run,
+   see below) — so "updated" is never announced while a power cut could still roll it back. An image that
+   ran and came back on the old version is reported as **rolled back**, by name. The Updates app (manual
+   file install) applies the same rule, judging only answers from AFTER the restart and comparing the
+   running slot with the one before.
 
 ## Cadence, privacy, opt-out
 
 - Passive check: `web/shell/update-check.js`, lazy-loaded ~15 s after the desktop is up (never in
   competition with session restore or the SD crawl). TTL 24 h; long-lived tabs re-evaluate every 6 h.
-- Exactly one origin is contacted (`api.github.com`; plus `indecenti.github.io` only when the user
-  installs). Nothing identifying is sent; the device is never in the loop.
+- The browser contacts `api.github.com` (the check) and `indecenti.github.io` (only when the user
+  installs). Nothing identifying is sent. The device itself contacts only `indecenti.github.io`: its own
+  version check (heap permitting, see below) and the SD-content download the user starts.
+- The browser bridges what it learned to the card (`/system/config/update.json`) **once per tag**
+  (`localStorage` `nucleo.update.bridged`), not on every 6 h re-check — no needless flash wear.
 - Every passive failure (offline, rate limit, GitHub down) is **silent**. Errors only surface on
   the explicit "Check now" in Settings.
 - Opt-out: Settings ▸ Updates ▸ "Automatic check" (per browser — the check runs in the browser;
@@ -58,61 +67,101 @@ same-origin POST — the same browser-direct rule the LLM API keys follow.
 
 ## Automatic rollback (fail-safe by construction)
 
-An update can never leave the device unusable — two independent layers guarantee it:
+An update can't leave the device unusable — two independent layers guarantee it:
 
-1. **Integrity, before the image is ever booted.** The install verifies SHA-256 + the ESP image
-   magic, and `esp_ota_end()` validates the image's own checksum. A corrupt or incomplete download
-   therefore **never becomes the boot partition** (`esp_ota_set_boot_partition` runs only after
-   validation) — the device simply keeps running the old firmware. This is true for both the
-   browser install (`POST /api/ota`) and any native path.
-2. **Rollback, if a valid-looking image boots badly.** `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y`: a
-   freshly-flashed image boots as `PENDING_VERIFY` and is only *confirmed*
-   (`esp_ota_mark_app_valid_cancel_rollback`) once the boot proves healthy — httpd actually serving
-   (`boot_healthy` in `main.c`). Two outcomes if it doesn't:
-   - **Crash / panic / watchdog:** the bootloader rolls back to the previous image on the next boot.
-   - **Degraded boot** (full OS, httpd never came up) on a still-`PENDING_VERIFY` image: `main.c`
-     rolls back **immediately** — `esp_ota_mark_app_invalid_rollback_and_reboot()` reboots straight
-     into the previous, known-good firmware. No waiting for a manual reboot. The previous image was
-     already confirmed valid, so this cannot loop; a Solo boot (httpd down by design) is excluded.
+1. **Integrity, before the image is ever booted.** The install verifies SHA-256 + the ESP image magic,
+   `esp_ota_end()` validates the image's own checksum, and the app descriptor must name `nucleoos`. A
+   corrupt, incomplete or foreign image therefore **never becomes the boot partition**
+   (`esp_ota_set_boot_partition` runs only after validation) — the device keeps running the old firmware.
+2. **Rollback, if a valid-looking image runs badly.** `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y`: a
+   freshly-flashed image boots as `PENDING_VERIFY` and is *confirmed*
+   (`esp_ota_mark_app_valid_cancel_rollback`) only once the OS has proved itself — **deferred confirm**
+   (rules in `ota_confirm_fsm.h`, host-gated by `npm run otaconfirm:test` across simulated reboots; glue in
+   `main.c`): httpd must be serving, and then the app loop (`nucleo_app_run`, every boot profile) must run for
+   20 s from its first turn (`nucleo_ota_health_tick`). A failed confirm (flash busy) is retried every 5 s,
+   never dropped. Before the confirm:
+   - **Crash / panic / watchdog** anywhere — ANIMA init, the voice, the app registry, the UI — reboots a
+     still-pending image and the bootloader rolls back to the previous one. (It used to confirm right after
+     httpd started, so an image crashing later in the boot looped for good: only a USB reflash helped.)
+   - **A deliberate restart inside the window** (the web-profile handoff, a Solo launch, the setup wizard)
+     confirms first through a shutdown handler — but only once the loop has run, so an `esp_restart()` taken
+     on a failure path before the UI comes up still rolls back. Panics and the watchdog never run it. Such an
+     EARLY confirm proved little, so it leaves a **trial marker** (RTC memory, bound to that image's ELF
+     SHA-256 so it never judges another image): a later boot that ends in a panic or a watchdog reset while it
+     is set calls `esp_ota_mark_app_invalid_rollback_and_reboot()` and goes back to the previous firmware (the
+     next boot's `system.boot` event carries `"ota":"trial-rollback"`); the marker clears once a boot's loop has
+     itself run 20 s. A brown-out, a power cut or a crash in the SD-content install boot (no app loop, a
+     download says nothing about the firmware) is no verdict. The confirm itself calls the idempotent
+     `esp_ota_mark_app_valid_cancel_rollback()` directly, so a transient otadata read error can't disarm it.
+   - **Restarts the device would regret are refused** until the image has settled (its loop has run):
+     `POST /api/sdcontent/arm` and `POST /api/reboot` answer `409 {"error":"starting"}` + `Retry-After` (the
+     Settings tab retries the arm by itself and explains a refused reboot; `/api/reboot` stops refusing after a
+     minute of uptime, so a boot wedged before its loop stays restartable — and rolls back), and `POST /api/ota` answers `409 {"error":"pending"}` while the running
+     image still waits for its own confirm (the bootloader would refuse a new one anyway); the web updaters
+     wait for that before sending the image.
+   - **Degraded boot** (full OS, httpd never came up) on a still-pending image: `main.c` rolls back
+     **immediately** (`esp_ota_mark_app_invalid_rollback_and_reboot()`). The previous image was confirmed,
+     so this cannot loop. Excluded: Solo boots and the first-boot setup (httpd down on purpose — the setup
+     boot uses the same deferred confirm), and a guest of M5Launcher (no OTA data of its own).
 
-Net effect: a bad update **self-heals** — corrupt images are refused before boot, and an image that
-boots but doesn't work is replaced automatically with the one that did.
+Net effect: a bad update **self-heals** — corrupt or foreign images are refused before boot, and an image
+that boots but doesn't hold up is replaced automatically with the one that did. A power cut in the first
+~20 s after an update also rolls back — which is why the web updaters wait for the confirm.
+
+## SD card content
+
+The web OS, the apps and ANIMA's knowledge live on the SD card, and each release ships its own
+(`docs/sd-content-install.md`). The firmware only serves what is on the card, so the two must move together:
+
+- `/api/status .sdc` reports `{status, card, fw, needed, armed}` (`nucleo_sdc_status_t`: no SD, missing,
+  partial, outdated, skipped, complete, manual, unknown), cached ~30 s; `.sdc_diag` is why the last
+  install failed.
+- **Settings ▸ Updates ▸ SD card content** shows the card's release against the firmware's, in plain words,
+  with Install / Update / Resume / Verify and repair. Two clicks (the device restarts and is away for
+  minutes) → `POST /api/sdcontent/arm` → the device's lean install boot fetches **only the changed files**
+  from `indecenti.github.io/NucleoOs/sd/<x.y.z>/` and verifies each against the release manifest, then
+  restarts. The tab shows the elapsed time, then a verdict that stays readable: the new version, or the
+  reason the device persisted. After a firmware update it points at the card when the card is behind.
+  A hotspot-only device (no internet) is told so and can't start it. Works under M5Launcher too.
+- **On the device**: once per firmware version, ~10 s into the app loop (not in the tight boot prologue), a
+  card that is behind gets a notification (native banner + web Notification Center; in the web profile only
+  once a browser is connected, so the device stays silent there) saying where to fix it — so a firmware updated from M5Launcher never leaves
+  the card behind in silence (`nucleo_sdcontent_remind_due`: NVS first, the card only when not yet reminded).
+- `/api/sdcontent/arm` writes the flag first and answers only what is true (500 if NVS refused), then restarts.
+  On the device's failure screen a long reason wraps on two lines instead of running off the panel.
 
 ## Native OS path
 
-For users who live in the native launcher and may never open the browser shell, the device checks
-and installs on its own — still without ever hitting the GitHub API from the device.
+For users who live in the native launcher. **The device does not install firmware by itself**, and the
+dialog says so plainly. Two hard limits stand in the way on this chip: the TLS fetch needs a ~42 KB
+contiguous block the heap never has once the OS is up (even the lean Solo boot tops out near 32 KB), and the
+release site sends 16 KB TLS records to an 8 KB receive buffer (the SD-content installer gets around that
+with 6 KB Range windows; an SD-staged firmware installer is the way forward).
 
-**Boot notification.** ~60 s after boot (never in Solo — no launcher, no services there) a one-shot
-background task waits for the Wi-Fi STA link, then, at most once per 24 h (throttle persisted in
-NVS), does a **~30-byte HTTPS GET of `version.json`** from the Pages site. That is the key economy:
-the GitHub API answer is tens of KB the chip would have to buffer and parse; `version.json` is one
-tag. The fetch is heap-gated and rides the arbiter (try-only) like every other TLS touch. A newer,
-non-dismissed release becomes a system notification (`nucleo_notify_emit(src:"ota")` → native
-banner/chime + `notify.post` to any connected browser). What it learns persists in NVS, so the
-**boot dialog needs no network**: on the next boot `nucleo_update_dialog_pending()` (pure NVS +
-`upd_should_show`) decides whether the run loop opens the Updates app before the launcher.
+**What the device knows.** The newest release it has learned comes from two sources and **the newer one
+wins** (`best_known_latest`): the card's `/system/config/update.json`, bridged by any browser that ran the
+check, and the device's own `version.json` check. That check is attempted only when the heap can fit the
+handshake (`UPD_TLS_MIN_BLOCK`) — decided *before* spawning its task, so no RAM is held just to be refused.
+A newer, non-dismissed release becomes a notification (`src:"ota"`, WARN for a security release); the
+**boot dialog needs no network** — `nucleo_update_dialog_pending()` (pure NVS + `upd_should_show_at`).
 
-**Boot dialog (3 choices), as requested:**
-- **Update now** → confirm → the app enters `NX_NET_APP` (~47 KB reclaimed, Wi-Fi stays up) and
-  streams `nucleoos-latest-ota.bin` straight into the OTA slot with a live progress bar, SHA-256 +
-  ESP-magic verified against `SHA256SUMS`. On success the device reboots itself; a bad image rolls
-  back (bootloader rollback). Nothing to power-cycle by hand.
+**Boot dialog (3 choices):**
+- **How to update** → a card with the exact way: on a stand-alone unit `http://<device IP>` (the hotspot's
+  `192.168.4.1` in AP mode) ▸ Settings ▸ Updates (SHA-256 verified, automatic rollback); under M5Launcher,
+  Launcher ▸ OTA ▸ NucleoOS; on a partition layout that is not ours (`ota.host: "other"`), over USB.
 - **Next boot** (also Esc) → nothing persisted; the dialog returns on the next boot.
-- **Ignore this version** → the tag is written to NVS `dismiss`; that exact tag never prompts again
-  (a newer one still will).
+- **Ignore this version** → the tag (and when) is written to NVS (`dismiss`, `dismt`); that tag never
+  prompts again — unless it is a **security** release, which comes back after 7 days
+  (`UPD_SECURITY_REMIND_S`): reminded, never nagged every boot. A newer tag always prompts.
 
-**Manual entry.** The Updates app also lives in the System category: open it any time for "Check
-now" and the same install flow.
+**Manual entry.** The Updates app lives in the System category: "Check now" runs the device's check, and a
+heap too tight for it says so ("Low RAM: check from the browser") instead of blaming the network.
 
-**Why the device install mirrors the web install byte-for-byte:** same Pages host, same
-`nucleoos-latest-ota.bin` (app-only, never the merged 0x0 image), same `SHA256SUMS`, same rollback.
-Only the byte-mover differs (esp_http_client + esp_ota_write here; `POST /api/ota` there).
-
-**Files:** `firmware/components/nucleo_app/nucleo_update.c` (engine: check + install workers),
-`update_policy.c` / `update_policy.h` (pure decisions — the C twin of `update-core.js`),
-`app_updates.cpp` (the dialog + installer UI, five languages), wired into the run loop and builtin
-registry in `nucleo_app.cpp`.
+**Files:** `firmware/components/nucleo_app/nucleo_update.c` (engine: check worker + the Solo install
+engine kept for a future SD-staged installer), `update_policy.c` / `update_policy.h` (pure decisions — the
+C twin of `update-core.js`), `app_updates.cpp` (the dialog, five languages, ASCII for the Font0 panel),
+wired into the run loop and builtin registry in `nucleo_app.cpp`. Rendered on the PC by `npm run ui:shots`
+(`updates.*` scenes).
 
 ## Release assets involved
 
@@ -135,7 +184,10 @@ flasher") — `pages.yml` tolerates their absence.
   `app:settings@updates` (the notify router deep-links a Settings tab via a one-shot
   `nucleo.settings.tab` hint + a `settings.tab` postMessage).
 - `apps/settings/www/fwupdate.js` — the Updates tab driver (check → download → verify → flash →
-  reboot verdict). Freezes the Settings poller during the flash.
+  confirm verdict) and its SD card content section. Freezes the Settings poller during a flash or an SD
+  install.
+- `apps/updates/www/index.html` — manual install of a `.bin` file (offline / hotspot units): restart,
+  confirm and rollback verdicts.
 - `.github/workflows/release.yml`, `.github/workflows/pages.yml` — asset production/republish.
 
 ## Tests
@@ -148,5 +200,16 @@ FIPS vectors plus `node:crypto` across all padding regimes.
 **Native:** `npm run update:test` (also in the ANIMA gate as `update-policy (release)`) compiles the
 REAL `update_policy.c` with MinGW and proves the same triplet parse/compare, `version.json` +
 `SHA256SUMS` parsing (strict shape, refuses truncation and an HTML error page), the show/dismiss/
-dev-build-ahead dialog logic, and the 24 h throttle that can never wedge (never-checked and
-clock-went-backwards are both "due"). 50 assertions, pure C, no device.
+dev-build-ahead dialog logic, the security reminder over time (`upd_should_show_at`: an ignored security
+release returns after 7 days; bad clocks never re-raise it), and the 24 h throttle that can never wedge
+(never-checked and clock-went-backwards are both "due"). 68 assertions, pure C, no device.
+
+**Guards:** `npm run guest:test` — the self-OTA whitelist (`guest_layout_is_own`): our two-bank table only;
+the live ADV layout, a test-less boot manager and a factory app are all refused. `npm run otaconfirm:test` —
+the deferred confirm and the trial across simulated reboots (23 cases: crash before/after the loop, the
+handoff, a failed confirm, brown-out, a crash in the install boot, settle). Both also run in CI (`gate.yml`).
+
+**Browser E2E:** `tools/web-e2e/sdcontent-update.e2e.mjs` (the SD content section: language, two-step
+confirm, success and failure verdicts, hotspot, older firmware) and `tools/web-e2e/updates.e2e.mjs` (manual
+install: complete only once confirmed; a rolled-back image is named as such). The simulator plays the
+restart, the deferred confirm and a rollback (`/api/_sim/ota`, `/api/_sim/sdc`).

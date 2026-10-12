@@ -44,6 +44,15 @@ bool upd_find_sha256(const char *sums, const char *name, char *out_hex65);
 // True only when latest parses, is strictly newer than current, and is not the dismissed tag.
 bool upd_should_show(const char *current, const char *latest, const char *dismissed);
 
+// The same decision, aware of WHEN the tag was dismissed and whether it is a SECURITY release. An ignored
+// ordinary update stays ignored; an ignored security update comes back once UPD_SECURITY_REMIND_S has
+// passed — the user who skipped it is reminded, never nagged on every boot. dismissed_at / now are
+// wall-clock seconds; a clock not set (before 2023) or running backwards never re-raises it.
+#define UPD_SECURITY_REMIND_S (7u * 24u * 3600u)
+#define UPD_CLOCK_VALID_S     1672531200u
+bool upd_should_show_at(const char *current, const char *latest, const char *dismissed,
+                        uint32_t dismissed_at, uint32_t now, bool security);
+
 // Network-check throttle: at most one fetch per interval. last_s==0 = never checked.
 // A clock that went backwards (now < last) counts as due — never let a bad RTC wedge the check.
 bool upd_check_due(uint32_t now_s, uint32_t last_s, uint32_t interval_s);

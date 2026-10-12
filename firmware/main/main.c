@@ -38,6 +38,10 @@
 #include "nucleo_voice.h"
 #include "nucleo_ir.h"
 #include "esp_ota_ops.h"
+#include "ota_confirm_fsm.h"  // deferred OTA confirm + trial: the pure decision core (host-gated)
+#include "esp_attr.h"        // RTC_NOINIT_ATTR: the OTA trial marker survives panic / watchdog resets
+#include <string.h>          // memcpy (the trial marker's image id)
+#include <stdatomic.h>
 #include "nucleo_guest.h"  // M5Launcher guest mode (runtime-detected from the partition table)
 #include "esp_app_desc.h"   // esp_app_get_description(): real running-image version for the boot banner
 #include "esp_system.h"     // esp_reset_reason(): why the PREVIOUS boot ended (panic vs WDT vs brownout)
@@ -134,17 +138,106 @@ static const char *reset_reason_str(esp_reset_reason_t r)
 // bootloader rolls back to the previous image on the next reboot. We reach this point
 // only once core services (storage attempt + network + HTTP server) are up, so the
 // image is healthy: confirm it and cancel the pending rollback. (No-op on factory.)
-static void ota_confirm_if_pending(void)
+
+static bool ota_image_pending(void)
 {
     const esp_partition_t *run = esp_ota_get_running_partition();
     esp_ota_img_states_t st;
-    if (run && esp_ota_get_state_partition(run, &st) == ESP_OK && st == ESP_OTA_IMG_PENDING_VERIFY) {
-        if (esp_ota_mark_app_valid_cancel_rollback() == ESP_OK)
-            ESP_LOGI(TAG, "OTA image confirmed valid (rollback cancelled)");
-        else
-            ESP_LOGW(TAG, "failed to confirm OTA image");
+    return run && esp_ota_get_state_partition(run, &st) == ESP_OK && st == ESP_OTA_IMG_PENDING_VERIFY;
+}
+
+// DEFERRED confirm + TRIAL — the rules live in ota_confirm_fsm.h (pure, host-gated by `npm run otaconfirm:test`);
+// this is the device glue. A new image used to be confirmed the moment httpd came up — BEFORE ANIMA, the voice,
+// the registry and the UI loop had started — so an image crashing in any of those booted itself forever. Now:
+//   • the app loop (every profile) ticks nucleo_ota_health_tick(); 20 s after its first turn the image is
+//     confirmed; a failed confirm is retried;
+//   • a deliberate restart inside the window confirms first (shutdown handler) once the loop has run, and leaves
+//     the TRIAL marker: a later boot ending in a panic / watchdog reset while it is set rolls the image back;
+//   • a panic or watchdog before the confirm reboots a still-pending image, which the bootloader rolls back.
+static void ota_confirm_on_restart(void);
+static ocf_t           s_ocf;
+static portMUX_TYPE    s_ocf_mux = portMUX_INITIALIZER_UNLOCKED;
+static atomic_bool     s_ocf_busy;          // an otadata write is in flight (loop or restart handler)
+static bool            s_trial_live;        // this boot carries the trial marker (clear it once proven)
+static bool            s_pending_at_boot;   // the running image was PENDING_VERIFY when this boot started
+static volatile bool   s_confirmed;         // ...and has been confirmed since
+// The trial marker, bound to THE image that set it (4 bytes of its ELF SHA-256): after another OTA, or when the
+// bootloader fell back to the other bank, a stale marker never judges an image it was not set for.
+RTC_NOINIT_ATTR static uint32_t s_trial[3]; // { TRIAL_MAGIC, ~TRIAL_MAGIC, image id }
+RTC_NOINIT_ATTR static uint32_t s_ota_note[2];   // { NOTE_MAGIC, 1 } = the previous boot rolled a trial back
+#define TRIAL_MAGIC 0x4F544154u             // "OTAT"
+#define NOTE_MAGIC  0x4F544E54u             // "OTNT"
+static uint32_t image_id(void)
+{
+    const esp_app_desc_t *a = esp_app_get_description();
+    uint32_t id = 0;
+    if (a) memcpy(&id, a->app_elf_sha256, sizeof id);
+    return id;
+}
+static bool trial_get(void) { return s_trial[0] == TRIAL_MAGIC && s_trial[1] == ~TRIAL_MAGIC && s_trial[2] == image_id(); }
+static void trial_set(bool on)
+{
+    s_trial[0] = on ? TRIAL_MAGIC : 0; s_trial[1] = on ? ~TRIAL_MAGIC : 0; s_trial[2] = on ? image_id() : 0;
+}
+
+// Confirm the running image now. esp_ota_mark_app_valid_cancel_rollback() is idempotent (ESP_OK on an image
+// that is already VALID, no write), so it is called directly: a transient failure to READ otadata must never
+// pass for "nothing pending" and disarm the retry.
+static bool ota_confirm_now(void)
+{
+    bool idle = false;
+    if (!atomic_compare_exchange_strong(&s_ocf_busy, &idle, true)) return false;   // the other context is on it
+    esp_err_t e = esp_ota_mark_app_valid_cancel_rollback();
+    atomic_store(&s_ocf_busy, false);
+    if (e == ESP_OK) { s_confirmed = true; ESP_LOGW(TAG, "OTA image confirmed valid (rollback cancelled)"); }
+    else ESP_LOGE(TAG, "OTA confirm failed (%s) — will retry", esp_err_to_name(e));
+    return e == ESP_OK;
+}
+
+static void ota_arm_deferred_confirm(void)
+{
+    taskENTER_CRITICAL(&s_ocf_mux); ocf_arm(&s_ocf); taskEXIT_CRITICAL(&s_ocf_mux);
+    if (esp_register_shutdown_handler(ota_confirm_on_restart) != ESP_OK)
+        ESP_LOGW(TAG, "OTA: no shutdown-handler slot — a restart before the confirm will roll back");
+    ESP_LOGW(TAG, "OTA image pending: confirmed after %llds of healthy app loop", OCF_AFTER_US / 1000000);
+    bootmark("ota-pending");
+}
+
+void nucleo_ota_health_tick(void)          // called by the app loop on every turn (nucleo_app.cpp)
+{
+    int64_t now = esp_timer_get_time();
+    taskENTER_CRITICAL(&s_ocf_mux);
+    bool go = ocf_tick(&s_ocf, now);
+    bool clear_trial = s_trial_live && ocf_trial_cleared(&s_ocf, now);
+    taskEXIT_CRITICAL(&s_ocf_mux);
+    if (clear_trial) { trial_set(false); s_trial_live = false; ESP_LOGW(TAG, "OTA trial passed"); }
+    if (!go) return;
+    bool ok = ota_confirm_now();
+    taskENTER_CRITICAL(&s_ocf_mux); ocf_result(&s_ocf, ok, now); taskEXIT_CRITICAL(&s_ocf_mux);
+}
+
+// Shutdown handler: a deliberate esp_restart() from a task (the scheduler runs; vTaskDelay yields so a lower-
+// priority main task can finish an in-flight confirm). Panics and the task watchdog never run it.
+static void ota_confirm_on_restart(void)
+{
+    taskENTER_CRITICAL(&s_ocf_mux); bool go = ocf_on_restart(&s_ocf); taskEXIT_CRITICAL(&s_ocf_mux);
+    if (!go) return;
+    for (int i = 0; i < 50 && atomic_load(&s_ocf_busy); i++) vTaskDelay(pdMS_TO_TICKS(10));   // ≤500 ms
+    if (s_confirmed) return;                                                                   // the loop did it
+    for (int t = 0; t < 3; t++) {
+        if (ota_confirm_now()) { trial_set(true); ESP_LOGW(TAG, "OTA confirmed EARLY by a restart: on trial"); return; }
+        vTaskDelay(pdMS_TO_TICKS(20));
     }
 }
+
+// For httpd, from this boot's own facts (no otadata read per request): would a restart right now keep a good
+// image? (/api/sdcontent/arm, /api/reboot wait until then.) Is the running image still waiting for its confirm?
+bool nucleo_ota_settled(void)
+{
+    taskENTER_CRITICAL(&s_ocf_mux); bool loop_ran = s_ocf.loop_t0 != 0; taskEXIT_CRITICAL(&s_ocf_mux);
+    return !s_pending_at_boot || s_confirmed || loop_ran;
+}
+bool nucleo_ota_pending(void) { return s_pending_at_boot && !s_confirmed; }   // esp_ota_begin refuses meanwhile
 
 // Boot breadcrumb: log to the serial console AND append to /sd/boot_trace.txt, so the LAST stage
 // reached before a hang is visible on the SD card (readable on a PC) even with no serial console.
@@ -244,6 +337,27 @@ void app_main(void)
     }
     HMEM("boot-start");
     bootmark("boot-start");
+    // OTA TRIAL verdict (ota_confirm_fsm.h): an image confirmed EARLY by a restart, whose boot then ended in a
+    // panic or a watchdog reset, proved nothing — send it back to the previous firmware now. A brown-out, a
+    // power cut (RTC memory lost) or a deliberate restart is no verdict; the marker clears once a boot's app
+    // loop has run 20 s.
+    if (trial_get()) {
+        esp_reset_reason_t rr = esp_reset_reason();
+        bool crash = rr == ESP_RST_PANIC || rr == ESP_RST_INT_WDT || rr == ESP_RST_TASK_WDT || rr == ESP_RST_WDT;
+        if (ocf_trial_rollback(true, crash)) {
+            trial_set(false);
+            ESP_LOGE(TAG, "OTA trial FAILED (%s after an early confirm) -> rolling back to the previous firmware",
+                     reset_reason_str(rr));
+            bootmark("ota-trial-rollback");
+            s_ota_note[0] = NOTE_MAGIC; s_ota_note[1] = 1;   // the next boot's system.boot event says why
+            esp_ota_mark_app_invalid_rollback_and_reboot();   // returns only if no valid previous image exists
+            s_ota_note[0] = 0;
+            ESP_LOGE(TAG, "OTA trial rollback impossible (no valid previous image) — keeping this firmware");
+        } else {
+            s_trial_live = true;
+        }
+    }
+    s_pending_at_boot = ota_image_pending();
 
     esp_err_t nvs = nvs_flash_init();
     if (nvs == ESP_ERR_NVS_NO_FREE_PAGES || nvs == ESP_ERR_NVS_NEW_VERSION_FOUND) {
@@ -258,6 +372,9 @@ void app_main(void)
     // this early (NVS) so the steps it does not need — the animated splash (a second 32 KB canvas) and the app
     // registry — are skipped, and nothing churns the heap the TLS handshake will need.
     const bool sdc_install = nucleo_sdcontent_armed();
+    // The install boot never runs the app loop, so it can't prove (or clear) an OTA trial, and a crash in a
+    // multi-minute download says nothing about the firmware: no verdict — drop the marker for this image.
+    if (sdc_install && s_trial_live) { trial_set(false); s_trial_live = false; }
     // Installed by M5Launcher? (partition-table scan, cached; logs the guest-mode posture once.)
     // Stand-alone: false, nothing changes. docs/m5launcher.md
     nucleo_guest_hosted();
@@ -481,7 +598,7 @@ void app_main(void)
     // on the first try. Doing it up front is the whole point — a FAILED first attempt LEAKS the port-80
     // listen socket, so the old "fail -> free -> retry" order then hit listen()=EADDRINUSE (112) on the
     // retry and ESP_ERROR_CHECK abort-LOOPED the device. One clean attempt avoids the leak entirely.
-    // Boot-health signal for the OTA rollback gate (see ota_confirm_if_pending below): an image is
+    // Boot-health signal for the OTA rollback gate (see the deferred confirm below): an image is
     // only "proven good" once the web OS actually serves. A degraded boot (httpd down) must NOT
     // cancel rollback, or a freshly-OTA'd image that can't start httpd would confirm itself and
     // strand the device with no web/OTA path to recover. Solo boots never reach the OTA confirm as
@@ -535,15 +652,18 @@ void app_main(void)
     }
     bootmark("discovery");
     // Confirm the running OTA image (cancel rollback) ONLY on a proven-healthy boot — httpd up, i.e.
-    // the web OS actually serves. A degraded boot leaves the image PENDING_VERIFY so the bootloader
-    // can still roll back on the next boot; the recovery path (web/OTA) is exactly what a degraded
-    // boot lacks, so auto-confirming there would be irreversible. A no-op when nothing is pending.
+    // the web OS actually serves — and only after the OS has then RUN for a while (deferred confirm, see
+    // nucleo_ota_health_tick). A degraded boot leaves the image PENDING_VERIFY so the bootloader can
+    // still roll back on the next boot; the recovery path (web/OTA) is exactly what a degraded boot
+    // lacks, so auto-confirming there would be irreversible. A no-op when nothing is pending.
     if (boot_healthy) {
-        ota_confirm_if_pending();
+        if (ota_image_pending()) ota_arm_deferred_confirm();
         // The promised replacement for the pre-httpd check above (removed for the OOM/stall reason
         // explained there) is kicked from nucleo_app.cpp, AFTER its own synchronous
         // nucleo_update_dialog_pending() call — see the note there for why the ordering matters.
-    } else if (!solo) {
+    } else if (!solo && !setup_pending && !nucleo_guest_hosted()) {
+        // (A lean first-boot setup boot never starts httpd on purpose — not degraded. A guest of M5Launcher
+        // has no OTA data of its own, so its image is never PENDING_VERIFY; the guard just says so.)
         // FULL-OS boot but httpd did NOT come up = a genuinely degraded boot. If we're running a
         // freshly-OTA'd image that is still PENDING_VERIFY, it just proved itself broken on its very
         // first boot -> roll back to the previous, known-good firmware RIGHT NOW (automatic self-heal,
@@ -561,17 +681,23 @@ void app_main(void)
             ESP_LOGW(TAG, "degraded boot but image already valid — staying, will retry next boot");
         }
     } else {
-        ESP_LOGW(TAG, "Solo boot: httpd intentionally down, OTA confirm deferred (not degraded)");
+        // First-boot setup: httpd is down ON PURPOSE (lean wizard heap), not degraded. The wizard runs in the
+        // app loop, so the same deferred confirm applies — otherwise the wizard's closing restart would reboot a
+        // still-pending (good) image and the bootloader would roll it back.
+        if (setup_pending && !solo && ota_image_pending()) ota_arm_deferred_confirm();
+        ESP_LOGW(TAG, "no OTA confirm on this boot path (Solo / first-boot setup / M5Launcher guest) — not degraded");
     }
     // Enrich the boot event so the journal's first line is a diagnosis seed: why the last boot ended,
     // the heap we came up with + the worst-ever watermark, and whether the SD mounted. Cheap (one
     // event at boot); the Log Viewer surfaces it and the "Diagnose" digest anchors uptime/resets on it.
     {
-        char p[160];
-        snprintf(p, sizeof p, "{\"ok\":true,\"rst\":\"%s\",\"free\":%u,\"min\":%u,\"sd\":%d}",
+        char p[180];
+        const bool trial_rb = s_ota_note[0] == NOTE_MAGIC && s_ota_note[1] == 1;
+        s_ota_note[0] = 0;
+        snprintf(p, sizeof p, "{\"ok\":true,\"rst\":\"%s\",\"free\":%u,\"min\":%u,\"sd\":%d%s}",
                  reset_reason_str(esp_reset_reason()),
                  (unsigned)esp_get_free_heap_size(), (unsigned)esp_get_minimum_free_heap_size(),
-                 sd_ok ? 1 : 0);
+                 sd_ok ? 1 : 0, trial_rb ? ",\"ota\":\"trial-rollback\"" : "");
         nucleo_event_publish("system.boot", p);
     }
 

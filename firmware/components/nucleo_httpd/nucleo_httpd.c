@@ -166,6 +166,8 @@ extern const char *nucleo_sdcontent_card_tag(void); // release the card's conten
 extern const char *nucleo_sdcontent_fw_tag(void);   // this firmware's x.y.z
 extern bool nucleo_sdcontent_needed(void);          // card missing/partial/outdated for this firmware
 extern bool nucleo_sdcontent_armed(void);           // a download is armed for the next boot
+extern bool nucleo_ota_settled(void);   // main.c: a restart now keeps a freshly-OTA'd image (deferred confirm)
+extern bool nucleo_ota_pending(void);   // main.c: the running image still waits for its confirm
 
 static esp_err_t status_get(httpd_req_t *req)
 {
@@ -199,7 +201,7 @@ static esp_err_t status_get(httpd_req_t *req)
       cJSON_AddNumberToObject(sd, "status", s_sdc_st);   // 0 no_sd,1 missing,2 partial,3 outdated,4 skipped,5 complete,6 manual,7 unknown
       cJSON_AddStringToObject(sd, "card", s_sdc_card);   // release on the card ("" if unknown)
       cJSON_AddStringToObject(sd, "fw", s_sdc_fw);       // this firmware's x.y.z
-      cJSON_AddBoolToObject(sd, "needed", nucleo_sdcontent_needed());
+      cJSON_AddBoolToObject(sd, "needed", s_sdc_st >= 1 && s_sdc_st <= 3);   // missing|partial|outdated (= sdc_content_needed)
       cJSON_AddBoolToObject(sd, "armed", nucleo_sdcontent_armed()); }
     cJSON_AddNumberToObject(root, "uptime_s", esp_timer_get_time() / 1000000);
     // Which boot profile serves this request. "web" = the lean server-Solo a browser session hands off to:
@@ -257,7 +259,7 @@ static esp_err_t status_get(httpd_req_t *req)
     bool hosted = nucleo_guest_hosted();
     cJSON_AddBoolToObject(ota, "rollback_enabled", !hosted);   // CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE (own bootloader only)
     cJSON_AddBoolToObject(ota, "self_update", nucleo_guest_self_ota_allowed());
-    cJSON_AddStringToObject(ota, "host", hosted ? "m5launcher" : "standalone");
+    cJSON_AddStringToObject(ota, "host", hosted ? "m5launcher" : (nucleo_guest_layout_own() ? "standalone" : "other"));
 
     // Heavy-work arbiter: is a TLS/SD/heap job holding the single budget right now, and the
     // teardown heap-floor watermark. The shell shows a "busy" banner and leaves client-only apps
@@ -866,7 +868,18 @@ static esp_err_t ota_post(httpd_req_t *req)
     if (!nucleo_guest_self_ota_allowed()) {
         httpd_resp_set_status(req, "409 Conflict");
         httpd_resp_set_type(req, "application/json");
-        httpd_resp_sendstr(req, "{\"error\":\"hosted\",\"host\":\"m5launcher\",\"message\":\"Installed by M5Launcher: update NucleoOS from the Launcher (OTA)\"}");
+        httpd_resp_sendstr(req, nucleo_guest_hosted()
+            ? "{\"error\":\"hosted\",\"host\":\"m5launcher\",\"message\":\"Installed by M5Launcher: update NucleoOS from the Launcher (OTA)\"}"
+            : "{\"error\":\"layout\",\"host\":\"other\",\"message\":\"Unrecognised partition layout: update NucleoOS over USB (web flasher)\"}");
+        return ESP_FAIL;
+    }
+    // The running image is itself still waiting for its confirm (an update a few seconds ago): the bootloader
+    // won't accept another one until then (esp_ota_begin -> ESP_ERR_OTA_ROLLBACK_INVALID_STATE). Say so up front.
+    if (nucleo_ota_pending()) {
+        httpd_resp_set_status(req, "409 Conflict");
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_set_hdr(req, "Retry-After", "10");
+        httpd_resp_sendstr(req, "{\"error\":\"pending\",\"retry_after_ms\":10000,\"message\":\"The previous update is still being confirmed: retry in a few seconds\"}");
         return ESP_FAIL;
     }
     const esp_partition_t *part = esp_ota_get_next_update_partition(NULL);
@@ -962,7 +975,7 @@ static esp_err_t ota_post(httpd_req_t *req)
 // same path the first-boot wizard uses; it fetches only the changed files and verifies each against the
 // manifest). {"on":false} disarms. Paired-only. Works on an M5Launcher guest too — unlike firmware OTA,
 // the SD download only writes the card, and the reboot keeps NucleoOS selected.
-extern bool nucleo_sdcontent_arm(bool on);
+extern bool nucleo_sdcontent_set_armed(bool on);
 static esp_err_t sdcontent_arm_post(httpd_req_t *req)
 {
     NUCLEO_AUTH_GUARD(req);
@@ -976,14 +989,27 @@ static esp_err_t sdcontent_arm_post(httpd_req_t *req)
     cJSON *root = cJSON_Parse(body);
     if (root) { cJSON *o = cJSON_GetObjectItem(root, "on"); if (cJSON_IsBool(o)) on = cJSON_IsTrue(o); cJSON_Delete(root); }
     if (!on) {
-        httpd_resp_sendstr(req, nucleo_sdcontent_arm(false) ? "{\"ok\":true,\"armed\":false}" : "{\"error\":\"nvs\"}");
+        httpd_resp_sendstr(req, nucleo_sdcontent_set_armed(false) ? "{\"ok\":true,\"armed\":false}" : "{\"error\":\"nvs\"}");
         return ESP_OK;
     }
-    // Arming reboots into the install boot (nucleo_sdcontent_arm(true) sets the NVS flag then esp_restart()),
-    // so send the response and let it flush first.
+    // A freshly-OTA'd image still starting up (its app loop not yet running) would be rolled back by this restart:
+    // the install boot ends in another restart with nothing confirmed. Wait until it has settled (seconds).
+    if (!nucleo_ota_settled()) {
+        httpd_resp_set_status(req, "409 Conflict");
+        httpd_resp_set_hdr(req, "Retry-After", "4");
+        httpd_resp_sendstr(req, "{\"error\":\"starting\",\"retry_after_ms\":4000}");
+        return ESP_OK;
+    }
+    // Write the flag FIRST and answer only what is true; then restart into the install boot.
+    if (!nucleo_sdcontent_set_armed(true)) {
+        httpd_resp_set_status(req, "500 Internal Server Error");
+        httpd_resp_sendstr(req, "{\"error\":\"nvs\"}");
+        return ESP_OK;
+    }
     httpd_resp_sendstr(req, "{\"ok\":true,\"armed\":true,\"reboot\":true}");
+    ESP_LOGW(TAG, "SD content download armed via /api/sdcontent/arm — rebooting into the install boot");
     vTaskDelay(pdMS_TO_TICKS(800));
-    nucleo_sdcontent_arm(true);
+    esp_restart();
     return ESP_OK;
 }
 
@@ -995,6 +1021,15 @@ static esp_err_t reboot_post(httpd_req_t *req)
     NUCLEO_AUTH_GUARD(req);
     httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
     httpd_resp_set_type(req, "application/json");
+    // A reboot this early after an update would roll the new firmware back — but never refuse forever: a boot
+    // wedged after httpd (its app loop never runs) must stay restartable from the web, and rolling back is then
+    // exactly the right self-heal. So the refusal ends after a minute of uptime.
+    if (!nucleo_ota_settled() && esp_timer_get_time() < 60LL * 1000000) {
+        httpd_resp_set_status(req, "409 Conflict");
+        httpd_resp_set_hdr(req, "Retry-After", "4");
+        httpd_resp_sendstr(req, "{\"error\":\"starting\",\"retry_after_ms\":4000}");
+        return ESP_OK;
+    }
     httpd_resp_sendstr(req, "{\"ok\":true,\"reboot\":true}");
     ESP_LOGI(TAG, "reboot requested via /api/reboot");
     vTaskDelay(pdMS_TO_TICKS(800));     // let the response flush, then restart

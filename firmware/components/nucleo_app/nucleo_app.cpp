@@ -13,6 +13,8 @@
 #include "ota_listen_fsm.h"    // pure OTA listening-handshake decision core (host-tested)
 #include "nucleo_exclusive.h"  // declarative exclusive_flags: framework enters on open, restores on close
 #include "nucleo_update.h"     // release-update: boot dialog decision + background check kick
+#include "nucleo_sdcontent.h"  // boot reminder when the card is behind this firmware
+#include "nucleo_notify.h"     // ...posted on the unified notification backbone
 #include "launcher_theme.h"
 #include "launcher_menu.h"
 #include "launcher_render.h"
@@ -108,6 +110,7 @@ static bool s_prev_server_solo = false;   // captured once at boot (nucleo_anima
 // extern-C setters (further down) own the rest of the OTA state.
 static volatile bool s_force_listen = false;
 extern "C" bool nucleo_recorder_is_busy(void);   // mic lifecycle: true until the WAV is fully closed + flushed
+extern "C" void nucleo_ota_health_tick(void);   // main.c: deferred OTA confirm — the app loop proves the OS runs
 
 // Bounded, WDT-fed wait for the mic to FULLY release (WAV finalized) before a reboot — a Solo reboot must
 // NEVER outrace record_task's fflush/fseek/write_header/fclose or it corrupts the FAT + the take.
@@ -1586,6 +1589,31 @@ static void draw_shot_toast(M5Canvas *c, bool ok)
 }
 
 // ---- run loop ----------------------------------------------------------------
+// The card's web OS / apps / ANIMA knowledge behind THIS firmware (updated from M5Launcher, a card from another
+// unit...): say so once per firmware version, with where it is fixed. Posted from the loop ~10 s after it starts —
+// not in the boot prologue, where the heap is at its tightest and a chime would sound at power-on. Allowed in the
+// web profile too: there a client is connected, so the device stays silent and the browser's Notification Center
+// shows it. Never during the wizard. Body <= 56 chars (the journal/web clip), ASCII (the native banner is Font0).
+static int64_t s_sdc_remind_at;   // ms: 0 = not scheduled yet, -1 = done this boot
+static bool sdc_boot_reminder(void)    // false = not now, ask again later (web profile, no browser yet)
+{
+    if ((s_solo_active && s_solo_app != SOLO_REMOTE) || nucleo_setup_onboarding()) return true;
+    // The web profile exists to give the browser's first load the heap: post there only to a connected client
+    // (the device then stays silent) — never a chime + audio task while nobody is driving it.
+    if (s_solo_active && !s_remote) return false;
+    if (!nucleo_sdcontent_remind_due()) return true;
+    const char *l = nucleo_i18n_lang();
+    const int li = l[0] == 'i' ? 0 : l[0] == 'f' ? 3 : l[0] == 'd' ? 4 : (l[0] == 'e' && l[1] == 's') ? 2 : 1;
+    static const char *const TITLE[5] = { "Contenuti SD da aggiornare", "SD content needs an update",
+        "Contenido SD por actualizar", "Contenu SD a mettre a jour", "SD-Inhalt veraltet" };
+    static const char *const BODY[5] = { "Aggiorna da Impostazioni > Dispositivo > Contenuti SD",
+        "Update it in Settings > Device > SD content", "Actualiza en Ajustes > Dispositivo > Contenido SD",
+        "Mettez a jour : Reglages > Appareil > Contenu SD", "Aktualisieren: Einstellungen > Geraet > SD-Inhalte" };
+    nucleo_notify_emit("system", NOTIFY_INFO, "sdc-remind", TITLE[li], BODY[li], "app:settings@updates");
+    nucleo_sdcontent_reminded();
+    return true;
+}
+
 void nucleo_app_run(void)
 {
     launcher_build_menu();
@@ -1654,6 +1682,7 @@ void nucleo_app_run(void)
     // NVS decision — no network on this path). Update now / next boot (Esc) / ignore this version.
     else if (nucleo_update_dialog_pending()) { nucleo_app_launch_id("updates"); }
 
+
     // Kick THIS boot's background release check, now that the dialog decision above has run and
     // (via nvs_ready(), inside nucleo_update_dialog_pending()) safely opened the "nucupd" NVS
     // namespace on this, the sole task, before any other task can touch it — nvs_ready() has no
@@ -1666,7 +1695,12 @@ void nucleo_app_run(void)
 
     for (;;) {
         esp_task_wdt_reset();
+        nucleo_ota_health_tick();   // a freshly-OTA'd image is confirmed only after the OS has run (main.c)
         int64_t now = esp_timer_get_time() / 1000;
+        if (s_sdc_remind_at >= 0) {                      // once per boot, ~10 s into the loop
+            if (!s_sdc_remind_at) s_sdc_remind_at = now + 10000;
+            else if (now >= s_sdc_remind_at) s_sdc_remind_at = sdc_boot_reminder() ? -1 : now + 10000;
+        }
         // A blocking modal (video playback, file dialogs) owns the keyboard without passing through here:
         // a long gap since the last iteration means the user was busy in it, so count it as activity —
         // else the idle screen-off/saver would fire the instant the modal returns.

@@ -17,6 +17,7 @@ static const char *TAG = "guest";
 #define LAUNCHER_KEY_ON_KEY   "LauncherOnKey"   // i32: GPIO that must be held to boot the Launcher (-1 = off)
 
 static int8_t s_hosted = -1;   // -1 = not scanned yet
+static bool   s_own_layout;    // our own two-bank table (guest_layout_is_own), valid once s_hosted >= 0
 
 bool nucleo_guest_hosted(void)
 {
@@ -38,14 +39,26 @@ bool nucleo_guest_hosted(void)
     esp_partition_iterator_release(it);   // NULL-safe
     const esp_partition_t *run = esp_ota_get_running_partition();
     bool hosted = guest_is_hosted(parts, n, run ? run->address : 0);
+    s_own_layout = guest_layout_is_own(parts, n, run ? run->address : 0);
     s_hosted = hosted ? 1 : 0;
     if (hosted)
         ESP_LOGW(TAG, "installed by M5Launcher (running '%s' @0x%lx): self-OTA off, updates via Launcher",
                  run ? run->label : "?", run ? (unsigned long)run->address : 0UL);
+    else if (!s_own_layout)
+        ESP_LOGW(TAG, "partition layout is not NucleoOS's own two-bank table (running '%s'): self-OTA off",
+                 run ? run->label : "?");
     return hosted;
 }
 
-bool nucleo_guest_self_ota_allowed(void) { return guest_self_ota_allowed(nucleo_guest_hosted()); }
+// Both guards: not under M5Launcher (blacklist) AND our own A/B layout (whitelist) — the next OTA slot is
+// then provably our other bank, never another installed app.
+bool nucleo_guest_self_ota_allowed(void)
+{
+    bool hosted = nucleo_guest_hosted();          // scans once, fills s_own_layout
+    return guest_self_ota_allowed(hosted) && s_own_layout;
+}
+
+bool nucleo_guest_layout_own(void) { (void)nucleo_guest_hosted(); return s_own_layout; }
 
 guest_return_t nucleo_guest_return_mode(void)
 {

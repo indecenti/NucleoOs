@@ -130,6 +130,16 @@ bool upd_should_show(const char *current, const char *latest, const char *dismis
     return true;
 }
 
+bool upd_should_show_at(const char *current, const char *latest, const char *dismissed,
+                        uint32_t dismissed_at, uint32_t now, bool security)
+{
+    if (!upd_should_show(current, latest, NULL)) return false;               // not a newer, valid release
+    if (!dismissed || !dismissed[0] || strcmp(dismissed, latest) != 0) return true;   // not the ignored tag
+    if (!security) return false;                                               // an ignored update stays ignored
+    if (dismissed_at < UPD_CLOCK_VALID_S || now < UPD_CLOCK_VALID_S || now < dismissed_at) return false;
+    return now - dismissed_at >= UPD_SECURITY_REMIND_S;
+}
+
 bool upd_check_due(uint32_t now_s, uint32_t last_s, uint32_t interval_s)
 {
     if (last_s == 0) return true;

@@ -76,6 +76,21 @@ test('SD content: a failed install reports the reason the device persisted, and 
   assert.equal(now.sdc.card, '0.6.0');
 });
 
+test('SD content: a device still settling after a firmware update (409 starting) is waited for, then armed', { skip }, async (t) => {
+  const sim = await startSim();
+  const browser = await launchBrowser({ args: [HOST_RULES] });
+  t.after(async () => { await browser.close(); await sim.stop(); });
+  await sim.control('/api/_sim/sdc', { status: 'outdated', card: '0.6.0', install_ms: 3000, fail: false });
+  const page = await openUpdates(browser, sim, 'en');
+  await page.waitFor(`!document.getElementById('sdc-go').hidden`, { timeout: 15000 });
+  await sim.control('/api/_sim/sdc', { starting_ms: 5000 });   // restarting now would roll the new firmware back
+  await page.eval(`document.getElementById('sdc-go').click(), document.getElementById('sdc-go').click(), true`);
+  const fw = (await sim.control('/api/_sim/sdc', {})).sdc.fw;
+  const done = fill(STR.en.sdcDone, { tag: `v${fw}` });
+  assert.ok(await page.waitFor(`document.getElementById('sdc-state').textContent === ${JSON.stringify(done)}`, { timeout: 45000 }),
+    `armed once the device settled, then installed; got: ${await state(page)}`);
+});
+
 test('SD content: a hotspot-only device (no internet) cannot start it, and says why', { skip }, async (t) => {
   const sim = await startSim();
   const browser = await launchBrowser({ args: [HOST_RULES] });

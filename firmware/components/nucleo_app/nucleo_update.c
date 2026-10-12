@@ -121,7 +121,15 @@ static void nvs_get_string(const char *key, char *out, size_t cap)
 }
 
 // ── tiny HTTPS GET (weather-get pattern: heap gate + arbiter outside, cleanup always) ─────────
-// Fills buf (NUL-terminated), returns body length or -1. Caller holds the arbiter token.
+// Fills buf (NUL-terminated), returns body length, -1 (network / HTTP failure) or -2 (the heap can't fit
+// a TLS handshake right now). Caller holds the arbiter token.
+#define UPD_TLS_MIN_BLOCK (42 * 1024)
+// One screen line (Font0, ASCII): the honest reason a check can't run — and where it does work.
+#define LOWRAM_IT "Poca RAM: controlla dal browser"
+#define LOWRAM_EN "Low RAM: check from the browser"
+#define LOWRAM_ES "Poca RAM: comprueba en navegador"
+#define LOWRAM_FR "RAM faible: verifiez via navigateur"
+#define LOWRAM_DE "Wenig RAM: im Browser pruefen"
 static int small_get(const char *url, char *buf, size_t cap)
 {
     // HARD heap gate. An outbound TLS handshake to GitHub Pages needs a large contiguous block; below
@@ -130,9 +138,9 @@ static int small_get(const char *url, char *buf, size_t cap)
     // in practice this gate refuses the fetch rather than risk a stall. The reliable release check is
     // the browser/web path; the device never gambles its stability on a handshake that may not fit.
     size_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL);
-    if (largest < 42 * 1024) {
-        ESP_LOGW(TAG, "heap too low for TLS (largest=%u, need >=42K) — skipping fetch", (unsigned)largest);
-        return -1;
+    if (largest < UPD_TLS_MIN_BLOCK) {
+        ESP_LOGW(TAG, "heap too low for TLS (largest=%u, need >=%u) — skipping fetch", (unsigned)largest, (unsigned)UPD_TLS_MIN_BLOCK);
+        return -2;   // not a network failure: the caller says "low RAM, use the browser", never "offline?"
     }
     esp_http_client_config_t cfg = {
         .url = url, .timeout_ms = 10000, .crt_bundle_attach = esp_crt_bundle_attach,
@@ -165,7 +173,7 @@ static bool wifi_sta_connected(void)
 // writes the latest release tag to SD (/system/config/update.json) and the native side reads it here
 // — zero device-side TLS. This is the reliable replacement for the (removed) on-device fetch.
 #define UPD_SD_FILE  "/sd/system/config/update.json"
-static bool read_sd_latest(char *tag, size_t cap)
+static bool read_sd_latest(char *tag, size_t cap, char *type, size_t tcap)
 {
     FILE *f = fopen(UPD_SD_FILE, "rb");
     if (!f) return false;
@@ -173,6 +181,7 @@ static bool read_sd_latest(char *tag, size_t cap)
     size_t n = fread(buf, 1, sizeof(buf) - 1, f);
     fclose(f);
     buf[n] = 0;
+    if (type && tcap) upd_extract_type(buf, type, tcap);   // "type" bridged by the browser (default patch)
     return upd_extract_tag(buf, tag, cap);   // parses {"tag":"vX.Y.Z", ...}
 }
 
@@ -181,23 +190,41 @@ static bool read_sd_latest(char *tag, size_t cap)
 // if a browser has ever visited this device online, else the native boot/background check's own
 // NVS-cached result (nvs_ready() warms s_st.latest from it). Either path alone is enough to offer
 // an update — this device never NEEDS a browser to have visited first.
-static bool best_known_latest(char *out, size_t cap)
+// The NEWER of the two wins: the SD file is written by a browser only when it learned a newer release, and
+// nothing ever rewrites it after the device updated — preferring it blindly meant a stale v0.7.1 file hid a
+// v0.7.2 the device's own check had already learned ("up to date" while an update existed).
+static bool best_known_latest_typed(char *out, size_t cap, bool *security)
 {
-    if (read_sd_latest(out, cap)) return true;
+    char sd[24] = "", nv[24] = "", sdtype[16] = "patch", nvtype[16] = "patch";
+    bool have_sd = read_sd_latest(sd, sizeof sd, sdtype, sizeof sdtype) && upd_parse_semver(sd, NULL);   // junk loses
     nvs_ready();
     portENTER_CRITICAL(&s_mux);
-    strncpy(out, s_st.latest, cap - 1); out[cap - 1] = 0;
+    strncpy(nv, s_st.latest, sizeof nv - 1); nv[sizeof nv - 1] = 0;
     portEXIT_CRITICAL(&s_mux);
+    nvs_get_string("ltype", nvtype, sizeof nvtype);
+    bool use_nv = !have_sd || (nv[0] && upd_cmp(nv, sd) > 0);
+    strncpy(out, use_nv ? nv : sd, cap - 1); out[cap - 1] = 0;
+    if (security) *security = !strcmp(use_nv ? nvtype : sdtype, "security");
     return out[0] != 0;
 }
+static bool best_known_latest(char *out, size_t cap) { return best_known_latest_typed(out, cap, NULL); }
 
 bool nucleo_update_dialog_pending(void)
 {
     char latest[24], dismiss[24];
-    if (!best_known_latest(latest, sizeof latest)) return false;   // no update learned by either path yet
+    bool security = false;
+    if (!best_known_latest_typed(latest, sizeof latest, &security)) return false;   // nothing learned yet
     nvs_get_string("dismiss", dismiss, sizeof dismiss);
+    uint32_t dismt = 0, now = (uint32_t)time(NULL);
+    if (nvs_ready()) {
+        nvs_get_u32(s_nvs, "dismt", &dismt);
+        // Dismissed while the clock was not set: start the reminder window now that it is.
+        if (dismiss[0] && dismt < UPD_CLOCK_VALID_S && now >= UPD_CLOCK_VALID_S) {
+            nvs_set_u32(s_nvs, "dismt", now); nvs_commit(s_nvs); dismt = now;
+        }
+    }
     const esp_app_desc_t *app = esp_app_get_description();
-    return upd_should_show(app ? app->version : "?", latest, dismiss);
+    return upd_should_show_at(app ? app->version : "?", latest, dismiss, dismt, now, security);
 }
 
 const char *nucleo_update_latest_tag(void)
@@ -215,6 +242,8 @@ void nucleo_update_dismiss_latest(void)
     char tag[24];
     if (!best_known_latest(tag, sizeof tag)) return;
     nvs_set_str(s_nvs, "dismiss", tag);
+    uint32_t now = (uint32_t)time(NULL);
+    nvs_set_u32(s_nvs, "dismt", now >= UPD_CLOCK_VALID_S ? now : 0);   // a security release returns after 7 days
     nvs_commit(s_nvs);
     ESP_LOGI(TAG, "dismissed %s", tag);
 }
@@ -282,32 +311,43 @@ static void check_task(void *arg)
     {
         uint32_t tk = nucleo_arb_acquire(ARB_BG, "upd-check", 0);   // try-only: busy -> another day
         if (!tk) { st_set_phase(from_boot ? UPD_IDLE : UPD_CHECK_FAIL,
-                                from_boot ? NULL : UT("Dispositivo occupato", "Device busy", "Dispositivo ocupado", "Appareil occupé", "Gerät beschäftigt"));
+                                from_boot ? NULL : UT("Dispositivo occupato", "Device busy", "Dispositivo ocupado", "Appareil occupe", "Geraet beschaeftigt"));
                    goto out_silent; }
         char body[192], tag[24];
         int n = small_get(UPD_VERSION_URL, body, sizeof body);
         nucleo_arb_release(tk);
 
+        if (n == -2) {
+            st_set_phase(from_boot ? UPD_IDLE : UPD_CHECK_FAIL,
+                         from_boot ? NULL : UT(LOWRAM_IT, LOWRAM_EN, LOWRAM_ES, LOWRAM_FR, LOWRAM_DE));
+            goto out_silent;
+        }
         if (n <= 0 || !upd_extract_tag(body, tag, sizeof tag) || !upd_parse_semver(tag, NULL)) {
             st_set_phase(from_boot ? UPD_IDLE : UPD_CHECK_FAIL,
-                         from_boot ? NULL : UT("Controllo non riuscito (offline?)", "Check failed (offline?)", "Comprobación fallida (¿sin conexión?)", "Vérification échouée (hors ligne ?)", "Prüfung fehlgeschlagen (offline?)"));
+                         from_boot ? NULL : UT("Controllo non riuscito (offline?)", "Check failed (offline?)", "Comprobacion fallida (sin conexion?)", "Verification echouee (hors ligne ?)", "Pruefung fehlgeschlagen (offline?)"));
             goto out_silent;
         }
 
         portENTER_CRITICAL(&s_mux);
         strncpy(s_st.latest, tag, sizeof(s_st.latest) - 1); s_st.latest[sizeof(s_st.latest) - 1] = 0;
         portEXIT_CRITICAL(&s_mux);
+        char ltype[16];
+        upd_extract_type(body, ltype, sizeof ltype);
         if (nvs_ready()) {
             nvs_set_str(s_nvs, "latest", tag);
+            nvs_set_str(s_nvs, "ltype", ltype);
             nvs_set_u32(s_nvs, "lastck", (uint32_t)time(NULL));
             nvs_commit(s_nvs);
         }
-        ESP_LOGI(TAG, "latest release: %s", tag);
+        ESP_LOGI(TAG, "latest release: %s (%s)", tag, ltype);
 
         char dismiss[24];
         nvs_get_string("dismiss", dismiss, sizeof dismiss);
+        uint32_t dismt = 0;
+        if (nvs_ready()) nvs_get_u32(s_nvs, "dismt", &dismt);
         const esp_app_desc_t *app = esp_app_get_description();
-        if (upd_should_show(app ? app->version : "?", tag, dismiss) && !s_notified_this_boot) {
+        if (upd_should_show_at(app ? app->version : "?", tag, dismiss, dismt, (uint32_t)time(NULL),
+                               !strcmp(ltype, "security")) && !s_notified_this_boot) {
             s_notified_this_boot = true;
             char id[40], body_txt[72];
             snprintf(id, sizeof id, "update-%s", tag);
@@ -338,84 +378,21 @@ out_silent:
     vTaskDelete(NULL);
 }
 
-// Boot-time check BODY. Runs in its OWN task (see nucleo_update_boot_check) in the pre-httpd window
-// where the 32 KB canvas is freed and httpd/L1/mDNS are not up yet — the ONE moment with a large
-// contiguous block for the external TLS handshake. Writes NVS, which the boot dialog reads.
-static StaticSemaphore_t s_boot_sem_buf;
-static SemaphoreHandle_t s_boot_sem = NULL;
-
-static void boot_fetch_task(void *arg)
-{
-    (void)arg;
-    do {
-        if (!nvs_ready()) break;
-        const esp_app_desc_t *app0 = esp_app_get_description();
-        const char *cur0 = app0 ? app0->version : "?";
-        // Re-check NOW (ignore the 24h throttle) if the firmware changed since our last check — an
-        // OTA/flash just happened; a freshly-updated device should confirm its update state on first boot.
-        char ckver[40]; size_t cl = sizeof ckver;
-        bool ver_changed = (nvs_get_str(s_nvs, "ckver", ckver, &cl) != ESP_OK) || strcmp(ckver, cur0) != 0;
-        uint32_t last = 0; nvs_get_u32(s_nvs, "lastck", &last);
-        if (ver_changed) last = 0;
-        if (!upd_check_due((uint32_t)time(NULL), last, UPD_CHECK_INTERVAL_S)) break;
-
-        // Wait up to ~10 s for the STA IP (DHCP lands ~8 s in on a cold boot). Fine 100 ms poll.
-        esp_netif_t *sta = esp_netif_get_handle_from_ifkey("WIFI_STA_DEF");
-        bool have_ip = false;
-        for (int i = 0; i < 100 && !have_ip; i++) {
-            esp_netif_ip_info_t ip;
-            if (sta && esp_netif_get_ip_info(sta, &ip) == ESP_OK && ip.ip.addr != 0) have_ip = true;
-            else vTaskDelay(pdMS_TO_TICKS(100));
-        }
-        if (!have_ip) { ESP_LOGW(TAG, "boot-check: no STA IP, skipping"); break; }
-
-        uint32_t tk = nucleo_arb_acquire(ARB_FG, "upd-boot", 0);
-        if (!tk) break;
-        char body[192], tag[24];
-        ESP_LOGI(TAG, "boot-check: heap largest=%u, fetching",
-                 (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL));
-        int n = small_get(UPD_VERSION_URL, body, sizeof body);
-        nucleo_arb_release(tk);
-        if (n <= 0 || !upd_extract_tag(body, tag, sizeof tag) || !upd_parse_semver(tag, NULL)) {
-            ESP_LOGW(TAG, "boot-check: fetch/parse failed (n=%d)", n); break;
-        }
-        portENTER_CRITICAL(&s_mux);
-        strncpy(s_st.latest, tag, sizeof(s_st.latest) - 1); s_st.latest[sizeof(s_st.latest) - 1] = 0;
-        portEXIT_CRITICAL(&s_mux);
-        nvs_set_str(s_nvs, "latest", tag);
-        nvs_set_u32(s_nvs, "lastck", (uint32_t)time(NULL));
-        nvs_set_str(s_nvs, "ckver", cur0);   // remember which firmware ran this check (throttle-reset key)
-        nvs_commit(s_nvs);
-        ESP_LOGI(TAG, "boot-check: latest %s (running %s) -> dialog %s",
-                 tag, cur0, nucleo_update_dialog_pending() ? "YES" : "no");
-    } while (0);
-    if (s_boot_sem) xSemaphoreGive(s_boot_sem);
-    vTaskDelete(NULL);
-}
-
-// Called from main.c pre-httpd. Runs the check in a task and waits at MOST the hard ceiling below,
-// then RETURNS so the boot proceeds no matter what. This is the safety lesson from a soft-brick: a
-// synchronous fetch here stalled past its own socket timeout and wedged the boot before httpd. Now a
-// stalled handshake keeps the task alive in the background (it holds its heap until it unwinds) but
-// can NEVER block the boot — httpd always starts. The task is one-shot at boot; the static semaphore
-// is never freed (so a late give can't touch freed memory).
-void nucleo_update_boot_check(void)
-{
-    s_boot_sem = xSemaphoreCreateBinaryStatic(&s_boot_sem_buf);
-    if (!s_boot_sem) return;
-    if (xTaskCreate(boot_fetch_task, "upd_boot", 8192, NULL, 5, NULL) != pdPASS) return;
-    // ~10 s IP wait + ~8 s fetch fits comfortably; 22 s ceiling, then boot regardless.
-    xSemaphoreTake(s_boot_sem, pdMS_TO_TICKS(22000));
-}
-
 bool nucleo_update_kick_check(bool from_boot)
 {
+    // The fetch needs UPD_TLS_MIN_BLOCK contiguous for its TLS handshake, which this chip rarely has once
+    // the OS is up. Don't spawn an 8 KB-stack task (that may then wait minutes for Wi-Fi) just for small_get
+    // to refuse it: decide here, and tell a user who pressed "Check now" where the check does work.
+    if (heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) < UPD_TLS_MIN_BLOCK) {
+        if (!from_boot) st_set_phase(UPD_CHECK_FAIL, UT(LOWRAM_IT, LOWRAM_EN, LOWRAM_ES, LOWRAM_FR, LOWRAM_DE));
+        return true;   // handled: the screen shows the reason (not "a check is already running")
+    }
     if (!try_claim_task()) return false;
     if (!from_boot) st_set_phase(UPD_CHECKING, NULL);
     // 8 KB stack: the TLS handshake runs in this task (same budget as the IDF https examples).
     if (xTaskCreate(check_task, "upd_check", 8192, (void *)(uintptr_t)from_boot, 3, NULL) != pdPASS) {
         s_task_alive = false;
-        if (!from_boot) st_set_phase(UPD_CHECK_FAIL, UT("Memoria insufficiente", "Out of memory", "Memoria insuficiente", "Mémoire insuffisante", "Zu wenig Speicher"));
+        if (!from_boot) st_set_phase(UPD_CHECK_FAIL, UT("Memoria insufficiente", "Out of memory", "Memoria insuficiente", "Memoire insuffisante", "Zu wenig Speicher"));
         return false;
     }
     return true;
@@ -448,10 +425,10 @@ static void install_task(void *arg)
                         "Mettez a jour via M5Launcher (OTA)", "Update ueber M5Launcher (OTA)"), 0);
 
     // Runs in a fresh-heap Solo boot where Wi-Fi has only just come up — wait for the STA IP first.
-    if (!wait_sta_ip()) fail_install(UT("Nessuna rete Wi-Fi", "No Wi-Fi network", "Sin red Wi-Fi", "Pas de réseau Wi-Fi", "Kein WLAN"), 0);
+    if (!wait_sta_ip()) fail_install(UT("Nessuna rete Wi-Fi", "No Wi-Fi network", "Sin red Wi-Fi", "Pas de reseau Wi-Fi", "Kein WLAN"), 0);
 
     uint32_t tk = nucleo_arb_acquire(ARB_FG, "ota-nat", 0);
-    if (!tk) fail_install(UT("Dispositivo occupato, riprova", "Device busy, retry", "Dispositivo ocupado, reintenta", "Appareil occupé, réessayez", "Gerät beschäftigt, erneut versuchen"), 0);
+    if (!tk) fail_install(UT("Dispositivo occupato, riprova", "Device busy, retry", "Dispositivo ocupado, reintenta", "Appareil occupe, reessayez", "Geraet beschaeftigt, erneut versuchen"), 0);
 
     {   // Fresh tag + checksums from the SAME deploy as the image we are about to pull.
         char sums[2048], body[192], tag[24];   // headroom: a growing asset list must not truncate the OTA line
@@ -487,7 +464,7 @@ static void install_task(void *arg)
     if (!cli) { esp_ota_abort(h); fail_install("http init", tk); }
     if (esp_http_client_open(cli, 0) != ESP_OK) {
         esp_http_client_cleanup(cli); esp_ota_abort(h);
-        fail_install(UT("Download non riuscito", "Download failed", "Descarga fallida", "Téléchargement échoué", "Download fehlgeschlagen"), tk);
+        fail_install(UT("Download non riuscito", "Download failed", "Descarga fallida", "Telechargement echoue", "Download fehlgeschlagen"), tk);
     }
     int64_t clen = esp_http_client_fetch_headers(cli);
     int status = esp_http_client_get_status_code(cli);
@@ -518,11 +495,11 @@ static void install_task(void *arg)
         // bytes per window forever. Cap the WHOLE transfer so a stalled server can't hold exclusive
         // mode + the arbiter token indefinitely with no way out.
         if (esp_timer_get_time() - t_start > 300LL * 1000000) {   // 5 min
-            ok = false; why = UT("Download troppo lento", "Download too slow", "Descarga demasiado lenta", "Téléchargement trop lent", "Download zu langsam");
+            ok = false; why = UT("Download troppo lento", "Download too slow", "Descarga demasiado lenta", "Telechargement trop lent", "Download zu langsam");
             break;
         }
     }
-    if (ok && (r < 0 || total == 0)) { ok = false; why = UT("Download interrotto", "Download interrupted", "Descarga interrumpida", "Téléchargement interrompu", "Download abgebrochen"); }
+    if (ok && (r < 0 || total == 0)) { ok = false; why = UT("Download interrotto", "Download interrupted", "Descarga interrumpida", "Telechargement interrompu", "Download abgebrochen"); }
     esp_http_client_cleanup(cli);
 
     if (ok) {
@@ -535,7 +512,7 @@ static void install_task(void *arg)
     mbedtls_sha256_free(&sha);
 
     if (!ok) { esp_ota_abort(h); fail_install(why ? why : "error", tk); }
-    if (esp_ota_end(h) != ESP_OK) fail_install(UT("Immagine incompleta", "Incomplete image", "Imagen incompleta", "Image incomplète", "Unvollständiges Image"), tk);
+    if (esp_ota_end(h) != ESP_OK) fail_install(UT("Immagine incompleta", "Incomplete image", "Imagen incompleta", "Image incomplete", "Unvollstaendiges Image"), tk);
     if (esp_ota_set_boot_partition(part) != ESP_OK) fail_install("set_boot", tk);
 
     nucleo_arb_release(tk);
@@ -556,7 +533,7 @@ bool nucleo_update_start(void)
     // margin is measured on real hardware, not guessed. The posture reclaim (~47 KB) already ran.
     if (xTaskCreate(install_task, "upd_flash", 12288, NULL, 4, NULL) != pdPASS) {
         s_task_alive = false;
-        st_set_phase(UPD_FAILED, UT("Memoria insufficiente", "Out of memory", "Memoria insuficiente", "Mémoire insuffisante", "Zu wenig Speicher"));
+        st_set_phase(UPD_FAILED, UT("Memoria insufficiente", "Out of memory", "Memoria insuficiente", "Memoire insuffisante", "Zu wenig Speicher"));
         return false;
     }
     return true;

@@ -122,6 +122,26 @@ test('updates: a valid image is POSTed raw to /api/ota, with progress; "complete
   assert.deepEqual(end, { slot: 'ota_0', install: true, bin: false, file: '', bar: 'none' }, 'status refreshed to the new slot; the form is reset');
 });
 
+test('updates: the new image is reported complete only once confirmed; one the device rolls back is reported as such', { skip }, async (t) => {
+  const sim = await startSim();
+  const browser = await launchBrowser({ args: [HOST_RULES] });
+  t.after(async () => { await browser.close(); await sim.stop(); });
+  const it = cat('updates', 'it');
+  // The image boots, never confirms (a crash before the deferred confirm, main.c) and the bootloader boots the
+  // previous slot again: the device is back, online, valid — but on the OLD firmware.
+  await sim.control('/api/_sim/ota', { rollback: true, confirm_ms: 3000 });
+  const page = await openApp(browser, sim, 'it');
+  await pick(page, 'nucleoos.bin', 300 * 1024);
+  await install(page);
+  assert.ok(await page.waitFor(`document.getElementById('msg').textContent === ${JSON.stringify(it.rolled_back)}`, { timeout: 40000 }),
+    'a rollback is named as such');
+  const texts = (await page.eval(`window.__msgs`)).map((m) => m.text);
+  assert.ok(texts.includes(it.confirming), 'the wait for the confirm was shown: ' + texts.join(' / '));
+  assert.ok(!texts.includes(it.update_complete), 'never reported as complete');
+  const end = await page.eval(`({ bin: document.getElementById('bin').disabled, bar: document.getElementById('bar').style.display })`);
+  assert.deepEqual(end, { bin: false, bar: 'none' }, 'the form is usable again (the file stays picked, as for "not applied")');
+});
+
 test('updates: a refused upload shows the device\'s reason and is never reported as success', { skip }, async (t) => {
   const en = cat('updates', 'en');
 

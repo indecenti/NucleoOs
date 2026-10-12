@@ -20,8 +20,13 @@ extern "C" {
 // True when installed by M5Launcher. Scans the partition table once, then cached. Safe from any task.
 bool nucleo_guest_hosted(void);
 
-// Self-OTA (native Updates app, POST /api/ota) is safe only on the stand-alone layout.
+// Self-OTA (native Updates app, POST /api/ota) is safe only on the stand-alone layout: not hosted by
+// M5Launcher AND the table is NucleoOS's own two-bank layout (guest_layout_is_own).
 bool nucleo_guest_self_ota_allowed(void);
+
+// The live table is NucleoOS's own two-bank layout (firmware/partitions.csv). False under M5Launcher and
+// under any other boot manager — /api/status reports such a layout as host "other".
+bool nucleo_guest_layout_own(void);
 
 // How the user can get back to the Launcher right now (reads Launcher's own NVS settings, read-only).
 // Meaningful only when hosted.

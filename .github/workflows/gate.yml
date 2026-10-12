@@ -48,6 +48,13 @@ jobs:
 
       - name: M5Launcher guest-mode policy (host-compiled C)
         run: node tools/anima-host/guest-check.mjs
+      - name: OTA deferred confirm + trial rollback rules (host-compiled C)
+        run: node tools/anima-host/ota-confirm-check.mjs
+
+      - name: SD-content self-install policy (host-compiled C)
+        run: node tools/anima-host/sdcontent-check.mjs
+      - name: SD-content installer end to end — fake Pages with the 8 KB TLS-record cap, faults (host-compiled C)
+        run: node tools/anima-host/sdcontent-e2e.mjs
 
       - name: App catalog matches the app manifests
         run: node tools/gen-app-catalog.mjs --check

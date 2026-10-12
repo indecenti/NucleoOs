@@ -27,18 +27,26 @@ tells you how to release it. Mixing them up is the most common mistake.
 - `POST /api/ota` streams the new `nucleoos.bin` into the **inactive** slot
   (`esp_ota_begin/write/end`), sets it as the boot partition, and reboots.
   The first byte is checked for the ESP image magic (`0xE9`) so junk uploads
-  fail fast with HTTP 400.
+  fail fast with HTTP 400, and after `esp_ota_end()` the app descriptor must name the
+  project `nucleoos` (a foreign firmware or the merged 0x0 image is refused, 400).
+  Self-OTA runs only on NucleoOS's own two-bank table (`guest_layout_is_own`).
 - **Rollback safety (always-bootable guarantee):** `CONFIG_BOOTLOADER_APP_ROLLBACK_ENABLE=y`.
-  After an OTA the new image boots in state `PENDING_VERIFY`. `app_main()` calls
-  `ota_confirm_if_pending()` **only after the core services are up** (SD attempt +
-  network + HTTP server). That call (`esp_ota_mark_app_valid_cancel_rollback`) marks
-  the image valid. If the new firmware crashes or hangs before that point, it is
-  never confirmed, and the bootloader **automatically rolls back** to the previous
-  working image on the next reset. The device cannot brick itself with a bad OTA.
+  After an OTA the new image boots in state `PENDING_VERIFY`. On a healthy boot (HTTP server
+  up) `app_main()` arms a **deferred confirm**: the app loop calls `nucleo_ota_health_tick()`
+  every turn and confirms the image (`esp_ota_mark_app_valid_cancel_rollback`) once the OS has
+  run for 20 s; a deliberate restart inside that window confirms first through a shutdown
+  handler, but only once the loop has run. If the new firmware crashes or hangs before that —
+  ANIMA, voice, registry and UI included — it is never confirmed, and the bootloader
+  **automatically rolls back** to the previous working image on the next reset.
 
-> ⚠️ **The mark-valid call is mandatory.** If you ever refactor `app_main()`, keep
-> `ota_confirm_if_pending()` on the healthy-boot path. Without it, every OTA image
-> is rolled back on its second boot — the OS would silently revert after each update.
+> ⚠️ **The confirm path is mandatory.** If you ever refactor `app_main()` or the app loop, keep the
+> deferred confirm armed on the healthy-boot path and `nucleo_ota_health_tick()` in the loop. Without
+> them every OTA image is rolled back on its second boot — the OS would silently revert after each update.
+> The rules themselves are in `ota_confirm_fsm.h`, gated by `npm run otaconfirm:test`.
+>
+> After an OTA the image is `ota.state: "pending"` for ~20-30 s: `release.ps1` waits for it to turn
+> `valid` before declaring success. Don't reset the unit (power, a serial monitor that toggles RTS) in that
+> window — it would roll the update back by design.
 
 ### Image state, visible at `/api/status`
 ```jsonc
@@ -183,7 +191,7 @@ The tag triggers `.github/workflows/release.yml`, a **three-stage, each-gates-th
    shards filtered out, every path checked against the device's write allow-list
    (`tools/nucleo-sd-deploy/allowlist-vectors.json`). It ships as the `-sd.zip` (contents at the zip
    root) plus `-sd-manifest.txt` (one `sha256 size pack mode path` line per file), and `pages.yml`
-   hosts the last three releases' trees file by file under `sd/<x.y.z>/` for the on-device
+   hosts the last four releases' trees file by file under `sd/<x.y.z>/` for the on-device
    SD-content installer ([sd-content-install.md](sd-content-install.md)). Gated by
    `tools/sd-payload.test.mjs`.
 3. **verify** — fails the run unless the release assets are reachable *and* the web-flasher site
@@ -228,7 +236,7 @@ M5Launcher's OTA list. Manual, account-bound step — see [m5launcher.md](m5laun
 
 **Firmware change (C):**
 - [ ] `flash.ps1 -BuildOnly` exit 0, binary fits the app partition
-- [ ] `ota_confirm_if_pending()` still on the healthy-boot path in `main.c`
+- [ ] deferred OTA confirm still armed on the healthy-boot path in `main.c`, and `nucleo_ota_health_tick()` still in the app loop
 - [ ] **if RAM-affecting** (new static buffer / boot service / bigger array): boot-test ONE
       unit over USB, serial `BOOTSTEP` log reaches `httpd` (not `abort()`), before OTAing others
 - [ ] delivered via Updates app (Wi-Fi) or `flash.ps1 -Port COMx` (USB)

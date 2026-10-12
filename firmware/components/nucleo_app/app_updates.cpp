@@ -1,6 +1,12 @@
-// app_updates — native release-update surface: the boot dialog (update / next boot / ignore)
-// and the on-device installer with live progress. Engine in nucleo_update.c, decisions in
-// update_policy.c (host-gated), download verified SHA-256 + rollback-covered.
+// app_updates — native release-update surface: the boot dialog (how to update / next boot / ignore).
+// Engine in nucleo_update.c, decisions in update_policy.c (host-gated).
+//
+// The on-device download can't run on this chip today: the TLS fetch needs a ~42 KB contiguous block the
+// heap never has (even the lean Solo boot tops out near 32 KB), and the release site sends 16 KB TLS records
+// to an 8 KB receive buffer. So the dialog no longer offers a button that ends in "site unreachable": on a
+// stand-alone unit it shows exactly where the update works — the web console's Settings > Updates, which
+// verifies the image (SHA-256) and is covered by the automatic rollback; under M5Launcher, the Launcher's
+// own OTA list. (The Solo install engine below stays for a future SD-staged installer.)
 //
 // Boot contract: the run loop launches this app when nucleo_update_dialog_pending() (NVS-only,
 // no network). Esc = "show me again next boot" (nothing persisted); [2] persists the dismissal
@@ -24,6 +30,7 @@
 // contiguous block that only a fresh boot has. Provided by nucleo_app.cpp (link-time, no header dep).
 extern "C" void nucleo_app_solo_request_id(const char *id);   // never returns (warm reboot)
 extern "C" bool nucleo_anima_solo_active(void);               // true when this boot IS a Solo boot
+extern "C" const char *nucleo_setup_ip(void);                // the device address, for the "update from the browser" card
 
 // Five-language literal pick (pomodoro pattern; Font0 is ASCII so strings are accent-folded).
 static const char *PT(const char *it, const char *en, const char *es, const char *fr, const char *de)
@@ -78,9 +85,9 @@ static void set_hint_for_ui(void)
                                "No apagues el dispositivo", "N'eteignez pas l'appareil",
                                "Geraet nicht ausschalten"));
     else if (s_ui == UI_CONFIRM)
-        nucleo_app_set_hint(PT("ENTER conferma  ESC annulla", "ENTER confirm  ESC cancel",
-                               "ENTER confirmar  ESC cancelar", "ENTER confirmer  ESC annuler",
-                               "ENTER bestaetigen  ESC abbrechen"));
+        nucleo_app_set_hint(PT("ENTER / ESC indietro", "ENTER / ESC back",       // the card only informs
+                               "ENTER / ESC volver", "ENTREE / ESC retour",
+                               "ENTER / ESC zurueck"));
     else if (menu_rows() == 3)
         nucleo_app_set_hint(PT("1-3 scegli  ESC = al prossimo avvio", "1-3 pick  ESC = next boot",
                                "1-3 elige  ESC = proximo arranque", "1-3 choisir  ESC = prochain demarrage",
@@ -92,14 +99,7 @@ static void set_hint_for_ui(void)
 }
 
 // ── actions ───────────────────────────────────────────────────────────────────
-// "Update now": the install can't run here (runtime heap is fragmented to ~7-15 KB; the outbound TLS
-// to GitHub needs ~30 KB contiguous). Arm it and reboot into a Solo boot — a fresh, unfragmented heap
-// with Wi-Fi and the UI up — where the install actually fits. The Solo instance auto-runs it (on_enter).
-static void start_install(void)
-{
-    nucleo_update_arm_boot_install();
-    nucleo_app_solo_request_id("updates");   // never returns (warm reboot into Solo)
-}
+// (No "update now" action: see the header — the dialog shows where the update works instead.)
 
 // The REAL install, run only from the fresh-heap Solo boot. Free the 32 KB canvas for TLS+flash
 // headroom (httpd/L1/mDNS aren't even up in Solo, so there's little else to reclaim) and draw the
@@ -154,8 +154,8 @@ static void on_key(int key, char ch)
         else if (key == NK_ENTER) act_row(s_sel);
         else if (ch >= '1' && ch < (char)('1' + rows)) act_row(ch - '1');
     } else if (s_ui == UI_CONFIRM) {
-        // Hosted: the confirm card only explains where the update lives; ENTER just goes back.
-        if (key == NK_ENTER) { if (nucleo_guest_self_ota_allowed()) start_install(); else { s_ui = UI_MAIN; set_hint_for_ui(); mark(); } }
+        // The card only explains where the update works (browser, or M5Launcher); ENTER goes back.
+        if (key == NK_ENTER) { s_ui = UI_MAIN; set_hint_for_ui(); mark(); }
     }
 }
 
@@ -198,7 +198,7 @@ static void draw_main(void)
 
     // Menu rows (selection bar + quick-select digits).
     const char *rows3[3] = {
-        PT("Aggiorna ora", "Update now", "Actualizar ahora", "Mettre a jour", "Jetzt aktualisieren"),
+        PT("Come aggiornare", "How to update", "Como actualizar", "Comment mettre a jour", "So aktualisieren"),
         PT("Al prossimo avvio", "Next boot", "Proximo arranque", "Prochain demarrage", "Naechster Start"),
         PT("Ignora questa versione", "Ignore this version", "Ignorar esta version", "Ignorer cette version", "Diese Version ignorieren"),
     };
@@ -219,22 +219,32 @@ static void draw_main(void)
 static void draw_confirm(void)
 {
     char msg[48];
-    if (!nucleo_guest_self_ota_allowed()) {   // installed by M5Launcher: its OTA list owns updates
+    if (!nucleo_guest_self_ota_allowed()) {   // M5Launcher's OTA list owns updates — or a layout we don't know
+        const bool launcher = nucleo_guest_hosted();
         snprintf(msg, sizeof msg, "%s %s", PT("Disponibile", "Available", "Disponible", "Disponible", "Verfuegbar"), nucleo_update_latest_tag());
         center(msg, 24, 2, FG);
-        center(PT("Aggiorna da M5Launcher:", "Update from M5Launcher:", "Actualiza desde M5Launcher:",
-                  "Mettez a jour via M5Launcher :", "Update ueber M5Launcher:"), 54, 1, MUTED);
-        center(PT("Launcher > OTA > NucleoOS", "Launcher > OTA > NucleoOS", "Launcher > OTA > NucleoOS",
-                  "Launcher > OTA > NucleoOS", "Launcher > OTA > NucleoOS"), 68, 1, FG);
+        center(launcher ? PT("Aggiorna da M5Launcher:", "Update from M5Launcher:", "Actualiza desde M5Launcher:",
+                             "Mettez a jour via M5Launcher :", "Update ueber M5Launcher:")
+                        : PT("Aggiorna via USB:", "Update over USB:", "Actualiza por USB:",
+                             "Mettez a jour par USB :", "Update per USB:"), 54, 1, MUTED);
+        center(launcher ? "Launcher > OTA > NucleoOS" : "indecenti.github.io/NucleoOs", 68, 1, FG);
         center(PT("ENTER = OK", "ENTER = OK", "ENTER = OK", "ENTREE = OK", "ENTER = OK"), 92, 1, C_GREEN);
         return;
     }
-    snprintf(msg, sizeof msg, "%s %s?", PT("Aggiornare a", "Update to", "Actualizar a", "Mettre a jour vers", "Aktualisieren auf"), nucleo_update_latest_tag());
-    center(msg, 30, 2, FG);
-    center(PT("Scarica l'immagine verificata e riavvia.", "Downloads the verified image and reboots.",
-              "Descarga la imagen verificada y reinicia.", "Telecharge l'image verifiee et redemarre.",
-              "Laedt das verifizierte Image und startet neu."), 62, 1, MUTED);
-    center(PT("ENTER = Si", "ENTER = Yes", "ENTER = Si", "ENTREE = Oui", "ENTER = Ja"), 84, 1, C_GREEN);
+    snprintf(msg, sizeof msg, "%s %s", PT("Disponibile", "Available", "Disponible", "Disponible", "Verfuegbar"), nucleo_update_latest_tag());
+    center(msg, 20, 2, FG);
+    center(PT("Aggiorna dal browser:", "Update from a browser:", "Actualiza desde un navegador:",
+              "Mettez a jour depuis un navigateur :", "Update im Browser:"), 46, 1, MUTED);
+    const char *ip = nucleo_setup_ip();
+    char url[40];
+    snprintf(url, sizeof url, "http://%s", (ip && ip[0]) ? ip : "192.168.4.1");   // hotspot: the AP address
+    center(url, 60, 1, FG);
+    center(PT("Impostazioni > Aggiornamenti", "Settings > Updates", "Ajustes > Actualizaciones",
+              "Reglages > Mises a jour", "Einstellungen > Updates"), 74, 1, FG);
+    center(PT("Verifica SHA-256, rollback automatico", "SHA-256 verified, automatic rollback",
+              "SHA-256 verificado, rollback automatico", "SHA-256 verifie, rollback automatique",
+              "SHA-256 geprueft, autom. Rollback"), 92, 1, MUTED);
+    center(PT("ENTER = OK", "ENTER = OK", "ENTER = OK", "ENTREE = OK", "ENTER = OK"), 108, 1, C_GREEN);
 }
 
 // The flash screen runs canvas-free + direct-draw (the canvas RAM went to the TLS handshake). So it

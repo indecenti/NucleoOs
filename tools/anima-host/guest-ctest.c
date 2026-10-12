@@ -107,6 +107,41 @@ int main(int argc, char **argv)
     guest_launcher_plan(NULL, 3, &plan);
     CHECK(!plan.app_found && plan.n_data == 0, "NULL parts -> empty plan");
 
+    // Whitelist (guest_layout_is_own): self-OTA may only ever write the OTHER bank of OUR two-bank table.
+    {
+        const guest_part_t *o0 = find(op, on, "ota_0"), *o1 = find(op, on, "ota_1");
+        CHECK(o0 && guest_layout_is_own(op, on, o0->offset), "own table, running ota_0 -> own layout");
+        CHECK(o1 && guest_layout_is_own(op, on, o1->offset), "own table, running ota_1 -> own layout");
+        CHECK(!guest_layout_is_own(op, on, 0x123000), "own table, running elsewhere -> not own");
+        CHECK(!guest_layout_is_own(hp, hn, 0x410000) && !guest_layout_is_own(hp, hn, 0x190000), "M5Launcher table -> never own");
+        // The live ADV layout (2026-10): Launcher in a `test` slot, MicroHydra in ota_0 ("microh"), us in ota_1.
+        guest_part_t adv[] = {
+            { GUEST_PT_TYPE_APP, GUEST_PT_SUB_TEST,      0x010000, 0x150000, "app0" },
+            { GUEST_PT_TYPE_APP, GUEST_PT_SUB_OTA_0,     0x170000, 0x240000, "microh" },
+            { GUEST_PT_TYPE_APP, GUEST_PT_SUB_OTA_0 + 1, 0x4f0000, 0x310000, "nucle1" },
+        };
+        CHECK(!guest_layout_is_own(adv, 3, 0x4f0000), "ADV under M5Launcher -> not own (next slot is MicroHydra)");
+        // The blacklist's blind spot: a boot manager WITHOUT a `test` slot, itself in ota_0, us in ota_1.
+        guest_part_t mgr[] = {
+            { GUEST_PT_TYPE_APP, GUEST_PT_SUB_OTA_0,     0x010000, 0x200000, "manager" },
+            { GUEST_PT_TYPE_APP, GUEST_PT_SUB_OTA_0 + 1, 0x210000, 0x380000, "nucleoos" },
+        };
+        CHECK(!guest_is_hosted(mgr, 2, 0x210000), "test-less manager slips past the blacklist...");
+        CHECK(!guest_layout_is_own(mgr, 2, 0x210000), "...and is stopped by the whitelist (labels are not ours)");
+        guest_part_t fac[] = {
+            { GUEST_PT_TYPE_APP, GUEST_PT_SUB_FACTORY,   0x010000, 0x100000, "factory" },
+            { GUEST_PT_TYPE_APP, GUEST_PT_SUB_OTA_0,     0x110000, 0x380000, "ota_0" },
+            { GUEST_PT_TYPE_APP, GUEST_PT_SUB_OTA_0 + 1, 0x490000, 0x380000, "ota_1" },
+        };
+        CHECK(!guest_layout_is_own(fac, 3, 0x110000), "a factory app beside the banks -> not own");
+        guest_part_t swapped[] = {
+            { GUEST_PT_TYPE_APP, GUEST_PT_SUB_OTA_0 + 1, 0x020000, 0x380000, "ota_0" },
+            { GUEST_PT_TYPE_APP, GUEST_PT_SUB_OTA_0,     0x3a0000, 0x380000, "ota_1" },
+        };
+        CHECK(!guest_layout_is_own(swapped, 2, 0x020000), "labels and subtypes must agree");
+        CHECK(!guest_layout_is_own(NULL, 2, 0), "NULL parts -> not own");
+    }
+
     printf("guest-policy: %d/%d passed%s\n", g_total - g_fail, g_total, g_fail ? "  (FAILURES)" : "");
     return g_fail ? 1 : 0;
 }

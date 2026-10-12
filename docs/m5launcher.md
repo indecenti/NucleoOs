@@ -12,7 +12,10 @@ NucleoOS ships **one binary** that works in two worlds:
 Nothing is configured: the mode is detected at runtime from the live partition table
 (`firmware/components/nucleo_guest/`). Our own table never contains an app partition of subtype
 `test`, so a stand-alone install can never be mistaken for a hosted one — that invariant is gated
-on the real `partitions.csv` by `npm run guest:test`.
+on the real `partitions.csv` by `npm run guest:test`. Self-OTA additionally needs a **whitelist** match
+(`guest_layout_is_own`, since v0.7.2): exactly our two app slots, labelled `ota_0`/`ota_1` with their
+subtypes, running from one of them. A boot manager without a `test` slot would slip past the blacklist
+above; the whitelist refuses it (and `/api/status` reports `ota.host: "other"`).
 
 ## How M5Launcher boots (what guest mode relies on)
 

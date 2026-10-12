@@ -207,16 +207,21 @@ engine understands Italian and English.) See [`i18n.md`](i18n.md).
 
 ## 8. Updating
 
-Installed devices learn about new releases **by themselves**, and the device never contacts the
-internet to do it — your **browser** checks GitHub. See [`update-check.md`](update-check.md).
+Installed devices learn about new releases **by themselves**: your **browser** checks GitHub, and the
+device itself contacts only the official release site. See [`update-check.md`](update-check.md).
 
 - **From the web desktop:** the Notification Center shows one notice when a newer release exists.
   Open **Settings ▸ Updates** to download, verify (SHA-256), and install it. This is the easy path.
-- **On the device:** if the browser has recorded a newer release, the Cardputer shows an **update
-  dialog at boot** with an on-device installer (no PC needed).
+- **SD card content:** the web OS and the apps live on the SD card. **Settings ▸ Updates ▸ SD card
+  content** says whether the card matches the firmware and updates it in one go — only the changed files,
+  each one verified; your data, keys and settings are never touched.
+- **On the device:** when a newer release is known, the Cardputer shows an **update dialog at boot** that
+  says exactly where to install it (the address to open in a browser, or M5Launcher's OTA list), and a
+  one-time notice when the SD content is behind the firmware.
 - **Rollback on failure.** Updates use two firmware banks with **A/B rollback**: an update that fails its
-  integrity check is never booted, and an image that boots but doesn't come up healthy is rolled
-  back automatically to the previous one.
+  integrity check (or isn't NucleoOS) is never booted, and an image that doesn't keep running healthily
+  for its first seconds is rolled back automatically to the previous one. The Updates tab says
+  "updated" only once the device has confirmed the new firmware.
 - Prefer to be told by GitHub? **Watch ▸ Custom ▸ Releases** on the repo.
 
 The apps/desktop (the SD "web layer") and the firmware version independently — most day-to-day

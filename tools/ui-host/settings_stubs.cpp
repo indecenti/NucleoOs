@@ -30,7 +30,8 @@ extern "C" {
 // its stand-alone rows and the goldens don't move. The real decision core is gated by guest:test.
 bool           g_host_guest = false;                       // scene-controlled: running under M5Launcher
 bool           nucleo_guest_hosted(void) { return g_host_guest; }
-bool           nucleo_guest_self_ota_allowed(void) { return true; }
+bool           g_host_layout_other = false;             // scene-controlled: a partition layout that isn't ours
+bool           nucleo_guest_self_ota_allowed(void) { return !g_host_guest && !g_host_layout_other; }
 guest_return_t nucleo_guest_return_mode(void) { return GUEST_RET_DEEP_SLEEP; }
 bool           nucleo_guest_return_to_launcher(void) { return false; }
 int         nucleo_setup_channel(void) { return 6; }

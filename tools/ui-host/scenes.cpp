@@ -11,6 +11,7 @@
 #include "nucleo_i18n.h"
 #include "nucleo_theme.h"
 #include "nucleo_ui.h"         // the blocking modals (nucleo_ui_modal.cpp) the wizard scenes drive
+#include "nucleo_update.h"     // upd_phase_t for the native Updates app scenes
 #include "apps.gen.h"          // HOST_APPS[], HOST_APP_N (run.mjs, from tools/launcher-host/apps.mjs)
 #include <stdio.h>
 #include <string.h>
@@ -310,12 +311,44 @@ static const Scene WIZARD[] = {
                               v.err = T5("Download interrotto (rete)", "Download interrupted (network)", "Descarga interrumpida (red)",
                                          "Telechargement coupe (reseau)", "Download abgebrochen (Netz)");
                               nucleo_ui_install_result(&v, 1); } },
+    { "install-notfound", [] { nucleo_ui_modal_direct(true); keys({ K(NK_ENTER) }); nucleo_ui_install_t v = {}; v.phase = NUI_INST_FAILED;
+                              v.err = T5("Contenuti non trovati: riprova piu tardi o aggiorna il firmware",
+                                         "Content not found: retry later or update the firmware",
+                                         "Contenido no encontrado: reintenta luego o actualiza el firmware",
+                                         "Contenu introuvable : reessayez ou mettez a jour le firmware",
+                                         "Inhalt nicht gefunden: erneut versuchen oder Firmware updaten");
+                              nucleo_ui_install_result(&v, 1); } },
     { "input",      [] { keys({ 'c', 'a', 's', 'a' }); char b[33] = ""; nucleo_ui_input("Nome dispositivo", b, sizeof b, 0); } },
     { "input-pass", [] { keys({ 's', 'e', 'g', 'r', 'e', 't', 'o' }); char b[65] = ""; nucleo_ui_input("Password", b, sizeof b, 1); } },
     { "input-shift", [] { g_host_shift_latch = true; keys({ 'c', 'a', 's', 'a' }); char b[33] = ""; nucleo_ui_input("Nome dispositivo", b, sizeof b, 0); } },
     { "input-reveal", [] { keys({ 's', 'e', 'g', 'r', 'e', 't', 'o', K(NK_TAB) }); char b[65] = ""; nucleo_ui_input("Password", b, sizeof b, 1); } },
 };
 #undef K
+
+// Native Updates app (app_updates.cpp): the boot dialog, and the card that says WHERE an update works
+// (the web console on a stand-alone unit, the Launcher's OTA list on a guest). Engine stubbed in
+// updates_stubs.cpp; the device "knows" v0.5.1 while it runs 0.4.0+host unless a scene says otherwise.
+extern "C" const char *g_host_upd_latest;
+extern bool g_host_layout_other;                     // settings_stubs.cpp
+extern "C" upd_phase_t g_host_upd_phase;
+extern "C" const char *g_host_upd_err;
+extern "C" void nucleo_register_updates(void);
+static const char *lowram_msg(void)          // the engine's own LOWRAM_* line (nucleo_update.c), per language
+{
+    const char *l = nucleo_i18n_lang();
+    return l[0] == 'i' ? "Poca RAM: controlla dal browser" : l[0] == 'f' ? "RAM faible: verifiez via navigateur"
+         : l[0] == 'd' ? "Wenig RAM: im Browser pruefen" : (l[0] == 'e' && l[1] == 's') ? "Poca RAM: comprueba en navegador"
+         : "Low RAM: check from the browser";
+}
+static const Scene UPDATES[] = {
+    { "main",      [] { app_open("updates"); app_draw(); } },                                   // v0.5.1 available
+    { "how",       [] { app_open("updates"); app_key(NK_ENTER); app_draw(); } },                 // stand-alone: the browser
+    { "how-guest", [] { g_host_guest = true; app_open("updates"); app_key(NK_ENTER); app_draw(); } },   // M5Launcher
+    { "how-other", [] { g_host_layout_other = true; app_open("updates"); app_key(NK_ENTER); app_draw(); } },   // not our table: USB
+    { "current",   [] { g_host_upd_latest = "v0.4.0"; app_open("updates"); app_draw(); } },     // up to date
+    { "lowram",    [] { g_host_upd_latest = "v0.4.0"; g_host_upd_phase = UPD_CHECK_FAIL; g_host_upd_err = lowram_msg();
+                        app_open("updates"); app_draw(); } },                                    // "Check now", heap too tight
+};
 
 static const char *LANGS[]  = { "en", "it", "es", "fr", "de" };
 static const char *THEMES[] = { "classic", "nano_banana", "hacker", "amoled" };
@@ -325,9 +358,9 @@ static const char *THEMES[] = { "classic", "nano_banana", "hacker", "amoled" };
 static const Scene *find_scene(const char *surface, const char *scene)
 {
     const Scene *set = !strcmp(surface, "launcher") ? SCENES : !strcmp(surface, "settings") ? SETTINGS
-                     : !strcmp(surface, "wizard") ? WIZARD : nullptr;
+                     : !strcmp(surface, "wizard") ? WIZARD : !strcmp(surface, "updates") ? UPDATES : nullptr;
     int n = set == SCENES ? (int)(sizeof SCENES / sizeof SCENES[0]) : set == SETTINGS ? (int)(sizeof SETTINGS / sizeof SETTINGS[0])
-          : (int)(sizeof WIZARD / sizeof WIZARD[0]);
+          : set == UPDATES ? (int)(sizeof UPDATES / sizeof UPDATES[0]) : (int)(sizeof WIZARD / sizeof WIZARD[0]);
     for (int i = 0; set && i < n; i++) if (!strcmp(set[i].name, scene)) return &set[i];
     return nullptr;
 }
@@ -338,6 +371,7 @@ static void list_all(void)
         { "launcher", SCENES, (int)(sizeof SCENES / sizeof SCENES[0]) },
         { "settings", SETTINGS, (int)(sizeof SETTINGS / sizeof SETTINGS[0]) },
         { "wizard", WIZARD, (int)(sizeof WIZARD / sizeof WIZARD[0]) },
+        { "updates", UPDATES, (int)(sizeof UPDATES / sizeof UPDATES[0]) },
     };
     for (auto &g : S)
         for (int i = 0; i < g.n; i++) {
@@ -390,6 +424,7 @@ int main(int argc, char **argv)
     host_display_begin();
     nucleo_theme_init();
     nucleo_register_wifi();
+    nucleo_register_updates();
     int rc = 0;
     for (int i = 2; i < argc; i++) {
         registry_load(strstr(argv[i], ".adv") != nullptr);

@@ -47,11 +47,19 @@ const char *nucleo_sdcontent_fw_tag(void);
 
 // Arm a download for the NEXT boot (NVS flag) and reboot, OR disarm. Returns false if the NVS write failed.
 bool nucleo_sdcontent_arm(bool on);
+// Arm (or disarm) the flag only, no restart: for a caller that must answer first (httpd), then esp_restart().
+bool nucleo_sdcontent_set_armed(bool on);
 bool nucleo_sdcontent_armed(void);          // is a download armed for this boot?
 
 // "Skip" for this firmware version: content.json declined=true, so the wizard / boot dialog stop offering it
 // until a newer firmware (Settings ▸ SD can still install it).
 void nucleo_sdcontent_decline(void);
+
+// Boot reminder, ONCE per firmware version: the card is behind THIS firmware (missing / interrupted /
+// outdated, and not declined) and no reminder was posted for this version yet. A firmware updated from
+// M5Launcher, or by a user who never opens the web console, used to leave the card behind in silence.
+bool nucleo_sdcontent_remind_due(void);
+void nucleo_sdcontent_reminded(void);       // remember this firmware version as reminded (NVS)
 
 // RUN the download now (BLOCKING, minutes). Call only in the dedicated install boot (main.c). Clears the arm
 // flag first (a crash never loops), persists the failure reason to NVS (/api/status .sdc_diag).

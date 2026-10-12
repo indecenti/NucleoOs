@@ -95,7 +95,7 @@ starts the device's own access point) and a name. The screen then shows an addre
 browser on the same network and pair with the 6‑digit PIN (Control Center ▸ Web, or Settings ▸ Device).
 
 **Updates** come by themselves. Settings ▸ Updates offers a checksum‑verified one‑click update, with
-A/B slots and automatic rollback. The full walkthrough is in the **[User Guide](docs/user-guide.md)**.
+A/B slots and automatic rollback, and updates the SD card's content to match (only the changed files). The full walkthrough is in the **[User Guide](docs/user-guide.md)**.
 
 ---
 

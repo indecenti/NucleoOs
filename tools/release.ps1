@@ -115,17 +115,26 @@ if (-not $SdOnly -and -not $guest) {
 # real app-descriptor version (semver+build.git), so a changed string here is proof the OTA took —
 # the whole point of the versioning system. Poll through the ~5s reboot window.
 Step "Verify running version"
-$afterVer = $null
-for ($i = 0; $i -lt 20 -and -not $afterVer; $i++) {
+# A new image confirms itself only after ~20 s of healthy running (deferred confirm, docs/update-check.md); a
+# reset before that rolls it back. So after an OTA wait for the new version AND ota.state leaving "pending".
+$otaSent = (-not $SdOnly -and -not $guest)
+$afterVer = $null; $afterState = $null
+for ($i = 0; $i -lt 45; $i++) {
     Start-Sleep -Seconds 2
-    try { $afterVer = (Invoke-RestMethod "$base/api/status" -TimeoutSec 5).version } catch { }
+    try { $now = Invoke-RestMethod "$base/api/status" -TimeoutSec 5 } catch { continue }
+    $afterVer = $now.version; $afterState = $now.ota.state
+    if (-not $otaSent -and $i -ge 2) { break }                                        # no firmware change expected
+    if ($otaSent -and $afterVer -ne $beforeVer -and $afterState -ne 'pending') { break }
 }
 if (-not $afterVer) {
-    Write-Warning "Could not read /api/status after reboot — check the device manually."
+    Write-Warning "Could not read /api/status after reboot - check the device manually."
 } elseif ($beforeVer -eq $afterVer) {
-    Write-Host ("running v{0} (unchanged — expected if firmware was not rebuilt/OTA'd)." -f $afterVer) -ForegroundColor Yellow
+    if ($otaSent) { Write-Warning ("still v{0} after the OTA: the new image did not take, or was rolled back." -f $afterVer) }
+    else { Write-Host ("running v{0} (unchanged - expected if firmware was not rebuilt/OTA'd)." -f $afterVer) -ForegroundColor Yellow }
+} elseif ($afterState -eq 'pending') {
+    Write-Warning ("now v{0} but NOT confirmed yet (ota.state pending): leave it powered ~30 s, then check /api/status." -f $afterVer)
 } else {
-    Write-Host ("version: was v{0}  ->  now v{1}  (OTA confirmed)." -f $beforeVer, $afterVer) -ForegroundColor Green
+    Write-Host ("version: was v{0}  ->  now v{1}  (image confirmed: ota.state {2})." -f $beforeVer, $afterVer, $afterState) -ForegroundColor Green
 }
 
 Write-Host "`nRelease complete -> $DeviceHost  (firmware + full SD synced)." -ForegroundColor Green

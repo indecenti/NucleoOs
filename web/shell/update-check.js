@@ -7,7 +7,7 @@
 
 import I18N from './nucleo-i18n.js';
 import {
-  LS_CACHE, LS_NOTIFIED, LS_ENABLED, UPDATE_TTL_MS,
+  LS_CACHE, LS_NOTIFIED, LS_ENABLED, LS_BRIDGED, UPDATE_TTL_MS,
   checkDue, decideNotify, fetchLatestRelease, parseReleaseType, updateLevel,
 } from './update-core.js';
 
@@ -43,11 +43,14 @@ export function initUpdateCheck({ getSnapVersion, getNotify }) {
         const lvl = updateLevel(type);
         // Bridge to the NATIVE boot dialog: the device can't do HTTPS to GitHub, so write what the
         // browser learned to SD. The firmware reads /system/config/update.json at boot (zero TLS)
-        // and shows the update dialog. Best-effort — a write failure just means no native dialog.
-        if (d.newer) {
+        // and shows the update dialog (the newer of this file and its own NVS check wins). Best-effort —
+        // a write failure just means no native dialog. Written once per learned tag, not on every 6 h
+        // re-check: the card is shared with the web OS and an unchanged file is pure flash wear.
+        if (d.newer && readJSON(LS_BRIDGED) !== cache.tag) {
           try {
             fetch('/api/fs/write?path=' + encodeURIComponent('/system/config/update.json'),
               { method: 'POST', body: JSON.stringify({ tag: cache.tag, type, notes: String(cache.notes || '').slice(0, 200) }) })
+              .then((r) => { if (r.ok) writeJSON(LS_BRIDGED, cache.tag); })
               .catch(() => {});
           } catch {}
         }

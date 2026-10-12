@@ -49,6 +49,23 @@ guest_return_t guest_return_mode(bool has_ddlb, uint8_t ddlb, bool has_on_key, i
 
 bool guest_self_ota_allowed(bool hosted) { return !hosted; }
 
+bool guest_layout_is_own(const guest_part_t *parts, int n, uint32_t running_offset)
+{
+    if (!parts) return false;
+    int apps = 0;
+    bool has0 = false, has1 = false, runs_here = false;
+    for (int i = 0; i < n; i++) {
+        const guest_part_t *p = &parts[i];
+        if (p->type != GUEST_PT_TYPE_APP) continue;
+        apps++;
+        if (p->subtype == GUEST_PT_SUB_OTA_0 && !strcmp(p->label, "ota_0")) has0 = true;
+        else if (p->subtype == GUEST_PT_SUB_OTA_0 + 1 && !strcmp(p->label, "ota_1")) has1 = true;
+        else return false;                                   // any other app slot: not our layout
+        if (p->offset == running_offset) runs_here = true;
+    }
+    return apps == 2 && has0 && has1 && runs_here;
+}
+
 void guest_launcher_plan(const guest_part_t *parts, int n, guest_install_plan_t *plan)
 {
     if (!plan) return;

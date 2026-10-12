@@ -1,5 +1,5 @@
 {
-  "generated": "2026-10-11T15:33:20.049Z",
+  "generated": "2026-10-12T07:59:09.564Z",
   "base": "en",
   "langs": [
     "en",
@@ -23,7 +23,7 @@
     "de": 100
   },
   "surfaces": 48,
-  "totalKeys": 3705,
+  "totalKeys": 3709,
   "namespaces": {
     "core": 156,
     "shell": 290,
@@ -67,7 +67,7 @@
     "tasks": 18,
     "terminal": 19,
     "unit-converter": 21,
-    "updates": 35,
+    "updates": 39,
     "video-player": 75,
     "video-studio": 29,
     "voice-manager": 78,

@@ -1381,7 +1381,12 @@ function openReboot() {
 function closeReboot() { clearInterval(rebootTimer); $('reboot-modal').classList.remove('show'); }
 $('btn-reboot').addEventListener('click', openReboot);
 $('reboot-cancel').addEventListener('click', closeReboot);
-$('reboot-confirm').addEventListener('click', async () => { closeReboot(); status(T('rebooting')); try { await fetch('/api/reboot', { method: 'POST' }); } catch {} status(T('rebootDoneMsg'), false); });
+$('reboot-confirm').addEventListener('click', async () => {
+  closeReboot(); status(T('rebooting'));
+  let r = null; try { r = await fetch('/api/reboot', { method: 'POST' }); } catch {}
+  if (r && r.status === 409) { status(T('rebootLater'), false); return; }   // just updated: a restart now would undo it
+  status(T('rebootDoneMsg'), false);
+});
 
 // ═══════════ security / sessions (revoke) ═══════════
 // /api/auth/status reports the live paired-session count; /api/unpair revokes others/all.

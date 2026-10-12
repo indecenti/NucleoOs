@@ -6,7 +6,20 @@ All notable user-facing changes to NucleoOS. Format loosely follows
 
 ## [Unreleased]
 
+### Added
+- **Update the SD card from the browser.** Settings ▸ Updates now shows whether the card's web OS, apps and
+  ANIMA knowledge match the firmware, and brings them up to date in one go — only the changed files, each one
+  verified; your data, keys and settings are never touched. After a firmware update it tells you when the card
+  is behind, and the Cardputer itself reminds you once per version (useful after an update from M5Launcher).
+
 ### Changed
+- **A firmware update counts as done only once the new firmware has run.** The Cardputer confirms it after its
+  first seconds of healthy running; if it crashes before that, it goes back to the previous version by itself.
+  Before, a firmware that crashed a little later in its start-up could stay stuck until a USB reflash. The
+  Updates tab now says "updated" only after that confirmation, and names a rollback when one happens.
+- **The update dialog on the Cardputer says where to update** — the address to open in a browser and the
+  menu to use, or M5Launcher's OTA list — instead of an "Update now" that could not work on this chip.
+- **An ignored security update is offered again after a week** (other ignored updates stay ignored).
 - **One AI decision for the whole OS.** The Game Center's AI opponent, Paint's prompt enhancer, the Recorder's
   and Dictation's summaries, IR Remote's and Nearby's spoken commands now use the AI you set up once: a model on
   your PC (Ollama, LM Studio…) with no key, otherwise your cloud key. They used to need a cloud key, and each
@@ -22,6 +35,17 @@ All notable user-facing changes to NucleoOS. Format loosely follows
   live in a small memory area shared with the Launcher; once it filled up, every new pairing was forgotten at
   the next restart — opening the web desktop for the first time asked for the PIN a second time. They are now
   stored in a third of the space, and if room still runs out the oldest sessions give way, never the one in use.
+- **The firmware updater refuses a file that isn't NucleoOS** (for example the full install image picked by
+  mistake), and updates itself only on its own standard memory layout — never over another installed app.
+- **"Up to date" is no longer shown when a newer version is already known** to the Cardputer.
+- **"Check now" with too little free memory says so** and points to the browser, instead of "offline?";
+  accented letters on the Cardputer's update screen no longer come out garbled.
+- **The SD download explains a missing version** ("retry later or update the firmware") instead of
+  "HTTP 404", and four releases' content now stay online instead of three.
+- **Settings no longer says the device never contacts the internet**: it contacts only the official release
+  site, to check versions and to download the updates you start.
+- **ANIMA answers about people's jobs again on cards updated from a Windows PC.** Its fact files could be
+  copied with the wrong line endings, and the Cardputer then refused to use them.
 - **The desktop no longer gets stuck in English after a hiccup.** When the Cardputer was busy at the moment the
   desktop loaded its language, the whole session fell back to English until a reload. The language is now
   retried, and the desktop switches to it by itself as soon as it arrives.

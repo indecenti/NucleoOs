@@ -133,14 +133,18 @@ export function initUpdatesTab({ $, T, getStatus, pausePoller, resumePoller }) {
     try {
       if (typeof pausePoller === 'function') pausePoller();
 
-      // 0. Installed by M5Launcher: the device refuses self-OTA (its "next" slot is another app's) —
-      // say so up front instead of downloading a few MB into a guaranteed 409. docs/m5launcher.md.
+      // 0. Installed by M5Launcher (or on a layout that isn't ours): the device refuses self-OTA — say so up
+      // front instead of downloading a few MB into a guaranteed 409. docs/m5launcher.md. And a device still
+      // confirming a PREVIOUS update (deferred confirm, ~20 s after a restart) can't take another yet: wait.
       setProgress(true, T('upChecking'));
-      try {
-        const r = await fetch('/api/status', { cache: 'no-store', signal: AbortSignal.timeout(4000) });
-        const s = r.ok ? await r.json() : null;
-        if (s && s.ota && s.ota.self_update === false) return fail(T('upHosted'));
-      } catch {}
+      for (let i = 0; i < 20; i++) {
+        let st = null;
+        try { const r = await fetch('/api/status', { cache: 'no-store', signal: AbortSignal.timeout(4000) }); st = r.ok ? await r.json() : null; } catch {}
+        if (st && st.ota && st.ota.self_update === false) return fail(T(st.ota.host === 'other' ? 'upOtherLayout' : 'upHosted'));
+        if (!(st && st.ota && st.ota.state === 'pending')) break;
+        setProgress(true, T('upPrevPending'));
+        await new Promise((res) => setTimeout(res, 3000));
+      }
 
       // 1. Pages ↔ API alignment: refuse to ship yesterday's image under a fresh tag.
       let vj = null;
@@ -172,32 +176,41 @@ export function initUpdatesTab({ $, T, getStatus, pausePoller, resumePoller }) {
       // with another heavy job — honour Retry-After a few times, then give up honestly.
       setProgress(true, T('upFlashing'));
       let resp = null;
-      for (let attempt = 0; attempt < 3; attempt++) {
+      let refusal = null;   // the device's 409 reason: hosted | layout | pending
+      for (let attempt = 0; attempt < 4; attempt++) {
         try { resp = await fetch('/api/ota', { method: 'POST', body: bin, signal: AbortSignal.timeout(300000) }); }
         catch { return fail(T('upFailTimeout')); }
-        if (resp.status !== 503) break;
-        setState(T('upBusy'));
+        refusal = null;
+        if (resp.status === 409) { try { refusal = (await resp.clone().json()).error || null; } catch {} }
+        if (resp.status !== 503 && refusal !== 'pending') break;
+        setState(T(refusal === 'pending' ? 'upPrevPending' : 'upBusy'));
         const wait = Math.max(2, parseInt(resp.headers.get('Retry-After') || '3', 10) || 3);
         await new Promise((res) => setTimeout(res, wait * 1000));
       }
       if (!resp) return fail(T('upFailTimeout'));
       if (resp.status === 401) return fail(T('upAuthFail'));
       if (resp.status === 503) return fail(T('upBusy'));
-      if (resp.status === 409) return fail(T('upHosted'));
+      if (resp.status === 409) return fail(T(refusal === 'layout' ? 'upOtherLayout' : refusal === 'pending' ? 'upPrevPending' : 'upHosted'));
       if (!resp.ok) return fail(T('upFailTimeout'));
 
-      // 6. The device reboots into the new slot. Poll until the reported version matches the tag.
-      // The first seconds can still answer with the OLD image (response sent before esp_restart),
-      // so early samples are only trusted for success, never for a rollback verdict.
+      // 6. The device reboots into the new slot. Poll until the reported version matches the tag AND the
+      // device has CONFIRMED the image: it does so only after the new OS has run for ~20 s (deferred confirm,
+      // main.c) — before that a crash, or a power cut, still rolls it back, so "updated" would be premature.
+      // The first seconds can still answer with the OLD image (response sent before esp_restart), so early
+      // samples are only trusted for success, never for a rollback verdict.
       setProgress(true, T('upWaitReboot'));
       const t0 = Date.now();
+      let sawNew = false;
       for (;;) {
-        if (Date.now() - t0 > 180000) return fail(T('upFailTimeout'));
+        if (Date.now() - t0 > 240000) return fail(T('upFailTimeout'));
         await new Promise((res) => setTimeout(res, 5000));
         let s = null;
         try { const r = await fetch('/api/status', { cache: 'no-store', signal: AbortSignal.timeout(4000) }); if (r.ok) s = await r.json(); } catch {}
         if (!s || !s.version) continue;
         const c = cmpSemver(s.version, cache.tag);
+        if (c === 0 && s.ota && s.ota.state === 'pending') { sawNew = true; setProgress(true, T('upConfirming')); continue; }
+        // The new image ran, then the device came back on the old one: the bootloader rolled it back.
+        if (c < 0 && sawNew) return fail(T('upRolledBack'));
         if (c === 0) {
           setProgress(false); setState(TT('upDone', { tag: cache.tag })); render();
           // The new firmware expects the SD content of its own release: if the card is behind, say so where the
@@ -209,7 +222,7 @@ export function initUpdatesTab({ $, T, getStatus, pausePoller, resumePoller }) {
           return;
         }
         // Old version, well past the reboot window → the bootloader rolled the image back.
-        if (c < 0 && Date.now() - t0 > 45000) return fail(T('upFailTimeout'));
+        if (c < 0 && Date.now() - t0 > 45000) return fail(T('upRolledBack'));
       }
     } finally {
       busy = false;
@@ -292,9 +305,17 @@ export function initUpdatesTab({ $, T, getStatus, pausePoller, resumePoller }) {
     try {
       if (typeof pausePoller === 'function') pausePoller();
       sdcProgress(true, T('sdcArming'));
+      // 409 "starting" = the device is a few seconds into a restart after a firmware update and must settle
+      // first (restarting it now would undo that update): it says when to retry.
       let r = null;
-      try { r = await fetch('/api/sdcontent/arm', { method: 'POST', headers: { 'content-type': 'application/json' },
-        body: '{"on":true}', signal: AbortSignal.timeout(15000) }); } catch {}
+      for (let attempt = 0; attempt < 6; attempt++) {
+        r = null;
+        try { r = await fetch('/api/sdcontent/arm', { method: 'POST', headers: { 'content-type': 'application/json' },
+          body: '{"on":true}', signal: AbortSignal.timeout(15000) }); } catch {}
+        if (!r || r.status !== 409) break;
+        const wait = Math.max(2, parseInt(r.headers.get('Retry-After') || '4', 10) || 4);
+        await new Promise((res) => setTimeout(res, wait * 1000));
+      }
       if (!r) return done(T('sdcArmFail'));
       if (r.status === 401) return done(T('upAuthFail'));
       if (r.status === 404) return done(T('sdcOldFw'));

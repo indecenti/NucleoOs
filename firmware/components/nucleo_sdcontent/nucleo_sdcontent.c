@@ -109,14 +109,18 @@ bool nucleo_sdcontent_armed(void)
     return v == 1;
 }
 
-bool nucleo_sdcontent_arm(bool on)
+bool nucleo_sdcontent_set_armed(bool on)
 {
     nvs_handle_t h = nvs_open_sdc(true);
     if (!h) return false;
     esp_err_t e = nvs_set_u8(h, SDC_NVS_ARM, on ? 1 : 0);
     if (e == ESP_OK) e = nvs_commit(h);
     nvs_close(h);
-    if (e != ESP_OK) return false;
+    return e == ESP_OK;
+}
+bool nucleo_sdcontent_arm(bool on)
+{
+    if (!nucleo_sdcontent_set_armed(on)) return false;
     if (on) { ESP_LOGW(TAG, "SD content download armed — rebooting into the install boot"); esp_restart(); }
     return true;
 }
@@ -179,6 +183,27 @@ void nucleo_sdcontent_decline(void)
 {
     char ver3[24]; fw_ver3(ver3, sizeof ver3);
     sdc_content_write(NUCLEO_SD_MOUNT, ver3, false, true);
+}
+
+#define SDC_NVS_REMIND  "remind"   // the firmware x.y.z the boot last reminded about a card behind it
+
+bool nucleo_sdcontent_remind_due(void)
+{
+    char ver3[24]; fw_ver3(ver3, sizeof ver3);
+    char last[24] = "";
+    nvs_handle_t h = nvs_open_sdc(false);
+    if (h) { size_t n = sizeof last; if (nvs_get_str(h, SDC_NVS_REMIND, last, &n) != ESP_OK) last[0] = 0; nvs_close(h); }
+    if (!strcmp(last, ver3)) return false;                // already reminded for this firmware: no card access
+    return nucleo_sdcontent_needed();                     // complete / hand copy / declined / no card -> false
+}
+
+void nucleo_sdcontent_reminded(void)
+{
+    char ver3[24]; fw_ver3(ver3, sizeof ver3);
+    nvs_handle_t h = nvs_open_sdc(true);
+    if (!h) return;
+    nvs_set_str(h, SDC_NVS_REMIND, ver3);
+    nvs_commit(h); nvs_close(h);
 }
 
 // ---- HTTPS transport: Range windows on ONE keep-alive connection ------------------------------------
@@ -256,6 +281,17 @@ static void localize(void)
     case SDC_E_WRITE:        m = L5("Scrittura SD fallita", "SD write failed", "Error al escribir la SD", "Ecriture SD impossible", "SD-Schreibfehler"); break;
     case SDC_E_NOMEM:        m = L5("RAM insufficiente", "Not enough RAM", "Sin RAM", "RAM insuffisante", "Zu wenig RAM"); break;
     default:                 m = L5("Download fallito", "Download failed", "Descarga fallida", "Echec", "Fehler"); break;
+    }
+    if (s_st.code == SDC_E_MANIFEST && s_st.http == 404) {
+        // No manifest for THIS firmware on the release site: it hosts the last four releases' content, and a
+        // release minutes old may not be published yet. Say what to do, not just a status code (<= 71 chars).
+        snprintf(s_st.err, sizeof s_st.err, "%s",
+                 L5("Contenuti non trovati: riprova piu tardi o aggiorna il firmware",
+                    "Content not found: retry later or update the firmware",
+                    "Contenido no encontrado: reintenta luego o actualiza el firmware",
+                    "Contenu introuvable : reessayez ou mettez a jour le firmware",
+                    "Inhalt nicht gefunden: erneut versuchen oder Firmware updaten"));
+        return;
     }
     const char *slash = strrchr(s_st.detail, '/');
     const char *d = slash ? slash + 1 : s_st.detail;

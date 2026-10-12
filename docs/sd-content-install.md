@@ -63,7 +63,7 @@ unchanged; this adds one more consumer of the same payload definition.
 4. **Hosting**: GitHub Pages (same host the firmware updater already trusts, CDN, no per-IP API limit),
    per-file under `/sd/<x.y.z>/…` plus `/sd/<x.y.z>/sd-manifest.txt` and `/sd/index.txt` (hosted
    versions). Each release attaches its `-sd.zip` and `-sd-manifest.txt`; `pages.yml` re-extracts the
-   last three releases that carry a manifest and verifies every file against it before deploying, so a
+   last four releases that carry a manifest and verifies every file against it before deploying, so a
    device a couple of versions behind still finds content matching its firmware.
 5. **The zip keeps existing**, built from the same staging tree (so it is finally current) and zipped
    **without** the `sd/` prefix. FLASH.md is rewritten: stand-alone, M5Launcher, and "the device can
@@ -140,6 +140,14 @@ apps, splash or registry. The arm flag is cleared first, so a crash can never lo
   unzipped at the card's root (recognised on its own, §3.1).
 - **Settings ▸ Device ▸ SD content**: the status as a value (OK, v0.4.2, incomplete, missing, present)
   with what ENTER does; a confirm, then the install boot. Needs a Wi-Fi link (the row says so).
+- **Web console, Settings ▸ Updates ▸ SD card content** (since v0.7.2): the card's release against the
+  firmware's, Install / Update / Resume / Verify and repair; `POST /api/sdcontent/arm` arms the same install
+  boot, and the tab waits for the device to come back and reports the verdict (`/api/status .sdc`,
+  `.sdc_diag`). After a firmware update from the browser it points at the card when the card is behind.
+  See [update-check.md § SD card content](update-check.md#sd-card-content).
+- **Boot reminder** (since v0.7.2): once per firmware version, a boot whose card is behind (missing,
+  interrupted, outdated — not declined) posts a notification saying where to fix it. This is what reaches a
+  user who updated the firmware from M5Launcher and never opens the web console.
 - Web rescue page: not yet (§ status).
 
 ### 3.5 Copying by hand
@@ -246,7 +254,8 @@ as for a web-flasher install — which is why this self-install exists. Specific
 2. **AKB5 = the shipped 47-shard manifest** (`deploy/sd-safe/data/anima/anima-it-akb5.bin`, what devices
    run today via `deploy/sd`) and exactly the shards it routes to. The 15 extra `tools/sd-sim` shards are
    unreferenced by it and are not shipped.
-3. **Hosting: GitHub Pages, last 3 releases**, per file under `sd/<x.y.z>/`.
+3. **Hosting: GitHub Pages, last 4 releases**, per file under `sd/<x.y.z>/` (3 until 2026-10-12). A device
+   whose release is no longer hosted gets "Content not found: retry later or update the firmware".
 4. **TTS voice banks out of scope** for now; the UI must say "voice not installed" instead of silence.
 5. **Entry points**: the first-run wizard (a step after the Wi-Fi join, when online with an SD card and no
    content), the boot dialog, Settings ▸ SD, and a line on the web rescue page.

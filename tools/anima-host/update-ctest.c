@@ -95,6 +95,22 @@ int main(void)
     CHECK(!upd_should_show("0.2.11", "v0.3.0", "v0.3.0"),         "dismissed tag stays hidden");
     CHECK(!upd_should_show("0.3.0+1.gdef", "v0.3.0", ""),          "same triplet -> quiet");
     CHECK(!upd_should_show("0.4.0+1.gdef", "v0.3.0", ""),          "dev build ahead -> quiet");
+
+    // Dismissal over time: an ignored ordinary update stays ignored; an ignored SECURITY update returns
+    // after UPD_SECURITY_REMIND_S (7 days) — reminded, never nagged every boot. Bad clocks never re-raise.
+    {
+        const uint32_t T0 = 1760000000u, DAY = 86400u;
+        CHECK(upd_should_show_at("0.2.11", "v0.3.0", "", 0, T0, false),                   "at: newer, not dismissed -> show");
+        CHECK(!upd_should_show_at("0.3.0", "v0.3.0", "", 0, T0, true),                    "at: not newer -> quiet even if security");
+        CHECK(!upd_should_show_at("0.2.11", "v0.3.0", "v0.3.0", T0, T0 + 30 * DAY, false), "at: ignored ordinary update stays ignored");
+        CHECK(!upd_should_show_at("0.2.11", "v0.3.0", "v0.3.0", T0, T0 + 6 * DAY, true),   "at: ignored security update quiet for 6 days");
+        CHECK(upd_should_show_at("0.2.11", "v0.3.0", "v0.3.0", T0, T0 + 7 * DAY, true),    "at: ignored security update back after 7 days");
+        CHECK(upd_should_show_at("0.2.11", "v0.3.1", "v0.3.0", T0, T0 + DAY, false),       "at: a NEWER tag than the ignored one shows");
+        CHECK(!upd_should_show_at("0.2.11", "v0.3.0", "v0.3.0", 0, T0 + 30 * DAY, true),   "at: dismissed with no clock -> no re-raise");
+        CHECK(!upd_should_show_at("0.2.11", "v0.3.0", "v0.3.0", T0, 1000, true),           "at: clock not set now -> no re-raise");
+        CHECK(!upd_should_show_at("0.2.11", "v0.3.0", "v0.3.0", T0, T0 - DAY, true),       "at: clock went backwards -> no re-raise");
+        CHECK(!upd_should_show_at("0.2.11", "", "", 0, T0, true),                         "at: nothing learned -> quiet");
+    }
     CHECK(!upd_should_show("0.2.11", "", ""),                       "never checked -> quiet");
     CHECK(!upd_should_show("0.2.11", "garbage", ""),                "garbage latest -> quiet");
     CHECK(!upd_should_show("?", "v0.3.0", ""),                      "unknown current -> quiet");

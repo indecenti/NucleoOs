@@ -407,6 +407,33 @@ extern "C" void nucleo_ui_install_screen(const nucleo_ui_install_t *v)
     s.present();
 }
 
+// The failure reason in Font2 on at most two lines: a reason wider than the panel (the "retry later or update
+// the firmware" advice is ~70 chars) wraps once at a word boundary instead of running off the edge; a second
+// line that still overflows is cut. Returns the y below the text.
+static int print_reason(LovyanGFX &g, int x, int y, const char *s, int maxw)
+{
+    char l1[80], l2[80];
+    snprintf(l1, sizeof l1, "%s", s);
+    l2[0] = 0;
+    if (g.textWidth(l1) > maxw) {
+        int cut = -1;
+        for (int i = 0; l1[i]; i++) {                       // the last space whose prefix still fits
+            if (l1[i] != ' ') continue;
+            l1[i] = 0;
+            bool fits = g.textWidth(l1) <= maxw;
+            l1[i] = ' ';
+            if (!fits) break;
+            cut = i;
+        }
+        if (cut > 0) { snprintf(l2, sizeof l2, "%s", l1 + cut + 1); l1[cut] = 0; }
+        while (l1[0] && g.textWidth(l1) > maxw) l1[strlen(l1) - 1] = 0;   // one unbreakable word
+        while (l2[0] && g.textWidth(l2) > maxw) l2[strlen(l2) - 1] = 0;
+    }
+    g.setCursor(x, y); g.print(l1); y += 16;
+    if (l2[0]) { g.setCursor(x, y); g.print(l2); y += 16; }
+    return y;
+}
+
 extern "C" void nucleo_ui_install_result(const nucleo_ui_install_t *v, int timeout_s)
 {
     if (!v) return;
@@ -434,8 +461,7 @@ extern "C" void nucleo_ui_install_result(const nucleo_ui_install_t *v, int timeo
         g.print(H5("Web OS e ANIMA sono pronti.", "Web OS and ANIMA are ready.", "Web OS y ANIMA estan listos.",
                    "Web OS et ANIMA sont prets.", "Web OS und ANIMA sind bereit."));
     } else {
-        snprintf(b, sizeof b, "%.40s", v->err && v->err[0] ? v->err : "?");
-        g.setCursor(8, y); g.print(b); y += 18;
+        y = print_reason(g, 8, y, v->err && v->err[0] ? v->err : "?", W - 16) + 2;
         g.setTextColor(MUT, BG);
         g.setCursor(8, y);
         g.print(H5("I file gia' scaricati restano.", "Files already done are kept.", "Lo ya descargado se conserva.",
