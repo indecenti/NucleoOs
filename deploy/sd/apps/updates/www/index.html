@@ -149,7 +149,7 @@
   // The device's reason, readable: its JSON {message|error} (409 hosted, …) or "busy" (503 single-flight).
   function deviceReason(xhr) {
     const txt = xhr.responseText || '';
-    try { const j = JSON.parse(txt); if (j && typeof j === 'object') { if (j.busy) return t('err_busy'); if (j.message || j.error) return String(j.message || j.error); } } catch {}
+    try { const j = JSON.parse(txt); if (j && typeof j === 'object') { if (j.busy) return t('err_busy'); if (j.error === 'pending') return t('err_pending'); if (j.error === 'layout') return t('err_layout'); if (j.message || j.error) return String(j.message || j.error); } } catch {}
     return txt.trim().slice(0, 200) || ('HTTP ' + xhr.status);
   }
 
@@ -169,34 +169,56 @@
       $('barfill').style.width = pct + '%';
       setMsg(t('uploading', { pct }), '');
     };
+    const slotBefore = lastStatus && lastStatus.ota ? lastStatus.ota.running : null;   // a rollback lands back here
     xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) { setMsgKey('image_written', null, 'ok'); waitForReboot(0); }
+      if (xhr.status >= 200 && xhr.status < 300) { setMsgKey('image_written', null, 'ok'); waitForReboot(0, slotBefore); }
       else { setMsgKey('update_rejected', { reason: deviceReason(xhr) }, 'err'); resetControls(); }
     };
     // The device reboots right after responding, so the socket may drop — but so does an early device-side
     // abort or a WiFi blip. No 2xx seen = unknown outcome: wait for the device and check it really rebooted.
     const sentAt = Date.now();
-    xhr.onerror = () => { setMsgKey('upload_done_rebooting', null, 'ok'); waitForReboot(sentAt); };
+    xhr.onerror = () => { setMsgKey('upload_done_rebooting', null, 'ok'); waitForReboot(sentAt, slotBefore); };
     xhr.timeout = 120000;
-    xhr.ontimeout = () => { setMsgKey('rebooting_short', null, 'ok'); waitForReboot(sentAt); };
+    xhr.ontimeout = () => { setMsgKey('rebooting_short', null, 'ok'); waitForReboot(sentAt, slotBefore); };
     xhr.send(file);
   });
 
   function resetControls() { $('install').disabled = !file; $('bin').disabled = false; $('refresh').disabled = false; $('bar').style.display = 'none'; $('barfill').style.width = '0'; }
 
-  // Poll /api/status until the device is back, then show the new state. sentAt (ms) = the upload's outcome
-  // is unknown: if the device's uptime predates the upload it never restarted, so nothing was installed.
-  function waitForReboot(sentAt) {
+  // Poll /api/status until the device is back, then judge. Three facts, in order:
+  //   1. it really RESTARTED (uptime younger than the upload) — an answer from before the reboot proves nothing;
+  //      sentAt (ms) = the upload's outcome is unknown: no restart there means nothing was installed;
+  //   2. the new image is CONFIRMED — the firmware confirms it only once the OS has run (~20 s, deferred
+  //      confirm); until then a crash or a power cut still rolls it back, so "complete" would be premature;
+  //   3. it is NOT back on the slot it ran from before (slotBefore): the bootloader rolled the image back.
+  function waitForReboot(sentAt, slotBefore) {
     $('barfill').style.width = '100%';
+    const since = sentAt || Date.now();
     let tries = 0;
     const iv = setInterval(async () => {
       tries++;
       const ok = await loadStatus();
-      const up = ok && lastStatus ? lastStatus.uptime_s : null;
-      if (ok && sentAt && typeof up === 'number' && up * 1000 >= Date.now() - sentAt) { clearInterval(iv); setMsgKey('not_applied', null, 'err'); resetControls(); }
-      else if (ok) { clearInterval(iv); setMsgKey('update_complete', null, 'ok'); file = null; $('bin').value = ''; resetControls(); }
-      else if (tries > 40) { clearInterval(iv); setMsgKey('reboot_timeout', null, 'warn'); resetControls(); }
-      else setMsgKey('reboot_waiting', { tries }, 'warn');
+      const s = ok ? lastStatus : null;
+      const up = s && typeof s.uptime_s === 'number' ? s.uptime_s : null;
+      const restarted = up !== null && up * 1000 < Date.now() - since;
+      const stop = (key, cls, installed) => {
+        clearInterval(iv); setMsgKey(key, null, cls);
+        if (installed) { file = null; $('bin').value = ''; }
+        resetControls();
+      };
+      if (ok && !restarted) {
+        if (sentAt) return stop('not_applied', 'err');
+        if (tries > 20) return stop('reboot_timeout', 'warn');   // a 2xx, yet no restart in ~40 s
+        return setMsgKey('reboot_waiting', { tries }, 'warn');
+      }
+      if (ok) {
+        const ota = s.ota || {};
+        if (ota.state === 'pending') return tries > 75 ? stop('reboot_timeout', 'warn') : setMsgKey('confirming', null, 'warn');
+        if (slotBefore && ota.running === slotBefore) return stop('rolled_back', 'err');
+        return stop('update_complete', 'ok', true);
+      }
+      if (tries > 75) return stop('reboot_timeout', 'warn');
+      setMsgKey('reboot_waiting', { tries }, 'warn');
     }, 2000);
   }
 

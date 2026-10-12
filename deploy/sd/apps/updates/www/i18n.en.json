@@ -27,6 +27,8 @@
   "upload_done_rebooting": "Upload finished; device is rebooting…",
   "rebooting_short": "Device is rebooting…",
   "update_complete": "Update complete — device is back online. ✔",
+  "confirming": "The new firmware has started: checking it stays stable before it is confirmed…",
+  "rolled_back": "The new firmware did not stay stable: the device went back to the previous version on its own. No data was touched.",
   "reboot_timeout": "Device did not come back in time. Check it and refresh.",
   "reboot_waiting": "Rebooting… waiting for the device ({tries})",
   "err_empty": "This file is empty — pick the nucleoos.bin firmware image.",
@@ -34,5 +36,7 @@
   "err_merged": "This is the full-flash image (nucleoos-latest.bin, with bootloader) — for USB flashing only. Pick the OTA image (…-ota.bin / nucleoos.bin).",
   "err_too_big": "This file is larger than the firmware slot ({max}) — it is not a NucleoOS OTA image.",
   "err_busy": "the device is busy with another download — try again in a moment",
+  "err_pending": "The device is still confirming the previous update: retry in a few seconds.",
+  "err_layout": "Unrecognised memory layout: update over USB (web flasher).",
   "not_applied": "The connection was lost and the device did not restart — the update was NOT installed. Try again."
 }

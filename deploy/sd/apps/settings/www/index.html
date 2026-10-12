@@ -597,6 +597,20 @@
             <div class="hint" id="up-prog-lbl" style="margin-top:6px">—</div>
           </div>
           <div class="hint" style="margin-top:10px" data-t="upFlashHint">Scarica l'immagine OTA dal sito ufficiale, ne verifica l'integrità (SHA-256) e la invia al dispositivo. Al termine il Cardputer si riavvia da solo; se l'immagine non parte, torna da sola alla versione precedente (rollback).</div></div>
+        <div class="sect" id="sdc-sect"><h2><span data-t="sdcTitle">Contenuti della scheda SD</span> <span class="badge fw">SD</span></h2>
+          <div class="info-grid">
+            <div class="info-cell"><div class="il" data-t="sdcOnCard">Sulla scheda</div><div class="iv" id="sdc-card">—</div></div>
+            <div class="info-cell"><div class="il" data-t="sdcForFw">Per questo firmware</div><div class="iv" id="sdc-fw">—</div></div>
+          </div>
+          <div class="row" style="margin-top:6px"><label data-t="upState">Stato</label><div class="ctl"><span class="hint" id="sdc-state">—</span></div></div>
+          <div class="ctl" style="gap:10px;flex-wrap:wrap;margin-top:8px">
+            <button id="sdc-go" hidden>📦 <span id="sdc-go-lbl" data-t="sdcUpdate">Aggiorna contenuti SD</span></button>
+          </div>
+          <div id="sdc-prog" hidden style="margin-top:12px">
+            <div class="up-bar"><i id="sdc-prog-bar" class="pulse" style="width:100%"></i></div>
+            <div class="hint" id="sdc-prog-lbl" style="margin-top:6px">—</div>
+          </div>
+          <div class="hint" style="margin-top:10px" data-t="sdcHint">Il web OS, le app e la conoscenza di ANIMA vivono sulla scheda SD. L'aggiornamento scarica dal sito ufficiale solo i file cambiati e verifica ognuno (SHA-256); i tuoi dati, le chiavi e le impostazioni non vengono toccati.</div></div>
         <div class="sect"><h2 data-t="upNotesTitle">Novità</h2><div class="logbox" id="up-notes">—</div></div>
         <div class="sect"><h2 data-t="upPrefs">Preferenze</h2>
           <div class="row"><label data-t="upAuto">Controllo automatico</label><div class="ctl">
@@ -775,6 +789,7 @@ function renderStatus(s) {
   // Updates tab: the installed-version cell rides every status sample (the tab may have rendered
   // before the first snapshot landed).
   { const uc = $('up-cur'); if (uc && s.version) uc.textContent = s.version; }
+  try { if (Updates) Updates.renderSdc(); } catch {}   // the SD-content section follows every sample too
   const net = s.network || {}, st = s.storage || {};
   // hero verdict
   const minFree = s.min_free_heap ?? 0, busy = s.arbiter && s.arbiter.busy;
@@ -1108,6 +1123,9 @@ function retitle() {
   $('t-region') && ($('t-region').textContent = T('regionFormat'));
   renderLangRegion();
   if (pcModels) pcModels.render();
+  // Updates tab: its state lines and button labels are built in code (and applyStaticI18n just reset the
+  // buttons to their default label) — rebuild them in the new language at once, not at the next poll.
+  try { if (Updates) Updates.render(); } catch {}
 }
 $('theme-light').addEventListener('click', () => { model.ui.theme = 'light'; applyLiveUI(); persistUiSoon(); });
 $('theme-dark').addEventListener('click', () => { model.ui.theme = 'dark'; applyLiveUI(); persistUiSoon(); });
@@ -1363,7 +1381,12 @@ function openReboot() {
 function closeReboot() { clearInterval(rebootTimer); $('reboot-modal').classList.remove('show'); }
 $('btn-reboot').addEventListener('click', openReboot);
 $('reboot-cancel').addEventListener('click', closeReboot);
-$('reboot-confirm').addEventListener('click', async () => { closeReboot(); status(T('rebooting')); try { await fetch('/api/reboot', { method: 'POST' }); } catch {} status(T('rebootDoneMsg'), false); });
+$('reboot-confirm').addEventListener('click', async () => {
+  closeReboot(); status(T('rebooting'));
+  let r = null; try { r = await fetch('/api/reboot', { method: 'POST' }); } catch {}
+  if (r && r.status === 409) { status(T('rebootLater'), false); return; }   // just updated: a restart now would undo it
+  status(T('rebootDoneMsg'), false);
+});
 
 // ═══════════ security / sessions (revoke) ═══════════
 // /api/auth/status reports the live paired-session count; /api/unpair revokes others/all.
