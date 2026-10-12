@@ -6945,14 +6945,14 @@
                                       "hash":  "2406f2e8db374d981236feb4a454fb5c06ab1e82f276d4e4a81062633b46e2ad"
                                   },
     "data/anima/learned/facets.en.jsonl":  {
-                                               "size":  "255069",
-                                               "mtime":  "639172129787940204",
-                                               "hash":  "8fc2d1bf9d4a7a379d57194b51fb915fba1e75687f52e00acd9c51a77eff1c53"
+                                               "size":  "252463",
+                                               "mtime":  "639273553351075921",
+                                               "hash":  "1d8f79726fb620276ca4b2de06ddc12f9419590d8dc1760589cb66a55d1af359"
                                            },
     "data/anima/learned/facets.it.jsonl":  {
-                                               "size":  "256450",
-                                               "mtime":  "639172129787940204",
-                                               "hash":  "bb428f33b625697df6e77f11241ac7de72ca2026f4f82bcfc5c7f95e9fb043c4"
+                                               "size":  "253845",
+                                               "mtime":  "639273553351096063",
+                                               "hash":  "46d07f41695a0c851c7d520a03020bbe7ee0912db7b3f1e9f15072bb432c3e6e"
                                            },
     "data/anima/workspace.json":  {
                                       "size":  "24",
