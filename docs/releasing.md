@@ -135,6 +135,8 @@ a live file.
   incrementally (reads each file first, writes only what changed). Use `--dry-run` to
   preview, `--only <subtree>` to scope. It **never** touches `system/config` (user
   state: pins, wallpaper, settings, session) or `data/` (media, ROMs).
+  After a full, clean run `--sync` also records the content's release in `system/content.json`, so
+  the device never mistakes a dev-synced card for an old release's (see `docs/sd-content-install.md` §3.1).
   The `--sync` mode diffs against each folder's `/api/fs/list`. If a folder can't be
   listed (firmware up to 0.3.0+43 answered 503 "oom" on 60+ entry folders), it stats
   each file with a 1-byte `Range` read instead of skipping the folder; only create-only

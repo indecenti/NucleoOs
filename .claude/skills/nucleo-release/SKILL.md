@@ -60,9 +60,12 @@ SD — e.g. it embeds the SHA-256 of `data/anima/learned/facets.*.jsonl` (`VKL_F
 3. Preview the SD delta, read-only:
    `node tools/push-ota.mjs --host http://<ip> --pin <pin> --sync --dry-run`
    (from Bash, PIN read from `release.local.json` with a one-line `node -e`, never echoed).
-4. After the release, re-run the same dry run: it must say **`0 create, 0 update`**. The live run can
+4. After the release, re-run the same dry run: it must say **`0 create, 0 update`** and
+   **`Content record (system/content.json): current (<x.y.z>)`**. The live run can
    report MORE updates than the preview (a same-size file whose content read fails under load counts as
    different and is rewritten identically) — harmless; the second dry run is the proof.
+   A full, clean sync writes that record itself (`tools/lib/sd-provenance.mjs`): without it a card once
+   filled by the device's SD-content engine keeps naming that old release and the unit nags for a download.
 
 ### Logs from long scripts
 Redirect to a file in the scratchpad and run in the background:

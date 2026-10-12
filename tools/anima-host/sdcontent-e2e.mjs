@@ -7,6 +7,7 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
+import { syncRecord } from '../lib/sd-provenance.mjs';
 
 const ROOT = process.cwd();
 const BUILD = join(ROOT, 'build');
@@ -31,7 +32,8 @@ if (cc.status !== 0) {
   process.exit(1);
 }
 if (cc.stderr) process.stderr.write(cc.stderr);
-const run = spawnSync(exe, [], { cwd: ROOT, env, encoding: 'utf8' });
+// S21: the exact record push-ota --sync writes after a clean full sync (tools/lib/sd-provenance.mjs).
+const run = spawnSync(exe, [], { cwd: ROOT, env: { ...env, SDC_DEVSYNC_RECORD: syncRecord('0.5.0') }, encoding: 'utf8' });
 process.stdout.write(run.stdout || '');
 if (run.stderr) process.stderr.write(run.stderr);
 process.exit(run.status === null ? 1 : run.status);

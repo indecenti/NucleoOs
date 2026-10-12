@@ -89,7 +89,7 @@ messages). UI: `nucleo_ui_modal.cpp` (install screens), `app_wifi.cpp` (wizard s
 | `PARTIAL` | `content.json` for this firmware, not complete (a run started and was cut) | **resume** |
 | `MANUAL` | the web OS is on the card (`www/shell/index.html[.gz]`) and `system/content/manifest.txt` names this release — a hand copy of the zip | no |
 | `OUTDATED` | the web OS is there, from another release (by the manifest beside it, else by `content.json`) | **update** |
-| `UNKNOWN` | the web OS is there, nothing names its release (a dev `sd-sync`, an old zip) | no |
+| `UNKNOWN` | the web OS is there, nothing names its release (an old zip, a hand copy of a dev tree) | no |
 | `SKIPPED` | nothing there, the user chose "Later" for this firmware | no |
 | `MISSING` | nothing there | **download** |
 
@@ -98,6 +98,18 @@ A hand copy is never nagged about, and a stale "Later" never hides real files. S
 content** shows every state and runs the same install (download / resume / update / **verify and
 repair**) for all of them. The engine marks a run as started (`content.json` complete:false) as soon as it
 accepts the manifest, so an interrupted run is a resume, never mistaken for a hand copy.
+
+**Dev syncs keep the record honest.** The developer's Wi-Fi sync (`push-ota.mjs --sync`, what
+`release.ps1` runs) rewrites the card's files but not the engine's own record, so a card once filled by
+the engine kept saying that old release (a unit installed in the 0.5.0 days and dev-synced to 0.7.2 since
+read `OUTDATED 0.5.0` and was offered a download it did not need). After a **full, clean** sync (no
+`--only` / `--exclude`, nothing failed or unverifiable) the tool now writes `content.json` for the
+content's release (`firmware/version/VERSION`): `{"tag":"0.7.2","complete":true,"declined":false,
+"by":"dev-sync"}` → `COMPLETE` on matching firmware, `OUTDATED` on any other (whose update then fetches
+only the files that differ: the engine hashes the card, it never trusts a record). A record that already
+says complete for that release is left alone; a partial or failed sync never vouches for the card. The
+dry run previews it (`Content record (system/content.json): would record …`). Code:
+`tools/lib/sd-provenance.mjs`; the record's effect on the real `sdc_engine.c` is gate case S21.
 
 ### 3.2 Updating is incremental
 
@@ -205,16 +217,19 @@ Esc during the run warm-reboots to the full OS (like the updater's Solo boot) �
 ## 6. Tests
 
 Host (no device), in the ANIMA gate and CI:
-- `npm run sdcontent:test` (59 checks): `content_policy.c` — header/line parser, path hygiene, the write
+- `npm run sdcontent:test` (70 checks): `content_policy.c` — header/line parser, path hygiene, the write
   allow-list against every row of the ownership map, plan decisions, version matching.
-- `npm run sdcontent:e2e` (153 checks): the **real** `sdc_engine.c` against a fake Pages server that
+- `npm run sdcontent:e2e` (157 checks): the **real** `sdc_engine.c` against a fake Pages server that
   enforces the device's limit (no response over one window) and injects faults, a temp dir as the SD.
   Fresh card, rerun no-op, resume after every kind of cut (mid-file link loss, corrupt byte, 404,
   manifest 404), hostile manifest (writes nothing), tag mismatch, user state byte-identical, no `.part`
   left, progress by bytes monotonic and moving inside a big file, the status table of §3.1 including a
   hand copy (MANUAL), a newer firmware over it (OUTDATED → only the changed file downloads), a dev tree
-  (UNKNOWN), an interrupted run (PARTIAL), "Later" (SKIPPED); FIPS SHA-256 vectors and the real release
-  manifest parsed and hash-compared.
+  (UNKNOWN), an interrupted run (PARTIAL), "Later" (SKIPPED), a dev-synced card with a stale engine record
+  fixed by the record `push-ota --sync` writes (S21: COMPLETE for its release, OUTDATED for a newer one);
+  FIPS SHA-256 vectors and the real release manifest parsed and hash-compared.
+- `tools/sd-provenance.test.mjs`: that record's spelling (what the firmware substring-matches) and when a
+  sync may write it.
 - `npm run ui:shots`: the wizard step (missing / update / resume, focus moved, Later page), Settings ▸
   Device ▸ SD content (missing / OK / hand copy / old / confirm), the install screens — 5 languages × 4
   themes, direct and buffered paths.

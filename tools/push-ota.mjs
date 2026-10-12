@@ -11,6 +11,9 @@
 //   - system/config/*  is create-only — user state (pins, wallpaper, settings) is NEVER clobbered.
 //   - heavy media (data/ROMs|DOS|Music|Videos) is skipped unless --include-media (flaky over Wi-Fi).
 //   - everything else is created if missing / overwritten if changed.
+//   - after a full, clean run it records the content's release in system/content.json (the SD-content
+//     engine's record, tools/lib/sd-provenance.mjs), so the device never mistakes a dev-synced card for an
+//     old release's and offers a download it does not need.
 // Change detection is cheap: device sizes come from /api/fs/list (one listing per directory,
 // cached) — a same-size small file (<256 KB) is content-verified, a same-size large file is
 // trusted (a 12 MB ROM is never downloaded just to diff it). Writes retry with backoff and
@@ -43,6 +46,7 @@ import { REGISTRY_REL, mergeRegistryText } from './lib/registry-merge.mjs';
 import { isDeviceState } from './lib/sd-policy.mjs';
 import { stagingDrift } from './staging-check.mjs';
 import { deviceSession } from './lib/device-session.mjs';
+import { CONTENT_JSON, syncRecord, readRecord, recordCurrent, mayRecord } from './lib/sd-provenance.mjs';
 
 const REPO = join(fileURLToPath(import.meta.url), '..', '..');
 const SD = join(REPO, 'deploy', 'sd');
@@ -316,10 +320,36 @@ async function syncSd(host, args) {
     } else failed++;
   }
 
+  // The card's content record (system/content.json, tools/lib/sd-provenance.mjs). After a full, clean sync
+  // the card holds THIS tree's content: record it, or a stale record (e.g. an old release's engine install)
+  // makes the device call the card OUTDATED and offer a download it does not need. A record that already
+  // says "complete, this release" is left alone (an engine-written one stays the engine's).
+  let provenance;
+  {
+    const version = (await readFile(join(REPO, 'firmware', 'version', 'VERSION'), 'utf8')).trim();
+    const devPath = '/' + CONTENT_JSON;
+    let devText = null;
+    try {
+      const r = await fetchWithTimeout(host + '/api/fs/read?path=' + encodeURIComponent(devPath), { cache: 'no-store', headers: authHeaders() }, Math.min(args.timeout, 30000));
+      if (r.ok) devText = Buffer.from(await r.arrayBuffer()).toString('utf8'); else await r.arrayBuffer().catch(() => {});
+    } catch { /* unreadable: treated as no record */ }
+    const was = readRecord(devText);
+    const wasStr = was ? `${was.tag || '?'} ${was.complete ? 'complete' : was.declined ? 'declined' : 'partial'}` : 'no record';
+    const full = !args.only && !(args.exclude && args.exclude.length);
+    if (recordCurrent(devText, version)) provenance = `current (${version})`;
+    else if (!full) provenance = `left as is (${wasStr}) - a partial sync does not vouch for the card`;
+    else if (args.dryRun) provenance = `would record ${version} (card says: ${wasStr})`;
+    else if (!mayRecord({ only: args.only, exclude: args.exclude, failed, unknown })) provenance = `left as is (${wasStr}) - the sync was not clean`;
+    else if (await pushFile(devPath, posix.dirname(devPath), posix.basename(devPath), Buffer.from(syncRecord(version), 'utf8')))
+      provenance = `recorded ${version} (was: ${wasStr})`;
+    else { provenance = `FAILED to record ${version} (card says: ${wasStr})`; failed++; }
+  }
+
   const kb = (bytes / 1024).toFixed(1);
   console.log(args.dryRun
     ? `\nSync dry run: ${created} create, ${updated} update (${kb} KB); ${skipped} current, ${excluded} excluded, ${stateKept} device-state preserved, ${unknown} unverifiable.`
     : `\nSync: ${created} created, ${updated} updated (${kb} KB), ${skipped} current, ${excluded} excluded, ${stateKept} device-state preserved, ${unknown} unverifiable, ${failed} failed.`);
+  console.log(`Content record (${CONTENT_JSON}): ${provenance}.`);
   if (failed) console.error('Some files failed after retries — re-run the same command to resume (it only retouches what is still wrong).');
   return failed ? 1 : 0;
 }

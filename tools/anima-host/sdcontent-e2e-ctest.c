@@ -458,6 +458,24 @@ int main(void)
     OK(sdc_content_status(SD, "0.5.0", NULL, 0) == SDC_ST_MISSING, "S20 a blank card is MISSING");
     sdc_content_write(SD, "0.5.0", false, true);
     OK(sdc_content_status(SD, "0.5.0", NULL, 0) == SDC_ST_SKIPPED, "S20 'Later' on a blank card is SKIPPED");
+    // S21 a card the engine filled for an OLD release, dev-synced since (push-ota --sync): the stale record made
+    //     it OUTDATED; the record the sync now writes (tools/lib/sd-provenance.mjs syncRecord("0.5.0"), handed
+    //     in by sdcontent-e2e.mjs) must read COMPLETE for that release and still OUTDATED for a newer one.
+    {
+        const char *rec = getenv("SDC_DEVSYNC_RECORD");
+        OK(rec && *rec, "S21 the dev-sync record is provided by sdcontent-e2e.mjs");
+        fresh_sd(); put(SD, "www/shell/index.html.gz", "gz", 2);
+        const char *old_man = "#nucleoos-sd 1 v0.4.0 1 2\n";
+        put(SD, "system/content/manifest.txt", old_man, strlen(old_man));
+        sdc_content_write(SD, "0.4.0", true, false);
+        OK(sdc_content_status(SD, "0.5.0", NULL, 0) == SDC_ST_OUTDATED, "S21 the stale engine record alone says OUTDATED");
+        if (rec) put(SD, "system/content.json", rec, strlen(rec));
+        char tag[24];
+        OK(sdc_content_status(SD, "0.5.0", tag, sizeof tag) == SDC_ST_COMPLETE && !strcmp(tag, "0.5.0")
+           && !sdc_content_needed(SD, "0.5.0"), "S21 after the dev sync's record: COMPLETE for 0.5.0, not offered");
+        OK(sdc_content_status(SD, "0.6.0", NULL, 0) == SDC_ST_OUTDATED && sdc_content_needed(SD, "0.6.0"),
+           "S21 ... and a newer firmware still sees it OUTDATED (offered the update)");
+    }
 
     printf("sdcontent-e2e: %d checks, %d failed\n", checks, fails);
     return fails ? 1 : 0;
