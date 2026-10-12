@@ -17,7 +17,7 @@ image generation.
 ![Platform: ESP32-S3](https://img.shields.io/badge/platform-ESP32--S3-informational)
 ![Framework: ESP-IDF](https://img.shields.io/badge/firmware-ESP--IDF-red)
 
-**[⬇️ Install](#-install)** · **[📋 What's new in v0.7.1](CHANGELOG.md)** · **[📖 User Guide](docs/user-guide.md)**
+**[⬇️ Install](#-install)** · **[📋 What's new in v0.7.2](CHANGELOG.md)** · **[📖 User Guide](docs/user-guide.md)**
 
 <sub>Free for noncommercial use · **commercial use requires a paid license** → niki070585@gmail.com</sub>
 
@@ -63,15 +63,18 @@ once and flash either.
 Product photos © M5Stack.</sub>
 </div>
 
-## ✨ New in v0.7.1
+## ✨ New in v0.7.2
 
-- **Costellazioni** — a full space game: combat, a galaxy to cross and worlds to land on ([see below](#-games--a-pocket-console)).
-- **The web OS loads about six times faster** from the Cardputer — a fresh browser shows the desktop
-  in about 5 s instead of over 30 s.
-- **Models on your PC** — Settings ▸ AI / Models drives Ollama, LM Studio, llama.cpp or Jan on your
-  computer: a model per task, PC or cloud first, free and offline.
-- **A sharper agent and real fixes** — ANIMA's agent writes files where you asked, Groq voice
-  transcription works in Dictation and the agent, the "Auto" AI profile no longer turns on Private mode.
+- **Safer firmware updates** — an update counts as done only once the new firmware has actually run; if it
+  crashes before that, the Cardputer goes back to the previous version by itself.
+- **Update the SD card from the browser** — Settings ▸ Updates brings the card's web OS, apps and ANIMA
+  knowledge up to date: only the changed files, each one verified, your data never touched.
+- **One AI decision for the whole OS** — games, Paint, the Recorder, Dictation, IR Remote and Nearby use the AI
+  you set up once (a model on your PC or your cloud key), and Private mode keeps everything local in every app.
+- **M5Launcher installs keep their paired browsers** across restarts.
+
+Previous release (v0.7.1): **Costellazioni**, a full space game; the web OS loading about six times faster;
+models on your PC (Ollama, LM Studio, llama.cpp, Jan).
 
 Full notes: [CHANGELOG.md](CHANGELOG.md). Installed devices are offered the update in **Settings ▸ Updates**.
 

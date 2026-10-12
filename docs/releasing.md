@@ -216,7 +216,8 @@ that fails the gate never publishes at all.
 
 ### Optional: M5Burner / M5Launcher listing
 The same merged image (`nucleoos-<version>.bin`) can be shared on M5Burner, which also puts it in
-M5Launcher's OTA list. Manual, account-bound step — see [m5launcher.md](m5launcher.md#publishing-so-it-shows-up-in-the-launchers-ota-list).
+M5Launcher's OTA list. Manual, account-bound step in the M5Burner desktop app; `npm run m5burner:kit`
+prepares the verified image, the cover and the form text — see [m5launcher.md](m5launcher.md#publishing-so-it-shows-up-in-the-launchers-ota-list).
 
 ### Security properties
 - **No unreviewed ship:** the gate blocks the build; `main` is always green (CI), so tags build green.

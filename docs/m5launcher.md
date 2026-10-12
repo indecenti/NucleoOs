@@ -94,17 +94,20 @@ curated by its author.)
    `nucleoos-<version>.bin` (0x0: bootloader + our partition table + app). It serves both paths:
    M5Burner "Burn" flashes it whole (stand-alone mode); the Launcher extracts the app + `cfg` from it
    (guest mode).
-2. In the M5Burner desktop app, sign in with the project's M5Stack account → *Share* / upload a
-   firmware: device **Cardputer**, name **NucleoOS**, version = the release tag, the merged `.bin`,
-   description (below) and screenshots from `docs/screenshots/`.
-3. After the catalog refreshes, verify with
+2. Build the kit: `npm run m5burner:kit` (`tools/m5burner-kit.py`, after `npm run ui:shots`). It writes
+   `build/m5burner/`: the release's merged image downloaded from the GitHub Release and checked (SHA-256
+   against `SHA256SUMS`, our own A/B table, app `nucleoos` of that version, not a dirty build), a 1280x960
+   cover (4:3, the catalog's shape) from the real native UI renders, and `listing.md` with every form field
+   and the paste-ready description (`description.txt`). Reproducible on purpose: `dist/` is wiped by every
+   `package-release.mjs` run, which once took a hand-made kit with it.
+3. In the M5Burner **desktop** app (there is no web upload), sign in with the project's M5Stack account →
+   **USER CUSTOM ▸ Publish**: name **NucleoOS for Cardputer & ADV** (the catalog's convention), version =
+   the release tag, device **Cardputer** (covers the ADV), GitHub link, the merged `.bin`, the cover and
+   the description → **Upload**, then switch the entry's **Publish** toggle on (public). A later release
+   adds a version to the same entry.
+4. After the catalog refreshes (LauncherHub mirrors it within a day), verify with
    `curl "https://api.launcherhub.net/firmwares?category=cardputer&q=nucleoos"` and install it from a
    Launcher once (Launcher ▸ OTA ▸ search "NucleoOS").
-
-Suggested description: *NucleoOS — an appliance OS for the Cardputer (original + ADV, one binary):
-native apps, offline assistant, web console. Works stand-alone or under M5Launcher (updates via
-Launcher OTA). License: PolyForm Noncommercial 1.0.0 — commercial use needs a license (COMMERCIAL.md).
-SD content: see the GitHub release.*
 
 The upload itself is a manual, account-bound step (M5Burner has no public upload API) — it is never
 automated from this repo.
