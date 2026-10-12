@@ -6,6 +6,8 @@ All notable user-facing changes to NucleoOS. Format loosely follows
 
 ## [Unreleased]
 
+## [0.7.2] — 2026-10-12
+
 ### Added
 - **Update the SD card from the browser.** Settings ▸ Updates now shows whether the card's web OS, apps and
   ANIMA knowledge match the firmware, and brings them up to date in one go — only the changed files, each one
