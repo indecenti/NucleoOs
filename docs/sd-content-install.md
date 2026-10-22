@@ -148,8 +148,8 @@ apps, splash or registry. The arm flag is cleared first, so a crash can never lo
 
 - **First-boot wizard**, after a successful join (setup-wizard.md step 4): the page names the case —
   download (~50 MB) / update (only the changed files) / resume — with [action] [Later]. **Later** explains
-  the two ways to get the files afterwards: Settings ▸ Device, or **by hand**: the release's SD zip
-  unzipped at the card's root (recognised on its own, §3.1).
+  the two ways to get the files afterwards: Settings ▸ Device, or **by hand** from a PC — a QR to the
+  hand-copy guide for this firmware (§3.5), recognised on its own once copied (§3.1).
 - **Settings ▸ Device ▸ SD content**: the status as a value (OK, v0.4.2, incomplete, missing, present)
   with what ENTER does; a confirm, then the install boot. Needs a Wi-Fi link (the row says so).
 - **Web console, Settings ▸ Updates ▸ SD card content** (since v0.7.2): the card's release against the
@@ -163,6 +163,12 @@ apps, splash or registry. The arm flag is cleared first, so a crash can never lo
 - Web rescue page: not yet (§ status).
 
 ### 3.5 Copying by hand
+
+The wizard's "Later" page carries a QR to `https://indecenti.github.io/NucleoOs/sd/?v=<x.y.z>`
+(`NUCLEO_SDC_HELP_URL`; page `web/flash/sd/index.html`, deployed by `pages.yml`). It links the zip of that
+exact release from `sd/zips.txt` (`<x.y.z> <bytes> <url>`, written by `pages.yml` for every hosted release),
+falls back to the release page for a version no longer hosted, and spells out the steps below in the five OS
+languages. Opened on a phone, it offers "copy link" / "send to computer", since the copy happens on a PC.
 
 1. Download `nucleoos-<version>-sd.zip` from the GitHub release matching the firmware.
 2. Unzip its **contents** at the root of the FAT32 card (`www/`, `apps/`, `data/`, `system/`, … at the

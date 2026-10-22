@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>NucleoOS — SD card by hand</title>
+<meta name="description" content="Copy the NucleoOS SD card content from a computer: the right zip for your firmware, step by step." />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='26'%3E%E2%9A%A1%3C/text%3E%3C/svg%3E" />
+<!-- Opened from the QR on the Cardputer's first-boot wizard ("Later" page): ?v=<firmware x.y.z>.
+     The zip for each hosted version comes from zips.txt, written by pages.yml next to the per-file trees. -->
+<style>
+  :root{
+    --bg:#0b1020; --bg2:#111a33; --card:#141d38; --card2:#0f1730;
+    --fg:#eaf0ff; --muted:#9fb0d4; --line:#233156;
+    --accent:#38bdf8; --accent2:#6366f1; --good:#34d399; --warn:#fbbf24;
+    --shadow:0 12px 40px rgba(0,0,0,.45);
+  }
+  @media (prefers-color-scheme: light){
+    :root{
+      --bg:#f4f7ff; --bg2:#e9eefc; --card:#ffffff; --card2:#f5f8ff;
+      --fg:#101833; --muted:#4c5b7a; --line:#dbe3f4;
+      --shadow:0 12px 40px rgba(30,50,110,.14);
+    }
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color:var(--fg);
+    background:
+      radial-gradient(1200px 600px at 80% -10%, rgba(99,102,241,.20), transparent 60%),
+      radial-gradient(900px 500px at -10% 10%, rgba(56,189,248,.16), transparent 55%),
+      var(--bg);
+    min-height:100vh;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:720px;margin:0 auto;padding:28px 16px 56px}
+  header{text-align:center;margin-bottom:8px}
+  .logo{display:inline-flex;align-items:center;gap:10px;font-weight:800;font-size:14px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+  .logo .dot{width:10px;height:10px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--accent2))}
+  h1{font-size:clamp(26px,6vw,38px);line-height:1.15;margin:12px 0 6px;letter-spacing:-.02em}
+  .tag{color:var(--muted);font-size:clamp(15px,2.4vw,17px);max-width:52ch;margin:0 auto}
+  .langs{display:flex;gap:6px;justify-content:center;margin-top:14px;flex-wrap:wrap}
+  .langs button{font:inherit;font-size:13px;padding:3px 10px;border-radius:999px;border:1px solid var(--line);background:var(--card2);color:var(--muted);cursor:pointer}
+  .langs button[aria-pressed="true"]{color:var(--fg);border-color:var(--accent)}
+
+  .card{background:linear-gradient(180deg,var(--card),var(--card2));border:1px solid var(--line);border-radius:18px;padding:22px;box-shadow:var(--shadow);margin:20px 0}
+  .get{text-align:center}
+  .get h2{margin:0 0 4px;font-size:19px}
+  .get p{color:var(--muted);font-size:14px;margin:0 0 14px}
+  .dl{display:inline-flex;align-items:center;gap:10px;padding:13px 20px;border-radius:12px;font-weight:700;font-size:16px;color:#04121f;background:linear-gradient(135deg,var(--accent),var(--accent2));text-decoration:none;max-width:100%;overflow-wrap:anywhere}
+  .dl:hover{filter:brightness(1.08)}
+  .dl[hidden]{display:none}
+  .fname{display:block;margin-top:10px;font-size:13px;color:var(--muted);overflow-wrap:anywhere}
+  .share{margin-top:14px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+  .share button{font:inherit;font-size:14px;padding:8px 14px;border-radius:10px;border:1px solid var(--line);background:var(--card2);color:var(--fg);cursor:pointer}
+  .share button:hover{border-color:var(--accent)}
+
+  h2.section{font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 16px}
+  ol.steps{list-style:none;counter-reset:s;margin:0;padding:0}
+  ol.steps>li{counter-increment:s;position:relative;padding:0 0 20px 50px;margin:0}
+  ol.steps>li::before{content:counter(s);position:absolute;left:0;top:0;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;font-weight:700;color:#04121f;background:linear-gradient(135deg,var(--accent),var(--accent2))}
+  ol.steps>li::after{content:"";position:absolute;left:16px;top:38px;bottom:4px;width:2px;background:var(--line)}
+  ol.steps>li:last-child::after{display:none}
+  ol.steps h3{margin:4px 0 4px;font-size:17px}
+  ol.steps p{margin:0 0 6px;color:var(--muted)}
+  code{background:var(--card2);border:1px solid var(--line);border-radius:6px;padding:1px 6px;font-size:13px;color:var(--fg)}
+  pre.tree{background:var(--card2);border:1px solid var(--line);border-radius:10px;padding:10px 14px;margin:8px 0;font-size:13px;line-height:1.5;color:var(--fg);overflow-x:auto}
+  pre.tree .bad{color:var(--warn)}
+  .note{border:1px solid color-mix(in srgb,var(--warn) 35%, var(--line));background:color-mix(in srgb,var(--warn) 8%, var(--card));padding:12px 16px;border-radius:10px;margin:14px 0 0;font-size:14px}
+  .note b{color:var(--warn)}
+  .ok{border-color:color-mix(in srgb,var(--good) 35%, var(--line));background:color-mix(in srgb,var(--good) 8%, var(--card))}
+  .ok b{color:var(--good)}
+  a{color:var(--accent)}
+  footer{text-align:center;color:var(--muted);font-size:13px;margin-top:28px}
+  footer a{color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <span class="logo"><span class="dot"></span>NucleoOS</span>
+    <h1 data-t="title"></h1>
+    <p class="tag" data-t="tag"></p>
+    <div class="langs" id="langs"></div>
+  </header>
+
+  <section class="card get">
+    <h2 id="for"></h2>
+    <p id="state" data-t="loading"></p>
+    <a class="dl" id="dl" hidden href="#"><span aria-hidden="true">⬇</span><span id="dlt"></span></a>
+    <span class="fname" id="fname"></span>
+    <div class="share">
+      <button type="button" id="copy" data-t="copy"></button>
+      <button type="button" id="send" data-t="send" hidden></button>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2 class="section" data-t="how"></h2>
+    <ol class="steps">
+      <li><h3 data-t="s1h"></h3><p data-t="s1p"></p></li>
+      <li><h3 data-t="s2h"></h3><p data-t="s2p"></p></li>
+      <li><h3 data-t="s3h"></h3><p data-t="s3p"></p>
+        <pre class="tree">SD (E:)
+├── apps/
+├── data/
+├── system/
+├── www/
+└── …</pre>
+        <p data-t="s3w"></p>
+        <pre class="tree"><span class="bad">SD (E:)
+└── nucleoos-…-sd/   ✗
+    ├── apps/
+    └── …</span></pre>
+      </li>
+      <li><h3 data-t="s4h"></h3><p data-t="s4p"></p></li>
+      <li><h3 data-t="s5h"></h3><p data-t="s5p"></p></li>
+    </ol>
+    <p class="note ok"><b data-t="okb"></b> <span data-t="okp"></span></p>
+    <p class="note"><b data-t="nb"></b> <span data-t="np"></span></p>
+  </section>
+
+  <footer><a href="../" data-t="flasher"></a> · <a href="https://github.com/indecenti/NucleoOs">GitHub</a></footer>
+</div>
+
+<script>
+(() => {
+  const T = {
+    it: {
+      title: "Contenuti SD da un PC",
+      tag: "Web OS, app e ANIMA vivono sulla microSD. Il Cardputer sa scaricarli da solo via Wi-Fi; qui li copi tu, da un computer.",
+      loading: "Cerco lo zip giusto…", for: "Per NucleoOS v{v}", forAny: "Ultima versione di NucleoOS",
+      found: "Lo zip della stessa versione del firmware del tuo Cardputer.",
+      latestOnly: "La v{v} non è più ospitata qui: prendi lo zip dalla sua pagina di release (o aggiorna il firmware).",
+      offline: "Non riesco a leggere l'elenco: apri la pagina della release e scarica il file che finisce con -sd.zip.",
+      dl: "Scarica lo zip SD", rel: "Apri la pagina della release",
+      copy: "Copia il link", copied: "Link copiato", send: "Invia al PC",
+      how: "Come si fa",
+      s1h: "Togli la microSD", s1p: "Spegni il Cardputer e sfila la scheda microSD.",
+      s2h: "Collegala al computer", s2p: "Con un lettore di schede (o l'adattatore SD). Deve apparire come un disco, per esempio E:. La scheda va formattata FAT32: quella del Cardputer lo è già.",
+      s3h: "Scarica ed estrai lo zip nella radice", s3p: "Scarica lo zip sul computer ed estrai il suo CONTENUTO direttamente nella scheda, così:",
+      s3w: "Non dentro una cartella in più. Su Windows: tasto destro sullo zip ▸ Estrai tutto ▸ come destinazione scegli il disco della SD (solo E:\\, togli il nome della cartella). Su Mac: apri lo zip e trascina le cartelle sulla scheda. Se chiede di sovrascrivere: sì a tutto.",
+      s4h: "Espelli in sicurezza", s4p: "Aspetta la fine della copia (sono migliaia di file), poi espelli la scheda prima di toglierla.",
+      s5h: "Rimettila e accendi", s5p: "Inserisci la microSD nel Cardputer e accendilo. Web OS e ANIMA sono pronti.",
+      okb: "Controllo:", okp: "Impostazioni ▸ Dispositivo ▸ Contenuti SD mostra la versione copiata. Con Wi-Fi puoi anche premere INVIO per verificare ogni file e riparare solo quelli rovinati.",
+      nb: "Versione:", np: "usa lo zip della stessa versione del firmware. Se copi uno zip più vecchio, il Cardputer se ne accorge e ti propone l'aggiornamento.",
+      flasher: "Installa NucleoOS dal browser"
+    },
+    en: {
+      title: "SD content from a computer",
+      tag: "The web OS, apps and ANIMA live on the microSD. The Cardputer can download them by itself over Wi-Fi; here you copy them yourself, from a computer.",
+      loading: "Looking for the right zip…", for: "For NucleoOS v{v}", forAny: "Latest NucleoOS",
+      found: "The zip that matches your Cardputer's firmware version.",
+      latestOnly: "v{v} is no longer hosted here: get the zip from its release page (or update the firmware).",
+      offline: "Can't read the list: open the release page and download the file ending in -sd.zip.",
+      dl: "Download the SD zip", rel: "Open the release page",
+      copy: "Copy link", copied: "Link copied", send: "Send to my computer",
+      how: "How to do it",
+      s1h: "Take the microSD out", s1p: "Switch the Cardputer off and slide the microSD card out.",
+      s2h: "Plug it into the computer", s2p: "With a card reader (or an SD adapter). It must show up as a drive, e.g. E:. The card must be FAT32 — the Cardputer's already is.",
+      s3h: "Download and unzip at the root", s3p: "Download the zip on the computer and extract its CONTENTS straight onto the card, like this:",
+      s3w: "Not inside an extra folder. On Windows: right-click the zip ▸ Extract All ▸ pick the SD drive as the destination (just E:\\, delete the folder name). On a Mac: open the zip and drag the folders onto the card. If asked to overwrite: yes to all.",
+      s4h: "Eject safely", s4p: "Wait for the copy to finish (thousands of files), then eject the card before pulling it out.",
+      s5h: "Put it back and switch on", s5p: "Insert the microSD into the Cardputer and switch it on. The web OS and ANIMA are ready.",
+      okb: "Check:", okp: "Settings ▸ Device ▸ SD content shows the copied version. With Wi-Fi you can also press ENTER to verify every file and repair only the broken ones.",
+      nb: "Version:", np: "use the zip of the same version as the firmware. Copy an older zip and the Cardputer notices and offers the update.",
+      flasher: "Install NucleoOS from the browser"
+    },
+    es: {
+      title: "Contenido SD desde un PC",
+      tag: "El web OS, las apps y ANIMA viven en la microSD. El Cardputer puede descargarlos solo por Wi-Fi; aquí los copias tú, desde un ordenador.",
+      loading: "Buscando el zip correcto…", for: "Para NucleoOS v{v}", forAny: "Última versión de NucleoOS",
+      found: "El zip de la misma versión que el firmware de tu Cardputer.",
+      latestOnly: "La v{v} ya no está aquí: descarga el zip desde su página de release (o actualiza el firmware).",
+      offline: "No puedo leer la lista: abre la página de release y descarga el archivo que termina en -sd.zip.",
+      dl: "Descargar el zip SD", rel: "Abrir la página de release",
+      copy: "Copiar enlace", copied: "Enlace copiado", send: "Enviar al ordenador",
+      how: "Cómo hacerlo",
+      s1h: "Saca la microSD", s1p: "Apaga el Cardputer y extrae la tarjeta microSD.",
+      s2h: "Conéctala al ordenador", s2p: "Con un lector de tarjetas (o un adaptador SD). Debe aparecer como una unidad, por ejemplo E:. La tarjeta debe estar en FAT32: la del Cardputer ya lo está.",
+      s3h: "Descarga y descomprime en la raíz", s3p: "Descarga el zip en el ordenador y extrae su CONTENIDO directamente en la tarjeta, así:",
+      s3w: "No dentro de una carpeta extra. En Windows: clic derecho en el zip ▸ Extraer todo ▸ elige la unidad SD como destino (solo E:\\, borra el nombre de la carpeta). En Mac: abre el zip y arrastra las carpetas a la tarjeta. Si pregunta si sobrescribir: sí a todo.",
+      s4h: "Expulsa con seguridad", s4p: "Espera a que termine la copia (miles de archivos) y expulsa la tarjeta antes de sacarla.",
+      s5h: "Vuelve a ponerla y enciende", s5p: "Mete la microSD en el Cardputer y enciéndelo. El web OS y ANIMA están listos.",
+      okb: "Comprobación:", okp: "Ajustes ▸ Dispositivo ▸ Contenido SD muestra la versión copiada. Con Wi-Fi también puedes pulsar ENTER para verificar cada archivo y reparar solo los dañados.",
+      nb: "Versión:", np: "usa el zip de la misma versión que el firmware. Si copias uno más antiguo, el Cardputer lo detecta y te ofrece la actualización.",
+      flasher: "Instalar NucleoOS desde el navegador"
+    },
+    fr: {
+      title: "Contenu SD depuis un PC",
+      tag: "Le web OS, les apps et ANIMA vivent sur la microSD. Le Cardputer sait les télécharger seul en Wi-Fi ; ici, tu les copies toi-même depuis un ordinateur.",
+      loading: "Recherche du bon zip…", for: "Pour NucleoOS v{v}", forAny: "Dernière version de NucleoOS",
+      found: "Le zip de la même version que le firmware de ton Cardputer.",
+      latestOnly: "La v{v} n'est plus hébergée ici : prends le zip sur sa page de release (ou mets le firmware à jour).",
+      offline: "Impossible de lire la liste : ouvre la page de release et télécharge le fichier qui finit par -sd.zip.",
+      dl: "Télécharger le zip SD", rel: "Ouvrir la page de release",
+      copy: "Copier le lien", copied: "Lien copié", send: "Envoyer à l'ordinateur",
+      how: "Comment faire",
+      s1h: "Retire la microSD", s1p: "Éteins le Cardputer et retire la carte microSD.",
+      s2h: "Branche-la sur l'ordinateur", s2p: "Avec un lecteur de cartes (ou un adaptateur SD). Elle doit apparaître comme un disque, par exemple E:. La carte doit être en FAT32 : celle du Cardputer l'est déjà.",
+      s3h: "Télécharge et décompresse à la racine", s3p: "Télécharge le zip sur l'ordinateur et extrais son CONTENU directement sur la carte, comme ceci :",
+      s3w: "Pas dans un dossier en plus. Sous Windows : clic droit sur le zip ▸ Extraire tout ▸ choisis le disque de la SD comme destination (juste E:\\, efface le nom du dossier). Sur Mac : ouvre le zip et glisse les dossiers sur la carte. S'il demande d'écraser : oui pour tout.",
+      s4h: "Éjecte proprement", s4p: "Attends la fin de la copie (des milliers de fichiers), puis éjecte la carte avant de la retirer.",
+      s5h: "Remets-la et allume", s5p: "Insère la microSD dans le Cardputer et allume-le. Le web OS et ANIMA sont prêts.",
+      okb: "Vérification :", okp: "Réglages ▸ Appareil ▸ Contenu SD affiche la version copiée. Avec le Wi-Fi, ENTRÉE vérifie chaque fichier et ne répare que ceux qui sont abîmés.",
+      nb: "Version :", np: "utilise le zip de la même version que le firmware. Avec un zip plus ancien, le Cardputer s'en aperçoit et propose la mise à jour.",
+      flasher: "Installer NucleoOS depuis le navigateur"
+    },
+    de: {
+      title: "SD-Inhalte vom Computer",
+      tag: "Web OS, Apps und ANIMA liegen auf der microSD. Der Cardputer kann sie selbst per WLAN laden; hier kopierst du sie selbst vom Computer.",
+      loading: "Suche das passende Zip…", for: "Für NucleoOS v{v}", forAny: "Neueste NucleoOS-Version",
+      found: "Das Zip zur Firmware-Version deines Cardputers.",
+      latestOnly: "v{v} liegt hier nicht mehr: hol das Zip von seiner Release-Seite (oder aktualisiere die Firmware).",
+      offline: "Liste nicht lesbar: öffne die Release-Seite und lade die Datei, die auf -sd.zip endet.",
+      dl: "SD-Zip herunterladen", rel: "Release-Seite öffnen",
+      copy: "Link kopieren", copied: "Link kopiert", send: "An den Computer senden",
+      how: "So geht's",
+      s1h: "microSD herausnehmen", s1p: "Cardputer ausschalten und die microSD-Karte herausziehen.",
+      s2h: "Am Computer anschließen", s2p: "Mit einem Kartenleser (oder SD-Adapter). Sie muss als Laufwerk erscheinen, z. B. E:. Die Karte muss FAT32 sein – die des Cardputers ist es schon.",
+      s3h: "Herunterladen und ins Hauptverzeichnis entpacken", s3p: "Lade das Zip auf den Computer und entpacke seinen INHALT direkt auf die Karte, so:",
+      s3w: "Nicht in einen zusätzlichen Ordner. Unter Windows: Rechtsklick aufs Zip ▸ Alle extrahieren ▸ als Ziel das SD-Laufwerk wählen (nur E:\\, Ordnernamen löschen). Auf dem Mac: Zip öffnen und die Ordner auf die Karte ziehen. Bei der Frage nach Überschreiben: ja für alle.",
+      s4h: "Sicher auswerfen", s4p: "Warte, bis das Kopieren fertig ist (tausende Dateien), und wirf die Karte aus, bevor du sie herausziehst.",
+      s5h: "Wieder einsetzen und einschalten", s5p: "microSD in den Cardputer stecken und einschalten. Web OS und ANIMA sind bereit.",
+      okb: "Kontrolle:", okp: "Einstellungen ▸ Gerät ▸ SD-Inhalte zeigt die kopierte Version. Mit WLAN prüft ENTER jede Datei und repariert nur die beschädigten.",
+      nb: "Version:", np: "nimm das Zip derselben Version wie die Firmware. Bei einem älteren Zip merkt es der Cardputer und bietet das Update an.",
+      flasher: "NucleoOS im Browser installieren"
+    }
+  };
+  const LANGS = { it: "Italiano", en: "English", es: "Español", fr: "Français", de: "Deutsch" };
+  const REPO = "https://github.com/indecenti/NucleoOs/releases";
+  const qv = new URLSearchParams(location.search).get("v") || "";
+  const want = /^\d+\.\d+\.\d+$/.test(qv) ? qv : "";
+  let lang = (navigator.languages || [navigator.language || "en"]).map(l => l.slice(0, 2).toLowerCase()).find(l => T[l]) || "en";
+  try { const s = localStorage.getItem("nucleo-sd-lang"); if (T[s]) lang = s; } catch (e) {}
+  let pick = null, mode = "loading";   // pick: { ver, size, url } | mode: loading | found | latestOnly | offline
+
+  const $ = id => document.getElementById(id);
+  const tr = (k, v) => (T[lang][k] || T.en[k] || "").replace("{v}", v || "");
+  const mb = n => (n / 1048576).toFixed(0) + " MB";
+
+  function render() {
+    document.documentElement.lang = lang;
+    document.querySelectorAll("[data-t]").forEach(el => { el.textContent = tr(el.dataset.t); });
+    $("for").textContent = want ? tr("for", want) : tr("forAny");
+    const dl = $("dl");
+    if (mode === "loading") { dl.hidden = true; return; }
+    $("state").textContent = mode === "found" ? tr("found") : tr(mode, want);
+    if (pick) {
+      dl.href = pick.url; $("dlt").textContent = tr("dl") + " · " + mb(pick.size);
+      $("fname").textContent = pick.url.split("/").pop();
+    } else {
+      dl.href = want ? REPO + "/tag/v" + want : REPO + "/latest";
+      $("dlt").textContent = tr("rel"); $("fname").textContent = "";
+    }
+    dl.hidden = false;
+    $("langs").querySelectorAll("button").forEach(b => b.setAttribute("aria-pressed", String(b.dataset.l === lang)));
+  }
+
+  for (const [k, name] of Object.entries(LANGS)) {
+    const b = document.createElement("button");
+    b.type = "button"; b.dataset.l = k; b.textContent = name;
+    b.onclick = () => { lang = k; try { localStorage.setItem("nucleo-sd-lang", k); } catch (e) {} render(); };
+    $("langs").appendChild(b);
+  }
+
+  // The page is usually opened on a phone (the QR) but the copy happens on a computer: hand the link over.
+  $("copy").onclick = async () => {
+    try { await navigator.clipboard.writeText(location.href); $("copy").textContent = tr("copied"); } catch (e) {}
+  };
+  if (navigator.share) {
+    $("send").hidden = false;
+    $("send").onclick = () => navigator.share({ title: document.title, url: location.href }).catch(() => {});
+  }
+
+  // zips.txt: "<x.y.z> <bytes> <url>" per hosted release, newest first (pages.yml).
+  fetch("zips.txt", { cache: "no-cache" })
+    .then(r => r.ok ? r.text() : Promise.reject(r.status))
+    .then(txt => {
+      const rows = txt.split("\n").map(l => l.trim().split(/\s+/)).filter(p => p.length === 3)
+        .map(([ver, size, url]) => ({ ver, size: +size, url }));
+      pick = rows.find(r => r.ver === want) || (!want && rows[0]) || null;
+      mode = pick ? "found" : "latestOnly";
+    })
+    .catch(() => { mode = "offline"; })
+    .finally(render);
+  render();
+})();
+</script>
+</body>
+</html>

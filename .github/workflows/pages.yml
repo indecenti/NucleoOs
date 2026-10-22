@@ -48,6 +48,7 @@ jobs:
         run: |
           mkdir -p _site
           cp web/flash/index.html web/flash/manifest.json _site/
+          mkdir -p _site/sd && cp web/flash/sd/index.html _site/sd/   # the wizard's "copy by hand" QR guide
           # Republish the latest firmware SAME-ORIGIN (see header note). Server-side, so CORS is a
           # non-issue; the manifest points at the relative ./nucleoos-latest.bin. Fails loudly if the
           # asset is missing (no release has run the patched release.yml yet — see bootstrap docs).
@@ -88,6 +89,7 @@ jobs:
         run: |
           mkdir -p _site/sd
           : > _site/sd/index.txt
+          : > _site/sd/zips.txt      # "<x.y.z> <bytes> <url>" per hosted release: the hand-copy guide's links
           curl -fsSL -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' \
             "https://api.github.com/repos/indecenti/NucleoOs/releases?per_page=30" > releases.json
           n=0
@@ -120,6 +122,8 @@ jobs:
               | (cd "$d" && sha256sum -c --quiet) \
               || { echo "::error::$tag SD tree does not match its manifest"; exit 1; }
             echo "$ver" >> _site/sd/index.txt
+            zip_size=$(printf '%s' "$r" | jq -r --arg u "$zip_url" '.assets[] | select(.browser_download_url == $u) | .size')
+            echo "$ver $zip_size $zip_url" >> _site/sd/zips.txt
             n=$((n + 1))
           done
           rm -f releases.json

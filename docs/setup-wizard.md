@@ -34,8 +34,11 @@ The wizard is **on rails**: every path ends on step 5, and nothing else in the O
                  </> / Tab / up/down move the focus, 1/2 pick, ENTER confirms, Esc = Later.
                  Download/Update/Resume arm the install boot and restart into it (sd-content-install.md
                  §3.3): progress screen, verdict, then the full OS.
-   4b. Later     "No problem. Download them any time in: Settings > Device. Or copy them to the SD:
-                 the v<x.y.z> release's SD zip, unzipped at the SD's root."  [Enter] -> step 5.
+   4b. Later     "No problem. With Wi-Fi: Settings > Device. From a PC: scan the QR and follow it."
+                 The QR (right half, version 3 at 3 px, white quiet zone) opens the Pages guide for THIS
+                 firmware, <Pages>/sd/?v=<x.y.z> (web/flash/sd/index.html): the matching -sd.zip with its
+                 size, the 5 copy steps (reader, unzip the CONTENTS at the root, eject, boot) in the
+                 phone's language, and "copy link / send to computer".  [Enter] -> step 5.
                  "Later" is remembered for this firmware (content.json declined) — never asked again
                  until a newer firmware; a hand copy made afterwards is recognised on its own.
 5. All set       "All set!" + "Connected to <ssid>" (or hotspot name + password), "Open in a

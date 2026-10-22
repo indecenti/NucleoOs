@@ -1502,27 +1502,28 @@ static void draw_sd_offer(void)
     mark(by, by + bh);
 }
 
-// "Later": the files can come any time — from Settings (the same download), or copied BY HAND from the
-// release's SD zip (the device recognises a hand copy by the manifest the zip carries). Static page.
+// "Later": the files can come any time — from Settings (the same download), or copied BY HAND from a PC.
+// The hand path is a QR to the Pages guide for THIS firmware (NUCLEO_SDC_HELP_URL + x.y.z): it names the
+// right zip, links it, and walks the copy step by step in the phone's language — nothing to type from a
+// 1" screen. The device recognises the copy by the manifest the zip carries. Static page.
 static void draw_sd_later(void)
 {
     if (!s_full) return;
     const char *t = TR5("Nessun problema", "No problem", "Sin problema", "Pas de souci", "Kein Problem");
-    ui_glyph(&d, UG_INFO, 14, 12, 7, ACC, BG);
-    txt(26, 4, t, ACC, BG, 2);
-    d.drawFastHLine(0, 23, W, LINE);
-    char b[48];
-    f2(8, 28, TR5("Scaricali quando vuoi da:", "Download them any time in:", "Descargalos cuando quieras:",
-                  "Telecharge-les plus tard:", "Spaeter herunterladen in:"), W - 16, FG, BG, false);
-    f2(16, 44, TR5("Impostazioni > Dispositivo", "Settings > Device", "Ajustes > Dispositivo", "Reglages > Appareil",
-                   "Einstellungen > Geraet"), W - 24, ACC, BG, false);
-    f2(8, 64, TR5("Oppure copiali tu sulla SD:", "Or copy them to the SD:", "O copialos tu en la SD:",
-                  "Ou copie-les sur la SD:", "Oder selbst auf die SD:"), W - 16, FG, BG, false);
-    snprintf(b, sizeof b, TR5("lo zip SD della release v%s", "the v%s release's SD zip", "el zip SD de la v%s",
-                              "le zip SD de la v%s", "das SD-Zip der v%s"), nucleo_sdcontent_fw_tag());
-    f2(16, 80, b, W - 24, ACC, BG, false);
-    f2(16, 96, TR5("estratto nella radice della SD", "unzipped at the SD's root", "descomprimido en la raiz",
-                   "decompresse a la racine", "ins SD-Hauptverzeichnis"), W - 24, MUTED, BG, false);
+    ui_glyph(&d, UG_INFO, 10, 10, 7, ACC, BG);
+    txt(22, 2, t, ACC, BG, 2);
+    // QR on the right, 99 px: version 3 (29 modules) at 3 px + a 2-module white quiet zone. White on the
+    // dark theme is the contrast a phone camera locks on; the url never outgrows version 3 (see the header).
+    const int qs = 99, qx = W - qs - 2, qy = 21, lw = qx - 10;
+    char url[64]; snprintf(url, sizeof url, NUCLEO_SDC_HELP_URL "%s", nucleo_sdcontent_fw_tag());
+    d.fillRect(qx, qy, qs, qs, 0xFFFF);
+    d.qrcode(url, qx, qy, qs, 3, false);
+    f2(6, 24, TR5("Con il Wi-Fi:", "With Wi-Fi:", "Con Wi-Fi:", "Avec le Wi-Fi:", "Mit WLAN:"), lw, MUTED, BG, false);
+    f2(6, 39, TR5("Impostazioni", "Settings", "Ajustes", "Reglages", "Einstellungen"), lw, ACC, BG, false);
+    f2(6, 54, TR5("> Dispositivo", "> Device", "> Dispositivo", "> Appareil", "> Geraet"), lw, ACC, BG, false);
+    f2(6, 74, TR5("Da un PC:", "From a PC:", "Desde un PC:", "Depuis un PC:", "Vom PC:"), lw, MUTED, BG, false);
+    f2(6, 89, TR5("inquadra il QR", "scan the QR", "escanea el QR", "scanne le QR", "QR scannen"), lw, FG, BG, false);
+    f2(6, 104, TR5("e segui i passi", "and follow it", "y sigue los pasos", "et suis les etapes", "und folgen"), lw, FG, BG, false);
 }
 
 // The SD step's choice. "Download/Update/Resume" arms the install boot and restarts into it (never returns);

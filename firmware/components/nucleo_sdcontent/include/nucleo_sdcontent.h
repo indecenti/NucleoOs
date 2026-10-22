@@ -45,6 +45,10 @@ const char *nucleo_sdcontent_card_tag(void);
 // This firmware's release, "x.y.z" (the content it wants; the -sd.zip to copy by hand is named after it).
 const char *nucleo_sdcontent_fw_tag(void);
 
+// The "copy it by hand" guide (web/flash/sd/index.html on Pages): + fw_tag. Kept short on purpose: with a
+// x.y.z tag the whole URL stays <= 53 bytes, i.e. a version-3 QR (29 modules) the wizard draws at 3 px.
+#define NUCLEO_SDC_HELP_URL "https://indecenti.github.io/NucleoOs/sd/?v="
+
 // Arm a download for the NEXT boot (NVS flag) and reboot, OR disarm. Returns false if the NVS write failed.
 bool nucleo_sdcontent_arm(bool on);
 // Arm (or disarm) the flag only, no restart: for a caller that must answer first (httpd), then esp_restart().
