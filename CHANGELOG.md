@@ -6,6 +6,19 @@ All notable user-facing changes to NucleoOS. Format loosely follows
 
 ## [Unreleased]
 
+## [0.7.3] — 2026-10-22
+
+### Added
+- **The first-boot "Later" step shows a QR to copy the SD content from a computer.** When you skip the SD
+  download, the Cardputer offers two ways to add the files later: over Wi-Fi from Settings ▸ Device, or from a
+  PC — scan the QR to open a page that links the exact zip for your firmware and walks the copy step by step,
+  in five languages. Before, it only named the zip, with no link and no instructions.
+
+### Changed
+- **On a Cardputer installed with M5Launcher, the update dialog points to the way that works.** It now says to
+  put the release's firmware file on the SD card and install it from the Launcher's SD menu, instead of a
+  Launcher OTA entry that does not exist until NucleoOS is published there.
+
 ## [0.7.2] — 2026-10-12
 
 ### Added
