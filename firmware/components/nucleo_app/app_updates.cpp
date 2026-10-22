@@ -223,12 +223,22 @@ static void draw_confirm(void)
         const bool launcher = nucleo_guest_hosted();
         snprintf(msg, sizeof msg, "%s %s", PT("Disponibile", "Available", "Disponible", "Disponible", "Verfuegbar"), nucleo_update_latest_tag());
         center(msg, 24, 2, FG);
-        center(launcher ? PT("Aggiorna da M5Launcher:", "Update from M5Launcher:", "Actualiza desde M5Launcher:",
-                             "Mettez a jour via M5Launcher :", "Update ueber M5Launcher:")
-                        : PT("Aggiorna via USB:", "Update over USB:", "Actualiza por USB:",
-                             "Mettez a jour par USB :", "Update per USB:"), 54, 1, MUTED);
-        center(launcher ? "Launcher > OTA > NucleoOS" : "indecenti.github.io/NucleoOs", 68, 1, FG);
-        center(PT("ENTER = OK", "ENTER = OK", "ENTER = OK", "ENTREE = OK", "ENTER = OK"), 92, 1, C_GREEN);
+        if (launcher) {
+            // The Launcher's OTA list carries NucleoOS only once it is published on M5Burner; until then
+            // (and always, as a sure path) the working way is the release's merged .bin on the SD, installed
+            // from the Launcher's SD menu — exactly how a hosted unit is brought up. docs/m5launcher.md.
+            center(PT("Aggiorna da M5Launcher:", "Update from M5Launcher:", "Actualiza desde M5Launcher:",
+                      "Mettez a jour via M5Launcher :", "Update ueber M5Launcher:"), 50, 1, MUTED);
+            center(PT(".bin della release sulla SD,", "release .bin on the SD card,", ".bin de la release en la SD,",
+                      ".bin de la release sur la SD,", "Release-.bin auf die SD,"), 66, 1, FG);
+            center(PT("poi SD > file > Install", "then SD > file > Install", "luego SD > archivo > Install",
+                      "puis SD > fichier > Install", "dann SD > Datei > Install"), 80, 1, FG);
+        } else {
+            center(PT("Aggiorna via USB:", "Update over USB:", "Actualiza por USB:",
+                      "Mettez a jour par USB :", "Update per USB:"), 54, 1, MUTED);
+            center("indecenti.github.io/NucleoOs", 68, 1, FG);
+        }
+        center(PT("ENTER = OK", "ENTER = OK", "ENTER = OK", "ENTREE = OK", "ENTER = OK"), 100, 1, C_GREEN);
         return;
     }
     snprintf(msg, sizeof msg, "%s %s", PT("Disponibile", "Available", "Disponible", "Disponible", "Verfuegbar"), nucleo_update_latest_tag());
