@@ -1,0 +1,46 @@
+# NucleoOS community Discord bot on the shared Oracle VM (~1 GB RAM, also hosts the ExaWar lobby).
+# Started on demand by nucleoos-bot.socket, exits by itself after 5 idle minutes: 0 RAM / 0 CPU at rest.
+# Hard caps for the moments it runs, so it can never starve the machine.
+[Unit]
+Description=NucleoOS Discord bot (/ask, /guide), on demand
+Requires=nucleoos-bot.socket
+After=nucleoos-bot.socket
+
+[Service]
+Type=simple
+User=nucleobot
+Group=nucleobot
+EnvironmentFile=/etc/nucleoos-bot.env
+ExecStart=/opt/node22/bin/node --max-old-space-size=24 --max-semi-space-size=1 /opt/nucleoos-bot/bot.mjs
+WorkingDirectory=/opt/nucleoos-bot
+Restart=no
+
+MemoryHigh=48M
+MemoryMax=64M
+MemorySwapMax=0
+CPUQuota=10%
+CPUWeight=10
+Nice=10
+TasksMax=12
+LimitNOFILE=128
+
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictAddressFamilies=AF_INET AF_INET6
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+SystemCallArchitectures=native
+CapabilityBoundingSet=
+AmbientCapabilities=
+UMask=0077

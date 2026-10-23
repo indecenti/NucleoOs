@@ -1,6 +1,6 @@
 {
   "name": "nucleoos",
-  "version": "0.7.3",
+  "version": "0.7.4",
   "description": "NucleoOS — web-native appliance OS for the M5Stack Cardputer.",
   "type": "module",
   "private": true,
@@ -141,6 +141,7 @@
     "gg:test": "node tools/anima-host/gg-check.mjs",
     "gen:icons": "node tools/gen-icon-bundle.mjs",
     "alarm:test": "node tools/alarm-host/run.mjs",
-    "gb:accuracy": "node tools/emu-host/gb-accuracy.mjs"
+    "gb:accuracy": "node tools/emu-host/gb-accuracy.mjs",
+    "discord:test": "node --test tools/discord-bot/search.test.mjs tools/discord-bot/automod.test.mjs tools/discord-bot/bot.test.mjs"
   }
 }

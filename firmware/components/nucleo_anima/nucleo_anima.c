@@ -133,6 +133,7 @@ static const a_alias_t APP_ALIAS[] = {
     { "agent",              { "agente", "agenti", "multi agente", "agent", "automa", "assistente autonomo", NULL } },
     { "dos-importer",       { "importer", NULL } },
     { "nearby",             { "nearby", NULL } },
+    { "community",          { "discord", "community", "comunita", "server discord", "supporto community", NULL } },
 };
 // </gen:app-alias>
 

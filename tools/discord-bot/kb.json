@@ -1,0 +1,182 @@
+{
+  "_comment": "Answers for the community Discord bot (/ask, /guide). Every answer must be backed by docs/ — keep the 'src' link pointing at the section it summarizes. Keywords may include Italian words: users ask in both languages.",
+  "repo": "https://github.com/indecenti/NucleoOs",
+  "entries": [
+    {
+      "id": "what",
+      "title": "What is NucleoOS?",
+      "guide": "start",
+      "keywords": "what is nucleoos about overview features cosa e sistema operativo intro",
+      "answer": "NucleoOS turns the **M5Stack Cardputer** and **Cardputer ADV** into a real computer, with two interfaces on one device:\n• the **native UI** on the Cardputer's screen: launcher, 50+ apps and games, settings\n• **NucleoOS Web**: a full desktop the Cardputer serves to your browser over Wi-Fi (files, spreadsheet, Paint, terminal, media, 40+ apps)\nPlus **ANIMA**, an assistant that works offline. One firmware image runs on both boards.",
+      "src": "README.md"
+    },
+    {
+      "id": "install",
+      "title": "How do I install NucleoOS?",
+      "guide": "install",
+      "keywords": "install installare flash flasher firmware how setup burn come si installa web flasher esptool chrome edge usb",
+      "answer": "1. On a desktop, open the web flasher **<https://indecenti.github.io/NucleoOs/>** in **Chrome or Edge** (Firefox, Safari and phones can't flash: no Web Serial).\n2. Plug the Cardputer in with USB-C, click **Connect & install NucleoOS**, pick its serial port.\n3. When it finishes, press **reset** (or replug USB).\n4. The first-boot wizard joins your Wi-Fi and can **download the SD card content by itself**.\nAlso installable from **M5Burner** and **M5Launcher** (same image). Flashing again from the same page fixes most failed installs.",
+      "src": "docs/user-guide.md#2-install"
+    },
+    {
+      "id": "sd",
+      "title": "What goes on the SD card?",
+      "guide": "install",
+      "keywords": "sd card microsd scheda fat32 zip payload content download apps missing extract root contenuto",
+      "answer": "The web desktop, apps and ANIMA's data live on the **microSD** (format it **FAT32**).\n• **Easiest:** at the end of the first-boot wizard the Cardputer downloads its SD content by itself over Wi-Fi, checks every file (SHA-256) and resumes if interrupted. Later: **Settings ▸ Device ▸ SD content**.\n• **By hand:** download `nucleoos-latest-sd.zip` from the latest release and **extract it to the card's root**, so `/apps` `/www` `/system` `/data` sit at the top level. Insert the card before powering on.\nThe `-sd.zip` is **not** firmware: never put it in a flasher or launcher.",
+      "src": "docs/sd-content-install.md"
+    },
+    {
+      "id": "launcher",
+      "title": "M5Launcher and M5Burner",
+      "guide": "install",
+      "keywords": "m5launcher launcher m5burner burner guest ota list back to launcher webburner",
+      "answer": "NucleoOS uses **one image** for every install path:\n• **M5Burner**: burn it whole (stand-alone mode, updates itself).\n• **M5Launcher** (OTA list, SD card or GitHub link): it runs as a **guest**. Updates then come from the Launcher, its own updater switches off so it can never overwrite your other firmwares, and **Settings ▸ Device ▸ Back to M5Launcher** returns you to the Launcher (or power-cycle + ENTER).\nTo update a Launcher install: put the release's firmware `.bin` on the SD card and install it from the Launcher's SD menu.",
+      "src": "docs/m5launcher.md"
+    },
+    {
+      "id": "firstboot",
+      "title": "First boot wizard",
+      "guide": "install",
+      "keywords": "first boot wizard primo avvio language wifi network name setup prima accensione",
+      "answer": "On first power-up a short wizard runs on the Cardputer's keyboard:\n1. **Language** (more languages later in Settings ▸ Language)\n2. **Network**: join your Wi-Fi, or skip to start the Cardputer's own **Access Point**\n3. **Device name**: default `nucleo-01` (hostname `nucleo-01.local`)\n4. **SD content** download (skippable, a QR shows how to do it from a PC)\n5. **All set**: the screen shows the address to open in your browser.",
+      "src": "docs/user-guide.md#3-first-boot"
+    },
+    {
+      "id": "webos",
+      "title": "How do I open the web desktop?",
+      "guide": "webos",
+      "keywords": "web desktop web os browser open address ip nucleo-01.local desktop console how to use desktop web aprire indirizzo",
+      "answer": "1. Use a phone or PC on the **same network** as the Cardputer.\n2. Open the address it shows (its IP, or `http://nucleo-01.local`). In Access Point mode join `NucleoOS-xxxx` and open `http://192.168.4.1/`.\n3. The first time, type the **6-digit PIN** shown on the Cardputer (TAB ▸ Web client). The browser stays paired after reboots.\nInside: Start menu and search, windows, notifications, and apps like Files, Spreadsheet, Paint, Terminal, Media, Settings. Summon ANIMA anywhere with **Ctrl/⌘ + Space**.",
+      "src": "docs/user-guide.md#4-open-the-web-desktop--pair"
+    },
+    {
+      "id": "pin",
+      "title": "Where is the pairing PIN?",
+      "guide": "webos",
+      "keywords": "pin pair pairing code password web login codice accoppiamento sign out sessions locked",
+      "answer": "On the Cardputer:\n• press **TAB** (Control Center) and move to **Web client**: the bottom line shows `Web <address>  PIN <code>`\n• or **Settings ▸ Device ▸ PIN**\n• or the **Connection** / **Remote Control** apps.\nThe PIN stays the same across reboots; only new browsers need it. After 5 wrong tries a browser is locked out for a while. To sign every browser out: **Settings ▸ Device ▸ Web sessions**.",
+      "src": "docs/user-guide.md#4-open-the-web-desktop--pair"
+    },
+    {
+      "id": "ap",
+      "title": "No Wi-Fi? Use the Access Point",
+      "guide": "webos",
+      "keywords": "access point hotspot ap no wifi own network phone join 192.168.4.1 nucleoos-xxxx can't connect authentication",
+      "answer": "Without Wi-Fi the Cardputer starts its own network **`NucleoOS-xxxx`**, with the password on screen. Join it from a phone or PC and open **`http://192.168.4.1/`**.\nIf a phone says \"authentication required\" or \"incorrect password\", just **try again and give it a moment**: the hotspot keeps the air quiet so the phone's retries succeed. Toggle it any time with **TAB ▸ Hotspot**.",
+      "src": "docs/user-guide.md#9-troubleshooting"
+    },
+    {
+      "id": "keys",
+      "title": "Using the Cardputer: keys and launcher",
+      "guide": "device",
+      "keywords": "keys keyboard tasti launcher navigate move enter esc back search spotlight pin app control center tab brightness volume",
+      "answer": "• `;` / `.` move up/down, `,` / `/` left/right, **Enter** opens, **Esc** goes back, **Del** deletes\n• **Just type** at Home to search every app (in any language: \"meteo\" finds Weather), and settings too\n• `*` pins an app to Home (up to 6); a Recent tile lists your last 5 apps\n• **TAB** opens the **Control Center**: Mute, Torch, Sleep, Hotspot (keys 1-4), brightness and volume, Web client, Restart\n• Inside lists, `1`-`9` jump to that row.",
+      "src": "docs/user-guide.md#5-using-the-cardputer-itself"
+    },
+    {
+      "id": "anima",
+      "title": "How do I use ANIMA?",
+      "guide": "anima",
+      "keywords": "anima assistant assistente ai offline ask question chat how to use copilot ctrl space voice talk",
+      "answer": "**ANIMA** is NucleoOS's assistant and it works **offline**: no cloud, no account.\n• On the Cardputer: open **ANIMA** from Home (it's always first).\n• On the web desktop: the ANIMA app, or **Ctrl/⌘ + Space** from anywhere.\nAsk it to **do things** (\"open the calculator\", \"set a timer for 5 minutes\", \"convert 10 km to miles\", \"what time is it\") or **ask questions**. When it doesn't know, it says so instead of guessing. It understands **English and Italian**, and a bilingual offline voice can read short answers aloud.",
+      "src": "docs/user-guide.md#6-anima-basics"
+    },
+    {
+      "id": "models",
+      "title": "Use a model on your PC (Ollama, LM Studio…)",
+      "guide": "anima",
+      "keywords": "ollama lm studio llama.cpp jan local model pc llm modello locale gpu cloud key api groq claude gemini engines",
+      "answer": "ANIMA can use AI servers running on your computer: **Ollama, LM Studio, llama.cpp, Jan**.\nOpen **Settings ▸ AI / Models ▸ Models on your PC** on the web desktop: it shows what's running, lets you pick a model per task (chat, code, agent), choose PC or cloud first, add a server by address, and gives the exact fix when a server refuses NucleoOS (for example Ollama's `OLLAMA_ORIGINS`).\nCloud models work too if you add your own API key. The offline brain always stays available.",
+      "src": "docs/anima-engines.md"
+    },
+    {
+      "id": "private",
+      "title": "Private mode",
+      "guide": "anima",
+      "keywords": "private privacy mode offline no cloud data privato riservatezza internet",
+      "answer": "Choose the **Private** AI profile and every app stays off the Internet: ANIMA, the agent, games and Paint only use the Cardputer and models on your own computer on the home network. No cloud calls, even with keys configured.",
+      "src": "docs/anima-engines.md"
+    },
+    {
+      "id": "update",
+      "title": "How do I update?",
+      "guide": "update",
+      "keywords": "update aggiornare aggiornamento upgrade new version release ota firmware latest",
+      "answer": "NucleoOS finds new releases by itself.\n• **Web desktop:** a notification appears; open **Settings ▸ Updates** to download, verify (SHA-256) and install. Easiest path, no cable.\n• **SD content:** **Settings ▸ Updates ▸ SD card content** updates only the changed files; your data, keys and settings are never touched.\n• **On the device:** an update dialog at boot tells you where to install it.\n• **M5Launcher installs** update from the Launcher.\nUpdates are **A/B with automatic rollback**: a bad image is never kept.",
+      "src": "docs/user-guide.md#8-updating"
+    },
+    {
+      "id": "version",
+      "title": "Which version do I have?",
+      "guide": "update",
+      "keywords": "version versione which firmware build number check about",
+      "answer": "The firmware version shows in the **boot banner** and in the web desktop's **Settings ▸ Updates**. Please include it in every #help post.",
+      "src": "docs/user-guide.md#9-troubleshooting"
+    },
+    {
+      "id": "languages",
+      "title": "Change language",
+      "guide": "device",
+      "keywords": "language lingua italian english german spanish french italiano change translate",
+      "answer": "The whole OS is in **5 languages**: English, Italiano, Deutsch, Español, Français. Change it in **Settings ▸ Language** on the Cardputer or in the web Settings: launcher, apps, search and voice all follow. ANIMA's offline engine understands English and Italian.",
+      "src": "docs/user-guide.md#7-languages"
+    },
+    {
+      "id": "games",
+      "title": "Games and emulators",
+      "guide": "device",
+      "keywords": "games giochi emulator game boy game gear rom roms arcade nes snes costellazioni play",
+      "answer": "• **Native games** on the Cardputer: Costellazioni (space), Tanks, Pinball, Snake Duel, Pong, Yahtzee and more.\n• **Native emulators**: Game Boy and Game Gear (our own cores, saves supported).\n• **Web**: Arcade (NES, SNES, Game Boy, GBA, Mega Drive…), Game Center with peer-to-peer multiplayer, DOSBox.\nEmulators are **bring your own ROMs**: NucleoOS ships none, and sharing ROMs or ROM links here is not allowed.",
+      "src": "README.md"
+    },
+    {
+      "id": "adv",
+      "title": "Cardputer vs Cardputer ADV",
+      "guide": "start",
+      "keywords": "adv cardputer adv difference supported boards which board compatible original",
+      "answer": "Both are supported by **the same firmware image**: it detects the board at boot. Nothing to choose when you install.",
+      "src": "README.md"
+    },
+    {
+      "id": "sdproblem",
+      "title": "SD card not recognized / apps missing",
+      "guide": "troubleshooting",
+      "keywords": "sd not recognized not found missing apps empty desktop blank card error exfat format problem non funziona",
+      "answer": "• Format the card **FAT32** (big cards often come as exFAT).\n• If you copied the zip by hand, check it was **extracted to the root**: `/apps` `/www` `/system` `/data` at the top level, not inside another folder.\n• Or let the Cardputer fix it: **Settings ▸ Device ▸ SD content** downloads and verifies the right content for your firmware.",
+      "src": "docs/user-guide.md#9-troubleshooting"
+    },
+    {
+      "id": "flashfail",
+      "title": "Flashing fails / no serial port",
+      "guide": "troubleshooting",
+      "keywords": "flash fails error no port serial not detected connect failed brick bootloop stuck flasher non trova porta",
+      "answer": "• Use **desktop Chrome or Edge** (Firefox, Safari and phones can't flash).\n• Try another **USB-C cable** (many are charge-only) and another USB port.\n• If the port doesn't appear, hold the Cardputer's **G0** button while plugging it in to enter download mode, then retry.\n• Flashing again from <https://indecenti.github.io/NucleoOs/> fixes most failed installs.\nStill stuck? Open a post in #help with the template.",
+      "src": "docs/user-guide.md#2-install"
+    },
+    {
+      "id": "security",
+      "title": "Security tools: rules",
+      "guide": "start",
+      "keywords": "security tools wifi ble ir attack deauth evil portal hacking pentest legal illegal sicurezza",
+      "answer": "NucleoOS includes Wi-Fi, BLE, IR and network security-testing tools **for authorized testing, research and education only**. Use them only on devices and networks you own or have written permission to test; transmitting is restricted or illegal in many countries. This server won't help with attacking anyone else.",
+      "src": "docs/user-guide.md#10-responsible-use-of-the-security-tools"
+    },
+    {
+      "id": "license",
+      "title": "License and commercial use",
+      "guide": "start",
+      "keywords": "license licenza free commercial sell business polyform open source price cost",
+      "answer": "NucleoOS is **free for any noncommercial use** (PolyForm Noncommercial 1.0.0). **Commercial use needs a paid license**: niki070585@gmail.com",
+      "src": "README.md#license"
+    },
+    {
+      "id": "contribute",
+      "title": "Report a bug or contribute",
+      "guide": "start",
+      "keywords": "bug report issue contribute contributing github pull request feature request idea segnalare",
+      "answer": "• **Bugs:** post in #bug-reports with steps, expected vs actual, board and firmware version.\n• **Ideas:** #ideas\n• **Code:** issues and pull requests on GitHub. Docs for app builders: `docs/app-manifest.md` and `docs/app-runtimes.md`.",
+      "src": "README.md"
+    }
+  ]
+}

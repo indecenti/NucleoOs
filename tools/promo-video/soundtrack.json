@@ -1,0 +1,33 @@
+{
+  "artista": "NucleoOS",
+  "album": "Promo 2026-10",
+  "modello": "acestep-v15-turbo",
+  "cartella": "D:/ACE-Step/outputs/NucleoOS/Promo 2026-10",
+  "default": { "durata": 36, "lingua": "en" },
+  "tracce": [
+    {
+      "titolo": "Pocket Workstation A",
+      "bpm": 128,
+      "tonalita": "A minor",
+      "seed": 4101,
+      "caption": "modern electronic, electro house, tech promo. Energetic, bright, clean and confident. Instruments: punchy four-on-the-floor kick, crisp claps, sidechained supersaw chords, plucky arpeggiated lead with a subtle chiptune square-wave touch, tight sub bass, short risers. Vocals: instrumental, no vocals. Production: clean modern mix, wide stereo, polished, strong drop at the start, no long intro.",
+      "testo": "[Intro]\n\n[Instrumental]\n\n[Chorus]\n\n[Instrumental]\n\n[Outro]"
+    },
+    {
+      "titolo": "Pocket Workstation B",
+      "bpm": 128,
+      "tonalita": "F# minor",
+      "seed": 4202,
+      "caption": "modern electronic, future bass, upbeat tech product video. Energetic but clean, optimistic. Instruments: tight kick and snare, sidechained wide synth chords, bouncy 8-bit arpeggio lead, warm sub bass, white-noise sweeps. Vocals: instrumental, no vocals. Production: clean professional mix, punchy, bright top end, quick build into drop.",
+      "testo": "[Intro]\n\n[Instrumental]\n\n[Chorus]\n\n[Instrumental]\n\n[Outro]"
+    },
+    {
+      "titolo": "Pocket Workstation C",
+      "bpm": 126,
+      "tonalita": "C minor",
+      "seed": 4303,
+      "caption": "modern electronic, synthwave meets electro, tech showcase. Driving, energetic, clean. Instruments: punchy electronic drums, pulsing analog bassline, bright saw lead hook, arpeggiated synths, glassy plucks, cymbal swells. Vocals: instrumental, no vocals. Production: clean modern mix, polished, wide, punchy drums, ends on a clear final hit.",
+      "testo": "[Intro]\n\n[Instrumental]\n\n[Chorus]\n\n[Instrumental]\n\n[Outro]"
+    }
+  ]
+}

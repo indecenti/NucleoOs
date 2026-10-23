@@ -1,0 +1,15 @@
+{
+  "_lang": "it",
+  "title": "Community",
+  "lede": "Entra nel Discord di NucleoOS: fai domande, mostra cosa hai creato, ricevi per primo le novità.",
+  "open": "Apri Discord",
+  "copy": "Copia il link d'invito",
+  "copied": "Copiato!",
+  "scan": "Inquadra con il telefono",
+  "bot.title": "Risposte rapide",
+  "bot.text": "Nel server scrivi <code>/ask</code> e la tua domanda, oppure <code>/guide</code> per le guide brevi.",
+  "help.title": "Serve aiuto?",
+  "help.text": "Apri un post nel forum help: un problema per post, con scheda e versione del firmware.",
+  "rules.title": "Gentilezza e sicurezza",
+  "rules.text": "Non pubblicare mai password, chiavi API o dati del Wi-Fi. Niente ROM o file pirata."
+}

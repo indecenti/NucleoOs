@@ -1,0 +1,15 @@
+{
+  "_lang": "en",
+  "title": "Community",
+  "lede": "Join the NucleoOS Discord: ask questions, show what you built, get release news first.",
+  "open": "Open Discord",
+  "copy": "Copy invite link",
+  "copied": "Copied!",
+  "scan": "Scan with your phone",
+  "bot.title": "Quick answers",
+  "bot.text": "In the server, type <code>/ask</code> and your question, or <code>/guide</code> for short guides.",
+  "help.title": "Need help?",
+  "help.text": "Open a post in the help forum: one problem per post, with your board and firmware version.",
+  "rules.title": "Be kind, stay safe",
+  "rules.text": "Never post passwords, API keys or Wi-Fi details. No ROMs or pirated files."
+}

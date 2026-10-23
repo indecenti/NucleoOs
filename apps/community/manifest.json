@@ -1,0 +1,21 @@
+{
+  "id": "community",
+  "name": "Community",
+  "version": "0.1.0",
+  "version_code": 1,
+  "min_os": "0.1.0",
+  "platforms": ["esp32s3"],
+  "description": "Join the NucleoOS community on Discord: open the server, copy the invite or scan it with your phone, and learn the helper bot's /ask and /guide commands.",
+  "category": "system",
+  "runtime": "web",
+  "entry_service": "none",
+  "web_route": "/apps/community/",
+  "icon": "icon.svg",
+  "permissions": ["system.clipboard"],
+  "mounts": {},
+  "handles": { "role": "none", "extensions": [] },
+  "subscribes": [],
+  "publishes": [],
+  "power": { "budget_class": "low", "wants_wakeup": [] },
+  "mesh": { "exposes": [], "consumes": [] }
+}

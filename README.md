@@ -16,8 +16,9 @@ image generation.
 ![License: PolyForm Noncommercial 1.0.0](https://img.shields.io/badge/license-PolyForm%20Noncommercial%201.0.0-blue)
 ![Platform: ESP32-S3](https://img.shields.io/badge/platform-ESP32--S3-informational)
 ![Framework: ESP-IDF](https://img.shields.io/badge/firmware-ESP--IDF-red)
+[![Discord](https://img.shields.io/badge/Discord-join%20the%20community-5865F2?logo=discord&logoColor=white)](https://discord.gg/84tyTPtWus)
 
-**[⬇️ Install](#-install--three-ways)** · **[📋 What's new in v0.7.2](CHANGELOG.md)** · **[📖 User Guide](docs/user-guide.md)**
+**[⬇️ Install](#-install--three-ways)** · **[📋 What's new in v0.7.3](CHANGELOG.md)** · **[📖 User Guide](docs/user-guide.md)** · **[💬 Discord](https://discord.gg/84tyTPtWus)**
 
 <sub>Free for noncommercial use · **commercial use requires a paid license** → niki070585@gmail.com</sub>
 

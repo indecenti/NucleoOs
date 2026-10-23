@@ -1,0 +1,12 @@
+# Socket activation: systemd holds 127.0.0.1:8009 (nginx proxies Discord's interactions here) and starts
+# nucleoos-bot.service on the first request. The bot exits when idle, so at rest it costs nothing.
+# 8009 is already an http_port_t port, so nginx may connect to it under SELinux (httpd_can_network_relay).
+[Unit]
+Description=NucleoOS Discord bot socket
+
+[Socket]
+ListenStream=127.0.0.1:8009
+Accept=no
+
+[Install]
+WantedBy=sockets.target

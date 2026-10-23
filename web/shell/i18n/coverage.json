@@ -1,5 +1,5 @@
 {
-  "generated": "2026-10-12T07:59:09.564Z",
+  "generated": "2026-10-23T17:10:10.462Z",
   "base": "en",
   "langs": [
     "en",
@@ -22,8 +22,8 @@
     "fr": 100,
     "de": 100
   },
-  "surfaces": 48,
-  "totalKeys": 3709,
+  "surfaces": 49,
+  "totalKeys": 3721,
   "namespaces": {
     "core": 156,
     "shell": 290,
@@ -37,6 +37,7 @@
     "calendar": 10,
     "clock": 18,
     "code-runner": 37,
+    "community": 12,
     "contacts": 32,
     "dictation": 59,
     "dj": 32,

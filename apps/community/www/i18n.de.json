@@ -1,0 +1,15 @@
+{
+  "_lang": "de",
+  "title": "Community",
+  "lede": "Komm in den NucleoOS-Discord: Fragen stellen, Projekte zeigen, Neuigkeiten zuerst erfahren.",
+  "open": "Discord öffnen",
+  "copy": "Einladungslink kopieren",
+  "copied": "Kopiert!",
+  "scan": "Mit dem Handy scannen",
+  "bot.title": "Schnelle Antworten",
+  "bot.text": "Tippe im Server <code>/ask</code> und deine Frage oder <code>/guide</code> für kurze Anleitungen.",
+  "help.title": "Hilfe nötig?",
+  "help.text": "Erstelle einen Beitrag im Hilfe-Forum: ein Problem pro Beitrag, mit Board und Firmware-Version.",
+  "rules.title": "Freundlich und sicher",
+  "rules.text": "Poste niemals Passwörter, API-Schlüssel oder WLAN-Daten. Keine ROMs oder Raubkopien."
+}

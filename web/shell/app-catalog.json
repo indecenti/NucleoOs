@@ -156,6 +156,11 @@
    "category": "system",
    "description": "Sistema di aiuto e documentazione di NucleoOS."
   },
+  "community": {
+   "name": "Community",
+   "category": "system",
+   "description": "Join the NucleoOS community on Discord: open the server, copy the invite or scan it with your phone, and learn the helper bot's /ask and…"
+  },
   "browser": {
    "name": "Browser",
    "category": "tools",
