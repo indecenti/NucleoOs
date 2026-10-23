@@ -198,10 +198,14 @@ static esp_err_t write_post(httpd_req_t *req) {
 - **App bundle signatures** (`settings.security.verify_bundle_signatures`, Ed25519) are still
   not enforced — see the roadmap. Pairing protects the *transport*; signing protects the
   *content* of installed apps. They are complementary.
-- **`/api/status` still discloses the joined SSID + device internals** (it must stay public for
-  discovery). On a shared LAN this is low-value (a peer already sees the AP), but trimming it to
-  the bare discovery fields is a candidate hardening if the taskbar/status dependencies are moved
-  to the gated `/api/diag`.
+- **`/api/status` still discloses device internals** (it must stay public for discovery), but since
+  v0.7.4 the joined **SSID** is sent only to a paired browser (an unpaired request gets `""`); every
+  reader of `network.ssid` is a post-pair app or the shell. Heap, storage and OTA fields stay public;
+  trimming them is a candidate if their readers move to the gated `/api/diag`.
+- **Pages carry `X-Frame-Options: SAMEORIGIN` and `Referrer-Policy: same-origin`** (`nucleo_webfs`
+  static_get, mirrored by the simulator): no other site can frame the desktop or the pairing overlay,
+  and links out don't hand external sites the device's LAN address. Apps keep working because the
+  shell frames them from the same origin.
 
 ## Simulator
 

@@ -231,7 +231,9 @@ static esp_err_t status_get(httpd_req_t *req)
 
     cJSON *net = cJSON_AddObjectToObject(root, "network");
     cJSON_AddStringToObject(net, "mode", nucleo_setup_mode());   // "sta" | "ap"
-    cJSON_AddStringToObject(net, "ssid", nucleo_setup_ssid());
+    // /api/status stays public for discovery, but the joined network's name is the user's data: only a
+    // paired browser gets it (every reader of network.ssid is a post-pair app or the shell, sending the cookie).
+    cJSON_AddStringToObject(net, "ssid", nucleo_auth_request_ok(req) ? nucleo_setup_ssid() : "");
     cJSON_AddStringToObject(net, "ip", nucleo_setup_ip());
     cJSON_AddBoolToObject(net, "time_synced", nucleo_setup_time_synced());
     cJSON_AddNumberToObject(net, "time", (double)time(NULL));     // epoch seconds (UTC)

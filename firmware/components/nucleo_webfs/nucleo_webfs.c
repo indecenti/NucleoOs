@@ -348,6 +348,14 @@ static esp_err_t static_get(httpd_req_t *req)
     // We always send the exact Content-Type for a known extension, so forbid MIME sniffing —
     // a .json or user asset can never be reinterpreted as HTML/script by the browser.
     httpd_resp_set_hdr(req, "X-Content-Type-Options", "nosniff");
+    // Pages only (a frame / a navigation is always an HTML document): no other site may frame the desktop or
+    // the pairing overlay (clickjacking), and links out don't tell external sites the device's LAN address.
+    // Apps run in same-origin iframes of the shell, which SAMEORIGIN allows. Worst case stays at 7 headers,
+    // under CONFIG_HTTPD_MAX_RESP_HEADERS (8).
+    if (strncmp(type, "text/html", 9) == 0) {
+        httpd_resp_set_hdr(req, "X-Frame-Options", "SAMEORIGIN");
+        httpd_resp_set_hdr(req, "Referrer-Policy", "same-origin");
+    }
     httpd_resp_set_hdr(req, "Cache-Control",
                        is_immutable_asset(type) ? "public, max-age=604800" : "no-cache");
     // The validator for THIS representation. The stat above chose gz vs raw the same way the open did;

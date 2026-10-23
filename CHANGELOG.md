@@ -6,6 +6,13 @@ All notable user-facing changes to NucleoOS. Format loosely follows
 
 ## [Unreleased]
 
+### Security
+- **The Wi-Fi network's name is shown only to paired browsers.** `/api/status` stays public so the desktop
+  can find the Cardputer, but it no longer tells an unpaired visitor which network the device joined.
+- **The web desktop can't be framed by other sites, and links out don't reveal the device's address.** Pages
+  are sent with `X-Frame-Options: SAMEORIGIN` and `Referrer-Policy: same-origin`; apps keep opening in the
+  desktop's windows as before.
+
 ## [0.7.3] — 2026-10-22
 
 ### Added

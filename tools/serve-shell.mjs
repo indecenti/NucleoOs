@@ -472,7 +472,10 @@ async function fsApi(req, res, url) {
           'content-range': `bytes ${start}-${end}/${data.length}`, 'content-length': end - start + 1, 'access-control-allow-origin': '*' });
         return res.end(data.subarray(start, end + 1));
       }
-      res.writeHead(200, { 'content-type': type, 'accept-ranges': 'bytes', 'content-length': data.length, 'access-control-allow-origin': '*' });
+      // Pages get the device's anti-framing / referrer headers (nucleo_webfs.c static_get), so the sim catches
+      // an app that would break under them.
+      const page = String(type).startsWith('text/html') ? { 'x-frame-options': 'SAMEORIGIN', 'referrer-policy': 'same-origin' } : {};
+      res.writeHead(200, { 'content-type': type, 'accept-ranges': 'bytes', 'content-length': data.length, 'access-control-allow-origin': '*', ...page });
       return res.end(data);
     }
     if (op === 'write') {
@@ -520,7 +523,10 @@ async function fsApi(req, res, url) {
 }
 
 // ---- helpers ----
-const send = (res, code, type, body) => { res.writeHead(code, { 'content-type': type, 'access-control-allow-origin': '*' }); res.end(body); };
+const send = (res, code, type, body) => {
+  const page = String(type).startsWith('text/html') ? { 'x-frame-options': 'SAMEORIGIN', 'referrer-policy': 'same-origin' } : {};
+  res.writeHead(code, { 'content-type': type, 'access-control-allow-origin': '*', ...page }); res.end(body);
+};
 const sendJSON = (res, obj) => send(res, 200, 'application/json; charset=utf-8', JSON.stringify(obj));
 async function sendFile(res, abs) {
   try { send(res, 200, TYPES[extname(abs)] || 'application/octet-stream', await readFile(abs)); }
@@ -703,7 +709,8 @@ const server = createServer(async (req, res) => {
     return sendJSON(res, { ...apiStatus, uptime_s: up, min_free_heap: simState.minFree, free_heap: jit(74000, 6000),
       largest_free_block: jit(42000, 5000), apps: { installed: a.apps.length },
       ...(sdc.diag ? { sdc_diag: sdc.diag } : {}), ...(sdc.absent ? {} : { sdc: sdcView() }),
-      network: { ...apiStatus.network, time: Math.floor(Date.now() / 1000) } }); }   // live device clock for the Clock app badge
+      // live device clock for the Clock app badge; the SSID only for a paired browser (nucleo_httpd.c status_get)
+      network: { ...apiStatus.network, ssid: isAuthed(req) ? apiStatus.network.ssid : '', time: Math.floor(Date.now() / 1000) } }); }
   if (path === '/api/apps') return sendJSON(res, await apiApps());
   // OS language (mirrors nucleo_httpd.c lang_handler): GET reads it, POST sets it and is a config
   // write → paired only. Without this the sim 404'd on every language change and the shell's
