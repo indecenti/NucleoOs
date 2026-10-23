@@ -17,7 +17,7 @@ image generation.
 ![Platform: ESP32-S3](https://img.shields.io/badge/platform-ESP32--S3-informational)
 ![Framework: ESP-IDF](https://img.shields.io/badge/firmware-ESP--IDF-red)
 
-**[⬇️ Install](#-install)** · **[📋 What's new in v0.7.2](CHANGELOG.md)** · **[📖 User Guide](docs/user-guide.md)**
+**[⬇️ Install](#-install--three-ways)** · **[📋 What's new in v0.7.2](CHANGELOG.md)** · **[📖 User Guide](docs/user-guide.md)**
 
 <sub>Free for noncommercial use · **commercial use requires a paid license** → niki070585@gmail.com</sub>
 
@@ -26,6 +26,41 @@ image generation.
 <img src="docs/screenshots/webos.gif" width="860" alt="NucleoOS web desktop — a Windows‑class shell (files, spreadsheet, Paint, games, monitor) served straight off the Cardputer" />
 
 </div>
+
+---
+
+## 🚀 Install — three ways
+
+**You need:** a Cardputer (original or ADV — same firmware), a USB‑C data cable and a microSD card formatted **FAT32**.
+
+### 1. Web flasher — easiest, nothing to install
+1. Open **[indecenti.github.io/NucleoOs](https://indecenti.github.io/NucleoOs/)** in **Chrome or Edge** on a desktop.
+2. Plug in the Cardputer and click **Connect & install NucleoOS**.
+3. When it finishes, press **reset**.
+
+### 2. M5Launcher — keep your other firmwares
+Already running [M5Launcher](https://github.com/bmorcelli/Launcher)? NucleoOS installs as a guest next to them.
+1. Download **[`nucleoos-latest.bin`](https://github.com/indecenti/NucleoOs/releases/latest/download/nucleoos-latest.bin)** and copy it to the SD card.
+2. In the Launcher, pick it from the **SD installer**. Updates also go through the Launcher.
+
+### 3. esptool — command line
+Download **[`nucleoos-latest.bin`](https://github.com/indecenti/NucleoOs/releases/latest/download/nucleoos-latest.bin)**, then with [esptool](https://github.com/espressif/esptool) (`pip install esptool`):
+```bash
+esptool --chip esp32s3 --baud 921600 write_flash 0x0 nucleoos-latest.bin
+```
+
+### Then: the SD card and first boot
+- **SD content.** NucleoOS serves its apps from the card. Once on Wi‑Fi, the first‑boot wizard downloads it by
+  itself — verified, resumable, skippable. Or extract
+  **[`nucleoos-latest-sd.zip`](https://github.com/indecenti/NucleoOs/releases/latest/download/nucleoos-latest-sd.zip)**
+  to the card root so `/apps`, `/www`, `/system` and `/data` sit at the top. The zip is card content, never a firmware.
+- **First boot.** A short wizard on the Cardputer's keyboard asks for language, Wi‑Fi (or starts the device's own
+  access point) and a name. The screen then shows an address: open it in a browser on the same network and pair
+  with the 6‑digit PIN (Control Center ▸ Web, or Settings ▸ Device).
+- **Updates** come by themselves: Settings ▸ Updates offers a checksum‑verified one‑click update, with A/B slots
+  and automatic rollback, and syncs the SD content (only changed files).
+
+All files: **[latest release](https://github.com/indecenti/NucleoOs/releases/latest)** · full walkthrough: **[User Guide](docs/user-guide.md)**.
 
 ---
 
@@ -77,28 +112,6 @@ Previous release (v0.7.1): **Costellazioni**, a full space game; the web OS load
 models on your PC (Ollama, LM Studio, llama.cpp, Jan).
 
 Full notes: [CHANGELOG.md](CHANGELOG.md). Installed devices are offered the update in **Settings ▸ Updates**.
-
-## 🚀 Install
-
-**You need:** a Cardputer (original or ADV), a USB‑C cable and a microSD card formatted **FAT32**.
-
-| | How |
-|---|---|
-| **Web flasher** — easiest | Open **[indecenti.github.io/NucleoOs](https://indecenti.github.io/NucleoOs/)** in Chrome or Edge on a desktop, plug in the Cardputer, click **Connect & install NucleoOS**, then press reset. |
-| **M5Launcher** | Copy the release's `nucleoos-<version>.bin` to the card and install it with the Launcher's SD installer. NucleoOS runs as a guest next to your other firmwares and is updated through the Launcher. |
-| **esptool** | `esptool --chip esp32s3 --baud 921600 write_flash 0x0 nucleoos-latest.bin` |
-
-**The SD card.** NucleoOS serves its apps from the card. Once it is on Wi‑Fi, the first‑boot wizard can
-download that content by itself — verified, resumable, and skippable. Or extract
-`nucleoos-latest-sd.zip` from the **[latest release](https://github.com/indecenti/NucleoOs/releases/latest)** to the
-card root, so that `/apps`, `/www`, `/system` and `/data` sit at the top. The zip is the card content, never a firmware.
-
-**First boot.** A short wizard on the Cardputer's own keyboard asks for the language, the Wi‑Fi network (or
-starts the device's own access point) and a name. The screen then shows an address: open it in a
-browser on the same network and pair with the 6‑digit PIN (Control Center ▸ Web, or Settings ▸ Device).
-
-**Updates** come by themselves. Settings ▸ Updates offers a checksum‑verified one‑click update, with
-A/B slots and automatic rollback, and updates the SD card's content to match (only the changed files). The full walkthrough is in the **[User Guide](docs/user-guide.md)**.
 
 ---
 
