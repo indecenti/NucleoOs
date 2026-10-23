@@ -96,21 +96,27 @@ curated by its author.)
    (guest mode).
 2. Build the kit: `npm run m5burner:kit` (`tools/m5burner-kit.py`, after `npm run ui:shots`). It writes
    `build/m5burner/`: the release's merged image downloaded from the GitHub Release and checked (SHA-256
-   against `SHA256SUMS`, our own A/B table, app `nucleoos` of that version, not a dirty build), a 1280x960
-   cover (4:3, the catalog's shape) from the real native UI renders, and `listing.md` with every form field
-   and the paste-ready description (`description.txt`). Reproducible on purpose: `dist/` is wiped by every
-   `package-release.mjs` run, which once took a hand-made kit with it.
-3. In the M5Burner **desktop** app (there is no web upload), sign in with the project's M5Stack account →
-   **USER CUSTOM ▸ Publish**: name **NucleoOS for Cardputer & ADV** (the catalog's convention), version =
-   the release tag, device **Cardputer** (covers the ADV), GitHub link, the merged `.bin`, the cover and
-   the description → **Upload**, then switch the entry's **Publish** toggle on (public). A later release
-   adds a version to the same entry.
+   against `SHA256SUMS`, our own A/B table, app `nucleoos` of that version, not a dirty build), a 1600x900
+   cover (16:9: the catalog shows covers in 16:9 cards cropped to fill, so any other shape loses its edges)
+   in the website's brand — headline, the real device photo with the real native UI on its screen, the web
+   desktop it serves (assets from the sibling `nucleos_sites` checkout, `NUCLEOOS_SITE`; without it, a grid
+   of native UI renders) — and `listing.md` with every form field plus the paste-ready Markdown description
+   (`description.txt`). Reproducible on purpose: `dist/` is wiped by every `package-release.mjs` run, which
+   once took a hand-made kit with it.
+3. Upload on **WebBurner** (https://burner.m5stack.com, signed in with the project's M5Stack account; the
+   M5Burner desktop app is discontinued on 2027-01-01 and points there) → Developer ▸ **Upload firmware**:
+   name **NucleoOS: desktop + offline AI for Cardputer & ADV** (starts with the product name so search finds
+   it; the rest is the hook the catalog list shows), categories **AI & Assistants** + **UI & Launcher**,
+   devices **Cardputer** + **Cardputer ADV**, the Markdown description, version = the release tag, the
+   GitHub link, the version notes, the merged `.bin`, the cover, visibility **Public** (reviewed by M5Stack
+   before it is listed; the entry shows *Pending* until then). A later release adds a version to the same
+   entry. First published: v0.7.3 on 2026-10-23.
 4. After the catalog refreshes (LauncherHub mirrors it within a day), verify with
    `curl "https://api.launcherhub.net/firmwares?category=cardputer&q=nucleoos"` and install it from a
    Launcher once (Launcher ▸ OTA ▸ search "NucleoOS").
 
-The upload itself is a manual, account-bound step (M5Burner has no public upload API) — it is never
-automated from this repo.
+The upload itself is an account-bound step on WebBurner (no public upload API) — it is never automated
+from this repo's scripts.
 
 ## Testing
 
