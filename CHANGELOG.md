@@ -6,6 +6,15 @@ All notable user-facing changes to NucleoOS. Format loosely follows
 
 ## [Unreleased]
 
+## [0.7.4] — 2026-10-24
+
+### Added
+- **Community app**: a new icon on the web desktop that opens the NucleoOS Discord, copies the invite, shows it as a
+  QR code to scan with your phone (handy when the computer has no Internet), and explains the helper bot's `/ask`
+  and `/guide` commands. ANIMA opens it too ("open discord", "apri community").
+- **Discord community with a help bot** (`tools/discord-bot/`): the bot answers `/ask` and `/guide` from the docs
+  and says when it doesn't know; moderation runs on Discord's own AutoMod. Join: https://discord.gg/84tyTPtWus
+
 ### Security
 - **The Wi-Fi network's name is shown only to paired browsers.** `/api/status` stays public so the desktop
   can find the Cardputer, but it no longer tells an unpaired visitor which network the device joined.
