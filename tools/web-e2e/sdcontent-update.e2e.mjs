@@ -13,7 +13,11 @@ import { bootShell } from './shell.mjs';
 
 const HOST_RULES = '--host-resolver-rules=MAP nucleo.test 127.0.0.1';
 const skip = !findChrome() && 'no Chrome/Edge installed';
-const { STR } = await import('../../apps/settings/www/i18n.js');
+const { readFileSync: _rf } = await import('node:fs');
+const STR = Object.fromEntries(['it', 'en', 'es', 'fr', 'de'].map((l) => {
+  let s = _rf(new URL(`../../apps/settings/www/i18n.${l}.json`, import.meta.url), 'utf8');
+  if (s.charCodeAt(0) === 0xfeff) s = s.slice(1); return [l, JSON.parse(s)];
+}));
 
 async function openUpdates(browser, sim, lang) {
   const page = await browser.newPage();

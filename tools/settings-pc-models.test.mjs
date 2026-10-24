@@ -5,7 +5,13 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { chatModels, serverRows, addServer, removeServer, setServerEnabled, setTaskModel, setPrefer, TASKS } from '../apps/settings/www/pc-models.js';
 import { loadLocalConfig, DEFAULT_SERVERS } from '../web/shell/ai-engines.js';
-import { STR } from '../apps/settings/www/i18n.js';
+import { readFileSync as _rf } from 'node:fs';
+// Settings is on the central engine now: its strings live in apps/settings/www/i18n.<lang>.json.
+const STR = Object.fromEntries(['it', 'en', 'es', 'fr', 'de'].map((l) => {
+  let s = _rf(new URL(`../apps/settings/www/i18n.${l}.json`, import.meta.url), 'utf8');
+  if (s.charCodeAt(0) === 0xfeff) s = s.slice(1);
+  return [l, JSON.parse(s)];
+}));
 
 const mem = () => { const m = new Map(); return { getItem: (k) => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)) }; };
 const base = () => loadLocalConfig(mem());          // the engine layer's own default config

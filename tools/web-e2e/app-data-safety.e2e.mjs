@@ -64,7 +64,11 @@ test('settings: adding a Groq/xAI key never erases teacher.json when it cannot b
   const sim = await startSim({ seed: { '/data/anima/teacher.json': teacher } });
   const browser = await launchBrowser({ args: [HOST_RULES] });
   t.after(async () => { await browser.close(); await sim.stop(); });
-  const { STR } = await import('../../apps/settings/www/i18n.js');
+  const { readFileSync: _rf } = await import('node:fs');
+  const STR = Object.fromEntries(['it', 'en', 'es', 'fr', 'de'].map((l) => {
+    let s = _rf(new URL(`../../apps/settings/www/i18n.${l}.json`, import.meta.url), 'utf8');
+    if (s.charCodeAt(0) === 0xfeff) s = s.slice(1); return [l, JSON.parse(s)];
+  }));
   const TP = '/data/anima/teacher.json';
   const page = await browser.newPage();
   await bootShell(page, sim, { lang: 'en', wait: false });

@@ -233,7 +233,11 @@ test('settings: a failed read never rewrites settings.json with the defaults', {
   const real = JSON.parse(await sim.readSd('/system/config/settings.json'));
   real.device = { ...(real.device || {}), name: 'cardputer-of-anna' };
   await (await import('node:fs/promises')).writeFile(`${sim.sd}/system/config/settings.json`, JSON.stringify(real));
-  const { STR } = await import('../../apps/settings/www/i18n.js');
+  const { readFileSync: _rf } = await import('node:fs');
+  const STR = Object.fromEntries(['it', 'en', 'es', 'fr', 'de'].map((l) => {
+    let s = _rf(new URL(`../../apps/settings/www/i18n.${l}.json`, import.meta.url), 'utf8');
+    if (s.charCodeAt(0) === 0xfeff) s = s.slice(1); return [l, JSON.parse(s)];
+  }));
 
   await t.test('read fails at open: the page says so and "Save" writes nothing', async () => {
     const page = await browser.newPage();
