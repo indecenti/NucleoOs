@@ -65,8 +65,15 @@ test('archive-manager: no hard-coded English error text reaches the UI', () => {
   assert.doesNotMatch(src, /new Error\(\s*["'`][A-Z]/, 'Error(...) starting with an English literal');
 });
 
-test('settings: the teacher.json read-failure messages exist in all 5 languages', async () => {
-  const { STR } = await import('../apps/settings/www/i18n.js');
+// Settings is on the central engine: its strings live in apps/settings/www/i18n.<lang>.json.
+const settingsCatalogs = () => Object.fromEntries(LANGS.map((l) => {
+  let s = readFileSync(join(REPO, 'apps', 'settings', 'www', `i18n.${l}.json`), 'utf8');
+  if (s.charCodeAt(0) === 0xfeff) s = s.slice(1);
+  return [l, JSON.parse(s)];
+}));
+
+test('settings: the teacher.json read-failure messages exist in all 5 languages', () => {
+  const STR = settingsCatalogs();
   for (const l of LANGS) for (const k of ['teacherReadFailed', 'teacherReadCorrupt'])
     assert.ok(typeof STR[l][k] === 'string' && STR[l][k].length > 10, `${l}.${k}`);
 });
@@ -81,8 +88,8 @@ test('settings: no it/en-only EN() ternary is left in index.html', () => {
   assert.deepEqual(hits, []);
 });
 
-test('settings: every T(\'key\') used by index.html exists in all 5 languages', async () => {
-  const { STR } = await import('../apps/settings/www/i18n.js');
+test('settings: every T(\'key\') used by index.html exists in all 5 languages', () => {
+  const STR = settingsCatalogs();
   const src = readFileSync(join(SETTINGS, 'index.html'), 'utf8');
   const keys = new Set([...src.matchAll(/\bT\(\s*'([A-Za-z0-9_]+)'\s*\)/g)].map((m) => m[1]));
   assert.ok(keys.size > 20, 'found the T() call sites');
