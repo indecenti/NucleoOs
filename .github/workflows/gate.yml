@@ -25,6 +25,9 @@ jobs:
       - name: i18n catalog parity (5 languages)
         run: node tools/i18n-check.mjs
 
+      - name: No new hardcoded UI text (ratchet over baseline)
+        run: node tools/i18n-hardcoded-check.mjs
+
       - name: Gzip twins in sync (EOL-normalized)
         run: node tools/check-gz.mjs
 

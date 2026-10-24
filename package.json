@@ -12,6 +12,8 @@
     "gen:api": "node tools/gen-api-spec.mjs",
     "gen:api:check": "node tools/gen-api-spec.mjs --check",
     "i18n:gate": "node tools/i18n-check.mjs",
+    "i18n:hardcoded": "node tools/i18n-hardcoded-check.mjs",
+    "i18n:hardcoded:report": "node tools/i18n-hardcoded-check.mjs --report",
     "ui:lint": "node tools/native-ui-lint.mjs",
     "icons:gate": "node tools/check-icons.mjs",
     "test": "node tools/anima-host/gate.mjs",
