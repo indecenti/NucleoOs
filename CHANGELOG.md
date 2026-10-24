@@ -6,7 +6,34 @@ All notable user-facing changes to NucleoOS. Format loosely follows
 
 ## [Unreleased]
 
+## [0.7.5] — 2026-10-24
+
+### Added
+- **Opt-in auto-update with a cancellable countdown.** When a new release is found the web desktop can
+  install it on its own after a visible countdown you can stop; the update notice now names the version
+  that is ready and links straight to Settings › Updates.
+
+### Changed
+- **The whole native interface now follows the OS language.** Alarm, Screensaver, Notifications, Pedometer,
+  Mail, Weather, Video, QR and PixelFix painted fixed Italian text; they now switch with the language like
+  the rest of the system. ANIMA's online answers also follow the OS language in Spanish, French and German
+  instead of falling back to English.
+
 ### Fixed
+- **Spirit Level: the bubble no longer runs the wrong way front-to-back.** One accelerometer axis was
+  mirrored, so tilting the device forward sent the bubble backward. Both the bullseye and the tube views
+  now read true, the big total zeroes when you press G, and the "in bubble" band shows its unit (±0.4°).
+- **Protractor: the plumb needle tracks the real angle** instead of sweeping about twice the dial marks
+  (same mirrored-axis cause). G zeroes / returns to absolute and F freezes — the same keys as the Level;
+  relative mode keeps the sign so you can see which way you turned.
+- **Mic Spectrum: the bars and the tuner gauge follow the colour theme** (TAB) like the waterfall and wave
+  already did; the in-tune / flat / sharp verdict stays green/amber/red.
+- **Torch** gains red and orange light and solid / blink / SOS modes, with a blink-speed slider — dim red
+  for night and astronomy, an amber SOS beacon for a breakdown. It no longer dims itself after the idle
+  timeout, and the quick-tap of the side button lights it in the colour and brightness you picked.
+- **Readable footer hints across the apps.** Long control hints were cut off at the edge of the bar
+  (losing "TAB menu", "esc" …); every over-long hint was shortened in all five languages, with a check
+  that keeps them within the bar from now on.
 - **Apps a release adds now show up after updating the SD card from the Cardputer.** The on-device SD
   installer downloaded a new app's files but never added it to the app list, so it stayed invisible (found
   with the Community app on a real Cardputer ADV). It now appends the release's new apps to the device's
