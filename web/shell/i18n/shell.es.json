@@ -1,10 +1,8 @@
 {
   "_lang": "es",
   "_note": "Chrome del shell NucleoOS (escritorio, Inicio, barra de tareas, diálogos, notificaciones). Las cadenas genéricas están en core.*.json. Mantén alineado con shell.it.json.",
-
   "mobile_title": "App para teléfono muy pronto",
   "mobile_body": "Conecta tu teléfono a un monitor (modo Escritorio) para usar NucleoOS, o gira el dispositivo.",
-
   "pair_title": "Vincular con este dispositivo",
   "pair_sub": "Introduce el código de 6 dígitos que aparece en la pantalla del Cardputer.",
   "pair_pin_aria": "Código de vinculación",
@@ -14,7 +12,6 @@
   "pair_need_digits": "Introduce los 6 dígitos.",
   "pair_net_error": "Error de red: ¿está encendido el dispositivo?",
   "pair_locked": "Demasiados intentos. Espera un momento y vuelve a intentarlo.",
-
   "start_pinned": "Ancladas",
   "start_allApps": "Todas las aplicaciones",
   "start_recommended": "Recomendado",
@@ -25,7 +22,6 @@
   "start_power_title": "Reiniciar el Cardputer",
   "start_dl_win": "Descargar la app para Windows",
   "start_dl_apk": "Descargar NucleoMind (servidor LLM para Android)",
-
   "tb_search_ph": "Buscar",
   "tb_search_title": "Buscar aplicaciones y archivos",
   "tb_copilot_title": "ANIMA Copilot — Ctrl+Space",
@@ -33,9 +29,7 @@
   "tray_ws_title": "Conexión con el Cardputer",
   "tray_net_title": "Red",
   "tray_clock_title": "Mostrar la fecha",
-
   "drop_text": "Suelta para subir a la SD del Cardputer",
-
   "osdlg_browse": "Examinar",
   "osdlg_open_title": "Abrir archivo",
   "osdlg_save_title": "Guardar archivo",
@@ -47,19 +41,16 @@
   "win_restore": "Restaurar",
   "win_close": "Cerrar",
   "win_no_route": "No se ha declarado ninguna página web.",
-
   "ac_theme_title": "Modo oscuro",
   "ac_eco": "Eco",
   "ac_eco_title": "Modo Eco",
   "ac_brightness": "Brillo",
-
   "ws_connected": "Cardputer conectado",
   "ws_reconnecting": "Reconectando…",
   "ws_offline": "Cardputer sin conexión",
   "ws_evicted": "Otro navegador tiene el control",
   "ws_evicted_body": "Otro navegador ha tomado el control del Cardputer. Atiende a uno a la vez.",
   "ws_evicted_take": "Tomar el control",
-
   "toast_theme_saved": "Tema guardado en el Cardputer",
   "toast_theme_error": "Error al guardar el tema",
   "toast_uploading": "Subiendo: {name}",
@@ -73,7 +64,6 @@
     "other": "Estos vídeos deben convertirse con Video Studio (companion para PC): {names}"
   },
   "toast_lang_changed": "Idioma: Español",
-
   "ctx_show_in_folder": "Mostrar en la carpeta",
   "ctx_new_file_shortcut": "Nuevo acceso directo a archivo…",
   "ctx_remove_reco": "Quitar de recomendados",
@@ -92,7 +82,6 @@
   "clipboard_empty": "El portapapeles está vacío",
   "prompt_new_file_path": "Ruta del archivo SD (p. ej. /data/Music/song.mp3)",
   "prompt_link_url": "URL del enlace (https://… o /apps/…)",
-
   "ctx_open_all": "Abrir todo ({n})",
   "ctx_open_new": "Abrir en una pestaña nueva",
   "ctx_properties": "Propiedades",
@@ -120,7 +109,6 @@
   "type_app": "Aplicación",
   "type_file": "Archivo",
   "type_url": "Enlace web",
-
   "ctx_new_shortcut": "Acceso directo…",
   "lnk_broken": "Acceso directo roto o destino inexistente",
   "lnk_protected": "No puedes crear un acceso directo a un archivo del sistema",
@@ -136,7 +124,6 @@
   "overwrite_ok": "Sobrescribir",
   "del_file_title": "¿Quitar del escritorio?",
   "del_file_body": "“{name}” es un archivo real en la carpeta Escritorio. Se eliminará de la SD.",
-
   "start_pinned_tag": "anclada",
   "reco_show": "Mostrar recomendados",
   "reco_hide": "Ocultar recomendados",
@@ -148,7 +135,6 @@
   "state_readonly": "Cardputer inaccesible: el escritorio, la sesión y el portapapeles son de solo lectura en esta sesión: no se sobrescribirá nada.",
   "search_indexing": "Indexando el Cardputer…",
   "search_anima": "Preguntar a ANIMA",
-
   "cat_app": "Aplicaciones",
   "cat_image": "Imágenes",
   "cat_audio": "Audio",
@@ -158,7 +144,6 @@
   "cat_game": "Juegos",
   "cat_other": "Otros archivos",
   "search_no_results": "Sin resultados",
-
   "cat_actions": "Ajustes y acciones",
   "cat_actions_sub": "Comando del sistema",
   "act_settings": "Abrir Ajustes",
@@ -185,7 +170,6 @@
   "act_desktop_kw": "escritorio minimizar ventanas ocultar",
   "act_reboot": "Reiniciar el Cardputer",
   "act_reboot_kw": "reiniciar apagar dispositivo",
-
   "reboot_confirm": "¿Reiniciar el Cardputer?",
   "rebooting": "Reiniciando…",
   "reboot_starting": "Reiniciando el Cardputer…",
@@ -197,7 +181,6 @@
   "busy_job_anima": "ANIMA en línea",
   "busy_job_transcribe": "Transcripción",
   "busy_tip": "El dispositivo está dando prioridad a una tarea pesada; las apps pueden responder con un breve retraso.",
-
   "ac_night": "Nocturna",
   "ac_night_title": "Luz nocturna: colores cálidos en pantalla",
   "ac_lock": "Bloquear",
@@ -242,7 +225,10 @@
   "nc_remove": "Quitar",
   "nc_ask_anima": "Pregunta a ANIMA",
   "nc_reminder": "Recordatorio",
-  "nc_digest_count": {"one":"{n} notificación","other":"{n} notificaciones"},
+  "nc_digest_count": {
+    "one": "{n} notificación",
+    "other": "{n} notificaciones"
+  },
   "nc_digest_cal": "{n} calendario",
   "nc_digest_unread": "{n} sin leer",
   "nc_src_calendar": "Calendario",
@@ -255,12 +241,10 @@
   "up_title_sec": "Actualización de seguridad de NucleoOS",
   "up_body": "La versión {tag} está lista para instalar — abre Ajustes › Actualizaciones.",
   "nc_src_app": "App",
-
   "amb_toggle_title": "Sugerencias de ANIMA",
   "amb_cal_body": "Empieza a las {time}",
   "amb_sd_title": "Tarjeta SD casi llena",
   "amb_sd_body": "Solo queda un {pct}% de espacio",
-
   "app_agent": "Agentes",
   "app_archive-manager": "Gestor de archivos",
   "app_authenticator": "Autenticador",
@@ -312,5 +296,13 @@
   "net_ap_title": "Punto de acceso {ssid} · http://192.168.4.1",
   "remote_controlling": "Controlando",
   "remote_title_one": "Este navegador controla el dispositivo. La pantalla del Cardputer está en pausa.",
-  "remote_title_many": "Este navegador controla el dispositivo ({n} sesiones). La pantalla del Cardputer está en pausa."
+  "remote_title_many": "Este navegador controla el dispositivo ({n} sesiones). La pantalla del Cardputer está en pausa.",
+  "up_whatsnew": "Novedades",
+  "up_update_now": "Actualizar ahora",
+  "up_later": "Más tarde",
+  "up_skip": "Omitir esta versión",
+  "up_pill_title": "Actualización disponible — novedades",
+  "up_ready": "{tag} está lista para instalar",
+  "up_no_notes": "Sin notas de la versión.",
+  "up_sec_badge": "Seguridad"
 }

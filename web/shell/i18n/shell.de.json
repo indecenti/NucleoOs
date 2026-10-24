@@ -1,10 +1,8 @@
 {
   "_lang": "de",
   "_note": "NucleoOS-Shell-Chrome (Desktop, Start, Taskleiste, Dialoge, Benachrichtigungen). Generische Zeichenketten stehen in core.*.json. Mit shell.it.json synchron halten.",
-
   "mobile_title": "Telefon-App bald verfügbar",
   "mobile_body": "Verbinde dein Telefon mit einem Monitor (Desktop-Modus), um NucleoOS zu nutzen, oder drehe dein Gerät.",
-
   "pair_title": "Mit diesem Gerät koppeln",
   "pair_sub": "Gib den 6-stelligen Code ein, der auf dem Cardputer-Bildschirm angezeigt wird.",
   "pair_pin_aria": "Kopplungscode",
@@ -14,7 +12,6 @@
   "pair_need_digits": "Gib alle 6 Ziffern ein.",
   "pair_net_error": "Netzwerkfehler – ist das Gerät eingeschaltet?",
   "pair_locked": "Zu viele Versuche. Warte kurz und versuche es erneut.",
-
   "start_pinned": "Angeheftet",
   "start_allApps": "Alle Apps",
   "start_recommended": "Empfohlen",
@@ -25,7 +22,6 @@
   "start_power_title": "Cardputer neu starten",
   "start_dl_win": "Windows-App herunterladen",
   "start_dl_apk": "NucleoMind herunterladen (LLM-Server für Android)",
-
   "tb_search_ph": "Suchen",
   "tb_search_title": "Apps und Dateien suchen",
   "tb_copilot_title": "ANIMA Copilot — Ctrl+Space",
@@ -33,9 +29,7 @@
   "tray_ws_title": "Verbindung zum Cardputer",
   "tray_net_title": "Netzwerk",
   "tray_clock_title": "Datum anzeigen",
-
   "drop_text": "Zum Hochladen auf die SD des Cardputer ablegen",
-
   "osdlg_browse": "Durchsuchen",
   "osdlg_open_title": "Datei öffnen",
   "osdlg_save_title": "Datei speichern",
@@ -47,19 +41,16 @@
   "win_restore": "Wiederherstellen",
   "win_close": "Schließen",
   "win_no_route": "Keine Webseite angegeben.",
-
   "ac_theme_title": "Dunkelmodus",
   "ac_eco": "Eco",
   "ac_eco_title": "Eco-Modus",
   "ac_brightness": "Helligkeit",
-
   "ws_connected": "Cardputer verbunden",
   "ws_reconnecting": "Neu verbinden…",
   "ws_offline": "Cardputer offline",
   "ws_evicted": "Ein anderer Browser hat die Kontrolle",
   "ws_evicted_body": "Ein anderer Browser hat die Kontrolle über den Cardputer übernommen. Er bedient immer nur einen.",
   "ws_evicted_take": "Kontrolle übernehmen",
-
   "toast_theme_saved": "Design auf dem Cardputer gespeichert",
   "toast_theme_error": "Fehler beim Speichern des Designs",
   "toast_uploading": "Wird hochgeladen: {name}",
@@ -73,7 +64,6 @@
     "other": "Diese Videos müssen mit Video Studio (PC-Companion) konvertiert werden: {names}"
   },
   "toast_lang_changed": "Sprache: Deutsch",
-
   "ctx_show_in_folder": "Im Ordner anzeigen",
   "ctx_new_file_shortcut": "Neue Dateiverknüpfung…",
   "ctx_remove_reco": "Aus Empfohlenen entfernen",
@@ -92,7 +82,6 @@
   "clipboard_empty": "Zwischenablage ist leer",
   "prompt_new_file_path": "SD-Dateipfad (z. B. /data/Music/song.mp3)",
   "prompt_link_url": "Link-URL (https://… oder /apps/…)",
-
   "ctx_open_all": "Alle öffnen ({n})",
   "ctx_open_new": "In neuem Tab öffnen",
   "ctx_properties": "Eigenschaften",
@@ -120,7 +109,6 @@
   "type_app": "Anwendung",
   "type_file": "Datei",
   "type_url": "Weblink",
-
   "ctx_new_shortcut": "Verknüpfung…",
   "lnk_broken": "Verknüpfung defekt oder Ziel fehlt",
   "lnk_protected": "Zu einer Systemdatei kann keine Verknüpfung erstellt werden",
@@ -136,7 +124,6 @@
   "overwrite_ok": "Überschreiben",
   "del_file_title": "Vom Desktop entfernen?",
   "del_file_body": "“{name}” ist eine echte Datei im Ordner Desktop. Sie wird von der SD gelöscht.",
-
   "start_pinned_tag": "angeheftet",
   "reco_show": "Empfohlene anzeigen",
   "reco_hide": "Empfohlene ausblenden",
@@ -148,7 +135,6 @@
   "state_readonly": "Cardputer nicht erreichbar: Desktop, Sitzung und Zwischenablage sind in dieser Sitzung schreibgeschützt — es wird nichts überschrieben.",
   "search_indexing": "Cardputer wird indiziert…",
   "search_anima": "ANIMA fragen",
-
   "cat_app": "Apps",
   "cat_image": "Bilder",
   "cat_audio": "Audio",
@@ -158,7 +144,6 @@
   "cat_game": "Spiele",
   "cat_other": "Andere Dateien",
   "search_no_results": "Keine Ergebnisse",
-
   "cat_actions": "Einstellungen und Aktionen",
   "cat_actions_sub": "Systembefehl",
   "act_settings": "Einstellungen öffnen",
@@ -185,7 +170,6 @@
   "act_desktop_kw": "desktop fenster minimieren ausblenden",
   "act_reboot": "Cardputer neu starten",
   "act_reboot_kw": "neustart neu starten ausschalten gerät",
-
   "reboot_confirm": "Cardputer neu starten?",
   "rebooting": "Wird neu gestartet…",
   "reboot_starting": "Cardputer wird neu gestartet…",
@@ -197,7 +181,6 @@
   "busy_job_anima": "ANIMA online",
   "busy_job_transcribe": "Transkription",
   "busy_tip": "Das Gerät priorisiert gerade eine schwere Aufgabe; Apps können mit kurzer Verzögerung antworten.",
-
   "ac_night": "Nachtlicht",
   "ac_night_title": "Nachtlicht: wärmere Bildschirmfarben",
   "ac_lock": "Sperren",
@@ -242,7 +225,10 @@
   "nc_remove": "Entfernen",
   "nc_ask_anima": "ANIMA fragen",
   "nc_reminder": "Erinnerung",
-  "nc_digest_count": {"one":"{n} Benachrichtigung","other":"{n} Benachrichtigungen"},
+  "nc_digest_count": {
+    "one": "{n} Benachrichtigung",
+    "other": "{n} Benachrichtigungen"
+  },
   "nc_digest_cal": "{n} Kalender",
   "nc_digest_unread": "{n} ungelesen",
   "nc_src_calendar": "Kalender",
@@ -255,12 +241,10 @@
   "up_title_sec": "NucleoOS-Sicherheitsupdate",
   "up_body": "Version {tag} ist bereit zur Installation — öffne Einstellungen › Updates.",
   "nc_src_app": "App",
-
   "amb_toggle_title": "ANIMA-Vorschläge",
   "amb_cal_body": "Beginnt um {time}",
   "amb_sd_title": "SD-Karte fast voll",
   "amb_sd_body": "Nur noch {pct}% Speicherplatz frei",
-
   "app_agent": "Agenten",
   "app_archive-manager": "Archivmanager",
   "app_authenticator": "Authentifikator",
@@ -312,5 +296,13 @@
   "net_ap_title": "Zugangspunkt {ssid} · http://192.168.4.1",
   "remote_controlling": "Steuerung",
   "remote_title_one": "Dieser Browser steuert das Gerät. Der Cardputer-Bildschirm ist pausiert.",
-  "remote_title_many": "Dieser Browser steuert das Gerät ({n} Sitzungen). Der Cardputer-Bildschirm ist pausiert."
+  "remote_title_many": "Dieser Browser steuert das Gerät ({n} Sitzungen). Der Cardputer-Bildschirm ist pausiert.",
+  "up_whatsnew": "Neuigkeiten",
+  "up_update_now": "Jetzt aktualisieren",
+  "up_later": "Später",
+  "up_skip": "Diese Version überspringen",
+  "up_pill_title": "Update verfügbar — Neuigkeiten",
+  "up_ready": "{tag} ist installationsbereit",
+  "up_no_notes": "Keine Release-Notes.",
+  "up_sec_badge": "Sicherheit"
 }

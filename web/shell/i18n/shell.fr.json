@@ -1,10 +1,8 @@
 {
   "_lang": "fr",
   "_note": "Chrome du shell NucleoOS (bureau, Démarrer, barre des tâches, dialogues, notifications). Les chaînes génériques sont dans core.*.json. Gardez aligné avec shell.it.json.",
-
   "mobile_title": "Application téléphone bientôt disponible",
   "mobile_body": "Connectez votre téléphone à un écran (mode Bureau) pour utiliser NucleoOS, ou tournez votre appareil.",
-
   "pair_title": "Associer à cet appareil",
   "pair_sub": "Saisissez le code à 6 chiffres affiché sur l'écran du Cardputer.",
   "pair_pin_aria": "Code d'association",
@@ -14,7 +12,6 @@
   "pair_need_digits": "Saisissez les 6 chiffres.",
   "pair_net_error": "Erreur réseau : l’appareil est-il allumé ?",
   "pair_locked": "Trop de tentatives. Patientez un instant puis réessayez.",
-
   "start_pinned": "Épinglé",
   "start_allApps": "Toutes les applications",
   "start_recommended": "Recommandations",
@@ -25,7 +22,6 @@
   "start_power_title": "Redémarrer le Cardputer",
   "start_dl_win": "Télécharger l'application Windows",
   "start_dl_apk": "Télécharger NucleoMind (serveur LLM pour Android)",
-
   "tb_search_ph": "Rechercher",
   "tb_search_title": "Rechercher applications et fichiers",
   "tb_copilot_title": "ANIMA Copilot — Ctrl+Space",
@@ -33,9 +29,7 @@
   "tray_ws_title": "Connexion au Cardputer",
   "tray_net_title": "Réseau",
   "tray_clock_title": "Afficher la date",
-
   "drop_text": "Déposez pour envoyer sur la carte SD du Cardputer",
-
   "osdlg_browse": "Parcourir",
   "osdlg_open_title": "Ouvrir un fichier",
   "osdlg_save_title": "Enregistrer le fichier",
@@ -47,19 +41,16 @@
   "win_restore": "Restaurer",
   "win_close": "Fermer",
   "win_no_route": "Aucune page web déclarée.",
-
   "ac_theme_title": "Mode sombre",
   "ac_eco": "Éco",
   "ac_eco_title": "Mode Éco",
   "ac_brightness": "Luminosité",
-
   "ws_connected": "Cardputer connecté",
   "ws_reconnecting": "Reconnexion…",
   "ws_offline": "Cardputer hors ligne",
   "ws_evicted": "Un autre navigateur a le contrôle",
   "ws_evicted_body": "Un autre navigateur a pris le contrôle du Cardputer. Il n en sert qu un à la fois.",
   "ws_evicted_take": "Reprendre le contrôle",
-
   "toast_theme_saved": "Thème enregistré sur le Cardputer",
   "toast_theme_error": "Erreur lors de l'enregistrement du thème",
   "toast_uploading": "Envoi : {name}",
@@ -73,7 +64,6 @@
     "other": "Ces vidéos doivent être converties avec Video Studio (companion PC) : {names}"
   },
   "toast_lang_changed": "Langue: Français",
-
   "ctx_show_in_folder": "Afficher dans le dossier",
   "ctx_new_file_shortcut": "Nouveau raccourci vers un fichier…",
   "ctx_remove_reco": "Retirer des recommandations",
@@ -92,7 +82,6 @@
   "clipboard_empty": "Le presse-papiers est vide",
   "prompt_new_file_path": "Chemin du fichier SD (ex. /data/Music/song.mp3)",
   "prompt_link_url": "URL du lien (https://… ou /apps/…)",
-
   "ctx_open_all": "Tout ouvrir ({n})",
   "ctx_open_new": "Ouvrir dans un nouvel onglet",
   "ctx_properties": "Propriétés",
@@ -120,7 +109,6 @@
   "type_app": "Application",
   "type_file": "Fichier",
   "type_url": "Lien web",
-
   "ctx_new_shortcut": "Raccourci…",
   "lnk_broken": "Raccourci rompu ou cible manquante",
   "lnk_protected": "Vous ne pouvez pas créer de raccourci vers un fichier système",
@@ -136,7 +124,6 @@
   "overwrite_ok": "Écraser",
   "del_file_title": "Retirer du bureau ?",
   "del_file_body": "“{name}” est un vrai fichier dans le dossier Bureau. Il sera supprimé de la carte SD.",
-
   "start_pinned_tag": "épinglé",
   "reco_show": "Afficher les recommandations",
   "reco_hide": "Masquer les recommandations",
@@ -148,7 +135,6 @@
   "state_readonly": "Cardputer injoignable : le bureau, la session et le presse-papiers sont en lecture seule pour cette session — rien ne sera écrasé.",
   "search_indexing": "Indexation du Cardputer…",
   "search_anima": "Demander à ANIMA",
-
   "cat_app": "Applications",
   "cat_image": "Images",
   "cat_audio": "Audio",
@@ -158,7 +144,6 @@
   "cat_game": "Jeux",
   "cat_other": "Autres fichiers",
   "search_no_results": "Aucun résultat",
-
   "cat_actions": "Réglages et actions",
   "cat_actions_sub": "Commande système",
   "act_settings": "Ouvrir les Réglages",
@@ -185,7 +170,6 @@
   "act_desktop_kw": "bureau réduire fenêtres masquer",
   "act_reboot": "Redémarrer le Cardputer",
   "act_reboot_kw": "redémarrer éteindre appareil",
-
   "reboot_confirm": "Redémarrer le Cardputer ?",
   "rebooting": "Redémarrage…",
   "reboot_starting": "Redémarrage du Cardputer…",
@@ -197,7 +181,6 @@
   "busy_job_anima": "ANIMA en ligne",
   "busy_job_transcribe": "Transcription",
   "busy_tip": "L’appareil donne la priorité à une tâche lourde ; les applications peuvent répondre avec un léger délai.",
-
   "ac_night": "Nocturne",
   "ac_night_title": "Éclairage nocturne : couleurs plus chaudes",
   "ac_lock": "Verrouiller",
@@ -242,7 +225,10 @@
   "nc_remove": "Retirer",
   "nc_ask_anima": "Demander à ANIMA",
   "nc_reminder": "Rappel",
-  "nc_digest_count": {"one":"{n} notification","other":"{n} notifications"},
+  "nc_digest_count": {
+    "one": "{n} notification",
+    "other": "{n} notifications"
+  },
   "nc_digest_cal": "{n} calendrier",
   "nc_digest_unread": "{n} non lues",
   "nc_src_calendar": "Calendrier",
@@ -255,12 +241,10 @@
   "up_title_sec": "Mise à jour de sécurité NucleoOS",
   "up_body": "La version {tag} est prête à installer — ouvrez Réglages › Mises à jour.",
   "nc_src_app": "App",
-
   "amb_toggle_title": "Suggestions d'ANIMA",
   "amb_cal_body": "Commence à {time}",
   "amb_sd_title": "Carte SD presque pleine",
   "amb_sd_body": "Il ne reste que {pct}% d'espace",
-
   "app_agent": "Agents",
   "app_archive-manager": "Gestionnaire d'archives",
   "app_authenticator": "Authentificateur",
@@ -312,5 +296,13 @@
   "net_ap_title": "Point d'accès {ssid} · http://192.168.4.1",
   "remote_controlling": "Contrôle",
   "remote_title_one": "Ce navigateur contrôle l'appareil. L'écran du Cardputer est en pause.",
-  "remote_title_many": "Ce navigateur contrôle l'appareil ({n} sessions). L'écran du Cardputer est en pause."
+  "remote_title_many": "Ce navigateur contrôle l'appareil ({n} sessions). L'écran du Cardputer est en pause.",
+  "up_whatsnew": "Nouveautés",
+  "up_update_now": "Mettre à jour",
+  "up_later": "Plus tard",
+  "up_skip": "Ignorer cette version",
+  "up_pill_title": "Mise à jour disponible — nouveautés",
+  "up_ready": "{tag} est prête à installer",
+  "up_no_notes": "Aucune note de version.",
+  "up_sec_badge": "Sécurité"
 }

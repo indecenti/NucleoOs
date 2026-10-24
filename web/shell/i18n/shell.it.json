@@ -1,10 +1,8 @@
 {
   "_lang": "it",
   "_note": "Chrome dello shell NucleoOS (desktop, Start, taskbar, dialoghi, notifiche). Le stringhe generiche stanno in core.*.json. Tieni allineato con shell.en.json.",
-
   "mobile_title": "App Telefono in Arrivo",
   "mobile_body": "Collega lo smartphone a un monitor (modalità Desktop) per usare NucleoOS, oppure ruota il dispositivo.",
-
   "pair_title": "Associa questo dispositivo",
   "pair_sub": "Inserisci il codice a 6 cifre mostrato sullo schermo del Cardputer.",
   "pair_pin_aria": "Codice di accoppiamento",
@@ -14,7 +12,6 @@
   "pair_need_digits": "Inserisci tutte e 6 le cifre.",
   "pair_net_error": "Errore di rete: il dispositivo è acceso?",
   "pair_locked": "Troppi tentativi. Attendi un momento e riprova.",
-
   "start_pinned": "Aggiunte",
   "start_allApps": "Tutte le app",
   "start_recommended": "Consigliati",
@@ -25,7 +22,6 @@
   "start_power_title": "Riavvia il Cardputer",
   "start_dl_win": "Scarica l'app per Windows",
   "start_dl_apk": "Scarica NucleoMind (server LLM per Android)",
-
   "tb_search_ph": "Cerca",
   "tb_search_title": "Cerca app e file",
   "tb_copilot_title": "ANIMA Copilot — Ctrl+Spazio",
@@ -33,9 +29,7 @@
   "tray_ws_title": "Connessione al Cardputer",
   "tray_net_title": "Rete",
   "tray_clock_title": "Mostra la data",
-
   "drop_text": "Rilascia per caricare sulla SD del Cardputer",
-
   "osdlg_browse": "Sfoglia",
   "osdlg_open_title": "Apri file",
   "osdlg_save_title": "Salva file",
@@ -47,19 +41,16 @@
   "win_restore": "Ripristina",
   "win_close": "Chiudi",
   "win_no_route": "Nessuna pagina web dichiarata.",
-
   "ac_theme_title": "Modalità scura",
   "ac_eco": "Eco",
   "ac_eco_title": "Modalità Eco",
   "ac_brightness": "Luminosità",
-
   "ws_connected": "Cardputer connesso",
   "ws_reconnecting": "Riconnessione…",
   "ws_offline": "Cardputer offline",
   "ws_evicted": "Un altro browser ha il controllo",
   "ws_evicted_body": "Un altro browser ha preso il controllo del Cardputer. Ne serve uno alla volta.",
   "ws_evicted_take": "Riprendi il controllo",
-
   "toast_theme_saved": "Tema salvato sul Cardputer",
   "toast_theme_error": "Errore nel salvataggio del tema",
   "toast_uploading": "Caricamento: {name}",
@@ -73,7 +64,6 @@
     "other": "Questi video vanno convertiti col Video Studio (companion sul PC): {names}"
   },
   "toast_lang_changed": "Lingua: Italiano",
-
   "ctx_show_in_folder": "Mostra nella cartella",
   "ctx_new_file_shortcut": "Nuovo collegamento a file…",
   "ctx_remove_reco": "Rimuovi dai consigliati",
@@ -92,7 +82,6 @@
   "clipboard_empty": "Appunti vuoti",
   "prompt_new_file_path": "Percorso file SD (es. /data/Music/song.mp3)",
   "prompt_link_url": "URL del link (https://… o /apps/…)",
-
   "ctx_open_all": "Apri tutto ({n})",
   "ctx_open_new": "Apri in una nuova scheda",
   "ctx_properties": "Proprietà",
@@ -120,7 +109,6 @@
   "type_app": "Applicazione",
   "type_file": "File",
   "type_url": "Collegamento web",
-
   "ctx_new_shortcut": "Collegamento…",
   "lnk_broken": "Collegamento non valido o destinazione mancante",
   "lnk_protected": "Non puoi creare un collegamento a un file di sistema",
@@ -136,7 +124,6 @@
   "overwrite_ok": "Sovrascrivi",
   "del_file_title": "Eliminare dal desktop?",
   "del_file_body": "“{name}” è un file reale nella cartella Desktop. Verrà eliminato dalla SD.",
-
   "start_pinned_tag": "aggiunta",
   "reco_show": "Mostra i consigliati",
   "reco_hide": "Nascondi i consigliati",
@@ -148,7 +135,6 @@
   "state_readonly": "Cardputer non raggiungibile: scrivania, sessione e appunti sono in sola lettura per questa sessione — non verrà sovrascritto nulla.",
   "search_indexing": "Indicizzazione del Cardputer…",
   "search_anima": "Chiedi ad ANIMA",
-
   "cat_app": "App",
   "cat_image": "Immagini",
   "cat_audio": "Audio",
@@ -158,7 +144,6 @@
   "cat_game": "Giochi",
   "cat_other": "Altri file",
   "search_no_results": "Nessun risultato",
-
   "cat_actions": "Impostazioni e azioni",
   "cat_actions_sub": "Comando di sistema",
   "act_settings": "Apri Impostazioni",
@@ -185,7 +170,6 @@
   "act_desktop_kw": "desktop scrivania riduci finestre nascondi",
   "act_reboot": "Riavvia il Cardputer",
   "act_reboot_kw": "riavvia reboot spegni dispositivo",
-
   "reboot_confirm": "Riavviare il Cardputer?",
   "rebooting": "Riavvio in corso…",
   "reboot_starting": "Riavvio del Cardputer…",
@@ -197,7 +181,6 @@
   "busy_job_anima": "ANIMA online",
   "busy_job_transcribe": "Trascrizione",
   "busy_tip": "Il dispositivo sta dando precedenza a un lavoro pesante; le app potrebbero rispondere con un breve ritardo.",
-
   "ac_night": "Notturna",
   "ac_night_title": "Luce notturna: scalda i colori dello schermo",
   "ac_lock": "Blocca",
@@ -242,7 +225,10 @@
   "nc_remove": "Rimuovi",
   "nc_ask_anima": "Chiedi ad ANIMA",
   "nc_reminder": "Promemoria",
-  "nc_digest_count": {"one":"{n} notifica","other":"{n} notifiche"},
+  "nc_digest_count": {
+    "one": "{n} notifica",
+    "other": "{n} notifiche"
+  },
   "nc_digest_cal": "{n} calendario",
   "nc_digest_unread": "{n} da leggere",
   "nc_src_calendar": "Calendario",
@@ -255,12 +241,10 @@
   "up_title_sec": "Aggiornamento di sicurezza NucleoOS",
   "up_body": "La versione {tag} è pronta da installare — apri Impostazioni › Aggiornamenti.",
   "nc_src_app": "App",
-
   "amb_toggle_title": "Suggerimenti di ANIMA",
   "amb_cal_body": "Inizia alle {time}",
   "amb_sd_title": "SD quasi piena",
   "amb_sd_body": "Resta solo il {pct}% di spazio libero",
-
   "app_agent": "Agenti",
   "app_archive-manager": "Archivi ZIP",
   "app_authenticator": "Authenticator",
@@ -312,5 +296,13 @@
   "net_ap_title": "Punto di accesso {ssid} · http://192.168.4.1",
   "remote_controlling": "Controllo",
   "remote_title_one": "Questo browser controlla il dispositivo. Lo schermo del Cardputer è in pausa.",
-  "remote_title_many": "Questo browser controlla il dispositivo ({n} sessioni). Lo schermo del Cardputer è in pausa."
+  "remote_title_many": "Questo browser controlla il dispositivo ({n} sessioni). Lo schermo del Cardputer è in pausa.",
+  "up_whatsnew": "Novità",
+  "up_update_now": "Aggiorna ora",
+  "up_later": "Più tardi",
+  "up_skip": "Salta questa versione",
+  "up_pill_title": "Aggiornamento disponibile — novità",
+  "up_ready": "{tag} è pronta all'installazione",
+  "up_no_notes": "Nessuna nota di rilascio.",
+  "up_sec_badge": "Sicurezza"
 }

@@ -22,6 +22,8 @@ export const LS_CACHE = 'nucleo.update.cache';       // { etag, tag, name, url, 
 export const LS_NOTIFIED = 'nucleo.update.notified'; // [tags already announced in this browser]
 export const LS_ENABLED = 'nucleo.update.enabled';   // '0' = auto-check off (per browser — the check runs here)
 export const LS_BRIDGED = 'nucleo.update.bridged';   // last tag written to the card's update.json (native dialog)
+export const LS_SKIP = 'nucleo.update.skip';         // a tag the user chose to skip: no pill, no re-notify, until a newer one
+export const LS_AUTO = 'nucleo.update.auto';         // '1' = auto-apply opt-in (download+verify+install when idle)
 
 export const UPDATE_TTL_MS = 24 * 3600 * 1000;       // one conditional request per browser per day
 
