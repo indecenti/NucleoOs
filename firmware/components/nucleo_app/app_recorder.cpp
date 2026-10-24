@@ -119,15 +119,11 @@ static const unsigned short SURF = 0x10A2, CAP = 0x1A8B, ACC = 0xF96B /* recorde
 enum { M_LIST = 0, M_DETAIL, M_SETTINGS, M_ASK, M_PLAY };   // M_ASK = cross-note answer reader; M_PLAY = Now-Playing card
 enum { T_SUMMARY = 0, T_SCRIPT, T_ACTIONS, T_ASK, T_COUNT };
 enum { ST_AI = 0, ST_AUDIO, ST_INFO, ST_COUNT };
-// UI language flag — cached in enter() from sys_lang() (SD read, too costly in draw loops).
-// Must be declared before det_tab_label() which references it.
-static bool s_en = false;
-
 // Tab labels are language-selected at draw time via det_tab_label().
 static const char *const DET_TABS_IT[] = { "RIASSUNTO", "TESTO", "AZIONI", "CHIEDI" };
 static const char *const DET_TABS_EN[] = { "SUMMARY",   "SCRIPT", "ACTIONS", "ASK"  };
 static const char *const SET_TABS[]    = { "AI", "AUDIO", "INFO" };
-static inline const char *det_tab_label(int i) { return s_en ? DET_TABS_EN[i] : DET_TABS_IT[i]; }
+static inline const char *det_tab_label(int i) { return nucleo_tr(DET_TABS_IT[i], DET_TABS_EN[i]); }
 
 static int  s_mode    = M_LIST;
 static int  s_tab     = T_SUMMARY;      // active AI-reader tab
@@ -174,13 +170,13 @@ enum { JOB_TRANSCRIBE = 1, JOB_SUMMARY, JOB_ACTIONS, JOB_QA, JOB_TITLE, JOB_ASKA
 enum { AIERR_NONE = 0, AIERR_OFFLINE, AIERR_RAM, AIERR_EMPTY, AIERR_FAIL };
 static volatile int s_ai_err = AIERR_NONE;
 // Honest one-liner for the current AI failure. RAM is the common ADV case — never call it "offline".
-static const char *ai_err_msg(bool en)
+static const char *ai_err_msg(void)
 {
     switch (s_ai_err) {
-        case AIERR_OFFLINE: return en ? "AI off: enable online / key" : "AI off: attiva online/chiave";
-        case AIERR_RAM:     return en ? "Low RAM: close an app, retry" : "RAM bassa: chiudi un'app, riprova";
-        case AIERR_EMPTY:   return en ? "No speech detected"          : "Nessun parlato rilevato";
-        default:            return en ? "AI failed (network?)"        : "AI fallita (rete?)";
+        case AIERR_OFFLINE: return TR("AI off: attiva online/chiave", "AI off: enable online / key");
+        case AIERR_RAM:     return TR("RAM bassa: chiudi un'app, riprova", "Low RAM: close an app, retry");
+        case AIERR_EMPTY:   return TR("Nessun parlato rilevato", "No speech detected");
+        default:            return TR("AI fallita (rete?)", "AI failed (network?)");
     }
 }
 
@@ -955,7 +951,7 @@ static void detail_draw(int top, int h)
     d.setTextSize(1);
     if (s_job == 3) {
         d.setTextColor(ACC, BG); d.setCursor(8, footer_y + 2);
-        d.print(ai_err_msg(s_en));
+        d.print(ai_err_msg());
         return;
     }
     if (nucleo_audio_is_playing() && s_playing >= 0) { draw_transport(footer_y); return; }
@@ -1316,7 +1312,7 @@ static void draw_library(int top, int h)
     }
     if (s_job == 3) {
         d.setTextColor(ACC, BG); d.setCursor(8, footer_y + 2);
-        d.print(ai_err_msg(s_en)); return;
+        d.print(ai_err_msg()); return;
     }
     if (nucleo_audio_is_playing() && s_playing >= 0) { draw_transport(footer_y); return; }
 
@@ -1540,8 +1536,6 @@ static void rec_ptt(bool on)
 static void enter(void)
 {
     load_settings();
-    // Cache UI language once per open (sys_lang() hits SD — avoid calling it in draw loops).
-    s_en = !strncasecmp(sys_lang(), "en", 2);
     nucleo_app_set_tab_handler(rec_tab);
     nucleo_app_set_back_handler(rec_back);
     nucleo_app_set_ptt_handler(rec_ptt);            // GO-hold = push-to-talk record while this app is open

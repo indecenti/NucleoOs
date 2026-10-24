@@ -146,14 +146,14 @@ static void do_refresh(bool relocate)
 {
     int top = nucleo_app_content_top(), h = nucleo_app_content_height();
     d.fillRect(0, top, 240, h, BG);
-    d.setTextSize(2); d.setTextColor(ACC, BG); d.setCursor(8, top + 8); d.print("Meteo");
-    d.setTextSize(2); d.setTextColor(MUTED, BG); d.setCursor(8, top + 44); d.print("Carico...");
+    d.setTextSize(2); d.setTextColor(ACC, BG); d.setCursor(8, top + 8); d.print(TR("Meteo", "Weather"));
+    d.setTextSize(2); d.setTextColor(MUTED, BG); d.setCursor(8, top + 44); d.print(TR("Carico...", "Loading..."));
 
     esp_task_wdt_reset();
     net_up();                                       // free contiguous heap for the TLS handshake(s)
     bool have_loc = (!relocate && s_w.place[0]) || (!relocate && nucleo_weather_cache_load(&s_w));
     if (!have_loc) {
-        d.setTextSize(2); d.setTextColor(MUTED, BG); d.setCursor(8, top + 72); d.print("Cerco posizione...");
+        d.setTextSize(2); d.setTextColor(MUTED, BG); d.setCursor(8, top + 72); d.print(TR("Cerco posizione...", "Locating..."));
         esp_task_wdt_reset();
         have_loc = nucleo_weather_locate_ip(&s_w);
         if (have_loc) nucleo_weather_cache_save(&s_w);
@@ -177,8 +177,8 @@ static bool text_input(const char *title, char *buf, int maxlen)
             d.fillRoundRect(8, top + 40, 224, 26, 4, LINE);
             d.setTextSize(2); d.setTextColor(FG, LINE); d.setCursor(14, top + 46); d.print(len ? buf : "");
             if (len) { int cw = 12; d.fillRect(14 + len * cw, top + 44, 2, 18, ACC); }   // caret
-            d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(8, top + 80); d.print("digita il nome, ENTER conferma");
-            d.setTextColor(DIM, BG); d.setCursor(8, top + 94); d.print("`  annulla");
+            d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(8, top + 80); d.print(TR("digita il nome, ENTER conferma", "type the name, ENTER confirms"));
+            d.setTextColor(DIM, BG); d.setCursor(8, top + 94); d.print(TR("`  annulla", "`  cancel"));
             dirty = false;
         }
         esp_task_wdt_reset();
@@ -194,10 +194,10 @@ static bool text_input(const char *title, char *buf, int maxlen)
 static void add_city_flow(void)
 {
     char name[40];
-    if (!text_input("Aggiungi citta", name, sizeof name)) return;
+    if (!text_input(TR("Aggiungi citta", "Add city"), name, sizeof name)) return;
     int top = nucleo_app_content_top();
     d.fillRect(0, top, 240, nucleo_app_content_height(), BG);
-    d.setTextSize(2); d.setTextColor(MUTED, BG); d.setCursor(8, top + 40); d.print("Cerco citta...");
+    d.setTextSize(2); d.setTextColor(MUTED, BG); d.setCursor(8, top + 40); d.print(TR("Cerco citta...", "Finding city..."));
     esp_task_wdt_reset();
     nucleo_weather_t tmp; memset(&tmp, 0, sizeof tmp);
     net_up();
@@ -206,7 +206,7 @@ static void add_city_flow(void)
     if (found) fav_add(tmp.place, tmp.lat, tmp.lon);
     else {
         d.fillRect(0, top, 240, nucleo_app_content_height(), BG);
-        d.setTextSize(2); d.setTextColor(WARN, BG); d.setCursor(8, top + 40); d.print("Citta non trovata");
+        d.setTextSize(2); d.setTextColor(WARN, BG); d.setCursor(8, top + 40); d.print(TR("Citta non trovata", "City not found"));
         d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(8, top + 66); d.print(name);
         for (int i = 0; i < 80; i++) { esp_task_wdt_reset(); vTaskDelay(pdMS_TO_TICKS(20)); nucleo_key_t k = nucleo_kbd_read(); if (k.key) break; }
     }
@@ -269,9 +269,9 @@ static void draw_now(int top, int h)
 {
     char ln[40];
     if (!s_ok) {
-        d.setTextSize(2); d.setTextColor(WARN, BG); d.setCursor(8, top + 22); d.print("Non disponibile");
-        d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(8, top + 48); d.print(s_w.place[0] ? s_w.place : "Serve il Wi-Fi.");
-        d.setCursor(8, top + 64); d.print("Premi  r  per riprovare.");
+        d.setTextSize(2); d.setTextColor(WARN, BG); d.setCursor(8, top + 22); d.print(TR("Non disponibile", "Unavailable"));
+        d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(8, top + 48); d.print(s_w.place[0] ? s_w.place : TR("Serve il Wi-Fi.", "Wi-Fi needed."));
+        d.setCursor(8, top + 64); d.print(TR("Premi  r  per riprovare.", "Press  r  to retry."));
         return;
     }
     d.setTextSize(2); d.setTextColor(FG, BG); d.setCursor(6, top + 2); d.print(s_w.place);
@@ -285,14 +285,14 @@ static void draw_now(int top, int h)
     d.drawCircle(tx + 5, top + 30, 2, SUN);                                       // degree ring
     d.setCursor(tx + 11, top + 26); { char u[2] = { Tu(), 0 }; d.print(u); }
 
-    d.setTextSize(2); d.setTextColor(SUN, BG); d.setCursor(92, top + 56); d.print(weather_wmo_label(s_w.code));
+    d.setTextSize(2); d.setTextColor(SUN, BG); d.setCursor(92, top + 56); d.print(TR(weather_wmo_label(s_w.code), weather_wmo_label_en(s_w.code)));
     d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(92, top + 76);
-    snprintf(ln, sizeof ln, "percepiti %d%c", Tc(s_w.feels), Tu()); d.print(ln);
+    snprintf(ln, sizeof ln, TR("percepiti %d%c", "feels %d%c"), Tc(s_w.feels), Tu()); d.print(ln);
 
     // metric row — bigger values
     int y = top + 94, pp = s_w.n_days ? s_w.day[0].precip_prob : 0;
     d.setTextSize(1); d.setTextColor(MUTED, BG);
-    d.setCursor(8, y);   d.print("Umidita");  d.setCursor(92, y);  d.print("Vento");  d.setCursor(168, y); d.print("Pioggia");
+    d.setCursor(8, y);   d.print(TR("Umidita", "Humidity"));  d.setCursor(92, y);  d.print(TR("Vento", "Wind"));  d.setCursor(168, y); d.print(TR("Pioggia", "Rain"));
     d.setTextSize(2); d.setTextColor(ACC, BG); d.setCursor(8, y + 11);   snprintf(ln, sizeof ln, "%d%%", s_w.humidity); d.print(ln);
     d.setTextColor(GRN, BG); d.setCursor(92, y + 11);  snprintf(ln, sizeof ln, "%d", (int)lroundf(s_w.wind)); d.print(ln); d.setTextSize(1); d.print(" km/h");
     d.setTextSize(2); d.setTextColor(RAIN, BG); d.setCursor(168, y + 11); snprintf(ln, sizeof ln, "%d%%", pp); d.print(ln);
@@ -300,14 +300,14 @@ static void draw_now(int top, int h)
 
 static void draw_fcast(int top, int h)
 {
-    if (!s_ok || s_w.n_days == 0) { d.setTextSize(2); d.setTextColor(WARN, BG); d.setCursor(8, top + 26); d.print("Non disponibile"); return; }
+    if (!s_ok || s_w.n_days == 0) { d.setTextSize(2); d.setTextColor(WARN, BG); d.setCursor(8, top + 26); d.print(TR("Non disponibile", "Unavailable")); return; }
     int rows = s_w.n_days; if (rows > 6) rows = 6;
     int rowh = h / rows;
     for (int i = 0; i < rows; i++) {
         int y0 = top + i * rowh, cy = y0 + rowh / 2; char ln[12];
         if (i) d.drawLine(6, y0, 234, y0, LINE);                            // subtle separator
         d.setTextSize(2); d.setTextColor(i == 0 ? SUN : FG, BG); d.setCursor(8, cy - 8);
-        d.print(i == 0 ? "Oggi" : weather_dow_short(s_w.day[i].dow));
+        d.print(i == 0 ? TR("Oggi", "Today") : TR(weather_dow_short(s_w.day[i].dow), weather_dow_short_en(s_w.day[i].dow)));
         draw_wx(86, cy, rowh * 0.27f, weather_wmo_icon(s_w.day[i].code));
         int hi = Tc(s_w.day[i].tmax), lo = Tc(s_w.day[i].tmin);
         unsigned short hc = (hi >= 28) ? WARN : (hi <= 4 ? ACC : FG);       // warm=orange, cold=blue
@@ -320,13 +320,13 @@ static void draw_fcast(int top, int h)
 
 static void draw_favs(int top, int h)
 {
-    d.setTextSize(2); d.setTextColor(ACC, BG); d.setCursor(8, top + 4); d.print("Citta preferite");
+    d.setTextSize(2); d.setTextColor(ACC, BG); d.setCursor(8, top + 4); d.print(TR("Citta preferite", "Favourite cities"));
     int total = s_fav_n + 1, rowh = 22, maxrows = (h - 30) / rowh;
     int start = 0; if (s_fav_sel >= maxrows) start = s_fav_sel - maxrows + 1;
     int y = top + 30;
     for (int i = start; i < total && i < start + maxrows; i++) {
         bool on = (i == s_fav_sel), add = (i == s_fav_n);
-        const char *lab = add ? "+ Aggiungi citta" : s_fav[i].place;
+        const char *lab = add ? TR("+ Aggiungi citta", "+ Add city") : s_fav[i].place;
         if (add && !on) {                                   // green "add" affordance when not focused
             d.setTextSize(2); d.setTextColor(GRN, BG); d.setCursor(14, y + (rowh - 16) / 2); d.print(lab);
         } else {

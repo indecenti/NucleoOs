@@ -38,7 +38,7 @@ const GRAPHICS_EXEMPT = new Set([
 // bare 0xXXXX, the literal is being fed to the renderer — a raw-color violation.
 const DRAW_SINK = /\b(?:d\.[A-Za-z]\w*|setTextColor|fillRect|fillRoundRect|drawRoundRect|drawRect|fillCircle|drawCircle|fillTriangle|drawFastHLine|drawFastVLine|drawLine|drawPixel|fillArc|drawArc|fillScreen|setColor|drawString|drawCircleHelper|fillSmoothRoundRect)\s*\(/;
 const HEX = /\b0x[0-9A-Fa-f]{4}\b/;
-const HINT_BARE = /nucleo_app_set_hint\s*\(\s*"/;
+const HINT_BARE = /nucleo_app_set_hint\s*\(\s*"(?!")/;   // "" (clear the hint) has nothing to translate
 
 // Strip // and /* */ comments so a hex in a comment never trips the lint. Also drops string literals so
 // a color-like token inside "text 0x1234" (rare) isn't flagged — colors are numeric args, not strings.

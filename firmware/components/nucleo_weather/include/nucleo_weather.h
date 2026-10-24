@@ -19,8 +19,10 @@ typedef enum {
 
 wx_icon_t   weather_wmo_icon(int code);
 const char *weather_wmo_label(int code);                 // Italian, short
+const char *weather_wmo_label_en(int code);              // English, short (UI picks with TR)
 int         weather_dow(int year, int month, int day);   // 0=Sun..6=Sat (Sakamoto)
 const char *weather_dow_short(int dow);                  // "Dom".."Sab"
+const char *weather_dow_short_en(int dow);               // "Sun".."Sat"
 bool        weather_parse_date(const char *iso, int *y, int *m, int *d);   // "YYYY-MM-DD"
 
 // ---- model (filled by the device fetch) --------------------------------------------------------

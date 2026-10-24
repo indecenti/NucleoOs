@@ -353,13 +353,15 @@ static void save_settings(void)
 // ---- app_ui_list callbacks (EFFETTO tab) -------------------------------------
 static const char *mode_label(int i, void *)
 {
-    static const char *const N[] = { "Spento","Orologio","Stelle","Fuoco","► Prova" };
-    return (unsigned)i < 5 ? N[i] : "";
+    static const char *const N[]    = { "Spento","Orologio","Stelle","Fuoco","► Prova" };
+    static const char *const N_EN[] = { "Off","Clock","Stars","Fire","► Test" };
+    return (unsigned)i < 5 ? nucleo_tr(N[i], N_EN[i]) : "";
 }
 static const char *mode_right(int i, void *)
 {
-    static const char *const D[] = { "schermo spento","rimbalzante","campo stellare","fuoco", nullptr };
-    return (unsigned)i < 4 ? D[i] : nullptr;
+    static const char *const D[]    = { "schermo spento","rimbalzante","campo stellare","fuoco", nullptr };
+    static const char *const D_EN[] = { "screen off","bouncing","starfield","fire", nullptr };
+    return (unsigned)i < 4 ? nucleo_tr(D[i], D_EN[i]) : nullptr;
 }
 static unsigned short mode_color(int i, void *)
 {
@@ -374,7 +376,7 @@ static void draw_settings(void)
     int ch = nucleo_app_content_height();
 
     if (s_tab == 0) {
-        int y0 = app_ui_title("EFFETTO", C_PURPLE, "TAB ►");
+        int y0 = app_ui_title(TR("EFFETTO", "EFFECT"), C_PURPLE, "TAB ►");
         app_ui_list(y0, ch - 24, 5, s_sel, mode_label, mode_right, mode_color, nullptr);
     } else {
         int y0 = app_ui_title("TIMER", C_PURPLE, "◄ TAB");
@@ -389,7 +391,7 @@ static void draw_settings(void)
         else if (sec % 60 == 0) snprintf(sv, sizeof sv, "%d min", sec / 60);
         else                    snprintf(sv, sizeof sv, "%dm %ds", sec / 60, sec % 60);
 
-        const char *sub = "Attivazione automatica dopo";
+        const char *sub = TR("Attivazione automatica dopo", "Starts automatically after");
         d.setTextSize(1); d.setTextColor(C_GREY, BG);
         d.setCursor((W - (int)strlen(sub) * 6) / 2, y0 + 6);
         d.print(sub);
@@ -408,7 +410,7 @@ static void draw_settings(void)
         d.setCursor((W - (int)strlen(hlp) * 6) / 2, vy + 22);
         d.print(hlp);
 
-        const char *sts = g_threshold_ms > 0 ? "Attivo" : "Disabilitato";
+        const char *sts = g_threshold_ms > 0 ? TR("Attivo", "On") : TR("Disabilitato", "Disabled");
         d.setTextColor(g_threshold_ms > 0 ? C_GREEN : C_RED, BG);
         d.setCursor((W - (int)strlen(sts) * 6) / 2, vy + 36);
         d.print(sts);

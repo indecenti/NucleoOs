@@ -18,6 +18,7 @@
 #include "launcher_theme.h"
 #include "nucleo_board.h"   // NUCLEO_SD_MOUNT
 #include "cJSON.h"          // read the web-created QR library off the SD
+#include "nucleo_i18n.h"    // TR(it,en): captions follow the system language
 
 // Network/auth getters (resolved at final link; same extern hatch nucleo_app.cpp uses).
 extern "C" const char *nucleo_setup_ip(void);
@@ -79,21 +80,21 @@ static void rebuild(void)
 
     if (s_src == SRC_PAIR) {
         snprintf(s_payload, sizeof s_payload, "http://%s", sta ? ip : "192.168.4.1");
-        snprintf(cap, sizeof cap, "Apri %s  PIN %s", sta ? ip : "192.168.4.1", nucleo_auth_pin());
+        snprintf(cap, sizeof cap, TR("Apri %s  PIN %s", "Open %s  PIN %s"), sta ? ip : "192.168.4.1", nucleo_auth_pin());
     } else if (s_src == SRC_WIFI) {
         const char *ssid = nucleo_setup_ssid();
         snprintf(s_payload, sizeof s_payload, "WIFI:T:WPA;S:%s;P:%s;;", ssid[0] ? ssid : "?", s_text);
         snprintf(cap, sizeof cap, "Wi-Fi %s  pass: %s_", ssid[0] ? ssid : "?", s_text);
     } else if (s_src == SRC_SAVED) {
-        if (s_sv_n == 0) { s_payload[0] = 0; snprintf(cap, sizeof cap, "Salvati: nessun QR dal web OS"); }
+        if (s_sv_n == 0) { s_payload[0] = 0; snprintf(cap, sizeof cap, "%s", TR("Salvati: nessun QR dal web OS", "Saved: no QR from the web OS")); }
         else {
             if (s_sv_sel >= s_sv_n) s_sv_sel = 0;
             snprintf(s_payload, sizeof s_payload, "%s", s_sv_data[s_sv_sel]);
-            snprintf(cap, sizeof cap, "Salvati %d/%d: %s", s_sv_sel + 1, s_sv_n, s_sv_label[s_sv_sel]);
+            snprintf(cap, sizeof cap, TR("Salvati %d/%d: %s", "Saved %d/%d: %s"), s_sv_sel + 1, s_sv_n, s_sv_label[s_sv_sel]);
         }
     } else {
         snprintf(s_payload, sizeof s_payload, "%s", s_text);
-        snprintf(cap, sizeof cap, "Testo: %s_", s_text);
+        snprintf(cap, sizeof cap, TR("Testo: %s_", "Text: %s_"), s_text);
     }
     nucleo_app_set_hint(cap);
     nucleo_app_request_draw();
@@ -105,8 +106,8 @@ static void draw(void)
     d.fillRect(0, 0, W, ch, 0xFFFF);        // full-white panel (extends the quiet zone)
 
     if (!s_payload[0]) {
-        const char *m1 = (s_src == SRC_SAVED) ? "Nessun QR salvato" : "Scrivi un testo";
-        const char *m2 = (s_src == SRC_SAVED) ? "creane dal web OS" : "o un URL, poi inquadra";
+        const char *m1 = (s_src == SRC_SAVED) ? TR("Nessun QR salvato", "No saved QR") : TR("Scrivi un testo", "Type some text");
+        const char *m2 = (s_src == SRC_SAVED) ? TR("creane dal web OS", "make them in the web OS") : TR("o un URL, poi inquadra", "or a URL, then scan it");
         d.setTextColor(0x0000, 0xFFFF); d.setTextSize(2);
         d.setCursor(28, 36); d.print(m1);
         d.setTextSize(1); d.setTextColor(0x8410, 0xFFFF);

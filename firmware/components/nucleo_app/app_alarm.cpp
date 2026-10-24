@@ -78,7 +78,8 @@ enum { PP_CHANGE = 0, PP_WIPE };        // what the challenge unlocks
 static int      s_pin_stage, s_pin_purpose;
 static bool     s_pin_bad;              // wrong current PIN -> stay on stage 1 and say so
 static int64_t  s_pin_ok_until;         // confirmation-toast deadline
-static const char *s_toast = "";        // what that toast says
+static const char *s_toast = "";        // what that toast says (Italian literal)
+static const char *s_toast_en = "";     // ...and its English twin, picked with TR() at paint time
 static bool     s_dirty_cfg;            // options changed -> persist on the way out
 
 // trigger bookkeeping + stealth screen
@@ -108,7 +109,8 @@ static int      s_saved_vol = -1;
 static float audio_thr(void)   { return 0.30f  - (float)(s_sens_audio  - 1) * (0.30f  - 0.015f) / (SENS_MAX - 1); }  // peak 0..1
 static float motion_e_thr(void){ return 0.45f  - (float)(s_sens_motion - 1) * (0.45f  - 0.030f) / (SENS_MAX - 1); }  // shake energy
 static float motion_t_thr(void){ return 0.30f  - (float)(s_sens_motion - 1) * (0.30f  - 0.020f) / (SENS_MAX - 1); }  // tilt delta
-static const char *const SRC_NAME[3] = { "Microfono", "Movimento", "Entrambi" };
+static const char *const SRC_NAME[3]    = { "Microfono", "Movimento", "Entrambi" };
+static const char *const SRC_NAME_EN[3] = { "Microphone", "Motion", "Both" };   // picked at paint time
 static const int         DELAYS[4]   = { 3, 5, 10, 15 };
 // Auto re-arm is not a bool: it IS the trigger window. After this many seconds the siren stops, the
 // alarm re-arms itself and the screen goes dark — in the silent mode too. 0 = off (hold until PIN).
@@ -402,24 +404,27 @@ static const char *aset_label(int i)
     static const char *const L[ASET_ROWS] = { "Sorgente", "Modo", "Sens. audio", "Sens. moto",
                                               "Ritardo armo", "PIN", "Test sirena", "Auto-riarmo",
                                               "Registra muto", "Cancella log" };
-    return (i >= 0 && i < ASET_ROWS) ? L[i] : "";
+    static const char *const L_EN[ASET_ROWS] = { "Source", "Mode", "Audio sens.", "Motion sens.",
+                                                 "Arm delay", "PIN", "Siren test", "Auto re-arm",
+                                                 "Silent rec", "Clear log" };
+    return (i >= 0 && i < ASET_ROWS) ? TR(L[i], L_EN[i]) : "";
 }
 static const char *aset_right(int i)
 {
     static char b[16];
     switch (i) {
-        case R_SRC: if (s_src != SRC_MIC && !nucleo_imu_present()) return "solo Mic"; return SRC_NAME[s_src];
-        case R_MODE: return s_mode == MODE_SILENT ? "Silenzioso" : "Sirena";
+        case R_SRC: if (s_src != SRC_MIC && !nucleo_imu_present()) return TR("solo Mic", "Mic only"); return TR(SRC_NAME[s_src], SRC_NAME_EN[s_src]);
+        case R_MODE: return s_mode == MODE_SILENT ? TR("Silenzioso", "Silent") : TR("Sirena", "Siren");
         case R_SENS_A: snprintf(b, sizeof b, "%d/20", s_sens_audio); return b;
-        case R_SENS_M: if (!nucleo_imu_present()) return "n/d"; snprintf(b, sizeof b, "%d/20", s_sens_motion); return b;
+        case R_SENS_M: if (!nucleo_imu_present()) return TR("n/d", "n/a"); snprintf(b, sizeof b, "%d/20", s_sens_motion); return b;
         case R_DELAY: snprintf(b, sizeof b, "%ds", DELAYS[s_delay_idx]); return b;
-        case R_PIN: return "INVIO";
-        case R_TEST: return "INVIO";
+        case R_PIN: return TR("INVIO", "ENTER");
+        case R_TEST: return TR("INVIO", "ENTER");
         case R_REARM: if (!REARM[s_rearm_idx]) return "off"; snprintf(b, sizeof b, "%ds", REARM[s_rearm_idx]); return b;
-        case R_REC: if (s_mode != MODE_SILENT) return "n/d";      // the siren owns the I2S: no capture
+        case R_REC: if (s_mode != MODE_SILENT) return TR("n/d", "n/a");      // the siren owns the I2S: no capture
                     if (!REC_MIN[s_rec_idx]) return "off";
                     snprintf(b, sizeof b, "%dmin", REC_MIN[s_rec_idx]); return b;
-        case R_LOG: { long n = log_size(); if (!n) return "vuoto"; snprintf(b, sizeof b, "%ldKB", (n + 1023) / 1024); return b; }
+        case R_LOG: { long n = log_size(); if (!n) return TR("vuoto", "empty"); snprintf(b, sizeof b, "%ldKB", (n + 1023) / 1024); return b; }
     }
     return "";
 }
@@ -509,7 +514,7 @@ static void disarm_to_idle(void)
 static void start_arming(void)
 {
     if (!motion_on() && !audio_on()) {          // ENTER used to do nothing at all here
-        s_toast = "Nessun sensore attivo"; s_pin_ok_until = esp_timer_get_time() + 2000000;
+        s_toast = "Nessun sensore attivo"; s_toast_en = "No sensor enabled"; s_pin_ok_until = esp_timer_get_time() + 2000000;
         nucleo_app_request_draw();
         return;
     }
@@ -703,13 +708,13 @@ static void on_key(int key, char ch)
                         else if (s_pin_purpose == PP_WIPE) {     // erasing the evidence needs the PIN
                             log_wipe();
                             s_pin_edit = false;
-                            s_toast = "Log cancellati"; s_pin_ok_until = esp_timer_get_time() + 2000000;
+                            s_toast = "Log cancellati"; s_toast_en = "Logs cleared"; s_pin_ok_until = esp_timer_get_time() + 2000000;
                         } else { s_pin_stage = PIN_NEW; s_pin_buf_len = 0; }
                     } else {
                         s_pin_hash = pin_hash(s_pin_buf);
                         s_dirty_cfg = true; cfg_save();          // a new PIN is persisted IMMEDIATELY
                         s_pin_edit = false;
-                        s_toast = "PIN aggiornato"; s_pin_ok_until = esp_timer_get_time() + 2000000;
+                        s_toast = "PIN aggiornato"; s_toast_en = "PIN updated"; s_pin_ok_until = esp_timer_get_time() + 2000000;
                     }
                 }
                 nucleo_app_request_draw();
@@ -755,18 +760,18 @@ static void draw_settings(int y0, int bottom)
     if (s_pin_edit) {
         bool old = (s_pin_stage == PIN_OLD);
         bool wipe = (s_pin_purpose == PP_WIPE);
-        center(old ? "PIN attuale" : "Nuovo PIN", y0 + 14, 2, old ? C_YELLOW : FG, BG);
+        center(old ? TR("PIN attuale", "Current PIN") : TR("Nuovo PIN", "New PIN"), y0 + 14, 2, old ? C_YELLOW : FG, BG);
         draw_pin_dots((y0 + bottom) / 2, s_pin_buf_len, old ? C_YELLOW : C_BLUE, BG);
-        if (s_pin_bad)   center("PIN errato - riprova", bottom - 16, 1, C_RED, BG);
-        else if (!old)   center("4 cifre  -  ESC cancella", bottom - 16, 1, MUTED, BG);
-        else if (wipe)   center("PIN per cancellare i log", bottom - 16, 1, C_RED, BG);
-        else             center("conferma il PIN in uso", bottom - 16, 1, MUTED, BG);
+        if (s_pin_bad)   center(TR("PIN errato - riprova", "Wrong PIN - retry"), bottom - 16, 1, C_RED, BG);
+        else if (!old)   center(TR("4 cifre  -  ESC cancella", "4 digits  -  ESC cancel"), bottom - 16, 1, MUTED, BG);
+        else if (wipe)   center(TR("PIN per cancellare i log", "PIN to clear the logs"), bottom - 16, 1, C_RED, BG);
+        else             center(TR("conferma il PIN in uso", "confirm the current PIN"), bottom - 16, 1, MUTED, BG);
         return;
     }
     // No "Impostazioni" caption: the app title sits right above, and those 22 px are worth two more
     // rows on a 135 px panel. The toast takes that space only while it is up.
     bool toast = esp_timer_get_time() < s_pin_ok_until;
-    if (toast) center(s_toast, y0 + 2, 2, C_GREEN, BG);
+    if (toast) center(TR(s_toast, s_toast_en), y0 + 2, 2, C_GREEN, BG);
     int rowh = 18, y = y0 + (toast ? 22 : 2), maxrows = (bottom - y) / rowh;
     int start = 0; if (s_set_sel >= maxrows) start = s_set_sel - maxrows + 1;
     for (int i = start; i < ASET_ROWS && i < start + maxrows; i++) {
@@ -797,37 +802,37 @@ static void draw(void)
 
     static char rb[16];
     const char *rl = "off"; unsigned short acc = MUTED;
-    if (s_state == ST_ARMING)         { rl = "armo"; acc = C_YELLOW; }
-    else if (s_state == ST_ARMED)     { rl = s_mode == MODE_SILENT ? "MUTO" : "ON"; acc = C_GREEN; }
+    if (s_state == ST_ARMING)         { rl = TR("armo", "arming"); acc = C_YELLOW; }
+    else if (s_state == ST_ARMED)     { rl = s_mode == MODE_SILENT ? TR("MUTO", "MUTE") : "ON"; acc = C_GREEN; }
     else if (s_state == ST_TRIGGERED) { rl = "!!!";  acc = C_RED;    }
     if (s_rec) rl = "REC";                                                                   // the tape is rolling
     if (s_trig_count > 0) { snprintf(rb, sizeof rb, "%s %d", rl, s_trig_count); rl = rb; }   // hit counter, always in view
-    int y0 = app_ui_title("Allarme", acc, rl);
+    int y0 = app_ui_title(TR("Allarme", "Alarm"), acc, rl);
     int cy = (y0 + bottom) / 2;
 
     if (s_settings) { draw_settings(y0, bottom); return; }
 
     if (s_state == ST_DISARMED) {
-        center("DISARMATO", cy - 22, 3, FG, BG);
-        center("INVIO per armare", cy + 6, 2, MUTED, BG);
+        center(TR("DISARMATO", "DISARMED"), cy - 22, 3, FG, BG);
+        center(TR("INVIO per armare", "ENTER to arm"), cy + 6, 2, MUTED, BG);
         char ln[44];
-        const char *src = (s_src != SRC_MIC && !nucleo_imu_present()) ? "Microfono" : SRC_NAME[s_src];
-        const char *md  = (s_mode == MODE_SILENT) ? "silenzioso" : "sirena";
+        const char *src = (s_src != SRC_MIC && !nucleo_imu_present()) ? TR("Microfono", "Microphone") : TR(SRC_NAME[s_src], SRC_NAME_EN[s_src]);
+        const char *md  = (s_mode == MODE_SILENT) ? TR("silenzioso", "silent") : TR("sirena", "siren");
         bool toast = esp_timer_get_time() < s_pin_ok_until;
-        if (toast)                 snprintf(ln, sizeof ln, "%s", s_toast);
-        else if (s_trig_count > 0) snprintf(ln, sizeof ln, "%s  %d eventi  ultimo %s", md, s_trig_count, s_trig_last);
-        else                       snprintf(ln, sizeof ln, "%s  %s  ritardo %ds", src, md, DELAYS[s_delay_idx]);
+        if (toast)                 snprintf(ln, sizeof ln, "%s", TR(s_toast, s_toast_en));
+        else if (s_trig_count > 0) snprintf(ln, sizeof ln, TR("%s  %d eventi  ultimo %s", "%s  %d events  last %s"), md, s_trig_count, s_trig_last);
+        else                       snprintf(ln, sizeof ln, TR("%s  %s  ritardo %ds", "%s  %s  delay %ds"), src, md, DELAYS[s_delay_idx]);
         center(ln, bottom - 14, 1, toast ? C_RED : DIM, BG);
     } else if (s_state == ST_ARMING) {
         char nb[8]; snprintf(nb, sizeof nb, "%d", s_arm_shown > 0 ? s_arm_shown : 1);
         center(nb, y0 + 12, 6, C_YELLOW, BG);
-        center("allontanati...", bottom - 16, 2, MUTED, BG);
+        center(TR("allontanati...", "walk away..."), bottom - 16, 2, MUTED, BG);
     } else if (s_state == ST_ARMED) {
-        center("ARMATO", y0 + 4, 3, C_GREEN, BG);            // 28..52
+        center(TR("ARMATO", "ARMED"), y0 + 4, 3, C_GREEN, BG);            // 28..52
         int by = y0 + 42, bw = W - 64, bx = 32;              // first bar 66..74, label at 56
         if (motion_on()) {
             float frac = nucleo_imu_energy() / motion_e_thr(); if (frac > 1) frac = 1;
-            d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(bx, by - 10); d.print("movimento");
+            d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(bx, by - 10); d.print(TR("movimento", "motion"));
             d.drawRect(bx, by, bw, 8, MUTED); d.fillRect(bx + 1, by + 1, (int)((bw - 2) * frac), 6, frac > 0.8f ? C_RED : C_GREEN);
             by += 22;                                        // second bar 88..96
         }
@@ -839,22 +844,22 @@ static void draw(void)
             d.drawRect(bx, by, bw, 8, dead ? C_RED : MUTED);
             d.fillRect(bx + 1, by + 1, (int)((bw - 2) * frac), 6, frac > 0.8f ? C_RED : C_BLUE);
         }
-        if (s_bad) center("PIN errato", bottom - 18, 2, C_RED, BG);
+        if (s_bad) center(TR("PIN errato", "Wrong PIN"), bottom - 18, 2, C_RED, BG);
         else if (s_rec) {                                    // two size-1 lines fit where one size-2 did
             char rc[40];
             rec_clock(rc, sizeof rc);
             center(rc, bottom - 18, 1, C_RED, BG);
-            center("digita il PIN", bottom - 9, 1, MUTED, BG);
-        } else center("digita il PIN", bottom - 18, 2, MUTED, BG);
+            center(TR("digita il PIN", "type the PIN"), bottom - 9, 1, MUTED, BG);
+        } else center(TR("digita il PIN", "type the PIN"), bottom - 18, 2, MUTED, BG);
     } else {   // TRIGGERED
         bool silent = (s_mode == MODE_SILENT);
-        center(silent ? "! RILEVATO !" : "! ALLARME !", y0 + 10, 3, silent ? C_YELLOW : FG, bg);
+        center(silent ? TR("! RILEVATO !", "! DETECTED !") : TR("! ALLARME !", "! ALARM !"), y0 + 10, 3, silent ? C_YELLOW : FG, bg);
         draw_pin_dots(cy + 6, s_entry_len, FG, bg);
-        if (s_bad) { center("PIN errato", bottom - 16, 2, FG, bg); return; }
+        if (s_bad) { center(TR("PIN errato", "Wrong PIN"), bottom - 16, 2, FG, bg); return; }
         char ln[40];
         int rem = rearm_us() ? (int)((rearm_us() - (esp_timer_get_time() - s_trig_t0)) / 1000000) + 1 : 0;
-        if (rem > 0) snprintf(ln, sizeof ln, "%s %s  riarmo in %ds", silent ? "muto" : "sirena", s_trig_last, rem);
-        else         snprintf(ln, sizeof ln, "%s %s  PIN per fermare", silent ? "muto" : "sirena", s_trig_last);
+        if (rem > 0) snprintf(ln, sizeof ln, TR("%s %s  riarmo in %ds", "%s %s  re-arm in %ds"), silent ? TR("muto", "mute") : TR("sirena", "siren"), s_trig_last, rem);
+        else         snprintf(ln, sizeof ln, TR("%s %s  PIN per fermare", "%s %s  PIN to stop"), silent ? TR("muto", "mute") : TR("sirena", "siren"), s_trig_last);
         center(ln, bottom - 22, 1, FG, bg);
         if (s_rec) { char rc[40]; rec_clock(rc, sizeof rc); center(rc, bottom - 12, 1, C_RED, bg); }
     }

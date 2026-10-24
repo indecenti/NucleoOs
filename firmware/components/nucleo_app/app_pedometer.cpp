@@ -25,8 +25,9 @@ static int      s_set_sel;
 #define PSET_ROWS 3
 static const char *pset_label(int i, void *)
 {
-    static const char *L[PSET_ROWS] = { "Obiettivo", "Passo (cm)", "Azzera passi" };
-    return (i >= 0 && i < PSET_ROWS) ? L[i] : "";
+    static const char *L[PSET_ROWS]    = { "Obiettivo", "Passo (cm)", "Azzera passi" };
+    static const char *L_EN[PSET_ROWS] = { "Goal",      "Stride (cm)", "Reset steps" };
+    return (i >= 0 && i < PSET_ROWS) ? nucleo_tr(L[i], L_EN[i]) : "";
 }
 static const char *pset_right(int i, void *)
 {
@@ -34,7 +35,7 @@ static const char *pset_right(int i, void *)
     switch (i) {
         case 0: snprintf(b, sizeof b, "%u", s_goal);   return b;
         case 1: snprintf(b, sizeof b, "%d", s_stride); return b;
-        case 2: return "INVIO";
+        case 2: return TR("INVIO", "ENTER");
     }
     return "";
 }
@@ -102,12 +103,12 @@ static void draw(void)
     char rgt[16];
     if (!present) snprintf(rgt, sizeof(rgt), "NO IMU");
     else snprintf(rgt, sizeof(rgt), "%d%%", (int)(prog * 100));
-    int y0 = app_ui_title("Contapassi", !present ? C_YELLOW : done ? C_GREEN : C_BLUE, rgt);
+    int y0 = app_ui_title(TR("Contapassi", "Pedometer"), !present ? C_YELLOW : done ? C_GREEN : C_BLUE, rgt);
 
     if (!present) {
         d.setTextSize(2); d.setTextColor(C_YELLOW, BG);
-        d.setCursor(12, y0 + 18); d.print("Sensore IMU");
-        d.setCursor(12, y0 + 40); d.print("non rilevato");
+        d.setCursor(12, y0 + 18); d.print(TR("Sensore IMU", "IMU sensor"));
+        d.setCursor(12, y0 + 40); d.print(TR("non rilevato", "not found"));
         return;
     }
     if (s_settings) {
@@ -138,7 +139,7 @@ static void draw(void)
     d.setTextSize(ts); d.setTextColor(done ? C_GREEN : FG, BG);
     d.setCursor(nx, y0 + 6); d.print(sb);
     d.setTextSize(1); d.setTextColor(MUTED, BG);
-    d.setCursor(nx, y0 + 8 + 8 * ts); d.print("passi");
+    d.setCursor(nx, y0 + 8 + 8 * ts); d.print(TR("passi", "steps"));
 
     float dist_m = s_steps * (s_stride / 100.0f);
     char ln[24];
@@ -147,7 +148,7 @@ static void draw(void)
     d.setTextSize(2); d.setTextColor(FG, BG);
     d.setCursor(nx, bottom - 38); d.print(ln);
     d.setTextSize(1); d.setTextColor(MUTED, BG);
-    char cb[24]; snprintf(cb, sizeof(cb), "%d passi/min", (int)(s_cad + 0.5f));
+    char cb[24]; snprintf(cb, sizeof(cb), TR("%d passi/min", "%d steps/min"), (int)(s_cad + 0.5f));
     d.setCursor(nx, bottom - 16); d.print(cb);
 }
 

@@ -68,7 +68,7 @@ static bool s_topick = false; static int s_tpsel = 0, s_tpscroll = 0;
 // editor
 static bool s_ed = false; static char *s_edbuf = NULL; static size_t s_edcap = 0;
 static bool s_edsecret = false, s_ednum = false, s_edwiz = false;
-static const char *s_edlabel = ""; static EdT s_edt = ED_NONE;
+static const char *s_edlabel = "", *s_edlabel_en = ""; static EdT s_edt = ED_NONE;
 static bool s_blink = false; static int s_blink_n = 0;
 // wizard
 static bool s_wiz = false; static int s_wseq[8], s_wn = 0, s_wi = 0; static bool s_wcustom = false;
@@ -152,18 +152,18 @@ static void start_send(void) {
     if (s_sending) return;
     int def = nucleo_mailcfg_default();
     smtp_account_t acc;
-    if (def < 0 || !nucleo_mailcfg_get(def, &acc)) { set_status("Nessun account"); return; }
-    if (!M->to[0] || !M->body[0]) { set_status("A: e Testo obbligatori"); return; }
-    if (!strchr(M->to, '@') || !strchr(M->to, '.')) { set_status("Indirizzo non valido"); return; }
+    if (def < 0 || !nucleo_mailcfg_get(def, &acc)) { set_status(TR("Nessun account", "No account")); return; }
+    if (!M->to[0] || !M->body[0]) { set_status(TR("A: e Testo obbligatori", "To and Text required")); return; }
+    if (!strchr(M->to, '@') || !strchr(M->to, '.')) { set_status(TR("Indirizzo non valido", "Invalid address")); return; }
     s_sending = true; s_send_done = false; s_send_phase = 1;
-    set_status("Invio in corso...");
+    set_status(TR("Invio in corso...", "Sending..."));
 }
 
 // ===========================================================================
 // editor
-static void editor_open(const char *label, char *buf, size_t cap, bool secret, bool numeric, bool wiz, EdT t) {
+static void editor_open(const char *label, const char *label_en, char *buf, size_t cap, bool secret, bool numeric, bool wiz, EdT t) {
     s_ed = true; s_edbuf = buf; s_edcap = cap; s_edsecret = secret; s_ednum = numeric; s_edwiz = wiz;
-    s_edlabel = label; s_edt = t; s_blink = true;
+    s_edlabel = label; s_edlabel_en = label_en; s_edt = t; s_blink = true;
     nucleo_app_set_hint(t == ED_TO ? TR5("scrivi   tab contatto   invio ok", "type   tab contact   enter ok", "escr.   tab contacto   enter ok", "taper   tab contact   entree ok", "tippe   tab kontakt   enter ok")
                                    : TR5("scrivi   invio ok   esc annulla", "type   enter ok   esc cancel", "escribe   enter ok   esc cancel", "taper   entree ok   esc annuler", "tippe   enter ok   esc abbr."));
     mark();
@@ -190,13 +190,14 @@ static void build_wseq(bool custom, bool editing) {
 static void wiz_show(void) {
     s_ed = false;
     switch (s_wseq[s_wi]) {
-        case WS_HOST:  editor_open("Host SMTP", M->edit.host, sizeof M->edit.host, false, false, true, ED_W_HOST); break;
+        case WS_HOST:  editor_open("Host SMTP", "SMTP host", M->edit.host, sizeof M->edit.host, false, false, true, ED_W_HOST); break;
         case WS_PORT:  snprintf(M->portbuf, sizeof M->portbuf, "%d", M->edit.port);
-                       editor_open("Porta", M->portbuf, sizeof M->portbuf, false, true, true, ED_W_PORT); break;
-        case WS_EMAIL: editor_open("Email", M->edit.user, sizeof M->edit.user, false, false, true, ED_W_EMAIL); break;
+                       editor_open("Porta", "Port", M->portbuf, sizeof M->portbuf, false, true, true, ED_W_PORT); break;
+        case WS_EMAIL: editor_open("Email", "Email", M->edit.user, sizeof M->edit.user, false, false, true, ED_W_EMAIL); break;
         case WS_PASS:  editor_open(s_edit_idx < 0 ? "Password app" : "Password (vuoto=invariata)",
+                                   s_edit_idx < 0 ? "App password" : "Password (empty=keep)",
                                    M->edit.pass, sizeof M->edit.pass, true, false, true, ED_W_PASS); break;
-        case WS_NAME:  editor_open("Nome mittente", M->edit.from_name, sizeof M->edit.from_name, false, false, true, ED_W_NAME); break;
+        case WS_NAME:  editor_open("Nome mittente", "Sender name", M->edit.from_name, sizeof M->edit.from_name, false, false, true, ED_W_NAME); break;
         default:       mark(); break;
     }
 }
@@ -212,7 +213,7 @@ static void wiz_save(void) {
     if (M->edit.from[0] == 0) strncpy(M->edit.from, M->edit.user, sizeof M->edit.from - 1);
     int r = nucleo_mailcfg_set(s_edit_idx, &M->edit);
     s_wiz = false; s_ed = false; reload();
-    set_status(r >= 0 ? "Account salvato" : "Errore salvataggio");
+    set_status(r >= 0 ? TR("Account salvato", "Account saved") : TR("Errore salvataggio", "Save error"));
 }
 static void wiz_next(void) {
     if (s_wseq[s_wi] == WS_CONFIRM) { wiz_save(); return; }
@@ -277,10 +278,10 @@ static void draw_dots(int y, int cur, int n) {
 }
 static void draw_editor(void) {
     d.fillScreen(BG);
-    draw_header(s_edwiz ? "Configura" : "Scrivi");
+    draw_header(s_edwiz ? TR("Configura", "Setup") : TR("Scrivi", "Write"));
     if (s_edwiz) draw_dots(HDR + 8, s_wi, s_wn);
     int y = s_edwiz ? HDR + 18 : CT + 2;
-    txt(8, y, s_edlabel, 2, MUTED); y += 22;
+    txt(8, y, TR(s_edlabel, s_edlabel_en), 2, MUTED); y += 22;
     char shown[160]; const char *v = s_edbuf ? s_edbuf : "";
     if (s_edsecret) { int n = (int)strlen(v); if (n > 24) n = 24; memset(shown, '*', n); shown[n] = 0; v = shown; }
     int maxc = 18, lh = 22, lines = 0, len = (int)strlen(v), p = 0; char line[22];
@@ -301,8 +302,8 @@ static void draw_editor(void) {
             txt(8, sy + i * 16, b, 1, pick ? ACC : MUTED);
         }
     }
-    const char *foot = (s_edt == ED_W_NAME) ? "Invio = salta/avanti" : "Invio = avanti";
-    if (s_edt == ED_TO || s_edt == ED_SUBJ || s_edt == ED_BODY) foot = "Invio = conferma";
+    const char *foot = (s_edt == ED_W_NAME) ? TR("Invio = salta/avanti", "Enter = skip/next") : TR("Invio = avanti", "Enter = next");
+    if (s_edt == ED_TO || s_edt == ED_SUBJ || s_edt == ED_BODY) foot = TR("Invio = conferma", "Enter = confirm");
     txt(8, CB - 16, foot, 1, MUTED);
 }
 static void draw_wizard(void) {
@@ -322,15 +323,16 @@ static void draw_wizard(void) {
             d.fillRect(W - 3, top, 2, th, THEME_LINE); d.fillRect(W - 3, ky, 2, kh, ACC); }
         return;
     }
-    draw_header("Conferma"); draw_dots(HDR + 8, s_wi, s_wn);
+    draw_header(TR("Conferma", "Confirm")); draw_dots(HDR + 8, s_wi, s_wn);
     int y = HDR + 18; char l[64];
     snprintf(l, sizeof l, "%s", M->edit.name[0] ? M->edit.name : M->edit.host); txt(8, y, l, 2, ACC); y += 20;
     snprintf(l, sizeof l, "%.30s", M->edit.user); txt(8, y, l, 2, FG); y += 18;
     snprintf(l, sizeof l, "%s:%d", M->edit.host, M->edit.port); txt(8, y, l, 1, MUTED); y += 14;
-    txt(8, y, M->edit.pass[0] ? "Password: impostata" : (s_edit_idx < 0 ? "Password: MANCANTE" : "Password: invariata"),
+    txt(8, y, M->edit.pass[0] ? TR("Password: impostata", "Password: set")
+                             : (s_edit_idx < 0 ? TR("Password: MANCANTE", "Password: MISSING") : TR("Password: invariata", "Password: unchanged")),
         1, (M->edit.pass[0] || s_edit_idx >= 0) ? C_GREEN : C_RED);
     d.fillRoundRect(8, CB - 26, W - 16, 22, 6, ACC);
-    ctxt(CB - 21, "INVIO = Salva", 2, WHITE);
+    ctxt(CB - 21, TR("INVIO = Salva", "ENTER = Save"), 2, WHITE);
 }
 static void draw_acct(void) {
     d.fillScreen(BG); draw_header("Account");
@@ -341,40 +343,41 @@ static void draw_acct(void) {
                  M->accts[i].name[0] ? M->accts[i].name : M->accts[i].user);
         items[i] = M->rowbuf[i]; dim[i] = false;
     }
-    items[s_nacct] = "+ Nuovo account"; dim[s_nacct] = true;
+    items[s_nacct] = TR("+ Nuovo account", "+ New account"); dim[s_nacct] = true;
     draw_list(items, dim, n, s_asel, CT);
     if (s_status[0]) txt(8, CB - 13, s_status, 1, C_GREEN);
-    else txt(8, CB - 13, "Invio=apri  X=canc  T=default", 1, MUTED);
+    else txt(8, CB - 13, TR("Invio=apri  X=canc  T=default", "Enter=open  X=del  T=default"), 1, MUTED);
 }
 static void draw_topick(void) {
-    d.fillScreen(BG); draw_header("Destinatario");
+    d.fillScreen(BG); draw_header(TR("Destinatario", "Recipient"));
     static const char *items[7]; static bool dim[7];
-    items[0] = "+ Nuovo indirizzo"; dim[0] = true;
+    items[0] = TR("+ Nuovo indirizzo", "+ New address"); dim[0] = true;
     for (int i = 0; i < s_nrec; ++i) { items[i + 1] = M->rec[i]; dim[i + 1] = false; }
     draw_list(items, dim, s_nrec + 1, s_tpsel, CT);
 }
 static void draw_write(void) {
-    d.fillScreen(BG); draw_header("Scrivi");
-    if (s_sending) { ctxt((CB + HDR) / 2 - 8, "Invio in corso...", 2, ACC); return; }
-    static const char *pre[3] = { "A:  ", "Ogg: ", "Txt: " };
-    const char *val[3] = { M->to[0] ? M->to : "(scegli)", M->subj[0] ? M->subj : "(vuoto)", M->body[0] ? M->body : "(vuoto)" };
+    d.fillScreen(BG); draw_header(TR("Scrivi", "Write"));
+    if (s_sending) { ctxt((CB + HDR) / 2 - 8, TR("Invio in corso...", "Sending..."), 2, ACC); return; }
+    static const char *pre[3]    = { "A:  ", "Ogg: ", "Txt: " };
+    static const char *pre_en[3] = { "To: ", "Sub: ", "Txt: " };
+    const char *val[3] = { M->to[0] ? M->to : TR("(scegli)", "(pick)"), M->subj[0] ? M->subj : TR("(vuoto)", "(empty)"), M->body[0] ? M->body : TR("(vuoto)", "(empty)") };
     int y = HDR + 4, rh = 22;
     for (int i = 0; i < 3; ++i) {
         bool s = (s_wfield == i);
         if (s) d.fillRoundRect(4, y, W - 8, rh - 1, 5, ACC);
-        char b[30]; snprintf(b, sizeof b, "%s%.21s", pre[i], val[i]);
+        char b[30]; snprintf(b, sizeof b, "%s%.21s", TR(pre[i], pre_en[i]), val[i]);
         for (char *q = b; *q; ++q) if (*q == '\n') *q = ' ';
         txt(8, y + 4, b, 2, s ? WHITE : FG); y += rh;
     }
     bool s = (s_wfield == 3);
     d.fillRoundRect(8, y + 1, W - 16, rh, 6, s ? C_GREEN : THEME_LINE);
-    ctxt(y + 5, "INVIA", 2, s ? WHITE : FG); y += rh + 2;
+    ctxt(y + 5, TR("INVIA", "SEND"), 2, s ? WHITE : FG); y += rh + 2;
     if (s_status[0]) txt(6, y, s_status, 1, s_send_ok ? C_GREEN : C_RED);
 }
 static void draw_sent(void) {
-    d.fillScreen(BG); draw_header("Inviate");
+    d.fillScreen(BG); draw_header(TR("Inviate", "Sent"));
     FILE *f = fopen(SENT_LOG, "r");
-    if (!f) { ctxt((CB + HDR) / 2, "Nessuna inviata", 2, MUTED); return; }
+    if (!f) { ctxt((CB + HDR) / 2, TR("Nessuna inviata", "None sent"), 2, MUTED); return; }
     int n = 0; char buf[120];
     while (fgets(buf, sizeof buf, f)) {
         size_t L = strlen(buf); while (L && (buf[L - 1] == '\n' || buf[L - 1] == '\r')) buf[--L] = 0;
@@ -382,7 +385,7 @@ static void draw_sent(void) {
         strncpy(M->sent[n % 8], buf, 103); M->sent[n % 8][103] = 0; n++;
     }
     fclose(f);
-    if (!n) { ctxt((CB + HDR) / 2, "Nessuna inviata", 2, MUTED); return; }
+    if (!n) { ctxt((CB + HDR) / 2, TR("Nessuna inviata", "None sent"), 2, MUTED); return; }
     int show = (n < 4) ? n : 4, y = CT;
     for (int i = 0; i < show; ++i) {
         int idx = (n - 1 - i) % 8; if (idx < 0) idx += 8;
@@ -400,7 +403,7 @@ static void draw_sent(void) {
 static void on_draw(void) {
     if (!s_dirty) return;
     s_dirty = false;
-    if (!M) { d.fillScreen(BG); ctxt(CB / 2, "Memoria insufficiente", 2, C_RED); return; }
+    if (!M) { d.fillScreen(BG); ctxt(CB / 2, TR("Memoria insufficiente", "Out of memory"), 2, C_RED); return; }
     if (s_ed)          draw_editor();
     else if (s_wiz)    draw_wizard();
     else if (s_topick) draw_topick();
@@ -436,7 +439,7 @@ static void on_key(int key, char ch) {
         else if (key == NK_CHAR && ch >= '1' && ch <= '9' && (ch - '0') <= s_nrec) {
             strncpy(M->to, M->rec[ch - '1'], sizeof M->to - 1); s_topick = false; mark();
         } else if (key == NK_ENTER || key == NK_RIGHT) {
-            if (s_tpsel == 0) { s_topick = false; editor_open("A", M->to, sizeof M->to, false, false, false, ED_TO); }
+            if (s_tpsel == 0) { s_topick = false; editor_open("A", "To", M->to, sizeof M->to, false, false, false, ED_TO); }
             else { strncpy(M->to, M->rec[s_tpsel - 1], sizeof M->to - 1); s_topick = false; mark(); }
         }
         return;
@@ -450,9 +453,9 @@ static void on_key(int key, char ch) {
         } else if (key == NK_ENTER || key == NK_RIGHT) {
             if (s_asel == s_nacct) wiz_start_new(); else wiz_start_edit(s_asel);
         } else if (key == NK_CHAR && (ch == 'x' || ch == 'X') && s_asel < s_nacct) {
-            nucleo_mailcfg_delete(s_asel); reload(); set_status("Eliminato");
+            nucleo_mailcfg_delete(s_asel); reload(); set_status(TR("Eliminato", "Deleted"));
         } else if (key == NK_CHAR && (ch == 't' || ch == 'T') && s_asel < s_nacct) {
-            nucleo_mailcfg_set_default(s_asel); reload(); set_status("Default impostato");
+            nucleo_mailcfg_set_default(s_asel); reload(); set_status(TR("Default impostato", "Default set"));
         }
         return;
     }
@@ -461,9 +464,9 @@ static void on_key(int key, char ch) {
         else if (key == NK_DOWN && s_wfield < W_FIELDS - 1) { s_wfield++; mark(); }
         else if (key == NK_ENTER || key == NK_RIGHT) {
             if (s_wfield == 0) { if (s_nrec) { s_topick = true; s_tpsel = 0; mark(); }
-                                 else editor_open("A", M->to, sizeof M->to, false, false, false, ED_TO); }
-            else if (s_wfield == 1) editor_open("Oggetto", M->subj, sizeof M->subj, false, false, false, ED_SUBJ);
-            else if (s_wfield == 2) editor_open("Testo", M->body, sizeof M->body, false, false, false, ED_BODY);
+                                 else editor_open("A", "To", M->to, sizeof M->to, false, false, false, ED_TO); }
+            else if (s_wfield == 1) editor_open("Oggetto", "Subject", M->subj, sizeof M->subj, false, false, false, ED_SUBJ);
+            else if (s_wfield == 2) editor_open("Testo", "Text", M->body, sizeof M->body, false, false, false, ED_BODY);
             else start_send();
         }
         return;
@@ -480,14 +483,14 @@ static void on_tick(void) {
         int def = nucleo_mailcfg_default();
         if (!job || def < 0 || !nucleo_mailcfg_get(def, &job->acc)) {
             free(job); s_sending = false; s_send_phase = 0;
-            nucleo_app_set_direct_draw(false); nucleo_screen_acquire(); set_status("Memoria insufficiente"); return;
+            nucleo_app_set_direct_draw(false); nucleo_screen_acquire(); set_status(TR("Memoria insufficiente", "Out of memory")); return;
         }
         strncpy(job->to, M->to, sizeof job->to - 1); job->to[sizeof job->to - 1] = 0;
         strncpy(job->subj, M->subj, sizeof job->subj - 1); job->subj[sizeof job->subj - 1] = 0;
         strncpy(job->body, M->body, sizeof job->body - 1); job->body[sizeof job->body - 1] = 0;
         if (xTaskCreate(smtp_task, "smtpw", 8192, job, 4, NULL) != pdPASS) {
             free(job); s_sending = false; s_send_phase = 0;
-            nucleo_app_set_direct_draw(false); nucleo_screen_acquire(); set_status("Memoria insufficiente");
+            nucleo_app_set_direct_draw(false); nucleo_screen_acquire(); set_status(TR("Memoria insufficiente", "Out of memory"));
         }
         return;
     }
@@ -495,8 +498,8 @@ static void on_tick(void) {
         s_send_done = false; s_send_phase = 0;
         nucleo_app_set_direct_draw(false); nucleo_screen_acquire();
         nucleo_mailcfg_log_sent(M->to, M->subj, s_send_ok);
-        if (s_send_ok) { add_recent(M->to); set_status("Inviata!"); M->to[0] = M->subj[0] = M->body[0] = 0; s_wfield = 0; }
-        else { char m[64]; snprintf(m, sizeof m, "Errore: %.40s", s_send_err[0] ? s_send_err : "?"); set_status(m); }
+        if (s_send_ok) { add_recent(M->to); set_status(TR("Inviata!", "Sent!")); M->to[0] = M->subj[0] = M->body[0] = 0; s_wfield = 0; }
+        else { char m[64]; snprintf(m, sizeof m, TR("Errore: %.40s", "Error: %.40s"), s_send_err[0] ? s_send_err : "?"); set_status(m); }
     }
     if (s_status[0] && s_status_until && esp_timer_get_time() > s_status_until) { s_status[0] = 0; s_status_until = 0; mark(); }
     if (s_ed) { if (++s_blink_n >= 3) { s_blink_n = 0; s_blink = !s_blink; mark(); } }

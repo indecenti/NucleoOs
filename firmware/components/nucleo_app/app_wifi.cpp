@@ -1516,7 +1516,8 @@ static void draw_sd_later(void)
     // dark theme is the contrast a phone camera locks on; the url never outgrows version 3 (see the header).
     const int qs = 99, qx = W - qs - 2, qy = 21, lw = qx - 10;
     char url[64]; snprintf(url, sizeof url, NUCLEO_SDC_HELP_URL "%s", nucleo_sdcontent_fw_tag());
-    d.fillRect(qx, qy, qs, qs, 0xFFFF);
+    static const uint16_t QR_QUIET = 0xFFFF;   // quiet zone is always white, whatever the theme
+    d.fillRect(qx, qy, qs, qs, QR_QUIET);
     d.qrcode(url, qx, qy, qs, 3, false);
     f2(6, 24, TR5("Con il Wi-Fi:", "With Wi-Fi:", "Con Wi-Fi:", "Avec le Wi-Fi:", "Mit WLAN:"), lw, MUTED, BG, false);
     f2(6, 39, TR5("Impostazioni", "Settings", "Ajustes", "Reglages", "Einstellungen"), lw, ACC, BG, false);

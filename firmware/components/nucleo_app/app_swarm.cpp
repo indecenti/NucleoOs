@@ -43,9 +43,9 @@ static void on_draw(void) {
     d.fillRect(0, 0, W, ch, BG);
 
     // ── header: accent title + hairline (app_ui_title) with a membership pill on the right ──
-    int y0 = app_ui_title("Sciame", ACC, nullptr);
+    int y0 = app_ui_title(TR("Sciame", "Swarm"), ACC, nullptr);
     bool open = swarm_svc_is_open();
-    const char *stx = open ? "APERTO" : "PROTETTO";
+    const char *stx = open ? TR("APERTO", "OPEN") : TR("PROTETTO", "SECURE");
     uint16_t sc = open ? AMB : GRN;
     int pw = (int)strlen(stx) * 6 + 12;
     d.fillRoundRect(W - 8 - pw, 4, pw, 15, 7, sc);
@@ -55,9 +55,9 @@ static void on_draw(void) {
     int bot = ch - 19;
     if (!n) {
         // big, readable empty state — say what to do (smartwatch idiom)
-        txt(10, y0 + 14, "Nessun vicino", FG, BG, 2);
-        txt(10, y0 + 40, "Apri Sciame sull'altro", MUTED, BG, 1);
-        txt(10, y0 + 54, "Cardputer, stesso canale.", MUTED, BG, 1);
+        txt(10, y0 + 14, TR("Nessun vicino", "No peers"), FG, BG, 2);
+        txt(10, y0 + 40, TR("Apri Sciame sull'altro", "Open Swarm on the other"), MUTED, BG, 1);
+        txt(10, y0 + 54, TR("Cardputer, stesso canale.", "Cardputer, same channel."), MUTED, BG, 1);
     } else {
         if (s_sel >= n) s_sel = n - 1;
         if (s_sel < 0)  s_sel = 0;
@@ -69,7 +69,7 @@ static void on_draw(void) {
     int iy = ch - 17;
     d.fillRoundRect(6, iy, W - 12, 15, 5, SURF);
     if (last[0]) txt(12, iy + 4, last, AMB, SURF, 1);
-    else { char ft[48]; snprintf(ft, sizeof ft, "io: %.12s   INVIO = ping", swarm_svc_name()); txt(12, iy + 4, ft, MUTED, SURF, 1); }
+    else { char ft[48]; snprintf(ft, sizeof ft, TR("io: %.12s   INVIO = ping", "me: %.12s   ENTER = ping"), swarm_svc_name()); txt(12, iy + 4, ft, MUTED, SURF, 1); }
 }
 
 static void on_key(int key, char chr) {

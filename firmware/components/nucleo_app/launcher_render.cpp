@@ -641,7 +641,7 @@ void launcher_draw_icon(M5GFX *c, int cx, int cy, int r, const char *id, char le
 // unmissable. Returns the label (into buf) or NULL when nothing offensive is armed.
 static const char *offensive_alert(char *buf, int cap)
 {
-    if (nucleo_evilportal_running())     { snprintf(buf, cap, "EVIL PORTAL  %d catt.", nucleo_evilportal_captures()); return buf; }
+    if (nucleo_evilportal_running())     { snprintf(buf, cap, TR("EVIL PORTAL  %d catt.", "EVIL PORTAL  %d caps"), nucleo_evilportal_captures()); return buf; }
     if (nucleo_wifiatk_deauth_running()) { snprintf(buf, cap, "DEAUTH FLOOD  %lu fr", nucleo_wifiatk_frames());        return buf; }
     if (nucleo_wifiatk_beacon_running()) { snprintf(buf, cap, "BEACON SPAM  %d SSID", nucleo_wifiatk_beacon_count()); return buf; }
     return NULL;

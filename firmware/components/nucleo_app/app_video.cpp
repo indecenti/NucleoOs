@@ -448,7 +448,7 @@ static void draw_controller(const char *title, const char *next_title, uint32_t 
 static void draw_video_help(int bri, int vol, bool muted)
 {
     d.fillScreen(CO_BG);
-    d.setTextSize(2); d.setTextColor(ACC, CO_BG); d.setCursor(10, 6); d.print("Comandi");
+    d.setTextSize(2); d.setTextColor(ACC, CO_BG); d.setCursor(10, 6); d.print(TR("Comandi", "Controls"));
     d.drawFastHLine(10, 26, 220, CO_LINE);
 
     auto bar = [&](int y, const char *lbl, int pct, unsigned short col) {
@@ -460,17 +460,20 @@ static void draw_video_help(int bri, int vol, bool muted)
         char v[8]; snprintf(v, sizeof v, "%d%%", pct);
         d.setTextColor(col, CO_BG); d.setCursor(198, y); d.print(v);
     };
-    bar(34, "- =   Luce", bri, CO_WARM);
-    if (muted) { d.setTextSize(1); d.setTextColor(MUTERED, CO_BG); d.setCursor(10, 48); d.print("; .   Volume   (MUTO: m)"); }
+    bar(34, TR("- =   Luce", "- =   Light"), bri, CO_WARM);
+    if (muted) { d.setTextSize(1); d.setTextColor(MUTERED, CO_BG); d.setCursor(10, 48); d.print(TR("; .   Volume   (MUTO: m)", "; .   Volume   (MUTED: m)")); }
     else       bar(48, "; .   Volume", vol, GRN);
 
-    static const char *const rk[6] = { ", /", "[ ]", "INVIO", "0-9", "m   t", "TAB" };
-    static const char *const rd[6] = { "indietro / avanti", "clip prec / succ", "play / pausa",
-                                       "salta al 10..90%", "muto / tempo restante", "chiudi   (ESC esci)" };
+    static const char *const rk[6]    = { ", /", "[ ]", "INVIO", "0-9", "m   t", "TAB" };
+    static const char *const rk_en[6] = { ", /", "[ ]", "ENTER", "0-9", "m   t", "TAB" };
+    static const char *const rd[6]    = { "indietro / avanti", "clip prec / succ", "play / pausa",
+                                          "salta al 10..90%", "muto / tempo restante", "chiudi   (ESC esci)" };
+    static const char *const rd_en[6] = { "back / forward", "prev / next clip", "play / pause",
+                                          "jump to 10..90%", "mute / time left", "close   (ESC exit)" };
     int y = 66;
     for (int i = 0; i < 6; i++) {
-        d.setTextSize(1); d.setTextColor(ACC, CO_BG); d.setCursor(10, y);  d.print(rk[i]);
-        d.setTextColor(CO_TXT, CO_BG); d.setCursor(58, y); d.print(rd[i]);
+        d.setTextSize(1); d.setTextColor(ACC, CO_BG); d.setCursor(10, y);  d.print(TR(rk[i], rk_en[i]));
+        d.setTextColor(CO_TXT, CO_BG); d.setCursor(58, y); d.print(TR(rd[i], rd_en[i]));
         y += 11;
     }
 }
@@ -549,14 +552,14 @@ static FILE *video_index_sidecar(const char *vpath, FILE *f, const nfv_header_t 
     // draw the wait screen once — only the percentage chip refreshes in the loop below
     d.fillScreen(BG);
     d.setTextSize(2); d.setTextColor(ACC, BG);
-    { const char *h = "Preparazione indice"; d.setCursor((240 - (int)strlen(h) * 12) / 2, 8); d.print(h); }
+    { const char *h = TR("Preparazione indice", "Building index"); d.setCursor((240 - (int)strlen(h) * 12) / 2, 8); d.print(h); }
     d.drawFastHLine(0, 28, 240, DIM);
     d.setTextSize(1); d.setTextColor(DIM, BG);
-    { const char *s1 = "Analisi fotogrammi in corso."; d.setCursor((240 - (int)strlen(s1) * 6) / 2, 38); d.print(s1); }
-    { const char *s2 = "Prima apertura: puo' richiedere"; d.setCursor((240 - (int)strlen(s2) * 6) / 2, 50); d.print(s2); }
-    { const char *s3 = "qualche minuto di attesa."; d.setCursor((240 - (int)strlen(s3) * 6) / 2, 60); d.print(s3); }
+    { const char *s1 = TR("Analisi fotogrammi in corso.", "Scanning the frames."); d.setCursor((240 - (int)strlen(s1) * 6) / 2, 38); d.print(s1); }
+    { const char *s2 = TR("Prima apertura: puo' richiedere", "First open: this can take"); d.setCursor((240 - (int)strlen(s2) * 6) / 2, 50); d.print(s2); }
+    { const char *s3 = TR("qualche minuto di attesa.", "a few minutes."); d.setCursor((240 - (int)strlen(s3) * 6) / 2, 60); d.print(s3); }
     d.drawFastHLine(0, 104, 240, DIM);
-    { const char *es = "[ ESC ]  annulla"; d.setCursor((240 - (int)strlen(es) * 6) / 2, 110); d.print(es); }
+    { const char *es = TR("[ ESC ]  annulla", "[ ESC ]  cancel"); d.setCursor((240 - (int)strlen(es) * 6) / 2, 110); d.print(es); }
 
     fseek(f, sizeof *H, SEEK_SET);
     long off = (long)sizeof *H; bool ok = true;
@@ -1611,8 +1614,8 @@ static const char *const HELP_LINES[] = {
     "Mono 16 kHz: lo speaker non",
     "rende sopra ~6 kHz - leggero,",
     "stesso suono.",
-    "",
-    "#=== ENGLISH ===",
+};
+static const char *const HELP_LINES_EN[] = {
     "#PLAYS (on the Cardputer)",
     "Only .nfv files (v1/v2/v3).",
     "Inside are JPEG frames; v3",
@@ -1633,13 +1636,18 @@ static const char *const HELP_LINES[] = {
     "above ~6 kHz - lighter, same",
     "sound.",
 };
-static const int HELP_N = (int)(sizeof HELP_LINES / sizeof HELP_LINES[0]);
+static const int HELP_N_IT = (int)(sizeof HELP_LINES / sizeof HELP_LINES[0]);
+static const int HELP_N_EN = (int)(sizeof HELP_LINES_EN / sizeof HELP_LINES_EN[0]);
 
 static void draw_help(int ch)
 {
     d.fillRect(0, 0, 240, ch, BG);
     d.fillRect(0, 0, 240, 24, BG);
-    d.setTextSize(2); d.setTextColor(FG, BG); d.setCursor(10, 4); d.print("Guida / Help");
+    d.setTextSize(2); d.setTextColor(FG, BG); d.setCursor(10, 4); d.print(TR("Guida", "Help"));
+    // The manual half for the active OS language (Italian only for "it", like TR()).
+    const bool help_en = nucleo_tr("it", "en")[0] == 'e';
+    const char *const *HL = help_en ? HELP_LINES_EN : HELP_LINES;
+    const int HELP_N = help_en ? HELP_N_EN : HELP_N_IT;
     d.drawFastHLine(0, 23, 240, LINE);
 
     const int LH = 11, top = 28, bot = ch - 12;
@@ -1651,7 +1659,7 @@ static void draw_help(int ch)
     d.setClipRect(0, 24, 240, bot - 24);
     int y = top;
     for (int i = s_help_scroll; i < HELP_N && y < bot; i++, y += LH) {
-        const char *s = HELP_LINES[i];
+        const char *s = HL[i];
         d.setTextSize(1);
         if (s[0] == '#') { d.setTextColor(ACC, BG); d.setCursor(8, y); d.print(s + 1); }
         else             { d.setTextColor(s[0] ? FG : DIM, BG); d.setCursor(8, y); d.print(s); }

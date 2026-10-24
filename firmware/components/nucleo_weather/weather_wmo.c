@@ -42,7 +42,35 @@ const char *weather_wmo_label(int code)
         case 85: case 86: return "Rovesci di neve";
         case 95: return "Temporale";
         case 96: case 99: return "Temporale e grandine";
-        default: return "—";
+        default: return "-";
+    }
+}
+
+const char *weather_wmo_label_en(int code)
+{
+    switch (code) {
+        case 0:  return "Clear";
+        case 1:  return "Mostly clear";
+        case 2:  return "Partly cloudy";
+        case 3:  return "Cloudy";
+        case 45: return "Fog";
+        case 48: return "Freezing fog";
+        case 51: case 53: case 55: return "Drizzle";
+        case 56: case 57: return "Freezing drizzle";
+        case 61: return "Light rain";
+        case 63: return "Rain";
+        case 65: return "Heavy rain";
+        case 66: case 67: return "Freezing rain";
+        case 71: return "Light snow";
+        case 73: return "Snow";
+        case 75: return "Heavy snow";
+        case 77: return "Snow grains";
+        case 80: case 81: return "Showers";
+        case 82: return "Heavy showers";
+        case 85: case 86: return "Snow showers";
+        case 95: return "Thunderstorm";
+        case 96: case 99: return "Storm and hail";
+        default: return "-";
     }
 }
 
@@ -58,7 +86,13 @@ int weather_dow(int y, int m, int d)
 const char *weather_dow_short(int dow)
 {
     static const char *N[] = { "Dom", "Lun", "Mar", "Mer", "Gio", "Ven", "Sab" };
-    return (dow >= 0 && dow < 7) ? N[dow] : "—";
+    return (dow >= 0 && dow < 7) ? N[dow] : "-";
+}
+
+const char *weather_dow_short_en(int dow)
+{
+    static const char *N[] = { "Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat" };
+    return (dow >= 0 && dow < 7) ? N[dow] : "-";
 }
 
 bool weather_parse_date(const char *iso, int *y, int *m, int *d)

@@ -10,6 +10,7 @@
 #include "launcher_theme.h"
 #include "nucleo_exclusive.h"
 #include "nucleo_fx3d.h"
+#include "nucleo_i18n.h"     // TR(it,en): labels follow the system language
 #include "esp_random.h"
 #include "esp_timer.h"
 #include <string.h>
@@ -27,6 +28,18 @@ static const char *const MDESC[N_MODES] = {
     "Rumore casuale  spettro pieno",
     "Croce singola pixel-per-pixel",
     "Striscia bianca  scansione"
+};
+// English twins, picked at paint time (never TR() in a static initialiser â€” the language is live).
+static const char *const MNAME_EN[N_MODES] = {
+    "B/W Flash", "RGB", "Checkerboard", "Noise", "Pixel Walker", "Sweep"
+};
+static const char *const MDESC_EN[N_MODES] = {
+    "Flash 70fps  every pixel",
+    "Red  Green  Blue  White  Black",
+    "Alternating pattern 30fps",
+    "Random noise  full spectrum",
+    "Single cross pixel-by-pixel",
+    "White stripe  sweep"
 };
 // Target frame intervals (µs): trade speed for effect type.
 // SPI @40MHz → blit 240×135 @16bpp = ~13ms → absolute ceiling ~74fps.
@@ -171,12 +184,14 @@ static void draw(void)
         d.drawRoundRect(LX+1, LY+1, LW-2, LH-2, 7, fx3d::scl(LINE, 80, 255));
 
         d.setTextSize(2); d.setTextColor(0xFFFF, INK);
-        int nw = (int)strlen(MNAME[s_mode]) * 12;
-        d.setCursor(LX + (LW-nw)/2, LY+5); d.print(MNAME[s_mode]);
+        const char *mn = nucleo_tr(MNAME[s_mode], MNAME_EN[s_mode]);
+        int nw = (int)strlen(mn) * 12;
+        d.setCursor(LX + (LW-nw)/2, LY+5); d.print(mn);
 
         d.setTextSize(1); d.setTextColor(MUTED, INK);
-        int dw = (int)strlen(MDESC[s_mode]) * 6;
-        d.setCursor(LX + (LW-dw)/2, LY+24); d.print(MDESC[s_mode]);
+        const char *md = nucleo_tr(MDESC[s_mode], MDESC_EN[s_mode]);
+        int dw = (int)strlen(md) * 6;
+        d.setCursor(LX + (LW-dw)/2, LY+24); d.print(md);
 
         // Mode-position dots inside the pill
         const int DR=3, DS=11, DX0=W/2 - (N_MODES*DS)/2 + DR, DY=LY+LH-11;
@@ -190,14 +205,14 @@ static void draw(void)
         d.fillRoundRect(PX, PY, PW, PH, 8, INK);
         d.drawRoundRect(PX, PY, PW, PH, 8, MUTED);
         d.setTextSize(2); d.setTextColor(MUTED, INK);
-        int tw = 5*12; d.setCursor(PX+(PW-tw)/2, PY+9); d.print("PAUSA");
+        int tw = 5*12; d.setCursor(PX+(PW-tw)/2, PY+9); d.print(TR("PAUSA", "PAUSE"));
     }
 
     // ---- Key-hint bar (first 5 s) ------------------------------------------
     if (now < s_hint_us) {
         d.fillRect(0, H-11, W, 11, INK);
         d.setTextSize(1); d.setTextColor(MUTED, INK);
-        const char *h = "TAB/frecce: modo   INVIO: pausa   ESC: esci";
+        const char *h = TR("TAB/frecce: modo   INVIO: pausa   ESC: esci", "TAB/arrows mode  ENTER pause  ESC exit");
         int hw = (int)strlen(h)*6; d.setCursor((W-hw)/2, H-9); d.print(h);
     }
 }

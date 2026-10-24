@@ -42,6 +42,7 @@ static void norm_lang(char *dst, size_t cap, const char *code)
 }
 
 bool nucleo_i18n_is_en(void) { return s_lang[0] == 'e' && s_lang[1] == 'n'; }
+bool nucleo_i18n_is_it(void) { return s_lang[0] == 'i' && s_lang[1] == 't'; }
 const char *nucleo_i18n_lang(void) { return s_lang; }
 uint32_t nucleo_i18n_gen(void) { return s_gen; }
 void nucleo_i18n_set_on_change(void (*cb)(const char *code)) { s_on_change = cb; }

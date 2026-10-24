@@ -1524,7 +1524,7 @@ static void draw_notify_banner(void)
 {
     d.fillRect(0, 0, W, H - HINT, C_GREEN);
     d.setTextColor(INK, C_GREEN);
-    d.setTextSize(1); d.setCursor(10, 8); d.print("NOTIFICA");
+    d.setTextSize(1); d.setCursor(10, 8); d.print(TR("NOTIFICA", "NOTICE"));
     d.drawFastHLine(10, 18, 220, INK);
 
     d.setTextSize(2); notify_wrap(s_notify_title, 2, 19, 12, 28, 18);     // title: prominent, up to 2 lines
@@ -1541,7 +1541,7 @@ static void draw_voice_overlay(void)
     
     // Status header
     d.setTextSize(2); d.setTextColor(C_GREEN, BG); d.setCursor(16, 16); 
-    d.print("IN ASCOLTO");
+    d.print(TR("IN ASCOLTO", "LISTENING"));
     
     // Mic pulse animation
     int64_t t = esp_timer_get_time() / 150000;
@@ -1555,7 +1555,7 @@ static void draw_voice_overlay(void)
     nucleo_voice_get_live_sentence(live, sizeof(live));
     
     d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(16, 48);
-    d.print("Trascrizione in tempo reale:");
+    d.print(TR("Trascrizione in tempo reale:", "Real-time transcription:"));
     
     d.setTextSize(2); d.setCursor(16, 68);
     if (live[0]) {
@@ -1566,13 +1566,13 @@ static void draw_voice_overlay(void)
     
     // Footer instruction
     d.setTextSize(1); d.setTextColor(C_BLUE, BG); d.setCursor(16, H - 20);
-    d.print("Rilascia GO per elaborare, tieni per parlare");
+    d.print(TR("Rilascia GO per elaborare, tieni per parlare", "Release GO to process, hold to speak"));
 }
 
 // Toast pill over a just-captured frame: green check + "Screenshot salvato", or red X + error.
 static void draw_shot_toast(M5Canvas *c, bool ok)
 {
-    const char *msg = ok ? "Screenshot salvato" : "Errore salvataggio";
+    const char *msg = ok ? TR("Screenshot salvato", "Screenshot saved") : TR("Errore salvataggio", "Save failed");
     uint16_t col = ok ? C_GREEN : C_RED;
     c->setFont(&fonts::Font2); c->setTextSize(1);
     int tw = (int)c->textWidth(msg);
@@ -2070,12 +2070,12 @@ void nucleo_app_run(void)
                 if (!launched_ok) {
                     char body[96];
                     if (!vr.matched)
-                        snprintf(body, sizeof body, "Non ho capito: %.40s", vr.sentence);
+                        snprintf(body, sizeof body, TR("Non ho capito: %.40s", "Didn't catch that: %.40s"), vr.sentence);
                     else if (vr.action == ANIMA_ACT_LAUNCH)
-                        snprintf(body, sizeof body, "App non trovata: %.40s", vr.reply);
+                        snprintf(body, sizeof body, TR("App non trovata: %.40s", "App not found: %.40s"), vr.reply);
                     else
                         snprintf(body, sizeof body, "%.80s", vr.reply[0] ? vr.reply : vr.sentence);
-                    nucleo_notify_post("Voce", body);
+                    nucleo_notify_post(TR("Voce", "Voice"), body);
                 }
             }
         }
@@ -2256,7 +2256,7 @@ void nucleo_app_run(void)
                     if (s_cover_req) {                             // Ctrl+P/'C' cover — canvas is freed here, so read the PANEL
                         s_cover_req = false;                       // (panel_cover un-swaps the readback bytes -> correct colours)
                         bool ok = (def && def->id && def->id[0]) ? gamefront_save_panel_cover(def->id) : false;
-                        nucleo_notify_post("Screenshot", ok ? "Cover salvata" : "Cover non disponibile");
+                        nucleo_notify_post("Screenshot", ok ? TR("Cover salvata", "Cover saved") : TR("Cover non disponibile", "Cover unavailable"));
                     }
                 }
                 // The hint bar sits below the app's clipped blit, so the app frame never

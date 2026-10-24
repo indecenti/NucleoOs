@@ -28,6 +28,7 @@
 #include "nucleo_board.h"
 #include "nucleo_anima.h"
 #include "nucleo_tts.h"
+#include "nucleo_i18n.h"    // nucleo_tr(): the home toast follows the OS language
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "esp_heap_caps.h"
@@ -429,7 +430,7 @@ static void semantic_dispatch(const char *tokens[], int ntok)
                  (unsigned)heap_caps_get_free_size(MALLOC_CAP_INTERNAL),
                  (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL), sentence);
         store_result(sentence, ANIMA_ACT_NONE,
-                     VOICE_LANG[0] == 'e' ? "Not enough memory, try again" : "Memoria insufficiente, riprova",
+                     nucleo_tr("Memoria insufficiente, riprova", "Not enough memory, try again"),
                      true, false);
         nucleo_event_publish("voice/state", "{\"error\":\"no_mem\"}");
         return;

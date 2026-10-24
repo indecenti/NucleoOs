@@ -1891,7 +1891,7 @@ static void draw_turn_timer(void) {
     }
     // final 5 seconds + the VIA beat: size grows as seconds fall, with a per-second heartbeat kick
     char nb[6]; const char *lbl;
-    if (secs >= 1) { snprintf(nb, sizeof nb, "%d", secs); lbl = nb; } else lbl = "VIA";
+    if (secs >= 1) { snprintf(nb, sizeof nb, "%d", secs); lbl = nb; } else lbl = GT("VIA", "GO");
     int frac = rem > 0 ? (rem % 1000) : (400 + rem);            // ms remaining inside the current beat
     int beat = (frac > 780) ? 1 : 0;                           // swell at the top of each second
     int base = secs >= 1 ? (4 + (5 - secs)) : 7;               // 5s->4 ... 1s->8 ; VIA->7

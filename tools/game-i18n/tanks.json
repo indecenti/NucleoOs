@@ -2,6 +2,7 @@
   "game": "tanks",
   "strings": {
     "Standard": { "es": "Estandar", "fr": "Standard", "de": "Standard" },
+    "GO": { "es": "YA", "fr": "GO", "de": "LOS" },
     "Big Bomb": { "es": "Bomba", "fr": "Bombe", "de": "Bombe" },
     "Digger": { "es": "Excavador", "fr": "Foreuse", "de": "Graeber" },
     "Cluster": { "es": "Racimo", "fr": "Grappe", "de": "Streubombe" },

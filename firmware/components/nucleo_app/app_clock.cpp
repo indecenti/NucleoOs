@@ -46,7 +46,7 @@ static const char *MON_EN[12] = { "Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul
 static void fmt_date(const struct tm *tm, char *out, int n)
 {
     if (!tm) { snprintf(out, n, "----"); return; }
-    bool en = nucleo_i18n_is_en();
+    bool en = !nucleo_i18n_is_it();   // English floor for es/fr/de, as TR() does
     const char *dow = (tm->tm_wday >= 0 && tm->tm_wday < 7) ? (en ? DOW_EN : DOW_IT)[tm->tm_wday] : "";
     const char *mon = (tm->tm_mon  >= 0 && tm->tm_mon  < 12) ? (en ? MON_EN : MON_IT)[tm->tm_mon] : "";
     snprintf(out, n, "%s %d %s %d", dow, tm->tm_mday, mon, 1900 + tm->tm_year);

@@ -55,7 +55,7 @@ static const char *const TABS_EN[NTABS] = { "SEND","RECV","PEER","CMD","OPT","?"
 static int   s_tab = T_SEND, s_sel = -1;
 // System UI language (settings.json ui.language) — shared with the Control Center + web shell, so
 // this app's existing IT/EN labels follow the global setting instead of a private toggle.
-extern "C" bool nucleo_i18n_is_en(void);
+extern "C" bool nucleo_i18n_is_it(void);
 extern "C" void nucleo_i18n_set_en(bool en);
 static bool  s_en = false;   // seeded from the system language on enter
 static int   s_proto = NLINK_PROTO_NUCLEO;   // OPZ setting
@@ -422,7 +422,7 @@ static void opt_activate(int row) {
     switch (row) {
         case O_PROTO: s_proto ^= 1; toast(s_proto ? "Modo Bruce" : "Modo Nucleo", s_proto ? "Bruce mode" : "Nucleo mode"); break;
         case O_AUTO:  s_auto = !s_auto; toast(s_auto ? "Auto-accetta ON" : "Auto-accetta OFF", s_auto ? "Auto-accept ON" : "Auto-accept OFF"); break;
-        case O_LANG:  nucleo_i18n_set_en(!nucleo_i18n_is_en()); s_en = nucleo_i18n_is_en(); update_hint(); break;
+        case O_LANG:  nucleo_i18n_set_en(!s_en); s_en = !nucleo_i18n_is_it(); update_hint(); break;
         default: break;
     }
 }
@@ -513,7 +513,7 @@ static void on_tick(void) {
 }
 
 static void on_enter(void) {
-    s_en = nucleo_i18n_is_en();           // follow the system language
+    s_en = !nucleo_i18n_is_it();          // follow the system language (English floor for es/fr/de)
     s_tab = T_SEND; s_sel = -1; s_clen = 0; s_cbuf[0] = 0;
     snprintf(s_dir, sizeof s_dir, "%s", NUCLEO_SD_MOUNT "/data");
     if (!s_ent) s_ent = (Ent *)calloc(ENT_MAX, sizeof *s_ent);   // heap-resident only while open; ZERO RAM at boot

@@ -17,8 +17,12 @@ extern "C" {
 void nucleo_i18n_load(void);
 
 // Hot accessor: true when the system language is English. Native UIs call this while painting.
-// (The native TFT strings are IT/EN only; for es/fr/de this is false → Italian base is painted.)
+// (False for es/fr/de too — for an IT/EN pick use TR() or !nucleo_i18n_is_it(), which floor to English.)
 bool nucleo_i18n_is_en(void);
+
+// True only for Italian. A two-language native screen should paint English whenever this is false
+// (en/es/fr/de) — use !nucleo_i18n_is_it() rather than is_en() for that choice, as nucleo_tr() does.
+bool nucleo_i18n_is_it(void);
 
 // The active OS language code verbatim ("it","en","es","fr","de",…). settings.json -> ui.language is
 // the single OS-wide signal; this returns exactly what was set, so the web keeps the precise choice.

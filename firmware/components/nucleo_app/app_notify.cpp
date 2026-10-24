@@ -21,6 +21,7 @@ extern "C" {
 }
 #include "launcher_theme.h"   // W/H + RGB565 palette
 #include "app_gfx.h"          // the `d` draw-target redirect (never name a local `d`)
+#include "nucleo_i18n.h"      // TR(it,en): chrome follows the system language live
 
 extern "C" void nucleo_anima_app_ask(const char *q);   // seed ANIMA with a question (app_anima.cpp)
 
@@ -29,7 +30,8 @@ extern "C" void nucleo_anima_app_ask(const char *q);   // seed ANIMA with a ques
 static const unsigned short ACC = C_PURPLE;
 
 enum { TAB_ALL, TAB_CAL, TAB_SYS, TAB_AI, TAB_COUNT };
-static const char *TAB_NAME[TAB_COUNT] = { "Tutte", "Cal", "Sis", "AI" };
+static const char *TAB_NAME[TAB_COUNT]    = { "Tutte", "Cal", "Sis", "AI" };
+static const char *TAB_NAME_EN[TAB_COUNT] = { "All",   "Cal", "Sys", "AI" };   // picked at paint time
 
 // One stored notification (display fields only; body/id dropped to keep RAM tight).
 struct NItem { char src[12]; char lvl[10]; char ttl[60]; char act[28]; char tstr[8]; };
@@ -83,7 +85,7 @@ static void ingest_line(const char *line)
     NItem it = {};   // zero the tail bytes get_str leaves past each string's NUL (the whole struct is copied)
     get_str(o, "src", it.src, sizeof it.src, "system");
     get_str(o, "lvl", it.lvl, sizeof it.lvl, "info");
-    get_str(o, "ttl", it.ttl, sizeof it.ttl, "(notifica)");
+    get_str(o, "ttl", it.ttl, sizeof it.ttl, "");   // untitled -> localised placeholder at paint time
     get_str(o, "act", it.act, sizeof it.act, "");
     cJSON *ts = cJSON_GetObjectItem(o, "ts");
     fmt_when(cJSON_IsNumber(ts) ? (long)ts->valuedouble : 0, it.tstr, sizeof it.tstr);
@@ -122,7 +124,10 @@ static void build_view(void)
 }
 
 // ---- row providers (index into s_view) -------------------------------------
-static const char *row_label(int i, void *) { return s_items[s_view[i]].ttl; }
+static const char *row_label(int i, void *) {
+    const char *t = s_items[s_view[i]].ttl;
+    return t[0] ? t : TR("(notifica)", "(notification)");
+}
 static const char *row_right(int i, void *) { return s_items[s_view[i]].tstr; }
 static unsigned short row_color(int i, void *) { return lvl_color(s_items[s_view[i]].lvl); }
 
@@ -150,7 +155,7 @@ static void draw_tabs(int y)
         bool act = (i == s_tab);
         if (act) d.fillRoundRect(x, y, tw, 14, 4, ACC);
         else     d.drawRoundRect(x, y, tw, 14, 4, LINE);
-        char lbl[16]; snprintf(lbl, sizeof lbl, "%s %d", TAB_NAME[i], s_cnt[i]);
+        char lbl[16]; snprintf(lbl, sizeof lbl, "%s %d", TR(TAB_NAME[i], TAB_NAME_EN[i]), s_cnt[i]);
         d.setTextSize(1); d.setTextColor(act ? INK : MUTED, act ? ACC : BG);
         d.setCursor(x + (tw - (int)strlen(lbl) * 6) / 2, y + 3); d.print(lbl);
     }
@@ -159,7 +164,7 @@ static void draw_tabs(int y)
 static void draw(void)
 {
     char right[16]; snprintf(right, sizeof right, "%d", s_cnt[s_tab]);
-    int y0 = app_ui_title("Notifiche", ACC, right);
+    int y0 = app_ui_title(TR("Notifiche", "Notifications"), ACC, right);
 
     int yt = y0;                                      // tab strip
     draw_tabs(yt);
@@ -167,20 +172,20 @@ static void draw(void)
 
     if (s_oom) {                                       // buffer alloc failed — honest, don't deref
         d.fillRect(0, yl, W, (H - HINT) - yl, BG);
-        const char *msg = "Memoria insufficiente";
+        const char *msg = TR("Memoria insufficiente", "Out of memory");
         d.setTextSize(1); d.setTextColor(C_RED, BG);
         d.setCursor((W - (int)strlen(msg) * 6) / 2, yl + 24); d.print(msg);
         return;
     }
     if (s_vn == 0) {
         d.fillRect(0, yl, W, (H - HINT) - yl, BG);
-        const char *msg = "Nessuna notifica";
+        const char *msg = TR("Nessuna notifica", "No notifications");
         d.setTextSize(1); d.setTextColor(DIM, BG);
         d.setCursor((W - (int)strlen(msg) * 6) / 2, yl + 24); d.print(msg);
         return;
     }
     app_ui_list(yl, (H - HINT) - yl, s_vn, s_sel, row_label, row_right, row_color, nullptr);
-    if (s_confirm_clr) app_ui_confirm("Cancella tutto?", "Elimina la cronologia notifiche", s_clr_yes);
+    if (s_confirm_clr) app_ui_confirm(TR("Cancella tutto?", "Clear all?"), TR("Elimina la cronologia notifiche", "Delete notification history"), s_clr_yes);
 }
 
 // ---- input / lifecycle -----------------------------------------------------
@@ -223,8 +228,8 @@ static void enter(void)
     s_tab = TAB_ALL; s_sel = 0; s_confirm_clr = false;
     load_journal(); build_view();                                     // both no-op when s_items==NULL
     nucleo_app_set_tab_handler(cycle_tab);
-    nucleo_app_set_hint(s_oom ? "memoria insufficiente   esc indietro"
-                              : "su/giu scegli   enter apri   TAB scheda   c pulisci");
+    nucleo_app_set_hint(s_oom ? TR("memoria insufficiente   esc indietro", "out of memory   esc back")
+                              : TR("su/giu scegli   enter apri   TAB scheda   c pulisci", "up/dn pick   enter open   TAB tab   c clear"));
     nucleo_app_request_draw();
 }
 static void leave(void)

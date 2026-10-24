@@ -118,7 +118,7 @@ struct ScoresHdr { uint32_t m; uint16_t v, p; char last[12]; };   // then NSCORE
 static void scores_load(void)
 {
     for (int i = 0; i < NSCORES; i++) { snprintf(s_scores[i].name, sizeof s_scores[i].name, "%s", "---"); s_scores[i].score = 0; s_scores[i].diff = 1; }
-    snprintf(s_name, sizeof s_name, "%s", "PILOTA");
+    snprintf(s_name, sizeof s_name, "%s", GT("PILOTA", "PILOT"));
     FILE *f = fopen(DIRR "/scores.bin", "rb");
     if (!f) return;
     ScoresHdr h;
@@ -151,7 +151,7 @@ static int score_insert(const char *name, int sc, int diff)
     for (int i = 0; i < NSCORES; i++) if (sc > s_scores[i].score) { rank = i; break; }
     if (rank < 0) return -1;
     for (int j = NSCORES - 1; j > rank; j--) s_scores[j] = s_scores[j - 1];
-    snprintf(s_scores[rank].name, sizeof s_scores[rank].name, "%s", (name && name[0]) ? name : "PILOTA");
+    snprintf(s_scores[rank].name, sizeof s_scores[rank].name, "%s", (name && name[0]) ? name : GT("PILOTA", "PILOT"));
     s_scores[rank].score = sc; s_scores[rank].diff = diff;
     return rank;
 }
