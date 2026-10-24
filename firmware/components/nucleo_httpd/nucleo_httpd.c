@@ -1409,7 +1409,7 @@ static esp_err_t anima_get(httpd_req_t *req)
     NUCLEO_AUTH_GUARD(req);   // an ANIMA turn spawns the 30 KB worker and can reach PAID cloud (teacher/weather/wiki);
                              // reject before any of that so an unpaired LAN client can't drain credits or the heap.
     const char *q = "";
-    char lang[4] = "it";
+    char lang[4]; strcpy(lang, nucleo_i18n_is_it() ? "it" : "en");   // OS default; English floor for es/fr/de
     char *qbuf = NULL;   // [query string | decoded q] — freed on every return below
     int mode_ov = 0;   // per-request online mode from the web app: 0=none, 1=off, 2=on(hybrid), 3=only
     bool want_reset = false;
@@ -1429,8 +1429,8 @@ static esp_err_t anima_get(httpd_req_t *req)
             q = val;
         }
         char lv[8];
-        if (httpd_query_key_value(query, "lang", lv, sizeof(lv)) == ESP_OK && (lv[0] == 'e' || lv[0] == 'E'))
-            strcpy(lang, "en");
+        if (httpd_query_key_value(query, "lang", lv, sizeof(lv)) == ESP_OK && lv[0])
+            strcpy(lang, (lv[0] == 'i' || lv[0] == 'I') ? "it" : "en");   // Italian only for "it"; English floor for en/es/fr/de
         char rv[4];
         if (httpd_query_key_value(query, "reset", rv, sizeof(rv)) == ESP_OK && rv[0] == '1')
             want_reset = true;              // "pulisci conversazione" -> forget device-side context (under the lock)
@@ -1824,7 +1824,7 @@ static esp_err_t anima_act_post(httpd_req_t *req)
 static esp_err_t anima_verify_get(httpd_req_t *req)
 {
     NUCLEO_AUTH_GUARD(req);   // same worker/heavy-op exposure as anima_get -> paired only
-    char kind[16] = { 0 }, key[160] = { 0 }, asserted[128] = { 0 }, lang[4] = "it";
+    char kind[16] = { 0 }, key[160] = { 0 }, asserted[128] = { 0 }, lang[4]; strcpy(lang, nucleo_i18n_is_it() ? "it" : "en");
     char query[440];
     if (httpd_req_get_url_query_len(req) > 0 &&
         httpd_req_get_url_query_str(req, query, sizeof(query)) == ESP_OK) {
@@ -1833,7 +1833,7 @@ static esp_err_t anima_verify_get(httpd_req_t *req)
         if (httpd_query_key_value(query, "key", v, sizeof v) == ESP_OK)      { url_decode(v); strncpy(key, v, sizeof(key) - 1); }
         if (httpd_query_key_value(query, "asserted", v, sizeof v) == ESP_OK) { url_decode(v); strncpy(asserted, v, sizeof(asserted) - 1); }
         char lv[8];
-        if (httpd_query_key_value(query, "lang", lv, sizeof lv) == ESP_OK && (lv[0] == 'e' || lv[0] == 'E')) strcpy(lang, "en");
+        if (httpd_query_key_value(query, "lang", lv, sizeof lv) == ESP_OK && lv[0]) strcpy(lang, (lv[0] == 'i' || lv[0] == 'I') ? "it" : "en");
     }
     // Spine gate, same pattern as anima_get: verify_claim walks L1/HDC (shared index, the HDC global
     // scratch) — concurrent with a native query it double-frees g_simcnt/g_bcnt. Try-only, never block.

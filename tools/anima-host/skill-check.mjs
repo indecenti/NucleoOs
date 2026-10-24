@@ -113,13 +113,19 @@ test('direct run() also enforces the closed schema', async () => {
 });
 
 // ── prompt-injection defense (per-app isolation) ───────────────────────────────────────────────────
-test('GUARD: guardedSystem injects scoped security rules + the app action names; app prompt kept; bilingual', () => {
+test('GUARD: English guard + explicit reply-language directive; action names + app prompt kept', () => {
   const s = guardedSystem('You ONLY control IR remotes.', [{ name: 'ir_send' }, { name: 'ir_tvbgone' }], 'it');
-  assert.match(s, /REGOLE DI SICUREZZA/);
+  assert.match(s, /SECURITY RULES/);                      // ONE English guard, no translated copy
+  assert.match(s, /Reply to the user in Italian/);        // the OS language is TOLD to the model
   assert.match(s, /ir_send, ir_tvbgone/);                 // scoped to THIS app's verbs only
   assert.match(s, /<untrusted_/);                         // the data-is-data convention is stated
   assert.match(s, /ONLY control IR/);                     // the app's own scoped prompt is preserved
-  assert.match(guardedSystem('x', [], 'en'), /SECURITY RULES/);
+  // es/fr/de are first-class: the model is told the real language, not floored to en/it.
+  assert.match(guardedSystem('x', [], 'fr'), /Reply to the user in French/);
+  assert.match(guardedSystem('x', [], 'de'), /Reply to the user in German/);
+  assert.match(guardedSystem('x', [], 'es'), /Reply to the user in Spanish/);
+  assert.match(guardedSystem('x', [], 'en'), /Reply to the user in English/);
+  assert.match(guardedSystem('x', [], 'zz'), /Reply to the user in English/);  // unknown -> English floor
 });
 
 test('FENCE: fenceUntrusted wraps content and neutralises a forged closing tag (no break-out)', () => {
@@ -137,7 +143,8 @@ test('GUARD: every scoped LLM call is handed the GUARDED system (the defense fra
   let seen = '';
   const transport = async ({ system }) => { seen = system; return { reply: 'ok' }; };
   await skill.ask('hello', { transport, lang: 'it' });
-  assert.match(seen, /REGOLE DI SICUREZZA/);
+  assert.match(seen, /SECURITY RULES/);
+  assert.match(seen, /Reply to the user in Italian/);
   assert.match(seen, /ONLY control IR/);
 });
 

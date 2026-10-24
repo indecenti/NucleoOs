@@ -70,7 +70,7 @@ static const char *TAG = "voice";
 #define VAD_RMS_MAX          4000          // …nor above this
 #define VOICE_MAX_TPLS       20            // max loaded templates
 #define TPL_PATH             NUCLEO_SD_MOUNT "/system/voice"
-#define VOICE_LANG           "it"          // anima reply language
+#define VOICE_LANG           (nucleo_i18n_is_it() ? "it" : "en")   // anima/TTS reply language = OS (English floor; TTS packs are it/en only)
 #define TPL_MAGIC            0x33505456u   // 'VTP3' — format version (MFCC + delta features)
 
 // Accept policy (distances are per-frame-averaged L1 MFCC units from vdsp_dtw).
