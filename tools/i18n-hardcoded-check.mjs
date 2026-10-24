@@ -92,11 +92,18 @@ function maskSkipped(html) {
   const blank = (m) => ' '.repeat(m.length);
   h = h.replace(/<!--[\s\S]*?-->/g, blank);
   h = h.replace(/<(script|style|svg|template|code|pre|title)\b[\s\S]*?<\/\1>/gi, blank);
-  // Element whose open tag carries a handled/opt-out i18n attribute: blank from the tag to its matching
-  // close. Approximate (no nesting of the SAME tag inside) — good enough for leaf UI nodes, which is
-  // where translated text lives; a false "handled" only ever SUPPRESSES a finding, never invents one.
-  h = h.replace(/<([a-zA-Z][\w-]*)\b[^>]*\bdata-i18n(?:-html|-ignore)?\b[^>]*>([\s\S]*?)<\/\1>/g,
+  // Element whose open tag carries a handled/opt-out binding: blank from the tag to its matching close.
+  // Recognised bindings: the central engine's data-i18n / data-i18n-html, the explicit opt-out
+  // data-i18n-ignore, AND a self-contained fork's data-t / data-t-html (e.g. the Settings app's i18n.js
+  // table — its text IS translated in all 5 languages, just not on the central engine). Approximate (no
+  // nesting of the SAME tag inside) — good enough for leaf UI nodes, where translated text lives; a
+  // false "handled" only ever SUPPRESSES a finding, never invents one.
+  h = h.replace(/<([a-zA-Z][\w-]*)\b[^>]*\b(?:data-i18n(?:-html|-ignore)?|data-t(?:-html)?)\b[^>]*>([\s\S]*?)<\/\1>/g,
     (m) => blank(m));
+  // An element that binds its ATTRIBUTES at runtime (data-i18n-attr / data-t-attr) may still carry a
+  // literal title/placeholder/aria-label/alt in the static markup as a design-time default — blank the
+  // whole open tag so the attribute scan below doesn't flag that translated-at-runtime value.
+  h = h.replace(/<[a-zA-Z][\w-]*\b[^>]*\bdata-(?:i18n|t)-attr\b[^>]*>/g, (m) => blank(m));
   return h;
 }
 
