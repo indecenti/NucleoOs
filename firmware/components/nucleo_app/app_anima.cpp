@@ -684,7 +684,7 @@ static void load_settings(void)
             }
         }
     }
-    s_en = nucleo_i18n_is_en();   // ANIMA speaks the OS language (the file's legacy "lang" key is only written back)
+    s_en = !nucleo_i18n_is_it();  // ANIMA speaks the OS language; English floor for es/fr/de (the file's legacy "lang" key is only written back)
     apply_online_mode();
 }
 
@@ -2567,7 +2567,7 @@ static void ia_key(int key)
         switch (s_mrow) {
             case IA_ONLINE: s_omode = (s_omode + 1) % 3; apply_online_mode(); save_settings(); break;
             case IA_LANG:                                    // the OS language itself (settings.json ui.language)
-                nucleo_i18n_set_en(!s_en); s_en = nucleo_i18n_is_en(); save_settings();
+                nucleo_i18n_set_en(!s_en); s_en = !nucleo_i18n_is_it(); save_settings();
                 if (s_ses->vmode == V_MANUAL) s_ses->vmode = V_FOLLOW;
                 rebuild_rows(); break;                       // re-wrap + relabel
             case IA_TEXT:                                    // re-wrap the transcript: row indices change
