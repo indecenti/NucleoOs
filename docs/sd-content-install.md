@@ -3,8 +3,8 @@
 Status: design approved 2026-09-30. **Implemented**: the pipeline (§2: `sd_deploy.py release`,
 `tools/package-release.mjs`, `release.yml`, `pages.yml`, gated by `tools/sd-payload.test.mjs`) and the
 device side (§3, 2026-10-02: `firmware/components/nucleo_sdcontent/`, the wizard step, Settings ▸ Device ▸
-SD content), host-gated end to end (§6). Not yet: the web rescue page button, the optional packs on the
-device (only `core` is installed), the apps.json *merge* (the registry is written only when absent).
+SD content), host-gated end to end (§6), and since v0.7.4+ the apps.json merge (§4, `sdc_registry.c`). Not
+yet: the web rescue page button, the optional packs on the device (only `core` is installed).
 
 Goal: a Cardputer that received **only the firmware** (M5Launcher OTA, M5Burner, web flasher) can fetch
 its SD content ("payload": web shell, web apps, registry, ANIMA data, wallpapers) **by itself over
@@ -193,11 +193,18 @@ languages. Opened on a phone, it offers "copy link" / "send to computer", since 
   `system/keys`, `system/sessions`, logs, `data/anima/teacher.json`, learned caches, `data/tts/` root, …
 - **Path hygiene**: relative, no `..`, no backslash, no leading `/`, ≤ 200 chars (+`.part` fits the 256
   buffers), printable ASCII.
-- **apps.json merge** (mirrors `planRegistryUpdate`, `apps/agent/www/app-publish.js:366-384`): start
-  from the release `installed[]`; carry every device entry with `created_by:"agent"` whose id is not a
-  system id; keep the user's `enabled` and granted `permissions` on bundled apps. If the device file is
-  unreadable or malformed → **skip the merge**, keep the device file, store the release copy as
-  `apps.json.release`, and report it (the OS keeps working with the old list).
+- **apps.json merge** (`firmware/components/nucleo_sdcontent/sdc_registry.c`): the device's file is the
+  live list and stays **byte for byte** — the user's `enabled` and granted `permissions`, the apps the
+  Agent created, the order. The release copy is fetched beside it (`apps.json.release`, size + SHA-256
+  checked) and every release entry whose `id` the device doesn't list is **appended** before the array's
+  `]`, so an app a release adds appears (found on a real ADV: before this, a new app's files arrived but it
+  was never registered). Nothing is removed or rewritten; an identical file is not even downloaded. It is
+  a streaming walk (top-level `installed[]` only, strings and escapes respected), ids kept as 32-bit
+  hashes, one entry at a time in the download window: no JSON tree in RAM, its path buffers only on the
+  stack after the TLS fetch. The swap is crash-safe (live list parked as `.old`, merged file moved in,
+  `.old` put back on failure). If the device file is unreadable or malformed → **skip the merge**, keep
+  the device file and the release copy as `apps.json.release` (the OS keeps working with the old list).
+  Gated by `tools/anima-host/sdcontent-e2e.mjs` (S10–S10e).
 - **Shared cards (M5Launcher)**: write only inside the roots above; create no new top-level folder
   beyond what provisioning already makes.
 
@@ -215,7 +222,8 @@ languages. Opened on a phone, it offers "copy link" / "send to computer", since 
 | Hash mismatch | retry that file once; then fail the run, file never installed |
 | SD full (pre-check or ENOSPC) | stop; files already installed are complete; report MB needed |
 | Power loss / Esc / crash | complete files stay; `.part` cleaned next run; resume skips verified files |
-| apps.json unreadable | merge skipped, device registry kept, reported |
+| apps.json unreadable | merge skipped, device registry kept, release copy kept as `apps.json.release` |
+| apps.json swap fails | the live list is put back from `.old`; the run fails with "SD write failed" |
 | Stuck transfer | per-file stall timeout + whole-run ceiling; WDT fed every chunk |
 
 Esc during the run warm-reboots to the full OS (like the updater's Solo boot) — always safe.

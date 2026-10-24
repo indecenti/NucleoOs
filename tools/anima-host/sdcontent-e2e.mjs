@@ -22,7 +22,7 @@ const exe = join(BUILD, 'sdcontente2e.exe');
 const cc = spawnSync(GCC, [
   '-std=gnu11', '-O1', '-Wall', '-Wextra', '-Werror', '-Wno-unused-result',
   '-I', `${C}/include`,
-  'tools/anima-host/sdcontent-e2e-ctest.c', `${C}/sdc_engine.c`, `${C}/content_policy.c`, `${C}/sdc_sha256.c`,
+  'tools/anima-host/sdcontent-e2e-ctest.c', `${C}/sdc_engine.c`, `${C}/sdc_registry.c`, `${C}/content_policy.c`, `${C}/sdc_sha256.c`,
   '-o', exe,
 ], { cwd: ROOT, env, encoding: 'utf8' });
 if (cc.status !== 0) {

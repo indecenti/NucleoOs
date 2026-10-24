@@ -6,6 +6,7 @@
 // Run by tools/anima-host/sdcontent-e2e.mjs (`npm run sdcontent:e2e`, part of the ANIMA gate).
 #include "sdc_engine.h"
 #include "sdc_sha256.h"
+#include "sdc_registry.h"
 #include "content_policy.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -49,6 +50,7 @@ static void put(const char *root, const char *rel, const void *data, size_t n)
     if (n) fwrite(data, 1, n, f);
     fclose(f);
 }
+#define PUTS(rel, s) put(W, rel, s, strlen(s))
 static long slurp(const char *path, uint8_t **out)
 {
     FILE *f = fopen(path, "rb"); if (!f) return -1;
@@ -98,6 +100,9 @@ static int count_parts(const char *path)   // leftover *.part files anywhere und
 static void sha_hex_of(const void *d, size_t n, char hex[65])
 { sdc_sha256_t c; sdc_sha256_init(&c); sdc_sha256_update(&c, d, n); uint8_t g[32]; sdc_sha256_final(&c, g); sdc_sha256_hex(g, hex); }
 
+// The release's app registry: two apps, pretty-printed like registry/apps.json.
+#define REL_REG "{\n  \"schema\": 1,\n  \"installed\": [\n    {\n      \"id\": \"calc\",\n      \"version\": \"2.0.0\",\n      \"enabled\": true\n    },\n    {\n      \"id\": \"community\",\n      \"version\": \"0.1.0\",\n      \"enabled\": true,\n      \"permissions\": [\n        \"system.clipboard\"\n      ]\n    }\n  ]\n}\n"
+
 // ---- the fixture release -----------------------------------------------------------------------------
 typedef struct { const char *path, *pack; char mode; size_t size; uint32_t seed; const char *text; } fx_t;
 static const fx_t FX[] = {
@@ -107,7 +112,7 @@ static const fx_t FX[] = {
     { "data/anima/anima-it-akb5.bin",         "core",   'w', 70001, 33, NULL },   // 12 windows, odd tail
     { "data/anima/learned/facets.it.jsonl",   "core",   'c', 0,     0, "RELEASE-SEED-IT\n" },  // user copy exists
     { "data/anima/learned/facets.en.jsonl",   "core",   'c', 0,     0, "RELEASE-SEED-EN\n" },  // absent -> created
-    { "system/registry/apps.json",            "core",   'm', 0,     0, "{\"installed\":[\"release\"]}\n" },
+    { "system/registry/apps.json",            "core",   'm', 0,     0, REL_REG },
     { "wallpapers/empty.txt",                 "core",   'w', 0,     0, "" },      // 0 bytes
     { "www/shell/a b#c.txt",                  "core",   'w', 0,     0, "needs url encoding\n" },
     { "apps/arcade/www/core.wasm",            "arcade", 'w', 9000,  44, NULL },   // optional pack
@@ -309,7 +314,7 @@ int main(void)
     OK(PR.monotonic && PR.bounded, "S1 progress never goes back, never past the total");
     OK(PR.inflight > 0, "S1 a big file updates the bar while it downloads");
     { char tag[24]; bool c = false, d = false; OK(sdc_content_read(SD, tag, sizeof tag, &c, &d) && c && !d && !strcmp(tag, "0.5.0"), "S1 content.json complete for 0.5.0"); }
-    OK(file_is(SD "/system/registry/apps.json", "{\"installed\":[\"release\"]}\n"), "S1 registry created when absent");
+    OK(file_is(SD "/system/registry/apps.json", REL_REG), "S1 registry created when absent");
     OK(!sdc_content_needed(SD, "0.5.0"), "S1 nothing more to offer for 0.5.0");
     OK(sdc_content_needed(SD, "0.6.0"), "S1 a newer firmware is offered again");
 
@@ -367,7 +372,87 @@ int main(void)
     fresh_sd(); put(SD, "system/registry/apps.json", "DEVICE-REG", 10);
     fake_t f10 = { .srv = SRV };
     ok = run(&f10, SD, WINDOW, "core", &st);
-    OK(ok && file_is(SD "/system/registry/apps.json", "DEVICE-REG"), "S10 existing registry kept (merge = create-only)");
+    OK(ok && file_is(SD "/system/registry/apps.json", "DEVICE-REG"), "S10 an unreadable device registry is never overwritten");
+    OK(exists(SD "/system/registry/apps.json.release"), "S10 the release copy is kept beside it for diagnosis");
+    OK(!exists(SD "/system/registry/apps.json.add") && !exists(SD "/system/registry/apps.json.merge") &&
+       !exists(SD "/system/registry/apps.json.old"), "S10 no merge temp files left");
+
+    // S10b the release adds an app: it is appended, everything the device had stays byte for byte
+    {
+        static const char DEV[] =
+            "{\n  \"schema\": 1,\n  \"installed\": [\n"
+            "    {\n      \"id\": \"calc\",\n      \"version\": \"1.0.0\",\n      \"enabled\": false,\n      \"note\": \"say \\\"hi\\\" {not a brace}\"\n    },\n"
+            "    {\n      \"id\": \"my-agent-app\",\n      \"created_by\": \"agent\",\n      \"meta\": {\n        \"id\": \"community\"\n      }\n    }\n"
+            "  ]\n}\n";
+        fresh_sd(); put(SD, "system/registry/apps.json", DEV, sizeof DEV - 1);
+        fake_t fb = { .srv = SRV };
+        ok = run(&fb, SD, WINDOW, "core", &st);
+        uint8_t *g; long n = slurp(SD "/system/registry/apps.json", &g);
+        bool head_kept = n > 0 && (size_t)n > sizeof DEV - 1 && memcmp(g, DEV, strlen(DEV) - strlen("\n  ]\n}\n")) == 0;
+        OK(ok && head_kept, "S10b every device entry kept byte for byte (user's enabled:false, agent app, escapes)");
+        const char *G = n > 0 ? (const char *)g : "";
+        OK(n > 0 && strstr(G, "\"id\": \"community\"") && strstr(G, "\"system.clipboard\""), "S10b the new release app is appended whole");
+        OK(n > 0 && strstr(G, "\"version\": \"1.0.0\"") && !strstr(G, "\"version\": \"2.0.0\""), "S10b an app the device has is not replaced by the release's");
+        OK(n > 0 && strstr(G, "    },\n    {\n      \"id\": \"community\"") != NULL, "S10b the new entry follows the last one, indented like the rest");
+        OK(n > 0 && !memcmp(G + n - 7, "\n  ]\n}\n", 7), "S10b the file still ends with the array and object closing");
+        OK(!exists(SD "/system/registry/apps.json.release") && !exists(SD "/system/registry/apps.json.add") &&
+           !exists(SD "/system/registry/apps.json.merge") && !exists(SD "/system/registry/apps.json.old"), "S10b no temp files left");
+        if (n > 0) free(g);
+        // rerun: the device now lists both -> unchanged, no second copy appended
+        uint8_t *g1; long n1 = slurp(SD "/system/registry/apps.json", &g1);
+        fake_t fb2 = { .srv = SRV };
+        ok = run(&fb2, SD, WINDOW, "core", &st);
+        uint8_t *g2; long n2 = slurp(SD "/system/registry/apps.json", &g2);
+        OK(ok && n1 == n2 && n1 > 0 && !memcmp(g1, g2, (size_t)n1), "S10b a second run appends nothing (idempotent)");
+        if (n1 > 0) free(g1);
+        if (n2 > 0) free(g2);
+    }
+
+    // S10c an empty device list gets every release app
+    {
+        static const char DEV[] = "{\"schema\":1,\"installed\":[]}";
+        fresh_sd(); put(SD, "system/registry/apps.json", DEV, sizeof DEV - 1);
+        fake_t fc = { .srv = SRV };
+        ok = run(&fc, SD, WINDOW, "core", &st);
+        uint8_t *g; long n = slurp(SD "/system/registry/apps.json", &g);
+        const char *G = n > 0 ? (const char *)g : "";
+        OK(ok && n > 0 && strstr(G, "\"id\": \"calc\"") && strstr(G, "\"id\": \"community\"") && strstr(G, "[\n    {") &&
+           !strstr(G, "[,"), "S10c empty list -> both apps, no leading comma");
+        if (n > 0) free(g);
+    }
+
+    // S10d the device file identical to the release: not even downloaded
+    {
+        fresh_sd(); put(SD, "system/registry/apps.json", REL_REG, strlen(REL_REG));
+        fake_t fd = { .srv = SRV };
+        ok = run(&fd, SD, WINDOW, "core", &st);
+        OK(ok && file_is(SD "/system/registry/apps.json", REL_REG) && !exists(SD "/system/registry/apps.json.release"),
+           "S10d identical registry left alone");
+    }
+
+    // S10e the merge itself on edge cases (direct calls)
+    {
+        char buf[2048]; int added = -1;
+        PUTS("rg/d.json", "{\"installed\":[{\"id\":\"a\"}],\"other\":{\"installed\":[{\"id\":\"zzz\"}]}}");
+        PUTS("rg/r.json", "{\"x\":[1,2,{\"installed\":[]}],\"installed\":[\"str\",7,{\"id\":\"a\"},{\"id\":\"b\",\"d\":\"x]\\\"y\"},{\"id\":\"b\"}]}");
+        sdc_reg_result_t r = sdc_registry_merge(W "/rg/d.json", W "/rg/r.json", buf, sizeof buf, &added);
+        OK(r == SDC_REG_MERGED && added == 1, "S10e compact files: one new id, a duplicate in the release added once, scalars skipped");
+        OK(file_is(W "/rg/d.json", "{\"installed\":[{\"id\":\"a\"},\n    {\"id\":\"b\",\"d\":\"x]\\\"y\"}],\"other\":{\"installed\":[{\"id\":\"zzz\"}]}}"),
+           "S10e only the top-level installed[] grows; a nested one is not it");
+        PUTS("rg/bad.json", "{\"installed\":[{\"id\":\"a\"}");
+        r = sdc_registry_merge(W "/rg/bad.json", W "/rg/r.json", buf, sizeof buf, &added);
+        OK(r == SDC_REG_DEVICE_BAD && file_is(W "/rg/bad.json", "{\"installed\":[{\"id\":\"a\"}"), "S10e a truncated device file is left untouched");
+        PUTS("rg/d2.json", "{\"installed\":[{\"id\":\"a\"}]}");
+        PUTS("rg/notreg.json", "[1,2,3]");
+        r = sdc_registry_merge(W "/rg/d2.json", W "/rg/notreg.json", buf, sizeof buf, &added);
+        OK(r == SDC_REG_RELEASE_BAD && file_is(W "/rg/d2.json", "{\"installed\":[{\"id\":\"a\"}]}"), "S10e a release copy that is not a registry changes nothing");
+        r = sdc_registry_merge(W "/rg/d2.json", W "/rg/r.json", buf, 8, &added);
+        OK(r == SDC_REG_DEVICE_BAD && file_is(W "/rg/d2.json", "{\"installed\":[{\"id\":\"a\"}]}"), "S10e an entry larger than the scratch buffer aborts safely");
+        PUTS("rg/crlf.json", "{\r\n  \"installed\": [\r\n    {\"id\": \"a\"}\r\n  ]\r\n}\r\n");
+        r = sdc_registry_merge(W "/rg/crlf.json", W "/rg/r.json", buf, sizeof buf, &added);
+        OK(r == SDC_REG_MERGED && file_is(W "/rg/crlf.json", "{\r\n  \"installed\": [\r\n    {\"id\": \"a\"},\n    {\"id\":\"b\",\"d\":\"x]\\\"y\"}\r\n  ]\r\n}\r\n"),
+           "S10e CRLF files keep their line ends around the insertion");
+    }
 
     // S11 the guard itself: a window over the device's TLS cap fails like the real bug did
     fresh_sd(); fake_t f11 = { .srv = SRV };

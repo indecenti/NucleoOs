@@ -4,6 +4,7 @@
 #include "sdc_engine.h"
 #include "content_policy.h"
 #include "sdc_sha256.h"
+#include "sdc_registry.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -164,11 +165,14 @@ static sdc_code_t fetch_to_file(eng_t *e, const char *url, const char *part, boo
 }
 
 // Download, verify (size + SHA-256) and atomically install one file; a mismatch is retried once.
-static sdc_code_t install_file(eng_t *e, const sdc_file_t *f)
+// aside = install it as "<path>.release" instead (the registry merge fetches the release copy beside the live
+// one). Built in this frame's own dst[], so the TLS fetch below gets no extra stack.
+static sdc_code_t install_file(eng_t *e, const sdc_file_t *f, bool aside)
 {
     char url[400], dst[300], part[306], got[65];
     url_join(url, sizeof url, e->cfg->base_url, f->path);
     join(dst, sizeof dst, e->cfg->root, f->path);
+    if (aside) { size_t l = strlen(dst); if (l + 8 >= sizeof dst) return SDC_E_WRITE; memcpy(dst + l, ".release", 9); }
     snprintf(part, sizeof part, "%s.part", dst);
     mkdir_parents(dst);
     for (int attempt = 0; attempt < 2; attempt++) {
@@ -185,6 +189,21 @@ static sdc_code_t install_file(eng_t *e, const sdc_file_t *f)
         unlink(part);
     }
     return SDC_E_VERIFY;
+}
+
+// The registry merge, after the release copy is on the card as "<dst>.release". Kept out of line so its path
+// buffers are on the stack only now, never during a TLS fetch (the install runs on the 8 KB main task).
+// Returns false only on a write failure (the device list is then untouched).
+static __attribute__((noinline)) bool merge_registry(eng_t *e, const char *dst, bool *merged)
+{
+    char relp[310];
+    snprintf(relp, sizeof relp, "%s.release", dst);
+    int added = 0;
+    sdc_reg_result_t mr = sdc_registry_merge(dst, relp, (char *)e->buf, e->cfg->window, &added);
+    // A device list we can't read stays untouched; the release copy is kept beside it for diagnosis.
+    if (mr != SDC_REG_DEVICE_BAD) unlink(relp);
+    *merged = mr == SDC_REG_MERGED;
+    return mr != SDC_REG_IO;
 }
 
 static const char *basename_of(const char *p) { const char *s = strrchr(p, '/'); return s ? s + 1 : p; }
@@ -259,10 +278,23 @@ bool sdc_engine_run(const sdc_cfg_t *cfg, const sdc_io_t *io, sdc_state_t *st)
         uint32_t dsz = 0; bool on_disk = file_size(dst, &dsz);
         char dsha[65]; bool have_sha = on_disk && dsz == f.size && file_sha(e, dst, dsha);
         sdc_plan_t pl = sdc_plan(&f, on_disk, dsz, have_sha ? dsha : NULL);
-        // MERGE (the app registry): written only when absent — an existing one is the device's live list.
+        // MERGE (the app registry): installed as is when absent. An existing one is the device's live list: the
+        // release copy is fetched aside and only the apps the device doesn't list are appended (sdc_registry.c),
+        // so an app a release adds appears without touching the user's choices. Identical file: nothing to do.
+        if (pl == SDC_PLAN_MERGE && on_disk && !(have_sha && strncmp(dsha, f.sha, 64) == 0)) {
+            rc = install_file(e, &f, true);
+            bool merged = false;
+            if (rc == SDC_OK && !merge_registry(e, dst, &merged)) rc = SDC_E_WRITE;
+            if (rc != SDC_OK) {
+                fclose(mf);
+                fail(e, rc, rc == SDC_E_VERIFY ? "file verification failed" : rc == SDC_E_WRITE ? "SD write failed" : "download failed", f.path);
+                goto out;
+            }
+            if (merged) st->files_written++;
+        }
         bool need = pl == SDC_PLAN_WRITE || (pl == SDC_PLAN_MERGE && !on_disk);
         if (need) {
-            rc = install_file(e, &f);
+            rc = install_file(e, &f, false);
             if (rc != SDC_OK) {
                 fclose(mf);
                 fail(e, rc, rc == SDC_E_VERIFY ? "file verification failed" : rc == SDC_E_WRITE ? "SD write failed" : "download failed", f.path);

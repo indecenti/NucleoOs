@@ -6,6 +6,13 @@ All notable user-facing changes to NucleoOS. Format loosely follows
 
 ## [Unreleased]
 
+### Fixed
+- **Apps a release adds now show up after updating the SD card from the Cardputer.** The on-device SD
+  installer downloaded a new app's files but never added it to the app list, so it stayed invisible (found
+  with the Community app on a real Cardputer ADV). It now appends the release's new apps to the device's
+  list and leaves everything already there exactly as it was: your enabled/disabled choices, permissions
+  and the apps the Agent created.
+
 ## [0.7.4] — 2026-10-24
 
 ### Added
