@@ -210,14 +210,14 @@ static void start_portal(void)
     if (s_mode == 0) {
         rc = nucleo_evilportal_start(effective_ssid(), s_tpl_idx);
     } else {
-        if (s_ap_n <= 0) { snprintf(s_err, sizeof s_err, "Nessuna rete: riscan"); set_hint(); nucleo_app_request_draw(); return; }
+        if (s_ap_n <= 0) { snprintf(s_err, sizeof s_err, "%s", TR("Nessuna rete: riscan","No networks: rescan")); set_hint(); nucleo_app_request_draw(); return; }
         unsigned char b[6]; nucleo_wifiatk_target_bssid_bytes(s_ap_idx, b);
         rc = nucleo_evilportal_start_twin(nucleo_wifiatk_target_ssid(s_ap_idx), s_tpl_idx, b,
                                           nucleo_wifiatk_target_channel(s_ap_idx),
                                           nucleo_wifiatk_target_authmode(s_ap_idx), s_mode == 2);
     }
     if (rc == 0) { s_err[0] = 0; go(ST_RUNNING); }
-    else { snprintf(s_err, sizeof s_err, "Avvio fallito (err %d)", rc); set_hint(); nucleo_app_request_draw(); }
+    else { snprintf(s_err, sizeof s_err, TR("Avvio fallito (err %d)","Start failed (err %d)"), rc); set_hint(); nucleo_app_request_draw(); }
 }
 
 // KARMA needs a big contiguous block for the promiscuous RX path — on the ADV the exclusive reclaim
@@ -258,7 +258,7 @@ static void tick(void)
             if (rc != 0) {
                 karma_restore_screen();
                 if (rc == -5) snprintf(s_err, sizeof s_err, "Heap troppo bassa: %d B", nucleo_wifiatk_karma_heap());
-                else          snprintf(s_err, sizeof s_err, "Karma non disponibile (%d)", rc);
+                else          snprintf(s_err, sizeof s_err, TR("Karma non disponibile (%d)","Karma unavailable (%d)"), rc);
                 go(ST_HOME); return;
             }
         }
@@ -271,7 +271,7 @@ static void tick(void)
         karma_restore_screen();                          // sniff done -> get the canvas back
         int n = nucleo_wifiatk_karma_count();
         if (n > 0) { s_km_sel = 0; go(ST_KARMA); }
-        else { snprintf(s_err, sizeof s_err, "Nessuna probe sentita"); go(ST_HOME); }
+        else { snprintf(s_err, sizeof s_err, "%s", TR("Nessuna probe sentita","No probes heard")); go(ST_HOME); }
         return;
     }
     if (s_state == ST_CLONE) {
@@ -281,11 +281,11 @@ static void tick(void)
         if (rc > 0) {
             for (int i = 0; i < s_tpl_n; i++)
                 if (!strcmp(nucleo_evilportal_template_name(i), nucleo_evilportal_clone_name())) { s_tpl_idx = i; break; }
-            snprintf(s_err, sizeof s_err, "Pagina clonata (%d B)", rc);
+            snprintf(s_err, sizeof s_err, TR("Pagina clonata (%d B)","Page cloned (%d B)"), rc);
         } else {
-            const char *m = rc == -13 ? "Nessun captive portal" : rc == -10 ? "Join fallito"
-                          : rc == -4  ? "Occupato: riprova"      : rc == -1  ? "Portale gia attivo"
-                          : "Clone fallito";
+            const char *m = rc == -13 ? TR("Nessun captive portal","No captive portal") : rc == -10 ? TR("Join fallito","Join failed")
+                          : rc == -4  ? TR("Occupato: riprova","Busy: retry")      : rc == -1  ? TR("Portale gia attivo","Portal already active")
+                          : TR("Clone fallito","Clone failed");
             snprintf(s_err, sizeof s_err, "%s", m);
         }
         build_rows(); go(ST_SETUP); return;
@@ -310,7 +310,7 @@ static void ui_list(const char *title, const char *badge, int n, int sel, row_ge
     int h = nucleo_app_content_height();
     app_ui_title(title, EP_RED, badge);
     if (n <= 0) {
-        d.setTextSize(1); d.setTextColor(DIM, BG); d.setCursor(12, 44); d.print(empty ? empty : "(vuoto)");
+        d.setTextSize(1); d.setTextColor(DIM, BG); d.setCursor(12, 44); d.print(empty ? empty : TR("(vuoto)","(empty)"));
     }
     const int rows = 6;
     int first = sel - rows / 2; if (first < 0) first = 0;
@@ -334,9 +334,14 @@ static void ui_list(const char *title, const char *badge, int n, int sel, row_ge
 }
 
 // ---- per-screen row getters --------------------------------------------------
-static const char *HOME_N[] = { "Civetta", "Gemello", "KARMA", "Loot" };
-static const char *HOME_D[] = { "AP con SSID a scelta", "clona un AP reale vicino",
+static const char *HOME_N_IT[] = { "Civetta", "Gemello", "KARMA", "Loot" };
+static const char *HOME_N_EN[] = { "Decoy", "Twin", "KARMA", "Loot" };
+#define HOME_N (nucleo_i18n_is_it() ? HOME_N_IT : HOME_N_EN)
+static const char *HOME_D_IT[] = { "AP con SSID a scelta", "clona un AP reale vicino",
                                 "esca dalle reti cercate", "credenziali catturate" };
+static const char *HOME_D_EN[] = { "AP with an SSID you pick", "clone a real nearby AP",
+                                "lure from the probed networks", "captured credentials" };
+#define HOME_D (nucleo_i18n_is_it() ? HOME_D_IT : HOME_D_EN)
 static const unsigned short HOME_C[] = { GRN, EP_CYAN, YEL, EP_RED };
 static void get_targets(int i, char *name, int nc, char *val, int vc, unsigned short *dot)
 {
@@ -355,7 +360,7 @@ static void get_karma(int i, char *name, int nc, char *val, int vc, unsigned sho
 }
 static void get_ssid(int i, char *name, int nc, char *val, int vc, unsigned short *dot)
 {
-    if (i == 0) { snprintf(name, nc, "Scrivi un nome..."); *dot = EP_CYAN; (void)val; (void)vc; return; }
+    if (i == 0) { snprintf(name, nc, "%s", TR("Scrivi un nome...","Type a name...")); *dot = EP_CYAN; (void)val; (void)vc; return; }
     snprintf(name, nc, "%.22s", nucleo_evilportal_ssid_preset(i - 1)); *dot = GRN; (void)val; (void)vc;
 }
 static void get_page(int i, char *name, int nc, char *val, int vc, unsigned short *dot)
@@ -371,19 +376,22 @@ static void get_loot(int i, char *name, int nc, char *val, int vc, unsigned shor
 // TAB options menu (context-sensitive).
 static const char *menu_item(int i)
 {
-    if (nucleo_evilportal_running()) { static const char *R[] = { "Loot catture", "Ferma portale", "Guida" }; return R[i]; }
-    static const char *N[] = { "Loot catture", "Guida" }; return N[i];
+    if (nucleo_evilportal_running()) { const char *R[] = { TR("Loot catture","Loot captures"), TR("Ferma portale","Stop portal"), TR("Guida","Guide") }; return R[i]; }
+    const char *N[] = { TR("Loot catture","Loot captures"), TR("Guida","Guide") }; return N[i];
 }
 static int menu_count(void) { return nucleo_evilportal_running() ? 3 : 2; }
-static const char *menu_title(void) { return nucleo_evilportal_running() ? "PORTALE ATTIVO" : "MENU"; }
+static const char *menu_title(void) { return nucleo_evilportal_running() ? TR("PORTALE ATTIVO","PORTAL ACTIVE") : "MENU"; }
 
 // ---- drawing -----------------------------------------------------------------
 static void draw_consent(int h)
 {
     app_ui_title("Evil Portal", EP_RED, "AUTH");
-    d.setTextSize(2); d.setTextColor(YEL, BG); d.setCursor(10, 28); d.print("Test autorizzati");
-    const char *L[] = { "AP civetta + pagina di login", "clonata: salva su SD le",
+    d.setTextSize(2); d.setTextColor(YEL, BG); d.setCursor(10, 28); d.print(TR("Test autorizzati","Authorized testing"));
+    const char *L_it[] = { "AP civetta + pagina di login", "clonata: salva su SD le",
                         "credenziali inviate.", "", "Solo reti tue o con permesso", "scritto (CTF, audit)." };
+    const char *L_en[] = { "Decoy AP + cloned login", "page: saves the submitted",
+                        "credentials to SD.", "", "Your own networks or with", "written permission (CTF, audit)." };
+    const char *const *L = nucleo_i18n_is_it() ? L_it : L_en;
     unsigned short C[] = { FG, FG, FG, BG, MUTED, MUTED };
     d.setTextSize(1);
     for (int i = 0; i < 6; i++) { d.setTextColor(C[i], BG); d.setCursor(10, 52 + i * 11); d.print(L[i]); }
@@ -404,7 +412,7 @@ static void draw_home(int h)
         d.setTextSize(1); d.setTextColor(s ? YEL : DIM, s ? PANEL : BG); d.setCursor(s ? 12 : 22, y + 15); d.print(HOME_D[i]);
     }
     if (nucleo_evilportal_running()) { d.setTextSize(1); d.setTextColor(EP_RED, BG); d.setCursor(10, h - 9);
-                                       d.print("portale ATTIVO - invio su Loot per gestirlo"); }
+                                       d.print(TR("portale ATTIVO - invio su Loot per gestirlo","portal ACTIVE - enter on Loot to manage")); }
     else if (s_err[0]) { d.setTextSize(1); d.setTextColor(s_err[0] == 'P' ? GRN : YEL, BG);
                          d.setCursor(10, h - 9); d.print(s_err); }
 }
@@ -424,8 +432,8 @@ static void row_line(int y, bool sel, const char *label, const char *val, unsign
 
 static void draw_setup(int h)
 {
-    const char *badge = s_mode == 0 ? "CIVETTA" : s_mode == 1 ? "GEMELLO" : "COERENTE";
-    app_ui_title("Configura", EP_RED, badge);
+    const char *badge = s_mode == 0 ? TR("CIVETTA","DECOY") : s_mode == 1 ? TR("GEMELLO","TWIN") : TR("COERENTE","MATCHED");
+    app_ui_title(TR("Configura","Configure"), EP_RED, badge);
     for (int i = 0; i < s_nrows; i++) {
         int y = 22 + i * 19; bool s = (i == s_sel);
         char val[40];
@@ -435,17 +443,17 @@ static void draw_setup(int h)
             case R_NET:
                 if (s_ap_n > 0) snprintf(val, sizeof val, "%.10s %s", nucleo_wifiatk_target_ssid(s_ap_idx),
                                          nucleo_wifiatk_target_fingerprint(s_ap_idx));
-                else snprintf(val, sizeof val, "(scegli)");
-                row_line(y, s, "Rete", val, (s_ap_n > 0 && twin_encrypted() && s_mode == 1) ? YEL : EP_CYAN); break;
-            case R_SEC: row_line(y, s, "Sicurezza", s_mode == 2 ? "Coerente (no login)" : "Cattura (open)",
+                else snprintf(val, sizeof val, "%s", TR("(scegli)","(pick)"));
+                row_line(y, s, TR("Rete","Network"), val, (s_ap_n > 0 && twin_encrypted() && s_mode == 1) ? YEL : EP_CYAN); break;
+            case R_SEC: row_line(y, s, TR("Sicurezza","Security"), s_mode == 2 ? TR("Coerente (no login)","Matched (no login)") : TR("Cattura (open)","Capture (open)"),
                                  s_mode == 2 ? EP_CYAN : YEL); break;
-            case R_PAGE: row_line(y, s, "Pagina", s_tpl_n ? nucleo_evilportal_template_name(s_tpl_idx) : "-", YEL); break;
-            case R_CLONE: row_line(y, s, "Clona pagina", s_ap_n > 0 && !twin_encrypted() ? "rete aperta: ok" : "serve rete aperta", GRN); break;
+            case R_PAGE: row_line(y, s, TR("Pagina","Page"), s_tpl_n ? nucleo_evilportal_template_name(s_tpl_idx) : "-", YEL); break;
+            case R_CLONE: row_line(y, s, TR("Clona pagina","Clone page"), s_ap_n > 0 && !twin_encrypted() ? TR("rete aperta: ok","open network: ok") : TR("serve rete aperta","needs an open network"), GRN); break;
             case R_GO:
                 if (s) { d.fillRoundRect(6, y, 228, 20, 6, GRN); d.setTextSize(2); d.setTextColor(INK, GRN);
-                         d.setCursor(92, y + 3); d.print("AVVIA"); }
+                         d.setCursor(92, y + 3); d.print(TR("AVVIA","START")); }
                 else  { d.drawRoundRect(6, y, 228, 20, 6, GRN); d.setTextSize(2); d.setTextColor(GRN, BG);
-                        d.setCursor(92, y + 3); d.print("AVVIA"); }
+                        d.setCursor(92, y + 3); d.print(TR("AVVIA","START")); }
                 break;
         }
     }
@@ -455,8 +463,8 @@ static void draw_setup(int h)
 
 static void draw_type(int h)
 {
-    app_ui_title("Nome rete", EP_RED, "");
-    d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(10, 28); d.print("Scrivi l'SSID civetta:");
+    app_ui_title(TR("Nome rete","Network name"), EP_RED, "");
+    d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(10, 28); d.print(TR("Scrivi l'SSID civetta:","Type the decoy SSID:"));
     d.drawRect(8, 44, 224, 20, LINE);
     d.setTextSize(2); d.setTextColor(FG, BG); d.setCursor(12, 47); d.print(s_custom);
     if (s_pulse) { int cx = 12 + s_typelen * 12; d.fillRect(cx, 47, 9, 14, EP_RED); }
@@ -520,31 +528,31 @@ static void draw_running(int h)
     if (nucleo_evilportal_twin()) { char tf[44]; snprintf(tf, sizeof tf, "%s ch%d deauth%lu  tab:menu",
                                     nucleo_evilportal_twin_coherent() ? "GEM-C" : "GEM",
                                     nucleo_evilportal_twin_channel(), nucleo_evilportal_deauth_frames()); d.print(tf); }
-    else d.print("invio: ferma   tab: menu");
+    else d.print(TR("invio: ferma   tab: menu","enter: stop   tab: menu"));
 }
 
 // KARMA Auto-lure: broadcasting the exact networks nearby devices were asking for.
 static void draw_lure(int h)
 {
-    app_ui_title("Esca KARMA", EP_RED, "LURE");
+    app_ui_title(TR("Esca KARMA","KARMA lure"), EP_RED, "LURE");
     if (s_pulse) d.fillCircle(150, 9, 4, EP_RED);
     d.setTextSize(1); d.setTextColor(EP_RED, BG); d.setCursor(160, 7); d.print("TX");
     d.setTextSize(1); d.setTextColor(GRN, BG); d.setCursor(10, 30);
-    char ss[34]; snprintf(ss, sizeof ss, "%d reti cercate in onda", nucleo_wifiatk_beacon_count()); d.print(ss);
+    char ss[34]; snprintf(ss, sizeof ss, TR("%d reti cercate in onda","%d probed networks on air"), nucleo_wifiatk_beacon_count()); d.print(ss);
     d.setTextSize(2); d.setTextColor(FG, BG); d.setCursor(10, 52);
     char fr[20]; unsigned long f = nucleo_wifiatk_beacon_frames();
     snprintf(fr, sizeof fr, "%lu beacon", f); d.print(fr);
     d.drawFastHLine(10, 80, 220, LINE);
     d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(10, 88);
-    d.print("i device vedono 'la loro' rete");
-    d.setTextColor(DIM, BG); d.setCursor(10, 99); d.print("e provano a collegarsi a noi");
-    d.setTextColor(YEL, BG); d.setCursor(10, h - 9); d.print("invio: ferma");
+    d.print(TR("i device vedono 'la loro' rete","devices see 'their own' network"));
+    d.setTextColor(DIM, BG); d.setCursor(10, 99); d.print(TR("e provano a collegarsi a noi","and try to connect to us"));
+    d.setTextColor(YEL, BG); d.setCursor(10, h - 9); d.print(TR("invio: ferma","enter: stop"));
 }
 
 static void draw_guide(int h)
 {
-    app_ui_title("Guida", EP_RED, "");
-    const char *L[] = {
+    app_ui_title(TR("Guida","Guide"), EP_RED, "");
+    const char *L_IT[] = {
         "Civetta: AP finto, SSID a scelta",
         "Gemello: clona un AP reale +",
         " deauth per spostarne i client",
@@ -556,6 +564,19 @@ static void draw_guide(int h)
         " un captive aperto (CSS inclusi)",
         "Solo test autorizzati.",
     };
+    const char *L_EN[] = {
+        "Decoy: fake AP, SSID you pick",
+        "Twin: clone a real AP +",
+        " deauth to move its clients over",
+        " capture=open (downgrade, visible)",
+        " matched=real WPA2 (no login)",
+        "KARMA: use the networks devices",
+        " are probing for as the lure",
+        "Clone page: copies the login of",
+        " an open captive (CSS included)",
+        "Authorized testing only.",
+    };
+    const char *const *L = nucleo_i18n_is_it() ? L_IT : L_EN;
     d.setTextSize(1);
     for (int i = 0; i < 10; i++) { d.setTextColor(i == 9 ? YEL : (L[i][0] == ' ' ? DIM : FG), BG);
                                    d.setCursor(8, 24 + i * 11); d.print(L[i]); }
@@ -594,21 +615,21 @@ static void draw(void)
     switch (s_state) {
         case ST_CONSENT: draw_consent(h); break;
         case ST_HOME:    draw_home(h); break;
-        case ST_TARGETS: ui_list("Reti vicine", "GEMELLO", s_ap_n, s_ap_idx, get_targets, "premi R per scansionare", "verde=aperta  R riscan"); break;
-        case ST_KARMA:   ui_list("Reti cercate", "KARMA", nucleo_wifiatk_karma_count(), s_km_sel, get_karma, "nessuna probe", "invio: usa come civetta"); break;
-        case ST_SSID:    ui_list("SSID civetta", "", s_ssid_n + 1, s_sel, get_ssid, "", nullptr); break;
+        case ST_TARGETS: ui_list(TR("Reti vicine","Nearby networks"), "GEMELLO", s_ap_n, s_ap_idx, get_targets, TR("premi R per scansionare","press R to scan"), TR("verde=aperta  R riscan","green=open  R rescan")); break;
+        case ST_KARMA:   ui_list(TR("Reti cercate","Probed networks"), "KARMA", nucleo_wifiatk_karma_count(), s_km_sel, get_karma, TR("nessuna probe","no probes"), TR("invio: usa come civetta","enter: use as decoy")); break;
+        case ST_SSID:    ui_list(TR("SSID civetta","Decoy SSID"), "", s_ssid_n + 1, s_sel, get_ssid, "", nullptr); break;
         case ST_TYPE:    draw_type(h); break;
-        case ST_PAGE:    ui_list("Pagina login", "", s_tpl_n, s_sel, get_page, "nessun template", nullptr); break;
+        case ST_PAGE:    ui_list(TR("Pagina login","Login page"), "", s_tpl_n, s_sel, get_page, TR("nessun template","no template"), nullptr); break;
         case ST_SETUP:   draw_setup(h); break;
         case ST_RUNNING: draw_running(h); break;
         case ST_LURE:    draw_lure(h); break;
-        case ST_LOOT:    ui_list("Loot", "", nucleo_evilportal_recent_count(), s_sel, get_loot, "ancora nulla", "salvato su /sd/evilportal/loot"); break;
+        case ST_LOOT:    ui_list("Loot", "", nucleo_evilportal_recent_count(), s_sel, get_loot, TR("ancora nulla","nothing yet"), TR("salvato su /sd/evilportal/loot","saved to /sd/evilportal/loot")); break;
         case ST_GUIDE:   draw_guide(h); break;
-        case ST_SCAN:    draw_busy("Scansione...", "Cerco le reti reali vicine.", h); s_scan_armed = true; break;
+        case ST_SCAN:    draw_busy(TR("Scansione...","Scanning..."), TR("Cerco le reti reali vicine.","Looking for real nearby networks."), h); s_scan_armed = true; break;
         case ST_KARMA_SCAN: {
             // DIRECT path (canvas freed for the sniff), repaints ~1 Hz: the band is cleared ONCE above,
             // so the static card doesn't blink. Erase+redraw only the small live bits in their own boxes.
-            draw_busy("Karma...", "Ascolto chi cerca quali reti.", h);
+            draw_busy("Karma...", TR("Ascolto chi cerca quali reti.","Listening for who probes what."), h);
             d.fillRect(215, h / 2 - 12, 10, 10, BG);   // pulse dot's box (self-erase so it can blink off)
             if (s_pulse) d.fillCircle(220, h / 2 - 7, 4, EP_RED);
             int hp = nucleo_wifiatk_karma_heap();      // confirm how much heap the sniff actually got
@@ -617,8 +638,8 @@ static void draw(void)
                           d.setTextSize(1); d.setTextColor(DIM, BG); d.setCursor(10, h - 9); d.print(hb); }
             s_karma_armed = true; break;
         }
-        case ST_CLONE:   draw_busy("Clono pagina...", "Mi unisco e scarico il login.", h); s_clone_armed = true; break;
-        case ST_STOPPING:draw_busy("Arresto...", "Ripristino la rete OS.", h); s_stop_armed = true; break;
+        case ST_CLONE:   draw_busy(TR("Clono pagina...","Cloning page..."), TR("Mi unisco e scarico il login.","Joining and downloading the login."), h); s_clone_armed = true; break;
+        case ST_STOPPING:draw_busy(TR("Arresto...","Stopping..."), TR("Ripristino la rete OS.","Restoring the OS network."), h); s_stop_armed = true; break;
     }
     if (s_menu) draw_menu(h);
 }
@@ -633,12 +654,14 @@ static void ep_tab(void)
 }
 static void menu_choose(void)
 {
-    const char *it = menu_item(s_menu_sel);
+    bool run = nucleo_evilportal_running();
     s_menu = false;
-    if (!strcmp(it, "Loot catture"))       { s_ret = s_state; go(ST_LOOT); }
-    else if (!strcmp(it, "Ferma portale")) { s_stop_armed = false; go(ST_STOPPING); }
-    else if (!strcmp(it, "Guida"))         { s_ret = s_state; go(ST_GUIDE); }
-    else { set_hint(); nucleo_app_force_repaint(); }   // stayed on a live screen: full repaint erases the menu box
+    // Dispatch by index, not label: the labels are localized (TR), so matching on text would break
+    // the moment the UI isn't Italian. Order mirrors menu_item(): running -> [Loot, Stop, Guide].
+    int sel = s_menu_sel;
+    if (sel == 0)                 { s_ret = s_state; go(ST_LOOT); }
+    else if (run && sel == 1)     { s_stop_armed = false; go(ST_STOPPING); }
+    else                          { s_ret = s_state; go(ST_GUIDE); }
 }
 static bool ep_back(int key)
 {
@@ -704,7 +727,7 @@ static void on_key(int key, char ch)
                 nucleo_wifiatk_beacon_custom_clear();
                 for (int i = 0; i < kn; i++) nucleo_wifiatk_beacon_custom_add(nucleo_wifiatk_karma_ssid(i));
                 if (nucleo_wifiatk_beacon_start(3 /*CUSTOM*/) == 0) go(ST_LURE);
-                else { snprintf(s_err, sizeof s_err, "Beacon non avviato"); nucleo_app_request_draw(); }
+                else { snprintf(s_err, sizeof s_err, "%s", TR("Beacon non avviato","Beacon not started")); nucleo_app_request_draw(); }
             } else if (ch == 'r' || ch == 'R') { s_karma_armed = false; s_karma_started = false; go(ST_KARMA_SCAN); }
             return;
         }
@@ -733,8 +756,8 @@ static void on_key(int key, char ch)
                     case R_SEC:   s_mode = (s_mode == 1) ? 2 : 1; set_hint(); nucleo_app_request_draw(); break;
                     case R_PAGE:  go(ST_PAGE); s_sel = s_tpl_idx; nucleo_app_request_draw(); break;  // set sel AFTER go() (which resets s_sel=0), else the picker never lands on the current template
                     case R_CLONE:
-                        if (s_ap_n <= 0)        snprintf(s_err, sizeof s_err, "Scegli prima una rete");
-                        else if (twin_encrypted()) snprintf(s_err, sizeof s_err, "Rete non aperta: no portale");
+                        if (s_ap_n <= 0)        snprintf(s_err, sizeof s_err, "%s", TR("Scegli prima una rete","Pick a network first"));
+                        else if (twin_encrypted()) snprintf(s_err, sizeof s_err, "%s", TR("Rete non aperta: no portale","Network not open: no portal"));
                         else { s_clone_armed = false; go(ST_CLONE); break; }
                         nucleo_app_request_draw(); break;
                     case R_GO:    start_portal(); break;

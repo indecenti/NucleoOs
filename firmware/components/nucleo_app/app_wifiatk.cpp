@@ -113,7 +113,7 @@ static void start_attack(void)
     s_armed_protected = (idx >= 0) && nucleo_wifiatk_target_protected(idx);   // warn: PMF target
     int rc = nucleo_wifiatk_deauth_start(idx);
     if (rc == 0) { s_state = ST_RUNNING; s_err[0] = 0; }
-    else snprintf(s_err, sizeof s_err, "Avvio fallito (err %d)", rc);
+    else snprintf(s_err, sizeof s_err, TR("Avvio fallito (err %d)","Start failed (err %d)"), rc);
     set_hint();
     nucleo_app_request_draw();
 }
@@ -179,8 +179,8 @@ static void draw_consent(int top, int h)
 {
     (void)top; (void)h;
     app_ui_title("Deauth Flood", ATK, "AUTH");
-    d.setTextSize(2); d.setTextColor(YEL, BG); d.setCursor(10, 28); d.print("Test autorizzati");
-    const char *lines[] = {
+    d.setTextSize(2); d.setTextColor(YEL, BG); d.setCursor(10, 28); d.print(TR("Test autorizzati","Authorized testing"));
+    const char *lines_it[] = {
         "Inonda di frame deauth/",
         "disassoc le reti scelte:",
         "scollega i client dall'AP.",
@@ -188,6 +188,15 @@ static void draw_consent(int top, int h)
         "Solo su reti tue o con",
         "permesso scritto (CTF, audit).",
     };
+    const char *lines_en[] = {
+        "Floods deauth/disassoc",
+        "frames at the chosen nets:",
+        "knocks clients off the AP.",
+        "",
+        "Your own networks or with",
+        "written permission (CTF, audit).",
+    };
+    const char *const *lines = nucleo_i18n_is_it() ? lines_it : lines_en;
     unsigned short cols[] = { FG, FG, FG, BG, MUTED, MUTED };
     d.setTextSize(1);
     for (int i = 0; i < 6; i++) { d.setTextColor(cols[i], BG); d.setCursor(10, 52 + i * 11); d.print(lines[i]); }
@@ -234,7 +243,7 @@ static void draw_list(int top, int h)
         bool focus = (idx == s_sel);
         if (idx == 0) {
             char tv[8]; snprintf(tv, sizeof tv, "%d", nucleo_wifiatk_targets_vulnerable());
-            list_row(y, focus, "TUTTE (vuln.)", s_n ? tv : "", ATK);   // flood-all hits only the deauthable APs
+            list_row(y, focus, TR("TUTTE (vuln.)","ALL (vuln.)"), s_n ? tv : "", ATK);   // flood-all hits only the deauthable APs
         } else {
             int t = idx - 1;
             bool prot = nucleo_wifiatk_target_protected(t);
@@ -245,7 +254,7 @@ static void draw_list(int top, int h)
             list_row(y, focus, lbl, info, prot ? PMF : GRN);
         }
     }
-    if (s_n == 0) { d.setTextSize(1); d.setTextColor(DIM, BG); d.setCursor(10, h - 10); d.print("nessuna rete - premi R"); }
+    if (s_n == 0) { d.setTextSize(1); d.setTextColor(DIM, BG); d.setCursor(10, h - 10); d.print(TR("nessuna rete - premi R","no networks - press R")); }
     else if (s_err[0]) { d.setTextSize(1); d.setTextColor(ATK, BG); d.setCursor(10, h - 10); d.print(s_err); }
 }
 
@@ -269,7 +278,7 @@ static void draw_running(int top, int h)
 
     // What's being hit (the live target line).
     char ss[30];
-    if (nucleo_wifiatk_targets_active() > 1) snprintf(ss, sizeof ss, "TUTTE  ora: %.16s", nucleo_wifiatk_cur_ssid());
+    if (nucleo_wifiatk_targets_active() > 1) snprintf(ss, sizeof ss, TR("TUTTE  ora: %.16s","ALL  now: %.16s"), nucleo_wifiatk_cur_ssid());
     else                                     snprintf(ss, sizeof ss, "%.26s", nucleo_wifiatk_cur_ssid());
     d.setTextSize(1); d.setTextColor(GRN, BG); d.setCursor(10, 28); d.print(ss);
 
@@ -304,22 +313,26 @@ static void draw_running(int top, int h)
     // Honest live verdict (the never-blind part): derived from injection health + measured effect.
     const char *vd; unsigned short vc;
     static char vbuf[34];
-    if (hsok > 0 || hspm > 0)   { snprintf(vbuf, sizeof vbuf, "CATTURATI: %d HS, %d PMKID", hsok, hspm); vd = vbuf; vc = GRN; }
+    if (hsok > 0 || hspm > 0)   { snprintf(vbuf, sizeof vbuf, TR("CATTURATI: %d HS, %d PMKID","CAPTURED: %d HS, %d PMKID"), hsok, hspm); vd = vbuf; vc = GRN; }
     else if (inj < 50)          { vd = "INIEZIONE DEBOLE"; vc = ATK; }
-    else if (seen == 0)         { vd = (up < 6) ? "avvio..." : "nessun client"; vc = MUTED; }
+    else if (seen == 0)         { vd = (up < 6) ? TR("avvio...","starting...") : TR("nessun client","no clients"); vc = MUTED; }
     else if (kick > 0 || recon) { vd = "EFFICACE"; vc = GRN; }
     else if (weak)              { vd = "segnale debole: avvicinati"; vc = ATK; }
-    else if (up >= 12)          { vd = s_armed_protected ? "PMF: resiste (CSA)" : "nessun effetto"; vc = ATK; }
+    else if (up >= 12)          { vd = s_armed_protected ? "PMF: resiste (CSA)" : TR("nessun effetto","no effect"); vc = ATK; }
     else                        { vd = s_armed_protected ? "CSA in corso..." : "in corso..."; vc = YEL; }
     char fb[44]; snprintf(fb, sizeof fb, "%s   inj %d%%", vd, inj);
     d.setTextColor(vc, BG); d.setCursor(10, h - 9); d.print(fb);
 }
 
 // ---- how-to-use guide (TAB overlay) ----------------------------------------
-static const char *GUIDE_HEAD[GUIDE_PAGES] = {
+static const char *GUIDE_HEAD_IT[GUIDE_PAGES] = {
     "Come funziona", "Leggere i dati", "Usarla meglio", "Limiti reali", "Comandi"
 };
-static const char *GUIDE_BODY[GUIDE_PAGES][6] = {
+static const char *GUIDE_HEAD_EN[GUIDE_PAGES] = {
+    "How it works", "Reading the data", "Using it better", "Real limits", "Keys"
+};
+#define GUIDE_HEAD (nucleo_i18n_is_it() ? GUIDE_HEAD_IT : GUIDE_HEAD_EN)
+static const char *GUIDE_BODY_IT[GUIDE_PAGES][6] = {
     { "Sgancia i client da un AP",
       "con frame 802.11 deauth.",
       "Sniffa i client reali e li",
@@ -351,11 +364,44 @@ static const char *GUIDE_BODY[GUIDE_PAGES][6] = {
       "Solo reti tue o con permesso",
       "scritto: CTF / audit." },
 };
+static const char *GUIDE_BODY_EN[GUIDE_PAGES][6] = {
+    { "Knocks clients off an AP",
+      "with 802.11 deauth frames.",
+      "Sniffs the real clients and",
+      "hits them ONE BY ONE (unicast)",
+      "+ broadcast: more effective",
+      "than broadcast alone." },
+    { "FRAME sent  KICK kicked",
+      "att on air  rec reconnected",
+      "rec rising = the deauth landed",
+      "inj% TX health (low = the",
+      "chip drops: short range / KO)",
+      "Good: KICK/rec up, att -> 0" },
+    { "Pick 1 AP with clients:",
+      "more targeted than ALL.",
+      "Blue dot = WPA3/OWE immune,",
+      "ALL skips them on its own.",
+      "Stay close. Give it time: the",
+      "clients surface as you sniff." },
+    { "2.4GHz open/WPA2: disconnects",
+      "and forces reconnects (see rec).",
+      "WPA3/PMF: deauth ignored, uses",
+      "CSA channel-switch (beacons not",
+      "protected) - effect varies.",
+      "Frames at 1Mbps for max range." },
+    { "up/dn  pick target",
+      "R       rescan",
+      "enter   start / stop",
+      "esc     leave on (bg)",
+      "Your own networks or with written",
+      "permission: CTF / audit." },
+};
+#define GUIDE_BODY (nucleo_i18n_is_it() ? GUIDE_BODY_IT : GUIDE_BODY_EN)
 
 static void draw_guide(void)
 {
     char rt[12]; snprintf(rt, sizeof rt, "%d/%d", s_page + 1, GUIDE_PAGES);
-    app_ui_title("Guida", ATK, rt);
+    app_ui_title(TR("Guida","Guide"), ATK, rt);
     d.setTextSize(2); d.setTextColor(YEL, BG); d.setCursor(10, 26); d.print(GUIDE_HEAD[s_page]);
     d.setTextSize(1);
     for (int i = 0; i < 6; i++) {
@@ -373,8 +419,8 @@ static void draw(void)
     d.fillRect(0, top, 240, h, BG);
     if (s_panel)                     draw_guide();
     else if (s_state == ST_CONSENT)  draw_consent(top, h);
-    else if (s_state == ST_SCAN)     { draw_busy("Scansione...", "Cerco le reti vicine.", h); s_scan_armed = true; }
-    else if (s_state == ST_STOPPING) { draw_busy("Arresto...", "Ripristino rete OS.", h); s_stop_armed = true; }
+    else if (s_state == ST_SCAN)     { draw_busy(TR("Scansione...","Scanning..."), TR("Cerco le reti vicine.","Looking for nearby networks."), h); s_scan_armed = true; }
+    else if (s_state == ST_STOPPING) { draw_busy(TR("Arresto...","Stopping..."), TR("Ripristino rete OS.","Restoring OS network."), h); s_stop_armed = true; }
     else if (s_state == ST_RUNNING)  draw_running(top, h);
     else                             draw_list(top, h);
 }

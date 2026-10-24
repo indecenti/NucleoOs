@@ -46,15 +46,15 @@ static uint32_t s_last_s;
 #define GUIDE_PAGES 5
 
 // ---- menu model -------------------------------------------------------------
-struct MenuItem { const char *label; char glyph; };
+struct MenuItem { const char *label; const char *label_en; char glyph; };
 static const MenuItem MENU[] = {
-    { "Scansiona rete",     'S' },   // 0
-    { "Mappa & host",       'M' },   // 1
-    { "ARP poison gateway", 'P' },   // 2
-    { "DHCP starvation",    'D' },   // 3
-    { "MAC flooding",       'F' },   // 4
-    { "Rogue DHCP (MITM)",  'R' },   // 5
-    { "Cattura PCAP",       'C' },   // 6
+    { "Scansiona rete",     "Scan network",      'S' },   // 0
+    { "Mappa & host",       "Map & hosts",       'M' },   // 1
+    { "ARP poison gateway", "ARP poison gateway",'P' },   // 2
+    { "DHCP starvation",    "DHCP starvation",   'D' },   // 3
+    { "MAC flooding",       "MAC flooding",      'F' },   // 4
+    { "Rogue DHCP (MITM)",  "Rogue DHCP (MITM)", 'R' },   // 5
+    { "Cattura PCAP",       "PCAP capture",      'C' },   // 6
 };
 #define MENU_N ((int)(sizeof(MENU)/sizeof(MENU[0])))
 
@@ -124,13 +124,13 @@ static bool eth_back(int key)
 
 static void fail(const char *msg) { snprintf(s_err, sizeof s_err, "%s", msg); nucleo_app_request_draw(); }
 
-static void start_running(int rc) { if (rc == 0) { s_state = ST_RUNNING; s_err[0] = 0; } else fail("Avvio fallito"); set_hint(); nucleo_app_request_draw(); }
+static void start_running(int rc) { if (rc == 0) { s_state = ST_RUNNING; s_err[0] = 0; } else fail(TR("Avvio fallito","Start failed")); set_hint(); nucleo_app_request_draw(); }
 
 static void activate_menu(void)
 {
     s_err[0] = 0;
     switch (s_sel) {
-        case 0: if (nucleo_eth_scan_start() == 0) { s_state = ST_SCANNING; set_hint(); } else fail("Scan fallito"); break;
+        case 0: if (nucleo_eth_scan_start() == 0) { s_state = ST_SCANNING; set_hint(); } else fail(TR("Scan fallito","Scan failed")); break;
         case 1: if (nucleo_eth_host_count() > 0) { s_state = ST_HOSTS; s_map = false; s_msel = 0; set_hint(); }
                 else fail("Scansiona prima la rete");
                 break;
@@ -152,7 +152,7 @@ static void start_mitm_on_selected(void)
     uint32_t victim = nucleo_eth_host_ip_raw(s_msel);
     uint32_t gw = nucleo_eth_gateway_ip();
     if (!gw)            { fail("Gateway ignoto"); return; }
-    if (victim == gw)   { fail("Scegli un host != gateway"); return; }
+    if (victim == gw)   { fail(TR("Scegli un host != gateway","Pick a host != gateway")); return; }
     if (!victim)        { fail("Host non valido"); return; }
     start_running(nucleo_eth_mitm_start(victim, gw));
 }
@@ -235,9 +235,12 @@ static void id_line(int y)
 static void draw_consent(int h)
 {
     app_ui_title("Ethernet W5500", ATK, "AUTH");
-    d.setTextSize(2); d.setTextColor(YEL, BG); d.setCursor(10, 28); d.print("Test autorizzati");
-    const char *L[] = { "Attacchi L2/L3 cablati:", "scan, ARP MITM/poison,", "DHCP starve, MAC flood,",
+    d.setTextSize(2); d.setTextColor(YEL, BG); d.setCursor(10, 28); d.print(TR("Test autorizzati","Authorized testing"));
+    const char *L_it[] = { "Attacchi L2/L3 cablati:", "scan, ARP MITM/poison,", "DHCP starve, MAC flood,",
                         "rogue DHCP, PCAP.", "Solo reti tue o con", "permesso scritto." };
+    const char *L_en[] = { "Wired L2/L3 attacks:", "scan, ARP MITM/poison,", "DHCP starve, MAC flood,",
+                        "rogue DHCP, PCAP.", "Your own networks or with", "written permission." };
+    const char *const *L = nucleo_i18n_is_it() ? L_it : L_en;
     unsigned short C[] = { FG, FG, FG, FG, MUTED, MUTED };
     d.setTextSize(1);
     for (int i = 0; i < 6; i++) { d.setTextColor(C[i], BG); d.setCursor(10, 52 + i * 11); d.print(L[i]); }
@@ -279,14 +282,14 @@ static void draw_menu(int h)
     int first = s_sel - vis / 2; if (first > MENU_N - vis) first = MENU_N - vis; if (first < 0) first = 0;
     for (int r = 0; r < vis && first + r < MENU_N; r++) {
         int idx = first + r, y = y0 + r * rowh;
-        list_row(y, idx == s_sel, MENU[idx].label, "", CYN);
+        list_row(y, idx == s_sel, TR(MENU[idx].label, MENU[idx].label_en), "", CYN);
     }
     if (s_err[0]) { d.setTextSize(1); d.setTextColor(COL_RED, BG); d.setCursor(10, h - 2); d.print(s_err); }
 }
 
 static void draw_scanning(int h)
 {
-    app_ui_title("Scansione ARP", ATK, "");
+    app_ui_title(TR("Scansione ARP","ARP scan"), ATK, "");
     int p = nucleo_eth_scan_progress();
     d.setTextSize(2); d.setTextColor(FG, BG); d.setCursor(10, 34); char b[8]; snprintf(b, sizeof b, "%d%%", p); d.print(b);
     d.drawRoundRect(10, 60, 220, 14, 4, LINE);
@@ -301,7 +304,7 @@ static void draw_hosts_list(int h)
 {
     int n = nucleo_eth_host_count();
     char rt[12]; snprintf(rt, sizeof rt, "%d host", n);
-    app_ui_title("Host trovati", ATK, rt);
+    app_ui_title(TR("Host trovati","Hosts found"), ATK, rt);
     const int rowh = 24, y0 = 26;
     int vis = (h - y0) / rowh; if (vis < 1) vis = 1;
     int first = s_msel - vis / 2; if (first > n - vis) first = n - vis; if (first < 0) first = 0;
@@ -311,7 +314,7 @@ static void draw_hosts_list(int h)
         char info[24]; snprintf(info, sizeof info, "%s%s", nucleo_eth_host_vendor(idx), nucleo_eth_host_is_gateway(idx) ? " GW" : "");
         list_row(y, idx == s_msel, lbl, info, nucleo_eth_host_is_gateway(idx) ? YEL : GRN);
     }
-    if (n == 0) { d.setTextSize(1); d.setTextColor(DIM, BG); d.setCursor(10, h - 10); d.print("nessun host"); }
+    if (n == 0) { d.setTextSize(1); d.setTextColor(DIM, BG); d.setCursor(10, h - 10); d.print(TR("nessun host","no hosts")); }
     else if (s_err[0]) { d.setTextSize(1); d.setTextColor(COL_RED, BG); d.setCursor(10, h - 10); d.print(s_err); }
 }
 
@@ -320,7 +323,7 @@ static void draw_hosts_list(int h)
 static void draw_hosts_map(int h)
 {
     int n = nucleo_eth_host_count();
-    app_ui_title("Mappa rete", ATK, "");
+    app_ui_title(TR("Mappa rete","Network map"), ATK, "");
     int gx = 120, gy = 40, yx = 120, yy = h - 8;
     // gateway hub
     d.fillRoundRect(gx - 28, gy - 12, 56, 22, 5, YEL);
@@ -376,30 +379,30 @@ static void draw_running(int h)
             char kb[12]; unsigned long by = nucleo_eth_pcap_bytes();
             if (by >= 1024) snprintf(kb, sizeof kb, "%luK", by / 1024); else snprintf(kb, sizeof kb, "%lu", by);
             big(62, "FRAME", fr, CYN); big(178, "RX", kb, GRN);
-            verdict = "cattura -> SD /capture.pcap"; vc = GRN;
+            verdict = TR("cattura -> SD /capture.pcap","capturing -> SD /capture.pcap"); vc = GRN;
             break;
         }
         case ETH_OP_ROGUE_DHCP: {
             char lz[8]; snprintf(lz, sizeof lz, "%d", nucleo_eth_rogue_leases());
             big(62, "OFFER", fr, CYN); big(178, "LEASE", lz, GRN);
-            verdict = "router+DNS -> me (MITM)"; vc = nucleo_eth_rogue_leases() ? GRN : MUTED;
+            verdict = TR("router+DNS -> me (MITM)","router+DNS -> me (MITM)"); vc = nucleo_eth_rogue_leases() ? GRN : MUTED;
             break;
         }
         default: {
             char rx[12]; unsigned long r = nucleo_eth_rx_frames();
             if (r >= 100000) snprintf(rx, sizeof rx, "%luk", r / 1000); else snprintf(rx, sizeof rx, "%lu", r);
             big(62, "TX", fr, ATK); big(178, "RX", rx, CYN);
-            if (op == ETH_OP_MITM)             { verdict = "intercetto host<->gw (reversibile)"; vc = GRN; }
-            else if (op == ETH_OP_POISON)      { verdict = "gateway dirottato (reversibile)"; vc = ATK; }
-            else if (op == ETH_OP_DHCP_STARVE) { verdict = "esaurisco il pool DHCP"; vc = ATK; }
-            else if (op == ETH_OP_MACFLOOD)    { verdict = "CAM overflow -> hub mode"; vc = ATK; }
-            else                               { verdict = "in corso..."; vc = YEL; }
+            if (op == ETH_OP_MITM)             { verdict = TR("intercetto host<->gw (reversibile)","intercepting host<->gw (reversible)"); vc = GRN; }
+            else if (op == ETH_OP_POISON)      { verdict = TR("gateway dirottato (reversibile)","gateway hijacked (reversible)"); vc = ATK; }
+            else if (op == ETH_OP_DHCP_STARVE) { verdict = TR("esaurisco il pool DHCP","draining the DHCP pool"); vc = ATK; }
+            else if (op == ETH_OP_MACFLOOD)    { verdict = TR("CAM overflow -> hub mode","CAM overflow -> hub mode"); vc = ATK; }
+            else                               { verdict = TR("in corso...","running..."); vc = YEL; }
             break;
         }
     }
     d.drawFastHLine(10, 84, 220, LINE);
     if (sub[0]) { d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(10, 92); d.print(sub); }
-    char st[52]; snprintf(st, sizeof st, "link %s   io %s", nucleo_eth_link() ? "UP" : "giu", nucleo_eth_my_ip_str());
+    char st[52]; snprintf(st, sizeof st, TR("link %s   io %s","link %s   me %s"), nucleo_eth_link() ? "UP" : TR("giu","down"), nucleo_eth_my_ip_str());
     d.setTextSize(1); d.setTextColor(nucleo_eth_link() ? MUTED : COL_RED, BG); d.setCursor(10, 92); d.print(st);
     d.setTextColor(vc, BG); d.setCursor(10, h - 9); d.print(verdict);
 }
@@ -412,8 +415,10 @@ static void draw_busy(const char *title, const char *msg, int h)
 }
 
 // ---- guide ------------------------------------------------------------------
-static const char *GH[GUIDE_PAGES] = { "Cos'e'", "Hardware", "Scan & mappa", "Attacchi", "Comandi" };
-static const char *GB[GUIDE_PAGES][6] = {
+static const char *GH_IT[GUIDE_PAGES] = { "Cos'e'", "Hardware", "Scan & mappa", "Attacchi", "Comandi" };
+static const char *GH_EN[GUIDE_PAGES] = { "What", "Hardware", "Scan & map", "Attacks", "Keys" };
+#define GH (nucleo_i18n_is_it() ? GH_IT : GH_EN)
+static const char *GB_IT[GUIDE_PAGES][6] = {
     { "Attacchi L2/L3 cablati via", "modulo W5500 in MACRAW.", "Niente lwIP: forgiamo i", "frame a mano -> gira sul",
       "Cardputer dove Bruce no.", "Una sola op alla volta." },
     { "W5500 SPI sul bus microSD:", "SCLK40 MOSI14 MISO39 +", "CS su G1 (Grove), saldato.", "Senza modulo l'app lo dice",
@@ -425,6 +430,19 @@ static const char *GB[GUIDE_PAGES][6] = {
     { "su/giu  scegli", "invio   avvia / MITM / ferma", "m       mappa/lista", "sx      indietro",
       "esc     lascia attivo (bg)", "tab     questa guida" },
 };
+static const char *GB_EN[GUIDE_PAGES][6] = {
+    { "Wired L2/L3 attacks via", "the W5500 in MACRAW.", "No lwIP: we forge the", "frames by hand -> runs on",
+      "the Cardputer where Bruce can't.", "One op at a time." },
+    { "W5500 SPI on the microSD bus:", "SCLK40 MOSI14 MISO39 +", "CS on G1 (Grove), soldered.", "Without the module the app says so",
+      "and does not fake it.", "" },
+    { "Scan: DHCP self-config then", "ARP sweep of the /24.", "Vendor from offline OUI.", "Map: GATEWAY on top, ME",
+      "below, hosts fanned out.", "Enter on a host = MITM." },
+    { "MITM/poison are REVERSIBLE:", "on exit we restore the", "ARP caches (Bruce doesn't).", "Rogue DHCP: router+DNS->me.",
+      "PCAP: capture to SD.", "Authorized networks only." },
+    { "up/dn  pick", "enter   start / MITM / stop", "m       map/list", "left    back",
+      "esc     leave on (bg)", "tab     this guide" },
+};
+#define GB (nucleo_i18n_is_it() ? GB_IT : GB_EN)
 static void draw_guide(void)
 {
     char rt[10]; snprintf(rt, sizeof rt, "%d/%d", s_page + 1, GUIDE_PAGES);
@@ -447,7 +465,7 @@ static void draw(void)
         case ST_CONSENT:  draw_consent(h); break;
         case ST_NOMODULE: draw_nomodule(h); break;
         case ST_SCANNING: draw_scanning(h); break;
-        case ST_STOPPING: draw_busy("Arresto...", "Ripristino cache ARP.", h); s_stop_armed = true; break;
+        case ST_STOPPING: draw_busy(TR("Arresto...","Stopping..."), TR("Ripristino cache ARP.","Restoring ARP cache."), h); s_stop_armed = true; break;
         case ST_HOSTS:    if (s_map) draw_hosts_map(h); else draw_hosts_list(h); break;
         case ST_RUNNING:  draw_running(h); break;
         default:          draw_menu(h); break;

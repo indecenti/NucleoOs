@@ -16,6 +16,7 @@
 #include "nucleo_exclusive.h"
 #include "nucleo_board.h"
 #include "app_gfx.h"
+#include "nucleo_i18n.h"   // s_en follows the OS language (ui.language)
 #include "nucleo_theme.h"   // themed chrome palette (replaces the local classic-theme mirror)
 #include <M5GFX.h>
 #include "freertos/FreeRTOS.h"
@@ -41,7 +42,7 @@ static const char *TAG = "app.ssh";
 #define KH_PATH   SSH_DIR "/known_hosts"
 #define KEYS_DIR  SSH_DIR "/keys"
 
-static bool s_en = false;   // default IT (bilingual strings throughout)
+static bool s_en = false;   // mirrors the OS language; seeded from nucleo_i18n in on_enter (bilingual strings throughout)
 
 // ── colors ── chrome follows the active OS theme (was a local classic-theme mirror that ignored
 // theme switches); the C_* names stay as thin aliases so the many draw calls below are untouched.
@@ -221,7 +222,7 @@ static int pin_hostkey(LIBSSH2_SESSION *sess) {
     int chk = libssh2_knownhost_checkp(kh, s_host, 22, hkey, klen,
                                        LIBSSH2_KNOWNHOST_TYPE_PLAIN | LIBSSH2_KNOWNHOST_KEYENC_RAW, NULL);
     int rc = 0;
-    if (chk == LIBSSH2_KNOWNHOST_CHECK_MISMATCH) { sb_info("!! HOST KEY CHANGED - possibile MITM, annullo"); set_status(s_en ? "host key changed - aborted" : "host key cambiata - annullato"); rc = -1; }
+    if (chk == LIBSSH2_KNOWNHOST_CHECK_MISMATCH) { sb_info(s_en ? "!! HOST KEY CHANGED - possible MITM, aborting" : "!! HOST KEY CHANGED - possibile MITM, annullo"); set_status(s_en ? "host key changed - aborted" : "host key cambiata - annullato"); rc = -1; }
     else if (chk == LIBSSH2_KNOWNHOST_CHECK_NOTFOUND) {
         libssh2_knownhost_addc(kh, s_host, NULL, hkey, klen, "nucleoos", 8,
                                LIBSSH2_KNOWNHOST_TYPE_PLAIN | LIBSSH2_KNOWNHOST_KEYENC_RAW | kh_keybit(ktype), NULL);
@@ -501,6 +502,7 @@ static void on_tick() { if (s_dirty) nucleo_app_request_draw(); }
 // (next field in the connect form, completion in the shell).
 static void ssh_tab() { on_key(NK_TAB, 0); }
 static void on_enter() {
+    s_en = !nucleo_i18n_is_it();   // follow the OS language (English floor for es/fr/de)
     s_state = ST_FORM; s_field = 0; s_status[0] = 0; s_dirty = true; s_zoom = 1; s_manual = false;
     s_auth = AUTH_PW; s_keyIdx = 0;
     s_linelen = s_cur_x = 0; s_curlen = 0; s_compIdx = -1;   // their APP_RAM buffers come back zeroed

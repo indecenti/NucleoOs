@@ -33,13 +33,22 @@ const char   *nucleo_wifiatk_beacon_custom_ssid(int i);
 }
 
 enum { MODE_FUNNY = 0, MODE_RANDOM = 1, MODE_CLONE = 2, MODE_CUSTOM = 3, N_MODE = 4 };
-static const char *MODE_NAME[N_MODE]  = { "Divertenti", "Casuali", "Clona vicine", "Personalizzate" };
-static const char *MODE_BLURB[N_MODE] = {
+static const char *MODE_NAME_IT[N_MODE]  = { "Divertenti", "Casuali", "Clona vicine", "Personalizzate" };
+static const char *MODE_NAME_EN[N_MODE]  = { "Funny", "Random", "Clone nearby", "Custom" };
+#define MODE_NAME (nucleo_i18n_is_it() ? MODE_NAME_IT : MODE_NAME_EN)
+static const char *MODE_BLURB_IT[N_MODE] = {
     "muro di SSID buffi/plausibili",
     "reti finte generate a caso",
     "gemelle delle reti reali qui",
     "scrivi tu i nomi delle reti",
 };
+static const char *MODE_BLURB_EN[N_MODE] = {
+    "wall of funny/plausible SSIDs",
+    "fake networks at random",
+    "twins of the real networks here",
+    "type the network names yourself",
+};
+#define MODE_BLURB (nucleo_i18n_is_it() ? MODE_BLURB_IT : MODE_BLURB_EN)
 
 #include "launcher_theme.h"   // themed BG/FG/MUTED/DIM/LINE/INK + C_* accents (launcher-consistent)
 #include "app_gfx.h"
@@ -98,7 +107,7 @@ static void tick(void)
         if (!s_arm_armed) return;
         int rc = nucleo_wifiatk_beacon_start(s_mode);
         if (rc == 0) { s_state = ST_RUNNING; s_err[0] = 0; }
-        else { snprintf(s_err, sizeof s_err, "Avvio fallito (err %d)", rc); s_state = ST_CONSENT; }
+        else { snprintf(s_err, sizeof s_err, TR("Avvio fallito (err %d)","Start failed (err %d)"), rc); s_state = ST_CONSENT; }
         set_hint();
         nucleo_app_request_draw();
         return;
@@ -164,7 +173,7 @@ static void draw_consent(void)
     app_ui_title("Beacon Spam", BCN, "AUTH");
     const int bot = nucleo_app_content_height();     // usable area; the hint bar owns everything below it
     // One compact consent line (was two, which pushed the mode list into the hint bar).
-    d.setTextSize(1); d.setTextColor(YEL, BG); d.setCursor(10, 26); d.print("Solo test autorizzati: reti WiFi finte.");
+    d.setTextSize(1); d.setTextColor(YEL, BG); d.setCursor(10, 26); d.print(TR("Solo test autorizzati: reti WiFi finte.","Authorized testing only: fake WiFi networks."));
 
     // 4 modes, size-2, laid out to END above the blurb — which sits just above the hint bar. Before,
     // fixed y=54+21*i put mode 4 (and the blurb) at 117/122, i.e. INSIDE the 121px hint-bar cutoff, so
@@ -209,7 +218,7 @@ static void draw_custom(void)
         d.print(row);
     }
     d.setTextColor(YEL, BG); d.setCursor(10, h - 9);
-    d.print(cnt > 0 ? "tab avvia   invio aggiungi" : "scrivi un nome + invio");
+    d.print(cnt > 0 ? TR("tab avvia   invio aggiungi","tab start   enter add") : TR("scrivi un nome + invio","type a name + enter"));
 }
 
 static void draw_busy(const char *title, const char *msg)
@@ -257,7 +266,7 @@ static void draw_running(void)
     unsigned short hc = hp >= 80 ? GRN : (hp >= 50 ? YEL : BCN);
     char hs[16]; snprintf(hs, sizeof hs, "inj %d%%", hp);
     d.setTextColor(hc, BG); d.setCursor(238 - (int)strlen(hs) * 6, 92); d.print(hs);
-    d.setTextColor(YEL, BG); d.setCursor(10, h - 9); d.print("invio: ferma   esc: lascia attivo");
+    d.setTextColor(YEL, BG); d.setCursor(10, h - 9); d.print(TR("invio: ferma   esc: lascia attivo","enter: stop   esc: leave on"));
 }
 
 static void draw(void)
@@ -266,8 +275,8 @@ static void draw(void)
     d.fillRect(0, top, 240, h, BG);
     if (s_state == ST_CONSENT)       draw_consent();
     else if (s_state == ST_CUSTOM)   draw_custom();
-    else if (s_state == ST_ARMING)   { draw_busy("Avvio...", "Genero le reti finte."); s_arm_armed = true; }
-    else if (s_state == ST_STOPPING) { draw_busy("Arresto...", "Ripristino rete OS."); s_stop_armed = true; }
+    else if (s_state == ST_ARMING)   { draw_busy(TR("Avvio...","Starting..."), TR("Genero le reti finte.","Generating fake networks.")); s_arm_armed = true; }
+    else if (s_state == ST_STOPPING) { draw_busy(TR("Arresto...","Stopping..."), TR("Ripristino rete OS.","Restoring OS network.")); s_stop_armed = true; }
     else                             draw_running();
 }
 

@@ -38,7 +38,9 @@ static const unsigned short SNF = 0x07FF /*cyan*/, GRN = C_GREEN, YEL = C_YELLOW
 
 enum { ST_CONSENT, ST_CONFIG, ST_RUNNING, ST_ARMING, ST_STOPPING };
 enum { R_MODE, R_CHAN, R_GO, R_NROWS };
-static const char *MODE_NAME[] = { "Tutti", "Beacon", "Probe", "Handshake", "Deauth" };
+static const char *MODE_NAME_IT[] = { "Tutti", "Beacon", "Probe", "Handshake", "Deauth" };
+static const char *MODE_NAME_EN[] = { "All", "Beacon", "Probe", "Handshake", "Deauth" };
+#define MODE_NAME (nucleo_i18n_is_it() ? MODE_NAME_IT : MODE_NAME_EN)
 #define N_MODE 5
 
 static int  s_state, s_row, s_mode, s_chan;   // s_chan: 0 = hop, 1..13 fixed
@@ -92,7 +94,7 @@ static void tick(void)
         free_screen();                       // +32KB contiguous BEFORE the queue allocs
         int rc = nucleo_wifiatk_sniffer_start(s_mode, s_chan);
         if (rc == 0) { s_state = ST_RUNNING; s_err[0] = 0; }
-        else { restore_screen(); snprintf(s_err, sizeof s_err, "Avvio fallito (%d)", rc); s_state = ST_CONFIG; }
+        else { restore_screen(); snprintf(s_err, sizeof s_err, TR("Avvio fallito (%d)","Start failed (%d)"), rc); s_state = ST_CONFIG; }
         set_hint(); nucleo_app_request_draw();
         return;
     }
@@ -154,8 +156,8 @@ static void draw_consent(void)
     int h = nucleo_app_content_height();
     app_ui_title("WiFi Sniffer", SNF, "AUTH");
     d.setTextSize(2); d.setTextColor(YEL, BG); d.setCursor(10, 28); d.print("Test autorizzati");
-    const char *L[] = { "Cattura i pacchetti WiFi", "in aria e li salva in .pcap", "su SD (Wireshark/hashcat).",
-                        "", "Solo reti tue o con permesso." };
+    const char *L[] = { TR("Cattura i pacchetti WiFi","Captures WiFi packets"), TR("in aria e li salva in .pcap","over the air into a .pcap"), TR("su SD (Wireshark/hashcat).","on SD (Wireshark/hashcat)."),
+                        "", TR("Solo reti tue o con permesso.","Only your own networks or with permission.") };
     unsigned short C[] = { FG, FG, FG, BG, MUTED };
     d.setTextSize(1);
     for (int i = 0; i < 5; i++) { d.setTextColor(C[i], BG); d.setCursor(10, 52 + i * 11); d.print(L[i]); }
@@ -166,16 +168,16 @@ static void draw_config(void)
 {
     int h = nucleo_app_content_height();
     app_ui_title("WiFi Sniffer", SNF, s_err[0] ? "ERR" : "");
-    char cv[12]; if (s_chan == 0) snprintf(cv, sizeof cv, "Hop banda"); else snprintf(cv, sizeof cv, "Canale %d", s_chan);
-    row(24, s_row == R_MODE, "Modo", MODE_NAME[s_mode]);
-    row(50, s_row == R_CHAN, "Canale", cv);
+    char cv[12]; if (s_chan == 0) snprintf(cv, sizeof cv, "%s", TR("Hop banda","Band hop")); else snprintf(cv, sizeof cv, TR("Canale %d","Channel %d"), s_chan);
+    row(24, s_row == R_MODE, TR("Modo","Mode"), MODE_NAME[s_mode]);
+    row(50, s_row == R_CHAN, TR("Canale","Channel"), cv);
     bool go = (s_row == R_GO);
-    if (go) { d.fillRoundRect(6, 76, 228, 22, 6, GRN); d.setTextSize(2); d.setTextColor(INK, GRN); d.setCursor(88, 80); d.print("AVVIA"); }
-    else    { d.drawRoundRect(6, 76, 228, 22, 6, GRN); d.setTextSize(2); d.setTextColor(GRN, BG); d.setCursor(88, 80); d.print("AVVIA"); }
+    if (go) { d.fillRoundRect(6, 76, 228, 22, 6, GRN); d.setTextSize(2); d.setTextColor(INK, GRN); d.setCursor(88, 80); d.print(TR("AVVIA","START")); }
+    else    { d.drawRoundRect(6, 76, 228, 22, 6, GRN); d.setTextSize(2); d.setTextColor(GRN, BG); d.setCursor(88, 80); d.print(TR("AVVIA","START")); }
     // Error / hint line, kept INSIDE the content area (above the footer).
     d.setTextSize(1);
     if (s_err[0]) { d.setTextColor(ERR, BG); d.setCursor(10, h - 10); d.print(s_err); }
-    else          { d.setTextColor(DIM, BG);    d.setCursor(10, h - 10); d.print("salva in /sd/sniffer/*.pcap"); }
+    else          { d.setTextColor(DIM, BG);    d.setCursor(10, h - 10); d.print(TR("salva in /sd/sniffer/*.pcap","saves to /sd/sniffer/*.pcap")); }
 }
 
 static void draw_busy(const char *t, const char *m)
@@ -225,7 +227,7 @@ static void draw_running(void)
     const char *p = nucleo_wifiatk_sniffer_path(); const char *base = p;
     for (const char *q = p; *q; q++) if (*q == '/') base = q + 1;
     d.setTextColor(SNF, BG); d.setCursor(10, 86); d.print(base[0] ? base : "...");
-    d.setTextColor(YEL, BG); d.setCursor(10, h - 9); d.print("invio: ferma  (B/P/D/X/HS = tipi)");
+    d.setTextColor(YEL, BG); d.setCursor(10, h - 9); d.print(TR("invio: ferma  (B/P/D/X/HS = tipi)","enter: stop  (B/P/D/X/HS = types)"));
 }
 
 static void draw(void)
@@ -245,8 +247,8 @@ static void draw(void)
         d.fillRect(0, top, 240, h, BG);
     s_gen = gen; s_run_painted = running;
     if (s_state == ST_CONSENT)       draw_consent();
-    else if (s_state == ST_ARMING)   { draw_busy("Avvio...", "Apro la cattura."); s_arm_armed = true; }
-    else if (s_state == ST_STOPPING) { draw_busy("Salvo...", "Chiudo il .pcap e ripristino rete."); s_stop_armed = true; }
+    else if (s_state == ST_ARMING)   { draw_busy(TR("Avvio...","Starting..."), TR("Apro la cattura.","Opening the capture.")); s_arm_armed = true; }
+    else if (s_state == ST_STOPPING) { draw_busy(TR("Salvo...","Saving..."), TR("Chiudo il .pcap e ripristino rete.","Closing the .pcap and restoring network.")); s_stop_armed = true; }
     else if (s_state == ST_RUNNING)  draw_running();
     else                             draw_config();
 }

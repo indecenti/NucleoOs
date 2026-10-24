@@ -36,19 +36,19 @@ static void txt(int x, int y, const char *s, uint16_t fg, uint16_t bg, int sz) {
     d.setTextSize(sz); d.setTextColor(fg, bg); d.setCursor(x, y); d.print(s);
 }
 
-struct Item { const char *label; const char *sub; };
+struct Item { const char *label; const char *label_en; const char *sub; const char *sub_en; };
 static const Item MENU_ITEMS[] = {
-    { "Scansione",   "dispositivi BLE vicini" },
-    { "Spam iOS",    "popup pairing Apple" },
-    { "Spam Android","popup Fast Pair" },
-    { "Spam Windows","popup Swift Pair" },
-    { "Spam Samsung","popup Galaxy Buds" },
-    { "Spam Tutti",  "ruota tutti gli OS" },
-    { "iBeacon",     "beacon standard" },
-    { "Tastiera HID","keyboard + media" },
+    { "Scansione",    "Scan",         "dispositivi BLE vicini", "nearby BLE devices" },
+    { "Spam iOS",     "Spam iOS",     "popup pairing Apple",    "Apple pairing popup" },
+    { "Spam Android", "Spam Android", "popup Fast Pair",        "Fast Pair popup" },
+    { "Spam Windows", "Spam Windows", "popup Swift Pair",       "Swift Pair popup" },
+    { "Spam Samsung", "Spam Samsung", "popup Galaxy Buds",      "Galaxy Buds popup" },
+    { "Spam Tutti",   "Spam All",     "ruota tutti gli OS",     "rotate every OS" },
+    { "iBeacon",      "iBeacon",      "beacon standard",        "standard beacon" },
+    { "Tastiera HID", "HID Keyboard", "keyboard + media",       "keyboard + media" },
 };
 static const int N_ITEMS = (int)(sizeof(MENU_ITEMS) / sizeof(MENU_ITEMS[0]));
-static const char *ble_label(int i, void *) { return MENU_ITEMS[i].label; }
+static const char *ble_label(int i, void *) { return TR(MENU_ITEMS[i].label, MENU_ITEMS[i].label_en); }
 
 // ---- mode control ----------------------------------------------------------------------------------
 static void stop_all(void) { nucleo_ble_scan_stop(); nucleo_ble_spam_stop(); nucleo_ble_ibeacon_stop(); nucleo_ble_hid_stop(); }
@@ -117,7 +117,7 @@ static void draw_menu(int top, int h)
     (void)top;
     int y0 = app_ui_title("BLE", ACC, "solo test autorizzati");
     if (!s_up_ok) {   // rare after the BLE-Solo Wi-Fi-skip fix
-        txt(8, y0 + 14, "Bluetooth non attivo.", FG, BG, 1);
+        txt(8, y0 + 14, TR("Bluetooth non attivo.","Bluetooth is off."), FG, BG, 1);
         txt(8, y0 + 30, "Riprova ad aprire l'app.", MUTED, BG, 1);
         return;
     }
@@ -125,7 +125,7 @@ static void draw_menu(int top, int h)
     app_ui_list(y0, h - y0 - foot, N_ITEMS, s_sel, ble_label, nullptr, nullptr, nullptr);
     // focused-item description on a footer strip (launcher idiom: the instruction line)
     d.fillRoundRect(6, h - foot, W - 12, foot - 2, 5, SURF);
-    txt(12, h - foot + 3, MENU_ITEMS[s_sel].sub, MUTED, SURF, 1);
+    txt(12, h - foot + 3, TR(MENU_ITEMS[s_sel].sub, MENU_ITEMS[s_sel].sub_en), MUTED, SURF, 1);
 }
 
 static void draw_scan(int top, int h)
@@ -133,29 +133,31 @@ static void draw_scan(int top, int h)
     (void)top; (void)h;
     char cb[16]; int cnt = nucleo_ble_scan_count();
     snprintf(cb, sizeof cb, "%d device", cnt);
-    int y0 = app_ui_title("Scansione", ACC, nucleo_ble_is_synced() ? "attiva" : "avvio...");
+    int y0 = app_ui_title(TR("Scansione","Scan"), ACC, nucleo_ble_is_synced() ? TR("attiva","on") : TR("avvio...","starting..."));
     txt(8, y0 + 4, cb, ACC, BG, 2);
     int y = y0 + 26; nucleo_ble_dev_t dv; char ln[56];
     for (int i = 0; i < cnt && i < 8; i++) {
         if (!nucleo_ble_scan_get(i, &dv)) break;
-        snprintf(ln, sizeof(ln), "%-12.12s %4d  %02x:%02x:%02x", dv.name[0] ? dv.name : "(senza nome)",
+        snprintf(ln, sizeof(ln), "%-12.12s %4d  %02x:%02x:%02x", dv.name[0] ? dv.name : TR("(senza nome)","(no name)"),
                  dv.rssi, dv.addr[5], dv.addr[4], dv.addr[3]);
         txt(8, y, ln, FG, BG, 1); y += 12;
     }
-    if (!cnt) txt(8, y, "Nessun dispositivo ancora.", DIM, BG, 1);
+    if (!cnt) txt(8, y, TR("Nessun dispositivo ancora.","No devices yet."), DIM, BG, 1);
 }
 
 static void draw_spam(int top, int h)
 {
     (void)top; (void)h;
-    static const char *TN[] = { "iOS", "Android", "Windows", "Samsung", "Tutti" };
+    static const char *TN_IT[] = { "iOS", "Android", "Windows", "Samsung", "Tutti" };
+    static const char *TN_EN[] = { "iOS", "Android", "Windows", "Samsung", "All" };
+    const char *const *TN = nucleo_i18n_is_it() ? TN_IT : TN_EN;
     int y0 = app_ui_title("Spam", WARN, "burst BLE adv");
     txt(8, y0 + 6, TN[s_target], FG, BG, 2);
     char ln[40];
     snprintf(ln, sizeof(ln), "%lu adv inviati", (unsigned long)nucleo_ble_spam_count());
     txt(8, y0 + 34, ln, GRN, BG, 2);
     txt(8, y0 + 58, "MAC casuale a ogni burst.", MUTED, BG, 1);
-    txt(8, y0 + 72, "esc per fermare.", DIM, BG, 1);
+    txt(8, y0 + 72, TR("esc per fermare.","esc to stop."), DIM, BG, 1);
 }
 
 static void draw_ibeacon(int top, int h)
@@ -165,21 +167,21 @@ static void draw_ibeacon(int top, int h)
     int y0 = app_ui_title("iBeacon", ACC, on ? "TX" : "off");
     txt(8, y0 + 6, on ? "In trasmissione" : "Fermo", on ? GRN : MUTED, BG, 2);
     txt(8, y0 + 34, "UUID NUCLEOOS-BLE  major 1 minor 1", MUTED, BG, 1);
-    txt(8, y0 + 50, "esc per fermare.", DIM, BG, 1);
+    txt(8, y0 + 50, TR("esc per fermare.","esc to stop."), DIM, BG, 1);
 }
 
 static void draw_hid(int top, int h)
 {
     (void)top; (void)h;
     bool conn = nucleo_ble_hid_connected(), ready = nucleo_ble_hid_ready();
-    int y0 = app_ui_title("Tastiera HID", ACC, ready ? "pronto" : conn ? "sub..." : "pairing");
-    txt(8, y0 + 6, ready ? "Connesso, pronto" : conn ? "Connesso (subscribe...)" : "Attendo pairing...",
+    int y0 = app_ui_title(TR("Tastiera HID","HID Keyboard"), ACC, ready ? TR("pronto","ready") : conn ? "sub..." : "pairing");
+    txt(8, y0 + 6, ready ? TR("Connesso, pronto","Connected, ready") : conn ? TR("Connesso (subscribe...)","Connected (subscribe...)") : TR("Attendo pairing...","Waiting for pairing..."),
         ready ? GRN : (conn ? WARN : MUTED), BG, 2);
     txt(8, y0 + 32, "Appare come tastiera \"NucleoOS\".", MUTED, BG, 1);
-    txt(8, y0 + 48, "ENTER: scrivi una riga demo.", FG, BG, 1);
+    txt(8, y0 + 48, TR("ENTER: scrivi una riga demo.","ENTER: type a demo line."), FG, BG, 1);
     txt(8, y0 + 62, "1 play  2 next  3 prev", DIM, BG, 1);
     txt(8, y0 + 74, "4 vol+  5 vol-  6 mute", DIM, BG, 1);
-    txt(8, y0 + 90, "esc per fermare.", DIM, BG, 1);
+    txt(8, y0 + 90, TR("esc per fermare.","esc to stop."), DIM, BG, 1);
 }
 
 static void on_draw(void)
