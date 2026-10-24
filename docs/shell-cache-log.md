@@ -10,6 +10,7 @@ Roll it whenever a precached shell asset changes (JS/CSS/HTML/i18n) or the app r
 
 | Version | Change |
 |---|---|
+| `v161` | Opt-in **auto-update** (`nucleo.update.auto`, default off, toggle in Settings ▸ Updates): when a new release is available the shell shows a **cancellable countdown**, then hands the tag to Settings ▸ Updates which runs the normal, rollback-aware install. Offered once per tag; the firmware's own rollback is the safety net. |
 | `v160` | Always-in-view update: a taskbar **update pill** + a **Start-button badge** that stay until the device is updated (security releases tinted amber), and a **What's-new sheet** (safe-rendered release notes, Update now / Later / Skip). `update-check.js` publishes the available-update state independent of the notification center. |
 | `v159` | New **Community** app (`apps/community`: open the NucleoOS Discord, copy or scan the invite, the helper bot's `/ask` and `/guide`): `app-catalog.json` (otherwise the app would open sandboxed, as an unknown app) and the `icons.json` bundle regenerated; i18n coverage counts it. |
 | `v158` | `update-check.js` / `update-core.js`: the browser writes the card's `update.json` once per learned tag (`nucleo.update.bridged`), not on every 6 h re-check. Rolled also so SW-controlled clients re-read the Settings app (Updates ▸ SD card content, confirm-aware firmware verdict) and the Updates app (restart / confirm / rollback verdicts). |

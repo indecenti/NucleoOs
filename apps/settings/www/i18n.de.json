@@ -394,5 +394,7 @@
   "apKeyRejected": "✗ Schlüssel abgelehnt",
   "apAnsweredBy": "beantwortet von",
   "apNoAnswer": "✗ keine Antwort",
-  "loading": "Lädt…"
+  "loading": "Lädt…",
+  "upAutoInstall": "Updates automatisch installieren",
+  "upAutoInstallHint": "Bei einer neuen Version lädt der Browser sie herunter, prüft sie und installiert sie nach einem abbrechbaren Countdown. Bleibt die neue Firmware instabil, kehrt das Gerät von selbst zurück."
 }

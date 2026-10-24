@@ -24,6 +24,8 @@ export const LS_ENABLED = 'nucleo.update.enabled';   // '0' = auto-check off (pe
 export const LS_BRIDGED = 'nucleo.update.bridged';   // last tag written to the card's update.json (native dialog)
 export const LS_SKIP = 'nucleo.update.skip';         // a tag the user chose to skip: no pill, no re-notify, until a newer one
 export const LS_AUTO = 'nucleo.update.auto';         // '1' = auto-apply opt-in (download+verify+install when idle)
+export const LS_AUTOTRIED = 'nucleo.update.autotried'; // last tag an auto-update countdown was offered for (no nagging)
+export const LS_AUTOSTART = 'nucleo.update.autostart'; // a tag the Settings ▸ Updates tab should install on open (set by the shell countdown)
 
 export const UPDATE_TTL_MS = 24 * 3600 * 1000;       // one conditional request per browser per day
 

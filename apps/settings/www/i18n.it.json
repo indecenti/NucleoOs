@@ -394,5 +394,7 @@
   "apKeyRejected": "✗ chiave rifiutata",
   "apAnsweredBy": "risponde",
   "apNoAnswer": "✗ nessuna risposta",
-  "loading": "Caricamento…"
+  "loading": "Caricamento…",
+  "upAutoInstall": "Installa aggiornamenti in automatico",
+  "upAutoInstallHint": "Quando esce una nuova release, il browser la scarica e la verifica, poi la installa dopo un conto alla rovescia annullabile. Se il nuovo firmware non resta stabile, il dispositivo torna indietro da solo."
 }

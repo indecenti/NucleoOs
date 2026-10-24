@@ -1,5 +1,5 @@
 {
-  "generated": "2026-10-24T10:12:01.329Z",
+  "generated": "2026-10-24T10:28:05.296Z",
   "base": "en",
   "langs": [
     "en",
@@ -23,10 +23,10 @@
     "de": 100
   },
   "surfaces": 50,
-  "totalKeys": 4125,
+  "totalKeys": 4131,
   "namespaces": {
     "core": 156,
-    "shell": 298,
+    "shell": 302,
     "agent": 160,
     "anima": 174,
     "arcade": 59,
@@ -62,7 +62,7 @@
     "radio": 56,
     "recorder": 106,
     "recycle-bin": 18,
-    "settings": 396,
+    "settings": 398,
     "spreadsheet": 303,
     "ssh": 55,
     "system-monitor": 33,

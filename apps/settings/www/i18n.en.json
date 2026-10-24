@@ -394,5 +394,7 @@
   "apKeyRejected": "✗ key rejected",
   "apAnsweredBy": "answered by",
   "apNoAnswer": "✗ no answer",
-  "loading": "Loading…"
+  "loading": "Loading…",
+  "upAutoInstall": "Auto-install updates",
+  "upAutoInstallHint": "When a new release is out, the browser downloads and verifies it, then installs it after a cancellable countdown. If the new firmware doesn't stay stable the device rolls back on its own."
 }

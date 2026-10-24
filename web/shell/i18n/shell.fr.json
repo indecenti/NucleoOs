@@ -304,5 +304,9 @@
   "up_pill_title": "Mise à jour disponible — nouveautés",
   "up_ready": "{tag} est prête à installer",
   "up_no_notes": "Aucune note de version.",
-  "up_sec_badge": "Sécurité"
+  "up_sec_badge": "Sécurité",
+  "up_auto_title": "Mise à jour automatique",
+  "up_auto_count": "Installation de {tag} dans {s}s… vous pouvez annuler.",
+  "up_auto_go": "Installer",
+  "up_auto_cancel": "Pas maintenant"
 }

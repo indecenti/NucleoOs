@@ -1040,6 +1040,34 @@ function renderUpdatePill(st) {
   }
   const start = document.getElementById('start-btn');
   if (start) { start.classList.toggle('has-update', !!(st && st.available)); start.classList.toggle('sec', sec); }
+  maybeAutoUpdate(st);
+}
+
+// Auto-update (opt-in, default OFF; nucleo.update.auto === '1'): when a new release is available, offer a
+// CANCELLABLE countdown, then hand the tag to Settings ▸ Updates which runs the normal, rollback-aware
+// install. Offered ONCE per tag (autotried) so it never nags. The firmware's own rollback is the safety net.
+function maybeAutoUpdate(st) {
+  try {
+    if (!st || !st.available) return;
+    if (localStorage.getItem('nucleo.update.auto') !== '1') return;
+    if (localStorage.getItem('nucleo.update.autotried') === st.tag) return;
+    localStorage.setItem('nucleo.update.autotried', st.tag);
+  } catch { return; }
+  runAutoCountdown(st);
+}
+
+async function runAutoCountdown(st) {
+  let secs = 30;
+  const body = '<p id="up-auto-line">' + escapeHtml(t('up_auto_count', { tag: st.tag, s: secs })) + '</p>';
+  const p = osModal({ title: t('up_auto_title'), glyph: '⬆️', bodyHTML: body, okText: t('up_auto_go'), cancelText: t('up_auto_cancel') });
+  const tick = setInterval(() => {
+    secs--;
+    const e = document.getElementById('up-auto-line');
+    if (e) e.textContent = t('up_auto_count', { tag: st.tag, s: Math.max(0, secs) });
+    if (secs <= 0) { clearInterval(tick); const ok = document.querySelector('#os-modal-scrim [data-act="ok"]'); if (ok) ok.click(); }
+  }, 1000);
+  let r = null; try { r = await p; } finally { clearInterval(tick); }
+  if (r === true) { try { localStorage.setItem('nucleo.update.autostart', st.tag); } catch {} openUpdatesTab(); }
 }
 
 // Remote release notes (a GitHub release body) are UNTRUSTED: escape every line FIRST, then add a little

@@ -394,5 +394,7 @@
   "apKeyRejected": "✗ clé refusée",
   "apAnsweredBy": "réponse de",
   "apNoAnswer": "✗ aucune réponse",
-  "loading": "Chargement…"
+  "loading": "Chargement…",
+  "upAutoInstall": "Installer les mises à jour automatiquement",
+  "upAutoInstallHint": "À chaque nouvelle version, le navigateur la télécharge et la vérifie, puis l'installe après un compte à rebours annulable. Si le nouveau firmware n'est pas stable, l'appareil revient en arrière tout seul."
 }
