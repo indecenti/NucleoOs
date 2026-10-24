@@ -22,6 +22,12 @@ extern "C" {
 bool nucleo_anima_online_available(void);
 // One QUESTION's network budget across every online tier (armed/disarmed by nucleo_anima_query).
 void nucleo_anima_online_turn_begin(void);
+
+// Set the reply language (OS code it/en/es/fr/de) for THIS turn's LLM paths; unknown -> English floor.
+// Does NOT change the offline/deterministic cascade, which stays it/en (es/fr/de floor to English there).
+void nucleo_anima_online_set_reply_lang(const char *code);
+// English name of an OS language code for the model's "reply in <language>" directive (unknown -> English).
+const char *nucleo_anima_lang_name(const char *code);
 void nucleo_anima_online_turn_end(void);
 
 // User master switch for the network tiers (persisted by the ANIMA app). OFF -> offline-only:

@@ -1409,7 +1409,7 @@ static esp_err_t anima_get(httpd_req_t *req)
     NUCLEO_AUTH_GUARD(req);   // an ANIMA turn spawns the 30 KB worker and can reach PAID cloud (teacher/weather/wiki);
                              // reject before any of that so an unpaired LAN client can't drain credits or the heap.
     const char *q = "";
-    char lang[4]; strcpy(lang, nucleo_i18n_is_it() ? "it" : "en");   // OS default; English floor for es/fr/de
+    char lang[4]; snprintf(lang, sizeof lang, "%.2s", nucleo_i18n_lang());   // real OS code (it/en/es/fr/de)
     char *qbuf = NULL;   // [query string | decoded q] — freed on every return below
     int mode_ov = 0;   // per-request online mode from the web app: 0=none, 1=off, 2=on(hybrid), 3=only
     bool want_reset = false;
@@ -1429,8 +1429,14 @@ static esp_err_t anima_get(httpd_req_t *req)
             q = val;
         }
         char lv[8];
-        if (httpd_query_key_value(query, "lang", lv, sizeof(lv)) == ESP_OK && lv[0])
-            strcpy(lang, (lv[0] == 'i' || lv[0] == 'I') ? "it" : "en");   // Italian only for "it"; English floor for en/es/fr/de
+        // The web client sends its UI language; accept the full supported set (it/en/es/fr/de) so an
+        // es/fr/de user gets an online answer in their own language. Unknown codes keep the OS default.
+        if (httpd_query_key_value(query, "lang", lv, sizeof(lv)) == ESP_OK && lv[0] && lv[1]) {
+            char a = (char)(lv[0] | 0x20), b = (char)(lv[1] | 0x20);
+            static const char *ok[] = { "it", "en", "es", "fr", "de" };
+            for (size_t i = 0; i < sizeof(ok) / sizeof(ok[0]); i++)
+                if (a == ok[i][0] && b == ok[i][1]) { lang[0] = a; lang[1] = b; lang[2] = 0; break; }
+        }
         char rv[4];
         if (httpd_query_key_value(query, "reset", rv, sizeof(rv)) == ESP_OK && rv[0] == '1')
             want_reset = true;              // "pulisci conversazione" -> forget device-side context (under the lock)
@@ -1442,7 +1448,7 @@ static esp_err_t anima_get(httpd_req_t *req)
             else                              mode_ov = 2;        // on   -> hybrid
         }
     }
-    bool en = lang[0] == 'e';
+    bool en = !(lang[0] == 'i' && lang[1] == 't');   // English floor for the handler's own text (es/fr/de -> English); the LLM reply uses the real code
 
     // Low-heap guard (see NUCLEO_TLS_MIN_BLOCK/_FREE): when SRAM is too tight for a safe
     // TLS handshake, force this turn OFFLINE so a doomed online attempt can't OOM the web server.

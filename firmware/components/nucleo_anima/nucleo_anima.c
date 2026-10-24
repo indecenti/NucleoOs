@@ -3743,7 +3743,11 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
 {
     g_anima_stage = 0xB0;                 // DIAG: entered the ANIMA query
     g_anima_phase = 0x01;                 // DIAG: cascade entry
-    bool en = lang && (lang[0] == 'e' || lang[0] == 'E');
+    // English is the FLOOR for the offline/deterministic cascade: Italian only when the code is "it",
+    // English for en/es/fr/de and anything else (es/fr/de have no offline corpus — they must not fall to
+    // Italian). The LLM paths get the REAL code via set_reply_lang below and can answer es/fr/de for real.
+    bool en = !(lang && (lang[0] | 0x20) == 'i' && (lang[1] | 0x20) == 't');
+    nucleo_anima_online_set_reply_lang(lang);   // the real OS language for this turn's LLM reply directive
     // RAM policy: stand the offline L1/HDC brain down for this turn ONLY in ONLINE-ONLY mode, where the
     // cloud LLM is the sole brain and L1's index would be dead weight competing for the TLS handshake's
     // heap. In HYBRID, L1 SERVES (it's half of "L1 + intelligent wiki search") so we must NOT stand it

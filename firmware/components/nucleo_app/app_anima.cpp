@@ -1740,7 +1740,7 @@ static void submit(void)
     // elision: the callee writes through the hidden return pointer), never as a temporary in this frame and
     // then copied — that temporary sat on the 26 KB Solo stack for the whole query (TLS included).
     const int64_t t0 = esp_timer_get_time();
-    ::new (static_cast<void *>(&s_ses->res)) anima_result_t(nucleo_anima_query(s_ses->req, s_en ? "en" : "it"));
+    ::new (static_cast<void *>(&s_ses->res)) anima_result_t(nucleo_anima_query(s_ses->req, nucleo_i18n_lang()));
     const int turn_ms = (int)((esp_timer_get_time() - t0) / 1000);
     s_ses->cloud_note = false;
     { const char *lr = nucleo_anima_long_reply();

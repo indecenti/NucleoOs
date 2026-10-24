@@ -11,6 +11,17 @@ static bool s_enabled = true;   // mirrors the device default (master switch ON)
 bool nucleo_anima_online_available(void) { return false; }       // no internet on host
 void nucleo_anima_online_turn_begin(void) { }                    // no network budget to arm on host
 void nucleo_anima_online_turn_end(void)   { }
+void nucleo_anima_online_set_reply_lang(const char *code) { (void)code; }   // LLM-only; no network on host
+const char *nucleo_anima_lang_name(const char *code) {           // mirror of the real mapping (English floor)
+    if (code && code[0]) {
+        char a = (char)(code[0] | 0x20), b = (char)(code[1] | 0x20);
+        if (a == 'i' && b == 't') return "Italian";
+        if (a == 'e' && b == 's') return "Spanish";
+        if (a == 'f' && b == 'r') return "French";
+        if (a == 'd' && b == 'e') return "German";
+    }
+    return "English";
+}
 void nucleo_anima_set_online(bool on)    { s_enabled = on; }
 bool nucleo_anima_online_enabled(void)   { return s_enabled; }
 bool nucleo_anima_teacher_configured(void) { return false; }     // no cloud key on host -> L1 always serves (gates run offline)
