@@ -53,20 +53,20 @@ static nucleo_ducky_layout_t s_layout = DUCKY_LAYOUT_US;
 static int s_macro = 0;
 static bool s_usb_ok = false;
 
-struct Macro { const char *name; uint8_t mod; uint8_t key; };
+struct Macro { const char *name; const char *name_en; uint8_t mod; uint8_t key; };
 static const Macro MACROS[] = {
-    { "Ctrl+Alt+Canc",        NK_HIDMOD_CTRL | NK_HIDMOD_ALT,   HID_DELfw },
-    { "Task Manager",         NK_HIDMOD_CTRL | NK_HIDMOD_SHIFT, HID_ESC },
-    { "Alt+F4 (chiudi)",      NK_HIDMOD_ALT,                    HID_F(4) },
-    { "Alt+Tab",              NK_HIDMOD_ALT,                    0x2B },
-    { "Win+D (desktop)",      NK_HIDMOD_GUI,                    0x07 },   // d
-    { "Win+L (blocca)",       NK_HIDMOD_GUI,                    0x0F },   // l
-    { "Win+E (esplora)",      NK_HIDMOD_GUI,                    0x08 },   // e
-    { "PrintScreen",          0,                                HID_PRTSC },
-    { "Esc",                  0,                                HID_ESC },
+    { "Ctrl+Alt+Canc",        "Ctrl+Alt+Del",       NK_HIDMOD_CTRL | NK_HIDMOD_ALT,   HID_DELfw },
+    { "Task Manager",         "Task Manager",       NK_HIDMOD_CTRL | NK_HIDMOD_SHIFT, HID_ESC },
+    { "Alt+F4 (chiudi)",      "Alt+F4 (close)",     NK_HIDMOD_ALT,                    HID_F(4) },
+    { "Alt+Tab",              "Alt+Tab",            NK_HIDMOD_ALT,                    0x2B },
+    { "Win+D (desktop)",      "Win+D (desktop)",    NK_HIDMOD_GUI,                    0x07 },   // d
+    { "Win+L (blocca)",       "Win+L (lock)",       NK_HIDMOD_GUI,                    0x0F },   // l
+    { "Win+E (esplora)",      "Win+E (explorer)",   NK_HIDMOD_GUI,                    0x08 },   // e
+    { "PrintScreen",          "PrintScreen",        0,                                HID_PRTSC },
+    { "Esc",                  "Esc",                0,                                HID_ESC },
 };
 static const int N_MACRO = (int)(sizeof(MACROS) / sizeof(MACROS[0]));
-static const char *mac_label(int i, void *) { return MACROS[i].name; }   // shared-list provider
+static const char *mac_label(int i, void *) { return TR(MACROS[i].name, MACROS[i].name_en); }   // shared-list provider
 
 // ---- live typing modal ----------------------------------------------------------------------------
 static void chip(int x, int y, const char *label, bool on, unsigned short oncol)
@@ -80,10 +80,10 @@ static void chip(int x, int y, const char *label, bool on, unsigned short oncol)
 static void type_screen(unsigned char m, bool conn, unsigned char leds, const char *echo)
 {
     d.fillScreen(BG);
-    d.setTextSize(2); d.setTextColor(ACC, BG); d.setCursor(8, 4); d.print("Digita");
+    d.setTextSize(2); d.setTextColor(ACC, BG); d.setCursor(8, 4); d.print(TR("Digita","Type"));
     d.setTextSize(1);
     d.fillCircle(150, 12, 4, conn ? GRN : WARN);
-    d.setTextColor(conn ? GRN : WARN, BG); d.setCursor(160, 8); d.print(conn ? "host ok" : "attendo PC");
+    d.setTextColor(conn ? GRN : WARN, BG); d.setCursor(160, 8); d.print(conn ? TR("host ok","host ok") : TR("attendo PC","waiting PC"));
 
     int x = 8, y = 30;
     chip(x, y, "CTRL", m & NK_MOD_CTRL, HL);  x += 38;
@@ -97,15 +97,15 @@ static void type_screen(unsigned char m, bool conn, unsigned char leds, const ch
     chip(x, y, "NUM",    leds & NK_HIDLED_NUM, GRN);    x += 36;
     chip(x, y, "SCROLL", leds & NK_HIDLED_SCROLL, GRN);
 
-    d.setTextColor(MUTED, BG); d.setCursor(8, 70); d.print("Inviato:");
+    d.setTextColor(MUTED, BG); d.setCursor(8, 70); d.print(TR("Inviato:","Sent:"));
     d.setTextColor(FG, BG); d.setCursor(54, 70); d.print(echo && echo[0] ? echo : "-");
 
     d.setTextColor(DIM, BG);
-    d.setCursor(8, 90);  d.print("Fn+1..0=F1..F10  Fn+-=F11 Fn+ ==F12");
-    d.setCursor(8, 102); d.print("Fn+frecce nav  Fn+Canc=Del  Fn+`=Esc");
+    d.setCursor(8, 90);  d.print(TR("Fn+1..0=F1..F10  Fn+-=F11 Fn+ ==F12","Fn+1..0=F1..F10  Fn+-=F11 Fn+ ==F12"));
+    d.setCursor(8, 102); d.print(TR("Fn+frecce nav  Fn+Canc=Del  Fn+`=Esc","Fn+arrows nav  Fn+Canc=Del  Fn+`=Esc"));
     d.setTextColor(s_layout == DUCKY_LAYOUT_IT ? ORG : ACC, BG);
     d.setCursor(8, 116); d.print(s_layout == DUCKY_LAYOUT_IT ? "Layout IT" : "Layout US");
-    d.setTextColor(WARN, BG); d.setCursor(150, 116); d.print("`  esci");
+    d.setTextColor(WARN, BG); d.setCursor(150, 116); d.print(TR("`  esci","`  exit"));
 }
 
 static void echo_push(char *echo, size_t n, const char *what)
@@ -231,7 +231,9 @@ static void on_tick(void)
 // ---- drawing ---------------------------------------------------------------------------------------
 static void tabbar(int top)
 {
-    static const char *N[] = { "Digita", "Macro", "Info", "Imp" };
+    static const char *IT[] = { "Digita", "Macro", "Info", "Imp" };
+    static const char *EN[] = { "Type", "Macro", "Info", "Set" };
+    const char *const *N = nucleo_i18n_is_it() ? IT : EN;
     int x = 6;
     for (int i = 0; i <= T_SET; i++) {
         bool on = (i == s_tab); int w = (int)strlen(N[i]) * 6 + 10;
@@ -253,40 +255,40 @@ static void draw(void)
     unsigned char leds = nucleo_usbhid_leds();
 
     if (s_tab == T_TYPE) {
-        d.setTextColor(s_usb_ok ? FG : WARN, BG); d.setCursor(8, y); d.print(s_usb_ok ? "Tastiera USB pronta." : "USB HID non installata.");
-        d.setTextColor(conn ? GRN : MUTED, BG); d.setCursor(8, y + 14); d.print(conn ? "Host collegato." : "Collega il cavo USB-C al PC.");
+        d.setTextColor(s_usb_ok ? FG : WARN, BG); d.setCursor(8, y); d.print(s_usb_ok ? TR("Tastiera USB pronta.","USB keyboard ready.") : TR("USB HID non installata.","USB HID not installed."));
+        d.setTextColor(conn ? GRN : MUTED, BG); d.setCursor(8, y + 14); d.print(conn ? TR("Host collegato.","Host connected.") : TR("Collega il cavo USB-C al PC.","Plug the USB-C cable into the PC."));
         // big call-to-action
         d.fillRoundRect(6, y + 34, 228, 26, 8, ACC);
         d.setTextSize(2); d.setTextColor(GRN, ACC); d.setCursor(14, y + 39); d.print("ENTER");
-        d.setTextSize(1); d.setTextColor(FG, ACC);  d.setCursor(80, y + 45); d.print("inizia a digitare");
-        d.setTextColor(DIM, BG); d.setCursor(8, y + 70); d.print("Combo, Fn, frecce, layout IT/US.");
+        d.setTextSize(1); d.setTextColor(FG, ACC);  d.setCursor(80, y + 45); d.print(TR("inizia a digitare","start typing"));
+        d.setTextColor(DIM, BG); d.setCursor(8, y + 70); d.print(TR("Combo, Fn, frecce, layout IT/US.","Combos, Fn, arrows, IT/US layout."));
     } else if (s_tab == T_MACRO) {
-        d.setTextColor(MUTED, BG); d.setCursor(8, y); d.print("ENTER invia la combo al PC");
+        d.setTextColor(MUTED, BG); d.setCursor(8, y); d.print(TR("ENTER invia la combo al PC","ENTER sends the combo to the PC"));
         app_ui_list(y + 14, h - (y + 14), N_MACRO, s_macro, mac_label, nullptr, nullptr, nullptr);
     } else if (s_tab == T_INFO) {
         d.setTextColor(FG, BG);
-        d.setCursor(8, y);      snprintf(ln, sizeof ln, "USB HID: %s", s_usb_ok ? "installata" : "errore"); d.print(ln);
+        d.setCursor(8, y);      snprintf(ln, sizeof ln, "USB HID: %s", s_usb_ok ? TR("installata","installed") : TR("errore","error")); d.print(ln);
         d.setTextColor(conn ? GRN : WARN, BG);
-        d.setCursor(8, y + 14); snprintf(ln, sizeof ln, "Host: %s", conn ? "collegato e pronto" : "non rilevato"); d.print(ln);
-        d.setTextColor(MUTED, BG); d.setCursor(8, y + 32); d.print("LED del PC (stato reale):");
+        d.setCursor(8, y + 14); snprintf(ln, sizeof ln, "Host: %s", conn ? TR("collegato e pronto","connected and ready") : TR("non rilevato","not detected")); d.print(ln);
+        d.setTextColor(MUTED, BG); d.setCursor(8, y + 32); d.print(TR("LED del PC (stato reale):","PC LEDs (real state):"));
         int x = 8, yy = y + 46;
         chip(x, yy, "CAPS",   leds & NK_HIDLED_CAPS, GRN);   x += 40;
         chip(x, yy, "NUM",    leds & NK_HIDLED_NUM, GRN);    x += 36;
         chip(x, yy, "SCROLL", leds & NK_HIDLED_SCROLL, GRN);
         d.setTextColor(DIM, BG);
-        d.setCursor(8, y + 66); d.print("Si accendono premendo i lock");
-        d.setCursor(8, y + 78); d.print("sul PC: e' il PC che ce lo dice.");
-        d.setTextColor(MUTED, BG); d.setCursor(8, y + 96); d.print("Console seriale sospesa (USB presa).");
+        d.setCursor(8, y + 66); d.print(TR("Si accendono premendo i lock","They light when you press the locks"));
+        d.setCursor(8, y + 78); d.print(TR("sul PC: e' il PC che ce lo dice.","on the PC: the PC tells us."));
+        d.setTextColor(MUTED, BG); d.setCursor(8, y + 96); d.print(TR("Console seriale sospesa (USB presa).","Serial console suspended (USB taken)."));
     } else { // T_SET
-        d.setTextColor(MUTED, BG); d.setCursor(8, y); d.print("ENTER / L cambia layout host");
+        d.setTextColor(MUTED, BG); d.setCursor(8, y); d.print(TR("ENTER / L cambia layout host","ENTER / L changes host layout"));
         bool us = (s_layout == DUCKY_LAYOUT_US);
         d.fillRoundRect(6, y + 16, 228, 24, 8, us ? ACC : LINE);
         if (us) d.fillRoundRect(6, y + 19, 5, 18, 2, ACC);
         d.setTextSize(2); d.setTextColor(us ? FG : MUTED, us ? ACC : LINE); d.setCursor(16, y + 20); d.print("US  QWERTY");
         d.fillRoundRect(6, y + 44, 228, 24, 8, !us ? ACC : LINE);
         if (!us) d.fillRoundRect(6, y + 47, 5, 18, 2, ACC);
-        d.setTextSize(2); d.setTextColor(!us ? FG : MUTED, !us ? ACC : LINE); d.setCursor(16, y + 48); d.print("IT  italiana");
-        d.setTextSize(1); d.setTextColor(DIM, BG); d.setCursor(8, y + 74); d.print("Mappa i simboli sul layout del PC.");
+        d.setTextSize(2); d.setTextColor(!us ? FG : MUTED, !us ? ACC : LINE); d.setCursor(16, y + 48); d.print(TR("IT  italiana","IT  Italian"));
+        d.setTextSize(1); d.setTextColor(DIM, BG); d.setCursor(8, y + 74); d.print(TR("Mappa i simboli sul layout del PC.","Maps symbols to the PC layout."));
     }
 }
 

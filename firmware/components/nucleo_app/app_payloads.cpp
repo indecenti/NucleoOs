@@ -47,7 +47,9 @@ static nucleo_ducky_stat_t s_stat;
 static Item *s_items = nullptr;
 static int   s_count = 0;
 
-static const char *BI_NAMES[]   = { "Demo: scrivi riga", "Win: apri Notepad", "Win: blocca schermo" };
+static const char *BI_NAMES_IT[] = { "Demo: scrivi riga", "Win: apri Notepad", "Win: blocca schermo" };
+static const char *BI_NAMES_EN[] = { "Demo: type a line", "Win: open Notepad", "Win: lock screen" };
+#define BI_NAMES (nucleo_i18n_is_it() ? BI_NAMES_IT : BI_NAMES_EN)
 static const char *BI_SCRIPTS[] = {
     "STRING Ciao da NucleoOS HID\nENTER\n",
     "REM apri Esegui e lancia Notepad\nGUI r\nDELAY 400\nSTRING notepad\nENTER\nDELAY 700\nSTRING Payload NucleoOS\nENTER\n",
@@ -115,15 +117,15 @@ static void draw_run(int line, int total, const char *status, unsigned short col
 {
     int top = nucleo_app_content_top(), h = nucleo_app_content_height();
     d.fillRect(0, top, 240, h, BG);
-    d.setTextSize(2); d.setTextColor(ACC, BG); d.setCursor(8, top + 6); d.print("Payload");
+    d.setTextSize(2); d.setTextColor(ACC, BG); d.setCursor(8, top + 6); d.print(TR("Payload","Payload"));
     d.setTextSize(1); d.setTextColor(col, BG); d.setCursor(8, top + 34); d.print(status);
     // progress bar
     int bw = 220, bx = 8, by = top + 56;
     d.drawRect(bx, by, bw, 12, MUTED);
     if (total > 0) { int fillw = (bw - 2) * (line < total ? line : total) / total; d.fillRect(bx + 1, by + 1, fillw, 10, GRN); }
-    char ln[40]; snprintf(ln, sizeof ln, "%d / %d righe", line, total);
+    char ln[40]; snprintf(ln, sizeof ln, TR("%d / %d righe","%d / %d lines"), line, total);
     d.setTextColor(FG, BG); d.setCursor(8, by + 18); d.print(ln);
-    d.setTextColor(MUTED, BG); d.setCursor(8, by + 34); d.print("` (ESC) per annullare");
+    d.setTextColor(MUTED, BG); d.setCursor(8, by + 34); d.print(TR("` (ESC) per annullare","` (ESC) to cancel"));
 }
 
 static void be_prog(void *c, int line, int total) { (void)c; draw_run(line, total, "esecuzione...", GRN); }
@@ -136,7 +138,7 @@ static void run_payload(void)
     nucleo_exclusive_info_t inf;
     bool was_excl = false, ble_ok = true;
 
-    draw_run(0, s_stat.lines, ble ? "BLE: avvio radio..." : "USB: installo HID...", WARN);
+    draw_run(0, s_stat.lines, ble ? TR("BLE: avvio radio...","BLE: starting radio...") : TR("USB: installo HID...","USB: installing HID..."), WARN);
     if (ble) {
         was_excl = nucleo_exclusive_active();           // don't exit an exclusive we didn't enter
         nucleo_exclusive_enter(NX_DEEP_OFFLINE, &inf);
@@ -147,7 +149,7 @@ static void run_payload(void)
     }
 
     // wait for the target to be ready (USB host attach / BLE pair+subscribe), abortable, ~20s
-    const char *wait = ble ? "accoppia il target: NucleoOS" : "collega il cavo USB-C";
+    const char *wait = ble ? TR("accoppia il target: NucleoOS","pair the target: NucleoOS") : TR("collega il cavo USB-C","plug the USB-C cable");
     bool ready = false;
     for (int i = 0; ble_ok && i < 1400 && !s_abort; i++) {
         ready = ble ? nucleo_ble_hid_ready() : nucleo_usbhid_ready();
@@ -158,15 +160,15 @@ static void run_payload(void)
     }
 
     char result[48];
-    if (!ble_ok)                snprintf(result, sizeof result, "errore: radio BLE non avviata");
-    else if (!ready || s_abort) snprintf(result, sizeof result, s_abort ? "annullato" : "target non pronto");
+    if (!ble_ok)                snprintf(result, sizeof result, "%s", TR("errore: radio BLE non avviata","error: BLE radio not started"));
+    else if (!ready || s_abort) snprintf(result, sizeof result, "%s", s_abort ? TR("annullato","cancelled") : TR("target non pronto","target not ready"));
     else {
         nucleo_ducky_backend_t be = {
             ble ? be_ready_ble : be_ready_usb, ble ? be_key_ble : be_key_usb,
             be_delay, be_abort, be_prog, NULL,
         };
         int n = nucleo_ducky_run(s_script, s_script_len, s_layout, &be);
-        snprintf(result, sizeof result, s_abort ? "annullato a %d righe" : "fatto: %d righe", n);
+        snprintf(result, sizeof result, s_abort ? TR("annullato a %d righe","cancelled at %d lines") : TR("fatto: %d righe","done: %d lines"), n);
     }
 
     bool ok = ble_ok && ready && !s_abort;
@@ -174,12 +176,12 @@ static void run_payload(void)
         if (ble_ok) nucleo_ble_hid_stop();
         bool down_ok = nucleo_ble_down();               // false = NimBLE stuck, controller RAM not reclaimed
         if (down_ok) { if (!was_excl) nucleo_exclusive_exit(); }   // don't exit an exclusive we didn't enter
-        else { snprintf(result, sizeof result, "BLE bloccato: riavvia"); ok = false; }  // do NOT restart Wi-Fi onto a broken heap
+        else { snprintf(result, sizeof result, "%s", TR("BLE bloccato: riavvia","BLE stuck: reboot")); ok = false; }  // do NOT restart Wi-Fi onto a broken heap
     }
     // USB HID stays resident for the session (PHY taken; OTA over Wi-Fi still works) — same as app_usbkbd.
 
     draw_run(s_stat.lines, s_stat.lines, result, ok ? GRN : WARN);
-    d.setTextColor(MUTED, BG); d.setCursor(8, nucleo_app_content_top() + nucleo_app_content_height() - 14); d.print("un tasto per tornare");
+    d.setTextColor(MUTED, BG); d.setCursor(8, nucleo_app_content_top() + nucleo_app_content_height() - 14); d.print(TR("un tasto per tornare","any key to go back"));
     for (;;) { nucleo_key_t k = nucleo_kbd_read(); if (k.key) break; vTaskDelay(pdMS_TO_TICKS(20)); esp_task_wdt_reset(); }
     nucleo_app_request_draw();
 }
@@ -227,9 +229,9 @@ static void on_key(int key, char ch)
 // ---- drawing ---------------------------------------------------------------------------------------
 static void draw_list(int top, int h)
 {
-    d.setTextSize(2); d.setTextColor(ACC, BG); d.setCursor(8, top + 6); d.print("Payloads");
+    d.setTextSize(2); d.setTextColor(ACC, BG); d.setCursor(8, top + 6); d.print(TR("Payloads","Payloads"));
     d.setTextSize(1); d.setTextColor(WARN, BG); d.setCursor(110, top + 12); d.print("solo test autorizzati");
-    if (s_count == 0) { d.setTextColor(MUTED, BG); d.setCursor(8, top + 34); d.print("nessun payload"); return; }
+    if (s_count == 0) { d.setTextColor(MUTED, BG); d.setCursor(8, top + 34); d.print(TR("nessun payload","no payload")); return; }
     int y = top + 30, rowh = 16, maxrows = (h - 30) / rowh;
     int start = 0; if (s_sel >= maxrows) start = s_sel - maxrows + 1;
     for (int i = start; i < s_count && i < start + maxrows; i++) {
@@ -248,17 +250,17 @@ static void draw_preview(int top, int h)
     d.setTextSize(1);
     char ln[48];
     d.setTextColor(s_stat.errors ? WARN : GRN, BG); d.setCursor(8, top + 30);
-    snprintf(ln, sizeof ln, "%d righe  %d tasti  ~%lu ms", s_stat.lines, s_stat.keystrokes, (unsigned long)s_stat.est_ms);
+    snprintf(ln, sizeof ln, TR("%d righe  %d tasti  ~%lu ms","%d lines  %d keys  ~%lu ms"), s_stat.lines, s_stat.keystrokes, (unsigned long)s_stat.est_ms);
     d.print(ln);
     if (s_stat.errors) { d.setTextColor(WARN, BG); d.setCursor(8, top + 44); snprintf(ln, sizeof ln, "%d errori (%s)", s_stat.errors, s_stat.first_error); d.print(ln); }
     else { d.setTextColor(MUTED, BG); d.setCursor(8, top + 44); d.print("sintassi ok"); }
 
     d.setTextColor(FG, BG); d.setCursor(8, top + 64);
-    snprintf(ln, sizeof ln, "Transport: %s", s_transport ? "BLE (wireless)" : "USB (cavo)"); d.print(ln);
+    snprintf(ln, sizeof ln, "Transport: %s", s_transport ? TR("BLE (wireless)","BLE (wireless)") : TR("USB (cavo)","USB (cable)")); d.print(ln);
     d.setCursor(8, top + 78); snprintf(ln, sizeof ln, "Layout: %s", s_layout == DUCKY_LAYOUT_IT ? "IT" : "US"); d.print(ln);
     d.setTextColor(MUTED, BG); d.setCursor(8, top + 96); d.print("T transport  L layout");
-    d.setTextColor(GRN, BG);   d.setCursor(8, top + 110); d.print("ENTER esegui");
-    d.setTextColor(MUTED, BG); d.setCursor(96, top + 110); d.print("esc indietro");
+    d.setTextColor(GRN, BG);   d.setCursor(8, top + 110); d.print(TR("ENTER esegui","ENTER run"));
+    d.setTextColor(MUTED, BG); d.setCursor(96, top + 110); d.print(TR("esc indietro","esc back"));
 }
 
 static void on_draw(void)
