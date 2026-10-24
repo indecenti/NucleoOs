@@ -58,6 +58,11 @@ const char *nk_orient_name(nk_orient_t o);
 // 90 = on its edge). Returns 0 when the vector is too small to trust, 1 otherwise.
 int nk_level(float gx, float gy, float gz, float *lx, float *ly, float *deg);
 
+// nk_level from a RAW BMI270 reading on the Cardputer ADV (sensor frame, specific force = points UP at
+// rest). Maps it to screen-frame gravity first, so *lx > 0 = the RIGHT edge is low and *ly > 0 = the
+// BOTTOM (keyboard) edge is low. This is what nucleo_imu_level() returns.
+int nk_level_sensor(float ax, float ay, float az, float *lx, float *ly, float *deg);
+
 // Pedometer: detect walking steps from the raw accel stream (peak detection on the dynamic accel with
 // a low-gate re-arm and a refractory window, so one stride = one count). Feed samples at ~50 Hz.
 typedef struct {

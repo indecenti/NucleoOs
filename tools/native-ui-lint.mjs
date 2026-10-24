@@ -40,6 +40,24 @@ const DRAW_SINK = /\b(?:d\.[A-Za-z]\w*|setTextColor|fillRect|fillRoundRect|drawR
 const HEX = /\b0x[0-9A-Fa-f]{4}\b/;
 const HINT_BARE = /nucleo_app_set_hint\s*\(\s*"(?!")/;   // "" (clear the hint) has nothing to translate
 
+// Rule 3 (hint-too-long): the footer bar (launcher_render_hint_bar) prints at most 39 Font0 glyphs;
+// a longer hint silently loses its tail (the user saw "TAB menu" / "esc" vanish). Measure the RUNTIME
+// byte length of each hint string — a C escape like \xb7 is ONE byte, a raw UTF-8 '·' is two — so the
+// check matches what strlen() feeds the bar, not the source spelling.
+const HINT_MAX = 39;
+const HINT_CALL = /nucleo_app_set_hint\s*\(([\s\S]*?)\)\s*;/g;
+const STR_LIT = /"((?:[^"\\]|\\.)*)"/g;
+function runtimeBytes(body) {
+  let b = 0;
+  for (let i = 0; i < body.length; i++) {
+    if (body[i] === '\\') {
+      if (body[i + 1] === 'x') { let j = i + 2; while (j < body.length && /[0-9a-fA-F]/.test(body[j])) j++; b++; i = j - 1; }
+      else { b++; i++; }                              // \n \t \\ \" \0 ... = one byte
+    } else b += Buffer.byteLength(body[i], 'utf8');
+  }
+  return b;
+}
+
 // Strip // and /* */ comments so a hex in a comment never trips the lint. Also drops string literals so
 // a color-like token inside "text 0x1234" (rare) isn't flagged — colors are numeric args, not strings.
 function sanitize(line) {
@@ -75,7 +93,20 @@ for (const f of files) {
       nHint++;
     }
   });
-  summary.push({ f, exemptColor, nColor, nHint });
+
+  // hint-too-long: full-text pass (a TR5 hint often spans several lines, so this can't be per-line)
+  let nLong = 0;
+  for (const m of text.matchAll(HINT_CALL)) {
+    const line = text.slice(0, m.index).split(/\r?\n/).length;
+    for (const sm of m[1].matchAll(STR_LIT)) {
+      const rb = runtimeBytes(sm[1]);
+      if (rb > HINT_MAX) {
+        violations.push({ file: f, line, rule: 'hint-too-long', text: `[${rb}B > ${HINT_MAX}] ${sm[1]}` });
+        nLong++;
+      }
+    }
+  }
+  summary.push({ f, exemptColor, nColor, nHint: nHint + nLong });
 }
 
 if (process.argv.includes('--list')) {

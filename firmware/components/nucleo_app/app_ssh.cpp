@@ -513,7 +513,7 @@ static void on_enter() {
     nucleo_screen_release();
     nucleo_app_set_direct_draw(true);
     scan_keys(); hist_load();
-    nucleo_app_set_hint(s_en ? "arrows/Tab field  </>auth/key  Enter go  Fn+H help" : "frecce/Tab campo  </>auth/chiave  Invio vai  Fn+H aiuto");
+    nucleo_app_set_hint(s_en ? "arrows/Tab  </>auth/key  Enter go  Fn+H" : "frecce/Tab  </>auth  invio vai  Fn+H");
     nucleo_app_set_back_handler(back_handler);
     nucleo_app_set_tab_handler(ssh_tab);
     nucleo_app_request_draw();

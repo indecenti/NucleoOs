@@ -60,8 +60,9 @@ float nucleo_imu_energy(void);
 unsigned nucleo_imu_steps(void);
 void     nucleo_imu_steps_reset(void);
 
-// Bubble-level readout for the native level app: *lx,*ly (screen-plane gravity, -1..1; 0,0 = level)
-// and *deg (tilt from flat). Returns false when the IMU is absent. See nk_level().
+// Bubble-level readout for the native level app: *lx,*ly (screen-plane gravity, -1..1; 0,0 = level;
+// points to the LOW side: +x = right edge low, +y = bottom edge low) and *deg (tilt from flat).
+// Returns false when the IMU is absent. See nk_level_sensor().
 bool nucleo_imu_level(float *lx, float *ly, float *deg);
 
 #ifdef __cplusplus

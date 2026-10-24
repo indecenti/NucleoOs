@@ -112,8 +112,8 @@ static void scan(void)
 }
 
 // ---- hints (bilingual) ----
-static void list_hint(void) { nucleo_app_set_hint(TR5("INVIO apri  ->azioni  n nuova  d elimina", "ENTER open  ->actions  n new  d delete", "INTRO abre  ->accion  n nuevo  d borra", "ENTREE ouvre  ->action  n nuevo  d sup", "ENTER abre  ->Aktion  n neu  d loescht")); }
-static void view_hint(void) { nucleo_app_set_hint(TR5(";/. scorri  INVIO modifica  TAB opzioni  <-lista", ";/. scroll  ENTER edit  TAB options  <-list", ";/. desplaza  INTRO edit  TAB opt  <-li", ";/. defil  ENTER edit  TAB opt  <-list", ";/. scroll  ENTER edit  TAB opt  <-list")); }
+static void list_hint(void) { nucleo_app_set_hint(TR5("INVIO apri  ->azioni  n nuova  d elim", "ENTER open  ->actions  n new  d del", "INTRO abre  ->accion  n nuevo  d borra", "ENTREE ouvre  ->action  n nouv  d sup", "ENTER abre  ->Aktion  n neu  d loescht")); }
+static void view_hint(void) { nucleo_app_set_hint(TR5(";/. scorri invio modif tab opz <-lista", ";/. scroll  enter edit  tab opt  <-list", ";/. desplaza  intro edit  tab opt  <-li", ";/. defil  enter edit  tab opt  <-list", ";/. scroll  enter edit  tab opt  <-lst")); }
 static void edit_hint(void) { nucleo_app_set_hint(TR5("INVIO a capo  CANC cancella  <-salva", "ENTER newline  DEL backspace  <-save", "INTRO linea  SUPR atras  <-guardar", "ENTREE nouv ligne  SUPP ret  <-sauver", "ENTER zeile  ENTF zurueck  <-speich.")); }
 
 static void load(const char *name)

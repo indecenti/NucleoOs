@@ -215,8 +215,8 @@ static void add_city_flow(void)
 // ---- lifecycle ------------------------------------------------------------------------------------
 static bool on_back(int key)
 {
-    if (s_fav_screen) { s_fav_screen = false; nucleo_app_set_hint(TR5("1-3 tab   </> cambia   r aggiorna   esc esci",
-                                                    "1-3 tab   </> switch   r refresh   esc back", "1-3   </> cambia   r actual   esc atras", "1-3   </> change   r actual   esc ret", "1-3   </> aendern   r aktualis   esc zur")); nucleo_app_request_draw(); return true; }
+    if (s_fav_screen) { s_fav_screen = false; nucleo_app_set_hint(TR5("1-3 tab  </> cambia  r aggiorna  esc",
+                                                    "1-3 tab  </> switch  r refresh  esc", "1-3 tab  </> cambia  r actual  esc", "1-3 tab  </> change  r actual  esc", "1-3 tab  </> aendern  r aktual  esc")); nucleo_app_request_draw(); return true; }
     if (key == NK_LEFT) { s_tab = (Tab)((s_tab + T_SET) % (T_SET + 1)); nucleo_app_request_draw(); return true; }
     return false;
 }
@@ -226,8 +226,8 @@ static void on_enter(void)
     s_tab = T_NOW; s_set_sel = 0; s_fav_screen = false; s_fav_sel = 0;
     fav_load();
     nucleo_app_set_back_handler(on_back);
-    nucleo_app_set_hint(TR5("1-3 tab   </> cambia   r aggiorna   esc esci",
-                                                    "1-3 tab   </> switch   r refresh   esc back", "1-3   </> cambia   r actual   esc atras", "1-3   </> change   r actual   esc ret", "1-3   </> aendern   r aktualis   esc zur"));
+    nucleo_app_set_hint(TR5("1-3 tab  </> cambia  r aggiorna  esc",
+                                                    "1-3 tab  </> switch  r refresh  esc", "1-3 tab  </> cambia  r actual  esc", "1-3 tab  </> change  r actual  esc", "1-3 tab  </> aendern  r aktual  esc"));
     do_refresh(false);
 }
 

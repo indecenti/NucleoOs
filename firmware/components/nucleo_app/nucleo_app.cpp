@@ -882,10 +882,13 @@ static void close_app(void)
 }
 void nucleo_app_exit(void) { close_app(); }
 
-// Global flashlight overlay (G0 quick-tap). Unlike opening the Torch app, this paints a pure-white
+// Global flashlight overlay (G0 quick-tap). Unlike opening the Torch app, this paints a solid light
 // panel over WHATEVER is on screen and, when dismissed, restores it exactly — your place in any app,
 // the launcher, or the Control Center is never disturbed. On a Cardputer the LCD is the only light
-// emitter, so "max light" = every subpixel on at 100% backlight.
+// emitter, so "max light" = every subpixel on at 100% backlight. Colour + level are the Torch app's
+// (white / 100% until you pick otherwise there): a dim red set for the night stays a dim red here.
+extern "C" void nucleo_torch_overlay_style(unsigned short *col, int *pct);   // app_torch.cpp
+static unsigned short s_torch_col = 0xFFFF;
 static void torch_off(void)
 {
     if (!s_torch) return;
@@ -898,9 +901,11 @@ static void torch_off(void)
 static void torch_on(void)
 {
     s_torch_prev_bright = nucleo_app_brightness();                        // remember to restore on dismiss
-    ESP_LOGW("torch", "on (bright %d -> 100)", s_torch_prev_bright);
+    int pct = 100;
+    nucleo_torch_overlay_style(&s_torch_col, &pct);
+    ESP_LOGW("torch", "on (bright %d -> %d)", s_torch_prev_bright, pct);
     s_torch = true;
-    nucleo_app_set_brightness(100);
+    nucleo_app_set_brightness(pct);
     s_dirty = true;                                                      // the run loop paints the white overlay
 }
 static void toggle_torch(void) { if (s_torch) torch_off(); else torch_on(); }
@@ -2128,8 +2133,8 @@ void nucleo_app_run(void)
             // block. The ready chime + end beep are the feedback; the panel returns after the beep.
             s_dirty = false;
         } else if (s_torch) {
-            // Flashlight overlay: a single full-white blit, then idle until a key/tap dismisses it.
-            if (s_dirty) { s_dirty = false; d.fillScreen(0xFFFF); }
+            // Flashlight overlay: a single full-panel blit, then idle until a key/tap dismisses it.
+            if (s_dirty) { s_dirty = false; d.fillScreen(s_torch_col); }
         } else if (voice_active) {
             if (s_dirty) { s_dirty = false; draw_voice_overlay(); }   // overlay paints DIRECT to d (no back-buffer)
         } else if (s_notify_show) {

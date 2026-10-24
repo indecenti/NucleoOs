@@ -1,6 +1,7 @@
 // Goniometro (digital angle finder) — Hardware section. Reads the BMI270 (Cardputer ADV) and shows the
-// device's roll as a full-screen protractor dial + a plumb needle + big degrees. SPACE zeroes on a
-// reference edge (relative corner measurement); F freezes/locks a reading; R clears the zero. ADV-only
+// device's roll as a full-screen protractor dial + a plumb needle + big degrees. G (or SPACE) zeroes on
+// a reference edge (relative corner measurement) and, pressed again, returns to absolute; F freezes a
+// reading (R still forces absolute, for muscle memory). ADV-only
 // (registered behind nucleo_ui_is_adv). The angle sign mirrors the IMU tilt mapping — flip ROLL_SIGN if
 // a unit reads inverted after a flash. The level MATH is shared with the Livella (nucleo_imu_level).
 #include "nucleo_app.h"
@@ -24,7 +25,8 @@ static float s_lx, s_ly, s_deg; // live in-plane gravity + tilt-from-flat
 static float s_roll;            // smoothed displayed roll (deg)
 static bool  s_seeded;
 static bool  s_reliable;        // sticky "tilt big enough to trust" (hysteresis — see poll)
-static float s_zero;            // zero reference (deg) for relative mode
+static float s_zero;            // zero reference (deg) for relative mode (0 in absolute mode)
+static bool  s_rel;             // relative mode: readout = angle from the s_zero reference edge
 static bool  s_frozen;          // reading locked
 static float s_frozen_val;
 static struct { int units; bool invert; } s_cfg = { 0, false };   // units: 0 = gradi, 1 = percento (pendenza)
@@ -55,7 +57,7 @@ static void gset_change(void)
 {
     if (s_set_sel == 0)      s_cfg.units = (s_cfg.units + 1) % 2;
     else if (s_set_sel == 1) s_cfg.invert = !s_cfg.invert;
-    else if (s_set_sel == 2) s_zero = 0.f;          // azzera calibrazione
+    else if (s_set_sel == 2) { s_zero = 0.f; s_rel = false; }   // azzera calibrazione
     nucleo_app_request_draw();
 }
 static void g_tab(void) { s_settings = !s_settings; s_set_sel = 0; nucleo_app_request_draw(); }
@@ -131,7 +133,7 @@ static void draw(void)
                            : (s_qa == INT32_MIN ? 0.f : (float)s_qa / 10.0f);   // qa already has zero+invert applied
     bool onRound = reliable && (fabsf(shown) < 0.4f || fabsf(fabsf(shown) - 90.f) < 0.4f || fabsf(fabsf(shown) - 45.f) < 0.4f || fabsf(fabsf(shown) - 180.f) < 0.4f);
 
-    const char    *rgt = !present ? "NO IMU" : s_frozen ? TR5("BLOCCATO", "LOCKED", "BLOQUEADO", "VERROU", "GESPERRT") : (s_zero != 0.f ? "REL" : "LIVE");
+    const char    *rgt = !present ? "NO IMU" : s_frozen ? TR5("BLOCCATO", "LOCKED", "BLOQUEADO", "VERROU", "GESPERRT") : (s_rel ? "REL" : "LIVE");
     unsigned short acc = !present ? C_YELLOW : s_frozen ? C_GREEN : (onRound ? C_GREEN : C_BLUE);
     // "!D" = frame going STRAIGHT to the panel (no 32 KB back-buffer) — see app_level.cpp.
     char rb[16];
@@ -163,7 +165,7 @@ static void draw(void)
         tick(cx, cy, R, (float)a, major ? 13 : med ? 9 : 5, major ? FG : DIM);
     }
     // zero marker on the rim (relative mode) — a green pip where the reference sits
-    if (s_zero != 0.f && !s_frozen) {
+    if (s_rel && !s_frozen) {
         float rad = (s_zero + 90.0f) * 0.0174533f;
         d.fillCircle(cx + (int)(cosf(rad) * R), cy + (int)(sinf(rad) * R), 3, C_GREEN);
     }
@@ -188,13 +190,16 @@ static void draw(void)
     d.fillCircle(cx, cy, 3, FG);                             // hub
 
     // BIG angle readout on the right, auto-fit to the landscape width. Unit: degrees or slope %.
+    // Absolute reads 0..180 (an angle finder). Relative keeps the SIGN: which way you turned from the
+    // reference edge is the point of zeroing (and what "Flip sign" acts on).
     char ds[16];
     float val = fabsf(shown);
     if (s_cfg.units == 1) {                                             // slope % — tan explodes toward 90 deg
         val = (val > 84.0f) ? 999.9f : tanf(val / RAD2DEG) * 100.0f;    // cap at an honest gauge ceiling
         if (val > 999.9f) val = 999.9f;                                 // (the old code printed "inf")
     }
-    if (reliable) snprintf(ds, sizeof(ds), "%.1f", (double)val);
+    if (s_rel && shown < 0.f) val = -val;
+    if (reliable) snprintf(ds, sizeof(ds), s_rel && val != 0.f ? "%+.1f" : "%.1f", (double)val);
     else          snprintf(ds, sizeof(ds), "--");
     int nx = 150, ts = 4, tw = (int)strlen(ds) * 6 * ts;
     while (ts > 2 && nx + tw + 18 > W) { ts--; tw = (int)strlen(ds) * 6 * ts; }
@@ -205,9 +210,9 @@ static void draw(void)
     else if (reliable) d.drawCircle(nx + tw + 4 + ts, cy - 4 * ts + 3, ts, onRound ? C_GREEN : FG);   // degree mark
     d.setTextSize(1); d.setTextColor(MUTED, BG);
     d.setCursor(nx, cy + 4 * ts + 5);
-    d.print(!reliable ? TR5("inclina il device", "tilt the device", "inclina el disp.", "inclinez l'appar", "Geraet neigen")
+    d.print(!reliable ? TR5("inclina device", "tilt the device", "inclina equipo", "inclinez-le", "Geraet neigen")   // <= 15 chars: 90 px
                       : s_frozen ? TR5("bloccato", "locked", "bloqueado", "verrouille", "gesperrt")
-                                 : (s_zero != 0.f ? TR5("relativo", "relative", "relativo", "relatif", "relativ") : TR5("assoluto", "absolute", "absoluto", "absolu", "absolut")));
+                                 : (s_rel ? TR5("relativo", "relative", "relativo", "relatif", "relativ") : TR5("assoluto", "absolute", "absoluto", "absolu", "absolut")));
 }
 
 // dim a colour ~45% for the needle's counter-tail (local helper; fx3d::scl is for the 3D path).
@@ -225,8 +230,13 @@ static void on_key(int key, char ch)
         else if (key == NK_RIGHT || key == NK_ENTER) gset_change();
         return;
     }
-    if (ch == ' ') { s_zero = s_roll; s_frozen = false; nucleo_app_request_draw(); }          // zero here
-    else if (ch == 'r' || ch == 'R') { s_zero = 0.f; s_frozen = false; nucleo_app_request_draw(); }  // absolute
+    // G (central, so the press doesn't nudge the edge you're measuring) toggles zero-here <-> absolute;
+    // SPACE does the same (old muscle memory) and R still forces absolute.
+    if (ch == 'g' || ch == 'G' || ch == ' ') {
+        if (s_rel) { s_zero = 0.f; s_rel = false; } else { s_zero = s_roll; s_rel = true; }
+        s_frozen = false; nucleo_app_request_draw();
+    }
+    else if (ch == 'r' || ch == 'R') { s_zero = 0.f; s_rel = false; s_frozen = false; nucleo_app_request_draw(); }
     else if (ch == 'f' || ch == 'F') {                                                          // freeze toggle
         s_frozen = !s_frozen;
         if (s_frozen) { s_frozen_val = wrap180(s_roll - s_zero); if (s_cfg.invert) s_frozen_val = -s_frozen_val; }
@@ -236,11 +246,13 @@ static void on_key(int key, char ch)
 
 static void enter(void)
 {
-    s_zero = 0.f; s_frozen = false; s_seeded = false; s_settings = false;
+    s_zero = 0.f; s_rel = false; s_frozen = false; s_seeded = false; s_settings = false;
     s_qa = s_qx = s_qy = INT32_MIN; s_qf = -1; s_frame_us = 0;   // force the first live frame after a (re)open
     nucleo_imu_level(&s_lx, &s_ly, &s_deg);
     s_reliable = nucleo_imu_present() && s_deg > FLAT_MIN;
-    nucleo_app_set_hint(TR5("spazio azzera   F blocca   R assoluto   TAB opzioni   esc esci", "space zero   F lock   R absolute   TAB options   esc back", "esp. cero   F bloq.   R abs.   TAB opc.", "esp. zero   F verr.   R abs.   TAB opt.", "Leer null   F spe.   R abs.   TAB opt."));
+    // <= 39 chars (the bar's width): the old 55-char hint cut "TAB options" off, so the menu looked missing
+    nucleo_app_set_hint(TR5("g zero/ass  f blocca  tab menu  esc", "g zero/abs  f lock  tab menu  esc", "g cero/abs  f fijar  tab menu  esc",
+                            "g zero/abs  f figer  tab menu  esc", "g Null/abs  f Halt  tab Menue  esc"));
     nucleo_app_set_tab_handler(g_tab);
     nucleo_app_set_back_handler(g_back);
     nucleo_app_set_poll_handler(poll);

@@ -83,7 +83,7 @@ static void set_hint(void)
     else if (s_state == ST_CONSENT)  nucleo_app_set_hint(TR5("invio accetto   esc esci   tab guida", "enter accept   esc back   tab guide", "intro acepta   esc atras   tab guia", "entrer accepter   esc ret   tab guide", "enter akzept   esc zur   tab anleit"));
     else if (s_state == ST_SCAN)     nucleo_app_set_hint(TR5("scansione in corso...", "scanning...", "escaneo...", "balayage...", "abtast..."));
     else if (s_state == ST_STOPPING) nucleo_app_set_hint(TR5("arresto in corso...", "stopping...", "detencion...", "arret...", "beendigung..."));
-    else if (s_state == ST_RUNNING)  nucleo_app_set_hint(TR5("invio: ferma   esc: lascia on   tab: guida", "enter: stop   esc: leave on   tab: guide", "intro: detiene   esc: deja on   tab guia", "entree: arret   esc: laisse   tab: guide", "enter: stopp   esc: weiter   tab: Hilfe"));
+    else if (s_state == ST_RUNNING)  nucleo_app_set_hint(TR5("invio ferma  esc lascia on  tab guida", "enter stop  esc leave on  tab guide", "intro detiene  esc deja on  tab guia", "entree arret  esc laisse  tab guide", "enter stopp  esc weiter  tab Hilfe"));
     else                             nucleo_app_set_hint(TR5("su/giu avvia   r riscan   tab guida", "up/dn start   r rescan   tab guide", "ar/ab inicia   r rescan   tab guia", "h/b demarre   r rescan   tab guide", "auf/ab start   r rescan   tab Hilfe"));
 }
 

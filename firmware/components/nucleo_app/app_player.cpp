@@ -837,7 +837,7 @@ static void update_hint(void)
         case 1:  nucleo_app_set_hint(TR5("scrivi cerca   invio trova   esc", "type search   enter find   esc", "escribe busca   intro buscar   esc", "ecris che   entrer trouve   esc", "tippe Suche   enter find   esc")); break;
         case 2:  nucleo_app_set_hint(TR5("su/giu scegli   invio conferma   esc", "up/dn pick   enter choose   esc", "ar/ab elige   intro confirma   esc", "haut/bas pick   entrer confirm   esc", "auf/ab Wahl   enter waehle   esc")); break;
         case 3:  nucleo_app_set_hint(TR5("</> scheda   su/giu riga   esc chiudi", "</> tab   up/dn row   esc close", "</> tab   ar/ab fila   esc cierra", "</> tab   h/b ligne   esc ferme", "</> tab   auf/ab Zeile   esc zu")); break;
-        default: nucleo_app_set_hint(TR5("su/giu sfoglia   invio riproduci   tab menu", "up/dn browse   enter play   tab menu", "ar/ab hojea   intro reproduc   tab menu", "haut/bas joue   entrer jouer   tab menu", "auf/ab such   enter spiel   tab menu"));
+        default: nucleo_app_set_hint(TR5("su/giu sfoglia  invio play  tab menu", "up/dn browse   enter play   tab menu", "ar/ab hojea  intro reprod  tab menu", "haut/bas joue  entrer joue  tab menu", "auf/ab such   enter spiel   tab menu"));
     }
 }
 

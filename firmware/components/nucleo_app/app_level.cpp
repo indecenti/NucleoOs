@@ -38,7 +38,7 @@ static int   s_view;
 static float s_lx, s_ly, s_deg;     // smoothed in-plane gravity + tilt-from-flat
 static float s_ozx, s_ozy;          // calibration zero (subtracted from lx/ly)
 static bool  s_hold;                // freeze the reading
-static float s_hx, s_hy, s_hdeg;    // held snapshot
+static float s_hx, s_hy;            // held snapshot (the held tilt is derived from it)
 
 // customizable settings (persist within a boot; reset on reboot)
 static struct { int units; bool flipx, flipy; float tol; } s_cfg = { 0, false, false, 0.4f };
@@ -121,14 +121,20 @@ static void axes(float *ax, float *ay)
     if (s_cfg.flipy) y = -y;
     *ax = x; *ay = y;
 }
-static float deg_now(void) { return s_hold ? s_hdeg : s_deg; }
+// Tilt from level, measured from the CALIBRATED axes so G zeroes the total too (the raw tilt-from-flat
+// kept reading the table's slope after a zero: the bullseye said 0.0 while the title/TOTAL stayed off).
+static float deg_now(void)
+{
+    float ax, ay; axes(&ax, &ay);
+    float m = sqrtf(ax * ax + ay * ay); if (m > 1) m = 1;
+    return asinf(m) * RAD2DEG;
+}
 
 // ---- views --------------------------------------------------------------------------------------
 static void view_bullseye(int top, int h, int y0)
 {
     float ax, ay; disp_axes(&ax, &ay);
-    float m = sqrtf(ax * ax + ay * ay); if (m > 1) m = 1;
-    float deg = asinf(m) * RAD2DEG;
+    float deg = disp_deg();
     bool level = deg < s_cfg.tol;
 
     int bottom = top + h;
@@ -203,7 +209,7 @@ static void view_tube_h(int top, int h, int y0)
     bool level = fabsf(angle) < s_cfg.tol;
     int bottom = top + h, mid = (y0 + bottom) / 2;
     int thick = 34, len = W - 16;
-    capillary(8, mid - 6 - thick / 2, len, thick, true, ax * 3.0f, level);
+    capillary(8, mid - 6 - thick / 2, len, thick, true, -ax * 3.0f, level);   // bubble to the HIGH side
     big_num(8, mid + 18, fabsf(angle), level ? C_GREEN : FG, W - 16);
 }
 
@@ -214,7 +220,7 @@ static void view_tube_v(int top, int h, int y0)
     bool level = fabsf(angle) < s_cfg.tol;
     int bottom = top + h;
     int thick = 34, len = bottom - y0 - 6;
-    capillary(20, y0 + 3, len, thick, false, ay * 3.0f, level);
+    capillary(20, y0 + 3, len, thick, false, -ay * 3.0f, level);              // bubble to the HIGH side
     big_num(70, (y0 + bottom) / 2 - 16, fabsf(angle), level ? C_GREEN : FG, W - 74);
 }
 
@@ -251,12 +257,13 @@ static const char *set_label(int i, void *)
 }
 static const char *set_right(int i, void *)
 {
-    static char b[12];
+    static char b[24];
     switch (i) {
         case 0: return s_cfg.units == 1 ? "%" : TR5("gradi", "deg", "grados", "deg", "grad");
         case 1: return s_cfg.flipx ? TR5("si", "yes", "si", "oui", "ja") : "no";
         case 2: return s_cfg.flipy ? TR5("si", "yes", "si", "oui", "ja") : "no";
-        case 3: snprintf(b, sizeof b, "%.1f", (double)s_cfg.tol); return b;
+        // the "in bubble" band is always in degrees (also with % units): say so, a bare "0.4" read as a bug
+        case 3: snprintf(b, sizeof b, "+/-%.1f %s", (double)s_cfg.tol, TR5("gradi", "deg", "grados", "deg", "grad")); return b;
         case 4: return TR5("INVIO", "ENTER", "INTRO", "ENTREE", "EINGABE");
     }
     return "";
@@ -328,7 +335,7 @@ static void on_key(int key, char ch)
     if (ch == 'g' || ch == 'G') { calibrate(); return; }            // G = zero (central, press-safe)
     if (ch == 'f' || ch == 'F') {                                   // F = hold/freeze toggle
         s_hold = !s_hold;
-        if (s_hold) { s_hx = s_lx; s_hy = s_ly; s_hdeg = s_deg; }
+        if (s_hold) { s_hx = s_lx; s_hy = s_ly; }
         nucleo_app_request_draw(); return;
     }
     if (key == NK_RIGHT) {                                          // RIGHT = next view / increase setting
@@ -362,11 +369,12 @@ static void enter(void)
     s_hold = false;
     s_qx = s_qy = s_qd = INT32_MIN; s_frame_us = 0;   // force the first live frame after a (re)open
     nucleo_imu_level(&s_lx, &s_ly, &s_deg);
-    nucleo_app_set_hint(TR5("tab vista   g azzera   f blocca   </> sfoglia   esc esci",
-                           "tab view   g zero   f hold   </> browse   esc back",
-                           "tab v   g cero  f blq  </> nav esc sal",
-                           "tab vue g zero f bloq </> nav esc sort",
-                           "tab ans g null f halt </> nav esc zur"));
+    // <= 39 chars: the hint bar shows no more (a longer one silently lost its last keys)
+    nucleo_app_set_hint(TR5("tab vista  g azzera  f blocca  esc esci",
+                           "tab view   g zero   f hold   esc back",
+                           "tab vista  g cero  f fijar  esc salir",
+                           "tab vue  g zero  f figer  esc quitter",
+                           "tab Ansicht  g Null  f Halt  esc zur."));
     nucleo_app_set_tab_handler(tab);
     nucleo_app_set_back_handler(back);
     nucleo_app_set_poll_handler(poll);

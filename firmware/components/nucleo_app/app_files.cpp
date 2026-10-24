@@ -358,9 +358,9 @@ static void update_hint(void)
             snprintf(h, sizeof h, TR5("'%s'  DEL=reset filtro", "'%s'  DEL=clear filter", "'%s'  DEL=reset filtro", "'%s'  DEL=reinit filtre", "'%s'  DEL=Filter reset"), s_query);
         nucleo_app_set_hint(h);
     } else if (at_root()) {
-        nucleo_app_set_hint(TR5("INVIO apri  ->azioni  /=recenti  ESC esci",
-                                "ENTER open  ->actions  /=recent  ESC exit", "INTRO abre  ->acciones  /=rec  ESC sal",
-                                "ENTREE ouvre  ->actions  /=rec  ESC qu", "ENTER oeffnet  ->Aktion  /=zul  ESC be"));
+        nucleo_app_set_hint(TR5("INVIO apri  ->azioni  /=recenti  ESC",
+                                "ENTER open  ->actions  /=recent  ESC", "INTRO abre  ->acciones  /=rec  ESC",
+                                "ENTREE ouvre  ->actions  /=rec  ESC", "ENTER oeffnet  ->Aktion  /=zul  ESC"));
     } else {
         nucleo_app_set_hint(TR5("INVIO apri  ->azioni  <-su  D=elimina",
                                 "ENTER open  ->actions  <-up  D=delete", "INTRO abre  ->acciones  <-arriba  D=el",

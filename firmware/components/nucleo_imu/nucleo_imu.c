@@ -341,5 +341,5 @@ bool nucleo_imu_level(float *lx, float *ly, float *deg)
         }
     }
     if (!s_lv_seeded) return false;
-    return nk_level(s_lvx, s_lvy, s_lvz, lx, ly, deg) != 0;
+    return nk_level_sensor(s_lvx, s_lvy, s_lvz, lx, ly, deg) != 0;
 }

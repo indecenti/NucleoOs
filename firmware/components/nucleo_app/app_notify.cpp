@@ -229,7 +229,7 @@ static void enter(void)
     load_journal(); build_view();                                     // both no-op when s_items==NULL
     nucleo_app_set_tab_handler(cycle_tab);
     nucleo_app_set_hint(s_oom ? TR("memoria insufficiente   esc indietro", "out of memory   esc back")
-                              : TR("su/giu scegli   enter apri   TAB scheda   c pulisci", "up/dn pick   enter open   TAB tab   c clear"));
+                              : TR("su/giu  enter apri  TAB sched  c pul", "up/dn  enter open  TAB tab  c clear"));
     nucleo_app_request_draw();
 }
 static void leave(void)

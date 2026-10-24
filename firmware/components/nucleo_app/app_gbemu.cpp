@@ -1511,8 +1511,8 @@ static void draw(void)
 static void hint(void)
 {
     nucleo_app_set_hint(st && st->flen
-        ? TR5("Invio gioca · Canc corregge · Esc pulisce",  "Enter plays · Backspace edits · Esc clears", "Intro juega/Bksp edita/Esc limpia", "Entree joue/Ret. edite/Esc efface", "Enter spielt/Bearb./Esc loescht")
-        : TR5("Scrivi per cercare · 1-9 · Invio gioca",     "Type to search · 1-9 · Enter plays", "Escribe buscar/1-9/Intro juega", "Tapez chercher/1-9/Entree joue", "Tippen Suchen/1-9/Enter spielt"));
+        ? TR5("Invio gioca  Canc modif  Esc pulisce",  "Enter plays  Bksp edits  Esc clears", "Intro juega/Bksp edita/Esc limpia", "Entree joue/Ret. edite/Esc efface", "Enter spielt/Bearb./Esc loescht")
+        : TR5("Scrivi cerca · 1-9 · Invio gioca",     "Type to search · 1-9 · Enter plays", "Escribe buscar/1-9/Intro juega", "Tapez chercher/1-9/Entree joue", "Tippen Suchen/1-9/Enter spielt"));
 }
 
 static void on_key(int key, char ch)

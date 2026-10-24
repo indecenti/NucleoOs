@@ -101,6 +101,21 @@ int main(void)
     CHECK(nk_level(G, 0, 0, &lx, &ly, &deg) == 1 && deg > 88.0f, "on edge => ~90, got %.2f", deg);
     CHECK(nk_level(0, 0, 0.4f, &lx, &ly, &deg) == 0, "tiny vector => 0 (untrusted)");
 
+    // 9b) raw BMI270 reading -> screen gravity (nucleo_imu_level). The device can't tell us the raw
+    //     sensor signs from here, so pin the MAPPING: X passes through, Y is negated (the one axis a user
+    //     reported inverted). lx = ax/g, ly = -ay/g, deg from the screen-normal component.
+    {
+        const float s = 0.5f * G, c = 0.8660254f * G;                   // 30 deg
+        CHECK(nk_level_sensor( s, 0, c, &lx, &ly, &deg) == 1 && fabsf(lx - 0.5f) < 0.02f && fabsf(ly) < 0.02f,
+              "ax>0 => lx = +ax/g, ly ~ 0; got lx=%.3f ly=%.3f", lx, ly);
+        CHECK(nk_level_sensor(0,  s, c, &lx, &ly, &deg) == 1 && fabsf(ly + 0.5f) < 0.02f && fabsf(lx) < 0.02f,
+              "ay>0 => ly = -ay/g (Y negated); got ly=%.3f lx=%.3f", ly, lx);
+        CHECK(nk_level_sensor(0, -s, c, &lx, &ly, &deg) == 1 && fabsf(ly - 0.5f) < 0.02f,
+              "ay<0 => ly = +|ay|/g; got ly=%.3f", ly);
+        CHECK(nk_level_sensor(0, G, 0, &lx, &ly, &deg) == 1 && ly < -0.98f && deg > 88.0f,
+              "upright on an edge => |ly| ~ 1, deg ~ 90; got ly=%.3f deg=%.1f", ly, deg);
+    }
+
     // 10) pedometer: synthetic walking = a 2 Hz oscillation on the vertical axis -> ~1 step per cycle
     {
         nk_step_state st; nk_step_reset(&st);

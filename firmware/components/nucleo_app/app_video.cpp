@@ -1836,7 +1836,7 @@ static void update_hint(void)
     switch (hs) {
         case 1:  nucleo_app_set_hint(TR5("DX scheda \xb7 SU/GIU riga \xb7 ESC chiudi", "RIGHT tab \xb7 UP/DN row \xb7 ESC close", "DER tab \xb7 AR/AB fila \xb7 ESC cierra", "DR. onglet \xb7 H/B ligne \xb7 ESC ferme", "RECHTS Tab \xb7 AUF/AB Zeile \xb7 ESC zu")); break;
         case 2:  nucleo_app_set_hint(TR5("SX/DX regola \xb7 INVIO fatto", "L/R adjust \xb7 ENTER done", "IZQ/DER ajusta \xb7 INTRO ok", "G/D regle \xb7 ENTREE ok", "L/R regeln \xb7 ENTER ok")); break;
-        default: nucleo_app_set_hint(TR5("invio riproduci/apri \xb7 canc su \xb7 TAB menu", "enter play/open \xb7 del up \xb7 TAB menu", "intro abre \xb7 supr subir \xb7 TAB menu", "entree lire \xb7 suppr haut \xb7 TAB menu", "enter Start \xb7 entf hoch \xb7 TAB Menue"));
+        default: nucleo_app_set_hint(TR5("invio apri \xb7 canc su \xb7 TAB menu", "enter play/open \xb7 del up \xb7 TAB menu", "intro abre \xb7 supr subir \xb7 TAB menu", "entree lire \xb7 suppr haut \xb7 TAB menu", "enter Start \xb7 entf hoch \xb7 TAB Menue"));
     }
 }
 

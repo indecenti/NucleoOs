@@ -1341,27 +1341,27 @@ static void set_hint_for_mode(void)
     switch (s_mode) {
     case M_DETAIL:
         nucleo_app_set_hint(s_tab == T_ASK
-            ? TR5("</> tab  Invio: chiedi  Spc: audio  Esc: back",
-                 "</> tab  Enter ask  Spc play  Esc back", "</> tab intro pregunta spc audio esc v", "</> tab entree demande spc jouer esc r", "</> tab enter frage spc spielen esc zur")
-            : TR5("</> tab  su/giu riga  ,/. pagina  Invio: genera",
-                 "</> tab  up/dn line  ,/. page  Enter make", "</> tab ar/ab ,/. pag intro genera", "</> tab haut/bas ,/. pag entree creer", "</> tab auf/ab ,/. Seite enter mache"));
+            ? TR5("</> tab  invio chiedi  spc audio  esc",
+                 "</> tab  enter ask  spc play  esc", "</> tab  intro pide  spc audio  esc", "</> tab  entree dem  spc jouer  esc", "</> tab  enter frage  spc audio  esc")
+            : TR5("</> tab  su/giu  ,/. pag  invio crea",
+                 "</> tab  up/dn  ,/. page  enter make", "</> tab  ar/ab  ,/. pag  intro crea", "</> tab  haut/bas  ,/. pag  entree cree", "</> tab  auf/ab  ,/. Seite  enter mache"));
         break;
     case M_SETTINGS:
         nucleo_app_set_hint(
             s_set_tab == ST_AUDIO ? TR5("</> tab  su/giu: volume  Esc: back", "</> tab  up/dn volume  Esc back", "</> tab ar/ab vol esc volta", "</> tab haut/bas vol esc ret.", "</> tab auf/ab Laut. esc zur.")
-          : s_set_tab == ST_AI    ? TR5("</> tab  su/giu  Invio: cambia  Esc: back", "</> tab  up/dn  Enter change  Esc back", "</> tab ar/ab intro cambia esc vol", "</> tab haut/bas entree change esc ret", "</> tab auf/ab enter aendern esc zur")
+          : s_set_tab == ST_AI    ? TR5("</> tab  su/giu  invio cambia  esc", "</> tab  up/dn  enter change  esc", "</> tab  ar/ab  intro cambia  esc", "</> tab  haut/bas  entree chg  esc", "</> tab  auf/ab  enter aend  esc")
           :                          TR5("</> tab  Esc: back", "</> tab  Esc back", "</> tab esc volta", "</> tab esc ret.", "</> tab esc zur."));
         break;
     case M_ASK:
         nucleo_app_set_hint(TR5("su/giu riga  ,/. pagina  Esc: back", "up/dn line  ,/. page  Esc back", "ar/ab linea ,/. pag esc volver", "haut/bas ligne ,/. pag esc ret.", "auf/ab Zeile ,/. Seite esc zuruck"));
         break;
     case M_PLAY:
-        nucleo_app_set_hint(TR5("Spc: play/pausa  ,/. cerca  su/giu vol  A: AI  Esc: back",
-                              "Spc play/pause  ,/. seek  up/dn vol  A: AI  Esc back", "Spc play/pausa ,/. busca A: IA esc vol", "Spc joue/pause ,/. cher. A: IA esc ret.", "Spc spielen/pause ,/. such A: KI esc z"));
+        nucleo_app_set_hint(TR5("spc play  ,/. cerca  u/d vol  A:IA",
+                              "spc play  ,/. seek  u/d vol  A:AI", "spc play  ,/. busca  u/d vol  A:IA", "spc play  ,/. cher  u/d vol  A:IA", "spc play  ,/. such  u/d vol  A:KI"));
         break;
     default:
-        nucleo_app_set_hint(TR5("Invio: ascolta  A: AI  K: chiedi a tutte  1-9: vai  R: reg",
-                              "Enter: play  A: AI  K: ask all  1-9: jump  R: rec", "Intro: escucha A: IA K: todo 1-9 R: gra", "Entree: jouer A: IA K: tout 1-9 R: enr", "Enter: spielen A: KI K: all 1-9 R: auf"));
+        nucleo_app_set_hint(TR5("invio play  A:IA  K:tutte  1-9  R:reg",
+                              "enter play  A:AI  K:all  1-9  R:rec", "intro play  A:IA  K:todo  1-9  R:gra", "entree play  A:IA  K:tout  1-9  R:enr", "enter play  A:KI  K:alle  1-9  R:auf"));
     }
 }
 static void set_mode(int m)

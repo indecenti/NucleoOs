@@ -25,9 +25,12 @@ static int      s_set_sel;
 #define PSET_ROWS 3
 static const char *pset_label(int i, void *)
 {
-    static const char *L[PSET_ROWS]    = { "Obiettivo", "Passo (cm)", "Azzera passi" };
-    static const char *L_EN[PSET_ROWS] = { "Goal",      "Stride (cm)", "Reset steps" };
-    return (i >= 0 && i < PSET_ROWS) ? nucleo_tr(L[i], L_EN[i]) : "";
+    switch (i) {
+        case 0: return TR5("Obiettivo", "Goal", "Objetivo", "Objectif", "Ziel");
+        case 1: return TR5("Passo (cm)", "Stride (cm)", "Paso (cm)", "Pas (cm)", "Schritt (cm)");
+        case 2: return TR5("Azzera passi", "Reset steps", "Poner a cero", "Remise zero", "Zuruecksetzen");
+    }
+    return "";
 }
 static const char *pset_right(int i, void *)
 {
@@ -167,7 +170,9 @@ static void enter(void)
 {
     s_settings = false;
     nucleo_imu_steps_reset(); s_steps = 0; s_cad = 0; s_last_step_us = 0;
-    nucleo_app_set_hint(TR5("cammina col device   R azzera   TAB opzioni   esc esci", "walk with device   R reset   TAB options   esc back", "camina device  R reset TAB opciones esc", "marche dev. R reset TAB option  esc ret", "Gehen mit Geraet R reset TAB Op esc zur"));
+    // <= 39 chars: the bar shows no more (the old 54-char hint lost "TAB opzioni / esc")
+    nucleo_app_set_hint(TR5("cammina  r azzera  tab menu  esc esci", "walk  r reset  tab menu  esc back", "camina  r cero  tab menu  esc salir",
+                            "marche  r zero  tab menu  esc sortir", "gehen  r null  tab Menue  esc zur."));
     nucleo_app_set_poll_handler(poll);
     nucleo_app_set_tab_handler(p_tab);
     nucleo_app_set_back_handler(p_back);

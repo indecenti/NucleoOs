@@ -39,7 +39,7 @@ static void on_enter(void){
     nucleo_app_set_direct_draw(true);   // static list UI: draw direct, free the 32 KB menu buffer
     s_sel = active_index();
     nucleo_app_set_back_handler(on_back);
-    nucleo_app_set_hint(TR5("SU/GIU scegli   INVIO applica   Esc esci", "UP/DN pick   ENTER apply   Esc exit", "AR/AB elige   INTRO aplica   Esc sale", "H/B choix   ENTREE appliq.   Esc sort", "AUF/AB Wahl   ENTER setzen   Esc Ende"));
+    nucleo_app_set_hint(TR5("SU/GIU scegli  INVIO applica  Esc", "UP/DN pick  ENTER apply  Esc", "AR/AB elige  INTRO aplica  Esc", "H/B choix  ENTREE appliq.  Esc", "AUF/AB Wahl  ENTER setzen  Esc"));
     nucleo_app_request_draw();
 }
 

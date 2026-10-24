@@ -878,9 +878,9 @@ static void enter(void)
     bool had_cfg = cfg_load();                   // PIN + options survive a reboot
     // Exploit the IMU when it's there — but never override a saved, deliberate "Microfono" choice.
     if (!had_cfg && nucleo_imu_present() && s_src == SRC_MIC) s_src = SRC_BOTH;
-    nucleo_app_set_hint(TR5("invio arma   tab modo/registrazione   tasto = schermo",
-                            "enter arm   tab mode/recording   any key = screen on", "intro arm  tab modo/grab  key=pantalla",
-                            "enter arm  tab mode/enreg  key=ecran", "eingabe arm  tab mode/aufn  taste=scr"));
+    nucleo_app_set_hint(TR5("invio arma  tab modo/reg  tasto=schermo",
+                            "enter arm  tab mode/rec  key=screen", "intro arma  tab modo/grab  tecla=scr",
+                            "entree arme  tab mode/enr  touche=ecr", "eingabe arm  tab modus/aufn  taste=scr"));
     nucleo_app_set_poll_handler(poll);
     nucleo_app_set_tab_handler(tab);
     nucleo_app_set_back_handler(back);

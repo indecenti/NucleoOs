@@ -116,6 +116,16 @@ int nk_level(float gx, float gy, float gz, float *lx, float *ly, float *deg)
     return 1;
 }
 
+int nk_level_sensor(float ax, float ay, float az, float *lx, float *ly, float *deg)
+{
+    // Map the raw BMI270 reading to screen-frame gravity (low side). Feeding raw (ax, ay) — as the
+    // level/protractor did until 2026-10 — left the screen-vertical axis inverted on the ADV: tilting
+    // the device forward sent the bubble backward, and the protractor's plumb turned the wrong way, so
+    // it appeared to sweep twice the dial marks. The horizontal axis already read right, so negate ONLY
+    // Y here. *lx = ax/g (right edge low -> +), *ly = -ay/g (bottom edge low -> +).
+    return nk_level(ax, -ay, az, lx, ly, deg);
+}
+
 // Pedometer thresholds in raw LSB (the IMU runs +/-2g, so 1g = 16384 LSB). A walking stride gives the
 // device ~0.15-0.5g of dynamic accel; HI catches a moderate step, LO must be crossed to re-arm.
 #define STEP_HI    2200.0f    // ~0.13 g dynamic peak => count a step

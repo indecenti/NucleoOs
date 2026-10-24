@@ -194,6 +194,7 @@ static void draw_pager(void)
 }
 
 // ---- mode: BARS ----
+static const int BAR_LO = 72;                      // LUT index at the floor: already the palette's own hue
 static void draw_bars(void)
 {
     int n = MS_BANDS, gap = 1;
@@ -203,9 +204,11 @@ static void draw_bars(void)
     for (int b = 0; b < n; b++) {
         int v = sens_apply((int)(s_disp[b] + 0.5f)); // smoothed, not raw -> fluid (no per-frame jitter)
         int hgt = v * MAIN_H / 255;
-        // fixed vertical gradient revealed by bar height (classic analyzer)
+        // fixed vertical gradient revealed by bar height (classic analyzer). It starts at BAR_LO, not 0:
+        // every palette opens on near-black, and most bars are short, so a 0-based ramp showed the same
+        // dark stubs in all three palettes and TAB looked like it did nothing in this mode.
         for (int yy = base; yy > base - hgt; yy -= 3) {
-            d.fillRect(x, yy - 2, bw, 3, grad8((uint8_t)((base - yy) * 255 / MAIN_H)));
+            d.fillRect(x, yy - 2, bw, 3, grad8((uint8_t)(BAR_LO + (base - yy) * (255 - BAR_LO) / MAIN_H)));
         }
         // peak-hold cap (bright, high-contrast against any palette)
         int capv = (int)s_cap[b];
@@ -314,9 +317,11 @@ static void draw_tuner(void)
     d.setTextSize(3); d.setTextColor(col, BG);
     d.setCursor(W - 6 - (int)strlen(dir) * 18, MAIN_T + 12); d.print(dir);
 
-    // cents needle gauge — ticks and needle sit ABOVE the baseline so the readout can use the row below
+    // cents needle gauge — ticks and needle sit ABOVE the baseline so the readout can use the row below.
+    // The baseline is a palette ramp (flat = cold end, sharp = hot end): the verdict colours stay
+    // semantic (green/yellow/red), but the gauge now follows TAB like the other three modes.
     int gy = MAIN_B - 14, gx = 16, gw = W - 32;
-    d.drawFastHLine(gx, gy, gw, DIM);
+    for (int i = 0; i < gw; i++) d.drawFastVLine(gx + i, gy, 2, grad8((uint8_t)(BAR_LO + i * (255 - BAR_LO) / gw)));
     for (int t = -50; t <= 50; t += 10) {
         int tx = gx + gw * (t + 50) / 100, th = (t == 0) ? 6 : 3;
         d.drawFastVLine(tx, gy - th, th, t == 0 ? C_GREEN : DIM);
@@ -455,7 +460,7 @@ static void draw(void)
 
 static void set_hint(void)
 {
-    nucleo_app_set_hint(TR5("L/R modo   TAB tema   U/D sens   GO ferma", "L/R mode   TAB theme   U/D sens   GO freeze", "L/R md   TAB tema   U/D sns   GO congel", "L/R mode   TAB theme   U/D sns   GO gl", "L/R Modus   TAB Tema   U/D Emf   GO ein"));
+    nucleo_app_set_hint(TR5("L/R modo  TAB tema  U/D sens  GO ferma", "L/R mode  TAB theme  U/D sens  GO hold", "L/R modo  TAB tema  U/D sens  GO alto", "L/R mode  TAB theme  U/D sens  GO fige", "L/R Modus  TAB Tema  U/D Emf  GO halt"));
 }
 
 static void on_key(int key, char ch)
