@@ -15,6 +15,9 @@
 #include "lgfx/v1/LGFX_Sprite.hpp"
 #include "extdisp_probe.h"
 #include "extdisp_mirror.hpp"
+#include "extdisp_touch.h"
+#include "extdisp_chrome.hpp"
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 #include <vector>
@@ -114,6 +117,148 @@ static void test_probe_logic(void)
     int ox, oy;
     extdisp_mirror_origin(320, 240, 240, 135, &ox, &oy); CHECK(ox == 40 && oy == 52, "origin 240x135 -> 40,52");
     extdisp_mirror_origin(320, 240, 240, 130, &ox, &oy); CHECK(ox == 40 && oy == 55, "origin 240x130 -> 40,55");
+}
+
+// ---- 3. touch (extdisp_touch.c): calibration, soft keys, gestures, the calibration flow ----------------
+static int feed(extdisp_gesture_t *g, uint32_t t, bool on, int x, int y, int *ev)
+{
+    return extdisp_gesture_feed(g, t, on, x, y, ev);
+}
+
+static void test_touch_logic(void)
+{
+    // The default calibration reproduces the phase-1 approximate map (every rotation / mirror).
+    for (int rot : { 1, 3, 5, 7 }) {
+        extdisp_cal_t k; extdisp_cal_default(rot, &k);
+        int worst = 0;
+        for (int rx = 400; rx <= 3700; rx += 330)
+            for (int ry = 400; ry <= 3700; ry += 330) {
+                int ax, ay, bx, by;
+                extdisp_touch_map(rx, ry, rot, &ax, &ay);
+                extdisp_cal_apply(&k, rx, ry, 320, 240, &bx, &by);
+                int d = abs(ax - bx) > abs(ay - by) ? abs(ax - bx) : abs(ay - by);
+                if (d > worst) worst = d;
+            }
+        CHECK(worst <= 1, "default calibration == approximate map (rotation %d, off by %d px)", rot, worst);
+    }
+    // An exact solve recovers a skewed, swapped, offset map; collinear points are refused.
+    {
+        auto truth = [](int rx, int ry, int *sx, int *sy) { *sx = (ry * 9) / 100 - 25 + rx / 200; *sy = 250 - (rx * 6) / 100; };
+        int raw[3][2] = { { 300, 300 }, { 3800, 400 }, { 500, 3700 } }, scr[3][2];
+        for (int i = 0; i < 3; i++) truth(raw[i][0], raw[i][1], &scr[i][0], &scr[i][1]);
+        extdisp_cal_t k;
+        CHECK(extdisp_cal_solve(raw, scr, &k), "solve");
+        int probe[2] = { 2000, 2000 }, want[2];
+        truth(2000, 2000, &want[0], &want[1]);
+        CHECK(extdisp_cal_error(&k, probe, want) <= 2, "solve generalises (off by %d)", extdisp_cal_error(&k, probe, want));
+        int col[3][2] = { { 100, 100 }, { 2000, 2000 }, { 4000, 4000 } };
+        CHECK(!extdisp_cal_solve(col, scr, &k), "collinear points refused");
+        int packed[7]; extdisp_cal_pack(5, &k, packed);
+        extdisp_cal_t back;
+        CHECK(extdisp_cal_unpack(packed, 5, &back) && back.c == k.c && back.f == k.f, "pack/unpack roundtrip");
+        CHECK(!extdisp_cal_unpack(packed, 1, &back), "a calibration from another rotation is ignored");
+        int zero[7] = { 5, 0, 0, 7, 0, 0, 9 };
+        CHECK(!extdisp_cal_unpack(zero, 5, &back), "a zeroed calibration is ignored");
+    }
+
+    // Soft-key layout around the 240x135 frame at 40,52 on 320x240.
+    extdisp_rect_t r[SK_COUNT];
+    extdisp_sk_layout(320, 240, 40, 52, 240, 135, r);
+    CHECK(r[SK_ESC].x == 0 && r[SK_ESC].w == 80 && r[SK_ESC].h == 52, "ESC top-left");
+    CHECK(r[SK_MENU].x == 240 && r[SK_MENU].w == 80, "MENU top-right");
+    CHECK(r[SK_LEFT].y == 187 && r[SK_LEFT].h == 53 && r[SK_RIGHT].x + r[SK_RIGHT].w == 320, "bottom row spans the band");
+    CHECK(extdisp_sk_hit(r, 5, 5) == SK_ESC && extdisp_sk_hit(r, 315, 10) == SK_MENU && extdisp_sk_hit(r, 160, 20) == SK_STATUS, "top hits");
+    CHECK(extdisp_sk_hit(r, 160, 220) == SK_OK && extdisp_sk_hit(r, 10, 200) == SK_LEFT && extdisp_sk_hit(r, 300, 239) == SK_RIGHT, "bottom hits");
+    CHECK(extdisp_sk_hit(r, 160, 120) == SK_FRAME && extdisp_sk_hit(r, 5, 120) == SK_FRAME, "frame and side strips = gesture area");
+    {
+        extdisp_rect_t t[SK_COUNT];
+        extdisp_sk_layout(320, 240, 0, 10, 320, 220, t);
+        CHECK(t[SK_ESC].w == 0 && t[SK_OK].w == 0 && extdisp_sk_hit(t, 5, 5) == SK_FRAME, "thin bands get no keys");
+    }
+
+    // Gestures.
+    extdisp_gesture_t g; int ev[EXT_MAX_EVENTS], n;
+    extdisp_gesture_init(&g, r);
+    n = feed(&g, 0, true, 160, 120, ev);   CHECK(n == 0, "frame press: nothing yet");
+    n = feed(&g, 40, true, 163, 118, ev);  CHECK(n == 0, "small wobble stays a tap");
+    n = feed(&g, 80, false, 0, 0, ev);     CHECK(n == 0 && g.down, "one flicker sample is not a release");
+    n = feed(&g, 100, true, 162, 119, ev); CHECK(n == 0, "contact resumes");
+    feed(&g, 140, false, 0, 0, ev);
+    n = feed(&g, 180, false, 0, 0, ev);    CHECK(n == 1 && ev[0] == EXT_EV_ENTER && !g.down, "tap = Enter on release");
+
+    extdisp_gesture_init(&g, r);
+    feed(&g, 0, true, 160, 150, ev);
+    n = feed(&g, 20, true, 160, 120, ev);  CHECK(n == 1 && ev[0] == EXT_EV_DOWN, "drag up 30 px = Down");
+    n = feed(&g, 40, true, 160, 90, ev);   CHECK(n == 1 && ev[0] == EXT_EV_DOWN, "another step");
+    n = feed(&g, 60, true, 200, 92, ev);   CHECK(n == 1 && ev[0] == EXT_EV_LEFT, "drag right = Left");
+    feed(&g, 80, false, 0, 0, ev); n = feed(&g, 100, false, 0, 0, ev);
+    CHECK(n == 0, "a drag does not end in Enter");
+
+    extdisp_gesture_init(&g, r);
+    feed(&g, 0, true, 160, 180, ev);
+    n = feed(&g, 50, true, 160, 60, ev);   CHECK(n == EXT_MAX_EVENTS, "a fling is capped at %d events", EXT_MAX_EVENTS);
+
+    extdisp_gesture_init(&g, r);
+    feed(&g, 0, true, 100, 100, ev);
+    n = feed(&g, EXT_LONG_MS, true, 101, 101, ev); CHECK(n == 1 && ev[0] == EXT_EV_BACK, "long press = Back");
+    n = feed(&g, EXT_LONG_MS + 300, true, 101, 101, ev); CHECK(n == 0, "...once");
+    feed(&g, 2000, false, 0, 0, ev); n = feed(&g, 2020, false, 0, 0, ev);
+    CHECK(n == 0, "no Enter after a long press");
+
+    extdisp_gesture_init(&g, r);
+    n = feed(&g, 0, true, 100, 210, ev);   CHECK(n == 1 && ev[0] == EXT_EV_UP && g.pressed == SK_UP, "arrow fires on press, key lit");
+    n = feed(&g, 200, true, 100, 210, ev); CHECK(n == 0, "no repeat before the delay");
+    n = feed(&g, EXT_REPEAT_DELAY, true, 100, 210, ev); CHECK(n == 1 && ev[0] == EXT_EV_UP, "auto-repeat");
+    n = feed(&g, EXT_REPEAT_DELAY + EXT_REPEAT_EVERY, true, 100, 210, ev); CHECK(n == 1, "repeat rate");
+    feed(&g, 1000, false, 0, 0, ev); n = feed(&g, 1020, false, 0, 0, ev);
+    CHECK(n == 0 && g.pressed == SK_NONE, "arrow release adds nothing");
+
+    extdisp_gesture_init(&g, r);
+    n = feed(&g, 0, true, 160, 210, ev);   CHECK(n == 0 && g.pressed == SK_OK, "OK lights on press");
+    feed(&g, 40, false, 0, 0, ev); n = feed(&g, 60, false, 0, 0, ev);
+    CHECK(n == 1 && ev[0] == EXT_EV_ENTER, "OK = Enter on release");
+    extdisp_gesture_init(&g, r);
+    feed(&g, 0, true, 10, 10, ev); feed(&g, 40, false, 0, 0, ev); n = feed(&g, 60, false, 0, 0, ev);
+    CHECK(n == 1 && ev[0] == EXT_EV_BACK, "ESC = Back");
+    extdisp_gesture_init(&g, r);
+    feed(&g, 0, true, 300, 10, ev); feed(&g, 40, false, 0, 0, ev); n = feed(&g, 60, false, 0, 0, ev);
+    CHECK(n == 1 && ev[0] == EXT_EV_MENU, "MENU = Control Center");
+    extdisp_gesture_init(&g, r);
+    feed(&g, 0, true, 160, 210, ev);
+    feed(&g, 40, true, 160, 120, ev);      CHECK(g.pressed == SK_NONE, "slide off OK unlights it");
+    feed(&g, 60, true, 160, 210, ev);      CHECK(g.pressed == SK_NONE, "...for good");
+    feed(&g, 80, false, 0, 0, ev); n = feed(&g, 100, false, 0, 0, ev);
+    CHECK(n == 0, "slide off = cancelled");
+    extdisp_gesture_init(&g, r);
+    feed(&g, 0, true, 160, 20, ev);
+    n = feed(&g, EXT_CAL_HOLD_MS - 40, true, 160, 20, ev); CHECK(n == 0, "status: nothing before 3 s");
+    n = feed(&g, EXT_CAL_HOLD_MS, true, 160, 20, ev);      CHECK(n == 1 && ev[0] == EXT_EV_CALIBRATE, "status hold = recalibrate");
+    feed(&g, 4000, false, 0, 0, ev); n = feed(&g, 4020, false, 0, 0, ev);
+    CHECK(n == 0, "status release adds nothing");
+
+    // The calibration flow, on a panel whose raw axes are swapped and mirrored.
+    auto raw_of = [](int sx, int sy, int *rx, int *ry) { *rx = 3900 - sy * 15; *ry = 250 + sx * 11; };
+    int tg[4][2]; extdisp_cal_targets(320, 240, tg);
+    CHECK(tg[0][0] == 20 && tg[2][0] == 299 && tg[2][1] == 219, "targets 20 px in");
+    CHECK(tg[0][1] < 52 && tg[2][1] >= 187, "targets sit in the letterbox");
+    extdisp_calib_t c; extdisp_calib_start(&c);
+    uint32_t t = 0; int res = CAL_BUSY;
+    CHECK(extdisp_calib_feed(&c, t, true, 100, 100) == CAL_BUSY && c.step == 0, "the finger that asked must lift first");
+    for (int k = 0; k < EXT_RELEASE_N; k++) extdisp_calib_feed(&c, t += 20, false, 0, 0);
+    for (int i = 0; i < 4; i++) {
+        int rx, ry; raw_of(tg[i][0], tg[i][1], &rx, &ry);
+        for (int s = 0; s < 20 && c.step == i; s++) res = extdisp_calib_feed(&c, t += 20, true, rx + (s & 1) * 6, ry - (s & 1) * 6);
+        CHECK(c.step == i + 1, "target %d captured", i + 1);
+        for (int s = 0; s < 3; s++) extdisp_calib_feed(&c, t += 20, true, 9, 9);   // still held: ignored
+        for (int k = 0; k < EXT_RELEASE_N; k++) extdisp_calib_feed(&c, t += 20, false, 0, 0);
+    }
+    CHECK(res == CAL_DONE, "four targets = done");
+    extdisp_cal_t k; int err = -1;
+    CHECK(extdisp_calib_finish(&c, 320, 240, &k, &err) && err <= 3, "calibration accepted (check off by %d px)", err);
+    { int rx, ry, sx, sy; raw_of(160, 120, &rx, &ry); extdisp_cal_apply(&k, rx, ry, 320, 240, &sx, &sy);
+      CHECK(abs(sx - 160) <= 3 && abs(sy - 120) <= 3, "centre lands at %d,%d", sx, sy); }
+    extdisp_calib_t bad = c; bad.raw[3][0] += 900;
+    CHECK(!extdisp_calib_finish(&bad, 320, 240, &k, &err) && err > EXT_CAL_MAX_ERR, "a sloppy 4th tap is rejected (%d px)", err);
 }
 
 // ---- 2. the mirror on the real LovyanGFX core ---------------------------------------------------------
@@ -232,6 +377,8 @@ static void test_mirror(const char *outdir)
 
     SpyMirror mirror;
     mirror.attach(inner.panel(), outer.panel());
+    static int s_lk = 0, s_lk_depth = 0, s_lk_max = 0;
+    mirror.set_ext_lock([] { s_lk++; if (++s_lk_depth > s_lk_max) s_lk_max = s_lk_depth; }, [] { s_lk_depth--; });
     s_spy = &mirror; s_inner = &inner; s_outer = &outer;
     CHECK(mirror.width() == 240 && mirror.height() == 135, "mirror carries the internal size");
     CHECK(mirror.origin_x() == 40 && mirror.origin_y() == 52, "centred at 40,52");
@@ -247,6 +394,7 @@ static void test_mirror(const char *outdir)
     CHECK(s_diverged == 0, "external diverged from internal after %d calls (first: call #%d)", s_diverged, s_first_diverged);
     CHECK(mirror.open == 0 && mirror.max_open == 1, "external transactions never nest (max %d)", mirror.max_open);
     CHECK(mirror.opened > 0, "external panel was written");
+    CHECK(s_lk == mirror.opened && s_lk_depth == 0 && s_lk_max == 1, "ext lock taken once per primitive (%d/%d), never nested", s_lk, mirror.opened);
 
     int diff_ref = 0, diff_ext = 0, outside = 0;
     for (int y = 0; y < 135; y++)
@@ -273,7 +421,26 @@ static void test_mirror(const char *outdir)
     for (int y = 0; y < 240; y++)                     // the letterbox shows black on the real panel
         for (int x = 0; x < 320; x++)
             if (outer.readPixel(x, y) == SENTINEL) outer.drawPixel(x, y, (uint16_t)0);
+    // The touch chrome around the frame: must not touch a single frame pixel.
+    std::vector<uint32_t> before(240 * 135);
+    for (int y = 0; y < 135; y++) for (int x = 0; x < 240; x++) before[y * 240 + x] = outer.readPixel(x + 40, y + 52);
+    extdisp_rect_t keys[SK_COUNT];
+    extdisp_sk_layout(320, 240, 40, 52, 240, 135, keys);
+    const extdisp_frame_t fr = { 40, 52, 240, 135 };
+    extdisp_chrome_draw(&outer, keys, fr, "ili9341? 27MHz", "hold: calibrate", true);
+    extdisp_chrome_key(&outer, keys, SK_OK, true, nullptr, nullptr, false);    // one key shown pressed
+    int touched = 0;
+    for (int y = 0; y < 135; y++) for (int x = 0; x < 240; x++) if (outer.readPixel(x + 40, y + 52) != before[y * 240 + x]) touched++;
+    CHECK(touched == 0, "chrome wrote %d px inside the frame", touched);
+    int lit = 0;
+    for (int y = 190; y < 237; y++) for (int x = 131; x < 189; x++) if (outer.readPixel(x, y) != 0) lit++;
+    CHECK(lit > 1500, "pressed OK key is drawn (%d px)", lit);
     snprintf(path, sizeof path, "%s/external.rgb", outdir); dump(path, outer);
+    extdisp_chrome_calib(&outer, fr, 1, "Calibration 2/4", "tap the target centre");
+    touched = 0;
+    for (int y = 0; y < 135; y++) for (int x = 0; x < 240; x++) if (outer.readPixel(x + 40, y + 52) != before[y * 240 + x]) touched++;
+    CHECK(touched == 0, "calibration screen wrote %d px inside the frame", touched);
+    snprintf(path, sizeof path, "%s/external_calib.rgb", outdir); dump(path, outer);
     printf("extdisp: %d mirrored calls, %d external transactions\n", s_ops, mirror.opened);
 }
 
@@ -281,6 +448,7 @@ int main(int argc, char **argv)
 {
     const char *outdir = argc > 1 ? argv[1] : ".";
     test_probe_logic();
+    test_touch_logic();
     test_mirror(outdir);
     printf("extdisp: %d passed, %d failed\n", s_pass, s_fail);
     return s_fail ? 1 : 0;

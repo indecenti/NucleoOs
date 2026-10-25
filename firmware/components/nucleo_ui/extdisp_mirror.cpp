@@ -48,8 +48,20 @@ color_depth_t Panel_Mirror::setColorDepth(color_depth_t depth)
 // the external landscape orientation is fixed at bring-up). Only the internal panel takes them.
 void Panel_Mirror::setInvert(bool invert)     { _pri->setInvert(invert); sync_dims(); }
 void Panel_Mirror::setRotation(uint_fast8_t r) { _pri->setRotation(r); sync_dims(); }
-void Panel_Mirror::setSleep(bool flg)         { _pri->setSleep(flg); _ext->setSleep(flg); }
-void Panel_Mirror::setPowerSave(bool flg)     { _pri->setPowerSave(flg); _ext->setPowerSave(flg); }
+void Panel_Mirror::setSleep(bool flg)
+{
+    _pri->setSleep(flg);
+    if (_lock) _lock();
+    _ext->setSleep(flg);
+    if (_unlock) _unlock();
+}
+void Panel_Mirror::setPowerSave(bool flg)
+{
+    _pri->setPowerSave(flg);
+    if (_lock) _lock();
+    _ext->setPowerSave(flg);
+    if (_unlock) _unlock();
+}
 
 void Panel_Mirror::writeCommand(uint32_t cmd, uint_fast8_t length) { _pri->writeCommand(cmd, length); }
 void Panel_Mirror::writeData(uint32_t data, uint_fast8_t length)   { _pri->writeData(data, length); }

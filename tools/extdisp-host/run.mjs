@@ -56,7 +56,8 @@ const fontStubSrc = ['#include <stdint.h>', ...[...fontSyms].map((s) => `const u
 if (!existsSync(fontStub) || readFileSync(fontStub, 'utf8') !== fontStubSrc) writeFileSync(fontStub, fontStubSrc);
 lgfxSrc.push(fontStub);
 
-const testSrc = [join(UI, 'extdisp_probe.c'), join(UI, 'extdisp_mirror.cpp'), join(here, 'main.cpp')];
+const testSrc = [join(UI, 'extdisp_probe.c'), join(UI, 'extdisp_touch.c'), join(UI, 'extdisp_mirror.cpp'),
+  join(UI, 'extdisp_chrome.cpp'), join(here, 'main.cpp')];
 const INC = ['-I', join(UIHOST, 'shim'), '-I', GFX, '-I', UI];
 
 try {
@@ -103,7 +104,7 @@ function png(rgb, w, h, scale) {
   return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', ihdr),
     chunk('IDAT', zlib.deflateSync(raw, { level: 9 })), chunk('IEND', Buffer.alloc(0))]);
 }
-for (const [name, w, h, s] of [['internal', 240, 135, 3], ['external', 320, 240, 2]]) {
+for (const [name, w, h, s] of [['internal', 240, 135, 3], ['external', 320, 240, 2], ['external_calib', 320, 240, 2]]) {
   const f = join(OUT, `${name}.rgb`);
   if (existsSync(f)) writeFileSync(join(OUT, `${name}.png`), png(readFileSync(f), w, h, s));
 }

@@ -27,6 +27,11 @@ void nucleo_kbd_init(void);
 // Non-blocking: returns a freshly pressed key, or {NK_NONE,0} if nothing new.
 nucleo_key_t nucleo_kbd_read(void);
 
+// Queue a key from another input device (the external display's touch layer). It comes out of the next
+// nucleo_kbd_read() exactly like a physical press, ahead of the keyboard. Same shapes as the keyboard
+// produces (arrows carry their legend char: UP ';', DOWN '.', LEFT ',', RIGHT '/'). Any task; false = full.
+bool nucleo_kbd_inject(nucleo_key_t k);
+
 // Modifier keys held *right now* (NK_MOD_* bitmask). Valid alongside the last nucleo_kbd_read():
 // e.g. Ctrl held + 'c' pressed reads as ch='c' with NK_MOD_CTRL set. Used by the USB Keyboard app
 // to forward combos. Shift is also reflected here (the char is already shifted in `ch`).

@@ -16,6 +16,7 @@
 #include "driver/i2c_master.h"
 #include "esp_log.h"
 #include "esp_timer.h"
+#include "freertos/FreeRTOS.h"
 
 // Auto-repeat: hold a navigation/edit key and it fires again after an initial delay, then at
 // a steady rate — so scrolling a long list (e.g. 64 tracks) is a hold, not 64 taps. Limited
@@ -287,9 +288,34 @@ void nucleo_kbd_init(void)
     }
 }
 
+// Injected keys (another input device, e.g. the external display's touch layer): a small ring drained
+// ahead of the physical keyboard. Written from another task, so a spinlock guards head/tail.
+#define INJECT_N 8
+static nucleo_key_t s_inj[INJECT_N];
+static int s_inj_head, s_inj_tail;
+static portMUX_TYPE s_inj_mux = portMUX_INITIALIZER_UNLOCKED;
+
+bool nucleo_kbd_inject(nucleo_key_t k)
+{
+    if (k.key == NK_NONE) return false;
+    bool ok = false;
+    portENTER_CRITICAL(&s_inj_mux);
+    int next = (s_inj_head + 1) % INJECT_N;
+    if (next != s_inj_tail) { s_inj[s_inj_head] = k; s_inj_head = next; ok = true; }
+    portEXIT_CRITICAL(&s_inj_mux);
+    return ok;
+}
+
 // Non-blocking: returns a freshly pressed key, or {NK_NONE,0} if nothing new.
 nucleo_key_t nucleo_kbd_read(void)
 {
+    if (s_inj_tail != s_inj_head) {
+        nucleo_key_t k = { NK_NONE, 0 };
+        portENTER_CRITICAL(&s_inj_mux);
+        if (s_inj_tail != s_inj_head) { k = s_inj[s_inj_tail]; s_inj_tail = (s_inj_tail + 1) % INJECT_N; }
+        portEXIT_CRITICAL(&s_inj_mux);
+        if (k.key != NK_NONE) return k;
+    }
     return s_adv ? tca_read() : gpio_read();
 }
 

@@ -8,10 +8,11 @@ primary display. Nothing changes for a device with nothing plugged in.
 |---|---|---|
 | 1 | Runtime detection + 1:1 mirror of the internal 240x135 UI, centred on the external panel | **done** (this doc) |
 | 2 | Native 320x240 layouts (launcher, File Commander, editor, media, games), drawn in bands (no framebuffer) | planned |
-| 3 | Touch as input (calibration, rotation, mapping to the existing nav events) | planned (phase 1 logs raw touch only) |
+| 3 | Touch as input: soft keys in the letterbox, gestures on the frame, 4-target calibration | **done** (see Touch) |
 
 Code: `firmware/components/nucleo_ui/` — `extdisp_probe.{h,c}` (pure rules), `extdisp_mirror.{hpp,cpp}`
-(the mirror panel), `nucleo_extdisp.cpp` (hardware glue). Host gate: `npm run extdisp:test`.
+(the mirror panel), `extdisp_touch.{h,c}` (pure touch: calibration, keys, gestures), `extdisp_chrome.{hpp,cpp}`
+(letterbox drawing), `nucleo_extdisp.cpp` (hardware glue). Host gate: `npm run extdisp:test`.
 
 ## Supported modules (V1.1, V1.2, ...)
 
@@ -81,6 +82,8 @@ on one pin.
   "external_invert": false,           // omit = controller default
   "external_rgb": false,              // omit = controller default (BGR)
   "external_diag": true,              // touch log + boot report (tester build default: on)
+  "external_touch": true,             // false = touch only logged, never drives the UI
+  "external_touch_cal": [5, ...],     // written by the calibration: [rotation, a, b, c, d, e, f]
   "external_pins": { "cs": 5, "dc": 15, "rst": 13, "t_cs": 6, "t_irq": 4, "bl": -1 }
 }
 ```
@@ -137,20 +140,61 @@ Residual risk accepted in auto mode: a module on G6 that drives it HIGH (push-pu
 probe would briefly fight T_CS; a LoRa cap's BUSY idles LOW at boot and is caught by the pull-up sense.
 `external: "off"` never touches the pins.
 
+## Touch (phase 3)
+
+Touch drives the OS through the keyboard: every gesture becomes an ordinary key press queued with
+`nucleo_kbd_inject()` and read by the next `nucleo_kbd_read()`, so the launcher, every native app, the
+Control Center and the games take touch with no change of their own.
+
+```
++--------+---------------------------+--------+
+|  ESC   |   status  (hold 3 s =     |  MENU  |   top band (52 px)
+|        |   recalibrate)            | (Tab)  |
++--------+---------------------------+--------+
+|      the mirrored 240x135 frame + side strips  |   gesture area
+|      tap = Enter   drag = arrows   hold = Back |
++-------+-------+-------+-------+---------------+
+|   <   |   ^   |  OK   |   v   |   >           |   bottom band (53 px)
++-------+-------+-------+-------+---------------+
+```
+
+- **Soft keys** (letterbox, never written by the mirror): arrows fire on press and auto-repeat while held
+  (450 ms, then every 120 ms); OK / ESC / MENU fire on release, only if the finger is still on the key —
+  sliding off cancels. The key under the finger lights up.
+- **Gestures on the frame**: tap = Enter; drag = arrows with natural scrolling (drag up = Down, drag left =
+  Right), one step per 28 px, at most 4 per sample; hold 600 ms without moving = Back.
+- **Screen off**: polling drops to 4 Hz; a tap only wakes the screen (an injected Back, which the idle-wake
+  path consumes) and that finger is ignored until it lifts.
+- **Calibration**: an affine raw→pixel map (absorbs axis swap, mirroring, a slightly rotated film), solved
+  from 3 of 4 corner targets and verified on the 4th (rejected and repeated above 20 px). It runs by itself
+  the first time a touch panel is seen, and again on a 3 s hold of the status area. Targets sit in the
+  letterbox, so the mirrored UI keeps working with the keyboard meanwhile. The result is stored as
+  `display.external_touch_cal` and is only used in the rotation it was taken in. Until then the
+  uncalibrated phase-1 map applies.
+- **Sampling**: Z1/Z2 pressure gate, then 3 X and 3 Y conversions (first of each discarded) → median;
+  pressure re-checked after the reads so a lift mid-sample is not a touch. A release needs 2 consecutive
+  empty samples (resistive films flicker). 40 ms idle period, 20 ms while touched; with T_IRQ wired no SPI
+  read happens at all while untouched.
+- **Bus**: the soft keys are drawn by the touch task under a mutex that the mirror also takes around each
+  external primitive — never inside one, so the per-primitive bus rule above still holds.
+- **Nothing without a display**: the touch state is heap allocated at attach, and the task (6 KB stack)
+  and the mutex exist only when a panel came up AND its touch answered. A Cardputer with nothing on the
+  header pays one pointer and the keyboard's 8-slot inject ring (~30 B), no task, no CPU.
+
 ## Diagnostics (tester)
 
-- **Test card** on the external panel's letterbox: controller (`?` = assumed), MHz, R/G/B/W swatches,
-  touch yes/no, rotation. The mirror never writes there.
+- **Test card** on the external panel's letterbox when touch is absent or `external_touch` is false:
+  controller (`?` = assumed), MHz, R/G/B/W swatches, touch yes/no, rotation. With touch input the soft
+  keys replace it and the status area keeps controller, MHz and (diag) the R/G/B/W swatches.
 - **`/sd/extdisp-report.txt`** (ADV, mode not off, diag on), rewritten only when its content changes
   (one SD write, not one per boot): firmware, board, mode, controller (read/assumed/configured), pins, pin
   senses, touch TEMP0/TEMP1, raw LCD ID bytes, decision, mirror geometry. Heap before/after goes to the log.
-- The touch diagnostics task (4 KB stack, only when touch answered and diag is on) polls at 25 Hz, skips the
-  SPI read while a wired T_IRQ says "untouched", and idles while the screen is off.
+- The report also says whether touch drives input and whether a calibration is stored.
 - **`GET /api/status` → `display_ext`**: `mode, active, touch, reason, controller, spi_tx, touch_presses,
   touch_x, touch_y`.
 - **Logs** (tag `extdisp`, WARN → `/api/logs` and serial): probe values, LCD ID bytes, decision,
-  `touch DOWN #n raw x y z -> ~sx,sy` / `touch UP after N ms (moved dx,dy)`. Touch coordinates use an
-  uncalibrated guess (raw 200..3900) — phase 3 calibrates.
+  `touch DOWN #n raw x y -> sx,sy` / `touch UP after N ms (moved dx,dy)` / `touch -> enter|up|...` (diag),
+  `touch calibrated: check target off by N px`.
 
 ### Tester checklist
 
@@ -158,7 +202,8 @@ probe would briefly fight T_CS; a LoRa cap's BUSY idles LOW at boot and is caugh
 2. Boot. Expected: the internal UI appears centred on the external panel with the test card around it.
 3. Check the swatches: R red, G green, B blue, W white. Otherwise set `external_invert` / `external_rgb`.
 4. Navigate the launcher, open an app, a game, the Control Center: the external copy must follow.
-5. Touch the panel: `/api/logs` shows `touch DOWN/UP`; `/api/status` `touch_presses` grows.
+5. Touch: first boot shows 4 targets in the corners — tap each centre. Then the soft keys and gestures
+   drive the UI; `/api/logs` shows `touch -> ...` for each event.
 6. Play a video / open the file manager: SD access must keep working (no stalls, no mount errors).
 7. Send back `/sd/extdisp-report.txt`, `/api/status`, `/api/logs`, a photo of the panel, and the module's
    controller chip marking if readable.
@@ -174,7 +219,7 @@ probe would briefly fight T_CS; a LoRa cap's BUSY idles LOW at boot and is caugh
 | SD errors after wiring | unplug the module's SDO (see above) |
 | Keyboard dead with the module plugged | check the `ui` warning about board detection in the log; report it |
 
-## Not in phase 1
+## Not yet
 
-No scaling (1:1, 240x135 centred), no native 320x240 layouts, touch not used as input, backlight follows
+No scaling (1:1, 240x135 centred), no native 320x240 layouts (phase 2), backlight follows
 brightness only when `bl` is a GPIO, no hot-plug (detection at boot; plug with the device off).

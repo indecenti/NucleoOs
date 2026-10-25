@@ -78,6 +78,8 @@
         "external_invert": { "type": "boolean" },
         "external_rgb": { "type": "boolean" },
         "external_diag": { "type": "boolean" },
+        "external_touch": { "type": "boolean" },
+        "external_touch_cal": { "type": "array", "items": { "type": "integer" }, "minItems": 7, "maxItems": 7 },
         "external_pins": {
           "type": "object",
           "additionalProperties": false,

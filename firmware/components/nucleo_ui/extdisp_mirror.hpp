@@ -21,6 +21,7 @@ class Panel_Mirror : public lgfx::Panel_Device
 {
 public:
     typedef void (*brightness_cb_t)(uint8_t brightness);
+    typedef void (*lock_cb_t)(void);
 
     // primary: the internal panel (already initialised + rotated). ext: the external panel, initialised,
     // landscape, cleared. Neither is owned.
@@ -32,6 +33,9 @@ public:
     uint32_t ext_transactions(void) const { return _ext_tx; }   // diagnostics: SPI2 claims made so far
     // Follows setBrightness() for an external backlight on a GPIO (nullptr: LED wired to a supply rail).
     void set_brightness_cb(brightness_cb_t cb) { _bl_cb = cb; }
+    // Taken around every external primitive, so another task (the touch layer drawing its keys in the
+    // letterbox) can hold the external panel between two of the mirror's primitives, never inside one.
+    void set_ext_lock(lock_cb_t lock, lock_cb_t unlock) { _lock = lock; _unlock = unlock; }
 
     bool init(bool) override { return true; }
     void initBus(void) override {}
@@ -76,13 +80,14 @@ public:
 
 protected:
     // One external transaction per primitive. Virtual so the host gate can count open/close.
-    virtual void ext_begin(void) { _ext_tx++; _ext->startWrite(); }
-    virtual void ext_end(void)   { _ext->endWrite(); }
+    virtual void ext_begin(void) { if (_lock) _lock(); _ext_tx++; _ext->startWrite(); }
+    virtual void ext_end(void)   { _ext->endWrite(); if (_unlock) _unlock(); }
 
 private:
     lgfx::IPanel *_pri = nullptr;
     lgfx::IPanel *_ext = nullptr;
     brightness_cb_t _bl_cb = nullptr;
+    lock_cb_t _lock = nullptr, _unlock = nullptr;
     int _ox = 0, _oy = 0;
     uint32_t _ext_tx = 0;
     // The open pixel stream, in internal-panel coordinates: window + where the next pixel goes.

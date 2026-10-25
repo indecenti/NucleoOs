@@ -11,6 +11,10 @@
 #include "nucleo_extdisp.h"
 #include "extdisp_probe.h"
 #include "extdisp_mirror.hpp"
+#include "extdisp_touch.h"
+#include "extdisp_chrome.hpp"
+#include "nucleo_kbd.h"
+#include "nucleo_i18n.h"
 #include "nucleo_ui.h"
 #include "nucleo_board.h"
 #include "nucleo_prefs.h"
@@ -30,6 +34,7 @@
 #include "esp_app_desc.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include "freertos/semphr.h"
 
 static const char *TAG = "extdisp";
 extern M5GFX d;
@@ -87,8 +92,9 @@ bool               s_ctrl_read = false;          // ...and whether it was read b
 uint8_t            s_id_d3[4], s_id_04[4];
 int                s_t0 = -1, s_t1 = -1;
 Panel_Mirror      *s_mirror = nullptr;
+lgfx::LGFX_Device *s_dev = nullptr;             // the external panel (touch layer draws the letterbox with it)
 int                s_bl_pin = -1;
-spi_device_handle_t s_touch = nullptr;           // kept for the diagnostics task
+spi_device_handle_t s_touch = nullptr;           // the XPT2046, kept for the touch task
 volatile int       s_presses = 0, s_last_x = -1, s_last_y = -1;
 
 // A pin another module actively drives LOW defeats our weak pull-up (e.g. a LoRa cap's BUSY on G6).
@@ -343,6 +349,7 @@ bool attach(void)
     draw_test_card(dev, mirror->origin_y(), mirror->height());
     d.setPanel(mirror);
     s_mirror = mirror;
+    s_dev = dev;
     ESP_LOGW(TAG, "%s%s %dx%d invert=%d bgr=%d: mirroring %dx%d at %d,%d (init %d ms)",
              extdisp_ctrl_str(s_ctrl), s_ctrl_read ? " (read back)" : " (assumed/configured)",
              panel->width(), panel->height(), invert, !rgb_order, mirror->width(), mirror->height(),
@@ -350,56 +357,238 @@ bool attach(void)
     return true;
 }
 
-// ---- tester diagnostics: touch events in the log --------------------------------------------------------
-// Polls the XPT2046 every 40 ms (only a Z read when untouched; skipped entirely while T_IRQ, if wired,
-// says "no touch") and logs press / release with raw and approximate screen coordinates. Phase 3 replaces
-// this with real input; until then it proves the touch path end to end without any UI change.
-void touch_diag_task(void *)
+// ---- touch (phase 3): XPT2046 -> calibrated panel pixels -> soft keys / gestures -> injected nav keys ------
+// The task polls the XPT2046 every 40 ms (20 ms while a finger is down; nothing at all while T_IRQ, if wired,
+// says "no touch"), maps raw samples through the stored calibration and feeds the pure gesture machine
+// (extdisp_touch.c). Its events become ordinary key presses via nucleo_kbd_inject(), so every app, game and
+// the launcher take touch with no change. The soft keys live in the letterbox, which the mirror never writes;
+// drawing there happens under s_ext_mux, the same lock the mirror takes around each external primitive.
+// Nothing here exists without a display: the state below is heap, allocated by attach(), and the task and
+// the mutex are created only when a panel came up and its touch answered (zero RAM and CPU otherwise).
+struct TouchCtx {
+    lgfx::LGFX_Device *dev;                      // the external panel's own device (letterbox drawing only)
+    SemaphoreHandle_t mux;
+    extdisp_cal_t cal;
+    bool cal_stored;                             // a calibration taken in this rotation is in use
+    int cal_err;                                 // check-target error of the last calibration (px)
+    extdisp_rect_t keys[SK_COUNT];
+    extdisp_frame_t frame;
+    char status1[32];
+};
+TouchCtx *s_tc = nullptr;
+bool      s_touch_input = true;                  // settings "external_touch": false = log touches only
+int       s_cal_raw[7];                          // settings "external_touch_cal", as loaded
+bool      s_has_cal_raw = false;
+
+void ext_lock(void)   { xSemaphoreTake(s_tc->mux, portMAX_DELAY); }
+void ext_unlock(void) { xSemaphoreGive(s_tc->mux); }
+
+bool chrome_on(void) { return s_touch_input && s_tc && s_tc->mux; }
+const char *status2(void) { return TR5("tieni: calibra", "hold: calibrate", "manten: calibrar", "maintenir: calibrer", "halten: kalibrieren"); }
+
+void draw_chrome(void)
 {
-    bool down = false;
+    if (!chrome_on()) return;
+    ext_lock();
+    extdisp_chrome_draw(s_tc->dev, s_tc->keys, s_tc->frame, s_tc->status1, status2(), s_cfg.diag);
+    ext_unlock();
+}
+
+void draw_key(int key, bool pressed)
+{
+    if (!chrome_on() || key == SK_NONE) return;
+    ext_lock();
+    extdisp_chrome_key(s_tc->dev, s_tc->keys, key, pressed, s_tc->status1, status2(), s_cfg.diag);
+    ext_unlock();
+}
+
+void draw_calib(int step, bool retry)
+{
+    if (!chrome_on()) return;
+    char l1[40];
+    snprintf(l1, sizeof l1, "%s %d/4", TR5("Calibrazione", "Calibration", "Calibracion", "Calibration", "Kalibrierung"), step + 1);
+    const char *l2 = retry ? TR5("impreciso: di nuovo", "not precise: again", "impreciso: otra vez", "imprecis: encore", "ungenau: nochmal")
+                           : TR5("tocca il centro del mirino", "tap the target centre", "toca el centro", "touchez le centre", "Zielmitte antippen");
+    ext_lock();
+    extdisp_chrome_calib(s_tc->dev, s_tc->frame, step, l1, l2);
+    ext_unlock();
+}
+
+int med3(int a, int b, int c) { return a > b ? (b > c ? b : (a > c ? c : a)) : (a > c ? a : (b > c ? c : b)); }
+
+// One sample: true = a finger is down and (rx, ry) is a median-filtered position. A lift during the reads
+// (pressure gone by the second check) or a malformed frame counts as no contact.
+bool touch_sample(int *rx, int *ry)
+{
+    bool on = xpt_pressure(xpt_read(s_touch, XPT_CMD_Z1), xpt_read(s_touch, XPT_CMD_Z2)) > XPT_Z_TOUCH;
+    if (on) {
+        int v[3], w[3];
+        xpt_read(s_touch, XPT_CMD_X);                // the first conversion after switching drivers settles
+        for (int i = 0; i < 3; i++) v[i] = xpt_read(s_touch, XPT_CMD_X);
+        xpt_read(s_touch, XPT_CMD_Y);
+        for (int i = 0; i < 3; i++) w[i] = xpt_read(s_touch, XPT_CMD_Y);
+        *rx = med3(v[0], v[1], v[2]);
+        *ry = med3(w[0], w[1], w[2]);
+        on = *rx >= 0 && *ry >= 0 &&
+             xpt_pressure(xpt_read(s_touch, XPT_CMD_Z1), xpt_read(s_touch, XPT_CMD_Z2)) > XPT_Z_TOUCH;
+    }
+    xpt_read(s_touch, XPT_CMD_IDLE);
+    return on;
+}
+
+void inject(int ev)
+{
+    nucleo_key_t k = { NK_NONE, 0 };
+    switch (ev) {
+        case EXT_EV_UP:    k = { NK_UP, ';' }; break;
+        case EXT_EV_DOWN:  k = { NK_DOWN, '.' }; break;
+        case EXT_EV_LEFT:  k = { NK_LEFT, ',' }; break;
+        case EXT_EV_RIGHT: k = { NK_RIGHT, '/' }; break;
+        case EXT_EV_ENTER: k = { NK_ENTER, 0 }; break;
+        case EXT_EV_BACK:  k = { NK_BACK, 0 }; break;
+        case EXT_EV_MENU:  k = { NK_TAB, 0 }; break;          // Tab = the Control Center
+        default: return;
+    }
+    nucleo_kbd_inject(k);
+}
+
+const char *ev_name(int ev)
+{
+    static const char *const N[] = { "-", "up", "down", "left", "right", "enter", "back", "menu", "calibrate" };
+    return ev >= 0 && ev <= EXT_EV_CALIBRATE ? N[ev] : "?";
+}
+
+bool t_irq_idle(void) { return s_cfg.t_irq >= 0 && gpio_get_level((gpio_num_t)s_cfg.t_irq) == 1; }
+
+void touch_task(void *)
+{
+    const int W = s_tc->dev->width(), H = s_tc->dev->height();
+    extdisp_gesture_t g;
+    extdisp_gesture_init(&g, s_tc->keys);
+    extdisp_calib_t cal;
+    bool calibrating = chrome_on() && !s_tc->cal_stored;   // first use: calibrate before trusting the keys
+    if (calibrating) { extdisp_calib_start(&cal); draw_calib(0, false); }
+    int shown = SK_NONE, x0 = 0, y0 = 0;
+    bool was_down = false, wake_hold = false;
     int64_t t_down = 0;
-    int x0 = 0, y0 = 0, rx = 0, ry = 0, rz = 0;
     for (;;) {
-        vTaskDelay(pdMS_TO_TICKS(40));
-        if (!s_screen_on) { vTaskDelay(pdMS_TO_TICKS(500)); continue; }   // screen off: stop polling
-        if (s_cfg.t_irq >= 0 && gpio_get_level((gpio_num_t)s_cfg.t_irq) == 1 && !down) continue;
-        int z = xpt_pressure(xpt_read(s_touch, XPT_CMD_Z1), xpt_read(s_touch, XPT_CMD_Z2));
-        bool now = z > XPT_Z_TOUCH;
-        if (now) {
-            xpt_read(s_touch, XPT_CMD_X);
-            int ax = xpt_read(s_touch, XPT_CMD_X), ay = xpt_read(s_touch, XPT_CMD_Y);
-            ay = (ay + xpt_read(s_touch, XPT_CMD_Y)) / 2;
-            if (ax >= 0 && ay >= 0) { rx = ax; ry = ay; rz = z; }
+        const bool busy = g.down || wake_hold || (calibrating && (cal.down || cal.wait_release));
+        vTaskDelay(pdMS_TO_TICKS(busy ? 20 : 40));
+        int rx = 0, ry = 0;
+        if (!s_screen_on || wake_hold) {
+            // Screen off: a tap only wakes it (an injected Back, which the wake path consumes), and the same
+            // finger is ignored until it lifts so it cannot also press whatever appears under it.
+            if (!s_screen_on) vTaskDelay(pdMS_TO_TICKS(200));
+            bool on = !t_irq_idle() && touch_sample(&rx, &ry);
+            if (on && !wake_hold && !s_screen_on && s_touch_input) {
+                nucleo_kbd_inject(nucleo_key_t{ NK_BACK, 0 });
+                ESP_LOGW(TAG, "touch: wake");
+            }
+            wake_hold = on;
+            if (!on) extdisp_gesture_init(&g, s_tc->keys);
+            continue;
         }
-        xpt_read(s_touch, XPT_CMD_IDLE);
-        int sx, sy;
-        extdisp_touch_map(rx, ry, extdisp_lgfx_rotation(&s_cfg), &sx, &sy);
-        if (now && !down) {
-            down = true; t_down = esp_timer_get_time(); x0 = sx; y0 = sy;
-            s_presses = s_presses + 1; s_last_x = sx; s_last_y = sy;
-            ESP_LOGW(TAG, "touch DOWN #%d raw x=%d y=%d z=%d -> ~%d,%d", s_presses, rx, ry, rz, sx, sy);
-        } else if (!now && down) {
-            down = false;
-            ESP_LOGW(TAG, "touch UP after %d ms at raw x=%d y=%d -> ~%d,%d (moved %d,%d)",
-                     (int)((esp_timer_get_time() - t_down) / 1000), rx, ry, sx, sy, sx - x0, sy - y0);
-        } else if (now) {
-            s_last_x = sx; s_last_y = sy;
+        if (!busy && t_irq_idle()) continue;
+        bool on = touch_sample(&rx, &ry);
+        const uint32_t now = (uint32_t)(esp_timer_get_time() / 1000);
+
+        if (calibrating) {
+            int r = extdisp_calib_feed(&cal, now, on, rx, ry);
+            if (r == CAL_NEXT) draw_calib(cal.step, false);
+            else if (r == CAL_DONE) {
+                extdisp_cal_t k;
+                int err = -1;
+                if (extdisp_calib_finish(&cal, W, H, &k, &err)) {
+                    s_tc->cal = k;
+                    s_tc->cal_stored = true;
+                    s_tc->cal_err = err;
+                    calibrating = false;
+                    int packed[7];
+                    extdisp_cal_pack(extdisp_lgfx_rotation(&s_cfg), &k, packed);
+                    bool saved = nucleo_prefs_save_extdisp_cal(packed);
+                    ESP_LOGW(TAG, "touch calibrated: check target off by %d px%s", err, saved ? "" : " (NOT saved)");
+                    extdisp_gesture_init(&g, s_tc->keys);
+                    shown = SK_NONE;
+                    draw_chrome();
+                } else {
+                    ESP_LOGW(TAG, "touch calibration rejected (check target off by %d px): again", err);
+                    extdisp_calib_start(&cal);
+                    draw_calib(0, true);
+                }
+            }
+            continue;
+        }
+
+        int sx = 0, sy = 0;
+        if (on) extdisp_cal_apply(&s_tc->cal, rx, ry, W, H, &sx, &sy);
+        int ev[EXT_MAX_EVENTS];
+        const int n = extdisp_gesture_feed(&g, now, on, sx, sy, ev);
+        if (g.down && !was_down) {
+            t_down = esp_timer_get_time(); x0 = sx; y0 = sy;
+            s_presses = s_presses + 1;
+            if (s_cfg.diag) ESP_LOGW(TAG, "touch DOWN #%d raw x=%d y=%d -> %d,%d", s_presses, rx, ry, sx, sy);
+        } else if (!g.down && was_down && s_cfg.diag) {
+            ESP_LOGW(TAG, "touch UP after %d ms (moved %d,%d)", (int)((esp_timer_get_time() - t_down) / 1000),
+                     s_last_x - x0, s_last_y - y0);
+        }
+        if (g.down) { s_last_x = sx; s_last_y = sy; }
+        was_down = g.down;
+        if (g.pressed != shown) { draw_key(shown, false); draw_key(g.pressed, true); shown = g.pressed; }
+        for (int i = 0; i < n; i++) {
+            if (s_cfg.diag) ESP_LOGW(TAG, "touch -> %s", ev_name(ev[i]));
+            if (ev[i] == EXT_EV_CALIBRATE) {
+                if (!chrome_on()) continue;
+                calibrating = true;
+                extdisp_calib_start(&cal);        // waits for this finger to lift before target 1
+                draw_calib(0, false);
+                extdisp_gesture_init(&g, s_tc->keys);
+                shown = SK_NONE;
+                was_down = false;
+                break;
+            }
+            if (s_touch_input) inject(ev[i]);
         }
     }
 }
 
-void start_touch_diag(void)
+// Called by attach() with the panel up and the mirror geometry known, BEFORE the mirror is installed:
+// allocates the touch state and the external-panel lock. False = no memory (the mirror still works).
+bool touch_prepare(lgfx::LGFX_Device *dev, Panel_Mirror *mirror)
 {
-    if (add_device(s_cfg.t_cs, 2000000, &s_touch) != ESP_OK) { ESP_LOGW(TAG, "touch diag: no device"); return; }
+    s_tc = new (std::nothrow) TouchCtx();
+    if (!s_tc) return false;
+    s_tc->dev = dev;
+    s_tc->mux = xSemaphoreCreateMutex();
+    if (!s_tc->mux) { delete s_tc; s_tc = nullptr; return false; }
+    s_tc->frame = { mirror->origin_x(), mirror->origin_y(), mirror->width(), mirror->height() };
+    extdisp_sk_layout(dev->width(), dev->height(), s_tc->frame.ox, s_tc->frame.oy, s_tc->frame.fw, s_tc->frame.fh,
+                      s_tc->keys);
+    const int rot = extdisp_lgfx_rotation(&s_cfg);
+    s_tc->cal_stored = s_has_cal_raw && extdisp_cal_unpack(s_cal_raw, rot, &s_tc->cal);
+    if (!s_tc->cal_stored) extdisp_cal_default(rot, &s_tc->cal);
+    s_tc->cal_err = -1;
+    if (s_cfg.diag) snprintf(s_tc->status1, sizeof s_tc->status1, "%s%s %dMHz", extdisp_ctrl_str(s_ctrl),
+                             s_ctrl_read ? "" : "?", s_cfg.mhz);
+    else snprintf(s_tc->status1, sizeof s_tc->status1, "NucleoOS");
+    mirror->set_ext_lock(ext_lock, ext_unlock);
+    return true;
+}
+
+void start_touch(void)
+{
+    if (!s_tc) return;
+    if (add_device(s_cfg.t_cs, 2000000, &s_touch) != ESP_OK) { ESP_LOGW(TAG, "touch: no SPI device"); return; }
     if (s_cfg.t_irq >= 0) {
         gpio_reset_pin((gpio_num_t)s_cfg.t_irq);
         gpio_set_direction((gpio_num_t)s_cfg.t_irq, GPIO_MODE_INPUT);
         gpio_set_pull_mode((gpio_num_t)s_cfg.t_irq, GPIO_PULLUP_ONLY);   // PENIRQ is open-drain, low = touched
     }
-    if (xTaskCreate(touch_diag_task, "extdisp_touch", 4096, nullptr, 2, nullptr) != pdPASS)
-        ESP_LOGW(TAG, "touch diag: task not created (heap %u)", (unsigned)heap_caps_get_free_size(MALLOC_CAP_8BIT));
+    // 6 KB: the calibration save runs cJSON + FATFS on this stack.
+    if (xTaskCreate(touch_task, "extdisp_touch", 6144, nullptr, 2, nullptr) != pdPASS)
+        ESP_LOGW(TAG, "touch: task not created (heap %u)", (unsigned)heap_caps_get_free_size(MALLOC_CAP_8BIT));
     else
-        ESP_LOGW(TAG, "touch diag: logging touch DOWN/UP (T_IRQ %s)", s_cfg.t_irq >= 0 ? "wired" : "polled");
+        ESP_LOGW(TAG, "touch: %s, calibration %s (T_IRQ %s)", s_touch_input ? "input" : "log only",
+                 s_tc->cal_stored ? "stored" : "pending", s_cfg.t_irq >= 0 ? "wired" : "polled");
 }
 
 // Everything a tester needs to send back, on the SD. Built in RAM first and rewritten only when it differs
@@ -434,6 +623,8 @@ void write_report(size_t heap_before, size_t heap_after)
     if (s_mirror)
         fprintf(f, "mirror        %dx%d at %d,%d on 320x240\n", s_mirror->width(), s_mirror->height(),
                 s_mirror->origin_x(), s_mirror->origin_y());
+    fprintf(f, "touch         %s, calibration %s\n", s_touch_input ? "input" : "log only",
+            !s_tc ? "-" : s_tc->cal_stored ? "stored" : "pending (first use asks for it)");
     fprintf(f, "live          GET /api/status -> display_ext ; heap + touch events in /api/logs (tag extdisp)\n");
     fclose(f);
     if (!buf) return;
@@ -474,7 +665,8 @@ extern "C" void nucleo_extdisp_boot(void)
     char mode[8] = "auto", ctrl[12] = "auto";
     int pins[6] = { s_cfg.cs, s_cfg.dc, s_cfg.rst, s_cfg.t_cs, s_cfg.t_irq, s_cfg.bl };
     nucleo_prefs_load_extdisp(mode, sizeof mode, ctrl, sizeof ctrl, &s_cfg.rotation, &s_cfg.mhz,
-                              &s_cfg.mirror, &s_cfg.invert, &s_cfg.rgb, &s_cfg.diag, pins);
+                              &s_cfg.mirror, &s_cfg.invert, &s_cfg.rgb, &s_cfg.diag, pins,
+                              &s_touch_input, s_cal_raw, &s_has_cal_raw);
     s_cfg.mode = extdisp_mode_parse(mode);
     s_cfg.controller = extdisp_ctrl_parse(ctrl);
     s_cfg.cs = pins[0]; s_cfg.dc = pins[1]; s_cfg.rst = pins[2];
@@ -497,7 +689,11 @@ extern "C" void nucleo_extdisp_boot(void)
     s_dec = extdisp_decide(&s_cfg, &s_probe);
     if (s_dec.attach && !attach()) s_dec.attach = false;
     ESP_LOGW(TAG, "mode=%s -> %s: %s", extdisp_mode_str(s_cfg.mode), s_dec.attach ? "ON" : "off", s_dec.reason);
-    if (s_dec.attach && s_dec.touch && s_cfg.diag) start_touch_diag();
+    // Touch only with a panel up AND a touch controller that answered: otherwise no task, no lock, no state.
+    if (s_dec.attach && s_dec.touch && (s_touch_input || s_cfg.diag) && touch_prepare(s_dev, s_mirror)) {
+        draw_chrome();                              // soft keys replace the test card (input on)
+        start_touch();
+    }
     if (s_cfg.diag && s_cfg.mode != EXTDISP_OFF && s_probe.is_adv)
         write_report(heap_before, heap_caps_get_free_size(MALLOC_CAP_8BIT));
 }
