@@ -10,7 +10,7 @@ export const meta = {
 
 const EXE = './tools/anima-host/build/anima.exe';
 const HOWTO = [
-  'Drive the REAL offline assistant in AKB5 mode. Run from repo root /g/Nucleo (cwd is already there).',
+  'Drive the REAL offline assistant in AKB5 mode. Run from the repo root (cwd is already there).',
   'Italian query:  printf "%s\\n/exit\\n" "QUERY" | ANIMA_AKB5=1 ' + EXE + ' 2>/dev/null | grep -iE "reply:"',
   'English query:  printf "/en\\n%s\\n/exit\\n" "QUERY" | ANIMA_AKB5=1 ' + EXE + ' 2>/dev/null | grep -iE "reply:"',
   'An empty / "(vuoto)" reply, or a refusal (e.g. "non e un luogo", "is a person, not a place", "did you mean"), = SAFE abstain.',

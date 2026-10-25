@@ -111,3 +111,38 @@ void nucleo_prefs_save(int brightness, int volume, bool muted)
     cJSON_free(out);
     ESP_LOGI(TAG, "saved bri=%d vol=%d mute=%d", brightness, volume, muted);
 }
+
+bool nucleo_prefs_load_extdisp(char *mode, size_t mode_len, char *ctrl, size_t ctrl_len, int *rotation, int *mhz,
+                               bool *mirror, int *invert, int *rgb, bool *diag, int pins[6])
+{
+    cJSON *root = settings_load();
+    if (!root) return false;
+    cJSON *disp = cJSON_GetObjectItem(root, "display");
+    if (cJSON_IsObject(disp)) {
+        cJSON *m = cJSON_GetObjectItem(disp, "external");
+        cJSON *c = cJSON_GetObjectItem(disp, "external_controller");
+        cJSON *r = cJSON_GetObjectItem(disp, "external_rotation");
+        cJSON *f = cJSON_GetObjectItem(disp, "external_mhz");
+        cJSON *mi = cJSON_GetObjectItem(disp, "external_mirror");
+        cJSON *iv = cJSON_GetObjectItem(disp, "external_invert");
+        cJSON *rg = cJSON_GetObjectItem(disp, "external_rgb");
+        cJSON *dg = cJSON_GetObjectItem(disp, "external_diag");
+        cJSON *p = cJSON_GetObjectItem(disp, "external_pins");
+        if (mode && mode_len && cJSON_IsString(m)) snprintf(mode, mode_len, "%s", m->valuestring);
+        if (ctrl && ctrl_len && cJSON_IsString(c)) snprintf(ctrl, ctrl_len, "%s", c->valuestring);
+        if (rotation && cJSON_IsNumber(r)) *rotation = (int)r->valuedouble;
+        if (mhz && cJSON_IsNumber(f)) *mhz = (int)f->valuedouble;
+        if (mirror && cJSON_IsBool(mi)) *mirror = cJSON_IsTrue(mi);
+        if (invert && cJSON_IsBool(iv)) *invert = cJSON_IsTrue(iv) ? 1 : 0;
+        if (rgb && cJSON_IsBool(rg)) *rgb = cJSON_IsTrue(rg) ? 1 : 0;
+        if (diag && cJSON_IsBool(dg)) *diag = cJSON_IsTrue(dg);
+        static const char *const KEYS[6] = { "cs", "dc", "rst", "t_cs", "t_irq", "bl" };
+        if (pins && cJSON_IsObject(p))
+            for (int i = 0; i < 6; i++) {
+                cJSON *v = cJSON_GetObjectItem(p, KEYS[i]);
+                if (cJSON_IsNumber(v)) pins[i] = (int)v->valuedouble;
+            }
+    }
+    cJSON_Delete(root);
+    return true;
+}

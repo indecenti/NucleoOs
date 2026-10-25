@@ -3,6 +3,7 @@
 // gz-staleness is intentionally ignored — that's gz:check's job, not the registry guard's, and it
 // would otherwise fire on every edit.
 import { execSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 let s = '';
 process.stdin.on('data', (d) => (s += d));
 process.stdin.on('end', () => {
@@ -14,7 +15,7 @@ process.stdin.on('end', () => {
   if (!/[\\/]registry[\\/]|manifest\.json$/i.test(f)) return;   // only registry / manifests
   let out = '';
   try {
-    execSync('npm run validate', { cwd: 'G:/Nucleo', encoding: 'utf8', stdio: 'pipe' });
+    execSync('npm run validate', { cwd: fileURLToPath(new URL('../..', import.meta.url)), encoding: 'utf8', stdio: 'pipe' });
     return;   // exit 0 → all good, stay silent
   } catch (e) {
     out = String(e.stdout || '') + String(e.stderr || '');

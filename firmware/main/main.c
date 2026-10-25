@@ -14,6 +14,7 @@
 #include "nucleo_registry.h"
 #include "nucleo_eventbus.h"
 #include "nucleo_ui.h"
+#include "nucleo_extdisp.h"
 #include "nucleo_setup.h"
 #include "nucleo_sdcontent.h"
 #include "nucleo_httpd.h"
@@ -404,6 +405,7 @@ void app_main(void)
         g_anima_stage = 0; g_anima_phase = 0;   // consume the breadcrumbs for the next boot cycle
     }
     nucleo_ui_init();                       // M5GFX display + Cardputer keyboard
+    nucleo_extdisp_early();                 // ADV: keep an EXT-header display deselected while the SD mounts
     nucleo_codec_init(nucleo_kbd_i2c_bus()); // ADV: attach ES8311 to the keyboard's I2C bus (no-op on original)
     nucleo_imu_init(nucleo_kbd_i2c_bus());   // ADV: attach BMI270 tilt sensor to the same I2C bus (no-op on original)
     HMEM("after-ui");
@@ -471,6 +473,10 @@ void app_main(void)
         // An erase interrupted by a power cut leaves an unmountable card: finish it (once), then reboot onto it.
         if (nucleo_storage_format_recover() == ESP_OK) { ESP_LOGW(TAG, "SD erase recovered: rebooting"); esp_restart(); }
     }
+
+    // Optional external display on the ADV EXT header (docs/external-display.md): probe + 1:1 mirror.
+    // After the SD (settings.json, and the SPI2 bus it shares), before any task that draws or reads the card.
+    if (!sdc_install) { nucleo_extdisp_boot(); bootmark("extdisp"); }
 
     // Graceful-shutdown hook: ESP-IDF runs nucleo_storage_sync() on every clean esp_restart()
     // (OTA, /api/reboot, native SISTEMA ▸ Riavvia, Wi-Fi reset, USB-MSC) to flush + unmount the

@@ -64,6 +64,33 @@
         "lang": { "type": "string", "enum": ["it", "en"] },
         "tier_max": { "type": "string", "enum": ["command", "fact", "stitch", "remote"] }
       }
+    },
+    "display": {
+      "type": "object",
+      "description": "External SPI display on the Cardputer ADV EXT header (docs/external-display.md). Absent = auto-detect with the documented wiring.",
+      "additionalProperties": false,
+      "properties": {
+        "external": { "type": "string", "enum": ["auto", "on", "off"] },
+        "external_controller": { "type": "string", "enum": ["auto", "ili9341", "st7789"] },
+        "external_rotation": { "type": "integer", "enum": [1, 3] },
+        "external_mhz": { "type": "integer", "minimum": 1, "maximum": 40 },
+        "external_mirror": { "type": "boolean" },
+        "external_invert": { "type": "boolean" },
+        "external_rgb": { "type": "boolean" },
+        "external_diag": { "type": "boolean" },
+        "external_pins": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "cs": { "type": "integer", "minimum": -1, "maximum": 48 },
+            "dc": { "type": "integer", "minimum": -1, "maximum": 48 },
+            "rst": { "type": "integer", "minimum": -1, "maximum": 48 },
+            "t_cs": { "type": "integer", "minimum": -1, "maximum": 48 },
+            "t_irq": { "type": "integer", "minimum": -1, "maximum": 48 },
+            "bl": { "type": "integer", "minimum": -1, "maximum": 48 }
+          }
+        }
+      }
     }
   }
 }

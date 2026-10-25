@@ -14,6 +14,7 @@
 // volume.json — it never writes settings.json. The only writer of these keys is nucleo_prefs_save.
 #pragma once
 #include <stdbool.h>
+#include <stddef.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -28,6 +29,14 @@ bool nucleo_prefs_load(int *brightness, int *volume, bool *muted);
 // Persist the given prefs into settings.json under the power.* section, read-modify-write so every
 // other key the web Settings app owns is preserved. Atomic-ish tmp+rename swap, same as nucleo_i18n.
 void nucleo_prefs_save(int brightness, int volume, bool muted);
+
+// External display settings (settings.json "display": external, external_controller, external_rotation,
+// external_mhz, external_mirror, external_invert, external_rgb, external_diag, external_pins{cs,dc,rst,t_cs,t_irq,bl}).
+// Same contract as nucleo_prefs_load: pass the defaults in, each out-param is written only when its key
+// is present (invert/rgb become 0/1 from a JSON bool). pins[] order: cs, dc, rst, t_cs, t_irq, bl. Values
+// are NOT validated here — the consumer (nucleo_ui's extdisp) owns the pin rules.
+bool nucleo_prefs_load_extdisp(char *mode, size_t mode_len, char *ctrl, size_t ctrl_len, int *rotation, int *mhz,
+                               bool *mirror, int *invert, int *rgb, bool *diag, int pins[6]);
 
 #ifdef __cplusplus
 }

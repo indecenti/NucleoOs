@@ -56,7 +56,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"G:/Nucleo/.claude/hooks/guard-deploy.mjs\"",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/guard-deploy.mjs\"",
             "statusMessage": "deploy guard"
           }
         ]
@@ -68,7 +68,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"G:/Nucleo/.claude/hooks/validate-registry.mjs\"",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/validate-registry.mjs\"",
             "statusMessage": "validate registry",
             "timeout": 60
           }

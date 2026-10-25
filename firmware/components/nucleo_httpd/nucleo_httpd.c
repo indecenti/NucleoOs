@@ -290,6 +290,26 @@ static esp_err_t status_get(httpd_req_t *req)
     static uint32_t s_imu_last_ms = 0;   // httpd serves on one task, so a function-static is race-free here
     uint32_t imu_now = (uint32_t)(xTaskGetTickCount() * portTICK_PERIOD_MS);
     if (!s_imu_last_ms || (uint32_t)(imu_now - s_imu_last_ms) >= 250) { nucleo_imu_sample(); s_imu_last_ms = imu_now; }
+    // External display on the ADV EXT header (nucleo_ui's extdisp; extern: no REQUIRES on nucleo_ui).
+    {
+        extern bool nucleo_extdisp_active(void); extern bool nucleo_extdisp_touch(void);
+        extern const char *nucleo_extdisp_mode(void); extern const char *nucleo_extdisp_reason(void);
+        cJSON *ext = cJSON_AddObjectToObject(root, "display_ext");
+        cJSON_AddStringToObject(ext, "mode", nucleo_extdisp_mode());
+        cJSON_AddBoolToObject(ext, "active", nucleo_extdisp_active());
+        cJSON_AddBoolToObject(ext, "touch", nucleo_extdisp_touch());
+        cJSON_AddStringToObject(ext, "reason", nucleo_extdisp_reason());
+        extern const char *nucleo_extdisp_controller(void);
+        extern void nucleo_extdisp_stats(unsigned *ext_tx, int *presses, int *last_x, int *last_y);
+        unsigned tx; int presses, lx, ly;
+        nucleo_extdisp_stats(&tx, &presses, &lx, &ly);
+        cJSON_AddStringToObject(ext, "controller", nucleo_extdisp_controller());
+        cJSON_AddNumberToObject(ext, "spi_tx", tx);
+        cJSON_AddNumberToObject(ext, "touch_presses", presses);
+        cJSON_AddNumberToObject(ext, "touch_x", lx);
+        cJSON_AddNumberToObject(ext, "touch_y", ly);
+    }
+
     cJSON *imu = cJSON_AddObjectToObject(root, "imu");
     bool imu_on = nucleo_imu_present();
     cJSON_AddBoolToObject(imu, "present", imu_on);

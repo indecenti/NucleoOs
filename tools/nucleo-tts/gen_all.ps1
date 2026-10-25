@@ -11,7 +11,7 @@ $py = (Get-Command python -ErrorAction SilentlyContinue).Source
 if (-not $py) { $py = (Get-Command py -ErrorAction SilentlyContinue).Source }
 if (-not $py) { Write-Host 'python non trovato'; exit 1 }
 
-$root    = 'G:\Nucleo'
+$root    = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
 $tt      = Join-Path $root 'tools\nucleo-tts'
 $staging = Join-Path $tt '_wav'                                  # .wav (PC only)
 $final   = Join-Path $root 'deploy\sd-safe\data\tts'            # index.bin + clips.pcm (project, PC disk)

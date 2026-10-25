@@ -5,9 +5,9 @@ $ErrorActionPreference = 'Continue'
 $py = (Get-Command python -ErrorAction SilentlyContinue).Source
 if (-not $py) { $py = (Get-Command py -ErrorAction SilentlyContinue).Source }
 
-$tt      = 'G:\Nucleo\tools\nucleo-tts'
+$tt      = $PSScriptRoot
 $staging = Join-Path $tt '_wav'
-$final   = 'G:\Nucleo\deploy\sd-safe\data\tts'
+$final   = Join-Path $PSScriptRoot '..\..\deploy\sd-safe\data\tts'
 $h       = 'H:\data\tts'
 
 $t0 = Get-Date

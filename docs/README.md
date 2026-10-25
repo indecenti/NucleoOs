@@ -31,6 +31,7 @@ source of truth for how the system works.
 | Doc | What you get |
 |---|---|
 | [device-ui.md](device-ui.md) | The on-device UI: launcher carousel, key map, Spotlight search, pins, Recent, and the Control Center (TAB). |
+| [external-display.md](external-display.md) | Optional second screen on the Cardputer ADV EXT header (ILI9341 / ST7789V + XPT2046, module V1.1/V1.2): wiring, runtime detection, the 1:1 mirror, settings, tester diagnostics. |
 | [app-categories.md](app-categories.md) | How the native launcher groups apps by *use*, its capacity limits, and the category reorganization. *(inventory tables are a snapshot — `npm run launcher:test` has the live tree)* |
 | [media.md](media.md) | Media playback model — the device serves bytes, the browser decodes; plus the optional on-device audio/video paths. |
 | [voice.md](voice.md) | The on-device push-to-talk keyword recognizer (AVCEB: MFCC · CMN · DTW), trained by the Voice Manager app. |

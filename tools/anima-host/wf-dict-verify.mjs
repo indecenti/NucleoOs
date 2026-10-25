@@ -9,7 +9,7 @@ export const meta = {
 
 const EXE = './tools/anima-host/build/anima.exe';
 const HOWTO = [
-  'Drive the REAL offline assistant. Run from repo root /g/Nucleo (cwd already there). One query per run:',
+  'Drive the REAL offline assistant. Run from the repo root (cwd already there). One query per run:',
   '  IT:  printf "%s\\n/exit\\n" "QUERY" | ' + EXE + ' 2>/dev/null | grep -iE "intent=|reply:"',
   '  EN:  printf "/en\\n%s\\n/exit\\n" "QUERY" | ' + EXE + ' 2>/dev/null | grep -iE "intent=|reply:"',
   'The line shows intent=<skill> and the reply. Empty/"(vuoto)" or "Non ho X nel dizionario" = SAFE abstain.',

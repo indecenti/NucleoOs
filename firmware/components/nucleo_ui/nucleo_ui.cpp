@@ -13,6 +13,8 @@
 #include "esp_task_wdt.h"   // modal loops below run on the watchdog-watched launcher task
 #include "esp_log.h"
 #include "esp_heap_caps.h"  // largest-free-block probe for the splash canvas fallback
+#include "driver/gpio.h"    // ADV second-opinion board check
+#include "esp_rom_sys.h"
 
 M5GFX d;
 
@@ -120,7 +122,31 @@ M5Canvas *nucleo_screen(void)
 extern "C" void nucleo_ui_set_brightness(unsigned char b) { d.setBrightness(b); }
 
 // M5GFX identifies the board during d.init(); the ADV uses a different (I2C) keyboard.
-extern "C" bool nucleo_ui_is_adv(void) { return d.getBoard() == lgfx::board_M5CardputerADV; }
+// It tells the ADV from the original by G8/G9 reading HIGH under a pull-down (the ADV's I2C pull-ups) —
+// but only after a VAMeter branch taken when G5 AND G6 also read high. On the ADV those are EXT header
+// pins: an accessory with pull-ups on both (e.g. an SPI display's two chip-selects) sends M5GFX down that
+// branch and the ADV comes back as the ORIGINAL Cardputer -> wrong keyboard driver, dead keyboard.
+// Second opinion, settled once in nucleo_ui_init before the keyboard owns G8/G9: the same pull-up test
+// without the G5/G6 detour.
+static int s_is_adv = -1;
+static bool adv_i2c_pullups_present(void)
+{
+    const gpio_num_t pins[2] = { GPIO_NUM_8, GPIO_NUM_9 };
+    bool high = true;
+    for (gpio_num_t p : pins) {
+        gpio_reset_pin(p);
+        gpio_set_direction(p, GPIO_MODE_INPUT);
+        gpio_set_pull_mode(p, GPIO_PULLDOWN_ONLY);
+    }
+    esp_rom_delay_us(100);
+    for (gpio_num_t p : pins) { high = high && gpio_get_level(p); gpio_reset_pin(p); }
+    return high;
+}
+extern "C" bool nucleo_ui_is_adv(void)
+{
+    if (s_is_adv < 0) return d.getBoard() == lgfx::board_M5CardputerADV;   // before nucleo_ui_init settles it
+    return s_is_adv == 1;
+}
 
 static const int W = 240, H = 135, BAR = 16;
 #include "nucleo_theme.h"
@@ -137,6 +163,12 @@ extern "C" void nucleo_ui_init(void)
 {
     nucleo_theme_init(); // Initialize dynamic theme
     d.init();
+    s_is_adv = d.getBoard() == lgfx::board_M5CardputerADV;
+    if (!s_is_adv && d.getBoard() == lgfx::board_M5Cardputer && adv_i2c_pullups_present()) {
+        s_is_adv = 1;
+        ESP_LOGW("ui", "M5GFX reported the original Cardputer but G8/G9 carry the ADV's I2C pull-ups: "
+                       "treating as ADV (an EXT accessory pulls G5/G6 high)");
+    }
     d.setRotation(1);
     nucleo_theme_draw_bg(&d, W, H);
     nucleo_screen_acquire();        // grab the shared back-buffer now, while the heap is clean

@@ -1,7 +1,7 @@
-import sys, time, serial
+import os, sys, time, serial
 port = sys.argv[1] if len(sys.argv) > 1 else "COM3"
 secs = int(sys.argv[2]) if len(sys.argv) > 2 else 80
-out  = sys.argv[3] if len(sys.argv) > 3 else r"G:\Nucleo\firmware\serial_cap.log"
+out  = sys.argv[3] if len(sys.argv) > 3 else os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "firmware", "serial_cap.log")
 # Open WITHOUT toggling DTR/RTS so we don't reset the device (USB-Serial-JTAG ignores them anyway).
 s = serial.Serial()
 s.port = port
