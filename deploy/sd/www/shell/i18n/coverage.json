@@ -1,5 +1,5 @@
 {
-  "generated": "2026-10-12T07:59:09.564Z",
+  "generated": "2026-10-24T10:28:05.296Z",
   "base": "en",
   "langs": [
     "en",
@@ -22,11 +22,11 @@
     "fr": 100,
     "de": 100
   },
-  "surfaces": 48,
-  "totalKeys": 3709,
+  "surfaces": 50,
+  "totalKeys": 4131,
   "namespaces": {
     "core": 156,
-    "shell": 290,
+    "shell": 302,
     "agent": 160,
     "anima": 174,
     "arcade": 59,
@@ -37,6 +37,7 @@
     "calendar": 10,
     "clock": 18,
     "code-runner": 37,
+    "community": 12,
     "contacts": 32,
     "dictation": 59,
     "dj": 32,
@@ -61,6 +62,7 @@
     "radio": 56,
     "recorder": 106,
     "recycle-bin": 18,
+    "settings": 398,
     "spreadsheet": 303,
     "ssh": 55,
     "system-monitor": 33,

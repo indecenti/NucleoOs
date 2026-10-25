@@ -132,14 +132,14 @@ static void activate_menu(void)
     switch (s_sel) {
         case 0: if (nucleo_eth_scan_start() == 0) { s_state = ST_SCANNING; set_hint(); } else fail(TR("Scan fallito","Scan failed")); break;
         case 1: if (nucleo_eth_host_count() > 0) { s_state = ST_HOSTS; s_map = false; s_msel = 0; set_hint(); }
-                else fail("Scansiona prima la rete");
+                else fail(TR("Scansiona prima la rete","Scan the network first"));
                 break;
         case 2: { uint32_t gw = nucleo_eth_gateway_ip();
-                  if (!gw) fail("Gateway ignoto: scansiona"); else start_running(nucleo_eth_poison_start(gw)); } break;
+                  if (!gw) fail(TR("Gateway ignoto: scansiona","Gateway unknown: scan")); else start_running(nucleo_eth_poison_start(gw)); } break;
         case 3: start_running(nucleo_eth_dhcp_starve_start()); break;
         case 4: start_running(nucleo_eth_macflood_start()); break;
         case 5:
-            if (!nucleo_eth_has_identity()) fail("Serve identita': scansiona");
+            if (!nucleo_eth_has_identity()) fail(TR("Serve identita': scansiona","Identity needed: scan"));
             else start_running(nucleo_eth_rogue_dhcp_start());
             break;
         case 6: start_running(nucleo_eth_pcap_start(nullptr)); break;
@@ -151,9 +151,9 @@ static void start_mitm_on_selected(void)
 {
     uint32_t victim = nucleo_eth_host_ip_raw(s_msel);
     uint32_t gw = nucleo_eth_gateway_ip();
-    if (!gw)            { fail("Gateway ignoto"); return; }
+    if (!gw)            { fail(TR("Gateway ignoto","Gateway unknown")); return; }
     if (victim == gw)   { fail(TR("Scegli un host != gateway","Pick a host != gateway")); return; }
-    if (!victim)        { fail("Host non valido"); return; }
+    if (!victim)        { fail(TR("Host non valido","Invalid host")); return; }
     start_running(nucleo_eth_mitm_start(victim, gw));
 }
 
@@ -163,7 +163,7 @@ static void tick(void)
         if (nucleo_eth_current() == ETH_OP_NONE || nucleo_eth_scan_progress() >= 100) {
             s_state = (nucleo_eth_host_count() > 0) ? ST_HOSTS : ST_MENU;
             s_map = false; s_msel = 0;
-            if (nucleo_eth_host_count() == 0) fail("Nessun host (DHCP? cavo?)");
+            if (nucleo_eth_host_count() == 0) fail(TR("Nessun host (DHCP? cavo?)","No host (DHCP? cable?)"));
             set_hint();
         }
         nucleo_app_request_draw();
@@ -296,7 +296,7 @@ static void draw_scanning(int h)
     d.fillRoundRect(12, 62, (216 * p) / 100, 10, 3, GRN);
     char st[40]; snprintf(st, sizeof st, "host %d   tx %lu   rx %lu", nucleo_eth_host_count(), nucleo_eth_tx_frames(), nucleo_eth_rx_frames());
     d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(10, 84); d.print(st);
-    if (!nucleo_eth_has_identity()) { d.setTextColor(YEL, BG); d.setCursor(10, h - 10); d.print("acquisisco lease DHCP..."); }
+    if (!nucleo_eth_has_identity()) { d.setTextColor(YEL, BG); d.setCursor(10, h - 10); d.print(TR("acquisisco lease DHCP...","acquiring DHCP lease...")); }
     (void)h;
 }
 

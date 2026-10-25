@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <script>/* NucleoOS resource guard: a lost same-origin script/stylesheet makes the shell reload this window once (wm.js retryFrame) */addEventListener('error',function(e){var t=e.target,u;if(!t||t===window||parent===window||(t.tagName!=='SCRIPT'&&t.tagName!=='LINK'))return;try{u=new URL(t.src||t.href,location.href);if(u.origin===location.origin)parent.postMessage({type:'app-resource-failed',src:u.pathname},location.origin)}catch(_){}},true)</script>
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
-  <title data-t="appTitle">Impostazioni</title>
+  <title data-i18n="appTitle">Impostazioni</title>
   <style>
     /* Native controls (audio/video bars, date/time pickers, file inputs, selects) follow the app theme. */
     :root { color-scheme: dark; } html[data-theme="light"] { color-scheme: light; }
@@ -327,7 +327,7 @@
   <header>
     <div class="logo">⚙</div>
     <div class="brand" id="brand">Impostazioni</div>
-    <div class="cmd-trigger" id="cmd-trigger" title="Comando rapido" data-t-attr="title:cmdBar">
+    <div class="cmd-trigger" id="cmd-trigger" title="Comando rapido" data-i18n-attr="title:cmdBar">
       <span>⌘</span><span class="t" id="cmd-trigger-t">Comanda il Cardputer…</span><kbd>Ctrl K</kbd>
     </div>
     <div class="live-pill" id="live-pill"><span class="ld"></span><span id="live-txt">Live</span></div>
@@ -350,17 +350,17 @@
         <div class="sect" style="padding-bottom:14px">
           <h2 id="t-pulse">Battito del dispositivo <span class="badge live">Live</span></h2>
           <div class="pulse-grid" id="pulse-grid">
-            <div class="tile wide ok" id="tile-heap"><div class="tk"><span class="dotcol"></span><span data-t="heap">Memoria libera</span></div><div class="tv ok">—</div><div class="tsub">internal SRAM</div><canvas></canvas></div>
-            <div class="tile wide ok" id="tile-cpu"><div class="tk"><span class="dotcol"></span><span data-t="cpu">CPU</span></div><div class="tv ok">—</div><div class="cores" id="cpu-cores"></div><canvas></canvas></div>
-            <div class="tile ok" id="tile-frag"><div class="tk"><span class="dotcol"></span><span data-t="fragShort">Framm.</span></div><div class="tv ok">—</div><div class="tsub">heap</div></div>
-            <div class="tile ok" id="tile-min"><div class="tk"><span class="dotcol"></span><span data-t="minHist">Min storico</span></div><div class="tv ok">—</div><div class="tsub">watermark</div></div>
-            <div class="tile ok" id="tile-up"><div class="tk"><span class="dotcol"></span><span data-t="uptime">Acceso da</span></div><div class="tv">—</div></div>
-            <div class="tile ok" id="tile-sd"><div class="tk"><span class="dotcol"></span><span data-t="storage">Storage</span></div><div class="tv">—</div><div class="tsub" id="tile-sd-sub"></div></div>
+            <div class="tile wide ok" id="tile-heap"><div class="tk"><span class="dotcol"></span><span data-i18n="heap">Memoria libera</span></div><div class="tv ok">—</div><div class="tsub">internal SRAM</div><canvas></canvas></div>
+            <div class="tile wide ok" id="tile-cpu"><div class="tk"><span class="dotcol"></span><span data-i18n="cpu">CPU</span></div><div class="tv ok">—</div><div class="cores" id="cpu-cores"></div><canvas></canvas></div>
+            <div class="tile ok" id="tile-frag"><div class="tk"><span class="dotcol"></span><span data-i18n="fragShort">Framm.</span></div><div class="tv ok">—</div><div class="tsub">heap</div></div>
+            <div class="tile ok" id="tile-min"><div class="tk"><span class="dotcol"></span><span data-i18n="minHist">Min storico</span></div><div class="tv ok">—</div><div class="tsub">watermark</div></div>
+            <div class="tile ok" id="tile-up"><div class="tk"><span class="dotcol"></span><span data-i18n="uptime">Acceso da</span></div><div class="tv">—</div></div>
+            <div class="tile ok" id="tile-sd"><div class="tk"><span class="dotcol"></span><span data-i18n="storage">Storage</span></div><div class="tv">—</div><div class="tsub" id="tile-sd-sub"></div></div>
           </div>
         </div>
 
         <div class="sect">
-          <h2 id="t-scenes">Scene <span class="badge" data-t="badgeOneTap">Un tocco</span></h2>
+          <h2 id="t-scenes">Scene <span class="badge" data-i18n="badgeOneTap">Un tocco</span></h2>
           <div class="chips" id="scene-chips"></div>
         </div>
 
@@ -370,11 +370,11 @@
         </div>
 
         <div class="sect">
-          <h2 id="t-st-cc">Self-Test <span class="badge" data-t="badgePulse">Battito</span></h2>
+          <h2 id="t-st-cc">Self-Test <span class="badge" data-i18n="badgePulse">Battito</span></h2>
           <div class="row" style="border-bottom:none;padding-top:0">
             <div class="ctl" style="gap:8px;flex-wrap:wrap">
-              <button class="primary" id="cc-selftest">🩺 <span data-t="runSelfTest">Esegui Self-Test</span></button>
-              <button id="cc-selftest-copy" disabled data-t="copyReport">Copia esito</button>
+              <button class="primary" id="cc-selftest">🩺 <span data-i18n="runSelfTest">Esegui Self-Test</span></button>
+              <button id="cc-selftest-copy" disabled data-i18n="copyReport">Copia esito</button>
               <span class="hint" id="cc-selftest-stat"></span>
             </div>
           </div>
@@ -385,32 +385,32 @@
       <!-- ═══════════ DISPLAY ═══════════ -->
       <section id="tab-display" class="tab-content">
         <div class="sect">
-          <h2><span data-t="screen">Schermo</span> <span class="badge fw">Firmware</span></h2>
+          <h2><span data-i18n="screen">Schermo</span> <span class="badge fw">Firmware</span></h2>
           <div class="row">
-            <label data-t="dispState">Stato schermo</label>
+            <label data-i18n="dispState">Stato schermo</label>
             <div class="ctl"><span class="hint" id="disp-state">Tocca per comandare il pannello.</span>
               <button id="disp-toggle" class="primary" style="margin-left:auto">⏻ Spegni</button></div>
           </div>
-          <div class="row" style="border-bottom:none"><div class="hint" style="flex:1" data-t-html="dispHint">Lo spegnimento porta la retroilluminazione a 0 (nero) senza cambiare la luminosità impostata. È l'<b>unica leva live</b> dello schermo via web; non interroga il pannello all'apertura per non risvegliarlo.</div></div>
+          <div class="row" style="border-bottom:none"><div class="hint" style="flex:1" data-i18n-html="dispHint">Lo spegnimento porta la retroilluminazione a 0 (nero) senza cambiare la luminosità impostata. È l'<b>unica leva live</b> dello schermo via web; non interroga il pannello all'apertura per non risvegliarlo.</div></div>
         </div>
         <div class="sect">
-          <h2 data-t="briAudio">Luminosità & Audio</h2>
-          <div class="row"><label data-t="briDisplay">Luminosità display</label>
+          <h2 data-i18n="briAudio">Luminosità & Audio</h2>
+          <div class="row"><label data-i18n="briDisplay">Luminosità display</label>
             <div class="ctl"><span style="color:var(--dim)">🔅</span><input type="range" id="pw-bri" min="10" max="100" step="5" value="100"><span style="color:var(--dim)">🔆</span><span class="range-val" id="pw-bri-v">100%</span></div></div>
-          <div class="row"><label data-t="volAudio">Volume audio</label>
+          <div class="row"><label data-i18n="volAudio">Volume audio</label>
             <div class="ctl"><span style="color:var(--dim)">🔈</span><input type="range" id="pw-vol" min="0" max="100" step="10" value="70"><span style="color:var(--dim)">🔊</span><span class="range-val" id="pw-vol-v">70%</span></div></div>
-          <div class="row" style="border-bottom:none"><div class="hint" style="flex:1" data-t-html="briVolHint">Luminosità e volume si <b>salvano</b> nelle impostazioni e si applicano al <b>prossimo avvio</b> (il firmware non espone un setter a caldo per questi).</div></div>
+          <div class="row" style="border-bottom:none"><div class="hint" style="flex:1" data-i18n-html="briVolHint">Luminosità e volume si <b>salvano</b> nelle impostazioni e si applicano al <b>prossimo avvio</b> (il firmware non espone un setter a caldo per questi).</div></div>
         </div>
       </section>
 
       <!-- ═══════════ APPEARANCE ═══════════ -->
       <section id="tab-personalization" class="tab-content">
-        <div class="sect"><h2><span data-t="theme">Tema</span> <span class="badge live">Live</span></h2>
+        <div class="sect"><h2><span data-i18n="theme">Tema</span> <span class="badge live">Live</span></h2>
           <div class="theme-cards">
-            <div class="theme-card" data-val="light" id="theme-light"><div class="icon">☀️</div><div class="name" data-t="themeLight">Chiaro</div></div>
-            <div class="theme-card" data-val="dark" id="theme-dark"><div class="icon">🌙</div><div class="name" data-t="themeDark">Scuro</div></div>
+            <div class="theme-card" data-val="light" id="theme-light"><div class="icon">☀️</div><div class="name" data-i18n="themeLight">Chiaro</div></div>
+            <div class="theme-card" data-val="dark" id="theme-dark"><div class="icon">🌙</div><div class="name" data-i18n="themeDark">Scuro</div></div>
           </div></div>
-        <div class="sect"><h2><span data-t="accentColor">Colore accento</span> <span class="badge live">Live</span></h2>
+        <div class="sect"><h2><span data-i18n="accentColor">Colore accento</span> <span class="badge live">Live</span></h2>
           <div class="accent-row" id="accent-container">
             <div class="color-swatch" style="background:#4ea1ff" data-color="#4ea1ff"></div>
             <div class="color-swatch" style="background:#5ee0a0" data-color="#5ee0a0"></div>
@@ -420,219 +420,222 @@
             <div class="color-swatch" style="background:#e0556b" data-color="#e0556b"></div>
             <div class="color-swatch" style="background:#2b6fd6" data-color="#2b6fd6"></div>
           </div></div>
-        <div class="sect"><h2><span data-t="textSize">Dimensione testo</span> <span class="badge live">Live</span></h2>
+        <div class="sect"><h2><span data-i18n="textSize">Dimensione testo</span> <span class="badge live">Live</span></h2>
           <div class="seg-row">
-            <div class="seg-item" data-size="12px" style="font-size:12px" data-t="sizeSmall">Piccolo</div>
-            <div class="seg-item" data-size="14px" style="font-size:14px" data-t="sizeNormal">Normale</div>
-            <div class="seg-item" data-size="16px" style="font-size:16px" data-t="sizeLarge">Grande</div>
+            <div class="seg-item" data-size="12px" style="font-size:12px" data-i18n="sizeSmall">Piccolo</div>
+            <div class="seg-item" data-size="14px" style="font-size:14px" data-i18n="sizeNormal">Normale</div>
+            <div class="seg-item" data-size="16px" style="font-size:16px" data-i18n="sizeLarge">Grande</div>
           </div></div>
         <div class="sect"><h2 id="t-langregion">Lingua e regione <span class="badge live">Live</span></h2>
           <div class="lr-label" id="t-displang">Lingua di visualizzazione</div>
           <div class="seg-row lang-row" id="lang-row"></div>
           <div class="hint" id="lang-hint" style="margin-top:7px">Imposta la lingua di sistema per ANIMA, il copilota e la voce.</div>
           <div class="lr-label" id="t-region" style="margin-top:15px">Formato regionale</div>
-          <select id="region-select" class="lr-select" aria-label="Formato regionale" data-t-attr="aria-label:regionFormat"></select>
+          <select id="region-select" class="lr-select" aria-label="Formato regionale" data-i18n-attr="aria-label:regionFormat"></select>
           <div class="lr-preview" id="region-preview"></div>
           <div class="lr-status" id="lang-status"></div></div>
-        <div class="sect"><h2><span data-t="wallpaper">Sfondo</span> <span class="badge live">Live</span></h2>
+        <div class="sect"><h2><span data-i18n="wallpaper">Sfondo</span> <span class="badge live">Live</span></h2>
           <div class="seg-row wp-type" id="wp-type">
-            <div class="seg-item" data-wptype="gradient" data-t="wpTypeGradient">Gradiente</div>
-            <div class="seg-item" data-wptype="color" data-t="wpTypeColor">Tinta unita</div>
-            <div class="seg-item" data-wptype="image" data-t="wpTypeImage">Immagine</div>
+            <div class="seg-item" data-wptype="gradient" data-i18n="wpTypeGradient">Gradiente</div>
+            <div class="seg-item" data-wptype="color" data-i18n="wpTypeColor">Tinta unita</div>
+            <div class="seg-item" data-wptype="image" data-i18n="wpTypeImage">Immagine</div>
           </div>
           <div id="wp-pane-gradient" class="wp-pane"><div id="wp-gradients" class="wp-tiles"></div></div>
           <div id="wp-pane-color" class="wp-pane" hidden><div id="wp-colors" class="wp-tiles"></div></div>
           <div id="wp-pane-image" class="wp-pane" hidden>
-            <div id="wp-container" class="wp-gallery"><div class="hint" style="padding:10px" data-t="wpLoadHint">Apri questa scheda per caricare gli sfondi…</div></div>
-            <div class="wp-fit-row"><div class="lr-label" data-t="wpFit">Adattamento</div>
+            <div id="wp-container" class="wp-gallery"><div class="hint" style="padding:10px" data-i18n="wpLoadHint">Apri questa scheda per caricare gli sfondi…</div></div>
+            <div class="wp-fit-row"><div class="lr-label" data-i18n="wpFit">Adattamento</div>
               <div class="seg-row" id="wp-fit">
-                <div class="seg-item" data-wpfit="cover" data-t="wpFitCover">Riempi</div>
-                <div class="seg-item" data-wpfit="contain" data-t="wpFitContain">Adatta</div>
-                <div class="seg-item" data-wpfit="center" data-t="wpFitCenter">Centra</div>
-                <div class="seg-item" data-wpfit="tile" data-t="wpFitTile">Ripeti</div>
+                <div class="seg-item" data-wpfit="cover" data-i18n="wpFitCover">Riempi</div>
+                <div class="seg-item" data-wpfit="contain" data-i18n="wpFitContain">Adatta</div>
+                <div class="seg-item" data-wpfit="center" data-i18n="wpFitCenter">Centra</div>
+                <div class="seg-item" data-wpfit="tile" data-i18n="wpFitTile">Ripeti</div>
               </div></div>
           </div>
-          <div class="wp-actions"><button class="wp-reset" id="wp-reset" data-t="wpReset">Ripristina predefinito</button></div>
+          <div class="wp-actions"><button class="wp-reset" id="wp-reset" data-i18n="wpReset">Ripristina predefinito</button></div>
         </div>
       </section>
 
       <!-- ═══════════ NETWORK ═══════════ -->
       <section id="tab-network" class="tab-content">
-        <div class="sect"><h2><span data-t="wifiStatus">Stato Wi-Fi</span> <span class="badge ro" data-t="badgeReadOnly">Sola lettura</span></h2>
+        <div class="sect"><h2><span data-i18n="wifiStatus">Stato Wi-Fi</span> <span class="badge ro" data-i18n="badgeReadOnly">Sola lettura</span></h2>
           <div class="info-grid">
-            <div class="info-cell"><div class="il" data-t="netMode">Modalità</div><div class="iv" id="net-mode">—</div></div>
+            <div class="info-cell"><div class="il" data-i18n="netMode">Modalità</div><div class="iv" id="net-mode">—</div></div>
             <div class="info-cell"><div class="il">SSID</div><div class="iv" id="net-ssid">—</div></div>
-            <div class="info-cell"><div class="il" data-t="ipAddr">Indirizzo IP</div><div class="iv" id="net-ip">—</div></div>
-            <div class="info-cell"><div class="il" data-t="clock">Orologio</div><div class="iv" id="net-time">—</div></div>
+            <div class="info-cell"><div class="il" data-i18n="ipAddr">Indirizzo IP</div><div class="iv" id="net-ip">—</div></div>
+            <div class="info-cell"><div class="il" data-i18n="clock">Orologio</div><div class="iv" id="net-time">—</div></div>
           </div></div>
-        <div class="sect"><h2 data-t="nearbyNets">Reti vicine</h2>
-          <div class="row" style="border-bottom:none;padding-top:0"><div class="ctl"><button id="wifi-scan">📡 <span data-t="scan">Scansiona</span></button><span class="hint" id="wifi-scan-stat"></span></div></div>
+        <div class="sect"><h2 data-i18n="nearbyNets">Reti vicine</h2>
+          <div class="row" style="border-bottom:none;padding-top:0"><div class="ctl"><button id="wifi-scan">📡 <span data-i18n="scan">Scansiona</span></button><span class="hint" id="wifi-scan-stat"></span></div></div>
           <div id="wifi-list"></div>
-          <div class="hint" style="margin-top:6px" data-t-html="wifiScanHint">La scansione è <b>su richiesta</b> e a sola lettura. Per <b>connettersi</b> o cambiare rete usa l'app <b>Wi-Fi</b> nativa: il firmware non espone un endpoint di join via web.</div></div>
-        <div class="sect"><h2><span data-t="connectivity">Connettività</span> <span class="badge fw">Firmware</span></h2>
+          <div class="hint" style="margin-top:6px" data-i18n-html="wifiScanHint">La scansione è <b>su richiesta</b> e a sola lettura. Per <b>connettersi</b> o cambiare rete usa l'app <b>Wi-Fi</b> nativa: il firmware non espone un endpoint di join via web.</div></div>
+        <div class="sect"><h2><span data-i18n="connectivity">Connettività</span> <span class="badge fw">Firmware</span></h2>
           <div class="row"><label>Wi-Fi</label><div class="ctl"><span class="sw"><input type="checkbox" id="net-wifi"><span></span></span></div></div>
           <div class="row"><label>Bluetooth LE</label><div class="ctl"><span class="sw"><input type="checkbox" id="net-ble"><span></span></span></div></div>
           <div class="row"><label>Swarm (ESP-NOW)</label><div class="ctl"><span class="sw"><input type="checkbox" id="net-swarm"><span></span></span></div></div>
-          <div class="hint" style="margin-top:6px" data-t="changesNextBoot">Le modifiche si salvano e si applicano al prossimo avvio.</div></div>
+          <div class="hint" style="margin-top:6px" data-i18n="changesNextBoot">Le modifiche si salvano e si applicano al prossimo avvio.</div></div>
         <div class="sect"><h2>IPv6 <span class="badge fw">Firmware</span></h2>
-          <div class="row"><label data-t="enableIpv6">Abilita IPv6</label><div class="ctl"><span class="sw"><input type="checkbox" id="net-ipv6"><span></span></span></div></div>
-          <div class="hint" style="margin-top:6px" data-t-html="ipv6Hint">IPv6 è <b>disabilitato</b> nel firmware per liberare SRAM: tutta la rete viaggia su IPv4. Le tabelle IPv6 di lwIP si allocano a compilazione — questo controllo registra solo la preferenza; per riattivarlo davvero ricompila con <code>CONFIG_LWIP_IPV6=y</code>.</div></div>
+          <div class="row"><label data-i18n="enableIpv6">Abilita IPv6</label><div class="ctl"><span class="sw"><input type="checkbox" id="net-ipv6"><span></span></span></div></div>
+          <div class="hint" style="margin-top:6px" data-i18n-html="ipv6Hint">IPv6 è <b>disabilitato</b> nel firmware per liberare SRAM: tutta la rete viaggia su IPv4. Le tabelle IPv6 di lwIP si allocano a compilazione — questo controllo registra solo la preferenza; per riattivarlo davvero ricompila con <code>CONFIG_LWIP_IPV6=y</code>.</div></div>
       </section>
 
       <!-- ═══════════ AI / MODELS ═══════════ -->
       <section id="tab-ai" class="tab-content">
-        <div class="sect" id="ai-presets-sect"><h2><span data-t="aiProfile">Profilo IA</span> <span class="badge live" data-t="badgeSmart">Intelligente</span></h2>
-          <div class="hint" style="margin-bottom:10px" data-t-html="aiProfileHint">Scegli <b>come deve ragionare ANIMA</b>. Il sistema rileva cosa è davvero disponibile — chiavi online, GPU del browser, cervello offline — e <b>attiva solo i profili possibili</b>, spiegando cosa manca.</div>
-          <div class="ps" id="preset-strip"><span class="hint" data-t="detectingOptions">rilevo le possibilità…</span></div>
+        <div class="sect" id="ai-presets-sect"><h2><span data-i18n="aiProfile">Profilo IA</span> <span class="badge live" data-i18n="badgeSmart">Intelligente</span></h2>
+          <div class="hint" style="margin-bottom:10px" data-i18n-html="aiProfileHint">Scegli <b>come deve ragionare ANIMA</b>. Il sistema rileva cosa è davvero disponibile — chiavi online, GPU del browser, cervello offline — e <b>attiva solo i profili possibili</b>, spiegando cosa manca.</div>
+          <div class="ps" id="preset-strip"><span class="hint" data-i18n="detectingOptions">rilevo le possibilità…</span></div>
           <div class="tier-band" id="tier-band" style="margin-top:13px"></div>
-          <div style="margin-top:13px"><div style="font-size:12.5px;font-weight:600;margin-bottom:6px" data-t="whatCurrentCanDo">Cosa può fare la configurazione attuale</div>
+          <div style="margin-top:13px"><div style="font-size:12.5px;font-weight:600;margin-bottom:6px" data-i18n="whatCurrentCanDo">Cosa può fare la configurazione attuale</div>
             <div class="caps-row" id="caps-row"></div></div>
-          <details class="apps-det" id="apps-det" style="margin-top:11px"><summary data-t="whichApps">Su quali app agisce</summary><div class="apps-list" id="apps-list"></div></details>
+          <details class="apps-det" id="apps-det" style="margin-top:11px"><summary data-i18n="whichApps">Su quali app agisce</summary><div class="apps-list" id="apps-list"></div></details>
           <div class="scope-legend" id="scope-legend" style="margin-top:11px"></div>
         </div>
 
-        <div class="sect" id="ai-local-sect"><h2><span data-t="pcModels">Modelli sul tuo PC</span> <span class="badge live" data-t="badgePcModels">Gratis · offline</span></h2>
-          <div class="hint" style="margin-bottom:6px" data-t-html="pcModelsHint">Un server IA su <b>questo computer</b> risponde ad ANIMA, al copilota e ad Agenti <b>senza chiave e senza Internet</b>.</div>
-          <div id="pc-models-mount"><span class="hint" data-t="pcDetecting">cerco i server…</span></div>
+        <div class="sect" id="ai-local-sect"><h2><span data-i18n="pcModels">Modelli sul tuo PC</span> <span class="badge live" data-i18n="badgePcModels">Gratis · offline</span></h2>
+          <div class="hint" style="margin-bottom:6px" data-i18n-html="pcModelsHint">Un server IA su <b>questo computer</b> risponde ad ANIMA, al copilota e ad Agenti <b>senza chiave e senza Internet</b>.</div>
+          <div id="pc-models-mount"><span class="hint" data-i18n="pcDetecting">cerco i server…</span></div>
         </div>
 
-        <details class="adv" id="ai-adv"><summary data-t="advSettings">Impostazioni avanzate · provider, chiave, cervello offline, voce</summary><div class="adv-inner">
-        <div class="sect"><h2><span data-t="brainsChain">Cervelli & catena di fallback</span> <span class="badge" data-t="badgeHowItWorks">Come funziona</span></h2>
-          <div class="hint" style="margin-bottom:10px" data-t-html="brainsChainHint">ANIMA ha <b>cinque menti</b> e le prova <b>in ordine</b>, dalla più capace a quella sempre-disponibile. Sfrutta prima la potenza del browser/PC e <b>scala sul Cardputer solo come ultima rete di sicurezza</b>.</div>
+        <details class="adv" id="ai-adv"><summary data-i18n="advSettings">Impostazioni avanzate · provider, chiave, cervello offline, voce</summary><div class="adv-inner">
+        <div class="sect"><h2><span data-i18n="brainsChain">Cervelli & catena di fallback</span> <span class="badge" data-i18n="badgeHowItWorks">Come funziona</span></h2>
+          <div class="hint" style="margin-bottom:10px" data-i18n-html="brainsChainHint">ANIMA ha <b>cinque menti</b> e le prova <b>in ordine</b>, dalla più capace a quella sempre-disponibile. Sfrutta prima la potenza del browser/PC e <b>scala sul Cardputer solo come ultima rete di sicurezza</b>.</div>
           <div style="display:flex;flex-direction:column;gap:6px">
-            <div style="display:flex;gap:10px;align-items:flex-start;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px 12px"><span style="font-size:17px;width:22px;text-align:center">☁</span><div style="flex:1"><div style="font-weight:600;font-size:13px" data-t="brain1Title">1 · IA online (cloud)</div><div class="hint" data-t="brain1Desc">Claude / Groq / Grok — serve chiave + Internet. La più capace.</div></div></div>
+            <div style="display:flex;gap:10px;align-items:flex-start;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px 12px"><span style="font-size:17px;width:22px;text-align:center">☁</span><div style="flex:1"><div style="font-weight:600;font-size:13px" data-i18n="brain1Title">1 · IA online (cloud)</div><div class="hint" data-i18n="brain1Desc">Claude / Groq / Grok — serve chiave + Internet. La più capace.</div></div></div>
             <div style="text-align:center;color:var(--dim)">↓</div>
-            <div style="display:flex;gap:10px;align-items:flex-start;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px 12px"><span style="font-size:17px;width:22px;text-align:center">⌂</span><div style="flex:1"><div style="font-weight:600;font-size:13px" data-t="brainPcTitle">2 · Modello sul tuo PC</div><div class="hint" data-t="brainPcDesc">Ollama / LM Studio su questo computer: gratis, offline, privato.</div></div></div>
+            <div style="display:flex;gap:10px;align-items:flex-start;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px 12px"><span style="font-size:17px;width:22px;text-align:center">⌂</span><div style="flex:1"><div style="font-weight:600;font-size:13px" data-i18n="brainPcTitle">2 · Modello sul tuo PC</div><div class="hint" data-i18n="brainPcDesc">Ollama / LM Studio su questo computer: gratis, offline, privato.</div></div></div>
             <div style="text-align:center;color:var(--dim)">↓</div>
-            <div style="display:flex;gap:10px;align-items:flex-start;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px 12px"><span style="font-size:17px;width:22px;text-align:center">✦</span><div style="flex:1"><div style="font-weight:600;font-size:13px" data-t="brain2Title">3 · LLM locale (GPU del browser)</div><div class="hint" data-t="brain2Desc">Un LLM completo sulla GPU del browser (WebLLM). Offline dopo il primo download.</div></div></div>
+            <div style="display:flex;gap:10px;align-items:flex-start;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px 12px"><span style="font-size:17px;width:22px;text-align:center">✦</span><div style="flex:1"><div style="font-weight:600;font-size:13px" data-i18n="brain2Title">3 · LLM locale (GPU del browser)</div><div class="hint" data-i18n="brain2Desc">Un LLM completo sulla GPU del browser (WebLLM). Offline dopo il primo download.</div></div></div>
             <div style="text-align:center;color:var(--dim)">↓</div>
-            <div style="display:flex;gap:10px;align-items:flex-start;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px 12px"><span style="font-size:17px;width:22px;text-align:center">◆</span><div style="flex:1"><div style="font-weight:600;font-size:13px" data-t="brain3Title">4 · Browser — cervello locale (WASM) + indice web</div><div class="hint" data-t-html="brain3Desc">La cascata del Cardputer compilata a WebAssembly, sulla CPU del browser. <b>Ultimo passo prima del Cardputer.</b></div></div></div>
+            <div style="display:flex;gap:10px;align-items:flex-start;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px 12px"><span style="font-size:17px;width:22px;text-align:center">◆</span><div style="flex:1"><div style="font-weight:600;font-size:13px" data-i18n="brain3Title">4 · Browser — cervello locale (WASM) + indice web</div><div class="hint" data-i18n-html="brain3Desc">La cascata del Cardputer compilata a WebAssembly, sulla CPU del browser. <b>Ultimo passo prima del Cardputer.</b></div></div></div>
             <div style="text-align:center;color:var(--dim)">↓</div>
-            <div style="display:flex;gap:10px;align-items:flex-start;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px 12px"><span style="font-size:17px;width:22px;text-align:center">▣</span><div style="flex:1"><div style="font-weight:600;font-size:13px" data-t="brain4Title">5 · Cardputer (on-device)</div><div class="hint" data-t-html="brain4Desc">Il cervello nel dispositivo. <b>Sempre disponibile e offline</b>: la rete di sicurezza finale.</div></div></div>
+            <div style="display:flex;gap:10px;align-items:flex-start;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px 12px"><span style="font-size:17px;width:22px;text-align:center">▣</span><div style="flex:1"><div style="font-weight:600;font-size:13px" data-i18n="brain4Title">5 · Cardputer (on-device)</div><div class="hint" data-i18n-html="brain4Desc">Il cervello nel dispositivo. <b>Sempre disponibile e offline</b>: la rete di sicurezza finale.</div></div></div>
           </div></div>
 
-        <div class="sect"><h2><span data-t="offlineBrainL1">Cervello offline (L1)</span> <span class="badge fw">Live · RAM</span></h2>
-          <div class="row"><label data-t="policy">Politica</label>
+        <div class="sect"><h2><span data-i18n="offlineBrainL1">Cervello offline (L1)</span> <span class="badge fw">Live · RAM</span></h2>
+          <div class="row"><label data-i18n="policy">Politica</label>
             <div class="ctl"><div class="seg-row" id="l1-policy">
-              <div class="seg-item" data-m="auto" data-t="auto">Auto</div><div class="seg-item" data-m="on" data-t="always">Sempre</div><div class="seg-item" data-m="off" data-t="never">Mai</div></div></div></div>
+              <div class="seg-item" data-m="auto" data-i18n="auto">Auto</div><div class="seg-item" data-m="on" data-i18n="always">Sempre</div><div class="seg-item" data-m="off" data-i18n="never">Mai</div></div></div></div>
           <div class="row" style="border-bottom:none"><div class="hint" id="l1-stat" style="flex:1">…</div></div>
-          <div class="row" style="border-bottom:none"><div class="hint" style="flex:1" data-t-html="l1PolicyHint">In <b>Auto</b> il cervello offline si fa da parte (liberando ~31&nbsp;KB) quando c'è un cervello più forte (online o LLM browser). <b>Sempre</b> lo tiene attivo, <b>Mai</b> non lo serve mai.</div></div></div>
+          <div class="row" style="border-bottom:none"><div class="hint" style="flex:1" data-i18n-html="l1PolicyHint">In <b>Auto</b> il cervello offline si fa da parte (liberando ~31&nbsp;KB) quando c'è un cervello più forte (online o LLM browser). <b>Sempre</b> lo tiene attivo, <b>Mai</b> non lo serve mai.</div></div></div>
 
-        <div class="sect"><h2 data-t="aiAssistant">Assistente IA · Provider e chiave</h2>
+        <div class="sect"><h2 data-i18n="aiAssistant">Assistente IA · Provider e chiave</h2>
           <!-- Single shared key manager (shell/ai-keys.js) — same component the ANIMA app mounts; the ONE
                place the OS asks for / stores a provider key. Provider chips, model, exec, key + test/save/delete,
                Gemini plan detection — all on shell/ai.js. No provider table or teacher.json I/O lives here anymore. -->
-          <div id="ai-keys-mount"><span class="hint" data-t="loadingKeyMgr">carico il gestore chiavi…</span></div>
-          <div class="row" style="border-bottom:none;margin-top:8px"><div class="hint" style="flex:1" data-t-html="aiKeysHint">🎨 <b>Generare immagini con l'IA</b> in Paint (Atelier) richiede una chiave <b>Grok (xAI)</b> — modello <code>grok-2-image</code>. Claude e Groq non disegnano, ma possono <b>migliorare il prompt</b>. 🎙️ La <b>trascrizione vocale</b> (Recorder, Dettatura) usa sempre Groq/OpenAI (Whisper), anche con Claude, Gemini o Grok come chat.</div></div></div>
+          <div id="ai-keys-mount"><span class="hint" data-i18n="loadingKeyMgr">carico il gestore chiavi…</span></div>
+          <div class="row" style="border-bottom:none;margin-top:8px"><div class="hint" style="flex:1" data-i18n-html="aiKeysHint">🎨 <b>Generare immagini con l'IA</b> in Paint (Atelier) richiede una chiave <b>Grok (xAI)</b> — modello <code>grok-2-image</code>. Claude e Groq non disegnano, ma possono <b>migliorare il prompt</b>. 🎙️ La <b>trascrizione vocale</b> (Recorder, Dettatura) usa sempre Groq/OpenAI (Whisper), anche con Claude, Gemini o Grok come chat.</div></div></div>
 
-        <div class="sect"><h2><span data-t="browserWasm">Browser · cervello locale (WASM)</span> <span class="badge">Offline</span></h2>
-          <div class="row"><label data-t="state">Stato</label><div class="ctl" style="flex-wrap:wrap"><span class="hint" id="edge-brain-stat" style="flex:1" data-t="checking">controllo…</span></div></div>
-          <div class="row" style="border-bottom:none"><label></label><div class="ctl" style="gap:8px;flex-wrap:wrap"><button id="edge-brain-prep">⬇ <span data-t="prepareUpdate">Prepara / Aggiorna</span></button><span class="hint" id="edge-brain-prog"></span></div></div>
-          <div class="row"><label data-t="webSearchOnDemand">Ricerca web on-demand</label><div class="ctl"><span class="sw"><input type="checkbox" id="edge-web-on"><span></span></span><span class="hint" style="flex:1" data-t-html="edgeWebHint">In modalità <b>Browser</b>, quando i cervelli locali non sanno, recupera la risposta <b>certa</b> da Wikipedia (dal browser, mai dal Cardputer) e la <b>mette in cache</b>: da lì resta offline. Spento = solo conoscenza già in cache (nulla esce dal dispositivo).</span></div></div>
-          <div class="row"><label data-t="cachedKnowledge">Conoscenza in cache</label><div class="ctl" style="gap:8px;flex-wrap:wrap"><span class="hint" id="edge-kb-count" style="flex:1">…</span><button id="edge-kb-clear">🗑 <span data-t="clear">Svuota</span></button></div></div>
-          <div class="row" style="border-bottom:none"><div class="hint" style="flex:1" data-t-html="edgeBrainHint">Lo <b>stesso motore del Cardputer</b> compilato a WebAssembly: apre app, calcola, risponde e impara <b>senza che nulla lasci il dispositivo</b>. Si scarica una volta (~14&nbsp;MB), poi funziona anche col Cardputer <b>spento</b>. Con la ricerca web on-demand diventa un <b>centralizzatore di conoscenza certa</b> che cresce con l'uso.</div></div></div>
+        <div class="sect"><h2><span data-i18n="browserWasm">Browser · cervello locale (WASM)</span> <span class="badge">Offline</span></h2>
+          <div class="row"><label data-i18n="state">Stato</label><div class="ctl" style="flex-wrap:wrap"><span class="hint" id="edge-brain-stat" style="flex:1" data-i18n="checking">controllo…</span></div></div>
+          <div class="row" style="border-bottom:none"><label></label><div class="ctl" style="gap:8px;flex-wrap:wrap"><button id="edge-brain-prep">⬇ <span data-i18n="prepareUpdate">Prepara / Aggiorna</span></button><span class="hint" id="edge-brain-prog"></span></div></div>
+          <div class="row"><label data-i18n="webSearchOnDemand">Ricerca web on-demand</label><div class="ctl"><span class="sw"><input type="checkbox" id="edge-web-on"><span></span></span><span class="hint" style="flex:1" data-i18n-html="edgeWebHint">In modalità <b>Browser</b>, quando i cervelli locali non sanno, recupera la risposta <b>certa</b> da Wikipedia (dal browser, mai dal Cardputer) e la <b>mette in cache</b>: da lì resta offline. Spento = solo conoscenza già in cache (nulla esce dal dispositivo).</span></div></div>
+          <div class="row"><label data-i18n="cachedKnowledge">Conoscenza in cache</label><div class="ctl" style="gap:8px;flex-wrap:wrap"><span class="hint" id="edge-kb-count" style="flex:1">…</span><button id="edge-kb-clear">🗑 <span data-i18n="clear">Svuota</span></button></div></div>
+          <div class="row" style="border-bottom:none"><div class="hint" style="flex:1" data-i18n-html="edgeBrainHint">Lo <b>stesso motore del Cardputer</b> compilato a WebAssembly: apre app, calcola, risponde e impara <b>senza che nulla lasci il dispositivo</b>. Si scarica una volta (~14&nbsp;MB), poi funziona anche col Cardputer <b>spento</b>. Con la ricerca web on-demand diventa un <b>centralizzatore di conoscenza certa</b> che cresce con l'uso.</div></div></div>
 
-        <div class="sect"><h2><span data-t="tts">Voce on-device</span> <span class="badge fw">Firmware</span></h2>
-          <div class="row"><label data-t="speakWhenAsked">Parla quando interrogato</label><div class="ctl"><span class="sw"><input type="checkbox" id="tts-enabled"><span></span></span><span class="hint" id="tts-stat">…</span></div></div>
-          <div class="row"><label data-t="readingSpeed">Velocità di lettura</label><div class="ctl"><input type="range" id="tts-speed" min="70" max="160" step="5" value="110" style="width:150px;accent-color:var(--accent)"><span class="hint" id="tts-speed-val" style="min-width:42px;text-align:right">110%</span></div></div>
-          <div class="row" style="border-bottom:none"><label></label><div class="ctl"><button id="tts-test">🔊 <span data-t="testVoice">Prova voce</span></button></div></div>
-          <div class="row"><label data-t="voiceAlways">Voce sempre attiva</label><div class="ctl"><span class="sw"><input type="checkbox" id="voice-always-on"><span></span></span><span class="hint" id="vao-stat"></span></div></div>
-          <div class="row" style="border-bottom:none"><div class="hint" style="flex:1" data-t-html="voiceAlwaysHint">Tiene i <b>comandi vocali</b> (PTT col tasto FN) sempre pronti dalla home. Costa ~16&nbsp;KB: lascialo spento finché non hai registrato i comandi.</div></div></div>
+        <div class="sect"><h2><span data-i18n="tts">Voce on-device</span> <span class="badge fw">Firmware</span></h2>
+          <div class="row"><label data-i18n="speakWhenAsked">Parla quando interrogato</label><div class="ctl"><span class="sw"><input type="checkbox" id="tts-enabled"><span></span></span><span class="hint" id="tts-stat">…</span></div></div>
+          <div class="row"><label data-i18n="readingSpeed">Velocità di lettura</label><div class="ctl"><input type="range" id="tts-speed" min="70" max="160" step="5" value="110" style="width:150px;accent-color:var(--accent)"><span class="hint" id="tts-speed-val" style="min-width:42px;text-align:right">110%</span></div></div>
+          <div class="row" style="border-bottom:none"><label></label><div class="ctl"><button id="tts-test">🔊 <span data-i18n="testVoice">Prova voce</span></button></div></div>
+          <div class="row"><label data-i18n="voiceAlways">Voce sempre attiva</label><div class="ctl"><span class="sw"><input type="checkbox" id="voice-always-on"><span></span></span><span class="hint" id="vao-stat"></span></div></div>
+          <div class="row" style="border-bottom:none"><div class="hint" style="flex:1" data-i18n-html="voiceAlwaysHint">Tiene i <b>comandi vocali</b> (PTT col tasto FN) sempre pronti dalla home. Costa ~16&nbsp;KB: lascialo spento finché non hai registrato i comandi.</div></div></div>
         </div></details>
       </section>
 
       <!-- ═══════════ DEVICE ═══════════ -->
       <section id="tab-device" class="tab-content">
-        <div class="sect"><h2 data-t="deviceIdentity">Identità dispositivo</h2>
-          <div class="row"><label data-t="deviceName">Nome dispositivo</label><div class="ctl"><input type="text" id="dev-name" maxlength="32" placeholder="nucleo-01"></div></div>
+        <div class="sect"><h2 data-i18n="deviceIdentity">Identità dispositivo</h2>
+          <div class="row"><label data-i18n="deviceName">Nome dispositivo</label><div class="ctl"><input type="text" id="dev-name" maxlength="32" placeholder="nucleo-01"></div></div>
           <div class="row"><label>Locale</label><div class="ctl"><input type="text" id="dev-locale" maxlength="12" placeholder="it-IT"></div></div>
-          <div class="row"><label data-t="timezone">Fuso orario</label><div class="ctl"><input type="text" id="dev-tz" maxlength="40" placeholder="Europe/Rome"></div></div>
-          <div class="hint" style="margin-top:6px" data-t="deviceNameHint">Il nome è usato da mDNS/Swarm e si applica al prossimo avvio.</div></div>
-        <div class="sect"><h2><span data-t="maintenance">Manutenzione</span> <span class="badge fw">Firmware</span></h2>
+          <div class="row"><label data-i18n="timezone">Fuso orario</label><div class="ctl"><input type="text" id="dev-tz" maxlength="40" placeholder="Europe/Rome"></div></div>
+          <div class="hint" style="margin-top:6px" data-i18n="deviceNameHint">Il nome è usato da mDNS/Swarm e si applica al prossimo avvio.</div></div>
+        <div class="sect"><h2><span data-i18n="maintenance">Manutenzione</span> <span class="badge fw">Firmware</span></h2>
           <div class="ctl" style="gap:10px;flex-wrap:wrap">
-            <button id="dev-selftest">🩺 <span data-t="selfTest">Self-Test</span></button>
-            <button class="danger" id="btn-reboot">🔄 <span data-t="rebootDevice">Riavvia dispositivo</span></button></div>
-          <div class="hint" style="margin-top:10px" data-t-html="maintenanceHint">Il riavvio ricarica firmware e indice ANIMA dalla SD. Per gli aggiornamenti firmware usa l'app <b>Aggiornamenti</b> (l'OTA è inaffidabile su questo dispositivo: preferisci il flash seriale).</div></div>
-        <div class="sect"><h2><span data-t="security">Sicurezza & sessioni</span> <span class="badge">PIN</span></h2>
-          <div class="row"><label data-t="activeSessions">Sessioni associate attive</label><div class="ctl"><span class="iv" id="sec-sessions">—</span></div></div>
+            <button id="dev-selftest">🩺 <span data-i18n="selfTest">Self-Test</span></button>
+            <button class="danger" id="btn-reboot">🔄 <span data-i18n="rebootDevice">Riavvia dispositivo</span></button></div>
+          <div class="hint" style="margin-top:10px" data-i18n-html="maintenanceHint">Il riavvio ricarica firmware e indice ANIMA dalla SD. Per gli aggiornamenti firmware usa l'app <b>Aggiornamenti</b> (l'OTA è inaffidabile su questo dispositivo: preferisci il flash seriale).</div></div>
+        <div class="sect"><h2><span data-i18n="security">Sicurezza & sessioni</span> <span class="badge">PIN</span></h2>
+          <div class="row"><label data-i18n="activeSessions">Sessioni associate attive</label><div class="ctl"><span class="iv" id="sec-sessions">—</span></div></div>
           <div class="ctl" style="gap:10px;flex-wrap:wrap;margin-top:8px">
-            <button id="sec-revoke-others">🚪 <span data-t="revokeOthers">Revoca le altre sessioni</span></button>
-            <button class="danger" id="sec-revoke-all">🧹 <span data-t="revokeAll">Revoca tutte</span></button></div>
-          <div class="hint" style="margin-top:10px" data-t="sessionsHint">Ogni browser associato col PIN è una sessione. Se hai perso un dispositivo o usato una rete non fidata, revoca le sessioni. Quelle inutilizzate scadono da sole dopo 90 giorni.</div></div>
+            <button id="sec-revoke-others">🚪 <span data-i18n="revokeOthers">Revoca le altre sessioni</span></button>
+            <button class="danger" id="sec-revoke-all">🧹 <span data-i18n="revokeAll">Revoca tutte</span></button></div>
+          <div class="hint" style="margin-top:10px" data-i18n="sessionsHint">Ogni browser associato col PIN è una sessione. Se hai perso un dispositivo o usato una rete non fidata, revoca le sessioni. Quelle inutilizzate scadono da sole dopo 90 giorni.</div></div>
       </section>
 
       <!-- ═══════════ DIAGNOSTICS ═══════════ -->
       <section id="tab-diagnostics" class="tab-content">
-        <div class="sect"><h2><span data-t="selfTestEndpoints">Self-Test endpoint</span> <span class="badge" data-t="badgePulse">Battito</span></h2>
+        <div class="sect"><h2><span data-i18n="selfTestEndpoints">Self-Test endpoint</span> <span class="badge" data-i18n="badgePulse">Battito</span></h2>
           <div class="row" style="border-bottom:none;padding-top:0"><div class="ctl" style="gap:8px;flex-wrap:wrap">
-            <button class="primary" id="dg-selftest">🩺 <span data-t="run">Esegui</span></button><button id="dg-selftest-copy" disabled data-t="copyReport">Copia esito</button><span class="hint" id="dg-selftest-stat"></span></div></div>
+            <button class="primary" id="dg-selftest">🩺 <span data-i18n="run">Esegui</span></button><button id="dg-selftest-copy" disabled data-i18n="copyReport">Copia esito</button><span class="hint" id="dg-selftest-stat"></span></div></div>
           <div class="st-list" id="dg-st-list"></div></div>
-        <div class="sect"><h2><span data-t="heapRegions">Heap (regioni)</span> <span class="badge live">Live</span></h2>
-          <div class="info-grid" id="heap-grid"><div class="hint" style="padding:6px" data-t="heapOpenHint">Apri questa scheda per leggere l'heap…</div></div></div>
-        <div class="sect"><h2><span data-t="systemLogs">Log di sistema</span> <span class="badge live">Live</span></h2>
-          <div class="row" style="border-bottom:none;padding-top:0"><div class="ctl"><button id="logs-refresh">⟳ <span data-t="refresh">Aggiorna</span></button><span class="hint" data-t-html="logsHint">Ring RAM ~2&nbsp;KB · funziona anche senza SD/seriale.</span></div></div>
+        <div class="sect"><h2><span data-i18n="heapRegions">Heap (regioni)</span> <span class="badge live">Live</span></h2>
+          <div class="info-grid" id="heap-grid"><div class="hint" style="padding:6px" data-i18n="heapOpenHint">Apri questa scheda per leggere l'heap…</div></div></div>
+        <div class="sect"><h2><span data-i18n="systemLogs">Log di sistema</span> <span class="badge live">Live</span></h2>
+          <div class="row" style="border-bottom:none;padding-top:0"><div class="ctl"><button id="logs-refresh">⟳ <span data-i18n="refresh">Aggiorna</span></button><span class="hint" data-i18n-html="logsHint">Ring RAM ~2&nbsp;KB · funziona anche senza SD/seriale.</span></div></div>
           <div class="logbox" id="logbox">—</div></div>
-        <div class="sect"><h2><span data-t="privacy">Privacy</span> <span class="badge ro" data-t="badgeNote">Nota</span></h2>
-          <div class="hint" data-t-html="privacyHint">Solo <code>/api/status</code> (discovery) resta <b>pubblico</b> sulla rete locale e mostra SSID/IP. Log e diagnostica (<code>/api/logs</code>, <code>/api/diag</code>, <code>/api/heap</code>, <code>/api/cpu</code>) ora <b>richiedono l'associazione</b>. Su reti non fidate usa l'hotspot WPA2 del dispositivo.</div></div>
+        <div class="sect"><h2><span data-i18n="privacy">Privacy</span> <span class="badge ro" data-i18n="badgeNote">Nota</span></h2>
+          <div class="hint" data-i18n-html="privacyHint">Solo <code>/api/status</code> (discovery) resta <b>pubblico</b> sulla rete locale e mostra SSID/IP. Log e diagnostica (<code>/api/logs</code>, <code>/api/diag</code>, <code>/api/heap</code>, <code>/api/cpu</code>) ora <b>richiedono l'associazione</b>. Su reti non fidate usa l'hotspot WPA2 del dispositivo.</div></div>
       </section>
 
       <!-- ═══════════ UPDATES ═══════════ -->
       <section id="tab-updates" class="tab-content">
-        <div class="sect"><h2><span data-t="upTitle">Aggiornamenti</span> <span class="badge fw">Firmware</span></h2>
+        <div class="sect"><h2><span data-i18n="upTitle">Aggiornamenti</span> <span class="badge fw">Firmware</span></h2>
           <div class="info-grid">
-            <div class="info-cell"><div class="il" data-t="upInstalled">Versione installata</div><div class="iv" id="up-cur">—</div></div>
-            <div class="info-cell"><div class="il" data-t="upLatest">Ultima release</div><div class="iv" id="up-latest">—</div></div>
-            <div class="info-cell"><div class="il" data-t="upChannel">Canale</div><div class="iv">GitHub Releases</div></div>
-            <div class="info-cell"><div class="il" data-t="upChecked">Ultimo controllo</div><div class="iv" id="up-checked">—</div></div>
+            <div class="info-cell"><div class="il" data-i18n="upInstalled">Versione installata</div><div class="iv" id="up-cur">—</div></div>
+            <div class="info-cell"><div class="il" data-i18n="upLatest">Ultima release</div><div class="iv" id="up-latest">—</div></div>
+            <div class="info-cell"><div class="il" data-i18n="upChannel">Canale</div><div class="iv">GitHub Releases</div></div>
+            <div class="info-cell"><div class="il" data-i18n="upChecked">Ultimo controllo</div><div class="iv" id="up-checked">—</div></div>
           </div>
-          <div class="row" style="margin-top:6px"><label data-t="upState">Stato</label><div class="ctl"><span class="hint" id="up-state">—</span></div></div>
+          <div class="row" style="margin-top:6px"><label data-i18n="upState">Stato</label><div class="ctl"><span class="hint" id="up-state">—</span></div></div>
           <div class="ctl" style="gap:10px;flex-wrap:wrap;margin-top:8px">
-            <button id="up-check">🔎 <span data-t="upCheckNow">Controlla ora</span></button>
-            <button id="up-flash" class="primary" hidden>⬆️ <span id="up-flash-lbl" data-t="upInstall">Aggiorna firmware</span></button>
-            <a id="up-sd" class="hint" target="_blank" rel="noopener" hidden style="align-self:center">📦 <span data-t="upSdZip">Scarica contenuti SD (.zip)</span></a>
-            <a id="up-notes-link" class="hint" target="_blank" rel="noopener" hidden style="align-self:center">🔗 <span data-t="upNotesLink">Note di rilascio</span></a>
+            <button id="up-check">🔎 <span data-i18n="upCheckNow">Controlla ora</span></button>
+            <button id="up-flash" class="primary" hidden>⬆️ <span id="up-flash-lbl" data-i18n="upInstall">Aggiorna firmware</span></button>
+            <a id="up-sd" class="hint" target="_blank" rel="noopener" hidden style="align-self:center">📦 <span data-i18n="upSdZip">Scarica contenuti SD (.zip)</span></a>
+            <a id="up-notes-link" class="hint" target="_blank" rel="noopener" hidden style="align-self:center">🔗 <span data-i18n="upNotesLink">Note di rilascio</span></a>
           </div>
           <div id="up-prog" hidden style="margin-top:12px">
             <div class="up-bar"><i id="up-prog-bar"></i></div>
             <div class="hint" id="up-prog-lbl" style="margin-top:6px">—</div>
           </div>
-          <div class="hint" style="margin-top:10px" data-t="upFlashHint">Scarica l'immagine OTA dal sito ufficiale, ne verifica l'integrità (SHA-256) e la invia al dispositivo. Al termine il Cardputer si riavvia da solo; se l'immagine non parte, torna da sola alla versione precedente (rollback).</div></div>
-        <div class="sect" id="sdc-sect"><h2><span data-t="sdcTitle">Contenuti della scheda SD</span> <span class="badge fw">SD</span></h2>
+          <div class="hint" style="margin-top:10px" data-i18n="upFlashHint">Scarica l'immagine OTA dal sito ufficiale, ne verifica l'integrità (SHA-256) e la invia al dispositivo. Al termine il Cardputer si riavvia da solo; se l'immagine non parte, torna da sola alla versione precedente (rollback).</div></div>
+        <div class="sect" id="sdc-sect"><h2><span data-i18n="sdcTitle">Contenuti della scheda SD</span> <span class="badge fw">SD</span></h2>
           <div class="info-grid">
-            <div class="info-cell"><div class="il" data-t="sdcOnCard">Sulla scheda</div><div class="iv" id="sdc-card">—</div></div>
-            <div class="info-cell"><div class="il" data-t="sdcForFw">Per questo firmware</div><div class="iv" id="sdc-fw">—</div></div>
+            <div class="info-cell"><div class="il" data-i18n="sdcOnCard">Sulla scheda</div><div class="iv" id="sdc-card">—</div></div>
+            <div class="info-cell"><div class="il" data-i18n="sdcForFw">Per questo firmware</div><div class="iv" id="sdc-fw">—</div></div>
           </div>
-          <div class="row" style="margin-top:6px"><label data-t="upState">Stato</label><div class="ctl"><span class="hint" id="sdc-state">—</span></div></div>
+          <div class="row" style="margin-top:6px"><label data-i18n="upState">Stato</label><div class="ctl"><span class="hint" id="sdc-state">—</span></div></div>
           <div class="ctl" style="gap:10px;flex-wrap:wrap;margin-top:8px">
-            <button id="sdc-go" hidden>📦 <span id="sdc-go-lbl" data-t="sdcUpdate">Aggiorna contenuti SD</span></button>
+            <button id="sdc-go" hidden>📦 <span id="sdc-go-lbl" data-i18n="sdcUpdate">Aggiorna contenuti SD</span></button>
           </div>
           <div id="sdc-prog" hidden style="margin-top:12px">
             <div class="up-bar"><i id="sdc-prog-bar" class="pulse" style="width:100%"></i></div>
             <div class="hint" id="sdc-prog-lbl" style="margin-top:6px">—</div>
           </div>
-          <div class="hint" style="margin-top:10px" data-t="sdcHint">Il web OS, le app e la conoscenza di ANIMA vivono sulla scheda SD. L'aggiornamento scarica dal sito ufficiale solo i file cambiati e verifica ognuno (SHA-256); i tuoi dati, le chiavi e le impostazioni non vengono toccati.</div></div>
-        <div class="sect"><h2 data-t="upNotesTitle">Novità</h2><div class="logbox" id="up-notes">—</div></div>
-        <div class="sect"><h2 data-t="upPrefs">Preferenze</h2>
-          <div class="row"><label data-t="upAuto">Controllo automatico</label><div class="ctl">
+          <div class="hint" style="margin-top:10px" data-i18n="sdcHint">Il web OS, le app e la conoscenza di ANIMA vivono sulla scheda SD. L'aggiornamento scarica dal sito ufficiale solo i file cambiati e verifica ognuno (SHA-256); i tuoi dati, le chiavi e le impostazioni non vengono toccati.</div></div>
+        <div class="sect"><h2 data-i18n="upNotesTitle">Novità</h2><div class="logbox" id="up-notes">—</div></div>
+        <div class="sect"><h2 data-i18n="upPrefs">Preferenze</h2>
+          <div class="row"><label data-i18n="upAuto">Controllo automatico</label><div class="ctl">
             <label class="sw"><input type="checkbox" id="up-auto" checked><span></span></label>
-            <span class="hint" data-t="upAutoHint">Una richiesta al giorno a GitHub, da questo browser. Il dispositivo non contatta mai internet.</span></div></div></div>
+            <span class="hint" data-i18n="upAutoHint">Una richiesta al giorno a GitHub, da questo browser. Il dispositivo non contatta mai internet.</span></div></div>
+          <div class="row"><label data-i18n="upAutoInstall">Installa aggiornamenti in automatico</label><div class="ctl">
+            <label class="sw"><input type="checkbox" id="up-auto-install"><span></span></label>
+            <span class="hint" data-i18n="upAutoInstallHint">Quando esce una nuova release, il browser la scarica e la verifica, poi la installa dopo un conto alla rovescia annullabile. Se il nuovo firmware non resta stabile, il dispositivo torna indietro da solo.</span></div></div></div>
       </section>
 
       <!-- ═══════════ ABOUT ═══════════ -->
       <section id="tab-about" class="tab-content">
-        <div class="sect"><h2 data-t="systemInfo">Informazioni sistema</h2>
+        <div class="sect"><h2 data-i18n="systemInfo">Informazioni sistema</h2>
           <div class="info-grid">
-            <div class="info-cell"><div class="il" data-t="platform">Piattaforma</div><div class="iv">M5Stack Cardputer</div></div>
+            <div class="info-cell"><div class="il" data-i18n="platform">Piattaforma</div><div class="iv">M5Stack Cardputer</div></div>
             <div class="info-cell"><div class="il">Chip</div><div class="iv">ESP32-S3</div></div>
-            <div class="info-cell"><div class="il" data-t="ipAddr">Indirizzo IP</div><div class="iv" id="info-ip">—</div></div>
-            <div class="info-cell"><div class="il" data-t="uptime">Acceso da</div><div class="iv" id="info-uptime">—</div></div>
-            <div class="info-cell"><div class="il" data-t="sdStorage">Storage SD</div><div class="iv" id="info-sd">—</div></div>
+            <div class="info-cell"><div class="il" data-i18n="ipAddr">Indirizzo IP</div><div class="iv" id="info-ip">—</div></div>
+            <div class="info-cell"><div class="il" data-i18n="uptime">Acceso da</div><div class="iv" id="info-uptime">—</div></div>
+            <div class="info-cell"><div class="il" data-i18n="sdStorage">Storage SD</div><div class="iv" id="info-sd">—</div></div>
             <div class="info-cell"><div class="il">NucleoOS</div><div class="iv" id="info-ver">v0.1.0</div></div>
             <div class="info-cell"><div class="il">Slot OTA</div><div class="iv" id="info-ota">—</div></div>
-            <div class="info-cell"><div class="il" data-t="installedApps">App installate</div><div class="iv" id="info-apps">—</div></div>
+            <div class="info-cell"><div class="il" data-i18n="installedApps">App installate</div><div class="iv" id="info-apps">—</div></div>
           </div></div>
-        <div class="sect"><h2 data-t="controlPanel">Pannello di Controllo</h2>
-          <div class="hint" data-t-html="aboutHint">Versione app <b>1.0</b> · Centro di Controllo con Battito live, scene, comando rapido e self-test. Pensato per dare <b>controllo completo da web</b> senza mai sovraccaricare il Cardputer.</div></div>
+        <div class="sect"><h2 data-i18n="controlPanel">Pannello di Controllo</h2>
+          <div class="hint" data-i18n-html="aboutHint">Versione app <b>1.0</b> · Centro di Controllo con Battito live, scene, comando rapido e self-test. Pensato per dare <b>controllo completo da web</b> senza mai sovraccaricare il Cardputer.</div></div>
       </section>
     </main>
   </div>
@@ -648,34 +651,43 @@
   <!-- reboot modal -->
   <div class="modal-scrim" id="reboot-modal">
     <div class="modal-box">
-      <div class="mi">🔄</div><div class="mt" data-t="rebootTitle">Conferma riavvio</div>
-      <div class="md" id="reboot-md" data-t="rebootBody">Vuoi davvero riavviare il dispositivo? Le connessioni attive verranno interrotte.</div>
-      <div class="mbtns"><button id="reboot-cancel" data-t="cancel">Annulla</button><button class="danger" id="reboot-confirm" disabled>Riavvia (3)</button></div>
+      <div class="mi">🔄</div><div class="mt" data-i18n="rebootTitle">Conferma riavvio</div>
+      <div class="md" id="reboot-md" data-i18n="rebootBody">Vuoi davvero riavviare il dispositivo? Le connessioni attive verranno interrotte.</div>
+      <div class="mbtns"><button id="reboot-cancel" data-i18n="cancel">Annulla</button><button class="danger" id="reboot-confirm" disabled>Riavvia (3)</button></div>
     </div>
   </div>
 
   <!-- preset confirm sheet -->
   <div class="modal-scrim" id="preset-modal">
     <div class="modal-box">
-      <div class="mi" id="pm-ic">✨</div><div class="mt" id="pm-title" data-t="profile">Profilo</div>
+      <div class="mi" id="pm-ic">✨</div><div class="mt" id="pm-title" data-i18n="profile">Profilo</div>
       <div class="md"><div id="pm-bullets" style="text-align:left"></div><div id="pm-apps" class="hint" style="margin-top:9px;text-align:left"></div></div>
-      <div class="mbtns"><button id="pm-cancel" data-t="cancel">Annulla</button><button class="primary" id="pm-apply" data-t="apply">Applica</button></div>
+      <div class="mbtns"><button id="pm-cancel" data-i18n="cancel">Annulla</button><button class="primary" id="pm-apply" data-i18n="apply">Applica</button></div>
     </div>
   </div>
 
   <footer>
-    <div class="dot ok" id="conn-dot"></div><span id="status-text" data-t="ready">Pronto</span>
+    <div class="dot ok" id="conn-dot"></div><span id="status-text" data-i18n="ready">Pronto</span>
     <div class="sp"></div>
-    <button id="btn-save" class="primary" disabled>💾 <span data-t="save">Salva</span></button>
+    <button id="btn-save" class="primary" disabled>💾 <span data-i18n="save">Salva</span></button>
     <button id="btn-reload" style="font-size:12px">⟳</button>
   </footer>
 
 <script type="module">
 import { DEFAULTS, merge } from './settings-merge.js';
-import { STR, t as tr, detectLang } from './i18n.js';
-import I18N, { LANGS } from '/nucleo-i18n.js';   // OS i18n engine: live language + regional formats
-// The shared core catalog (cap_* capability strings, app names) — loaded once, never repaints Settings' own UI.
-const coreReady = I18N.init('core', { apply: false, observe: false }).catch(() => {});
+import I18N, { LANGS } from '/nucleo-i18n.js';   // OS i18n engine: live language + regional formats + the Settings catalog
+// Settings is on the central engine: its strings live in apps/settings/www/i18n.<lang>.json (loaded here
+// with core), and it keeps its OWN synchronous apply (applyStaticI18n/T) over the engine's resolved
+// strings — no private i18n.js fork any more. `await coreReady` before the first paint (below) keeps the
+// engine's async load from ever flashing raw keys on the OS control panel.
+const coreReady = I18N.init('settings', { apply: false, observe: false }).catch(() => {});
+// English-first floor (mirrors the engine BASE): Italian only for an explicit it* language/locale.
+const detectLang = (model) => {
+  const l = model && model.ui && model.ui.language;
+  if (['it', 'en', 'es', 'fr', 'de'].includes(l)) return l;
+  const loc = (model && model.device && model.device.locale) || '';
+  return /^it/i.test(loc) ? 'it' : 'en';
+};
 import { createPoller } from './poller.js';
 import { SCENES, applyScene } from './scenes.js';
 import { PRESETS, applyPreset, planPreset, feasibility, buildRegistry, gaps, APP_MAP, appStatus } from './preset-engine.js';
@@ -714,7 +726,7 @@ let caps = { l1Mode: 'auto', l1Serving: false, hasKey: false };
 let screenOn = true;            // optimistic; we never POST on load (would wake a headless device)
 let pcModels = null, pcModelsMounting = false;   // AI ▸ Models on your PC (mounted when the AI tab opens)
 
-const T = (k) => tr(lang, k);
+const T = (k) => I18N.t(k, undefined, 'settings');
 function status(txt, ok = true) { $('status-text').textContent = txt; $('conn-dot').className = 'dot ' + (ok ? 'ok' : 'err'); }
 function setDirty(v) { dirty = v; $('btn-save').disabled = !v; }
 
@@ -1095,13 +1107,13 @@ function applyLiveUI() {
 }
 // Declarative binding for the static markup: elements annotated with data-t (textContent),
 // data-t-html (innerHTML, for hint strings that carry <b>/<code>) or data-t-attr
-// ("attr:key;attr2:key2") are resolved through the same STR table via T(). Called from retitle(),
+// ("attr:key;attr2:key2") are resolved through the engine catalog via T(). Called from retitle(),
 // so it runs on load and on every live OS-wide language change.
 function applyStaticI18n(root = document) {
-  root.querySelectorAll('[data-t]').forEach((el) => { el.textContent = T(el.getAttribute('data-t')); });
-  root.querySelectorAll('[data-t-html]').forEach((el) => { el.innerHTML = T(el.getAttribute('data-t-html')); });
-  root.querySelectorAll('[data-t-attr]').forEach((el) => {
-    for (const pair of el.getAttribute('data-t-attr').split(';')) {
+  root.querySelectorAll('[data-i18n]').forEach((el) => { el.textContent = T(el.getAttribute('data-i18n')); });
+  root.querySelectorAll('[data-i18n-html]').forEach((el) => { el.innerHTML = T(el.getAttribute('data-i18n-html')); });
+  root.querySelectorAll('[data-i18n-attr]').forEach((el) => {
+    for (const pair of el.getAttribute('data-i18n-attr').split(';')) {
       const i = pair.indexOf(':'); if (i < 0) continue;
       const a = pair.slice(0, i).trim(), k = pair.slice(i + 1).trim();
       if (a && k) el.setAttribute(a, T(k));
@@ -1508,7 +1520,7 @@ async function mountPcModelsUI() {
 (function () {
   const TPATH = '/data/anima/teacher.json';
   let REG = { providers: {} }, lastSig = null, evaluating = false, pendingApply = null;
-  // Every string here is 5-language: T() keys in i18n.js STR, and preset-engine.js label objects
+  // Every string here is 5-language: T() keys in the settings catalog, and preset-engine.js label objects
   // ({ it, en, es, fr, de }) read through L(); English stays the fallback floor.
   const L = (o) => (o && (o[lang] || o.en || o.it)) || '';
 
@@ -1818,6 +1830,7 @@ async function load() {
 }
 
 // ═══════════ boot ═══════════
+await coreReady;   // the Settings catalog must be in the engine before the first paint (no raw-key flash)
 buildSidebar(); buildScenes(); buildQuick(); buildActions(); selectTab('control');
 // Updates tab: check/download/verify/flash driver (see fwupdate.js). The poller freezes during a
 // flash so the serial fetch chain belongs to the OTA stream alone.

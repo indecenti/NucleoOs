@@ -365,6 +365,24 @@ html[data-theme="light"] .task-btn .label { background: #ffffff; }
 #tray > span:hover { background: var(--glass-2); }
 #tray svg { flex: none; opacity: .9; }
 #tray #tray-net { cursor: default; }
+/* update-available pill: always in view until the device is updated (see update-check.js) */
+#tray-update { cursor: pointer; color: var(--accent); }
+#tray-update .tu-tag { font-weight: 600; font-size: 11px; }
+#tray-update.sec { color: #f5a623; }
+#start-btn { position: relative; }
+#start-btn.has-update::after { content: ''; position: absolute; top: 5px; right: 6px; width: 7px; height: 7px;
+  border-radius: 50%; background: var(--accent); border: 1.5px solid var(--bg); }
+#start-btn.has-update.sec::after { background: #f5a623; }
+/* What's-new sheet (built into the generic os-modal) */
+.us-ver { font-weight: 600; margin: 0 0 9px; }
+.us-sec { display: inline-block; font-size: 11px; font-weight: 700; color: #1a1205; background: #f5a623;
+  border-radius: 5px; padding: 1px 6px; margin-right: 7px; }
+.us-notes { max-height: 42vh; overflow: auto; font-size: 13px; line-height: 1.5; color: var(--text); margin-bottom: 12px; }
+.us-notes .h { font-weight: 700; margin: 8px 0 3px; }
+.us-notes .li { padding-left: 14px; text-indent: -10px; }
+.us-skip { display: inline-block; background: none; border: 0; color: var(--muted); text-decoration: underline;
+  cursor: pointer; font-size: 12px; padding: 2px 0; margin-bottom: 4px; }
+.us-skip:hover { color: var(--text); }
 #tray .v { white-space: nowrap; }
 #clock { color: var(--text); font-variant-numeric: tabular-nums; flex-direction: column; align-items: flex-end;
   gap: 0; line-height: 1.18; cursor: default; }

@@ -1,0 +1,91 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<script>/* NucleoOS resource guard: a lost same-origin script/stylesheet makes the shell reload this window once (wm.js retryFrame) */addEventListener('error',function(e){var t=e.target,u;if(!t||t===window||parent===window||(t.tagName!=='SCRIPT'&&t.tagName!=='LINK'))return;try{u=new URL(t.src||t.href,location.href);if(u.origin===location.origin)parent.postMessage({type:'app-resource-failed',src:u.pathname},location.origin)}catch(_){}},true)</script>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title data-i18n="title">Community</title>
+<style>
+  :root { color-scheme: dark; --blurple: #4752c4; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 18px; background: #0e1830; color: #e8eefc;
+    font: 15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  .hero { display: grid; grid-template-columns: 1fr auto; gap: 18px; align-items: center;
+    background: linear-gradient(135deg, #2a3283, #16223f 70%); border: 1px solid #3a46a8; border-radius: 16px; padding: 18px; }
+  h1 { margin: 0 0 6px; font-size: 22px; }
+  .lede { margin: 0 0 14px; color: #c9d3f2; }
+  .actions { display: flex; flex-wrap: wrap; gap: 8px; }
+  button { font: inherit; border-radius: 10px; padding: 9px 15px; cursor: pointer; border: 1px solid #33477a;
+    background: #23345c; color: #e8eefc; }
+  button.primary { background: var(--blurple); border-color: var(--blurple); font-weight: 600; }
+  button:focus-visible { outline: 2px solid #aab2ff; outline-offset: 2px; }
+  .link { margin-top: 10px; font-size: 13px; color: #c9d3f2; word-break: break-all; }
+  .qr { background: #fff; border-radius: 12px; padding: 10px; text-align: center; }
+  .qr canvas { display: block; width: 148px; height: 148px; image-rendering: pixelated; }
+  .qr small { display: block; color: #33406a; font-size: 12px; margin-top: 4px; max-width: 148px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; margin-top: 14px; }
+  .card { background: #16223f; border: 1px solid #243352; border-radius: 14px; padding: 14px; }
+  .card h2 { margin: 0 0 6px; font-size: 16px; }
+  .card p { margin: 0; color: #b9c6e6; font-size: 14px; }
+  code { background: #0e1830; border: 1px solid #2c3d63; border-radius: 6px; padding: 1px 6px; color: #cfe; }
+  @media (max-width: 520px) { .hero { grid-template-columns: 1fr; } .qr { justify-self: center; } }
+</style>
+</head>
+<body>
+  <section class="hero">
+    <div>
+      <h1 data-i18n="title">Community</h1>
+      <p class="lede" data-i18n="lede">Join the NucleoOS Discord: ask questions, show what you built, get release news first.</p>
+      <div class="actions">
+        <button class="primary" id="open" data-i18n="open">Open Discord</button>
+        <button id="copy" data-i18n="copy">Copy invite link</button>
+      </div>
+      <div class="link" id="url"></div>
+    </div>
+    <div class="qr">
+      <canvas id="qr" width="148" height="148" aria-hidden="true"></canvas>
+      <small data-i18n="scan">Scan with your phone</small>
+    </div>
+  </section>
+
+  <div class="grid">
+    <div class="card">
+      <h2 data-i18n="bot.title">Quick answers</h2>
+      <p data-i18n-html="bot.text">In the server, type <code>/ask</code> and your question, or <code>/guide</code> for short guides.</p>
+    </div>
+    <div class="card">
+      <h2 data-i18n="help.title">Need help?</h2>
+      <p data-i18n="help.text">Open a post in the help forum: one problem per post, with your board and firmware version.</p>
+    </div>
+    <div class="card">
+      <h2 data-i18n="rules.title">Be kind, stay safe</h2>
+      <p data-i18n="rules.text">Never post passwords, API keys or Wi-Fi details. No ROMs or pirated files.</p>
+    </div>
+  </div>
+
+  <script src="/apps/qr/qrcode.js"></script>
+  <script type="module">
+    import I18N from '/nucleo-i18n.js';
+    const t = await I18N.init('community');
+    const INVITE = 'https://discord.gg/84tyTPtWus';
+    document.getElementById('url').textContent = INVITE;
+
+    document.getElementById('open').onclick = () => window.open(INVITE, '_blank', 'noopener,noreferrer');
+    const copyBtn = document.getElementById('copy');
+    copyBtn.onclick = async () => {
+      try { await navigator.clipboard.writeText(INVITE); } catch { /* clipboard may be gated on plain http */ }
+      copyBtn.textContent = t('copied');
+      setTimeout(() => { copyBtn.textContent = t('copy'); }, 1600);
+    };
+
+    // QR of the invite: works even when this computer has no internet (the phone opens it).
+    const qr = window.NucleoQR && NucleoQR.generate(INVITE, { ecc: NucleoQR.ECC.MEDIUM });
+    if (qr) {
+      const c = document.getElementById('qr'), ctx = c.getContext('2d'), quiet = 2, n = qr.size + quiet * 2;
+      c.width = c.height = n;
+      ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, n, n); ctx.fillStyle = '#000';
+      for (let y = 0; y < qr.size; y++) for (let x = 0; x < qr.size; x++) if (qr.get(x, y)) ctx.fillRect(x + quiet, y + quiet, 1, 1);
+    }
+  </script>
+</body>
+</html>

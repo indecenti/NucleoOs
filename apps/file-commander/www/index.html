@@ -87,6 +87,23 @@
     .statusbar { display: flex; align-items: center; gap: 10px; padding: 4px 12px; font-size: 12px;
       color: var(--muted); background: var(--panel); border-top: 1px solid var(--line); }
     .statusbar .sp { flex: 1; } .statusbar .hint { font-size: 11px; opacity: .8; }
+    /* selection action bar: every keyboard/right-click action reachable by mouse or touch alone */
+    .selbar { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 6px 8px;
+      background: var(--panel2); border-top: 1px solid var(--line); }
+    .selbar[hidden] { display: none; }
+    .selbar .n { margin-right: auto; font-size: 12px; color: var(--muted); }
+    .selbar button.danger { color: var(--danger); border-color: #e0556b66; }
+    button:disabled { opacity: .4; cursor: default; } button:disabled:hover { background: #ffffff10; }
+    li { -webkit-touch-callout: none; }   /* iOS: long-press opens our menu, not the system callout */
+    @media (pointer: coarse) { li { padding: 11px 12px; } header button, .selbar button { padding: 7px 11px; } }
+    /* phone width: no folder rail (Up + breadcrumbs + folder taps navigate), icon-only buttons, crumbs on their own row */
+    @media (max-width: 600px) {
+      aside.side, .resizer { display: none; }
+      header { flex-wrap: wrap; }
+      header .crumbs { order: 10; flex-basis: 100%; }
+      .find { flex: 1 1 60px; width: auto; min-width: 0; }
+      header button > span[data-i18n], .selbar button > span[data-i18n] { display: none; }
+    }
     /* context menu */
     .ctx { position: fixed; z-index: 50; min-width: 180px; padding: 6px; background: var(--panel2);
       border: 1px solid #ffffff1f; border-radius: 10px; box-shadow: 0 16px 40px #000c; font-size: 13px; }
@@ -154,6 +171,8 @@
       <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 13V4M4 7.5 8 3.5l4 4" stroke-linecap="round" stroke-linejoin="round"/></svg><span data-i18n="up">Up</span>
     </button>
     <div class="crumbs" id="crumbs"></div>
+    <button id="hdr-paste" hidden data-i18n-attr="title:paste">📌<span data-i18n="paste">Paste</span></button>
+    <button id="hdr-undo" hidden data-i18n-attr="title:undo">↶<span data-i18n="undo">Undo</span></button>
     <button id="tosd" title="Copy selection to NucleoOS SD" hidden data-i18n-attr="title:tosd_title">
       <svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 2v8M5 7l3 3 3-3" stroke-linecap="round" stroke-linejoin="round"/><path d="M3 12.5h10" stroke-linecap="round"/></svg><span data-i18n="tosd">To SD</span>
     </button>
@@ -174,6 +193,16 @@
     <div class="lh-col lh-size" data-col="size"><span data-i18n="size">Size</span> <span class="arr"></span></div>
   </div>
   <ul id="list" class="view-list"></ul>
+  <div class="selbar" id="selbar" hidden>
+    <span class="n"></span>
+    <button id="sb-copy" data-i18n-attr="title:copy">📋 <span data-i18n="copy">Copy</span></button>
+    <button id="sb-cut" data-i18n-attr="title:cut">✂️ <span data-i18n="cut">Cut</span></button>
+    <button id="sb-rename" data-i18n-attr="title:rename">✏️ <span data-i18n="rename">Rename</span></button>
+    <button id="sb-del" class="danger" data-i18n-attr="title:delete">🗑 <span data-i18n="delete">Delete</span></button>
+    <button id="sb-all" data-i18n-attr="title:selectAll">☑ <span data-i18n="selectAll">Select all</span></button>
+    <button id="sb-more" data-i18n-attr="title:more">⋯</button>
+    <button id="sb-clear" data-i18n-attr="title:sel_clear">✕</button>
+  </div>
   <div class="statusbar"><span id="count"></span><span class="sp"></span><span class="hint" id="hint">Ctrl+C/X/V · Ctrl+A · F2 · Del · Ctrl+Z</span></div>
   </div>
 
@@ -395,8 +424,8 @@
       const local = !isSD();
       document.getElementById('newfolder').style.display = (isSD() || writable()) ? '' : 'none';
       document.getElementById('tosd').hidden = !local;
-      document.getElementById('hint').textContent = !local
-        ? t('hint_local')
+      document.getElementById('hint').textContent = matchMedia('(pointer: coarse)').matches ? t('hint_touch')
+        : !local ? t('hint_local')
         : (writable() ? t('hint_rw') : t('hint_ro'));
     }
 
@@ -604,7 +633,7 @@
       li.innerHTML = '<span class="glyph"></span><span class="name"></span><span class="size"></span>';
       li.onclick = (ev) => rowClick(ev, li._e);
       li.ondblclick = () => open(li._e);
-      li.oncontextmenu = (ev) => { ev.preventDefault(); const en = li._e; if (!selected.has(en.name)) { selected.clear(); selected.add(en.name); paintSelection(); } itemMenu(ev, en); };
+      li.oncontextmenu = (ev) => { ev.preventDefault(); rowMenu(ev, li._e); };
       updateRow(li, e);
       return li;
     }
@@ -661,11 +690,67 @@
     }
     // Selection and cut-marking repaint classes in place — they never rebuild the list.
     function paintSelection() { for (const [name, li] of rowEls) li.classList.toggle('sel', selected.has(name)); updateCount(view().length); }
-    function paintCut() { for (const [name, li] of rowEls) li.classList.toggle('cut', !!(xfer && xfer.op === 'cut' && xfer.items.some((it) => it.name === name))); }
+    function paintCut() { for (const [name, li] of rowEls) li.classList.toggle('cut', !!(xfer && xfer.op === 'cut' && xfer.items.some((it) => it.name === name))); syncSelBar(); }
     function updateCount(shown) {
       const el = document.getElementById('count'); if (!el) return;
       el.textContent = selected.size ? t('count_selected', { count: selected.size }) : (t('count_items', { count: shown }) + (filterText ? t('count_filtered') : ''));
+      syncSelBar();
     }
+    // The action bar mirrors the item menu's rules (protected files, read-only locations, folders),
+    // so a phone or a mouse-only PC can do everything the Del/F2/Ctrl shortcuts do.
+    const byId = (id) => document.getElementById(id);
+    function syncSelBar() {
+      const w = isSD() || writable();
+      byId('hdr-paste').hidden = !(xfer && w);
+      byId('hdr-undo').hidden = !(isSD() && undoStack.length);
+      const sel = selectedEntries(), n = sel.length;
+      byId('selbar').hidden = !n; if (!n) return;                    // the count stays in the status bar
+      const files = sel.filter((e) => e.type === 'file'), one = n === 1 ? sel[0] : null;
+      byId('sb-copy').disabled = !files.length;                       // folders are never copied (as in the menu)
+      byId('sb-cut').disabled = !w || !files.some((e) => !e.protected);
+      byId('sb-rename').disabled = !one || !w || one.protected || (one.type === 'dir' && (isSD() || ACTIVE.src !== 'bridge'));
+      byId('sb-del').disabled = !w || sel.every((e) => e.protected);
+      byId('sb-all').disabled = n >= view().length;
+    }
+    byId('sb-copy').onclick = () => copyCut('copy');
+    byId('sb-cut').onclick = () => copyCut('cut');
+    byId('sb-rename').onclick = () => { const s = selectedEntries(); if (s.length === 1) renameFile(s[0]); };
+    byId('sb-del').onclick = () => { const s = selectedEntries(); s.length === 1 ? del(s[0]) : deleteSelection(); };   // single: confirm card
+    byId('sb-all').onclick = () => { view().forEach((x) => selected.add(x.name)); paintSelection(); };
+    byId('sb-clear').onclick = () => { selected.clear(); lastClick = -1; paintSelection(); };
+    byId('sb-more').onclick = (ev) => {
+      ev.stopPropagation();                                          // the document click would close it at once
+      const s = selectedEntries(); if (!s.length) return;
+      const r = ev.currentTarget.getBoundingClientRect();
+      itemMenu({ clientX: r.left, clientY: r.top }, s[0]);
+    };
+    byId('hdr-paste').onclick = () => pasteHere();
+    byId('hdr-undo').onclick = () => undo();
+
+    function rowMenu(ev, en) {
+      if (!selected.has(en.name)) { selected.clear(); selected.add(en.name); paintSelection(); }
+      itemMenu(ev, en);
+    }
+    // Touch has no right-click (iOS never fires contextmenu): a ~500 ms press opens the same menus.
+    // If the browser fires its own contextmenu first (Android), that path wins and the timer is dropped.
+    let lpTimer = 0, lpAt = null, lpSwallowUntil = 0;
+    const lpCancel = () => { clearTimeout(lpTimer); lpTimer = 0; };
+    list.addEventListener('pointerdown', (ev) => {
+      if (ev.pointerType === 'mouse') return;
+      lpCancel(); lpAt = { x: ev.clientX, y: ev.clientY };
+      const li = ev.target.closest('li');
+      lpTimer = setTimeout(() => {
+        lpTimer = 0; lpSwallowUntil = Date.now() + 700;               // eat the click/contextmenu of the release
+        const at = { clientX: lpAt.x, clientY: lpAt.y };
+        if (li && li._e) rowMenu(at, li._e); else bgMenu(at);
+      }, 500);
+    });
+    list.addEventListener('pointermove', (ev) => { if (lpTimer && Math.hypot(ev.clientX - lpAt.x, ev.clientY - lpAt.y) > 10) lpCancel(); });
+    for (const k of ['pointerup', 'pointercancel', 'dragstart']) list.addEventListener(k, lpCancel);
+    for (const k of ['click', 'contextmenu']) document.addEventListener(k, (ev) => {
+      if (k === 'contextmenu' && lpTimer) { lpCancel(); return; }
+      if (Date.now() < lpSwallowUntil) { ev.preventDefault(); ev.stopPropagation(); }
+    }, true);
 
     async function open(e) {
       if (isSD()) {
@@ -1017,7 +1102,7 @@
       }
       selected.clear(); load();
     }
-    function pushUndo(rec) { undoStack.push(rec); if (undoStack.length > UNDO_CAP) undoStack.shift(); }
+    function pushUndo(rec) { undoStack.push(rec); if (undoStack.length > UNDO_CAP) undoStack.shift(); syncSelBar(); }
     async function undo() {
       const rec = undoStack.pop(); if (!rec) return;
       if (rec.type === 'delete') { if (!await restoreFromTrash(rec.trash, rec.orig)) pushUndo(rec); }   // failed: keep it undoable

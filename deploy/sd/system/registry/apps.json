@@ -358,6 +358,16 @@
       ]
     },
     {
+      "id": "community",
+      "version": "0.1.0",
+      "path": "/apps/community",
+      "enabled": true,
+      "autostart": false,
+      "permissions": [
+        "system.clipboard"
+      ]
+    },
+    {
       "id": "browser",
       "version": "0.1.0",
       "path": "/apps/browser",

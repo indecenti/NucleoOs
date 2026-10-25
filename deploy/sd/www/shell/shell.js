@@ -62,6 +62,8 @@ let Copilot = null;
 // The system Notification Center (the single web surface for all notifications). Loaded lazily
 // in initOS(); the WebSocket handler routes notify.post / calendar.reminder into it. See notify.js.
 let Notify = null;
+let UpdateCtl = null;                 // the update-check controller (runNow / refresh / skip)
+let upState = { available: false, tag: '', level: 'info', notes: '', url: '' };
 // Proactive ANIMA (ambient.js): the FIRST producer on the dormant src:'anima' channel. Loaded
 // lazily after notify.js so its emits always find the backbone. Rules are pure and host-tested.
 let Ambient = null;
@@ -1008,11 +1010,17 @@ async function startDesktopServices() {
   // and pings the Notification Center when a newer NucleoOS release exists. Loaded lazily on its
   // own delay so it never competes with the session restore or the SD crawl. See update-check.js.
   setTimeout(() => {
-    import('./update-check.js').then((m) => m.initUpdateCheck({
+    import('./update-check.js').then((m) => { UpdateCtl = m.initUpdateCheck({
       getSnapVersion: () => (lastStatusSnap && lastStatusSnap.version) || '',
       getNotify: () => Notify,
-    })).catch((e) => console.warn('[update] load failed', e));
+      onState: renderUpdatePill,
+    }); }).catch((e) => console.warn('[update] load failed', e));
   }, 15000);
+  const _upPill = document.getElementById('tray-update');
+  if (_upPill) {
+    _upPill.addEventListener('click', openWhatsNew);
+    _upPill.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openWhatsNew(); } });
+  }
   connectWS();
   // Warm the search index: instant from localStorage (if any), then revalidated against the
   // device. Repaint search results live whenever the index finishes (re)building.
@@ -1020,6 +1028,92 @@ async function startDesktopServices() {
   FsIndex.init({ live: () => searchActive() });   // no crawl at boot: the first search warms it (fsindex.js)
   doRefreshStatus(); scheduleStatus();   // adaptive: pause-when-hidden + 15s→60s error backoff (see runStatus)
 }
+// ---- "update available" taskbar pill + Start badge + What's-new sheet (state from update-check.js) ----
+function renderUpdatePill(st) {
+  upState = st || { available: false, tag: '', level: 'info', notes: '', url: '' };
+  const sec = !!(st && st.level === 'warn');
+  const pill = document.getElementById('tray-update');
+  if (pill) {
+    pill.hidden = !(st && st.available);
+    pill.classList.toggle('sec', sec);
+    const tag = pill.querySelector('.tu-tag'); if (tag) tag.textContent = (st && st.available) ? st.tag : '';
+  }
+  const start = document.getElementById('start-btn');
+  if (start) { start.classList.toggle('has-update', !!(st && st.available)); start.classList.toggle('sec', sec); }
+  maybeAutoUpdate(st);
+}
+
+// Auto-update (opt-in, default OFF; nucleo.update.auto === '1'): when a new release is available, offer a
+// CANCELLABLE countdown, then hand the tag to Settings ▸ Updates which runs the normal, rollback-aware
+// install. Offered ONCE per tag (autotried) so it never nags. The firmware's own rollback is the safety net.
+function maybeAutoUpdate(st) {
+  try {
+    if (!st || !st.available) return;
+    if (localStorage.getItem('nucleo.update.auto') !== '1') return;
+    if (localStorage.getItem('nucleo.update.autotried') === st.tag) return;
+    localStorage.setItem('nucleo.update.autotried', st.tag);
+  } catch { return; }
+  runAutoCountdown(st);
+}
+
+async function runAutoCountdown(st) {
+  let secs = 30;
+  const body = '<p id="up-auto-line">' + escapeHtml(t('up_auto_count', { tag: st.tag, s: secs })) + '</p>';
+  const p = osModal({ title: t('up_auto_title'), glyph: '⬆️', bodyHTML: body, okText: t('up_auto_go'), cancelText: t('up_auto_cancel') });
+  const tick = setInterval(() => {
+    secs--;
+    const e = document.getElementById('up-auto-line');
+    if (e) e.textContent = t('up_auto_count', { tag: st.tag, s: Math.max(0, secs) });
+    if (secs <= 0) { clearInterval(tick); const ok = document.querySelector('#os-modal-scrim [data-act="ok"]'); if (ok) ok.click(); }
+  }, 1000);
+  let r = null; try { r = await p; } finally { clearInterval(tick); }
+  if (r === true) { try { localStorage.setItem('nucleo.update.autostart', st.tag); } catch {} openUpdatesTab(); }
+}
+
+// Remote release notes (a GitHub release body) are UNTRUSTED: escape every line FIRST, then add a little
+// inert structure (headings, bullets). No unescaped remote text ever reaches innerHTML.
+function renderUpdateNotes(raw) {
+  const lines = String(raw || '').split(/\r?\n/).slice(0, 60);
+  const out = [];
+  for (let ln of lines) {
+    ln = ln.replace(/\s+$/, '');
+    if (!ln) { out.push('<div style="height:5px"></div>'); continue; }
+    const h = ln.match(/^#{1,3}\s+(.*)$/);
+    if (h) { out.push('<div class="h">' + escapeHtml(h[1]) + '</div>'); continue; }
+    const li = ln.match(/^\s*[-*]\s+(.*)$/);
+    if (li) { out.push('<div class="li">• ' + escapeHtml(li[1]) + '</div>'); continue; }
+    out.push('<div>' + escapeHtml(ln) + '</div>');
+  }
+  return out.join('') || ('<div>' + escapeHtml(t('up_no_notes')) + '</div>');
+}
+
+function openUpdatesTab() {
+  try { localStorage.setItem('nucleo.settings.tab', 'updates'); } catch {}
+  const a = byId('settings'); if (a && WM) WM.open(a);
+  try {
+    const w = WM.list().find((x) => x.app && x.app.id === 'settings');
+    const f = w && w.el.querySelector('iframe');
+    if (f) f.contentWindow.postMessage({ t: 'settings.tab', d: 'updates' }, '*');
+  } catch {}
+}
+
+async function openWhatsNew() {
+  const st = upState; if (!st || !st.available) return;
+  const sec = st.level === 'warn';
+  const body =
+    '<div class="us-ver">' + (sec ? '<span class="us-sec">' + escapeHtml(t('up_sec_badge')) + '</span>' : '') +
+      escapeHtml(t('up_ready', { tag: st.tag })) + '</div>' +
+    '<div class="us-notes">' + renderUpdateNotes(st.notes) + '</div>' +
+    '<button class="us-skip" id="up-skip-link">' + escapeHtml(t('up_skip')) + '</button>';
+  let skipped = false;
+  const p = osModal({ title: t('up_whatsnew'), glyph: '⬆️', bodyHTML: body, okText: t('up_update_now'), cancelText: t('up_later') });
+  const sk = document.getElementById('up-skip-link');
+  if (sk) sk.onclick = () => { skipped = true; const c = document.querySelector('#os-modal-scrim [data-act="cancel"]'); if (c) c.click(); };
+  const r = await p;
+  if (skipped) { if (UpdateCtl) UpdateCtl.skip(st.tag, (lastStatusSnap && lastStatusSnap.version) || ''); return; }
+  if (r === true) openUpdatesTab();
+}
+
 function onViewportChange(e) {
   if (e.matches) {
     if (desktopStarted) return;
@@ -3572,7 +3666,9 @@ async function doRefreshStatus() {
     // Background poll: two quick tries, not five slow ones — a failure goes to suspectLink(), which
     // settles "device gone" vs "device busy" with one probe instead of 30 s of retries.
     const s = await fetchJSON('/api/status', { tries: 2, timeout: 5000 });
+    const _prevVer = lastStatusSnap && lastStatusSnap.version;
     lastStatusSnap = s;                    // kept for newly-opened windows (see setOnFrameLoad)
+    if (UpdateCtl && s && s.version && s.version !== _prevVer) UpdateCtl.refresh(s.version);   // clear the update pill right after an install
     setLink(true);
     const txt = t('tray_sd_free', { free: fmtSize(s.storage.free_bytes) });
     document.querySelector('#tray-storage .v').textContent = txt;

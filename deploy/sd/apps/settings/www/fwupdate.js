@@ -16,7 +16,7 @@
 // The device only ever sees step 4 — everything else is browser↔GitHub.
 
 import {
-  LS_CACHE, LS_ENABLED, UPDATE_TTL_MS, UPDATE_PAGES_BASE, UPDATE_OTA_BIN, UPDATE_SUMS,
+  LS_CACHE, LS_ENABLED, LS_AUTO, LS_AUTOSTART, UPDATE_TTL_MS, UPDATE_PAGES_BASE, UPDATE_OTA_BIN, UPDATE_SUMS,
   UPDATE_VERSION_JSON, UPDATE_RELEASES_URL, UPDATE_SD_ZIP_URL,
   checkDue, cmpSemver, parseSemver, fetchLatestRelease, parseSha256Sums,
 } from '/update-core.js';
@@ -35,7 +35,7 @@ export function initUpdatesTab({ $, T, getStatus, pausePoller, resumePoller }) {
     cur: $('up-cur'), latest: $('up-latest'), checked: $('up-checked'), state: $('up-state'),
     check: $('up-check'), flash: $('up-flash'), flashLbl: $('up-flash-lbl'), sd: $('up-sd'),
     notesLink: $('up-notes-link'), notes: $('up-notes'), prog: $('up-prog'),
-    progBar: $('up-prog-bar'), progLbl: $('up-prog-lbl'), auto: $('up-auto'),
+    progBar: $('up-prog-bar'), progLbl: $('up-prog-lbl'), auto: $('up-auto'), autoInstall: $('up-auto-install'),
   });
 
   function fmtWhen(ts) {
@@ -73,6 +73,7 @@ export function initUpdatesTab({ $, T, getStatus, pausePoller, resumePoller }) {
     } else if (cache && cache.tag) setState('—');
     if (e.flash && !busy) { e.flash.hidden = !newer; disarmConfirm(); }
     if (e.auto) e.auto.checked = localStorage.getItem(LS_ENABLED) !== '0';
+    if (e.autoInstall) e.autoInstall.checked = localStorage.getItem(LS_AUTO) === '1';
     renderSdc();
   }
 
@@ -374,6 +375,19 @@ export function initUpdatesTab({ $, T, getStatus, pausePoller, resumePoller }) {
   if (e.auto) e.auto.addEventListener('change', () => {
     try { localStorage.setItem(LS_ENABLED, e.auto.checked ? '1' : '0'); } catch {}
   });
+  if (e.autoInstall) e.autoInstall.addEventListener('change', () => {
+    try { localStorage.setItem(LS_AUTO, e.autoInstall.checked ? '1' : '0'); } catch {}
+  });
+
+  // Auto-update hand-off: the shell's cancellable countdown set this tag; run the normal, rollback-aware
+  // install now (check first so we only flash a genuinely newer release). One-shot — cleared immediately.
+  try {
+    const want = localStorage.getItem(LS_AUTOSTART);
+    if (want) {
+      localStorage.removeItem(LS_AUTOSTART);
+      check(true).then(() => { const x = els(); if (x.flash && !x.flash.hidden && !busy) { disarmConfirm(); doFlash(); } }).catch(() => {});
+    }
+  } catch {}
 
   return { check, render, renderSdc };
 }

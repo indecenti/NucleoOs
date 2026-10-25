@@ -8,9 +8,10 @@ tools/m5burner-kit.py's cover.
 
   build/promo/nucleoos-promo-16x9.mp4   1920x1080
   build/promo/nucleoos-promo-1x1.mp4    1080x1080
+  build/promo/nucleoos-promo-9x16.mp4   1080x1920 (Shorts)
   build/promo/contact-<fmt>.jpg         one frame from the middle of every shot, for review
 
-Usage:  python tools/promo-video/build.py --audio <mastered.wav> [--bpm 128] [--offset <s>] [--only 16x9|1x1]
+Usage:  python tools/promo-video/build.py --audio <mastered.wav> [--bpm 128] [--offset <s>] [--only 16x9|1x1|9x16]
 The soundtrack is generated with ACE-Step from tools/promo-video/soundtrack.json and mastered to
 about -14 LUFS / -1 dBTP (see README.md here). Without --offset the first beat is found with librosa.
 
@@ -96,6 +97,11 @@ def fit_browser(view, vw, vh):
     return win
 
 
+def tall_browser(view, h):
+    """A browser window about h tall, however wide that makes it (Shorts: it pans across the frame)."""
+    return browser(view, round(h * view.width / view.height * 0.97))
+
+
 def browser(view, width, url='http://nucleo-01.local'):
     """A browser window around a web capture (the capture is fitted to the window width)."""
     bar = max(28, round(width * 0.034))
@@ -177,11 +183,12 @@ def fn_badge(d, x, y, h, label):
 
 
 class Scene:
-    """Base: a caption block that slides in, a visual area. wide = 16:9, else square."""
+    """Base: a caption block that slides in, a visual area. wide = 16:9, tall = 9:16 (Shorts), else square."""
 
     def __init__(self, W, H, beat):
         self.W, self.H, self.beat = W, H, beat
         self.wide = W / H > 1.3
+        self.tall = H / W > 1.5
         self.m = round(min(W, H) * 0.065)
         if self.wide:
             self.cap_w = round(W * 0.34)
@@ -189,15 +196,16 @@ class Scene:
                         H - round(self.m * 0.7))   # visual box
         else:
             self.cap_w = W - 2 * self.m
-            self.vis = (self.m, round(H * 0.36), W - self.m, H - self.m)
+            self.bottom = round(H * 0.8) if self.tall else H - self.m   # Shorts: the player's buttons cover the bottom fifth
+            self.vis = (self.m, round(H * 0.36), W - self.m, self.bottom)
 
     def caption(self, title, sub, size=None, sub_size=None):
-        size = size or (round(self.H * 0.115) if self.wide else round(self.W * 0.1))
+        size = size or (round(self.H * 0.115) if self.wide else round(self.W * (0.12 if self.tall else 0.1)))
         sub_size = sub_size or round(min(self.W, self.H) * 0.03)
         txt = Text(title, sub, self.cap_w, size, sub_size)
         if not self.wide:                               # square: the visual goes below the tallest caption
             top = round(self.m * 0.9 + txt.im.height + self.m * 0.5)
-            self.vis = (self.m, max(self.vis[1], top) if hasattr(self, '_capped') else top, self.W - self.m, self.H - self.m)
+            self.vis = (self.m, max(self.vis[1], top) if hasattr(self, '_capped') else top, self.W - self.m, self.bottom)
             self._capped = True
         return txt
 
@@ -218,6 +226,14 @@ class Scene:
             band = txt.im.crop((0, top, txt.im.width, bot))
             paste_alpha(c, band, (x0, y0 + top + (1 - k) * rise), k)
 
+    def panned(self, im, t, dur):
+        """x for an image wider than the visual box: it slides from its left edge to its right edge over dur."""
+        vw = self.vis[2] - self.vis[0]
+        if im.width <= vw:
+            return self.vis[0] + (vw - im.width) / 2
+        k = min(max(t / dur, 0.0), 1.0)
+        return self.vis[0] - (im.width - vw) * (k * k * (3 - 2 * k))
+
     def fit(self, im, box, scale=1.0):
         bw, bh = box[2] - box[0], box[3] - box[1]
         s = min(bw / im.width, bh / im.height) * scale
@@ -237,7 +253,7 @@ class Hook(Scene):
         self.txt = Text(['A MICROCONTROLLER', "THAT THINKS IT'S", 'A WORKSTATION'], None,
                         self.cap_w + (round(self.W * 0.04) if self.wide else 0), size, 10)
         vw = self.vis[2] - self.vis[0]
-        dw = round(vw * (0.95 if self.wide else 0.92))
+        dw = round(self.W * 0.98) if self.tall else round(vw * (0.95 if self.wide else 0.92))
         self.dev, self.pad = shadowed(device('adv', native('launcher.home'), dw))
 
     def frame(self, t):
@@ -248,7 +264,7 @@ class Hook(Scene):
             y = (self.H - self.dev.height) / 2 + self.H * 0.04
         else:
             x = lerp(self.W + 40, (self.W - self.dev.width) / 2, k)
-            y = self.H - self.dev.height + self.pad * 0.6
+            y = (self.vis[1] + self.vis[3] - self.dev.height) / 2 if self.tall else self.H - self.dev.height + self.pad * 0.6
         c.alpha_composite(self.dev, (round(x), round(y)))
         self.draw_caption(c, self.txt, t, stagger=1.0)
         return c
@@ -261,7 +277,7 @@ class Native(Scene):
         super().__init__(*a)
         self.txt = self.caption(['50+ NATIVE', 'APPS & GAMES'], ['Big fonts and quick keys, made for a 240x135 screen.'])
         vw, vh = self.vis[2] - self.vis[0], self.vis[3] - self.vis[1]
-        dw = round(min(vw * 1.0, vh / 0.645 * 0.98))
+        dw = round(self.W * 0.98) if self.tall else round(min(vw * 1.0, vh / 0.645 * 0.98))
         self.devs = [shadowed(device('adv', native(s), dw)) for s in self.SCREENS]
 
     def frame(self, t):
@@ -285,7 +301,10 @@ class Web(Scene):
                                 ['Open nucleo-01.local: the Cardputer itself serves 40+ web apps.', 'About 6x faster in 0.7.'])
         vw = self.vis[2] - self.vis[0]
         vh = self.vis[3] - self.vis[1]
-        self.wins = [shadowed(fit_browser(web(n), vw, vh), blur=18, dy=16, alpha=90) for n in self.CAPS]
+        if self.tall:       # as tall as the box, wider than the frame: it pans
+            self.wins = [shadowed(tall_browser(web(n), round(vh * 0.9)), blur=18, dy=16, alpha=90) for n in self.CAPS]
+        else:
+            self.wins = [shadowed(fit_browser(web(n), vw, vh), blur=18, dy=16, alpha=90) for n in self.CAPS]
 
     def frame(self, t):
         c = base_canvas(self.W, self.H)
@@ -293,7 +312,7 @@ class Web(Scene):
         i = min(int(t / per), len(self.wins) - 1)
         win, pad = self.wins[i]
         tl = t - i * per
-        bx = self.vis[0] + (self.vis[2] - self.vis[0] - win.width) / 2
+        bx = self.panned(win, tl, per) if self.tall else self.vis[0] + (self.vis[2] - self.vis[0] - win.width) / 2
         by = self.vis[1] + (self.vis[3] - self.vis[1] - win.height) / 2 + pad * 0.2
         k = ease(tl / (self.beat * 0.6))
         c.alpha_composite(win, (round(bx), round(by + (1 - k) * 40)))
@@ -310,13 +329,14 @@ class Anima(Scene):
         src = web('anima')
         # the conversation column, not the empty sidebar: crop to the chat pane
         src = src.crop((round(src.width * 0.18), 0, src.width, src.height))
-        self.win, self.pad = shadowed(fit_browser(src, round(vw * 0.96), round(vh * 0.96)), blur=18, dy=16, alpha=90)
+        win = tall_browser(src, round(vh * 0.9)) if self.tall else fit_browser(src, round(vw * 0.96), round(vh * 0.96))
+        self.win, self.pad = shadowed(win, blur=18, dy=16, alpha=90)
 
     def frame(self, t):
         c = base_canvas(self.W, self.H)
         z = 1.0 + 0.04 * (t / self.dur)                       # a slow push-in
         win = self.win.resize((round(self.win.width * z), round(self.win.height * z)), Image.BILINEAR)
-        bx = self.vis[0] + (self.vis[2] - self.vis[0] - win.width) / 2
+        bx = self.panned(win, t, self.dur) if self.tall else self.vis[0] + (self.vis[2] - self.vis[0] - win.width) / 2
         by = self.vis[1] + (self.vis[3] - self.vis[1] - win.height) / 2
         k = ease(t / (self.beat * 0.6))
         paste_alpha(c, win, (bx, by + (1 - k) * 40), k)
@@ -333,7 +353,7 @@ class Games(Scene):
         self.pics = []
         for n in ('costellazioni-combat', 'costellazioni-world'):
             im = Image.open(WEB / f'{n}.webp').convert('RGBA')
-            s = min(vw / im.width, vh / im.height)
+            s = vh * 0.9 / im.height if self.tall else min(vw / im.width, vh / im.height)
             im = im.resize((round(im.width * s), round(im.height * s)), Image.LANCZOS)
             mask = Image.new('L', im.size, 0)
             ImageDraw.Draw(mask).rounded_rectangle((0, 0, im.width - 1, im.height - 1), round(min(im.size) * 0.03), fill=255)
@@ -351,7 +371,7 @@ class Games(Scene):
             tl = t - i * bar
             z = 1.0 + 0.035 * tl / bar
             p = pic.resize((round(pic.width * z), round(pic.height * z)), Image.BILINEAR)
-            bx = self.vis[0] + (self.vis[2] - self.vis[0] - p.width) / 2
+            bx = self.panned(p, tl, bar) if self.tall else self.vis[0] + (self.vis[2] - self.vis[0] - p.width) / 2
             by = self.vis[1] + (self.vis[3] - self.vis[1] - p.height) / 2
             k = ease(tl / (self.beat * 0.6))
             paste_alpha(c, p, (bx, by + (1 - k) * 40), k)
@@ -374,7 +394,7 @@ class Install(Scene):
                                 ['Downloads and verifies its own SD content. Runs as a guest under M5Launcher.',
                                  'One image for Cardputer + ADV.'])
         vw, vh = self.vis[2] - self.vis[0], self.vis[3] - self.vis[1]
-        dw = round(min(vw * 0.62, vh * 0.98 / 0.645 / 1.45))
+        dw = round(min(vw * (0.85 if self.tall else 0.62), vh * 0.98 / 0.645 / 1.45))
         self.states = []
         for scr in ('wizard.install-run', 'wizard.install-done'):
             s = native(scr)
@@ -523,7 +543,7 @@ def main():
     ap.add_argument('--audio', required=True)
     ap.add_argument('--bpm', type=float, default=128)
     ap.add_argument('--offset', type=float, help='seconds into the audio where the first downbeat is')
-    ap.add_argument('--only', choices=['16x9', '1x1'])
+    ap.add_argument('--only', choices=['16x9', '1x1', '9x16'])
     ap.add_argument('--stills', action='store_true', help='only the contact sheet + shot frames, no video')
     ap.add_argument('--out', default=str(REPO / 'build' / 'promo'))
     a = ap.parse_args()
@@ -535,7 +555,7 @@ def main():
     if offset is None:
         offset, tempo = first_beat(a.audio)
         print(f'first beat {offset:.3f}s, librosa tempo {tempo:.1f} (using --bpm {a.bpm})')
-    for fmt, W, H in (('16x9', 1920, 1080), ('1x1', 1080, 1080)):
+    for fmt, W, H in (('16x9', 1920, 1080), ('1x1', 1080, 1080), ('9x16', 1080, 1920)):
         if a.only in (None, fmt):
             build(fmt, W, H, a.audio, a.bpm, offset, out, a.stills)
 

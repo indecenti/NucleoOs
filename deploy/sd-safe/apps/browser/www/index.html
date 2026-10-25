@@ -1848,9 +1848,9 @@
   <script type="module">
     import I18N from '/nucleo-i18n.js';
     await I18N.init('browser');
-    // Live language switch: declarative [data-i18n*] nodes are repainted by the engine itself; here we
-    // refresh the imperatively-set tab titles (and re-render home screens to pick up the new strings).
-    I18N.onChange(() => {
+    // Refresh the imperatively-set tab titles (and re-render home screens) in the active OS language.
+    // Declarative [data-i18n*] nodes are handled by the engine itself; this covers the JS-built bits.
+    const refreshDynamic = () => {
       try {
         if (typeof state === 'object' && Array.isArray(state.tabs)) {
           state.tabs.forEach((tab) => {
@@ -1863,7 +1863,11 @@
           if (typeof renderTabs === 'function') renderTabs();
         }
       } catch (_e) {}
-    });
+    };
+    // The first tab is created before this module loads, so its title fell back to the literal default.
+    // Repaint once now that the catalog is in, then on every live language change (reload-free).
+    refreshDynamic();
+    I18N.onChange(refreshDynamic);
   </script>
 </body>
 </html>

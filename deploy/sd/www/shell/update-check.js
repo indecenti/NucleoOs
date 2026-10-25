@@ -7,8 +7,8 @@
 
 import I18N from './nucleo-i18n.js';
 import {
-  LS_CACHE, LS_NOTIFIED, LS_ENABLED, LS_BRIDGED, UPDATE_TTL_MS,
-  checkDue, decideNotify, fetchLatestRelease, parseReleaseType, updateLevel,
+  LS_CACHE, LS_NOTIFIED, LS_ENABLED, LS_BRIDGED, LS_SKIP, UPDATE_TTL_MS,
+  checkDue, decideNotify, fetchLatestRelease, parseReleaseType, updateLevel, cmpSemver,
 } from './update-core.js';
 
 const t = I18N.scope('shell');
@@ -19,16 +19,36 @@ const RECHECK_EVERY = 6 * 3600 * 1000;   // long-lived tabs re-evaluate the 24h 
 const readJSON = (k) => { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } };
 const writeJSON = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} };
 
-export function initUpdateCheck({ getSnapVersion, getNotify }) {
+export function initUpdateCheck({ getSnapVersion, getNotify, onState }) {
   let timer = null;
   const schedule = (ms) => { clearTimeout(timer); timer = setTimeout(run, ms); };
 
+  // Persistent "update available" state the shell paints as a taskbar pill + a Start badge (and a
+  // What's-new sheet), so a new release is always in view — not only a notification that can be missed.
+  // Recomputed from the cache + the live firmware version on every check AND whenever the status version
+  // changes (refresh), so the pill clears the moment an install lands. A skipped tag hides it until a
+  // newer one appears. Pure read of what fetchLatestRelease already cached — no extra network.
+  let lastState = null;
+  function computeState(version) {
+    const cache = readJSON(LS_CACHE);
+    const skip = (() => { try { return localStorage.getItem(LS_SKIP); } catch { return null; } })();
+    const available = !!(version && cache && cache.tag && cmpSemver(cache.tag, version) > 0 && skip !== cache.tag);
+    const lvl = available ? updateLevel(parseReleaseType(cache.notes)) : 'info';
+    return { available, tag: available ? cache.tag : '', level: lvl, notes: available ? (cache.notes || '') : '', url: available ? (cache.url || '') : '' };
+  }
+  function emitState(version) {
+    if (!onState) return;
+    const st = computeState(version);
+    const key = st.available + '|' + st.tag + '|' + st.level;
+    if (key === lastState) return;   // only on an actual change
+    lastState = key; try { onState(st); } catch {}
+  }
+
   async function run() {
     try {
-      if (localStorage.getItem(LS_ENABLED) === '0') { schedule(RECHECK_EVERY); return; }
+      if (localStorage.getItem(LS_ENABLED) === '0') { emitState(getSnapVersion()); schedule(RECHECK_EVERY); return; }
       const version = getSnapVersion();
-      const Notify = getNotify();
-      if (!version || !Notify) { schedule(RETRY_DELAY); return; }   // first /api/status or notify.js still loading
+      if (!version) { schedule(RETRY_DELAY); return; }               // no /api/status version yet — nothing to compare
 
       let cache = readJSON(LS_CACHE);
       if (checkDue({ cache, nowMs: Date.now(), ttlMs: UPDATE_TTL_MS })) {
@@ -36,6 +56,9 @@ export function initUpdateCheck({ getSnapVersion, getNotify }) {
         if (res.ok) { cache = res.cache; writeJSON(LS_CACHE, cache); }
         // !ok → keep whatever we knew; stay silent.
       }
+      emitState(version);   // the taskbar pill / Start badge only need the version + cache — NOT Notify
+      const Notify = getNotify();
+      if (!Notify) { schedule(RETRY_DELAY); return; }                // notifications need notify.js; the pill is already up
       if (cache && cache.tag) {
         const notified = readJSON(LS_NOTIFIED) || [];
         const d = decideNotify({ currentVer: version, latestTag: cache.tag, notifiedTags: notified });
@@ -64,10 +87,18 @@ export function initUpdateCheck({ getSnapVersion, getNotify }) {
           writeJSON(LS_NOTIFIED, notified.concat(cache.tag).slice(-8));
         }
       }
+      emitState(version);   // keep the taskbar pill / Start badge in step with what we just learned
     } catch (e) { console.warn('[update] check failed', e); }
     schedule(RECHECK_EVERY);
   }
 
   schedule(START_DELAY);
-  return { runNow: run };
+  // refresh(version): recompute the pill state from the cached release + a (possibly new) firmware
+  // version, with no network — the shell calls it when /api/status reports a different version, so an
+  // install clears the pill at once. skip(tag): user chose to skip; hide the pill until a newer release.
+  return {
+    runNow: run,
+    refresh: (version) => emitState(version),
+    skip: (tag, version) => { try { localStorage.setItem(LS_SKIP, tag); } catch {} lastState = null; emitState(version); },
+  };
 }
