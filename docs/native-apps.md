@@ -180,6 +180,9 @@ Home, right after ANIMA, so the way back is one step away. Turning an option off
 - An independent review of the loader against the ESP-IDF 5.4 sources (MMU, cache, flash driver) found 13
   issues before the first hardware run; all fixed (RAM base in the cache key, data-cache invalidation, full
   read-back hash, offset overflow, hooks on app switch, re-hash of the file, call targets, watchdog).
+- **Installed from the published store over HTTPS (2026-10-27)**, on the ADV: native catalog refreshed and
+  verified, Constellations, Tanks and Poker updated 1.0.0 -> 1.1.0 ("update all"), every operation rc=0 with
+  3.1-3.6 KB of the 7 KB store task stack left; the updated Constellations (ABI 2) then loaded and ran.
 - **All three games verified on hardware (2026-10-27)**, on both boards, with a test firmware that has none of
   them built in: Tanks, Poker and Constellations opened one after another from the launcher, each replacing
   the previous module in the scratch region (`tanks loaded ... 75648 B`, `poker loaded ... 29116 B`,
