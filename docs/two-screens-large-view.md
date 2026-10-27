@@ -93,3 +93,21 @@ finish with `idf.py --no-ccache build`. Known gallery limit: games open `/sd/...
 
 Not verified on the PC (need the device): drags and flings, the SD sprite atlases (Cardler, Orde), the
 co-op / network guest paths (touch moves only the local player), a few end screens no scene reaches.
+
+## The other apps (2026-10-27)
+
+42 apps redone with the panel as the primary screen (commit "Apps: the external panel as the primary
+screen"): the 12 that were still mirrored (torch, qr, level, goniometer, pedometer, pixelfix, chrono,
+pomodoro, alarm, dice, yahtzee, micspec) got their own view; the rest lost their generic key bars and use
+the space better (calendar month grid + agenda, notepad with a tap-placed cursor, files detail pane, Wi-Fi
+networks + detail, scrub bars and volume sliders in the media apps, swipe-to-archive notifications, ...).
+The Security apps are out of scope and were not touched.
+
+Known limits / follow-ups:
+- `lg::frame` composes in the shared 8-bit (RGB332) canvas: dark theme greys such as `lg::card()` turn black
+  or olive there. Apps with themed cards draw direct (or use a colour that survives, e.g. 0x212A). A 16-bit
+  mode for `lg::frame` (5 strips of 48 rows) would fix it at some speed cost.
+- micspec recomposes the whole panel at its frame rate; on the device it may be bound by the SPI push
+  (~30 ms per 320x240 frame) — check it there.
+- Notify's swipe-to-archive rewrites `notify.jsonl`: a notification arriving in those few ms is lost.
+- Flash: 18 KB left in the app slot (image 0x37B890). Any further panel work must pay for itself.
