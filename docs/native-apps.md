@@ -47,10 +47,13 @@ The rules that keep an installed app working across OS updates:
 3. **`name = target`** exports a firmware guard under the usual name: `nucleo_app_register` is
    `nucleo_native_capture_register`, which accepts a registration only during `nucleo_native_main`.
 4. **The layout fingerprint.** Inline code in a module (LovyanGFX methods, struct fields) bakes in the shape
-   of firmware types. `nucleo_native_layout()` hashes the ABI level, the LovyanGFX version and the size and
-   key offsets of the shared types (`LGFXBase`, `LGFX_Sprite`, `nucleo_app_def_t`, `gui::Menu`...). Module and
-   firmware compute it from the same header; a different value is refused at load. When a firmware update
-   changes it, the store rebuilds every native app from its recipe and publishes them with the firmware.
+   of firmware types. `nucleo_native_layout()` hashes the LovyanGFX version and the size and key offsets of the
+   shared types (`LGFXBase`, `LGFX_Sprite`, `nucleo_app_def_t`, `gui::Menu`...) — not the ABI level, which only
+   adds names, so a new level never invalidates the modules already installed. Module and firmware compute it
+   from the same header; a different value is refused at load. When a firmware update changes it, the store
+   rebuilds every native app from its recipe and publishes them with the firmware.
+   Level 2 (2026-10-27) = level 1 + the second-screen helpers the games use (`lg::tap`, `lg::field`,
+   `lg::frame` with the touch flag, `nucleo_touch_add_pad`, `nucleo_touch_add_scroll`).
 
 Not in v1, on purpose: the web server (`httpd_*`: a module's handlers would outlive it, and the web OS's
 catch-all route is registered last, so a late endpoint is never reached), task creation, raw radio, OTA,

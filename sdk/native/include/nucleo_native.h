@@ -13,7 +13,7 @@
 #pragma once
 #include <stdint.h>
 
-#define NUCLEO_NATIVE_ABI    1u            // the level this SDK builds against (abi/v1.txt)
+#define NUCLEO_NATIVE_ABI    2u            // the level this SDK builds against (abi/v2.txt)
 #define NAP_MAGIC            0x3150414eu   // "NAP1" little-endian
 #define NAP_ID_MAX           32
 
@@ -61,7 +61,7 @@ constexpr uint32_t nucleo_native_layout()
 {
     using namespace nucleo_native_detail;
     uint32_t h = 2166136261u;
-    h = fnv(h, NUCLEO_NATIVE_ABI);
+    // Not the ABI level: levels only add names (old modules keep working); this hashes only type shapes.
     h = fnv(h, LGFX_VERSION_MAJOR * 10000u + LGFX_VERSION_MINOR * 100u + LGFX_VERSION_PATCH);
     h = fnv(h, sizeof(lgfx::LGFXBase));     h = fnv(h, alignof(lgfx::LGFXBase));
     h = fnv(h, sizeof(lgfx::LGFX_Sprite));
