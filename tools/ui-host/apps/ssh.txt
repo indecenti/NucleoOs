@@ -3,7 +3,7 @@
 @sd data/ssh/keys/id_ed25519 -----BEGIN OPENSSH PRIVATE KEY----- (demo)
 @sd data/ssh/keys/id_rsa -----BEGIN OPENSSH PRIVATE KEY----- (demo)
 form
-filled    t:server.lan ENTER t:nicola
+filled    t:server.lan ENTER t:user
 keyauth   D D R
 # shell: a fictional connected session (host-only seed via the c:~ sentinel) to exercise the panel terminal.
 shell     c:~

@@ -393,21 +393,21 @@ static void ssh_demo_shell() {
     if (!s_sbcol) s_sbcol = (uint8_t *)calloc((size_t)SB_LINES * SB_W, 1);
     if (!s_sb) return;
     if (!s_lock) s_lock = (SemaphoreHandle_t)1;   // non-null so sb_feed() runs (host sem calls are no-ops)
-    snprintf(s_host, sizeof s_host, "pi.local");
-    snprintf(s_user, sizeof s_user, "nicola");
+    snprintf(s_host, sizeof s_host, "server.local");
+    snprintf(s_user, sizeof s_user, "user");
     s_head = s_count = s_curlen = s_scroll = 0; s_aesc = s_pn = 0; s_cur[0] = 0;
     s_fgbase = DEF_FG; s_bold = false;
     static const char *const L[] = {
-        "Linux pi 6.1.0-rpi7 aarch64 GNU/Linux",
-        "Last login: Mon Oct 27 10:14:02 2026 from 192.168.1.5",
-        "nicola@pi:~ $ ls -la",
+        "Linux server 6.1.0-rpi7 aarch64 GNU/Linux",
+        "Last login: Mon Oct 27 10:14:02 2026 from 10.0.0.2",
+        "user@server:~ $ ls -la",
         "total 28",
-        "drwxr-xr-x 4 nicola nicola 4096 Oct 27 10:02 .",
-        "-rw-r--r-- 1 nicola nicola  220 Sep  1  2025 .bash_logout",
-        "drwxr-xr-x 2 nicola nicola 4096 Oct 20 18:33 projects",
-        "nicola@pi:~ $ uptime",
+        "drwxr-xr-x 4 user user 4096 Oct 27 10:02 .",
+        "-rw-r--r-- 1 user user  220 Sep  1  2025 .bash_logout",
+        "drwxr-xr-x 2 user user 4096 Oct 20 18:33 projects",
+        "user@server:~ $ uptime",
         " 10:14:31 up 6 days,  2:41,  load average: 0.08, 0.03, 0.01",
-        "nicola@pi:~ $ ",
+        "user@server:~ $ ",
     };
     for (unsigned i = 0; i < sizeof(L) / sizeof(L[0]); i++) sb_info(L[i]);
     snprintf(s_line, SB_W, "sudo systemctl status nginx");
