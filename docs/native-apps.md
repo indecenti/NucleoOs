@@ -82,33 +82,41 @@ One native app is resident at a time.
 
 1. **Signature again.** `/sd/apps/<id>/app.nap` is re-checked against the signed package it was installed
    from (`.package.sig`, kept beside it), with the keys compiled into the firmware: a card edited on a PC
-   never runs code the store did not sign.
+   never runs code the store did not sign. The signed SHA-256 is kept for step 7.
 2. **`nap_inspect()`**: ELF32 LE Xtensa `ET_DYN`; exactly the three segments, file offset = address; only
    the dynamic tags the SDK's link produces (no `DT_NEEDED`, `DT_INIT`, TLS...); every relocation of an
-   allowed type (`RELATIVE`, `JMP_SLOT`, `GLOB_DAT`, `32`, `RTLD`), aligned, inside the module; every import
-   in the export table; `nucleo_native_info` valid; ABI level, layout fingerprint and id as expected; sizes
-   within the scratch region and the RAM budget. Nothing is written or run before all of this passes.
+   allowed type (`RELATIVE`, `JMP_SLOT`, `GLOB_DAT`, `32`, `RTLD`), aligned, inside the module (no offset that
+   can wrap around); every import in the export table; `nucleo_native_info` valid; ABI level, layout
+   fingerprint and id as expected; sizes within the scratch region and the RAM budget. The relocation tables
+   are then read once into RAM for the passes below.
 3. **Map.** The scratch region is the 256 KB `coredump` partition (core dumps to flash are off in this
    firmware: the build fails if they are turned on). It is mapped with `esp_mmu_map` on the instruction
    bus; on the ESP32-S3 the MMU table is shared by both buses, so the same pages are also visible through the
-   data bus at a fixed offset, which serves the module's constants.
-4. **Write**, sector by sector, the text and rodata relocated for those addresses — unless the last sector of
-   the region already says it holds exactly this module (its SHA-256), relocated against exactly this
-   firmware (its ELF SHA-256) at exactly these addresses. Relaunching an app costs no flash wear; switching
-   between two apps rewrites ~100 KB. The header is erased before and written after, so an interrupted
+   data bus at a fixed offset, which serves the module's constants. `.data`/`.bss` get a heap block.
+4. **Dry pass.** The whole image is relocated in RAM sector by sector and hashed: every relocation target is
+   checked here, before the flash is touched.
+5. **Write**, sector by sector — unless the last sector of the region already says it holds exactly this image:
+   same module, same firmware (its ELF SHA-256), same instruction-bus, data-bus **and RAM** addresses (Xtensa
+   literal pools in the code hold absolute `.data` addresses) and same image hash. Relaunching an app in the
+   same conditions costs no flash wear. The header is erased before and written after, so an interrupted
    write can never vouch for a half-written image.
-5. **Read back** the first bytes through the data bus and compare with the file: a mapping or cache problem
-   stops here, before any jump.
-6. **Data**: `.data`/`.bss` relocated into a heap block; constructors run; `nucleo_native_main` registers the
-   app. The launcher slot of the store app (`store_apps.cpp`) gets the module's callbacks; the store keeps the
-   identity (id, name, category, icon).
+6. **Check what the CPU will see.** Flash writes flush only the instruction-bus side of the cache, so the data
+   cache is invalidated over the data-bus alias (and on unload, for the next module at the same address);
+   then the whole image is hashed through the data bus and must equal the dry pass.
+7. **Data and start**: `.data` relocated; the file is hashed again and must still be the signed one (not swapped
+   while loading); constructor, destructor and entry pointers must point into the module's code; constructors
+   run; `nucleo_native_main` registers the app. The launcher slot of the store app (`store_apps.cpp`) gets the
+   module's callbacks; the store keeps the identity (id, name, category, icon, description), so nothing the
+   launcher keeps ever points into a module. Long passes feed the task watchdog.
 
 A native **game** gets the same fresh-heap Solo boot as a built-in game (the store apps are registered in
 that boot too), so it loads on an unfragmented heap. A crash inside an app resets the device into the full
 OS, as for every app: the Solo latch only survives a clean software reboot.
 
 Unloading (another native app needs the region, or the store updates or removes this one) puts the slot's
-placeholder back first, then runs destructors and releases the mapping and the RAM. The store never swaps
+placeholder back first, then runs destructors and releases the mapping and the RAM. Switching from one app to
+another drops every hook the outgoing app set (poll, Back, TAB, push-to-talk, a latched GO hold) before the
+incoming module may be loaded, so no hook can jump into code that is no longer mapped. The store never swaps
 the files of a loaded module (`nucleo_native_forget` first), and refuses to unload the app in the foreground.
 
 **Where native apps are unavailable:** a partition table without a 64 KB-aligned `coredump` partition — in
@@ -151,5 +159,8 @@ and every step is checked:
   the same on every module in the store checkout beside this repository.
 - `npm run store:test` — the store engine over a real two-channel store built and signed by the store's
   own tools: install, re-verification on the card, ABI and channel refusals, tampering.
+- An independent review of the loader against the ESP-IDF 5.4 sources (MMU, cache, flash driver) found 13
+  issues before the first hardware run; all fixed (RAM base in the cache key, data-cache invalidation, full
+  read-back hash, offset overflow, hooks on app switch, re-hash of the file, call targets, watchdog).
 - **Not yet verified on hardware**: steps 3 to 6 (MMU mapping, flash write while mapped, the data-bus alias,
   executing a module). That is the first thing to run on both boards; until it passes, no release ships it.

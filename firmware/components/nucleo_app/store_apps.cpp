@@ -218,7 +218,8 @@ extern "C" void nucleo_store_app_prepare(nucleo_app_def_t *slot)
     slot->on_enter = m->on_enter; slot->on_key = m->on_key; slot->on_tick = m->on_tick; slot->on_draw = m->on_draw;
     slot->on_exit = m->on_exit; slot->exclusive_flags = m->exclusive_flags; slot->ram = m->ram;
     slot->on_draw_large = m->on_draw_large;
-    if (m->desc) slot->desc = m->desc;
+    // Nothing that points into the module goes where the launcher keeps it (its tree copies name / desc):
+    // those stay the store's, so a later unload can never leave the launcher reading unmapped flash.
     s_patched = slot;
 }
 

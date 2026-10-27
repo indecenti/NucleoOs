@@ -644,22 +644,24 @@ st_code_t st_verify_installed(const char *root, const char *id, const char *rel,
     snprintf(p, sizeof p, "%s/apps/%s/.package.sig", root, id);
     FILE *f = fopen(p, "rb");
     if (!f) return ST_E_NOTFOUND;
+    char *ln = malloc(LINE_MAX_);                   // not s_line: this runs on the caller's task, the store on its own
+    if (!ln) { fclose(f); return ST_E_NOMEM; }
     sdc_sha256_t h;
     sdc_sha256_init(&h);
     char want[65] = "";
     uint32_t want_size = 0;
     int line = 0;
     bool body_end = false, ok = true;
-    while (ok && fgets(s_line, sizeof s_line, f)) {
-        size_t n = strlen(s_line);
-        if (!n || s_line[n - 1] != '\n') { ok = false; break; }
-        if (!strcmp(s_line, "--\n")) { body_end = true; break; }
-        sdc_sha256_update(&h, s_line, n);
-        if (line == 0) ok = !strcmp(s_line, PKG_MAGIC "\n");
-        else if (line == 1) { s_line[n - 1] = 0; ok = !strcmp(s_line, id); }
+    while (ok && fgets(ln, LINE_MAX_, f)) {
+        size_t n = strlen(ln);
+        if (!n || ln[n - 1] != '\n') { ok = false; break; }
+        if (!strcmp(ln, "--\n")) { body_end = true; break; }
+        sdc_sha256_update(&h, ln, n);
+        if (line == 0) ok = !strcmp(ln, PKG_MAGIC "\n");
+        else if (line == 1) { ln[n - 1] = 0; ok = !strcmp(ln, id); }
         else if (line >= 4) {
             char sha[65], *path; uint32_t sz;
-            ok = parse_pkg_file(s_line, sha, &sz, &path);
+            ok = parse_pkg_file(ln, sha, &sz, &path);
             if (ok && !strcmp(path, rel)) { memcpy(want, sha, sizeof want); want_size = sz; }
         }
         line++;
@@ -669,6 +671,7 @@ st_code_t st_verify_installed(const char *root, const char *id, const char *rel,
     int dl = 0;
     ok = ok && body_end && line >= 5 && read_sig_block(f, key, der, &dl);
     fclose(f);
+    free(ln);
     if (!ok) return ST_E_BAD;
     sdc_sha256_final(&h, hash);
     if (!io->verify(io->ctx, key, hash, der, (size_t)dl)) return ST_E_SIG;

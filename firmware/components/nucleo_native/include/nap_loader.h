@@ -43,6 +43,7 @@ typedef struct {
     const char *expect_id;            // the store id it was installed as (NULL = do not check)
     uint32_t flash_max;               // bytes of the scratch region usable for text + rodata
     uint32_t ram_max;                 // largest data segment accepted (.data + .bss)
+    void   (*tick)(void *ctx);        // optional: called between blocks of work (feed a watchdog, yield)
 } nap_src_t;
 
 typedef struct {
@@ -55,6 +56,8 @@ typedef struct {
     uint32_t init_array, n_init, fini_array, n_fini;
     uint32_t entry;                   // vaddr of nucleo_native_main
     nap_info_t info;
+    const uint8_t *rela_mem;          // nap_cache_relocs(): both tables in RAM (NULL = read from the file)
+    const uint8_t *jmprel_mem;
 } nap_image_t;
 
 // Runtime addresses of vaddr 0 for each part: text on the instruction bus, rodata on the data bus (the same
@@ -63,6 +66,11 @@ typedef struct { uint32_t ibus, dbus, ram; } nap_bases_t;
 
 // Full validation; fills *img. detail (optional) receives a short reason ("needs fopen64", "abi 2 > 1").
 nap_rc_t nap_inspect(const nap_src_t *src, nap_image_t *img, char *detail, size_t detail_cap);
+
+// Bytes nap_cache_relocs() needs, and the call itself: reads both relocation tables into `mem` once, so the
+// passes below never re-read them from the SD card. Optional; without it they are read from the file.
+uint32_t nap_relocs_bytes(const nap_image_t *img);
+nap_rc_t nap_cache_relocs(const nap_src_t *src, nap_image_t *img, uint8_t *mem, uint32_t cap);
 
 // The relocated bytes of the flash image [off, off + len): off and len multiples of 4, inside image_size.
 nap_rc_t nap_relocate_flash(const nap_src_t *src, const nap_image_t *img, const nap_bases_t *b,

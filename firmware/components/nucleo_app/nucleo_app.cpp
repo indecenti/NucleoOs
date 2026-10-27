@@ -829,6 +829,7 @@ static bool maybe_solo_launch(int idx)
 extern "C" void nucleo_settings_search_preset(const char *q);   // app_wifi.cpp
 extern "C" void nucleo_settings_onboard(void);                  // app_wifi.cpp: next open = first-boot network step
 extern "C" bool nucleo_setup_onboarding(void);                  // nucleo_setup.c
+static void (*s_g0_app_ptt)(bool) = nullptr;   // the app PTT handler latched for the current GO hold
 static void launch_by_id(const char *id);
 static void launch(const MenuNode *app)
 {
@@ -857,6 +858,9 @@ static void launch_by_id(const char *id)
     if (s_active >= 0 && s_apps[s_active].on_exit) s_apps[s_active].on_exit();
     app_ram_free();                                       // ...and its working RAM, before the incoming app's
     s_active = -1;                                        // nothing in the foreground while a module may be swapped
+    // Every hook the outgoing app set dies with it HERE, not only if the incoming one opens: loading a native
+    // app may unmap the outgoing one's code, and a hook left behind would jump into it.
+    s_app_tab = nullptr; s_app_back = nullptr; s_app_poll = nullptr; s_app_ptt = nullptr; s_g0_app_ptt = nullptr;
     if (is_dynamic(idx)) nucleo_store_app_prepare(&s_apps[idx]);   // a native app: load its module now
     s_active = idx; s_stub = nullptr;
     open_app_def(&s_apps[idx]);
@@ -1870,7 +1874,7 @@ void nucleo_app_run(void)
     gpio_config(&g0cfg);
     int64_t g0_down_ms = 0; int64_t g0_cooldown_ms = 0;
     bool    g0_ptt = false;                    // this press already crossed into a talk-hold (PTT engaged)
-    void  (*g0_app_ptt)(bool) = nullptr;       // latched app PTT handler for THIS hold (recorder); else voice PTT
+    // (the app PTT handler latched for a GO hold is s_g0_app_ptt, file scope: an app switch can drop it)
     int64_t g0_dark_since = 0;                 // when the PTT low-power blank started (safety-timeout anchor)
 
     // Solo: we booted as a dedicated personality — open the target app straight away and never show the
@@ -2074,8 +2078,8 @@ void nucleo_app_run(void)
                     // blank the panel or free the canvas — the user watches the live waveform/timer, and the
                     // app provides its own audio start/end cues. Latch the handler so THIS hold's release is
                     // delivered even if the app exits mid-hold (s_app_ptt would clear).
-                    g0_app_ptt = s_app_ptt;
-                    g0_app_ptt(true);
+                    s_g0_app_ptt = s_app_ptt;
+                    s_g0_app_ptt(true);
                 } else if (nucleo_exclusive_active()) {
                     // Exclusive app foreground: NX_VOICE already disabled the engine, so a GO-hold
                     // can do nothing useful — but the old path freed the 32 KB canvas BEFORE the
@@ -2101,7 +2105,7 @@ void nucleo_app_run(void)
         } else {                                               // released
             if (g0_down_ms) ESP_LOGW("g0", "up after %d ms ptt=%d cooldown=%d", (int)(now - g0_down_ms), (int)g0_ptt, (int)(now < g0_cooldown_ms));
             if (g0_ptt) {
-                if (g0_app_ptt) { g0_app_ptt(false); g0_app_ptt = nullptr; }  // app PTT (recorder): stop + end cue
+                if (s_g0_app_ptt) { s_g0_app_ptt(false); s_g0_app_ptt = nullptr; }  // app PTT (recorder): stop + end cue
                 else            { nucleo_voice_ptt(false); }                  // voice PTT → recognize (screen dark until end beep)
                 g0_ptt = false;
             } else if (g0_down_ms != 0 && now - g0_down_ms >= 30 && now >= g0_cooldown_ms) {

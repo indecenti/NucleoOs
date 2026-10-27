@@ -60,13 +60,24 @@ static nap_src_t src_of(const uint8_t *file, uint32_t size, uint32_t layout, con
     return s;
 }
 
+static int g_cache_relocs;     // 1: relocation tables read once into RAM (the device path)
+static uint8_t *g_relocs;
+static int g_ticks;
+static void count_tick(void *ctx) { (void)ctx; g_ticks++; }
+
 static nap_rc_t full_load(const uint8_t *file, uint32_t size, uint32_t layout, const char *id, nap_image_t *img,
                           uint8_t **flash, uint8_t **ram, char *detail)
 {
     uint32_t keep = g_size;
     g_size = size;
     nap_src_t s = src_of(file, size, layout, id);
+    s.tick = count_tick;
     nap_rc_t rc = nap_inspect(&s, img, detail, 64);
+    if (rc == NAP_OK && g_cache_relocs) {
+        free(g_relocs);
+        g_relocs = malloc(nap_relocs_bytes(img) + 4);
+        rc = nap_cache_relocs(&s, img, g_relocs, nap_relocs_bytes(img));
+    }
     if (rc == NAP_OK) {
         nap_bases_t b = { IBUS, DBUS, RAMB - img->data_start };
         *flash = calloc(1, img->image_size + 4);
@@ -127,6 +138,7 @@ static void m_relaent(uint8_t *f, uint32_t *n, const nap_image_t *g) { (void)n; 
 static void m_relasz(uint8_t *f, uint32_t *n, const nap_image_t *g) { (void)n; (void)g; uint32_t p = dyn_find(f, 8); wr32(f + p + 4, 0x7ffffff8); }
 static void m_reloc_type(uint8_t *f, uint32_t *n, const nap_image_t *g) { (void)n; f[g->rela + 4] = 20; }
 static void m_reloc_off(uint8_t *f, uint32_t *n, const nap_image_t *g) { (void)n; wr32(f + g->rela, 0x00ffff00); }
+static void m_reloc_wrap(uint8_t *f, uint32_t *n, const nap_image_t *g) { (void)n; wr32(f + g->rela, 0xfffffffcu); }
 static void m_reloc_odd(uint8_t *f, uint32_t *n, const nap_image_t *g) { (void)n; wr32(f + g->rela, rd32(f + g->rela) + 1); }
 static void m_reloc_sym(uint8_t *f, uint32_t *n, const nap_image_t *g) { (void)n; uint32_t r = g->jmprel ? g->jmprel : g->rela; wr32(f + r + 4, (rd32(f + r + 4) & 0xff) | 0xffff00u); }
 static void m_rel_target(uint8_t *f, uint32_t *n, const nap_image_t *g)
@@ -157,6 +169,14 @@ int main(int argc, char **argv)
 
     if (!strcmp(argv[1], "relocate")) {
         if (argc < 8) return 2;
+        // The device path (tables cached in RAM) must give exactly the same bytes as reading them from the file.
+        g_cache_relocs = 1;
+        nap_image_t im2; uint8_t *fl2 = NULL, *ra2 = NULL; char d2[64] = "";
+        g_ticks = 0;
+        if (full_load(g_file, g_size, layout, id, &im2, &fl2, &ra2, d2) != NAP_OK ||
+            memcmp(fl, fl2, img.image_size) || memcmp(ra, ra2, img.data_memsz)) { printf("FAIL cached relocations differ\n"); return 1; }
+        if (!g_ticks) { printf("FAIL no tick during a load\n"); return 1; }
+        g_cache_relocs = 0;
         FILE *o = fopen(argv[6], "wb"); fwrite(fl, 1, img.image_size, o); fclose(o);
         o = fopen(argv[7], "wb"); fwrite(ra, 1, img.data_memsz, o); fclose(o);
         printf("text 0x%x rodata 0x%x-0x%x data 0x%x+%u/%u relocs %u+%u entry 0x%x init %u fini %u id %s abi %u\n",
@@ -175,6 +195,7 @@ int main(int argc, char **argv)
         { "DT_NEEDED (a library)", m_needed, NAP_E_DYNAMIC }, { "RELAENT 8", m_relaent, NAP_E_DYNAMIC },
         { "RELASZ past the file", m_relasz, NAP_E_FORMAT },  { "unknown reloc type", m_reloc_type, NAP_E_RELOC },
         { "reloc outside the module", m_reloc_off, NAP_E_RELOC }, { "unaligned reloc", m_reloc_odd, NAP_E_RELOC },
+        { "reloc offset that wraps to 0", m_reloc_wrap, NAP_E_RELOC },
         { "reloc symbol index out of range", m_reloc_sym, NAP_E_FORMAT }, { "RELATIVE target outside", m_rel_target, NAP_E_RELOC },
         { "info magic", m_info_magic, NAP_E_INFO },          { "info abi 9 > 1", m_info_abi, NAP_E_ABI },
         { "info id unterminated", m_info_noterm, NAP_E_INFO }, { "STRSZ past the file", m_strsz, NAP_E_FORMAT },

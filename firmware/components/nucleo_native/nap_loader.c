@@ -158,6 +158,28 @@ static bool find_sym(const nap_src_t *s, const nap_image_t *img, const char *wan
     return false;
 }
 
+// A block of relocation entries: from the RAM copy when there is one, else from the file.
+static bool rela_block(const nap_src_t *s, const nap_image_t *img, uint32_t tab, uint32_t first, uint32_t k, uint8_t *blk)
+{
+    const uint8_t *mem = tab == img->rela ? img->rela_mem : tab == img->jmprel ? img->jmprel_mem : NULL;
+    if (s->tick) s->tick(s->ctx);
+    if (mem) { memcpy(blk, mem + first * RELA_SIZE, k * RELA_SIZE); return true; }
+    return rd(s, tab + first * RELA_SIZE, blk, k * RELA_SIZE);
+}
+
+uint32_t nap_relocs_bytes(const nap_image_t *img) { return (img->nrela + img->njmprel) * RELA_SIZE; }
+
+nap_rc_t nap_cache_relocs(const nap_src_t *s, nap_image_t *img, uint8_t *mem, uint32_t cap)
+{
+    if (nap_relocs_bytes(img) > cap) return NAP_E_TOOBIG;
+    if ((img->nrela && !rd(s, img->rela, mem, img->nrela * RELA_SIZE)) ||
+        (img->njmprel && !rd(s, img->jmprel, mem + img->nrela * RELA_SIZE, img->njmprel * RELA_SIZE)))
+        return NAP_E_IO;
+    img->rela_mem = mem;
+    img->jmprel_mem = mem + img->nrela * RELA_SIZE;
+    return NAP_OK;
+}
+
 // Every relocation of one table: type, alignment, target segment, and (with resolve) its symbol.
 static nap_rc_t check_relocs(const nap_src_t *s, const nap_image_t *img, uint32_t tab, uint32_t n, bool plt,
                              char *detail, size_t detail_cap)
@@ -166,13 +188,15 @@ static nap_rc_t check_relocs(const nap_src_t *s, const nap_image_t *img, uint32_
     nap_bases_t probe = { 0, 0, 0 };
     for (uint32_t i = 0; i < n; i += RELA_BLOCK) {
         uint32_t k = n - i < RELA_BLOCK ? n - i : RELA_BLOCK;
-        if (!rd(s, tab + i * RELA_SIZE, blk, k * RELA_SIZE)) return NAP_E_FORMAT;
+        if (!rela_block(s, img, tab, i, k, blk)) return NAP_E_FORMAT;
         for (uint32_t j = 0; j < k; j++) {
             const uint8_t *r = blk + j * RELA_SIZE;
             uint32_t off = rd32(r), info = rd32(r + 4), type = info & 0xff, sym = info >> 8;
             if (off & 3) { DETAIL("reloc %lu unaligned", (unsigned long)(i + j)); return NAP_E_RELOC; }
-            bool in_flash = off + 4 <= img->ro_end && (off + 4 <= img->text_end || off >= img->ro_start);
-            bool in_data = off >= img->data_start && off + 4 <= img->data_start + img->data_memsz;
+            // in_range(): no `off + 4` that could wrap around to 0 and pass.
+            bool in_flash = in_range(off, 4, img->text_end) ||
+                            (off >= img->ro_start && in_range(off - img->ro_start, 4, img->ro_end - img->ro_start));
+            bool in_data = off >= img->data_start && in_range(off - img->data_start, 4, img->data_memsz);
             if (!in_flash && !in_data) { DETAIL("reloc %lu at 0x%lx", (unsigned long)(i + j), (unsigned long)off); return NAP_E_RELOC; }
             switch (type) {
                 case R_XTENSA_NONE: case R_XTENSA_RTLD: continue;
@@ -309,11 +333,11 @@ static nap_rc_t apply(const nap_src_t *s, const nap_image_t *img, const nap_base
     uint8_t blk[RELA_BLOCK * RELA_SIZE];
     for (uint32_t i = 0; i < n; i += RELA_BLOCK) {
         uint32_t k = n - i < RELA_BLOCK ? n - i : RELA_BLOCK;
-        if (!rd(s, tab + i * RELA_SIZE, blk, k * RELA_SIZE)) return NAP_E_IO;
+        if (!rela_block(s, img, tab, i, k, blk)) return NAP_E_IO;
         for (uint32_t j = 0; j < k; j++) {
             const uint8_t *r = blk + j * RELA_SIZE;
             uint32_t off = rd32(r), info = rd32(r + 4), add = rd32(r + 8), type = info & 0xff;
-            if (off < lo || off + 4 > hi) continue;
+            if (off < lo || !in_range(off - lo, 4, hi - lo)) continue;
             uint8_t *p = buf + (off - lo);
             uint32_t v;
             nap_rc_t rc;
