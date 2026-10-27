@@ -156,6 +156,7 @@ and every step is checked:
 | Brawler (`brawler`, 10 sources) | 72 KB (56 KB, 1.5 KB RAM, ABI 3) | ~41 KB | `CONFIG_NUCLEO_STORE_BRAWLER` |
 | Pinball (`pinball`) | 51 KB (40 KB, 1.3 KB RAM, ABI 3) | ~27 KB | `CONFIG_NUCLEO_STORE_PINBALL` |
 | Cardler (`cardler`) | 49 KB (40 KB, 0.5 KB RAM, ABI 3) | ~27 KB | `CONFIG_NUCLEO_STORE_CARDLER` |
+| Orde (`orde`, C++ + C) | 49 KB (37 KB, 0.5 KB RAM, ABI 3) | ~26 KB | `CONFIG_NUCLEO_STORE_ORDE` |
 
 With all three from the store (the default) the image is **3,461,120 B instead of 3,603,792 B: 142,672 B (139 KB)
 recovered**
