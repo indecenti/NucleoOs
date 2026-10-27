@@ -28,12 +28,26 @@ extern "C" {
 #define NUCLEO_TOUCH_ROW 0x10
 static inline bool nucleo_touch_is_row(int key, char ch) { return key == 9 /* NK_CHAR */ && ch >= NUCLEO_TOUCH_ROW && ch < NUCLEO_TOUCH_ROW + 16; }
 
+// Fields: an area whose meaning depends on WHERE it is tapped (a star map, a game board, a playfield). It
+// registers as one target with ch = NUCLEO_TOUCH_FIELD; on that key the app reads the tap's position with
+// nucleo_touch_last() and hit-tests its own content — any number of things on the field, one target.
+#define NUCLEO_TOUCH_FIELD 0x0E
+static inline bool nucleo_touch_is_field(int key, char ch) { return key == 9 /* NK_CHAR */ && ch == NUCLEO_TOUCH_FIELD; }
+// Where the tap that delivered the last target key landed (the screen's own coordinates). False = none yet.
+bool nucleo_touch_last(int *x, int *y);
+
 void nucleo_touch_clear(void);                                   // start this frame's set
 void nucleo_touch_add(int x, int y, int w, int h, int key, char ch);   // key = NK_*, ch for NK_CHAR
 void nucleo_touch_commit(void);                                  // publish it (the touch task reads this one)
 #define NUCLEO_TOUCH_SCROLL_MAX 2
 void nucleo_touch_add_scroll(int x, int y, int w, int h, int step,
                              int key_back, char ch_back, int key_fwd, char ch_fwd);
+
+// Drag pads: like a scroll area (a drag that starts inside is the app's, never a long-press Back), but the drag
+// moves in the FINGER's direction on both axes: every `step` px of travel delivers NK_RIGHT / NK_LEFT / NK_DOWN /
+// NK_UP (finger right = Right, finger up = Up), no fling. For aiming and steering on a playfield. Taps inside still
+// hit the targets. Shares the NUCLEO_TOUCH_SCROLL_MAX table with the scroll areas.
+void nucleo_touch_add_pad(int x, int y, int w, int h, int step);
 
 #ifdef __cplusplus
 }

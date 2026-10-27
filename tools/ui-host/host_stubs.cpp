@@ -157,8 +157,10 @@ extern "C" bool nucleo_kbd_take_shift_tap(void) { bool t = g_host_shift_latch; g
 extern "C" char nucleo_kbd_shifted(char c) { return (c >= 'a' && c <= 'z') ? (char)(c - 32) : c; }
 
 // Touch targets (nucleo_touch.h): the host has no touch panel.
+extern "C" bool nucleo_touch_last(int *, int *) { return false; }
 extern "C" void nucleo_touch_clear(void) {}
 extern "C" void nucleo_touch_add(int, int, int, int, int, char) {}
 extern "C" void nucleo_touch_commit(void) {}
 extern "C" void nucleo_touch_add_scroll(int, int, int, int, int, int, char, int, char) {}
+extern "C" void nucleo_touch_add_pad(int, int, int, int, int) {}
 extern "C" bool nucleo_kbd_inject(nucleo_key_t) { return true; }   // a tapped row opening itself: no ring on the host

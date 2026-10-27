@@ -30,6 +30,7 @@ extern "C" {
 }
 #include "game_text.h"
 #include "game_ui.h"
+#include "tanks_host_kit.h"   // the two-screen kit as no-ops (the gate runs the Cardputer view)
 extern "C" const char *nucleo_i18n_lang(void) { return "it"; }
 extern "C" uint32_t nucleo_i18n_gen(void) { return 1; }
 

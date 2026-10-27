@@ -8,6 +8,7 @@
 //   tanks_host.exe <scenario> [seed]      scenarios: aim | weapons | series | edges | frames | all
 // Prints "FAIL <what>" per violation and exits 1 if any.
 #include "../../firmware/components/nucleo_app/app_tanks.cpp"
+#include "tanks_host_kit.h"   // the two-screen kit as no-ops (the gate runs the Cardputer view)
 
 #include <stdarg.h>
 #include <string.h>

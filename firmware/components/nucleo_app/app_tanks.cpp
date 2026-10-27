@@ -228,6 +228,13 @@ static int     s_ld_go;                  // where ENTER leaves the picker: 0 = v
 static uint8_t s_slot[2][LOADOUT_N];
 static int     s_nslot[2];
 static int  ld_count(void) { int n = 0; for (int w = 0; w < NWEAP; w++) if (s_ldpick[w]) n++; return n; }
+static void sfx(int id);
+static void ld_random(void) {             // a fresh RANDOM 10-weapon loadout, different every time
+    for (int w = 0; w < NWEAP; w++) s_ldpick[w] = false;
+    int picked = 0, guard = 0;
+    while (picked < LOADOUT_N && guard++ < 400) { int w = (int)(esp_random() % NWEAP); if (!s_ldpick[w]) { s_ldpick[w] = true; picked++; } }
+    sfx(2); nucleo_app_request_draw();
+}
 
 // manual aim entry
 static int    s_entry_field;
@@ -1412,6 +1419,10 @@ static inline uint16_t bg_at(int wx, int wy) {     // reconstruct what the world
 }
 
 // ============================ rendering: world ===============================
+// The view the world painters draw into: the Cardputer's 240x135, or the panel's 320x240 (the world 1:1 at full
+// resolution: more of the field and of the sky; s_voy = world-to-view vertical offset). Painters shadow W/H with it.
+static int s_vw = 240, s_vh = H, s_voy = 0;
+static int cam_x(void) { return clampi((int)(s_cam + s_camfree) - (s_vw - 240) / 2, 0, WW - s_vw); }
 // 8bpp = RGB332 (R,G:8 levels, B:4): raw vertical ramps band hard. Ordered (Bayer) dithering blends them.
 static const uint8_t BAYER4[16] = { 0,8,2,10, 12,4,14,6, 3,11,1,9, 15,7,13,5 };
 static inline int R5(uint16_t c){ return ((c >> 11) & 31) * 255 / 31; }
@@ -1424,6 +1435,7 @@ static inline uint16_t dith332(int r, int g, int b, int t) {     // t = Bayer th
     return rgb(rl * 255 / 7, gl * 255 / 7, bl * 255 / 3);
 }
 static inline uint16_t sky_ramp(int y) {                          // smooth (undithered) 3-stop sky colour for overlays
+    const int H = s_vh;
     if (y < 0) y = 0;
     if (y >= H) y = H - 1;
     float f = (float)y / (H - 1);
@@ -1431,6 +1443,7 @@ static inline uint16_t sky_ramp(int y) {                          // smooth (und
     return mix(th_skyM, th_skyB, (int)((f - 0.5f) * 2 * 256));
 }
 static void world_sky(int oy) {
+    const int W = s_vw, H = s_vh;
     // ---- clean banded gradient (top -> mid -> horizon) ----
     // One solid colour PER ROW (no per-pixel Bayer dither): the sky reads as calm, homogeneous
     // bands instead of a speckle of colours — the single biggest "less chaotic" win. Also cheaper
@@ -1438,7 +1451,7 @@ static void world_sky(int oy) {
     for (int y = 0; y < H; y++) d.drawFastHLine(0, y, W, sky_ramp(y));
     // ---- stars (night + a few at dusk): twinkling single pixels, a few sparkle ----
     for (int i = 0; i < s_starN; i++) {
-        int sxp = (int)(h01(i, s_seed) * W), syp = (int)(h01(i + 99, s_seed) * (GTOP + 32)) + oy;
+        int sxp = (int)(h01(i, s_seed) * W), syp = (int)(h01(i + 99, s_seed) * (GTOP + 32 + s_voy)) + oy - s_voy;
         int ph = ((s_anim >> 2) + i * 5) & 7; if (ph >= 6) continue;
         uint16_t sc = mix(th_skyB, COL_WHITE, 150 + (int)(h01(i + 7, s_seed) * 105));
         d.drawPixel(sxp, syp, sc);
@@ -1470,7 +1483,7 @@ static void world_sky(int oy) {
     // ---- clouds (tinted; bigger and darker when raining) ----
     for (int i = 0; i < NCLOUD; i++) {
         float cx = s_cl_x[i] - s_cam * 0.25f - (s_anim * (0.2f + s_wind * 0.004f)); cx = fmodf(cx, W + 60); if (cx < -60) cx += W + 60;
-        int cy = (int)s_cl_y[i] + oy; uint16_t cc = th_cloud; float ss = s_cl_s[i] * (s_rain ? 1.5f : 1.0f);
+        int cy = (int)s_cl_y[i] * (s_voy ? 2 : 1) + oy - s_voy; uint16_t cc = th_cloud; float ss = s_cl_s[i] * (s_rain ? 1.5f : 1.0f);
         d.fillRoundRect((int)cx, cy, (int)(22 * ss), 6, 3, cc); d.fillCircle((int)cx + (int)(8 * ss), cy + 1, 4, cc);
     }
     // ---- multi-layer parallax ridges ----
@@ -1488,6 +1501,7 @@ static void world_sky(int oy) {
     }
 }
 static void draw_rain(int oy) {                                   // diagonal streaks over the whole scene
+    const int W = s_vw, H = s_vh;
     uint16_t rc = mix(th_skyB, COL_WHITE, 90);
     int lean = (s_wind < 0) ? 1 : -1;
     for (int i = 0; i < 40; i++) {
@@ -1497,11 +1511,11 @@ static void draw_rain(int oy) {                                   // diagonal st
     }
 }
 static void world_terrain(int ox, int oy) {
-    int camx = (int)(s_cam + s_camfree);
+    int camx = cam_x(); const int W = s_vw, VB = s_vh;
     for (int sx = 0; sx < W; sx++) {
         int wx = camx + sx; if (wx < 0 || wx >= WW) continue;
         int sh = s_h[wx];                                       // WORLD surface row (camera-independent colour key)
-        int gy = sh + oy; if (gy < 0) gy = 0; if (gy >= H) continue;   // gy = screen surface row
+        int gy = sh + oy; if (gy < 0) gy = 0; if (gy >= VB) continue;   // gy = screen surface row
         // Soil CROSS-SECTION (Pocket-Tanks-style): grass rim -> topsoil -> soil -> subsoil -> rock,
         // shaded by DEPTH below the surface instead of one flat colour. A faint elevation darkening keeps
         // lower/back ground from glaring. Drawn as a handful of vertical segments (cheap).
@@ -1518,14 +1532,14 @@ static void world_terrain(int ox, int oy) {
         uint16_t top1 = dug ? soil : topsoil;
         uint16_t rimc = dug ? fx3d::scl(DIRT, 205, 256) : th_rim;
         int y = gy, n;
-        n = (gy + 3 <= H) ? 3  : H - gy; if (n > 0) { d.drawFastVLine(sx + ox, y, n, top1);   y += n; }
-        n = (y  + 8 <= H) ? 8  : H - y;  if (n > 0) { d.drawFastVLine(sx + ox, y, n, soil);    y += n; }
-        n = (y + 14 <= H) ? 14 : H - y;  if (n > 0) { d.drawFastVLine(sx + ox, y, n, subsoil); y += n; }
-        if (y < H) d.drawFastVLine(sx + ox, y, H - y, rock);
-        if (((wx * 7) & 7) == 0) { int sy2 = gy + 4 + ((wx * 13) & 7); if (sy2 < H) d.drawPixel(sx + ox, sy2, fx3d::scl(soil, 222, 256)); }  // dirt grain
-        if (((wx * 131 + 5) & 15) == 0) { int py2 = gy + 13 + ((wx * 37) & 13); if (py2 < H - 1) { uint16_t pc = ((wx * 7) & 1) ? fx3d::scl(rock, 150, 256) : mix(subsoil, th_rim, 40); d.drawPixel(sx + ox, py2, pc); d.drawPixel(sx + ox, py2 + 1, fx3d::scl(pc, 170, 256)); } }  // embedded pebbles
+        n = (gy + 3 <= VB) ? 3  : VB - gy; if (n > 0) { d.drawFastVLine(sx + ox, y, n, top1);   y += n; }
+        n = (y  + 8 <= VB) ? 8  : VB - y;  if (n > 0) { d.drawFastVLine(sx + ox, y, n, soil);    y += n; }
+        n = (y + 14 <= VB) ? 14 : VB - y;  if (n > 0) { d.drawFastVLine(sx + ox, y, n, subsoil); y += n; }
+        if (y < VB) d.drawFastVLine(sx + ox, y, VB - y, rock);
+        if (((wx * 7) & 7) == 0) { int sy2 = gy + 4 + ((wx * 13) & 7); if (sy2 < VB) d.drawPixel(sx + ox, sy2, fx3d::scl(soil, 222, 256)); }  // dirt grain
+        if (((wx * 131 + 5) & 15) == 0) { int py2 = gy + 13 + ((wx * 37) & 13); if (py2 < VB - 1) { uint16_t pc = ((wx * 7) & 1) ? fx3d::scl(rock, 150, 256) : mix(subsoil, th_rim, 40); d.drawPixel(sx + ox, py2, pc); d.drawPixel(sx + ox, py2 + 1, fx3d::scl(pc, 170, 256)); } }  // embedded pebbles
         d.drawFastVLine(sx + ox, gy, 1, rimc);                                                // surface line (grass or bare dirt)
-        if (gy + 1 < H) d.drawPixel(sx + ox, gy + 1, outline_for(rimc));
+        if (gy + 1 < VB) d.drawPixel(sx + ox, gy + 1, outline_for(rimc));
         if (!dug && s_atmo == ATM_DAY && (wx % 11) == 0 && gy - 1 >= 0) d.drawPixel(sx + ox, gy - 1, th_accent);        // grass tufts (pristine only)
         else if (s_atmo == ATM_RAIN && ((wx + (s_anim >> 3)) & 15) == 0) d.drawPixel(sx + ox, gy, mix(th_rim, COL_WHITE, 150)); // wet glint
     }
@@ -1563,6 +1577,7 @@ static void rbar(int px, int py, float c, float s, float x0, float y0, float x1,
     d.fillTriangle(ax, ay, bx, by, cx, cy, col); d.fillTriangle(ax, ay, cx, cy, dx, dy, col);
 }
 static void draw_tank(int i, int camx, int ox, int oy) {
+    const int W = s_vw;
     int sx = (int)s_tk[i].x - camx + ox; if (sx < -20 || sx > W + 20) return;
     int sy = (int)s_tk[i].y + oy; uint16_t col = i ? COL_P1 : COL_P0;
     uint16_t obg = bg_at((int)s_tk[i].x, (int)s_tk[i].y), olc = outline_for(obg);   // background-adaptive outline
@@ -1609,6 +1624,7 @@ static void draw_tank(int i, int camx, int ox, int oy) {
     }
 }
 static void draw_traj(int camx, int ox, int oy) {
+    const int W = s_vw, H = s_vh;
     int who = s_active;
     float e = s_tk[who].elev * (float)M_PI / 180.0f, dir = (who == 0) ? 1.0f : -1.0f, v = v0_of(s_tk[who].power);
     float x = s_tk[who].x + cosf(e) * dir * BARREL, y = s_tk[who].y - 3 - sinf(e) * BARREL;
@@ -1658,6 +1674,7 @@ static void draw_nuke(int camx, int ox, int oy) {
     d.fillCircle(bx, capy - 1, cap / 2, mix(COL_WHITE, rgb(255, 210, 130), (int)(p * 200)));      // hot core
 }
 static void draw_projectiles(int camx, int ox, int oy) {
+    const int W = s_vw;
     for (int i = 0; i < NPROJ; i++) {
         if (!s_pr[i].on) continue;
         Proj *p = &s_pr[i];
@@ -1716,6 +1733,7 @@ static void draw_projectiles(int camx, int ox, int oy) {
 // vertical death-ray during the LASER phase. All primitives, no assets, RAM 0.
 static void ufo_draw(int camx, int ox, int oy) {
     if (!s_ufo.on) return;
+    const int W = s_vw;
     Ufo *u = &s_ufo;
     int px = (int)u->x - camx + ox, py = (int)u->y + oy;
     if (px < -30 || px > W + 30) return;
@@ -1786,7 +1804,7 @@ static void draw_glance(void) {
 static void draw_wind(void) {
     int th = s_wind < 0 ? -s_wind : s_wind;
     uint16_t wc = th < 14 ? COL_GREEN : th < 32 ? COL_GOLD : th < 52 ? rgb(255, 140, 50) : COL_RED;
-    int cx = W / 2, ay = 12;
+    const int cx = s_vw / 2, ay = 12;
     txt_c(cx + 1, 1, 1, COL_INK, GT("VENTO", "WIND")); txt_c(cx, 0, 1, mix(COL_INK, HUD_TEXT2, 230), GT("VENTO", "WIND"));
     if (th < 3) { txt_c(cx, 8, 1, COL_GREEN, GT("calmo", "calm")); return; }
     int dir = s_wind < 0 ? -1 : 1, len = 12 + th * 30 / 70; if (len > 42) len = 42;
@@ -1878,14 +1896,27 @@ static void draw_wcard(void) {     // weapon picker card: pops on weapon change 
 // Multiplayer turn clock (net only, our turn): a calm chip while there's time, then a BIG throbbing 5..1
 // countdown that swells and pulses as the clock runs out, ending on a "VIA" beat as the shot auto-launches.
 static void draw_turn_timer(void) {
-    if (s_mode == MODE_AI || !local_active() || s_phase != TP_AIM) return;
+    if (s_mode == MODE_AI || !local_active()) return;
+    const int W = s_vw, oy = s_voy / 2;
+    // YOUR-TURN call-out: a brief bold banner the instant the handoff lands on us, so a remote
+    // player never misses that it's their move (paired with the chirp fired in start_turn).
+    if (s_yt_t > now_ms()) {
+        uint16_t c = (s_seat == 0) ? COL_P0 : COL_P1;
+        const char *t = GT("TOCCA A TE", "YOUR TURN");
+        int tw = (int)strlen(t) * 12, bx = W / 2 - tw / 2 - 8, by = 40 + oy;
+        d.fillRoundRect(bx, by, tw + 16, 20, 5, mix(COL_INK, c, 70));
+        d.drawRoundRect(bx, by, tw + 16, 20, 5, ((s_anim >> 2) & 1) ? COL_WHITE : c);
+        txt_c(W / 2 + 1, by + 4, 2, COL_INK, t);
+        txt_c(W / 2,     by + 3, 2, c, t);
+    }
+    if (s_phase != TP_AIM) return;
     int rem = (int)(s_aim_deadline - now_ms());
     if (rem <= -400) return;                                     // shot already gone
     int secs = rem > 0 ? (rem + 999) / 1000 : 0;
     if (secs > 5) {                                             // calm chip, top-centre
         char b[8]; snprintf(b, sizeof b, "0:%02d", secs);
         uint16_t col = secs <= 10 ? COL_GOLD : COL_CYAN;
-        int bw = 34, bx = W / 2 - bw / 2, by = 24;
+        int bw = 34, bx = W / 2 - bw / 2, by = 24 + oy;
         d.fillRoundRect(bx, by, bw, 14, 4, mix(COL_INK, col, 40));
         d.drawRoundRect(bx, by, bw, 14, 4, mix(col, COL_INK, 80));
         txt_c(W / 2, by + 3, 1, col, b);
@@ -1899,7 +1930,7 @@ static void draw_turn_timer(void) {
     int base = secs >= 1 ? (4 + (5 - secs)) : 7;               // 5s->4 ... 1s->8 ; VIA->7
     int sz = clampi(base + beat, 3, 9);
     uint16_t col = (secs == 0) ? COL_GOLD : (beat ? COL_WHITE : COL_RED);
-    int cyv = 50, cx = W / 2, cyc = cyv + sz * 4;
+    int cyv = 50 + oy, cx = W / 2, cyc = cyv + sz * 4;
     d.drawCircle(cx, cyc, beat ? 24 : 13, mix(COL_INK, col, 120));   // throbbing ring
     txt_c(cx + 2, cyv + 2, sz, COL_INK, lbl);                       // drop shadow
     txt_c(cx, cyv, sz, col, lbl);
@@ -1913,19 +1944,21 @@ static void draw_flash(void) {
     // EVERY pixel on EVERY shot -> a full-screen speckle that read as flicker. They now rely on their local
     // sparks/rings/shatter for punch; the screen itself is left alone.
     if (s_flash <= 0 || s_flashmax <= 0 || s_flashpeak < 200) return;
+    const int W = s_vw, H = s_vh;
     int fa = s_flash * s_flashpeak / s_flashmax;               // 0..peak
     if (fa <= 0) return;
-    if (fa >= 232) { d.fillScreen(s_flashcol); return; }       // blinding peak (nuke white-out)
+    if (fa >= 232) { d.fillRect(0, 0, W, H, s_flashcol); return; }       // blinding peak (nuke white-out)
     for (int y = 0; y < H; y++)
         for (int x = 0; x < W; x++)
             if (BAYER4[((y & 3) << 2) | (x & 3)] * 16 + 8 < fa) d.drawPixel(x, y, s_flashcol);
 }
-static void draw_play(void) {
-    int ox = 0, oy = (int)s_camY;
+static void draw_scene(void) {                                  // the battlefield in the current view (no HUD)
+    const int W = s_vw, H = s_vh;
+    int ox = 0, oy = (int)s_camY + s_voy;
     if (s_shake > 0.4f) { ox += (int)frnd(-s_shake, s_shake); oy += (int)frnd(-s_shake, s_shake); }
-    int camx = (int)(s_cam + s_camfree);
+    int camx = cam_x();
     world_sky(oy);
-    if (oy < 0) d.fillRect(0, H + oy, W, -oy, th_ground2);   // cover the strip a downward/shake look exposes
+    if (oy < s_voy) d.fillRect(0, H + oy - s_voy, W, s_voy - oy, th_ground2);   // cover the strip a downward/shake look exposes
     world_terrain(ox, oy);
     draw_tank(0, camx, ox, oy); draw_tank(1, camx, ox, oy);
     if (s_phase == TP_AIM && g_aimhelp) draw_traj(camx, ox, oy);   // telegraph human AND CPU aim
@@ -1961,33 +1994,27 @@ static void draw_play(void) {
         if (s_dp[i].msg) snprintf(b, sizeof b, "%s +%d", s_dp[i].msg, s_dp[i].val);   // juicy bonus banner
         else             snprintf(b, sizeof b, "-%d", s_dp[i].val);                   // plain damage number
         int dpx = (int)s_dp[i].x - camx + ox, dpy = (int)s_dp[i].y + oy, da = s_dp[i].life * 256 / 900;
-        int half = (int)strlen(b) * 3 + 1;                                  // a banner straddling the edge slides fully on
+        int sz = s_voy ? 2 : 1, half = (int)strlen(b) * 3 * sz + 1;        // a banner straddling the edge slides fully on
         if (dpx > -half && dpx < W + half) dpx = clampi(dpx, half, W - half); // screen; one far off-camera stays off
-        txt_c(dpx + 1, dpy + 1, 1, COL_INK, b);                      // drop shadow, matches HUD HP text
-        txt_c(dpx, dpy, 1, mix(COL_INK, s_dp[i].col, da), b);
+        txt_c(dpx + 1, dpy + 1, sz, COL_INK, b);                     // drop shadow, matches HUD HP text
+        txt_c(dpx, dpy, sz, mix(COL_INK, s_dp[i].col, da), b);
     }
+}
+static void draw_wipe(void) {                                   // turn-change diagonal wipe in the new player's colour
+    if (s_phase != TP_TURN) return;
+    const int W = s_vw, H = s_vh;
+    float t = clampf((1050 - s_turn_t) / 350.0f, 0, 1);
+    int edge = (int)(t * (W + H)), ty = s_voy ? 100 : 46; uint16_t wcol = s_active ? COL_P1 : COL_P0;
+    for (int y = 0; y < H; y += 4) if ((edge - y) < W) d.fillRect(clampi(edge - y, 0, W), y, W, 4, mix(COL_INK, wcol, 40));
+    char tb[24]; snprintf(tb, sizeof tb, "%s P%d", GT("TURNO", "TURN"), s_active + 1);
+    if (t > 0.5f) { txt_c(W / 2 + 1, ty + 1, 2 + (s_voy > 0), COL_INK, tb); txt_c(W / 2, ty, 2 + (s_voy > 0), COL_WHITE, tb); }
+}
+static void draw_play(void) {
+    draw_scene();
     draw_hud();
     draw_wcard();
     draw_turn_timer();
-    // net YOUR-TURN call-out: a brief bold banner the instant the handoff lands on us, so a remote
-    // player never misses that it's their move (paired with the chirp fired in start_turn).
-    if (s_yt_t > now_ms() && s_mode != MODE_AI && local_active()) {
-        uint16_t c = (s_seat == 0) ? COL_P0 : COL_P1;
-        const char *t = GT("TOCCA A TE", "YOUR TURN");
-        int tw = (int)strlen(t) * 12, bx = W / 2 - tw / 2 - 8, by = 40;
-        d.fillRoundRect(bx, by, tw + 16, 20, 5, mix(COL_INK, c, 70));
-        d.drawRoundRect(bx, by, tw + 16, 20, 5, ((s_anim >> 2) & 1) ? COL_WHITE : c);
-        txt_c(W / 2 + 1, by + 4, 2, COL_INK, t);
-        txt_c(W / 2,     by + 3, 2, c, t);
-    }
-    // turn-change diagonal wipe in the new player's colour
-    if (s_phase == TP_TURN) {
-        float t = clampf((1050 - s_turn_t) / 350.0f, 0, 1);
-        int edge = (int)(t * (W + H)); uint16_t wcol = s_active ? COL_P1 : COL_P0;
-        for (int y = 0; y < H; y += 4) if ((edge - y) < W) d.fillRect(clampi(edge - y, 0, W), y, W, 4, mix(COL_INK, wcol, 40));
-        char tb[24]; snprintf(tb, sizeof tb, "%s P%d", GT("TURNO", "TURN"), s_active + 1);
-        if (t > 0.5f) { txt_c(W / 2 + 1, 47, 2, COL_INK, tb); txt_c(W / 2, 46, 2, COL_WHITE, tb); }
-    }
+    draw_wipe();
     // leave-match confirm modal (Esc in-match) — never bail out of a game by accident
     if (s_confirm) {
         for (int y = 0; y < H; y += 2) d.drawFastHLine(0, y, W, COL_INK);          // dim scrim (cheap, no alpha)
@@ -2129,19 +2156,28 @@ static void opt_value(int i, char *out, int cap, uint16_t *col) {
     }
 }
 #define NOPT 6
+// The key guide and the help text: one table each, shared by the Cardputer screens and the panel.
+struct TxtLine { const char *it, *en; uint16_t col; };
+static const TxtLine GUIDE[7] = {
+    { GTK("SU/GIU  alzata", "UP/DN   elevation"), HUD_TEXT }, { GTK("SX/DX   potenza", "LEFT/RIGHT power"), HUD_TEXT },
+    { GTK("E S A D  muovi camera", "E S A D  pan camera"), COL_CYAN }, { GTK("1-9 0 / Q W  scegli arma", "1-9 0 / Q W  weapon"), HUD_TEXT },
+    { GTK("INVIO/SPAZIO  spara", "ENTER/SPACE  fire"), COL_GOLD }, { GTK("TAB  impostazioni", "TAB  settings"), HUD_TEXT },
+    { GTK("Esc menu  -  occhio al VENTO", "Esc menu  -  mind the WIND"), COL_DIM } };
+static const TxtLine HELP[8] = {   // the first three are the panel's touch gestures
+    { GTK("Tocca il campo: mira", "Tap the field: aim"), COL_CYAN }, { GTK("Trascina: alzata / potenza", "Drag: angle / power"), COL_CYAN },
+    { GTK("Tocca il tuo carro: fuoco", "Tap your tank: fire"), COL_CYAN },
+    { GTK("SU/GIU alzata - SX/DX potenza", "UP/DN elevation - LEFT/RIGHT power"), HUD_TEXT },
+    { GTK("E S A D  muovi la camera", "E S A D  pan the camera"), COL_CYAN },
+    { GTK("1-9 0 / Q W arma - INVIO spara", "1-9 0 / Q W weapon - ENTER fire"), HUD_TEXT },
+    { GTK("TAB impostazioni - occhio al VENTO", "TAB settings - mind the WIND"), COL_GOLD },
+    { GTK("29 armi: scegli le tue 10", "29 weapons: pick your 10"), HUD_TEXT } };
 static void draw_options(int ch) {
     felt(ch);
     txt_c(W / 2 + 1, 6, 3, mix(COL_GOLD, COL_INK, 130), GT("IMPOSTAZIONI", "SETTINGS"));   // drop shadow
     txt_c(W / 2, 5, 3, COL_GOLD, GT("IMPOSTAZIONI", "SETTINGS"));
     d.drawFastHLine(14, 27, W - 28, rgb(54, 64, 104));
     if (s_optguide) {
-        txt(14, 32, 1, HUD_TEXT, GT("SU/GIU  alzata", "UP/DN   elevation"));
-        txt(14, 44, 1, HUD_TEXT, GT("SX/DX   potenza", "LEFT/RIGHT power"));
-        txt(14, 56, 1, COL_CYAN, GT("E S A D  muovi camera", "E S A D  pan camera"));
-        txt(14, 68, 1, HUD_TEXT, GT("1-9 0 / Q W  scegli arma", "1-9 0 / Q W  weapon"));
-        txt(14, 80, 1, COL_GOLD, GT("INVIO/SPAZIO  spara", "ENTER/SPACE  fire"));
-        txt(14, 92, 1, HUD_TEXT, GT("TAB  impostazioni", "TAB  settings"));
-        txt(14, 104, 1, COL_DIM, GT("Esc menu  -  occhio al VENTO", "Esc menu  -  mind the WIND"));
+        for (int i = 0; i < 7; i++) txt(14, 32 + i * 12, 1, GUIDE[i].col, game_text(GUIDE[i].it, GUIDE[i].en));
         txt_c(W / 2, ch - 12, 1, COL_DIM, GT("INVIO/TAB indietro", "ENTER/TAB back"));
         return;
     }
@@ -2242,11 +2278,7 @@ static void draw_help(int ch) {
     txt_c(W / 2 + 1, 7, 3, mix(COL_GOLD, COL_INK, 130), GT("Guida", "Help"));   // drop shadow
     txt_c(W / 2, 6, 3, COL_GOLD, GT("Guida", "Help"));
     d.drawFastHLine(14, 34, W - 28, rgb(54, 64, 104));
-    txt(12, 40, 1, HUD_TEXT, GT("SU/GIU alzata - SX/DX potenza", "UP/DN elevation - LEFT/RIGHT power"));
-    txt(12, 54, 1, COL_CYAN, GT("E S A D  muovi la camera", "E S A D  pan the camera"));
-    txt(12, 68, 1, HUD_TEXT, GT("1-9 0 / Q W arma - INVIO spara", "1-9 0 / Q W weapon - ENTER fire"));
-    txt(12, 82, 1, COL_GOLD, GT("TAB impostazioni - occhio al VENTO", "TAB settings - mind the WIND"));
-    txt(12, 96, 1, HUD_TEXT, GT("29 armi: scegli le tue 10", "29 weapons: pick your 10"));
+    for (int i = 3; i < 8; i++) txt(12, 40 + (i - 3) * 14, 1, HELP[i].col, game_text(HELP[i].it, HELP[i].en));
     txt_c(W / 2, ch - 12, 1, COL_DIM, GT("Esc indietro", "Esc back"));
 }
 static void draw_host(int ch) {
@@ -2386,7 +2418,10 @@ static void aim_input(int axis, int dir, char key) {
     s_inKey = key;
     aim_nudge(axis, dir, 1); s_inT0 = t; s_inNext = t + HOLD_DELAY_MS;
 }
+static void fire_local(void) { if (s_mode != MODE_AI) net_send_fire(); fire_weapon(s_active); }
+static bool lg_key(int k, char ch);
 static void on_key(int k, char ch) {
+    if (lg_key(k, ch)) return;                                // a touch on the panel's content
     switch (s_screen) {
         case ST_MENU:
             if (k == NK_UP)        { s_msel = (s_msel + NMENU - 1) % NMENU; sfx(1); nucleo_app_request_draw(); }
@@ -2464,7 +2499,7 @@ static void on_key(int k, char ch) {
                 if (slot < s_nslot[me] && s_tk[me].ammo[s_slot[me][slot]] != 0) { s_tk[me].weap = s_slot[me][slot]; s_wbar_t = now_ms() + 1700; sfx(1); }
                 else sfx(3);
             }
-            else if (k == NK_ENTER || ch == ' ') { if (s_mode != MODE_AI) net_send_fire(); fire_weapon(me); }
+            else if (k == NK_ENTER || ch == ' ') fire_local();
             return;
         }
         case ST_OVER:
@@ -2522,71 +2557,278 @@ static void draw_game(void) {
 }
 
 // ===== two screens ===========================================================
-// Panel (on_draw_large): the battlefield scaled to 320 px + a native HUD band. Tanks is turn-based, so every
-// aim action is a discrete key the on_key handler already takes — the panel buttons (angle, power, weapon,
-// fire) map straight to them and are fully playable by touch. Cardputer (on_draw while two screens): the live
-// turn / angle / power / wind / weapon / HP and the key map, never the battlefield. Extra state: none.
+// Panel (on_draw_large): every screen drawn NATIVELY for 320x240 through lg::frame. The battlefield is the same
+// world painters at 1:1 in a 320x240 view (more field, 68 px more sky: shells stay in sight). Touch is direct:
+// tap the field = swing the barrel toward that point, drag = fine-tune (up/down angle, left/right power), tap
+// your tank = fire, tap the weapon chip = next weapon, tap the power gauge = power; lists are tap = pick, tap
+// again = open; the header chevron is Back. Cardputer (on_draw while two screens): state + keys, never the
+// battlefield. Extra state: one list scroll.
 #define ACC COL_GOLD
+#define LW  320
+#define LH  240
+#define LOY 68                                   // world row 0 this far down the panel
+#define LBOT 204                                 // play: the bottom HUD band (weapon chip / angle / power gauge)
+static int s_lscroll;
 static const char *tanks_wname(int who) { const Weap &w = WEAPS[s_tk[who].weap]; return game_text(w.it, w.en); }
-struct HudBtn { const char *label; int key; char ch; bool acc; };
-static void hud_row(int x, int y, int w, int h, const HudBtn *b, int n) {
-    if (n <= 0) return;
-    const int gap = 4, bw = (w - (n - 1) * gap) / n;
-    for (int i = 0; i < n; i++)
-        lg::button(x + i * (bw + gap), y, bw, h, b[i].label, b[i].acc ? ACC : lg::card(), b[i].acc ? COL_INK : 0xFFFF, b[i].key, b[i].ch);
+static void view_large(bool on) { s_vw = on ? LW : 240; s_vh = on ? LH : H; s_voy = on ? LOY : 0; }
+static __attribute__((noinline)) void lt(int x, int y, int f, uint16_t col, const char *s, uint8_t datum = top_left) {
+    lg::font(f); d.setTextDatum(datum); d.setTextColor(col); d.drawString(s, x, y); d.setTextDatum(top_left);
 }
-static void large_hud(int y, int h) {
-    const int panw = d.width(), pad = 8;
-    d.fillRect(0, y, panw, h, BG);
-    d.drawFastHLine(0, y, panw, LINE);
-    int bh = h - 12; if (bh > 46) bh = 46; const int by = y + (h - bh) / 2;
-    if (s_screen == ST_PLAY && !s_confirm) {
-        int me = s_active; uint16_t tc = me ? COL_P1 : COL_P0;
-        char tag[6]; snprintf(tag, sizeof tag, "P%d", me + 1);
-        lg::font(2); d.setTextDatum(middle_left); d.setTextColor(tc, BG); d.drawString(tag, pad, y + h / 3);
-        char wl[12]; snprintf(wl, sizeof wl, GT("V %d", "W %d"), s_wind);
-        lg::font(4); d.setTextColor(MUTED, BG); d.drawString(wl, pad, y + h * 3 / 4);
-        d.setTextDatum(top_left);
-        // ^/v = angle, </> = power, W = weapon, FIRE (wide). All discrete keys on_key already handles this turn.
-        // (angle/power read big off the frame's own corner plates; the companion carries the full readout)
-        const int bx0 = 56, g = 4, u = (panw - bx0 - pad - 5 * g) / 8;   // 5 single buttons + a 3u FIRE
-        int x = bx0;
-        lg::button(x, by, u, bh, "^", lg::card(), 0xFFFF, NK_UP, 0);    x += u + g;   // angle up
-        lg::button(x, by, u, bh, "v", lg::card(), 0xFFFF, NK_DOWN, 0);  x += u + g;   // angle down
-        lg::button(x, by, u, bh, "<", lg::card(), 0xFFFF, NK_LEFT, 0);  x += u + g;   // power down
-        lg::button(x, by, u, bh, ">", lg::card(), 0xFFFF, NK_RIGHT, 0); x += u + g;   // power up
-        lg::button(x, by, u, bh, "W", lg::card(), COL_GREEN, NK_CHAR, 'w'); x += u + g;
-        lg::button(x, by, 3 * u, bh, GT("FUOCO", "FIRE"), ACC, COL_INK, NK_CHAR, ' ');
-    } else if (s_screen == ST_PLAY && s_confirm) {
-        const HudBtn b[2] = { { GT("ESCI", "QUIT"), NK_ENTER, 0, true }, { GT("ANNULLA", "CANCEL"), NK_BACK, 0, false } };
-        hud_row(pad, by, panw - 2 * pad, bh, b, 2);
-    } else if (s_screen == ST_OVER) {
-        bool canReplay = (s_mode == MODE_AI) || (s_seat == 0 && s_haspeer);
-        if (canReplay) { const HudBtn b[2] = { { GT("RIGIOCA", "REPLAY"), NK_ENTER, 0, true }, { "MENU", NK_BACK, 0, false } }; hud_row(pad, by, panw - 2 * pad, bh, b, 2); }
-        else           { const HudBtn b[1] = { { "MENU", NK_BACK, 0, true } }; hud_row(pad, by, panw - 2 * pad, bh, b, 1); }
-    } else if (s_screen == ST_LOADOUT) {
-        const HudBtn b[4] = { { GT("SU", "UP"), NK_UP, 0, false }, { GT("GIU", "DOWN"), NK_DOWN, 0, false },
-                              { GT("SEL", "PICK"), NK_CHAR, ' ', false }, { GT("OK", "READY"), NK_ENTER, 0, true } };
-        hud_row(pad, by, panw - 2 * pad, bh, b, 4);
-    } else if (s_screen == ST_OPT) {
-        const HudBtn b[3] = { { GT("SU", "UP"), NK_UP, 0, false }, { GT("GIU", "DOWN"), NK_DOWN, 0, false },
-                              { GT("CAMBIA", "CHANGE"), NK_ENTER, 0, true } };
-        hud_row(pad, by, panw - 2 * pad, bh, b, 3);
-    } else if (s_screen == ST_MENU) {
-        const HudBtn b[3] = { { GT("SU", "UP"), NK_UP, 0, false }, { GT("GIU", "DOWN"), NK_DOWN, 0, false },
-                              { GT("SCEGLI", "SELECT"), NK_ENTER, 0, true } };
-        hud_row(pad, by, panw - 2 * pad, bh, b, 3);
-    } else if (s_screen == ST_BROWSE) {
-        const HudBtn b[3] = { { GT("SU", "UP"), NK_UP, 0, false }, { GT("GIU", "DOWN"), NK_DOWN, 0, false },
-                              { GT("ENTRA", "JOIN"), NK_ENTER, 0, true } };
-        hud_row(pad, by, panw - 2 * pad, bh, b, 3);
-    } else if (s_screen == ST_HOST) {
-        const HudBtn b[1] = { { GT("AVVIA", "START"), NK_ENTER, 0, true } };
-        hud_row(pad, by, panw - 2 * pad, bh, b, 1);
-    } else {   // ST_SCORES / ST_HELP
-        const HudBtn b[1] = { { GT("INDIETRO", "BACK"), NK_BACK, 0, true } };
-        hud_row(pad, by, panw - 2 * pad, bh, b, 1);
+static __attribute__((noinline)) void lfit(int x, int y, int f, uint16_t col, const char *s, int maxw, uint8_t datum = top_left) {
+    lg::font(f); char b[48]; lg::fit(b, sizeof b, s, maxw); lt(x, y, f, col, b, datum);
+}
+static void lchev(int x, int y, uint16_t c) { for (int k = 0; k < 2; k++) { d.drawLine(x + 6 + k, y, x + k, y + 7, c); d.drawLine(x + k, y + 7, x + 6 + k, y + 14, c); } }
+static void lfelt(void) { gui::vgradient(0, 0, LW, LH, gui::rgb(36, 36, 85), gui::rgb(0, 0, 0)); }
+static int lhead(const char *title, const char *right, uint16_t acc) {   // felt + header band (chevron = Back)
+    lfelt();
+    d.fillRect(0, 0, LW, 30, mix(COL_INK, acc, 40)); d.drawFastHLine(0, 29, LW, acc);
+    lchev(9, 8, acc); nucleo_touch_add(0, 0, 120, 30, NK_BACK, 0);
+    lfit(28, 7, 1, acc, title, 180);
+    if (right) lt(LW - 10, 7, 0, COL_MUT, right, top_right);
+    return 30;
+}
+// A list of n rows from y0 (rows of rh, as many as fit in h): selection pill, tap targets, scroll by drag.
+typedef void (*lrow_fn)(int i, int y, int h, bool sel);
+static void lrows(int y0, int h, int rh, int n, int sel, lrow_fn fn) {
+    int rows = h / rh;
+    if (sel < s_lscroll) s_lscroll = sel;
+    if (sel >= s_lscroll + rows) s_lscroll = sel - rows + 1;
+    s_lscroll = clampi(s_lscroll, 0, n > rows ? n - rows : 0);
+    for (int k = 0; k < rows && s_lscroll + k < n; k++) {
+        int i = s_lscroll + k, y = y0 + k * rh;
+        if (i == sel) { d.fillRoundRect(6, y + 1, LW - 12, rh - 2, 6, rgb(30, 40, 72)); d.fillRoundRect(8, y + 4, 4, rh - 8, 2, ACC); }
+        fn(i, y, rh, i == sel);
+        nucleo_touch_add(0, y, LW, rh, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + k));
     }
+    if (n > rows) {
+        int tr = rows * rh - 8, kh = tr * rows / n;
+        d.fillRect(LW - 4, y0 + 4, 2, tr, rgb(54, 64, 104)); d.fillRect(LW - 4, y0 + 4 + (tr - kh) * s_lscroll / (n - rows), 2, kh, ACC);
+        nucleo_touch_add_scroll(0, y0, LW, rows * rh, rh, NK_UP, 0, NK_DOWN, 0);
+    }
+}
+static void llines(const TxtLine *t, int n, int y, int lh) { for (int i = 0; i < n; i++) lfit(14, y + i * lh, 0, t[i].col, game_text(t[i].it, t[i].en), LW - 24); }
+static void lr_menu(int i, int y, int h, bool f) { lt(22, y + h / 2, 1, f ? COL_WHITE : COL_MUT, menu_label(i), middle_left); }
+static void lp_menu(void) {
+    lfelt();
+    lt(LW / 2, 6, 3, COL_GOLD, "TANKS", top_center);
+    lt(LW / 2, 36, 0, COL_MUT, GT("Artiglieria a turni", "Turn-based artillery"), top_center);
+    mini_tank(40, 22, COL_P0); mini_tank(LW - 46, 22, COL_P1);
+    lrows(56, LH - 56, 26, NMENU, s_msel, lr_menu);
+}
+static void lr_weap(int i, int y, int h, bool f) {
+    const Weap *w = &WEAPS[i]; bool on = s_ldpick[i]; int cy = y + h / 2;
+    d.fillRoundRect(18, cy - 6, 12, 12, 2, on ? COL_GREEN : COL_INK); d.drawRoundRect(18, cy - 6, 12, 12, 2, on ? COL_GREEN : rgb(60, 70, 96));
+    if (on) { d.drawLine(20, cy, 23, cy + 3, COL_INK); d.drawLine(23, cy + 3, 28, cy - 3, COL_INK); }
+    d.fillRoundRect(36, y + 5, 5, h - 10, 1, w->col);
+    lfit(48, cy, 0, on || f ? COL_WHITE : COL_MUT, game_text(w->it, w->en), 150, middle_left);
+    char mt[18];
+    if (w->beh == WB_SHIELD) snprintf(mt, sizeof mt, "%s", GT("difesa", "defense")); else snprintf(mt, sizeof mt, "d%d x%d", w->dmg, w->ammo);
+    lt(LW - 12, cy, 0, mix(w->col, COL_WHITE, 60), f ? weap_kind(i) : mt, middle_right);
+}
+static void lp_loadout(void) {
+    int n = ld_count(); char cc[10]; snprintf(cc, sizeof cc, "%d/%d", n, LOADOUT_N);
+    lhead(GT("ARSENALE", "ARSENAL"), cc, n == LOADOUT_N ? COL_GREEN : ACC);
+    lrows(32, 160, 26, NWEAP, s_ldsel, lr_weap);
+    // the ten picks + START (full) / random (otherwise): the strip is one tap target
+    int sy = 200, filled = 0;
+    for (int w = 0; w < NWEAP && filled < LOADOUT_N; w++) if (s_ldpick[w]) { d.fillRoundRect(8 + filled * 20, sy + 6, 17, 22, 4, WEAPS[w].col); filled++; }
+    for (int e = filled; e < LOADOUT_N; e++) d.drawRoundRect(8 + e * 20, sy + 6, 17, 22, 4, e == filled && ((s_anim >> 2) & 1) ? COL_GOLD : rgb(60, 70, 104));
+    bool full = n == LOADOUT_N;
+    d.fillRoundRect(214, sy, 100, 34, 8, full ? COL_GREEN : rgb(60, 70, 120));
+    lt(264, sy + 17, 1, full ? COL_INK : COL_WHITE, full ? GT("AVVIA", "START") : GT("A CASO", "RANDOM"), middle_center);
+    lg::field(0, sy - 4, LW, LH - sy + 4);
+}
+static void lr_opt(int i, int y, int h, bool f) {
+    char vb[16]; uint16_t vc; opt_value(i, vb, sizeof vb, &vc);
+    lt(22, y + h / 2, 0, f ? COL_WHITE : COL_MUT, opt_label(i), middle_left);
+    lt(LW - 16, y + h / 2, 0, vc, vb, middle_right);
+}
+static void lp_options(void) {
+    int y = lhead(GT("Impostazioni", "Settings"), nullptr, ACC);
+    if (s_optguide) { llines(GUIDE, 7, y + 8, 28); lg::field(0, 30, LW, LH - 30); return; }
+    lrows(y + 6, LH - y - 6, 32, NOPT, s_optsel, lr_opt);
+}
+static void lp_scores(void) {
+    int y = lhead(GT("Record", "Scores"), nullptr, ACC) + 8;
+    for (int i = 0; i < NTOP; i++, y += 33) {
+        bool fl = g_top[i] != 0; uint16_t acc = i == 0 ? COL_GOLD : i < 3 ? mix(COL_GOLD, COL_INK, 70) : rgb(60, 70, 110);
+        if (fl) d.fillRoundRect(12, y, LW - 24, 29, 6, mix(acc, COL_INK, i == 0 ? 150 : 200)); else d.drawRoundRect(12, y, LW - 24, 29, 6, rgb(26, 32, 52));
+        char r[12]; snprintf(r, sizeof r, "%d", i + 1);
+        d.fillCircle(32, y + 14, 10, fl ? acc : rgb(22, 28, 46)); lt(32, y + 15, 0, fl ? COL_INK : COL_DIM, r, middle_center);
+        if (fl) snprintf(r, sizeof r, "%u", g_top[i]); else snprintf(r, sizeof r, "---");
+        lt(LW - 24, y + 15, 2, fl ? COL_WHITE : rgb(40, 48, 74), r, middle_right);
+    }
+}
+static void lp_help(void) { llines(HELP, 8, lhead(GT("Guida", "Help"), nullptr, ACC) + 6, 25); }
+static void ldots(char *dots) { strcpy(dots, "   "); for (int i = 0; i < (int)((s_anim >> 2) % 4) && i < 3; i++) dots[i] = '.'; }
+static void lcard(int y, uint16_t col, const char *top, const char *name, const char *sub) {   // a lobby card
+    d.fillRoundRect(16, y, LW - 32, 96, 10, mix(col, COL_INK, 200)); d.drawRoundRect(16, y, LW - 32, 96, 10, col);
+    if (top) lt(LW / 2, y + 8, 0, COL_MUT, top, top_center);
+    lfit(LW / 2, y + 28, 2, col, name, LW - 48, top_center);
+    lfit(LW / 2, y + 64, 0, COL_WHITE, sub, LW - 48, top_center);
+}
+static void lp_host(void) {
+    lhead(GT("Crea stanza", "Create room"), nullptr, COL_P0);
+    char cc[28], dots[4], w[40]; ldots(dots);
+    snprintf(cc, sizeof cc, GT("canale %d", "channel %d"), pnet_channel());
+    lcard(36, COL_GOLD, nullptr, pnet_name(), cc);
+    if (s_guest_in) {                                   // the challenger's card: tap it to start
+        lcard(140, COL_P1, GT("Sfida da", "Challenger"), s_peer_name, GT("Tocca: AVVIA", "Tap: START"));
+        lg::field(16, 140, LW - 32, 96);
+    } else {
+        snprintf(w, sizeof w, "%s%s", GT("Attendo sfidante", "Waiting for rival"), dots);
+        lt(LW / 2, 150, 1, COL_WHITE, w, top_center);
+        lfit(LW / 2, 180, 0, COL_DIM, GT("sull'altro: Entra in stanza, stesso canale", "on the other: Join room, same channel"), LW - 16, top_center);
+    }
+}
+static void lr_room(int i, int y, int h, bool f) {
+    lfit(22, y + h / 2, 1, f ? COL_WHITE : COL_MUT, s_rooms[i].name, 200, middle_left);
+    if (f) lt(LW - 16, y + h / 2, 0, COL_GREEN, GT("entra", "join"), middle_right);
+}
+static void lp_browse(void) {
+    char cc[24], dots[4], w[44]; ldots(dots);
+    snprintf(cc, sizeof cc, GT("canale %d", "channel %d"), pnet_channel());
+    int y = lhead(GT("Entra in stanza", "Join room"), cc, COL_P1);
+    if (s_welcomed || s_join_pending) {
+        snprintf(w, sizeof w, "%s%s", s_welcomed ? GT("l'host sta per avviare", "host is about to start") : GT("contatto", "reaching"), dots);
+        lcard(60, s_welcomed ? COL_GREEN : COL_GOLD, s_welcomed ? GT("SEI NELLA STANZA", "YOU'RE IN THE ROOM") : GT("Entro nella stanza", "Joining room"), s_peer_name, w);
+    } else if (s_nroom == 0) {
+        lt(LW / 2, 100, 1, COL_WHITE, GT("Nessuna stanza trovata", "No rooms found"), top_center);
+        lfit(LW / 2, 130, 0, COL_DIM, GT("Sull'altro Cardputer: Crea stanza", "On the other Cardputer: Create room"), LW - 16, top_center);
+    } else lrows(y + 6, LH - y - 6, 34, s_nroom, s_rsel, lr_room);
+}
+static void lp_over(void) {
+    int win = s_tk[0].dead ? 1 : 0; uint16_t wc = s_draw_flag ? COL_GOLD : (win ? COL_P1 : COL_P0);
+    bool mywin = (s_mode == MODE_GUEST) ? (win == 1) : (win == 0);
+    bool series_over = s_mode == MODE_AI && (s_wins[0] >= SERIES_TGT || s_wins[1] >= SERIES_TGT);
+    lhead(GT("Fine round", "Round over"), nullptr, wc);
+    for (int i = 0; i < NSPK; i++) {                    // the fireworks (spawned in the Cardputer's 240x135 space)
+        if (s_spk[i].life <= 0) continue;
+        int f = s_spk[i].life * 256 / (s_spk[i].max > 0 ? s_spk[i].max : 1);
+        d.fillCircle((int)s_spk[i].x * 4 / 3, (int)s_spk[i].y * 4 / 3 + 30, f > 130 ? 3 : 2, mix(COL_INK, s_spk[i].col, f));
+    }
+    const char *ban = s_draw_flag ? GT("PAREGGIO!", "DRAW!")
+                    : series_over ? (s_wins[0] >= SERIES_TGT ? GT("SERIE VINTA!", "SERIES WON!") : GT("SERIE PERSA!", "SERIES LOST!"))
+                    : s_mode == MODE_AI ? (win == 0 ? GT("ROUND VINTO!", "ROUND WON!") : GT("ROUND PERSO!", "ROUND LOST!"))
+                    : (mywin ? GT("VITTORIA!", "VICTORY!") : GT("SCONFITTA!", "DEFEAT!"));
+    d.fillRect(0, 40, LW, 48, mix(wc, COL_INK, 150)); d.fillRect(0, 40, LW, 3, wc); d.fillRect(0, 85, LW, 3, wc);
+    lt(LW / 2, 64, 3, ((s_anim >> 2) & 1) ? COL_WHITE : COL_GOLD, ban, middle_center);
+    char t[40]; snprintf(t, sizeof t, "%d  -  %d", s_wins[0], s_wins[1]); lt(LW / 2, 98, 3, COL_WHITE, t, top_center);
+    if (s_mode == MODE_AI) { snprintf(t, sizeof t, "%s %d", GT("PRIMO A", "FIRST TO"), SERIES_TGT); lt(LW / 2, 132, 0, mix(COL_GOLD, COL_INK, 60), t, top_center); }
+    if (!s_draw_flag) { snprintf(t, sizeof t, "%s %d", GT("Vita rimasta", "HP left"), s_tk[win].hp); lt(LW / 2, 154, 0, COL_GREEN, t, top_center); }
+    if (s_mode == MODE_AI && !s_draw_flag && win == 0 && s_bonus > 0) { snprintf(t, sizeof t, "%s +%u", GT("Bonus", "Bonus"), s_bonus); lt(LW / 2, 176, 0, COL_GOLD, t, top_center); }
+    bool canReplay = (s_mode == MODE_AI) || (s_seat == 0 && s_haspeer);
+    lt(LW / 2, 210, 1, ((s_anim >> 2) & 1) ? COL_WHITE : COL_DIM, canReplay ? GT("Tocca: rivincita", "Tap: rematch") : GT("Attendi l'host", "Wait for the host"), top_center);
+    lg::field(0, 30, LW, LH - 30);
+}
+// ---- the battlefield ----
+static void lhp(int i, int x) {                       // one tank's HP: tag + gauge + number (x = the block's left)
+    uint16_t c = s_tk[i].hp > 40 ? (i ? COL_P1 : COL_P0) : COL_RED; char b[8];
+    int bx = i ? x + 30 : x + 26;
+    snprintf(b, sizeof b, "P%d", i + 1); lt(i ? x + 84 : x, 6, 1, i ? COL_P1 : COL_P0, b);
+    d.fillRoundRect(bx, 9, 50, 10, 3, rgb(22, 26, 38)); if (s_tk[i].hp > 0) d.fillRoundRect(bx, 9, 50 * s_tk[i].hp / 100, 10, 3, c);
+    snprintf(b, sizeof b, "%d", s_tk[i].hp); lt(i ? x + 26 : x + 80, 14, 0, c, b, i ? middle_right : middle_left);
+}
+static void ltank_pos(int *x, int *y) { *x = (int)s_tk[s_active].x - cam_x(); *y = (int)s_tk[s_active].y + (int)s_camY + LOY - 4; }
+static void lp_play(void) {
+    view_large(true);
+    draw_scene();
+    const int me = s_active; const uint16_t ac = me ? COL_P1 : COL_P0; char b[40];
+    d.fillRect(0, 0, LW, 28, mix(sky_ramp(4), COL_INK, 190));
+    lchev(8, 7, COL_MUT);
+    lhp(0, 24); lhp(1, 196); draw_wind();
+    nucleo_touch_add(0, 0, 22, 28, NK_BACK, 0);
+    const bool mine = local_active() && s_phase == TP_AIM;
+    const char *st = nullptr;
+    if (s_phase == TP_AIM && !local_active()) st = s_mode == MODE_AI ? GT("la CPU mira...", "CPU aiming...") : GT("avversario mira...", "opponent aiming...");
+    else if (mine && s_mode == MODE_AI && now_ms() - s_hud_t > HUD_SHOW_MS) st = GT("Tocca il tuo carro: fuoco", "Tap your tank: fire");
+    if (st) { lt(LW / 2 + 1, 35, 1, COL_INK, st, top_center); lt(LW / 2, 34, 1, ac, st, top_center); }
+    draw_turn_timer();
+    if (mine) {
+        int tx, ty; ltank_pos(&tx, &ty);
+        d.drawCircle(tx, ty, 20 + ((s_anim >> 2) & 1), ac);              // the fire target around your tank
+        // bottom band: weapon chip (tap = next) | angle | power gauge (tap / drag = power)
+        const Tank &t = s_tk[me]; const Weap *w = &WEAPS[t.weap];
+        d.fillRect(0, LBOT, LW, LH - LBOT, mix(th_ground2, COL_INK, 200)); d.drawFastHLine(0, LBOT, LW, ac);
+        d.fillRoundRect(4, LBOT + 4, 128, 32, 6, mix(w->col, COL_INK, 170)); d.fillRoundRect(9, LBOT + 9, 5, 22, 2, w->col);
+        lfit(19, LBOT + 5, 0, COL_WHITE, tanks_wname(me), 110);
+        if (t.ammo[t.weap] >= 0) snprintf(b, sizeof b, "x%d  %s", t.ammo[t.weap], weap_kind(t.weap)); else snprintf(b, sizeof b, "%s", weap_kind(t.weap));
+        lfit(19, LBOT + 24, 4, HUD_TEXT2, b, 110);
+        snprintf(b, sizeof b, "%d", t.elev); lt(163, LBOT + 24, 2, COL_GOLD, b, middle_center); lt(163, LBOT + 4, 4, HUD_TEXT2, "ANG", top_center);
+        uint16_t pc = mix(COL_GREEN, COL_RED, t.power * 256 / 100);
+        d.fillRoundRect(196, LBOT + 24, 116, 9, 4, rgb(40, 44, 60)); d.fillRoundRect(196, LBOT + 24, 116 * t.power / 100, 9, 4, pc);
+        snprintf(b, sizeof b, "%s %d", GT("POT", "PWR"), t.power); lt(196, LBOT + 4, 0, pc, b);
+    }
+    draw_wipe();
+    if (s_confirm) {                                                    // leave-match dialog: its two choices are the content
+        for (int y = 0; y < LH; y += 2) d.drawFastHLine(0, y, LW, COL_INK);
+        d.fillRoundRect(40, 60, 240, 120, 10, rgb(28, 32, 50)); d.drawRoundRect(40, 60, 240, 120, 10, COL_GOLD);
+        lt(LW / 2, 70, 2, COL_GOLD, GT("Uscire?", "Leave?"), top_center);
+        lt(LW / 2, 100, 0, HUD_TEXT2, GT("Abbandoni la partita", "This abandons the match"), top_center);
+        d.fillRoundRect(52, 128, 104, 40, 8, COL_RED); d.fillRoundRect(164, 128, 104, 40, 8, rgb(60, 70, 110));
+        lt(104, 148, 1, COL_WHITE, GT("Esci", "Quit"), middle_center); lt(216, 148, 1, COL_WHITE, GT("Resta", "Stay"), middle_center);
+    }
+    lg::field(0, 28, LW, LH - 28);
+    if (mine && !s_confirm) nucleo_touch_add_pad(0, 28, LW, LH - 28, 6);
+    view_large(false);
+}
+static void lplay_tap(int x, int y) {
+    if (s_confirm) {
+        if (y >= 128 && y < 168 && x >= 52 && x < 156) on_key(NK_ENTER, 0);
+        else if (y >= 128 && y < 168 && x >= 164 && x < 268) { s_confirm = false; nucleo_app_request_draw(); }
+        return;
+    }
+    if (!local_active() || s_phase != TP_AIM) return;
+    Tank &t = s_tk[s_active]; s_hud_t = now_ms();
+    if (y >= LBOT) {
+        if (x < 136) cycle_weapon(+1);
+        else if (x >= 190) { t.power = clampi(5 + (x - 196) * 95 / 116, 5, 100); sfx(1); }
+    } else {
+        view_large(true); int tx, ty; ltank_pos(&tx, &ty); view_large(false);
+        int dx = x - tx, dy = ty - y;
+        if (dx * dx + dy * dy < 24 * 24) { fire_local(); return; }      // your tank: fire
+        float a = atan2f((float)dy, (float)(s_active ? -dx : dx)) * 180.0f / (float)M_PI;   // swing the barrel there
+        t.elev = a < -90 ? ELEV_MAX : clampi((int)lroundf(a), ELEV_MIN, ELEV_MAX); sfx(1);
+    }
+    if (g_manual) seed_entry();
+    nucleo_app_request_draw();
+}
+static void lg_paint(void *) {
+    switch (s_screen) {
+        case ST_MENU:    lp_menu(); break;
+        case ST_PLAY:    lp_play(); break;
+        case ST_OVER:    lp_over(); break;
+        case ST_OPT:     lp_options(); break;
+        case ST_HOST:    lp_host(); break;
+        case ST_BROWSE:  lp_browse(); break;
+        case ST_SCORES:  lp_scores(); break;
+        case ST_HELP:    lp_help(); break;
+        case ST_LOADOUT: lp_loadout(); break;
+        default: break;
+    }
+}
+// A touch on the panel (a list row or a field tap): true when handled. Rows: tap = pick, tap again = open.
+static bool lg_key(int k, char ch) {
+    int tx = 0, ty = 0;
+    const bool fld = lg::tap(k, ch, &tx, &ty);
+    const int ri = nucleo_touch_is_row(k, ch) ? s_lscroll + ch - NUCLEO_TOUCH_ROW : -1;
+    if (!fld && ri < 0) return false;
+    int *sel = nullptr, n = 0;
+    switch (s_screen) {
+        case ST_MENU:    sel = &s_msel; n = NMENU; break;
+        case ST_OPT:     if (fld) { s_optguide = 0; sfx(3); nucleo_app_request_draw(); } sel = &s_optsel; n = NOPT; break;
+        case ST_BROWSE:  sel = &s_rsel; n = s_nroom; break;
+        case ST_LOADOUT: if (fld) { if (ld_count() == LOADOUT_N) on_key(NK_ENTER, 0); else ld_random(); } sel = &s_ldsel; n = NWEAP; break;
+        case ST_PLAY:    if (fld) lplay_tap(tx, ty); break;
+        case ST_OVER:    if (fld) on_key(NK_ENTER, 0); break;
+        case ST_HOST:    if (fld && s_guest_in) host_start_match(); break;
+        default: break;
+    }
+    if (sel && ri >= 0 && ri < n) {
+        if (*sel != ri) { *sel = ri; sfx(1); nucleo_app_request_draw(); }
+        else on_key(s_screen == ST_LOADOUT ? NK_CHAR : NK_ENTER, s_screen == ST_LOADOUT ? ' ' : 0);
+    }
+    return true;
 }
 static void draw_companion(void) {
     int y = lg::comp_head("Tanks", ACC);
@@ -2637,7 +2879,7 @@ static void on_draw(void) {
 }
 static void draw_large(void) {
     nucleo_touch_clear();
-    lg::game(draw_game, large_hud, "Tanks", ACC);
+    lg::frame(lg_paint, nullptr);
     nucleo_touch_commit();
 }
 static bool proj_focus(float *fx, float *fy) {     // centroid of live projectiles + small velocity lead
@@ -2677,12 +2919,7 @@ static bool poll(void) {
         // are swapped vs the key legends (physical ALT->GUI, verified: app_pinball uses it for tilt).
         static bool alt_prev = false;
         bool alt = (nucleo_kbd_mods() & NK_MOD_GUI) != 0;
-        if (alt && !alt_prev) {
-            for (int w = 0; w < NWEAP; w++) s_ldpick[w] = false;
-            int picked = 0, guard = 0;
-            while (picked < LOADOUT_N && guard++ < 400) { int w = (int)(esp_random() % NWEAP); if (!s_ldpick[w]) { s_ldpick[w] = true; picked++; } }
-            sfx(2); nucleo_app_request_draw();
-        }
+        if (alt && !alt_prev) ld_random();
         alt_prev = alt;
     }
     if (s_screen == ST_MENU) { s_gm.sel = (int8_t)s_msel; return gui::menu_tick(s_gm, dt); }   // idle menu: no redraw at all

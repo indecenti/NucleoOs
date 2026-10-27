@@ -1,2 +1,11 @@
 menu
-play ENTER tick:10
+menu_pick row:3
+options D D D ENTER
+play ENTER tick:40
+play_tap ENTER tick:40 tap:60,60 tick:4
+paused ENTER tick:12 BACK
+resumed ENTER tick:12 BACK row:0 tick:3
+over ENTER tick:1500
+browse D D ENTER
+scores D D D D ENTER
+help D D D D D ENTER

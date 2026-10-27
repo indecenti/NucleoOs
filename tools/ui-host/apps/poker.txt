@@ -1,6 +1,17 @@
 menu
 help D ENTER
+help_controls D ENTER R
+paytable D ENTER R R
 settings D D ENTER
+confirm D D ENTER U ENTER
 ready ENTER
 hold ENTER SPACE tick:6 c:3 c:5
 result ENTER SPACE tick:6 SPACE tick:8
+paused ENTER BACK
+menu_tap row:1
+bet_tap row:0 row:0 tap:202,205
+hold_tap row:0 row:0 tap:270,200 tick:6 tap:40,90 tap:100,90
+draw_tap row:0 row:0 tap:270,200 tick:6 tap:40,90 tap:270,200 tick:8
+settings_tap row:2 row:2 row:3
+confirm_tap row:2 row:2 row:5 row:5
+help_tap row:1 row:1 tap:250,120

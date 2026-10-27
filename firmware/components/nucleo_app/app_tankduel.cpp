@@ -380,23 +380,28 @@ static void tank_init(Tank &t, int type, bool p1){
 }
 
 // ========================== camera ===========================================
+// The arena view the field painters draw into: the Cardputer's 240x135 under its 14-px HUD, or the panel's
+// native 320x240 under a 28-px HUD (view_big). Same 15-px tiles, the panel just sees more of the arena.
+static int s_vw=240, s_vh=135, s_hud=HUD_H;
 static void cam_update(void){
     Tank &t=s_tanks[s_local];
-    s_cam_x=(int)t.x-W/2;
-    s_cam_y=(int)t.y-PLAY_H/2;
+    const int ph=s_vh-s_hud;
+    s_cam_x=(int)t.x-s_vw/2;
+    s_cam_y=(int)t.y-ph/2;
     if(s_cam_x<0) s_cam_x=0;
     if(s_cam_y<0) s_cam_y=0;
-    if(s_cam_x>WORLD_W-W) s_cam_x=WORLD_W-W;
-    if(s_cam_y>WORLD_H-PLAY_H) s_cam_y=WORLD_H-PLAY_H;
+    if(s_cam_x>WORLD_W-s_vw) s_cam_x=WORLD_W-s_vw;
+    if(s_cam_y>WORLD_H-ph) s_cam_y=WORLD_H-ph;
 }
+static void view_big(bool big){ s_vw=big?320:240; s_vh=big?240:135; s_hud=big?28:HUD_H; }
 
 // screen-shake offset (recomputed per frame from s_shake)
 static int s_shx, s_shy;
 // world-to-screen helpers (shake folded in; HUD draws unshaken)
 static int wx2s(float wx){ return (int)wx - s_cam_x + s_shx; }
-static int wy2s(float wy){ return (int)wy - s_cam_y + HUD_H + s_shy; }
+static int wy2s(float wy){ return (int)wy - s_cam_y + s_hud + s_shy; }
 static int tx2s(int tx){ return tx*TILE_PX - s_cam_x + s_shx; }
-static int ty2s(int ty){ return ty*TILE_PX - s_cam_y + HUD_H + s_shy; }
+static int ty2s(int ty){ return ty*TILE_PX - s_cam_y + s_hud + s_shy; }
 
 // ========================== particles =========================================
 static void spark_burst(float x,float y,int n,uint16_t col){
@@ -1516,8 +1521,8 @@ static uint16_t tile_hi(uint8_t t){
 
 static void draw_map(void){
     int tx0=s_cam_x/TILE_PX, ty0=s_cam_y/TILE_PX;
-    int tx1=(s_cam_x+W)/TILE_PX+1;
-    int ty1=(s_cam_y+PLAY_H)/TILE_PX+1;
+    int tx1=(s_cam_x+s_vw)/TILE_PX+1;
+    int ty1=(s_cam_y+(s_vh-s_hud))/TILE_PX+1;
     if(tx0>0) tx0--;
     if(ty0>0) ty0--;                            // overscan for shake
     if(tx1>MAP_W) tx1=MAP_W;
@@ -1615,7 +1620,7 @@ static void draw_map(void){
 static void draw_tank_sprite(const Tank &t, uint16_t col, bool bot=false, int id=-1){
     int sx=wx2s(t.x), sy=wy2s(t.y);
     int dir=t.dir;
-    if(sx<-22||sx>W+12||sy<HUD_H-22||sy>H+12) return;
+    if(sx<-22||sx>s_vw+12||sy<s_hud-22||sy>s_vh+12) return;
     if(t.in_shop){
         // cloaked: ghosted chassis + green $ beacon (hidden from foe, shown to self)
         uint16_t g=((s_anim>>2)&1)?COL_GREEN:rgb(40,120,60);
@@ -1740,7 +1745,7 @@ static void draw_picks(void){
     for(int i=0;i<MAX_PICKS;i++){
         if(!s_picks[i].active) continue;
         int sx=tx2s(s_picks[i].tx)+TILE_PX/2, sy=ty2s(s_picks[i].ty)+TILE_PX/2;
-        if(sx<-10||sx>W+10||sy<HUD_H-10||sy>H+10) continue;
+        if(sx<-10||sx>s_vw+10||sy<s_hud-10||sy>s_vh+10) continue;
         sy-=((s_anim>>2)&3);                       // gentle bob
         bool weap=(s_picks[i].kind==PK_WEAPON);
         uint16_t c=weap?COL_GOLD:pu_color(s_picks[i].type);
@@ -1759,7 +1764,7 @@ static void draw_bullets(void){
         Bullet &b=s_bullets[i];
         if(!b.alive) continue;
         int sx=wx2s(b.x), sy=wy2s(b.y);
-        if(sx<-6||sx>W+6||sy<HUD_H-6||sy>H+6) continue;
+        if(sx<-6||sx>s_vw+6||sy<s_hud-6||sy>s_vh+6) continue;
         uint16_t col=tank_col(b.owner);
         int tx=sx-(int)(b.vx*6), ty=sy-(int)(b.vy*6);   // trail anchor
         if(b.wp==WP_RAIL){
@@ -1818,7 +1823,7 @@ static void draw_sparks(void){
     for(int i=0;i<MAX_RINGS;i++){
         if(s_rings[i].life<=0) continue;
         int sx=wx2s(s_rings[i].x), sy=wy2s(s_rings[i].y);
-        if(sx<-60||sx>W+60||sy<HUD_H-60||sy>H+60) continue;
+        if(sx<-60||sx>s_vw+60||sy<s_hud-60||sy>s_vh+60) continue;
         int age=s_rings[i].maxlife-s_rings[i].life;
         int rad=3+age/10;  // faster expansion
         int f=s_rings[i].life*256/s_rings[i].maxlife;
@@ -1831,7 +1836,7 @@ static void draw_sparks(void){
     for(int i=0;i<MAX_SPARKS;i++){
         if(s_sparks[i].life<=0) continue;
         int sx=wx2s(s_sparks[i].x), sy=wy2s(s_sparks[i].y);
-        if(sx<0||sx>=W||sy<HUD_H||sy>=H) continue;
+        if(sx<0||sx>=s_vw||sy<s_hud||sy>=s_vh) continue;
         int f=s_sparks[i].life*256/s_sparks[i].maxlife;
         uint16_t c=mix(COL_BLACK,s_sparks[i].col,f);
         if(f>160) d.fillRect(sx,sy,2,2,c); else d.drawPixel(sx,sy,c);
@@ -1841,7 +1846,7 @@ static void draw_sparks(void){
 static void draw_flash(void){
     if(s_flash<=0) return;
     int a=s_flash>120?120:s_flash;
-    for(int y=HUD_H;y<H;y+=2) d.drawFastHLine((y&2)?0:1,y,W,mix(rgb(10,12,20),COL_WHITE,a));
+    for(int y=s_hud;y<s_vh;y+=2) d.drawFastHLine((y&2)?0:1,y,s_vw,mix(rgb(10,12,20),COL_WHITE,a));
 }
 
 /// ========================== draw: HUD =========================================
@@ -1858,6 +1863,7 @@ static void hud_pips(int x,int who,uint16_t col,bool right){
         else d.drawRect(bx,3,3,8,rgb(36,36,85));
     }
 }
+static void minimap(int mmx,int mmy,int mmw,int mmh);
 static void draw_hud(void){
     d.fillRect(0,0,W,HUD_H,HUD_BG);
     d.drawFastHLine(0,HUD_H-1,W,rgb(73,109,170));
@@ -1883,7 +1889,11 @@ static void draw_hud(void){
     int mmw=24, mmh=10, mmx=W-mmw-2, mmy=2, rx=mmx-4;
     if(s_nplayers>=2) hud_pips(rx,1-s_local,s_local==0?COL_P2:COL_P1,true);
     else if(s_nbots>0){ snprintf(b,sizeof b,GT("O%d x%d","W%d x%d"),s_bot_level+1,s_bot_kills); txr(rx,4,1,COL_RED,b); }
-    // minimap (fog: a rival in a shop is hidden)
+    minimap(mmx,mmy,mmw,mmh);
+    if(lt.stun_ms>0&&((s_anim>>2)&1)) gui::text("EMP",W/2,HUD_H+4,1,gui::F_BODY,rgb(182,109,255),COL_BLACK);
+}
+// minimap (fog: a rival in a shop is hidden)
+static void minimap(int mmx,int mmy,int mmw,int mmh){
     d.fillRect(mmx,mmy,mmw,mmh,COL_BLACK);
     d.drawRect(mmx-1,mmy-1,mmw+2,mmh+2,rgb(73,109,170));
     for(int si=0;si<MAX_SHOPS;si++){
@@ -1902,7 +1912,6 @@ static void draw_hud(void){
         if(dy>mmy+mmh-2) dy=mmy+mmh-2;
         d.fillRect(dx,dy,2,2,p==0?COL_P1:COL_P2);
     }
-    if(lt.stun_ms>0&&((s_anim>>2)&1)) gui::text("EMP",W/2,HUD_H+4,1,gui::F_BODY,rgb(182,109,255),COL_BLACK);
 }
 
 // ========================== draw: shop overlay ================================
@@ -2010,14 +2019,21 @@ static void draw_menu(void){
     a.type=TT_VIPER; a.dir=3; a.fx=-1; a.x=s_cam_x+W-19; draw_tank_sprite(a,COL_P2);
     gui::menu(s_menu,items,NMENU,y,nucleo_app_content_height(),ACCENT);
 }
+static const char *how_line(int i){     // 0..5 on both views, 6..7 (touch) on the panel only
+    switch(i){
+        case 0: return GT("W/E/R su  A sinistra  S giu  D destra","W/E/R up  A left  S down  D right");
+        case 1: return GT("K spara   L usa il power-up","K fire   L use the power-up");
+        case 2: return GT("Esc pausa (di nuovo: esci)","Esc pause (again: leave)");
+        case 3: return GT("Negozio: entra nel riquadro verde.","Shop: drive onto the green pad.");
+        case 4: return GT("20 s, invisibile sulla mappa rivale","20 s, hidden from the rival's map");
+        case 5: return GT("Crediti: colpo +2, distrutto +15","Credits: hit +2, kill +15");
+        case 6: return GT("Pannello: trascina il campo = guida","Panel: drag the field = drive");
+        default: return GT("tocca = spara li'  chip = power-up","tap = fire there  chip = power-up");
+    }
+}
 static void draw_how(void){
     int y=gui::title(GT("Come si gioca","How to play"),nullptr,ACCENT);
-    txt(6,y,1,COL_WHITE,GT("W/E/R su  A sinistra  S giu  D destra","W/E/R up  A left  S down  D right"));
-    txt(6,y+11,1,COL_WHITE,GT("K spara   L usa il power-up","K fire   L use the power-up"));
-    txt(6,y+22,1,COL_WHITE,GT("Esc pausa (di nuovo: esci)","Esc pause (again: leave)"));
-    txt(6,y+37,1,COL_GOLD,GT("Negozio: entra nel riquadro verde.","Shop: drive onto the green pad."));
-    txt(6,y+48,1,COL_WHITE,GT("20 s, invisibile sulla mappa rivale","20 s, hidden from the rival's map"));
-    txt(6,y+59,1,COL_WHITE,GT("Crediti: colpo +2, distrutto +15","Credits: hit +2, kill +15"));
+    for(int i=0;i<6;i++) txt(6,y+i*11+(i>2?4:0),1,i==3?COL_GOLD:COL_WHITE,how_line(i));
 }
 static const char* tank_desc(int t){
     switch(t){ case TT_VIPER: return GT("Velocissimo ma fragile","Very fast but fragile");
@@ -2031,8 +2047,9 @@ static void stat_bar(int x,int y,const char *lab,int v,int vmax,uint16_t col){
     d.fillRoundRect(x+30,y,90,7,3,rgb(0,0,85));
     d.fillRoundRect(x+30,y,90*v/vmax,7,3,col);
 }
+static const uint8_t TT_HP[TT_COUNT]={8,4,5,10}, TT_SPD[TT_COUNT]={42,80,60,25}, TT_ARM[TT_COUNT]={1,0,0,2};
 static void draw_tank_select(void){
-    static const uint8_t HP[TT_COUNT]={8,4,5,10}, SPD[TT_COUNT]={42,80,60,25}, ARM[TT_COUNT]={1,0,0,2};
+    const uint8_t *HP=TT_HP, *SPD=TT_SPD, *ARM=TT_ARM;
     int y=gui::title(GT("Scegli il tank","Pick your tank"),nullptr,ACCENT);
     gui::panel(6,y,70,64,rgb(0,0,85),rgb(73,109,170));
     Tank a={}; a.type=s_tsel; a.dir=0; a.fy=-1; a.alive=true; a.x=s_cam_x+41; a.y=s_cam_y-HUD_H+y+36;
@@ -2044,8 +2061,8 @@ static void draw_tank_select(void){
     for(int i=0;i<TT_COUNT;i++) d.fillCircle(96+i*10,y+58,2,i==s_tsel?ACCENT:rgb(36,36,85));
     gui::text(tank_desc(s_tsel),W/2,y+67,1,gui::F_SMALL,COL_GREEN,COL_BLACK);
 }
-static void wait_dots(int cy){
-    for(int i=0;i<3;i++) d.fillCircle(W/2-12+i*12,cy,2,(s_now/300)%3==i?ACCENT:rgb(36,36,85));
+static void wait_dots(int cy,int cx=W/2,int r=2){
+    for(int i=0;i<3;i++) d.fillCircle(cx-6*r+i*6*r,cy,r,(s_now/300)%3==i?ACCENT:rgb(36,36,85));
 }
 static void draw_host_screen(void){
     char sub[40]; snprintf(sub,sizeof sub,GT("%.12s - canale %d","%.12s - channel %d"),pnet_name(),pnet_channel());
@@ -2079,13 +2096,18 @@ static void draw_pause(void){
     gui::dialog(GT("PAUSA","PAUSED"),s_mode==GM_CPU?nullptr:GT("La partita continua!","The match goes on!"),nullptr,
                 GT("INVIO riprendi   Esc esci","ENTER resume   Esc leave"),ACCENT);
 }
+static const char *over_head(char *sub,int n,uint16_t *tc){     // the result line + "mode - time" (both views)
+    bool coop=(s_match_type==MT_COOP), won=local_won();
+    const char* t;
+    if(coop){ t=won?GT("Sopravvissuto!","You survived!"):GT("Sconfitta","Defeat"); *tc=won?COL_GREEN:COL_RED; }
+    else { t=s_winner<0?GT("Pareggio","Draw"):won?GT("Hai vinto!","You win!"):GT("Hai perso","You lose"); *tc=s_winner<0?COL_GOLD:won?COL_GREEN:COL_RED; }
+    int elapsed=(180000-s_match_ms)/1000;
+    snprintf(sub,n,"%s - %d:%02d",coop?GT("Sopravvivenza","Survival"):mtype_name(s_match_type),elapsed/60,elapsed%60);
+    return t;
+}
 static void draw_over(void){
     bool coop=(s_match_type==MT_COOP), won=local_won();
-    const char* t; uint16_t tc;
-    if(coop){ t=won?GT("Sopravvissuto!","You survived!"):GT("Sconfitta","Defeat"); tc=won?COL_GREEN:COL_RED; }
-    else { t=s_winner<0?GT("Pareggio","Draw"):won?GT("Hai vinto!","You win!"):GT("Hai perso","You lose"); tc=s_winner<0?COL_GOLD:won?COL_GREEN:COL_RED; }
-    int elapsed=(180000-s_match_ms)/1000;
-    char sub[48]; snprintf(sub,sizeof sub,"%s - %d:%02d",coop?GT("Sopravvivenza","Survival"):mtype_name(s_match_type),elapsed/60,elapsed%60);
+    char sub[48]; uint16_t tc; const char *t=over_head(sub,sizeof sub,&tc);
     int y=gui::title(t,sub,tc);
     // one row per human: colour tag, tank, HP left, credits; the winner framed in gold
     for(int p=0;p<s_nplayers;p++){
@@ -2123,62 +2145,207 @@ static void draw_game(void){
 }
 
 // ===== two screens ===========================================================
-// Panel (on_draw_large): the arena scaled to 320 px + a native HUD band with big HP / credits / kills /
-// timer and touch controls for the real actions (a D-pad + fire + power-up while playing, shop/menu nav
-// elsewhere). Cardputer (on_draw while two screens): the live match state and the key map, never the arena.
-struct HudBtn { const char *label; int key; char ch; bool acc; };
-static void hud_row(int x,int y,int w,int h,const HudBtn *b,int n){
-    if(n<=0) return;
-    const int gap=4, bw=(w-(n-1)*gap)/n;
-    for(int i=0;i<n;i++)
-        lg::button(x+i*(bw+gap),y,bw,h,b[i].label,b[i].acc?ACCENT:lg::card(),b[i].acc?COL_BLACK:COL_WHITE,b[i].key,b[i].ch);
+// Panel (on_draw_large): every screen is drawn NATIVELY for 320x240 (lg::frame), touch is direct on the content.
+// Play: the arena at full panel resolution (same 15-px tiles, a wider view) under a 28-px HUD; drag the field =
+// drive that way, tap = aim there and fire (tap the enemy tank to shoot it), tap the power-up chip = use it,
+// the chevron = pause. Menus / select / shop / browse: tap a row or card to pick it, tap it again to open.
+// Cardputer (on_draw while two screens): the companion (match state + key map), never the arena.
+#define LW 320
+#define LH 240
+static int    s_lcx, s_lcy, s_lsc;          // the panel's camera (taps map through it), its list scroll
+static int8_t s_dmx, s_dmy;                 // drag-to-drive intent per axis
+static int    s_dmx_ms, s_dmy_ms, s_tfire_ms;   // how long each stays live (decays in poll)
+static float  s_aimx, s_aimy;               // tap-to-fire aim (unit vector)
+static void ltx(int x,int y,int f,uint16_t c,const char *s,uint8_t dt=top_left){
+    lg::font(f); d.setTextDatum(dt); d.setTextColor(c); d.drawString(s,x,y); d.setTextDatum(top_left);
 }
-static void large_hud(int y,int h){
-    const int panw=d.width(), pad=8;
-    d.fillRect(0,y,panw,h,BG);
-    d.drawFastHLine(0,y,panw,LINE);
-    int bh=h-12; if(bh>46) bh=46; const int by=y+(h-bh)/2;
-    if(s_state==GS_PLAY||s_state==GS_SHOP){
-        Tank &lt=s_tanks[s_local];
-        char hp[16]; snprintf(hp,sizeof hp,"HP %d",lt.hp<0?0:lt.hp);
-        lg::font(2); d.setTextDatum(middle_left); d.setTextColor(lt.hp*4<=lt.hp_max?COL_RED:COL_GREEN,BG); d.drawString(hp,pad,y+h/3);
-        char st[28];
-        if(s_nbots>0) snprintf(st,sizeof st,GT("$%d  Bot %d","$%d  Kills %d"),lt.credits,s_bot_kills);
-        else          snprintf(st,sizeof st,"$%d  %s",lt.credits,wp_short(lt.weapon));
-        lg::font(4); d.setTextColor(MUTED,BG); d.setTextDatum(middle_left); d.drawString(st,pad,y+h*3/4);
-        d.setTextDatum(top_left);
-        if(s_state==GS_SHOP){
-            const HudBtn b[5]={{GT("ACQ","BUY"),NK_CHAR,'a',false},{GT("VEN","SELL"),NK_CHAR,'d',false},
-                               {"^",NK_UP,0,false},{"v",NK_DOWN,0,false},{"OK",NK_ENTER,0,true}};
-            hud_row(72,by,panw-72-pad,bh,b,5);
-        } else {
-            // D-pad + fire (K) + power-up (L) + pause; labels match the key map on the companion
-            const int bx0=72, gap=4, cols=7, bw=(panw-bx0-pad-(cols-1)*gap)/cols;
-            lg::button(bx0+0*(bw+gap),by,bw,bh,"<",lg::card(),COL_WHITE,NK_CHAR,'a');
-            lg::button(bx0+1*(bw+gap),by,bw,bh,"^",lg::card(),COL_WHITE,NK_CHAR,'w');
-            lg::button(bx0+2*(bw+gap),by,bw,bh,"v",lg::card(),COL_WHITE,NK_CHAR,'s');
-            lg::button(bx0+3*(bw+gap),by,bw,bh,">",lg::card(),COL_WHITE,NK_CHAR,'d');
-            lg::button(bx0+4*(bw+gap),by,bw,bh,"K",ACCENT,COL_BLACK,NK_CHAR,'k');
-            lg::button(bx0+5*(bw+gap),by,bw,bh,"L",lg::card(),COL_GOLD,NK_CHAR,'l');
-            lg::button(bx0+6*(bw+gap),by,bw,bh,"II",lg::card(),COL_WHITE,NK_BACK,0);
-        }
-    } else if(s_state==GS_PAUSE){
-        const HudBtn b[2]={{GT("RIPRENDI","RESUME"),NK_ENTER,0,true},{GT("ESCI","QUIT"),NK_BACK,0,false}};
-        hud_row(pad,by,panw-2*pad,bh,b,2);
-    } else if(s_state==GS_OVER){
-        const HudBtn b[2]={{s_mode==GM_CPU?GT("RIGIOCA","REPLAY"):GT("MENU","MENU"),NK_ENTER,0,true},{"MENU",NK_BACK,0,false}};
-        hud_row(pad,by,panw-2*pad,bh,b, s_mode==GM_CPU?2:1);
-    } else if(s_state==GS_MENU||s_state==GS_SELECT||s_state==GS_HOST){
-        const HudBtn b[3]={{GT("SU","UP"),NK_UP,0,false},{GT("GIU","DOWN"),NK_DOWN,0,false},{GT("SCEGLI","SELECT"),NK_ENTER,0,true}};
-        hud_row(pad,by,panw-2*pad,bh,b,3);
-    } else if(s_state==GS_BROWSE){
-        const HudBtn b[3]={{GT("SU","UP"),NK_UP,0,false},{GT("GIU","DOWN"),NK_DOWN,0,false},
-                           {GT("ENTRA","JOIN"),NK_ENTER,0,true}};
-        hud_row(pad,by,panw-2*pad,bh,b,3);
-    } else {   // GS_HOW
-        const HudBtn b[1]={{GT("INDIETRO","BACK"),NK_BACK,0,true}};
-        hud_row(pad,by,panw-2*pad,bh,b,1);
+static void lsprite(int x,int y,int type,int dir,uint16_t col){     // a tank at panel x,y (menus)
+    static const int8_t DX[4]={0,1,0,-1};
+    Tank a={}; a.type=type; a.dir=dir; a.fx=DX[dir]; a.fy=-DX[(dir+1)&3]; a.alive=true;
+    a.x=s_cam_x+x; a.y=s_cam_y-s_hud+y; s_shx=s_shy=0; draw_tank_sprite(a,col);
+}
+static int lbg(const char *title,const char *right,uint16_t acc){ d.fillRect(0,0,LW,LH,BG); return lg::header(title,right,acc); }
+static void lp_hud(void){
+    Tank &me=s_tanks[s_local];
+    char b[16];
+    d.fillRect(0,0,LW,28,HUD_BG); d.drawFastHLine(0,27,LW,rgb(73,109,170));
+    ltx(7,6,1,COL_WHITE,"<");                              // pause
+    lg::bar(26,4,68,7,(me.hp<0?0:me.hp)*100/(me.hp_max>0?me.hp_max:1),me.hp*4<=me.hp_max?COL_RED:COL_GREEN);
+    snprintf(b,sizeof b,"$%d",me.credits); ltx(26,12,0,COL_GOLD,b);
+    ltx(100,3,0,me.stun_ms>0?rgb(182,109,255):COL_WHITE,wp_short(me.weapon));
+    int cd=me.fire_cd>0?me.fire_cd:0;
+    lg::bar(100,21,46,3,100-100*cd/fire_cd_for(me.weapon),cd?COL_RED:COL_GREEN);
+    uint16_t pc=me.pu?pu_color(me.pu):rgb(36,36,85); bool on=me.pu_ms>0||me.pu==PU_SHIELD;   // the power-up chip
+    if(on) d.fillRoundRect(154,3,22,22,5,pc); else d.drawRoundRect(154,3,22,22,5,me.pu&&((s_anim>>3)&1)?COL_WHITE:pc);
+    if(me.pu) ltx(165,14,0,on?COL_BLACK:pc,pu_letter(me.pu),middle_center);
+    int sec=s_match_ms/1000; snprintf(b,sizeof b,"%d:%02d",sec/60,sec%60);
+    ltx(186,6,0,sec<=10&&((s_anim>>3)&1)?COL_RED:COL_GREEN,b);
+    bool duel=s_nplayers>=2; b[0]=0;                       // the rival's HP, or the survival wave + kills
+    if(duel) snprintf(b,sizeof b,"HP %d",s_tanks[1-s_local].hp<0?0:s_tanks[1-s_local].hp);
+    else if(s_nbots>0) snprintf(b,sizeof b,GT("O%d x%d","W%d x%d"),s_bot_level+1,s_bot_kills);
+    ltx(286,6,0,!duel?COL_RED:s_local?COL_P1:COL_P2,b,top_right);
+    minimap(293,2,24,24);
+}
+static void lp_field(void){
+    cam_update(); s_lcx=s_cam_x; s_lcy=s_cam_y;
+    draw_map(); draw_picks(); draw_tanks(); draw_bullets(); draw_sparks(); draw_flash();
+    lp_hud();
+    if(s_tanks[s_local].stun_ms>0&&((s_anim>>2)&1)) ltx(LW/2,34,1,rgb(182,109,255),"EMP",top_center);
+    if(s_state!=GS_PLAY) return;
+    if(s_match_ms>176000){                                 // the opening legend: how the panel plays
+        d.fillRect(0,LH-24,LW,24,HUD_BG);
+        ltx(LW/2,LH-20,0,COL_WHITE,GT("Trascina: guida   Tocca: spara li'","Drag: drive   Tap: fire there"),top_center);
     }
+    nucleo_touch_add(0,0,26,28,NK_BACK,0);
+    nucleo_touch_add(148,0,34,28,NK_CHAR,'l');
+    lg::field(0,28,LW,LH-28);
+    nucleo_touch_add_pad(0,28,LW,LH-28,8);
+}
+static void lplay_tap(int x,int y){
+    Tank &me=s_tanks[s_local]; if(!me.alive||y<28) return;
+    float ax=(float)(x+s_lcx)-me.x, ay=(float)(y-28+s_lcy)-me.y, l=sqrtf(ax*ax+ay*ay); if(l<1) return;   // a tap on the enemy = at it
+    s_aimx=ax/l; s_aimy=ay/l; s_tfire_ms=300;
+}
+static void ldrag(int k){                                  // a pad step: drive that way for a moment
+    if(k==NK_LEFT||k==NK_RIGHT){ s_dmx=k==NK_RIGHT?1:-1; s_dmx_ms=220; } else { s_dmy=k==NK_DOWN?1:-1; s_dmy_ms=220; }
+}
+static const char *row_pause(int i,void*){ return i?GT("Esci","Leave"):GT("Riprendi","Resume"); }
+static const char *row_over(int i,void*){ return (i||s_mode!=GM_CPU)?"Menu":GT("Rivincita","Rematch"); }
+static const char *row_menu(int i,void*){ return menu_label(i); }
+static const char *row_mtype(int i,void*){ return mtype_name(i); }
+static const char *row_host(int i,void*){ return s_hosts[i].name; }
+static void row_shop(int i,int x,int y,int w,int h,bool focus,unsigned short bg,void *u){
+    char b[8]; ShopItem &it=s_shop_items[s_local][i];
+    if(s_shop_tab){ snprintf(b,sizeof b,"+%d",((SellRow*)u)[i].refund); lg::row_text(x,y,w,h,focus,bg,((SellRow*)u)[i].label,b,FG); return; }
+    snprintf(b,sizeof b,it.sold?"--":"$%d",it.cost);
+    lg::row_text(x,y,w,h,focus,bg,shop_name(it.type),b,it.sold?MUTED:s_tanks[s_local].credits>=it.cost?FG:COL_RED);
+}
+static void lp_pause(void){
+    d.fillRoundRect(56,58,208,132,10,BG); d.drawRoundRect(56,58,208,132,10,ACCENT);
+    ltx(LW/2,68,1,ACCENT,GT("PAUSA","PAUSED"),top_center);
+    if(s_mode!=GM_CPU) ltx(LW/2,90,0,MUTED,GT("La partita continua!","The match goes on!"),top_center);
+    s_lsc=0; lg::text_list(64,112,192,72,2,0,&s_lsc,row_pause,nullptr,nullptr,nullptr,ACCENT,36);
+}
+static void lp_shop(void){
+    Tank &me=s_tanks[s_local];
+    SellRow sell[4]; int nsell=build_sell_list(s_local,sell), count=s_shop_tab?nsell:SHOP_N;
+    if(s_shop_sel>=count) s_shop_sel=count>0?count-1:0;
+    char r[20]; snprintf(r,sizeof r,"$%d   %ds",me.credits,me.shop_ms/1000);
+    int y=lbg(GT("Negozio","Shop"),r,COL_GREEN);
+    const char *tb[2]={GT("Compra","Buy"),GT("Vendi","Sell")};
+    y=lg::tabs(y,tb,2,s_shop_tab,COL_GREEN,"ad");
+    int tw=me.shop_ms*LW/20000; d.fillRect(0,y-3,LW,2,LINE); d.fillRect(0,y-3,tw<LW?tw:LW,2,me.shop_ms<=5000?COL_RED:COL_GREEN);
+    if(!count){ lg::message(0,y,LW,LH-y-28,s_shop_tab?GT("Niente da vendere","Nothing to sell"):GT("Esaurito","Sold out"),nullptr,MUTED); return; }
+    lg::list(0,y,LW,LH-y-28,lg::ROW,count,s_shop_sel,&s_shop_scroll,row_shop,sell,COL_GREEN);
+    ShopItem &it=s_shop_items[s_local][s_shop_sel];
+    ltx(LW/2,LH-22,0,COL_GOLD,s_shop_tab?GT("vendi: + crediti","sell: + credits"):it.sold?GT("gia' comprato","already bought"):shop_effect(it.type),top_center);
+}
+static void lp_menu(void){
+    int y=lbg("Tank Duel",nullptr,ACCENT);
+    d.fillRect(0,y,LW,46,rgb(36,36,85));                   // a deck band, the two rivals facing off
+    lsprite(118,y+23,TT_BULLDOG,1,COL_P1); lsprite(202,y+23,TT_VIPER,3,COL_P2);
+    lg::text_list(0,y+48,LW,LH-y-48,NMENU,s_menu.sel,&s_lsc,row_menu,nullptr,nullptr,nullptr,ACCENT,31);
+}
+static void lp_select(void){
+    int y=lbg(GT("Scegli il tank","Pick your tank"),nullptr,ACCENT)+6;
+    for(int i=0;i<TT_COUNT;i++){
+        int x=6+i*78; bool on=i==s_tsel;
+        lg::panel(x,y,74,74,on?mix(lg::card(),ACCENT,70):0);
+        if(on) d.drawRoundRect(x,y,74,74,8,ACCENT);
+        lsprite(x+37,y+30,i,0,COL_P1);
+        ltx(x+37,y+54,0,on?FG:MUTED,tank_name(i),top_center);
+        nucleo_touch_add(x,y,74,74,NK_CHAR,(char)(NUCLEO_TOUCH_ROW+i));
+    }
+    y+=86;
+    static const char *const LAB[3]={"HP","SPD","ARM"}; static const uint8_t MX[3]={10,80,2};
+    const uint8_t *v[3]={TT_HP,TT_SPD,TT_ARM}; const uint16_t c[3]={COL_GREEN,COL_GOLD,rgb(109,182,255)};
+    for(int k=0;k<3;k++){ ltx(16,y+k*22,0,MUTED,LAB[k]); lg::bar(64,y+k*22+4,240,9,v[k][s_tsel]*100/MX[k],c[k]); }
+    ltx(LW/2,y+72,0,ACCENT,tank_desc(s_tsel),top_center);
+}
+static void lp_host(void){
+    char sub[20]; snprintf(sub,sizeof sub,GT("canale %d","channel %d"),pnet_channel());
+    int y=lbg(GT("Crea partita","Host a match"),sub,ACCENT);
+    s_lsc=0; lg::text_list(0,y+6,LW,3*34,MT_COUNT,s_match_type,&s_lsc,row_mtype,nullptr,nullptr,nullptr,ACCENT,34);
+    ltx(LW/2,y+124,0,FG,GT("Attendo sfidante","Waiting for a rival"),top_center);
+    ltx(LW/2,y+144,0,MUTED,pnet_name(),top_center);
+    wait_dots(y+184,LW/2,4);
+}
+static void lp_browse(void){
+    char sub[20]; snprintf(sub,sizeof sub,GT("canale %d","channel %d"),pnet_channel());
+    int y=lbg(GT("Entra in partita","Join a match"),sub,COL_P2);
+    if(s_join_pending||!s_nhost){
+        lg::message(0,y,LW,LH-y-50,s_join_pending?GT("Mi collego...","Connecting..."):GT("Cerco partite...","Looking for matches..."),
+                    s_join_pending?nullptr:GT("Sull'altro: Tank Duel > Crea","Other device: Tank Duel > Host"),COL_P2);
+        wait_dots(LH-36,LW/2,4); return;
+    }
+    lg::text_list(0,y,LW,LH-y,s_nhost,s_bsel,&s_lsc,row_host,nullptr,nullptr,nullptr,COL_P2,34);
+}
+static void lp_how(void){
+    int y=lbg(GT("Come si gioca","How to play"),nullptr,ACCENT)+4;
+    for(int i=0;i<8;i++) ltx(10,y+i*25,0,i==3?COL_GOLD:i>=6?ACCENT:FG,how_line(i));
+}
+static void lp_over(void){
+    char sub[48]; uint16_t tc; const char *t=over_head(sub,sizeof sub,&tc);
+    int y=lbg(t,nullptr,tc)+6;
+    ltx(LW/2,y,0,MUTED,sub,top_center); y+=26;
+    bool coop=(s_match_type==MT_COOP), won=local_won();
+    for(int p=0;p<s_nplayers;p++,y+=40){
+        Tank &t=s_tanks[p]; uint16_t col=p==0?COL_P1:COL_P2;
+        d.fillRect(14,y+9,5,16,((s_winner==p)||(coop&&won))?COL_GOLD:col);
+        char b[24]; snprintf(b,sizeof b,"%s%s",tank_name(t.type),p==s_local?GT(" (tu)"," (you)"):"");
+        ltx(26,y+9,0,col,b);
+        snprintf(b,sizeof b,"HP %d/%d  $%d",t.hp<0?0:t.hp,t.hp_max,t.credits);
+        ltx(LW-14,y+9,0,FG,b,top_right);
+    }
+    char sc[40];
+    if(s_nbots>0){ snprintf(sc,sizeof sc,GT("Bot distrutti: %d   Ondata: %d","Bots destroyed: %d   Wave: %d"),s_bot_kills,s_bot_level+1); ltx(LW/2,y+2,0,COL_GOLD,sc,top_center); y+=22; }
+    if(s_peerleft) ltx(LW/2,y+2,0,COL_RED,GT("Avversario disconnesso","Opponent disconnected"),top_center);
+    int n=s_mode==GM_CPU?2:1; s_lsc=0;
+    lg::text_list(40,LH-n*36-6,LW-80,n*36,n,0,&s_lsc,row_over,nullptr,nullptr,nullptr,tc,36);
+}
+static void lg_paint(void *){
+    view_big(true);
+    switch(s_state){
+        case GS_MENU:   lp_menu(); break;
+        case GS_SELECT: lp_select(); break;
+        case GS_HOST:   lp_host(); break;
+        case GS_BROWSE: lp_browse(); break;
+        case GS_SHOP:   lp_shop(); break;
+        case GS_PLAY:   lp_field(); break;
+        case GS_PAUSE:  lp_field(); lp_pause(); break;
+        case GS_OVER:   lp_over(); break;
+        default:        lp_how(); break;
+    }
+    view_big(false); cam_update();
+}
+static void on_key(int k, char ch);
+static void leave_to_menu(void);
+// A touch on the panel (a row / card target or a field tap): true when handled. Tapping the selection again opens it.
+static bool lg_key(int k, char ch){
+    int tx=0, ty=0;
+    const bool fld=lg::tap(k,ch,&tx,&ty);
+    const int ri=nucleo_touch_is_row(k,ch)?ch-NUCLEO_TOUCH_ROW:-1;
+    if(!fld&&ri<0) return false;
+    int sel=0, n=0, sc=s_lsc;
+    SellRow sr[4];
+    switch(s_state){
+        case GS_PLAY:   if(fld) lplay_tap(tx,ty); return true;
+        case GS_PAUSE: case GS_OVER: if(ri==0) on_key(NK_ENTER,0); else if(ri==1) leave_to_menu(); return true;
+        case GS_HOST:   if(ri>=0&&ri<MT_COUNT){ s_match_type=ri; sfx_play(SFX_NAV); nucleo_app_request_draw(); } return true;
+        case GS_MENU:   sel=s_menu.sel; n=NMENU; break;
+        case GS_SELECT: sel=s_tsel; n=TT_COUNT; sc=0; break;
+        case GS_BROWSE: if(s_join_pending) return true; sel=s_bsel; n=s_nhost; break;
+        case GS_SHOP:   sel=s_shop_sel; n=s_shop_tab?build_sell_list(s_local,sr):SHOP_N; sc=s_shop_scroll; break;
+        default: return true;
+    }
+    int r=lg::row_tap(k,ch,sc,n,&sel);
+    if(r==2){ on_key(NK_ENTER,0); return true; }
+    if(s_state==GS_MENU) s_menu.sel=(int8_t)sel;
+    else if(s_state==GS_SELECT) s_tsel=sel;
+    else if(s_state==GS_BROWSE) s_bmenu.sel=(int8_t)(s_bsel=sel);
+    else s_shop_sel=sel;
+    sfx_play(SFX_NAV); nucleo_app_request_draw();
+    return true;
 }
 static void draw_companion(void){
     int y=lg::comp_head("Tank Duel",ACCENT);
@@ -2225,7 +2392,7 @@ static void on_draw(void){
 }
 static void draw_large(void){
     nucleo_touch_clear();
-    lg::game(draw_game, large_hud, "Tank Duel", ACCENT);
+    lg::frame(lg_paint, nullptr);
     nucleo_touch_commit();
 }
 
@@ -2281,14 +2448,11 @@ static void set_hint(void){
 
 // ========================== input ============================================
 static int s_pu_req;          // guest: input packets still to carry the "use powerup" bit (lossy link: 4 tries)
-// Panel (on_draw_large) touch controls: the keyboard play input is read from the HELD-key state
-// (nucleo_kbd_char_down), which a touch TAP does not set — so a tapped D-pad / fire button records a short
-// intent here that poll() ORs into the movement/fire read, for both the solo/host sim and the guest send.
-static int8_t s_touch_mvx, s_touch_mvy;   // last tapped 8-way intent
-static int    s_touch_mv_ms, s_touch_fire_ms;   // how long that intent / fire stays live (ms, decays in poll)
+// Panel touch: the keyboard play input is read from the HELD-key state, which touch never sets — so a drag on
+// the field (pad steps, ldrag) and a tap (lplay_tap) leave short intents that poll() folds into the read.
 
 static void on_key(int k, char ch){
-    (void)k;
+    if(lg_key(k,ch)) return;                       // a touch on the panel's content
     switch(s_state){
         case GS_MENU:
             if(gui::menu_key(s_menu,k,NMENU)){ sfx_play(SFX_NAV); nucleo_app_request_draw(); }
@@ -2340,12 +2504,7 @@ static void on_key(int k, char ch){
             // movement + fire polled continuously in poll(); L = use powerup (letters never auto-repeat, so every
             // event is a real press — the old latch ignored a second L unless another key came in between)
             if(ch=='l'){ if(s_mode==GM_GUEST) s_pu_req=4; else pu_use(s_local); }
-            // panel touch buttons (a tap can't hold a key): record a short movement / fire intent for poll()
-            else if(ch=='k'){ s_touch_fire_ms=130; }
-            else if(ch=='w'||ch=='e'||ch=='r'){ s_touch_mvx=0; s_touch_mvy=-1; s_touch_mv_ms=200; }
-            else if(ch=='s'){ s_touch_mvx=0; s_touch_mvy=1; s_touch_mv_ms=200; }
-            else if(ch=='a'){ s_touch_mvx=-1; s_touch_mvy=0; s_touch_mv_ms=200; }
-            else if(ch=='d'){ s_touch_mvx=1; s_touch_mvy=0; s_touch_mv_ms=200; }
+            else if(k==NK_UP||k==NK_DOWN||k==NK_RIGHT) ldrag(k);   // a drag on the panel's field (LEFT: on_back)
             return;
         case GS_SHOP: {
             Tank &me=s_tanks[s_local];
@@ -2396,7 +2555,7 @@ static void on_key(int k, char ch){
     }
 }
 static bool on_back(int key){
-    if(key==NK_LEFT) return true; // swallow LEFT
+    if(key==NK_LEFT){ if(s_state==GS_PLAY) ldrag(key); return true; }   // swallow LEFT (a drag step in play)
     switch(s_state){
         case GS_MENU:   return false; // close app
         case GS_PLAY:   go(GS_PAUSE); return true;
@@ -2412,6 +2571,7 @@ static bool on_back(int key){
 }
 
 // ========================== poll =============================================
+static void touch_drive(int *mvx,int *mvy){ if(s_dmx_ms>0) *mvx=s_dmx; if(s_dmy_ms>0) *mvy=s_dmy; }
 static bool poll(void){
     s_now=now_ms();
     int dt=(int)(s_now-s_last); if(dt<0) dt=0; if(dt>60) dt=60;
@@ -2451,8 +2611,9 @@ static bool poll(void){
     } else if(s_state==GS_PLAY||s_state==GS_SHOP||s_state==GS_PAUSE){
         sparks_step(dt);
         live=true;
-        if(s_touch_mv_ms>0) s_touch_mv_ms-=dt;       // panel D-pad / fire intent decays (a tap = a short nudge)
-        if(s_touch_fire_ms>0) s_touch_fire_ms-=dt;
+        if(s_dmx_ms>0) s_dmx_ms-=dt;                 // panel drag / tap-fire intents decay
+        if(s_dmy_ms>0) s_dmy_ms-=dt;
+        if(s_tfire_ms>0) s_tfire_ms-=dt;
 
         // vs CPU a pause freezes the match under a static card. Online it cannot (the host's pause froze the
         // guest's game with no explanation): the match runs on and only this player's controls are idle.
@@ -2510,13 +2671,15 @@ static bool poll(void){
             bool rt=live&&nucleo_kbd_char_down('d');
             bool fire=live&&nucleo_kbd_char_down('k');
             int mvx=(rt?1:0)-(lt_?1:0), mvy=(dn?1:0)-(up?1:0);   // 8-way intent
-            if(live&&!mvx&&!mvy&&s_touch_mv_ms>0){ mvx=s_touch_mvx; mvy=s_touch_mvy; }   // panel D-pad
-            if(live&&s_touch_fire_ms>0) fire=true;                                       // panel fire
+            if(live&&!mvx&&!mvy) touch_drive(&mvx,&mvy);
+            if(live&&!mvx&&!mvy&&s_tfire_ms>0){            // a tap: turn the 8-way way of the aim (the net carries no angle)
+                mvx=s_aimx>0.38f?1:s_aimx<-0.38f?-1:0; mvy=s_aimy>0.38f?1:s_aimy<-0.38f?-1:0; fire=true;
+            }
             if(mvx||mvy) tank_drive(s_local,mvx,mvy,(float)dt);  // local prediction
             if(fire) tank_fire(s_local);
             for(int p=0;p<2;p++) if(s_tanks[p].flash_ms>0) s_tanks[p].flash_ms-=dt;
             for(int p=0;p<2;p++) if(s_tanks[p].hurt_ms>0) s_tanks[p].hurt_ms-=dt;
-            if(s_now-s_last_tx>25){ send_input(fire,s_pu_req>0,mvx,mvy); if(s_pu_req>0) s_pu_req--; }
+            if(s_now-s_last_tx>25){ send_input(fire,s_pu_req>0,mvx,mvy); if(s_pu_req>0) s_pu_req--; if(fire) s_tfire_ms=0; }
             cam_update();
             if(s_now-s_last_rx>3500){ s_winner=-1; s_peerleft=true; go(GS_OVER); return true; }
             goto frame_check;
@@ -2531,10 +2694,14 @@ static bool poll(void){
             bool rt=nucleo_kbd_char_down('d');
             bool fire=nucleo_kbd_char_down('k');
             int mvx=(rt?1:0)-(lt_?1:0), mvy=(dn?1:0)-(up?1:0);
-            if(!mvx&&!mvy&&s_touch_mv_ms>0){ mvx=s_touch_mvx; mvy=s_touch_mvy; }   // panel D-pad
-            if(s_touch_fire_ms>0) fire=true;                                       // panel fire
+            if(!mvx&&!mvy) touch_drive(&mvx,&mvy);
             if(mvx||mvy) tank_drive(s_local,mvx,mvy,(float)dt);
             if(fire) tank_fire(s_local);
+            if(s_tfire_ms>0){                              // a tap: free aim at the point, fire when the gun is ready
+                Tank &t=s_tanks[s_local]; int cd=t.fire_cd;
+                t.fx=s_aimx; t.fy=s_aimy; t.dir=fabsf(s_aimx)>=fabsf(s_aimy)?(s_aimx>0?1:3):(s_aimy>0?2:0);
+                tank_fire(s_local); if(t.fire_cd!=cd) s_tfire_ms=0;
+            }
         }
         // fire cooldowns + EMP stun
         for(int p=0;p<2;p++){ if(s_tanks[p].fire_cd>0) s_tanks[p].fire_cd-=dt; if(s_tanks[p].stun_ms>0) s_tanks[p].stun_ms-=dt; }
@@ -2603,7 +2770,7 @@ static void on_enter(void){
     s_nhost=s_bsel=0; s_txseq=s_rxseq=0;
     s_now=s_last=s_frame=now_ms();
     s_last_hello=s_last_tx=s_last_rx=0;
-    s_pu_req=0; s_touch_mvx=s_touch_mvy=0; s_touch_mv_ms=s_touch_fire_ms=0;
+    s_pu_req=0; s_dmx_ms=s_dmy_ms=s_tfire_ms=0;
     s_ai_fire_last=0;
     s_join_pending=false; s_join_t=s_join_resend=0;
     s_match_type=MT_DUEL; s_nbots=0; s_nplayers=2; memset(s_bots,0,sizeof(Tank)*MAX_BOTS);

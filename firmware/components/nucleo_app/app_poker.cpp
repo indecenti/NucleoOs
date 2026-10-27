@@ -47,12 +47,22 @@ static const uint16_t COL_FELT = RGB(0, 73, 36), COL_FELT2 = RGB(0, 36, 0), COL_
 static inline uint16_t mix(uint16_t a, uint16_t b, int t) { return gui::mix(a, b, t); }
 
 // ============================ geometry =======================================
-#define NCARD   5
-#define CARD_W  44
-#define CARD_GAP 5
-#define CARD_Y  19
-#define CARD_H  76
-static inline int card_x(int i)  { return i * (CARD_W + CARD_GAP); }   // 0,49,98,147,196
+// The view: the compact 240-wide frame, or the native 320x240 panel (view_set(true), two screens). The painters
+// read W, the content height and the card geometry from here, so one set draws both screens at their own size.
+static bool s_big;
+static int  s_vw = 240, s_vh = 119, s_cardw = 44, s_cgap = 5, s_cardy = 19, s_cardh = 76, s_cx0;
+#define W        s_vw
+#define NCARD    5
+#define CARD_W   s_cardw
+#define CARD_GAP s_cgap
+#define CARD_Y   s_cardy
+#define CARD_H   s_cardh
+static void view_set(bool big)
+{
+    s_big = big; s_vw = big ? 320 : 240; s_vh = big ? 240 : nucleo_app_content_height();
+    s_cardw = big ? 56 : 44; s_cgap = big ? 6 : 5; s_cardy = big ? 42 : 19; s_cardh = big ? 96 : 76; s_cx0 = big ? 8 : 0;
+}
+static inline int card_x(int i)  { return s_cx0 + i * (CARD_W + CARD_GAP); }
 static inline int card_cx(int i) { return card_x(i) + CARD_W / 2; }    // 22,71,120,169,218
 
 // ============================ cards / scoring ================================
@@ -155,6 +165,9 @@ static Fx *s_fx;
 
 static void dec(int *v, int n) { *v -= n; if (*v < 0) *v = 0; }
 static void go(int s);
+static void on_key(int k, char ch);
+static bool on_back(int key);
+static bool lg_key(int k, char ch);
 
 // ============================ persistence ====================================
 #define DIRR "/sd/data/poker"
@@ -239,7 +252,7 @@ static void draw_suit(int cx, int cy, int r, int suit, uint16_t col)
 // the table: a dithered felt with a dark vignette edge
 static void draw_felt(void)
 {
-    int ch = nucleo_app_content_height();
+    int ch = s_vh;
     gui::vgradient(0, 0, W, ch, RGB(0, 109, 36), COL_FELT2);
     for (int k = 0; k < 3; k++) d.drawRect(k, k, W - 2 * k, ch - 2 * k, mix(0, COL_FELT, k * 80));
 }
@@ -262,8 +275,8 @@ static void card_shape(int dx, int y, int cw, int h, bool face, int id, uint16_t
     gui::text(RANKS[rank], dx + 3, y + 1, 0, gui::F_SMALL, sc, tint);                   // corner index
     draw_suit(dx + 7, y + 20, 3, suit, sc);
     draw_suit(dx + cw - 7, y + h - 9, 3, suit, sc);
-    gui::text(RANKS[rank], cx, y + 23, 1, gui::F_TITLE, sc, tint);                      // big centre rank
-    draw_suit(cx, y + 56, 9, suit, sc);                                                 // big centre suit
+    gui::text(RANKS[rank], cx, y + h * 23 / 76, 1, h > 90 ? gui::F_BIG : gui::F_TITLE, sc, tint);   // big centre rank
+    draw_suit(cx, y + h * 56 / 76, h * 9 / 76, suit, sc);                              // big centre suit
 }
 static void draw_card(int slot)
 {
@@ -312,18 +325,26 @@ static const char *hand_name(int cat)
         default:            return GT("NESSUNA VINCITA", "NO WIN");
     }
 }
+// The panel's back chevron (tap = Back, like Esc).
+static void lchev(void)
+{
+    for (int k = 0; k < 2; k++) { d.drawLine(16 + k, 8, 10 + k, 15, COL_GOLDL); d.drawLine(10 + k, 15, 16 + k, 22, COL_GOLDL); }
+    nucleo_touch_add(0, 0, 70, 30, NK_BACK, 0);
+}
 static void draw_hud(void)
 {
     char b[28];
-    d.fillRect(0, 0, W, 16, COL_DARK);
-    d.drawFastHLine(0, 15, W, COL_GOLDD);
-    d.fillSmoothCircle(9, 8, 6, COL_GOLD); d.drawCircle(9, 8, 6, COL_GOLDD); d.drawCircle(9, 8, 3, COL_GOLDD);   // a coin
+    const int hh = s_big ? 30 : 16, cx = s_big ? 36 : 9, ty = s_big ? 7 : 0;
+    d.fillRect(0, 0, W, hh, COL_DARK);
+    d.drawFastHLine(0, hh - 1, W, COL_GOLDD);
+    if (s_big) lchev();
+    d.fillSmoothCircle(cx, hh / 2, 6, COL_GOLD); d.drawCircle(cx, hh / 2, 6, COL_GOLDD); d.drawCircle(cx, hh / 2, 3, COL_GOLDD);   // a coin
     snprintf(b, sizeof b, "%d", (int)(s_disp_bal + 0.5f));
     bool rolling = ((int)(s_disp_bal + 0.5f) != g_balance);
-    txt(b, 19, -1, 0, gui::F_BODY, rolling && ((s_anim >> 1) & 1) ? COL_WHITE : COL_GOLDL);
-    if (g_draws > 2 && s_pp == PP_HOLD) { snprintf(b, sizeof b, GT("Cambio %d/%d", "Draw %d/%d"), s_draw_n + 1, g_draws - 1); txt(b, W / 2 + 20, 0, 1, gui::F_SMALL, COL_CYAN); }
+    txt(b, cx + 10, s_big ? 3 : -1, 0, s_big ? gui::F_TITLE : gui::F_BODY, rolling && ((s_anim >> 1) & 1) ? COL_WHITE : COL_GOLDL);
+    if (g_draws > 2 && s_pp == PP_HOLD) { snprintf(b, sizeof b, GT("Cambio %d/%d", "Draw %d/%d"), s_draw_n + 1, g_draws - 1); txt(b, W / 2 + 20, ty, 1, gui::F_SMALL, COL_CYAN); }
     snprintf(b, sizeof b, GT("Puntata %d", "Bet %d"), g_bet);
-    txt(b, W - 4, 0, 2, gui::F_SMALL, COL_CREAM);
+    txt(b, W - 6, ty, 2, gui::F_SMALL, COL_CREAM);
 }
 static void pill(const char *p)              // a prompt in the bottom strip, blinking gently
 {
@@ -340,6 +361,12 @@ static void draw_bottom(void)
         txt(s_msg, W / 2, y + 1, 1, gui::F_SMALL, COL_GOLDL);
         return;
     }
+    if (s_big && s_pp == PP_HOLD) {                    // the panel: tap the cards themselves; the hint caret points up at them
+        pill(GT("Tocca le carte da tenere", "Tap the cards to keep"));
+        if (g_hint) for (int i = 0; i < NCARD; i++) if ((s_sugg_mask >> i & 1) && !s_hold[i]) d.fillTriangle(card_cx(i), y + 2, card_cx(i) - 6, y + 9, card_cx(i) + 6, y + 9, COL_CYAN);
+        return;
+    }
+    if (s_big && s_pp == PP_DEAL) return;
     if (s_pp == PP_HOLD || s_pp == PP_DEAL) {
         for (int i = 0; i < NCARD; i++) {
             int cx = card_cx(i); bool held = s_hold[i];
@@ -362,7 +389,48 @@ static void draw_bottom(void)
         } else txt(hand_name(s_hand_cat), W / 2, y, 1, gui::F_BODY, COL_GREY);
         return;
     }
-    pill(s_pp == PP_DRAW ? GT("Cambio...", "Drawing...") : GT("SPAZIO per distribuire", "SPACE to deal"));
+    if (s_pp == PP_DRAW) { if (!s_big) pill(GT("Cambio...", "Drawing...")); return; }
+    pill(s_big ? GT("Scegli la fiche, tocca il mazzo", "Pick a chip, tap the deck") : GT("SPAZIO per distribuire", "SPACE to deal"));
+}
+// The panel's money row under the table: the five bet chips (tap one = that bet) and the deck (tap = deal / draw).
+#define CHIP_X(i) (34 + (i) * 42)
+#define DECK_X 230
+static void draw_chips_deck(void)
+{
+    static const uint16_t CC[5] = { RGB(219, 219, 219), COL_HEART, RGB(0, 146, 73), COL_BACK, RGB(73, 36, 85) };
+    const bool locked = s_pp != PP_READY && s_pp != PP_RESULT;
+    txt(GT("Puntata", "Bet"), 14, 164, 0, gui::F_SMALL, COL_GOLDL);
+    for (int i = 0; i < 5; i++) {
+        const bool on = g_bet == i + 1;
+        const int cx = CHIP_X(i), cy = on ? 201 : 207;
+        const uint16_t c = locked && !on ? mix(CC[i], COL_FELT, 150) : CC[i];
+        d.fillCircle(cx + 2, 209, 19, COL_SHADOW);
+        d.fillCircle(cx, cy, 19, c);
+        for (int k = 0; k < 8; k++) { float a = k * 0.785f; d.fillCircle(cx + (int)(cosf(a) * 15), cy + (int)(sinf(a) * 15), 2, COL_WHITE); }
+        d.fillCircle(cx, cy, 11, mix(c, COL_WHITE, 90));
+        if (on) for (int k = 0; k < 2; k++) d.drawCircle(cx, cy, 20 + k, COL_GOLD);
+        char b[2] = { (char)('1' + i), 0 };
+        txt(b, cx, cy - 9, 1, gui::F_BODY, i == 0 ? COL_DARK : COL_WHITE);
+    }
+    for (int k = 2; k >= 0; k--) card_shape(DECK_X + k * 3, 170 + k * 3, 74, 58, false, 0, 0);   // the deck, a little stack
+    const char *lab = s_pp == PP_HOLD ? GT("CAMBIA", "DRAW") : locked ? nullptr : GT("GIOCA", "DEAL");
+    if (lab) {
+        d.fillSmoothRoundRect(DECK_X + 4, 188, 66, 22, 6, COL_GOLD);
+        txt(lab, DECK_X + 37, 190, 1, gui::text_width(lab, gui::F_BODY) > 60 ? gui::F_SMALL : gui::F_BODY, COL_DARK);
+    }
+}
+// A tap on the table (the field below the header).
+static void table_tap(int x, int y)
+{
+    if (s_pp == PP_DEAL || s_pp == PP_DRAW) { on_key(NK_ENTER, 0); return; }        // skip the flips
+    if (y < CARD_Y + CARD_H + 6) {                                                     // a card: hold / release it
+        const int i = (x - s_cx0) / (CARD_W + CARD_GAP);
+        if (s_pp == PP_HOLD && i >= 0 && i < NCARD) on_key(NK_CHAR, (char)('3' + i));
+    } else if (x >= DECK_X - 6) on_key(NK_ENTER, 0);                                // the deck: deal / draw
+    else if (y > 168 && s_pp != PP_HOLD) {                                             // a chip: that bet
+        const int i = (x - 13) / 42;
+        if (i >= 0 && i < 5 && g_bet != i + 1) { g_bet = i + 1; sfx(SFX_BET); }   // saved with the next notable hand / on exit
+    }
 }
 
 // ============================ coins / fireworks ==============================
@@ -577,34 +645,77 @@ static void settle_hand(void)
 }
 
 // ============================ screens: menu / help / settings ================
+// The shared title / menu / dialog, drawn natively on the panel (touch rows, a back chevron, a tappable card).
+static int title_bar(const char *name, const char *sub)
+{
+    if (!s_big) return gui::title(name, sub, COL_GOLD);
+    gui::vgradient(0, 0, W, s_vh, mix(0, COL_GOLD, 60), COL_FELT2);
+    d.fillRect(0, 0, W, 30, COL_DARK); d.drawFastHLine(0, 29, W, COL_GOLDD);
+    lchev();
+    txt(name, W / 2, 4, 1, gui::F_TITLE, COL_GOLDL);
+    if (sub) txt(sub, W / 2, 34, 1, gui::F_SMALL, COL_CREAM);
+    return sub ? 58 : 38;
+}
+static void menu_rows(const gui::Menu &m, const char *const *it, int n, int y0, uint16_t acc)
+{
+    if (!s_big) { gui::menu(m, it, n, y0, s_vh, acc); return; }
+    int rh = (s_vh - y0 - 4) / n; if (rh > 54) rh = 54;
+    for (int i = 0; i < n; i++) {
+        const int y = y0 + i * rh; const bool sel = i == m.sel;
+        d.fillSmoothRoundRect(28, y + 3, W - 56, rh - 6, 10, sel ? mix(0, acc, 150) : mix(COL_FELT2, 0, 60));
+        d.drawRoundRect(28, y + 3, W - 56, rh - 6, 10, sel ? COL_GOLDL : COL_DIM);
+        txt(it[i], W / 2, y + rh / 2 - 7, 1, gui::F_BODY, sel ? COL_WHITE : COL_CREAM);
+        if (!s_confirm) nucleo_touch_add(0, y, W, rh, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + i));
+    }
+}
+// keys == nullptr on the panel: a Yes / No pair (rows 0 / 1); else the card itself is the tap target.
+static void dlg(const char *head, const char *l1, const char *keys, const char *tkeys, uint16_t acc)
+{
+    if (!s_big) { gui::dialog(head, l1, nullptr, keys, acc); return; }
+    const int x = 30, y = 62, w = 260, h = 116;
+    gui::panel(x, y, w, h, COL_DARK, acc);
+    txt(head, W / 2, y + 10, 1, gui::F_TITLE, acc);
+    if (l1) txt(l1, W / 2, y + 42, 1, gui::F_SMALL, COL_WHITE);
+    if (tkeys) { txt(tkeys, W / 2, y + 80, 1, gui::F_SMALL, COL_GOLDL); lg::field(x, y, w, h); return; }
+    for (int i = 0; i < 2; i++) {
+        const int bx = x + 20 + i * 116;
+        d.fillSmoothRoundRect(bx, y + 70, 104, 34, 8, i ? mix(COL_DARK, COL_GREY, 90) : COL_RED);
+        txt(i ? "No" : GT("Si", "Yes"), bx + 52, y + 77, 1, gui::F_BODY, COL_WHITE);
+        nucleo_touch_add(bx, y + 70, 104, 34, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + i));
+    }
+}
 static void draw_menu(void)
 {
     char sub[32]; snprintf(sub, sizeof sub, GT("Crediti %d", "Credits %d"), g_balance);
-    int y = gui::title("POKER", sub, COL_GOLD);
-    draw_suit(22, 15, 10, SU_HEART, COL_HEART); draw_suit(W - 22, 15, 10, SU_SPADE, COL_CREAM);
+    int y = title_bar("POKER", sub);
+    const int sx = s_big ? 100 : 22;
+    draw_suit(sx, 15, 10, SU_HEART, COL_HEART); draw_suit(W - sx, 15, 10, SU_SPADE, COL_CREAM);
     const char *items[3] = { GT("Gioca", "Play"), GT("Come si gioca", "How to play"), GT("Impostazioni", "Settings") };
-    gui::menu(s_menu, items, 3, y, nucleo_app_content_height(), COL_GOLD);
+    menu_rows(s_menu, items, 3, y, COL_GOLD);
 }
 static void draw_help(void)
 {
-    int ch = nucleo_app_content_height();
+    int ch = s_vh;
     const char *titles[3] = { GT("Obiettivo", "Objective"), GT("Comandi", "Controls"), GT("Vincite", "Paytable") };
-    int y = gui::title(titles[s_help], nullptr, COL_GOLD);
+    int y = title_bar(titles[s_help], nullptr);
+    const int lp = s_big ? 26 : 16, fb = s_big ? gui::F_BODY : gui::F_SMALL;   // the panel: bigger type, airier lines
+    if (s_big) { lg::field(0, 30, W, s_vh - 30); y += 10; }                    // tap the left / right half: page back / on
     if (s_help == 0) {
-        txt(GT("Ricevi 5 carte. TIENI le buone", "You get 5 cards. HOLD the good"), 8, y, 0, gui::F_SMALL, COL_CREAM);
-        txt(GT("con i tasti 3-7, poi CAMBIA", "ones with keys 3-7, then DRAW"), 8, y + 16, 0, gui::F_SMALL, COL_CREAM);
-        txt(GT("le altre (SPAZIO).", "the rest (SPACE)."), 8, y + 32, 0, gui::F_SMALL, COL_CREAM);
-        txt(GT("Coppia di J o meglio: vinci!", "Jacks or better: you win!"), 8, y + 50, 0, gui::F_SMALL, COL_GOLD);
+        txt(GT("Ricevi 5 carte. TIENI le buone", "You get 5 cards. HOLD the good"), 8, y, 0, fb, COL_CREAM);
+        txt(s_big ? GT("toccandole, poi CAMBIA le altre", "ones by tapping, then DRAW the") : GT("con i tasti 3-7, poi CAMBIA", "ones with keys 3-7, then DRAW"), 8, y + lp, 0, fb, COL_CREAM);
+        txt(s_big ? GT("toccando il mazzo.", "rest by tapping the deck.") : GT("le altre (SPAZIO).", "the rest (SPACE)."), 8, y + 2 * lp, 0, fb, COL_CREAM);
+        txt(GT("Coppia di J o meglio: vinci!", "Jacks or better: you win!"), 8, y + 3 * lp + 2, 0, fb, COL_GOLD);
     } else if (s_help == 1) {
-        const char *k[4] = { "3 4 5 6 7", GT("SPAZIO", "SPACE"), GT("SU/GIU", "UP/DN"), "TAB  H" };
-        const char *v[4] = { GT("tieni le carte", "hold cards"), GT("distribuisci/cambia", "deal / draw"), GT("puntata +/-", "bet +/-"), GT("opzioni  consiglio", "setup  hint") };
-        for (int i = 0; i < 4; i++) { txt(k[i], 8, y + i * 17, 0, gui::F_SMALL, COL_GREY); txt(v[i], 92, y + i * 17, 0, gui::F_SMALL, COL_GOLDL); }
+        const char *k[4] = { s_big ? GT("Carta", "Card") : "3 4 5 6 7", s_big ? GT("Mazzo", "Deck") : GT("SPAZIO", "SPACE"), s_big ? GT("Fiche", "Chip") : GT("SU/GIU", "UP/DN"), s_big ? "<" : "TAB  H" };
+        const char *v[4] = { GT("tieni le carte", "hold cards"), GT("distribuisci/cambia", "deal / draw"), s_big ? GT("Puntata", "Bet") : GT("puntata +/-", "bet +/-"), s_big ? GT("PAUSA", "PAUSED") : GT("opzioni  consiglio", "setup  hint") };
+        for (int i = 0; i < 4; i++) { txt(k[i], 8, y + i * (lp + 1), 0, fb, COL_GREY); txt(v[i], s_big ? 110 : 92, y + i * (lp + 1), 0, fb, COL_GOLDL); }
     } else {
         for (int i = 0; i < 9; i++) {
-            int cat = HAND_ROYAL - i, col = i / 5, row = i % 5, x = 6 + col * 118, yy = y - 2 + row * 15;
+            int cat = HAND_ROYAL - i, col = s_big ? 0 : i / 5, row = s_big ? i : i % 5, x = 6 + col * 118, yy = y - (s_big ? 10 : 2) + row * (s_big ? 20 : 15);
             char b[8]; snprintf(b, sizeof b, "%d", PAY[cat]);
-            d.setTextColor(i < 2 ? COL_GOLDL : COL_CREAM); d.setCursor(x, yy + 4); d.print(hand_name(cat));
-            txt(b, x + 112, yy, 2, gui::F_SMALL, i < 2 ? COL_GOLDL : COL_GOLD);
+            if (s_big) txt(hand_name(cat), 20, yy, 0, gui::F_SMALL, i < 2 ? COL_GOLDL : COL_CREAM);
+            else { d.setTextColor(i < 2 ? COL_GOLDL : COL_CREAM); d.setCursor(x, yy + 4); d.print(hand_name(cat)); }
+            txt(b, s_big ? W - 20 : x + 112, yy, 2, gui::F_SMALL, i < 2 ? COL_GOLDL : COL_GOLD);
         }
     }
     for (int i = 0; i < 3; i++) d.fillCircle(W / 2 - 12 + i * 12, ch - 5, i == s_help ? 3 : 2, i == s_help ? COL_GOLD : COL_DIM);
@@ -620,16 +731,16 @@ static void draw_settings(void)
     snprintf(r[3], 28, "%s: %s", GT("Consiglio", "Hold hint"), g_hint ? on : off);
     snprintf(r[4], 28, "Audio: %s", g_audio ? on : off);
     const char *items[NSET] = { r[0], r[1], r[2], r[3], r[4], GT("Azzera crediti", "Reset credits") };
-    int y = gui::title(GT("Impostazioni", "Settings"), nullptr, COL_GOLD);
-    gui::menu(s_setm, items, NSET, y, nucleo_app_content_height(), COL_GOLD);
+    int y = title_bar(GT("Impostazioni", "Settings"), nullptr);
+    menu_rows(s_setm, items, NSET, y, COL_GOLD);
     if (s_confirm) {
         char l1[28]; snprintf(l1, sizeof l1, GT("Riparti con %d crediti", "Restart with %d credits"), START_CREDITS);
-        gui::dialog(GT("Azzerare i crediti?", "Reset the credits?"), l1, nullptr, GT("INVIO si  Esc no", "ENTER yes  Esc no"), COL_RED);
+        dlg(GT("Azzerare i crediti?", "Reset the credits?"), l1, GT("INVIO si  Esc no", "ENTER yes  Esc no"), nullptr, COL_RED);
     }
 }
 static void draw_over(void)
 {
-    int ch = nucleo_app_content_height();
+    int ch = s_vh;
     int shx = 0, shy = 0;
     if (s_shake_ms > 0) { shx = (int)((s_anim * 37) % 7) - 3; shy = (int)((s_anim * 53) % 7) - 3; }
     draw_felt();
@@ -644,9 +755,10 @@ static void draw_over(void)
         d.drawRoundRect(x - w / 2, yy - 16, w, 34, 4, cs >= 0 ? COL_CARDED : COL_BACKED);
         if (w > 13) { int suit = f.id / 13; draw_suit(x, yy, 6, cs >= 0 ? suit : SU_SPADE, cs < 0 ? COL_GOLD : suit_red(suit) ? COL_HEART : COL_SPADE); }
     }
+    if (s_big) lchev();
     if (s_over_ms < 300) return;                               // the card drops in after the spill starts
     char l1[32]; snprintf(l1, sizeof l1, GT("Riparti con %d crediti", "Restart with %d credits"), START_CREDITS);
-    gui::dialog(GT("CREDITI FINITI", "OUT OF CREDITS"), l1, nullptr, GT("INVIO ricomincia  Esc menu", "ENTER restart  Esc menu"), ((s_anim >> 2) & 1) ? COL_RED : COL_GOLD);
+    dlg(GT("CREDITI FINITI", "OUT OF CREDITS"), l1, GT("INVIO ricomincia  Esc menu", "ENTER restart  Esc menu"), GT("Tocca: ricomincia", "Tap: restart"), ((s_anim >> 2) & 1) ? COL_RED : COL_GOLD);
 }
 
 // ============================ screen: play ===================================
@@ -689,16 +801,17 @@ static void draw_play(void)
     s_shx = s_shy = 0;
     if (s_shake_ms > 0) { int m = s_shake_ms > 350 ? 3 : 2; s_shx = (int)((s_anim * 37) % (2 * m + 1)) - m; s_shy = (int)((s_anim * 53) % (2 * m + 1)) - m; }
     bool big = (s_pp == PP_RESULT && s_win_total > 0 && s_win_tier >= 1);
-    int ch = nucleo_app_content_height();
+    int ch = s_vh;
     draw_felt();
     if (big) draw_rays();                                                              // golden backdrop behind the cards
     draw_hud();
     for (int i = 0; i < NCARD; i++) draw_card(i);
     draw_bottom();
     // Touch: while holding, each card (and its badge below) toggles its hold, as keys 3..7 do; between hands
-    // the bet label steps the bet. Anywhere else a tap is Enter: deal / draw. (Only in the compact layout —
-    // on the panel the frame is a scaled image and the native HUD owns the touch targets.)
-    if (!s_paused && !nucleo_app_two_screens()) {
+    // the bet label steps the bet. On the panel the whole table under the header is one field (table_tap):
+    // tap a card to hold it, a chip to bet, the deck to deal / draw.
+    if (s_big) { draw_chips_deck(); if (!s_paused) lg::field(0, 30, W, s_vh - 30); }
+    else if (!s_paused && !nucleo_app_two_screens()) {
         if (s_pp == PP_HOLD)
             for (int i = 0; i < NCARD; i++) nucleo_touch_add(card_x(i), CARD_Y, CARD_W, CARD_H + 22, NK_CHAR, (char)('3' + i));
         else if (s_pp == PP_READY || s_pp == PP_RESULT) nucleo_touch_add(W - 72, 0, 72, 18, NK_UP, 0);
@@ -712,8 +825,8 @@ static void draw_play(void)
         for (int k = 0; k < 3; k++) d.drawRect(k, k, W - 2 * k, ch - 2 * k, mix(COL_FELT, gc, g - k * 30));
         draw_win_banner();                                                             // the popping payoff banner, on top
     }
-    if (s_paused) gui::dialog(GT("PAUSA", "PAUSED"), s_pp == PP_READY || s_pp == PP_RESULT ? nullptr : GT("Uscendo, la mano si gioca", "Leaving plays the hand"),
-                              nullptr, GT("INVIO riprendi  Esc esci", "ENTER resume  Esc leave"), COL_GOLD);
+    if (s_paused) dlg(GT("PAUSA", "PAUSED"), s_pp == PP_READY || s_pp == PP_RESULT ? nullptr : GT("Uscendo, la mano si gioca", "Leaving plays the hand"),
+                      GT("INVIO riprendi  Esc esci", "ENTER resume  Esc leave"), GT("Tocca: riprendi  < esci", "Tap: resume  < leave"), COL_GOLD);
 }
 
 // ============================ input + hints ==================================
@@ -769,6 +882,7 @@ static void toggle_hold(int i)
 }
 static void on_key(int k, char ch)
 {
+    if (lg_key(k, ch)) return;                                                         // a touch on the panel
     nucleo_app_request_draw();
     switch (s_screen) {
         case ST_MENU:
@@ -851,7 +965,7 @@ static void step_flips(int dt)
 }
 static void draw_game(void)
 {
-    d.setClipRect(0, 0, W, nucleo_app_content_height());          // rays / spilled cards never paint the footer
+    if (!s_big) d.setClipRect(0, 0, W, s_vh);          // rays / spilled cards never paint the footer
     switch (s_screen) {
         case ST_MENU: draw_menu(); break;
         case ST_HELP: draw_help(); break;
@@ -859,89 +973,42 @@ static void draw_game(void)
         case ST_PLAY: draw_play(); break;
         default:      draw_over(); coins_draw(); break;
     }
-    d.clearClipRect();
+    if (!s_big) d.clearClipRect();                     // (on the panel the strip window owns the clip)
 }
 
-// ===== two screens: the full table on the 320x240 panel, the Cardputer as a companion ===================
-// The game's own frame is pushed scaled to the panel (lg::game), with a NATIVE HUD below it: the credits and
-// bet in big type plus the real touch controls — deal / bet / the five hold toggles / draw, menu navigation on
-// the other screens. Taps deliver the same keys on_key already handles. The Cardputer shows the money, the
-// phase and the key map (never a copy of the panel).
-static void lg_btn3(int y, int bh, const char *la, int ka, char ca, const char *lb, int kb, char cb,
-                    const char *lc, int kc, char cc)
-{
-    const int W320 = d.width(), g = 8, bw = (W320 - 4 * g) / 3;
-    lg::button(g, y, bw, bh, la, mix(COL_FELT, 0, 70), COL_GOLDL, ka, ca);
-    lg::button(2 * g + bw, y, bw, bh, lb, COL_GOLD, COL_DARK, kb, cb);
-    lg::button(3 * g + 2 * bw, y, bw, bh, lc, mix(COL_FELT, 0, 70), COL_GOLDL, kc, cc);
-}
-static void lg_hud(int y, int h)
-{
-    const int W320 = d.width();
-    d.fillRect(0, y, W320, h, COL_FELT2);
-    d.drawFastHLine(0, y, W320, COL_GOLDD);
-    const int bh = h - 34 < 40 ? h - 12 : 44, by = y + h - bh - 6;
-    char b[40];
-
-    if (s_screen == ST_PLAY) {
-        lg::font(2); d.setTextDatum(top_left); d.setTextColor(COL_GOLDL, COL_FELT2);
-        snprintf(b, sizeof b, "%d", g_balance); d.drawString(b, 12, y + 5);
-        if (s_pp != PP_RESULT) {                                  // the result line (below) owns this row instead
-            lg::font(1); d.setTextDatum(top_right); d.setTextColor(COL_CREAM, COL_FELT2);
-            snprintf(b, sizeof b, GT("Puntata %d", "Bet %d"), g_bet); d.drawString(b, W320 - 12, y + 9);
-        }
-        d.setTextDatum(top_left);
-        if (s_paused) { lg::button(40, by, W320 - 80, bh, GT("Riprendi", "Resume"), COL_GOLD, COL_DARK, NK_ENTER, 0); return; }
-        if (s_pp == PP_HOLD) {
-            const int g = 6, tw = 36;
-            int x = g;
-            for (int i = 0; i < NCARD; i++) {
-                char lab[4]; snprintf(lab, sizeof lab, "%s", RANKS[s_card[i] % 13]);
-                bool held = s_hold[i];
-                lg::button(x, by, tw, bh, lab, held ? COL_GOLD : mix(COL_FELT, 0, 90), held ? COL_DARK : COL_GOLDL, NK_CHAR, (char)('3' + i));
-                x += tw + g;
-            }
-            lg::button(x, by, W320 - g - x, bh, GT("CAMBIA", "DRAW"), COL_GOLD, COL_DARK, NK_ENTER, 0);
-            return;
-        }
-        if (s_pp == PP_DEAL || s_pp == PP_DRAW) { lg::button(40, by, W320 - 80, bh, GT("Salta", "Skip"), mix(COL_FELT, 0, 70), COL_GOLDL, NK_ENTER, 0); return; }
-        // PP_READY / PP_RESULT
-        if (s_pp == PP_RESULT) {
-            const char *nm = hand_name(s_hand_cat);
-            lg::font(1); d.setTextDatum(top_center); d.setTextColor(s_win_total > 0 ? COL_GOLDL : COL_GREY, COL_FELT2);
-            char r[32]; if (s_win_total > 0) snprintf(r, sizeof r, "%s  +%d", nm, s_win_total); else snprintf(r, sizeof r, "%s", nm);
-            d.drawString(r, W320 / 2, y + 7); d.setTextDatum(top_left);
-        }
-        lg_btn3(by, bh, GT("Punta -", "Bet -"), NK_DOWN, 0, s_pp == PP_RESULT ? GT("ANCORA", "AGAIN") : GT("GIOCA", "DEAL"), NK_ENTER, 0, GT("Punta +", "Bet +"), NK_UP, 0);
-        return;
-    }
-    // non-play screens: a label + navigation
-    lg::font(1); d.setTextDatum(top_left); d.setTextColor(COL_GOLD, COL_FELT2);
-    const char *lbl = s_screen == ST_MENU ? GT("POKER - menu", "POKER - menu")
-                    : s_screen == ST_HELP ? GT("Come si gioca", "How to play")
-                    : s_screen == ST_SET  ? GT("Impostazioni", "Settings")
-                    : GT("Crediti finiti", "Out of credits");
-    d.drawString(lbl, 12, y + 6); d.setTextDatum(top_left);
-    if (s_screen == ST_MENU)      lg_btn3(by, bh, GT("Su", "Up"), NK_UP, 0, "OK", NK_ENTER, 0, GT("Giu", "Down"), NK_DOWN, 0);
-    else if (s_screen == ST_HELP) lg_btn3(by, bh, GT("Prec", "Prev"), NK_LEFT, 0, GT("Chiudi", "Close"), NK_ENTER, 0, GT("Succ", "Next"), NK_RIGHT, 0);
-    else if (s_screen == ST_SET) {
-        if (s_confirm) { const int g = 8, bw = (W320 - 3 * g) / 2;
-            lg::button(g, by, bw, bh, "No", mix(COL_FELT, 0, 70), COL_GOLDL, NK_BACK, 0);
-            lg::button(2 * g + bw, by, bw, bh, GT("Si", "Yes"), COL_RED, COL_WHITE, NK_ENTER, 0); }
-        else lg_btn3(by, bh, GT("Su", "Up"), NK_UP, 0, GT("Cambia", "Change"), NK_RIGHT, 0, GT("Giu", "Down"), NK_DOWN, 0);
-    }
-    else lg::button(40, by, W320 - 80, bh, GT("Ricomincia", "Restart"), COL_GOLD, COL_DARK, NK_ENTER, 0);
-}
+// ===== two screens: the whole game NATIVE on the 320x240 panel, the Cardputer as a companion =============
+// view_set(true) lays every screen out for 320x240 (bigger cards, the chips and the deck under the table), composed
+// off-screen in strips (lg::frame). Touch is direct: tap a menu / settings row to pick it, again to open or change
+// it; on the table tap a card to hold it, a chip to bet, the deck to deal / draw; tap a card (pause, game over) to
+// go on; the header chevron is Back. The keyboard works as before.
+static void lg_paint(void *) { draw_game(); }
 static void draw_large(void)
 {
+    view_set(true);
     nucleo_touch_clear();
-    lg::game(draw_game, lg_hud, "Poker", COL_GOLD);
+    lg::frame(lg_paint, nullptr);
     nucleo_touch_commit();
+}
+static bool lg_key(int k, char ch)
+{
+    int x = 0, y = 0;
+    const bool fld = lg::tap(k, ch, &x, &y);
+    const int ri = nucleo_touch_is_row(k, ch) ? ch - NUCLEO_TOUCH_ROW : -1;
+    if (!fld && ri < 0) return false;
+    gui::Menu *m = s_screen == ST_MENU ? &s_menu : s_screen == ST_SET && !s_confirm ? &s_setm : nullptr;
+    if (m && ri >= 0) {                                                                 // a row: pick it, again = open / change
+        if (m->sel == ri) on_key(NK_ENTER, 0); else { m->sel = (int8_t)ri; m->pos = ri; sfx(SFX_NAV); }
+    } else if (s_screen == ST_SET && ri >= 0) { if (ri == 0) on_key(NK_ENTER, 0); else on_back(NK_BACK); }   // Yes / No
+    else if (s_screen == ST_HELP && fld) { if (x < W / 2) on_back(NK_LEFT); else on_key(NK_RIGHT, 0); }   // page back / on
+    else if (s_screen == ST_PLAY && fld && !s_paused) table_tap(x, y);
+    else if (fld) on_key(NK_ENTER, 0);                                                  // the pause / game-over card
+    nucleo_app_request_draw();
+    return true;
 }
 // The Cardputer companion: the money, the phase, the key map.
 static void draw_companion(void)
 {
-    const int top = nucleo_app_content_top(), h = nucleo_app_content_height();
+    const int top = nucleo_app_content_top(), h = s_vh;
     d.fillRect(0, top, W, h, BG);
     int y = lg::comp_head("POKER", COL_GOLD);
     char b[40];
@@ -960,7 +1027,7 @@ static void draw_companion(void)
     else                           st = GT("Pronto a giocare", "Ready to play");
     gui::text(st, 8, y + 50, 0, gui::F_BODY, COL_WHITE, 0);
     if (s_screen == ST_PLAY && s_pp == PP_RESULT && s_win_total > 0) { snprintf(b, sizeof b, "+%d", s_win_total); gui::text(b, W - 8, y + 50, 2, gui::F_BODY, COL_GOLDL, 0); }
-    const char *keys = s_screen != ST_PLAY ? GT("Tocca i tasti sul pannello", "Use the panel buttons")
+    const char *keys = s_screen != ST_PLAY ? GT("Tocca il pannello", "Tap the panel")
                      : s_paused            ? GT("INVIO riprendi  Esc esci", "ENTER resume  Esc leave")
                      : s_pp == PP_HOLD     ? GT("3-7 tieni  SPAZIO cambia", "3-7 hold  SPACE draw")
                      : GT("SPAZIO distribuisci  su/giu punta", "SPACE deal  up/dn bet");
@@ -968,7 +1035,8 @@ static void draw_companion(void)
 }
 static void on_draw(void)
 {
-    if (nucleo_app_two_screens()) { draw_companion(); return; }
+    view_set(false);
+    if (nucleo_app_two_screens()) { draw_companion(); view_set(true); return; }
     draw_game();
 }
 static bool poll(void)
@@ -1003,7 +1071,7 @@ static bool poll(void)
         }
     } else {                                                                           // ST_OVER
         s_over_ms += dt; dec(&s_shake_ms, dt); live = true;
-        float k = dt / 16.0f; int ch = nucleo_app_content_height();
+        float k = dt / 16.0f; int ch = s_vh;
         for (int i = 0; i < NFALL; i++) {                                  // tumble the spilled deck down, wrapping at the bottom
             Fall &f = s_fx->fall[i];
             f.vy += 0.05f * k; f.x += f.vx * k; f.y += f.vy * k; f.sp += f.spin * dt;
@@ -1020,6 +1088,7 @@ static void on_enter(void)
 {
     game_text_open("poker");
     cfg_read();
+    view_set(nucleo_app_two_screens());
     if (nucleo_audio_volume() < 40) nucleo_audio_set_volume(85);
     shuffle_deck();
     reset_table_ready();

@@ -28,6 +28,13 @@
 #define BR_MAXENEMY  6          // simultaneous live enemies
 #define BR_GRAV      900.0f     // px/s^2 for jumps & blood
 
+// The view the street is drawn through: screen = o + k * stage px. Compact {1, 0, 0}; the external panel draws the
+// same 240x135 stage natively at 4/3 (320x180) under its HUD band (app_brawler.cpp, on_draw_large).
+struct BrView { float k, ox, oy; };
+extern BrView br_v;
+static inline int brX(float x) { return (int)(br_v.ox + x * br_v.k); }
+static inline int brY(float y) { return (int)(br_v.oy + y * br_v.k); }
+
 // ------------------------------------------------------------------ palette
 // A noir NIGHT street (brawler_scene.cpp, its own per-street table), bright OUTLINED fighters — the heroes
 // in light player colours, each enemy type in its own hue (brawler_chars.cpp) — and red for blood and
@@ -209,7 +216,17 @@ bool  menu_key(int key, char ch);      // consume a key on menu screens; true if
 void  menu_goto(BrScreen s);           // switch screen (resets cursors, plays a cue)
 const char *menu_hint(void);           // OS footer hint for the current non-play screen
 bool  menu_animating(int dt_ms);       // a non-play screen still moving (glide / posing heroes): keep drawing
-void  menu_coop_start(void);           // co-op: both peers paired -> configure heroes + enter SC_PLAY
+void  menu_coop_start(void);
+// For the external panel's native screens (app_brawler.cpp): the list rows (title / options / co-op), the
+// cursor, a tapped row (tap = select, again = open), the controls page, a posed hero, a relative stat, the
+// select header.
+int   menu_rows(const char **it, char (*b)[40]);
+int   menu_cursor(void);
+void  menu_pick(int i);
+void  menu_help(const char **key, const char **act);
+void  menu_hero(int idx, bool sel, float sx, float feetY, float sc);
+float menu_stat(int stat, int idx);
+const char *menu_sel_head(void);           // co-op: both peers paired -> configure heroes + enter SC_PLAY
                                        // (host sims + streams; guest renders the host snapshot)
 
 // ------------------------------------------------------------------ sound (brawler_sfx.cpp)

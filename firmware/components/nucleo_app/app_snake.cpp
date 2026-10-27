@@ -27,11 +27,17 @@
 // ─── world / camera ──────────────────────────────────────────────────────────
 #define WORLD_W   80
 #define WORLD_H   40
-#define CELL       8      // px per cell
-#define HUD_H     23
+// The view is parametric: compact 240x135 (8 px cells, HUD 23, 30x14 cells) or the 320x240 panel (10 px cells,
+// HUD 30, 32x21 cells). view_set() picks it; logic is in cells, particles in world px (8 per cell).
+static int s_cell=8, s_hud=23, s_vcw=30, s_vch=14, s_pw=240, s_ph=135;
+static void view_set(bool big) {
+    s_cell=big?10:8; s_hud=big?30:23; s_vcw=big?32:30; s_vch=big?21:14; s_pw=big?320:240; s_ph=big?240:135;
+}
+#define CELL      s_cell  // px per cell
+#define HUD_H     s_hud
 #define PLAY_Y    HUD_H
-#define VIEW_W    30      // visible cells X: 240/8=30
-#define VIEW_H    14      // visible cells Y: (135-23)/8=14 (fullscreen play)
+#define VIEW_W    s_vcw   // visible cells X
+#define VIEW_H    s_vch   // visible cells Y
 
 // Minimap in the HUD
 #define MM_X      (W-42)
@@ -219,7 +225,7 @@ static int rng_range(int lo, int hi) {
 }
 
 // ─── text ───────────────────────────────────────────────────────────
-static void txt(int x,int y,int sz,uint16_t col,const char*s){ d.setTextSize(sz); d.setTextColor(col); d.setCursor(x,y); d.print(s); }
+static void txt(int x,int y,int sz,uint16_t col,const char*s){ d.setFont(&fonts::Font0); d.setTextSize(sz); d.setTextColor(col); d.setCursor(x,y); d.print(s); }
 static void txc(int cx,int y,int sz,uint16_t col,const char*s){ txt(cx-(int)strlen(s)*3*sz,y,sz,col,s); }
 static void txr(int rx,int y,int sz,uint16_t col,const char*s){ txt(rx-(int)strlen(s)*6*sz,y,sz,col,s); }
 
@@ -241,7 +247,6 @@ static void stats_load(void) {
 // ─── camera ───────────────────────────────────────────────────────────────────
 static void cam_update(void) {
     const Snake& own=(s_mode==MODE_GUEST)?s_s2:s_s1;
-    if(!own.alive) return;
     int cx=(int)own.bx[0]-VIEW_W/2;
     int cy=(int)own.by[0]-VIEW_H/2;
     if(cx<0)cx=0;
@@ -253,6 +258,7 @@ static void cam_update(void) {
 // Screen coordinates from a world cell
 static inline int sx_(int8_t c) { return (c-s_cam_x)*CELL; }
 static inline int sy_(int8_t r) { return HUD_H+(r-s_cam_y)*CELL; }
+static inline float wpx(int8_t c) { return c*8.0f+4.0f; }   // a cell's centre in world px (particles)
 static inline bool inv_(int8_t c, int8_t r) {
     return c>=s_cam_x&&c<s_cam_x+VIEW_W&&r>=s_cam_y&&r<s_cam_y+VIEW_H;
 }
@@ -356,7 +362,7 @@ static int64_t snake_interval(const Snake& s) {
 static void eat(Snake& s, int8_t nx, int8_t ny, uint16_t col) {
     snake_grow(s,2);
     s.score++; if(s.score>s_hisc)s_hisc=s.score;
-    parts_spawn((float)(sx_(nx)+CELL/2), (float)(sy_(ny)+CELL/2), col, 12);
+    parts_spawn(wpx(nx), wpx(ny), col, 12);
     SFX(SX_EAT);
 }
 static bool snake_step(Snake& s, Snake& opp) {
@@ -372,7 +378,7 @@ static bool snake_step(Snake& s, Snake& opp) {
     if(lethal){
         if(s.pu==PU_SHIELD){            // shield absorbs one crash: drop it, flash, survive in place
             s.pu=PU_NONE; s.pu_t=0; SFX(SX_PU);
-            parts_spawn((float)(sx_(s.bx[0])+CELL/2),(float)(sy_(s.by[0])+CELL/2),0x07FF,18);
+            parts_spawn(wpx(s.bx[0]),wpx(s.by[0]),0x07FF,18);
             return true;
         }
         s.alive=false; return false;
@@ -383,7 +389,7 @@ static bool snake_step(Snake& s, Snake& opp) {
     if(nx==s_fx&&ny==s_fy)   { eat(s,nx,ny,0xF800); spawn_food(); }
     if(nx==s_fx2&&ny==s_fy2) { eat(s,nx,ny,COL_GOLD); spawn_food2(); }
     if(s_pu_type&&nx==s_pu_x&&ny==s_pu_y){
-        parts_spawn((float)(sx_(nx)+CELL/2), (float)(sy_(ny)+CELL/2), PU_COL[s_pu_type], 16);
+        parts_spawn(wpx(nx), wpx(ny), PU_COL[s_pu_type], 16);
         apply_pu(s,opp,s_pu_type);s_pu_type=PU_NONE;
     }
     return true;
@@ -454,8 +460,8 @@ static void on_death(void) {
     else             s_winner=(s_s1.score>=s_s2.score)?1:2;
     if(i_won()) s_wins1++; else s_wins2++;
     // Explosion in screen coordinates (camera already updated before game_step)
-    if(d1) parts_spawn(sx_(s_s1.bx[0])+(float)CELL/2, sy_(s_s1.by[0])+(float)CELL/2, COL_P1, 20);
-    if(d2) parts_spawn(sx_(s_s2.bx[0])+(float)CELL/2, sy_(s_s2.by[0])+(float)CELL/2, COL_P2, 20);
+    if(d1) parts_spawn(wpx(s_s1.bx[0]), wpx(s_s1.by[0]), COL_P1, 20);
+    if(d2) parts_spawn(wpx(s_s2.bx[0]), wpx(s_s2.by[0]), COL_P2, 20);
     SFX(i_won()?SX_WIN:SX_DIE);
     stats_save();
     s_flash=10; go(ST_OVER);
@@ -580,7 +586,7 @@ static void apply_state(const sn_state_t* st, int plen) {
         cam_update();
         Snake& dead=(s_winner==1)?s_s2:s_s1;
         uint16_t dc=(s_winner==1)?COL_P2:COL_P1;
-        parts_spawn(sx_(dead.bx[0])+(float)CELL/2, sy_(dead.by[0])+(float)CELL/2, dc, 16);
+        parts_spawn(wpx(dead.bx[0]), wpx(dead.by[0]), dc, 16);
         s_flash=10; go(ST_OVER);
     }
     nucleo_app_request_draw();
@@ -746,23 +752,25 @@ static void hud_side(const Snake& s, uint16_t col, bool right) {
         d.fillRect(right?bx0+10+36-bw:bx0+10,15,bw,3,PU_COL[s.pu]);
     }
 }
+static void minimap(int mx,int my);
 static void draw_hud(void) {
     d.fillRect(0,0,W,HUD_H,COL_BGK);
     d.drawFastHLine(0,HUD_H-1,W,COL_EDGE);
     hud_side(s_s1,COL_P1,false);
     hud_side(s_s2,COL_P2,true);
-    // Minimap
-    int mx=MM_X;
-    d.fillRect(mx, MM_Y, MM_W, MM_H, COL_PANEL);
-    d.drawRect(mx-1, MM_Y-1, MM_W+2, MM_H+2, COL_EDGE);
-    d.drawRect(mx+s_cam_x/2, MM_Y+s_cam_y/2, VIEW_W/2, VIEW_H/2, 0x6B6D);   // viewport
-    d.drawPixel(mx+s_fx/2,  MM_Y+s_fy/2,  0xF800);
-    d.drawPixel(mx+s_fx2/2, MM_Y+s_fy2/2, COL_GOLD);
-    if(s_pu_type) d.drawPixel(mx+s_pu_x/2, MM_Y+s_pu_y/2, PU_COL[s_pu_type]);
-    for(int i=2;i<s_s1.len;i+=3) d.drawPixel(mx+s_s1.bx[i]/2, MM_Y+s_s1.by[i]/2, COL_P1D);
-    for(int i=2;i<s_s2.len;i+=3) d.drawPixel(mx+s_s2.bx[i]/2, MM_Y+s_s2.by[i]/2, COL_P2D);
-    d.fillRect(mx+s_s1.bx[0]/2, MM_Y+s_s1.by[0]/2, 2, 2, COL_P1);
-    d.fillRect(mx+s_s2.bx[0]/2, MM_Y+s_s2.by[0]/2, 2, 2, COL_P2);
+    minimap(MM_X,MM_Y);
+}
+static void minimap(int mx,int my) {
+    d.fillRect(mx, my, MM_W, MM_H, COL_PANEL);
+    d.drawRect(mx-1, my-1, MM_W+2, MM_H+2, COL_EDGE);
+    d.drawRect(mx+s_cam_x/2, my+s_cam_y/2, VIEW_W/2, VIEW_H/2, 0x6B6D);   // viewport
+    d.drawPixel(mx+s_fx/2,  my+s_fy/2,  0xF800);
+    d.drawPixel(mx+s_fx2/2, my+s_fy2/2, COL_GOLD);
+    if(s_pu_type) d.drawPixel(mx+s_pu_x/2, my+s_pu_y/2, PU_COL[s_pu_type]);
+    for(int i=2;i<s_s1.len;i+=3) d.drawPixel(mx+s_s1.bx[i]/2, my+s_s1.by[i]/2, COL_P1D);
+    for(int i=2;i<s_s2.len;i+=3) d.drawPixel(mx+s_s2.bx[i]/2, my+s_s2.by[i]/2, COL_P2D);
+    d.fillRect(mx+s_s1.bx[0]/2, my+s_s1.by[0]/2, 2, 2, COL_P1);
+    d.fillRect(mx+s_s2.bx[0]/2, my+s_s2.by[0]/2, 2, 2, COL_P2);
 }
 
 // ─── draw snake with camera ──────────────────────────────────────────────────
@@ -805,7 +813,10 @@ static void draw_snake(const Snake& s, uint16_t col, uint16_t dark) {
 }
 
 // ─── draw field ───────────────────────────────────────────────────────────────
+static void lp_play_over(void);
 static void draw_play(void) {
+    const int W=s_pw, H=s_ph;                             // the view (compact or panel): shadows the 240x135 globals
+    cam_update();
     // floor: black with a navy dot on every cell corner, so speed and position read at a glance
     d.fillRect(0,PLAY_Y,W,H-PLAY_Y,COL_BGK);
     for(int gx_=0;gx_<VIEW_W;gx_++) for(int gy_=0;gy_<VIEW_H;gy_++) d.drawPixel(gx_*CELL,PLAY_Y+gy_*CELL,0x0010);
@@ -856,7 +867,7 @@ static void draw_play(void) {
 
     // Explosion particles
     for(int i=0;i<N_PARTS;i++)
-        if(s_parts[i].life) d.fillRect((int)s_parts[i].x,(int)s_parts[i].y,3,3,s_parts[i].col);
+        if(s_parts[i].life) d.fillRect((int)((s_parts[i].x-s_cam_x*8)*CELL/8),HUD_H+(int)((s_parts[i].y-s_cam_y*8)*CELL/8),CELL/3+1,CELL/3+1,s_parts[i].col);
 
     // Screen-edge flash on death
     if(s_flash>0) {
@@ -864,6 +875,7 @@ static void draw_play(void) {
         for(int t=0;t<(s_flash>5?2:1);t++)
             d.drawRect(t,PLAY_Y+t,W-2*t,H-PLAY_Y-2*t,fc);
     }
+    if(W>240){ lp_play_over(); return; }                // the panel: its own HUD, cards and touch
     draw_hud();
 
     if(s_st!=ST_PLAY) return;
@@ -883,8 +895,8 @@ static void draw_play(void) {
 
 /// ─── menu screens ────────────────────────────────────────────────────────────
 // Titles, lists and the pause / result cards come from the console kit (game_ui.h), like every other game.
-static void wait_dots(int cy,uint16_t col) {
-    for(int i=0;i<3;i++) d.fillCircle(W/2-12+i*12,cy,2,(esp_timer_get_time()/300000)%3==i?col:0x2104);
+static void wait_dots(int cx,int cy,uint16_t col) {
+    for(int i=0;i<3;i++) d.fillCircle(cx-12+i*12,cy,2,(esp_timer_get_time()/300000)%3==i?col:0x2104);
 }
 static const char *menu_label(int i) {
     switch(i){
@@ -913,7 +925,7 @@ static void draw_host(void) {
     char sub[32]; snprintf(sub,sizeof sub,GT("%.12s - canale %d","%.12s - channel %d"),pnet_name(),pnet_channel());
     int y=gui::title(GT("Crea partita","Host a match"),sub,COL_P1);
     gui::text(GT("Attendo sfidante","Waiting for rival"),W/2,y+4,1,gui::F_BODY,COL_TXT,COL_BGK);
-    wait_dots(y+34,COL_P1);
+    wait_dots(W/2,y+34,COL_P1);
     gui::text(GT("Sull'altro: Snake > Entra","Other device: Snake > Join"),W/2,y+44,1,gui::F_SMALL,COL_DIMC,COL_BGK);
 }
 
@@ -923,12 +935,12 @@ static void draw_browse(void) {
         char nm[16]; snprintf(nm,sizeof nm,"%.12s",s_browse_sel<s_n_hosts?s_hosts[s_browse_sel].name:"?");
         gui::text(GT("Mi collego a","Connecting to"),W/2,y+2,1,gui::F_SMALL,COL_DIMC,COL_BGK);
         gui::text(nm,W/2,y+20,1,gui::F_BODY,COL_GOLD,COL_BGK);
-        wait_dots(y+50,COL_P2);
+        wait_dots(W/2,y+50,COL_P2);
         return;
     }
     if(s_n_hosts==0) {
         gui::text(GT("Cerco partite...","Looking for matches..."),W/2,y+4,1,gui::F_SMALL,COL_TXT,COL_BGK);
-        wait_dots(y+30,COL_P2);
+        wait_dots(W/2,y+30,COL_P2);
         gui::text(GT("Sull'altro: Snake > Crea","Other device: Snake > Host"),W/2,y+44,1,gui::F_SMALL,COL_DIMC,COL_BGK);
         return;
     }
@@ -937,40 +949,50 @@ static void draw_browse(void) {
     gui::menu(s_bmenu,items,s_n_hosts,y,nucleo_app_content_height(),COL_P2);
 }
 
+// The result card's lines (compact dialog and panel card): returns the title, fills the score / record lines.
+static const char *over_lines(char *sc, char *r, uint16_t *col) {
+    bool won=i_won();
+    snprintf(sc,40,"%.8s  %d - %d  %.8s",s_s1.name,s_s1.score,s_s2.score,s_s2.name);
+    if(s_peerleft) snprintf(r,40,"%s",GT("Avversario disconnesso","Opponent disconnected"));
+    else snprintf(r,40,GT("Record cibo: %d","Food record: %d"),s_hisc);
+    *col=s_peerleft?COL_MUTE:won?COL_GOLD:0xF8A2;
+    return s_peerleft?GT("Fine partita","Match over"):won?GT("Hai vinto!","You win!"):
+           s_mode==MODE_AI?GT("Vince la CPU","CPU wins"):GT("Hai perso","You lose");
+}
 static void draw_over(void) {
     d.setClipRect(0,0,W,H-HINT);                          // the field behind the card stays above the footer
     draw_play();
     for(int y=PLAY_Y;y<H-HINT;y+=2) d.drawFastHLine(0,y,W,COL_BGK);
     d.clearClipRect();
-    bool won=i_won();
-    const char* t=s_peerleft?GT("Fine partita","Match over"):won?GT("Hai vinto!","You win!"):
-                  s_mode==MODE_AI?GT("Vince la CPU","CPU wins"):GT("Hai perso","You lose");
-    char sc[40]; snprintf(sc,sizeof sc,"%.8s  %d - %d  %.8s",s_s1.name,s_s1.score,s_s2.score,s_s2.name);
-    char r[40]; if(s_peerleft) snprintf(r,sizeof r,"%s",GT("Avversario disconnesso","Opponent disconnected"));
-                else snprintf(r,sizeof r,GT("Record cibo: %d","Food record: %d"),s_hisc);
-    gui::dialog(t,sc,r,nullptr,s_peerleft?COL_MUTE:won?COL_GOLD:0xF8A2);
+    char sc[40], r[40]; uint16_t col;
+    const char *t=over_lines(sc,r,&col);
+    gui::dialog(t,sc,r,nullptr,col);
 }
 
 static void help_row(int y,char sym,uint16_t col,const char *t) {
     d.fillRoundRect(8,y-1,10,10,3,col); char s[2]={sym,0}; txt(10,y,1,COL_BGK,s);
     txt(24,y,1,COL_TXT,t);
 }
-static void draw_help(void) {
-    int y=gui::title(s_help_pg==0?GT("Come si gioca","How to play"):GT("POWER-UP","POWER-UPS"),nullptr,0xFFE0);
+// The help page's lines (compact and panel): page 0 = the rules (+ the panel's touch line at [4]), page 1 = the
+// power-ups (PU 1..5); [5] is the TAB line. Returns how many rows the compact page draws.
+static int help_text(const char **l) {
     if(s_help_pg==0) {
-        txt(6,y,1,COL_TXT,GT("Frecce o W/A/S/D: gira","Arrows or W/A/S/D: turn"));
-        txt(6,y+11,1,COL_TXT,GT("Mangia per crescere e fare punti","Eat to grow and score"));
-        txt(6,y+22,1,COL_TXT,GT("Muri, rocce e corpi uccidono","Walls, rocks and bodies kill"));
-        txt(6,y+33,1,COL_TXT,GT("Vince chi resta vivo","Last snake alive wins"));
-        txt(6,y+50,1,COL_GOLD,GT("TAB: power-up","TAB: power-ups"));
-    } else {
-        help_row(y+1,'F',PU_COL[PU_SPEED], GT("veloce per un po'","faster for a while"));
-        help_row(y+14,'L',PU_COL[PU_SLOW],  GT("rallenta l'avversario","slows your rival"));
-        help_row(y+27,'X',PU_COL[PU_SHORT], GT("perdi 6 segmenti","drop 6 segments"));
-        help_row(y+40,'G',PU_COL[PU_GHOST], GT("attraversi i muri","pass through walls"));
-        help_row(y+53,'S',PU_COL[PU_SHIELD],GT("salva da 1 schianto","survive one crash"));
-        txt(6,y+70,1,COL_GOLD,GT("TAB: regole","TAB: rules"));
+        l[0]=GT("Frecce o W/A/S/D: gira","Arrows or W/A/S/D: turn"); l[1]=GT("Mangia per crescere e fare punti","Eat to grow and score");
+        l[2]=GT("Muri, rocce e corpi uccidono","Walls, rocks and bodies kill"); l[3]=GT("Vince chi resta vivo","Last snake alive wins");
+        l[4]=GT("Pannello: trascina o tocca per girare","Panel: drag or tap to turn"); l[5]=GT("TAB: power-up","TAB: power-ups");
+        return 4;
     }
+    l[0]=GT("veloce per un po'","faster for a while"); l[1]=GT("rallenta l'avversario","slows your rival");
+    l[2]=GT("perdi 6 segmenti","drop 6 segments"); l[3]=GT("attraversi i muri","pass through walls");
+    l[4]=GT("salva da 1 schianto","survive one crash"); l[5]=GT("TAB: regole","TAB: rules");
+    return 5;
+}
+static const char *help_title(void) { return s_help_pg==0?GT("Come si gioca","How to play"):GT("POWER-UP","POWER-UPS"); }
+static void draw_help(void) {
+    int y=gui::title(help_title(),nullptr,0xFFE0);
+    const char *l[6]; int n=help_text(l);
+    for(int i=0;i<n;i++) { if(s_help_pg) help_row(y+1+i*13,PU_SYM[i+1],PU_COL[i+1],l[i]); else txt(6,y+i*11,1,COL_TXT,l[i]); }
+    txt(6,y+(s_help_pg?70:50),1,COL_GOLD,l[5]);
 }
 
 static void draw_scores(void) {
@@ -998,64 +1020,186 @@ static void draw_game(void) {
 }
 
 // ===== two screens ===========================================================
-// The panel (on_draw_large): the game's own frame scaled to 320 px, with a native HUD band below holding
-// big scores + touch controls that map to the real keys (a D-pad + pause while playing, nav in menus). The
-// Cardputer (on_draw while two screens) is a companion: the live score, power-ups and the key map — never
-// the game frame. Keep the extra state to nothing: both read the globals the game already keeps.
+// The panel (on_draw_large) is drawn NATIVELY at 320x240 through lg::frame: the field is draw_play() with 10 px
+// cells (view_set) under its own HUD band, menus and cards are laid out for the panel. Touch is direct: rows are
+// tapped (tap = pick, again = open; card rows act at once), on the field a drag turns the snake that way and a
+// tap turns it toward the point (relative to the head), the chevron is Back (pause / leave). The Cardputer shows
+// the companion (score, power-ups, keys). No extra state: everything reads the game's globals.
 #define ACC COL_P1
-
-struct HudBtn { const char *label; int key; char ch; bool acc; };
-static void hud_row(int x, int y, int w, int h, const HudBtn *b, int n) {
-    if (n <= 0) return;
-    const int gap = 4, bw = (w - (n - 1) * gap) / n;
-    for (int i = 0; i < n; i++)
-        lg::button(x + i * (bw + gap), y, bw, h, b[i].label,
-                   b[i].acc ? ACC : lg::card(), b[i].acc ? COL_BGK : COL_TXT, b[i].key, b[i].ch);
+#define LW 320
+#define LH 240
+static void leave_to_menu(void);
+static void set_dir(int8_t dir);
+static int lt(int x,int y,int f,uint16_t col,const char *s,uint8_t dt=top_left) {   // panel text, no box
+    lg::font(f); d.setTextSize(1); d.setTextDatum(dt); d.setTextColor(col); d.drawString(s,x,y);
+    int w=d.textWidth(s); d.setTextDatum(top_left); return w;
 }
-static void hud_score(int x, int yc, uint16_t col, const char *name, int score) {
-    char nm[10]; snprintf(nm, sizeof nm, "%.8s", name && name[0] ? name : "?");
-    lg::font(0); d.setTextDatum(middle_left); d.setTextColor(col, BG); d.drawString(nm, x, yc);
-    char s[8]; snprintf(s, sizeof s, "%d", score);
-    lg::font(2); d.setTextDatum(middle_right); d.setTextColor(COL_TXT, BG); d.drawString(s, x + 120, yc);
-    d.setTextDatum(top_left);
+static void lchev(void) { for(int k=0;k<2;k++){ d.drawLine(13+k,8,7+k,15,COL_MUTE); d.drawLine(7+k,15,13+k,22,COL_MUTE); } nucleo_touch_add(0,0,34,30,NK_BACK,0); }
+// The header: a back chevron (tap = Back) and the title; returns the first y below.
+static int lhead(const char *t,uint16_t acc) {
+    d.fillRect(0,0,LW,LH,COL_BGK);
+    lchev();
+    lt(28,8,1,acc,t);
+    d.drawFastHLine(0,29,LW,acc);
+    return 38;
 }
-static void large_hud(int y, int h) {
-    const int PW = d.width(), pad = 8;
-    d.fillRect(0, y, PW, h, BG);
-    d.drawFastHLine(0, y, PW, LINE);
-    int bh = h - 12; if (bh > 46) bh = 46;
-    const int by = y + (h - bh) / 2;
-    if (s_st == ST_PLAY && !s_paused) {
-        hud_score(pad, y + h / 4, COL_P1, s_s1.name, s_s1.score);
-        hud_score(pad, y + h * 3 / 4, COL_P2, s_s2.name, s_s2.score);
-        const HudBtn b[5] = { { "<", NK_LEFT, 0, false }, { "^", NK_UP, 0, false },
-                              { "v", NK_DOWN, 0, false }, { ">", NK_RIGHT, 0, false },
-                              { "II", NK_BACK, 0, true } };
-        hud_row(140, by, PW - 140 - pad, bh, b, 5);
-    } else if (s_st == ST_PLAY && s_paused) {
-        const HudBtn b[2] = { { GT("RIPRENDI", "RESUME"), NK_ENTER, 0, true },
-                              { GT("ESCI", "QUIT"), NK_BACK, 0, false } };
-        hud_row(pad, by, PW - 2 * pad, bh, b, 2);
-    } else if (s_st == ST_MENU) {
-        const HudBtn b[3] = { { GT("SU", "UP"), NK_UP, 0, false }, { GT("GIU", "DOWN"), NK_DOWN, 0, false },
-                              { GT("SCEGLI", "SELECT"), NK_ENTER, 0, true } };
-        hud_row(pad, by, PW - 2 * pad, bh, b, 3);
-    } else if (s_st == ST_BROWSE) {
-        const HudBtn b[4] = { { GT("SU", "UP"), NK_UP, 0, false }, { GT("GIU", "DOWN"), NK_DOWN, 0, false },
-                              { GT("ENTRA", "JOIN"), NK_ENTER, 0, true }, { GT("INDIETRO", "BACK"), NK_BACK, 0, false } };
-        hud_row(pad, by, PW - 2 * pad, bh, b, 4);
-    } else if (s_st == ST_OVER) {
-        const HudBtn b1[2] = { { GT("RIVINCITA", "REMATCH"), NK_ENTER, 0, true }, { "MENU", NK_BACK, 0, false } };
-        const HudBtn b2[1] = { { "MENU", NK_ENTER, 0, true } };
-        if (s_mode == MODE_AI) hud_row(pad, by, PW - 2 * pad, bh, b1, 2);
-        else                   hud_row(pad, by, PW - 2 * pad, bh, b2, 1);
-    } else if (s_st == ST_HELP) {
-        const HudBtn b[2] = { { GT("PAGINA", "PAGE"), NK_TAB, 0, true }, { GT("INDIETRO", "BACK"), NK_BACK, 0, false } };
-        hud_row(pad, by, PW - 2 * pad, bh, b, 2);
-    } else {   // ST_HOST / ST_SCORES
-        const HudBtn b[1] = { { GT("INDIETRO", "BACK"), NK_BACK, 0, true } };
-        hud_row(pad, by, PW - 2 * pad, bh, b, 1);
+// Tappable rows (touch row i), the selected one on a filled pill.
+static void lrows(int x,int y,int w,int rh,const char *const *it,int n,int sel,uint16_t acc) {
+    for(int i=0;i<n;i++) {
+        int ry=y+i*rh; bool s=i==sel;
+        if(s){ d.fillRoundRect(x,ry,w,rh-6,6,COL_PANEL); d.fillRoundRect(x+4,ry+7,4,rh-20,2,acc); }
+        else d.drawRoundRect(x,ry,w,rh-6,6,0x2108);
+        lt(x+18,ry+(rh-6)/2,0,s?COL_TXT:COL_MUTE,it[i],middle_left);
+        nucleo_touch_add(x,ry,w,rh-6,NK_CHAR,(char)(NUCLEO_TOUCH_ROW+i));
     }
+}
+// A card over the dimmed field: title, two lines, action rows (row 0 is the primary one).
+static void lcard(const char *t,const char *l1,const char *l2,uint16_t col,const char *const *it,int n) {
+    for(int y=PLAY_Y+1;y<LH;y+=2) d.drawFastHLine(0,y,LW,COL_BGK);
+    const int top=l2?80:l1?64:46, h=top+4+n*40, y0=PLAY_Y+(LH-PLAY_Y-h)/2;
+    d.fillRoundRect(30,y0,LW-60,h,8,COL_BGK); d.drawRoundRect(30,y0,LW-60,h,8,col);
+    lt(LW/2,y0+10,2,col,t,top_center);
+    if(l1) lt(LW/2,y0+38,0,COL_TXT,l1,top_center);
+    if(l2) lt(LW/2,y0+56,0,COL_MUTE,l2,top_center);
+    lrows(46,y0+top,LW-92,40,it,n,0,col);
+}
+static void lhud_side(const Snake &s,uint16_t col,bool right) {
+    char b[12]; snprintf(b,sizeof b,"%d",s.score);
+    const uint8_t dt=right?middle_right:middle_left;
+    const int sg=right?-1:1;
+    int x=right?LW-52:30;
+    x+=sg*(lt(x,15,2,COL_TXT,b,dt)+6);
+    snprintf(b,sizeof b,"%.8s",s.name);
+    x+=sg*(lt(x,15,0,col,b,dt)+5);
+    if(s.pu){ if(right) x-=14; d.fillRoundRect(x,8,14,14,3,PU_COL[s.pu]); char sy[2]={PU_SYM[s.pu],0}; lt(x+7,15,4,COL_BGK,sy,middle_center); }
+}
+// Draws over draw_play()'s field at panel size: the HUD band, then the pause / result card or the 3-2-1.
+static void lp_play_over(void) {
+    d.fillRect(0,0,LW,HUD_H,COL_BGK);
+    d.drawFastHLine(0,HUD_H-1,LW,COL_EDGE);
+    lchev();
+    lhud_side(s_s1,COL_P1,false); lhud_side(s_s2,COL_P2,true);
+    minimap(LW-44,5);
+    if(s_st==ST_OVER) {
+        char sc[40], r[40]; uint16_t col;
+        const char *t=over_lines(sc,r,&col);
+        const char *it[2]={ s_mode==MODE_AI?GT("RIVINCITA","REMATCH"):"MENU", "MENU" };
+        lcard(t,sc,r,col,it,s_mode==MODE_AI?2:1);
+        return;
+    }
+    if(s_paused) {
+        const char *it[2]={ GT("RIPRENDI","RESUME"), GT("ESCI","QUIT") };
+        lcard(GT("PAUSA","PAUSED"),s_mode==MODE_AI?nullptr:GT("La partita continua!","The match goes on!"),nullptr,COL_P1,it,2);
+        return;
+    }
+    int64_t now=esp_timer_get_time();
+    if(now<s_go_us) {
+        char n[2]={(char)('1'+(int)((s_go_us-now)/(READY_MS*1000LL/3))),0};
+        d.fillRoundRect(LW/2-32,62,64,64,10,COL_PANEL); d.drawRoundRect(LW/2-32,62,64,64,10,COL_EDGE);
+        lt(LW/2,95,3,COL_GOLD,n,middle_center);
+        lt(LW/2,138,1,COL_TXT,GT("Pronti...","Get ready..."),top_center);
+        lt(LW/2,162,0,COL_MUTE,GT("Trascina o tocca per girare","Drag or tap to turn"),top_center);
+    }
+    lg::field(0,HUD_H,LW,LH-HUD_H);                         // tap = turn toward the point
+    nucleo_touch_add_pad(0,HUD_H,LW,LH-HUD_H,14);           // drag = turn that way
+}
+// A field tap: turn toward it, relative to the head (the axis across the current heading).
+static void ltap_turn(int tx,int ty) {
+    view_set(true); cam_update();                           // the panel's mapping (the compact draw may have run)
+    const Snake &s=(s_mode==MODE_GUEST)?s_s2:s_s1;
+    int dx=tx-(sx_(s.bx[0])+CELL/2), dy=ty-(sy_(s.by[0])+CELL/2);
+    int8_t ref=(s_mode!=MODE_GUEST&&s.inq_n>0)?s.inq[s.inq_n-1]:s.next_dir;
+    if(DX[ref]){ if(abs(dy)>=CELL) set_dir(dy<0?DUP:DDN); }
+    else if(abs(dx)>=CELL) set_dir(dx<0?DLT:DRT);
+}
+static void lp_help(void) {
+    int y=lhead(help_title(),0xFFE0)+4;
+    const char *l[6]; help_text(l);
+    for(int i=0;i<5;i++) {
+        if(s_help_pg==0) { lt(14,y+i*28,0,i==4?COL_P1:COL_TXT,l[i]); continue; }
+        d.fillRoundRect(14,y+i*30,18,18,4,PU_COL[i+1]); char sy[2]={PU_SYM[i+1],0};
+        lt(23,y+i*30+9,0,COL_BGK,sy,middle_center); lt(42,y+i*30+9,0,COL_TXT,l[i],middle_left);
+    }
+    lt(14,y+156,0,COL_GOLD,l[5]);
+    lg::field(0,30,LW,LH-30);                               // a tap turns the page
+}
+static void lp_wait(const char *t,uint16_t col,const char *l1,const char *l2,const char *l3) {
+    lhead(t,col);
+    if(l1) lt(LW/2,62,0,COL_DIMC,l1,top_center);
+    if(l2) lt(LW/2,92,2,COL_TXT,l2,top_center);
+    wait_dots(LW/2,140,col);
+    if(l3) lt(LW/2,170,0,COL_DIMC,l3,top_center);
+}
+static void lg_paint(void *) {
+    view_set(true);
+    switch(s_st) {
+        case ST_PLAY: case ST_OVER: draw_play(); break;
+        case ST_MENU: {
+            const char *it[N_MENU]; for(int i=0;i<N_MENU;i++) it[i]=menu_label(i);
+            lrows(10,lhead("Snake Duel",COL_P1),LW-20,40,it,N_MENU,s_menu.sel,COL_P1);
+            menu_snake(LW-80,12,COL_P1,COL_P1D,1);
+            break;
+        }
+        case ST_HOST: {
+            char sub[32]; snprintf(sub,sizeof sub,GT("%.12s - canale %d","%.12s - channel %d"),pnet_name(),pnet_channel());
+            lp_wait(GT("Crea partita","Host a match"),COL_P1,sub,GT("Attendo sfidante","Waiting for rival"),GT("Sull'altro: Snake > Entra","Other device: Snake > Join"));
+            break;
+        }
+        case ST_BROWSE:
+            if(s_join_pending) lp_wait(GT("Entra in partita","Join a match"),COL_P2,GT("Mi collego a","Connecting to"),s_browse_sel<s_n_hosts?s_hosts[s_browse_sel].name:"?",nullptr);
+            else if(s_n_hosts==0) lp_wait(GT("Entra in partita","Join a match"),COL_P2,nullptr,GT("Cerco partite...","Looking for matches..."),GT("Sull'altro: Snake > Crea","Other device: Snake > Host"));
+            else {
+                const char *it[MAX_HOSTS]; for(int i=0;i<s_n_hosts;i++) it[i]=s_hosts[i].name;
+                lrows(10,lhead(GT("Entra in partita","Join a match"),COL_P2),LW-20,40,it,s_n_hosts,s_browse_sel,COL_P2);
+            }
+            break;
+        case ST_HELP: lp_help(); break;
+        case ST_SCORES: {
+            int y=lhead(GT("Record","Scores"),COL_GOLD)+14;
+            char b[48];
+            lt(LW/4,y,0,COL_P1,GT("Vinte da te","Your wins"),top_center);
+            lt(LW*3/4,y,0,COL_P2,GT("Vinte dai rivali","Rival wins"),top_center);
+            snprintf(b,sizeof b,"%d",s_wins1); lt(LW/4,y+26,3,COL_TXT,b,top_center);
+            snprintf(b,sizeof b,"%d",s_wins2); lt(LW*3/4,y+26,3,COL_TXT,b,top_center);
+            snprintf(b,sizeof b,"%s: %d",GT("Record cibo","Food record"),s_hisc);
+            lt(LW/2,y+100,1,COL_GOLD,b,top_center);
+            break;
+        }
+    }
+}
+static void draw_large(void) {
+    nucleo_touch_clear();
+    lg::frame(lg_paint,nullptr);
+    nucleo_touch_commit();
+}
+// A touch on the panel's content (a row or a field tap): true when consumed.
+static void on_key(int key, char ch);
+static bool lg_key(int k,char ch) {
+    int tx=0, ty=0;
+    const bool fld=lg::tap(k,ch,&tx,&ty);
+    const int ri=nucleo_touch_is_row(k,ch)?ch-NUCLEO_TOUCH_ROW:-1;
+    if(!fld&&ri<0) return false;
+    switch(s_st) {
+        case ST_MENU:
+            if(ri<0||ri>=N_MENU) break;
+            if(s_menu.sel==ri){ on_key(NK_ENTER,0); return true; }
+            s_menu.sel=(int8_t)ri; SFX(SX_NAV); break;
+        case ST_BROWSE:
+            if(ri<0||ri>=s_n_hosts||s_join_pending) break;
+            if(s_browse_sel==ri){ on_key(NK_ENTER,0); return true; }
+            s_browse_sel=ri; s_bmenu.sel=(int8_t)ri; SFX(SX_NAV); break;
+        case ST_HELP: if(fld) s_help_pg^=1; break;
+        case ST_PLAY:
+            if(s_paused){ if(ri==0) on_key(NK_ENTER,0); else if(ri==1) leave_to_menu(); return true; }
+            if(fld) ltap_turn(tx,ty);
+            return true;
+        case ST_OVER:
+            if(ri==0) on_key(NK_ENTER,0); else if(ri==1) leave_to_menu();
+            return true;
+        default: break;
+    }
+    nucleo_app_request_draw();
+    return true;
 }
 static void comp_pu(int x, int y, const Snake &s) {
     if (!s.pu) return;
@@ -1108,12 +1252,8 @@ static void draw_companion(void) {
 }
 static void on_draw(void) {
     if (nucleo_app_two_screens()) { draw_companion(); return; }
+    view_set(false);
     draw_game();
-}
-static void draw_large(void) {
-    nucleo_touch_clear();
-    lg::game(draw_game, large_hud, "Snake", ACC);
-    nucleo_touch_commit();
 }
 
 // ─── state / hint ────────────────────────────────────────────────────────────
@@ -1154,6 +1294,7 @@ static void set_dir(int8_t dir) {
 }
 
 static void on_key(int key, char ch) {
+    if(lg_key(key,ch)) return;                            // a touch on the panel's content
     switch(s_st) {
         case ST_MENU:
             if(gui::menu_key(s_menu,key,N_MENU)){ SFX(SX_NAV); nucleo_app_request_draw(); }

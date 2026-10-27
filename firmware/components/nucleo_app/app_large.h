@@ -13,8 +13,9 @@
 //   }
 //   on_key:  switch (lg::row_tap(key, ch, s_lg_scroll, s_n, &s_sel)) { case 1: redraw; return; case 2: open(); return; }
 //
-// Games: lg::game() puts the game's own frame (drawn into the shared canvas) on the panel, scaled to its width,
-// with a native HUD band below; the Cardputer shows the game's companion (score, lives, keys).
+// Games draw their large view NATIVELY for 320x240 (lg::frame for animated screens, lg::field / nucleo_touch_add_pad
+// for direct touch on the playfield); lg::game() — the compact frame scaled up — is a mirror (CLAUDE.md) and only
+// stays for apps not converted yet. The Cardputer shows the game's companion (score, lives, keys).
 #pragma once
 #include <stddef.h>
 #include "app_ui.h"     // app_ui_text_fn / app_ui_color_fn row providers
@@ -70,6 +71,22 @@ int  comp_head(const char *app, unsigned short acc);
 void comp_keys(const char *keys);
 
 // ---- games -----------------------------------------------------------------------------------------------------
+// A whole animated frame, composed off-screen: paint() draws the frame in PANEL coordinates into `d` — which is then
+// the shared canvas seen through a window (320 wide, ~100 rows at a time) — once per strip, and every finished strip
+// is pushed in one blit, so the panel never shows a cleared-then-redrawn frame. No extra RAM. Inside paint() `d` is
+// buffered (tile_blit / stipple work) and d.width() is the panel's; use the [y0, y0+h) band, never d.height().
+// The touch set is cleared before every strip, so register the frame's targets inside paint() (or after frame()).
+// The window's rows above the strip lie BEFORE the canvas in memory and only its clip keeps them untouched: inside
+// paint() never call clearClipRect (a narrower setClipRect is fine if the strip's clip is restored after it), and
+// never drawWideLine / drawWedgeLine / drawGradientLine: they replace the clip with the whole sprite and would
+// write outside the canvas.
+// Without a canvas (fragmented heap) paint() runs once straight onto the panel. Returns true when composed.
+bool frame(void (*paint)(void *ud), void *ud, int y0 = 0, int h = 0 /* 0 = to the bottom */);
+// A field: one target over [x, x+w) x [y, y+h) whose taps the app hit-tests itself (nucleo_touch.h).
+void field(int x, int y, int w, int h);
+// The tap that delivered (key, ch), if it was a field tap: its panel position. False for anything else.
+bool tap(int key, char ch, int *x, int *y);
+
 // The game's frame on the panel: draw_game() (the game's compact renderer) runs into the shared canvas, which is
 // pushed scaled to the panel's width at the top; the band below it is the HUD: hud(y, h) paints it (or a plain
 // band with the game's name when null) and registers its touch targets. Call between touch clear/commit.

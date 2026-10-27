@@ -6,3 +6,8 @@ pause ENTER ENTER tick:10 BACK
 over D ENTER ENTER tick:450
 browse D D D ENTER ENTER
 how D D D D ENTER
+host D D ENTER ENTER
+menu_tap row:1
+select_tap ENTER row:2
+play_tap ENTER ENTER tick:5 tap:250,130 tick:1
+survival_tap D ENTER ENTER tick:25 tap:60,200 tick:1

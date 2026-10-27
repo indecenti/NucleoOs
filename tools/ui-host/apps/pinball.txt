@@ -6,3 +6,11 @@ over ENTER SPACE tick:350 SPACE tick:350 SPACE tick:350 SPACE tick:700
 scores D ENTER
 settings D D ENTER
 help D D ENTER D D ENTER
+menu_tap row:2
+set_tap row:2 row:2 row:2 row:2
+help_tap row:2 row:2 row:2 row:2 tap:80,120
+scores_tap row:1 row:1
+launch_tap ENTER tick:5 tap:310,150 tick:12
+flip_tap ENTER SPACE tick:14 tap:190,200 tick:1
+pause_tap ENTER SPACE tick:10 BACK
+resume_tap ENTER SPACE tick:10 BACK row:0 tick:2

@@ -1,5 +1,23 @@
 menu
 help D ENTER
+help_controls D ENTER R
+symbols D ENTER R R
 settings D D ENTER
+confirm D D ENTER U ENTER
 play ENTER
 spin ENTER SPACE
+paused ENTER BACK
+menu_tap row:1
+play_tap row:0 row:0
+spin_tap row:0 row:0 tap:150,100 tick:1
+lever_tap row:0 row:0 tap:304,60
+stop_tap row:0 row:0 tap:150,100 tap:150,100 tick:3
+landed_tap row:0 row:0 tap:304,60 tick:12
+lines_tap row:0 row:0 tap:16,62
+bet_tap row:0 row:0 tap:212,214
+auto_tap row:0 row:0 tap:286,210
+settings_tap row:2 row:2 row:3
+confirm_tap row:2 row:2 row:5 row:5
+help_tap row:1 row:1 tap:250,120
+bigwin_auto row:0 row:0 tap:286,210 tick:27
+jackpot_auto row:0 row:0 tap:286,210 tick:57

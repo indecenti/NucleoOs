@@ -6,3 +6,13 @@ settings D ENTER
 hero ENTER
 play ENTER ENTER tick:8
 pause ENTER ENTER tick:4 BACK
+menu_tap row:1
+settings_tap row:1 row:1 row:0
+hero_tap ENTER row:2
+play_tap ENTER row:0 row:0 tick:3 tap:290,210 tick:6
+play_drag ENTER ENTER tick:2 L L L U U tick:2
+levelup ENTER ENTER tick:530
+levelup_tap ENTER ENTER tick:530 row:1
+levelup_pick ENTER ENTER tick:530 row:2 row:2 tick:2
+pause_tap ENTER ENTER tick:4 BACK row:1
+over ENTER D ENTER tick:500 c:1 tick:500 c:1 tick:500 c:1 tick:500 c:1 tick:900 c:1 tick:900 c:1 tick:900

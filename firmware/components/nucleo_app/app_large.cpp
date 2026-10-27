@@ -276,6 +276,46 @@ void comp_keys(const char *keys)
     d.drawString(t, 8, y);
 }
 
+bool frame(void (*paint)(void *ud), void *ud, int y0, int h)
+{
+    const int W = d.width();
+    if (h <= 0) h = d.height() - y0;
+    M5Canvas *c = nucleo_screen_wide(W);
+    if (!c || c->height() < 8) { paint(ud); return false; }
+    LovyanGFX *panel = &d;
+    const int rows = c->height();
+    uint8_t *buf = (uint8_t *)c->getBuffer();
+    static M5Canvas s_win;                                   // a window onto the canvas: panel rows [oy, oy+rows)
+    for (int oy = y0; oy < y0 + h; oy += rows) {
+        const int sh = y0 + h - oy < rows ? y0 + h - oy : rows;
+        // The window's row oy is the canvas's row 0: a sprite (oy + sh) rows tall whose buffer starts oy rows
+        // before the canvas, clipped to its last sh rows, so nothing above the canvas is ever written.
+        s_win.setColorDepth(c->getColorDepth());
+        s_win.setBuffer(buf - (ptrdiff_t)oy * W, W, oy + sh);
+        s_win.setClipRect(0, oy, W, sh);
+        nucleo_touch_clear();
+        nucleo_app_set_gfx(&s_win);
+        paint(ud);
+        nucleo_app_set_gfx(nullptr);
+        panel->setClipRect(0, oy, W, sh);
+        c->pushSprite(panel, 0, oy);
+        panel->clearClipRect();
+    }
+    return true;
+}
+
+void field(int x, int y, int w, int h) { nucleo_touch_add(x, y, w, h, NK_CHAR, NUCLEO_TOUCH_FIELD); }
+
+bool tap(int key, char ch, int *x, int *y)
+{
+    if (!nucleo_touch_is_field(key, ch)) return false;
+    int tx = 0, ty = 0;
+    if (!nucleo_touch_last(&tx, &ty)) return false;
+    if (x) *x = tx;
+    if (y) *y = ty;
+    return true;
+}
+
 void game(void (*draw_game)(void), void (*hud)(int y, int h), const char *name, unsigned short acc)
 {
     LovyanGFX *panel = &d;                                    // the external panel (on_draw_large draws direct)

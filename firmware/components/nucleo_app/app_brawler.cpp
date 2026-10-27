@@ -20,6 +20,8 @@
 #include "game_text.h"
 #include "app_large.h"
 #include "nucleo_touch.h"
+#include "game_ui.h"
+#include <stdio.h>
 #include <math.h>
 #include <string.h>
 
@@ -30,13 +32,17 @@ extern "C" {
 
 // ============================ the one shared state =============================
 BrCtx g;
+BrView br_v = { 1.0f, 0.0f, 0.0f };
 
-// Panel (on_draw_large) touch controls: play input is read from the HELD-key matrix (nucleo_kbd_char_down),
-// which a touch TAP cannot set — so a tapped D-pad / attack button records a short intent here that poll()
-// folds into the movement read and the per-frame attack edges (P1, solo/host).
-static int8_t s_tmvx, s_tmvz;      // last tapped move intent (x along street, z depth)
+// Panel (on_draw_large) touch: play input is read from the HELD-key matrix (nucleo_kbd_char_down), which a
+// touch cannot set — so the field's gestures record a short intent here that poll() folds into the movement
+// read and the attack edges (P1, solo/host): a drag on the street = a step in the finger's direction, a tap on
+// a foe = walk up to it and punch (tap again: the combo), a tap on the street = walk there, on the hero = jump.
+static int8_t s_tmvx, s_tmvz;      // drag move intent (x along street, z depth)
 static float  s_tmv_t;             // seconds the move intent stays live
-static bool   s_tpunch, s_tkick, s_tjump;   // one-shot attack taps
+static bool   s_tpunch, s_tjump;   // one-shot taps
+static int8_t s_gi;                // the foe a tap picked (g.f index), -1 = walk to (s_gx, s_gz)
+static float  s_gx, s_gz, s_gt;    // tap goal + seconds it stays live
 
 // ============================ br_* helpers (shared across all modules) ==========
 uint32_t br_now_ms(void) { return (uint32_t)(esp_timer_get_time() / 1000); }
@@ -113,26 +119,21 @@ static void tab_handler(void)
     nucleo_app_request_draw();
 }
 
+static bool lg_key(int k, char ch);
+static void drag_step(int k)
+{
+    s_tmvx = k == NK_RIGHT ? 1 : k == NK_LEFT ? -1 : 0;
+    s_tmvz = k == NK_DOWN ? 1 : k == NK_UP ? -1 : 0;
+    s_tmv_t = 0.18f; s_gt = 0.0f;
+}
 static void on_key(int k, char ch)
 {
     // In play, ATTACKS are polled from the live keyboard matrix in poll() (edge-detected) so you can
     // move AND strike at once — on_key wouldn't deliver a J/K tap reliably while a WASD key is held.
-    // Here on_key only drives the menus — and the external panel's touch buttons (which arrive as key
-    // events, not held keys): they set a short intent poll() reads for the hero.
+    // Here on_key drives the menus, the panel's taps (lg_key) and its street drag (arrows: a short step).
+    if (lg_key(k, ch)) return;
     if (g.screen == SC_PLAY && !g.paused) {
-        if (k == NK_CHAR) {
-            char c = (ch >= 'A' && ch <= 'Z') ? (char)(ch + 32) : ch;
-            switch (c) {
-                case 'j': s_tpunch = true; break;
-                case 'k': s_tkick  = true; break;
-                case 'l': case ' ': s_tjump = true; break;
-                case 'd': s_tmvx = 1;  s_tmvz = 0;  s_tmv_t = 0.18f; break;
-                case 'a': s_tmvx = -1; s_tmvz = 0;  s_tmv_t = 0.18f; break;
-                case 's': s_tmvx = 0;  s_tmvz = 1;  s_tmv_t = 0.18f; break;   // toward the front
-                case 'e': case 'w': s_tmvx = 0; s_tmvz = -1; s_tmv_t = 0.18f; break;  // toward the back
-                default: break;
-            }
-        }
+        if (k == NK_RIGHT || k == NK_UP || k == NK_DOWN) drag_step(k);
         return;
     }
     // Menus accept the SAME keys as gameplay so the controls are consistent (the ;/. arrow legends
@@ -157,7 +158,10 @@ static void on_key(int k, char ch)
 // play, resumes from pause, closes the app only from the title screen, otherwise returns to the title.
 static bool on_back(int key)
 {
-    if (key == NK_LEFT) { menu_key(NK_LEFT, 0); nucleo_app_request_draw(); return true; }
+    if (key == NK_LEFT) {
+        if (g.screen == SC_PLAY) drag_step(NK_LEFT); else { menu_key(NK_LEFT, 0); nucleo_app_request_draw(); }
+        return true;
+    }
     // In any co-op state (lobby or in-game) Esc tears the ESP-NOW session down and returns to the menu —
     // no networked pause to keep in sync. Solo play is unaffected (g.net is false).
     if (g.net) { bnet_stop(); g.net = false; g.paused = false; menu_goto(SC_MENU); return true; }
@@ -179,7 +183,7 @@ static bool poll(void)
     float dt = s_last_poll ? (g.now - s_last_poll) / 1000.0f : 0.0f;
     s_last_poll = g.now;
     if (dt < 0.0f) dt = 0.0f; else if (dt > 0.06f) dt = 0.06f;
-    if (s_tmv_t > 0.0f) s_tmv_t -= dt;       // panel D-pad intent decays (a tap = a short step)
+    if (s_tmv_t > 0.0f) s_tmv_t -= dt;       // the panel's drag intent decays (a drag step = a short walk)
 
     // Fullscreen only while the action is on screen (pause still shows the field under the overlay);
     // every other screen keeps the OS footer with its hint (refreshed when the text changes).
@@ -217,7 +221,25 @@ static bool poll(void)
             if (h && h->hp > 0 && !fighter_busy(h) && h->yoff <= 0.0f) {
                 float mvx = (nucleo_kbd_char_down('d') ? 1.0f : 0.0f) - (nucleo_kbd_char_down('a') ? 1.0f : 0.0f);
                 float mvz = (nucleo_kbd_char_down('s') ? 1.0f : 0.0f) - (nucleo_kbd_char_down('e') ? 1.0f : 0.0f);  // E = su (verso il fondo), S = giu'
-                if (mvx == 0.0f && mvz == 0.0f && s_tmv_t > 0.0f) { mvx = (float)s_tmvx; mvz = (float)s_tmvz; }   // panel D-pad
+                if (mvx == 0.0f && mvz == 0.0f && s_tmv_t > 0.0f) { mvx = (float)s_tmvx; mvz = (float)s_tmvz; }   // panel drag
+                else if (mvx == 0.0f && mvz == 0.0f && s_gt > 0.0f) {      // panel tap: walk to the goal (a foe: then punch)
+                    s_gt -= dt;
+                    float gx = s_gx, gz = s_gz;
+                    const Fighter *e = s_gi >= 0 ? &g.f[s_gi] : nullptr;
+                    if (e && (!e->on || e->is_hero || e->hp <= 0)) s_gt = 0.0f;
+                    else if (e) {                                          // stand at 70% of the reach, on our side
+                        float r = brawler_hero(h->kind)->reach * (0.7f + 0.5f * scene_scale(h->z) / 34.0f);
+                        gx = e->x + (h->x < e->x ? -0.7f : 0.7f) * r; gz = e->z;
+                    }
+                    float dx = gx - h->x, dz = gz - h->z;
+                    if (s_gt > 0.0f && fabsf(dx) < 5.0f && fabsf(dz) < 0.06f) {
+                        if (e) { h->dir = e->x > h->x ? 1 : -1; s_tpunch = true; }
+                        s_gt = 0.0f;
+                    } else if (s_gt > 0.0f) {
+                        mvx = fabsf(dx) < 5.0f ? 0.0f : dx > 0 ? 1.0f : -1.0f;
+                        mvz = fabsf(dz) < 0.06f ? 0.0f : dz > 0 ? 1.0f : -1.0f;
+                    }
+                }
                 // Normalize the diagonal so it isn't sqrt(2) faster than a cardinal push.
                 if (mvx != 0.0f && mvz != 0.0f) { mvx *= 0.7071f; mvz *= 0.7071f; }
 
@@ -267,9 +289,8 @@ static bool poll(void)
                 if (dk && !pk) br_hero_act(ha, 1);
                 if (dl && !pl) br_hero_act(ha, 2);
                 pj = dj; pk = dk; pl = dl;
-                // panel attack buttons (one-shot taps): fire once, then clear
+                // the panel's taps (one-shot): fire once, then clear
                 if (s_tpunch) { br_hero_act(ha, 0); s_tpunch = false; }
-                if (s_tkick)  { br_hero_act(ha, 1); s_tkick  = false; }
                 if (s_tjump)  { br_hero_act(ha, 2); s_tjump  = false; }
             }
 
@@ -373,9 +394,10 @@ static int sort_by_depth(int *order)
     return n;
 }
 
-static void draw_game(void)
+// The fight's stage through the view br_v (compact 1:1, the panel 4/3): street, shadows, pools, fighters, blood.
+static void draw_stage(void)
 {
-    if (g.screen == SC_PLAY || g.screen == SC_PAUSE || g.screen == SC_OVER || g.screen == SC_CLEAR) {
+        const float K = br_v.k;
         scene_draw();
 
         // dark contact shadows under each fighter (before the bodies), flattened and scaled with depth;
@@ -385,7 +407,7 @@ static void draw_game(void)
             if (!fr->on) continue;
             float sc = scene_scale(fr->z) * fighter_scale(fr);
             int rx = (int)(0.38f * sc - fr->yoff * 0.08f); if (rx < 3) rx = 3;
-            fxfig::puddle((int)br_screen_x(fr->x), (int)(scene_floor_y(fr->z) + g.shake.oy()), rx, rx / 3 + 1, BR_INK);
+            fxfig::puddle(brX(br_screen_x(fr->x)), brY(scene_floor_y(fr->z) + g.shake.oy()), (int)(rx * K), (int)(rx * K) / 3 + 1, BR_INK);
         }
 
         brfx_draw_pools();   // ground blood decals (behind fighters)
@@ -396,15 +418,15 @@ static void draw_game(void)
             Fighter fr = g.f[order[idx]];
             if (br_invuln(&fr) && ((g.now / 70) & 1)) continue;   // mercy / respawn frames: the hero blinks
             if (!fr.is_hero && fr.hp <= 0 && fr.st == BS_DOWN && fr.anim >= 1.0f && ((g.now / 80) & 1)) continue;   // a body blinks out
-            float sc = scene_scale(fr.z) * fighter_scale(&fr);
-            float feetY = scene_floor_y(fr.z) - fr.yoff + g.shake.oy();
-            float sx = br_screen_x(fr.x);
+            float sc = scene_scale(fr.z) * fighter_scale(&fr) * K;
+            float feetY = br_v.oy + (scene_floor_y(fr.z) - fr.yoff + g.shake.oy()) * K;
+            float sx = br_v.ox + br_screen_x(fr.x) * K;
             // nearer lanes are bigger AND brighter: the far lane is graded into the stage's haze
             br_figure(&fr, sx, feetY, sc, (int)((1.0f - fr.z) * 90.0f), scene_haze(), scene_rim());
             float head = feetY - 2.05f * sc;
             if (!fr.is_hero && (fr.st == BS_PUNCH || fr.st == BS_KICK) && fr.anim < 0.28f) {
                 // the TELL: a red-hot glint over a foe winding up, growing until the blow lands
-                int r = 2 + (int)(fr.anim * 12.0f);
+                int r = (int)((2 + fr.anim * 12.0f) * K);
                 d.fillTriangle((int)sx, (int)head - 4 - r, (int)sx - r, (int)head - 4, (int)sx + r, (int)head - 4, BR_BLOOD);
                 d.drawPixel((int)sx, (int)head - 5, BR_WHITE);
             } else if (fr.is_hero && g.nplayers > 1) {
@@ -414,6 +436,11 @@ static void draw_game(void)
         }
 
         brfx_draw_drops();   // airborne blood (in front of fighters)
+}
+static void draw_game(void)
+{
+    if (g.screen == SC_PLAY || g.screen == SC_PAUSE || g.screen == SC_OVER || g.screen == SC_CLEAR) {
+        draw_stage();
         hud_draw();
         menu_draw();         // the pause / game-over / cleared card over the frozen fight; a no-op on SC_PLAY
         return;
@@ -424,66 +451,235 @@ static void draw_game(void)
 }
 
 // ===== two screens ===========================================================
-// Panel (on_draw_large): the belt-scroll fight scaled to 320 px + a native HUD band with the hero's HP,
-// lives and combo and touch controls for the real actions (a D-pad + punch/kick/jump while playing, menu
-// nav elsewhere). Cardputer (on_draw while two screens): the live HP / lives / level / combo and the key
-// map, never the fight. The touch buttons map to the keys poll() already reads (see the intent layer above).
-#define ACC BR_GOLD
-struct HudBtn { const char *label; int key; char ch; bool acc; };
-static void hud_row(int x, int y, int w, int h, const HudBtn *b, int n)
+// Panel (on_draw_large, lg::frame): the same 240x135 stage DRAWN natively at 4/3 (320x180, view br_v) under a
+// 60 px HUD band, every screen laid out for 320x240: the fight (tap a foe = go punch it, tap the street = walk
+// there, tap the hero = jump, drag = step), its cards (pause / game over / cleared: tap the rows), the title /
+// options / co-op lists (tap = pick, again = open), the hero cards. Cardputer (on_draw while two screens): the
+// live HP / lives / level / combo and the key map, never the fight.
+#define ACC  BR_GOLD
+#define RED  BR_BLOOD
+#define LTOP 60                                   // the stage's top on the panel (under the HUD band)
+static void lt(int x, int y, int f, uint16_t c, const char *s, uint8_t dt = top_left)
 {
-    if (n <= 0) return;
-    const int gap = 4, bw = (w - (n - 1) * gap) / n;
-    for (int i = 0; i < n; i++)
-        lg::button(x + i * (bw + gap), y, bw, h, b[i].label, b[i].acc ? ACC : lg::card(), b[i].acc ? BR_INK : 0xFFFF, b[i].key, b[i].ch);
+    lg::font(f); d.setTextDatum(dt); d.setTextColor(c); d.drawString(s, x, y); d.setTextDatum(top_left);
 }
-static void large_hud(int y, int h)
+static void lrow(int i, int x, int y, int w, const char *label, bool sel)
 {
-    const int panw = d.width(), pad = 8;
-    d.fillRect(0, y, panw, h, BG);
-    d.drawFastHLine(0, y, panw, LINE);
-    int bh = h - 12; if (bh > 46) bh = 46; const int by = y + (h - bh) / 2;
-    if (g.screen == SC_PLAY) {
-        Fighter *hero = br_hero(0);
-        int hp = hero ? hero->hp : 0, mhp = hero ? hero->maxhp : 100;
-        char l[16]; snprintf(l, sizeof l, "HP %d", hp < 0 ? 0 : hp);
-        lg::font(2); d.setTextDatum(middle_left); d.setTextColor(hp * 3 <= mhp ? BR_BLOOD : BR_GOLD, BG); d.drawString(l, pad, y + h / 3);
-        if (g.combo >= 2) snprintf(l, sizeof l, GT("x%d  COMBO %d", "x%d  COMBO %d"), g.lives, g.combo);
-        else              snprintf(l, sizeof l, GT("Vite x%d", "Lives x%d"), g.lives);
-        lg::font(4); d.setTextColor(BR_MUTED, BG); d.setTextDatum(middle_left); d.drawString(l, pad, y + h * 3 / 4);
-        d.setTextDatum(top_left);
-        // D-pad (depth ^v, street <>) + punch(J) kick(K) jump(L) + pause
-        const int bx0 = 78, g_ = 4, u = (panw - bx0 - pad - 7 * g_) / 8;
-        int x = bx0;
-        lg::button(x, by, u, bh, "^", lg::card(), 0xFFFF, NK_CHAR, 'e'); x += u + g_;
-        lg::button(x, by, u, bh, "v", lg::card(), 0xFFFF, NK_CHAR, 's'); x += u + g_;
-        lg::button(x, by, u, bh, "<", lg::card(), 0xFFFF, NK_CHAR, 'a'); x += u + g_;
-        lg::button(x, by, u, bh, ">", lg::card(), 0xFFFF, NK_CHAR, 'd'); x += u + g_;
-        lg::button(x, by, u, bh, "J", ACC, BR_INK, NK_CHAR, 'j'); x += u + g_;      // punch
-        lg::button(x, by, u, bh, "K", ACC, BR_INK, NK_CHAR, 'k'); x += u + g_;      // kick
-        lg::button(x, by, u, bh, "L", lg::card(), BR_GOLD, NK_CHAR, 'l'); x += u + g_;  // jump
-        lg::button(x, by, u, bh, "II", lg::card(), 0xFFFF, NK_TAB, 0);              // pause
-    } else if (g.screen == SC_PAUSE) {
-        const HudBtn b[2] = { { GT("RIPRENDI", "RESUME"), NK_ENTER, 0, true }, { GT("ESCI", "QUIT"), NK_BACK, 0, false } };
-        hud_row(pad, by, panw - 2 * pad, bh, b, 2);
-    } else if (g.screen == SC_OVER) {
-        const HudBtn b[2] = { { GT("RIPROVA", "RETRY"), NK_ENTER, 0, true }, { "MENU", NK_BACK, 0, false } };
-        hud_row(pad, by, panw - 2 * pad, bh, b, 2);
-    } else if (g.screen == SC_CLEAR) {
-        const HudBtn b[1] = { { GT("AVANTI", "CONTINUE"), NK_ENTER, 0, true } };
-        hud_row(pad, by, panw - 2 * pad, bh, b, 1);
-    } else if (g.screen == SC_MENU || g.screen == SC_OPT || g.screen == SC_COOP) {
-        const HudBtn b[3] = { { GT("SU", "UP"), NK_UP, 0, false }, { GT("GIU", "DOWN"), NK_DOWN, 0, false },
-                              { GT("SCEGLI", "SELECT"), NK_ENTER, 0, true } };
-        hud_row(pad, by, panw - 2 * pad, bh, b, 3);
-    } else if (g.screen == SC_SEL) {
-        const HudBtn b[3] = { { "<", NK_LEFT, 0, false }, { ">", NK_RIGHT, 0, false },
-                              { GT("SCEGLI", "SELECT"), NK_ENTER, 0, true } };
-        hud_row(pad, by, panw - 2 * pad, bh, b, 3);
-    } else {   // SC_HELP / SC_LOBBY
-        const HudBtn b[1] = { { GT("INDIETRO", "BACK"), NK_BACK, 0, true } };
-        hud_row(pad, by, panw - 2 * pad, bh, b, 1);
+    d.fillRoundRect(x, y, w, 32, 6, sel ? gui::mix(BR_INK, RED, 150) : gui::mix(BR_INK, BR_MUTED, 50));
+    if (sel) d.drawRoundRect(x, y, w, 32, 6, ACC);
+    lt(x + w / 2, y + 16, 1, sel ? BR_WHITE : BR_MUTED, label, middle_center);
+    nucleo_touch_add(x, y, w, 32, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + i));
+}
+static void lbar(int x, int y, int w, int h, float f, uint16_t col)
+{
+    d.fillRect(x - 1, y - 1, w + 2, h + 2, BR_INK); d.fillRect(x, y, w, h, br_rgb(36, 36, 85));
+    if (f > 0) d.fillRect(x, y, (int)(w * f), h, col ? col : f < 0.3f ? RED : ACC);
+}
+static void lband(const char *title)              // the HUD band: back chevron + a title (or the fight's HUD)
+{
+    for (int b = 0; b < 4; b++) d.fillRect(0, b * 15, 320, 15, gui::mix(BR_INK, RED, 12 + b * 8));
+    d.drawFastHLine(0, LTOP - 1, 320, gui::mix(BR_INK, RED, 160));
+    for (int i = 0; i < 2; i++) { d.drawLine(8 + i, 15, 14 + i, 9, BR_WHITE); d.drawLine(8 + i, 15, 14 + i, 21, BR_WHITE); }
+    nucleo_touch_add(0, 0, 40, 30, NK_BACK, 0);
+    if (title) lt(26, 6, 2, ACC, title);
+}
+static void lhud(void)
+{
+    lband(nullptr);
+    char b[40];
+    for (int p = 0; p < g.nplayers && p < 2; p++) {
+        Fighter *fr = br_hero(p);
+        if (!fr) continue;
+        const int x = p ? 196 : 34, w = p ? 116 : 120;
+        lt(p ? x + w : x, 4, 1, brawler_hero_color(fr->kind), brawler_hero(fr->kind)->name, p ? top_right : top_left);
+        lbar(x, 24, w, 8, fr->maxhp > 0 ? (float)(fr->hp < 0 ? 0 : fr->hp) / fr->maxhp : 0, 0);
     }
+    for (int p = 0; p < g.lives && p < 5; p++) d.fillCircle(40 + p * 14, 46, 5, RED);
+    snprintf(b, sizeof b, "%ld", g.score);
+    const int sx = g.nplayers > 1 ? 160 : 312;
+    lt(sx, 4, 2, BR_WHITE, b, g.nplayers > 1 ? top_center : top_right);
+    const LevelDef *L = brawler_level(g.level);
+    for (int w = 0; w < L->nwaves; w++) {
+        bool done = w < g.wave || (w == g.wave && g.gatex >= g.level_len);
+        d.fillCircle(sx - (g.nplayers > 1 ? (L->nwaves - 1) * 6 - w * 12 : (L->nwaves - 1 - w) * 12 + 4), 42, 4, done ? ACC : br_rgb(73, 73, 85));
+    }
+    const bool blink = (g.now >> 6) & 1;
+    if (g.combo > 1) { snprintf(b, sizeof b, "COMBO x%d", g.combo); lt(160, LTOP + 8, 2, blink ? RED : ACC, b, top_center); }
+    if (g.gatex >= g.level_len && brawler_live_enemies() == 0 && ((g.now / 300) & 1)) {
+        lt(290, 124, 2, ACC, GT("VAI", "GO"), middle_right);
+        d.fillTriangle(294, 110, 294, 138, 312, 124, ACC);
+    }
+    for (int i = 2; i < BR_MAXF; i++) {                 // the boss's bar along the bottom while it stands
+        Fighter *e = &g.f[i];
+        if (!e->on || e->kind != 3 || e->hp <= 0) continue;
+        lt(8, 206, 0, br_rgb(182, 73, 255), GT("CAPOBANDA", "GANG BOSS"));
+        lbar(8, 226, 304, 6, (float)e->hp / e->maxhp, br_rgb(182, 73, 255));
+        break;
+    }
+    if (g.banner_t > 0.0f) {                             // the stage / boss banner slides in over the street
+        float t = g.banner_t, in = (g.banner ? 2.0f : 2.2f) - t;
+        float k = in < 0.25f ? in / 0.25f : t < 0.25f ? t / 0.25f : 1.0f;
+        int ox = (int)(-(1.0f - k) * (1.0f - k) * 320), y = 100;
+        d.fillRect(ox, y, 320, 46, BR_INK);
+        d.drawFastHLine(ox, y, 320, g.banner ? RED : ACC); d.drawFastHLine(ox, y + 45, 320, g.banner ? RED : ACC);
+        if (g.banner) snprintf(b, sizeof b, "%s", GT("ATTENZIONE", "WARNING"));
+        else          snprintf(b, sizeof b, GT("STRADA %d", "STREET %d"), g.level + 1);
+        lt(ox + 160, y + 4, 0, g.banner ? RED : ACC, b, top_center);
+        lt(ox + 160, y + 22, 1, BR_WHITE, g.banner ? GT("Arriva il capobanda!", "Here comes the boss!") : brawler_level_name(g.level), top_center);
+    }
+}
+static void lcard(const char *head, const char *l1, const char *l2, const char *r0, const char *r1)
+{
+    d.fillRoundRect(40, 72, 240, 158, 8, BR_INK);
+    d.drawRoundRect(40, 72, 240, 158, 8, RED);
+    lt(160, 82, 2, ACC, head, top_center);
+    lt(160, 110, 0, BR_WHITE, l1, top_center);
+    lt(160, 128, 0, BR_MUTED, l2, top_center);
+    lrow(0, 56, 150, 208, r0, true);
+    lrow(1, 56, 188, 208, r1, false);
+}
+static void lp_paint(void *)
+{
+    char l1[48], l2[48];
+    br_v = { 4.0f / 3.0f, 0.0f, (float)LTOP };
+    const bool fight = g.screen == SC_PLAY || g.screen == SC_PAUSE || g.screen == SC_OVER || g.screen == SC_CLEAR;
+    if (fight) draw_stage(); else scene_draw();          // the menus stand on the night street too
+    br_v = { 1.0f, 0.0f, 0.0f };
+    switch (g.screen) {
+    case SC_PLAY:
+        lhud();
+        lg::field(0, LTOP, 320, 240 - LTOP);
+        nucleo_touch_add_pad(0, LTOP, 320, 240 - LTOP, 8);
+        break;
+    case SC_PAUSE:
+        lhud();
+        snprintf(l1, sizeof l1, GT("Punti %ld", "Score %ld"), g.score);
+        lcard(GT("PAUSA", "PAUSED"), brawler_level_name(g.level), l1, GT("Riprendi", "Resume"), GT("Esci", "Quit"));
+        break;
+    case SC_OVER:
+        lhud();
+        snprintf(l1, sizeof l1, GT("Punti %ld", "Score %ld"), g.score);
+        snprintf(l2, sizeof l2, "%s %d: %s", GT("Livello", "Level"), g.level + 1, brawler_level_name(g.level));
+        lcard(GT("FINE PARTITA", "GAME OVER"), l1, l2, GT("Riprova", "Retry"), "Menu");
+        break;
+    case SC_CLEAR: {
+        lhud();
+        const bool last = g.level >= brawler_level_count() - 1;
+        if (last) snprintf(l1, sizeof l1, "%s", GT("Hai ripulito la citta!", "You cleared the city!"));
+        else      snprintf(l1, sizeof l1, "%s: %s", GT("Prossima", "Next"), brawler_level_name(g.level + 1));
+        snprintf(l2, sizeof l2, GT("Punti %ld", "Score %ld"), g.score);
+        lcard(last ? GT("VITTORIA!", "VICTORY!") : GT("ZONA RIPULITA", "AREA CLEARED"), l1, l2,
+              last ? "Menu" : GT("Avanti", "Continue"), "Menu");
+        break;
+    }
+    case SC_SEL: {
+        lband(nullptr);
+        lt(26, 8, 1, ACC, menu_sel_head());
+        for (int i = 0; i < 3; i++) {
+            const bool sel = g.sel == i;
+            const int x = 8 + i * 104;
+            d.fillRoundRect(x, 66, 96, 128, 6, sel ? gui::mix(BR_INK, RED, 120) : BR_INK);
+            d.drawRoundRect(x, 66, 96, 128, 6, sel ? ACC : br_rgb(73, 73, 85));
+            lt(x + 48, 70, 1, sel ? BR_WHITE : BR_MUTED, brawler_hero(i)->name, top_center);
+            menu_hero(i, sel, x + 48, 170, 36);
+            lt(x + 48, 174, 0, sel ? BR_WHITE : BR_MUTED, brawler_hero_style(i), top_center);
+            nucleo_touch_add(x, 66, 96, 128, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + i));
+        }
+        const char *tag[4] = { GT("VIT", "HP"), GT("VEL", "SPD"), GT("FOR", "POW"), GT("POR", "RCH") };
+        d.fillRect(0, 198, 320, 42, BR_INK);
+        for (int k = 0; k < 4; k++) {
+            const int x = 8 + (k & 1) * 158, y = 202 + (k >> 1) * 18;
+            lt(x, y, 0, BR_MUTED, tag[k]);
+            d.fillRect(x + 40, y + 4, 104, 8, br_rgb(36, 36, 85));
+            d.fillRect(x + 40, y + 4, (int)(104 * menu_stat(k, g.sel)), 8, k == 2 ? RED : BR_WHITE);
+        }
+        break;
+    }
+    case SC_HELP: {
+        lband(GT("Comandi", "Controls"));
+        const char *key[5], *act[5];
+        menu_help(key, act);
+        d.fillRoundRect(8, 68, 304, 164, 8, BR_INK);
+        for (int i = 0; i < 5; i++) {
+            lt(20, 78 + i * 30, 0, i == 1 ? RED : ACC, key[i]);
+            lt(120, 78 + i * 30, 0, BR_WHITE, act[i]);
+        }
+        break;
+    }
+    case SC_LOBBY: {
+        lband(GT("Co-op 2 giocatori", "Co-op 2 players"));
+        d.fillRoundRect(30, 84, 260, 120, 8, BR_INK);
+        d.drawRoundRect(30, 84, 260, 120, 8, RED);
+        lt(160, 100, 2, ACC, g.is_host ? GT("Ospito...", "Hosting...") : GT("Cerco...", "Searching..."), top_center);
+        lt(160, 134, 0, BR_WHITE, g.is_host ? GT("Attendo il 2o giocatore", "Waiting for player 2") : GT("Cerco una partita vicina", "Looking for a nearby game"), top_center);
+        const int dn = (int)((g.now / 300) % 4);
+        for (int k = 0; k < 3; k++) d.fillCircle(136 + k * 24, 180, k < dn ? 6 : 3, k < dn ? RED : BR_MUTED);
+        break;
+    }
+    default: {                                            // title / options / co-op: the list
+        const char *it[3]; char b[2][40];
+        const int n = menu_rows(it, b), sel = menu_cursor();
+        if (g.screen == SC_MENU) {
+            lband("SCORRIBANDA");
+            lt(312, 40, 0, BR_MUTED, GT("Picchiaduro a scorrimento", "Belt-scroll beat'em up"), top_right);
+            menu_hero(0, true, 40, 226, 40);
+            menu_hero(1, false, 280, 226, 40);
+        } else lband(g.screen == SC_OPT ? GT("Opzioni", "Options") : GT("Co-op 2 giocatori", "Co-op 2 players"));
+        for (int i = 0; i < n; i++) lrow(i, 76, 84 + i * 44, 168, it[i], sel == i);
+        break;
+    }
+    }
+}
+static void draw_large(void)
+{
+    nucleo_touch_clear();
+    lg::frame(lp_paint, nullptr);
+    nucleo_touch_commit();
+}
+// A tap on the fight: a foe (the front-most under the finger) = walk up and punch it, the hero = jump, the
+// street = walk there.
+static void lplay_tap(int tx, int ty)
+{
+    Fighter *h = br_hero(0);
+    if (!h || h->hp <= 0) return;
+    const float K = 4.0f / 3.0f;
+    int pick = -1;
+    for (int i = 0; i < BR_MAXF; i++) {
+        const Fighter *e = &g.f[i];
+        if (!e->on || e->hp <= 0) continue;
+        float sc = scene_scale(e->z) * fighter_scale(e) * K, sx = br_screen_x(e->x) * K, fy = LTOP + (scene_floor_y(e->z) - e->yoff) * K;
+        if (fabsf(tx - sx) > 0.55f * sc + 6 || ty < fy - 2.2f * sc - 4 || ty > fy + 8) continue;
+        if (pick < 0 || e->z > g.f[pick].z || (g.f[pick].is_hero && !e->is_hero)) pick = i;
+    }
+    s_tmv_t = 0.0f;
+    if (pick >= 0 && g.f[pick].is_hero) { s_tjump = true; return; }
+    s_gi = (int8_t)pick; s_gt = 2.5f;
+    s_gx = g.camx + tx / K;
+    s_gz = clampf_(((ty - LTOP) / K - BR_BELT.horizonY) / (BR_BELT.frontY - BR_BELT.horizonY), 0.18f, 1.0f);
+}
+static bool lg_key(int k, char ch)
+{
+    int tx = 0, ty = 0;
+    const bool fld = lg::tap(k, ch, &tx, &ty);
+    const int ri = nucleo_touch_is_row(k, ch) ? ch - NUCLEO_TOUCH_ROW : -1;
+    if (!fld && ri < 0) return false;
+    switch (g.screen) {
+    case SC_PLAY: if (fld && !g.paused) lplay_tap(tx, ty); return true;
+    case SC_PAUSE: case SC_OVER: case SC_CLEAR:
+        if (ri == 0) menu_key(NK_ENTER, 0);
+        else if (ri == 1) on_back(NK_BACK);
+        break;
+    case SC_SEL:
+        if (ri < 0 || ri > 2) return true;
+        if (g.sel == ri) menu_key(NK_ENTER, 0); else { g.sel = ri; bsfx(BSFX_NAV); }
+        break;
+    case SC_MENU: case SC_OPT: case SC_COOP:
+        if (ri >= 0) menu_pick(ri);
+        break;
+    default: return true;
+    }
+    nucleo_app_request_draw();
+    return true;
 }
 static void draw_companion(void)
 {
@@ -522,12 +718,6 @@ static void on_draw(void)
     if (nucleo_app_two_screens()) { draw_companion(); return; }
     draw_game();
 }
-static void draw_large(void)
-{
-    nucleo_touch_clear();
-    lg::game(draw_game, large_hud, "Scorribanda", ACC);
-    nucleo_touch_commit();
-}
 
 // ============================ lifecycle: enter / exit =========================
 static void on_enter(void)
@@ -547,7 +737,7 @@ static void on_enter(void)
     brfx_reset();
 
     s_last_poll = 0; s_hint = nullptr;
-    s_tmvx = s_tmvz = 0; s_tmv_t = 0.0f; s_tpunch = s_tkick = s_tjump = false;
+    s_tmvx = s_tmvz = 0; s_tmv_t = s_gt = 0.0f; s_tpunch = s_tjump = false;
     nucleo_app_set_back_handler(on_back);
     nucleo_app_set_poll_handler(poll);
     nucleo_app_set_tab_handler(tab_handler);   // TAB pauses (else it would open the global Control Center)

@@ -4,7 +4,7 @@
 // links that the host does not provide is an auto-generated "return 0" stub, so any app renders without
 // hand-written stubs; an app that needs real data gets it from its scene file (tools/ui-host/apps/<id>.txt).
 //   gallery_<id>.exe <outdir> <shot> <variant: compact|companion|large> <lang> [key tokens...]
-// Key tokens: U D L R ENTER BACK TAB DEL SPACE | c:<ch> | t:<text> | row:<n> (a tapped list row) |
+// Key tokens: U D L R ENTER BACK TAB DEL SPACE | c:<ch> | t:<text> | row:<n> (a tapped list row) | tap:<x>,<y> (a field tap) |
 //             tick:<n> (n on_tick calls, 200 ms each) | adv
 #include <M5GFX.h>
 #include "host_state.h"
@@ -68,6 +68,8 @@ struct TRect { int x, y, w, h, key; char ch; bool scroll; };
 static TRect s_t[NUCLEO_TOUCH_MAX + NUCLEO_TOUCH_SCROLL_MAX], s_tc[NUCLEO_TOUCH_MAX + NUCLEO_TOUCH_SCROLL_MAX];
 static int s_tn, s_tcn, s_tsn;
 static int s_toverflow;
+static int s_tap_x = -1, s_tap_y = -1;
+extern "C" bool nucleo_touch_last(int *x, int *y) { if (s_tap_x < 0) return false; if (x) *x = s_tap_x; if (y) *y = s_tap_y; return true; }
 extern "C" void nucleo_touch_clear(void) { s_tn = 0; s_tsn = 0; }
 extern "C" void nucleo_touch_add(int x, int y, int w, int h, int key, char ch)
 {
@@ -80,6 +82,7 @@ extern "C" void nucleo_touch_add_scroll(int x, int y, int w, int h, int, int, ch
     if (s_tsn >= NUCLEO_TOUCH_SCROLL_MAX) { s_toverflow++; return; }
     s_t[s_tn++] = { x, y, w, h, 0, 0, true }; s_tsn++;
 }
+extern "C" void nucleo_touch_add_pad(int x, int y, int w, int h, int step) { nucleo_touch_add_scroll(x, y, w, h, step, 0, 0, 0, 0); }
 extern "C" void nucleo_touch_commit(void) { memcpy(s_tc, s_t, sizeof s_t); s_tcn = s_tn; }
 
 // ---- driving the app -----------------------------------------------------------------------------------------
@@ -103,6 +106,10 @@ static void token(const char *t)
     if (!strncmp(t, "c:", 2)) { key(NK_CHAR, t[2]); return; }
     if (!strncmp(t, "t:", 2)) { for (const char *s = t + 2; *s; s++) key(NK_CHAR, *s == '_' ? ' ' : *s); return; }
     if (!strncmp(t, "row:", 4)) { key(NK_CHAR, (char)(NUCLEO_TOUCH_ROW + atoi(t + 4))); return; }
+    if (!strncmp(t, "tap:", 4)) {                       // a tap on a field at x,y (panel pixels): NUCLEO_TOUCH_FIELD
+        if (sscanf(t + 4, "%d,%d", &s_tap_x, &s_tap_y) != 2) { fprintf(stderr, "bad tap token '%s'\n", t); exit(3); }
+        key(NK_CHAR, NUCLEO_TOUCH_FIELD); return;
+    }
     if (!strncmp(t, "tick:", 5)) { tick(atoi(t + 5)); return; }
     fprintf(stderr, "unknown key token '%s'\n", t);
     exit(3);

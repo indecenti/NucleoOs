@@ -5,3 +5,14 @@ midgame ENTER SPACE D SPACE D SPACE D SPACE D SPACE D SPACE D SPACE D SPACE D SP
 options D D D ENTER
 scores D D D D ENTER
 help D D D D D ENTER
+menu_tap row:2
+loadout_tap row:0 row:0 row:2 row:3 row:3 row:5 row:5
+loadout_random row:0 row:0 tap:260,215
+play_aim row:0 row:0 tap:260,215 tap:260,215 tick:90 tap:250,90 tap:20,220 tap:280,226
+play_aimhigh row:0 row:0 tap:260,215 tap:260,215 tick:90 tap:60,60
+play_confirm row:0 row:0 tap:260,215 tap:260,215 tick:90 BACK
+options_tap row:3 row:3 row:4
+options_guide row:3 row:3 row:5 row:5
+host row:1 row:1 tap:260,215 tap:260,215 tick:2
+browse row:2 row:2 tap:260,215 tap:260,215 tick:2
+play_fire row:0 row:0 tap:260,215 tap:260,215 tick:90 tap:250,90 tap:76,148 tick:5

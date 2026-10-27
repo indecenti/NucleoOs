@@ -46,7 +46,7 @@ static inline uint16_t mix(uint16_t a, uint16_t b, int t) { return gui::mix(a, b
 #define COL_GREY   rgb(146, 146, 170)
 #define COL_DIM    rgb(73, 73, 85)
 #define ACC        COL_AMBER
-#define CH         (H - HINT)
+#define CH         s_vh                  // the view height: the compact frame, or the panel for the game-over
 
 // ============================ model ==========================================
 #define NROD      6
@@ -59,7 +59,8 @@ enum { ST_MENU = 0, ST_HELP, ST_SET, ST_PLAY, ST_OVER, ST_SCORES, ST_NAME, ST_PA
 
 static int   g_audio = 1, g_diff = 1, g_best = 0;
 
-static int   s_screen;
+static int   s_screen, s_lsel;             // s_lsel: the picked row of the panel pause card
+static int   s_vw = W, s_vh = H - HINT;    // the view the game-over spectacle is drawn in (lp_over: 320x240)
 static int64_t s_now, s_last, s_frame;
 static int   s_acc;
 static unsigned s_anim;
@@ -186,6 +187,9 @@ static void sfx(int id)
 }
 
 // ============================ draw helpers ===================================
+// The panel paints in clipped strip windows (lg::frame), where drawWideLine widens the clip and writes outside
+// the window: there (s_flat) the demand needle is two plain lines.
+static bool s_flat;
 // transparent text (single-arg colour) — avoids opaque glyph boxes punching holes in rings/bars
 static void text_at(int x, int y, int sz, uint16_t col, const char *s) { d.setTextSize(sz); d.setTextColor(col); d.setCursor(x, y); d.print(s); d.setTextSize(1); }
 static void text_c(int cx, int y, int sz, uint16_t col, const char *s) { text_at(cx - (int)strlen(s) * 3 * sz, y, sz, col, s); }
@@ -211,6 +215,7 @@ static void radial_tick(int cx, int cy, int r0, int r1, int pct, uint16_t col)
 {
     float a = (float)pct * 3.6f * 0.01745329f;
     float ca = cosf(a), sa = sinf(a);
+    if (s_flat) { for (int k = 0; k < 2; k++) d.drawLine(cx + (int)(ca * r0) + k, cy + (int)(sa * r0), cx + (int)(ca * r1) + k, cy + (int)(sa * r1), col); return; }
     d.drawWideLine(cx + (int)(ca * r0), cy + (int)(sa * r0), cx + (int)(ca * r1), cy + (int)(sa * r1), 1.0f, col);
 }
 static void draw_core(int cx, int cy, int base, uint16_t col)
@@ -321,20 +326,18 @@ static void draw_menu(void)
     const char *items[NMENU] = { GT("Gioca", "Play"), GT("Classifica", "Leaderboard"), GT("Impostazioni", "Settings") };
     gui::menu(s_menu, items, NMENU, y, CH, ACC);
 }
-static void draw_help(void)
+// The guide's five lines of page pg and their colours (shared by the compact page and the panel page).
+static void help_lines(int pg, const char **l, uint16_t *c)
 {
-    const char *titles[3] = { GT("Obiettivo", "Objective"), GT("Comandi", "Controls"), GT("Pericoli", "Hazards") };
-    int y = gui::title(titles[s_help], nullptr, ACC);
-    for (int i = 0; i < 3; i++) d.fillCircle(W - 26 + i * 8, 14, i == s_help ? 3 : 2, i == s_help ? ACC : COL_DIM);   // page dots
-    const char *l[5]; uint16_t c[5] = { COL_WHITE, COL_WHITE, COL_WHITE, COL_WHITE, COL_WHITE };
-    if (s_help == 0) {
+    for (int i = 0; i < 5; i++) c[i] = COL_WHITE;
+    if (pg == 0) {
         l[0] = GT("Tieni la POTENZA (MW)", "Keep the POWER (MW)");
         l[1] = GT("pari alla DOMANDA della rete", "equal to the grid DEMAND");
         l[2] = GT("senza fondere il nucleo.", "without melting the core.");
         l[3] = GT("La domanda sale col tempo:", "Demand rises over time:");
         l[4] = GT("resisti il piu' a lungo!", "survive as long as you can!");
         c[2] = COL_AMBER; c[4] = COL_GREEN;
-    } else if (s_help == 1) {
+    } else if (pg == 1) {
         l[0] = GT("SX/DX o 1-6: scegli la barra", "LEFT/RIGHT or 1-6: pick a rod");
         l[1] = GT("SU o W: estrai = +potenza", "UP or W: pull out = +power");
         l[2] = GT("GIU o E: inserisci = raffredda", "DOWN or E: push in = cools");
@@ -349,6 +352,14 @@ static void draw_help(void)
         l[4] = GT("Il cuore batte: rallenta!", "A heartbeat: slow down!");
         c[1] = COL_RED; c[3] = COL_RED; c[4] = COL_AMBER;
     }
+}
+static const char *help_title(int pg) { return pg == 0 ? GT("Obiettivo", "Objective") : pg == 1 ? GT("Comandi", "Controls") : GT("Pericoli", "Hazards"); }
+static void draw_help(void)
+{
+    int y = gui::title(help_title(s_help), nullptr, ACC);
+    for (int i = 0; i < 3; i++) d.fillCircle(W - 26 + i * 8, 14, i == s_help ? 3 : 2, i == s_help ? ACC : COL_DIM);   // page dots
+    const char *l[5]; uint16_t c[5];
+    help_lines(s_help, l, c);
     for (int i = 0; i < 5; i++) {
         if (gui::text_width(l[i], gui::F_SMALL) <= W - 16) gui::text(l[i], 8, y + i * 16, 0, gui::F_SMALL, c[i], COL_BG);
         else text_at(8, y + i * 16 + 4, 1, c[i], l[i]);           // a long translation: the 6x8 face
@@ -472,23 +483,26 @@ static void draw_play(void)
 }
 static void draw_card(int prog)   // score + best count-up, shared by both deaths
 {
+    const int W = s_vw;
     if (prog > 1000) prog = 1000;
     if (prog < 0) prog = 0;
     char b[32];
     snprintf(b, sizeof b, GT("Punteggio %d", "Score %d"), s_score * prog / 1000);
-    gui::text(b, W / 2, 76, 1, gui::F_BODY, COL_WHITE, COL_BG);
+    gui::text(b, W / 2, CH * 63 / 100, 1, gui::F_BODY, COL_WHITE, COL_BG);
     snprintf(b, sizeof b, GT("Record %d%s", "Best %d%s"), g_best * prog / 1000, s_newbest ? "  *" : "");
-    gui::text(b, W / 2, 98, 1, gui::F_SMALL, s_newbest ? COL_GREEN : COL_AMBER, COL_BG);
+    gui::text(b, W / 2, CH * 81 / 100, 1, gui::F_SMALL, s_newbest ? COL_GREEN : COL_AMBER, COL_BG);
 }
 static void draw_blackout(int e)
 {
+    const int W = s_vw;
     d.fillRect(0, 0, W, CH, COL_BG);
-    draw_core(W / 2, 30, 12, rgb(73, 73, 170));
-    if (e >= 500 || ((s_anim >> 1) & 3)) gui::text("BLACKOUT", W / 2, 48, 1, gui::F_TITLE, COL_CYAN, rgb(0, 36, 85));   // flickers in
+    draw_core(W / 2, CH / 4, 12, rgb(73, 73, 170));
+    if (e >= 500 || ((s_anim >> 1) & 3)) gui::text("BLACKOUT", W / 2, CH * 2 / 5, 1, gui::F_TITLE, COL_CYAN, rgb(0, 36, 85));   // flickers in
     draw_card(e > 120 ? (e - 120) * 1000 / 480 : 0);
 }
 static void draw_meltdown(int e)
 {
+    const int W = s_vw;
     int cx = W / 2, cyc = CH / 2;
     float k = s_over_total ? (float)s_over_ms / s_over_total : 0;            // 1 at blast -> 0 as it settles
     int shake = (int)(7 * k);
@@ -517,17 +531,18 @@ static void draw_meltdown(int e)
     if (e < 160) d.fillRect(0, 0, W, CH, mix(COL_WHITE, COL_BG, e * 256 / 160));   // detonation whiteout
     if (e > 240) {                                                          // title slams in, strobing
         uint16_t tc = ((s_anim >> 1) & 1) ? COL_WHITE : COL_RED;
-        gui::text(GT("FUSIONE", "MELTDOWN"), cx + ox, 36 + oy, 1, gui::F_TITLE, tc, rgb(109, 0, 0));
+        gui::text(GT("FUSIONE", "MELTDOWN"), cx + ox, CH * 3 / 10 + oy, 1, gui::F_TITLE, tc, rgb(109, 0, 0));
     }
     if (e > s_over_total - 650) draw_card((e - (s_over_total - 650)) * 1000 / 600);   // card as chaos settles
 }
 static void draw_over(void)
 {
     int e = s_over_total - s_over_ms;
-    d.setClipRect(0, 0, W, CH);                  // shockwaves + debris fly off-screen: keep them above the footer
+    const bool clip = s_vw == W;                 // (the panel strip is already clipped: never widen it)
+    if (clip) d.setClipRect(0, 0, W, CH);        // shockwaves + debris fly off-screen: keep them above the footer
     if (s_over_reason == 0) draw_meltdown(e);
     else draw_blackout(e);
-    d.clearClipRect();
+    if (clip) d.clearClipRect();
 }
 static void draw_scores(void)
 {
@@ -560,6 +575,9 @@ static void draw_name(void)
 }
 
 // ============================ input + hint ===================================
+// A sideways arrow from the panel's rod-bank drag (no key down): ignored, so a drag only slides the rod (a tap
+// picks the rod). The Cardputer's arrow keys are physically down and keep stepping the selection.
+static bool pad_side(char c) { return nucleo_app_two_screens() && !nucleo_kbd_char_down(c); }
 static void set_hint(void)
 {
     switch (s_screen) {
@@ -578,7 +596,7 @@ static void set_hint(void)
 static void go(int s)
 {
     if (s == ST_MENU || s == ST_SET) { s_menu.sel = 0; s_menu.pos = 0; }
-    s_screen = s; set_hint(); nucleo_app_request_draw();
+    s_screen = s; s_lsel = 0; set_hint(); nucleo_app_request_draw();
 }
 
 static void menu_select(void)
@@ -612,8 +630,10 @@ static void over_key(bool enter)
     if (s_qualify) { go(ST_NAME); return; }
     if (enter) new_game(); else { sfx(3); go(ST_MENU); }
 }
+static bool lg_key(int k, char ch);
 static void on_key(int k, char ch)
 {
+    if (lg_key(k, ch)) return;
     switch (s_screen) {
         case ST_MENU:
             if (gui::menu_key(s_menu, k, NMENU)) { sfx(1); nucleo_app_request_draw(); }
@@ -628,7 +648,7 @@ static void on_key(int k, char ch)
             else if (k == NK_ENTER || k == NK_RIGHT) settings_change(k);
             return;
         case ST_PLAY:
-            if (k == NK_RIGHT)     { s_cur = (s_cur + 1) % NROD; sfx(1); }
+            if (k == NK_RIGHT)     { if (!pad_side('/')) { s_cur = (s_cur + 1) % NROD; sfx(1); } }
             else if (ch >= '1' && ch <= '0' + NROD) { s_cur = ch - '1'; sfx(1); }      // 1-6 jump straight to a rod
             else if (k == NK_UP || ch == 'w' || ch == 'W') rod_adjust(+1);
             else if (k == NK_DOWN || ch == 'e' || ch == 'E') rod_adjust(-1);
@@ -658,7 +678,7 @@ static bool on_back(int key)
         switch (s_screen) {
             case ST_HELP: s_help = (s_help + 2) % 3; sfx(1); nucleo_app_request_draw(); break;
             case ST_SET:  if (s_menu.sel < 2) settings_change(key); break;
-            case ST_PLAY: s_cur = (s_cur + NROD - 1) % NROD; sfx(1); nucleo_app_request_draw(); break;
+            case ST_PLAY: if (!pad_side(',')) { s_cur = (s_cur + NROD - 1) % NROD; sfx(1); nucleo_app_request_draw(); } break;
             case ST_NAME: { int l = (int)strlen(s_name); if (l > 0) s_name[l - 1] = 0; sfx(3); nucleo_app_request_draw(); } break;
             default: break;
         }
@@ -696,76 +716,239 @@ static void draw_game(void)
     }
 }
 
-// ===== two screens: the control room on the 320x240 panel, the Cardputer as a companion =================
-// lg::game pushes the gauges/rod-bank frame scaled to the panel; a NATIVE HUD below gives the real controls as
-// discrete taps the framework delivers cleanly (pick rod, pull out / push in, SCRAM, menu nav). The Cardputer
-// shows the live numbers (power vs demand, heat, grid) and the key map.
-static void lg_btn3(int y, int bh, const char *la, int ka, char ca, const char *lb, int kb, char cb,
-                    const char *lc, int kc, char cc)
+/// ===== two screens: the control room NATIVE on the 320x240 panel, the Cardputer as a companion ==========
+// Every screen is laid out for 320x240 (lg::frame) and touched directly: tap a row to pick it, tap it again to
+// open it; the chevron is Back. In play the rod bank is six sliders: tap a rod at a height to set it there, drag
+// up / down to pull it out / push it in; tap the core gauge to SCRAM. The game-over spectacle runs full panel
+// (the same renderer at 320x240) and a tap goes on. The companion shows the live numbers and the key map.
+#define LW 320
+#define LH 240
+#define LRY 150                                 // the rod bank: slots LRY..LRY+LRH, 40 px wide, 52 px apart
+#define LRH 82
+#define LRX 10
+static void lt(int x, int y, int f, uint16_t c, const char *s, uint8_t dt = top_left)
 {
-    const int W320 = d.width(), g = 8, bw = (W320 - 4 * g) / 3;
-    lg::button(g, y, bw, bh, la, lg::card(), FG, ka, ca);
-    lg::button(2 * g + bw, y, bw, bh, lb, ACC, COL_BG, kb, cb);
-    lg::button(3 * g + 2 * bw, y, bw, bh, lc, lg::card(), FG, kc, cc);
+    lg::font(f); d.setTextDatum(dt); d.setTextColor(c); d.drawString(s, x, y); d.setTextDatum(top_left);
 }
-static void lg_hud(int y, int h)
+static void lchev(int x, int y, uint16_t c)
 {
-    const int W320 = d.width();
-    d.fillRect(0, y, W320, h, COL_BG);
-    d.drawFastHLine(0, y, W320, COL_DIM);
-    const int bh = h - 24 < 34 ? h - 10 : 40, by = y + h - bh - 6;
-    char b[48];
-
-    if (s_screen == ST_PLAY || s_screen == ST_PAUSE) {
-        int sec = s_time_ms / 1000, pwr = (int)(s_dpow + 0.5f), hpct = (int)s_dheat;
-        lg::font(1); d.setTextDatum(top_left); d.setTextColor(COL_GREY, COL_BG);
-        snprintf(b, sizeof b, "%d:%02d", sec / 60, sec % 60); d.drawString(b, 10, y + 5);
-        d.setTextColor(s_power >= s_demand ? COL_GREEN : COL_AMBER, COL_BG);
-        snprintf(b, sizeof b, GT("MW %d / %d", "MW %d / %d"), pwr, s_demand); d.drawString(b, 66, y + 5);
-        d.setTextDatum(top_right); d.setTextColor(heat_col(hpct), COL_BG);
-        snprintf(b, sizeof b, GT("Calore %d%%", "Heat %d%%"), hpct); d.drawString(b, W320 - 10, y + 5);
-        d.setTextDatum(top_left);
-        if (s_screen == ST_PAUSE) { lg::button(40, by, W320 - 80, bh, GT("Riprendi", "Resume"), ACC, COL_BG, NK_ENTER, 0); return; }
-        const int g = 6, aw = 30, sw = 90, bw = (W320 - 6 * g - 2 * aw - sw) / 2;
-        int x = g;
-        lg::button(x, by, aw, bh, "<", lg::card(), FG, NK_LEFT, 0); x += aw + g;
-        lg::button(x, by, bw, bh, GT("Estrai", "Pull"), mix(COL_GREEN, COL_BG, 80), COL_WHITE, NK_UP, 0); x += bw + g;
-        lg::button(x, by, sw, bh, "SCRAM", COL_RED, COL_WHITE, NK_CHAR, ' '); x += sw + g;
-        lg::button(x, by, bw, bh, GT("Inser.", "Push"), mix(COL_CYAN, COL_BG, 80), COL_WHITE, NK_DOWN, 0); x += bw + g;
-        lg::button(x, by, aw, bh, ">", lg::card(), FG, NK_RIGHT, 0);
+    for (int k = 0; k < 2; k++) { d.drawLine(x + 6 + k, y, x + k, y + 7, c); d.drawLine(x + k, y + 7, x + 6 + k, y + 14, c); }
+}
+static void lhead(const char *title, const char *right)   // the header band: the chevron (tap = Back), title, value
+{
+    gui::vgradient(0, 0, LW, 30, rgb(73, 36, 0), COL_BG);
+    d.drawFastHLine(0, 29, LW, mix(ACC, COL_BG, 120));
+    lchev(10, 8, ACC); nucleo_touch_add(0, 0, 140, 30, NK_BACK, 0);
+    lt(28, 7, 1, ACC, title);
+    if (right) lt(LW - 10, 8, 0, COL_GREY, right, top_right);
+}
+// n rows from y, rh apart, the picked one lit; row i taps as NUCLEO_TOUCH_ROW + i. `val` = a right-hand value.
+static void lrows(int y, int rh, const char *const *lab, const char *const *val, int n, int sel, int x, int w)
+{
+    for (int i = 0; i < n; i++) {
+        const int ry = y + i * rh, h = rh - 6; const bool s = i == sel;
+        d.fillRoundRect(x, ry, w, h, 8, s ? rgb(73, 36, 0) : rgb(0, 0, 36));
+        d.drawRoundRect(x, ry, w, h, 8, s ? ACC : COL_TRACK);
+        if (val && val[i]) { lt(x + 16, ry + h / 2 + 1, 1, s ? COL_WHITE : COL_GREY, lab[i], middle_left); lt(x + w - 16, ry + h / 2 + 1, 1, ACC, val[i], middle_right); }
+        else lt(x + w / 2, ry + h / 2 + 1, 1, s ? COL_WHITE : COL_GREY, lab[i], middle_center);
+        nucleo_touch_add(x, ry, w, h, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + i));
+    }
+}
+static void lp_menu(void)
+{
+    d.fillRect(0, 0, LW, LH, COL_BG);
+    lt(LW / 2, 8, 3, ACC, GT("REATTORE", "REACTOR"), top_center);
+    char b[24]; snprintf(b, sizeof b, GT("Record %d", "Best %d"), g_best);
+    lt(LW / 2, 38, 0, COL_GREY, b, top_center);
+    draw_core(LW / 2, 86, 14, heat_col(40 + (int)(20 * sinf(s_anim * 0.05f))));
+    const char *items[NMENU] = { GT("Gioca", "Play"), GT("Classifica", "Leaderboard"), GT("Impostazioni", "Settings") };
+    lrows(126, 38, items, nullptr, NMENU, s_menu.sel, 50, LW - 100);
+}
+static void lp_set(void)
+{
+    d.fillRect(0, 0, LW, LH, COL_BG);
+    lhead(GT("Impostazioni", "Settings"), nullptr);
+    const char *lab[NSET] = { GT("Audio", "Audio"), GT("Difficolta", "Difficulty"), GT("Come si gioca", "How to play") };
+    const char *val[NSET] = { g_audio ? GT("Si", "On") : GT("No", "Off"), diff_name(g_diff), nullptr };
+    lrows(44, 50, lab, val, NSET, s_menu.sel, 16, LW - 32);
+}
+static void lp_help(void)
+{
+    d.fillRect(0, 0, LW, LH, COL_BG);
+    lhead(help_title(s_help), nullptr);
+    for (int i = 0; i < 3; i++) d.fillCircle(LW - 34 + i * 12, 15, i == s_help ? 4 : 3, i == s_help ? ACC : COL_DIM);   // page dots
+    const char *l[5]; uint16_t c[5];
+    help_lines(s_help, l, c);
+    for (int i = 0; i < 5; i++) { char b[48]; lg::font(0); lg::fit(b, sizeof b, l[i], LW - 28); lt(14, 46 + i * 36, 0, c[i], b); }
+    lg::field(0, 30, LW, LH - 30);
+}
+static void lp_scores(void)
+{
+    d.fillRect(0, 0, LW, LH, COL_BG);
+    lhead(GT("Classifica", "Leaderboard"), nullptr);
+    char b[16];
+    for (int i = 0; i < NSCORES; i++) {
+        const int y = 33 + i * 20; const bool hot = i == s_newrank;
+        if (hot) d.fillRoundRect(6, y, LW - 12, 19, 5, rgb(73, 36, 0));
+        const uint16_t c = hot ? COL_WHITE : (i < 3 ? COL_AMBER : COL_GREY);
+        snprintf(b, sizeof b, "%d", i + 1); lt(34, y + 2, 0, c, b, top_right);
+        if (!s_scores[i].score) { lt(60, y + 2, 0, COL_DIM, "-"); continue; }
+        d.fillCircle(48, y + 10, 3, s_scores[i].diff == 0 ? COL_GREEN : s_scores[i].diff == 2 ? COL_RED : COL_AMBER);
+        lt(60, y + 2, 0, c, s_scores[i].name);
+        snprintf(b, sizeof b, "%d", s_scores[i].score); lt(LW - 16, y + 2, 0, c, b, top_right);
+    }
+}
+static void lp_name(void)
+{
+    d.fillRect(0, 0, LW, LH, COL_BG);
+    char b[24]; snprintf(b, sizeof b, GT("Punteggio %d", "Score %d"), s_score);
+    lhead(GT("Nuovo record!", "New record!"), b);
+    lt(LW / 2, 50, 0, COL_GREY, GT("Scrivi il nome sulla tastiera", "Type the name on the keyboard"), top_center);
+    gui::panel(30, 76, LW - 60, 44, rgb(0, 0, 85), COL_CYAN);
+    lt(44, 98, 2, COL_WHITE, s_name, middle_left);
+    lg::font(2); const int cx = 46 + d.textWidth(s_name);
+    if ((s_anim >> 3) & 1) d.fillRect(cx, 86, 10, 24, COL_CYAN);
+    const char *ok[1] = { "OK" };
+    lrows(150, 52, ok, nullptr, 1, 0, 80, LW - 160);
+}
+// The rod a panel x falls on (the slots and the gaps right of them).
+static int lrod_at(int x) { int i = (x - LRX + 6) / 52; return i < 0 ? 0 : i >= NROD ? NROD - 1 : i; }
+static void lp_play(void)
+{
+    d.fillRect(0, 0, LW, LH, COL_BG);
+    char b[24];
+    const int sec = s_time_ms / 1000, hpct = (int)s_dheat;
+    int dz = s_dheat < 82 ? 0 : (int)((s_dheat - 82) * 100 / 18); if (dz > 100) dz = 100;
+    gui::vgradient(0, 0, LW, 30, rgb(0, 0, 36), COL_BG);                            // the top band: pause, time, score
+    lchev(10, 8, ACC);
+    snprintf(b, sizeof b, "%d:%02d", sec / 60, sec % 60); lt(26, 7, 1, COL_GREY, b);
+    snprintf(b, sizeof b, "%d", s_score); lt(LW - 10, 5, 2, s_pop_ms > 300 ? COL_WHITE : COL_AMBER, b, top_right);
+    if (s_dheat >= 90 && ((s_anim >> 1) & 1)) {                                       // PANIC banner
+        d.fillRoundRect(LW / 2 - 60, 3, 120, 24, 5, COL_RED);
+        lt(LW / 2, 15, 1, COL_WHITE, GT("! CRITICO !", "! CRITICAL !"), middle_center);
+    }
+    const bool met = s_power >= s_demand;                                              // POWER gauge, demand needle
+    const int sh = (int)(40 * (0.5f + 0.5f * sinf(s_anim * 0.18f)));
+    const uint16_t pcol = met ? mix(COL_GREEN, COL_WHITE, sh) : COL_AMBER;
+    ring(62, 88, 46, (int)(s_dpow * 100 / POWER_MAX), pcol, false);
+    radial_tick(62, 88, 33, 49, s_demand * 100 / POWER_MAX, COL_WHITE);
+    snprintf(b, sizeof b, "%d", (int)(s_dpow + 0.5f)); lt(62, 86, 3, COL_WHITE, b, middle_center);
+    lt(62, 104, 4, COL_GREY, "MW", top_center);
+    ring(258, 88, 46, hpct, (dz >= 45 && (s_anim & 1)) ? COL_WHITE : heat_col(hpct), true);   // CORE heat = SCRAM
+    snprintf(b, sizeof b, "%d%%", hpct); lt(258, 86, 3, dz > 0 ? rgb(255, 109 + (100 - dz), 85) : heat_col(hpct), b, middle_center);
+    lt(258, 104, 4, COL_RED, "SCRAM", top_center);
+    lt(LW / 2, 38, 4, COL_GREY, GT("DOMANDA", "DEMAND"), top_center);                  // centre: demand + grid
+    snprintf(b, sizeof b, "%d", s_demand); lt(LW / 2, 50, 2, s_dem_ms > 0 ? COL_WHITE : COL_AMBER, b, top_center);
+    if (s_dem_ms > 0) {
+        const uint16_t tc = s_dem_dip ? COL_CYAN : COL_AMBER; const int ax = LW / 2 + 30, ay = 60;
+        if (s_dem_dip) d.fillTriangle(ax - 5, ay - 4, ax + 5, ay - 4, ax, ay + 4, tc);
+        else           d.fillTriangle(ax - 5, ay + 4, ax + 5, ay + 4, ax, ay - 4, tc);
+    }
+    lt(LW / 2, 88, 4, COL_GREY, GT("RETE", "GRID"), top_center);
+    d.fillRoundRect(LW / 2 - 32, 100, 64, 10, 3, COL_TRACK);
+    const int sw = (int)s_dstab * 60 / 100;
+    if (sw > 0) d.fillRoundRect(LW / 2 - 30, 102, sw, 6, 2, s_stab > 35 ? COL_CYAN : COL_RED);
+    d.fillRoundRect(3, LRY - 8, LW - 6, LRH + 14, 6, rgb(0, 0, 85));                   // the rod bank: six sliders
+    d.drawRoundRect(3, LRY - 8, LW - 6, LRH + 14, 6, rgb(36, 73, 170));
+    const int usable = LRH - 8;
+    for (int i = 0; i < NROD; i++) {
+        const int x = LRX + i * 52, hy = LRY + 4 + s_rod[i] * usable / ROD_MAX; const bool sel = i == s_cur;
+        d.fillRoundRect(x, LRY, 40, LRH, 5, COL_BG);
+        const uint16_t fuel = sel ? rgb(255, 219, 170) : heat_col(hpct);
+        if (hy - LRY - 4 > 0) d.fillRoundRect(x + 4, LRY + 4, 32, hy - LRY - 4, 3, fuel);
+        d.fillRect(x + 4, hy, 32, LRY + LRH - 4 - hy, rgb(73, 73, 85));
+        d.fillRoundRect(x + 2, hy - 2, 36, 5, 2, sel ? COL_WHITE : rgb(182, 182, 170)); // the handle
+        d.drawRoundRect(x, LRY, 40, LRH, 5, sel ? COL_AMBER : rgb(36, 73, 170));
+    }
+    if (s_scram_ms > 180) d.fillRect(0, 0, LW, LH, mix(rgb(182, 219, 255), COL_BG, (220 - s_scram_ms) * 256 / 40));   // SCRAM flash
+    if (dz > 0) {                                                                       // the danger vignette
+        const int amp = (int)(dz * (0.55f + 0.45f * sinf(s_anim * 0.4f)));
+        for (int k = 0; k < 5; k++) d.drawRect(k, k, LW - 2 * k, LH - 2 * k, rgb(36 + amp * (5 - k) / 4, 0, 0));
+    }
+    if (s_screen == ST_PAUSE) {
+        gui::panel(40, 40, LW - 80, 170, COL_BG, ACC);
+        lt(LW / 2, 50, 2, ACC, GT("PAUSA", "PAUSED"), top_center);
+        snprintf(b, sizeof b, "%d:%02d  %d  %s", sec / 60, sec % 60, s_score, diff_name(g_diff));
+        lt(LW / 2, 78, 0, COL_GREY, b, top_center);
+        const char *rows[2] = { GT("Riprendi", "Resume"), GT("Menu", "Menu") };
+        lrows(104, 50, rows, nullptr, 2, s_lsel, 60, LW - 120);
         return;
     }
-    if (s_screen == ST_OVER) {
-        lg::font(1); d.setTextDatum(top_center); d.setTextColor(s_over_reason == 0 ? COL_RED : COL_CYAN, COL_BG);
-        snprintf(b, sizeof b, GT("%s  -  Punti %d", "%s  -  Score %d"), s_over_reason == 0 ? GT("Fusione", "Meltdown") : "Blackout", s_score);
-        d.drawString(b, W320 / 2, y + 6); d.setTextDatum(top_left);
-        lg::button(40, by, W320 - 80, bh, s_qualify ? GT("Salva record", "Save score") : GT("Rigioca", "Replay"), ACC, COL_BG, NK_ENTER, 0);
-        return;
+    nucleo_touch_add(0, 0, 120, 30, NK_BACK, 0);
+    lg::field(206, 36, 110, 104);                                                      // the core gauge: SCRAM
+    lg::field(0, LRY - 8, LW, LH - LRY + 8);                                           // the rods: tap = set
+    nucleo_touch_add_pad(0, LRY - 8, LW, LH - LRY + 8, 16);                            // drag = pull / push
+}
+static void lp_over(void)
+{
+    d.fillRect(0, LH - 36, LW, 36, COL_BG);
+    s_vw = LW; s_vh = LH - 36;                                                         // the spectacle above the hint
+    draw_over();
+    s_vw = W; s_vh = H - HINT;
+    lchev(10, 8, COL_GREY); nucleo_touch_add(0, 0, 60, 40, NK_BACK, 0);
+    if (s_over_total - s_over_ms < 700) return;
+    const char *t = s_qualify ? GT("Salva record", "Save score") : GT("Rigioca", "Replay");
+    lg::font(1); const int w = d.textWidth(t) + 40;
+    d.fillRoundRect(LW / 2 - w / 2, LH - 33, w, 30, 15, ACC);
+    lt(LW / 2, LH - 17, 1, COL_BG, t, middle_center);
+    lg::field(0, 40, LW, LH - 40);
+}
+static void lg_paint(void *)
+{
+    s_flat = true;
+    switch (s_screen) {
+        case ST_MENU:   lp_menu(); break;
+        case ST_HELP:   lp_help(); break;
+        case ST_SET:    lp_set(); break;
+        case ST_PLAY: case ST_PAUSE: lp_play(); break;
+        case ST_OVER:   lp_over(); break;
+        case ST_SCORES: lp_scores(); break;
+        case ST_NAME:   lp_name(); break;
+        default: break;
     }
-    if (s_screen == ST_NAME) {
-        lg::font(1); d.setTextDatum(top_left); d.setTextColor(COL_GREY, COL_BG);
-        d.drawString(GT("Scrivi il nome sulla tastiera", "Type the name on the keyboard"), 12, y + 6);
-        d.setTextDatum(top_left);
-        lg::button(40, by, W320 - 80, bh, "OK", ACC, COL_BG, NK_ENTER, 0);
-        return;
-    }
-    // menu / settings / help / scores
-    lg::font(1); d.setTextDatum(top_left); d.setTextColor(ACC, COL_BG);
-    const char *lbl = s_screen == ST_MENU ? GT("REATTORE - menu", "REACTOR - menu")
-                    : s_screen == ST_SET  ? GT("Impostazioni", "Settings")
-                    : s_screen == ST_HELP ? GT("Come si gioca", "How to play")
-                    : GT("Classifica", "Leaderboard");
-    d.drawString(lbl, 12, y + 6); d.setTextDatum(top_left);
-    if (s_screen == ST_MENU)       lg_btn3(by, bh, GT("Su", "Up"), NK_UP, 0, "OK", NK_ENTER, 0, GT("Giu", "Down"), NK_DOWN, 0);
-    else if (s_screen == ST_SET)   lg_btn3(by, bh, GT("Su", "Up"), NK_UP, 0, GT("Cambia", "Change"), NK_ENTER, 0, GT("Giu", "Down"), NK_DOWN, 0);
-    else if (s_screen == ST_HELP)  lg_btn3(by, bh, GT("Prec", "Prev"), NK_LEFT, 0, GT("Avanti", "Next"), NK_RIGHT, 0, GT("Indietro", "Back"), NK_BACK, 0);
-    else                           lg::button(40, by, W320 - 80, bh, GT("Menu", "Menu"), ACC, COL_BG, NK_ENTER, 0);
+    s_flat = false;
 }
 static void draw_large(void)
 {
     nucleo_touch_clear();
-    lg::game(draw_game, lg_hud, GT("Reattore", "Reactor"), ACC);
+    lg::frame(lg_paint, nullptr);
     nucleo_touch_commit();
+}
+// A touch on the panel (a row or a field tap): true when handled.
+static bool lg_key(int k, char ch)
+{
+    int tx = 0, ty = 0;
+    const bool fld = lg::tap(k, ch, &tx, &ty);
+    const int ri = nucleo_touch_is_row(k, ch) ? ch - NUCLEO_TOUCH_ROW : -1;
+    if (!fld && ri < 0) return false;
+    switch (s_screen) {
+        case ST_MENU: case ST_SET: {
+            const int n = s_screen == ST_MENU ? NMENU : NSET;
+            if (ri < 0 || ri >= n) return true;
+            if (s_menu.sel != ri) { s_menu.sel = (int8_t)ri; sfx(1); nucleo_app_request_draw(); }
+            else if (s_screen == ST_MENU) menu_select(); else settings_change(NK_ENTER);
+            return true;
+        }
+        case ST_HELP:  if (fld) on_key(NK_RIGHT, 0); return true;
+        case ST_PAUSE:
+            if (ri < 0 || ri > 1) return true;
+            if (s_lsel != ri) { s_lsel = ri; sfx(1); nucleo_app_request_draw(); }
+            else if (ri == 0) on_key(NK_ENTER, 0); else on_back(NK_BACK);
+            return true;
+        case ST_PLAY:
+            if (!fld) return true;
+            if (ty < LRY - 8) { if (tx >= 206) scram(); }
+            else {                                                                      // a rod set at the tapped height
+                s_cur = lrod_at(tx);
+                const int v = ((ty - LRY - 4) * ROD_MAX + (LRH - 8) / 2) / (LRH - 8);
+                rod_adjust((int)s_rod[s_cur] - (v < 0 ? 0 : v > ROD_MAX ? ROD_MAX : v));
+            }
+            nucleo_app_request_draw();
+            return true;
+        case ST_OVER:  if (fld) over_key(true); return true;
+        case ST_NAME:  if (ri == 0) name_commit(); return true;
+        default:       return true;
+    }
 }
 static void draw_companion(void)
 {
@@ -796,7 +979,7 @@ static void draw_companion(void)
     gui::text(st, 8, y + 6, 0, gui::F_BODY, 0xFFFF, 0);
     snprintf(b, sizeof b, GT("Record %d", "Best %d"), g_best); gui::text(b, 8, y + 34, 0, gui::F_SMALL, COL_AMBER, 0);
     lg::comp_keys(s_screen == ST_NAME ? GT("Scrivi il nome  INVIO ok", "Type the name  ENTER ok")
-                                      : GT("Tocca i tasti sul pannello", "Use the panel buttons"));
+                                      : GT("Tocca le righe sul pannello", "Tap the rows on the panel"));
 }
 static void on_draw(void)
 {

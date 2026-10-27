@@ -99,6 +99,7 @@ lgfx::LGFX_Device *s_dev = nullptr;             // the external panel (touch lay
 int                s_bl_pin = -1;
 spi_device_handle_t s_touch = nullptr;           // the XPT2046, kept for the touch task
 volatile int       s_presses = 0, s_last_x = -1, s_last_y = -1;
+volatile int       s_tap_x = -1, s_tap_y = -1;       // where the last target tap landed (nucleo_touch_last)
 bool               s_primary = true;             // settings "external_primary": an attached panel hosts large screens
 bool               s_fit = true;                 // settings "external_fit": compact screens scaled 4/3 (320x180)
 volatile int       s_layout = 0;                 // settings "external_layout": 0 duplicate, 1 Cardputer only, 2 second only
@@ -409,7 +410,7 @@ struct TouchCtx {
     Target tgt_build[NUCLEO_TOUCH_MAX], tgt[NUCLEO_TOUCH_MAX];
     uint8_t ntgt_build, ntgt;
     // Scroll areas (nucleo_touch_add_scroll), built and published with the targets.
-    struct Scroll { int16_t x, y, w, h, step, kb, kf; char cb, cf; };
+    struct Scroll { int16_t x, y, w, h, step, kb, kf; char cb, cf; bool pad; };   // pad: nucleo_touch_add_pad
     Scroll scr_build[NUCLEO_TOUCH_SCROLL_MAX], scr[NUCLEO_TOUCH_SCROLL_MAX];
     uint8_t nscr_build, nscr;
 };
@@ -524,6 +525,7 @@ struct ScrollTrack {
     bool on;                       // a drag that began in a scroll area owns this touch
     TouchCtx::Scroll a;            // that area (copied: the app may republish mid-drag)
     int  last, acc;                // last finger y (screen px), travel not yet turned into keys
+    int  lastx, accx;              // pad: the same along x
     int  hist_y[4]; uint32_t hist_t[4]; int hn;   // recent samples, for the release velocity
     int  vel, frac;                // fling velocity (px/ms x1000), 0 = none; sub-pixel carry
     uint32_t t_fling;
@@ -533,6 +535,16 @@ void scroll_emit(ScrollTrack &st, int dy)
     st.acc += dy;
     while (st.acc <= -st.a.step) { st.acc += st.a.step; if (s_touch_input) nucleo_kbd_inject(nucleo_key_t{ st.a.kf, st.a.cf }); }
     while (st.acc >=  st.a.step) { st.acc -= st.a.step; if (s_touch_input) nucleo_kbd_inject(nucleo_key_t{ st.a.kb, st.a.cb }); }
+}
+
+// A drag pad: the finger's travel on each axis becomes arrows in ITS direction (finger right = Right), one per step.
+void pad_emit(ScrollTrack &st, int dx, int dy)
+{
+    st.accx += dx; st.acc += dy;
+    while (st.accx >=  st.a.step) { st.accx -= st.a.step; if (s_touch_input) nucleo_kbd_inject(nucleo_key_t{ NK_RIGHT, '/' }); }
+    while (st.accx <= -st.a.step) { st.accx += st.a.step; if (s_touch_input) nucleo_kbd_inject(nucleo_key_t{ NK_LEFT, ',' }); }
+    while (st.acc  >=  st.a.step) { st.acc  -= st.a.step; if (s_touch_input) nucleo_kbd_inject(nucleo_key_t{ NK_DOWN, '.' }); }
+    while (st.acc  <= -st.a.step) { st.acc  += st.a.step; if (s_touch_input) nucleo_kbd_inject(nucleo_key_t{ NK_UP, ';' }); }
 }
 
 void touch_task(void *)
@@ -642,7 +654,7 @@ void touch_task(void *)
                     if (ax >= a.x && ax < a.x + a.w && ay >= a.y && ay < a.y + a.h) { sc.a = a; sc.on = true; break; }
                 }
                 ext_unlock();
-                if (sc.on) { sc.last = ay; sc.acc = 0; sc.hn = 0; }
+                if (sc.on) { sc.last = ay; sc.acc = 0; sc.hn = 0; sc.lastx = ax; sc.accx = 0; }
             }
             if (s_cfg.diag) ESP_LOGW(TAG, "touch DOWN #%d raw x=%d y=%d -> %d,%d", s_presses, rx, ry, sx, sy);
         } else if (!g.down && was_down && s_cfg.diag) {
@@ -654,14 +666,16 @@ void touch_task(void *)
         if (g.down && on) { s_last_x = sx; s_last_y = sy; }
         if (sc.on && g.down && on) {                 // the finger moves the content, 1:1 (past the tap slop)
             const int ay = solo_seen ? sy : (s_tc->frame.fh > 0 ? (sy - s_tc->frame.oy) * 135 / s_tc->frame.fh : sy);
-            if (g.moved) scroll_emit(sc, ay - sc.last);
-            sc.last = ay;
+            const int ax = solo_seen ? sx : (s_tc->frame.fw > 0 ? (sx - s_tc->frame.ox) * 240 / s_tc->frame.fw : sx);
+            if (sc.a.pad) { if (g.moved) pad_emit(sc, ax - sc.lastx, ay - sc.last); }
+            else if (g.moved) scroll_emit(sc, ay - sc.last);
+            sc.last = ay; sc.lastx = ax;
             if (sc.hn == 4) { memmove(sc.hist_y, sc.hist_y + 1, sizeof(int) * 3); memmove(sc.hist_t, sc.hist_t + 1, sizeof(uint32_t) * 3); sc.hn = 3; }
             sc.hist_y[sc.hn] = ay; sc.hist_t[sc.hn] = now; sc.hn++;
         }
         if (sc.on && !g.down && was_down) {          // lift: a flick keeps coasting
             sc.on = false;
-            if (g.moved && sc.hn >= 2 && now - sc.hist_t[sc.hn - 1] < 80) {
+            if (!sc.a.pad && g.moved && sc.hn >= 2 && now - sc.hist_t[sc.hn - 1] < 80) {
                 const int dt = (int)(sc.hist_t[sc.hn - 1] - sc.hist_t[0]);
                 if (dt > 0) {
                     int v = (sc.hist_y[sc.hn - 1] - sc.hist_y[0]) * 1000 / dt;
@@ -702,6 +716,7 @@ void touch_task(void *)
                 ext_unlock();
                 if (hit.key != NK_NONE) {
                     if (s_cfg.diag) ESP_LOGW(TAG, "touch -> target key %d at %d,%d", hit.key, s_last_x, s_last_y);
+                    s_tap_x = s_last_x; s_tap_y = s_last_y;
                     if (s_touch_input) nucleo_kbd_inject(hit);
                     continue;
                 }
@@ -724,6 +739,7 @@ void touch_task(void *)
                     ext_unlock();
                     if (hit.key != NK_NONE) {
                         if (s_cfg.diag) ESP_LOGW(TAG, "touch -> target key %d '%c' at %d,%d", hit.key, hit.ch ? hit.ch : ' ', cx, cy);
+                        s_tap_x = cx; s_tap_y = cy;
                         if (s_touch_input) nucleo_kbd_inject(hit);
                         continue;
                     }
@@ -1036,13 +1052,27 @@ extern "C" bool nucleo_extdisp_draw_internal(void (*fn)(void *gfx))
 }
 
 // ---- touch targets (include/nucleo_touch.h) ----------------------------------------------------------------
+extern "C" bool nucleo_touch_last(int *x, int *y)
+{
+    if (s_tap_x < 0) return false;
+    if (x) *x = s_tap_x;
+    if (y) *y = s_tap_y;
+    return true;
+}
 extern "C" void nucleo_touch_clear(void) { if (s_tc) { s_tc->ntgt_build = 0; s_tc->nscr_build = 0; } }
 
 extern "C" void nucleo_touch_add_scroll(int x, int y, int w, int h, int step, int key_back, char ch_back, int key_fwd, char ch_fwd)
 {
     if (!s_tc || s_tc->nscr_build >= NUCLEO_TOUCH_SCROLL_MAX || w <= 0 || h <= 0 || step <= 0) return;
     s_tc->scr_build[s_tc->nscr_build++] = TouchCtx::Scroll{ (int16_t)x, (int16_t)y, (int16_t)w, (int16_t)h, (int16_t)step,
-                                                            (int16_t)key_back, (int16_t)key_fwd, ch_back, ch_fwd };
+                                                            (int16_t)key_back, (int16_t)key_fwd, ch_back, ch_fwd, false };
+}
+
+extern "C" void nucleo_touch_add_pad(int x, int y, int w, int h, int step)
+{
+    if (!s_tc || s_tc->nscr_build >= NUCLEO_TOUCH_SCROLL_MAX || w <= 0 || h <= 0 || step <= 0) return;
+    s_tc->scr_build[s_tc->nscr_build++] = TouchCtx::Scroll{ (int16_t)x, (int16_t)y, (int16_t)w, (int16_t)h, (int16_t)step,
+                                                            0, 0, 0, 0, true };
 }
 
 extern "C" void nucleo_touch_add(int x, int y, int w, int h, int key, char ch)

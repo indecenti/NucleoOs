@@ -4,3 +4,14 @@ settings D D ENTER
 help D D ENTER D D ENTER
 play ENTER tick:6
 pause ENTER tick:4 BACK
+menu_tap row:1
+settings_tap D D ENTER row:1 row:1
+help_tap D D ENTER D D ENTER tap:160,120
+play_rods ENTER tap:30,155 tap:82,228 tick:3
+play_scram ENTER tick:4 tap:258,88 tick:1
+pause_tap ENTER tick:4 BACK row:1
+meltdown ENTER tap:30,155 tap:82,155 tap:134,155 tap:186,155 tap:238,155 tap:290,155 tick:20
+meltdown_end ENTER tap:30,155 tap:82,155 tap:134,155 tap:186,155 tap:238,155 tap:290,155 tick:30
+blackout ENTER tap:258,88 tick:30
+name ENTER tap:30,155 tap:82,155 tap:134,155 tap:186,155 tap:238,155 tap:290,155 tick:30 tap:160,120
+name_ok ENTER tap:30,155 tap:82,155 tap:134,155 tap:186,155 tap:238,155 tap:290,155 tick:30 tap:160,120 row:0

@@ -6,3 +6,11 @@ record D D ENTER
 settings D D D ENTER
 play ENTER
 moved ENTER U R U R D U
+menu_tap row:1
+help_p2 D ENTER tap:160,120
+help_p3 D ENTER tap:160,120 tap:160,120
+settings_tap D D D ENTER row:1
+play_tap ENTER tap:220,120 tap:120,220 tap:20,120
+undo_tap ENTER tap:220,120 tap:280,210
+pause ENTER BACK
+pause_tap ENTER BACK row:1

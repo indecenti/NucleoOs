@@ -38,6 +38,23 @@
     "UP/DN  ENTER pick  Esc quit": { "es": "AR/AB  INTRO elige  Esc sale", "fr": "HT/BAS  ENTREE ok  Esc quitte", "de": "AUF/AB  ENTER waehlt  Esc Ende" },
     "L/R pages  Esc back": { "es": "IZ/DE paginas  Esc atras", "fr": "G/D pages  Esc retour", "de": "L/R Seiten  Esc zurueck" },
     "UP/DN  L/R change  Esc done": { "es": "AR/AB  IZ/DE cambia  Esc ok", "fr": "HT/BAS  G/D change  Esc ok", "de": "AUF/AB  L/R aendert  Esc ok" },
-    "SPACE spin  UP/DN bet  TAB setup": { "es": "ESPACIO gira  AR/AB apuesta  TAB", "fr": "ESPACE lance  HT/BAS mise  TAB", "de": "LEER dreht  AUF/AB Einsatz  TAB" }
+    "SPACE spin  UP/DN bet  TAB setup": { "es": "ESPACIO gira  AR/AB apuesta  TAB", "fr": "ESPACE lance  HT/BAS mise  TAB", "de": "LEER dreht  AUF/AB Einsatz  TAB" },
+    "Yes": { "es": "Si", "fr": "Oui", "de": "Ja" },
+    "Lever, reels": { "es": "Palanca, rodillos", "fr": "Levier, rouleaux", "de": "Hebel, Walzen" },
+    "Tap: restart": { "es": "Toca: reinicia", "fr": "Touche: recommencer", "de": "Tippen: neu starten" },
+    "Tap: resume  < leave": { "es": "Toca: sigue  < salir", "fr": "Touche: reprendre  < quitter", "de": "Tippen: weiter  < verlassen" },
+    "Credits": { "es": "Creditos", "fr": "Credits", "de": "Guthaben" },
+    "Bet %d  Lines %d": { "es": "Apuesta %d  Lineas %d", "fr": "Mise %d  Lignes %d", "de": "Einsatz %d  Linien %d" },
+    "Menu": { "es": "Menu", "fr": "Menu", "de": "Menue" },
+    "Help": { "es": "Ayuda", "fr": "Aide", "de": "Hilfe" },
+    "Out of credits": { "es": "Sin creditos", "fr": "Plus de credits", "de": "Kein Guthaben" },
+    "Paused": { "es": "Pausa", "fr": "Pause", "de": "Pause" },
+    "Spinning...": { "es": "Girando...", "fr": "Ca tourne...", "de": "Dreht sich..." },
+    "Win!": { "es": "Premio!", "fr": "Gagne!", "de": "Gewinn!" },
+    "Auto on": { "es": "Auto activo", "fr": "Auto actif", "de": "Auto an" },
+    "Ready to spin": { "es": "Listo para girar", "fr": "Pret a lancer", "de": "Bereit zum Drehen" },
+    "Tap the panel": { "es": "Toca el panel", "fr": "Touche l'ecran", "de": "Tippe auf das Panel" },
+    "SPACE stop the reels": { "es": "ESPACIO para rodillos", "fr": "ESPACE arrete les rouleaux", "de": "LEER stoppt die Walzen" },
+    "SPACE spin  up/dn bet": { "es": "ESPACIO gira  arr/abj apuesta", "fr": "ESPACE lancer  haut/bas mise", "de": "LEER drehen  auf/ab Einsatz" }
   }
 }

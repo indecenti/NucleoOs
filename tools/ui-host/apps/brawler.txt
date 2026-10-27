@@ -7,3 +7,9 @@ over ENTER ENTER tick:2200
 options D D ENTER
 coop D ENTER
 help D D ENTER D D ENTER
+menu_tap row:2
+opt_tap row:2 row:2 row:1 row:1
+sel_tap row:0 row:2
+play_tap ENTER ENTER tick:8 tap:210,180 tick:30
+walk_tap ENTER ENTER tick:14 tap:40,236 tick:8
+pause_tap ENTER ENTER tick:8 BACK row:0 tick:3 BACK

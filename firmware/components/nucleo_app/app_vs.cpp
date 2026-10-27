@@ -185,12 +185,21 @@ static TileAtlas s_atlas;                      // 4 KB heap chunks while open
 static bool     s_atlas_ok = false;
 static int      s_face = 0;                    // player facing: 0 = right, 1 = left
 static int64_t  s_last_us = 0, s_poll_us = 0;
+// The field view: 240x135 on the Cardputer, 320x240 on the panel (the world is drawn 1:1, the panel just sees
+// more of it; spawns stay off-camera, they ring at 280+ px). Touch steering: a drag on the panel nudges an axis
+// for a few frames (s_tx/s_ty + timers), a tap walks to that world point (s_go*).
+static int      s_vw = 240, s_vh = 135, s_lsel = 0;
+static int8_t   s_tx = 0, s_ty = 0, s_txt = 0, s_tyt = 0;
+static bool     s_go = false;
+static int      s_gox = 0, s_goy = 0;
 
 // enemy accent per type (fallback primitives)
 static const uint16_t EN_COL[4] = { 0xF9A6 /*red*/, 0xFD20 /*orange*/, 0xC61F /*violet*/, 0x07FF /*cyan*/ };
 
 static bool poll_fn(void);
 static bool on_back(int key);
+static bool lg_key(int k, char ch);
+static bool lsteer(int key);
 
 static inline const uint8_t *T(int i) { return tile_px(&s_atlas, i); }
 static inline void blit_ent(int idx, int f, int cx, int cy, int D, int ol = 0x00) { tile_blit_sz(T(idx), f, cx, cy, D, ol); }
@@ -255,7 +264,7 @@ static void apply_hero(VS *w, int h)
 // ---- screen flow: one place sets fullscreen + hint for each state (menus keep the hint bar) ----
 static void go(int gs)
 {
-    s_gs = gs;
+    s_gs = gs; s_lsel = 0; s_go = false;
     nucleo_app_set_fullscreen(gs >= GS_PLAY);
     switch (gs) {
         case GS_MENU:     nucleo_app_set_hint(GT("SU/GIU  INVIO scegli  Esc esci", "UP/DN  ENTER pick  Esc quit")); break;
@@ -302,6 +311,7 @@ static bool on_back(int key)
 {
     if (!s_w) return false;
     if (key == NK_LEFT) {
+        if (lsteer(key)) return true;                 // a drag left on the panel's field
         if (s_gs == GS_START)    { s_hero = (s_hero + HERO_COUNT - 1) % HERO_COUNT; sfx(SFX_SELECT); nucleo_app_request_draw(); }
         if (s_gs == GS_SETTINGS) { tile_cfg_adjust(&s_cfg, s_setm.sel, -1); sfx(SFX_SELECT); nucleo_app_request_draw(); }
         if (s_gs == GS_LEVELUP)  { if (s_up_sel > 0) s_up_sel--; sfx(SFX_SELECT); nucleo_app_request_draw(); }
@@ -322,6 +332,7 @@ static bool on_back(int key)
 static void on_key(int key, char ch)
 {
     if (!s_w) return;
+    if (lg_key(key, ch)) return;                       // a touch on the panel's content
     switch (s_gs) {
         case GS_MENU:
             if (gui::menu_key(s_menu, key, 2)) sfx(SFX_SELECT);
@@ -373,8 +384,18 @@ static void read_move(VS *w)
 
     if (tile_cfg_recenter_key(&s_cfg)) sfx(SFX_SELECT);                 // Ctrl / Space / C: new tilt neutral
     float mx, my;
+    bool walk = false;
+    if (vx || vy) s_go = false;                                         // keys win over a tapped spot
+    else {                                                              // no keys -> the panel's touch
+        if (s_txt > 0) { s_txt--; vx = s_tx * MOVE; } if (s_tyt > 0) { s_tyt--; vy = s_ty * MOVE; }
+        if (s_go) {                                                     // walking to a tapped spot
+            float dx = (float)(s_gox - VS_TOINT(w->ppx)), dy = (float)(s_goy - VS_TOINT(w->ppy)), l = sqrtf(dx * dx + dy * dy);
+            if (l < 4.0f) s_go = false; else { vx = (vfix)(dx * MOVE / l); vy = (vfix)(dy * MOVE / l); walk = true; }
+        }
+        if (vx < 0) s_face = 1; else if (vx > 0) s_face = 0;
+    }
     if (vx || vy) {
-        if (vx && vy) { vx = (vx * 181) >> 8; vy = (vy * 181) >> 8; }   // normalise diagonal (~x0.707)
+        if (vx && vy && !walk) { vx = (vx * 181) >> 8; vy = (vy * 181) >> 8; }   // normalise diagonal (~x0.707)
     } else if (tile_cfg_tilt(&s_cfg, &mx, &my)) {                       // no keys -> tilt (ADV only)
         float maxv = (float)VS_TOFIX(1) * (1.0f + (float)s_cfg.sens * 0.6f);   // px/frame at full deviation
         vx = (vfix)(mx * maxv); vy = (vfix)(my * maxv);
@@ -445,7 +466,7 @@ static void draw_hud(VS *w)
     bool low = hp_pct <= 25 && (w->frame & 8);
     uint16_t hp_col = low ? C_YELLOW : (hp_pct > 60 ? C_GREEN : (hp_pct > 25 ? C_YELLOW : C_RED));
 
-    const int TOP = 2;
+    const int W = s_vw, H = s_vh, TOP = 2, LX = W > 240 ? 24 : 3;   // the panel puts the back chevron at the left
     d.fillRect(0, 0, W, TOP + 11, 0x0000);
     d.drawRect(1, TOP + 1, W - 2, 6, 0xFFFF);                    // HP track outline
     d.fillRect(2, TOP + 2, W - 4, 4, 0x2965);
@@ -459,7 +480,7 @@ static void draw_hud(VS *w)
     int secs = (int)(w->frame / 30);
     const int TY = TOP + 11;
     snprintf(b, sizeof b, "%02d:%02d", secs / 60, secs % 60);
-    gui::text(b, 3, TY, 0, gui::F_SMALL, 0xFFFF, 0x0000);
+    gui::text(b, LX, TY, 0, gui::F_SMALL, 0xFFFF, 0x0000);
     snprintf(b, sizeof b, "%d/%d", w->php < 0 ? 0 : w->php, w->phpmax);
     gui::text(b, W / 2, TY, 1, gui::F_SMALL, hp_col, 0x0000);
     snprintf(b, sizeof b, "Lv%d  x%d", w->plevel, w->kills);
@@ -480,6 +501,7 @@ static void draw_hud(VS *w)
 
 static void render_world(VS *w)
 {
+    const int W = s_vw, H = s_vh;
     // screen shake: jitter the camera a couple of px while w->shake is hot (set by the sim on big hits)
     int shx = 0, shy = 0;
     if (w->shake > 0) { int m = w->shake > 6 ? 3 : 2; shx = (int)((w->frame * 7) % (2 * m + 1)) - m; shy = (int)((w->frame * 13) % (2 * m + 1)) - m; }
@@ -521,7 +543,7 @@ static void render_world(VS *w)
                 else if (((hsh >> 20) & 127) == 11) tile_blit_key(T(T_CRATE), px, py);
             }
     } else {
-        d.fillScreen(0x0841);
+        d.fillRect(0, 0, W, H, 0x0841);
         for (int y = -(cam_y & 15); y < H; y += 16)
             for (int x = -(cam_x & 15); x < W; x += 16)
                 d.drawPixel(x, y, 0x18E3);
@@ -697,6 +719,7 @@ static void draw_carousel(void)
 // dropping banner, over the frozen game.
 static void draw_lvlanim(void)
 {
+    const int W = s_vw, H = s_vh;
     int t = s_anim_t, cx = W / 2, cy = H / 2 - 6, rlen = 14 + t * 8;
     for (int k = 0; k < 8; k++) {
         int a = ((k + (t & 1)) & 7) * 4;                 // 8 rays from the 32-step table, 1-step shimmer
@@ -714,13 +737,15 @@ static void draw_lvlanim(void)
 }
 
 // The chooser: all 3 cards visible at once (compare at a glance) — icon, name, NEW / next level, and a
-// one-line description of what the card does.
+// one-line description of what the card does. View-parametric: on the panel each card is a row target.
 static void draw_levelup(VS *w)
 {
+    const int W = s_vw, H = s_vh, big = W > 240, top = big ? 34 : 25, st = big ? 66 : 35, ch = st - 3, r = big ? 20 : 13;
     gui::panel(4, 3, W - 10, H - 8, gui::rgb(0, 0, 36), 0xFFE0);
-    gui::text(GT("LIVELLO SU! Scegli 1-3", "LEVEL UP! Pick 1-3"), W / 2, 5, 1, gui::F_BODY, 0xFFE0, 0x0000);
+    gui::text(big ? GT("LIVELLO SU! Tocca una carta", "LEVEL UP! Tap a card") : GT("LIVELLO SU! Scegli 1-3", "LEVEL UP! Pick 1-3"),
+              W / 2, big ? 9 : 5, 1, gui::F_BODY, 0xFFE0, 0x0000);
     for (int i = 0; i < 3; i++) {
-        int cy = 25 + i * 35, sel = (i == s_up_sel);
+        int cy = top + i * st, sel = (i == s_up_sel);
         Offer o = s_off[i];
         const char *nm, *ds, *tag = nullptr; char lv[12]; uint16_t tagc = 0x8C71;
         if (o.kind == OFF_PSV) { nm = psv_name(o.id); ds = psv_desc(o.id); }
@@ -729,25 +754,21 @@ static void draw_levelup(VS *w)
             if (o.kind == OFF_WEP_NEW) { tag = GT("NUOVA", "NEW"); tagc = 0x8FF3; }
             else { snprintf(lv, sizeof lv, "Lv%d", vs_has_weapon(w, o.id) + 1); tag = lv; tagc = 0xFEA0; }
         }
-        d.fillSmoothRoundRect(10, cy, W - 20, 32, 6, sel ? gui::rgb(36, 73, 109) : gui::rgb(18, 22, 40));
-        if (sel) d.drawRoundRect(10, cy, W - 20, 32, 6, 0xFFE0);
-        icon_disc(o.kind == OFF_PSV ? PSV_ICO[o.id] : WEP_ICO[o.id], 27, cy + 16, 13, sel ? 0xFEA0 : 0x4208);
-        gui::text(nm, 46, cy + 2, 0, gui::F_BODY, sel ? 0xFFFF : 0xC618, 0x0000);
-        if (tag) gui::text(tag, W - 16, cy + 3, 2, gui::F_SMALL, tagc, 0x0000);
-        d.setTextColor(sel ? 0x8FF3 : 0x8C71); d.setCursor(46, cy + 21); d.print(ds);
+        d.fillSmoothRoundRect(10, cy, W - 20, ch, 6, sel ? gui::rgb(36, 73, 109) : gui::rgb(18, 22, 40));
+        if (sel) d.drawRoundRect(10, cy, W - 20, ch, 6, 0xFFE0);
+        int tx = 14 + 2 * r + 6;
+        icon_disc(o.kind == OFF_PSV ? PSV_ICO[o.id] : WEP_ICO[o.id], 14 + r, cy + ch / 2, r, sel ? 0xFEA0 : 0x4208);
+        gui::text(nm, tx, cy + (big ? 8 : 2), 0, gui::F_BODY, sel ? 0xFFFF : 0xC618, 0x0000);
+        if (tag) gui::text(tag, W - 16, cy + (big ? 8 : 3), 2, gui::F_SMALL, tagc, 0x0000);
+        if (big) { gui::text(ds, tx, cy + 36, 0, gui::F_SMALL, sel ? 0x8FF3 : 0x8C71, 0x0000); nucleo_touch_add(10, cy, W - 20, ch, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + i)); }
+        else { d.setTextColor(sel ? 0x8FF3 : 0x8C71); d.setCursor(tx, cy + 21); d.print(ds); }
     }
 }
 
-static void draw_game(void)
+// The arena at the current view size: world, bomb flash, HUD, the two screen-edge flashes.
+static void draw_field(VS *w)
 {
-    VS *w = s_w;
-    if (!w) { d.fillScreen(0x0000); return; }
-    switch (s_gs) {                                     // full-screen menus — no world behind
-        case GS_MENU:     draw_menu(); return;
-        case GS_SETTINGS: tile_cfg_draw(&s_cfg, s_setm, COL_ACC); return;
-        case GS_START:    draw_carousel(); return;
-        default: break;
-    }
+    const int W = s_vw, H = s_vh;
     render_world(w);
     // Bomb pickup: the sim wiped the screen (want_bomb counts down) — a bright full flash under the HUD.
     if (w->want_bomb > 0) d.fillRect(0, 0, W, H, w->want_bomb > 5 ? 0xFFFF : (w->want_bomb > 2 ? 0xFFE0 : 0xC618));
@@ -759,92 +780,198 @@ static void draw_game(void)
         uint16_t col = (s_wave_flash & 1) ? 0xF800 : 0x7800;
         d.drawRect(0, 0, W, H, col); d.drawRect(1, 1, W - 2, H - 2, col);
     }
+}
+// the run's one-line summary (pause / game over) and the record line
+static void run_line(char *b, int n, bool kills)
+{
+    int secs = (int)(s_w->frame / 30);
+    if (kills) snprintf(b, n, GT("%s  %d:%02d  Lv%d  %d uccisi", "%s  %d:%02d  Lv%d  %d kills"), hero_name(s_hero), secs / 60, secs % 60, s_w->plevel, s_w->kills);
+    else snprintf(b, n, "%s  -  %d:%02d  -  Lv%d", hero_name(s_hero), secs / 60, secs % 60, s_w->plevel);
+}
+static void best_line(char *b, int n)
+{
+    if (s_new_record) snprintf(b, n, "%s", GT("NUOVO RECORD!", "NEW RECORD!"));
+    else snprintf(b, n, GT("Record %d:%02d  -  %d uccisi", "Best %d:%02d  -  %d kills"), s_best_secs / 60, s_best_secs % 60, s_best_kills);
+}
+
+static void draw_game(void)
+{
+    VS *w = s_w;
+    s_vw = W; s_vh = H;
+    if (!w) { d.fillScreen(0x0000); return; }
+    switch (s_gs) {                                     // full-screen menus — no world behind
+        case GS_MENU:     draw_menu(); return;
+        case GS_SETTINGS: tile_cfg_draw(&s_cfg, s_setm, COL_ACC); return;
+        case GS_START:    draw_carousel(); return;
+        default: break;
+    }
+    draw_field(w);
     char l1[40], l2[40];
-    int secs = (int)(w->frame / 30);
     switch (s_gs) {
         case GS_LVLANIM: draw_lvlanim(); break;
         case GS_LEVELUP: draw_levelup(w); break;
         case GS_PAUSE:
-            snprintf(l1, sizeof l1, GT("%s  -  %d:%02d  -  Lv%d", "%s  -  %d:%02d  -  Lv%d"), hero_name(s_hero), secs / 60, secs % 60, w->plevel);
+            run_line(l1, sizeof l1, false);
             gui::dialog(GT("Pausa", "Paused"), l1, nullptr, GT("INVIO riprendi   Esc esci", "ENTER resume   Esc quit"), COL_ACC);
             break;
         case GS_OVER:
-            snprintf(l1, sizeof l1, GT("%s  %d:%02d  Lv%d  %d uccisi", "%s  %d:%02d  Lv%d  %d kills"), hero_name(s_hero), secs / 60, secs % 60, w->plevel, w->kills);
-            if (s_new_record) snprintf(l2, sizeof l2, "%s", GT("NUOVO RECORD!", "NEW RECORD!"));
-            else snprintf(l2, sizeof l2, GT("Record %d:%02d  -  %d uccisi", "Best %d:%02d  -  %d kills"), s_best_secs / 60, s_best_secs % 60, s_best_kills);
+            run_line(l1, sizeof l1, true); best_line(l2, sizeof l2);
             gui::dialog(GT("Sconfitto", "Defeated"), l1, l2, GT("INVIO rigioca   Esc menu", "ENTER play again   Esc menu"), C_RED);
             break;
         default: break;
     }
 }
 
-// ===== two screens: the arena on the 320x240 panel, the Cardputer as the gamepad ========================
-// lg::game pushes the survivors arena scaled to the panel; a NATIVE HUD below carries the state and the
-// discrete controls the framework can deliver as taps: the three level-up cards (1-3), pause/resume, hero
-// select, menu nav. Weapons auto-fire; the only real-time input is MOVEMENT, which stays on the Cardputer's
-// held keys (a tap cannot be held) — so the Cardputer is the pad and the panel is the screen. The companion
-// shows HP / time / level / kills and the key map.
-static void lg_btn3(int y, int bh, const char *la, int ka, char ca, const char *lb, int kb, char cb,
-                    const char *lc, int kc, char cc)
+// ===== two screens: the whole game NATIVE on the 320x240 panel, the Cardputer as companion ==================
+// lg::frame composes every frame; the arena is the same renderer at 320x240 (1:1, a wider look at the world).
+// Touch is direct: menu / settings / pause / game-over rows and the hero and level-up cards are tap = pick,
+// tap again = open; in play a tap walks the hero to that spot and a drag on the field steers it (weapons fire
+// on their own). The chevron (top-left) is Back / pause. The keyboard keeps working as before.
+#define LW 320
+#define LH 240
+static void lchev(void)                                // the back chevron + its target
 {
-    const int W320 = d.width(), g = 8, bw = (W320 - 4 * g) / 3;
-    lg::button(g, y, bw, bh, la, lg::card(), FG, ka, ca);
-    lg::button(2 * g + bw, y, bw, bh, lb, COL_ACC, 0x0000, kb, cb);
-    lg::button(3 * g + 2 * bw, y, bw, bh, lc, lg::card(), FG, kc, cc);
+    for (int k = 0; k < 2; k++) { d.drawLine(14 + k, 9, 8 + k, 16, COL_ACC); d.drawLine(8 + k, 16, 14 + k, 23, COL_ACC); }
+    nucleo_touch_add(0, 0, 44, 30, NK_BACK, 0);
 }
-static void lg_hud(int y, int h)
+static void lhead(const char *t)
 {
-    const int W320 = d.width();
-    VS *w = s_w;
-    d.fillRect(0, y, W320, h, 0x0000);
-    d.drawFastHLine(0, y, W320, COL_ACC);
-    const int bh = h - 24 < 34 ? h - 10 : 40, by = y + h - bh - 6;
-    char b[40];
-
-    if ((s_gs == GS_PLAY || s_gs == GS_LVLANIM || s_gs == GS_LEVELUP || s_gs == GS_PAUSE || s_gs == GS_OVER) && w) {
-        int secs = (int)(w->frame / 30);
-        lg::font(1); d.setTextDatum(top_left); d.setTextColor(0xFFFF, 0x0000);
-        snprintf(b, sizeof b, "%02d:%02d", secs / 60, secs % 60); d.drawString(b, 10, y + 5);
-        d.setTextColor(w->php > w->phpmax / 4 ? C_GREEN : C_RED, 0x0000);
-        snprintf(b, sizeof b, GT("Vita %d/%d", "HP %d/%d"), w->php < 0 ? 0 : w->php, w->phpmax); d.drawString(b, 86, y + 5);
-        d.setTextDatum(top_right); d.setTextColor(0xFFE0, 0x0000);
-        snprintf(b, sizeof b, "Lv%d  x%d", w->plevel, w->kills); d.drawString(b, W320 - 10, y + 5);
-        d.setTextDatum(top_left);
-        if (s_gs == GS_LEVELUP) {
-            const int g = 8, bw = (W320 - 4 * g) / 3;
-            for (int i = 0; i < 3; i++) {
-                Offer o = s_off[i];
-                const char *nm = o.kind == OFF_PSV ? psv_name(o.id) : wep_name(o.id);
-                snprintf(b, sizeof b, "%d %s", i + 1, nm);
-                lg::button(g + i * (bw + g), by, bw, bh, b, i == s_up_sel ? COL_ACC : lg::card(), i == s_up_sel ? 0x0000 : FG, NK_CHAR, (char)('1' + i));
-            }
-            return;
-        }
-        if (s_gs == GS_PAUSE) { lg::button(40, by, W320 - 80, bh, GT("Riprendi", "Resume"), COL_ACC, 0x0000, NK_ENTER, 0); return; }
-        if (s_gs == GS_OVER) {
-            const int g = 8, bw = (W320 - 3 * g) / 2;
-            lg::button(g, by, bw, bh, GT("Rigioca", "Play again"), COL_ACC, 0x0000, NK_ENTER, 0);
-            lg::button(2 * g + bw, by, bw, bh, GT("Menu", "Menu"), lg::card(), FG, NK_BACK, 0);
-            return;
-        }
-        lg::button(40, by, W320 - 80, bh, GT("Pausa", "Pause"), lg::card(), FG, NK_BACK, 0);
-        return;
+    gui::vgradient(0, 0, LW, 30, gui::rgb(73, 36, 0), 0x0000);
+    d.drawFastHLine(0, 29, LW, COL_ACC);
+    lchev();
+    gui::text(t, 28, 6, 0, gui::F_BODY, 0xFFFF, 0x0000);
+}
+// tappable rows (pills) in [x, x+w) from y, h tall each: row i = NUCLEO_TOUCH_ROW + i
+static void lrows(const char *const *it, int n, int x, int y, int w, int h, int sel)
+{
+    for (int i = 0; i < n; i++, y += h) {
+        bool s = i == sel;
+        d.fillSmoothRoundRect(x, y + 2, w, h - 4, 8, s ? COL_ACC : gui::rgb(18, 22, 40));
+        if (!s) d.drawRoundRect(x, y + 2, w, h - 4, 8, gui::rgb(73, 73, 85));
+        gui::text(it[i], x + w / 2, y + h / 2 - 7, 1, gui::F_BODY, s ? 0x0000 : 0xFFFF, s ? COL_ACC : 0x0000);
+        nucleo_touch_add(x, y, w, h, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + i));
     }
-    // menu / settings / hero select
-    lg::font(1); d.setTextDatum(top_left); d.setTextColor(COL_ACC, 0x0000);
-    const char *lbl = s_gs == GS_SETTINGS ? GT("Impostazioni", "Settings")
-                    : s_gs == GS_START     ? GT("Scegli l'eroe", "Choose your hero")
-                    : GT("Orde - menu", "Orde - menu");
-    d.drawString(lbl, 12, y + 6); d.setTextDatum(top_left);
-    if (s_gs == GS_MENU)          lg_btn3(by, bh, GT("Su", "Up"), NK_UP, 0, "OK", NK_ENTER, 0, GT("Giu", "Down"), NK_DOWN, 0);
-    else if (s_gs == GS_SETTINGS) lg_btn3(by, bh, GT("Su", "Up"), NK_UP, 0, GT("Cambia", "Change"), NK_RIGHT, 0, GT("Giu", "Down"), NK_DOWN, 0);
-    else                          lg_btn3(by, bh, "<", NK_LEFT, 0, GT("Gioca", "Play"), NK_ENTER, 0, ">", NK_RIGHT, 0);
+}
+static void lp_menu(VS *w)
+{
+    render_world(w);
+    tile_dither_rect(0, 0, LW, LH, 0x00);
+    gui::text("Orde", LW / 2, 26, 1, gui::F_BIG, COL_ACC, 0x0000);
+    char sub[48];
+    if (s_best_secs > 0 || s_best_kills > 0) best_line(sub, sizeof sub);
+    else snprintf(sub, sizeof sub, "%s", GT("Sopravvivi alle orde", "Survive the hordes"));
+    gui::text(sub, LW / 2, 62, 1, gui::F_SMALL, 0xFFE0, 0x0000);
+    if (s_atlas_ok) { blit_ent(T_MONK, 0, 46, 44, 56, 0xFF); blit_ent(T_GHOST, 1, LW - 46, 44, 56, 0x00); }
+    const char *it[2] = { GT("Gioca", "Play"), GT("Impostazioni", "Settings") };
+    lchev();
+    lrows(it, 2, 60, 110, LW - 120, 50, s_menu.sel);
+}
+static void lp_settings(void)
+{
+    char r[5][32];
+    snprintf(r[0], 32, "%s: %s", GT("Suoni", "Sound"), s_cfg.audio ? "ON" : "OFF");
+    snprintf(r[1], 32, "%s: %s", GT("Giroscopio", "Tilt sensor"), s_cfg.tilt ? "ON" : "OFF");
+    snprintf(r[2], 32, "%s: %d", GT("Sensibilita", "Sensitivity"), s_cfg.sens);
+    snprintf(r[3], 32, "%s: %s", GT("Inverti X", "Invert X"), s_cfg.inv_x ? "ON" : "OFF");
+    snprintf(r[4], 32, "%s: %s", GT("Inverti Y", "Invert Y"), s_cfg.inv_y ? "ON" : "OFF");
+    const char *it[5] = { r[0], r[1], r[2], r[3], r[4] };
+    gui::vgradient(0, 0, LW, LH, 0x0000, gui::rgb(36, 18, 0));
+    lhead(GT("Impostazioni", "Settings"));
+    lrows(it, tile_cfg_rows(), 30, 36, LW - 60, 40, s_setm.sel);
+}
+static void lp_heroes(void)
+{
+    gui::vgradient(0, 0, LW, LH, 0x0000, gui::rgb(36, 18, 0));
+    lhead(GT("Scegli l'eroe", "Choose your hero"));
+    for (int h = 0; h < HERO_COUNT; h++) {
+        int x = 8 + h * 78, s = h == s_hero;
+        d.fillSmoothRoundRect(x, 40, 70, 112, 8, s ? gui::rgb(73, 36, 0) : gui::rgb(18, 22, 40));
+        d.drawRoundRect(x, 40, 70, 112, 8, s ? COL_ACC : gui::rgb(73, 73, 85));
+        tile_dither_ellipse(x + 35, 112, 22, 5, 0x00);
+        if (s_atlas_ok) blit_ent(HERO_TILE[h], 0, x + 35, 84, s ? 56 : 44, s ? 0xFF : 0x00);
+        else d.fillCircle(x + 35, 84, 14, s ? C_GREEN : 0x4208);
+        gui::text(hero_name(h), x + 35, 126, 1, gui::F_SMALL, s ? 0xFFFF : 0xC618, 0x0000);
+        nucleo_touch_add(x, 40, 70, 112, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + h));
+    }
+    gui::text(hero_power(s_hero), LW / 2, 168, 1, gui::F_BODY, 0x8FF3, 0x0000);
+    gui::text(GT("Tocca di nuovo l'eroe per giocare", "Tap the hero again to play"), LW / 2, 204, 1, gui::F_SMALL, 0x8C71, 0x0000);
+}
+// pause / game over: a card over the frozen arena with the run's stats and two rows
+static void lp_card(const char *head, uint16_t acc, bool over)
+{
+    char l1[48], l2[48];
+    gui::panel(24, 44, LW - 48, 176, gui::rgb(0, 0, 36), acc);
+    gui::text(head, LW / 2, 54, 1, gui::F_TITLE, acc, 0x0000);
+    run_line(l1, sizeof l1, over); gui::text(l1, LW / 2, 82, 1, gui::F_SMALL, 0xFFFF, 0x0000);
+    if (over) { best_line(l2, sizeof l2); gui::text(l2, LW / 2, 100, 1, gui::F_SMALL, s_new_record ? 0xFFE0 : 0xC618, 0x0000); }
+    const char *it[2] = { over ? GT("Rigioca", "Play again") : GT("Riprendi", "Resume"), GT("Menu", "Menu") };
+    lrows(it, 2, 48, over ? 122 : 110, LW - 96, 46, s_lsel);
+}
+static void lg_paint(void *)
+{
+    VS *w = s_w;
+    s_vw = LW; s_vh = LH;
+    if (!w) { d.fillRect(0, 0, LW, LH, 0x0000); return; }
+    switch (s_gs) {
+        case GS_MENU:     lp_menu(w); return;
+        case GS_SETTINGS: lp_settings(); return;
+        case GS_START:    lp_heroes(); return;
+        default: break;
+    }
+    draw_field(w);
+    if (s_gs == GS_PLAY) {
+        lchev();
+        lg::field(0, 30, LW, LH - 30);
+        nucleo_touch_add_pad(0, 30, LW, LH - 30, 8);
+        if (w->frame < 90) gui::text(GT("Tocca: vai li'   Trascina: muovi", "Tap: walk there   Drag: steer"), LW / 2, LH - 40, 1, gui::F_SMALL, 0xFFFF, 0x0000);
+    }
+    else if (s_gs == GS_LVLANIM) draw_lvlanim();
+    else if (s_gs == GS_LEVELUP) draw_levelup(w);
+    else if (s_gs == GS_PAUSE)   lp_card(GT("Pausa", "Paused"), COL_ACC, false);
+    else if (s_gs == GS_OVER)    lp_card(GT("Sconfitto", "Defeated"), C_RED, true);
 }
 static void draw_large(void)
 {
     nucleo_touch_clear();
-    lg::game(draw_game, lg_hud, "Orde", COL_ACC);
+    lg::frame(lg_paint, nullptr);
     nucleo_touch_commit();
+}
+// A drag on the field in play: steer one axis for ~1/4 s (held keys stay on the keyboard and win)
+static bool lsteer(int key)
+{
+    if (s_gs != GS_PLAY || !nucleo_app_two_screens() || nucleo_kbd_char_down(',') || nucleo_kbd_char_down('/')
+        || nucleo_kbd_char_down(';') || nucleo_kbd_char_down('.')) return false;
+    if (key == NK_LEFT || key == NK_RIGHT) { s_tx = key == NK_LEFT ? -1 : 1; s_txt = 8; }
+    else if (key == NK_UP || key == NK_DOWN) { s_ty = key == NK_UP ? -1 : 1; s_tyt = 8; }
+    else return false;
+    s_go = false;
+    return true;
+}
+// A touch on the panel's content (a row or a field tap): true when handled. A tap on the selection opens it.
+static bool lg_key(int k, char ch)
+{
+    int tx = 0, ty = 0;
+    const bool fld = lg::tap(k, ch, &tx, &ty);
+    const int ri = nucleo_touch_is_row(k, ch) ? ch - NUCLEO_TOUCH_ROW : -1;
+    if (!fld && ri < 0) return lsteer(k);
+    VS *w = s_w;
+    bool again = false;
+    switch (s_gs) {
+        case GS_PLAY:
+            if (fld) { s_go = true; s_gox = VS_TOINT(w->ppx) + tx - LW / 2; s_goy = VS_TOINT(w->ppy) + ty - LH / 2; s_txt = s_tyt = 0; }
+            return true;
+        case GS_MENU:     if (ri >= 0 && ri < 2) { again = s_menu.sel == ri; s_menu.sel = (int8_t)ri; } break;
+        case GS_SETTINGS: if (ri >= 0 && ri < tile_cfg_rows()) { if (s_setm.sel == ri) { on_key(NK_RIGHT, 0); return true; } s_setm.sel = (int8_t)ri; } break;
+        case GS_START:    if (ri >= 0 && ri < HERO_COUNT) { again = s_hero == ri; s_hero = ri; } break;
+        case GS_LEVELUP:  if (ri >= 0 && ri < 3) { again = s_up_sel == ri; s_up_sel = ri; } break;
+        case GS_PAUSE: case GS_OVER:
+            if (ri >= 0 && ri < 2) { if (s_lsel == ri && ri) { on_back(NK_BACK); return true; } again = s_lsel == ri; s_lsel = ri; }
+            break;
+        default: return true;
+    }
+    if (again) { on_key(NK_ENTER, 0); return true; }
+    sfx(SFX_SELECT); nucleo_app_request_draw();
+    return true;
 }
 static void draw_companion(void)
 {
@@ -878,7 +1005,7 @@ static void draw_companion(void)
     }
     gui::text(s_gs == GS_SETTINGS ? GT("Impostazioni", "Settings") : GT("Menu", "Menu"), 8, y + 6, 0, gui::F_BODY, 0xFFFF, 0);
     if (s_best_secs > 0 || s_best_kills > 0) { snprintf(b, sizeof b, GT("Record %d:%02d  %d uccisi", "Best %d:%02d  %d kills"), s_best_secs / 60, s_best_secs % 60, s_best_kills); gui::text(b, 8, y + 34, 0, gui::F_SMALL, 0xFFE0, 0); }
-    lg::comp_keys(GT("Tocca i tasti sul pannello", "Use the panel buttons"));
+    lg::comp_keys(GT("SU/GIU  INVIO  o tocca il pannello", "UP/DN  ENTER  or tap the panel"));
 }
 static void on_draw(void)
 {

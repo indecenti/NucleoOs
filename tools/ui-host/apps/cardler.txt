@@ -1,3 +1,8 @@
 menu
-settings D ENTER
+settings U ENTER
 play ENTER
+menu_tap row:1
+settings_tap U ENTER tap:160,56 tap:160,56
+play_tap ENTER tap:250,120 tick:5
+pause ENTER BACK
+pause_tap ENTER BACK row:1

@@ -92,14 +92,24 @@ static uint16_t mix(uint16_t a, uint16_t b, int t)
 // 90' rotation: screen_x = (PH-1) - ly, screen_y = lx.  Right-handed (no mirror).
 #define PW 135
 #define PH 240
-static inline int SX(float ly) { return (PH - 1) - (int)(ly + 0.5f); }
-static inline int SY(float lx) { return (int)(lx + 0.5f); }
-static void pcircle(float lx, float ly, int r, uint16_t c) { d.fillCircle(SX(ly), SY(lx), r, c); }
-static void pcirc_o(float lx, float ly, int r, uint16_t c) { d.drawCircle(SX(ly), SY(lx), r, c); }
-static void ptri(float ax, float ay, float bx, float by, float cx, float cy, uint16_t c) { d.fillTriangle(SX(ay), SY(ax), SX(by), SY(bx), SX(cy), SY(cx), c); }
+// On the external panel the table stands UPRIGHT at 1:1 (s_ox >= 0 = its left edge): screen_x = s_ox + lx, y = ly.
+static int s_ox = -1;
+static inline int TX(float lx, float ly) { return s_ox < 0 ? (PH - 1) - (int)(ly + 0.5f) : s_ox + (int)(lx + 0.5f); }
+static inline int TY(float lx, float ly) { return s_ox < 0 ? (int)(lx + 0.5f) : (int)(ly + 0.5f); }
+static void pcircle(float lx, float ly, int r, uint16_t c) { d.fillCircle(TX(lx, ly), TY(lx, ly), r, c); }
+static void pcirc_o(float lx, float ly, int r, uint16_t c) { d.drawCircle(TX(lx, ly), TY(lx, ly), r, c); }
+static void ptri(float ax, float ay, float bx, float by, float cx, float cy, uint16_t c) { d.fillTriangle(TX(ax, ay), TY(ax, ay), TX(bx, by), TY(bx, by), TX(cx, cy), TY(cx, cy), c); }
 // logical axis-aligned box (lx,ly,w,h) -> screen rect (dims swap under the rotation)
-static void pbox(float lx, float ly, float w, float h, uint16_t c) { d.fillRect(SX(ly + h), SY(lx), (int)h + 1, (int)w + 1, c); }
-static void pbox_round(float lx, float ly, float w, float h, int r, uint16_t c) { d.fillRoundRect(SX(ly + h), SY(lx), (int)h + 1, (int)w + 1, r, c); }
+static void pbox(float lx, float ly, float w, float h, uint16_t c)
+{
+    if (s_ox < 0) d.fillRect(TX(lx, ly + h), TY(lx, ly), (int)h + 1, (int)w + 1, c);
+    else d.fillRect(TX(lx, ly), TY(lx, ly), (int)w + 1, (int)h + 1, c);
+}
+static void pbox_round(float lx, float ly, float w, float h, int r, uint16_t c)
+{
+    if (s_ox < 0) d.fillRoundRect(TX(lx, ly + h), TY(lx, ly), (int)h + 1, (int)w + 1, r, c);
+    else d.fillRoundRect(TX(lx, ly), TY(lx, ly), (int)w + 1, (int)h + 1, r, c);
+}
 // thick logical segment (capsule-ish) as two triangles of half-width hw
 static void pthick(float ax, float ay, float bx, float by, float hw, uint16_t c)
 {
@@ -149,8 +159,6 @@ static int dmd_width(const char *s, int pitch) { return (int)strlen(s) * 6 * pit
 
 // ============================ landscape text (menus) =========================
 static void ltext(int x, int y, int sz, uint16_t col, const char *s) { d.setTextSize(sz); d.setTextColor(col); d.setCursor(x, y); d.print(s); }
-static void ltext_c(int cx, int y, int sz, uint16_t col, const char *s) { ltext(cx - (int)strlen(s) * 3 * sz, y, sz, col, s); }
-static void ltext_r(int rx, int y, int sz, uint16_t col, const char *s) { ltext(rx - (int)strlen(s) * 6 * sz, y, sz, col, s); }
 
 // ============================ state ==========================================
 enum { ST_MENU = 0, ST_SCORES, ST_HELP, ST_SET, ST_PLAY, ST_OPT, ST_OVER };
@@ -791,7 +799,7 @@ static void draw_bg_motif(int theme)
 }
 static void draw_field(void)
 {
-    d.fillRect(0, 0, 240, 135, COL_BG);
+    pbox(0, 0, PW - 1, PH - 1, COL_BG);
     // themed gradient base
     for (int ly = TWALL; ly < BWALL; ly += 4) {
         int t = 80 + 130 * (ly - TWALL) / (BWALL - TWALL);
@@ -864,21 +872,33 @@ static void draw_sling(const Bump *o)
 }
 // A real flipper bat: an anti-aliased WEDGE, fat at the pivot and tapering to the tip (drawWedgeLine), with
 // a dark outline, the themed body, a bright rubber core that flashes white on the flip, a chrome pivot.
+// drawWedgeLine blends with what is under it, which the panel's strip window (lg::frame) does not survive: there
+// the bat is a plain tapered polygon (two end discs + the hull between them).
+static void wedge(int x0, int y0, int x1, int y1, float r0, float r1, uint16_t c)
+{
+    if (s_ox < 0) { d.drawWedgeLine(x0, y0, x1, y1, r0, r1, c); return; }
+    float dx = (float)(x1 - x0), dy = (float)(y1 - y0), l = sqrtf(dx * dx + dy * dy); if (l < 0.001f) l = 0.001f;
+    float nx = -dy / l, ny = dx / l;
+    int ax = x0 + (int)lroundf(nx * r0), ay = y0 + (int)lroundf(ny * r0), bx_ = x0 - (int)lroundf(nx * r0), by_ = y0 - (int)lroundf(ny * r0);
+    int cx = x1 + (int)lroundf(nx * r1), cy = y1 + (int)lroundf(ny * r1), ex = x1 - (int)lroundf(nx * r1), ey = y1 - (int)lroundf(ny * r1);
+    d.fillTriangle(ax, ay, bx_, by_, cx, cy, c); d.fillTriangle(bx_, by_, cx, cy, ex, ey, c);
+    d.fillCircle(x0, y0, (int)r0, c); d.fillCircle(x1, y1, (int)r1, c);
+}
 static void draw_flipper(const Flip *f, bool left)
 {
     float tx2, ty2; flip_tip(f, &tx2, &ty2);
     uint16_t col = left ? th_accent : th_accent2;
-    int x0 = SX(f->py), y0 = SY(f->px), x1 = SX(ty2), y1 = SY(tx2);
-    if (f->sw > 0.05f) d.drawWedgeLine(x0, y0, x1, y1, 7.0f, 4.5f, mix(th_field, col, (int)(f->sw * 80)));   // glow while raised
-    d.drawWedgeLine(x0, y0, x1, y1, 5.4f, 3.2f, COL_DARK);                             // outline
-    d.drawWedgeLine(x0, y0, x1, y1, 4.4f, 2.3f, col);                                  // body
-    d.drawWedgeLine(x0, y0, x1, y1, 1.8f, 0.9f, mix(COL_WHITE, col, 60 + (int)(f->sw * 90)));   // rubber core
+    int x0 = TX(f->px, f->py), y0 = TY(f->px, f->py), x1 = TX(tx2, ty2), y1 = TY(tx2, ty2);
+    if (f->sw > 0.05f) wedge(x0, y0, x1, y1, 7.0f, 4.5f, mix(th_field, col, (int)(f->sw * 80)));   // glow while raised
+    wedge(x0, y0, x1, y1, 5.4f, 3.2f, COL_DARK);                             // outline
+    wedge(x0, y0, x1, y1, 4.4f, 2.3f, col);                                  // body
+    wedge(x0, y0, x1, y1, 1.8f, 0.9f, mix(COL_WHITE, col, 60 + (int)(f->sw * 90)));   // rubber core
     pcircle(f->px, f->py, 3, COL_STEELL); pcircle(f->px - 0.6f, f->py - 0.6f, 1, COL_WHITE);  // chrome pivot
 }
 static void draw_ball(void)
 {
     pcircle(bx + 1, by + 2, BR, mix(th_field2, COL_DARK, 150));   // soft drop shadow (offset = floats above table)
-    d.fillSmoothCircle(SX(by), SY(bx), (int)BR, COL_STEEL);      // chrome body, anti-aliased edge
+    d.fillSmoothCircle(TX(bx, by), TY(bx, by), (int)BR, COL_STEEL);      // chrome body, anti-aliased edge
     pcircle(bx - 0.7f, by - 0.7f, BR - 1, COL_STEELL);           // lit crescent up-left = roundness
     pcircle(bx - 1, by - 1, 1, COL_WHITE);                       // specular highlight
 }
@@ -893,6 +913,7 @@ static void draw_score_strip(void)
     int fillw = s_lv.goal > 0 ? (int)((long)PW * cap / s_lv.goal) : 0;
     pbox(0, 18, PW, 2, mix(COL_DARK, th_wall, 200));
     if (fillw > 0) pbox(0, 18, fillw, 2, mix(th_accent, COL_WHITE, fillw >= PW ? 160 : 0));
+    if (s_ox >= 0) return;                                          // the panel's side card carries the readouts
     // left readout: level + multiplier (mult goes green when active)
     char lm[14]; snprintf(lm, sizeof lm, "L%d X%d", s_level, s_mult);
     int lw = dmd_width(lm, 1);
@@ -915,9 +936,9 @@ static void draw_score_strip(void)
 static void draw_xfade(void)
 {
     if (s_xfade_ms <= 0) return;
-    int age = s_xfade_age, cx = 120, cy = 67;
-    if (age < 200) d.fillRect(0, 0, 240, 135, mix(th_field, th_wallL, age * 256 / 200));   // opening flash
-    else for (int y = (age & 1); y < 135; y += 2) d.drawFastHLine(0, y, 240, COL_BG);       // screen-door dim
+    int age = s_xfade_age, cx = TX(PW / 2, PH / 2), cy = TY(PW / 2, PH / 2);
+    if (age < 200) pbox(0, 0, PW - 1, PH - 1, mix(th_field, th_wallL, age * 256 / 200));   // opening flash
+    else for (int y = (age & 1); y < (s_ox < 0 ? 135 : PH); y += 2) d.drawFastHLine(s_ox < 0 ? 0 : s_ox, y, s_ox < 0 ? 240 : PW, COL_BG);   // screen-door dim
     int fade = s_xfade_ms < 300 ? s_xfade_ms * 256 / 300 : 256;
     for (int r = 0; r < 6; r++) {
         int rr = (age - 170) / 3 - r * 16;
@@ -962,7 +983,7 @@ static void draw_dmd(void)
     pbox_round(px, py, panelW, panelH, 3, COL_DARK);                         // black DMD glass
     for (int gy = 0; gy < rows; gy++)                                         // the FULL dim-amber dot grid (single pixels = cheap)
         for (int gx = 0; gx < cols; gx++)
-            d.drawPixel(SX(py + 3 + gy * P), SY(px + 3 + gx * P), COL_AMBERD);
+            d.drawPixel(TX(px + 3 + gx * P, py + 3 + gy * P), TY(px + 3 + gx * P, py + 3 + gy * P), COL_AMBERD);
     uint16_t on = ((s_anim >> 2) & 1) ? s_dmd_col : mix(s_dmd_col, COL_WHITE, 90);   // lit dots, gentle flicker
     if (s_dmd_sub[0]) {
         dmd_grid_line(px, py, P, cols, rows, 1, s_dmd_line, s_anim / 2, on);
@@ -1009,9 +1030,10 @@ static void draw_play(void)
         pbox(gx, CHTOP + (GH - bh), 2, bh, mix(COL_GREEN, COL_RED, (int)(s_plunge * 256)));   // fill green->red as it charges
         for (int q = 1; q < 4; q++) pbox(gx - 1, CHTOP + GH * q / 4, 4, 0, COL_DIM);          // quarter ticks
         pbox(gx - 1, CHTOP - 1, 4, 2, s_plunge >= 0.99f ? ((s_anim & 2) ? COL_WHITE : COL_RED) : COL_DIM);   // MAX marker (flashes when full)
-        const char *pp = s_charging ? GT("RILASCIA!", "RELEASE!") : GT("TIENI CTRL: CARICA", "HOLD CTRL: CHARGE");
+        const char *pp = s_charging ? GT("RILASCIA!", "RELEASE!") : s_ox >= 0 ? GT("TIRA LA MOLLA", "PULL THE PLUNGER")
+                                                                              : GT("TIENI CTRL: CARICA", "HOLD CTRL: CHARGE");
         uint16_t ac = ((s_anim >> 2) & 1) ? COL_GOLDL : COL_GOLD;
-        dmd_text((PW - dmd_width(pp, 1)) / 2.0f, 122, pp, 1, 1, s_charging ? COL_RED : ac, 0, 0);   // mid-table, clear of the bats
+        if (s_screen == ST_PLAY) dmd_text((PW - dmd_width(pp, 1)) / 2.0f, 122, pp, 1, 1, s_charging ? COL_RED : ac, 0, 0);   // mid-table, clear of the bats
     }
     if (s_save_ms > 0) {                                                // ball saver grace period visual
         const char *safe = "SAFE";
@@ -1065,19 +1087,20 @@ static void draw_scores(void)
     }
 }
 // Help: three pages of five lines in the small UI face; a key column + its action where it is a key list.
-static void draw_help(void)
+static const char *help_title(void)
 {
     const char *titles[3] = { GT("Obiettivo", "Objective"), GT("Comandi", "Controls"), GT("Punti", "Scoring") };
-    int y = gui::title(titles[s_help], nullptr, ACC);
-    for (int i = 0; i < 3; i++) d.fillCircle(W - 26 + i * 8, 14, i == s_help ? 3 : 2, i == s_help ? ACC : COL_DIM);   // page dots
-    const char *k[5], *a[5];
+    return titles[s_help % 3];
+}
+// The help page's five lines (page 0: k = the text lines) or five key/action pairs (pages 1-2).
+static void help_rows(const char **k, const char **a)
+{
     if (s_help == 0) {
-        const char *l[5] = { GT("Tieni il device in verticale", "Hold the device upright"),
-                             GT("(bordo destro in alto).", "(right edge up)."),
-                             GT("Colpisci respingenti e bersagli,", "Hit bumpers and targets,"),
-                             GT("non far cadere la palla.", "do not let the ball drain."),
-                             GT("Barra piena: nuovo livello!", "Bar full: next level!") };
-        for (int i = 0; i < 5; i++) gui::text(l[i], 10, y + i * 16, 0, gui::F_SMALL, i == 4 ? COL_GOLD : WHITE, BLACK);
+        k[0] = GT("Tieni il device in verticale", "Hold the device upright");
+        k[1] = GT("(bordo destro in alto).", "(right edge up).");
+        k[2] = GT("Colpisci respingenti e bersagli,", "Hit bumpers and targets,");
+        k[3] = GT("non far cadere la palla.", "do not let the ball drain.");
+        k[4] = GT("Barra piena: nuovo livello!", "Bar full: next level!");
         return;
     }
     if (s_help == 1) {
@@ -1093,7 +1116,18 @@ static void draw_help(void)
         k[3] = GT("Tutti i bers.", "All targets"); a[3] = GT("1000, molt. +1, bonus", "1000, mult +1, bonus");
         k[4] = "Spinner";                      a[4] = GT("50 + 25 a giro", "50 + 25 a turn");
     }
-    int ax = 0;                                    // the action column starts after the widest key
+}
+static void draw_help(void)
+{
+    int y = gui::title(help_title(), nullptr, ACC);
+    for (int i = 0; i < 3; i++) d.fillCircle(W - 26 + i * 8, 14, i == s_help ? 3 : 2, i == s_help ? ACC : COL_DIM);   // page dots
+    const char *k[5], *a[5];
+    help_rows(k, a);
+    if (s_help == 0) {
+        for (int i = 0; i < 5; i++) gui::text(k[i], 10, y + i * 16, 0, gui::F_SMALL, i == 4 ? COL_GOLD : WHITE, BLACK);
+        return;
+    }
+    int ax = 0;                                   // the action column starts after the widest key
     for (int i = 0; i < 5; i++) { int w = gui::text_width(k[i], gui::F_SMALL); if (w > ax) ax = w; }
     ax += 18;
     for (int i = 0; i < 5; i++) {
@@ -1174,8 +1208,10 @@ static void settings_change(int key)
     else if (key == NK_ENTER) { sfx(2); s_help = 0; go(ST_HELP); return; }
     nucleo_app_request_draw();
 }
+static bool lg_key(int k, char ch);
 static void on_key(int k, char ch)
 {
+    if (lg_key(k, ch)) return;                     // a touch on the panel's content
     switch (s_screen) {
         case ST_MENU:
             if (gui::menu_key(s_menu, k, NMENU)) { sfx(1); nucleo_app_request_draw(); }
@@ -1239,61 +1275,195 @@ static void draw_game(void)
 }
 
 // ===== two screens ===========================================================
-// Panel (on_draw_large): the portrait table scaled to 320 px with a native landscape HUD band below it —
-// big score + level/balls/multiplier, and touch controls for the real actions (flippers, launch, nudge,
-// pause). Cardputer (on_draw while two screens) is a companion: the live score/ball/level and the key map,
-// never the table. Extra state: none (both read the globals the game keeps).
-struct HudBtn { const char *label; int key; char ch; bool acc; };
-static void hud_row(int x, int y, int w, int h, const HudBtn *b, int n)
+// Panel (on_draw_large, lg::frame): the table stands UPRIGHT at 1:1 (135x240, the full panel height) on the right,
+// the plunger lane beside it, and a native side card on the left (score, level, balls, menus). Touch is direct:
+// tap the left/right half of the table = that flipper, pull the plunger down (drag) and let go = launch, tap it =
+// full power. Cardputer (on_draw while two screens) is the companion: score/ball/level and the key map.
+#define LOX   164                 // the table's left edge on the panel
+#define LANEX (LOX + PW + 3)      // the plunger lane
+#define PULL_CH ((char)0x03)      // plunger drag: finger down (pull) / up (ease back)
+#define PUSH_CH ((char)0x04)
+static int s_pull_ms;             // a plunger drag is in progress: launch when it stops
+static void lt(int x, int y, int f, uint16_t c, const char *s, textdatum_t dt = top_left)
 {
-    if (n <= 0) return;
-    const int gap = 4, bw = (w - (n - 1) * gap) / n;
-    for (int i = 0; i < n; i++)
-        lg::button(x + i * (bw + gap), y, bw, h, b[i].label, b[i].acc ? ACC : lg::card(),
-                   b[i].acc ? BLACK : WHITE, b[i].key, b[i].ch);
+    lg::font(f); d.setTextDatum(dt); d.setTextColor(c); d.drawString(s, x, y); d.setTextDatum(top_left);
 }
-static void large_hud(int y, int h)
+static void lrow(int i, int y, const char *label, bool sel)
 {
-    const int panw = d.width(), pad = 8;
-    d.fillRect(0, y, panw, h, BG);
-    d.drawFastHLine(0, y, panw, LINE);
-    int bh = h - 12; if (bh > 46) bh = 46;
-    const int by = y + (h - bh) / 2;
-    if (s_screen == ST_PLAY) {
-        char sc[16]; snprintf(sc, sizeof sc, "%lu", (unsigned long)s_disp_score);
-        lg::font(2); d.setTextDatum(middle_left); d.setTextColor(COL_AMBER, BG); d.drawString(sc, pad, y + h / 3);
-        char st[28]; snprintf(st, sizeof st, GT("Liv %d  Palle %d  x%d", "Lvl %d  Balls %d  x%d"), s_level, s_balls, s_mult);
-        lg::font(4); d.setTextDatum(middle_left); d.setTextColor(MUTED, BG); d.drawString(st, pad, y + h * 3 / 4);
-        d.setTextDatum(top_left);
-        const int bx0 = 104;
-        if (s_bp == BP_READY) {
-            const HudBtn b[2] = { { GT("LANCIA", "LAUNCH"), NK_CHAR, ' ', true }, { "II", NK_TAB, 0, false } };
-            hud_row(bx0, by, panw - bx0 - pad, bh, b, 2);
-        } else {
-            const HudBtn b[4] = { { "SX", NK_CHAR, '1', true }, { "N", NK_CHAR, 'n', false },
-                                  { "DX", NK_CHAR, '0', true }, { "II", NK_TAB, 0, false } };
-            hud_row(bx0, by, panw - bx0 - pad, bh, b, 4);
+    d.fillRoundRect(8, y, 144, 32, 6, sel ? mix(COL_BG, ACC, 90) : COL_FIELD);
+    if (sel) d.fillRoundRect(10, y + 7, 4, 18, 2, ACC);
+    lt(22, y + 16, 1, sel ? COL_WHITE : COL_GREY, label, middle_left);
+    nucleo_touch_add(8, y, 144, 32, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + i));
+}
+static int lscore(int y)          // "Score" + the big number; returns the y below
+{
+    char b[16]; snprintf(b, sizeof b, "%lu", (unsigned long)s_disp_score);
+    lt(10, y, 0, COL_GREY, GT("Punti", "Score"));
+    lg::font(3); lt(10, y + 18, d.textWidth(b) > 144 ? 2 : 3, COL_AMBER, b);
+    return y + 52;
+}
+static void lp_card(void)
+{
+    d.fillRect(0, 0, LOX - 4, 240, COL_DARK);
+    d.drawFastVLine(LOX - 4, 0, 240, th_wall);
+    for (int i = 0; i < 2; i++) { d.drawLine(12 + i, 15, 18 + i, 9, ACC); d.drawLine(12 + i, 15, 18 + i, 21, ACC); }   // back chevron
+    nucleo_touch_add(0, 0, 60, 30, NK_BACK, 0);
+    const char *t = s_screen == ST_SCORES ? GT("Classifica", "Scores") : s_screen == ST_SET ? GT("Impostazioni", "Settings")
+                  : s_screen == ST_HELP ? help_title() : s_screen == ST_OPT ? GT("PAUSA", "PAUSED") : GT("FLIPPER", "PINBALL");
+    lt(28, 7, 1, s_screen == ST_MENU ? ACC : COL_WHITE, t);
+    char b[40];
+    switch (s_screen) {
+    case ST_MENU: {
+        snprintf(b, sizeof b, GT("Record %lu", "Best %lu"), (unsigned long)g_hi);
+        lt(10, 38, 0, COL_GOLD, b);
+        const char *it[NMENU] = { GT("Gioca", "Play"), GT("Classifica", "Scores"), GT("Impostazioni", "Settings") };
+        for (int i = 0; i < NMENU; i++) lrow(i, 70 + i * 40, it[i], s_menu.sel == i);
+        break;
+    }
+    case ST_SET: {
+        char a[32], n[32];
+        snprintf(a, sizeof a, "Audio: %s", g_audio ? GT("Si", "On") : GT("No", "Off"));
+        snprintf(n, sizeof n, "%s: %s", GT("Colpetto", "Nudge"), g_nudge ? GT("Si", "On") : GT("No", "Off"));
+        const char *it[NSET] = { a, n, GT("Come si gioca", "How to play") };
+        for (int i = 0; i < NSET; i++) lrow(i, 44 + i * 40, it[i], s_menu.sel == i);
+        break;
+    }
+    case ST_SCORES:
+        for (int i = 0; i < NTOP; i++) {
+            snprintf(b, sizeof b, "%d.", i + 1); lt(34, 36 + i * 20, 0, i < 3 ? COL_GOLD : COL_GREY, b, top_right);
+            snprintf(b, sizeof b, "%lu", (unsigned long)g_top[i]); lt(44, 36 + i * 20, 0, g_top[i] ? COL_WHITE : COL_DIM, g_top[i] ? b : "---");
         }
-    } else if (s_screen == ST_OPT) {
-        const HudBtn b[2] = { { GT("RIPRENDI", "RESUME"), NK_ENTER, 0, true }, { GT("ESCI", "QUIT"), NK_BACK, 0, false } };
-        hud_row(pad, by, panw - 2 * pad, bh, b, 2);
-    } else if (s_screen == ST_OVER) {
-        const HudBtn b[2] = { { GT("RIGIOCA", "REPLAY"), NK_ENTER, 0, true }, { "MENU", NK_BACK, 0, false } };
-        hud_row(pad, by, panw - 2 * pad, bh, b, 2);
-    } else if (s_screen == ST_MENU) {
-        const HudBtn b[3] = { { GT("SU", "UP"), NK_UP, 0, false }, { GT("GIU", "DOWN"), NK_DOWN, 0, false },
-                              { GT("SCEGLI", "SELECT"), NK_ENTER, 0, true } };
-        hud_row(pad, by, panw - 2 * pad, bh, b, 3);
-    } else if (s_screen == ST_SET) {
-        const HudBtn b[3] = { { GT("SU", "UP"), NK_UP, 0, false }, { GT("GIU", "DOWN"), NK_DOWN, 0, false },
-                              { GT("CAMBIA", "CHANGE"), NK_ENTER, 0, true } };
-        hud_row(pad, by, panw - 2 * pad, bh, b, 3);
-    } else if (s_screen == ST_HELP) {
-        const HudBtn b[2] = { { GT("PAGINA", "PAGE"), NK_RIGHT, 0, true }, { GT("INDIETRO", "BACK"), NK_BACK, 0, false } };
-        hud_row(pad, by, panw - 2 * pad, bh, b, 2);
-    } else {   // ST_SCORES
-        const HudBtn b[1] = { { GT("INDIETRO", "BACK"), NK_BACK, 0, true } };
-        hud_row(pad, by, panw - 2 * pad, bh, b, 1);
+        lg::field(0, 30, LOX - 4, 210);
+        break;
+    case ST_HELP: {
+        const char *k[5], *a[5];
+        help_rows(k, a);
+        int y = 36;
+        lg::font(0);
+        if (!s_help) {            // the table already stands upright here: skip "hold the device upright"
+            char p[80]; snprintf(p, sizeof p, "%s %s", k[2], k[3]);
+            d.setTextColor(COL_WHITE); y += 18 * lg::wrap(p, 10, y, 144, 18, 4) + 8;
+            d.setTextColor(COL_GOLD); lg::wrap(k[4], 10, y, 144, 18, 2);
+        }
+        for (int i = 0; i < 5 && s_help; i++) {
+            if (s_help) { d.setTextColor(COL_GREY); y += 16 * lg::wrap(k[i], 10, y, 144, 16, 1); }
+            d.setTextColor(i == 3 ? COL_GOLD : COL_WHITE);
+            y += 16 * lg::wrap(a[i], 18, y, 136, 16, 2) + 4;
+        }
+        for (int i = 0; i < 3; i++) d.fillCircle(128 + i * 10, 15, i == s_help ? 3 : 2, i == s_help ? ACC : COL_DIM);
+        lg::field(0, 30, LOX - 4, 210);
+        break;
+    }
+    default: {                    // play / pause / game over
+        int y = lscore(34);
+        if (s_screen == ST_OVER) {
+            const bool hs = s_score >= g_hi && s_score > 0;
+            const char *ot = hs ? GT("NUOVO RECORD!", "HIGH SCORE!") : GT("FINE PARTITA", "GAME OVER");
+            lg::font(1); lt(10, y, d.textWidth(ot) > 144 ? 0 : 1, hs ? COL_GOLD : COL_RED, ot);
+            int rank = -1;
+            for (int i = 0; i < NTOP && s_score > 0; i++) if (g_top[i] == s_score) { rank = i + 1; break; }
+            if (rank > 0) snprintf(b, sizeof b, GT("Classifica: %d.", "Leaderboard: #%d"), rank);
+            else snprintf(b, sizeof b, GT("Record %lu", "Best %lu"), (unsigned long)g_hi);
+            lt(10, y + 24, 0, COL_GREY, b);
+            lrow(0, 150, GT("Rigioca", "Replay"), true);
+            lrow(1, 190, "Menu", false);
+            break;
+        }
+        snprintf(b, sizeof b, GT("Livello %d", "Level %d"), s_level);
+        lt(10, y, 1, COL_WHITE, b);
+        lt(150, y + 3, 0, th_accent, theme_name(), top_right);
+        unsigned cap = s_lv_score < (unsigned)s_lv.goal ? s_lv_score : (unsigned)s_lv.goal;
+        d.fillRoundRect(10, y + 24, 140, 6, 3, COL_FIELD2);
+        if (s_lv.goal > 0) d.fillRoundRect(10, y + 24, (int)(140L * cap / s_lv.goal), 6, 3, th_accent);
+        y += 40;
+        for (int i = 0; i < s_balls && i < 6; i++) { d.fillCircle(18 + i * 20, y + 8, 7, COL_STEEL); d.fillCircle(16 + i * 20, y + 6, 3, COL_STEELL); }
+        snprintf(b, sizeof b, "x%d", s_mult);
+        lt(150, y, 2, s_mult > 1 ? COL_GREEN : COL_DIM, b, top_right);
+        y += 26;
+        if (s_2x_ms > 0 || s_slow_ms > 0) {
+            int rem = s_2x_ms > 0 ? s_2x_ms : s_slow_ms, full = s_2x_ms > 0 ? 9000 : 6000;
+            uint16_t pc = s_2x_ms > 0 ? COL_GOLD : COL_CYAN;
+            lt(10, y, 1, pc, s_2x_ms > 0 ? GT("PUNTI X2", "2X SCORE") : GT("RALLENTA", "SLOW-MO"));
+            d.fillRect(10, y + 20, 140 * rem / full, 3, pc);
+        }
+        if (s_screen == ST_OPT) {
+            lrow(0, 150, GT("Riprendi", "Resume"), true);
+            lrow(1, 190, GT("Esci", "Quit"), false);
+        } else {
+            lt(10, 200, 0, COL_GREY, GT("Tocca i lati: flipper", "Tap a side: flipper"));
+            lt(10, 218, 0, s_bp == BP_READY ? COL_GOLD : COL_GREY, GT("Tira la molla: lancia", "Pull plunger: launch"));
+        }
+        break;
+    }
+    }
+}
+static void lp_lane(void)         // the plunger: a spring in its lane; the knob follows the pull
+{
+    const int x = LANEX, w = 14, top = 70, tip = 96 + (int)(s_plunge * 100);
+    d.fillRoundRect(x - 2, top - 2, w + 4, 240 - top + 4, 5, COL_STEEL);
+    d.fillRoundRect(x, top, w, 240 - top, 4, COL_DARK);
+    if (s_bp == BP_READY && s_plunge > 0) d.fillRect(x + 3, 96, w - 6, tip - 96, mix(COL_GREEN, COL_RED, (int)(s_plunge * 256)));
+    for (int y = tip + 10; y < 232; y += 6) d.drawLine(x + 2, y, x + w - 3, y + 3, COL_STEEL);   // the spring
+    d.fillRect(x + w / 2 - 1, tip, 3, 12, COL_STEELL);
+    d.fillRoundRect(x, tip - 6, w, 9, 3, s_bp == BP_READY ? COL_RED : COL_REDD);
+    if (s_bp == BP_READY && s_screen == ST_PLAY && !s_charging && ((s_anim >> 4) & 1))
+        for (int i = 0; i < 2; i++) d.fillTriangle(x + 2, top + 6 + i * 8, x + w - 3, top + 6 + i * 8, x + w / 2, top + 12 + i * 8, COL_GOLD);
+}
+static void lg_paint(void *)
+{
+    d.fillRect(0, 0, 320, 240, COL_BG);
+    s_ox = LOX; draw_play(); s_ox = -1;
+    d.fillRect(LOX + PW, 0, 320 - LOX - PW, 240, COL_BG);     // trim the level-up rings to the table
+    lp_lane();
+    lp_card();
+    if (s_screen == ST_PLAY) {
+        lg::field(LOX, 0, PW, 240);
+        lg::field(LANEX - 3, 60, 320 - LANEX + 3, 180);
+        nucleo_touch_add_scroll(LANEX - 3, 60, 320 - LANEX + 3, 180, 5, NK_CHAR, PULL_CH, NK_CHAR, PUSH_CH);
+    }
+}
+static void draw_large(void)
+{
+    nucleo_touch_clear();
+    lg::frame(lg_paint, nullptr);
+    nucleo_touch_commit();
+}
+static bool on_back(int key);
+// A touch on the panel's content: true when handled.
+static bool lg_key(int k, char ch)
+{
+    int tx = 0, ty = 0;
+    const bool fld = lg::tap(k, ch, &tx, &ty);
+    const int ri = nucleo_touch_is_row(k, ch) ? ch - NUCLEO_TOUCH_ROW : -1;
+    const bool drag = k == NK_CHAR && (ch == PULL_CH || ch == PUSH_CH);
+    if (!fld && ri < 0 && !drag) return false;
+    switch (s_screen) {
+    case ST_PLAY:
+        if (drag) {
+            if (s_bp != BP_READY) return true;
+            s_plunge += ch == PULL_CH ? 0.05f : -0.05f;
+            if (s_plunge > 1.0f) s_plunge = 1.0f;
+            if (s_plunge < 0.0f) s_plunge = 0.0f;
+            s_charging = true; s_pull_ms = 220;
+        } else if (fld && s_bp == BP_READY) launch_ball(1.0f);         // tap the plunger (or the table): full power
+        else if (fld && tx < LOX + PW / 2) s_ltap_ms = 150;
+        else if (fld) s_rtap_ms = 150;
+        return true;
+    case ST_MENU: case ST_SET: {
+        const int n = s_screen == ST_MENU ? NMENU : NSET;
+        if (ri < 0 || ri >= n) return true;
+        if (s_menu.sel != ri) { s_menu.sel = (int8_t)ri; sfx(1); nucleo_app_request_draw(); }
+        else if (s_screen == ST_MENU) menu_select();
+        else settings_change(NK_ENTER);
+        return true;
+    }
+    case ST_OPT: case ST_OVER:
+        if (ri == 0) { if (s_screen == ST_OVER) new_game(); else sfx(3); go(ST_PLAY); }
+        else if (ri == 1) on_back(NK_BACK);
+        return true;
+    case ST_HELP:   if (fld) { s_help = (s_help + 1) % 3; sfx(1); nucleo_app_request_draw(); } return true;
+    case ST_SCORES: if (fld) { sfx(3); go(ST_MENU); } return true;
+    default: return true;
     }
 }
 static void draw_companion(void)
@@ -1340,12 +1510,6 @@ static void on_draw(void)
 {
     if (nucleo_app_two_screens()) { draw_companion(); return; }
     draw_game();
-}
-static void draw_large(void)
-{
-    nucleo_touch_clear();
-    lg::game(draw_game, large_hud, GT("Flipper", "Pinball"), ACC);
-    nucleo_touch_commit();
 }
 static bool poll(void)
 {
@@ -1396,12 +1560,13 @@ static bool poll(void)
         s_l1_prev = leftHeld; s_r0_prev = rightHeld;
         if ((m & NK_MOD_GUI) && !(s_mods_prev & NK_MOD_GUI)) nudge((s_anim & 1) ? 1 : -1);   // physical ALT -> tilt (rising edge)
         if (s_bp == BP_READY) {                                  // FX3 plunger: hold CTRL (or GO) to charge, release to fire
+            if (s_pull_ms > 0) dec(&s_pull_ms, dt);              // (or pull the panel's plunger and let go)
             bool want = chargeMod || s_go_held;
             if (want) {
                 if (s_plunge < 1.0f) { s_plunge += 0.020f * (dt / 16.0f); if (s_plunge > 1.0f) { s_plunge = 1.0f; s_atmax = 0; } }
                 else { s_atmax += dt; if (s_atmax > 1600) { s_plunge = 0; s_atmax = 0; } }   // held at max too long -> overheat reset
                 s_charging = true;
-            } else if (s_charging) launch_ball(s_plunge);        // released -> fire at the charged power
+            } else if (s_charging && s_pull_ms <= 0) launch_ball(s_plunge);        // released -> fire at the charged power
         }
         s_mods_prev = m;
         if (s_launch_ms > 0) dec(&s_launch_ms, dt);

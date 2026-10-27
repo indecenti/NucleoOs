@@ -174,8 +174,12 @@ static char s_status[40];        // transient one-liner on market/shipyard
 #define NBOLT 18                     // enemy laser tracers (player fire is hitscan, not a projectile)
 #define NFOE  6
 #define NWARP 56                     // forward-streaking 3D starfield
-#define CX     120.0f                // vanishing-point x (= W/2)
-#define FOCAL  140.0f                // focal length (px); larger = more zoom / narrower FOV
+// The dogfight's view: the Cardputer's 240 x (121|135), or natively the external panel's 320x240 (two screens).
+// Logic and drawing share it (the reticle, the lock and the hits live in view pixels); view_set() picks it.
+static int   s_vw = 240, s_vh = 121;
+static float s_vk = 1.0f;                // view scale vs the Cardputer's (focal length, aim speed, cockpit)
+#define CX     (s_vw * 0.5f)             // vanishing-point x (= view width / 2)
+#define FOCAL  (140.0f * s_vk)           // focal length (px); larger = more zoom / narrower FOV
 #define ZNEAR    6.0f                // depth at which a foe/bolt reaches the cockpit
 #define ZFAR   260.0f                // spawn / far-clip depth
 #define ZCONV  140.0f                // depth where a tracer's converging line meets the rim
@@ -814,6 +818,7 @@ static void stars_draw(int ch)
 }
 
 // ============================ text helpers ===================================
+#undef OVERFLOW                           // MinGW's math.h has one (the host gallery)
 #ifdef NH_GAME_NAME
 static int s_overflow, s_overflow_line;   // host harness only: text that did not fit its room (must stay 0), and where
 #define OVERFLOW() (s_overflow++, s_overflow_line = __LINE__)
@@ -981,7 +986,7 @@ static bool fb_get(TileFb *f)
 {
     if (!tile_fb(f)) return false;
     int ch = nucleo_app_content_height();
-    if (f->y1 > ch) f->y1 = ch;
+    if (d.width() <= 240 && f->y1 > ch) f->y1 = ch;            // the panel's frame (lg::frame) has no footer
     return true;
 }
 
@@ -1320,19 +1325,20 @@ static void cine_end(void)
 
 // Hyperspace: a tunnel of rings rushing out of the throat (cyan / violet, brighter as they near), streaks that
 // stretch from a dim tail to a white head, and a dithered glow in the throat. k in 0..1 is the intensity.
-static void draw_warp(int ch, float k)
+static void draw_warp(int w, int ch, float k)
 {
     LovyanGFX &G = d;
-    int cx = W / 2, cy = ch / 2;
+    int cx = w / 2, cy = ch / 2;
+    const float z = w / 240.0f;
     for (int i = 0; i < 5; i++) {
-        int ph = (int)((s_now / 3 + i * 26) % 130), rr = 3 + ph * ph / 70;
+        int ph = (int)((s_now / 3 + i * 26) % 130), rr = (int)((3 + ph * ph / 70) * z);
         G.drawEllipse(cx, cy, rr * 3 / 2, rr, shade((i & 1) ? C565(130, 90, 255) : C565(60, 170, 255), 1 + ph / 26, 6));
     }
-    blob(cx, cy, 8 + (int)(k * 22), 6 + (int)(k * 16), C565(150, 220, 255), 10);
-    G.fillCircle(cx, cy, 1 + (int)(k * 3), COL_WHITE);
-    float reach = 6 + k * 120;
+    blob(cx, cy, (int)((8 + k * 22) * z), (int)((6 + k * 16) * z), C565(150, 220, 255), 10);
+    G.fillCircle(cx, cy, 1 + (int)(k * 3 * z), COL_WHITE);
+    float reach = (6 + k * 120) * z;
     for (int i = 0; i < NSTAR; i++) {
-        float d0 = 8 + (float)((star[i].x + s_anim * 2) % 50) * (0.5f + k);
+        float d0 = (8 + (float)((star[i].x + s_anim * 2) % 50) * (0.5f + k)) * z;
         float ca = star[i].ca * (1.0f / 127), sa = star[i].sa * (1.0f / 127), dm = d0 + reach * 0.4f;
         int x0 = cx + (int)(ca * d0), y0 = cy + (int)(sa * d0), xm = cx + (int)(ca * dm), ym = cy + (int)(sa * dm);
         int x1 = cx + (int)(ca * (d0 + reach)), y1 = cy + (int)(sa * (d0 + reach));
@@ -1365,7 +1371,7 @@ static void draw_cine(void)
             for (int i = 0; i < shown; i++) center(46 + i * 11, 1, i == shown - 1 ? COL_WHITE : COL_GREY, lp(INTRO_LINES[i]));
         }
     } else if (s_cine == CINE_JUMP) {
-        draw_warp(ch, p < 0.8f ? p / 0.8f : 1.0f);
+        draw_warp(W, ch, p < 0.8f ? p / 0.8f : 1.0f);
         if (p > 0.86f) G.fillRect(0, 0, W, ch, rgb(220, 240, 255));   // arrival flash
         else {
             center(ch - 34, 1, COL_DIM, GT("salto iperspaziale", "hyperspace jump"));
@@ -1391,7 +1397,7 @@ static void draw_cine(void)
         center(26, 1, COL_AMBER, b);
         if (p > 0.62f && ((s_anim >> 2) & 3)) center(ch - 30, 1, FAC_LOOK[F_ECO].glow, GT("L'Eco risponde.", "The Echo answers."));
     } else if (s_cine == CINE_SECTOR) {
-        draw_warp(ch, p < 0.6f ? p / 0.6f : 1.0f);            // hyperspace surge into the new sector
+        draw_warp(W, ch, p < 0.6f ? p / 0.6f : 1.0f);         // hyperspace surge into the new sector
         center(16, 2, COL_CYAN, GT("SETTORE RIPULITO", "SECTOR CLEARED"));
         char b[28]; snprintf(b, sizeof b, "%s %u", GT("SETTORE", "SECTOR"), (unsigned)g.sector);
         center(ch / 2 - 8, 3, COL_AMBER, b);
@@ -1409,7 +1415,18 @@ static void draw_cine(void)
 // You ride the cockpit looking down +ez. Steer the reticle with the arrows; ENTER fires twin
 // lasers that converge on the crosshair (hitscan on the locked fighter). Enemies fly out of the
 // vanishing point and grow as they close; a 3D starfield streaks past. Esc disengages.
-static inline int pf_top(void) { return 14; }   // playfield top (under the combat HUD band)
+static inline int pf_top(void) { return s_vw > 240 ? 30 : 14; }   // playfield top (under the combat HUD band)
+// The view for the current screen setup; a change mid-fight carries the reticle over to the new view.
+static void view_set(void)
+{
+    const bool big = nucleo_app_two_screens();
+    const int vw = big ? 320 : 240, vh = big ? 240 : nucleo_app_content_height();
+    if (vw == s_vw && vh == s_vh) return;
+    const float ox = CX, oy = s_cy, k = (big ? 4.0f / 3.0f : 1.0f) / s_vk;
+    s_vw = vw; s_vh = vh; s_vk = big ? 4.0f / 3.0f : 1.0f;
+    s_cy = (pf_top() + s_vh) * 0.5f;
+    s_aimx = CX + (s_aimx - ox) * k; s_aimy = s_cy + (s_aimy - oy) * k;
+}
 static float s_regen_acc;                        // sub-unit shield-regen accumulator
 
 // perspective: world (ex,ey,ez) -> screen (sx,sy); sc multiplies a world radius into px.
@@ -1689,10 +1706,11 @@ static void draw_reticle(int x, int y, bool locked)
 static void draw_cockpit(int ch)
 {
     LovyanGFX &G = d;
+    const int W = s_vw, t = pf_top(), a = (int)(66 * s_vk), b = (int)(52 * s_vk), c = (int)(27 * s_vk);
     uint16_t f = C565(24, 28, 44), e = C565(70, 84, 120), hi = C565(120, 136, 180);
-    G.drawLine(0, 14, 66, 34, e); G.drawLine(0, 15, 66, 35, f); G.drawLine(W - 1, 14, W - 67, 34, e); G.drawLine(W - 1, 15, W - 67, 35, f);
-    G.fillTriangle(0, ch - 1, 52, ch - 1, 0, ch - 27, f); G.fillTriangle(W - 1, ch - 1, W - 53, ch - 1, W - 1, ch - 27, f);
-    G.drawLine(0, ch - 27, 52, ch - 1, hi); G.drawLine(W - 1, ch - 27, W - 53, ch - 1, hi);
+    G.drawLine(0, t, a, t + 20, e); G.drawLine(0, t + 1, a, t + 21, f); G.drawLine(W - 1, t, W - 1 - a, t + 20, e); G.drawLine(W - 1, t + 1, W - 1 - a, t + 21, f);
+    G.fillTriangle(0, ch - 1, b, ch - 1, 0, ch - c, f); G.fillTriangle(W - 1, ch - 1, W - 1 - b, ch - 1, W - 1, ch - c, f);
+    G.drawLine(0, ch - c, b, ch - 1, hi); G.drawLine(W - 1, ch - c, W - 1 - b, ch - 1, hi);
     G.fillRect(1, ch - 4, 4, 4, COL_RED); G.fillRect(W - 5, ch - 4, 4, 4, COL_RED);
 }
 // Top-down radar on the left console: you at the bottom centre, ahead is up. Hostiles red (gold: the ace, white:
@@ -1700,16 +1718,17 @@ static void draw_cockpit(int ch)
 static void draw_radar(int ch)
 {
     LovyanGFX &G = d;
-    int cx = 19, cy = ch - 2;
-    G.fillArc(cx, cy, 0, 15, 180, 360, C565(0, 34, 24));
-    G.drawArc(cx, cy, 15, 15, 180, 360, C565(50, 170, 120));
-    G.drawArc(cx, cy, 8, 8, 180, 360, C565(20, 90, 64));
+    const float k = s_vk;
+    int cx = (int)(19 * k), cy = ch - 2, R = (int)(15 * k), R2 = (int)(8 * k);
+    G.fillArc(cx, cy, 0, R, 180, 360, C565(0, 34, 24));
+    G.drawArc(cx, cy, R, R, 180, 360, C565(50, 170, 120));
+    G.drawArc(cx, cy, R2, R2, 180, 360, C565(20, 90, 64));
     for (int i = 0; i <= NFOE; i++) {                           // the wing, then the ward
         const Foe *f = &s_foe[i < NFOE ? i : 0];
         if (i < NFOE ? !f->on : !s_ward_on) continue;
         float ex = i < NFOE ? f->ex : s_ward_x, ez = i < NFOE ? f->ez : ZWARD;
         uint16_t c = i == NFOE ? COL_CYAN : i == s_lock ? COL_WHITE : f->kind == FOE_ACE ? COL_GOLD : COL_RED;
-        G.fillRect(cx + clampi((int)(ex * 0.09f), -9, 8), cy - 3 - clampi((int)(ez * 0.05f), 0, 10), 2, 2, c);
+        G.fillRect(cx + (int)(clampi((int)(ex * 0.09f), -9, 8) * k), cy - 3 - (int)(clampi((int)(ez * 0.05f), 0, 10) * k), 2, 2, c);
     }
 }
 // The system's sky behind the dogfight: a nebula in its faction's tones (a soft cloud, a brighter knot, a dust lane
@@ -1719,10 +1738,11 @@ static void draw_radar(int ch)
 static void draw_backdrop(float top, int ch)
 {
     const FacLook &L = FAC_LOOK[cur_fac()];
+    const int W = s_vw;
     int t0 = (int)top, h = ch - t0;
     int parx = (int)((s_aimx - CX) * 0.05f), pary = (int)((s_aimy - s_cy) * 0.05f);
     uint32_t hh = pg_hash3(g.seed ^ 0x51A7u, g.sector, (uint32_t)g.sys);
-    int nx = 50 + (int)(hh % 140) - parx, ny = t0 + 26 + (int)((hh >> 8) % (uint32_t)(h - 52)) - pary;
+    int nx = (50 + (int)(hh % 140)) * W / 240 - parx, ny = t0 + 26 + (int)((hh >> 8) % (uint32_t)(h - 52)) - pary;
     for (int i = 0; i < 4; i++) {                                     // the cloud: four soft lobes along a slant
         uint32_t q = pg_hash32(hh + (uint32_t)i * 0x9E37u);
         int dx = (i - 2) * 26 + (int)(q % 21) - 10, dy = ((hh >> 30) & 1 ? 1 : -1) * (i - 2) * 9 + (int)((q >> 8) % 13) - 6;
@@ -1732,10 +1752,10 @@ static void draw_backdrop(float top, int ch)
     blob(nx - 6, ny + 5, 54, 4, COL_SPACE, 10);                                          // a dust lane across it
     for (int i = 0; i < NSTAR; i += 2) {
         if (((s_anim + star[i].tw) & 63) < 2) continue;                  // occasional twinkle-out
-        int xx = ((int)star[i].x - parx) % W; if (xx < 0) xx += W;
+        int xx = ((int)star[i].x * W / 240 - parx) % W; if (xx < 0) xx += W;
         d.drawPixel(xx, t0 + ((((int)star[i].y - pary) % h) + h) % h, star[i].layer == 2 ? COL_GREY : COL_DIM);
     }
-    int side = (hh >> 20) & 1 ? 1 : -1, pr = 12 + (int)((hh >> 21) % 11);
+    int side = (hh >> 20) & 1 ? 1 : -1, pr = (int)((12 + (int)((hh >> 21) % 11)) * s_vk);
     int px = (side > 0 ? W - 32 : 32) - parx * 2, py = t0 + 40 + (int)((hh >> 25) % 36) - pary * 2;
     draw_planet(px, py, pr, g.sys);
     if (SYSTEMS[g.sys].beacon) draw_spire(px - side * (pr + 12), py + pr / 2 + 8, 22, lit_beacon(g.sys));
@@ -1939,7 +1959,8 @@ static void combat_reset_common(void)
     s_combo = 0; s_combo_until = 0;
     s_part_rr = 0; s_muz_until = s_hullvig_until = s_shieldvig_until = s_nearmiss_ms = s_alarm_ms = 0;
     s_hitmark_until = s_smoke_ms = 0;
-    s_cy = (pf_top() + nucleo_app_content_height()) * 0.5f;
+    view_set();
+    s_cy = (pf_top() + s_vh) * 0.5f;
     s_aimx = CX; s_aimy = s_cy; s_aim_hv = s_aim_vv = 0; s_aim_h_until = s_aim_v_until = 0;
     if (g_tilt && nucleo_imu_present()) nucleo_imu_recenter();   // "hold it as you like" -> capture neutral
     s_throttle10 = 5; s_pfire_ms = 0; s_lock = -1; s_lock_since = 0; s_fire_flash_until = 0; s_shake = 0;
@@ -2007,11 +2028,11 @@ static int eligible_missions(int *out)
 // harder for an instant, responsive tap. combat_step (a) applies the drag that eases it back to rest.
 static void aim_steer(int axis, int dir)   // axis: 0 = horizontal, 1 = vertical
 {
-    float vmax  = AIM_VMAX + s_throttle10 * 9.0f;         // boost widens the speed cap
+    float vmax  = (AIM_VMAX + s_throttle10 * 9.0f) * s_vk; // boost widens the speed cap
     float  *v   = axis ? &s_aim_vv : &s_aim_hv;
     int64_t *un = axis ? &s_aim_v_until : &s_aim_h_until;
     bool fresh  = (s_now >= *un);                          // window lapsed -> treat as a new press
-    *v += (float)dir * (fresh ? AIM_KICK : AIM_PUSH);
+    *v += (float)dir * (fresh ? AIM_KICK : AIM_PUSH) * s_vk;
     if (*v >  vmax) *v =  vmax;
     if (*v < -vmax) *v = -vmax;
     *un = s_now + 220;                                     // input-recent window; aim-assist waits it out
@@ -2048,9 +2069,26 @@ static void ace_step(Foe *f, int ms, bool huntward)        // huntward: it is af
     }
 }
 
+// Lock-on: the on-screen foe nearest the reticle, on its hull or on its lead pip; `prev` (the current lock) holds
+// in a 1.6x wider window. Also the touch path: a tap moves the reticle, then this finds what is under it.
+static void lock_scan(int prev)
+{
+    s_lock = -1;
+    float best = 1e9f;
+    for (int i = 0; i < NFOE; i++) {
+        Foe *f = &s_foe[i]; if (!f->on || ace_evading(f)) continue;
+        float sx, sy, sc; if (!project(f->ex, f->ey, f->ez, &sx, &sy, &sc)) continue;
+        float dx = sx - s_aimx, dy = sy - s_aimy, dd = dx * dx + dy * dy, lx, ly;
+        if (lead_pip(f, &lx, &ly)) { float dl = (lx - s_aimx) * (lx - s_aimx) + (ly - s_aimy) * (ly - s_aimy); if (dl < dd) dd = dl; }
+        float r = (7.0f + 15.0f * sc) * (i == prev ? 1.6f : 1.0f);
+        if (dd < r * r && dd < best) { best = dd; s_lock = i; }
+    }
+}
 static void combat_step(float dt)
 {
-    int   ch  = nucleo_app_content_height();
+    view_set();
+    const int W = s_vw;
+    int   ch  = s_vh;
     float top = (float)pf_top();
     int   ms  = (int)(dt * 1000.0f);
 
@@ -2063,7 +2101,7 @@ static void combat_step(float dt)
     if (g_tilt && nucleo_imu_present()) {
         float ttx, tty;
         if (nucleo_imu_tilt(&ttx, &tty)) {
-            float vmax = AIM_VMAX + s_throttle10 * 9.0f;
+            float vmax = (AIM_VMAX + s_throttle10 * 9.0f) * s_vk;
             float dx = tilt_shape(ttx), dy = tilt_shape(tty);
             if (dx != 0.0f) s_aim_hv += (dx * vmax - s_aim_hv) * fminf(10.0f * dt, 1.0f);
             if (dy != 0.0f) s_aim_vv += (dy * vmax - s_aim_vv) * fminf(10.0f * dt, 1.0f);
@@ -2202,18 +2240,8 @@ static void combat_step(float dt)
 
     // (g) lock-on: the on-screen foe nearest the reticle — on its hull or on its lead pip. The current lock holds
     //     in a wider window (1.6x) so a weaving target is not dropped at every twitch; an evading ace slips any lock.
-    int prev = s_lock; s_lock = -1;
-    {
-        float best = 1e9f;
-        for (int i = 0; i < NFOE; i++) {
-            Foe *f = &s_foe[i]; if (!f->on || ace_evading(f)) continue;
-            float sx, sy, sc; if (!project(f->ex, f->ey, f->ez, &sx, &sy, &sc)) continue;
-            float dx = sx - s_aimx, dy = sy - s_aimy, dd = dx * dx + dy * dy, lx, ly;
-            if (lead_pip(f, &lx, &ly)) { float dl = (lx - s_aimx) * (lx - s_aimx) + (ly - s_aimy) * (ly - s_aimy); if (dl < dd) dd = dl; }
-            float r = (7.0f + 15.0f * sc) * (i == prev ? 1.6f : 1.0f);
-            if (dd < r * r && dd < best) { best = dd; s_lock = i; }
-        }
-    }
+    int prev = s_lock;
+    lock_scan(prev);
     if (s_lock >= 0) { if (!s_lock_since || s_lock != prev) { s_lock_since = s_now; sfx(SFX_LOCK); } }
     else s_lock_since = 0;
 
@@ -2256,6 +2284,7 @@ static void combat_step(float dt)
 // has slipped outside the view — a dogfight readability staple so the player always knows where to turn.
 static void draw_foe_arrow(int top, int ch, float sx, float sy, uint16_t col)
 {
+    const int W = s_vw;
     float dx = sx - CX, dy = sy - s_cy;
     float L = sqrtf(dx * dx + dy * dy); if (L < 1.0f) L = 1.0f;
     float nx = dx / L, ny = dy / L;
@@ -2281,10 +2310,13 @@ static void objective(char *b, int n)
     else snprintf(b, n, "%s: %s", GT("Imboscata", "Ambush"), lp(FAC_NAME[s_cc.foe_fac & 3]));
 }
 
+static void combat_hud_large(void);
 static void draw_combat(void)
 {
     LovyanGFX &G = d;
-    int ch = nucleo_app_content_height();
+    view_set();
+    const int W = s_vw;
+    int ch = s_vh;
     float top = (float)pf_top();
     int jx = s_shake > 0 ? (rnd(3) - 1) : 0, jy = s_shake > 0 ? (rnd(3) - 1) : 0;   // hit shake
     int fac = s_cc.foe_fac & 3;
@@ -2489,6 +2521,7 @@ static void draw_combat(void)
     if (g.hull_max && g.hull * 100 / g.hull_max < 25 && ((s_anim >> 2) & 3) < 2)
         G.drawRect(0, (int)top, W, ch - (int)top, rgb(150, 30, 28));
 
+    if (W > 240) { combat_hud_large(); return; }             // the panel: its own native HUD + messages
     // HUD band: shield / hull gauges, boost, missiles, wave (or the ward's gauge), kills. Icons, not letters;
     // the shield and hull gauges BLINK when critical. Steady, not jittered.
     G.fillRect(0, 0, W, 13, COL_SPACE);
@@ -3198,8 +3231,10 @@ static bool list_key(int *sel, int n, int k)
     *sel = (*sel + (k == NK_UP ? n - 1 : 1)) % n; sfx(SFX_MOVE); req();
     return true;
 }
+static bool lg_key(int k, char ch);
 static void on_key(int k, char ch)
 {
+    if (lg_key(k, ch)) return;                               // a touch on the panel's content
     switch (s_screen) {
         case ST_CINE: cine_end(); return;
         case ST_TITLE: {
@@ -3320,86 +3355,774 @@ static void draw_game(void)
     }
 }
 
-// ===== two screens: the whole game on the 320x240 panel, the Cardputer as a companion ===================
-// Costellazioni is screen-rich (title, map, station lists, briefings, a real-time dogfight). lg::game pushes
-// each screen's own frame scaled to the panel; a NATIVE HUD below gives the touch controls that fit the
-// current screen — list nav + select/back, buy/sell at the market, jump on the map, aim/fire/boost in combat.
-// Taps deliver the same keys on_key/on_back already handle. The Cardputer companion shows the ship's state.
-struct LgBtn { const char *l; int k; char c; bool prim; };
-static void lg_row(int y, int bh, const LgBtn *bs, int n)
+// ===== two screens: the whole game NATIVE on the 320x240 panel, the Cardputer as a companion ============
+// Every screen has its own 320x240 layout (CLAUDE.md "Two screens: never a mirror") composed off-screen in strips
+// (lg::frame), and touch is direct on the content: tap a menu row / a market row / a hub card / a choice to pick
+// it, tap it again to open; tap a system on the star map, tap it again (or its card) to jump; in a fight tap a
+// foe to fire on it, drag the field to steer the reticle, tap the missile rack, tap the boost gauge. The header
+// chevron is Back. The keyboard keeps working exactly as before (on_key / on_back).
+#define LW   320
+#define LH   240
+#define LHDR 30                                // header band: chevron, title, a right-hand value
+static void lt(int x, int y, int f, uint16_t col, const char *s, uint8_t datum = top_left)   // panel text, no box
 {
-    const int W320 = d.width(), g = 7, bw = (W320 - (n + 1) * g) / n;
-    for (int i = 0; i < n; i++)
-        lg::button(g + i * (bw + g), y, bw, bh, bs[i].l, bs[i].prim ? COL_CYAN : lg::card(), bs[i].prim ? COL_SPACE : FG, bs[i].k, bs[i].c);
+    lg::font(f); d.setTextDatum(datum); d.setTextColor(col); d.drawString(s, x, y); d.setTextDatum(top_left);
 }
-static void lg_hud(int y, int h)
+static int ltf(int x, int y, int f, uint16_t col, const char *s, int maxw, uint8_t datum = top_left)   // cut to maxw
 {
-    const int W320 = d.width();
-    d.fillRect(0, y, W320, h, COL_PANEL);
-    d.drawFastHLine(0, y, W320, COL_CYAN);
-    const int bh1 = (h - 14 < 40) ? h - 14 : 40, by1 = y + h - bh1 - 6;   // one centred row
-    const int rh = (h - 18) / 2, r1 = y + 6, r2 = y + 10 + rh;            // two rows
-    char b[40];
+    lg::font(f); char b[96]; lg::fit(b, sizeof b, s, maxw); lt(x, y, f, col, b, datum);
+    lg::font(f); return d.textWidth(b);
+}
+static int lwrap(int x, int y, int maxw, int lh, int maxl, uint16_t col, const char *s)       // Font2 prose
+{
+    lg::font(0); d.setTextColor(col); d.setTextDatum(top_left);
+    return lg::wrap(s, x, y, maxw, lh, maxl);
+}
+static void lchevron(int x, int y, uint16_t c)
+{
+    for (int k = 0; k < 2; k++) { d.drawLine(x + 6 + k, y, x + k, y + 7, c); d.drawLine(x + k, y + 7, x + 6 + k, y + 14, c); }
+}
+// Far stars over the whole panel (the compact field is 240 x 121: x by 4/3, y by 2), drifting with s_scroll.
+static void lstars(bool drift)
+{
+    for (int i = 0; i < NSTAR; i++) {
+        int L = star[i].layer;
+        int x = drift ? (int)(star[i].x - s_scroll[L]) % 240 : star[i].x;
+        if (x < 0) x += 240;
+        x = x * LW / 240;
+        int y = (star[i].y % 121) * LH / 121;
+        bool twk = ((s_anim + star[i].tw) & 31) < 3;
+        uint16_t c = L == 0 ? (twk ? COL_GREY : COL_DIM) : L == 1 ? COL_GREY : (twk ? COL_CYAN : COL_WHITE);
+        if (!drift) c = L == 2 ? COL_DIM : COL_TRACK;
+        if (L == 2 && drift) d.fillRect(x, y, 2, 2, c); else d.drawPixel(x, y, c);
+    }
+}
+static void lsky(void) { d.fillRect(0, 0, LW, LH, COL_SPACE); lstars(false); }
+// The header band in the station's faction tone: a back chevron (tap = Back), the emblem, the title and a value.
+static int lhead(const char *title, const char *right, uint16_t rcol)
+{
+    const int f = cur_fac();
+    gui::vgradient(0, 0, LW, LHDR, FAC_LOOK[f].deep, COL_SPACE);
+    d.drawFastHLine(0, LHDR - 1, LW, FAC_LOOK[f].trim);
+    lchevron(9, 8, FAC_LOOK[f].glow);
+    nucleo_touch_add(0, 0, 110, LHDR, NK_BACK, 0);
+    draw_emblem(34, 15, 7, f);
+    int rw = 0;
+    if (right && right[0]) rw = ltf(LW - 10, 7, 0, rcol, right, 150, top_right) + 10;
+    ltf(48, 7, 1, FAC_LOOK[f].glow, title, LW - 48 - rw - 6);
+    return LHDR;
+}
+// A list row's ground: the selection is a pill in the faction's tone with its accent rail.
+static void lrow(int y, int h, bool sel, uint16_t acc)
+{
+    if (!sel) return;
+    d.fillRoundRect(6, y + 1, LW - 12, h - 2, 6, gui::mix(COL_SPACE, acc, 70));
+    d.fillRoundRect(8, y + 4, 4, h - 8, 2, acc);
+}
+static void lrow_target(int i, int y, int h) { nucleo_touch_add(0, y, LW, h, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + i)); }
 
+// ---- title / settings ----
+static void lp_title(void)
+{
+    LovyanGFX &G = d;
+    gui::vgradient(0, 0, LW, LH, C565(0, 0, 24), C565(40, 8, 70));
+    blob(246, 52, 106, 50, C565(110, 40, 160), 7);
+    blob(272, 40, 58, 26, C565(50, 150, 200), 5);
+    blob(208, 76, 86, 8, C565(0, 0, 24), 9);
+    for (int i = 0; i < NSTAR; i++) {
+        int x = star[i].x * LW / 240, y = (star[i].y % 121) * LH / 121;
+        G.drawPixel(x, y, star[i].layer == 2 ? COL_WHITE : star[i].layer ? COL_GREY : COL_DIM);
+        if (star[i].layer == 2 && (star[i].tw & 7) == 0) { G.drawFastHLine(x - 2, y, 5, COL_GREY); G.drawFastVLine(x, y - 2, 5, COL_GREY); }
+    }
+    paint_world(40, LH + 58, 100, WD_OCEAN, 0.6f, -0.62f);
+    G.drawArc(40, LH + 58, 103, 101, 252, 320, C565(120, 200, 255));
+    const int sx = LW - 20, sy = 104;                           // the beacon and its threads to far, lit stars
+    G.drawLine(sx, sy - 62, LW - 1, 10, COL_THREAD); G.drawLine(sx, sy - 62, sx - 44, 4, COL_GOLD);
+    G.drawLine(sx, sy - 62, LW - 4, sy - 16, COL_GOLD);
+    draw_spire(sx, sy, 62, true);
+    draw_ship(34, 22, 4, COL_AMBER);                              // the Lucciola, engines lit
+    blob(18, 22, 8, 4, C565(255, 200, 80), 9);
+    lt(LW / 2 + 1, 33, 3, C565(60, 20, 90), GT("Costellazioni", "Constellations"), middle_center);
+    lt(LW / 2, 32, 3, COL_WHITE, GT("Costellazioni", "Constellations"), middle_center);
+    lg::font(3); int tw = d.textWidth(GT("Costellazioni", "Constellations"));
+    G.fillRect(LW / 2 - tw / 2, 52, tw, 2, COL_GOLD);
+    ltf(LW / 2, 60, 0, C565(255, 220, 150), GT("Mercante tra le stelle", "Trader among the stars"), LW - 60, top_center);
+    int act[4]; int n = title_items(act);
+    const int rh = 38, gap = 6, y0 = LH - (s_save_bad ? 22 : 10) - n * (rh + gap) + gap;
+    for (int i = 0; i < n; i++) {
+        const char *it = act[i] == 0 ? GT("Continua", "Continue") : act[i] == 1 ? GT("Nuova partita", "New game") : GT("Impostazioni", "Settings");
+        const bool sel = i == s_tmenu.sel;
+        const int y = y0 + i * (rh + gap);
+        G.fillRoundRect(64, y, LW - 128, rh, 10, sel ? gui::mix(COL_SPACE, COL_GOLD, 120) : C565(20, 14, 44));
+        G.drawRoundRect(64, y, LW - 128, rh, 10, sel ? COL_GOLD : C565(70, 60, 110));
+        ltf(LW / 2, y + rh / 2 + 1, 1, sel ? COL_WHITE : COL_GREY, it, LW - 148, middle_center);
+        nucleo_touch_add(64, y, LW - 128, rh, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + i));
+    }
+    if (s_save_bad) ltf(LW / 2, LH - 18, 0, COL_RED, GT("Salvataggio illeggibile", "Save file unreadable"), LW - 20, top_center);
+}
+static void lp_settings(void)
+{
+    lsky();
+    lhead(GT("Impostazioni", "Settings"), nullptr, 0);
+    const int n = set_count(), rh = 46;
+    for (int i = 0; i < n; i++) {
+        const int y = LHDR + 10 + i * rh, k = set_kind(i);
+        const bool sel = i == s_smenu.sel;
+        const uint16_t acc = k == SET_DELETE && s_del_armed ? COL_RED : COL_CYAN;
+        lrow(y, rh - 4, sel, acc);
+        const char *name = k == SET_AUDIO ? GT("Suoni", "Sound") : k == SET_TILT ? GT("Inclinazione", "Tilt control")
+                         : !s_has_save ? GT("Nessun salvataggio", "No save")
+                         : s_del_armed ? GT("Sicuro? Tocca ancora: cancella", "Sure? Tap again: delete") : GT("Cancella salvataggio", "Delete save");
+        const int vy = y + (rh - 4) / 2;
+        if (k == SET_DELETE) ltf(22, vy, 1, s_del_armed ? COL_RED : (s_has_save ? COL_WHITE : COL_DIM), name, LW - 44, middle_left);
+        else {
+            ltf(22, vy, 1, sel ? COL_WHITE : COL_GREY, name, LW - 120, middle_left);
+            const bool on = k == SET_AUDIO ? g_audio != 0 : (nucleo_imu_present() && g_tilt);
+            const bool na = k == SET_TILT && !nucleo_imu_present();
+            const int sw = 46, sx = LW - 22 - sw;                          // the switch is the value
+            d.fillRoundRect(sx, vy - 12, sw, 24, 12, na ? COL_TRACK : on ? COL_GREEN : C565(50, 56, 80));
+            d.fillCircle(on ? sx + sw - 12 : sx + 12, vy, 9, na ? COL_DIM : COL_WHITE);
+            if (na) ltf(sx - 8, vy, 0, COL_DIM, GT("n/d", "n/a"), 60, middle_right);
+        }
+        lrow_target(i, y, rh - 4);
+    }
+}
+
+// ---- cinematics ----
+static void lp_cine(void)
+{
+    LovyanGFX &G = d;
+    G.fillRect(0, 0, LW, LH, COL_SPACE);
+    int64_t el = s_now - s_cine_t0;
+    float p = (float)el / cine_dur(s_cine);
+    if (p > 1) p = 1;
+    if (s_cine == CINE_INTRO) {
+        lstars(true);
+        paint_world(LW + 12, LH + 24, 70, WD_OCEAN, -0.7f, -0.45f);
+        draw_ship(50 + (int)(p * 40), 54, 5, COL_AMBER);
+        if (p < 0.30f) {
+            uint16_t c = rgb(60 + (int)(p * 600), 140 + (int)(p * 380), 255);
+            lt(LW / 2, LH / 2 - 10, 3, c, GT("Costellazioni", "Constellations"), middle_center);
+        } else {
+            lt(LW / 2, 22, 2, COL_GOLD, GT("Costellazioni", "Constellations"), middle_center);
+            int shown = (int)((p - 0.30f) / 0.70f * NINTRO) + 1;
+            if (shown > NINTRO) shown = NINTRO;
+            for (int i = 0; i < shown; i++)
+                ltf(LW / 2, 76 + i * 20, 0, i == shown - 1 ? COL_WHITE : COL_GREY, lp(INTRO_LINES[i]), LW - 24, top_center);
+        }
+    } else if (s_cine == CINE_JUMP) {
+        draw_warp(LW, LH, p < 0.8f ? p / 0.8f : 1.0f);
+        if (p > 0.86f) G.fillRect(0, 0, LW, LH, rgb(220, 240, 255));   // arrival flash
+        else {
+            ltf(LW / 2, LH - 58, 0, COL_DIM, GT("salto iperspaziale", "hyperspace jump"), LW - 20, top_center);
+            ltf(LW / 2, LH - 36, 2, COL_WHITE, SYSTEMS[g.sys].name, LW - 20, top_center);
+        }
+    } else if (s_cine == CINE_BEACON) {
+        lstars(true);
+        int cx = LW / 2, by = LH - 12, top = by - 96;
+        bool on = p > 0.22f;
+        if (on) {
+            int len = (int)((p - 0.22f) * 600);
+            for (int k = 0; k < 6; k++) {
+                float a = -2.85f + k * 0.5f;
+                G.drawLine(cx, top, cx + (int)(cosf(a) * len), top + (int)(sinf(a) * len * 0.6f), k & 1 ? COL_GOLD : COL_THREAD);
+            }
+            int rr = (int)((p - 0.22f) * 160);
+            for (int k = 0; k < 3; k++) if (rr - k * 9 > 0) G.drawCircle(cx, top, rr - k * 9, k == 0 ? COL_WHITE : COL_GOLD);
+        }
+        draw_spire(cx, by, 96, on);
+        lt(LW / 2, 8, 2, COL_GOLD, GT("FARO ACCESO", "BEACON LIT"), top_center);
+        char b[28]; snprintf(b, sizeof b, "%d / %d", beacons_lit(), beacons_total());
+        lt(LW / 2, 38, 1, COL_AMBER, b, top_center);
+        if (p > 0.62f && ((s_anim >> 2) & 3)) ltf(LW / 2, LH - 44, 0, FAC_LOOK[F_ECO].glow, GT("L'Eco risponde.", "The Echo answers."), LW - 20, top_center);
+    } else if (s_cine == CINE_SECTOR) {
+        draw_warp(LW, LH, p < 0.6f ? p / 0.6f : 1.0f);
+        ltf(LW / 2, 22, 2, COL_CYAN, GT("SETTORE RIPULITO", "SECTOR CLEARED"), LW - 20, top_center);
+        char b[28]; snprintf(b, sizeof b, "%s %u", GT("SETTORE", "SECTOR"), (unsigned)g.sector);
+        ltf(LW / 2, LH / 2, 3, COL_AMBER, b, LW - 20, middle_center);
+        ltf(LW / 2, LH - 30, 0, COL_DIM, GT("Piu' profondo, piu' pericoloso", "Deeper, deadlier"), LW - 20, top_center);
+    } else {
+        lstars(true);
+        lt(LW / 2, LH / 2 - 30, 3, COL_RED, GT("FINE", "GAME OVER"), middle_center);
+        int shown = (int)(p * (NLOSE + 1)), y = LH / 2 + 4;
+        for (int i = 0; i < NLOSE && i < shown; i++) { ltf(LW / 2, y, 0, COL_GREY, lp(LOSE_LINES[i]), LW - 24, top_center); y += 20; }
+    }
+    lg::field(0, 0, LW, LH);                                        // tap anywhere: skip
+}
+
+// ---- star map ----
+#define LMAP_Y0 (LHDR + 10)
+#define LCARD_Y 186
+static int lmap_x(int lx) { return 20 + lx * 280 / 100; }
+static int lmap_y(int ly) { return LMAP_Y0 + ly * (LCARD_Y - 16 - LMAP_Y0) / 100; }
+static void lp_map(void)
+{
+    LovyanGFX &G = d;
+    G.fillRect(0, 0, LW, LH, COL_SPACE);
+    uint32_t hh = pg_hash3(g.seed ^ 0x6A11u, g.sector, 0);
+    blob(66 + (int)(hh % 186), 70 + (int)((hh >> 8) % 70), 106, 40, C565(24, 10, 60), 8);
+    blob(54 + (int)((hh >> 16) % 212), 90 + (int)((hh >> 24) % 50), 66, 28, C565(0, 30, 50), 6);
+    lstars(true);
+    char b[48];
+    snprintf(b, sizeof b, "%d cr  %s %d/%d", g.credits, GT("celle", "cells"), g.fuel, g.fuel_max);
+    char t[40]; snprintf(t, sizeof t, "%s %u", GT("Settore", "Sector"), (unsigned)g.sector);
+    lhead(t, b, COL_AMBER);
+
+    uint8_t e[NSYS][2]; int ne = map_threads(e);
+    for (int k = 0; k < ne; k++) {
+        int a = e[k][0], c = e[k][1];
+        int xa = lmap_x(SYSTEMS[a].x), ya = lmap_y(SYSTEMS[a].y), xb = lmap_x(SYSTEMS[c].x), yb = lmap_y(SYSTEMS[c].y);
+        if (lit_beacon(a) && lit_beacon(c)) {
+            G.drawLine(xa, ya + 1, xb, yb + 1, C565(140, 100, 0));
+            G.drawLine(xa, ya, xb, yb, COL_THREAD);
+            int tt = (int)((s_anim * 3 + k * 37) % 100);
+            G.fillRect(xa + (xb - xa) * tt / 100 - 1, ya + (yb - ya) * tt / 100 - 1, 3, 3, COL_WHITE);
+        } else for (int sgm = 0; sgm < 16; sgm++) if ((sgm * 7 + a * 3 + c) % 5)
+            G.drawLine(xa + (xb - xa) * sgm / 16, ya + (yb - ya) * sgm / 16, xa + (xb - xa) * (2 * sgm + 1) / 32, ya + (yb - ya) * (2 * sgm + 1) / 32, C565(60, 66, 100));
+    }
+    int cx = lmap_x(SYSTEMS[g.sys].x), cy = lmap_y(SYSTEMS[g.sys].y);
+    bool tsel = s_target >= 0 && s_target != g.sys;
+    float dd = tsel ? sys_dist(g.sys, s_target) : 0;
+    int cost = jump_cost(dd);
+    bool reach = tsel && dd <= g.jump_range && g.fuel >= cost;
+    if (tsel) {
+        int x1 = lmap_x(SYSTEMS[s_target].x), y1 = lmap_y(SYSTEMS[s_target].y);
+        int L = (abs(x1 - cx) > abs(y1 - cy) ? abs(x1 - cx) : abs(y1 - cy)) / 4 + 1;
+        for (int sgm = 0; sgm < L; sgm++) if ((sgm + (int)(s_anim / 2)) % 3) {
+            int ax = cx + (x1 - cx) * sgm / L, ay = cy + (y1 - cy) * sgm / L, bx = cx + (x1 - cx) * (sgm + 1) / L, by = cy + (y1 - cy) * (sgm + 1) / L;
+            G.drawLine(ax, ay, bx, by, reach ? COL_AMBER : COL_RED); G.drawLine(ax, ay + 1, bx, by + 1, reach ? COL_AMBER : COL_RED);
+        }
+    }
+    for (int i = 0; i < NSYS; i++) {
+        int x = lmap_x(SYSTEMS[i].x), y = lmap_y(SYSTEMS[i].y);
+        uint16_t c = faction_col(SYSTEMS[i].faction);
+        blob(x, y, 9, 9, c, 7);
+        G.fillCircle(x, y, 3, c); G.fillRect(x - 1, y - 1, 2, 2, COL_WHITE);
+        if (SYSTEMS[i].beacon) draw_spire(x + 9, y + 6, 17, lit_beacon(i));
+        if (i != g.sys && sys_dist(g.sys, i) <= g.jump_range) {
+            uint16_t rc = g.fuel >= jump_cost(sys_dist(g.sys, i)) ? C565(60, 140, 90) : C565(110, 50, 50);
+            G.drawFastHLine(x - 11, y, 3, rc); G.drawFastHLine(x + 9, y, 3, rc); G.drawFastVLine(x, y - 11, 3, rc); G.drawFastVLine(x, y + 9, 3, rc);
+        }
+    }
+    G.drawCircle(cx, cy, 8 + (int)((s_anim / 3) % 4), COL_GREEN);
+    draw_ship(cx, cy - 1, 3, COL_WHITE);
+    if (tsel) {
+        int x = lmap_x(SYSTEMS[s_target].x), y = lmap_y(SYSTEMS[s_target].y), o = 10 + (int)((s_anim / 2) % 3);
+        for (int sx = -1; sx <= 1; sx += 2) for (int sy = -1; sy <= 1; sy += 2) {
+            G.drawFastHLine(sx < 0 ? x - o : x + o - 5, y + sy * o, 6, COL_AMBER);
+            G.drawFastVLine(x + sx * o, sy < 0 ? y - o : y + o - 5, 6, COL_AMBER);
+        }
+    }
+    // The card at the bottom: the target (tap it to jump), or where you are.
+    const int ti = tsel ? s_target : g.sys;
+    const Sys *ts = &SYSTEMS[ti];
+    const int f = ts->faction & 3;
+    gui::panel(6, LCARD_Y, LW - 12, LH - LCARD_Y - 4, gui::mix(COL_SPACE, FAC_LOOK[f].deep, 190), tsel && reach ? COL_AMBER : FAC_LOOK[f].glow);
+    draw_emblem(24, LCARD_Y + 25, 9, f);
+    int rx = LW - 16;
+    if (tsel) {
+        snprintf(b, sizeof b, "%d", cost);
+        int cw = ltf(rx, LCARD_Y + 6, 1, reach ? COL_GREEN : COL_RED, b, 60, top_right);
+        icon(IC_FUEL, rx - cw - 12, LCARD_Y + 10, reach ? COL_GREEN : COL_RED);
+        rx -= cw + 16;
+    }
+    if (ts->beacon) { draw_spire(rx - 6, LCARD_Y + 40, 26, lit_beacon(ti)); rx -= 18; }
+    ltf(42, LCARD_Y + 5, 1, COL_WHITE, ts->name, rx - 50);
+    if (s_status[0] && tsel) snprintf(b, sizeof b, "%s", s_status);
+    else if (tsel) snprintf(b, sizeof b, "%s . %s . %d ly  -  %s", lp(ECON_NAME[ts->econ]), lp(FAC_NAME[f]), (int)dd,
+                            reach ? GT("tocca: salta", "tap: jump") : GT("fuori portata", "out of reach"));
+    else snprintf(b, sizeof b, "%s  -  %s", GT("Sei qui", "You are here"), GT("tocca un sistema", "tap a system"));
+    ltf(42, LCARD_Y + 27, 0, s_status[0] && tsel ? COL_RED : (tsel && reach ? COL_AMBER : COL_GREY), b, LW - 42 - 16 - (ts->beacon ? 18 : 0));
+    lg::field(0, LHDR, LW, LH - LHDR);
+}
+static void lmap_tap(int x, int y)
+{
+    if (y >= LCARD_Y) { if (s_target >= 0 && s_target != g.sys) do_jump(); else { sfx(SFX_BACK); go(ST_SYSTEM); } return; }
+    int best = -1, bd = 26 * 26;
+    for (int i = 0; i < NSYS; i++) {
+        int dx = lmap_x(SYSTEMS[i].x) - x, dy = lmap_y(SYSTEMS[i].y) - y;
+        if (dx * dx + dy * dy < bd) { bd = dx * dx + dy * dy; best = i; }
+    }
+    if (best < 0) return;
+    if (best == g.sys) { s_target = -1; s_status[0] = 0; sfx(SFX_MOVE); req(); return; }
+    if (best == s_target) { do_jump(); return; }
+    s_target = best; s_status[0] = 0; sfx(SFX_MOVE); req();
+}
+
+// ---- the dock: the station header over six cards ----
+static void lhub_icon(int i, int cx, int cy, uint16_t c)
+{
+    uint16_t pal[3] = { c, shade(c, 1, 2), COL_WHITE };
+    switch (i) {
+        case 0: glyph(ICON7[IC_CARGO], 7, cx - 10, cy - 10, 21, pal); break;
+        case 1: glyph(ICON7[IC_HULL], 7, cx - 10, cy - 10, 21, pal); break;
+        case 2: glyph(ICON7[IC_KILL], 7, cx - 10, cy - 10, 21, pal); break;
+        case 3: draw_ship(cx + 2, cy, 5, c); break;
+        case 4:                                                    // a little constellation
+            d.drawLine(cx - 12, cy + 6, cx - 2, cy - 8, c); d.drawLine(cx - 2, cy - 8, cx + 12, cy - 2, c); d.drawLine(cx + 12, cy - 2, cx + 4, cy + 9, c);
+            d.fillCircle(cx - 12, cy + 6, 2, COL_WHITE); d.fillCircle(cx - 2, cy - 8, 3, COL_WHITE); d.fillCircle(cx + 12, cy - 2, 2, COL_WHITE); d.fillCircle(cx + 4, cy + 9, 2, COL_WHITE);
+            break;
+        default:                                                   // the hatch home: an arrow out of a frame
+            d.drawRoundRect(cx - 11, cy - 10, 16, 20, 3, c);
+            d.fillRect(cx - 4, cy - 1, 14, 3, c); d.fillTriangle(cx + 15, cy, cx + 8, cy - 6, cx + 8, cy + 6, c);
+            break;
+    }
+}
+static void lp_system(void)
+{
+    LovyanGFX &G = d;
+    lsky();
+    const Sys *s = &SYSTEMS[g.sys];
+    const int f = cur_fac(), hh = 54;
+    gui::vgradient(0, 0, LW, hh, FAC_LOOK[f].deep, COL_SPACE);
+    G.drawFastHLine(0, hh, LW, FAC_LOOK[f].trim);
+    lchevron(8, 20, FAC_LOOK[f].glow);
+    nucleo_touch_add(0, 0, 60, hh, NK_BACK, 0);
+    draw_planet(40, 27, 17, g.sys);
+    int nx = 66;
+    if (s->beacon) { draw_spire(66, 46, 30, lit_beacon(g.sys)); nx = 78; }
+    char b[40];
+    snprintf(b, sizeof b, "%d cr", g.credits);
+    int crw = ltf(LW - 10, 7, 1, COL_AMBER, b, 110, top_right);
+    snprintf(b, sizeof b, "%s %d/%d", GT("celle", "cells"), g.fuel, g.fuel_max);
+    ltf(LW - 10, 31, 0, COL_CYAN, b, 110, top_right);
+    ltf(nx, 6, 2, COL_WHITE, s->name, LW - 10 - crw - 10 - nx);
+    snprintf(b, sizeof b, "%s . %s", lp(ECON_NAME[s->econ]), lp(FAC_NAME[s->faction]));
+    ltf(nx, 32, 0, FAC_LOOK[f].glow, b, LW - 120 - nx);
+    int el[NMISS_PER_SYS]; s_jobs = eligible_missions(el);
+    const int cw = 98, chh = 84, gx = 8, gy = hh + 8;
+    for (int i = 0; i < 6; i++) {
+        const int x = gx + (i % 3) * (cw + 6), y = gy + (i / 3) * (chh + 6);
+        const bool sel = i == s_hubsel;
+        G.fillRoundRect(x, y, cw, chh, 9, sel ? gui::mix(COL_SPACE, FAC_LOOK[f].glow, 70) : gui::mix(COL_SPACE, FAC_LOOK[f].deep, 110));
+        G.drawRoundRect(x, y, cw, chh, 9, sel ? FAC_LOOK[f].glow : gui::mix(COL_SPACE, FAC_LOOK[f].trim, 90));
+        lhub_icon(i, x + cw / 2, y + 30, sel ? COL_WHITE : FAC_LOOK[f].glow);
+        ltf(x + cw / 2, y + chh - 22, 0, sel ? COL_WHITE : COL_GREY, i == 5 ? GT("Salva", "Save") : hub_label(i), cw - 8, top_center);
+        b[0] = 0;
+        if (i == 2 && s_jobs > 0) snprintf(b, sizeof b, "%d", s_jobs);
+        else if (i == 3) snprintf(b, sizeof b, "%d/%d", beacons_lit(), beacons_total());
+        if (b[0]) {
+            lg::font(0); int bw = d.textWidth(b) + 10;
+            G.fillRoundRect(x + cw - bw - 4, y + 4, bw, 18, 9, i == 2 ? COL_AMBER : C565(40, 70, 90));
+            lt(x + cw - 4 - bw / 2, y + 13, 0, i == 2 ? COL_SPACE : COL_CYAN, b, middle_center);
+        }
+        nucleo_touch_add(x, y, cw, chh, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + i));
+    }
+}
+
+// ---- market: tap a row to pick it; on the picked row tap the price to buy one, your stock to sell one ----
+#define LMKT_Y0  (LHDR + 16)
+#define LMKT_RH  19
+#define LMKT_SELL 236                                // x from which a tap on the picked row sells
+static void lp_market(void)
+{
+    lsky();
+    char b[40];
+    snprintf(b, sizeof b, "%d cr   %d/%d", g.credits, cargo_used(), g.cargo_max);
+    lhead(GT("MERCATO", "MARKET"), b, COL_AMBER);
+    lt(20, LHDR + 4, 4, COL_DIM, GT("MERCE", "GOODS"));
+    lt(LMKT_SELL - 22, LHDR + 4, 4, COL_DIM, GT("COMPRA", "BUY"), top_right);
+    lt(LW - 12, LHDR + 4, 4, COL_DIM, GT("STIVA - VENDI", "HOLD - SELL"), top_right);
+    const uint16_t acc = FAC_LOOK[cur_fac()].glow;
+    for (int i = 0; i <= NGOODS; i++) {
+        const int y = LMKT_Y0 + i * LMKT_RH, vy = y + LMKT_RH / 2;
+        const bool sel = i == s_mktsel, fuel = i == NGOODS;
+        lrow(y, LMKT_RH, sel, acc);
+        const int price = fuel ? refuel_price(g.sys) : unit_buy(g.sys, i);
+        const uint16_t pc = fuel ? COL_CYAN : price < GOODS[i].base ? COL_GREEN : price > GOODS[i].base ? COL_RED : COL_GREY;
+        ltf(20, vy, 0, sel ? COL_WHITE : COL_GREY, fuel ? GT("Carburante", "Fuel") : lp(GOODS[i].name), 130, middle_left);
+        snprintf(b, sizeof b, "%d", price);
+        ltf(LMKT_SELL - 22, vy, 0, pc, b, 80, middle_right);
+        if (fuel) snprintf(b, sizeof b, "%d/%d", g.fuel, g.fuel_max);
+        else snprintf(b, sizeof b, "x%d", g.cargo[i]);
+        ltf(LW - 16, vy, 0, fuel || g.cargo[i] ? COL_AMBER : COL_DIM, b, 60, middle_right);
+        if (sel) {                                                 // the picked row's two halves: buy | sell
+            d.drawFastVLine(LMKT_SELL, y + 4, LMKT_RH - 8, gui::mix(COL_SPACE, acc, 160));
+            if (!fuel && g.cargo[i] > 0) lchevron(LMKT_SELL + 6, vy - 7, COL_AMBER);
+        }
+    }
+    const int sy = LMKT_Y0 + (NGOODS + 1) * LMKT_RH + 4;
+    if (s_status[0]) ltf(LW / 2, sy, 0, COL_GREEN, s_status, LW - 20, top_center);
+    else ltf(LW / 2, sy, 0, COL_DIM, GT("tocca il prezzo: compra  -  la stiva: vendi", "tap the price: buy  -  the hold: sell"), LW - 20, top_center);
+    lg::field(0, LMKT_Y0, LW, (NGOODS + 1) * LMKT_RH);
+}
+static void lmarket_tap(int x, int y)
+{
+    const int i = (y - LMKT_Y0) / LMKT_RH;
+    if (i < 0 || i > NGOODS) return;
+    if (i != s_mktsel) { s_mktsel = i; s_status[0] = 0; sfx(SFX_MOVE); req(); return; }
+    if (x >= LMKT_SELL) { if (i < NGOODS) sell_good(i); else sfx(SFX_DENY); }
+    else if (i == NGOODS) buy_fuel();
+    else buy_good(i);
+    req();
+}
+
+// ---- shipyard ----
+static void lp_shipyard(void)
+{
+    lsky();
+    char b[24];
+    snprintf(b, sizeof b, "%d cr", g.credits);
+    lhead(GT("CANTIERE", "SHIPYARD"), b, COL_AMBER);
+    const uint16_t acc = FAC_LOOK[cur_fac()].glow;
+    const int rh = 25, y0 = LHDR + 6;
+    for (int i = 0; i < 8; i++) {
+        const int y = y0 + i * rh, vy = y + rh / 2;
+        const bool sel = i == s_yardsel;
+        lrow(y, rh, sel, acc);
+        bool dim = false;
+        if (i == 7) { if (g.hull >= g.hull_max) { snprintf(b, sizeof b, "%s", GT("integro", "intact")); dim = true; } else snprintf(b, sizeof b, "%d cr", up_cost(7)); }
+        else if (up_level(i) >= 4) { snprintf(b, sizeof b, "MAX"); dim = true; }
+        else snprintf(b, sizeof b, "%d cr", up_cost(i));
+        ltf(20, vy, 0, sel ? COL_WHITE : COL_GREY, yard_name(i), 150, middle_left);
+        if (i < 7) for (int k = 0; k < 4; k++) d.fillRoundRect(176 + k * 13, vy - 4, 9, 9, 2, k < up_level(i) ? COL_GREEN : COL_TRACK);
+        ltf(LW - 16, vy, 0, dim ? COL_DIM : COL_AMBER, b, 80, middle_right);
+        lrow_target(i, y, rh);
+    }
+    ltf(LW / 2, y0 + 8 * rh + 2, 4, COL_DIM, GT("tocca una voce, poi di nuovo per comprarla", "tap an item, then again to buy it"), LW - 20, top_center);
+}
+
+// ---- bridge ----
+static void lp_plancia(void)
+{
+    LovyanGFX &G = d;
+    lsky();
+    char b[44], v[16];
+    snprintf(b, sizeof b, "%s  K%d", rank_name(), (int)g.kills);
+    lhead(GT("PLANCIA", "BRIDGE"), b, COL_GREY);
+    draw_ship(28, LHDR + 20, 5, COL_AMBER);
+    ltf(48, LHDR + 9, 1, COL_WHITE, GT("Lucciola", "Firefly"), 120);
+    snprintf(b, sizeof b, "%d cr", g.credits);
+    ltf(LW - 12, LHDR + 8, 1, COL_AMBER, b, 120, top_right);
+    snprintf(b, sizeof b, "%s %u", GT("Settore", "Sector"), (unsigned)g.sector);
+    ltf(48, LHDR + 31, 0, COL_GREY, b, 120);
+    snprintf(v, sizeof v, "%d/%d", beacons_lit(), beacons_total());
+    int vw = ltf(LW - 12, LHDR + 31, 0, COL_GOLD, v, 60, top_right);
+    draw_spire(LW - 12 - vw - 10, LHDR + 46, 16, beacons_lit() > 0);
+    struct { int ic; uint16_t c; const char *n; } st[6] = {
+        { IC_HULL, COL_GREEN, GT("Scafo", "Hull") }, { IC_SHIELD, COL_CYAN, GT("Scudo", "Shield") },
+        { IC_KILL, COL_RED, GT("Laser", "Laser") },   { IC_WAVE, COL_PURPLE, GT("Sensori", "Sensors") },
+        { IC_FUEL, COL_CYAN, GT("Celle", "Cells") },  { IC_BOOST, COL_AMBER, GT("Raggio", "Range") } };
+    for (int i = 0; i < 6; i++) {
+        switch (i) {
+            case 0: snprintf(v, sizeof v, "%d/%d", g.hull, g.hull_max); break;
+            case 1: snprintf(v, sizeof v, "%d", g.shield_max); break;
+            case 2: snprintf(v, sizeof v, "%d/4", g.weapon); break;
+            case 3: snprintf(v, sizeof v, "%d", g.sensors); break;
+            case 4: snprintf(v, sizeof v, "%d/%d", g.fuel, g.fuel_max); break;
+            default: snprintf(v, sizeof v, "%d", g.jump_range); break;
+        }
+        const int x = 12 + (i & 1) * 154, y = LHDR + 58 + (i / 2) * 22;
+        uint16_t pal[3] = { st[i].c, shade(st[i].c, 1, 2), COL_WHITE };
+        glyph(ICON7[st[i].ic], 7, x, y + 1, 14, pal);
+        ltf(x + 20, y, 0, COL_GREY, st[i].n, 70);
+        ltf(x + 142, y, 0, COL_WHITE, v, 60, top_right);
+    }
+    const int ry = LHDR + 124;
+    lt(12, ry, 1, COL_AMBER, GT("Reputazione", "Reputation"));
+    lg::font(1); int rw = d.textWidth(GT("Reputazione", "Reputation"));
+    G.drawFastHLine(20 + rw, ry + 8, LW - 32 - rw, C565(60, 50, 30));
+    for (int i = 0; i < NFAC; i++) {
+        const int y = ry + 21 + i * 17;
+        draw_emblem(18, y + 8, 6, i);
+        ltf(30, y, 0, COL_GREY, lp(FAC_NAME[i]), 100);
+        const int pct = (g.rep[i] + 100) / 2;
+        mini_bar(134, y + 4, 136, 8, pct, g.rep[i] >= 0 ? COL_GREEN : COL_RED);
+        G.drawFastVLine(134 + 68, y + 2, 12, COL_GREY);
+        snprintf(b, sizeof b, "%d", g.rep[i]);
+        ltf(LW - 12, y, 0, g.rep[i] >= 0 ? COL_GREEN : COL_RED, b, 36, top_right);
+    }
+}
+
+// ---- encounter ----
+static void lp_event(void)
+{
+    LovyanGFX &G = d;
+    lsky();
+    const Event *e = &EVENTS[s_ev];
+    int f = e->need_faction >= 0 ? e->need_faction : e->ch[0].eff.rep_fac;
+    uint16_t acc = s_ev == EV_FARO ? COL_GOLD : f >= 0 ? FAC_LOOK[f & 3].glow : COL_CYAN;
+    gui::panel(6, 4, LW - 12, LH - 8, gui::mix(COL_SPACE, f >= 0 ? FAC_LOOK[f & 3].deep : COL_PANEL, 150), acc);
+    int tx = 18;
+    if (s_ev == EV_FARO) { draw_spire(24, 34, 26, false); tx = 40; }
+    else if (f >= 0) { draw_emblem(26, 22, 10, f); tx = 44; }
+    ltf(tx, 12, 1, acc, lp(e->title), LW - tx - 18);
+    const int oy0 = LH - 12 - e->nch * 32;
+    lwrap(18, 42, LW - 36, 18, (oy0 - 46) / 18, COL_WHITE, lp(e->body));
+    for (int i = 0; i < e->nch; i++) {
+        const int y = oy0 + i * 32;
+        const bool sel = i == s_evsel, ok = choice_affordable(&e->ch[i]);
+        if (sel) { G.fillRoundRect(14, y, LW - 28, 28, 6, gui::mix(COL_SPACE, acc, 70)); G.fillRoundRect(16, y + 5, 4, 18, 2, acc); }
+        else G.drawRoundRect(14, y, LW - 28, 28, 6, gui::mix(COL_SPACE, acc, 60));
+        ltf(28, y + 14, 0, !ok ? COL_DIM : sel ? COL_WHITE : COL_GREY, lp(e->ch[i].label), LW - 56, middle_left);
+        nucleo_touch_add(14, y, LW - 28, 28, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + i));
+    }
+}
+
+// ---- mission bay / briefing / debrief ----
+static void lp_missions(void)
+{
+    LovyanGFX &G = d;
+    lsky();
+    lhead(GT("MISSIONI", "MISSIONS"), SYSTEMS[g.sys].name, COL_GREY);
+    int n = eligible_missions(s_elig);
+    if (n == 0) { ltf(LW / 2, LH / 2, 1, COL_DIM, GT("Nessun contratto", "No contracts"), LW - 20, middle_center); return; }
+    if (s_misssel >= n) s_misssel = n - 1;
+    const int rh = 50;
+    for (int i = 0; i < n; i++) {
+        const Mission *m = cur_mission(s_elig[i]);             // also fills s_fv
+        const uint16_t rc = fv_rarcol(s_fv.rarity);
+        const int y = LHDR + 6 + i * rh;
+        const bool sel = i == s_misssel;
+        G.fillRoundRect(6, y, LW - 12, rh - 4, 7, sel ? gui::mix(COL_SPACE, rc, 60) : gui::mix(COL_SPACE, COL_PANEL, 200));
+        G.drawRoundRect(6, y, LW - 12, rh - 4, 7, sel ? rc : gui::mix(COL_SPACE, rc, 70));
+        draw_emblem(24, y + 15, 7, m->offer_fac & 3);
+        ltf(40, y + 4, 1, rc, m->name, LW - 40 - 60);
+        draw_stars(LW - 14, y + 8, s_fv.rarity, rc);
+        char b[24]; snprintf(b, sizeof b, "%d cr", m->reward_cr);
+        int rw = ltf(40, y + 26, 0, COL_AMBER, b, 90);
+        ltf(40 + rw + 12, y + 26, 0, COL_GREY, lp(FA_NAME[s_fv.arch]), 130);
+        int diff = m->waves * m->per_wave + (m->ace ? 2 : 0);
+        for (int sd = 0; sd < diff && sd < 8; sd++) G.fillRect(LW - 18 - (7 - sd) * 8, y + 31, 5, 5, COL_RED);
+        nucleo_touch_add(6, y, LW - 12, rh - 4, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + i));
+    }
+}
+static void lp_brief(void)
+{
+    LovyanGFX &G = d;
+    lsky();
+    const Mission *m = cur_mission(s_pick);
+    const int of = m->offer_fac & 3;
+    const uint16_t rc = fv_rarcol(s_fv.rarity);
+    gui::panel(4, 2, LW - 8, LH - 4, gui::mix(COL_SPACE, FAC_LOOK[of].deep, 110), rc);
+    gui::vgradient(6, 4, LW - 12, 30, FAC_LOOK[of].deep, gui::mix(COL_SPACE, FAC_LOOK[of].deep, 110));
+    lchevron(10, 11, FAC_LOOK[of].glow);
+    nucleo_touch_add(0, 0, 40, 34, NK_BACK, 0);
+    draw_emblem(36, 19, 9, of);
+    ltf(52, 9, 1, rc, m->name, LW - 52 - 14);
+    char b[96];
+    snprintf(b, sizeof b, "%s:", giver(of));
+    int gw = ltf(14, 38, 0, FAC_LOOK[of].glow, b, 200);
+    ltf(LW - 14, 38, 0, rc, lp(FV_RARNAME[s_fv.rarity]), LW - 28 - gw - 10, top_right);
+    lwrap(14, 58, LW - 28, 17, 3, COL_WHITE, m->brief);
+    int li = s_fv.has_enemy ? snprintf(b, sizeof b, "%s: %s", GT("Bersaglio", "Target"), s_mt->target)
+                            : snprintf(b, sizeof b, "%s: %s", GT("Banda", "Gang"), lp(FV_GANG[s_fv.gang]));
+    for (int i = 0; i < s_fv.nmod && li < (int)sizeof b - 4; i++) li += snprintf(b + li, sizeof b - li, " . %s", lp(FV_MODS[s_fv.mod[i]]));
+    ltf(14, 112, 0, COL_CYAN, b, LW - 28);
+    snprintf(b, sizeof b, "%s: %d x%d%s  vs %s", GT("Ostili", "Hostiles"), m->waves, m->per_wave, m->ace ? GT(" +ASSO", " +ACE") : "", lp(FAC_NAME[m->foe_fac]));
+    ltf(14, 130, 0, COL_GREY, b, LW - 28);
+    snprintf(b, sizeof b, "%s %d cr (+%d/%s)   %s +%d", GT("Paga", "Pay"), m->reward_cr, m->kill_cr, GT("abb", "kill"), lp(FAC_NAME[of]), m->rep_gain);
+    ltf(14, 148, 0, COL_AMBER, b, LW - 28);
+    const char *opt[2] = { GT("Accetta e lancia", "Accept & launch"), GT("Annulla", "Decline") };
+    for (int i = 0; i < 2; i++) {
+        const int y = 172 + i * 32;
+        const bool sel = i == s_briefsel;
+        if (sel) { G.fillRoundRect(12, y, LW - 24, 28, 6, gui::mix(COL_SPACE, FAC_LOOK[of].glow, 70)); G.fillRoundRect(14, y + 5, 4, 18, 2, FAC_LOOK[of].glow); }
+        else G.drawRoundRect(12, y, LW - 24, 28, 6, gui::mix(COL_SPACE, FAC_LOOK[of].glow, 60));
+        ltf(26, y + 14, 1, sel ? COL_WHITE : COL_GREY, opt[i], LW - 50, middle_left);
+        nucleo_touch_add(12, y, LW - 24, 28, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + i));
+    }
+}
+static void lp_debrief(void)
+{
+    LovyanGFX &G = d;
+    lsky();
+    const bool win = s_result == 1;
+    lt(LW / 2 + 1, 25, 3, C565(40, 20, 0), win ? GT("VITTORIA", "VICTORY") : GT("RITIRATA", "RETREAT"), middle_center);
+    lt(LW / 2, 24, 3, win ? COL_GOLD : COL_RED, win ? GT("VITTORIA", "VICTORY") : GT("RITIRATA", "RETREAT"), middle_center);
+    lg::font(3); int tw = d.textWidth(win ? GT("VITTORIA", "VICTORY") : GT("RITIRATA", "RETREAT"));
+    G.fillRect(LW / 2 - tw / 2, 44, tw, 2, win ? COL_GOLD : COL_RED);
+    if (win && s_mission >= 0) lwrap(14, 54, LW - 28, 17, 2, COL_WHITE, cur_mission(s_mission)->win);
+    const bool rep = win && s_cc.rep_fac >= 0, acedown = s_fx->ace_down && s_fx->ace_id < NACE;
+    const int cy = 96, chh = 46 + (rep ? 24 : 0) + (acedown ? 24 : 0);
+    gui::panel(8, cy, LW - 16, chh, gui::mix(COL_SPACE, FAC_LOOK[cur_fac()].deep, 120), FAC_LOOK[cur_fac()].glow);
+    char b[48];
+    uint16_t pal[3] = { COL_AMBER, shade(COL_AMBER, 1, 2), COL_WHITE };
+    glyph(ICON7[IC_KILL], 7, 20, cy + 14, 14, pal);
+    snprintf(b, sizeof b, "%s: %d", GT("Abbattuti", "Kills"), s_mkills);
+    ltf(40, cy + 13, 0, COL_GREY, b, 140);
+    snprintf(b, sizeof b, "+%d cr", s_earn_cr);
+    ltf(LW - 20, cy + 10, 2, COL_AMBER, b, 140, top_right);
+    int y = cy + 44;
+    if (rep) {
+        draw_emblem(24, y + 8, 6, s_cc.rep_fac);
+        snprintf(b, sizeof b, "%s +%d", lp(FAC_NAME[s_cc.rep_fac & 3]), s_cc.rep_gain);
+        ltf(36, y, 0, COL_GREEN, b, 120);
+        if (s_cc.enemy_rep_fac >= 0) {
+            draw_emblem(LW / 2 + 14, y + 8, 6, s_cc.enemy_rep_fac);
+            snprintf(b, sizeof b, "%s -%d", lp(FAC_NAME[s_cc.enemy_rep_fac & 3]), s_cc.enemy_rep_loss);
+            ltf(LW / 2 + 26, y, 0, COL_RED, b, 120);
+        }
+        y += 24;
+    }
+    if (acedown) {
+        for (int i = 0; i < 2; i++) { G.drawLine(18, y + 2 + i * 4, 24, y + 7 + i * 4, COL_GOLD); G.drawLine(24, y + 7 + i * 4, 30, y + 2 + i * 4, COL_GOLD); }
+        ltf(38, y, 0, COL_GOLD, ACE_NAME[s_fx->ace_id], LW - 60);
+    }
+    ltf(LW / 2, LH - 24, 0, COL_DIM, GT("tocca per tornare alla stazione", "tap to return to the station"), LW - 20, top_center);
+    lg::field(0, 0, LW, LH);
+}
+
+// ---- the dogfight's native HUD (the field itself is draw_combat on the 320x240 view) ----
+#define LBOOST_X 168                                 // boost gauge: tap along it to set the boost (0..10)
+#define LBOOST_W 40
+#define LMSL_X   214                                 // the missile rack: tap it to fire one
+#define LMSL_W   32
+static void combat_hud_large(void)
+{
+    LovyanGFX &G = d;
+    const int fac = s_cc.foe_fac & 3, top = pf_top();
+    const bool blink = (s_anim >> 2) & 1;
+    G.fillRect(0, 0, LW, top - 1, COL_SPACE);
+    G.drawFastHLine(0, top - 1, LW, FAC_LOOK[fac].trim);
+    lchevron(6, 7, s_now < s_flee_until ? COL_RED : COL_GREY);
+    const int spct = s_shieldmax ? s_shield * 100 / s_shieldmax : 0, hpct = g.hull_max ? g.hull * 100 / g.hull_max : 0;
+    const uint16_t sc_col = spct <= 0 ? (blink ? COL_RED : COL_DIM) : COL_CYAN, hc_col = hpct < 30 ? (blink ? COL_RED : COL_AMBER) : COL_GREEN;
+    icon(IC_SHIELD, 22, 4, sc_col); G.fillRect(32, 5, 54, 6, C565(26, 30, 48)); G.fillRect(32, 5, 54 * clampi(spct, 0, 100) / 100, 6, sc_col);
+    icon(IC_HULL, 22, 16, hc_col);  G.fillRect(32, 17, 54, 6, C565(26, 30, 48)); G.fillRect(32, 17, 54 * clampi(hpct, 0, 100) / 100, 6, hc_col);
+    for (int i = 32 + 5; i < 86; i += 6) { G.drawFastVLine(i, 5, 6, COL_SPACE); G.drawFastVLine(i, 17, 6, COL_SPACE); }
+    // the ward's gauge, or the wave count
+    char b[48];
+    if (s_ward_on) {
+        int wpct = s_ward_max ? s_ward_hp * 100 / s_ward_max : 0;
+        uint16_t wc = wpct < 35 ? (blink ? COL_RED : COL_AMBER) : COL_GREEN;
+        if (s_cc.type == MT_DEFEND) draw_spire(98, 24, 18, true); else icon(IC_CARGO, 94, 10, wc);
+        G.fillRect(106, 11, 52, 7, C565(26, 30, 48)); G.fillRect(106, 11, 52 * clampi(wpct, 0, 100) / 100, 7, wc);
+    } else {
+        icon(IC_WAVE, 94, 10, COL_GREY);
+        snprintf(b, sizeof b, "%d/%d", s_wave, s_cc.waves); ltf(106, 7, 0, COL_GREY, b, 56);
+    }
+    icon(IC_BOOST, LBOOST_X - 2, 3, COL_AMBER);
+    for (int i = 0; i < 5; i++) G.fillRect(LBOOST_X + 8 + i * 6, 22 - i * 3, 4, 4 + i * 3, s_throttle10 > i * 2 ? COL_AMBER : COL_TRACK);
+    for (int i = 0; i < NMSL; i++) {
+        const int mx = LMSL_X + 2 + i * 10;
+        if (i < s_msl_ammo) G.fillTriangle(mx, 6, mx, 22, mx + 7, 14, COL_AMBER);
+        else                G.drawTriangle(mx, 6, mx, 22, mx + 7, 14, COL_DIM);
+    }
+    if (s_now < s_rapid_until) G.drawFastHLine(LMSL_X, 26, LMSL_W - 4, COL_PURPLE);
+    snprintf(b, sizeof b, "%d", s_kills);
+    int kw = ltf(LW - 8, 7, 1, COL_AMBER, b, 40, top_right);
+    icon(IC_KILL, LW - 8 - kw - 11, 10, COL_AMBER);
+    // under the HUD: the ace's radio line, else the ace's name + hp, else the objective (+ combo)
+    const Foe *ace = nullptr;
+    for (int i = 0; i < NFOE; i++) if (s_foe[i].on && s_foe[i].kind == FOE_ACE) ace = &s_foe[i];
+    if (s_now < s_fx->comm_until && s_fx->comm_id <= NACE) {
+        int id = s_fx->comm_id;
+        tile_dither_rect(0, top, LW, 40, 0x00);
+        ltf(6, top + 3, 0, id < NACE ? COL_GOLD : FAC_LOOK[F_ECO].glow, id < NACE ? ACE_NAME[id] : giver(F_ECO), LW - 12);
+        ltf(14, top + 21, 0, COL_WHITE, lp(ACE_QUIP[id]), LW - 20);
+    } else if (ace && s_fx->ace_id < NACE) {
+        int nw = ltf(6, top + 3, 0, COL_GOLD, ACE_NAME[s_fx->ace_id], 180);
+        int bx = 14 + nw, bw = LW - 8 - bx;
+        G.fillRect(bx, top + 9, bw, 5, C565(60, 20, 20));
+        G.fillRect(bx, top + 9, bw * clampi(ace->hp, 0, ace->hpmax) / (ace->hpmax ? ace->hpmax : 1), 5, ace_immune(ace) ? COL_GOLD : COL_RED);
+    } else {
+        objective(b, sizeof b);
+        ltf(7, top + 4, 0, 0x0000, b, LW - 70); ltf(6, top + 3, 0, COL_GREY, b, LW - 70);
+        if (s_combo > 1 && s_now < s_combo_until) { snprintf(b, sizeof b, "x%d", s_combo); ltf(LW - 8, top + 3, 1, blink ? COL_WHITE : COL_PURPLE, b, 60, top_right); }
+    }
+    if (s_fx->cmsg[0] && s_now < s_fx->cmsg_until) {
+        tile_dither_rect(0, LH / 2 - 20, LW, 38, 0x00);
+        ltf(LW / 2, LH / 2, 2, s_fx->ace_id < NACE && !strcmp(s_fx->cmsg, ACE_NAME[s_fx->ace_id]) ? COL_GOLD : COL_CYAN, s_fx->cmsg, LW - 16, middle_center);
+    }
+    if (s_fx->toast[0] && s_now < s_fx->toast_until) ltf(LW / 2, LH / 2 + 26, 1, COL_GREEN, s_fx->toast, LW - 20, top_center);
+    if (s_now - s_combat_t0 < 3500) {                     // the opening legend: how the panel flies
+        tile_dither_rect(24, LH - 52, LW - 48, 42, 0x00);
+        ltf(LW / 2, LH - 48, 0, COL_WHITE, GT("Tocca un nemico: fuoco   Trascina: mira", "Tap a foe: fire   Drag: aim"), LW - 56, top_center);
+        ltf(LW / 2, LH - 30, 0, COL_GREY, GT("Tocca i missili   < due volte: fuga", "Tap the missiles   < twice: flee"), LW - 56, top_center);
+    }
+    // touch: the chevron (Back: twice to flee), the field (tap = aim there + fire on what is under it), the drag pad
+    nucleo_touch_add(0, 0, 18, top, NK_BACK, 0);
+    lg::field(0, 0, LW, LH);
+    nucleo_touch_add_pad(0, top, LW, LH - top, 8);
+}
+static void lcombat_tap(int x, int y)
+{
+    if (s_result) return;
+    if (y < pf_top()) {
+        if (x >= LBOOST_X - 4 && x < LBOOST_X + LBOOST_W) { s_throttle10 = clampi((x - LBOOST_X) * 11 / LBOOST_W, 0, 10); sfx(SFX_MOVE); }
+        else if (x >= LMSL_X && x < LMSL_X + LMSL_W) missile_fire();
+        return;
+    }
+    s_aimx = (float)x; s_aimy = (float)y; s_aim_hv = s_aim_vv = 0;
+    s_aim_h_until = s_aim_v_until = s_now + 400;          // the assist waits: the finger chose the spot
+    lock_scan(-1);
+    if (s_lock >= 0) player_fire();
+}
+
+static void lg_paint(void *)
+{
     switch (s_screen) {
-        case ST_TITLE: {
-            const LgBtn r[] = { { GT("Su", "Up"), NK_UP, 0, false }, { "OK", NK_ENTER, 0, true }, { GT("Giu", "Down"), NK_DOWN, 0, false } };
-            lg_row(by1, bh1, r, 3); break;
-        }
-        case ST_SETTINGS: {
-            const LgBtn r[] = { { GT("Su", "Up"), NK_UP, 0, false }, { GT("Cambia", "Change"), NK_ENTER, 0, true }, { GT("Giu", "Down"), NK_DOWN, 0, false } };
-            lg_row(by1, bh1, r, 3); break;
-        }
-        case ST_CINE: {
-            const LgBtn r[] = { { GT("Salta", "Skip"), NK_ENTER, 0, true } };
-            lg_row(by1, bh1, r, 1); break;
-        }
-        case ST_MAP: {
-            const LgBtn r[] = { { GT("< Sist", "< Sys"), NK_UP, 0, false }, { GT("SALTA", "JUMP"), NK_ENTER, 0, true }, { GT("Sist >", "Sys >"), NK_DOWN, 0, false }, { GT("Torna", "Back"), NK_BACK, 0, false } };
-            lg_row(by1, bh1, r, 4); break;
-        }
-        case ST_SYSTEM: case ST_SHIPYARD: case ST_MISSIONS: {
-            const LgBtn r[] = { { GT("Su", "Up"), NK_UP, 0, false }, { GT("Scegli", "Select"), NK_ENTER, 0, true }, { GT("Giu", "Down"), NK_DOWN, 0, false }, { GT("Torna", "Back"), NK_BACK, 0, false } };
-            lg_row(by1, bh1, r, 4); break;
-        }
-        case ST_MARKET: {
-            const LgBtn top[] = { { GT("Su", "Up"), NK_UP, 0, false }, { GT("Giu", "Down"), NK_DOWN, 0, false } };
-            lg_row(r1, rh, top, 2);
-            const LgBtn bot[] = { { GT("Compra", "Buy"), NK_ENTER, 0, true }, { GT("Vendi", "Sell"), NK_CHAR, 's', false }, { GT("Indietro", "Back"), NK_BACK, 0, false } };
-            lg_row(r2, rh, bot, 3); break;
-        }
-        case ST_EVENT: {
-            const LgBtn r[] = { { GT("Su", "Up"), NK_UP, 0, false }, { GT("Scegli", "Choose"), NK_ENTER, 0, true }, { GT("Giu", "Down"), NK_DOWN, 0, false } };
-            lg_row(by1, bh1, r, 3); break;
-        }
-        case ST_BRIEF: {
-            const LgBtn r[] = { { GT("Scelta", "Toggle"), NK_UP, 0, false }, { GT("Conferma", "Confirm"), NK_ENTER, 0, true }, { GT("Indietro", "Back"), NK_BACK, 0, false } };
-            lg_row(by1, bh1, r, 3); break;
-        }
-        case ST_DEBRIEF: {
-            const LgBtn r[] = { { GT("Continua", "Continue"), NK_ENTER, 0, true } };
-            lg_row(by1, bh1, r, 1); break;
-        }
-        case ST_COMBAT: {
-            lg::font(0); d.setTextDatum(top_right); d.setTextColor(COL_AMBER, COL_PANEL);
-            snprintf(b, sizeof b, GT("Spinta %d", "Boost %d"), s_throttle10); d.drawString(b, W320 - 8, y + 2);
-            d.setTextDatum(top_left);
-            const LgBtn aim[] = { { "<", NK_LEFT, 0, false }, { "^", NK_UP, 0, false }, { "v", NK_DOWN, 0, false }, { ">", NK_RIGHT, 0, false } };
-            lg_row(r1 + 6, rh - 6, aim, 4);
-            const LgBtn act[] = { { GT("FUOCO", "FIRE"), NK_ENTER, 0, true }, { GT("Missile", "Missile"), NK_CHAR, 's', false }, { "-", NK_CHAR, '[', false }, { "+", NK_CHAR, ']', false } };
-            lg_row(r2, rh, act, 4); break;
-        }
-        default: {
-            const LgBtn r[] = { { GT("Indietro", "Back"), NK_BACK, 0, true } };
-            lg_row(by1, bh1, r, 1); break;
-        }
+        case ST_TITLE:    lp_title(); break;
+        case ST_SETTINGS: lp_settings(); break;
+        case ST_CINE:     lp_cine(); break;
+        case ST_MAP:      lp_map(); break;
+        case ST_SYSTEM:   lp_system(); break;
+        case ST_MARKET:   lp_market(); break;
+        case ST_SHIPYARD: lp_shipyard(); break;
+        case ST_PLANCIA:  lp_plancia(); break;
+        case ST_EVENT:    lp_event(); break;
+        case ST_MISSIONS: lp_missions(); break;
+        case ST_BRIEF:    lp_brief(); break;
+        case ST_COMBAT:   draw_combat(); break;
+        case ST_DEBRIEF:  lp_debrief(); break;
+        default: break;
     }
 }
 static void draw_large(void)
 {
     nucleo_touch_clear();
-    lg::game(draw_game, lg_hud, "Costellazioni", COL_CYAN);
+    lg::frame(lg_paint, nullptr);
     nucleo_touch_commit();
+}
+// A touch on the panel (a row target or a field tap): true when handled.
+static bool lg_key(int k, char ch)
+{
+    int tx = 0, ty = 0;
+    const bool fld = lg::tap(k, ch, &tx, &ty);
+    const int ri = nucleo_touch_is_row(k, ch) ? ch - NUCLEO_TOUCH_ROW : -1;
+    if (!fld && ri < 0) return false;
+    switch (s_screen) {
+        case ST_TITLE: {
+            int act[4]; int n = title_items(act);
+            if (ri < 0 || ri >= n) return true;
+            if (s_tmenu.sel == ri) title_enter(); else { s_tmenu.sel = (int8_t)ri; sfx(SFX_MOVE); req(); }
+            return true;
+        }
+        case ST_SETTINGS:
+            if (ri < 0 || ri >= set_count()) return true;
+            if (s_smenu.sel == ri) settings_activate(); else { s_smenu.sel = (int8_t)ri; s_del_armed = false; sfx(SFX_MOVE); req(); }
+            return true;
+        case ST_CINE:     if (fld) cine_end(); return true;
+        case ST_MAP:      if (fld) lmap_tap(tx, ty); return true;
+        case ST_SYSTEM:                                          // a card opens at once
+            if (ri < 0 || ri >= 6) return true;
+            s_hubsel = ri; hub_open(); return true;
+        case ST_MARKET:   if (fld) lmarket_tap(tx, ty); return true;
+        case ST_SHIPYARD:
+            if (ri < 0 || ri >= 8) return true;
+            if (s_yardsel == ri) buy_upgrade(ri); else { s_yardsel = ri; sfx(SFX_MOVE); }
+            req(); return true;
+        case ST_EVENT:
+            if (ri < 0 || ri >= EVENTS[s_ev].nch) return true;
+            if (s_evsel == ri) apply_choice(); else { s_evsel = ri; sfx(SFX_MOVE); req(); }
+            return true;
+        case ST_MISSIONS: {
+            int el[NMISS_PER_SYS]; int n = eligible_missions(el);
+            if (ri < 0 || ri >= n) return true;
+            if (s_misssel == ri) { s_pick = el[ri]; s_briefsel = 0; sfx(SFX_OK); go(ST_BRIEF); }
+            else { s_misssel = ri; sfx(SFX_MOVE); req(); }
+            return true;
+        }
+        case ST_BRIEF:
+            if (ri < 0 || ri > 1) return true;
+            if (s_briefsel != ri) { s_briefsel = ri; sfx(SFX_MOVE); req(); return true; }
+            if (ri == 0) combat_begin_mission(s_pick); else { sfx(SFX_BACK); go(ST_MISSIONS); }
+            return true;
+        case ST_COMBAT:   if (fld) lcombat_tap(tx, ty); return true;
+        case ST_DEBRIEF:  if (fld) { sfx(SFX_OK); go(ST_SYSTEM); } return true;
+        default: return true;
+    }
 }
 static const char *scr_name(void)
 {
@@ -3437,7 +4160,7 @@ static void draw_companion(void)
         snprintf(b, sizeof b, GT("Scafo %d/%d  Carb %d/%d", "Hull %d/%d  Fuel %d/%d"), g.hull < 0 ? 0 : g.hull, g.hull_max, g.fuel, g.fuel_max);
         gui::text(b, 8, y + 26, 0, gui::F_SMALL, COL_GREEN, 0);
     }
-    lg::comp_keys(GT("Tocca i tasti sul pannello", "Use the panel buttons"));
+    lg::comp_keys(GT("Tocca righe, mappa, nemici", "Tap rows, the map, foes"));
 }
 static void on_draw(void)
 {
@@ -3458,6 +4181,7 @@ static bool poll(void)
     // The double buffer composites off-screen and blits once, so this is flicker-free (same as combat).
     // Combat and the cinematics run at the ~50 Hz of the main loop (smooth aim, streaks, explosions); the map
     // breathes at ~30 Hz. s_anim is a 30 Hz clock whatever the frame rate, so blinks keep their pace.
+    if (s_screen == ST_CINE && s_now - s_cine_t0 >= cine_dur(s_cine)) { cine_end(); return true; }
     bool animated = (s_screen == ST_MAP || s_screen == ST_CINE || s_screen == ST_COMBAT);
     if (!animated) return false;
     int64_t elapsed = s_now - s_last_frame;

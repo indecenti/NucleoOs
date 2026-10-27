@@ -68,8 +68,8 @@ static void draw_title(void) {
     hero_signature(0, (now % 2400) / 2400.0f, &st, &an);
     pose_hero(0, st, an, 26, CH - 4, 28, +1, 150, ACC);
     pose_hero(1, BS_IDLE, (now % 4000) / 4000.0f, BR_SW - 26, CH - 4, 28, -1, 150, ACC);
-    const char *it[NM_ITEMS] = { GT("Gioca", "Play"), GT("Co-op 2 giocatori", "Co-op 2 players"), GT("Opzioni", "Options") };
-    gui::menu(s_menu, it, NM_ITEMS, y, CH, ACC);
+    const char *it[NM_ITEMS];
+    gui::menu(s_menu, it, menu_rows(it, nullptr), y, CH, ACC);
 }
 
 // ============================ SC_SEL (character select) ======================
@@ -79,7 +79,7 @@ static int s_coop_host = 1;    // co-op role chosen on SC_COOP: 1 = Host (player
 
 // Trade-offs only read at a glance if each bar is filled RELATIVE to the roster: the leader is full, the
 // laggard a short (never empty) stub. Mapped into 0.30..1.00 over [lo..hi].
-static float stat_frac(int stat, int idx) {
+float menu_stat(int stat, int idx) {
     float v[3];
     for (int i = 0; i < 3; i++) {
         const HeroDef *h = brawler_hero(i);
@@ -89,6 +89,12 @@ static float stat_frac(int stat, int idx) {
     return hi - lo < 0.001f ? 1.0f : 0.30f + 0.70f * (v[idx] - lo) / (hi - lo);
 }
 
+void menu_hero(int idx, bool sel, float sx, float feetY, float sc) {
+    uint32_t now = br_now_ms();
+    BrState pst = BS_IDLE; float panim = (now % 3000) / 3000.0f + idx * 0.33f;
+    if (sel) hero_signature(idx, (now % 1600) / 1600.0f, &pst, &panim);
+    pose_hero(idx, pst, panim, sx, feetY, sc, +1, sel ? 0 : 130, sel ? ACC : 0);
+}
 static void hero_card(int idx, int x, int cw) {
     const HeroDef *h = brawler_hero(idx);
     bool sel = (g.sel == idx);
@@ -98,10 +104,7 @@ static void hero_card(int idx, int x, int cw) {
               sel ? WHITE : MUTED, BLACK);
     // the posed silhouette AT THIS HERO'S OWN BUILD; the pick performs its signature move on a loop, the
     // others idle out of phase so the line-up breathes.
-    uint32_t now = br_now_ms();
-    BrState pst = BS_IDLE; float panim = (now % 3000) / 3000.0f + idx * 0.33f;
-    if (sel) hero_signature(idx, (now % 1600) / 1600.0f, &pst, &panim);
-    pose_hero(idx, pst, panim, x + cw / 2, top + 55, 17, +1, sel ? 0 : 130, sel ? ACC : 0);
+    menu_hero(idx, sel, x + cw / 2, top + 55, 17);
     gui::text(brawler_hero_style(idx), x + cw / 2, top + 56, 1, gui::F_SMALL, sel ? WHITE : MUTED, BLACK);
 }
 // The picked hero's four stats under the cards, relative to the roster (power in red: the edge).
@@ -112,13 +115,16 @@ static void hero_stats(int idx) {
         d.setTextColor(MUTED); d.setCursor(x, y); d.print(tag[s]);
         int bx = x + 22, bw = 88;
         d.fillRect(bx, y, bw, 7, gui::rgb(36, 36, 85));
-        d.fillRect(bx, y, (int)(bw * stat_frac(s, idx)), 7, s == 2 ? ACC : WHITE);
+        d.fillRect(bx, y, (int)(bw * menu_stat(s, idx)), 7, s == 2 ? ACC : WHITE);
     }
+}
+const char *menu_sel_head(void) {
+    return s_coop ? (s_coop_host ? GT("OSPITI: scegli il tuo", "HOST: pick yours") : GT("TI UNISCI: scegli il tuo", "JOIN: pick yours"))
+                  : GT("Scegli il lottatore", "Choose your fighter");
 }
 static void draw_select(void) {
     backdrop();
-    const char *hdr = s_coop ? (s_coop_host ? GT("OSPITI: scegli il tuo", "HOST: pick yours") : GT("TI UNISCI: scegli il tuo", "JOIN: pick yours"))
-                             : GT("Scegli il lottatore", "Choose your fighter");
+    const char *hdr = menu_sel_head();
     gui::text(hdr, BR_SW / 2, 2, 1, gui::text_width(hdr, gui::F_BODY) <= BR_SW - 8 ? gui::F_BODY : gui::F_SMALL, WHITE, BLACK);
     int cw = (BR_SW - 8 - 2 * 4) / 3;
     for (int i = 0; i < 3; i++) hero_card(i, 4 + i * (cw + 4), cw);
@@ -176,21 +182,37 @@ void menu_coop_start(void) {
 #define NO_ITEMS 3
 static void draw_options(void) {
     int y = gui::title(GT("Opzioni", "Options"), nullptr, ACC);
-    char a[32], df[40];
-    snprintf(a, sizeof a, "%s: %s", GT("Audio", "Audio"), g.audio ? GT("Si", "On") : GT("No", "Off"));
-    snprintf(df, sizeof df, "%s: %s", GT("Difficolta", "Difficulty"),
+    char b[2][40]; const char *it[NO_ITEMS];
+    gui::menu(s_menu, it, menu_rows(it, b), y, CH, ACC);
+}
+// The rows of the current list screen (title / options / co-op) into it[] (options format into b): the count.
+int menu_rows(const char **it, char (*b)[40]) {
+    if (g.screen == SC_MENU) { it[0] = GT("Gioca", "Play"); it[1] = GT("Co-op 2 giocatori", "Co-op 2 players"); it[2] = GT("Opzioni", "Options"); return NM_ITEMS; }
+    if (g.screen == SC_COOP) { it[0] = GT("Ospita la partita", "Host a game"); it[1] = GT("Unisciti", "Join"); return 2; }
+    if (g.screen != SC_OPT || !b) return 0;
+    snprintf(b[0], 40, "%s: %s", GT("Audio", "Audio"), g.audio ? GT("Si", "On") : GT("No", "Off"));
+    snprintf(b[1], 40, "%s: %s", GT("Difficolta", "Difficulty"),
              g.diff == 0 ? GT("Facile", "Easy") : g.diff == 1 ? GT("Normale", "Normal") : GT("Difficile", "Hard"));
-    const char *it[NO_ITEMS] = { a, df, GT("Comandi", "Controls") };
-    gui::menu(s_menu, it, NO_ITEMS, y, CH, ACC);
+    it[0] = b[0]; it[1] = b[1]; it[2] = GT("Comandi", "Controls");
+    return NO_ITEMS;
+}
+int  menu_cursor(void) { return s_menu.sel; }
+void menu_pick(int i) {          // a tapped row: the first tap selects it, a second one opens it
+    if (s_menu.sel == i) { menu_key(NK_ENTER, 0); return; }
+    s_menu.sel = (int8_t)i; bsfx(BSFX_NAV);
 }
 
 // ============================ SC_HELP =======================================
+void menu_help(const char **key, const char **act) {
+    key[0] = "E S A D"; key[1] = "J"; key[2] = "K"; key[3] = GT("L / Spazio", "L / Space"); key[4] = "Esc / TAB";
+    act[0] = GT("muovi", "move"); act[1] = GT("pugno, ripeti: combo", "punch, repeat: combo");
+    act[2] = GT("calcio, atterra", "kick, knocks down"); act[3] = GT("salto, J/K in aria", "jump, J/K in the air");
+    act[4] = GT("pausa", "pause");
+}
 static void draw_help(void) {
     int y = gui::title(GT("Comandi", "Controls"), nullptr, ACC);
-    const char *key[5] = { "E S A D", "J", "K", GT("L / Spazio", "L / Space"), "Esc / TAB" };
-    const char *act[5] = { GT("muovi", "move"), GT("pugno, ripeti: combo", "punch, repeat: combo"),
-                           GT("calcio, atterra", "kick, knocks down"), GT("salto, J/K in aria", "jump, J/K in the air"),
-                           GT("pausa", "pause") };
+    const char *key[5], *act[5];
+    menu_help(key, act);
     for (int i = 0; i < 5; i++) {
         int ry = y + i * 16;
         gui::text(key[i], 10, ry, 0, gui::F_SMALL, i == 1 ? ACC : WHITE, BLACK);
@@ -201,8 +223,8 @@ static void draw_help(void) {
 // ============================ SC_COOP (host / join) =========================
 static void draw_coop(void) {
     int y = gui::title(GT("Co-op 2 giocatori", "Co-op 2 players"), GT("Uno ospita, l'altro si unisce", "One hosts, the other joins"), ACC);
-    const char *it[2] = { GT("Ospita la partita", "Host a game"), GT("Unisciti", "Join") };
-    gui::menu(s_menu, it, 2, y, CH, ACC);
+    const char *it[2];
+    gui::menu(s_menu, it, menu_rows(it, nullptr), y, CH, ACC);
 }
 
 // ============================ public: menu_draw =============================

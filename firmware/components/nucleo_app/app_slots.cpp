@@ -47,17 +47,28 @@ static const uint16_t COL_FELT = RGB(0, 73, 36), COL_DARK = RGB(0, 36, 0), COL_G
 static inline uint16_t mix(uint16_t a, uint16_t b, int t) { return gui::mix(a, b, t); }
 
 // ============================ geometry =======================================
+// The view: the compact 240-wide frame, or the native 320x240 panel (view_set(true), two screens). The painters
+// read W, the content height and the reel geometry from here, so one set draws both screens at their own size.
+static bool s_big;
+static int  s_vw = 240, s_vh = 119, s_reelw = 62, s_reelgap = 7, s_cellh = 33, s_gridy = 18, s_syms = 15, s_gridx = 20;
+#define W      s_vw
 #define NREEL 3
 #define NROW  3
 #define SLEN  30
-#define REEL_W 62
-#define REEL_GAP 7
-#define GRID_W (NREEL * REEL_W + (NREEL - 1) * REEL_GAP)   // 200
-#define GRID_X ((W - GRID_W) / 2)                          // 20
-#define CELL_H 33
-#define GRID_Y 18
+#define REEL_W   s_reelw
+#define REEL_GAP s_reelgap
+#define GRID_W (NREEL * REEL_W + (NREEL - 1) * REEL_GAP)   // 200 (panel 238)
+#define GRID_X s_gridx                                     // 20 (panel 30: the lever stands on the right)
+#define CELL_H s_cellh
+#define GRID_Y s_gridy
 #define GRID_H (NROW * CELL_H)                             // 99  -> window 18..117 (fills down to the system footer)
-#define SYM_S  15                                          // symbol half-size (px)
+#define SYM_S  s_syms                                      // symbol half-size (px)
+static void view_set(bool big)
+{
+    s_big = big; s_vw = big ? 320 : 240; s_vh = big ? 240 : nucleo_app_content_height();
+    s_reelw = big ? 74 : 62; s_reelgap = big ? 8 : 7; s_cellh = big ? 44 : 33; s_gridy = big ? 40 : 18; s_syms = big ? 19 : 15;
+    s_gridx = big ? 30 : 20;
+}
 
 // ============================ symbols / paytable =============================
 enum { SY_CHERRY = 0, SY_LEMON, SY_PLUM, SY_BELL, SY_BAR, SY_DIAMOND, SY_SEVEN, SY_WILD, NSYM };
@@ -145,6 +156,9 @@ static void dec(int *v, int n) { *v -= n; if (*v < 0) *v = 0; }
 static int   total_bet(void) { return LINES_OPT[g_lines_idx] * BET_OPT[g_bet_idx]; }
 static int   active_lines(void) { return LINES_OPT[g_lines_idx]; }
 static void  go(int s);
+static void  on_key(int k, char ch);
+static bool  on_back(int key);
+static bool  lg_key(int k, char ch);
 
 // ============================ persistence ====================================
 #define DIRR "/sd/data/slots"
@@ -301,7 +315,14 @@ static void draw_sym(int cx, int cy, int s, int id, int glow)
 }
 
 // ============================ background / cabinet ===========================
-static void draw_felt(void) { gui::vgradient(0, 0, W, nucleo_app_content_height(), RGB(0, 109, 36), COL_DARK); }
+static void draw_felt(void) { gui::vgradient(0, 0, W, s_vh, RGB(0, 109, 36), COL_DARK); }
+// Where payline tab l sits: lines 1-3 on the left at their rows, 4-5 on the right where they end.
+static void tab_xy(int l, int *x, int *y)
+{
+    const int right = l >= 3, row = right ? PAYLINE[l][2] : PAYLINE[l][0];
+    *x = right ? GRID_X + GRID_W + 4 : GRID_X - (s_big ? 24 : 18);
+    *y = GRID_Y + row * CELL_H + CELL_H / 2 - (s_big ? 9 : 6);
+}
 static void draw_cabinet(void)
 {
     // triple gold frame hugging the reel window, corner bolts
@@ -310,15 +331,24 @@ static void draw_cabinet(void)
     d.drawRoundRect(GRID_X - 1, GRID_Y - 1, GRID_W + 2, GRID_H + 2, 3, COL_GOLDL);
     for (int i = 0; i < 4; i++) { int bx = i & 1 ? GRID_X + GRID_W + 1 : GRID_X - 2, by = i & 2 ? GRID_Y + GRID_H + 1 : GRID_Y - 2; d.fillSmoothCircle(bx, by, 2, COL_GOLDL); }
     // payline tabs on the cabinet edges: lines 1-3 on the left at their rows, 4-5 on the right where they end
+    const int tw = s_big ? 20 : 14, th = s_big ? 18 : 12;
     for (int l = 0; l < 5; l++) {
         bool on = l < active_lines();
-        int right = l >= 3, row = right ? PAYLINE[l][2] : PAYLINE[l][0];
-        int x = right ? GRID_X + GRID_W + 4 : 2, y = GRID_Y + row * CELL_H + CELL_H / 2 - 6;
+        int x, y; tab_xy(l, &x, &y);
         uint16_t c = s_linewin[l] ? COL_WHITE : on ? LINECOL[l] : RGB(36, 73, 36);
-        d.fillSmoothRoundRect(x, y, 14, 12, 3, c);
+        d.fillSmoothRoundRect(x, y, tw, th, 3, c);
         char b[2] = { (char)('1' + l), 0 };
-        d.setTextColor(on ? COL_DARK : RGB(73, 109, 73)); d.setCursor(x + 4, y + 2); d.print(b);
+        d.setTextColor(on ? COL_DARK : RGB(73, 109, 73)); d.setCursor(x + tw / 2 - 2, y + th / 2 - 4); d.print(b);
     }
+    if (!s_big) return;
+    // the panel: the machine's lever on the right (tap it, or the reels, to spin); pulled down while they turn
+    const int lx = 304, ky = s_pp == PP_SPIN ? GRID_Y + GRID_H - 22 : GRID_Y + 14;
+    d.fillRoundRect(lx - 4, GRID_Y + 6, 8, GRID_H - 12, 4, COL_DARK);
+    d.drawRoundRect(lx - 4, GRID_Y + 6, 8, GRID_H - 12, 4, COL_GOLDD);
+    const int py = GRID_Y + GRID_H / 2;
+    d.fillRect(lx - 2, ky < py ? ky : py, 4, ky < py ? py - ky : ky - py, COL_GREY);
+    d.fillSmoothCircle(lx, py, 6, COL_GOLDD);
+    d.fillSmoothCircle(lx, ky, 11, COL_REDD); d.fillSmoothCircle(lx - 1, ky - 1, 9, COL_RED); d.fillCircle(lx - 4, ky - 4, 3, COL_PINK);
 }
 
 // ============================ reels render ===================================
@@ -361,9 +391,12 @@ static void draw_reel_one(int reel)
 }
 static void draw_reels(void)
 {
-    d.setClipRect(GRID_X, GRID_Y, GRID_W, GRID_H);
-    for (int r = 0; r < NREEL; r++) draw_reel_one(r);
-    d.clearClipRect();
+    int32_t cx, cy, cw, ch;                       // clip to the window, inside the current clip (the panel's strip)
+    d.getClipRect(&cx, &cy, &cw, &ch);
+    const int x0 = GRID_X > cx ? GRID_X : cx, y0 = GRID_Y > cy ? GRID_Y : cy;
+    const int x1 = GRID_X + GRID_W < cx + cw ? GRID_X + GRID_W : cx + cw, y1 = GRID_Y + GRID_H < cy + ch ? GRID_Y + GRID_H : cy + ch;
+    if (x1 > x0 && y1 > y0) { d.setClipRect(x0, y0, x1 - x0, y1 - y0); for (int r = 0; r < NREEL; r++) draw_reel_one(r); }
+    d.setClipRect(cx, cy, cw, ch);
     for (int r = 0; r < NREEL - 1; r++) d.drawFastVLine(GRID_X + r * (REEL_W + REEL_GAP) + REEL_W + REEL_GAP / 2, GRID_Y, GRID_H, COL_GOLDD);   // gold posts
     // anticipation: dim the settled reels with a screen-door, spotlight the still-spinning last reel
     if (s_antic && r_phase[NREEL - 1] != 0) {
@@ -377,21 +410,59 @@ static void draw_reels(void)
 }
 
 // ============================ HUD ============================================
+// The panel's back chevron (tap = Back, like Esc).
+static void lchev(void)
+{
+    for (int k = 0; k < 2; k++) { d.drawLine(16 + k, 8, 10 + k, 15, COL_GOLDL); d.drawLine(10 + k, 15, 16 + k, 22, COL_GOLDL); }
+    nucleo_touch_add(0, 0, 70, 30, NK_BACK, 0);
+}
 static void draw_hud(void)
 {
     char b[28];
-    d.fillRect(0, 0, W, 16, COL_DARK);
-    d.drawFastHLine(0, 15, W, COL_GOLDD);
-    d.fillSmoothCircle(9, 8, 6, COL_GOLD); d.drawCircle(9, 8, 6, COL_GOLDD); d.drawCircle(9, 8, 3, COL_GOLDD);   // a coin
+    const int hh = s_big ? 30 : 16, cx = s_big ? 36 : 9, ty = s_big ? 7 : 0, ay = hh / 2 - 6;
+    d.fillRect(0, 0, W, hh, COL_DARK);
+    d.drawFastHLine(0, hh - 1, W, COL_GOLDD);
+    if (s_big) lchev();
+    d.fillSmoothCircle(cx, hh / 2, 6, COL_GOLD); d.drawCircle(cx, hh / 2, 6, COL_GOLDD); d.drawCircle(cx, hh / 2, 3, COL_GOLDD);   // a coin
     snprintf(b, sizeof b, "%d", (int)(s_disp_bal + 0.5f));
     bool rolling = ((int)(s_disp_bal + 0.5f) != g_balance);                            // credits counting up after a win
-    txt(b, 19, -1, 0, gui::F_BODY, rolling && ((s_anim >> 1) & 1) ? COL_WHITE : COL_GOLDL);
+    txt(b, cx + 10, s_big ? 3 : -1, 0, s_big ? gui::F_TITLE : gui::F_BODY, rolling && ((s_anim >> 1) & 1) ? COL_WHITE : COL_GOLDL);
     snprintf(b, sizeof b, GT("Puntata %d", "Bet %d"), total_bet());
-    txt(b, W - 4, 0, 2, gui::F_SMALL, COL_CREAM);
+    txt(b, W - 6, ty, 2, gui::F_SMALL, COL_CREAM);
     if (s_auto) {                                                                       // autospin indicator
-        d.fillSmoothRoundRect(W / 2 - 2, 2, 34, 12, 4, mix(COL_DARK, COL_CYAN, 90));
-        d.setTextColor(((s_anim >> 2) & 1) ? COL_WHITE : COL_CYAN); d.setCursor(W / 2 + 3, 4); d.print("AUTO");
+        d.fillSmoothRoundRect(W / 2 - 2, ay, 34, 12, 4, mix(COL_DARK, COL_CYAN, 90));
+        d.setTextColor(((s_anim >> 2) & 1) ? COL_WHITE : COL_CYAN); d.setCursor(W / 2 + 3, ay + 2); d.print("AUTO");
     }
+}
+// The panel's bet row under the machine: the bet per line as five coins (tap one = that bet) and the AUTO lamp.
+static void draw_bet_row(void)
+{
+    const bool idle = s_pp == PP_IDLE;
+    txt(GT("Puntata/linea", "Bet/line"), 12, 180, 0, gui::F_SMALL, COL_GOLDL);
+    for (int i = 0; i < 5; i++) {
+        const bool on = i == g_bet_idx; const int x = 10 + i * 50;
+        d.fillSmoothRoundRect(x, 198, 44, 34, 8, on ? COL_GOLD : mix(COL_DARK, COL_FELT, idle ? 120 : 40));
+        d.drawRoundRect(x, 198, 44, 34, 8, on ? COL_GOLDL : COL_GOLDD);
+        char b[4]; snprintf(b, sizeof b, "%d", BET_OPT[i]);
+        txt(b, x + 22, 205, 1, gui::F_BODY, on ? COL_DARK : idle ? COL_CREAM : COL_GREY);
+    }
+    d.fillSmoothRoundRect(262, 186, 50, 46, 10, s_auto ? mix(COL_DARK, COL_CYAN, 140) : COL_DARK);
+    d.drawRoundRect(262, 186, 50, 46, 10, COL_CYAN);
+    txt("AUTO", 287, 201, 1, gui::F_SMALL, s_auto && ((s_anim >> 2) & 1) ? COL_WHITE : COL_CYAN);
+}
+// A tap on the machine (the field below the header).
+static void machine_tap(int x, int y)
+{
+    if (s_pp == PP_SPIN) { on_key(NK_ENTER, 0); return; }                              // slam-stop
+    if (s_pp != PP_IDLE) return;
+    if (y >= GRID_Y - 6 && y < GRID_Y + GRID_H + 6) {
+        for (int l = 0; l < 5; l++) {                                                  // a payline tab: play up to that line
+            int tx, ty; tab_xy(l, &tx, &ty);
+            if (x >= tx - 4 && x < tx + 24 && y >= ty - 6 && y < ty + 24) { g_lines_idx = l == 0 ? 0 : l < 3 ? 1 : 2; sfx(SFX_BET); return; }
+        }
+        on_key(NK_ENTER, 0);                                                           // the reels / the lever: spin
+    } else if (y >= 186 && x >= 258) on_key(NK_CHAR, 'a');                             // the AUTO lamp
+    else if (y >= 190 && x < 256) { const int i = (x - 8) / 50; if (i >= 0 && i < 5 && i != g_bet_idx) { g_bet_idx = i; sfx(SFX_BET); } }
 }
 
 // ============================ coin particles / fireworks =====================
@@ -594,38 +665,81 @@ static void settle_spin(void)
 }
 
 // ============================ screens: menu / help / settings / over =========
+// The shared title / menu / dialog, drawn natively on the panel (touch rows, a back chevron, a tappable card).
+static int title_bar(const char *name, const char *sub)
+{
+    if (!s_big) return gui::title(name, sub, COL_GOLD);
+    gui::vgradient(0, 0, W, s_vh, mix(0, COL_GOLD, 60), COL_DARK);
+    d.fillRect(0, 0, W, 30, COL_DARK); d.drawFastHLine(0, 29, W, COL_GOLDD);
+    lchev();
+    txt(name, W / 2, 4, 1, gui::F_TITLE, COL_GOLDL);
+    if (sub) txt(sub, W / 2, 34, 1, gui::F_SMALL, COL_CREAM);
+    return sub ? 58 : 38;
+}
+static void menu_rows(const gui::Menu &m, const char *const *it, int n, int y0)
+{
+    if (!s_big) { gui::menu(m, it, n, y0, s_vh, COL_GOLD); return; }
+    int rh = (s_vh - y0 - 4) / n; if (rh > 54) rh = 54;
+    for (int i = 0; i < n; i++) {
+        const int y = y0 + i * rh; const bool sel = i == m.sel;
+        d.fillSmoothRoundRect(28, y + 3, W - 56, rh - 6, 10, sel ? mix(0, COL_GOLD, 150) : mix(COL_DARK, 0, 60));
+        d.drawRoundRect(28, y + 3, W - 56, rh - 6, 10, sel ? COL_GOLDL : COL_GOLDD);
+        txt(it[i], W / 2, y + rh / 2 - 7, 1, gui::F_BODY, sel ? COL_WHITE : COL_CREAM);
+        if (!s_confirm) nucleo_touch_add(0, y, W, rh, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + i));
+    }
+}
+// tkeys == nullptr on the panel: a Yes / No pair (rows 0 / 1); else the card itself is the tap target.
+static void dlg(const char *head, const char *l1, const char *keys, const char *tkeys, uint16_t acc)
+{
+    if (!s_big) { gui::dialog(head, l1, nullptr, keys, acc); return; }
+    const int x = 30, y = 62, w = 260, h = 116;
+    gui::panel(x, y, w, h, COL_DARK, acc);
+    txt(head, W / 2, y + 10, 1, gui::F_TITLE, acc);
+    if (l1) txt(l1, W / 2, y + 42, 1, gui::F_SMALL, COL_WHITE);
+    if (tkeys) { txt(tkeys, W / 2, y + 80, 1, gui::F_SMALL, COL_GOLDL); lg::field(x, y, w, h); return; }
+    for (int i = 0; i < 2; i++) {
+        const int bx = x + 20 + i * 116;
+        d.fillSmoothRoundRect(bx, y + 70, 104, 34, 8, i ? mix(COL_DARK, COL_GREY, 90) : COL_RED);
+        txt(i ? "No" : GT("Si", "Yes"), bx + 52, y + 77, 1, gui::F_BODY, COL_WHITE);
+        nucleo_touch_add(bx, y + 70, 104, 34, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + i));
+    }
+}
 static void draw_menu(void)
 {
     char sub[32]; snprintf(sub, sizeof sub, GT("Crediti %d", "Credits %d"), g_balance);
-    int y = gui::title("SLOT", sub, COL_GOLD);
-    draw_sym(22, 16, 11, SY_SEVEN, 40); draw_sym(W - 22, 16, 11, SY_CHERRY, 40);
+    int y = title_bar("SLOT", sub);
+    const int sx = s_big ? 112 : 22;
+    draw_sym(sx, 16, 11, SY_SEVEN, 40); draw_sym(W - sx, 16, 11, SY_CHERRY, 40);
     const char *items[3] = { GT("Gioca", "Play"), GT("Come si gioca", "How to play"), GT("Impostazioni", "Settings") };
-    gui::menu(s_menu, items, 3, y, nucleo_app_content_height(), COL_GOLD);
+    menu_rows(s_menu, items, 3, y);
 }
 static void draw_help(void)
 {
-    int ch = nucleo_app_content_height();
+    int ch = s_vh;
     const char *titles[3] = { GT("Obiettivo", "Objective"), GT("Comandi", "Controls"), GT("Simboli", "Symbols") };
-    int y = gui::title(titles[s_help], nullptr, COL_GOLD);
+    int y = title_bar(titles[s_help], nullptr);
+    const int lp = s_big ? 26 : 17, fb = s_big ? gui::F_BODY : gui::F_SMALL;   // the panel: bigger type, airier lines
+    if (s_big) { lg::field(0, 30, W, s_vh - 30); y += 10; }                    // tap the left / right half: page back / on
     if (s_help == 0) {
-        txt(GT("Allinea 3 simboli uguali su", "Line up 3 equal symbols on an"), 8, y, 0, gui::F_SMALL, COL_CREAM);
-        txt(GT("una linea attiva per vincere.", "active line to win."), 8, y + 16, 0, gui::F_SMALL, COL_CREAM);
-        txt(GT("Il JOLLY (W) vale per tutti.", "The WILD (W) stands for all."), 8, y + 34, 0, gui::F_SMALL, COL_GOLD);
-        txt(GT("Tre 7 = JACKPOT!", "Three 7s = JACKPOT!"), 8, y + 52, 0, gui::F_SMALL, COL_RED);
+        txt(GT("Allinea 3 simboli uguali su", "Line up 3 equal symbols on an"), 8, y, 0, fb, COL_CREAM);
+        txt(GT("una linea attiva per vincere.", "active line to win."), 8, y + lp, 0, fb, COL_CREAM);
+        txt(GT("Il JOLLY (W) vale per tutti.", "The WILD (W) stands for all."), 8, y + 2 * lp + 2, 0, fb, COL_GOLD);
+        txt(GT("Tre 7 = JACKPOT!", "Three 7s = JACKPOT!"), 8, y + 3 * lp + 2, 0, fb, COL_RED);
     } else if (s_help == 1) {
-        const char *k[4] = { GT("SPAZIO", "SPACE"), GT("SU/GIU", "UP/DN"), GT("SX/DX", "L/R"), "A  TAB" };
+        const char *k[4] = { s_big ? GT("Leva, rulli", "Lever, reels") : GT("SPAZIO", "SPACE"), s_big ? "1 2 5 10 25" : GT("SU/GIU", "UP/DN"), s_big ? "1 - 5" : GT("SX/DX", "L/R"), s_big ? "AUTO" : "A  TAB" };
         const char *v[4] = { GT("gira / ferma", "spin / stop"), GT("puntata per linea", "bet per line"), GT("linee 1 3 5", "lines 1 3 5"), GT("auto  impostazioni", "auto  setup") };
-        for (int i = 0; i < 4; i++) { txt(k[i], 8, y + i * 17, 0, gui::F_SMALL, COL_GREY); txt(v[i], 84, y + i * 17, 0, gui::F_SMALL, COL_GOLDL); }
+        for (int i = 0; i < 4; i++) { txt(k[i], 8, y + i * lp, 0, fb, COL_GREY); txt(v[i], s_big ? 136 : 84, y + i * lp, 0, fb, COL_GOLDL); }
     } else {
         for (int i = 0; i < NSYM; i++) {                                             // paytable: mini symbol + 3x payout
-            int sym = NSYM - 1 - i, x = 14 + (i % 4) * 58, yy = y + 2 + (i / 4) * 24;
-            draw_sym(x, yy + 8, 8, sym, 0);
+            int sym = NSYM - 1 - i, x = 14 + (i % 4) * (s_big ? 78 : 58), yy = y + 2 + (i / 4) * (s_big ? 40 : 24), ss = s_big ? 13 : 8;
+            draw_sym(x + ss - 8, yy + ss, ss, sym, 0);
             char b[12]; snprintf(b, sizeof b, "x%d", PAY3[sym]);
-            txt(b, x + 11, yy, 0, gui::F_SMALL, sym >= SY_SEVEN ? COL_GOLDL : COL_CREAM);
+            txt(b, x + 2 * ss - 5, yy + ss - 8, 0, gui::F_SMALL, sym >= SY_SEVEN ? COL_GOLDL : COL_CREAM);
         }
         char b[32]; snprintf(b, sizeof b, GT("2 ciliegie x%d", "2 cherries x%d"), CHERRY2);
-        draw_sym(14, y + 58, 8, SY_CHERRY, 0); draw_sym(30, y + 58, 8, SY_CHERRY, 0);
-        txt(b, 44, y + 50, 0, gui::F_SMALL, COL_RED);
+        const int cy = y + (s_big ? 96 : 58);
+        draw_sym(14, cy, 8, SY_CHERRY, 0); draw_sym(30, cy, 8, SY_CHERRY, 0);
+        txt(b, 44, cy - 8, 0, fb, COL_RED);
     }
     for (int i = 0; i < 3; i++) d.fillCircle(W / 2 - 12 + i * 12, ch - 5, i == s_help ? 3 : 2, i == s_help ? COL_GOLD : RGB(73, 109, 85));
 }
@@ -640,18 +754,19 @@ static void draw_settings(void)
     snprintf(r[3], 28, "Turbo: %s", g_turbo ? on : off);
     snprintf(r[4], 28, "Audio: %s", g_audio ? on : off);
     const char *items[NSET] = { r[0], r[1], r[2], r[3], r[4], GT("Azzera crediti", "Reset credits") };
-    int y = gui::title(GT("Impostazioni", "Settings"), nullptr, COL_GOLD);
-    gui::menu(s_setm, items, NSET, y, nucleo_app_content_height(), COL_GOLD);
+    int y = title_bar(GT("Impostazioni", "Settings"), nullptr);
+    menu_rows(s_setm, items, NSET, y);
     if (s_confirm) {
         char l1[28]; snprintf(l1, sizeof l1, GT("Riparti con %d crediti", "Restart with %d credits"), START_CREDITS);
-        gui::dialog(GT("Azzerare i crediti?", "Reset the credits?"), l1, nullptr, GT("INVIO si  Esc no", "ENTER yes  Esc no"), COL_RED);
+        dlg(GT("Azzerare i crediti?", "Reset the credits?"), l1, GT("INVIO si  Esc no", "ENTER yes  Esc no"), nullptr, COL_RED);
     }
 }
 static void draw_over(void)
 {
     draw_felt();
     char l1[32]; snprintf(l1, sizeof l1, GT("Riparti con %d crediti", "Restart with %d credits"), START_CREDITS);
-    gui::dialog(GT("CREDITI FINITI", "OUT OF CREDITS"), l1, nullptr, GT("INVIO ricomincia  Esc menu", "ENTER restart  Esc menu"), ((s_anim >> 2) & 1) ? COL_RED : COL_GOLD);
+    if (s_big) lchev();
+    dlg(GT("CREDITI FINITI", "OUT OF CREDITS"), l1, GT("INVIO ricomincia  Esc menu", "ENTER restart  Esc menu"), GT("Tocca: ricomincia", "Tap: restart"), ((s_anim >> 2) & 1) ? COL_RED : COL_GOLD);
 }
 
 // ============================ screen: play ===================================
@@ -664,7 +779,7 @@ static void draw_win_overlay(void)
         for (int r = 1; r < NREEL; r++) {
             int x0 = GRID_X + (r - 1) * (REEL_W + REEL_GAP) + REEL_W / 2 + s_shx, y0 = GRID_Y + PAYLINE[l][r - 1] * CELL_H + CELL_H / 2 + s_shy;
             int x1 = x0 + REEL_W + REEL_GAP, y1 = GRID_Y + PAYLINE[l][r] * CELL_H + CELL_H / 2 + s_shy;
-            d.drawWideLine(x0, y0, x1, y1, 1.5f, lc);
+            for (int o = -1; o <= 1; o++) d.drawLine(x0, y0 + o, x1, y1 + o, lc);   // (drawWideLine ignores the strip clip)
         }
     }
     if (!s_finale_done) return;                                                        // payoff text after the reveal
@@ -699,7 +814,7 @@ static void draw_play(void)
 {
     s_shx = s_shy = 0;
     if (s_shake_ms > 0) { int m = s_shake_ms > 350 ? 3 : 2; s_shx = (int)((s_anim * 37) % (2 * m + 1)) - m; s_shy = (int)((s_anim * 53) % (2 * m + 1)) - m; }
-    int ch = nucleo_app_content_height();
+    int ch = s_vh;
     bool big = s_pp == PP_WIN && s_finale_done && s_win_tier >= 1;
     draw_felt();
     if (big) draw_rays();
@@ -707,8 +822,10 @@ static void draw_play(void)
     draw_reels();
     draw_hud();
     // Touch: the bet label raises the bet, the middle of the bar toggles autospin; a tap on the reels (or
-    // anywhere else) is Enter: spin, or slam-stop while they turn. Drag right/left changes the lines.
-    if (!s_paused && s_pp == PP_IDLE && !nucleo_app_two_screens()) {   // compact only; the panel HUD owns touch
+    // anywhere else) is Enter: spin, or slam-stop while they turn. Drag right/left changes the lines. On the panel
+    // the machine under the header is one field (machine_tap): the reels / lever, the payline tabs, the coins, AUTO.
+    if (s_big) { draw_bet_row(); if (!s_paused) lg::field(0, 30, W, s_vh - 30); }
+    else if (!s_paused && s_pp == PP_IDLE && !nucleo_app_two_screens()) {
         nucleo_touch_add(W - 80, 0, 80, 16, NK_UP, 0);
         nucleo_touch_add(W / 2 - 24, 0, 52, 16, NK_CHAR, 'a');
     }
@@ -722,7 +839,7 @@ static void draw_play(void)
     }
     if (s_pp == PP_WIN) draw_win_overlay();
     if (s_msg_ms > 0) { gui::panel(30, GRID_Y + GRID_H / 2 - 10, W - 60, 20, COL_REDD, COL_GOLD); txt(s_msg, W / 2, GRID_Y + GRID_H / 2 - 9, 1, gui::F_SMALL, COL_WHITE); }
-    if (s_paused) gui::dialog(GT("PAUSA", "PAUSED"), nullptr, nullptr, GT("INVIO riprendi  Esc esci", "ENTER resume  Esc leave"), COL_GOLD);
+    if (s_paused) dlg(GT("PAUSA", "PAUSED"), nullptr, GT("INVIO riprendi  Esc esci", "ENTER resume  Esc leave"), GT("Tocca: riprendi  < esci", "Tap: resume  < leave"), COL_GOLD);
 }
 
 // ============================ input + hint ===================================
@@ -761,6 +878,7 @@ static void bet_change(int row, int dir)
 }
 static void on_key(int k, char ch)
 {
+    if (lg_key(k, ch)) return;                                                         // a touch on the panel
     nucleo_app_request_draw();
     switch (s_screen) {
         case ST_MENU:
@@ -862,7 +980,7 @@ static void step_reels(int dt)
 }
 static void draw_game(void)
 {
-    d.setClipRect(0, 0, W, nucleo_app_content_height());          // rays never paint the footer
+    if (!s_big) d.setClipRect(0, 0, W, s_vh);          // rays never paint the footer
     switch (s_screen) {
         case ST_MENU: draw_menu(); break;
         case ST_HELP: draw_help(); break;
@@ -870,79 +988,41 @@ static void draw_game(void)
         case ST_PLAY: draw_play(); break;
         default:      draw_over(); coins_draw(); break;
     }
-    d.clearClipRect();
+    if (!s_big) d.clearClipRect();                     // (on the panel the strip window owns the clip)
 }
 
-// ===== two screens: the cabinet on the 320x240 panel, the Cardputer as a companion =====================
-// lg::game pushes the machine's own frame scaled to the panel; a NATIVE HUD below carries the money and the
-// real touch controls (spin / slam-stop / bet / lines / auto, and menu navigation on the other screens).
-static void lg_btn3(int y, int bh, const char *la, int ka, char ca, const char *lb, int kb, char cb,
-                    const char *lc, int kc, char cc)
-{
-    const int W320 = d.width(), g = 8, bw = (W320 - 4 * g) / 3;
-    lg::button(g, y, bw, bh, la, mix(COL_FELT, 0, 70), COL_GOLDL, ka, ca);
-    lg::button(2 * g + bw, y, bw, bh, lb, COL_GOLD, COL_DARK, kb, cb);
-    lg::button(3 * g + 2 * bw, y, bw, bh, lc, mix(COL_FELT, 0, 70), COL_GOLDL, kc, cc);
-}
-static void lg_hud(int y, int h)
-{
-    const int W320 = d.width();
-    d.fillRect(0, y, W320, h, COL_DARK);
-    d.drawFastHLine(0, y, W320, COL_GOLDD);
-    char b[40];
-
-    if (s_screen == ST_PLAY) {
-        lg::font(1); d.setTextDatum(top_left); d.setTextColor(COL_GOLDL, COL_DARK);
-        snprintf(b, sizeof b, GT("Crediti %d", "Credits %d"), g_balance); d.drawString(b, 12, y + 4);
-        d.setTextDatum(top_right); d.setTextColor(COL_CREAM, COL_DARK);
-        snprintf(b, sizeof b, GT("Punt %d", "Bet %d"), total_bet()); d.drawString(b, W320 - 12, y + 4);
-        d.setTextDatum(top_left);
-        const int main_y = y + 20, main_h = 30, slim_y = main_y + main_h + 3, slim_h = y + h - slim_y - 4;
-        if (s_paused) { lg::button(40, main_y, W320 - 80, main_h, GT("Riprendi", "Resume"), COL_GOLD, COL_DARK, NK_ENTER, 0); return; }
-        if (s_pp == PP_SPIN) { lg::button(40, main_y, W320 - 80, main_h, GT("FERMA", "STOP"), COL_GOLD, COL_DARK, NK_ENTER, 0); return; }
-        if (s_pp == PP_WIN) {
-            lg::font(1); d.setTextDatum(top_center); d.setTextColor(COL_GOLDL, COL_DARK);
-            snprintf(b, sizeof b, s_win_tier == 2 ? "JACKPOT  +%d" : GT("VINCITA +%d", "WIN +%d"), s_win_total);
-            d.drawString(b, W320 / 2, main_y + 8); d.setTextDatum(top_left);
-            return;
-        }
-        // PP_IDLE
-        lg_btn3(main_y, main_h, GT("Punta -", "Bet -"), NK_DOWN, 0, GT("GIRA", "SPIN"), NK_ENTER, 0, GT("Punta +", "Bet +"), NK_UP, 0);
-        if (slim_h >= 16) {
-            const int g = 8, bw = (W320 - 3 * g) / 2;
-            char ll[20]; snprintf(ll, sizeof ll, GT("Linee %d", "Lines %d"), active_lines());
-            lg::button(g, slim_y, bw, slim_h, ll, mix(COL_FELT, 0, 90), COL_CYAN, NK_RIGHT, 0);
-            lg::button(2 * g + bw, slim_y, bw, slim_h, s_auto ? GT("Auto: si", "Auto: on") : GT("Auto: no", "Auto: off"), s_auto ? mix(COL_DARK, COL_CYAN, 90) : mix(COL_FELT, 0, 90), s_auto ? COL_WHITE : COL_CYAN, NK_CHAR, 'a');
-        }
-        return;
-    }
-    // non-play screens
-    const int bh = h - 34 < 40 ? h - 12 : 44, by = y + h - bh - 6;
-    lg::font(1); d.setTextDatum(top_left); d.setTextColor(COL_GOLD, COL_DARK);
-    const char *lbl = s_screen == ST_MENU ? GT("SLOT - menu", "SLOT - menu")
-                    : s_screen == ST_HELP ? GT("Come si gioca", "How to play")
-                    : s_screen == ST_SET  ? GT("Impostazioni", "Settings")
-                    : GT("Crediti finiti", "Out of credits");
-    d.drawString(lbl, 12, y + 6); d.setTextDatum(top_left);
-    if (s_screen == ST_MENU)      lg_btn3(by, bh, GT("Su", "Up"), NK_UP, 0, "OK", NK_ENTER, 0, GT("Giu", "Down"), NK_DOWN, 0);
-    else if (s_screen == ST_HELP) lg_btn3(by, bh, GT("Prec", "Prev"), NK_LEFT, 0, GT("Chiudi", "Close"), NK_ENTER, 0, GT("Succ", "Next"), NK_RIGHT, 0);
-    else if (s_screen == ST_SET) {
-        if (s_confirm) { const int g = 8, bw = (W320 - 3 * g) / 2;
-            lg::button(g, by, bw, bh, "No", mix(COL_FELT, 0, 70), COL_GOLDL, NK_BACK, 0);
-            lg::button(2 * g + bw, by, bw, bh, GT("Si", "Yes"), COL_RED, COL_WHITE, NK_ENTER, 0); }
-        else lg_btn3(by, bh, GT("Su", "Up"), NK_UP, 0, GT("Cambia", "Change"), NK_RIGHT, 0, GT("Giu", "Down"), NK_DOWN, 0);
-    }
-    else lg::button(40, by, W320 - 80, bh, GT("Ricomincia", "Restart"), COL_GOLD, COL_DARK, NK_ENTER, 0);
-}
+// ===== two screens: the whole game NATIVE on the 320x240 panel, the Cardputer as a companion =============
+// view_set(true) lays every screen out for 320x240 (bigger reels, the lever, the bet coins under the machine),
+// composed off-screen in strips (lg::frame). Touch is direct: tap a menu / settings row to pick it, again to open or
+// change it; tap the reels or the lever to spin (again to slam-stop), a payline tab for the lines, a coin for the
+// bet per line, the AUTO lamp; tap the card (pause, game over) to go on; the header chevron is Back.
+static void lg_paint(void *) { draw_game(); }
 static void draw_large(void)
 {
+    view_set(true);
     nucleo_touch_clear();
-    lg::game(draw_game, lg_hud, "Slot", COL_GOLD);
+    lg::frame(lg_paint, nullptr);
     nucleo_touch_commit();
+}
+static bool lg_key(int k, char ch)
+{
+    int x = 0, y = 0;
+    const bool fld = lg::tap(k, ch, &x, &y);
+    const int ri = nucleo_touch_is_row(k, ch) ? ch - NUCLEO_TOUCH_ROW : -1;
+    if (!fld && ri < 0) return false;
+    gui::Menu *m = s_screen == ST_MENU ? &s_menu : s_screen == ST_SET && !s_confirm ? &s_setm : nullptr;
+    if (m && ri >= 0) {                                                                 // a row: pick it, again = open / change
+        if (m->sel == ri) on_key(NK_ENTER, 0); else { m->sel = (int8_t)ri; m->pos = ri; sfx(SFX_MOVE); }
+    } else if (s_screen == ST_SET && ri >= 0) { if (ri == 0) on_key(NK_ENTER, 0); else on_back(NK_BACK); }   // Yes / No
+    else if (s_screen == ST_HELP && fld) { if (x < W / 2) on_back(NK_LEFT); else on_key(NK_RIGHT, 0); }   // page back / on
+    else if (s_screen == ST_PLAY && fld && !s_paused) machine_tap(x, y);
+    else if (fld) on_key(NK_ENTER, 0);                                                  // the pause / game-over card
+    nucleo_app_request_draw();
+    return true;
 }
 static void draw_companion(void)
 {
-    const int top = nucleo_app_content_top(), h = nucleo_app_content_height();
+    const int top = nucleo_app_content_top(), h = s_vh;
     d.fillRect(0, top, W, h, BG);
     int y = lg::comp_head("SLOT", COL_GOLD);
     char b[40];
@@ -962,7 +1042,7 @@ static void draw_companion(void)
     else                          st = GT("Pronto a girare", "Ready to spin");
     gui::text(st, 8, y + 50, 0, gui::F_BODY, COL_WHITE, 0);
     if (s_screen == ST_PLAY && s_pp == PP_WIN && s_win_total > 0) { snprintf(b, sizeof b, "+%d", s_win_total); gui::text(b, W - 8, y + 50, 2, gui::F_BODY, COL_GOLDL, 0); }
-    const char *keys = s_screen != ST_PLAY ? GT("Tocca i tasti sul pannello", "Use the panel buttons")
+    const char *keys = s_screen != ST_PLAY ? GT("Tocca il pannello", "Tap the panel")
                      : s_paused            ? GT("INVIO riprendi  Esc esci", "ENTER resume  Esc leave")
                      : s_pp == PP_SPIN     ? GT("SPAZIO ferma i rulli", "SPACE stop the reels")
                      : GT("SPAZIO gira  su/giu punta", "SPACE spin  up/dn bet");
@@ -970,7 +1050,8 @@ static void draw_companion(void)
 }
 static void on_draw(void)
 {
-    if (nucleo_app_two_screens()) { draw_companion(); return; }
+    view_set(false);
+    if (nucleo_app_two_screens()) { draw_companion(); view_set(true); return; }
     draw_game();
 }
 static bool poll(void)
@@ -1030,6 +1111,7 @@ static void on_enter(void)
 {
     game_text_open("slots");
     cfg_read();
+    view_set(nucleo_app_two_screens());
     build_strips();
     if (nucleo_audio_volume() < 40) nucleo_audio_set_volume(85);
     for (int r = 0; r < NREEL; r++) { r_phase[r] = 0; r_top[r] = (int)(esp_random() % SLEN); r_pos[r] = r_top[r]; r_flash_ms[r] = 0; }

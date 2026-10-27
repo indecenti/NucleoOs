@@ -89,7 +89,10 @@ void brfx_step(float dt)
 // Ground decals — drawn behind the fighters. Camera + shake folded into the x offset.
 void brfx_draw_pools(void)
 {
-    if (s_fx) s_fx->pools.draw(-g.camx + g.shake.ox());
+    if (!s_fx) return;
+    if (br_v.k == 1.0f) { s_fx->pools.draw(-g.camx + g.shake.ox()); return; }
+    for (const auto &p : s_fx->pools.d_)                  // the panel's view (4/3): the same decals, scaled
+        if (p.on) fxfig::puddle(brX(p.x - g.camx + g.shake.ox()), brY(p.y), (int)(p.rx * br_v.k), (int)(p.ry * br_v.k + 0.5f), p.col);
 }
 
 // Airborne droplets + impact sparks — drawn in front of the fighters. Sparks paint last so the bright
@@ -98,6 +101,11 @@ void brfx_draw_drops(void)
 {
     float xoff = -g.camx + g.shake.ox();
     if (!s_fx) return;
-    s_fx->drops.draw(xoff);
-    s_fx->sparks.draw(xoff);
+    if (br_v.k == 1.0f) { s_fx->drops.draw(xoff); s_fx->sparks.draw(xoff); return; }
+    for (int f = 0; f < 2; f++)
+        for (const auto &q : (f ? s_fx->sparks : s_fx->drops).p) {
+            if (!q.on) continue;
+            float k = q.max > 0 ? q.life / q.max : 0.0f;
+            d.fillCircle(brX(q.x + xoff), brY(q.y), k > 0.55f ? 3 : 2, fx3d::scl(q.col, (int)(170 + 85 * k), 255));
+        }
 }

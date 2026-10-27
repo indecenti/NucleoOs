@@ -1,6 +1,11 @@
 menu
+menu_pick row:3
 play ENTER tick:20
+play_tap ENTER tick:12 tap:160,50 tick:3
 paused ENTER tick:20 BACK
+resumed ENTER tick:20 BACK row:0 tick:2
 over ENTER tick:90
+browse D D ENTER
 scores D D D ENTER
 help D D D D ENTER
+help_page D D D D ENTER tap:160,120
