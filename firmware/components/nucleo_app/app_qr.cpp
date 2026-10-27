@@ -154,6 +154,7 @@ static void enter(void)
     s_src = SRC_PAIR; s_len = 0; s_text[0] = 0;
     s_prev_bright = nucleo_app_brightness();
     nucleo_app_set_brightness(100);             // bright screen = easy camera lock
+    nucleo_app_set_keep_awake(true);           // a code waiting to be scanned never dims (the framework clears it on close)
     nucleo_app_set_back_handler(on_back);
     s_sv_label = (char (*)[40]) calloc(QR_SAVED_MAX, sizeof s_sv_label[0]);
     s_sv_data  = (char (*)[256])calloc(QR_SAVED_MAX, sizeof s_sv_data[0]);

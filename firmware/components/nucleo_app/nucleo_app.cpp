@@ -47,6 +47,9 @@ extern "C" {
 #include "nucleo_auth.h"        // NUCLEO_AUTH_GUARD (include dir pulled in via CMakeLists)
 
 #include "app_gfx.h"
+#include "nucleo_surface.h"     // large (external 320x240) vs compact surface for the launcher home
+#include "nucleo_touch.h"       // touch targets: apps mark what a tap on the external panel means
+#include "nucleo_extdisp.h"     // /api/screen?display=ext: the external panel, rebuilt from the internal one
 
 // Network info (resolved at link; declared here for the stub screen, no component dep).
 extern "C" const char *nucleo_setup_mode(void);
@@ -280,8 +283,20 @@ static inline void scr_put16(uint8_t *b, uint16_t v) { b[0] = v; b[1] = v >> 8; 
 static esp_err_t screen_get(httpd_req_t *req)
 {
     NUCLEO_AUTH_GUARD(req);
+    // ?display=ext -> the external panel (ADV second screen), rebuilt from the internal one; it cannot be read.
+    char q[32] = "", disp[8] = "";
+    bool ext = httpd_req_get_url_query_str(req, q, sizeof q) == ESP_OK &&
+               httpd_query_key_value(q, "display", disp, sizeof disp) == ESP_OK && !strcmp(disp, "ext");
     int w = 0, h = 0;
-    nucleo_ui_panel_size(&w, &h);
+    if (ext && !nucleo_extdisp_screen_size(1, &w, &h)) {
+        httpd_resp_set_status(req, "409 Conflict");
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_sendstr(req, nucleo_extdisp_active()
+            ? "{\"ok\":false,\"err\":\"the external panel shows a native screen right now (no readback): only the internal panel can be captured\"}"
+            : "{\"ok\":false,\"err\":\"no external display\"}");
+        return ESP_OK;
+    }
+    if (!ext) nucleo_ui_panel_size(&w, &h);
     if (w <= 0 || h <= 0 || w > 320) {
         httpd_resp_set_status(req, "503 Service Unavailable");
         httpd_resp_set_type(req, "application/json");
@@ -299,7 +314,8 @@ static esp_err_t screen_get(httpd_req_t *req)
     static uint16_t prow[320];                // one panel scanline, byte-swapped RGB565
     static uint8_t orow[320 * 3 + 4];
     for (int y = h - 1; y >= 0; y--) {        // BMP rows are bottom-up
-        if (!nucleo_ui_read_row(y, w, prow)) memset(prow, 0, (size_t)w * 2);
+        bool got = ext ? nucleo_extdisp_screen_row(1, y, w, prow) : nucleo_ui_read_row(y, w, prow);
+        if (!got) memset(prow, 0, (size_t)w * 2);
         memset(orow, 0, rowSize);
         for (int x = 0; x < w; x++) {
             uint16_t raw = prow[x];
@@ -315,6 +331,32 @@ static esp_err_t screen_get(httpd_req_t *req)
     return ESP_OK;
 }
 
+// POST /api/input?key=enter|back|left|right|up|down|tab|del|char&ch=x — inject one key exactly as the
+// external panel's touch does (the same ring the run loop reads). Paired clients only. For remote tests
+// and automation: "does a key reach the launcher / the app" without touching the device.
+static esp_err_t input_post(httpd_req_t *req)
+{
+    NUCLEO_AUTH_GUARD(req);
+    char q[48] = "", kv[12] = "", cv[4] = "";
+    if (httpd_req_get_url_query_str(req, q, sizeof q) == ESP_OK) {
+        httpd_query_key_value(q, "key", kv, sizeof kv);
+        httpd_query_key_value(q, "ch", cv, sizeof cv);
+    }
+    static const struct { const char *n; int k; } K[] = {
+        { "enter", NK_ENTER }, { "back", NK_BACK }, { "left", NK_LEFT }, { "right", NK_RIGHT },
+        { "up", NK_UP }, { "down", NK_DOWN }, { "tab", NK_TAB }, { "del", NK_DEL }, { "char", NK_CHAR } };
+    int key = NK_NONE;
+    for (unsigned i = 0; i < sizeof K / sizeof K[0]; i++) if (!strcmp(kv, K[i].n)) key = K[i].k;
+    httpd_resp_set_type(req, "application/json");
+    if (key == NK_NONE || (key == NK_CHAR && !cv[0])) {
+        httpd_resp_set_status(req, "400 Bad Request");
+        return httpd_resp_sendstr(req, "{\"ok\":false,\"err\":\"key=enter|back|left|right|up|down|tab|del|char (+ch)\"}");
+    }
+    bool ok = nucleo_kbd_inject(nucleo_key_t{ key, key == NK_CHAR ? cv[0] : (char)0 });
+    ESP_LOGW("input", "api key %s%s%s -> %s", kv, cv[0] ? " " : "", cv, ok ? "queued" : "ring full");
+    return httpd_resp_sendstr(req, ok ? "{\"ok\":true}" : "{\"ok\":false,\"err\":\"queue full\"}");
+}
+
 extern "C" esp_err_t nucleo_app_register_display(httpd_handle_t server)
 {
     // Single-line designated init (fields in declaration order) so the api-spec generator
@@ -323,6 +365,8 @@ extern "C" esp_err_t nucleo_app_register_display(httpd_handle_t server)
     esp_err_t e = httpd_register_uri_handler(server, &display);
     httpd_uri_t screen = { .uri = "/api/screen", .method = HTTP_GET, .handler = screen_get };
     httpd_register_uri_handler(server, &screen);
+    httpd_uri_t input = { .uri = "/api/input", .method = HTTP_POST, .handler = input_post };
+    httpd_register_uri_handler(server, &input);
     return e;
 }
 
@@ -351,6 +395,23 @@ void nucleo_app_register(const nucleo_app_def_t *app)
 
 // Read access for the menu builder (plain C++ linkage; see launcher_menu.cpp).
 int                     nucleo_app_count(void) { return s_app_count; }
+
+// Apps installed from the store (store_apps.cpp) live in the TAIL of the registry, after every built-in
+// app: replacing them as a block never moves a built-in's index (the app in the foreground, the Store, is
+// one of those). The launcher tree is rebuilt the next time it is shown.
+static int  s_builtin_n = -1;
+static bool s_menu_dirty;
+void nucleo_app_set_dynamic(const nucleo_app_def_t *defs, int n)
+{
+    if (s_builtin_n < 0) s_builtin_n = s_app_count;
+    s_app_count = s_builtin_n;
+    for (int i = 0; i < n && s_app_count < MAX_APPS; i++) s_apps[s_app_count++] = defs[i];
+    if (n > MAX_APPS - s_builtin_n)
+        ESP_LOGW("applaunch", "store apps: %d installed, %d fit the registry", n, MAX_APPS - s_builtin_n);
+    s_menu_dirty = true;
+}
+int nucleo_app_dynamic_room(void) { return MAX_APPS - (s_builtin_n < 0 ? s_app_count : s_builtin_n); }
+static bool is_dynamic(int idx) { return s_builtin_n >= 0 && idx >= s_builtin_n; }
 const nucleo_app_def_t *nucleo_app_at(int i)   { return &s_apps[i]; }
 
 // Built-in apps (each registers itself).
@@ -386,6 +447,8 @@ extern "C" void nucleo_register_ethernet(void);
 extern "C" void nucleo_register_ble(void);
 extern "C" void nucleo_register_sentinel(void);
 extern "C" void nucleo_register_airspace(void);
+extern "C" void nucleo_register_presence(void);
+extern "C" void nucleo_register_store(void);
 extern "C" void nucleo_ble_keep_next_boot(void);   // keep BLE for the next (Solo) boot — NX_BLE apps
 extern "C" void nucleo_register_fido(void);
 extern "C" void nucleo_register_payloads(void);
@@ -424,7 +487,8 @@ extern "C" void nucleo_register_alarm(void);          // app_alarm.cpp — Hardw
 extern "C" void nucleo_register_pixelfix(void);       // app_pixelfix.cpp — Tools: LCD pixel rehabilitation (6 full-screen patterns)
 extern "C" void nucleo_register_screensaver(void);    // app_screensaver.cpp — Tools: animated screensaver + screen-off
 extern "C" bool nucleo_screensaver_should_activate(int64_t idle_ms);  // app_screensaver.cpp hook per main loop
-extern "C" void nucleo_screensaver_set_trigger(void);                 // app_screensaver.cpp hook per main loop
+extern "C" void nucleo_screensaver_set_trigger(void);
+extern "C" int  nucleo_screensaver_timeout_s(void);                  // the display power manager's timeout (0 = never)                 // app_screensaver.cpp hook per main loop
 extern "C" bool nucleo_ui_is_adv(void);               // Cardputer ADV? (M5GFX board detect — robust, independent of IMU init)
 
 // Registration order defines BOTH the category order in the root menu (first app of a category seen
@@ -454,7 +518,7 @@ void nucleo_app_register_builtins(void)
     // System (settings, device, voice control)
     nucleo_register_wifi(); nucleo_register_info(); nucleo_register_sysmon(); nucleo_register_theme(); nucleo_register_notify(); nucleo_register_voice(); nucleo_register_voicelab(); nucleo_register_updates();
     // Security (authorized testing)
-    nucleo_register_evilportal(); nucleo_register_wifiatk(); nucleo_register_beacon(); nucleo_register_sniffer(); nucleo_register_ethernet(); nucleo_register_ble(); nucleo_register_sentinel(); nucleo_register_airspace(); nucleo_register_fido(); nucleo_register_payloads();
+    nucleo_register_evilportal(); nucleo_register_wifiatk(); nucleo_register_beacon(); nucleo_register_sniffer(); nucleo_register_ethernet(); nucleo_register_ble(); nucleo_register_sentinel(); nucleo_register_airspace(); nucleo_register_presence(); nucleo_register_store(); nucleo_register_fido(); nucleo_register_payloads();
 }
 
 // ---- app lifecycle ----------------------------------------------------------
@@ -467,6 +531,7 @@ static uint32_t s_lang_gen = 0;            // last-seen i18n generation; a web-s
 static bool s_control_center = false;      // global Control Center overlay active
 static bool s_wake_pending  = false;       // screen was blanked by CC "screen off" — first key restores
 static int  s_wake_saved_bright = 80;      // brightness to restore on wake
+static int  s_pm_state = 0;                // display power manager: 0 on, 1 dimmed, 2 off (see pm_hook)
 static bool s_gamefront     = false;       // GameFront (HyperSpin-style game launcher) state active
 static bool s_gf_return     = false;       // re-open GameFront when the game it launched closes
 static bool s_shot_req       = false;      // Fn+P -> a real full-frame screenshot on the next composite
@@ -626,8 +691,16 @@ static bool app_ram_alloc(const nucleo_app_def_t *def)
     return true;
 }
 
+// The launcher's companion on the Cardputer's own panel while its home lives on the external one.
+static void companion_cb(void *g) { launcher_render_companion((lgfx::LovyanGFX *)g); }
+// Two-screen apps: their compact frame (composited in the shared canvas) goes to the Cardputer's panel.
+static M5Canvas *s_compact_cv = nullptr;
+static void compact_cb(void *g) { if (s_compact_cv) s_compact_cv->pushSprite((lgfx::LovyanGFX *)g, 0, 0); }
+
 static void open_app_def(const nucleo_app_def_t *def)
 {
+    if (!def || !def->on_draw_large) nucleo_surface_set_large(false);   // compact apps: back to 240x135 before on_enter draws
+    nucleo_touch_clear(); nucleo_touch_commit();   // the previous screen's touch targets end here
     // DIAG breadcrumbs (WARN -> visible in /api/logs): bracket on_enter with heap stats so a hang/OOM
     // during an app's entry (e.g. the 2nd launch-from-ANIMA freeze) shows up as an "enter" with no
     // matching "done" in the live log. Cheap; one line each side.
@@ -653,6 +726,11 @@ static void open_app_def(const nucleo_app_def_t *def)
         // in-place restore is the path that previously broke audio + SD on the ADV. Strip it here; a
         // non-Solo app asking for NX_WIFI still gets the runtime behaviour unchanged.
         if ((xf & NX_SOLO) && (xf & NX_WIFI)) xf &= ~NX_WIFI;
+        // Inside the Solo boot itself there is nothing to suspend: main.c never started the services (no
+        // httpd, no mDNS, no voice; with NX_WIFI not even the network stack). Entering exclusive mode here made
+        // the exit RESTORE them — start them from scratch — and httpd_start() on a network stack that was never
+        // initialised aborts (the crash on leaving the Video app of the media-center boot).
+        if (s_solo_active) xf = 0;
         bool was_active = nucleo_exclusive_active();   // a background worker (Recorder AI) may already hold it
         if (xf) {
             nucleo_exclusive_enter(xf, NULL);          // idempotent: adds nothing if already active
@@ -702,6 +780,7 @@ static void open_app_def(const nucleo_app_def_t *def)
 static bool maybe_solo_launch(int idx)
 {
     if (s_solo_active || idx < 0) return false;
+    if (is_dynamic(idx)) return false;             // a store app opens inline: the Solo boot never registers it
     const nucleo_app_def_t *a = &s_apps[idx];
     // Remote Control boots a DEDICATED server-Solo profile: httpd + auth stay up, but the offline brain,
     // voice, TTS, IR, recorder and calendar service never come up — the web OS gets a fresh, unfragmented
@@ -841,6 +920,8 @@ static const nucleo_app_def_t *active_def()
 }
 static void close_app(void)
 {
+    nucleo_touch_clear(); nucleo_touch_commit();   // back to the launcher: no app targets
+    launcher_render_companion_invalidate();      // two screens: the launcher's companion comes back on the next tick
     const nucleo_app_def_t *def = active_def();
     // ANIMA Solo: there is no launcher to return to — let the app save its state (anima's leave() writes
     // the chat), then reboot into the full OS. esp_restart() runs the registered storage-sync shutdown
@@ -878,9 +959,15 @@ static void close_app(void)
     s_active = -1; s_stub = nullptr; s_dirty = true; s_chrome_dirty = true;
     // A game launched FROM GameFront returns to it, not to the home carousel — the front-end keeps
     // its selection so you land back on the game you just played.
+    if (s_menu_dirty) {                           // the store changed what is installed: the tree follows
+        s_menu_dirty = false;
+        launcher_build_menu();
+        launcher_reset();
+    }
     if (s_gf_return) { s_gf_return = false; gamefront_open(); s_gamefront = true; }
 }
 void nucleo_app_exit(void) { close_app(); }
+const char *nucleo_app_active_id(void) { return s_active >= 0 ? s_apps[s_active].id : nullptr; }
 
 // Global flashlight overlay (G0 quick-tap). Unlike opening the Torch app, this paints a solid light
 // panel over WHATEVER is on screen and, when dismissed, restores it exactly — your place in any app,
@@ -936,7 +1023,7 @@ void nucleo_app_set_direct_draw(bool on)
     else    nucleo_screen_acquire();
 }
 int  nucleo_app_content_top(void)    { return 0; }
-int  nucleo_app_content_height(void) { return s_app_fullscreen ? H : (H - HINT); }
+int  nucleo_app_content_height(void) { return (nucleo_surface_large() && !nucleo_app_is_buffered()) ? (int)d.height() : s_app_fullscreen ? H : (H - HINT); }   // large: no footer there
 void nucleo_app_set_keep_awake(bool on) { s_app_keep_awake = on; }
 void nucleo_app_set_fullscreen(bool on)
 {
@@ -960,6 +1047,10 @@ void nucleo_app_request_draw(void)   { s_dirty = true; }
 // (a black video frame) stays on screen — the "black film list on exit" bug. See ANTI-FLICKER.md.
 static unsigned int s_repaint_gen = 1;   // see nucleo_app_repaint_gen() in the header
 unsigned int nucleo_app_repaint_gen(void) { return s_repaint_gen; }
+bool nucleo_app_two_screens(void)
+{
+    return s_active >= 0 && s_apps[s_active].on_draw_large && nucleo_surface_large();
+}
 
 void nucleo_app_force_repaint(void)
 {
@@ -1474,6 +1565,7 @@ static void display_wake(void)
     s_disp_wake_req = false;                      // any wake satisfies a pending /api/display wake request
     if (!s_disp_sleep) return;
     s_wake_pending = false;                       // the idle sleep took over a CC "screen off": this wake ends both,
+    s_pm_state = 0;
                                                   // else the NEXT real key is swallowed as the (stale) CC wake key
     s_disp_sleep = false;
     s_disp_off = false;                           // a physical wake also ends a web client's dark-hold, else it strands until the <=90s deadman (blocking idle screen-off + 32 KB reclaim)
@@ -1619,6 +1711,83 @@ static bool sdc_boot_reminder(void)    // false = not now, ask again later (web 
     return true;
 }
 
+// ---- display power manager: ONE place decides when the screens dim, go dark and wake ------------------
+// The phone/watch model (Android's PowerManager, Wear OS): user activity resets an inactivity timer; a few
+// seconds before the timeout the backlight DIMS (the warning: any key brings it back, and is delivered); at the
+// timeout the screen goes OFF (backlight 0 on the Cardputer, the external panel black and fenced off) and the
+// first key only wakes it — it never reaches the app, so a wake can't press anything.
+// It runs inside nucleo_kbd_read() (the keyboard's activity hook), so EVERY input path drives it: the run loop,
+// a game's own frame loop, a blocking player, a modal; touch too (its taps arrive as keys). Held keys count as
+// activity (a game played on a held direction never dims). The timeout is Settings > Display > Screensaver
+// (0 = never). Wake locks: an app's keep_awake, nucleo_app_display_hold() (video while a clip plays), and the
+// system states that own the screen (torch, voice, a web client, a reminder banner, the Control Center).
+// The launcher home and the saver itself are not governed here: the launcher opens the screensaver instead.
+static int64_t s_pm_act = 0;            // ms of the last user input
+static int     s_pm_hold = 0;           // nucleo_app_display_hold() count
+enum { PM_ON = 0, PM_DIM, PM_OFF };
+static bool    s_g0_eat = false;        // the side-button press that woke the screen does nothing else
+#define PM_GAME_X 3                     // games: watched more than typed at; three times the timeout
+
+void nucleo_app_display_hold(bool on) { s_pm_hold += on ? 1 : (s_pm_hold > 0 ? -1 : 0); }
+
+static bool pm_inhibited(void)
+{
+    if (s_pm_hold > 0 || s_app_keep_awake || s_remote || s_disp_sleep || s_disp_off || s_torch || s_voice_dark ||
+        s_control_center || s_notify_show || nucleo_voice_is_listening()) return true;
+    if (s_active < 0) return true;                                   // launcher / GameFront: the saver's job
+    const nucleo_app_def_t *a = active_def();
+    return !a || (a->id && !strcmp(a->id, "screensaver"));
+}
+// Back to full brightness from DIM (the key is delivered) or from OFF (the caller swallows it).
+static void pm_wake(int64_t now)
+{
+    const bool was_off = s_pm_state == PM_OFF || s_wake_pending;
+    s_pm_state = PM_ON; s_pm_act = now;
+    if (s_wake_pending) { s_wake_pending = false; nucleo_app_set_brightness(s_wake_saved_bright); }
+    else nucleo_app_set_brightness(s_brightness);
+    if (was_off) nucleo_app_force_repaint();                         // the external panel missed every frame
+}
+static void pm_off(void)
+{
+    if (s_wake_pending) return;
+    s_wake_saved_bright = s_brightness;                              // the level, not the dimmed one
+    nucleo_ui_set_brightness(0);                                     // both panels (the external follows)
+    s_wake_pending = true; s_pm_state = PM_OFF;
+}
+static bool pm_hook(nucleo_key_t k, bool held)
+{
+    const int64_t now = esp_timer_get_time() / 1000;
+    if (s_wake_pending) {                                            // off (idle, or the Control Center's action)
+        if (k.key != NK_NONE) { pm_wake(now); return true; }         // the wake key: swallowed
+        return false;                                                // a key held from before does not wake
+    }
+    if (k.key != NK_NONE || held) {                                  // activity
+        s_pm_act = now;
+        if (s_pm_state == PM_DIM) pm_wake(now);
+        return false;
+    }
+    if (pm_inhibited()) {                                            // a wake lock: the timer restarts after it
+        s_pm_act = now;
+        if (s_pm_state == PM_DIM) pm_wake(now);
+        return false;
+    }
+    int64_t to = (int64_t)nucleo_screensaver_timeout_s() * 1000;
+    if (to <= 0) return false;
+    const nucleo_app_def_t *a = active_def();
+    if (a && a->category && !strcmp(a->category, "Games")) to *= PM_GAME_X;
+    int64_t lead = to / 5; if (lead < 2000) lead = 2000; if (lead > 10000) lead = 10000;
+    const int64_t idle = now - s_pm_act;
+    if (idle >= to) pm_off();
+    else if (idle >= to - lead && s_pm_state == PM_ON) {             // the warning: a quarter of the light
+        int raw = s_brightness * 255 / 100 / 4; if (raw < 6) raw = 6;
+        nucleo_ui_set_brightness((unsigned char)raw);
+        s_pm_state = PM_DIM;
+    }
+    return false;
+}
+// Any input that does not come through the keyboard (the side button, a reminder) wakes or keeps it lit.
+static void pm_poke(void) { const int64_t now = esp_timer_get_time() / 1000; if (s_pm_state != PM_ON || s_wake_pending) pm_wake(now); else s_pm_act = now; }
+
 void nucleo_app_run(void)
 {
     launcher_build_menu();
@@ -1632,6 +1801,8 @@ void nucleo_app_run(void)
     if (!s_solo_active) launcher_apply_return();
     int64_t last_tick = 0, last_clock = 0, remote_gone_ms = 0, last_remote = 0, last_remote_input = 0;
     int64_t last_act = esp_timer_get_time() / 1000, focus_chk = 0;   // idle screen-off + web-focus recheck timers
+    s_pm_act = last_act;
+    nucleo_kbd_set_hook(pm_hook);                                    // the display power manager sees every input
 
     // A web OS shell connecting hands the device to the server; on this no-PSRAM chip that means warm-rebooting
     // into the lean server-Solo (connect handler below). But if THIS boot was itself a CRASH, a prior server-Solo
@@ -1824,20 +1995,6 @@ void nucleo_app_run(void)
             nucleo_app_launch_id("screensaver");
             last_act = now;  // reset so it doesn't re-trigger immediately after
         }
-        // In-app idle screen-off: an open app can't host the saver (native apps are exclusive — launching
-        // it would close e.g. the Radio and stop the stream), so after the same timeout we only drop the
-        // backlight; the app keeps running and the first key relights it and is swallowed (CC Sleep path).
-        // Games, the saver itself and apps that pinned keep_awake stay lit.
-        if (s_active >= 0 && !s_remote && !s_wake_pending && !s_torch && !s_voice_dark && !s_disp_sleep &&
-            !s_disp_off && !s_app_keep_awake && !s_control_center && !nucleo_voice_is_listening()) {
-            const nucleo_app_def_t *ia = active_def();
-            bool exempt = !ia || (ia->id && !strcmp(ia->id, "screensaver")) ||
-                          (ia->category && !strcmp(ia->category, "Games"));
-            if (!exempt && nucleo_screensaver_should_activate(now - last_act)) {
-                s_wake_saved_bright = nucleo_app_brightness(); nucleo_ui_set_brightness(0); s_wake_pending = true;
-            }
-        }
-
         // PTT low-power capture finished: the voice engine has captured, recognized, and played the
         // end beep, then released VH_PTT. Bring the panel back and force a full repaint. The 32 KB
         // back-buffer is re-acquired lazily by the render path (once the voice task's buffers free),
@@ -1861,8 +2018,14 @@ void nucleo_app_run(void)
         // We own the GPIO0 timing (the single reader) and drive the engine via nucleo_voice_ptt();
         // the engine no longer polls the pin, so a tap and a talk-hold can never both fire on one
         // press. (The old long-press jump to the ANIMA app is gone — hold now talks instead.)
-        if (gpio_get_level(GPIO_NUM_0) == 0) {                 // pressed (active-low)
-            last_act = now;
+        if (gpio_get_level(GPIO_NUM_0) == 0 && !s_g0_eat && g0_down_ms == 0 && (s_wake_pending || s_pm_state != PM_ON)) {
+            const bool off = s_wake_pending;                    // the side button wakes the screen first
+            pm_poke(); last_act = now;
+            s_g0_eat = off;                                     // from off: this press is spent on the wake
+        }
+        if (s_g0_eat) { if (gpio_get_level(GPIO_NUM_0) != 0) s_g0_eat = false; }   // ...until it is released
+        else if (gpio_get_level(GPIO_NUM_0) == 0) {            // pressed (active-low)
+            last_act = now; s_pm_act = now;
             if (g0_down_ms == 0) { g0_down_ms = now; ESP_LOGW("g0", "down"); }
             else if (!g0_ptt && now - g0_down_ms >= G0_HOLD_MS) {
                 g0_ptt = true;                                 // crossed the threshold → start talking
@@ -1917,6 +2080,7 @@ void nucleo_app_run(void)
                     snprintf(s_notify_title, sizeof s_notify_title, "%s", nq.title);
                     snprintf(s_notify_body, sizeof s_notify_body, "%s", nq.body);
                     s_notify_show = true; s_dirty = true; s_notify_at = now;
+                    pm_poke();                                           // a reminder must be seen
                 }
             }
         }
@@ -1970,8 +2134,6 @@ void nucleo_app_run(void)
         nucleo_key_t nk = nucleo_kbd_read();
         if (nk.key != NK_NONE) {
             last_act = now;                      // any key counts as activity (resets the idle screen-off timer)
-            // Screen-off wake: CC "screen off" action blanked the backlight; first key restores and is swallowed.
-            if (s_wake_pending) { s_wake_pending = false; nucleo_app_set_brightness(s_wake_saved_bright); continue; }
             // Capture: Fn+P is an OS-wide screenshot -> a real full-frame image in /data/Screenshots
             // (EVERYWHERE, games included — it used to save only a tiny cover for games, so "screenshot"
             // seemed broken in a game). While a game is foreground, Ctrl+P (or a plain 'C') instead
@@ -2002,6 +2164,7 @@ void nucleo_app_run(void)
                     s_control_center = !s_control_center; s_dirty = true; s_chrome_dirty = true; s_hint_dirty = true;
                     if (s_control_center) {
                         launcher_render_control_center_open();
+                        launcher_render_control_center_invalidate();   // it lands over another screen: paint it whole
                         // Direct-draw apps release the 32 KB canvas; the CC needs it for flicker-free
                         // composite. The app won't draw while the CC is up, so borrow the canvas now
                         // and give it back when the CC closes (s_cc_canvas_borrowed tracks the loan).
@@ -2024,7 +2187,7 @@ void nucleo_app_run(void)
                 if (r == 3) {
                     // Backlight fully OFF (the app-level setter floors at 10% on purpose, so go to the panel
                     // driver). s_brightness is untouched, so the wake key restores the exact level.
-                    s_wake_saved_bright = nucleo_app_brightness(); nucleo_ui_set_brightness(0); s_wake_pending = true;
+                    pm_off();
                 }
                 else if (r == 4) { const char *lid = launcher_render_control_center_launch_id(); if (lid) nucleo_app_launch_id(lid); }
                 else if (r == 5) torch_on();
@@ -2033,7 +2196,16 @@ void nucleo_app_run(void)
                 // GameFront owns input while up (s_active is still -1). It returns an id to launch.
                 char gid[24];
                 int r = gamefront_key(nk.key, nk.ch, gid, sizeof gid);
-                if (r == GF_CLOSE)       { s_gamefront = false; d.fillScreen(BG); s_dirty = true; s_chrome_dirty = true; s_hint_dirty = true; }
+                // A held arrow queues keys faster than a cover decodes: apply every queued step, render once.
+                for (int q = 0; q < 8 && r == GF_REDRAW; q++) {
+                    nucleo_key_t more = nucleo_kbd_read();
+                    if (more.key == NK_NONE) break;
+                    r = gamefront_key(more.key, more.ch, gid, sizeof gid);
+                    if (r == GF_NONE) r = GF_REDRAW;
+                }
+                if (r == GF_CLOSE)       { s_gamefront = false; d.fillScreen(BG); s_dirty = true; s_chrome_dirty = true; s_hint_dirty = true;
+                                           launcher_render_companion_invalidate();   // two screens: the launcher's companion returns
+                                           if (nucleo_surface_large() && launcher_render_companion_changed()) nucleo_extdisp_draw_internal(companion_cb); }
                 else if (r == GF_LAUNCH) { s_gamefront = false; s_gf_return = true; launch_by_id(gid); }
                 else if (r == GF_REDRAW) s_dirty = true;
             } else if (s_active == -1) {
@@ -2114,6 +2286,7 @@ void nucleo_app_run(void)
             // every second flashed all three bars black. Skip while the list is mid-scroll so
             // the direct write can't race the band blit.
             else if (s_active == -1 && !s_gamefront && !s_chrome_dirty && !s_dirty) launcher_render_clock_tick();
+            if (nucleo_surface_large() && !s_gamefront && s_active == -1 && launcher_render_companion_changed()) nucleo_extdisp_draw_internal(companion_cb);
         }
 
         // Smooth-scroll toward the focused row (the only animation). Suppressed during the PTT session
@@ -2121,6 +2294,26 @@ void nucleo_app_run(void)
         if (s_active == -1 && !s_gamefront && !s_control_center && !s_torch && !s_voice_dark && launcher_render_step_scroll()) s_dirty = true;
         if (s_control_center && !s_torch && !s_voice_dark && launcher_render_control_center_animating()) s_dirty = true;   // CC scroll easing
         if (s_gamefront && !s_control_center && !s_torch && !s_voice_dark && gamefront_step()) s_dirty = true;
+
+        // Primary surface. Only the launcher home lays itself out at 320x240 so far: it takes the large surface
+        // whenever an external panel can host it, and every other screen (apps, Control Center, GameFront,
+        // overlays) runs compact. No external panel = never large, nothing to do. A switch repaints all.
+        if (!s_disp_sleep) {
+            const nucleo_app_def_t *fg = s_active >= 0 ? &s_apps[s_active] : nullptr;
+            bool want_large = (s_active == -1 || (fg && fg->on_draw_large)) && !(s_control_center && s_active >= 0) && !s_notify_show && !s_torch &&
+                              !voice_active && !s_voice_dark && !s_remote;
+            if (nucleo_surface_set_large(want_large)) {
+                // Wipe the panel once at the switch: the new layout repaints only its own regions, so
+                // whatever the old one left outside them (the mirrored Control Center over an app, its
+                // letterbox) would otherwise stay on the external panel as a ghost.
+                d.fillScreen(BG);
+                s_dirty = true; s_chrome_dirty = true; s_hint_dirty = true; s_repaint_gen++;
+                launcher_render_companion_invalidate();
+                gamefront_invalidate();
+                if (want_large && !s_gamefront && s_active == -1 && launcher_render_companion_changed()) nucleo_extdisp_draw_internal(companion_cb);
+                if (s_control_center) launcher_render_control_center_invalidate();
+            }
+        }
 
         bool fg_taken = false;   // did the foreground-app branch own the screen this iteration? (idle-reblit guard)
         // An overlay above the Control Center owns the panel this frame (PTT, torch, voice, reminder): the
@@ -2166,7 +2359,30 @@ void nucleo_app_run(void)
             // runs at the data rate (~31 Hz), not the loop rate. Blitting duplicate frames at 50 Hz is
             // exactly the cadence redraw ANTI-FLICKER.md #4 forbids. Null for ordinary apps (no change).
             if (s_app_poll && s_app_poll()) s_dirty = true;
-            if (s_dirty) {
+            if (s_dirty && def && def->on_draw_large && nucleo_surface_large()) {
+                // Two screens: the large view natively on the external panel, the compact one (keyboard-side
+                // controls) on the Cardputer. Same shared canvas for the compact frame, no extra RAM.
+                s_dirty = false;
+                if (!s_fg_was_fg) s_repaint_gen++;
+                M5Canvas *cv = s_app_direct ? nullptr : nucleo_screen();
+                if (cv) {
+                    nucleo_app_set_gfx(cv);
+                    cv->fillSprite(BG);
+                    if (def->on_draw) def->on_draw();       // the Cardputer's summary (no touch there)
+                    nucleo_app_set_gfx(nullptr);
+                    uint32_t h = fg_canvas_hash(cv);         // pushed only when it changed: no re-send per key
+                    static uint32_t s_compact_hash = 0;
+                    if (h != s_compact_hash || !s_fg_was_fg) {
+                        s_compact_hash = h;
+                        s_compact_cv = cv;
+                        nucleo_extdisp_draw_internal(compact_cb);
+                        s_compact_cv = nullptr;
+                    }
+                }
+                d.startWrite();
+                def->on_draw_large();
+                d.endWrite();
+            } else if (s_dirty) {
                 s_dirty = false;
                 // Apps that freed the canvas (ANIMA) pin direct draw: don't lazily re-acquire the
                 // 32 KB buffer here — that would reclaim the RAM the app gave to its index/worker.
@@ -2174,7 +2390,9 @@ void nucleo_app_run(void)
                 if (cv) {
                     nucleo_app_set_gfx(cv);                     // route on_draw into the canvas
                     cv->fillSprite(BG);
+                    nucleo_touch_clear();
                     if (def && def->on_draw) def->on_draw();
+                    nucleo_touch_commit();
                     nucleo_app_set_gfx(nullptr);                // back to the real display
 
                     // Pending capture (Fn+P / 'C'): the canvas now holds exactly the CLEAN frame on
@@ -2247,7 +2465,9 @@ void nucleo_app_run(void)
                     // repaint into ONE SPI transaction so the clear→text gap is as short as possible.
                     if (!s_fg_direct_last) { s_fg_direct_last = true; s_repaint_gen++; }   // buffered -> direct: re-sync
                     d.startWrite();
+                    nucleo_touch_clear();
                     def->on_draw();
+                    nucleo_touch_commit();
                     d.endWrite();
                     // Direct-draw screen (ANIMA, or any app that freed the canvas): the frame is on the
                     // PANEL, so grab it from there — works even in Solo boot (no httpd, no canvas), as a

@@ -33,6 +33,9 @@ image generation.
 ## 🚀 Install — three ways
 
 **You need:** a Cardputer (original or ADV — same firmware), a USB‑C data cable and a microSD card formatted **FAT32**.
+> ⚠️ **FAT32 only — not exFAT.** Cards over 32 GB come exFAT from the factory and Windows won't offer FAT32 for them:
+> reformat with a tool such as guiformat or Rufus. On an exFAT card the firmware boots, but the web OS can't be read
+> and the browser shows the *Rescue* page ("The desktop shell is unavailable on this device").
 
 ### 1. Web flasher — easiest, nothing to install
 1. Open **[indecenti.github.io/NucleoOs](https://indecenti.github.io/NucleoOs/)** in **Chrome or Edge** on a desktop.
@@ -43,6 +46,9 @@ image generation.
 Already running [M5Launcher](https://github.com/bmorcelli/Launcher)? NucleoOS installs as a guest next to them.
 1. Download **[`nucleoos-latest.bin`](https://github.com/indecenti/NucleoOs/releases/latest/download/nucleoos-latest.bin)** and copy it to the SD card.
 2. In the Launcher, pick it from the **SD installer**. Updates also go through the Launcher.
+3. The `.bin` is only the firmware. The web OS lives on the card: extract
+   [`nucleoos-latest-sd.zip`](https://github.com/indecenti/NucleoOs/releases/latest/download/nucleoos-latest-sd.zip)
+   to the card root, or let the first‑boot wizard download it over Wi‑Fi (see below).
 
 ### 3. esptool — command line
 Download **[`nucleoos-latest.bin`](https://github.com/indecenti/NucleoOs/releases/latest/download/nucleoos-latest.bin)**, then with [esptool](https://github.com/espressif/esptool) (`pip install esptool`):
@@ -207,7 +213,7 @@ browser; a native version runs on the Cardputer itself.
 
 ### 🎬 Media — native player, MP3 & radio
 
-- **Film player (native)** — plays `.nfv` (MJPEG + MP3) straight off the SD with seek.
+- **Film player (native)** — plays `.nfv` v4 (whole-frame JPEG + IMA ADPCM sound in one file, ~15 fps) straight off the SD, on the external 320x240 panel too, with seek and resume.
 - **MP3 player (native)** — dual‑mic aware, browses folders, reads duration from headers.
 - **Radio (native)** — multi‑station internet radio with a twin web app.
 
@@ -363,7 +369,7 @@ Every demanding feature respects a tight set of RAM tricks, validated on hardwar
 | **Assistant & voice** | ANIMA chat · Recorder (MP3, dual‑mic + live transcription) · Mic Spectrum (FFT) · Voice Trainer / keyword + PTT (AVCEB MFCC·CMN·DTW) |
 | **Security — Wi‑Fi/BLE** | WiFi Sniffer (→ `.pcap`) · Evil Portal · WiFi Attacks (deauth/beacon/probe) · BLE Suite (scan/spam/iBeacon) · Beacon |
 | **Security — wired/USB** | Ethernet/W5500 L2‑L3 engine · Payloads / BadUSB (DuckyScript) · USB Keyboard PRO (HID, macros, IT/US) |
-| **Media** | Film player (`.nfv` MJPEG+MP3, seek) · MP3 player · Radio (multi‑station) · Photos |
+| **Media** | Film player (`.nfv` v4 MJPEG+ADPCM, seek) · MP3 player · Radio (multi‑station) · Photos |
 | **Instruments & sensors** | Torch · Bubble Level · Protractor · Alarm (mic + accelerometer + IMU) · Pedometer · Weather · IR Remote · QR · PixelFix · Screensaver |
 | **System** | WiFi manager · Settings/Theme · Clock · Calendar · Notepad · Calculator · System Monitor · Notifications · Info · Mail (SMTP) · SSH terminal |
 | **Games** | Constellations (3D space) · Pong · Snake Duel · Tank Duel · Tanks (artillery) · Brawl · Pinball · Reactor · Hordes · Cardler · Poker · Slots · Dice · Yahtzee · Sand Garden (merge) — via the **GameFront** carousel |

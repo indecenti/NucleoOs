@@ -59,8 +59,11 @@
 
     /* ---------- Player stage ---------- */
     .player-container { flex: 1; position: relative; background: #000; display: flex; justify-content: center; align-items: center; min-height: 0; overflow: hidden; }
-    video { width: 100%; height: 100%; object-fit: contain; background: #000; }
-    .player-container.idle video { display: none; }
+    video, #nfv { width: 100%; height: 100%; object-fit: contain; background: #000; }
+    .player-container.idle video, .player-container.idle #nfv { display: none; }
+    #nfv { display: none; }
+    .player-container.nfv video { display: none; }
+    .player-container.nfv:not(.idle) #nfv { display: block; }
     .player-container.playing-hidden { cursor: none; }
 
     /* Welcome / empty state */
@@ -293,11 +296,12 @@
     </nav>
   </header>
 
-  <input type="file" id="input-file" accept="video/*" style="display:none;">
+  <input type="file" id="input-file" accept="video/*,.nfv" style="display:none;">
   <input type="file" id="input-sub" accept=".srt,.vtt,.webvtt" style="display:none;">
 
   <main class="player-container idle" id="player-container">
     <video id="v" playsinline></video>
+    <canvas id="nfv"></canvas>
 
     <!-- Welcome / empty state -->
     <div class="welcome" id="welcome">
@@ -440,6 +444,7 @@
 
   <script type="module">
     import I18N from '/nucleo-i18n.js';
+    import { NfvMedia } from './nfv4.js';
     const t = await I18N.init('video-player');   // loads core + this app's catalog, paints [data-i18n], live-switches
     // Re-render imperatively-built text after a live language change. The engine's apply() already
     // repaints every [data-i18n] node — but #title-sub carries a (live) file name while playing and
@@ -453,10 +458,15 @@
     });
 
     const DEFAULT_VIDS_DIR = '/data/Videos';
-    const VIDEO_RE = /\.(mp4|webm|mov|mkv|m4v|ogv)$/i;
+    const VIDEO_RE = /\.(mp4|webm|mov|mkv|m4v|ogv|nfv)$/i;
+    const NFV_RE = /\.nfv$/i;
 
     const $ = (id) => document.getElementById(id);
-    const v = $('v');
+    // `v` is whichever engine plays the current file: the <video> element, or NfvMedia (the Cardputer's own .nfv
+    // format, drawn on a canvas) — it answers the same properties, methods and on<event> handlers.
+    const videoEl = $('v');
+    let v = videoEl, nfv = null;
+    const localFiles = new Map();   // blob: URL -> File (an .nfv is read by slicing the File, not via the URL)
     const playerContainer = $('player-container');
     const titleSub = $('title-sub');
     const inputFile = $('input-file');
@@ -575,15 +585,40 @@
     /* ---------- Playback ---------- */
     const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
     let lastBlobUrl = '';   // object URL of the currently open local file — revoke it or the whole file stays pinned in RAM
+    // Point `v` at the engine this file needs; the other one is stopped and released.
+    function useEngine(isNfv) {
+      if (isNfv && !nfv) {
+        nfv = new NfvMedia($('nfv'));
+        for (const k of ['ontimeupdate', 'onprogress', 'onloadedmetadata', 'onplay', 'onpause', 'onended']) nfv[k] = videoEl[k];
+        nfv.onerror = () => {
+          const e = nfv.error;
+          titleSub.textContent = '— ' + (e && e.code === 'NFV_OLD' ? t('nfvOld', { v: e.version }) : t('nfvError'));
+          updatePlayIcon(false);
+        };
+        nfv.dataset = videoEl.dataset;
+      }
+      const next = isNfv ? nfv : videoEl;
+      if (next !== v) {
+        if (v === videoEl) { videoEl.pause(); videoEl.removeAttribute('src'); videoEl.load(); } else nfv.close();
+        v = next;
+        v.volume = parseFloat(volumeSlider.value); v.muted = videoEl.muted;
+      }
+      playerContainer.classList.toggle('nfv', isNfv);
+    }
+
     function playVideo(path) {
       currentPath = path;
       clearSubs();
       const isLocal = path.startsWith('blob:') || path.startsWith('data:');
-      if (lastBlobUrl && lastBlobUrl !== path) { URL.revokeObjectURL(lastBlobUrl); lastBlobUrl = ''; }
+      if (lastBlobUrl && lastBlobUrl !== path) { URL.revokeObjectURL(lastBlobUrl); localFiles.delete(lastBlobUrl); lastBlobUrl = ''; }
       if (path.startsWith('blob:')) lastBlobUrl = path;
-      v.src = isLocal ? path : getSdUrl(path);
+      const local = localFiles.get(path);
+      const isNfv = local ? NFV_RE.test(local.name) : NFV_RE.test(path);
+      useEngine(isNfv);
+      if (isNfv) nfv.open(local || getSdUrl(path)).then(() => { if (currentPath === path) v.play().catch(() => {}); });
+      else v.src = isLocal ? path : getSdUrl(path);
       playerContainer.classList.remove('idle');
-      v.play().catch(() => {});
+      if (!isNfv) v.play().catch(() => {});
       const name = isLocal ? (v.dataset.name || t('localFile')) : path.split('/').pop();
       titleSub.removeAttribute('data-i18n');   // file name is live data — keep the engine from repainting it
       titleSub.textContent = '— ' + name;
@@ -592,7 +627,7 @@
       resetControlsTimeout();
       // Sidecar-sub detection costs an extra /api/fs/list — let the video stream win the race for the
       // device's few sockets and only look for subs once playback has actually started.
-      if (!isLocal) v.addEventListener('canplay', () => { if (currentPath === path) detectSidecarSubs(path); }, { once: true });
+      if (!isLocal && !isNfv) v.addEventListener('canplay', () => { if (currentPath === path) detectSidecarSubs(path); }, { once: true });
     }
 
     function togglePlay() {
@@ -604,7 +639,8 @@
 
     function stopVideo() {
       v.pause(); clearSubs(); v.removeAttribute('src'); v.load();
-      if (lastBlobUrl) { URL.revokeObjectURL(lastBlobUrl); lastBlobUrl = ''; }
+      useEngine(false);
+      if (lastBlobUrl) { URL.revokeObjectURL(lastBlobUrl); localFiles.delete(lastBlobUrl); lastBlobUrl = ''; }
       currentPath = '';
       playerContainer.classList.add('idle');
       updatePlayIcon(false);
@@ -960,13 +996,14 @@
         e.preventDefault(); dragDepth = 0; dragOverlay.style.display = 'none';
         const file = e.dataTransfer.files[0];
         if (!file) return;
-        if (file.type.startsWith('video/')) openLocalFile(file);
+        if (file.type.startsWith('video/') || NFV_RE.test(file.name)) openLocalFile(file);
         else if (SUB_RE.test(file.name)) { if (currentPath) loadLocalSub(file); }
       });
       inputFile.onchange = (e) => { const f = e.target.files[0]; if (f) openLocalFile(f); inputFile.value = ''; };
     }
     function openLocalFile(file) {
       const url = URL.createObjectURL(file);
+      if (NFV_RE.test(file.name)) localFiles.set(url, file);
       v.dataset.name = file.name + ' (' + t('localTag') + ')';
       playVideo(url);
     }

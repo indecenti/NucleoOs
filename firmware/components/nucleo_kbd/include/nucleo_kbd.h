@@ -26,6 +26,12 @@ void nucleo_kbd_init(void);
 
 // Non-blocking: returns a freshly pressed key, or {NK_NONE,0} if nothing new.
 nucleo_key_t nucleo_kbd_read(void);
+// Input activity hook — how the display power manager sees EVERY input, whoever reads the keyboard (the run
+// loop, a game's own loop, a blocking player, a modal). Called on each read with the key about to be returned
+// (NK_NONE included: the read itself is the manager's clock) and whether any key or modifier is held. Return
+// true to swallow the key (it only woke the screen). One hook; NULL removes it.
+typedef bool (*nucleo_kbd_hook_t)(nucleo_key_t k, bool held);
+void nucleo_kbd_set_hook(nucleo_kbd_hook_t hook);
 
 // Queue a key from another input device (the external display's touch layer). It comes out of the next
 // nucleo_kbd_read() exactly like a physical press, ahead of the keyboard. Same shapes as the keyboard

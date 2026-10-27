@@ -88,5 +88,7 @@
   "volumePct": "Volume ±10 %",
   "subOnOff": "Sous-titres activer/désactiver",
   "subSize": "Taille des sous-titres",
-  "showPlaylistShort": "Afficher la liste de lecture"
+  "showPlaylistShort": "Afficher la liste de lecture",
+  "nfvOld": "Le format .nfv v{v} n'est plus pris en charge : reconvertissez-le avec Video Studio",
+  "nfvError": "Impossible de lire le fichier .nfv"
 }

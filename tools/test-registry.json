@@ -3901,7 +3901,7 @@
         "--test",
         "tools/nfv/nfv.test.mjs"
       ],
-      "verifies": "NFV video format writer/reader round-trip: frame chain, index, headers, dirty-frame trimming match spec",
+      "verifies": "NFV v4 browser writer rebuilds a nfv4.py clip byte for byte; chunk layout, audio lead, seek index, strip masks, ADPCM decode",
       "nl": false,
       "lang": "na",
       "in_gate": true,

@@ -44,6 +44,9 @@
 #include "app_ui.h"       // app_ui_ascii_fold: shared UTF-8 -> ASCII fold for the TFT fonts
 #include "nucleo_i18n.h"   // the OS language (settings.json ui.language): ANIMA follows it, TR(it,en)
 #include "nucleo_theme.h"  // THEME_* roles: the chrome follows the OS theme (docs/native-ui-kit.md)
+#include "nucleo_surface.h" // two screens: the conversation on the external panel
+#include "nucleo_extdisp.h" // ...and the composer on the Cardputer's own (nucleo_extdisp_internal_gfx)
+#include "nucleo_touch.h"   // taps on the external panel: pages, the deck, the tabs, the mode
 #include <M5GFX.h>
 #include "nucleo_anima.h"
 #include "nucleo_tts.h"
@@ -95,7 +98,20 @@ uint32_t nucleo_event_publish(const char *topic, const char *payload_json);
 // Launcher display name of a native app in the OS language (flash table in launcher_render.cpp); NULL when
 // the app keeps its own proper-noun name. Works in any boot — ANIMA Solo registers no other app.
 const char *launcher_app_localized_name(const char *id);
+int nucleo_power_battery_pct(void);   // the composer's status strip (-1 = unknown)
 }
+
+// TWO SCREENS. Every painter draws through G, normally the display itself. With an external panel the
+// conversation lives there (320x240, native, a smaller anti-aliased face: twice the rows) and the
+// Cardputer's own screen becomes the COMPOSER — the line being typed, big, right above the keyboard,
+// with its completion and the turn's status (draw_companion repoints G at the internal panel for it).
+// Every coordinate is relative to G's size (AW, AH), so the same painters serve both panels.
+static LovyanGFX *s_g = &d;
+#define G (*s_g)
+#define AW ((int)G.width())
+#define AH ((int)G.height())
+// The conversation is on the external panel (G is the display and the display is the large surface).
+static bool lg(void) { return s_g == (LovyanGFX *)&d && nucleo_surface_large(); }
 
 // Chrome follows the OS theme (docs/native-ui-kit.md §1): the roles, never an RGB565 literal, so AMOLED /
 // Hacker Green / Nano Banana recolour ANIMA like every other app. The focused row / active tab is the kit's
@@ -371,18 +387,24 @@ static int  s_today_count;                         // number of events TODAY (fo
 // (no panel read-back), so on our solid region backgrounds it stays crisp. Always pair fg+bg.
 static void set_font(unsigned char f)
 {
-    if      (f == F_BIG)  d.setFont(&fonts::FreeSans9pt7b);
-    else if (f == F_BOLD) d.setFont(&fonts::FreeSansBold9pt7b);
-    else if (f == F_MED)  d.setFont(&fonts::Font2);
-    else                  d.setFont(&fonts::Font0);
-    d.setTextSize(1);
+    if      (f == F_BIG)  G.setFont(&fonts::FreeSans9pt7b);
+    else if (f == F_BOLD) G.setFont(&fonts::FreeSansBold9pt7b);
+    else if (f == F_MED)  G.setFont(&fonts::Font2);
+    else                  G.setFont(&fonts::Font0);
+    G.setTextSize(1);
 }
-static unsigned char chat_font(void) { return s_big ? F_BIG : F_MED; }
+// The external panel always gets the sans face: at its ~143 ppi 18 px reads a touch smaller than the
+// mirrored picture did, and 12 rows fit where the Cardputer has 5.
+static unsigned char chat_font(void) { return (s_big || lg()) ? F_BIG : F_MED; }
 static int  font_h(unsigned char f)  { return (f == F_BIG || f == F_BOLD) ? 18 : f == F_MED ? 15 : 11; }
 static int  row_h(const Row *r)      { return font_h(r->font) + ((r->first & RF_FIRST) ? 3 : 0); }   // +gap before a new message
 static int  input_h(void)            { return font_h(chat_font()) + 8; }
+// Rows above the transcript (the header) and below it (the input line). Two screens: a taller header in a
+// readable face; the input line stays on both panels (the Cardputer's composer shows it big as well).
+static int  hdr_h(void)              { return lg() ? 22 : 18; }
+static int  input_band(void)         { return input_h() + 1; }
 // Width of the first n bytes of s with the CURRENT font (textWidth needs a NUL-terminated string).
-static int  meas(const char *s, int n) { char t[216]; if (n > 215) n = 215; memcpy(t, s, n); t[n] = 0; return (int)d.textWidth(t); }
+static int  meas(const char *s, int n) { char t[216]; if (n > 215) n = 215; memcpy(t, s, n); t[n] = 0; return (int)G.textWidth(t); }
 
 // ---- in-place painters (ANTI-FLICKER.md technique 2, no back-buffer) ---------------------------------
 // ANIMA draws DIRECT to the panel, so a fillRect-then-print blinks. These never clear under the text: the
@@ -391,57 +413,57 @@ static int  meas(const char *s, int n) { char t[216]; if (n > 215) n = 215; memc
 // Opaque text in the box [bx,bx+bw) x [by,by+bh) with the CURRENT font; returns the x after the text.
 static int box_text(int bx, int by, int bw, int bh, int tx, int ty, const char *s, unsigned short fg, unsigned short bg)
 {
-    const int fh = (int)d.fontHeight(), w = (s && s[0]) ? (int)d.textWidth(s) : 0, bx1 = bx + bw, by1 = by + bh;
+    const int fh = (int)G.fontHeight(), w = (s && s[0]) ? (int)G.textWidth(s) : 0, bx1 = bx + bw, by1 = by + bh;
     if (tx < bx) tx = bx;
     const int gy0 = ty < by ? by : ty, gy1 = ty + fh > by1 ? by1 : ty + fh;   // glyph rows inside the box
-    if (gy0 > by)  d.fillRect(bx, by, bw, gy0 - by, bg);
-    if (gy1 < by1) d.fillRect(bx, gy1, bw, by1 - gy1, bg);
+    if (gy0 > by)  G.fillRect(bx, by, bw, gy0 - by, bg);
+    if (gy1 < by1) G.fillRect(bx, gy1, bw, by1 - gy1, bg);
     if (gy1 > gy0) {
-        if (tx > bx) d.fillRect(bx, gy0, tx - bx, gy1 - gy0, bg);
-        if (tx + w < bx1) d.fillRect(tx + w, gy0, bx1 - tx - w, gy1 - gy0, bg);
+        if (tx > bx) G.fillRect(bx, gy0, tx - bx, gy1 - gy0, bg);
+        if (tx + w < bx1) G.fillRect(tx + w, gy0, bx1 - tx - w, gy1 - gy0, bg);
     }
-    if (w) { d.setTextColor(fg, bg); d.setCursor(tx, ty); d.print(s); }
+    if (w) { G.setTextColor(fg, bg); G.setCursor(tx, ty); G.print(s); }
     return tx + w;
 }
 // A focused-row pill (the kit's one selection look: accent fill, INK text) painted over whatever the band
 // held: only the four corner squares outside the arc and the side margins [0,x) / [x+w,xr) go to BG first.
 static void pill_band(int x, int y, int w, int h, int r, unsigned short col, int xr)
 {
-    if (x > 0) d.fillRect(0, y, x, h, BG);
-    if (x + w < xr) d.fillRect(x + w, y, xr - x - w, h, BG);
-    d.fillRect(x, y, r, r, BG);         d.fillRect(x + w - r, y, r, r, BG);
-    d.fillRect(x, y + h - r, r, r, BG); d.fillRect(x + w - r, y + h - r, r, r, BG);
-    d.fillRoundRect(x, y, w, h, r, col);
+    if (x > 0) G.fillRect(0, y, x, h, BG);
+    if (x + w < xr) G.fillRect(x + w, y, xr - x - w, h, BG);
+    G.fillRect(x, y, r, r, BG);         G.fillRect(x + w - r, y, r, r, BG);
+    G.fillRect(x, y + h - r, r, r, BG); G.fillRect(x + w - r, y + h - r, r, r, BG);
+    G.fillRoundRect(x, y, w, h, r, col);
 }
 // A one-line Font0 field [x0,x1) at glyph row y: two coloured segments (a, then b) aligned left or right,
 // everything else in the field painted BG. Header clusters, the reader's status strip.
 static void seg_field(int x0, int x1, int y, bool right, const char *a, unsigned short ca, const char *b, unsigned short cb)
 {
-    d.setFont(&fonts::Font0); d.setTextSize(1);
+    G.setFont(&fonts::Font0); G.setTextSize(1);
     const int wa = (a && a[0]) ? (int)strlen(a) * 6 : 0, wb = (b && b[0]) ? (int)strlen(b) * 6 : 0;
     const int gap = (wa && wb) ? 12 : 0;
     int x = right ? x1 - (wa + gap + wb) : x0;
     if (x < x0) x = x0;
-    if (x > x0) d.fillRect(x0, y, x - x0, 8, BG);
-    if (wa) { d.setTextColor(ca, BG); d.setCursor(x, y); d.print(a); x += wa; }
-    if (gap) { d.fillRect(x, y, gap, 8, BG); x += gap; }
-    if (wb) { d.setTextColor(cb, BG); d.setCursor(x, y); d.print(b); x += wb; }
-    if (x < x1) d.fillRect(x, y, x1 - x, 8, BG);
+    if (x > x0) G.fillRect(x0, y, x - x0, 8, BG);
+    if (wa) { G.setTextColor(ca, BG); G.setCursor(x, y); G.print(a); x += wa; }
+    if (gap) { G.fillRect(x, y, gap, 8, BG); x += gap; }
+    if (wb) { G.setTextColor(cb, BG); G.setCursor(x, y); G.print(b); x += wb; }
+    if (x < x1) G.fillRect(x, y, x1 - x, 8, BG);
 }
 // Slim scroll rail in the column [235,240): track, thumb, track as three non-overlapping pieces, so the
 // thumb moves without the column ever blanking. total/first/shown are in rows.
 static void draw_vscroll(int ty0, int avail, int total, int first, int shown)
 {
-    if (total <= 0 || shown >= total) { d.fillRect(235, ty0, 5, avail, BG); return; }
+    if (total <= 0 || shown >= total) { G.fillRect((AW - 5), ty0, 5, avail, BG); return; }
     int th = avail * shown / total; if (th < 8) th = 8;
     if (th > avail) th = avail;
     int tyo = first * (avail - th) / (total - shown);
     if (tyo < 0) tyo = 0;
     if (tyo > avail - th) tyo = avail - th;
     const int bot = ty0 + tyo + th, rest = ty0 + avail - bot;
-    if (tyo) { d.fillRect(235, ty0, 2, tyo, BG); d.drawFastVLine(237, ty0, tyo, LINE); d.fillRect(238, ty0, 2, tyo, BG); }
-    d.fillRect(235, ty0 + tyo, 1, th, BG); d.fillRect(236, ty0 + tyo, 3, th, MUTED); d.fillRect(239, ty0 + tyo, 1, th, BG);
-    if (rest > 0) { d.fillRect(235, bot, 2, rest, BG); d.drawFastVLine(237, bot, rest, LINE); d.fillRect(238, bot, 2, rest, BG); }
+    if (tyo) { G.fillRect((AW - 5), ty0, 2, tyo, BG); G.drawFastVLine((AW - 3), ty0, tyo, LINE); G.fillRect((AW - 2), ty0, 2, tyo, BG); }
+    G.fillRect((AW - 5), ty0 + tyo, 1, th, BG); G.fillRect((AW - 4), ty0 + tyo, 3, th, MUTED); G.fillRect((AW - 1), ty0 + tyo, 1, th, BG);
+    if (rest > 0) { G.fillRect((AW - 5), bot, 2, rest, BG); G.drawFastVLine((AW - 3), bot, rest, LINE); G.fillRect((AW - 2), bot, 2, rest, BG); }
 }
 
 // ---- row cache: word-wrap the message ring by pixel width --------------------
@@ -460,10 +482,10 @@ static void emit_row(const char *p, int len, unsigned short col, unsigned short 
 static int tag_w(const char *t) { return (int)strlen(t) * 6; }
 static void draw_tag(int x, int y, const char *t, unsigned short col)
 {
-    d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextColor(col, BG);
+    G.setFont(&fonts::Font0); G.setTextSize(1); G.setTextColor(col, BG);
     for (const char *p = t; *p; p++, x += 6) {
-        if (*p == '|') { d.fillRect(x, y, 6, 8, BG); d.fillRect(x + 2, y + 3, 2, 2, col); }
-        else { char c[2] = { *p, 0 }; d.setCursor(x, y); d.print(c); }
+        if (*p == '|') { G.fillRect(x, y, 6, 8, BG); G.fillRect(x + 2, y + 3, 2, 2, col); }
+        else { char c[2] = { *p, 0 }; G.setCursor(x, y); G.print(c); }
     }
 }
 
@@ -473,12 +495,12 @@ static void wrap_msg(const Msg *m, const char *override_text)
 {
     // ANIMA answers use a BOLD face in big mode (stronger on this low-DPI panel); questions stay regular.
     unsigned char font = (m->role == R_META)  ? (unsigned char)F_SMALL
-                       : (m->role == R_ANIMA) ? (s_big ? (unsigned char)F_BOLD : (unsigned char)F_MED)
+                       : (m->role == R_ANIMA) ? ((s_big || lg()) ? (unsigned char)F_BOLD : (unsigned char)F_MED)
                        :                        chat_font();
     set_font(font);
     // User rows are right-aligned with a min-x of 22, so their usable width is 232-22=210; ANIMA rows
     // start at x=11 (210..225 region) so 214. Wrapping must match the render budget or a full line clips.
-    const int availw = (m->role == R_META) ? 224 : (m->role == R_USER) ? 210 : 214;
+    const int availw = (m->role == R_META) ? (AW - 16) : (m->role == R_USER) ? (AW - 30) : (AW - 26);
     const char *text = override_text ? override_text : m->text;   // current answer: full text from s_ses->full
     s_wrap_mi = (unsigned char)(m - s_msg);
     int before = s_rown, first = 1;
@@ -508,7 +530,7 @@ static void wrap_msg(const Msg *m, const char *override_text)
     // else on a small row of its own. Not while the typewriter is still revealing the text.
     if (m->role == R_ANIMA && m->tag[0] && !(override_text && s_reveal >= 0)) {
         const Row *lr = &s_row[s_rown - 1];
-        if (meas(lr->p, lr->len) <= 217 - tag_w(m->tag)) s_row[s_rown - 1].first |= RF_TAG;
+        if (meas(lr->p, lr->len) <= (AW - 23) - tag_w(m->tag)) s_row[s_rown - 1].first |= RF_TAG;
         else emit_row(m->tag, (int)strlen(m->tag), K_DIM, 0, R_META, F_SMALL, RF_TAGROW);
     }
 }
@@ -531,7 +553,7 @@ static void wrap_ring(int k, bool from_cur)
                 s_ses->full[s_reveal] = saved;
             } else wrap_msg(&s_msg[idx], s_ses->full);
         } else if (on) wrap_msg(&s_msg[idx], NULL); }
-    d.setFont(&fonts::Font0); d.setTextSize(1);   // leave the global font at the framework default
+    G.setFont(&fonts::Font0); G.setTextSize(1);   // leave the global font at the framework default
     s_d_body = true;                              // the view mode (FOLLOW / ANCHOR / MANUAL) decides where it lands
 }
 static void rebuild_rows(void) { wrap_ring(0, false); }
@@ -569,9 +591,9 @@ static void push_anima(const char *t, unsigned short acc) { push_msg(R_ANIMA, FG
 // The row at the TOP of the viewport drops its 3 px message gap (it separates messages, not the view
 // edge), so a page holds one more line. Geometry: chat body = content - 18 header - input - 1; the
 // full-screen reader (fullscreen: no header, input or footer) = RD_BODY rows + a 9 px status strip.
-#define RD_BODY 126
+#define RD_BODY (AH - 9)
 static int top_h(int i)  { return font_h(s_row[i].font); }                   // row i as the view's top row
-static int chat_avail(void) { return nucleo_app_content_height() - 18 - input_h() - 1; }
+static int chat_avail(void) { return nucleo_app_content_height() - hdr_h() - input_band(); }
 static int first_row_of(int slot) { for (int i = 0; i < s_rown; i++) if (s_row[i].mi == slot) return i; return -1; }
 // The last row index that fits fully when row t is at the top.
 static int last_fit(int t, int avail)
@@ -2160,7 +2182,7 @@ static void leave(void)
     // In practice leave() only runs from close_app() in the Solo boot, right before its esp_restart().
     for (int i = 0; i < 35 && !nucleo_screen_acquire(); i++) vTaskDelay(pdMS_TO_TICKS(20));
     if (nucleo_exclusive_active()) nucleo_exclusive_exit();  // restore httpd/L1/mDNS/voice: canvas already restored
-    d.setFont(&fonts::Font0); d.setTextSize(1);    // restore the framework's default font for the next app
+    G.setFont(&fonts::Font0); G.setTextSize(1);    // restore the framework's default font for the next app
 }
 
 // The hint shown on the chat page: the deck, an empty line, or a line being written (<= 39 chars, the
@@ -2645,9 +2667,11 @@ static void retry_online(void)
     submit();
 }
 
+static bool touch_key(int key, char ch);
 static void on_key(int key, char ch)
 {
     if (!s_ses) return;                                     // no session block: only Esc (on_back) works
+    if (touch_key(key, ch)) return;                         // a tap on the external panel
     if (s_exit_confirm) {                                   // confirm modal: Enter = confirm, anything else = cancel
         s_exit_confirm = false;
         if (s_ed_open) {                                    // editor "discard the text?": Enter only (letters are
@@ -2752,22 +2776,47 @@ static void tick(void)
 // the content starts at 22. It fills its own band, so it is painted only on a menu scene change.
 static void draw_tabbar(int active)
 {
-    d.setFont(&fonts::Font0); d.setTextSize(1);
+    if (lg()) {                                     // two screens: five equal segments across the panel, Font2,
+        const char *const *nm = s_en ? TABS_EN : TABS_IT;   // each one a touch target (touch_targets)
+        const int tw = AW / TAB_N;
+        G.setFont(&fonts::Font2); G.setTextSize(1);
+        G.fillRect(0, 0, AW, 22, BG);
+        for (int i = 0; i < TAB_N; i++) {
+            const bool on = i == active;
+            G.fillRoundRect(i * tw + 2, 1, tw - 4, 19, 5, on ? ACC : LINE);
+            G.setTextColor(on ? INK : MUTED, on ? ACC : LINE);
+            G.setCursor(i * tw + (tw - (int)G.textWidth(nm[i])) / 2, 3); G.print(nm[i]);
+        }
+        G.setFont(&fonts::Font0);
+        return;
+    }
+    G.setFont(&fonts::Font0); G.setTextSize(1);
     app_ui_tabs(0, s_en ? TABS_EN : TABS_IT, TAB_N, active, ACC);
-    d.fillRect(0, 20, 240, 2, BG);
+    G.fillRect(0, 20, AW, 2, BG);
 }
 // A menu row band [y, y+h): focused = the accent pill (INK content), else BG (MUTED content). It paints the
 // whole band, so repainting one row never needs a clear first; returns the content background.
 static unsigned short row_band(int y, int h, bool focus)
 {
-    if (focus) { pill_band(4, y, 232, h - 2, 9, ACC, 240); d.fillRect(0, y + h - 2, 240, 2, BG); return ACC; }
-    d.fillRect(0, y, 240, h, BG);
+    if (focus) { pill_band(4, y, (AW - 8), h - 2, 9, ACC, AW); G.fillRect(0, y + h - 2, AW, 2, BG); return ACC; }
+    G.fillRect(0, y, AW, h, BG);
     return BG;
 }
 // Menu lists repaint per ROW: slot k (counted from the first visible row) is repainted only when what it
 // shows changed (row, y, focus, value). A focus move then repaints two rows, not the screen.
 #define MSIG_N 8
 static uint32_t mix(uint32_t h, uint32_t v) { return (h ^ v) * 16777619u; }
+// The list rows the menu put on the panel this frame (y, height, row index): a tap picks / opens one.
+struct MenuTap { short y, h, idx; };
+static MenuTap s_mt[12];
+static int s_mt_n;
+static void mt_add(int y, int h, int idx, int clip_top, int ch)
+{
+    if (s_mt_n >= 12) return;
+    int y0 = y < clip_top ? clip_top : y, y1 = y + h > ch ? ch : y + h;
+    if (y1 <= y0) return;
+    s_mt[s_mt_n++] = MenuTap{ (short)y0, (short)(y1 - y0), (short)idx };
+}
 static bool mrow_dirty(int k, uint32_t sig)
 {
     sig |= 1u;                                          // 0 = "unknown" (forces a paint)
@@ -2781,7 +2830,7 @@ static void mlist_tail(int k, int y, int ch)
 {
     for (; k < MSIG_N; k++) s_ses->msig[k] = 0;
     if (y > ch) y = ch;
-    if (y < ch && s_ses->mleft != y) d.fillRect(0, y, 240, ch - y, BG);
+    if (y < ch && s_ses->mleft != y) G.fillRect(0, y, AW, ch - y, BG);
     s_ses->mleft = (short)y;
 }
 
@@ -2793,36 +2842,36 @@ static void draw_set_row(int y, bool focus, const char *label, const char *val,
 {
     const int h = focus ? 46 : 30;
     const unsigned short bg = row_band(y, h, focus), ink = focus ? INK : MUTED;
-    d.setFont(&fonts::Font0); d.setTextSize(2);
-    d.setTextColor(ink, bg);
-    d.setCursor(16, y + (h - 16) / 2 - 1); d.print(label);
+    G.setFont(&fonts::Font0); G.setTextSize(2);
+    G.setTextColor(ink, bg);
+    G.setCursor(16, y + (h - 16) / 2 - 1); G.print(label);
 
     if (kind == SV_SLIDER) {                                        // track LINE, fill GRN, knob FG
         bool edit = focus && s_edit;
-        int sw = focus ? 96 : 60, sh = 12, bx = 230 - sw, vy = y + (h - sh) / 2;
-        d.fillRoundRect(bx, vy, sw, sh, sh / 2, LINE);
+        int sw = focus ? 96 : 60, sh = 12, bx = (AW - 10) - sw, vy = y + (h - sh) / 2;
+        G.fillRoundRect(bx, vy, sw, sh, sh / 2, LINE);
         int onw = slider_val * sw / 100; if (onw < 0) onw = 0; if (onw > sw) onw = sw;
-        if (onw > 0) d.fillRoundRect(bx, vy, onw, sh, sh / 2, GRN);
+        if (onw > 0) G.fillRoundRect(bx, vy, onw, sh, sh / 2, GRN);
         int kx = bx + onw; if (kx < bx + 6) kx = bx + 6; if (kx > bx + sw - 6) kx = bx + sw - 6;
-        d.fillCircle(kx, vy + sh / 2, edit ? sh / 2 + 2 : sh / 2 + 1, FG);
-        if (edit) d.drawRoundRect(bx - 2, vy - 2, sw + 4, sh + 4, (sh + 4) / 2, INK);
+        G.fillCircle(kx, vy + sh / 2, edit ? sh / 2 + 2 : sh / 2 + 1, FG);
+        if (edit) G.drawRoundRect(bx - 2, vy - 2, sw + 4, sh + 4, (sh + 4) / 2, INK);
         return;
     }
     if (kind == SV_TOGGLE) {
-        int sw = 42, sh = 20, bx = 230 - sw, vy = y + (h - sh) / 2;
-        d.fillRoundRect(bx, vy, sw, sh, sh / 2, on ? GRN : LINE);
+        int sw = 42, sh = 20, bx = (AW - 10) - sw, vy = y + (h - sh) / 2;
+        G.fillRoundRect(bx, vy, sw, sh, sh / 2, on ? GRN : LINE);
         int kx = on ? bx + sw - sh / 2 - 1 : bx + sh / 2 + 1;
-        d.fillCircle(kx, vy + sh / 2, sh / 2 - 3, on ? INK : FG);
+        G.fillCircle(kx, vy + sh / 2, sh / 2 - 3, on ? INK : FG);
         return;
     }
     if (kind == SV_ACTION) {                                        // a chevron: Enter acts
-        int ax = 214, ay = y + h / 2;
-        d.fillTriangle(ax, ay - 5, ax, ay + 5, ax + 6, ay, ink);
+        int ax = (AW - 26), ay = y + h / 2;
+        G.fillTriangle(ax, ay - 5, ax, ay + 5, ax + 6, ay, ink);
         return;
     }
     if (val && val[0]) {                                            // SV_TEXT value, right-aligned
-        d.setTextColor(ink, bg);
-        d.setCursor(228 - (int)strlen(val) * 12, y + (h - 16) / 2 - 1); d.print(val);
+        G.setTextColor(ink, bg);
+        G.setCursor((AW - 12) - (int)strlen(val) * 12, y + (h - 16) / 2 - 1); G.print(val);
     }
 }
 
@@ -2852,7 +2901,7 @@ static int build_ia(IAItem *it)
 
 // Word-wrap `text` (honouring '\n') from (x,y) within maxw px and render it. Returns the y after the
 // last line. Shared by the manual; measures with the chosen font so it never clips on either language.
-static void wline(int x, int y, int lineh, const char *t, unsigned short col) { box_text(0, y, 240, lineh, x, y, t, col, BG); }
+static void wline(int x, int y, int lineh, const char *t, unsigned short col) { box_text(0, y, AW, lineh, x, y, t, col, BG); }
 static int draw_wrapped(const char *text, int x, int y, int maxw, unsigned char font, unsigned short col, int lineh)
 {
     set_font(font);
@@ -2924,18 +2973,18 @@ static void draw_guide(int ch)
     s_ses->mpage = (short)pg;
     const GuidePage *g = (s_en ? GUIDE_EN : GUIDE_IT) + pg;
     set_font(F_BOLD);                                     // big bold title (was a tiny 6x8), painted in place
-    box_text(0, 22, 240, 21, 8, 22, g->title, ACC, BG);
-    d.drawFastHLine(8, 43, 224, LINE);
-    d.setClipRect(0, 45, 240, ch - 53);                  // body band, kept clear of the title and the dots
-    int by = draw_wrapped(g->body, 8, 47, 224, F_BIG, FG, 18);   // big anti-aliased FreeSans body
-    d.clearClipRect();
-    if (by < ch - 8) d.fillRect(0, by, 240, ch - 8 - by, BG);
-    int gap = 14, span = (GUIDE_N - 1) * gap, x0 = 120 - span / 2, dy = ch - 6;          // carousel page dots
+    box_text(0, 22, AW, 21, 8, 22, g->title, ACC, BG);
+    G.drawFastHLine(8, 43, (AW - 16), LINE);
+    G.setClipRect(0, 45, AW, ch - 53);                  // body band, kept clear of the title and the dots
+    int by = draw_wrapped(g->body, 8, 47, (AW - 16), F_BIG, FG, 18);   // big anti-aliased FreeSans body
+    G.clearClipRect();
+    if (by < ch - 8) G.fillRect(0, by, AW, ch - 8 - by, BG);
+    int gap = 14, span = (GUIDE_N - 1) * gap, x0 = (AW / 2) - span / 2, dy = ch - 6;          // carousel page dots
     for (int i = 0; i < GUIDE_N; i++) {
-        d.fillRect(x0 + i * gap - 3, dy - 3, 7, 7, BG);  // a dot's own 7x7 box: the only thing that clears
-        d.fillCircle(x0 + i * gap, dy, i == pg ? 3 : 2, i == pg ? ACC : MUTED);
+        G.fillRect(x0 + i * gap - 3, dy - 3, 7, 7, BG);  // a dot's own 7x7 box: the only thing that clears
+        G.fillCircle(x0 + i * gap, dy, i == pg ? 3 : 2, i == pg ? ACC : MUTED);
     }
-    d.setFont(&fonts::Font0); d.setTextSize(1);          // leave the global font at the framework default
+    G.setFont(&fonts::Font0); G.setTextSize(1);          // leave the global font at the framework default
 }
 
 // ---- IA tab: the settings list (Music/Video parity) -------------------------
@@ -2945,11 +2994,12 @@ static void draw_ia(int ch)
 {
     IAItem it[IA_ROWS]; int n = build_ia(it);
     const int top = 24, f = s_mrow;
-    d.setClipRect(0, 22, 240, ch - 22);
+    G.setClipRect(0, 22, AW, ch - 22);
     int yy = list_scroll_y0(top, ch - top, n, f), k = 0;
     for (int i = 0; i < n; i++) {
         int hh = (i == f) ? 46 : 30;
         if (yy + hh > 22 && yy < ch) {
+            mt_add(yy, hh, i, 22, ch);
             uint32_t sg = mix(mix(mix(mix(2166136261u, 0x1A00u + i), ((uint32_t)yy << 2) | (i == f) | ((i == f && s_edit) << 1)),
                                   (uint32_t)(it[i].slider * 2 + it[i].on)), (uint32_t)(it[i].val[0] | it[i].val[1] << 8 | it[i].val[2] << 16));
             if (mrow_dirty(k, sg)) draw_set_row(yy, i == f, it[i].label, it[i].val, it[i].kind, it[i].on, it[i].slider);
@@ -2957,7 +3007,7 @@ static void draw_ia(int ch)
         }
         yy += hh;
     }
-    d.clearClipRect();
+    G.clearClipRect();
     mlist_tail(k, yy, ch);
 }
 
@@ -2966,18 +3016,17 @@ static void draw_ia(int ch)
 // One STATO line: small grey label (Font0) on the left, the value BIG (Font2) so it reads at a glance.
 static void stato_row(int y, const char *lbl, const char *val, unsigned short vc)
 {
-    d.setFont(&fonts::Font0); d.setTextSize(1);
-    d.setTextColor(MUTED, BG); d.setCursor(12, y + 4); d.print(lbl);
-    d.setFont(&fonts::Font2); d.setTextSize(1);
+    G.setFont(&fonts::Font0); G.setTextSize(1);
+    G.setTextColor(MUTED, BG); G.setCursor(12, y + 4); G.print(lbl);
+    G.setFont(&fonts::Font2); G.setTextSize(1);
     char v[48]; snprintf(v, sizeof v, "%s", val);
-    while (v[0] && (int)d.textWidth(v) > 232 - 88) v[strlen(v) - 1] = 0;   // clip to the right edge
-    d.setTextColor(vc, BG); d.setCursor(88, y); d.print(v);
+    while (v[0] && (int)G.textWidth(v) > (AW - 8) - 88) v[strlen(v) - 1] = 0;   // clip to the right edge
+    G.setTextColor(vc, BG); G.setCursor(88, y); G.print(v);
 }
 // STATO tab: a watch "system face" — readable Font2 values with status colours, using the full body.
 static void draw_stato(int ch)
 {
-    (void)ch;
-    const int step = 16, ymax = 104;
+    const int step = 16, ymax = ch - 17;
     int y = 24;
     char v[48];
 
@@ -2996,8 +3045,8 @@ static void draw_stato(int ch)
     stato_row(y, TR5("Rete", "Net", "Red", "Reseau", "Netz"), v, (ip && ip[0]) ? GRN : MUTED);
     if (ip && ip[0] && ssid && ssid[0]) {                                // SSID as a small grey tag, right-aligned
         char sb[18]; snprintf(sb, sizeof sb, "%.16s", ssid);
-        d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextColor(DIM, BG);
-        d.setCursor(232 - (int)strlen(sb) * 6, y + 4); d.print(sb);
+        G.setFont(&fonts::Font0); G.setTextSize(1); G.setTextColor(DIM, BG);
+        G.setCursor((AW - 8) - (int)strlen(sb) * 6, y + 4); G.print(sb);
     }
     y += step;
 
@@ -3028,13 +3077,13 @@ static void draw_stato(int ch)
 static void fit_w(char *s, int budget)
 {
     int L = (int)strlen(s);
-    if (L == 0 || (int)d.textWidth(s) <= budget) return;          // already fits — leave it untouched
+    if (L == 0 || (int)G.textWidth(s) <= budget) return;          // already fits — leave it untouched
     for (int n = L - 2; n > 0; n--) {                             // longest "<prefix>.." that fits, first
         s[n] = '.'; s[n + 1] = '.'; s[n + 2] = 0;                 // n+2 <= L: stays inside the buffer
-        if ((int)d.textWidth(s) <= budget) return;
+        if ((int)G.textWidth(s) <= budget) return;
     }
     int n = (int)strlen(s);                                       // pathologically narrow budget: hard clip
-    while (n > 0 && (int)d.textWidth(s) > budget) s[--n] = 0;
+    while (n > 0 && (int)G.textWidth(s) > budget) s[--n] = 0;
 }
 
 // ---- IDEE tab: the skill catalog, a smartwatch-style drill-down -------------
@@ -3048,34 +3097,34 @@ static void draw_cat_icon(int c, int x, int y, unsigned short col)
 {
     switch (c) {
         case 0:  // Sistema: an info "i" in a ring
-            d.drawCircle(x + 8, y + 8, 6, col);
-            d.fillRect(x + 7, y + 4, 2, 2, col); d.fillRect(x + 7, y + 7, 2, 5, col); break;
+            G.drawCircle(x + 8, y + 8, 6, col);
+            G.fillRect(x + 7, y + 4, 2, 2, col); G.fillRect(x + 7, y + 7, 2, 5, col); break;
         case 1:  // Calcolo: a calculator (screen + 2x2 keys)
-            d.drawRoundRect(x + 2, y + 1, 12, 14, 2, col); d.drawFastHLine(x + 4, y + 4, 8, col);
-            d.fillRect(x + 4, y + 8, 2, 2, col); d.fillRect(x + 9, y + 8, 2, 2, col);
-            d.fillRect(x + 4, y + 11, 2, 2, col); d.fillRect(x + 9, y + 11, 2, 2, col); break;
+            G.drawRoundRect(x + 2, y + 1, 12, 14, 2, col); G.drawFastHLine(x + 4, y + 4, 8, col);
+            G.fillRect(x + 4, y + 8, 2, 2, col); G.fillRect(x + 9, y + 8, 2, 2, col);
+            G.fillRect(x + 4, y + 11, 2, 2, col); G.fillRect(x + 9, y + 11, 2, 2, col); break;
         case 2:  // Geometria: a right-triangle (set square)
-            d.drawTriangle(x + 2, y + 13, x + 13, y + 13, x + 2, y + 3, col);
-            d.drawRect(x + 2, y + 11, 3, 2, col); break;                       // right-angle tick
+            G.drawTriangle(x + 2, y + 13, x + 13, y + 13, x + 2, y + 3, col);
+            G.drawRect(x + 2, y + 11, 3, 2, col); break;                       // right-angle tick
         case 3:  // Conversioni: two opposed arrows (swap)
-            d.drawFastHLine(x + 3, y + 5, 8, col); d.fillTriangle(x + 11, y + 3, x + 11, y + 7, x + 14, y + 5, col);
-            d.drawFastHLine(x + 5, y + 10, 8, col); d.fillTriangle(x + 5, y + 8, x + 5, y + 12, x + 2, y + 10, col); break;
+            G.drawFastHLine(x + 3, y + 5, 8, col); G.fillTriangle(x + 11, y + 3, x + 11, y + 7, x + 14, y + 5, col);
+            G.drawFastHLine(x + 5, y + 10, 8, col); G.fillTriangle(x + 5, y + 8, x + 5, y + 12, x + 2, y + 10, col); break;
         case 4:  // Meteo: a cloud
-            d.fillCircle(x + 6, y + 9, 3, col); d.fillCircle(x + 10, y + 8, 4, col);
-            d.fillCircle(x + 13, y + 9, 2, col); d.fillRect(x + 5, y + 10, 9, 2, col); break;
+            G.fillCircle(x + 6, y + 9, 3, col); G.fillCircle(x + 10, y + 8, 4, col);
+            G.fillCircle(x + 13, y + 9, 2, col); G.fillRect(x + 5, y + 10, 9, 2, col); break;
         case 5:  // Agenda: a calendar
-            d.drawRoundRect(x + 2, y + 3, 12, 11, 1, col); d.fillRect(x + 2, y + 3, 12, 3, col);
-            d.fillRect(x + 5, y + 1, 2, 3, col); d.fillRect(x + 9, y + 1, 2, 3, col);
-            d.fillRect(x + 5, y + 9, 2, 2, col); break;                        // a marked day
+            G.drawRoundRect(x + 2, y + 3, 12, 11, 1, col); G.fillRect(x + 2, y + 3, 12, 3, col);
+            G.fillRect(x + 5, y + 1, 2, 3, col); G.fillRect(x + 9, y + 1, 2, 3, col);
+            G.fillRect(x + 5, y + 9, 2, 2, col); break;                        // a marked day
         case 6:  // App e File: a 2x2 app grid
-            d.fillRect(x + 3, y + 3, 4, 4, col); d.fillRect(x + 9, y + 3, 4, 4, col);
-            d.fillRect(x + 3, y + 9, 4, 4, col); d.fillRect(x + 9, y + 9, 4, 4, col); break;
+            G.fillRect(x + 3, y + 3, 4, 4, col); G.fillRect(x + 9, y + 3, 4, 4, col);
+            G.fillRect(x + 3, y + 9, 4, 4, col); G.fillRect(x + 9, y + 9, 4, 4, col); break;
         case 7:  // Sapere: a lightbulb
-            d.drawCircle(x + 8, y + 6, 5, col);
-            d.drawFastHLine(x + 6, y + 12, 5, col); d.drawFastHLine(x + 7, y + 14, 3, col); break;
+            G.drawCircle(x + 8, y + 6, 5, col);
+            G.drawFastHLine(x + 6, y + 12, 5, col); G.drawFastHLine(x + 7, y + 14, 3, col); break;
         default: // Traduci: a globe
-            d.drawCircle(x + 8, y + 8, 6, col);
-            d.drawFastHLine(x + 2, y + 8, 13, col); d.drawFastVLine(x + 8, y + 2, 13, col); break;
+            G.drawCircle(x + 8, y + 8, 6, col);
+            G.drawFastHLine(x + 2, y + 8, 13, col); G.drawFastVLine(x + 8, y + 2, 13, col); break;
     }
 }
 
@@ -3088,17 +3137,17 @@ static void draw_cat_row(int y, bool focus, int i)
     const unsigned short bg = row_band(y, h, focus), ink = focus ? INK : MUTED;
     int cy = y + h / 2, ty = y + (h - 16) / 2;
     char num[4]; snprintf(num, sizeof num, "%d", i + 1);                     // quick-pick index, subtle
-    d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextColor(focus ? INK : DIM, bg);
-    d.setCursor(11, cy - 3); d.print(num);
+    G.setFont(&fonts::Font0); G.setTextSize(1); G.setTextColor(focus ? INK : DIM, bg);
+    G.setCursor(11, cy - 3); G.print(num);
     draw_cat_icon(i, 22, ty, ink);                                           // identity glyph
-    d.setFont(&fonts::Font0); d.setTextSize(2); d.setTextColor(ink, bg);     // big label
+    G.setFont(&fonts::Font0); G.setTextSize(2); G.setTextColor(ink, bg);     // big label
     char line[40]; snprintf(line, sizeof line, "%s", cat_label(i));
     fit_w(line, 150);                                                        // ".." if longer; room for badge + chevron
-    d.setCursor(44, ty - 1); d.print(line);
+    G.setCursor(44, ty - 1); G.print(line);
     char cnt[6]; snprintf(cnt, sizeof cnt, "%d", cat_leaf_count(i));         // leaf-count badge, right of the label
-    d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextColor(ink, bg);
-    d.setCursor(206 - (int)strlen(cnt) * 6, cy - 3); d.print(cnt);
-    d.fillTriangle(222, cy - 4, 222, cy + 4, 227, cy, ink);                  // drill chevron
+    G.setFont(&fonts::Font0); G.setTextSize(1); G.setTextColor(ink, bg);
+    G.setCursor((AW - 34) - (int)strlen(cnt) * 6, cy - 3); G.print(cnt);
+    G.fillTriangle((AW - 18), cy - 4, (AW - 18), cy + 4, (AW - 13), cy, ink);                  // drill chevron
 }
 
 // One leaf row, framed like an IA settings row: a subtle quick-pick index on the left, the big size-2
@@ -3111,14 +3160,14 @@ static void draw_leaf_row(int y, bool focus, int c, int i)
     bool form = L->slots > 0;
     int cy = y + h / 2, ty = y + (h - 16) / 2;
     char num[4]; snprintf(num, sizeof num, "%d", i + 1);                     // quick-pick index, subtle
-    d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextColor(focus ? INK : DIM, bg);
-    d.setCursor(11, cy - 3); d.print(num);
-    d.setFont(&fonts::Font0); d.setTextSize(2); d.setTextColor(ink, bg);     // big label
+    G.setFont(&fonts::Font0); G.setTextSize(1); G.setTextColor(focus ? INK : DIM, bg);
+    G.setCursor(11, cy - 3); G.print(num);
+    G.setFont(&fonts::Font0); G.setTextSize(2); G.setTextColor(ink, bg);     // big label
     char line[44]; snprintf(line, sizeof line, "%s", s_en ? L->l_en : L->l_it);
-    fit_w(line, form ? 152 : 188);                                           // ".." if longer; room for the form badge
-    d.setCursor(34, ty - 1); d.print(line);
-    if (form) { d.setFont(&fonts::Font0); d.setTextSize(2); d.setTextColor(ink, bg);
-                d.setCursor(202, ty - 1); d.print("..."); }
+    fit_w(line, form ? (AW - 88) : (AW - 52));                                           // ".." if longer; room for the form badge
+    G.setCursor(34, ty - 1); G.print(line);
+    if (form) { G.setFont(&fonts::Font0); G.setTextSize(2); G.setTextColor(ink, bg);
+                G.setCursor((AW - 38), ty - 1); G.print("..."); }
 }
 
 // Natural list scroll shared by the IDEE/OGGI/IA lists. A persistent pixel offset (s_list_scroll) that
@@ -3143,17 +3192,18 @@ static int list_scroll_y0(int top, int avail, int n, int f)
 static void draw_idee_cats(int ch)
 {
     const int top = 24, f = s_mrow;
-    d.setClipRect(0, 22, 240, ch - 22);
+    G.setClipRect(0, 22, AW, ch - 22);
     int yy = list_scroll_y0(top, ch - top, CAT_N, f), k = 0;
     for (int i = 0; i < CAT_N; i++) {
         int hh = (i == f) ? 46 : 30;
         if (yy + hh > 22 && yy < ch) {
+            mt_add(yy, hh, i, 22, ch);
             if (mrow_dirty(k, mix(mix(2166136261u, 0xC000u + i), ((uint32_t)yy << 1) | (i == f)))) draw_cat_row(yy, i == f, i);
             k++;
         }
         yy += hh;
     }
-    d.clearClipRect();
+    G.clearClipRect();
     mlist_tail(k, yy, ch);
 }
 
@@ -3164,25 +3214,26 @@ static void draw_idee_leaves(int ch)
     int c = s_idee_cat, n = cat_leaf_count(c);
     if (s_ses->mfull) {                           // the breadcrumb is static for the whole scene
         draw_cat_icon(c, 6, 22, ACC);             // breadcrumb icon carries the category identity down
-        d.setFont(&fonts::Font0); d.setTextSize(1);
+        G.setFont(&fonts::Font0); G.setTextSize(1);
         char hd[40]; snprintf(hd, sizeof hd, "< %s", cat_label(c));
-        d.setTextColor(ACC, BG); d.setCursor(28, 27); d.print(hd);
+        G.setTextColor(ACC, BG); G.setCursor(28, 27); G.print(hd);
         char cc[6]; snprintf(cc, sizeof cc, "%d", n);
-        d.setTextColor(MUTED, BG); d.setCursor(232 - (int)strlen(cc) * 6, 27); d.print(cc);
-        d.drawFastHLine(8, 40, 224, LINE);
+        G.setTextColor(MUTED, BG); G.setCursor((AW - 8) - (int)strlen(cc) * 6, 27); G.print(cc);
+        G.drawFastHLine(8, 40, (AW - 16), LINE);
     }
     const int top = 44, f = s_mrow;
-    d.setClipRect(0, 42, 240, ch - 42);
+    G.setClipRect(0, 42, AW, ch - 42);
     int yy = list_scroll_y0(top, ch - top, n, f), k = 0;
     for (int i = 0; i < n; i++) {
         int hh = (i == f) ? 46 : 30;
         if (yy + hh > 42 && yy < ch) {
+            mt_add(yy, hh, i, 42, ch);
             if (mrow_dirty(k, mix(mix(2166136261u, 0x1E00u + i), ((uint32_t)yy << 1) | (i == f)))) draw_leaf_row(yy, i == f, c, i);
             k++;
         }
         yy += hh;
     }
-    d.clearClipRect();
+    G.clearClipRect();
     mlist_tail(k, yy, ch);
 }
 
@@ -3194,77 +3245,77 @@ static void draw_idee_form(int ch)
 {
     const Leaf *L = &LEAVES[s_form_leaf];
     int s = s_form_slot;
-    const int bx = 8, bw = 224, by = 64, bh = 38;
+    const int bx = 8, bw = (AW - 16), by = 64, bh = 38;
 
     // -- breadcrumb: icon + "Cat > Leaf" (left) + the value box frame: static for the whole form --
     if (s_ses->mfull) {
         draw_cat_icon(L->cat, 6, 22, ACC);
-        d.setFont(&fonts::Font0); d.setTextSize(1);
+        G.setFont(&fonts::Font0); G.setTextSize(1);
         char hd[52]; snprintf(hd, sizeof hd, "%s > %s", cat_label(L->cat), s_en ? L->l_en : L->l_it);
-        while (hd[0] && (int)d.textWidth(hd) > 150) hd[strlen(hd) - 1] = 0;
-        d.setTextColor(ACC, BG); d.setCursor(28, 27); d.print(hd);
-        d.drawFastHLine(8, 40, 224, LINE);
-        d.drawRoundRect(bx, by, bw, bh, 8, ACC); d.drawRoundRect(bx + 1, by + 1, bw - 2, bh - 2, 7, ACC);   // the active field
-        d.fillRect(bx + 4, by + 5, 4, bh - 10, ACC);            // active rail
+        while (hd[0] && (int)G.textWidth(hd) > 150) hd[strlen(hd) - 1] = 0;
+        G.setTextColor(ACC, BG); G.setCursor(28, 27); G.print(hd);
+        G.drawFastHLine(8, 40, (AW - 16), LINE);
+        G.drawRoundRect(bx, by, bw, bh, 8, ACC); G.drawRoundRect(bx + 1, by + 1, bw - 2, bh - 2, 7, ACC);   // the active field
+        G.fillRect(bx + 4, by + 5, 4, bh - 10, ACC);            // active rail
     }
     // -- step "n/N" + dots (multi-field forms): a fixed field and each dot's own box --
     if (L->slots > 1) {
         char sp[12]; snprintf(sp, sizeof sp, "%d/%d", s + 1, L->slots);
-        d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(186, 27); d.print(sp);
+        G.setFont(&fonts::Font0); G.setTextSize(1); G.setTextColor(MUTED, BG); G.setCursor((AW - 54), 27); G.print(sp);
         for (int i = 0; i < L->slots; i++) {
-            int dx = 224 - (L->slots - 1 - i) * 11, dy = 30;
-            d.fillRect(dx - 4, dy - 4, 9, 9, BG);
-            if      (i <  s) d.fillCircle(dx, dy, 3, GRN);
-            else if (i == s) d.fillCircle(dx, dy, 4, ACC);
-            else             d.drawCircle(dx, dy, 3, MUTED);
+            int dx = (AW - 16) - (L->slots - 1 - i) * 11, dy = 30;
+            G.fillRect(dx - 4, dy - 4, 9, 9, BG);
+            if      (i <  s) G.fillCircle(dx, dy, 3, GRN);
+            else if (i == s) G.fillCircle(dx, dy, 4, ACC);
+            else             G.drawCircle(dx, dy, 3, MUTED);
         }
     }
     // -- BIG question label (this slot's field), opaque in its band --
     const char *pl = (s == 0) ? (s_en ? L->p1_en : L->p1_it) : (s_en ? L->p2_en : L->p2_it);
     char lab[40]; snprintf(lab, sizeof lab, "%s", pl ? pl : "");
-    d.setFont(&fonts::FreeSans9pt7b); d.setTextSize(1);
-    while (lab[0] && (int)d.textWidth(lab) > 224) lab[strlen(lab) - 1] = 0;
-    box_text(0, 42, 240, by - 42, 10, 44, lab, FG, BG);
+    G.setFont(&fonts::FreeSans9pt7b); G.setTextSize(1);
+    while (lab[0] && (int)G.textWidth(lab) > (AW - 16)) lab[strlen(lab) - 1] = 0;
+    box_text(0, 42, AW, by - 42, 10, 44, lab, FG, BG);
 
     // -- the value, painted in place inside the frame: text, caret, recent-value ghost, then the leftover --
     const int ix0 = bx + 9, ix1 = bx + bw - 3, iy0 = by + 3, ih = bh - 6;
     const int vx = bx + 14, vy = by + (bh - 32) / 2;            // size-2 Font2 glyph is ~32px tall
-    d.setFont(&fonts::Font2);
-    d.setClipRect(ix0, iy0, ix1 - ix0, ih);                    // a long value never paints over the frame
+    G.setFont(&fonts::Font2);
+    G.setClipRect(ix0, iy0, ix1 - ix0, ih);                    // a long value never paints over the frame
     int cx = vx;
     if (s_ses->slot[s][0]) {
-        d.setTextSize(2);
+        G.setTextSize(2);
         const char *sv = s_ses->slot[s];                        // long value: show its tail, like the chat line
-        while (sv[1] && (int)d.textWidth(sv) > ix1 - 6 - vx) sv++;
-        d.fillRect(ix0, iy0, vx - ix0, ih, BG);
-        d.setTextColor(FG, BG); d.setCursor(vx, vy); d.print(sv);
-        cx = vx + (int)d.textWidth(sv); if (cx > ix1 - 5) cx = ix1 - 5;
+        while (sv[1] && (int)G.textWidth(sv) > ix1 - 6 - vx) sv++;
+        G.fillRect(ix0, iy0, vx - ix0, ih, BG);
+        G.setTextColor(FG, BG); G.setCursor(vx, vy); G.print(sv);
+        cx = vx + (int)G.textWidth(sv); if (cx > ix1 - 5) cx = ix1 - 5;
     } else {
-        d.setTextSize(1);
+        G.setTextSize(1);
         cx = ix0 + 1;
         box_text(cx + 5, iy0, ix1 - cx - 5, ih, vx, by + (bh - 16) / 2, s_en ? "type..." : "scrivi...", DIM, BG);
-        d.fillRect(ix0, iy0, 1, ih, BG);
+        G.fillRect(ix0, iy0, 1, ih, BG);
     }
-    d.fillRect(cx, iy0, 1, ih, BG); d.fillRect(cx + 1, vy, 3, 30, GRN); d.fillRect(cx + 4, iy0, 1, ih, BG);   // big caret
-    if (vy + 30 < iy0 + ih) d.fillRect(cx + 1, vy + 30, 3, iy0 + ih - vy - 30, BG);
+    G.fillRect(cx, iy0, 1, ih, BG); G.fillRect(cx + 1, vy, 3, 30, GRN); G.fillRect(cx + 4, iy0, 1, ih, BG);   // big caret
+    if (vy + 30 < iy0 + ih) G.fillRect(cx + 1, vy + 30, 3, iy0 + ih - vy - 30, BG);
     if (s_ses->slot[s][0]) {
         char g[40]; int ge = cx + 5;                            // ghost: a past value with this prefix
         if (cx < bx + bw - 36 && slot_autocomplete(s_ses->slot[s], g, sizeof g)) {
-            d.setTextSize(2);
+            G.setTextSize(2);
             ge = box_text(cx + 5, iy0, ix1 - cx - 5, ih, cx + 6, vy, g + strlen(s_ses->slot[s]), DIM, BG);
-        } else d.fillRect(cx + 5, iy0, ix1 - cx - 5, ih, BG);
+        } else G.fillRect(cx + 5, iy0, ix1 - cx - 5, ih, BG);
         (void)ge;
     }
-    d.clearClipRect();
-    d.setTextSize(1);
+    G.clearClipRect();
+    G.setTextSize(1);
 
     // -- live preview of the assembled question (fills as you type) --
     char q[A_INMAX]; form_build_query(q, sizeof q, true);
     char pv[96]; snprintf(pv, sizeof pv, "%s", q);
-    d.setFont(&fonts::Font0); d.setTextSize(1);
-    while (pv[0] && (int)d.textWidth(pv) > 224) pv[strlen(pv) - 1] = 0;
+    G.setFont(&fonts::Font0); G.setTextSize(1);
+    while (pv[0] && (int)G.textWidth(pv) > (AW - 16)) pv[strlen(pv) - 1] = 0;
     int py = by + bh + 8; if (py > ch - 10) py = ch - 10;
-    box_text(0, py, 240, 8, 8, py, pv, MUTED, BG);
+    box_text(0, py, AW, 8, 8, py, pv, MUTED, BG);
 }
 
 static void draw_idee(int ch)
@@ -3301,17 +3352,17 @@ static void draw_event_row(int y, bool focus, int i)
                                     memcpy(pre, s_ses->today[i], pl); pre[pl] = 0; title = sep + 2; }
     char t[64]; snprintf(t, sizeof t, "%s", title);
     if (focus) {                                                                // expanded: time on top, BIG title below
-        if (pre[0]) { d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextColor(acol, bg); d.setCursor(16, y + 6); d.print(pre); }
-        d.setFont(&fonts::Font0); d.setTextSize(2); d.setTextColor(tcol, bg);
-        fit_w(t, 214);                                                          // ".." if longer than the row
-        d.setCursor(16, pre[0] ? y + 22 : y + (h - 16) / 2 - 1); d.print(t);
+        if (pre[0]) { G.setFont(&fonts::Font0); G.setTextSize(1); G.setTextColor(acol, bg); G.setCursor(16, y + 6); G.print(pre); }
+        G.setFont(&fonts::Font0); G.setTextSize(2); G.setTextColor(tcol, bg);
+        fit_w(t, (AW - 26));                                                          // ".." if longer than the row
+        G.setCursor(16, pre[0] ? y + 22 : y + (h - 16) / 2 - 1); G.print(t);
     } else {                                                                    // compact: small time accent + big title
         int x = 16;
-        if (pre[0]) { d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextColor(acol, bg);
-                      d.setCursor(x, y + (h - 8) / 2); d.print(pre); x += (int)d.textWidth(pre) + 8; }
-        d.setFont(&fonts::Font0); d.setTextSize(2); d.setTextColor(tcol, bg);
-        fit_w(t, 232 - x);                                                      // ".." if longer than the room left
-        d.setCursor(x, y + (h - 16) / 2 - 1); d.print(t);
+        if (pre[0]) { G.setFont(&fonts::Font0); G.setTextSize(1); G.setTextColor(acol, bg);
+                      G.setCursor(x, y + (h - 8) / 2); G.print(pre); x += (int)G.textWidth(pre) + 8; }
+        G.setFont(&fonts::Font0); G.setTextSize(2); G.setTextColor(tcol, bg);
+        fit_w(t, (AW - 8) - x);                                                      // ".." if longer than the room left
+        G.setCursor(x, y + (h - 16) / 2 - 1); G.print(t);
     }
 }
 
@@ -3322,22 +3373,22 @@ static void draw_today(int ch)
 {
     const int top = 44, f = s_mrow;
     if (s_ses->mfull) {                                                         // header: static for the scene
-        set_font(F_MED); d.setTextColor(ACC, BG);                               // bigger, accented date header
-        d.setCursor(8, 24); d.print(s_ses->today_hdr[0] ? s_ses->today_hdr : (s_en ? "Today" : "Oggi"));
+        set_font(F_MED); G.setTextColor(ACC, BG);                               // bigger, accented date header
+        G.setCursor(8, 24); G.print(s_ses->today_hdr[0] ? s_ses->today_hdr : (s_en ? "Today" : "Oggi"));
         if (s_today_count > 0) { char cb[6]; snprintf(cb, sizeof cb, "%d", s_today_count);
-            d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextColor(MUTED, BG);
-            d.setCursor(232 - (int)strlen(cb) * 6, 28); d.print(cb); }
-        d.drawFastHLine(8, 42, 224, LINE);
+            G.setFont(&fonts::Font0); G.setTextSize(1); G.setTextColor(MUTED, BG);
+            G.setCursor((AW - 8) - (int)strlen(cb) * 6, 28); G.print(cb); }
+        G.drawFastHLine(8, 42, (AW - 16), LINE);
     }
     if (s_today_n == 0) {                                                       // friendly, bigger empty state
         if (!s_ses->mfull) return;
-        set_font(F_BIG); d.setTextColor(MUTED, BG);
-        d.setCursor(10, top + 10); d.print(s_en ? "No events today" : "Niente in agenda oggi");
-        d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextColor(DIM, BG);
-        d.setCursor(10, top + 36); d.print(s_en ? "Try: remind me ..." : "Prova: ricordami ...");
+        set_font(F_BIG); G.setTextColor(MUTED, BG);
+        G.setCursor(10, top + 10); G.print(s_en ? "No events today" : "Niente in agenda oggi");
+        G.setFont(&fonts::Font0); G.setTextSize(1); G.setTextColor(DIM, BG);
+        G.setCursor(10, top + 36); G.print(s_en ? "Try: remind me ..." : "Prova: ricordami ...");
         return;
     }
-    d.setClipRect(0, top, 240, ch - top);
+    G.setClipRect(0, top, AW, ch - top);
     int yy = list_scroll_y0(top, ch - top, s_today_n, f), k = 0;
     for (int i = 0; i < s_today_n; i++) {
         int hh = (i == f) ? 46 : 30;
@@ -3347,7 +3398,7 @@ static void draw_today(int ch)
         }
         yy += hh;
     }
-    d.clearClipRect();
+    G.clearClipRect();
     mlist_tail(k, yy, ch);
 }
 
@@ -3376,21 +3427,42 @@ static void put_badge(int top)
                                (s_en ? MO3_EN : MO3_IT)[tm->tm_mon]);
         if (clk) snprintf(b, sizeof b, "%02d:%02d", tm->tm_hour, tm->tm_min);
     }
-    seg_field(104, 234, top + 4, true, a, ca, b, MUTED);
+    if (lg()) {                                                 // two screens: one Font2 cluster, right-aligned
+        char t[36]; snprintf(t, sizeof t, "%s%s%s", a, a[0] && b[0] ? "   " : "", b);
+        G.setFont(&fonts::Font2); G.setTextSize(1);
+        const int x0 = AW - 150, tx = AW - 8 - (int)G.textWidth(t);
+        box_text(x0, top + 1, 150, 18, tx, top + 3, t, a[0] && !b[0] ? ca : (s_busy ? GRN : MUTED), BG);
+        G.setFont(&fonts::Font0);
+        return;
+    }
+    seg_field((AW - 136), (AW - 6), top + 4, true, a, ca, b, MUTED);
 }
 static void draw_badge(int top) { put_badge(top); }
 
 static void draw_header(int top)
 {
-    d.setFont(&fonts::Font0); d.setTextSize(1);
-    d.setTextColor(ACC, BG); d.setCursor(8, top + 4); d.print("ANIMA");
+    if (lg()) {                                                 // two screens: Font2, a 22 px band
+        G.setFont(&fonts::Font2); G.setTextSize(1);
+        G.setTextColor(ACC, BG); G.setCursor(8, top + 3); G.print("ANIMA");
+        const char *ml = s_omode == OM_OFF ? "offline " : s_omode == OM_ONLY ? "online  " : (s_en ? "hybrid  " : "ibrido  ");
+        G.setTextColor(s_omode == OM_OFF ? DIM : s_omode == OM_ONLY ? GRN : ACC, BG);
+        G.setCursor(70, top + 3); G.print(ml);
+        put_badge(top);
+        G.drawFastHLine(0, top + 20, AW, LINE);
+        G.fillRect(0, top + 21, AW, 1, BG);
+        return;
+    }
+    G.setFont(&fonts::Font0); G.setTextSize(1);
+    G.setTextColor(ACC, BG); G.setCursor(8, top + 4); G.print("ANIMA");
     char ml[8]; snprintf(ml, sizeof ml, "%-7s", s_omode == OM_OFF ? "offline" : s_omode == OM_ONLY ? "online" : (s_en ? "hybrid" : "ibrido"));
-    d.setTextColor(s_omode == OM_OFF ? DIM : s_omode == OM_ONLY ? GRN : ACC, BG);
-    d.setCursor(60, top + 4); d.print(ml);                      // fixed 7-cell field: a shorter label erases the longer
+    G.setTextColor(s_omode == OM_OFF ? DIM : s_omode == OM_ONLY ? GRN : ACC, BG);
+    G.setCursor(60, top + 4); G.print(ml);                      // fixed 7-cell field: a shorter label erases the longer
     put_badge(top);                                             // page / date + clock, right-aligned cluster
-    d.drawFastHLine(0, top + 15, 240, LINE);
+    G.drawFastHLine(0, top + 15, AW, LINE);
 }
 
+// The deck rows on the panel (draw_deck), so a tap lands on the suggestion it touches.
+static short s_deck_y, s_deck_rh = 16, s_deck_first, s_deck_n;
 static void draw_deck(int ty0, int avail)
 {
     // Glance header: a time-of-day greeting (left) + clock (right) — like a watch's top card — then
@@ -3402,30 +3474,32 @@ static void draw_deck(int ty0, int avail)
                              : (hr < 12 ? "Buongiorno"   : hr < 18 ? "Buon pomeriggio" : "Buonasera");
     char hm[8] = "";
     if (tm && now > 1672531200) snprintf(hm, sizeof hm, "%02d:%02d", tm->tm_hour, tm->tm_min);
-    d.setFont(&fonts::Font2); d.setTextSize(1);
-    box_text(0, ty0, 196, 16, 8, ty0, greet, ACC, BG);
-    d.setFont(&fonts::Font0);
-    box_text(196, ty0, 44, 16, 232 - (int)strlen(hm) * 6, ty0 + 4, hm, MUTED, BG);
+    G.setFont(&fonts::Font2); G.setTextSize(1);
+    box_text(0, ty0, (AW - 44), 16, 8, ty0, greet, ACC, BG);
+    G.setFont(&fonts::Font0);
+    box_text((AW - 44), ty0, 44, 16, (AW - 8) - (int)strlen(hm) * 6, ty0 + 4, hm, MUTED, BG);
     // Glance line: the next reminder if there's one, otherwise a hint that TAB opens the full skill
     // catalog (so first-timers discover the IDEE tree beyond these quick picks). One dim Font0 line.
     bool reminder = s_ses->complics[0] != 0;
     const char *glance = reminder ? s_ses->complics : (s_en ? "TAB: full skill catalog" : "TAB: catalogo completo");
-    box_text(0, ty0 + 16, 240, 12, 8, ty0 + 16, glance, reminder ? MUTED : DIM, BG);
-    d.setFont(&fonts::Font2); d.setTextSize(1);
+    box_text(0, ty0 + 16, AW, 12, 8, ty0 + 16, glance, reminder ? MUTED : DIM, BG);
+    G.setFont(&fonts::Font2); G.setTextSize(1);
     if (s_sug_sel < 0) s_sug_sel = 0;
     if (s_sug_sel >= SUG_N) s_sug_sel = SUG_N - 1;
-    const int rh = 16, top_y = ty0 + 28, end = ty0 + avail;
+    const int rh = lg() ? 20 : 16, top_y = ty0 + 28, end = ty0 + avail;
     int maxvis = (end - top_y) / rh; if (maxvis < 1) maxvis = 1;   // scroll so the selection stays on screen
     int first = (s_sug_sel >= maxvis) ? s_sug_sel - maxvis + 1 : 0;
+    s_deck_y = (short)top_y; s_deck_rh = (short)rh; s_deck_first = (short)first;
+    s_deck_n = (short)(SUG_N - first < maxvis ? SUG_N - first : maxvis);
     int yy = top_y;
     for (int i = first; i < SUG_N && i < first + maxvis; i++, yy += rh) {
         char line[48]; snprintf(line, sizeof line, "%s", cur_sug(i)); fit_w(line, 212);
         if (i == s_sug_sel) {                                     // the kit's selection look: accent pill, INK text
-            pill_band(4, yy, 228, rh, 6, ACC, 235);
-            d.setTextColor(INK, ACC); d.setCursor(12, yy); d.print(line);
-        } else box_text(0, yy, 235, rh, 12, yy, line, FG, BG);
+            pill_band(4, yy, (AW - 12), rh, 6, ACC, (AW - 5));
+            G.setTextColor(INK, ACC); G.setCursor(12, yy + (rh - 16) / 2); G.print(line);
+        } else box_text(0, yy, (AW - 5), rh, 12, yy + (rh - 16) / 2, line, FG, BG);
     }
-    if (yy < end) d.fillRect(0, yy, 235, end - yy, BG);
+    if (yy < end) G.fillRect(0, yy, (AW - 5), end - yy, BG);
     int shown = (SUG_N - first < maxvis) ? SUG_N - first : maxvis;
     draw_vscroll(top_y, maxvis * rh, SUG_N, first, shown);        // scroll cue when the deck overflows
 }
@@ -3437,58 +3511,58 @@ static int render_row(int y, const Row *r, bool at_top)
 {
     set_font(r->font);
     const int gap = ((r->first & RF_FIRST) && !at_top) ? 3 : 0, base = font_h(r->font), ty = y + gap;
-    if (gap) d.fillRect(0, y, 235, gap, BG);
+    if (gap) G.fillRect(0, y, (AW - 5), gap, BG);
     char t[216]; int n = r->len; if (n > 215) n = 215; memcpy(t, r->p, n); t[n] = 0;
     if (r->first & RF_TAGROW) {                              // the answer's source tag on a row of its own
-        const int tw = tag_w(t), tgx = 232 - tw;
-        d.fillRect(0, ty, tgx, base, BG);
-        d.fillRect(tgx, ty, tw, 1, BG); d.fillRect(tgx, ty + 9, tw, base - 9, BG);
-        d.fillRect(tgx + tw, ty, 235 - tgx - tw, base, BG);
+        const int tw = tag_w(t), tgx = (AW - 8) - tw;
+        G.fillRect(0, ty, tgx, base, BG);
+        G.fillRect(tgx, ty, tw, 1, BG); G.fillRect(tgx, ty + 9, tw, base - 9, BG);
+        G.fillRect(tgx + tw, ty, (AW - 5) - tgx - tw, base, BG);
         draw_tag(tgx, ty + 1, t, pal(r->col));
         return gap + base;
     }
     int x0 = 0, tx = 8;
-    if (r->role == R_USER) { tx = 232 - (int)d.textWidth(t); if (tx < 22) tx = 22; }
+    if (r->role == R_USER) { tx = (AW - 8) - (int)G.textWidth(t); if (tx < 22) tx = 22; }
     else if (r->role == R_ANIMA) {                           // the message's left rail (violet / amber)
-        d.fillRect(0, ty, 3, base, BG);
-        d.fillRect(3, ty, 3, base - 2, pal(r->accent));
-        d.fillRect(3, ty + base - 2, 3, 2, BG);
+        G.fillRect(0, ty, 3, base, BG);
+        G.fillRect(3, ty, 3, base - 2, pal(r->accent));
+        G.fillRect(3, ty + base - 2, 3, 2, BG);
         x0 = 6; tx = 11;
     }
     if (r->first & RF_TAG) {                                 // text, then the tag right-aligned on the same row
         const char *tg = s_msg[r->mi].tag;
-        const int tw = tag_w(tg), tgx = 232 - tw, gy = ty + base - 12;
+        const int tw = tag_w(tg), tgx = (AW - 8) - tw, gy = ty + base - 12;
         box_text(x0, ty, tgx - 4 - x0, base, tx, ty, t, pal(r->col), BG);
-        d.fillRect(tgx - 4, ty, 239 - tgx, gy - ty, BG);
-        d.fillRect(tgx - 4, gy + 8, 239 - tgx, ty + base - gy - 8, BG);
-        d.fillRect(tgx - 4, gy, 4, 8, BG); d.fillRect(tgx + tw, gy, 235 - tgx - tw, 8, BG);
+        G.fillRect(tgx - 4, ty, (AW - 1) - tgx, gy - ty, BG);
+        G.fillRect(tgx - 4, gy + 8, (AW - 1) - tgx, ty + base - gy - 8, BG);
+        G.fillRect(tgx - 4, gy, 4, 8, BG); G.fillRect(tgx + tw, gy, (AW - 5) - tgx - tw, 8, BG);
         draw_tag(tgx, gy, tg, DIM);
         return gap + base;
     }
-    box_text(x0, ty, 235 - x0, base, tx, ty, t, pal(r->col), BG);
+    box_text(x0, ty, (AW - 5) - x0, base, tx, ty, t, pal(r->col), BG);
     return gap + base;
 }
 // Paint rows from `t` into [ty0, ty0+avail) and clear only what is left below the last one.
 static void paint_rows(int ty0, int avail, int t)
 {
     int y = ty0; const int end = ty0 + avail;
-    d.setClipRect(0, ty0, 235, avail);                       // a partial last row never bleeds onto the input edge
+    G.setClipRect(0, ty0, (AW - 5), avail);                       // a partial last row never bleeds onto the input edge
     for (int i = t; i < s_rown && y < end; i++) y += render_row(y, &s_row[i], i == t);
-    d.clearClipRect();
-    if (y < end) d.fillRect(0, y, 235, end - y, BG);
+    G.clearClipRect();
+    if (y < end) G.fillRect(0, y, (AW - 5), end - y, BG);
     draw_vscroll(ty0, avail, s_rown, t, last_fit(t, avail) - t + 1);
 }
 
 static void draw_body(int top, int h)
 {
-    const int ty0 = top + 18, avail = h - input_h() - 1 - 18;
+    const int ty0 = top + hdr_h(), avail = h - input_band() - hdr_h();
     const signed char kind = deck_active() ? BK_DECK : BK_CHAT;
     if (s_ses->body_kind != kind) {                          // deck <-> transcript: a scene change, one clear
-        if (s_ses->body_kind != BK_NONE) d.fillRect(0, ty0, 240, avail, BG);
+        if (s_ses->body_kind != BK_NONE) G.fillRect(0, ty0, AW, avail, BG);
         s_ses->body_kind = kind;
     }
     if (kind == BK_DECK) { draw_deck(ty0, avail); return; }
-    if (s_rown <= 0) { d.fillRect(0, ty0, 240, avail, BG); return; }
+    if (s_rown <= 0) { G.fillRect(0, ty0, AW, avail, BG); return; }
     paint_rows(ty0, avail, view_top(avail));
 }
 
@@ -3501,13 +3575,13 @@ static void reader_status(void)
 {
     char a[24] = ""; int p, n;
     if (answer_pos(RD_BODY, &p, &n)) snprintf(a, sizeof a, "%d/%d", p, n);
-    d.fillRect(0, RD_BODY, 240, 1, BG);
-    seg_field(0, 120, RD_BODY + 1, false, a, ACC, "", MUTED);
-    seg_field(120, 240, RD_BODY + 1, true, s_en ? ";/. page  esc" : ";/. pagina  esc", DIM, "", DIM);
+    G.fillRect(0, RD_BODY, AW, 1, BG);
+    seg_field(0, (AW / 2), RD_BODY + 1, false, a, ACC, "", MUTED);
+    seg_field((AW / 2), AW, RD_BODY + 1, true, s_en ? ";/. page  esc" : ";/. pagina  esc", DIM, "", DIM);
 }
 static void draw_reader(void)
 {
-    if (s_rown <= 0) { d.fillRect(0, 0, 240, RD_BODY, BG); reader_status(); return; }
+    if (s_rown <= 0) { G.fillRect(0, 0, AW, RD_BODY, BG); reader_status(); return; }
     paint_rows(0, RD_BODY, view_top(RD_BODY));
     reader_status();
 }
@@ -3532,7 +3606,7 @@ static void reader_close(void)
 // chat font (the old hard-coded 22 didn't track the proportional prompt width). The chat font must be
 // set before calling. Single source so placeholder, text, caret and ghost all line up.
 static const int PROMPT_X = 8;
-static int input_x0(void) { return PROMPT_X + (int)d.textWidth(">") + (s_big ? 14 : 6); }
+static int input_x0(void) { return PROMPT_X + (int)G.textWidth(">") + (s_big ? 14 : 6); }
 
 // The input row, painted in place: every keystroke overwrites the line (opaque glyphs) and clears only what
 // is left to its right — the row never blanks while you type. Busy: the dot wave (its own small box is the
@@ -3540,40 +3614,40 @@ static int input_x0(void) { return PROMPT_X + (int)d.textWidth(">") + (s_big ? 1
 static void draw_input(int top, int h)
 {
     const int inH = input_h(), in_top = top + h - inH, ty = in_top + 4, bot = in_top + inH;
-    d.drawFastHLine(0, in_top, 240, LINE);
+    G.drawFastHLine(0, in_top, AW, LINE);
     set_font(chat_font());
-    const int fh = (int)d.fontHeight();
-    d.fillRect(0, in_top + 1, 240, ty - in_top - 1, BG);   // the margins around the glyph band (BG over BG: invisible)
-    if (ty + fh < bot) d.fillRect(0, ty + fh, 240, bot - ty - fh, BG);
+    const int fh = (int)G.fontHeight();
+    G.fillRect(0, in_top + 1, AW, ty - in_top - 1, BG);   // the margins around the glyph band (BG over BG: invisible)
+    if (ty + fh < bot) G.fillRect(0, ty + fh, AW, bot - ty - fh, BG);
     if (s_busy && s_ilen == 0) {                            // thinking: wave of 4 dots, the bright "peak" travels
         const int cy = in_top + inH / 2, act = (int)(s_spin & 3);
-        d.fillRect(0, ty, 72, fh, BG);
+        G.fillRect(0, ty, 72, fh, BG);
         for (int i = 0; i < 4; i++) {
             int dist = i - act; if (dist < 0) dist = -dist;
             int r = dist == 0 ? 4 : dist == 1 ? 3 : 2;
             unsigned short col = dist == 0 ? GRN : dist == 1 ? ACC : DIM;
-            d.fillCircle(PROMPT_X + 8 + i * 14, cy, r, col);
+            G.fillCircle(PROMPT_X + 8 + i * 14, cy, r, col);
         }
         const char *note = s_ses->cloud_note ? (s_en ? "cloud: up to 12 s" : "cloud: max 12 s") : "";
         set_font(F_MED);
-        box_text(72, ty, 168, fh, 76, ty + (fh - (int)d.fontHeight()) / 2, note, MUTED, BG);
+        box_text(72, ty, (AW - 72), fh, 76, ty + (fh - (int)G.fontHeight()) / 2, note, MUTED, BG);
         return;
     }
-    const int x0 = input_x0(), availw = 232 - x0;
-    const int pe = box_text(0, ty, 8 + (int)d.textWidth(">"), fh, PROMPT_X, ty, ">", ACC, BG);
-    if (x0 > pe) d.fillRect(pe, ty, x0 - pe, fh, BG);
+    const int x0 = input_x0(), availw = (AW - 8) - x0;
+    const int pe = box_text(0, ty, 8 + (int)G.textWidth(">"), fh, PROMPT_X, ty, ">", ACC, BG);
+    if (x0 > pe) G.fillRect(pe, ty, x0 - pe, fh, BG);
     if (s_ilen == 0) {                                       // empty -> a dim placeholder cue (smartwatch style)
-        box_text(x0, ty, 240 - x0, fh, x0, ty, s_awaiting ? (s_en ? "reply..." : "rispondi...") : (s_en ? "type..." : "scrivi..."), DIM, BG);
+        box_text(x0, ty, AW - x0, fh, x0, ty, s_awaiting ? (s_en ? "reply..." : "rispondi...") : (s_en ? "type..." : "scrivi..."), DIM, BG);
         return;
     }
-    int startc = 0; while (s_ses->input[startc] && (int)d.textWidth(s_ses->input + startc) > availw) startc++;   // scroll to keep the caret visible
+    int startc = 0; while (s_ses->input[startc] && (int)G.textWidth(s_ses->input + startc) > availw) startc++;   // scroll to keep the caret visible
     const char *vis = s_ses->input + startc;
-    const int te = x0 + (int)d.textWidth(vis);
-    d.setTextColor(FG, BG); d.setCursor(x0, ty); d.print(vis);
+    const int te = x0 + (int)G.textWidth(vis);
+    G.setTextColor(FG, BG); G.setCursor(x0, ty); G.print(vis);
     // Ghost completion: the dim tail of the best match, drawn after the caret. fn+/ accepts it.
     char ghost[HIST_LEN];
-    if (te + 3 < 230 && autocomplete(s_ses->input, ghost, sizeof ghost)) box_text(te, ty, 240 - te, fh, te + 3, ty, ghost + s_ilen, DIM, BG);
-    else if (te < 240) d.fillRect(te, ty, 240 - te, fh, BG);
+    if (te + 3 < (AW - 10) && autocomplete(s_ses->input, ghost, sizeof ghost)) box_text(te, ty, AW - te, fh, te + 3, ty, ghost + s_ilen, DIM, BG);
+    else if (te < AW) G.fillRect(te, ty, AW - te, fh, BG);
 }
 
 // The caret is a thin bar after the visible input. Toggling just this cell lets the blink animate
@@ -3583,12 +3657,12 @@ static void draw_caret(int top, int h)
     if (deck_active() || s_menu_open || s_busy) return;     // busy: the input row shows the dots -> the caret doesn't touch them
     int inH = input_h(), in_top = top + h - inH, ty = in_top + 4;
     set_font(chat_font());
-    const int x0 = input_x0(), availw = 232 - x0;
-    int startc = 0; while (s_ses->input[startc] && (int)d.textWidth(s_ses->input + startc) > availw) startc++;
-    int cx = x0 + (int)d.textWidth(s_ses->input + startc);
+    const int x0 = input_x0(), availw = (AW - 8) - x0;
+    int startc = 0; while (s_ses->input[startc] && (int)G.textWidth(s_ses->input + startc) > availw) startc++;
+    int cx = x0 + (int)G.textWidth(s_ses->input + startc);
     int ch = s_big ? 16 : 13;
     bool show = (s_blink & 2);
-    d.fillRect(cx + 1, ty, 2, ch, show ? GRN : BG);
+    G.fillRect(cx + 1, ty, 2, ch, show ? GRN : BG);
 }
 
 // The tabbed menu. A SCENE change (menu opened, tab paged, IDEE level/form entered, language, an overlay
@@ -3598,10 +3672,11 @@ static void draw_menu(int ch)
 {
     AnimaSession *S = s_ses;
     const int scene = s_tab | ((s_idee_cat + 1) << 4) | ((s_form_leaf + 1) << 8) | (s_en ? 1 << 16 : 0);
+    s_mt_n = 0;
     S->mfull = (S->mscene != scene);
     if (S->mfull) {
         S->mscene = scene;
-        d.fillRect(0, 0, 240, ch, BG);
+        G.fillRect(0, 0, AW, ch, BG);
         draw_tabbar(s_tab);
         memset(S->msig, 0, sizeof S->msig); S->mleft = -1; S->mpage = -1;
     }
@@ -3622,24 +3697,24 @@ static void draw_editor(int top, int h)
     AnimaEditor *E = s_ed;
     const int fh = font_h(F_MED);
     if (!E->full && !E->dirty) {                         // the blink: toggle ONLY the caret bar
-        d.fillRect(E->cx, E->cy, 2, fh, (s_blink & 2) ? ACC : BG);
+        G.fillRect(E->cx, E->cy, 2, fh, (s_blink & 2) ? ACC : BG);
         return;
     }
     set_font(F_MED);
     if (E->full) {                                       // scene: clear once + the title bar with the path
-        d.fillRect(0, top, 240, h, BG);
-        d.fillRect(0, top, 240, 17, LINE);
+        G.fillRect(0, top, AW, h, BG);
+        G.fillRect(0, top, AW, 17, LINE);
         char pth[80]; snprintf(pth, sizeof pth, "%s", E->path[0] ? E->path : "(file)"); fit_w(pth, 176);
-        d.setTextColor(FG, LINE); d.setCursor(4, top + 1); d.print(pth);
+        G.setTextColor(FG, LINE); G.setCursor(4, top + 1); G.print(pth);
     }
     // Title bar: the live char count on the right, an opaque field (no clear).
     char cc[16]; snprintf(cc, sizeof cc, "%d", s_ed_len);
-    box_text(184, top, 56, 17, 238 - (int)d.textWidth(cc), top + 1, cc, ACC, LINE);
+    box_text((AW - 56), top, 56, 17, (AW - 2) - (int)G.textWidth(cc), top + 1, cc, ACC, LINE);
     E->full = E->dirty = false;
 
     // Word-wrap the buffer into line segments [off,len), honoring '\n' and hard-splitting over-wide words.
     // The segment arrays live in the editor block (heap while the editor is open; were static .bss).
-    const int availw = 232, LCAP = ED_LCAP, lh = font_h(F_MED) + 1;
+    const int availw = AW - 8, LCAP = ED_LCAP, lh = font_h(F_MED) + 1;
     short *loff = s_ed->loff, *llen = s_ed->llen; int nl = 0;
     int ls = 0, i = 0, n = s_ed_len;
     while (i <= n && nl < LCAP) {
@@ -3666,12 +3741,12 @@ static void draw_editor(int top, int h)
     for (int r = first; r < nl; r++) {
         char tmp[80]; int L = llen[r]; if (L > 79) L = 79;
         memcpy(tmp, s_ed->buf + loff[r], L); tmp[L] = 0;
-        int te = box_text(0, y, 240, lh, 4, y, tmp, FG, BG);
+        int te = box_text(0, y, AW, lh, 4, y, tmp, FG, BG);
         if (r == nl - 1) { E->cx = (short)(te + 1); E->cy = (short)y; }
         y += lh;
     }
-    if (y < top + h) d.fillRect(0, y, 240, top + h - y, BG);
-    d.fillRect(E->cx, E->cy, 2, fh, (s_blink & 2) ? ACC : BG);   // the caret at the end of the text
+    if (y < top + h) G.fillRect(0, y, AW, top + h - y, BG);
+    G.fillRect(E->cx, E->cy, 2, fh, (s_blink & 2) ? ACC : BG);   // the caret at the end of the text
 }
 
 // Exit-confirm modal: full-screen panel, large clearly visible fonts (native UI RULE).
@@ -3680,32 +3755,32 @@ static void draw_exit_modal(void)
 {
     int top = nucleo_app_content_top(), h = nucleo_app_content_height();
     const bool ed = s_ed_open;
-    d.fillRect(0, top, 240, h, BG);
-    int bw = 212, bh = 92, bx = (240 - bw) / 2, by = top + (h - bh) / 2;
-    d.fillRoundRect(bx, by, bw, bh, 10, BG);
-    d.drawRoundRect(bx, by, bw, bh, 10, ACC);
-    d.drawRoundRect(bx + 1, by + 1, bw - 2, bh - 2, 9, ACC);          // double border = more pronounced
-    set_font(F_BIG); d.setTextColor(FG, BG);
+    G.fillRect(0, top, AW, h, BG);
+    int bw = (AW - 28), bh = 92, bx = (AW - bw) / 2, by = top + (h - bh) / 2;
+    G.fillRoundRect(bx, by, bw, bh, 10, BG);
+    G.drawRoundRect(bx, by, bw, bh, 10, ACC);
+    G.drawRoundRect(bx + 1, by + 1, bw - 2, bh - 2, 9, ACC);          // double border = more pronounced
+    set_font(F_BIG); G.setTextColor(FG, BG);
     const char *q = ed ? (s_en ? "Discard the text?" : "Scartare il testo?") : (s_en ? "Leave ANIMA?" : "Uscire da ANIMA?");
-    d.setCursor(120 - (int)d.textWidth(q) / 2, by + 14); d.print(q);
+    G.setCursor((AW / 2) - (int)G.textWidth(q) / 2, by + 14); G.print(q);
     set_font(F_MED);
     const char *yes = ed ? (s_en ? "Enter = Discard" : "Invio = Scarta") : (s_en ? "Enter = Exit" : "Invio = Esci");
-    d.setTextColor(ed ? AMBER : GRN, BG); d.setCursor(120 - (int)d.textWidth(yes) / 2, by + 44); d.print(yes);
+    G.setTextColor(ed ? AMBER : GRN, BG); G.setCursor((AW / 2) - (int)G.textWidth(yes) / 2, by + 44); G.print(yes);
     const char *no = ed ? (s_en ? "Esc = Keep writing" : "Esc = Continua") : (s_en ? "Esc = Stay" : "Esc = Resta");
-    d.setTextColor(MUTED, BG); d.setCursor(120 - (int)d.textWidth(no) / 2, by + 66); d.print(no);
-    d.setFont(&fonts::Font0); d.setTextSize(1);
+    G.setTextColor(MUTED, BG); G.setCursor((AW / 2) - (int)G.textWidth(no) / 2, by + 66); G.print(no);
+    G.setFont(&fonts::Font0); G.setTextSize(1);
 }
 
-static void draw(void)
+static void draw_main(void)
 {
     int top = nucleo_app_content_top(), h = nucleo_app_content_height();
     if (!s_ses) {                                           // session block failed to allocate (see enter)
-        d.fillRect(0, top, 240, h, BG);
-        set_font(F_MED); d.setTextColor(AMBER, BG);
-        d.setCursor(8, top + 20); d.print(s_en ? "ANIMA: out of memory." : "ANIMA: memoria esaurita.");
-        d.setTextColor(MUTED, BG);
-        d.setCursor(8, top + 44); d.print(s_en ? "Esc returns to the OS." : "Esc torna all'OS.");
-        d.setFont(&fonts::Font0); d.setTextSize(1);
+        G.fillRect(0, top, AW, h, BG);
+        set_font(F_MED); G.setTextColor(AMBER, BG);
+        G.setCursor(8, top + 20); G.print(s_en ? "ANIMA: out of memory." : "ANIMA: memoria esaurita.");
+        G.setTextColor(MUTED, BG);
+        G.setCursor(8, top + 44); G.print(s_en ? "Esc returns to the OS." : "Esc torna all'OS.");
+        G.setFont(&fonts::Font0); G.setTextSize(1);
         return;
     }
     // An overlay (voice, notification banner, Control Center) painted over us, or a force_repaint(): what the
@@ -3714,11 +3789,11 @@ static void draw(void)
     if (gen != s_ses->rgen) { s_ses->rgen = gen; mark_all_dirty(); }
     if (s_exit_confirm) { draw_exit_modal(); return; }      // exit modal on top of everything
     if (s_ses->clear_confirm) {                             // the kit's confirm card over the current scene
-        if (s_d_clear) { d.fillRect(0, top, 240, h, BG); s_d_clear = false; }   // an overlay painted over: clean backdrop
-        d.setFont(&fonts::Font0); d.setTextSize(1);
+        if (s_d_clear) { G.fillRect(0, top, AW, h, BG); s_d_clear = false; }   // an overlay painted over: clean backdrop
+        G.setFont(&fonts::Font0); G.setTextSize(1);
         app_ui_confirm(s_en ? "Clear the chat?" : "Pulire la chat?",
                        s_en ? "Deletes the saved conversation" : "Cancella la conversazione salvata", s_ses->clear_yes);
-        d.setFont(&fonts::Font0); d.setTextSize(1);
+        G.setFont(&fonts::Font0); G.setTextSize(1);
         return;
     }
     // Safety net: if the framework ever hands us its (freshly cleared) off-screen canvas instead of
@@ -3729,17 +3804,17 @@ static void draw(void)
         s_ses->mscene = -1;
     }
     if (s_ed_open || s_menu_open) s_d_clear = false;        // (they do their own one clear per scene)
-    if (s_ed_open)   { draw_editor(top, h); d.setFont(&fonts::Font0); d.setTextSize(1); return; }
-    if (s_menu_open) { draw_menu(h); d.setFont(&fonts::Font0); d.setTextSize(1); return; }
+    if (s_ed_open)   { draw_editor(top, h); G.setFont(&fonts::Font0); G.setTextSize(1); return; }
+    if (s_menu_open) { draw_menu(h); G.setFont(&fonts::Font0); G.setTextSize(1); return; }
 
     if (s_ses->reader) {                                    // full-screen reader (fullscreen: h = the whole panel)
-        if (s_d_clear) d.fillRect(0, 0, 240, h, BG);
+        if (s_d_clear) G.fillRect(0, 0, AW, h, BG);
         draw_reader();
         s_d_hdr = s_d_body = s_d_input = s_d_badge = s_d_clear = false;
-        d.setFont(&fonts::Font0); d.setTextSize(1);
+        G.setFont(&fonts::Font0); G.setTextSize(1);
         return;
     }
-    if (s_d_clear) { d.fillRect(0, top, 240, h, BG); s_ses->body_kind = BK_NONE; }   // scene change: the one clear
+    if (s_d_clear) { G.fillRect(0, top, AW, h, BG); s_ses->body_kind = BK_NONE; }   // scene change: the one clear
     if (s_d_body) s_d_badge = true;                         // the header's page indicator follows the body
 
     if (s_d_body)       draw_body(top, h);
@@ -3749,14 +3824,368 @@ static void draw(void)
     draw_caret(top, h);
 
     s_d_hdr = s_d_body = s_d_input = s_d_badge = s_d_clear = false;
-    d.setFont(&fonts::Font0); d.setTextSize(1);    // leave the global font at the framework default
+    G.setFont(&fonts::Font0); G.setTextSize(1);    // leave the global font at the framework default
+}
+
+// ---- two screens: the composer on the Cardputer -------------------------------------------------------------
+// With the conversation on the external panel, the Cardputer's own screen is what sits above the keys, so it
+// shows what the keys do: the line being typed in a large face (up to three wrapped lines, the completion
+// dimmed after the caret), ANIMA thinking, the focused menu entry, the open question of a confirm. A thin
+// status strip on top (mode, clock) and a context strip at the foot (where you are in the answer, its
+// source, the app an answer offers). Repainted only when what it shows changes; the caret is one bar.
+static uint32_t s_cmp_sig;
+static int  s_cmp_scene = -1;
+static short s_cmp_cx = -1, s_cmp_cy, s_cmp_ch;
+#define CMP_TOP   18                    // composer band [CMP_TOP, CMP_BOT)
+#define CMP_BOT   115
+static void cmp_line(int y, int h, const char *t, unsigned short col, unsigned short bg)
+{
+    box_text(0, y, AW, h, 8, y + (h - (int)G.fontHeight()) / 2, t, col, bg);
+}
+// The title + value pair the composer shows for a menu / modal scene: a small label, a big value.
+static void cmp_card(const char *label, const char *value, unsigned short vcol, const char *sub)
+{
+    G.setFont(&fonts::Font2); cmp_line(CMP_TOP + 2, 18, label, MUTED, BG);
+    char v[64]; snprintf(v, sizeof v, "%s", value ? value : "");
+    G.setFont(&fonts::FreeSansBold12pt7b);
+    while (v[0] && (int)G.textWidth(v) > AW - 16) v[strlen(v) - 1] = 0;
+    cmp_line(CMP_TOP + 22, 32, v, vcol, BG);
+    G.setFont(&fonts::Font2); cmp_line(CMP_TOP + 56, 18, sub ? sub : "", DIM, BG);
+    G.fillRect(0, CMP_TOP + 74, AW, CMP_BOT - CMP_TOP - 74, BG);
+}
+static void draw_companion(void)
+{
+    LovyanGFX *ig = (LovyanGFX *)nucleo_extdisp_internal_gfx();
+    if (!ig || !s_ses) return;
+    int ap_p = 0, ap_n = 0;                                  // the answer position, on the conversation's panel
+    const bool ap = answer_pos(chat_avail(), &ap_p, &ap_n);
+    LovyanGFX *keep = s_g; s_g = ig;
+    time_t now = time(NULL); struct tm *tm = localtime(&now);
+    const bool clk = tm && now > 1672531200;
+    // What is on it: the scene, and a signature of everything it prints (the caret is painted apart).
+    const int scene = s_exit_confirm ? 1 : s_ses->clear_confirm ? 2 : s_ed_open ? 3 : s_menu_open ? 4 : 0;
+    uint32_t sig = mix(mix(mix(2166136261u, (uint32_t)scene), (uint32_t)s_omode | (s_busy << 4) | ((s_spin & 3) << 5) | (s_en << 7)),
+                       (uint32_t)(clk ? tm->tm_hour * 60 + tm->tm_min : -1));
+    sig = mix(sig, (uint32_t)(s_tab | (s_mrow + 1) << 4 | (s_idee_cat + 1) << 12 | (s_form_leaf + 1) << 18 | (s_edit << 26)));
+    sig = mix(sig, (uint32_t)(s_sug_sel | deck_active() << 8 | s_awaiting << 9 | s_rown << 10));
+    sig = mix(sig, (uint32_t)nucleo_power_battery_pct());
+    for (const char *c = s_ses->complics; *c; c++) sig = mix(sig, (uint8_t)*c);
+    for (const char *c = s_ses->input; *c; c++) sig = mix(sig, (uint8_t)*c);
+    if (s_ed_open && s_ed) sig = mix(sig, (uint32_t)s_ed_len);
+    if (s_menu_open && s_form_leaf >= 0) for (int k = 0; k < 2; k++) for (const char *c = s_ses->slot[k]; *c; c++) sig = mix(sig, (uint8_t)*c);
+    if (s_ses->launch[0]) sig = mix(sig, (uint8_t)s_ses->launch[0] | 0x100);
+    const bool full = scene != s_cmp_scene;
+    G.startWrite();
+    if (full) { G.fillScreen(BG); s_cmp_scene = scene; s_cmp_sig = 0; }
+    if (sig != s_cmp_sig) {
+        s_cmp_sig = sig;
+        s_cmp_cx = -1;
+        // Status strip: identity + mode on the left, the clock on the right.
+        G.setFont(&fonts::Font0); G.setTextSize(1);
+        G.fillRect(0, 0, AW, 4, BG);
+        G.setTextColor(ACC, BG); G.setCursor(8, 4); G.print("ANIMA ");
+        G.setTextColor(s_omode == OM_OFF ? DIM : s_omode == OM_ONLY ? GRN : ACC, BG);
+        G.print(s_omode == OM_OFF ? "offline" : s_omode == OM_ONLY ? "online " : (s_en ? "hybrid " : "ibrido "));
+        int sx = G.getCursorX();
+        char hm[16] = "";
+        const int bp = nucleo_power_battery_pct();
+        if (clk && bp >= 0) snprintf(hm, sizeof hm, "%02d:%02d  %d%%", tm->tm_hour, tm->tm_min, bp);
+        else if (clk)       snprintf(hm, sizeof hm, "%02d:%02d", tm->tm_hour, tm->tm_min);
+        else if (bp >= 0)   snprintf(hm, sizeof hm, "%d%%", bp);
+        int hx = AW - 8 - (int)strlen(hm) * 6;
+        G.fillRect(sx, 4, hx - sx, 8, BG);
+        G.setTextColor(bp >= 0 && bp < 20 ? AMBER : MUTED, BG); G.setCursor(hx, 4); G.print(hm);
+        G.fillRect(AW - 8, 4, 8, 8, BG);
+        G.fillRect(0, 12, AW, 4, BG);
+        G.drawFastHLine(0, 16, AW, LINE); G.fillRect(0, 17, AW, 1, BG);
+
+        char foot[64] = ""; unsigned short fcol = MUTED;
+        if (scene == 1) {
+            const bool ed = s_ed_open;
+            cmp_card(ed ? (s_en ? "Editor" : "Editor") : "ANIMA",
+                     ed ? (s_en ? "Discard the text?" : "Scartare il testo?") : (s_en ? "Leave ANIMA?" : "Uscire da ANIMA?"), FG,
+                     ed ? (s_en ? "Enter discards  Esc keeps" : "Invio scarta  Esc continua") : (s_en ? "Enter exits  Esc stays" : "Invio esce  Esc resta"));
+        } else if (scene == 2) {
+            cmp_card("ANIMA", s_en ? "Clear the chat?" : "Pulire la chat?", FG, s_ses->clear_yes ? (s_en ? "> Yes" : "> Si") : "> No");
+        } else if (scene == 3) {
+            char cnt[24]; snprintf(cnt, sizeof cnt, s_en ? "%d characters" : "%d caratteri", s_ed_len);
+            cmp_card("Editor", s_ed && s_ed->path[0] ? s_ed->path : "(file)", FG, cnt);
+        } else if (scene == 4) {
+            // The menu: the tab, then the focused entry big (what Enter would open), its detail below.
+            const char *tab = (s_en ? TABS_EN : TABS_IT)[s_tab];
+            char val[64] = "", sub[64] = "";
+            if (s_tab == TAB_IDEE) {
+                if (s_form_leaf >= 0) {
+                    const Leaf *L = &LEAVES[s_form_leaf];
+                    snprintf(val, sizeof val, "%s", s_ses->slot[s_form_slot][0] ? s_ses->slot[s_form_slot] : "...");
+                    snprintf(sub, sizeof sub, "%s", s_en ? L->l_en : L->l_it);
+                } else if (s_idee_cat < 0) {
+                    if (s_mrow >= 0) { snprintf(val, sizeof val, "%s", cat_label(s_mrow)); snprintf(sub, sizeof sub, "%d %s", cat_leaf_count(s_mrow), s_en ? "skills" : "abilita"); }
+                } else if (s_mrow >= 0) {
+                    const Leaf *L = &LEAVES[cat_leaf_at(s_idee_cat, s_mrow)];
+                    snprintf(val, sizeof val, "%s", s_en ? L->l_en : L->l_it);
+                    snprintf(sub, sizeof sub, "%s", cat_label(s_idee_cat));
+                }
+            } else if (s_tab == TAB_IA && s_mrow >= 0 && s_mrow < IA_ROWS) {
+                IAItem it[IA_ROWS]; build_ia(it);
+                snprintf(val, sizeof val, "%s", it[s_mrow].label);
+                if (it[s_mrow].kind == SV_SLIDER) snprintf(sub, sizeof sub, "%d%%", it[s_mrow].slider);
+                else if (it[s_mrow].kind == SV_TOGGLE) snprintf(sub, sizeof sub, "%s", it[s_mrow].on ? "on" : "off");
+                else snprintf(sub, sizeof sub, "%s", it[s_mrow].val);
+            } else if (s_tab == TAB_GUIDA) {
+                int pg = s_mrow < 0 ? 0 : s_mrow; if (pg >= GUIDE_N) pg = GUIDE_N - 1;
+                snprintf(val, sizeof val, "%s", (s_en ? GUIDE_EN : GUIDE_IT)[pg].title);
+                snprintf(sub, sizeof sub, "%d / %d", pg + 1, GUIDE_N);
+            } else if (s_tab == TAB_OGGI) {
+                snprintf(val, sizeof val, "%s", s_ses->today_hdr);
+                snprintf(sub, sizeof sub, "%d %s", s_today_count, s_en ? "events today" : "eventi oggi");
+            } else if (s_tab == TAB_STATO) {
+                snprintf(val, sizeof val, "%u KB", (unsigned)(heap_caps_get_free_size(MALLOC_CAP_DEFAULT) / 1024));
+                snprintf(sub, sizeof sub, "%s", s_en ? "free RAM" : "RAM libera");
+            }
+            cmp_card(tab, val[0] ? val : tab, val[0] ? FG : DIM, sub);
+        } else if (s_busy) {
+            // Thinking: a big wave of dots, the bright peak travelling, and how long a cloud turn may take.
+            G.fillRect(0, CMP_TOP, AW, CMP_BOT - CMP_TOP, BG);
+            const int cy = CMP_TOP + 34, act = (int)(s_spin & 3);
+            for (int i = 0; i < 4; i++) {
+                int dist = i - act; if (dist < 0) dist = -dist;
+                G.fillCircle(AW / 2 - 39 + i * 26, cy, dist == 0 ? 8 : dist == 1 ? 6 : 4, dist == 0 ? GRN : dist == 1 ? ACC : DIM);
+            }
+            G.setFont(&fonts::Font2);
+            const char *t = s_ses->cloud_note ? (s_en ? "cloud: up to 12 s" : "cloud: max 12 s") : (s_en ? "thinking" : "sto pensando");
+            G.setTextColor(MUTED, BG); G.setCursor((AW - (int)G.textWidth(t)) / 2, cy + 18); G.print(t);
+            char q[A_INMAX + 4]; snprintf(q, sizeof q, "\"%s\"", s_ses->req);   // what it is answering
+            fit_w(q, AW - 16);
+            G.setTextColor(FG, BG); G.setCursor((AW - (int)G.textWidth(q)) / 2, cy + 40); G.print(q);
+            snprintf(foot, sizeof foot, "%s", s_en ? "Enter stops" : "Invio ferma");
+        } else {
+            // The composer: the line in FreeSans 12 pt, wrapped by pixels, the last three lines shown.
+            G.setFont(&fonts::FreeSans12pt7b);
+            const int lh = 30, maxw = AW - 20;
+            const char *in = s_ses->input;
+            int starts[8], nl = 0, ls = 0, n = s_ilen;
+            starts[nl++] = 0;
+            for (int i = 1; i <= n; i++) {
+                if (meas(in + ls, i - ls) > maxw) {
+                    int b = i - 1; while (b > ls && in[b] != ' ') b--;
+                    ls = (b > ls) ? b + 1 : i - 1;
+                    if (nl < 8) starts[nl++] = ls; else { memmove(starts, starts + 1, sizeof(int) * 7); starts[7] = ls; }
+                }
+            }
+            const int first = nl > 3 ? nl - 3 : 0;
+            int y = CMP_TOP + 4;
+            if (n == 0 && !s_awaiting) {
+                // Nothing typed: a watch face. The time big, the day beside it, then the next reminder and
+                // the gist of the last answer — what a glance at the keyboard side should tell you.
+                char hm2[8] = "--:--"; if (clk) snprintf(hm2, sizeof hm2, "%02d:%02d", tm->tm_hour, tm->tm_min);
+                G.setFont(&fonts::Font6);                                // 48 px digits, the watch's own face
+                box_text(0, CMP_TOP, 152, 50, 8, CMP_TOP + 1, hm2, FG, BG);
+                G.setFont(&fonts::Font2);
+                char wd[16] = "", dm[16] = "";
+                if (clk) {
+                    static const char *const WDL_IT[7] = { "domenica", "lunedi", "martedi", "mercoledi", "giovedi", "venerdi", "sabato" };
+                    static const char *const WDL_EN[7] = { "Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday" };
+                    snprintf(wd, sizeof wd, "%s", (s_en ? WDL_EN : WDL_IT)[tm->tm_wday]);
+                    snprintf(dm, sizeof dm, "%d %s", tm->tm_mday, (s_en ? MO3_EN : MO3_IT)[tm->tm_mon]);
+                }
+                box_text(152, CMP_TOP, AW - 152, 22, 156, CMP_TOP + 5, wd, MUTED, BG);
+                box_text(152, CMP_TOP + 22, AW - 152, 24, 156, CMP_TOP + 25, dm, ACC, BG);
+                G.fillRect(152, CMP_TOP + 46, AW - 152, 4, BG);         // under the date, beside the clock
+                G.fillRect(0, CMP_TOP + 50, 8, 2, BG); G.drawFastHLine(8, CMP_TOP + 51, AW - 16, LINE);
+                G.fillRect(8, CMP_TOP + 50, AW - 16, 1, BG); G.fillRect(AW - 8, CMP_TOP + 50, 8, 2, BG);
+                char rm[80];
+                snprintf(rm, sizeof rm, "%s", s_ses->complics[0] ? s_ses->complics : (s_en ? "No reminders" : "Nessun promemoria"));
+                fit_w(rm, AW - 16);
+                box_text(0, CMP_TOP + 52, AW, 22, 8, CMP_TOP + 55, rm, s_ses->complics[0] ? AMBER : DIM, BG);
+                // The last answer's opening words, a line of it.
+                char la[80] = "";
+                for (int i = s_mcount - 1; i >= 0; i--) {
+                    int idx = (s_mhead - s_mcount + i + MSG_MAX) % MSG_MAX;
+                    if (s_msg[idx].role == R_ANIMA) {
+                        snprintf(la, sizeof la, "%s", s_msg[idx].text);
+                        for (char *c = la; *c; c++) if (*c == '\n') *c = ' ';
+                        break;
+                    }
+                }
+                fit_w(la, AW - 16);
+                box_text(0, CMP_TOP + 74, AW, CMP_BOT - CMP_TOP - 74, 8, CMP_TOP + 77, la, FG, BG);
+                y = CMP_BOT;
+            } else if (n == 0) {
+                G.setFont(&fonts::FreeSans12pt7b);
+                cmp_line(y, lh, s_en ? "reply..." : "rispondi...", AMBER, BG);
+                s_cmp_cx = 9; s_cmp_cy = (short)(y + 5); y += lh;
+            }
+            for (int l = first; l < nl && n > 0; l++, y += lh) {
+                int e = (l + 1 < nl) ? starts[l + 1] : n;
+                char t[A_INMAX]; int L = e - starts[l]; memcpy(t, in + starts[l], L); t[L] = 0;
+                int te = box_text(0, y, AW, lh, 8, y + 3, t, FG, BG);
+                if (l == nl - 1) {
+                    s_cmp_cx = (short)(te + 1); s_cmp_cy = (short)(y + 5);
+                    char ghost[HIST_LEN];
+                    if (autocomplete(s_ses->input, ghost, sizeof ghost) && te + 4 < AW - 8) {
+                        char gt[HIST_LEN]; snprintf(gt, sizeof gt, "%s", ghost + s_ilen);
+                        while (gt[0] && te + 4 + (int)G.textWidth(gt) > AW - 4) gt[strlen(gt) - 1] = 0;
+                        box_text(te, y, AW - te, lh, te + 4, y + 3, gt, DIM, BG);
+                    }
+                }
+            }
+            if (y < CMP_BOT) G.fillRect(0, y, AW, CMP_BOT - y, BG);
+            s_cmp_ch = 22;
+            // The foot: what Enter does here, or where you are in the answer and where it came from.
+            if (s_ses->launch[0] && n == 0) {
+                char nm[32]; const char *ln = launcher_app_localized_name(s_ses->launch);
+                snprintf(nm, sizeof nm, "%s", ln ? ln : s_ses->launch);
+                snprintf(foot, sizeof foot, s_en ? "Enter opens %s" : "Invio apre %s", nm); fcol = GRN;
+            } else if (deck_active()) {
+                snprintf(foot, sizeof foot, "%d  %s", s_sug_sel + 1, cur_sug(s_sug_sel)); fcol = ACC;
+            } else if (s_awaiting) {
+                snprintf(foot, sizeof foot, "%s", s_en ? "ANIMA is waiting for your reply" : "ANIMA aspetta la tua risposta"); fcol = AMBER;
+            } else {
+                const char *tg = "";
+                for (int i = s_mcount - 1; i >= 0; i--) {
+                    int idx = (s_mhead - s_mcount + i + MSG_MAX) % MSG_MAX;
+                    if (s_msg[idx].role == R_ANIMA) { tg = s_msg[idx].tag; break; }
+                }
+                if (ap) snprintf(foot, sizeof foot, "%d/%d   %s", ap_p, ap_n, tg);
+                else snprintf(foot, sizeof foot, "%s", tg);
+                for (char *c = foot; *c; c++) if (*c == '|') *c = ' ';
+            }
+        }
+        // The context strip at the foot.
+        G.setFont(&fonts::Font2);
+        G.drawFastHLine(0, CMP_BOT + 1, AW, LINE);
+        fit_w(foot, AW - 16);
+        box_text(0, CMP_BOT + 2, AW, AH - CMP_BOT - 2, 8, CMP_BOT + 3, foot, fcol, BG);
+    }
+    // The caret: one bar, toggled by the blink.
+    if (s_cmp_cx >= 0 && scene == 0 && !s_busy)
+        G.fillRect(s_cmp_cx, s_cmp_cy, 2, s_cmp_ch, (s_blink & 2) ? GRN : BG);
+    G.endWrite();
+    G.setFont(&fonts::Font0); G.setTextSize(1);
+    s_g = keep;
+}
+static void composer_invalidate(void) { s_cmp_scene = -1; }
+
+// ---- touch (the external panel; in mirror mode the same targets in the Cardputer's coordinates) ------------
+// Private key codes a tap injects (NK_CHAR + a control code no key types); rows use NUCLEO_TOUCH_ROW.
+enum { T_PG_UP = 1, T_PG_DN, T_MODE, T_MENU, T_PREV, T_NEXT, T_TAB = 8 /* ..8+TAB_N-1 */, T_ROW_BACK = 13, T_ROW_FWD = 14 };
+static void touch_targets(void)
+{
+    if (s_ses && s_exit_confirm && !s_ed_open) {                  // "Leave ANIMA?": the two answer lines
+        const int top = nucleo_app_content_top(), h = nucleo_app_content_height();
+        const int bw = AW - 28, bh = 92, bx = (AW - bw) / 2, by = top + (h - bh) / 2;
+        nucleo_touch_add(bx, by + 38, bw, 24, NK_ENTER, 0);
+        nucleo_touch_add(bx, by + 62, bw, 30, NK_BACK, 0);
+    }
+    if (s_ses && !s_exit_confirm && !s_ses->clear_confirm && !s_ed_open) {
+        const int top = nucleo_app_content_top(), h = nucleo_app_content_height();
+        if (s_menu_open) {
+            const int tw = AW / TAB_N;                                    // the tab strip: one target per tab
+            for (int i = 0; i < TAB_N; i++) nucleo_touch_add(i * tw, 0, tw, 22, NK_CHAR, (char)(T_TAB + i));
+            if (s_tab == TAB_GUIDA) {                                     // the manual: left half back, right half on
+                nucleo_touch_add(0, 22, AW / 2, h - 22, NK_CHAR, (char)T_PREV);
+                nucleo_touch_add(AW / 2, 22, AW - AW / 2, h - 22, NK_CHAR, (char)T_NEXT);
+            } else if (!(s_tab == TAB_IDEE && s_form_leaf >= 0)) {
+                for (int k = 0; k < s_mt_n; k++)                          // a list row: tap picks, tap again opens
+                    nucleo_touch_add(0, s_mt[k].y, AW, s_mt[k].h, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + k));
+                // ...and the list follows a drag: the focus walks a row per 30 px (the list scrolls with it).
+                if (s_tab != TAB_STATO) nucleo_touch_add_scroll(0, 22, AW, h - 22, 30, NK_UP, 0, NK_DOWN, 0);
+            }
+        } else if (s_ses->reader) {
+            nucleo_touch_add(0, 0, AW, RD_BODY / 2, NK_CHAR, (char)T_PG_UP);
+            nucleo_touch_add(0, RD_BODY / 2, AW, h - RD_BODY / 2, NK_CHAR, (char)T_PG_DN);
+            nucleo_touch_add_scroll(0, 0, AW, RD_BODY, font_h(chat_font()), NK_CHAR, (char)T_ROW_BACK, NK_CHAR, (char)T_ROW_FWD);
+        } else {
+            const int hh = hdr_h(), by = top + hh, bh = h - hh - input_band();
+            nucleo_touch_add(0, top, AW / 2, hh, NK_CHAR, (char)T_MODE);         // header: the mode label cycles it,
+            nucleo_touch_add(AW / 2, top, AW - AW / 2, hh, NK_CHAR, (char)T_MENU); // the clock side opens the menu
+            if (deck_active()) {                                          // the deck: each suggestion is a target
+                for (int k = 0; k < s_deck_n && k < 16; k++)
+                    nucleo_touch_add(0, s_deck_y + k * s_deck_rh, AW, s_deck_rh, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + k));
+            } else {                                                      // the transcript: upper half back a page,
+                nucleo_touch_add(0, by, AW, bh / 2, NK_CHAR, (char)T_PG_UP);  // lower half on a page
+                nucleo_touch_add(0, by + bh / 2, AW, bh - bh / 2, NK_CHAR, (char)T_PG_DN);
+            }
+            // A drag moves the transcript under the finger, a row per row height; on the deck it walks the pick.
+            nucleo_touch_add_scroll(0, by, AW, bh, deck_active() ? s_deck_rh : font_h(chat_font()),
+                                    NK_CHAR, (char)T_ROW_BACK, NK_CHAR, (char)T_ROW_FWD);
+        }
+    }
+    nucleo_touch_commit();
+}
+// A tap's key. True when it was one (consumed).
+static bool touch_key(int key, char ch)
+{
+    if (key != NK_CHAR || ch <= 0 || ch >= NUCLEO_TOUCH_ROW + 16 || !s_ses) return false;
+    if (s_exit_confirm || s_ses->clear_confirm || s_ed_open) return true;   // no targets there: a stale tap
+    if (ch >= NUCLEO_TOUCH_ROW) {
+        const int slot = ch - NUCLEO_TOUCH_ROW;
+        if (s_menu_open) {
+            if (slot >= s_mt_n) return true;
+            const int idx = s_mt[slot].idx;
+            if (idx == s_mrow) { menu_key(NK_ENTER, 0); return true; }    // the picked row again: open it
+            s_mrow = idx;
+            if (s_tab == TAB_IDEE && s_idee_cat >= 0) s_ses->focus_leaf[s_idee_cat] = (signed char)idx;
+            menu_hint(); nucleo_app_request_draw();
+            return true;
+        }
+        if (!deck_active() || slot >= s_deck_n) return true;
+        const int idx = s_deck_first + slot;
+        if (idx == s_sug_sel) { run_suggestion(); if (!s_busy) nucleo_app_set_hint(chat_hint()); }
+        else { s_sug_sel = idx; s_d_body = true; nucleo_app_request_draw(); }
+        return true;
+    }
+    if (ch >= T_TAB && ch < T_TAB + TAB_N) {
+        const int t = ch - T_TAB;
+        if (!s_menu_open) return true;
+        if (t == s_tab) { on_back(NK_BACK); return true; }               // the open tab again: one level up / close
+        s_tab = t; s_edit = false; reset_idee(); s_mrow = -1;
+        menu_hint(); nucleo_app_request_draw();
+        return true;
+    }
+    switch (ch) {
+        case T_PG_UP: case T_PG_DN:
+            view_page(ch == T_PG_UP ? -1 : +1, s_ses->reader ? RD_BODY : chat_avail());
+            s_d_badge = true; nucleo_app_request_draw(); break;
+        case T_MODE: if (s_ilen == 0 && !s_busy && !s_menu_open) cycle_mode_key(); break;
+        case T_MENU: if (!s_busy) on_tab(); break;
+        case T_ROW_BACK: case T_ROW_FWD: {                               // a drag: one row
+            const int dir = ch == T_ROW_BACK ? -1 : +1;
+            if (s_menu_open) break;
+            if (!s_ses->reader && deck_active()) {
+                const int ns = s_sug_sel + dir;
+                if (ns >= 0 && ns < SUG_N) { s_sug_sel = ns; s_d_body = true; nucleo_app_request_draw(); }
+                break;
+            }
+            view_scroll(dir, s_ses->reader ? RD_BODY : chat_avail());
+            s_d_badge = true; nucleo_app_request_draw();
+            break;
+        }
+        case T_PREV: guida_key(NK_UP, 0); break;
+        case T_NEXT: guida_key(NK_DOWN, 0); break;
+        default: break;
+    }
+    return true;
+}
+
+static void draw(void)
+{
+    // The panel changed size (the external one came or went): the transcript re-wraps to the new width.
+    static int s_wrap_aw = 0;
+    if (s_ses && s_wrap_aw != AW) { s_wrap_aw = AW; rebuild_rows(); mark_all_dirty(); composer_invalidate(); }
+    nucleo_touch_clear();                         // before the frame: the kit's confirm card adds its buttons
+    draw_main();
+    if (lg()) draw_companion();
+    touch_targets();
 }
 
 extern "C" void nucleo_register_anima(void)
 {
     static const nucleo_app_def_t app = {
         "anima", "ANIMA", "Tools", "Offline assistant: ask in plain words",
-        'a', ACC, enter, on_key, tick, draw, leave
+        'a', ACC, enter, on_key, tick, draw, leave,
+        0, nullptr, draw                       // two screens: the same painters, on the large surface
     };
     nucleo_app_register(&app);
 }

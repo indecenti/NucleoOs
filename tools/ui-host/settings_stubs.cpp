@@ -124,3 +124,26 @@ extern "C" nucleo_sdc_status_t nucleo_sdcontent_status(void) { return (nucleo_sd
 extern "C" const char *nucleo_sdcontent_card_tag(void) { return g_host_sdc_status == 3 ? "0.4.2" : ""; }
 extern "C" const char *nucleo_sdcontent_fw_tag(void) { return "0.5.0"; }
 extern "C" bool nucleo_setup_is_first_boot(void) { return false; }
+
+// ---- second screen (nucleo_extdisp.h): an attached ILI9341, 40 MHz, fit on; a pending 80 MHz on request ----
+#include "nucleo_extdisp.h"
+bool g_host_ext_pending = false;                           // scene-controlled: the saved speed differs (restart)
+static nucleo_extdisp_conf_t s_ext_saved = { 0, 40, 1, true, true, true, 2 };
+extern "C" bool nucleo_extdisp_active(void) { return true; }
+extern "C" bool nucleo_extdisp_touch(void) { return true; }
+extern "C" const char *nucleo_extdisp_reason(void) { return "detected (XPT2046 fingerprint)"; }
+extern "C" const char *nucleo_extdisp_controller(void) { return "ili9341"; }
+extern "C" bool nucleo_extdisp_conf(nucleo_extdisp_conf_t *live, nucleo_extdisp_conf_t *saved)
+{
+    if (live) *live = { 0, 40, 1, true, true, true, 2 };
+    if (saved) { *saved = s_ext_saved; if (g_host_ext_pending) saved->mhz = 80; }
+    return true;
+}
+extern "C" bool nucleo_extdisp_set_primary(bool on) { s_ext_saved.primary = on; return true; }
+extern "C" bool nucleo_extdisp_set_layout(int l) { s_ext_saved.layout = l; return true; }
+extern "C" bool nucleo_extdisp_set_fit(bool on) { s_ext_saved.fit = on; return true; }
+extern "C" bool nucleo_extdisp_set_mode(int m) { s_ext_saved.mode = m; return true; }
+extern "C" bool nucleo_extdisp_set_mhz(int m) { s_ext_saved.mhz = m; return true; }
+extern "C" bool nucleo_extdisp_set_rotation(int r) { s_ext_saved.rotation = r; return true; }
+extern "C" bool nucleo_extdisp_set_touch(bool on) { s_ext_saved.touch = on; return true; }
+extern "C" bool nucleo_extdisp_recalibrate(void) { return true; }

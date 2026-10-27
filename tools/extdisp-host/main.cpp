@@ -57,7 +57,8 @@ static void test_probe_logic(void)
     { extdisp_cfg_t b = c; b.rst = -1; b.t_irq = -1; b.bl = 3; CHECK(extdisp_cfg_check(&b) == NULL, "optional -1 + LED on G3 ok"); }
     { extdisp_cfg_t b = c; b.cs = -1; CHECK(extdisp_cfg_check(&b) != NULL, "cs required"); }
     { extdisp_cfg_t b = c; b.rotation = 2; CHECK(extdisp_cfg_check(&b) != NULL, "portrait refused"); }
-    { extdisp_cfg_t b = c; b.mhz = 80; CHECK(extdisp_cfg_check(&b) != NULL, "80 MHz refused"); }
+    { extdisp_cfg_t b = c; b.mhz = 80; CHECK(extdisp_cfg_check(&b) == NULL, "80 MHz accepted (write-only panel)"); }
+    { extdisp_cfg_t b = c; b.mhz = 81; CHECK(extdisp_cfg_check(&b) != NULL, "81 MHz refused"); }
 
     CHECK(extdisp_mode_parse("off") == EXTDISP_OFF && extdisp_mode_parse("on") == EXTDISP_ON, "mode parse");
     CHECK(extdisp_mode_parse(NULL) == EXTDISP_AUTO && extdisp_mode_parse("x") == EXTDISP_AUTO, "mode default auto");
@@ -267,8 +268,8 @@ struct PanelSprite : public LGFX_Sprite { IPanel *panel(void) { return _panel; }
 // Counts external transactions; `open` must be 0 whenever control is back in the caller.
 struct SpyMirror : public Panel_Mirror {
     int open = 0, opened = 0, max_open = 0;
-    void ext_begin(void) override { open++; opened++; if (open > max_open) max_open = open; Panel_Mirror::ext_begin(); }
-    void ext_end(void) override { open--; Panel_Mirror::ext_end(); }
+    void bus_open(void) override { open++; opened++; if (open > max_open) max_open = open; Panel_Mirror::bus_open(); }
+    void bus_close(void) override { open--; Panel_Mirror::bus_close(); }
 };
 
 static SpyMirror *s_spy;
@@ -444,12 +445,229 @@ static void test_mirror(const char *outdir)
     printf("extdisp: %d mirrored calls, %d external transactions\n", s_ops, mirror.opened);
 }
 
+// ---- solo: the external panel is THE display (launcher on 320x240), the internal one untouched ---------
+static void test_solo(const char *outdir)
+{
+    PanelSprite inner, outer;
+    inner.setColorDepth(16); inner.createSprite(240, 135); inner.fillSprite(TFT_NAVY);
+    const uint32_t navy = inner.readPixel(0, 0);
+    outer.setColorDepth(16); outer.createSprite(320, 240); outer.fillSprite(SENTINEL);
+    SpyMirror mirror;
+    mirror.attach(inner.panel(), outer.panel());
+    LGFX_Device dev;
+    dev.setPanel(&mirror);
+    dev.setColorDepth(16);
+    dev.setRotation(0);
+
+    dev.startWrite();
+    CHECK(!mirror.set_solo(true) && !mirror.solo(), "no switch while a frame is open on the internal panel");
+    dev.endWrite();
+    CHECK(mirror.set_solo(true) && mirror.solo(), "solo on between frames");
+    dev.clearClipRect(); dev.clearScrollRect();                  // LGFXBase caches the clip box: re-read the size
+    CHECK(dev.width() == 320 && dev.height() == 240, "solo reports the external size (%dx%d)", (int)dev.width(), (int)dev.height());
+    CHECK(mirror.origin_x() == 0 && mirror.origin_y() == 0, "solo is unshifted");
+    CHECK(!mirror.isReadable(), "solo is write-only");
+
+    dev.fillScreen(TFT_DARKGREY);
+    dev.fillRect(300, 220, 20, 20, TFT_RED);                      // the far corner exists only on the external
+    dev.drawString("solo 320x240", 10, 10, &lgfx::fonts::Font4);
+    LGFX_Sprite band(&dev);                                       // a 320-wide 8bpp strip, as the launcher pushes
+    band.setColorDepth(8);
+    band.createSprite(320, 40);
+    band.fillSprite(TFT_BLUE);
+    band.fillCircle(160, 20, 15, TFT_YELLOW);
+    dev.startWrite();
+    band.pushSprite(&dev, 0, 100);
+    dev.endWrite();
+    band.deleteSprite();
+    std::vector<uint16_t> px(64 * 3);
+    for (size_t i = 0; i < px.size(); i++) px[i] = (uint16_t)(i * 977);
+    dev.startWrite();
+    dev.setAddrWindow(250, 150, 64, 3);
+    dev.pushPixels(px.data(), 100);
+    dev.pushPixels(px.data() + 100, (int32_t)px.size() - 100);
+    dev.endWrite();
+    dev.setScrollRect(0, 0, 320, 60); dev.scroll(0, -7); dev.clearScrollRect();   // a no-op, never a crash
+    dev.fillSmoothCircle(60, 200, 20, TFT_GREEN);                // anti-aliased: written as opaque runs, no readback
+    CHECK(outer.readPixel(60, 200) == 0x07E0 && outer.readPixel(60, 185) == 0x07E0, "solo: an anti-aliased circle lands filled");
+    CHECK(outer.readPixel(60, 225) != 0x07E0, "solo: the circle stays inside its radius");
+
+    CHECK(mirror.open == 0 && mirror.max_open == 1, "solo: one external transaction per primitive (max %d)", mirror.max_open);
+    CHECK(mirror.opened > 0, "solo wrote the external panel");
+    int in_changed = 0;
+    for (int y = 0; y < 135; y++) for (int x = 0; x < 240; x++) if (inner.readPixel(x, y) != navy) in_changed++;
+    CHECK(in_changed == 0, "solo touched %d internal px", in_changed);
+    CHECK(outer.readPixel(310, 230) == 0xF800, "solo reaches the external corner unshifted (%04x)", (unsigned)outer.readPixel(310, 230));
+    CHECK(outer.readPixel(160, 120) == lgfx::color565(255, 255, 0), "solo: the 8bpp strip landed in place");
+    {
+        PanelSprite ref;                                          // the same stream on a plain 320x240 sprite
+        ref.setColorDepth(16); ref.createSprite(320, 240);
+        ref.startWrite(); ref.setAddrWindow(250, 150, 64, 3);
+        ref.pushPixels(px.data(), 100); ref.pushPixels(px.data() + 100, (int32_t)px.size() - 100);
+        ref.endWrite();
+        int bad = 0;
+        for (int y = 150; y < 153; y++) for (int x = 250; x < 314; x++) if (outer.readPixel(x, y) != ref.readPixel(x, y)) bad++;
+        CHECK(bad == 0, "solo: a split pixel stream resumes mid-window (%d px off)", bad);
+    }
+    char path[512];
+    snprintf(path, sizeof path, "%s/external_solo.rgb", outdir); dump(path, outer);
+
+    CHECK(mirror.set_solo(false) && !mirror.solo(), "solo off");
+    dev.clearClipRect(); dev.clearScrollRect();
+    CHECK(dev.width() == 240 && dev.height() == 135 && mirror.origin_x() == 40 && mirror.origin_y() == 52, "back to the centred mirror");
+    dev.fillRect(0, 0, 10, 10, TFT_GREEN);
+    CHECK(inner.readPixel(5, 5) == outer.readPixel(45, 57) && inner.readPixel(5, 5) != navy, "mirroring resumes after solo");
+}
+
+// ---- fit: every compact frame scaled 4/3 (240x135 -> 320x180, centred at 0,30), nearest pixel ----------
+static int fit_x(int x) { return x * 4 / 3; }
+static int fit_diff(PanelSprite &inner, PanelSprite &outer)
+{
+    int bad = 0;
+    for (int y = 0; y < 135; y++)
+        for (int x = 0; x < 240; x++) {
+            uint32_t c = inner.readPixel(x, y);
+            for (int Y = fit_x(y); Y < fit_x(y + 1); Y++)
+                for (int X = fit_x(x); X < fit_x(x + 1); X++)
+                    if (outer.readPixel(X, Y + 30) != c) bad++;
+        }
+    return bad;
+}
+static PanelSprite *s_fit_in, *s_fit_out;
+static int s_fit_ops = 0, s_fit_bad_ops = 0, s_fit_first = -1;
+static void fit_check(void)
+{
+    s_fit_ops++;
+    if (fit_diff(*s_fit_in, *s_fit_out)) { s_fit_bad_ops++; if (s_fit_first < 0) s_fit_first = s_fit_ops; }
+}
+
+static void test_fit(const char *outdir)
+{
+    PanelSprite inner, outer;
+    inner.setColorDepth(16); inner.createSprite(240, 135); inner.fillSprite(TFT_BLACK);
+    outer.setColorDepth(16); outer.createSprite(320, 240); outer.fillSprite(SENTINEL);
+    SpyMirror mirror;
+    mirror.attach(inner.panel(), outer.panel());
+    CHECK(mirror.set_fit(true) && mirror.fit(), "fit on");
+    CHECK(mirror.width() == 240 && mirror.height() == 135, "fit keeps the compact size for the OS");
+    CHECK(mirror.frame_w() == 320 && mirror.frame_h() == 180, "fit frame is 320x180 (%dx%d)", mirror.frame_w(), mirror.frame_h());
+    CHECK(mirror.origin_x() == 0 && mirror.origin_y() == 30, "fit frame centred at 0,30 (%d,%d)", mirror.origin_x(), mirror.origin_y());
+    LGFX_Device dev;
+    dev.setPanel(&mirror);
+    dev.setColorDepth(16);
+    dev.setRotation(0);
+
+    // The same script as the 1:1 mirror (scaled image, transparent push, alpha edges, scroll), then compare.
+    s_spy = nullptr;
+    s_fit_in = &inner; s_fit_out = &outer;
+    draw_script(dev);
+    fit_check();
+    CHECK(s_fit_bad_ops == 0, "fit: external differs from the scaled internal frame (%d px)", fit_diff(inner, outer));
+    CHECK(mirror.open == 0 && mirror.max_open == 1, "fit: one external transaction per primitive (max %d)", mirror.max_open);
+
+    // A pixel stream split mid-row and a fill stream, then a check.
+    std::vector<uint16_t> px(37 * 5);
+    for (size_t i = 0; i < px.size(); i++) px[i] = (uint16_t)(i * 2311 + 7);
+    dev.startWrite();
+    dev.setAddrWindow(101, 60, 37, 5);
+    dev.pushPixels(px.data(), 50);
+    dev.pushPixels(px.data() + 50, (int32_t)px.size() - 50);
+    dev.setAddrWindow(3, 120, 11, 7);
+    dev.writeColor((uint16_t)0xF81F, 11 * 7);
+    dev.endWrite();
+    CHECK(fit_diff(inner, outer) == 0, "fit: split streams scale exactly (%d px off)", fit_diff(inner, outer));
+    int outside = 0;
+    for (int y = 0; y < 240; y++) for (int x = 0; x < 320; x++) if ((y < 30 || y >= 210) && outer.readPixel(x, y) != SENTINEL) outside++;
+    CHECK(outside == 0, "fit: %d px written into the letterbox bands", outside);
+    {   // screenshots: every rebuilt external row equals the panel (the letterbox reads black, it was never written)
+        std::vector<uint16_t> row(320), tmp(240);
+        int bad = 0;
+        for (int y = 30; y < 210; y++) {
+            mirror.ext_row(y, row.data(), tmp.data());
+            for (int x = 0; x < 320; x++) {
+                uint16_t raw = row[x], c = (uint16_t)((raw >> 8) | (raw << 8));   // write format is byte-swapped
+                if (c != (uint16_t)outer.readPixel(x, y)) bad++;
+            }
+        }
+        CHECK(bad == 0, "fit: rebuilt screenshot rows differ from the panel in %d px", bad);
+        mirror.ext_row(5, row.data(), tmp.data());
+        CHECK(row[0] == 0 && row[319] == 0, "fit: screenshot letterbox is black");
+    }
+    char path[512];
+    snprintf(path, sizeof path, "%s/external_fit.rgb", outdir); dump(path, outer);
+
+    // Solo still wins over fit (the large surface is unscaled), and fit comes back after it.
+    CHECK(mirror.set_solo(true), "solo over fit");
+    dev.clearClipRect();
+    CHECK(dev.width() == 320 && mirror.origin_y() == 0, "solo ignores fit");
+    CHECK(mirror.set_solo(false), "solo off");
+    dev.clearClipRect();
+    CHECK(mirror.origin_y() == 30 && mirror.frame_h() == 180, "fit geometry restored after solo");
+    CHECK(mirror.set_fit(false) && mirror.origin_y() == 52 && mirror.frame_w() == 240, "fit off: back to 1:1");
+}
+
+// ---- frame hold: one external transaction per frame, given back to the SD on demand ---------------------
+static uint32_t s_clock_ms = 0;
+static void *s_task = (void *)1;
+static void test_hold(void)
+{
+    PanelSprite inner, outer;
+    inner.setColorDepth(16); inner.createSprite(240, 135); inner.fillSprite(TFT_BLACK);
+    outer.setColorDepth(16); outer.createSprite(320, 240); outer.fillSprite(SENTINEL);
+    SpyMirror mirror;
+    mirror.attach(inner.panel(), outer.panel());
+    mirror.set_hold([]() -> uint32_t { return s_clock_ms; }, []() -> void * { return s_task; }, 8);
+    LGFX_Device dev;
+    dev.setPanel(&mirror);
+    dev.setColorDepth(16);
+    dev.setRotation(0);
+
+    // Outside a frame: unchanged, one real open per primitive, closed after each.
+    dev.drawPixel(1, 1, TFT_RED);
+    CHECK(mirror.open == 0 && mirror.opened == 1, "hold: a lone primitive still opens and closes");
+
+    // A frame of 200 pixels (an outline): ONE real open, closed by endWrite.
+    int o0 = mirror.opened;
+    dev.startWrite();
+    for (int i = 0; i < 200; i++) dev.drawPixel(10 + i % 100, 10 + i / 100, TFT_GREEN);
+    CHECK(mirror.open == 1, "hold: the bus stays open inside the frame");
+    dev.endWrite();
+    CHECK(mirror.open == 0 && mirror.opened - o0 == 1, "hold: 200 primitives = %d bus opens", mirror.opened - o0);
+    CHECK(inner.readPixel(50, 10) == outer.readPixel(90, 62), "hold: what is drawn is unchanged");
+
+    // The SD asks mid-frame on the SAME task: the hold is given back at once, reopened by the next primitive.
+    o0 = mirror.opened;
+    dev.startWrite();
+    dev.drawPixel(5, 5, TFT_BLUE);
+    mirror.release_hold();
+    CHECK(mirror.open == 0, "hold: released for an SD transfer of the drawing task");
+    dev.drawPixel(6, 5, TFT_BLUE);
+    dev.endWrite();
+    CHECK(mirror.open == 0 && mirror.opened - o0 == 2, "hold: reopened once after the SD transfer (%d)", mirror.opened - o0);
+
+    // Another task cannot take it away (it waits for the bus instead) ...
+    dev.startWrite();
+    dev.drawPixel(7, 5, TFT_BLUE);
+    s_task = (void *)2; mirror.release_hold(); s_task = (void *)1;
+    CHECK(mirror.open == 1, "hold: another task's request does not close it");
+    // ... and the budget bounds how long it waits.
+    o0 = mirror.opened;
+    s_clock_ms += 9;
+    dev.drawPixel(8, 5, TFT_BLUE);
+    CHECK(mirror.opened - o0 == 1, "hold: past the 8 ms budget the bus is given back and retaken");
+    dev.endWrite();
+    CHECK(mirror.open == 0 && mirror.max_open == 1, "hold: never nested, closed at the end (max %d)", mirror.max_open);
+}
+
 int main(int argc, char **argv)
 {
     const char *outdir = argc > 1 ? argv[1] : ".";
     test_probe_logic();
     test_touch_logic();
     test_mirror(outdir);
+    test_solo(outdir);
+    test_fit(outdir);
+    test_hold();
     printf("extdisp: %d passed, %d failed\n", s_pass, s_fail);
     return s_fail ? 1 : 0;
 }

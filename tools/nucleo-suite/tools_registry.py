@@ -32,22 +32,22 @@ TOOLS = [
         },
         "description": {
             "it": ("Studio drag-and-drop che converte un filmato qualsiasi nel formato video "
-                   "nativo di NucleoOS. Produce un file .nfv (MJPEG 240×135) con audio "
-                   "integrato, calibrato per lo schermo da 1.14\" e per l'ESP32-S3 senza PSRAM."),
+                   "nativo di NucleoOS: un file .nfv v4 (frame JPEG interi + audio IMA ADPCM) "
+                   "a 320×240 per lo schermo esterno o 240×135 per il solo Cardputer."),
             "en": ("Drag-and-drop studio that converts any movie into NucleoOS' native video "
-                   "format. It outputs a .nfv file (MJPEG 240×135) with embedded audio, tuned "
-                   "for the 1.14\" panel and the PSRAM-less ESP32-S3."),
+                   "format: one .nfv v4 file (whole-frame JPEGs + IMA ADPCM sound), 320×240 for "
+                   "the external panel or 240×135 for the Cardputer alone."),
         },
         "features": {
             "it": [
-                "NFV v3 tile-delta: redraw solo dei riquadri che cambiano, 3-5× più piccolo",
-                "Compatibilità NFV v2 (full-frame + .mp3) per le build più vecchie",
-                "Trim, crop/pad, FPS e qualità regolabili; decodifica GPU NVIDIA opzionale",
+                "Volume normalizzato a -14 LUFS: tutti i video suonano allo stesso livello",
+                "Coda di più video, taglio inizio/durata, crop o bande nere, FPS e qualità",
+                "Maschera delle strisce cambiate: il Cardputer invia al display solo ciò che si muove",
             ],
             "en": [
-                "NFV v3 tile-delta: redraws only the tiles that change, 3-5× smaller",
-                "NFV v2 compatibility (full-frame + .mp3) for older builds",
-                "Trim, crop/pad, FPS and quality tunable; optional NVIDIA GPU decode",
+                "Loudness normalised to -14 LUFS: every video plays at the same level",
+                "Queue of several videos, start/duration trim, crop or pad, FPS and quality",
+                "Changed-strip mask: the Cardputer only sends what moves to the panel",
             ],
         },
         "requires": {
@@ -56,45 +56,35 @@ TOOLS = [
         },
     },
     {
-        "id": "nfv-reindex",
+        "id": "nfv-migrate",
         "cat": "video",
         "glyph": "reindex",
         "accent": "#ffb454",
-        "script": "tools/nfv/reindex.py",
+        "script": "tools/nfv/migrate.py",
         "kind": "cli",
         "frozen_ok": True,
         "needs_repo": False,
-        "title": {"it": "NFV Reindex", "en": "NFV Reindex"},
+        "title": {"it": "NFV Migrate", "en": "NFV Migrate"},
         "tagline": {
-            "it": "Aggiunge l'indice di seek alle vecchie clip .nfv (resume istantaneo)",
-            "en": "Adds a seek index to old .nfv clips (instant resume)",
+            "it": "Converte una vecchia clip .nfv (v1/v2 + .mp3) nel formato v4",
+            "en": "Converts an old .nfv clip (v1/v2 + .mp3) to the v4 format",
         },
         "description": {
-            "it": ("Aggiorna sul posto le clip NFV v1 create prima dell'indice di ricerca: "
-                   "evita la lenta scansione \"Preparing...\" sul device. Non ri-codifica, "
-                   "accoda solo la tabella offset e ritocca l'header (crash-safe)."),
-            "en": ("Upgrades in place the NFV v1 clips made before the seek index existed: it "
-                   "avoids the slow on-device \"Preparing...\" scan. It does not re-encode — it "
-                   "only appends the offset table and patches the header (crash-safe)."),
+            "it": ("Il Cardputer riproduce solo .nfv v4. Questa utility porta in v4 una clip vecchia "
+                   "anche senza il video originale: usa i suoi frame JPEG e la .mp3 accanto, con l'audio "
+                   "normalizzato come ogni altra clip. Scrive '<nome> (v4).nfv' e non tocca l'originale."),
+            "en": ("The Cardputer plays .nfv v4 only. This utility carries an old clip over even without "
+                   "its source video: it uses its JPEG frames and the sibling .mp3, with the sound normalised "
+                   "like every other clip. Writes '<name> (v4).nfv' and leaves the original alone."),
         },
         "features": {
-            "it": [
-                "Opera su un singolo .nfv o su un'intera cartella (es. la SD in un lettore)",
-                "Salta le clip già indicizzate; verifica la catena fino a EOF prima di toccare",
-                "Modalità simulazione (--dry-run) per vedere cosa farebbe",
-            ],
-            "en": [
-                "Works on a single .nfv or a whole folder (e.g. the SD in a reader)",
-                "Skips already-indexed clips; verifies the chain to EOF before touching anything",
-                "Dry-run mode to preview what it would do",
-            ],
+            "it": ["Nessuna sorgente necessaria: bastano .nfv e .mp3", "Resta a 240×135 (niente ingrandimenti sfocati)"],
+            "en": ["No source needed: the .nfv and .mp3 are enough", "Stays at 240×135 (no blurry upscaling)"],
         },
-        "requires": {"it": ["solo stdlib Python"], "en": ["Python stdlib only"]},
+        "requires": {"it": ["ffmpeg sul PATH", "pillow", "numpy"], "en": ["ffmpeg on PATH", "pillow", "numpy"]},
         "params": [
-            {"name": "target", "type": "path", "mode": "any", "default": "", "required": True,
-             "label": {"it": "Cartella o file .nfv", "en": "Folder or .nfv file"}},
-            {"name": "dry", "type": "bool", "default": False, "flag": "--dry-run",
-             "label": {"it": "Solo simulazione (non scrive)", "en": "Dry run (no writes)"}},
+            {"name": "input", "type": "path", "mode": "file", "default": "", "required": True,
+             "label": {"it": "Clip .nfv vecchia", "en": "Old .nfv clip"}},
         ],
     },
     {

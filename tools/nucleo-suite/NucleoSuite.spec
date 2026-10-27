@@ -27,9 +27,8 @@ def repo(*parts):
 # La destinazione DEVE combaciare con tools_registry["script"].
 TOOL_DATAS = [
     (repo("tools", "nfv", "studio_gui.py"),          "tools/nfv"),
-    (repo("tools", "nfv", "nfv3.py"),                "tools/nfv"),
-    (repo("tools", "nfv", "encode.py"),              "tools/nfv"),
-    (repo("tools", "nfv", "reindex.py"),             "tools/nfv"),
+    (repo("tools", "nfv", "nfv4.py"),                "tools/nfv"),
+    (repo("tools", "nfv", "migrate.py"),             "tools/nfv"),
     (repo("tools", "serial_boot.py"),                "tools"),
     (repo("tools", "serial_capture.py"),             "tools"),
 ]

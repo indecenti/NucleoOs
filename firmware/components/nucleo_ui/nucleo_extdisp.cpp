@@ -9,6 +9,9 @@
 // ST7789V under the same silkscreen. With SDO wired the controller is read back (ID4 / RDDID); without it
 // the ILI9341 is assumed and settings.json "external_controller" picks the other one.
 #include "nucleo_extdisp.h"
+#include "nucleo_surface.h"
+#include "nucleo_touch.h"
+#include "nucleo_theme.h"
 #include "extdisp_probe.h"
 #include "extdisp_mirror.hpp"
 #include "extdisp_touch.h"
@@ -96,6 +99,14 @@ lgfx::LGFX_Device *s_dev = nullptr;             // the external panel (touch lay
 int                s_bl_pin = -1;
 spi_device_handle_t s_touch = nullptr;           // the XPT2046, kept for the touch task
 volatile int       s_presses = 0, s_last_x = -1, s_last_y = -1;
+bool               s_primary = true;             // settings "external_primary": an attached panel hosts large screens
+bool               s_fit = true;                 // settings "external_fit": compact screens scaled 4/3 (320x180)
+volatile int       s_layout = 0;                 // settings "external_layout": 0 duplicate, 1 Cardputer only, 2 second only
+nucleo_extdisp_conf_t s_saved;                   // what settings.json holds now (the page shows "after restart")
+volatile int       s_layout_gen = 0;             // bumped when the frame geometry changes (touch re-lays its keys)
+volatile bool      s_cal_req = false;            // Settings asked for a recalibration
+volatile bool      s_solo = false;               // the panel is `d`, natively (the launcher on 320x240)
+volatile bool      s_calibrating = false;        // the touch task is collecting calibration targets (mirror only)
 
 // A pin another module actively drives LOW defeats our weak pull-up (e.g. a LoRa cap's BUSY on G6).
 bool driven_low_against_pullup(int pin)
@@ -222,10 +233,21 @@ void read_lcd_ids(void)
 }
 
 volatile bool s_screen_on = true;
+void draw_chrome(void);
+void lock_opt(void);
+void unlock_opt(void);
+// Screen off (idle auto-off, the Control Center, the web): the backlight goes with the internal one when it is
+// on a GPIO. With the LED on the 5 V rail it cannot be switched, so the panel is painted black instead (a TN
+// panel in sleep/display-off shows WHITE). Coming back, the OS repaints the frame and we redraw the letterbox.
 void bl_follow(uint8_t brightness)
 {
-    s_screen_on = brightness != 0;
-    if (s_bl_pin >= 0) gpio_set_level((gpio_num_t)s_bl_pin, brightness ? 1 : 0);
+    const bool on = brightness != 0, was = s_screen_on;
+    s_screen_on = on;
+    if (s_bl_pin >= 0) gpio_set_level((gpio_num_t)s_bl_pin, on ? 1 : 0);
+    if (s_mirror) s_mirror->set_dark(!on && s_bl_pin < 0 && s_layout != 1);   // dark: nothing reaches it until on
+    if (on == was || !s_dev || s_layout == 1) return;   // Cardputer only: the panel is black already
+    if (!on && s_bl_pin < 0) { lock_opt(); s_dev->fillScreen(TFT_BLACK); unlock_opt(); }
+    if (on) draw_chrome();
 }
 
 // The letterbox around the mirrored frame is never written by the mirror, so it carries a permanent test
@@ -249,7 +271,7 @@ void draw_test_card(lgfx::LGFX_Device *dev, int oy, int fh)
     }
     dev->setTextColor(TFT_DARKGREY, TFT_BLACK);
     dev->drawString("colours wrong? see docs", 172, 30);
-    dev->drawRect(dev->width() / 2 - 121, top - 1, 242, fh + 2, TFT_DARKGREY);
+    if (top > 1) dev->drawRect(0, top - 1, W, fh + 2, TFT_DARKGREY);
     dev->setTextColor(TFT_WHITE, TFT_BLACK);
     snprintf(line, sizeof line, "touch: %s   rot %d%s", s_dec.touch ? "XPT2046" : "none", s_cfg.rotation,
              s_cfg.mirror ? " mirror" : "");
@@ -346,13 +368,20 @@ bool attach(void)
 
     // Swap the mirror in under `d`. Boot is single-threaded here (no UI task yet), so no frame is mid-flight.
     mirror->attach(d.getPanel(), panel);
-    draw_test_card(dev, mirror->origin_y(), mirror->height());
+    // Frame hold: one external transaction per frame (8 ms budget), handed back before every SD transfer.
+    mirror->set_hold([]() -> uint32_t { return (uint32_t)(esp_timer_get_time() / 1000); },
+                     []() -> void * { return (void *)xTaskGetCurrentTaskHandle(); }, 8);
+    nucleo_storage_set_sd_pre([]() { if (s_mirror) s_mirror->release_hold(); });
+    mirror->set_fit(s_fit);
+    mirror->set_ext_off(s_layout == 1);
+    mirror->set_pri_off(s_layout == 2);
+    draw_test_card(dev, mirror->origin_y(), mirror->frame_h());
     d.setPanel(mirror);
     s_mirror = mirror;
     s_dev = dev;
     ESP_LOGW(TAG, "%s%s %dx%d invert=%d bgr=%d: mirroring %dx%d at %d,%d (init %d ms)",
              extdisp_ctrl_str(s_ctrl), s_ctrl_read ? " (read back)" : " (assumed/configured)",
-             panel->width(), panel->height(), invert, !rgb_order, mirror->width(), mirror->height(),
+             panel->width(), panel->height(), invert, !rgb_order, mirror->frame_w(), mirror->frame_h(),
              mirror->origin_x(), mirror->origin_y(), (int)((esp_timer_get_time() - t0) / 1000));
     return true;
 }
@@ -372,23 +401,39 @@ struct TouchCtx {
     bool cal_stored;                             // a calibration taken in this rotation is in use
     int cal_err;                                 // check-target error of the last calibration (px)
     extdisp_rect_t keys[SK_COUNT];
+    extdisp_rect_t keys_solo[SK_COUNT];          // solo: no letterbox, the whole panel is the gesture area
     extdisp_frame_t frame;
     char status1[32];
+    // Touch targets (nucleo_touch.h): the set being built by the UI task, and the published one.
+    struct Target { int16_t x, y, w, h; int16_t key; char ch; };
+    Target tgt_build[NUCLEO_TOUCH_MAX], tgt[NUCLEO_TOUCH_MAX];
+    uint8_t ntgt_build, ntgt;
+    // Scroll areas (nucleo_touch_add_scroll), built and published with the targets.
+    struct Scroll { int16_t x, y, w, h, step, kb, kf; char cb, cf; };
+    Scroll scr_build[NUCLEO_TOUCH_SCROLL_MAX], scr[NUCLEO_TOUCH_SCROLL_MAX];
+    uint8_t nscr_build, nscr;
 };
 TouchCtx *s_tc = nullptr;
 bool      s_touch_input = true;                  // settings "external_touch": false = log touches only
 int       s_cal_raw[7];                          // settings "external_touch_cal", as loaded
 bool      s_has_cal_raw = false;
 
-void ext_lock(void)   { xSemaphoreTake(s_tc->mux, portMAX_DELAY); }
-void ext_unlock(void) { xSemaphoreGive(s_tc->mux); }
+// Recursive: the task drawing a frame holds it across primitives (frame hold) and may take it again inside
+// (touch targets, a brightness change mid-frame).
+void ext_lock(void)   { xSemaphoreTakeRecursive(s_tc->mux, portMAX_DELAY); }
+void ext_unlock(void) { xSemaphoreGiveRecursive(s_tc->mux); }
 
-bool chrome_on(void) { return s_touch_input && s_tc && s_tc->mux; }
+bool chrome_on(void) { return s_touch_input && s_tc && s_tc->mux && !s_solo && s_layout != 1; }
+// Before this task drives the external panel itself (s_dev), it gives back any frame hold of its own — the
+// same bus device must not be acquired twice.
+void lock_opt(void)   { if (s_mirror) s_mirror->release_hold(); if (s_tc && s_tc->mux) ext_lock(); }
+void unlock_opt(void) { if (s_tc && s_tc->mux) ext_unlock(); }
 const char *status2(void) { return TR5("tieni: calibra", "hold: calibrate", "manten: calibrar", "maintenir: calibrer", "halten: kalibrieren"); }
 
 void draw_chrome(void)
 {
     if (!chrome_on()) return;
+    if (s_mirror) s_mirror->release_hold();
     ext_lock();
     extdisp_chrome_draw(s_tc->dev, s_tc->keys, s_tc->frame, s_tc->status1, status2(), s_cfg.diag);
     ext_unlock();
@@ -460,6 +505,36 @@ const char *ev_name(int ev)
 
 bool t_irq_idle(void) { return s_cfg.t_irq >= 0 && gpio_get_level((gpio_num_t)s_cfg.t_irq) == 1; }
 
+// A panel point in the foreground screen's own coordinates: the panel's on the large surface, the compact
+// 240x135 inside the mirrored frame. False outside the frame.
+bool to_screen(bool solo, int px, int py, int *x, int *y)
+{
+    if (solo) { *x = px; *y = py; return true; }
+    const extdisp_frame_t &f = s_tc->frame;
+    if (f.fw <= 0 || f.fh <= 0) return false;
+    const int fx = px - f.ox, fy = py - f.oy;
+    if (fx < 0 || fy < 0 || fx >= f.fw || fy >= f.fh) return false;
+    *x = fx * 240 / f.fw; *y = fy * 135 / f.fh;
+    return true;
+}
+
+// Kinetic scrolling: the finger's travel in screen pixels becomes keys, one per area step; after a flick the
+// same accumulator keeps being fed by a decaying velocity. Velocity in screen px per ms, x1000 (fixed point).
+struct ScrollTrack {
+    bool on;                       // a drag that began in a scroll area owns this touch
+    TouchCtx::Scroll a;            // that area (copied: the app may republish mid-drag)
+    int  last, acc;                // last finger y (screen px), travel not yet turned into keys
+    int  hist_y[4]; uint32_t hist_t[4]; int hn;   // recent samples, for the release velocity
+    int  vel, frac;                // fling velocity (px/ms x1000), 0 = none; sub-pixel carry
+    uint32_t t_fling;
+};
+void scroll_emit(ScrollTrack &st, int dy)
+{
+    st.acc += dy;
+    while (st.acc <= -st.a.step) { st.acc += st.a.step; if (s_touch_input) nucleo_kbd_inject(nucleo_key_t{ st.a.kf, st.a.cf }); }
+    while (st.acc >=  st.a.step) { st.acc -= st.a.step; if (s_touch_input) nucleo_kbd_inject(nucleo_key_t{ st.a.kb, st.a.cb }); }
+}
+
 void touch_task(void *)
 {
     const int W = s_tc->dev->width(), H = s_tc->dev->height();
@@ -469,10 +544,32 @@ void touch_task(void *)
     bool calibrating = chrome_on() && !s_tc->cal_stored;   // first use: calibrate before trusting the keys
     if (calibrating) { extdisp_calib_start(&cal); draw_calib(0, false); }
     int shown = SK_NONE, x0 = 0, y0 = 0;
-    bool was_down = false, wake_hold = false;
+    bool was_down = false, wake_hold = false, solo_seen = false;
+    ScrollTrack sc = {};
+    bool was_scroll = false;
     int64_t t_down = 0;
     for (;;) {
-        const bool busy = g.down || wake_hold || (calibrating && (cal.down || cal.wait_release));
+        s_calibrating = calibrating;
+        if (s_cal_req) {                           // Settings: "Calibrate touch"
+            s_cal_req = false;
+            if (chrome_on() && !calibrating) {
+                calibrating = true;
+                extdisp_calib_start(&cal);
+                draw_calib(0, false);
+                shown = SK_NONE; was_down = false;
+                continue;
+            }
+        }
+        static int layout_seen = 0;
+        if (s_solo != solo_seen || s_layout_gen != layout_seen) {   // surface or frame changed: re-lay the keys
+            solo_seen = s_solo;
+            layout_seen = s_layout_gen;
+            extdisp_gesture_init(&g, solo_seen ? s_tc->keys_solo : s_tc->keys);
+            shown = SK_NONE;
+            was_down = false;
+        }
+        if (s_layout == 1 && !calibrating) { vTaskDelay(pdMS_TO_TICKS(200)); continue; }   // Cardputer only
+        const bool busy = g.down || wake_hold || sc.vel != 0 || (calibrating && (cal.down || cal.wait_release));
         vTaskDelay(pdMS_TO_TICKS(busy ? 20 : 40));
         int rx = 0, ry = 0;
         if (!s_screen_on || wake_hold) {
@@ -485,7 +582,16 @@ void touch_task(void *)
                 ESP_LOGW(TAG, "touch: wake");
             }
             wake_hold = on;
-            if (!on) extdisp_gesture_init(&g, s_tc->keys);
+            if (!on) extdisp_gesture_init(&g, solo_seen ? s_tc->keys_solo : s_tc->keys);
+            continue;
+        }
+        if (sc.vel != 0 && (t_irq_idle() || !touch_sample(&rx, &ry))) {   // a flick coasting, no finger on the glass
+            const uint32_t nowf = (uint32_t)(esp_timer_get_time() / 1000);
+            const int dt = (int)(nowf - sc.t_fling); sc.t_fling = nowf;
+            sc.frac += sc.vel * dt;                  // x1000
+            scroll_emit(sc, sc.frac / 1000); sc.frac %= 1000;
+            sc.vel = sc.vel * 92 / 100;              // ~0.92 per 20 ms: a phone-like glide, ~0.5 s
+            if (sc.vel > -40 && sc.vel < 40) sc.vel = 0;
             continue;
         }
         if (!busy && t_irq_idle()) continue;
@@ -507,7 +613,7 @@ void touch_task(void *)
                     extdisp_cal_pack(extdisp_lgfx_rotation(&s_cfg), &k, packed);
                     bool saved = nucleo_prefs_save_extdisp_cal(packed);
                     ESP_LOGW(TAG, "touch calibrated: check target off by %d px%s", err, saved ? "" : " (NOT saved)");
-                    extdisp_gesture_init(&g, s_tc->keys);
+                    extdisp_gesture_init(&g, solo_seen ? s_tc->keys_solo : s_tc->keys);
                     shown = SK_NONE;
                     draw_chrome();
                 } else {
@@ -526,16 +632,54 @@ void touch_task(void *)
         if (g.down && !was_down) {
             t_down = esp_timer_get_time(); x0 = sx; y0 = sy;
             s_presses = s_presses + 1;
+            // Does this touch start in a scroll area? Then the drag is the app's scroll, not the arrows.
+            sc.vel = 0; sc.on = false;
+            int ax, ay;
+            if (to_screen(solo_seen, sx, sy, &ax, &ay)) {
+                ext_lock();
+                for (int t = 0; t < s_tc->nscr; t++) {
+                    const TouchCtx::Scroll &a = s_tc->scr[t];
+                    if (ax >= a.x && ax < a.x + a.w && ay >= a.y && ay < a.y + a.h) { sc.a = a; sc.on = true; break; }
+                }
+                ext_unlock();
+                if (sc.on) { sc.last = ay; sc.acc = 0; sc.hn = 0; }
+            }
             if (s_cfg.diag) ESP_LOGW(TAG, "touch DOWN #%d raw x=%d y=%d -> %d,%d", s_presses, rx, ry, sx, sy);
         } else if (!g.down && was_down && s_cfg.diag) {
             ESP_LOGW(TAG, "touch UP after %d ms (moved %d,%d)", (int)((esp_timer_get_time() - t_down) / 1000),
                      s_last_x - x0, s_last_y - y0);
         }
-        if (g.down) { s_last_x = sx; s_last_y = sy; }
+        // Only a real contact sample moves the "where the finger is": the release is debounced over a few
+        // EMPTY samples (sx, sy = 0 there), and a tap's meaning is read from this position after it lifts.
+        if (g.down && on) { s_last_x = sx; s_last_y = sy; }
+        if (sc.on && g.down && on) {                 // the finger moves the content, 1:1 (past the tap slop)
+            const int ay = solo_seen ? sy : (s_tc->frame.fh > 0 ? (sy - s_tc->frame.oy) * 135 / s_tc->frame.fh : sy);
+            if (g.moved) scroll_emit(sc, ay - sc.last);
+            sc.last = ay;
+            if (sc.hn == 4) { memmove(sc.hist_y, sc.hist_y + 1, sizeof(int) * 3); memmove(sc.hist_t, sc.hist_t + 1, sizeof(uint32_t) * 3); sc.hn = 3; }
+            sc.hist_y[sc.hn] = ay; sc.hist_t[sc.hn] = now; sc.hn++;
+        }
+        if (sc.on && !g.down && was_down) {          // lift: a flick keeps coasting
+            sc.on = false;
+            if (g.moved && sc.hn >= 2 && now - sc.hist_t[sc.hn - 1] < 80) {
+                const int dt = (int)(sc.hist_t[sc.hn - 1] - sc.hist_t[0]);
+                if (dt > 0) {
+                    int v = (sc.hist_y[sc.hn - 1] - sc.hist_y[0]) * 1000 / dt;
+                    if (v > 3000) v = 3000;
+                    if (v < -3000) v = -3000;
+                    if (v > 250 || v < -250) { sc.vel = v; sc.frac = 0; sc.t_fling = now; }
+                }
+            }
+            sc.hn = 0;
+        }
         was_down = g.down;
         if (g.pressed != shown) { draw_key(shown, false); draw_key(g.pressed, true); shown = g.pressed; }
+        const bool scroll_touch = sc.on || (sc.vel != 0) || (!g.down && was_scroll);
+        was_scroll = sc.on;
         for (int i = 0; i < n; i++) {
             if (s_cfg.diag) ESP_LOGW(TAG, "touch -> %s", ev_name(ev[i]));
+            if (scroll_touch && ev[i] != EXT_EV_ENTER) continue;    // a scroll's drag / hold is not an arrow or Back
+            if (scroll_touch && ev[i] == EXT_EV_ENTER && g.moved) continue;
             if (ev[i] == EXT_EV_CALIBRATE) {
                 if (!chrome_on()) continue;
                 calibrating = true;
@@ -545,6 +689,45 @@ void touch_task(void *)
                 shown = SK_NONE;
                 was_down = false;
                 break;
+            }
+            // Large surface (the launcher home, 320x240): a tap means what is under the finger — the status bar
+            // goes back up, the side icons step the carousel toward them, the centre opens. Drags/holds as usual.
+            if (solo_seen && ev[i] == EXT_EV_ENTER && !g.moved) {
+                nucleo_key_t hit = { NK_NONE, 0 };            // a large screen's own targets, in panel pixels
+                ext_lock();
+                for (int t = 0; t < s_tc->ntgt; t++) {
+                    const TouchCtx::Target &r = s_tc->tgt[t];
+                    if (s_last_x >= r.x && s_last_x < r.x + r.w && s_last_y >= r.y && s_last_y < r.y + r.h) { hit = { (int)r.key, r.ch }; break; }
+                }
+                ext_unlock();
+                if (hit.key != NK_NONE) {
+                    if (s_cfg.diag) ESP_LOGW(TAG, "touch -> target key %d at %d,%d", hit.key, s_last_x, s_last_y);
+                    if (s_touch_input) nucleo_kbd_inject(hit);
+                    continue;
+                }
+                const int pw = s_dev->width();
+                if (s_last_y < 24) ev[i] = EXT_EV_BACK;
+                else if (s_last_x < pw * 3 / 10) ev[i] = EXT_EV_LEFT;
+                else if (s_last_x > pw * 7 / 10) ev[i] = EXT_EV_RIGHT;
+            }
+            // A compact screen's own targets: a tap on one delivers its key instead of Enter.
+            if (!solo_seen && ev[i] == EXT_EV_ENTER && !g.moved && s_tc->frame.fw > 0 && s_tc->frame.fh > 0) {
+                const int fx = s_last_x - s_tc->frame.ox, fy = s_last_y - s_tc->frame.oy;
+                if (fx >= 0 && fy >= 0 && fx < s_tc->frame.fw && fy < s_tc->frame.fh) {
+                    const int cx = fx * 240 / s_tc->frame.fw, cy = fy * 135 / s_tc->frame.fh;
+                    nucleo_key_t hit = { NK_NONE, 0 };
+                    ext_lock();
+                    for (int t = 0; t < s_tc->ntgt; t++) {
+                        const TouchCtx::Target &r = s_tc->tgt[t];
+                        if (cx >= r.x && cx < r.x + r.w && cy >= r.y && cy < r.y + r.h) { hit = { (int)r.key, r.ch }; break; }
+                    }
+                    ext_unlock();
+                    if (hit.key != NK_NONE) {
+                        if (s_cfg.diag) ESP_LOGW(TAG, "touch -> target key %d '%c' at %d,%d", hit.key, hit.ch ? hit.ch : ' ', cx, cy);
+                        if (s_touch_input) nucleo_kbd_inject(hit);
+                        continue;
+                    }
+                }
             }
             if (s_touch_input) inject(ev[i]);
         }
@@ -558,11 +741,12 @@ bool touch_prepare(lgfx::LGFX_Device *dev, Panel_Mirror *mirror)
     s_tc = new (std::nothrow) TouchCtx();
     if (!s_tc) return false;
     s_tc->dev = dev;
-    s_tc->mux = xSemaphoreCreateMutex();
+    s_tc->mux = xSemaphoreCreateRecursiveMutex();
     if (!s_tc->mux) { delete s_tc; s_tc = nullptr; return false; }
-    s_tc->frame = { mirror->origin_x(), mirror->origin_y(), mirror->width(), mirror->height() };
+    s_tc->frame = { mirror->origin_x(), mirror->origin_y(), mirror->frame_w(), mirror->frame_h() };
     extdisp_sk_layout(dev->width(), dev->height(), s_tc->frame.ox, s_tc->frame.oy, s_tc->frame.fw, s_tc->frame.fh,
                       s_tc->keys);
+    extdisp_sk_layout(dev->width(), dev->height(), 0, 0, dev->width(), dev->height(), s_tc->keys_solo);
     const int rot = extdisp_lgfx_rotation(&s_cfg);
     s_tc->cal_stored = s_has_cal_raw && extdisp_cal_unpack(s_cal_raw, rot, &s_tc->cal);
     if (!s_tc->cal_stored) extdisp_cal_default(rot, &s_tc->cal);
@@ -621,8 +805,9 @@ void write_report(size_t heap_before, size_t heap_after)
             s_id_d3[3], s_id_04[0], s_id_04[1], s_id_04[2], s_id_04[3]);
     fprintf(f, "decision      %s: %s\n", s_dec.attach ? "ATTACHED" : "not attached", s_dec.reason);
     if (s_mirror)
-        fprintf(f, "mirror        %dx%d at %d,%d on 320x240\n", s_mirror->width(), s_mirror->height(),
-                s_mirror->origin_x(), s_mirror->origin_y());
+        fprintf(f, "mirror        %dx%d at %d,%d on 320x240%s\n", s_mirror->frame_w(), s_mirror->frame_h(),
+                s_mirror->origin_x(), s_mirror->origin_y(), s_mirror->fit() ? " (fit 4/3)" : " (1:1)");
+    fprintf(f, "primary       %s\n", s_primary ? "external hosts the launcher (320x240)" : "mirror only");
     fprintf(f, "touch         %s, calibration %s\n", s_touch_input ? "input" : "log only",
             !s_tc ? "-" : s_tc->cal_stored ? "stored" : "pending (first use asks for it)");
     fprintf(f, "live          GET /api/status -> display_ext ; heap + touch events in /api/logs (tag extdisp)\n");
@@ -662,13 +847,16 @@ extern "C" void nucleo_extdisp_boot(void)
         s_dec.reason = "original Cardputer: no EXT header";
         return;
     }
-    char mode[8] = "auto", ctrl[12] = "auto";
+    char mode[8] = "auto", ctrl[12] = "auto", layout[12] = "duplicate";
     int pins[6] = { s_cfg.cs, s_cfg.dc, s_cfg.rst, s_cfg.t_cs, s_cfg.t_irq, s_cfg.bl };
     nucleo_prefs_load_extdisp(mode, sizeof mode, ctrl, sizeof ctrl, &s_cfg.rotation, &s_cfg.mhz,
                               &s_cfg.mirror, &s_cfg.invert, &s_cfg.rgb, &s_cfg.diag, pins,
-                              &s_touch_input, s_cal_raw, &s_has_cal_raw);
+                              &s_touch_input, s_cal_raw, &s_has_cal_raw, &s_primary, &s_fit, layout, sizeof layout);
+    s_layout = !strcmp(layout, "cardputer") ? 1 : !strcmp(layout, "external") ? 2 : 0;
     s_cfg.mode = extdisp_mode_parse(mode);
     s_cfg.controller = extdisp_ctrl_parse(ctrl);
+    s_saved = nucleo_extdisp_conf_t{ s_cfg.mode == EXTDISP_ON ? 1 : s_cfg.mode == EXTDISP_OFF ? 2 : 0, s_cfg.mhz,
+                                     s_cfg.rotation, s_primary, s_fit, s_touch_input, s_layout };
     s_cfg.cs = pins[0]; s_cfg.dc = pins[1]; s_cfg.rst = pins[2];
     s_cfg.t_cs = pins[3]; s_cfg.t_irq = pins[4]; s_cfg.bl = pins[5];
     // Tester shortcut: an empty file /sd/extdisp-on forces mode "on" (a module wired WITHOUT its touch lines,
@@ -709,4 +897,183 @@ extern "C" void nucleo_extdisp_stats(unsigned *ext_tx, int *presses, int *last_x
     if (presses) *presses = s_presses;
     if (last_x) *last_x = s_last_x;
     if (last_y) *last_y = s_last_y;
+}
+
+// ---- primary surface (include/nucleo_surface.h) ------------------------------------------------------------
+namespace {
+
+} // namespace
+
+extern "C" bool nucleo_surface_large_ok(void)
+{
+    return s_mirror && s_primary && s_layout != 1 && (!s_tc || (s_tc->cal_stored && !s_calibrating));
+}
+
+extern "C" bool nucleo_surface_large(void) { return s_solo; }
+
+extern "C" bool nucleo_surface_set_large(bool on)
+{
+    if (on && !nucleo_surface_large_ok()) on = false;
+    if (!s_mirror || on == s_solo) return false;
+    lock_opt();                                   // the touch task never draws mid-switch
+    bool ok = s_mirror->set_solo(on);
+    if (ok && !on) s_dev->fillScreen(TFT_BLACK);  // wipe the large screen; the caller repaints the centred frame
+    unlock_opt();
+    if (!ok) return false;
+    s_solo = on;
+    d.clearClipRect();                            // LGFXBase caches the clip box of the old size
+    d.clearScrollRect();
+    if (!on) draw_chrome();                       // large: the launcher paints its companion on the internal panel
+    ESP_LOGI(TAG, "surface: %s", on ? "large (external 320x240)" : "compact (mirror)");
+    return true;
+}
+
+// ---- second-screen settings (include/nucleo_extdisp.h) --------------------------------------------------------
+extern "C" bool nucleo_extdisp_conf(nucleo_extdisp_conf_t *live, nucleo_extdisp_conf_t *saved)
+{
+    if (!nucleo_ui_is_adv()) return false;
+    if (live) *live = nucleo_extdisp_conf_t{ s_cfg.mode == EXTDISP_ON ? 1 : s_cfg.mode == EXTDISP_OFF ? 2 : 0, s_cfg.mhz,
+                                             s_cfg.rotation, s_primary, s_mirror ? s_mirror->fit() : s_fit, s_touch_input,
+                                             s_layout };
+    if (saved) *saved = s_saved;
+    return true;
+}
+
+extern "C" bool nucleo_extdisp_set_layout(int layout)
+{
+    if (layout < 0 || layout > 2) return false;
+    s_saved.layout = layout;
+    bool ok = nucleo_prefs_save_display_str("external_layout", layout == 1 ? "cardputer" : layout == 2 ? "external" : "duplicate");
+    if (!s_mirror || layout == s_layout) { s_layout = layout; return ok; }
+    nucleo_surface_set_large(false);              // every mode starts compact; the launcher re-asks for large
+    lock_opt();
+    s_mirror->set_ext_off(layout == 1);
+    s_mirror->set_pri_off(layout == 2);
+    s_layout = layout;
+    s_dev->fillScreen(TFT_BLACK);                 // Cardputer only: stays black; otherwise the caller repaints
+    unlock_opt();
+    d.clearClipRect();
+    draw_chrome();
+    return ok;
+}
+
+extern "C" bool nucleo_extdisp_set_primary(bool on)
+{
+    s_primary = on; s_saved.primary = on;
+    return nucleo_prefs_save_display_bool("external_primary", on);   // the run loop follows on its next frame
+}
+
+extern "C" bool nucleo_extdisp_set_fit(bool on)
+{
+    s_fit = on; s_saved.fit = on;
+    bool ok = nucleo_prefs_save_display_bool("external_fit", on);
+    if (s_mirror && !s_solo && s_mirror->fit() != on) {
+        lock_opt();
+        if (s_mirror->set_fit(on)) {
+            s_dev->fillScreen(TFT_BLACK);                            // the frame moves: wipe, the caller repaints it
+            if (s_tc) {
+                s_tc->frame = { s_mirror->origin_x(), s_mirror->origin_y(), s_mirror->frame_w(), s_mirror->frame_h() };
+                extdisp_sk_layout(s_dev->width(), s_dev->height(), s_tc->frame.ox, s_tc->frame.oy, s_tc->frame.fw,
+                                  s_tc->frame.fh, s_tc->keys);
+            }
+            s_layout_gen = s_layout_gen + 1;
+        }
+        unlock_opt();
+        d.clearClipRect();
+        draw_chrome();
+    }
+    return ok;
+}
+
+extern "C" bool nucleo_extdisp_set_mode(int mode)
+{
+    s_saved.mode = mode;
+    return nucleo_prefs_save_display_str("external", mode == 1 ? "on" : mode == 2 ? "off" : "auto");
+}
+extern "C" bool nucleo_extdisp_set_mhz(int mhz)     { s_saved.mhz = mhz; return nucleo_prefs_save_display_int("external_mhz", mhz); }
+extern "C" bool nucleo_extdisp_set_rotation(int r)  { s_saved.rotation = r; return nucleo_prefs_save_display_int("external_rotation", r); }
+extern "C" bool nucleo_extdisp_set_touch(bool on)   { s_saved.touch = on; return nucleo_prefs_save_display_bool("external_touch", on); }
+
+extern "C" bool nucleo_extdisp_recalibrate(void)
+{
+    if (!s_tc || !s_tc->mux || !s_touch_input || s_solo) return false;
+    s_cal_req = true;
+    return true;
+}
+
+// ---- screenshots ------------------------------------------------------------------------------------------------
+extern "C" bool nucleo_extdisp_screen_size(int which, int *w, int *h)
+{
+    if (!s_mirror) return false;
+    lgfx::IPanel *p = which ? (lgfx::IPanel *)s_dev->getPanel() : s_mirror->primary();
+    if (which && s_solo) return false;
+    *w = p->width(); *h = p->height();
+    return true;
+}
+
+extern "C" bool nucleo_extdisp_screen_row(int which, int y, int w, uint16_t *out)
+{
+    if (!s_mirror) return false;
+    if (!which) { if (w != s_mirror->primary()->width()) return false; s_mirror->primary()->startWrite();
+                  s_mirror->pri_row(y, out); s_mirror->primary()->endWrite(); return true; }
+    static uint16_t tmp[240];                     // one internal row (httpd task only)
+    if (w != s_dev->width() || s_mirror->primary()->width() > 240) return false;
+    s_mirror->primary()->startWrite();
+    bool ok = s_mirror->ext_row(y, out, tmp);
+    s_mirror->primary()->endWrite();
+    return ok;
+}
+
+extern "C" bool nucleo_extdisp_draw_internal(void (*fn)(void *gfx))
+{
+    if (!s_mirror || !s_solo || s_layout == 2 || !fn) return false;
+    lgfx::LGFX_Device g;
+    g.setPanel(static_cast<lgfx::Panel_Device *>(s_mirror->primary()));   // the internal ST7789 (a Panel_Device)
+    g.clearClipRect();                            // a fresh LGFXBase starts with an EMPTY clip box: nothing would draw
+    g.clearScrollRect();
+    fn(&g);
+    return true;
+}
+
+// ---- touch targets (include/nucleo_touch.h) ----------------------------------------------------------------
+extern "C" void nucleo_touch_clear(void) { if (s_tc) { s_tc->ntgt_build = 0; s_tc->nscr_build = 0; } }
+
+extern "C" void nucleo_touch_add_scroll(int x, int y, int w, int h, int step, int key_back, char ch_back, int key_fwd, char ch_fwd)
+{
+    if (!s_tc || s_tc->nscr_build >= NUCLEO_TOUCH_SCROLL_MAX || w <= 0 || h <= 0 || step <= 0) return;
+    s_tc->scr_build[s_tc->nscr_build++] = TouchCtx::Scroll{ (int16_t)x, (int16_t)y, (int16_t)w, (int16_t)h, (int16_t)step,
+                                                            (int16_t)key_back, (int16_t)key_fwd, ch_back, ch_fwd };
+}
+
+extern "C" void nucleo_touch_add(int x, int y, int w, int h, int key, char ch)
+{
+    if (!s_tc || s_tc->ntgt_build >= NUCLEO_TOUCH_MAX || w <= 0 || h <= 0) return;
+    s_tc->tgt_build[s_tc->ntgt_build++] = TouchCtx::Target{ (int16_t)x, (int16_t)y, (int16_t)w, (int16_t)h, (int16_t)key, ch };
+}
+
+extern "C" void nucleo_touch_commit(void)
+{
+    if (!s_tc || !s_tc->mux) return;
+    ext_lock();                                   // the touch task never sees a half-copied set
+    memcpy(s_tc->tgt, s_tc->tgt_build, sizeof s_tc->tgt);
+    s_tc->ntgt = s_tc->ntgt_build;
+    memcpy(s_tc->scr, s_tc->scr_build, sizeof s_tc->scr);
+    s_tc->nscr = s_tc->nscr_build;
+    ext_unlock();
+}
+
+extern "C" void nucleo_extdisp_frame_hold(bool on) { if (s_mirror) s_mirror->hold_enable(on); }
+
+extern "C" void *nucleo_extdisp_internal_gfx(void)
+{
+    static lgfx::LGFX_Device *s_igfx = nullptr;     // ~200 B, created on first use (only with a panel attached)
+    if (!s_mirror || !s_solo || s_layout == 2) return nullptr;
+    if (!s_igfx) {
+        s_igfx = new (std::nothrow) lgfx::LGFX_Device();
+        if (!s_igfx) return nullptr;
+        s_igfx->setPanel(static_cast<lgfx::Panel_Device *>(s_mirror->primary()));
+    }
+    s_igfx->clearClipRect();
+    s_igfx->clearScrollRect();
+    return s_igfx;
 }

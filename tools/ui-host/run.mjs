@@ -64,6 +64,7 @@ const INC = [
   '-I', join(FW, 'nucleo_kbd', 'include'), '-I', join(FW, 'nucleo_ui', 'include'),
   '-I', join(FW, 'nucleo_storage', 'include'), '-I', join(FW, 'nucleo_voice', 'include'), '-I', CJSON,
   '-I', join(FW, 'nucleo_guest', 'include'), '-I', join(FW, 'nucleo_sdcontent', 'include'),
+  '-I', join(FW, 'nucleo_store', 'include'),
 ];
 const COMPAT = ['-include', join(here, 'shim', 'host_compat.h')];
 
@@ -103,6 +104,8 @@ const fwSrc = [
   join(FW, 'nucleo_ui', 'nucleo_ui_modal.cpp'),
   join(FW, 'nucleo_storage', 'nucleo_i18n.c'), join(CJSON, 'cJSON.c'),
   join(FW, 'nucleo_app', 'app_updates.cpp'), join(FW, 'nucleo_app', 'update_policy.c'),   // native Updates app
+  join(FW, 'nucleo_app', 'app_store.cpp'), join(FW, 'nucleo_app', 'store_apps.cpp'), join(FW, 'nucleo_store', 'store_engine.c'),   // native Store app + its launcher apps
+  join(FW, 'nucleo_sdcontent', 'sdc_sha256.c'), join(FW, 'nucleo_sdcontent', 'sdc_registry.c'), join(here, 'store_stubs.cpp'),
   join(here, 'host_stubs.cpp'), join(here, 'settings_stubs.cpp'), join(here, 'updates_stubs.cpp'), join(here, 'scenes.cpp'),
 ];
 
@@ -160,7 +163,9 @@ console.log(`ui-host: ${sceneNames.length} scenes rendered`);
 
 // ---- PNG + hashes ---------------------------------------------------------------------------------------
 const W = 240, H = 135, SCALE = 3;
+const dims = (rgb) => (rgb.length === 320 * 240 * 3 ? [320, 240] : [W, H]);   // .large scenes: the external panel
 function png(rgb) {                       // one scene, upscaled x3 (nearest) for legibility
+  const [W, H] = dims(rgb);
   const w = W * SCALE, h = H * SCALE;
   const big = Buffer.alloc(w * h * 3);
   for (let y = 0; y < h; y++)
@@ -205,11 +210,16 @@ const SHEETS = join(OUT, 'sheets');
 mkdirSync(SHEETS, { recursive: true });
 for (const f of readdirSync(SHEETS)) rmSync(join(SHEETS, f));
 const groups = {};
-for (const n of Object.keys(frames)) { const [surface, scene] = n.split('.'); (groups[`${surface}.${scene}`] ||= []).push(n); }
+for (const n of Object.keys(frames)) {
+  const [surface, scene] = n.split('.');
+  const big = dims(frames[n])[0] === 320;                 // large frames get their own sheet (other size)
+  (groups[`${surface}.${scene}${big ? '.large' : ''}`] ||= []).push(n);
+}
 const RANK = ['en.classic', 'it.classic', 'es.classic', 'fr.classic', 'de.classic', 'en.nano_banana', 'en.hacker', 'en.amoled', 'en.classic.direct'];
 const rank = (n) => { const v = n.split('.').slice(2).join('.'); const i = RANK.indexOf(v); return i < 0 ? 99 : i; };
 for (const m of Object.values(groups)) m.sort((a, b) => rank(a) - rank(b));
 for (const [g, members] of Object.entries(groups)) {
+  const [W, H] = dims(frames[members[0]]);
   const cols = Math.min(3, members.length), rows = Math.ceil(members.length / cols), G = 2;
   const sw = cols * W + (cols - 1) * G, sh = rows * H + (rows - 1) * G;
   const sheet = Buffer.alloc(sw * sh * 3, 0x30);

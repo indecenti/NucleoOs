@@ -104,7 +104,7 @@ function png(rgb, w, h, scale) {
   return Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk('IHDR', ihdr),
     chunk('IDAT', zlib.deflateSync(raw, { level: 9 })), chunk('IEND', Buffer.alloc(0))]);
 }
-for (const [name, w, h, s] of [['internal', 240, 135, 3], ['external', 320, 240, 2], ['external_calib', 320, 240, 2]]) {
+for (const [name, w, h, s] of [['internal', 240, 135, 3], ['external', 320, 240, 2], ['external_calib', 320, 240, 2], ['external_solo', 320, 240, 2], ['external_fit', 320, 240, 2]]) {
   const f = join(OUT, `${name}.rgb`);
   if (existsSync(f)) writeFileSync(join(OUT, `${name}.png`), png(readFileSync(f), w, h, s));
 }

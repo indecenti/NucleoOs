@@ -40,6 +40,8 @@
 #include "nucleo_kbd.h"
 #include "nucleo_board.h"
 #include "nucleo_exclusive.h"
+#include "nucleo_extdisp.h"     // two screens: the card and the menu on the Cardputer
+#include "nucleo_surface.h"     // ...while the picture fills the external 320x240 panel
 #include "nucleo_power.h"
 #include "nucleo_setup.h"
 #include "nucleo_ble.h"
@@ -220,6 +222,19 @@ static bool s_sharp   = false;   // false = blend the 1-in-16 line away, true = 
 // Output geometry for the mode in force. Set by geom_apply(), read by the scanline path.
 static int s_out_w = SRC_W, s_out_x = SRC_X, s_band_h = BAND_1TO1;
 
+// TWO SCREENS. With an external 320x240 panel the picture goes there, scaled exactly 3/2 on both axes:
+// 160x144 -> 240x216, centred, its own aspect, nothing merged or dropped (every source pair becomes three
+// pixels, every pair of lines three rows). The Cardputer's screen carries the game's card — title, fps,
+// battery, the key legend — and the pause menu, so the picture is never covered. Same band buffers.
+static bool s_big = false;
+static int  s_out_y0 = 0, s_out_h = OUT_H;
+// A 256x192 Master System picture fills it whole at exactly 5/4: 320x240, every fourth pixel and line twice.
+#define BIG_W (s_src_w == SRC_W ? 240 : 320)
+#define BIG_H (s_src_w == SRC_W ? 216 : 240)
+#define BIG_X ((320 - BIG_W) / 2)
+#define BIG_Y ((240 - BIG_H) / 2)
+static LovyanGFX *igfx(void) { return s_big ? (LovyanGFX *)nucleo_extdisp_internal_gfx() : nullptr; }
+
 static inline uint16_t swap16(uint16_t c) { return (uint16_t)((c >> 8) | (c << 8)); }
 static void pal_apply(void)
 {
@@ -240,6 +255,14 @@ static int s_src_w = SRC_W, s_src_h = 144;
 static void hscale_build(void);
 static void geom_apply(void)
 {
+    if (s_big) {
+        s_out_w = BIG_W; s_out_x = BIG_X; s_out_y0 = BIG_Y; s_out_h = BIG_H;
+        s_band_h = SYS ? SYS->band_wide : BAND_WIDE;
+        if (SYS && s_band_h * BIG_W * sizeof(uint16_t) > band_bytes())   // 320-px rows: as many as the band holds
+            s_band_h = (int)(band_bytes() / (BIG_W * sizeof(uint16_t)));
+        return;
+    }
+    s_out_y0 = 0; s_out_h = OUT_H;
     int w1 = s_src_w == SRC_W ? SRC_W : 180;
     if (s_stretch) { s_out_w = 240; s_out_x = 0;              s_band_h = SYS ? SYS->band_wide : BAND_WIDE; }
     else           { s_out_w = w1;  s_out_x = (240 - w1) / 2;
@@ -248,7 +271,7 @@ static void geom_apply(void)
 }
 // The HUD needs the picture to be 160 px wide — stretched, or a 180 px Master System picture, leaves
 // no pillars wide enough to put it in.
-static inline bool hud_on(void) { return s_hud && !s_stretch && s_src_w == SRC_W; }
+static inline bool hud_on(void) { return s_hud && !s_stretch && !s_big && s_src_w == SRC_W; }
 
 // ── session state (heap on enter, never .bss: the app is closed almost always) ──────────────────
 #define MAXR    120          // matches held at once. The filter, not this cap, is how you reach a game.
@@ -316,6 +339,10 @@ struct EState {
     uint8_t  hsrc[240];      // Master System lines: output column -> first source column (hscale_build)
     uint8_t  hmix[240];      // ...and whether it is the midpoint of that column and the next
     bool     have_stash;
+    // Two screens: the external panel keeps what it was sent, so a source line identical to the one it
+    // had last frame is not sent again (a hash per line; a static HUD or a still background costs no bus).
+    uint32_t lhash[192];
+    bool     diff_ok;        // lhash describes what the panel shows; false after anything else drew there
     bool     crash_told;     // the crash menu opens once per crash, not every second
     bool     mute_keys;      // buttons held when the menu closed stay OUT of the game until released
     bool     state_ok;       // a save state exists — looked up once per menu open, not per repaint
@@ -471,11 +498,30 @@ static bool rom_path(const char *name, char *out, size_t n)
 // firmware, but this is the emulator's per-scanline path: 135 lines x 60 fps, and at -Os the inner
 // copy does not get unrolled. The attribute keeps the exception to the one function that earns it.
 static void row_done(void);
+static void rows_skip(int rows);
+static bool line_same(const void *px, int bytes, int line);
 __attribute__((optimize("-O2")))
 static void on_line(const uint8_t *px, int line, void *user)
 {
     (void)user;
     if (!st || !st->band[0]) return;
+    if (s_big) {                                 // 3/2: a pair of pixels -> 3, every odd line drawn twice
+        if (st->out_y >= s_out_h) return;
+        if (line_same(px, SRC_W, line)) { rows_skip((line & 1) ? 2 : 1); return; }
+        uint16_t *row = st->band[st->band_idx] + (size_t)st->band_line * s_out_w;
+        const uint16_t *sh = SHADE_TX;
+        for (int x = 0, o = 0; x < SRC_W; x += 2, o += 3) {
+            uint16_t a = sh[px[x] & 3], b = sh[px[x + 1] & 3];
+            row[o] = a; row[o + 1] = a; row[o + 2] = b;
+        }
+        row_done();
+        if ((line & 1) && st->out_y < s_out_h) {
+            uint16_t *dup = st->band[st->band_idx] + (size_t)st->band_line * s_out_w;
+            memcpy(dup, row, (size_t)s_out_w * sizeof *dup);   // the row stays valid: a queued push only reads it
+            row_done();
+        }
+        return;
+    }
     if ((line & 15) == 7) {                      // the one line in sixteen the panel has no row for
         if (!s_sharp) { memcpy(st->stash, px, SRC_W); st->have_stash = true; }
         return;
@@ -551,6 +597,32 @@ static void on_line16(const uint16_t *px, int line, void *user)
 {
     (void)user;
     if (!st || !st->band[0]) return;
+    if (s_big) {                                 // Game Gear 160x144: the same exact 3/2; Master System 256x192: 5/4
+        if (st->out_y >= s_out_h) return;
+        if (line_same(px, s_src_w * 2, line)) { rows_skip(s_src_w == SRC_W ? ((line & 1) ? 2 : 1) : ((line & 3) == 1 ? 2 : 1)); return; }
+        uint16_t *row = st->band[st->band_idx] + (size_t)st->band_line * s_out_w;
+        bool twice;
+        if (s_src_w == SRC_W) {
+            for (int x = 0, o = 0; x < SRC_W; x += 2, o += 3) {
+                uint16_t a = px[x], b = px[x + 1];
+                row[o] = a; row[o + 1] = a; row[o + 2] = b;
+            }
+            twice = line & 1;
+        } else {
+            for (int x = 0, o = 0; x < 256; x += 4, o += 5) {
+                uint16_t a = px[x], b = px[x + 1], c = px[x + 2], e = px[x + 3];
+                row[o] = a; row[o + 1] = b; row[o + 2] = b; row[o + 3] = c; row[o + 4] = e;
+            }
+            twice = (line & 3) == 1;
+        }
+        row_done();
+        if (twice && st->out_y < s_out_h) {
+            uint16_t *dup = st->band[st->band_idx] + (size_t)st->band_line * s_out_w;
+            memcpy(dup, row, (size_t)s_out_w * sizeof *dup);
+            row_done();
+        }
+        return;
+    }
     bool merge = s_src_h == 144 ? (line & 15) == 7 : (line * 45 >> 6) == ((line + 1) * 45 >> 6);
     if (merge) {
         if (!s_sharp) { memcpy(st->stash16, px, (size_t)s_src_w * sizeof *px); st->have_stash = true; }
@@ -587,14 +659,38 @@ static void on_line16(const uint16_t *px, int line, void *user)
     row_done();
 }
 
+static void band_push(void);
 // One output row is in the band buffer: count it, and push the band once it is full.
 static void row_done(void)
 {
     if (st->band_line == 0) st->band_y = st->out_y;
     st->band_line++;
     st->out_y++;
-
-    if (st->band_line == s_band_h || st->out_y >= OUT_H) {
+    if (st->band_line == s_band_h || st->out_y >= s_out_h) band_push();
+}
+// Two screens: this source line is what the panel already shows. Send what is pending and step over
+// its output rows; the next band starts below them.
+static void rows_skip(int rows)
+{
+    if (st->band_line) band_push();
+    st->out_y += rows;
+    if (st->out_y > s_out_h) st->out_y = s_out_h;
+}
+// True when source line `line` (bytes long) is unchanged since the panel last got it. FNV-1a over words.
+__attribute__((optimize("-O2")))
+static bool line_same(const void *px, int bytes, int line)
+{
+    if (line < 0 || line >= 192 || ((uintptr_t)px & 3)) return false;
+    const uint32_t *w = (const uint32_t *)px;
+    uint32_t h = 2166136261u;
+    for (int i = 0, n = bytes >> 2; i < n; i++) h = (h ^ w[i]) * 16777619u;
+    bool same = st->diff_ok && st->lhash[line] == h;
+    st->lhash[line] = h;
+    return same;
+}
+static void band_push(void)
+{
+    {
         // No startWrite here: play() holds ONE transaction open across the whole frame, so every band
         // streams to the panel with no bus re-arbitration between them — a tighter, more continuous
         // update, which is what keeps the moving picture from tearing band by band.
@@ -606,7 +702,7 @@ static void row_done(void)
         // reading it. Only possible because the data is already panel-order — a converting push
         // builds its own temporary copy and cannot DMA from ours at all.
         int64_t b0 = esp_timer_get_time();
-        d.pushImageDMA(s_out_x, st->band_y, s_out_w, st->band_line, st->band[st->band_idx]);
+        d.pushImageDMA(s_out_x, s_out_y0 + st->band_y, s_out_w, st->band_line, st->band[st->band_idx]);
         st->us_blit += (uint32_t)(esp_timer_get_time() - b0);
         st->band_idx ^= 1;
         st->band_line = 0;
@@ -776,11 +872,53 @@ static void chrome_draw(void)
     }
 }
 
+// TWO SCREENS: the card on the Cardputer's own screen. `full` repaints it whole; otherwise only the live line
+// (fps, battery, volume, a toast) — once a second, never per frame.
+static void card_draw(bool full)
+{
+    LovyanGFX *g = igfx();
+    if (!g || st->menu) return;
+    g->startWrite();
+    if (full) {
+        g->fillScreen(BG);
+        g->setTextSize(1); g->setTextColor(DIM, BG); g->setCursor(6, 4); g->print(SYS->short_name);
+        char t[22]; snprintf(t, sizeof t, "%s", SYS->title());
+        g->setTextSize(2); g->setTextColor(FG, BG); g->setCursor(6, 16); g->print(t);
+        g->drawFastHLine(6, 56, 228, LINE);
+        g->setTextSize(1);
+        g->setTextColor(MUTED, BG);
+        g->setCursor(6, 62);  g->print(TR5("E S A D   muovi", "E S A D   move", "E S A D   mover", "E S A D   bouger", "E S A D   bewegen"));
+        if (SYS->palettes) {                       // Game Boy: A / B / START / SELECT
+            g->setCursor(6, 74);  g->print("K = A     J = B");
+            g->setCursor(6, 86);  g->print(TR5("Invio START   Spazio SELECT", "Enter START   Space SELECT", "Intro START   Espacio SELECT", "Entree START  Espace SELECT", "Enter START   Leer SELECT"));
+        } else {                                   // Game Gear: buttons 1 / 2 and START; Master System: PAUSE
+            g->setCursor(6, 74);  g->print("J = 1     K = 2");
+            g->setCursor(6, 86);
+            if (s_src_w == SRC_W) g->print(TR5("Invio START", "Enter START", "Intro START", "Entree START", "Enter START"));
+            else                  g->print(TR5("Invio PAUSA", "Enter PAUSE", "Intro PAUSA", "Entree PAUSE", "Enter PAUSE"));
+        }
+        g->setCursor(6, 98);  g->print(TR5("M menu   TAB veloce   -/= volume", "M menu   TAB fast   -/= volume", "M menu   TAB rapido   -/= vol", "M menu   TAB vite   -/= vol", "M Menue  TAB schnell  -/= Laut"));
+        if (SYS->palettes) { g->setCursor(6, 110); g->print(TR5("P colori", "P palette", "P paleta", "P palette", "P Palette")); }
+    }
+    // The live line: fps (green at speed), battery, volume, or the last toast.
+    g->fillRect(0, 36, 240, 18, BG);
+    g->setTextSize(2);
+    g->setTextColor(st->fps >= 55 ? GRN : AMB, BG); g->setCursor(6, 38); g->printf("%2d fps", st->fps);
+    g->setTextSize(1);
+    int bp = nucleo_power_battery_pct();
+    g->setTextColor(bp >= 0 && bp < 20 ? AMB : MUTED, BG);
+    g->setCursor(110, 43);
+    if (st->toast[0]) { g->setTextColor(GRN, BG); g->print(st->toast); }
+    else if (bp >= 0) g->printf("%d%%   vol %d%%", bp, nucleo_audio_volume());
+    else g->printf("vol %d%%", nucleo_audio_volume());
+    g->endWrite();
+}
+
 // Everything outside the picture, blanked in one go. Called when the info is switched off (the
 // pillars must not keep the last frame's numbers frozen on screen) and when the mode changes.
 static void frame_clear(void)
 {
-    if (s_stretch) return;             // the picture covers the whole panel; nothing is left to clear
+    if (s_stretch || s_big) return;    // the picture covers the panel (or is on the external one): nothing to clear
     d.fillRect(0, 0, s_out_x, 135, BG);
     d.fillRect(s_out_x + s_out_w, 0, 240 - (s_out_x + s_out_w), 135, BG);
 }
@@ -791,6 +929,7 @@ static void frame_clear(void)
 // stop covering the pillars.
 static void view_apply(void)
 {
+    if (s_big) return;                 // two screens: the picture's geometry is fixed (3/2 on the panel)
     geom_apply();
     d.fillScreen(BG);
     hud_draw();
@@ -802,6 +941,7 @@ static void pal_cycle(void)
     if (!SYS->palettes) return;
     s_pal = (s_pal + 1) % PAL_COUNT;
     pal_apply();
+    st->diff_ok = false;                          // every line changes colour
     state_save(st->resume);
     chrome_draw();
 }
@@ -926,6 +1066,8 @@ static void menu_anim(void)
 static void menu_close(void)
 {
     st->menu = false;
+    st->diff_ok = false;                          // a state load / reset changed the picture under the menu
+    if (s_big) { nucleo_app_set_gfx(nullptr); card_draw(true); }   // the menu was on the Cardputer: its card returns
     // Enter, Space and K both drive this menu AND are Start, Select and A. Whatever is still held
     // at the moment the menu closes stays out of the game until it is released — otherwise picking
     // "Resume" with Enter pressed Start and paused the game again.
@@ -1148,6 +1290,11 @@ static void play_session(const char *name)
     // What the cartridge draws decides the scaler: a Game Gear cartridge can turn out to be a Master
     // System game (its CRC says so), known only now. The bands were sized for the widest case.
     SYS->geometry(&s_src_w, &s_src_h);
+    // Two screens: the picture goes to the external panel (160x144 at 3/2, 256x192 at 5/4: full screen).
+    s_big = ((s_src_w == SRC_W && s_src_h == 144) || (s_src_w == 256 && s_src_h == 192)) && nucleo_surface_large_ok();
+    st->diff_ok = false;
+    if (s_big && !nucleo_surface_large() && !nucleo_surface_set_large(true)) s_big = false;
+    ESP_LOGW("gbemu", "two screens: src %dx%d ok=%d large=%d big=%d", s_src_w, s_src_h, (int)nucleo_surface_large_ok(), (int)nucleo_surface_large(), (int)s_big);
     geom_apply();
 
     snprintf(st->resume, sizeof st->resume, "%s", name);
@@ -1192,13 +1339,14 @@ static void play_session(const char *name)
     st->fps_frames = 0; st->fps = 0; st->fps_t0 = esp_timer_get_time();
     hud_draw();
     chrome_draw();
+    card_draw(true);
     uint8_t held = 0;
     int64_t next = esp_timer_get_time();
     const int64_t FRAME_US = SYS->frame_us;             // the console's real frame time (DMG 59.73 Hz, GG 59.92 Hz)
 
     while (st->running) {
         esp_task_wdt_reset();
-        if (st->toast[0] && esp_timer_get_time() > st->toast_until) { st->toast[0] = '\0'; chrome_draw(); }
+        if (st->toast[0] && esp_timer_get_time() > st->toast_until) { st->toast[0] = '\0'; chrome_draw(); card_draw(false); }
 
         // INPUT — read the keyboard's LIVE pressed set, not its key EVENTS.
         //
@@ -1241,6 +1389,7 @@ static void play_session(const char *name)
                 // the power, and look up whether a state exists. The time is traced: an SD step that
                 // outgrew its budget once rebooted the console from exactly this key.
                 st->menu = true; st->msel = 0;
+                if (s_big && igfx()) nucleo_app_set_gfx(igfx());   // the pause menu on the Cardputer, picture untouched
                 menu_draw();
                 int64_t t0 = esp_timer_get_time();
                 SYS->save();
@@ -1277,7 +1426,9 @@ static void play_session(const char *name)
         // top to bottom instead of nine separately-arbitrated writes.
         d.startWrite();
         SYS->run_frame();
+        if (st->band_line) band_push();          // a frame that ended on a partly filled band
         d.endWrite();
+        st->diff_ok = s_big;                     // the panel now holds exactly this frame's lines
 
         st->fps_frames++;
         int64_t now = esp_timer_get_time();
@@ -1314,6 +1465,7 @@ static void play_session(const char *name)
                 st->crash_told = true;
                 st->menu = true; st->msel = MI_RESUME;  // paused; Reset is a deliberate choice, never a mashed key
                 st->state_ok = SYS->state_exists(0);
+                if (s_big && igfx()) nucleo_app_set_gfx(igfx());
                 menu_draw();
             }
             // Battery RAM reaches the card within ~2 s of an in-game save, not only on quit.
@@ -1321,6 +1473,7 @@ static void play_session(const char *name)
             st->us_blit = 0; SYS->reset_counters();
             st->fps_frames = 0; st->fps_t0 = now;
             hud_draw();
+            card_draw(false);
 
             // AUTOMATIC RELIEF — one-way, and that is the whole point. The earlier version stepped back
             // UP when fps recovered, which turned into a per-second flicker: enabling frame-skip halves
@@ -1376,6 +1529,7 @@ static void play_session(const char *name)
     SYS->close();
     free(st->band[0]); free(st->band[1]); st->band[0] = st->band[1] = nullptr;
     d.setSwapBytes(false);                 // leave the shared display as every other app expects it
+    if (s_big) { nucleo_app_set_gfx(nullptr); s_big = false; nucleo_surface_set_large(false); geom_apply(); }
     nucleo_app_set_direct_draw(false);
     nucleo_app_force_repaint();
 }

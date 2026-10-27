@@ -1,20 +1,30 @@
-// In-browser video → .nfv converter. The heavy lifting (ffmpeg) runs as WebAssembly right here
-// in the browser — NO PC companion, NO install. We then write only the small .nfv (+ sibling
-// .mp3) to the device, same-origin (/api/fs/write), so there's no huge raw upload to drop.
+// In-browser video → .nfv v4 converter. The heavy lifting (ffmpeg) runs as WebAssembly right here
+// in the browser — NO PC companion, NO install. The finished .nfv (picture AND sound in one file) is written
+// to the device in resumable parts (/api/fs/write?append=1&at=N), so a Wi-Fi drop costs one part, not the film.
 //
 // Single-thread @ffmpeg/core (vendored under vendor/ffmpeg/) → no SharedArrayBuffer, so it runs
-// without cross-origin-isolation headers. Slower than the native companion's CUDA path, but it
-// works for everyone. (A WebCodecs hardware-decode fast path is a planned phase-2 accel.)
-import { buildNfv, splitMjpeg } from './nfv.js';
+// without cross-origin-isolation headers. For a whole film the PC encoder is faster: tools/nfv/nfv4.py
+// (same format, byte-identical container — tools/nfv/nfv.test.mjs checks it).
+import { buildNfv4, splitMjpeg, wavAdpcmBlocks, stripMask, REFRESH_S } from './nfv.js';
 import I18N from '/nucleo-i18n.js';
 const t = await I18N.init('video-studio');
 
-export const SCREEN_W = 240, SCREEN_H = 136;
+// q = ffmpeg's MJPEG quantiser (2 = best). The device shows ~15 fps at most (SD + SPI bus), so more fps only
+// costs card bandwidth; bigger frames cost read time: "quality" is for calm content.
 export const PROFILES = {
-  compat:   { fps: 12, q: 8, ar: 22050, ab: '32k' },
-  balanced: { fps: 20, q: 7, ar: 22050, ab: '40k' },
-  quality:  { fps: 24, q: 5, ar: 24000, ab: '48k' },
+  compat:   { fps: 12, q: 6 },
+  balanced: { fps: 15, q: 5 },
+  quality:  { fps: 15, q: 3 },
 };
+// universal: 320x240 for the external 2.8" panel; on the Cardputer alone the player scales it to fit.
+// cardputer: 240x135 (coded 240x144, a multiple of 16) — smaller, for the built-in screen only.
+export const TARGETS = {
+  universal: { w: 320, h: 240, visW: 320, visH: 240 },
+  cardputer: { w: 240, h: 144, visW: 240, visH: 135 },
+};
+const AUDIO_RATE = 16000, AUDIO_BLOCK = 256;
+const LOUD = 'I=-14:TP=-1.5:LRA=11';            // every clip to the same loudness (EBU R128), as nfv4.py
+const MAX_JPEG = 48000;                          // the player's frame buffer limit (app_video.cpp)
 
 const ext = (n) => { const m = /\.[^.]+$/.exec(n || ''); return m ? m[0] : '.bin'; };
 const base = (n) => (n || 'video').replace(/\.[^.]+$/, '');
@@ -58,18 +68,33 @@ export function loadEngine(onStage) {
   return _loading;
 }
 
-function vf(fit, fps) {
+function vf(fit, fps, tg) {
   const s = fit === 'pad'
-    ? `scale=${SCREEN_W}:${SCREEN_H}:force_original_aspect_ratio=decrease:flags=lanczos,pad=${SCREEN_W}:${SCREEN_H}:(ow-iw)/2:(oh-ih)/2:color=black`
-    : `scale=${SCREEN_W}:${SCREEN_H}:force_original_aspect_ratio=increase:flags=lanczos,crop=${SCREEN_W}:${SCREEN_H}`;
-  return `fps=${fps},${s}`;
+    ? `scale=${tg.visW}:${tg.visH}:force_original_aspect_ratio=decrease:flags=lanczos,pad=${tg.visW}:${tg.visH}:(ow-iw)/2:(oh-ih)/2:color=black`
+    : `scale=${tg.visW}:${tg.visH}:force_original_aspect_ratio=increase:flags=lanczos,crop=${tg.visW}:${tg.visH}`;
+  return `${s},pad=${tg.w}:${tg.h}:(ow-iw)/2:(oh-ih)/2:color=black,fps=${fps}`;
 }
 
-// Convert a File to { nfv: Blob, mp3: Blob|null, frames, fps, base }. onStage(text, pct?) for UI.
+// Two-pass EBU R128: pass 1 measures, pass 2 applies a LINEAR gain (no pumping). null = no audio stream.
+async function measureLoudness(ff, inName) {
+  const lines = [];
+  const onLog = ({ message }) => lines.push(message);
+  ff.on('log', onLog);
+  try {
+    await ff.exec(['-hide_banner', '-nostats', '-i', inName, '-map', '0:a:0', '-ac', '1',
+      '-af', `loudnorm=${LOUD}:print_format=json`, '-f', 'null', '-']);
+  } finally { ff.off('log', onLog); }
+  const m = /\{[^{}]*"input_i"[^{}]*\}/.exec(lines.join('\n'));
+  if (!m) return null;
+  try { return JSON.parse(m[0]); } catch { return null; }
+}
+
+// Convert a File to { nfv: Blob, frames, fps, size, base }. onStage(text, pct?) for UI.
 export async function convertFile(file, opts = {}, onStage = () => {}) {
   const ff = await loadEngine((s) => onStage(s));
   const prof = { ...PROFILES[opts.profile || 'balanced'] };
   if (opts.fps) prof.fps = +opts.fps;
+  const tg = TARGETS[opts.target] || TARGETS.universal;
   const fit = opts.fit === 'pad' ? 'pad' : 'crop';
   const inName = 'in' + ext(file.name);
 
@@ -79,58 +104,89 @@ export async function convertFile(file, opts = {}, onStage = () => {}) {
   ff.on('progress', onProg);
 
   // ffmpeg.wasm's virtual FS outlives a conversion, and ffmpeg will not overwrite an existing output without
-  // -y. A conversion that failed half-way used to leave its a.mp3 behind, and the next (silent) video was
+  // -y. A conversion that failed half-way used to leave its audio behind, and the next (silent) video was
   // delivered with that soundtrack. Start and end every conversion with a clean slate.
-  const scratch = [inName, 'a.mp3', 'v.mjpeg'];
+  const scratch = [inName, 'a.wav', 'v.mjpeg'];
   const clean = async () => { for (const f of scratch) { try { await ff.deleteFile(f); } catch {} } };
   await clean();
   try {
     onStage(t('stage_reading'), 0);
     await ff.writeFile(inName, new Uint8Array(await file.arrayBuffer()));
 
-    // 1) audio → mono mp3 (optional; many clips have it, some don't)
-    let mp3 = null;
-    stageLabel = t('stage_audio'); stageBase = 0; stageSpan = 30;
-    // exec() resolves ffmpeg's exit code (it does not throw): only a 0 means a.mp3 is this video's audio.
-    try {
-      // -map_metadata -1 + -id3v2_version 0: bare MP3, no ID3 tag, so the player's CBR byte-map seek is exact.
-      const code = await ff.exec(['-i', inName, '-vn', '-ac', '1', '-ar', String(prof.ar), '-c:a', 'libmp3lame', '-b:a', prof.ab, '-map_metadata', '-1', '-id3v2_version', '0', 'a.mp3']);
-      if (code === 0) {
-        const d = await ff.readFile('a.mp3');
-        if (d && d.length > 0) mp3 = new Blob([d], { type: 'audio/mpeg' });
-      }
-    } catch { /* no audio stream — fine */ }
+    // 1) audio → loudness-normalised 16 kHz mono IMA ADPCM (optional; some clips have none)
+    stageLabel = t('stage_loudness'); stageBase = 0; stageSpan = 10;
+    const loud = await measureLoudness(ff, inName);
+    let audio = null;
+    if (loud) {
+      stageLabel = t('stage_audio'); stageBase = 10; stageSpan = 10;
+      const finite = (x) => Number.isFinite(parseFloat(x));
+      const af = finite(loud.input_i) && finite(loud.input_tp)
+        ? ['-af', `loudnorm=${LOUD}:measured_I=${loud.input_i}:measured_TP=${loud.input_tp}:measured_LRA=${loud.input_lra}` +
+                  `:measured_thresh=${loud.input_thresh}:offset=${loud.target_offset}:linear=true`]
+        : [];                                                   // a silent track: nothing to normalise
+      const code = await ff.exec(['-i', inName, '-map', '0:a:0', '-ac', '1', ...af, '-ar', String(AUDIO_RATE),
+        '-c:a', 'adpcm_ima_wav', '-block_size', String(AUDIO_BLOCK), 'a.wav']);
+      if (code !== 0) throw new Error(t('err_audio'));
+      audio = wavAdpcmBlocks(await ff.readFile('a.wav'));
+    }
 
-    // 2) video → concatenated MJPEG → frames
-    stageLabel = t('stage_video'); stageBase = 30; stageSpan = 60;
-    const vcode = await ff.exec(['-i', inName, '-an', '-vf', vf(fit, prof.fps), '-q:v', String(prof.q), '-c:v', 'mjpeg', '-f', 'image2pipe', 'v.mjpeg']);
+    // 2) video → concatenated baseline 4:2:0 JPEGs → frames
+    stageLabel = t('stage_video'); stageBase = 20; stageSpan = 55;
+    const vcode = await ff.exec(['-i', inName, '-map', '0:v:0', '-an', '-vf', vf(fit, prof.fps, tg), '-pix_fmt', 'yuvj420p',
+      '-q:v', String(prof.q), '-c:v', 'mjpeg', '-f', 'image2pipe', 'v.mjpeg']);
     // A failed pass leaves no v.mjpeg: say "no frames", not the virtual FS's cryptic "ErrnoError: FS error".
     const mjpeg = vcode === 0 ? await ff.readFile('v.mjpeg').catch(() => null) : null;
     const frames = mjpeg ? splitMjpeg(mjpeg) : [];
     if (!frames.length) throw new Error(t('err_no_frames'));
 
-    // 3) assemble .nfv (v2, indexed)
-    stageLabel = t('stage_assembling'); stageBase = 90; stageSpan = 9;
-    onStage(stageLabel, 95);
-    const nfv = buildNfv(frames, { fps: prof.fps, hasAudio: !!mp3 });
+    // 3) strip masks: which 16-row strips each frame changes (the device sends only those over its SPI bus)
+    const masks = new Array(frames.length);
+    const cv = new OffscreenCanvas(tg.w, tg.h), g = cv.getContext('2d', { willReadFrequently: true });
+    const shown = new Array(tg.h >> 4).fill(null), refresh = Math.max(2, Math.round(prof.fps * REFRESH_S));
+    for (let i = 0; i < frames.length; i++) {
+      if (frames[i].length > MAX_JPEG) throw new Error(t('err_frame_big'));
+      const bmp = await createImageBitmap(new Blob([frames[i]], { type: 'image/jpeg' }));
+      g.drawImage(bmp, 0, 0); bmp.close();
+      masks[i] = stripMask(shown, g.getImageData(0, 0, tg.w, tg.h).data, tg.w, tg.h, i, refresh);
+      if (i % 60 === 0) onStage(t('stage_masks'), 75 + Math.round(i / frames.length * 20));
+    }
 
-    return { nfv, mp3, frames: frames.length, fps: prof.fps, base: sdSafe(base(file.name)) };
+    // 4) assemble .nfv v4
+    onStage(t('stage_assembling'), 96);
+    const { blob, size } = buildNfv4(frames, { fps: prof.fps, width: tg.w, height: tg.h, visW: tg.visW, visH: tg.visH, masks, audio });
+    return { nfv: blob, frames: frames.length, fps: prof.fps, size, base: sdSafe(base(file.name)) };
   } finally {
     try { ff.off('progress', onProg); } catch {}
     await clean();                      // success OR failure: nothing may leak into the next conversion
   }
 }
 
-// Write the result onto the device SD (same-origin — no CORS, no huge raw upload).
+// Write the result onto the device SD (same-origin — no CORS) in resumable 512 KB parts: the device appends a
+// part only when its copy is exactly `at` bytes long and answers its real size otherwise (409), so a dropped
+// request is simply sent again. The file lands as <name>.part and is renamed into place once complete.
 export async function deliverToDevice(result, onStage = () => {}) {
-  const put = async (path, blob) => {
-    const r = await fetch('/api/fs/write?path=' + encodeURIComponent(path), {
-      method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: blob,
-    });
-    if (!r.ok) throw new Error(t('err_write_failed', { status: r.status, path }));
-  };
-  onStage(t('stage_writing'), 99);
-  await put(`/data/Videos/${result.base}.nfv`, result.nfv);
-  if (result.mp3) await put(`/data/Videos/${result.base}.mp3`, result.mp3);
-  return `/data/Videos/${result.base}.nfv`;
+  const PART = 512 * 1024, dst = `/data/Videos/${result.base}.nfv`, part = dst + '.part';
+  const q = (p) => encodeURIComponent(p);
+  const blob = result.nfv, size = blob.size;
+  await fetch('/api/fs/delete?path=' + q(part), { method: 'POST' }).catch(() => {});
+  let at = 0, fails = 0;
+  while (at < size) {
+    onStage(t('stage_writing'), Math.floor(at / size * 100));
+    try {
+      const r = await fetch(`/api/fs/write?path=${q(part)}&append=1&at=${at}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: blob.slice(at, Math.min(size, at + PART)),
+      });
+      if (!r.ok && r.status !== 409) throw new Error(t('err_write_failed', { status: r.status, path: dst }));
+      const j = await r.json().catch(() => ({}));
+      at = Number.isFinite(j.size) ? j.size : Math.min(size, at + PART);
+      fails = 0;
+    } catch (e) {
+      if (++fails > 8) throw e;
+      await new Promise((r) => setTimeout(r, 1500 * fails));
+    }
+  }
+  await fetch('/api/fs/delete?path=' + q(dst), { method: 'POST' }).catch(() => {});
+  const mv = await fetch(`/api/fs/move?from=${q(part)}&to=${q(dst)}`, { method: 'POST' });
+  if (!mv.ok) throw new Error(t('err_write_failed', { status: mv.status, path: dst }));
+  return dst;
 }

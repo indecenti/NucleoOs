@@ -1,12 +1,13 @@
 // Video — device-simulator app. Faithful mirror of firmware app_video.cpp: browse
-// /data/Videos for .nfv clips (MJPEG 240x136 + sibling .mp3) and play them on the screen.
-// The browser decodes JPEG frames + plays the mp3; the device does the same with M5GFX
-// drawJpg + the Helix MP3 task. The whole control surface is exercised here so the UX is
-// signed off before it ships.
+// /data/Videos for .nfv v4 clips (whole-frame JPEGs + IMA ADPCM sound in one file) and play them on the screen.
+// The decoding is the web Video Player's NfvMedia (apps/video-player/www/nfv4.js): JPEGs onto a canvas, the
+// ADPCM through Web Audio; the device does the same with esp_new_jpeg + the I2S. Older .nfv (v1-v3) no longer
+// play, as on the device. The whole control surface is exercised here so the UX is signed off before it ships.
 //
 // Controls (identical on device): enter/space play-pause · , / seek 10s · ; . volume ·
 // [ ] brightness · 0-9 jump to % · TAB hold controls · esc stop (saves resume position).
 import { makeListState, drawFocusList } from './_list.js';
+import { NfvMedia } from '/apps/video-player/nfv4.js';
 const lst = makeListState();
 
 const DIR = '/data/Videos';
@@ -18,10 +19,9 @@ let sel = 0;
 
 // --- playback state -----------------------------------------------------------
 let mode = 'list';                 // 'list' | 'resume' | 'play'
-let clip = null;                   // { fps, frameCount, durationMs, frames:[{off,size}], buf }
-let frameIdx = -1, bitmap = null, decoding = false;
-const audio = new Audio();
-audio.preload = 'auto';
+let clip = null;                   // the open clip's header (NfvMedia.h) once loaded
+const frame = document.createElement('canvas');                // NfvMedia paints the picture here
+const audio = new NfvMedia(frame);                             // same surface as <audio>: play/pause/currentTime/volume
 let overlayUntil = 0;              // controller auto-hides at this ts (ms); Infinity = pinned
 let brightness = 100;             // 0..100 (device: panel backlight; here: a dark scrim)
 let loadingName = '', playingName = '';
@@ -53,66 +53,37 @@ async function scan() {
   } catch { names = []; }
 }
 
-// Parse NFV1 into a frame offset/size index (see tools/nfv/encode.py).
-function parseNfv(arrayBuf) {
-  const dv = new DataView(arrayBuf);
-  const magic = String.fromCharCode(dv.getUint8(0), dv.getUint8(1), dv.getUint8(2), dv.getUint8(3));
-  if (magic !== 'NFV1') throw new Error('not an NFV1 clip');
-  const fps = dv.getUint16(10, true) || 12;
-  const frameCount = dv.getUint32(14, true);
-  const durationMs = dv.getUint32(18, true);
-  const frames = [];
-  let p = 32;
-  for (let i = 0; i < frameCount && p + 4 <= dv.byteLength; i++) {
-    const size = dv.getUint32(p, true); p += 4;
-    frames.push({ off: p, size }); p += size;
-  }
-  return { fps, frameCount: frames.length, durationMs, frames, buf: new Uint8Array(arrayBuf) };
-}
-
 let playingNfv = '';               // file name of the clip currently open (for resume saving)
 
 async function open(i, startSec = 0) {
   if (i < 0 || i >= names.length) return;
   loadingName = names[i]; playingName = names[i].replace(/\.nfv$/i, ''); playingNfv = names[i];
-  mode = 'play'; clip = null; bitmap = null; frameIdx = -1;
+  mode = 'play'; clip = null;
   overlayUntil = nowMs() + 2500;
-  try {
-    const buf = await (await fetch('/api/fs/read?path=' + encodeURIComponent(DIR + '/' + names[i]))).arrayBuffer();
-    clip = parseNfv(buf);
-  } catch (e) { loadingName = 'Error: ' + e.message; return; }
-  audio.src = '/api/fs/read?path=' + encodeURIComponent(DIR + '/' + names[i].replace(/\.nfv$/i, '.mp3'));
-  const begin = () => { try { audio.currentTime = startSec || 0; } catch { /* not seekable yet */ } audio.play().catch(() => {}); };
-  if (startSec > 0) audio.addEventListener('loadedmetadata', begin, { once: true });
-  else { audio.currentTime = 0; audio.play().catch(() => {}); }
+  await audio.open('/api/fs/read?path=' + encodeURIComponent(DIR + '/' + names[i]));
+  if (audio.error) {
+    loadingName = audio.error.code === 'NFV_OLD' ? `Old format (v${audio.error.version}): convert it again` : 'Error: ' + audio.error.message;
+    return;
+  }
+  clip = audio.h;
+  if (startSec > 0) audio.currentTime = startSec;
+  audio.play().catch(() => {});
 }
 
 function curSec() { return audio.currentTime || 0; }
-function totalSec() { return (clip && clip.durationMs ? clip.durationMs / 1000 : 0) || (isFinite(audio.duration) ? audio.duration : 0); }
+function totalSec() { return clip ? clip.durationMs / 1000 : 0; }
 
 function stop() {
   if (playingNfv) resumeSave(playingNfv, curSec(), totalSec());   // remember where we stopped
-  audio.pause(); audio.src = ''; mode = 'list'; clip = null; bitmap = null; frameIdx = -1; playingNfv = '';
+  audio.close(); mode = 'list'; clip = null; playingNfv = '';
 }
 
 // Clip played to the end -> clear its resume mark and fall back to the list.
 audio.addEventListener('ended', () => {
   if (playingNfv) { resumeSave(playingNfv, totalSec(), totalSec()); playingNfv = ''; }
-  mode = 'list'; clip = null; bitmap = null; frameIdx = -1;
+  audio.close(); mode = 'list'; clip = null;
 });
 
-function targetFrame() {
-  if (!clip) return 0;
-  return clampi(Math.floor(audio.currentTime * clip.fps), 0, clip.frameCount - 1);
-}
-function ensureFrame(i) {
-  if (!clip || decoding || i === frameIdx) return;
-  decoding = true;
-  const fr = clip.frames[i];
-  createImageBitmap(new Blob([clip.buf.subarray(fr.off, fr.off + fr.size)], { type: 'image/jpeg' }))
-    .then(bm => { if (bitmap) bitmap.close?.(); bitmap = bm; frameIdx = i; decoding = false; })
-    .catch(() => { decoding = false; });
-}
 function bumpOverlay() { if (overlayUntil !== Infinity) overlayUntil = nowMs() + 3500; }
 
 export const videoApp = {
@@ -178,7 +149,7 @@ function drawList(g) {
   g.text(`${names.length} clip${names.length === 1 ? '' : 's'}`, g.W - 8, top + 9, g.COL.muted, 8, 'normal', 'right');
   if (!names.length) {
     g.text('No .nfv clips in /data/Videos', 12, top + 40, g.COL.dim, 9);
-    g.text('Encode with tools/nfv/encode.py', 12, top + 54, g.COL.dim, 8);
+    g.text('Convert with Video Studio (web app)', 12, top + 54, g.COL.dim, 8);
     return { instruction: 'Play .nfv clips on the screen', hint: 'esc back' };
   }
   drawFocusList(g, lst, {
@@ -195,16 +166,13 @@ function drawPlayer(g) {
   ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H);
 
   if (!clip) {
-    g.text(loadingName.startsWith('Error') ? loadingName : 'Loading…', W / 2, H / 2, ACCENT, 10, 'bold', 'center');
+    g.text(audio.error ? loadingName : 'Loading…', W / 2, H / 2, ACCENT, 10, 'bold', 'center');
     return { fullscreen: true };
   }
 
-  // current frame, cover-fit (fills screen, no bars)
-  ensureFrame(targetFrame());
-  if (bitmap) {
-    const s = Math.max(W / bitmap.width, H / bitmap.height);
-    ctx.drawImage(bitmap, (W - bitmap.width * s) / 2, (H - bitmap.height * s) / 2, bitmap.width * s, bitmap.height * s);
-  }
+  // current frame, cover-fit (fills screen, no bars — the device crops a 320x240 clip the same way)
+  const s = Math.max(W / frame.width, H / frame.height);
+  ctx.drawImage(frame, (W - frame.width * s) / 2, (H - frame.height * s) / 2, frame.width * s, frame.height * s);
   // brightness scrim (device dims the backlight; here we darken)
   if (brightness < 100) { ctx.save(); ctx.globalAlpha = (1 - brightness / 100) * 0.85; ctx.fillStyle = '#000'; ctx.fillRect(0, 0, W, H); ctx.restore(); }
 
@@ -223,7 +191,7 @@ function drawController(g) {
 
   const paused = audio.paused;
   const el = audio.currentTime || 0;
-  const du = (clip.durationMs || 0) / 1000 || (isFinite(audio.duration) ? audio.duration : 0);
+  const du = totalSec();
 
   // Row 1: play chip + title (marquee) + time
   g.roundRect(6, y + 5, 16, 16, 4, paused ? '#1f2c4a' : ACCENT);
@@ -267,6 +235,6 @@ function marquee(g, x, y, w, text, col, now) {
 
 // Test/inspection hook (preview harness; not part of the app contract). Mirrors player.js.
 export function _debugState() {
-  return { mode, n: names.length, sel, frame: frameIdx, frames: clip?.frameCount, t: Math.round((audio.currentTime || 0) * 10) / 10,
+  return { mode, n: names.length, sel, frames: clip?.frames, t: Math.round((audio.currentTime || 0) * 10) / 10,
     vol: audio.volume, bri: brightness, paused: audio.paused, overlayPinned: overlayUntil === Infinity };
 }

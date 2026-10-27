@@ -34,7 +34,7 @@
   "video-studio": {
    "name": "Video Studio",
    "category": "media",
-   "description": "Convert videos to the device .nfv format and deliver them to the SD. Conversion runs on a PC companion (native ffmpeg + GPU); this app is…"
+   "description": "Convert videos to the device .nfv v4 format (picture + loudness-normalised sound in one file) in the browser and deliver them to the SD."
   },
   "automation-studio": {
    "name": "Automation Studio",

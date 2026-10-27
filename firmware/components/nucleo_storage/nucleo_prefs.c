@@ -114,7 +114,8 @@ void nucleo_prefs_save(int brightness, int volume, bool muted)
 
 bool nucleo_prefs_load_extdisp(char *mode, size_t mode_len, char *ctrl, size_t ctrl_len, int *rotation, int *mhz,
                                bool *mirror, int *invert, int *rgb, bool *diag, int pins[6],
-                               bool *touch_input, int touch_cal[7], bool *has_cal)
+                               bool *touch_input, int touch_cal[7], bool *has_cal, bool *primary, bool *fit,
+                               char *layout, size_t layout_len)
 {
     cJSON *root = settings_load();
     if (!root) return false;
@@ -140,6 +141,12 @@ bool nucleo_prefs_load_extdisp(char *mode, size_t mode_len, char *ctrl, size_t c
         static const char *const KEYS[6] = { "cs", "dc", "rst", "t_cs", "t_irq", "bl" };
         cJSON *ti = cJSON_GetObjectItem(disp, "external_touch");
         if (touch_input && cJSON_IsBool(ti)) *touch_input = cJSON_IsTrue(ti);
+        cJSON *pr = cJSON_GetObjectItem(disp, "external_primary");
+        if (primary && cJSON_IsBool(pr)) *primary = cJSON_IsTrue(pr);
+        cJSON *ft = cJSON_GetObjectItem(disp, "external_fit");
+        if (fit && cJSON_IsBool(ft)) *fit = cJSON_IsTrue(ft);
+        cJSON *lo = cJSON_GetObjectItem(disp, "external_layout");
+        if (layout && layout_len && cJSON_IsString(lo)) snprintf(layout, layout_len, "%s", lo->valuestring);
         cJSON *tc = cJSON_GetObjectItem(disp, "external_touch_cal");
         if (touch_cal && has_cal && cJSON_IsArray(tc) && cJSON_GetArraySize(tc) == 7) {
             bool ok = true;
@@ -159,20 +166,20 @@ bool nucleo_prefs_load_extdisp(char *mode, size_t mode_len, char *ctrl, size_t c
     return true;
 }
 
-bool nucleo_prefs_save_extdisp_cal(const int cal[7])
+// Write one "display.<key>" (takes ownership of `val`), preserving every other key.
+static bool save_display_item(const char *key, cJSON *val)
 {
     // Same read-modify-write and clobber guard as nucleo_prefs_save: every other key survives.
     cJSON *root = settings_load();
     if (!root) {
-        if (settings_file_size() > 0) { ESP_LOGW(TAG, "settings.json unparseable — touch calibration not saved"); return false; }
+        if (settings_file_size() > 0) { ESP_LOGW(TAG, "settings.json unparseable — display.%s not saved", key); cJSON_Delete(val); return false; }
         root = cJSON_CreateObject();
     }
     cJSON *disp = cJSON_GetObjectItem(root, "display");
     if (!cJSON_IsObject(disp)) { cJSON_DeleteItemFromObject(root, "display"); disp = cJSON_AddObjectToObject(root, "display"); }
-    cJSON *arr = cJSON_CreateIntArray(cal, 7);
-    if (!disp || !arr) { cJSON_Delete(arr); cJSON_Delete(root); return false; }
-    cJSON_DeleteItemFromObject(disp, "external_touch_cal");
-    cJSON_AddItemToObject(disp, "external_touch_cal", arr);
+    if (!disp || !val) { cJSON_Delete(val); cJSON_Delete(root); return false; }
+    cJSON_DeleteItemFromObject(disp, key);
+    cJSON_AddItemToObject(disp, key, val);
     char *out = cJSON_Print(root);
     cJSON_Delete(root);
     if (!out) return false;
@@ -185,6 +192,11 @@ bool nucleo_prefs_save_extdisp_cal(const int cal[7])
         if (ok) { remove(SETTINGS_JSON); ok = rename(tmp, SETTINGS_JSON) == 0; }
     }
     cJSON_free(out);
-    ESP_LOGI(TAG, "touch calibration %s", ok ? "saved" : "NOT saved");
+    ESP_LOGI(TAG, "display.%s %s", key, ok ? "saved" : "NOT saved");
     return ok;
 }
+
+bool nucleo_prefs_save_extdisp_cal(const int cal[7]) { return save_display_item("external_touch_cal", cJSON_CreateIntArray(cal, 7)); }
+bool nucleo_prefs_save_display_bool(const char *key, bool v) { return save_display_item(key, cJSON_CreateBool(v)); }
+bool nucleo_prefs_save_display_int(const char *key, int v)   { return save_display_item(key, cJSON_CreateNumber(v)); }
+bool nucleo_prefs_save_display_str(const char *key, const char *v) { return save_display_item(key, cJSON_CreateString(v ? v : "")); }

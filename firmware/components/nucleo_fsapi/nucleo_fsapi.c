@@ -274,6 +274,25 @@ static esp_err_t write_post(httpd_req_t *req)
         return ESP_FAIL;
     }
 
+    // Resumable append (?append=1&at=<bytes>): the body is added to the end of the file, but only if the file is
+    // exactly `at` bytes long — else 409 with its real length, and the client resumes from there. A long upload
+    // over a flaky link then survives drops: only the part in flight is sent again. No temp file, no rename.
+    char q[96] = "", av[4] = "", atv[16] = "";
+    bool append = false; long at = -1;
+    if (httpd_req_get_url_query_str(req, q, sizeof q) == ESP_OK) {
+        if (httpd_query_key_value(q, "append", av, sizeof av) == ESP_OK && av[0] == '1') append = true;
+        if (httpd_query_key_value(q, "at", atv, sizeof atv) == ESP_OK) at = atol(atv);
+    }
+    if (append) {
+        struct stat sb; long have = stat(abs, &sb) == 0 ? (long)sb.st_size : 0;
+        if (at >= 0 && at != have) {
+            char body[48]; snprintf(body, sizeof body, "{\"ok\":false,\"size\":%ld}", have);
+            httpd_resp_set_status(req, "409 Conflict");
+            httpd_resp_set_type(req, "application/json");
+            httpd_resp_sendstr(req, body);
+            return ESP_OK;
+        }
+    }
     char tmp[272]; snprintf(tmp, sizeof(tmp), "%s.tmp", abs);   // atomic: write temp, then rename
     // The receive buffer wants NUCLEO_WRITE_CHUNK (16 KB), but right after boot the heap is
     // fragmented (launcher canvas + Wi-Fi pools) and a 16 KB contiguous block may not exist
@@ -283,7 +302,7 @@ static esp_err_t write_post(httpd_req_t *req)
     char *buf = NULL;
     while (chunk >= 2048 && !(buf = malloc(chunk))) chunk /= 2;
     if (!buf) { httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "oom"); return ESP_FAIL; }
-    FILE *f = fopen(tmp, "wb");
+    FILE *f = fopen(append ? abs : tmp, append ? "ab" : "wb");
     if (!f) { free(buf); httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "open"); return ESP_FAIL; }
 
     // A still-open but quiet socket yields HTTPD_SOCK_ERR_TIMEOUT every recv_wait_timeout
@@ -309,6 +328,14 @@ static esp_err_t write_post(httpd_req_t *req)
     // FATFS rename() does NOT overwrite an existing file (fails with EEXIST), which broke
     // every re-save (ui-state/session/settings -> HTTP 500). Drop the old file first, then
     // swap in the freshly-written temp. Write stays atomic-ish: temp is complete before swap.
+    if (append) {                                     // the bytes that made it stay: the client resumes from the size
+        if (fail != ESP_OK) { httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "write failed"); return ESP_FAIL; }
+        struct stat sb; long have = stat(abs, &sb) == 0 ? (long)sb.st_size : 0;
+        char body[48]; snprintf(body, sizeof body, "{\"ok\":true,\"size\":%ld}", have);
+        httpd_resp_set_type(req, "application/json");
+        httpd_resp_sendstr(req, body);
+        return ESP_OK;
+    }
     if (fail != ESP_OK) { remove(tmp); httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "write failed"); return ESP_FAIL; }
     remove(abs);
     if (rename(tmp, abs) != 0) { remove(tmp); httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "rename"); return ESP_FAIL; }

@@ -30,14 +30,6 @@
       "port": 5601
     },
     {
-      "name": "studio",
-      "runtimeExecutable": "node",
-      "runtimeArgs": [
-        "tools/nfv/studio.mjs"
-      ],
-      "port": 5577
-    },
-    {
       "name": "video-studio-tile",
       "runtimeExecutable": "python",
       "runtimeArgs": [

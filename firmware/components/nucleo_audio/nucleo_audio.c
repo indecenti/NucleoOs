@@ -620,7 +620,9 @@ static void player_task(void *arg)
     FILE *f = fopen(s_path, "rb");
     if (f) {
         const char *dot = strrchr(s_path, '.');
-        bool mp3 = dot && !strcasecmp(dot, ".mp3");
+        // An embedded window (NFV v3: the MP3 inside the .nfv) is MP3 whatever the file's extension says —
+        // judging by ".mp3" alone sent every v3 clip's audio down the WAV path, which rejected it: silence.
+        bool mp3 = (dot && !strcasecmp(dot, ".mp3")) || atomic_load(&s_audio_len) > 0;
         if (mp3) {
             // Total bytes for the time<->byte seek map. For an embedded window (NFV v3) it's the
             // window length and the decoder starts at its base; for a standalone file it's the

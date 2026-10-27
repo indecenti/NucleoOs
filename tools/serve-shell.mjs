@@ -5,7 +5,7 @@
 //   /apps/<id>/<rest> -> apps/<id>/www/<rest> ;  /<asset> -> web/shell/<asset>
 // Usage: node tools/serve-shell.mjs   (http://localhost:5599)
 import { createServer } from 'node:http';
-import { readFile, writeFile, readdir, stat, rm, rmdir, mkdir, rename } from 'node:fs/promises';
+import { readFile, writeFile, readdir, stat, rm, rmdir, mkdir, rename, appendFile } from 'node:fs/promises';
 import { readFileSync, existsSync, writeFileSync } from 'node:fs';   // sync reads for the ANIMA agenda/capabilities executor
 import { createHash, randomBytes, randomInt } from 'node:crypto';
 import { join, dirname, extname, normalize, sep } from 'node:path';
@@ -480,6 +480,16 @@ async function fsApi(req, res, url) {
     }
     if (op === 'write') {
       const body = await readBody(req);
+      // MIRROR THE FIRMWARE (nucleo_fsapi.c write_post): ?append=1&at=N adds the body only when the file is exactly
+      // N bytes long, else 409 {size} — resumable uploads (Video Studio, tools/nfv/push-resume.mjs) rely on it.
+      if (url.searchParams.get('append') === '1') {
+        let have = 0; try { have = (await stat(abs)).size; } catch {}
+        const at = url.searchParams.has('at') ? parseInt(url.searchParams.get('at'), 10) : -1;
+        if (at >= 0 && at !== have) return send(res, 409, 'application/json', JSON.stringify({ ok: false, size: have }));
+        try { await appendFile(abs, body); }
+        catch (e) { if (e.code === 'ENOENT' || e.code === 'ENOTDIR') return send(res, 500, 'text/plain', 'open'); throw e; }
+        return sendJSON(res, { ok: true, size: have + body.length });
+      }
       // MIRROR THE FIRMWARE (nucleo_fsapi.c): /api/fs/write never creates parent folders — fopen fails and the
       // device answers 500 "open". This answered 404 (the generic ENOENT catch below), so an app that created
       // its folder only on a 404 passed here and never saved anything on a real Cardputer (Terminal history).

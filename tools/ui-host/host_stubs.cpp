@@ -44,7 +44,32 @@ M5Canvas *nucleo_screen(void)
     }
     return &s_screen;
 }
-void host_display_begin(void) { d.setColorDepth(16); d.createSprite(240, 135); d.fillScreen(0); }
+void host_display_begin(void)
+{
+    d.deleteSprite();
+    d.setColorDepth(16);
+    d.createSprite(g_host.large ? 320 : 240, g_host.large ? 240 : 135);
+    d.fillScreen(0);
+}
+// The device's view of the same canvas bytes at another width (nucleo_ui.cpp): no allocation of its own.
+static M5Canvas s_wide(&d);
+M5Canvas *nucleo_screen_wide(int w)
+{
+    M5Canvas *c = nucleo_screen();
+    if (!c || w <= 0) return nullptr;
+    if (w == c->width()) return c;
+    int rows = (int)((size_t)c->width() * (size_t)c->height() / (size_t)w);
+    if (rows < 1) return nullptr;
+    if (s_wide.getBuffer() != c->getBuffer() || s_wide.width() != w || s_wide.height() != rows) {
+        s_wide.setColorDepth(8);                 // set the PANEL's depth (setBuffer's bpp only sets the converter)
+        s_wide.setBuffer(c->getBuffer(), w, rows);
+    }
+    return &s_wide;
+}
+// The scene fixes the surface (g_host.large); a request to switch is a no-op here.
+extern "C" bool nucleo_surface_large_ok(void) { return g_host.large; }
+extern "C" bool nucleo_surface_large(void) { return g_host.large; }
+extern "C" bool nucleo_surface_set_large(bool) { return false; }
 
 extern "C" bool nucleo_ui_is_adv(void) { return g_host.adv; }
 extern "C" void nucleo_ui_set_brightness(unsigned char b) { d.setBrightness(b); }
@@ -130,3 +155,10 @@ bool g_host_shift_latch = false;                                       // scene-
 extern "C" bool nucleo_kbd_shift_latched(void) { return g_host_shift_latch; }
 extern "C" bool nucleo_kbd_take_shift_tap(void) { bool t = g_host_shift_latch; g_host_shift_latch = false; return t; }
 extern "C" char nucleo_kbd_shifted(char c) { return (c >= 'a' && c <= 'z') ? (char)(c - 32) : c; }
+
+// Touch targets (nucleo_touch.h): the host has no touch panel.
+extern "C" void nucleo_touch_clear(void) {}
+extern "C" void nucleo_touch_add(int, int, int, int, int, char) {}
+extern "C" void nucleo_touch_commit(void) {}
+extern "C" void nucleo_touch_add_scroll(int, int, int, int, int, int, char, int, char) {}
+extern "C" bool nucleo_kbd_inject(nucleo_key_t) { return true; }   // a tapped row opening itself: no ring on the host

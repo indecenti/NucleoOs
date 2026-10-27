@@ -37,6 +37,13 @@ typedef struct {
     // nucleo_exclusive_enter/exit themselves; the close safety-net still covers early exit.
     unsigned int exclusive_flags;    // trailing field: existing positional initializers zero it
     const nucleo_app_ram_t *ram;     // per-app working RAM, allocated on open / freed on close (NULL = none)
+    // Two screens (optional). With an external 320x240 panel attached, an app that has this shows its WHOLE UI
+    // there natively (straight to `d`, which is then the panel: read d.width()/d.height(); no buffer, so repaint
+    // each box over itself, and skip the call when nothing it shows changed — it runs on every redraw request).
+    // Its touch targets are its own job there (nucleo_touch.h, in panel coordinates). Meanwhile on_draw runs for
+    // the Cardputer's own screen: check nucleo_app_two_screens() and draw a glanceable summary there.
+    // NULL = the app is mirrored as before.
+    void (*on_draw_large)(void);
 } nucleo_app_def_t;
 
 // Capacity of the app registry (nucleo_app.cpp) and of the launcher tree (launcher_menu.cpp), which
@@ -49,6 +56,13 @@ void nucleo_app_register(const nucleo_app_def_t *app);
 
 // Register the built-in apps (Clock, System status, ...).
 void nucleo_app_register_builtins(void);
+
+// Apps installed from the store: (re)place them as one block after the built-ins (store_apps.cpp keeps
+// the definitions alive). The launcher tree is rebuilt when it is next shown. dynamic_room() = slots left.
+void nucleo_app_set_dynamic(const nucleo_app_def_t *defs, int n);
+int  nucleo_app_dynamic_room(void);
+// id of the app in the foreground, NULL at the launcher.
+const char *nucleo_app_active_id(void);
 
 // Run the launcher loop forever (call once from app_main after setup).
 void nucleo_app_run(void);
@@ -71,6 +85,9 @@ void nucleo_app_force_repaint(void);
 // app_info.cpp) must invalidate its own cache when this value changes, or overlay residue stays on
 // screen. Buffered apps need not care: the run loop already forces a full blit in the same cases.
 unsigned int nucleo_app_repaint_gen(void);
+// True while the foreground app runs on two screens (its on_draw_large owns the external panel): on_draw is
+// then drawing the Cardputer's summary, not the app's full UI.
+bool nucleo_app_two_screens(void);
 void nucleo_app_release_buffers(void);         // free launcher off-screen buffers (reclaim RAM)
 // Heavy one-shot HTTP downloads (OTA) raise this so the run loop LAUNCHES Remote Control from the UI task
 // — the RAM-listening posture (frees the 32 KB canvas + L1) that lets a flash through, but automatic.
@@ -114,6 +131,9 @@ void nucleo_app_set_fullscreen(bool on);
 // Keep-awake: the app vetoes the in-app idle screen-off (backlight drop after the screensaver timeout).
 // Auto-cleared on app open/close.
 void nucleo_app_set_keep_awake(bool on);
+// Display wake lock for code that runs outside the app lifecycle (a blocking player): while held (counted,
+// pair every true with a false) the display power manager never dims or turns the screen off.
+void nucleo_app_display_hold(bool on);
 bool nucleo_app_launch_file(const char *path); // open the app associated with a file (open-with); false if no viewer for the type
 // Viewer on_enter helper: the EXACT file Files asked to open ("open with"), consumed once — NULL
 // when the app was opened normally. Lets Notes/Music/Photos open that file, not their own folder.

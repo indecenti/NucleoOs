@@ -22,6 +22,7 @@ void       nucleo_app_set_gfx(LovyanGFX *g);  // NULL restores the real display
 M5Canvas *nucleo_screen(void);            // shared back-buffer, or NULL while OOM (draw direct)
 bool      nucleo_screen_acquire(void);    // explicit (re)allocate — always attempts
 void      nucleo_screen_release(void);    // FREES the 32 KB canvas (deleteSprite); re-acquired lazily
+M5Canvas *nucleo_screen_wide(int w);      // the same bytes seen w px wide (fewer rows), or NULL — no allocation
 
 // Zero-churn redirect: existing `d.<method>()` / `&d` call sites now follow the target.
 // (Only affects the bare token `d`; text inside string literals like "%d" is untouched.)

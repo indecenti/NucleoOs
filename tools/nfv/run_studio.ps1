@@ -1,5 +1,5 @@
 # Launch the NFV Studio GUI (drag-and-drop video converter for the Cardputer).
-# On first launch, installs the missing dependencies: tkinterdnd2 (drag&drop) + pillow/numpy (engine v3).
+# On first launch, installs the missing dependencies: tkinterdnd2 (drag&drop) + pillow/numpy (engine v4).
 
 $ErrorActionPreference = "Stop"
 $pyFile = Join-Path $PSScriptRoot "studio_gui.py"
@@ -13,10 +13,10 @@ function Ensure-PyModule($import, $pip, $label) {
 }
 
 Ensure-PyModule "tkinterdnd2" "tkinterdnd2" "tkinterdnd2 (drag & drop)"
-Ensure-PyModule "PIL"         "pillow"      "Pillow (engine v3)"
-Ensure-PyModule "numpy"       "numpy"       "numpy (engine v3)"
+Ensure-PyModule "PIL"         "pillow"      "Pillow (engine v4)"
+Ensure-PyModule "numpy"       "numpy"       "numpy (engine v4)"
 
-# ffmpeg must be on the PATH (used by both v2 and v3).
+# ffmpeg must be on the PATH (nfv4.py drives it).
 if (-not (Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
     Write-Warning "ffmpeg non trovato nel PATH: la conversione non funzionera' finche' non lo installi."
 }

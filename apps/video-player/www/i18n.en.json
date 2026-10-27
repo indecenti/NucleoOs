@@ -88,5 +88,7 @@
   "volumePct": "Volume ±10%",
   "subOnOff": "Subtitles on/off",
   "subSize": "Subtitle size",
-  "showPlaylistShort": "Show Playlist"
+  "showPlaylistShort": "Show Playlist",
+  "nfvOld": "Old .nfv format (v{v}) is no longer supported: convert it again with Video Studio",
+  "nfvError": "Cannot read the .nfv file"
 }

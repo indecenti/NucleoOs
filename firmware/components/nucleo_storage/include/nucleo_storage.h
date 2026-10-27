@@ -1,6 +1,14 @@
 // SD filesystem: mount, first-boot provisioning, capacity. See docs/storage.md.
 #pragma once
 #include <stdbool.h>
+
+// Called right before EVERY SD card transfer, on the task doing it. The external display (nucleo_ui) uses it
+// to give back a display transaction it holds on the shared SPI bus, so a task that reads the card while it
+// is drawing never waits on itself. NULL = none. Set once at boot.
+#ifdef __cplusplus
+extern "C"
+#endif
+void nucleo_storage_set_sd_pre(void (*fn)(void));
 #include <stdint.h>
 #include "esp_err.h"
 

@@ -1,2 +1,4 @@
 dependencies:
   m5stack/m5gfx: "^0.2.0"
+  # SIMD JPEG decoder for the ESP32-S3 (NFV4 video: 320x240 4:2:0 at ~66 fps, ~10 KB working RAM)
+  espressif/esp_new_jpeg: "^1.0.2"

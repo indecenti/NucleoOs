@@ -2,6 +2,7 @@
 // a few system prompts). Split out of nucleo_ui.cpp so the host renderer (tools/ui-host) can draw them with
 // the real code: they only need the panel `d`, the shared back-buffer API (nucleo_screen) and the keyboard.
 #include "nucleo_ui.h"
+#include "nucleo_surface.h"
 #include "nucleo_kbd.h"
 #include "nucleo_theme.h"
 #include <M5GFX.h>
@@ -153,6 +154,7 @@ static void modal_idle(void)
 
 extern "C" void nucleo_ui_message(const char *title, const char *const *lines, int n)
 {
+    nucleo_surface_set_large(false);   // modals are laid out for 240x135
     ModalSurface s;
     header(s.g, title);
     s.g->setTextColor(FG, BG);
@@ -168,6 +170,7 @@ extern "C" void nucleo_ui_message(const char *title, const char *const *lines, i
 
 extern "C" void nucleo_ui_home(const char *title, const char *const *lines, int n)
 {
+    nucleo_surface_set_large(false);   // modals are laid out for 240x135
     s_hint = "";                                   // no hint bar here: present() must not repaint a stale one
     ModalSurface s;
     header(s.g, title);
@@ -178,6 +181,7 @@ extern "C" void nucleo_ui_home(const char *title, const char *const *lines, int 
 
 extern "C" int nucleo_ui_menu(const char *title, const char *const *items, int n)
 {
+    nucleo_surface_set_large(false);   // modals are laid out for 240x135
     // Settings' list look: every item at size 2 (the old unfocused items were size 1, 6 px glyphs), the
     // focused one in the accent chip with the theme ink. The view keeps the focus in sight with a row
     // of context; a back-buffer glides, the direct path snaps (no in-place repaint per eased frame).
@@ -256,6 +260,7 @@ extern "C" int nucleo_ui_menu(const char *title, const char *const *items, int n
 
 extern "C" void nucleo_ui_input(const char *title, char *buf, int len, int masked)
 {
+    nucleo_surface_set_large(false);   // modals are laid out for 240x135
     // Settings' text field: a rounded LINE box with an accent edge, the value at size 2 (the tail of a long
     // value scrolls in), a steady caret. A masked value shows the character just typed for 1.5 s and TAB
     // shows / hides all of it — nothing is typed blind.
@@ -344,6 +349,7 @@ static const char *inst_title(void) { return H5("Contenuti SD", "SD content", "C
 
 extern "C" void nucleo_ui_install_screen(const nucleo_ui_install_t *v)
 {
+    nucleo_surface_set_large(false);   // modals are laid out for 240x135
     static int s_phase = -1, s_fw = -1;
     static char s_sig[4][48];                                 // what each field shows now
     if (!v) return;
@@ -436,6 +442,7 @@ static int print_reason(LovyanGFX &g, int x, int y, const char *s, int maxw)
 
 extern "C" void nucleo_ui_install_result(const nucleo_ui_install_t *v, int timeout_s)
 {
+    nucleo_surface_set_large(false);   // modals are laid out for 240x135
     if (!v) return;
     bool ok = v->phase == NUI_INST_DONE;
     ModalSurface s;

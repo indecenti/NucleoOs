@@ -12,6 +12,7 @@
 #include "nucleo_theme.h"
 #include "nucleo_ui.h"         // the blocking modals (nucleo_ui_modal.cpp) the wizard scenes drive
 #include "nucleo_update.h"     // upd_phase_t for the native Updates app scenes
+#include "nucleo_store.h"      // nst_status_t / st_state_t for the native Store app scenes
 #include "apps.gen.h"          // HOST_APPS[], HOST_APP_N (run.mjs, from tools/launcher-host/apps.mjs)
 #include <stdio.h>
 #include <string.h>
@@ -49,8 +50,8 @@ static void dump(const char *name)
     char p[256]; snprintf(p, sizeof p, "%s/%s.rgb", s_out, name);
     FILE *f = fopen(p, "wb");
     if (!f) { fprintf(stderr, "cannot write %s\n", p); exit(2); }
-    for (int y = 0; y < 135; y++)
-        for (int x = 0; x < 240; x++) {
+    for (int y = 0; y < d.height(); y++)
+        for (int x = 0; x < d.width(); x++) {
             uint16_t c = (uint16_t)d.readPixel(x, y);          // RGB565
             unsigned char px[3] = { (unsigned char)(((c >> 11) & 31) * 255 / 31),
                                     (unsigned char)(((c >> 5) & 63) * 255 / 63),
@@ -123,6 +124,11 @@ static const Scene SCENES[] = {
     { "cat-recent",  [] { launcher_reset(); for (const char *id : { "files", "weather", "wifi" }) launcher_note_launch(id);
                           go_category(LAUNCHER_RECENT_ID, 0); draw_launcher(); } },
     { "search-none", [] { type("zzq"); draw_launcher(); } },
+    // The Cardputer's own panel while the home is on the external one (duplicate mode): time, date, battery,
+    // network; then with a track playing.
+    { "companion",       [] { launcher_render_companion(&d); } },
+    { "companion-music", [] { g_host.playing = true; g_host.track = "/sd/Music/Daft Punk - Veridis Quo.mp3";
+                              launcher_render_companion(&d); } },
     { "cc",          [] { cc_scene({}); } },
     { "cc-bright",   [] { cc_scene({ NK_DOWN }); } },                              // brightness card centred
     { "cc-volume",   [] { cc_scene({ NK_DOWN, NK_DOWN }); } },                     // scrolled to mid-column
@@ -141,17 +147,25 @@ extern "C" void nucleo_app_set_tab_handler(void (*fn)(void)) { s_tab = fn; }
 extern "C" void nucleo_app_set_back_handler(bool (*fn)(int)) { s_back = fn; }
 extern "C" unsigned int nucleo_app_repaint_gen(void) { return s_gen; }
 extern "C" bool nucleo_app_launch_id(const char *) { return false; }
+extern "C" void nucleo_app_set_dynamic(const nucleo_app_def_t *defs, int n) {   // store apps: append to the live table
+    for (int i = 0; i < n && s_live_n < 8; i++) s_live[s_live_n++] = defs[i];
+}
+extern "C" int nucleo_app_dynamic_room(void) { return 8 - s_live_n; }
 extern "C" void nucleo_register_wifi(void);
 extern "C" void nucleo_settings_search_preset(const char *q);
 void launcher_render_hint_bar(void);
 
 static const nucleo_app_def_t *s_app;
+extern "C" const char *nucleo_app_active_id(void) { return s_app ? s_app->id : ""; }
 static void app_open(const char *id)
 {
     if (s_app && s_app->on_exit) s_app->on_exit();
+    if (s_app && s_app->ram) for (const nucleo_app_ram_t *r = s_app->ram; r->ptr; r++) { free(*r->ptr); *r->ptr = nullptr; }
     s_app = nullptr; s_tab = nullptr; s_back = nullptr;
     for (int i = 0; i < s_live_n; i++) if (!strcmp(s_live[i].id, id)) s_app = &s_live[i];
     s_gen++;
+    // Per-app RAM, as the framework does: allocated (zeroed) before on_enter, freed after on_exit.
+    if (s_app && s_app->ram) for (const nucleo_app_ram_t *r = s_app->ram; r->ptr; r++) *r->ptr = calloc(1, r->bytes);
     if (s_app && s_app->on_enter) s_app->on_enter();
 }
 // One key through the same routing as the run loop: Esc/LEFT -> back handler, TAB -> tab handler.
@@ -195,6 +209,7 @@ static void app_draw(void)
 }
 
 extern bool g_host_guest;
+extern bool g_host_ext_pending;                       // settings_stubs.cpp
 extern bool g_host_onboard_sta;
 extern int g_host_join_err;
 extern bool g_host_shift_latch;
@@ -237,6 +252,11 @@ static const Scene SETTINGS[] = {
     { "nets",      [] { app_open("wifi"); app_key(NK_ENTER); app_key(NK_ENTER); app_key(NK_DOWN); app_draw(); } },
     { "hotspot",   [] { app_open("wifi"); app_key(NK_DOWN); app_key(NK_ENTER); app_draw(); } },
     { "display",   [] { app_open("wifi"); down(3); app_key(NK_ENTER); app_draw(); } },
+    // ADV: the root gains "Second screen" under Display (row 4); its page, and a speed change waiting for a restart.
+    { "root-adv",  [] { g_host.adv = true; app_open("wifi"); down(4); app_draw(); } },
+    { "ext",       [] { g_host.adv = true; app_open("wifi"); down(4); app_key(NK_ENTER); app_draw(); } },
+    { "ext-speed", [] { g_host.adv = true; g_host_ext_pending = true; app_open("wifi"); down(4); app_key(NK_ENTER); down(3); app_draw(); } },
+    { "ext-end",   [] { g_host.adv = true; app_open("wifi"); down(4); app_key(NK_ENTER); app_key(NK_UP); app_key(NK_UP); app_draw(); } },
     { "sound",     [] { app_open("wifi"); down(4); app_key(NK_ENTER); app_draw(); } },
     { "sound-tts", [] { app_open("wifi"); down(4); app_key(NK_ENTER);
                         down(3); app_key(NK_RIGHT); app_draw(); } },
@@ -350,6 +370,35 @@ static const Scene UPDATES[] = {
                         app_open("updates"); app_draw(); } },                                    // "Check now", heap too tight
 };
 
+// Native Store app (app_store.cpp): the REAL engine reads a catalog seeded on the sandbox SD
+// (store_stubs.cpp: 11 apps, three installed by the store, two of them with an update, one built-in).
+extern "C" void nucleo_register_store(void);
+extern "C" void host_store_seed(bool with_catalog);
+extern "C" nst_status_t g_host_store_status;
+extern "C" nst_op_t g_host_store_op;
+extern "C" st_state_t g_host_store_st;
+extern "C" const char *g_host_store_err;
+static void store_open(bool catalog = true) { host_store_seed(catalog); app_open("store"); }
+static const Scene STORE[] = {
+    { "new",       [] { store_open(); app_draw(); } },
+    { "games",     [] { store_open(); app_key(NK_TAB); app_draw(); } },
+    { "cats",      [] { store_open(); app_key(NK_TAB); app_key(NK_TAB); down(1); app_draw(); } },
+    { "cat-tools", [] { store_open(); app_key(NK_TAB); app_key(NK_TAB); down(1); app_key(NK_ENTER); app_draw(); } },
+    { "mine",      [] { store_open(); for (int i = 0; i < 3; i++) app_key(NK_TAB); app_draw(); } },
+    { "app-new",   [] { store_open(); app_key(NK_ENTER); app_draw(); } },
+    { "app-update",[] { store_open(); for (int i = 0; i < 3; i++) app_key(NK_TAB); app_key(NK_ENTER); app_draw(); } },
+    { "app-system",[] { store_open(); app_type("met"); app_key(NK_ENTER); app_draw(); } },
+    { "app-mine",  [] { store_open(); for (int i = 0; i < 3; i++) app_key(NK_TAB); down(2); app_key(NK_ENTER); app_draw(); } },
+    { "remove",    [] { store_open(); for (int i = 0; i < 3; i++) app_key(NK_TAB); down(2); app_key(NK_ENTER); app_key(NK_DEL); app_draw(); } },
+    { "busy",      [] { store_open(); app_key(NK_ENTER); g_host_store_status = NST_BUSY; g_host_store_op = NST_OP_INSTALL;
+                        g_host_store_st.phase = ST_PH_FILES; g_host_store_st.pct = 42; g_host_store_st.files_done = 3;
+                        g_host_store_st.files_total = 7; strcpy(g_host_store_st.cur, "index.html.gz"); app_draw(); } },
+    { "qr",        [] { store_open(); for (int i = 0; i < 3; i++) app_key(NK_TAB); down(2); app_key(NK_ENTER); app_key(NK_CHAR, 'q'); app_draw(); } },
+    { "error-cat", [] { g_host_store_status = NST_FAILED; g_host_store_err = "Store unreachable"; store_open(); app_draw(); } },
+    { "empty",     [] { store_open(false); app_draw(); } },
+    { "error",     [] { g_host_store_status = NST_FAILED; g_host_store_err = "Store unreachable"; store_open(false); app_draw(); } },
+};
+
 static const char *LANGS[]  = { "en", "it", "es", "fr", "de" };
 static const char *THEMES[] = { "classic", "nano_banana", "hacker", "amoled" };
 
@@ -358,12 +407,17 @@ static const char *THEMES[] = { "classic", "nano_banana", "hacker", "amoled" };
 static const Scene *find_scene(const char *surface, const char *scene)
 {
     const Scene *set = !strcmp(surface, "launcher") ? SCENES : !strcmp(surface, "settings") ? SETTINGS
-                     : !strcmp(surface, "wizard") ? WIZARD : !strcmp(surface, "updates") ? UPDATES : nullptr;
+                     : !strcmp(surface, "wizard") ? WIZARD : !strcmp(surface, "updates") ? UPDATES
+                     : !strcmp(surface, "store") ? STORE : nullptr;
     int n = set == SCENES ? (int)(sizeof SCENES / sizeof SCENES[0]) : set == SETTINGS ? (int)(sizeof SETTINGS / sizeof SETTINGS[0])
-          : set == UPDATES ? (int)(sizeof UPDATES / sizeof UPDATES[0]) : (int)(sizeof WIZARD / sizeof WIZARD[0]);
+          : set == UPDATES ? (int)(sizeof UPDATES / sizeof UPDATES[0]) : set == STORE ? (int)(sizeof STORE / sizeof STORE[0])
+          : (int)(sizeof WIZARD / sizeof WIZARD[0]);
     for (int i = 0; set && i < n; i++) if (!strcmp(set[i].name, scene)) return &set[i];
     return nullptr;
 }
+
+static const char *const LARGE_SCENES[] = { "home", "home-row3", "cat-office", "cat-games", "search-set", "search-none",
+                                              "cc", "cc-volume", "cc-web", "cc-restart" };
 
 static void list_all(void)
 {
@@ -372,6 +426,7 @@ static void list_all(void)
         { "settings", SETTINGS, (int)(sizeof SETTINGS / sizeof SETTINGS[0]) },
         { "wizard", WIZARD, (int)(sizeof WIZARD / sizeof WIZARD[0]) },
         { "updates", UPDATES, (int)(sizeof UPDATES / sizeof UPDATES[0]) },
+        { "store", STORE, (int)(sizeof STORE / sizeof STORE[0]) },
     };
     for (auto &g : S)
         for (int i = 0; i < g.n; i++) {
@@ -380,6 +435,13 @@ static void list_all(void)
             printf("%s.%s.en.classic.direct\n", g.surface, g.set[i].name);
             printf("%s.%s.en.classic.short\n", g.surface, g.set[i].name);   // the ADV's fitted 240x130 canvas
         }
+    // The launcher home on an external 320x240 panel (nucleo_surface.h): the only large screen so far.
+    for (const char *sc : LARGE_SCENES) {
+        printf("launcher.%s.en.classic.large\n", sc);
+        printf("launcher.%s.it.classic.large\n", sc);
+        printf("launcher.%s.en.amoled.large\n", sc);
+        printf("launcher.%s.en.classic.large-short\n", sc);   // ADV's fitted canvas seen 320 wide (97 rows)
+    }
 }
 
 static int render_one(const char *full)
@@ -391,14 +453,16 @@ static int render_one(const char *full)
     const Scene *sc = find_scene(part[0], part[1]);
     if (!sc) { fprintf(stderr, "unknown scene %s\n", full); return 2; }
     bool direct = np == 5 && !strcmp(part[4], "direct");
-    bool shortc = np == 5 && !strcmp(part[4], "short");
+    bool large = np == 5 && !strncmp(part[4], "large", 5);
+    bool shortc = np == 5 && (!strcmp(part[4], "short") || !strcmp(part[4], "large-short"));
+    if (large != g_host.large) { fprintf(stderr, "%s: a .large scene runs in its own process\n", full); return 2; }
     nucleo_theme_set(part[3]);
     nucleo_i18n_set_lang(part[2]);
     g_host.canvas_ok = !direct;
     // Every scene states its canvas height (no leak from a previous scene in this process). 130 rows is what
     // nucleo_screen_acquire() fits on the ADV: (31,744 B largest block - 512) / 240.
     g_host.canvas_rows = shortc ? 130 : 135;
-    g_host.stale_mark = shortc; g_host.stale_px = 0;
+    g_host.stale_mark = shortc && !large; g_host.stale_px = 0;
     nucleo_screen_release();
     launcher_build_menu();
     g_host.now_us += 1000000;
@@ -421,10 +485,12 @@ int main(int argc, char **argv)
     if (argc > 1 && !strcmp(argv[1], "--list")) { list_all(); return 0; }
     if (argc < 3) { fprintf(stderr, "usage: ui_host <outdir> <scene>... | --list\n"); return 2; }
     s_out = argv[1];
+    g_host.large = strstr(argv[2], ".large") != nullptr;   // the panel size is fixed per process (one scene each)
     host_display_begin();
     nucleo_theme_init();
     nucleo_register_wifi();
     nucleo_register_updates();
+    nucleo_register_store();
     int rc = 0;
     for (int i = 2; i < argc; i++) {
         registry_load(strstr(argv[i], ".adv") != nullptr);

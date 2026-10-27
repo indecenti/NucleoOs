@@ -306,8 +306,17 @@ bool nucleo_kbd_inject(nucleo_key_t k)
     return ok;
 }
 
-// Non-blocking: returns a freshly pressed key, or {NK_NONE,0} if nothing new.
-nucleo_key_t nucleo_kbd_read(void)
+static nucleo_kbd_hook_t s_hook;
+void nucleo_kbd_set_hook(nucleo_kbd_hook_t hook) { s_hook = hook; }
+
+static bool any_held(void)
+{
+    if (s_mods) return true;
+    for (int i = 1; i < 128; i++) if (s_down[i]) return true;
+    return false;
+}
+
+static nucleo_key_t read_raw(void)
 {
     if (s_inj_tail != s_inj_head) {
         nucleo_key_t k = { NK_NONE, 0 };
@@ -317,6 +326,14 @@ nucleo_key_t nucleo_kbd_read(void)
         if (k.key != NK_NONE) return k;
     }
     return s_adv ? tca_read() : gpio_read();
+}
+
+// Non-blocking: returns a freshly pressed key, or {NK_NONE,0} if nothing new.
+nucleo_key_t nucleo_kbd_read(void)
+{
+    nucleo_key_t k = read_raw();
+    if (s_hook && s_hook(k, any_held())) k = (nucleo_key_t){ NK_NONE, 0 };
+    return k;
 }
 
 bool nucleo_kbd_shift_latched(void) { return s_sh_tap; }

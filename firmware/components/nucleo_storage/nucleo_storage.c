@@ -42,13 +42,28 @@ esp_err_t nucleo_storage_mount_cfg(void)
     return ESP_OK;
 }
 
+// SD transfer hook (nucleo_storage.h): wraps the SDSPI host's transaction function.
+static void (*volatile s_sd_pre)(void) = NULL;
+static esp_err_t (*s_sd_xfer)(int slot, sdmmc_command_t *cmd) = NULL;
+void nucleo_storage_set_sd_pre(void (*fn)(void)) { s_sd_pre = fn; }
+static esp_err_t sd_xfer(int slot, sdmmc_command_t *cmd)
+{
+    void (*pre)(void) = s_sd_pre;
+    if (pre) pre();
+    return s_sd_xfer(slot, cmd);
+}
+
 static esp_err_t mount_ex(bool format_if_failed);
 esp_err_t nucleo_storage_mount(void) { return mount_ex(false); }
 static esp_err_t mount_ex(bool format_if_failed)
 {
     sdmmc_host_t host = SDSPI_HOST_DEFAULT();
     host.slot = NUCLEO_SD_SPI_HOST;
-    host.max_freq_khz = 15000; // Abbassiamo a 15MHz per stabilità su ESP32-S3
+    // 20 MHz = SDMMC_FREQ_DEFAULT, the SD spec's default-speed mode. Was 15 MHz "for stability"; reads are CRC-
+    // checked by the SPI driver (CMD59), and the video player measured the card as its bottleneck.
+    host.max_freq_khz = SDMMC_FREQ_DEFAULT;
+    s_sd_xfer = host.do_transaction;   // every card transfer passes the hook first (shared-bus arbitration)
+    host.do_transaction = sd_xfer;
 
     spi_bus_config_t bus = {
         .mosi_io_num = NUCLEO_SD_PIN_MOSI,

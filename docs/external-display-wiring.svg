@@ -1,75 +1,79 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 560" font-family="Segoe UI, Arial, sans-serif" font-size="13">
-<rect width="960" height="560" fill="#ffffff"/>
-<text x="24" y="34" font-size="19" font-weight="700" fill="#111">2.8" SPI display (V1.1 / V1.2) → Cardputer ADV, EXT header</text>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 640" font-family="Segoe UI, Arial, sans-serif" font-size="13">
+<rect width="1000" height="640" fill="#ffffff"/>
+<text x="24" y="34" font-size="19" font-weight="700" fill="#111">2.8" SPI display (V1.1 / V1.2) → Cardputer ADV, EXT header — one colour per wire</text>
 <text x="40" y="70" font-weight="700" fill="#555">DISPLAY MODULE (14-pin header)</text>
-<text x="514" y="70" font-weight="700" fill="#555">CARDPUTER ADV · EXT 2×7</text>
-<rect x="36" y="80" width="210" height="382" rx="8" fill="#c0392b" opacity="0.10"/>
-<rect x="506" y="80" width="250" height="382" rx="8" fill="#222" opacity="0.06"/>
-<path d="M236 96 C378 96 378 231 520 231" fill="none" stroke="#d62828" stroke-width="3" stroke-linecap="round"/>
-<path d="M236 123 C378 123 378 177 520 177" fill="none" stroke="#333333" stroke-width="3" stroke-linecap="round"/>
-<path d="M236 150 C378 150 378 420 520 420" fill="none" stroke="#2a9d3f" stroke-width="3" stroke-linecap="round"/>
-<path d="M236 177 C378 177 378 393 520 393" fill="none" stroke="#2a9d3f" stroke-width="3" stroke-linecap="round"/>
-<path d="M236 204 C378 204 378 447 520 447" fill="none" stroke="#2a9d3f" stroke-width="3" stroke-linecap="round"/>
-<path d="M236 231 C378 231 378 312 520 312" fill="none" stroke="#1d6fd8" stroke-width="3" stroke-linecap="round"/>
-<path d="M236 258 C378 258 378 258 520 258" fill="none" stroke="#e09f00" stroke-width="3" stroke-linecap="round"/>
-<path d="M236 285 C378 285 378 231 520 231" fill="none" stroke="#d62828" stroke-width="3" stroke-linecap="round"/>
-<path d="M236 339 C378 339 378 258 520 258" fill="none" stroke="#e09f00" stroke-width="3" stroke-linecap="round"/>
-<path d="M236 366 C378 366 378 204 520 204" fill="none" stroke="#e8590c" stroke-width="3" stroke-linecap="round"/>
-<path d="M236 393 C378 393 378 312 520 312" fill="none" stroke="#1d6fd8" stroke-width="3" stroke-linecap="round"/>
-<path d="M236 420 C378 420 378 366 520 366" fill="none" stroke="#8e44ad" stroke-width="3" stroke-linecap="round"/>
-<path d="M236 447 C378 447 378 150 520 150" fill="none" stroke="#e8590c" stroke-width="3" stroke-linecap="round"/>
-<text x="52" y="100" fill="#888">1</text><text x="224" y="100" text-anchor="end" font-weight="600" fill="#111">VCC</text><circle cx="236" cy="96" r="5" fill="#111" stroke="#111"/>
-<text x="52" y="127" fill="#888">2</text><text x="224" y="127" text-anchor="end" font-weight="600" fill="#111">GND</text><circle cx="236" cy="123" r="5" fill="#111" stroke="#111"/>
-<text x="52" y="154" fill="#888">3</text><text x="224" y="154" text-anchor="end" font-weight="600" fill="#111">CS</text><circle cx="236" cy="150" r="5" fill="#111" stroke="#111"/>
-<text x="52" y="181" fill="#888">4</text><text x="224" y="181" text-anchor="end" font-weight="600" fill="#111">RESET</text><circle cx="236" cy="177" r="5" fill="#111" stroke="#111"/>
-<text x="52" y="208" fill="#888">5</text><text x="224" y="208" text-anchor="end" font-weight="600" fill="#111">DC</text><circle cx="236" cy="204" r="5" fill="#111" stroke="#111"/>
-<text x="52" y="235" fill="#888">6</text><text x="224" y="235" text-anchor="end" font-weight="600" fill="#111">SDI (MOSI)</text><circle cx="236" cy="231" r="5" fill="#111" stroke="#111"/>
-<text x="52" y="262" fill="#888">7</text><text x="224" y="262" text-anchor="end" font-weight="600" fill="#111">SCK</text><circle cx="236" cy="258" r="5" fill="#111" stroke="#111"/>
-<text x="52" y="289" fill="#888">8</text><text x="224" y="289" text-anchor="end" font-weight="600" fill="#111">LED</text><circle cx="236" cy="285" r="5" fill="#111" stroke="#111"/>
-<text x="52" y="316" fill="#888">9</text><text x="224" y="316" text-anchor="end" font-weight="600" fill="#999">SDO  ✕ not connected</text><circle cx="236" cy="312" r="5" fill="#fff" stroke="#111"/>
-<text x="52" y="343" fill="#888">10</text><text x="224" y="343" text-anchor="end" font-weight="600" fill="#111">T_CLK</text><circle cx="236" cy="339" r="5" fill="#111" stroke="#111"/>
-<text x="52" y="370" fill="#888">11</text><text x="224" y="370" text-anchor="end" font-weight="600" fill="#111">T_CS</text><circle cx="236" cy="366" r="5" fill="#111" stroke="#111"/>
-<text x="52" y="397" fill="#888">12</text><text x="224" y="397" text-anchor="end" font-weight="600" fill="#111">T_DIN</text><circle cx="236" cy="393" r="5" fill="#111" stroke="#111"/>
-<text x="52" y="424" fill="#888">13</text><text x="224" y="424" text-anchor="end" font-weight="600" fill="#111">T_DO</text><circle cx="236" cy="420" r="5" fill="#111" stroke="#111"/>
-<text x="52" y="451" fill="#888">14</text><text x="224" y="451" text-anchor="end" font-weight="600" fill="#111">T_IRQ</text><circle cx="236" cy="447" r="5" fill="#111" stroke="#111"/>
-<circle cx="520" cy="96" r="5" fill="#fff" stroke="#111"/><text x="534" y="100" font-weight="400" fill="#999">1 · G3 — free</text>
-<circle cx="520" cy="123" r="5" fill="#fff" stroke="#111"/><text x="534" y="127" font-weight="400" fill="#999">2 · 5VIN — free</text>
-<circle cx="520" cy="150" r="5" fill="#111" stroke="#111"/><text x="534" y="154" font-weight="600" fill="#111">3 · G4 · INT</text>
-<circle cx="520" cy="177" r="5" fill="#111" stroke="#111"/><text x="534" y="181" font-weight="600" fill="#111">4 · GND</text>
-<circle cx="520" cy="204" r="5" fill="#111" stroke="#111"/><text x="534" y="208" font-weight="600" fill="#111">5 · G6 · BUSY</text>
-<circle cx="520" cy="231" r="5" fill="#111" stroke="#111"/><text x="534" y="235" font-weight="600" fill="#111">6 · 5VOUT</text>
-<circle cx="520" cy="258" r="5" fill="#111" stroke="#111"/><text x="534" y="262" font-weight="600" fill="#111">7 · G40 · SCK</text>
-<circle cx="520" cy="285" r="5" fill="#fff" stroke="#d62828"/><text x="534" y="289" font-weight="400" fill="#d62828">8 · G8 · SDA — do NOT connect</text>
-<circle cx="520" cy="312" r="5" fill="#111" stroke="#111"/><text x="534" y="316" font-weight="600" fill="#111">9 · G14 · MOSI</text>
-<circle cx="520" cy="339" r="5" fill="#fff" stroke="#d62828"/><text x="534" y="343" font-weight="400" fill="#d62828">10 · G9 · SCL — do NOT connect</text>
-<circle cx="520" cy="366" r="5" fill="#111" stroke="#111"/><text x="534" y="370" font-weight="600" fill="#111">11 · G39 · MISO</text>
-<circle cx="520" cy="393" r="5" fill="#111" stroke="#111"/><text x="534" y="397" font-weight="600" fill="#111">12 · G13 · TX</text>
-<circle cx="520" cy="420" r="5" fill="#111" stroke="#111"/><text x="534" y="424" font-weight="600" fill="#111">13 · G5 · CS</text>
-<circle cx="520" cy="447" r="5" fill="#111" stroke="#111"/><text x="534" y="451" font-weight="600" fill="#111">14 · G15 · RX</text>
-<text x="774" y="70" font-weight="700" fill="#555">EXT 2×7</text><rect x="774" y="80" width="150" height="207" rx="6" fill="none" stroke="#999"/>
-<rect x="784" y="87" width="58" height="20" rx="4" fill="#f4f4f4" stroke="#d62828"/><text x="813" y="101" text-anchor="middle" font-size="12">1 G3</text>
-<rect x="854" y="87" width="58" height="20" rx="4" fill="#f4f4f4" stroke="#bbb"/><text x="883" y="101" text-anchor="middle" font-size="12">2 5VIN</text>
-<rect x="784" y="114" width="58" height="20" rx="4" fill="#e8f0fe" stroke="#bbb"/><text x="813" y="128" text-anchor="middle" font-size="12">3 G4</text>
-<rect x="854" y="114" width="58" height="20" rx="4" fill="#e8f0fe" stroke="#bbb"/><text x="883" y="128" text-anchor="middle" font-size="12">4 GND</text>
-<rect x="784" y="141" width="58" height="20" rx="4" fill="#e8f0fe" stroke="#bbb"/><text x="813" y="155" text-anchor="middle" font-size="12">5 G6</text>
-<rect x="854" y="141" width="58" height="20" rx="4" fill="#e8f0fe" stroke="#bbb"/><text x="883" y="155" text-anchor="middle" font-size="12">6 5VOUT</text>
-<rect x="784" y="168" width="58" height="20" rx="4" fill="#e8f0fe" stroke="#bbb"/><text x="813" y="182" text-anchor="middle" font-size="12">7 G40</text>
-<rect x="854" y="168" width="58" height="20" rx="4" fill="#f4f4f4" stroke="#bbb"/><text x="883" y="182" text-anchor="middle" font-size="12">8 G8</text>
-<rect x="784" y="195" width="58" height="20" rx="4" fill="#e8f0fe" stroke="#bbb"/><text x="813" y="209" text-anchor="middle" font-size="12">9 G14</text>
-<rect x="854" y="195" width="58" height="20" rx="4" fill="#f4f4f4" stroke="#bbb"/><text x="883" y="209" text-anchor="middle" font-size="12">10 G9</text>
-<rect x="784" y="222" width="58" height="20" rx="4" fill="#e8f0fe" stroke="#bbb"/><text x="813" y="236" text-anchor="middle" font-size="12">11 G39</text>
-<rect x="854" y="222" width="58" height="20" rx="4" fill="#e8f0fe" stroke="#bbb"/><text x="883" y="236" text-anchor="middle" font-size="12">12 G13</text>
-<rect x="784" y="249" width="58" height="20" rx="4" fill="#e8f0fe" stroke="#bbb"/><text x="813" y="263" text-anchor="middle" font-size="12">13 G5</text>
-<rect x="854" y="249" width="58" height="20" rx="4" fill="#e8f0fe" stroke="#bbb"/><text x="883" y="263" text-anchor="middle" font-size="12">14 G15</text>
-<text x="776" y="303" font-size="11" fill="#555">EXT: odd pins left, even pins right</text><text x="776" y="317" font-size="11" fill="#d62828">find pin 1 (G3) on the silkscreen</text>
-<line x1="40" y1="487" x2="62" y2="487" stroke="#d62828" stroke-width="4"/><text x="68" y="491" font-size="12">power</text>
-<line x1="168" y1="487" x2="190" y2="487" stroke="#333333" stroke-width="4"/><text x="196" y="491" font-size="12">ground</text>
-<line x1="296" y1="487" x2="318" y2="487" stroke="#e09f00" stroke-width="4"/><text x="324" y="491" font-size="12">clock (shared)</text>
-<line x1="424" y1="487" x2="446" y2="487" stroke="#1d6fd8" stroke-width="4"/><text x="452" y="491" font-size="12">MOSI (shared)</text>
-<line x1="552" y1="487" x2="574" y2="487" stroke="#8e44ad" stroke-width="4"/><text x="580" y="491" font-size="12">touch MISO</text>
-<line x1="680" y1="487" x2="702" y2="487" stroke="#2a9d3f" stroke-width="4"/><text x="708" y="491" font-size="12">display control</text>
-<line x1="808" y1="487" x2="830" y2="487" stroke="#e8590c" stroke-width="4"/><text x="836" y="491" font-size="12">touch control</text>
-<text x="40" y="519" font-size="13" fill="#333" font-weight="400">Module SD_CS / SD_MOSI / SD_MISO / SD_SCK: not connected (the Cardputer's own SD is used).</text>
-<text x="40" y="539" font-size="13" fill="#333" font-weight="400">SDO unwired. Pins 6, 7, 9 take two wires each (Y-jumper or breadboard). Module jumper J1 must be OPEN.</text>
-<text x="40" y="559" font-size="13" fill="#d62828" font-weight="700">Wire with the Cardputer switched OFF.</text>
+<text x="524" y="70" font-weight="700" fill="#555">CARDPUTER ADV · EXT 2×7</text>
+<rect x="36" y="80" width="214" height="382" rx="8" fill="#c0392b" opacity="0.10"/>
+<rect x="516" y="80" width="250" height="382" rx="8" fill="#222" opacity="0.06"/>
+<!-- wires: module pin y = 96 + 27*(n-1); EXT pin y = 96 + 27*(n-1) -->
+<path d="M240 96 C384 96 384 231 530 231" fill="none" stroke="#e03131" stroke-width="4" stroke-linecap="round"/>
+<path d="M240 123 C384 123 384 177 530 177" fill="none" stroke="#111111" stroke-width="4" stroke-linecap="round"/>
+<path d="M240 150 C384 150 384 420 530 420" fill="none" stroke="#2f9e44" stroke-width="4" stroke-linecap="round"/>
+<path d="M240 177 C384 177 384 393 530 393" fill="none" stroke="#868e20" stroke-width="4" stroke-linecap="round"/>
+<path d="M240 204 C384 204 384 447 530 447" fill="none" stroke="#0c8599" stroke-width="4" stroke-linecap="round"/>
+<path d="M240 231 C384 231 384 312 530 312" fill="none" stroke="#1c5fd8" stroke-width="4" stroke-linecap="round"/>
+<path d="M240 258 C384 258 384 258 530 258" fill="none" stroke="#f08c00" stroke-width="4" stroke-linecap="round"/>
+<path d="M240 285 C384 285 384 231 530 231" fill="none" stroke="#f783ac" stroke-width="4" stroke-linecap="round" stroke-dasharray="9 5"/>
+<path d="M240 339 C384 339 384 258 530 258" fill="none" stroke="#8d5524" stroke-width="4" stroke-linecap="round" stroke-dasharray="9 5"/>
+<path d="M240 366 C384 366 384 204 530 204" fill="none" stroke="#7048e8" stroke-width="5" stroke-linecap="round"/>
+<path d="M240 393 C384 393 384 312 530 312" fill="none" stroke="#22b8cf" stroke-width="4" stroke-linecap="round" stroke-dasharray="9 5"/>
+<path d="M240 420 C384 420 384 366 530 366" fill="none" stroke="#d6336c" stroke-width="4" stroke-linecap="round"/>
+<path d="M240 447 C384 447 384 150 530 150" fill="none" stroke="#868e96" stroke-width="4" stroke-linecap="round"/>
+<!-- module pins -->
+<text x="52" y="100" fill="#888">1</text><text x="226" y="100" text-anchor="end" font-weight="600" fill="#e03131">VCC</text><circle cx="240" cy="96" r="6" fill="#e03131"/>
+<text x="52" y="127" fill="#888">2</text><text x="226" y="127" text-anchor="end" font-weight="600" fill="#111">GND</text><circle cx="240" cy="123" r="6" fill="#111111"/>
+<text x="52" y="154" fill="#888">3</text><text x="226" y="154" text-anchor="end" font-weight="600" fill="#2f9e44">CS</text><circle cx="240" cy="150" r="6" fill="#2f9e44"/>
+<text x="52" y="181" fill="#888">4</text><text x="226" y="181" text-anchor="end" font-weight="600" fill="#868e20">RESET</text><circle cx="240" cy="177" r="6" fill="#868e20"/>
+<text x="52" y="208" fill="#888">5</text><text x="226" y="208" text-anchor="end" font-weight="600" fill="#0c8599">DC</text><circle cx="240" cy="204" r="6" fill="#0c8599"/>
+<text x="52" y="235" fill="#888">6</text><text x="226" y="235" text-anchor="end" font-weight="600" fill="#1c5fd8">SDI (MOSI)</text><circle cx="240" cy="231" r="6" fill="#1c5fd8"/>
+<text x="52" y="262" fill="#888">7</text><text x="226" y="262" text-anchor="end" font-weight="600" fill="#f08c00">SCK</text><circle cx="240" cy="258" r="6" fill="#f08c00"/>
+<text x="52" y="289" fill="#888">8</text><text x="226" y="289" text-anchor="end" font-weight="600" fill="#e64980">LED</text><circle cx="240" cy="285" r="6" fill="#f783ac"/>
+<text x="52" y="316" fill="#888">9</text><text x="226" y="316" text-anchor="end" font-weight="600" fill="#aaa">SDO  ✕ leave free</text><circle cx="240" cy="312" r="6" fill="#fff" stroke="#999" stroke-width="2"/>
+<text x="52" y="343" fill="#888">10</text><text x="226" y="343" text-anchor="end" font-weight="600" fill="#8d5524">T_CLK</text><circle cx="240" cy="339" r="6" fill="#8d5524"/>
+<text x="52" y="370" fill="#888">11</text><text x="226" y="370" text-anchor="end" font-weight="700" fill="#7048e8">T_CS</text><circle cx="240" cy="366" r="6" fill="#7048e8"/>
+<text x="52" y="397" fill="#888">12</text><text x="226" y="397" text-anchor="end" font-weight="600" fill="#1098ad">T_DIN</text><circle cx="240" cy="393" r="6" fill="#22b8cf"/>
+<text x="52" y="424" fill="#888">13</text><text x="226" y="424" text-anchor="end" font-weight="600" fill="#d6336c">T_DO / T_OUT</text><circle cx="240" cy="420" r="6" fill="#d6336c"/>
+<text x="52" y="451" fill="#888">14</text><text x="226" y="451" text-anchor="end" font-weight="600" fill="#868e96">T_IRQ (optional)</text><circle cx="240" cy="447" r="6" fill="#868e96"/>
+<!-- EXT pins, in pin order -->
+<circle cx="530" cy="96" r="6" fill="#fff" stroke="#bbb" stroke-width="2"/><text x="546" y="100" fill="#aaa">1 · G3 — free</text>
+<circle cx="530" cy="123" r="6" fill="#fff" stroke="#bbb" stroke-width="2"/><text x="546" y="127" fill="#aaa">2 · 5VIN — free</text>
+<circle cx="530" cy="150" r="6" fill="#868e96"/><text x="546" y="154" font-weight="600" fill="#111">3 · G4 ← T_IRQ</text>
+<circle cx="530" cy="177" r="6" fill="#111111"/><text x="546" y="181" font-weight="600" fill="#111">4 · GND ← GND</text>
+<circle cx="530" cy="204" r="6" fill="#7048e8"/><text x="546" y="208" font-weight="700" fill="#7048e8">5 · G6 ← T_CS</text>
+<circle cx="530" cy="231" r="6" fill="#e03131"/><text x="546" y="235" font-weight="600" fill="#111">6 · 5VOUT ← VCC + LED</text>
+<circle cx="530" cy="258" r="6" fill="#f08c00"/><text x="546" y="262" font-weight="600" fill="#111">7 · G40 ← SCK + T_CLK</text>
+<circle cx="530" cy="285" r="6" fill="#fff" stroke="#e03131" stroke-width="2"/><text x="546" y="289" fill="#e03131">8 · G8 SDA — do NOT connect</text>
+<circle cx="530" cy="312" r="6" fill="#1c5fd8"/><text x="546" y="316" font-weight="600" fill="#111">9 · G14 ← SDI + T_DIN</text>
+<circle cx="530" cy="339" r="6" fill="#fff" stroke="#e03131" stroke-width="2"/><text x="546" y="343" fill="#e03131">10 · G9 SCL — do NOT connect</text>
+<circle cx="530" cy="366" r="6" fill="#d6336c"/><text x="546" y="370" font-weight="600" fill="#111">11 · G39 ← T_DO only</text>
+<circle cx="530" cy="393" r="6" fill="#868e20"/><text x="546" y="397" font-weight="600" fill="#111">12 · G13 ← RESET</text>
+<circle cx="530" cy="420" r="6" fill="#2f9e44"/><text x="546" y="424" font-weight="600" fill="#111">13 · G5 ← CS</text>
+<circle cx="530" cy="447" r="6" fill="#0c8599"/><text x="546" y="451" font-weight="600" fill="#111">14 · G15 ← DC</text>
+<!-- the header as it sits on the board -->
+<text x="790" y="70" font-weight="700" fill="#555">EXT 2×7 (top view)</text>
+<rect x="790" y="80" width="186" height="207" rx="6" fill="none" stroke="#999"/>
+<rect x="800" y="87" width="78" height="20" rx="4" fill="#f4f4f4" stroke="#e03131" stroke-width="2"/><text x="839" y="101" text-anchor="middle" font-size="12">1 G3</text>
+<rect x="888" y="87" width="78" height="20" rx="4" fill="#f4f4f4" stroke="#bbb"/><text x="927" y="101" text-anchor="middle" font-size="12">2 5VIN</text>
+<rect x="800" y="114" width="78" height="20" rx="4" fill="#868e96"/><text x="839" y="128" text-anchor="middle" font-size="12" fill="#fff">3 T_IRQ</text>
+<rect x="888" y="114" width="78" height="20" rx="4" fill="#111"/><text x="927" y="128" text-anchor="middle" font-size="12" fill="#fff">4 GND</text>
+<rect x="800" y="141" width="78" height="20" rx="4" fill="#7048e8"/><text x="839" y="155" text-anchor="middle" font-size="12" fill="#fff">5 T_CS</text>
+<rect x="888" y="141" width="78" height="20" rx="4" fill="#e03131"/><text x="927" y="155" text-anchor="middle" font-size="12" fill="#fff">6 VCC+LED</text>
+<rect x="800" y="168" width="78" height="20" rx="4" fill="#f08c00"/><text x="839" y="182" text-anchor="middle" font-size="12" fill="#fff">7 SCK+T_CLK</text>
+<rect x="888" y="168" width="78" height="20" rx="4" fill="#f4f4f4" stroke="#e03131"/><text x="927" y="182" text-anchor="middle" font-size="12" fill="#e03131">8 ✕</text>
+<rect x="800" y="195" width="78" height="20" rx="4" fill="#1c5fd8"/><text x="839" y="209" text-anchor="middle" font-size="12" fill="#fff">9 SDI+T_DIN</text>
+<rect x="888" y="195" width="78" height="20" rx="4" fill="#f4f4f4" stroke="#e03131"/><text x="927" y="209" text-anchor="middle" font-size="12" fill="#e03131">10 ✕</text>
+<rect x="800" y="222" width="78" height="20" rx="4" fill="#d6336c"/><text x="839" y="236" text-anchor="middle" font-size="12" fill="#fff">11 T_DO</text>
+<rect x="888" y="222" width="78" height="20" rx="4" fill="#868e20"/><text x="927" y="236" text-anchor="middle" font-size="12" fill="#fff">12 RESET</text>
+<rect x="800" y="249" width="78" height="20" rx="4" fill="#2f9e44"/><text x="839" y="263" text-anchor="middle" font-size="12" fill="#fff">13 CS</text>
+<rect x="888" y="249" width="78" height="20" rx="4" fill="#0c8599"/><text x="927" y="263" text-anchor="middle" font-size="12" fill="#fff">14 DC</text>
+<text x="792" y="303" font-size="11" fill="#555">odd pins left, even pins right</text>
+<text x="792" y="317" font-size="11" fill="#e03131">find pin 1 (G3) on the silkscreen:</text>
+<text x="792" y="331" font-size="11" fill="#e03131">reversed, 5 V and GND swap</text>
+<!-- notes -->
+<text x="40" y="496" font-size="14" font-weight="700" fill="#111">Two wires on one EXT pin (Y-jumper or breadboard; dashed = the second wire):</text>
+<text x="40" y="518" font-size="13" fill="#333">pin 6 ← VCC + LED · pin 7 ← SCK + T_CLK · pin 9 ← SDI + T_DIN</text>
+<text x="40" y="546" font-size="14" font-weight="700" fill="#7048e8">T_CS must be on pin 5 (G6). Held low (GND, wrong pin) the touch chip owns G39 and the SD card stalls.</text>
+<text x="40" y="568" font-size="13" fill="#333">SDO and the module's SD_* pins stay free (the Cardputer's own SD is used). Module jumper J1 OPEN.</text>
+<text x="40" y="590" font-size="13" fill="#333">Only T_DO goes to G39. Without T_DIN or T_CLK the touch reads 0; without T_CS it is never probed.</text>
+<text x="40" y="618" font-size="14" fill="#e03131" font-weight="700">Wire with the Cardputer switched OFF.</text>
 </svg>

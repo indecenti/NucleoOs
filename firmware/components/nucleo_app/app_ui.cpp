@@ -2,6 +2,7 @@
 // Static-only: rows snap to position instantly and long labels are truncated to fit (no scrolling
 // text), so there is nothing to animate. Apps redraw only on key input — zero redraws when idle.
 #include "app_ui.h"
+#include "nucleo_touch.h"   // tap a row: select it, tap again: open it
 #include <M5GFX.h>
 #include <string.h>
 #include <stdio.h>
@@ -143,9 +144,17 @@ void app_ui_gauge(int y, const char *label, const char *val, int pct, unsigned s
     d.fillRoundRect(10, y + 12, 220 * pct / 100, 5, 2, col);
 }
 
+// Touch: the rows the last app_ui_list() put on screen, by slot (slot -> row index), for app_ui_list_key.
+static int s_tap_row[16];
+static int s_tap_n = 0;
+
 void app_ui_list(int top, int h, int count, int sel,
                  app_ui_text_fn label, app_ui_text_fn right, app_ui_color_fn color, void *ud)
 {
+    s_tap_n = 0;
+    // Every width below assumes the default font (6 px per char, x2 for the big rows): set it here, so a
+    // caller that drew a header in another font just before cannot make the rows overflow their pill.
+    d.setFont(&fonts::Font0); d.setTextDatum(textdatum_t::top_left);
     d.fillRect(0, top, 240, h, BG);
     d.setClipRect(0, top, 240, h);
     if (count <= 0) { d.clearClipRect(); return; }
@@ -162,6 +171,10 @@ void app_ui_list(int top, int h, int count, int sel,
         int y = top + (i - scroll) * STEP + STEP / 2;
         if (y > top + h) break;
         bool focus = (i == sel);
+        if (s_tap_n < 16) {                                       // touch: this row, tap = pick / open
+            nucleo_touch_add(0, y - STEP / 2, 240, STEP, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + s_tap_n));
+            s_tap_row[s_tap_n++] = i;
+        }
         unsigned short col = color ? color(i, ud) : ACC;
         const char *lab = label(i, ud);
         const char *rt = right ? right(i, ud) : nullptr;
@@ -207,6 +220,7 @@ void app_ui_list(int top, int h, int count, int sel,
         d.fillRoundRect(236, ky, 3, kh, 1, color ? color(sel, ud) : ACC);
     }
     d.clearClipRect();
+    nucleo_touch_add_scroll(0, top, 240, h, STEP, NK_UP, 0, NK_DOWN, 0);   // a drag walks the rows
 }
 
 // First alphanumeric char of a label, lowercased (skips leading glyphs/spaces). 0 if none.
@@ -236,7 +250,7 @@ void app_ui_confirm(const char *title, const char *msg, bool yes_focus)
     static const unsigned short DANGER = 0xF9A6;   // warm red for the destructive choice
     int top = nucleo_app_content_top(), h = nucleo_app_content_height();
     const int cw = 212, chh = 90;
-    int cx = (240 - cw) / 2;
+    int cx = ((int)d.width() - cw) / 2;            // centred on whichever panel draws it
     int cy = top + (h - chh) / 2; if (cy < top + 2) cy = top + 2;
 
     d.fillRoundRect(cx, cy, cw, chh, 9, BG);
@@ -262,6 +276,8 @@ void app_ui_confirm(const char *title, const char *msg, bool yes_focus)
     d.drawRoundRect(nx, by, bw, bh, 7, ACC);
     d.setTextColor(yes_focus ? FG : INK, yes_focus ? BG : ACC);
     d.setCursor(nx + bw / 2 - (int)strlen(no) * 6, by + 4); d.print(no);
+    nucleo_touch_add(yx, by - 6, bw, bh + 12, NK_CHAR, 'y');   // touch: the buttons answer (app_ui_confirm_key)
+    nucleo_touch_add(nx, by - 6, bw, bh + 12, NK_CHAR, 'n');
 }
 
 int app_ui_confirm_key(int key, char ch, bool *yes_focus)
@@ -283,6 +299,13 @@ int app_ui_confirm_key(int key, char ch, bool *yes_focus)
 bool app_ui_list_key(int key, char ch, int *sel, int count, app_ui_text_fn label, void *ud)
 {
     if (count <= 0 || !sel || !label) return false;
+    if (nucleo_touch_is_row(key, ch)) {                      // a tapped row: pick it, or open it if picked
+        int slot = ch - NUCLEO_TOUCH_ROW;
+        if (slot >= s_tap_n || s_tap_row[slot] >= count) return true;
+        if (s_tap_row[slot] == *sel) nucleo_kbd_inject(nucleo_key_t{ NK_ENTER, 0 });   // opens on the next loop
+        else *sel = s_tap_row[slot];
+        return true;
+    }
 
     // Type-ahead state: a short prefix buffer that decays after a pause, plus same-key cycling.
     static char s_pre[24];

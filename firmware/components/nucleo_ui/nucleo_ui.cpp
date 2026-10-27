@@ -5,6 +5,7 @@
 #include "nucleo_power.h"   // real battery level for the header gauge
 #include <M5GFX.h>
 #include <string.h>
+#include <new>             // std::nothrow for the lazily created wide view
 #include <stdio.h>
 #include <math.h>
 #include "freertos/FreeRTOS.h"
@@ -28,9 +29,19 @@ LovyanGFX *nucleo_app_gfx(void)         { return s_gfx_target; }
 // isn't allocated (the device draws direct-to-panel to save RAM on this no-PSRAM chip — the canvas
 // is the exception, not the rule). The Cardputer's panel returns BYTE-SWAPPED RGB565 on readback
 // (0x07E0 reads back as 0xE007); the caller un-swaps. Always available, no heap needed.
-extern "C" void nucleo_ui_panel_size(int *w, int *h) { if (w) *w = d.width(); if (h) *h = d.height(); }
+extern "C" bool nucleo_extdisp_screen_size(int which, int *w, int *h);
+extern "C" bool nucleo_extdisp_screen_row(int which, int y, int w, uint16_t *out);
+extern "C" void nucleo_ui_panel_size(int *w, int *h)
+{
+    int pw, ph;
+    if (nucleo_extdisp_screen_size(0, &pw, &ph)) { if (w) *w = pw; if (h) *h = ph; return; }   // own panel, not the mirror
+    if (w) *w = d.width();
+    if (h) *h = d.height();
+}
 extern "C" bool nucleo_ui_read_row(int y, int w, uint16_t *out)
 {
+    int pw, ph;
+    if (nucleo_extdisp_screen_size(0, &pw, &ph)) return y >= 0 && y < ph && nucleo_extdisp_screen_row(0, y, w, out);
     if (!out || y < 0 || y >= d.height() || w <= 0 || w > d.width()) return false;
     d.readRect(0, y, w, 1, out);
     return true;
@@ -117,6 +128,28 @@ M5Canvas *nucleo_screen(void)
         nucleo_screen_acquire();
     }
     return s_screen_alive ? &s_screen : nullptr;
+}
+
+// The SAME bytes seen `w` pixels wide, for the launcher's 320-wide strips on the large surface (an external
+// panel used natively): no allocation of its own, so a large screen costs no extra RAM. The view holds as
+// many rows as the canvas bytes fill at that width (~101 at 320 wide). Re-pointed on every call, because
+// the canvas moves when a decoder frees it and it is re-acquired. NULL whenever nucleo_screen() is NULL.
+// The view object itself (~340 B) is created on first use, i.e. only once an external panel hosts a large
+// screen: a Cardputer without one pays a pointer.
+static M5Canvas *s_wide = nullptr;
+M5Canvas *nucleo_screen_wide(int w)
+{
+    M5Canvas *c = nucleo_screen();
+    if (!c || w <= 0) return nullptr;
+    if (w == c->width()) return c;
+    int rows = (int)((size_t)c->width() * (size_t)c->height() / (size_t)w);
+    if (rows < 1) return nullptr;
+    if (!s_wide && !(s_wide = new (std::nothrow) M5Canvas(&d))) return nullptr;
+    if (s_wide->getBuffer() != c->getBuffer() || s_wide->width() != w || s_wide->height() != rows) {
+        s_wide->setColorDepth(8);                // set the PANEL's depth (setBuffer's bpp only sets the converter)
+        s_wide->setBuffer(c->getBuffer(), w, rows);
+    }
+    return s_wide;
 }
 
 extern "C" void nucleo_ui_set_brightness(unsigned char b) { d.setBrightness(b); }

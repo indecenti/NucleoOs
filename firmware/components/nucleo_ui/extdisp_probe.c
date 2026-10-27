@@ -38,7 +38,7 @@ static bool ext_pin(int p) { return p == 3 || p == 4 || p == 5 || p == 6 || p ==
 const char *extdisp_cfg_check(const extdisp_cfg_t *c)
 {
     if (c->rotation != 1 && c->rotation != 3) return "rotation must be 1 or 3";
-    if (c->mhz < 1 || c->mhz > 40) return "mhz out of range (1..40)";
+    if (c->mhz < 1 || c->mhz > 80) return "mhz out of range (1..80)";
     if (!ext_pin(c->cs)) return "cs is not a free EXT pin";
     if (!ext_pin(c->dc)) return "dc is not a free EXT pin";
     const int opt[4] = { c->rst, c->t_cs, c->t_irq, c->bl };

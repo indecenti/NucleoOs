@@ -7,7 +7,7 @@ primary display. Nothing changes for a device with nothing plugged in.
 | Phase | What | Status |
 |---|---|---|
 | 1 | Runtime detection + 1:1 mirror of the internal 240x135 UI, centred on the external panel | **done** (this doc) |
-| 2 | Native 320x240 layouts (launcher, File Commander, editor, media, games), drawn in bands (no framebuffer) | planned |
+| 2 | Native 320x240 layouts, drawn in strips (no framebuffer): the primary-surface API + the launcher home | **started** (see Primary surface) |
 | 3 | Touch as input: soft keys in the letterbox, gestures on the frame, 4-target calibration | **done** (see Touch) |
 
 Code: `firmware/components/nucleo_ui/` — `extdisp_probe.{h,c}` (pure rules), `extdisp_mirror.{hpp,cpp}`
@@ -78,18 +78,44 @@ on one pin.
   "external_controller": "auto",      // auto | ili9341 | st7789
   "external_rotation": 1,             // 1 | 3 (module upside down)
   "external_mirror": false,           // true = left-right flip (text reads mirrored)
-  "external_mhz": 27,                 // 1..40; lower it on long jumper wires
+  "external_mhz": 27,                 // 1..80 (exact: 10/20/27/40/80); lower it on long jumper wires
   "external_invert": false,           // omit = controller default
   "external_rgb": false,              // omit = controller default (BGR)
   "external_diag": true,              // touch log + boot report (tester build default: on)
   "external_touch": true,             // false = touch only logged, never drives the UI
   "external_touch_cal": [5, ...],     // written by the calibration: [rotation, a, b, c, d, e, f]
+  "external_primary": true,           // false = mirror only; true = screens laid out for 320x240 use it natively
+  "external_fit": true,               // compact screens scaled 4/3 (320x180); false = 1:1 (240x135, sharp)
+  "external_layout": "duplicate",     // duplicate | cardputer (panel black) | external (Cardputer backlight off)
   "external_pins": { "cs": 5, "dc": 15, "rst": 13, "t_cs": 6, "t_irq": 4, "bl": -1 }
 }
 ```
 
 The `//` notes are explanations only — remove them in the real file (JSON has no comments).
 Read once at boot. Schema: `schemas/settings.schema.json`.
+
+**Mode** (`external_layout`, live): *duplicate* draws both screens; *cardputer* leaves the panel black and
+ignores its touch (the mirror skips every external write, the large surface is refused); *external* keeps the
+Cardputer's backlight at 0 while the internal panel is still drawn (it stays the source for readbacks and
+screenshots). An "extend" mode (launcher on the Cardputer, a second-screen companion) is planned.
+
+**Screenshots.** `GET /api/screen` is always the Cardputer's own panel; `GET /api/screen?display=ext` is the
+external panel rebuilt from it (frame as written, letterbox black). While the panel shows a native large
+screen there is nothing to rebuild from: 409.
+
+**On the device: Settings ▸ Second screen** (ADV only, under Display): status, Mode, Big home (`external_primary`) and
+Big apps (`external_fit`) apply at once; Speed, Detection, Orientation and Touch are written now and apply after
+a restart (the row says so); Calibrate touch starts the 4-target calibration; Restart is on the same page.
+
+**Speed.** The panel clock is 80 MHz divided by an integer, so 10 / 20 / 27 / 40 / 80 are the exact steps
+(60 is not reachable: it lands on 40). One full 320x240 frame is 1.23 Mbit, so the ceiling is ~8 fps at 10 MHz,
+~30 at 40 MHz and ~60 at 80 MHz — before the shared SD bus and the CPU-driven (no DMA) writes take their share.
+80 MHz is accepted because the panel is write-only (the GPIO-matrix limit is about reads); it needs short wires.
+
+**Screen off.** Idle auto-off, the Control Center's screen-off and the web's `display off` all go through the
+brightness, which the mirror follows: with the LED on a GPIO (`bl`) the backlight switches off; with the LED on
+the 5 V rail the panel is painted black (a TN panel in sleep shows white). Waking repaints the frame and the
+letterbox. The screensaver is an ordinary compact screen, so it shows on the panel (fitted) by itself.
 
 ## Detection (boot)
 
@@ -181,6 +207,55 @@ Control Center and the games take touch with no change of their own.
   and the mutex exist only when a panel came up AND its touch answered. A Cardputer with nothing on the
   header pays one pointer and the keyboard's 8-slot inject ring (~30 B), no task, no CPU.
 
+## Primary surface (phase 2)
+
+When a panel is attached (and `external_primary` is not false), screens that have a 320x240 layout use it
+natively instead of the 240x135 mirror. Today that is the **launcher home** (carousel, category pages,
+search); every other screen stays compact, mirrored as before. API: `include/nucleo_surface.h`.
+
+- **Fit (system-wide).** Every compact screen — apps, games, modals, Control Center, screensaver — is drawn on
+  the panel scaled 4/3 (320x180, letterbox bands of 30 px for the touch keys) by `Panel_Mirror` itself, with no
+  app change. Opaque images and pixel streams are scaled from their source pixels; transparent or affine pushes,
+  alpha blends and scrolls are read back from the internal panel first. `external_fit: false` = the old 1:1.
+- **Two classes, not free sizes.** `compact` = the internal 240x135 (mirrored onto the external panel);
+  `large` = the external 320x240, used alone. A screen is designed and host-tested for each class it
+  supports, so there is no "responsive" guesswork at run time.
+- **Solo mode.** `nucleo_surface_set_large(true)` puts `Panel_Mirror` in solo: every write goes to the
+  external panel, unshifted, and `d` reports 320x240, so the code that draws to `d` lays out against the
+  live `d.width()/d.height()`. The internal panel shows a one-off "External screen active" card, dimmed to
+  1/4 brightness (no per-frame cost). The external glass is write-only: in solo `readRect` returns
+  nothing, `copyRect` (scroll) is a no-op and alpha blends land unblended — a large screen must not read
+  the panel back. Switches happen only between frames (`set_solo` refuses with a transaction open).
+- **No RAM.** A large screen composites through the SAME 32 KB back-buffer, seen 320 px wide
+  (`nucleo_screen_wide()`: ~101 rows, ~97 on the ADV's fitted canvas). The launcher band (320x210) is
+  drawn in two or three strips, each a finished slice of the frame, so the panel never shows a cleared
+  intermediate. Nothing is allocated when no panel is attached, and no call needs an "is it there" test:
+  `set_large(true)` is refused and the surface stays compact.
+- **Who switches.** The launcher run loop asks for large on its home and for compact everywhere else
+  (apps, Control Center, GameFront, notifications, voice, torch, remote). `open_app_def` and every
+  blocking modal (`nucleo_ui_message/menu/input/...`) claim compact before they draw. A switch returns
+  true and the caller repaints everything; the touch layer follows by itself (solo: no letterbox keys, the
+  whole panel is the gesture area — a tap means what is under it: top 24 px = Back, left 30 % = Left,
+  right 30 % = Right, centre = Enter; drag = arrows, hold = Back). The large home has no hint bar.
+- **Calibration first.** Large is granted only once a touch panel has a stored calibration (the targets
+  live in the letterbox, which solo does not have).
+
+### Making another screen large (the standard)
+
+1. Read the size from `d.width()/d.height()` (the launcher defines `W`/`H` this way) and keep the compact
+   numbers exactly as they are; add the large ones next to them (see `CAR_*` in `launcher_render.cpp`).
+2. Composite through `nucleo_screen_wide(W)` in strips of `c->height()` rows; never allocate a 320x240
+   buffer (150 KB at 16bpp does not exist on this board).
+3. Never read the panel back on the large surface (no `readRect`, scroll or alpha over panel content).
+4. Ask for large only where the screen is drawn by your code, compact everywhere else — the run loop's
+   `want_large` is the single place for launcher states; an app would declare it in its `nucleo_app_def_t`.
+5. Add `.large` scenes to `tools/ui-host/scenes.cpp` (`LARGE_SCENES`) and accept them with
+   `npm run ui:shots -- --update` after looking at `build/ui-host/sheets/*.large.png`.
+
+Next candidates: the Music app (tracks list + now playing; mind the shared SPI bus while the MP3 streams
+from the SD — redraw the progress at 1 Hz, not per frame) and the shared `app_ui` kit (title, tabs, list,
+rows, gauges), which would bring every kit-based app along.
+
 ## Diagnostics (tester)
 
 - **Test card** on the external panel's letterbox when touch is absent or `external_touch` is false:
@@ -211,6 +286,8 @@ Control Center and the games take touch with no change of their own.
 | Symptom | Likely cause / fix |
 |---|---|
 | Panel stays white | not attached — read `reason` in the report; or VCC/LED not powered |
+| Attached (log says mirroring) but still white | init garbled on long jumpers: `external_mhz` 10 |
+| `touch probe ... temp0=0 temp1=0` | nothing comes back on MISO: check T_DO (T_OUT) on G39, T_CS on G6, GND |
 | `no display found` | T_CS/T_DO/T_CLK miswired, or no touch on the module → `external: "on"` |
 | Colours negative / R↔B | `external_invert` / `external_rgb` |
 | Text mirrored left-right | `external_mirror: true` |
@@ -221,5 +298,5 @@ Control Center and the games take touch with no change of their own.
 
 ## Not yet
 
-No scaling (1:1, 240x135 centred), no native 320x240 layouts (phase 2), backlight follows
+No scaling of compact screens (1:1, 240x135 centred), native 320x240 only on the launcher home so far, backlight follows
 brightness only when `bl` is a GPIO, no hot-plug (detection at boot; plug with the device off).

@@ -1,23 +1,22 @@
-// Video app v2 — a native on-device player for NucleoOS .nfv clips (MJPEG 240x136 + a
-// sibling .mp3). The device cannot decode H.264/H.265 (no PSRAM, no hardware codec), so
-// clips are pre-converted on a PC with tools/nfv/encode.py into per-frame JPEGs that M5GFX
-// decodes for free, plus a mono low-bitrate MP3 played by the existing Helix task.
+// Video app — a native on-device player for NucleoOS .nfv v4 clips: whole-frame baseline JPEGs and IMA ADPCM
+// sound interleaved in one file (tools/nfv/nfv4.py, or Video Studio in the browser). The device cannot decode
+// H.264/H.265 (no PSRAM, no hardware codec), so clips are pre-converted. Older .nfv (v1-v3: frames + a sibling
+// .mp3, or tile-delta) are no longer played — the list shows them as such and tools/nfv/migrate.py carries a
+// v1/v2 clip over without its source video.
 //
 // Browser: a folder-aware fisheye list aligned with the Music app — folders first (amber, with
 // a recursive clip count), then .nfv files (blue, with duration and a green "continue watching"
 // mark). Enter descends / plays, Del goes up. Every row self-clears its own background so the
 // list is correct AND flicker-free both when the shared canvas is buffered and when a decoder
-// holds the RAM and we draw DIRECT (this was the v1 selection-page flicker: only the focused
-// row was cleared, the rest relied on the canvas pre-fill that's absent in direct mode).
+// holds the RAM and we draw DIRECT.
 //
 // Settings (TAB): a 4-tab sheet mirroring Music — PLAY / AUDIO / VIEW / LIBRARY — with a
 // persistent tab bar, toggle pills, sliders and action rows. Adds Autoplay, Repeat (Off/One/All),
 // Resume behaviour, start volume, brightness, sort order and "Continue Watching" management.
 // Persisted to /system/config/video.json.
 //
-// Playback (play_nfv) is a blocking modal: it owns the screen + keyboard until the clip ends or
-// the viewer backs out, frees the shared UI canvas to hand the contiguous block to the MP3
-// decoder, and pets the task watchdog every frame. When a clip ends naturally and Autoplay/Repeat
+// Playback (play_nfv -> play_nfv4) is a blocking modal: it owns the screen + keyboard until the clip ends or
+// the viewer backs out, and pets the task watchdog every frame. When a clip ends naturally and Autoplay/Repeat
 // is on, the next clip in the folder starts automatically. See docs/media.md and ANTI-FLICKER.md.
 #include "nucleo_app.h"
 #include "app_ui.h"
@@ -42,6 +41,10 @@ extern "C" {
 }
 
 #include "app_gfx.h"
+#include "nucleo_surface.h"     // two screens: the film plays on the external panel
+#include "nucleo_extdisp.h"     // ...and the Cardputer becomes its remote
+#include "nucleo_touch.h"       // taps: seek / pause / jump; a vertical drag = volume
+#include "nucleo_power.h"       // the perf lock: 240 MHz while a film plays
 #include "nucleo_exclusive.h"   // dedicated-mode RAM reclaim while a clip plays (Wi-Fi STA stays up)
 #include "esp_log.h"
 #include "esp_heap_caps.h"
@@ -70,24 +73,8 @@ static const unsigned short
 #define MAXE   64               // entries shown in the current folder (folders + clips)
 #define HEAD_H 20               // list context-header height
 
-// NFV1 header — must match tools/nfv/encode.py (little-endian, 32 bytes).
-#pragma pack(push, 1)
-typedef struct {
-    char     magic[4];        // "NFV1"
-    uint8_t  version;
-    uint8_t  flags;           // bit0 = sibling .mp3 exists, bit1 = inline seek index
-    uint16_t width;
-    uint16_t height;
-    uint16_t fps;
-    uint16_t reserved0;       // v2: index_stride
-    uint32_t frame_count;
-    uint32_t duration_ms;
-    uint32_t max_frame_bytes;
-    uint8_t  reserved1[6];    // v2: [0:4] = index_offset
-} nfv_header_t;
-#pragma pack(pop)
 
-struct VEntry { char name[72]; bool dir; uint16_t count; uint32_t dur; uint32_t resume; };
+struct VEntry { char name[72]; bool dir, old; uint16_t count; uint32_t dur; uint32_t resume; };   // old = pre-v4 clip
 
 // The folder listing lives in one malloc'd block held only while the app is OPEN and freed on
 // leave(), so the RAM (~5 KB) goes back to ANIMA (mirrors Files / Music). Guarded: if the alloc
@@ -233,15 +220,16 @@ static void rel_key(char *buf, size_t n, const char *name)
     snprintf(buf, n, "%s%s", p, name);
 }
 
-// Peek a clip's duration (seconds) from its NFV header — version-aware (v3 moved the field).
-static uint32_t nfv_duration_path(const char *vpath)
+// Peek a clip's duration (seconds) from its v4 header; *old (optional) = an .nfv of an older version.
+static uint32_t nfv_duration_path(const char *vpath, bool *old = nullptr)
 {
+    if (old) *old = false;
     FILE *f = fopen(vpath, "rb"); if (!f) return 0;
     uint8_t hb[64]; size_t got = fread(hb, 1, sizeof hb, f); fclose(f);
     if (got < 32 || memcmp(hb, "NFV1", 4)) return 0;
     auto le32 = [&](int o) { return (uint32_t)(hb[o] | (hb[o+1] << 8) | (hb[o+2] << 16) | ((uint32_t)hb[o+3] << 24)); };
-    if (hb[4] == 3) return got >= 64 ? le32(24) / 1000 : 0;   // v3: duration_ms at offset 24
-    return le32(18) / 1000;                                   // v1/v2: duration_ms at offset 18
+    if (hb[4] != 4) { if (old) *old = true; return 0; }       // v1-v3: no longer played
+    return le32(20) / 1000;                                   // v4: duration_ms at offset 20
 }
 
 // Count .nfv clips reachable under `abs`, descending a few levels; depth-capped so a deep tree
@@ -298,7 +286,7 @@ static void scan(void)
             if (!isdir && !is_nfv(e->d_name)) continue;     // hide non-clip files (.mp3 siblings, .idx, .mp4)
             VEntry *r = &st->e[s_n];
             snprintf(r->name, sizeof r->name, "%s", e->d_name);
-            r->dir = isdir; r->count = 0; r->dur = 0; r->resume = 0;
+            r->dir = isdir; r->old = false; r->count = 0; r->dur = 0; r->resume = 0;
             s_n++;
         }
         closedir(dir);                                      // close BEFORE recursing
@@ -307,7 +295,7 @@ static void scan(void)
         VEntry *r = &st->e[i];
         char c[320]; snprintf(c, sizeof c, "%s%s", base, r->name);
         if (r->dir) r->count = (uint16_t)count_clips(c, 0);
-        else        r->dur = nfv_duration_path(c);
+        else        r->dur = nfv_duration_path(c, &r->old);
         esp_task_wdt_reset();
     }
     qsort(st->e, s_n, sizeof(VEntry), cmp);                 // sort AFTER durations are known
@@ -519,82 +507,6 @@ static int64_t resume_prompt(const char *vpath, const char *title, uint32_t resu
     }
 }
 
-// One-time on-device seek index for v1 clips (no inline index). Walks the size-prefix chain ONCE
-// to build a sparse frame->byte table, cached on SD as "<video>.idx" so later resume/seek is an
-// instant O(1) jump. Returns an open FILE* to read offsets from (caller fcloses it), *base = byte
-// pos of offsets[0], *stride = frames per entry; NULL if it can't build.
-#define NFVX_STRIDE 48
-static FILE *video_index_sidecar(const char *vpath, FILE *f, const nfv_header_t *H, long fsz,
-                                 long *base, uint32_t *stride, bool *aborted)
-{
-    if (aborted) *aborted = false;
-    if (!H->frame_count) return NULL;
-    char ipath[288]; snprintf(ipath, sizeof ipath, "%s.idx", vpath);
-
-    FILE *sf = fopen(ipath, "rb");
-    if (sf) {                                                 // reuse a valid cache
-        char m[4]; uint8_t ver = 0, pad = 0; uint16_t stp = 0; uint32_t fc = 0, cnt = 0;
-        bool ok = fread(m, 1, 4, sf) == 4 && memcmp(m, "NFVX", 4) == 0 &&
-                  fread(&ver, 1, 1, sf) == 1 && fread(&pad, 1, 1, sf) == 1 &&
-                  fread(&stp, 1, 2, sf) == 2 && fread(&fc, 1, 4, sf) == 4 && fread(&cnt, 1, 4, sf) == 4 &&
-                  ver == 1 && stp > 0 && fc == H->frame_count && cnt == (H->frame_count + stp - 1) / stp;
-        if (ok) { *base = 16; *stride = stp; return sf; }
-        fclose(sf);                                           // stale/corrupt -> rebuild
-    }
-
-    char tpath[296]; snprintf(tpath, sizeof tpath, "%s.idxtmp", vpath);
-    FILE *w = fopen(tpath, "wb"); if (!w) { ESP_LOGW(V_TAG, "idx: cannot create %s (errno %d)", tpath, errno); return NULL; }
-    uint16_t stp = NFVX_STRIDE; uint32_t fc = H->frame_count, cnt = (fc + stp - 1) / stp;
-    uint8_t hdr[16]; memcpy(hdr, "NFVX", 4); hdr[4] = 1; hdr[5] = 0;
-    memcpy(hdr + 6, &stp, 2); memcpy(hdr + 8, &fc, 4); memcpy(hdr + 12, &cnt, 4);
-    fwrite(hdr, 1, 16, w);
-
-    // draw the wait screen once — only the percentage chip refreshes in the loop below
-    d.fillScreen(BG);
-    d.setTextSize(2); d.setTextColor(ACC, BG);
-    { const char *h = TR("Preparazione indice", "Building index"); d.setCursor((240 - (int)strlen(h) * 12) / 2, 8); d.print(h); }
-    d.drawFastHLine(0, 28, 240, DIM);
-    d.setTextSize(1); d.setTextColor(DIM, BG);
-    { const char *s1 = TR("Analisi fotogrammi in corso.", "Scanning the frames."); d.setCursor((240 - (int)strlen(s1) * 6) / 2, 38); d.print(s1); }
-    { const char *s2 = TR("Prima apertura: puo' richiedere", "First open: this can take"); d.setCursor((240 - (int)strlen(s2) * 6) / 2, 50); d.print(s2); }
-    { const char *s3 = TR("qualche minuto di attesa.", "a few minutes."); d.setCursor((240 - (int)strlen(s3) * 6) / 2, 60); d.print(s3); }
-    d.drawFastHLine(0, 104, 240, DIM);
-    { const char *es = TR("[ ESC ]  annulla", "[ ESC ]  cancel"); d.setCursor((240 - (int)strlen(es) * 6) / 2, 110); d.print(es); }
-
-    fseek(f, sizeof *H, SEEK_SET);
-    long off = (long)sizeof *H; bool ok = true;
-    for (uint32_t i = 0; i < fc; i++) {
-        if ((i % stp) == 0) { uint32_t o = (uint32_t)off; fwrite(&o, 1, 4, w); }
-        uint32_t s; if (fread(&s, 1, 4, f) != 4) { ok = false; break; }
-        off += 4 + (long)s;
-        if (off > fsz) { ok = false; break; }
-        if (fseek(f, (long)s, SEEK_CUR) != 0) { ok = false; break; }
-        if ((i & 0x3f) == 0) {                                // every 64 frames: pet WDT, poll ESC, update %
-            esp_task_wdt_reset();
-            for (int g = 0; g < 8; g++) {                     // drain the key queue so an ESC tap is never missed
-                nucleo_key_t k = nucleo_kbd_read();
-                if (k.key == NK_NONE && k.ch == 0) break;
-                if (k.key == NK_BACK || k.key == NK_DEL || k.ch == '`' || k.ch == 'q') {
-                    if (aborted) *aborted = true;
-                    ok = false;
-                    break;
-                }
-            }
-            if (!ok) break;                                   // aborted -> bail out of the scan
-            char pb[6]; snprintf(pb, sizeof pb, "%d%%", (int)((int64_t)i * 100 / fc));
-            d.fillRect(0, 70, 240, 30, BG);
-            d.setTextSize(3); d.setTextColor(FG, BG);
-            d.setCursor((240 - (int)strlen(pb) * 18) / 2, 74); d.print(pb);
-        }
-    }
-    fclose(w);
-    if (!ok) { remove(tpath); return NULL; }                  // aborted or read error: no half cache
-    remove(ipath); rename(tpath, ipath);                      // publish atomically
-    ESP_LOGI(V_TAG, "idx: cached %u entries for %s", (unsigned)cnt, vpath);
-    sf = fopen(ipath, "rb"); if (!sf) { ESP_LOGW(V_TAG, "idx: reopen failed (errno %d)", errno); return NULL; }
-    *base = 16; *stride = stp; return sf;
-}
-
 // Diagnostic breadcrumb to SD — survives a freeze+watchdog-reboot, read back over WiFi via
 // /api/fs/read /data/.vtrace. Each call appends "<tag> free=.. lrg=.. t=.." (internal heap free +
 // largest contiguous block + ms). `reset` truncates (a new playback session). The last line written
@@ -610,636 +522,593 @@ static void vtrace(const char *tag, bool reset)
     fclose(f);
 }
 
-// ===== NFV v3 (tile-delta) playback =========================================================
-// v3 splits each frame into a grid of equal tiles and stores, per frame, ONLY the tiles that
-// changed (see tools/nfv/nfv3.py). The previous frame already lives in the ST7789's own GRAM
-// (we draw direct, no RAM framebuffer), so a partial update costs zero extra RAM — in fact the
-// reassembly buffer here (~template + one tile) is far smaller than v2's full-frame buffer.
+// ---- two screens --------------------------------------------------------------------------------------------
+// With an external panel the film plays THERE, native (a 320x240 clip 1:1, a 240-wide one centred). A 320-wide
+// clip on the Cardputer alone is scaled 3/4 (every fourth row and column dropped). The external panel's controller is a 30 px bar
+// at its foot (in the letterbox band when there is one, else over the picture while it shows); the Cardputer
+// becomes the remote: title, a big clock, the usual controller bar. Touch: the picture's left / centre /
+// right third = -10 s / pause / +10 s, a vertical drag = volume, the bottom strip = jump to that point.
+struct VGeom { bool big, switched; float sc; int oy, oh; };
+static const int VBAR = 30;                                  // the external panel's controller bar
+static VGeom vgeom_begin(int vis_w, int vis_h)
+{
+    VGeom g = {};
+    if (nucleo_surface_large_ok()) {
+        if (!nucleo_surface_large()) g.switched = nucleo_surface_set_large(true);
+        g.big = nucleo_surface_large();
+    }
+    const int pw = d.width(), ph = d.height();
+    g.sc = (float)pw / (vis_w > 0 ? vis_w : 240);
+    g.oh = (int)((vis_h > 0 ? vis_h : 135) * g.sc + 0.5f);
+    g.oy = g.oh >= ph ? (ph - g.oh) / 2 : (g.big ? (ph - g.oh) / 2 : 0);   // compact keeps the picture on top
+    return g;
+}
+static void vgeom_end(const VGeom &g)
+{
+    nucleo_app_set_gfx(nullptr);
+    nucleo_touch_clear(); nucleo_touch_commit();
+    if (g.switched) nucleo_surface_set_large(false);
+}
+#define VSEEK_N 12                                           // jump points along the bottom strip
+static void vtouch(const VGeom &g)
+{
+    nucleo_touch_clear();
+    const int pw = d.width(), ph = d.height();
+    const int by = g.big ? ph - VBAR : BARY;                 // the bottom strip (the controller bar)
+    const int py = g.oy > 0 ? g.oy : 0, pb = by;             // the picture above it
+    nucleo_touch_add(0, py, pw / 3, pb - py, NK_LEFT, ',');
+    nucleo_touch_add(pw / 3, py, pw - 2 * (pw / 3), pb - py, NK_ENTER, 0);
+    nucleo_touch_add(pw - pw / 3, py, pw / 3, pb - py, NK_RIGHT, '/');
+    for (int k = 0; k < VSEEK_N; k++)
+        nucleo_touch_add(k * pw / VSEEK_N, by, pw / VSEEK_N + 1, ph - by, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + k));
+    if (g.big && g.oy >= 16) nucleo_touch_add(0, 0, pw / 4, g.oy, NK_BACK, 0);   // the top band's left: stop
+    nucleo_touch_add_scroll(0, py, pw, pb - py, 24, NK_DOWN, 0, NK_UP, 0);         // drag up = louder
+    nucleo_touch_commit();
+}
+// The external panel's bar: title, time, progress. `full` repaints its background (else in place).
+static void vbar_big(const char *title, uint32_t el, uint32_t tot, bool paused, bool full)
+{
+    const int W = d.width(), y = d.height() - VBAR;
+    if (full) { d.fillRect(0, y, W, VBAR, CO_BG); d.drawFastHLine(0, y, W, CO_LINE); }
+    d.setFont(&fonts::Font2); d.setTextSize(1);
+    char tm[24], a[8], b[8]; fmt_mmss(a, sizeof a, el); fmt_mmss(b, sizeof b, tot);
+    snprintf(tm, sizeof tm, "%s%s / %s", paused ? "|| " : "", a, b);
+    const int tw = (int)d.textWidth(tm);
+    char t[64]; snprintf(t, sizeof t, "%s", title ? title : "");
+    while (t[0] && (int)d.textWidth(t) > W - tw - 24) t[strlen(t) - 1] = 0;
+    d.setTextColor(CO_TXT, CO_BG); d.setCursor(8, y + 3); d.print(t);
+    const int te = 8 + (int)d.textWidth(t);
+    d.fillRect(te, y + 3, W - tw - 8 - te, 16, CO_BG);
+    d.setTextColor(paused ? ACC : CO_MUT, CO_BG); d.setCursor(W - 8 - tw, y + 3); d.print(tm);
+    const int px = 8, pw = W - 16, fill = tot ? (int)((int64_t)pw * el / tot) : 0;
+    d.fillRect(px, y + 22, fill, 4, ACC);
+    d.fillRect(px + fill, y + 22, pw - fill, 4, CO_CHIP);
+    d.setFont(&fonts::Font0);
+}
+// The Cardputer as the remote while the film is on the external panel.
+static void vremote(const char *title, const char *next_title, uint32_t el, uint32_t tot, bool paused, bool muted,
+                    int vol, int bri, bool full, bool seeking, int sdir, int sstep, bool near_end)
+{
+    LovyanGFX *ig = (LovyanGFX *)nucleo_extdisp_internal_gfx();
+    if (!ig) return;
+    nucleo_app_set_gfx(ig);
+    d.startWrite();
+    if (full) {
+        d.fillRect(0, 0, 240, BARY, CO_BG);
+        d.setFont(&fonts::Font2); d.setTextColor(CO_MUT, CO_BG);
+        char t[64]; snprintf(t, sizeof t, "%s", title ? title : "");
+        while (t[0] && (int)d.textWidth(t) > 224) t[strlen(t) - 1] = 0;
+        d.setCursor(8, 4); d.print(t);
+    }
+    char a[8], b[12]; fmt_mmss(a, sizeof a, s_time_rem && tot > el ? tot - el : el);
+    d.setFont(&fonts::Font7); d.setTextColor(paused ? CO_MUT : CO_TXT, CO_BG);
+    d.setCursor(8, 26); d.print(a);
+    d.setFont(&fonts::Font2); d.setTextColor(CO_MUT, CO_BG);
+    snprintf(b, sizeof b, "/ %s", ""); fmt_mmss(b + 2, sizeof b - 2, tot);
+    d.setCursor(240 - 8 - (int)d.textWidth(b), 58); d.print(b);
+    d.setFont(&fonts::Font0);
+    draw_controller(title, next_title, el, tot, paused, muted, vol, bri, full, seeking, sdir, sstep, near_end);
+    d.endWrite();
+    nucleo_app_set_gfx(nullptr);
+}
+
+#define V4_RDBUF_MIN 4096            // smallest stdio buffer the reader falls back to
+
+// ===== NFV v4 (interleaved MJPEG + IMA ADPCM) — the player ====================================================
+// Format and rationale: tools/nfv/nfv4.py. In short: ONE file, ONE reader (this loop, front to back, nothing
+// else on the card — no MP3 task, so no file-system / SPI-bus deadlock), whole-frame baseline JPEGs decoded by
+// esp_new_jpeg (SIMD on the S3) in 16-row strips that go straight to the panel, and IMA ADPCM audio written to
+// the I2S. The I2S queue is the clock: a frame that would be late is dropped (every frame stands alone), the
+// sound never stops.
 //
-// Every tile is encoded with the SAME quant + Huffman tables and the SAME dimensions, so the
-// JPEG header is identical for all of them: we store it ONCE (the "template") and each tile
-// carries only its entropy scan. A tile's full JPEG is rebuilt as `template + scan + FFD9` —
-// byte-identical to what the PC encoder produced, so M5GFX's baseline decoder accepts it (proven
-// by a host round-trip in tools/nfv/test_nfv3.py).
+// Audio pump. The driver cannot say how much room its DMA queue has, and a blocking write would hold the reader
+// back, so the queue is modelled: queued = samples written - samples played (wall clock x rate). A block is
+// written only when it fits (it never blocks), the queue is topped up between the strips of every frame, and
+// an underrun re-anchors the model. The I2S queue is I2S_CHANNEL_DEFAULT_CONFIG's 6 x 240 frames.
 //
-// Because delta frames are NOT self-contained, the player can't byte-jump to an arbitrary frame:
-// it seeks to the nearest preceding keyframe (indexed) and replays the few deltas up to the
-// target. Forward catch-up just applies the intervening deltas (cheap). Audio is embedded as the
-// file's last section (played via nucleo_audio_play_window) or a sibling .mp3 (fallback).
-static int play_nfv3(const char *vpath, const char *title, const char *reskey, int64_t start_ms,
+// RAM while playing: the decoder (~10 KB), one 16-row strip (W x 16 x 2 = 10 KB at 320), one compressed frame
+// (the header's max_jpeg, <= 24 KB by the encoder's cap), 4 ADPCM blocks + one PCM block (~2 KB), 4 KB stdio
+// buffer. Separate blocks, each well under the ~32 KB contiguous a Solo boot leaves.
+// (4 ADPCM blocks above: V4_AQ, 8 x 256 B.)
+#include "esp_jpeg_dec.h"
+
+static const int8_t  IMA_IDX[8] = { -1, -1, -1, -1, 2, 4, 6, 8 };
+static const int16_t IMA_STEP[89] = {
+    7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 19, 21, 23, 25, 28, 31, 34, 37, 41, 45, 50, 55, 60, 66, 73, 80, 88, 97, 107,
+    118, 130, 143, 157, 173, 190, 209, 230, 253, 279, 307, 337, 371, 408, 449, 494, 544, 598, 658, 724, 796, 876, 963,
+    1060, 1166, 1282, 1411, 1552, 1707, 1878, 2066, 2272, 2499, 2749, 3024, 3327, 3660, 4026, 4428, 4871, 5358, 5894,
+    6484, 7132, 7845, 8630, 9493, 10442, 11487, 12635, 13899, 15289, 16818, 18500, 20350, 22385, 24623, 27086, 29794,
+    32767 };
+// One mono IMA ADPCM block (WAV layout: i16 predictor, u8 step index, u8 0, then nibbles low first) -> PCM.
+static int ima_block(const uint8_t *b, int len, int16_t *out)
+{
+    if (len < 4) return 0;
+    int pred = (int16_t)(b[0] | (b[1] << 8)), idx = b[2] > 88 ? 88 : b[2], n = 0;
+    out[n++] = (int16_t)pred;
+    for (int i = 4; i < len; i++) {
+        for (int s = 0; s < 2; s++) {
+            const int nib = s ? (b[i] >> 4) : (b[i] & 15), step = IMA_STEP[idx];
+            int diff = step >> 3;
+            if (nib & 1) diff += step >> 2;
+            if (nib & 2) diff += step >> 1;
+            if (nib & 4) diff += step;
+            pred += (nib & 8) ? -diff : diff;
+            if (pred > 32767) pred = 32767;
+            if (pred < -32768) pred = -32768;
+            idx += IMA_IDX[nib & 7];
+            if (idx < 0) idx = 0;
+            if (idx > 88) idx = 88;
+            out[n++] = (int16_t)pred;
+        }
+    }
+    return n;
+}
+
+
+#define V4_AQ   8                    // ADPCM blocks held ahead of the I2S queue (~256 ms at 256 B / 16 kHz)
+#define V4_QCAP (6 * 240)            // the I2S DMA queue, in samples (I2S_CHANNEL_DEFAULT_CONFIG: 6 x 240)
+static int play_nfv4(const char *vpath, const char *title, const char *reskey, int64_t start_ms,
                      const char *next_title)
 {
     FILE *f = fopen(vpath, "rb");
     if (!f) return PR_STOP;
+    // One SD read per 16 KB (about two frames): fewer, longer transfers on the bus the card shares with the
+    // external panel. The media-center boot (no radio) leaves the RAM for it; 4 KB if it does not.
+    size_t rdsz = 32768;                                 // ~3 frames per card read (157 KB free in the Solo boot)
+    char *rdbuf = (char *)malloc(rdsz);
+    if (!rdbuf) { rdsz = 16384; rdbuf = (char *)malloc(rdsz); }
+    if (!rdbuf) { rdsz = V4_RDBUF_MIN; rdbuf = (char *)malloc(rdsz); }
+    if (rdbuf) setvbuf(f, rdbuf, _IOFBF, rdsz);
     uint8_t hb[64];
-    if (fread(hb, 1, 64, f) != 64 || memcmp(hb, "NFV1", 4) || hb[4] != 3) { fclose(f); return PR_STOP; }
-    auto le16 = [&](int o) { return (uint16_t)(hb[o] | (hb[o+1] << 8)); };
-    auto le32 = [&](int o) { return (uint32_t)(hb[o] | (hb[o+1] << 8) | (hb[o+2] << 16) | ((uint32_t)hb[o+3] << 24)); };
+    if (fread(hb, 1, 64, f) != 64 || memcmp(hb, "NFV1", 4) || hb[4] != 4) { fclose(f); free(rdbuf); return PR_STOP; }
+    auto le16 = [&](int o) { return (uint32_t)(hb[o] | (hb[o + 1] << 8)); };
+    auto le32 = [&](int o) { return (uint32_t)(hb[o] | (hb[o + 1] << 8) | (hb[o + 2] << 16) | ((uint32_t)hb[o + 3] << 24)); };
+    const int W = (int)le16(6), Hc = (int)le16(8), fps = le16(10) ? (int)le16(10) : 15, rate = (int)le16(12);
+    const bool has_audio = (hb[5] & 1) && hb[14] == 1 && rate > 0;
+    const bool has_mask = (hb[5] & 2) != 0;              // video chunks say which 16-row strips changed
+    const uint32_t nfr = le32(16), dur_ms = le32(20), max_jpeg = le32(24);
+    const int ablock = (int)le16(28), aspb = (int)le16(30);
+    const uint32_t index_off = le32(32), index_count = le32(36);
+    const int vis_w = le32(40) ? (int)le32(40) : W, vis_h = le32(44) ? (int)le32(44) : Hc;
+    if (W <= 0 || W > 320 || (W & 15) || Hc <= 0 || Hc > 320 || (Hc & 15) || !max_jpeg || max_jpeg > 48000 ||
+        (has_audio && (ablock < 8 || ablock > 2048 || aspb < 1 || aspb > 4096))) {
+        fclose(f); free(rdbuf); return PR_STOP;
+    }
 
-    const uint8_t  flags        = hb[5];
-    uint16_t       fps          = le16(10); if (!fps) fps = 12;
-    const uint8_t  tile_w       = hb[16], tile_h = hb[17], cols = hb[18], rows = hb[19];
-    const uint32_t frame_count  = le32(20);
-    const uint32_t duration_hdr = le32(24);
-    uint32_t       max_tile     = le32(28);
-    const uint32_t template_off = le32(32);
-    const uint16_t template_len = le16(36);
-    const uint32_t index_off    = le32(40);
-    const uint32_t index_count  = le32(44);
-    const uint32_t audio_off    = le32(48);
-    const uint32_t audio_len    = le32(52);
-    const int      tile_count   = (int)cols * (int)rows;
-
-    if (!frame_count || !template_len || tile_count <= 0 || tile_count > 255) { fclose(f); return PR_STOP; }
-    if (max_tile < 64)    max_tile = 64;
-    if (max_tile > 60000) max_tile = 60000;            // u16 scan field caps it anyway
-
-    // ONE reusable JPEG buffer: [ shared template | tile scan | FF D9 ]. The template prefix is
-    // written once; only the scan region is refilled per tile. Far smaller than v2's frame buffer,
-    // so the big freed block goes to the Helix MP3 decoder (silent-audio OOM avoided).
     nucleo_app_release_buffers();
-    const size_t jcap = (size_t)template_len + max_tile + 2;
-    uint8_t *jbuf = (uint8_t *)malloc(jcap);
-    if (!jbuf) {
+    uint8_t  *jin   = (uint8_t *)malloc(max_jpeg);
+    uint16_t *strip = (uint16_t *)jpeg_calloc_align((size_t)W * 16 * 2, 16);
+    uint8_t  *aq    = has_audio ? (uint8_t *)malloc((size_t)V4_AQ * ablock) : nullptr;
+    int16_t  *pcm   = has_audio ? (int16_t *)malloc((size_t)aspb * 2) : nullptr;
+    jpeg_dec_handle_t dec = nullptr;
+    jpeg_dec_config_t dcfg = DEFAULT_JPEG_DEC_CONFIG();
+    dcfg.output_type = JPEG_PIXEL_FORMAT_RGB565_BE;       // the panel's own byte order: a raw, unconverted push
+    dcfg.block_enable = true;                             // 16 rows at a time (4:2:0 MCU), never a whole frame
+    const bool ok_mem = jin && strip && (!has_audio || (aq && pcm)) && jpeg_dec_open(&dcfg, &dec) == JPEG_ERR_OK;
+    {
+        char t[112];
+        snprintf(t, sizeof t, "nfv4_open %dx%d fps=%d audio=%d/%d max_jpeg=%u ok=%d", W, Hc, fps, (int)has_audio, rate,
+                 (unsigned)max_jpeg, (int)ok_mem);
+        vtrace(t, false);
+    }
+    auto cleanup = [&]() {
+        if (dec) jpeg_dec_close(dec);
+        free(jin); if (strip) jpeg_free_align(strip); free(aq); free(pcm);
+        fclose(f); free(rdbuf);
+    };
+    if (!ok_mem) {
         d.fillScreen(0); d.setTextColor(CO_TXT, 0); d.setTextSize(1);
         d.setCursor(20, 60); d.print("Not enough memory to play");
-        vTaskDelay(pdMS_TO_TICKS(1500)); fclose(f); return PR_STOP;
+        vTaskDelay(pdMS_TO_TICKS(1500));
+        cleanup();
+        return PR_STOP;
     }
-    fseek(f, template_off, SEEK_SET);
-    if (fread(jbuf, 1, template_len, f) != template_len) { free(jbuf); fclose(f); return PR_STOP; }
-    const long frames_begin = (long)template_off + template_len;
 
+    nucleo_power_perf_begin();                            // full clock while a film plays (DFS idles at 80 MHz)
+    const VGeom G = vgeom_begin(vis_w, vis_h);
+    const int pw = d.width(), ph = d.height();
+    // Placement: native when the panel is wide enough (centred), else 3/4 (a 320 clip on the Cardputer: every
+    // fourth row and column dropped, in place, inside the strip).
+    const bool down = W > pw;
+    const int OW = down ? W * 3 / 4 : W, OH = down ? Hc * 3 / 4 : Hc;
+    const int ox = (pw - OW) / 2, oy = (ph - OH) / 2;
+    d.setSwapBytes(false);                               // the strips are already in panel order
     d.fillScreen(0);
-
-    // ---- timing ----
-    const uint32_t tot_s  = frame_count ? (frame_count - 1) / fps : 0;
-    const uint32_t dur_ms = duration_hdr ? duration_hdr : (uint32_t)((uint64_t)frame_count * 1000 / fps);
-    if (start_ms < 0) start_ms = 0;
-    if (dur_ms && start_ms > (int64_t)dur_ms) start_ms = dur_ms;
-
-    // ---- audio: embedded window (preferred) or sibling .mp3 (fallback) ----
-    char apath[256]; snprintf(apath, sizeof apath, "%s", vpath);
-    { char *dot = strrchr(apath, '.'); if (dot) snprintf(dot, sizeof apath - (size_t)(dot - apath), ".mp3"); }  // bound to remaining space (no overflow on a late dot)
-    bool have_audio = false;
-    if (audio_len) {
-        nucleo_audio_play_window(vpath, (uint32_t)start_ms, dur_ms, audio_off, audio_len);
-        have_audio = true;
-    } else if ((flags & 1) == 0 && access(apath, R_OK) == 0) {
-        nucleo_audio_play_at(apath, (uint32_t)start_ms, dur_ms);
-        have_audio = true;
+    vtouch(G);
+    const bool audio_ok = has_audio && nucleo_audio_pcm_open(rate, 1) == ESP_OK;
+    {
+        char t[96];
+        snprintf(t, sizeof t, "nfv4_geom panel=%dx%d big=%d down=%d at=%d,%d audio_ok=%d", pw, ph, (int)G.big, (int)down,
+                 ox, oy, (int)audio_ok);
+        vtrace(t, false);
     }
-    if (have_audio) {
-        if (s_vol_default > 0) nucleo_audio_set_volume(s_vol_default);
-        nucleo_audio_fade_in(180);
-    }
+    if (audio_ok && s_vol_default > 0) nucleo_audio_set_volume(s_vol_default);
+    if (audio_ok) nucleo_audio_fade_in(250);             // no click on the first sample
 
-    const int64_t AUDIO_LAT_MS = 70;
-    int64_t t0 = esp_timer_get_time() - start_ms * 1000;
-    const int64_t period = 1000000 / fps;
+    // ---- clocks ---------------------------------------------------------------------------------------------
+    int64_t a_t0 = 0;                    // when the audio anchor's first sample started playing (0 = not yet)
+    uint64_t a_written = 0;              // samples written since the anchor
+    int64_t a_base_ms = 0;               // clip time of the anchor
+    int64_t v_t0 = esp_timer_get_time(); // wall-clock anchor when there is no audio (yet)
+    int64_t v_base_ms = 0;
+    uint32_t underruns = 0;
+    auto pos_ms = [&]() -> int64_t {
+        const int64_t now = esp_timer_get_time();
+        if (audio_ok && a_t0) {
+            int64_t played = (now - a_t0) * rate / 1000000;
+            if (played > (int64_t)a_written) played = (int64_t)a_written;
+            return a_base_ms + played * 1000 / rate;
+        }
+        return v_base_ms + (now - v_t0) / 1000;
+    };
+    // ---- audio queue ----------------------------------------------------------------------------------------
+    int aq_len[V4_AQ] = {}; uint32_t aq_stamp[V4_AQ] = {}; int aq_head = 0, aq_n = 0;
+    uint32_t a_skip_until = 0;           // after a seek: samples before this are dropped
+    auto pump_audio = [&]() {
+        if (!audio_ok) { aq_n = 0; return; }
+        while (aq_n > 0) {
+            const int64_t now = esp_timer_get_time();
+            if (a_t0) {
+                int64_t queued = (int64_t)a_written - (now - a_t0) * rate / 1000000;
+                if (queued < 0) {                        // ran dry: re-anchor (the gap was silence)
+                    a_base_ms += (int64_t)a_written * 1000 / rate;
+                    a_t0 = now; a_written = 0; underruns++; queued = 0;
+                }
+                if (queued + aspb > V4_QCAP) break;      // no room: writing now would block
+            }
+            const int slot = aq_head;
+            int n = ima_block(aq + (size_t)slot * ablock, aq_len[slot], pcm);
+            int drop = 0;
+            if (a_skip_until > aq_stamp[slot]) drop = (int)(a_skip_until - aq_stamp[slot]);
+            if (drop > n) drop = n;
+            if (n - drop > 0) {
+                if (!a_t0) { a_t0 = now; a_written = 0; a_base_ms = (int64_t)(aq_stamp[slot] + drop) * 1000 / rate; }
+                nucleo_audio_pcm_write(pcm + drop, (size_t)(n - drop) * 2);
+                a_written += (uint64_t)(n - drop);
+            }
+            a_skip_until = 0;
+            aq_head = (aq_head + 1) % V4_AQ; aq_n--;
+        }
+    };
+    // ---- picture ----------------------------------------------------------------------------------------------
+    auto push_strip = [&](int y0, int rows) {
+        if (!down) { d.pushImage(ox, oy + y0, W, rows, strip); return; }
+        int outr = 0;                                    // 3/4 nearest, in place (destinations never pass sources)
+        for (int r = 0; r < rows; r++) {
+            if (((y0 + r) & 3) == 3) continue;
+            const uint16_t *src = strip + (size_t)r * W;
+            uint16_t *dst = strip + (size_t)outr * OW;
+            for (int c = 0, o = 0; c < W; c++) if ((c & 3) != 3) dst[o++] = src[c];
+            outr++;
+        }
+        d.pushImage(ox, oy + y0 * 3 / 4, OW, outr, strip);
+    };
+    uint32_t pf_dec = 0, pf_rd = 0, pf_shown = 0, pf_late = 0; int64_t pf_t0 = esp_timer_get_time();
+    // Only the strips that changed go over the bus (the bus the card shares is the bottleneck: ~31 ms for a
+    // whole 320x240 frame at 40 MHz). Frames dropped as late leave their changes in `pend_mask` for the next
+    // one; `full` repaints everything (start, seek, the bar leaving the picture, the help sheet closing).
+    uint16_t v_mask = 0xFFFF, pend_mask = 0;
+    bool full = true;
+    uint32_t pf_jdec = 0, pf_strips = 0;
+    uint32_t pf_iter = 0, pf_slow = 0, pf_keys = 0; int32_t pf_lateby = 0; int64_t pf_prev = 0;   // loop health
+    auto decode_frame = [&](uint32_t len) -> bool {
+        jpeg_dec_io_t io = {};
+        io.inbuf = jin; io.inbuf_len = (int)len;
+        jpeg_dec_header_info_t info;
+        if (jpeg_dec_parse_header(dec, &io, &info) != JPEG_ERR_OK || info.width != W) return false;
+        int cnt = 0, olen = 0;
+        jpeg_dec_get_process_count(dec, &cnt);
+        jpeg_dec_get_outbuf_len(dec, &olen);
+        if (cnt <= 0 || olen > W * 16 * 2) return false;
+        int y = 0;
+        const uint16_t send = (full || !has_mask) ? 0xFFFF : (uint16_t)(v_mask | pend_mask);
+        for (int k = 0; k < cnt; k++) {
+            io.outbuf = (uint8_t *)strip;
+            const int64_t j0 = esp_timer_get_time();
+            if (jpeg_dec_process(dec, &io) != JPEG_ERR_OK) return false;
+            pf_jdec += (uint32_t)(esp_timer_get_time() - j0);
+            const int rows = io.out_size / (W * 2);
+            if (k >= 16 || (send >> k) & 1) { push_strip(y, rows); pf_strips++; }
+            y += rows;
+            pump_audio();                                // keep the sound fed while the picture paints
+        }
+        return true;
+    };
 
-    // ---- frame engine ----------------------------------------------------------------------
-    // Invariant: `cur` = last fully-rendered frame; the file is positioned to read frame cur+1
-    // (== next_to_read). seek_keyframe() repositions both; render_one() paints one frame's tiles.
-    int64_t cur = -1;
-    int64_t next_to_read = 0;
-    bool    force_resync = true;       // first paint must seek to a keyframe
-
-    // WDT-safe far seek (same rationale as play_nfv's seek_far): hop in bounded steps, pet between,
-    // so a multi-second cluster-chain walk on a big v3 clip can't trip the 8s task-WDT. Rewind base is
-    // frames_begin (the v3 frame region start).
-    auto seek_far = [&](long off) {
-        if (off < frames_begin) off = frames_begin;
+    // ---- the stream ---------------------------------------------------------------------------------------------
+    long fpos = 64;                                      // file position, tracked (no ftell per chunk)
+    bool have_v = false, eof = false;
+    uint32_t v_len = 0, v_stamp = 0, v_skip_until = 0;
+    int64_t cur_frame = -1;
+    auto skip_bytes = [&](uint32_t n) -> bool {          // read through (a seek would drop the stdio buffer)
+        while (n) { const uint32_t k = n > max_jpeg ? max_jpeg : n; if (fread(jin, 1, k, f) != k) return false; n -= k; }
+        return true;
+    };
+    auto read_chunk = [&]() -> bool {                    // one chunk into the audio queue or the frame slot
+        uint8_t ch[12];
+        if ((uint32_t)fpos + 12 > index_off || fread(ch, 1, 12, f) != 12) { eof = true; return false; }
+        const uint32_t len = ch[4] | (ch[5] << 8) | (ch[6] << 16) | ((uint32_t)ch[7] << 24);
+        const uint32_t stamp = ch[8] | (ch[9] << 8) | (ch[10] << 16) | ((uint32_t)ch[11] << 24);
+        fpos += 12 + (long)len;
+        if (ch[0] == 2 && len <= (uint32_t)ablock && audio_ok) {
+            if (a_skip_until && stamp + (uint32_t)aspb <= a_skip_until) return skip_bytes(len);
+            const int slot = (aq_head + aq_n) % V4_AQ;
+            if (fread(aq + (size_t)slot * ablock, 1, len, f) != len) { eof = true; return false; }
+            aq_len[slot] = (int)len; aq_stamp[slot] = stamp; aq_n++;
+            return true;
+        }
+        if (ch[0] == 1 && len <= max_jpeg) {
+            const uint16_t m = (uint16_t)(ch[2] | (ch[3] << 8));
+            if (stamp < v_skip_until) { pend_mask |= m; return skip_bytes(len); }
+            if (fread(jin, 1, len, f) != len) { eof = true; return false; }
+            have_v = true; v_len = len; v_stamp = stamp; v_mask = m;
+            return true;
+        }
+        return skip_bytes(len);
+    };
+    auto seek_far = [&](long off) {                      // WDT-safe hops (FATFS walks the cluster chain)
         long pos = ftell(f);
-        if (pos < 0 || off < pos) { fseek(f, frames_begin, SEEK_SET); pos = frames_begin; }
+        if (pos < 0 || off < pos) { fseek(f, 64, SEEK_SET); pos = 64; }
         const long STEP = 2L * 1024 * 1024;
         while (off - pos > STEP) { fseek(f, STEP, SEEK_CUR); pos += STEP; esp_task_wdt_reset(); }
         fseek(f, off - pos, SEEK_CUR);
     };
-
-    auto seek_keyframe = [&](int64_t target) {
-        long off = frames_begin; uint32_t kf = 0;
-        if (index_count) {
-            int L = 0, R = (int)index_count - 1, a = 0;
-            uint8_t eb[8];
-            while (L <= R) {                                   // largest keyframe idx <= target
-                int mid = (L + R) / 2;
-                esp_task_wdt_reset();                          // index probes on a big file are slow
+    auto seek_ms = [&](int64_t ms) {
+        if (ms < 0) ms = 0;
+        if (dur_ms && ms > (int64_t)dur_ms - 500) ms = (int64_t)dur_ms - 500;
+        if (ms < 0) ms = 0;
+        const uint32_t tf = (uint32_t)(ms * fps / 1000);
+        long off = 64; uint32_t kf = 0;
+        if (index_count) {                               // the last seek point at or before the target
+            int L = 0, R = (int)index_count - 1, a = 0; uint8_t eb[8];
+            while (L <= R) {
+                const int mid = (L + R) / 2;
+                esp_task_wdt_reset();
                 fseek(f, (long)index_off + (long)mid * 8, SEEK_SET);
                 if (fread(eb, 1, 8, f) != 8) break;
-                uint32_t fi = (uint32_t)(eb[0] | (eb[1]<<8) | (eb[2]<<16) | ((uint32_t)eb[3]<<24));
-                if (fi <= (uint32_t)target) { a = mid; L = mid + 1; } else { R = mid - 1; }
+                const uint32_t fi = eb[0] | (eb[1] << 8) | (eb[2] << 16) | ((uint32_t)eb[3] << 24);
+                if (fi <= tf) { a = mid; L = mid + 1; } else R = mid - 1;
             }
             fseek(f, (long)index_off + (long)a * 8, SEEK_SET);
             if (fread(eb, 1, 8, f) == 8) {
-                kf  = (uint32_t)(eb[0] | (eb[1]<<8) | (eb[2]<<16) | ((uint32_t)eb[3]<<24));
-                off = (long)(eb[4] | (eb[5]<<8) | (eb[6]<<16) | ((uint32_t)eb[7]<<24));
+                kf  = eb[0] | (eb[1] << 8) | (eb[2] << 16) | ((uint32_t)eb[3] << 24);
+                off = (long)(eb[4] | (eb[5] << 8) | (eb[6] << 16) | ((uint32_t)eb[7] << 24));
             }
         }
-        seek_far(off);                                         // WDT-safe positioning to the keyframe
-        next_to_read = kf;
-        return (int64_t)kf;
+        (void)kf;
+        seek_far(off); fpos = off;
+        have_v = false; eof = false; aq_n = 0; aq_head = 0;
+        v_skip_until = tf;
+        a_skip_until = audio_ok ? (uint32_t)(ms * rate / 1000) : 0;
+        a_t0 = 0; a_written = 0; a_base_ms = ms;
+        v_t0 = esp_timer_get_time(); v_base_ms = ms;
+        full = true; pend_mask = 0;                      // a new place in the film: paint it whole
     };
+    if (start_ms > 0) seek_ms(start_ms);
 
-    auto render_one = [&]() -> bool {                          // draw frame `next_to_read`'s tiles
-        uint8_t nb;
-        if (fread(&nb, 1, 1, f) != 1) return false;            // EOF
-        for (int i = 0; i < (int)nb; i++) {
-            uint8_t hdr3[3];
-            if (fread(hdr3, 1, 3, f) != 3) return false;
-            uint8_t  ti   = hdr3[0];
-            uint16_t slen = (uint16_t)(hdr3[1] | (hdr3[2] << 8));
-            if (slen > max_tile) { fseek(f, slen, SEEK_CUR); return false; }   // corrupt -> bail
-            if (fread(jbuf + template_len, 1, slen, f) != slen) return false;
-            jbuf[template_len + slen]     = 0xFF;
-            jbuf[template_len + slen + 1] = 0xD9;
-            if (ti < tile_count) {
-                int tx = (ti % cols) * tile_w, ty = (ti / cols) * tile_h;
-                d.drawJpg(jbuf, (size_t)template_len + slen + 2, tx, ty);
-            }
-        }
-        next_to_read++;
-        return true;
-    };
-
-    // Bring the screen to `target`. Re-seeks to a keyframe on a forced resync (seek / overlay
-    // repaint) or a backward move; otherwise just applies the forward deltas.
-    auto advance_to = [&](int64_t target) -> bool {
-        if (target == cur && !force_resync) return true;
-        // Re-seek to a keyframe on a backward jump OR a BIG forward gap: replaying thousands of deltas
-        // frame-by-frame to catch a far target is a multi-second hang. <=4-frame backward jitter is
-        // tolerated (audio resync) to avoid a costly re-seek every frame.
-        if (force_resync || cur < 0 || target < cur - 4 || target > cur + 96) {
-            cur = seek_keyframe(target) - 1;
-            force_resync = false;
-        }
-        while (cur < target) {
-            if (!render_one()) return false;
-            cur++;
-            if ((cur & 255) == 0) esp_task_wdt_reset();        // long delta replay can't starve the WDT
-        }
-        return true;
-    };
-
-    if (start_ms > 0) {                                        // wind to the resume point
-        uint32_t sf = (uint32_t)((int64_t)start_ms * fps / 1000);
-        if (frame_count && sf >= frame_count) sf = frame_count - 1;
-        char ts[8]; fmt_mmss(ts, sizeof ts, (uint32_t)(start_ms / 1000));
-        char rb[24]; snprintf(rb, sizeof rb, "Resuming %s...", ts);
-        d.setTextColor(CO_TXT, 0); d.setTextSize(1);
-        d.setCursor((240 - (int)strlen(rb) * 6) / 2, 62); d.print(rb);
-    }
-
+    // ---- the loop (keys and chrome) ----------------------------------------------------------------
+    const uint32_t tot_s = dur_ms / 1000;
     int     bri = nucleo_app_brightness();
     int64_t overlay_until = esp_timer_get_time() + 2500000;
-    bool    help = false, paused = false, stop = false, need_full = false, ov_prev = false, ctrl_full = true;
+    bool    help = false, paused = false, stop = false, ov_prev = false, ctrl_full = true, remote_full = true;
     int     result = PR_STOP;
-    uint32_t ui_sig = 0xffffffff;
-    int64_t  seek_hold_until = 0; int64_t hold_frame = 0;
-    int64_t  resync_until = 0;
+    uint32_t ui_sig = 0xffffffff, remote_sig = 0xffffffff;
     int      seek_step_s = 10, seek_dir = 0;
-    int64_t  last_seek_us = 0, badge_until = 0;
-
-    auto seek_ms = [&](int64_t ms) {
-        if (ms < 0) ms = 0;
-        if (dur_ms && ms > (int64_t)dur_ms) ms = dur_ms;
-        uint32_t tf = (uint32_t)(ms * fps / 1000);
-        if (frame_count && tf >= frame_count) tf = frame_count - 1;
-        if (have_audio) nucleo_audio_seek((uint32_t)ms);
-        t0 = esp_timer_get_time() - ms * 1000;
-        hold_frame = tf; seek_hold_until = esp_timer_get_time() + 250000;
-        resync_until = esp_timer_get_time() + 1200000;        // free-run until the audio task applies the seek (elapsed_ms stale meanwhile) -> backward jump must not snap back
-        force_resync = true;                                   // land on a keyframe, then replay
-        overlay_until = esp_timer_get_time() + 3000000; ui_sig = 0xffffffff;
-    };
-
+    int64_t  last_seek_us = 0, badge_until = 0, paused_ms = 0;
     while (!stop) {
         esp_task_wdt_reset();
-
+        const int64_t now = esp_timer_get_time();
+        if (pf_prev && now - pf_prev > (int64_t)pf_slow * 1000) pf_slow = (uint32_t)((now - pf_prev) / 1000);
+        pf_prev = now; pf_iter++;
         nucleo_key_t k = nucleo_kbd_read();
         if (k.key != NK_NONE) {
-            int64_t now = esp_timer_get_time();
-            int64_t pos_ms = have_audio ? (int64_t)nucleo_audio_elapsed_ms() : (now - t0) / 1000;
+            pf_keys++;
+            const int64_t p = paused ? paused_ms : pos_ms();
             if (k.key == NK_BACK || k.key == NK_DEL || k.ch == 'q' || k.ch == '`') { result = PR_STOP; stop = true; }
-            else if (k.ch == ']')       { result = PR_NEXT; stop = true; }
-            else if (k.ch == '[')       { result = PR_PREV; stop = true; }
-            else if (k.key == NK_ENTER || k.ch == ' ' || k.ch == 'p') { paused = !paused; if (have_audio) nucleo_audio_toggle_pause(); overlay_until = now + 3000000; ui_sig = 0xffffffff; }
-            else if (k.key == NK_TAB)   { help = !help; if (!help) need_full = true; ui_sig = 0xffffffff; }   // TAB = commands panel
-            else if (k.ch == 'm')       { nucleo_audio_set_mute(!nucleo_audio_is_muted()); overlay_until = now + 3000000; ui_sig = 0xffffffff; }
-            else if (k.ch == 't')       { s_time_rem = !s_time_rem; overlay_until = now + 3000000; ui_sig = 0xffffffff; }
+            else if (k.ch == ']') { result = PR_NEXT; stop = true; }
+            else if (k.ch == '[') { result = PR_PREV; stop = true; }
+            else if (nucleo_touch_is_row(k.key, k.ch)) {
+                if (dur_ms) { seek_ms((int64_t)dur_ms * (k.ch - NUCLEO_TOUCH_ROW) / (VSEEK_N - 1)); if (paused) paused_ms = pos_ms(); }
+                overlay_until = now + 3000000; ui_sig = 0xffffffff;
+            }
+            else if (k.key == NK_ENTER || k.ch == ' ' || k.ch == 'p') {
+                paused = !paused;
+                if (paused) {
+                    paused_ms = p;
+                    // A pause badge on the picture (the next frame paints over it when playback resumes).
+                    const int bx = (ox > 0 ? ox : 0) + 10, by = (oy > 0 ? oy : 0) + 10;
+                    d.startWrite();
+                    d.fillRoundRect(bx, by, 34, 30, 8, CO_BG);
+                    d.drawRoundRect(bx, by, 34, 30, 8, CO_LINE);
+                    d.fillRect(bx + 11, by + 8, 4, 14, CO_TXT); d.fillRect(bx + 19, by + 8, 4, 14, CO_TXT);
+                    d.endWrite();
+                }
+                else seek_ms(paused_ms);                 // resume exactly where it stopped (clocks re-anchored)
+                overlay_until = now + 3000000; ui_sig = 0xffffffff;
+            }
+            else if (k.key == NK_TAB) { help = !help; if (!help) remote_full = ctrl_full = full = true; ui_sig = 0xffffffff; }
+            else if (k.ch == 'm') { nucleo_audio_set_mute(!nucleo_audio_is_muted()); overlay_until = now + 3000000; ui_sig = 0xffffffff; }
+            else if (k.ch == 't') { s_time_rem = !s_time_rem; overlay_until = now + 3000000; ui_sig = 0xffffffff; }
             else if (k.key == NK_LEFT || k.key == NK_RIGHT) {
-                int dir = (k.key == NK_RIGHT) ? 1 : -1;
+                const int dir = (k.key == NK_RIGHT) ? 1 : -1;
                 if (dir == seek_dir && now - last_seek_us < 1200000) seek_step_s = (seek_step_s < 30) ? 30 : 60;
                 else seek_step_s = 10;
                 seek_dir = dir; last_seek_us = now; badge_until = now + 900000;
-                seek_ms(pos_ms + (int64_t)dir * seek_step_s * 1000);
+                seek_ms(p + (int64_t)dir * seek_step_s * 1000);
+                if (paused) paused_ms = pos_ms();
+                overlay_until = now + 3000000; ui_sig = 0xffffffff;
             }
-            else if (k.key == NK_UP)    { if (nucleo_audio_is_muted()) nucleo_audio_set_mute(false); nucleo_audio_set_volume(nucleo_audio_volume() + 10); overlay_until = now + 3000000; ui_sig = 0xffffffff; }
-            else if (k.key == NK_DOWN)  { if (nucleo_audio_is_muted()) nucleo_audio_set_mute(false); nucleo_audio_set_volume(nucleo_audio_volume() - 10); overlay_until = now + 3000000; ui_sig = 0xffffffff; }
+            else if (k.key == NK_UP)   { if (nucleo_audio_is_muted()) nucleo_audio_set_mute(false); nucleo_audio_set_volume(nucleo_audio_volume() + 10); overlay_until = now + 3000000; ui_sig = 0xffffffff; }
+            else if (k.key == NK_DOWN) { if (nucleo_audio_is_muted()) nucleo_audio_set_mute(false); nucleo_audio_set_volume(nucleo_audio_volume() - 10); overlay_until = now + 3000000; ui_sig = 0xffffffff; }
             else if (k.ch == '=' || k.ch == '+') { nucleo_app_set_brightness(nucleo_app_brightness() + 10); bri = nucleo_app_brightness(); overlay_until = now + 3000000; ui_sig = 0xffffffff; }
             else if (k.ch == '-' || k.ch == '_') { nucleo_app_set_brightness(nucleo_app_brightness() - 10); bri = nucleo_app_brightness(); overlay_until = now + 3000000; ui_sig = 0xffffffff; }
-            // 1-9 chapter-jump REMOVED (2026-06-21): on a huge clip a far jump COMPLETES the reposition
-            // (trace si_ok) but the draw/decode loop then hangs with the heap at ~6KB largest block (no
-            // PSRAM) — a physical limit on big jumps. Resume + arrow seeks (small hops) are safe and stay.
         }
         if (stop) break;
-
-        if (help) {                                            // TAB cheat-sheet: pause the video pass, show keys + live Luce/Volume
-            if (ui_sig) { draw_video_help(bri, nucleo_audio_volume(), nucleo_audio_is_muted()); ui_sig = 0; }
+        if (help) {
+            if (ui_sig) {
+                LovyanGFX *ig = G.big ? (LovyanGFX *)nucleo_extdisp_internal_gfx() : nullptr;
+                if (ig) nucleo_app_set_gfx(ig);
+                draw_video_help(bri, nucleo_audio_volume(), nucleo_audio_is_muted()); ui_sig = 0;
+                nucleo_app_set_gfx(nullptr);
+            }
             vTaskDelay(pdMS_TO_TICKS(16));
             continue;
         }
 
-        int64_t now = esp_timer_get_time();
-        bool overlay_now = now < overlay_until;
+        const bool overlay_now = now < overlay_until;
+        if (overlay_now != ov_prev) { if (overlay_now) ctrl_full = true; else full = true; ov_prev = overlay_now; ui_sig = 0xffffffff; }
+        const bool bar_over = G.big && oy + OH > ph - VBAR;
 
-        int64_t target;
-        if (now < seek_hold_until)         target = hold_frame;
-        else if (paused)                   target = cur < 0 ? 0 : cur;
-        else if (now < resync_until)       target = (now - t0) / period;   // post-seek free-run until the audio task applies the seek (elapsed_ms stale until then) -> backward jump must not snap back
-        else if (have_audio && nucleo_audio_is_playing()) {
-            int64_t ms = (int64_t)nucleo_audio_elapsed_ms() - AUDIO_LAT_MS; if (ms < 0) ms = 0;
-            target = ms * fps / 1000;
-        } else                             target = (now - t0) / period;
-        if (frame_count && target >= (int64_t)frame_count) target = frame_count - 1;
-        if (target < 0) target = 0;
-
-        if (overlay_now != ov_prev) { if (!overlay_now) need_full = true; else ctrl_full = true; ov_prev = overlay_now; ui_sig = 0xffffffff; }
-
-        if (need_full) { force_resync = true; need_full = false; }     // repaint covered region
-        if (target != cur || force_resync) {
-            d.startWrite();
-            d.setClipRect(0, 0, 240, overlay_now ? BARY : 135);   // ALWAYS clip: coded height (144) > panel (135), else the 3rd tile row bleeds = vertical scroll
-            bool ok = advance_to(target);
-            d.clearClipRect();
-            d.endWrite();
-            if (!ok) { ESP_LOGW(V_TAG, "nfv3 end: cur=%u/%u next=%u", (unsigned)cur, (unsigned)frame_count, (unsigned)next_to_read); result = PR_ENDED; break; }
-        }
-
-        bool seeking = now < badge_until;
-        if (overlay_now) {
-            uint32_t el = (cur < 0 ? 0 : (uint32_t)cur) / fps;
-            bool muted = nucleo_audio_is_muted();
-            bool near_end = tot_s && el + 10 >= tot_s && next_title && next_title[0];
-            uint32_t sig = (el & 0x1fff) | ((uint32_t)(nucleo_audio_volume() / 10) << 13)
-                         | ((uint32_t)(bri / 10) << 17) | ((uint32_t)paused << 21)
-                         | ((uint32_t)(seeking ? 1 : 0) << 22) | ((uint32_t)muted << 23)
-                         | ((uint32_t)s_time_rem << 24) | ((uint32_t)near_end << 25);
-            if (sig != ui_sig) {
-                ui_sig = sig;
-                d.startWrite();
-                draw_controller(title, next_title, el, tot_s, paused, muted, nucleo_audio_volume(),
-                                bri, ctrl_full, seeking, seek_dir, seek_step_s, near_end);
-                d.endWrite();
-                ctrl_full = false;
+        bool worked = false;
+        if (!paused) {
+            pump_audio();
+            // Read ahead: fill the audio queue, and take the next frame.
+            int64_t r0 = esp_timer_get_time();
+            while (!eof && !have_v && aq_n < V4_AQ) read_chunk();
+            pf_rd += (uint32_t)(esp_timer_get_time() - r0);
+            pump_audio();
+            if (have_v) {
+                const int64_t due = (int64_t)v_stamp * 1000 / fps, p = pos_ms();
+                if (p > due + 1000 / fps) {                                                 // late: drop it
+                    if ((int32_t)(p - due) > pf_lateby) pf_lateby = (int32_t)(p - due);
+                    have_v = false; pend_mask |= v_mask; pf_late++; worked = true;
+                }
+                else if (p + 3 >= due) {                                                   // its turn: paint it
+                    const int64_t d0 = esp_timer_get_time();
+                    d.startWrite();
+                    if (G.big && overlay_now && bar_over) d.setClipRect(0, 0, pw, ph - VBAR);
+                    else if (!G.big && overlay_now)      d.setClipRect(0, 0, pw, BARY);
+                    else                                 d.setClipRect(0, 0, pw, ph);
+                    if (!decode_frame(v_len)) {
+                        static int s_bad = 0;
+                        if (s_bad++ < 3) { char t[64]; snprintf(t, sizeof t, "nfv4_decode_fail frame=%u len=%u", (unsigned)v_stamp, (unsigned)v_len); vtrace(t, false); }
+                    }
+                    d.clearClipRect();
+                    d.endWrite();
+                    pf_dec += (uint32_t)(esp_timer_get_time() - d0);
+                    cur_frame = v_stamp; have_v = false; pf_shown++; worked = true;
+                    full = false; pend_mask = 0;
+                }
+            } else if (eof && aq_n == 0) {
+                if (!audio_ok || pos_ms() >= a_base_ms + (int64_t)a_written * 1000 / rate) { result = PR_ENDED; break; }
             }
         }
 
-        if (have_audio && !paused && cur >= (int64_t)frame_count - 1 && nucleo_audio_elapsed_ms() > dur_ms) { result = PR_ENDED; break; }
-        if (!have_audio && !paused && (now - t0) / period >= (int64_t)frame_count) { result = PR_ENDED; break; }   // silent clip end
-
-        vTaskDelay((target != cur || seeking) ? 1 : pdMS_TO_TICKS(8));
+        // ---- chrome: the external bar / the Cardputer's controller, and the remote ----
+        const uint32_t el = (uint32_t)((paused ? paused_ms : pos_ms()) / 1000);
+        const bool seeking = now < badge_until;
+        if (overlay_now) {
+            const bool muted = nucleo_audio_is_muted();
+            const bool near_end = tot_s && el + 10 >= tot_s && next_title && next_title[0];
+            const uint32_t sig = (el & 0x1fff) | ((uint32_t)(nucleo_audio_volume() / 10) << 13) | ((uint32_t)(bri / 10) << 17)
+                               | ((uint32_t)paused << 21) | ((uint32_t)seeking << 22) | ((uint32_t)muted << 23)
+                               | ((uint32_t)s_time_rem << 24) | ((uint32_t)near_end << 25);
+            if (sig != ui_sig) {
+                ui_sig = sig;
+                d.startWrite();
+                if (G.big) vbar_big(title, el, tot_s, paused, ctrl_full);
+                else draw_controller(title, next_title, el, tot_s, paused, muted, nucleo_audio_volume(), bri, ctrl_full,
+                                     seeking, seek_dir, seek_step_s, near_end);
+                d.endWrite();
+                ctrl_full = false;
+            }
+        } else if (G.big && !bar_over && ui_sig != 0) {
+            ui_sig = 0;
+            d.fillRect(0, ph - VBAR, pw, VBAR, 0);
+        }
+        if (G.big) {
+            const bool near_end = tot_s && el + 10 >= tot_s && next_title && next_title[0];
+            const uint32_t rs = (el & 0x1fff) | ((uint32_t)(nucleo_audio_volume() / 10) << 13) | ((uint32_t)(bri / 10) << 17)
+                              | ((uint32_t)paused << 21) | ((uint32_t)seeking << 22) | ((uint32_t)nucleo_audio_is_muted() << 23)
+                              | ((uint32_t)s_time_rem << 24) | ((uint32_t)near_end << 25);
+            if (rs != remote_sig) {
+                remote_sig = rs;
+                vremote(title, next_title, el, tot_s, paused, nucleo_audio_is_muted(), nucleo_audio_volume(), bri,
+                        remote_full, seeking, seek_dir, seek_step_s, near_end);
+                remote_full = false;
+            }
+        }
+        if (now - pf_t0 >= 5000000) {
+            char t[192];
+            snprintf(t, sizeof t, "nfv4_perf shown=%u late=%u rd=%ums jpeg=%ums dec+push=%ums strips=%u under=%u pos=%u "
+                     "iter=%u slow=%ums keys=%u lateby=%dms aq=%d",
+                     (unsigned)pf_shown, (unsigned)pf_late, (unsigned)(pf_rd / 1000), (unsigned)(pf_jdec / 1000),
+                     (unsigned)(pf_dec / 1000), (unsigned)pf_strips, (unsigned)underruns, (unsigned)el,
+                     (unsigned)pf_iter, (unsigned)pf_slow, (unsigned)pf_keys, (int)pf_lateby, aq_n);
+            vtrace(t, false);
+            ESP_LOGW(V_TAG, "%s", t);                   // live on the serial console too
+            pf_shown = pf_late = pf_rd = pf_dec = pf_jdec = pf_strips = 0; pf_t0 = now;
+            pf_iter = pf_slow = pf_keys = 0; pf_lateby = 0;
+        }
+        if (!worked) vTaskDelay(1);                      // nothing due yet: give the core back
     }
 
-    esp_task_wdt_reset();                          // cleanup below (SD write + audio stop) must not starve the WDT
-    vtrace("nfv3_loopend", false);
-    if (have_audio) nucleo_audio_stop();           // stop the decoder BEFORE the SD write (shared SPI bus) — see play_nfv
-    vtrace("nfv3_audiostop", false);
-    uint32_t watched = fps ? (uint32_t)(cur < 0 ? 0 : cur) / fps : 0;
+    esp_task_wdt_reset();
+    if (audio_ok) nucleo_audio_pcm_close();
+    const uint32_t watched = (uint32_t)((paused ? paused_ms : pos_ms()) / 1000);
     resume_save(reskey, result == PR_ENDED ? tot_s : watched, tot_s);
-    vtrace("nfv3_resumed", false);
-    free(jbuf);
-    fclose(f);
+    (void)cur_frame; (void)nfr;
+    cleanup();
+    vgeom_end(G);
+    nucleo_power_perf_end();
     return result;
 }
 
-// Blocking modal playback of clip at `vpath` (sibling .mp3 inferred), starting at `start_ms`
-// (0 = top). `title` is shown in the bar; `reskey` is the resume DB key. The audio task is the
-// master clock: the video maps the audio's elapsed ms to a frame and skips ahead if it falls
-// behind, so A/V never drifts. Controls: enter/space play-pause · ,/ seek (taps accelerate
-// 10->30->60s) · ;. volume · [ ] prev/next clip · -/= brightness · m mute · t time · 0-9 jump %
-// · TAB hold · esc stop. `next_title` (or NULL) is shown as "Up next" near the end for autoplay.
-// Returns a PR_* code: PR_ENDED (natural end -> caller may auto-advance), PR_NEXT/PR_PREV (skip),
-// PR_STOP (viewer stopped / failed to start). Does NOT restore the list — the caller does, so a
-// back-to-back auto-advance/skip never flashes the browser between clips.
+// Blocking modal playback of the clip at `vpath`, from `start_ms` (0 = top). `title` is shown in the bar;
+// `reskey` is the resume DB key; `next_title` (or NULL) is shown as "Up next" near the end for autoplay.
+// Returns a PR_* code: PR_ENDED (natural end -> the caller may auto-advance), PR_NEXT/PR_PREV (skip),
+// PR_STOP (stopped, or the clip cannot play). Does NOT restore the list — the caller does, so a back-to-back
+// auto-advance/skip never flashes the browser between clips. Only v4 plays; an older clip says how to convert it.
 static int play_nfv(const char *vpath, const char *title, const char *reskey, int64_t start_ms,
                     const char *next_title)
 {
-    char apath[256]; snprintf(apath, sizeof apath, "%s", vpath);
-    char *dot = strrchr(apath, '.'); if (dot) snprintf(dot, sizeof apath - (size_t)(dot - apath), ".mp3");  // bound to remaining space: a late dot near apath[256] would overflow a fixed 5
-
+    uint8_t hb[8] = {};
     FILE *f = fopen(vpath, "rb");
     if (!f) return PR_STOP;
-    nfv_header_t H;
-    if (fread(&H, 1, sizeof H, f) != sizeof H || memcmp(H.magic, "NFV1", 4) != 0) { fclose(f); return PR_STOP; }
-    if (H.version == 3) { fclose(f); return play_nfv3(vpath, title, reskey, start_ms, next_title); }   // tile-delta path
-
-    uint16_t fps = H.fps ? H.fps : 12;
-    // Frame-buffer cap — the load-bearing number for sibling audio. The buffer is carved out of the
-    // ONE ~32 KB block freed by release_buffers(); the Helix MP3 decoder then needs ~20-24 KB CONTIGUOUS
-    // for its 8 allocations out of what's left. Measured on-device (/data/.vtrace audiochk): a 5 KB
-    // buffer (short clips) leaves 27 KB and the decoder inits fine; an 11.5 KB buffer (the big Ghibli
-    // films at 16 kHz) leaves only 20.5 KB and MP3InitDecoder OOMs (init=2) -> the clip plays SILENT.
-    // Cap at 8 KB so the decoder always gets >=24 KB. Frames larger than the cap are skipped cleanly by
-    // load_frame() (the previous frame holds for one beat) — a rare, minor visual hitch on high-detail
-    // frames, traded for audio that actually plays. Real encoded frames average ~5-6 KB, so most are
-    // unaffected. (The true fix for zero dropped frames is the v3 tile-delta format's tiny buffer.)
-    #define NFV_FRAMEBUF_CAP 8192u
-    uint32_t maxf = H.max_frame_bytes;
-    if (maxf < 1024 || maxf > NFV_FRAMEBUF_CAP) maxf = NFV_FRAMEBUF_CAP;
-    nucleo_app_release_buffers();
-    size_t bufcap = maxf;
-    uint8_t *buf = (uint8_t *)malloc(bufcap);
-    if (!buf) {
-        d.fillScreen(0); d.setTextColor(CO_TXT, 0); d.setTextSize(1);
-        d.setCursor(20, 60); d.print("Not enough memory to play");
-        vTaskDelay(pdMS_TO_TICKS(1500)); fclose(f); return PR_STOP;
-    }
-    uint32_t last_sz = 0;
-    fseek(f, 0, SEEK_END); long fsz = ftell(f); fseek(f, sizeof H, SEEK_SET);
-
-    // ---- Seek index: an EXACT frame->byte table so resume/seek never crawls the clip. ----
-    FILE    *idxf = NULL;
-    long     idx_base = 0;
-    uint32_t idx_stride = 0;
-    bool     idx_owned = false;
-    {
-        uint16_t stp = H.reserved0;
-        uint32_t ioff = 0; memcpy(&ioff, H.reserved1, sizeof ioff);
-        if ((H.flags & 2) && stp && (long)ioff >= (long)sizeof H && (long)ioff < fsz) {
-            // Inline index: SHARE the frame handle. A separate fopen handle sat at byte 0 and paid a
-            // maximal 0->EOF cluster-chain walk on its FIRST index read (= the freeze), plus a ~4KB
-            // in-play FIL/sector-cache alloc. One handle + WDT-safe seeks (seek_far) is the right shape.
-            idxf = f; idx_base = (long)ioff + 4; idx_stride = stp;
-        }
-    }
-
-    d.fillScreen(0);
-    if (!idxf) {                                              // v1 clip: build/load the SD sidecar
-        long b; uint32_t stp; bool aborted = false;
-        FILE *sf = video_index_sidecar(vpath, f, &H, fsz, &b, &stp, &aborted);
-        if (aborted) { free(buf); fclose(f); return PR_STOP; }   // user pressed esc during "Preparing"
-        if (sf) { idxf = sf; idx_base = b; idx_stride = stp; idx_owned = true; }
-        fseek(f, sizeof H, SEEK_SET);
-    }
-    if (start_ms > 0) {
-        char ts[8]; fmt_mmss(ts, sizeof ts, (uint32_t)(start_ms / 1000));
-        char rb[24]; snprintf(rb, sizeof rb, "Resuming %s...", ts);
-        d.setTextColor(CO_TXT, 0); d.setTextSize(1);
-        d.setCursor((240 - (int)strlen(rb) * 6) / 2, 62); d.print(rb);
-    }
-
-    const int64_t period = 1000000 / fps;
-    const uint32_t tot_s = H.frame_count ? (H.frame_count - 1) / fps : 0;
-    const uint32_t dur_ms = H.duration_ms ? H.duration_ms : (uint32_t)((uint64_t)H.frame_count * 1000 / fps);
-    if (start_ms < 0) start_ms = 0;
-    if (dur_ms && start_ms > (int64_t)dur_ms) start_ms = dur_ms;
-
-    bool have_audio = (H.flags & 1) && access(apath, R_OK) == 0;
-    if (have_audio) {
-        nucleo_audio_play_at(apath, (uint32_t)start_ms, dur_ms);
-        if (s_vol_default > 0) nucleo_audio_set_volume(s_vol_default);
-        nucleo_audio_fade_in(180);                            // pop-free start (see nucleo_audio)
-    }
-
-    const int64_t AUDIO_LAT_MS = 70;
-    int64_t t0 = esp_timer_get_time() - start_ms * 1000;
-
-    int     bri = nucleo_app_brightness();
-    int64_t overlay_until = esp_timer_get_time() + 2500000;
-    bool    help = false, paused = false, stop = false, need_full = false, ov_prev = false, ctrl_full = true;
-    int     result = PR_STOP;
-    uint32_t cur = 0, next_idx = 0;
-    int64_t  cached_i = -1; long cached_foff = 0;   // 1-entry index cache: repeated 1-9 in the same stride bucket skips the walk+4B read
-    uint32_t ui_sig = 0xffffffff;
-    int64_t  seek_hold_until = 0; uint32_t hold_frame = 0;
-    int64_t  resync_until = 0;
-    int      seek_step_s = 10, seek_dir = 0;
-    int64_t  last_seek_us = 0, badge_until = 0;
-    // Video-stall self-heal: track when `cur` last advanced. If the audio clock keeps running but the
-    // frame cursor is wedged (a mis-seek or an oversize/corrupt-frame bail leaves next_idx past target,
-    // so want_load never fires again), the clip plays "audio, no video" — and on exit cur/fps==0 so the
-    // resume point is lost too. We detect the stall below and force an exact index re-seek to re-lock.
-    int64_t  cur_moved_us = esp_timer_get_time();
-    uint32_t cur_seen = 0xffffffff;
-
-    // WDT-safe far seek. FATFS without fast-seek walks the cluster chain O(distance) INSIDE one
-    // blocking fseek(); on a 300-500MB clip that exceeds the 8s task-WDT and hard-freezes the system,
-    // and a single fseek cannot be interrupted to pet the dog. So split a long move into bounded
-    // forward hops and pet between them: a slow seek degrades to "takes a moment", never a freeze.
-    // Backward targets restart the FATFS walk from cluster 0, so rewind to the header and hop forward.
-    auto seek_far = [&](FILE *fp, long off) {
-        if (off < (long)sizeof H) off = (long)sizeof H;
-        long pos = ftell(fp);
-        if (pos < 0 || off < pos) { fseek(fp, (long)sizeof H, SEEK_SET); pos = (long)sizeof H; }
-        const long STEP = 2L * 1024 * 1024;                   // ~2MB/hop (=64 clusters), no single hop can approach the 8s WDT even under W5500+audio bus contention
-        while (off - pos > STEP) { fseek(fp, STEP, SEEK_CUR); pos += STEP; esp_task_wdt_reset(); }
-        fseek(fp, off - pos, SEEK_CUR);
-    };
-
-    auto load_frame = [&](uint32_t target) -> bool {
-        while (next_idx < target) {
-            uint32_t s; if (fread(&s, 1, 4, f) != 4) return false;
-            fseek(f, s, SEEK_CUR); next_idx++;
-            if ((next_idx & 255) == 0) esp_task_wdt_reset();  // a big forward skip can't starve the WDT
-        }
-        uint32_t s; if (fread(&s, 1, 4, f) != 4) return false;
-        if (s > maxf) { fseek(f, s, SEEK_CUR); next_idx = target + 1; return false; }
-        if (fread(buf, 1, s, f) != s) return false;
-        last_sz = s; next_idx = target + 1; return true;
-    };
-
-    auto seek_index = [&](uint32_t tf) -> bool {
-        if (!idxf || !idx_stride) return false;
-        uint32_t i = tf / idx_stride;
-        long foff;
-        if ((int64_t)i == cached_i) {                         // same stride bucket as last seek: skip the index walk + 4B read
-            foff = cached_foff;
-        } else {
-            seek_far(idxf, idx_base + (long)i * 4);            // WDT-safe (idxf shares f): read the offset...
-            uint32_t fo;
-            if (fread(&fo, 1, 4, idxf) != 4) return false;
-            if ((long)fo < (long)sizeof H || (long)fo >= fsz) return false;
-            foff = (long)fo; cached_i = (int64_t)i; cached_foff = foff;
-        }
-        seek_far(f, foff);                                    // ...then WDT-safe positioning to the frame
-        next_idx = i * idx_stride;
-        return true;
-    };
-
-    auto seek_approx = [&](uint32_t tf) -> bool {
-        if (!H.frame_count || fsz <= (long)sizeof H) return false;
-        long est = (long)sizeof H + (long)((int64_t)(fsz - (long)sizeof H) * tf / H.frame_count);
-        if (est < (long)sizeof H) est = sizeof H;
-        seek_far(f, est);                                     // WDT-safe (was a raw fseek to a far offset)
-        int prev = -1; long pos = est, limit = (long)maxf * 4 + 64;
-        for (long i = 0; i < limit; i++) {
-            int c = fgetc(f); if (c < 0) break; pos++;
-            if ((i & 8191) == 8191) esp_task_wdt_reset();     // the byte-scan fallback must not starve the WDT
-            if (prev == 0xFF && c == 0xD8) { fseek(f, pos - 6, SEEK_SET); next_idx = tf; return true; }
-            prev = c;
-        }
-        next_idx = tf;                                        // even on miss: don't leave load_frame to crawl from a stale next_idx
-        return false;
-    };
-
-    auto seek_ms = [&](int64_t ms) {
-        if (ms < 0) ms = 0;
-        if (dur_ms && ms > (int64_t)dur_ms) ms = dur_ms;
-        uint32_t tf = (uint32_t)(ms * fps / 1000);
-        if (H.frame_count && tf >= H.frame_count) tf = H.frame_count - 1;
-        if (have_audio) nucleo_audio_seek((uint32_t)ms);
-        t0 = esp_timer_get_time() - ms * 1000;
-        if (!seek_index(tf)) seek_approx(tf);
-        hold_frame = tf; seek_hold_until = esp_timer_get_time() + 250000;
-        resync_until = esp_timer_get_time() + 1200000;        // free-run from the seek target until the audio task applies the seek (elapsed_ms is stale meanwhile) -> a backward jump must not snap back to the old position
-        cur = 0xffffffff; need_full = false;
-        overlay_until = esp_timer_get_time() + 3000000; ui_sig = 0xffffffff;
-    };
-
-    if (start_ms > 0) {                                       // wind to the resume point in O(1)
-        uint32_t sf = (uint32_t)((int64_t)start_ms * fps / 1000);
-        if (H.frame_count && sf >= H.frame_count) sf = H.frame_count - 1;
-        if (!seek_index(sf)) seek_approx(sf);
-    }
-
-    while (!stop) {
-        esp_task_wdt_reset();
-
-        nucleo_key_t k = nucleo_kbd_read();
-        if (k.key != NK_NONE) {
-            int64_t now = esp_timer_get_time();
-            int64_t pos_ms = have_audio ? (int64_t)nucleo_audio_elapsed_ms() : (now - t0) / 1000;
-            if (k.key == NK_BACK || k.key == NK_DEL || k.ch == 'q' || k.ch == '`') { result = PR_STOP; stop = true; }
-            else if (k.ch == ']')       { result = PR_NEXT; stop = true; }   // skip to next clip
-            else if (k.ch == '[')       { result = PR_PREV; stop = true; }   // skip to previous clip
-            else if (k.key == NK_ENTER || k.ch == ' ' || k.ch == 'p') { paused = !paused; if (have_audio) nucleo_audio_toggle_pause(); overlay_until = now + 3000000; ui_sig = 0xffffffff; }
-            else if (k.key == NK_TAB)   { help = !help; if (!help) need_full = true; ui_sig = 0xffffffff; }   // TAB = commands panel
-            else if (k.ch == 'm')       { nucleo_audio_set_mute(!nucleo_audio_is_muted()); overlay_until = now + 3000000; ui_sig = 0xffffffff; }   // mute toggle
-            else if (k.ch == 't')       { s_time_rem = !s_time_rem; overlay_until = now + 3000000; ui_sig = 0xffffffff; }   // elapsed/remaining (persist via VIEW>Time; no SD write mid-play)
-            else if (k.key == NK_LEFT || k.key == NK_RIGHT) {
-                int dir = (k.key == NK_RIGHT) ? 1 : -1;
-                if (dir == seek_dir && now - last_seek_us < 1200000) seek_step_s = (seek_step_s < 30) ? 30 : 60;
-                else seek_step_s = 10;
-                seek_dir = dir; last_seek_us = now; badge_until = now + 900000;
-                seek_ms(pos_ms + (int64_t)dir * seek_step_s * 1000);
-            }
-            else if (k.key == NK_UP)    { if (nucleo_audio_is_muted()) nucleo_audio_set_mute(false); nucleo_audio_set_volume(nucleo_audio_volume() + 10); overlay_until = now + 3000000; ui_sig = 0xffffffff; }
-            else if (k.key == NK_DOWN)  { if (nucleo_audio_is_muted()) nucleo_audio_set_mute(false); nucleo_audio_set_volume(nucleo_audio_volume() - 10); overlay_until = now + 3000000; ui_sig = 0xffffffff; }
-            else if (k.ch == '=' || k.ch == '+') { nucleo_app_set_brightness(nucleo_app_brightness() + 10); bri = nucleo_app_brightness(); overlay_until = now + 3000000; ui_sig = 0xffffffff; }
-            else if (k.ch == '-' || k.ch == '_') { nucleo_app_set_brightness(nucleo_app_brightness() - 10); bri = nucleo_app_brightness(); overlay_until = now + 3000000; ui_sig = 0xffffffff; }
-            // 1-9 chapter-jump REMOVED (2026-06-21): on a huge clip a far jump COMPLETES the reposition
-            // (trace si_ok) but the draw/decode loop then hangs with the heap at ~6KB largest block (no
-            // PSRAM) — a physical limit on big jumps. Resume + arrow seeks (small hops) are safe and stay.
-        }
-        if (stop) break;
-
-        if (help) {                                            // TAB cheat-sheet: pause the video pass, show keys + live Luce/Volume
-            if (ui_sig) { draw_video_help(bri, nucleo_audio_volume(), nucleo_audio_is_muted()); ui_sig = 0; }
-            vTaskDelay(pdMS_TO_TICKS(16));
-            continue;
-        }
-
-        int64_t now = esp_timer_get_time();
-        bool overlay_now = now < overlay_until;
-
-        uint32_t target;
-        if (now < seek_hold_until)         target = hold_frame;
-        else if (paused)                   target = cur;
-        else if (now < resync_until)       target = (uint32_t)((now - t0) / period);   // post-seek: free-run from the seek target until the audio decoder repositions (elapsed_ms is stale until its task runs poll_seek) -> stops a big/backward jump snapping back to the pre-seek position
-        else if (have_audio && nucleo_audio_is_playing()) {
-            int64_t ms = (int64_t)nucleo_audio_elapsed_ms() - AUDIO_LAT_MS; if (ms < 0) ms = 0;
-            target = (uint32_t)(ms * fps / 1000);
-        } else                             target = (uint32_t)((now - t0) / period);
-        if (H.frame_count && target >= H.frame_count) target = H.frame_count - 1;
-
-        // Self-heal a wedged frame cursor (see cur_moved_us decl). The stuck signature is: audio is the
-        // live clock, the target has run ahead of cur, yet want_load is dead because next_idx overshot
-        // target (target < next_idx). If that persists past a grace window, re-lock with an exact index
-        // seek (approx fallback for index-less v1 clips) so load_frame draws the live frame again.
-        if (cur != cur_seen) { cur_seen = cur; cur_moved_us = now; }
-        else if (!paused && have_audio && nucleo_audio_is_playing()
-                 && now >= seek_hold_until && now >= resync_until
-                 && (int64_t)target > (int64_t)cur + 2 && (int64_t)target < (int64_t)next_idx
-                 && now - cur_moved_us > 1200000) {
-            if (!seek_index(target)) seek_approx(target);    // re-position f to a real frame boundary
-            cur_moved_us = now;                              // fresh grace window for the re-seek
-            ESP_LOGW(V_TAG, "nfv stall heal: cur=%u target=%u next_idx=%u", (unsigned)cur, (unsigned)target, (unsigned)next_idx);
-        }
-
-        if (overlay_now != ov_prev) { if (!overlay_now) need_full = true; else ctrl_full = true; ov_prev = overlay_now; ui_sig = 0xffffffff; }
-
-        // FORWARD-ONLY. The loop holds (no backward walk) on small jitter — that killed the 1-9 lag.
-        // BUT a BIG forward gap must never be crawled frame-by-frame: on a 120k-frame clip that's a
-        // multi-MINUTE hang (load_frame pets the WDT, so it's not a reboot — it's a true freeze, the
-        // "video never arrives"). If the target is far ahead of the read cursor, jump there via the index
-        // in O(1) (seek_far is WDT-safe), so load_frame only skips the short remainder.
-        bool want_load = (int64_t)target >= (int64_t)next_idx;
-        if (want_load && idx_stride && (int64_t)target > (int64_t)next_idx + 4 * (int64_t)idx_stride) {
-            seek_index(target);   // big forward gap -> O(1) index jump, never crawl frame-by-frame
-        }
-        if (want_load || (need_full && last_sz)) {
-            bool have = want_load ? load_frame(target) : true;
-            if (have) {
-                d.startWrite();
-                if (overlay_now) d.setClipRect(0, 0, 240, BARY);
-                d.drawJpg(buf, last_sz, 0, 0);
-                if (overlay_now) d.clearClipRect();
-                d.endWrite();
-                cur = target; need_full = false;
-            } else if (next_idx >= H.frame_count) { result = PR_ENDED; break; }
-            else { static int s_lf = 0; if (s_lf++ < 8) ESP_LOGW(V_TAG, "nfv loadfail: cur=%u target=%u next_idx=%u/%u maxf=%u", (unsigned)cur, (unsigned)target, (unsigned)next_idx, (unsigned)H.frame_count, (unsigned)maxf); }
-        }
-
-        bool seeking = now < badge_until;
-        if (overlay_now) {
-            uint32_t el = cur / fps;
-            bool muted = nucleo_audio_is_muted();
-            bool near_end = tot_s && el + 10 >= tot_s && next_title && next_title[0];
-            uint32_t sig = (el & 0x1fff) | ((uint32_t)(nucleo_audio_volume() / 10) << 13)
-                         | ((uint32_t)(bri / 10) << 17) | ((uint32_t)paused << 21)
-                         | ((uint32_t)(seeking ? 1 : 0) << 22) | ((uint32_t)muted << 23)
-                         | ((uint32_t)s_time_rem << 24) | ((uint32_t)near_end << 25);
-            if (sig != ui_sig) {
-                ui_sig = sig;
-                d.startWrite();
-                draw_controller(title, next_title, el, tot_s, paused, muted, nucleo_audio_volume(),
-                                bri, ctrl_full, seeking, seek_dir, seek_step_s, near_end);
-                d.endWrite();
-                ctrl_full = false;
-            }
-        }
-
-        // End of clip. Audio-live: wait for the audio clock to pass the duration (A/V-accurate). Not
-        // audio-live (no audio, or the decoder failed to start — then elapsed_ms() is frozen forever):
-        // fall back to the wall-clock timer, else the modal HANGS on the last frame (v2 had only the
-        // audio check; v3 already has this fallback). Fixes "silent big film never returns to the list".
-        if (!paused && cur >= H.frame_count - 1) {
-            bool audio_live = have_audio && nucleo_audio_is_playing();
-            bool done = audio_live ? (nucleo_audio_elapsed_ms() > H.duration_ms)
-                                   : ((now - t0) / period >= (int64_t)H.frame_count);
-            if (done) { result = PR_ENDED; break; }
-        }
-
-        vTaskDelay((want_load || seeking) ? 1 : pdMS_TO_TICKS(8));
-    }
-
-    esp_task_wdt_reset();                          // cleanup below (SD write + audio stop) must not starve the WDT
-    vtrace("nfv_loopend", false);
-    ESP_LOGW(V_TAG, "nfv end: result=%d cur=%u/%u next_idx=%u maxf=%u audio=%d elapsed=%u dur=%u",
-             result, (unsigned)cur, (unsigned)H.frame_count, (unsigned)next_idx, (unsigned)maxf,
-             (int)have_audio, (unsigned)nucleo_audio_elapsed_ms(), (unsigned)dur_ms);
-    // Stop the audio decoder before the SD work below: frees its RAM and nothing's left to play. (The
-    // real exit-freeze cause was a STACK overflow in resume_save — its 48-entry array, now a heap
-    // scratch buffer s_resume_scratch — not SD contention; this ordering is just good hygiene.)
-    if (have_audio) nucleo_audio_stop();
-    vtrace("nfv_audiostop", false);
-    uint32_t watched = fps ? cur / fps : 0;
-    resume_save(reskey, result == PR_ENDED ? tot_s : watched, tot_s);   // remember position (or clear if done)
-    vtrace("nfv_resumed", false);
-    if (idx_owned && idxf) fclose(idxf);
-    free(buf);
+    const size_t got = fread(hb, 1, sizeof hb, f);
     fclose(f);
-    return result;
+    if (got == sizeof hb && !memcmp(hb, "NFV1", 4) && hb[4] == 4)
+        return play_nfv4(vpath, title, reskey, start_ms, next_title);
+    char ver[24];
+    if (got == sizeof hb && !memcmp(hb, "NFV1", 4)) snprintf(ver, sizeof ver, ".nfv v%u", (unsigned)hb[4]);
+    else snprintf(ver, sizeof ver, "?");
+    const char *lines[5] = { TR("Formato vecchio", "Old format"), ver,
+                             TR("non piu' riprodotto.", "no longer played."),
+                             TR("Riconvertilo con Video Studio", "Convert it with Video Studio"),
+                             TR("o tools/nfv/migrate.py", "or tools/nfv/migrate.py") };
+    d.fillScreen(BG);
+    for (int i = 0; i < 5; i++) {
+        const bool big = i < 2;
+        d.setTextSize(big ? 2 : 1); d.setTextColor(big ? ACC : FG, BG);
+        d.setCursor((d.width() - (int)strlen(lines[i]) * (big ? 12 : 6)) / 2, big ? 14 + i * 22 : 66 + (i - 2) * 14);
+        d.print(lines[i]);
+    }
+    for (const int64_t until = esp_timer_get_time() + 8000000; esp_timer_get_time() < until;) {   // any key, or 8 s
+        const nucleo_key_t k = nucleo_kbd_read();
+        if (k.key != NK_NONE || k.ch) break;
+        vTaskDelay(pdMS_TO_TICKS(30));
+    }
+    return PR_STOP;
 }
 
 // Return to the list after the playback modal(s). play_nfv frees the shared UI canvas to hand the
@@ -1284,6 +1153,7 @@ static void draw_row(int i, int y, int h, bool focus)
     char mb[12] = "";
     if (r->dir)         snprintf(mb, sizeof mb, "%u", (unsigned)r->count);
     else if (is_resume) fmt_mmss(mb, sizeof mb, r->resume);
+    else if (r->old)    snprintf(mb, sizeof mb, "%s", TR("vecchio", "old"));   // pre-v4: opening it says how to convert
     else if (r->dur)    fmt_mmss(mb, sizeof mb, r->dur);
     int mw = mb[0] ? (int)strlen(mb) * 6 : 0;
 
@@ -1322,6 +1192,8 @@ static void draw_row(int i, int y, int h, bool focus)
     }
 }
 
+// Touch: the rows draw_list put on the panel (slot -> entry index).
+static int s_vtap[12], s_vtap_n;
 static void draw_list(int y0, int region_h)
 {
     if (s_sel < s_scroll) s_scroll = s_sel;
@@ -1330,12 +1202,18 @@ static void draw_list(int y0, int region_h)
     while (scan_y > region_h && s_scroll < s_sel) { scan_y -= (s_scroll == s_sel) ? 28 : 20; s_scroll++; }
 
     int y = y0;
+    s_vtap_n = 0;
     for (int i = s_scroll; i < s_n && y < y0 + region_h; i++) {
         int h = (i == s_sel) ? 28 : 20;
         if (y + h > y0 + region_h && i != s_scroll) break;
         draw_row(i, y, h, i == s_sel);
+        if (s_vtap_n < 12) {                                  // touch: tap picks, tap again plays / opens
+            nucleo_touch_add(0, y, 240, h, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + s_vtap_n));
+            s_vtap[s_vtap_n++] = i;
+        }
         y += h;
     }
+    nucleo_touch_add_scroll(0, y0, 240, region_h, 20, NK_UP, 0, NK_DOWN, 0);   // a drag walks the list
     if (y < y0 + region_h) d.fillRect(0, y, 240, (y0 + region_h) - y, BG);   // clear the tail
 
     if (s_n > 1) {                                            // capsule scroll knob over a faint track
@@ -1596,20 +1474,20 @@ static bool video_back(int key)
 // A line starting with '#' is a heading (accent, no marker); "" is a spacer.
 static const char *const HELP_LINES[] = {
     "#RIPRODUCE (sul Cardputer)",
-    "Solo file .nfv (v1/v2/v3).",
-    "Dentro sono frame JPEG; il v3",
-    "aggiorna solo le parti che",
-    "cambiano + audio incluso.",
+    "Solo file .nfv v4: immagine",
+    "(JPEG) e audio in un file.",
+    "Il film va anche sullo schermo",
+    "esterno 320x240, se collegato.",
     "#ALTRI FORMATI?",
     "mp4, mkv, avi, mov, mjpeg e",
     "qualsiasi altro NON si aprono",
-    "qui: convertili in .nfv con lo",
-    "strumento NucleoOS (NFV Studio,",
-    "run_studio.ps1 sul PC).",
-    "#COMPATIBILITA'",
-    "I clip vecchi (v1/v2) si vedono",
-    "come prima: il player riconosce",
-    "la versione automaticamente.",
+    "qui: convertili in .nfv con",
+    "Video Studio (app web) o con",
+    "tools/nfv/nfv4.py sul PC.",
+    "#CLIP VECCHI (v1/v2/v3)",
+    "Nella lista: 'vecchio'. Non si",
+    "riproducono piu': riconvertili,",
+    "o usa tools/nfv/migrate.py.",
     "#AUDIO",
     "Mono 16 kHz: lo speaker non",
     "rende sopra ~6 kHz - leggero,",
@@ -1617,20 +1495,20 @@ static const char *const HELP_LINES[] = {
 };
 static const char *const HELP_LINES_EN[] = {
     "#PLAYS (on the Cardputer)",
-    "Only .nfv files (v1/v2/v3).",
-    "Inside are JPEG frames; v3",
-    "stores only the parts that",
-    "change + embedded audio.",
+    "Only .nfv v4 files: picture",
+    "(JPEG) and sound in one file.",
+    "The film also plays on the",
+    "external 320x240 panel.",
     "#OTHER FORMATS?",
     "mp4, mkv, avi, mov, mjpeg and",
     "any other do NOT open here:",
-    "convert them to .nfv with the",
-    "NucleoOS tool (NFV Studio,",
-    "run_studio.ps1 on a PC).",
-    "#COMPATIBILITY",
-    "Old clips (v1/v2) play just like",
-    "before: the player detects the",
-    "version automatically.",
+    "convert them to .nfv with",
+    "Video Studio (web app) or",
+    "tools/nfv/nfv4.py on a PC.",
+    "#OLD CLIPS (v1/v2/v3)",
+    "Listed as 'old'. They no longer",
+    "play: convert them again, or",
+    "use tools/nfv/migrate.py.",
     "#AUDIO",
     "Mono 16 kHz: the speaker is deaf",
     "above ~6 kHz - lighter, same",
@@ -1694,7 +1572,7 @@ static void draw(void)
         if (strcmp(s_path, "/")) { d.setCursor(12, lt + 16); d.print("(empty folder)"); }
         else {
             d.setCursor(12, lt + 16); d.print("No .nfv clips in /data/Videos");
-            d.setCursor(12, lt + 30); d.print("Convert on PC: tools/nfv/run_studio.ps1");
+            d.setCursor(12, lt + 30); d.print(TR("Converti: app web Video Studio", "Convert: Video Studio web app"));
         }
         return;
     }
@@ -1762,7 +1640,9 @@ static void play_from(int idx, int64_t start_ms)
         const char *nt = NULL;                               // "Up next" preview for autoplay/repeat
         if (s_autoplay || s_repeat) { int an = next_to_play(idx); if (an >= 0 && an != idx) { clip_title(an, ntbuf, sizeof ntbuf); nt = ntbuf; } }
 
+        nucleo_app_display_hold(true);                       // a film is watched, not touched: stay lit
         int r = play_nfv(vpath, title, key, start_ms, nt);
+        nucleo_app_display_hold(false);
         resume_refresh();
         start_ms = 0;                                        // any subsequent clip starts at the top
 
@@ -1783,7 +1663,9 @@ static void play_external(const char *abs)
     const char *bn = strrchr(abs, '/'); bn = bn ? bn + 1 : abs;
     char title[72]; snprintf(title, sizeof title, "%s", bn);
     char *dt = strrchr(title, '.'); if (dt) *dt = 0;          // hide the .nfv extension in the bar
+    nucleo_app_display_hold(true);
     play_nfv(abs, title, abs, 0, NULL);                       // reskey = abs path (unique resume key)
+    nucleo_app_display_hold(false);
     resume_refresh();
     return_to_list();
 }
@@ -1798,6 +1680,12 @@ static void on_key(int key, char ch)
     }
     if (s_set_open) { settings_key(key, ch); return; }
 
+    if (nucleo_touch_is_row(key, ch)) {                       // a tapped row: pick it, or open it if picked
+        int slot = ch - NUCLEO_TOUCH_ROW;
+        if (slot >= s_vtap_n) return;
+        if (s_vtap[slot] != s_sel) { s_sel = s_vtap[slot]; nucleo_app_request_draw(); return; }
+        key = NK_ENTER; ch = 0;
+    }
     if (app_ui_list_key(key, ch, &s_sel, s_n, row_label, nullptr)) {   // up/down + type-to-jump
         // handled
     }
@@ -1877,7 +1765,9 @@ extern "C" void nucleo_register_video(void)
         "video", "Video", "Media",
         ".nfv player — prev/next, mute, autoplay, resume. TAB=settings.",
         'V', 0x4D9C, enter, on_key, tick, draw, leave,
-        NX_NET_APP | NX_SOLO   // SOLO: reboot into a fresh, unfragmented heap so MP3 decoder + JPEG buffer
+        NX_NET_APP | NX_SOLO | NX_WIFI   // SOLO + WIFI: a media center — the Solo boot starts no radio at all
+                               // (no Wi-Fi, no BLE, no httpd/voice/L1): ~48 KB more heap, no radio interrupts.
+                               // SOLO: reboot into a fresh, unfragmented heap so MP3 decoder + JPEG buffer
                                // + file list coexist (inline reclaim left the decoder short -> silent video).
                                // NX_NET_APP bits are no-ops in Solo (services down at boot) but kept defensively
                                // for the non-Solo fallback path. Esc reboots back to the full OS.

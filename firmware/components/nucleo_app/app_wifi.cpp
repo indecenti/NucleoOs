@@ -30,6 +30,8 @@
 #include "nucleo_i18n.h"      // TR5(it,en,es,fr,de) + the 5-language OS switch
 #include "nucleo_guest.h"     // installed by M5Launcher: Device page gains "Back to M5Launcher"
 #include "nucleo_sdcontent.h" // SD content: the wizard's download step + Device > "SD content"
+#include "nucleo_extdisp.h"   // ADV: the second-screen page (external SPI display on the EXT header)
+#include "nucleo_touch.h"     // tap a row: select it, tap again: open it
 #include <M5GFX.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
@@ -145,12 +147,13 @@ static const int ROW_H = 19;                   // compact row
 static const int ROW_F = 34;                   // focused row: an expanded two-line chip
 
 // ---- pages + rows -----------------------------------------------------------
-enum { PG_ROOT = 0, PG_WIFI, PG_AP, PG_BT, PG_DISPLAY, PG_SOUND, PG_DEVICE, PG_RESET, PG_NETS, PG_SAVED, PG_SEARCH, PG_N };
+enum { PG_ROOT = 0, PG_WIFI, PG_AP, PG_BT, PG_DISPLAY, PG_SOUND, PG_DEVICE, PG_RESET, PG_NETS, PG_SAVED, PG_SEARCH, PG_EXT, PG_N };
 enum { K_NAV = 0, K_INFO, K_TOGGLE, K_SLIDER, K_CYCLE, K_EDIT, K_DANGER };
 enum {
     R_NONE = 0,
     R_SUGGEST,                                                                              // root chip
-    R_S_WIFI, R_S_AP, R_S_BT, R_S_DISPLAY, R_S_SOUND, R_ANIMA, R_LANG, R_DATETIME, R_S_DEVICE, R_S_RESET,
+    R_S_WIFI, R_S_AP, R_S_BT, R_S_DISPLAY, R_S_EXT, R_S_SOUND, R_ANIMA, R_LANG, R_DATETIME, R_S_DEVICE, R_S_RESET,
+    R_X_STATE, R_X_LAYOUT, R_X_PRIMARY, R_X_FIT, R_X_MHZ, R_X_MODE, R_X_ROT, R_X_TOUCH, R_X_CAL,       // Second screen (ADV)
     R_NETS, R_SAVED, R_HANDOFF,                                                             // Wi-Fi
     R_AP_ON, R_AP_STATE, R_AP_SSID, R_AP_PASS, R_AP_ADDR,                                   // Hotspot
     R_BT_BOOT, R_BT_STATE,                                                                  // Bluetooth
@@ -163,6 +166,9 @@ enum {
 };
 
 static const uint8_t ROWS_ROOT[]    = { R_S_WIFI, R_S_AP, R_S_BT, R_S_DISPLAY, R_S_SOUND, R_ANIMA, R_LANG, R_DATETIME, R_S_DEVICE, R_S_RESET };
+// The ADV has the EXT header: its root gains "Second screen" right under Display.
+static const uint8_t ROWS_ROOT_ADV[] = { R_S_WIFI, R_S_AP, R_S_BT, R_S_DISPLAY, R_S_EXT, R_S_SOUND, R_ANIMA, R_LANG, R_DATETIME, R_S_DEVICE, R_S_RESET };
+static const uint8_t ROWS_EXT[]     = { R_X_STATE, R_X_LAYOUT, R_X_PRIMARY, R_X_FIT, R_X_MHZ, R_X_MODE, R_X_ROT, R_X_TOUCH, R_X_CAL, R_RESTART };
 static const uint8_t ROWS_WIFI[]    = { R_NETS, R_SAVED, R_HANDOFF };
 static const uint8_t ROWS_AP[]      = { R_AP_ON, R_AP_STATE, R_AP_SSID, R_AP_PASS, R_AP_ADDR };
 static const uint8_t ROWS_BT[]      = { R_BT_BOOT, R_BT_STATE, R_RESTART };
@@ -173,7 +179,7 @@ static const uint8_t ROWS_DEVICE[]  = { R_NAME, R_PIN, R_SESSIONS, R_MODEL, R_VE
 static const uint8_t ROWS_DEVICE_HOSTED[] = { R_NAME, R_PIN, R_SESSIONS, R_MODEL, R_VERSION, R_BATTERY, R_SD, R_SDC, R_RAM, R_UPTIME, R_UPDATES, R_RESTART, R_LAUNCHER };
 static const uint8_t ROWS_RESET[]   = { R_RST_SOFT, R_RST_HARD, R_RST_FMT, R_RST_SD };
 static bool is_rst(uint8_t id) { return id == R_RST_SOFT || id == R_RST_HARD || id == R_RST_FMT || id == R_RST_SD; }   // ENTER x3 rows
-static const uint8_t SECTIONS[]     = { PG_WIFI, PG_AP, PG_BT, PG_DISPLAY, PG_SOUND, PG_DEVICE, PG_RESET };   // TAB order
+static const uint8_t SECTIONS[]     = { PG_WIFI, PG_AP, PG_BT, PG_DISPLAY, PG_EXT, PG_SOUND, PG_DEVICE, PG_RESET };   // TAB order (PG_EXT: ADV only)
 #define NROWS(a) ((int)(sizeof(a) / sizeof((a)[0])))
 
 // One row, built on demand from its id (never stored).
@@ -378,7 +384,9 @@ static int suggestion(void)
 static const uint8_t *page_rows(int pg, int *n)
 {
     switch (pg) {
-        case PG_ROOT:    *n = NROWS(ROWS_ROOT);    return ROWS_ROOT;
+        case PG_ROOT:    if (nucleo_ui_is_adv()) { *n = NROWS(ROWS_ROOT_ADV); return ROWS_ROOT_ADV; }
+                         *n = NROWS(ROWS_ROOT);    return ROWS_ROOT;
+        case PG_EXT:     *n = NROWS(ROWS_EXT);     return ROWS_EXT;
         case PG_WIFI:    *n = NROWS(ROWS_WIFI);    return ROWS_WIFI;
         case PG_AP:      *n = NROWS(ROWS_AP);      return ROWS_AP;
         case PG_BT:      *n = NROWS(ROWS_BT);      return ROWS_BT;
@@ -407,6 +415,7 @@ static const char *page_title(int pg)
         case PG_AP:      return "Hotspot";
         case PG_BT:      return "Bluetooth";
         case PG_DISPLAY: return TR5("Schermo", "Display", "Pantalla", "Ecran", "Anzeige");
+        case PG_EXT:     return TR5("Secondo schermo", "Second screen", "2a pantalla", "Second ecran", "2. Bildschirm");
         case PG_SOUND:   return TR5("Suono", "Sound", "Sonido", "Son", "Ton");
         case PG_DEVICE:  return TR5("Dispositivo", "Device", "Dispositivo", "Appareil", "Geraet");
         case PG_RESET:   return TR5("Ripristino", "Reset", "Restablecer", "Restauration", "Ruecksetzen");
@@ -420,6 +429,7 @@ static int section_of(uint8_t id)
     switch (id) {
         case R_S_WIFI: return PG_WIFI;   case R_S_AP: return PG_AP;          case R_S_BT: return PG_BT;
         case R_S_DISPLAY: return PG_DISPLAY; case R_S_SOUND: return PG_SOUND; case R_S_DEVICE: return PG_DEVICE;
+        case R_S_EXT: return PG_EXT;
         case R_S_RESET: return PG_RESET;
         default: return -1;
     }
@@ -478,6 +488,82 @@ static void make_row_id(uint8_t id, int num, Row &r)
         snprintf(r.val, sizeof r.val, "%d%%", nucleo_app_brightness());
         snprintf(r.sub, sizeof r.sub, "%d%%  %s", nucleo_app_brightness(), theme_name());
         break;
+    case R_S_EXT: {
+        r.label = TR5("Secondo schermo", "Second screen", "2a pantalla", "Second ecran", "2. Bildschirm"); r.glyph = UG_MONITOR;
+        nucleo_extdisp_conf_t lv;
+        nucleo_extdisp_conf(&lv, nullptr);
+        if (nucleo_extdisp_active()) {
+            snprintf(r.val, sizeof r.val, "%d MHz", lv.mhz); r.col = GOOD;
+            snprintf(r.sub, sizeof r.sub, "%s  %d MHz  %s", nucleo_extdisp_controller(), lv.mhz,
+                     lv.fit ? TR5("adatta", "fit", "ajustar", "ajuste", "skaliert") : "1:1");
+        } else { vset(r, TR5("Non collegato", "Not connected", "No conectada", "Non connecte", "Nicht verbunden")); r.col = MUTED; }
+    } break;
+    case R_X_STATE:
+        r.label = TR5("Stato", "Status", "Estado", "Etat", "Status"); r.kind = K_INFO;
+        if (nucleo_extdisp_active()) { vset(r, TR5("Collegato", "Connected", "Conectada", "Connecte", "Verbunden")); r.col = GOOD; }
+        else                         { vset(r, TR5("Non trovato", "Not found", "No encontrada", "Introuvable", "Nicht gefunden")); r.col = MUTED; }
+        sset(r, nucleo_extdisp_reason());
+        break;
+    case R_X_LAYOUT: {
+        nucleo_extdisp_conf_t sv; nucleo_extdisp_conf(nullptr, &sv);
+        r.label = TR5("Modalita", "Mode", "Modo", "Mode", "Modus"); r.kind = K_CYCLE;
+        if (sv.layout == 1) {
+            vset(r, TR5("Solo Cardputer", "Cardputer only", "Solo Cardputer", "Cardputer seul", "Nur Cardputer"));
+            sset(r, TR5("Il secondo schermo resta nero", "The second screen stays dark", "La segunda queda negra",
+                        "Le second reste noir", "Zweiter bleibt dunkel"));
+        } else if (sv.layout == 2) {
+            vset(r, TR5("Solo secondo", "Second only", "Solo segunda", "Second seul", "Nur zweiter"));
+            sset(r, TR5("Il display del Cardputer si spegne", "The Cardputer's display turns off", "La pantalla del Cardputer se apaga",
+                        "L'ecran du Cardputer s'eteint", "Cardputer-Display aus"));
+        } else {
+            vset(r, TR5("Duplica", "Duplicate", "Duplicar", "Dupliquer", "Duplizieren"));
+            sset(r, TR5("Su entrambi gli schermi", "On both screens", "En ambas pantallas", "Sur les deux ecrans", "Auf beiden Bildschirmen"));
+        }
+    } break;
+    case R_X_PRIMARY: case R_X_FIT: case R_X_MHZ: case R_X_MODE: case R_X_ROT: case R_X_TOUCH: case R_X_CAL: {
+        nucleo_extdisp_conf_t lv, sv;
+        nucleo_extdisp_conf(&lv, &sv);
+        const char *later = TR5("Dopo il riavvio", "After a restart", "Tras reiniciar", "Au redemarrage", "Nach Neustart");
+        if (id == R_X_PRIMARY) {
+            r.label = TR5("Home grande", "Big home", "Inicio grande", "Accueil grand", "Start gross");
+            r.kind = K_TOGGLE; r.on = sv.primary;
+            sset(r, TR5("Il launcher usa tutti i 320x240", "The launcher uses the whole 320x240", "El menu usa los 320x240",
+                        "Le menu utilise les 320x240", "Das Menue nutzt 320x240"));
+        } else if (id == R_X_FIT) {
+            r.label = TR5("App grandi", "Big apps", "Apps grandes", "Apps en grand", "Apps gross");
+            r.kind = K_TOGGLE; r.on = sv.fit;
+            sset(r, sv.fit ? TR5("320x180, scala 4/3", "320x180, scaled 4/3", "320x180, escala 4/3", "320x180, echelle 4/3", "320x180, Faktor 4/3")
+                           : TR5("240x135 nitido, 1:1", "240x135 sharp, 1:1", "240x135 nitido, 1:1", "240x135 net, 1:1", "240x135 scharf, 1:1"));
+        } else if (id == R_X_MHZ) {
+            r.label = TR5("Velocita", "Speed", "Velocidad", "Vitesse", "Tempo"); r.kind = K_CYCLE;
+            snprintf(r.val, sizeof r.val, "%d MHz", sv.mhz);
+            sset(r, sv.mhz != lv.mhz ? later
+                 : sv.mhz >= 80 ? TR5("Sperimentale: cavi corti", "Experimental: short wires", "Experimental: cables cortos",
+                                      "Experimental: fils courts", "Experimentell: kurze Kabel")
+                 : TR5("Piu alta = piu fluido", "Higher = smoother", "Mas alta = mas fluido", "Plus haut = plus fluide", "Hoeher = fluessiger"));
+        } else if (id == R_X_MODE) {
+            r.label = TR5("Rilevamento", "Detection", "Deteccion", "Detection", "Erkennung"); r.kind = K_CYCLE;
+            vset(r, sv.mode == 1 ? TR5("Sempre", "Always", "Siempre", "Toujours", "Immer")
+                  : sv.mode == 2 ? TR5("Spento", "Off", "Apagado", "Eteint", "Aus") : "Auto");
+            sset(r, sv.mode != lv.mode ? later : TR5("Sempre: modulo senza touch", "Always: a module without touch",
+                                                     "Siempre: modulo sin tactil", "Toujours: module sans tactile", "Immer: Modul ohne Touch"));
+        } else if (id == R_X_ROT) {
+            r.label = TR5("Orientamento", "Orientation", "Orientacion", "Orientation", "Ausrichtung"); r.kind = K_CYCLE;
+            vset(r, sv.rotation == 3 ? TR5("Capovolto", "Upside down", "Invertida", "Inverse", "Kopfueber")
+                                     : TR5("Normale", "Normal", "Normal", "Normale", "Normal"));
+            if (sv.rotation != lv.rotation) sset(r, later);
+        } else if (id == R_X_TOUCH) {
+            r.label = "Touch"; r.kind = K_TOGGLE; r.on = sv.touch;
+            sset(r, sv.touch != lv.touch ? later : TR5("Tocco, trascina, tieni premuto", "Tap, drag, hold", "Toca, arrastra, manten",
+                                                       "Toucher, glisser, maintenir", "Tippen, ziehen, halten"));
+        } else {
+            r.label = TR5("Calibra il touch", "Calibrate touch", "Calibrar tactil", "Calibrer tactile", "Touch kalibrieren");
+            r.dis = !nucleo_extdisp_touch() || !lv.touch;
+            sset(r, r.dis ? TR5("Nessun touch rilevato", "No touch detected", "Sin tactil detectado", "Aucun tactile detecte", "Kein Touch erkannt")
+                          : TR5("Tocca i 4 mirini sullo schermo", "Tap the 4 targets on the screen", "Toca las 4 dianas",
+                                "Touchez les 4 cibles", "Die 4 Ziele antippen"));
+        }
+    } break;
     case R_S_SOUND:
         r.label = TR5("Suono", "Sound", "Sonido", "Son", "Ton"); r.glyph = muted ? UG_MUTE : UG_SPEAKER;
         if (muted) { vset(r, TR5("Muto", "Muted", "Mudo", "Muet", "Stumm")); r.col = BAD; }
@@ -728,7 +814,7 @@ static void make_row(int pg, int i, Row &r)
         if (i < 0 || i >= s_hits) { memset(&r, 0, sizeof r); r.label = ""; return; }
         make_row_id(s_hit_id[i], 0, r);
         // A sub-page row has no glyph of its own (0 would draw the Wi-Fi fan): wear its section's.
-        static const uint8_t PAGE_GLYPH[PG_N] = { 0, UG_WIFI, UG_HOTSPOT, UG_BLUETOOTH, UG_SUN, UG_SPEAKER, UG_CHIP, UG_RESET, UG_WIFI, UG_WIFI, 0 };
+        static const uint8_t PAGE_GLYPH[PG_N] = { 0, UG_WIFI, UG_HOTSPOT, UG_BLUETOOTH, UG_SUN, UG_SPEAKER, UG_CHIP, UG_RESET, UG_WIFI, UG_WIFI, 0, UG_MONITOR };
         if (!r.glyph && s_hit_pg[i] != PG_ROOT) r.glyph = PAGE_GLYPH[s_hit_pg[i]];
         // show where it lives: "Sound  40%"
         char loc[40]; snprintf(loc, sizeof loc, "%s  %s", page_title(s_hit_pg[i]), r.sub[0] ? r.sub : r.val);
@@ -749,8 +835,9 @@ static bool focused_row(Row &r)
 }
 static int root_index_of(uint8_t id)
 {
-    int off = suggestion() != SG_NONE ? 1 : 0;
-    for (int i = 0; i < NROWS(ROWS_ROOT); i++) if (ROWS_ROOT[i] == id) return i + off;
+    int off = suggestion() != SG_NONE ? 1 : 0, n;
+    const uint8_t *rows = page_rows(PG_ROOT, &n);
+    for (int i = 0; i < n; i++) if (rows[i] == id) return i + off;
     return 0;
 }
 
@@ -770,9 +857,10 @@ static bool ci_contains(const char *hay, const char *needle)
 static int search_scan(const char *q, uint8_t *pg_out, uint8_t *id_out, int cap)
 {
     int hits = 0;
-    static const uint8_t PAGES[] = { PG_ROOT, PG_WIFI, PG_AP, PG_BT, PG_DISPLAY, PG_SOUND, PG_DEVICE, PG_RESET };
+    static const uint8_t PAGES[] = { PG_ROOT, PG_WIFI, PG_AP, PG_BT, PG_DISPLAY, PG_EXT, PG_SOUND, PG_DEVICE, PG_RESET };
     for (int p = 0; p < NROWS(PAGES); p++) {
         int pg = PAGES[p], n; const uint8_t *ids = page_rows(pg, &n);
+        if (pg == PG_EXT && !nucleo_ui_is_adv()) continue;
         for (int i = 0; i < n; i++) {
             if (pg == PG_ROOT && section_of(ids[i]) < 0 && ids[i] != R_ANIMA && ids[i] != R_LANG && ids[i] != R_DATETIME) continue;
             Row r; make_row_id(ids[i], i, r);
@@ -1073,6 +1161,7 @@ static void draw_scrollbar(int top, int band, int scroll, int total)
 }
 
 struct RowBox { const Row *r; bool foc, icon; };
+static int s_tap_row[10];                     // touch: screen slot -> row index, from the last draw_page
 static void row_box(int y, const void *ctx) { const RowBox *b = (const RowBox *)ctx; draw_row(y, *b->r, b->foc, b->icon); }
 
 static int draw_wifi_card(int top);
@@ -1118,6 +1207,9 @@ static void draw_page(int ch)
     for (int i = 0; i < n && k < 10; i++) {
         int h = (i == sel) ? ROW_F : ROW_H;
         if (y + h > top && y < top + band) {
+            int ty = y > top ? y : top, th = (y + h < top + band ? y + h : top + band) - ty;
+            nucleo_touch_add(0, ty, W, th, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + k));
+            s_tap_row[k] = i;
             Row r; make_row(s_page, i, r);
             if (slot_begin(k, y, h, fnv(row_sig(r, i == sel, icon), ACC), next)) {
                 RowBox rb = { &r, i == sel, icon };
@@ -1130,6 +1222,7 @@ static void draw_page(int ch)
     slots_end(next, k, y < top + band ? y : top + band);
     d.clearClipRect();
     draw_scrollbar(top, band, sc, total);
+    nucleo_touch_add_scroll(0, top, W, band, ROW_H, NK_UP, 0, NK_DOWN, 0);   // a drag walks the rows
 }
 
 // Wi-Fi status card: signal ring + network name + address line. Returns the y below it.
@@ -1793,7 +1886,8 @@ static void set_page(int pg)
 }
 static void open_section(int pg)
 {
-    for (int i = 0; i < NROWS(ROWS_ROOT); i++) if (section_of(ROWS_ROOT[i]) == pg) s_sel[PG_ROOT] = (int8_t)root_index_of(ROWS_ROOT[i]);
+    int nr; const uint8_t *rr = page_rows(PG_ROOT, &nr);
+    for (int i = 0; i < nr; i++) if (section_of(rr[i]) == pg) s_sel[PG_ROOT] = (int8_t)root_index_of(rr[i]);
     set_page(pg);
 }
 static void go_back(void)
@@ -1813,6 +1907,7 @@ static void on_tab(void)
         int sec = section_of(r.id); next = sec >= 0 ? sec : PG_WIFI;
     } else {
         for (int i = 0; i < NROWS(SECTIONS); i++) if (SECTIONS[i] == cur) next = SECTIONS[(i + 1) % NROWS(SECTIONS)];
+        if (next == PG_EXT && !nucleo_ui_is_adv()) next = PG_SOUND;
     }
     s_qn = 0; s_q[0] = 0;
     open_section(next);
@@ -1851,6 +1946,23 @@ static bool adjust(const Row &r, int dir)
         case R_SAVER_TIME:  saver_time_cycle(dir); return true;
         case R_SAVER_STYLE: s_saver_m_pend = ((s_saver_m_pend >= 0 ? s_saver_m_pend : nucleo_screensaver_mode()) + dir + 4) % 4;
                             s_prefs_dirty = true; return true;
+        case R_X_LAYOUT: {
+            nucleo_extdisp_conf_t sv; nucleo_extdisp_conf(nullptr, &sv);
+            nucleo_extdisp_set_layout((sv.layout + dir + 3) % 3);
+            nucleo_app_force_repaint();
+            return true;
+        }
+        case R_X_MHZ: case R_X_MODE: case R_X_ROT: {
+            nucleo_extdisp_conf_t sv; nucleo_extdisp_conf(nullptr, &sv);
+            if (r.id == R_X_MHZ) {
+                static const int MHZ[] = { 10, 20, 27, 40, 80 };   // the panel clock divides 80 MHz: these are exact
+                int i = 0; while (i < 4 && MHZ[i] < sv.mhz) i++;
+                i += dir; if (i < 0) i = 0; if (i > 4) i = 4;
+                nucleo_extdisp_set_mhz(MHZ[i]);
+            } else if (r.id == R_X_MODE) nucleo_extdisp_set_mode((sv.mode + dir + 3) % 3);
+            else nucleo_extdisp_set_rotation(sv.rotation == 3 ? 1 : 3);
+            return true;
+        }
         default: return false;
     }
 }
@@ -1874,6 +1986,11 @@ static void toggle(const Row &r)
                         toast_ok(TR5("Vale dal prossimo riavvio", "Applies after a restart", "Se aplica al reiniciar",
                                      "Actif apres redemarrage", "Gilt nach Neustart")); break;
         case R_AP_ON:   s_cf = R_AP_ON; s_cf_yes = false; break;
+        case R_X_PRIMARY: nucleo_extdisp_set_primary(on); break;
+        case R_X_FIT:     nucleo_extdisp_set_fit(on); nucleo_app_force_repaint(); break;   // the frame moved: repaint all
+        case R_X_TOUCH:   nucleo_extdisp_set_touch(on);
+                          toast_ok(TR5("Vale dal prossimo riavvio", "Applies after a restart", "Se aplica al reiniciar",
+                                       "Actif apres redemarrage", "Gilt nach Neustart")); break;
     }
 }
 
@@ -1921,6 +2038,13 @@ static void activate(const Row &r)
         else                    { s_sel[PG_WIFI] = 0; open_section(PG_WIFI); set_page(PG_NETS); }
     } break;
     case R_LANG: case R_THEME: case R_ANIMA: case R_SAVER_TIME: case R_SAVER_STYLE: adjust(r, +1); break;
+    case R_X_MHZ: case R_X_MODE: case R_X_ROT: case R_X_LAYOUT: adjust(r, +1); break;
+    case R_X_PRIMARY: case R_X_FIT: case R_X_TOUCH: toggle(r); break;
+    case R_X_CAL:
+        if (r.dis || !nucleo_extdisp_recalibrate()) toast(r.sub);
+        else toast_ok(TR5("Tocca i mirini sul secondo schermo", "Tap the targets on the second screen", "Toca las dianas en la segunda pantalla",
+                          "Touchez les cibles sur le second ecran", "Ziele auf dem zweiten Bildschirm antippen"));
+        break;
     case R_DATETIME: dt_open(); break;
     case R_NETS:     set_page(PG_NETS); break;
     case R_SAVED:    set_page(PG_SAVED); break;
@@ -2092,6 +2216,13 @@ static void search_set(const char *q)
 // LEFT and Esc never arrive here: the framework routes both to on_back().
 static void on_key(int k, char ch)
 {
+    // A tapped row (external panel): select it, or open it when it already is the selection.
+    if (nucleo_touch_is_row(k, ch) && s_im == IM_NONE && !s_dt && s_cf == R_NONE) {
+        int slot = ch - NUCLEO_TOUCH_ROW, n = page_count(s_page);
+        if (slot >= 10 || s_tap_row[slot] >= n) return;
+        if (s_tap_row[slot] != cur_sel()) { s_sel[s_page] = (int8_t)s_tap_row[slot]; update_hint(); nucleo_app_request_draw(); return; }
+        k = NK_ENTER; ch = 0;
+    }
     if (s_onboard == OB_DONE) {                                      // "All set": ENTER opens the launcher
         if (k == NK_ENTER) { s_onboard = OB_NONE; nucleo_setup_onboard_ack();
                              if (nucleo_setup_is_first_boot()) esp_restart();   // lean setup is done: boot the full OS

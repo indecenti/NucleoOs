@@ -88,5 +88,7 @@
   "volumePct": "Lautstärke ±10 %",
   "subOnOff": "Untertitel ein/aus",
   "subSize": "Untertitelgröße",
-  "showPlaylistShort": "Wiedergabeliste anzeigen"
+  "showPlaylistShort": "Wiedergabeliste anzeigen",
+  "nfvOld": ".nfv-Format v{v} wird nicht mehr unterstützt: mit Video Studio neu konvertieren",
+  "nfvError": "Die .nfv-Datei kann nicht gelesen werden"
 }

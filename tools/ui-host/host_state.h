@@ -23,6 +23,7 @@ struct HostState {
     const nucleo_key_t *kbd = nullptr;        // scripted keys for the BLOCKING modals (nucleo_ui_menu/input/message)
     int  kbd_n = 0, kbd_i = 0;
     bool adv = false;
+    bool large = false;                       // .large scenes: the launcher on an external 320x240 panel (nucleo_surface.h)
     int64_t now_us = 5000000;                 // esp_timer clock
     time_t wall = 1790678520;                 // 2026-09-29 09:22 UTC (scripted wall clock)
 };
