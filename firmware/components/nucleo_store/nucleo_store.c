@@ -25,7 +25,7 @@ static const char *TAG = "store";
 
 #define WINDOW        6144u     // == the SD-content installer: under the 8 KB TLS record cap (sdc_engine.h)
 #define TLS_MIN_BLOCK 22000u    // contiguous heap the TLS handshake needs (nucleo_sdcontent.c)
-#define TASK_STACK    6144
+#define TASK_STACK    7168      // TLS handshake + ECDSA verify run on it; the high-water mark is logged per op
 
 static volatile nst_status_t s_status = NST_IDLE;
 static nst_op_t s_op;
@@ -145,7 +145,8 @@ static void task(void *arg)
         nucleo_sdcontent_http_close();
     }
     free(buf);
-    ESP_LOGW(TAG, "op %d %s: rc=%d http=%d detail=%s", s_op, s_id, rc, s_st.http, s_st.detail);
+    ESP_LOGW(TAG, "op %d %s: rc=%d http=%d detail=%s stack-left=%u", s_op, s_id, rc, s_st.http, s_st.detail,
+             (unsigned)uxTaskGetStackHighWaterMark(NULL));
     if (rc != ST_OK) { s_st.code = rc; localize(rc, s_st.http); }
     s_status = rc == ST_OK ? NST_DONE : NST_FAILED;
     vTaskDelete(NULL);

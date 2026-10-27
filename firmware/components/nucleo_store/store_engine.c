@@ -181,7 +181,7 @@ static bool read_sig_block(FILE *f, char key[17], uint8_t *der, int *derlen)
 static st_code_t fetch(const st_cfg_t *cfg, const st_io_t *io, st_state_t *st, const char *url,
                        const char *dest, uint32_t max, int64_t want, uint8_t sha[32])
 {
-    char part[300];
+    static char part[300];          // static: the engine runs on one task, and its stack also carries TLS
     snprintf(part, sizeof part, "%s.part", dest);
     if (!mkdirs(dest, false)) { fail_detail(st, ST_E_WRITE, dest); return ST_E_WRITE; }
     FILE *f = fopen(part, "wb");
@@ -256,7 +256,7 @@ st_code_t st_refresh(const st_cfg_t *cfg, const st_io_t *io, st_state_t *st)
     st->phase = ST_PH_CATALOG;
     if (!channel_ok(cfg->channel)) { fail_detail(st, ST_E_BAD, "channel"); return ST_E_BAD; }
     if (!is_dir(cfg->root)) { fail_detail(st, ST_E_NO_SD, cfg->root); return ST_E_NO_SD; }
-    char dir[160], idx_new[200], sig_new[200], idx[200], ser[200], url[200];
+    static char dir[160], idx_new[200], sig_new[200], idx[200], ser[200], url[200];   // static: see st_install
     store_dir(cfg->root, cfg->channel, dir, sizeof dir);
     if (!mkdirs(dir, true)) { fail_detail(st, ST_E_WRITE, dir); return ST_E_WRITE; }
     snprintf(idx_new, sizeof idx_new, "%s/index.new", dir);
@@ -503,7 +503,7 @@ static void manifest_perms(const char *mpath, char *out, size_t cap, uint8_t *bu
 
 static void register_web_app(const st_cfg_t *cfg, const st_app_t *a)
 {
-    char reg[200], add[200], man[200], perms[220];
+    static char reg[200], add[200], man[200], perms[220];   // static: see st_install
     snprintf(reg, sizeof reg, "%s/system/registry/apps.json", cfg->root);
     if (!exists(reg)) return;                                   // no web OS on this card: nothing to list it in
     snprintf(man, sizeof man, "%s/apps/%s/manifest.json", cfg->root, a->id);
@@ -536,7 +536,9 @@ st_code_t st_install(const st_cfg_t *cfg, const st_io_t *io, st_state_t *st, con
     st_installed(cfg->root, a->id, &system);
     if (system) { fail_detail(st, ST_E_CONFLICT, a->id); return ST_E_CONFLICT; }
 
-    char tmp[200], sig[200], live[200], old[200], url[260], path[300];
+    // Static, not on the stack: the store task's stack also carries the TLS handshake and the signature check
+    // (a 6 KB task overflowed with these 1.4 KB on it). The engine runs one operation at a time.
+    static char tmp[200], sig[200], live[200], old[200], url[260], path[300];
     snprintf(tmp, sizeof tmp, "%s/apps/.tmp/%s", cfg->root, a->id);
     snprintf(sig, sizeof sig, "%s/apps/.tmp/%s.sig", cfg->root, a->id);
     snprintf(live, sizeof live, "%s/apps/%s", cfg->root, a->id);

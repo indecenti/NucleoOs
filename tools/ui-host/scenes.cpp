@@ -390,6 +390,7 @@ static const Scene STORE[] = {
     { "choose-nonative", [] { g_host_native_abi = 0; store_choose(); app_key(NK_CHAR, '1'); app_draw(); g_host_native_abi = 1; } },
     { "native",    [] { native_open(); app_draw(); } },
     { "native-app",[] { native_open(); app_key(NK_ENTER); app_draw(); } },
+    { "native-app-uninstall", [] { native_open(); app_key(NK_ENTER); app_key(NK_RIGHT); app_draw(); } },   // RIGHT focuses Uninstall
     { "native-mine",[] { native_open(); for (int i = 0; i < 3; i++) app_key(NK_TAB); app_draw(); } },
     { "new",       [] { store_open(); app_draw(); } },
     { "games",     [] { store_open(); app_key(NK_TAB); app_draw(); } },

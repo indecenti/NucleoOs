@@ -79,6 +79,7 @@ static Ram *M;
 static const nucleo_app_ram_t APP_RAM[] = { { (void **)&M, sizeof(Ram) }, { nullptr, 0 } };
 
 static int s_n, s_nvis, s_sel, s_tab, s_view, s_cat, s_cat_sel, s_updates, s_app_from, s_qn, s_qi, s_desc_off;
+static int s_btn;         // app page: the focused button (0 = Install / Update / Open, 1 = Uninstall); LEFT/RIGHT move it
 static int s_lg_scroll;   // first visible row on the panel list
 static int s_ch, s_ch_sel; // the store being browsed (CH_*), and the highlighted card on the choice screen
 static bool s_yes, s_busy_seen, s_refresh_pending, s_canvas_lent, s_direct_full;
@@ -266,10 +267,9 @@ static void set_hint(void)
         if (stt == S_NEW)
             nucleo_app_set_hint(TR5("ok installa   esc indietro", "ok install   esc back", "ok instalar   esc atras", "ok installer   esc retour", "ok install.   esc zurueck"));
         else if (stt == S_UPDATE)
-            nucleo_app_set_hint(TR5("ok aggiorna  del disinstalla", "ok update  del uninstall", "ok actualizar  del desinst.", "ok maj  del desinstaller", "ok update  del entfernen"));
+            nucleo_app_set_hint(TR5("<> scegli  ok conferma  esc", "<> choose  ok press  esc", "<> elegir  ok pulsar  esc", "<> choisir  ok valider", "<> waehlen  ok druecken"));
         else if (mine)
-            nucleo_app_set_hint(TR5("ok apri   del disinstalla   esc", "ok open   del uninstall   esc", "ok abrir   del desinstalar",
-                                    "ok ouvrir   del desinstaller", "ok oeffnen   del entfernen"));
+            nucleo_app_set_hint(TR5("<> scegli  ok conferma  esc", "<> choose  ok press  esc", "<> elegir  ok pulsar  esc", "<> choisir  ok valider", "<> waehlen  ok druecken"));
         else
             nucleo_app_set_hint(TR5("esc indietro", "esc back", "esc atras", "esc retour", "esc zurueck"));
     }
@@ -297,6 +297,7 @@ static void open_app(void)
     if (!s_nvis) return;
     s_app_from = s_view;                         // ESC returns there (a list or a category)
     s_desc_off = 0;
+    s_btn = 0;
     if (st_find(NUCLEO_SD_MOUNT, CH_ID[s_ch], M->rows[M->vis[s_sel]].id, &M->app)) go(V_APP);
 }
 
@@ -536,11 +537,14 @@ static void draw_app(int top, int h)
     // Main action on OK: Install / Update, or Open once it is installed (a web app opens on a phone or PC).
     const char *act = stt == S_OK ? TR5("Apri", "Open", "Abrir", "Ouvrir", "Oeffnen") : state_word(stt);
     unsigned short col = stt == S_OK ? C_GREEN : state_col(stt);
-    d.fillRoundRect(6, by, 110, 20, 8, col);
-    txt(&fonts::Font2, 61, by + 10, act, INK, textdatum_t::middle_center);
-    if (mine) {                                          // DEL: uninstall, always visible for the store's apps
-        d.drawRoundRect(122, by, 112, 20, 8, C_RED);
-        txt(&fonts::Font2, 178, by + 10, TR5("Disinstalla", "Uninstall", "Desinstalar", "Desinstaller", "Entfernen"), C_RED, textdatum_t::middle_center);
+    // The focused button is filled, the other outlined: LEFT / RIGHT move the focus, OK presses it.
+    bool on_main = !mine || s_btn == 0;
+    if (on_main) d.fillRoundRect(6, by, 110, 20, 8, col); else d.drawRoundRect(6, by, 110, 20, 8, col);
+    txt(&fonts::Font2, 61, by + 10, act, on_main ? INK : col, textdatum_t::middle_center);
+    if (mine) {                                          // uninstall: always there for the store's apps (also DEL)
+        if (!on_main) d.fillRoundRect(122, by, 112, 20, 8, C_RED); else d.drawRoundRect(122, by, 112, 20, 8, C_RED);
+        txt(&fonts::Font2, 178, by + 10, TR5("Disinstalla", "Uninstall", "Desinstalar", "Desinstaller", "Entfernen"),
+            on_main ? C_RED : INK, textdatum_t::middle_center);
     } else if (a.author[0]) {                            // otherwise who made it
         snprintf(s, sizeof s, "%s %s", TR5("di", "by", "de", "par", "von"), a.author);
         d.setFont(&fonts::Font0);
@@ -657,8 +661,9 @@ static void lg_app(void)
     const unsigned short col = stt == S_OK ? C_GREEN : state_col(stt);
     if (mine) {
         const int bw = (W - 28 - 8) / 2;
-        lg::button(14, H - 52, bw, 44, act, col, INK, NK_ENTER, 0);
-        lg::button(22 + bw, H - 52, bw, 44, TR5("Disinstalla", "Uninstall", "Desinstalar", "Desinstaller", "Entfernen"), C_RED, INK, NK_DEL, 0);
+        lg::button(14, H - 52, bw, 44, act, s_btn == 0 ? col : LINE, s_btn == 0 ? INK : FG, NK_ENTER, 0);
+        lg::button(22 + bw, H - 52, bw, 44, TR5("Disinstalla", "Uninstall", "Desinstalar", "Desinstaller", "Entfernen"),
+                   s_btn == 1 ? C_RED : LINE, s_btn == 1 ? INK : FG, NK_DEL, 0);
     } else {
         const int bw = W > 260 ? 220 : W - 40;
         lg::button((W - bw) / 2, H - 52, bw, 44, act, col, INK, NK_ENTER, 0);
@@ -950,9 +955,12 @@ static void on_key(int key, char ch)
         if (key == NK_DOWN && s_desc_off < 6) { s_desc_off++; nucleo_app_request_draw(); return; }
         if (key == NK_CHAR && (ch == 'q' || ch == 'Q') && stt == S_OK && !strcmp(M->app.kind, "web")
             && nucleo_setup_ip() && nucleo_setup_ip()[0]) { go(V_QR); return; }
-        if (key == NK_ENTER && (stt == S_NEW || stt == S_UPDATE)) start(NST_OP_INSTALL, M->app.id);
+        bool mine = st_installed(NUCLEO_SD_MOUNT, M->app.id, nullptr) != 0;
+        if ((key == NK_LEFT || key == NK_RIGHT) && mine) { s_btn ^= 1; set_hint(); nucleo_app_request_draw(); return; }
+        if (!mine) s_btn = 0;
+        if ((key == NK_ENTER && s_btn == 1) || (key == NK_DEL && mine)) { s_yes = false; s_view = V_CONFIRM_REMOVE; }
+        else if (key == NK_ENTER && (stt == S_NEW || stt == S_UPDATE)) start(NST_OP_INSTALL, M->app.id);
         else if (key == NK_ENTER && stt == S_OK) open_installed();
-        else if (key == NK_DEL && st_installed(NUCLEO_SD_MOUNT, M->app.id, nullptr)) { s_yes = false; s_view = V_CONFIRM_REMOVE; }
         nucleo_app_request_draw();
         return;
     }
