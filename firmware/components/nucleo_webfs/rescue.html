@@ -47,6 +47,10 @@
   <h1>🛟 NucleoOS Rescue</h1>
   <p class="sub">The desktop shell is unavailable on this device. Use this console to re-upload the
     web OS or re-flash the firmware. Actions need pairing — enter the PIN shown on the device screen.</p>
+  <div class="card hidden" id="whyCard">
+    <h2>Why you see this</h2>
+    <div class="msg" id="whyMsg" style="margin:0"></div>
+  </div>
 
   <div class="card" id="pairCard">
     <h2>Pairing</h2>
@@ -91,6 +95,28 @@
   </div>
 </div>
 
+<script>
+// Why the shell is missing: the firmware tags its rescue response with X-Nucleo-Rescue.
+(function () {
+  const ZIP = 'https://github.com/indecenti/NucleoOs/releases/latest/download/nucleoos-latest-sd.zip';
+  const WHY = {
+    'no-sd': 'The microSD card could not be read. It is missing, or formatted <b>exFAT/NTFS</b> — NucleoOS needs ' +
+      '<b>FAT32</b> (cards over 32 GB too: use a tool such as guiformat or Rufus on Windows). Reformat, then extract ' +
+      '<a href="' + ZIP + '">nucleoos-latest-sd.zip</a> to the card root.',
+    'no-www': 'The card works, but the web OS was never installed on it. Extract <a href="' + ZIP + '">nucleoos-latest-sd.zip</a> ' +
+      'to the card root (so <code>/www</code>, <code>/apps</code>, <code>/system</code>, <code>/data</code> sit at the top), ' +
+      'or connect the device to Wi-Fi and let Settings ▸ Updates download it.',
+    'no-shell': 'The card has <code>/www</code> but the desktop shell is incomplete (interrupted copy?). Extract ' +
+      '<a href="' + ZIP + '">nucleoos-latest-sd.zip</a> to the card root again, overwriting.'
+  };
+  fetch(location.pathname, { cache: 'no-store' }).then(r => {
+    const msg = WHY[r.headers.get('X-Nucleo-Rescue')];
+    if (!msg) return;
+    document.getElementById('whyMsg').innerHTML = msg;
+    document.getElementById('whyCard').classList.remove('hidden');
+  }).catch(() => {});
+})();
+</script>
 <script>
 (function(){
   "use strict";

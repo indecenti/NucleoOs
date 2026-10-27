@@ -262,6 +262,13 @@ static int dev_get(void *ctx, const char *url, uint32_t off, uint32_t len, uint8
     return got;
 }
 
+// The same transport for the app store client (nucleo_store): one Range window, one keep-alive connection.
+int nucleo_sdcontent_http_get(void *ctx, const char *url, uint32_t off, uint32_t len, uint8_t *buf, int *status)
+{
+    return dev_get(ctx, url, off, len, buf, status);
+}
+void nucleo_sdcontent_http_close(void) { cli_drop(); }
+
 static void io_progress(void *ctx, const sdc_state_t *st) { (void)ctx; nucleo_sdcontent_on_progress(st); }
 static void io_tick(void *ctx) { (void)ctx; esp_task_wdt_reset(); }
 

@@ -2,7 +2,8 @@
 #include "nucleo_board.h"
 #include <stdio.h>
 #include <string.h>
-#include <sys/stat.h>        // stat/fstat: the size+mtime ETag (conditional GET -> 304)
+#include <sys/stat.h>
+#include <dirent.h>          // opendir: tell "SD not mounted" from "SD mounted but no web OS" for the rescue page        // stat/fstat: the size+mtime ETag (conditional GET -> 304)
 #include "esp_log.h"
 #include "esp_heap_caps.h"   // largest-free-block check for the large-file circuit breaker
 #include "freertos/FreeRTOS.h"
@@ -23,6 +24,16 @@ static esp_err_t serve_rescue(httpd_req_t *req)
 {
     size_t len = (size_t)(rescue_html_end - rescue_html_start);
     if (len > 0) len--;   // drop the trailing NUL that EMBED_TXTFILES appends
+    // Why the shell is missing, for the page to explain: "no-sd" = card absent or unreadable (e.g.
+    // exFAT, which this FATFS build doesn't mount), "no-www" = card fine but the SD content was never
+    // installed, "no-shell" = /www exists but the shell entry page doesn't (partial/corrupt copy).
+    const char *why = "no-shell";
+    struct stat st;
+    if (stat(NUCLEO_SD_MOUNT "/www", &st) != 0) {
+        DIR *d = opendir(NUCLEO_SD_MOUNT);
+        if (d) { closedir(d); why = "no-www"; } else why = "no-sd";
+    }
+    httpd_resp_set_hdr(req, "X-Nucleo-Rescue", why);
     httpd_resp_set_type(req, "text/html; charset=utf-8");
     httpd_resp_set_hdr(req, "Cache-Control", "no-store");
     return httpd_resp_send(req, rescue_html_start, len);

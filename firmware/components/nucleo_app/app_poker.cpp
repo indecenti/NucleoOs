@@ -15,6 +15,7 @@
 // Never name a local `d` (it is the display macro).
 
 #include "nucleo_app.h"
+#include "nucleo_touch.h"       // tap a card to hold it
 #include "nucleo_kbd.h"
 #include "launcher_theme.h"
 #include "app_gfx.h"
@@ -693,6 +694,13 @@ static void draw_play(void)
     draw_hud();
     for (int i = 0; i < NCARD; i++) draw_card(i);
     draw_bottom();
+    // Touch: while holding, each card (and its badge below) toggles its hold, as keys 3..7 do; between hands
+    // the bet label steps the bet. Anywhere else a tap is Enter: deal / draw.
+    if (!s_paused) {
+        if (s_pp == PP_HOLD)
+            for (int i = 0; i < NCARD; i++) nucleo_touch_add(card_x(i), CARD_Y, CARD_W, CARD_H + 22, NK_CHAR, (char)('3' + i));
+        else if (s_pp == PP_READY || s_pp == PP_RESULT) nucleo_touch_add(W - 72, 0, 72, 18, NK_UP, 0);
+    }
     coins_draw();
     if (s_pp == PP_RESULT && s_win_tier == 2) fw_draw();
     if (s_flash_ms > 0) d.fillRect(0, 0, W, ch, mix(COL_FELT, COL_WHITE, s_flash_ms * 256 / 200));

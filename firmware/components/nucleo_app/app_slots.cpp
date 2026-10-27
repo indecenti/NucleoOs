@@ -16,6 +16,7 @@
 // Never name a local `d` (it is the display macro).
 
 #include "nucleo_app.h"
+#include "nucleo_touch.h"       // tap the bet / AUTO labels
 #include "nucleo_kbd.h"
 #include "launcher_theme.h"
 #include "app_gfx.h"
@@ -704,6 +705,12 @@ static void draw_play(void)
     draw_cabinet();
     draw_reels();
     draw_hud();
+    // Touch: the bet label raises the bet, the middle of the bar toggles autospin; a tap on the reels (or
+    // anywhere else) is Enter: spin, or slam-stop while they turn. Drag right/left changes the lines.
+    if (!s_paused && s_pp == PP_IDLE) {
+        nucleo_touch_add(W - 80, 0, 80, 16, NK_UP, 0);
+        nucleo_touch_add(W / 2 - 24, 0, 52, 16, NK_CHAR, 'a');
+    }
     coins_draw();
     if (s_pp == PP_WIN && s_win_tier == 2) fw_draw();                                   // jackpot-only fireworks
     if (s_flash_ms > 0) d.fillRect(0, 0, W, ch, mix(COL_FELT, COL_WHITE, s_flash_ms * 256 / 200));   // jackpot white burst

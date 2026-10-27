@@ -73,3 +73,10 @@ bool        launcher_render_control_center_animating(void);   // every loop: tru
 // Without the back-buffer the panel repaints only the elements that changed (flicker-free); call this
 // when something else drew over it, so the next paint is a full one.
 void        launcher_render_control_center_invalidate(void);
+
+// Companion: the Cardputer's own panel while the launcher home is on an external 320x240 panel (duplicate
+// mode). Draw it with launcher_render_companion(); _changed() is true (once) when what it shows has moved.
+namespace lgfx { inline namespace v1 { class LovyanGFX; } }
+void launcher_render_companion(lgfx::LovyanGFX *g);
+bool launcher_render_companion_changed(void);
+void launcher_render_companion_invalidate(void);

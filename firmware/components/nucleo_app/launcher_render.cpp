@@ -12,6 +12,7 @@
 #include "esp_system.h"      // esp_restart() for the Control Center's Restart shortcut
 #include "esp_timer.h"       // esp_timer_get_time() for the frame-rate-independent carousel ease
 #include "nucleo_i18n.h"     // system language (TR/it-en) for the Control Center labels
+#include "nucleo_touch.h"    // the large Control Center: tap a tile / shortcut
 
 // The real display (defined in nucleo_ui.cpp). The launcher always draws to it directly;
 // only the animated list band is composited off-screen first. We do NOT include app_gfx.h
@@ -19,10 +20,29 @@
 // launcher chrome must always hit the physical screen.
 extern M5GFX d;
 
+// Apps installed from the Store carry a 32x32 drawn icon (store_apps.cpp); the launcher paints it in the
+// app's colour. Weak so host harnesses that don't link store_apps.cpp still build (returns none there).
+extern "C" const uint8_t *nucleo_store_app_icon(const char *id) __attribute__((weak));
+
 // Shared off-screen back-buffer (nucleo_ui.cpp). The launcher list band composites into it and
 // blits the band region with a clipped push; apps reuse the same canvas. See app_gfx.h.
 M5Canvas *nucleo_screen(void);
 void      nucleo_screen_release(void);
+M5Canvas *nucleo_screen_wide(int w);   // the same bytes seen w px wide: the 320-wide strips of the large surface
+
+// Geometry follows the live surface: the internal 240x135, or 320x240 while an external panel hosts the
+// launcher natively (nucleo_surface.h). W and H are read at draw time, so every layout below adapts; the
+// Control Center and the other compact screens only ever run on the compact surface (= 240x135).
+#define W ((int)::d.width())
+#define H ((int)::d.height())
+static inline bool lr_large(void) { return ::d.width() >= 300; }
+// The large surface: a taller status bar and no hint bar (the whole height goes to the carousel); BY
+// centres the status bar's contents in whatever height it has.
+#undef BAR
+#undef HINT
+#define BAR  (lr_large() ? 22 : 16)
+#define HINT (lr_large() ? 0 : 14)
+#define BY   ((BAR - 16) / 2)
 
 // Network info + pairing PIN (resolved at link; no component dependency).
 extern "C" const char *nucleo_setup_mode(void);        // "sta" | "ap"
@@ -180,6 +200,7 @@ static const struct { const char *id, *it, *en, *es, *fr, *de; } APP_NAME_TR[] =
     { "orde",        "Orde",                "Hordes",         "Hordas",         "Hordes",           "Horden" },
     { "pedometer",   "Contapassi",          "Pedometer",      "Podometro",      "Podometre",        "Schrittzaehler" },
     { "photos",      "Foto",                "Photos",         "Fotos",          "Photos",           "Fotos" },
+    { "presence",    "Presenza",            "Presence",       "Presencia",      "Presence",         "Praesenz" },
     { "pinball",     "Flipper",             "Pinball",        "Pinball",        "Flipper",          "Flipper" },
     { "qr",          "Codice QR",           "QR Code",        "Codigo QR",      "Code QR",          "QR-Code" },
     { "radio",       "Radio",               "Radio",          "Radio",          "Radio",            "Radio" },
@@ -190,6 +211,7 @@ static const struct { const char *id, *it, *en, *es, *fr, *de; } APP_NAME_TR[] =
     { "slots",       "Slot",                "Slots",          "Tragaperras",    "Machines",         "Automat" },
     { "snake",       "Serpente",            "Snake",          "Serpiente",      "Serpent",          "Schlange" },
     { "stelle",      "Costellazioni",       "Constellations", "Constelaciones", "Constellations",   "Sternbilder" },
+    { "store",       "Store",               "Store",          "Tienda",         "Boutique",         "Store" },
     { "swarm",       "Sciame",              "Swarm",          "Enjambre",       "Essaim",           "Schwarm" },
     { "sysmon",      "Stato sistema",       "System Status",  "Estado sistema", "Etat systeme",     "Systemstatus" },
     { "tankd",       "Duello Carri",        "Tank Duel",      "Duelo Tanques",  "Duel de Chars",    "Panzerduell" },
@@ -499,7 +521,13 @@ static void ui_icon(lgfx::v1::LGFXBase *g, int cx, int cy, int r, const char *id
     }
 
     // The rest stay procedural: loops, trig, or coordinates the table form can't reproduce bit-exactly.
-    if (!strcmp(id, "chrono")) {                                        // stopwatch: dial ring + top plunger + single hand
+    if (!strcmp(id, "store")) {                                         // shopping bag + download arrow
+        IFC(cx, cy - s * 0.38f, s * 0.46f, col); IFC(cx, cy - s * 0.38f, s * 0.46f - Tk * 0.8f, bg);   // handle
+        IRR(cx - s * 0.82f, cy - s * 0.34f, s * 1.64f, s * 1.3f, s * 0.22f, col);                      // bag
+        IBX(cx - Tk * 0.36f, cy - s * 0.14f, Tk * 0.72f, s * 0.48f, bg);                                // arrow stem
+        ITR(cx - s * 0.34f, cy + s * 0.3f, cx + s * 0.34f, cy + s * 0.3f, cx, cy + s * 0.7f, bg);       // arrow head
+
+    } else if (!strcmp(id, "chrono")) {                                 // stopwatch: dial ring + top plunger + single hand
         IBX(cx - Tk * 0.4f, cy - s * 0.98f, Tk * 0.8f, s * 0.34f, col);        // plunger stem
         IFC(cx, cy - s * 0.98f, Tk * 0.6f, col);                              // plunger knob
         IFC(cx, cy + s * 0.14f, s * 0.80f, col); IFC(cx, cy + s * 0.14f, s * 0.80f - Tk, bg);   // dial body -> ring
@@ -608,6 +636,13 @@ static void ui_icon(lgfx::v1::LGFXBase *g, int cx, int cy, int r, const char *id
         IBX(cx + gp * 0.5f,      cy - ph - gp * 0.5f, pw, ph, col);            // top-right pixel (lit)
         IBX(cx - pw - gp * 0.5f, cy + gp * 0.5f,      pw, ph, col);            // bottom-left pixel (lit)
         // bottom-right stays bg = stuck/dead pixel intentionally dark
+    } else if (r >= 10 && nucleo_store_app_icon && nucleo_store_app_icon(id)) {   // app installed from the Store: its 32x32 drawn icon
+        const uint8_t *bm = nucleo_store_app_icon(id);
+        float side = s * 1.7f, px = side / 32.0f, ox = cx - side * 0.5f, oy = cy - side * 0.5f;
+        for (int row = 0; row < 32; row++)
+            for (int cl = 0; cl < 32; cl++)
+                if (bm[row * 4 + cl / 8] & (0x80 >> (cl % 8)))
+                    P_box(g, ox + cl * px, oy + row * px, px + 0.9f, px + 0.9f, col);
     } else {
         g->setTextSize(r >= 12 ? 3 : (r >= 6 ? 2 : 1)); g->setTextColor(col);   // fallback: a bold letter
         int cw = (r >= 12 ? 18 : (r >= 6 ? 12 : 6)), ch = (r >= 12 ? 24 : (r >= 6 ? 16 : 8));
@@ -647,6 +682,26 @@ static const char *offensive_alert(char *buf, int cap)
     return NULL;
 }
 
+// "mar 29 set": day + month in the system language (it/en/es/fr/de; ASCII 3-letter forms, English is the
+// floor). Empty while the clock was never set.
+static void day_month(char *dt, int cap, time_t now, const struct tm *tm)
+{
+    static const char *const WD[5][7] = {
+        { "dom","lun","mar","mer","gio","ven","sab" }, { "Sun","Mon","Tue","Wed","Thu","Fri","Sat" },
+        { "dom","lun","mar","mie","jue","vie","sab" }, { "dim","lun","mar","mer","jeu","ven","sam" },
+        { "So","Mo","Di","Mi","Do","Fr","Sa" } };
+    static const char *const MO[5][12] = {
+        { "gen","feb","mar","apr","mag","giu","lug","ago","set","ott","nov","dic" },
+        { "Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec" },
+        { "ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic" },
+        { "jan","fev","mar","avr","mai","jun","jul","aou","sep","oct","nov","dec" },
+        { "Jan","Feb","Mar","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez" } };
+    const char *lc = nucleo_i18n_lang();
+    int li = !strcmp(lc, "it") ? 0 : !strcmp(lc, "es") ? 2 : !strcmp(lc, "fr") ? 3 : !strcmp(lc, "de") ? 4 : 1;
+    dt[0] = 0;
+    if (tm && now > 1672531200) snprintf(dt, cap, "%s %d %s", WD[li][tm->tm_wday], tm->tm_mday, MO[li][tm->tm_mon]);
+}
+
 void launcher_render_status_bar(void)
 {
     // While any radio-offensive op runs in the background the whole top bar becomes a red alert — an
@@ -656,7 +711,7 @@ void launcher_render_status_bar(void)
     if (alert) {
         d.fillRect(0, 0, W, BAR, C_RED);
         d.fillCircle(9, BAR / 2, 3, INK);
-        d.setTextSize(1); d.setTextColor(INK, C_RED); d.setCursor(18, 4); d.print(alert);
+        d.setTextSize(1); d.setTextColor(INK, C_RED); d.setCursor(18, 4 + BY); d.print(alert);
         d.drawFastHLine(0, BAR - 1, W, LINE);
         return;
     }
@@ -671,17 +726,17 @@ void launcher_render_status_bar(void)
     if (launcher_depth() > 0) {
         // Breadcrumb: a colour chip carrying the category icon + the name in the big Font2 face
         // (legible), with the Wi-Fi gauge and the item count packed from the right edge inward.
-        d.fillRoundRect(2, 1, 14, 14, 3, node->color);
-        ui_icon(&d, 9, 8, 6, strcmp(node->id, LAUNCHER_RECENT_ID) ? node->id : "clock", node->icon, INK, node->color);
-        d.setFont(&fonts::Font2); d.setTextColor(FG, INK); d.setCursor(20, 0);
+        d.fillRoundRect(2, 1 + BY, 14, 14, 3, node->color);
+        ui_icon(&d, 9, 8 + BY, 6, strcmp(node->id, LAUNCHER_RECENT_ID) ? node->id : "clock", node->icon, INK, node->color);
+        d.setFont(&fonts::Font2); d.setTextColor(FG, INK); d.setCursor(20, BY);
         char b[16]; snprintf(b, sizeof(b), "%.14s", node_label(node)); d.print(b);
         d.setFont(&fonts::Font0); d.setTextSize(1);
         int rx = W - 2;
-        draw_wifi(rx - 19, 4, sta, nucleo_setup_rssi());   rx -= 19 + 6;   // signal far right
+        draw_wifi(rx - 19, 4 + BY, sta, nucleo_setup_rssi());   rx -= 19 + 6;   // signal far right
         int cnt = node_child_count(node);
         if (cnt > 0) {
             char cc[12]; snprintf(cc, sizeof cc, "%d app", cnt);
-            d.setTextColor(MUTED, INK); d.setCursor(rx - (int)strlen(cc) * 6, 4); d.print(cc);   // left of the gauges
+            d.setTextColor(MUTED, INK); d.setCursor(rx - (int)strlen(cc) * 6, 4 + BY); d.print(cc);   // left of the gauges
         }
     } else {
         // Home (smartwatch face): a bold clock anchors the LEFT in the 16px-tall Font2 face; the
@@ -690,7 +745,7 @@ void launcher_render_status_bar(void)
         // shown whenever it fits. Drawn only when no filter chip claims the right.
         time_t now = time(NULL); struct tm *tm = localtime(&now);
         char t[8]; snprintf(t, sizeof(t), "%02d:%02d", tm ? tm->tm_hour : 0, tm ? tm->tm_min : 0);
-        d.setFont(&fonts::Font2); d.setTextColor(FG, INK); d.setCursor(6, 0); d.print(t);  // big white clock
+        d.setFont(&fonts::Font2); d.setTextColor(FG, INK); d.setCursor(6, BY); d.print(t);  // big white clock
         int clock_r = 6 + (int)d.textWidth(t);
         d.setFont(&fonts::Font0); d.setTextSize(1);
 
@@ -698,27 +753,14 @@ void launcher_render_status_bar(void)
             // Right cluster from the edge: [|||] Wi-Fi, then [day month], then [ssid] if it still
             // fits. Each piece is dropped if it would crowd the clock, so nothing overlaps the time.
             int rx = W - 2;
-            draw_wifi(rx - 19, 4, sta, nucleo_setup_rssi());   rx -= 19 + 6;   // antenna gauge, far right
+            draw_wifi(rx - 19, 4 + BY, sta, nucleo_setup_rssi());   rx -= 19 + 6;   // antenna gauge, far right
             int bpct = nucleo_power_battery_pct();
-            if (bpct >= 0) { draw_battery_pip(rx - 14, 4, bpct); rx -= 14 + 6; }   // pip left of the gauge
-            // Day + month in the system language (it/en/es/fr/de; ASCII 3-letter forms, English is the floor).
-            static const char *const WD[5][7] = {
-                { "dom","lun","mar","mer","gio","ven","sab" }, { "Sun","Mon","Tue","Wed","Thu","Fri","Sat" },
-                { "dom","lun","mar","mie","jue","vie","sab" }, { "dim","lun","mar","mer","jeu","ven","sam" },
-                { "So","Mo","Di","Mi","Do","Fr","Sa" } };
-            static const char *const MO[5][12] = {
-                { "gen","feb","mar","apr","mag","giu","lug","ago","set","ott","nov","dic" },
-                { "Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec" },
-                { "ene","feb","mar","abr","may","jun","jul","ago","sep","oct","nov","dic" },
-                { "jan","fev","mar","avr","mai","jun","jul","aou","sep","oct","nov","dec" },
-                { "Jan","Feb","Mar","Apr","Mai","Jun","Jul","Aug","Sep","Okt","Nov","Dez" } };
-            const char *lc = nucleo_i18n_lang();
-            int li = !strcmp(lc, "it") ? 0 : !strcmp(lc, "es") ? 2 : !strcmp(lc, "fr") ? 3 : !strcmp(lc, "de") ? 4 : 1;
-            char dt[16] = "";
-            if (tm && now > 1672531200) snprintf(dt, sizeof dt, "%s %d %s", WD[li][tm->tm_wday], tm->tm_mday, MO[li][tm->tm_mon]);
+            if (bpct >= 0) { draw_battery_pip(rx - 14, 4 + BY, bpct); rx -= 14 + 6; }   // pip left of the gauge
+            char dt[16];
+            day_month(dt, sizeof dt, now, tm);
             int dw = (int)strlen(dt) * 6;
             if (dt[0] && rx - dw > clock_r + 6) {
-                d.setTextColor(C_YELLOW, INK); d.setCursor(rx - dw, 4); d.print(dt);
+                d.setTextColor(C_YELLOW, INK); d.setCursor(rx - dw, 4 + BY); d.print(dt);
                 rx -= dw + 8;
             }
             // Connected -> the live SSID in muted grey; not connected -> a small red "offline" right
@@ -726,7 +768,7 @@ void launcher_render_status_bar(void)
             char net[12]; snprintf(net, sizeof net, "%.10s", sta ? nucleo_setup_ssid() : "offline");
             int nw = (int)strlen(net) * 6;
             if (rx - nw > clock_r + 8) {
-                d.setTextColor(sta ? MUTED : C_RED, INK); d.setCursor(rx - nw, 4); d.print(net);
+                d.setTextColor(sta ? MUTED : C_RED, INK); d.setCursor(rx - nw, 4 + BY); d.print(net);
             }
         }
     }
@@ -736,7 +778,7 @@ void launcher_render_status_bar(void)
         char fb[20]; snprintf(fb, sizeof fb, "/%.10s", launcher_filter());
         int fw = (int)strlen(fb) * 6;
         d.fillRect(W - fw - 4, 0, fw + 4, BAR - 1, 0x1926);
-        d.setTextColor(C_GREEN, 0x1926); d.setCursor(W - fw - 1, 4); d.print(fb);
+        d.setTextColor(C_GREEN, 0x1926); d.setCursor(W - fw - 1, 4 + BY); d.print(fb);
     }
 
     d.drawFastHLine(0, BAR - 1, W, LINE);
@@ -752,7 +794,7 @@ void launcher_render_clock_tick(void)
     char ab[28]; const char *alert = offensive_alert(ab, sizeof ab);
     if (alert) {                                   // alert bar owns the strip: refresh the count in place
         d.fillRect(18, 0, W - 18, BAR - 1, C_RED);
-        d.setTextSize(1); d.setTextColor(INK, C_RED); d.setCursor(18, 4); d.print(alert);
+        d.setTextSize(1); d.setTextColor(INK, C_RED); d.setCursor(18, 4 + BY); d.print(alert);
         return;
     }
     // The right cluster (Wi-Fi gauge + SSID/"offline") is normally repainted only on navigation, so a
@@ -767,7 +809,7 @@ void launcher_render_clock_tick(void)
     char t[8]; time_t now = time(NULL); struct tm *tm = localtime(&now);
     snprintf(t, sizeof(t), "%02d:%02d", tm ? tm->tm_hour : 0, tm ? tm->tm_min : 0);
     d.fillRect(0, 0, 56, BAR - 1, INK);                       // wipe the clock cell (Font2 is wider than the old 6x8)
-    d.setFont(&fonts::Font2); d.setTextColor(FG, INK); d.setCursor(6, 0); d.print(t);
+    d.setFont(&fonts::Font2); d.setTextColor(FG, INK); d.setCursor(6, BY); d.print(t);
     d.setFont(&fonts::Font0); d.setTextSize(1);               // leave the global font at the framework default
     // The date (day + month) lives in the right cluster, repainted by the status bar on navigation;
     // it changes once a day, so the 1 Hz tick only needs to refresh the HH:MM digits on the left.
@@ -796,6 +838,7 @@ void launcher_render_instr_bar(void) { }
 
 void launcher_render_hint_bar(void)
 {
+    if (HINT <= 0) return;                                       // large surface: no hint bar
     int y = H - HINT;
     d.fillRect(0, y, W, HINT, s_hint_bg); d.drawFastHLine(0, y, W, LINE);
     int len = (int)strlen(s_hint); if (len > 39) len = 39;
@@ -811,10 +854,14 @@ void launcher_render_chrome(void) { launcher_render_status_bar(); launcher_rende
 // Font2; a secondary line gives the description (apps) or the item count (categories); a dot rail marks
 // the position. The whole rail slides horizontally (s_carousel eased toward the focus). Zero heap: the
 // band still composites into the ONE shared back-buffer and blits once. Mirrors web/device/device.js.
-static const int CAR_SLOT    = 84;     // horizontal spacing between adjacent icons (left/right peek)
-static const int CAR_R_C     = 32;     // centred badge radius (fills the band top-down)
-static const int CAR_R_S     = 19;     // side badge radius (neighbours stay prominent)
-static const int CAR_ICON_DY = 34;     // icon-row centre, pushed up to use the band top
+// Compact values first; the large surface (320x210 band) gets bigger badges, a wider rail and room for the
+// focused app's description under its title.
+#define CAR_SLOT    (lr_large() ? 118 : 84)   // horizontal spacing between adjacent icons (left/right peek)
+#define CAR_R_C     (lr_large() ? 50 : 32)    // centred badge radius (fills the band top-down)
+#define CAR_R_S     (lr_large() ? 30 : 19)    // side badge radius (neighbours stay prominent)
+#define CAR_ICON_DY (lr_large() ? 70 : 34)    // icon-row centre, pushed up to use the band top
+#define CAR_TITLE_Y (lr_large() ? 150 : 84)   // title centre, below the icon
+#define CAR_DOTS_Y  (lr_large() ? 200 : 102)  // position rail
 
 static float s_carousel     = 0.0f;    // continuous carousel index, eased toward launcher_sel()
 static bool  s_band_buffered = true;   // set by launcher_render_list: was the last band blit buffered?
@@ -947,7 +994,7 @@ template <typename T> static void draw_eq(T *c, int ex, int ey, int w, unsigned 
 // launcher_render_step_scroll).
 template <typename T> static void draw_list(T *c, int base)
 {
-    if (nucleo_theme_has_bg_image()) nucleo_theme_draw_bg_slice(c, 0, base, W, LIST_BAND_H);
+    if (nucleo_theme_has_bg_image() && !lr_large()) nucleo_theme_draw_bg_slice(c, 0, base, W, LIST_BAND_H);   // the image is 240x135
     else                            c->fillRect(0, base, W, LIST_BAND_H, BG);
 
     int n = launcher_visible_count();
@@ -990,7 +1037,7 @@ template <typename T> static void draw_list(T *c, int base)
         float t = 1.0f - ad; if (t < 0) t = 0;                          // 1 centred, 0 a full slot away
         int x  = (int)(W / 2 + d * CAR_SLOT + 0.5f);
         int r  = (int)(CAR_R_S + (CAR_R_C - CAR_R_S) * t + 0.5f);
-        int cy = iconCY + (int)((1.0f - t) * 6.0f + 0.5f);              // neighbours drop a touch (arc/depth)
+        int cy = iconCY + (int)((1.0f - t) * (lr_large() ? 10.0f : 6.0f) + 0.5f);   // neighbours drop a touch (arc/depth)
         uint16_t badge = mix565(LINE, it->color, 0.40f + 0.60f * t);    // badge fill (dim neighbour -> bright focus)
         int cr = (int)(r * 0.34f + 0.5f);                               // rounded-square corner radius
         if (t > 0.6f) c->fillRoundRect(x - r - 4, cy - r - 4, 2 * r + 8, 2 * r + 8, cr + 3, mix565(BG, it->color, 0.50f));  // soft halo
@@ -1027,8 +1074,8 @@ template <typename T> static void draw_list(T *c, int base)
         c->setFont(&fonts::Font4); int fh = 26;
         if ((int)c->textWidth(lab) > W - 20) { c->setFont(&fonts::Font2); fh = 16; }
         fit_width(c, lab, W - 12, buf, sizeof buf);
-        c->setCursor(W / 2 - (int)c->textWidth(buf) / 2, base + 84 - fh / 2); c->print(buf);   // centre at base+84
-        draw_dots(c, n, sel, W / 2, base + 102, cur->color);
+        c->setCursor(W / 2 - (int)c->textWidth(buf) / 2, base + CAR_TITLE_Y - fh / 2); c->print(buf);
+        draw_dots(c, n, sel, W / 2, base + CAR_DOTS_Y, cur->color);
     }
     c->setFont(&fonts::Font0); c->setTextSize(1);                       // leave the font at the framework default
 }
@@ -1039,13 +1086,25 @@ template <typename T> static void draw_list(T *c, int base)
 // hand the canvas RAM to the codec; it re-acquires lazily here.
 void launcher_render_list(void)
 {
-    M5Canvas *c = nucleo_screen();
+    M5Canvas *c = lr_large() ? nucleo_screen_wide(W) : nucleo_screen();
     s_band_buffered = (c != nullptr);                          // tells step_scroll to snap (not animate) on the direct path
-    if (c) {
+    if (c && c->height() >= LIST_BAND_H) {
         draw_list(c, 0);                                        // band-local: rows 0..LIST_BAND_H of the canvas
         d.setClipRect(0, LIST_TOP, W, LIST_BAND_H);            // land it in the band region only...
         c->pushSprite(0, LIST_TOP);                            // ...one blit -> no flicker (rows below are clipped)
         d.clearClipRect();
+    } else if (c) {
+        // Large surface: the band (320x210) is taller than the 32 KB canvas seen 320 wide (~100 rows), so it
+        // is composited in strips through the SAME bytes — no extra RAM. Each strip is a finished slice of
+        // the frame, so the panel never shows a cleared-then-redrawn intermediate.
+        const int sh = c->height();
+        for (int s = 0; s < LIST_BAND_H; s += sh) {
+            draw_list(c, -s);                                   // band row s lands on canvas row 0
+            int h = LIST_BAND_H - s < sh ? LIST_BAND_H - s : sh;
+            d.setClipRect(0, LIST_TOP + s, W, h);
+            c->pushSprite(0, LIST_TOP + s);
+            d.clearClipRect();
+        }
     } else {
         // No canvas (heap fragmented after a radio session): draw direct, batched into ONE SPI
         // transaction so the clear→rows repaint is as quick as possible. Paired with the snap-scroll
@@ -1102,17 +1161,37 @@ enum { SC_SETTINGS = 0, SC_WEB, SC_USBKBD, SC_USBDRIVE, SC_RESTART, CC_NSHORT };
 
 // Geometry. The body is a virtual column scrolled under the strip; every element keeps a 2 px focus-ring
 // margin that never shares a row with a neighbour's ring, so a focus move only redraws two outlines.
+// Geometry: the compact numbers (240x135, a scrolling column) and the large ones (an external 320x240 panel,
+// where the whole column fits at once with bigger tiles and full-width sliders). Read at draw time.
 static const int CC_STRIP_H = 18;
 static const int CC_BODY_Y  = CC_STRIP_H + 1;                  // first body row (below the strip rule)
-static const int CC_X0 = 4, CC_XW = 228;                       // card column; the scroll knob sits right of it
-static const int CC_KNOB_X = 236;                              // 2 px scroll knob
-static const int CC_CARD_Y[CC_NLINES] = { 0, 58, 96, 134 };    // card tops in the column
-static const int CC_CARD_H[CC_NLINES] = { 58, 34, 34, 52 };    // ...and heights: tiles, bright, volume, shortcuts
-static const int CC_COL_H = 186;                               // the whole column
-static const int CC_TILE_W = 54, CC_TILE_P = 58, CC_TILE_H = 34, CC_TILE_DY = 3, CC_TILE_CAP = 40;
-static const int CC_SHORT_W = 42, CC_SHORT_P = 46, CC_SHORT_H = 26, CC_SHORT_DY = 3, CC_SHORT_CAP = 33;
+static const int CC_CARD_Y_S[CC_NLINES] = { 0, 58, 96, 134 };  // card tops in the column
+static const int CC_CARD_H_S[CC_NLINES] = { 58, 34, 34, 52 };  // ...and heights: tiles, bright, volume, shortcuts
+static const int CC_CARD_Y_L[CC_NLINES] = { 2, 70, 114, 158 };
+static const int CC_CARD_H_L[CC_NLINES] = { 64, 40, 40, 58 };
+#define CC_X0       (lr_large() ? 6 : 4)                        // card column; the scroll knob sits right of it
+#define CC_XW       (lr_large() ? 308 : 228)
+#define CC_KNOB_X   (W - 4)                                     // 2 px scroll knob
+#define CC_CARD_Y   (lr_large() ? CC_CARD_Y_L : CC_CARD_Y_S)
+#define CC_CARD_H   (lr_large() ? CC_CARD_H_L : CC_CARD_H_S)
+#define CC_COL_H    (lr_large() ? 216 : 186)                    // the whole column
+#define CC_TILE_W   (lr_large() ? 72 : 54)
+#define CC_TILE_P   (lr_large() ? 78 : 58)
+#define CC_TILE_H   (lr_large() ? 40 : 34)
+#define CC_TILE_DY  3
+#define CC_TILE_CAP (lr_large() ? 46 : 40)
+#define CC_SHORT_W  (lr_large() ? 56 : 42)
+#define CC_SHORT_P  (lr_large() ? 62 : 46)
+#define CC_SHORT_H  (lr_large() ? 34 : 26)
+#define CC_SHORT_DY 3
+#define CC_SHORT_CAP (lr_large() ? 40 : 33)
+#define CC_GLYPH_T  (lr_large() ? 14 : 10)                      // tile / shortcut icon radius
+#define CC_GLYPH_S  (lr_large() ? 11 : 8)
 static const int CC_CAP_H = 16;                                // one caption line (Font2 height)
-static const int CC_TRK_X = 12, CC_TRK_W = 212, CC_TRK_H = 6, CC_TRK_DY = 24;   // slider track in its card
+#define CC_TRK_X    (lr_large() ? 16 : 12)                      // slider track in its card
+#define CC_TRK_W    (lr_large() ? 288 : 212)
+#define CC_TRK_H    (lr_large() ? 8 : 6)
+#define CC_TRK_DY   (lr_large() ? 26 : 24)
 
 static int  s_cc_scroll = 0;           // body scroll in rows — kept across opens with the focus (resume)
 static bool s_cc_anim   = false;       // buffered scroll still easing toward the focused card
@@ -1170,6 +1249,7 @@ void launcher_render_control_center_reset(void)
 
 void launcher_render_control_center_close(void)
 {
+    nucleo_touch_clear(); nucleo_touch_commit();               // its tile/shortcut targets end with it
     s_cc_arm = -1;
     if (s_cc_prefs) { s_cc_prefs = false; nucleo_app_persist_prefs(); }   // one settings.json write per visit
 }
@@ -1498,7 +1578,7 @@ template <typename T> static void cc_tile(T *g, int i, int oy, bool full)
     bool refill = full || fk != s_ccs.tile_fill[i];
     if (refill) g->fillRoundRect(x, y, CC_TILE_W, CC_TILE_H, 8, fill);
     if (refill || ink != s_ccs.tile_ink[i]) {
-        ui_glyph(g, cc_tile_glyph(i), x + CC_TILE_W / 2, y + CC_TILE_H / 2 + 1, 10, ink, fill);   // the big icon IS the label
+        ui_glyph(g, cc_tile_glyph(i), x + CC_TILE_W / 2, y + CC_TILE_H / 2 + 1, CC_GLYPH_T, ink, fill);   // the big icon IS the label
         char k[2] = { (char)('1' + i), 0 };                           // quick-key badge
         g->setFont(&fonts::Font0); g->setTextSize(1);
         g->setTextColor(nucleo_theme_ink_on(fill, on ? INK : DIM), fill); g->setCursor(x + 5, y + 3); g->print(k);
@@ -1545,7 +1625,7 @@ template <typename T> static void cc_short(T *g, int i, int oy, bool full)
     if (full) g->fillRoundRect(x, y, CC_SHORT_W, CC_SHORT_H, 7, LINE);
     if (full || ring != s_ccs.sh_ring[i]) { cc_ring(g, x, y, CC_SHORT_W, CC_SHORT_H, 7, ring); s_ccs.sh_ring[i] = ring; }
     if (full || ink != s_ccs.sh_ink[i]) {
-        ui_glyph(g, cc_short_glyph(i), x + CC_SHORT_W / 2 + 3, y + CC_SHORT_H / 2, 8, ink, LINE);
+        ui_glyph(g, cc_short_glyph(i), x + CC_SHORT_W / 2 + 3, y + CC_SHORT_H / 2, CC_GLYPH_S, ink, LINE);
         char k[2] = { (char)('1' + CC_NTILES + i), 0 };               // quick-key badge 5-9
         g->setFont(&fonts::Font0); g->setTextSize(1);
         g->setTextColor(nucleo_theme_ink_on(LINE, DIM), LINE); g->setCursor(x + 4, y + 3); g->print(k);
@@ -1598,12 +1678,22 @@ template <typename T> static void cc_paint(T *g, bool full, int vh)
     }
     if (full) cc_knob(g);
     g->clearClipRect();
+    if (full && lr_large()) {                                 // touch: a tile or a shortcut is its quick key 1..9
+        nucleo_touch_clear();
+        int oy = CC_BODY_Y + CC_CARD_Y[CL_TILES] - s_cc_scroll;
+        for (int i = 0; i < CC_NTILES; i++)
+            nucleo_touch_add(CC_X0 + i * CC_TILE_P, oy, CC_TILE_P, CC_CARD_H[CL_TILES], NK_CHAR, (char)('1' + i));
+        oy = CC_BODY_Y + CC_CARD_Y[CL_SHORT] - s_cc_scroll;
+        for (int i = 0; i < CC_NSHORT; i++)
+            nucleo_touch_add(CC_X0 + i * CC_SHORT_P, oy, CC_SHORT_P, CC_CARD_H[CL_SHORT], NK_CHAR, (char)('1' + CC_NTILES + i));
+        nucleo_touch_commit();
+    }
 }
 
 void launcher_render_control_center(void)
 {
     s_cc_drawn_sig = cc_sig();
-    M5Canvas *c = nucleo_screen();
+    M5Canvas *c = lr_large() ? nullptr : nucleo_screen();    // large: direct, repainting only what changed
     int vh = c ? c->height() : H; if (vh > H) vh = H;        // the rows THIS frame can draw
     int tgt = cc_scroll_target(vh - CC_BODY_Y);
     if (c) {                                                  // back-buffer: compose all, ONE blit
@@ -1624,4 +1714,81 @@ void launcher_render_control_center(void)
     s_cc_snap = false;
     s_ccs.vh = (int16_t)vh;
     s_ccs.valid = true;                                       // the screen now matches s_ccs
+}
+
+// ---- companion: the Cardputer's own panel while the launcher home lives on the external one ------------------
+// Only what is worth a glance: the time, the date, the battery, the network (name + address to reach the web
+// OS) and what is playing. Drawn straight to the panel, no buffer; launcher_render_companion_changed() keeps a
+// signature so the run loop repaints it only when one of those values moved (about once a minute).
+static uint32_t companion_sig(void)
+{
+    time_t now = time(NULL); struct tm *tm = localtime(&now);
+    uint32_t h = 2166136261u;
+    auto mix = [&](const char *p) { while (p && *p) h = (h ^ (uint8_t)*p++) * 16777619u; h = (h ^ 0xFF) * 16777619u; };
+    char b[32];
+    snprintf(b, sizeof b, "%d:%d:%d", tm ? tm->tm_hour : -1, tm ? tm->tm_min : -1, tm ? tm->tm_yday : -1); mix(b);
+    snprintf(b, sizeof b, "%d", nucleo_power_battery_pct()); mix(b);
+    mix(nucleo_setup_mode()); mix(nucleo_setup_ssid()); mix(nucleo_setup_ip());
+    bool play = nucleo_audio_is_playing() && !nucleo_audio_is_paused();
+    mix(play ? nucleo_audio_path() : "-");
+    mix(nucleo_i18n_lang());
+    return h;
+}
+
+static uint32_t s_comp_sig = 0;
+bool launcher_render_companion_changed(void)
+{
+    uint32_t h = companion_sig();
+    if (h == s_comp_sig) return false;
+    s_comp_sig = h;
+    return true;
+}
+void launcher_render_companion_invalidate(void) { s_comp_sig = 0; }
+
+void launcher_render_companion(lgfx::LovyanGFX *g)
+{
+    const int w = g->width(), h = g->height();
+    time_t now = time(NULL); struct tm *tm = localtime(&now);
+    g->startWrite();
+    g->fillScreen(BG);
+    g->setTextDatum(lgfx::top_center);
+    // The time, as big as the panel allows (7-segment, 48 px).
+    char t[8]; snprintf(t, sizeof t, "%02d:%02d", tm ? tm->tm_hour : 0, tm ? tm->tm_min : 0);
+    g->setTextColor(FG, BG);
+    g->drawString(t, w / 2, 6, &fonts::Font7);
+    // Date, or what is playing (the track's file name, without folders or extension).
+    char line[40];
+    bool play = nucleo_audio_is_playing() && !nucleo_audio_is_paused();
+    if (play) {
+        const char *p = nucleo_audio_path(), *slash = strrchr(p, '/');
+        snprintf(line, sizeof line, "%s", slash ? slash + 1 : p);
+        char *dot = strrchr(line, '.'); if (dot && dot != line) *dot = 0;
+        g->setTextColor(C_GREEN, BG);
+    } else {
+        day_month(line, sizeof line, now, tm);
+        g->setTextColor(C_YELLOW, BG);
+    }
+    g->setFont(&fonts::Font2);
+    while (line[0] && (int)g->textWidth(line) > w - 12) line[strlen(line) - 1] = 0;
+    g->drawString(line, w / 2, 60, &fonts::Font2);
+    g->drawFastHLine(8, 82, w - 16, LINE);
+    // Battery left, network right; the address to reach the web OS under the network name.
+    g->setTextDatum(lgfx::top_left);
+    int bp = nucleo_power_battery_pct();
+    char bt[12];
+    if (bp >= 0) snprintf(bt, sizeof bt, "%d%%", bp); else snprintf(bt, sizeof bt, "--");
+    g->setTextColor(bp >= 0 && bp < 20 ? C_RED : bp >= 0 && bp < 50 ? C_YELLOW : C_GREEN, BG);
+    g->drawString(bt, 10, 92, &fonts::Font4);
+    bool sta = !strcmp(nucleo_setup_mode(), "sta") && nucleo_setup_ip()[0];
+    g->setTextDatum(lgfx::top_right);
+    char net[24];
+    snprintf(net, sizeof net, "%.20s", sta ? nucleo_setup_ssid() : !strcmp(nucleo_setup_mode(), "ap") ? "Hotspot" : "offline");
+    g->setTextColor(sta ? FG : C_RED, BG);
+    g->drawString(net, w - 10, 90, &fonts::Font2);
+    g->setTextColor(MUTED, BG);
+    g->drawString(sta ? nucleo_setup_ip() : !strcmp(nucleo_setup_mode(), "ap") ? "192.168.4.1" : "", w - 10, 110, &fonts::Font2);
+    g->setTextDatum(lgfx::top_left);
+    g->setFont(&fonts::Font0);
+    g->endWrite();
+    (void)h;
 }

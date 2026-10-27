@@ -91,6 +91,13 @@ export function drawIcon(g, id, cx, cy, s) {
       g.bx(cx - T / 2, cy - s * 0.6, T, s * 0.6); g.bx(cx, cy - T / 2, s * 0.5, T); g.fc(cx, cy, T * 0.7);
       break;
 
+    case 'store':                                  // shopping bag + download arrow
+      g.fc(cx, cy - s * 0.38, s * 0.46); g.fc(cx, cy - s * 0.38, s * 0.46 - T * 0.8, g.bg);
+      g.frr(cx - s * 0.82, cy - s * 0.34, s * 1.64, s * 1.3, s * 0.22);
+      g.bx(cx - T * 0.36, cy - s * 0.14, T * 0.72, s * 0.48, g.bg);
+      g.tri(cx - s * 0.34, cy + s * 0.3, cx + s * 0.34, cy + s * 0.3, cx, cy + s * 0.7, g.bg);
+      break;
+
     case 'chrono':                                 // stopwatch: dial ring + top plunger + single hand
       g.bx(cx - T * 0.4, cy - s * 0.98, T * 0.8, s * 0.34);
       g.fc(cx, cy - s * 0.98, T * 0.6);

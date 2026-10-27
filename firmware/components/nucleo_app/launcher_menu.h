@@ -25,6 +25,10 @@ struct MenuNode {
 void launcher_build_menu(void);
 void launcher_reset(void);
 
+// Monotone counter bumped on every rebuild. store_apps.cpp uses it to know a retired app-definition block
+// is no longer referenced by the tree (so it is safe to free) without a use-after-free window.
+unsigned launcher_tree_gen(void);
+
 // Return-cursor across a Solo (NX_SOLO) warm reboot. capture() snapshots the current launch frame
 // (Home vs category + type-to-filter + focused row) into RTC just before the Solo reboot; apply()
 // re-enters it after the return boot (call AFTER build_menu()+reset(), only in the full-OS boot).

@@ -1,0 +1,606 @@
+// App store client — the engine. See store_engine.h, and docs/format.md in the store repository (the two
+// must stay in step: the store's tools/store.py writes exactly what this reads).
+#include "store_engine.h"
+#include "sdc_sha256.h"
+#include "sdc_registry.h"
+
+#include <ctype.h>
+#include <dirent.h>
+#include <errno.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+#define INDEX_MAGIC "nucleoos-cardputer-index-v1"
+#define PKG_MAGIC   "nucleoos-cardputer-pkg-v1"
+#define SIG_MAGIC   "nucleoos-cardputer-sig-v1"
+#define MAX_INDEX   (4u * 1024 * 1024)
+#define MAX_SIGFILE 1024u
+#define MAX_PKGSIG  (32u * 1024)
+#define MAX_FILE    (4u * 1024 * 1024)
+#define MAX_FILES   64
+#define LINE_MAX_   1280
+#define CLOCK_SET   1700000000u     // before this the device clock is not set: expiry is not checked
+
+static char s_line[LINE_MAX_];      // one catalog / package line (the engine runs on one task at a time)
+
+// ── small helpers ─────────────────────────────────────────────────────────────
+static bool is_dir(const char *p) { struct stat s; return stat(p, &s) == 0 && S_ISDIR(s.st_mode); }
+static bool exists(const char *p) { struct stat s; return stat(p, &s) == 0; }
+
+static int mkdir1(const char *p)
+{
+#ifdef _WIN32
+    return (mkdir)(p);          // parenthesised: a host shim may define mkdir(p, m) as a macro
+#else
+    return mkdir(p, 0775);
+#endif
+}
+
+// mkdir -p for the directory part of `path` (or `path` itself when dir_too).
+static bool mkdirs(const char *path, bool dir_too)
+{
+    char tmp[300];
+    size_t n = strlen(path);
+    if (n >= sizeof tmp) return false;
+    memcpy(tmp, path, n + 1);
+    if (!dir_too) { char *s = strrchr(tmp, '/'); if (!s) return true; *s = 0; }
+    for (char *p = tmp + 1; *p; p++) {
+        if (*p != '/') continue;
+        *p = 0;
+        if (!is_dir(tmp) && mkdir1(tmp) != 0 && errno != EEXIST) return false;
+        *p = '/';
+    }
+    return is_dir(tmp) || mkdir1(tmp) == 0 || errno == EEXIST;
+}
+
+static void rmtree(const char *path)
+{
+    DIR *d = opendir(path);
+    if (!d) { unlink(path); return; }
+    struct dirent *e;
+    char child[300];
+    while ((e = readdir(d)) != NULL) {
+        if (!strcmp(e->d_name, ".") || !strcmp(e->d_name, "..")) continue;
+        snprintf(child, sizeof child, "%s/%s", path, e->d_name);
+        if (is_dir(child)) rmtree(child); else unlink(child);
+    }
+    closedir(d);
+    rmdir(path);
+}
+
+static bool hex64(const char *s)
+{
+    for (int i = 0; i < 64; i++) if (!isxdigit((unsigned char)s[i]) || isupper((unsigned char)s[i])) return false;
+    return s[64] == 0;
+}
+
+bool st_id_ok(const char *id)
+{
+    size_t n = strlen(id);
+    if (n < 2 || n > ST_ID_MAX || !islower((unsigned char)id[0])) return false;
+    for (size_t i = 0; i < n; i++)
+        if (!(islower((unsigned char)id[i]) || isdigit((unsigned char)id[i]) || id[i] == '-')) return false;
+    return true;
+}
+
+// Up to four segments of [A-Za-z0-9._-], none empty, none starting with '.' (so never "." or "..").
+bool st_path_ok(const char *path)
+{
+    int segs = 0;
+    const char *p = path;
+    if (!*p || strlen(p) > 160) return false;
+    while (*p) {
+        if (*p == '.' || *p == '/') return false;
+        segs++;
+        while (*p && *p != '/') {
+            char c = *p++;
+            if (!(isalnum((unsigned char)c) || c == '.' || c == '_' || c == '-')) return false;
+        }
+        if (*p == '/') { p++; if (!*p) return false; }
+    }
+    return segs <= 4;
+}
+
+int st_ver_cmp(const char *a, const char *b)
+{
+    for (int i = 0; i < 3; i++) {
+        long x = strtol(a, (char **)&a, 10), y = strtol(b, (char **)&b, 10);
+        if (x != y) return x < y ? -1 : 1;
+        if (*a == '.') a++;
+        if (*b == '.') b++;
+    }
+    return 0;
+}
+
+static void fail_detail(st_state_t *st, st_code_t code, const char *detail)
+{
+    st->code = code;
+    st->phase = ST_PH_FAILED;
+    snprintf(st->detail, sizeof st->detail, "%s", detail ? detail : "");
+}
+
+static void progress(const st_io_t *io, st_state_t *st)
+{
+    if (st->total) st->pct = (int)((uint64_t)st->done * 100 / st->total);
+    if (io->progress) io->progress(io->ctx, st);
+}
+
+static int b64val(int c)
+{
+    if (c >= 'A' && c <= 'Z') return c - 'A';
+    if (c >= 'a' && c <= 'z') return c - 'a' + 26;
+    if (c >= '0' && c <= '9') return c - '0' + 52;
+    if (c == '+') return 62;
+    if (c == '/') return 63;
+    return -1;
+}
+
+static int b64decode(const char *s, uint8_t *out, int cap)
+{
+    int n = 0, bits = 0;
+    uint32_t acc = 0;
+    for (; *s && *s != '='; s++) {
+        int v = b64val((unsigned char)*s);
+        if (v < 0) return -1;
+        acc = (acc << 6) | (uint32_t)v; bits += 6;
+        if (bits >= 8) { bits -= 8; if (n >= cap) return -1; out[n++] = (uint8_t)(acc >> bits); }
+    }
+    return n;
+}
+
+// "key <16 hex>\nsig <b64>\n" (the lines after a package's "--", or after the sig magic).
+static bool read_sig_block(FILE *f, char key[17], uint8_t *der, int *derlen)
+{
+    char kl[32], sl[160];
+    if (!fgets(kl, sizeof kl, f) || !fgets(sl, sizeof sl, f)) return false;
+    size_t k = strlen(kl), s = strlen(sl);
+    if (k != 21 || strncmp(kl, "key ", 4) || kl[20] != '\n') return false;
+    if (s < 6 || strncmp(sl, "sig ", 4) || sl[s - 1] != '\n') return false;
+    memcpy(key, kl + 4, 16); key[16] = 0;
+    for (int i = 0; i < 16; i++) if (!isxdigit((unsigned char)key[i])) return false;
+    sl[s - 1] = 0;
+    *derlen = b64decode(sl + 4, der, 80);
+    return *derlen >= 8;
+}
+
+// ── download ──────────────────────────────────────────────────────────────────
+// GET url into `dest` via `dest`.part in Range windows; refuses more than `max` bytes, and anything but
+// exactly `want` bytes when want >= 0. sha (optional) receives the SHA-256 of what was written.
+static st_code_t fetch(const st_cfg_t *cfg, const st_io_t *io, st_state_t *st, const char *url,
+                       const char *dest, uint32_t max, int64_t want, uint8_t sha[32])
+{
+    char part[300];
+    snprintf(part, sizeof part, "%s.part", dest);
+    if (!mkdirs(dest, false)) { fail_detail(st, ST_E_WRITE, dest); return ST_E_WRITE; }
+    FILE *f = fopen(part, "wb");
+    if (!f) { fail_detail(st, ST_E_WRITE, dest); return ST_E_WRITE; }
+    sdc_sha256_t h;
+    sdc_sha256_init(&h);
+    uint32_t off = 0;
+    st_code_t rc = ST_OK;
+    for (;;) {
+        int status = 0, n = -1;
+        for (int a = 0; a <= cfg->retries; a++) {
+            n = io->get(io->ctx, url, off, cfg->window, cfg->buf, &status);
+            if (n >= 0 || status != 0) break;          // only a transport failure is worth retrying
+            if (io->tick) io->tick(io->ctx);
+        }
+        if (n < 0 && status == 416 && off > 0) break;   // the body ended exactly on a window edge
+        if (n < 0) { rc = ST_E_NET; st->http = status; break; }
+        if (off + (uint32_t)n > max || (want >= 0 && off + (uint32_t)n > (uint64_t)want)) { rc = ST_E_VERIFY; break; }
+        if (n && fwrite(cfg->buf, 1, (size_t)n, f) != (size_t)n) { rc = ST_E_WRITE; break; }
+        sdc_sha256_update(&h, cfg->buf, (size_t)n);
+        off += (uint32_t)n;
+        st->done += (uint32_t)n;
+        progress(io, st);
+        if (io->tick) io->tick(io->ctx);
+        if ((uint32_t)n < cfg->window || status == 200) break;   // short window (or a whole small body): the end
+    }
+    if (fclose(f) != 0 && rc == ST_OK) rc = ST_E_WRITE;
+    if (rc == ST_OK && want >= 0 && off != (uint64_t)want) rc = ST_E_VERIFY;
+    if (rc == ST_OK) {
+        if (sha) sdc_sha256_final(&h, sha);
+        unlink(dest);
+        if (rename(part, dest) != 0) rc = ST_E_WRITE;
+    }
+    if (rc != ST_OK) { unlink(part); fail_detail(st, rc, strrchr(url, '/') ? strrchr(url, '/') + 1 : url); }
+    return rc;
+}
+
+// ── catalog ───────────────────────────────────────────────────────────────────
+static void store_dir(const char *root, char *out, size_t n) { snprintf(out, n, "%s/apps/.store", root); }
+
+uint32_t st_catalog_serial(const char *root)
+{
+    char p[160]; store_dir(root, p, sizeof p);
+    strncat(p, "/serial", sizeof p - strlen(p) - 1);
+    FILE *f = fopen(p, "rb");
+    unsigned long v = 0;
+    if (f) { if (fscanf(f, "%lu", &v) != 1) v = 0; fclose(f); }
+    return (uint32_t)v;
+}
+
+// The header of a downloaded catalog: magic, serial, expires, apps.
+static bool read_header(FILE *f, uint32_t *serial, uint32_t *expires)
+{
+    char l[64];
+    unsigned long s, e, n;
+    if (!fgets(l, sizeof l, f) || strcmp(l, INDEX_MAGIC "\n")) return false;
+    if (!fgets(l, sizeof l, f) || sscanf(l, "serial %lu", &s) != 1) return false;
+    if (!fgets(l, sizeof l, f) || sscanf(l, "expires %lu", &e) != 1) return false;
+    if (!fgets(l, sizeof l, f) || sscanf(l, "apps %lu", &n) != 1) return false;
+    *serial = (uint32_t)s; *expires = (uint32_t)e;
+    return true;
+}
+
+st_code_t st_refresh(const st_cfg_t *cfg, const st_io_t *io, st_state_t *st)
+{
+    memset(st, 0, sizeof *st);
+    st->phase = ST_PH_CATALOG;
+    if (!is_dir(cfg->root)) { fail_detail(st, ST_E_NO_SD, cfg->root); return ST_E_NO_SD; }
+    char dir[160], idx_new[200], sig_new[200], idx[200], ser[200], url[200];
+    store_dir(cfg->root, dir, sizeof dir);
+    if (!mkdirs(dir, true)) { fail_detail(st, ST_E_WRITE, dir); return ST_E_WRITE; }
+    snprintf(idx_new, sizeof idx_new, "%s/index.new", dir);
+    snprintf(sig_new, sizeof sig_new, "%s/index.sig.new", dir);
+    snprintf(idx, sizeof idx, "%s/index.txt", dir);
+    snprintf(ser, sizeof ser, "%s/serial", dir);
+
+    uint8_t hash[32];
+    snprintf(url, sizeof url, "%sindex.txt", cfg->base_url);
+    st_code_t rc = fetch(cfg, io, st, url, idx_new, MAX_INDEX, -1, hash);
+    if (rc == ST_OK) {
+        snprintf(url, sizeof url, "%sindex.sig", cfg->base_url);
+        rc = fetch(cfg, io, st, url, sig_new, MAX_SIGFILE, -1, NULL);
+    }
+    if (rc != ST_OK) goto out;
+
+    // The signature, then the header.
+    {
+        FILE *f = fopen(sig_new, "rb");
+        char l[40], key[17];
+        uint8_t der[80];
+        int dl = 0;
+        bool ok = f && fgets(l, sizeof l, f) && !strcmp(l, SIG_MAGIC "\n") && read_sig_block(f, key, der, &dl);
+        if (f) fclose(f);
+        if (!ok) { rc = ST_E_BAD; fail_detail(st, rc, "index.sig"); goto out; }
+        if (!io->verify(io->ctx, key, hash, der, (size_t)dl)) { rc = ST_E_SIG; fail_detail(st, rc, "index.txt"); goto out; }
+    }
+    {
+        FILE *f = fopen(idx_new, "rb");
+        uint32_t serial = 0, expires = 0;
+        bool ok = f && read_header(f, &serial, &expires);
+        if (f) fclose(f);
+        if (!ok) { rc = ST_E_BAD; fail_detail(st, rc, "index.txt"); goto out; }
+        if (serial < st_catalog_serial(cfg->root)) { rc = ST_E_ROLLBACK; fail_detail(st, rc, "serial"); goto out; }
+        uint32_t now = io->now ? io->now(io->ctx) : 0;
+        if (now >= CLOCK_SET && now > expires) { rc = ST_E_EXPIRED; fail_detail(st, rc, "expires"); goto out; }
+        unlink(idx);
+        if (rename(idx_new, idx) != 0) { rc = ST_E_WRITE; fail_detail(st, rc, "index.txt"); goto out; }
+        FILE *s = fopen(ser, "wb");
+        if (!s || fprintf(s, "%lu\n", (unsigned long)serial) < 0) { if (s) fclose(s); rc = ST_E_WRITE; fail_detail(st, rc, "serial"); goto out; }
+        fclose(s);
+    }
+    st->phase = ST_PH_DONE;
+out:
+    unlink(idx_new);
+    unlink(sig_new);
+    return rc;
+}
+
+// Split `s` in place at `sep` into at most n fields; returns the count.
+static int split(char *s, char sep, char **f, int n)
+{
+    int k = 0;
+    f[k++] = s;
+    for (char *p = s; *p && k < n; p++) if (*p == sep) { *p = 0; f[k++] = p + 1; }
+    return k;
+}
+
+static bool copy_field(char *dst, size_t cap, const char *src, size_t maxlen)
+{
+    size_t n = strlen(src);
+    if (n == 0 || n > maxlen || n >= cap) return false;
+    for (size_t i = 0; i < n; i++) if ((unsigned char)src[i] < 0x20 || (unsigned char)src[i] > 0x7e) return false;
+    memcpy(dst, src, n + 1);
+    return true;
+}
+
+bool st_parse_line(const char *line, st_app_t *a)
+{
+    char buf[LINE_MAX_];
+    size_t n = strlen(line);
+    if (n >= sizeof buf) return false;
+    memcpy(buf, line, n + 1);
+    while (n && (buf[n - 1] == '\n' || buf[n - 1] == '\r')) buf[--n] = 0;
+    // 12 fields in the first catalogs, `updated` appended as the 13th; anything after is a future field.
+    char *f[16];
+    int nf = split(buf, '\t', f, 16);
+    if (nf < 12 || strcmp(f[0], "app")) return false;
+    memset(a, 0, sizeof *a);
+    char *end;
+    if (!copy_field(a->id, sizeof a->id, f[1], ST_ID_MAX) || !st_id_ok(a->id)) return false;
+    if (!copy_field(a->kind, sizeof a->kind, f[2], 7)) return false;
+    unsigned long code = strtoul(f[3], &end, 10);
+    if (*end || code == 0 || code > 0x7fffffffUL) return false;
+    a->code = (uint32_t)code;
+    if (!copy_field(a->version, sizeof a->version, f[4], 15) || !copy_field(a->min_os, sizeof a->min_os, f[5], 15)) return false;
+    if (!copy_field(a->category, sizeof a->category, f[6], 11)) return false;
+    unsigned long size = strtoul(f[7], &end, 10);
+    if (*end) return false;
+    a->size = (uint32_t)size;
+    if (!copy_field(a->sig_sha, sizeof a->sig_sha, f[8], 64) || !hex64(a->sig_sha)) return false;
+    if (strcmp(f[9], "-") && !copy_field(a->perms, sizeof a->perms, f[9], 63)) return false;
+    char *names[ST_LANGS + 1], *descs[ST_LANGS + 1];
+    if (split(f[10], '|', names, ST_LANGS + 1) != ST_LANGS || split(f[11], '|', descs, ST_LANGS + 1) != ST_LANGS) return false;
+    for (int i = 0; i < ST_LANGS; i++)
+        if (!copy_field(a->name[i], sizeof a->name[i], names[i], ST_NAME_MAX) ||
+            !copy_field(a->desc[i], sizeof a->desc[i], descs[i], ST_DESC_MAX)) return false;
+    if (nf >= 13) {
+        unsigned long u = strtoul(f[12], &end, 10);
+        if (*end) return false;
+        a->updated = (uint32_t)u;
+    }
+    if (nf >= 14 && !copy_field(a->author, sizeof a->author, f[13], sizeof a->author - 1)) return false;
+    return true;
+}
+
+FILE *st_catalog_open(const char *root)
+{
+    char p[200]; store_dir(root, p, sizeof p);
+    strncat(p, "/index.txt", sizeof p - strlen(p) - 1);
+    FILE *f = fopen(p, "rb");
+    uint32_t s, e;
+    if (f && !read_header(f, &s, &e)) { fclose(f); return NULL; }
+    return f;
+}
+
+bool st_catalog_next(FILE *f, st_app_t *out)
+{
+    while (fgets(s_line, sizeof s_line, f)) {
+        size_t n = strlen(s_line);
+        if (n && s_line[n - 1] != '\n' && !feof(f)) {           // longer than any valid line: skip the rest
+            int c; while ((c = fgetc(f)) != EOF && c != '\n') {}
+            continue;
+        }
+        if (st_parse_line(s_line, out)) return true;
+    }
+    return false;
+}
+
+bool st_find(const char *root, const char *id, st_app_t *out)
+{
+    FILE *f = st_catalog_open(root);
+    if (!f) return false;
+    bool found = false;
+    while (!found && st_catalog_next(f, out)) found = !strcmp(out->id, id);
+    fclose(f);
+    return found;
+}
+
+// ── install ───────────────────────────────────────────────────────────────────
+uint32_t st_installed(const char *root, const char *id, bool *system)
+{
+    char p[200];
+    snprintf(p, sizeof p, "%s/apps/%s/.store-version", root, id);
+    if (system) *system = false;
+    FILE *f = fopen(p, "rb");
+    if (!f) {
+        snprintf(p, sizeof p, "%s/apps/%s", root, id);
+        if (system) *system = exists(p);
+        return 0;
+    }
+    unsigned long v = 0;
+    if (fscanf(f, "code %lu", &v) != 1) v = 0;
+    fclose(f);
+    return (uint32_t)v;
+}
+
+// One package line: "<sha256> <size> <path>".
+static bool parse_pkg_file(char *l, char sha[65], uint32_t *size, char **path)
+{
+    size_t n = strlen(l);
+    if (n && l[n - 1] == '\n') l[--n] = 0;
+    if (n < 68 || l[64] != ' ') return false;
+    memcpy(sha, l, 64); sha[64] = 0;
+    if (!hex64(sha)) return false;
+    char *end;
+    unsigned long sz = strtoul(l + 65, &end, 10);
+    if (end == l + 65 || *end != ' ' || sz > MAX_FILE) return false;
+    *size = (uint32_t)sz;
+    *path = end + 1;
+    return st_path_ok(*path);
+}
+
+// Reads <sigpath> (a downloaded package.sig): checks its header against the catalog line, hashes the signed
+// body, verifies the signature and counts the files. Nothing is downloaded before this says yes.
+static st_code_t check_package(const st_io_t *io, st_state_t *st, const st_app_t *a, const char *sigpath,
+                               int *nfiles, uint32_t *total)
+{
+    FILE *f = fopen(sigpath, "rb");
+    if (!f) { fail_detail(st, ST_E_WRITE, "package.sig"); return ST_E_WRITE; }
+    sdc_sha256_t h;
+    sdc_sha256_init(&h);
+    int line = 0, files = 0;
+    uint32_t sum = 0;
+    bool body_end = false, ok = true;
+    char code[16];
+    snprintf(code, sizeof code, "%lu", (unsigned long)a->code);
+    while (ok && fgets(s_line, sizeof s_line, f)) {
+        size_t n = strlen(s_line);
+        if (!n || s_line[n - 1] != '\n') { ok = false; break; }
+        if (!strcmp(s_line, "--\n")) { body_end = true; break; }
+        sdc_sha256_update(&h, s_line, n);
+        s_line[n - 1] = 0;
+        switch (line++) {
+            case 0: ok = !strcmp(s_line, PKG_MAGIC); break;
+            case 1: ok = !strcmp(s_line, a->id); break;
+            case 2: ok = !strcmp(s_line, code); break;
+            case 3: ok = !strcmp(s_line, a->kind); break;
+            default: {
+                char sha[65], *path; uint32_t sz;
+                strcat(s_line, "\n");
+                ok = parse_pkg_file(s_line, sha, &sz, &path) && ++files <= MAX_FILES;
+                sum += sz;
+            }
+        }
+    }
+    char key[17];
+    uint8_t der[80], hash[32];
+    int dl = 0;
+    ok = ok && body_end && line >= 5 && read_sig_block(f, key, der, &dl);
+    fclose(f);
+    if (!ok) { fail_detail(st, ST_E_BAD, "package.sig"); return ST_E_BAD; }
+    sdc_sha256_final(&h, hash);
+    if (!io->verify(io->ctx, key, hash, der, (size_t)dl)) { fail_detail(st, ST_E_SIG, "package.sig"); return ST_E_SIG; }
+    *nfiles = files;
+    *total = sum;
+    return ST_OK;
+}
+
+// The app's own "permissions" array, copied verbatim from its manifest.json when it is plain and short.
+static void manifest_perms(const char *mpath, char *out, size_t cap, uint8_t *buf, size_t bufcap)
+{
+    snprintf(out, cap, "[]");
+    FILE *f = fopen(mpath, "rb");
+    if (!f) return;
+    size_t n = fread(buf, 1, bufcap - 1, f);
+    fclose(f);
+    buf[n] = 0;
+    const char *k = strstr((const char *)buf, "\"permissions\"");
+    if (!k) return;
+    const char *o = strchr(k, '['), *c = o ? strchr(o, ']') : NULL;
+    if (!o || !c || (size_t)(c - o + 2) > cap) return;
+    for (const char *p = o + 1; p < c; p++)
+        if (!(isalnum((unsigned char)*p) || strchr("._-\", \n\r\t", *p))) return;
+    memcpy(out, o, (size_t)(c - o + 1));
+    out[c - o + 1] = 0;
+}
+
+static void register_web_app(const st_cfg_t *cfg, const st_app_t *a)
+{
+    char reg[200], add[200], man[200], perms[220];
+    snprintf(reg, sizeof reg, "%s/system/registry/apps.json", cfg->root);
+    if (!exists(reg)) return;                                   // no web OS on this card: nothing to list it in
+    snprintf(man, sizeof man, "%s/apps/%s/manifest.json", cfg->root, a->id);
+    manifest_perms(man, perms, sizeof perms, cfg->buf, cfg->window);
+    snprintf(add, sizeof add, "%s/apps/.store/reg-add.json", cfg->root);
+    FILE *f = fopen(add, "wb");
+    if (!f) return;
+    fprintf(f, "{\"installed\":[{\"id\":\"%s\",\"version\":\"%s\",\"path\":\"/apps/%s\",\"enabled\":true,"
+               "\"autostart\":false,\"permissions\":%s}]}\n", a->id, a->version, a->id, perms);
+    fclose(f);
+    int added = 0;
+    sdc_registry_merge(reg, add, (char *)cfg->buf, cfg->window, &added);
+    unlink(add);
+}
+
+st_code_t st_install(const st_cfg_t *cfg, const st_io_t *io, st_state_t *st, const st_app_t *a)
+{
+    memset(st, 0, sizeof *st);
+    st->phase = ST_PH_PACKAGE;
+    snprintf(st->cur, sizeof st->cur, "%s", a->id);
+    if (!is_dir(cfg->root)) { fail_detail(st, ST_E_NO_SD, cfg->root); return ST_E_NO_SD; }
+    if (!st_id_ok(a->id)) { fail_detail(st, ST_E_BAD, a->id); return ST_E_BAD; }
+    if (strcmp(a->kind, "web") && strcmp(a->kind, "data")) { fail_detail(st, ST_E_UNSUPPORTED, a->kind); return ST_E_UNSUPPORTED; }
+    bool system = false;
+    st_installed(cfg->root, a->id, &system);
+    if (system) { fail_detail(st, ST_E_CONFLICT, a->id); return ST_E_CONFLICT; }
+
+    char tmp[200], sig[200], live[200], old[200], url[260], path[300];
+    snprintf(tmp, sizeof tmp, "%s/apps/.tmp/%s", cfg->root, a->id);
+    snprintf(sig, sizeof sig, "%s/apps/.tmp/%s.sig", cfg->root, a->id);
+    snprintf(live, sizeof live, "%s/apps/%s", cfg->root, a->id);
+    snprintf(old, sizeof old, "%s/apps/.old/%s", cfg->root, a->id);
+    rmtree(tmp);
+    unlink(sig);
+
+    // 1. package.sig: must be the one the signed catalog names, and must itself verify.
+    uint8_t sha[32];
+    char hex[65];
+    snprintf(url, sizeof url, "%sapps/%s/%lu/package.sig", cfg->base_url, a->id, (unsigned long)a->code);
+    st_code_t rc = fetch(cfg, io, st, url, sig, MAX_PKGSIG, -1, sha);
+    if (rc != ST_OK) goto out;
+    sdc_sha256_hex(sha, hex);
+    if (strcmp(hex, a->sig_sha)) { rc = ST_E_VERIFY; fail_detail(st, rc, "package.sig"); goto out; }
+    int nfiles = 0;
+    uint32_t total = 0;
+    if ((rc = check_package(io, st, a, sig, &nfiles, &total)) != ST_OK) goto out;
+
+    // 2. Every file, each checked against its signed size and hash.
+    st->phase = ST_PH_FILES;
+    st->files_total = nfiles;
+    st->done = 0;
+    st->total = total;
+    {
+        FILE *f = fopen(sig, "rb");
+        if (!f) { rc = ST_E_WRITE; fail_detail(st, rc, "package.sig"); goto out; }
+        for (int i = 0; i < 4; i++) if (!fgets(s_line, sizeof s_line, f)) break;
+        while (rc == ST_OK && fgets(s_line, sizeof s_line, f) && strcmp(s_line, "--\n")) {
+            char want[65], *rel;
+            uint32_t sz;
+            if (!parse_pkg_file(s_line, want, &sz, &rel)) { rc = ST_E_BAD; fail_detail(st, rc, "package.sig"); break; }
+            snprintf(path, sizeof path, "%s/%s", tmp, rel);
+            snprintf(url, sizeof url, "%sapps/%s/%lu/%s", cfg->base_url, a->id, (unsigned long)a->code, rel);
+            const char *base = strrchr(rel, '/');
+            snprintf(st->cur, sizeof st->cur, "%s", base ? base + 1 : rel);
+            if ((rc = fetch(cfg, io, st, url, path, MAX_FILE, sz, sha)) != ST_OK) break;
+            sdc_sha256_hex(sha, hex);
+            if (strcmp(hex, want)) { rc = ST_E_VERIFY; fail_detail(st, rc, rel); break; }
+            st->files_done++;
+            progress(io, st);
+        }
+        fclose(f);
+        if (rc != ST_OK) goto out;
+    }
+
+    // 3. Mark it as the store's, then swap it in: the old version is parked, never lost until the new one is in.
+    st->phase = ST_PH_INSTALL;
+    snprintf(path, sizeof path, "%s/.store-version", tmp);
+    {
+        FILE *v = fopen(path, "wb");
+        // What the launcher needs to list it without the catalog: category and its name in every language.
+        if (!v || fprintf(v, "code %lu\nversion %s\nkind %s\ncategory %s\nname %s|%s|%s|%s|%s\n", (unsigned long)a->code,
+                          a->version, a->kind, a->category, a->name[0], a->name[1], a->name[2], a->name[3], a->name[4]) < 0) {
+            if (v) fclose(v);
+            rc = ST_E_WRITE; fail_detail(st, rc, ".store-version"); goto out;
+        }
+        if (fclose(v) != 0) { rc = ST_E_WRITE; fail_detail(st, rc, ".store-version"); goto out; }
+    }
+    rmtree(old);
+    bool had = is_dir(live);
+    if (had && (!mkdirs(old, false) || rename(live, old) != 0)) { rc = ST_E_WRITE; fail_detail(st, rc, a->id); goto out; }
+    if (rename(tmp, live) != 0) {
+        if (had) rename(old, live);
+        rc = ST_E_WRITE; fail_detail(st, rc, a->id); goto out;
+    }
+    rmtree(old);
+    if (!strcmp(a->kind, "web")) register_web_app(cfg, a);
+    st->phase = ST_PH_DONE;
+    st->pct = 100;
+    progress(io, st);
+out:
+    unlink(sig);
+    if (rc != ST_OK) rmtree(tmp);
+    return rc;
+}
+
+st_code_t st_remove(const char *root, const char *id)
+{
+    if (!st_id_ok(id)) return ST_E_BAD;
+    bool system = false;
+    if (!st_installed(root, id, &system)) return system ? ST_E_CONFLICT : ST_E_NOTFOUND;
+    char p[200], reg[200];
+    snprintf(p, sizeof p, "%s/apps/%s", root, id);
+    rmtree(p);
+    if (is_dir(p)) return ST_E_WRITE;
+    snprintf(reg, sizeof reg, "%s/system/registry/apps.json", root);
+    if (exists(reg)) {
+        static char buf[2048];
+        int removed = 0;
+        sdc_registry_drop(reg, id, buf, sizeof buf, &removed);
+    }
+    return ST_OK;
+}

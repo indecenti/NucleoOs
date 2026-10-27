@@ -222,3 +222,6 @@ CONFIG_ESP_GDBSTUB_ENABLED=n
 # wifiatk are unaffected. Flip to =y only if a real 802.1X login flow is ever added.
 CONFIG_ESP_WIFI_ENTERPRISE_SUPPORT=n
 CONFIG_TINYUSB_NET_MODE_NCM=y
+
+# Presence app (Wi-Fi CSI detector)
+CONFIG_ESP_WIFI_CSI_ENABLED=y

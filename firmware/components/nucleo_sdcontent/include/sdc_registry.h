@@ -22,3 +22,7 @@ typedef enum {
 // window. Temp files are `<device_path>.add` and `<device_path>.merge`, always removed.
 sdc_reg_result_t sdc_registry_merge(const char *device_path, const char *release_path,
                                     char *buf, size_t cap, int *added);
+
+// Remove the entry with this id (an app the store uninstalled), in place and atomically like the merge.
+// SDC_REG_MERGED = removed (*removed = how many), SDC_REG_UNCHANGED = no such entry: file untouched.
+sdc_reg_result_t sdc_registry_drop(const char *device_path, const char *id, char *buf, size_t cap, int *removed);

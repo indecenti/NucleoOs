@@ -20,6 +20,7 @@ void gamefront_open(void);                                  // snapshot the Game
 int  gamefront_key(int key, char ch, char *launch_id, int cap);  // GF_LAUNCH fills launch_id
 void gamefront_render(void);                               // compose full screen + blit
 bool gamefront_step(void);                                 // animation tick; true while moving
+void gamefront_invalidate(void);                           // the next render repaints everything (surface switch)
 
 // Capture the freshly-composited shared canvas to the SD. cover -> downscaled /data/GameShots/<id>.bmp;
 // screenshot -> full-res /data/Screenshots/<name>.bmp. Call right after the frame is pushed.

@@ -1,5 +1,5 @@
 {
-  "generated": "2026-10-25T00:45:35.334Z",
+  "generated": "2026-10-27T14:04:20.394Z",
   "base": "en",
   "langs": [
     "en",
@@ -23,7 +23,7 @@
     "de": 100
   },
   "surfaces": 50,
-  "totalKeys": 4133,
+  "totalKeys": 4142,
   "namespaces": {
     "core": 156,
     "shell": 302,
@@ -70,8 +70,8 @@
     "terminal": 19,
     "unit-converter": 21,
     "updates": 39,
-    "video-player": 75,
-    "video-studio": 29,
+    "video-player": 77,
+    "video-studio": 36,
     "voice-manager": 78,
     "weather": 41,
     "wifi-scanner": 27

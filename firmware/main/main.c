@@ -103,6 +103,7 @@ static void solo_watchdog_disarm(void)
 }
 // Disarm FIRST: reaching here is the proof the Solo task exists and is scheduled, which is exactly
 // what the watchdog is waiting for.
+extern void nucleo_store_apps_sync(void);   // nucleo_app/store_apps.cpp: store apps join the launcher
 static void anima_solo_task(void *arg) { (void)arg; solo_watchdog_disarm(); nucleo_app_run(); vTaskDelete(NULL); }
 
 // Human label for the last reset cause. This is THE first question when a device reboots on its own:
@@ -755,6 +756,7 @@ void app_main(void)
     } else {
         nucleo_app_register_builtins();      bootmark("app-builtins");
         nucleo_setup_register_apps();        bootmark("app-setup");
+        nucleo_store_apps_sync();            bootmark("app-store");   // apps installed from the store
     }
     bootmark("pre-app-run");
     // Web Client server-Solo is the ONE Solo profile that keeps httpd UP, and httpd_start carves the heap:

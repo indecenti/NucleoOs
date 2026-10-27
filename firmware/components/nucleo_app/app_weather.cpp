@@ -18,6 +18,7 @@ extern "C" {
 #include "app_ui.h"             // shared tab strip + selectable row
 #include "nucleo_theme.h"       // themed chrome palette (replaces the local classic-theme copy)
 #include "nucleo_i18n.h"        // TR(it,en): hints follow the system language
+#include "nucleo_touch.h"       // two screens: tap the tabs and the rows on the panel
 
 // Free a big CONTIGUOUS block for the TLS handshake (httpd+L1+voice down, Wi-Fi stays up) around an
 // online fetch, then restore. Without this the largest free block is ~7KB and HTTPS always OOMs ->
@@ -89,6 +90,12 @@ static void fav_del(int idx)
     s_fav_n--; fav_save();
 }
 
+// Where a transient screen (loading, typing a city) draws: the whole external panel below its tab bar when the
+// app runs on two screens (d IS the panel then), the app's content area otherwise.
+static int area_top(void) { return nucleo_app_two_screens() ? 34 : nucleo_app_content_top(); }
+static int area_h(void)   { return nucleo_app_two_screens() ? d.height() - 34 : nucleo_app_content_height(); }
+static int area_w(void)   { return nucleo_app_two_screens() ? d.width() : 240; }
+
 // ---- vector weather icons (curated sun + clouds) --------------------------------------------------
 static void draw_sun(int cx, int cy, float s, bool rays)
 {
@@ -144,8 +151,8 @@ static void draw_wx(int cx, int cy, float s, wx_icon_t ic)
 // ---- fetch ----------------------------------------------------------------------------------------
 static void do_refresh(bool relocate)
 {
-    int top = nucleo_app_content_top(), h = nucleo_app_content_height();
-    d.fillRect(0, top, 240, h, BG);
+    int top = area_top(), h = area_h();
+    d.fillRect(0, top, area_w(), h, BG);
     d.setTextSize(2); d.setTextColor(ACC, BG); d.setCursor(8, top + 8); d.print(TR("Meteo", "Weather"));
     d.setTextSize(2); d.setTextColor(MUTED, BG); d.setCursor(8, top + 44); d.print(TR("Carico...", "Loading..."));
 
@@ -171,10 +178,10 @@ static bool text_input(const char *title, char *buf, int maxlen)
     buf[0] = 0; int len = 0; bool dirty = true;
     for (;;) {
         if (dirty) {
-            int top = nucleo_app_content_top(), h = nucleo_app_content_height();
-            d.fillRect(0, top, 240, h, BG);
+            int top = area_top(), h = area_h();
+            d.fillRect(0, top, area_w(), h, BG);
             d.setTextSize(2); d.setTextColor(ACC, BG); d.setCursor(8, top + 8); d.print(title);
-            d.fillRoundRect(8, top + 40, 224, 26, 4, LINE);
+            d.fillRoundRect(8, top + 40, area_w() - 16, 26, 4, LINE);
             d.setTextSize(2); d.setTextColor(FG, LINE); d.setCursor(14, top + 46); d.print(len ? buf : "");
             if (len) { int cw = 12; d.fillRect(14 + len * cw, top + 44, 2, 18, ACC); }   // caret
             d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(8, top + 80); d.print(TR("digita il nome, ENTER conferma", "type the name, ENTER confirms"));
@@ -195,8 +202,8 @@ static void add_city_flow(void)
 {
     char name[40];
     if (!text_input(TR("Aggiungi citta", "Add city"), name, sizeof name)) return;
-    int top = nucleo_app_content_top();
-    d.fillRect(0, top, 240, nucleo_app_content_height(), BG);
+    int top = area_top();
+    d.fillRect(0, top, area_w(), area_h(), BG);
     d.setTextSize(2); d.setTextColor(MUTED, BG); d.setCursor(8, top + 40); d.print(TR("Cerco citta...", "Finding city..."));
     esp_task_wdt_reset();
     nucleo_weather_t tmp; memset(&tmp, 0, sizeof tmp);
@@ -205,7 +212,7 @@ static void add_city_flow(void)
     net_down();
     if (found) fav_add(tmp.place, tmp.lat, tmp.lon);
     else {
-        d.fillRect(0, top, 240, nucleo_app_content_height(), BG);
+        d.fillRect(0, top, area_w(), area_h(), BG);
         d.setTextSize(2); d.setTextColor(WARN, BG); d.setCursor(8, top + 40); d.print(TR("Citta non trovata", "City not found"));
         d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(8, top + 66); d.print(name);
         for (int i = 0; i < 80; i++) { esp_task_wdt_reset(); vTaskDelay(pdMS_TO_TICKS(20)); nucleo_key_t k = nucleo_kbd_read(); if (k.key) break; }
@@ -233,6 +240,11 @@ static void on_enter(void)
 
 static void on_key(int key, char ch)
 {
+    // A tap on a row of the panel (two screens) arrives as ch 1..15 = that row: select it, then open it.
+    if (key == NK_CHAR && ch >= 1 && ch <= 15) {
+        if (s_fav_screen) s_fav_sel = ch - 1; else if (s_tab == T_SET) s_set_sel = ch - 1;
+        key = NK_ENTER; ch = 0;
+    }
     if (s_fav_screen) {
         int total = s_fav_n + 1;                      // +1 = "add"
         if (key == NK_UP)   { s_fav_sel = (s_fav_sel - 1 + total) % total; nucleo_app_request_draw(); }
@@ -365,8 +377,10 @@ static void draw_set(int top, int h)
     snprintf(ln, sizeof ln, "%s  %.2f,%.2f", s_w.place[0] ? s_w.place : "-", s_w.lat, s_w.lon); d.print(ln);
 }
 
+static void draw_summary(void);   // two screens: the Cardputer's glanceable summary (defined below)
 static void on_draw(void)
 {
+    if (nucleo_app_two_screens()) { draw_summary(); return; }
     int top = nucleo_app_content_top(), h = nucleo_app_content_height();
     d.fillRect(0, top, 240, h, BG);
     if (s_fav_screen) { draw_favs(top, h); return; }
@@ -379,11 +393,205 @@ static void on_draw(void)
     else draw_set(ctop, ch);
 }
 
+// ---- two screens: the whole app on the external 320x240 panel -----------------------------------------
+// Everything the tabs hold, at a size read from across the desk: a tab bar you can tap, Now (place, big
+// icon + temperature, condition, feels-like, three metrics), Forecast (a full-width row per day), Settings and
+// Favourite cities (big rows, tap = open). The Cardputer shows a glanceable summary meanwhile (on_draw).
+// No buffer: each region is painted over itself, and only what changed is repainted — moving through a menu
+// repaints the rows, nothing else; a key that changes nothing on the panel costs nothing.
+#define LG_TOP 34
+static const char *tab_name(int t)
+{
+    return t == T_NOW ? TR5("Adesso", "Now", "Ahora", "Maint.", "Jetzt")
+         : t == T_FCAST ? TR5("Previsioni", "Forecast", "Prevision", "Previsions", "Vorhersage")
+         : TR5("Impostazioni", "Settings", "Ajustes", "Reglages", "Einstell.");
+}
+
+static void lg_tabs(int W2)
+{
+    d.fillRect(0, 0, W2, LG_TOP, BG);
+    const int tw = W2 / 3;
+    d.setFont(&fonts::Font2);
+    for (int t = 0; t <= T_SET; t++) {
+        bool on = (t == s_tab && !s_fav_screen);
+        int x = t * tw + 3, w = tw - 6;
+        if (on) d.fillRoundRect(x, 4, w, 26, 8, ACCENT); else d.drawRoundRect(x, 4, w, 26, 8, LINE);
+        const char *n = tab_name(t);
+        d.setTextColor(on ? INK : MUTED, on ? ACCENT : BG);
+        d.setCursor(x + (w - (int)d.textWidth(n)) / 2, 9); d.print(n);
+        nucleo_touch_add(x, 0, w, LG_TOP, NK_CHAR, (char)('1' + t));
+    }
+}
+
+// One big selectable row over its own band: accent pill when focused, a quiet outline otherwise.
+static void lg_row(int W2, int y, int h, const char *label, const char *val, bool on, unsigned short tint)
+{
+    d.fillRect(0, y, W2, h, BG);
+    if (on) d.fillRoundRect(6, y + 2, W2 - 12, h - 4, 10, ACCENT);
+    else    d.drawRoundRect(6, y + 2, W2 - 12, h - 4, 10, LINE);
+    d.setFont(&fonts::Font4);
+    d.setTextColor(on ? INK : tint, on ? ACCENT : BG);
+    d.setCursor(18, y + (h - 26) / 2 + 1); d.print(label);
+    if (val && val[0]) {
+        d.setFont(&fonts::Font2); d.setTextColor(on ? INK : MUTED, on ? ACCENT : BG);
+        d.setCursor(W2 - 18 - (int)d.textWidth(val), y + (h - 16) / 2); d.print(val);
+    }
+}
+
+static void lg_now(int W2, int H2)
+{
+    char ln[40];
+    if (!s_ok) {
+        d.setFont(&fonts::Font4); d.setTextColor(WARN, BG);
+        const char *m = TR("Non disponibile", "Unavailable");
+        d.setCursor((W2 - (int)d.textWidth(m)) / 2, 100); d.print(m);
+        d.setFont(&fonts::Font2); d.setTextColor(MUTED, BG);
+        m = TR("Serve il Wi-Fi: r per riprovare", "Wi-Fi needed: r to retry");
+        d.setCursor((W2 - (int)d.textWidth(m)) / 2, 134); d.print(m);
+        return;
+    }
+    d.setFont(&fonts::Font4); d.setTextColor(FG, BG); d.setCursor(10, LG_TOP + 4); d.print(s_w.place);
+    if (s_w.updated[0]) { d.setFont(&fonts::Font2); d.setTextColor(DIM, BG); d.setCursor(W2 - 10 - (int)d.textWidth(s_w.updated), LG_TOP + 8); d.print(s_w.updated); }
+    draw_wx(58, 112, 40, weather_wmo_icon(s_w.code));
+    snprintf(ln, sizeof ln, "%d", Tc(s_w.temp));
+    d.setFont(&fonts::Font7); d.setTextColor(FG, BG); d.setCursor(118, 70); d.print(ln);
+    int tx = 118 + (int)d.textWidth(ln) + 5;
+    d.drawCircle(tx + 5, 77, 5, SUN); d.drawCircle(tx + 5, 77, 4, SUN);
+    d.setFont(&fonts::Font4); d.setTextColor(SUN, BG); d.setCursor(tx + 13, 70); { char u[2] = { Tu(), 0 }; d.print(u); }
+    char cond[40]; snprintf(cond, sizeof cond, "%s", TR(weather_wmo_label(s_w.code), weather_wmo_label_en(s_w.code)));
+    d.setFont(&fonts::Font4);
+    while (cond[0] && (int)d.textWidth(cond) > W2 - 126) cond[strlen(cond) - 1] = 0;
+    d.setTextColor(SUN, BG); d.setCursor(118, 124); d.print(cond);
+    d.setFont(&fonts::Font2); d.setTextColor(MUTED, BG); d.setCursor(118, 154);
+    snprintf(ln, sizeof ln, TR("percepiti %d%c", "feels like %d%c"), Tc(s_w.feels), Tu()); d.print(ln);
+    // The three metrics across the bottom.
+    int pp = s_w.n_days ? s_w.day[0].precip_prob : 0, cw = W2 / 3;
+    d.drawFastHLine(8, 178, W2 - 16, LINE);
+    const char *lab[3] = { TR("Umidita", "Humidity"), TR("Vento km/h", "Wind km/h"), TR("Pioggia", "Rain") };
+    char val[3][12]; unsigned short col[3] = { ACC, GRN, RAIN };
+    snprintf(val[0], 12, "%d%%", s_w.humidity); snprintf(val[1], 12, "%d", (int)lroundf(s_w.wind)); snprintf(val[2], 12, "%d%%", pp);
+    for (int i = 0; i < 3; i++) {
+        int cx = i * cw + cw / 2;
+        d.setFont(&fonts::Font2); d.setTextColor(MUTED, BG); d.setCursor(cx - (int)d.textWidth(lab[i]) / 2, 184); d.print(lab[i]);
+        d.setFont(&fonts::Font4); d.setTextColor(col[i], BG); d.setCursor(cx - (int)d.textWidth(val[i]) / 2, 204); d.print(val[i]);
+    }
+}
+
+static void lg_fcast(int W2, int H2)
+{
+    if (!s_ok || s_w.n_days == 0) { d.setFont(&fonts::Font4); d.setTextColor(WARN, BG); d.setCursor(16, 100); d.print(TR("Non disponibile", "Unavailable")); return; }
+    int n = s_w.n_days; if (n > WX_MAX_DAYS) n = WX_MAX_DAYS;
+    int rh = (H2 - LG_TOP) / n;
+    char ln[12];
+    for (int i = 0; i < n; i++) {
+        int y = LG_TOP + i * rh, cy = y + rh / 2;
+        if (i) d.drawFastHLine(8, y, W2 - 16, LINE);
+        d.setFont(&fonts::Font4); d.setTextColor(i == 0 ? SUN : FG, BG); d.setCursor(10, cy - 12);
+        d.print(i == 0 ? TR("Oggi", "Today") : TR(weather_dow_short(s_w.day[i].dow), weather_dow_short_en(s_w.day[i].dow)));
+        draw_wx(118, cy, rh * 0.30f, weather_wmo_icon(s_w.day[i].code));
+        int hi = Tc(s_w.day[i].tmax), lo = Tc(s_w.day[i].tmin);
+        snprintf(ln, sizeof ln, "%d", hi);
+        d.setTextColor(hi >= 28 ? WARN : (hi <= 4 ? ACC : FG), BG); d.setCursor(152, cy - 12); d.print(ln);
+        snprintf(ln, sizeof ln, "%d", lo);
+        d.setTextColor(MUTED, BG); d.setCursor(192, cy - 12); d.print(ln);
+        int bx = 232, bw = 46, pp = s_w.day[i].precip_prob;
+        d.drawRoundRect(bx, cy - 6, bw, 12, 3, DIM);
+        int fw = (bw - 2) * pp / 100; if (fw > 0) d.fillRoundRect(bx + 1, cy - 5, fw, 10, 3, RAIN);
+        snprintf(ln, sizeof ln, "%d%%", pp);
+        d.setFont(&fonts::Font2); d.setTextColor(RAIN, BG); d.setCursor(W2 - 6 - (int)d.textWidth(ln), cy - 8); d.print(ln);
+    }
+}
+
+static void lg_set_rows(int W2, bool register_targets)
+{
+    char favv[8], unit[12];
+    snprintf(favv, sizeof favv, "%d", s_fav_n);
+    snprintf(unit, sizeof unit, "%s", s_units_f ? "Fahrenheit" : "Celsius");
+    const char *lab[4] = { TR5("Aggiorna", "Refresh", "Actualizar", "Actualiser", "Aktualisieren"),
+                           TR5("Localizza (IP)", "Locate (IP)", "Localizar (IP)", "Localiser (IP)", "Orten (IP)"),
+                           TR5("Citta preferite", "Favourite cities", "Ciudades favoritas", "Villes favorites", "Lieblingsorte"),
+                           TR5("Unita", "Units", "Unidad", "Unite", "Einheit") };
+    const char *val[4] = { s_w.updated, "", favv, unit };
+    for (int i = 0; i < 4; i++) {
+        int y = LG_TOP + 4 + i * 44;
+        lg_row(W2, y, 42, lab[i], val[i], i == s_set_sel, FG);
+        if (register_targets) nucleo_touch_add(0, y, W2, 42, NK_CHAR, (char)(1 + i));
+    }
+}
+
+static void lg_fav_rows(int W2, int H2, bool register_targets)
+{
+    const int y0 = LG_TOP + 30, rh = 34, vis = (H2 - y0) / rh, total = s_fav_n + 1;
+    int start = s_fav_sel >= vis ? s_fav_sel - vis + 1 : 0;
+    for (int r = 0; r < vis; r++) {
+        int i = start + r, y = y0 + r * rh;
+        if (i >= total) { d.fillRect(0, y, W2, rh, BG); continue; }
+        bool add = (i == s_fav_n);
+        lg_row(W2, y, rh, add ? TR("+ Aggiungi citta", "+ Add city") : s_fav[i].place, "", i == s_fav_sel, add ? GRN : FG);
+        if (register_targets) nucleo_touch_add(0, y, W2, rh, NK_CHAR, (char)(1 + i));
+    }
+}
+
+static void draw_large(void)
+{
+    const int W2 = d.width(), H2 = d.height();
+    // What the panel shows, in two parts: the screen (tab, data, the lists' size) and the focus inside it.
+    uint32_t sig = 2166136261u;
+    auto mix = [&](uint32_t v) { sig = (sig ^ v) * 16777619u; };
+    mix(nucleo_app_repaint_gen()); mix((uint32_t)s_tab); mix(s_fav_screen); mix(s_ok); mix(s_units_f); mix((uint32_t)s_fav_n);
+    mix((uint32_t)lroundf((float)s_w.temp * 10)); mix((uint32_t)s_w.code); mix((uint32_t)s_w.humidity); mix((uint32_t)s_w.n_days);
+    for (const char *p = s_w.place; *p; p++) mix((uint8_t)*p);
+    for (const char *p = s_w.updated; *p; p++) mix((uint8_t)*p);
+    static uint32_t s_sig = 0;
+    static int s_sel_shown = -1, s_fsel_shown = -1;
+    const bool full = (sig != s_sig);
+    if (!full) {                                     // same screen: only the focus may have moved
+        if (s_fav_screen && s_fav_sel != s_fsel_shown) { s_fsel_shown = s_fav_sel; lg_fav_rows(W2, H2, false); }
+        else if (!s_fav_screen && s_tab == T_SET && s_set_sel != s_sel_shown) { s_sel_shown = s_set_sel; lg_set_rows(W2, false); }
+        return;
+    }
+    s_sig = sig; s_sel_shown = s_set_sel; s_fsel_shown = s_fav_sel;
+    nucleo_touch_clear();
+    lg_tabs(W2);
+    d.fillRect(0, LG_TOP, W2, H2 - LG_TOP, BG);
+    if (s_fav_screen) {
+        d.setFont(&fonts::Font4); d.setTextColor(ACC, BG); d.setCursor(10, LG_TOP + 2); d.print(TR("Citta preferite", "Favourite cities"));
+        lg_fav_rows(W2, H2, true);
+    }
+    else if (s_tab == T_NOW) lg_now(W2, H2);
+    else if (s_tab == T_FCAST) lg_fcast(W2, H2);
+    else {
+        lg_set_rows(W2, true);
+        char ln[48]; d.setFont(&fonts::Font2); d.setTextColor(DIM, BG);
+        snprintf(ln, sizeof ln, "%s  %.2f, %.2f", s_w.place[0] ? s_w.place : "-", s_w.lat, s_w.lon);
+        d.setCursor(10, H2 - 20); d.print(ln);
+    }
+    nucleo_touch_commit();
+    d.setFont(&fonts::Font0); d.setTextSize(1);
+}
+
+// The Cardputer's own screen while the panel has the app: a glanceable summary (place, temperature, sky).
+static void draw_summary(void)
+{
+    char ln[24];
+    d.setFont(&fonts::Font2); d.setTextColor(MUTED, BG); d.setCursor(6, 4);
+    d.print(s_w.place[0] ? s_w.place : TR("Meteo", "Weather"));
+    if (!s_ok) { d.setFont(&fonts::Font4); d.setTextColor(WARN, BG); d.setCursor(6, 50); d.print(TR("Non disponibile", "Unavailable")); d.setFont(&fonts::Font0); return; }
+    snprintf(ln, sizeof ln, "%d", Tc(s_w.temp));
+    d.setFont(&fonts::Font7); d.setTextColor(FG, BG); d.setCursor(8, 30); d.print(ln);
+    int tx = 8 + (int)d.textWidth(ln) + 4;
+    d.setFont(&fonts::Font4); d.setTextColor(SUN, BG); d.setCursor(tx, 30); { char u[2] = { Tu(), 0 }; d.print(u); }
+    draw_wx(188, 58, 28, weather_wmo_icon(s_w.code));
+    char cond[32]; snprintf(cond, sizeof cond, "%s", TR(weather_wmo_label(s_w.code), weather_wmo_label_en(s_w.code)));
+    d.setFont(&fonts::Font2); d.setTextColor(SUN, BG); d.setCursor(8, 92); d.print(cond);
+    d.setFont(&fonts::Font0); d.setTextSize(1);
+}
+
 extern "C" void nucleo_register_weather(void)
 {
     static const nucleo_app_def_t app = {
         "weather", "Meteo", "Tools", "Meteo geolocalizzato, citta preferite, previsioni (Open-Meteo)",
-        'M', 0x5D9F, on_enter, on_key, nullptr, on_draw, nullptr, 0
+        'M', 0x5D9F, on_enter, on_key, nullptr, on_draw, nullptr, 0, nullptr, draw_large
     };
     nucleo_app_register(&app);
 }

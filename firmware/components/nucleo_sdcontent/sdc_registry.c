@@ -212,3 +212,44 @@ done:
     free(ids);
     return res;
 }
+
+sdc_reg_result_t sdc_registry_drop(const char *device_path, const char *id, char *buf, size_t cap, int *removed)
+{
+    *removed = 0;
+    char outp[310], oldp[310];
+    snprintf(outp, sizeof outp, "%s.drop", device_path);
+    snprintf(oldp, sizeof oldp, "%s.old", device_path);
+    size_t want = strlen(id);
+    FILE *dev = fopen(device_path, "rb"), *out = NULL;
+    sdc_reg_result_t res = SDC_REG_UNCHANGED;
+    size_t len;
+    int r, kept = 0;
+    if (!dev) return SDC_REG_DEVICE_BAD;
+    if (!(out = fopen(outp, "wb"))) { res = SDC_REG_IO; goto done; }
+    if (!seek_installed(dev, out)) { res = SDC_REG_DEVICE_BAD; goto done; }
+    // Re-emit every object element except the one with this id; non-object elements are not registry entries.
+    while ((r = next_entry(dev, buf, cap, &len)) > 0) {
+        const char *eid; size_t il;
+        if (r != 1) continue;
+        if (entry_id(buf, len, &eid, &il) && il == want && !strncmp(eid, id, il)) { (*removed)++; continue; }
+        fputs(kept++ ? ",\n    " : "\n    ", out);
+        fwrite(buf, 1, len, out);
+    }
+    if (r < 0) { res = SDC_REG_DEVICE_BAD; goto done; }
+    fputs(kept ? "\n  ]" : "]", out);
+    { int c; while ((c = fgetc(dev)) != EOF) fputc(c, out); }   // the rest of the file, verbatim
+    fclose(dev); dev = NULL;
+    if (fclose(out) != 0) { out = NULL; res = SDC_REG_IO; goto done; }
+    out = NULL;
+    if (!*removed) goto done;
+    unlink(oldp);
+    if (rename(device_path, oldp) != 0) { res = SDC_REG_IO; goto done; }
+    if (rename(outp, device_path) != 0) { rename(oldp, device_path); res = SDC_REG_IO; goto done; }
+    unlink(oldp);
+    res = SDC_REG_MERGED;
+done:
+    if (dev) fclose(dev);
+    if (out) fclose(out);
+    unlink(outp);
+    return res;
+}

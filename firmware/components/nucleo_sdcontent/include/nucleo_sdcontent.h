@@ -85,6 +85,11 @@ void nucleo_sdcontent_on_net_ready(void);
 // Progress hook, called by the engine; weak no-op default, main.c paints the boot-window bar.
 void nucleo_sdcontent_on_progress(const sdc_state_t *st);
 
+// The HTTPS transport (Range windows on one keep-alive connection, see sdc_engine.h), shared with the app
+// store client. Contract of sdc_io_t.get. Close it when done: it holds a TLS session (~20 KB).
+int  nucleo_sdcontent_http_get(void *ctx, const char *url, uint32_t off, uint32_t len, uint8_t *buf, int *status);
+void nucleo_sdcontent_http_close(void);
+
 #ifdef __cplusplus
 }
 #endif

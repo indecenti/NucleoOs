@@ -180,6 +180,8 @@ void launcher_build_menu(void)
     ROOT.items = s_root_items;
 }
 
+unsigned launcher_tree_gen(void) { return s_tree_gen; }
+
 void launcher_reset(void)
 {
     s_stack[0].node = &ROOT;
