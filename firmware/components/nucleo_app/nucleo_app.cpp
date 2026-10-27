@@ -531,7 +531,10 @@ void nucleo_app_register_builtins(void)
 #if !CONFIG_NUCLEO_STORE_BRAWLER
     nucleo_register_brawler();
 #endif
-    nucleo_register_dice(); nucleo_register_yahtzee(); nucleo_register_snake(); nucleo_register_vs();
+    nucleo_register_dice(); nucleo_register_yahtzee(); nucleo_register_snake();
+#if !CONFIG_NUCLEO_STORE_ORDE
+    nucleo_register_vs();
+#endif
 #if !CONFIG_NUCLEO_STORE_CARDLER
     nucleo_register_cardler();
 #endif

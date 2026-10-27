@@ -47,6 +47,12 @@ config NUCLEO_STORE_CARDLER
     help
         Leaves app_cardler.cpp out of the firmware image.
 
+config NUCLEO_STORE_ORDE
+    bool "Orde (orde): from the store, not in the firmware"
+    default y
+    help
+        Leaves app_vs.cpp and vs_sim.c out of the firmware image.
+
 endmenu
 
 endmenu

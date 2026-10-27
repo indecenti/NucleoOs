@@ -4,6 +4,11 @@
 // Multi-weapon build: the player carries several auto-firing weapons at once (the Vampire-Survivors
 // core loop), each on its own cooldown and auto-targeting. Global "passive" stats (might/haste/area)
 // buff every weapon, so one upgrade card can improve the whole kit. Plus elites, pickups, fat xp gems.
+#if __has_include("sdkconfig.h")       // the host harnesses compile this file without one
+#include "sdkconfig.h"
+#endif
+// Built in, or (CONFIG_NUCLEO_STORE_ORDE) only as the store's native module, built with NAP_MODULE.
+#if !CONFIG_NUCLEO_STORE_ORDE || defined(NAP_MODULE)
 #include "vs_sim.h"
 
 // 32-direction unit circle in 8.8 (cos, sin scaled by 256). Precomputed constant table — the
@@ -534,3 +539,4 @@ void vs_step(VS *w)
 
     if (w->checks > w->checks_max) w->checks_max = w->checks;
 }
+#endif  // !CONFIG_NUCLEO_STORE_ORDE || NAP_MODULE

@@ -9,6 +9,11 @@
 // RAM: the VS world (~7 KB SoA pools) and the T_N tiles (8bpp RGB332, 256 B each, 4 KB chunks) are
 // HEAP-ON-ENTER (alloc in on_enter, free on_exit) — never .bss. NX_SOLO opens the game in a fresh,
 // unfragmented heap. Atlas built by assets/coop-rpg/repack_orde_atlas8.mjs.
+#if __has_include("sdkconfig.h")       // the host harnesses compile this file without one
+#include "sdkconfig.h"
+#endif
+// Built in, or (CONFIG_NUCLEO_STORE_ORDE) only as the store's native module, built with NAP_MODULE.
+#if !CONFIG_NUCLEO_STORE_ORDE || defined(NAP_MODULE)
 #include "nucleo_app.h"
 #include "nucleo_kbd.h"
 #include "launcher_theme.h"      // W H HINT BG FG C_*
@@ -1023,3 +1028,4 @@ extern "C" void nucleo_register_vs(void)
     };
     nucleo_app_register(&app);
 }
+#endif  // !CONFIG_NUCLEO_STORE_ORDE || NAP_MODULE
