@@ -112,6 +112,13 @@ changed. Two system surfaces remove even that:
   receives a shifted `y`, so the same draw code serves both paths. Header values, the search query, the
   text-editor field and the scrollbar are fixed-width opaque fields (no clear at all). Full paints only
   on a scene change (page, overlay open/close, theme, language) or `nucleo_app_repaint_gen()`.
+  On the external 320x240 panel (its `on_draw_large`) Settings composes the whole frame with
+  `lg::frame(..., exact = true)` — RGB565 strips, one blit each — gated by a signature that includes the
+  visible rows' values (a slider moved from the keyboard must reach the panel). It used to clear the panel and
+  redraw straight onto it on every change, which blinked at the 1 Hz live refresh (fixed 2026-10-27).
+  Its lists keep every row the same height (a focused row that grew pushed the rest of the list), scroll in
+  pixels with the edge rows clipped, and a drag moves the content (NUCLEO_TOUCH_VIEW_*), not the focus; the run
+  loop applies every queued drag step before one paint, so the list keeps up with the finger.
 - **Control Center** (`launcher_render.cpp`) needs no sprite: focus is a ring of outlines, colour
   changes redraw a glyph over its own fill, sliders lift only the old knob, and every text line is an
   opaque fixed-width field.

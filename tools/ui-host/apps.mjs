@@ -8,7 +8,7 @@
 // hand-written stubs. Data an app reads from the SD card comes from its scene file.
 //
 // Scene file tools/ui-host/apps/<key>.txt (key = the source name, app_<key>.cpp). One scene per line:
-//   <name> [key tokens...]                     tokens: U D L R ENTER BACK TAB DEL SPACE c:<ch> t:<text> row:<n> tap:<x>,<y> tick:<n> adv
+//   <name> [key tokens...]                     tokens: U D L R ENTER BACK TAB DEL SPACE c:<ch> t:<text> row:<n> tap:<x>,<y> touch:<x>,<y> view:<n> tick:<n> adv
 //   @src extra.cpp comp/x.c ...                more firmware sources (nucleo_app/, or <component>/<file>) the app needs for real
 //   @host x_stubs.cpp ...                      hand-written host stubs from tools/ui-host/ (data a stub of 0 cannot give)
 //   @reg nucleo_register_x                     the register function (default nucleo_register_<key>)

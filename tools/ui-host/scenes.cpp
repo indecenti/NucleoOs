@@ -113,9 +113,11 @@ struct Scene { const char *name; void (*run)(void); };
 static const Scene SCENES[] = {
     { "home",        [] { launcher_reset(); draw_launcher(); } },
     { "home-row3",   [] { launcher_reset(); launcher_set_sel(3); draw_launcher(); } },
+    { "home-end",    [] { launcher_reset(); launcher_set_sel(launcher_visible_count() - 1); draw_launcher(); } },   // the last tile: scrolled
     { "cat-office",  [] { go_category("Office", 0); draw_launcher(); } },
     { "cat-system",  [] { go_category("System", 0); draw_launcher(); } },
     { "cat-games",   [] { go_category("Games", 2); draw_launcher(); } },
+    { "cat-games-end", [] { go_category("Games", 0); launcher_set_sel(launcher_visible_count() - 1); draw_launcher(); } },
     { "cat-security",[] { go_category("Security", 0); draw_launcher(); } },
     { "search-set",  [] { type("set"); draw_launcher(); } },
     { "search-rank", [] { type("ca"); draw_launcher(); } },
@@ -132,8 +134,9 @@ static const Scene SCENES[] = {
                               launcher_render_companion(&d); } },
     { "cc",          [] { cc_scene({}); } },
     { "cc-bright",   [] { cc_scene({ NK_DOWN }); } },                              // brightness card centred
-    { "cc-volume",   [] { cc_scene({ NK_DOWN, NK_DOWN }); } },                     // scrolled to mid-column
-    { "cc-web",      [] { cc_scene({ NK_DOWN, NK_DOWN, NK_DOWN, NK_RIGHT }); } },  // bottom: IP + pairing PIN
+    { "cc-xbright",  [] { cc_scene({ NK_DOWN, NK_DOWN }); } },                     // ADV: the second screen's brightness
+    { "cc-volume",   [] { cc_scene({ NK_DOWN, NK_DOWN, NK_DOWN }); } },            // scrolled to mid-column
+    { "cc-web",      [] { cc_scene({ NK_DOWN, NK_DOWN, NK_DOWN, NK_DOWN, NK_RIGHT }); } },  // bottom: IP + pairing PIN
     { "cc-restart",  [] { cc_scene({ -'9' }); } },                                // key 9 arms Restart (red)
 };
 
@@ -256,7 +259,7 @@ static const Scene SETTINGS[] = {
     // ADV: the root gains "Second screen" under Display (row 4); its page, and a speed change waiting for a restart.
     { "root-adv",  [] { g_host.adv = true; app_open("wifi"); down(4); app_draw(); } },
     { "ext",       [] { g_host.adv = true; app_open("wifi"); down(4); app_key(NK_ENTER); app_draw(); } },
-    { "ext-speed", [] { g_host.adv = true; g_host_ext_pending = true; app_open("wifi"); down(4); app_key(NK_ENTER); down(3); app_draw(); } },
+    { "ext-speed", [] { g_host.adv = true; g_host_ext_pending = true; app_open("wifi"); down(4); app_key(NK_ENTER); down(4); app_draw(); } },
     { "ext-end",   [] { g_host.adv = true; app_open("wifi"); down(4); app_key(NK_ENTER); app_key(NK_UP); app_key(NK_UP); app_draw(); } },
     { "sound",     [] { app_open("wifi"); down(4); app_key(NK_ENTER); app_draw(); } },
     { "sound-tts", [] { app_open("wifi"); down(4); app_key(NK_ENTER);
@@ -477,8 +480,8 @@ static const Scene *find_scene(const char *surface, const char *scene)
     return nullptr;
 }
 
-static const char *const LARGE_SCENES[] = { "home", "home-row3", "cat-office", "cat-games", "search-set", "search-none",
-                                              "cc", "cc-volume", "cc-web", "cc-restart" };
+static const char *const LARGE_SCENES[] = { "home", "home-row3", "home-end", "cat-office", "cat-games", "cat-games-end", "search-set", "search-none",
+                                              "cc", "cc-xbright", "cc-volume", "cc-web", "cc-restart" };
 
 static void list_all(void)
 {

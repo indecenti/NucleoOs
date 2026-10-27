@@ -78,7 +78,8 @@ on one pin.
   "external_controller": "auto",      // auto | ili9341 | st7789
   "external_rotation": 1,             // 1 | 3 (module upside down)
   "external_mirror": false,           // true = left-right flip (text reads mirrored)
-  "external_mhz": 27,                 // 1..80 (exact: 10/20/27/40/80); lower it on long jumper wires
+  "external_mhz": 27,                 // 10/20/27/40 (exact steps; a saved 80 boots at 40); lower it on long wires
+  "external_brightness": 100,         // 10..100: the panel's own backlight (only with `bl` on a GPIO)
   "external_invert": false,           // omit = controller default
   "external_rgb": false,              // omit = controller default (BGR)
   "external_diag": true,              // touch log + boot report (tester build default: on)
@@ -107,10 +108,23 @@ screen there is nothing to rebuild from: 409.
 Big apps (`external_fit`) apply at once; Speed, Detection, Orientation and Touch are written now and apply after
 a restart (the row says so); Calibrate touch starts the 4-target calibration; Restart is on the same page.
 
-**Speed.** The panel clock is 80 MHz divided by an integer, so 10 / 20 / 27 / 40 / 80 are the exact steps
-(60 is not reachable: it lands on 40). One full 320x240 frame is 1.23 Mbit, so the ceiling is ~8 fps at 10 MHz,
-~30 at 40 MHz and ~60 at 80 MHz — before the shared SD bus and the CPU-driven (no DMA) writes take their share.
-80 MHz is accepted because the panel is write-only (the GPIO-matrix limit is about reads); it needs short wires.
+**Speed.** The panel clock is 80 MHz divided by an integer, so 10 / 20 / 27 / 40 are the exact steps
+(60 is not reachable: it lands on 40). One full 320x240 frame is 1.23 Mbit, so the ceiling is ~8 fps at 10 MHz
+and ~30 at 40 MHz — before the shared SD bus and the CPU-driven (no DMA) writes take their share. 80 MHz was
+offered as experimental and removed (2026-10-27): on real jumper wiring it flickered and dropped frames. A
+settings.json still holding 80 boots at 40.
+
+**Brightness.** With the LED on a GPIO (`bl`) the backlight is a PWM (LEDC channel 5 / timer 2; the Cardputer's
+own backlight holds channel 7 / timer 3), so the panel has its own level, `external_brightness` (10..100 %),
+separate from the Cardputer's: a slider in the Control Center (the "Second screen" card, under Brightness) and on
+the Second screen settings page; both persist once when you leave them. With the LED on the 5 V rail there is
+nothing to dim: the card keeps only its Calibrate pill (no card at all without touch) and the settings row is
+greyed out.
+
+**Launcher grid (large).** Same-size tiles, 4 per row, scrolled in pixels: the keys keep the focused tile in view
+with the smallest move, a drag moves the content (`NUCLEO_TOUCH_VIEW_*`, every queued step applied before one
+paint) and leaves the focus alone, rows cut by the edges are clipped. The focused tile sits on a lit card in its
+own colour. Inside a category the first cell is a Back tile (and the status-bar breadcrumb still works).
 
 **Screen off.** Idle auto-off, the Control Center's screen-off and the web's `display off` all go through the
 brightness, which the mirror follows: with the LED on a GPIO (`bl`, G3 = EXT pin 1 in the reference wiring) the
@@ -194,8 +208,12 @@ Control Center and the games take touch with no change of their own.
   path consumes) and that finger is ignored until it lifts.
 - **Calibration**: an affine raw→pixel map (absorbs axis swap, mirroring, a slightly rotated film), solved
   from 3 of 4 corner targets and verified on the 4th (rejected and repeated above 20 px). It runs by itself
-  the first time a touch panel is seen, and again on a 3 s hold of the status area. Targets sit in the
-  letterbox, so the mirrored UI keeps working with the keyboard meanwhile. The result is stored as
+  the first time a touch panel is seen, again on a 3 s hold of the status area, from Settings > Second screen
+  > Calibrate touch, and from the Control Center's second-screen card (the Calibrate pill, or Enter on the
+  card). It works on either surface (mirrored or large): while it runs the mirror is held dark and the
+  calibration owns the whole panel — white, the current target a red bullseye in its corner, and in the
+  centre "Step k of 4", four progress dots and the instruction (red after a rejected try); a green check
+  closes it, then the panel is wiped and the OS repaints everything. The result is stored as
   `display.external_touch_cal` and is only used in the rotation it was taken in. Until then the
   uncalibrated phase-1 map applies.
 - **Sampling**: Z1/Z2 pressure gate, then 3 X and 3 Y conversions (first of each discarded) → median;
@@ -238,8 +256,8 @@ search); every other screen stays compact, mirrored as before. API: `include/nuc
   true and the caller repaints everything; the touch layer follows by itself (solo: no letterbox keys, the
   whole panel is the gesture area — a tap means what is under it: top 24 px = Back, left 30 % = Left,
   right 30 % = Right, centre = Enter; drag = arrows, hold = Back). The large home has no hint bar.
-- **Calibration first.** Large is granted only once a touch panel has a stored calibration (the targets
-  live in the letterbox, which solo does not have).
+- **Calibration first.** Large is granted only once a touch panel has a stored calibration (and not while one
+  runs: the surface goes compact, behind the dark mirror, and comes back afterwards).
 
 ### Making another screen large (the standard)
 
@@ -300,4 +318,4 @@ rows, gauges), which would bring every kit-based app along.
 ## Not yet
 
 No scaling of compact screens (1:1, 240x135 centred), native 320x240 only on the launcher home so far, backlight follows
-brightness only when `bl` is a GPIO, no hot-plug (detection at boot; plug with the device off).
+brightness (and has its own level) only when `bl` is a GPIO, no hot-plug (detection at boot; plug with the device off).

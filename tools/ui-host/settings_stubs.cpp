@@ -125,7 +125,7 @@ extern "C" const char *nucleo_sdcontent_card_tag(void) { return g_host_sdc_statu
 extern "C" const char *nucleo_sdcontent_fw_tag(void) { return "0.5.0"; }
 extern "C" bool nucleo_setup_is_first_boot(void) { return false; }
 
-// ---- second screen (nucleo_extdisp.h): an attached ILI9341, 40 MHz, fit on; a pending 80 MHz on request ----
+// ---- second screen (nucleo_extdisp.h): an attached ILI9341, 40 MHz, fit on; a pending 27 MHz on request ----
 #include "nucleo_extdisp.h"
 bool g_host_ext_pending = false;                           // scene-controlled: the saved speed differs (restart)
 static nucleo_extdisp_conf_t s_ext_saved = { 0, 40, 1, true, true, true, 2 };
@@ -136,7 +136,7 @@ extern "C" const char *nucleo_extdisp_controller(void) { return "ili9341"; }
 extern "C" bool nucleo_extdisp_conf(nucleo_extdisp_conf_t *live, nucleo_extdisp_conf_t *saved)
 {
     if (live) *live = { 0, 40, 1, true, true, true, 2 };
-    if (saved) { *saved = s_ext_saved; if (g_host_ext_pending) saved->mhz = 80; }
+    if (saved) { *saved = s_ext_saved; if (g_host_ext_pending) saved->mhz = 27; }
     return true;
 }
 extern "C" bool nucleo_extdisp_set_primary(bool on) { s_ext_saved.primary = on; return true; }
@@ -147,3 +147,7 @@ extern "C" bool nucleo_extdisp_set_mhz(int m) { s_ext_saved.mhz = m; return true
 extern "C" bool nucleo_extdisp_set_rotation(int r) { s_ext_saved.rotation = r; return true; }
 extern "C" bool nucleo_extdisp_set_touch(bool on) { s_ext_saved.touch = on; return true; }
 extern "C" bool nucleo_extdisp_recalibrate(void) { return true; }
+static int s_ext_bri = 80;                                 // the module's LED on a GPIO: dimmable
+extern "C" bool nucleo_extdisp_brightness_ok(void) { return true; }
+extern "C" int  nucleo_extdisp_brightness(void) { return s_ext_bri; }
+extern "C" bool nucleo_extdisp_set_brightness(int p, bool) { s_ext_bri = p < 10 ? 10 : p > 100 ? 100 : p; return true; }

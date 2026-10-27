@@ -86,27 +86,53 @@ void extdisp_chrome_draw(LovyanGFX *g, const extdisp_rect_t r[SK_COUNT], const e
     g->endWrite();
 }
 
-void extdisp_chrome_calib(LovyanGFX *g, const extdisp_frame_t &fr, int step, const char *l1, const char *l2)
+void extdisp_chrome_calib(LovyanGFX *g, int step, bool retry, const char *title, const char *line_step,
+                          const char *instr)
 {
-    const int W = g->width(), H = g->height(), fb = fr.oy + fr.fh;
+    const uint16_t PAPER = 0xFFFF, TEXT = color565(20, 24, 32), SOFT = color565(96, 104, 120);
+    const uint16_t RED = color565(226, 32, 40), GREEN = color565(30, 160, 70), TODO = color565(205, 210, 220);
+    const int W = g->width(), H = g->height(), cx = W / 2;
     int t[4][2];
     extdisp_cal_targets(W, H, t);
     g->startWrite();
-    g->fillRect(0, 0, W, fr.oy, BG);
-    g->fillRect(0, fb, W, H - fb, BG);
-    if (step >= 0 && step < 4) {
+    g->fillScreen(PAPER);
+    if (step >= 0 && step < 4) {                                    // the target: a red bullseye on a fine cross
         const int x = t[step][0], y = t[step][1];
-        g->drawCircle(x, y, 10, TARGET);
-        g->drawCircle(x, y, 9, TARGET);
-        g->drawFastHLine(x - 16, y, 33, INK);
-        g->drawFastVLine(x, y - 16, 33, INK);
-        g->fillCircle(x, y, 2, TARGET);
+        g->drawFastHLine(x - 22, y, 45, SOFT);
+        g->drawFastVLine(x, y - 22, 45, SOFT);
+        g->fillCircle(x, y, 15, RED);
+        g->fillCircle(x, y, 10, PAPER);
+        g->fillCircle(x, y, 6, RED);
+        g->fillCircle(x, y, 1, PAPER);                              // the exact point to press
     }
-    g->setTextDatum(textdatum_t::top_center);
-    g->setFont(&lgfx::fonts::Font2);
-    g->setTextColor(INK, BG);
-    if (l1) g->drawString(l1, W / 2, 6);
-    g->setTextColor(DIM, BG);
-    if (l2) g->drawString(l2, W / 2, 24);
+    g->setTextDatum(textdatum_t::middle_center);
+    if (step >= 4) {                                                // done: a green check
+        const int y = H / 2 - 30;
+        g->fillCircle(cx, y, 24, GREEN);
+        for (int k = -2; k <= 2; k++) {
+            g->drawLine(cx - 12, y + k, cx - 4, y + 8 + k, PAPER);
+            g->drawLine(cx - 4, y + 8 + k, cx + 12, y - 8 + k, PAPER);
+        }
+        g->setFont(&lgfx::fonts::FreeSansBold12pt7b); g->setTextColor(TEXT, PAPER);
+        if (title) g->drawString(title, cx, H / 2 + 16);
+        g->setFont(&lgfx::fonts::Font2); g->setTextColor(SOFT, PAPER);
+        if (instr) g->drawString(instr, cx, H / 2 + 42);
+        g->setTextDatum(textdatum_t::top_left);
+        g->endWrite();
+        return;
+    }
+    g->setFont(&lgfx::fonts::FreeSansBold12pt7b); g->setTextColor(TEXT, PAPER);
+    if (title) g->drawString(title, cx, H / 2 - 42);
+    g->setFont(&lgfx::fonts::FreeSans9pt7b); g->setTextColor(SOFT, PAPER);
+    if (line_step) g->drawString(line_step, cx, H / 2 - 14);
+    for (int i = 0; i < 4; i++) {                                   // progress: done / current / to do
+        const int dx = cx - 33 + i * 22, dy = H / 2 + 10;
+        if (i < step)       g->fillCircle(dx, dy, 6, GREEN);
+        else if (i == step) { g->fillCircle(dx, dy, 8, RED); g->fillCircle(dx, dy, 3, PAPER); }
+        else                g->fillCircle(dx, dy, 6, TODO);
+    }
+    g->setFont(&lgfx::fonts::Font2); g->setTextColor(retry ? RED : TEXT, PAPER);
+    if (instr) g->drawString(instr, cx, H / 2 + 38);
+    g->setTextDatum(textdatum_t::top_left);
     g->endWrite();
 }

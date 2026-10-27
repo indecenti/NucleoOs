@@ -47,6 +47,8 @@ bool nucleo_prefs_save_extdisp_cal(const int cal[7]);
 bool nucleo_prefs_save_display_bool(const char *key, bool v);
 bool nucleo_prefs_save_display_int(const char *key, int v);
 bool nucleo_prefs_save_display_str(const char *key, const char *v);
+// Read one numeric "display.<key>": *v is written only when the key is present (pass the default in).
+bool nucleo_prefs_load_display_int(const char *key, int *v);
 
 #ifdef __cplusplus
 }

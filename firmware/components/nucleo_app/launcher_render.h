@@ -17,9 +17,12 @@
 // steps by one); on the grid the run loop moves up/down by a whole row, so it asks for the column count.
 // 0 = the compact carousel is live (no grid); >0 = the grid's column count.
 int launcher_render_large_cols(void);
-// First visible item index on the large grid (row*cols), after keeping the focused tile in view: the run
+// First item index whose tile is on screen on the large grid, after keeping the focused tile in view: the run
 // loop maps a tapped tile (NUCLEO_TOUCH_ROW + slot) to the item at first + slot.
 int launcher_render_grid_first(void);
+// A drag on the large grid (NUCLEO_TOUCH_VIEW_*): the content moves one step (dir +1 = toward the end), the
+// focus stays. True when it moved (repaint).
+bool launcher_render_grid_view(int dir);
 
 // Bottom hint-bar text (also the public nucleo_app_set_hint).
 void        launcher_render_set_hint(const char *h);
