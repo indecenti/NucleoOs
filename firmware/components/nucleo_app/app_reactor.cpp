@@ -12,6 +12,11 @@
 // A ~30 Hz poll animates and steps the sim at a fixed 10 Hz timestep; still screens are not redrawn.
 // LEFT/BACK reach on_back(), all other keys reach on_key(). Text is ASCII only. Never name a local `d`.
 
+#if __has_include("sdkconfig.h")       // the host harnesses compile this file without one
+#include "sdkconfig.h"
+#endif
+// Built in, or (CONFIG_NUCLEO_STORE_REACTOR) only as the store's native module, built with NAP_MODULE.
+#if !CONFIG_NUCLEO_STORE_REACTOR || defined(NAP_MODULE)
 #include "nucleo_app.h"
 #include "nucleo_kbd.h"
 #include "launcher_theme.h"
@@ -1054,3 +1059,4 @@ extern "C" void nucleo_register_reactor(void)
     };
     nucleo_app_register(&app);
 }
+#endif  // !CONFIG_NUCLEO_STORE_REACTOR || NAP_MODULE

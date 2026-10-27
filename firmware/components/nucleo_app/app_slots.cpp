@@ -15,6 +15,11 @@
 // languages (GT). Sound: the PC-rendered pack in /sd/data/slots/pack, never synthesized on the device.
 // Never name a local `d` (it is the display macro).
 
+#if __has_include("sdkconfig.h")       // the host harnesses compile this file without one
+#include "sdkconfig.h"
+#endif
+// Built in, or (CONFIG_NUCLEO_STORE_SLOTS) only as the store's native module, built with NAP_MODULE.
+#if !CONFIG_NUCLEO_STORE_SLOTS || defined(NAP_MODULE)
 #include "nucleo_app.h"
 #include "nucleo_touch.h"       // tap the bet / AUTO labels
 #include "nucleo_kbd.h"
@@ -1149,3 +1154,4 @@ extern "C" void nucleo_register_slots(void)
     };
     nucleo_app_register(&app);
 }
+#endif  // !CONFIG_NUCLEO_STORE_SLOTS || NAP_MODULE

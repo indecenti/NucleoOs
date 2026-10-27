@@ -510,11 +510,18 @@ void nucleo_app_register_builtins(void)
     // Web OS: the two transports to the browser web OS — cable (usbweb) and LAN (remote)
     nucleo_register_usbweb(); nucleo_register_remote();
     // Games
+#if !CONFIG_NUCLEO_STORE_REACTOR
     nucleo_register_reactor();
+#endif
 #if !CONFIG_NUCLEO_STORE_CONSTELLATIONS
     nucleo_register_constellations();   // the games that ship from the store: Kconfig "Games that ship from the store"
 #endif
-    nucleo_register_sandgarden(); nucleo_register_slots();
+#if !CONFIG_NUCLEO_STORE_SANDGARDEN
+    nucleo_register_sandgarden();
+#endif
+#if !CONFIG_NUCLEO_STORE_SLOTS
+    nucleo_register_slots();
+#endif
 #if !CONFIG_NUCLEO_STORE_POKER
     nucleo_register_poker();
 #endif
@@ -531,7 +538,10 @@ void nucleo_app_register_builtins(void)
 #if !CONFIG_NUCLEO_STORE_BRAWLER
     nucleo_register_brawler();
 #endif
-    nucleo_register_dice(); nucleo_register_yahtzee(); nucleo_register_snake();
+    nucleo_register_dice(); nucleo_register_yahtzee();
+#if !CONFIG_NUCLEO_STORE_SNAKE
+    nucleo_register_snake();
+#endif
 #if !CONFIG_NUCLEO_STORE_ORDE
     nucleo_register_vs();
 #endif
