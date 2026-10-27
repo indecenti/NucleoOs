@@ -1779,7 +1779,7 @@ async function mountPcModelsUI() {
           if (out) out.textContent = ok ? `✓ ${cfg.provider} ${T('apResponds')} · ${ms} ms` : T('apKeyRejected'); return; }
       }
       const r = await fetch('/api/anima?q=ping&lang=' + lang + '&mode=' + (pl.mode === 'on' ? 'on' : 'off'), { cache: 'no-store' });
-      const j = await r.json().catch(() => null); const ms = Math.round(performance.now() - t0);
+      const j = r.ok ? await r.json().catch(() => null) : null; const ms = Math.round(performance.now() - t0);   // a 503 body is not an answer
       if (out) out.textContent = j ? `✓ ${T('apAnsweredBy')} ${j.intent || j.tier || 'device'} · ${ms} ms` : T('apNoAnswer');
     } catch (e) { if (out) out.textContent = '✗ ' + (e && e.message || e); }
   }

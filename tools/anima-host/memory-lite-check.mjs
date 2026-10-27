@@ -7,6 +7,9 @@
 //   * it serves the memory tiers: profile set/recall, teach, user-taught recall (IT + EN);
 //   * it claims NOTHING else: commands, reminders, launches, knowledge, time stay "not mine" (the caller
 //     answers busy and the browser's own engine takes them, device actions via /api/anima/act).
+//   * MEMORY-ONLY BOOT (--memory-only = nucleo_anima_init_memory, the Web Client server-Solo): with no full
+//     init, the plain query still teaches and recalls exactly like the full cascade (encoder alone, no index),
+//     and everything else is intent "not_ready" — never the 200 "I don't know" that lost every My Facts entry.
 // Stateful: it writes ./sd/data/anima/{profile,user}.* and removes them (and restores any prior store) after.
 //
 //   node tools/anima-host/memory-lite-check.mjs [--show]
@@ -45,8 +48,8 @@ const STATE = ['profile.tsv', 'profile.tsv.tmp', 'user.tsv', 'user.vec', 'user.t
 const bak = (f) => join(dir, f + '.memlite.bak');
 const wipe = () => { for (const f of STATE) try { rmSync(join(dir, f)); } catch { /* absent */ } };
 
-function run(lines) {
-  const r = spawnSync(exe, [], { input: Buffer.from(lines.join('\n') + '\n', 'utf8'), maxBuffer: 64 * 1024 * 1024 });
+function run(lines, args = []) {
+  const r = spawnSync(exe, args, { input: Buffer.from(lines.join('\n') + '\n', 'utf8'), maxBuffer: 64 * 1024 * 1024 });
   return r.stdout.toString('utf8').split(/^Q: /m).slice(1).map((b) => ({
     notMine: /\(memory: not mine\)/.test(b),
     intent: (b.match(/intent=(\S*)/) || [])[1] || '',
@@ -85,6 +88,23 @@ try {
     if (!r.notMine) fails.push([q, `lean path claimed a non-memory utterance: ${r.intent} "${r.reply}"`]);
     if (show) console.log(`${r.notMine ? '  ok' : 'FAIL'}  "${q}" -> ${r.notMine ? '(not mine)' : r.intent}`);
   });
+  // Memory-only boot: plain queries (no /memory prefix) through nucleo_anima_query, as /api/anima's caller sees.
+  wipe();
+  const mem = run(seq(''), ['--memory-only']);
+  MEMORY.forEach(([, q], i) => {
+    n++;
+    const a = mem[i] || {}, b = full[i] || {};
+    const why = a.reply !== b.reply ? `memory-only "${a.reply}" != full "${b.reply}"` : '';
+    if (why) fails.push([q, why]);
+    if (show) console.log(`${why ? 'FAIL' : '  ok'}  [memory-only] "${q}" -> ${a.intent} "${a.reply}"`);
+  });
+  wipe();
+  run(['/reset', ...neg.map((l) => l.replace(/^\/memory /, ''))], ['--memory-only']).forEach((r, i) => {
+    n++;
+    const q = NOT_MINE[i][1];
+    if (r.intent !== 'not_ready') fails.push([q, `memory-only boot answered a non-memory utterance: ${r.intent} "${r.reply}"`]);
+    if (show) console.log(`${r.intent === 'not_ready' ? '  ok' : 'FAIL'}  [memory-only] "${q}" -> ${r.intent}`);
+  });
 } finally {
   wipe();
   for (const f of STATE) if (existsSync(bak(f))) renameSync(bak(f), join(dir, f));
@@ -92,4 +112,4 @@ try {
 
 console.log(`[memory-lite] lean personal-memory path — ${n - fails.length}/${n} pass`);
 if (fails.length) { console.log('FAILURES:'); for (const [q, w] of fails) console.log(`  ✗ "${q}" — ${w}`); process.exit(1); }
-console.log('✓ same answers as the full cascade for memory; nothing else claimed');
+console.log('✓ same answers as the full cascade for memory (lean path and memory-only boot); nothing else claimed');

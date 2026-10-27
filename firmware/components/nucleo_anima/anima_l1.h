@@ -7,6 +7,11 @@
 // Load the SD encoder + index. Best-effort: returns false (L1 stays off) if files absent.
 bool nucleo_anima_l1_init(void);
 
+// Open ONLY the encoder (flash-mapped, or one SD file handle) so dim()/encode() work while retrieval
+// stays off: the personal-memory tiers embed with it, and the index + hot-row cache stay unallocated.
+// For the memory-only ANIMA of the Web Client server-Solo. Returns false if no encoder is present.
+bool nucleo_anima_l1_init_encoder(void);
+
 // Free the in-RAM cluster index (~18 KB) so the assistant holds no RAM while you use other apps;
 // the next query transparently reloads it from SD. Call it when a foreground app opens.
 void nucleo_anima_l1_unload(void);

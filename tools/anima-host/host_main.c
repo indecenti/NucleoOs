@@ -214,6 +214,7 @@ int main(int argc, char **argv) {
     char query[1024]; query[0] = 0;
     int do_verify = 0;            // --verify "kind|key|asserted" -> grounded verdict (ANIMA Forge)
     int do_cos = 0;               // --cos: stdin "a<TAB>b" per line -> cosine under the device encoder
+    int mem_only = 0;             // --memory-only: the Web Client server-Solo boot (nucleo_anima_init_memory)
     for (int i = 1; i < argc; i++) {
         const char *a = argv[i];
         if (!a) continue;
@@ -221,13 +222,15 @@ int main(int argc, char **argv) {
         else if (!strcmp(a, "--it")) lang = "it";
         else if (!strcmp(a, "--verify")) do_verify = 1;
         else if (!strcmp(a, "--cos")) do_cos = 1;
+        else if (!strcmp(a, "--memory-only")) mem_only = 1;
         else {
             if (query[0]) strncat(query, " ", sizeof(query) - strlen(query) - 1);
             strncat(query, a, sizeof(query) - strlen(query) - 1);
         }
     }
 
-    nucleo_anima_init(lang);
+    if (mem_only) nucleo_anima_init_memory(lang);
+    else          nucleo_anima_init(lang);
 
     // --verify "kind|key|asserted": drive the grounded cross-substrate verifier and print the verdict.
     if (do_verify) {
@@ -292,8 +295,9 @@ int main(int argc, char **argv) {
         size_t n = strlen(line);
         while (n && (line[n-1] == '\n' || line[n-1] == '\r')) line[--n] = 0;
         if (!n) continue;
-        if (!strcmp(line, "/en"))    { lang = "en"; nucleo_anima_init(lang); continue; }
-        if (!strcmp(line, "/it"))    { lang = "it"; nucleo_anima_init(lang); continue; }
+        // --memory-only keeps that boot: on the device the language comes with each request, never a full init.
+        if (!strcmp(line, "/en"))    { lang = "en"; if (!mem_only) nucleo_anima_init(lang); continue; }
+        if (!strcmp(line, "/it"))    { lang = "it"; if (!mem_only) nucleo_anima_init(lang); continue; }
         if (!strcmp(line, "/reset")) { nucleo_anima_reset_session(); fprintf(stderr, "(sessione azzerata)\n"); continue; }
         if (!strncmp(line, "/learnvec ", 10)) { fprintf(stderr, "(learnvec %s: %d vectors)\n", line + 10, hm_learnvec(line + 10)); continue; }
         // "/memory <q>": the lean personal-memory path (nucleo_anima_query_memory) the web server falls back

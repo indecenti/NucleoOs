@@ -1181,8 +1181,9 @@
             try{ r=await fetch(url, opts); }
             catch(e){ if(dead() || a>=tries-1) throw e; await wait(backoff(a)); continue; }      // socket reset → back off, don't hammer
             if(r.status===503 && a<tries-1 && !dead()){                                // device busy (arbiter / spine try-lock)
-              let ra=0; try{ ra=(await r.clone().json()).retry_after_ms|0; }catch{}
-              await wait(ra||backoff(a)); continue;                                     // honor the server's Retry-After
+              let b=null; try{ b=await r.clone().json(); }catch{}
+              if(b && b.error==='not_ready') return r;                                  // assistant off (web profile): retrying can't help
+              await wait((b && b.retry_after_ms|0)||backoff(a)); continue;              // honor the server's Retry-After
             }
             return r;
           }

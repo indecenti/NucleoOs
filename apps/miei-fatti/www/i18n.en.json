@@ -66,6 +66,7 @@
   "verify": "Verify",
   "teach1": "Teach",
   "profSaved": "Profile saved and taught.",
+  "profNotTaught": "Profile saved on the Cardputer, but ANIMA didn’t learn it.",
   "asking": "Asking ANIMA…",
   "noded": "Add more relations (e.g. two parents, or two linked places) and deductions will appear here.",
   "chip.new": "to teach",

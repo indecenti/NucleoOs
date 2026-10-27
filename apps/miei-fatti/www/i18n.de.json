@@ -66,6 +66,7 @@
   "verify": "Prüfen",
   "teach1": "Beibringen",
   "profSaved": "Profil gespeichert und beigebracht.",
+  "profNotTaught": "Profil auf dem Cardputer gespeichert, aber ANIMA hat es nicht gelernt.",
   "asking": "Frage ANIMA…",
   "noded": "Füge weitere Beziehungen hinzu (z. B. zwei Eltern oder zwei verbundene Orte) und hier erscheinen die Schlussfolgerungen.",
   "chip.new": "beizubringen",

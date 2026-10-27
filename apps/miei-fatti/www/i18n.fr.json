@@ -66,6 +66,7 @@
   "verify": "Vérifier",
   "teach1": "Apprendre",
   "profSaved": "Profil enregistré et appris.",
+  "profNotTaught": "Profil enregistré sur le Cardputer, mais ANIMA ne l’a pas appris.",
   "asking": "Question à ANIMA…",
   "noded": "Ajoute d’autres relations (p. ex. deux parents, ou deux lieux liés) et les déductions apparaîtront ici.",
   "chip.new": "à apprendre",

@@ -89,6 +89,13 @@ typedef struct {
 // Load the command pack for `lang` ("it" for now). Idempotent.
 esp_err_t nucleo_anima_init(const char *lang);
 
+// Memory-only init for the Web Client server-Solo, where the full cascade is skipped to leave the heap to
+// the web OS: only the personal-memory tiers (nucleo_anima_query_memory) work, on the L1 encoder alone (no
+// index, no cache). A no-op after a full init. ready() is the full cascade; memory_only() this mode.
+esp_err_t nucleo_anima_init_memory(const char *lang);
+bool nucleo_anima_ready(void);
+bool nucleo_anima_memory_only(void);
+
 // Run the cascade on a UTF-8 input line. Understands IT+EN; replies in `lang`
 // ("en" -> English, anything else -> Italian). Always returns (tier NONE if unsure).
 anima_result_t nucleo_anima_query(const char *input, const char *lang);

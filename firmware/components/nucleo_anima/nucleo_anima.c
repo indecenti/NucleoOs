@@ -2690,6 +2690,7 @@ static int a_resolve_apps(char tok[A_MAX_TOKENS][A_TOK_LEN], int ntok, const cha
 // ---- public API -------------------------------------------------------------
 
 static bool s_ready;
+static bool s_mem_only;   // nucleo_anima_init_memory(): only the personal-memory tiers answer
 
 esp_err_t nucleo_anima_init(const char *lang)
 {
@@ -2698,12 +2699,31 @@ esp_err_t nucleo_anima_init(const char *lang)
     if (lang && strcmp(lang, "it") != 0)
         ESP_LOGW(TAG, "lang '%s' not bundled yet; using 'it'", lang);
     s_ready = true;
+    s_mem_only = false;
     ESP_LOGI(TAG, "L0 ready (%d intents)", (int)(sizeof(INTENTS) / sizeof(INTENTS[0])));
     nucleo_anima_l1_init();    // best-effort: semantic tier if the SD packs are present
     session_load();            // restore conversational context from a previous boot (best-effort)
     units_load();              // restore user-defined units learned in a previous session
     return ESP_OK;
 }
+
+// The Web Client server-Solo skips the full init to leave the heap to the web OS, but the web OS still
+// sends personal memory here (My Facts, "ricorda che…", "mi chiamo…": the device owns user.tsv/profile).
+// Without this the device answered every one with a 200 "I don't know" and the fact was lost.
+esp_err_t nucleo_anima_init_memory(const char *lang)
+{
+    if (s_ready) return ESP_OK;              // full init already done: it covers memory too
+    (void)lang;
+    s_ready = true;
+    s_mem_only = true;
+    nucleo_anima_l1_init_encoder();          // teach/recall embed with the encoder; no index, no cache
+    session_load();                          // query_memory saves the session: never overwrite it with an empty one
+    ESP_LOGI(TAG, "memory-only ready (profile/teach/recall)");
+    return ESP_OK;
+}
+
+bool nucleo_anima_ready(void)       { return s_ready && !s_mem_only; }
+bool nucleo_anima_memory_only(void) { return s_ready && s_mem_only; }
 
 // L0: cheap keyword/intent tier (returns tier NONE if not confident). `en` picks the reply
 // language; ANIMA understands both regardless (the keyword tables hold IT+EN triggers).
@@ -3747,6 +3767,19 @@ anima_result_t nucleo_anima_query(const char *input, const char *lang)
     // English for en/es/fr/de and anything else (es/fr/de have no offline corpus — they must not fall to
     // Italian). The LLM paths get the REAL code via set_reply_lang below and can answer es/fr/de for real.
     bool en = !(lang && (lang[0] | 0x20) == 'i' && (lang[1] | 0x20) == 't');
+    if (s_mem_only) {
+        // Memory-only init: the rest of the cascade has no L1 and must not take the heap. Callers that can
+        // tell "not ready" apart (nucleo_anima_memory_only) answer it themselves; this is the honest floor.
+        anima_result_t m;
+        if (nucleo_anima_query_memory(input, lang, &m)) return m;
+        memset(&m, 0, sizeof m);
+        m.tier = ANIMA_TIER_NONE; m.action = ANIMA_ACT_NONE;
+        snprintf(m.intent, sizeof m.intent, "not_ready");
+        snprintf(m.state, sizeof m.state, "idle");
+        snprintf(m.reply, sizeof m.reply, "%s", en ? "The assistant is off while the web desktop is open."
+                                                   : "L'assistente è spento mentre il desktop web è aperto.");
+        return m;
+    }
     nucleo_anima_online_set_reply_lang(lang);   // the real OS language for this turn's LLM reply directive
     // RAM policy: stand the offline L1/HDC brain down for this turn ONLY in ONLINE-ONLY mode, where the
     // cloud LLM is the sole brain and L1's index would be dead weight competing for the TLS handshake's
@@ -4546,7 +4579,7 @@ done: {
 int nucleo_anima_query_memory(const char *input, const char *lang, anima_result_t *out)
 {
     if (!s_ready || !input || !input[0] || !out) return 0;
-    bool en = lang && (lang[0] == 'e' || lang[0] == 'E');
+    bool en = !(lang && (lang[0] | 0x20) == 'i' && (lang[1] | 0x20) == 't');   // same floor as nucleo_anima_query
     char tok[A_MAX_TOKENS][A_TOK_LEN];
     int ntok = a_tokenize(input, tok);
     if (ntok == 0) return 0;

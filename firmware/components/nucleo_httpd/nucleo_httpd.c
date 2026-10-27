@@ -1318,6 +1318,16 @@ static esp_err_t anima_busy_503(httpd_req_t *req)
     httpd_resp_sendstr(req, "{\"busy\":true,\"retry_after_ms\":250}");
     return ESP_OK;
 }
+// The device assistant is off for this question (memory-only in the Web Client server-Solo, or not
+// initialized at all): not "busy, retry" — the caller answers it elsewhere (the browser brain).
+static esp_err_t anima_not_ready_503(httpd_req_t *req)
+{
+    httpd_resp_set_status(req, "503 Service Unavailable");
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, nucleo_anima_memory_only() ? "{\"error\":\"not_ready\",\"memory_only\":true}"
+                                                       : "{\"error\":\"not_ready\"}");
+    return ESP_OK;
+}
 static esp_err_t anima_too_long_413(httpd_req_t *req)
 {
     httpd_resp_set_status(req, "413 Payload Too Large");
@@ -1518,6 +1528,28 @@ static esp_err_t anima_get(httpd_req_t *req)
     }
     if (want_reset) nucleo_anima_reset_session();
 
+    // Memory-only ANIMA (Web Client server-Solo: the web OS owns the heap) or none at all (lean first-boot
+    // setup): never spawn the 30 KB worker. Personal memory runs right here on the httpd stack; anything else
+    // is a 503 "not_ready" the web clients answer from the browser brain. It used to be a 200 "I don't know",
+    // which every client took for the device's real answer — My Facts lost every fact taught from the web OS.
+    anima_query_job_t qj = { .q = q, .lang = lang };
+    bool ran = false;
+    if (!nucleo_anima_ready()) {
+        bool mem = nucleo_anima_memory_only();
+        size_t left = anima_stack_left();
+        ran = mem && left >= ANIMA_LITE_NEED && nucleo_anima_query_memory(q, lang, &qj.out) != 0;
+        if (!ran) {
+            nucleo_anima_unlock();
+            free(qbuf);
+            if (mem && left < ANIMA_LITE_NEED) {
+                ESP_LOGW(TAG, "anima memory: stack left %u B < %u", (unsigned)left, (unsigned)ANIMA_LITE_NEED);
+                return anima_busy_503(req);
+            }
+            return anima_not_ready_503(req);
+        }
+        mode_ov = 0;                       // no online mode was applied: nothing to restore below
+    }
+
     // Apply a per-request online mode (web ANIMA mode selector), saving/restoring the device-global
     // state so this never clobbers the native Settings toggle. Mirrors the sim's `mode` param.
     bool saved_online = nucleo_anima_online_enabled();
@@ -1527,8 +1559,7 @@ static esp_err_t anima_get(httpd_req_t *req)
     else if (mode_ov == 3) { nucleo_anima_set_online(true);  nucleo_anima_set_online_only(true); }
 
     // Run the cascade on a transient 30 KB worker (NOT in this lean httpd task — see anima_run_offthread).
-    anima_query_job_t qj = { .q = q, .lang = lang };
-    bool ran = anima_run_offthread(anima_query_thunk, &qj);
+    if (!ran) ran = anima_run_offthread(anima_query_thunk, &qj);
     if (!ran) {
         // The heap can't carve 30 KB right now (the ADV with the web OS on: largest block ~13 KB, so this
         // used to answer "busy" to EVERYTHING). The personal-memory tiers run right here instead (see

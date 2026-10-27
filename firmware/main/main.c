@@ -723,8 +723,11 @@ void app_main(void)
     // eagerly load the ~18 KB flat centroid slab (AKB5-absent SDs) right after httpd — exactly the contiguous
     // heap this mode exists to keep free for the browser's first, heaviest load. Skipping it also makes the
     // boot log honest (it already lists "L1" among the skipped subsystems). The web OS answers in its own
-    // browser brain; /api/anima degrades to a graceful "not ready" (tier none) if the shell ever asks.
+    // browser brain, EXCEPT personal memory, which the device owns (My Facts, "ricorda che…", "mi chiamo…"):
+    // there it gets the memory-only init (encoder only, no index), and /api/anima answers 503 "not_ready"
+    // to the rest so the browser takes it.
     if (!solo_srv && !setup_pending) nucleo_anima_init(nucleo_i18n_lang());   // SKIP during lean first-boot setup (empty SD, no L1 anyway)
+    else if (solo_srv && !setup_pending) nucleo_anima_init_memory(nucleo_i18n_lang());
     bootmark("anima");
     if (sd_ok && (!solo || nucleo_app_solo_needs_speech()) && !setup_pending) nucleo_tts_init(nucleo_i18n_lang());   // SKIP in non-speech Solo + lean first-boot setup
     bootmark("tts");

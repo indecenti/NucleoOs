@@ -84,8 +84,14 @@ calendar service OFF so the desktop gets the RAM. `/api/status` → `"profile": 
 - Navigation is detected by `Accept: text/html` (browsers send `Sec-Fetch-Mode` only to secure origins).
 - The reboot waits 1.5 s after queuing the page (`HANDOFF_FLUSH_MS`), or the page arrives cut.
 - The page reloads when `/api/status` says `profile: "web"`. The WebSocket trigger stays as a fallback.
-- In web mode the device's brain is paused. The firmware (0.7.x) answers `/api/anima` **200 "Non lo so." with
-  `tier:"none"`**, not 503 — `deviceCommand` treats that as `busy` when `/api/status` says `profile:"web"`. Taken as
+- In web mode the device's brain is paused **except personal memory**, which the device owns (`profile.tsv`,
+  `user.tsv`: My Facts, "ricorda che X è Y", "mi chiamo X"). `main.c` calls `nucleo_anima_init_memory()`: the L1
+  encoder alone (flash-mapped, no index, no hot-row cache), so `/api/anima` runs `nucleo_anima_query_memory()` on
+  the httpd stack and answers those for real. Anything else is **503 `{"error":"not_ready","memory_only":true}`**,
+  which the clients do not retry. Host: `npm run anima -- --memory-only`.
+  Until firmware 0.7.5 the init was skipped entirely and every question got **200 "Non lo so."** with
+  `tier:"none"`: My Facts marked each fact ERROR and the profile was never learned (Discord report, 2026-10-27).
+  `deviceCommand` still treats a `tier:"none"` under `profile:"web"` as `busy` for those older firmwares. Taken as
   an answer it skipped every fallback below (brightness went to the agent, "che ore sono" to a model). ANIMA says so
   (`devWebMode`), the L1 setting stands down, and step 1 above takes over.
 

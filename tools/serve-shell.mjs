@@ -619,8 +619,9 @@ function isAskable(q) {
 // The real device fails in ways a healthy Node server never does: it drops off WiFi, answers 503
 // while the arbiter is busy, stalls under heap pressure, loses the live socket. Without a way to
 // provoke those, every retry/offline/reconnect path in the shell ships untested.
-//   POST /api/_sim/fault  {route:'/api/apps', status:503, delay_ms:0, times:3, drop:false}
+//   POST /api/_sim/fault  {route:'/api/apps', status:503, delay_ms:0, times:3, drop:false, body:{…}}
 //        route is a path prefix ('*' = everything except /api/_sim); times:0 = until cleared;
+//        body replaces the default JSON (e.g. the firmware's 503 {"error":"not_ready"} for /api/anima);
 //        drop:true destroys the socket (what "device unreachable" looks like to the browser).
 //   POST /api/_sim/fault  {clear:true}          remove every rule
 //   POST /api/_sim/offline {on:true|false}       drop EVERY request + the live socket (device gone)
@@ -638,7 +639,8 @@ async function simControl(req, res, path) {
   if (path === '/api/_sim/fault') {
     if (b.clear) SIM.faults = [];
     else SIM.faults.push({ route: String(b.route || '*'), status: b.status | 0, delay_ms: b.delay_ms | 0,
-      times: b.times | 0, left: b.times | 0, drop: !!b.drop });
+      times: b.times | 0, left: b.times | 0, drop: !!b.drop,
+      body: b.body && typeof b.body === 'object' ? b.body : null });
     return sendJSON(res, { ok: true, faults: SIM.faults });
   }
   if (path === '/api/_sim/offline') {
@@ -704,7 +706,8 @@ const server = createServer(async (req, res) => {
     if (fault.left > 0) fault.left--;
     if (fault.delay_ms) await new Promise((r) => setTimeout(r, fault.delay_ms));
     if (fault.drop) { req.socket.destroy(); return; }
-    if (fault.status) return send(res, fault.status, 'application/json', JSON.stringify({ error: 'sim fault', busy: fault.status === 503, retry_after_ms: 300 }));
+    if (fault.status) return send(res, fault.status, 'application/json',
+      JSON.stringify(fault.body || { error: 'sim fault', busy: fault.status === 503, retry_after_ms: 300 }));
   }
 
   // Pairing endpoints (public by nature) + the guard for protected routes.

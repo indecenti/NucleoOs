@@ -1526,9 +1526,12 @@
           if (r.status === 401) { emit('anima: not paired (401)', 'err'); return; }
           // The brain is single-owner; 503 means another turn holds it, not that it is broken.
           if (r.status === 503) {
+            let b = null;
+            try { b = await r.json(); } catch {}
+            // The web profile runs only the personal-memory part of the brain: retrying can't help.
+            if (b && b.error === 'not_ready') { emit('anima: the device assistant is off while the web desktop is open', 'warn'); return; }
             if (attempt) { emit('anima: brain busy — try again', 'warn'); return; }
-            let wait = 250;
-            try { wait = (await r.json()).retry_after_ms || 250; } catch {}
+            const wait = (b && b.retry_after_ms) || 250;
             await new Promise((res) => setTimeout(res, wait));
             continue;
           }

@@ -109,6 +109,7 @@ static int8_t   *s_centroids;      // legacy: always NULL now (centroids are str
 static float    *s_cnorm;          // legacy: always NULL now (norms computed inline during the streamed scan)
 static uint32_t *s_cdir;           // K*2 (vecOff, count) pairs (RAM)
 static bool      s_ready;
+static bool      s_enc_only;       // encoder open for dim()/encode(), retrieval off (nucleo_anima_l1_init_encoder)
 
 // ---- AKB4 asymmetric "holographic" prefilter (optional, backward-compatible) ----------------
 // An AKB4 index appends a sign-signature trailer (one D-bit sign mask per vector) + an "ASIG"
@@ -221,7 +222,9 @@ static int      s_ec_slots;                  // rows actually allocated this acq
 // Best-effort (re)allocation of the hot-row cache. A fresh buffer starts all-empty (no slot valid).
 static void ec_cache_acquire(void)
 {
-    if (s_ec_row || s_D == 0) return;
+    // Flash-mapped rows are direct pointers (acc_row never reads the cache), and the encoder-only mode
+    // must not take up to 25 KB of the heap the web OS is using: the SD path then reads a stack row.
+    if (s_ec_row || s_D == 0 || s_enc_map || s_enc_only) return;
     for (int want = ENC_CACHE; want >= 16; want >>= 1) {   // largest power-of-two cache that fits
         s_ec_row = malloc((size_t)want * (s_D + sizeof(uint32_t)));   // rows + their slot tags, one block
         if (s_ec_row) { s_ec_slots = want; s_ec_id = (uint32_t *)(s_ec_row + (size_t)want * s_D); L1_COUNT(s_ct_cache); break; }
@@ -432,6 +435,36 @@ fail:
     #undef RDU32
 }
 
+// Open the ANE2 encoder: flash mapping first (instant random access via the flash cache), else the
+// ~3 MB SD file (slower random reads, but always works). A mapping already in place is kept — mapping
+// it twice would leak the first handle.
+static bool open_encoder(void)
+{
+    if (s_enc_map) return true;
+    if (map_encoder_from_flash()) return true;
+    if (s_enc) { fclose(s_enc); s_enc = NULL; }   // leak-proof: never overwrite an already-open FD
+    s_enc = fopen(ENC_PATH, "rb");
+    if (!s_enc) { ESP_LOGW(TAG, "no encoder (flash partition or %s) — L1 disabled", ENC_PATH); return false; }
+    char magic[4];
+    if (fread(magic,1,4,s_enc)!=4 || memcmp(magic,"ANE2",4)) { ESP_LOGW(TAG,"bad encoder magic"); fclose(s_enc); s_enc=NULL; return false; }
+    s_H = rd_u32(s_enc); s_D = rd_u32(s_enc);
+    s_ncharn = (int)rd_u32(s_enc); s_wordn = rd_u32(s_enc);
+    if (s_H == 0 || s_D == 0 || s_D > L1_MAXDIM || s_ncharn <= 0 || s_ncharn > 6) { fclose(s_enc); s_enc=NULL; return false; }
+    for (int i = 0; i < s_ncharn; i++) s_charn[i] = rd_u32(s_enc);
+    rd_u32(s_enc);                       // scale (f32) — unused for ranking
+    s_enc_off = ftell(s_enc);
+    return true;
+}
+
+bool nucleo_anima_l1_init_encoder(void)
+{
+    s_enc_only = open_encoder();
+    ESP_LOGI(TAG, "encoder-only %s (retrieval off) free=%u largest=%u", s_enc_only ? "ready" : "ABSENT",
+             (unsigned)heap_caps_get_free_size(MALLOC_CAP_DEFAULT),
+             (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT));
+    return s_enc_only;
+}
+
 bool nucleo_anima_l1_init(void)
 {
     s_ready = false;
@@ -439,21 +472,8 @@ bool nucleo_anima_l1_init(void)
          (unsigned)heap_caps_get_free_size(MALLOC_CAP_DEFAULT),
          (unsigned)heap_caps_get_minimum_free_size(MALLOC_CAP_INTERNAL),
          (unsigned)heap_caps_get_largest_free_block(MALLOC_CAP_DEFAULT));
-    // Fast path first: encoder mapped from internal flash (instant random access via the flash cache).
-    if (!map_encoder_from_flash()) {
-        // Fallback: the encoder is a ~3 MB file on the SD card (slower random reads, but always works).
-        if (s_enc) { fclose(s_enc); s_enc = NULL; }   // leak-proof: never overwrite an already-open FD
-        s_enc = fopen(ENC_PATH, "rb");
-        if (!s_enc) { ESP_LOGW(TAG, "no encoder (flash partition or %s) — L1 disabled", ENC_PATH); return false; }
-        char magic[4];
-        if (fread(magic,1,4,s_enc)!=4 || memcmp(magic,"ANE2",4)) { ESP_LOGW(TAG,"bad encoder magic"); fclose(s_enc); s_enc=NULL; return false; }
-        s_H = rd_u32(s_enc); s_D = rd_u32(s_enc);
-        s_ncharn = (int)rd_u32(s_enc); s_wordn = rd_u32(s_enc);
-        if (s_H == 0 || s_D == 0 || s_D > L1_MAXDIM || s_ncharn <= 0 || s_ncharn > 6) { fclose(s_enc); s_enc=NULL; return false; }
-        for (int i = 0; i < s_ncharn; i++) s_charn[i] = rd_u32(s_enc);
-        rd_u32(s_enc);                       // scale (f32) — unused for ranking
-        s_enc_off = ftell(s_enc);
-    }
+    if (!open_encoder()) return false;
+    s_enc_only = false;
 
     // The flat index is the default; an AKB5 sharded manifest (probed once here, encoder dim known) takes
     // over transparently if present. Either alone is enough to enable L1; a device may ship AKB5-only.
@@ -1805,14 +1825,14 @@ int nucleo_anima_l1_stitch(const char *query, bool en, anima_result_t *io)
 void nucleo_anima_l1_last_band(float *c1, float *c2) { if (c1) *c1 = s_band.c1; if (c2) *c2 = s_band.c2; }
 
 // Encoder dimension (0 if L1/encoder isn't loaded). Lets other tiers size a query vector.
-int nucleo_anima_l1_dim(void) { return s_ready ? (int)s_D : 0; }
+int nucleo_anima_l1_dim(void) { return (s_ready || s_enc_only) ? (int)s_D : 0; }
 
 // Embed `text` with the SAME device encoder L1 uses, into out[>=dim]. Returns the dim (>0) or 0 if
 // the encoder isn't loaded / text is empty. Shared so the online tier can recall learned cards by
 // meaning using vectors that are consistent with the query (see nucleo_anima_online.c recall).
 int nucleo_anima_l1_encode(const char *text, int8_t *out, int cap)
 {
-    if (!s_ready || !text || !out || cap < (int)s_D) return 0;
+    if (!(s_ready || s_enc_only) || !text || !out || cap < (int)s_D) return 0;
     if (!l1_encode(text, out)) return 0;
     return (int)s_D;
 }

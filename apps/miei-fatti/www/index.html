@@ -498,8 +498,14 @@
     };
     return (M[l]||M.en)[field]||null; }
   async function saveProfile(){ if(!(await canEdit($('profmsg')))) return; $('saveprof').disabled=true; const msg=$('profmsg'); msg.className='ask'; msg.textContent=t().teaching;
-    for(const k of PF){ const v=$('p-'+k).value.trim(); state.profile[k]=v; const s=profileSentence(k,v,lang()); if(s) await anima(s); }
-    scheduleSave(); $('saveprof').disabled=false; msg.innerHTML='<b>'+t().profSaved+'</b>'; }
+    // The file is saved either way; "taught" only when ANIMA confirmed every field. It used to say so even when
+    // the device answered "I don't know" to all of them (web profile), and the profile was never learned.
+    let bad=0, off=false;
+    for(const k of PF){ const v=$('p-'+k).value.trim(); state.profile[k]=v; const s=profileSentence(k,v,lang());
+      if(!s || off) continue; const c=classify(await anima(s)); if(c==='noconn') off=true; else if(c!=='ok') bad++; }
+    scheduleSave(); $('saveprof').disabled=false;
+    if(off||bad){ msg.className='ask err'; msg.textContent=t().profNotTaught+(off?' — '+t().noconn:''); return; }
+    msg.innerHTML='<b>'+t().profSaved+'</b>'; }
   async function askProfile(){ const msg=$('profmsg'); msg.className='ask'; msg.textContent=t().asking;
     const j=await anima(({it:'cosa sai di me',en:'what do you know about me',es:'qué sabes de mí',fr:'que sais-tu sur moi',de:'was weißt du über mich'}[lang()]||'cosa sai di me')); msg.textContent=j?(j.reply||''):t().noconn; }
 
