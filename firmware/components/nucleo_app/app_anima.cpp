@@ -401,7 +401,7 @@ static int  row_h(const Row *r)      { return font_h(r->font) + ((r->first & RF_
 static int  input_h(void)            { return font_h(chat_font()) + 8; }
 // Rows above the transcript (the header) and below it (the input line). Two screens: a taller header in a
 // readable face; the input line stays on both panels (the Cardputer's composer shows it big as well).
-static int  hdr_h(void)              { return lg() ? 22 : 18; }
+static int  hdr_h(void)              { return lg() ? 30 : 18; }   // panel: a finger-sized bar (Back, mode, menu)
 static int  input_band(void)         { return input_h() + 1; }
 // Width of the first n bytes of s with the CURRENT font (textWidth needs a NUL-terminated string).
 static int  meas(const char *s, int n) { char t[216]; if (n > 215) n = 215; memcpy(t, s, n); t[n] = 0; return (int)G.textWidth(t); }
@@ -2774,18 +2774,27 @@ static void tick(void)
 // ---- tabbed menu: the kit's tab strip + settings rows (docs/native-ui-kit.md §3) -------------------
 // The standard app_ui_tabs strip across the top 20px (active = ACC pill + INK, others LINE pills + MUTED);
 // the content starts at 22. It fills its own band, so it is painted only on a menu scene change.
+// The Back button on the panel, the same pill + bold chevron as every app's (lg::back in the kit).
+static void back_pill(int x, int y, int h)
+{
+    const int cy = y + h / 2;
+    G.fillRoundRect(x, y, 40, h, h / 2, LINE);
+    for (int k = 0; k < 3; k++) { G.drawLine(x + 24 + k, cy - 6, x + 18 + k, cy, FG); G.drawLine(x + 18 + k, cy, x + 24 + k, cy + 6, FG); }
+}
+
 static void draw_tabbar(int active)
 {
     if (lg()) {                                     // two screens: five equal segments across the panel, Font2,
         const char *const *nm = s_en ? TABS_EN : TABS_IT;   // each one a touch target (touch_targets)
-        const int tw = AW / TAB_N;
+        const int tx0 = 48, tw = (AW - tx0) / TAB_N;
         G.setFont(&fonts::Font2); G.setTextSize(1);
         G.fillRect(0, 0, AW, 22, BG);
+        back_pill(4, 1, 20);                                // Back: one level up, or close the menu
         for (int i = 0; i < TAB_N; i++) {
             const bool on = i == active;
-            G.fillRoundRect(i * tw + 2, 1, tw - 4, 19, 5, on ? ACC : LINE);
+            G.fillRoundRect(tx0 + i * tw + 2, 1, tw - 4, 19, 5, on ? ACC : LINE);
             G.setTextColor(on ? INK : MUTED, on ? ACC : LINE);
-            G.setCursor(i * tw + (tw - (int)G.textWidth(nm[i])) / 2, 3); G.print(nm[i]);
+            G.setCursor(tx0 + i * tw + (tw - (int)G.textWidth(nm[i])) / 2, 3); G.print(nm[i]);
         }
         G.setFont(&fonts::Font0);
         return;
@@ -2990,10 +2999,70 @@ static void draw_guide(int ch)
 // ---- IA tab: the settings list (Music/Video parity) -------------------------
 // Same natural-scroll list as the other tabs: the focused row enlarges in place and the list scrolls
 // only when the focus reaches an edge (no centre-pinning). Clipped to the body region so nothing bleeds.
+// One settings row on the panel: a card, the label in FreeSans bold, the control at the right (a switch, the value
+// with < > to cycle, a chevron) or, for a slider, the % at the right and a full-width track under the label —
+// every row the same height, so moving the focus never pushes the list.
+enum { IA_LG_RH = 40, IA_LG_TX = 20, IA_LG_TW = 280 };   // row height; slider track x / width (taps map onto it)
+static void draw_set_row_lg(int y, bool focus, const IAItem &it, bool danger)
+{
+    const int x = 8, w = AW - 16, ch = IA_LG_RH - 4, cy = y + ch / 2, rx = x + w - 12;
+    const unsigned short bg = focus ? (danger ? AMBER : ACC) : LINE, ink = focus ? INK : FG;
+    G.fillRect(0, y, AW, IA_LG_RH, BG);
+    G.fillRoundRect(x, y, w, ch, 9, bg);
+    G.setFont(&fonts::FreeSansBold9pt7b); G.setTextSize(1); G.setTextColor(focus ? INK : danger ? AMBER : FG, bg);
+    if (it.kind == SV_SLIDER) {
+        G.setTextDatum(top_left); G.drawString(it.label, x + 12, y + 3);
+        char v[8]; snprintf(v, sizeof v, "%d%%", it.slider);
+        G.setTextDatum(top_right); G.setTextColor(ink, bg); G.drawString(v, rx, y + 3);
+        const int ty = y + ch - 10, fw = it.slider * IA_LG_TW / 100;
+        G.fillRoundRect(IA_LG_TX, ty, IA_LG_TW, 5, 2, focus ? INK : BG);
+        if (fw > 0) G.fillRoundRect(IA_LG_TX, ty, fw, 5, 2, focus ? BG : GRN);
+        G.fillCircle(IA_LG_TX + (fw < 5 ? 5 : fw > IA_LG_TW - 5 ? IA_LG_TW - 5 : fw), ty + 2, 5, focus ? BG : FG);
+    } else {
+        G.setTextDatum(middle_left); G.drawString(it.label, x + 12, cy + 1);
+        G.setTextDatum(middle_right); G.setTextColor(ink, bg);
+        if (it.kind == SV_TOGGLE) {
+            const int sw = 42, sh = 22, bx = rx - sw;
+            G.fillRoundRect(bx, cy - sh / 2, sw, sh, sh / 2, it.on ? GRN : BG);
+            G.fillCircle(it.on ? bx + sw - sh / 2 : bx + sh / 2, cy, sh / 2 - 3, it.on ? INK : MUTED);
+        } else if (it.kind == SV_ACTION) {
+            G.fillTriangle(rx - 6, cy - 6, rx - 6, cy + 6, rx, cy, ink);
+        } else {                                                  // a value that a tap cycles: < value >
+            G.setFont(&fonts::Font2); G.drawString(it.val, rx - 14, cy + 1);
+            const int vw = (int)G.textWidth(it.val);
+            G.fillTriangle(rx - 6, cy - 4, rx - 6, cy + 4, rx - 1, cy, ink);
+            G.fillTriangle(rx - 20 - vw, cy - 4, rx - 20 - vw, cy + 4, rx - 25 - vw, cy, ink);
+        }
+    }
+    G.setTextDatum(top_left); G.setFont(&fonts::Font0); G.setTextSize(1);
+}
+
 static void draw_ia(int ch)
 {
     IAItem it[IA_ROWS]; int n = build_ia(it);
     const int top = 24, f = s_mrow;
+    if (lg()) {
+        const int avail = ch - top, maxs = n * IA_LG_RH - avail > 0 ? n * IA_LG_RH - avail : 0;
+        if (f >= 0) {                                         // the focus in view, with the smallest move
+            if (f * IA_LG_RH < s_list_scroll) s_list_scroll = f * IA_LG_RH;
+            if (f * IA_LG_RH + IA_LG_RH > s_list_scroll + avail) s_list_scroll = f * IA_LG_RH + IA_LG_RH - avail;
+        }
+        if (s_list_scroll > maxs) s_list_scroll = maxs;
+        if (s_list_scroll < 0) s_list_scroll = 0;
+        G.setClipRect(0, 22, AW, ch - 22);
+        int k = 0, yy = top - s_list_scroll;
+        for (int i = 0; i < n; i++, yy += IA_LG_RH) {
+            if (yy + IA_LG_RH <= 22 || yy >= ch) continue;
+            mt_add(yy, IA_LG_RH - 4, i, 22, ch);
+            uint32_t sg = mix(mix(mix(mix(2166136261u, 0x1B00u + i), ((uint32_t)yy << 2) | (i == f)),
+                                  (uint32_t)(it[i].slider * 2 + it[i].on)), (uint32_t)(it[i].val[0] | it[i].val[1] << 8 | it[i].val[2] << 16));
+            if (mrow_dirty(k, sg)) draw_set_row_lg(yy, i == f, it[i], i == IA_CLEAR);
+            k++;
+        }
+        G.clearClipRect();
+        mlist_tail(k, yy, ch);
+        return;
+    }
     G.setClipRect(0, 22, AW, ch - 22);
     int yy = list_scroll_y0(top, ch - top, n, f), k = 0;
     for (int i = 0; i < n; i++) {
@@ -3427,11 +3496,12 @@ static void put_badge(int top)
                                (s_en ? MO3_EN : MO3_IT)[tm->tm_mon]);
         if (clk) snprintf(b, sizeof b, "%02d:%02d", tm->tm_hour, tm->tm_min);
     }
-    if (lg()) {                                                 // two screens: one Font2 cluster, right-aligned
+    if (lg()) {                                                 // two screens: one Font2 cluster left of the menu button
+        if (!s_busy && ca == AMBER) a[0] = 0;                   // the date stays on the Cardputer: position or clock here
         char t[36]; snprintf(t, sizeof t, "%s%s%s", a, a[0] && b[0] ? "   " : "", b);
         G.setFont(&fonts::Font2); G.setTextSize(1);
-        const int x0 = AW - 150, tx = AW - 8 - (int)G.textWidth(t);
-        box_text(x0, top + 1, 150, 18, tx, top + 3, t, a[0] && !b[0] ? ca : (s_busy ? GRN : MUTED), BG);
+        const int x0 = 176, tx = AW - 42 - (int)G.textWidth(t);
+        box_text(x0, top + 5, AW - 40 - x0, 20, tx, top + 7, t, a[0] && !b[0] ? ca : (s_busy ? GRN : MUTED), BG);
         G.setFont(&fonts::Font0);
         return;
     }
@@ -3439,17 +3509,21 @@ static void put_badge(int top)
 }
 static void draw_badge(int top) { put_badge(top); }
 
+
 static void draw_header(int top)
 {
-    if (lg()) {                                                 // two screens: Font2, a 22 px band
+    if (lg()) {                                                 // two screens: a 30 px bar — Back, name + mode, menu
+        G.fillRect(0, top, AW, 28, BG);
+        back_pill(4, top + 4, 22);                              // Back: leave (behind the confirm) / one level up
         G.setFont(&fonts::Font2); G.setTextSize(1);
-        G.setTextColor(ACC, BG); G.setCursor(8, top + 3); G.print("ANIMA");
-        const char *ml = s_omode == OM_OFF ? "offline " : s_omode == OM_ONLY ? "online  " : (s_en ? "hybrid  " : "ibrido  ");
+        G.setTextColor(ACC, BG); G.setCursor(52, top + 7); G.print("ANIMA");
+        const char *ml = s_omode == OM_OFF ? "offline" : s_omode == OM_ONLY ? "online" : (s_en ? "hybrid" : "ibrido");
         G.setTextColor(s_omode == OM_OFF ? DIM : s_omode == OM_ONLY ? GRN : ACC, BG);
-        G.setCursor(70, top + 3); G.print(ml);
+        G.setCursor(108, top + 7); G.print(ml);                 // tap: cycles the mode
         put_badge(top);
-        G.drawFastHLine(0, top + 20, AW, LINE);
-        G.fillRect(0, top + 21, AW, 1, BG);
+        for (int k = 0; k < 3; k++) G.fillRoundRect(AW - 28, top + 9 + k * 5, 18, 2, 1, MUTED);   // the menu button
+        G.drawFastHLine(0, top + 28, AW, LINE);
+        G.fillRect(0, top + 29, AW, 1, BG);
         return;
     }
     G.setFont(&fonts::Font0); G.setTextSize(1);
@@ -3751,10 +3825,31 @@ static void draw_editor(int top, int h)
 
 // Exit-confirm modal: full-screen panel, large clearly visible fonts (native UI RULE).
 // With the editor open the same modal asks "discard the typed text?" (Esc in the editor with text).
+static short s_xm_y, s_xm_bw;        // panel: where the confirm's two buttons are (touch_targets)
 static void draw_exit_modal(void)
 {
     int top = nucleo_app_content_top(), h = nucleo_app_content_height();
     const bool ed = s_ed_open;
+    if (lg()) {                                              // the panel: a card with two buttons to tap
+        G.fillRect(0, top, AW, h, BG);
+        const int bw = AW - 40, bh = 128, bx = 20, by = top + (h - bh) / 2;
+        G.fillRoundRect(bx, by, bw, bh, 12, LINE);
+        G.drawRoundRect(bx, by, bw, bh, 12, ACC);
+        G.setFont(&fonts::FreeSansBold12pt7b); G.setTextColor(FG, LINE); G.setTextDatum(middle_center);
+        G.drawString(ed ? (s_en ? "Discard the text?" : "Scartare il testo?") : (s_en ? "Leave ANIMA?" : "Uscire da ANIMA?"), AW / 2, by + 30);
+        const int w = (bw - 36) / 2, y = by + 64, hh = 48;
+        s_xm_y = (short)y; s_xm_bw = (short)w;
+        G.fillRoundRect(bx + 12, y, w, hh, 12, ed ? AMBER : GRN);
+        G.fillRoundRect(bx + 24 + w, y, w, hh, 12, BG);
+        G.drawRoundRect(bx + 24 + w, y, w, hh, 12, MUTED);
+        G.setFont(&fonts::FreeSansBold9pt7b);
+        G.setTextColor(INK, ed ? AMBER : GRN);
+        G.drawString(ed ? (s_en ? "Discard" : "Scarta") : (s_en ? "Leave" : "Esci"), bx + 12 + w / 2, y + hh / 2);
+        G.setTextColor(FG, BG);
+        G.drawString(ed ? (s_en ? "Keep writing" : "Continua") : (s_en ? "Stay" : "Resta"), bx + 24 + w + w / 2, y + hh / 2);
+        G.setTextDatum(top_left); G.setFont(&fonts::Font0); G.setTextSize(1);
+        return;
+    }
     G.fillRect(0, top, AW, h, BG);
     int bw = (AW - 28), bh = 92, bx = (AW - bw) / 2, by = top + (h - bh) / 2;
     G.fillRoundRect(bx, by, bw, bh, 10, BG);
@@ -4072,7 +4167,11 @@ static void composer_invalidate(void) { s_cmp_scene = -1; }
 enum { T_PG_UP = 1, T_PG_DN, T_MODE, T_MENU, T_PREV, T_NEXT, T_TAB = 8 /* ..8+TAB_N-1 */, T_ROW_BACK = 13, T_ROW_FWD = 14 };
 static void touch_targets(void)
 {
-    if (s_ses && s_exit_confirm && !s_ed_open) {                  // "Leave ANIMA?": the two answer lines
+    if (s_ses && s_exit_confirm && lg()) {                        // the panel's confirm: its two buttons
+        const int bx = 20, w = s_xm_bw;
+        nucleo_touch_add(bx + 6, s_xm_y - 6, w + 12, 60, NK_ENTER, 0);
+        nucleo_touch_add(bx + 18 + w, s_xm_y - 6, w + 12, 60, NK_BACK, 0);
+    } else if (s_ses && s_exit_confirm && !s_ed_open) {           // "Leave ANIMA?": the two answer lines
         const int top = nucleo_app_content_top(), h = nucleo_app_content_height();
         const int bw = AW - 28, bh = 92, bx = (AW - bw) / 2, by = top + (h - bh) / 2;
         nucleo_touch_add(bx, by + 38, bw, 24, NK_ENTER, 0);
@@ -4081,8 +4180,9 @@ static void touch_targets(void)
     if (s_ses && !s_exit_confirm && !s_ses->clear_confirm && !s_ed_open) {
         const int top = nucleo_app_content_top(), h = nucleo_app_content_height();
         if (s_menu_open) {
-            const int tw = AW / TAB_N;                                    // the tab strip: one target per tab
-            for (int i = 0; i < TAB_N; i++) nucleo_touch_add(i * tw, 0, tw, 22, NK_CHAR, (char)(T_TAB + i));
+            const int tx0 = lg() ? 48 : 0, tw = (AW - tx0) / TAB_N;     // the tab strip: one target per tab
+            if (lg()) nucleo_touch_add(0, 0, tx0, 26, NK_BACK, 0);       // ...after the Back button
+            for (int i = 0; i < TAB_N; i++) nucleo_touch_add(tx0 + i * tw, 0, tw, 22, NK_CHAR, (char)(T_TAB + i));
             if (s_tab == TAB_GUIDA) {                                     // the manual: left half back, right half on
                 nucleo_touch_add(0, 22, AW / 2, h - 22, NK_CHAR, (char)T_PREV);
                 nucleo_touch_add(AW / 2, 22, AW - AW / 2, h - 22, NK_CHAR, (char)T_NEXT);
@@ -4098,8 +4198,10 @@ static void touch_targets(void)
             nucleo_touch_add_scroll(0, 0, AW, RD_BODY, font_h(chat_font()), NK_CHAR, (char)T_ROW_BACK, NK_CHAR, (char)T_ROW_FWD);
         } else {
             const int hh = hdr_h(), by = top + hh, bh = h - hh - input_band();
-            nucleo_touch_add(0, top, AW / 2, hh, NK_CHAR, (char)T_MODE);         // header: the mode label cycles it,
-            nucleo_touch_add(AW / 2, top, AW - AW / 2, hh, NK_CHAR, (char)T_MENU); // the clock side opens the menu
+            const int bk = lg() ? 50 : 0;                                // panel: the Back button leads the bar
+            if (bk) nucleo_touch_add(0, top, bk, hh + 4, NK_BACK, 0);
+            nucleo_touch_add(bk, top, AW / 2 - bk, hh, NK_CHAR, (char)T_MODE);   // header: the mode label cycles it,
+            nucleo_touch_add(AW / 2, top, AW - AW / 2, hh, NK_CHAR, (char)T_MENU); // the clock / menu side opens the menu
             if (deck_active()) {                                          // the deck: each suggestion is a target
                 for (int k = 0; k < s_deck_n && k < 16; k++)
                     nucleo_touch_add(0, s_deck_y + k * s_deck_rh, AW, s_deck_rh, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + k));
@@ -4124,6 +4226,20 @@ static bool touch_key(int key, char ch)
         if (s_menu_open) {
             if (slot >= s_mt_n) return true;
             const int idx = s_mt[slot].idx;
+            if (lg() && s_tab == TAB_IA && idx >= 0 && idx < IA_ROWS) {   // panel settings: the first tap acts
+                IAItem it[IA_ROWS]; build_ia(it);
+                s_mrow = idx; s_edit = false;
+                int tx = 0, ty = 0;
+                if (it[idx].kind == SV_SLIDER && nucleo_touch_last(&tx, &ty)) {   // the value under the finger
+                    int pct = (tx - IA_LG_TX) * 100 / IA_LG_TW; pct = pct < 0 ? 0 : pct > 100 ? 100 : pct;
+                    if (idx == IA_VOL)        nucleo_audio_set_volume(pct);
+                    else if (idx == IA_BRI)   nucleo_app_set_brightness(pct < 10 ? 10 : pct);
+                    else if (idx == IA_SPEED) nucleo_tts_set_speed(TTS_SPEED_MIN + pct * (TTS_SPEED_MAX - TTS_SPEED_MIN) / 100);
+                    nucleo_app_persist_prefs();
+                    menu_hint(); nucleo_app_request_draw();
+                } else ia_key(NK_ENTER);                                  // switch / cycle / Clear chat (asks first)
+                return true;
+            }
             if (idx == s_mrow) { menu_key(NK_ENTER, 0); return true; }    // the picked row again: open it
             s_mrow = idx;
             if (s_tab == TAB_IDEE && s_idee_cat >= 0) s_ses->focus_leaf[s_idee_cat] = (signed char)idx;

@@ -98,12 +98,16 @@ int wrap(const char *s, int x, int y, int maxw, int lh, int maxl)
     return n;
 }
 
-static void chevron(int x, int y, unsigned short c)
-{
-    d.drawLine(x + 6, y, x, y + 6, c); d.drawLine(x + 7, y, x + 1, y + 6, c);
-    d.drawLine(x, y + 6, x + 6, y + 12, c); d.drawLine(x + 1, y + 6, x + 7, y + 12, c);
-}
 static void menu_glyph(int x, int y, unsigned short c) { for (int k = 0; k < 3; k++) d.fillRoundRect(x, y + k * 5, 16, 2, 1, c); }
+
+int back(int x, int y, int h, int key)
+{
+    const int w = 40, cy = y + h / 2;
+    d.fillRoundRect(x, y, w, h, h / 2, LINE);
+    for (int k = 0; k < 3; k++) { d.drawLine(x + 24 + k, cy - 6, x + 18 + k, cy, FG); d.drawLine(x + 18 + k, cy, x + 24 + k, cy + 6, FG); }
+    nucleo_touch_add(x > 4 ? x - 4 : 0, y > 4 ? y - 4 : 0, w + 24, h + 8, key, 0);
+    return x + w;
+}
 
 int header(const char *title, const char *right, unsigned short acc, int back_key, int menu_key)
 {
@@ -111,9 +115,9 @@ int header(const char *title, const char *right, unsigned short acc, int back_ke
     d.fillRect(0, 0, W, HEAD, BG);
     int tx = PAD;
     if (back_key) {
-        chevron(10, HEAD / 2 - 7, acc);
-        nucleo_touch_add(0, 0, 96, HEAD, back_key, 0);
-        tx = 26;
+        back(3, 3, HEAD - 6, back_key);
+        nucleo_touch_add(0, 0, 96, HEAD + 2, back_key, 0);     // the title beside it backs too
+        tx = 52;
     }
     int rx = W - PAD;
     if (menu_key) {

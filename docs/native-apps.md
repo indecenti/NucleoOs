@@ -126,6 +126,15 @@ another drops every hook the outgoing app set (poll, Back, TAB, push-to-talk, a 
 incoming module may be loaded, so no hook can jump into code that is no longer mapped. The store never swaps
 the files of a loaded module (`nucleo_native_forget` first), and refuses to unload the app in the foreground.
 
+**On the second screen: the system bar.** A native app with `on_draw_large` that is in front on the external
+panel gets a 30 px system bar at the top — a Back button (the same pill every built-in app has) and the app's
+name; a tap anywhere on it is Back. The app's surface is the rest of the panel: `d.width()` x `d.height()` is
+320 x 210 and its touch targets are in that surface's own coordinates (the firmware shifts the taps), so an app
+needs no code for it. A module that draws its own Back opts out with `NAP_FLAG_NO_HUD` in
+`NUCLEO_NATIVE_APP_EX(..., flags, ...)`: then it gets the whole 320 x 240. Built-in apps never get the bar —
+they draw their Back themselves (`lg::header` / `lg::back`). Leaving the large surface (the Control Center,
+an overlay) takes the bar away with it.
+
 **Where native apps are unavailable:** a partition table without a 64 KB-aligned `coredump` partition — in
 practice, under M5Launcher (it recreates only SPIFFS/FAT partitions). The Store then shows the native store
 as unavailable, with the reason, and the web store as usual.

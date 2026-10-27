@@ -796,8 +796,10 @@ void pv_draw_large(LovyanGFX &g, int oy, const pv_model_t &m)
     g.fillRect(0, 0 - oy, 320, 240, BG);
     char s[40];
 
-    // Status bar.
-    pill(g, 6, 5 - oy, 178, 32, title(m), title_col(m));
+    // Status bar: the Back button (the kit's look: lg::back), then the state pill.
+    g.fillRoundRect(6, 9 - oy, 40, 24, 12, LINE);
+    for (int k = 0; k < 3; k++) { g.drawLine(30 + k, 15 - oy, 24 + k, 21 - oy, FG); g.drawLine(24 + k, 21 - oy, 30 + k, 27 - oy, FG); }
+    pill(g, 52, 5 - oy, 132, 32, title(m), title_col(m));
     subtitle(s, sizeof s, m);
     text_fit(g, &fonts::Font2, 192, 5 - oy, 124, s, FG);
     const char *wh = where(m);

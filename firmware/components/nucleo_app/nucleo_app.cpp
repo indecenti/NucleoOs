@@ -468,6 +468,8 @@ extern "C" void nucleo_register_theme(void);   // app_theme.cpp — replaces the
 extern "C" void nucleo_register_reactor(void); // app_reactor.cpp — Games: reactor-management game
 extern "C" void nucleo_register_constellations(void); // app_constellations.cpp — Games: space-trader
 extern "C" bool nucleo_store_app_is_native(const char *id);          // store_apps.cpp
+extern "C" const char *nucleo_native_loaded(void);                  // native_apps.cpp: the resident module's id
+extern "C" unsigned nucleo_native_flags(void);                      // ...and its NAP_FLAG_*
 extern "C" void nucleo_store_app_prepare(nucleo_app_def_t *slot);    // store_apps.cpp: load a native app's module
 extern "C" void nucleo_register_sandgarden(void);     // app_sandgarden.cpp — Games: falling-sand garden
 extern "C" void nucleo_register_slots(void);          // app_slots.cpp — Games: slot machine
@@ -2371,6 +2373,25 @@ void nucleo_app_run(void)
         if (s_gamefront && !s_control_center && !s_torch && !s_voice_dark && gamefront_step()) s_dirty = true;
 
         if (nucleo_extdisp_take_repaint()) nucleo_app_force_repaint();   // the calibration screen covered the panel
+
+        // The system bar (Back + the app's name) over a store app on the panel: built-ins draw their own Back
+        // (lg::header / lg::back); a native module from the store gets the bar unless it declares NAP_FLAG_NO_HUD.
+        {
+            static const char *s_hud_for = nullptr;
+            const nucleo_app_def_t *fg = s_active >= 0 ? &s_apps[s_active] : nullptr;
+            const bool hud = fg && fg->on_draw_large && nucleo_surface_large() && nucleo_store_app_is_native(fg->id) &&
+                             nucleo_native_loaded()[0] && !strcmp(nucleo_native_loaded(), fg->id) &&
+                             !(nucleo_native_flags() & 0x0002u /* NAP_FLAG_NO_HUD */);
+            const char *want = hud ? fg->id : nullptr;
+            if (!nucleo_surface_large()) s_hud_for = nullptr;      // leaving the large surface took the bar away
+            if (want != s_hud_for) {
+                if (nucleo_extdisp_set_hud(hud ? fg->name : nullptr, fg ? fg->color : 0)) {   // the surface changed size
+                    d.fillScreen(BG);
+                    nucleo_app_force_repaint();
+                }
+                s_hud_for = want;
+            }
+        }
 
         // Primary surface. Only the launcher home lays itself out at 320x240 so far: it takes the large surface
         // whenever an external panel can host it, and every other screen (apps, Control Center, GameFront,

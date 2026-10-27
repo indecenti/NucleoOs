@@ -121,6 +121,12 @@ the Second screen settings page; both persist once when you leave them. With the
 nothing to dim: the card keeps only its Calibrate pill (no card at all without touch) and the settings row is
 greyed out.
 
+**Touch chrome on the panel (large).** Every screen has a finger-sized Back: the launcher's 30 px bar (inside a
+category: a Back pill, and a tap on the rest of the bar opens the Control Center, also on the home), the kit's
+`lg::header` (`lg::back`: a 40 px pill + bold chevron), the games gallery, ANIMA's own bar and menu, and the
+system bar over store apps (`NAP_FLAG_NO_HUD` opts out, docs/native-apps.md). The Control Center closes with
+the X in its strip or a tap anywhere on the strip.
+
 **Launcher grid (large).** Same-size tiles, 4 per row, scrolled in pixels: the keys keep the focused tile in view
 with the smallest move, a drag moves the content (`NUCLEO_TOUCH_VIEW_*`, every queued step applied before one
 paint) and leaves the focus alone, rows cut by the edges are clipped. The focused tile sits on a lit card in its

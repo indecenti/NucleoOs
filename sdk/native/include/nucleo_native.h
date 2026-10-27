@@ -18,6 +18,7 @@
 #define NAP_ID_MAX           32
 
 #define NAP_FLAG_NET         0x0001u       // uses the radio (pnet multiplayer)
+#define NAP_FLAG_NO_HUD      0x0002u       // draws its own Back on the second screen: no system bar over it
 
 #ifdef __cplusplus
 extern "C" {

@@ -104,6 +104,7 @@ static const esp_partition_t *scratch(void)
 extern "C" uint32_t nucleo_native_abi_level(void) { return scratch() ? nap_abi_level : 0; }
 extern "C" const char *nucleo_native_error(void) { return s_err; }
 extern "C" const char *nucleo_native_loaded(void) { return s_id; }
+extern "C" unsigned nucleo_native_flags(void) { return s_id[0] ? s_img.info.flags : 0; }   // NAP_FLAG_* of the resident module
 extern "C" void nucleo_native_on_unload(void (*cb)(const char *id)) { s_unload_cb = cb; }
 
 // The ABI's "nucleo_app_register" (abi/v1.txt): a module registers its app exactly like a built-in does; the

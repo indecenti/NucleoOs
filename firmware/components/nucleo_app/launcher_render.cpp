@@ -41,7 +41,7 @@ static inline bool lr_large(void) { return ::d.width() >= 300; }
 // centres the status bar's contents in whatever height it has.
 #undef BAR
 #undef HINT
-#define BAR  (lr_large() ? 22 : 16)
+#define BAR  (lr_large() ? 30 : 16)                  // large: a finger-sized bar (Back button, tap = Control Center)
 #define HINT (lr_large() ? 0 : 14)
 #define BY   ((BAR - 16) / 2)
 
@@ -729,11 +729,11 @@ void launcher_render_status_bar(void)
         // (legible), with the Wi-Fi gauge and the item count packed from the right edge inward.
         // On the touch panel a back chevron leads it, so the breadcrumb reads as "tap here to go back".
         int cx = 2;
-        if (lr_large()) {
-            int ay = BAR / 2;
-            d.drawLine(cx + 5, ay - 5, cx, ay, FG); d.drawLine(cx + 6, ay - 5, cx + 1, ay, FG);
-            d.drawLine(cx, ay, cx + 5, ay + 5, FG); d.drawLine(cx + 1, ay, cx + 6, ay + 5, FG);
-            cx += 12;
+        if (lr_large()) {                                    // a Back button the finger finds: pill + bold chevron
+            const int bh = BAR - 6, ay = BAR / 2;
+            d.fillRoundRect(3, 3, 44, bh, bh / 2, LINE);
+            for (int k = 0; k < 3; k++) { d.drawLine(29 + k, ay - 7, 22 + k, ay, FG); d.drawLine(22 + k, ay, 29 + k, ay + 7, FG); }
+            cx = 54;
         }
         d.fillRoundRect(cx, 1 + BY, 14, 14, 3, node->color);
         ui_icon(&d, cx + 7, 8 + BY, 6, strcmp(node->id, LAUNCHER_RECENT_ID) ? node->id : "clock", node->icon, INK, node->color);
@@ -1005,8 +1005,8 @@ template <typename T> static void draw_eq(T *c, int ex, int ey, int w, unsigned 
 // rows cut by the band's edges are clipped. Inside a category the first cell is a Back tile.
 #define GRID_COLS   4
 #define GRID_CELLW  (W / GRID_COLS)               // 80 px on the 320-wide panel
-#define GRID_RH     70                            // cell height: badge (46) + label + gaps
-#define GRID_TOP    6                             // first tile row, below the status bar band
+#define GRID_RH     68                            // cell height: badge (46) + label + gaps
+#define GRID_TOP    3                             // first tile row, below the status bar band
 #define GRID_STEP   6                             // px the content moves per drag key
 static int s_grid_off = 0;                        // scroll offset of the grid band, in px
 static int s_grid_max = 0;                        // its largest value (content taller than the band)
@@ -1256,7 +1256,8 @@ static void grid_register_touch(void)
     nucleo_touch_clear();
     const int n = launcher_visible_count(), lead = grid_lead(), first = grid_first(), cells = n + lead;
     const int rows = (cells + GRID_COLS - 1) / GRID_COLS, y0 = LIST_TOP, y1 = LIST_TOP + LIST_BAND_H;
-    if (lead) nucleo_touch_add(0, 0, 160, BAR + 4, NK_BACK, 0);                            // breadcrumb = back
+    if (lead) nucleo_touch_add(0, 0, 64, BAR + 4, NK_BACK, 0);                             // the Back button
+    nucleo_touch_add(lead ? 64 : 0, 0, lead ? W - 64 : W, BAR, NK_TAB, 0);                  // the bar: Control Center
     for (int row = 0; row < rows; row++) {
         const int top = LIST_TOP + GRID_TOP + row * GRID_RH - s_grid_off;
         const int ty = top - 3 > y0 ? top - 3 : y0, by = top + GRID_RH - 3 < y1 ? top + GRID_RH - 3 : y1;
@@ -1642,6 +1643,12 @@ template <typename T> static void cc_strip(T *g, bool full)
     s_ccs.clock_r = (int16_t)cr;
 
     int rx = W - 4;                                                   // right cluster, fixed cells
+    if (lr_large()) {                                                 // the close button (the whole strip closes)
+        const int xc = W - 12, yc = CC_STRIP_H / 2;
+        g->fillRect(W - 24, 0, 24, CC_STRIP_H, BG);
+        for (int k = 0; k < 2; k++) { g->drawLine(xc - 5 + k, yc - 5, xc + 4 + k, yc + 4, FG); g->drawLine(xc + 4 + k, yc - 5, xc - 5 + k, yc + 4, FG); }
+        rx = W - 28;
+    }
     char b[8]; if (bpct >= 0) snprintf(b, sizeof b, "%3d%%", bpct); else snprintf(b, sizeof b, "  --");
     g->setTextColor(FG, BG); g->setCursor(rx - 24, 5); g->print(b); rx -= 24 + 4;
     unsigned short bc = (bpct < 20) ? C_RED : (bpct < 50) ? C_YELLOW : C_GREEN;
@@ -1930,6 +1937,7 @@ template <typename T> static void cc_paint(T *g, bool full, int vh)
     g->clearClipRect();
     if (full && lr_large()) {                                 // touch: a tile or a shortcut is its quick key 1..9
         nucleo_touch_clear();
+        nucleo_touch_add(0, 0, W, CC_BODY_Y + 3, NK_BACK, 0);              // the strip (and its X): close
         int oy = CC_BODY_Y + cc_card_y(CL_TILES) - s_cc_scroll;
         for (int i = 0; i < CC_NTILES; i++)
             nucleo_touch_add(CC_X0 + i * CC_TILE_P, oy, CC_TILE_P, cc_card_h(CL_TILES), NK_CHAR, (char)('1' + i));

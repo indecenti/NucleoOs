@@ -35,6 +35,9 @@ void font(int f);
 // The header band [0, HEAD): a back chevron at the left (tap -> back_key; 0 = none), the title in `acc`, a muted
 // `right` text, and a menu glyph at the right when `menu_key` != 0 (tap -> that key, usually NK_TAB). Returns HEAD.
 int header(const char *title, const char *right, unsigned short acc, int back_key = 6 /* NK_BACK */, int menu_key = 0);
+// The Back button, the same in every app on the panel: a 40 px pill with a bold chevron at (x, y), h tall, and a
+// touch target a little larger than it (key, usually NK_BACK). Returns its right edge. lg::header draws one.
+int back(int x, int y, int h, int key = 6 /* NK_BACK */);
 // A row of tabs (pills) at y, full width, 28 px tall; tab i taps as NK_CHAR keys[i] (or NK_TAB when keys is null:
 // one TAB press per step is the app's job then, so prefer keys). Returns the first y below.
 int tabs(int y, const char *const *names, int n, int active, unsigned short acc, const char *keys);

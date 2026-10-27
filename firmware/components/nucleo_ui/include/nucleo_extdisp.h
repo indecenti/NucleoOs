@@ -38,6 +38,10 @@ bool nucleo_extdisp_set_mhz(int mhz);         // after a restart (10 / 20 / 27 /
 bool nucleo_extdisp_set_rotation(int rot);    // after a restart (1 or 3 = upside down)
 bool nucleo_extdisp_set_touch(bool on);       // after a restart
 bool nucleo_extdisp_recalibrate(void);        // live: false when there is no touch to calibrate right now
+// The system bar on the large surface (a store app in front): a 30 px band at the top with a Back button and the
+// app's name; the app's surface becomes 320x210 below it and a tap on the band is Back. NULL removes it. True when
+// the surface changed (the caller repaints everything). Leaving the large surface removes it by itself.
+bool nucleo_extdisp_set_hud(const char *title, unsigned short color);
 // True once after something painted over the external panel (the calibration screen): the run loop repaints all.
 bool nucleo_extdisp_take_repaint(void);
 // The panel's own backlight level, separate from the Cardputer's (settings "external_brightness", 10..100 %).
