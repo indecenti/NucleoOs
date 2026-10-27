@@ -35,6 +35,18 @@ config NUCLEO_STORE_BRAWLER
     help
         Leaves app_brawler.cpp and brawler_*.cpp out of the firmware image.
 
+config NUCLEO_STORE_PINBALL
+    bool "Pinball (pinball): from the store, not in the firmware"
+    default y
+    help
+        Leaves app_pinball.cpp out of the firmware image.
+
+config NUCLEO_STORE_CARDLER
+    bool "Cardler (cardler): from the store, not in the firmware"
+    default y
+    help
+        Leaves app_cardler.cpp out of the firmware image.
+
 endmenu
 
 endmenu

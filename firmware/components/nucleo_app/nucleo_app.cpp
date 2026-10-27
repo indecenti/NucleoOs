@@ -518,7 +518,10 @@ void nucleo_app_register_builtins(void)
 #if !CONFIG_NUCLEO_STORE_POKER
     nucleo_register_poker();
 #endif
-    nucleo_register_pinball(); nucleo_register_pong();
+#if !CONFIG_NUCLEO_STORE_PINBALL
+    nucleo_register_pinball();
+#endif
+    nucleo_register_pong();
 #if !CONFIG_NUCLEO_STORE_TANKS
     nucleo_register_tanks();
 #endif
@@ -528,7 +531,10 @@ void nucleo_app_register_builtins(void)
 #if !CONFIG_NUCLEO_STORE_BRAWLER
     nucleo_register_brawler();
 #endif
-    nucleo_register_dice(); nucleo_register_yahtzee(); nucleo_register_snake(); nucleo_register_vs(); nucleo_register_cardler();
+    nucleo_register_dice(); nucleo_register_yahtzee(); nucleo_register_snake(); nucleo_register_vs();
+#if !CONFIG_NUCLEO_STORE_CARDLER
+    nucleo_register_cardler();
+#endif
     // Measure (ADV-only): BMI270 measuring instruments
     if (nucleo_ui_is_adv()) { nucleo_register_level(); nucleo_register_goniometer(); nucleo_register_pedometer(); }
     // Connect: the Cardputer as a peripheral or terminal of another machine (USB keyboard/disk, SSH)
