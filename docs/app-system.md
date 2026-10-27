@@ -44,8 +44,8 @@ Spec: [native-apps.md](native-apps.md). Installed on the SD card only; at launch
 re-verified, relocated into the 256 KB `coredump` partition (core dumps are off) and executed from flash
 through the MMU, so an app costs RAM only for its own variables. ABI level 1 = what the built-in games use
 (195 functions); the layout fingerprint pins the shapes of the shared types; a native game gets the same Solo
-boot as a built-in one. Store games: Constellations, Tanks, Poker (all run from the SD card on both boards; 139 KB out of the image
-once the release after the loader drops them). Next: the release that ships the loader.
+boot as a built-in one. Store games: Constellations, Tanks, Poker (all run from the SD card on both boards; out of the image by default,
+139 KB recovered). The Store is the second entry on Home, after ANIMA. Next: the release that ships it.
 
 ## Testing — **next**
 
@@ -71,6 +71,6 @@ a local preview server mirrors the device paths (`/nucleo-i18n.js`, `/apps/<id>/
 1. Device-verify the Store client (catalog download, install, update, remove) on both boards.
 2. Device smoke test (HTTP part), then the serial test channel and the Solo/exclusive apps.
 3. Web shell store page (WebCrypto verification).
-4. Native apps: run the loader on both boards (Constellations), then the release with the loader, then the
-   release that drops Constellations from the image (docs/native-apps.md "Migration").
+4. Native apps: **done** — loader verified on both boards; Constellations, Tanks and Poker ship from the store
+   and are out of the image (docs/native-apps.md "Leaving the firmware"). Next: more games, ABI v2 for the emulator.
 5. Recover flash for the M5Launcher slot (the image is over it today), helped by step 4.

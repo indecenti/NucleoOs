@@ -118,7 +118,10 @@ static void t_real_tree(void)
         }
     }
     for (int i = 0; i < REAL_APP_N; i++) {
-        if (!strcmp(REAL_APPS[i].id, "anima")) { CHECK(seen[i] == 0, "ANIMA duplicated in a category"); continue; }
+        if (!strcmp(REAL_APPS[i].id, "anima") || !strcmp(REAL_APPS[i].id, "store")) {   // both live on Home itself
+            CHECK(seen[i] == 0, "%s duplicated in a category", REAL_APPS[i].id);
+            continue;
+        }
         CHECK(seen[i] == 1, "app %s reachable %d times (want 1)", REAL_APPS[i].id, seen[i]);
     }
     printf("real tree: %d apps in %d categories\n", REAL_APP_N, cats);
@@ -262,12 +265,14 @@ static void t_recents(void)
     int office = home_index_of("Office");
     launcher_set_sel(office);
     launcher_note_launch("wifi");
-    CHECK(home_index_of(LAUNCHER_RECENT_ID) == 1, "Recent tile right after ANIMA (at %d)", home_index_of(LAUNCHER_RECENT_ID));
+    CHECK(home_index_of("store") == 1, "the Store right after ANIMA (at %d)", home_index_of("store"));
+    CHECK(home_index_of(LAUNCHER_RECENT_ID) == 2, "Recent tile right after ANIMA and the Store (at %d)", home_index_of(LAUNCHER_RECENT_ID));
     CHECK(launcher_focused() && !strcmp(launcher_focused()->id, "Office"), "focus stays on Office when the tile appears");
     // Newest first, deduplicated, capped at 5; system launches and ANIMA never enter it.
     const char *ids[6] = { "clock", "calc", "wifi", "files", "weather", "notepad" };
     for (const char *id : ids) launcher_note_launch(id);
     launcher_note_launch("screensaver"); launcher_note_launch("remote"); launcher_note_launch("updates"); launcher_note_launch("anima");
+    launcher_note_launch("store");
     CHECK(enter_category(LAUNCHER_RECENT_ID), "enter Recent");
     const char *want[5] = { "notepad", "weather", "files", "wifi", "calc" };
     CHECK(launcher_visible_count() == 5, "5 recents (got %d)", launcher_visible_count());
@@ -300,13 +305,15 @@ static void t_pins(void)
     int home0 = launcher_visible_count();
     launcher_toggle_pin("wifi");
     CHECK(launcher_is_pinned("wifi"), "pinned");
-    CHECK(home_index_of("wifi") == 1, "pinned app rides right after ANIMA (at %d)", home_index_of("wifi"));
+    CHECK(home_index_of("wifi") == 2, "pinned app rides right after ANIMA and the Store (at %d)", home_index_of("wifi"));
     CHECK(launcher_visible_count() == home0 + 1, "Home grew by one");
     // Persisted: a fresh build (reboot) reloads it.
     launcher_build_menu(); launcher_reset();
-    CHECK(home_index_of("wifi") == 1, "pin survives a rebuild from the store");
+    CHECK(home_index_of("wifi") == 2, "pin survives a rebuild from the store");
     launcher_toggle_pin("anima");
     CHECK(!launcher_is_pinned("anima") && launcher_visible_count() == home0 + 1, "ANIMA is never pinned");
+    launcher_toggle_pin("store");
+    CHECK(!launcher_is_pinned("store") && launcher_visible_count() == home0 + 1, "the Store is never pinned");
     launcher_toggle_pin("no-such-app");
     CHECK(launcher_visible_count() == home0 + 1, "unknown id pinned in store but not shown");
     launcher_toggle_pin("no-such-app");
@@ -320,10 +327,10 @@ static void t_pins(void)
     // Store full: the oldest pin is evicted.
     const char *ids[7] = { 0 };
     int k = 0;
-    for (int i = 0; i < REAL_APP_N && k < 7; i++) if (strcmp(REAL_APPS[i].id, "anima")) ids[k++] = REAL_APPS[i].id;
+    for (int i = 0; i < REAL_APP_N && k < 7; i++) if (strcmp(REAL_APPS[i].id, "anima") && strcmp(REAL_APPS[i].id, "store")) ids[k++] = REAL_APPS[i].id;
     for (int i = 0; i < 7; i++) launcher_toggle_pin(ids[i]);
     CHECK(!launcher_is_pinned(ids[0]) && launcher_is_pinned(ids[6]), "7th pin evicts the oldest");
-    CHECK(home_index_of(ids[1]) == 1 && home_index_of(ids[6]) == 6, "pin order = oldest first after ANIMA");
+    CHECK(home_index_of(ids[1]) == 2 && home_index_of(ids[6]) == 7, "pin order = oldest first after ANIMA and the Store");
     pins_wipe();
 }
 

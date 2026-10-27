@@ -27,7 +27,7 @@ const nucleo_app_def_t   *nucleo_app_at(int i);
 static MenuNode        s_dyn_cats[MAX_CATS];
 static MenuNode        s_dyn_apps[MAX_APPS];
 static const MenuNode *s_cat_pool[MAX_APPS + MAX_CATS];         // every category's items, one run each
-static const MenuNode *s_root_items[MAX_CATS + MAX_PIN + 3];   // ANIMA + pins + Recent + categories, NULL-terminated
+static const MenuNode *s_root_items[MAX_CATS + MAX_PIN + 4];   // ANIMA + Store + pins + Recent + categories, NULL-terminated
 static MenuNode        ROOT;
 static int             s_cat_count = 0;
 static int             s_app_n     = 0;   // number of app nodes in s_dyn_apps (for the flat "Spotlight" search)
@@ -118,9 +118,10 @@ void launcher_build_menu(void)
     s_tree_gen++;
     s_cat_count = 0;
     const MenuNode *anima_node = nullptr;        // hoisted straight onto Home, not buried in a category
+    const MenuNode *store_node = nullptr;        // the Store, second on Home: where the apps and games come from
     int n = nucleo_app_count();
     if (n > MAX_APPS) n = MAX_APPS;
-    signed char cat_of[MAX_APPS];                // category index per app (-1 = ANIMA, not in a category)
+    signed char cat_of[MAX_APPS];                // category index per app (-1 = ANIMA / Store, not in a category)
     int cat_n[MAX_CATS] = { 0 };
     for (int i = 0; i < n; i++) {
         const nucleo_app_def_t *a = nucleo_app_at(i);
@@ -133,6 +134,7 @@ void launcher_build_menu(void)
         s_dyn_apps[i].items = nullptr;
 
         if (!strcmp(a->id, "anima")) { anima_node = &s_dyn_apps[i]; cat_of[i] = -1; continue; }  // ANIMA -> top-level Home entry
+        if (!strcmp(a->id, "store")) { store_node = &s_dyn_apps[i]; cat_of[i] = -1; continue; }  // Store -> right after it
         int c = get_or_create_cat(a->category);
         cat_of[i] = (signed char)c;
         cat_n[c]++;
@@ -154,21 +156,22 @@ void launcher_build_menu(void)
     int rn = 0;
     for (int k = 0; k < s_rec_n; k++)
         for (int i = 0; i < n; i++)
-            if (!strcmp(s_dyn_apps[i].id, s_rec_buf[k]) && strcmp(s_rec_buf[k], "anima")) { s_rec_items[rn++] = &s_dyn_apps[i]; break; }
+            if (!strcmp(s_dyn_apps[i].id, s_rec_buf[k]) && strcmp(s_rec_buf[k], "anima") && strcmp(s_rec_buf[k], "store")) { s_rec_items[rn++] = &s_dyn_apps[i]; break; }
     s_rec_items[rn] = nullptr;
     REC.id = LAUNCHER_RECENT_ID; REC.label = "Recent"; REC.icon = 'R'; REC.color = C_GREEN;
     REC.kind = N_MENU; REC.desc = ""; REC.items = s_rec_items;
     int r = 0;
     if (anima_node) s_root_items[r++] = anima_node;            // ANIMA leads Home, above the categories
+    if (store_node) s_root_items[r++] = store_node;            // then the Store: most games now come from it
     // Pinned apps ride at the top of Home (after ANIMA), in pin order. Each still lives in its own
     // category too (Library model), so a pin adds a shortcut without moving the app.
-    for (int p = 0; p < s_pin_n && r < MAX_CATS + MAX_PIN + 1; p++) {
-        if (!strcmp(s_pin_buf[p], "anima")) continue;          // already hoisted — never double it
+    for (int p = 0; p < s_pin_n && r < MAX_CATS + MAX_PIN + 2; p++) {
+        if (!strcmp(s_pin_buf[p], "anima") || !strcmp(s_pin_buf[p], "store")) continue;   // already hoisted — never double it
         for (int i = 0; i < n; i++)
             if (!strcmp(s_dyn_apps[i].id, s_pin_buf[p])) { s_root_items[r++] = &s_dyn_apps[i]; break; }
     }
     if (rn > 0) s_root_items[r++] = &REC;                      // one fixed tile: the categories keep their slots
-    for (int i = 0; i < s_cat_count && r < MAX_CATS + MAX_PIN + 2; i++) s_root_items[r++] = &s_dyn_cats[i];
+    for (int i = 0; i < s_cat_count && r < MAX_CATS + MAX_PIN + 3; i++) s_root_items[r++] = &s_dyn_cats[i];
     s_root_items[r] = nullptr;
 
     ROOT.id = "home";
@@ -423,11 +426,11 @@ bool launcher_is_pinned(const char *id)
     return false;
 }
 
-// Pin/unpin an app id at the top of Home, persist, and rebuild the tree. ANIMA is ignored (it already
-// lives at Home). A full store drops the oldest pin to make room for the new one.
+// Pin/unpin an app id at the top of Home, persist, and rebuild the tree. ANIMA and the Store are ignored (they
+// already live at Home). A full store drops the oldest pin to make room for the new one.
 void launcher_toggle_pin(const char *id)
 {
-    if (!id || !id[0] || !strcmp(id, "anima") || !strcmp(id, LAUNCHER_SETTINGS_SEARCH_ID)) return;
+    if (!id || !id[0] || !strcmp(id, "anima") || !strcmp(id, "store") || !strcmp(id, LAUNCHER_SETTINGS_SEARCH_ID)) return;
     for (int i = 0; i < s_pin_n; i++) {                          // already pinned -> unpin
         if (!strcmp(s_pin_buf[i], id)) {
             for (int j = i; j < s_pin_n - 1; j++) memcpy(s_pin_buf[j], s_pin_buf[j + 1], sizeof s_pin_buf[0]);
@@ -449,7 +452,7 @@ void launcher_toggle_pin(const char *id)
 // ---- recents ------------------------------------------------------------------
 void launcher_note_launch(const char *id)
 {
-    if (!id || !id[0] || !strcmp(id, "anima")) return;          // ANIMA already leads Home
+    if (!id || !id[0] || !strcmp(id, "anima") || !strcmp(id, "store")) return;   // ANIMA and the Store already lead Home
     // Opened BY the system, not by the user: the idle screensaver, the web-handoff screen, the boot
     // update dialog. Recording them would push the user's real apps out of the tile.
     static const char *const AUTO[] = { "screensaver", "remote", "updates" };

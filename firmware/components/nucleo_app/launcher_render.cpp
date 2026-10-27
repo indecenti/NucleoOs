@@ -95,7 +95,7 @@ void launcher_render_update_chrome(void)
     // Hint line: the controls that actually do something right now. Arrows move the focus; Esc goes
     // back; ENTER opens. When an app is focused, '*' pins/unpins it to the top of Home (ANIMA excluded,
     // it already lives there). s_hint is 48 B; the longest string below is ~30 chars, well within 240 px.
-    bool app = cur && cur->kind == N_APP && strcmp(cur->id, "anima") && strcmp(cur->id, LAUNCHER_SETTINGS_SEARCH_ID);
+    bool app = cur && cur->kind == N_APP && strcmp(cur->id, "anima") && strcmp(cur->id, "store") && strcmp(cur->id, LAUNCHER_SETTINGS_SEARCH_ID);
     const char *pinw = app ? (launcher_is_pinned(cur->id) ? TR5("* togli", "* unpin", "* soltar", "* retirer", "* loesen") : TR5("* fissa", "* pin", "* fijar", "* epingler", "* anheften")) : "";
     if (launcher_filter()[0]) {
         snprintf(s_hint, sizeof(s_hint), TR5("cerca \"%.12s\"   esc azzera", "find \"%.12s\"   esc clear", "buscar \"%.12s\"   esc borrar",

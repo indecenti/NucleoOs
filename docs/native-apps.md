@@ -148,7 +148,8 @@ and every step is checked:
 | Tanks (`tanks`) | 96 KB (75 KB, 2.1 KB RAM) | ~70 KB | `CONFIG_NUCLEO_STORE_TANKS` |
 | Poker (`poker`) | 37 KB (29 KB, 0.7 KB RAM) | ~20 KB | `CONFIG_NUCLEO_STORE_POKER` |
 
-With all three from the store the image is **3,461,008 B instead of 3,603,792 B: 142,784 B (139 KB) recovered**
+With all three from the store (the default) the image is **3,461,120 B instead of 3,603,792 B: 142,672 B (139 KB)
+recovered**
 (208 KB free in the OTA slot instead of 66 KB). Every game except the Game Boy emulator already fits ABI v1
 (measured: all their imports are in `abi/v1.txt`); the emulator needs 77 more functions, a v2 candidate.
 
@@ -156,19 +157,13 @@ Moving one more: add `CONFIG_NUCLEO_STORE_<GAME>` to the menu in `nucleo_app/Kco
 at the top of its source and around its registration in `nucleo_app.cpp`, then in the store a manifest with its
 recipe and a launcher icon, `tools/native_build.py`, `store.py publish`.
 
-## Migration of a built-in app (two releases)
+## Leaving the firmware
 
-`docs/app-store.md` "Upgrade guarantees" applies; for Constellations (`stelle`) it reads:
-
-1. **Release N**: the firmware ships the native loader and the two-channel store client, and still has
-   Constellations built in. The store publishes `stelle` (built from release N's commit). Nothing changes for
-   a user; it is installable but the built-in one is the one the launcher opens.
-2. Install and play `stelle` from the store on both Cardputers (original and ADV), with existing saves on
-   the card, before going on.
-3. **Release N+1**: `CONFIG_NUCLEO_STORE_CONSTELLATIONS=y` leaves the game out of the image (-96 KB). The
-   launcher tile stays (same id, same saves under `/sd/data/costellazioni/`), now opening the store app.
-   The web Game Center's cross-play save endpoint is not available while the game ships from the store
-   (no `httpd` in ABI v1).
+Decision (2026-10-27): Constellations, Tanks and Poker leave the image in the same release that ships the
+loader (`CONFIG_NUCLEO_STORE_*` default `y`), not one release later. Updating to it removes them from the
+device until they are installed from the Store (Native C); their launcher id, Recents/pins and saves under
+`/sd/data/` stay, so an install brings them back exactly where they were. The Store is the second entry on
+Home, right after ANIMA, so the way back is one step away. Turning an option off builds that game in again.
 
 ## Verification
 
