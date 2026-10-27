@@ -23,6 +23,12 @@ config NUCLEO_STORE_TANKS
     help
         Leaves app_tanks.cpp out of the firmware image (about 70 KB).
 
+config NUCLEO_STORE_TANKDUEL
+    bool "Tank Duel (tankd): from the store, not in the firmware"
+    default y
+    help
+        Leaves app_tankduel.cpp out of the firmware image (about 47 KB).
+
 endmenu
 
 endmenu
