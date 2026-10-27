@@ -1,11 +1,28 @@
 menu "NucleoOS apps"
 
+menu "Games that ship from the store"
+    comment "Each one left out of the image becomes the native app of the same id in the store (docs/native-apps.md)."
+    comment "Turn one on only in a release AFTER one that shipped the native loader, never in the same one."
+
 config NUCLEO_STORE_CONSTELLATIONS
-    bool "Constellations ships from the store (native app), not in the firmware"
+    bool "Constellations (stelle): from the store, not in the firmware"
     default n
     help
-        Leaves app_constellations.cpp out of the firmware image (about 96 KB): the game is then the
-        native app "stelle" of the store (docs/native-apps.md). Turn it on only in a release AFTER one
-        that shipped the native loader, never in the same one (docs/app-store.md, upgrade guarantees).
+        Leaves app_constellations.cpp out of the firmware image (about 68 KB). The web Game Center's
+        cross-play save endpoint is not available while the game ships from the store.
+
+config NUCLEO_STORE_POKER
+    bool "Poker (poker): from the store, not in the firmware"
+    default n
+    help
+        Leaves app_poker.cpp out of the firmware image.
+
+config NUCLEO_STORE_TANKS
+    bool "Tanks (tanks): from the store, not in the firmware"
+    default n
+    help
+        Leaves app_tanks.cpp out of the firmware image (about 70 KB).
+
+endmenu
 
 endmenu

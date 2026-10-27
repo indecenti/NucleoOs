@@ -15,6 +15,11 @@
 // local `d`. Engine routes NK_LEFT/NK_BACK to the back handler; everything else to on_key; TAB to the
 // tab handler.
 
+#if __has_include("sdkconfig.h")       // the host harnesses compile this file without one
+#include "sdkconfig.h"
+#endif
+// Built in, or (CONFIG_NUCLEO_STORE_TANKS) only as the store's native module, built with NAP_MODULE.
+#if !CONFIG_NUCLEO_STORE_TANKS || defined(NAP_MODULE)
 #include "nucleo_app.h"
 #include "nucleo_kbd.h"
 #include "nucleo_exclusive.h"
@@ -2809,3 +2814,4 @@ extern "C" void nucleo_register_tanks(void) {
     };
     nucleo_app_register(&app);
 }
+#endif  // !CONFIG_NUCLEO_STORE_TANKS || NAP_MODULE

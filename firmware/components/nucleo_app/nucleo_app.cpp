@@ -512,9 +512,17 @@ void nucleo_app_register_builtins(void)
     // Games
     nucleo_register_reactor();
 #if !CONFIG_NUCLEO_STORE_CONSTELLATIONS
-    nucleo_register_constellations();   // until it ships from the store only (Kconfig: docs/native-apps.md "Migration")
+    nucleo_register_constellations();   // the games that ship from the store: Kconfig "Games that ship from the store"
 #endif
-    nucleo_register_sandgarden(); nucleo_register_slots(); nucleo_register_poker(); nucleo_register_pinball(); nucleo_register_pong(); nucleo_register_tanks(); nucleo_register_tankduel(); nucleo_register_brawler(); nucleo_register_dice(); nucleo_register_yahtzee(); nucleo_register_snake(); nucleo_register_vs(); nucleo_register_cardler();
+    nucleo_register_sandgarden(); nucleo_register_slots();
+#if !CONFIG_NUCLEO_STORE_POKER
+    nucleo_register_poker();
+#endif
+    nucleo_register_pinball(); nucleo_register_pong();
+#if !CONFIG_NUCLEO_STORE_TANKS
+    nucleo_register_tanks();
+#endif
+    nucleo_register_tankduel(); nucleo_register_brawler(); nucleo_register_dice(); nucleo_register_yahtzee(); nucleo_register_snake(); nucleo_register_vs(); nucleo_register_cardler();
     // Measure (ADV-only): BMI270 measuring instruments
     if (nucleo_ui_is_adv()) { nucleo_register_level(); nucleo_register_goniometer(); nucleo_register_pedometer(); }
     // Connect: the Cardputer as a peripheral or terminal of another machine (USB keyboard/disk, SSH)
