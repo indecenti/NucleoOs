@@ -44,8 +44,8 @@ Spec: [native-apps.md](native-apps.md). Installed on the SD card only; at launch
 re-verified, relocated into the 256 KB `coredump` partition (core dumps are off) and executed from flash
 through the MMU, so an app costs RAM only for its own variables. ABI level 1 = what the built-in games use
 (195 functions); the layout fingerprint pins the shapes of the shared types; a native game gets the same Solo
-boot as a built-in one. First apps: Constellations (`stelle`, 104 KB module, run on both boards) and Poker (37 KB). Next: the release that
-ships the loader, then the one that drops them from the image.
+boot as a built-in one. Store games: Constellations, Tanks, Poker (all run from the SD card on both boards; 139 KB out of the image
+once the release after the loader drops them). Next: the release that ships the loader.
 
 ## Testing — **next**
 

@@ -140,6 +140,22 @@ and every step is checked:
 - the ABI is the whole interface: no symbol lookup beyond the table, no way to reach unlisted functions by
   name, and the dangerous families are not listed.
 
+## Games that ship from the store
+
+| Game (id) | Module | In the firmware | Kconfig |
+|---|---|---|---|
+| Constellations (`stelle`) | 104 KB (82 KB code + constants, 2.9 KB RAM) | ~68 KB | `CONFIG_NUCLEO_STORE_CONSTELLATIONS` |
+| Tanks (`tanks`) | 96 KB (75 KB, 2.1 KB RAM) | ~70 KB | `CONFIG_NUCLEO_STORE_TANKS` |
+| Poker (`poker`) | 37 KB (29 KB, 0.7 KB RAM) | ~20 KB | `CONFIG_NUCLEO_STORE_POKER` |
+
+With all three from the store the image is **3,461,008 B instead of 3,603,792 B: 142,784 B (139 KB) recovered**
+(208 KB free in the OTA slot instead of 66 KB). Every game except the Game Boy emulator already fits ABI v1
+(measured: all their imports are in `abi/v1.txt`); the emulator needs 77 more functions, a v2 candidate.
+
+Moving one more: add `CONFIG_NUCLEO_STORE_<GAME>` to the menu in `nucleo_app/Kconfig`, the same three-line guard
+at the top of its source and around its registration in `nucleo_app.cpp`, then in the store a manifest with its
+recipe and a launcher icon, `tools/native_build.py`, `store.py publish`.
+
 ## Migration of a built-in app (two releases)
 
 `docs/app-store.md` "Upgrade guarantees" applies; for Constellations (`stelle`) it reads:
@@ -166,7 +182,12 @@ and every step is checked:
 - An independent review of the loader against the ESP-IDF 5.4 sources (MMU, cache, flash driver) found 13
   issues before the first hardware run; all fixed (RAM base in the cache key, data-cache invalidation, full
   read-back hash, offset overflow, hooks on app switch, re-hash of the file, call targets, watchdog).
-- **Verified on hardware (2026-10-27)**, on both boards (original Cardputer and ADV), with a test firmware built
+- **All three games verified on hardware (2026-10-27)**, on both boards, with a test firmware that has none of
+  them built in: Tanks, Poker and Constellations opened one after another from the launcher, each replacing
+  the previous module in the scratch region (`tanks loaded ... 75648 B`, `poker loaded ... 29116 B`,
+  `stelle loaded ... 82644 B`), no panic on either board. Not exercised: playing them with keys (the Solo boot
+  has no web server to inject keys; a person at the device), Tanks' two-player LAN mode.
+- **First verified on hardware (2026-10-27)**, on both boards (original Cardputer and ADV), with a test firmware built
   with `CONFIG_NUCLEO_STORE_CONSTELLATIONS=y` (Constellations only from the store; image 67 KB smaller):
   `stelle` installed on the SD with its signed package, opened from the launcher search into its Solo boot,
   verified, mapped, written and executed (`stelle loaded: abi 1, 82644 B code+const, 2888 B RAM`, ~0.8 s),
