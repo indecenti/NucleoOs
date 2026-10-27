@@ -193,7 +193,7 @@ static void unload(void)
     s_id[0] = 0;
     memset(&s_img, 0, sizeof s_img);
     memset(&s_bases, 0, sizeof s_bases);
-    if (was[0]) ESP_LOGI(TAG, "unloaded %s", was);
+    if (was[0]) ESP_LOGW(TAG, "unloaded %s", was);
 }
 
 extern "C" void nucleo_native_forget(const char *id)
@@ -206,9 +206,14 @@ extern "C" void nucleo_native_forget(const char *id)
 }
 
 // ── flash image ───────────────────────────────────────────────────────────────
-// Relocates the whole image in `buf`-sized pieces. With write, also erases + writes it to the region.
-static bool image_pass(const nap_src_t *src, uint8_t *buf, bool write, uint8_t sha[32])
+// Relocates the whole image in `buf`-sized pieces. With `old` (a second sector buffer), also writes it to the
+// region - only the sectors whose content changed: a relaunch with the data block elsewhere changes just the
+// sectors whose literal pools point into .data.
+static uint32_t s_written;                           // sectors the last write pass erased + wrote
+static bool image_pass(const nap_src_t *src, uint8_t *buf, uint8_t *old, uint8_t sha[32])
 {
+    bool write = old != nullptr;
+    s_written = 0;
     char detail[64];
     mbedtls_sha256_context h;
     mbedtls_sha256_init(&h);
@@ -219,8 +224,12 @@ static bool image_pass(const nap_src_t *src, uint8_t *buf, bool write, uint8_t s
         nap_rc_t rc = nap_relocate_flash(src, &s_img, &s_bases, off, buf, n, detail, sizeof detail);
         if (rc != NAP_OK) { set_err(nap_rc_name(rc), detail); ok = false; break; }
         mbedtls_sha256_update(&h, buf, n);
-        if (write && (esp_partition_erase_range(s_part, off, SECTOR) != ESP_OK ||
-                      esp_partition_write(s_part, off, buf, n) != ESP_OK)) { set_err("flash write", nullptr); ok = false; }
+        if (write) {
+            if (esp_partition_read(s_part, off, old, n) == ESP_OK && !memcmp(old, buf, n)) { feed(nullptr); continue; }
+            if (esp_partition_erase_range(s_part, off, SECTOR) != ESP_OK || esp_partition_write(s_part, off, buf, n) != ESP_OK)
+                { set_err("flash write", nullptr); ok = false; }
+            s_written++;
+        }
         feed(nullptr);
     }
     mbedtls_sha256_finish(&h, sha);
@@ -232,7 +241,13 @@ static bool header_matches(const CacheHdr &want)
 {
     CacheHdr h;
     if (esp_partition_read(s_part, s_part->size - SECTOR, &h, sizeof h) != ESP_OK) return false;
-    return h.check == fnv(&h, offsetof(CacheHdr, check)) && !memcmp(&h, &want, offsetof(CacheHdr, check));
+    bool ok = h.check == fnv(&h, offsetof(CacheHdr, check)) && !memcmp(&h, &want, offsetof(CacheHdr, check));
+    if (!ok && h.magic == CACHE_MAGIC)                 // why the region is rewritten: tuning and diagnostics
+        ESP_LOGW(TAG, "rewrite: module %s fw %s image %s ibus %08lx/%08lx ram %08lx/%08lx",
+                 memcmp(h.nap_sha, want.nap_sha, 32) ? "new" : "same", memcmp(h.fw_sha, want.fw_sha, 32) ? "new" : "same",
+                 memcmp(h.img_sha, want.img_sha, 32) ? "new" : "same", (unsigned long)h.ibus, (unsigned long)want.ibus,
+                 (unsigned long)h.ram, (unsigned long)want.ram);
+    return ok;
 }
 
 // ── load ──────────────────────────────────────────────────────────────────────
@@ -273,7 +288,7 @@ extern "C" const nucleo_app_def_t *nucleo_native_load(const char *id)
     if (s_img.info.ram > EXTRA_RAM_MAX) { set_err("RAM", "asks for too much"); goto fail; }
     if (nap_relocs_bytes(&s_img) > RELOCS_MAX) { set_err("too many relocations", nullptr); goto fail; }
     if (heap_caps_get_largest_free_block(MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL) <
-        (size_t)s_img.data_memsz + DATA_ALIGN + s_img.info.ram + nap_relocs_bytes(&s_img) + SECTOR + 4096) { set_err("RAM", nullptr); goto fail; }
+        (size_t)s_img.data_memsz + DATA_ALIGN + s_img.info.ram + nap_relocs_bytes(&s_img) + 2 * SECTOR + 4096) { set_err("RAM", nullptr); goto fail; }
     buf = (uint8_t *)malloc(SECTOR);
     relocs = (uint8_t *)malloc(nap_relocs_bytes(&s_img) ? nap_relocs_bytes(&s_img) : 4);
     s_ram_raw = (uint8_t *)heap_caps_calloc(1, s_img.data_memsz + DATA_ALIGN, MALLOC_CAP_8BIT | MALLOC_CAP_INTERNAL);
@@ -296,7 +311,7 @@ extern "C" const nucleo_app_def_t *nucleo_native_load(const char *id)
     snprintf(s_id, sizeof s_id, "%s", id);           // from here on unload() cleans up everything
 
     // 4. Dry pass: every relocation target checked, the image hashed - nothing written yet.
-    if (!image_pass(&src, buf, false, sha)) goto fail;
+    if (!image_pass(&src, buf, nullptr, sha)) goto fail;
 
     // 5. Write it, unless the region already holds exactly this image for these addresses.
     hdr.magic = CACHE_MAGIC; hdr.ver = CACHE_VER;
@@ -305,13 +320,19 @@ extern "C" const nucleo_app_def_t *nucleo_native_load(const char *id)
     memcpy(hdr.img_sha, sha, 32);
     hdr.ibus = s_bases.ibus; hdr.dbus = s_bases.dbus; hdr.ram = s_bases.ram; hdr.size = s_img.image_size;
     hdr.check = fnv(&hdr, offsetof(CacheHdr, check));
-    if (!header_matches(hdr)) {
-        ESP_LOGI(TAG, "%s: writing %u B to the scratch region", id, (unsigned)s_img.image_size);
+    if (header_matches(hdr)) ESP_LOGW(TAG, "%s: scratch region already holds this image (no flash write)", id);
+    else {
+        ESP_LOGW(TAG, "%s: updating the scratch region (%u B image)", id, (unsigned)s_img.image_size);
         // The header goes first and comes back last: an interrupted write never vouches for a half image.
         if (esp_partition_erase_range(s_part, s_part->size - SECTOR, SECTOR) != ESP_OK) { set_err("flash erase", nullptr); goto fail; }
         uint8_t again[32];
-        if (!image_pass(&src, buf, true, again)) goto fail;
+        uint8_t *old = (uint8_t *)malloc(SECTOR);
+        if (!old) { set_err("RAM", nullptr); goto fail; }
+        bool wrote = image_pass(&src, buf, old, again);
+        free(old);
+        if (!wrote) goto fail;
         if (memcmp(again, sha, 32)) { set_err("image changed while writing", nullptr); goto fail; }
+        ESP_LOGW(TAG, "%s: %u of %u sectors rewritten", id, (unsigned)s_written, (unsigned)((s_img.image_size + SECTOR - 1) / SECTOR));
         if (esp_partition_write(s_part, s_part->size - SECTOR, &hdr, sizeof hdr) != ESP_OK) { set_err("flash write", "header"); goto fail; }
     }
 
@@ -358,7 +379,7 @@ extern "C" const nucleo_app_def_t *nucleo_native_load(const char *id)
     s_capturing = false;
     if (!s_def || !s_def->on_draw) { set_err("no app registered", id); goto fail; }
     def = s_def;
-    ESP_LOGI(TAG, "%s loaded: abi %u, %u B code+const, %u B RAM", id, s_img.info.abi, (unsigned)s_img.image_size,
+    ESP_LOGW(TAG, "%s loaded: abi %u, %u B code+const, %u B RAM", id, s_img.info.abi, (unsigned)s_img.image_size,
              (unsigned)s_img.data_memsz);
     return def;
 

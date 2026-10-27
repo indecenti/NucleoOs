@@ -38,13 +38,14 @@ Store improvements (**next**): a small RGB565 icon per app in the catalog folder
 real icons; screenshots for the web page; an optional "featured" list; an update badge on the launcher at
 boot; opt-in automatic updates; a beta channel (a second signed catalog).
 
-## Native apps from the SD card — **written, host-tested; hardware next**
+## Native apps from the SD card — **working on both boards; not yet released**
 
 Spec: [native-apps.md](native-apps.md). Installed on the SD card only; at launch the signed `.nap` module is
 re-verified, relocated into the 256 KB `coredump` partition (core dumps are off) and executed from flash
 through the MMU, so an app costs RAM only for its own variables. ABI level 1 = what the built-in games use
 (195 functions); the layout fingerprint pins the shapes of the shared types; a native game gets the same Solo
-boot as a built-in one. First app: Constellations (`stelle`, 104 KB module). Next: run it on both boards.
+boot as a built-in one. First apps: Constellations (`stelle`, 104 KB module, run on both boards) and Poker (37 KB). Next: the release that
+ships the loader, then the one that drops them from the image.
 
 ## Testing — **next**
 

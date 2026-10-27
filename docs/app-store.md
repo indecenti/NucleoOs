@@ -49,6 +49,6 @@ every file against the signed `package.sig`, then swaps the folder in and keeps 
 `.package.sig` (a native app is re-verified against it before every load). RAM: a few KB of buffers, no
 JSON tree.
 
-**Status (2026-10-27):** client, two channels and native loader written and host-tested; not yet in a
-release, not yet run on hardware. Native apps need the `coredump` partition as their flash scratch region:
+**Status (2026-10-27):** client, two channels and native loader written and host-tested; the loader runs
+Constellations from the SD card on both boards (docs/native-apps.md, "Verification"). Not yet in a release. Native apps need the `coredump` partition as their flash scratch region:
 unavailable under M5Launcher, where the Store shows the native store as such.

@@ -95,11 +95,15 @@ One native app is resident at a time.
    data bus at a fixed offset, which serves the module's constants. `.data`/`.bss` get a heap block.
 4. **Dry pass.** The whole image is relocated in RAM sector by sector and hashed: every relocation target is
    checked here, before the flash is touched.
-5. **Write**, sector by sector — unless the last sector of the region already says it holds exactly this image:
-   same module, same firmware (its ELF SHA-256), same instruction-bus, data-bus **and RAM** addresses (Xtensa
-   literal pools in the code hold absolute `.data` addresses) and same image hash. Relaunching an app in the
-   same conditions costs no flash wear. The header is erased before and written after, so an interrupted
-   write can never vouch for a half-written image.
+5. **Write** — unless the last sector of the region already says it holds exactly this image: same module, same
+   firmware (its ELF SHA-256), same instruction-bus, data-bus **and RAM** addresses (Xtensa literal pools in the
+   code hold absolute `.data` addresses) and same image hash. Otherwise only the sectors whose content differs
+   are erased and written. On the device the `.data` block lands elsewhere at almost every launch (Wi-Fi
+   allocates concurrently in the Solo boot), and that changes just the sectors whose literal pools point into
+   `.data`: measured on Constellations, **2 of 21 sectors** per launch, ~0.6 s. At 100k erase cycles per
+   sector that is tens of years of daily use. The header is erased before and written after, so an
+   interrupted write can never vouch for a half-written image; a log line says what changed and how many
+   sectors were rewritten.
 6. **Check what the CPU will see.** Flash writes flush only the instruction-bus side of the cache, so the data
    cache is invalidated over the data-bus alias (and on unload, for the next module at the same address);
    then the whole image is hashed through the data bus and must equal the dry pass.
@@ -162,5 +166,11 @@ and every step is checked:
 - An independent review of the loader against the ESP-IDF 5.4 sources (MMU, cache, flash driver) found 13
   issues before the first hardware run; all fixed (RAM base in the cache key, data-cache invalidation, full
   read-back hash, offset overflow, hooks on app switch, re-hash of the file, call targets, watchdog).
-- **Not yet verified on hardware**: steps 3 to 6 (MMU mapping, flash write while mapped, the data-bus alias,
-  executing a module). That is the first thing to run on both boards; until it passes, no release ships it.
+- **Verified on hardware (2026-10-27)**, on both boards (original Cardputer and ADV), with a test firmware built
+  with `CONFIG_NUCLEO_STORE_CONSTELLATIONS=y` (Constellations only from the store; image 67 KB smaller):
+  `stelle` installed on the SD with its signed package, opened from the launcher search into its Solo boot,
+  verified, mapped, written and executed (`stelle loaded: abi 1, 82644 B code+const, 2888 B RAM`, ~0.8 s),
+  then relaunched after a reset: data block elsewhere, 2 sectors rewritten, loaded again; no panic in 30+ s
+  of play on either board. Not yet exercised there: the install path over HTTPS (the published store is not
+  pushed yet; the engine is host-tested), Poker (built in on this firmware), the store-side unload when
+  switching between two native apps.
