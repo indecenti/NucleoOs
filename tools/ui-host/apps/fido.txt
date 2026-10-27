@@ -1,0 +1,4 @@
+# FIDO Key in key mode: the live status screen on the panel + the on-device passkey manager.
+@host stubs/fido_stubs.cpp
+status
+manage  c:m

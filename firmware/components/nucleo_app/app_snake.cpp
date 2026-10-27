@@ -10,6 +10,8 @@
 #include "game_sfx.h"
 #include "game_text.h"
 #include "game_ui.h"
+#include "app_large.h"
+#include "nucleo_touch.h"
 #include "launcher_theme.h"
 #include "nucleo_app.h"
 #include "nucleo_kbd.h"
@@ -983,7 +985,7 @@ static void draw_scores(void) {
     gui::text(r,W/2,y+48,1,gui::F_SMALL,COL_GOLD,COL_BGK);
 }
 
-static void on_draw(void) {
+static void draw_game(void) {
     switch(s_st) {
         case ST_MENU:   draw_menu();   break;
         case ST_HOST:   draw_host();   break;
@@ -993,6 +995,125 @@ static void on_draw(void) {
         case ST_HELP:   draw_help();   break;
         case ST_SCORES: draw_scores(); break;
     }
+}
+
+// ===== two screens ===========================================================
+// The panel (on_draw_large): the game's own frame scaled to 320 px, with a native HUD band below holding
+// big scores + touch controls that map to the real keys (a D-pad + pause while playing, nav in menus). The
+// Cardputer (on_draw while two screens) is a companion: the live score, power-ups and the key map — never
+// the game frame. Keep the extra state to nothing: both read the globals the game already keeps.
+#define ACC COL_P1
+
+struct HudBtn { const char *label; int key; char ch; bool acc; };
+static void hud_row(int x, int y, int w, int h, const HudBtn *b, int n) {
+    if (n <= 0) return;
+    const int gap = 4, bw = (w - (n - 1) * gap) / n;
+    for (int i = 0; i < n; i++)
+        lg::button(x + i * (bw + gap), y, bw, h, b[i].label,
+                   b[i].acc ? ACC : lg::card(), b[i].acc ? COL_BGK : COL_TXT, b[i].key, b[i].ch);
+}
+static void hud_score(int x, int yc, uint16_t col, const char *name, int score) {
+    char nm[10]; snprintf(nm, sizeof nm, "%.8s", name && name[0] ? name : "?");
+    lg::font(0); d.setTextDatum(middle_left); d.setTextColor(col, BG); d.drawString(nm, x, yc);
+    char s[8]; snprintf(s, sizeof s, "%d", score);
+    lg::font(2); d.setTextDatum(middle_right); d.setTextColor(COL_TXT, BG); d.drawString(s, x + 120, yc);
+    d.setTextDatum(top_left);
+}
+static void large_hud(int y, int h) {
+    const int PW = d.width(), pad = 8;
+    d.fillRect(0, y, PW, h, BG);
+    d.drawFastHLine(0, y, PW, LINE);
+    int bh = h - 12; if (bh > 46) bh = 46;
+    const int by = y + (h - bh) / 2;
+    if (s_st == ST_PLAY && !s_paused) {
+        hud_score(pad, y + h / 4, COL_P1, s_s1.name, s_s1.score);
+        hud_score(pad, y + h * 3 / 4, COL_P2, s_s2.name, s_s2.score);
+        const HudBtn b[5] = { { "<", NK_LEFT, 0, false }, { "^", NK_UP, 0, false },
+                              { "v", NK_DOWN, 0, false }, { ">", NK_RIGHT, 0, false },
+                              { "II", NK_BACK, 0, true } };
+        hud_row(140, by, PW - 140 - pad, bh, b, 5);
+    } else if (s_st == ST_PLAY && s_paused) {
+        const HudBtn b[2] = { { GT("RIPRENDI", "RESUME"), NK_ENTER, 0, true },
+                              { GT("ESCI", "QUIT"), NK_BACK, 0, false } };
+        hud_row(pad, by, PW - 2 * pad, bh, b, 2);
+    } else if (s_st == ST_MENU) {
+        const HudBtn b[3] = { { GT("SU", "UP"), NK_UP, 0, false }, { GT("GIU", "DOWN"), NK_DOWN, 0, false },
+                              { GT("SCEGLI", "SELECT"), NK_ENTER, 0, true } };
+        hud_row(pad, by, PW - 2 * pad, bh, b, 3);
+    } else if (s_st == ST_BROWSE) {
+        const HudBtn b[4] = { { GT("SU", "UP"), NK_UP, 0, false }, { GT("GIU", "DOWN"), NK_DOWN, 0, false },
+                              { GT("ENTRA", "JOIN"), NK_ENTER, 0, true }, { GT("INDIETRO", "BACK"), NK_BACK, 0, false } };
+        hud_row(pad, by, PW - 2 * pad, bh, b, 4);
+    } else if (s_st == ST_OVER) {
+        const HudBtn b1[2] = { { GT("RIVINCITA", "REMATCH"), NK_ENTER, 0, true }, { "MENU", NK_BACK, 0, false } };
+        const HudBtn b2[1] = { { "MENU", NK_ENTER, 0, true } };
+        if (s_mode == MODE_AI) hud_row(pad, by, PW - 2 * pad, bh, b1, 2);
+        else                   hud_row(pad, by, PW - 2 * pad, bh, b2, 1);
+    } else if (s_st == ST_HELP) {
+        const HudBtn b[2] = { { GT("PAGINA", "PAGE"), NK_TAB, 0, true }, { GT("INDIETRO", "BACK"), NK_BACK, 0, false } };
+        hud_row(pad, by, PW - 2 * pad, bh, b, 2);
+    } else {   // ST_HOST / ST_SCORES
+        const HudBtn b[1] = { { GT("INDIETRO", "BACK"), NK_BACK, 0, true } };
+        hud_row(pad, by, PW - 2 * pad, bh, b, 1);
+    }
+}
+static void comp_pu(int x, int y, const Snake &s) {
+    if (!s.pu) return;
+    d.fillRoundRect(x, y, 10, 10, 2, PU_COL[s.pu]);
+    char sy[2] = { PU_SYM[s.pu], 0 };
+    lg::font(4); d.setTextDatum(middle_center); d.setTextColor(COL_BGK, PU_COL[s.pu]); d.drawString(sy, x + 5, y + 5);
+    d.setTextDatum(top_left);
+}
+static void draw_companion(void) {
+    int y = lg::comp_head("Snake", ACC);
+    if (s_st == ST_PLAY || s_st == ST_OVER) {
+        char nm1[10], nm2[10];
+        snprintf(nm1, sizeof nm1, "%.8s", s_s1.name[0] ? s_s1.name : "P1");
+        snprintf(nm2, sizeof nm2, "%.8s", s_s2.name[0] ? s_s2.name : "P2");
+        lg::font(0); d.setTextDatum(top_left);
+        d.setTextColor(COL_P1, BG); d.drawString(nm1, 8, y + 2);
+        d.setTextDatum(top_right); d.setTextColor(COL_P2, BG); d.drawString(nm2, 232, y + 2);
+        lg::font(3); d.setTextColor(COL_TXT, BG);
+        char s1[6], s2[6]; snprintf(s1, sizeof s1, "%d", s_s1.score); snprintf(s2, sizeof s2, "%d", s_s2.score);
+        d.setTextDatum(top_left);  d.drawString(s1, 8, y + 20);
+        d.setTextDatum(top_right); d.drawString(s2, 232, y + 20);
+        lg::font(1); d.setTextDatum(top_center); d.setTextColor(COL_MUTE, BG); d.drawString("-", 120, y + 28);
+        comp_pu(8, y + 56, s_s1); comp_pu(222, y + 56, s_s2);
+        if (s_st == ST_OVER) {
+            bool won = i_won();
+            lg::font(1); d.setTextDatum(top_center); d.setTextColor(won ? COL_GOLD : COL_MUTE, BG);
+            d.drawString(won ? GT("Hai vinto!", "You win!") : s_mode == MODE_AI ? GT("Vince la CPU", "CPU wins") : GT("Hai perso", "You lose"), 120, y + 56);
+        }
+        d.setTextDatum(top_left);
+        lg::comp_keys(s_st == ST_OVER ? GT("INVIO / Esc: menu", "ENTER / Esc: menu")
+                                      : GT("frecce o WASD: gira   Esc: pausa", "arrows or WASD: turn   Esc: pause"));
+        return;
+    }
+    const char *title = GT("Menu", "Menu"), *line = nullptr;
+    if (s_st == ST_MENU)        { line = menu_label(s_menu.sel); }
+    else if (s_st == ST_HOST)   { title = GT("In attesa", "Hosting"); line = GT("sfidante...", "waiting..."); }
+    else if (s_st == ST_BROWSE) { title = GT("Entra", "Join"); line = s_n_hosts > 0 ? s_hosts[s_browse_sel < s_n_hosts ? s_browse_sel : 0].name : GT("cerco...", "searching..."); }
+    else if (s_st == ST_HELP)   { title = GT("Guida", "Help"); line = s_help_pg == 0 ? GT("regole", "rules") : GT("power-up", "power-ups"); }
+    else if (s_st == ST_SCORES) { title = GT("Record", "Scores"); }
+    lg::font(1); d.setTextDatum(top_left); d.setTextColor(ACC, BG); d.drawString(title, 8, y + 6);
+    if (s_st == ST_SCORES) {
+        char l[40]; snprintf(l, sizeof l, GT("Vinte %d - %d", "Wins %d - %d"), s_wins1, s_wins2);
+        lg::font(0); d.setTextColor(COL_TXT, BG); d.drawString(l, 8, y + 28);
+        snprintf(l, sizeof l, GT("Record cibo: %d", "Food best: %d"), s_hisc);
+        d.setTextColor(COL_GOLD, BG); d.drawString(l, 8, y + 48);
+    } else if (line) {
+        lg::font(2); d.setTextColor(COL_TXT, BG); d.drawString(line, 8, y + 26);
+    }
+    lg::comp_keys(GT("INVIO scegli   Esc indietro", "ENTER select   Esc back"));
+}
+static void on_draw(void) {
+    if (nucleo_app_two_screens()) { draw_companion(); return; }
+    draw_game();
+}
+static void draw_large(void) {
+    nucleo_touch_clear();
+    lg::game(draw_game, large_hud, "Snake", ACC);
+    nucleo_touch_commit();
 }
 
 // ─── state / hint ────────────────────────────────────────────────────────────
@@ -1127,7 +1248,7 @@ extern "C" void nucleo_register_snake(void) {
     static const nucleo_app_def_t app = {
         "snake", "Snake", "Games", "Serpente 1v1 in rete (ESP-NOW) o vs AI",
         'S', C_GREEN, on_enter, on_key, nullptr, on_draw, on_exit,
-        NX_SOLO, APP_RAM
+        NX_SOLO, APP_RAM, draw_large
     };
     nucleo_app_register(&app);
 }

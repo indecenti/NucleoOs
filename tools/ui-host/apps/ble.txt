@@ -1,0 +1,7 @@
+# BLE suite — menu / scan / spam / iBeacon / HID. Fictional devices from the stub.
+@host stubs/ble_stubs.cpp
+menu     tick:2
+scan     c:1 tick:2
+spamios  c:2 tick:2
+ibeacon  c:7 tick:2
+hid      c:8 tick:2

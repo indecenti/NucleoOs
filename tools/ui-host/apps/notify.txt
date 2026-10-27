@@ -1,0 +1,11 @@
+# Notifications: tabs + list on the panel, the selected notification's detail card, the Cardputer as companion.
+# Fictional history seeded on the card so every tab and the detail card are exercised.
+# TAB cycles the filter (All -> Cal -> Sys -> AI); row:n taps a panel list row; c:c opens the clear-all card.
+@sd system/notify.jsonl {"src":"calendar","lvl":"info","ttl":"Riunione team alle 15:00","act":"app:calendar","ts":1730210400}\n{"src":"anima","lvl":"success","ttl":"Ho finito il riassunto delle news","act":"anima:riassumi le news di oggi","ts":1730212000}\n{"src":"system","lvl":"warn","ttl":"Batteria al 18 per cento","act":"","ts":1730213000}\n{"src":"ota","lvl":"info","ttl":"Aggiornamento 2.4.1 disponibile","act":"app:updates","ts":1730214000}\n{"src":"recorder","lvl":"critical","ttl":"Registrazione interrotta: scheda SD piena","act":"app:files","ts":1730215000}\n{"src":"calendar","lvl":"info","ttl":"Compleanno di Marco domani","act":"app:calendar","ts":1730216000}\n{"src":"anima","lvl":"info","ttl":"Promemoria: ricordati di bere acqua","act":"","ts":1730217000}
+all
+pick      D D
+taprow    row:1
+cal       TAB
+sys       TAB TAB
+ai        TAB TAB TAB
+clear     c:c

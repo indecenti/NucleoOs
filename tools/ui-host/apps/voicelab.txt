@@ -1,0 +1,11 @@
+# Voice Lab: the big test bench (PROVA) and the per-command reliability list + card (DIAGNOSI).
+# Fictional trained commands on the card feed the diagnosis list. TAB switches tabs.
+# A live match needs the real recognizer + GO, so the host shows the idle bench and the untested tiers.
+@sd system/voice/registratore.tpl offline-template
+@sd system/voice/musica.tpl offline-template
+@sd system/voice/orologio.tpl offline-template
+@sd system/voice/torcia.tpl offline-template
+@sd system/voice/meteo.tpl offline-template
+prova
+diagnosi   TAB
+pick       TAB D D

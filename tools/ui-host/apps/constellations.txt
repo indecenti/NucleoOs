@@ -1,0 +1,10 @@
+@app stelle
+title
+settings D D ENTER
+cine D ENTER
+system D ENTER ENTER
+market D ENTER ENTER ENTER
+shipyard D ENTER ENTER D ENTER
+map D ENTER ENTER D D D D ENTER
+missions D ENTER ENTER D D ENTER
+combat D ENTER ENTER D D ENTER ENTER ENTER tick:4

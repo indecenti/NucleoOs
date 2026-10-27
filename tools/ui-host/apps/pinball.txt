@@ -1,0 +1,8 @@
+menu
+ready ENTER tick:5
+play ENTER SPACE tick:15
+pause ENTER SPACE tick:10 TAB
+over ENTER SPACE tick:350 SPACE tick:350 SPACE tick:350 SPACE tick:700
+scores D ENTER
+settings D D ENTER
+help D D ENTER D D ENTER

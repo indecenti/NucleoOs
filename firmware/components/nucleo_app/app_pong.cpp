@@ -32,6 +32,8 @@
 #include "app_gfx.h"
 #include "game_text.h"
 #include "game_ui.h"
+#include "app_large.h"
+#include "nucleo_touch.h"
 #include <M5GFX.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -998,7 +1000,7 @@ static bool on_back(int key) {
 }
 
 // ============================ poll / draw / lifecycle ========================
-static void on_draw(void) {
+static void draw_game(void) {
     int ch = nucleo_app_content_height();
     switch (s_screen) {
         case ST_MENU:   draw_menu(ch); break;
@@ -1012,6 +1014,12 @@ static void on_draw(void) {
         default: break;
     }
 }
+// Two screens (pilot): the game's frame on the panel, a plain companion on the Cardputer.
+static void on_draw(void) {
+    if (nucleo_app_two_screens()) { lg::comp_head("PONG", C_BLUE); lg::comp_keys(";/. muovi  ESC pausa"); return; }
+    draw_game();
+}
+static void draw_large(void) { nucleo_touch_clear(); lg::game(draw_game, nullptr, "Pong", C_BLUE); nucleo_touch_commit(); }
 static bool poll(void) {
     s_now = now_ms();
     int dt = (int)(s_now - s_last); if (dt < 0) dt = 0; if (dt > 60) dt = 60;
@@ -1099,7 +1107,7 @@ extern "C" void nucleo_register_pong(void) {
         "pong", "Pong", "Games", "Pong arcade: 1v1 in rete tra due Cardputer, o vs CPU",
         'P', C_BLUE, on_enter, on_key, nullptr, on_draw, on_exit,
         NX_NET_APP,                                // ~70KB freed, Wi-Fi STA (ESP-NOW) stays up
-        APP_RAM
+        APP_RAM, draw_large
     };
     nucleo_app_register(&app);
 }

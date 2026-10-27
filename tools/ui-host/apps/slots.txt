@@ -1,0 +1,5 @@
+menu
+help D ENTER
+settings D D ENTER
+play ENTER
+spin ENTER SPACE

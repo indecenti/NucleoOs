@@ -1,0 +1,9 @@
+# Screensaver: effect list + preview + timer on the panel; the running effect fills the panel (game-style).
+# Starts on the Clock effect (the default). Each scene shows a different effect preview / tab / the running saver.
+effetto
+off       U
+stars     D
+fire      D D
+prova     D D D
+timer     TAB
+running   D D D ENTER

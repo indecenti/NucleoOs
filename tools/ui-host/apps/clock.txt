@@ -1,0 +1,4 @@
+digital
+analog TAB
+options ENTER
+options_format ENTER D

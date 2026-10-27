@@ -22,6 +22,8 @@
 #include "app_gfx.h"
 #include "game_text.h"
 #include "game_ui.h"
+#include "app_large.h"
+#include "nucleo_touch.h"
 #include "nucleo_exclusive.h"
 #include "pinball_levels.h"
 #include <M5GFX.h>
@@ -1038,6 +1040,7 @@ static void draw_play(void)
 #define ACC   gui::rgb(80, 220, 255)            // the table's neon cyan, RGB332-exact
 #define WHITE gui::rgb(255, 255, 255)
 #define BLACK gui::rgb(0, 0, 0)
+#undef  MUTED                                   // launcher_theme.h maps MUTED to the active theme; this screen wants a fixed muted blue
 #define MUTED gui::rgb(150, 160, 190)
 #define NMENU 3
 #define NSET  3
@@ -1221,7 +1224,7 @@ static bool on_back(int key)
 }
 
 // ============================ poll / draw / lifecycle ========================
-static void on_draw(void)
+static void draw_game(void)
 {
     switch (s_screen) {
         case ST_MENU: draw_menu(); break;
@@ -1233,6 +1236,116 @@ static void on_draw(void)
         case ST_OVER: draw_over(); break;
         default: break;
     }
+}
+
+// ===== two screens ===========================================================
+// Panel (on_draw_large): the portrait table scaled to 320 px with a native landscape HUD band below it —
+// big score + level/balls/multiplier, and touch controls for the real actions (flippers, launch, nudge,
+// pause). Cardputer (on_draw while two screens) is a companion: the live score/ball/level and the key map,
+// never the table. Extra state: none (both read the globals the game keeps).
+struct HudBtn { const char *label; int key; char ch; bool acc; };
+static void hud_row(int x, int y, int w, int h, const HudBtn *b, int n)
+{
+    if (n <= 0) return;
+    const int gap = 4, bw = (w - (n - 1) * gap) / n;
+    for (int i = 0; i < n; i++)
+        lg::button(x + i * (bw + gap), y, bw, h, b[i].label, b[i].acc ? ACC : lg::card(),
+                   b[i].acc ? BLACK : WHITE, b[i].key, b[i].ch);
+}
+static void large_hud(int y, int h)
+{
+    const int panw = d.width(), pad = 8;
+    d.fillRect(0, y, panw, h, BG);
+    d.drawFastHLine(0, y, panw, LINE);
+    int bh = h - 12; if (bh > 46) bh = 46;
+    const int by = y + (h - bh) / 2;
+    if (s_screen == ST_PLAY) {
+        char sc[16]; snprintf(sc, sizeof sc, "%lu", (unsigned long)s_disp_score);
+        lg::font(2); d.setTextDatum(middle_left); d.setTextColor(COL_AMBER, BG); d.drawString(sc, pad, y + h / 3);
+        char st[28]; snprintf(st, sizeof st, GT("Liv %d  Palle %d  x%d", "Lvl %d  Balls %d  x%d"), s_level, s_balls, s_mult);
+        lg::font(4); d.setTextDatum(middle_left); d.setTextColor(MUTED, BG); d.drawString(st, pad, y + h * 3 / 4);
+        d.setTextDatum(top_left);
+        const int bx0 = 104;
+        if (s_bp == BP_READY) {
+            const HudBtn b[2] = { { GT("LANCIA", "LAUNCH"), NK_CHAR, ' ', true }, { "II", NK_TAB, 0, false } };
+            hud_row(bx0, by, panw - bx0 - pad, bh, b, 2);
+        } else {
+            const HudBtn b[4] = { { "SX", NK_CHAR, '1', true }, { "N", NK_CHAR, 'n', false },
+                                  { "DX", NK_CHAR, '0', true }, { "II", NK_TAB, 0, false } };
+            hud_row(bx0, by, panw - bx0 - pad, bh, b, 4);
+        }
+    } else if (s_screen == ST_OPT) {
+        const HudBtn b[2] = { { GT("RIPRENDI", "RESUME"), NK_ENTER, 0, true }, { GT("ESCI", "QUIT"), NK_BACK, 0, false } };
+        hud_row(pad, by, panw - 2 * pad, bh, b, 2);
+    } else if (s_screen == ST_OVER) {
+        const HudBtn b[2] = { { GT("RIGIOCA", "REPLAY"), NK_ENTER, 0, true }, { "MENU", NK_BACK, 0, false } };
+        hud_row(pad, by, panw - 2 * pad, bh, b, 2);
+    } else if (s_screen == ST_MENU) {
+        const HudBtn b[3] = { { GT("SU", "UP"), NK_UP, 0, false }, { GT("GIU", "DOWN"), NK_DOWN, 0, false },
+                              { GT("SCEGLI", "SELECT"), NK_ENTER, 0, true } };
+        hud_row(pad, by, panw - 2 * pad, bh, b, 3);
+    } else if (s_screen == ST_SET) {
+        const HudBtn b[3] = { { GT("SU", "UP"), NK_UP, 0, false }, { GT("GIU", "DOWN"), NK_DOWN, 0, false },
+                              { GT("CAMBIA", "CHANGE"), NK_ENTER, 0, true } };
+        hud_row(pad, by, panw - 2 * pad, bh, b, 3);
+    } else if (s_screen == ST_HELP) {
+        const HudBtn b[2] = { { GT("PAGINA", "PAGE"), NK_RIGHT, 0, true }, { GT("INDIETRO", "BACK"), NK_BACK, 0, false } };
+        hud_row(pad, by, panw - 2 * pad, bh, b, 2);
+    } else {   // ST_SCORES
+        const HudBtn b[1] = { { GT("INDIETRO", "BACK"), NK_BACK, 0, true } };
+        hud_row(pad, by, panw - 2 * pad, bh, b, 1);
+    }
+}
+static void draw_companion(void)
+{
+    int y = lg::comp_head(GT("Flipper", "Pinball"), ACC);
+    if (s_screen == ST_PLAY || s_screen == ST_OPT || s_screen == ST_OVER) {
+        char sc[16]; snprintf(sc, sizeof sc, "%lu", (unsigned long)s_disp_score);
+        lg::font(1); d.setTextDatum(top_left); d.setTextColor(ACC, BG); d.drawString(GT("Punti", "Score"), 8, y + 2);
+        lg::font(3); d.setTextColor(COL_AMBER, BG); d.drawString(sc, 8, y + 16);
+        char st[44]; snprintf(st, sizeof st, GT("Liv %d   Palle %d   Molt x%d", "Lvl %d   Balls %d   Mult x%d"), s_level, s_balls, s_mult);
+        lg::font(0); d.setTextColor(WHITE, BG); d.drawString(st, 8, y + 52);
+        if (s_2x_ms > 0 || s_slow_ms > 0) {
+            d.setTextDatum(top_right); d.setTextColor(s_2x_ms > 0 ? COL_GOLD : COL_CYAN, BG);
+            d.drawString(s_2x_ms > 0 ? "X2" : "SLOW", 232, y + 2); d.setTextDatum(top_left);
+        }
+        if (s_screen == ST_OVER) { lg::font(1); d.setTextColor(COL_RED, BG); d.drawString(GT("FINE PARTITA", "GAME OVER"), 8, y + 70); }
+        else if (s_screen == ST_OPT) { lg::font(1); d.setTextColor(COL_GOLD, BG); d.drawString(GT("PAUSA", "PAUSED"), 8, y + 70); }
+        lg::comp_keys(s_screen != ST_PLAY ? GT("INVIO / Esc", "ENTER / Esc")
+                      : s_bp == BP_READY ? GT("SPAZIO lancia   TAB pausa", "SPACE launch   TAB pause")
+                                         : GT("1/0 flipper   N colpo   TAB pausa", "1/0 flippers   N nudge   TAB pause"));
+        return;
+    }
+    lg::font(1); d.setTextDatum(top_left); d.setTextColor(ACC, BG);
+    const char *t = s_screen == ST_MENU ? GT("Flipper", "Pinball") : s_screen == ST_SET ? GT("Impostazioni", "Settings")
+                   : s_screen == ST_SCORES ? GT("Classifica", "Scores") : GT("Guida", "Help");
+    d.drawString(t, 8, y + 6);
+    lg::font(0); d.setTextColor(WHITE, BG);
+    char l[44];
+    if (s_screen == ST_MENU) {
+        snprintf(l, sizeof l, GT("Record: %lu", "Best: %lu"), (unsigned long)g_hi); d.drawString(l, 8, y + 30);
+        const char *sel[3] = { GT("Gioca", "Play"), GT("Classifica", "Scores"), GT("Impostazioni", "Settings") };
+        d.setTextColor(ACC, BG); d.drawString(sel[s_menu.sel % 3], 8, y + 50);
+    } else if (s_screen == ST_SET) {
+        snprintf(l, sizeof l, "Audio %s   %s %s", g_audio ? "ON" : "OFF", GT("Colpo", "Nudge"), g_nudge ? "ON" : "OFF");
+        d.drawString(l, 8, y + 30);
+    } else if (s_screen == ST_SCORES) {
+        snprintf(l, sizeof l, "1.  %lu", (unsigned long)g_top[0]); d.drawString(l, 8, y + 30);
+    } else {
+        snprintf(l, sizeof l, GT("pagina %d / 3", "page %d / 3"), s_help + 1); d.drawString(l, 8, y + 30);
+    }
+    lg::comp_keys(GT("INVIO scegli   Esc indietro", "ENTER select   Esc back"));
+}
+static void on_draw(void)
+{
+    if (nucleo_app_two_screens()) { draw_companion(); return; }
+    draw_game();
+}
+static void draw_large(void)
+{
+    nucleo_touch_clear();
+    lg::game(draw_game, large_hud, GT("Flipper", "Pinball"), ACC);
+    nucleo_touch_commit();
 }
 static bool poll(void)
 {
@@ -1342,7 +1455,7 @@ extern "C" void nucleo_register_pinball(void)
     static const nucleo_app_def_t app = {
         "pinball", "Flipper", "Games", "Flipper verticale: tieni il device in verticale",
         'F', C_BLUE, on_enter, on_key, nullptr, on_draw, on_exit,
-        NX_NET_APP
+        NX_NET_APP, nullptr, draw_large
     };
     nucleo_app_register(&app);
 }

@@ -14,6 +14,8 @@
 #include "nucleo_app.h"
 #include "launcher_theme.h"
 #include "nucleo_i18n.h"                        // TR(it,en): hint follows the system language
+#include "app_large.h"                          // two screens: status cards + handoff toggle on the panel
+#include "nucleo_touch.h"
 #include <M5GFX.h>
 #include <stdio.h>
 #include "nvs.h"                                // persist the auto-handoff toggle across reboots
@@ -120,8 +122,10 @@ static void remote_tick(void)   // redraw only when the live state actually chan
     if (sig != s_sig) { s_sig = sig; nucleo_app_request_draw(); }
 }
 
+static void remote_companion(void);
 static void remote_draw(void)
 {
+    if (nucleo_app_two_screens()) { remote_companion(); return; }
     int top_y = nucleo_app_content_top();
     d.fillRect(0, top_y, W, nucleo_app_content_height(), BG);
     const int sh = nucleo_ws_shell_count();
@@ -166,11 +170,91 @@ static void remote_draw(void)
     }
 }
 
+// ===== two screens =============================================================================================
+// The panel carries the "how to connect" card, large: the live link state, the address to open and the pairing
+// PIN each in their own box, with the auto-handoff as a big toggle button (tap = Enter, the same key that flips it
+// on the Cardputer). The Cardputer becomes a glance companion: the same facts in one column. There is no mirror.
+static void remote_draw_large(void)
+{
+    const int W_ = d.width(), H_ = d.height();
+    const int sh  = nucleo_ws_shell_count();
+    const bool usb = nucleo_usbnet_is_active();
+    const char *ip  = nucleo_setup_ip();
+    const char *pin = nucleo_auth_pin();
+    nucleo_touch_clear();
+    char rc[12]; rc[0] = 0; if (sh > 0) snprintf(rc, sizeof rc, "%d", sh);
+    int y = lg::header("Remote Control", sh > 0 ? rc : nullptr, C_BLUE);
+    d.fillRect(0, y, W_, H_ - y, BG);
+    const int cx = 16, cw = W_ - 32;
+    unsigned short cb;
+
+    // link state
+    int cy = y + 6;
+    lg::panel(cx, cy, cw, 34); cb = lg::card();
+    lg::font(1); d.setTextColor(sh > 0 ? C_GREEN : C_GREEN, cb);
+    d.drawString(sh > 0 ? L5("CONNESSO", "CONNECTED", "CONECTADO", "CONNECTE", "VERBUNDEN")
+                        : L5("IN ASCOLTO - PRONTO", "LISTENING - READY", "A LA ESCUCHA", "EN ECOUTE - PRET", "BEREIT - WARTET"),
+                 cx + 14, cy + 9);
+
+    // address to open
+    cy += 42;
+    lg::panel(cx, cy, cw, 50); cb = lg::card();
+    lg::font(0); d.setTextColor(MUTED, cb);
+    d.drawString(usb ? L5("Nel browser del PC apri:", "In the PC browser open:", "En el navegador del PC:", "Dans le navigateur du PC:", "Im PC-Browser oeffnen:")
+                     : L5("Apri nel browser:", "Open in a browser:", "Abre en el navegador:", "Ouvre dans le navigateur:", "Im Browser oeffnen:"),
+                 cx + 14, cy + 8);
+    lg::font(2); d.setTextColor(usb ? C_GREEN : FG, cb);
+    char ab[40]; lg::fit(ab, sizeof ab, usb ? "http://192.168.7.1"
+                         : ((ip && ip[0]) ? ip : L5("(nessuna rete)", "(no network)", "(sin red)", "(pas de reseau)", "(kein Netz)")), cw - 28);
+    d.drawString(ab, cx + 14, cy + 26);
+
+    // pairing PIN
+    cy += 56;
+    lg::panel(cx, cy, cw, 44); cb = lg::card();
+    lg::font(0); d.setTextColor(MUTED, cb);
+    d.drawString(L5("PIN accoppiamento:", "Pair PIN:", "PIN de vinculacion:", "PIN d'appairage:", "Kopplungs-PIN:"), cx + 14, cy + 7);
+    lg::font(2); d.setTextColor(C_BLUE, cb);
+    d.drawString((pin && pin[0]) ? pin : "----", cx + 14, cy + 23);
+
+    // auto-handoff toggle (Wi-Fi Remote only; USB-web has no screen handoff)
+    if (!usb) {
+        const int bh = 40, by = H_ - bh - 12;
+        char lbl[48]; snprintf(lbl, sizeof lbl, "%s %s",
+            L5("Passaggio auto:", "Auto handoff:", "Traspaso auto:", "Relais auto:", "Auto-Uebergabe:"), s_remote_enabled ? "ON" : "OFF");
+        lg::button(cx, by, cw, bh, lbl, s_remote_enabled ? C_GREEN : LINE, s_remote_enabled ? INK : FG, NK_ENTER, 0);
+    }
+    nucleo_touch_commit();
+}
+
+static void remote_companion(void)
+{
+    const int top = nucleo_app_content_top(), h = nucleo_app_content_height();
+    d.fillRect(0, top, 240, h, BG);
+    const int sh  = nucleo_ws_shell_count();
+    const bool usb = nucleo_usbnet_is_active();
+    const char *ip  = nucleo_setup_ip();
+    const char *pin = nucleo_auth_pin();
+    int y = lg::comp_head("REMOTE", C_BLUE);
+    d.setFont(&fonts::FreeSansBold9pt7b);
+    d.setTextColor(sh > 0 ? C_GREEN : C_GREEN, BG);
+    d.drawString(sh > 0 ? L5("Connesso", "Connected", "Conectado", "Connecte", "Verbunden")
+                        : L5("In ascolto", "Listening", "A la escucha", "En ecoute", "Bereit"), 8, y + 4);
+    d.setFont(&fonts::Font0); d.setTextColor(MUTED, BG);
+    char ln[48];
+    snprintf(ln, sizeof ln, "%s %s", usb ? "USB" : "IP", usb ? "192.168.7.1" : ((ip && ip[0]) ? ip : "-"));
+    d.drawString(ln, 8, y + 26);
+    snprintf(ln, sizeof ln, "PIN %s", (pin && pin[0]) ? pin : "----"); d.drawString(ln, 8, y + 40);
+    if (!usb) { snprintf(ln, sizeof ln, "%s %s", L5("Handoff", "Handoff", "Handoff", "Relais", "Ubergabe"), s_remote_enabled ? "ON" : "OFF");
+                d.setTextColor(s_remote_enabled ? C_GREEN : C_RED, BG); d.drawString(ln, 8, y + 54); }
+    lg::comp_keys(usb ? L5("ESC esci", "ESC back", "ESC salir", "ESC retour", "ESC zurueck")
+                      : L5("INVIO handoff on/off  ESC esci", "ENTER handoff on/off  ESC back", "INTRO handoff  ESC salir", "ENTREE handoff  ESC retour", "ENTER Ubergabe  ESC zurueck"));
+}
+
 extern "C" void nucleo_register_remote(void)
 {
     static const nucleo_app_def_t app = {
         "remote", "Remote Control", "Web OS", "Web Client server mode: reboots into a fresh heap (max RAM), shows IP + PIN, ready for the web OS",
-        'r', C_BLUE, remote_enter, remote_key, remote_tick, remote_draw, remote_exit
+        'r', C_BLUE, remote_enter, remote_key, remote_tick, remote_draw, remote_exit, 0, nullptr, remote_draw_large
     };
     nucleo_app_register(&app);
 }

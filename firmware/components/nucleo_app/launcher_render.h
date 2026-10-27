@@ -11,9 +11,15 @@
 // not animate), which avoids per-frame sprite churn that previously fragmented the heap.
 #pragma once
 
-// Apps are laid out as a single horizontal icon carousel (smartwatch idiom): one big centred badge
-// with smaller dimmer neighbours peeking on each side. Navigation is one-dimensional — every arrow
-// steps the focus by one — so nucleo_app.cpp needs no column count.
+// Apps are laid out as a single horizontal icon carousel (smartwatch idiom) on the Cardputer: one big
+// centred badge with smaller dimmer neighbours. On an external 320x240 panel the same apps become a
+// touch GRID instead (a real home screen). Navigation is one-dimensional on the carousel (every arrow
+// steps by one); on the grid the run loop moves up/down by a whole row, so it asks for the column count.
+// 0 = the compact carousel is live (no grid); >0 = the grid's column count.
+int launcher_render_large_cols(void);
+// First visible item index on the large grid (row*cols), after keeping the focused tile in view: the run
+// loop maps a tapped tile (NUCLEO_TOUCH_ROW + slot) to the item at first + slot.
+int launcher_render_grid_first(void);
 
 // Bottom hint-bar text (also the public nucleo_app_set_hint).
 void        launcher_render_set_hint(const char *h);

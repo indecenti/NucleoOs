@@ -12,6 +12,8 @@
 #include "nucleo_app.h"
 #include "launcher_theme.h"   // themed BG/FG/MUTED/DIM/LINE/INK + C_* accents (launcher-consistent)
 #include "app_gfx.h"
+#include "app_large.h"        // two screens: the monitor + peer status on the panel, Cardputer as companion
+#include "nucleo_touch.h"
 #include <M5GFX.h>
 #include <string.h>
 #include <stdio.h>
@@ -703,8 +705,129 @@ static void draw_info(int top)
     d.setCursor(8, y + 66); d.print(TR5("Telemetria: PSRAM+CPU ogni 1s", "Telemetry: PSRAM+CPU every 1s", "Telemetria: PSRAM+CPU cada 1s", "Telemetrie: PSRAM+CPU chaque 1s", "Telemetrie: PSRAM+CPU alle 1s"));
 }
 
+// ===== two screens =============================================================================================
+// The panel is the deck: a peer-status card at the top, the live P4 monitor below it (free PSRAM, per-core CPU,
+// SRAM + uptime) and a big "Type on P4" button, plus a Server tab (discovery / IP / PIN as touch rows) and an
+// Info tab. The Cardputer — where you type when the button is pressed — is the companion: link state, a glance at
+// the telemetry, and the keys. Touch is the content: the tabs tap as 1..3, the rows do what their key does.
+static const char *const LG_TABS[] = { "Monitor", "Server", "Info" };
+
+// A bar with a leading label and a right-aligned value, panel-sized.
+static void lg_meter(int x, int y, int w, const char *label, const char *val, int pct, unsigned short col)
+{
+    lg::font(0); d.setTextColor(MUTED, BG); d.setTextDatum(top_left); d.drawString(label, x, y);
+    d.setTextDatum(top_right); d.setTextColor(FG, BG); d.drawString(val, x + w, y); d.setTextDatum(top_left);
+    lg::bar(x, y + 16, w, 8, pct, col);
+}
+
+// A one-line peer-status row: colored dot + server/IP (online) or the state message. Returns the y below it.
+static int lg_status_line(int x, int y, int w)
+{
+    const bool on = (s_cs == CS_ONLINE);
+    d.fillCircle(x + 6, y + 7, 5, on ? GRN : (s_cs == CS_IDLE ? WARN : ACC));
+    lg::font(0); d.setTextDatum(middle_left); d.setTextColor(on ? GRN : MUTED, BG);
+    char ln[56];
+    if (on) snprintf(ln, sizeof ln, "%s   %s", s_server[0] ? s_server : "NucleoV2", s_ip);
+    else    snprintf(ln, sizeof ln, "%s", s_status[0] ? s_status : "offline");
+    char f[56]; lg::fit(f, sizeof f, ln, w - 22);
+    d.drawString(f, x + 18, y + 7); d.setTextDatum(top_left);
+    return y + 22;
+}
+
+static void kd_draw_large(void)
+{
+    const int W = d.width(), H = d.height();
+    nucleo_touch_clear();
+    int y = lg::header("KeyDeck", s_cs == CS_ONLINE ? "online" : nullptr, ACC, NK_BACK, 0);
+    y = lg::tabs(y + 2, LG_TABS, 3, s_tab, ACC, "123");
+    d.fillRect(0, y, W, H - y, BG);
+    const int cx = 16, cw = W - 32;
+    const int cy = lg_status_line(cx, y + 4, cw);
+
+    if (s_tab == T_MON) {
+        const bool fresh = stats_fresh();
+        char mb[8], tot[8], val[24];
+        fmt_mb(mb, sizeof mb, s_ps_free); fmt_mb(tot, sizeof tot, s_ps_total);
+        if (s_stat_at) snprintf(val, sizeof val, "%s / %s MB", mb, tot); else snprintf(val, sizeof val, "--");
+        const int psp = s_ps_total ? (int)((uint64_t)s_ps_free * 100 / s_ps_total) : 0;
+        char c0[8], c1[8];
+        if (s_cpu0 >= 0) snprintf(c0, sizeof c0, "%d%%", s_cpu0); else snprintf(c0, sizeof c0, "n/d");
+        if (s_cpu1 >= 0) snprintf(c1, sizeof c1, "%d%%", s_cpu1); else snprintf(c1, sizeof c1, "n/d");
+        lg_meter(cx, cy + 2,  cw, "Free PSRAM", val, psp, fresh ? GRN : LINE);
+        lg_meter(cx, cy + 32, cw, "CPU0", c0, s_cpu0 < 0 ? 0 : s_cpu0, s_cpu0 >= 85 ? WARN : ACC);
+        lg_meter(cx, cy + 62, cw, "CPU1", c1, s_cpu1 < 0 ? 0 : s_cpu1, s_cpu1 >= 85 ? WARN : ACC);
+        lg::font(0); d.setTextColor(DIM, BG);
+        char ft[48];
+        if (s_stat_at) snprintf(ft, sizeof ft, "SRAM %u KB    up %uh %02um", s_sram_free / 1024, s_uptime / 3600, (s_uptime % 3600) / 60);
+        else snprintf(ft, sizeof ft, "%s", s_cs == CS_ONLINE ? "waiting for telemetry..." : "offline");
+        d.drawString(ft, cx, cy + 90);
+        const int bh = 36, by = H - bh - 8;
+        const bool on = (s_cs == CS_ONLINE);
+        lg::button(cx, by, cw, bh, on ? "Type on P4" : "Reconnect", on ? ACC : LINE, on ? INK : FG, NK_ENTER, 0);
+    } else if (s_tab == T_SRV) {
+        const int py = cy + 2, ph = H - py - 10;
+        lg::panel(cx, py, cw, ph);
+        const unsigned short cb = lg::card();
+        lg::font(0); d.setTextColor(MUTED, cb); d.drawString("mDNS  _keydeck._tcp", cx + 12, py + 10);
+        lg::kv(cx + 12, py + 30, cw - 24, "Saved IP", s_saved_ip[0] ? s_saved_ip : "-", FG, cb);
+        lg::kv(cx + 12, py + 50, cw - 24, "PIN", s_pin[0] ? s_pin : "open", s_pin[0] ? FG : MUTED, cb);
+        if (s_edit != E_NONE) {
+            lg::font(1); d.setTextColor(ACC, cb); d.drawString(s_edit == E_IP ? "New IP" : "P4 PIN (empty = none)", cx + 12, py + 74);
+            d.fillRoundRect(cx + 12, py + 92, cw - 24, 34, 8, INK); d.drawRoundRect(cx + 12, py + 92, cw - 24, 34, 8, ACC);
+            char f[24]; snprintf(f, sizeof f, "%s_", s_ebuf);
+            lg::font(2); d.setTextDatum(middle_left); d.setTextColor(FG, INK); d.drawString(f, cx + 22, py + 109); d.setTextDatum(top_left);
+        } else {
+            const int bw = cw - 24, bx = cx + 12; int ry = py + 64;
+            lg::button(bx, ry, bw, 22, "Search again (mDNS)", LINE, FG, NK_ENTER, 0); ry += 26;
+            lg::button(bx, ry, bw, 22, "Enter IP", ACC, INK, NK_CHAR, 'm'); ry += 26;
+            lg::button(bx, ry, bw, 22, "Set PIN", s_need_pin ? WARN : lg::card(), s_need_pin ? INK : FG, NK_CHAR, 'p');
+        }
+    } else {   // T_INFO
+        const int py = cy + 2, ph = H - py - 10;
+        lg::panel(cx, py, cw, ph);
+        const unsigned short cb = lg::card();
+        char ln[40];
+        snprintf(ln, sizeof ln, "%s:%d", s_ip[0] ? s_ip : "-", KD_PORT);
+        lg::kv(cx + 12, py + 14, cw - 24, "Server", ln, FG, cb);
+        lg::kv(cx + 12, py + 36, cw - 24, "This Cardputer", nucleo_setup_ip(), FG, cb);
+        lg::kv(cx + 12, py + 58, cw - 24, "Protocol", "KeyDeck v1 TCP", FG, cb);
+        lg::font(0); d.setTextColor(MUTED, cb);
+        lg::wrap("Keys go to the focused field on the P4. Telemetry: PSRAM + CPU every 1 s.", cx + 12, py + 84, cw - 24, 17, 3);
+    }
+    nucleo_touch_commit();
+}
+
+static void draw_companion(void)
+{
+    const int top = nucleo_app_content_top(), h = nucleo_app_content_height();
+    d.fillRect(0, top, 240, h, BG);
+    const int y = lg::comp_head("KEYDECK", ACC);
+    const bool on = (s_cs == CS_ONLINE);
+    d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(ACC, BG); d.drawString(LG_TABS[s_tab], 8, y + 2);
+    d.fillCircle(150, y + 8, 4, on ? GRN : WARN);
+    d.setFont(&fonts::Font0); d.setTextColor(on ? GRN : WARN, BG); d.drawString(on ? "online" : "offline", 160, y + 5);
+
+    if (s_tab == T_MON && s_stat_at) {
+        char mb[8]; fmt_mb(mb, sizeof mb, s_ps_free);
+        char ln[40]; snprintf(ln, sizeof ln, "PSRAM %s MB", mb);
+        d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(FG, BG); d.drawString(ln, 8, y + 30);
+        if (s_cpu0 >= 0) { snprintf(ln, sizeof ln, "CPU %d%% / %d%%", s_cpu0, s_cpu1); d.setFont(&fonts::Font0); d.setTextColor(MUTED, BG); d.drawString(ln, 8, y + 56); }
+        lg::comp_keys(on ? "ENTER type on P4" : "ENTER reconnect");
+    } else if (s_tab == T_SRV) {
+        d.setFont(&fonts::Font0); d.setTextColor(MUTED, BG);
+        char ln[40]; snprintf(ln, sizeof ln, "IP %s   PIN %s", s_saved_ip[0] ? s_saved_ip : "-", s_pin[0] ? s_pin : "open");
+        d.drawString(ln, 8, y + 34);
+        lg::comp_keys(s_edit != E_NONE ? "type  ENTER save  ` cancel" : "ENTER mDNS  m IP  p PIN");
+    } else {
+        d.setFont(&fonts::Font0); d.setTextColor(MUTED, BG);
+        d.drawString("KeyDeck v1 (TCP) to the NucleoV2", 8, y + 34);
+        lg::comp_keys("keys -> focused field on P4");
+    }
+}
+
 static void draw(void)
 {
+    if (nucleo_app_two_screens()) { draw_companion(); return; }
     const int top = nucleo_app_content_top(), h = nucleo_app_content_height();
     d.fillRect(0, top, 240, h, BG);
     tabbar(top);
@@ -719,7 +842,7 @@ extern "C" void nucleo_register_keydeck(void)
 {
     static const nucleo_app_def_t app = {
         "keydeck", "KeyDeck", "Connect", "Tastiera Wi-Fi + monitor per NucleoV2 (P4)",
-        'D', 0x4DDF, on_enter, on_key, on_tick, draw, on_exit, 0
+        'D', 0x4DDF, on_enter, on_key, on_tick, draw, on_exit, 0, nullptr, kd_draw_large
     };
     nucleo_app_register(&app);
 }

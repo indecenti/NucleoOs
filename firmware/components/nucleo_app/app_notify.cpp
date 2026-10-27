@@ -22,6 +22,8 @@ extern "C" {
 #include "launcher_theme.h"   // W/H + RGB565 palette
 #include "app_gfx.h"          // the `d` draw-target redirect (never name a local `d`)
 #include "nucleo_i18n.h"      // TR(it,en): chrome follows the system language live
+#include "app_large.h"        // two screens: the list + detail on the 320x240 panel, the Cardputer as companion
+#include "nucleo_touch.h"
 
 extern "C" void nucleo_anima_app_ask(const char *q);   // seed ANIMA with a question (app_anima.cpp)
 
@@ -161,8 +163,11 @@ static void draw_tabs(int y)
     }
 }
 
+static void draw_companion(void);   // two-screen companion, defined below
+
 static void draw(void)
 {
+    if (nucleo_app_two_screens()) { draw_companion(); return; }
     char right[16]; snprintf(right, sizeof right, "%d", s_cnt[s_tab]);
     int y0 = app_ui_title(TR("Notifiche", "Notifications"), ACC, right);
 
@@ -188,6 +193,98 @@ static void draw(void)
     if (s_confirm_clr) app_ui_confirm(TR("Cancella tutto?", "Clear all?"), TR("Elimina la cronologia notifiche", "Delete notification history"), s_clr_yes);
 }
 
+// ===== two screens ==============================================================================================
+// The external panel carries the Notification Center full-size: the filter tabs across the top, the list on the
+// left, and the selected notification's detail card on the right (title, source/level/time, the action it runs).
+// The Cardputer is the companion: the active tab, the picked notification and the keys. Touch: the tabs filter,
+// a row taps to pick and again to run its action, the card's button runs it; the clear-all card has Yes/No.
+static const int N_LISTW = 168;
+static int s_lg_scroll = 0;                           // the panel list's first visible row
+static const char NTABKEYS[TAB_COUNT + 1] = { 1, 2, 3, 4, 0 };   // a control char per tab (no collision with typing)
+
+static void lg_detail(int x, int y, int w, int h)
+{
+    lg::panel(x, y, w, h);
+    const unsigned short cb = lg::card();
+    if (s_vn == 0) { lg::font(1); d.setTextColor(MUTED, cb); d.drawString(TR("Nessuna notifica", "No notifications"), x + 12, y + 14); return; }
+    const NItem *it = &s_items[s_view[s_sel]];
+    const unsigned short lc = lvl_color(it->lvl);
+    d.fillRoundRect(x + 12, y + 14, 10, 10, 2, lc);   // the level dot
+    lg::font(1); d.setTextColor(lc, cb);
+    const char *title = it->ttl[0] ? it->ttl : TR("(notifica)", "(notification)");
+    const int nl = lg::wrap(title, x + 28, y + 10, w - 40, 22, 3);
+    const int yy = y + 12 + (nl < 1 ? 1 : nl) * 22 + 8;
+    char meta[56]; snprintf(meta, sizeof meta, "%s   %s   %s", it->src, it->lvl, it->tstr);
+    lg::font(0); d.setTextColor(MUTED, cb);
+    char mf[56]; lg::fit(mf, sizeof mf, meta, w - 24); d.drawString(mf, x + 12, yy);
+    const int by = y + h - 44;                        // the action footer, pinned to the card foot
+    if (it->act[0]) {
+        lg::font(0); d.setTextColor(DIM, cb);
+        char a[48]; snprintf(a, sizeof a, "%s %s", TR("Azione:", "Action:"), it->act);
+        char af[48]; lg::fit(af, sizeof af, a, w - 24); d.drawString(af, x + 12, by - 20);
+        lg::button(x + 12, by, w - 24, 34, TR("Esegui", "Run"), ACC, INK, NK_ENTER, 0);
+    } else {
+        lg::font(0); d.setTextColor(DIM, cb); d.drawString(TR("Nessuna azione", "No action"), x + 12, by + 8);
+    }
+}
+
+static void lg_clear_card(void)
+{
+    const int Wd = d.width(), Hd = d.height();
+    const int cw = Wd - 72, cx = 36, chh = 130, cy = (Hd - chh) / 2;
+    lg::panel(cx, cy, cw, chh, INK); d.drawRoundRect(cx, cy, cw, chh, 8, C_RED);
+    lg::font(1); d.setTextColor(C_RED, INK); d.drawString(TR("Cancellare tutto?", "Clear all?"), cx + 16, cy + 14);
+    lg::font(0); d.setTextColor(FG, INK); d.drawString(TR("Elimina la cronologia notifiche.", "Delete the notification history."), cx + 16, cy + 44);
+    const int bw = (cw - 48) / 2;
+    lg::button(cx + 16, cy + chh - 48, bw, 36, "No", s_clr_yes ? LINE : ACC, s_clr_yes ? FG : INK, NK_CHAR, 'n');
+    lg::button(cx + 32 + bw, cy + chh - 48, bw, 36, TR("Elimina", "Delete"), s_clr_yes ? C_RED : LINE, s_clr_yes ? INK : FG, NK_CHAR, 'y');
+}
+
+static void draw_large(void)
+{
+    const int Wd = d.width(), Hd = d.height();
+    nucleo_touch_clear();
+    char r[16]; snprintf(r, sizeof r, "%d", s_cnt[TAB_ALL]);
+    int y = lg::header(TR("Notifiche", "Notifications"), r, ACC, NK_BACK, NK_TAB);
+    static char tn[TAB_COUNT][16]; const char *names[TAB_COUNT];
+    for (int i = 0; i < TAB_COUNT; i++) { snprintf(tn[i], sizeof tn[i], "%s %d", TR(TAB_NAME[i], TAB_NAME_EN[i]), s_cnt[i]); names[i] = tn[i]; }
+    y = lg::tabs(y, names, TAB_COUNT, s_tab, ACC, NTABKEYS);
+    if (s_oom) { lg::message(0, y, Wd, Hd - y, TR("Memoria insufficiente", "Out of memory"), nullptr, C_RED); nucleo_touch_commit(); return; }
+    if (s_vn == 0) {
+        lg::message(0, y, Wd, Hd - y, TR("Nessuna notifica", "No notifications"), TR("Niente in questa scheda.", "Nothing in this tab."), DIM);
+        nucleo_touch_commit(); return;
+    }
+    lg::text_list(0, y + 2, N_LISTW, Hd - y - 4, s_vn, s_sel, &s_lg_scroll, row_label, row_right, row_color, nullptr, ACC);
+    d.fillRect(N_LISTW, y, Wd - N_LISTW, Hd - y, BG);
+    lg_detail(N_LISTW + 4, y + 6, Wd - N_LISTW - 10, Hd - y - 12);
+    if (s_confirm_clr) lg_clear_card();
+    nucleo_touch_commit();
+}
+
+static void draw_companion(void)
+{
+    const int top = nucleo_app_content_top(), h = nucleo_app_content_height();
+    d.fillRect(0, top, W, h, BG);
+    const int y = lg::comp_head("NOTIFICHE", ACC);
+    char tb[40]; snprintf(tb, sizeof tb, "%s  %d", TR(TAB_NAME[s_tab], TAB_NAME_EN[s_tab]), s_cnt[s_tab]);
+    d.setFont(&fonts::Font0); d.setTextColor(ACC, BG); d.drawString(tb, 8, y + 2);
+    if (s_oom || s_vn == 0) {
+        d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(s_oom ? C_RED : MUTED, BG);
+        d.drawString(s_oom ? TR("Memoria insufficiente", "Out of memory") : TR("Nessuna notifica", "No notifications"), 8, y + 22);
+        lg::comp_keys(TR("TAB scheda  ESC esci", "TAB tab  ESC exit")); return;
+    }
+    const NItem *it = &s_items[s_view[s_sel]];
+    d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(lvl_color(it->lvl), BG);
+    const int nl = lg::wrap(it->ttl[0] ? it->ttl : TR("(notifica)", "(notification)"), 8, y + 18, 224, 20, 2);
+    d.setFont(&fonts::Font0); d.setTextColor(MUTED, BG);
+    char meta[56]; snprintf(meta, sizeof meta, "%s  %s  %s", it->src, it->lvl, it->tstr);
+    d.drawString(meta, 8, y + 20 + nl * 20);
+    char pos[24]; snprintf(pos, sizeof pos, "%d / %d", s_sel + 1, s_vn);
+    d.setTextColor(DIM, BG); d.drawString(pos, 8, y + 20 + nl * 20 + 14);
+    lg::comp_keys(s_confirm_clr ? TR("y conferma  n annulla", "y confirm  n cancel")
+                                : TR("su/giu  INVIO apri  TAB scheda  c pulisci", "up/dn  ENTER open  TAB tab  c clear"));
+}
+
 // ---- input / lifecycle -----------------------------------------------------
 static void cycle_tab(void)                           // TAB handler
 {
@@ -203,6 +300,15 @@ static void on_key(int key, char ch)
         if (r >= 0) s_confirm_clr = false;
         nucleo_app_request_draw();
         return;
+    }
+    if (key == NK_CHAR && ch >= 1 && ch <= TAB_COUNT) {   // a panel tab tap: filter to that tab
+        s_tab = ch - 1; s_sel = 0; build_view(); nucleo_app_request_draw();
+        return;
+    }
+    if (nucleo_app_two_screens()) {                       // panel: tap a row to pick, tap again to run it
+        int t = lg::row_tap(key, ch, s_lg_scroll, s_vn, &s_sel);
+        if (t == 2) { if (s_vn > 0) run_action(s_items[s_view[s_sel]].act); return; }
+        if (t == 1) { nucleo_app_request_draw(); return; }
     }
     if (key == NK_ENTER) {
         if (s_vn > 0) run_action(s_items[s_view[s_sel]].act);
@@ -241,7 +347,7 @@ extern "C" void nucleo_register_notify(void)
 {
     static const nucleo_app_def_t app = {
         "notify", "Notifiche", "System", "Notification center",
-        'n', ACC, enter, on_key, tick, draw, leave
+        'n', ACC, enter, on_key, tick, draw, leave, 0, nullptr, draw_large
     };
     nucleo_app_register(&app);
 }

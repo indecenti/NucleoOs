@@ -14,6 +14,9 @@
 #include "nucleo_mailcfg.h"
 #include "nucleo_exclusive.h"
 #include "nucleo_i18n.h"        // TR(it,en): hints follow the system language
+#include "nucleo_board.h"       // NUCLEO_SD_MOUNT
+#include "nucleo_touch.h"
+#include "app_large.h"          // two screens: tabs, lists, fields on the panel; the Cardputer as companion
 
 #include <string.h>
 #include <stdio.h>
@@ -24,8 +27,8 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 
-#define SENT_LOG "/sd/system/mail/sent.log"
-#define REC_FILE "/sd/system/mail/recents.txt"
+#define SENT_LOG NUCLEO_SD_MOUNT "/system/mail/sent.log"
+#define REC_FILE NUCLEO_SD_MOUNT "/system/mail/recents.txt"
 
 // ---- geometry ----
 #define HDR    20
@@ -131,7 +134,7 @@ static void add_recent(const char *to) {
     strncpy(M->rec[0], to, 95); M->rec[0][95] = 0;
     if (s_nrec < 6) s_nrec++;
 save:
-    mkdir("/sd/system", 0775); mkdir("/sd/system/mail", 0775);
+    mkdir(NUCLEO_SD_MOUNT "/system", 0775); mkdir(NUCLEO_SD_MOUNT "/system/mail", 0775);
     FILE *f = fopen(REC_FILE, "w"); if (!f) return;
     for (int i = 0; i < s_nrec; ++i) fprintf(f, "%s\n", M->rec[i]);
     fclose(f);
@@ -400,9 +403,11 @@ static void draw_sent(void) {
         y += 30;
     }
 }
+static void draw_companion(void);
 static void on_draw(void) {
     if (!s_dirty) return;
     s_dirty = false;
+    if (nucleo_app_two_screens()) { draw_companion(); return; }
     if (!M) { d.fillScreen(BG); ctxt(CB / 2, TR("Memoria insufficiente", "Out of memory"), 2, C_RED); return; }
     if (s_ed)          draw_editor();
     else if (s_wiz)    draw_wizard();
@@ -414,8 +419,10 @@ static void on_draw(void) {
 
 // ===========================================================================
 // input
+static bool lg_key(int key, char ch);
 static void on_key(int key, char ch) {
     if (!M || s_sending) return;
+    if (lg_key(key, ch)) return;                  // the panel's taps (two screens)
     if (s_ed) {
         if (key == NK_ENTER) editor_commit();
         else if (key == NK_DEL) { size_t n = strlen(s_edbuf); if (n) { s_edbuf[n - 1] = 0; mark(); } }
@@ -544,12 +551,365 @@ static void on_exit(void) {
     free(M); M = NULL;
 }
 
+
+// ===========================================================================
+// two screens
+// The panel carries the mail app laid out for touch: Account / Write / Sent as tabs under the header; the
+// accounts as a list with the picked one's card (Edit / Default / Delete); the message as three tappable fields
+// and a Send button; the sent log as a list; the editors (fields, setup wizard) as one large field with Cancel /
+// OK and, for the recipient, the matching contacts to tap. The typing stays on the Cardputer, whose companion
+// shows the field being typed in large type, or what is picked, and the keys.
+// Panel-only actions arrive as NK_CHAR with private control codes (below 0x10: never typing, never list rows).
+enum { LGK_TAB0 = 0x01 /* ..0x03 */, LGK_FIELD0 = 0x04 /* ..0x07: To, Subject, Text, Send */, LGK_SUGG0 = 0x0A /* ..0x0C */ };
+static int s_lg_sscroll, s_lg_ssel;             // the Sent list (the other lists reuse the app's own scrolls)
+
+static int lg_sent_load(void)                     // the sent log into M->sent (ring of the newest 8); returns the count
+{
+    FILE *f = fopen(SENT_LOG, "r");
+    if (!f) return 0;
+    int n = 0; char buf[120];
+    while (fgets(buf, sizeof buf, f)) {
+        size_t L = strlen(buf); while (L && (buf[L - 1] == '\n' || buf[L - 1] == '\r')) buf[--L] = 0;
+        if (!L) continue;
+        strncpy(M->sent[n % 8], buf, 103); M->sent[n % 8][103] = 0; n++;
+    }
+    fclose(f);
+    return n;
+}
+// One sent-log line split in place of a copy: "time | OK | to | subject".
+static void lg_sent_split(const char *ln, char *ts, char *to, char *subj, bool *ok)
+{
+    char b[104]; snprintf(b, sizeof b, "%s", ln);
+    ts[0] = to[0] = subj[0] = 0; *ok = strstr(b, " | OK | ") != NULL;
+    char *p2 = strstr(b, " | ");
+    if (!p2) { snprintf(subj, 64, "%s", b); return; }
+    *p2 = 0; snprintf(ts, 20, "%s", b);
+    char *p3 = strstr(p2 + 3, " | ");
+    if (!p3) return;
+    char *t = p3 + 3, *p4 = strstr(t, " | ");
+    if (p4) { *p4 = 0; snprintf(subj, 64, "%s", p4 + 3); }
+    snprintf(to, 64, "%s", t);
+}
+
+static bool lg_key(int key, char ch)
+{
+    if (!M || s_sending) return false;
+    if (nucleo_touch_is_row(key, ch)) {                                   // a tapped list row: pick it, again = open
+        int r = 0;
+        if (s_ed) return false;
+        if (s_wiz && s_wseq[s_wi] == WS_PROV) { r = lg::row_tap(key, ch, s_pscroll, nucleo_mailcfg_preset_count(), &s_psel); if (r == 2) wiz_pick_provider(s_psel); }
+        else if (s_wiz) return false;
+        else if (s_topick) { r = lg::row_tap(key, ch, s_tpscroll, s_nrec + 1, &s_tpsel); if (r == 2) { on_key(NK_ENTER, 0); return true; } }
+        else if (s_tab == TAB_ACCT) { r = lg::row_tap(key, ch, s_ascroll, s_nacct + 1, &s_asel); if (r == 2) { on_key(NK_ENTER, 0); return true; } }
+        else if (s_tab == TAB_SENT) { int n = lg_sent_load(); if (n > 8) n = 8; r = lg::row_tap(key, ch, s_lg_sscroll, n, &s_lg_ssel); }
+        mark();
+        return true;
+    }
+    if (key != NK_CHAR || ch <= 0 || ch >= NUCLEO_TOUCH_ROW) return false;
+    if (s_ed) {
+        if (ch >= LGK_SUGG0 && ch < LGK_SUGG0 + 3 && s_edt == ED_TO) {
+            int idx[3]; const int c = mail_suggest(idx, 3), i = ch - LGK_SUGG0;
+            if (i < c) { strncpy(M->to, M->rec[idx[i]], sizeof M->to - 1); M->to[sizeof M->to - 1] = 0; mark(); }
+            return true;
+        }
+        return false;
+    }
+    if (s_wiz || s_topick) return false;
+    if (ch >= LGK_TAB0 && ch < LGK_TAB0 + NTABS) { s_tab = ch - LGK_TAB0; s_asel = 0; s_wfield = 0; s_status[0] = 0; mark(); return true; }
+    if (s_tab == TAB_WRITE && ch >= LGK_FIELD0 && ch < LGK_FIELD0 + W_FIELDS) { s_wfield = ch - LGK_FIELD0; on_key(NK_ENTER, 0); return true; }
+    return false;
+}
+
+static const char *lg_acct_name(int i) { return M->accts[i].name[0] ? M->accts[i].name : M->accts[i].user; }
+
+static void lg_acct_row(int i, int x, int y, int w, int h, bool focus, unsigned short bg, void *)
+{
+    if (i >= s_nacct) { lg::row_text(x, y, w, h, focus, bg, TR("+ Nuovo account", "+ New account"), nullptr, C_GREEN); return; }
+    lg::row_text(x, y, w, h, focus, bg, lg_acct_name(i), i == s_def ? "*" : nullptr, FG);
+}
+static void lg_prov_row(int i, int x, int y, int w, int h, bool focus, unsigned short bg, void *)
+{
+    lg::row_text(x, y, w, h, focus, bg, nucleo_mailcfg_preset(i)->name, nullptr, FG);
+}
+static void lg_pick_row(int i, int x, int y, int w, int h, bool focus, unsigned short bg, void *)
+{
+    if (i == 0) { lg::row_text(x, y, w, h, focus, bg, TR("+ Nuovo indirizzo", "+ New address"), nullptr, C_GREEN); return; }
+    lg::row_text(x, y, w, h, focus, bg, M->rec[i - 1], nullptr, FG);
+}
+static void lg_sent_row(int i, int x, int y, int w, int h, bool focus, unsigned short bg, void *ud)
+{
+    const int n = *(const int *)ud;
+    int idx = (n - 1 - i) % 8; if (idx < 0) idx += 8;                // newest first
+    char ts[20], to[64], subj[64]; bool ok;
+    lg_sent_split(M->sent[idx], ts, to, subj, &ok);
+    d.fillCircle(x + 12, y + 13, 4, focus ? INK : (ok ? C_GREEN : C_RED));
+    char t[64];
+    lg::font(0); d.setTextDatum(top_right); d.setTextColor(focus ? INK : MUTED, bg);
+    const char *hm = strlen(ts) > 11 ? ts + 5 : ts;                     // "MM-DD HH:MM"
+    d.drawString(hm, x + w - 8, y + 5);
+    const int rw = d.textWidth(hm) + 12;
+    d.setTextDatum(top_left); d.setTextColor(focus ? INK : FG, bg);
+    lg::fit(t, sizeof t, to, w - 28 - rw); d.drawString(t, x + 24, y + 5);
+    d.setTextColor(focus ? INK : MUTED, bg);
+    lg::fit(t, sizeof t, ok ? subj : TR("non inviata", "not sent"), w - 32); d.drawString(t, x + 24, y + 23);
+}
+
+// The open editor: its label, the value in a large box, the contacts that match (recipient), Cancel / OK.
+static void lg_editor(void)
+{
+    const int W = d.width(), H = d.height();
+    char step[12] = "";
+    if (s_edwiz) snprintf(step, sizeof step, "%d / %d", s_wi + 1, s_wn);
+    lg::header(s_edwiz ? TR("Configura account", "Account setup") : TR("Scrivi", "Write"), step, ACC, NK_BACK);
+    d.fillRect(0, lg::HEAD, W, H - lg::HEAD, BG);
+    lg::font(1); d.setTextColor(FG, BG); d.drawString(TR(s_edlabel, s_edlabel_en), 14, lg::HEAD + 8);
+    const bool body = s_edt == ED_BODY;
+    const int by = lg::HEAD + 32, bh = body ? H - by - 56 : 44;
+    d.fillRoundRect(10, by, W - 20, bh, 8, INK); d.drawRoundRect(10, by, W - 20, bh, 8, ACC);
+    const char *v = s_edbuf ? s_edbuf : "";
+    if (body) {                                                          // the text: wrapped, its end in view (no copy)
+        lg::font(0); d.setTextColor(FG, INK);
+        const int lines = (bh - 12) / 18;
+        const char *t = v;
+        while (strlen(t) > (size_t)(lines * 30)) { const char *nl = strpbrk(t, " \n"); if (!nl) break; t = nl + 1; }
+        if (!*t) { d.setTextColor(DIM, INK); d.drawString(TR("scrivi sul Cardputer...", "type on the Cardputer..."), 20, by + 8); }
+        else lg::wrap(t, 20, by + 8, W - 40, 18, lines);
+    } else {
+        char shown[128];
+        if (s_edsecret) { int n = (int)strlen(v); if (n > 40) n = 40; memset(shown, '*', n); shown[n] = 0; }
+        else snprintf(shown, sizeof shown, "%s", v);
+        lg::font(2); d.setTextDatum(middle_left); d.setTextColor(FG, INK);
+        if (d.textWidth(shown) > W - 56) lg::font(1);                   // a long address: the smaller bold face first
+        const char *t = shown; while (*t && d.textWidth(t) > W - 56) t++;
+        d.drawString(t, 20, by + bh / 2 + 1);
+        d.fillRect(20 + d.textWidth(t) + 2, by + 10, 3, bh - 20, ACC);
+        d.setTextDatum(top_left);
+    }
+    if (s_edt != ED_TO && !body) {
+        lg::font(0); d.setTextColor(MUTED, BG);
+        lg::wrap(s_edt == ED_W_PASS ? TR("La password per app del provider (non quella normale): la scrivi sul Cardputer.",
+                                         "The provider's app password (not the normal one): type it on the Cardputer.")
+                                    : TR("Scrivi sulla tastiera del Cardputer.", "Type on the Cardputer's keyboard."), 14, by + bh + 10, W - 28, 17, 3);
+    }
+    if (s_edt == ED_TO && s_nrec) {                                      // the matching contacts: tap = fill it
+        int idx[3]; const int c = mail_suggest(idx, 3);
+        for (int i = 0; i < c; i++) {
+            const int ry = by + bh + 6 + i * 26;
+            if (ry + 24 > H - 50) break;
+            d.fillRoundRect(10, ry, W - 20, 24, 7, lg::card());
+            lg::row_text(10, ry, W - 20, 24, false, lg::card(), M->rec[idx[i]], i == 0 ? "TAB" : nullptr, i == 0 ? ACC : FG);
+            nucleo_touch_add(10, ry, W - 20, 24, NK_CHAR, (char)(LGK_SUGG0 + i));
+        }
+    }
+    const int bw = (W - 30) / 2;
+    const char *ok = s_edwiz ? TR("Avanti", "Next") : "OK";
+    lg::button(10, H - 46, bw, 38, s_edwiz && s_wi > 0 ? TR("Indietro", "Back") : TR("Annulla", "Cancel"), LINE, FG, NK_BACK, 0);
+    lg::button(20 + bw, H - 46, bw, 38, ok, ACC, INK, NK_ENTER, 0);
+}
+
+static void lg_wizard(void)
+{
+    const int W = d.width(), H = d.height();
+    char step[12]; snprintf(step, sizeof step, "%d / %d", s_wi + 1, s_wn);
+    if (s_wseq[s_wi] == WS_PROV) {                                       // the provider: list + its card
+        lg::header(TR("Scegli il provider", "Pick the provider"), step, ACC, NK_BACK);
+        const int LW = 150, y = lg::HEAD + 2;
+        lg::list(0, y, LW, H - y - 2, lg::ROW, nucleo_mailcfg_preset_count(), s_psel, &s_pscroll, lg_prov_row, nullptr, ACC);
+        d.fillRect(LW, lg::HEAD, W - LW, H - lg::HEAD, BG);
+        const smtp_preset_t *p = nucleo_mailcfg_preset(s_psel);
+        const int cx = LW + 4, cw = W - LW - 10, cy = y + 4, ch = H - cy - 8;
+        lg::panel(cx, cy, cw, ch);
+        const unsigned short cb = lg::card();
+        lg::font(1); d.setTextColor(ACC, cb); d.drawString(p ? p->name : "", cx + 10, cy + 10);
+        lg::font(0); d.setTextColor(MUTED, cb);
+        if (p && p->host[0]) { char h[64]; lg::fit(h, sizeof h, p->host, cw - 20); d.drawString(h, cx + 10, cy + 36); }
+        d.setTextColor(FG, cb);
+        if (p) lg::wrap(p->hint, cx + 10, cy + 60, cw - 20, 18, 4);
+        lg::button(cx + 8, cy + ch - 40, cw - 16, 32, TR("Scegli", "Choose"), ACC, INK, NK_ENTER, 0);
+        return;
+    }
+    lg::header(TR("Conferma account", "Confirm account"), step, ACC, NK_BACK);   // WS_CONFIRM
+    d.fillRect(0, lg::HEAD, W, H - lg::HEAD, BG);
+    const int cy = lg::HEAD + 6, ch = H - cy - 56;
+    lg::panel(10, cy, W - 20, ch);
+    const unsigned short cb = lg::card();
+    lg::font(1); d.setTextColor(ACC, cb); d.drawString(M->edit.name[0] ? M->edit.name : M->edit.host, 22, cy + 10);
+    char l[80]; int ly = cy + 40;
+    lg::kv(22, ly, W - 44, "Email", M->edit.user, FG, cb); ly += 24;
+    snprintf(l, sizeof l, "%s:%d", M->edit.host, M->edit.port);
+    lg::kv(22, ly, W - 44, "Server", l, FG, cb); ly += 24;
+    lg::kv(22, ly, W - 44, TR("Mittente", "Sender"), M->edit.from_name[0] ? M->edit.from_name : "-", FG, cb); ly += 24;
+    const bool pw_ok = M->edit.pass[0] || s_edit_idx >= 0;
+    lg::kv(22, ly, W - 44, "Password", M->edit.pass[0] ? TR("impostata", "set") : (s_edit_idx < 0 ? TR("MANCANTE", "MISSING") : TR("invariata", "unchanged")),
+           pw_ok ? C_GREEN : C_RED, cb);
+    const int bw = (W - 30) / 2;
+    lg::button(10, H - 46, bw, 38, TR("Indietro", "Back"), LINE, FG, NK_BACK, 0);
+    lg::button(20 + bw, H - 46, bw, 38, TR("Salva", "Save"), ACC, INK, NK_ENTER, 0);
+}
+
+static void lg_field(int y, int h, int i, const char *label, const char *val, bool empty)
+{
+    const int W = d.width();
+    const bool f = s_wfield == i;
+    lg::panel(8, y, W - 16, h);
+    const unsigned short cb = lg::card();
+    if (f) { d.drawRoundRect(8, y, W - 16, h, 8, ACC); d.drawRoundRect(9, y + 1, W - 18, h - 2, 7, ACC); }
+    lg::font(0); d.setTextColor(f ? ACC : MUTED, cb); d.drawString(label, 18, y + 8);
+    d.setTextColor(empty ? DIM : FG, cb);
+    if (i == 2) lg::wrap(val, 84, y + 8, W - 108, 17, (h - 8) / 17);
+    else { char t[128]; lg::fit(t, sizeof t, val, W - 108); d.drawString(t, 84, y + 8); }
+    nucleo_touch_add(8, y, W - 16, h, NK_CHAR, (char)(LGK_FIELD0 + i));
+}
+
+static void draw_large(void)
+{
+    const int W = d.width(), H = d.height();
+    nucleo_touch_clear();
+    if (!M) {
+        lg::header("Mail", nullptr, ACC, NK_BACK);
+        lg::message(0, lg::HEAD, W, H - lg::HEAD, TR("Memoria insufficiente", "Out of memory"), TR("Chiudi qualche app e riprova", "Close some apps and retry"), C_RED);
+        nucleo_touch_commit(); return;
+    }
+    if (s_ed)       { lg_editor(); nucleo_touch_commit(); return; }
+    if (s_wiz)      { lg_wizard(); nucleo_touch_commit(); return; }
+    if (s_topick) {
+        lg::header(TR("Destinatario", "Recipient"), nullptr, ACC, NK_BACK);
+        lg::list(0, lg::HEAD + 2, W, H - lg::HEAD - 2, lg::ROW + 4, s_nrec + 1, s_tpsel, &s_tpscroll, lg_pick_row, nullptr, ACC);
+        nucleo_touch_commit(); return;
+    }
+    const char *from = s_def >= 0 && s_def < s_nacct ? M->accts[s_def].user : TR("nessun account", "no account");
+    lg::header("Mail", from, ACC, NK_BACK);
+    static const char *names_it[NTABS] = { "Account", "Scrivi", "Inviate" }, *names_en[NTABS] = { "Account", "Write", "Sent" };
+    const char *names[NTABS]; for (int i = 0; i < NTABS; i++) names[i] = TR(names_it[i], names_en[i]);
+    static const char keys[NTABS] = { LGK_TAB0, LGK_TAB0 + 1, LGK_TAB0 + 2 };
+    const int y = lg::tabs(lg::HEAD + 2, names, NTABS, s_tab, ACC, keys);
+    const int bh = H - y;
+    if (s_tab == TAB_ACCT) {
+        const int LW = 140;
+        lg::list(0, y, LW, bh - 2, lg::ROW, s_nacct + 1, s_asel, &s_ascroll, lg_acct_row, nullptr, ACC);
+        d.fillRect(LW, y, W - LW, bh, BG);
+        const int cx = LW + 4, cw = W - LW - 10, ch = bh - 6;
+        lg::panel(cx, y, cw, ch);
+        const unsigned short cb = lg::card();
+        if (s_asel >= s_nacct) {                                          // "+ New account": what a tap does
+            lg::font(1); d.setTextColor(C_GREEN, cb); d.drawString(TR("Nuovo account", "New account"), cx + 10, y + 10);
+            lg::font(0); d.setTextColor(MUTED, cb);
+            lg::wrap(TR("Scegli il provider, poi email e password per app: le scrivi sul Cardputer.",
+                        "Pick the provider, then the email and app password: you type them on the Cardputer."), cx + 10, y + 36, cw - 20, 17, 5);
+            lg::button(cx + 8, y + ch - 40, cw - 16, 32, TR("Configura", "Set up"), ACC, INK, NK_ENTER, 0);
+        } else {
+            const smtp_account_t *a = &M->accts[s_asel];
+            lg::font(1); d.setTextColor(ACC, cb); char t[48]; lg::fit(t, sizeof t, lg_acct_name(s_asel), cw - 20); d.drawString(t, cx + 10, y + 8);
+            lg::font(0); d.setTextColor(FG, cb); lg::fit(t, sizeof t, a->user, cw - 20); d.drawString(t, cx + 10, y + 32);
+            char hp[80]; snprintf(hp, sizeof hp, "%s:%d", a->host, a->port);
+            d.setTextColor(MUTED, cb); lg::fit(t, sizeof t, hp, cw - 20); d.drawString(t, cx + 10, y + 50);
+            d.setTextColor(s_asel == s_def ? C_GREEN : DIM, cb);
+            d.drawString(s_asel == s_def ? TR("* predefinito", "* default") : TR("non predefinito", "not default"), cx + 10, y + 68);
+            const int b3 = (cw - 24) / 2, by = y + ch - 76;
+            lg::button(cx + 8, by, cw - 16, 32, TR("Modifica", "Edit"), ACC, INK, NK_ENTER, 0);
+            lg::button(cx + 8, by + 38, b3, 30, TR("Predef.", "Default"), LINE, s_asel == s_def ? DIM : FG, NK_CHAR, 't');
+            lg::button(cx + 16 + b3, by + 38, b3, 30, TR("Elimina", "Delete"), LINE, C_RED, NK_CHAR, 'x');
+        }
+        if (s_status[0]) { lg::font(0); d.setTextColor(C_GREEN, BG); char t[64]; lg::fit(t, sizeof t, s_status, LW - 12); d.drawString(t, 8, H - 18); }
+    } else if (s_tab == TAB_WRITE) {
+        d.fillRect(0, y, W, bh, BG);
+        if (s_sending) lg::message(0, y, W, bh, TR("Invio in corso...", "Sending..."), M->to, ACC);
+        else {
+            lg_field(y + 2, 30, 0, TR("A", "To"), M->to[0] ? M->to : TR("tocca per scegliere", "tap to pick"), !M->to[0]);
+            lg_field(y + 36, 30, 1, TR("Oggetto", "Subject"), M->subj[0] ? M->subj : TR("(vuoto)", "(empty)"), !M->subj[0]);
+            lg_field(y + 70, bh - 112, 2, TR("Testo", "Text"), M->body[0] ? M->body : TR("tocca per scrivere", "tap to write"), !M->body[0]);
+            const int sy = H - 38;
+            if (s_status[0]) { lg::font(0); d.setTextColor(s_send_ok ? C_GREEN : C_RED, BG); char t[64]; lg::fit(t, sizeof t, s_status, W - 150); d.drawString(t, 10, sy + 9); }
+            const bool ready = M->to[0] && M->body[0];
+            lg::button(W - 130, sy, 120, 34, TR("Invia", "Send"), ready ? C_GREEN : LINE, ready ? INK : MUTED, NK_CHAR, (char)(LGK_FIELD0 + 3));
+            if (s_wfield == 3) d.drawRoundRect(W - 132, sy - 2, 124, 38, 10, ACC);
+        }
+    } else {
+        int n = lg_sent_load(); if (n > 8) n = 8;
+        if (!n) lg::message(0, y, W, bh, TR("Nessuna inviata", "None sent"), TR("Le mail inviate da qui compaiono in questa lista.", "Mail sent from here shows up in this list."), MUTED);
+        else { if (s_lg_ssel >= n) s_lg_ssel = n - 1; lg::list(0, y, W, bh, 42, n, s_lg_ssel, &s_lg_sscroll, lg_sent_row, &n, ACC); }
+    }
+    nucleo_touch_commit();
+}
+
+// The Cardputer while the panel shows the mail: the field being typed in large type, or what is picked.
+static void draw_companion(void)
+{
+    const int top = nucleo_app_content_top(), h = nucleo_app_content_height();
+    d.fillRect(0, top, 240, h, BG);
+    int y = lg::comp_head("MAIL", ACC);
+    d.setFont(&fonts::Font0); d.setTextSize(1);
+    if (!M) { d.setTextColor(C_RED, BG); d.drawString(TR("Memoria insufficiente", "Out of memory"), 8, y + 4); return; }
+    if (s_ed) {                                                          // the line being typed, large
+        d.setTextColor(MUTED, BG); d.drawString(TR(s_edlabel, s_edlabel_en), 8, y + 2);
+        char shown[64]; const char *v = s_edbuf ? s_edbuf : "";
+        if (s_edsecret) { int n = (int)strlen(v); if (n > 17) n = 17; memset(shown, '*', n); shown[n] = 0; v = shown; }
+        const char *line = v; for (const char *c = v; *c; c++) if (*c == '\n') line = c + 1;
+        const int n = (int)strlen(line);
+        const char *tail = n > 17 ? line + n - 17 : line;
+        d.setTextSize(2); d.setTextColor(FG, BG); d.setCursor(8, y + 20); d.print(tail);
+        d.fillRect(8 + (int)strlen(tail) * 12, y + 18, 3, 18, ACC); d.setTextSize(1);
+        if (s_edt == ED_TO && s_nrec) { int idx[1]; if (mail_suggest(idx, 1)) { char s[48]; snprintf(s, sizeof s, "TAB > %.38s", M->rec[idx[0]]); d.setTextColor(ACC, BG); d.drawString(s, 8, y + 46); } }
+        char m[40]; snprintf(m, sizeof m, TR("%d caratteri", "%d characters"), (int)strlen(s_edbuf ? s_edbuf : "")); d.setTextColor(MUTED, BG); d.drawString(m, 8, y + 62);
+        lg::comp_keys(TR("scrivi  INVIO ok  ESC annulla", "type  ENTER ok  ESC cancel"));
+        return;
+    }
+    if (s_sending) { d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(ACC, BG); d.drawString(TR("Invio in corso...", "Sending..."), 8, y + 6); return; }
+    d.setFont(&fonts::FreeSansBold9pt7b);
+    if (s_wiz) {
+        const smtp_preset_t *p = nucleo_mailcfg_preset(s_psel);
+        d.setTextColor(FG, BG); d.drawString(s_wseq[s_wi] == WS_PROV ? (p ? p->name : "") : TR("Conferma account", "Confirm account"), 8, y + 6);
+        d.setFont(&fonts::Font0); d.setTextColor(MUTED, BG);
+        char m[48]; snprintf(m, sizeof m, TR("Configura account  %d di %d", "Account setup  %d of %d"), s_wi + 1, s_wn); d.drawString(m, 8, y + 32);
+        lg::comp_keys(TR("su/giu  INVIO avanti  ESC indietro", "up/dn  ENTER next  ESC back"));
+        return;
+    }
+    if (s_topick) {
+        d.setTextColor(FG, BG); lg::wrap(s_tpsel == 0 ? TR("+ Nuovo indirizzo", "+ New address") : M->rec[s_tpsel - 1], 8, y + 6, 224, 20, 2);
+        lg::comp_keys(TR("su/giu  1-6 scegli  INVIO ok  ESC", "up/dn  1-6 pick  ENTER ok  ESC"));
+        return;
+    }
+    if (s_tab == TAB_ACCT) {
+        d.setTextColor(s_asel >= s_nacct ? C_GREEN : FG, BG);
+        d.drawString(s_asel >= s_nacct ? TR("+ Nuovo account", "+ New account") : lg_acct_name(s_asel), 8, y + 6);
+        d.setFont(&fonts::Font0); d.setTextColor(MUTED, BG);
+        if (s_asel < s_nacct) d.drawString(M->accts[s_asel].user, 8, y + 30);
+        if (s_status[0]) { d.setTextColor(C_GREEN, BG); d.drawString(s_status, 8, y + 46); }
+        lg::comp_keys(TR("INVIO apri  x elim  t predef  TAB", "ENTER open  x del  t default  TAB"));
+    } else if (s_tab == TAB_WRITE) {
+        static const char *fit[W_FIELDS] = { "A", "Oggetto", "Testo", "Invia" }, *fen[W_FIELDS] = { "To", "Subject", "Text", "Send" };
+        char fl[32]; snprintf(fl, sizeof fl, "> %s", TR(fit[s_wfield], fen[s_wfield]));
+        d.setTextColor(ACC, BG); d.drawString(fl, 8, y + 4);
+        d.setFont(&fonts::Font0);
+        char l[60];
+        snprintf(l, sizeof l, "%s %.34s", TR("A:", "To:"), M->to[0] ? M->to : "-"); d.setTextColor(FG, BG); d.drawString(l, 8, y + 28);
+        snprintf(l, sizeof l, "%s %.30s", TR("Ogg:", "Subj:"), M->subj[0] ? M->subj : "-"); d.drawString(l, 8, y + 40);
+        snprintf(l, sizeof l, TR("Testo: %d caratteri", "Text: %d characters"), (int)strlen(M->body)); d.setTextColor(MUTED, BG); d.drawString(l, 8, y + 52);
+        if (s_status[0]) { d.setTextColor(s_send_ok ? C_GREEN : C_RED, BG); d.drawString(s_status, 8, y + 66); }
+        lg::comp_keys(TR("su/giu campo  INVIO modifica  TAB", "up/dn field  ENTER edit  TAB"));
+    } else {
+        const int n = lg_sent_load();
+        char m[40]; snprintf(m, sizeof m, TR("%d inviate", "%d sent"), n);
+        d.setTextColor(FG, BG); d.drawString(m, 8, y + 6);
+        if (n > 0) {                                                       // the newest one
+            char ts[20], to[64], subj[64]; bool ok;
+            lg_sent_split(M->sent[(n - 1) % 8], ts, to, subj, &ok);
+            d.setFont(&fonts::Font0);
+            char l[64]; snprintf(l, sizeof l, "%s  %s", ts, ok ? "OK" : TR("ERRORE", "ERROR"));
+            d.setTextColor(ok ? C_GREEN : C_RED, BG); d.drawString(l, 8, y + 30);
+            snprintf(l, sizeof l, "%.38s", to); d.setTextColor(FG, BG); d.drawString(l, 8, y + 44);
+            snprintf(l, sizeof l, "%.38s", subj); d.setTextColor(MUTED, BG); d.drawString(l, 8, y + 56);
+        }
+        lg::comp_keys(TR("TAB scheda  ESC esci", "TAB tab  ESC exit"));
+    }
+}
+
 extern "C" void nucleo_register_mail(void) {
     static const nucleo_app_def_t app = {
         "mail", "Mail", "Messaging", "Invia email via Gmail/SMTP",
         'M', C_BLUE,
         on_enter, on_key, on_tick, on_draw, on_exit,
-        NX_NET_APP
+        NX_NET_APP, nullptr, draw_large
     };
     nucleo_app_register(&app);
 }

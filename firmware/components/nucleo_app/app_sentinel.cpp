@@ -22,12 +22,15 @@ extern "C" {
 #include "nucleo_exclusive.h"
 #include "nucleo_i18n.h"         // TR(it, en)
 }
+#include "app_large.h"           // two screens: the tracker list + details on the 320x240 panel
+#include "nucleo_touch.h"
 
 static const unsigned short ACC = C_GREEN, WARN = C_YELLOW, ALERT = C_RED, SURF = 0x10A2;
 
 enum Screen { LIST, INFO };
 static Screen s_screen = LIST;
 static bool   s_up_ok = false;
+static int    s_sel = 0, s_lscroll = 0;   // selection + scroll for the two-screen list
 
 static void txt(int x, int y, const char *s, uint16_t fg, uint16_t bg, int sz) {
     d.setTextSize(sz); d.setTextColor(fg, bg); d.setCursor(x, y); d.print(s);
@@ -61,6 +64,19 @@ static void on_exit(void) {
 
 static void on_tick(void) {
     if (s_up_ok) sentinel_tracker_tick();
+    nucleo_app_request_draw();
+}
+
+// Selecting a tracker (so the panel's details card / the companion can show one). Taps arrive here as
+// rows; up/down walk the list. Harmless on the Cardputer-only build (no visible selection there).
+static void on_key(int key, char ch) {
+    if (s_screen != LIST || !s_up_ok) return;
+    int n = sentinel_tracker_count();
+    if (n <= 0) return;
+    if (nucleo_touch_is_row(key, ch)) { int i = s_lscroll + (ch - NUCLEO_TOUCH_ROW); if (i < n) s_sel = i; }
+    else if (key == NK_UP)   s_sel = (s_sel + n - 1) % n;
+    else if (key == NK_DOWN) s_sel = (s_sel + 1) % n;
+    else return;
     nucleo_app_request_draw();
 }
 
@@ -110,7 +126,113 @@ static void draw_info(void) {
     txt(8, y0 + 80, TR5("tab: torna alla lista", "tab: back to the list", "tab: vuelve a lista", "tab: retour a liste", "tab: zurueck zu liste"), DIM, BG, 1);
 }
 
+// ===== two screens ==============================================================================================
+// The panel carries the defence dashboard: a following-alert banner, the scrollable tracker list on the left
+// (tap a row to inspect it) and the picked tracker's details on the right. TAB (header menu glyph) flips to a
+// full-panel "what this does" card. The Cardputer becomes the companion: the alert count big, the total, and
+// the picked tracker — the glanceable summary while the panel shows everything.
+static void lg_track_row(int i, int x, int y, int w, int h, bool focus, unsigned short bg, void *) {
+    sentinel_view_t v;
+    if (!sentinel_tracker_get(i, &v)) { lg::row_text(x, y, w, h, focus, bg, "-", nullptr, MUTED); return; }
+    char right[20]; snprintf(right, sizeof right, "%ddB %lus", v.rssi, (unsigned long)v.age_s);
+    unsigned short col = v.following ? ALERT : ((v.flags & 0x01) ? WARN : FG);
+    char nm[32]; snprintf(nm, sizeof nm, "%s%s", v.following ? "<< " : "", sentinel_type_name(v.type));
+    lg::row_text(x, y, w, h, focus, bg, nm, right, focus ? INK : col);
+}
+
+static void lg_info_panel(int x, int y, int w, int h) {
+    lg::panel(x, y, w, h);
+    const unsigned short cb = lg::card();
+    lg::font(1); d.setTextColor(ACC, cb); d.drawString(TR("Che cosa fa", "What it does"), x + 12, y + 10);
+    lg::font(0); d.setTextColor(FG, cb);
+    int ty = y + 36;
+    ty += 17 * lg::wrap(TR("Rileva i tracker Bluetooth che restano con te: AirTag/FindMy, SmartTag, Tile, Chipolo.",
+                           "Detects Bluetooth trackers that stay with you: AirTag/FindMy, SmartTag, Tile, Chipolo."),
+                        x + 12, ty, w - 24, 17, 3);
+    ty += 8;
+    d.setTextColor(ALERT, cb); d.drawString(TR("<<  ti sta seguendo", "<<  following you"), x + 12, ty); ty += 20;
+    d.setTextColor(WARN, cb);  d.drawString(TR("!   in modo smarrito", "!   in lost mode"), x + 12, ty); ty += 24;
+    lg::font(0); d.setTextColor(C_GREEN, cb);
+    d.drawString(TR("Solo ascolto - zero TX", "Listen only - zero TX"), x + 12, ty);
+}
+
+static void draw_large(void) {
+    const int Wp = d.width(), Hp = d.height();
+    nucleo_touch_clear();
+    const int following = s_up_ok ? sentinel_tracker_following() : 0;
+    const int n = s_up_ok ? sentinel_tracker_count() : 0;
+    const char *status = !s_up_ok ? TR("BT off", "BT off")
+                       : nucleo_ble_is_synced() ? TR("scansione", "scanning") : TR("avvio...", "starting...");
+    int y = lg::header("Sentinel", status, following ? ALERT : ACC, NK_BACK, NK_TAB);
+    d.fillRect(0, y, Wp, Hp - y, BG);
+
+    if (s_screen == INFO) { lg_info_panel(12, y + 6, Wp - 24, Hp - y - 14); nucleo_touch_commit(); return; }
+    if (!s_up_ok) {
+        lg::message(12, y + 6, Wp - 24, Hp - y - 14, TR("Bluetooth non attivo", "Bluetooth not active"),
+                    TR("Riapri l'app per riprovare.", "Reopen the app to retry."), WARN);
+        nucleo_touch_commit(); return;
+    }
+    if (n > 0 && s_sel >= n) s_sel = n - 1;
+    if (following > 0) {   // the headline: someone is following you
+        d.fillRoundRect(8, y + 4, Wp - 16, 30, 7, ALERT);
+        char b[40]; snprintf(b, sizeof b, TR("!  %d tracker ti segue", "!  %d tracker following you"), following);
+        lg::font(1); d.setTextColor(INK, ALERT); d.setTextDatum(middle_left); d.drawString(b, 20, y + 19); d.setTextDatum(top_left);
+        y += 38;
+    }
+    const int LW = 178;
+    if (n > 0) {
+        lg::list(0, y + 2, LW, Hp - y - 6, lg::ROW, n, s_sel, &s_lscroll, lg_track_row, nullptr, ACC);
+        // details card for the picked tracker
+        sentinel_view_t v; const int dx = LW + 4, dw = Wp - LW - 10;
+        lg::panel(dx, y + 6, dw, Hp - y - 14);
+        const unsigned short cb = lg::card();
+        if (sentinel_tracker_get(s_sel, &v)) {
+            lg::font(1); d.setTextColor(v.following ? ALERT : ACC, cb);
+            char nm[28]; lg::fit(nm, sizeof nm, sentinel_type_name(v.type), dw - 20);
+            d.drawString(nm, dx + 10, y + 16);
+            d.drawFastHLine(dx + 10, y + 38, dw - 20, LINE);
+            int ky = y + 48;
+            char val[16];
+            snprintf(val, sizeof val, "%d dBm", v.rssi); lg::kv(dx + 10, ky, dw - 20, "RSSI", val, FG, cb); ky += 24;
+            snprintf(val, sizeof val, "%lu s", (unsigned long)v.age_s); lg::kv(dx + 10, ky, dw - 20, TR("Visto da", "Seen for"), val, FG, cb); ky += 24;
+            snprintf(val, sizeof val, "%u", v.hits); lg::kv(dx + 10, ky, dw - 20, TR("Avvist.", "Hits"), val, MUTED, cb); ky += 28;
+            const char *st = v.following ? TR("TI SEGUE", "FOLLOWING") : (v.flags & 0x01) ? TR("smarrito", "lost mode") : TR("presente", "present");
+            lg::font(1); d.setTextColor(v.following ? ALERT : ((v.flags & 0x01) ? WARN : C_GREEN), cb);
+            d.drawString(st, dx + 10, ky);
+        }
+    } else {
+        lg::message(0, y + 6, Wp, Hp - y - 14, TR("Nessun tracker", "No trackers"),
+                    TR("Solo ascolto - zero TX.", "Listen only - zero TX."), C_GREEN);
+    }
+    nucleo_touch_commit();
+}
+
+static void draw_companion(void) {
+    const int top = nucleo_app_content_top(), h = nucleo_app_content_height();
+    d.fillRect(0, top, 240, h, BG);
+    int y = lg::comp_head("SENTINEL", ACC);
+    if (!s_up_ok) {
+        d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(WARN, BG); d.drawString(TR("Bluetooth non attivo", "Bluetooth off"), 8, y + 8);
+        d.setFont(&fonts::Font0); return;
+    }
+    const int following = sentinel_tracker_following(), n = sentinel_tracker_count();
+    d.setFont(&fonts::FreeSansBold18pt7b); d.setTextColor(following ? ALERT : C_GREEN, BG);
+    char big[8]; snprintf(big, sizeof big, "%d", following);
+    d.drawString(big, 8, y + 2);
+    d.setFont(&fonts::Font0); d.setTextColor(following ? ALERT : MUTED, BG);
+    d.drawString(following ? TR("TI SEGUONO", "FOLLOWING") : TR("nessuno ti segue", "none following"), 54, y + 10);
+    char m[28]; snprintf(m, sizeof m, TR("%d tracker vicini", "%d trackers nearby"), n);
+    d.setTextColor(ACC, BG); d.drawString(m, 8, y + 44);
+    sentinel_view_t v;
+    if (n > 0 && sentinel_tracker_get(s_sel, &v)) {
+        char ln[40]; snprintf(ln, sizeof ln, "> %s  %ddB", sentinel_type_name(v.type), v.rssi);
+        d.setTextColor(FG, BG); d.drawString(ln, 8, y + 62);
+    }
+    lg::comp_keys(TR(";/. scegli  TAB info  ESC esci", ";/. pick  TAB info  ESC back"));
+}
+
 static void on_draw(void) {
+    if (nucleo_app_two_screens()) { draw_companion(); return; }
     int top = nucleo_app_content_top(), h = nucleo_app_content_height();
     d.fillRect(0, top, 240, h, BG);
     if (s_screen == INFO) draw_info(); else draw_list(h);
@@ -120,8 +242,8 @@ extern "C" void nucleo_register_sentinel(void) {
     static const nucleo_app_def_t app = {
         "sentinel", "Sentinel", "Security",
         "Anti-stalking tracker detector (BLE, passive)",
-        'S', 0x2DEB, on_enter, nullptr, on_tick, on_draw, on_exit,
-        NX_SOLO | NX_DEEP_OFFLINE | NX_BLE
+        'S', 0x2DEB, on_enter, on_key, on_tick, on_draw, on_exit,
+        NX_SOLO | NX_DEEP_OFFLINE | NX_BLE, nullptr, draw_large
     };
     nucleo_app_register(&app);
 }

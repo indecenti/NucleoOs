@@ -21,6 +21,8 @@
 #include "nucleo_exclusive.h"
 #include "nucleo_i18n.h"
 #include "nucleo_guest.h"   // installed by M5Launcher: no self-OTA, the update comes from Launcher's list
+#include "app_large.h"      // two screens: the version card + big buttons on the panel, the Cardputer as companion
+#include "nucleo_touch.h"
 
 #include <string.h>
 #include <stdio.h>
@@ -309,10 +311,135 @@ static void draw_flash(void)
     }
 }
 
+// ===== two screens ==============================================================================================
+// The panel carries the update: the current version as a hero number, the status line, and the menu as big touch
+// buttons (How to update / Next boot / Ignore this version, or a single Check now). The "how to update" card and
+// the flash progress get their own panel layouts. The Cardputer becomes the companion: version, status, key map.
+static uint16_t upd_status_line(char *out, size_t cap)
+{
+    nucleo_update_state_t st; nucleo_update_get_state(&st);
+    const char *latest = nucleo_update_latest_tag();
+    uint16_t scol = MUTED;
+    if (s_busy_retry) { snprintf(out, cap, "%s", PT("Controllo in corso, riprova", "A check is running, retry", "Comprobacion en curso, reintenta", "Verification en cours, reessayez", "Pruefung laeuft, erneut versuchen")); scol = C_YELLOW; }
+    else if (st.phase == UPD_CHECKING) snprintf(out, cap, "%s", PT("Controllo in corso...", "Checking...", "Comprobando...", "Verification...", "Pruefe..."));
+    else if (st.phase == UPD_CHECK_FAIL) { snprintf(out, cap, "%s", st.err); scol = C_YELLOW; }
+    else if (update_available() && !s_dismissed_now) { snprintf(out, cap, "%s %s", PT("Disponibile:", "Available:", "Disponible:", "Disponible :", "Verfuegbar:"), latest); scol = C_GREEN; }
+    else if (latest[0]) snprintf(out, cap, "%s (%s)", PT("Sei aggiornato", "Up to date", "Actualizado", "A jour", "Aktuell"), latest);
+    else snprintf(out, cap, "%s", PT("Nessun controllo ancora", "Never checked yet", "Sin comprobar aun", "Jamais verifie", "Noch nie geprueft"));
+    return scol;
+}
+
+static void draw_confirm_large(void)
+{
+    const int W = d.width(), H = d.height();
+    char head[48]; snprintf(head, sizeof head, "%s %s", PT("Disponibile", "Available", "Disponible", "Disponible", "Verfuegbar"), nucleo_update_latest_tag());
+    const int y = lg::header(head, nullptr, C_GREEN);
+    lg::panel(16, y + 8, W - 32, H - y - 70);
+    const unsigned short cb = lg::card();
+    const int tx = 32, ty = y + 24;
+    if (!nucleo_guest_self_ota_allowed()) {
+        if (nucleo_guest_hosted()) {
+            lg::font(1); d.setTextColor(FG, cb); d.drawString(PT("Aggiorna da M5Launcher:", "Update from M5Launcher:", "Actualiza desde M5Launcher:", "Mettez a jour via M5Launcher :", "Update ueber M5Launcher:"), tx, ty);
+            lg::font(0); d.setTextColor(MUTED, cb);
+            lg::wrap(PT(".bin della release sulla SD, poi SD > file > Install", "release .bin on the SD card, then SD > file > Install", ".bin de la release en la SD, luego SD > archivo > Install", ".bin de la release sur la SD, puis SD > fichier > Install", "Release-.bin auf die SD, dann SD > Datei > Install"), tx, ty + 32, W - 2 * tx, 18, 4);
+        } else {
+            lg::font(1); d.setTextColor(FG, cb); d.drawString(PT("Aggiorna via USB:", "Update over USB:", "Actualiza por USB:", "Mettez a jour par USB :", "Update per USB:"), tx, ty);
+            lg::font(1); d.setTextColor(C_BLUE, cb); char u[40]; lg::fit(u, sizeof u, "indecenti.github.io/NucleoOs", W - 2 * tx); d.drawString(u, tx, ty + 34);
+        }
+    } else {
+        lg::font(1); d.setTextColor(FG, cb); d.drawString(PT("Aggiorna dal browser:", "Update from a browser:", "Actualiza desde un navegador:", "Mettez a jour depuis un navigateur :", "Update im Browser:"), tx, ty);
+        const char *ip = nucleo_setup_ip();
+        char url[48]; snprintf(url, sizeof url, "http://%s", (ip && ip[0]) ? ip : "192.168.4.1");
+        lg::font(2); d.setTextColor(C_BLUE, cb); char uu[48]; lg::fit(uu, sizeof uu, url, W - 2 * tx); d.drawString(uu, tx, ty + 30);
+        lg::font(1); d.setTextColor(FG, cb); d.drawString(PT("Impostazioni > Aggiornamenti", "Settings > Updates", "Ajustes > Actualizaciones", "Reglages > Mises a jour", "Einstellungen > Updates"), tx, ty + 64);
+        lg::font(0); d.setTextColor(MUTED, cb);
+        lg::wrap(PT("Verifica SHA-256, rollback automatico", "SHA-256 verified, automatic rollback", "SHA-256 verificado, rollback automatico", "SHA-256 verifie, rollback automatique", "SHA-256 geprueft, autom. Rollback"), tx, ty + 92, W - 2 * tx, 16, 2);
+    }
+    lg::button((W - 160) / 2, H - 54, 160, 44, "OK", C_GREEN, INK, NK_ENTER, 0);
+}
+
+static void draw_flash_large(void)
+{
+    const int W = d.width(), H = d.height();
+    nucleo_update_state_t st; nucleo_update_get_state(&st);
+    d.fillRect(0, 0, W, H, BG);
+    if (st.phase == UPD_FAILED) { lg::message(0, 0, W, H, PT("AGGIORNAMENTO FALLITO", "UPDATE FAILED", "ACTUALIZACION FALLIDA", "MISE A JOUR ECHOUEE", "UPDATE FEHLGESCHLAGEN"), st.err, C_RED); return; }
+    if (st.phase == UPD_REBOOTING) { lg::message(0, 0, W, H, PT("Fatto! Riavvio...", "Done! Rebooting...", "Listo! Reiniciando...", "Termine ! Redemarrage...", "Fertig! Neustart..."), nullptr, C_GREEN); return; }
+    lg::font(2); d.setTextDatum(top_center); d.setTextColor(FG, BG);
+    d.drawString(st.phase == UPD_VERIFYING ? PT("Verifica SHA-256...", "Verifying SHA-256...", "Verificando SHA-256...", "Verification SHA-256...", "Pruefe SHA-256...")
+                                           : PT("Aggiornamento in corso", "Updating", "Actualizando", "Mise a jour", "Aktualisiere"), W / 2, 44);
+    lg::font(1); d.setTextColor(C_YELLOW, BG); d.drawString(PT("NON SPEGNERE", "DO NOT POWER OFF", "NO APAGAR", "NE PAS ETEINDRE", "NICHT AUSSCHALTEN"), W / 2, 84);
+    d.setTextDatum(top_left);
+    lg::bar(30, 124, W - 60, 16, st.phase == UPD_VERIFYING ? 100 : (st.pct < 0 ? 0 : st.pct), C_GREEN);
+    if (st.phase == UPD_DOWNLOADING) {
+        lg::font(0); d.setTextDatum(top_center); d.setTextColor(MUTED, BG);
+        char p[32]; snprintf(p, sizeof p, "%d%%  %d/%d KB", st.pct < 0 ? 0 : st.pct, st.recv_kb, st.total_kb);
+        d.drawString(p, W / 2, 150); d.setTextDatum(top_left);
+    }
+}
+
+static void draw_large(void)
+{
+    const int W = d.width(), H = d.height();
+    nucleo_touch_clear();
+    if (s_ui == UI_FLASH)   { draw_flash_large();   nucleo_touch_commit(); return; }
+    if (s_ui == UI_CONFIRM) { draw_confirm_large(); nucleo_touch_commit(); return; }
+    // UI_MAIN: hero version + status + big buttons
+    char cur[24]; cur_triplet(cur, sizeof cur);
+    const int y = lg::header(PT("AGGIORNAMENTI", "UPDATES", "ACTUALIZACIONES", "MISES A JOUR", "UPDATES"), nullptr, C_GREEN);
+    lg::font(3); d.setTextDatum(top_center); d.setTextColor(FG, BG); d.drawString(cur, W / 2, y + 6);
+    char line[64]; const uint16_t scol = upd_status_line(line, sizeof line);
+    lg::font(1); d.setTextColor(scol, BG); char sl[64]; lg::fit(sl, sizeof sl, line, W - 24); d.drawString(sl, W / 2, y + 46);
+    d.setTextDatum(top_left);
+    const char *rows3[3] = {
+        PT("Come aggiornare", "How to update", "Como actualizar", "Comment mettre a jour", "So aktualisieren"),
+        PT("Al prossimo avvio", "Next boot", "Proximo arranque", "Prochain demarrage", "Naechster Start"),
+        PT("Ignora questa versione", "Ignore this version", "Ignorar esta version", "Ignorer cette version", "Diese Version ignorieren"),
+    };
+    const char *row1 = PT("Controlla ora", "Check now", "Comprobar ahora", "Verifier maintenant", "Jetzt pruefen");
+    const int rows = menu_rows(), regTop = y + 68, regBot = H - 12;
+    if (rows == 1) {
+        lg::button(22, regTop + (regBot - regTop - 50) / 2, W - 44, 50, row1, C_GREEN, INK, NK_CHAR, '1');
+    } else {
+        const int gap = 7, bh = (regBot - regTop - (rows - 1) * gap) / rows;
+        for (int i = 0; i < rows; i++) {
+            const bool sel = (i == s_sel);
+            lg::button(22, regTop + i * (bh + gap), W - 44, bh, rows3[i], sel ? C_GREEN : lg::card(), sel ? INK : FG, NK_CHAR, (char)('1' + i));
+        }
+    }
+    nucleo_touch_commit();
+}
+
+static void draw_companion(void)
+{
+    const int top = nucleo_app_content_top(), h = nucleo_app_content_height();
+    d.fillRect(0, top, W, h, BG);
+    const int y = lg::comp_head("UPDATES", C_GREEN);
+    if (s_ui == UI_FLASH) {
+        nucleo_update_state_t st; nucleo_update_get_state(&st);
+        d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(st.phase == UPD_FAILED ? C_RED : C_YELLOW, BG);
+        d.drawString(st.phase == UPD_FAILED ? PT("Fallito", "Failed", "Fallida", "Echouee", "Fehlgeschlagen")
+                                            : PT("Non spegnere", "Do not power off", "No apagar", "Ne pas eteindre", "Nicht ausschalten"), 8, y + 4);
+        d.setFont(&fonts::Font0); d.setTextColor(FG, BG);
+        char p[40]; if (st.pct >= 0) snprintf(p, sizeof p, "%d%%  %d/%d KB", st.pct, st.recv_kb, st.total_kb); else snprintf(p, sizeof p, "%d KB", st.recv_kb);
+        d.drawString(p, 8, y + 28);
+        lg::comp_keys("");
+        return;
+    }
+    char cur[24]; cur_triplet(cur, sizeof cur);
+    d.setFont(&fonts::FreeSansBold12pt7b); d.setTextColor(FG, BG); d.drawString(cur, 8, y + 6);
+    char line[64]; const uint16_t scol = upd_status_line(line, sizeof line);
+    d.setFont(&fonts::Font0); d.setTextColor(scol, BG); char f[44]; snprintf(f, sizeof f, "%.40s", line); d.drawString(f, 8, y + 40);
+    lg::comp_keys(s_ui == UI_CONFIRM ? PT("INVIO ok  ESC indietro", "ENTER ok  ESC back", "INTRO ok  ESC atras", "ENTREE ok  ESC retour", "ENTER ok  ESC zurueck")
+                : menu_rows() == 3 ? PT("1-3 scegli  ESC prossimo avvio", "1-3 pick  ESC next boot", "1-3 elige  ESC prox arranque", "1-3 choisir  ESC demarrage", "1-3 waehlen  ESC Start")
+                : PT("INVIO controlla  ESC esci", "ENTER check  ESC exit", "INTRO comprobar  ESC salir", "ENTREE verifier  ESC quitter", "ENTER pruefen  ESC beenden"));
+}
+
 static void on_draw(void)
 {
     if (!s_dirty) return;
     s_dirty = false;
+    if (nucleo_app_two_screens()) { draw_companion(); return; }
     if (s_ui == UI_FLASH) { draw_flash(); return; }   // owns its own clears (canvas-free direct-draw)
     d.fillScreen(BG);
     if (s_ui == UI_MAIN) draw_main();
@@ -355,6 +482,7 @@ extern "C" void nucleo_register_updates(void)
         "Check and install NucleoOS releases",
         'U', C_GREEN,
         on_enter, on_key, on_tick, on_draw, on_exit,
+        0, nullptr, draw_large,
     };
     nucleo_app_register(&app);
 }

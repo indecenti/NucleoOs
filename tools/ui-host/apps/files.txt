@@ -1,0 +1,29 @@
+# Files: (c:<control char> = a card button on the panel: 0x04 details, 0x05 rename, 0x06 new folder)
+# a small card with music, pictures, notes, videos, a nested folder and some history
+@sd data/Music/Daft_Crocodile_-_Notte_al_porto.mp3 ID3fakeaudio
+@sd data/Music/Le_Sardine_-_Estate_lunga.mp3 ID3fakeaudio
+@sd data/Pictures/lago-al-tramonto.jpg fakejpeg
+@sd data/Pictures/gita-in-montagna.png fakepng
+@sd data/Notes/spesa.md # Spesa\n- latte\n- pane
+@sd data/Notes/idee-progetto.md # Idee\nUn secondo schermo per ogni app.
+@sd data/Notes/Archivio/2025-ricevute.txt ricevute
+@sd data/Videos/trailer-festival.nfv NFV
+@sd data/Recordings/riunione-lunedi.wav RIFF
+@sd system/config/settings.json {"lang":"it"}
+@sd backup-telefono.zip PK
+@sd leggimi.txt Benvenuto sulla scheda.
+@sd nucleo/files-hist.txt F:/data/Notes/spesa.md\nF:/data/Music/Le_Sardine_-_Estate_lunga.mp3\nD:/data/Pictures/:4\nD:/data/Notes/:2\n
+root
+pick      D D D D
+folder    ENTER
+music     ENTER D ENTER D
+notes     ENTER D D ENTER
+parent    ENTER D D ENTER U U
+details   ENTER D D ENTER D D c:
+rename    ENTER D D ENTER D D c:
+mkdir     ENTER D D ENTER D D c: t:Lavoro
+delete    ENTER D D ENTER D D c:d
+recent    TAB
+search    TAB TAB t:spesa
+results   TAB TAB t:a ENTER
+noresult  TAB TAB t:zzz ENTER

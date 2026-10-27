@@ -1,0 +1,9 @@
+# Photos: generated pictures on the card (stubs/photos_stubs.cpp writes them: two JPEG, two PNG, one too large)
+@host stubs/photos_stubs.cpp
+list
+pick      D D
+big       U
+view      ENTER
+viewpng   D D ENTER
+next      ENTER D
+backlist  ENTER DEL

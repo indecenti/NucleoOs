@@ -1,0 +1,14 @@
+# Store: the sections (New/Games/Categories/Mine), a category, an app page (install / update / installed),
+# the uninstall confirm and the open-on-phone QR. store_seed.cpp seeds the catalog + a device IP (apps.mjs only).
+@src store_apps.cpp nucleo_store/store_engine.c nucleo_sdcontent/sdc_sha256.c nucleo_sdcontent/sdc_registry.c
+@host store_stubs.cpp store_seed.cpp
+new
+games       TAB
+cats        TAB TAB
+cat-tools   TAB TAB D ENTER
+mine        TAB TAB TAB
+app-new     ENTER
+app-update  TAB TAB TAB ENTER
+app-mine    TAB TAB TAB D D ENTER
+remove      TAB TAB TAB D D ENTER DEL
+qr          TAB TAB TAB D D ENTER c:q

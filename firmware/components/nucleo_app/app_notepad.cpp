@@ -27,6 +27,8 @@ extern "C" {
 #include "launcher_theme.h"     // shared OS palette — Notes follows the theme like every other app
 #include "nucleo_audio.h"       // soft clicks on discrete actions
 #include "app_gfx.h"
+#include "app_large.h"         // two screens: the notes on the 320x240 panel, the Cardputer as companion
+#include "nucleo_touch.h"
 
 // Semantic accents mapped onto the shared palette (theme-following, coherent Markdown highlighting).
 #define ACC     C_BLUE
@@ -218,13 +220,15 @@ static void strip_inline(const char *src, char *dst, int cap)
     dst[j] = 0;
 }
 
+// Where render_doc lays the document out: the Cardputer's content area, or the panel's body (two screens).
+static int s_doc_x = 8, s_doc_w = 224, s_doc_top = -1, s_doc_bot = -1;
 static int render_doc(int scroll, bool measure)
 {
-    const int MARGL = 8, MARGR = 8, top = nucleo_app_content_top() + 20;
-    const int bottom = nucleo_app_content_top() + nucleo_app_content_height() - 2;
+    const int MARGL = s_doc_x, top = s_doc_top >= 0 ? s_doc_top : nucleo_app_content_top() + 20;
+    const int bottom = s_doc_bot >= 0 ? s_doc_bot : nucleo_app_content_top() + nucleo_app_content_height() - 2;
     int bsz = body_size();
     int cw = 6 * bsz;
-    int contentW = 240 - MARGL - MARGR;
+    int contentW = s_doc_w;
     bool md = file_is_md();
     int dline = 0, y = top, stop = 0;
 
@@ -332,7 +336,13 @@ static void leave(void) { save(); free(s_buf); s_buf = nullptr; free(s_names); s
 static const char *nl_label(int i, void *) { return (i == 0 || !s_names) ? TR5("+ Nuova nota", "+ New note", "+ Nueva nota", "+ New note", "+ Neue notiz") : s_names[i - 1]; }
 static unsigned short nl_color(int i, void *) { return i == 0 ? GRN : ACC; }
 
-static int view_vis(void) { int h = nucleo_app_content_height() - 22; int lh = body_size() * 8; return h / lh < 1 ? 1 : h / lh; }
+static const int LG_DOC_TOP = lg::HEAD + 6;              // the document on the panel: under the header, full height
+static int view_vis(void)
+{
+    int h = nucleo_app_two_screens() ? 240 - LG_DOC_TOP - 4 : nucleo_app_content_height() - 22;
+    int lh = body_size() * 8; return h / lh < 1 ? 1 : h / lh;
+}
+static int s_lg_scroll;                                   // the panel list's first visible row
 
 // ---- Actions / Rename / Details ----
 static void open_actions(void)
@@ -378,7 +388,7 @@ static void act_perform(int idx)
 }
 static void actions_key(int key, char ch)
 {
-    (void)ch;
+    if (nucleo_touch_is_row(key, ch)) { int i = ch - NUCLEO_TOUCH_ROW; if (i < ACT_N) act_perform(i); return; }   // the panel's action rows
     if (key == NK_UP)        s_actsel = (s_actsel + ACT_N - 1) % ACT_N;
     else if (key == NK_DOWN) s_actsel = (s_actsel + 1) % ACT_N;
     else if (key == NK_ENTER) { act_perform(s_actsel); return; }
@@ -394,6 +404,10 @@ static void on_key(int key, char ch)
 
     if (s_mode == M_SET) {                                        // settings card
         if (key == NK_TAB) { s_mode = M_VIEW; cfg_save(); view_hint(); }
+        else if (nucleo_touch_is_row(key, ch)) {                                       // a tapped option: pick it and step it
+            s_setsel = (ch - NUCLEO_TOUCH_ROW) & 1;
+            if (s_setsel == 0) s_fontsz = (s_fontsz + 1) % 3; else s_mdmode = (s_mdmode + 1) % 3;
+        }
         else if (key == NK_UP || key == NK_DOWN) s_setsel = (s_setsel + 1) & 1;
         else if (key == NK_RIGHT || key == NK_ENTER) { if (s_setsel == 0) s_fontsz = (s_fontsz + 1) % 3; else s_mdmode = (s_mdmode + 1) % 3; }
         else return;
@@ -409,6 +423,9 @@ static void on_key(int key, char ch)
                 scan(); if (s_sel > s_n) s_sel = s_n;
             }
             if (r >= 0) s_confirm_del = false;
+        }
+        else if (int t = lg::row_tap(key, ch, s_lg_scroll, items, &s_sel)) {           // a tapped row: pick, or open
+            if (t == 2) { if (s_sel == 0) new_note(); else load(s_names[s_sel - 1]); }
         }
         else if (key == NK_RIGHT && s_sel > 0) { open_actions(); return; }
         else if (app_ui_list_key(key, ch, &s_sel, items, nl_label, nullptr)) { }
@@ -615,8 +632,243 @@ static void draw_input(void)
     d.print(TR5("INVIO conferma   <- annulla", "ENTER confirm   <- cancel", "INTRO confirma   <- cancela", "ENTREE confirm   <- annule", "ENTER bestaetigt   <- abbr."));
 }
 
+// ===== two screens ==============================================================================================
+// The panel carries the notes: the list on the left with the picked note's opening lines beside it, the document
+// full width while reading or writing, the actions / options / details / rename as panels of their own. Touch is
+// the content: tap a note to pick it, again (or its preview) to open it; drag the document to scroll it; the
+// header's chevron steps back. The Cardputer, where the typing happens, becomes the companion: what is picked or
+// open, and while writing the line under the cursor in large type.
+static const int LG_LISTW = 150;
+static char s_prev[200];                                  // the picked note's first bytes, for the preview card
+static int  s_prev_of = -1;
+
+static void lg_preview(int x, int y, int w, int h)
+{
+    lg::panel(x, y, w, h);
+    const unsigned short cb = lg::card();
+    if (s_sel == 0) {                                      // "+ New note": what a tap does
+        lg::font(1); d.setTextColor(GRN, cb); d.drawString(TR("Nuova nota", "New note"), x + 10, y + 10);
+        lg::font(0); d.setTextColor(MUTED, cb);
+        lg::wrap(TR("Tocca qui o premi INVIO: si apre vuota e scrivi sulla tastiera.",
+                    "Tap here or press ENTER: it opens empty and you type on the keyboard."), x + 10, y + 36, w - 20, 17, 6);
+        nucleo_touch_add(x, y, w, h, NK_ENTER, 0);
+        return;
+    }
+    if (s_prev_of != s_sel) {                              // read the opening bytes once per pick
+        s_prev_of = s_sel; s_prev[0] = 0;
+        char abs[200]; snprintf(abs, sizeof abs, "%s/%s", NOTES_DIR, s_names[s_sel - 1]);
+        FILE *f = fopen(abs, "rb");
+        if (f) { size_t n = fread(s_prev, 1, sizeof s_prev - 1, f); s_prev[n] = 0; fclose(f); }
+        for (char *c = s_prev; *c; c++) if (*c == '#' || *c == '*' || *c == '`' || *c == '\r') *c = ' ';
+    }
+    lg::font(1); d.setTextColor(ACC, cb);
+    char t[56]; lg::fit(t, sizeof t, s_names[s_sel - 1], w - 20); d.drawString(t, x + 10, y + 8);
+    d.drawFastHLine(x + 10, y + 30, w - 20, LINE);
+    lg::font(0); d.setTextColor(s_prev[0] ? FG : DIM, cb);
+    const int bh = 30, lines = (h - 40 - bh - 14) / 17;
+    lg::wrap(s_prev[0] ? s_prev : TR("(vuota)", "(empty)"), x + 10, y + 38, w - 20, 17, lines);
+    const int bw = (w - 26) / 2, by = y + h - bh - 8;      // the two things to do with it
+    lg::button(x + 8, by, bw, bh, TR("Apri", "Open"), ACC, INK, NK_ENTER, 0);
+    lg::button(x + 18 + bw, by, bw, bh, TR("Azioni", "Actions"), LINE, FG, NK_RIGHT, '/');
+    nucleo_touch_add(x, y, w, by - y, NK_ENTER, 0);        // the note itself opens too
+}
+
+static void lg_list_row(int i, int x, int y, int w, int h, bool focus, unsigned short bg, void *)
+{
+    if (i == 0) { lg::row_text(x, y, w, h, focus, bg, TR("+ Nuova nota", "+ New note"), nullptr, GRN); return; }
+    char nm[56]; snprintf(nm, sizeof nm, "%s", s_names[i - 1]);
+    char *dot = strrchr(nm, '.'); if (dot && dot != nm) *dot = 0;           // the extension is noise in the list
+    lg::row_text(x, y, w, h, focus, bg, nm, nullptr, FG);
+}
+
+static void lg_doc(void)
+{
+    const int W = d.width(), H = d.height();
+    const bool editing = (s_mode == M_EDIT);
+    char title[48]; snprintf(title, sizeof title, "%s%s", s_file, s_dirty ? " *" : "");
+    s_doc_x = 12; s_doc_w = W - 30; s_doc_top = LG_DOC_TOP; s_doc_bot = H - 4;
+    const int vis = view_vis();
+    char tag[16];
+    if (editing) snprintf(tag, sizeof tag, "%s", TR("SCRIVI", "EDIT"));
+    else {
+        s_doc_lines = render_doc(0, true);
+        int maxs = s_doc_lines - vis; if (maxs < 0) maxs = 0;
+        if (s_vscroll > maxs) s_vscroll = maxs;
+        if (s_vscroll < 0) s_vscroll = 0;
+        int pct = s_doc_lines > 0 ? (int)((long)(s_vscroll + vis) * 100 / s_doc_lines) : 100; if (pct > 100) pct = 100;
+        snprintf(tag, sizeof tag, "%s %d%%", file_is_md() ? "MD" : "TXT", pct);
+    }
+    lg::header(title, tag, ACC, NK_BACK, editing ? 0 : NK_TAB);
+    d.fillRect(0, lg::HEAD, W, H - lg::HEAD, BG);
+    d.setFont(&fonts::Font0);                              // the document's own type: the bitmap face, sized 1..3
+    if (editing) {
+        const int sz = body_size() < 2 ? 2 : body_size(), LINEH = sz * 8 + 2, WRAP = (W - 24) / (6 * sz);
+        const int RING = 24;
+        int evis = (H - LG_DOC_TOP - 4) / LINEH; if (evis > RING) evis = RING;
+        static int rows_at[RING]; int nlines = 0, col = 0;               // where each row starts in the buffer (ring)
+        rows_at[0] = 0;
+        for (int i = 0; s_buf && i < s_len; i++) {
+            if (s_buf[i] == '\n' || ++col >= WRAP) { nlines++; col = 0; rows_at[nlines % RING] = i + 1; }
+        }
+        const int total = nlines + 1, first = total > evis ? total - evis : 0;
+        int y = LG_DOC_TOP;
+        for (int l = first; l < total; l++, y += LINEH) {
+            const int a = rows_at[l % RING], b = l == nlines ? s_len : rows_at[(l + 1) % RING];
+            char row[64]; int n = b - a; if (n > 0 && s_buf[a + n - 1] == '\n') n--; if (n > 63) n = 63; if (n < 0) n = 0;
+            memcpy(row, s_buf + a, n); row[n] = 0;
+            d.setTextSize(sz); d.setTextColor(FG, BG); d.setCursor(12, y); d.print(row);
+            if (l == nlines) d.fillRect(12 + n * 6 * sz, y, 3, sz * 8, GRN);
+        }
+        if (s_len == 0) { lg::font(0); d.setTextColor(DIM, BG); d.drawString(TR("Scrivi sulla tastiera...", "Type on the keyboard..."), 24, LG_DOC_TOP); }
+        d.setTextSize(1);
+        return;
+    }
+    render_doc(s_vscroll, false);
+    d.setTextSize(1);
+    if (s_len == 0) { lg::font(0); d.setTextColor(DIM, BG); d.drawString(TR("(vuota)", "(empty)"), 12, LG_DOC_TOP); }
+    if (s_doc_lines > vis) {
+        const int maxs = s_doc_lines - vis, track = H - LG_DOC_TOP - 8;
+        int kh = track * vis / s_doc_lines; if (kh < 14) kh = 14;
+        d.fillRect(W - 6, LG_DOC_TOP, 2, track, LINE);
+        d.fillRect(W - 6, LG_DOC_TOP + (track - kh) * s_vscroll / (maxs > 0 ? maxs : 1), 2, kh, ACC);
+    }
+    nucleo_touch_add_scroll(0, lg::HEAD, W, H - lg::HEAD, body_size() * 8, NK_UP, 0, NK_DOWN, 0);   // drag = scroll
+    if (!s_trunc) nucleo_touch_add(W / 3, H - 60, W / 3, 60, NK_ENTER, 0);   // a tap low in the middle: write
+}
+
+static void draw_large(void)
+{
+    const int W = d.width(), H = d.height();
+    nucleo_touch_clear();
+    if (s_mode == M_VIEW || s_mode == M_EDIT || s_mode == M_SET) {
+        lg_doc();
+        if (s_mode == M_SET) {                             // the view options, over the document's foot
+            const int ch = 116, cy = H - ch - 8, cx = 20, cw = W - 40;
+            lg::panel(cx, cy, cw, ch, INK); d.drawRoundRect(cx, cy, cw, ch, 8, ACC);
+            lg::font(1); d.setTextColor(GRN, INK); d.drawString(TR("Opzioni vista", "View options"), cx + 12, cy + 8);
+            const char *szn[3] = { TR("Piccolo", "Small"), TR("Medio", "Medium"), TR("Grande", "Large") };
+            const char *mdn[3] = { "Auto", "Markdown", TR("Testo", "Plain") };
+            const char *lbl[2] = { TR("Dimensione", "Font size"), TR("Formato", "Format") };
+            const char *val[2] = { szn[s_fontsz], mdn[s_mdmode] };
+            for (int i = 0; i < 2; i++) {
+                const int ry = cy + 34 + i * 36; const bool on = i == s_setsel;
+                const unsigned short f = on ? ACC : INK;
+                d.fillRoundRect(cx + 8, ry, cw - 16, 32, 8, f);
+                lg::row_text(cx + 8, ry, cw - 16, 32, on, f, lbl[i], val[i], MUTED);
+                nucleo_touch_add(cx, ry, cw, 32, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + i));
+            }
+        }
+        nucleo_touch_commit();
+        return;
+    }
+    if (s_mode == M_ACT || s_mode == M_DETAILS || s_mode == M_INPUT) {
+        lg::header(s_target, nullptr, ACC, NK_BACK);
+        const int y = lg::HEAD + 6;
+        d.fillRect(0, lg::HEAD, W, H - lg::HEAD, BG);
+        if (s_mode == M_ACT) {
+            const char *items[ACT_N] = { TR("Apri", "Open"), TR("Rinomina", "Rename"), TR("Duplica", "Duplicate"), TR("Dettagli", "Details"), TR("Elimina", "Delete") };
+            for (int i = 0; i < ACT_N; i++) {
+                const int ry = y + i * 40; const bool on = i == s_actsel;
+                const unsigned short ac = i == 4 ? C_RED : ACC, f = on ? ac : lg::card();
+                d.fillRoundRect(12, ry, W - 24, 34, 9, f);
+                lg::font(1); d.setTextDatum(middle_left); d.setTextColor(on ? INK : (i == 4 ? C_RED : FG), f);
+                d.drawString(items[i], 28, ry + 18); d.setTextDatum(top_left);
+                nucleo_touch_add(12, ry, W - 24, 34, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + i));
+            }
+        } else if (s_mode == M_DETAILS) {
+            lg::panel(12, y, W - 24, H - y - 10);
+            const unsigned short cb = lg::card();
+            char line[48]; int ly = y + 12;
+            struct stat st; char abs[200]; snprintf(abs, sizeof abs, "%s/%s", NOTES_DIR, s_target);
+            if (stat(abs, &st) == 0) {
+                if (st.st_size < 1024) snprintf(line, sizeof line, "%ld B", (long)st.st_size);
+                else snprintf(line, sizeof line, "%ld KB", (long)((st.st_size + 1023) / 1024));
+                lg::kv(26, ly, W - 52, TR("Dimensione", "Size"), line, FG, cb); ly += 26;
+                time_t mt = st.st_mtime; struct tm *tm = localtime(&mt);
+                if (tm) { snprintf(line, sizeof line, "%02d/%02d/%04d %02d:%02d", tm->tm_mday, tm->tm_mon + 1, 1900 + tm->tm_year, tm->tm_hour, tm->tm_min);
+                          lg::kv(26, ly, W - 52, TR("Modificata", "Modified"), line, FG, cb); ly += 26; }
+            }
+            snprintf(line, sizeof line, "%ld", s_stat_lines); lg::kv(26, ly, W - 52, TR("Righe", "Lines"), line, FG, cb); ly += 26;
+            snprintf(line, sizeof line, "%ld", s_stat_words); lg::kv(26, ly, W - 52, TR("Parole", "Words"), line, FG, cb); ly += 26;
+            snprintf(line, sizeof line, "%ld", s_stat_bytes); lg::kv(26, ly, W - 52, "Byte", line, MUTED, cb);
+            nucleo_touch_add(0, lg::HEAD, W, H - lg::HEAD, NK_ENTER, 0);   // any tap closes, like any key
+        } else {                                            // rename: the field here, the typing on the Cardputer
+            lg::font(1); d.setTextColor(FG, BG); d.drawString(TR("Nuovo nome", "New name"), 16, y + 8);
+            d.fillRoundRect(12, y + 34, W - 24, 40, 8, INK); d.drawRoundRect(12, y + 34, W - 24, 40, 8, s_input[0] ? ACC : LINE);
+            char shown[72]; snprintf(shown, sizeof shown, "%s_", s_input);
+            char f[72]; lg::font(2); lg::fit(f, sizeof f, shown, W - 48);
+            d.setTextDatum(middle_left); d.setTextColor(FG, INK); d.drawString(f, 24, y + 55); d.setTextDatum(top_left);
+            const int bw = (W - 36) / 2;
+            lg::button(12, H - 54, bw, 40, TR("Annulla", "Cancel"), LINE, FG, NK_BACK, 0);
+            lg::button(24 + bw, H - 54, bw, 40, TR("Rinomina", "Rename"), ACC, INK, NK_ENTER, 0);
+        }
+        nucleo_touch_commit();
+        return;
+    }
+    // M_LIST
+    char c[16]; snprintf(c, sizeof c, TR("%d note", "%d notes"), s_n);
+    const int y = lg::header("Notes", c, ACC);
+    lg::list(0, y + 2, LG_LISTW, H - y - 4, lg::ROW, s_n + 1, s_sel, &s_lg_scroll, lg_list_row, nullptr, ACC);
+    d.fillRect(LG_LISTW, y, W - LG_LISTW, H - y, BG);
+    lg_preview(LG_LISTW + 4, y + 6, W - LG_LISTW - 10, H - y - 12);
+    if (s_confirm_del && s_sel > 0) {                       // delete? over the whole body, Yes / No to tap
+        const int cy = 70, ch = 120;
+        lg::panel(24, cy, W - 48, ch, INK); d.drawRoundRect(24, cy, W - 48, ch, 8, C_RED);
+        lg::font(1); d.setTextColor(C_RED, INK); d.drawString(TR("Eliminare la nota?", "Delete note?"), 40, cy + 12);
+        lg::font(0); d.setTextColor(FG, INK); char nm[56]; lg::fit(nm, sizeof nm, s_names[s_sel - 1], W - 96); d.drawString(nm, 40, cy + 38);
+        const int bw = (W - 48 - 36) / 2;
+        lg::button(36, cy + ch - 48, bw, 36, "No", s_del_yes ? LINE : ACC, s_del_yes ? FG : INK, NK_CHAR, 'n');
+        lg::button(48 + bw, cy + ch - 48, bw, 36, TR("Elimina", "Delete"), s_del_yes ? C_RED : LINE, s_del_yes ? INK : FG, NK_CHAR, 'y');
+    }
+    nucleo_touch_commit();
+}
+
+// The Cardputer while the panel shows the notes: the pick (or the open note), and while writing the cursor's line.
+static void draw_companion(void)
+{
+    const int top = nucleo_app_content_top(), h = nucleo_app_content_height();
+    d.fillRect(0, top, 240, h, BG);
+    int y = lg::comp_head("NOTES", ACC);
+    if (s_mode == M_EDIT) {                                 // the line being typed, large, with the cursor
+        int a = s_len; while (a > 0 && s_buf[a - 1] != '\n') a--;
+        const char *line = s_buf + a; const int n = s_len - a;
+        const char *tail = n > 17 ? line + n - 17 : line;
+        d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(ACC, BG);
+        char t[48]; snprintf(t, sizeof t, "%.36s%s", s_file, s_dirty ? " *" : ""); d.drawString(t, 8, y + 2);
+        d.setFont(&fonts::Font0); d.setTextSize(2); d.setTextColor(FG, BG); d.setCursor(8, y + 34); d.print(tail);
+        d.fillRect(8 + (int)strlen(tail) * 12, y + 32, 3, 18, GRN); d.setTextSize(1);
+        char m[40]; snprintf(m, sizeof m, TR("%d caratteri", "%d characters"), s_len);
+        d.setTextColor(MUTED, BG); d.setCursor(8, y + 62); d.print(m);
+        lg::comp_keys(TR("INVIO a capo  CANC cancella  ESC salva", "ENTER newline  DEL erase  ESC save"));
+        return;
+    }
+    if (s_mode == M_VIEW || s_mode == M_SET) {
+        d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(FG, BG);
+        lg::wrap(s_file, 8, y + 4, 224, 20, 2);
+        const int vis = view_vis();
+        int pct = s_doc_lines > 0 ? (int)((long)(s_vscroll + vis) * 100 / s_doc_lines) : 100; if (pct > 100) pct = 100;
+        lg::bar(8, y + 52, 224, 6, pct, ACC);
+        d.setFont(&fonts::Font0); d.setTextColor(MUTED, BG);
+        char m[40]; snprintf(m, sizeof m, "%s  %d%%", file_is_md() ? "Markdown" : TR("Testo", "Text"), pct); d.drawString(m, 8, y + 64);
+        lg::comp_keys(s_trunc ? TR(";/. scorri  sola lettura  ESC lista", ";/. scroll  read-only  ESC list")
+                              : TR(";/. scorri  INVIO scrivi  TAB opz", ";/. scroll  ENTER write  TAB opts"));
+        return;
+    }
+    const char *what = s_mode == M_LIST ? (s_sel == 0 ? TR("+ Nuova nota", "+ New note") : s_names[s_sel - 1]) : s_target;
+    d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(s_mode == M_LIST && s_sel == 0 ? GRN : FG, BG);
+    const int nl = lg::wrap(what, 8, y + 4, 224, 20, 3);
+    d.setFont(&fonts::Font0); d.setTextColor(MUTED, BG);
+    char m[40]; snprintf(m, sizeof m, TR("%d di %d", "%d of %d"), s_sel, s_n);
+    if (s_mode == M_LIST && s_sel > 0) d.drawString(m, 8, y + 8 + nl * 20);
+    lg::comp_keys(s_mode == M_INPUT ? TR("scrivi il nome  INVIO ok  ESC annulla", "type the name  ENTER ok  ESC cancel")
+                : s_mode == M_LIST ? TR("INVIO apri  -> azioni  n nuova  d elim", "ENTER open  -> actions  n new  d del")
+                : TR("su/giu  INVIO ok  ESC indietro", "up/dn  ENTER ok  ESC back"));
+}
+
 static void draw(void)
 {
+    if (nucleo_app_two_screens()) { draw_companion(); return; }
+    s_doc_x = 8; s_doc_w = 224; s_doc_top = -1; s_doc_bot = -1;   // the compact layout (the panel's may be left set)
     if (s_mode == M_INPUT)   { draw_input();   return; }
     if (s_mode == M_DETAILS) { draw_details();  return; }
     if (s_mode == M_ACT)     { draw_actions();  return; }
@@ -631,7 +883,7 @@ extern "C" void nucleo_register_notepad(void)
 {
     static const nucleo_app_def_t app = {
         "notepad", "Notes", "Office", "Leggi e scrivi testo e Markdown",
-        'n', C_BLUE, enter, on_key, tick, draw, leave
+        'n', C_BLUE, enter, on_key, tick, draw, leave, 0, nullptr, draw_large
     };
     nucleo_app_register(&app);
 }

@@ -1,3 +1,4 @@
+#include <direct.h>   // _mkdir: the Video scenes lay out sd/data/Videos
 // ui-host scene driver: builds the REAL launcher tree from the real app registry, drives the REAL
 // renderer (launcher_render.cpp) into the in-memory 240x135 display, and dumps every scene as a
 // raw RGB image (run.mjs turns them into PNGs + a hash manifest for the golden gate).
@@ -399,6 +400,54 @@ static const Scene STORE[] = {
     { "error",     [] { g_host_store_status = NST_FAILED; g_host_store_err = "Store unreachable"; store_open(false); app_draw(); } },
 };
 
+// ---- Video: the clip browser, compact / on the external panel / its Cardputer companion --------------------------
+extern "C" void nucleo_register_video(void);
+// A v4 clip header is all the browser reads (duration, picture size); older versions show as "old".
+static void video_clip(const char *name, int ver, uint32_t dur_s, int vw, int vh)
+{
+    char p[160]; snprintf(p, sizeof p, "sd/data/Videos/%s", name);
+    FILE *f = fopen(p, "wb"); if (!f) return;
+    uint8_t h[64] = { 'N', 'F', 'V', '1', (uint8_t)ver, 3 };
+    auto w16 = [&](int o, uint32_t v) { h[o] = v & 255; h[o + 1] = (v >> 8) & 255; };
+    auto w32 = [&](int o, uint32_t v) { w16(o, v & 0xffff); w16(o + 2, v >> 16); };
+    w16(6, vw); w16(8, (vh + 15) & ~15); w16(10, 15); w32(20, dur_s * 1000); w32(40, vw); w32(44, vh);
+    fwrite(h, 1, sizeof h, f); fclose(f);
+}
+static void video_open(bool clips = true)
+{
+    _mkdir("sd/data"); _mkdir("sd/data/Videos");
+    if (clips) {
+        _mkdir("sd/data/Videos/Cortometraggi");
+        video_clip("Wallace e Gromit - Una Fantastica Gita.nfv", 4, 1296, 320, 240);
+        video_clip("Wallace e Gromit - Il Mistero dei 12 Fornai Assassinati.nfv", 4, 1710, 240, 135);
+        video_clip("Wallace e Gromit - I Pantaloni Sbagliati.nfv", 4, 1662, 240, 135);
+        video_clip("Screamers - Urla dallo Spazio (1995).nfv", 1, 0, 240, 136);
+        video_clip("Cortometraggi/Corto.nfv", 4, 300, 320, 240);
+        FILE *r = fopen("sd/data/Videos/.nfv-resume", "w");
+        if (r) { fputs("754|Wallace e Gromit - Il Mistero dei 12 Fornai Assassinati.nfv\n", r); fclose(r); }
+    }
+    app_open("video");
+}
+static void video_draw(void)
+{
+    if (g_host.large && s_app->on_draw_large) {               // the external panel: the app's own 320x240 view
+        for (int t = 0; t < 12; t++) { g_host.now_us += 200000; if (s_app->on_tick) s_app->on_tick(); }
+        d.fillScreen(THEME_BG);
+        s_app->on_draw_large();
+        return;
+    }
+    app_draw();
+}
+static const Scene VIDEO[] = {
+    { "list",      [] { video_open(); down(2); video_draw(); } },
+    { "companion", [] { g_host.two_screens = true; video_open(); down(2); video_draw(); } },
+    { "folder",    [] { video_open(); video_draw(); } },
+    { "subfolder", [] { video_open(); app_key(NK_ENTER); video_draw(); } },
+    { "old",       [] { video_open(); down(1); video_draw(); } },
+    { "resume",    [] { video_open(); down(3); video_draw(); } },
+    { "empty",     [] { video_open(false); video_draw(); } },
+};
+
 static const char *LANGS[]  = { "en", "it", "es", "fr", "de" };
 static const char *THEMES[] = { "classic", "nano_banana", "hacker", "amoled" };
 
@@ -408,9 +457,10 @@ static const Scene *find_scene(const char *surface, const char *scene)
 {
     const Scene *set = !strcmp(surface, "launcher") ? SCENES : !strcmp(surface, "settings") ? SETTINGS
                      : !strcmp(surface, "wizard") ? WIZARD : !strcmp(surface, "updates") ? UPDATES
-                     : !strcmp(surface, "store") ? STORE : nullptr;
+                     : !strcmp(surface, "store") ? STORE : !strcmp(surface, "video") ? VIDEO : nullptr;
     int n = set == SCENES ? (int)(sizeof SCENES / sizeof SCENES[0]) : set == SETTINGS ? (int)(sizeof SETTINGS / sizeof SETTINGS[0])
           : set == UPDATES ? (int)(sizeof UPDATES / sizeof UPDATES[0]) : set == STORE ? (int)(sizeof STORE / sizeof STORE[0])
+          : set == VIDEO ? (int)(sizeof VIDEO / sizeof VIDEO[0])
           : (int)(sizeof WIZARD / sizeof WIZARD[0]);
     for (int i = 0; set && i < n; i++) if (!strcmp(set[i].name, scene)) return &set[i];
     return nullptr;
@@ -427,6 +477,7 @@ static void list_all(void)
         { "wizard", WIZARD, (int)(sizeof WIZARD / sizeof WIZARD[0]) },
         { "updates", UPDATES, (int)(sizeof UPDATES / sizeof UPDATES[0]) },
         { "store", STORE, (int)(sizeof STORE / sizeof STORE[0]) },
+        { "video", VIDEO, (int)(sizeof VIDEO / sizeof VIDEO[0]) },
     };
     for (auto &g : S)
         for (int i = 0; i < g.n; i++) {
@@ -441,6 +492,10 @@ static void list_all(void)
         printf("launcher.%s.it.classic.large\n", sc);
         printf("launcher.%s.en.amoled.large\n", sc);
         printf("launcher.%s.en.classic.large-short\n", sc);   // ADV's fitted canvas seen 320 wide (97 rows)
+    }
+    for (const char *sc : { "list", "folder", "subfolder", "old", "resume", "empty" }) {   // Video on the external panel (its own layout)
+        printf("video.%s.it.classic.large\n", sc);
+        printf("video.%s.en.classic.large\n", sc);
     }
 }
 
@@ -491,6 +546,7 @@ int main(int argc, char **argv)
     nucleo_register_wifi();
     nucleo_register_updates();
     nucleo_register_store();
+    nucleo_register_video();
     int rc = 0;
     for (int i = 2; i < argc; i++) {
         registry_load(strstr(argv[i], ".adv") != nullptr);

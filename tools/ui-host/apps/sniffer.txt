@@ -1,0 +1,5 @@
+# WiFi Sniffer — consent / config / running capture. Simulated capture from the stub.
+@host stubs/sniffer_stubs.cpp
+consent  tick:2
+config   ENTER tick:2
+running  ENTER D D ENTER tick:2

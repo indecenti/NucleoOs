@@ -1,0 +1,6 @@
+# KeyDeck: keydeck_stubs.cpp fakes a connected NucleoV2 peer streaming one STAT (PSRAM/CPU/uptime).
+@host stubs/keydeck_stubs.cpp
+monitor
+server    c:2
+editip    c:2 c:m t:192.168.1.50
+info      c:3

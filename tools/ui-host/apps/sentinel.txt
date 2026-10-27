@@ -1,0 +1,5 @@
+# Sentinel — anti-stalking tracker detector (BLE, passive). Fictional trackers from the stub.
+@host stubs/sentinel_stubs.cpp
+list    tick:2
+pick    D D
+info    TAB

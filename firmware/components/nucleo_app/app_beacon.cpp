@@ -53,9 +53,12 @@ static const char *MODE_BLURB_EN[N_MODE] = {
 #include "launcher_theme.h"   // themed BG/FG/MUTED/DIM/LINE/INK + C_* accents (launcher-consistent)
 #include "app_gfx.h"
 #include "nucleo_i18n.h"      // TR(it,en): hints follow the system language
+#include "app_large.h"        // two screens: the beacon flood laid out on the 320x240 panel
+#include "nucleo_touch.h"
 
 // BG/FG/MUTED/DIM/LINE/INK come from launcher_theme.h (themed, shared with the launcher).
 static const unsigned short BCN = 0xAD5F /*violet*/, GRN = C_GREEN, YEL = C_YELLOW;
+static int s_lg_scroll = 0;   // panel mode-list scroll
 
 enum { ST_CONSENT, ST_CUSTOM, ST_ARMING, ST_RUNNING, ST_STOPPING };
 static int  s_state;
@@ -104,7 +107,7 @@ static void enter(void)
 static void tick(void)
 {
     if (s_state == ST_ARMING) {
-        if (!s_arm_armed) return;
+        if (!s_arm_armed) { s_arm_armed = true; return; }   // first tick arms (draw also does): busy screen paints first
         int rc = nucleo_wifiatk_beacon_start(s_mode);
         if (rc == 0) { s_state = ST_RUNNING; s_err[0] = 0; }
         else { snprintf(s_err, sizeof s_err, TR("Avvio fallito (err %d)","Start failed (err %d)"), rc); s_state = ST_CONSENT; }
@@ -113,7 +116,7 @@ static void tick(void)
         return;
     }
     if (s_state == ST_STOPPING) {
-        if (!s_stop_armed) return;
+        if (!s_stop_armed) { s_stop_armed = true; return; }
         nucleo_wifiatk_beacon_stop();
         nucleo_app_exit();
         return;
@@ -140,6 +143,9 @@ static void pick_selected(void)
 static void on_key(int key, char ch)
 {
     if (s_state == ST_CONSENT) {
+        if (int t = lg::row_tap(key, ch, s_lg_scroll, N_MODE, &s_sel)) {   // panel: tap a mode to pick, again to arm
+            if (t == 2) pick_selected(); else nucleo_app_request_draw(); return;
+        }
         if (key == NK_UP)        { s_sel = (s_sel + N_MODE - 1) % N_MODE; nucleo_app_request_draw(); }
         else if (key == NK_DOWN) { s_sel = (s_sel + 1) % N_MODE;          nucleo_app_request_draw(); }
         else if (ch >= '1' && ch <= '4') { s_sel = ch - '1'; pick_selected(); }   // 1-9 quick-select
@@ -269,8 +275,136 @@ static void draw_running(void)
     d.setTextColor(YEL, BG); d.setCursor(10, h - 9); d.print(TR("invio: ferma   esc: lascia attivo","enter: stop   esc: leave on"));
 }
 
+// ===== two screens ==============================================================================================
+// The panel carries the flood: the consent card is the mode picker (tap a mode to pick, again to arm) with the
+// chosen mode's blurb beside it; Custom is a text field + the list of SSIDs you added with a big START button;
+// the running flood is big BEACON / SSID counters with the injection health and a STOP button. The Cardputer
+// becomes the companion: the picked mode (or the live counters) and the key hints.
+static void lg_mode_row(int i, int x, int y, int w, int h, bool focus, unsigned short bg, void *) {
+    char lbl[28]; snprintf(lbl, sizeof lbl, "%d  %s", i + 1, MODE_NAME[i]);
+    lg::row_text(x, y, w, h, focus, bg, lbl, nullptr, focus ? INK : FG);
+}
+
+static void draw_large(void) {
+    const int Wp = d.width(), Hp = d.height();
+    nucleo_touch_clear();
+    if (s_state == ST_CONSENT) {
+        int y = lg::header("Beacon Spam", "AUTH", BCN, NK_BACK);
+        d.fillRect(0, y, Wp, Hp - y, BG);
+        d.fillRoundRect(8, y + 4, Wp - 16, 26, 6, lg::card());
+        lg::font(0); d.setTextColor(YEL, lg::card()); d.setTextDatum(middle_left);
+        d.drawString(TR("Solo test autorizzati: reti WiFi finte", "Authorized testing only: fake WiFi networks"), 18, y + 17);
+        d.setTextDatum(top_left);
+        int ly = y + 36;
+        const int LW = 178;
+        lg::list(0, ly, LW, Hp - ly - 4, lg::ROW, N_MODE, s_sel, &s_lg_scroll, lg_mode_row, nullptr, BCN);
+        const int dx = LW + 4, dw = Wp - LW - 10;
+        lg::panel(dx, ly, dw, Hp - ly - 4);
+        const unsigned short cb = lg::card();
+        lg::font(1); d.setTextColor(BCN, cb); d.drawString(MODE_NAME[s_sel], dx + 10, ly + 10);
+        d.drawFastHLine(dx + 10, ly + 32, dw - 20, LINE);
+        lg::font(0); d.setTextColor(FG, cb);
+        lg::wrap(MODE_BLURB[s_sel], dx + 10, ly + 42, dw - 20, 18, 5);
+        lg::button(dx + 8, Hp - 48, dw - 16, 34, s_sel == MODE_CUSTOM ? TR("Scrivi", "Write") : TR("Avvia", "Arm"), BCN, INK, NK_ENTER, 0);
+        nucleo_touch_commit(); return;
+    }
+    if (s_state == ST_CUSTOM) {
+        int cnt = nucleo_wifiatk_beacon_custom_count();
+        char rt[16]; snprintf(rt, sizeof rt, TR("%d reti", "%d nets"), cnt);
+        int y = lg::header(TR("Personalizzate", "Custom SSIDs"), rt, BCN, NK_BACK);
+        d.fillRect(0, y, Wp, Hp - y, BG);
+        // the line being typed
+        d.fillRoundRect(12, y + 8, Wp - 24, 38, 8, INK); d.drawRoundRect(12, y + 8, Wp - 24, 38, 8, BCN);
+        lg::font(2); d.setTextColor(FG, INK); d.setTextDatum(middle_left);
+        char shown[40]; snprintf(shown, sizeof shown, "%s_", s_line); char f[40]; lg::fit(f, sizeof f, shown, Wp - 48);
+        d.drawString(f, 24, y + 27); d.setTextDatum(top_left);
+        // the added names
+        lg::panel(12, y + 54, Wp - 24, Hp - y - 108);
+        const unsigned short cb = lg::card();
+        if (cnt == 0) { lg::font(0); d.setTextColor(DIM, cb); d.drawString(TR("Scrivi un nome sul Cardputer + INVIO", "Type a name on the Cardputer + ENTER"), 24, y + 66); }
+        int show = cnt < 6 ? cnt : 6;
+        for (int i = 0; i < show; i++) {
+            int idx = cnt - show + i;
+            char row[40]; snprintf(row, sizeof row, "%d. %s", idx + 1, nucleo_wifiatk_beacon_custom_ssid(idx));
+            lg::font(0); d.setTextColor(GRN, cb); d.drawString(row, 24, y + 64 + i * 18);
+        }
+        lg::button(40, Hp - 48, Wp - 80, 36, TR("AVVIA la lista", "START the list"), cnt ? BCN : lg::card(), cnt ? INK : DIM, NK_TAB, 0);
+        nucleo_touch_commit(); return;
+    }
+    if (s_state == ST_ARMING || s_state == ST_STOPPING) {
+        lg::header("Beacon Spam", nullptr, BCN, NK_BACK);
+        d.fillRect(0, lg::HEAD, Wp, Hp - lg::HEAD, BG);
+        lg::message(0, lg::HEAD, Wp, Hp - lg::HEAD,
+                    s_state == ST_ARMING ? TR("Avvio...", "Starting...") : TR("Arresto...", "Stopping..."),
+                    s_state == ST_ARMING ? TR("Genero le reti finte.", "Generating fake networks.") : TR("Ripristino rete OS.", "Restoring OS network."), BCN);
+        if (s_state == ST_ARMING) s_arm_armed = true; else s_stop_armed = true;
+        nucleo_touch_commit(); return;
+    }
+    // ST_RUNNING
+    unsigned up = nucleo_wifiatk_beacon_uptime_s();
+    char el[10]; snprintf(el, sizeof el, "%02u:%02u", up / 60, up % 60);
+    int y = lg::header("Beacon Spam", el, BCN, NK_BACK);
+    d.fillRect(0, y, Wp, Hp - y, BG);
+    char ms[40]; snprintf(ms, sizeof ms, TR("%d reti finte - %s", "%d fake nets - %s"),
+                          nucleo_wifiatk_beacon_count(), MODE_NAME[nucleo_wifiatk_beacon_mode() % N_MODE]);
+    lg::font(1); d.setTextColor(GRN, BG); d.drawString(ms, 14, y + 6);
+    char fr[12]; unsigned long f = nucleo_wifiatk_beacon_frames();
+    if (f >= 100000) snprintf(fr, sizeof fr, "%luk", f / 1000); else snprintf(fr, sizeof fr, "%lu", f);
+    char sc[8]; snprintf(sc, sizeof sc, "%d", nucleo_wifiatk_beacon_count());
+    lg::panel(12, y + 30, (Wp - 30) / 2, 72);
+    lg::panel(18 + (Wp - 30) / 2, y + 30, (Wp - 30) / 2, 72);
+    lg::font(3); d.setTextDatum(middle_center);
+    d.setTextColor(BCN, lg::card()); d.drawString(fr, 12 + (Wp - 30) / 4, y + 58);
+    d.setTextColor(GRN, lg::card()); d.drawString(sc, 18 + (Wp - 30) / 2 + (Wp - 30) / 4, y + 58);
+    lg::font(0); d.setTextColor(MUTED, lg::card());
+    d.drawString("BEACON", 12 + (Wp - 30) / 4, y + 86); d.drawString("SSID", 18 + (Wp - 30) / 2 + (Wp - 30) / 4, y + 86);
+    d.setTextDatum(top_left);
+    int hp = nucleo_wifiatk_beacon_health();
+    unsigned short hc = hp >= 80 ? GRN : (hp >= 50 ? YEL : BCN);
+    char hs[20]; snprintf(hs, sizeof hs, TR("iniezione %d%%", "injection %d%%"), hp);
+    lg::font(1); d.setTextColor(hc, BG); d.drawString(hs, 14, y + 114);
+    lg::font(0); d.setTextColor(MUTED, BG); d.drawString(TR("canali 1 / 6 / 11", "channels 1 / 6 / 11"), 14, y + 140);
+    lg::button(40, Hp - 50, Wp - 80, 40, TR("FERMA", "STOP"), C_RED, INK, NK_ENTER, 0);
+    nucleo_touch_commit();
+}
+
+static void draw_companion(void) {
+    const int top = nucleo_app_content_top(), h = nucleo_app_content_height();
+    d.fillRect(0, top, 240, h, BG);
+    int y = lg::comp_head("BEACON", BCN);
+    if (s_state == ST_RUNNING) {
+        char fr[12]; unsigned long f = nucleo_wifiatk_beacon_frames();
+        if (f >= 100000) snprintf(fr, sizeof fr, "%luk", f / 1000); else snprintf(fr, sizeof fr, "%lu", f);
+        d.setFont(&fonts::FreeSansBold18pt7b); d.setTextColor(BCN, BG); d.drawString(fr, 8, y + 2);
+        d.setFont(&fonts::Font0); d.setTextColor(MUTED, BG); d.drawString(TR("beacon TX", "beacons TX"), 8, y + 34);
+        char ln[40]; snprintf(ln, sizeof ln, TR("%d SSID  -  %s", "%d SSID  -  %s"), nucleo_wifiatk_beacon_count(), MODE_NAME[nucleo_wifiatk_beacon_mode() % N_MODE]);
+        d.setTextColor(GRN, BG); d.drawString(ln, 8, y + 50);
+        char hs[20]; snprintf(hs, sizeof hs, TR("iniezione %d%%", "injection %d%%"), nucleo_wifiatk_beacon_health());
+        d.setTextColor(FG, BG); d.drawString(hs, 8, y + 64);
+        lg::comp_keys(TR("INVIO ferma   ESC lascia attivo", "ENTER stop   ESC leave on")); return;
+    }
+    if (s_state == ST_CUSTOM) {
+        d.setFont(&fonts::FreeSansBold12pt7b); d.setTextColor(BCN, BG); d.drawString(TR("Personalizzate", "Custom"), 8, y + 4);
+        d.setFont(&fonts::Font0); d.setTextColor(FG, BG);
+        char ln[40]; snprintf(ln, sizeof ln, TR("%d reti   > %s_", "%d nets   > %s_"), nucleo_wifiatk_beacon_custom_count(), s_line);
+        d.drawString(ln, 8, y + 34);
+        lg::comp_keys(TR("scrivi + INVIO   TAB avvia", "type + ENTER   TAB start")); return;
+    }
+    if (s_state == ST_ARMING || s_state == ST_STOPPING) {
+        d.setFont(&fonts::FreeSansBold12pt7b); d.setTextColor(BCN, BG);
+        d.drawString(s_state == ST_ARMING ? TR("Avvio...", "Starting...") : TR("Arresto...", "Stopping..."), 8, y + 4);
+        d.setFont(&fonts::Font0); return;
+    }
+    // CONSENT
+    d.setFont(&fonts::FreeSansBold12pt7b); d.setTextColor(BCN, BG); d.drawString(MODE_NAME[s_sel], 8, y + 4);
+    d.setFont(&fonts::Font0); d.setTextColor(MUTED, BG);
+    lg::wrap(MODE_BLURB[s_sel], 8, y + 32, 224, 12, 2);
+    lg::comp_keys(TR(";/. scegli  INVIO avvia  ESC esci", ";/. pick  ENTER arm  ESC back"));
+}
+
 static void draw(void)
 {
+    if (nucleo_app_two_screens()) { draw_companion(); return; }
     int top = nucleo_app_content_top(), h = nucleo_app_content_height();
     d.fillRect(0, top, 240, h, BG);
     if (s_state == ST_CONSENT)       draw_consent();
@@ -297,7 +431,7 @@ extern "C" void nucleo_register_beacon(void)
         // needs contiguous DMA-capable buffers from the Wi-Fi driver; on the live (fragmented) OS heap
         // those allocations can fail and panic the device the instant you arm. A clean boot makes the
         // injection rock-solid — same trick the games use. Esc reboots back to the full OS.
-        NX_SOLO
+        NX_SOLO, nullptr, draw_large
     };
     nucleo_app_register(&app);
 }

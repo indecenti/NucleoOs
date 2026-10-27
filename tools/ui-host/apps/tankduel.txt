@@ -1,0 +1,8 @@
+menu
+select ENTER
+play ENTER ENTER tick:20
+survival D ENTER ENTER tick:25
+pause ENTER ENTER tick:10 BACK
+over D ENTER ENTER tick:450
+browse D D D ENTER ENTER
+how D D D D ENTER

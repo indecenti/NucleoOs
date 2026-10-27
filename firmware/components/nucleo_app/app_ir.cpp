@@ -14,6 +14,8 @@
 #include "nucleo_kbd.h"
 #include "app_gfx.h"
 #include "app_ui.h"   // shared Wear-OS focused-row list + type-to-jump
+#include "app_large.h"   // two screens: catalog list + button grid on the panel, Cardputer as companion
+#include "nucleo_touch.h"
 #include <M5GFX.h>
 #include "nucleo_ir.h"
 #include "nucleo_ir_proto.h"
@@ -60,6 +62,7 @@ static int  s_sel;             // selection in the current list
 static int  s_dev;             // chosen device index (level 1)
 static int  s_region;          // 0=all 1=us 2=eu 3=asia
 static char s_status[40];
+static int  s_lg_scroll;       // the panel list's first visible row (two screens)
 
 static bool     s_sweep;        // TV-B-Gone sweep running
 static uint32_t s_sweep_i;      // next tvpower index to consider
@@ -361,7 +364,9 @@ static void draw_find(int top, int h) {
 }
 
 // ---- drawing ----
+static void draw_companion(void);
 static void on_draw(void) {
+    if (nucleo_app_two_screens()) { draw_companion(); return; }
     int top = nucleo_app_content_top(), H = nucleo_app_content_height();
     d.fillRect(0, top, 240, H, BG);
     draw_tabbar(top);
@@ -467,6 +472,16 @@ static void on_key(int k, char ch) {
     // Auto-Find wizard: Enter = "yes it turned off" (identify), RIGHT = "no, next candidate".
     if (s_view == V_FIND && s_find) { if (k == NK_ENTER) find_yes(); else if (k == NK_RIGHT) find_no(); return; }
 
+    // A tapped row/button on the panel: select it, or activate it when it already was the selection
+    // (the button grid at level 2 registers its cells as rows 0..nbtn-1 with scroll 0).
+    if (nucleo_touch_is_row(k, ch)) {
+        const int scroll = (s_view == V_REM && s_level == 2) ? 0 : s_lg_scroll;
+        const int t = lg::row_tap(k, ch, scroll, cur_count(), &s_sel);
+        if (t == 2) activate();
+        else if (t == 1) { s_status[0] = 0; nucleo_app_request_draw(); }
+        return;
+    }
+
     if (k == NK_RIGHT) { ir_tab(); return; }       // RIGHT pages tabs forward (LEFT == back handler)
     if (k == NK_ENTER) { activate(); return; }
 
@@ -541,11 +556,163 @@ static const nucleo_app_ram_t APP_RAM[] = {
     { (void **)&s_cats,      sizeof(ir_cat_t) * MAX_CAT },
     { nullptr, 0 } };
 
+// ===== two screens =============================================================================================
+// The panel is the catalog: category -> remote on the left, and once a remote is open its buttons as a touch grid
+// (tap a button to send it). TV-B-Gone and Auto-Find show their live card natively, with big action buttons. The
+// Cardputer is the companion: the active tab, what is selected, the live sweep readout and the keys.
+static void lg_grid_cell(int x, int y, int w, int h, const char *label, bool focus, bool power, int slot) {
+    const unsigned short fill = power ? PWR : (focus ? ACC : lg::card());
+    d.fillRoundRect(x, y, w, h, 8, fill);
+    if (focus && !power) d.drawRoundRect(x, y, w, h, 8, FG);
+    lg::font(1); d.setTextDatum(middle_center); d.setTextColor((power || focus) ? INK : FG, fill);
+    char t[16]; lg::fit(t, sizeof t, label, w - 8);
+    d.drawString(t, x + w / 2, y + h / 2 + 1); d.setTextDatum(top_left);
+    nucleo_touch_add(x, y, w, h, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + slot));
+}
+static void lg_button_grid(int y0, int W, int H) {
+    ir_pack_remote_t r; r.name[0] = 0; ir_pack_remote(&s_pack, (uint32_t)s_dev, &r);
+    lg::font(1); d.setTextColor(ACC, BG); d.drawString(r.name, 12, y0 + 4);
+    lg::font(0); d.setTextDatum(top_right); d.setTextColor(MUTED, BG);
+    d.drawString(nir_proto_name((nir_proto_t)r.proto), W - 10, y0 + 6); d.setTextDatum(top_left);
+    const int n = (int)s_curdev.nbtn, cols = 2, rows = (n + cols - 1) / cols > 0 ? (n + cols - 1) / cols : 1;
+    const int gy = y0 + 24, gap = 8, cw = (W - 12 - gap) / cols, chh = (H - gy - 10 - (rows - 1) * gap) / rows;
+    for (int i = 0; i < n; i++) {
+        ir_pack_btn_t b; if (!ir_pack_button(&s_pack, &s_curdev, (uint32_t)i, &b)) continue;
+        const int cx = 8 + (i % cols) * (cw + gap), cyy = gy + (i / cols) * (chh + gap);
+        lg_grid_cell(cx, cyy, cw, chh, b.key, i == s_sel, !strcmp(b.key, "power"), i);
+    }
+}
+static void lg_remote_card(int x, int y, int w, int h) {
+    lg::panel(x, y, w, h); const unsigned short cb = lg::card();
+    const int real = catrem_index(s_sel);
+    ir_pack_remote_t r; r.name[0] = 0;
+    if (real >= 0 && real < (int)s_pack.n_remotes) ir_pack_remote(&s_pack, (uint32_t)real, &r);
+    lg::font(1); d.setTextColor(ACC, cb); lg::wrap(r.name, x + 12, y + 12, w - 24, 20, 2);
+    lg::kv(x + 12, y + 58, w - 24, "Protocol", nir_proto_name((nir_proto_t)r.proto), FG, cb);
+    char nb[16]; snprintf(nb, sizeof nb, "%u", r.nbtn);
+    lg::kv(x + 12, y + 82, w - 24, "Buttons", nb, FG, cb);
+    lg::button(x + 10, y + h - 46, w - 20, 36, "Open", ACC, INK, NK_ENTER, 0);
+}
+static void lg_sweep_card(int y, int W, int H) {
+    d.fillRect(0, y, W, H - y, BG);
+    lg::font(2); d.setTextDatum(top_center); d.setTextColor(PWR, BG); d.drawString("SWEEPING", W / 2, y + 12);
+    lg::font(3); d.setTextColor(FG, BG); d.drawString(s_cur_brand[0] ? s_cur_brand : "...", W / 2, y + 44);
+    const int pct = s_sweep_total ? s_sweep_done * 100 / s_sweep_total : 0;
+    d.setTextDatum(top_left); lg::bar(30, y + 104, W - 60, 14, pct, PWR);
+    char c[24]; snprintf(c, sizeof c, "%d / %d", s_sweep_done, s_sweep_total);
+    lg::font(1); d.setTextDatum(top_center); d.setTextColor(MUTED, BG); d.drawString(c, W / 2, y + 126);
+    d.setTextDatum(top_left);
+    lg::button((W - 160) / 2, H - 54, 160, 42, "Stop", LINE, FG, NK_ENTER, 0);
+}
+static void lg_find_card(int y, int W, int H) {
+    d.fillRect(0, y, W, H - y, BG);
+    lg::font(2); d.setTextDatum(top_center); d.setTextColor(ACC, BG); d.drawString("AUTO-FIND", W / 2, y + 10);
+    lg::font(3); d.setTextColor(FG, BG); d.drawString(s_find_brand[0] ? s_find_brand : "...", W / 2, y + 42);
+    char c[20]; snprintf(c, sizeof c, "%d / %d", s_find_done, s_find_total);
+    lg::font(1); d.setTextColor(MUTED, BG); d.drawString(c, W / 2, y + 80);
+    lg::font(2); d.setTextColor(PWR, BG); d.drawString("TV off?", W / 2, y + 100);
+    d.setTextDatum(top_left);
+    const int bw = (W - 48) / 2;
+    lg::button(16, H - 54, bw, 42, "YES", GRN, INK, NK_ENTER, 0);
+    lg::button(32 + bw, H - 54, bw, 42, "NO", LINE, FG, NK_RIGHT, '/');
+}
+
+static void ir_draw_large(void) {
+    const int W = d.width(), H = d.height();
+    nucleo_touch_clear();
+    int y = lg::header("IR Remote", s_status[0] ? s_status : nullptr, ACC, NK_BACK, 0);
+    y = lg::tabs(y + 2, TABS, NTABS, s_view, ACC, nullptr);
+    d.fillRect(0, y, W, H - y, BG);
+    if (!s_pack_ok && (s_view != V_FAV || s_nfav == 0)) {
+        lg::message(0, y, W, H - y, "No catalog on SD", "build presets.bin (ir:pack)", MUTED);
+        nucleo_touch_commit(); return;
+    }
+    if (s_view == V_REM) {
+        if (s_level == 2) { lg_button_grid(y, W, H); }
+        else {
+            const int lw = 150;
+            const app_ui_text_fn lab = (s_level == 0) ? cat_label : catrem_label;
+            const app_ui_text_fn rt  = (s_level == 0) ? cat_right : catrem_right;
+            lg::text_list(0, y + 2, lw, H - y - 4, cur_count(), s_sel, &s_lg_scroll, lab, rt, nullptr, nullptr, ACC);
+            const int px = lw + 6, pw = W - lw - 12, py = y + 6, ph = H - y - 12;
+            if (s_level == 0) {
+                lg::panel(px, py, pw, ph); const unsigned short cb = lg::card();
+                lg::font(1); d.setTextColor(ACC, cb); d.drawString("Category", px + 12, py + 10);
+                lg::font(2); d.setTextColor(FG, cb); lg::wrap(cat_label(s_sel, nullptr), px + 12, py + 34, pw - 24, 24, 2);
+                char cnt[24]; snprintf(cnt, sizeof cnt, "%s remotes", cat_right(s_sel, nullptr));
+                lg::font(0); d.setTextColor(MUTED, cb); d.drawString(cnt, px + 12, py + ph - 40);
+                lg::font(0); d.setTextColor(MUTED, cb); d.drawString("Tap again to open", px + 12, py + ph - 22);
+            } else {
+                lg_remote_card(px, py, pw, ph);
+            }
+        }
+    } else if (s_view == V_TVB) {
+        if (s_sweep) lg_sweep_card(y, W, H);
+        else {
+            const int lw = 130;
+            lg::text_list(0, y + 2, lw, H - y - 4, NREGION, s_sel, &s_lg_scroll, region_label, region_right, nullptr, nullptr, ACC);
+            const int px = lw + 6, pw = W - lw - 12, py = y + 6, ph = H - y - 12;
+            lg::panel(px, py, pw, ph); const unsigned short cb = lg::card();
+            lg::font(1); d.setTextColor(PWR, cb); d.drawString("TV-B-Gone", px + 12, py + 10);
+            lg::font(0); d.setTextColor(MUTED, cb); lg::wrap("Sweep this region's TV power-off codes until a set switches off.", px + 12, py + 36, pw - 24, 17, 4);
+            lg::button(px + 10, py + ph - 46, pw - 20, 36, "Sweep", PWR, INK, NK_ENTER, 0);
+        }
+    } else if (s_view == V_FIND) {
+        if (s_find) lg_find_card(y, W, H);
+        else {
+            const int lw = 130;
+            lg::text_list(0, y + 2, lw, H - y - 4, NREGION, s_sel, &s_lg_scroll, region_label, region_right, nullptr, nullptr, ACC);
+            const int px = lw + 6, pw = W - lw - 12, py = y + 6, ph = H - y - 12;
+            lg::panel(px, py, pw, ph); const unsigned short cb = lg::card();
+            lg::font(1); d.setTextColor(ACC, cb); d.drawString("Auto-Find", px + 12, py + 10);
+            lg::font(0); d.setTextColor(MUTED, cb); lg::wrap("Identify an unknown TV: it fires power codes one by one until yours turns off.", px + 12, py + 36, pw - 24, 17, 4);
+            lg::button(px + 10, py + ph - 46, pw - 20, 36, "Start", ACC, INK, NK_ENTER, 0);
+        }
+    } else {   // V_FAV
+        if (s_nfav == 0) { lg::message(0, y, W, H - y, "No favourites yet", "star buttons in the web app", MUTED); nucleo_touch_commit(); return; }
+        const int lw = 160;
+        lg::text_list(0, y + 2, lw, H - y - 4, s_nfav, s_sel, &s_lg_scroll, fav_label, nullptr, fav_color, nullptr, STAR);
+        const int px = lw + 6, pw = W - lw - 12, py = y + 6, ph = H - y - 12;
+        lg::panel(px, py, pw, ph); const unsigned short cb = lg::card();
+        lg::font(1); d.setTextColor(STAR, cb); lg::wrap(s_sel < s_nfav ? s_fav[s_sel].label : "", px + 12, py + 12, pw - 24, 20, 3);
+        lg::button(px + 10, py + ph - 46, pw - 20, 36, "Send", STAR, INK, NK_ENTER, 0);
+    }
+    nucleo_touch_commit();
+}
+
+static void draw_companion(void) {
+    const int top = nucleo_app_content_top(), h = nucleo_app_content_height();
+    d.fillRect(0, top, 240, h, BG);
+    const int y = lg::comp_head("IR REMOTE", ACC);
+    if (s_view == V_TVB && s_sweep) {
+        d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(PWR, BG); d.drawString("Sweeping", 8, y + 4);
+        char m[40]; snprintf(m, sizeof m, "%s  %d/%d", s_cur_brand[0] ? s_cur_brand : "...", s_sweep_done, s_sweep_total);
+        d.setFont(&fonts::Font0); d.setTextColor(MUTED, BG); d.drawString(m, 8, y + 30);
+        lg::comp_keys("ENTER / ESC stop");
+        return;
+    }
+    if (s_view == V_FIND && s_find) {
+        d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(ACC, BG); d.drawString(s_find_brand[0] ? s_find_brand : "...", 8, y + 4);
+        char m[24]; snprintf(m, sizeof m, "%d/%d   TV off?", s_find_done, s_find_total);
+        d.setFont(&fonts::Font0); d.setTextColor(PWR, BG); d.drawString(m, 8, y + 30);
+        lg::comp_keys("ENTER yes   > no   ESC stop");
+        return;
+    }
+    d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(ACC, BG); d.drawString(TABS[s_view], 8, y + 2);
+    const char *sel = (s_pack_ok || s_view == V_FAV) ? cur_label_fn()(s_sel, nullptr) : "";
+    d.setFont(&fonts::Font2); d.setTextColor(FG, BG);
+    lg::wrap(sel, 8, y + 24, 224, 18, 2);
+    if (s_status[0]) { d.setFont(&fonts::Font0); d.setTextColor(GRN, BG); d.drawString(s_status, 8, y + 64); }
+    lg::comp_keys(s_view == V_REM ? (s_level == 2 ? "up/dn pick   ENTER send   ESC back"
+                                                  : "up/dn pick   ENTER open   ESC back")
+                                  : "up/dn pick   ENTER go");
+}
+
 extern "C" void nucleo_register_ir(void) {
     static const nucleo_app_def_t app = {
         "ir", "IR Remote", "Tools", "TV-B-Gone, brand remotes & favourites (SD catalog)",
         'I', ACC,
-        enter, on_key, on_tick, on_draw, on_exit, 0, APP_RAM
+        enter, on_key, on_tick, on_draw, on_exit, 0, APP_RAM, ir_draw_large
     };
     nucleo_app_register(&app);
 }

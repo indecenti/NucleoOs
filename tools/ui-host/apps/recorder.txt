@@ -1,0 +1,16 @@
+# Voice Recorder: four fictional takes with real sizes, dates and AI sidecars (stubs/recorder_stubs.cpp writes them
+# into the box; the stub also records / plays on demand and says we are in the dedicated boot with a cloud engine)
+@host stubs/recorder_stubs.cpp
+library
+pick      D
+recording c:r tick:4
+playing   ENTER
+reader    c:a
+script    c:a c:2
+empty     D c:a c:3
+asktab    c:a c:4
+settings  TAB
+audio     TAB R
+info      TAB R R
+rowtap    row:2
+aiwork    c:t

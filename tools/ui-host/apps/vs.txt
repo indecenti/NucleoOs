@@ -1,0 +1,8 @@
+@reg nucleo_register_vs
+@app orde
+@src vs_sim.c
+menu
+settings D ENTER
+hero ENTER
+play ENTER ENTER tick:8
+pause ENTER ENTER tick:4 BACK

@@ -1,0 +1,7 @@
+# Sciame (ESP-NOW swarm): the peer list on the panel + a selected peer. (@sd is shared by every scene, so the
+# empty state and the OPEN-membership pill are exercised in code but not shown here — SD stays populated/secure.)
+@host swarm_stubs.cpp
+@sd swarm/peers.txt Kitchen-01 128 0\nStudio-Pad 64 1\nGarage-Node 220 0\nAttic-07 12 0
+@sd swarm/last.txt pong da Kitchen-01 (14 ms)
+peers
+pick    D D

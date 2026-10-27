@@ -1,0 +1,8 @@
+@reg nucleo_register_sandgarden
+@app giardino
+menu
+help D ENTER
+record D D ENTER
+settings D D D ENTER
+play ENTER
+moved ENTER U R U R D U

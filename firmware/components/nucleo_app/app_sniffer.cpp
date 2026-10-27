@@ -32,6 +32,8 @@ unsigned    nucleo_wifiatk_sniffer_deauth(void);
 
 #include "launcher_theme.h"   // themed BG/FG/MUTED/DIM/LINE/INK + C_* accents (launcher-consistent)
 #include "app_gfx.h"
+#include "app_large.h"        // two screens: the capture laid out on the 320x240 panel
+#include "nucleo_touch.h"
 
 // BG/FG/MUTED/DIM/LINE/INK come from launcher_theme.h (themed, shared with the launcher).
 static const unsigned short SNF = 0x07FF /*cyan*/, GRN = C_GREEN, YEL = C_YELLOW, ERR = 0xF800 /*error text*/;
@@ -90,7 +92,7 @@ static void restore_screen(void)
 static void tick(void)
 {
     if (s_state == ST_ARMING) {
-        if (!s_arm_armed) return;
+        if (!s_arm_armed) { s_arm_armed = true; return; }   // first tick arms (draw also does): busy screen paints first
         free_screen();                       // +32KB contiguous BEFORE the queue allocs
         int rc = nucleo_wifiatk_sniffer_start(s_mode, s_chan);
         if (rc == 0) { s_state = ST_RUNNING; s_err[0] = 0; }
@@ -99,7 +101,7 @@ static void tick(void)
         return;
     }
     if (s_state == ST_STOPPING) {
-        if (!s_stop_armed) return;
+        if (!s_stop_armed) { s_stop_armed = true; return; }
         nucleo_wifiatk_sniffer_stop();
         restore_screen();
         nucleo_app_exit();
@@ -123,6 +125,12 @@ static void on_key(int key, char ch)
         return;
     }
     // ST_CONFIG
+    if (nucleo_touch_is_row(key, ch)) {        // panel: tap a row to cycle it, or GO to arm
+        int i = ch - NUCLEO_TOUCH_ROW; if (i >= R_NROWS) return; s_row = i;
+        if (i == R_GO) { s_state = ST_ARMING; s_arm_armed = false; set_hint(); nucleo_app_request_draw(); return; }
+        if (i == R_MODE) s_mode = (s_mode + 1) % N_MODE; else if (i == R_CHAN) s_chan = (s_chan + 1) % 14;
+        nucleo_app_request_draw(); return;
+    }
     if (key == NK_UP)        s_row = (s_row + R_NROWS - 1) % R_NROWS;
     else if (key == NK_DOWN) s_row = (s_row + 1) % R_NROWS;
     else if (key == NK_RIGHT) {
@@ -230,8 +238,126 @@ static void draw_running(void)
     d.setTextColor(YEL, BG); d.setCursor(10, h - 9); d.print(TR("invio: ferma  (B/P/D/X/HS = tipi)","enter: stop  (B/P/D/X/HS = types)"));
 }
 
+// ===== two screens ==============================================================================================
+// The panel carries the capture: the consent card with Accept/Back buttons, the config as tappable rows (Mode,
+// Channel) plus a big START button, and the running capture as a big packet counter with the per-type breakdown
+// (EAPOL highlighted — crackable material), the drop count and the .pcap name, plus a STOP button. The Cardputer
+// becomes the companion: the packet count big, the breakdown, and the key hints.
+static void lg_cfg_row(int y, int w, const char *label, const char *val, bool focus, int slot) {
+    const int x = 16;
+    d.fillRoundRect(x, y, w, 36, 9, focus ? SNF : lg::card());
+    lg::font(1); d.setTextColor(focus ? INK : FG, focus ? SNF : lg::card()); d.setTextDatum(middle_left);
+    d.drawString(label, x + 14, y + 18);
+    d.setTextColor(focus ? INK : SNF, focus ? SNF : lg::card()); d.setTextDatum(middle_right);
+    d.drawString(val, x + w - 14, y + 18); d.setTextDatum(top_left);
+    nucleo_touch_add(x, y, w, 36, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + slot));
+}
+
+static void draw_large(void) {
+    const int Wp = d.width(), Hp = d.height();
+    nucleo_touch_clear();
+    if (s_state == ST_CONSENT) {
+        int y = lg::header("WiFi Sniffer", "AUTH", SNF, NK_BACK);
+        d.fillRect(0, y, Wp, Hp - y, BG);
+        lg::panel(12, y + 8, Wp - 24, Hp - y - 70);
+        const unsigned short cb = lg::card();
+        lg::font(1); d.setTextColor(YEL, cb); d.drawString(TR("Test autorizzati", "Authorized testing"), 24, y + 18);
+        lg::font(0); d.setTextColor(FG, cb);
+        lg::wrap(TR("Cattura i pacchetti Wi-Fi in aria e li salva in .pcap su SD (Wireshark / hashcat).",
+                    "Captures Wi-Fi packets over the air into a .pcap on SD (Wireshark / hashcat)."), 24, y + 44, Wp - 48, 19, 3);
+        d.setTextColor(MUTED, cb);
+        lg::wrap(TR("Solo reti tue o con permesso.", "Only your own networks or with permission."), 24, y + 108, Wp - 48, 19, 1);
+        const int bw = (Wp - 36) / 2;
+        lg::button(12, Hp - 54, bw, 42, TR("Indietro", "Back"), lg::card(), FG, NK_BACK, 0);
+        lg::button(24 + bw, Hp - 54, bw, 42, TR("Accetto", "Accept"), SNF, INK, NK_ENTER, 0);
+        nucleo_touch_commit(); return;
+    }
+    if (s_state == ST_ARMING || s_state == ST_STOPPING) {
+        lg::header("WiFi Sniffer", nullptr, SNF, NK_BACK);
+        d.fillRect(0, lg::HEAD, Wp, Hp - lg::HEAD, BG);
+        lg::message(0, lg::HEAD, Wp, Hp - lg::HEAD,
+                    s_state == ST_ARMING ? TR("Avvio...", "Starting...") : TR("Salvo...", "Saving..."),
+                    s_state == ST_ARMING ? TR("Apro la cattura.", "Opening the capture.") : TR("Chiudo il .pcap.", "Closing the .pcap."), SNF);
+        if (s_state == ST_ARMING) s_arm_armed = true; else s_stop_armed = true;
+        nucleo_touch_commit(); return;
+    }
+    if (s_state == ST_RUNNING) {
+        char cb2[12]; int cc = nucleo_wifiatk_sniffer_channel();
+        snprintf(cb2, sizeof cb2, s_chan == 0 ? "hop c%d" : "ch %d", cc);
+        int y = lg::header("WiFi Sniffer", cb2, SNF, NK_BACK);
+        d.fillRect(0, y, Wp, Hp - y, BG);
+        unsigned pk = nucleo_wifiatk_sniffer_pkts(), dr = nucleo_wifiatk_sniffer_drops();
+        lg::panel(12, y + 2, Wp - 24, 60);
+        const unsigned short cbg = lg::card();
+        char ps[16]; snprintf(ps, sizeof ps, "%u", pk);
+        lg::font(3); d.setTextColor(FG, cbg); d.setTextDatum(middle_left); d.drawString(ps, 26, y + 30); d.setTextDatum(top_left);
+        lg::font(0); d.setTextColor(MUTED, cbg); d.drawString(TR("pacchetti", "packets"), 26, y + 46);
+        char ds[20]; snprintf(ds, sizeof ds, TR("persi %u", "dropped %u"), dr);
+        d.setTextColor(dr ? YEL : DIM, cbg); d.setTextDatum(top_right); d.drawString(ds, Wp - 24, y + 14); d.setTextDatum(top_left);
+        // per-type breakdown, two columns; EAPOL on its own highlighted row (crackable material)
+        unsigned ea = nucleo_wifiatk_sniffer_eapol();
+        const int gx = 16, gw = (Wp - 32 - 12) / 2; char v[12];
+        snprintf(v, sizeof v, "%u", nucleo_wifiatk_sniffer_beacons()); lg::kv(gx, y + 76, gw, "Beacon", v, SNF, BG);
+        snprintf(v, sizeof v, "%u", nucleo_wifiatk_sniffer_data());    lg::kv(gx + gw + 12, y + 76, gw, "Data", v, SNF, BG);
+        snprintf(v, sizeof v, "%u", nucleo_wifiatk_sniffer_probes());  lg::kv(gx, y + 100, gw, "Probe", v, SNF, BG);
+        snprintf(v, sizeof v, "%u", nucleo_wifiatk_sniffer_deauth());  lg::kv(gx + gw + 12, y + 100, gw, "Deauth", v, YEL, BG);
+        snprintf(v, sizeof v, "%u", ea); lg::kv(gx, y + 124, Wp - 32, TR("EAPOL (handshake)", "EAPOL (handshake)"), v, ea ? GRN : MUTED, BG);
+        lg::font(0); d.setTextColor(SNF, BG);
+        const char *p = nucleo_wifiatk_sniffer_path(); const char *base = p; for (const char *q = p; *q; q++) if (*q == '/') base = q + 1;
+        d.drawString(base[0] ? base : "...", gx, y + 150);
+        lg::button(40, Hp - 46, Wp - 80, 38, TR("FERMA e salva", "STOP and save"), C_RED, INK, NK_ENTER, 0);
+        nucleo_touch_commit(); return;
+    }
+    // ST_CONFIG
+    int y = lg::header("WiFi Sniffer", s_err[0] ? "ERR" : nullptr, SNF, NK_BACK);
+    d.fillRect(0, y, Wp, Hp - y, BG);
+    char cv[16]; if (s_chan == 0) snprintf(cv, sizeof cv, "%s", TR("Hop banda", "Band hop")); else snprintf(cv, sizeof cv, TR("Canale %d", "Channel %d"), s_chan);
+    lg_cfg_row(y + 14, Wp - 32, TR("Modo", "Mode"), MODE_NAME[s_mode], s_row == R_MODE, R_MODE);
+    lg_cfg_row(y + 58, Wp - 32, TR("Canale", "Channel"), cv, s_row == R_CHAN, R_CHAN);
+    const bool go = (s_row == R_GO);
+    d.fillRoundRect(16, y + 108, Wp - 32, 48, 11, go ? GRN : lg::card());
+    lg::font(2); d.setTextColor(go ? INK : GRN, go ? GRN : lg::card()); d.setTextDatum(middle_center);
+    d.drawString(TR("AVVIA", "START"), Wp / 2, y + 132); d.setTextDatum(top_left);
+    nucleo_touch_add(16, y + 108, Wp - 32, 48, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + R_GO));
+    lg::font(0); d.setTextColor(s_err[0] ? ERR : DIM, BG);
+    d.setTextDatum(bottom_left); d.drawString(s_err[0] ? s_err : TR("salva in /sd/sniffer/*.pcap", "saves to /sd/sniffer/*.pcap"), 16, Hp - 6); d.setTextDatum(top_left);
+    nucleo_touch_commit();
+}
+
+static void draw_companion(void) {
+    const int top = nucleo_app_content_top(), h = nucleo_app_content_height();
+    d.fillRect(0, top, 240, h, BG);
+    int y = lg::comp_head("SNIFFER", SNF);
+    if (s_state == ST_RUNNING) {
+        d.setFont(&fonts::FreeSansBold18pt7b); d.setTextColor(FG, BG);
+        char ps[12]; snprintf(ps, sizeof ps, "%u", nucleo_wifiatk_sniffer_pkts()); d.drawString(ps, 8, y + 2);
+        d.setFont(&fonts::Font0); d.setTextColor(MUTED, BG); d.drawString(TR("pacchetti", "packets"), 8, y + 34);
+        unsigned ea = nucleo_wifiatk_sniffer_eapol();
+        char bd[44]; snprintf(bd, sizeof bd, "B%u P%u D%u X%u", nucleo_wifiatk_sniffer_beacons(), nucleo_wifiatk_sniffer_probes(),
+                              nucleo_wifiatk_sniffer_data(), nucleo_wifiatk_sniffer_deauth());
+        d.setTextColor(SNF, BG); d.drawString(bd, 8, y + 48);
+        if (ea) { char es[16]; snprintf(es, sizeof es, "HS %u", ea); d.setTextColor(GRN, BG); d.drawString(es, 180, y + 48); }
+        lg::comp_keys(TR("INVIO ferma e salva  ESC esci", "ENTER stop & save  ESC back")); return;
+    }
+    if (s_state == ST_CONSENT || s_state == ST_ARMING || s_state == ST_STOPPING) {
+        d.setFont(&fonts::FreeSansBold12pt7b); d.setTextColor(SNF, BG);
+        d.drawString(s_state == ST_CONSENT ? TR("Autorizza", "Authorize") : s_state == ST_ARMING ? TR("Avvio...", "Starting...") : TR("Salvo...", "Saving..."), 8, y + 4);
+        d.setFont(&fonts::Font0); d.setTextColor(MUTED, BG);
+        lg::wrap(TR("Accetta sul pannello per configurare.", "Accept on the panel to configure."), 8, y + 34, 224, 12, 2);
+        lg::comp_keys(TR("INVIO accetto  ESC esci", "ENTER accept  ESC back")); return;
+    }
+    // CONFIG
+    d.setFont(&fonts::FreeSansBold12pt7b); d.setTextColor(SNF, BG); d.drawString(TR("Configura", "Configure"), 8, y + 4);
+    d.setFont(&fonts::Font0); d.setTextColor(FG, BG);
+    char ln[40]; char cv[16]; if (s_chan == 0) snprintf(cv, sizeof cv, TR("hop", "hop")); else snprintf(cv, sizeof cv, "ch%d", s_chan);
+    snprintf(ln, sizeof ln, "%s  -  %s", MODE_NAME[s_mode], cv);
+    d.drawString(ln, 8, y + 34);
+    lg::comp_keys(TR(";/. riga  > cambia  INVIO avvia", ";/. row  > change  ENTER start"));
+}
+
 static void draw(void)
 {
+    if (nucleo_app_two_screens()) { draw_companion(); return; }
     int top = nucleo_app_content_top(), h = nucleo_app_content_height();
     // RUNNING is on the DIRECT path (the canvas was freed for the sniffer queues) and repaints ~1 Hz
     // (pulse dot + live counters). A full-content fillRect on that cadence blinks the whole panel
@@ -259,7 +385,7 @@ extern "C" void nucleo_register_sniffer(void)
 {
     static const nucleo_app_def_t app = {
         "sniffer", "WiFi Sniffer", "Security", "Promiscuous 802.11 capture to .pcap for authorized testing",
-        'P', SNF, enter, on_key, tick, draw, leave
+        'P', SNF, enter, on_key, tick, draw, leave, 0, nullptr, draw_large
     };
     nucleo_app_register(&app);
 }

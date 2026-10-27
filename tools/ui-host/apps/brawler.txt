@@ -1,0 +1,9 @@
+@src brawler_chars.cpp brawler_enemies.cpp brawler_combat.cpp brawler_levels.cpp brawler_scene.cpp brawler_fx.cpp brawler_menu.cpp brawler_sfx.cpp brawler_net.cpp
+menu
+select ENTER
+play ENTER ENTER tick:8 c:d tick:4 c:j tick:4 c:j tick:4 c:k tick:6
+pause ENTER ENTER tick:8 BACK
+over ENTER ENTER tick:2200
+options D D ENTER
+coop D ENTER
+help D D ENTER D D ENTER

@@ -1,0 +1,7 @@
+# Updates: the boot dialog (v0.5.1 available -> 3 big buttons), the "how to update" card, a selected row.
+@src update_policy.c
+@host updates_stubs.cpp
+main
+pick-next   D
+pick-ignore D D
+how         ENTER

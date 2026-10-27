@@ -1,0 +1,11 @@
+@host stubs/ethernet_stubs.cpp
+consent
+menu ENTER
+scanning ENTER ENTER
+hosts ENTER D ENTER
+map ENTER D ENTER c:m
+run_poison ENTER D D ENTER
+run_pcap ENTER D D D D D D ENTER
+run_rogue ENTER D D D D D ENTER
+guide ENTER TAB
+stopping ENTER D D ENTER ENTER

@@ -1,0 +1,3 @@
+# Airspace — passive Wi-Fi attack detector. Simulated monitor with live counts + two raised alerts.
+@host stubs/airspace_stubs.cpp
+mon   tick:3

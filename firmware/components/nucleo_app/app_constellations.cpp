@@ -39,6 +39,8 @@
 #include "nucleo_fx3d.h"     // reusable pseudo-3D toolkit: Mode-7 grid + flat-shaded polygon ships
 #include "nucleo_exclusive.h" // NX_NET_APP: free ~60KB before on_enter so the heap pools always allocate
 #include "nucleo_ui.h"        // nucleo_ui_is_adv(): gate the tilt setting to the ADV
+#include "app_large.h"        // two screens: the game on the 320x240 panel, the Cardputer as companion
+#include "nucleo_touch.h"
 #include "notify_synth.h"     // notify_voice_t + notify_synth_voices_wav (pure inline, stdio+math)
 // BMI270 tilt seam. Forward-declared (not #include "nucleo_imu.h") so we don't pull nucleo_imu's
 // include dir into the whole nucleo_app component and recompile every sibling source. Symbols
@@ -3298,7 +3300,7 @@ static bool on_back(int key)
 }
 
 // ============================ draw / tick / poll =============================
-static void on_draw(void)
+static void draw_game(void)
 {
     switch (s_screen) {
         case ST_TITLE:    draw_title(); break;
@@ -3316,6 +3318,131 @@ static void on_draw(void)
         case ST_DEBRIEF:  draw_debrief(); break;
         default: break;
     }
+}
+
+// ===== two screens: the whole game on the 320x240 panel, the Cardputer as a companion ===================
+// Costellazioni is screen-rich (title, map, station lists, briefings, a real-time dogfight). lg::game pushes
+// each screen's own frame scaled to the panel; a NATIVE HUD below gives the touch controls that fit the
+// current screen — list nav + select/back, buy/sell at the market, jump on the map, aim/fire/boost in combat.
+// Taps deliver the same keys on_key/on_back already handle. The Cardputer companion shows the ship's state.
+struct LgBtn { const char *l; int k; char c; bool prim; };
+static void lg_row(int y, int bh, const LgBtn *bs, int n)
+{
+    const int W320 = d.width(), g = 7, bw = (W320 - (n + 1) * g) / n;
+    for (int i = 0; i < n; i++)
+        lg::button(g + i * (bw + g), y, bw, bh, bs[i].l, bs[i].prim ? COL_CYAN : lg::card(), bs[i].prim ? COL_SPACE : FG, bs[i].k, bs[i].c);
+}
+static void lg_hud(int y, int h)
+{
+    const int W320 = d.width();
+    d.fillRect(0, y, W320, h, COL_PANEL);
+    d.drawFastHLine(0, y, W320, COL_CYAN);
+    const int bh1 = (h - 14 < 40) ? h - 14 : 40, by1 = y + h - bh1 - 6;   // one centred row
+    const int rh = (h - 18) / 2, r1 = y + 6, r2 = y + 10 + rh;            // two rows
+    char b[40];
+
+    switch (s_screen) {
+        case ST_TITLE: {
+            const LgBtn r[] = { { GT("Su", "Up"), NK_UP, 0, false }, { "OK", NK_ENTER, 0, true }, { GT("Giu", "Down"), NK_DOWN, 0, false } };
+            lg_row(by1, bh1, r, 3); break;
+        }
+        case ST_SETTINGS: {
+            const LgBtn r[] = { { GT("Su", "Up"), NK_UP, 0, false }, { GT("Cambia", "Change"), NK_ENTER, 0, true }, { GT("Giu", "Down"), NK_DOWN, 0, false } };
+            lg_row(by1, bh1, r, 3); break;
+        }
+        case ST_CINE: {
+            const LgBtn r[] = { { GT("Salta", "Skip"), NK_ENTER, 0, true } };
+            lg_row(by1, bh1, r, 1); break;
+        }
+        case ST_MAP: {
+            const LgBtn r[] = { { GT("< Sist", "< Sys"), NK_UP, 0, false }, { GT("SALTA", "JUMP"), NK_ENTER, 0, true }, { GT("Sist >", "Sys >"), NK_DOWN, 0, false }, { GT("Torna", "Back"), NK_BACK, 0, false } };
+            lg_row(by1, bh1, r, 4); break;
+        }
+        case ST_SYSTEM: case ST_SHIPYARD: case ST_MISSIONS: {
+            const LgBtn r[] = { { GT("Su", "Up"), NK_UP, 0, false }, { GT("Scegli", "Select"), NK_ENTER, 0, true }, { GT("Giu", "Down"), NK_DOWN, 0, false }, { GT("Torna", "Back"), NK_BACK, 0, false } };
+            lg_row(by1, bh1, r, 4); break;
+        }
+        case ST_MARKET: {
+            const LgBtn top[] = { { GT("Su", "Up"), NK_UP, 0, false }, { GT("Giu", "Down"), NK_DOWN, 0, false } };
+            lg_row(r1, rh, top, 2);
+            const LgBtn bot[] = { { GT("Compra", "Buy"), NK_ENTER, 0, true }, { GT("Vendi", "Sell"), NK_CHAR, 's', false }, { GT("Indietro", "Back"), NK_BACK, 0, false } };
+            lg_row(r2, rh, bot, 3); break;
+        }
+        case ST_EVENT: {
+            const LgBtn r[] = { { GT("Su", "Up"), NK_UP, 0, false }, { GT("Scegli", "Choose"), NK_ENTER, 0, true }, { GT("Giu", "Down"), NK_DOWN, 0, false } };
+            lg_row(by1, bh1, r, 3); break;
+        }
+        case ST_BRIEF: {
+            const LgBtn r[] = { { GT("Scelta", "Toggle"), NK_UP, 0, false }, { GT("Conferma", "Confirm"), NK_ENTER, 0, true }, { GT("Indietro", "Back"), NK_BACK, 0, false } };
+            lg_row(by1, bh1, r, 3); break;
+        }
+        case ST_DEBRIEF: {
+            const LgBtn r[] = { { GT("Continua", "Continue"), NK_ENTER, 0, true } };
+            lg_row(by1, bh1, r, 1); break;
+        }
+        case ST_COMBAT: {
+            lg::font(0); d.setTextDatum(top_right); d.setTextColor(COL_AMBER, COL_PANEL);
+            snprintf(b, sizeof b, GT("Spinta %d", "Boost %d"), s_throttle10); d.drawString(b, W320 - 8, y + 2);
+            d.setTextDatum(top_left);
+            const LgBtn aim[] = { { "<", NK_LEFT, 0, false }, { "^", NK_UP, 0, false }, { "v", NK_DOWN, 0, false }, { ">", NK_RIGHT, 0, false } };
+            lg_row(r1 + 6, rh - 6, aim, 4);
+            const LgBtn act[] = { { GT("FUOCO", "FIRE"), NK_ENTER, 0, true }, { GT("Missile", "Missile"), NK_CHAR, 's', false }, { "-", NK_CHAR, '[', false }, { "+", NK_CHAR, ']', false } };
+            lg_row(r2, rh, act, 4); break;
+        }
+        default: {
+            const LgBtn r[] = { { GT("Indietro", "Back"), NK_BACK, 0, true } };
+            lg_row(by1, bh1, r, 1); break;
+        }
+    }
+}
+static void draw_large(void)
+{
+    nucleo_touch_clear();
+    lg::game(draw_game, lg_hud, "Costellazioni", COL_CYAN);
+    nucleo_touch_commit();
+}
+static const char *scr_name(void)
+{
+    switch (s_screen) {
+        case ST_TITLE:    return GT("Menu", "Menu");
+        case ST_SETTINGS: return GT("Impostazioni", "Settings");
+        case ST_CINE:     return GT("Introduzione", "Intro");
+        case ST_MAP:      return GT("Mappa stellare", "Star map");
+        case ST_SYSTEM:   return GT("Sistema", "System");
+        case ST_MARKET:   return GT("Mercato", "Market");
+        case ST_SHIPYARD: return GT("Cantiere", "Shipyard");
+        case ST_PLANCIA:  return GT("Plancia", "Bridge");
+        case ST_EVENT:    return GT("Evento", "Event");
+        case ST_MISSIONS: return GT("Missioni", "Missions");
+        case ST_BRIEF:    return GT("Briefing", "Briefing");
+        case ST_COMBAT:   return GT("Combattimento", "Combat");
+        default:          return GT("Rapporto", "Debrief");
+    }
+}
+static void draw_companion(void)
+{
+    const int top = nucleo_app_content_top(), hc = nucleo_app_content_height();
+    d.fillRect(0, top, W, hc, COL_SPACE);
+    int y = lg::comp_head("COSTELLAZIONI", COL_CYAN);
+    char b[48];
+    gui::text(scr_name(), 8, y + 2, 0, gui::F_BODY, COL_WHITE, 0);
+    if (s_ingame) {
+        snprintf(b, sizeof b, GT("%d cr", "%d cr"), g.credits); gui::text(b, W - 8, y + 4, 2, gui::F_SMALL, COL_AMBER, 0);
+        if (s_screen == ST_COMBAT) {
+            snprintf(b, sizeof b, GT("Scafo %d/%d  Spinta %d", "Hull %d/%d  Boost %d"), g.hull < 0 ? 0 : g.hull, g.hull_max, s_throttle10);
+            gui::text(b, 8, y + 26, 0, gui::F_SMALL, COL_GREEN, 0);
+            lg::comp_keys(GT("Frecce mira  SPAZIO fuoco  S missile", "Arrows aim  SPACE fire  S missile"));
+            return;
+        }
+        snprintf(b, sizeof b, GT("Scafo %d/%d  Carb %d/%d", "Hull %d/%d  Fuel %d/%d"), g.hull < 0 ? 0 : g.hull, g.hull_max, g.fuel, g.fuel_max);
+        gui::text(b, 8, y + 26, 0, gui::F_SMALL, COL_GREEN, 0);
+    }
+    lg::comp_keys(GT("Tocca i tasti sul pannello", "Use the panel buttons"));
+}
+static void on_draw(void)
+{
+    if (nucleo_app_two_screens()) { draw_companion(); return; }
+    draw_game();
 }
 // ~30 Hz animation only on the live screens; static screens repaint on input.
 static bool poll(void)
@@ -3394,7 +3521,7 @@ extern "C" void nucleo_register_constellations(void)
         "stelle", "Costellazioni", "Games", "Mercante stellare: riaccendi i Fari",
         'C', C_BLUE, on_enter, on_key, nullptr, on_draw, on_exit,
         NX_NET_APP,  // free ~60KB (httpd/mDNS/voice/L1) before on_enter so the pools always fit -> no launch OOM
-        APP_RAM
+        APP_RAM, draw_large
     };
     nucleo_app_register(&app);
 }

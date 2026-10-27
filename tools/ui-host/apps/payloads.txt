@@ -1,0 +1,5 @@
+# Payloads: the built-in demo list on the panel, and a script preview with real analysis stats.
+# The real DuckyScript analyzer is pulled in so the preview shows true line/keystroke/time numbers.
+@src nucleo_ducky/nucleo_ducky.c
+list
+preview  ENTER

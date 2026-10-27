@@ -20,6 +20,8 @@
 #include "game_sfx.h"            // shared SFX engine (pack WAV -> play, degrades to tone)
 #include "game_text.h"           // the five OS languages (it/en in flash, es/fr/de from the SD pack)
 #include "game_ui.h"             // gui:: the console kit (title, menu, dialog, text)
+#include "app_large.h"           // two screens: the arena on the 320x240 panel, the Cardputer as companion
+#include "nucleo_touch.h"
 #include "nucleo_imu.h"          // ADV tilt sensor (complementary control)
 #include <stdlib.h>
 #include <stdio.h>
@@ -736,7 +738,7 @@ static void draw_levelup(VS *w)
     }
 }
 
-static void on_draw(void)
+static void draw_game(void)
 {
     VS *w = s_w;
     if (!w) { d.fillScreen(0x0000); return; }
@@ -776,13 +778,121 @@ static void on_draw(void)
     }
 }
 
+// ===== two screens: the arena on the 320x240 panel, the Cardputer as the gamepad ========================
+// lg::game pushes the survivors arena scaled to the panel; a NATIVE HUD below carries the state and the
+// discrete controls the framework can deliver as taps: the three level-up cards (1-3), pause/resume, hero
+// select, menu nav. Weapons auto-fire; the only real-time input is MOVEMENT, which stays on the Cardputer's
+// held keys (a tap cannot be held) — so the Cardputer is the pad and the panel is the screen. The companion
+// shows HP / time / level / kills and the key map.
+static void lg_btn3(int y, int bh, const char *la, int ka, char ca, const char *lb, int kb, char cb,
+                    const char *lc, int kc, char cc)
+{
+    const int W320 = d.width(), g = 8, bw = (W320 - 4 * g) / 3;
+    lg::button(g, y, bw, bh, la, lg::card(), FG, ka, ca);
+    lg::button(2 * g + bw, y, bw, bh, lb, COL_ACC, 0x0000, kb, cb);
+    lg::button(3 * g + 2 * bw, y, bw, bh, lc, lg::card(), FG, kc, cc);
+}
+static void lg_hud(int y, int h)
+{
+    const int W320 = d.width();
+    VS *w = s_w;
+    d.fillRect(0, y, W320, h, 0x0000);
+    d.drawFastHLine(0, y, W320, COL_ACC);
+    const int bh = h - 24 < 34 ? h - 10 : 40, by = y + h - bh - 6;
+    char b[40];
+
+    if ((s_gs == GS_PLAY || s_gs == GS_LVLANIM || s_gs == GS_LEVELUP || s_gs == GS_PAUSE || s_gs == GS_OVER) && w) {
+        int secs = (int)(w->frame / 30);
+        lg::font(1); d.setTextDatum(top_left); d.setTextColor(0xFFFF, 0x0000);
+        snprintf(b, sizeof b, "%02d:%02d", secs / 60, secs % 60); d.drawString(b, 10, y + 5);
+        d.setTextColor(w->php > w->phpmax / 4 ? C_GREEN : C_RED, 0x0000);
+        snprintf(b, sizeof b, GT("Vita %d/%d", "HP %d/%d"), w->php < 0 ? 0 : w->php, w->phpmax); d.drawString(b, 86, y + 5);
+        d.setTextDatum(top_right); d.setTextColor(0xFFE0, 0x0000);
+        snprintf(b, sizeof b, "Lv%d  x%d", w->plevel, w->kills); d.drawString(b, W320 - 10, y + 5);
+        d.setTextDatum(top_left);
+        if (s_gs == GS_LEVELUP) {
+            const int g = 8, bw = (W320 - 4 * g) / 3;
+            for (int i = 0; i < 3; i++) {
+                Offer o = s_off[i];
+                const char *nm = o.kind == OFF_PSV ? psv_name(o.id) : wep_name(o.id);
+                snprintf(b, sizeof b, "%d %s", i + 1, nm);
+                lg::button(g + i * (bw + g), by, bw, bh, b, i == s_up_sel ? COL_ACC : lg::card(), i == s_up_sel ? 0x0000 : FG, NK_CHAR, (char)('1' + i));
+            }
+            return;
+        }
+        if (s_gs == GS_PAUSE) { lg::button(40, by, W320 - 80, bh, GT("Riprendi", "Resume"), COL_ACC, 0x0000, NK_ENTER, 0); return; }
+        if (s_gs == GS_OVER) {
+            const int g = 8, bw = (W320 - 3 * g) / 2;
+            lg::button(g, by, bw, bh, GT("Rigioca", "Play again"), COL_ACC, 0x0000, NK_ENTER, 0);
+            lg::button(2 * g + bw, by, bw, bh, GT("Menu", "Menu"), lg::card(), FG, NK_BACK, 0);
+            return;
+        }
+        lg::button(40, by, W320 - 80, bh, GT("Pausa", "Pause"), lg::card(), FG, NK_BACK, 0);
+        return;
+    }
+    // menu / settings / hero select
+    lg::font(1); d.setTextDatum(top_left); d.setTextColor(COL_ACC, 0x0000);
+    const char *lbl = s_gs == GS_SETTINGS ? GT("Impostazioni", "Settings")
+                    : s_gs == GS_START     ? GT("Scegli l'eroe", "Choose your hero")
+                    : GT("Orde - menu", "Orde - menu");
+    d.drawString(lbl, 12, y + 6); d.setTextDatum(top_left);
+    if (s_gs == GS_MENU)          lg_btn3(by, bh, GT("Su", "Up"), NK_UP, 0, "OK", NK_ENTER, 0, GT("Giu", "Down"), NK_DOWN, 0);
+    else if (s_gs == GS_SETTINGS) lg_btn3(by, bh, GT("Su", "Up"), NK_UP, 0, GT("Cambia", "Change"), NK_RIGHT, 0, GT("Giu", "Down"), NK_DOWN, 0);
+    else                          lg_btn3(by, bh, "<", NK_LEFT, 0, GT("Gioca", "Play"), NK_ENTER, 0, ">", NK_RIGHT, 0);
+}
+static void draw_large(void)
+{
+    nucleo_touch_clear();
+    lg::game(draw_game, lg_hud, "Orde", COL_ACC);
+    nucleo_touch_commit();
+}
+static void draw_companion(void)
+{
+    const int top = nucleo_app_content_top(), hc = nucleo_app_content_height();
+    d.fillRect(0, top, W, hc, BG);
+    int y = lg::comp_head("ORDE", COL_ACC);
+    VS *w = s_w;
+    char b[48];
+    if ((s_gs == GS_PLAY || s_gs == GS_LVLANIM || s_gs == GS_LEVELUP || s_gs == GS_PAUSE || s_gs == GS_OVER) && w) {
+        int secs = (int)(w->frame / 30);
+        snprintf(b, sizeof b, "%02d:%02d", secs / 60, secs % 60); gui::text(b, 8, y + 2, 0, gui::F_BODY, 0xFFFF, 0);
+        snprintf(b, sizeof b, "Lv%d  x%d", w->plevel, w->kills); gui::text(b, W - 8, y + 4, 2, gui::F_SMALL, 0xFFE0, 0);
+        int pct = w->phpmax > 0 ? (w->php < 0 ? 0 : w->php) * 100 / w->phpmax : 0;
+        lg::bar(8, y + 24, 224, 8, pct, pct > 25 ? C_GREEN : C_RED);
+        snprintf(b, sizeof b, GT("Vita %d / %d", "HP %d / %d"), w->php < 0 ? 0 : w->php, w->phpmax); gui::text(b, 8, y + 36, 0, gui::F_SMALL, 0xFFFF, 0);
+        const char *st = s_gs == GS_LEVELUP ? GT("Livello su! scegli", "Level up! pick")
+                       : s_gs == GS_PAUSE   ? GT("In pausa", "Paused")
+                       : s_gs == GS_OVER    ? (s_new_record ? GT("Nuovo record!", "New record!") : GT("Sconfitto", "Defeated"))
+                       : hero_name(s_hero);
+        gui::text(st, 8, y + 52, 0, gui::F_BODY, s_gs == GS_OVER ? C_RED : 0x8FF3, 0);
+        lg::comp_keys(s_gs == GS_LEVELUP ? GT("1-3 scegli la carta", "1-3 pick a card")
+                     : s_gs == GS_PLAY   ? GT("Frecce/WASIO muovi  Esc pausa", "Arrows/WASIO move  Esc pause")
+                     : GT("INVIO ok  Esc indietro", "ENTER ok  Esc back"));
+        return;
+    }
+    if (s_gs == GS_START) {
+        gui::text(hero_name(s_hero), 8, y + 4, 0, gui::F_BODY, 0xFFFF, 0);
+        lg::wrap(hero_power(s_hero), 8, y + 26, 224, 18, 2);
+        lg::comp_keys(GT("SX/DX eroe  INVIO gioca", "L/R hero  ENTER play"));
+        return;
+    }
+    gui::text(s_gs == GS_SETTINGS ? GT("Impostazioni", "Settings") : GT("Menu", "Menu"), 8, y + 6, 0, gui::F_BODY, 0xFFFF, 0);
+    if (s_best_secs > 0 || s_best_kills > 0) { snprintf(b, sizeof b, GT("Record %d:%02d  %d uccisi", "Best %d:%02d  %d kills"), s_best_secs / 60, s_best_secs % 60, s_best_kills); gui::text(b, 8, y + 34, 0, gui::F_SMALL, 0xFFE0, 0); }
+    lg::comp_keys(GT("Tocca i tasti sul pannello", "Use the panel buttons"));
+}
+static void on_draw(void)
+{
+    if (nucleo_app_two_screens()) { draw_companion(); return; }
+    draw_game();
+}
+
 extern "C" void nucleo_register_vs(void)
 {
     static const nucleo_app_def_t app = {
         "orde", "Orde", "Games", "Mini vampire-survivors: sopravvivi alle orde",
         'O', 0xF9A6,
         on_enter, on_key, nullptr, on_draw, on_exit,
-        NX_SOLO
+        NX_SOLO, nullptr, draw_large
     };
     nucleo_app_register(&app);
 }

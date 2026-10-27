@@ -57,6 +57,8 @@ extern "C" {
 #include "app_gfx.h"
 #include "nucleo_theme.h"       // themed chrome; was hardcoded classic literals -> ignored theme switches
 #include "nucleo_i18n.h"        // TR(it,en): hint follows the system language
+#include "app_large.h"          // two screens: the dial on the 320x240 panel, the Cardputer as companion
+#include "nucleo_touch.h"
 
 // Live STA link state (extern like app_wifi.cpp — a header include would cycle nucleo_setup->nucleo_app).
 // The radio is the one app whose whole existence depends on the uplink, so it treats the link as a
@@ -80,6 +82,7 @@ static const char *DEFAULT_URL = "http://radioindex-130-110-12-237.sslip.io/stre
 static station_t  s_fallback;            // 1-slot static safety net (~0.2 KB) if malloc fails
 static station_t *s_st = nullptr;        // malloc'd while the app is OPEN, freed on leave()
 static int s_cap = 0, s_count = 0, s_sel = 0, s_default = 0, s_top = 0;
+static int s_lg_scroll = 0;              // two screens: the panel list's first visible row
 
 // Always slot 0: the built-in Radio Index (pinned first so it is always in evidence).
 static void seed_radio_index(void)
@@ -483,11 +486,22 @@ static void leave(void)
 static void on_key(int key, char ch)
 {
     if (s_count <= 0) return;
+    const bool two = nucleo_app_two_screens();
 
+    if (two) {                                                     // panel: tap a row to pick, tap again to listen
+        int t = lg::row_tap(key, ch, s_lg_scroll, s_count, &s_sel);
+        if (t == 2) { listen(&s_st[s_sel]); return; }
+        if (t == 1) { clamp_scroll(); nucleo_app_request_draw(); return; }
+    }
+    if (ch == '+' || ch == '-') {                                  // the card's volume buttons (and the +/- keys)
+        nucleo_audio_set_volume(nucleo_audio_volume() + (ch == '+' ? 10 : -10));
+        nucleo_app_request_draw(); return;
+    }
     if (key == NK_UP || key == NK_DOWN) {
         int old = s_sel, old_top = s_top;
         s_sel = (key == NK_UP) ? (s_sel + s_count - 1) % s_count : (s_sel + 1) % s_count;
         clamp_scroll();
+        if (two) { nucleo_app_request_draw(); return; }            // two screens: the panel list redraws whole
         if (s_top != old_top) draw_list_band();                    // scrolled/wrapped -> one band repaint
         else { draw_row(old); draw_row(s_sel); }                   // same window -> only the two rows
         draw_header_genre();                                       // isolated header field
@@ -497,7 +511,9 @@ static void on_key(int key, char ch)
         for (int n = 1; n <= s_count; n++) {
             int idx = (s_sel + n) % s_count;
             if (tolower((unsigned char)s_st[idx].name[0]) == want) {
-                s_sel = idx; clamp_scroll(); draw_list_band(); draw_header_genre(); break;
+                s_sel = idx; clamp_scroll();
+                if (two) nucleo_app_request_draw(); else { draw_list_band(); draw_header_genre(); }
+                break;
             }
         }
     } else if (key == NK_ENTER) {
@@ -507,8 +523,84 @@ static void on_key(int key, char ch)
 
 static void tick(void) { }                         // static screen: nothing animates -> never repaints
 
+// ===== two screens ==============================================================================================
+// The external panel carries the dial: the full station list on the left, and the selected station's card on the
+// right (name, genre, stream, a volume control and a big "Ascolta" button). Tuning in is still the blocking ON AIR
+// modal (it owns the Cardputer, RAM-critical) — the panel keeps the card while it plays. The Cardputer is the
+// companion: the picked station, where it is in the list and the keys. Touch: tap a row to pick, again to listen;
+// the card's buttons set the start volume and start the stream.
+static const int R_LISTW = 150;
+
+static void lg_row(int i, int x, int y, int w, int h, bool focus, unsigned short bg, void *)
+{
+    lg::row_text(x, y, w, h, focus, bg, s_st[i].name, i == s_default ? TR("pred", "def") : nullptr,
+                 i == s_default ? GRN : FG);
+}
+
+static void lg_card(int x, int y, int w, int h)
+{
+    lg::panel(x, y, w, h);
+    const unsigned short cb = lg::card();
+    const station_t *s = &s_st[s_sel];
+    const unsigned short namec = (s_sel == s_default) ? GRN : ACC;
+    lg::font(2); d.setTextColor(namec, cb);
+    char t[48]; lg::fit(t, sizeof t, s->name, w - 20); d.drawString(t, x + 12, y + 12);
+    lg::font(0); d.setTextColor(MUTED, cb);
+    char g[48]; lg::fit(g, sizeof g, s->genre[0] ? s->genre : TR("(nessun genere)", "(no genre)"), w - 20);
+    d.drawString(g, x + 12, y + 44);
+    d.setTextColor(DIM, cb);
+    char u[80]; lg::fit(u, sizeof u, s->stream, w - 20); d.drawString(u, x + 12, y + 62);
+
+    int vol = nucleo_audio_volume();                // the start volume (applied when the stream begins)
+    char vl[24]; snprintf(vl, sizeof vl, "%s  %d%%", TR("Volume", "Volume"), vol);
+    lg::font(0); d.setTextColor(MUTED, cb); d.drawString(vl, x + 12, y + 92);
+    lg::button(x + w - 68, y + 86, 28, 24, "-", HLINE, FG, NK_CHAR, '-');
+    lg::button(x + w - 36, y + 86, 28, 24, "+", HLINE, FG, NK_CHAR, '+');
+    lg::bar(x + 12, y + 116, w - 24, 10, vol, GRN);
+
+    lg::button(x + 12, y + h - 46, w - 24, 36, TR("Ascolta", "Listen"), namec, INK, NK_ENTER, 0);
+}
+
+static void draw_large(void)
+{
+    const int Wd = d.width(), Hd = d.height();
+    nucleo_touch_clear();
+    char c[24]; snprintf(c, sizeof c, TR("%d stazioni", "%d stations"), s_count);
+    const int y = lg::header("Radio", c, ACC);
+    if (s_count <= 0) {
+        lg::message(0, y, Wd, Hd - y, TR("Nessuna stazione", "No stations"),
+                    TR("Aggiungile dall'app web Radio.", "Add them from the web Radio app."), MUTED);
+        nucleo_touch_commit(); return;
+    }
+    lg::list(0, y + 2, R_LISTW, Hd - y - 4, lg::ROW, s_count, s_sel, &s_lg_scroll, lg_row, nullptr, ACC);
+    d.fillRect(R_LISTW, y, Wd - R_LISTW, Hd - y, BG);
+    lg_card(R_LISTW + 4, y + 6, Wd - R_LISTW - 10, Hd - y - 12);
+    nucleo_touch_commit();
+}
+
+static void draw_companion(void)
+{
+    const int top = nucleo_app_content_top(), h = nucleo_app_content_height();
+    d.fillRect(0, top, 240, h, BG);
+    const int y = lg::comp_head("RADIO", ACC);
+    if (s_count <= 0) {
+        d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(MUTED, BG);
+        d.drawString(TR("Nessuna stazione", "No stations"), 8, y + 10);
+        lg::comp_keys(TR("ESC esci", "ESC exit")); return;
+    }
+    const station_t *s = &s_st[s_sel];
+    d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(s_sel == s_default ? GRN : FG, BG);
+    const int nl = lg::wrap(s->name, 8, y + 4, 224, 20, 2);
+    d.setFont(&fonts::Font0); d.setTextColor(MUTED, BG);
+    if (s->genre[0]) d.drawString(s->genre, 8, y + 8 + nl * 20);
+    char m[48]; snprintf(m, sizeof m, TR("%d di %d   vol %d%%", "%d of %d   vol %d%%"), s_sel + 1, s_count, nucleo_audio_volume());
+    d.setTextColor(DIM, BG); d.drawString(m, 8, y + 60);
+    lg::comp_keys(TR("su/giu scegli  INVIO ascolta  +/- vol", "up/dn pick  ENTER listen  +/- vol"));
+}
+
 static void draw(void)                             // full render: framework calls this on open and after listen()
 {
+    if (nucleo_app_two_screens()) { draw_companion(); return; }
     int cy = nucleo_app_content_top(), ch = nucleo_app_content_height();
     d.fillRect(0, cy, 240, ch, BG);
     d.setTextSize(2); d.setTextColor(ACC, BG); d.setCursor(10, cy + 2); d.print("Radio");
@@ -524,7 +616,7 @@ extern "C" void nucleo_register_radio(void)
     static const nucleo_app_def_t app = {
         "radio", "Radio Index", "Media", "Tune into free live radio (list shared with the web app)",
         'R', 0x4DDF, enter, on_key, tick, draw, leave,
-        NX_NET_APP | NX_SOLO
+        NX_NET_APP | NX_SOLO,
             // SOLO, and this time MEASURED on both sides. Inline (full OS + declarative reclaim) the
             // decoder is dead on arrival: free 24 KB, largest 13 KB — Helix never comes up (the very
             // "no RAM" this app was reported for). The Solo boot gives free ~60 KB / largest ~23 KB and
@@ -533,6 +625,7 @@ extern "C" void nucleo_register_radio(void)
             // EAGAIN-as-fatal tore down live connections, and the I2S sink opened last and found no
             // DMA block (now it pre-opens before the ring). STA-only + PS_NONE keep the fresh join
             // usable. NO NX_WIFI: the stream needs the radio up. Esc reboots back to the full OS.
+        nullptr, draw_large                        // two screens: the dial on the panel + Cardputer companion
     };
     nucleo_app_register(&app);
 }

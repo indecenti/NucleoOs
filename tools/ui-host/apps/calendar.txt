@@ -1,0 +1,17 @@
+# Calendar: a week with events around "today" (the harness clock: Tue 2026-09-29 09:22 UTC)
+@src calendar_svc.cpp
+@sd system/config/calendar.json {"events":{"2026-09-29":[{"id":"e1","time":"08:00","text":"Corsa al parco"},{"id":"e2","time":"10:30","text":"Dentista - dott. Rinaldi"},{"id":"e3","time":"13:00","text":"Pranzo con Giulia"},{"id":"e4","time":"","text":"Compleanno di Marta"},{"id":"e5","time":"18:45","text":"Palestra"},{"id":"e6","time":"21:00","text":"Chiamare il fornitore per il preventivo della cucina e confermare la data del montaggio"}],"2026-09-30":[{"id":"e7","time":"09:00","text":"Riunione progetto Nucleo"}],"2026-10-02":[{"id":"e8","time":"20:30","text":"Cinema"}],"2026-09-25":[{"id":"e9","time":"17:00","text":"Dentista - controllo"}]}}
+day
+pick      D D
+rowtap    row:3
+newrow    row:6
+event     D ENTER
+eventlong D D ENTER
+empty     R R
+month     c:m
+monthnext c:m c:>
+form      c:n t:Dent
+formedit  D c:e TAB
+formtime  c:n TAB TAB t:1415
+allday    c:n TAB TAB DEL
+confirm   D c:d

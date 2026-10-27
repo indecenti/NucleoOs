@@ -5,6 +5,8 @@
 #include "nucleo_app.h"
 #include "launcher_theme.h"
 #include "nucleo_i18n.h"       // TR(it,en): hint follows the system language
+#include "app_large.h"         // two screens: the sheet on the 320x240 panel, how-to-reach on the Cardputer
+#include "nucleo_touch.h"
 #include "app_gfx.h"
 #include <M5GFX.h>
 #include <string.h>
@@ -189,15 +191,23 @@ static void info_enter(void)
     nucleo_app_request_draw();
 }
 
+static int lg_max_top(void);   // the panel's scroll bound (its taller rows fit fewer); defined below
+
 static void info_key(int key, char ch)
 {
     (void)ch;
-    if (key == NK_UP   && s_target > 0)          { s_target--; nucleo_app_request_draw(); }
-    else if (key == NK_DOWN && s_target < max_top()) { s_target++; nucleo_app_request_draw(); }
+    const int bound = nucleo_app_two_screens() ? lg_max_top() : max_top();
+    if (key == NK_UP   && s_target > 0)       { s_target--; nucleo_app_request_draw(); }
+    else if (key == NK_DOWN && s_target < bound) { s_target++; nucleo_app_request_draw(); }
 }
+
+static void info_draw_large(void);
+static void info_companion(void);
 
 static void info_draw(void)
 {
+    if (nucleo_app_two_screens()) { info_companion(); return; }   // the panel carries the sheet; here: how to reach it
+
     int top = nucleo_app_content_top(), ch = nucleo_app_content_height();
     const int rowH = 20;
     s_vis = ch / rowH; if (s_vis < 1) s_vis = 1; if (s_vis > MAX_SLOT - 1) s_vis = MAX_SLOT - 1;
@@ -269,13 +279,114 @@ static void info_draw(void)
     d.clearClipRect();
 }
 
+// ---- two screens ---------------------------------------------------------------------------------
+// Panel: the same section/row model, laid out big on 320x240 — section headers with an accent rule,
+// each stat as "caption  VALUE". Drag or UP/DOWN scrolls. A change-signature gates a full repaint, so
+// the direct (bufferless) panel never clear-flickers on an idle 1 Hz stats poll. Companion: the few
+// numbers that matter to reach the box — network, address, PIN — large on the Cardputer.
+static int s_lg_vis = 6;                                   // rows that fit on the panel (recomputed in draw)
+static int lg_max_top(void) { int m = s_nrow - s_lg_vis; return m > 0 ? m : 0; }
+
+static uint32_t lg_sig(void)
+{
+    uint32_t h = rows_sig();
+    h ^= (uint32_t)s_target * 2654435761u;
+    h ^= nucleo_app_repaint_gen() * 40503u;
+    return h ? h : 1;
+}
+
+static void info_draw_large(void)
+{
+    const int W = d.width(), H = d.height();
+    if (!s_row) { s_row = (Row *)calloc(40, sizeof *s_row); if (s_row) build_rows(); }
+    if (!s_nrow) build_rows();
+
+    const int HEAD = lg::HEAD, rowH = 30, bodyTop = HEAD + 4;
+    s_lg_vis = (H - bodyTop) / rowH; if (s_lg_vis < 1) s_lg_vis = 1;
+    if (s_target > lg_max_top()) s_target = lg_max_top();
+    if (s_target < 0) s_target = 0;
+
+    static uint32_t s_shown = 0;
+    uint32_t sig = lg_sig();
+    if (sig == s_shown) return;                            // nothing changed -> leave the panel as it is (no flicker)
+    s_shown = sig;
+
+    nucleo_touch_clear();
+    char rt[12]; snprintf(rt, sizeof rt, "%d/%d", s_target + 1, s_nrow);
+    lg::header("Connection", s_nrow > s_lg_vis ? rt : nullptr, C_BLUE);
+    d.fillRect(0, HEAD, W, H - HEAD, BG);
+    d.setFont(&fonts::Font0);
+
+    for (int r = 0; r < s_lg_vis; r++) {
+        const int idx = s_target + r;
+        if (idx < 0 || idx >= s_nrow) break;
+        const Row &R = s_row[idx];
+        const int ry = bodyTop + r * rowH;
+        if (R.kind == RK_HEAD) {
+            lg::font(1); d.setTextColor(R.col, BG); d.setTextDatum(middle_left);
+            d.drawString(R.label, 10, ry + rowH / 2);
+            d.setTextDatum(top_left);
+            d.drawFastHLine(10, ry + rowH - 4, W - 20, R.col);
+            continue;
+        }
+        lg::font(0); d.setTextColor(MUTED, BG); d.setTextDatum(middle_left);
+        d.drawString(R.label, 12, ry + rowH / 2);
+        const int lw = d.textWidth(R.label);
+        if (R.val[0]) {
+            lg::font(1); d.setTextDatum(middle_right);
+            d.setTextColor(R.col, BG);
+            char v[40]; lg::fit(v, sizeof v, R.val, W - 24 - lw - 12);
+            d.drawString(v, W - 12, ry + rowH / 2);
+        }
+        d.setTextDatum(top_left);
+    }
+    // the whole body is a drag-to-scroll area; UP/DOWN walk the top row
+    nucleo_touch_add_scroll(0, HEAD, W, H - HEAD, rowH, NK_UP, 0, NK_DOWN, 0);
+    if (s_nrow > s_lg_vis) {                                // a slim knob on the right
+        const int track = H - bodyTop - 8, kh = track * s_lg_vis / s_nrow < 14 ? 14 : track * s_lg_vis / s_nrow;
+        const int ky = bodyTop + 4 + (track - kh) * s_target / (lg_max_top() > 0 ? lg_max_top() : 1);
+        d.fillRect(W - 4, bodyTop, 2, track, LINE);
+        d.fillRect(W - 4, ky, 2, kh, C_BLUE);
+    }
+    nucleo_touch_commit();
+    d.setFont(&fonts::Font0); d.setTextSize(1);
+}
+
+static void info_companion(void)
+{
+    const int top = nucleo_app_content_top(), ch = nucleo_app_content_height();
+    d.fillRect(0, top, 240, ch, BG);
+    if (!s_row) { s_row = (Row *)calloc(40, sizeof *s_row); }
+    build_rows();
+    int y = lg::comp_head("CONNECTION", C_BLUE);
+
+    bool sta = !strcmp(nucleo_setup_mode(), "sta") && nucleo_setup_ssid()[0];
+    const char *ip = nucleo_setup_ip();
+    char ipb[24]; snprintf(ipb, sizeof ipb, "%s", (sta && ip[0]) ? ip : "192.168.4.1");
+    struct { const char *l; const char *v; unsigned short c; } rows[] = {
+        { TR("Rete", "Network"),     sta ? nucleo_setup_ssid() : "Setup AP", C_BLUE },
+        { TR("Indirizzo", "Address"), ipb, C_GREEN },
+        { "PIN", (sta && ip[0]) ? nucleo_auth_pin() : TR("unisci il Wi-Fi", "join Wi-Fi"), C_YELLOW },
+    };
+    d.setFont(&fonts::Font0); d.setTextSize(1);
+    for (int i = 0; i < 3; i++) {
+        const int ry = y + 4 + i * 22;
+        d.setTextColor(MUTED, BG); d.setCursor(8, ry + 5); d.print(rows[i].l);
+        char v[26]; snprintf(v, sizeof v, "%.20s", rows[i].v);
+        int vw = (int)strlen(v) * 12;
+        if (56 + vw <= 232) { d.setTextSize(2); d.setTextColor(rows[i].c, BG); d.setCursor(232 - vw, ry); d.print(v); d.setTextSize(1); }
+        else { d.setTextColor(rows[i].c, BG); d.setCursor(56, ry + 5); d.print(v); }
+    }
+    lg::comp_keys(TR("dettagli sul 2o schermo  esc", "details on 2nd screen  esc"));
+}
+
 static void info_exit(void) { free(s_row); s_row = nullptr; s_nrow = 0; }   // back to zero .bss until reopened
 
 extern "C" void nucleo_register_info(void)
 {
     static const nucleo_app_def_t app = {
         "info", "Connection", "System", "Wi-Fi, indirizzi web e info dispositivo",
-        'i', C_BLUE, info_enter, info_key, nullptr, info_draw, info_exit
+        'i', C_BLUE, info_enter, info_key, nullptr, info_draw, info_exit, 0, nullptr, info_draw_large
     };
     nucleo_app_register(&app);
 }

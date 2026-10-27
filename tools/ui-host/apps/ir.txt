@@ -1,0 +1,11 @@
+# IR Remote: fictional catalog from ir_stubs.cpp (6 remotes in 3 categories, 12 TV-power codes).
+# userdata.json gives the Favourites tab two starred codes (the same file the web app writes).
+@host stubs/ir_stubs.cpp
+@sd data/ir/userdata.json {"favs":[{"label":"TV Power","code":{"protocol":"nec","address":4,"command":2}},{"label":"Amp Vol+","code":{"protocol":"rc5","address":16,"command":1}}]}
+cats
+remotes   ENTER
+buttons   ENTER ENTER
+tvb       TAB
+sweep     TAB ENTER tick:3
+find      TAB TAB ENTER tick:2
+favs      TAB TAB TAB

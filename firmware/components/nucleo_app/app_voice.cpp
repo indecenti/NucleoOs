@@ -29,6 +29,9 @@ extern "C" {
 #include "nucleo_exclusive.h"   // free RAM on enter so the recognizer's ~38 KB heap gate can pass
 #include "nucleo_i18n.h"        // TR(it,en): UI labels follow the system language
 #include "nucleo_theme.h"       // themed chrome (BG/FG/MUTED/DIM/LINE follow the active OS theme)
+#include "app_large.h"          // two screens: the trainer on the 320x240 panel, the Cardputer as companion/PTT
+#include "nucleo_touch.h"
+#include "esp_timer.h"          // esp_timer_get_time for the mic pulse (also used in the compact record view)
 
 // Chrome follows the active theme; ACC is the app's identity accent (its registered launcher color);
 // ACC2 + the box tints below are semantic status colors (named, never bare hex in a draw call).
@@ -56,6 +59,7 @@ extern "C" int nucleo_ws_client_count(void);
 // ── State ────────────────────────────────────────────────────────────────────
 static int  s_tab  = 0;     // 0=triggers 1=record 2=status
 static int  s_sel  = 0;
+static int  s_lg_scroll = 0;   // two screens: the panel template-list's first visible row
 static bool s_confirm_del, s_del_yes;   // pending "delete template?" confirm card (tab 0)
 static char (*s_tpl_names)[32] = nullptr;   // [MAX_TPLS][32], heap-allocated on enter (zero RAM at boot)
 static int  s_tpl_count = 0;
@@ -160,6 +164,11 @@ static void on_key(int key, char ch)
             if (r >= 0) s_confirm_del = false;
             nucleo_app_request_draw();
             return;
+        }
+        if (nucleo_app_two_screens()) {               // panel: tap a row to pick, tap again to re-train it
+            int t = lg::row_tap(key, ch, s_lg_scroll, s_tpl_count, &s_sel);
+            if (t == 2) { ch = 'r'; key = NK_CHAR; }   // second tap = train the selected template (falls through)
+            else if (t == 1) { nucleo_app_request_draw(); return; }
         }
         if (app_ui_list_key(key, ch, &s_sel, s_tpl_count, nullptr, nullptr)) {
             // handled
@@ -388,8 +397,167 @@ static void draw_status(int top_y)
     d.print(TR5("A = Sempre attiva (PTT da home)", "A = Always on (PTT from home)", "A = Siempre on (PTT inicio)", "A = Toujours on (PTT accueil)", "A = Immer an (PTT Startseite)"));
 }
 
+// ===== two screens ==============================================================================================
+// The external panel carries the trainer: the template list + a detail card (MODELLI), a big centred training
+// card (ADDESTRA) that mirrors the capture state, and the status rows (INFO). The Cardputer is the companion and,
+// crucially, where the typing + the GO push-to-talk happen: it shows "hold GO and speak" while training. Touch:
+// the tabs switch, a row taps to pick and again to re-train it, the card buttons train / delete / toggle.
+static int lg_tab_bar(int y, int Wd)
+{
+    const char *tabs[3] = { tab_label(0), tab_label(1), tab_label(2) };
+    (void)Wd;
+    return lg::tabs(y, tabs, 3, s_tab, ACC, nullptr);     // tap a tab = NK_TAB (cycles)
+}
+
+static void lg_tpl_row(int i, int x, int y, int w, int h, bool focus, unsigned short bg, void *)
+{
+    lg::row_text(x, y, w, h, focus, bg, s_tpl_names ? s_tpl_names[i] : "?", nullptr, FG);
+}
+
+static void lg_tab_triggers(int yb, int Wd, int Hd)
+{
+    if (s_tpl_count == 0) {
+        lg::message(0, yb, Wd, Hd - yb, TR("Nessun modello", "No templates"),
+                    TR("Vai su Addestra per crearne uno.", "Go to Train to create one."), MUTED);
+        return;
+    }
+    const int listw = 150;
+    lg::list(0, yb + 2, listw, Hd - yb - 4, lg::ROW, s_tpl_count, s_sel, &s_lg_scroll, lg_tpl_row, nullptr, ACC);
+    d.fillRect(listw, yb, Wd - listw, Hd - yb, BG);
+    const int px = listw + 4, py = yb + 6, pw = Wd - listw - 10, ph = Hd - yb - 12;
+    lg::panel(px, py, pw, ph);
+    const unsigned short cb = lg::card();
+    lg::font(2); d.setTextColor(ACC, cb);
+    char t[40]; lg::fit(t, sizeof t, s_tpl_names[s_sel], pw - 20); d.drawString(t, px + 12, py + 14);
+    lg::font(0); d.setTextColor(MUTED, cb); d.drawString(TR("Modello vocale offline", "Offline voice template"), px + 12, py + 44);
+    lg::button(px + 12, py + ph - 86, pw - 24, 34, TR("Riaddestra", "Re-train"), ACC, BG, NK_CHAR, 'r');
+    lg::button(px + 12, py + ph - 44, pw - 24, 34, TR("Elimina", "Delete"), C_RED, 0xFFFF, NK_DEL, 0);
+    if (s_confirm_del) {
+        const int cw = Wd - 80, cx = 40, chh = 120, cy = (Hd - chh) / 2;
+        lg::panel(cx, cy, cw, chh, LINE); d.drawRoundRect(cx, cy, cw, chh, 8, C_RED);
+        lg::font(1); d.setTextColor(C_RED, LINE); d.drawString(TR("Eliminare il modello?", "Delete template?"), cx + 16, cy + 12);
+        lg::font(0); d.setTextColor(FG, LINE); char nm[40]; lg::fit(nm, sizeof nm, s_tpl_names[s_sel], cw - 32); d.drawString(nm, cx + 16, cy + 40);
+        const int bw = (cw - 48) / 2;
+        lg::button(cx + 16, cy + chh - 46, bw, 34, "No", s_del_yes ? LINE : ACC, s_del_yes ? FG : BG, NK_CHAR, 'n');
+        lg::button(cx + 32 + bw, cy + chh - 46, bw, 34, TR("Elimina", "Delete"), s_del_yes ? C_RED : LINE, 0xFFFF, NK_CHAR, 'y');
+    }
+}
+
+static void lg_tab_record(int yb, int Wd, int Hd)
+{
+    const int bx = 30, bw = Wd - 60, by = yb + 16, bh = Hd - yb - 28;
+    const int cx = bx + bw / 2, cy = by + bh / 2;
+    switch (s_rec_step) {
+    case RS_IDLE:
+        lg::panel(bx, by, bw, bh, LINE);
+        lg::font(2); d.setTextColor(FG, LINE); d.setTextDatum(top_center); d.drawString(TR("Nuova parola", "New word"), cx, by + 16); d.setTextDatum(top_left);
+        lg::font(0); d.setTextColor(ACC, LINE); d.drawString(TR("1. Scrivi il nome sul Cardputer", "1. Type the name on the Cardputer"), bx + 20, by + 54);
+        d.setTextColor(DIM, LINE); d.drawString(TR("2. Tieni premuto GO e parla", "2. Hold GO and speak"), bx + 20, by + 76);
+        d.setTextColor(DIM, LINE); d.drawString(TR("100% offline, nessun WAV salvato", "100% offline, no WAV stored"), bx + 20, by + 98);
+        lg::button(cx - 90, by + bh - 48, 180, 36, TR("Scrivi il nome", "Type the name"), ACC, BG, NK_ENTER, 0);
+        break;
+    case RS_WAITING_FN: {
+        const bool listening = nucleo_voice_is_listening();
+        const unsigned short box = listening ? REC_BG : LINE;
+        lg::panel(bx, by, bw, bh, box);
+        lg::font(2); d.setTextColor(listening ? ACC2 : ACC, box); d.setTextDatum(top_center);
+        d.drawString(listening ? TR("IN ASCOLTO...", "LISTENING...") : TR("TIENI GO e parla", "HOLD GO & speak"), cx, by + 16);
+        d.setTextDatum(top_left);
+        lg::font(0); d.setTextColor(FG, box); d.drawString(TR("Parola:", "Word:"), bx + 20, by + 54);
+        lg::font(2); d.setTextColor(ACC, box); char w[32]; lg::fit(w, sizeof w, s_rec_word, bw - 120); d.drawString(w, bx + 20, by + 74);
+        if (listening) {
+            int64_t t = esp_timer_get_time() / 200000; int r = 16 + (int)(t % 5);
+            d.fillCircle(bx + bw - 44, cy, r, (t & 1) ? C_RED : ACC2); d.fillCircle(bx + bw - 44, cy, 9, FG);
+        } else { d.drawCircle(bx + bw - 44, cy, 17, MUTED); d.fillCircle(bx + bw - 44, cy, 8, DIM); }
+        break;
+    }
+    case RS_DONE:
+        lg::panel(bx, by, bw, bh, OK_BG);
+        lg::font(3); d.setTextColor(ACC, OK_BG); d.setTextDatum(top_center); d.drawString(TR("SALVATO!", "SAVED!"), cx, by + 24); d.setTextDatum(top_left);
+        lg::font(1); d.setTextColor(FG, OK_BG); char m[48]; snprintf(m, sizeof m, "%s.tpl", s_rec_word);
+        { char mf[48]; lg::fit(mf, sizeof mf, m, bw - 40); d.setTextDatum(top_center); d.drawString(mf, cx, by + bh / 2 + 6); }
+        lg::font(0); d.setTextColor(MUTED, OK_BG); d.drawString(TR("Tocca per continuare", "Tap to continue"), cx, by + bh - 28); d.setTextDatum(top_left);
+        nucleo_touch_add(bx, by, bw, bh, NK_ENTER, 0);
+        break;
+    case RS_TOO_SHORT:
+        lg::panel(bx, by, bw, bh, ERR_BG);
+        lg::font(2); d.setTextColor(C_RED, ERR_BG); d.setTextDatum(top_center); d.drawString(TR("ERRORE AUDIO", "AUDIO ERROR"), cx, by + 20); d.setTextDatum(top_left);
+        lg::font(0); d.setTextColor(FG, ERR_BG); d.setTextDatum(top_center);
+        d.drawString(TR("Troppo corto o silenzio.", "Too short or silent."), cx, by + bh / 2);
+        d.setTextColor(MUTED, ERR_BG); d.drawString(TR("Tocca e tieni GO piu a lungo.", "Tap and hold GO longer."), cx, by + bh - 28);
+        d.setTextDatum(top_left);
+        nucleo_touch_add(bx, by, bw, bh, NK_ENTER, 0);
+        break;
+    }
+}
+
+static void lg_tab_status(int yb, int Wd, int Hd)
+{
+    const int px = 20, py = yb + 10, pw = Wd - 40, ph = Hd - yb - 20;
+    lg::panel(px, py, pw, ph);
+    const unsigned short cb = lg::card();
+    const int ws = nucleo_ws_client_count();
+    const bool aon = nucleo_voice_always_on();
+    char tpl[24];
+    if (s_tpl_overflow) snprintf(tpl, sizeof tpl, "%d+ (max %d)", s_tpl_count, MAX_TPLS);
+    else                snprintf(tpl, sizeof tpl, "%d / %d", s_tpl_count, MAX_TPLS);
+    char wss[8]; snprintf(wss, sizeof wss, "%d", ws);
+    int ky = py + 12;
+    lg::kv(px + 16, ky, pw - 32, TR("Modelli", "Templates"), tpl, s_tpl_overflow ? ACC2 : ACC, cb); ky += 24;
+    lg::kv(px + 16, ky, pw - 32, "WS client", wss, ws > 0 ? ACC : MUTED, cb); ky += 24;
+    lg::kv(px + 16, ky, pw - 32, "Routing", ws > 0 ? "Web" : TR("Locale", "Local"), ws > 0 ? ACC2 : ACC, cb); ky += 24;
+    lg::kv(px + 16, ky, pw - 32, TR("Lingua", "Language"), "IT/EN (Anima)", MUTED, cb);
+    lg::button(px + 16, py + ph - 42, pw - 32, 34, aon ? TR("Disattiva sempre-attiva", "Turn always-on off") : TR("Attiva sempre-attiva", "Turn always-on on"),
+               aon ? LINE : ACC, aon ? FG : BG, NK_CHAR, 'a');
+}
+
+static void draw_large(void)
+{
+    const int Wd = d.width(), Hd = d.height();
+    nucleo_touch_clear();
+    char rt[16] = ""; if (s_tab == 0) snprintf(rt, sizeof rt, "%d", s_tpl_count);
+    const int y = lg::header("Voice", rt[0] ? rt : nullptr, ACC, NK_BACK, NK_TAB);
+    const int yb = lg_tab_bar(y, Wd);
+    if (s_tab == 0)      lg_tab_triggers(yb, Wd, Hd);
+    else if (s_tab == 1) lg_tab_record(yb, Wd, Hd);
+    else                 lg_tab_status(yb, Wd, Hd);
+    nucleo_touch_commit();
+}
+
+static void draw_companion(void)
+{
+    const int top = nucleo_app_content_top(), h = nucleo_app_content_height();
+    d.fillRect(0, top, W, h, BG);
+    const int y = lg::comp_head("VOICE", ACC);
+    d.setFont(&fonts::Font0); d.setTextColor(ACC, BG); d.drawString(tab_label(s_tab), 8, y + 2);
+    if (s_tab == 0) {
+        d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(FG, BG);
+        d.drawString(s_tpl_count > 0 ? s_tpl_names[s_sel] : TR("Nessun modello", "No templates"), 8, y + 18);
+        char m[24]; snprintf(m, sizeof m, "%d / %d", s_tpl_count ? s_sel + 1 : 0, s_tpl_count);
+        d.setFont(&fonts::Font0); d.setTextColor(DIM, BG); d.drawString(m, 8, y + 42);
+        lg::comp_keys(TR("su/giu  R addestra  Del elimina  TAB", "up/dn  R train  Del delete  TAB"));
+    } else if (s_tab == 1) {
+        const bool listening = nucleo_voice_is_listening();
+        d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(listening ? ACC2 : ACC, BG);
+        d.drawString(s_rec_step == RS_WAITING_FN ? (listening ? TR("Parla ora!", "Speak now!") : TR("Tieni GO e parla", "Hold GO & speak"))
+                     : s_rec_step == RS_DONE ? TR("Salvato", "Saved")
+                     : s_rec_step == RS_TOO_SHORT ? TR("Riprova", "Try again")
+                     : TR("Scrivi il nome", "Type the name"), 8, y + 18);
+        if (s_rec_word[0]) { d.setFont(&fonts::Font0); d.setTextColor(FG, BG); d.drawString(s_rec_word, 8, y + 44); }
+        lg::comp_keys(s_rec_step == RS_IDLE ? TR("INVIO scrivi il nome  TAB schede", "ENTER type the name  TAB tabs")
+                                            : TR("TIENI GO per registrare", "HOLD GO to record"));
+    } else {
+        char l[32]; snprintf(l, sizeof l, "%s %d/%d", TR("Modelli", "Templates"), s_tpl_count, MAX_TPLS);
+        d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(FG, BG); d.drawString(l, 8, y + 18);
+        d.setFont(&fonts::Font0); d.setTextColor(nucleo_voice_always_on() ? ACC2 : MUTED, BG);
+        d.drawString(nucleo_voice_always_on() ? TR("Sempre attiva: Si", "Always on: Yes") : TR("Sempre attiva: No", "Always on: No"), 8, y + 44);
+        lg::comp_keys(TR("A sempre attiva  TAB schede", "A always on  TAB tabs"));
+    }
+}
+
 static void draw(void)
 {
+    if (nucleo_app_two_screens()) { draw_companion(); return; }
     int top = nucleo_app_content_top();
     d.fillRect(0, top, 240, nucleo_app_content_height(), BG);
 
@@ -406,7 +574,7 @@ extern "C" void nucleo_register_voice(void)
     static const nucleo_app_def_t app = {
         "voice", "Voice Trainer", "System",
         "Local offline voice trainer",
-        'V', ACC, enter, on_key, tick, draw, exit_app
+        'V', ACC, enter, on_key, tick, draw, exit_app, 0, nullptr, draw_large
     };
     nucleo_app_register(&app);
 }

@@ -16,6 +16,8 @@
 #include "nucleo_exclusive.h"
 #include "nucleo_board.h"
 #include "app_gfx.h"
+#include "app_large.h"     // two screens: the terminal at 320x240 on the panel, typing on the Cardputer
+#include "nucleo_touch.h"
 #include "nucleo_i18n.h"   // s_en follows the OS language (ui.language)
 #include "nucleo_theme.h"   // themed chrome palette (replaces the local classic-theme mirror)
 #include <M5GFX.h>
@@ -35,7 +37,13 @@
 #include <dirent.h>
 #include <sys/stat.h>
 
-static const char *TAG = "app.ssh";
+[[maybe_unused]] static const char *TAG = "app.ssh";   // used by ESP_LOGI on-device; no-op (unused) on the host
+
+// Two-screen touch: a drag inside the panel's scrollback delivers these (as NK_CHAR, control codes that are
+// never typed) so a finger pages the output the way Fn+Up/Fn+Down do on the Cardputer. Form field taps use the
+// standard NUCLEO_TOUCH_ROW codes; the Connect button taps one slot past the last field.
+#define SSH_TSCROLL_UP   0x1e
+#define SSH_TSCROLL_DOWN 0x1f
 
 #define SSH_DIR   NUCLEO_SD_MOUNT "/data/ssh"
 #define HIST_PATH SSH_DIR "/history.txt"
@@ -347,6 +355,13 @@ static void do_complete() {
 // ── keys ──
 static void form_key(int key, char ch) {
     int nf = form_nfields();
+    if (nucleo_touch_is_row(key, ch)) {                 // panel: tap a field to edit it; tap past the last = Connect
+        int idx = ch - NUCLEO_TOUCH_ROW;
+        if (idx >= nf) { start_connect(); return; }
+        if (idx == 2 && s_field == 2) s_auth = (s_auth == AUTH_PW) ? AUTH_KEY : AUTH_PW;  // re-tap Auth toggles it
+        else s_field = idx;
+        s_dirty = true; nucleo_app_request_draw(); return;
+    }
     // resolve the editable target for the current field
     char *txt = nullptr; int cap = 0;
     if (s_field == 0) { txt = s_host; cap = sizeof s_host; }
@@ -368,13 +383,55 @@ static void form_key(int key, char ch) {
     }
     s_dirty = true; nucleo_app_request_draw();
 }
+#ifdef __MINGW32__
+// Host gallery ONLY (MinGW; the firmware target is xtensa and never defines __MINGW32__): seed a
+// fictional connected shell so the panel terminal (draw_shell_large) is actually exercised on the PC.
+// A live libssh2 session cannot be stood up in a render, so the ui-host scene injects a sentinel key
+// (c:~) that drops us straight into ST_SHELL with canned output. Never compiled into the firmware.
+static void ssh_demo_shell() {
+    if (!s_sb) s_sb = (char *)calloc((size_t)SB_LINES * SB_W, 1);
+    if (!s_sbcol) s_sbcol = (uint8_t *)calloc((size_t)SB_LINES * SB_W, 1);
+    if (!s_sb) return;
+    if (!s_lock) s_lock = (SemaphoreHandle_t)1;   // non-null so sb_feed() runs (host sem calls are no-ops)
+    snprintf(s_host, sizeof s_host, "pi.local");
+    snprintf(s_user, sizeof s_user, "nicola");
+    s_head = s_count = s_curlen = s_scroll = 0; s_aesc = s_pn = 0; s_cur[0] = 0;
+    s_fgbase = DEF_FG; s_bold = false;
+    static const char *const L[] = {
+        "Linux pi 6.1.0-rpi7 aarch64 GNU/Linux",
+        "Last login: Mon Oct 27 10:14:02 2026 from 192.168.1.5",
+        "nicola@pi:~ $ ls -la",
+        "total 28",
+        "drwxr-xr-x 4 nicola nicola 4096 Oct 27 10:02 .",
+        "-rw-r--r-- 1 nicola nicola  220 Sep  1  2025 .bash_logout",
+        "drwxr-xr-x 2 nicola nicola 4096 Oct 20 18:33 projects",
+        "nicola@pi:~ $ uptime",
+        " 10:14:31 up 6 days,  2:41,  load average: 0.08, 0.03, 0.01",
+        "nicola@pi:~ $ ",
+    };
+    for (unsigned i = 0; i < sizeof(L) / sizeof(L[0]); i++) sb_info(L[i]);
+    snprintf(s_line, SB_W, "sudo systemctl status nginx");
+    s_linelen = (int)strlen(s_line); s_cur_x = s_linelen;
+    s_state = ST_SHELL; s_dirty = true;
+}
+#endif
+
 static void on_key(int key, char ch) {
+#ifdef __MINGW32__
+    if (key == NK_CHAR && ch == '~') { ssh_demo_shell(); nucleo_app_request_draw(); return; }
+#endif
     if (s_manual) { s_manual = false; s_dirty = true; nucleo_app_request_draw(); return; }
     if (s_state == ST_FORM) { form_key(key, ch); return; }
     if (s_state == ST_CLOSED) { if (s_sb) { free(s_sb); s_sb = nullptr; } if (s_sbcol) { free(s_sbcol); s_sbcol = nullptr; } s_state = ST_FORM; s_dirty = true; nucleo_app_request_draw(); return; }
     if (s_state != ST_SHELL) return;
     unsigned m = nucleo_kbd_mods();
     int rows = (nucleo_app_content_height() - 23) / (8 * s_zoom); if (rows < 1) rows = 1;
+    if (key == NK_CHAR && (ch == SSH_TSCROLL_UP || ch == SSH_TSCROLL_DOWN)) {   // panel: drag the scrollback
+        int step = rows - 1 > 0 ? rows - 1 : 1;
+        if (ch == SSH_TSCROLL_UP) { s_scroll += step; if (s_scroll > s_count - 1) s_scroll = s_count > 0 ? s_count - 1 : 0; }
+        else                      { s_scroll -= step; if (s_scroll < 0) s_scroll = 0; }
+        s_dirty = true; nucleo_app_request_draw(); return;
+    }
     if (m & NK_MOD_FN) {
         if (key == NK_UP)   { s_scroll += rows - 1 > 0 ? rows - 1 : 1; if (s_scroll > s_count - 1) s_scroll = s_count > 0 ? s_count - 1 : 0; s_dirty = true; nucleo_app_request_draw(); return; }
         if (key == NK_DOWN) { s_scroll -= rows - 1 > 0 ? rows - 1 : 1; if (s_scroll < 0) s_scroll = 0; s_dirty = true; nucleo_app_request_draw(); return; }
@@ -485,8 +542,159 @@ static void draw_manual() {
     const char **m = s_en ? en : it;
     for (int i = 0; m[i]; i++) draw_text(8, top + 15 + i * 8, m[i], i >= 9 ? C_DIM : C_INK, C_BG, 1);
 }
+// ===== two screens =============================================================================================
+// The panel is the terminal at 320x240 — more columns and rows than the Cardputer — while the typing, history,
+// completion and scrolling stay on the Cardputer keyboard (the companion shows the line you are typing, big, and
+// the key map). The connect form is laid out as big tappable field rows with a Connect button; a drag on the
+// scrollback pages it. Never a mirror.
+static void draw_form_large() {
+    const int W = d.width(), H = d.height();
+    nucleo_touch_clear();
+    int y = lg::header("SSH", s_status[0] ? s_status : nullptr, ACCENT);
+    d.fillRect(0, y, W, H - y, C_BG);
+    const int nf = form_nfields(), cx = 16, cw = W - 32, rh = 26, gap = 3;
+    int ry = y + 8;
+    const char *lab; char val[96];
+    for (int i = 0; i < nf; i++) {
+        const bool sel = (i == s_field);
+        if (i == 0) { lab = "Host"; snprintf(val, sizeof val, "%s", s_host); }
+        else if (i == 1) { lab = s_en ? "User" : "Utente"; snprintf(val, sizeof val, "%s", s_user); }
+        else if (i == 2) { lab = "Auth"; snprintf(val, sizeof val, "< %s >", s_auth == AUTH_PW ? "Password" : (s_en ? "Key" : "Chiave")); }
+        else if (s_auth == AUTH_PW && i == 3) { lab = "Password"; int n = strlen(s_pass); int k = 0; for (; k < n && k < 90; k++) val[k] = '*'; val[k] = 0; }
+        else if (s_auth == AUTH_KEY && i == 3) { lab = s_en ? "Key" : "Chiave"; snprintf(val, sizeof val, s_keysN ? "< %s >" : "%s", s_keysN ? s_keys[s_keyIdx] : (s_en ? "(none in keys/)" : "(nessuna in keys/)")); }
+        else { lab = "Passphrase"; int n = strlen(s_passph); int k = 0; for (; k < n && k < 90; k++) val[k] = '*'; val[k] = 0; }
+        const unsigned short box = sel ? C_INBG : lg::card();
+        d.fillRoundRect(cx, ry, cw, rh, 7, box);
+        if (sel) d.drawRoundRect(cx, ry, cw, rh, 7, ACCENT);
+        lg::font(0); d.setTextColor(sel ? ACCENT : C_DIM, box); d.drawString(lab, cx + 12, ry + 5);
+        char vf[72]; lg::fit(vf, sizeof vf, val[0] ? val : "-", cw - 118); d.setTextColor(C_INK, box); d.drawString(vf, cx + 108, ry + 5);
+        nucleo_touch_add(cx, ry, cw, rh, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + i));
+        ry += rh + gap;
+    }
+    const int bh = 42, by = H - bh - 12;
+    lg::button(cx, by, cw, bh, s_en ? "Connect" : "Connetti", ACCENT, C_BG, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + nf));
+    nucleo_touch_commit();
+}
+
+static void draw_shell_large() {
+    const int W = d.width(), H = d.height();
+    nucleo_touch_clear();
+    const int zoom = s_zoom, charW = 6 * zoom, rowH = 8 * zoom, cols = (W - 8) / charW;
+    const int hdrH = 12, inH = 16, sbTop = hdrH, sbH = H - hdrH - inH, rows = sbH / rowH;
+    d.fillRect(0, 0, W, H, C_BG);
+    char st[100]; snprintf(st, sizeof st, "%s %s@%s%s", s_scroll ? "^scroll" : "*", s_user, s_host, s_sbcol ? "" : " [mono]");
+    draw_text(4, 1, st, s_scroll ? C_WARN : ACCENT, C_BG, 1);
+    if (s_lock) xSemaphoreTake(s_lock, portMAX_DELAY);
+    int li = s_count - 1 - s_scroll, yy = sbTop + (rows - 1) * rowH;
+    while (li >= 0 && yy >= sbTop) {
+        const char *ln = sb_line(li); const uint8_t *cl = sb_col(li);
+        int len = strlen(ln), nseg = len <= 0 ? 1 : (len + cols - 1) / cols;
+        for (int seg = nseg - 1; seg >= 0 && yy >= sbTop; seg--) {
+            int off = seg * cols, pl = len - off; if (pl > cols) pl = cols; if (pl < 0) pl = 0;
+            char piece[SB_W]; memcpy(piece, ln + off, pl); piece[pl] = 0;
+            draw_run(4, yy, piece, cl ? cl + off : nullptr, pl, zoom);
+            yy -= rowH;
+        }
+        li--;
+    }
+    if (s_lock) xSemaphoreGive(s_lock);
+    const int iy = H - inH; d.fillRect(0, iy, W, inH, C_INBG);
+    const int icw = 6, icols = (W - 16) / icw, from = s_cur_x > icols ? s_cur_x - icols : 0;
+    char shown[SB_W]; int k = 0; for (int i = from; i < s_linelen && k < icols; i++, k++) shown[k] = s_mask ? '*' : s_line[i]; shown[k] = 0;
+    draw_text(4, iy + 4, ">", ACCENT, C_INBG, 1); draw_text(14, iy + 4, shown, C_INK, C_INBG, 1);
+    d.fillRect(14 + (s_cur_x - from) * icw, iy + 3, 2, 10, ACCENT);
+    nucleo_touch_add_scroll(0, sbTop, W, sbH, rowH, NK_CHAR, SSH_TSCROLL_UP, NK_CHAR, SSH_TSCROLL_DOWN);
+    nucleo_touch_commit();
+}
+
+static void draw_status_large(const char *head, const char *sub, unsigned short col) {
+    const int W = d.width(), H = d.height();
+    nucleo_touch_clear();
+    int y = lg::header("SSH", nullptr, ACCENT);
+    d.fillRect(0, y, W, H - y, C_BG);
+    lg::message(16, y + 12, W - 32, H - y - 24, head, sub, col);
+    nucleo_touch_commit();
+}
+
+static void draw_manual_large() {
+    const int W = d.width(), H = d.height();
+    nucleo_touch_clear();
+    int y = lg::header(s_en ? "SSH - help" : "SSH - guida", nullptr, ACCENT);
+    d.fillRect(0, y, W, H - y, C_BG);
+    const char *it[] = { "Invio  esegui comando", "Su/Giu  cronologia", "Tab  completa (cmd+storia)",
+        "Sin/Des  cursore", "Esc  cancella riga", "Fn+Su/Giu  scorri output", "Fn+Z  zoom font",
+        "Fn+H  guida", "Fn+Esc  esci", "Auth: Password o Chiave", "Chiavi in /sd/data/ssh/keys",
+        "host key fidata al 1o uso", nullptr };
+    const char *en[] = { "Enter  run command", "Up/Down  history", "Tab  complete (cmd+hist)",
+        "Left/Right  cursor", "Esc  clear line", "Fn+Up/Down  scroll output", "Fn+Z  zoom font",
+        "Fn+H  help", "Fn+Esc  quit", "Auth: Password or Key", "Keys in /sd/data/ssh/keys",
+        "host key trusted on 1st use", nullptr };
+    const char **m = s_en ? en : it;
+    lg::font(0);
+    const int colw = (W - 32) / 2;
+    for (int i = 0; m[i]; i++) {
+        const int col = i / 6, row = i % 6;
+        d.setTextColor(i >= 9 ? C_DIM : C_INK, C_BG);
+        d.drawString(m[i], 16 + col * colw, y + 12 + row * 24);
+    }
+    nucleo_touch_commit();
+}
+
+static void draw_large() {
+    if (s_manual) { draw_manual_large(); return; }
+    if (s_state == ST_FORM) { draw_form_large(); return; }
+    if (s_state == ST_SHELL) { draw_shell_large(); return; }
+    if (s_state == ST_CLOSED) {
+        draw_status_large(s_status[0] ? s_status : (s_en ? "Disconnected" : "Disconnesso"),
+                          s_en ? "press a key for the form" : "premi un tasto per il form", C_WARN);
+        return;
+    }
+    char head[120]; snprintf(head, sizeof head, "SSH %s@%s", s_user, s_host);
+    draw_status_large(head, s_status, C_DIM);
+}
+
+static void draw_companion() {
+    const int top = nucleo_app_content_top(), h = nucleo_app_content_height();
+    d.fillRect(0, top, 240, h, C_BG);
+    int y = lg::comp_head("SSH", ACCENT);
+    if (s_manual) {
+        d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(C_INK, C_BG);
+        lg::wrap(s_en ? "Quick help on the panel" : "Guida rapida sul pannello", 8, y + 4, 224, 20, 2);
+        lg::comp_keys(s_en ? "Fn+H closes it" : "Fn+H la chiude");
+        return;
+    }
+    if (s_state == ST_FORM) {
+        d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(C_INK, C_BG);
+        char ln[64]; snprintf(ln, sizeof ln, "%s@%s", s_user[0] ? s_user : (s_en ? "user" : "utente"), s_host[0] ? s_host : "host");
+        lg::wrap(ln, 8, y + 4, 224, 20, 2);
+        d.setFont(&fonts::Font0); d.setTextColor(C_DIM, C_BG);
+        static const char *FN_IT[] = { "campo: Host", "campo: Utente", "campo: Auth", "campo: Password/Chiave", "campo: Passphrase" };
+        static const char *FN_EN[] = { "field: Host", "field: User", "field: Auth", "field: Password/Key", "field: Passphrase" };
+        d.drawString((s_en ? FN_EN : FN_IT)[s_field < 5 ? s_field : 4], 8, y + 34);
+        char ab[40]; snprintf(ab, sizeof ab, "Auth: %s", s_auth == AUTH_PW ? "Password" : (s_en ? "Key" : "Chiave")); d.drawString(ab, 8, y + 48);
+        lg::comp_keys(s_en ? "type fields  Enter next  </>auth" : "scrivi campi  Invio avanti  </>auth");
+        return;
+    }
+    if (s_state == ST_SHELL) {
+        d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(s_scroll ? C_WARN : ACCENT, C_BG);
+        char ln[64]; snprintf(ln, sizeof ln, "%s@%s %s", s_user, s_host, s_scroll ? "[scroll]" : "[live]");
+        lg::wrap(ln, 8, y + 2, 224, 18, 2);
+        d.setFont(&fonts::Font0); d.setTextColor(C_DIM, C_BG); d.drawString(s_en ? "typing:" : "digiti:", 8, y + 34);
+        const int icw = 12, icols = 18, from = s_cur_x > icols ? s_cur_x - icols : 0;
+        char shown[24]; int k = 0; for (int i = from; i < s_linelen && k < icols; i++, k++) shown[k] = s_mask ? '*' : s_line[i]; shown[k] = 0;
+        d.setTextSize(2); d.setTextColor(C_INK, C_BG); d.setCursor(8, y + 46); d.print(shown[0] ? shown : " ");
+        d.fillRect(8 + (int)strlen(shown) * icw, y + 44, 3, 18, ACCENT); d.setTextSize(1);
+        lg::comp_keys(s_en ? "Enter send  Tab compl  Fn+Up/Dn scroll  Fn+Esc" : "Invio invia  Tab compl  Fn+Su/Giu scorri  Fn+Esc");
+        return;
+    }
+    d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(C_WARN, C_BG);
+    lg::wrap(s_status[0] ? s_status : "...", 8, y + 4, 224, 20, 2);
+    lg::comp_keys(s_en ? "ESC cancels" : "ESC annulla");
+}
+
 static void on_draw() {
     s_dirty = false;
+    if (nucleo_app_two_screens()) { draw_companion(); return; }
     if (s_manual) draw_manual();
     else if (s_state == ST_FORM) draw_form();
     else if (s_state == ST_SHELL) draw_shell();
@@ -548,7 +756,7 @@ extern "C" void nucleo_register_ssh(void) {
         "ssh", "SSH", "Connect", "Terminale SSH nativo (modalita dedicata)",
         's', 0x2EE0, on_enter, on_key, on_tick, on_draw, on_exit,
         NX_NET_APP,  // declarative: dedicated RAM for the whole SSH session; framework restores on close
-        APP_RAM
+        APP_RAM, draw_large
     };
     nucleo_app_register(&app);
 }

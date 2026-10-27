@@ -1,0 +1,7 @@
+# Theme: the list on the left, a live full-panel preview of the selected theme on the right.
+# Theme data is real (the harness links nucleo_theme.cpp); each scene previews a different theme.
+home
+down2    D D
+down4    D D D D
+tap      row:1
+apply    D ENTER

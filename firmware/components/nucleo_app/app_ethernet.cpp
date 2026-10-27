@@ -16,6 +16,8 @@
 //   Running : Enter stop (heals + frees), Esc = leave running in background
 #include "nucleo_app.h"
 #include "app_ui.h"
+#include "app_large.h"          // two screens: the engine's UI on the 320x240 panel, a status companion
+#include "nucleo_touch.h"
 #include "nucleo_eth.h"
 #include <M5GFX.h>
 #include <string.h>
@@ -42,6 +44,8 @@ static bool s_stop_armed;
 static char s_err[44];
 static bool s_pulse;
 static uint32_t s_last_s;
+static int  s_menu_top;     // panel list scroll (top row) for the menu / host list on the 320x240 screen
+static int  s_host_top;
 
 #define GUIDE_PAGES 5
 
@@ -208,7 +212,11 @@ static void on_key(int key, char ch)
             return;
         case ST_HOSTS: {
             int n = nucleo_eth_host_count();
-            if (key == NK_UP)        s_msel = (s_msel - 1 + (n?n:1)) % (n?n:1);
+            if (nucleo_touch_is_row(key, ch)) {                      // tap a host row: pick it, tap again = MITM
+                int i = ch - NUCLEO_TOUCH_ROW + s_host_top;
+                if (i >= 0 && i < n) { if (i == s_msel) start_mitm_on_selected(); else s_msel = i; }
+            }
+            else if (key == NK_UP)        s_msel = (s_msel - 1 + (n?n:1)) % (n?n:1);
             else if (key == NK_DOWN) s_msel = (s_msel + 1) % (n?n:1);
             else if (key == NK_ENTER) start_mitm_on_selected();
             else if (key == NK_CHAR && (ch == 'm' || ch == 'M')) s_map = !s_map;
@@ -216,7 +224,11 @@ static void on_key(int key, char ch)
             return;
         }
         default:  // ST_MENU
-            if (key == NK_UP)        s_sel = (s_sel - 1 + MENU_N) % MENU_N;
+            if (nucleo_touch_is_row(key, ch)) {                      // tap a menu row: select, tap again = run
+                int i = ch - NUCLEO_TOUCH_ROW + s_menu_top;
+                if (i >= 0 && i < MENU_N) { if (i == s_sel) activate_menu(); else s_sel = i; }
+            }
+            else if (key == NK_UP)        s_sel = (s_sel - 1 + MENU_N) % MENU_N;
             else if (key == NK_DOWN) s_sel = (s_sel + 1) % MENU_N;
             else if (key == NK_ENTER) activate_menu();
             nucleo_app_request_draw();
@@ -456,8 +468,309 @@ static void draw_guide(void)
     }
 }
 
+// ===== two screens ==============================================================================
+// The engine's UI, laid out for the 320x240 touch panel: the consent gate, the attack menu (tap a row,
+// tap again to run), the scan progress, the host list / live network map, and the running screen with big
+// hero numbers and a STOP button. The header carries a back chevron and the guide glyph. The Cardputer,
+// where the keyboard is, becomes a status companion: the state, what is selected, the live op + uptime.
+static void eth_chevron(int x, int y, unsigned short c)
+{
+    d.drawLine(x + 6, y, x, y + 6, c); d.drawLine(x + 7, y, x + 1, y + 6, c);
+    d.drawLine(x, y + 6, x + 6, y + 12, c); d.drawLine(x + 1, y + 6, x + 7, y + 12, c);
+}
+// A native header in the app's own palette (so the body's BG never two-tones against lg's THEME_BG).
+// back != 0 adds a chevron (-> that key); menu != 0 adds the stacked guide glyph (-> that key).
+static int eth_lg_header(const char *title, const char *right, int back, int menu)
+{
+    const int W = d.width(), HEAD = 30;
+    d.fillRect(0, 0, W, HEAD, BG);
+    int tx = 10;
+    if (back) { eth_chevron(10, HEAD / 2 - 7, ATK); nucleo_touch_add(0, 0, 90, HEAD, back, 0); tx = 28; }
+    int rx = W - 10;
+    if (menu) { for (int k = 0; k < 3; k++) d.fillRoundRect(W - 26, HEAD / 2 - 6 + k * 5, 16, 2, 1, MUTED);
+                nucleo_touch_add(W - 46, 0, 46, HEAD, menu, 0); rx = W - 36; }
+    if (right && right[0]) {
+        d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextDatum(middle_right); d.setTextColor(MUTED, BG);
+        d.drawString(right, rx, HEAD / 2); d.setTextDatum(top_left);
+    }
+    lg::font(1); d.setTextColor(ATK, BG); d.setTextDatum(middle_left);
+    char t[48]; lg::fit(t, sizeof t, title, rx - tx - 40); d.drawString(t, tx, HEAD / 2 + 1);
+    d.setTextDatum(top_left);
+    d.drawFastHLine(10, HEAD - 2, W - 20, LINE);
+    return HEAD;
+}
+
+static void lg_consent(int W, int H)
+{
+    eth_lg_header("Ethernet W5500", "AUTH", NK_BACK, NK_TAB);
+    int y = 36;
+    d.setFont(&fonts::Font0);
+    lg::font(2); d.setTextColor(YEL, BG); d.setTextDatum(top_left);
+    d.drawString(TR("Test autorizzati", "Authorized testing"), 12, y); y += 26;
+    const char *L_it[] = { "Attacchi L2/L3 cablati: scan, ARP", "MITM/poison, DHCP starve, MAC flood,",
+                           "rogue DHCP, PCAP.", "Solo reti tue o con permesso scritto." };
+    const char *L_en[] = { "Wired L2/L3 attacks: scan, ARP MITM/", "poison, DHCP starve, MAC flood,",
+                           "rogue DHCP, PCAP.", "Your own networks or written consent." };
+    const char *const *L = nucleo_i18n_is_it() ? L_it : L_en;
+    lg::font(0);
+    for (int i = 0; i < 4; i++) { d.setTextColor(i < 3 ? FG : MUTED, BG); d.drawString(L[i], 12, y); y += 18; }
+    const int bw = (W - 36) / 2, by = H - 52;
+    lg::button(12, by, bw, 40, TR("Esci", "Leave"), LINE, FG, NK_BACK, 0);
+    lg::button(24 + bw, by, bw, 40, TR("Accetto", "Accept"), ATK, INK, NK_ENTER, 0);
+}
+
+static void lg_nomodule(int W, int H)
+{
+    eth_lg_header("Ethernet W5500", nullptr, NK_BACK, 0);
+    int y = 40;
+    lg::font(2); d.setTextColor(COL_RED, BG); d.setTextDatum(top_left);
+    d.drawString(TR("Modulo assente", "Module absent"), 12, y); y += 28;
+    const char *L[] = { TR("Collega un W5500 SPI sul bus microSD:", "Connect a W5500 SPI on the microSD bus:"),
+                        "SCLK 40   MOSI 14   MISO 39", TR("CS -> G1 (Grove), saldato.", "CS -> G1 (Grove), soldered.") };
+    lg::font(0);
+    for (int i = 0; i < 3; i++) { d.setTextColor(i == 0 ? FG : MUTED, BG); d.drawString(L[i], 12, y); y += 18; }
+    lg::button(12, H - 52, W - 24, 40, TR("Rileva ora", "Detect now"), ATK, INK, NK_ENTER, 0);
+}
+
+static void lg_menu(int W, int H)
+{
+    char rt[14]; snprintf(rt, sizeof rt, "%d host", nucleo_eth_host_count());
+    int y = eth_lg_header("Ethernet W5500", rt, NK_BACK, NK_TAB);
+    char idb[42]; snprintf(idb, sizeof idb, "io %s  gw %s", nucleo_eth_my_ip_str(), nucleo_eth_gateway_str());
+    lg::font(0); d.setTextColor(nucleo_eth_has_identity() ? GRN : MUTED, BG); d.setTextDatum(top_left);
+    char idf[48]; lg::fit(idf, sizeof idf, idb, W - 20); d.drawString(idf, 12, y + 4);
+    const int y0 = y + 22, rowh = 26, avail = H - y0 - (s_err[0] ? 18 : 6);
+    int vis = avail / rowh; if (vis > MENU_N) vis = MENU_N;
+    if (s_sel < s_menu_top) s_menu_top = s_sel;
+    if (s_sel >= s_menu_top + vis) s_menu_top = s_sel - vis + 1;
+    if (s_menu_top > MENU_N - vis) s_menu_top = MENU_N - vis;
+    if (s_menu_top < 0) s_menu_top = 0;
+    for (int r = 0; r < vis; r++) {
+        int idx = s_menu_top + r, ry = y0 + r * rowh; bool on = idx == s_sel;
+        lg::panel(10, ry, W - 20, rowh - 4, on ? ATK : lg::card());
+        lg::font(1); d.setTextDatum(middle_left); d.setTextColor(on ? INK : FG, on ? ATK : lg::card());
+        char b[28]; lg::fit(b, sizeof b, TR(MENU[idx].label, MENU[idx].label_en), W - 48);
+        d.drawString(b, 22, ry + (rowh - 4) / 2);
+        nucleo_touch_add(10, ry, W - 20, rowh - 4, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + r));
+    }
+    d.setTextDatum(top_left);
+    if (s_err[0]) { lg::font(0); d.setTextColor(COL_RED, BG); d.drawString(s_err, 12, H - 16); }
+}
+
+static void lg_scanning(int W, int H)
+{
+    eth_lg_header(TR("Scansione ARP", "ARP scan"), nullptr, NK_BACK, 0);
+    int p = nucleo_eth_scan_progress();
+    lg::font(3); d.setTextColor(FG, BG); d.setTextDatum(top_center);
+    char b[8]; snprintf(b, sizeof b, "%d%%", p); d.drawString(b, W / 2, 56);
+    d.setTextDatum(top_left);
+    lg::bar(20, 112, W - 40, 14, p, GRN);
+    char st[48]; snprintf(st, sizeof st, "host %d   tx %lu   rx %lu", nucleo_eth_host_count(), nucleo_eth_tx_frames(), nucleo_eth_rx_frames());
+    lg::font(0); d.setTextColor(MUTED, BG); d.setTextDatum(top_center); d.drawString(st, W / 2, 140);
+    if (!nucleo_eth_has_identity()) { d.setTextColor(YEL, BG); d.drawString(TR("acquisisco lease DHCP...", "acquiring DHCP lease..."), W / 2, 162); }
+    d.setTextDatum(top_left);
+    (void)H;
+}
+
+static void lg_hosts_list(int W, int H)
+{
+    int n = nucleo_eth_host_count();
+    int y = eth_lg_header(TR("Host trovati", "Hosts found"), nullptr, NK_BACK, 0);   // count shown on the toggle side
+    lg::button(W - 92, 2, 82, 26, s_map ? TR("Lista", "List") : TR("Mappa", "Map"), lg::card(), FG, NK_CHAR, 'm');
+    const int y0 = y + 4, rowh = 30, avail = H - y0 - 4;
+    int vis = avail / rowh; if (vis > n) vis = n; if (vis < 1) vis = 1;
+    if (s_msel < s_host_top) s_host_top = s_msel;
+    if (s_msel >= s_host_top + vis) s_host_top = s_msel - vis + 1;
+    if (s_host_top > n - vis) s_host_top = n - vis;
+    if (s_host_top < 0) s_host_top = 0;
+    for (int r = 0; r < vis; r++) {
+        int idx = s_host_top + r, ry = y0 + r * rowh; bool on = idx == s_msel;
+        bool gw = nucleo_eth_host_is_gateway(idx);
+        lg::panel(10, ry, W - 20, rowh - 4, on ? ATK : lg::card());
+        if (!on) d.fillCircle(22, ry + (rowh - 4) / 2, 4, gw ? YEL : GRN);
+        lg::font(1); d.setTextDatum(middle_left); d.setTextColor(on ? INK : FG, on ? ATK : lg::card());
+        d.drawString(nucleo_eth_host_ip(idx), on ? 22 : 34, ry + (rowh - 4) / 2);
+        char info[24]; snprintf(info, sizeof info, "%s%s", nucleo_eth_host_vendor(idx), gw ? " GW" : "");
+        lg::font(0); d.setTextDatum(middle_right); d.setTextColor(on ? INK : MUTED, on ? ATK : lg::card());
+        char inf[24]; lg::fit(inf, sizeof inf, info, (W - 20) / 2); d.drawString(inf, W - 18, ry + (rowh - 4) / 2);
+        nucleo_touch_add(10, ry, W - 20, rowh - 4, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + r));
+    }
+    d.setTextDatum(top_left);
+    if (n == 0) { lg::font(0); d.setTextColor(DIM, BG); d.drawString(TR("nessun host", "no hosts"), 12, y0 + 6); }
+}
+
+static void lg_hosts_map(int W, int H)
+{
+    int n = nucleo_eth_host_count();
+    eth_lg_header(TR("Mappa rete", "Network map"), nullptr, NK_BACK, 0);
+    lg::button(W - 92, 2, 82, 26, TR("Lista", "List"), lg::card(), FG, NK_CHAR, 'm');
+    int gx = W / 2, gy = 64, yx = W / 2, yy = H - 48;
+    d.fillRoundRect(gx - 44, gy - 16, 88, 30, 6, YEL);
+    lg::font(1); d.setTextColor(INK, YEL); d.setTextDatum(middle_center); d.drawString("GATEWAY", gx, gy - 1);
+    d.fillRoundRect(yx - 26, yy - 2, 52, 26, 6, CYN);
+    d.setTextColor(INK, CYN); d.drawString("IO", yx, yy + 11);
+    d.setTextDatum(top_left);
+    d.drawLine(yx, yy - 2, gx, gy + 14, DIM);
+    for (int i = 0; i < n && i < 8; i++) {
+        int hx = 30 + i * ((W - 60) / 8), hy = 118; bool sel = (i == s_msel);
+        unsigned short c = nucleo_eth_host_is_gateway(i) ? YEL : (sel ? ATK : GRN);
+        d.drawLine(hx, hy, gx, gy + 14, sel ? ATK : LINE);
+        if (sel) d.drawLine(hx, hy, yx, yy - 2, ATK);
+        d.fillCircle(hx, hy, sel ? 8 : 5, c);
+        nucleo_touch_add(hx - 14, hy - 14, 28, 28, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + i)); s_host_top = 0;
+    }
+    if (n > 0) {
+        char b[48]; snprintf(b, sizeof b, "%s %s%s", nucleo_eth_host_ip(s_msel), nucleo_eth_host_vendor(s_msel),
+                             nucleo_eth_host_is_gateway(s_msel) ? " (GW)" : "");
+        lg::font(0); d.setTextColor(FG, BG); d.setTextDatum(top_left);
+        char bf[48]; lg::fit(bf, sizeof bf, b, W - 120); d.drawString(bf, 12, H - 40);
+        lg::button(W - 100, H - 44, 88, 34, "MITM", ATK, INK, NK_ENTER, 0);
+    }
+}
+
+static void lg_big(int cx, int top, const char *label, const char *val, unsigned short col)
+{
+    lg::font(0); d.setTextColor(MUTED, BG); d.setTextDatum(top_center); d.drawString(label, cx, top);
+    lg::font(3); d.setTextColor(col, BG); d.drawString(val, cx, top + 16);
+    d.setTextDatum(top_left);
+}
+
+static void lg_running(int W, int H)
+{
+    nucleo_eth_op_t op = nucleo_eth_current();
+    char up[12]; unsigned u = nucleo_eth_uptime_s(); snprintf(up, sizeof up, "%02u:%02u", u / 60, u % 60);
+    eth_lg_header(op_name(op), up, NK_BACK, 0);
+    if (s_pulse) d.fillCircle(W - 120, 15, 4, ATK);
+    lg::font(0); d.setTextColor(ATK, BG); d.setTextDatum(top_left); d.drawString("LIVE", W - 112, 11);
+
+    char fr[12]; unsigned long f = nucleo_eth_tx_frames();
+    if (f >= 100000) snprintf(fr, sizeof fr, "%luk", f / 1000); else snprintf(fr, sizeof fr, "%lu", f);
+    const char *verdict; unsigned short vc = GRN;
+    switch (op) {
+        case ETH_OP_PCAP: {
+            char kb[12]; unsigned long by = nucleo_eth_pcap_bytes();
+            if (by >= 1024) snprintf(kb, sizeof kb, "%luK", by / 1024); else snprintf(kb, sizeof kb, "%lu", by);
+            lg_big(W / 4, 52, "FRAME", fr, CYN); lg_big(W * 3 / 4, 52, "RX", kb, GRN);
+            verdict = TR("cattura -> SD /capture.pcap", "capturing -> SD /capture.pcap"); break;
+        }
+        case ETH_OP_ROGUE_DHCP: {
+            char lz[8]; snprintf(lz, sizeof lz, "%d", nucleo_eth_rogue_leases());
+            lg_big(W / 4, 52, "OFFER", fr, CYN); lg_big(W * 3 / 4, 52, "LEASE", lz, GRN);
+            verdict = TR("router+DNS -> me (MITM)", "router+DNS -> me (MITM)"); vc = nucleo_eth_rogue_leases() ? GRN : MUTED; break;
+        }
+        default: {
+            char rx[12]; unsigned long r = nucleo_eth_rx_frames();
+            if (r >= 100000) snprintf(rx, sizeof rx, "%luk", r / 1000); else snprintf(rx, sizeof rx, "%lu", r);
+            lg_big(W / 4, 52, "TX", fr, ATK); lg_big(W * 3 / 4, 52, "RX", rx, CYN);
+            if (op == ETH_OP_MITM)             { verdict = TR("intercetto host<->gw (reversibile)", "intercepting host<->gw (reversible)"); }
+            else if (op == ETH_OP_POISON)      { verdict = TR("gateway dirottato (reversibile)", "gateway hijacked (reversible)"); vc = ATK; }
+            else if (op == ETH_OP_DHCP_STARVE) { verdict = TR("esaurisco il pool DHCP", "draining the DHCP pool"); vc = ATK; }
+            else if (op == ETH_OP_MACFLOOD)    { verdict = TR("CAM overflow -> hub mode", "CAM overflow -> hub mode"); vc = ATK; }
+            else                               { verdict = TR("in corso...", "running..."); vc = YEL; }
+            break;
+        }
+    }
+    d.drawFastHLine(16, 120, W - 32, LINE);
+    char st[56]; snprintf(st, sizeof st, TR("link %s   io %s", "link %s   me %s"), nucleo_eth_link() ? "UP" : TR("giu", "down"), nucleo_eth_my_ip_str());
+    lg::font(0); d.setTextColor(nucleo_eth_link() ? MUTED : COL_RED, BG); d.setTextDatum(top_left); d.drawString(st, 16, 130);
+    lg::font(1); d.setTextColor(vc, BG); char vf[52]; lg::fit(vf, sizeof vf, verdict, W - 32); d.drawString(vf, 16, 152);
+    lg::button(16, H - 52, W - 32, 40, TR("STOP + ripristina", "STOP + restore"), COL_RED, 0xFFFF, NK_ENTER, 0);
+}
+
+static void lg_busy(const char *title, const char *msg, int W, int H)
+{
+    eth_lg_header("Ethernet W5500", nullptr, 0, 0);
+    lg::message(0, 30, W, H - 30, title, msg, FG);
+}
+
+static void lg_guide(int W, int H)
+{
+    char rt[10]; snprintf(rt, sizeof rt, "%d/%d", s_page + 1, GUIDE_PAGES);
+    eth_lg_header(TR("Guida", "Guide"), rt, NK_BACK, 0);
+    lg::font(2); d.setTextColor(YEL, BG); d.setTextDatum(top_left); d.drawString(GH[s_page], 12, 38);
+    lg::font(0); int y = 68;
+    for (int i = 0; i < 6; i++) {
+        const char *l = GB[s_page][i]; if (!l[0]) continue;
+        bool legal = (s_page == GUIDE_PAGES - 1 && i >= 4) || (s_page == 3 && i >= 5);
+        d.setTextColor(legal ? YEL : FG, BG); char lf[52]; lg::fit(lf, sizeof lf, l, W - 24); d.drawString(lf, 12, y); y += 20;
+    }
+    const int bw = (W - 36) / 2;
+    lg::button(12, H - 46, bw, 34, TR("< Prec", "< Prev"), lg::card(), FG, NK_UP, 0);
+    lg::button(24 + bw, H - 46, bw, 34, TR("Succ >", "Next >"), lg::card(), FG, NK_DOWN, 0);
+}
+
+static void draw_large(void)
+{
+    const int W = d.width(), H = d.height();
+    nucleo_touch_clear();
+    d.fillRect(0, 0, W, H, BG);
+    if (s_panel) { lg_guide(W, H); nucleo_touch_commit(); return; }
+    switch (s_state) {
+        case ST_CONSENT:  lg_consent(W, H); break;
+        case ST_NOMODULE: lg_nomodule(W, H); break;
+        case ST_SCANNING: lg_scanning(W, H); break;
+        case ST_STOPPING: lg_busy(TR("Arresto...", "Stopping..."), TR("Ripristino cache ARP.", "Restoring ARP cache."), W, H); s_stop_armed = true; break;
+        case ST_HOSTS:    if (s_map) lg_hosts_map(W, H); else lg_hosts_list(W, H); break;
+        case ST_RUNNING:  lg_running(W, H); break;
+        default:          lg_menu(W, H); break;
+    }
+    nucleo_touch_commit();
+    d.setFont(&fonts::Font0); d.setTextSize(1);
+}
+
+// The Cardputer while the panel has the engine: the state, what is selected, and the live op.
+static void draw_companion(void)
+{
+    const int top = nucleo_app_content_top(), h = nucleo_app_content_height();
+    d.fillRect(0, top, 240, h, BG);
+    int y = lg::comp_head("ETHERNET", ATK);
+    d.setFont(&fonts::FreeSansBold9pt7b);
+    if (s_panel) {
+        d.setTextColor(YEL, BG); d.drawString(GH[s_page], 8, y + 2);
+        lg::comp_keys(TR("su/giu pagina  invio chiudi", "up/dn page  enter close"));
+        return;
+    }
+    switch (s_state) {
+        case ST_CONSENT:
+            d.setTextColor(FG, BG); lg::wrap(TR("Test autorizzati: accetta sul 2o schermo.", "Authorized testing: accept on the 2nd screen."), 8, y + 2, 224, 20, 3);
+            lg::comp_keys(TR("invio accetto  esc esci  tab guida", "enter accept  esc back  tab guide")); break;
+        case ST_NOMODULE:
+            d.setTextColor(COL_RED, BG); d.drawString(TR("Modulo W5500 assente", "W5500 module absent"), 8, y + 2);
+            lg::comp_keys(TR("un tasto per rilevare", "a key to detect")); break;
+        case ST_SCANNING: {
+            char b[8]; snprintf(b, sizeof b, "%d%%", nucleo_eth_scan_progress());
+            d.setFont(&fonts::Font0); d.setTextSize(3); d.setTextColor(FG, BG); d.setCursor(8, y + 10); d.print(b); d.setTextSize(1);
+            lg::comp_keys(TR("scansione...", "scanning...")); break;
+        }
+        case ST_HOSTS: {
+            int n = nucleo_eth_host_count();
+            char t[40]; snprintf(t, sizeof t, "%s", n ? nucleo_eth_host_ip(s_msel) : TR("nessun host", "no hosts"));
+            d.setTextColor(FG, BG); d.drawString(t, 8, y + 2);
+            if (n) { d.setFont(&fonts::Font0); d.setTextColor(MUTED, BG); d.setCursor(8, y + 26);
+                     d.printf("%d/%d  %s%s", s_msel + 1, n, nucleo_eth_host_vendor(s_msel), nucleo_eth_host_is_gateway(s_msel) ? " GW" : ""); }
+            lg::comp_keys(TR("su/giu  invio MITM  m mappa", "up/dn  enter MITM  m map")); break;
+        }
+        case ST_RUNNING: {
+            nucleo_eth_op_t op = nucleo_eth_current();
+            d.setTextColor(ATK, BG); d.drawString(op_name(op), 8, y + 2);
+            unsigned u = nucleo_eth_uptime_s();
+            d.setFont(&fonts::Font0); d.setTextColor(MUTED, BG); d.setCursor(8, y + 26);
+            d.printf("%02u:%02u   tx %lu", u / 60, u % 60, nucleo_eth_tx_frames());
+            lg::comp_keys(TR("invio stop  esc lascia on", "enter stop  esc leave on")); break;
+        }
+        default: {  // ST_MENU
+            d.setTextColor(FG, BG); d.drawString(TR(MENU[s_sel].label, MENU[s_sel].label_en), 8, y + 2);
+            d.setFont(&fonts::Font0); d.setTextColor(MUTED, BG); d.setCursor(8, y + 26);
+            d.printf("%d/%d   %d host", s_sel + 1, MENU_N, nucleo_eth_host_count());
+            lg::comp_keys(TR("su/giu  invio avvia  tab guida", "up/dn  enter start  tab guide")); break;
+        }
+    }
+}
+
 static void draw(void)
 {
+    if (nucleo_app_two_screens()) { draw_companion(); return; }   // the panel owns the engine UI; here: status
+
     int top = nucleo_app_content_top(), h = nucleo_app_content_height();
     d.fillRect(0, top, 240, h, BG);
     if (s_panel) { draw_guide(); return; }
@@ -485,7 +798,7 @@ extern "C" void nucleo_register_ethernet(void)
 {
     static const nucleo_app_def_t app = {
         "ethernet", "Ethernet W5500", "Security", "Wired L2/L3 attacks (W5500 MACRAW) for authorized testing",
-        'E', ATK, enter, on_key, tick, draw, leave
+        'E', ATK, enter, on_key, tick, draw, leave, 0, nullptr, draw_large
     };
     nucleo_app_register(&app);
 }

@@ -39,6 +39,8 @@ extern "C" {
 #include "app_gfx.h"
 #include "nucleo_theme.h"       // THEME_*: chrome follows the live theme (docs/native-ui-kit.md)
 #include "nucleo_i18n.h"        // TR(it,en): UI labels follow the system language
+#include "nucleo_touch.h"
+#include "app_large.h"          // two screens: library / Now Playing / settings on the panel, companion here
 
 // ---- Design tokens — CHROME follows the LIVE theme (docs/native-ui-kit.md rule 1) ---------------
 // These were baked RGB565 literals, so Music drew its own blue-on-void-blue whatever the user had
@@ -135,6 +137,13 @@ static int next_pos(void);
 static void on_tab(void);
 static void now_playing(void);
 static void np_mq_free(void);   // marquee sprite teardown (used by leave() before its definition)
+// two screens (defined with the panel code at the end)
+static bool s_np = false;       // the panel's Now Playing view (replaces the blocking loop while two screens are up)
+static bool lg_key(int key, char ch);
+static void lg_bump(void);
+static void lg_np_open(void);
+static void draw_companion(void);
+static void seek_rel(int delta_s);
 
 // ---- settings I/O -----------------------------------------------------------
 static void load_settings(void)
@@ -843,6 +852,8 @@ static void update_hint(void)
 
 static void on_tab(void)
 {
+    if (nucleo_app_two_screens()) lg_bump();
+    if (s_np && !s_set_open) { s_np = false; nucleo_app_request_draw(); return; }   // TAB leaves Now Playing, as in its loop
     s_set_open = !s_set_open;
     s_set_tab = 0;          // PLAY is always available
     s_set_row = -1;         // start in the tab header: RIGHT switches tab, DOWN enters rows
@@ -857,6 +868,11 @@ static void on_tab(void)
 static bool player_back(int key)
 {
     if (!st) return false;
+    if (nucleo_app_two_screens()) lg_bump();
+    if (s_np && !s_set_open && !s_typing && !s_sub_list) {             // the panel's Now Playing: Left = -10 s, Esc = library
+        if (key == NK_LEFT) seek_rel(-10); else s_np = false;
+        nucleo_app_request_draw(); return true;
+    }
     if (s_typing) { s_typing = false; update_hint(); nucleo_app_request_draw(); return true; }
     if (s_sub_list) {
         s_sub_list = false;
@@ -959,6 +975,7 @@ static void draw_sublist(void)
 
 static void draw(void)
 {
+    if (nucleo_app_two_screens()) { draw_companion(); return; }
     if (!st) return;
     s_groove_y = -1;   // re-established below only if the focused row is the playing track
     if (s_typing)   { draw_typing();  return; }
@@ -1056,6 +1073,7 @@ static void play_external(const char *abs)
 static void on_key(int key, char ch)
 {
     if (!st) return;
+    if (lg_key(key, ch)) return;                         // two screens: the panel's taps / Now Playing keys
     if (s_typing) {                                      // cancel = Back/Left (handled by player_back)
         if (key == NK_DEL || ch == 8 || ch == 127) {
             int len = strlen(st->search_query); if (len > 0) st->search_query[len-1] = 0;
@@ -1161,6 +1179,12 @@ static void tick(void)
     // what kills the old "whole list redraws every second while a song plays" flicker: during
     // playback the shared back-buffer is on loan to the MP3 decoder, so a full repaint would draw
     // the entire list direct-to-panel (clear-then-draw = flicker). Here we touch a few pixels.
+    if (nucleo_app_two_screens()) {                      // both screens repaint just their clock (draw_large / companion)
+        if (!active) return;
+        int el = (int)nucleo_audio_elapsed(), pct = nucleo_audio_progress();
+        if (el != s_strip_el || pct != s_strip_pct) { s_strip_el = el; s_strip_pct = pct; nucleo_app_request_draw(); }
+        return;
+    }
     bool strip_live = active && !s_set_open && !s_typing && !s_sub_list;
     if (!strip_live) return;
     int el = (int)nucleo_audio_elapsed(), pct = nucleo_audio_progress();
@@ -1215,7 +1239,7 @@ static void leave(void)
         for (int i = 0; i < s_sub_count; i++) free(s_sub_items[i]);
         free(s_sub_items); s_sub_items = NULL; s_sub_count = 0;
     }
-    s_sub_list = false; s_typing = false; s_set_open = false; // reset modal flags so the next open starts clean
+    s_sub_list = false; s_typing = false; s_set_open = false; s_np = false; // reset modal flags so the next open starts clean
     if (st) { free(st); st = nullptr; }
     s_n = 0;
 }
@@ -1508,8 +1532,496 @@ static void np_legend(void)
     d.print("L/R seek  U/D vol  [ ] track  f fav");
 }
 
+
+// ===== two screens ==============================================================================================
+// With the external panel the player is laid out for 320x240 + touch and the Cardputer becomes its companion:
+//   library      the folder / filter as a list at the left (tap = pick, again = open / play) and a card at the
+//                right: the playing track with prev / play-pause / next (tap the card for Now Playing), or the
+//                picked folder / track with its Open / Play button when nothing plays;
+//   now playing  title + artist, a seek bar of ten tap targets (tap = jump to that tenth), big prev / play / next,
+//                favourite and repeat pills, and a vertical volume bar at the right that follows a drag;
+//   settings     the four tabs as pills and their rows as large tappable pills; search / genre / artist pickers.
+// The blocking Now Playing loop of the compact UI is NOT used here: it would freeze the panel. Now Playing is a
+// mode of the normal run loop instead (s_np), its keys are the loop's keys, and tick() asks for a redraw only
+// when a second / percent passes. A redraw that changes nothing but the clock repaints just the time and the
+// progress (both screens): the panel has no buffer, so a full repaint each second would flicker.
+// Panel-only actions arrive as NK_CHAR with private control codes (below 0x10: never typing, never list rows).
+enum { LGK_SETTAB0 = 0x01 /* ..0x04: settings tab id 0..3 */, LGK_NP = 0x05 /* the playing card: Now Playing */ };
+static int s_lg_scroll, s_lg_sscroll;
+static unsigned s_lg_rev = 1, s_lg_drawn_rev, s_lg_drawn_gen, s_lg_comp_rev, s_lg_comp_gen;
+static int s_lg_drawn_play = -1, s_lg_comp_play = -1;
+static unsigned s_lg_meta_of;                         // which playpath s_np_title / s_np_meta were loaded for
+
+static void lg_bump(void) { s_lg_rev++; }
+static unsigned lg_hash(const char *s) { unsigned h = 5381; while (s && *s) h = h * 33 + (unsigned char)*s++; return h; }
+// Everything the playback side shows except the clock: a change means a full repaint.
+static int lg_play_key(void)
+{
+    const bool playing = nucleo_audio_is_playing(), paused = nucleo_audio_is_paused();
+    const char *bn = st && st->playpath[0] ? strrchr(st->playpath, '/') : nullptr;
+    const bool fav = bn && music_db_is_fav(bn + 1);
+    return (playing ? 1 : 0) | (paused ? 2 : 0) | (nucleo_audio_is_muted() ? 4 : 0) | (fav ? 8 : 0) | (s_repeat << 4) | (s_shuffle ? 64 : 0)
+         | ((nucleo_audio_volume() / 5) << 7) | ((st ? st->qidx & 63 : 0) << 12) | (int)((st ? lg_hash(st->playpath) : 0) & 0x3FFF) << 18;
+}
+static void lg_meta_sync(void)                        // the Now Playing title / artist line for the playing track
+{
+    if (!st || !st->playpath[0]) { s_np_title[0] = s_np_meta[0] = 0; s_lg_meta_of = 0; return; }
+    const unsigned h = lg_hash(st->playpath);
+    if (h != s_lg_meta_of) { np_load_meta(); s_lg_meta_of = h; }
+}
+
+// Now Playing on the panel (replaces the blocking loop while two screens are up).
+static void lg_np_open(void)
+{
+    nucleo_app_release_buffers();
+    char target[300]; snprintf(target, sizeof target, "%s%s", st->qdir, st->q[track_at(st->qidx)]);
+    if (strcmp(target, st->playpath) != 0 || !nucleo_audio_is_playing()) play_q(st->qidx);
+    if (!st->playpath[0]) return;                     // failed to start: play_q already said why in the hint
+    s_np = true; lg_meta_sync(); lg_bump();
+    nucleo_app_request_draw();
+}
+
+static bool lg_key(int key, char ch)
+{
+    if (!st || !nucleo_app_two_screens()) return false;
+    lg_bump();
+    if (s_np && !s_set_open && !s_typing && !s_sub_list) {           // the Now Playing loop's keys
+        if (key == NK_ENTER || ch == ' ' || ch == 'p') nucleo_audio_toggle_pause();
+        else if (key == NK_RIGHT) seek_rel(+10);
+        else if (key == NK_UP)    { nucleo_audio_set_mute(false); nucleo_audio_set_volume(nucleo_audio_volume() + 10); }
+        else if (key == NK_DOWN)  { nucleo_audio_set_mute(false); nucleo_audio_set_volume(nucleo_audio_volume() - 10); }
+        else if (ch == '[' && st->qn > 0) play_q(prev_pos());
+        else if (ch == ']' && st->qn > 0) { int p = next_pos(); if (p >= 0) play_q(p); }
+        else if (ch == 'f' && st->playpath[0]) { const char *bn = strrchr(st->playpath, '/'); bn = bn ? bn + 1 : st->playpath; music_db_set_fav(bn, !music_db_is_fav(bn)); }
+        else if (ch == 'r') { s_repeat = (s_repeat + 1) % 3; save_settings(); }
+        else if (ch >= '0' && ch <= '9') { uint32_t dur = nucleo_audio_duration_ms(); if (dur) nucleo_audio_seek((uint32_t)((int64_t)(ch - '0') * dur / 10)); }
+        else if (ch == 's') { nucleo_audio_stop(); st->playpath[0] = 0; s_np = false; }
+        else if (key == NK_DEL) s_np = false;
+        nucleo_app_request_draw();
+        return true;
+    }
+    if (s_typing) return false;
+    if (s_sub_list) {
+        if (!nucleo_touch_is_row(key, ch)) return false;
+        if (lg::row_tap(key, ch, s_lg_sscroll, s_sub_count, &s_sub_sel) == 2) { on_key(NK_ENTER, 0); return true; }
+        nucleo_app_request_draw(); return true;
+    }
+    if (s_set_open) {
+        if (key == NK_CHAR && ch >= LGK_SETTAB0 && ch < LGK_SETTAB0 + 4) {
+            s_set_tab = ch - LGK_SETTAB0; s_set_row = 0; s_set_edit = false;
+            if (s_set_tab == 3) music_db_ensure();
+            nucleo_app_request_draw(); return true;
+        }
+        if (nucleo_touch_is_row(key, ch)) {
+            const int i = ch - NUCLEO_TOUCH_ROW;
+            if (i < SET_ROWS[s_set_tab]) { s_set_row = i; settings_key(NK_ENTER, 0); }
+            return true;
+        }
+        return false;
+    }
+    if (key == NK_CHAR && ch == LGK_NP) { if (st->qn > 0 && st->playpath[0]) now_playing(); return true; }
+    if (nucleo_touch_is_row(key, ch)) {
+        if (lg::row_tap(key, ch, s_lg_scroll, s_n, &s_sel) == 2) on_key(NK_ENTER, 0);
+        nucleo_app_request_draw(); return true;
+    }
+    return false;
+}
+
+// A file name for reading on the panel: '_' as spaces (so it wraps), the extension dropped.
+static const char *lg_pretty(const char *name, bool drop_ext)
+{
+    static char b[64];
+    snprintf(b, sizeof b, "%s", name ? name : "");
+    for (char *c = b; *c; c++) if (*c == '_') *c = ' ';
+    char *dot = drop_ext ? strrchr(b, '.') : nullptr; if (dot && dot != b) *dot = 0;
+    return b;
+}
+static const char *lg_ctx(void)
+{
+    switch (st->filter_type) {
+        case 0:  return TR("Ricerca", "Search");
+        case 1:  return TR("Genere", "Genre");
+        case 2:  return TR("Artista", "Artist");
+        case 3:  return TR("Preferiti", "Favourites");
+        case 4:  return TR("Piu' ascoltati", "Top played");
+        default: return strcmp(s_path, "/") ? lg_pretty(breadcrumb(), false) : TR("Musica", "Music");
+    }
+}
+static const char *lg_playing_name(void)
+{
+    if (s_np_title[0]) return lg_pretty(s_np_title, false);
+    const char *bn = strrchr(st->playpath, '/'); return lg_pretty(bn ? bn + 1 : st->playpath, true);
+}
+
+static void lg_row(int i, int x, int y, int w, int h, bool focus, unsigned short bg, void *)
+{
+    MEntry *r = &st->e[i];
+    char base[208]; snprintf(base, sizeof base, "%s%s", MUSIC_DIR, s_path);
+    const bool plays = row_is_playing(r, base), paused = plays && nucleo_audio_is_paused();
+    const unsigned short ic = focus ? INK : r->dir ? AMB : plays ? (paused ? AMB : GRN) : MUTED;
+    const int iy = y + (h - 12) / 2;
+    if (r->dir) icon_folder(x + 8, iy + 1, ic);
+    else if (plays) { if (paused) icon_pause(x + 9, iy + 1, 10, ic); else icon_eq(x + 8, iy + 2, ic); }
+    else icon_note(x + 9, iy, ic);
+    char mb[12] = "";
+    if (r->dir) snprintf(mb, sizeof mb, "%u", (unsigned)r->count);
+    else if (r->dur) fmt_time(mb, sizeof mb, r->dur);
+    const char *bn = strrchr(r->name, '/'); bn = bn ? bn + 1 : r->name;
+    lg::row_text(x + 20, y, w - 20, h, focus, bg, lg_pretty(bn, !r->dir), mb, r->dir ? AMB : plays ? GRN : FG);
+}
+
+// The library's right-hand card. full=false repaints only the clock and the progress of the playing card.
+static void lg_card(int x, int y, int w, int h, bool full)
+{
+    const bool active = st->playpath[0] && (nucleo_audio_is_playing() || nucleo_audio_is_paused());
+    const unsigned short cb = lg::card();
+    const bool paused = nucleo_audio_is_paused();
+    const unsigned short col = paused ? AMB : GRN;
+    const int py = y + h - 104;                                       // the progress row of the playing card
+    if (active) {
+        if (full) {
+            lg::panel(x, y, w, h);
+            lg::font(4); d.setTextColor(col, cb); d.drawString(paused ? TR("IN PAUSA", "PAUSED") : TR("IN RIPRODUZIONE", "NOW PLAYING"), x + 10, y + 10);
+            lg::font(1); d.setTextColor(FG, cb);
+            lg::wrap(lg_playing_name(), x + 10, y + 26, w - 20, 19, 2);
+            if (s_np_meta[0]) { lg::font(0); d.setTextColor(MUTED, cb); char m[48]; lg::fit(m, sizeof m, s_np_meta, w - 20); d.drawString(m, x + 10, y + 66); }
+            nucleo_touch_add(x, y, w, py - y - 4, NK_CHAR, LGK_NP);  // the card itself: Now Playing
+            const int bs = (w - 32) / 3, by = y + h - 50;
+            lg::button(x + 8, by, bs, 42, "", LINE, FG, NK_CHAR, '[');
+            d.fillTriangle(x + 8 + bs / 2 + 6, by + 13, x + 8 + bs / 2 + 6, by + 29, x + 8 + bs / 2 - 4, by + 21, FG); d.fillRect(x + 8 + bs / 2 - 7, by + 13, 3, 17, FG);
+            const int px2 = x + 16 + bs;
+            lg::button(px2, by, bs, 42, "", col, INK, NK_CHAR, ' ');
+            if (paused) icon_play(px2 + bs / 2 - 6, by + 13, 16, INK); else icon_pause(px2 + bs / 2 - 7, by + 13, 16, INK);
+            const int nx = x + 24 + 2 * bs;
+            lg::button(nx, by, bs, 42, "", LINE, FG, NK_CHAR, ']');
+            d.fillTriangle(nx + bs / 2 - 6, by + 13, nx + bs / 2 - 6, by + 29, nx + bs / 2 + 4, by + 21, FG); d.fillRect(nx + bs / 2 + 5, by + 13, 3, 17, FG);
+        }
+        const uint32_t el = nucleo_audio_elapsed(), du = nucleo_audio_duration_ms() / 1000;
+        char te[8], td[8], t[20]; fmt_time(te, sizeof te, el); fmt_time(td, sizeof td, du);
+        snprintf(t, sizeof t, du ? "%s / %s" : "%s", te, td);
+        d.fillRect(x + 8, py, w - 16, 40, cb);
+        lg::font(0); d.setTextColor(FG, cb); d.drawString(t, x + 10, py + 6);
+        lg::bar(x + 10, py + 28, w - 20, 6, nucleo_audio_progress(), col);
+        return;
+    }
+    if (!full) return;
+    lg::panel(x, y, w, h);
+    if (s_n == 0 || s_sel >= s_n) {
+        lg::font(1); d.setTextColor(MUTED, cb); lg::wrap(strcmp(s_path, "/") ? TR("Cartella vuota", "Empty folder") : TR("Nessuna musica", "No music"), x + 10, y + 10, w - 20, 19, 2);
+        lg::font(0); d.setTextColor(DIM, cb); lg::wrap(TR("Copia MP3 o WAV in /data/Music.", "Copy MP3 or WAV files into /data/Music."), x + 10, y + 56, w - 20, 17, 4);
+        return;
+    }
+    MEntry *r = &st->e[s_sel];
+    const char *bn = strrchr(r->name, '/'); bn = bn ? bn + 1 : r->name;
+    lg::font(1); d.setTextColor(r->dir ? AMB : ACC, cb);
+    const int nl = lg::wrap(lg_pretty(bn, !r->dir), x + 10, y + 10, w - 20, 19, 3);
+    lg::font(0); d.setTextColor(MUTED, cb);
+    char m[40];
+    if (r->dir) snprintf(m, sizeof m, TR("%u brani", "%u tracks"), (unsigned)r->count);
+    else if (r->dur) { char t[12]; fmt_time(t, sizeof t, r->dur); snprintf(m, sizeof m, "%s", t); }
+    else snprintf(m, sizeof m, "%s", strrchr(r->name, '.') && !strcasecmp(strrchr(r->name, '.'), ".wav") ? "WAV" : "MP3");
+    d.drawString(m, x + 10, y + 16 + nl * 19);
+    lg::button(x + 8, y + h - 44, w - 16, 36, r->dir ? TR("Apri", "Open") : TR("Riproduci", "Play"), r->dir ? AMB : GRN, INK, NK_ENTER, 0);
+}
+
+// Now Playing: full=false repaints only the seek bar and the times.
+static const int NP_MAINW = 262;
+static void lg_np_seek(bool targets)
+{
+    const bool paused = nucleo_audio_is_paused(), playing = nucleo_audio_is_playing();
+    const unsigned short col = np_state_col(playing, paused);
+    const int x = 14, w = NP_MAINW - 28, y = 104;
+    d.fillRect(0, y - 10, NP_MAINW, 52, BG);
+    int pct = nucleo_audio_progress(); if (pct < 0) pct = 0; if (pct > 100) pct = 100;
+    d.fillRoundRect(x, y, w, 8, 4, LINE);
+    const int fw = w * pct / 100;
+    if (fw > 0) d.fillRoundRect(x, y, fw < 8 ? 8 : fw, 8, 4, col);
+    int kx = x + fw; if (kx < x + 5) kx = x + 5; if (kx > x + w - 5) kx = x + w - 5;
+    d.fillCircle(kx, y + 4, 8, FG); d.fillCircle(kx, y + 4, 4, col);
+    const uint32_t el = nucleo_audio_elapsed(), du = nucleo_audio_duration_ms() / 1000;
+    char te[8], td[8]; fmt_time(te, sizeof te, el); fmt_time(td, sizeof td, du);
+    lg::font(0); d.setTextColor(FG, BG); d.drawString(te, x, y + 18);
+    if (du) { d.setTextDatum(top_right); d.setTextColor(MUTED, BG); d.drawString(td, x + w, y + 18); d.setTextDatum(top_left); }
+    if (targets && du)                                                 // ten slices: a tap jumps to that tenth
+        for (int i = 0; i < 10; i++) nucleo_touch_add(x + w * i / 10 - (i == 0 ? x : 0), y - 12, w / 10 + (i == 0 ? x : 0), 28, NK_CHAR, (char)('0' + i));
+}
+static void lg_np_volume(void)
+{
+    const int W = d.width(), H = d.height(), cx = NP_MAINW + (W - NP_MAINW) / 2, ty = lg::HEAD + 14, th = H - ty - 44;
+    d.fillRect(NP_MAINW, lg::HEAD, W - NP_MAINW, H - lg::HEAD, BG);
+    const bool muted = nucleo_audio_is_muted();
+    const int vol = nucleo_audio_volume(), fh = muted ? 0 : th * vol / 100;
+    d.fillRoundRect(cx - 9, ty, 18, th, 9, LINE);
+    if (fh > 0) d.fillRoundRect(cx - 9, ty + th - fh, 18, fh < 18 ? 18 : fh, 9, GRN);
+    char v[8]; if (muted) snprintf(v, sizeof v, "MUTE"); else snprintf(v, sizeof v, "%d%%", vol);
+    lg::font(0); d.setTextDatum(top_center); d.setTextColor(muted ? RED : FG, BG); d.drawString(v, cx, ty + th + 8);
+    lg::font(4); d.setTextColor(DIM, BG); d.drawString("VOL", cx, ty + th + 26); d.setTextDatum(top_left);
+    nucleo_touch_add_scroll(NP_MAINW, lg::HEAD, W - NP_MAINW, H - lg::HEAD, 12, NK_DOWN, '.', NK_UP, ';');   // drag up = louder
+}
+static void lg_now_playing(bool full)
+{
+    const int W = d.width(), H = d.height();
+    if (!full) { lg_np_seek(false); return; }
+    lg_meta_sync();
+    char pos[16]; snprintf(pos, sizeof pos, "%d / %d", st->qidx + 1, st->qn);
+    const bool playing = nucleo_audio_is_playing(), paused = nucleo_audio_is_paused();
+    lg::header(st->playpath[0] ? (paused ? TR("In pausa", "Paused") : TR("In riproduzione", "Now playing")) : TR("Fermo", "Stopped"),
+               st->qn ? pos : nullptr, np_state_col(playing, paused), NK_BACK);
+    if (!st->playpath[0]) {
+        lg::message(0, lg::HEAD, W, H - lg::HEAD, TR("Coda finita", "Queue finished"), TR("Indietro per la libreria.", "Back for the library."), MUTED);
+        return;
+    }
+    d.fillRect(0, lg::HEAD, NP_MAINW, 74, BG);
+    lg::font(2); d.setTextColor(ACC, BG);
+    const int nl = lg::wrap(lg_playing_name(), 14, lg::HEAD + 8, NP_MAINW - 24, 24, 2);
+    lg::font(0); d.setTextColor(MUTED, BG);
+    if (s_np_meta[0]) { char m[48]; lg::fit(m, sizeof m, s_np_meta, NP_MAINW - 28); d.drawString(m, 14, lg::HEAD + 12 + nl * 24); }
+    lg_np_seek(true);
+    // transport: previous / play-pause / next, centred on the main column
+    const int ty = 144, c1 = NP_MAINW / 2 - 76, c2 = NP_MAINW / 2, c3 = NP_MAINW / 2 + 76;
+    d.fillRect(0, ty - 4, NP_MAINW, 64, BG);
+    const unsigned short col = np_state_col(playing, paused);
+    d.fillCircle(c1, ty + 26, 24, LINE); d.fillCircle(c3, ty + 26, 24, LINE); d.fillCircle(c2, ty + 26, 30, col);
+    d.fillTriangle(c1 + 7, ty + 16, c1 + 7, ty + 36, c1 - 6, ty + 26, FG); d.fillRect(c1 - 10, ty + 16, 3, 21, FG);
+    d.fillTriangle(c3 - 7, ty + 16, c3 - 7, ty + 36, c3 + 6, ty + 26, FG); d.fillRect(c3 + 8, ty + 16, 3, 21, FG);
+    if (paused || !playing) icon_play(c2 - 8, ty + 14, 24, INK); else icon_pause(c2 - 10, ty + 14, 24, INK);
+    nucleo_touch_add(c1 - 30, ty - 4, 60, 62, NK_CHAR, '[');
+    nucleo_touch_add(c2 - 36, ty - 4, 72, 62, NK_CHAR, ' ');
+    nucleo_touch_add(c3 - 30, ty - 4, 60, 62, NK_CHAR, ']');
+    // favourite + repeat / shuffle pills along the bottom
+    const int by = H - 26;
+    d.fillRect(0, by - 2, NP_MAINW, 28, BG);
+    const char *bn = strrchr(st->playpath, '/'); bn = bn ? bn + 1 : st->playpath;
+    const bool fav = music_db_is_fav(bn);
+    d.fillRoundRect(14, by, 76, 24, 12, fav ? RED : LINE); icon_heart(24, by + 8, fav ? INK : MUTED);
+    lg::font(0); d.setTextDatum(middle_left); d.setTextColor(fav ? INK : FG, fav ? RED : LINE); d.drawString(TR("Pref.", "Fav"), 40, by + 12); d.setTextDatum(top_left);
+    nucleo_touch_add(10, by - 4, 84, 30, NK_CHAR, 'f');
+    char rp[24]; snprintf(rp, sizeof rp, "%s: %s", TR("Ripeti", "Repeat"), s_repeat == 0 ? TR("no", "off") : s_repeat == 1 ? TR("uno", "one") : TR("tutti", "all"));
+    d.fillRoundRect(96, by, 104, 24, 12, s_repeat ? ACC : LINE);
+    d.setTextDatum(middle_center); d.setTextColor(s_repeat ? INK : FG, s_repeat ? ACC : LINE); d.drawString(rp, 148, by + 12); d.setTextDatum(top_left);
+    nucleo_touch_add(94, by - 4, 108, 30, NK_CHAR, 'r');
+    if (s_shuffle) { d.fillRoundRect(206, by, 50, 24, 12, ACC); d.setTextDatum(middle_center); d.setTextColor(INK, ACC); lg::font(4); d.drawString(TR("CASUALE", "SHUFFLE"), 231, by + 12); d.setTextDatum(top_left); }
+    lg_np_volume();
+}
+
+static void lg_settings(void)
+{
+    const int W = d.width(), H = d.height();
+    lg::header(TR("Impostazioni", "Settings"), nullptr, ACC, NK_BACK);
+    int avail[4], na = settings_avail(avail);
+    if (tab_index(avail, na, s_set_tab) == 0 && avail[0] != s_set_tab) s_set_tab = avail[0];
+    static const char *const TIT[4] = { "Play", "Audio", "Queue", "Find" }, *const TIT_IT[4] = { "Riproduci", "Audio", "Coda", "Cerca" };
+    const char *names[4]; char keys[4];
+    for (int i = 0; i < na; i++) { names[i] = TR(TIT_IT[avail[i]], TIT[avail[i]]); keys[i] = (char)(LGK_SETTAB0 + avail[i]); }
+    const int y0 = lg::tabs(lg::HEAD + 2, names, na, tab_index(avail, na, s_set_tab), ACC, keys);
+    struct Row { const char *label; char val[16]; int kind; bool on; };
+    Row it[6] = {};
+    int n = 0;
+    if (s_set_tab == 0) {
+        n = 3;
+        it[0] = { TR("Casuale", "Shuffle"), "", SV_TOGGLE, s_shuffle };
+        it[1] = { TR("Ripeti", "Repeat"), "", SV_TEXT, false }; snprintf(it[1].val, 16, "%s", s_repeat == 0 ? TR("No", "Off") : s_repeat == 1 ? TR("Uno", "One") : TR("Tutti", "All"));
+        it[2] = { TR("Autoplay cartelle", "Autoplay folders"), "", SV_TOGGLE, s_autoplay };
+    } else if (s_set_tab == 1) {
+        n = 3;
+        it[0] = { TR("Volume", "Volume"), "", SV_SLIDER, false };
+        it[1] = { TR("Volume all'avvio", "Start volume"), "", SV_TEXT, false };
+        if (s_vol_default) snprintf(it[1].val, 16, "%d%%", s_vol_default); else snprintf(it[1].val, 16, "%s", TR("ultimo", "last"));
+        it[2] = { TR("Muto", "Mute"), "", SV_TOGGLE, nucleo_audio_is_muted() };
+    } else if (s_set_tab == 2) {
+        n = 3;
+        it[0] = { TR("Coda", "Queue"), "", SV_TEXT, false };
+        if (st->qn) snprintf(it[0].val, 16, "%d / %d", st->qidx + 1, st->qn); else snprintf(it[0].val, 16, "%s", TR("vuota", "empty"));
+        it[1] = { TR("Rimescola", "Reshuffle"), "", SV_ACTION, false };
+        it[2] = { TR("Svuota la coda", "Clear the queue"), "", SV_ACTION, false };
+    } else {
+        n = 6;
+        it[0] = { TR("Cerca un brano", "Find a track"), "", SV_ACTION, false };
+        it[1] = { TR("Generi", "Genres"), "", SV_ACTION, false };
+        it[2] = { TR("Artisti", "Artists"), "", SV_ACTION, false };
+        it[3] = { TR("Preferiti", "Favourites"), "", st->filter_type == 3 ? SV_TEXT : SV_ACTION, false }; if (st->filter_type == 3) snprintf(it[3].val, 16, "ON");
+        it[4] = { TR("Piu' ascoltati", "Most played"), "", st->filter_type == 4 ? SV_TEXT : SV_ACTION, false }; if (st->filter_type == 4) snprintf(it[4].val, 16, "ON");
+        it[5] = { TR("Togli il filtro", "Clear the filter"), "", SV_ACTION, false };
+    }
+    d.fillRect(0, y0, W, H - y0, BG);
+    const int rh = (H - y0 - 4) / n > 40 ? 40 : (H - y0 - 4) / n;
+    for (int i = 0; i < n; i++) {
+        const int ry = y0 + i * rh;
+        const bool on = i == s_set_row;
+        const unsigned short f = on ? ACC : lg::card();
+        d.fillRoundRect(8, ry + 2, W - 16, rh - 4, 9, f);
+        lg::font(0); d.setTextDatum(middle_left); d.setTextColor(on ? INK : FG, f); d.drawString(it[i].label, 22, ry + rh / 2);
+        const int rx = W - 22, cy = ry + rh / 2;
+        if (it[i].kind == SV_TOGGLE) {
+            d.fillRoundRect(rx - 40, cy - 10, 40, 20, 10, it[i].on ? GRN : LINE);
+            d.fillCircle(it[i].on ? rx - 10 : rx - 30, cy, 7, it[i].on ? INK : MUTED);
+        } else if (it[i].kind == SV_SLIDER) {
+            const int sw = 110, vol = nucleo_audio_volume();
+            d.fillRoundRect(rx - sw, cy - 5, sw, 10, 5, LINE);
+            if (vol > 0) d.fillRoundRect(rx - sw, cy - 5, sw * vol / 100 < 10 ? 10 : sw * vol / 100, 10, 5, GRN);
+            if (on && s_set_edit) d.drawRoundRect(rx - sw - 3, cy - 8, sw + 6, 16, 8, INK);
+        } else if (it[i].kind == SV_ACTION) {
+            const unsigned short cc = on ? INK : MUTED;          // a chevron: this row opens something
+            for (int o = 0; o < 2; o++) { d.drawLine(rx - 10 + o, cy - 6, rx - 4 + o, cy, cc); d.drawLine(rx - 4 + o, cy, rx - 10 + o, cy + 6, cc); }
+        } else {
+            d.setTextDatum(middle_right); d.setTextColor(on ? INK : MUTED, f); d.drawString(it[i].val, rx, cy);
+        }
+        d.setTextDatum(top_left);
+        nucleo_touch_add(8, ry, W - 16, rh, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + i));
+    }
+    if (s_set_edit) {                                                 // the volume being set: - / + / OK over the foot
+        const int by = H - 44, bw = (W - 40) / 3;
+        d.fillRect(0, by - 4, W, 48, BG);
+        lg::button(10, by, bw, 38, "-", LINE, FG, NK_DOWN, '.');
+        lg::button(20 + bw, by, bw, 38, "+", LINE, FG, NK_UP, ';');
+        lg::button(30 + 2 * bw, by, bw, 38, "OK", ACC, INK, NK_ENTER, 0);
+    }
+}
+
+static void draw_large(void)
+{
+    const int W = d.width(), H = d.height();
+    if (!st) {
+        nucleo_touch_clear();
+        lg::header(TR("Musica", "Music"), nullptr, ACC, NK_BACK);
+        lg::message(0, lg::HEAD, W, H - lg::HEAD, TR("RAM insufficiente", "Not enough RAM"), TR("Chiudi e riapri Musica.", "Close and reopen Music."), RED);
+        nucleo_touch_commit(); return;
+    }
+    const unsigned gen = nucleo_app_repaint_gen();
+    const int pk = lg_play_key();
+    const bool clock_only = s_lg_drawn_rev == s_lg_rev && s_lg_drawn_gen == gen && s_lg_drawn_play == pk;
+    s_lg_drawn_rev = s_lg_rev; s_lg_drawn_gen = gen; s_lg_drawn_play = pk;
+    const bool lib = !s_typing && !s_sub_list && !s_set_open && !s_np;
+    if (clock_only) {                                                 // only a second / percent passed
+        if (s_np && !s_set_open && !s_typing && !s_sub_list) lg_now_playing(false);
+        else if (lib) lg_card(186, lg::HEAD + 6, W - 192, H - lg::HEAD - 12, false);
+        return;                                                       // the touch table stays as committed
+    }
+    nucleo_touch_clear();
+    if (s_typing) {
+        lg::header(TR("Cerca un brano", "Find a track"), nullptr, ACC, NK_BACK);
+        d.fillRect(0, lg::HEAD, W, H - lg::HEAD, BG);
+        d.fillRoundRect(12, lg::HEAD + 16, W - 24, 42, 8, INK); d.drawRoundRect(12, lg::HEAD + 16, W - 24, 42, 8, ACC);
+        lg::font(2); d.setTextDatum(middle_left); d.setTextColor(FG, INK);
+        const char *t = st->search_query; while (*t && d.textWidth(t) > W - 56) t++;
+        d.drawString(t, 24, lg::HEAD + 38); d.fillRect(24 + d.textWidth(t) + 2, lg::HEAD + 26, 3, 22, ACC); d.setTextDatum(top_left);
+        lg::font(0); d.setTextColor(MUTED, BG);
+        lg::wrap(TR("Scrivi parte del titolo sulla tastiera del Cardputer.", "Type part of the title on the Cardputer's keyboard."), 16, lg::HEAD + 70, W - 32, 17, 2);
+        lg::button(12, H - 50, W - 24, 40, TR("Cerca", "Find"), st->search_query[0] ? ACC : LINE, st->search_query[0] ? INK : MUTED, NK_ENTER, 0);
+    } else if (s_sub_list) {
+        lg::header(s_sub_type == 1 ? TR("Generi", "Genres") : TR("Artisti", "Artists"), nullptr, ACC, NK_BACK);
+        if (s_sub_count == 0) lg::message(0, lg::HEAD, W, H - lg::HEAD, TR("Ancora niente", "Nothing here yet"), TR("L'indice dei brani si sta creando.", "The track index is being built."), MUTED);
+        else lg::text_list(0, lg::HEAD + 2, W, H - lg::HEAD - 2, s_sub_count, s_sub_sel, &s_lg_sscroll,
+                           [](int i, void *) -> const char * { return s_sub_items[i]; }, nullptr, nullptr, nullptr, ACC);
+    } else if (s_set_open) {
+        lg_settings();
+    } else if (s_np) {
+        lg_now_playing(true);
+    } else {
+        char cnt[12]; snprintf(cnt, sizeof cnt, "%d", s_n);
+        const int y = lg::header(lg_ctx(), cnt, ACC, NK_BACK, NK_TAB);
+        if (s_n) lg::list(0, y + 2, 182, H - y - 4, lg::ROW, s_n, s_sel, &s_lg_scroll, lg_row, nullptr, ACC);
+        else { d.fillRect(0, y, 182, H - y, BG); lg::font(0); d.setTextColor(DIM, BG); d.drawString(strcmp(s_path, "/") ? TR("(vuota)", "(empty)") : TR("Nessun brano", "No tracks"), 14, y + 12); }
+        d.fillRect(182, y, W - 182, H - y, BG);
+        lg_meta_sync();
+        lg_card(186, y + 6, W - 192, H - y - 12, true);
+    }
+    nucleo_touch_commit();
+}
+
+// The companion's clock line: time (or PAUSED) and a thin progress bar.
+static void lg_comp_clock(int ty)
+{
+    const bool paused = nucleo_audio_is_paused();
+    const uint32_t el = nucleo_audio_elapsed(), du = nucleo_audio_duration_ms() / 1000;
+    char te[8], td[8], t[24]; fmt_time(te, sizeof te, el); fmt_time(td, sizeof td, du);
+    snprintf(t, sizeof t, du ? "%s / %s" : "%s", te, td);
+    d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextColor(paused ? AMB : GRN, BG);
+    d.drawString(paused ? TR("PAUSA", "PAUSED") : t, 8, ty + 2);
+    if (paused) { d.setTextColor(FG, BG); d.drawString(t, 60, ty + 2); }
+    lg::bar(8, ty + 13, 224, 4, nucleo_audio_progress(), paused ? AMB : GRN);
+}
+
+// The Cardputer while the panel shows the player: what plays (or what is picked / typed) and the keys. A redraw
+// that changes nothing but the clock repaints only the time line when drawing direct (no buffer to compose).
+static void draw_companion(void)
+{
+    const int top = nucleo_app_content_top(), h = nucleo_app_content_height();
+    const unsigned gen = nucleo_app_repaint_gen();
+    const int pk = lg_play_key();
+    const bool active = st && st->playpath[0] && (nucleo_audio_is_playing() || nucleo_audio_is_paused());
+    const bool clock_only = !nucleo_app_is_buffered() && s_lg_comp_rev == s_lg_rev && s_lg_comp_gen == gen && s_lg_comp_play == pk;
+    s_lg_comp_rev = s_lg_rev; s_lg_comp_gen = gen; s_lg_comp_play = pk;
+    const int ty = top + 72;                                          // the time / progress line
+    if (clock_only && !s_typing && !s_sub_list && !s_set_open) {
+        if (!active) return;
+        d.fillRect(0, ty, 240, 20, BG);
+        lg_comp_clock(ty);
+        return;
+    }
+    d.fillRect(0, top, 240, h, BG);
+    {
+        int y = lg::comp_head(TR("MUSICA", "MUSIC"), ACC);
+        if (!st) { d.setFont(&fonts::Font0); d.setTextColor(RED, BG); d.drawString(TR("RAM insufficiente", "Not enough RAM"), 8, y + 4); return; }
+        d.setFont(&fonts::Font0); d.setTextSize(1);
+        if (s_typing) {
+            d.setTextColor(MUTED, BG); d.drawString(TR("Cerca un brano", "Find a track"), 8, y + 2);
+            const char *q = st->search_query; const int n = (int)strlen(q);
+            const char *tail = n > 17 ? q + n - 17 : q;
+            d.setTextSize(2); d.setTextColor(FG, BG); d.setCursor(8, y + 20); d.print(tail);
+            d.fillRect(8 + (int)strlen(tail) * 12, y + 18, 3, 18, ACC); d.setTextSize(1);
+            lg::comp_keys(TR("scrivi  INVIO cerca  ESC annulla", "type  ENTER find  ESC cancel"));
+            return;
+        }
+        if (s_sub_list) {
+            d.setTextColor(MUTED, BG); d.drawString(s_sub_type == 1 ? TR("Generi", "Genres") : TR("Artisti", "Artists"), 8, y + 2);
+            d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(FG, BG);
+            lg::wrap(s_sub_count ? s_sub_items[s_sub_sel] : TR("Ancora niente", "Nothing here yet"), 8, y + 18, 224, 20, 2);
+            lg::comp_keys(TR("su/giu  INVIO scegli  ESC indietro", "up/dn  ENTER pick  ESC back"));
+            return;
+        }
+        if (s_set_open) {
+            static const char *const T[4] = { "Play", "Audio", "Queue", "Find" }, *const T_IT[4] = { "Riproduci", "Audio", "Coda", "Cerca" };
+            d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(FG, BG);
+            char t[40]; snprintf(t, sizeof t, "%s: %s", TR("Impostazioni", "Settings"), TR(T_IT[s_set_tab], T[s_set_tab])); d.drawString(t, 8, y + 4);
+            d.setFont(&fonts::Font0); d.setTextColor(MUTED, BG);
+            char v[32]; snprintf(v, sizeof v, TR("volume %d%%", "volume %d%%"), nucleo_audio_volume()); d.drawString(v, 8, y + 28);
+            lg::comp_keys(s_set_edit ? TR("su/giu volume  INVIO fatto", "up/dn volume  ENTER done") : TR("su/giu riga  -> scheda  INVIO ok", "up/dn row  -> tab  ENTER ok"));
+            return;
+        }
+        if (active || s_np) {                                         // what plays, large
+            lg_meta_sync();
+            d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(ACC, BG);
+            lg::wrap(st->playpath[0] ? lg_playing_name() : TR("Coda finita", "Queue finished"), 8, y + 2, 224, 20, 2);
+            d.setFont(&fonts::Font0); d.setTextColor(MUTED, BG);
+            if (s_np_meta[0]) { char m[48]; snprintf(m, sizeof m, "%.38s", s_np_meta); d.drawString(m, 8, y + 44); }
+            if (st->qn) { char q[16]; snprintf(q, sizeof q, "%d/%d", st->qidx + 1, st->qn); d.setTextDatum(top_right); d.drawString(q, 232, y + 44); d.setTextDatum(top_left); }
+            lg::comp_keys(s_np ? TR("INVIO pausa  [ ]  </> 10s  su/giu vol", "ENTER pause  [ ]  </> 10s  up/dn vol")
+                               : TR("INVIO apri  spazio pausa  -> in riprod.", "ENTER open  space pause  -> playing"));
+            if (!active) return;
+        } else {                                                      // the pick
+            if (s_n && s_sel < s_n) {
+                MEntry *r = &st->e[s_sel];
+                const char *bn = strrchr(r->name, '/'); bn = bn ? bn + 1 : r->name;
+                d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(r->dir ? AMB : FG, BG);
+                const int nl = lg::wrap(lg_pretty(bn, !r->dir), 8, y + 2, 224, 20, 2);
+                d.setFont(&fonts::Font0); d.setTextColor(MUTED, BG);
+                char m[40];
+                if (r->dir) snprintf(m, sizeof m, TR("cartella, %u brani", "folder, %u tracks"), (unsigned)r->count);
+                else if (r->dur) { char t[12]; fmt_time(t, sizeof t, r->dur); snprintf(m, sizeof m, "%s", t); }
+                else m[0] = 0;
+                d.drawString(m, 8, y + 8 + nl * 20);
+            } else { d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(MUTED, BG); d.drawString(TR("Nessun brano", "No tracks"), 8, y + 4); }
+            lg::comp_keys(TR("INVIO apri  TAB menu  CANC su", "ENTER open  TAB menu  DEL up"));
+            return;
+        }
+    }
+    lg_comp_clock(ty);
+}
+
 static void now_playing(void)
 {
+    if (nucleo_app_two_screens()) { lg_np_open(); return; }  // the panel's Now Playing: no blocking loop
     // Release the shared ~32 KB canvas, then START THE TRACK BEFORE grabbing the marquee sprite.
     // The old order acquired the 3200-byte sprite first, "so it wouldn't fragment the decoder's block" —
     // but that is backwards: taking 3200 bytes out of the just-freed region is precisely what can split
@@ -1660,7 +2172,7 @@ extern "C" void nucleo_register_player(void)
         "music", "Music", "Media",
         "MP3/WAV browser — Shuffle, Repeat, Autoplay. TAB=settings.",
         'M', 0xFBB6, enter, on_key, tick, draw, leave,
-        NX_NET_APP | NX_SOLO | NX_WIFI
+        NX_NET_APP | NX_SOLO | NX_WIFI, nullptr, draw_large
             // SOLO: reboot into a fresh, UNFRAGMENTED heap. The runtime reclaim frees RAM but cannot
             // defragment, and Helix needs ~24 KB contiguous — see the note above play_q.
             // WIFI: with NX_SOLO this means "never start the radio for this boot". Wi-Fi costs ~48 KB

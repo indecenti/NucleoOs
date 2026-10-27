@@ -52,10 +52,13 @@ bool        nucleo_wifiatk_handshake_pmkid(void);
 #include "launcher_theme.h"   // themed BG/FG/MUTED/DIM/LINE/INK + C_* accents (launcher-consistent)
 #include "app_gfx.h"
 #include "nucleo_i18n.h"      // TR(it,en): hints follow the system language
+#include "app_large.h"        // two screens: the deauth toolkit laid out on the 320x240 panel
+#include "nucleo_touch.h"
 
 // BG/FG/MUTED/DIM/LINE/INK come from launcher_theme.h (themed, shared with the launcher).
 static const unsigned short ATK = 0xFD20 /*orange*/, GRN = C_GREEN,
                             YEL = C_YELLOW, PANEL = 0x18E3, PMF = 0x5C9F /*blue: PMF/immune*/;
+static int s_lg_scroll = 0;   // panel target-list scroll
 
 enum { ST_CONSENT, ST_SCAN, ST_LIST, ST_RUNNING, ST_STOPPING };
 static int  s_state;
@@ -120,9 +123,11 @@ static void start_attack(void)
 
 static void tick(void)
 {
-    // Deferred scan: only after the "Scansione..." screen has been painted (it briefly blocks).
+    // Deferred scan: only after the "Scansione..." screen has been painted (it briefly blocks). The arm is set
+    // on the first tick in the state (draw also sets it) so a redraw of the busy screen is guaranteed between
+    // entering ST_SCAN and the blocking scan — same timing on the device, and reachable in the PC gallery.
     if (s_state == ST_SCAN) {
-        if (!s_scan_armed) return;
+        if (!s_scan_armed) { s_scan_armed = true; return; }
         s_n = nucleo_wifiatk_scan();
         if (s_sel >= total_rows()) s_sel = 0;
         s_state = ST_LIST;
@@ -132,7 +137,7 @@ static void tick(void)
     }
     // Deferred teardown: stop only after the "Arresto..." screen has been painted.
     if (s_state == ST_STOPPING) {
-        if (!s_stop_armed) return;
+        if (!s_stop_armed) { s_stop_armed = true; return; }
         nucleo_wifiatk_deauth_stop();
         nucleo_app_exit();
         return;
@@ -162,6 +167,10 @@ static void on_key(int key, char ch)
     }
     // ST_LIST
     int tot = total_rows();
+    if (int t = lg::row_tap(key, ch, s_lg_scroll, tot, &s_sel)) {   // panel: tap a target to pick, again to arm
+        if (t == 2) { start_attack(); return; }
+        nucleo_app_request_draw(); return;
+    }
     switch (key) {
         case NK_UP:    s_sel = (s_sel - 1 + tot) % tot; break;
         case NK_DOWN:  s_sel = (s_sel + 1) % tot;       break;
@@ -413,8 +422,190 @@ static void draw_guide(void)
     }
 }
 
+// ===== two screens ==============================================================================================
+// The panel carries the toolkit: the consent card with Accept/Back buttons, the scrollable target list (tap a
+// row to pick, again to arm) with the picked AP's details + a big ARM button beside it, the running flood as big
+// FRAME/KICK counters with a live verdict and a STOP button, and the how-to guide as a paged panel. Touch is the
+// content; the header menu glyph opens the guide. The Cardputer becomes the companion: the picked target or the
+// live counters + verdict, and the key hints.
+static void lg_atk_row(int i, int x, int y, int w, int h, bool focus, unsigned short bg, void *) {
+    if (i == 0) {
+        char rv[10]; snprintf(rv, sizeof rv, "%d", nucleo_wifiatk_targets_vulnerable());
+        lg::row_text(x, y, w, h, focus, bg, TR("TUTTE (vuln.)", "ALL (vuln.)"), s_n ? rv : "", focus ? INK : ATK);
+        return;
+    }
+    int t = i - 1;
+    bool prot = nucleo_wifiatk_target_protected(t);
+    char right[20]; snprintf(right, sizeof right, "c%d %ddB", nucleo_wifiatk_target_channel(t), nucleo_wifiatk_target_rssi(t));
+    const char *ss = nucleo_wifiatk_target_ssid(t);
+    lg::row_text(x, y, w, h, focus, bg, ss[0] ? ss : "(hidden)", right, focus ? INK : (prot ? PMF : FG));
+}
+
+static void lg_big(int cx, int cy, const char *label, const char *val, unsigned short col, unsigned short bg) {
+    lg::font(3); d.setTextColor(col, bg); d.setTextDatum(middle_center); d.drawString(val, cx, cy);
+    lg::font(0); d.setTextColor(MUTED, bg); d.drawString(label, cx, cy + 28); d.setTextDatum(top_left);
+}
+
+static void draw_large(void) {
+    const int Wp = d.width(), Hp = d.height();
+    nucleo_touch_clear();
+
+    if (s_panel) {   // guide: paged, closes on the chevron (mapped to ENTER) or a tap
+        char rt[12]; snprintf(rt, sizeof rt, "%d/%d", s_page + 1, GUIDE_PAGES);
+        int y = lg::header(TR("Guida", "Guide"), rt, ATK, NK_ENTER);
+        d.fillRect(0, y, Wp, Hp - y, BG);
+        lg::panel(12, y + 6, Wp - 24, Hp - y - 58);
+        const unsigned short cb = lg::card();
+        lg::font(2); d.setTextColor(YEL, cb); d.drawString(GUIDE_HEAD[s_page], 24, y + 16);
+        lg::font(0); d.setTextColor(FG, cb);
+        int ty = y + 46;
+        for (int i = 0; i < 6; i++) { const char *l = GUIDE_BODY[s_page][i]; if (!l[0]) { ty += 8; continue; }
+            d.setTextColor(s_page == GUIDE_PAGES - 1 && i >= 4 ? YEL : FG, cb); d.drawString(l, 24, ty); ty += 20; }
+        const int bw = (Wp - 36) / 2;
+        lg::button(12, Hp - 44, bw, 34, TR("< Prec", "< Prev"), lg::card(), FG, NK_UP, 0);
+        lg::button(24 + bw, Hp - 44, bw, 34, TR("Succ >", "Next >"), lg::card(), FG, NK_DOWN, 0);
+        nucleo_touch_commit(); return;
+    }
+
+    if (s_state == ST_CONSENT) {
+        int y = lg::header("Deauth Flood", "AUTH", ATK, NK_BACK, NK_TAB);
+        d.fillRect(0, y, Wp, Hp - y, BG);
+        lg::panel(12, y + 8, Wp - 24, Hp - y - 70);
+        const unsigned short cb = lg::card();
+        lg::font(1); d.setTextColor(YEL, cb); d.drawString(TR("Test autorizzati", "Authorized testing"), 24, y + 18);
+        lg::font(0); d.setTextColor(FG, cb);
+        lg::wrap(TR("Inonda di frame deauth/disassoc le reti scelte: scollega i client dall'AP.",
+                    "Floods deauth/disassoc frames at the chosen networks: knocks clients off the AP."), 24, y + 44, Wp - 48, 19, 3);
+        d.setTextColor(MUTED, cb);
+        lg::wrap(TR("Solo su reti tue o con permesso scritto (CTF, audit).",
+                    "Your own networks or with written permission (CTF, audit)."), 24, y + 108, Wp - 48, 19, 2);
+        const int bw = (Wp - 36) / 2;
+        lg::button(12, Hp - 54, bw, 42, TR("Indietro", "Back"), lg::card(), FG, NK_BACK, 0);
+        lg::button(24 + bw, Hp - 54, bw, 42, TR("Accetto", "Accept"), ATK, INK, NK_ENTER, 0);
+        nucleo_touch_commit(); return;
+    }
+    if (s_state == ST_SCAN || s_state == ST_STOPPING) {
+        lg::header("Deauth Flood", nullptr, ATK, NK_BACK);
+        d.fillRect(0, lg::HEAD, Wp, Hp - lg::HEAD, BG);
+        lg::message(0, lg::HEAD, Wp, Hp - lg::HEAD,
+                    s_state == ST_SCAN ? TR("Scansione...", "Scanning...") : TR("Arresto...", "Stopping..."),
+                    s_state == ST_SCAN ? TR("Cerco le reti vicine.", "Looking for nearby networks.") : TR("Ripristino rete OS.", "Restoring OS network."), ATK);
+        if (s_state == ST_SCAN) s_scan_armed = true; else s_stop_armed = true;
+        nucleo_touch_commit(); return;
+    }
+    if (s_state == ST_RUNNING) {
+        unsigned up = nucleo_wifiatk_uptime_s();
+        char el[10]; snprintf(el, sizeof el, "%02u:%02u", up / 60, up % 60);
+        int y = lg::header("Deauth Flood", el, ATK, NK_BACK, NK_TAB);
+        d.fillRect(0, y, Wp, Hp - y, BG);
+        char ss[36]; snprintf(ss, sizeof ss, "%.34s", nucleo_wifiatk_cur_ssid());
+        lg::font(1); d.setTextColor(GRN, BG); d.drawString(ss, 14, y + 6);
+        // two hero counters
+        char fr[12]; unsigned long f = nucleo_wifiatk_frames();
+        if (f >= 100000) snprintf(fr, sizeof fr, "%luk", f / 1000); else snprintf(fr, sizeof fr, "%lu", f);
+        int seen = nucleo_wifiatk_clients(), act = nucleo_wifiatk_clients_active(), kick = seen - act; if (kick < 0) kick = 0;
+        char kk[8]; snprintf(kk, sizeof kk, "%d", kick);
+        lg::panel(12, y + 28, (Wp - 30) / 2, 72);
+        lg::panel(18 + (Wp - 30) / 2, y + 28, (Wp - 30) / 2, 72);
+        lg_big(12 + (Wp - 30) / 4, y + 56, "FRAME", fr, ATK, lg::card());
+        lg_big(18 + (Wp - 30) / 2 + (Wp - 30) / 4, y + 56, "KICK", kk, kick ? GRN : MUTED, lg::card());
+        // status line
+        int inj = nucleo_wifiatk_inject_health(); int rssi = nucleo_wifiatk_cur_rssi();
+        char st[64]; snprintf(st, sizeof st, "att %d  rec %u  ch%d  %ddB  inj %d%%",
+                              act, nucleo_wifiatk_reconnects(), nucleo_wifiatk_cur_channel(), rssi, inj);
+        lg::font(0); d.setTextColor(MUTED, BG); d.drawString(st, 14, y + 108);
+        // verdict
+        int hsok = nucleo_wifiatk_handshake_count();
+        const char *vd; unsigned short vc;
+        char vbuf[40];
+        if (hsok > 0) { snprintf(vbuf, sizeof vbuf, TR("CATTURATI: %d handshake", "CAPTURED: %d handshake"), hsok); vd = vbuf; vc = GRN; }
+        else if (inj < 50) { vd = TR("INIEZIONE DEBOLE", "WEAK INJECTION"); vc = ATK; }
+        else if (kick > 0) { vd = TR("EFFICACE", "EFFECTIVE"); vc = GRN; }
+        else { vd = TR("in corso...", "in progress..."); vc = YEL; }
+        d.fillRoundRect(12, y + 126, Wp - 24, 28, 7, vc);
+        lg::font(1); d.setTextColor(INK, vc); d.setTextDatum(middle_left); d.drawString(vd, 26, y + 140); d.setTextDatum(top_left);
+        lg::button(40, Hp - 50, Wp - 80, 40, TR("FERMA", "STOP"), C_RED, INK, NK_ENTER, 0);
+        nucleo_touch_commit(); return;
+    }
+    // ST_LIST
+    char rt[12]; snprintf(rt, sizeof rt, "%d AP", s_n);
+    int y = lg::header("Deauth Flood", rt, ATK, NK_BACK, NK_TAB);
+    const int LW = 182, tot = total_rows();
+    lg::list(0, y + 2, LW, Hp - y - 6, lg::ROW, tot, s_sel, &s_lg_scroll, lg_atk_row, nullptr, ATK);
+    d.fillRect(LW, y, Wp - LW, Hp - y, BG);
+    const int dx = LW + 4, dw = Wp - LW - 10;
+    lg::panel(dx, y + 6, dw, Hp - y - 58);
+    const unsigned short cb = lg::card();
+    if (s_sel == 0) {
+        lg::font(1); d.setTextColor(ATK, cb); d.drawString(TR("Tutte le reti", "All networks"), dx + 10, y + 16);
+        lg::font(0); d.setTextColor(FG, cb);
+        char b[32]; snprintf(b, sizeof b, TR("%d attaccabili", "%d attackable"), nucleo_wifiatk_targets_vulnerable());
+        d.drawString(b, dx + 10, y + 44);
+        d.setTextColor(MUTED, cb);
+        lg::wrap(TR("Salta da solo le reti WPA3/OWE.", "Skips WPA3/OWE on its own."), dx + 10, y + 66, dw - 20, 17, 2);
+    } else {
+        int t = s_sel - 1; bool prot = nucleo_wifiatk_target_protected(t);
+        char nm[28]; lg::fit(nm, sizeof nm, nucleo_wifiatk_target_ssid(t), dw - 20);
+        lg::font(1); d.setTextColor(prot ? PMF : ATK, cb); d.drawString(nm[0] ? nm : "(hidden)", dx + 10, y + 16);
+        d.drawFastHLine(dx + 10, y + 38, dw - 20, LINE);
+        int ky = y + 48; char v[16];
+        snprintf(v, sizeof v, "%d", nucleo_wifiatk_target_channel(t)); lg::kv(dx + 10, ky, dw - 20, TR("Canale", "Channel"), v, FG, cb); ky += 24;
+        lg::kv(dx + 10, ky, dw - 20, TR("Sicur.", "Auth"), nucleo_wifiatk_target_auth(t), FG, cb); ky += 24;
+        snprintf(v, sizeof v, "%d dB", nucleo_wifiatk_target_rssi(t)); lg::kv(dx + 10, ky, dw - 20, "RSSI", v, FG, cb); ky += 26;
+        if (prot) { lg::font(0); d.setTextColor(PMF, cb); d.drawString(TR("WPA3/PMF: immune", "WPA3/PMF: immune"), dx + 10, ky); }
+    }
+    lg::button(dx, Hp - 48, dw, 36, TR("ARMA", "ARM"), ATK, INK, NK_ENTER, 0);
+    if (s_n == 0) { lg::font(0); d.setTextColor(DIM, BG); d.setTextDatum(bottom_left);
+                    d.drawString(TR("nessuna rete - r riscan", "no networks - r rescan"), 8, Hp - 4); d.setTextDatum(top_left); }
+    nucleo_touch_commit();
+}
+
+static void draw_companion(void) {
+    const int top = nucleo_app_content_top(), h = nucleo_app_content_height();
+    d.fillRect(0, top, 240, h, BG);
+    int y = lg::comp_head("DEAUTH", ATK);
+    if (s_panel) {
+        d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(YEL, BG); d.drawString(GUIDE_HEAD[s_page], 8, y + 6);
+        d.setFont(&fonts::Font0); d.setTextColor(MUTED, BG); char p[16]; snprintf(p, sizeof p, "%d/%d", s_page + 1, GUIDE_PAGES); d.drawString(p, 8, y + 30);
+        lg::comp_keys(TR(";/. pagina  INVIO chiudi", ";/. page  ENTER close")); return;
+    }
+    if (s_state == ST_RUNNING) {
+        char fr[12]; unsigned long f = nucleo_wifiatk_frames();
+        if (f >= 100000) snprintf(fr, sizeof fr, "%luk", f / 1000); else snprintf(fr, sizeof fr, "%lu", f);
+        d.setFont(&fonts::FreeSansBold18pt7b); d.setTextColor(ATK, BG); d.drawString(fr, 8, y + 2);
+        d.setFont(&fonts::Font0); d.setTextColor(MUTED, BG); d.drawString(TR("frame TX", "frames TX"), 8, y + 34);
+        int seen = nucleo_wifiatk_clients(), kick = seen - nucleo_wifiatk_clients_active(); if (kick < 0) kick = 0;
+        char ln[40]; snprintf(ln, sizeof ln, TR("KICK %d  att %d  ch%d", "KICK %d  act %d  ch%d"), kick, nucleo_wifiatk_clients_active(), nucleo_wifiatk_cur_channel());
+        d.setTextColor(GRN, BG); d.drawString(ln, 8, y + 48);
+        char ss[40]; snprintf(ss, sizeof ss, "> %.30s", nucleo_wifiatk_cur_ssid());
+        d.setTextColor(FG, BG); d.drawString(ss, 8, y + 62);
+        lg::comp_keys(TR("INVIO ferma  TAB guida  ESC on", "ENTER stop  TAB guide  ESC on")); return;
+    }
+    if (s_state == ST_CONSENT || s_state == ST_SCAN || s_state == ST_STOPPING) {
+        d.setFont(&fonts::FreeSansBold12pt7b); d.setTextColor(ATK, BG);
+        d.drawString(s_state == ST_CONSENT ? TR("Autorizza", "Authorize") : s_state == ST_SCAN ? TR("Scansione...", "Scanning...") : TR("Arresto...", "Stopping..."), 8, y + 4);
+        d.setFont(&fonts::Font0); d.setTextColor(MUTED, BG);
+        lg::wrap(s_state == ST_CONSENT ? TR("Accetta sul pannello per scansionare.", "Accept on the panel to scan.")
+                                       : TR("Attendi...", "Please wait..."), 8, y + 34, 224, 12, 2);
+        lg::comp_keys(TR("INVIO accetto  ESC esci  TAB guida", "ENTER accept  ESC back  TAB guide")); return;
+    }
+    // ST_LIST
+    d.setFont(&fonts::FreeSansBold12pt7b); d.setTextColor(ATK, BG);
+    const char *sel = s_sel == 0 ? TR("TUTTE", "ALL") : nucleo_wifiatk_target_ssid(s_sel - 1);
+    char t[32]; snprintf(t, sizeof t, "%.24s", sel && sel[0] ? sel : "(hidden)");
+    d.drawString(t, 8, y + 4);
+    d.setFont(&fonts::Font0); d.setTextColor(MUTED, BG);
+    char m[32]; snprintf(m, sizeof m, TR("%d reti trovate", "%d networks found"), s_n);
+    d.drawString(m, 8, y + 34);
+    if (s_sel > 0) { char info[40]; snprintf(info, sizeof info, "c%d  %s  %ddB", nucleo_wifiatk_target_channel(s_sel - 1),
+                     nucleo_wifiatk_target_auth(s_sel - 1), nucleo_wifiatk_target_rssi(s_sel - 1));
+                     d.setTextColor(FG, BG); d.drawString(info, 8, y + 50); }
+    lg::comp_keys(TR(";/. scegli  INVIO arma  r riscan", ";/. pick  ENTER arm  r rescan"));
+}
+
 static void draw(void)
 {
+    if (nucleo_app_two_screens()) { draw_companion(); return; }
     int top = nucleo_app_content_top(), h = nucleo_app_content_height();
     d.fillRect(0, top, 240, h, BG);
     if (s_panel)                     draw_guide();
@@ -437,7 +628,7 @@ extern "C" void nucleo_register_wifiatk(void)
 {
     static const nucleo_app_def_t app = {
         "wifiatk", "Deauth Flood", "Security", "802.11 deauth flood for authorized Wi-Fi testing",
-        'D', ATK, enter, on_key, tick, draw, leave
+        'D', ATK, enter, on_key, tick, draw, leave, 0, nullptr, draw_large
     };
     nucleo_app_register(&app);
 }

@@ -74,7 +74,7 @@ static const unsigned short
 #define HEAD_H 20               // list context-header height
 
 
-struct VEntry { char name[72]; bool dir, old; uint16_t count; uint32_t dur; uint32_t resume; };   // old = pre-v4 clip
+struct VEntry { char name[72]; bool dir, old; uint16_t count, vw, vh; uint32_t dur; uint32_t resume; };   // old = pre-v4 clip; vw x vh = picture
 
 // The folder listing lives in one malloc'd block held only while the app is OPEN and freed on
 // leave(), so the RAM (~5 KB) goes back to ANIMA (mirrors Files / Music). Guarded: if the alloc
@@ -177,6 +177,13 @@ struct resume_ent { char name[80]; uint32_t sec; };
 // resume_save and resume_refresh both run on the UI task and never nest, so one shared buffer is safe.
 // Heap-allocated on enter() and freed on leave() so it is ZERO RAM at boot when the app is closed.
 static resume_ent *s_resume_scratch = nullptr;
+// The scratch exists only around a read/rewrite of the DB (~4 KB): while a film plays it is the frame queue's.
+static bool resume_scratch_take(void)
+{
+    if (!s_resume_scratch) s_resume_scratch = (resume_ent *)calloc(RESUME_MAX, sizeof *s_resume_scratch);
+    return s_resume_scratch != nullptr;
+}
+static void resume_scratch_drop(void) { free(s_resume_scratch); s_resume_scratch = nullptr; }
 
 static int resume_read_all(resume_ent *out, int max)
 {
@@ -198,7 +205,8 @@ static int resume_read_all(resume_ent *out, int max)
 
 static void resume_save(const char *key, uint32_t sec, uint32_t total_sec)
 {
-    resume_ent *e = s_resume_scratch; if (!e) return;
+    if (!resume_scratch_take()) return;
+    resume_ent *e = s_resume_scratch;
     int n = resume_read_all(e, RESUME_MAX);   // heap scratch, not 4 KB of stack
     for (int i = 0; i < n; i++)                              // drop any existing entry for this clip
         if (!strcmp(e[i].name, key)) { e[i] = e[n - 1]; n--; break; }
@@ -208,9 +216,11 @@ static void resume_save(const char *key, uint32_t sec, uint32_t total_sec)
         snprintf(e[n].name, sizeof e[n].name, "%s", key); e[n].sec = sec; n++;
     }
     FILE *f = fopen(RESUME_DB, "w");
-    if (!f) return;
-    for (int i = 0; i < n; i++) fprintf(f, "%u|%s\n", (unsigned)e[i].sec, e[i].name);
-    fclose(f);
+    if (f) {
+        for (int i = 0; i < n; i++) fprintf(f, "%u|%s\n", (unsigned)e[i].sec, e[i].name);
+        fclose(f);
+    }
+    resume_scratch_drop();
 }
 
 // Build a clip's resume key = path under /data/Videos (folder prefix + name; bare name at root).
@@ -220,8 +230,9 @@ static void rel_key(char *buf, size_t n, const char *name)
     snprintf(buf, n, "%s%s", p, name);
 }
 
-// Peek a clip's duration (seconds) from its v4 header; *old (optional) = an .nfv of an older version.
-static uint32_t nfv_duration_path(const char *vpath, bool *old = nullptr)
+// Peek a clip's duration (seconds) from its v4 header; *old (optional) = an .nfv of an older version;
+// *vw x *vh (optional) = the visible picture size.
+static uint32_t nfv_duration_path(const char *vpath, bool *old = nullptr, uint16_t *vw = nullptr, uint16_t *vh = nullptr)
 {
     if (old) *old = false;
     FILE *f = fopen(vpath, "rb"); if (!f) return 0;
@@ -229,6 +240,8 @@ static uint32_t nfv_duration_path(const char *vpath, bool *old = nullptr)
     if (got < 32 || memcmp(hb, "NFV1", 4)) return 0;
     auto le32 = [&](int o) { return (uint32_t)(hb[o] | (hb[o+1] << 8) | (hb[o+2] << 16) | ((uint32_t)hb[o+3] << 24)); };
     if (hb[4] != 4) { if (old) *old = true; return 0; }       // v1-v3: no longer played
+    if (vw) *vw = (uint16_t)(le32(40) ? le32(40) : (hb[6] | (hb[7] << 8)));
+    if (vh) *vh = (uint16_t)(le32(44) ? le32(44) : (hb[8] | (hb[9] << 8)));
     return le32(20) / 1000;                                   // v4: duration_ms at offset 20
 }
 
@@ -257,7 +270,7 @@ static int count_clips(const char *abs, int depth)
 // distinct in-progress clips recorded (for the LIBRARY tab's "Continue" counter).
 static int resume_refresh(void)
 {
-    if (!st || !s_resume_scratch) return 0;
+    if (!st || !resume_scratch_take()) return 0;
     resume_ent *e = s_resume_scratch; int n = resume_read_all(e, RESUME_MAX);   // heap scratch, not 4 KB of stack
     for (int i = 0; i < s_n; i++) {
         st->e[i].resume = 0;
@@ -266,6 +279,7 @@ static int resume_refresh(void)
         for (int j = 0; j < n; j++)
             if (!strcmp(e[j].name, key)) { st->e[i].resume = e[j].sec; break; }
     }
+    resume_scratch_drop();
     return n;
 }
 
@@ -286,7 +300,7 @@ static void scan(void)
             if (!isdir && !is_nfv(e->d_name)) continue;     // hide non-clip files (.mp3 siblings, .idx, .mp4)
             VEntry *r = &st->e[s_n];
             snprintf(r->name, sizeof r->name, "%s", e->d_name);
-            r->dir = isdir; r->old = false; r->count = 0; r->dur = 0; r->resume = 0;
+            r->dir = isdir; r->old = false; r->count = 0; r->vw = r->vh = 0; r->dur = 0; r->resume = 0;
             s_n++;
         }
         closedir(dir);                                      // close BEFORE recursing
@@ -295,7 +309,7 @@ static void scan(void)
         VEntry *r = &st->e[i];
         char c[320]; snprintf(c, sizeof c, "%s%s", base, r->name);
         if (r->dir) r->count = (uint16_t)count_clips(c, 0);
-        else        r->dur = nfv_duration_path(c, &r->old);
+        else        r->dur = nfv_duration_path(c, &r->old, &r->vw, &r->vh);
         esp_task_wdt_reset();
     }
     qsort(st->e, s_n, sizeof(VEntry), cmp);                 // sort AFTER durations are known
@@ -468,10 +482,16 @@ static void draw_video_help(int bri, int vol, bool muted)
 
 // Netflix-style resume sheet. Returns the chosen start in ms, 0 to start over, or -1 if backed
 // out. Blocking modal (owns the screen + keyboard) and pets the watchdog while it waits.
+static int lg_wrap(const char *s, int x, int y, int maxw, int lh, int maxl);   // two-screen helpers, below
 static int64_t resume_prompt(const char *vpath, const char *title, uint32_t resume_sec)
 {
     uint32_t total = nfv_duration_path(vpath);
     char rs[8], ts[8]; fmt_mmss(rs, sizeof rs, resume_sec); fmt_mmss(ts, sizeof ts, total);
+    // Sized to whichever screen `d` is: the Cardputer, or the external panel when the browser lives there (then
+    // the two choices are big touch buttons too: 'r' = resume, 's' = start over).
+    const int W = d.width(), H = d.height();
+    const bool big = W >= 320;
+    const char *opt[2] = { TR("Riprendi", "Resume"), TR("Da capo", "Start over") };
 
     int sel = 0, last = -1;                                   // 0 = Resume, 1 = Start over
     for (;;) {
@@ -479,29 +499,39 @@ static int64_t resume_prompt(const char *vpath, const char *title, uint32_t resu
         if (sel != last) {
             last = sel;
             d.fillScreen(BG);
-            d.setTextSize(1); d.setTextColor(ACC, BG); d.setCursor(12, 10); d.print("Resume playback?");
-            char tb[34]; snprintf(tb, sizeof tb, "%.32s", title);
-            d.setTextColor(FG, BG); d.setCursor(12, 24); d.print(tb);
-
-            int px = 12, pw = 216, py = 40;                  // a glance at how far in they were
-            d.fillRoundRect(px, py, pw, 4, 2, CO_TRK);
-            int fw = total ? (int)((int64_t)pw * resume_sec / total) : 0;
-            if (fw > 0) d.fillRoundRect(px, py, fw, 4, 2, ACC);
-            char line[40]; snprintf(line, sizeof line, "Stopped at %s / %s", rs, ts);
-            d.setTextColor(CO_MUT, BG); d.setCursor(12, 50); d.print(line);
-
-            const char *opt[2] = { "Resume", "Start over" };
+            const int m = big ? 20 : 12, cw = W - 2 * m;
+            int y = big ? 18 : 8;
+            d.setTextDatum(top_left);
+            d.setFont(big ? (const lgfx::IFont *)&fonts::FreeSansBold9pt7b : (const lgfx::IFont *)&fonts::Font0); d.setTextColor(ACC, BG);
+            d.drawString(TR("Riprendere la visione?", "Resume playback?"), m, y);
+            y += big ? 28 : 14;
+            d.setFont(big ? (const lgfx::IFont *)&fonts::FreeSans9pt7b : (const lgfx::IFont *)&fonts::Font2); d.setTextColor(FG, BG);
+            y += (big ? 22 : 16) * lg_wrap(title, m, y, cw, big ? 22 : 16, 2) + 4;
+            const int fw = total ? (int)((int64_t)cw * resume_sec / total) : 0;   // how far in they were
+            d.fillRoundRect(m, y, cw, big ? 6 : 4, 2, CO_TRK);
+            if (fw > 0) d.fillRoundRect(m, y, fw, big ? 6 : 4, 2, GRN);
+            y += big ? 12 : 8;
+            char line[48]; snprintf(line, sizeof line, TR("Interrotto a %s di %s", "Stopped at %s of %s"), rs, ts);
+            d.setFont(big ? (const lgfx::IFont *)&fonts::Font2 : (const lgfx::IFont *)&fonts::Font0); d.setTextColor(CO_MUT, BG); d.drawString(line, m, y);
+            const int bh = big ? 52 : 22, by = big ? H - bh - 22 : 84, bw = (cw - (big ? 16 : 8)) / 2;
+            if (big) nucleo_touch_clear();
             for (int b = 0; b < 2; b++) {
-                int bx = 12 + b * 112;
-                d.fillRoundRect(bx, 70, 104, 22, 6, sel == b ? ACC : CO_CHIP);
-                d.setTextColor(sel == b ? CO_INK : FG, sel == b ? ACC : CO_CHIP);
-                d.setCursor(bx + (104 - (int)strlen(opt[b]) * 6) / 2, 78); d.print(opt[b]);
+                const int bx = m + b * (bw + (big ? 16 : 8));
+                const unsigned short fill = sel == b ? ACC : CO_CHIP;
+                d.fillRoundRect(bx, by, bw, bh, big ? 10 : 6, fill);
+                d.setFont(big ? (const lgfx::IFont *)&fonts::FreeSansBold9pt7b : (const lgfx::IFont *)&fonts::Font0); d.setTextDatum(middle_center);
+                d.setTextColor(sel == b ? CO_INK : FG, fill); d.drawString(opt[b], bx + bw / 2, by + bh / 2);
+                if (big) nucleo_touch_add(bx, by, bw, bh, NK_CHAR, b == 0 ? 'r' : 's');
             }
-            d.setTextColor(CO_MUT, BG); d.setCursor(12, 110); d.print("< > select   enter ok   esc back");
+            if (big) nucleo_touch_commit();
+            d.setTextDatum(top_left); d.setFont(&fonts::Font0); d.setTextColor(CO_MUT, BG);
+            if (!big) d.drawString(TR("< > scegli   invio ok   esc indietro", "< > select   enter ok   esc back"), m, 112);
         }
         nucleo_key_t k = nucleo_kbd_read();
         if      (k.key == NK_LEFT || k.key == NK_RIGHT || k.key == NK_UP || k.key == NK_DOWN) sel ^= 1;
         else if (k.key == NK_ENTER) return sel == 0 ? (int64_t)resume_sec * 1000 : 0;
+        else if (k.key == NK_CHAR && k.ch == 'r') return (int64_t)resume_sec * 1000;
+        else if (k.key == NK_CHAR && k.ch == 's') return 0;
         else if (k.key == NK_BACK || k.key == NK_DEL || k.ch == '`') return -1;
         vTaskDelay(pdMS_TO_TICKS(20));
     }
@@ -623,13 +653,20 @@ static void vremote(const char *title, const char *next_title, uint32_t el, uint
 //
 // Audio pump. The driver cannot say how much room its DMA queue has, and a blocking write would hold the reader
 // back, so the queue is modelled: queued = samples written - samples played (wall clock x rate). A block is
-// written only when it fits (it never blocks), the queue is topped up between the strips of every frame, and
-// an underrun re-anchors the model. The I2S queue is I2S_CHANNEL_DEFAULT_CONFIG's 6 x 240 frames.
+// written only when it fits (it never blocks), the queue is topped up between the strips of every frame and
+// between the chunks the reader takes, and an underrun re-anchors the model. The I2S queue is opened long
+// (nucleo_audio_pcm_open_ex: ~200 ms instead of the driver's 90 ms), so a slow card read or a heavy frame no
+// longer runs it dry.
 //
-// RAM while playing: the decoder (~10 KB), one 16-row strip (W x 16 x 2 = 10 KB at 320), one compressed frame
-// (the header's max_jpeg, <= 24 KB by the encoder's cap), 4 ADPCM blocks + one PCM block (~2 KB), 4 KB stdio
-// buffer. Separate blocks, each well under the ~32 KB contiguous a Solo boot leaves.
-// (4 ADPCM blocks above: V4_AQ, 8 x 256 B.)
+// Read-ahead. The file carries each second's sound ~0.25 s before its pictures, and a reader that holds ONE
+// frame stops there: while that frame waits for its turn, no more sound comes in, and a slow read right then is
+// an audible gap. So the player keeps a queue of compressed frames (as many as the heap affords, up to V4_VQ)
+// and a long ADPCM queue: the sound then runs up to ~0.5 s ahead of the picture.
+//
+// RAM while playing: the decoder (~10 KB), one 16-row strip (W x 16 x 2 = 10 KB at 320), V4_VQ compressed
+// frames at most (the header's max_jpeg each, <= 24 KB by the encoder's cap; fewer when the heap is short), up
+// to V4_AQ_MAX ADPCM blocks (6 KB) + one PCM block, the stdio buffer, the I2S DMA. Separate blocks, each well
+// under the ~32 KB contiguous a Solo boot leaves.
 #include "esp_jpeg_dec.h"
 
 static const int8_t  IMA_IDX[8] = { -1, -1, -1, -1, 2, 4, 6, 8 };
@@ -665,8 +702,11 @@ static int ima_block(const uint8_t *b, int len, int16_t *out)
 }
 
 
-#define V4_AQ   8                    // ADPCM blocks held ahead of the I2S queue (~256 ms at 256 B / 16 kHz)
-#define V4_QCAP (6 * 240)            // the I2S DMA queue, in samples (I2S_CHANNEL_DEFAULT_CONFIG: 6 x 240)
+#define V4_AQ_MAX 24                 // ADPCM blocks held ahead of the I2S queue (~0.75 s at 256 B / 16 kHz)
+#define V4_QCAP   (6 * 240)          // the driver's default I2S queue, in samples, when the long one is refused
+#define V4_QWANT  3200               // the I2S queue asked for (200 ms at 16 kHz)
+#define V4_VQ     5                  // compressed frames read ahead, at most
+#define V4_RESERVE (22 * 1024)       // heap left for the I2S DMA, stdio and the panel after the frame queue
 static int play_nfv4(const char *vpath, const char *title, const char *reskey, int64_t start_ms,
                      const char *next_title)
 {
@@ -696,24 +736,36 @@ static int play_nfv4(const char *vpath, const char *title, const char *reskey, i
     }
 
     nucleo_app_release_buffers();
-    uint8_t  *jin   = (uint8_t *)malloc(max_jpeg);
     uint16_t *strip = (uint16_t *)jpeg_calloc_align((size_t)W * 16 * 2, 16);
-    uint8_t  *aq    = has_audio ? (uint8_t *)malloc((size_t)V4_AQ * ablock) : nullptr;
+    int aq_cap = V4_AQ_MAX;                               // the long ADPCM queue, halved until it fits
+    uint8_t *aq = nullptr;
+    if (has_audio) while (aq_cap >= 8 && !(aq = (uint8_t *)malloc((size_t)aq_cap * ablock))) aq_cap /= 2;
     int16_t  *pcm   = has_audio ? (int16_t *)malloc((size_t)aspb * 2) : nullptr;
     jpeg_dec_handle_t dec = nullptr;
     jpeg_dec_config_t dcfg = DEFAULT_JPEG_DEC_CONFIG();
     dcfg.output_type = JPEG_PIXEL_FORMAT_RGB565_BE;       // the panel's own byte order: a raw, unconverted push
     dcfg.block_enable = true;                             // 16 rows at a time (4:2:0 MCU), never a whole frame
-    const bool ok_mem = jin && strip && (!has_audio || (aq && pcm)) && jpeg_dec_open(&dcfg, &dec) == JPEG_ERR_OK;
+    const bool dec_ok = jpeg_dec_open(&dcfg, &dec) == JPEG_ERR_OK;
+    // The frame queue takes what is left: one slot always, more while the heap keeps V4_RESERVE free.
+    uint8_t *vq[V4_VQ] = {}; int vq_cap = 0;
+    while (vq_cap < V4_VQ) {
+        if (vq_cap && heap_caps_get_free_size(MALLOC_CAP_INTERNAL) < max_jpeg + V4_RESERVE) break;
+        if (!(vq[vq_cap] = (uint8_t *)malloc(max_jpeg))) break;
+        vq_cap++;
+    }
+    uint8_t *jin = vq[0];                                 // the frame being decoded (the queue's head)
+    const bool ok_mem = vq_cap > 0 && strip && (!has_audio || (aq && pcm)) && dec_ok;
     {
-        char t[112];
-        snprintf(t, sizeof t, "nfv4_open %dx%d fps=%d audio=%d/%d max_jpeg=%u ok=%d", W, Hc, fps, (int)has_audio, rate,
-                 (unsigned)max_jpeg, (int)ok_mem);
+        char t[128];
+        snprintf(t, sizeof t, "nfv4_open %dx%d fps=%d audio=%d/%d max_jpeg=%u ok=%d frames=%d ablocks=%d", W, Hc, fps,
+                 (int)has_audio, rate, (unsigned)max_jpeg, (int)ok_mem, vq_cap, has_audio ? aq_cap : 0);
         vtrace(t, false);
     }
     auto cleanup = [&]() {
         if (dec) jpeg_dec_close(dec);
-        free(jin); if (strip) jpeg_free_align(strip); free(aq); free(pcm);
+        for (int i = 0; i < vq_cap; i++) free(vq[i]);
+        if (strip) jpeg_free_align(strip);
+        free(aq); free(pcm);
         fclose(f); free(rdbuf);
     };
     if (!ok_mem) {
@@ -735,11 +787,12 @@ static int play_nfv4(const char *vpath, const char *title, const char *reskey, i
     d.setSwapBytes(false);                               // the strips are already in panel order
     d.fillScreen(0);
     vtouch(G);
-    const bool audio_ok = has_audio && nucleo_audio_pcm_open(rate, 1) == ESP_OK;
+    const bool audio_ok = has_audio && nucleo_audio_pcm_open_ex(rate, 1, V4_QWANT) == ESP_OK;
+    const int qcap = audio_ok && nucleo_audio_pcm_queue_frames() > 0 ? nucleo_audio_pcm_queue_frames() : V4_QCAP;
     {
         char t[96];
-        snprintf(t, sizeof t, "nfv4_geom panel=%dx%d big=%d down=%d at=%d,%d audio_ok=%d", pw, ph, (int)G.big, (int)down,
-                 ox, oy, (int)audio_ok);
+        snprintf(t, sizeof t, "nfv4_geom panel=%dx%d big=%d down=%d at=%d,%d audio_ok=%d i2s=%d", pw, ph, (int)G.big,
+                 (int)down, ox, oy, (int)audio_ok, qcap);
         vtrace(t, false);
     }
     if (audio_ok && s_vol_default > 0) nucleo_audio_set_volume(s_vol_default);
@@ -762,7 +815,7 @@ static int play_nfv4(const char *vpath, const char *title, const char *reskey, i
         return v_base_ms + (now - v_t0) / 1000;
     };
     // ---- audio queue ----------------------------------------------------------------------------------------
-    int aq_len[V4_AQ] = {}; uint32_t aq_stamp[V4_AQ] = {}; int aq_head = 0, aq_n = 0;
+    int aq_len[V4_AQ_MAX] = {}; uint32_t aq_stamp[V4_AQ_MAX] = {}; int aq_head = 0, aq_n = 0;
     uint32_t a_skip_until = 0;           // after a seek: samples before this are dropped
     auto pump_audio = [&]() {
         if (!audio_ok) { aq_n = 0; return; }
@@ -774,7 +827,7 @@ static int play_nfv4(const char *vpath, const char *title, const char *reskey, i
                     a_base_ms += (int64_t)a_written * 1000 / rate;
                     a_t0 = now; a_written = 0; underruns++; queued = 0;
                 }
-                if (queued + aspb > V4_QCAP) break;      // no room: writing now would block
+                if (queued + aspb > qcap) break;         // no room: writing now would block
             }
             const int slot = aq_head;
             int n = ima_block(aq + (size_t)slot * ablock, aq_len[slot], pcm);
@@ -787,7 +840,7 @@ static int play_nfv4(const char *vpath, const char *title, const char *reskey, i
                 a_written += (uint64_t)(n - drop);
             }
             a_skip_until = 0;
-            aq_head = (aq_head + 1) % V4_AQ; aq_n--;
+            aq_head = (aq_head + 1) % aq_cap; aq_n--;
         }
     };
     // ---- picture ----------------------------------------------------------------------------------------------
@@ -837,11 +890,15 @@ static int play_nfv4(const char *vpath, const char *title, const char *reskey, i
 
     // ---- the stream ---------------------------------------------------------------------------------------------
     long fpos = 64;                                      // file position, tracked (no ftell per chunk)
-    bool have_v = false, eof = false;
-    uint32_t v_len = 0, v_stamp = 0, v_skip_until = 0;
+    bool eof = false;
+    uint32_t v_skip_until = 0;
+    uint32_t vq_len[V4_VQ] = {}, vq_stamp[V4_VQ] = {}; uint16_t vq_mask[V4_VQ] = {};
+    int vq_head = 0, vq_n = 0;                           // frames read and waiting for their turn
+    auto vq_pop = [&]() { vq_head = (vq_head + 1) % vq_cap; vq_n--; };
     int64_t cur_frame = -1;
     auto skip_bytes = [&](uint32_t n) -> bool {          // read through (a seek would drop the stdio buffer)
-        while (n) { const uint32_t k = n > max_jpeg ? max_jpeg : n; if (fread(jin, 1, k, f) != k) return false; n -= k; }
+        uint8_t *sb = vq[(vq_head + vq_n) % vq_cap];      // a free slot (the reader runs only while one is free)
+        while (n) { const uint32_t k = n > max_jpeg ? max_jpeg : n; if (fread(sb, 1, k, f) != k) return false; n -= k; }
         return true;
     };
     auto read_chunk = [&]() -> bool {                    // one chunk into the audio queue or the frame slot
@@ -852,7 +909,7 @@ static int play_nfv4(const char *vpath, const char *title, const char *reskey, i
         fpos += 12 + (long)len;
         if (ch[0] == 2 && len <= (uint32_t)ablock && audio_ok) {
             if (a_skip_until && stamp + (uint32_t)aspb <= a_skip_until) return skip_bytes(len);
-            const int slot = (aq_head + aq_n) % V4_AQ;
+            const int slot = (aq_head + aq_n) % aq_cap;
             if (fread(aq + (size_t)slot * ablock, 1, len, f) != len) { eof = true; return false; }
             aq_len[slot] = (int)len; aq_stamp[slot] = stamp; aq_n++;
             return true;
@@ -860,8 +917,9 @@ static int play_nfv4(const char *vpath, const char *title, const char *reskey, i
         if (ch[0] == 1 && len <= max_jpeg) {
             const uint16_t m = (uint16_t)(ch[2] | (ch[3] << 8));
             if (stamp < v_skip_until) { pend_mask |= m; return skip_bytes(len); }
-            if (fread(jin, 1, len, f) != len) { eof = true; return false; }
-            have_v = true; v_len = len; v_stamp = stamp; v_mask = m;
+            const int slot = (vq_head + vq_n) % vq_cap;
+            if (fread(vq[slot], 1, len, f) != len) { eof = true; return false; }
+            vq_len[slot] = len; vq_stamp[slot] = stamp; vq_mask[slot] = m; vq_n++;
             return true;
         }
         return skip_bytes(len);
@@ -897,7 +955,7 @@ static int play_nfv4(const char *vpath, const char *title, const char *reskey, i
         }
         (void)kf;
         seek_far(off); fpos = off;
-        have_v = false; eof = false; aq_n = 0; aq_head = 0;
+        vq_n = 0; vq_head = 0; eof = false; aq_n = 0; aq_head = 0;
         v_skip_until = tf;
         a_skip_until = audio_ok ? (uint32_t)(ms * rate / 1000) : 0;
         a_t0 = 0; a_written = 0; a_base_ms = ms;
@@ -982,16 +1040,24 @@ static int play_nfv4(const char *vpath, const char *title, const char *reskey, i
         bool worked = false;
         if (!paused) {
             pump_audio();
-            // Read ahead: fill the audio queue, and take the next frame.
+            // Read ahead: fill the audio queue and the frame queue, a few chunks per pass with the sound topped
+            // up after each, so a long refill never starves the I2S.
             int64_t r0 = esp_timer_get_time();
-            while (!eof && !have_v && aq_n < V4_AQ) read_chunk();
+            for (int c = 0; c < 6 && !eof && vq_n < vq_cap && aq_n < aq_cap; c++) {
+                const int had = vq_n;
+                read_chunk();
+                pump_audio();
+                if (vq_n > had && vq_n > 1) break;           // one more frame banked per pass is enough
+            }
             pf_rd += (uint32_t)(esp_timer_get_time() - r0);
             pump_audio();
-            if (have_v) {
+            if (vq_n > 0) {
+                const uint32_t v_stamp = vq_stamp[vq_head], v_len = vq_len[vq_head];
+                v_mask = vq_mask[vq_head]; jin = vq[vq_head];
                 const int64_t due = (int64_t)v_stamp * 1000 / fps, p = pos_ms();
                 if (p > due + 1000 / fps) {                                                 // late: drop it
                     if ((int32_t)(p - due) > pf_lateby) pf_lateby = (int32_t)(p - due);
-                    have_v = false; pend_mask |= v_mask; pf_late++; worked = true;
+                    vq_pop(); pend_mask |= v_mask; pf_late++; worked = true;
                 }
                 else if (p + 3 >= due) {                                                   // its turn: paint it
                     const int64_t d0 = esp_timer_get_time();
@@ -1006,7 +1072,7 @@ static int play_nfv4(const char *vpath, const char *title, const char *reskey, i
                     d.clearClipRect();
                     d.endWrite();
                     pf_dec += (uint32_t)(esp_timer_get_time() - d0);
-                    cur_frame = v_stamp; have_v = false; pf_shown++; worked = true;
+                    cur_frame = v_stamp; vq_pop(); pf_shown++; worked = true;
                     full = false; pend_mask = 0;
                 }
             } else if (eof && aq_n == 0) {
@@ -1066,9 +1132,9 @@ static int play_nfv4(const char *vpath, const char *title, const char *reskey, i
     esp_task_wdt_reset();
     if (audio_ok) nucleo_audio_pcm_close();
     const uint32_t watched = (uint32_t)((paused ? paused_ms : pos_ms()) / 1000);
-    resume_save(reskey, result == PR_ENDED ? tot_s : watched, tot_s);
     (void)cur_frame; (void)nfr;
-    cleanup();
+    cleanup();                                           // the frame queue's RAM back first: the save needs a little
+    resume_save(reskey, result == PR_ENDED ? tot_s : watched, tot_s);
     vgeom_end(G);
     nucleo_power_perf_end();
     return result;
@@ -1555,6 +1621,276 @@ static void draw_help(int ch)
     d.print(maxs > 0 ? "UP/DN scroll   ESC back" : "ESC back");
 }
 
+// ===== two screens ==============================================================================================
+// With the external panel the browser lives THERE, designed for 320x240 + touch: the clip list on the left (the
+// full height), the picked clip's card on the right (length, picture, where you stopped). Touch is the content
+// itself: tap a row to pick it, tap the picked row or the card to play/open, drag the list to scroll, the header's
+// back chevron leaves a folder and its menu button opens the settings.
+// The Cardputer becomes the companion: the picked title in large type, its details and the keys. Settings and
+// the manual stay on the Cardputer (keyboard work) while the panel keeps the list.
+static const int LG_HEAD = 30, LG_ROW = 25, LG_LISTW = 198;
+static const unsigned short CARD = 0x10A2;
+
+// Copy `s` into `out`, cut with ".." to fit `maxw` pixels in the current font.
+static void lg_fit(char *out, size_t n, const char *s, int maxw)
+{
+    snprintf(out, n, "%s", s);
+    if (d.textWidth(out) <= maxw) return;
+    char t[96];
+    for (size_t l = strlen(out); l > 1; l--) {
+        snprintf(t, sizeof t, "%.*s..", (int)(l - 1), out);
+        if (d.textWidth(t) <= maxw) { snprintf(out, n, "%s", t); return; }
+    }
+}
+
+// Word-wrap `s` into up to `maxl` lines of `maxw` px at (x, y), `lh` apart; the last line is cut with "..".
+static int lg_wrap(const char *s, int x, int y, int maxw, int lh, int maxl)
+{
+    char line[96];
+    int n = 0;
+    while (*s && n < maxl) {
+        while (*s == ' ') s++;
+        int take = 0, fit = 0;
+        for (int i = 1; s[i - 1]; i++) {                    // the longest prefix that fits, ending at a word break
+            if (s[i] != ' ' && s[i] != 0) continue;
+            snprintf(line, sizeof line, "%.*s", i, s);
+            if (d.textWidth(line) > maxw) break;
+            fit = i;
+            if (!s[i]) break;
+        }
+        take = fit ? fit : (int)strlen(s);                   // one word longer than the line: cut it below
+        if (n == maxl - 1 && s[take]) take = (int)strlen(s); // last line: the rest, cut to fit
+        char raw[96]; snprintf(raw, sizeof raw, "%.*s", take, s);
+        lg_fit(line, sizeof line, raw, maxw);
+        d.drawString(line, x, y + n * lh);
+        s += take; n++;
+    }
+    return n;
+}
+
+static void lg_title(int idx, char *buf, size_t n)            // display name: no .nfv, trailing '/' off folders
+{
+    snprintf(buf, n, "%s", st->e[idx].name);
+    if (!st->e[idx].dir) { char *dt = strrchr(buf, '.'); if (dt) *dt = 0; }
+}
+
+// A series in one folder ("Wallace e Gromit - Una Fantastica Gita", "Wallace e Gromit - I Pantaloni...") reads as a
+// column of identical starts once cut to the row. A clip whose "<series> - " start is shared with another clip of
+// the folder shows only what follows it (the card and the Cardputer keep the full title). 0 = show it whole.
+static int lg_series_len(int i)
+{
+    if (st->e[i].dir) return 0;
+    const char *n = st->e[i].name, *sep = strstr(n, " - ");
+    if (!sep || sep == n) return 0;
+    const int k = (int)(sep - n) + 3;
+    for (int j = 0; j < s_n; j++)
+        if (j != i && !st->e[j].dir && !strncmp(st->e[j].name, n, k)) return k;
+    return 0;
+}
+
+static void lg_row(int i, int y, bool focus)
+{
+    const int strip = lg_series_len(i);
+    const VEntry *r = &st->e[i];
+    const bool is_resume = !r->dir && r->resume > 0;
+    const unsigned short acc = r->dir ? AMB : ACC, bg = focus ? acc : BG;
+    d.fillRect(0, y, LG_LISTW, LG_ROW, BG);
+    if (focus) d.fillRoundRect(4, y + 1, LG_LISTW - 8, LG_ROW - 2, 7, acc);
+    const int iy = y + (LG_ROW - 10) / 2;
+    if (r->dir) icon_folder(11, iy, focus ? INK : AMB); else icon_film(11, iy, focus ? INK : ACC);
+    char mb[12] = "";
+    if (r->dir)         snprintf(mb, sizeof mb, "%u", (unsigned)r->count);
+    else if (is_resume) fmt_mmss(mb, sizeof mb, r->resume);
+    else if (r->old)    snprintf(mb, sizeof mb, "%s", TR("vecchio", "old"));
+    else if (r->dur)    fmt_mmss(mb, sizeof mb, r->dur);
+    d.setFont(&fonts::Font2); d.setTextDatum(middle_right);
+    d.setTextColor(focus ? INK : (is_resume ? GRN : MUTED), bg);
+    int mw = mb[0] ? d.textWidth(mb) : 0;
+    if (mb[0]) d.drawString(mb, LG_LISTW - 12, y + LG_ROW / 2);
+    if (is_resume) { mark_play(LG_LISTW - 20 - mw, y + LG_ROW / 2 - 3, focus ? INK : GRN); mw += 9; }
+    char t[72], f[80]; lg_title(i, t, sizeof t);
+    const char *shown = (!r->dir && strip && (int)strlen(t) > strip) ? t + strip : t;
+    lg_fit(f, sizeof f, shown, LG_LISTW - 12 - mw - 8 - 30);
+    d.setTextDatum(middle_left); d.setTextColor(focus ? INK : (r->dir ? AMB : FG), bg);
+    d.drawString(f, 30, y + LG_ROW / 2);
+}
+
+static void lg_card(int x, int y, int w, int h)
+{
+    d.fillRoundRect(x, y, w, h, 8, CARD);
+    if (s_sel >= s_n) return;
+    const VEntry *r = &st->e[s_sel];
+    // the action, at the card's foot: what a tap on the card does
+    if (!r->old) {
+        const int bh = 30, by = y + h - bh - 8, bx = x + 8, bw = w - 16;
+        const unsigned short fill = r->dir ? AMB : (r->resume > 0 ? GRN : ACC);
+        d.fillRoundRect(bx, by, bw, bh, 8, fill);
+        char lab[24];
+        if (r->dir) snprintf(lab, sizeof lab, "%s", TR("Apri", "Open"));
+        else if (r->resume > 0) snprintf(lab, sizeof lab, "%s", TR("Riprendi", "Resume"));   // the time is on the line above
+        else snprintf(lab, sizeof lab, "%s", TR("Riproduci", "Play"));
+        d.setFont(&fonts::Font2); d.setTextDatum(middle_left);
+        const int tw = d.textWidth(lab), gx = bx + (bw - tw - 14) / 2, cy = by + bh / 2;
+        if (r->dir) icon_folder(gx - 2, cy - 5, INK); else d.fillTriangle(gx, cy - 6, gx, cy + 6, gx + 9, cy, INK);
+        d.setTextColor(INK, fill); d.drawString(lab, gx + 14, cy);
+        d.setTextDatum(top_left);
+        h -= bh + 8;                                          // the details live above it
+    }
+    char t[72]; lg_title(s_sel, t, sizeof t);
+    int cy = y + 8;
+    // the big line: the clip length (or the folder's clip count)
+    char big[16];
+    if (r->dir) snprintf(big, sizeof big, "%u", (unsigned)r->count); else if (r->dur) fmt_mmss(big, sizeof big, r->dur); else snprintf(big, sizeof big, "--");
+    d.setFont(&fonts::FreeSansBold12pt7b); d.setTextDatum(top_left); d.setTextColor(r->dir ? AMB : ACC, CARD);
+    d.drawString(big, x + 10, cy);
+    d.setFont(&fonts::Font0); d.setTextColor(MUTED, CARD);
+    d.drawString(r->dir ? "video" : TR("durata", "length"), x + 10, cy + 26);
+    cy += 42;
+    d.drawFastHLine(x + 10, cy, w - 20, LINE);
+    cy += 7;
+    d.setFont(&fonts::Font2); d.setTextColor(FG, CARD);
+    cy += 17 * lg_wrap(t, x + 10, cy, w - 20, 17, 4) + 4;
+    d.setFont(&fonts::Font0);
+    if (r->old) {
+        d.setTextColor(AMB, CARD);
+        d.drawString(TR("Formato vecchio:", "Old format:"), x + 10, cy);
+        d.drawString(TR("riconvertilo.", "convert it again."), x + 10, cy + 11);
+    } else if (!r->dir) {
+        char m[32];
+        if (r->vw) { snprintf(m, sizeof m, "%ux%u", (unsigned)r->vw, (unsigned)r->vh); d.setTextColor(MUTED, CARD); d.drawString(m, x + 10, cy); cy += 12; }
+        if (r->resume > 0 && r->dur) {                        // where you stopped, as a bar
+            char rs[8]; fmt_mmss(rs, sizeof rs, r->resume);
+            snprintf(m, sizeof m, "%s %s", TR("riprendi da", "resume at"), rs);
+            d.setTextColor(GRN, CARD); d.drawString(m, x + 10, cy);
+            const int bw = w - 20, fill = (int)((int64_t)bw * r->resume / r->dur);
+            d.fillRoundRect(x + 10, cy + 12, bw, 4, 2, LINE);
+            d.fillRoundRect(x + 10, cy + 12, fill < 4 ? 4 : fill, 4, 2, GRN);
+        }
+    }
+}
+
+// Header touch controls: a back chevron (in a folder) at the left, a menu button (settings) at the right.
+static void lg_chevron(int x, int y, unsigned short c)
+{
+    d.drawLine(x + 6, y, x, y + 6, c); d.drawLine(x + 7, y, x + 1, y + 6, c);
+    d.drawLine(x, y + 6, x + 6, y + 12, c); d.drawLine(x + 1, y + 6, x + 7, y + 12, c);
+}
+static void lg_menu_icon(int x, int y, unsigned short c)
+{
+    for (int k = 0; k < 3; k++) d.fillRoundRect(x, y + k * 5, 16, 2, 1, c);
+}
+
+static void draw_large(void)
+{
+    if (!st) return;
+    const int W = d.width(), H = d.height();
+    nucleo_touch_clear();
+    // header: where we are + how many
+    d.fillRect(0, 0, W, LG_HEAD, BG);
+    const bool sub = strcmp(s_path, "/") != 0;
+    const int tx = sub ? 28 : 10;                             // the title moves right of the back chevron
+    if (sub) { lg_chevron(10, LG_HEAD / 2 - 6, ACC); nucleo_touch_add(0, 0, 120, LG_HEAD, NK_DEL, 0); }
+    lg_menu_icon(W - 26, LG_HEAD / 2 - 6, MUTED);
+    nucleo_touch_add(W - 44, 0, 44, LG_HEAD, NK_TAB, 0);
+    char ctx[48];
+    if (strcmp(s_path, "/")) { snprintf(ctx, sizeof ctx, "%s", s_path + 1); size_t l = strlen(ctx); if (l && ctx[l - 1] == '/') ctx[l - 1] = 0; }
+    else snprintf(ctx, sizeof ctx, "Video");
+    d.setFont(&fonts::FreeSansBold9pt7b); d.setTextDatum(middle_left); d.setTextColor(ACC, BG);
+    char hf[52]; lg_fit(hf, sizeof hf, ctx, W - 140 - tx); d.drawString(hf, tx, LG_HEAD / 2);
+    char cnt[24]; snprintf(cnt, sizeof cnt, "%d %s", s_n, s_n == 1 ? TR("elemento", "item") : TR("elementi", "items"));
+    d.setFont(&fonts::Font2); d.setTextDatum(middle_right); d.setTextColor(MUTED, BG); d.drawString(cnt, W - 36, LG_HEAD / 2);
+    d.drawFastHLine(10, LG_HEAD - 2, W - 20, LINE);
+    d.fillRect(tx, LG_HEAD - 2, 60, 2, ACC);
+
+    const int body = LG_HEAD + 2, bh = H - body;
+    if (s_set_open || s_help_open) {                         // keyboard work happens on the Cardputer
+        d.fillRect(0, body, W, bh, BG);
+        d.setFont(&fonts::FreeSans9pt7b); d.setTextDatum(middle_center); d.setTextColor(MUTED, BG);
+        d.drawString(s_help_open ? TR("Guida aperta sul Cardputer", "Manual open on the Cardputer")
+                                 : TR("Impostazioni sul Cardputer", "Settings on the Cardputer"), W / 2, body + bh / 2);
+        nucleo_touch_commit();
+        return;
+    }
+    if (s_n == 0) {
+        d.fillRect(0, body, W, bh, BG);
+        d.setFont(&fonts::FreeSans9pt7b); d.setTextDatum(middle_center); d.setTextColor(FG, BG);
+        d.drawString(strcmp(s_path, "/") ? TR("Cartella vuota", "Empty folder") : TR("Nessun video in /data/Videos", "No videos in /data/Videos"), W / 2, body + bh / 2 - 12);
+        d.setFont(&fonts::Font2); d.setTextColor(MUTED, BG);
+        d.drawString(TR("Convertili con l'app web Video Studio", "Convert them with the Video Studio web app"), W / 2, body + bh / 2 + 12);
+        nucleo_touch_commit();
+        return;
+    }
+    // the list (left): fixed rows, the picked one kept in view
+    const int rows = (bh - 4) / LG_ROW;
+    if (s_sel < s_scroll) s_scroll = s_sel;
+    if (s_sel >= s_scroll + rows) s_scroll = s_sel - rows + 1;
+    if (s_scroll > s_n - rows) s_scroll = s_n - rows > 0 ? s_n - rows : 0;
+    s_vtap_n = 0;
+    int y = body + 2;
+    for (int i = s_scroll; i < s_n && i < s_scroll + rows; i++, y += LG_ROW) {
+        lg_row(i, y, i == s_sel);
+        if (s_vtap_n < 12) { nucleo_touch_add(0, y, LG_LISTW, LG_ROW, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + s_vtap_n)); s_vtap[s_vtap_n++] = i; }
+    }
+    if (y < body + bh) d.fillRect(0, y, LG_LISTW, body + bh - y, BG);
+    if (s_n > rows) {                                         // scroll knob
+        const int track = bh - 8, kh = track * rows / s_n < 14 ? 14 : track * rows / s_n;
+        const int ky = body + 4 + (track - kh) * s_scroll / (s_n - rows);
+        d.fillRect(LG_LISTW - 3, body + 4, 2, track, LINE);
+        d.fillRect(LG_LISTW - 3, ky, 2, kh, ACC);
+    }
+    nucleo_touch_add_scroll(0, body, LG_LISTW, bh, LG_ROW, NK_UP, 0, NK_DOWN, 0);   // a drag walks the list
+    // the card (right)
+    d.fillRect(LG_LISTW, body, W - LG_LISTW, bh, BG);
+    lg_card(LG_LISTW + 4, body + 4, W - LG_LISTW - 10, bh - 8);
+    nucleo_touch_add(LG_LISTW, body, W - LG_LISTW, bh, NK_ENTER, 0);                // tap the card: play / open
+    d.setTextDatum(top_left); d.setFont(&fonts::Font0);
+    nucleo_touch_commit();
+}
+
+// The Cardputer while the panel shows the list: the picked title, large, and the keys.
+static void draw_companion(int top, int ch)
+{
+    d.fillRect(0, top, 240, ch, BG);
+    d.setTextDatum(top_left);
+    d.setFont(&fonts::Font0); d.setTextColor(ACC, BG);
+    d.drawString(TR("VIDEO  -  sul secondo schermo", "VIDEO  -  on the second screen"), 8, top + 4);
+    if (s_sel < s_n) {
+        const VEntry *r = &st->e[s_sel];
+        char t[72]; lg_title(s_sel, t, sizeof t);
+        d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(r->dir ? AMB : FG, BG);
+        const int nl = lg_wrap(t, 8, top + 18, 224, 20, 3);
+        d.setFont(&fonts::Font2);
+        char m[40] = "";
+        if (r->dir) snprintf(m, sizeof m, "%u video", (unsigned)r->count);
+        else if (r->old) snprintf(m, sizeof m, "%s", TR("formato vecchio", "old format"));
+        else if (r->resume > 0) { char a[8], b[8]; fmt_mmss(a, sizeof a, r->resume); fmt_mmss(b, sizeof b, r->dur); snprintf(m, sizeof m, "%s %s / %s", TR("riprendi", "resume"), a, b); }
+        else if (r->dur) fmt_mmss(m, sizeof m, r->dur);
+        int my = top + 22 + nl * 20;
+        d.setTextColor(r->resume > 0 && !r->dir ? GRN : MUTED, BG);
+        d.drawString(m, 8, my);
+        if (!r->dir && !r->old && r->vw) {                    // the picture, right-aligned on the same line
+            char res[16]; snprintf(res, sizeof res, "%ux%u", (unsigned)r->vw, (unsigned)r->vh);
+            d.setTextDatum(top_right); d.setTextColor(DIM, BG); d.drawString(res, 232, my); d.setTextDatum(top_left);
+        }
+        my += 20;
+        if (!r->dir && r->resume > 0 && r->dur) {             // where you stopped
+            const int fill = (int)((int64_t)224 * r->resume / r->dur);
+            d.fillRoundRect(8, my, 224, 4, 2, LINE); d.fillRoundRect(8, my, fill < 4 ? 4 : fill, 4, 2, GRN);
+            my += 10;
+        }
+        // where the pick sits in the folder: a dot per entry (a bar past 24)
+        const int bx = 8, bw = 224, by = top + ch - 8;
+        if (s_n <= 24) for (int i = 0; i < s_n; i++) {
+            const int cx = bx + (s_n == 1 ? bw / 2 : i * bw / (s_n - 1));
+            d.fillCircle(cx, by, i == s_sel ? 3 : 2, i == s_sel ? ACC : LINE);
+        } else {
+            d.fillRect(bx, by - 1, bw, 2, LINE);
+            d.fillRect(bx + (bw - 12) * s_sel / (s_n - 1), by - 2, 12, 4, ACC);
+        }
+    }
+    d.setFont(&fonts::Font0);
+}
+
 static void draw(void)
 {
     if (!st) return;
@@ -1562,6 +1898,7 @@ static void draw(void)
     int top = nucleo_app_content_top();
     if (s_help_open) { draw_help(ch); return; }
     if (s_set_open) { draw_settings(ch); return; }
+    if (nucleo_app_two_screens()) { draw_companion(top, ch); return; }
 
     draw_header(top, s_n);
     int lt = top + HEAD_H, lh = ch - HEAD_H;
@@ -1736,8 +2073,6 @@ static void enter(void)
     // Helix MP3 decoder (~20 KB) + the JPEG frame buffer (~9 KB) + the file list coexist without OOM —
     // the inline ~70 KB reclaim alone left the decoder short and playback was SILENT.
     if (!st) st = (VState *)calloc(1, sizeof(VState));       // ~5 KB, only while the app is open
-    if (!s_resume_scratch)                                   // ~4 KB resume scratch, only while open; before scan()
-        s_resume_scratch = (resume_ent *)calloc(RESUME_MAX, sizeof *s_resume_scratch);
     load_settings();
     nucleo_audio_set_mute(false);                            // never inherit a mute from a previous session
     nucleo_app_set_tab_handler(on_tab);
@@ -1765,12 +2100,14 @@ extern "C" void nucleo_register_video(void)
         "video", "Video", "Media",
         ".nfv player — prev/next, mute, autoplay, resume. TAB=settings.",
         'V', 0x4D9C, enter, on_key, tick, draw, leave,
-        NX_NET_APP | NX_SOLO | NX_WIFI   // SOLO + WIFI: a media center — the Solo boot starts no radio at all
+        NX_NET_APP | NX_SOLO | NX_WIFI,  // SOLO + WIFI: a media center — the Solo boot starts no radio at all
                                // (no Wi-Fi, no BLE, no httpd/voice/L1): ~48 KB more heap, no radio interrupts.
                                // SOLO: reboot into a fresh, unfragmented heap so MP3 decoder + JPEG buffer
                                // + file list coexist (inline reclaim left the decoder short -> silent video).
                                // NX_NET_APP bits are no-ops in Solo (services down at boot) but kept defensively
                                // for the non-Solo fallback path. Esc reboots back to the full OS.
+        nullptr,                       // no per-app RAM block
+        draw_large,                    // two screens: the browser on the 320x240 panel, the Cardputer as companion
     };
     nucleo_app_register(&app);
 }

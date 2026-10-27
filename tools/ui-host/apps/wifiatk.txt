@@ -1,0 +1,7 @@
+# Deauth Flood — consent / target list / running flood / guide. Fictional APs from the stub.
+@host stubs/wifiatk_stubs.cpp
+consent  tick:2
+list     ENTER tick:2
+pick     ENTER tick:2 D D
+running  ENTER tick:2 D D ENTER tick:2
+guide    ENTER tick:2 TAB

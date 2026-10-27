@@ -18,6 +18,10 @@
 #include <string.h>
 #include <sys/stat.h>
 #include "app_gfx.h"
+#include "app_large.h"         // two screens: the watch face on the 320x240 panel, the Cardputer as companion
+#include "nucleo_touch.h"
+
+#define ACC C_BLUE             // the clock's accent, as in its def
 
 #ifndef M_PI
 #define M_PI 3.14159265358979f
@@ -178,8 +182,180 @@ static void draw_settings(int top, int h)
     d.setCursor(bx + 12, by + bh - 10); d.print(TR5("su/giu  </>  INVIO chiudi", "up/dn  </>  ENTER close", "arr/abj  </>  ENTER cerr.", "haut/bas  <>  ENTREE f.", "auf/ab  <>  ENTER sch."));
 }
 
+// ===== two screens ==============================================================================================
+// The external 320x240 panel is a real, big watch: a full-bleed digital or analog face drawn straight to `d`
+// (which IS the panel here). Touch lives in the face: tap the sides to change the dial, the centre for options,
+// the top strip to leave. The Cardputer meanwhile is a glanceable companion (time, date, face/format, keys).
+
+// Centred text within an arbitrary width (the compact helper assumes W).
+static void centered_w(const char *str, int size, int y, unsigned short col, unsigned short bg, int cw)
+{
+    d.setTextSize(size); d.setTextColor(col, bg);
+    d.setCursor((cw - (int)strlen(str) * 6 * size) / 2, y); d.print(str);
+}
+
+// The digital face at the panel's size — same ingredients as the compact one, sized up.
+static void draw_digital_large(int pw, int ph, const struct tm *tm, bool synced)
+{
+    if (!synced) {
+        centered_w("--:--", 8, ph / 2 - 36, C_GREY, BG, pw);
+        centered_w(TR5("attendo sincronizzazione NTP...", "waiting for NTP sync...", "espera sincroniz. NTP...",
+                       "attente synchro NTP...", "warte auf NTP-Sync..."), 2, ph / 2 + 44, C_YELLOW, BG, pw);
+        return;
+    }
+    int hh = s_h24 ? tm->tm_hour : (tm->tm_hour % 12 ? tm->tm_hour % 12 : 12);
+    char hm[6]; snprintf(hm, sizeof(hm), "%02d:%02d", hh, tm->tm_min);
+
+    const int big = 8, bigw = (int)strlen(hm) * 6 * big;      // "HH:MM" at size 8 (240 px) leaves room on 320
+    int side = (s_secs ? 6 + 2 * 6 * 3 : 0);                  // room for "SS" at size 3 (36 px)
+    if (!s_h24 && side < 6 + 2 * 6 * 2) side = 6 + 2 * 6 * 2; // or "AM"/"PM" at size 2
+    int gx = (pw - (bigw + side)) / 2; if (gx < 2) gx = 2;
+    int ty = ph / 2 - 54;                                     // time block (64 px) sits high; date below
+
+    d.setTextSize(big); d.setTextColor(FG, BG); d.setCursor(gx, ty); d.print(hm);
+    int sidex = gx + bigw + 6;
+    if (s_secs) {
+        char ss[4]; snprintf(ss, sizeof(ss), "%02d", tm->tm_sec);
+        d.setTextSize(3); d.setTextColor(ACC, BG); d.setCursor(sidex, ty + 40); d.print(ss);
+    }
+    if (!s_h24) {
+        d.setTextSize(2); d.setTextColor(MUTED, BG);
+        d.setCursor(sidex, ty + (s_secs ? 40 + 26 : 40)); d.print(tm->tm_hour < 12 ? "AM" : "PM");
+    }
+    char date[32]; fmt_date(tm, date, sizeof(date));
+    centered_w(date, 3, ty + 64 + 18, MUTED, BG, pw);
+}
+
+// The analog face at the panel's size (reuses hand()).
+static void draw_analog_large(int pw, int ph, const struct tm *tm, bool synced)
+{
+    int R = (ph - 46) / 2; if (R > 80) R = 80;
+    int cx = pw / 2, cy = ph / 2 - 10;
+
+    d.fillCircle(cx, cy, R, C_GREY);
+    d.fillCircle(cx, cy, R - 5, BG);
+
+    for (int i = 0; i < 12; i++) {
+        float a = i * (TWO_PI / 12.0f); bool q = (i % 3 == 0);
+        int tx = (int)lroundf(cx + (R - 12) * sinf(a)), tyk = (int)lroundf(cy - (R - 12) * cosf(a));
+        d.fillCircle(tx, tyk, q ? 3 : 2, q ? FG : C_GREY);
+    }
+
+    if (!synced) {
+        centered_w(TR5("attendo NTP...", "waiting NTP...", "esperando NTP...", "attente NTP...", "warte auf NTP..."),
+                   2, cy - 8, C_YELLOW, BG, pw);
+        return;
+    }
+
+    float ah = ((tm->tm_hour % 12) + tm->tm_min / 60.0f) / 12.0f * TWO_PI;
+    float am = (tm->tm_min + tm->tm_sec / 60.0f) / 60.0f * TWO_PI;
+    float as = tm->tm_sec / 60.0f * TWO_PI;
+    hand(cx, cy, ah, R * 0.52f, 9.0f, FG);
+    hand(cx, cy, am, R * 0.80f, 6.0f, FG);
+    hand(cx, cy, as, R * 0.88f, 2.5f, C_RED);
+    d.fillCircle(cx, cy, 5, C_RED);
+    d.fillCircle(cx, cy, 2, BG);
+
+    char date[32]; fmt_date(tm, date, sizeof(date));
+    centered_w(date, 2, cy + R + 10, MUTED, BG, pw);
+}
+
+// The options card on the panel: three rows, each a tap target that toggles it.
+static void draw_settings_large(int pw, int ph)
+{
+    int bw = 280, bx = (pw - bw) / 2, bh = 168, by = (ph - bh) / 2;
+    d.fillRoundRect(bx, by, bw, bh, 10, INK);
+    d.drawRoundRect(bx, by, bw, bh, 10, ACC);
+    d.setTextSize(3); d.setTextColor(ACC, INK);
+    d.setCursor(bx + 16, by + 12); d.print(TR5("Opzioni", "Options", "Opciones", "Options", "Optionen"));
+
+    char rows[3][32];
+    snprintf(rows[0], 32, "%s %s", TR5("Quadrante:", "Face:", "Cuadr.:", "Cadran:", "Ziff.:"), s_face == FACE_ANALOG ? TR5("Analog.", "Analog", "Analog.", "Analog.", "Analog.") : TR5("Digit.", "Digital", "Digit.", "Digit.", "Digit."));
+    snprintf(rows[1], 32, "%s %s", TR5("Formato:", "Format:", "Formato:", "Format:", "Format:"), s_h24 ? "24h" : "12h");
+    snprintf(rows[2], 32, "%s %s", TR5("Secondi:", "Seconds:", "Segundos:", "Secondes:", "Sekunden:"), s_secs ? "On" : "Off");
+    for (int i = 0; i < 3; i++) {
+        bool sel = (i == s_set_sel); int ry = by + 54 + i * 34;
+        if (sel) d.fillRoundRect(bx + 10, ry - 4, bw - 20, 30, 6, ACC);
+        d.setTextSize(2); d.setTextColor(sel ? INK : FG, sel ? ACC : INK);
+        d.setCursor(bx + 18, ry); d.print(rows[i]);
+        nucleo_touch_add(bx + 10, ry - 4, bw - 20, 30, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + i));
+    }
+    d.setTextSize(1); d.setTextColor(MUTED, INK);
+    d.setCursor(bx + 16, by + bh - 14); d.print(TR5("tocca una riga per cambiarla", "tap a row to change it",
+                                                    "toca una fila para cambiar", "touchez une ligne", "Zeile antippen zum Aendern"));
+}
+
+static void draw_large(void)
+{
+    nucleo_touch_clear();
+    const int pw = d.width(), ph = d.height();
+    d.fillRect(0, 0, pw, ph, BG);
+    d.setTextWrap(false);               // big type must clip at the edge, never wrap to the next line
+
+    time_t now = time(NULL); struct tm *tm = localtime(&now);
+    bool synced = (now >= EPOCH_2023) && tm;
+    if (s_face == FACE_ANALOG) draw_analog_large(pw, ph, tm, synced);
+    else                       draw_digital_large(pw, ph, tm, synced);
+
+    // A faint back chevron + a hint, so the touch zones are discoverable without a button bar.
+    d.setTextSize(3); d.setTextColor(MUTED, BG); d.setCursor(8, 4); d.print("<");
+    if (!s_settings) {
+        d.setTextSize(1); d.setTextColor(MUTED, BG);
+        centered_w(TR5("lati: quadrante  -  centro: opzioni", "sides: face  -  centre: options",
+                       "lados: cuadrante  -  centro: opc.", "cotes: cadran  -  centre: options",
+                       "Seiten: Ziffer  -  Mitte: Optionen"), 1, ph - 12, MUTED, BG, pw);
+    }
+
+    if (s_settings) {
+        draw_settings_large(pw, ph);        // its rows are registered as touch targets
+    } else {
+        // Specific zones first (they win the hit test), then nothing else — gaps fall back to the panel zones.
+        nucleo_touch_add(0, 0, pw, 36, NK_BACK, 0);                     // top strip: leave
+        nucleo_touch_add(0, 36, pw * 2 / 5, ph - 48, NK_TAB, 0);        // left side: next face
+        nucleo_touch_add(pw - pw * 2 / 5, 36, pw * 2 / 5, ph - 48, NK_TAB, 0); // right side: next face
+        nucleo_touch_add(pw * 2 / 5, 36, pw - 2 * (pw * 2 / 5), ph - 48, NK_ENTER, 0); // centre: options
+    }
+    d.setTextWrap(true);
+    nucleo_touch_commit();
+}
+
+// The Cardputer while the panel is the watch: the time big, the date, what dial/format is set, and the keys.
+static void draw_companion(void)
+{
+    const int top = nucleo_app_content_top(), h = nucleo_app_content_height();
+    d.fillRect(0, top, W, h, BG);
+    int y = lg::comp_head(TR5("OROLOGIO", "CLOCK", "RELOJ", "HORLOGE", "UHR"), ACC);
+
+    time_t now = time(NULL); struct tm *tm = localtime(&now);
+    bool synced = (now >= EPOCH_2023) && tm;
+    if (!synced) {
+        d.setTextSize(4); d.setTextColor(C_GREY, BG); centered_w("--:--", 4, y + 20, C_GREY, BG, W);
+        d.setTextSize(1); d.setTextColor(C_YELLOW, BG); centered_w(TR("attendo NTP...", "waiting NTP..."), 1, y + 58, C_YELLOW, BG, W);
+        lg::comp_keys(TR("TAB quadrante  INVIO opzioni", "TAB face  ENTER options"));
+        return;
+    }
+    int hh = s_h24 ? tm->tm_hour : (tm->tm_hour % 12 ? tm->tm_hour % 12 : 12);
+    char hm[12];
+    if (s_secs) snprintf(hm, sizeof(hm), "%02d:%02d:%02d", hh, tm->tm_min, tm->tm_sec);
+    else        snprintf(hm, sizeof(hm), "%02d:%02d", hh, tm->tm_min);
+    int size = s_secs ? 3 : 4;
+    centered_w(hm, size, y + 16, FG, BG, W);
+    if (!s_h24) { d.setTextSize(1); centered_w(tm->tm_hour < 12 ? "AM" : "PM", 1, y + 16 + size * 8 + 2, MUTED, BG, W); }
+
+    char date[32]; fmt_date(tm, date, sizeof(date));
+    centered_w(date, 1, y + 50, MUTED, BG, W);
+    char info[40];
+    snprintf(info, sizeof(info), "%s  %s  %s", s_face == FACE_ANALOG ? TR("Analogico", "Analog") : TR("Digitale", "Digital"),
+             s_h24 ? "24h" : "12h", s_secs ? TR("sec", "sec") : "");
+    centered_w(info, 1, y + 64, ACC, BG, W);
+    lg::comp_keys(s_settings ? TR("su/giu  </> cambia  INVIO chiudi", "up/dn  </> change  ENTER close")
+                             : TR("TAB quadrante  INVIO opzioni", "TAB face  ENTER options"));
+}
+
 static void draw(void)
 {
+    if (nucleo_app_two_screens()) { draw_companion(); return; }
+
     int top = nucleo_app_content_top(), h = nucleo_app_content_height();
     d.fillRect(0, top, W, h, BG);
 
@@ -217,6 +393,10 @@ static void change_val(int row, int dir)
 static void on_key(int key, char ch)
 {
     if (s_settings) {
+        if (nucleo_touch_is_row(key, ch)) {        // a tapped option row on the panel: select and toggle it
+            int i = ch - NUCLEO_TOUCH_ROW; if (i >= 0 && i < 3) { s_set_sel = i; change_val(i, +1); }
+            return;
+        }
         if (key == NK_UP)         { s_set_sel = (s_set_sel + 2) % 3; nucleo_app_request_draw(); }
         else if (key == NK_DOWN)  { s_set_sel = (s_set_sel + 1) % 3; nucleo_app_request_draw(); }
         else if (key == NK_RIGHT) { change_val(s_set_sel, +1); }
@@ -257,7 +437,7 @@ extern "C" void nucleo_register_clock(void)
 {
     static const nucleo_app_def_t app = {
         "clock", "Orologio", "Office", "Orologio digitale e analogico",
-        'c', C_BLUE, enter, on_key, tick, draw, nullptr
+        'c', C_BLUE, enter, on_key, tick, draw, nullptr, 0, nullptr, draw_large
     };
     nucleo_app_register(&app);
 }

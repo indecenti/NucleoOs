@@ -65,6 +65,8 @@ const INC = [
   '-I', join(FW, 'nucleo_storage', 'include'), '-I', join(FW, 'nucleo_voice', 'include'), '-I', CJSON,
   '-I', join(FW, 'nucleo_guest', 'include'), '-I', join(FW, 'nucleo_sdcontent', 'include'),
   '-I', join(FW, 'nucleo_store', 'include'),
+  '-I', join(FW, 'nucleo_audio', 'include'), '-I', join(FW, 'nucleo_power', 'include'),   // app_video.cpp
+  '-I', join(root, 'firmware', 'managed_components', 'espressif__esp_new_jpeg', 'include'),
 ];
 const COMPAT = ['-include', join(here, 'shim', 'host_compat.h')];
 
@@ -100,12 +102,13 @@ lgfxSrc.push(fontStub);
 
 const fwSrc = [
   join(FW, 'nucleo_app', 'launcher_render.cpp'), join(FW, 'nucleo_app', 'launcher_menu.cpp'),
-  join(FW, 'nucleo_app', 'app_ui.cpp'), join(FW, 'nucleo_app', 'app_wifi.cpp'), join(FW, 'nucleo_ui', 'nucleo_theme.cpp'),
+  join(FW, 'nucleo_app', 'app_ui.cpp'), join(FW, 'nucleo_app', 'app_large.cpp'), join(FW, 'nucleo_app', 'app_wifi.cpp'), join(FW, 'nucleo_ui', 'nucleo_theme.cpp'),
   join(FW, 'nucleo_ui', 'nucleo_ui_modal.cpp'),
   join(FW, 'nucleo_storage', 'nucleo_i18n.c'), join(CJSON, 'cJSON.c'),
   join(FW, 'nucleo_app', 'app_updates.cpp'), join(FW, 'nucleo_app', 'update_policy.c'),   // native Updates app
   join(FW, 'nucleo_app', 'app_store.cpp'), join(FW, 'nucleo_app', 'store_apps.cpp'), join(FW, 'nucleo_store', 'store_engine.c'),   // native Store app + its launcher apps
   join(FW, 'nucleo_sdcontent', 'sdc_sha256.c'), join(FW, 'nucleo_sdcontent', 'sdc_registry.c'), join(here, 'store_stubs.cpp'),
+  join(FW, 'nucleo_app', 'app_video.cpp'), join(here, 'video_stubs.cpp'),   // native Video (two-screen browser)
   join(here, 'host_stubs.cpp'), join(here, 'settings_stubs.cpp'), join(here, 'updates_stubs.cpp'), join(here, 'scenes.cpp'),
 ];
 

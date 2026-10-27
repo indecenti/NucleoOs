@@ -24,6 +24,7 @@ struct HostState {
     int  kbd_n = 0, kbd_i = 0;
     bool adv = false;
     bool large = false;                       // .large scenes: the launcher on an external 320x240 panel (nucleo_surface.h)
+    bool two_screens = false;                 // .companion scenes: the app runs two-screen, this is its Cardputer half
     int64_t now_us = 5000000;                 // esp_timer clock
     time_t wall = 1790678520;                 // 2026-09-29 09:22 UTC (scripted wall clock)
 };

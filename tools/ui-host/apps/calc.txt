@@ -1,0 +1,7 @@
+# Calculator: empty, typing, a result, an error, a long expression
+@src calc_eval.c
+home
+typing  t:12+7*3
+result  t:12+7*3 ENTER
+error   t:5*(2+ ENTER
+long    t:123456789*987654321+3.14159/2

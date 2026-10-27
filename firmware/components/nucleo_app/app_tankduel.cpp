@@ -18,6 +18,8 @@
 #include "launcher_theme.h"
 #include "game_text.h"
 #include "game_ui.h"
+#include "app_large.h"
+#include "nucleo_touch.h"
 #include "app_gfx.h"
 
 #include "game_sfx.h"
@@ -2105,7 +2107,7 @@ static void draw_over(void){
 
 // ========================== draw: main ========================================
 static void draw_field(void){ draw_map(); draw_picks(); draw_tanks(); draw_bullets(); draw_sparks(); draw_flash(); draw_hud(); }
-static void on_draw(void){
+static void draw_game(void){
     switch(s_state){
         case GS_MENU:   draw_menu(); break;
         case GS_SELECT: draw_tank_select(); break;
@@ -2118,6 +2120,113 @@ static void on_draw(void){
         case GS_HOW:    draw_how(); break;
         default: break;
     }
+}
+
+// ===== two screens ===========================================================
+// Panel (on_draw_large): the arena scaled to 320 px + a native HUD band with big HP / credits / kills /
+// timer and touch controls for the real actions (a D-pad + fire + power-up while playing, shop/menu nav
+// elsewhere). Cardputer (on_draw while two screens): the live match state and the key map, never the arena.
+struct HudBtn { const char *label; int key; char ch; bool acc; };
+static void hud_row(int x,int y,int w,int h,const HudBtn *b,int n){
+    if(n<=0) return;
+    const int gap=4, bw=(w-(n-1)*gap)/n;
+    for(int i=0;i<n;i++)
+        lg::button(x+i*(bw+gap),y,bw,h,b[i].label,b[i].acc?ACCENT:lg::card(),b[i].acc?COL_BLACK:COL_WHITE,b[i].key,b[i].ch);
+}
+static void large_hud(int y,int h){
+    const int panw=d.width(), pad=8;
+    d.fillRect(0,y,panw,h,BG);
+    d.drawFastHLine(0,y,panw,LINE);
+    int bh=h-12; if(bh>46) bh=46; const int by=y+(h-bh)/2;
+    if(s_state==GS_PLAY||s_state==GS_SHOP){
+        Tank &lt=s_tanks[s_local];
+        char hp[16]; snprintf(hp,sizeof hp,"HP %d",lt.hp<0?0:lt.hp);
+        lg::font(2); d.setTextDatum(middle_left); d.setTextColor(lt.hp*4<=lt.hp_max?COL_RED:COL_GREEN,BG); d.drawString(hp,pad,y+h/3);
+        char st[28];
+        if(s_nbots>0) snprintf(st,sizeof st,GT("$%d  Bot %d","$%d  Kills %d"),lt.credits,s_bot_kills);
+        else          snprintf(st,sizeof st,"$%d  %s",lt.credits,wp_short(lt.weapon));
+        lg::font(4); d.setTextColor(MUTED,BG); d.setTextDatum(middle_left); d.drawString(st,pad,y+h*3/4);
+        d.setTextDatum(top_left);
+        if(s_state==GS_SHOP){
+            const HudBtn b[5]={{GT("ACQ","BUY"),NK_CHAR,'a',false},{GT("VEN","SELL"),NK_CHAR,'d',false},
+                               {"^",NK_UP,0,false},{"v",NK_DOWN,0,false},{"OK",NK_ENTER,0,true}};
+            hud_row(72,by,panw-72-pad,bh,b,5);
+        } else {
+            // D-pad + fire (K) + power-up (L) + pause; labels match the key map on the companion
+            const int bx0=72, gap=4, cols=7, bw=(panw-bx0-pad-(cols-1)*gap)/cols;
+            lg::button(bx0+0*(bw+gap),by,bw,bh,"<",lg::card(),COL_WHITE,NK_CHAR,'a');
+            lg::button(bx0+1*(bw+gap),by,bw,bh,"^",lg::card(),COL_WHITE,NK_CHAR,'w');
+            lg::button(bx0+2*(bw+gap),by,bw,bh,"v",lg::card(),COL_WHITE,NK_CHAR,'s');
+            lg::button(bx0+3*(bw+gap),by,bw,bh,">",lg::card(),COL_WHITE,NK_CHAR,'d');
+            lg::button(bx0+4*(bw+gap),by,bw,bh,"K",ACCENT,COL_BLACK,NK_CHAR,'k');
+            lg::button(bx0+5*(bw+gap),by,bw,bh,"L",lg::card(),COL_GOLD,NK_CHAR,'l');
+            lg::button(bx0+6*(bw+gap),by,bw,bh,"II",lg::card(),COL_WHITE,NK_BACK,0);
+        }
+    } else if(s_state==GS_PAUSE){
+        const HudBtn b[2]={{GT("RIPRENDI","RESUME"),NK_ENTER,0,true},{GT("ESCI","QUIT"),NK_BACK,0,false}};
+        hud_row(pad,by,panw-2*pad,bh,b,2);
+    } else if(s_state==GS_OVER){
+        const HudBtn b[2]={{s_mode==GM_CPU?GT("RIGIOCA","REPLAY"):GT("MENU","MENU"),NK_ENTER,0,true},{"MENU",NK_BACK,0,false}};
+        hud_row(pad,by,panw-2*pad,bh,b, s_mode==GM_CPU?2:1);
+    } else if(s_state==GS_MENU||s_state==GS_SELECT||s_state==GS_HOST){
+        const HudBtn b[3]={{GT("SU","UP"),NK_UP,0,false},{GT("GIU","DOWN"),NK_DOWN,0,false},{GT("SCEGLI","SELECT"),NK_ENTER,0,true}};
+        hud_row(pad,by,panw-2*pad,bh,b,3);
+    } else if(s_state==GS_BROWSE){
+        const HudBtn b[3]={{GT("SU","UP"),NK_UP,0,false},{GT("GIU","DOWN"),NK_DOWN,0,false},
+                           {GT("ENTRA","JOIN"),NK_ENTER,0,true}};
+        hud_row(pad,by,panw-2*pad,bh,b,3);
+    } else {   // GS_HOW
+        const HudBtn b[1]={{GT("INDIETRO","BACK"),NK_BACK,0,true}};
+        hud_row(pad,by,panw-2*pad,bh,b,1);
+    }
+}
+static void draw_companion(void){
+    int y=lg::comp_head("Tank Duel",ACCENT);
+    if(s_state==GS_PLAY||s_state==GS_SHOP||s_state==GS_PAUSE||s_state==GS_OVER){
+        Tank &lt=s_tanks[s_local];
+        char l[40];
+        // HP + credits
+        snprintf(l,sizeof l,"HP %d/%d",lt.hp<0?0:lt.hp,lt.hp_max);
+        lg::font(2); d.setTextDatum(top_left); d.setTextColor(lt.hp*4<=lt.hp_max?COL_RED:COL_GREEN,BG); d.drawString(l,8,y+4);
+        snprintf(l,sizeof l,"$%d",lt.credits);
+        d.setTextDatum(top_right); d.setTextColor(COL_GOLD,BG); d.drawString(l,232,y+4); d.setTextDatum(top_left);
+        // weapon + timer / kills
+        lg::font(0);
+        snprintf(l,sizeof l,"%s  %s",GT("Arma","Weapon"),wp_short(lt.weapon));
+        d.setTextColor(COL_WHITE,BG); d.drawString(l,8,y+30);
+        int sec=s_match_ms/1000;
+        if(s_nbots>0) snprintf(l,sizeof l,GT("Bot: %d   Ondata %d","Kills: %d   Wave %d"),s_bot_kills,s_bot_level+1);
+        else          snprintf(l,sizeof l,GT("Tempo %d:%02d","Time %d:%02d"),sec/60,sec%60);
+        d.setTextColor(COL_WHITE,BG); d.drawString(l,8,y+46);
+        if(s_nplayers>=2){ snprintf(l,sizeof l,GT("Rivale HP %d","Rival HP %d"),s_tanks[1-s_local].hp<0?0:s_tanks[1-s_local].hp);
+            d.setTextColor(s_local==0?COL_P2:COL_P1,BG); d.drawString(l,8,y+62); }
+        if(s_state==GS_OVER){ bool won=local_won(); lg::font(1); d.setTextColor(won?COL_GREEN:COL_RED,BG);
+            d.drawString(won?GT("Vittoria!","You win!"):GT("Sconfitta","You lose"),8,y+78); }
+        else if(s_state==GS_PAUSE){ lg::font(1); d.setTextColor(COL_GOLD,BG); d.drawString(GT("PAUSA","PAUSED"),8,y+78); }
+        lg::comp_keys(s_state==GS_SHOP?GT("A/D scheda  frecce  INVIO  Esc","A/D tab  arrows  ENTER  Esc")
+                      : s_state==GS_PLAY?GT("WASD muovi  K fuoco  L power  Esc","WASD move  K fire  L power  Esc")
+                      : GT("INVIO / Esc","ENTER / Esc"));
+        return;
+    }
+    lg::font(1); d.setTextDatum(top_left); d.setTextColor(ACCENT,BG);
+    const char *t = s_state==GS_MENU?"Tank Duel" : s_state==GS_SELECT?GT("Scegli tank","Pick tank")
+                   : s_state==GS_HOST?GT("Crea partita","Host") : s_state==GS_BROWSE?GT("Entra","Join") : GT("Guida","Help");
+    d.drawString(t,8,y+6);
+    lg::font(0); d.setTextColor(COL_WHITE,BG);
+    if(s_state==GS_MENU){ d.setTextColor(ACCENT,BG); d.drawString(menu_label(s_menu.sel%NMENU),8,y+30); }
+    else if(s_state==GS_SELECT){ d.drawString(tank_name(s_tsel),8,y+30); }
+    else if(s_state==GS_HOST){ d.drawString(mtype_name(s_match_type),8,y+30); }
+    else if(s_state==GS_BROWSE){ d.drawString(s_nhost>0?s_hosts[s_bsel<s_nhost?s_bsel:0].name:GT("cerco...","searching..."),8,y+30); }
+    lg::comp_keys(GT("INVIO scegli   Esc indietro","ENTER select   Esc back"));
+}
+static void on_draw(void){
+    if(nucleo_app_two_screens()){ draw_companion(); return; }
+    draw_game();
+}
+static void draw_large(void){
+    nucleo_touch_clear();
+    lg::game(draw_game, large_hud, "Tank Duel", ACCENT);
+    nucleo_touch_commit();
 }
 
 // ========================== state transitions ================================
@@ -2172,6 +2281,11 @@ static void set_hint(void){
 
 // ========================== input ============================================
 static int s_pu_req;          // guest: input packets still to carry the "use powerup" bit (lossy link: 4 tries)
+// Panel (on_draw_large) touch controls: the keyboard play input is read from the HELD-key state
+// (nucleo_kbd_char_down), which a touch TAP does not set — so a tapped D-pad / fire button records a short
+// intent here that poll() ORs into the movement/fire read, for both the solo/host sim and the guest send.
+static int8_t s_touch_mvx, s_touch_mvy;   // last tapped 8-way intent
+static int    s_touch_mv_ms, s_touch_fire_ms;   // how long that intent / fire stays live (ms, decays in poll)
 
 static void on_key(int k, char ch){
     (void)k;
@@ -2226,6 +2340,12 @@ static void on_key(int k, char ch){
             // movement + fire polled continuously in poll(); L = use powerup (letters never auto-repeat, so every
             // event is a real press — the old latch ignored a second L unless another key came in between)
             if(ch=='l'){ if(s_mode==GM_GUEST) s_pu_req=4; else pu_use(s_local); }
+            // panel touch buttons (a tap can't hold a key): record a short movement / fire intent for poll()
+            else if(ch=='k'){ s_touch_fire_ms=130; }
+            else if(ch=='w'||ch=='e'||ch=='r'){ s_touch_mvx=0; s_touch_mvy=-1; s_touch_mv_ms=200; }
+            else if(ch=='s'){ s_touch_mvx=0; s_touch_mvy=1; s_touch_mv_ms=200; }
+            else if(ch=='a'){ s_touch_mvx=-1; s_touch_mvy=0; s_touch_mv_ms=200; }
+            else if(ch=='d'){ s_touch_mvx=1; s_touch_mvy=0; s_touch_mv_ms=200; }
             return;
         case GS_SHOP: {
             Tank &me=s_tanks[s_local];
@@ -2331,6 +2451,8 @@ static bool poll(void){
     } else if(s_state==GS_PLAY||s_state==GS_SHOP||s_state==GS_PAUSE){
         sparks_step(dt);
         live=true;
+        if(s_touch_mv_ms>0) s_touch_mv_ms-=dt;       // panel D-pad / fire intent decays (a tap = a short nudge)
+        if(s_touch_fire_ms>0) s_touch_fire_ms-=dt;
 
         // vs CPU a pause freezes the match under a static card. Online it cannot (the host's pause froze the
         // guest's game with no explanation): the match runs on and only this player's controls are idle.
@@ -2388,6 +2510,8 @@ static bool poll(void){
             bool rt=live&&nucleo_kbd_char_down('d');
             bool fire=live&&nucleo_kbd_char_down('k');
             int mvx=(rt?1:0)-(lt_?1:0), mvy=(dn?1:0)-(up?1:0);   // 8-way intent
+            if(live&&!mvx&&!mvy&&s_touch_mv_ms>0){ mvx=s_touch_mvx; mvy=s_touch_mvy; }   // panel D-pad
+            if(live&&s_touch_fire_ms>0) fire=true;                                       // panel fire
             if(mvx||mvy) tank_drive(s_local,mvx,mvy,(float)dt);  // local prediction
             if(fire) tank_fire(s_local);
             for(int p=0;p<2;p++) if(s_tanks[p].flash_ms>0) s_tanks[p].flash_ms-=dt;
@@ -2407,6 +2531,8 @@ static bool poll(void){
             bool rt=nucleo_kbd_char_down('d');
             bool fire=nucleo_kbd_char_down('k');
             int mvx=(rt?1:0)-(lt_?1:0), mvy=(dn?1:0)-(up?1:0);
+            if(!mvx&&!mvy&&s_touch_mv_ms>0){ mvx=s_touch_mvx; mvy=s_touch_mvy; }   // panel D-pad
+            if(s_touch_fire_ms>0) fire=true;                                       // panel fire
             if(mvx||mvy) tank_drive(s_local,mvx,mvy,(float)dt);
             if(fire) tank_fire(s_local);
         }
@@ -2477,7 +2603,7 @@ static void on_enter(void){
     s_nhost=s_bsel=0; s_txseq=s_rxseq=0;
     s_now=s_last=s_frame=now_ms();
     s_last_hello=s_last_tx=s_last_rx=0;
-    s_pu_req=0;
+    s_pu_req=0; s_touch_mvx=s_touch_mvy=0; s_touch_mv_ms=s_touch_fire_ms=0;
     s_ai_fire_last=0;
     s_join_pending=false; s_join_t=s_join_resend=0;
     s_match_type=MT_DUEL; s_nbots=0; s_nplayers=2; memset(s_bots,0,sizeof(Tank)*MAX_BOTS);
@@ -2505,7 +2631,7 @@ extern "C" void nucleo_register_tankduel(void){
         "tankd","Tank Duel","Games","Arena 1v1: mappa 40x40, shop contestato, 4 tank, upgrade",
         'D', rgb(255,150,80),
         on_enter, on_key, nullptr, on_draw, on_exit,
-        NX_NET_APP, APP_RAM
+        NX_NET_APP, APP_RAM, draw_large
     };
     nucleo_app_register(&app);
 }

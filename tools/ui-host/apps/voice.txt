@@ -1,0 +1,12 @@
+# Voice Trainer: template list + detail (MODELLI), the big training card (ADDESTRA), status (INFO).
+# Fictional voice templates on the card so the list and detail card are exercised. TAB cycles the tabs.
+# The capture states (listening / saved / error) need the real engine + GO, so the host shows the idle card.
+@sd system/voice/registratore.tpl offline-template
+@sd system/voice/musica.tpl offline-template
+@sd system/voice/orologio.tpl offline-template
+@sd system/voice/torcia.tpl offline-template
+modelli
+pick      D
+delconf   c:d
+record    TAB
+status    TAB TAB

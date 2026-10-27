@@ -21,6 +21,8 @@
 #include "launcher_theme.h"   // themed BG/FG/MUTED/DIM/LINE/INK + C_* accents
 #include "app_gfx.h"
 #include "app_ui.h"           // app_ui_title accent header
+#include "app_large.h"        // two screens: the status card + arm button on the panel, Cardputer as companion
+#include "nucleo_touch.h"
 #include <M5GFX.h>
 #include <string.h>
 extern "C" {
@@ -102,8 +104,10 @@ static void drive_key(int key, char ch)
     if (key == NK_ENTER || ch == ' ')
         nucleo_usbmsc_request();        // reboot flag -> USB-drive loop (no return)
 }
+static void drive_companion(void);
 static void drive_draw(void)
 {
+    if (nucleo_app_two_screens()) { drive_companion(); return; }
     draw_single("USB Drive",
         L5("microSD come disco del PC", "microSD as a PC drive", "microSD como disco del PC",
            "microSD comme disque PC", "microSD als PC-Laufwerk"),
@@ -127,8 +131,10 @@ static void web_key(int key, char ch)
         nucleo_app_solo_request(SOLO_REMOTE);   // httpd + auth up; USB NIC comes up after httpd (no return)
     }
 }
+static void web_companion(void);
 static void web_draw(void)
 {
+    if (nucleo_app_two_screens()) { web_companion(); return; }
     draw_single("Web via USB",
         L5("Web OS via cavo, senza WiFi", "Web OS over cable, no Wi-Fi", "Web OS por cable, sin WiFi",
            "Web OS par cable, sans WiFi", "Web-OS uber Kabel, ohne WLAN"),
@@ -136,11 +142,91 @@ static void web_draw(void)
         "http://192.168.7.1");
 }
 
+// ===== two screens =============================================================================================
+// With the external panel each mode shows a full status card describing what it does and a big touch button that
+// arms it; the Cardputer becomes a companion that repeats the mode and the key that arms it. The action itself
+// reboots the device, so there is no live state to show — the card is purely the single call-to-action, large.
+static void draw_large_single(const char *title, const char *intro, const char *action, const char *detail,
+                              unsigned short acc)
+{
+    const int W = d.width(), H = d.height();
+    nucleo_touch_clear();
+    const int y = lg::header(title, nullptr, acc);
+    d.fillRect(0, y, W, H - y, BG);
+    const int bh = 54, by = H - bh - 18;
+    const int cx = 16, cw = W - 32, cy = y + 12, chh = by - cy - 14;
+    lg::panel(cx, cy, cw, chh);
+    const unsigned short cb = lg::card();
+    lg::font(2); d.setTextColor(acc, cb); d.drawString(title, cx + 16, cy + 14);
+    lg::font(0); d.setTextColor(MUTED, cb);
+    lg::wrap(intro, cx + 16, cy + 48, cw - 32, 18, 3);
+    if (detail) {
+        lg::font(1); d.setTextDatum(middle_center); d.setTextColor(acc, cb);
+        d.drawString(detail, cx + cw / 2, cy + chh - 22); d.setTextDatum(top_left);
+    }
+    lg::button(cx, by, cw, bh, action, acc, INK, NK_ENTER, 0);
+    nucleo_touch_commit();
+}
+
+static void draw_companion_single(const char *app, const char *intro, const char *detail, const char *keys,
+                                  unsigned short acc)
+{
+    const int top = nucleo_app_content_top(), h = nucleo_app_content_height();
+    d.fillRect(0, top, 240, h, BG);
+    const int y = lg::comp_head(app, acc);
+    d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(FG, BG);
+    const int nl = lg::wrap(intro, 8, y + 6, 224, 20, 3);
+    if (detail) { d.setFont(&fonts::Font0); d.setTextColor(acc, BG); d.drawString(detail, 8, y + 10 + nl * 20); }
+    lg::comp_keys(keys);
+}
+
+static void drive_draw_large(void)
+{
+    draw_large_single("USB Drive",
+        L5("La microSD appare sul PC come un disco USB. Il sistema non tocca la FAT finche' il PC la usa.",
+           "The microSD appears on the PC as a USB disk. The system won't touch the FAT while the PC owns it.",
+           "La microSD aparece en el PC como disco USB. El sistema no toca la FAT mientras el PC la usa.",
+           "La microSD apparait sur le PC comme un disque USB. Le systeme ne touche pas la FAT.",
+           "Die microSD erscheint am PC als USB-Disk. Das System ruehrt die FAT nicht an."),
+        L5("Collega", "Mount", "Montar", "Monter", "Einbinden"), nullptr, ACC);
+}
+
+static void web_draw_large(void)
+{
+    draw_large_single("Web via USB",
+        L5("La web OS servita al browser del PC via cavo, senza WiFi ne driver.",
+           "The web OS served to the PC browser over the cable, no Wi-Fi and no driver.",
+           "La web OS servida al navegador del PC por cable, sin WiFi ni driver.",
+           "La web OS servie au navigateur du PC par cable, sans WiFi ni pilote.",
+           "Die Web-OS per Kabel an den PC-Browser, ohne WLAN und Treiber."),
+        L5("Avvia", "Start", "Iniciar", "Lancer", "Starten"), "http://192.168.7.1", C_PURPLE);
+}
+
+static void drive_companion(void)
+{
+    draw_companion_single("USB DRIVE",
+        L5("La microSD diventa un disco del PC via cavo USB.", "The microSD becomes a PC disk over the USB cable.",
+           "La microSD se vuelve un disco del PC por USB.", "La microSD devient un disque PC par USB.",
+           "Die microSD wird per USB zur PC-Disk."),
+        nullptr,
+        L5("INVIO collega", "ENTER mount", "INTRO montar", "ENTREE monter", "ENTER einbinden"), ACC);
+}
+
+static void web_companion(void)
+{
+    draw_companion_single("WEB VIA USB",
+        L5("La web OS al browser del PC via cavo, senza WiFi.", "The web OS to the PC browser over cable, no Wi-Fi.",
+           "La web OS al navegador del PC por cable, sin WiFi.", "La web OS au navigateur du PC par cable, sans WiFi.",
+           "Die Web-OS per Kabel an den PC-Browser, ohne WLAN."),
+        "http://192.168.7.1",
+        L5("INVIO avvia", "ENTER start", "INTRO iniciar", "ENTREE lancer", "ENTER starten"), C_PURPLE);
+}
+
 extern "C" void nucleo_register_usb(void)
 {
     static const nucleo_app_def_t app = {
         "usb", "USB Drive", "Connect", "Expose the SD to a PC as a USB mass-storage drive",
-        'U', ACC, drive_enter, drive_key, nullptr, drive_draw, nullptr
+        'U', ACC, drive_enter, drive_key, nullptr, drive_draw, nullptr, 0, nullptr, drive_draw_large
     };
     nucleo_app_register(&app);
 }
@@ -149,7 +235,7 @@ extern "C" void nucleo_register_usbweb(void)
 {
     static const nucleo_app_def_t app = {
         "usbweb", "Web via USB", "Web OS", "Serve the web OS to a PC browser over the USB cable (NCM, no Wi-Fi)",
-        'W', C_PURPLE, web_enter, web_key, nullptr, web_draw, nullptr
+        'W', C_PURPLE, web_enter, web_key, nullptr, web_draw, nullptr, 0, nullptr, web_draw_large
     };
     nucleo_app_register(&app);
 }

@@ -1,0 +1,5 @@
+# USB Keyboard: the four tabs. usbhid stubs return 0 -> "ready, waiting for PC" (no host), LEDs off.
+type
+macro   c:2 D D
+info    c:3
+set     c:4

@@ -18,6 +18,8 @@
 #include "launcher_theme.h"
 #include "app_gfx.h"
 #include "game_text.h"
+#include "app_large.h"
+#include "nucleo_touch.h"
 #include <math.h>
 #include <string.h>
 
@@ -28,6 +30,13 @@ extern "C" {
 
 // ============================ the one shared state =============================
 BrCtx g;
+
+// Panel (on_draw_large) touch controls: play input is read from the HELD-key matrix (nucleo_kbd_char_down),
+// which a touch TAP cannot set — so a tapped D-pad / attack button records a short intent here that poll()
+// folds into the movement read and the per-frame attack edges (P1, solo/host).
+static int8_t s_tmvx, s_tmvz;      // last tapped move intent (x along street, z depth)
+static float  s_tmv_t;             // seconds the move intent stays live
+static bool   s_tpunch, s_tkick, s_tjump;   // one-shot attack taps
 
 // ============================ br_* helpers (shared across all modules) ==========
 uint32_t br_now_ms(void) { return (uint32_t)(esp_timer_get_time() / 1000); }
@@ -108,8 +117,24 @@ static void on_key(int k, char ch)
 {
     // In play, ATTACKS are polled from the live keyboard matrix in poll() (edge-detected) so you can
     // move AND strike at once — on_key wouldn't deliver a J/K tap reliably while a WASD key is held.
-    // Here on_key only drives the menus.
-    if (g.screen == SC_PLAY && !g.paused) return;
+    // Here on_key only drives the menus — and the external panel's touch buttons (which arrive as key
+    // events, not held keys): they set a short intent poll() reads for the hero.
+    if (g.screen == SC_PLAY && !g.paused) {
+        if (k == NK_CHAR) {
+            char c = (ch >= 'A' && ch <= 'Z') ? (char)(ch + 32) : ch;
+            switch (c) {
+                case 'j': s_tpunch = true; break;
+                case 'k': s_tkick  = true; break;
+                case 'l': case ' ': s_tjump = true; break;
+                case 'd': s_tmvx = 1;  s_tmvz = 0;  s_tmv_t = 0.18f; break;
+                case 'a': s_tmvx = -1; s_tmvz = 0;  s_tmv_t = 0.18f; break;
+                case 's': s_tmvx = 0;  s_tmvz = 1;  s_tmv_t = 0.18f; break;   // toward the front
+                case 'e': case 'w': s_tmvx = 0; s_tmvz = -1; s_tmv_t = 0.18f; break;  // toward the back
+                default: break;
+            }
+        }
+        return;
+    }
     // Menus accept the SAME keys as gameplay so the controls are consistent (the ;/. arrow legends
     // still work): E/W up, S down, A left, D right, J/K/L/Space confirm. Without this the player
     // presses the movement keys in a menu and nothing scrolls.
@@ -154,6 +179,7 @@ static bool poll(void)
     float dt = s_last_poll ? (g.now - s_last_poll) / 1000.0f : 0.0f;
     s_last_poll = g.now;
     if (dt < 0.0f) dt = 0.0f; else if (dt > 0.06f) dt = 0.06f;
+    if (s_tmv_t > 0.0f) s_tmv_t -= dt;       // panel D-pad intent decays (a tap = a short step)
 
     // Fullscreen only while the action is on screen (pause still shows the field under the overlay);
     // every other screen keeps the OS footer with its hint (refreshed when the text changes).
@@ -191,6 +217,7 @@ static bool poll(void)
             if (h && h->hp > 0 && !fighter_busy(h) && h->yoff <= 0.0f) {
                 float mvx = (nucleo_kbd_char_down('d') ? 1.0f : 0.0f) - (nucleo_kbd_char_down('a') ? 1.0f : 0.0f);
                 float mvz = (nucleo_kbd_char_down('s') ? 1.0f : 0.0f) - (nucleo_kbd_char_down('e') ? 1.0f : 0.0f);  // E = su (verso il fondo), S = giu'
+                if (mvx == 0.0f && mvz == 0.0f && s_tmv_t > 0.0f) { mvx = (float)s_tmvx; mvz = (float)s_tmvz; }   // panel D-pad
                 // Normalize the diagonal so it isn't sqrt(2) faster than a cardinal push.
                 if (mvx != 0.0f && mvz != 0.0f) { mvx *= 0.7071f; mvz *= 0.7071f; }
 
@@ -240,6 +267,10 @@ static bool poll(void)
                 if (dk && !pk) br_hero_act(ha, 1);
                 if (dl && !pl) br_hero_act(ha, 2);
                 pj = dj; pk = dk; pl = dl;
+                // panel attack buttons (one-shot taps): fire once, then clear
+                if (s_tpunch) { br_hero_act(ha, 0); s_tpunch = false; }
+                if (s_tkick)  { br_hero_act(ha, 1); s_tkick  = false; }
+                if (s_tjump)  { br_hero_act(ha, 2); s_tjump  = false; }
             }
 
             // --- world step (host or solo; the guest never reaches here) ---
@@ -342,7 +373,7 @@ static int sort_by_depth(int *order)
     return n;
 }
 
-static void on_draw(void)
+static void draw_game(void)
 {
     if (g.screen == SC_PLAY || g.screen == SC_PAUSE || g.screen == SC_OVER || g.screen == SC_CLEAR) {
         scene_draw();
@@ -392,6 +423,112 @@ static void on_draw(void)
     menu_draw();
 }
 
+// ===== two screens ===========================================================
+// Panel (on_draw_large): the belt-scroll fight scaled to 320 px + a native HUD band with the hero's HP,
+// lives and combo and touch controls for the real actions (a D-pad + punch/kick/jump while playing, menu
+// nav elsewhere). Cardputer (on_draw while two screens): the live HP / lives / level / combo and the key
+// map, never the fight. The touch buttons map to the keys poll() already reads (see the intent layer above).
+#define ACC BR_GOLD
+struct HudBtn { const char *label; int key; char ch; bool acc; };
+static void hud_row(int x, int y, int w, int h, const HudBtn *b, int n)
+{
+    if (n <= 0) return;
+    const int gap = 4, bw = (w - (n - 1) * gap) / n;
+    for (int i = 0; i < n; i++)
+        lg::button(x + i * (bw + gap), y, bw, h, b[i].label, b[i].acc ? ACC : lg::card(), b[i].acc ? BR_INK : 0xFFFF, b[i].key, b[i].ch);
+}
+static void large_hud(int y, int h)
+{
+    const int panw = d.width(), pad = 8;
+    d.fillRect(0, y, panw, h, BG);
+    d.drawFastHLine(0, y, panw, LINE);
+    int bh = h - 12; if (bh > 46) bh = 46; const int by = y + (h - bh) / 2;
+    if (g.screen == SC_PLAY) {
+        Fighter *hero = br_hero(0);
+        int hp = hero ? hero->hp : 0, mhp = hero ? hero->maxhp : 100;
+        char l[16]; snprintf(l, sizeof l, "HP %d", hp < 0 ? 0 : hp);
+        lg::font(2); d.setTextDatum(middle_left); d.setTextColor(hp * 3 <= mhp ? BR_BLOOD : BR_GOLD, BG); d.drawString(l, pad, y + h / 3);
+        if (g.combo >= 2) snprintf(l, sizeof l, GT("x%d  COMBO %d", "x%d  COMBO %d"), g.lives, g.combo);
+        else              snprintf(l, sizeof l, GT("Vite x%d", "Lives x%d"), g.lives);
+        lg::font(4); d.setTextColor(BR_MUTED, BG); d.setTextDatum(middle_left); d.drawString(l, pad, y + h * 3 / 4);
+        d.setTextDatum(top_left);
+        // D-pad (depth ^v, street <>) + punch(J) kick(K) jump(L) + pause
+        const int bx0 = 78, g_ = 4, u = (panw - bx0 - pad - 7 * g_) / 8;
+        int x = bx0;
+        lg::button(x, by, u, bh, "^", lg::card(), 0xFFFF, NK_CHAR, 'e'); x += u + g_;
+        lg::button(x, by, u, bh, "v", lg::card(), 0xFFFF, NK_CHAR, 's'); x += u + g_;
+        lg::button(x, by, u, bh, "<", lg::card(), 0xFFFF, NK_CHAR, 'a'); x += u + g_;
+        lg::button(x, by, u, bh, ">", lg::card(), 0xFFFF, NK_CHAR, 'd'); x += u + g_;
+        lg::button(x, by, u, bh, "J", ACC, BR_INK, NK_CHAR, 'j'); x += u + g_;      // punch
+        lg::button(x, by, u, bh, "K", ACC, BR_INK, NK_CHAR, 'k'); x += u + g_;      // kick
+        lg::button(x, by, u, bh, "L", lg::card(), BR_GOLD, NK_CHAR, 'l'); x += u + g_;  // jump
+        lg::button(x, by, u, bh, "II", lg::card(), 0xFFFF, NK_TAB, 0);              // pause
+    } else if (g.screen == SC_PAUSE) {
+        const HudBtn b[2] = { { GT("RIPRENDI", "RESUME"), NK_ENTER, 0, true }, { GT("ESCI", "QUIT"), NK_BACK, 0, false } };
+        hud_row(pad, by, panw - 2 * pad, bh, b, 2);
+    } else if (g.screen == SC_OVER) {
+        const HudBtn b[2] = { { GT("RIPROVA", "RETRY"), NK_ENTER, 0, true }, { "MENU", NK_BACK, 0, false } };
+        hud_row(pad, by, panw - 2 * pad, bh, b, 2);
+    } else if (g.screen == SC_CLEAR) {
+        const HudBtn b[1] = { { GT("AVANTI", "CONTINUE"), NK_ENTER, 0, true } };
+        hud_row(pad, by, panw - 2 * pad, bh, b, 1);
+    } else if (g.screen == SC_MENU || g.screen == SC_OPT || g.screen == SC_COOP) {
+        const HudBtn b[3] = { { GT("SU", "UP"), NK_UP, 0, false }, { GT("GIU", "DOWN"), NK_DOWN, 0, false },
+                              { GT("SCEGLI", "SELECT"), NK_ENTER, 0, true } };
+        hud_row(pad, by, panw - 2 * pad, bh, b, 3);
+    } else if (g.screen == SC_SEL) {
+        const HudBtn b[3] = { { "<", NK_LEFT, 0, false }, { ">", NK_RIGHT, 0, false },
+                              { GT("SCEGLI", "SELECT"), NK_ENTER, 0, true } };
+        hud_row(pad, by, panw - 2 * pad, bh, b, 3);
+    } else {   // SC_HELP / SC_LOBBY
+        const HudBtn b[1] = { { GT("INDIETRO", "BACK"), NK_BACK, 0, true } };
+        hud_row(pad, by, panw - 2 * pad, bh, b, 1);
+    }
+}
+static void draw_companion(void)
+{
+    int y = lg::comp_head("Scorribanda", ACC);
+    if (g.screen == SC_PLAY || g.screen == SC_PAUSE || g.screen == SC_OVER || g.screen == SC_CLEAR) {
+        Fighter *hero = br_hero(0);
+        int hp = hero ? hero->hp : 0, mhp = hero ? hero->maxhp : 100;
+        char l[40];
+        snprintf(l, sizeof l, "HP %d/%d", hp < 0 ? 0 : hp, mhp);
+        lg::font(2); d.setTextDatum(top_left); d.setTextColor(hp * 3 <= mhp ? BR_BLOOD : BR_GOLD, BG); d.drawString(l, 8, y + 4);
+        snprintf(l, sizeof l, GT("Vite x%d", "Lives x%d"), g.lives);
+        d.setTextDatum(top_right); d.setTextColor(BR_GOLD, BG); d.drawString(l, 232, y + 6); d.setTextDatum(top_left);
+        lg::font(0); d.setTextColor(0xFFFF, BG);
+        snprintf(l, sizeof l, "%s", brawler_level_name(g.level)); d.drawString(l, 8, y + 32);
+        snprintf(l, sizeof l, GT("Punti %ld   Combo %d", "Score %ld   Combo %d"), g.score, g.combo);
+        d.setTextColor(BR_MUTED, BG); d.drawString(l, 8, y + 48);
+        if (g.screen == SC_OVER)       { lg::font(1); d.setTextColor(BR_BLOOD, BG); d.drawString(GT("FINE PARTITA", "GAME OVER"), 8, y + 66); }
+        else if (g.screen == SC_CLEAR) { lg::font(1); d.setTextColor(BR_GOLD, BG);  d.drawString(GT("ZONA RIPULITA", "AREA CLEARED"), 8, y + 66); }
+        else if (g.screen == SC_PAUSE) { lg::font(1); d.setTextColor(BR_GOLD, BG);  d.drawString(GT("PAUSA", "PAUSED"), 8, y + 66); }
+        lg::comp_keys(g.screen == SC_PLAY ? GT("ESAD muovi  J pugno  K calcio  L salto", "ESAD move  J punch  K kick  L jump")
+                                          : GT("INVIO / Esc", "ENTER / Esc"));
+        return;
+    }
+    lg::font(1); d.setTextDatum(top_left); d.setTextColor(ACC, BG);
+    const char *t = g.screen == SC_MENU ? "Scorribanda" : g.screen == SC_SEL ? GT("Scegli eroe", "Pick hero")
+                   : g.screen == SC_OPT ? GT("Impostazioni", "Settings") : g.screen == SC_COOP ? GT("Co-op", "Co-op")
+                   : g.screen == SC_LOBBY ? GT("In attesa", "Lobby") : GT("Guida", "Help");
+    d.drawString(t, 8, y + 6);
+    lg::font(0); d.setTextColor(0xFFFF, BG);
+    if (g.screen == SC_SEL) { d.setTextColor(brawler_hero_color(g.sel), BG); d.drawString(brawler_hero(g.sel)->name, 8, y + 30); }
+    else if (g.screen == SC_LOBBY) { d.drawString(GT("altro Cardputer...", "other Cardputer..."), 8, y + 30); }
+    lg::comp_keys(GT("INVIO scegli   Esc indietro", "ENTER select   Esc back"));
+}
+static void on_draw(void)
+{
+    if (nucleo_app_two_screens()) { draw_companion(); return; }
+    draw_game();
+}
+static void draw_large(void)
+{
+    nucleo_touch_clear();
+    lg::game(draw_game, large_hud, "Scorribanda", ACC);
+    nucleo_touch_commit();
+}
+
 // ============================ lifecycle: enter / exit =========================
 static void on_enter(void)
 {
@@ -410,6 +547,7 @@ static void on_enter(void)
     brfx_reset();
 
     s_last_poll = 0; s_hint = nullptr;
+    s_tmvx = s_tmvz = 0; s_tmv_t = 0.0f; s_tpunch = s_tkick = s_tjump = false;
     nucleo_app_set_back_handler(on_back);
     nucleo_app_set_poll_handler(poll);
     nucleo_app_set_tab_handler(tab_handler);   // TAB pauses (else it would open the global Control Center)
@@ -433,7 +571,7 @@ extern "C" void nucleo_register_brawler(void)
         "Picchiaduro noir a scorrimento: silhouette, sangue, vs CPU e co-op",
         'S', C_RED,
         on_enter, on_key, nullptr, on_draw, on_exit,
-        NX_NET_APP
+        NX_NET_APP, nullptr, draw_large
     };
     nucleo_app_register(&app);
 }

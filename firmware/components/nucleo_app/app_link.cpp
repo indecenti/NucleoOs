@@ -19,6 +19,8 @@
 #include "launcher_theme.h"
 #include "app_gfx.h"
 #include "app_ui.h"            // shared focused-list widget + type-ahead/quick-select nav
+#include "app_large.h"         // two screens: the exchange on the 320x240 panel, the Cardputer as companion
+#include "nucleo_touch.h"
 #include "nucleo_i18n.h"       // TR5: 5-language strings
 #include <M5GFX.h>
 #include <string.h>
@@ -53,6 +55,7 @@ static const char *const TABS_EN[NTABS] = { "SEND","RECV","PEER","CMD","OPT","?"
 
 // ---- state -----------------------------------------------------------------
 static int   s_tab = T_SEND, s_sel = -1;
+static int   s_lg_scroll = 0;              // first visible row on the panel list
 // System UI language (settings.json ui.language) — shared with the Control Center + web shell, so
 // this app's existing IT/EN labels follow the global setting instead of a private toggle.
 extern "C" bool nucleo_i18n_is_it(void);
@@ -381,8 +384,183 @@ static void update_hint(void) {
     nucleo_app_set_hint(h);
 }
 
+// ===== two screens ==============================================================================================
+// The panel carries Vicino: the six sections as a tab bar, each with its own layout — the file browser to send,
+// the peer list to scan/pick, the incoming offer / command cards with Accept/Reject buttons, the options list,
+// the guide. Touch is the content: tap a row to pick it (again to send/open), the chips to answer, the tabs to
+// page. The Cardputer (where the command gets typed) becomes the companion: the section, its selection/status,
+// a live transfer, and the key map.
+static void lg_bottom_progress(int bot) {
+    nlink_status_t st; nlink_svc_status(&st);
+    if (!st.active && st.state != NL_ST_DONE && st.state != NL_ST_FAIL) return;
+    const int W = d.width(), y = bot + 2;
+    d.fillRoundRect(8, y, W - 16, 20, 6, SURF);
+    const char *verb = st.state == NL_ST_DONE ? (s_en ? "Done" : "Fatto")
+                     : st.state == NL_ST_FAIL ? (s_en ? "Failed" : "Errore")
+                     : st.sending ? (s_en ? "Sending" : "Invio") : (s_en ? "Receiving" : "Ricezione");
+    const unsigned short vc = st.state == NL_ST_DONE ? GRN : st.state == NL_ST_FAIL ? REDC : ACC;
+    lg::font(0); d.setTextColor(vc, SURF); char hd[48]; snprintf(hd, sizeof hd, "%s %.20s", verb, st.name); d.drawString(hd, 14, y + 6);
+    char rt[24];
+    if (st.active && st.rate_bps) snprintf(rt, sizeof rt, "%uKB/s  %u%%", (unsigned)(st.rate_bps / 1024), st.total ? (unsigned)(100ULL * st.done / st.total) : 0);
+    else snprintf(rt, sizeof rt, "%u/%u KB", (unsigned)(st.done / 1024), (unsigned)(st.total / 1024));
+    d.setTextDatum(top_right); d.setTextColor(MUTED, SURF); d.drawString(rt, W - 14, y + 6); d.setTextDatum(top_left);
+}
+
+static void lg_send(int y, int bot) {
+    const int W = d.width();
+    char rt[28]; snprintf(rt, sizeof rt, "-> %.14s", peer_target_name());
+    const char *base = strrchr(s_dir, '/'); base = (base && base[1]) ? base + 1 : "SD";
+    lg::font(0); d.setTextColor(MUTED, BG); d.setTextDatum(top_right); d.drawString(rt, W - 10, y + 4); d.setTextDatum(top_left);
+    d.setTextColor(ACC, BG); lg::font(1); char bb[28]; lg::fit(bb, sizeof bb, base, W - 120); d.drawString(bb, 10, y + 2);
+    const int ly = y + 24;
+    const int tn = snd_count();
+    if (!tn) { lg::message(0, ly, W, bot - ly, s_en ? "Empty folder" : "Cartella vuota", nullptr, DIM); return; }
+    lg::text_list(0, ly, W, bot - ly, tn, s_fsel, &s_lg_scroll, snd_label, snd_right, snd_col, nullptr, ACC);
+}
+
+static void lg_peer(int y, int bot) {
+    const int W = d.width();
+    const int n = nlink_svc_peer_count();
+    char rt[16]; snprintf(rt, sizeof rt, "ch%d", nlink_svc_channel());
+    lg::font(0); d.setTextColor(MUTED, BG); d.setTextDatum(top_right); d.drawString(rt, W - 10, y + 4); d.setTextDatum(top_left);
+    lg::button(8, y + 2, W - 16, 30, s_en ? "Scan for peers" : "Cerca dispositivi", s_sel < 0 ? ACC : lg::card(), s_sel < 0 ? INK : FG, NK_CHAR, 1);
+    const int ly = y + 38;
+    if (!n) { lg::message(0, ly, W, bot - ly, s_en ? "No peers yet" : "Nessun peer", s_en ? "Tap Scan to look." : "Tocca Cerca.", DIM); return; }
+    lg::text_list(0, ly, W, bot - ly, n, s_sel, &s_lg_scroll, pr_label, pr_right, pr_col, nullptr, ACC);
+}
+
+static void lg_recv(int y, int bot) {
+    const int W = d.width();
+    char name[64], from[40]; uint32_t sz;
+    if (nlink_svc_offer_pending(name, sizeof name, from, sizeof from, &sz)) {
+        const int ch = 148, cy = y + 10;
+        lg::panel(16, cy, W - 32, ch, CAP); d.drawRoundRect(16, cy, W - 32, ch, 8, ACC);
+        lg::font(0); d.setTextColor(MUTED, CAP); char h[52]; snprintf(h, sizeof h, s_en ? "%.18s wants to send:" : "%.18s vuole inviarti:", from); d.drawString(h, 30, cy + 14);
+        lg::font(2); d.setTextColor(AMB, CAP); char f[32]; lg::fit(f, sizeof f, name, W - 80); d.drawString(f, 30, cy + 40);
+        lg::font(0); d.setTextColor(DIM, CAP); char szs[20]; snprintf(szs, sizeof szs, "%u KB", (unsigned)(sz / 1024)); d.drawString(szs, 30, cy + 76);
+        const int bw = (W - 32 - 16) / 2;
+        lg::button(24, cy + ch - 48, bw, 38, s_en ? "Accept" : "Accetta", GRN, INK, NK_CHAR, 'y');
+        lg::button(32 + bw, cy + ch - 48, bw, 38, s_en ? "Reject" : "Rifiuta", REDC, INK, NK_CHAR, 'n');
+        return;
+    }
+    lg::message(0, y, W, bot - y, s_en ? "Listening for offers..." : "In ascolto di offerte...",
+                s_en ? "Received files land in the inbox." : "I file ricevuti vanno nell'inbox.", ACC);
+}
+
+static void lg_cmd(int y, int bot) {
+    const int W = d.width();
+    char cmd[160], from[40];
+    if (nlink_svc_cmd_pending(cmd, sizeof cmd, from, sizeof from)) {
+        const bool lng = (int)strlen(cmd) > CMD_SHOW;
+        const int ch = 148, cy = y + 10;
+        lg::panel(16, cy, W - 32, ch, CAP); d.drawRoundRect(16, cy, W - 32, ch, 8, AMB);
+        lg::font(0); d.setTextColor(lng ? REDC : MUTED, CAP); d.drawString(lng ? cmd_too_long() : (s_en ? "Requested command:" : "Comando richiesto:"), 30, cy + 16);
+        lg::font(2); d.setTextColor(AMB, CAP); char c[24]; snprintf(c, sizeof c, "%.*s", CMD_SHOW, cmd); d.drawString(c, 30, cy + 44);
+        const int bw = (W - 32 - 16) / 2;
+        if (!lng) { lg::button(24, cy + ch - 48, bw, 38, s_en ? "Run" : "Esegui", GRN, INK, NK_CHAR, 'y'); lg::button(32 + bw, cy + ch - 48, bw, 38, s_en ? "Discard" : "Scarta", REDC, INK, NK_CHAR, 'n'); }
+        else lg::button((W - bw) / 2, cy + ch - 48, bw, 38, s_en ? "Reject" : "Rifiuta", REDC, INK, NK_CHAR, 'n');
+        return;
+    }
+    lg::font(1); d.setTextColor(MUTED, BG); d.drawString(s_en ? "Type on the Cardputer, ENTER sends:" : "Scrivi sul Cardputer, INVIO invia:", 16, y + 6);
+    d.fillRoundRect(16, y + 32, W - 32, 42, 8, SURF);
+    char sh[48]; snprintf(sh, sizeof sh, "%s_", s_cbuf); char f[48]; lg::font(2); lg::fit(f, sizeof f, sh, W - 56);
+    d.setTextDatum(middle_left); d.setTextColor(FG, SURF); d.drawString(f, 28, y + 53); d.setTextDatum(top_left);
+    char rt[28]; snprintf(rt, sizeof rt, "-> %.16s", peer_target_name());
+    lg::font(0); d.setTextColor(DIM, BG); d.drawString(rt, 16, y + 84);
+    lg::font(0); d.setTextColor(DIM, BG); d.drawString(s_en ? "Receiver confirms before it runs." : "Il ricevente conferma prima di eseguire.", 16, bot - 16);
+    (void)bot;
+}
+
+static void lg_opt(int y) {
+    const int W = d.width();
+    Row it[8]; int n; build_opt(it, &n);
+    const int H = d.height(), rh = n > 0 && (H - y - 6) / n < 32 ? (H - y - 6) / n : 32;
+    for (int i = 0; i < n; i++) {
+        const int ry = y + 2 + i * rh; const bool sel = (i == s_sel);
+        const unsigned short f = sel ? ACC : lg::card();
+        d.fillRoundRect(8, ry, W - 16, rh - 2, 8, f);
+        char rb[28];
+        if (it[i].kind == RV_TOGGLE) snprintf(rb, sizeof rb, "%s", it[i].on ? "On" : "Off");
+        else if (it[i].kind == RV_SEG) snprintf(rb, sizeof rb, "%s", s_seg2[it[i].seg & 1]);
+        else if (it[i].kind == RV_ACTION) snprintf(rb, sizeof rb, ">");
+        else snprintf(rb, sizeof rb, "%.18s", it[i].val);
+        lg::row_text(8, ry, W - 16, rh - 2, sel, f, it[i].label, rb, it[i].kind == RV_TOGGLE ? (it[i].on ? GRN : DIM) : MUTED);
+        nucleo_touch_add(8, ry, W - 16, rh, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + i));
+    }
+}
+
+static void lg_help(int y) {
+    const char *it[] = {
+        "TAB / tocca: cambia scheda", "PEER: Cerca, poi tocca per sceglierlo",
+        "INVIA: sfoglia, tocca il file per inviarlo", "RICEVI / CMD: Accetta o Rifiuta",
+        "OPZ: Nucleo affidabile / Bruce compat.", 0 };
+    const char *en[] = {
+        "TAB / tap: switch tab", "PEER: Scan, then tap to pick a target",
+        "SEND: browse, tap a file to send it", "RECV / CMD: Accept or Reject",
+        "OPT: Nucleo reliable / Bruce compat.", 0 };
+    const char **m = s_en ? en : it;
+    lg::font(0);
+    for (int i = 0; m[i]; i++) { d.setTextColor(i < 2 ? FG : MUTED, BG); d.drawString(m[i], 16, y + 6 + i * 22); }
+}
+
+static void draw_large(void) {
+    const int H = d.height();
+    nucleo_touch_clear();
+    const int y0 = lg::header("Vicino", nullptr, ACC);
+    const char *names[NTABS]; for (int i = 0; i < NTABS; i++) names[i] = tab_label(i);
+    const int y = lg::tabs(y0, names, NTABS, s_tab, ACC, nullptr);
+    nlink_status_t st; nlink_svc_status(&st);
+    const bool xfer = st.active || st.state == NL_ST_DONE || st.state == NL_ST_FAIL;
+    const int bot = xfer ? H - 26 : H - 4;
+    switch (s_tab) {
+        case T_SEND: lg_send(y, bot); break;
+        case T_RECV: lg_recv(y, bot); break;
+        case T_PEER: lg_peer(y, bot); break;
+        case T_CMD:  lg_cmd(y, bot);  break;
+        case T_OPT:  lg_opt(y);       break;
+        default:     lg_help(y);      break;
+    }
+    if (xfer) lg_bottom_progress(bot);
+    nucleo_touch_commit();
+}
+
+static void draw_companion(void) {
+    const int top = nucleo_app_content_top(), h = nucleo_app_content_height();
+    d.fillRect(0, top, 240, h, BG);
+    const int y = lg::comp_head("VICINO", ACC);
+    d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(ACC, BG);
+    d.drawString(tab_label(s_tab), 8, y + 4);
+    d.setFont(&fonts::Font0); d.setTextColor(FG, BG);
+    char buf[64];
+    if (s_tab == T_SEND) {
+        const char *base = strrchr(s_dir, '/'); base = (base && base[1]) ? base + 1 : "SD";
+        snprintf(buf, sizeof buf, s_en ? "%.14s  ->  %.12s" : "%.14s  ->  %.12s", base, peer_target_name()); d.drawString(buf, 8, y + 26);
+        const Ent *e = snd_at(s_fsel); d.setTextColor(MUTED, BG);
+        d.drawString(snd_is_up(s_fsel) ? ".." : (e ? e->name : ""), 8, y + 40);
+    } else if (s_tab == T_PEER) {
+        snprintf(buf, sizeof buf, s_en ? "%d peers  -  ch%d" : "%d peer  -  ch%d", nlink_svc_peer_count(), nlink_svc_channel()); d.drawString(buf, 8, y + 26);
+        d.setTextColor(GRN, BG); snprintf(buf, sizeof buf, "-> %.18s", peer_target_name()); d.drawString(buf, 8, y + 40);
+    } else if (s_tab == T_RECV) {
+        char name[64], from[40]; uint32_t sz;
+        if (nlink_svc_offer_pending(name, sizeof name, from, sizeof from, &sz)) { d.setTextColor(AMB, BG); snprintf(buf, sizeof buf, s_en ? "%.12s: %.18s" : "%.12s: %.18s", from, name); d.drawString(buf, 8, y + 26); d.setTextColor(FG, BG); d.drawString(s_en ? "Answer on the panel" : "Rispondi sul pannello", 8, y + 40); }
+        else { d.setTextColor(MUTED, BG); d.drawString(s_en ? "Listening..." : "In ascolto...", 8, y + 26); }
+    } else if (s_tab == T_CMD) {
+        char cmd[160], from[40];
+        if (nlink_svc_cmd_pending(cmd, sizeof cmd, from, sizeof from)) { d.setTextColor(AMB, BG); snprintf(buf, sizeof buf, "%.26s", cmd); d.drawString(buf, 8, y + 26); }
+        else { d.setTextColor(FG, BG); snprintf(buf, sizeof buf, "%.26s_", s_cbuf); d.drawString(buf, 8, y + 26); d.setTextColor(DIM, BG); snprintf(buf, sizeof buf, "-> %.18s", peer_target_name()); d.drawString(buf, 8, y + 40); }
+    } else if (s_tab == T_OPT) {
+        d.setTextColor(MUTED, BG); snprintf(buf, sizeof buf, "%s  -  %s", s_proto ? "Bruce" : "Nucleo", s_auto ? (s_en ? "Auto on" : "Auto on") : (s_en ? "Auto off" : "Auto off")); d.drawString(buf, 8, y + 26);
+    } else {
+        d.setTextColor(MUTED, BG); d.drawString(s_en ? "Guide on the panel" : "Guida sul pannello", 8, y + 26);
+    }
+    nlink_status_t st; nlink_svc_status(&st);
+    if (st.active) { d.setTextColor(ACC, BG); char p[40]; snprintf(p, sizeof p, "%s %u%%", st.sending ? (s_en ? "Send" : "Invio") : (s_en ? "Recv" : "Ric"), st.total ? (unsigned)(100ULL * st.done / st.total) : 0); d.drawString(p, 8, y + 54); }
+    lg::comp_keys(s_en ? "TAB tab   keys on the Cardputer" : "TAB scheda   tasti sul Cardputer");
+}
+
 // ---- on_draw ---------------------------------------------------------------
 static void on_draw(void) {
+    if (nucleo_app_two_screens()) { draw_companion(); return; }
     int ch = nucleo_app_content_height();
     d.fillRect(0, 0, W, ch, BG);
     // Bar pill is filled only while focus is on the bar; once focus is inside a list it goes to outline.
@@ -431,6 +609,15 @@ static void on_key(int key, char ch) {
 
     // global tab paging
     if (key == NK_RIGHT) { page_tab(); return; }
+
+    // panel touch: tapped rows (SEND files / PEER list / OPT rows) and the PEER scan button (ch==1)
+    if (nucleo_touch_is_row(key, ch)) {
+        if (s_tab == T_SEND) { if (lg::row_tap(key, ch, s_lg_scroll, snd_count(), &s_fsel) == 2) send_selected(); nucleo_app_request_draw(); return; }
+        if (s_tab == T_PEER) { if (lg::row_tap(key, ch, s_lg_scroll, nlink_svc_peer_count(), &s_sel) == 2) { s_peer_sel = s_sel; toast("Peer scelto", "Peer set"); } update_hint(); nucleo_app_request_draw(); return; }
+        if (s_tab == T_OPT)  { int i = ch - NUCLEO_TOUCH_ROW; if (i < opt_rows()) { s_sel = i; opt_activate(i); } update_hint(); nucleo_app_request_draw(); return; }
+        return;
+    }
+    if (key == NK_CHAR && ch == 1 && s_tab == T_PEER) { nlink_svc_discover((nlink_proto_t)s_proto); toast("Cerco...", "Scanning..."); nucleo_app_request_draw(); return; }
 
     // Y/N answers (RECV offer, CMD pending) — only when something is actually pending.
     if ((s_tab == T_RECV || s_tab == T_CMD) && (ch == 'y' || ch == 'Y' || ch == 'n' || ch == 'N')) {
@@ -533,6 +720,7 @@ extern "C" void nucleo_register_link(void) {
         'V', C_BLUE,
         on_enter, on_key, on_tick, on_draw, on_exit,
         NX_NET_APP,                            // declarative exclusive: ~70KB freed, Wi-Fi STA stays up
+        nullptr, draw_large,
     };
     nucleo_app_register(&app);
 }

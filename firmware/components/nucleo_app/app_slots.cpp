@@ -23,6 +23,7 @@
 #include "nucleo_exclusive.h"   // NX_NET_APP: dedicate RAM + free the shared I2S line so SFX play
 #include "game_text.h"
 #include "game_ui.h"
+#include "app_large.h"          // two screens: the cabinet on the 320x240 panel, the Cardputer as companion
 #include <M5GFX.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -707,7 +708,7 @@ static void draw_play(void)
     draw_hud();
     // Touch: the bet label raises the bet, the middle of the bar toggles autospin; a tap on the reels (or
     // anywhere else) is Enter: spin, or slam-stop while they turn. Drag right/left changes the lines.
-    if (!s_paused && s_pp == PP_IDLE) {
+    if (!s_paused && s_pp == PP_IDLE && !nucleo_app_two_screens()) {   // compact only; the panel HUD owns touch
         nucleo_touch_add(W - 80, 0, 80, 16, NK_UP, 0);
         nucleo_touch_add(W / 2 - 24, 0, 52, 16, NK_CHAR, 'a');
     }
@@ -859,7 +860,7 @@ static void step_reels(int dt)
     for (int r = 0; r < NREEL; r++) if (r_phase[r] != 0) return;
     evaluate();
 }
-static void on_draw(void)
+static void draw_game(void)
 {
     d.setClipRect(0, 0, W, nucleo_app_content_height());          // rays never paint the footer
     switch (s_screen) {
@@ -870,6 +871,107 @@ static void on_draw(void)
         default:      draw_over(); coins_draw(); break;
     }
     d.clearClipRect();
+}
+
+// ===== two screens: the cabinet on the 320x240 panel, the Cardputer as a companion =====================
+// lg::game pushes the machine's own frame scaled to the panel; a NATIVE HUD below carries the money and the
+// real touch controls (spin / slam-stop / bet / lines / auto, and menu navigation on the other screens).
+static void lg_btn3(int y, int bh, const char *la, int ka, char ca, const char *lb, int kb, char cb,
+                    const char *lc, int kc, char cc)
+{
+    const int W320 = d.width(), g = 8, bw = (W320 - 4 * g) / 3;
+    lg::button(g, y, bw, bh, la, mix(COL_FELT, 0, 70), COL_GOLDL, ka, ca);
+    lg::button(2 * g + bw, y, bw, bh, lb, COL_GOLD, COL_DARK, kb, cb);
+    lg::button(3 * g + 2 * bw, y, bw, bh, lc, mix(COL_FELT, 0, 70), COL_GOLDL, kc, cc);
+}
+static void lg_hud(int y, int h)
+{
+    const int W320 = d.width();
+    d.fillRect(0, y, W320, h, COL_DARK);
+    d.drawFastHLine(0, y, W320, COL_GOLDD);
+    char b[40];
+
+    if (s_screen == ST_PLAY) {
+        lg::font(1); d.setTextDatum(top_left); d.setTextColor(COL_GOLDL, COL_DARK);
+        snprintf(b, sizeof b, GT("Crediti %d", "Credits %d"), g_balance); d.drawString(b, 12, y + 4);
+        d.setTextDatum(top_right); d.setTextColor(COL_CREAM, COL_DARK);
+        snprintf(b, sizeof b, GT("Punt %d", "Bet %d"), total_bet()); d.drawString(b, W320 - 12, y + 4);
+        d.setTextDatum(top_left);
+        const int main_y = y + 20, main_h = 30, slim_y = main_y + main_h + 3, slim_h = y + h - slim_y - 4;
+        if (s_paused) { lg::button(40, main_y, W320 - 80, main_h, GT("Riprendi", "Resume"), COL_GOLD, COL_DARK, NK_ENTER, 0); return; }
+        if (s_pp == PP_SPIN) { lg::button(40, main_y, W320 - 80, main_h, GT("FERMA", "STOP"), COL_GOLD, COL_DARK, NK_ENTER, 0); return; }
+        if (s_pp == PP_WIN) {
+            lg::font(1); d.setTextDatum(top_center); d.setTextColor(COL_GOLDL, COL_DARK);
+            snprintf(b, sizeof b, s_win_tier == 2 ? "JACKPOT  +%d" : GT("VINCITA +%d", "WIN +%d"), s_win_total);
+            d.drawString(b, W320 / 2, main_y + 8); d.setTextDatum(top_left);
+            return;
+        }
+        // PP_IDLE
+        lg_btn3(main_y, main_h, GT("Punta -", "Bet -"), NK_DOWN, 0, GT("GIRA", "SPIN"), NK_ENTER, 0, GT("Punta +", "Bet +"), NK_UP, 0);
+        if (slim_h >= 16) {
+            const int g = 8, bw = (W320 - 3 * g) / 2;
+            char ll[20]; snprintf(ll, sizeof ll, GT("Linee %d", "Lines %d"), active_lines());
+            lg::button(g, slim_y, bw, slim_h, ll, mix(COL_FELT, 0, 90), COL_CYAN, NK_RIGHT, 0);
+            lg::button(2 * g + bw, slim_y, bw, slim_h, s_auto ? GT("Auto: si", "Auto: on") : GT("Auto: no", "Auto: off"), s_auto ? mix(COL_DARK, COL_CYAN, 90) : mix(COL_FELT, 0, 90), s_auto ? COL_WHITE : COL_CYAN, NK_CHAR, 'a');
+        }
+        return;
+    }
+    // non-play screens
+    const int bh = h - 34 < 40 ? h - 12 : 44, by = y + h - bh - 6;
+    lg::font(1); d.setTextDatum(top_left); d.setTextColor(COL_GOLD, COL_DARK);
+    const char *lbl = s_screen == ST_MENU ? GT("SLOT - menu", "SLOT - menu")
+                    : s_screen == ST_HELP ? GT("Come si gioca", "How to play")
+                    : s_screen == ST_SET  ? GT("Impostazioni", "Settings")
+                    : GT("Crediti finiti", "Out of credits");
+    d.drawString(lbl, 12, y + 6); d.setTextDatum(top_left);
+    if (s_screen == ST_MENU)      lg_btn3(by, bh, GT("Su", "Up"), NK_UP, 0, "OK", NK_ENTER, 0, GT("Giu", "Down"), NK_DOWN, 0);
+    else if (s_screen == ST_HELP) lg_btn3(by, bh, GT("Prec", "Prev"), NK_LEFT, 0, GT("Chiudi", "Close"), NK_ENTER, 0, GT("Succ", "Next"), NK_RIGHT, 0);
+    else if (s_screen == ST_SET) {
+        if (s_confirm) { const int g = 8, bw = (W320 - 3 * g) / 2;
+            lg::button(g, by, bw, bh, "No", mix(COL_FELT, 0, 70), COL_GOLDL, NK_BACK, 0);
+            lg::button(2 * g + bw, by, bw, bh, GT("Si", "Yes"), COL_RED, COL_WHITE, NK_ENTER, 0); }
+        else lg_btn3(by, bh, GT("Su", "Up"), NK_UP, 0, GT("Cambia", "Change"), NK_RIGHT, 0, GT("Giu", "Down"), NK_DOWN, 0);
+    }
+    else lg::button(40, by, W320 - 80, bh, GT("Ricomincia", "Restart"), COL_GOLD, COL_DARK, NK_ENTER, 0);
+}
+static void draw_large(void)
+{
+    nucleo_touch_clear();
+    lg::game(draw_game, lg_hud, "Slot", COL_GOLD);
+    nucleo_touch_commit();
+}
+static void draw_companion(void)
+{
+    const int top = nucleo_app_content_top(), h = nucleo_app_content_height();
+    d.fillRect(0, top, W, h, BG);
+    int y = lg::comp_head("SLOT", COL_GOLD);
+    char b[40];
+    gui::text(GT("Crediti", "Credits"), 8, y + 2, 0, gui::F_SMALL, COL_GREY, 0);
+    snprintf(b, sizeof b, "%d", g_balance); gui::text(b, 8, y + 13, 0, gui::F_BIG, COL_GOLDL, 0);
+    snprintf(b, sizeof b, GT("Punt %d  Linee %d", "Bet %d  Lines %d"), total_bet(), active_lines());
+    gui::text(b, W - 8, y + 20, 2, gui::F_SMALL, COL_CREAM, 0);
+    const char *st;
+    if (s_screen == ST_MENU)      st = GT("Menu", "Menu");
+    else if (s_screen == ST_HELP) st = GT("Guida", "Help");
+    else if (s_screen == ST_SET)  st = GT("Impostazioni", "Settings");
+    else if (s_screen == ST_OVER) st = GT("Crediti finiti", "Out of credits");
+    else if (s_paused)            st = GT("Pausa", "Paused");
+    else if (s_pp == PP_SPIN)     st = GT("Girano...", "Spinning...");
+    else if (s_pp == PP_WIN)      st = s_win_tier == 2 ? "JACKPOT!" : GT("Vincita!", "Win!");
+    else if (s_auto)              st = GT("Auto attivo", "Auto on");
+    else                          st = GT("Pronto a girare", "Ready to spin");
+    gui::text(st, 8, y + 50, 0, gui::F_BODY, COL_WHITE, 0);
+    if (s_screen == ST_PLAY && s_pp == PP_WIN && s_win_total > 0) { snprintf(b, sizeof b, "+%d", s_win_total); gui::text(b, W - 8, y + 50, 2, gui::F_BODY, COL_GOLDL, 0); }
+    const char *keys = s_screen != ST_PLAY ? GT("Tocca i tasti sul pannello", "Use the panel buttons")
+                     : s_paused            ? GT("INVIO riprendi  Esc esci", "ENTER resume  Esc leave")
+                     : s_pp == PP_SPIN     ? GT("SPAZIO ferma i rulli", "SPACE stop the reels")
+                     : GT("SPAZIO gira  su/giu punta", "SPACE spin  up/dn bet");
+    lg::comp_keys(keys);
+}
+static void on_draw(void)
+{
+    if (nucleo_app_two_screens()) { draw_companion(); return; }
+    draw_game();
 }
 static bool poll(void)
 {
@@ -961,7 +1063,7 @@ extern "C" void nucleo_register_slots(void)
         NX_NET_APP | NX_SOLO,  // NX_SOLO: reboot into a FRESH unfragmented heap (the 32KB canvas couldn't be
                                // re-acquired inline on the fragmented heap -> OOM/Task-WDT). NX_NET_APP bits are
                                // no-ops in Solo (services already down at boot) but kept defensively.
-        APP_RAM
+        APP_RAM, draw_large
     };
     nucleo_app_register(&app);
 }

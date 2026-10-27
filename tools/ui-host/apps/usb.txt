@@ -1,0 +1,2 @@
+# USB Drive: a single call-to-action (the mode reboots the device). Renders the status card + arm button.
+home

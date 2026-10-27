@@ -1081,9 +1081,36 @@ static void open_gamefront(void)
     s_dirty = true; s_chrome_dirty = true; s_hint_dirty = true;
 }
 
+// Enter the focused launcher row: Games opens the dedicated front-end, a category descends, an app opens.
+static void launcher_open_focused(void)
+{
+    const MenuNode *f = launcher_focused();
+    if (f && f->kind == N_MENU && !strcmp(f->id, "Games")) { open_gamefront(); return; }
+    const MenuNode *a = launcher_enter(); if (a) launch(a);
+}
+
 static void handle_launcher(int k, char ch)
 {
     int s = launcher_sel();
+    int cols = launcher_render_large_cols();     // >0 on the external panel: a 2-D grid, not the 1-D rail
+    if (nucleo_touch_is_row(k, ch)) {            // the panel: a tapped tile opens straight away
+        int i = launcher_render_grid_first() + (ch - NUCLEO_TOUCH_ROW);
+        if (i >= 0 && i < launcher_visible_count()) { launcher_set_sel(i); launcher_open_focused(); }
+        s_dirty = true; return;
+    }
+    if (cols > 1) {                              // grid: left/right step one, up/down a whole row (clamped)
+        int n = launcher_visible_count();
+        if      (k == NK_LEFT)  launcher_set_sel(s - 1);
+        else if (k == NK_RIGHT) launcher_set_sel(s + 1);
+        else if (k == NK_UP)    { if (s - cols >= 0) launcher_set_sel(s - cols); }
+        else if (k == NK_DOWN)  { if (s + cols < n) launcher_set_sel(s + cols); }
+        else if (k == NK_ENTER) { launcher_open_focused(); return; }
+        else if (k == NK_BACK)  launcher_back();
+        else if (k == NK_DEL)   launcher_filter_backspace();
+        else if (k == NK_CHAR && ch == '*') { const MenuNode *f = launcher_focused(); if (f && f->kind == N_APP) launcher_toggle_pin(f->id); }
+        else if (k == NK_CHAR && ch > ' ') launcher_filter_push(ch);
+        s_dirty = true; return;
+    }
     if      (k == NK_LEFT  || k == NK_UP)   launcher_set_sel(s - 1);   // previous (wraps to the last)
     else if (k == NK_RIGHT || k == NK_DOWN) launcher_set_sel(s + 1);   // next (wraps to the first)
     else if (k == NK_ENTER) {

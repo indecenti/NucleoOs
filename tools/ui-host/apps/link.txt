@@ -1,0 +1,16 @@
+# Vicino (ESP-NOW): the file browser to send, the peer list + scan, an incoming offer, the command input,
+# the options and the guide. (@sd is shared by every scene, so CMD shows the input box — no cmd.txt is seeded.)
+@host link_stubs.cpp
+@sd data/report.pdf a small placeholder document body for the send browser size column
+@sd data/photo.jpg JPEGDATA..............................................
+@sd data/notes.txt la lista della spesa e due appunti
+@sd data/Projects/readme.md # Progetto\nprime note
+@sd link/peers.txt Desk-Bruce 1\nTablet-09 0\nPhone-X 0
+@sd link/offer.txt Desk-Bruce|holiday.jpg|842
+send
+recv      TAB
+peer      TAB TAB
+peer-pick TAB TAB D ENTER
+cmd       TAB TAB TAB t:ls_/data
+opt       TAB TAB TAB TAB
+help      TAB TAB TAB TAB TAB

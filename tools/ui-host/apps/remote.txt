@@ -1,0 +1,4 @@
+# Remote Control: the Wi-Fi listening screen on the panel (IP + PIN + auto-handoff), and handoff turned off.
+@host stubs/remote_stubs.cpp
+listening
+handoff-off ENTER

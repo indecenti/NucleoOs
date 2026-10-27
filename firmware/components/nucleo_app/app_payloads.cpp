@@ -8,6 +8,8 @@
 #include "nucleo_app.h"
 #include "app_gfx.h"
 #include "nucleo_i18n.h"       // TR(it,en): hint follows the system language
+#include "app_large.h"         // two screens: payload list + preview details on the panel, Cardputer companion
+#include "nucleo_touch.h"
 #include <M5GFX.h>
 #include <string.h>
 #include <stdio.h>
@@ -211,10 +213,15 @@ static void on_exit(void)
     s_count = 0;
 }
 
+static int s_lg_scroll = 0;        // payload list scroll on the panel (two screens)
 static void on_key(int key, char ch)
 {
     if (s_scr == LIST) {
         if (s_count == 0) return;
+        if (int t = lg::row_tap(key, ch, s_lg_scroll, s_count, &s_sel)) {   // tap a row on the panel
+            if (t == 2 && load_script(s_sel)) s_scr = PREVIEW;
+            nucleo_app_request_draw(); return;
+        }
         if (key == NK_UP)   { s_sel = (s_sel - 1 + s_count) % s_count; nucleo_app_request_draw(); }
         if (key == NK_DOWN) { s_sel = (s_sel + 1) % s_count; nucleo_app_request_draw(); }
         if (key == NK_ENTER) { if (load_script(s_sel)) { s_scr = PREVIEW; nucleo_app_request_draw(); } }
@@ -263,8 +270,105 @@ static void draw_preview(int top, int h)
     d.setTextColor(MUTED, BG); d.setCursor(96, top + 110); d.print(TR("esc indietro","esc back"));
 }
 
+// ===== two screens =============================================================================================
+// The panel carries the runner: the payload list on the left with the picked script's details on the right, then
+// a full-width preview card (lines, keystrokes, time, syntax, transport, layout) with a big RUN button. Touch is
+// the content — tap a payload to pick it, tap again (or its card) to open the preview; T/L buttons flip transport
+// and layout. The Cardputer is the companion: what is picked / previewed and the keys, never a mirror.
+static const int LG_LISTW = 148, LG_INK = 0x0000, LG_LINE = 0x2945;
+
+static const char *pl_label(int i, void *) { return (i >= 0 && i < s_count) ? s_items[i].name : ""; }
+static const char *pl_right(int i, void *) { return (i >= 0 && i < s_count) ? (s_items[i].builtin ? "demo" : "sd") : ""; }
+static unsigned short pl_color(int i, void *) { return (i >= 0 && i < s_count && !s_items[i].builtin) ? FG : MUTED; }
+
+static void draw_large(void)
+{
+    const int W = d.width(), H = d.height();
+    nucleo_touch_clear();
+
+    if (s_scr == PREVIEW) {
+        char ttl[40]; lg::fit(ttl, sizeof ttl, (s_sel >= 0 && s_sel < s_count) ? s_items[s_sel].name : "Payload", W - 60);
+        int y = lg::header(ttl, nullptr, ACC, NK_BACK);
+        d.fillRect(0, y, W, H - y, BG);
+        const int cx = 16, cw = W - 32;
+        int cy = y + 8;
+        lg::panel(cx, cy, cw, 92);
+        const unsigned short cb = lg::card();
+        char v[32];
+        snprintf(v, sizeof v, "%d", s_stat.lines);      lg::kv(cx + 14, cy + 12, cw - 28, TR("Righe", "Lines"), v, FG, cb);
+        snprintf(v, sizeof v, "%d", s_stat.keystrokes); lg::kv(cx + 14, cy + 34, cw - 28, TR("Tasti", "Keystrokes"), v, FG, cb);
+        snprintf(v, sizeof v, "~%lu ms", (unsigned long)s_stat.est_ms); lg::kv(cx + 14, cy + 56, cw - 28, TR("Durata", "Time"), v, MUTED, cb);
+        lg::font(0); d.setTextColor(s_stat.errors ? WARN : GRN, cb);
+        if (s_stat.errors) { char e[48]; snprintf(e, sizeof e, TR("%d errori: %s", "%d errors: %s"), s_stat.errors, s_stat.first_error); d.drawString(e, cx + 14, cy + 76); }
+        else d.drawString(TR("sintassi ok", "syntax ok"), cx + 14, cy + 76);
+        // transport + layout toggles
+        cy += 100;
+        const int bw = (cw - 10) / 2;
+        char tl[28]; snprintf(tl, sizeof tl, "%s: %s", TR("Via", "Via"), s_transport ? "BLE" : "USB");
+        lg::button(cx, cy, bw, 36, tl, LG_LINE, FG, NK_CHAR, 't');
+        char ll[28]; snprintf(ll, sizeof ll, "%s: %s", TR("Layout", "Layout"), s_layout == DUCKY_LAYOUT_IT ? "IT" : "US");
+        lg::button(cx + bw + 10, cy, bw, 36, ll, LG_LINE, FG, NK_CHAR, 'l');
+        // run
+        const int bh = 44, by = H - bh - 12;
+        lg::button(cx, by, cw, bh, TR("Esegui (INVIO)", "Run (ENTER)"), GRN, LG_INK, NK_ENTER, 0);
+        nucleo_touch_commit();
+        return;
+    }
+
+    // LIST
+    char c[16]; snprintf(c, sizeof c, "%d", s_count);
+    int y = lg::header("Payloads", c, ACC, NK_BACK);
+    d.fillRect(0, y, W, H - y, BG);
+    if (s_count == 0) {
+        lg::message(16, y + 10, W - 32, H - y - 20, TR("Nessun payload", "No payloads"),
+                    TR("metti dei .txt in /sd/data/ducky", "drop .txt files in /sd/data/ducky"), MUTED);
+        nucleo_touch_commit();
+        return;
+    }
+    lg::text_list(0, y + 2, LG_LISTW, H - y - 4, s_count, s_sel, &s_lg_scroll, pl_label, pl_right, pl_color, nullptr, ACC);
+    const int rx = LG_LISTW + 4, rw = W - LG_LISTW - 10, ry = y + 6, rh = H - y - 12;
+    lg::panel(rx, ry, rw, rh);
+    const unsigned short cb = lg::card();
+    Item *it = &s_items[s_sel];
+    lg::font(1); d.setTextColor(ACC, cb);
+    char nm[40]; lg::fit(nm, sizeof nm, it->name, rw - 20); d.drawString(nm, rx + 10, ry + 8);
+    d.drawFastHLine(rx + 10, ry + 30, rw - 20, LG_LINE);
+    lg::font(0); d.setTextColor(it->builtin ? MUTED : FG, cb);
+    d.drawString(it->builtin ? TR("Demo integrato", "Built-in demo") : TR("File su SD", "File on SD"), rx + 10, ry + 40);
+    lg::font(4); d.setTextColor(WARN, cb);
+    d.drawString(TR("solo test autorizzati", "authorized tests only"), rx + 10, ry + 58);
+    const int bh = 34, by = ry + rh - bh - 8;
+    lg::button(rx + 8, by, rw - 16, bh, TR("Apri", "Open"), ACC, LG_INK, NK_ENTER, 0);
+    nucleo_touch_add(rx, ry, rw, by - ry, NK_ENTER, 0);   // the card itself opens too
+    nucleo_touch_commit();
+}
+
+static void draw_companion(void)
+{
+    const int top = nucleo_app_content_top(), h = nucleo_app_content_height();
+    d.fillRect(0, top, 240, h, BG);
+    int y = lg::comp_head("PAYLOADS", ACC);
+    d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(FG, BG);
+    const char *nm = (s_count && s_sel >= 0 && s_sel < s_count) ? s_items[s_sel].name : TR("nessun payload", "no payload");
+    int nl = lg::wrap(nm, 8, y + 4, 224, 20, 2);
+    d.setFont(&fonts::Font0); d.setTextColor(MUTED, BG);
+    char ln[48];
+    if (s_scr == PREVIEW) {
+        snprintf(ln, sizeof ln, TR("%d righe  %d tasti  ~%lu ms", "%d lines  %d keys  ~%lu ms"), s_stat.lines, s_stat.keystrokes, (unsigned long)s_stat.est_ms);
+        d.drawString(ln, 8, y + 8 + nl * 20);
+        snprintf(ln, sizeof ln, "%s  %s", s_transport ? "BLE" : "USB", s_layout == DUCKY_LAYOUT_IT ? "IT" : "US");
+        d.setTextColor(s_stat.errors ? WARN : GRN, BG); d.drawString(ln, 8, y + 24 + nl * 20);
+        lg::comp_keys(TR("T via  L layout  INVIO esegui  ESC", "T via  L layout  ENTER run  ESC"));
+    } else {
+        snprintf(ln, sizeof ln, TR("%d di %d", "%d of %d"), s_count ? s_sel + 1 : 0, s_count);
+        d.drawString(ln, 8, y + 8 + nl * 20);
+        lg::comp_keys(TR("frecce scegli  INVIO apri  ESC esci", "arrows pick  ENTER open  ESC back"));
+    }
+}
+
 static void on_draw(void)
 {
+    if (nucleo_app_two_screens()) { draw_companion(); return; }
     int top = nucleo_app_content_top(), h = nucleo_app_content_height();
     d.fillRect(0, top, 240, h, BG);
     if (s_scr == LIST) draw_list(top, h); else draw_preview(top, h);
@@ -274,7 +378,7 @@ extern "C" void nucleo_register_payloads(void)
 {
     static const nucleo_app_def_t app = {
         "payloads", "Payloads", "Security", "DuckyScript runner USB/BLE + preview (test autorizzati)",
-        'D', 0xFD20, on_enter, on_key, nullptr, on_draw, on_exit, 0
+        'D', 0xFD20, on_enter, on_key, nullptr, on_draw, on_exit, 0, nullptr, draw_large
     };
     nucleo_app_register(&app);
 }

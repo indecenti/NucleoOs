@@ -91,6 +91,8 @@ static esp_err_t arm_record(void)
 
 #include "app_gfx.h"
 #include "nucleo_theme.h"          // themed chrome (BG/FG/MUTED/DIM/LINE/INK follow the active OS theme)
+#include "nucleo_touch.h"
+#include "app_large.h"                // two screens: library / recording / playback / AI reader on the panel
 
 // ---- Design tokens (RGB565), aligned with the Music player for a cohesive look -------------------
 // Chrome neutrals follow the active OS theme; ACC is the app's identity accent (registered launcher
@@ -217,6 +219,9 @@ static void ask_all(void);
 static int  build_corpus(char *buf, int cap);
 static void open_play(void);
 static void play_key(int key, char ch);
+static bool lg_key(int key, char ch);   // two screens (defined with the panel code, before draw())
+static void lg_bump(void);
+static void draw_companion(void);
 static int64_t s_vol_shown_us = 0;      // Now-Playing: show a brief "Vol NN%" badge after a volume nudge
 
 // ---- settings I/O ---------------------------------------------------------------------------------
@@ -1432,6 +1437,7 @@ static void list_key(int key, char ch)
 
 static void on_key(int key, char ch)
 {
+    if (lg_key(key, ch)) return;                               // the panel's taps (two screens)
     if (s_mode == M_SETTINGS) { settings_key(key, ch); return; }
     if (s_mode == M_DETAIL)   { detail_key(key, ch);   return; }
     if (s_mode == M_PLAY)     { play_key(key, ch);     return; }
@@ -1448,6 +1454,7 @@ static void on_key(int key, char ch)
 // TAB: list -> settings, settings/detail/ask -> list. Never mid-record.
 static void rec_tab(void)
 {
+    if (nucleo_app_two_screens()) lg_bump();
     if (nucleo_recorder_is_recording()) return;
     if (s_mode == M_DETAIL || s_mode == M_SETTINGS || s_mode == M_ASK || s_mode == M_PLAY) set_mode(M_LIST);
     else { s_set_tab = ST_AI; s_set_row = 0; set_mode(M_SETTINGS); }
@@ -1456,6 +1463,7 @@ static void rec_tab(void)
 // Back/Left routing (framework hands us the key code): Left = previous tab, Esc/Back = pop a level.
 static bool rec_back(int key)
 {
+    if (nucleo_app_two_screens()) lg_bump();
     if (s_mode == M_PLAY) {                                    // Left = seek −5s while playing; Esc/Back leaves to the list
         if (key == NK_LEFT && nucleo_audio_is_playing()) { seek_playing(false); return true; }
         set_mode(M_LIST); return true;
@@ -1750,8 +1758,457 @@ static void draw_ai_working(int top, int h)
     d.setFont(&fonts::Font0);
 }
 
+
+// ===== two screens ==============================================================================================
+// With the external panel the recorder is laid out for 320x240 + touch and the Cardputer becomes its companion:
+//   library   the takes as a list at the left (tap = pick, again = play), a big round REC button at the top
+//             right and the picked take's card under it (date, length, AI badge; Listen / AI / Rename / Delete);
+//   recording a big timer, the scrolling waveform across the whole width, the input meter and a big STOP;
+//   playing   the take's clock, a scrubber, -5 s / play-pause / +5 s, volume - / +, AI;
+//   AI reader the four tabs as pills, the note in the reading face, a drag scrolls it, Listen / Generate;
+//   settings  AI / AUDIO / INFO as pills, rows to tap, the volume with - / +.
+// Rename, delete and the questions use the Cardputer's own input / menu (they are typed there anyway).
+// The recording view redraws at the waveform's rate (~20 Hz) and playback every second: on those redraws only
+// the moving boxes (timer, waveform, meter / clock, scrubber) are repainted — the panel has no buffer.
+// Panel-only actions arrive as NK_CHAR with private control codes (below 0x10: never typing, never list rows).
+enum { LGK_SETTAB0 = 0x01 /* ..0x03 */ };
+static int s_lg_scroll;
+static unsigned s_lg_rev = 1, s_lg_drawn_rev, s_lg_drawn_gen, s_lg_comp_rev, s_lg_comp_gen;
+static int s_lg_drawn_view = -1, s_lg_comp_view = -1;
+static void lg_bump(void) { s_lg_rev++; }
+
+enum { LGV_AI = -1, LGV_SPLASH = -2, LGV_REC = -3, LGV_ARMING = -4 };   // the special layouts; a mode is >= 0
+// Which full layout is up (a change means a full repaint): recording, AI working, splash, or the mode.
+static int lg_view(void)
+{
+    if (s_ai_screen_freed) return LGV_AI;
+    if (s_enter_solo_us) return LGV_SPLASH;
+    if (nucleo_recorder_is_recording() || s_ptt == PTT_ARMING) return (s_ptt == PTT_ARMING && !nucleo_recorder_is_recording()) ? LGV_ARMING : LGV_REC;
+    return s_mode | (nucleo_audio_is_playing() ? 0x20 : 0) | (nucleo_audio_is_paused() ? 0x40 : 0) | ((s_playing + 1) << 8) | (s_job << 16);
+}
+
+static bool lg_key(int key, char ch)
+{
+    if (!nucleo_app_two_screens()) return false;
+    lg_bump();
+    if (nucleo_recorder_is_recording() || s_ai_screen_freed || s_enter_solo_us) return false;
+    if (s_mode == M_LIST && nucleo_touch_is_row(key, ch)) {
+        const int r = lg::row_tap(key, ch, s_lg_scroll, s_count, &s_sel);
+        if (s_job == 3) s_job = 0;
+        if (r == 2) open_play(); else nucleo_app_request_draw();
+        return true;
+    }
+    if (s_mode == M_SETTINGS) {
+        if (key == NK_CHAR && ch >= LGK_SETTAB0 && ch < LGK_SETTAB0 + ST_COUNT) { s_set_tab = ch - LGK_SETTAB0; s_set_row = 0; set_hint_for_mode(); nucleo_app_request_draw(); return true; }
+        if (s_set_tab == ST_AI && nucleo_touch_is_row(key, ch)) { s_set_row = ch - NUCLEO_TOUCH_ROW; settings_key(NK_ENTER, 0); return true; }
+    }
+    return false;
+}
+
+// The take's name for the panel: a renamed take in full (its list label is cut to 23 characters), an
+// auto-named one as its date/time label.
+static const char *lg_label(int i)
+{
+    static char b[48];
+    if (i < 0 || i >= s_count) return "";
+    if (!strncmp(s_list[i].name, "rec-", 4) && s_list[i].mtime > 0) return s_list[i].label;
+    snprintf(b, sizeof b, "%s", s_list[i].name);
+    char *dot = strrchr(b, '.'); if (dot && !strcasecmp(dot, ".wav")) *dot = 0;
+    return b;
+}
+// A button with a drawn minus / plus (the faces' '-' and '+' are too thin to read at a glance).
+static void lg_pm_button(int x, int y, int w, int h, bool plus, int key, char ch)
+{
+    lg::button(x, y, w, h, "", LINE, FG, key, ch);
+    d.fillRect(x + w / 2 - 8, y + h / 2 - 1, 17, 3, FG);
+    if (plus) d.fillRect(x + w / 2 - 1, y + h / 2 - 8, 3, 17, FG);
+}
+
+static void lg_rec_disc(int cx, int cy, int r, bool stop)               // the round record / stop button
+{
+    d.fillCircle(cx, cy, r, REC_DISC);
+    d.drawCircle(cx, cy, r, ACC); d.drawCircle(cx, cy, r - 1, ACC);
+    if (stop) d.fillRoundRect(cx - r / 3, cy - r / 3, 2 * (r / 3), 2 * (r / 3), 4, ACC);
+    else      d.fillCircle(cx, cy, r / 2, ACC);
+}
+
+static void lg_take_row(int i, int x, int y, int w, int h, bool focus, unsigned short bg, void *)
+{
+    const unsigned short c = rl_color(i, nullptr);
+    d.fillCircle(x + 12, y + h / 2, 4, focus ? INK : c);
+    lg::row_text(x + 16, y, w - 16, h, focus, bg, lg_label(i), rl_right(i, nullptr), FG);
+}
+
+static void lg_library(void)
+{
+    const int W = d.width(), H = d.height();
+    char sub[32];
+    snprintf(sub, sizeof sub, "%d  %u:%02u", s_count, (unsigned)(s_total_secs / 60), (unsigned)(s_total_secs % 60));
+    const int y = lg::header(TR5("Registratore", "Voice Recorder", "Grabador", "Enregistreur", "Rekorder"), s_count ? sub : nullptr, ACC, NK_BACK, NK_TAB);
+    char fr[24]; human_free(fr, sizeof fr);
+    if (s_count == 0) {                                                 // the call to action: one big button
+        d.fillRect(0, y, W, H - y, BG);
+        lg_rec_disc(W / 2, y + 70, 46, false);
+        nucleo_touch_add(W / 2 - 60, y + 14, 120, 112, NK_CHAR, 'r');
+        lg::font(1); d.setTextDatum(top_center); d.setTextColor(FG, BG);
+        d.drawString(TR5("Tocca per registrare", "Tap to record", "Toca para grabar", "Touchez pour enregistrer", "Tippen zum Aufnehmen"), W / 2, y + 128);
+        lg::font(0); d.setTextColor(MUTED, BG);
+        d.drawString(TR5("o tieni premuto GO sul Cardputer", "or hold GO on the Cardputer", "o manten GO", "ou maintenez GO", "oder GO halten"), W / 2, y + 152);
+        if (fr[0]) { d.setTextColor(DIM, BG); d.drawString(fr, W / 2, y + 176); }
+        d.setTextDatum(top_left);
+        return;
+    }
+    const int LW = 170;
+    lg::list(0, y + 2, LW, H - y - 4, lg::ROW, s_count, s_sel, &s_lg_scroll, lg_take_row, nullptr, ACC);
+    const int cx = LW + 4, cw = W - cx - 6;
+    d.fillRect(LW, y, W - LW, H - y, BG);
+    // REC: a big round button with the free space beside it
+    lg_rec_disc(cx + 30, y + 34, 26, false);
+    nucleo_touch_add(cx, y + 4, cw, 60, NK_CHAR, 'r');
+    lg::font(1); d.setTextColor(ACC, BG); d.drawString("REC", cx + 64, y + 18);
+    lg::font(4); d.setTextColor(MUTED, BG); d.drawString(fr[0] ? fr : "", cx + 64, y + 40);
+    // the picked take
+    const int ky = y + 70, kh = H - ky - 6;
+    lg::panel(cx, ky, cw, kh);
+    const unsigned short cb = lg::card();
+    const Rec *r = &s_list[s_sel < s_count ? s_sel : 0];
+    lg::font(1); d.setTextColor(r->has_ai ? VIO : FG, cb);
+    char t[48]; lg::fit(t, sizeof t, lg_label(s_sel < s_count ? s_sel : 0), cw - 20); d.drawString(t, cx + 10, ky + 8);
+    lg::font(0); d.setTextColor(MUTED, cb);
+    char det[40];
+    if (r->mtime > 0) { struct tm tm; localtime_r(&r->mtime, &tm); strftime(det, sizeof det, "%d/%m %H:%M", &tm); } else det[0] = 0;
+    char line[64]; snprintf(line, sizeof line, "%s  %u:%02u", det, (unsigned)(r->secs / 60), (unsigned)(r->secs % 60));
+    d.drawString(line, cx + 10, ky + 30);
+    if (s_job == 1) { d.setTextColor(AMBER, cb); d.drawString(TR5("AI al lavoro...", "AI working...", "IA trabaja", "IA travaille", "KI arbeitet"), cx + 10, ky + 48); }
+    else if (s_job == 3) { d.setTextColor(ACC, cb); char e[40]; lg::fit(e, sizeof e, ai_err_msg(), cw - 20); d.drawString(e, cx + 10, ky + 48); }
+    else if (r->has_ai) { d.setTextColor(VIO, cb); d.drawString(TR5("note AI pronte", "AI notes ready", "notas IA", "notes IA", "KI-Notizen"), cx + 10, ky + 48); }
+    const int bw = (cw - 22) / 2, by = ky + kh - 70;
+    const bool plays = s_playing == s_sel && nucleo_audio_is_playing();
+    lg::button(cx + 8, by, bw, 30, plays ? TR5("In ascolto", "Playing", "Escucha", "Joue", "Spielt") : TR5("Ascolta", "Listen", "Escucha", "Ecoute", "Hoeren"), GRN, INK, NK_ENTER, 0);
+    lg::button(cx + 14 + bw, by, bw, 30, "AI", VIO, INK, NK_CHAR, 'a');
+    lg::button(cx + 8, by + 36, bw, 28, TR5("Nome", "Name", "Nombre", "Nom", "Name"), LINE, FG, NK_CHAR, 'n');
+    lg::button(cx + 14 + bw, by + 36, bw, 28, TR5("Elimina", "Delete", "Elimina", "Supprime", "Loeschen"), LINE, ACC, NK_CHAR, 'd');
+}
+
+// The recording screen; full=false repaints only the timer, the waveform and the meter.
+static void lg_recording(bool full)
+{
+    const int W = d.width(), H = d.height();
+    const bool arming = s_ptt == PTT_ARMING && !nucleo_recorder_is_recording();
+    const bool blink = (esp_timer_get_time() / 400000) & 1;
+    if (full) {
+        lg::header(arming ? TR5("Pronto", "Ready", "Listo", "Pret", "Bereit") : TR5("Registrazione", "Recording", "Grabacion", "Enregistrement", "Aufnahme"), nullptr, ACC, 0);
+        d.fillRect(0, lg::HEAD, W, H - lg::HEAD, BG);
+        if (arming) {
+            lg_rec_disc(W / 2, 110, 44, false);
+            lg::font(1); d.setTextDatum(top_center); d.setTextColor(GRN, BG);
+            d.drawString(TR5("Tieni GO e parla...", "Hold GO and speak...", "Manten GO y habla", "Tiens GO et parle", "GO halten, sprechen"), W / 2, 170);
+            d.setTextDatum(top_left);
+            return;
+        }
+        lg_rec_disc(W / 2, H - 28, 24, true);                              // STOP
+        nucleo_touch_add(W / 2 - 60, H - 58, 120, 58, NK_CHAR, 'r');
+        lg::font(0); d.setTextColor(MUTED, BG); d.drawString(TR5("tocca per fermare", "tap to stop", "toca: para", "touchez: stop", "tippen: stopp"), 12, H - 22);
+    }
+    if (arming) return;
+    d.fillCircle(W - 18, lg::HEAD / 2, 7, blink ? ACC : REC_DIM);       // live dot in the header
+    const uint32_t s = nucleo_recorder_seconds();
+    char t[16];
+    if (s >= 3600) snprintf(t, sizeof t, "%u:%02u:%02u", (unsigned)(s / 3600), (unsigned)((s / 60) % 60), (unsigned)(s % 60));
+    else           snprintf(t, sizeof t, "%u:%02u", (unsigned)(s / 60), (unsigned)(s % 60));
+    d.fillRect(0, lg::HEAD + 4, W, 48, BG);
+    d.setFont(&fonts::Font7); d.setTextSize(1); d.setTextDatum(top_center); d.setTextColor(FG, BG);
+    d.drawString(t, W / 2, lg::HEAD + 4);
+    d.setTextDatum(top_left);
+    // waveform across the whole width: each column repaints its own cell
+    const int wx = 10, ww = W - 20, wy = 84, wh = 56, cy = wy + wh / 2, step = ww / WAVE_N;
+    for (int i = 0; i < WAVE_N; i++) {
+        const int lv = s_wave[(s_wave_head + i) % WAVE_N], bx = wx + i * step;
+        int bh = lv * (wh - 2) / 100; if (bh < 1 && lv > 0) bh = 1;
+        d.fillRect(bx, wy, step, wh, BG);
+        const unsigned short col = lv > 80 ? ACC : lv > 40 ? AMBER : (lv > 0 ? GRN : WAVE);
+        if (bh <= 0) d.drawFastHLine(bx, cy, step, WAVE);
+        else d.fillRect(bx, cy - bh / 2, step > 1 ? step - 1 : 1, bh, col);
+    }
+    // meter with peak hold, then the coaching / size line
+    int lvl = nucleo_recorder_level(); if (lvl < 0) lvl = 0; if (lvl > 100) lvl = 100;
+    const int mx = 10, mw = W - 20, my = wy + wh + 8;
+    d.fillRect(0, my - 2, W, 32, BG);
+    d.fillRoundRect(mx, my, mw, 10, 5, LINE);
+    if (lvl) d.fillRoundRect(mx, my, mw * lvl / 100 < 10 ? 10 : mw * lvl / 100, 10, 5, lvl > 80 ? ACC : lvl > 40 ? AMBER : GRN);
+    if (s_peak > 2) { int px = mx + mw * s_peak / 100; if (px > mx + mw - 2) px = mx + mw - 2; d.drawFastVLine(px, my - 2, 14, FG); }
+    const char *coach = nullptr; unsigned short cc = MUTED;
+    if (s >= 1) {
+        if (s_peak >= 96 || lvl >= 96) { coach = TR5("Troppo vicino", "Too loud", "Muy cerca", "Trop pres", "Zu nah"); cc = ACC; }
+        else if (s_peak < 6)           { coach = TR5("Parla piu' forte", "Speak up", "Mas fuerte", "Plus fort", "Lauter"); cc = AMBER; }
+    }
+    lg::font(0);
+    if (coach) { d.setTextColor(cc, BG); d.drawString(coach, mx, my + 14); }
+    const uint32_t kb = (uint32_t)(((uint64_t)s * REC_BPS) / 1024);
+    char sz[16]; if (kb >= 1024) snprintf(sz, sizeof sz, "%.1f MB", kb / 1024.0); else snprintf(sz, sizeof sz, "%u KB", (unsigned)kb);
+    d.setTextDatum(top_right); d.setTextColor(MUTED, BG); d.drawString(sz, mx + mw, my + 14); d.setTextDatum(top_left);
+}
+
+// Now Playing for one take; full=false repaints only the clock, the scrubber and the state line.
+static void lg_play(bool full)
+{
+    const int W = d.width(), H = d.height();
+    const uint32_t el = nucleo_audio_elapsed_ms() / 1000, dur = nucleo_audio_duration_ms() / 1000;
+    const bool playing = nucleo_audio_is_playing(), paused = nucleo_audio_is_paused();
+    if (full) {
+        char durs[12]; snprintf(durs, sizeof durs, "%u:%02u", (unsigned)(dur / 60), (unsigned)(dur % 60));
+        lg::header(lg_label(s_sel), dur ? durs : nullptr, GRN, NK_BACK);
+        d.fillRect(0, lg::HEAD, W, H - lg::HEAD, BG);
+        const int by = H - 50, bw = (W - 50) / 4;                      // -5 s, play/pause, +5 s, AI
+        lg::button(10, by, bw, 42, "-5s", LINE, FG, NK_CHAR, ',');
+        lg::button(20 + bw, by, bw, 42, "", GRN, INK, NK_CHAR, ' ');
+        const int px = 20 + bw + bw / 2;
+        if (paused || !playing) d.fillTriangle(px - 7, by + 11, px - 7, by + 31, px + 10, by + 21, INK);
+        else { d.fillRect(px - 8, by + 11, 6, 20, INK); d.fillRect(px + 2, by + 11, 6, 20, INK); }
+        lg::button(30 + 2 * bw, by, bw, 42, "+5s", LINE, FG, NK_CHAR, '.');
+        lg::button(40 + 3 * bw, by, bw, 42, "AI", VIO, INK, NK_CHAR, 'a');
+        lg_pm_button(W - 96, lg::HEAD + 70, 40, 30, false, NK_DOWN, '.');   // volume
+        lg_pm_button(W - 50, lg::HEAD + 70, 40, 30, true, NK_UP, ';');
+    }
+    char els[12]; snprintf(els, sizeof els, "%u:%02u", (unsigned)(el / 60), (unsigned)(el % 60));
+    d.fillRect(0, lg::HEAD + 4, W - 104, 60, BG);
+    d.setFont(&fonts::Font7); d.setTextSize(1); d.setTextColor(FG, BG); d.drawString(els, 16, lg::HEAD + 10);
+    char vb[12]; snprintf(vb, sizeof vb, "Vol %d%%", nucleo_audio_volume());
+    lg::font(0); d.setTextDatum(top_right); d.fillRect(W - 104, lg::HEAD + 44, 100, 20, BG); d.setTextColor(MUTED, BG); d.drawString(vb, W - 12, lg::HEAD + 46); d.setTextDatum(top_left);
+    int prog = nucleo_audio_progress(); if (prog < 0) prog = 0; if (prog > 100) prog = 100;
+    const int bx = 16, bw = W - 32, sy = lg::HEAD + 116;
+    d.fillRect(0, sy - 10, W, 50, BG);
+    d.fillRoundRect(bx, sy, bw, 8, 4, LINE);
+    const int fw = bw * prog / 100; if (fw > 0) d.fillRoundRect(bx, sy, fw < 8 ? 8 : fw, 8, 4, GRN);
+    int kx = bx + fw; if (kx < bx + 5) kx = bx + 5; if (kx > bx + bw - 5) kx = bx + bw - 5;
+    d.fillCircle(kx, sy + 4, 8, FG);
+    const char *st = !playing ? TR5("Fine", "Ended", "Fin", "Fini", "Ende") : paused ? TR5("In pausa", "Paused", "En pausa", "Pause", "Pausiert") : TR5("In ascolto", "Playing", "Escucha", "Joue", "Spielt");
+    lg::font(0); d.setTextColor(!playing ? MUTED : paused ? AMBER : GRN, BG); d.drawString(st, bx, sy + 18);
+    const uint32_t rem = dur > el ? dur - el : 0;
+    char rems[12]; snprintf(rems, sizeof rems, "-%u:%02u", (unsigned)(rem / 60), (unsigned)(rem % 60));
+    d.setTextDatum(top_right); d.setTextColor(MUTED, BG); d.drawString(rems, bx + bw, sy + 18); d.setTextDatum(top_left);
+}
+
+// The AI reader (one take, four tabs) or the cross-note answer: the text in the reading face, a drag scrolls it.
+static void lg_reader(bool ask_all_view)
+{
+    const int W = d.width(), H = d.height();
+    if (ask_all_view) lg::header(TR5("Chiedi a tutte le note", "Ask all notes", "Preg. todas", "Dem. toutes", "Frage alle"), s_eng_ready ? s_eng_short : nullptr, VIO, NK_BACK);
+    else lg::header(lg_label(s_sel), s_eng_ready ? s_eng_short : nullptr, VIO, NK_BACK);
+    int y0 = lg::HEAD + 2;
+    if (!ask_all_view) {
+        const char *names[T_COUNT]; for (int i = 0; i < T_COUNT; i++) names[i] = det_tab_label(i);
+        static const char keys[T_COUNT] = { '1', '2', '3', '4' };
+        y0 = lg::tabs(y0, names, T_COUNT, s_tab, VIO, keys);
+    }
+    const int foot = ask_all_view ? H - 4 : H - 46;
+    d.fillRect(0, y0, W, H - y0, BG);
+    const bool here = s_sel < s_count;
+    const bool busy = !ask_all_view && s_job == 1 && here && !strcmp(s_jobname, s_list[s_sel].name) && s_job_kind == kind_for_tab(s_tab);
+    if (busy) {
+        char b[48]; snprintf(b, sizeof b, "%s %s...", s_eng_ready ? s_eng_short : "AI", TR5("sta elaborando", "is working", "trabaja", "travaille", "arbeitet"));
+        lg::message(0, y0, W, foot - y0, b, TR5("trascrizione e ragionamento nel cloud", "transcribing and reasoning in the cloud", "en la nube", "dans le nuage", "in der Cloud"), AMBER);
+    } else if (!ask_all_view && (s_empty || !s_text || !s_text[0])) {
+        const char *t1 = s_tab == T_SUMMARY ? TR5("Nessun riassunto", "No summary yet", "Sin resumen", "Pas de resume", "Keine Zusammenf.")
+                       : s_tab == T_SCRIPT  ? TR5("Nessuna trascrizione", "No transcript yet", "Sin transcripcion", "Pas de transcript", "Kein Transkript")
+                       : s_tab == T_ACTIONS ? TR5("Nessuna azione", "No action items", "Sin acciones", "Pas d'actions", "Keine Aktionen")
+                       :                      TR5("Fai una domanda su questa nota", "Ask about this note", "Pregunta", "Posez une question", "Stelle eine Frage");
+        lg::message(0, y0, W, foot - y0, t1, s_job == 3 ? ai_err_msg() : s_tab == T_ASK ? TR5("Chiedi: la domanda si scrive sul Cardputer.", "Ask: you type the question on the Cardputer.", "La pregunta se escribe en el Cardputer.", "La question se tape sur le Cardputer.", "Die Frage tippst du am Cardputer.") : TR5("Il pulsante qui sotto la crea con l'AI.", "The button below makes it with the AI.", "El boton la crea.", "Le bouton la cree.", "Der Knopf erstellt sie."), MUTED);
+    } else if (s_text && s_text[0]) {
+        const int LH = 20, first = y0 + 20, maxlines = (foot - first - 6) / LH + 1;
+        int total = 0;
+        s_more = draw_wrapped(s_text, 12, first, W - 36, LH, maxlines, s_scroll, &total);
+        s_total_lines = total; s_page_lines = maxlines;               // the scroll clamp reads these (reader_scroll)
+        if (total > maxlines) {
+            const int sb_y = y0 + 6, sb_h = foot - y0 - 12, th = sb_h * maxlines / total < 14 ? 14 : sb_h * maxlines / total;
+            const int maxs = total - maxlines > 0 ? total - maxlines : 1;
+            d.fillRect(W - 10, sb_y, 4, sb_h, LINE);
+            d.fillRect(W - 10, sb_y + (s_scroll * (sb_h - th)) / maxs, 4, th, VIO);
+        }
+        nucleo_touch_add_scroll(0, y0, W, foot - y0, LH, NK_UP, ';', NK_DOWN, '.');   // drag = scroll
+    } else lg::message(0, y0, W, foot - y0, TR5("Nessuna risposta.", "No answer.", "Sin respuesta.", "Pas reponse.", "Keine Antwort."), nullptr, MUTED);
+    if (ask_all_view) return;
+    const int bw = (W - 30) / 2, by = H - 42;
+    const bool playing = nucleo_audio_is_playing() && s_playing >= 0;
+    lg::button(10, by, bw, 36, playing ? (nucleo_audio_is_paused() ? TR5("Riprendi", "Resume", "Sigue", "Reprendre", "Weiter") : TR5("Pausa", "Pause", "Pausa", "Pause", "Pause"))
+                                       : TR5("Ascolta", "Listen", "Escucha", "Ecoute", "Hoeren"), LINE, GRN, NK_CHAR, ' ');
+    const bool can = s_job != 1 && (s_tab == T_ASK || s_empty);
+    lg::button(20 + bw, by, bw, 36, s_tab == T_ASK ? TR5("Chiedi", "Ask", "Pregunta", "Demander", "Fragen") : s_tab == T_SCRIPT ? TR5("Trascrivi", "Transcribe", "Transcribe", "Transcrire", "Transkrib.") : TR5("Genera", "Generate", "Genera", "Generer", "Erstellen"),
+               can ? VIO : lg::card(), can ? INK : DIM, NK_ENTER, 0);
+}
+
+static void lg_settings(void)
+{
+    const int W = d.width(), H = d.height();
+    lg::header(TR5("Impostazioni", "Settings", "Ajustes", "Reglages", "Einstellungen"), nullptr, ACC, NK_BACK);
+    static const char keys[ST_COUNT] = { LGK_SETTAB0, LGK_SETTAB0 + 1, LGK_SETTAB0 + 2 };
+    const int y0 = lg::tabs(lg::HEAD + 2, SET_TABS, ST_COUNT, s_set_tab, ACC, keys);
+    d.fillRect(0, y0, W, H - y0, BG);
+    if (s_set_tab == ST_AI) {
+        const char *lbl[4] = { TR5("Trascrizione automatica", "Auto transcribe", "Transcribe auto", "Transcrire auto", "Auto transkribieren"),
+                               TR5("Riassunto automatico", "Auto summary", "Resumen auto", "Resume auto", "Auto Zusammenf."),
+                               TR5("Titolo automatico", "Auto title", "Titulo auto", "Titre auto", "Auto Titel"), TR5("Lingua", "Language", "Idioma", "Langue", "Sprache") };
+        const bool on[3] = { s_auto_transcribe, s_auto_summary, s_auto_title };
+        for (int i = 0; i < 4; i++) {
+            const int ry = y0 + 2 + i * 42; const bool f = i == s_set_row;
+            const unsigned short fill = f ? ACC : lg::card();
+            d.fillRoundRect(8, ry, W - 16, 38, 9, fill);
+            lg::font(0); d.setTextDatum(middle_left); d.setTextColor(f ? INK : FG, fill); d.drawString(lbl[i], 22, ry + 19);
+            if (i < 3) { d.fillRoundRect(W - 62, ry + 9, 40, 20, 10, on[i] ? GRN : LINE); d.fillCircle(on[i] ? W - 32 : W - 52, ry + 19, 7, on[i] ? INK : MUTED); }
+            else { d.setTextDatum(middle_right); d.drawString(s_lang == 1 ? "IT" : s_lang == 2 ? "EN" : "Auto", W - 22, ry + 19); }
+            d.setTextDatum(top_left);
+            nucleo_touch_add(8, ry, W - 16, 38, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + i));
+        }
+    } else if (s_set_tab == ST_AUDIO) {
+        const int vol = nucleo_audio_volume();
+        lg::font(1); d.setTextColor(FG, BG); d.drawString("Volume", 16, y0 + 14);
+        char vb[8]; snprintf(vb, sizeof vb, "%d%%", vol);
+        d.setTextDatum(top_right); d.drawString(vb, W - 16, y0 + 14); d.setTextDatum(top_left);
+        lg::bar(16, y0 + 44, W - 32, 12, vol, GRN);
+        const int bw = (W - 42) / 2;
+        lg_pm_button(16, y0 + 70, bw, 40, false, NK_DOWN, '.');
+        lg_pm_button(26 + bw, y0 + 70, bw, 40, true, NK_UP, ';');
+        lg::font(0); d.setTextColor(DIM, BG); d.drawString(TR5("Per riascoltare le note", "Playback level for takes", "Nivel de reproduccion", "Niveau de lecture", "Wiedergabepegel"), 16, y0 + 122);
+    } else {
+        const bool on = nucleo_anima_online_available();
+        char fr[24]; human_free(fr, sizeof fr);
+        const char *m = s_eng_model; if (!strncmp(m, "claude-", 7)) m += 7;
+        int y = y0 + 12;
+        lg::kv(16, y, W - 32, TR5("Motore", "Engine", "Motor", "Moteur", "Engine"), s_eng_ready ? s_eng_short : TR5("non impostato", "not set", "no fijado", "non regle", "nicht gesetzt"), s_eng_ready ? GRN : ACC); y += 28;
+        lg::kv(16, y, W - 32, TR5("Modello", "Model", "Modelo", "Modele", "Modell"), m[0] ? m : "-", MUTED); y += 28;
+        lg::kv(16, y, W - 32, "Online", on ? TR5("si", "yes", "si", "oui", "ja") : "no", on ? GRN : ACC); y += 28;
+        lg::kv(16, y, W - 32, TR5("Spazio", "Storage", "Espacio", "Espace", "Speicher"), fr[0] ? fr : "n/d", FG);
+    }
+}
+
+static void lg_ai_working(bool full)
+{
+    const int W = d.width(), H = d.height();
+    if (full) {
+        lg::header(job_kind_label(s_job_kind), s_eng_ready ? s_eng_short : nullptr, VIO, 0);
+        d.fillRect(0, lg::HEAD, W, H - lg::HEAD, BG);
+        lg::font(1); d.setTextDatum(top_center); d.setTextColor(GRN, BG);
+        d.drawString(TR5("Elaborazione in corso...", "Processing...", "Procesando...", "Traitement...", "Arbeitet..."), W / 2, 150);
+        lg::font(0); d.setTextColor(MUTED, BG);
+        d.drawString(TR5("la nota resta sulla scheda: puoi aspettare qui", "the take stays on the card: you can wait here", "la nota queda en la tarjeta", "la prise reste sur la carte", "die Aufnahme bleibt auf der Karte"), W / 2, 200);
+        d.setTextDatum(top_left);
+    }
+    const int phase = (int)((esp_timer_get_time() / 320000) % 4);
+    static const int RX[4] = { 26, 0, -26, 0 }, RY[4] = { 0, 26, 0, -26 };
+    for (int k = 0; k < 4; k++) {
+        const int x = W / 2 + RX[k], y = 96 + RY[k];
+        d.fillRect(x - 7, y - 7, 14, 14, BG);
+        d.fillCircle(x, y, k == phase ? 6 : 3, k == phase ? GRN : DIM);
+    }
+    d.fillRect(0, 172, W, 22, BG);
+    int pd = 0, pt = 0; nucleo_anima_transcribe_progress(&pd, &pt);
+    if (pt > 1) {
+        char w2[40]; snprintf(w2, sizeof w2, "%s %d/%d", TR5("segmento", "segment", "segmento", "segment", "Segment"), pd + (pd < pt ? 1 : 0), pt);
+        lg::font(0); d.setTextDatum(top_center); d.setTextColor(MUTED, BG); d.drawString(w2, W / 2, 174); d.setTextDatum(top_left);
+    }
+}
+
+static void draw_large(void)
+{
+    const int W = d.width(), H = d.height();
+    const unsigned gen = nucleo_app_repaint_gen();
+    const int view = lg_view();
+    const bool moving_only = s_lg_drawn_rev == s_lg_rev && s_lg_drawn_gen == gen && s_lg_drawn_view == view;
+    s_lg_drawn_rev = s_lg_rev; s_lg_drawn_gen = gen; s_lg_drawn_view = view;
+    if (moving_only) {                                                  // only the clock / waveform / spinner moved
+        if (view == LGV_AI) lg_ai_working(false);
+        else if (view == LGV_REC) lg_recording(false);
+        else if (view >= 0 && s_mode == M_PLAY) lg_play(false);
+        return;                                                         // the touch table stays as committed
+    }
+    nucleo_touch_clear();
+    if (view == LGV_AI)  lg_ai_working(true);
+    else if (view == LGV_SPLASH) { lg::header(TR5("Registratore", "Voice Recorder", "Grabador", "Enregistreur", "Rekorder"), nullptr, ACC, 0);
+                           lg::message(0, lg::HEAD, W, H - lg::HEAD, TR5("Modalita' dedicata", "Dedicated mode", "Modo dedicado", "Mode dedie", "Widme Modus"),
+                                       TR5("preparo la RAM...", "preparing RAM...", "prepara RAM", "prepare RAM", "bereite RAM"), FG); }
+    else if (view == LGV_REC || view == LGV_ARMING) lg_recording(true);
+    else if (s_mode == M_SETTINGS) lg_settings();
+    else if (s_mode == M_DETAIL)   lg_reader(false);
+    else if (s_mode == M_ASK)      lg_reader(true);
+    else if (s_mode == M_PLAY)     lg_play(true);
+    else                           lg_library();
+    nucleo_touch_commit();
+}
+
+// The Cardputer while the panel shows the recorder: the timer while recording, else the picked take / what
+// plays, and the keys. On the direct path a redraw that only moves the timer / clock repaints just that line.
+static void lg_comp_live(int y)
+{
+    char t[24];
+    if (nucleo_recorder_is_recording()) {
+        const uint32_t s = nucleo_recorder_seconds();
+        snprintf(t, sizeof t, "%u:%02u", (unsigned)(s / 60), (unsigned)(s % 60));
+        d.fillRect(0, y, 240, 52, BG);
+        d.setFont(&fonts::Font0); d.setTextSize(4); d.setTextColor(FG, BG); d.setCursor(8, y + 2); d.print(t); d.setTextSize(1);
+        d.fillCircle(222, y + 16, 7, (esp_timer_get_time() / 400000) & 1 ? ACC : REC_DIM);
+        int lvl = nucleo_recorder_level(); if (lvl < 0) lvl = 0; if (lvl > 100) lvl = 100;
+        lg::bar(8, y + 40, 224, 6, lvl, lvl > 80 ? ACC : lvl > 40 ? AMBER : GRN);
+        return;
+    }
+    if (nucleo_audio_is_playing() && s_playing >= 0) {
+        const uint32_t el = nucleo_audio_elapsed_ms() / 1000, dur = nucleo_audio_duration_ms() / 1000;
+        snprintf(t, sizeof t, "%u:%02u / %u:%02u", (unsigned)(el / 60), (unsigned)(el % 60), (unsigned)(dur / 60), (unsigned)(dur % 60));
+        d.fillRect(0, y, 240, 20, BG);
+        d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextColor(nucleo_audio_is_paused() ? AMBER : GRN, BG); d.drawString(t, 8, y + 2);
+        lg::bar(8, y + 13, 224, 4, nucleo_audio_progress(), GRN);
+    }
+}
+static void draw_companion(void)
+{
+    const int top = nucleo_app_content_top(), h = nucleo_app_content_height();
+    const unsigned gen = nucleo_app_repaint_gen();
+    const int view = lg_view();
+    const bool rec = nucleo_recorder_is_recording();
+    const int live_y = rec ? top + 30 : top + 76;
+    if (!nucleo_app_is_buffered() && s_lg_comp_rev == s_lg_rev && s_lg_comp_gen == gen && s_lg_comp_view == view) { lg_comp_live(live_y); return; }
+    s_lg_comp_rev = s_lg_rev; s_lg_comp_gen = gen; s_lg_comp_view = view;
+    d.fillRect(0, top, 240, h, BG);
+    int y = lg::comp_head(TR5("REGISTRATORE", "RECORDER", "GRABADOR", "ENREGISTREUR", "REKORDER"), ACC);
+    d.setFont(&fonts::Font0); d.setTextSize(1);
+    if (view == LGV_SPLASH) { d.setTextColor(FG, BG); d.drawString(TR5("Modalita' dedicata: preparo la RAM...", "Dedicated mode: preparing RAM...", "Modo dedicado", "Mode dedie", "Widme Modus"), 8, y + 6); return; }
+    if (view == LGV_AI) {
+        d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(GRN, BG); d.drawString(job_kind_label(s_job_kind), 8, y + 6);
+        d.setFont(&fonts::Font0); d.setTextColor(MUTED, BG); d.drawString(TR5("elaborazione nel cloud...", "processing in the cloud...", "en la nube", "dans le nuage", "in der Cloud"), 8, y + 32);
+        lg::comp_keys(TR5("Esc due volte: esci", "Esc twice: leave", "Esc dos veces", "Esc deux fois", "Esc zweimal"));
+        return;
+    }
+    if (rec || s_ptt == PTT_ARMING) {
+        d.setTextColor(ACC, BG); d.drawString(rec ? TR5("REGISTRAZIONE", "RECORDING", "GRABANDO", "ENREGISTRE", "AUFNAHME") : TR5("Pronto: tieni GO", "Ready: hold GO", "Listo", "Pret", "Bereit"), 8, y + 2);
+        lg_comp_live(live_y);
+        lg::comp_keys(s_ptt == PTT_RECORDING ? TR5("rilascia GO per fermare", "release GO to stop", "suelta GO", "relache GO", "GO loslassen")
+                                             : TR5("R o spazio: ferma", "R or space: stop", "R/esp: para", "R/esp: stop", "R/Leer: stopp"));
+        return;
+    }
+    const char *what = s_count && s_sel < s_count ? lg_label(s_sel) : TR5("Nessuna nota", "No takes", "Sin notas", "Aucune prise", "Keine Aufnahmen");
+    d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(s_count && s_list[s_sel].has_ai ? VIO : FG, BG);
+    d.drawString(what, 8, y + 4);
+    d.setFont(&fonts::Font0); d.setTextColor(MUTED, BG);
+    if (s_count && s_sel < s_count) {
+        const Rec *r = &s_list[s_sel];
+        char det[24] = ""; if (r->mtime > 0) { struct tm tm; localtime_r(&r->mtime, &tm); strftime(det, sizeof det, "%d/%m %H:%M", &tm); }
+        char m[64];
+        snprintf(m, sizeof m, "%s  %u:%02u  %d/%d", det, (unsigned)(r->secs / 60), (unsigned)(r->secs % 60), s_sel + 1, s_count);
+        d.drawString(m, 8, y + 28);
+        if (s_mode == M_DETAIL) { d.setTextColor(VIO, BG); d.drawString(det_tab_label(s_tab), 8, y + 42); }
+        else if (s_mode == M_SETTINGS) { char m2[32]; snprintf(m2, sizeof m2, "%s: %s", TR5("Impostazioni", "Settings", "Ajustes", "Reglages", "Einstell."), SET_TABS[s_set_tab]); d.setTextColor(ACC, BG); d.drawString(m2, 8, y + 42); }
+        else if (s_job == 1) { d.setTextColor(AMBER, BG); d.drawString(TR5("AI al lavoro...", "AI working...", "IA trabaja", "IA travaille", "KI arbeitet"), 8, y + 42); }
+        else if (r->has_ai) { d.setTextColor(VIO, BG); d.drawString(TR5("note AI pronte", "AI notes ready", "notas IA", "notes IA", "KI-Notizen"), 8, y + 42); }
+    }
+    lg_comp_live(live_y);
+    lg::comp_keys(s_mode == M_PLAY ? TR5("spazio pausa  ,/. 5s  su/giu vol", "space pause  ,/. 5s  up/dn vol", "esp pausa  ,/. 5s", "esp pause  ,/. 5s", "Leer Pause  ,/. 5s")
+                : s_mode == M_DETAIL ? TR5("1-4 scheda  su/giu  INVIO crea", "1-4 tab  up/dn  ENTER make", "1-4 tab  INTRO crea", "1-4 onglet  ENTREE", "1-4 Tab  ENTER")
+                : s_mode == M_SETTINGS ? TR5("su/giu  INVIO cambia  </> scheda", "up/dn  ENTER change  </> tab", "INTRO cambia", "ENTREE change", "ENTER aendern")
+                : TR5("R reg  INVIO play  A AI  n nome", "R rec  ENTER play  A AI  n name", "R grab  INTRO play  A IA", "R enr  ENTREE play  A IA", "R auf  ENTER play  A KI"));
+}
+
 static void draw(void)
 {
+    if (nucleo_app_two_screens()) { draw_companion(); return; }
     int top = nucleo_app_content_top(), h = nucleo_app_content_height();
     // The AI-working screen is on the DIRECT path (canvas freed) and redraws ~3 Hz for the spinner:
     // a full-band fillRect on that cadence is exactly the ST7789 blink ANTI-FLICKER.md forbids. Clear
@@ -1790,7 +2247,7 @@ extern "C" void nucleo_register_recorder(void)
     static const nucleo_app_def_t app = {
         "recorder", "Voice Recorder", "Media",
         "Record the mic, then summarize/transcribe with Grok. TAB=settings.",
-        'R', 0xF96B, enter, on_key, tick, draw, exit_app
+        'R', 0xF96B, enter, on_key, tick, draw, exit_app, 0, nullptr, draw_large
     };
     nucleo_app_register(&app);
 }

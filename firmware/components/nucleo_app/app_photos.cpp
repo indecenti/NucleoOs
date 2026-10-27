@@ -142,8 +142,167 @@ static void view_to_list(const char *hint)
     nucleo_app_set_hint(hint);
 }
 
+
+// ===== two screens ==============================================================================================
+// The panel carries the pictures: in the list, the names at the left and the picked one's card at the right (type,
+// size in pixels, file size, the too-large warning) with an Open button — no thumbnail is decoded there, so
+// browsing never costs the decoder's RAM while the shared canvas is still held. Opening a picture takes the same
+// RAM posture as the compact viewer (canvas released, direct draw) and decodes it ONCE fitted to the whole panel,
+// straight into the panel (no buffer); a later redraw that shows the same picture skips the decode and repaints
+// only the caption. Touch: tap a name to pick it, again (or Open) to view; in the viewer the left / right thirds
+// step to the previous / next picture, a vertical drag does too, the middle (or the caption's chevron) goes back.
+// The Cardputer, meanwhile, is the companion: what is picked or shown, its numbers, the keys.
+#include "nucleo_theme.h"
+#include "nucleo_touch.h"
+#include "app_large.h"
+#include <sys/stat.h>
+
+static const unsigned short C_RED_PH = 0xF96B, BLACK_PH = 0x0000;   // the OS red; the viewer's mat
+static const int LG_LISTW = 150, LG_CAP = 24;           // list width; the viewer's caption band
+static int s_lg_scroll;
+static int s_lg_pic_sel = -1; static unsigned s_lg_pic_gen; static bool s_lg_pic_on;   // what the panel shows now
+
+// The picked picture's path (the "open with" file, or the folder's s_sel) and its bare name.
+static const char *lg_path(char *abs, size_t n)
+{
+    if (s_open_abs[0]) { snprintf(abs, n, "%s", s_open_abs); const char *nm = strrchr(s_open_abs, '/'); return nm ? nm + 1 : s_open_abs; }
+    if (s_n <= 0) { abs[0] = 0; return ""; }
+    snprintf(abs, n, "%s/%s", PIC_DIR, s_names[s_sel]);
+    return s_names[s_sel];
+}
+static const char *lg_kind(const char *nm)
+{
+    const char *dot = strrchr(nm, '.');
+    return dot && !strcasecmp(dot, ".png") ? "PNG" : "JPEG";
+}
+
+static void lg_row(int i, int x, int y, int w, int h, bool focus, unsigned short bg, void *)
+{
+    char nm[56]; snprintf(nm, sizeof nm, "%s", s_names[i]);
+    char *dot = strrchr(nm, '.'); if (dot && dot != nm) *dot = 0;              // the extension shows on the card
+    lg::row_text(x, y, w, h, focus, bg, nm, nullptr, THEME_FG);
+}
+
+static void lg_list(void)
+{
+    const int W = d.width(), H = d.height();
+    s_lg_pic_on = false;
+    char c[24]; snprintf(c, sizeof c, TR("%d immagini", "%d images"), s_n);
+    const int y = lg::header("Photos", c, ACC);
+    if (s_n == 0) {
+        lg::message(0, y, W, H - y, TR("Nessuna immagine", "No images"), TR("Copia JPEG o PNG in /data/Pictures (dal web o dalla scheda).", "Copy JPEG or PNG files into /data/Pictures (from the web or the card)."), THEME_MUTED);
+        return;
+    }
+    lg::list(0, y + 2, LG_LISTW, H - y - 4, lg::ROW, s_n, s_sel, &s_lg_scroll, lg_row, nullptr, ACC);
+    d.fillRect(LG_LISTW, y, W - LG_LISTW, H - y, THEME_BG);
+    const int cx = LG_LISTW + 4, cy = y + 6, cw = W - LG_LISTW - 10, ch = H - cy - 6;
+    lg::panel(cx, cy, cw, ch);
+    const unsigned short cb = lg::card();
+    char abs[256]; const char *nm = lg_path(abs, sizeof abs);
+    char t[64]; lg::font(1); d.setTextColor(ACC, cb);
+    char base[56]; snprintf(base, sizeof base, "%s", nm); char *dot = strrchr(base, '.'); if (dot && dot != base) *dot = 0;
+    lg::fit(t, sizeof t, base, cw - 20); d.drawString(t, cx + 10, cy + 8);
+    d.drawFastHLine(cx + 10, cy + 30, cw - 20, THEME_LINE);
+    int iw = 0, ih = 0; const bool dims = img_dims(abs, &iw, &ih);
+    const bool big = dims && (iw > IMG_MAX_DIM || ih > IMG_MAX_DIM || (long)iw * ih > IMG_MAX_PIX);
+    int ly = cy + 38;
+    lg::kv(cx + 10, ly, cw - 20, TR("Tipo", "Type"), lg_kind(nm), THEME_FG, cb); ly += 22;
+    if (dims) { snprintf(t, sizeof t, "%d x %d", iw, ih); lg::kv(cx + 10, ly, cw - 20, TR("Pixel", "Pixels"), t, big ? C_RED_PH : THEME_FG, cb); ly += 22; }
+    struct stat st;
+    if (stat(abs, &st) == 0) {
+        if (st.st_size < 1024) snprintf(t, sizeof t, "%ld B", (long)st.st_size); else snprintf(t, sizeof t, "%ld KB", (long)((st.st_size + 1023) / 1024));
+        lg::kv(cx + 10, ly, cw - 20, TR("File", "File"), t, THEME_FG, cb); ly += 22;
+    }
+    snprintf(t, sizeof t, "%d / %d", s_sel + 1, s_n);
+    lg::kv(cx + 10, ly, cw - 20, TR("Posizione", "Position"), t, THEME_MUTED, cb);
+    if (big) {                                               // the no-PSRAM decoder would crash on it: say where it opens
+        lg::font(0); d.setTextColor(C_RED_PH, cb);
+        lg::wrap(TR("Troppo grande per il Cardputer: aprila dall'app web.", "Too large for the Cardputer: open it in the web app."), cx + 10, cy + ch - 56, cw - 20, 17, 3);
+    } else {
+        lg::button(cx + 8, cy + ch - 40, cw - 16, 32, TR("Apri", "Open"), ACC, THEME_INK, NK_ENTER, 0);
+        nucleo_touch_add(cx, cy, cw, ch - 44, NK_ENTER, 0);   // the card itself opens too
+    }
+}
+
+static void lg_view(void)
+{
+    const int W = d.width(), H = d.height(), PH = H - LG_CAP;
+    char abs[256]; const char *nm = lg_path(abs, sizeof abs);
+    const unsigned gen = nucleo_app_repaint_gen();
+    const int key = s_open_abs[0] ? -2 : s_sel;
+    if (!s_lg_pic_on || s_lg_pic_sel != key || s_lg_pic_gen != gen) {   // a new picture (or the panel was overdrawn)
+        d.fillRect(0, 0, W, PH, BLACK_PH);
+        if (abs[0]) {
+            const char *dot = strrchr(nm, '.');
+            if (dot && !strcasecmp(dot, ".png")) d.drawPngFile(abs, W / 2, PH / 2, W, PH, 0, 0, 0.0f, 0.0f, datum_t::middle_center);
+            else                                 d.drawJpgFile(abs, W / 2, PH / 2, W, PH, 0, 0, 0.0f, 0.0f, datum_t::middle_center);
+        }
+        s_lg_pic_on = true; s_lg_pic_sel = key; s_lg_pic_gen = gen;
+    }
+    // the caption band: back chevron + name, the position, the step arrows
+    d.fillRect(0, PH, W, LG_CAP, THEME_BG);
+    const int cy = PH + LG_CAP / 2;
+    d.drawLine(16, cy, 22, cy - 6, ACC); d.drawLine(16, cy, 22, cy + 6, ACC); d.drawLine(17, cy, 23, cy - 6, ACC); d.drawLine(17, cy, 23, cy + 6, ACC);
+    lg::font(0); d.setTextDatum(middle_left); d.setTextColor(THEME_FG, THEME_BG);
+    char t[64]; lg::fit(t, sizeof t, nm, W - 120); d.drawString(t, 32, cy);
+    if (!s_open_abs[0]) {
+        char pos[16]; snprintf(pos, sizeof pos, "%d / %d", s_sel + 1, s_n);
+        d.setTextDatum(middle_right); d.setTextColor(THEME_MUTED, THEME_BG); d.drawString(pos, W - 10, cy);
+    }
+    d.setTextDatum(top_left);
+    nucleo_touch_add(0, PH, W / 2, LG_CAP, NK_DEL, 8);                   // the caption's chevron: back to the list
+    if (!s_open_abs[0] && s_n > 1) {
+        nucleo_touch_add(0, 0, W * 3 / 10, PH, NK_UP, ';');               // left third: previous
+        nucleo_touch_add(W * 7 / 10, 0, W - W * 7 / 10, PH, NK_DOWN, '.'); // right third: next
+        nucleo_touch_add_scroll(0, 0, W, PH, 60, NK_UP, ';', NK_DOWN, '.');
+    }
+    nucleo_touch_add(W * 3 / 10, 0, W * 4 / 10, PH, NK_DEL, 8);          // the middle: back to the list
+}
+
+static void draw_large(void)
+{
+    nucleo_touch_clear();
+    if (s_view) lg_view(); else lg_list();
+    nucleo_touch_commit();
+}
+
+static void lg_tap_list(int key, char ch, bool *done)                    // a tapped name: pick it, again = open it
+{
+    *done = false;
+    if (s_view || !nucleo_touch_is_row(key, ch)) return;
+    *done = true;
+    if (lg::row_tap(key, ch, s_lg_scroll, s_n, &s_sel) == 2) open_selected();
+    nucleo_app_request_draw();
+}
+
+// The Cardputer while the panel shows the pictures: the picked / shown one, its numbers, the keys.
+static void draw_companion(void)
+{
+    const int top = nucleo_app_content_top(), h = nucleo_app_content_height();
+    d.fillRect(0, top, 240, h, THEME_BG);
+    int y = lg::comp_head("PHOTOS", ACC);
+    if (s_n == 0 && !s_open_abs[0]) {
+        d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(THEME_FG, THEME_BG); d.drawString(TR("Nessuna immagine", "No images"), 8, y + 6);
+        d.setFont(&fonts::Font0); d.setTextColor(THEME_MUTED, THEME_BG); d.drawString("/data/Pictures", 8, y + 30);
+        lg::comp_keys(TR("ESC esci", "ESC exit"));
+        return;
+    }
+    char abs[256]; const char *nm = lg_path(abs, sizeof abs);
+    d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(THEME_FG, THEME_BG);
+    const int nl = lg::wrap(nm, 8, y + 4, 224, 20, 2);
+    d.setFont(&fonts::Font0); d.setTextColor(THEME_MUTED, THEME_BG);
+    int iw = 0, ih = 0; char m[64];
+    if (img_dims(abs, &iw, &ih)) snprintf(m, sizeof m, "%s  %d x %d", lg_kind(nm), iw, ih); else snprintf(m, sizeof m, "%s", lg_kind(nm));
+    d.drawString(m, 8, y + 10 + nl * 20);
+    if (!s_open_abs[0]) { snprintf(m, sizeof m, TR("%d di %d", "%d of %d"), s_sel + 1, s_n); d.drawString(m, 8, y + 22 + nl * 20); }
+    if (s_view) { d.setTextColor(ACC, THEME_BG); d.drawString(TR("sul pannello", "on the panel"), 160, y + 22 + nl * 20); }
+    lg::comp_keys(s_view ? (s_open_abs[0] ? TR("CANC chiudi  ESC esci", "DEL close  ESC exit") : TR(";/. prec/succ  CANC lista  ESC esci", ";/. prev/next  DEL list  ESC exit"))
+                         : TR(";/. scegli  INVIO apri  1-9 apri", ";/. pick  ENTER view  1-9 view"));
+}
+
 static void on_key(int key, char ch)
 {
+    { bool done; lg_tap_list(key, ch, &done); if (done) return; }      // the panel's taps (two screens)
     if (s_view) {
         if (s_open_abs[0]) {                          // external "open with" image: single file, no prev/next
             if (key == NK_DEL) { s_open_abs[0] = 0; s_view = false; nucleo_app_set_direct_draw(false); d.releasePngMemory(); nucleo_app_set_hint(TR5(";/. muovi  invio apri  esc indietro", ";/. move  enter view  esc back", ";/. mueve  enter ver  esc volver", ";/. depl.  entree voir  esc ret.", ";/. bew.  enter zeigen  esc ret.")); }
@@ -202,7 +361,11 @@ static void draw_list(void)
     app_ui_list(y0, top + h - y0, s_n, s_sel, ph_label, nullptr, ph_color, nullptr);
 }
 
-static void draw(void) { if (s_view) draw_view(); else draw_list(); }
+static void draw(void)
+{
+    if (nucleo_app_two_screens()) { draw_companion(); return; }
+    if (s_view) draw_view(); else draw_list();
+}
 
 static void exit_app(void) { d.releasePngMemory(); if (s_names) { free(s_names); s_names = nullptr; s_n = 0; } }   // return ~3.5 KB to the heap for ANIMA
 
@@ -210,7 +373,7 @@ extern "C" void nucleo_register_photos(void)
 {
     static const nucleo_app_def_t app = {
         "photos", "Photos", "Media", "Browse images on the SD card",
-        'P', 0xFE8C, enter, on_key, tick, draw, exit_app
+        'P', 0xFE8C, enter, on_key, tick, draw, exit_app, 0, nullptr, draw_large
     };
     nucleo_app_register(&app);
 }

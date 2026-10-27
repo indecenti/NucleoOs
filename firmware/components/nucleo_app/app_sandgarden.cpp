@@ -21,6 +21,8 @@
 #include "app_gfx.h"
 #include "game_ui.h"
 #include "game_text.h"
+#include "app_large.h"          // two screens: the garden on the 320x240 panel, the Cardputer as companion
+#include "nucleo_touch.h"
 #include "game_sfx.h"
 #include <M5GFX.h>
 #include <stdint.h>
@@ -501,7 +503,7 @@ static void draw_settings(void)
     set_items[0] = a; set_items[1] = GT("Azzera record", "Reset records");
     gui::menu(s_set, set_items, 2, y, nucleo_app_content_height(), rgb(120, 220, 140));
 }
-static void on_draw(void)
+static void draw_game(void)
 {
     switch (s_scr) {
         case SC_PLAY:   draw_play(); break;
@@ -510,6 +512,100 @@ static void on_draw(void)
         case SC_SET:    draw_settings(); break;
         default:        draw_menu(); break;
     }
+}
+
+// ===== two screens: the garden on the 320x240 panel, the Cardputer as a companion ========================
+// lg::game pushes the board + sky frame scaled to the panel; a NATIVE HUD below is the directional pad that
+// drives the slides (each tap is one move, exactly like a key press) plus undo, with the dialogs and the menu
+// navigation as their own touch rows. The Cardputer companion shows the score, the record and the tallest
+// plant grown so far.
+#define GRN rgb(120, 220, 140)
+static void lg_hud(int y, int h)
+{
+    const int W320 = d.width();
+    d.fillRect(0, y, W320, h, rgb(10, 16, 26));
+    d.drawFastHLine(0, y, W320, rgb(80, 130, 90));
+    const int g = 8, colw = (W320 - 4 * g) / 3;
+    const int r1 = y + 4, rh = (h - 3 * 4) / 2, r2 = r1 + rh + 4;
+    char b[24];
+
+    if (s_scr == SC_PLAY) {
+        if (s_dialog == 1) {            // pause
+            lg::button(g, r2, (W320 - 3 * g) / 2, rh, GT("Riprendi", "Resume"), GRN, 0x0000, NK_ENTER, 0);
+            lg::button(2 * g + (W320 - 3 * g) / 2, r2, (W320 - 3 * g) / 2, rh, GT("Menu", "Menu"), lg::card(), FG, NK_BACK, 0);
+            return;
+        }
+        if (s_dialog == 2) {            // garden full
+            const int bw = G->can_undo ? (W320 - 4 * g) / 3 : (W320 - 3 * g) / 2;
+            int x = g;
+            lg::button(x, r2, bw, rh, GT("Nuova", "New"), GRN, 0x0000, NK_ENTER, 0); x += bw + g;
+            if (G->can_undo) { lg::button(x, r2, bw, rh, GT("Annulla", "Undo"), rgb(255, 214, 70), 0x0000, NK_CHAR, 'z'); x += bw + g; }
+            lg::button(x, r2, bw, rh, GT("Menu", "Menu"), lg::card(), FG, NK_BACK, 0);
+            return;
+        }
+        if (s_dialog == 3) { lg::button(40, r2, W320 - 80, rh, GT("Continua", "Continue"), rgb(255, 214, 70), 0x0000, NK_ENTER, 0); return; }
+        // the directional pad + undo
+        lg::button(g, r1, colw, rh, GT("Annulla", "Undo"), G->can_undo ? rgb(120, 150, 210) : lg::card(), G->can_undo ? 0x0000 : DIM, NK_CHAR, 'z');
+        lg::button(2 * g + colw, r1, colw, rh, GT("Su", "Up"), GRN, 0x0000, NK_UP, 0);
+        snprintf(b, sizeof b, "%lu", (unsigned long)G->score);
+        lg::font(1); d.setTextDatum(middle_center); d.setTextColor(rgb(255, 230, 150), rgb(10, 16, 26));
+        d.drawString(b, 3 * g + 2 * colw + colw / 2, r1 + rh / 2); d.setTextDatum(top_left);
+        lg::button(g, r2, colw, rh, GT("Sx", "Left"), GRN, 0x0000, NK_LEFT, 0);
+        lg::button(2 * g + colw, r2, colw, rh, GT("Giu", "Down"), GRN, 0x0000, NK_DOWN, 0);
+        lg::button(3 * g + 2 * colw, r2, colw, rh, GT("Dx", "Right"), GRN, 0x0000, NK_RIGHT, 0);
+        return;
+    }
+    // menu / settings / help / record
+    const int bh = rh, by = r2;
+    lg::font(1); d.setTextDatum(top_left); d.setTextColor(GRN, rgb(10, 16, 26));
+    const char *lbl = s_scr == SC_SET ? GT("Impostazioni", "Settings")
+                    : s_scr == SC_HELP ? GT("Come si gioca", "How to play")
+                    : s_scr == SC_RECORD ? GT("Record", "Records")
+                    : GT("Giardino - menu", "Garden - menu");
+    d.drawString(lbl, 12, r1 + 4); d.setTextDatum(top_left);
+    const int bw3 = (W320 - 4 * g) / 3;
+    if (s_scr == SC_MENU)        { lg::button(g, by, bw3, bh, GT("Su", "Up"), lg::card(), FG, NK_UP, 0); lg::button(2 * g + bw3, by, bw3, bh, "OK", GRN, 0x0000, NK_ENTER, 0); lg::button(3 * g + 2 * bw3, by, bw3, bh, GT("Giu", "Down"), lg::card(), FG, NK_DOWN, 0); }
+    else if (s_scr == SC_SET)    { lg::button(g, by, bw3, bh, GT("Su", "Up"), lg::card(), FG, NK_UP, 0); lg::button(2 * g + bw3, by, bw3, bh, GT("Cambia", "Change"), GRN, 0x0000, NK_ENTER, 0); lg::button(3 * g + 2 * bw3, by, bw3, bh, GT("Giu", "Down"), lg::card(), FG, NK_DOWN, 0); }
+    else if (s_scr == SC_HELP)   { lg::button(g, by, bw3, bh, GT("Prec", "Prev"), lg::card(), FG, NK_LEFT, 0); lg::button(2 * g + bw3, by, bw3, bh, GT("Avanti", "Next"), GRN, 0x0000, NK_RIGHT, 0); lg::button(3 * g + 2 * bw3, by, bw3, bh, GT("Indietro", "Back"), lg::card(), FG, NK_BACK, 0); }
+    else                         lg::button(40, by, W320 - 80, bh, GT("Menu", "Menu"), GRN, 0x0000, NK_BACK, 0);
+}
+static void draw_large(void)
+{
+    nucleo_touch_clear();
+    lg::game(draw_game, lg_hud, GT("Giardino", "Garden"), GRN);
+    nucleo_touch_commit();
+}
+static void draw_companion(void)
+{
+    const int top = nucleo_app_content_top(), hc = nucleo_app_content_height();
+    d.fillRect(0, top, W, hc, BG);
+    int y = lg::comp_head("GIARDINO", GRN);
+    char b[32];
+    if (s_scr == SC_PLAY && G) {
+        gui::text(GT("Punti", "Score"), 8, y + 2, 0, gui::F_SMALL, rgb(150, 200, 160), 0);
+        snprintf(b, sizeof b, "%lu", (unsigned long)G->score); gui::text(b, 8, y + 13, 0, gui::F_BIG, 0xFFFF, 0);
+        snprintf(b, sizeof b, GT("Rec %lu", "Best %lu"), (unsigned long)s_best); gui::text(b, W - 8, y + 18, 2, gui::F_SMALL, rgb(255, 230, 150), 0);
+        int mt = max_tier();
+        snprintf(b, sizeof b, GT("Pianta: %s", "Plant: %s"), tier_name(mt));
+        gui::text(b, 8, y + 44, 0, gui::F_BODY, tier_col(mt), 0);
+        const char *st = s_dialog == 1 ? GT("In pausa", "Paused")
+                       : s_dialog == 2 ? GT("Giardino pieno", "Garden full")
+                       : s_dialog == 3 ? GT("Albero d'oro!", "Golden tree!") : nullptr;
+        if (st) gui::text(st, W - 8, y + 44, 2, gui::F_SMALL, rgb(255, 200, 80), 0);
+        lg::comp_keys(GT("Frecce muovono  Z annulla  Esc pausa", "Arrows move  Z undo  Esc pause"));
+        return;
+    }
+    const char *st = s_scr == SC_SET ? GT("Impostazioni", "Settings")
+                   : s_scr == SC_HELP ? GT("Come si gioca", "How to play")
+                   : s_scr == SC_RECORD ? GT("Record", "Records") : GT("Menu", "Menu");
+    gui::text(st, 8, y + 6, 0, gui::F_BODY, 0xFFFF, 0);
+    snprintf(b, sizeof b, GT("Record %lu", "Best %lu"), (unsigned long)s_best); gui::text(b, 8, y + 34, 0, gui::F_SMALL, rgb(255, 230, 150), 0);
+    lg::comp_keys(GT("Tocca i tasti sul pannello", "Use the panel buttons"));
+}
+static void on_draw(void)
+{
+    if (nucleo_app_two_screens()) { draw_companion(); return; }
+    draw_game();
 }
 
 // ============================ flow ===========================================
@@ -673,7 +769,7 @@ extern "C" void nucleo_register_sandgarden(void)
         "giardino", "Giardino", "Games", "Unisci le piante e fai crescere l'albero d'oro",
         'G', C_GREEN, on_enter, on_key, nullptr, on_draw, on_exit,
         NX_NET_APP,   // the shared I2S line for the sound pack; restored on close
-        APP_RAM
+        APP_RAM, draw_large
     };
     nucleo_app_register(&app);
 }

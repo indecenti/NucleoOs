@@ -1,0 +1,17 @@
+# Mail: two fictional accounts (stub), a few recent contacts and a sent log on the card
+@host stubs/mail_stubs.cpp
+@sd system/mail/recents.txt giulia.conti@example.com\nmarco.bianchi@example.org\nufficio@studio-example.org\n
+@sd system/mail/sent.log 2026-09-26 10:12 | OK | giulia.conti@example.com | Foto della gita\n2026-09-27 18:40 | ERR | marco.bianchi@example.org | Preventivo cucina\n2026-09-28 08:05 | OK | ufficio@studio-example.org | Ferie di ottobre\n2026-09-29 09:01 | OK | marco.bianchi@example.org | Re: Preventivo cucina\n
+accounts
+second    D
+newacct   D D
+write     TAB
+picker    TAB ENTER D
+filled    TAB ENTER D ENTER D ENTER t:Preventivo_cucina ENTER D ENTER t:Ciao_Marco,_ti_mando_le_misure_della_parete:_320_x_260_cm._Fammi_sapere_entro_venerdi. ENTER
+toedit    TAB ENTER ENTER t:mar
+body      TAB D D ENTER t:Ciao_Giulia,_ecco_le_foto_della_gita_al_lago._La_prossima_volta_porto_il_cavalletto.
+sent      TAB TAB
+provider  D D ENTER D
+wizemail  D D ENTER ENTER t:luca.ferri@example.com
+wizpass   D D ENTER ENTER t:luca.ferri@example.com ENTER t:abcdefgh
+wizdone   D D ENTER ENTER t:luca.ferri@example.com ENTER t:abcdefgh ENTER t:Luca ENTER

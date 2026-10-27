@@ -1,0 +1,6 @@
+menu
+scores D ENTER
+settings D D ENTER
+help D D ENTER D D ENTER
+play ENTER tick:6
+pause ENTER tick:4 BACK

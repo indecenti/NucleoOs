@@ -1,0 +1,8 @@
+# Radio: the dial (list + station card) on the panel, the Cardputer as companion.
+# NB: ENTER starts the blocking ON AIR modal (it reads the keyboard directly) so scenes never press it.
+# Stations come from the built-in curated catalog seeded when the SD card has no radio.json.
+home
+pick     D D D
+far      D D D D D D D D
+volup    c:+ c:+ c:+
+voldn    c:+ c:+ c:- c:-

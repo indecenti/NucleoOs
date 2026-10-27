@@ -1,0 +1,10 @@
+# Evil Portal — consent / home / setup / SSID + page lists / typing / loot / running. Fictional data from the stub.
+@host stubs/evilportal_stubs.cpp
+consent  tick:2
+home     ENTER
+setup    ENTER ENTER
+ssid     ENTER ENTER ENTER
+page     ENTER ENTER D ENTER
+type     ENTER ENTER ENTER ENTER
+loot     ENTER D D D ENTER
+running  ENTER ENTER D D ENTER tick:2

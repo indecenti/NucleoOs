@@ -1,0 +1,6 @@
+menu
+help D ENTER
+settings D D ENTER
+ready ENTER
+hold ENTER SPACE tick:6 c:3 c:5
+result ENTER SPACE tick:6 SPACE tick:8

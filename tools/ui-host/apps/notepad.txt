@@ -1,0 +1,12 @@
+# Notes: a few notes on the card, the list / a note open / writing / the manager cards
+@sd data/Notes/spesa.md # Spesa\n- latte\n- pane integrale\n- **caffe'** in grani\n- mele\n\nRicordarsi le buste.
+@sd data/Notes/idee-progetto.md # Idee\n## Cardputer\nUn secondo schermo per ogni app: lista a sinistra, dettagli a destra.\n> Mai uno specchio.\n\n---\nAltro testo per vedere lo scorrimento della nota sul pannello grande, che deve andare a capo bene.
+@sd data/Notes/todo.txt chiamare Marco\nportare la bici dal meccanico\nrinnovare il dominio
+list    D D
+view    D D ENTER
+write   ENTER t:Ciao_dal_Cardputer ENTER t:seconda_riga
+actions D D R
+details D D R D D D ENTER
+rename  D D R D ENTER
+delete  D c:d
+options D D ENTER TAB

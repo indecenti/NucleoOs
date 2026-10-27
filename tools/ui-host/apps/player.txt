@@ -1,0 +1,28 @@
+# Music: two albums and loose tracks (fake MP3 bodies: no duration). stubs/player_stubs.cpp makes a started
+# track "play" (1:23 of 4:01) and gives the compact Now Playing loop its Back.
+@src app_player_db.cpp
+@host stubs/player_stubs.cpp
+@sd data/Music/Le_Sardine/01_Estate_lunga.mp3 ID3
+@sd data/Music/Le_Sardine/02_Bicicletta_rossa.mp3 ID3
+@sd data/Music/Le_Sardine/03_Notte_al_porto.mp3 ID3
+@sd data/Music/Daft_Crocodile/Live_a_Genova/01_Intro.mp3 ID3
+@sd data/Music/Daft_Crocodile/Live_a_Genova/02_Onde_di_neon.mp3 ID3
+@sd data/Music/Daft_Crocodile/Coccodrillo_elettrico.mp3 ID3
+@sd data/Music/Pioggia_su_Milano.mp3 ID3
+@sd data/Music/Caffe_alle_sette.wav RIFF
+@sd data/Music/Il_treno_delle_nove_e_mezza_che_non_arriva_mai.mp3 ID3
+library
+pick      D D D
+folder    ENTER
+playing   D D D ENTER
+nowplay   D D D ENTER
+back      D D D ENTER BACK
+nextpick  D D D ENTER BACK D
+settings  TAB
+setaudio  TAB R
+volume    TAB R D ENTER
+setqueue  D D D ENTER BACK TAB R R
+find      TAB R R
+search    TAB R R D ENTER t:not
+genres    TAB R R D D ENTER
+findq     D D D ENTER BACK TAB R R R

@@ -1,0 +1,5 @@
+# Beacon Spam — consent (mode picker) / custom SSIDs / running flood. Fictional data from the stub.
+@host stubs/beacon_stubs.cpp
+consent  tick:2
+custom   D D D ENTER t:FreeWiFi_Guest ENTER t:Aeroporto ENTER t:Hotel_Lobby ENTER
+running  ENTER tick:2

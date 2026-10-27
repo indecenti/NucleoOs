@@ -1,0 +1,6 @@
+menu
+play ENTER tick:20
+paused ENTER tick:20 BACK
+over ENTER tick:90
+scores D D D ENTER
+help D D D D ENTER

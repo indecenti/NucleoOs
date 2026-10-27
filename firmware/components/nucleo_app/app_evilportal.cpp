@@ -82,11 +82,14 @@ int           nucleo_wifiatk_beacon_count(void);
 
 #include "launcher_theme.h"   // themed BG/FG/MUTED/DIM/LINE/INK + C_* accents (launcher-consistent)
 #include "app_gfx.h"
+#include "app_large.h"        // two screens: the captive portal laid out on the 320x240 panel
+#include "nucleo_touch.h"
 
 // BG/FG/MUTED/DIM/LINE/INK come from launcher_theme.h (themed, shared with the launcher).
 static const unsigned short EP_RED = C_RED, GRN = C_GREEN,
                             YEL = C_YELLOW, PANEL = 0x18E3, EP_CYAN = 0x5C9F,
                             EP_MAG = 0xF81F;   // evil-twin (non-coherent) indicator — genuine content color
+static int s_lg_scroll = 0;   // panel list scroll (one list visible at a time)
 
 // ---- screens ----------------------------------------------------------------
 enum {
@@ -597,8 +600,267 @@ static void draw_menu(int h)   // TAB overlay
     (void)h;
 }
 
+// ===== two screens ==============================================================================================
+// The panel carries the whole portal: the consent card with Accept/Back, the home menu (list + description), the
+// config as tappable rows, the SSID / page / loot lists, a typing field, and the running portal as big CLIENT /
+// CATTURE counters with the latest captured credentials and a STOP button. The header menu glyph opens the TAB
+// options (Loot / Stop / Guide). The Cardputer becomes the companion: the live counters or the picked item + keys.
+static void lg_home_row(int i, int x, int y, int w, int h, bool focus, unsigned short bg, void *) {
+    char right[8] = "";
+    if (i == 3) { int c = nucleo_evilportal_captures(); if (c) snprintf(right, sizeof right, "%d", c); }
+    lg::row_text(x, y, w, h, focus, bg, HOME_N[i], right, focus ? INK : HOME_C[i]);
+}
+static void lg_ssid_row(int i, int x, int y, int w, int h, bool focus, unsigned short bg, void *) {
+    if (i == 0) { lg::row_text(x, y, w, h, focus, bg, TR("Scrivi un nome...", "Type a name..."), nullptr, focus ? INK : EP_CYAN); return; }
+    lg::row_text(x, y, w, h, focus, bg, nucleo_evilportal_ssid_preset(i - 1), nullptr, focus ? INK : FG);
+}
+static void lg_page_row(int i, int x, int y, int w, int h, bool focus, unsigned short bg, void *) {
+    lg::row_text(x, y, w, h, focus, bg, nucleo_evilportal_template_name(i), nullptr, focus ? INK : FG);
+}
+static void lg_loot_row(int i, int x, int y, int w, int h, bool focus, unsigned short bg, void *) {
+    lg::row_text(x, y, w, h, focus, bg, nucleo_evilportal_recent_user(i), nucleo_evilportal_recent_pass(i), focus ? INK : FG);
+}
+static void lg_tgt_row(int i, int x, int y, int w, int h, bool focus, unsigned short bg, void *) {
+    char right[18]; snprintf(right, sizeof right, "c%d %ddB", nucleo_wifiatk_target_channel(i), nucleo_wifiatk_target_rssi(i));
+    const char *ss = nucleo_wifiatk_target_ssid(i);
+    lg::row_text(x, y, w, h, focus, bg, ss[0] ? ss : "(hidden)", right, focus ? INK : FG);
+}
+
+static void lg_ep_menu(int Wp, int Hp) {   // the TAB options overlay as a panel
+    int n = menu_count();
+    const int cw = 220, cx = (Wp - cw) / 2, ch = 24 + n * 40, cy = (Hp - ch) / 2;
+    lg::panel(cx, cy, cw, ch, INK); d.drawRoundRect(cx, cy, cw, ch, 8, EP_RED);
+    lg::font(0); d.setTextColor(MUTED, INK); d.drawString(menu_title(), cx + 14, cy + 8);
+    for (int i = 0; i < n; i++) {
+        int y = cy + 22 + i * 40; bool s = (i == s_menu_sel);
+        d.fillRoundRect(cx + 10, y, cw - 20, 34, 8, s ? EP_RED : lg::card());
+        lg::font(1); d.setTextColor(s ? INK : FG, s ? EP_RED : lg::card()); d.setTextDatum(middle_left);
+        d.drawString(menu_item(i), cx + 24, y + 18); d.setTextDatum(top_left);
+        nucleo_touch_add(cx + 10, y, cw - 20, 34, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + i));
+    }
+}
+
+static void draw_large(void) {
+    const int Wp = d.width(), Hp = d.height();
+    nucleo_touch_clear();
+
+    if (s_state == ST_CONSENT) {
+        int y = lg::header("Evil Portal", "AUTH", EP_RED, NK_BACK);
+        d.fillRect(0, y, Wp, Hp - y, BG);
+        lg::panel(12, y + 8, Wp - 24, Hp - y - 70);
+        const unsigned short cb = lg::card();
+        lg::font(1); d.setTextColor(YEL, cb); d.drawString(TR("Test autorizzati", "Authorized testing"), 24, y + 18);
+        lg::font(0); d.setTextColor(FG, cb);
+        lg::wrap(TR("AP civetta + pagina di login clonata: salva su SD le credenziali inviate.",
+                    "Decoy AP + cloned login page: saves the submitted credentials to SD."), 24, y + 44, Wp - 48, 19, 3);
+        d.setTextColor(MUTED, cb);
+        lg::wrap(TR("Solo reti tue o con permesso scritto (CTF, audit).",
+                    "Your own networks or with written permission (CTF, audit)."), 24, y + 108, Wp - 48, 19, 2);
+        const int bw = (Wp - 36) / 2;
+        lg::button(12, Hp - 54, bw, 42, TR("Indietro", "Back"), lg::card(), FG, NK_BACK, 0);
+        lg::button(24 + bw, Hp - 54, bw, 42, TR("Accetto", "Accept"), EP_RED, INK, NK_ENTER, 0);
+        nucleo_touch_commit(); return;
+    }
+    if (s_state == ST_SCAN || s_state == ST_KARMA_SCAN || s_state == ST_CLONE || s_state == ST_STOPPING) {
+        lg::header("Evil Portal", nullptr, EP_RED, NK_BACK);
+        d.fillRect(0, lg::HEAD, Wp, Hp - lg::HEAD, BG);
+        const char *t, *m;
+        switch (s_state) {
+            case ST_SCAN:       t = TR("Scansione...", "Scanning..."); m = TR("Cerco le reti reali vicine.", "Looking for real nearby networks."); s_scan_armed = true; break;
+            case ST_KARMA_SCAN: t = "Karma..."; m = TR("Ascolto chi cerca quali reti.", "Listening for who probes what."); s_karma_armed = true; break;
+            case ST_CLONE:      t = TR("Clono pagina...", "Cloning page..."); m = TR("Scarico il login.", "Downloading the login."); s_clone_armed = true; break;
+            default:            t = TR("Arresto...", "Stopping..."); m = TR("Ripristino rete OS.", "Restoring OS network."); s_stop_armed = true; break;
+        }
+        lg::message(0, lg::HEAD, Wp, Hp - lg::HEAD, t, m, EP_RED);
+        nucleo_touch_commit(); return;
+    }
+    if (s_state == ST_HOME) {
+        int y = lg::header("Evil Portal", nullptr, EP_RED, NK_BACK, NK_TAB);
+        const int LW = 150;
+        lg::list(0, y + 2, LW, Hp - y - 6, lg::ROW, 4, s_home_sel, &s_lg_scroll, lg_home_row, nullptr, EP_RED);
+        const int dx = LW + 4, dw = Wp - LW - 10;
+        lg::panel(dx, y + 6, dw, Hp - y - 14);
+        const unsigned short cb = lg::card();
+        lg::font(2); d.setTextColor(HOME_C[s_home_sel], cb); d.drawString(HOME_N[s_home_sel], dx + 10, y + 16);
+        d.drawFastHLine(dx + 10, y + 44, dw - 20, LINE);
+        lg::font(0); d.setTextColor(FG, cb);
+        lg::wrap(HOME_D[s_home_sel], dx + 10, y + 54, dw - 20, 18, 4);
+        if (nucleo_evilportal_running()) { lg::font(0); d.setTextColor(EP_RED, cb); d.drawString(TR("PORTALE ATTIVO", "PORTAL ACTIVE"), dx + 10, Hp - 24); }
+        lg::button(dx + 8, Hp - 50, dw - 16, 34, TR("Apri", "Open"), EP_RED, INK, NK_ENTER, 0);
+        nucleo_touch_commit(); return;
+    }
+    if (s_state == ST_SSID || s_state == ST_PAGE || s_state == ST_LOOT || s_state == ST_TARGETS || s_state == ST_KARMA) {
+        const char *title; int n; int sel; lg::row_fn fn; const char *empty;
+        switch (s_state) {
+            case ST_SSID:    title = TR("SSID civetta", "Decoy SSID"); n = s_ssid_n + 1; sel = s_sel; fn = lg_ssid_row; empty = ""; break;
+            case ST_PAGE:    title = TR("Pagina login", "Login page"); n = s_tpl_n; sel = s_sel; fn = lg_page_row; empty = TR("nessun template", "no template"); break;
+            case ST_TARGETS: title = TR("Reti vicine", "Nearby networks"); n = s_ap_n; sel = s_ap_idx; fn = lg_tgt_row; empty = TR("premi R per scansionare", "press R to scan"); break;
+            case ST_KARMA:   title = TR("Reti cercate", "Probed networks"); n = nucleo_wifiatk_karma_count(); sel = s_km_sel; fn = lg_tgt_row; empty = TR("nessuna probe", "no probes"); break;
+            default:         title = "Loot"; n = nucleo_evilportal_recent_count(); sel = s_sel; fn = lg_loot_row; empty = TR("ancora nulla", "nothing yet"); break;
+        }
+        int y = lg::header(title, s_state == ST_LOOT ? nullptr : "", EP_RED, NK_BACK);
+        d.fillRect(0, y, Wp, Hp - y, BG);
+        if (n <= 0) lg::message(0, y + 10, Wp, Hp - y - 20, empty, s_state == ST_LOOT ? TR("salvato su /sd/evilportal/loot", "saved to /sd/evilportal/loot") : "", DIM);
+        else lg::list(0, y + 2, Wp, Hp - y - 6, lg::ROW, n, sel, &s_lg_scroll, fn, nullptr, EP_RED);
+        nucleo_touch_commit(); return;
+    }
+    if (s_state == ST_TYPE) {
+        int y = lg::header(TR("Nome rete", "Network name"), nullptr, EP_RED, NK_BACK);
+        d.fillRect(0, y, Wp, Hp - y, BG);
+        lg::font(0); d.setTextColor(MUTED, BG); d.drawString(TR("Scrivi l'SSID civetta sul Cardputer:", "Type the decoy SSID on the Cardputer:"), 16, y + 12);
+        d.fillRoundRect(12, y + 34, Wp - 24, 44, 8, INK); d.drawRoundRect(12, y + 34, Wp - 24, 44, 8, EP_RED);
+        char shown[40]; snprintf(shown, sizeof shown, "%s_", s_custom); char f[40]; lg::font(2); lg::fit(f, sizeof f, shown, Wp - 48);
+        d.setTextColor(FG, INK); d.setTextDatum(middle_left); d.drawString(f, 24, y + 56); d.setTextDatum(top_left);
+        nucleo_touch_commit(); return;
+    }
+    if (s_state == ST_SETUP) {
+        const char *badge = s_mode == 0 ? TR("CIVETTA", "DECOY") : s_mode == 1 ? TR("GEMELLO", "TWIN") : TR("COERENTE", "MATCHED");
+        int y = lg::header(TR("Configura", "Configure"), badge, EP_RED, NK_BACK, NK_TAB);
+        d.fillRect(0, y, Wp, Hp - y, BG);
+        int ry = y + 8;
+        for (int i = 0; i < s_nrows; i++) {
+            bool sel = (i == s_sel); bool go = (s_rows[i] == R_GO);
+            const char *label; char val[44] = "";
+            switch (s_rows[i]) {
+                case R_SSID: label = "SSID"; snprintf(val, sizeof val, "%s%s", effective_ssid(), s_custom[0] ? " *" : ""); break;
+                case R_NET:  label = TR("Rete", "Network"); if (s_ap_n > 0) snprintf(val, sizeof val, "%.16s", nucleo_wifiatk_target_ssid(s_ap_idx)); else snprintf(val, sizeof val, "%s", TR("(scegli)", "(pick)")); break;
+                case R_SEC:  label = TR("Sicurezza", "Security"); snprintf(val, sizeof val, "%s", s_mode == 2 ? TR("Coerente", "Matched") : TR("Cattura", "Capture")); break;
+                case R_PAGE: label = TR("Pagina", "Page"); snprintf(val, sizeof val, "%s", s_tpl_n ? nucleo_evilportal_template_name(s_tpl_idx) : "-"); break;
+                case R_CLONE:label = TR("Clona pagina", "Clone page"); snprintf(val, sizeof val, "%s", (s_ap_n > 0 && !twin_encrypted()) ? TR("ok", "ok") : TR("serve rete aperta", "needs open net")); break;
+                default:     label = ""; break;
+            }
+            if (go) {
+                d.fillRoundRect(16, ry, Wp - 32, 42, 10, sel ? GRN : lg::card());
+                lg::font(2); d.setTextColor(sel ? INK : GRN, sel ? GRN : lg::card()); d.setTextDatum(middle_center);
+                d.drawString(TR("AVVIA", "START"), Wp / 2, ry + 21); d.setTextDatum(top_left);
+                nucleo_touch_add(16, ry, Wp - 32, 42, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + i)); ry += 50;
+            } else {
+                d.fillRoundRect(16, ry, Wp - 32, 32, 8, sel ? EP_RED : lg::card());
+                lg::font(1); d.setTextColor(sel ? INK : FG, sel ? EP_RED : lg::card()); d.setTextDatum(middle_left);
+                d.drawString(label, 28, ry + 16);
+                char vf[28]; lg::fit(vf, sizeof vf, val, 150);
+                d.setTextColor(sel ? INK : EP_CYAN, sel ? EP_RED : lg::card()); d.setTextDatum(middle_right);
+                d.drawString(vf, Wp - 28, ry + 16); d.setTextDatum(top_left);
+                nucleo_touch_add(16, ry, Wp - 32, 32, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + i)); ry += 38;
+            }
+        }
+        if (s_err[0]) { lg::font(0); d.setTextColor(s_err[0] == 'P' ? GRN : EP_RED, BG); d.setTextDatum(bottom_left); d.drawString(s_err, 16, Hp - 4); d.setTextDatum(top_left); }
+        nucleo_touch_commit(); return;
+    }
+    if (s_state == ST_GUIDE) {
+        int y = lg::header(TR("Guida", "Guide"), nullptr, EP_RED, NK_BACK);
+        d.fillRect(0, y, Wp, Hp - y, BG);
+        lg::panel(12, y + 6, Wp - 24, Hp - y - 14);
+        const unsigned short cb = lg::card();
+        const char *L_IT[] = { "Civetta: AP finto, SSID a scelta.", "Gemello: clona un AP reale + deauth.",
+                               "Cattura = open (visibile).", "Coerente = WPA2 reale (no login).",
+                               "KARMA: usa le reti cercate come esca.", "Solo test autorizzati." };
+        const char *L_EN[] = { "Decoy: fake AP, SSID you pick.", "Twin: clone a real AP + deauth.",
+                               "Capture = open (visible).", "Matched = real WPA2 (no login).",
+                               "KARMA: lure from probed networks.", "Authorized testing only." };
+        const char *const *L = nucleo_i18n_is_it() ? L_IT : L_EN;
+        lg::font(0);
+        for (int i = 0; i < 6; i++) { d.setTextColor(i == 5 ? YEL : FG, cb); d.drawString(L[i], 24, y + 18 + i * 24); }
+        nucleo_touch_commit(); return;
+    }
+    if (s_state == ST_LURE) {
+        int y = lg::header(TR("Esca KARMA", "KARMA lure"), "LURE", EP_RED, NK_BACK);
+        d.fillRect(0, y, Wp, Hp - y, BG);
+        lg::panel(12, y + 10, Wp - 24, 96);
+        const unsigned short cb = lg::card();
+        char n[16]; snprintf(n, sizeof n, "%lu", nucleo_wifiatk_beacon_frames());
+        lg::font(3); d.setTextColor(EP_RED, cb); d.setTextDatum(middle_center); d.drawString(n, Wp / 2, y + 48); d.setTextDatum(top_left);
+        lg::font(0); d.setTextColor(MUTED, cb); d.setTextDatum(top_center); d.drawString(TR("beacon in onda", "beacons on air"), Wp / 2, y + 82); d.setTextDatum(top_left);
+        lg::font(1); d.setTextColor(GRN, BG);
+        char ss[36]; snprintf(ss, sizeof ss, TR("%d reti cercate", "%d probed networks"), nucleo_wifiatk_beacon_count());
+        d.drawString(ss, 16, y + 116);
+        lg::button(40, Hp - 50, Wp - 80, 40, TR("FERMA", "STOP"), C_RED, INK, NK_ENTER, 0);
+        nucleo_touch_commit(); return;
+    }
+    // ST_RUNNING
+    {
+        unsigned up = nucleo_evilportal_uptime_s();
+        char el[10]; snprintf(el, sizeof el, "%02u:%02u", up / 60, up % 60);
+        int y = lg::header("Evil Portal", el, EP_RED, NK_BACK, NK_TAB);
+        d.fillRect(0, y, Wp, Hp - y, BG);
+        char ss[36]; snprintf(ss, sizeof ss, "%.34s", nucleo_evilportal_ssid());
+        lg::font(1); d.setTextColor(GRN, BG); d.drawString(ss, 14, y + 6);
+        int caps = nucleo_evilportal_captures();
+        char cl[8]; snprintf(cl, sizeof cl, "%d", nucleo_evilportal_clients());
+        char cp[8]; snprintf(cp, sizeof cp, "%d", caps);
+        lg::panel(12, y + 30, (Wp - 30) / 2, 68);
+        lg::panel(18 + (Wp - 30) / 2, y + 30, (Wp - 30) / 2, 68);
+        lg::font(3); d.setTextDatum(middle_center);
+        d.setTextColor(FG, lg::card()); d.drawString(cl, 12 + (Wp - 30) / 4, y + 56);
+        d.setTextColor(caps ? EP_RED : MUTED, lg::card()); d.drawString(cp, 18 + (Wp - 30) / 2 + (Wp - 30) / 4, y + 56);
+        lg::font(0); d.setTextColor(MUTED, lg::card());
+        d.drawString("CLIENT", 12 + (Wp - 30) / 4, y + 84); d.drawString(TR("CATTURE", "CAPTURES"), 18 + (Wp - 30) / 2 + (Wp - 30) / 4, y + 84);
+        d.setTextDatum(top_left);
+        // latest credentials
+        lg::panel(12, y + 106, Wp - 24, 52);
+        const unsigned short cb = lg::card();
+        if (caps == 0) { lg::font(0); d.setTextColor(DIM, cb); d.drawString(TR("in attesa di vittime...", "waiting for victims..."), 24, y + 126); }
+        else {
+            lg::font(0); d.setTextColor(MUTED, cb); d.drawString(TR("ultima cattura:", "latest capture:"), 24, y + 114);
+            char u[32]; lg::fit(u, sizeof u, nucleo_evilportal_last_user(), Wp - 48);
+            d.setTextColor(FG, cb); d.drawString(u, 24, y + 130);
+            char p[32]; lg::fit(p, sizeof p, nucleo_evilportal_last_pass(), Wp - 48);
+            d.setTextColor(EP_RED, cb); d.drawString(p, 24, y + 144);
+        }
+        lg::button(40, Hp - 44, Wp - 80, 38, TR("FERMA portale", "STOP portal"), C_RED, INK, NK_ENTER, 0);
+    }
+    if (s_menu) lg_ep_menu(Wp, Hp);
+    nucleo_touch_commit();
+}
+
+static void draw_companion(void) {
+    const int top = nucleo_app_content_top(), h = nucleo_app_content_height();
+    d.fillRect(0, top, 240, h, BG);
+    int y = lg::comp_head("EVIL PORTAL", EP_RED);
+    if (s_state == ST_RUNNING || s_state == ST_LURE) {
+        if (s_state == ST_LURE) {
+            d.setFont(&fonts::FreeSansBold18pt7b); d.setTextColor(EP_RED, BG);
+            char n[12]; snprintf(n, sizeof n, "%lu", nucleo_wifiatk_beacon_frames()); d.drawString(n, 8, y + 2);
+            d.setFont(&fonts::Font0); d.setTextColor(MUTED, BG); d.drawString(TR("beacon esca", "lure beacons"), 8, y + 34);
+        } else {
+            d.setFont(&fonts::FreeSansBold18pt7b); d.setTextColor(nucleo_evilportal_captures() ? EP_RED : FG, BG);
+            char n[8]; snprintf(n, sizeof n, "%d", nucleo_evilportal_captures()); d.drawString(n, 8, y + 2);
+            d.setFont(&fonts::Font0); d.setTextColor(MUTED, BG); d.drawString(TR("catture", "captures"), 48, y + 10);
+            char ln[40]; snprintf(ln, sizeof ln, TR("%d client  -  %.20s", "%d clients  -  %.20s"), nucleo_evilportal_clients(), nucleo_evilportal_ssid());
+            d.setTextColor(GRN, BG); d.drawString(ln, 8, y + 40);
+            if (nucleo_evilportal_captures()) { char u[40]; snprintf(u, sizeof u, "> %.30s", nucleo_evilportal_last_user());
+                                                d.setTextColor(FG, BG); d.drawString(u, 8, y + 56); }
+        }
+        lg::comp_keys(TR("INVIO ferma  TAB menu  ESC on", "ENTER stop  TAB menu  ESC on")); return;
+    }
+    if (s_state == ST_CONSENT || s_state == ST_SCAN || s_state == ST_KARMA_SCAN || s_state == ST_CLONE || s_state == ST_STOPPING) {
+        d.setFont(&fonts::FreeSansBold12pt7b); d.setTextColor(EP_RED, BG);
+        d.drawString(s_state == ST_CONSENT ? TR("Autorizza", "Authorize") : TR("Attendi...", "Please wait..."), 8, y + 4);
+        d.setFont(&fonts::Font0); d.setTextColor(MUTED, BG);
+        lg::wrap(TR("Accetta sul pannello per iniziare.", "Accept on the panel to begin."), 8, y + 34, 224, 12, 2);
+        lg::comp_keys(TR("INVIO accetto   ESC esci", "ENTER accept   ESC back")); return;
+    }
+    // menu-ish states (home/setup/lists/type): show the picked item
+    const char *what; char buf[48];
+    switch (s_state) {
+        case ST_HOME:  what = HOME_N[s_home_sel]; break;
+        case ST_SSID:  snprintf(buf, sizeof buf, "%s", s_sel == 0 ? TR("Scrivi un nome", "Type a name") : nucleo_evilportal_ssid_preset(s_sel - 1)); what = buf; break;
+        case ST_PAGE:  what = s_tpl_n ? nucleo_evilportal_template_name(s_sel) : "-"; break;
+        case ST_LOOT:  snprintf(buf, sizeof buf, "%d loot", nucleo_evilportal_recent_count()); what = buf; break;
+        case ST_TYPE:  snprintf(buf, sizeof buf, "%s_", s_custom); what = buf; break;
+        case ST_SETUP: what = TR("Configura", "Configure"); break;
+        default:       what = "Evil Portal"; break;
+    }
+    d.setFont(&fonts::FreeSansBold12pt7b); d.setTextColor(EP_RED, BG); d.drawString(what, 8, y + 4);
+    d.setFont(&fonts::Font0); d.setTextColor(MUTED, BG);
+    if (s_state == ST_HOME) lg::wrap(HOME_D[s_home_sel], 8, y + 32, 224, 12, 2);
+    lg::comp_keys(s_state == ST_TYPE ? TR("scrivi  INVIO ok  ESC indietro", "type  ENTER ok  ESC back")
+                : TR(";/. scegli  INVIO apri  ESC indietro", ";/. pick  ENTER open  ESC back"));
+}
+
 static void draw(void)
 {
+    if (nucleo_app_two_screens()) { draw_companion(); return; }
     int top = nucleo_app_content_top(), h = nucleo_app_content_height();
     // RUNNING / LURE are on the DIRECT path (canvas freed for the AP/deauth) and repaint ~1 Hz. A
     // full-content fillRect on that cadence blinks the whole panel (ANTI-FLICKER.md technique 2):
@@ -689,9 +951,23 @@ static void on_key(int key, char ch)
 {
     if (s_menu) {
         int n = menu_count();
+        if (nucleo_touch_is_row(key, ch)) { int i = ch - NUCLEO_TOUCH_ROW; if (i < n) { s_menu_sel = i; menu_choose(); } return; }
         if (key == NK_UP || key == NK_DOWN) { list_nav(&s_menu_sel, n, key); nucleo_app_request_draw(); }
         else if (key == NK_ENTER) menu_choose();
         return;
+    }
+    // Panel: a tapped list row selects that item and acts on it (same as moving there + Enter).
+    if (nucleo_touch_is_row(key, ch)) {
+        int i = (ch - NUCLEO_TOUCH_ROW) + s_lg_scroll;
+        switch (s_state) {
+            case ST_HOME:    if (i < 4)             { s_home_sel = i; on_key(NK_ENTER, 0); } return;
+            case ST_SETUP:   if (i < s_nrows)       { s_sel = i; on_key(NK_ENTER, 0); } return;
+            case ST_SSID:    if (i < s_ssid_n + 1)  { s_sel = i; on_key(NK_ENTER, 0); } return;
+            case ST_PAGE:    if (i < s_tpl_n)       { s_sel = i; on_key(NK_ENTER, 0); } return;
+            case ST_TARGETS: if (i < s_ap_n)        { s_ap_idx = i; on_key(NK_ENTER, 0); } return;
+            case ST_KARMA:   if (i < nucleo_wifiatk_karma_count()) { s_km_sel = i; on_key(NK_ENTER, 0); } return;
+            default: return;
+        }
     }
     switch (s_state) {
         case ST_CONSENT:
@@ -784,12 +1060,13 @@ extern "C" void nucleo_register_evilportal(void)
     static const nucleo_app_def_t app = {
         "evilportal", "Evil Portal", "Security", "Captive portal for authorized Wi-Fi testing",
         'E', EP_RED, enter, on_key, tick, draw, leave,
+        // SOLO BOOT (exclusive_flags below); then ram=NULL and on_draw_large=draw_large.
         // SOLO BOOT: reboot into a FRESH, unfragmented heap. This is the heaviest Security app —
         // template in RAM + rogue AP + captive DNS + its own :80 server + live page-clone + KARMA
         // promiscuous sniff — and on the live, fragmented OS heap (esp. the ADV) those allocations are
         // marginal (boot Task-WDT, KARMA reboot). A clean boot makes it solid, like the games/beacon.
         // Trade-off: leaving the app reboots to the OS, so the portal no longer runs in the background.
-        NX_SOLO
+        NX_SOLO, nullptr, draw_large
     };
     nucleo_app_register(&app);
 }

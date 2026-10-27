@@ -18,6 +18,8 @@
 #include "app_gfx.h"
 #include "game_text.h"
 #include "game_ui.h"
+#include "app_large.h"          // two screens: the reactor gauges on the 320x240 panel, the Cardputer companion
+#include "nucleo_touch.h"
 #include "nucleo_exclusive.h"   // NX_NET_APP: dedicate RAM + free the shared I2S line so SFX play
 #include <M5GFX.h>
 #include <stdint.h>
@@ -673,7 +675,7 @@ static bool on_back(int key)
 }
 
 // ============================ draw / poll / lifecycle ========================
-static void on_draw(void)
+static void draw_game(void)
 {
     switch (s_screen) {
         case ST_MENU: draw_menu(); break;
@@ -692,6 +694,114 @@ static void on_draw(void)
         case ST_NAME: draw_name(); break;
         default: break;
     }
+}
+
+// ===== two screens: the control room on the 320x240 panel, the Cardputer as a companion =================
+// lg::game pushes the gauges/rod-bank frame scaled to the panel; a NATIVE HUD below gives the real controls as
+// discrete taps the framework delivers cleanly (pick rod, pull out / push in, SCRAM, menu nav). The Cardputer
+// shows the live numbers (power vs demand, heat, grid) and the key map.
+static void lg_btn3(int y, int bh, const char *la, int ka, char ca, const char *lb, int kb, char cb,
+                    const char *lc, int kc, char cc)
+{
+    const int W320 = d.width(), g = 8, bw = (W320 - 4 * g) / 3;
+    lg::button(g, y, bw, bh, la, lg::card(), FG, ka, ca);
+    lg::button(2 * g + bw, y, bw, bh, lb, ACC, COL_BG, kb, cb);
+    lg::button(3 * g + 2 * bw, y, bw, bh, lc, lg::card(), FG, kc, cc);
+}
+static void lg_hud(int y, int h)
+{
+    const int W320 = d.width();
+    d.fillRect(0, y, W320, h, COL_BG);
+    d.drawFastHLine(0, y, W320, COL_DIM);
+    const int bh = h - 24 < 34 ? h - 10 : 40, by = y + h - bh - 6;
+    char b[48];
+
+    if (s_screen == ST_PLAY || s_screen == ST_PAUSE) {
+        int sec = s_time_ms / 1000, pwr = (int)(s_dpow + 0.5f), hpct = (int)s_dheat;
+        lg::font(1); d.setTextDatum(top_left); d.setTextColor(COL_GREY, COL_BG);
+        snprintf(b, sizeof b, "%d:%02d", sec / 60, sec % 60); d.drawString(b, 10, y + 5);
+        d.setTextColor(s_power >= s_demand ? COL_GREEN : COL_AMBER, COL_BG);
+        snprintf(b, sizeof b, GT("MW %d / %d", "MW %d / %d"), pwr, s_demand); d.drawString(b, 66, y + 5);
+        d.setTextDatum(top_right); d.setTextColor(heat_col(hpct), COL_BG);
+        snprintf(b, sizeof b, GT("Calore %d%%", "Heat %d%%"), hpct); d.drawString(b, W320 - 10, y + 5);
+        d.setTextDatum(top_left);
+        if (s_screen == ST_PAUSE) { lg::button(40, by, W320 - 80, bh, GT("Riprendi", "Resume"), ACC, COL_BG, NK_ENTER, 0); return; }
+        const int g = 6, aw = 30, sw = 90, bw = (W320 - 6 * g - 2 * aw - sw) / 2;
+        int x = g;
+        lg::button(x, by, aw, bh, "<", lg::card(), FG, NK_LEFT, 0); x += aw + g;
+        lg::button(x, by, bw, bh, GT("Estrai", "Pull"), mix(COL_GREEN, COL_BG, 80), COL_WHITE, NK_UP, 0); x += bw + g;
+        lg::button(x, by, sw, bh, "SCRAM", COL_RED, COL_WHITE, NK_CHAR, ' '); x += sw + g;
+        lg::button(x, by, bw, bh, GT("Inser.", "Push"), mix(COL_CYAN, COL_BG, 80), COL_WHITE, NK_DOWN, 0); x += bw + g;
+        lg::button(x, by, aw, bh, ">", lg::card(), FG, NK_RIGHT, 0);
+        return;
+    }
+    if (s_screen == ST_OVER) {
+        lg::font(1); d.setTextDatum(top_center); d.setTextColor(s_over_reason == 0 ? COL_RED : COL_CYAN, COL_BG);
+        snprintf(b, sizeof b, GT("%s  -  Punti %d", "%s  -  Score %d"), s_over_reason == 0 ? GT("Fusione", "Meltdown") : "Blackout", s_score);
+        d.drawString(b, W320 / 2, y + 6); d.setTextDatum(top_left);
+        lg::button(40, by, W320 - 80, bh, s_qualify ? GT("Salva record", "Save score") : GT("Rigioca", "Replay"), ACC, COL_BG, NK_ENTER, 0);
+        return;
+    }
+    if (s_screen == ST_NAME) {
+        lg::font(1); d.setTextDatum(top_left); d.setTextColor(COL_GREY, COL_BG);
+        d.drawString(GT("Scrivi il nome sulla tastiera", "Type the name on the keyboard"), 12, y + 6);
+        d.setTextDatum(top_left);
+        lg::button(40, by, W320 - 80, bh, "OK", ACC, COL_BG, NK_ENTER, 0);
+        return;
+    }
+    // menu / settings / help / scores
+    lg::font(1); d.setTextDatum(top_left); d.setTextColor(ACC, COL_BG);
+    const char *lbl = s_screen == ST_MENU ? GT("REATTORE - menu", "REACTOR - menu")
+                    : s_screen == ST_SET  ? GT("Impostazioni", "Settings")
+                    : s_screen == ST_HELP ? GT("Come si gioca", "How to play")
+                    : GT("Classifica", "Leaderboard");
+    d.drawString(lbl, 12, y + 6); d.setTextDatum(top_left);
+    if (s_screen == ST_MENU)       lg_btn3(by, bh, GT("Su", "Up"), NK_UP, 0, "OK", NK_ENTER, 0, GT("Giu", "Down"), NK_DOWN, 0);
+    else if (s_screen == ST_SET)   lg_btn3(by, bh, GT("Su", "Up"), NK_UP, 0, GT("Cambia", "Change"), NK_ENTER, 0, GT("Giu", "Down"), NK_DOWN, 0);
+    else if (s_screen == ST_HELP)  lg_btn3(by, bh, GT("Prec", "Prev"), NK_LEFT, 0, GT("Avanti", "Next"), NK_RIGHT, 0, GT("Indietro", "Back"), NK_BACK, 0);
+    else                           lg::button(40, by, W320 - 80, bh, GT("Menu", "Menu"), ACC, COL_BG, NK_ENTER, 0);
+}
+static void draw_large(void)
+{
+    nucleo_touch_clear();
+    lg::game(draw_game, lg_hud, GT("Reattore", "Reactor"), ACC);
+    nucleo_touch_commit();
+}
+static void draw_companion(void)
+{
+    const int top = nucleo_app_content_top(), hc = nucleo_app_content_height();
+    d.fillRect(0, top, W, hc, COL_BG);
+    int y = lg::comp_head("REATTORE", ACC);
+    char b[40];
+    if (s_screen == ST_PLAY || s_screen == ST_PAUSE) {
+        int sec = s_time_ms / 1000, pwr = (int)(s_dpow + 0.5f), hpct = (int)s_dheat;
+        snprintf(b, sizeof b, "%d:%02d", sec / 60, sec % 60); gui::text(b, 8, y + 2, 0, gui::F_SMALL, COL_GREY, 0);
+        snprintf(b, sizeof b, "%d", s_score); gui::text(b, W - 8, y + 2, 2, gui::F_SMALL, COL_AMBER, 0);
+        snprintf(b, sizeof b, GT("Potenza %d  Domanda %d", "Power %d  Demand %d"), pwr, s_demand);
+        gui::text(b, 8, y + 18, 0, gui::F_SMALL, s_power >= s_demand ? COL_GREEN : COL_AMBER, 0);
+        snprintf(b, sizeof b, GT("Calore %d%%  Rete %d%%", "Heat %d%%  Grid %d%%"), hpct, (int)s_dstab);
+        gui::text(b, 8, y + 34, 0, gui::F_SMALL, heat_col(hpct), 0);
+        snprintf(b, sizeof b, GT("Barra %d di %d", "Rod %d of %d"), s_cur + 1, NROD);
+        gui::text(b, 8, y + 52, 0, gui::F_BODY, COL_WHITE, 0);
+        lg::comp_keys(s_screen == ST_PAUSE ? GT("INVIO riprendi  Esc esci", "ENTER resume  Esc leave")
+                                           : GT("SX/DX barra  SU/GIU  SPAZIO scram", "L/R rod  UP/DN  SPACE scram"));
+        return;
+    }
+    const char *st = s_screen == ST_MENU ? GT("Menu", "Menu")
+                   : s_screen == ST_SET  ? GT("Impostazioni", "Settings")
+                   : s_screen == ST_HELP ? GT("Come si gioca", "How to play")
+                   : s_screen == ST_SCORES ? GT("Classifica", "Leaderboard")
+                   : s_screen == ST_NAME ? GT("Nuovo record", "New record")
+                   : s_over_reason == 0 ? GT("Fusione", "Meltdown") : "Blackout";
+    gui::text(st, 8, y + 6, 0, gui::F_BODY, 0xFFFF, 0);
+    snprintf(b, sizeof b, GT("Record %d", "Best %d"), g_best); gui::text(b, 8, y + 34, 0, gui::F_SMALL, COL_AMBER, 0);
+    lg::comp_keys(s_screen == ST_NAME ? GT("Scrivi il nome  INVIO ok", "Type the name  ENTER ok")
+                                      : GT("Tocca i tasti sul pannello", "Use the panel buttons"));
+}
+static void on_draw(void)
+{
+    if (nucleo_app_two_screens()) { draw_companion(); return; }
+    draw_game();
 }
 static bool poll(void)
 {
@@ -757,7 +867,7 @@ extern "C" void nucleo_register_reactor(void)
         "reactor", "Reattore", "Games", "Tieni la potenza, evita la fusione",
         'R', C_RED, on_enter, on_key, nullptr, on_draw, on_exit,
         NX_NET_APP,  // dedicate RAM + free the shared I2S/mic line so the chiptune SFX reliably play
-        APP_RAM
+        APP_RAM, draw_large
     };
     nucleo_app_register(&app);
 }

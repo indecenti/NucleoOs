@@ -13,6 +13,8 @@
 #include "app_ui.h"
 #include "launcher_theme.h"
 #include "app_gfx.h"
+#include "app_large.h"      // two screens: the store grid + install card on the panel, the Cardputer as companion
+#include "nucleo_touch.h"
 #include <M5GFX.h>
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
@@ -70,6 +72,7 @@ static Ram *M;
 static const nucleo_app_ram_t APP_RAM[] = { { (void **)&M, sizeof(Ram) }, { nullptr, 0 } };
 
 static int s_n, s_nvis, s_sel, s_tab, s_view, s_cat, s_cat_sel, s_updates, s_app_from, s_qn, s_qi, s_desc_off;
+static int s_lg_scroll;   // first visible row on the panel list
 static bool s_yes, s_busy_seen, s_refresh_pending, s_canvas_lent, s_direct_full;
 static nst_status_t s_last_status;
 static const char *s_note;            // one-line notice on the app page, cleared by the next key
@@ -260,6 +263,7 @@ static void set_hint(void)
 static void go(int view)
 {
     s_view = view;
+    s_lg_scroll = 0;
     if (view == V_LIST || view == V_CAT) build_list();
     set_hint();
     nucleo_app_request_draw();
@@ -493,8 +497,213 @@ static void draw_qr(int top, int h)
     txt_fit(&fonts::Font0, x, top + h - 11, w, url + strlen(host), ACC);
 }
 
+// ===== two screens ==============================================================================================
+// The panel carries the store: the sections as a tab bar, the apps as a touch list, and an app's page as a real
+// install card (big tile, name, facts, description, the Install/Update/Open + Uninstall buttons). Categories, the
+// remove confirm and the open-on-phone QR get their own panel layouts. The Cardputer becomes the companion: the
+// section / selection / app state and the key map; during a download, the progress.
+static const char *const LG_TABS[5][NTABS] = {
+    { "Novita'", "Giochi", "Categorie", "Mie" }, { "New", "Games", "Categories", "Mine" },
+    { "Nuevas", "Juegos", "Categorias", "Mias" }, { "Neuf", "Jeux", "Categ.", "Mes apps" },
+    { "Neu", "Spiele", "Kategorien", "Meine" } };
+
+static void lg_tile(int x, int y, int sz, const char *name, int cat)
+{
+    d.fillRoundRect(x, y, sz, sz, sz / 4, CATS[cat].col);
+    char l[2] = { name && name[0] ? name[0] : '?', 0 };
+    lg::font(3); d.setTextDatum(middle_center); d.setTextColor(INK, CATS[cat].col);
+    d.drawString(l, x + sz / 2, y + sz / 2 + 1); d.setTextDatum(top_left);
+}
+
+static void lg_progress(void)
+{
+    const int W = d.width(), H = d.height();
+    d.fillRect(0, 0, W, H, BG);
+    const st_state_t *st = nucleo_store_state();
+    const char *what = nucleo_store_op() == NST_OP_REFRESH ? TR5("Aggiorno il catalogo", "Updating the catalog", "Actualizando catalogo", "Mise a jour du catalogue", "Katalog wird geladen")
+                     : nucleo_store_op() == NST_OP_REMOVE ? TR5("Rimuovo", "Removing", "Quitando", "Suppression", "Entferne")
+                     : st->phase == ST_PH_INSTALL ? TR5("Installo", "Installing", "Instalando", "Installation", "Installiere")
+                     : TR5("Scarico e verifico", "Downloading, verifying", "Descargando y verificando", "Telechargement, verification", "Lade und pruefe");
+    lg::font(2); d.setTextDatum(top_center); d.setTextColor(FG, BG); d.drawString(what, W / 2, H / 2 - 44); d.setTextDatum(top_left);
+    const int pct = st->pct < 0 ? 0 : st->pct > 100 ? 100 : st->pct;
+    lg::bar(30, H / 2, W - 60, 16, pct, ACC);
+    char s[48];
+    if (st->files_total) snprintf(s, sizeof s, "%d/%d  %.24s", st->files_done, st->files_total, st->cur);
+    else snprintf(s, sizeof s, "%d%%", pct);
+    lg::font(0); d.setTextDatum(top_center); d.setTextColor(MUTED, BG); d.drawString(s, W / 2, H / 2 + 30); d.setTextDatum(top_left);
+}
+
+static void lg_app(void)
+{
+    const int W = d.width(), H = d.height();
+    const st_app_t &a = M->app;
+    const int li = lang_idx(), cat = cat_index(a.category);
+    const uint8_t stt = state_of(a);
+    const int y = lg::header(a.name[li], nullptr, ACC, NK_BACK);
+    d.fillRect(0, lg::HEAD, W, H - lg::HEAD, BG);
+    lg_tile(14, y + 8, 56, a.name[li], cat);
+    lg::font(2); d.setTextColor(FG, BG); char nm[48]; lg::fit(nm, sizeof nm, a.name[li], W - 92); d.drawString(nm, 82, y + 10);
+    char sz[16]; kb(sz, sizeof sz, a.size);
+    char facts[80]; snprintf(facts, sizeof facts, "v%s  %s  %s", a.version, sz, CATS[cat].n[li]);
+    lg::font(0); d.setTextColor(MUTED, BG); char ff[80]; lg::fit(ff, sizeof ff, facts, W - 92); d.drawString(ff, 82, y + 42);
+    if (a.author[0]) { char au[48]; snprintf(au, sizeof au, "%s %s", TR5("di", "by", "de", "par", "von"), a.author); char af[48]; lg::fit(af, sizeof af, au, W - 92); d.setTextColor(DIM, BG); d.drawString(af, 82, y + 58); }
+    int dy = y + 80;
+    d.drawFastHLine(14, dy, W - 28, LINE); dy += 8;
+    const int descBot = a.perms[0] ? H - 74 : H - 62;
+    const int maxl = (descBot - dy) / 16; bool more = false;
+    int ey = wrap(16, dy, W - 32, a.desc[li], maxl > 0 ? maxl : 1, FG, s_desc_off, &more);
+    if (s_desc_off) { lg::font(0); d.setTextColor(DIM, BG); d.setTextDatum(top_right); d.drawString("^", W - 16, dy); d.setTextDatum(top_left); }
+    if (more)       { lg::font(0); d.setTextColor(DIM, BG); d.setTextDatum(top_right); d.drawString("v", W - 16, ey - 12); d.setTextDatum(top_left); }
+    nucleo_touch_add_scroll(14, dy, W - 28, descBot - dy, 16, NK_UP, 0, NK_DOWN, 0);
+    if (a.perms[0]) { char p[72]; snprintf(p, sizeof p, "%s %s", TR5("Usa:", "Uses:", "Usa:", "Utilise :", "Nutzt:"), a.perms); lg::font(0); d.setTextColor(C_YELLOW, BG); char pf[72]; lg::fit(pf, sizeof pf, p, W - 28); d.drawString(pf, 16, H - 70); }
+    bool system = false;
+    const bool mine = st_installed(NUCLEO_SD_MOUNT, a.id, &system) != 0;
+    const char *act = stt == S_OK ? TR5("Apri", "Open", "Abrir", "Ouvrir", "Oeffnen") : state_word(stt);
+    const unsigned short col = stt == S_OK ? C_GREEN : state_col(stt);
+    if (mine) {
+        const int bw = (W - 28 - 8) / 2;
+        lg::button(14, H - 52, bw, 44, act, col, INK, NK_ENTER, 0);
+        lg::button(22 + bw, H - 52, bw, 44, TR5("Disinstalla", "Uninstall", "Desinstalar", "Desinstaller", "Entfernen"), C_RED, INK, NK_DEL, 0);
+    } else {
+        const int bw = W > 260 ? 220 : W - 40;
+        lg::button((W - bw) / 2, H - 52, bw, 44, act, col, INK, NK_ENTER, 0);
+    }
+    if (s_view == V_CONFIRM_REMOVE) {
+        const int cw = W - 56, chh = 118, cx = 28, cy = (H - chh) / 2;
+        lg::panel(cx, cy, cw, chh, INK); d.drawRoundRect(cx, cy, cw, chh, 8, C_RED);
+        lg::font(1); d.setTextColor(C_RED, INK); d.setTextDatum(top_center); d.drawString(TR5("Disinstallare?", "Uninstall?", "Desinstalar?", "Desinstaller ?", "Entfernen?"), cx + cw / 2, cy + 12);
+        lg::font(0); d.setTextColor(FG, INK); char nmc[48]; lg::fit(nmc, sizeof nmc, a.name[li], cw - 24); d.drawString(nmc, cx + cw / 2, cy + 40); d.setTextDatum(top_left);
+        const int bw = (cw - 36) / 2;
+        lg::button(cx + 12, cy + chh - 50, bw, 40, "No", s_yes ? LINE : ACC, s_yes ? FG : INK, NK_CHAR, 'n');
+        lg::button(cx + 24 + bw, cy + chh - 50, bw, 40, TR5("Disinstalla", "Uninstall", "Desinstalar", "Desinstaller", "Entfernen"), s_yes ? C_RED : LINE, s_yes ? INK : FG, NK_CHAR, 'y');
+    }
+}
+
+static void lg_qr(void)
+{
+    const int W = d.width(), H = d.height();
+    const int y = lg::header(M->app.name[lang_idx()], nullptr, ACC, NK_BACK);
+    d.fillRect(0, y, W, H - y, BG);
+    char url[96]; snprintf(url, sizeof url, "http://%s/apps/%s/", nucleo_setup_ip() ? nucleo_setup_ip() : "", M->app.id);
+    int q = H - y - 20; if (q > 184) q = 184;
+    d.fillRect(14, y + 10, q, q, 0xFFFF);
+    d.qrcode(url, 14, y + 10, q, 1, true);
+    const int tx = 14 + q + 16, tw = W - tx - 10;
+    lg::font(1); d.setTextColor(FG, BG); char t[48]; lg::fit(t, sizeof t, M->app.name[lang_idx()], tw); d.drawString(t, tx, y + 14);
+    lg::font(0); d.setTextColor(MUTED, BG);
+    lg::wrap(TR5("Inquadralo col telefono per aprire l'app nel browser.", "Scan it with your phone to open the app in the browser.",
+                 "Escanealo con el movil para abrir la app.", "Scannez-le pour ouvrir l'app.", "Mit dem Handy scannen, um die App zu oeffnen."), tx, y + 42, tw, 17, 5);
+    lg::font(0); d.setTextColor(ACC, BG); char uf[48]; lg::fit(uf, sizeof uf, url, tw); d.drawString(uf, tx, H - 24);
+    nucleo_touch_add(0, y, W, H - y, NK_BACK, 0);   // any tap steps back
+}
+
+static void draw_large(void)
+{
+    const int W = d.width(), H = d.height();
+    nucleo_touch_clear();
+    if (nucleo_store_status() == NST_BUSY) { lg_progress(); nucleo_touch_commit(); return; }
+    if (s_view == V_APP || s_view == V_CONFIRM_REMOVE) { lg_app(); nucleo_touch_commit(); return; }
+    if (s_view == V_QR) { lg_qr(); nucleo_touch_commit(); return; }
+    if (s_view == V_CAT) {
+        char cnt[12]; snprintf(cnt, sizeof cnt, "%d", s_nvis);
+        const int y = lg::header(CATS[s_cat].n[lang_idx()], cnt, CATS[s_cat].col, NK_BACK);
+        if (s_nvis) lg::text_list(0, y + 2, W, H - y - 4, s_nvis, s_sel, &s_lg_scroll, row_label, row_right, row_color, nullptr, ACC);
+        else lg::message(0, y, W, H - y, TR5("Nessuna app", "No apps", "Sin apps", "Aucune app", "Keine Apps"), nullptr, MUTED);
+        nucleo_touch_commit();
+        return;
+    }
+    // V_LIST: section tabs + list
+    const int y0 = lg::header("Store", nullptr, ACC);
+    const int li = lang_idx();
+    const char *names[NTABS]; static char mine[20];
+    for (int i = 0; i < NTABS; i++) names[i] = LG_TABS[li][i];
+    if (s_updates) { snprintf(mine, sizeof mine, "%s %d", LG_TABS[li][TAB_MINE], s_updates); names[TAB_MINE] = mine; }
+    int y = lg::tabs(y0, names, NTABS, s_tab, ACC, nullptr);
+    if (s_tab == TAB_CATS) {
+        lg::text_list(0, y + 2, W, H - y - 4, NCATS, s_cat_sel, &s_lg_scroll, cat_label, cat_right, cat_color, nullptr, ACC);
+        nucleo_touch_commit();
+        return;
+    }
+    int listy = y + 2, listh = H - listy - 4;
+    if (s_tab == TAB_MINE && s_updates) {
+        char b[40]; snprintf(b, sizeof b, TR5("Aggiorna tutte (%d)", "Update all (%d)", "Actualizar todas (%d)", "Tout mettre a jour (%d)", "Alle aktualisieren (%d)"), s_updates);
+        lg::button(8, y + 2, W - 16, 32, b, C_YELLOW, INK, NK_CHAR, 'u');
+        listy = y + 38; listh = H - listy - 4;
+    }
+    if (s_nvis) lg::text_list(0, listy, W, listh, s_nvis, s_sel, &s_lg_scroll, row_label, row_right, row_color, nullptr, ACC);
+    else {
+        const char *msg = nucleo_store_status() == NST_FAILED ? nucleo_store_error()
+                        : !s_n ? TR5("Catalogo non ancora scaricato: serve il Wi-Fi.", "Catalog not downloaded yet: it needs Wi-Fi.", "Catalogo aun no descargado: necesita Wi-Fi.", "Catalogue pas encore telecharge : il faut le Wi-Fi.", "Katalog noch nicht geladen: WLAN noetig.")
+                        : s_tab == TAB_MINE ? TR5("Nessuna app dallo store. Guarda in Novita'.", "No store apps yet. Look in New.", "Sin apps de la tienda. Mira en Nuevas.", "Aucune app. Voyez Nouveau.", "Noch keine Store-Apps. Siehe Neu.")
+                        : TR5("Niente qui, per ora.", "Nothing here yet.", "Nada aqui por ahora.", "Rien ici pour l'instant.", "Noch nichts hier.");
+        lg::message(0, listy, W, listh, msg, nullptr, nucleo_store_status() == NST_FAILED ? C_RED : MUTED);
+    }
+    nucleo_touch_commit();
+}
+
+static void draw_companion(void)
+{
+    const int top = nucleo_app_content_top(), h = nucleo_app_content_height();
+    d.fillRect(0, top, 240, h, BG);
+    const int y = lg::comp_head("STORE", ACC);
+    if (nucleo_store_status() == NST_BUSY) {
+        const st_state_t *st = nucleo_store_state();
+        d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(FG, BG);
+        d.drawString(nucleo_store_op() == NST_OP_REMOVE ? TR5("Rimuovo...", "Removing...", "Quitando...", "Suppression...", "Entferne...")
+                   : nucleo_store_op() == NST_OP_REFRESH ? TR5("Catalogo...", "Catalog...", "Catalogo...", "Catalogue...", "Katalog...")
+                   : TR5("Installo...", "Installing...", "Instalando...", "Installation...", "Installiere..."), 8, y + 4);
+        const int pct = st->pct < 0 ? 0 : st->pct;
+        lg::bar(8, y + 30, 224, 6, pct, ACC);
+        d.setFont(&fonts::Font0); d.setTextColor(MUTED, BG);
+        char s[44]; if (st->files_total) snprintf(s, sizeof s, "%d/%d  %.18s", st->files_done, st->files_total, st->cur); else snprintf(s, sizeof s, "%d%%", pct);
+        d.drawString(s, 8, y + 44);
+        lg::comp_keys(TR5("attendi...", "please wait...", "espera...", "patientez...", "bitte warten..."));
+        return;
+    }
+    const int li = lang_idx();
+    if (s_view == V_APP || s_view == V_CONFIRM_REMOVE) {
+        const st_app_t &a = M->app; const uint8_t stt = state_of(a);
+        d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(FG, BG); char nm[40]; snprintf(nm, sizeof nm, "%.26s", a.name[li]); d.drawString(nm, 8, y + 4);
+        char sz[16]; kb(sz, sizeof sz, a.size);
+        d.setFont(&fonts::Font0); d.setTextColor(MUTED, BG); char f[40]; snprintf(f, sizeof f, "v%s  %s  %s", a.version, sz, CATS[cat_index(a.category)].n[li]); d.drawString(f, 8, y + 26);
+        d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(state_col(stt), BG); d.drawString(state_word(stt), 8, y + 42);
+        bool system = false; const bool mine = st_installed(NUCLEO_SD_MOUNT, a.id, &system) != 0;
+        lg::comp_keys(s_view == V_CONFIRM_REMOVE ? TR5("Y/N conferma", "Y/N confirm", "Y/N confirma", "Y/N confirme", "Y/N bestaet.")
+                    : stt == S_OK ? TR5("INVIO apri  DEL disinstalla", "ENTER open  DEL uninstall", "INTRO abrir  DEL desinst.", "ENTREE ouvrir  DEL desinst.", "ENTER oeffnen  DEL entfernen")
+                    : mine ? TR5("INVIO aggiorna  DEL disinstalla", "ENTER update  DEL uninstall", "INTRO actualiz  DEL desinst.", "ENTREE maj  DEL desinst.", "ENTER update  DEL entfernen")
+                    : TR5("INVIO installa  ESC indietro", "ENTER install  ESC back", "INTRO instalar  ESC atras", "ENTREE installer  ESC retour", "ENTER install.  ESC zurueck"));
+        return;
+    }
+    if (s_view == V_QR) {
+        const st_app_t &a = M->app;
+        d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(FG, BG); char nm[40]; snprintf(nm, sizeof nm, "%.26s", a.name[li]); d.drawString(nm, 8, y + 4);
+        d.setFont(&fonts::Font0); d.setTextColor(MUTED, BG);
+        lg::wrap(TR5("Inquadra il QR sul pannello per aprirla nel browser.", "Scan the QR on the panel to open it in a browser.", "Escanea el QR del panel.", "Scannez le QR du panneau.", "QR am Panel scannen."), 8, y + 24, 224, 14, 3);
+        lg::comp_keys(TR5("un tasto: indietro", "any key: back", "una tecla: atras", "une touche : retour", "Taste: zurueck"));
+        return;
+    }
+    if (s_view == V_CAT) {
+        d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(CATS[s_cat].col, BG); d.drawString(CATS[s_cat].n[li], 8, y + 4);
+        d.setFont(&fonts::Font0); d.setTextColor(MUTED, BG); char c[32]; snprintf(c, sizeof c, TR5("%d app", "%d apps", "%d apps", "%d apps", "%d Apps"), s_nvis); d.drawString(c, 8, y + 26);
+        if (s_nvis) { d.setTextColor(FG, BG); char b[40]; snprintf(b, sizeof b, "-> %.22s", row_label(s_sel, nullptr)); d.drawString(b, 8, y + 40); }
+        lg::comp_keys(TR5("INVIO apri  ESC categorie", "ENTER open  ESC categories", "INTRO abrir  ESC categ.", "ENTREE ouvrir  ESC categ.", "ENTER oeffnen  ESC Kateg."));
+        return;
+    }
+    // V_LIST
+    d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(ACC, BG);
+    char tb[24]; snprintf(tb, sizeof tb, "%s", LG_TABS[li][s_tab]); d.drawString(tb, 8, y + 4);
+    d.setFont(&fonts::Font0); d.setTextColor(MUTED, BG);
+    if (s_tab == TAB_CATS) { char c[24]; snprintf(c, sizeof c, TR5("%d categorie", "%d categories", "%d categorias", "%d categories", "%d Kategorien"), NCATS); d.drawString(c, 8, y + 26); d.setTextColor(FG, BG); char b[40]; snprintf(b, sizeof b, "-> %.22s", cat_label(s_cat_sel, nullptr)); d.drawString(b, 8, y + 40); }
+    else {
+        char c[32]; snprintf(c, sizeof c, TR5("%d app  -  %d da aggiornare", "%d apps  -  %d to update", "%d apps  -  %d por actualizar", "%d apps  -  %d a jour", "%d Apps  -  %d Updates"), s_nvis, s_updates); d.drawString(c, 8, y + 26);
+        if (s_nvis) { d.setTextColor(FG, BG); char b[40]; snprintf(b, sizeof b, "-> %.22s", row_label(s_sel, nullptr)); d.drawString(b, 8, y + 40); }
+    }
+    lg::comp_keys(TR5("TAB sezione  INVIO apri  r ricarica", "TAB section  ENTER open  r reload", "TAB seccion  INTRO abrir  r", "TAB section  ENTREE ouvrir  r", "TAB Bereich  ENTER oeffnen  r"));
+}
+
 static void on_draw(void)
 {
+    if (nucleo_app_two_screens()) { draw_companion(); return; }
     int top = nucleo_app_content_top(), h = nucleo_app_content_height();
     if (s_canvas_lent && !s_direct_full && nucleo_store_status() == NST_BUSY) {   // direct: only the card changes
         draw_progress(top, h);
@@ -594,6 +803,16 @@ static void on_key(int key, char ch)
         nucleo_app_request_draw();
         return;
     }
+    if (nucleo_touch_is_row(key, ch)) {                   // a tapped list / category row on the panel
+        if (s_view == V_LIST && s_tab == TAB_CATS) {
+            if (lg::row_tap(key, ch, s_lg_scroll, NCATS, &s_cat_sel) == 2) { s_cat = s_cat_sel; s_sel = 0; go(V_CAT); }
+            else nucleo_app_request_draw();
+            return;
+        }
+        if (lg::row_tap(key, ch, s_lg_scroll, s_nvis, &s_sel) == 2) open_app();
+        else nucleo_app_request_draw();
+        return;
+    }
     if (key == NK_CHAR && (ch == 'r' || ch == 'R')) { start(NST_OP_REFRESH, nullptr); return; }
     if (key == NK_CHAR && (ch == 'u' || ch == 'U') && s_view == V_LIST && s_tab == TAB_MINE && s_updates) {
         s_qn = s_qi = 0;
@@ -647,7 +866,7 @@ extern "C" void nucleo_register_store(void)
 {
     static const nucleo_app_def_t app = {
         "store", "Store", "System", "Install apps from the signed NucleoOS store",
-        'S', 0x4D1F, on_enter, on_key, nullptr, on_draw, on_exit, NX_NET_APP, APP_RAM, nullptr
+        'S', 0x4D1F, on_enter, on_key, nullptr, on_draw, on_exit, NX_NET_APP, APP_RAM, draw_large
     };
     nucleo_app_register(&app);
 }

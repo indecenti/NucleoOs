@@ -1,0 +1,17 @@
+@host settings_stubs.cpp
+root adv
+wifi adv TAB
+hotspot adv TAB TAB
+bluetooth adv TAB TAB TAB
+display adv TAB TAB TAB TAB
+theme adv TAB TAB TAB TAB D
+ext adv TAB TAB TAB TAB TAB
+sound adv TAB TAB TAB TAB TAB TAB
+device adv TAB TAB TAB TAB TAB TAB TAB
+reset adv TAB TAB TAB TAB TAB TAB TAB TAB
+nets adv TAB ENTER
+saved adv TAB D ENTER
+password adv TAB ENTER D D ENTER
+search adv c:l c:u c:m
+datetime adv D D D D D D D D ENTER
+confirm adv TAB TAB ENTER

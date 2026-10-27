@@ -28,6 +28,8 @@
 #include "nucleo_imu.h"          // ADV tilt sensor (complementary control)
 #include "game_text.h"           // the five OS languages (it/en in flash, es/fr/de from the SD pack)
 #include "game_ui.h"             // gui:: the console kit (title, menu, dialog, text)
+#include "app_large.h"           // two screens: the world on the 320x240 panel, the Cardputer as companion
+#include "nucleo_touch.h"
 #include "game_sfx.h"            // shared SFX: the PC-rendered pack, else a tone
 #include <M5GFX.h>
 #include <stdlib.h>
@@ -588,7 +590,7 @@ static void draw_menu(void)
     gui::menu(s_menu, items, n, y, nucleo_app_content_height(), COL_ACC);
 }
 
-static void on_draw(void)
+static void draw_game(void)
 {
     if (s_gs == GS_MENU)     { draw_menu(); return; }
     if (s_gs == GS_SETTINGS) { tile_cfg_draw(&s_cfg, s_setm, COL_ACC); return; }
@@ -610,6 +612,86 @@ static void on_draw(void)
         gui::dialog(GT("Vittoria!", "Victory!"), b, GT("Il regno e' salvo", "The kingdom is saved"),
                     GT("INVIO esplora   Esc menu", "ENTER explore   Esc menu"), COL_ACC);
     }
+}
+
+// ===== two screens: the world on the 320x240 panel, the Cardputer as the gamepad =========================
+// lg::game pushes the top-down world scaled to the panel; a NATIVE HUD below shows HP / gold / chests and the
+// touch actions the framework can deliver as discrete keys (talk-open, pause, menu nav). Real-time MOVEMENT
+// stays on the Cardputer's held keys (arrows / WASIO) — a tap cannot be "held" — so the Cardputer is the pad
+// and the panel is the screen. The companion spells out the movement keys and the live run state.
+static void lg_btn3(int y, int bh, const char *la, int ka, char ca, const char *lb, int kb, char cb,
+                    const char *lc, int kc, char cc)
+{
+    const int W320 = d.width(), g = 8, bw = (W320 - 4 * g) / 3;
+    lg::button(g, y, bw, bh, la, lg::card(), FG, ka, ca);
+    lg::button(2 * g + bw, y, bw, bh, lb, COL_ACC, 0x0000, kb, cb);
+    lg::button(3 * g + 2 * bw, y, bw, bh, lc, lg::card(), FG, kc, cc);
+}
+static void lg_hud(int y, int h)
+{
+    const int W320 = d.width();
+    d.fillRect(0, y, W320, h, 0x0000);
+    d.drawFastHLine(0, y, W320, gui::rgb(36, 109, 85));
+    const int bh = h - 24 < 34 ? h - 10 : 36, by = y + h - bh - 6;
+    char b[40];
+
+    if (s_gs >= GS_PLAY) {
+        for (int i = 0; i < HPMAX; i++) heart(8 + i * 10, y + 6, i < s_hp ? 0xF80A : 0x39C7);   // HP pips
+        lg::font(1); d.setTextDatum(top_right); d.setTextColor(COL_GOLD, 0x0000);
+        snprintf(b, sizeof b, GT("Oro %d", "Gold %d"), s_gold); d.drawString(b, W320 - 12, y + 4);
+        d.setTextDatum(top_left); d.setTextColor(s_won ? COL_ACC : 0xFFFF, 0x0000);
+        snprintf(b, sizeof b, GT("Scrigni %d/%d", "Chests %d/%d"), R->nopen, s_nchest); d.drawString(b, 8, y + 20);
+        d.setTextDatum(top_left);
+        if (s_gs == GS_PAUSE) { lg::button(40, by, W320 - 80, bh, GT("Riprendi", "Resume"), COL_ACC, 0x0000, NK_ENTER, 0); return; }
+        if (s_gs == GS_OVER)  { lg::button(40, by, W320 - 80, bh, GT("Continua", "Continue"), COL_GOLD, 0x0000, NK_ENTER, 0); return; }
+        if (s_gs == GS_WIN)   { lg::button(40, by, W320 - 80, bh, GT("Esplora", "Explore"), COL_ACC, 0x0000, NK_ENTER, 0); return; }
+        const int g = 8, bw = (W320 - 3 * g) * 2 / 3;
+        lg::button(g, by, bw, bh, s_dlg >= 0 ? GT("Chiudi", "Close") : GT("Parla / Apri", "Talk / Open"), COL_ACC, 0x0000, NK_ENTER, 0);
+        lg::button(2 * g + bw, by, W320 - 3 * g - bw, bh, GT("Pausa", "Pause"), lg::card(), FG, NK_BACK, 0);
+        return;
+    }
+    // menu / settings
+    lg::font(1); d.setTextDatum(top_left); d.setTextColor(COL_ACC, 0x0000);
+    d.drawString(s_gs == GS_SETTINGS ? GT("Impostazioni", "Settings") : GT("Cardler - menu", "Cardler - menu"), 12, y + 6);
+    d.setTextDatum(top_left);
+    if (s_gs == GS_SETTINGS) lg_btn3(by, bh, GT("Su", "Up"), NK_UP, 0, GT("Cambia", "Change"), NK_RIGHT, 0, GT("Giu", "Down"), NK_DOWN, 0);
+    else                     lg_btn3(by, bh, GT("Su", "Up"), NK_UP, 0, "OK", NK_ENTER, 0, GT("Giu", "Down"), NK_DOWN, 0);
+}
+static void draw_large(void)
+{
+    nucleo_touch_clear();
+    lg::game(draw_game, lg_hud, "Cardler", COL_ACC);
+    nucleo_touch_commit();
+}
+static void draw_companion(void)
+{
+    const int top = nucleo_app_content_top(), hc = nucleo_app_content_height();
+    d.fillRect(0, top, W, hc, BG);
+    int y = lg::comp_head("CARDLER", COL_ACC);
+    char b[40];
+    if (s_gs >= GS_PLAY) {
+        for (int i = 0; i < HPMAX; i++) heart(8 + i * 10, y + 4, i < s_hp ? 0xF80A : 0x39C7);
+        snprintf(b, sizeof b, GT("Oro %d", "Gold %d"), s_gold); gui::text(b, W - 8, y + 2, 2, gui::F_SMALL, COL_GOLD, 0);
+        snprintf(b, sizeof b, GT("Scrigni %d / %d", "Chests %d / %d"), R->nopen, s_nchest);
+        gui::text(b, 8, y + 18, 0, gui::F_BODY, s_won ? COL_ACC : 0xFFFF, 0);
+        const char *st = s_gs == GS_PAUSE ? GT("In pausa", "Paused")
+                       : s_gs == GS_OVER  ? GT("Sei svenuto", "You fainted")
+                       : s_gs == GS_WIN   ? GT("Vittoria!", "Victory!")
+                       : s_dlg >= 0       ? GT("Dialogo", "Talking")
+                       : GT("In esplorazione", "Exploring");
+        gui::text(st, 8, y + 40, 0, gui::F_BODY, COL_MUT, 0);
+        lg::comp_keys(s_gs == GS_PLAY ? GT("Frecce/WASIO muovi  INVIO parla  Esc pausa", "Arrows/WASIO move  ENTER talk  Esc pause")
+                                      : GT("INVIO ok  Esc indietro", "ENTER ok  Esc back"));
+        return;
+    }
+    gui::text(s_gs == GS_SETTINGS ? GT("Impostazioni", "Settings") : GT("Menu", "Menu"), 8, y + 6, 0, gui::F_BODY, 0xFFFF, 0);
+    gui::text(GT("Comandi sul pannello", "Controls on the panel"), 8, y + 34, 0, gui::F_SMALL, COL_MUT, 0);
+    lg::comp_keys(GT("Tocca i tasti sul pannello", "Use the panel buttons"));
+}
+static void on_draw(void)
+{
+    if (nucleo_app_two_screens()) { draw_companion(); return; }
+    draw_game();
 }
 
 static bool poll_fn(void)
@@ -685,7 +767,7 @@ extern "C" void nucleo_register_cardler(void)
         "cardler", "Cardler", "Games", "Mini RPG: esplora, parla, raccogli",
         'C', 0x3FE6,
         on_enter, on_key, nullptr, on_draw, on_exit,
-        NX_SOLO, APP_RAM
+        NX_SOLO, APP_RAM, draw_large
     };
     nucleo_app_register(&app);
 }

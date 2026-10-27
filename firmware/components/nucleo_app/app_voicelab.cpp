@@ -33,6 +33,9 @@ extern "C" {
 }
 
 #include "app_gfx.h"
+#include "app_large.h"          // two screens: the test bench + diagnosis on the 320x240 panel, the Cardputer as companion/PTT
+#include "nucleo_touch.h"
+#include "esp_timer.h"          // esp_timer_get_time for the live mic pulse
 
 // ── Palette ───────────────────────────────────────────────────────────────────
 static const unsigned short
@@ -85,6 +88,7 @@ static conf_t classify(int32_t dist, int32_t second, int32_t radius)
 // ── State ─────────────────────────────────────────────────────────────────────
 static int  s_tab = 0;        // 0=PROVA 1=DIAGNOSI
 static int  s_sel = 0;        // DIAGNOSI list cursor
+static int  s_lg_scroll = 0;  // two screens: the panel diagnosis-list's first visible row
 
 static char s_tpl_names[MAX_TPLS][32];
 static int  s_diag_tier[MAX_TPLS];   // best tier seen this session, per command (0 = untested)
@@ -171,6 +175,10 @@ static void tick(void)
 static void on_key(int key, char ch)
 {
     if (s_tab == 1) {
+        if (nucleo_app_two_screens()) {               // panel: tap a row to select the command
+            int t = lg::row_tap(key, ch, s_lg_scroll, s_tpl_count, &s_sel);
+            if (t) { nucleo_app_request_draw(); return; }
+        }
         if (app_ui_list_key(key, ch, &s_sel, s_tpl_count, nullptr, nullptr)) { nucleo_app_request_draw(); return; }
         if (ch == 'r' || ch == 'R') { scan_tpls(); nucleo_app_request_draw(); }  // refresh
         return;
@@ -285,8 +293,144 @@ static void draw_diagnosi(int top_y)
     d.print(TR5("Prova ogni comando; rosso = riaddestra", "Test each command; red = retrain", "Prueba cmd; rojo=reeducar", "Teste cmd; rouge=reapp.", "Teste Befehl; rot=neu lernen"));
 }
 
+// ===== two screens ==============================================================================================
+// The external panel carries the console: a big centred test bench (PROVA) that shows the recognized word, the
+// confidence verdict + bar and what ANIMA would resolve it to, and the per-command reliability list + card
+// (DIAGNOSI). The Cardputer is the companion and the GO push-to-talk — it shows "hold GO and speak" while testing.
+// Touch: the tabs switch, a diagnosis row taps to select, the bench's Pulisci button clears the last result.
+static void lg_tabs_bar(int y)
+{
+    const char *LBL[2] = { TR("Prova", "Test"), TR("Diagnosi", "Diagnose") };
+    lg::tabs(y, LBL, 2, s_tab, ACC, nullptr);           // tap a tab = NK_TAB (toggles)
+}
+
+static void lg_conf_bar(int x, int y, int w, int pct, unsigned short col)
+{
+    lg::bar(x, y, w, 12, pct, col);
+}
+
+static void lg_prova(int yb, int Wd, int Hd)
+{
+    const int bx = 24, bw = Wd - 48, by = yb + 14, bh = Hd - yb - 24;
+    const int cx = bx + bw / 2;
+    if (!s_have_m) {
+        lg::panel(bx, by, bw, bh, PANEL);
+        lg::font(3); d.setTextColor(ACC, PANEL); d.setTextDatum(top_center);
+        d.drawString(TR("Tieni GO e parla", "Hold GO & speak"), cx, by + 26);
+        lg::font(0); d.setTextColor(FG, PANEL);
+        d.drawString(TR("Modo prova: riconosce ma NON agisce.", "Test mode: recognizes but does NOT act."), cx, by + 70);
+        d.setTextColor(MUTED, PANEL);
+        d.drawString(s_tpl_count > 0 ? TR("Pronuncia un comando addestrato.", "Say a trained command.")
+                                     : TR("Nessun comando: usa Voice Trainer.", "No command: use Voice Trainer."), cx, by + 94);
+        d.setTextDatum(top_left);
+        const bool listening = nucleo_voice_is_listening();
+        if (listening) {
+            int64_t t = esp_timer_get_time() / 200000; int r = 14 + (int)(t % 5);
+            d.fillCircle(cx, by + bh - 48, r, (t & 1) ? C_DEB : C_DIS); d.fillCircle(cx, by + bh - 48, 8, FG);
+        } else { d.drawCircle(cx, by + bh - 48, 16, MUTED); d.fillCircle(cx, by + bh - 48, 7, DIM); }
+        return;
+    }
+    conf_t c = classify(s_m.dist, s_m.second, s_m.radius);
+    lg::panel(bx, by, bw, bh, PANEL);
+    lg::font(3); d.setTextColor(FG, PANEL);
+    char w[24]; lg::fit(w, sizeof w, s_m.word, bw - 140); d.drawString(w, bx + 16, by + 14);
+    const char *vl = tier_name(c.tier);
+    lg::font(1); const int vw = (int)d.textWidth(vl) + 18;
+    d.fillRoundRect(bx + bw - vw - 14, by + 16, vw, 24, 8, c.col);
+    d.setTextDatum(middle_center); d.setTextColor(BG, c.col); d.drawString(vl, bx + bw - vw - 14 + vw / 2, by + 28); d.setTextDatum(top_left);
+    lg_conf_bar(bx + 16, by + 58, bw - 32, c.pct, c.col);
+    int ry = by + 82;
+    if (s_have_r) {
+        const char *verb = TR("Risposta", "Answer");
+        if (s_r.action == ANIMA_ACT_LAUNCH)      verb = TR("Avvierebbe", "Would launch");
+        else if (s_r.action == ANIMA_ACT_SYSTEM) verb = TR("Stato", "Status");
+        else if (!s_r.matched)                   verb = TR("Nessun comando", "No command");
+        lg::font(0); d.setTextColor(ACC, PANEL); d.drawString(verb, bx + 16, ry);
+        lg::font(1); d.setTextColor(FG, PANEL);
+        char rb[40]; lg::fit(rb, sizeof rb, s_r.matched ? s_r.reply : "-", bw - 32); d.drawString(rb, bx + 16, ry + 18);
+    }
+    lg::font(0); d.setTextColor(MUTED, PANEL);
+    char tm[48]; snprintf(tm, sizeof tm, "d %ld  2o %ld  r %ld   n.%d", (long)s_m.dist, (long)s_m.second, (long)s_m.radius, s_recog);
+    d.drawString(tm, bx + 16, by + bh - 24);
+    lg::button(bx + bw - 108, by + bh - 44, 96, 32, TR("Pulisci", "Clear"), LINE, FG, NK_CHAR, 'c');
+}
+
+static void lg_diag_row(int i, int x, int y, int w, int h, bool focus, unsigned short bg, void *)
+{
+    lg::row_text(x, y, w, h, focus, bg, s_tpl_names[i], tier_name(s_diag_tier[i]), focus ? FG : TIER_COL[s_diag_tier[i]]);
+}
+
+static void lg_diagnosi(int yb, int Wd, int Hd)
+{
+    if (s_tpl_count == 0) {
+        lg::message(0, yb, Wd, Hd - yb, TR("Nessun comando", "No commands"),
+                    TR("Apri Voice Trainer per crearne.", "Open Voice Trainer to create one."), MUTED);
+        return;
+    }
+    const int listw = 136;
+    lg::text_list(0, yb + 2, listw, Hd - yb - 4, s_tpl_count, s_sel, &s_lg_scroll, dg_label, dg_right, dg_color, nullptr, ACC);
+    d.fillRect(listw, yb, Wd - listw, Hd - yb, BG);
+    const int px = listw + 4, py = yb + 6, pw = Wd - listw - 10, ph = Hd - yb - 12;
+    lg::panel(px, py, pw, ph);
+    const unsigned short cb = lg::card();
+    const int tier = s_diag_tier[s_sel];
+    lg::font(2); d.setTextColor(FG, cb);
+    char nm[32]; lg::fit(nm, sizeof nm, s_tpl_names[s_sel], pw - 20); d.drawString(nm, px + 12, py + 14);
+    lg::font(0); d.setTextColor(MUTED, cb); d.drawString(TR("Affidabilita", "Reliability"), px + 12, py + 46);
+    lg::font(2); d.setTextColor(TIER_COL[tier], cb);
+    char tn[24]; lg::fit(tn, sizeof tn, tier_name(tier), pw - 24); d.drawString(tn, px + 12, py + 64);
+    lg_conf_bar(px + 12, py + ph - 56, pw - 24, TIER_PCT[tier], TIER_COL[tier]);
+    lg::font(0); d.setTextColor(tier <= 1 ? C_DIS : MUTED, cb);
+    lg::wrap(tier == 0 ? TR("Pronuncialo per provarlo.", "Say it to test it.")
+                       : tier <= 1 ? TR("Debole: riaddestralo.", "Weak: re-train it.")
+                                   : TR("Buona affidabilita.", "Good reliability."), px + 12, py + ph - 32, pw - 24, 16, 2);
+}
+
+static void draw_large(void)
+{
+    const int Wd = d.width(), Hd = d.height();
+    nucleo_touch_clear();
+    char rt[16] = ""; if (s_tab == 1) snprintf(rt, sizeof rt, "%d", s_tpl_count);
+    const int y = lg::header("Voice Lab", rt[0] ? rt : nullptr, ACC, NK_BACK, NK_TAB);
+    lg_tabs_bar(y);
+    const int yb = y + 32;
+    if (s_tab == 0) lg_prova(yb, Wd, Hd);
+    else            lg_diagnosi(yb, Wd, Hd);
+    nucleo_touch_commit();
+}
+
+static void draw_companion(void)
+{
+    const int top = nucleo_app_content_top(), h = nucleo_app_content_height();
+    d.fillRect(0, top, W, h, BG);
+    const int y = lg::comp_head("VOICE LAB", ACC);
+    d.setFont(&fonts::Font0); d.setTextColor(ACC, BG);
+    d.drawString(s_tab == 0 ? TR("PROVA", "TEST") : TR("DIAGNOSI", "DIAGNOSE"), 8, y + 2);
+    if (s_tab == 0) {
+        if (s_have_m) {
+            conf_t c = classify(s_m.dist, s_m.second, s_m.radius);
+            d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(FG, BG); d.drawString(s_m.word, 8, y + 18);
+            d.setFont(&fonts::Font0); d.setTextColor(c.col, BG); d.drawString(tier_name(c.tier), 8, y + 44);
+        } else {
+            d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(nucleo_voice_is_listening() ? C_DIS : ACC, BG);
+            d.drawString(nucleo_voice_is_listening() ? TR("Parla ora!", "Speak now!") : TR("Tieni GO e parla", "Hold GO & speak"), 8, y + 20);
+        }
+        lg::comp_keys(TR("TIENI GO per provare  C pulisci  TAB", "HOLD GO to test  C clear  TAB"));
+    } else {
+        if (s_tpl_count > 0) {
+            const int tier = s_diag_tier[s_sel];
+            d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(FG, BG); d.drawString(s_tpl_names[s_sel], 8, y + 18);
+            d.setFont(&fonts::Font0); d.setTextColor(TIER_COL[tier], BG); d.drawString(tier_name(tier), 8, y + 44);
+        } else {
+            d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(MUTED, BG); d.drawString(TR("Nessun comando", "No commands"), 8, y + 18);
+        }
+        lg::comp_keys(TR("su/giu  R aggiorna  TAB prova", "up/dn  R refresh  TAB test"));
+    }
+}
+
 static void draw(void)
 {
+    if (nucleo_app_two_screens()) { draw_companion(); return; }
     int top = nucleo_app_content_top();
     d.fillRect(0, top, 240, nucleo_app_content_height(), BG);
     if (s_tab == 0) draw_prova(top);
@@ -299,7 +443,7 @@ extern "C" void nucleo_register_voicelab(void)
     static const nucleo_app_def_t app = {
         "voicelab", "Voice Lab", "System",
         "Test and diagnose voice recognition",
-        'P', ACC, enter, on_key, tick, draw, exit_app
+        'P', ACC, enter, on_key, tick, draw, exit_app, 0, nullptr, draw_large
     };
     nucleo_app_register(&app);
 }

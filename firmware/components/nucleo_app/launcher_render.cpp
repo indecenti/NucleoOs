@@ -726,9 +726,17 @@ void launcher_render_status_bar(void)
     if (launcher_depth() > 0) {
         // Breadcrumb: a colour chip carrying the category icon + the name in the big Font2 face
         // (legible), with the Wi-Fi gauge and the item count packed from the right edge inward.
-        d.fillRoundRect(2, 1 + BY, 14, 14, 3, node->color);
-        ui_icon(&d, 9, 8 + BY, 6, strcmp(node->id, LAUNCHER_RECENT_ID) ? node->id : "clock", node->icon, INK, node->color);
-        d.setFont(&fonts::Font2); d.setTextColor(FG, INK); d.setCursor(20, BY);
+        // On the touch panel a back chevron leads it, so the breadcrumb reads as "tap here to go back".
+        int cx = 2;
+        if (lr_large()) {
+            int ay = BAR / 2;
+            d.drawLine(cx + 5, ay - 5, cx, ay, FG); d.drawLine(cx + 6, ay - 5, cx + 1, ay, FG);
+            d.drawLine(cx, ay, cx + 5, ay + 5, FG); d.drawLine(cx + 1, ay, cx + 6, ay + 5, FG);
+            cx += 12;
+        }
+        d.fillRoundRect(cx, 1 + BY, 14, 14, 3, node->color);
+        ui_icon(&d, cx + 7, 8 + BY, 6, strcmp(node->id, LAUNCHER_RECENT_ID) ? node->id : "clock", node->icon, INK, node->color);
+        d.setFont(&fonts::Font2); d.setTextColor(FG, INK); d.setCursor(cx + 18, BY);
         char b[16]; snprintf(b, sizeof(b), "%.14s", node_label(node)); d.print(b);
         d.setFont(&fonts::Font0); d.setTextSize(1);
         int rx = W - 2;
@@ -987,6 +995,110 @@ template <typename T> static void draw_eq(T *c, int ex, int ey, int w, unsigned 
     }
 }
 
+// ---- the launcher grid (external 320x240 panel) -----------------------------
+// A tiny screen scrolls a one-at-a-time carousel; a 320x240 panel with touch shows a real home screen:
+// a grid of app tiles (icon + name), many readable at once, each one a tap target. Replaces the scaled
+// carousel on the large surface only — the Cardputer keeps the carousel. Keyboard focus is the accent
+// ring; touch just taps a tile. Rows scroll under the status bar with a knob when they overflow.
+#define GRID_COLS   4
+#define GRID_CELLW  (W / GRID_COLS)               // 80 px on the 320-wide panel
+#define GRID_RH     70                            // cell height: badge (46) + label + gaps
+#define GRID_TOP    6                             // first tile row, below the status bar band
+static int s_grid_scroll = 0;                     // first visible grid ROW (kept so touch maps back to items)
+
+static int grid_rows_vis(void) { int r = (LIST_BAND_H - GRID_TOP) / GRID_RH; return r < 1 ? 1 : r; }
+
+// Keep the focused tile's row in view; return the first visible item index (row * cols). Pure (no draw),
+// so launcher_render_list can call it to lay the touch targets exactly where the tiles land.
+static int grid_first(void)
+{
+    int n = launcher_visible_count();
+    int rows_vis = grid_rows_vis(), total = (n + GRID_COLS - 1) / GRID_COLS;
+    int selrow = launcher_sel() / GRID_COLS;
+    if (selrow < s_grid_scroll) s_grid_scroll = selrow;
+    if (selrow >= s_grid_scroll + rows_vis) s_grid_scroll = selrow - rows_vis + 1;
+    if (s_grid_scroll > total - rows_vis) s_grid_scroll = total - rows_vis;
+    if (s_grid_scroll < 0) s_grid_scroll = 0;
+    return s_grid_scroll * GRID_COLS;
+}
+
+int launcher_render_large_cols(void) { return lr_large() ? GRID_COLS : 0; }
+int launcher_render_grid_first(void) { return grid_first(); }
+
+template <typename T> static void draw_grid(T *c, int base)
+{
+    c->fillRect(0, base, W, LIST_BAND_H, BG);
+    int n = launcher_visible_count();
+    if (n == 0) {
+        const char *none = launcher_filter()[0] ? TR5("Nessun risultato", "No matches", "Sin resultados", "Aucun resultat", "Keine Treffer")
+                                                 : TR5("Nessuna app", "No apps", "Ninguna app", "Aucune app", "Keine Apps");
+        c->setFont(&fonts::FreeSans9pt7b); c->setTextColor(DIM, BG);
+        c->setTextDatum(middle_center); c->drawString(none, W / 2, base + LIST_BAND_H / 2);
+        c->setTextDatum(top_left); c->setFont(&fonts::Font0); c->setTextSize(1);
+        return;
+    }
+    int sel = launcher_sel(), first = grid_first(), rows_vis = grid_rows_vis();
+    static unsigned s_eq_frame = 0; s_eq_frame++;
+    bool audio_on = nucleo_audio_is_playing() && !nucleo_audio_is_paused();
+    const char *ap = audio_on ? nucleo_audio_path() : "";
+    bool is_stream = ap && strstr(ap, "://");
+
+    for (int k = 0; k < rows_vis; k++) {
+        for (int j = 0; j < GRID_COLS; j++) {
+            int i = first + k * GRID_COLS + j;
+            if (i >= n) break;
+            const MenuNode *it = launcher_nth_visible(i);
+            if (!it) continue;
+            bool focus = (i == sel);
+            int cx = j * GRID_CELLW + GRID_CELLW / 2;
+            int cy = base + GRID_TOP + k * GRID_RH + 25;        // icon-row centre within the cell
+            int r = 23, cr = (int)(r * 0.34f + 0.5f);
+            uint16_t badge = mix565(LINE, it->color, focus ? 1.0f : 0.55f);
+            if (focus) c->fillRoundRect(cx - r - 4, cy - r - 4, 2 * r + 8, 2 * r + 8, cr + 3, mix565(BG, it->color, 0.50f));
+            c->fillRoundRect(cx - r, cy - r, 2 * r, 2 * r, cr, badge);
+            if (focus) {                                        // accent ring = keyboard focus
+                uint16_t rc = mix565(it->color, FG, 0.40f);
+                c->drawRoundRect(cx - r - 2, cy - r - 2, 2 * r + 4, 2 * r + 4, cr + 2, rc);
+                c->drawRoundRect(cx - r - 3, cy - r - 3, 2 * r + 6, 2 * r + 6, cr + 2, rc);
+            }
+            int gr = (int)(r * 0.68f + 0.5f);
+            uint16_t gcol = focus ? INK : mix565(BG, FG, 0.72f);
+            const char *gid = !strcmp(it->id, LAUNCHER_RECENT_ID) ? "clock"
+                            : !strcmp(it->id, LAUNCHER_SETTINGS_SEARCH_ID) ? "wifi" : it->id;
+            ui_icon(c, cx, cy, gr, gid, it->icon, gcol, badge);
+            if (it->kind == N_MENU)
+                draw_badge(c, cx + (int)(r * 0.82f), cy - (int)(r * 0.82f), node_child_count(it), it->color);
+            else if (launcher_is_pinned(it->id)) {
+                int px = cx + (int)(r * 0.82f), py = cy - (int)(r * 0.82f);
+                c->fillCircle(px, py, 4, INK); c->fillCircle(px, py, 3, C_YELLOW);
+            }
+            if (audio_on && ((is_stream && !strcmp(it->id, "radio")) || (!is_stream && !strcmp(it->id, "music"))))
+                draw_eq(c, cx + (int)(r * 0.6f), cy + (int)(r * 0.6f), (int)(r * 0.55f), s_eq_frame);
+            // label under the badge, one line fitted to the cell (".." when a name is too long to show whole)
+            char buf[24]; c->setFont(&fonts::Font2); c->setTextSize(1);
+            const char *lab = node_label(it);
+            const int maxw = GRID_CELLW - 8;
+            fit_width(c, lab, maxw, buf, sizeof buf);
+            if ((int)strlen(buf) < (int)strlen(lab)) {           // truncated: shrink until "prefix.." fits
+                int l = (int)strlen(buf);
+                for (; l > 0; l--) { char t[26]; snprintf(t, sizeof t, "%.*s..", l, lab); if ((int)c->textWidth(t) <= maxw) break; }
+                snprintf(buf, sizeof buf, "%.*s..", l, lab);
+            }
+            c->setTextColor(focus ? FG : mix565(BG, FG, 0.80f), BG);
+            c->setCursor(cx - (int)c->textWidth(buf) / 2, base + GRID_TOP + k * GRID_RH + 50); c->print(buf);
+        }
+    }
+    // scroll knob on the right edge when the grid overflows
+    int total = (n + GRID_COLS - 1) / GRID_COLS;
+    if (total > rows_vis) {
+        int track = LIST_BAND_H - 8, kh = track * rows_vis / total; if (kh < 16) kh = 16;
+        int ky = base + 4 + (track - kh) * s_grid_scroll / (total - rows_vis);
+        c->fillRect(W - 3, base + 4, 2, track, LINE);
+        c->fillRect(W - 3, ky, 2, kh, mix565(FG, BG, 0.3f));
+    }
+    c->setFont(&fonts::Font0); c->setTextSize(1);
+}
+
 // ---- the launcher carousel --------------------------------------------------
 // Rendered into a band-local coordinate space (top = `base`): for the off-screen canvas base = 0 and
 // the result is pushed at y = LIST_TOP; for the direct fallback base = LIST_TOP. The focused item is a
@@ -994,7 +1106,8 @@ template <typename T> static void draw_eq(T *c, int ex, int ey, int w, unsigned 
 // launcher_render_step_scroll).
 template <typename T> static void draw_list(T *c, int base)
 {
-    if (nucleo_theme_has_bg_image() && !lr_large()) nucleo_theme_draw_bg_slice(c, 0, base, W, LIST_BAND_H);   // the image is 240x135
+    if (lr_large()) { draw_grid(c, base); return; }     // the panel shows a touch grid, not the scaled rail
+    if (nucleo_theme_has_bg_image()) nucleo_theme_draw_bg_slice(c, 0, base, W, LIST_BAND_H);   // the image is 240x135
     else                            c->fillRect(0, base, W, LIST_BAND_H, BG);
 
     int n = launcher_visible_count();
@@ -1084,9 +1197,29 @@ template <typename T> static void draw_list(T *c, int base)
 // into the top of that canvas and blit only the band region with a destination-clipped push,
 // so the chrome below it is untouched. Decoder apps call nucleo_screen_release() directly to
 // hand the canvas RAM to the codec; it re-acquires lazily here.
+// The large grid's touch targets: one per visible tile (tap = open that app / enter that category), a
+// scroll area over the whole grid (a drag walks the rows), and the status-bar breadcrumb as Back inside a
+// category. Panel coordinates; registered once per frame (the band itself may blit in several strips).
+static void grid_register_touch(void)
+{
+    nucleo_touch_clear();
+    int n = launcher_visible_count(), first = grid_first(), rows_vis = grid_rows_vis();
+    for (int k = 0; k < rows_vis; k++)
+        for (int j = 0; j < GRID_COLS; j++) {
+            int slot = k * GRID_COLS + j;
+            if (first + slot >= n) break;
+            nucleo_touch_add(j * GRID_CELLW, LIST_TOP + GRID_TOP + k * GRID_RH, GRID_CELLW, GRID_RH,
+                             NK_CHAR, (char)(NUCLEO_TOUCH_ROW + slot));
+        }
+    nucleo_touch_add_scroll(0, LIST_TOP, W, LIST_BAND_H, GRID_RH, NK_UP, 0, NK_DOWN, 0);   // drag = scroll rows
+    if (launcher_depth() > 0) nucleo_touch_add(0, 0, 120, BAR, NK_BACK, 0);                // breadcrumb = back
+    nucleo_touch_commit();
+}
+
 void launcher_render_list(void)
 {
     M5Canvas *c = lr_large() ? nucleo_screen_wide(W) : nucleo_screen();
+    if (lr_large()) grid_register_touch();
     s_band_buffered = (c != nullptr);                          // tells step_scroll to snap (not animate) on the direct path
     if (c && c->height() >= LIST_BAND_H) {
         draw_list(c, 0);                                        // band-local: rows 0..LIST_BAND_H of the canvas

@@ -24,6 +24,8 @@
 #include "nucleo_fx3d.h"
 #include "game_text.h"
 #include "game_ui.h"
+#include "app_large.h"
+#include "nucleo_touch.h"
 #include <M5GFX.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -2503,7 +2505,7 @@ static bool on_back(int key) {
 }
 
 // ============================ poll / draw / lifecycle ========================
-static void on_draw(void) {
+static void draw_game(void) {
     int ch = nucleo_app_content_height();
     switch (s_screen) {
         case ST_MENU:   draw_menu(ch); break;
@@ -2517,6 +2519,126 @@ static void on_draw(void) {
         case ST_LOADOUT: draw_loadout(ch); break;
         default: break;
     }
+}
+
+// ===== two screens ===========================================================
+// Panel (on_draw_large): the battlefield scaled to 320 px + a native HUD band. Tanks is turn-based, so every
+// aim action is a discrete key the on_key handler already takes — the panel buttons (angle, power, weapon,
+// fire) map straight to them and are fully playable by touch. Cardputer (on_draw while two screens): the live
+// turn / angle / power / wind / weapon / HP and the key map, never the battlefield. Extra state: none.
+#define ACC COL_GOLD
+static const char *tanks_wname(int who) { const Weap &w = WEAPS[s_tk[who].weap]; return game_text(w.it, w.en); }
+struct HudBtn { const char *label; int key; char ch; bool acc; };
+static void hud_row(int x, int y, int w, int h, const HudBtn *b, int n) {
+    if (n <= 0) return;
+    const int gap = 4, bw = (w - (n - 1) * gap) / n;
+    for (int i = 0; i < n; i++)
+        lg::button(x + i * (bw + gap), y, bw, h, b[i].label, b[i].acc ? ACC : lg::card(), b[i].acc ? COL_INK : 0xFFFF, b[i].key, b[i].ch);
+}
+static void large_hud(int y, int h) {
+    const int panw = d.width(), pad = 8;
+    d.fillRect(0, y, panw, h, BG);
+    d.drawFastHLine(0, y, panw, LINE);
+    int bh = h - 12; if (bh > 46) bh = 46; const int by = y + (h - bh) / 2;
+    if (s_screen == ST_PLAY && !s_confirm) {
+        int me = s_active; uint16_t tc = me ? COL_P1 : COL_P0;
+        char tag[6]; snprintf(tag, sizeof tag, "P%d", me + 1);
+        lg::font(2); d.setTextDatum(middle_left); d.setTextColor(tc, BG); d.drawString(tag, pad, y + h / 3);
+        char wl[12]; snprintf(wl, sizeof wl, GT("V %d", "W %d"), s_wind);
+        lg::font(4); d.setTextColor(MUTED, BG); d.drawString(wl, pad, y + h * 3 / 4);
+        d.setTextDatum(top_left);
+        // ^/v = angle, </> = power, W = weapon, FIRE (wide). All discrete keys on_key already handles this turn.
+        // (angle/power read big off the frame's own corner plates; the companion carries the full readout)
+        const int bx0 = 56, g = 4, u = (panw - bx0 - pad - 5 * g) / 8;   // 5 single buttons + a 3u FIRE
+        int x = bx0;
+        lg::button(x, by, u, bh, "^", lg::card(), 0xFFFF, NK_UP, 0);    x += u + g;   // angle up
+        lg::button(x, by, u, bh, "v", lg::card(), 0xFFFF, NK_DOWN, 0);  x += u + g;   // angle down
+        lg::button(x, by, u, bh, "<", lg::card(), 0xFFFF, NK_LEFT, 0);  x += u + g;   // power down
+        lg::button(x, by, u, bh, ">", lg::card(), 0xFFFF, NK_RIGHT, 0); x += u + g;   // power up
+        lg::button(x, by, u, bh, "W", lg::card(), COL_GREEN, NK_CHAR, 'w'); x += u + g;
+        lg::button(x, by, 3 * u, bh, GT("FUOCO", "FIRE"), ACC, COL_INK, NK_CHAR, ' ');
+    } else if (s_screen == ST_PLAY && s_confirm) {
+        const HudBtn b[2] = { { GT("ESCI", "QUIT"), NK_ENTER, 0, true }, { GT("ANNULLA", "CANCEL"), NK_BACK, 0, false } };
+        hud_row(pad, by, panw - 2 * pad, bh, b, 2);
+    } else if (s_screen == ST_OVER) {
+        bool canReplay = (s_mode == MODE_AI) || (s_seat == 0 && s_haspeer);
+        if (canReplay) { const HudBtn b[2] = { { GT("RIGIOCA", "REPLAY"), NK_ENTER, 0, true }, { "MENU", NK_BACK, 0, false } }; hud_row(pad, by, panw - 2 * pad, bh, b, 2); }
+        else           { const HudBtn b[1] = { { "MENU", NK_BACK, 0, true } }; hud_row(pad, by, panw - 2 * pad, bh, b, 1); }
+    } else if (s_screen == ST_LOADOUT) {
+        const HudBtn b[4] = { { GT("SU", "UP"), NK_UP, 0, false }, { GT("GIU", "DOWN"), NK_DOWN, 0, false },
+                              { GT("SEL", "PICK"), NK_CHAR, ' ', false }, { GT("OK", "READY"), NK_ENTER, 0, true } };
+        hud_row(pad, by, panw - 2 * pad, bh, b, 4);
+    } else if (s_screen == ST_OPT) {
+        const HudBtn b[3] = { { GT("SU", "UP"), NK_UP, 0, false }, { GT("GIU", "DOWN"), NK_DOWN, 0, false },
+                              { GT("CAMBIA", "CHANGE"), NK_ENTER, 0, true } };
+        hud_row(pad, by, panw - 2 * pad, bh, b, 3);
+    } else if (s_screen == ST_MENU) {
+        const HudBtn b[3] = { { GT("SU", "UP"), NK_UP, 0, false }, { GT("GIU", "DOWN"), NK_DOWN, 0, false },
+                              { GT("SCEGLI", "SELECT"), NK_ENTER, 0, true } };
+        hud_row(pad, by, panw - 2 * pad, bh, b, 3);
+    } else if (s_screen == ST_BROWSE) {
+        const HudBtn b[3] = { { GT("SU", "UP"), NK_UP, 0, false }, { GT("GIU", "DOWN"), NK_DOWN, 0, false },
+                              { GT("ENTRA", "JOIN"), NK_ENTER, 0, true } };
+        hud_row(pad, by, panw - 2 * pad, bh, b, 3);
+    } else if (s_screen == ST_HOST) {
+        const HudBtn b[1] = { { GT("AVVIA", "START"), NK_ENTER, 0, true } };
+        hud_row(pad, by, panw - 2 * pad, bh, b, 1);
+    } else {   // ST_SCORES / ST_HELP
+        const HudBtn b[1] = { { GT("INDIETRO", "BACK"), NK_BACK, 0, true } };
+        hud_row(pad, by, panw - 2 * pad, bh, b, 1);
+    }
+}
+static void draw_companion(void) {
+    int y = lg::comp_head("Tanks", ACC);
+    if (s_screen == ST_PLAY || s_screen == ST_OVER) {
+        int me = s_active; uint16_t tc = me ? COL_P1 : COL_P0;
+        char l[40];
+        // HP of both tanks
+        lg::font(2); d.setTextDatum(top_left); d.setTextColor(s_tk[0].hp > 40 ? COL_P0 : COL_RED, BG);
+        snprintf(l, sizeof l, "%d", s_tk[0].hp); d.drawString(l, 8, y + 4);
+        d.setTextDatum(top_right); d.setTextColor(s_tk[1].hp > 40 ? COL_P1 : COL_RED, BG);
+        snprintf(l, sizeof l, "%d", s_tk[1].hp); d.drawString(l, 232, y + 4);
+        lg::font(1); d.setTextDatum(top_center); d.setTextColor(MUTED, BG); d.drawString("HP", 120, y + 8);
+        d.setTextDatum(top_left);
+        if (s_screen == ST_PLAY) {
+            lg::font(1); d.setTextColor(tc, BG);
+            snprintf(l, sizeof l, GT("Turno P%d", "P%d turn"), me + 1); d.drawString(l, 8, y + 30);
+            lg::font(0); d.setTextColor(0xFFFF, BG);
+            snprintf(l, sizeof l, GT("Ang %d   Pot %d   Vento %d", "Ang %d   Pwr %d   Wind %d"), s_tk[me].elev, s_tk[me].power, s_wind);
+            d.drawString(l, 8, y + 48);
+            char wn[18]; snprintf(wn, sizeof wn, "%.14s", tanks_wname(me));
+            snprintf(l, sizeof l, "%s %s", GT("Arma:", "Weapon:"), wn);
+            d.setTextColor(WEAPS[s_tk[me].weap].col, BG); d.drawString(l, 8, y + 62);
+        } else {
+            int win = s_tk[0].dead ? 1 : 0; bool mywin = (s_mode == MODE_GUEST) ? (win == 1) : (win == 0);
+            lg::font(1); d.setTextColor(mywin ? COL_GREEN : COL_RED, BG);
+            d.drawString(mywin ? GT("Vittoria!", "Victory!") : GT("Sconfitta", "Defeat"), 8, y + 34);
+            lg::font(0); d.setTextColor(0xFFFF, BG);
+            snprintf(l, sizeof l, GT("Serie  %d - %d", "Series  %d - %d"), s_wins[0], s_wins[1]); d.drawString(l, 8, y + 56);
+        }
+        lg::comp_keys(s_screen == ST_OVER ? GT("INVIO / Esc", "ENTER / Esc")
+                                          : GT("frecce mira  W arma  INVIO spara", "arrows aim  W weapon  ENTER fire"));
+        return;
+    }
+    lg::font(1); d.setTextDatum(top_left); d.setTextColor(ACC, BG);
+    const char *t = s_screen == ST_MENU ? "Tanks" : s_screen == ST_LOADOUT ? GT("Armi", "Loadout")
+                   : s_screen == ST_OPT ? GT("Impostazioni", "Settings") : s_screen == ST_HOST ? GT("Crea stanza", "Host")
+                   : s_screen == ST_BROWSE ? GT("Entra", "Join") : s_screen == ST_SCORES ? GT("Record", "Scores") : GT("Guida", "Help");
+    d.drawString(t, 8, y + 6);
+    lg::font(0); d.setTextColor(0xFFFF, BG);
+    if (s_screen == ST_MENU) { d.setTextColor(ACC, BG); d.drawString(menu_label(s_msel % NMENU), 8, y + 30); }
+    else if (s_screen == ST_LOADOUT) { char l[24]; snprintf(l, sizeof l, GT("Scelte %d / %d", "Picked %d / %d"), ld_count(), LOADOUT_N); d.drawString(l, 8, y + 30); }
+    else if (s_screen == ST_BROWSE) { d.drawString(s_nroom > 0 ? s_rooms[s_rsel < s_nroom ? s_rsel : 0].name : GT("cerco...", "searching..."), 8, y + 30); }
+    lg::comp_keys(GT("INVIO scegli   Esc indietro", "ENTER select   Esc back"));
+}
+static void on_draw(void) {
+    if (nucleo_app_two_screens()) { draw_companion(); return; }
+    draw_game();
+}
+static void draw_large(void) {
+    nucleo_touch_clear();
+    lg::game(draw_game, large_hud, "Tanks", ACC);
+    nucleo_touch_commit();
 }
 static bool proj_focus(float *fx, float *fy) {     // centroid of live projectiles + small velocity lead
     float sx = 0, sy = 0, leadx = 0; int n = 0;
@@ -2683,7 +2805,7 @@ extern "C" void nucleo_register_tanks(void) {
     static const nucleo_app_def_t app = {
         "tanks", "Tanks", "Games", "Artiglieria a turni: terreno distruttibile, 29 armi, scudi, biomi, vs CPU",
         'T', C_GREEN, on_enter, on_key, nullptr, on_draw, on_exit,
-        NX_NET_APP, APP_RAM
+        NX_NET_APP, APP_RAM, draw_large
     };
     nucleo_app_register(&app);
 }

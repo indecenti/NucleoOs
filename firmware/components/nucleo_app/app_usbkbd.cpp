@@ -15,6 +15,8 @@
 #include "nucleo_i18n.h"      // TR(it,en): hint follows the system language
 #include "app_gfx.h"
 #include "app_ui.h"           // shared focused-list widget (macro list) + quick-select nav
+#include "app_large.h"        // two screens: the tabs + macro picker on the panel, Cardputer as companion
+#include "nucleo_touch.h"
 #include "nucleo_exclusive.h" // declarative exclusive mode (NX_NET_APP)
 #include <M5GFX.h>
 #include <string.h>
@@ -52,6 +54,7 @@ static int  s_last_conn = -1;
 static nucleo_ducky_layout_t s_layout = DUCKY_LAYOUT_US;
 static int s_macro = 0;
 static bool s_usb_ok = false;
+static int s_lg_scroll = 0;   // the panel macro list's first visible row (two screens)
 
 struct Macro { const char *name; const char *name_en; uint8_t mod; uint8_t key; };
 static const Macro MACROS[] = {
@@ -205,11 +208,17 @@ static void on_key(int key, char ch)
     switch (s_tab) {
         case T_TYPE: if (key == NK_ENTER) type_loop(); break;
         case T_MACRO:
-            if (app_ui_list_key(key, ch, &s_macro, N_MACRO, mac_label, nullptr)) { nucleo_app_request_draw(); }
+            if (int t = lg::row_tap(key, ch, s_lg_scroll, N_MACRO, &s_macro)) {   // the panel's macro rows
+                if (t == 2) nucleo_usbhid_key(MACROS[s_macro].mod, MACROS[s_macro].key);
+                nucleo_app_request_draw();
+            }
+            else if (app_ui_list_key(key, ch, &s_macro, N_MACRO, mac_label, nullptr)) { nucleo_app_request_draw(); }
             else if (key == NK_ENTER) { nucleo_usbhid_key(MACROS[s_macro].mod, MACROS[s_macro].key); nucleo_app_request_draw(); }
             break;
         case T_SET:
-            if (key == NK_ENTER || ch == 'l') { s_layout = (s_layout == DUCKY_LAYOUT_US) ? DUCKY_LAYOUT_IT : DUCKY_LAYOUT_US; nucleo_app_request_draw(); }
+            if (ch == 'u') { s_layout = DUCKY_LAYOUT_US; nucleo_app_request_draw(); }           // the panel's US button
+            else if (ch == 'i') { s_layout = DUCKY_LAYOUT_IT; nucleo_app_request_draw(); }       // ...and IT button
+            else if (key == NK_ENTER || ch == 'l') { s_layout = (s_layout == DUCKY_LAYOUT_US) ? DUCKY_LAYOUT_IT : DUCKY_LAYOUT_US; nucleo_app_request_draw(); }
             break;
         default: break;
     }
@@ -245,8 +254,10 @@ static void tabbar(int top)
     d.drawFastHLine(0, top + 20, 240, LINE);   // launcher-consistent hairline anchor under the tabs
 }
 
+static void draw_companion(void);
 static void draw(void)
 {
+    if (nucleo_app_two_screens()) { draw_companion(); return; }
     int top = nucleo_app_content_top(), h = nucleo_app_content_height();
     d.fillRect(0, top, 240, h, BG);
     tabbar(top);
@@ -292,6 +303,137 @@ static void draw(void)
     }
 }
 
+// ===== two screens =============================================================================================
+// The panel carries the tabbed keyboard: Type is a status card + a big "start typing" button, Macro is the combo
+// list on the left with a live preview of the modifier+key it sends (and a Send button) on the right, Info is the
+// HID/host/LED state card, Settings is the US/IT layout as two big touch buttons. Tabs tap as 1..4. The Cardputer
+// — where you actually type — is the companion: the tab, what is selected, and the keys. Touch is the content.
+static const char *const LG_TABS_IT[] = { "Digita", "Macro", "Info", "Imp" };
+static const char *const LG_TABS_EN[] = { "Type", "Macro", "Info", "Set" };
+
+// Name the host key a macro sends, so the preview reads like "Ctrl + Alt + Del", not a hex code.
+static const char *macro_keyname(uint8_t key)
+{
+    if (key == HID_DELfw) return "Del";
+    if (key == HID_ESC)   return "Esc";
+    if (key == HID_PRTSC) return "PrtSc";
+    if (key == HID_F(4))  return "F4";
+    if (key == 0x2B)      return "Tab";
+    if (key == 0x07)      return "D";
+    if (key == 0x0F)      return "L";
+    if (key == 0x08)      return "E";
+    return "Key";
+}
+
+static void mac_row(int i, int x, int y, int w, int h, bool focus, unsigned short bg, void *)
+{
+    lg::row_text(x, y, w, h, focus, bg, TR(MACROS[i].name, MACROS[i].name_en), nullptr, FG);
+}
+
+static void lg_chip(int x, int y, const char *label, bool on, unsigned short oncol, unsigned short off)
+{
+    lg::font(0);
+    const int w = (int)strlen(label) * 6 + 14;
+    d.fillRoundRect(x, y, w, 20, 5, on ? oncol : off);
+    d.setTextDatum(middle_center); d.setTextColor(on ? INK : MUTED, on ? oncol : off);
+    d.drawString(label, x + w / 2, y + 11); d.setTextDatum(top_left);
+}
+
+static void kbd_draw_large(void)
+{
+    const int W = d.width(), H = d.height();
+    nucleo_touch_clear();
+    const bool conn = nucleo_usbhid_ready();
+    const unsigned char leds = nucleo_usbhid_leds();
+    const char *right = conn ? "host ok" : TR("attendo PC", "waiting PC");
+    int y = lg::header("USB Keyboard", right, ACC, NK_BACK, 0);
+    const char *const *N = nucleo_i18n_is_it() ? LG_TABS_IT : LG_TABS_EN;
+    y = lg::tabs(y + 2, N, 4, s_tab, ACC, "1234");
+    d.fillRect(0, y, W, H - y, BG);
+    const unsigned short cb = lg::card();
+
+    if (s_tab == T_TYPE) {
+        const int cx = 16, cw = W - 32, cy = y + 10, chh = 96;
+        lg::panel(cx, cy, cw, chh);
+        lg::font(1); d.setTextColor(s_usb_ok ? FG : WARN, cb);
+        d.drawString(s_usb_ok ? TR("Tastiera USB pronta", "USB keyboard ready") : TR("USB HID non installata", "USB HID not installed"), cx + 14, cy + 12);
+        lg::font(0); d.setTextColor(conn ? GRN : MUTED, cb);
+        lg::wrap(conn ? TR("Host collegato.", "Host connected.") : TR("Collega il cavo USB-C al PC.", "Plug the USB-C cable into the PC."), cx + 14, cy + 40, cw - 28, 17, 2);
+        lg::font(0); d.setTextColor(DIM, cb);
+        d.drawString(TR("Combo, Fn, frecce, layout IT/US.", "Combos, Fn, arrows, IT/US layout."), cx + 14, cy + chh - 20);
+        const int bh = 56, by = H - bh - 16;
+        lg::button(cx, by, cw, bh, TR("Inizia a digitare", "Start typing"), ACC, INK, NK_ENTER, 0);
+    } else if (s_tab == T_MACRO) {
+        const int lw = 168;
+        lg::list(0, y + 2, lw, H - y - 4, lg::ROW, N_MACRO, s_macro, &s_lg_scroll, mac_row, nullptr, ACC);
+        const int px = lw + 6, pw = W - lw - 12, py = y + 6, ph = H - y - 12;
+        lg::panel(px, py, pw, ph);
+        lg::font(1); d.setTextColor(ACC, cb);
+        lg::wrap(TR(MACROS[s_macro].name, MACROS[s_macro].name_en), px + 12, py + 12, pw - 24, 20, 2);
+        const uint8_t mod = MACROS[s_macro].mod;
+        int cyp = py + 58;
+        lg_chip(px + 12, cyp, "CTRL", mod & NK_HIDMOD_CTRL, ACC, cb == BG ? LINE : cb);
+        lg_chip(px + 12 + 58, cyp, "ALT", mod & NK_HIDMOD_ALT, ACC, LINE); cyp += 26;
+        lg_chip(px + 12, cyp, "SHIFT", mod & NK_HIDMOD_SHIFT, ACC, LINE);
+        lg_chip(px + 12 + 70, cyp, "GUI", mod & NK_HIDMOD_GUI, ACC, LINE); cyp += 28;
+        lg::font(1); d.setTextColor(FG, cb); d.drawString("+", px + 12, cyp);
+        lg::font(2); d.setTextColor(GRN, cb); d.drawString(macro_keyname(MACROS[s_macro].key), px + 30, cyp - 4);
+        const int bh = 46;
+        lg::button(px + 10, py + ph - bh - 10, pw - 20, bh, TR("Invia al PC", "Send to PC"), GRN, INK, NK_ENTER, 0);
+    } else if (s_tab == T_INFO) {
+        const int cx = 16, cw = W - 32, cy = y + 10, chh = H - y - 20;
+        lg::panel(cx, cy, cw, chh);
+        int ky = cy + 14;
+        lg::kv(cx + 14, ky, cw - 28, "USB HID", s_usb_ok ? TR("installata", "installed") : TR("errore", "error"), s_usb_ok ? GRN : WARN, cb); ky += 26;
+        lg::kv(cx + 14, ky, cw - 28, "Host", conn ? TR("collegato", "connected") : TR("non rilevato", "not detected"), conn ? GRN : WARN, cb); ky += 30;
+        lg::font(0); d.setTextColor(MUTED, cb); d.drawString(TR("LED del PC (stato reale):", "PC LEDs (real state):"), cx + 14, ky); ky += 20;
+        lg_chip(cx + 14, ky, "CAPS", leds & NK_HIDLED_CAPS, GRN, LINE);
+        lg_chip(cx + 14 + 66, ky, "NUM", leds & NK_HIDLED_NUM, GRN, LINE);
+        lg_chip(cx + 14 + 66 + 60, ky, "SCROLL", leds & NK_HIDLED_SCROLL, GRN, LINE); ky += 30;
+        lg::font(0); d.setTextColor(DIM, cb);
+        lg::wrap(TR("Console seriale sospesa: la USB e' presa dalla tastiera.", "Serial console suspended: the USB is taken by the keyboard."), cx + 14, ky, cw - 28, 17, 2);
+    } else {   // T_SET
+        const bool us = (s_layout == DUCKY_LAYOUT_US);
+        lg::font(0); d.setTextColor(MUTED, BG); d.drawString(TR("Mappa i simboli sul layout del PC.", "Maps symbols to the PC layout."), 16, y + 10);
+        const int bw = W - 32, bh = 60;
+        lg::button(16, y + 34, bw, bh, "US  QWERTY", us ? ACC : lg::card(), us ? INK : FG, NK_CHAR, 'u');
+        lg::button(16, y + 34 + bh + 12, bw, bh, TR("IT  italiana", "IT  Italian"), !us ? ACC : lg::card(), !us ? INK : FG, NK_CHAR, 'i');
+    }
+    nucleo_touch_commit();
+}
+
+static void draw_companion(void)
+{
+    const int top = nucleo_app_content_top(), h = nucleo_app_content_height();
+    d.fillRect(0, top, 240, h, BG);
+    const int y = lg::comp_head("USB KEYBOARD", ACC);
+    const bool conn = nucleo_usbhid_ready();
+    const char *const *N = nucleo_i18n_is_it() ? LG_TABS_IT : LG_TABS_EN;
+    d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(ACC, BG);
+    char t[48]; snprintf(t, sizeof t, "%s", N[s_tab]); d.drawString(t, 8, y + 2);
+    d.setFont(&fonts::Font0); d.setTextColor(conn ? GRN : WARN, BG);
+    d.drawString(conn ? TR("host collegato", "host connected") : TR("attendo il PC", "waiting for the PC"), 120, y + 6);
+
+    if (s_tab == T_MACRO) {
+        d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(FG, BG);
+        lg::wrap(TR(MACROS[s_macro].name, MACROS[s_macro].name_en), 8, y + 30, 224, 20, 2);
+        lg::comp_keys(TR("su/giu scegli  INVIO invia", "up/dn pick  ENTER send"));
+    } else if (s_tab == T_TYPE) {
+        d.setFont(&fonts::Font0); d.setTextColor(s_usb_ok ? FG : WARN, BG);
+        d.drawString(s_usb_ok ? TR("Tastiera USB pronta.", "USB keyboard ready.") : TR("USB HID non installata.", "USB HID not installed."), 8, y + 34);
+        lg::comp_keys(TR("INVIO inizia a digitare", "ENTER start typing"));
+    } else if (s_tab == T_INFO) {
+        const unsigned char leds = nucleo_usbhid_leds();
+        char m[40]; snprintf(m, sizeof m, "CAPS %s  NUM %s  SCRL %s", (leds & NK_HIDLED_CAPS) ? "*" : "-", (leds & NK_HIDLED_NUM) ? "*" : "-", (leds & NK_HIDLED_SCROLL) ? "*" : "-");
+        d.setFont(&fonts::Font0); d.setTextColor(MUTED, BG); d.drawString(m, 8, y + 34);
+        lg::comp_keys(TR("stato reale del PC", "the PC's real state"));
+    } else {
+        d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(FG, BG);
+        d.drawString(s_layout == DUCKY_LAYOUT_US ? "Layout US" : "Layout IT", 8, y + 34);
+        lg::comp_keys(TR("INVIO / L cambia layout", "ENTER / L switch layout"));
+    }
+}
+
 extern "C" void nucleo_register_usbkbd(void)
 {
     static const nucleo_app_def_t app = {
@@ -302,7 +444,7 @@ extern "C" void nucleo_register_usbkbd(void)
         // runtime) that was a blink per key. A fresh heap guarantees the buffered path; the app is a
         // USB peripheral and uses zero network. Bonus: exiting reboots, which also returns the USB
         // PHY TinyUSB took from the serial console.
-        NX_NET_APP | NX_SOLO | NX_WIFI
+        NX_NET_APP | NX_SOLO | NX_WIFI, nullptr, kbd_draw_large
     };
     nucleo_app_register(&app);
 }
