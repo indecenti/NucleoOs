@@ -89,6 +89,11 @@ bool        nucleo_audio_why_silent(char *buf, size_t n);
 // Refuses while a track/stream is playing: the I2S is a single resource and silently stealing it from
 // the player would be worse than saying no. Close when done — the pins go back to the recorder/codec.
 esp_err_t nucleo_audio_pcm_open(int rate, int channels);
+// Same, with a DMA queue of about `queue_frames` frames instead of the driver's 6 x 240 (a player that reads a
+// card between its writes needs the slack: 4096 frames = 256 ms at 16 kHz, ~16 KB of DMA RAM at most).
+// nucleo_audio_pcm_queue_frames() = what the open channel really has (0 = closed).
+esp_err_t nucleo_audio_pcm_open_ex(int rate, int channels, int queue_frames);
+int       nucleo_audio_pcm_queue_frames(void);
 esp_err_t nucleo_audio_pcm_write(const int16_t *pcm, size_t bytes);
 void      nucleo_audio_pcm_close(void);
 

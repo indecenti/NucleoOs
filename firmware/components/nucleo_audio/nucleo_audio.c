@@ -99,9 +99,16 @@ static atomic_bool s_seek_req = false;
 static atomic_uint_least32_t s_audio_base = 0, s_audio_len = 0;
 
 // ---- I2S sink (shared with the MP3 decoder via nucleo_audio_priv.h) ----
+// DMA queue of the NEXT open: the driver default (6 x 240 frames) unless a raw-PCM client asked for more
+// (nucleo_audio_pcm_open_ex); pcm_close puts the default back. s_q_* is what the live channel was opened with.
+#define Q_DESC_DEF 6
+#define Q_FRAME_DEF 240
+static int s_q_desc = Q_DESC_DEF, s_q_frame = Q_FRAME_DEF, s_open_desc = 0, s_open_frame = 0;
 static esp_err_t i2s_open(int rate, int chans)
 {
     i2s_chan_config_t cc = I2S_CHANNEL_DEFAULT_CONFIG(I2S_NUM_AUTO, I2S_ROLE_MASTER);
+    cc.dma_desc_num = (uint32_t)s_q_desc;
+    cc.dma_frame_num = (uint32_t)s_q_frame;
     cc.auto_clear = true; // MUST be true to prevent micro-looping on underflow/pause
     esp_err_t err = i2s_new_channel(&cc, &s_tx, NULL);
     if (err != ESP_OK) { ESP_LOGE(TAG, "i2s_new_channel: %s", esp_err_to_name(err)); s_tx = NULL; return err; }
@@ -130,6 +137,7 @@ static esp_err_t i2s_open(int rate, int chans)
     }
     nucleo_codec_speaker(true);   // ADV: power up the ES8311 DAC now that BCLK is actually running
     s_rate = rate; s_chans = chans;
+    s_open_desc = s_q_desc; s_open_frame = s_q_frame;
     ESP_LOGI(TAG, "i2s TX up: %d Hz, %d ch (bclk=%d ws=%d dout=%d)", rate, chans,
              NUCLEO_SPK_PIN_BCLK, NUCLEO_SPK_PIN_WS, NUCLEO_SPK_PIN_DOUT);
     return ESP_OK;
@@ -247,6 +255,7 @@ void nucleo_audio_siren_stop(void) { i2s_close(); }          // silence + free t
 static esp_err_t i2s_rate_locked(int rate, int chans)
 {
     if (!s_tx) return i2s_open(rate, chans);
+    if (s_open_desc != s_q_desc || s_open_frame != s_q_frame) { i2s_close(); return i2s_open(rate, chans); }   // queue size changed
     if (rate == s_rate && chans == s_chans) return ESP_OK;
     // Slot count changed -> reopen; otherwise just retune the clock.
     if (chans != s_chans) { i2s_close(); return i2s_open(rate, chans); }
@@ -401,10 +410,30 @@ esp_err_t nucleo_audio_pcm_write(const int16_t *pcm, size_t bytes)
     return nucleo_audio_i2s_write(pcm, bytes);   // same volume/mute/meter path as every other sound
 }
 
+esp_err_t nucleo_audio_pcm_open_ex(int rate, int channels, int queue_frames)
+{
+    if (atomic_load(&s_playing)) return ESP_ERR_INVALID_STATE;
+    if (nucleo_recorder_is_busy() || nucleo_micspec_running()) return ESP_ERR_INVALID_STATE;
+    // The driver caps one DMA buffer at 4092 bytes; 8 descriptors of up to 480 frames keep every buffer legal
+    // for 16-bit stereo too. Rounded up to whole descriptors.
+    int desc = 8, frame = (queue_frames + desc - 1) / desc;
+    if (frame < Q_FRAME_DEF) frame = Q_FRAME_DEF;
+    if (frame > 480) frame = 480;
+    i2s_lock();
+    s_q_desc = desc; s_q_frame = frame;
+    esp_err_t r = i2s_rate_locked(rate, channels < 1 ? 1 : channels > 2 ? 2 : channels);
+    i2s_unlock();
+    if (r != ESP_OK) { s_q_desc = Q_DESC_DEF; s_q_frame = Q_FRAME_DEF; }
+    return r;
+}
+
+int nucleo_audio_pcm_queue_frames(void) { return s_tx ? s_open_desc * s_open_frame : 0; }
+
 void nucleo_audio_pcm_close(void)
 {
     if (atomic_load(&s_playing)) return;         // a track started meanwhile: it owns the channel now
     i2s_close();
+    s_q_desc = Q_DESC_DEF; s_q_frame = Q_FRAME_DEF;   // the next user gets the default queue back
 }
 
 // ─── Live output analysis ─────────────────────────────────────────────────────────────────────────

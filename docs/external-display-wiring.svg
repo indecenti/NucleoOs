@@ -13,7 +13,7 @@
 <path d="M240 204 C384 204 384 447 530 447" fill="none" stroke="#0c8599" stroke-width="4" stroke-linecap="round"/>
 <path d="M240 231 C384 231 384 312 530 312" fill="none" stroke="#1c5fd8" stroke-width="4" stroke-linecap="round"/>
 <path d="M240 258 C384 258 384 258 530 258" fill="none" stroke="#f08c00" stroke-width="4" stroke-linecap="round"/>
-<path d="M240 285 C384 285 384 231 530 231" fill="none" stroke="#f783ac" stroke-width="4" stroke-linecap="round" stroke-dasharray="9 5"/>
+<path d="M240 285 C384 285 384 96 530 96" fill="none" stroke="#e64980" stroke-width="5" stroke-linecap="round"/>
 <path d="M240 339 C384 339 384 258 530 258" fill="none" stroke="#8d5524" stroke-width="4" stroke-linecap="round" stroke-dasharray="9 5"/>
 <path d="M240 366 C384 366 384 204 530 204" fill="none" stroke="#7048e8" stroke-width="5" stroke-linecap="round"/>
 <path d="M240 393 C384 393 384 312 530 312" fill="none" stroke="#22b8cf" stroke-width="4" stroke-linecap="round" stroke-dasharray="9 5"/>
@@ -27,7 +27,7 @@
 <text x="52" y="208" fill="#888">5</text><text x="226" y="208" text-anchor="end" font-weight="600" fill="#0c8599">DC</text><circle cx="240" cy="204" r="6" fill="#0c8599"/>
 <text x="52" y="235" fill="#888">6</text><text x="226" y="235" text-anchor="end" font-weight="600" fill="#1c5fd8">SDI (MOSI)</text><circle cx="240" cy="231" r="6" fill="#1c5fd8"/>
 <text x="52" y="262" fill="#888">7</text><text x="226" y="262" text-anchor="end" font-weight="600" fill="#f08c00">SCK</text><circle cx="240" cy="258" r="6" fill="#f08c00"/>
-<text x="52" y="289" fill="#888">8</text><text x="226" y="289" text-anchor="end" font-weight="600" fill="#e64980">LED</text><circle cx="240" cy="285" r="6" fill="#f783ac"/>
+<text x="52" y="289" fill="#888">8</text><text x="226" y="289" text-anchor="end" font-weight="600" fill="#e64980">LED</text><circle cx="240" cy="285" r="6" fill="#e64980"/>
 <text x="52" y="316" fill="#888">9</text><text x="226" y="316" text-anchor="end" font-weight="600" fill="#aaa">SDO  ✕ leave free</text><circle cx="240" cy="312" r="6" fill="#fff" stroke="#999" stroke-width="2"/>
 <text x="52" y="343" fill="#888">10</text><text x="226" y="343" text-anchor="end" font-weight="600" fill="#8d5524">T_CLK</text><circle cx="240" cy="339" r="6" fill="#8d5524"/>
 <text x="52" y="370" fill="#888">11</text><text x="226" y="370" text-anchor="end" font-weight="700" fill="#7048e8">T_CS</text><circle cx="240" cy="366" r="6" fill="#7048e8"/>
@@ -35,12 +35,12 @@
 <text x="52" y="424" fill="#888">13</text><text x="226" y="424" text-anchor="end" font-weight="600" fill="#d6336c">T_DO / T_OUT</text><circle cx="240" cy="420" r="6" fill="#d6336c"/>
 <text x="52" y="451" fill="#888">14</text><text x="226" y="451" text-anchor="end" font-weight="600" fill="#868e96">T_IRQ (optional)</text><circle cx="240" cy="447" r="6" fill="#868e96"/>
 <!-- EXT pins, in pin order -->
-<circle cx="530" cy="96" r="6" fill="#fff" stroke="#bbb" stroke-width="2"/><text x="546" y="100" fill="#aaa">1 · G3 — free</text>
+<circle cx="530" cy="96" r="6" fill="#e64980"/><text x="546" y="100" font-weight="700" fill="#e64980">1 · G3 ← LED (backlight)</text>
 <circle cx="530" cy="123" r="6" fill="#fff" stroke="#bbb" stroke-width="2"/><text x="546" y="127" fill="#aaa">2 · 5VIN — free</text>
 <circle cx="530" cy="150" r="6" fill="#868e96"/><text x="546" y="154" font-weight="600" fill="#111">3 · G4 ← T_IRQ</text>
 <circle cx="530" cy="177" r="6" fill="#111111"/><text x="546" y="181" font-weight="600" fill="#111">4 · GND ← GND</text>
 <circle cx="530" cy="204" r="6" fill="#7048e8"/><text x="546" y="208" font-weight="700" fill="#7048e8">5 · G6 ← T_CS</text>
-<circle cx="530" cy="231" r="6" fill="#e03131"/><text x="546" y="235" font-weight="600" fill="#111">6 · 5VOUT ← VCC + LED</text>
+<circle cx="530" cy="231" r="6" fill="#e03131"/><text x="546" y="235" font-weight="600" fill="#111">6 · 5VOUT ← VCC</text>
 <circle cx="530" cy="258" r="6" fill="#f08c00"/><text x="546" y="262" font-weight="600" fill="#111">7 · G40 ← SCK + T_CLK</text>
 <circle cx="530" cy="285" r="6" fill="#fff" stroke="#e03131" stroke-width="2"/><text x="546" y="289" fill="#e03131">8 · G8 SDA — do NOT connect</text>
 <circle cx="530" cy="312" r="6" fill="#1c5fd8"/><text x="546" y="316" font-weight="600" fill="#111">9 · G14 ← SDI + T_DIN</text>
@@ -52,12 +52,12 @@
 <!-- the header as it sits on the board -->
 <text x="790" y="70" font-weight="700" fill="#555">EXT 2×7 (top view)</text>
 <rect x="790" y="80" width="186" height="207" rx="6" fill="none" stroke="#999"/>
-<rect x="800" y="87" width="78" height="20" rx="4" fill="#f4f4f4" stroke="#e03131" stroke-width="2"/><text x="839" y="101" text-anchor="middle" font-size="12">1 G3</text>
+<rect x="800" y="87" width="78" height="20" rx="4" fill="#e64980" stroke="#e03131" stroke-width="2"/><text x="839" y="101" text-anchor="middle" font-size="12" fill="#fff">1 LED</text>
 <rect x="888" y="87" width="78" height="20" rx="4" fill="#f4f4f4" stroke="#bbb"/><text x="927" y="101" text-anchor="middle" font-size="12">2 5VIN</text>
 <rect x="800" y="114" width="78" height="20" rx="4" fill="#868e96"/><text x="839" y="128" text-anchor="middle" font-size="12" fill="#fff">3 T_IRQ</text>
 <rect x="888" y="114" width="78" height="20" rx="4" fill="#111"/><text x="927" y="128" text-anchor="middle" font-size="12" fill="#fff">4 GND</text>
 <rect x="800" y="141" width="78" height="20" rx="4" fill="#7048e8"/><text x="839" y="155" text-anchor="middle" font-size="12" fill="#fff">5 T_CS</text>
-<rect x="888" y="141" width="78" height="20" rx="4" fill="#e03131"/><text x="927" y="155" text-anchor="middle" font-size="12" fill="#fff">6 VCC+LED</text>
+<rect x="888" y="141" width="78" height="20" rx="4" fill="#e03131"/><text x="927" y="155" text-anchor="middle" font-size="12" fill="#fff">6 VCC</text>
 <rect x="800" y="168" width="78" height="20" rx="4" fill="#f08c00"/><text x="839" y="182" text-anchor="middle" font-size="12" fill="#fff">7 SCK+T_CLK</text>
 <rect x="888" y="168" width="78" height="20" rx="4" fill="#f4f4f4" stroke="#e03131"/><text x="927" y="182" text-anchor="middle" font-size="12" fill="#e03131">8 ✕</text>
 <rect x="800" y="195" width="78" height="20" rx="4" fill="#1c5fd8"/><text x="839" y="209" text-anchor="middle" font-size="12" fill="#fff">9 SDI+T_DIN</text>
@@ -71,9 +71,16 @@
 <text x="792" y="331" font-size="11" fill="#e03131">reversed, 5 V and GND swap</text>
 <!-- notes -->
 <text x="40" y="496" font-size="14" font-weight="700" fill="#111">Two wires on one EXT pin (Y-jumper or breadboard; dashed = the second wire):</text>
-<text x="40" y="518" font-size="13" fill="#333">pin 6 ← VCC + LED · pin 7 ← SCK + T_CLK · pin 9 ← SDI + T_DIN</text>
+<text x="40" y="518" font-size="13" fill="#333">pin 7 ← SCK + T_CLK · pin 9 ← SDI + T_DIN</text>
 <text x="40" y="546" font-size="14" font-weight="700" fill="#7048e8">T_CS must be on pin 5 (G6). Held low (GND, wrong pin) the touch chip owns G39 and the SD card stalls.</text>
 <text x="40" y="568" font-size="13" fill="#333">SDO and the module's SD_* pins stay free (the Cardputer's own SD is used). Module jumper J1 OPEN.</text>
 <text x="40" y="590" font-size="13" fill="#333">Only T_DO goes to G39. Without T_DIN or T_CLK the touch reads 0; without T_CS it is never probed.</text>
+<rect x="790" y="352" width="186" height="104" rx="6" fill="#e64980" opacity="0.08"/>
+<text x="800" y="372" font-size="13" font-weight="700" fill="#e64980">LED → pin 1 (G3)</text>
+<text x="800" y="391" font-size="12" fill="#333">the backlight follows the</text>
+<text x="800" y="407" font-size="12" fill="#333">screen: standby turns it</text>
+<text x="800" y="423" font-size="12" fill="#333">off for real. On 5VOUT it</text>
+<text x="800" y="439" font-size="12" fill="#333">can only be painted black.</text>
+<text x="800" y="452" font-size="10" fill="#777">setting: external_pins.bl = 3</text>
 <text x="40" y="618" font-size="14" fill="#e03131" font-weight="700">Wire with the Cardputer switched OFF.</text>
 </svg>

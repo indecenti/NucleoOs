@@ -49,7 +49,7 @@ LCD CS/DC/RST match the known-good community wiring (guicmg/cardputer_adv_extern
 | DC | 14 | **G15** | |
 | SDI (MOSI) | 9 | G14 | shared with the SD |
 | SCK | 7 | G40 | shared with the SD |
-| LED | 6 (5VOUT) | — | or a GPIO (`bl`, e.g. G3) to follow screen-off |
+| LED | 1 | **G3** | the backlight, switched by the firmware (`bl: 3`); on 6 (5VOUT) it can never turn off |
 | SDO (MISO) | 11 | G39 | **optional** — only for controller auto-ID (see below) |
 | T_CLK | 7 | G40 | shared |
 | T_DIN | 9 | G14 | shared |
@@ -87,7 +87,7 @@ on one pin.
   "external_primary": true,           // false = mirror only; true = screens laid out for 320x240 use it natively
   "external_fit": true,               // compact screens scaled 4/3 (320x180); false = 1:1 (240x135, sharp)
   "external_layout": "duplicate",     // duplicate | cardputer (panel black) | external (Cardputer backlight off)
-  "external_pins": { "cs": 5, "dc": 15, "rst": 13, "t_cs": 6, "t_irq": 4, "bl": -1 }
+  "external_pins": { "cs": 5, "dc": 15, "rst": 13, "t_cs": 6, "t_irq": 4, "bl": 3 }
 }
 ```
 
@@ -113,8 +113,9 @@ a restart (the row says so); Calibrate touch starts the 4-target calibration; Re
 80 MHz is accepted because the panel is write-only (the GPIO-matrix limit is about reads); it needs short wires.
 
 **Screen off.** Idle auto-off, the Control Center's screen-off and the web's `display off` all go through the
-brightness, which the mirror follows: with the LED on a GPIO (`bl`) the backlight switches off; with the LED on
-the 5 V rail the panel is painted black (a TN panel in sleep shows white). Waking repaints the frame and the
+brightness, which the mirror follows: with the LED on a GPIO (`bl`, G3 = EXT pin 1 in the reference wiring) the
+backlight switches off; with the LED on the 5 V rail it cannot, and the panel is only painted black (a TN panel in
+sleep shows white) — the glow stays. Waking repaints the frame and the
 letterbox. The screensaver is an ordinary compact screen, so it shows on the panel (fitted) by itself.
 
 ## Detection (boot)

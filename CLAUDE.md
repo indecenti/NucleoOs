@@ -84,6 +84,18 @@ Every native firmware UI must use **large readable fonts, exploit every pixel, a
 smartwatch tricks** (autocomplete, history, resume, 1–9 quick-select, preview) to fight the
 tiny screen + keyboard. See `docs/device-ui.md`.
 
+## Two screens: never a mirror (permanent)
+With the external 320x240 panel attached, **no app may simply mirror the Cardputer** on it. Every app
+(new or touched) gets an `on_draw_large` with a layout designed for 320x240 + touch, and the Cardputer's
+own screen becomes a companion (status, selection details, key hints, remote) — never a copy of the big
+screen. A mirrored app is a bug: when you touch an app that still mirrors, give it its two-screen UI.
+- **Native, not scaled**: the large view is laid out for 320x240. Scaling the 240x135 frame up (`lg::game` /
+  `pushRotateZoom`) is still a mirror.
+- **Touch is direct, no shortcut buttons**: you tap/drag the content itself (a list row, a system on the map,
+  a card, the target in a fight, a slider) — never a row of buttons that re-sends keyboard keys (Up / Down /
+  OK / Back / Fire). Buttons exist only when they ARE the content (a calculator's keys, a macro pad, an IR
+  remote). Gestures: tap = pick, tap again / tap the card = open, drag = scroll or aim, header chevron = back.
+
 ## Where knowledge goes (keep this tidy)
 - **`docs/*.md`** — durable engineering specs and architecture (English, versioned). Default home for "how the system works".
 - **`CLAUDE.md`** (this file) — durable conventions and rules I must follow every session.
