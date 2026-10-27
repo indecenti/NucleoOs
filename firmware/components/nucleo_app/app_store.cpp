@@ -3,6 +3,10 @@
 // file is the UI. Upgrade rules it respects (docs/app-store.md): it only ever writes /sd/apps/<id>/, never
 // touches an app it did not install, and an install that fails leaves the previous version in place.
 //
+// Two stores, chosen first and never mixed: "Native C" (apps that run on the Cardputer itself, loaded from the SD
+// card: docs/native-apps.md) and "Web app" (apps the Cardputer serves to a phone or PC browser). Each is its own
+// signed catalog; ESC from a store's sections comes back to the choice, 1 / 2 pick directly.
+//
 // Sections (TAB): New (newest first) / Games / Categories (a list of categories, OK opens one) / Mine
 // (installed, updates first; the tab shows how many). OK opens an app's page: tile, name, author, version,
 // size, category, description, permissions, the action (Install / Update), DEL removes. Type-ahead and
@@ -32,13 +36,16 @@ extern "C" {
 #include "nucleo_store.h"
 extern const char *nucleo_setup_ip(void);
 void nucleo_store_apps_sync(void);
+void nucleo_native_forget(const char *id);     // native_apps.cpp: unload it if loaded, before its files change
 }
 
 static const unsigned short ACC = 0x4D1F;
 #define MAX_ROWS 96
 
 enum { TAB_NEW, TAB_GAMES, TAB_CATS, TAB_MINE, NTABS };
-enum { V_LIST, V_CAT, V_APP, V_CONFIRM_REMOVE, V_QR };
+enum { V_CHOOSE, V_LIST, V_CAT, V_APP, V_CONFIRM_REMOVE, V_QR };
+enum { CH_NATIVE, CH_WEB, NCH };
+static const char *const CH_ID[NCH] = { ST_CH_NATIVE, ST_CH_WEB };
 enum { S_NEW, S_UPDATE, S_OK, S_SYSTEM, S_NEWER_OS, S_UNSUPPORTED };
 
 // The store's categories (docs/format.md), with their colour and name in the five languages.
@@ -73,6 +80,7 @@ static const nucleo_app_ram_t APP_RAM[] = { { (void **)&M, sizeof(Ram) }, { null
 
 static int s_n, s_nvis, s_sel, s_tab, s_view, s_cat, s_cat_sel, s_updates, s_app_from, s_qn, s_qi, s_desc_off;
 static int s_lg_scroll;   // first visible row on the panel list
+static int s_ch, s_ch_sel; // the store being browsed (CH_*), and the highlighted card on the choice screen
 static bool s_yes, s_busy_seen, s_refresh_pending, s_canvas_lent, s_direct_full;
 static nst_status_t s_last_status;
 static const char *s_note;            // one-line notice on the app page, cleared by the next key
@@ -85,14 +93,26 @@ static int cat_index(const char *id)
     return NCATS - 1;
 }
 
+static const char *ch_name(int ch) { return ch == CH_NATIVE ? "Native C" : "Web app"; }
+static const char *ch_sub(int ch)
+{
+    return ch == CH_NATIVE ? TR5("Girano sulla Cardputer", "Run on the Cardputer", "Funcionan en la Cardputer",
+                                 "Tournent sur la Cardputer", "Laufen auf dem Cardputer")
+                           : TR5("Si aprono nel browser", "Open in a browser", "Se abren en el navegador",
+                                 "S'ouvrent dans le navigateur", "Oeffnen im Browser");
+}
+static bool native_ok(void) { return nucleo_store_native_abi() != 0; }
+
 static uint8_t state_of(const st_app_t &a)
 {
-    if (strcmp(a.kind, "web") && strcmp(a.kind, "data")) return S_UNSUPPORTED;
+    const char *ch = st_kind_channel(a.kind);
+    if (!ch || strcmp(ch, CH_ID[s_ch])) return S_UNSUPPORTED;
     bool system = false;
     uint32_t have = st_installed(NUCLEO_SD_MOUNT, a.id, &system);
     if (system) return S_SYSTEM;
     if (have && have >= a.code) return S_OK;
     if (st_ver_cmp(nucleo_store_os_version(), a.min_os) < 0) return S_NEWER_OS;
+    if (!strcmp(a.kind, "native") && a.abi > nucleo_store_native_abi()) return S_NEWER_OS;
     return have ? S_UPDATE : S_NEW;
 }
 
@@ -148,7 +168,7 @@ static void load(void)
 {
     s_n = 0; s_updates = 0;
     memset(M->cat_count, 0, sizeof M->cat_count);
-    FILE *f = st_catalog_open(NUCLEO_SD_MOUNT);
+    FILE *f = st_catalog_open(NUCLEO_SD_MOUNT, CH_ID[s_ch]);
     if (f) {
         int li = lang_idx();
         while (s_n < MAX_ROWS && st_catalog_next(f, &M->app)) {
@@ -236,6 +256,9 @@ static void set_hint(void)
 {
     if (nucleo_store_status() == NST_BUSY)
         nucleo_app_set_hint(TR5("attendi...", "please wait...", "espera...", "patientez...", "bitte warten..."));
+    else if (s_view == V_CHOOSE)
+        nucleo_app_set_hint(TR5("1 Native C   2 Web app   ok apri", "1 Native C   2 Web app   ok open", "1 Native C   2 Web app   ok",
+                                "1 Native C   2 Web app   ok", "1 Native C   2 Web app   ok"));
     else if (s_view == V_APP) {
         // Only the keys that do something for THIS app.
         uint8_t stt = state_of(M->app);
@@ -256,8 +279,8 @@ static void set_hint(void)
         nucleo_app_set_hint(TR5("ok apri   esc categorie", "ok open   esc categories", "ok abrir   esc categorias",
                                 "ok ouvrir   esc categories", "ok oeffnen   esc Kategorien"));
     else
-        nucleo_app_set_hint(TR5("tab sezione  r aggiorna  ok apri", "tab section  r refresh  ok open", "tab seccion  r recargar  ok",
-                                "tab section  r actualiser  ok", "tab Bereich  r neu laden  ok"));
+        nucleo_app_set_hint(TR5("tab sezione  r aggiorna  esc store", "tab section  r refresh  esc stores", "tab seccion  r recargar  esc",
+                                "tab section  r actualiser  esc", "tab Bereich  r neu laden  esc"));
 }
 
 static void go(int view)
@@ -274,7 +297,7 @@ static void open_app(void)
     if (!s_nvis) return;
     s_app_from = s_view;                         // ESC returns there (a list or a category)
     s_desc_off = 0;
-    if (st_find(NUCLEO_SD_MOUNT, M->rows[M->vis[s_sel]].id, &M->app)) go(V_APP);
+    if (st_find(NUCLEO_SD_MOUNT, CH_ID[s_ch], M->rows[M->vis[s_sel]].id, &M->app)) go(V_APP);
 }
 
 // ── network operations ────────────────────────────────────────────────────────
@@ -302,7 +325,8 @@ static void canvas_return(void)
 static void start(nst_op_t op, const char *id)
 {
     if (op != NST_OP_REMOVE) canvas_lend();
-    if (nucleo_store_start(op, id)) { s_busy_seen = true; set_hint(); }
+    if (id && s_ch == CH_NATIVE && op != NST_OP_REFRESH) nucleo_native_forget(id);   // never swap files under a loaded module
+    if (nucleo_store_start(op, CH_ID[s_ch], id)) { s_busy_seen = true; set_hint(); }
     else canvas_return();
     nucleo_app_request_draw();
 }
@@ -378,6 +402,46 @@ static void empty_state(int y, const char *msg, uint16_t col)
     wrap(14, y + 16, 212, msg, 4, col);
 }
 
+// The first screen: which store. Two cards, the highlighted one on an accent; native is greyed out (with the
+// reason) where this firmware cannot run native apps, e.g. under M5Launcher.
+static const unsigned short CH_COL[NCH] = { 0xFB4D, 0x4D1F };
+static void draw_choose(int top, int h)
+{
+    txt(&fonts::Font2, 6, top + 2, TR5("Quale store?", "Which store?", "Que tienda?", "Quelle boutique ?", "Welcher Store?"), MUTED);
+    int ch_h = (h - 24) / 2;
+    for (int c = 0; c < NCH; c++) {
+        int y = top + 20 + c * (ch_h + 2);
+        bool on = c == s_ch_sel, off = c == CH_NATIVE && !native_ok();
+        unsigned short col = off ? DIM : CH_COL[c];
+        if (on) d.fillRoundRect(4, y, 232, ch_h, 8, col); else d.drawRoundRect(4, y, 232, ch_h, 8, col);
+        char k[2] = { (char)('1' + c), 0 };
+        txt(&fonts::Font4, 20, y + ch_h / 2 + 1, k, on ? INK : col, textdatum_t::middle_center);
+        txt(&fonts::FreeSansBold9pt7b, 40, y + 4, ch_name(c), on ? INK : FG);
+        const char *sub = off ? TR5("Non qui (M5Launcher)", "Not here (M5Launcher)", "Aqui no (M5Launcher)",
+                                    "Pas ici (M5Launcher)", "Nicht hier (M5Launcher)") : ch_sub(c);
+        txt_fit(&fonts::Font0, 40, y + ch_h - 13, 190, sub, on ? INK : MUTED);
+    }
+}
+
+static void enter_channel(int c)
+{
+    if (c == CH_NATIVE && !native_ok()) {
+        s_note = TR5("Le app native richiedono NucleoOS installato da solo (non sotto M5Launcher).",
+                     "Native apps need NucleoOS installed on its own (not under M5Launcher).",
+                     "Las apps nativas requieren NucleoOS solo (no bajo M5Launcher).",
+                     "Les apps natives exigent NucleoOS seul (pas sous M5Launcher).",
+                     "Native Apps brauchen NucleoOS allein (nicht unter M5Launcher).");
+        nucleo_app_request_draw();
+        return;
+    }
+    s_note = nullptr;
+    s_ch = c; s_ch_sel = c;
+    s_tab = TAB_NEW; s_sel = 0; s_cat = 0; s_cat_sel = 0;
+    load();
+    go(V_LIST);
+    if (nucleo_setup_ip() && nucleo_setup_ip()[0]) start(NST_OP_REFRESH, nullptr);   // the fresh catalog of THIS store
+}
+
 static void draw_tabs_and_list(int top, int h)
 {
     static const char *const T[5][NTABS] = {
@@ -388,7 +452,7 @@ static void draw_tabs_and_list(int top, int h)
     static char mine[16];
     for (int i = 0; i < NTABS; i++) names[i] = T[lang_idx()][i];
     if (s_updates) { snprintf(mine, sizeof mine, "%s %d", T[lang_idx()][TAB_MINE], s_updates); names[TAB_MINE] = mine; }
-    int y = app_ui_tabs(top, names, NTABS, s_tab, ACC), lh = h - (y - top);
+    int y = app_ui_tabs(top, names, NTABS, s_tab, CH_COL[s_ch]), lh = h - (y - top);   // the store's own colour
     if (s_tab == TAB_CATS) {
         app_ui_list(y, lh, NCATS, s_cat_sel, cat_label, cat_right, cat_color, nullptr);
         return;
@@ -597,11 +661,35 @@ static void lg_qr(void)
     nucleo_touch_add(0, y, W, H - y, NK_BACK, 0);   // any tap steps back
 }
 
+static void lg_choose(void)
+{
+    const int W = d.width(), H = d.height();
+    const int y = lg::header("Store", nullptr, ACC);
+    d.fillRect(0, y, W, H - y, BG);
+    lg::font(1); d.setTextColor(MUTED, BG);
+    d.drawString(TR5("Quale store?", "Which store?", "Que tienda?", "Quelle boutique ?", "Welcher Store?"), 14, y + 6);
+    const int ch = (H - y - 40) / 2;
+    for (int c = 0; c < NCH; c++) {
+        const int cy = y + 30 + c * (ch + 4);
+        const bool off = c == CH_NATIVE && !native_ok(), on = c == s_ch_sel;
+        const unsigned short col = off ? DIM : CH_COL[c];
+        if (on) d.fillRoundRect(10, cy, W - 20, ch, 12, col); else { d.fillRoundRect(10, cy, W - 20, ch, 12, LINE); d.drawRoundRect(10, cy, W - 20, ch, 12, col); }
+        lg::font(2); d.setTextColor(on ? INK : FG, on ? col : LINE); d.drawString(ch_name(c), 28, cy + 12);
+        lg::font(0); d.setTextColor(on ? INK : MUTED, on ? col : LINE);
+        char sub[64]; lg::fit(sub, sizeof sub, off ? TR5("Non disponibile in questa installazione", "Not available on this setup", "No disponible aqui",
+                                                         "Indisponible ici", "Hier nicht verfuegbar") : ch_sub(c), W - 56);
+        d.drawString(sub, 28, cy + ch - 24);
+        nucleo_touch_add(10, cy, W - 20, ch, NK_CHAR, (char)('1' + c));   // tap the card = open that store
+    }
+    if (s_note) { lg::font(0); d.setTextColor(C_RED, BG); char n[96]; lg::fit(n, sizeof n, s_note, W - 20); d.drawString(n, 10, H - 14); }
+}
+
 static void draw_large(void)
 {
     const int W = d.width(), H = d.height();
     nucleo_touch_clear();
     if (nucleo_store_status() == NST_BUSY) { lg_progress(); nucleo_touch_commit(); return; }
+    if (s_view == V_CHOOSE) { lg_choose(); nucleo_touch_commit(); return; }
     if (s_view == V_APP || s_view == V_CONFIRM_REMOVE) { lg_app(); nucleo_touch_commit(); return; }
     if (s_view == V_QR) { lg_qr(); nucleo_touch_commit(); return; }
     if (s_view == V_CAT) {
@@ -613,12 +701,12 @@ static void draw_large(void)
         return;
     }
     // V_LIST: section tabs + list
-    const int y0 = lg::header("Store", nullptr, ACC);
+    const int y0 = lg::header(ch_name(s_ch), nullptr, CH_COL[s_ch], NK_BACK);
     const int li = lang_idx();
     const char *names[NTABS]; static char mine[20];
     for (int i = 0; i < NTABS; i++) names[i] = LG_TABS[li][i];
     if (s_updates) { snprintf(mine, sizeof mine, "%s %d", LG_TABS[li][TAB_MINE], s_updates); names[TAB_MINE] = mine; }
-    int y = lg::tabs(y0, names, NTABS, s_tab, ACC, nullptr);
+    int y = lg::tabs(y0, names, NTABS, s_tab, CH_COL[s_ch], nullptr);
     if (s_tab == TAB_CATS) {
         lg::text_list(0, y + 2, W, H - y - 4, NCATS, s_cat_sel, &s_lg_scroll, cat_label, cat_right, cat_color, nullptr, ACC);
         nucleo_touch_commit();
@@ -661,6 +749,17 @@ static void draw_companion(void)
         return;
     }
     const int li = lang_idx();
+    if (s_view == V_CHOOSE) {
+        d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(FG, BG);
+        d.drawString(TR5("Quale store?", "Which store?", "Que tienda?", "Quelle boutique ?", "Welcher Store?"), 8, y + 4);
+        d.setFont(&fonts::Font0);
+        for (int c = 0; c < NCH; c++) {
+            d.setTextColor(c == s_ch_sel ? CH_COL[c] : MUTED, BG);
+            char b[48]; snprintf(b, sizeof b, "%d  %s - %.24s", c + 1, ch_name(c), ch_sub(c)); d.drawString(b, 8, y + 26 + c * 14);
+        }
+        lg::comp_keys(TR5("1/2 scegli  INVIO apri", "1/2 pick  ENTER open", "1/2 elegir  INTRO abrir", "1/2 choisir  ENTREE", "1/2 waehlen  ENTER"));
+        return;
+    }
     if (s_view == V_APP || s_view == V_CONFIRM_REMOVE) {
         const st_app_t &a = M->app; const uint8_t stt = state_of(a);
         d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(FG, BG); char nm[40]; snprintf(nm, sizeof nm, "%.26s", a.name[li]); d.drawString(nm, 8, y + 4);
@@ -690,8 +789,8 @@ static void draw_companion(void)
         return;
     }
     // V_LIST
-    d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(ACC, BG);
-    char tb[24]; snprintf(tb, sizeof tb, "%s", LG_TABS[li][s_tab]); d.drawString(tb, 8, y + 4);
+    d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(CH_COL[s_ch], BG);
+    char tb[40]; snprintf(tb, sizeof tb, "%s - %s", ch_name(s_ch), LG_TABS[li][s_tab]); d.drawString(tb, 8, y + 4);
     d.setFont(&fonts::Font0); d.setTextColor(MUTED, BG);
     if (s_tab == TAB_CATS) { char c[24]; snprintf(c, sizeof c, TR5("%d categorie", "%d categories", "%d categorias", "%d categories", "%d Kategorien"), NCATS); d.drawString(c, 8, y + 26); d.setTextColor(FG, BG); char b[40]; snprintf(b, sizeof b, "-> %.22s", cat_label(s_cat_sel, nullptr)); d.drawString(b, 8, y + 40); }
     else {
@@ -712,6 +811,11 @@ static void on_draw(void)
     }
     s_direct_full = false;
     d.fillRect(0, top, 240, h, BG);
+    if (s_view == V_CHOOSE) {                         // the card itself says why native is unavailable
+        draw_choose(top, h);
+        d.setFont(&fonts::Font0); d.setTextDatum(textdatum_t::top_left);
+        return;
+    }
     if (s_view == V_QR) { draw_qr(top, h); d.setFont(&fonts::Font0); d.setTextDatum(textdatum_t::top_left); return; }
     if (s_view == V_APP || s_view == V_CONFIRM_REMOVE) draw_app(top, h);
     else if (s_view == V_CAT) draw_category(top, h);
@@ -722,7 +826,8 @@ static void on_draw(void)
     else if (nucleo_store_status() == NST_FAILED && s_n) {
         // What failed, and how old the catalog on screen is.
         struct stat st;
-        const char *age = stat(NUCLEO_SD_MOUNT "/apps/.store/index.txt", &st) == 0 ? ago((uint32_t)st.st_mtime) : "";
+        char ip[64]; snprintf(ip, sizeof ip, NUCLEO_SD_MOUNT "/apps/.store/%s/index.txt", CH_ID[s_ch]);
+        const char *age = stat(ip, &st) == 0 ? ago((uint32_t)st.st_mtime) : "";
         d.fillRect(0, top + h - 27, 240, 27, BG);
         d.drawFastHLine(0, top + h - 27, 240, LINE);
         txt_fit(&fonts::Font2, 4, top + h - 26, 232, nucleo_store_error(), C_RED);
@@ -763,7 +868,7 @@ static bool poll(void)
             char keep[ST_ID_MAX + 1];
             snprintf(keep, sizeof keep, "%s", M->app.id);
             load();
-            if (s_view == V_APP && keep[0] && !st_find(NUCLEO_SD_MOUNT, keep, &M->app)) s_view = V_LIST;
+            if (s_view == V_APP && keep[0] && !st_find(NUCLEO_SD_MOUNT, CH_ID[s_ch], keep, &M->app)) s_view = V_LIST;
             set_hint();
         }
         return true;
@@ -771,10 +876,12 @@ static bool poll(void)
     return false;
 }
 
-// Open an installed app. A web app runs in a browser: its address, as a QR code and as text, for a phone or a
-// PC on the same network. Without Wi-Fi there is no address to give: say so instead.
+// Open an installed app. A native app opens like any app of the system (the launcher loads it from the SD).
+// A web app runs in a browser: its address, as a QR code and as text, for a phone or a PC on the same network.
+// Without Wi-Fi there is no address to give: say so instead.
 static void open_installed(void)
 {
+    if (!strcmp(M->app.kind, "native")) { nucleo_store_apps_sync(); nucleo_app_launch_id(M->app.id); return; }
     if (!strcmp(M->app.kind, "web") && nucleo_setup_ip() && nucleo_setup_ip()[0]) go(V_QR);
     else { s_note = TR5("Serve il Wi-Fi per aprirla", "Needs Wi-Fi to open", "Necesita Wi-Fi", "Il faut le Wi-Fi", "WLAN noetig"); nucleo_app_request_draw(); }
 }
@@ -782,6 +889,13 @@ static void open_installed(void)
 static void on_key(int key, char ch)
 {
     if (nucleo_store_status() == NST_BUSY) return;
+    if (s_view == V_CHOOSE) {
+        if (key == NK_CHAR && ch >= '1' && ch < '1' + NCH) { enter_channel(ch - '1'); return; }
+        if (key == NK_UP || key == NK_DOWN) { s_ch_sel = (s_ch_sel + 1) % NCH; s_note = nullptr; }
+        else if (key == NK_ENTER) { enter_channel(s_ch_sel); return; }
+        nucleo_app_request_draw();
+        return;
+    }
     if (s_view == V_CONFIRM_REMOVE) {
         int r = app_ui_confirm_key(key, ch, &s_yes);
         if (r == 1) { s_view = V_APP; start(NST_OP_REMOVE, M->app.id); }
@@ -831,7 +945,7 @@ static void on_key(int key, char ch)
 
 static void on_tab(void)
 {
-    if (nucleo_store_status() == NST_BUSY || s_view == V_APP || s_view == V_CONFIRM_REMOVE) return;
+    if (nucleo_store_status() == NST_BUSY || s_view == V_CHOOSE || s_view == V_APP || s_view == V_CONFIRM_REMOVE) return;
     s_tab = (s_tab + 1) % NTABS;
     s_sel = 0;
     go(V_LIST);
@@ -844,20 +958,21 @@ static bool on_back(int key)
     if (s_view == V_CONFIRM_REMOVE || s_view == V_QR) { go(V_APP); return true; }
     if (s_view == V_APP) { go(s_app_from); return true; }
     if (s_view == V_CAT) { go(V_LIST); return true; }
+    if (s_view == V_LIST) { s_note = nullptr; go(V_CHOOSE); return true; }   // the sections of a store -> the choice
     return false;
 }
 
 static void on_enter(void)
 {
-    s_view = V_LIST; s_tab = TAB_NEW; s_sel = 0; s_cat = 0; s_cat_sel = 0; s_busy_seen = false;
-    load();                                                        // the last catalog, instantly, from the SD
+    // Always the choice first: native and web are two stores, never one mixed list.
+    s_view = V_CHOOSE; s_ch = s_ch_sel = native_ok() ? CH_NATIVE : CH_WEB;
+    s_tab = TAB_NEW; s_sel = 0; s_cat = 0; s_cat_sel = 0; s_busy_seen = false; s_n = 0; s_nvis = 0; s_note = nullptr;
     s_last_status = nucleo_store_status();
     nucleo_app_set_tab_handler(on_tab);
     nucleo_app_set_back_handler(on_back);
     nucleo_app_set_poll_handler(poll);
     set_hint();
-    s_refresh_pending = nucleo_setup_ip() && nucleo_setup_ip()[0];   // then the fresh one, from the first poll:
-    nucleo_app_request_draw();                                     // by then NX_NET_APP has freed its RAM
+    nucleo_app_request_draw();
 }
 
 static void on_exit(void) { canvas_return(); }

@@ -12,7 +12,7 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#define INDEX_MAGIC "nucleoos-cardputer-index-v1"
+#define INDEX_MAGIC "nucleoos-cardputer-index-v2"
 #define PKG_MAGIC   "nucleoos-cardputer-pkg-v1"
 #define SIG_MAGIC   "nucleoos-cardputer-sig-v1"
 #define MAX_INDEX   (4u * 1024 * 1024)
@@ -24,6 +24,16 @@
 #define CLOCK_SET   1700000000u     // before this the device clock is not set: expiry is not checked
 
 static char s_line[LINE_MAX_];      // one catalog / package line (the engine runs on one task at a time)
+static char s_cat_channel[8];       // channel of the catalog st_catalog_open last opened
+
+const char *st_kind_channel(const char *kind)
+{
+    if (!strcmp(kind, "native")) return ST_CH_NATIVE;
+    if (!strcmp(kind, "web") || !strcmp(kind, "data")) return ST_CH_WEB;
+    return NULL;
+}
+
+static bool channel_ok(const char *ch) { return ch && (!strcmp(ch, ST_CH_NATIVE) || !strcmp(ch, ST_CH_WEB)); }
 
 // ── small helpers ─────────────────────────────────────────────────────────────
 static bool is_dir(const char *p) { struct stat s; return stat(p, &s) == 0 && S_ISDIR(s.st_mode); }
@@ -210,11 +220,14 @@ static st_code_t fetch(const st_cfg_t *cfg, const st_io_t *io, st_state_t *st, c
 }
 
 // ── catalog ───────────────────────────────────────────────────────────────────
-static void store_dir(const char *root, char *out, size_t n) { snprintf(out, n, "%s/apps/.store", root); }
-
-uint32_t st_catalog_serial(const char *root)
+static void store_dir(const char *root, const char *channel, char *out, size_t n)
 {
-    char p[160]; store_dir(root, p, sizeof p);
+    snprintf(out, n, "%s/apps/.store/%s", root, channel);
+}
+
+uint32_t st_catalog_serial(const char *root, const char *channel)
+{
+    char p[160]; store_dir(root, channel, p, sizeof p);
     strncat(p, "/serial", sizeof p - strlen(p) - 1);
     FILE *f = fopen(p, "rb");
     unsigned long v = 0;
@@ -222,12 +235,14 @@ uint32_t st_catalog_serial(const char *root)
     return (uint32_t)v;
 }
 
-// The header of a downloaded catalog: magic, serial, expires, apps.
-static bool read_header(FILE *f, uint32_t *serial, uint32_t *expires)
+// The header of a downloaded catalog: magic, channel, serial, expires, apps.
+static bool read_header(FILE *f, const char *channel, uint32_t *serial, uint32_t *expires)
 {
-    char l[64];
+    char l[64], want[24];
     unsigned long s, e, n;
+    snprintf(want, sizeof want, "channel %s\n", channel);
     if (!fgets(l, sizeof l, f) || strcmp(l, INDEX_MAGIC "\n")) return false;
+    if (!fgets(l, sizeof l, f) || strcmp(l, want)) return false;
     if (!fgets(l, sizeof l, f) || sscanf(l, "serial %lu", &s) != 1) return false;
     if (!fgets(l, sizeof l, f) || sscanf(l, "expires %lu", &e) != 1) return false;
     if (!fgets(l, sizeof l, f) || sscanf(l, "apps %lu", &n) != 1) return false;
@@ -239,9 +254,10 @@ st_code_t st_refresh(const st_cfg_t *cfg, const st_io_t *io, st_state_t *st)
 {
     memset(st, 0, sizeof *st);
     st->phase = ST_PH_CATALOG;
+    if (!channel_ok(cfg->channel)) { fail_detail(st, ST_E_BAD, "channel"); return ST_E_BAD; }
     if (!is_dir(cfg->root)) { fail_detail(st, ST_E_NO_SD, cfg->root); return ST_E_NO_SD; }
     char dir[160], idx_new[200], sig_new[200], idx[200], ser[200], url[200];
-    store_dir(cfg->root, dir, sizeof dir);
+    store_dir(cfg->root, cfg->channel, dir, sizeof dir);
     if (!mkdirs(dir, true)) { fail_detail(st, ST_E_WRITE, dir); return ST_E_WRITE; }
     snprintf(idx_new, sizeof idx_new, "%s/index.new", dir);
     snprintf(sig_new, sizeof sig_new, "%s/index.sig.new", dir);
@@ -249,10 +265,10 @@ st_code_t st_refresh(const st_cfg_t *cfg, const st_io_t *io, st_state_t *st)
     snprintf(ser, sizeof ser, "%s/serial", dir);
 
     uint8_t hash[32];
-    snprintf(url, sizeof url, "%sindex.txt", cfg->base_url);
+    snprintf(url, sizeof url, "%s%s/index.txt", cfg->base_url, cfg->channel);
     st_code_t rc = fetch(cfg, io, st, url, idx_new, MAX_INDEX, -1, hash);
     if (rc == ST_OK) {
-        snprintf(url, sizeof url, "%sindex.sig", cfg->base_url);
+        snprintf(url, sizeof url, "%s%s/index.sig", cfg->base_url, cfg->channel);
         rc = fetch(cfg, io, st, url, sig_new, MAX_SIGFILE, -1, NULL);
     }
     if (rc != ST_OK) goto out;
@@ -271,10 +287,10 @@ st_code_t st_refresh(const st_cfg_t *cfg, const st_io_t *io, st_state_t *st)
     {
         FILE *f = fopen(idx_new, "rb");
         uint32_t serial = 0, expires = 0;
-        bool ok = f && read_header(f, &serial, &expires);
+        bool ok = f && read_header(f, cfg->channel, &serial, &expires);
         if (f) fclose(f);
         if (!ok) { rc = ST_E_BAD; fail_detail(st, rc, "index.txt"); goto out; }
-        if (serial < st_catalog_serial(cfg->root)) { rc = ST_E_ROLLBACK; fail_detail(st, rc, "serial"); goto out; }
+        if (serial < st_catalog_serial(cfg->root, cfg->channel)) { rc = ST_E_ROLLBACK; fail_detail(st, rc, "serial"); goto out; }
         uint32_t now = io->now ? io->now(io->ctx) : 0;
         if (now >= CLOCK_SET && now > expires) { rc = ST_E_EXPIRED; fail_detail(st, rc, "expires"); goto out; }
         unlink(idx);
@@ -315,10 +331,10 @@ bool st_parse_line(const char *line, st_app_t *a)
     if (n >= sizeof buf) return false;
     memcpy(buf, line, n + 1);
     while (n && (buf[n - 1] == '\n' || buf[n - 1] == '\r')) buf[--n] = 0;
-    // 12 fields in the first catalogs, `updated` appended as the 13th; anything after is a future field.
+    // 15 fields: ... updated, author, abi; anything after is a future field (ignored).
     char *f[16];
     int nf = split(buf, '\t', f, 16);
-    if (nf < 12 || strcmp(f[0], "app")) return false;
+    if (nf < 15 || strcmp(f[0], "app")) return false;
     memset(a, 0, sizeof *a);
     char *end;
     if (!copy_field(a->id, sizeof a->id, f[1], ST_ID_MAX) || !st_id_ok(a->id)) return false;
@@ -338,22 +354,28 @@ bool st_parse_line(const char *line, st_app_t *a)
     for (int i = 0; i < ST_LANGS; i++)
         if (!copy_field(a->name[i], sizeof a->name[i], names[i], ST_NAME_MAX) ||
             !copy_field(a->desc[i], sizeof a->desc[i], descs[i], ST_DESC_MAX)) return false;
-    if (nf >= 13) {
-        unsigned long u = strtoul(f[12], &end, 10);
-        if (*end) return false;
-        a->updated = (uint32_t)u;
-    }
-    if (nf >= 14 && !copy_field(a->author, sizeof a->author, f[13], sizeof a->author - 1)) return false;
+    unsigned long u = strtoul(f[12], &end, 10);
+    if (*end) return false;
+    a->updated = (uint32_t)u;
+    if (!copy_field(a->author, sizeof a->author, f[13], sizeof a->author - 1)) return false;
+    if (!st_kind_channel(a->kind)) return false;
+    if (!strcmp(a->kind, "native")) {                       // a native app names the ABI level it was built for
+        unsigned long abi = strtoul(f[14], &end, 10);
+        if (*end || abi == 0 || abi > 0xffff) return false;
+        a->abi = (uint32_t)abi;
+    } else if (strcmp(f[14], "-")) return false;
     return true;
 }
 
-FILE *st_catalog_open(const char *root)
+FILE *st_catalog_open(const char *root, const char *channel)
 {
-    char p[200]; store_dir(root, p, sizeof p);
+    if (!channel_ok(channel)) return NULL;
+    char p[200]; store_dir(root, channel, p, sizeof p);
     strncat(p, "/index.txt", sizeof p - strlen(p) - 1);
     FILE *f = fopen(p, "rb");
     uint32_t s, e;
-    if (f && !read_header(f, &s, &e)) { fclose(f); return NULL; }
+    if (f && !read_header(f, channel, &s, &e)) { fclose(f); return NULL; }
+    if (f) snprintf(s_cat_channel, sizeof s_cat_channel, "%s", channel);
     return f;
 }
 
@@ -365,14 +387,14 @@ bool st_catalog_next(FILE *f, st_app_t *out)
             int c; while ((c = fgetc(f)) != EOF && c != '\n') {}
             continue;
         }
-        if (st_parse_line(s_line, out)) return true;
+        if (st_parse_line(s_line, out) && !strcmp(st_kind_channel(out->kind), s_cat_channel)) return true;
     }
     return false;
 }
 
-bool st_find(const char *root, const char *id, st_app_t *out)
+bool st_find(const char *root, const char *channel, const char *id, st_app_t *out)
 {
-    FILE *f = st_catalog_open(root);
+    FILE *f = st_catalog_open(root, channel);
     if (!f) return false;
     bool found = false;
     while (!found && st_catalog_next(f, out)) found = !strcmp(out->id, id);
@@ -504,7 +526,12 @@ st_code_t st_install(const st_cfg_t *cfg, const st_io_t *io, st_state_t *st, con
     snprintf(st->cur, sizeof st->cur, "%s", a->id);
     if (!is_dir(cfg->root)) { fail_detail(st, ST_E_NO_SD, cfg->root); return ST_E_NO_SD; }
     if (!st_id_ok(a->id)) { fail_detail(st, ST_E_BAD, a->id); return ST_E_BAD; }
-    if (strcmp(a->kind, "web") && strcmp(a->kind, "data")) { fail_detail(st, ST_E_UNSUPPORTED, a->kind); return ST_E_UNSUPPORTED; }
+    const char *ch = st_kind_channel(a->kind);
+    if (!ch || !channel_ok(cfg->channel) || strcmp(ch, cfg->channel)) { fail_detail(st, ST_E_UNSUPPORTED, a->kind); return ST_E_UNSUPPORTED; }
+    if (!strcmp(a->kind, "native")) {
+        if (!cfg->native_abi) { fail_detail(st, ST_E_UNSUPPORTED, a->kind); return ST_E_UNSUPPORTED; }
+        if (a->abi > cfg->native_abi) { fail_detail(st, ST_E_ABI, a->id); return ST_E_ABI; }
+    }
     bool system = false;
     st_installed(cfg->root, a->id, &system);
     if (system) { fail_detail(st, ST_E_CONFLICT, a->id); return ST_E_CONFLICT; }
@@ -520,7 +547,7 @@ st_code_t st_install(const st_cfg_t *cfg, const st_io_t *io, st_state_t *st, con
     // 1. package.sig: must be the one the signed catalog names, and must itself verify.
     uint8_t sha[32];
     char hex[65];
-    snprintf(url, sizeof url, "%sapps/%s/%lu/package.sig", cfg->base_url, a->id, (unsigned long)a->code);
+    snprintf(url, sizeof url, "%s%s/apps/%s/%lu/package.sig", cfg->base_url, cfg->channel, a->id, (unsigned long)a->code);
     st_code_t rc = fetch(cfg, io, st, url, sig, MAX_PKGSIG, -1, sha);
     if (rc != ST_OK) goto out;
     sdc_sha256_hex(sha, hex);
@@ -543,7 +570,7 @@ st_code_t st_install(const st_cfg_t *cfg, const st_io_t *io, st_state_t *st, con
             uint32_t sz;
             if (!parse_pkg_file(s_line, want, &sz, &rel)) { rc = ST_E_BAD; fail_detail(st, rc, "package.sig"); break; }
             snprintf(path, sizeof path, "%s/%s", tmp, rel);
-            snprintf(url, sizeof url, "%sapps/%s/%lu/%s", cfg->base_url, a->id, (unsigned long)a->code, rel);
+            snprintf(url, sizeof url, "%s%s/apps/%s/%lu/%s", cfg->base_url, cfg->channel, a->id, (unsigned long)a->code, rel);
             const char *base = strrchr(rel, '/');
             snprintf(st->cur, sizeof st->cur, "%s", base ? base + 1 : rel);
             if ((rc = fetch(cfg, io, st, url, path, MAX_FILE, sz, sha)) != ST_OK) break;
@@ -562,13 +589,17 @@ st_code_t st_install(const st_cfg_t *cfg, const st_io_t *io, st_state_t *st, con
     {
         FILE *v = fopen(path, "wb");
         // What the launcher needs to list it without the catalog: category and its name in every language.
-        if (!v || fprintf(v, "code %lu\nversion %s\nkind %s\ncategory %s\nname %s|%s|%s|%s|%s\n", (unsigned long)a->code,
-                          a->version, a->kind, a->category, a->name[0], a->name[1], a->name[2], a->name[3], a->name[4]) < 0) {
+        if (!v || fprintf(v, "code %lu\nversion %s\nkind %s\nchannel %s\nabi %lu\ncategory %s\nname %s|%s|%s|%s|%s\n",
+                          (unsigned long)a->code, a->version, a->kind, cfg->channel, (unsigned long)a->abi, a->category,
+                          a->name[0], a->name[1], a->name[2], a->name[3], a->name[4]) < 0) {
             if (v) fclose(v);
             rc = ST_E_WRITE; fail_detail(st, rc, ".store-version"); goto out;
         }
         if (fclose(v) != 0) { rc = ST_E_WRITE; fail_detail(st, rc, ".store-version"); goto out; }
     }
+    // The signed package travels with the app: st_verify_installed re-checks its files against it later.
+    snprintf(path, sizeof path, "%s/.package.sig", tmp);
+    if (rename(sig, path) != 0) { rc = ST_E_WRITE; fail_detail(st, rc, ".package.sig"); goto out; }
     rmtree(old);
     bool had = is_dir(live);
     if (had && (!mkdirs(old, false) || rename(live, old) != 0)) { rc = ST_E_WRITE; fail_detail(st, rc, a->id); goto out; }
@@ -602,5 +633,62 @@ st_code_t st_remove(const char *root, const char *id)
         int removed = 0;
         sdc_registry_drop(reg, id, buf, sizeof buf, &removed);
     }
+    return ST_OK;
+}
+
+st_code_t st_verify_installed(const char *root, const char *id, const char *rel, const st_io_t *io,
+                              uint8_t *buf, size_t buflen, uint8_t sha_out[32])
+{
+    if (!st_id_ok(id) || !st_path_ok(rel) || !buf || buflen < 64) return ST_E_BAD;
+    char p[200];
+    snprintf(p, sizeof p, "%s/apps/%s/.package.sig", root, id);
+    FILE *f = fopen(p, "rb");
+    if (!f) return ST_E_NOTFOUND;
+    sdc_sha256_t h;
+    sdc_sha256_init(&h);
+    char want[65] = "";
+    uint32_t want_size = 0;
+    int line = 0;
+    bool body_end = false, ok = true;
+    while (ok && fgets(s_line, sizeof s_line, f)) {
+        size_t n = strlen(s_line);
+        if (!n || s_line[n - 1] != '\n') { ok = false; break; }
+        if (!strcmp(s_line, "--\n")) { body_end = true; break; }
+        sdc_sha256_update(&h, s_line, n);
+        if (line == 0) ok = !strcmp(s_line, PKG_MAGIC "\n");
+        else if (line == 1) { s_line[n - 1] = 0; ok = !strcmp(s_line, id); }
+        else if (line >= 4) {
+            char sha[65], *path; uint32_t sz;
+            ok = parse_pkg_file(s_line, sha, &sz, &path);
+            if (ok && !strcmp(path, rel)) { memcpy(want, sha, sizeof want); want_size = sz; }
+        }
+        line++;
+    }
+    char key[17];
+    uint8_t der[80], hash[32];
+    int dl = 0;
+    ok = ok && body_end && line >= 5 && read_sig_block(f, key, der, &dl);
+    fclose(f);
+    if (!ok) return ST_E_BAD;
+    sdc_sha256_final(&h, hash);
+    if (!io->verify(io->ctx, key, hash, der, (size_t)dl)) return ST_E_SIG;
+    if (!want[0]) return ST_E_NOTFOUND;
+
+    snprintf(p, sizeof p, "%s/apps/%s/%s", root, id, rel);
+    if (!(f = fopen(p, "rb"))) return ST_E_NOTFOUND;
+    sdc_sha256_init(&h);
+    uint32_t total = 0;
+    size_t n;
+    while ((n = fread(buf, 1, buflen, f)) > 0) {
+        sdc_sha256_update(&h, buf, n);
+        total += (uint32_t)n;
+        if (io->tick) io->tick(io->ctx);
+    }
+    fclose(f);
+    char hex[65];
+    sdc_sha256_final(&h, hash);
+    sdc_sha256_hex(hash, hex);
+    if (total != want_size || strcmp(hex, want)) return ST_E_VERIFY;
+    if (sha_out) memcpy(sha_out, hash, 32);
     return ST_OK;
 }

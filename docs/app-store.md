@@ -34,10 +34,21 @@ path is checked against these rules before it ships:
 8. **Verified on hardware.** Each release on this path is tested as an upgrade from the previous public
    release on both Cardputers, with existing saves on the card, before it is published.
 
-## Firmware client (to build)
+## Firmware client
+
+`components/nucleo_store` (engine, host-tested by `npm run store:test`) and the Store app
+(`nucleo_app/app_store.cpp`). Two stores, chosen on the Store's first screen and never mixed: **Native C**
+(channel `native`: apps that run on the Cardputer, [native-apps.md](native-apps.md)) and **Web app** (channel
+`web`: apps served to a browser, and content packs). Each channel is its own signed catalog, with its channel
+name inside the signed text, its own serial and its own state under `/sd/apps/.store/<channel>/`.
 
 Streams `index.txt`/`index.sig` to the SD and verifies them chunk by chunk (mbedTLS ECDSA P-256, keys
 compiled in: main + backup), keeps the highest accepted `serial`, refuses expired catalogs when the
 clock is set, then reads the catalog one line at a time. Installs into `/sd/apps/.tmp/<id>/`, checks
-every file against the signed `package.sig`, then swaps the folder in. RAM: a few KB of buffers, no
+every file against the signed `package.sig`, then swaps the folder in and keeps the signed package as
+`.package.sig` (a native app is re-verified against it before every load). RAM: a few KB of buffers, no
 JSON tree.
+
+**Status (2026-10-27):** client, two channels and native loader written and host-tested; not yet in a
+release, not yet run on hardware. Native apps need the `coredump` partition as their flash scratch region:
+unavailable under M5Launcher, where the Store shows the native store as such.

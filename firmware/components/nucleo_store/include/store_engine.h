@@ -6,6 +6,11 @@
 //
 // RAM: a few KB of buffers, never a whole file, never a JSON tree. The catalog lives on the SD card and is
 // read one line at a time.
+//
+// Two channels, each its own signed catalog under <base_url><channel>/: "native" (C apps executed from the
+// flash scratch region, docs/native-apps.md in NucleoOS) and "web" (served from SD to a browser). The channel
+// name is inside the signed catalog and every kind belongs to exactly one channel, so a catalog or package
+// can never be passed off as the other channel's.
 #pragma once
 #include <stdbool.h>
 #include <stddef.h>
@@ -35,7 +40,13 @@ typedef struct {
     char     desc[ST_LANGS][ST_DESC_MAX + 1];
     uint32_t updated;               // unix time this version was published (day precision), 0 = unknown
     char     author[41];            // "" in catalogs older than the field
+    uint32_t abi;                   // native: the ABI level it was built for (0 for web / data)
 } st_app_t;
+
+#define ST_CH_NATIVE "native"
+#define ST_CH_WEB    "web"
+// The channel a kind is published in (NULL = unknown kind).
+const char *st_kind_channel(const char *kind);
 
 typedef enum {
     ST_OK = 0,
@@ -52,6 +63,7 @@ typedef enum {
     ST_E_CONFLICT,      // /sd/apps/<id> exists and was not installed by the store: never touched
     ST_E_UNSUPPORTED,   // a kind this firmware cannot install (native, unknown)
     ST_E_SPACE,         // not enough free space on the SD card for the download + the swap
+    ST_E_ABI,           // a native app built for a newer firmware ABI than this one
 } st_code_t;
 
 typedef enum { ST_PH_IDLE, ST_PH_CATALOG, ST_PH_PACKAGE, ST_PH_FILES, ST_PH_INSTALL, ST_PH_DONE, ST_PH_FAILED } st_phase_t;
@@ -80,8 +92,10 @@ typedef struct {
 } st_io_t;
 
 typedef struct {
-    const char *root;       // SD mount ("/sd"): installs go to <root>/apps/<id>/, state to <root>/apps/.store/
+    const char *root;       // SD mount ("/sd"): installs go to <root>/apps/<id>/, state to <root>/apps/.store/<channel>/
     const char *base_url;   // "https://indecenti.github.io/nucleoos-cardputer-store/" (trailing '/')
+    const char *channel;    // ST_CH_NATIVE or ST_CH_WEB
+    uint32_t    native_abi; // highest native ABI level this firmware runs (0 = it cannot run native apps)
     uint8_t    *buf;        // scratch, >= window bytes (the device lends its download window)
     uint32_t    window;     // bytes per request (6144 on the device)
     int         retries;    // extra attempts per window on a transport failure
@@ -91,12 +105,13 @@ typedef struct {
 // <root>/apps/.store/index.txt and its serial is remembered. On failure the previous catalog stays.
 st_code_t st_refresh(const st_cfg_t *cfg, const st_io_t *io, st_state_t *st);
 
-// The local catalog, one app at a time. st_catalog_next skips the header and malformed lines.
-FILE *st_catalog_open(const char *root);
+// The local catalog of a channel, one app at a time. st_catalog_next skips the header and malformed lines,
+// and lines whose kind belongs to another channel.
+FILE *st_catalog_open(const char *root, const char *channel);
 bool  st_catalog_next(FILE *f, st_app_t *out);
 bool  st_parse_line(const char *line, st_app_t *out);
-bool  st_find(const char *root, const char *id, st_app_t *out);
-uint32_t st_catalog_serial(const char *root);
+bool  st_find(const char *root, const char *channel, const char *id, st_app_t *out);
+uint32_t st_catalog_serial(const char *root, const char *channel);
 
 // Install or update one app (download, verify everything, swap in atomically, register a web app).
 st_code_t st_install(const st_cfg_t *cfg, const st_io_t *io, st_state_t *st, const st_app_t *app);
@@ -104,6 +119,12 @@ st_code_t st_install(const st_cfg_t *cfg, const st_io_t *io, st_state_t *st, con
 st_code_t st_remove(const char *root, const char *id);
 // version_code installed by the store, 0 = not installed; *system = a folder the store does not own.
 uint32_t st_installed(const char *root, const char *id, bool *system);
+
+// Re-checks an installed file against the signed package it came from (kept as <id>/.package.sig): the
+// signature (trusted keys only), the id, and the file's size + SHA-256. Native apps call it before every
+// load, so a card edited on a PC can never run code the store did not sign. buf: scratch of buflen bytes.
+st_code_t st_verify_installed(const char *root, const char *id, const char *rel, const st_io_t *io,
+                              uint8_t *buf, size_t buflen, uint8_t sha_out[32]);
 
 // "x.y.z" order (missing parts are 0; text after the third number is ignored).
 int  st_ver_cmp(const char *a, const char *b);

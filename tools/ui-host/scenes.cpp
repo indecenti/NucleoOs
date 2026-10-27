@@ -379,8 +379,18 @@ extern "C" nst_status_t g_host_store_status;
 extern "C" nst_op_t g_host_store_op;
 extern "C" st_state_t g_host_store_st;
 extern "C" const char *g_host_store_err;
-static void store_open(bool catalog = true) { host_store_seed(catalog); app_open("store"); }
+extern "C" uint32_t g_host_native_abi;
+// The Store opens on the choice of store; the scenes below browse the web store unless they say otherwise.
+static void store_choose(bool catalog = true) { host_store_seed(catalog); app_open("store"); }
+static void store_open(bool catalog = true) { store_choose(catalog); app_key(NK_CHAR, '2'); }
+static void native_open() { store_choose(); app_key(NK_CHAR, '1'); }
 static const Scene STORE[] = {
+    { "choose",    [] { store_choose(); app_draw(); } },
+    { "choose-web",[] { store_choose(); down(1); app_draw(); } },
+    { "choose-nonative", [] { g_host_native_abi = 0; store_choose(); app_key(NK_CHAR, '1'); app_draw(); g_host_native_abi = 1; } },
+    { "native",    [] { native_open(); app_draw(); } },
+    { "native-app",[] { native_open(); app_key(NK_ENTER); app_draw(); } },
+    { "native-mine",[] { native_open(); for (int i = 0; i < 3; i++) app_key(NK_TAB); app_draw(); } },
     { "new",       [] { store_open(); app_draw(); } },
     { "games",     [] { store_open(); app_key(NK_TAB); app_draw(); } },
     { "cats",      [] { store_open(); app_key(NK_TAB); app_key(NK_TAB); down(1); app_draw(); } },

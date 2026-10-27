@@ -8,8 +8,10 @@
 //   store_cli <public dir> <sd root> list
 //   store_cli <public dir> <sd root> installed <id>
 //   store_cli <public dir> <sd root> paths
+//   store_cli <public dir> <sd root> verify-installed <id> <file>
 // Env FAULT: "drop" (every 3rd request fails at the transport, then retried), "dead" (every request fails),
-// "404". Prints "rc=<st_code_t>" last.
+// "404". Env CHANNEL: "web" (default) or "native"; NATIVE_ABI: the firmware's native ABI level (default 1).
+// Prints "rc=<st_code_t>" last.
 #include "store_engine.h"
 #include "store_verify.h"
 
@@ -60,26 +62,29 @@ int main(int argc, char **argv)
     const char *sd = argv[2], *cmd = argv[3], *arg = argc > 4 ? argv[4] : "";
     s_fault = getenv("FAULT");
     static uint8_t buf[6144];
-    st_cfg_t cfg = { .root = sd, .base_url = "https://store.test/", .buf = buf, .window = sizeof buf, .retries = 3 };
+    const char *ch = getenv("CHANNEL") && getenv("CHANNEL")[0] ? getenv("CHANNEL") : ST_CH_WEB;
+    uint32_t abi = getenv("NATIVE_ABI") ? (uint32_t)strtoul(getenv("NATIVE_ABI"), NULL, 10) : 1;
+    st_cfg_t cfg = { .root = sd, .base_url = "https://store.test/", .channel = ch, .native_abi = abi, .buf = buf,
+                     .window = sizeof buf, .retries = 3 };
     st_io_t io = { .ctx = NULL, .get = fake_get, .verify = host_verify, .now = host_now };
     st_state_t st = { 0 };
     st_code_t rc = ST_OK;
     if (!strcmp(cmd, "refresh")) {
         s_now = arg[0] ? (uint32_t)strtoul(arg, NULL, 10) : 0;
         rc = st_refresh(&cfg, &io, &st);
-        printf("serial=%lu\n", (unsigned long)st_catalog_serial(sd));
+        printf("serial=%lu\n", (unsigned long)st_catalog_serial(sd, ch));
     } else if (!strcmp(cmd, "install")) {
         st_app_t a;
-        if (!st_find(sd, arg, &a)) rc = ST_E_NOTFOUND;
+        if (!st_find(sd, ch, arg, &a)) rc = ST_E_NOTFOUND;
         else rc = st_install(&cfg, &io, &st, &a);
         if (rc == ST_OK) printf("files=%d bytes=%lu\n", st.files_done, (unsigned long)st.done);
     } else if (!strcmp(cmd, "remove")) {
         rc = st_remove(sd, arg);
     } else if (!strcmp(cmd, "list")) {
-        FILE *f = st_catalog_open(sd);
+        FILE *f = st_catalog_open(sd, ch);
         st_app_t a;
         int n = 0;
-        while (f && st_catalog_next(f, &a)) { printf("app %s %s %lu %s\n", a.id, a.kind, (unsigned long)a.code, a.name[1]); n++; }
+        while (f && st_catalog_next(f, &a)) { printf("app %s %s %lu %s abi %lu\n", a.id, a.kind, (unsigned long)a.code, a.name[1], (unsigned long)a.abi); n++; }
         if (f) fclose(f);
         printf("count=%d\n", n);
     } else if (!strcmp(cmd, "installed")) {
@@ -94,6 +99,9 @@ int main(int argc, char **argv)
         for (unsigned i = 0; i < sizeof bad / sizeof *bad; i++) if (st_path_ok(bad[i])) { printf("bad accepted: %s\n", bad[i]); errs++; }
         if (st_ver_cmp("0.8.0", "0.7.5") <= 0 || st_ver_cmp("0.7.5+3.gabc", "0.7.5") != 0 || st_ver_cmp("1.0", "1.0.1") >= 0) { printf("ver_cmp\n"); errs++; }
         rc = errs ? ST_E_BAD : ST_OK;
+    } else if (!strcmp(cmd, "verify-installed")) {
+        uint8_t sha[32];
+        rc = st_verify_installed(sd, arg, argc > 5 ? argv[5] : "", &io, buf, sizeof buf, sha);
     } else { fprintf(stderr, "unknown command %s\n", cmd); return 2; }
     if (rc != ST_OK) printf("detail=%s http=%d\n", st.detail, st.http);
     printf("requests=%d\nrc=%d\n", s_req, rc);

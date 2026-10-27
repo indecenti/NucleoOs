@@ -1,0 +1,11 @@
+menu "NucleoOS apps"
+
+config NUCLEO_STORE_CONSTELLATIONS
+    bool "Constellations ships from the store (native app), not in the firmware"
+    default n
+    help
+        Leaves app_constellations.cpp out of the firmware image (about 96 KB): the game is then the
+        native app "stelle" of the store (docs/native-apps.md). Turn it on only in a release AFTER one
+        that shipped the native loader, never in the same one (docs/app-store.md, upgrade guarantees).
+
+endmenu

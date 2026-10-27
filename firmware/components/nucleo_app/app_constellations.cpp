@@ -32,6 +32,9 @@
 // Texts follow the OS language (game_text.h: it/en here, es/fr/de from the SD pack); ASCII only (the TFT
 // fonts have no accents): Italian uses the apostrophe form.
 
+#include "sdkconfig.h"
+// Built in, or (CONFIG_NUCLEO_STORE_CONSTELLATIONS) only as the store's native module, built with NAP_MODULE.
+#if !CONFIG_NUCLEO_STORE_CONSTELLATIONS || defined(NAP_MODULE)
 #include "nucleo_app.h"
 #include "nucleo_kbd.h"
 #include "launcher_theme.h"
@@ -3525,3 +3528,4 @@ extern "C" void nucleo_register_constellations(void)
     };
     nucleo_app_register(&app);
 }
+#endif  // !CONFIG_NUCLEO_STORE_CONSTELLATIONS || NAP_MODULE

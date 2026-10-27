@@ -467,6 +467,8 @@ extern "C" void nucleo_register_qr(void);
 extern "C" void nucleo_register_theme(void);   // app_theme.cpp — replaces the empty nucleo_setup.c stub
 extern "C" void nucleo_register_reactor(void); // app_reactor.cpp — Games: reactor-management game
 extern "C" void nucleo_register_constellations(void); // app_constellations.cpp — Games: space-trader
+extern "C" bool nucleo_store_app_is_native(const char *id);          // store_apps.cpp
+extern "C" void nucleo_store_app_prepare(nucleo_app_def_t *slot);    // store_apps.cpp: load a native app's module
 extern "C" void nucleo_register_sandgarden(void);     // app_sandgarden.cpp — Games: falling-sand garden
 extern "C" void nucleo_register_slots(void);          // app_slots.cpp — Games: slot machine
 extern "C" void nucleo_register_poker(void);          // app_poker.cpp — Games: 5-card draw video poker
@@ -508,7 +510,11 @@ void nucleo_app_register_builtins(void)
     // Web OS: the two transports to the browser web OS — cable (usbweb) and LAN (remote)
     nucleo_register_usbweb(); nucleo_register_remote();
     // Games
-    nucleo_register_reactor(); nucleo_register_constellations(); nucleo_register_sandgarden(); nucleo_register_slots(); nucleo_register_poker(); nucleo_register_pinball(); nucleo_register_pong(); nucleo_register_tanks(); nucleo_register_tankduel(); nucleo_register_brawler(); nucleo_register_dice(); nucleo_register_yahtzee(); nucleo_register_snake(); nucleo_register_vs(); nucleo_register_cardler();
+    nucleo_register_reactor();
+#if !CONFIG_NUCLEO_STORE_CONSTELLATIONS
+    nucleo_register_constellations();   // until it ships from the store only (Kconfig: docs/native-apps.md "Migration")
+#endif
+    nucleo_register_sandgarden(); nucleo_register_slots(); nucleo_register_poker(); nucleo_register_pinball(); nucleo_register_pong(); nucleo_register_tanks(); nucleo_register_tankduel(); nucleo_register_brawler(); nucleo_register_dice(); nucleo_register_yahtzee(); nucleo_register_snake(); nucleo_register_vs(); nucleo_register_cardler();
     // Measure (ADV-only): BMI270 measuring instruments
     if (nucleo_ui_is_adv()) { nucleo_register_level(); nucleo_register_goniometer(); nucleo_register_pedometer(); }
     // Connect: the Cardputer as a peripheral or terminal of another machine (USB keyboard/disk, SSH)
@@ -780,7 +786,10 @@ static void open_app_def(const nucleo_app_def_t *def)
 static bool maybe_solo_launch(int idx)
 {
     if (s_solo_active || idx < 0) return false;
-    if (is_dynamic(idx)) return false;             // a store app opens inline: the Solo boot never registers it
+    // A store app opens inline, except a NATIVE game: it gets the same fresh-heap Solo boot as a built-in one
+    // (main.c syncs the store apps in that boot so launch_id finds it; the id must fit the RTC slot).
+    if (is_dynamic(idx) && (!nucleo_store_app_is_native(s_apps[idx].id) || strlen(s_apps[idx].id) >= sizeof s_solo_id))
+        return false;
     const nucleo_app_def_t *a = &s_apps[idx];
     // Remote Control boots a DEDICATED server-Solo profile: httpd + auth stay up, but the offline brain,
     // voice, TTS, IR, recorder and calendar service never come up — the web OS gets a fresh, unfragmented
@@ -831,6 +840,7 @@ static void launch(const MenuNode *app)
     int idx = find_app(app->id);
     if (idx >= 0) launcher_note_launch(app->id);         // Recent tile (before a Solo reboot, so it sticks)
     if (maybe_solo_launch(idx)) return;
+    if (idx >= 0 && is_dynamic(idx)) nucleo_store_app_prepare(&s_apps[idx]);   // a native app: load its module now
     if (idx >= 0) { s_active = idx; s_stub = nullptr; open_app_def(&s_apps[idx]); }
     else          { s_active = -2; s_stub = app;     open_app_def(&STUB); }
 }
@@ -846,6 +856,8 @@ static void launch_by_id(const char *id)
     // path; this is the missing app->app path.) Guarded to a real app: not the launcher (-1) or stub (-2).
     if (s_active >= 0 && s_apps[s_active].on_exit) s_apps[s_active].on_exit();
     app_ram_free();                                       // ...and its working RAM, before the incoming app's
+    s_active = -1;                                        // nothing in the foreground while a module may be swapped
+    if (is_dynamic(idx)) nucleo_store_app_prepare(&s_apps[idx]);   // a native app: load its module now
     s_active = idx; s_stub = nullptr;
     open_app_def(&s_apps[idx]);
 }

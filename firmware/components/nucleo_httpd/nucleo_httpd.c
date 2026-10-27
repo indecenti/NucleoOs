@@ -2874,8 +2874,10 @@ esp_err_t nucleo_httpd_start(void)
     if (nucleo_app_register_display(server) != ESP_OK) ESP_LOGW(TAG, "display endpoint register failed");
     // /api/game/costellazioni/save (cross-play campaign save <-> save.bin) — same forward-decl/final-link
     // arrangement as the display endpoint (nucleo_app owns the Costellazioni Save struct).
-    extern esp_err_t nucleo_app_register_costellazioni_api(httpd_handle_t);
-    if (nucleo_app_register_costellazioni_api(server) != ESP_OK) ESP_LOGW(TAG, "costellazioni save endpoint register failed");
+    // Weak: absent when Constellations ships from the store instead of the firmware (CONFIG_NUCLEO_STORE_CONSTELLATIONS).
+    extern esp_err_t nucleo_app_register_costellazioni_api(httpd_handle_t) __attribute__((weak));
+    if (nucleo_app_register_costellazioni_api && nucleo_app_register_costellazioni_api(server) != ESP_OK)
+        ESP_LOGW(TAG, "costellazioni save endpoint register failed");
     // /api/fido/* (passkey/PIN web console) — forward-decl/final-link, like the display endpoint.
     extern esp_err_t nucleo_fido_register_api(httpd_handle_t);
     if (nucleo_fido_register_api(server) != ESP_OK) ESP_LOGW(TAG, "fido web console endpoints register failed");

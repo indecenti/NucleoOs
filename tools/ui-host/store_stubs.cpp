@@ -6,6 +6,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <direct.h>
+#include "nucleo_app.h"
 extern "C" {
 #include "nucleo_store.h"
 }
@@ -16,7 +17,16 @@ nst_op_t     g_host_store_op = NST_OP_REFRESH;
 st_state_t   g_host_store_st;
 const char  *g_host_store_err = "";
 
-bool nucleo_store_start(nst_op_t, const char *) { return false; }
+uint32_t     g_host_native_abi = 1;          // 0 = a firmware where native apps are unavailable (M5Launcher)
+bool nucleo_store_start(nst_op_t, const char *, const char *) { return false; }
+const char *nucleo_store_channel(void) { return ST_CH_WEB; }
+uint32_t nucleo_store_native_abi(void) { return g_host_native_abi; }
+bool nucleo_store_check_installed(const char *, const char *, uint8_t *) { return false; }
+// native_apps.cpp is device-only (MMU, flash): the launcher side links against these.
+const nucleo_app_def_t *nucleo_native_load(const char *) { return nullptr; }
+const char *nucleo_native_error(void) { return "signature: stelle"; }
+void nucleo_native_on_unload(void (*)(const char *)) {}
+void nucleo_native_forget(const char *) {}
 nst_status_t nucleo_store_status(void) { return g_host_store_status; }
 nst_op_t nucleo_store_op(void) { return g_host_store_op; }
 const st_state_t *nucleo_store_state(void) { return &g_host_store_st; }
@@ -66,22 +76,50 @@ static const SeedApp SEED[] = {
         "Memoria, temperatura, bateria y red de un vistazo.", "Memoire, temperature, batterie et reseau.", "Speicher, Temperatur, Akku und Netz." } },
 };
 
-// Seeds sd/apps/.store/index.txt plus the installed state: netscan/unit-convert/notes-md installed by the
-// store (notes-md and unit-convert one version behind), metronome present as a built-in app.
+// Native apps for the "Native C" store.
+static const SeedApp NATIVE[] = {
+    { "stelle", "games", 1, 0, 105796, "audio,imu", { "Costellazioni", "Constellations", "Constelaciones", "Constellations", "Sternbilder" },
+      { "Mercante stellare: commercia tra i sistemi, combatti i pirati, riaccendi i Fari della galassia.",
+        "Star trader: trade between systems, fight pirates, relight the Beacons of the galaxy.",
+        "Mercader estelar: comercia entre sistemas, lucha contra piratas, reenciende los Faros.",
+        "Marchand stellaire : commercez entre les systemes, combattez les pirates, rallumez les Phares.",
+        "Sternenhaendler: handle zwischen Systemen, bekaempfe Piraten, entzuende die Leuchtfeuer neu." } },
+    { "poker", "games", 1, 6, 31200, "audio", { "Poker", "Poker", "Poker", "Poker", "Poker" },
+      { "Video poker a 5 carte: tieni le buone, punta alla scala reale.", "5-card draw video poker: hold the good ones, go for the royal flush.",
+        "Video poker de 5 cartas: guarda las buenas.", "Video poker a 5 cartes : gardez les bonnes.", "Video-Poker mit 5 Karten." } },
+};
+
+static void write_catalog(const char *ch, const char *kind, const char *abi, const SeedApp *apps, int n)
+{
+    char p[64];
+    snprintf(p, sizeof p, "sd/apps/.store/%s", ch); _mkdir(p);
+    snprintf(p, sizeof p, "sd/apps/.store/%s/index.txt", ch);
+    FILE *f = fopen(p, "wb");
+    fprintf(f, "nucleoos-cardputer-index-v2\nchannel %s\nserial 7\nexpires 1999999999\napps %d\n", ch, n);
+    for (int i = 0; i < n; i++) {
+        const SeedApp &a = apps[i];
+        uint32_t day = (uint32_t)(g_host.wall / 86400 * 86400) - (uint32_t)a.days_ago * 86400;
+        fprintf(f, "app\t%s\t%s\t%d\t1.%d.0\t0.7.5\t%s\t%lu\t%064d\t%s\t%s|%s|%s|%s|%s\t%s|%s|%s|%s|%s\t%lu\tNucleo Labs\t%s\n",
+                a.id, kind, a.code, a.code, a.cat, (unsigned long)a.size, 0, a.perms,
+                a.n[0], a.n[1], a.n[2], a.n[3], a.n[4], a.dsc[0], a.dsc[1], a.dsc[2], a.dsc[3], a.dsc[4], (unsigned long)day, abi);
+    }
+    fclose(f);
+}
+
+// Seeds the two catalogs (sd/apps/.store/<channel>/index.txt) plus the installed state: netscan/unit-convert/
+// notes-md installed by the store (notes-md and unit-convert one version behind), metronome present as a
+// built-in app; in the native store, Constellations installed.
 extern "C" void host_store_seed(bool with_catalog)
 {
     _mkdir("sd"); _mkdir("sd/apps"); _mkdir("sd/apps/.store");
     if (with_catalog) {
-        FILE *f = fopen("sd/apps/.store/index.txt", "wb");
-        fprintf(f, "nucleoos-cardputer-index-v1\nserial 7\nexpires 1999999999\napps %d\n", (int)(sizeof SEED / sizeof SEED[0]));
-        for (const SeedApp &a : SEED) {
-            uint32_t day = (uint32_t)(g_host.wall / 86400 * 86400) - (uint32_t)a.days_ago * 86400;
-            fprintf(f, "app\t%s\tweb\t%d\t1.%d.0\t0.8.0\t%s\t%lu\t%064d\t%s\t%s|%s|%s|%s|%s\t%s|%s|%s|%s|%s\t%lu\tNucleo Labs\n",
-                    a.id, a.code, a.code, a.cat, (unsigned long)a.size, 0, a.perms,
-                    a.n[0], a.n[1], a.n[2], a.n[3], a.n[4], a.dsc[0], a.dsc[1], a.dsc[2], a.dsc[3], a.dsc[4], (unsigned long)day);
-        }
-        fclose(f);
+        write_catalog(ST_CH_WEB, "web", "-", SEED, (int)(sizeof SEED / sizeof SEED[0]));
+        write_catalog(ST_CH_NATIVE, "native", "1", NATIVE, (int)(sizeof NATIVE / sizeof NATIVE[0]));
     }
+    _mkdir("sd/apps/stelle");
+    FILE *nv = fopen("sd/apps/stelle/.store-version", "wb");
+    fprintf(nv, "code 1\nversion 1.1.0\nkind native\nchannel native\nabi 1\ncategory games\nname Costellazioni|Constellations|Constelaciones|Constellations|Sternbilder\n");
+    fclose(nv);
     struct { const char *id; int code; } inst[] = { { "net-scan", 1 }, { "unit-convert", 3 }, { "notes-md", 4 } };
     for (auto &i : inst) {
         char p[96];

@@ -18,6 +18,8 @@
 #include <time.h>
 
 extern const char *nucleo_i18n_lang(void) __attribute__((weak));   // nucleo_storage (resolved at link)
+// nucleo_app/native_apps.cpp: the native ABI level this firmware runs (weak: a build without it has none).
+extern uint32_t nucleo_native_abi_level(void) __attribute__((weak));
 
 static const char *TAG = "store";
 
@@ -28,6 +30,7 @@ static const char *TAG = "store";
 static volatile nst_status_t s_status = NST_IDLE;
 static nst_op_t s_op;
 static char s_id[ST_ID_MAX + 1];
+static char s_channel[8] = ST_CH_NATIVE;
 static st_state_t s_st;
 static char s_err[72];
 
@@ -35,6 +38,8 @@ nst_status_t nucleo_store_status(void) { return s_status; }
 nst_op_t nucleo_store_op(void) { return s_op; }
 const st_state_t *nucleo_store_state(void) { return &s_st; }
 const char *nucleo_store_error(void) { return s_status == NST_FAILED ? s_err : ""; }
+const char *nucleo_store_channel(void) { return s_channel; }
+uint32_t nucleo_store_native_abi(void) { return nucleo_native_abi_level ? nucleo_native_abi_level() : 0; }
 
 const char *nucleo_store_os_version(void)
 {
@@ -74,6 +79,7 @@ static void localize(st_code_t c, int http)
     case ST_E_NOTFOUND:    m = L5("App non trovata", "App not found", "App no encontrada", "App introuvable", "App nicht gefunden"); break;
     case ST_E_CONFLICT:    m = L5("App di sistema: non la tocco", "System app: left untouched", "App del sistema: intacta", "App systeme : intacte", "System-App: unveraendert"); break;
     case ST_E_SPACE:       m = L5("Spazio SD insufficiente", "Not enough space on the SD", "Sin espacio en la SD", "Pas assez de place sur la SD", "Zu wenig Platz auf der SD"); break;
+    case ST_E_ABI:         m = L5("Serve un NucleoOS piu' nuovo", "Needs a newer NucleoOS", "Requiere NucleoOS nuevo", "NucleoOS plus recent requis", "Neueres NucleoOS noetig"); break;
     case ST_E_UNSUPPORTED: m = L5("Richiede un firmware piu' nuovo", "Needs a newer firmware", "Requiere firmware nuevo", "Firmware plus recent requis", "Neuere Firmware noetig"); break;
     default:               m = L5("Operazione fallita", "Operation failed", "Operacion fallida", "Echec", "Fehlgeschlagen"); break;
     }
@@ -121,7 +127,8 @@ static void task(void *arg)
         if (!buf || largest < TLS_MIN_BLOCK) rc = ST_E_NOMEM;
     }
     if (rc == ST_OK) {
-        st_cfg_t cfg = { .root = NUCLEO_SD_MOUNT, .base_url = NUCLEO_STORE_URL, .buf = buf, .window = WINDOW, .retries = 3 };
+        st_cfg_t cfg = { .root = NUCLEO_SD_MOUNT, .base_url = NUCLEO_STORE_URL, .channel = s_channel,
+                         .native_abi = nucleo_store_native_abi(), .buf = buf, .window = WINDOW, .retries = 3 };
         st_io_t io = { .ctx = NULL, .get = nucleo_sdcontent_http_get, .verify = io_verify, .now = io_now,
                        .progress = io_progress, .tick = io_tick };
         if (s_op == NST_OP_REFRESH) rc = st_refresh(&cfg, &io, &s_st);
@@ -129,7 +136,7 @@ static void task(void *arg)
         else {
             st_app_t *a = malloc(sizeof *a);
             if (!a) rc = ST_E_NOMEM;
-            else if (!st_find(NUCLEO_SD_MOUNT, s_id, a)) rc = ST_E_NOTFOUND;
+            else if (!st_find(NUCLEO_SD_MOUNT, s_channel, s_id, a)) rc = ST_E_NOTFOUND;
             else if (st_ver_cmp(nucleo_store_os_version(), a->min_os) < 0) rc = ST_E_UNSUPPORTED;
             else if (!sd_room(a->size)) rc = ST_E_SPACE;
             else rc = st_install(&cfg, &io, &s_st, a);
@@ -144,10 +151,12 @@ static void task(void *arg)
     vTaskDelete(NULL);
 }
 
-bool nucleo_store_start(nst_op_t op, const char *id)
+bool nucleo_store_start(nst_op_t op, const char *channel, const char *id)
 {
     if (s_status == NST_BUSY) return false;
+    if (!channel || (strcmp(channel, ST_CH_NATIVE) && strcmp(channel, ST_CH_WEB))) return false;
     if (op != NST_OP_REFRESH && (!id || !st_id_ok(id))) return false;
+    snprintf(s_channel, sizeof s_channel, "%s", channel);
     s_op = op;
     snprintf(s_id, sizeof s_id, "%s", id ? id : "");
     memset(&s_st, 0, sizeof s_st);
@@ -159,4 +168,16 @@ bool nucleo_store_start(nst_op_t op, const char *id)
         return false;
     }
     return true;
+}
+
+bool nucleo_store_check_installed(const char *id, const char *rel, uint8_t sha[32])
+{
+    enum { BUF = 2048 };
+    uint8_t *buf = malloc(BUF);
+    if (!buf) return false;
+    st_io_t io = { .ctx = NULL, .verify = io_verify, .tick = io_tick };
+    st_code_t rc = st_verify_installed(NUCLEO_SD_MOUNT, id, rel, &io, buf, BUF, sha);
+    free(buf);
+    if (rc != ST_OK) ESP_LOGE(TAG, "%s/%s does not match its signed package (rc=%d)", id, rel, rc);
+    return rc == ST_OK;
 }
