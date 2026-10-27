@@ -253,7 +253,7 @@ nap_rc_t nap_inspect(const nap_src_t *s, nap_image_t *img, char *detail, size_t 
     }
     if (loads != 3 || !dyn || dyn < img->data_start || !in_range(dyn - img->data_start, dynsz, img->data_filesz) || (dynsz & 7))
         { DETAIL("segment layout"); return NAP_E_SEGMENTS; }
-    img->image_size = img->ro_end;
+    img->image_size = (img->ro_end + 3) & ~3u;          // whole words: rodata may end mid-word (zero-padded)
     if (img->image_size > s->flash_max || img->data_memsz > s->ram_max)
         { DETAIL("%lu B code, %lu B data", (unsigned long)img->image_size, (unsigned long)img->data_memsz); return NAP_E_TOOBIG; }
 
@@ -369,7 +369,9 @@ nap_rc_t nap_relocate_flash(const nap_src_t *s, const nap_image_t *img, const na
                             uint32_t off, uint8_t *buf, uint32_t len, char *detail, size_t detail_cap)
 {
     if ((off | len) & 3 || !in_range(off, len, img->image_size)) return NAP_E_FORMAT;
-    if (!rd(s, off, buf, len)) return NAP_E_IO;
+    uint32_t have = off + len <= img->ro_end ? len : img->ro_end - off;   // past ro_end: the padding word
+    if (!rd(s, off, buf, have)) return NAP_E_IO;
+    memset(buf + have, 0, len - have);
     // The gap between text and rodata (alignment padding) is not part of either segment: zero it.
     for (uint32_t a = off; a < off + len; a++) if (a >= img->text_end && a < img->ro_start) buf[a - off] = 0;
     nap_rc_t rc = apply(s, img, b, img->rela, img->nrela, off, off + len, buf, detail, detail_cap);
