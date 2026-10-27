@@ -959,8 +959,8 @@ template <typename T> static void draw_badge(T *c, int cx, int cy, int count, ui
     int tw = (int)c->textWidth(s), h = 17, w = tw + 11; if (w < 17) w = 17;
     c->fillRoundRect(cx - w / 2,     cy - h / 2,     w,     h,     h / 2,       accent);   // accent rim
     c->fillRoundRect(cx - w / 2 + 2, cy - h / 2 + 2, w - 4, h - 4, (h - 4) / 2, INK);      // dark fill
-    c->setTextColor(FG, INK);
-    c->setCursor(cx - tw / 2, cy - 8); c->print(s);                                        // Font2 ~16px, centred
+    c->setTextColor(FG);                                                                    // no box: keep the rim whole
+    c->setTextDatum(middle_center); c->drawString(s, cx, cy + 1); c->setTextDatum(top_left);
 }
 
 // Dot rail / position indicator, centred at (cx, y). Collapses to "k/n" past 13 items.
@@ -1053,7 +1053,7 @@ template <typename T> static void draw_grid(T *c, int base)
             int cx = j * GRID_CELLW + GRID_CELLW / 2;
             int cy = base + GRID_TOP + k * GRID_RH + 25;        // icon-row centre within the cell
             int r = 23, cr = (int)(r * 0.34f + 0.5f);
-            uint16_t badge = mix565(LINE, it->color, focus ? 1.0f : 0.55f);
+            uint16_t badge = mix565(LINE, it->color, focus ? 1.0f : 0.85f);   // full colours: the home is touched, not scanned
             if (focus) c->fillRoundRect(cx - r - 4, cy - r - 4, 2 * r + 8, 2 * r + 8, cr + 3, mix565(BG, it->color, 0.50f));
             c->fillRoundRect(cx - r, cy - r, 2 * r, 2 * r, cr, badge);
             if (focus) {                                        // accent ring = keyboard focus
@@ -1062,7 +1062,7 @@ template <typename T> static void draw_grid(T *c, int base)
                 c->drawRoundRect(cx - r - 3, cy - r - 3, 2 * r + 6, 2 * r + 6, cr + 2, rc);
             }
             int gr = (int)(r * 0.68f + 0.5f);
-            uint16_t gcol = focus ? INK : mix565(BG, FG, 0.72f);
+            uint16_t gcol = focus ? INK : mix565(BG, FG, 0.92f);
             const char *gid = !strcmp(it->id, LAUNCHER_RECENT_ID) ? "clock"
                             : !strcmp(it->id, LAUNCHER_SETTINGS_SEARCH_ID) ? "wifi" : it->id;
             ui_icon(c, cx, cy, gr, gid, it->icon, gcol, badge);
@@ -1227,15 +1227,19 @@ void launcher_render_list(void)
         c->pushSprite(0, LIST_TOP);                            // ...one blit -> no flicker (rows below are clipped)
         d.clearClipRect();
     } else if (c) {
-        // Large surface: the band (320x210) is taller than the 32 KB canvas seen 320 wide (~100 rows), so it
-        // is composited in strips through the SAME bytes — no extra RAM. Each strip is a finished slice of
-        // the frame, so the panel never shows a cleared-then-redrawn intermediate.
-        const int sh = c->height();
+        // Large surface: the band (320x218) is taller than the 32 KB canvas seen 320 wide, so it is composited
+        // in strips through the SAME bytes — no extra RAM. Each strip is a finished slice of the frame, so the
+        // panel never shows a cleared-then-redrawn intermediate. The bytes are seen as RGB565 (~50 rows a strip):
+        // the tiles keep their exact theme colours (8-bit RGB332 turned the muted badges olive / grey).
+        static M5Canvas s_l16;
+        s_l16.setColorDepth(16);
+        s_l16.setBuffer(c->getBuffer(), W, c->height() / 2);
+        const int sh = s_l16.height();
         for (int s = 0; s < LIST_BAND_H; s += sh) {
-            draw_list(c, -s);                                   // band row s lands on canvas row 0
+            draw_list(&s_l16, -s);                              // band row s lands on canvas row 0
             int h = LIST_BAND_H - s < sh ? LIST_BAND_H - s : sh;
             d.setClipRect(0, LIST_TOP + s, W, h);
-            c->pushSprite(0, LIST_TOP + s);
+            s_l16.pushSprite(&d, 0, LIST_TOP + s);
             d.clearClipRect();
         }
     } else {
@@ -1352,15 +1356,6 @@ static bool cc_tile_on(int i)
 }
 static unsigned short cc_tile_col(int i) { return i == TL_MUTE ? C_RED : i == TL_HOTSPOT ? C_YELLOW : THEME_ACC; }
 static int cc_tile_glyph(int i) { return i == TL_MUTE ? UG_MUTE : i == TL_TORCH ? UG_TORCH : i == TL_SCREEN ? UG_MOON : UG_HOTSPOT; }
-static const char *cc_tile_label(int i)
-{
-    switch (i) {
-        case TL_MUTE:   return TR5("Muto", "Mute", "Silencio", "Muet", "Stumm");
-        case TL_TORCH:  return TR5("Torcia", "Torch", "Linterna", "Torche", "Lampe");
-        case TL_SCREEN: return TR5("Spegni", "Sleep", "Reposo", "Veille", "Schlaf");
-        default:        return "Hotspot";
-    }
-}
 static int cc_short_glyph(int i)
 {
     static const int G[CC_NSHORT] = { UG_GEAR, UG_MONITOR, UG_KEYBOARD, UG_USB, UG_POWER };
