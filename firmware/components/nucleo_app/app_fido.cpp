@@ -13,6 +13,7 @@
 #include "app_ui.h"
 #include "app_large.h"       // two screens: the key-mode status + passkey manager on the panel, Cardputer companion
 #include "nucleo_touch.h"
+#include "nucleo_extdisp.h"   // nucleo_extdisp_draw_internal: the Cardputer's own screen while a modal owns the panel
 #include <M5GFX.h>
 #include <string.h>
 #include <stdio.h>
@@ -31,6 +32,7 @@ enum KM { KM_STATUS, KM_MANAGE };
 static int s_km = KM_STATUS;
 static int s_cm_sel = 0;
 static int s_lg_scroll = 0;       // passkey list scroll on the panel (two screens)
+static bool s_del_armed = false;  // panel passkeys: the picked row was tapped again -> "delete?"
 static uint32_t s_last_sig = 0;   // ANTI-FLICKER: what on_draw last rendered (see on_tick/fido_sig)
 
 // Signature of everything the status/manage screen shows. In key mode the canvas can't be acquired
@@ -52,6 +54,11 @@ static uint32_t fido_sig(void) {
     return s;
 }
 
+// Two screens (defined below): the modals in full on the panel + a summary on the Cardputer.
+static void present_large(const char *rp, int sel);
+static void pin_large(const char *title, const char *sub, int n);
+static void cardputer(const char *l1, const char *l2, const char *keys);
+
 static void txt(int x, int y, const char *s, uint16_t fg, uint16_t bg, int sz) {
     d.setTextSize(sz); d.setTextColor(fg, bg); d.setCursor(x, y); d.print(s);
 }
@@ -60,6 +67,25 @@ static void txt(int x, int y, const char *s, uint16_t fg, uint16_t bg, int sz) {
 // keeping the host alive with CTAPHID KEEPALIVE frames. rp = who is asking.
 static int fido_present(const char *rp, void *ui) {
     (void)ui;
+    if (nucleo_app_two_screens()) {                    // the panel: who asks + Approve / Deny rows (tap, tap again)
+        int sel = -1;
+        present_large(rp, sel);
+        cardputer(TR("Un sito vuole accedere:", "A site wants to sign in:"), (rp && rp[0]) ? rp : "?",
+                  TR("INVIO approva   ESC nega", "ENTER approve   ESC deny"));
+        for (;;) {
+            esp_task_wdt_reset();
+            nucleo_key_t k = nucleo_kbd_read();
+            if (k.key == NK_ENTER) { nucleo_app_request_draw(); return 1; }
+            if (k.key == NK_BACK)  { nucleo_app_request_draw(); return 0; }
+            if (nucleo_touch_is_row(k.key, k.ch)) {
+                const int i = k.ch - NUCLEO_TOUCH_ROW;
+                if (i == sel) { nucleo_app_request_draw(); return i == 0; }
+                sel = i; present_large(rp, sel);
+            }
+            nucleo_fido_keepalive();
+            vTaskDelay(pdMS_TO_TICKS(90));
+        }
+    }
     int top = nucleo_app_content_top(), h = nucleo_app_content_height();
     d.fillRect(0, top, 240, h, BG);
     int y0 = app_ui_title("Sign-in", ACC, nullptr);
@@ -84,12 +110,17 @@ static int fido_present(const char *rp, void *ui) {
 static int pin_entry(const char *title, const char *sub, char *buf, int cap) {
     int n = 0; buf[0] = 0;
     for (;;) {
+        if (nucleo_app_two_screens()) {                // the panel shows it big; it is typed on the Cardputer
+            pin_large(title, sub, n);
+            cardputer(title, sub, TR("INVIO ok   ESC annulla", "ENTER ok   ESC cancel"));
+        } else {
         int top = nucleo_app_content_top(), h = nucleo_app_content_height();
         d.fillRect(0, top, 240, h, BG);
         int y0 = app_ui_title(title, ACC, sub);
         char mask[40]; int mi = 0; for (int i = 0; i < n && mi < 38; i++) mask[mi++] = '*'; mask[mi] = 0;
         txt(8, y0 + 16, n ? mask : "____", FG, BG, 3);
         txt(8, h - 14, TR5("INVIO ok   ESC annulla", "ENTER ok   ESC cancel", "ENTER ok   ESC cancela", "ENTER ok   ESC annule", "ENTER ok   ESC bricht"), WARN, BG, 1);
+        }
         for (;;) {
             esp_task_wdt_reset();
             nucleo_key_t k = nucleo_kbd_read();
@@ -147,11 +178,24 @@ static void on_exit(void) {
     if (s_key_mode) { nucleo_fido_stop(); nucleo_fido_request_mode(false); }   // reboot back to normal
 }
 
+static bool lg_key(int key, char ch);
+static void set_pin(void) {                                                   // set / change the on-device PIN
+    char pin[72];
+    int n = pin_entry(TR5("Nuovo PIN", "New PIN", "Nuevo PIN", "Nouveau PIN", "Neue PIN"), TR5("4-63 caratteri", "4-63 chars", "4-63 caract.", "4-63 caract.", "4-63 Zeichen"), pin, sizeof pin);
+    // pin_set() returns false on a bad length (FIDO caps the PIN at 63): don't leave the user
+    // believing UV is configured when it silently didn't take. Tell them via the hint bar.
+    if (n >= 4 && !nucleo_fido_pin_set(pin))
+        nucleo_app_set_hint(TR5("PIN non valido (4-63 caratteri)", "invalid PIN (4-63 chars)", "PIN invalido (4-63 caract.)", "PIN invalide (4-63 caract.)", "Ung. PIN (4-63 Zeichen)"));
+    memset(pin, 0, sizeof pin);
+    nucleo_app_request_draw();
+}
+
 static void on_key(int key, char ch) {
+    if (lg_key(key, ch)) return;                                               // a touch on the panel's content
     if (!s_key_mode) { if (key == NK_ENTER) nucleo_fido_request_mode(true); return; }   // reboot into key mode
     if (s_km == KM_MANAGE) {                                                   // passkey manager
         int cnt = nucleo_fido_cred_count();
-        if (lg::row_tap(key, ch, s_lg_scroll, cnt, &s_cm_sel)) { nucleo_app_request_draw(); return; }  // tap a row (panel)
+        s_del_armed = false;
         if (key == NK_UP && s_cm_sel > 0) s_cm_sel--;
         else if (key == NK_DOWN && s_cm_sel < cnt - 1) s_cm_sel++;
         else if ((ch == 'd' || ch == 'D' || key == NK_DEL) && cnt > 0) {
@@ -163,16 +207,7 @@ static void on_key(int key, char ch) {
         return;
     }
     if (ch == 'm' || ch == 'M') { s_km = KM_MANAGE; s_cm_sel = 0; nucleo_app_request_draw(); return; }
-    if (ch == 'p' || ch == 'P') {                                             // set / change the on-device PIN
-        char pin[72];
-        int n = pin_entry(TR5("Nuovo PIN", "New PIN", "Nuevo PIN", "Nouveau PIN", "Neue PIN"), TR5("4-63 caratteri", "4-63 chars", "4-63 caract.", "4-63 caract.", "4-63 Zeichen"), pin, sizeof pin);
-        // pin_set() returns false on a bad length (FIDO caps the PIN at 63): don't leave the user
-        // believing UV is configured when it silently didn't take. Tell them via the hint bar.
-        if (n >= 4 && !nucleo_fido_pin_set(pin))
-            nucleo_app_set_hint(TR5("PIN non valido (4-63 caratteri)", "invalid PIN (4-63 chars)", "PIN invalido (4-63 caract.)", "PIN invalide (4-63 caract.)", "Ung. PIN (4-63 Zeichen)"));
-        memset(pin, 0, sizeof pin);
-        nucleo_app_request_draw();
-    }
+    if (ch == 'p' || ch == 'P') set_pin();
 }
 
 static void on_tick(void) {
@@ -202,76 +237,184 @@ static void draw_manage(int h) {
 }
 
 // ===== two screens =============================================================================================
-// The panel carries the security key in full: before key mode, a card that explains it with a big arm button;
-// in key mode, the live state (link, PIN/UV, hardware vs software key) with big "set PIN" / "passkeys" buttons;
-// and the passkey manager as a tappable list with a delete button. The Cardputer stays the companion, where the
-// PIN is typed — never a mirror.
-static const char *cred_rp(int i, void *) {
-    static char b[40]; fido_cred_view_t v; b[0] = 0;
-    if (nucleo_fido_cred_get(i, &v)) snprintf(b, sizeof b, "%.32s", v.rp[0] ? v.rp : "?");
-    return b;
+// The panel is the key's main screen, built only from the kit (lg::header, lg::settings_list, lg::setting,
+// lg::message): before key mode an explanation and the "enter key mode" row; in key mode the live state as
+// settings rows (tap = pick, tap again = act: set the PIN, open the passkeys); the passkeys as rows where a
+// second tap arms "delete" (in red) and a third deletes. The sign-in prompt and the PIN entry take the whole
+// panel too (the site in big type, Approve / Deny as rows), with a summary on the Cardputer, where the PIN is
+// typed. Never a mirror.
+static int s_arm_sel = -1;           // before key mode: the "enter key mode" row picked (0) or not (-1)
+static int s_st_sel = -1;            // key mode status: the picked row
+static int s_st_scroll = 0;
+enum { ST_LINK = 0, ST_PIN, ST_KEY, ST_CREDS, ST_N };
+
+static void st_row(int i, lg::Setting *o, void *)
+{
+    const bool ready = nucleo_fido_ready(), pinset = nucleo_fido_pin_is_set(), hw = nucleo_fido_key_is_hardware();
+    static char cn[20];
+    switch (i) {
+    case ST_LINK:  o->label = TR("Collegamento", "Link");
+                   o->value = ready ? TR("collegata", "connected") : TR("attesa PC", "waiting for PC");
+                   o->vcol = ready ? C_GREEN : WARN; break;
+    case ST_PIN:   o->label = TR("PIN - verifica utente", "PIN - user verification");
+                   o->value = pinset ? TR("impostato", "set") : TR("nessuno", "none");
+                   o->vcol = pinset ? C_GREEN : WARN;
+                   o->sub = pinset ? TR("tocca di nuovo: cambia (sul Cardputer)", "tap again: change it (on the Cardputer)")
+                                   : TR("tocca di nuovo: imposta (sul Cardputer)", "tap again: set it (on the Cardputer)"); break;
+    case ST_KEY:   o->label = TR("Chiave", "Key");
+                   o->value = hw ? TR("eFuse hardware", "eFuse hardware") : TR("NVS software", "NVS software");
+                   o->vcol = hw ? C_GREEN : MUTED; break;
+    default:       snprintf(cn, sizeof cn, TR("%d salvate", "%d stored"), nucleo_fido_cred_count());
+                   o->label = TR("Passkey", "Passkeys"); o->value = cn;
+                   o->sub = TR("tocca di nuovo: gestisci", "tap again: manage them"); break;
+    }
 }
-static const char *cred_user(int i, void *) {
-    static char b[32]; fido_cred_view_t v; b[0] = 0;
-    if (nucleo_fido_cred_get(i, &v)) snprintf(b, sizeof b, "%.20s", v.user);
-    return b;
+
+static void cred_row(int i, lg::Setting *o, void *)
+{
+    static char rp[2][40], us[2][24];                 // the focused row may be drawn after another: 2 slots
+    fido_cred_view_t v; const int k = i & 1;
+    rp[k][0] = us[k][0] = 0;
+    if (nucleo_fido_cred_get(i, &v)) { snprintf(rp[k], sizeof rp[k], "%.32s", v.rp[0] ? v.rp : "?"); snprintf(us[k], sizeof us[k], "%.20s", v.user); }
+    o->label = rp[k]; o->value = us[k]; o->vcol = MUTED;
+    if (i == s_cm_sel && s_del_armed) {
+        o->kind = lg::ROW_DANGER;
+        o->sub = TR("tocca ancora: elimina per sempre", "tap again: delete it for good");
+    }
 }
 
 static void draw_large(void) {
     const int W = d.width(), H = d.height();
     nucleo_touch_clear();
 
-    if (!s_key_mode) {                                                   // arm screen
+    if (!s_key_mode) {                                                   // before key mode
         const int y = lg::header("FIDO Key", nullptr, ACC);
         d.fillRect(0, y, W, H - y, BG);
-        const int bh = 54, by = H - bh - 16, cx = 16, cw = W - 32, cy = y + 12, chh = by - cy - 14;
-        lg::panel(cx, cy, cw, chh);
+        const int rh = 52, ry = H - rh - 10, cy = y + 10;
+        lg::panel(8, cy, W - 16, ry - cy - 10);
         const unsigned short cb = lg::card();
-        lg::font(2); d.setTextColor(ACC, cb); d.drawString(TR("Security key", "Security key"), cx + 16, cy + 14);
+        lg::font(2); d.setTextColor(ACC, cb); d.drawString(TR("Security key", "Security key"), 22, cy + 12);
         lg::font(0); d.setTextColor(MUTED, cb);
-        lg::wrap(TR("FIDO2 / U2F passkey. Il modo chiave rende FIDO l'unica interfaccia USB: serve un riavvio. Il sito chiede, tu approvi qui con INVIO.",
-                    "FIDO2 / U2F passkeys. Key mode makes FIDO the sole USB interface, so it reboots. A site asks, you approve here with ENTER."),
-                 cx + 16, cy + 46, cw - 32, 18, 5);
-        lg::button(cx, by, cw, bh, TR("Entra in modo chiave", "Enter key mode"), ACC, INK, NK_ENTER, 0);
+        lg::wrap(TR("FIDO2 / U2F passkey. Il modo chiave rende FIDO l'unica interfaccia USB: serve un riavvio. Il sito chiede, tu approvi qui.",
+                    "FIDO2 / U2F passkeys. Key mode makes FIDO the sole USB interface, so it reboots. A site asks, you approve here."),
+                 22, cy + 42, W - 44, 18, 5);
+        lg::Setting s = { TR("Entra in modo chiave", "Enter key mode"), TR("tocca di nuovo: riavvia in modo FIDO", "tap again: reboot into FIDO mode"),
+                          nullptr, lg::ROW_NAV, -1, -1, false, false, 0, 0, 0 };
+        lg::setting(8, ry, W - 16, rh, s, s_arm_sel == 0, ACC);
+        nucleo_touch_add(8, ry, W - 16, rh, NK_CHAR, (char)NUCLEO_TOUCH_ROW);
         nucleo_touch_commit();
         return;
     }
 
-    if (s_km == KM_MANAGE) {                                             // passkey manager
-        int cnt = nucleo_fido_cred_count();
+    if (s_km == KM_MANAGE) {                                             // passkeys
+        const int cnt = nucleo_fido_cred_count();
         char rb[16]; snprintf(rb, sizeof rb, TR("%d salvate", "%d stored"), cnt);
         const int y = lg::header("Passkey", rb, ACC, NK_BACK);
         d.fillRect(0, y, W, H - y, BG);
-        const int bh = 44, by = H - bh - 12, listH = by - y - 8;
-        if (cnt == 0) lg::message(16, y + 8, W - 32, listH, TR("Nessuna passkey", "No passkeys"),
+        if (cnt == 0) lg::message(16, y + 8, W - 32, H - y - 16, TR("Nessuna passkey", "No passkeys"),
                                   TR("Le passkey residenti compaiono qui", "Resident passkeys show up here"), MUTED);
-        else lg::text_list(0, y + 4, W, listH, cnt, s_cm_sel, &s_lg_scroll, cred_rp, cred_user, nullptr, nullptr, ACC, 30);
-        lg::button(16, by, W - 32, bh, TR("Elimina selezionata", "Delete selected"),
-                   cnt ? C_RED : LINE, cnt ? INK : MUTED, NK_DEL, 0);
+        else lg::settings_list(4, y + 6, W - 8, H - y - 10, 44, cnt, s_cm_sel, &s_lg_scroll, cred_row, nullptr, ACC);
         nucleo_touch_commit();
         return;
     }
 
-    // KM_STATUS
-    const bool ready = nucleo_fido_ready(), pinset = nucleo_fido_pin_is_set(), hw = nucleo_fido_key_is_hardware();
-    const int y = lg::header("FIDO Key", ready ? TR("collegata", "connected") : TR("attesa PC", "waiting PC"), ACC);
+    const bool ready = nucleo_fido_ready();                              // status
+    const int y = lg::header("FIDO Key", ready ? TR("collegata", "connected") : TR("attesa PC", "waiting for PC"), ACC);
     d.fillRect(0, y, W, H - y, BG);
-    const int cx = 16, cw = W - 32;
-    unsigned short cb;
-    int cy = y + 8;
-    lg::panel(cx, cy, cw, 48); cb = lg::card();
-    lg::font(2); d.setTextColor(ready ? C_GREEN : ACC, cb); d.drawString(TR("Chiave attiva", "Key active"), cx + 14, cy + 10);
-    cy += 56;
-    lg::panel(cx, cy, cw, 40); cb = lg::card();
-    lg::font(1); d.setTextColor(pinset ? C_GREEN : WARN, cb);
-    d.drawString(pinset ? TR("PIN impostato - UV attivo", "PIN set - UV on") : TR("Nessun PIN (premi P)", "No PIN (press P)"), cx + 14, cy + 11);
-    cy += 48;
-    lg::panel(cx, cy, cw, 40); cb = lg::card();
-    lg::font(1); d.setTextColor(hw ? C_GREEN : MUTED, cb);
-    d.drawString(hw ? TR("Chiave: eFuse hardware", "Key: eFuse hardware") : TR("Chiave: NVS software", "Key: NVS software"), cx + 14, cy + 11);
-    const int bh = 44, by = H - bh - 12, bw = (cw - 10) / 2;
-    lg::button(cx, by, bw, bh, TR("P  PIN", "P  PIN"), pinset ? LINE : ACC, pinset ? FG : INK, NK_CHAR, 'p');
-    lg::button(cx + bw + 10, by, bw, bh, TR("M  Passkey", "M  Passkeys"), ACC, INK, NK_CHAR, 'm');
+    lg::settings_list(4, y + 6, W - 8, ST_N * 44, 44, ST_N, s_st_sel, &s_st_scroll, st_row, nullptr, ACC);
+    lg::font(0); d.setTextColor(MUTED, BG); d.setTextDatum(top_center);
+    d.drawString(TR("Aggiungila come security key sul sito.", "Add it as a security key on the site."), W / 2, y + 14 + ST_N * 44);
+    d.setTextDatum(top_left);
+    nucleo_touch_commit();
+}
+
+// A touch on the panel: true when handled (row targets; keyboard keys fall through to on_key).
+static void set_pin(void);
+static bool lg_key(int key, char ch) {
+    if (!nucleo_touch_is_row(key, ch)) return false;
+    if (!s_key_mode) {
+        if (s_arm_sel == 0) nucleo_fido_request_mode(true);                // reboots into key mode
+        else { s_arm_sel = 0; nucleo_app_request_draw(); }
+        return true;
+    }
+    if (s_km == KM_MANAGE) {
+        const int cnt = nucleo_fido_cred_count(), was = s_cm_sel;
+        const int r = lg::row_tap(key, ch, s_lg_scroll, cnt, &s_cm_sel);
+        if (r == 1 && s_cm_sel != was) s_del_armed = false;                 // a new row: just pick it
+        else if (r == 2 && !s_del_armed) s_del_armed = true;                // tapped again: arm the delete
+        else if (r == 2) {                                                   // tapped a third time: delete
+            nucleo_fido_cred_delete(s_cm_sel);
+            const int nc = nucleo_fido_cred_count();
+            if (s_cm_sel >= nc && s_cm_sel > 0) s_cm_sel--;
+            s_del_armed = false;
+        }
+        nucleo_app_request_draw();
+        return true;
+    }
+    if (lg::row_tap(key, ch, s_st_scroll, ST_N, &s_st_sel) == 2) {          // tapped again: act
+        if (s_st_sel == ST_PIN) set_pin();
+        else if (s_st_sel == ST_CREDS) { s_km = KM_MANAGE; s_cm_sel = 0; s_del_armed = false; }
+    }
+    nucleo_app_request_draw();
+    return true;
+}
+
+// ---- the modals on two screens: the panel shows the request in full, the Cardputer a summary ----
+static const char *s_cp_l1, *s_cp_l2, *s_cp_keys;                      // what the Cardputer shows meanwhile
+static void cp_draw(void *gfx) {
+    LovyanGFX *g = (LovyanGFX *)gfx;
+    g->fillRect(0, 0, 240, 135, BG);
+    g->setFont(&fonts::Font0); g->setTextSize(1); g->setTextDatum(top_left); g->setTextColor(ACC, BG);
+    g->drawString(TR("FIDO  -  sul secondo schermo", "FIDO  -  on the second screen"), 8, 6);
+    g->setFont(&fonts::FreeSansBold9pt7b); g->setTextColor(FG, BG);
+    if (s_cp_l1) g->drawString(s_cp_l1, 8, 30);
+    g->setTextColor(ACC, BG);
+    if (s_cp_l2) { char b[28]; snprintf(b, sizeof b, "%.24s", s_cp_l2); g->drawString(b, 8, 58); }
+    g->setFont(&fonts::Font0); g->setTextColor(WARN, BG);
+    if (s_cp_keys) g->drawString(s_cp_keys, 8, 118);
+}
+static void cardputer(const char *l1, const char *l2, const char *keys) {
+    s_cp_l1 = l1; s_cp_l2 = l2; s_cp_keys = keys;
+    nucleo_extdisp_draw_internal(cp_draw);
+}
+
+// The sign-in request on the panel: who is asking, then Approve / Deny as rows (tap = pick, tap again = do it).
+static void present_large(const char *rp, int sel) {
+    const int W = d.width(), H = d.height();
+    nucleo_touch_clear();
+    const int y = lg::header(TR("Accesso", "Sign-in"), nullptr, ACC, 0);
+    d.fillRect(0, y, W, H - y, BG);
+    lg::panel(8, y + 8, W - 16, 86);
+    const unsigned short cb = lg::card();
+    lg::font(0); d.setTextColor(MUTED, cb); d.drawString(TR("Un sito vuole accedere:", "A site wants to sign in:"), 22, y + 20);
+    char rb[40]; lg::font(2); lg::fit(rb, sizeof rb, (rp && rp[0]) ? rp : "?", W - 44);
+    d.setTextColor(ACC, cb); d.drawString(rb, 22, y + 46);
+    lg::Setting ok = { TR("Approva", "Approve"), TR("tocca di nuovo per approvare", "tap again to approve"), nullptr, lg::ROW_NAV, -1, -1, false, false, 0, C_GREEN, 0 };
+    lg::Setting no = { TR("Nega", "Deny"), TR("tocca di nuovo per negare", "tap again to deny"), nullptr, lg::ROW_DANGER, -1, -1, false, false, 0, 0, 0 };
+    const int ry = y + 104;
+    lg::setting(8, ry, W - 16, 50, ok, sel == 0, C_GREEN);
+    lg::setting(8, ry + 52, W - 16, 50, no, sel == 1, C_RED);
+    nucleo_touch_add(8, ry, W - 16, 48, NK_CHAR, (char)NUCLEO_TOUCH_ROW);
+    nucleo_touch_add(8, ry + 52, W - 16, 48, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + 1));
+    nucleo_touch_commit();
+}
+
+// The PIN entry on the panel: the request and the masked PIN in big type; it is typed on the Cardputer.
+static void pin_large(const char *title, const char *sub, int n) {
+    const int W = d.width(), H = d.height();
+    nucleo_touch_clear();
+    const int y = lg::header(title, sub, ACC, 0);
+    d.fillRect(0, y, W, H - y, BG);
+    lg::panel(8, y + 20, W - 16, 90);
+    const unsigned short cb = lg::card();
+    char mask[24]; int m = 0; for (int i = 0; i < n && m < 20; i++) mask[m++] = '*'; mask[m] = 0;
+    lg::font(3); d.setTextColor(n ? FG : DIM, cb); d.setTextDatum(middle_center);
+    d.drawString(n ? mask : "____", W / 2, y + 65);
+    lg::font(0); d.setTextColor(MUTED, BG);
+    d.drawString(TR("Digita il PIN sul Cardputer", "Type the PIN on the Cardputer"), W / 2, y + 140);
+    d.setTextColor(WARN, BG);
+    d.drawString(TR("INVIO ok   ESC annulla", "ENTER ok   ESC cancel"), W / 2, y + 166);
+    d.setTextDatum(top_left);
     nucleo_touch_commit();
 }
 

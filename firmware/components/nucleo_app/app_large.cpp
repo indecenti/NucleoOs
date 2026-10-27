@@ -342,7 +342,7 @@ int settings_list(int x, int y, int w, int h, int rowh, int n, int sel, int *scr
 void setting(int x, int y, int w, int h, const Setting &s, bool foc, unsigned short acc)
 {
     const int ch = h - 4, rx = x + w - 12, cy = y + ch / 2;
-    const unsigned short bg = foc ? acc : card(), ink = foc ? INK : (s.dis ? DIM : FG);
+    const unsigned short bg = foc ? (s.kind == ROW_DANGER ? C_RED : acc) : card(), ink = foc ? INK : (s.dis ? DIM : FG);
     d.fillRoundRect(x, y, w, ch, 9, bg);
     int lx = x + 12;
     if (s.glyph >= 0) {
@@ -352,22 +352,23 @@ void setting(int x, int y, int w, int h, const Setting &s, bool foc, unsigned sh
     // A slider row is two lines — label + value, then the slider — as one block centred in the card, so it
     // looks the same at every row height and focus state.
     const bool two = s.kind == ROW_SLIDER;
-    const int ly = two ? y + (ch - 26) / 2 + 9 : cy;            // the label line's centre
+    const bool subl = !two && foc && s.sub && s.sub[0];          // focused with a sub line: label on top
+    const int ly = two ? y + (ch - 26) / 2 + 9 : subl ? y + 13 : cy;   // the label line's centre (values align on it)
     int vx = rx;
     char v[28];
     switch (s.kind) {
     case ROW_TOGGLE:
-        toggle(rx, cy, s.on && !s.dis, foc); vx = rx - 32;
+        toggle(rx, ly, s.on && !s.dis, foc); vx = rx - 32;
         break;
     case ROW_CYCLE:
         font(1); d.setTextDatum(middle_right); d.setTextColor(ink, bg);
-        fit(v, sizeof v, s.value, w / 2); d.drawString(v, rx - 12, cy);
-        ui_glyph(&d, UG_NEXT, rx - 4, cy, 4, ink, bg);
-        ui_glyph(&d, UG_PREV, rx - 24 - d.textWidth(v), cy, 4, ink, bg);
+        fit(v, sizeof v, s.value, w / 2); d.drawString(v, rx - 12, ly);
+        ui_glyph(&d, UG_NEXT, rx - 4, ly, 4, ink, bg);
+        ui_glyph(&d, UG_PREV, rx - 24 - d.textWidth(v), ly, 4, ink, bg);
         vx = rx - 34 - d.textWidth(v);
         break;
     case ROW_NAV: case ROW_DANGER:
-        ui_glyph(&d, UG_NEXT, rx, cy, 5, ink, bg); vx = rx - 14;
+        ui_glyph(&d, UG_NEXT, rx, ly, 5, ink, bg); vx = rx - 14;
         break;
     default:                                                     // ROW_VALUE / ROW_SLIDER: a value at the right
         if (s.rglyph >= 0) { ui_glyph(&d, s.rglyph, rx, ly, 5, foc ? INK : (s.vcol ? s.vcol : FG), bg); vx = rx - 16; }
@@ -382,7 +383,7 @@ void setting(int x, int y, int w, int h, const Setting &s, bool foc, unsigned sh
     const unsigned short lc = foc ? INK : (s.dis ? DIM : s.kind == ROW_DANGER ? C_RED : (s.lcol ? s.lcol : FG));
     font(1); d.setTextColor(lc, bg);
     char lbl[48]; fit(lbl, sizeof lbl, s.label, vx - lx - 4);
-    if (!two && foc && s.sub && s.sub[0]) {
+    if (subl) {
         d.setTextDatum(top_left); d.drawString(lbl, lx, y + 5);
         font(0); d.setTextColor(INK, bg);
         char sub[52]; fit(sub, sizeof sub, s.sub, w - (lx - x) - 10);

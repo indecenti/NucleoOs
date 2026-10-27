@@ -2,3 +2,7 @@
 @host stubs/fido_stubs.cpp
 status
 manage  c:m
+status_pick row:1
+manage_tap row:3 row:3
+del_pick c:m row:1
+del_armed c:m row:1 row:1

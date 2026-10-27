@@ -12,7 +12,7 @@ bool nucleo_fido_key_is_hardware(void){ return true; }
 int  nucleo_fido_cred_count(void)     { return 3; }
 bool nucleo_fido_cred_get(int i, fido_cred_view_t *o) {
     static const char *rp[3] = { "github.com", "accounts.google.com", "cloudflare.com" };
-    static const char *us[3] = { "nicola", "niki", "admin" };
+    static const char *us[3] = { "alice", "bob", "admin" };
     if (i < 0 || i > 2 || !o) return false;
     snprintf(o->rp, sizeof o->rp, "%s", rp[i]);
     snprintf(o->user, sizeof o->user, "%s", us[i]);
