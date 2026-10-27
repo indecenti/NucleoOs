@@ -18,8 +18,8 @@ const HDR = readFileSync('firmware/components/nucleo_registry/include/nucleo_reg
 const num = (re) => { const m = re.exec(HDR); if (!m) throw new Error(`registry header: ${re}`); return +m[1]; };
 const CAP = num(/#define NUCLEO_MAX_APPS\s+(\d+)/);
 const ID_MAX = num(/#define NUCLEO_APP_ID_MAX\s+(\d+)/);
-const fieldLen = (name) => num(new RegExp(`char\\s+${name}\\[(\\d+)\\]`));
-const VER_MAX = fieldLen('version') - 1, NAME_MAX = fieldLen('name') - 1, ICON_MAX = fieldLen('icon_raw') - 1;
+const VER_MAX = num(/#define NUCLEO_APP_VER_MAX\s+(\d+)/), NAME_MAX = num(/#define NUCLEO_APP_NAME_MAX\s+(\d+)/);
+const ICON_MAX = num(/#define NUCLEO_APP_ICON_MAX\s+(\d+)/);
 const USER_HEADROOM = 16;   // slots that must stay free for the user's own apps
 
 let fail = 0;

@@ -51,8 +51,11 @@ See [app-runtimes.md](app-runtimes.md).
 
 ## Firmware limits
 
-The firmware keeps the registry in a static table (`nucleo_registry.h`): up to **80 apps**, ids up to 24
-characters, names up to 31, an icon that is either the standard `/apps/<id>/icon.svg` or a relative path /
-glyph up to 21 bytes; `web_route` is always `/apps/<id>/` (webfs serves nothing else). Entries past the cap
+The firmware keeps the registry in one heap block per load, sized to what is installed (`nucleo_registry.h`:
+an entry table of pointers plus a string pool, ~50 B per app — it replaced 7.5 KB of fixed slots in `.bss`).
+Limits: up to **80 apps**, ids up to 24 bytes, versions up to 11, names up to 31, an icon that is either the
+standard `/apps/<id>/icon.svg` or a relative path / glyph up to 21 bytes; `web_route` is always
+`/apps/<id>/` (webfs serves nothing else). A reload builds the new block beside the live one and swaps it in,
+so a reload that runs out of heap keeps the previous table. Entries past the cap
 are dropped with a log warning. `npm run registry:test` gates these limits against every shipped manifest
 and keeps at least 16 slots free for user apps.

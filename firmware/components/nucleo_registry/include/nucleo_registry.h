@@ -6,32 +6,40 @@
 #include "esp_err.h"
 
 // Capacity. The shipped registry already lists 48 apps and the Agent app adds the user's own on top, so
-// the old cap of 48 silently dropped every user app. 80 entries fit in LESS static RAM than the old 48
-// (94 B vs 157 B per entry — see the budget assert in nucleo_registry.c): web_route and the standard icon
-// path are derived from the id instead of being stored.
+// the old cap of 48 silently dropped every user app. The table is no longer static: each load sizes ONE
+// heap block to what is installed (entries + their strings, ~50 B per app), so the cap only bounds that
+// block — it used to be 80 fixed 94-byte slots (7.5 KB of .bss) resident from boot, mostly padding.
+// web_route and the standard icon path are derived from the id instead of being stored.
 #define NUCLEO_MAX_APPS    80
 #define NUCLEO_APP_ID_MAX  24   // same as the Agent app's isValidId (apps/agent/www/app-publish.js)
+// Longer manifest strings are cut to these byte lengths, exactly as the old fixed fields did.
+#define NUCLEO_APP_VER_MAX  11
+#define NUCLEO_APP_NAME_MAX 31
+#define NUCLEO_APP_ICON_MAX 21  // a longer non-standard icon falls back to the standard one
 
 enum { NUCLEO_ROUTE_NONE = 0, NUCLEO_ROUTE_STD };               // STD = "/apps/<id>/"
 enum { NUCLEO_ICON_NONE = 0, NUCLEO_ICON_STD, NUCLEO_ICON_RAW }; // STD = "/apps/<id>/icon.svg"
 
+// Every string is non-NULL ("" when absent) and lives in the registry's block: valid until the next
+// nucleo_registry_load(), which frees the old block. Readers and the runtime reload both run on the
+// httpd task (boot loads before httpd starts), so no reader can hold a stale pointer across a reload.
 typedef struct {
-    char    id[NUCLEO_APP_ID_MAX + 1];
-    char    version[12];
-    char    name[32];        // from the app manifest (falls back to id)
-    char    icon_raw[22];    // manifest "icon" verbatim when not the standard path ("assets/icon.svg", a glyph)
+    const char *id;
+    const char *version;
+    const char *name;        // from the app manifest (falls back to id)
+    const char *icon_raw;    // manifest "icon" verbatim when not the standard path ("assets/icon.svg", a glyph)
     uint8_t route;           // NUCLEO_ROUTE_*
     uint8_t icon;            // NUCLEO_ICON_*
     bool    enabled;
 } nucleo_app_t;
 
-// Load /sd/system/registry/apps.json into memory.
+// Load /sd/system/registry/apps.json into memory. On failure the previous table stays in place.
 esp_err_t nucleo_registry_load(void);
 
 // Number of installed apps after a successful load.
 int nucleo_registry_count(void);
 
-// Installed apps array (length = nucleo_registry_count()).
+// Installed apps array (length = nucleo_registry_count(); NULL before the first load).
 const nucleo_app_t *nucleo_registry_apps(void);
 
 // The manifest's web_route / icon strings exactly as /api/apps has always reported them ("" when the

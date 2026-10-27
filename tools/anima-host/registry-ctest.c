@@ -3,8 +3,8 @@
 // tools/anima-host/registry-check.mjs, which builds each fixture card and the expected values.
 //   registry-ctest <fixture-dir> <expected.tsv> <expected-count>
 // expected.tsv: one line per app, "id\tname\troute\ticon\tenabled" — exactly what /api/apps reported with
-// the old 157-byte entries (manifest strings verbatim, "" when absent). The gate proves the compact 94-byte
-// entry reproduces them byte for byte, and that the cap holds user (Agent) apps.
+// the old 157-byte entries (manifest strings verbatim, "" when absent). The gate proves the pooled entries
+// (one heap block per load) reproduce them byte for byte, and that the cap holds user (Agent) apps.
 #include "nucleo_registry.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -26,6 +26,8 @@ int main(int argc, char **argv)
     int fail = 0, checked = 0;
 
     if (nucleo_registry_load() != 0) { printf("FAIL load\n"); return 1; }
+    // Again, as an install does at runtime: the reload builds a new block and frees the first one.
+    if (nucleo_registry_load() != 0) { printf("FAIL reload\n"); return 1; }
     int n = nucleo_registry_count();
     if (n != want_count) { printf("FAIL count %d != %d\n", n, want_count); fail++; }
     const nucleo_app_t *apps = nucleo_registry_apps();
