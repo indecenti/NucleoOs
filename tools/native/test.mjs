@@ -44,7 +44,10 @@ const xgcc = join(XT, 'xtensa-esp32s3-elf-gcc'), readelf = join(XT, 'xtensa-esp3
 
 // Exports in strcmp order (as the firmware table), address 0x40000000 + 16 * i.
 const names = [];
-for (const raw of readFileSync(join(root, 'sdk', 'native', 'abi', 'v1.txt'), 'utf8').split(/\r?\n/)) {
+// The firmware exports its highest level, which contains every lower one.
+const ABI_DIR = join(root, 'sdk', 'native', 'abi');
+const ABI_MAX = Math.max(...readdirSync(ABI_DIR).map((f) => +((f.match(/^v(\d+)\.txt$/) || [0, 0])[1])));
+for (const raw of readFileSync(join(ABI_DIR, `v${ABI_MAX}.txt`), 'utf8').split(/\r?\n/)) {
   const l = raw.replace(/#.*/, '').trim();
   if (l) names.push(l.split(/\s*=\s*/)[0]);
 }
@@ -73,7 +76,7 @@ const u32 = (b, o) => b.readUInt32LE(o);
 
 function checkModule(label, file, layout, id) {
   const fl = join(OUT, `${label}.flash`), da = join(OUT, `${label}.data`);
-  const r = run(tester, ['relocate', file, exportsFile, layout, id, fl, da]);
+  const r = run(tester, ['relocate', file, exportsFile, layout, id, fl, da], { env: { ...env, NAP_ABI_MAX: String(ABI_MAX) } });
   const m = r.stdout.match(/text 0x(\w+) rodata 0x(\w+)-0x(\w+) data 0x(\w+)\+(\d+)\/(\d+)/);
   const [textEnd, roStart, roEnd, dataStart] = m.slice(1, 5).map((x) => parseInt(x, 16));
   const dataMem = +m[6];
@@ -125,7 +128,7 @@ function checkModule(label, file, layout, id) {
   }
   if (bad || diff) { console.error(`native: ${label}: ${bad} wrong relocations, ${diff} altered words`); process.exit(1); }
   console.log(`native: ${label}: ${n} relocations exact, rest of the image byte-identical (${r.stdout.trim()})`);
-  const rj = run(tester, ['reject', file, exportsFile, layout, id], { allowFail: true });
+  const rj = run(tester, ['reject', file, exportsFile, layout, id], { allowFail: true, env: { ...env, NAP_ABI_MAX: String(ABI_MAX) } });
   process.stdout.write(rj.stdout.split('\n').map((x) => (x ? `  ${x}` : x)).join('\n'));
   if (rj.status !== 0) { console.error(`native: ${label}: corruption checks failed${rj.status > 1 ? ` (exit ${rj.status}: a crash)` : ''}`); process.exit(1); }
 }

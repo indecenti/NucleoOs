@@ -55,7 +55,7 @@ static nap_src_t src_of(const uint8_t *file, uint32_t size, uint32_t layout, con
 {
     nap_src_t s = { 0 };
     s.ctx = (void *)file; s.read = mem_read; s.size = size;
-    s.exports = g_ex; s.n_exports = g_nex; s.abi_max = 1; s.layout = layout; s.expect_id = id;
+    s.exports = g_ex; s.n_exports = g_nex; s.abi_max = getenv("NAP_ABI_MAX") ? (uint32_t)atoi(getenv("NAP_ABI_MAX")) : 1; s.layout = layout; s.expect_id = id;
     s.flash_max = 252 * 1024; s.ram_max = 48 * 1024;
     return s;
 }
@@ -152,7 +152,7 @@ static void m_rel_target(uint8_t *f, uint32_t *n, const nap_image_t *g)
 static void m_id(uint8_t *f, uint32_t *n, const nap_image_t *g) { (void)n; (void)g; (void)f; }
 static int g_info_off;
 static void m_info_magic(uint8_t *f, uint32_t *n, const nap_image_t *g) { (void)n; (void)g; f[g_info_off] ^= 1; }
-static void m_info_abi(uint8_t *f, uint32_t *n, const nap_image_t *g) { (void)n; (void)g; f[g_info_off + 4] = 9; }
+static void m_info_abi(uint8_t *f, uint32_t *n, const nap_image_t *g) { (void)n; (void)g; f[g_info_off + 4] = 99; }
 static void m_info_noterm(uint8_t *f, uint32_t *n, const nap_image_t *g) { (void)n; (void)g; memset(f + g_info_off + 16, 'a', 33); }
 static void m_strsz(uint8_t *f, uint32_t *n, const nap_image_t *g) { (void)n; (void)g; uint32_t p = dyn_find(f, 10); wr32(f + p + 4, 0x7fffffff); }
 
@@ -197,7 +197,7 @@ int main(int argc, char **argv)
         { "reloc outside the module", m_reloc_off, NAP_E_RELOC }, { "unaligned reloc", m_reloc_odd, NAP_E_RELOC },
         { "reloc offset that wraps to 0", m_reloc_wrap, NAP_E_RELOC },
         { "reloc symbol index out of range", m_reloc_sym, NAP_E_FORMAT }, { "RELATIVE target outside", m_rel_target, NAP_E_RELOC },
-        { "info magic", m_info_magic, NAP_E_INFO },          { "info abi 9 > 1", m_info_abi, NAP_E_ABI },
+        { "info magic", m_info_magic, NAP_E_INFO },          { "info abi 99 > firmware", m_info_abi, NAP_E_ABI },
         { "info id unterminated", m_info_noterm, NAP_E_INFO }, { "STRSZ past the file", m_strsz, NAP_E_FORMAT },
     };
     for (size_t i = 0; i < sizeof T / sizeof T[0]; i++) expect(T[i].what, try_mut(layout, id, T[i].m, &img), T[i].want);
