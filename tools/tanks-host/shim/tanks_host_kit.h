@@ -17,7 +17,7 @@ void font(int) {}
 void fit(char *out, size_t n, const char *s, int) { snprintf(out, n, "%s", s ? s : ""); }
 int  comp_head(const char *, unsigned short) { return 0; }
 void comp_keys(const char *) {}
-bool frame(void (*)(void *), void *, int, int) { return false; }
+bool frame(void (*)(void *), void *, int, int, bool) { return false; }
 void field(int, int, int, int) {}
 bool tap(int, char, int *, int *) { return false; }
 }  // namespace lg
