@@ -488,7 +488,8 @@ static void lg_tab_record(int yb, int Wd, int Hd)
 
 static void lg_tab_status(int yb, int Wd, int Hd)
 {
-    const int px = 20, py = yb + 10, pw = Wd - 40, ph = Hd - yb - 20;
+    const int px = 20, py = yb + 10, pw = Wd - 40, ph = 4 * 24 + 16;
+    d.fillRect(0, yb, Wd, Hd - yb, BG);
     lg::panel(px, py, pw, ph);
     const unsigned short cb = lg::card();
     const int ws = nucleo_ws_client_count();
@@ -501,14 +502,12 @@ static void lg_tab_status(int yb, int Wd, int Hd)
     lg::kv(px + 16, ky, pw - 32, TR("Modelli", "Templates"), tpl, s_tpl_overflow ? ACC2 : ACC, cb); ky += 24;
     lg::kv(px + 16, ky, pw - 32, "WS client", wss, ws > 0 ? ACC : MUTED, cb); ky += 24;
     lg::kv(px + 16, ky, pw - 32, "Routing", ws > 0 ? "Web" : TR("Locale", "Local"), ws > 0 ? ACC2 : ACC, cb); ky += 24;
-    lg::kv(px + 16, ky, pw - 32, TR("Lingua", "Language"), "IT/EN (Anima)", MUTED, cb); ky += 34;
+    lg::kv(px + 16, ky, pw - 32, TR("Lingua", "Language"), "IT/EN (Anima)", MUTED, cb);
     // the always-on switch: the row itself toggles it (PTT from the home screen, saved in settings)
-    d.drawFastHLine(px + 16, ky - 8, pw - 32, LINE);
-    lg::font(1); d.setTextColor(FG, cb); d.drawString(TR("Sempre attiva", "Always on"), px + 16, ky + 6);
-    const int sx = px + pw - 64;
-    d.fillRoundRect(sx, ky + 2, 48, 26, 13, aon ? ACC : LINE);
-    d.fillCircle(aon ? sx + 35 : sx + 13, ky + 15, 10, 0xFFFF);
-    nucleo_touch_add(px, ky - 6, pw, 42, NK_CHAR, 'a');
+    const int ry = py + ph + 8;
+    const lg::Setting st = { TR("Sempre attiva", "Always on"), nullptr, nullptr, lg::ROW_TOGGLE, -1, -1, aon, false, 0, 0, 0 };
+    lg::setting(px, ry, pw, 46, st, false, ACC);
+    nucleo_touch_add(px, ry, pw, 42, NK_CHAR, 'a');
 }
 
 static void draw_large(void)

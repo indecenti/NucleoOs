@@ -8,8 +8,11 @@
 #include <M5GFX.h>
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include "app_gfx.h"
 #include "launcher_theme.h"
+#include "ui_glyph.h"
+#include "nucleo_theme.h"
 
 namespace lg {
 
@@ -21,7 +24,27 @@ static unsigned short mix(unsigned short a, unsigned short b, int t)   // t = 0 
     return (unsigned short)((r << 11) | (g << 5) | bl);
 }
 
-unsigned short card(void) { return mix(BG, FG, 22); }
+static int q332(unsigned short c) { return ((c >> 13) << 5) | (((c >> 8) & 7) << 2) | ((c >> 3) & 3); }
+// A themed tint that must survive the 8-bit canvas of lg::frame (RGB332: 3-3-2 bits): there a dark grey
+// either collapses into BG or turns olive (blue keeps only 2 bits). Walk from c toward FG and take the first
+// step whose RGB332 is not BG and stays close to the colour it stands for. 16-bit targets get c as is.
+static unsigned short survive(unsigned short c)
+{
+    if (d.getColorDepth() > 8) return c;
+    const int qb = q332(BG);
+    unsigned short first = 0; bool have = false;
+    for (int t = 0; t <= 200; t += 6) {
+        const unsigned short m = mix(c, FG, t);
+        const int q = q332(m);
+        if (q == qb) continue;
+        if (!have) { first = m; have = true; }
+        const int r = (q >> 5) * 255 / 7, g = ((q >> 2) & 7) * 255 / 7, b = (q & 3) * 255 / 3;
+        const int R = ((m >> 11) & 31) * 255 / 31, G = ((m >> 5) & 63) * 255 / 63, B = (m & 31) * 255 / 31;
+        if (abs(r - R) + abs(g - G) + abs(b - B) <= 48) return m;
+    }
+    return have ? first : c;
+}
+unsigned short card(void) { return survive(mix(BG, FG, 22)); }
 
 void font(int f)
 {
@@ -257,6 +280,119 @@ void message(int x, int y, int w, int h, const char *head, const char *sub, unsi
     d.setTextDatum(top_left);
 }
 
+void toggle(int rx, int cy, bool on, bool on_pill)
+{
+    const int sw = 26, sh = 13, x = rx - sw;
+    d.fillRoundRect(x, cy - sh / 2, sw, sh, sh / 2, on ? C_GREEN : (on_pill ? BG : survive(LINE)));
+    d.fillCircle(on ? x + sw - sh / 2 - 1 : x + sh / 2 + 1, cy, sh / 2 - 2, on ? INK : (on_pill ? FG : nucleo_theme_ink_on(LINE, MUTED)));
+}
+
+void slider(int x, int cy, int w, int pct, unsigned short col, int h)
+{
+    if (pct < 0) pct = 0;
+    if (pct > 100) pct = 100;
+    const int r = h / 2 + 3, x0 = x + r, span = w - 2 * r, kx = x0 + span * pct / 100;
+    d.fillRoundRect(x0, cy - h / 2, span, h, h / 2, survive(LINE));
+    if (kx > x0) d.fillRoundRect(x0, cy - h / 2, kx - x0 + h / 2, h, h / 2, col);
+    d.fillCircle(kx, cy, r, col);
+    d.fillCircle(kx, cy, r - 2, FG);
+}
+
+int slider_at(int tx, int x, int w)
+{
+    const int r = 6, span = w - 2 * r;
+    if (span <= 0) return 0;
+    int p = (tx - x - r) * 100 / span;
+    return p < 0 ? 0 : p > 100 ? 100 : p;
+}
+
+void vslider(int cx, int y, int h, int pct, unsigned short col, int w)
+{
+    if (pct < 0) pct = 0;
+    if (pct > 100) pct = 100;
+    const int r = w / 2 + 3, y0 = y + r, span = h - 2 * r, ky = y0 + span - span * pct / 100;
+    d.fillRoundRect(cx - w / 2, y0, w, span, w / 2, survive(LINE));
+    if (ky < y0 + span) d.fillRoundRect(cx - w / 2, ky - w / 2, w, y0 + span - ky + w / 2, w / 2, col);
+    d.fillCircle(cx, ky, r, col);
+    d.fillCircle(cx, ky, r - 2, FG);
+}
+
+int vslider_at(int ty, int y, int h)
+{
+    const int r = 6, span = h - 2 * r;
+    if (span <= 0) return 0;
+    int p = 100 - (ty - y - r) * 100 / span;
+    return p < 0 ? 0 : p > 100 ? 100 : p;
+}
+
+struct SetList { setting_fn fn; void *ud; unsigned short acc; };
+static void set_row(int i, int x, int y, int w, int h, bool focus, unsigned short, void *p)
+{
+    const SetList *l = (const SetList *)p;
+    Setting s = { "", nullptr, nullptr, ROW_VALUE, -1, -1, false, false, 0, 0, 0 };
+    l->fn(i, &s, l->ud);
+    setting(x - 4, y, w + 8, h, s, focus, l->acc);
+}
+int settings_list(int x, int y, int w, int h, int rowh, int n, int sel, int *scroll, setting_fn fn, void *ud, unsigned short acc)
+{
+    SetList l = { fn, ud, acc };
+    return list(x, y, w, h, rowh, n, sel, scroll, set_row, &l, BG);   // the row draws its own pill
+}
+
+void setting(int x, int y, int w, int h, const Setting &s, bool foc, unsigned short acc)
+{
+    const int ch = h - 4, rx = x + w - 12, cy = y + ch / 2;
+    const unsigned short bg = foc ? acc : card(), ink = foc ? INK : (s.dis ? DIM : FG);
+    d.fillRoundRect(x, y, w, ch, 9, bg);
+    int lx = x + 12;
+    if (s.glyph >= 0) {
+        ui_glyph(&d, s.glyph, x + 17, cy, 6, foc ? INK : (s.dis ? DIM : (s.lcol ? s.lcol : acc)), bg);
+        lx = x + 34;
+    }
+    // A slider row is two lines — label + value, then the slider — as one block centred in the card, so it
+    // looks the same at every row height and focus state.
+    const bool two = s.kind == ROW_SLIDER;
+    const int ly = two ? y + (ch - 26) / 2 + 9 : cy;            // the label line's centre
+    int vx = rx;
+    char v[28];
+    switch (s.kind) {
+    case ROW_TOGGLE:
+        toggle(rx, cy, s.on && !s.dis, foc); vx = rx - 32;
+        break;
+    case ROW_CYCLE:
+        font(1); d.setTextDatum(middle_right); d.setTextColor(ink, bg);
+        fit(v, sizeof v, s.value, w / 2); d.drawString(v, rx - 12, cy);
+        ui_glyph(&d, UG_NEXT, rx - 4, cy, 4, ink, bg);
+        ui_glyph(&d, UG_PREV, rx - 24 - d.textWidth(v), cy, 4, ink, bg);
+        vx = rx - 34 - d.textWidth(v);
+        break;
+    case ROW_NAV: case ROW_DANGER:
+        ui_glyph(&d, UG_NEXT, rx, cy, 5, ink, bg); vx = rx - 14;
+        break;
+    default:                                                     // ROW_VALUE / ROW_SLIDER: a value at the right
+        if (s.rglyph >= 0) { ui_glyph(&d, s.rglyph, rx, ly, 5, foc ? INK : (s.vcol ? s.vcol : FG), bg); vx = rx - 16; }
+        else if (s.value && s.value[0]) {
+            font(1); d.setTextDatum(middle_right); d.setTextColor(foc ? INK : (s.dis ? DIM : (two || !s.vcol ? FG : s.vcol)), bg);
+            fit(v, sizeof v, s.value, w * 2 / 3); d.drawString(v, rx, ly);
+            vx = rx - d.textWidth(v) - 12;
+        }
+        break;
+    }
+    if (two) slider(lx - 3, ly + 12, rx - lx + 3, s.pct, foc ? INK : acc, 4);
+    const unsigned short lc = foc ? INK : (s.dis ? DIM : s.kind == ROW_DANGER ? C_RED : (s.lcol ? s.lcol : FG));
+    font(1); d.setTextColor(lc, bg);
+    char lbl[48]; fit(lbl, sizeof lbl, s.label, vx - lx - 4);
+    if (!two && foc && s.sub && s.sub[0]) {
+        d.setTextDatum(top_left); d.drawString(lbl, lx, y + 5);
+        font(0); d.setTextColor(INK, bg);
+        char sub[52]; fit(sub, sizeof sub, s.sub, w - (lx - x) - 10);
+        d.drawString(sub, lx, y + 23);
+    } else {
+        d.setTextDatum(middle_left); d.drawString(lbl, lx, ly);
+    }
+    d.setTextDatum(top_left);
+}
+
 int comp_head(const char *app, unsigned short acc)
 {
     const int top = nucleo_app_content_top();
@@ -276,29 +412,34 @@ void comp_keys(const char *keys)
     d.drawString(t, 8, y);
 }
 
-bool frame(void (*paint)(void *ud), void *ud, int y0, int h)
+bool frame(void (*paint)(void *ud), void *ud, int y0, int h, bool exact)
 {
     const int W = d.width();
     if (h <= 0) h = d.height() - y0;
     M5Canvas *c = nucleo_screen_wide(W);
     if (!c || c->height() < 8) { paint(ud); return false; }
     LovyanGFX *panel = &d;
-    const int rows = c->height();
     uint8_t *buf = (uint8_t *)c->getBuffer();
+    // 8-bit: the canvas as it is (~100 rows of 320). exact: the same bytes as RGB565 (~50 rows), so theme
+    // colours land exactly as when drawn straight to the panel — twice the strips, no extra RAM.
+    const int bpp = exact ? 2 : 1, rows = c->height() / bpp;
     static M5Canvas s_win;                                   // a window onto the canvas: panel rows [oy, oy+rows)
+    static M5Canvas s_out;                                   // the canvas bytes seen at the window's depth (push)
+    if (exact) { s_out.setColorDepth(16); s_out.setBuffer(buf, W, rows); }
+    M5Canvas *out = exact ? &s_out : c;
     for (int oy = y0; oy < y0 + h; oy += rows) {
         const int sh = y0 + h - oy < rows ? y0 + h - oy : rows;
         // The window's row oy is the canvas's row 0: a sprite (oy + sh) rows tall whose buffer starts oy rows
         // before the canvas, clipped to its last sh rows, so nothing above the canvas is ever written.
-        s_win.setColorDepth(c->getColorDepth());
-        s_win.setBuffer(buf - (ptrdiff_t)oy * W, W, oy + sh);
+        s_win.setColorDepth(exact ? 16 : c->getColorDepth());
+        s_win.setBuffer(buf - (ptrdiff_t)oy * W * bpp, W, oy + sh);
         s_win.setClipRect(0, oy, W, sh);
         nucleo_touch_clear();
         nucleo_app_set_gfx(&s_win);
         paint(ud);
         nucleo_app_set_gfx(nullptr);
         panel->setClipRect(0, oy, W, sh);
-        c->pushSprite(panel, 0, oy);
+        out->pushSprite(panel, 0, oy);
         panel->clearClipRect();
     }
     return true;

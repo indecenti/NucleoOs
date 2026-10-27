@@ -1773,8 +1773,8 @@ static void draw_ai_working(int top, int h)
 // Panel-only actions arrive as NK_CHAR with private control codes (below 0x10: never typing, never list rows).
 enum { LGK_SETTAB0 = 0x01 /* ..0x03 */ };
 // Panel sliders (painter and hit-test share them): Now Playing's seek track and volume track, the settings volume.
-enum { PL_SX = 16, PL_SW = 288, PL_SY = 30 + 116, PL_VX = 216, PL_VW = 88, PL_VY = 30 + 76, SET_VX = 16, SET_VW = 288 };
-static int lg_pct_at(int t, int x, int w) { const int p = (t - x) * 100 / w; return p < 0 ? 0 : p > 100 ? 100 : p; }
+// (y = each slider's centre line; SET_X = the settings rows' x, lg::setting's slider spans x + 9, w - 21.)
+enum { PL_SX = 16, PL_SW = 288, PL_SY = 30 + 121, PL_VX = 216, PL_VW = 88, PL_VY = 30 + 81, SET_X = 8 };
 static int s_lg_scroll;
 static unsigned s_lg_rev = 1, s_lg_drawn_rev, s_lg_drawn_gen, s_lg_comp_rev, s_lg_comp_gen;
 static int s_lg_drawn_view = -1, s_lg_comp_view = -1;
@@ -1803,10 +1803,10 @@ static bool lg_key(int key, char ch)
     }
     int tx, ty;
     if (lg::tap(key, ch, &tx, &ty)) {                                     // a slider: seek track or volume track
-        if (s_mode == M_PLAY && ty >= PL_SY - 18) {
+        if (s_mode == M_PLAY && ty >= PL_SY - 23) {
             const uint32_t dur = nucleo_audio_duration_ms();
-            if (dur && nucleo_audio_is_playing()) nucleo_audio_seek((uint32_t)((uint64_t)lg_pct_at(tx, PL_SX, PL_SW) * (dur - 500) / 100));
-        } else nucleo_audio_set_volume(s_mode == M_PLAY ? lg_pct_at(tx, PL_VX, PL_VW) : lg_pct_at(tx, SET_VX, SET_VW));
+            if (dur && nucleo_audio_is_playing()) nucleo_audio_seek((uint32_t)((uint64_t)lg::slider_at(tx, PL_SX, PL_SW) * (dur - 500) / 100));
+        } else nucleo_audio_set_volume(s_mode == M_PLAY ? lg::slider_at(tx, PL_VX, PL_VW) : lg::slider_at(tx, SET_X + 9, d.width() - 2 * SET_X - 21));
         nucleo_app_request_draw(); return true;
     }
     if (s_mode == M_SETTINGS) {
@@ -1827,15 +1827,6 @@ static const char *lg_label(int i)
     char *dot = strrchr(b, '.'); if (dot && !strcasecmp(dot, ".wav")) *dot = 0;
     return b;
 }
-// A horizontal slider: LINE track, `col` fill up to pct, a knob; the whole band around it is a field (tap = set).
-static void lg_slider(int x, int y, int w, int pct, unsigned short col, bool target = true)
-{
-    lg::bar(x, y, w, 10, pct, col);
-    const int kx = x + w * pct / 100;
-    d.fillCircle(kx, y + 5, 9, FG); d.fillCircle(kx, y + 5, 4, col);
-    if (target) lg::field(x - 14, y - 16, w + 28, 42);
-}
-
 static void lg_rec_disc(int cx, int cy, int r, bool stop)               // the round record / stop button
 {
     d.fillCircle(cx, cy, r, REC_DISC);
@@ -1946,8 +1937,7 @@ static void lg_recording(bool full)
     int lvl = nucleo_recorder_level(); if (lvl < 0) lvl = 0; if (lvl > 100) lvl = 100;
     const int mx = 10, mw = W - 20, my = wy + wh + 8;
     d.fillRect(0, my - 2, W, 32, BG);
-    d.fillRoundRect(mx, my, mw, 10, 5, LINE);
-    if (lvl) d.fillRoundRect(mx, my, mw * lvl / 100 < 10 ? 10 : mw * lvl / 100, 10, 5, lvl > 80 ? ACC : lvl > 40 ? AMBER : GRN);
+    lg::bar(mx, my, mw, 10, lvl, lvl > 80 ? ACC : lvl > 40 ? AMBER : GRN);
     if (s_peak > 2) { int px = mx + mw * s_peak / 100; if (px > mx + mw - 2) px = mx + mw - 2; d.drawFastVLine(px, my - 2, 14, FG); }
     const char *coach = nullptr; unsigned short cc = MUTED;
     if (s >= 1) {
@@ -1985,11 +1975,13 @@ static void lg_play(bool full)
     char vb[12]; snprintf(vb, sizeof vb, "Vol %d%%", vol);
     d.fillRect(W - 112, lg::HEAD + 40, 112, 50, BG);
     lg::font(0); d.setTextDatum(top_right); d.setTextColor(MUTED, BG); d.drawString(vb, W - 12, lg::HEAD + 46); d.setTextDatum(top_left);
-    lg_slider(PL_VX, PL_VY, PL_VW, vol, GRN, full);                       // tap the track = that level
+    lg::slider(PL_VX, PL_VY, PL_VW, vol, GRN, 8);                          // tap the track = that level
+    if (full) lg::field(PL_VX - 14, PL_VY - 21, PL_VW + 28, 42);
     int prog = nucleo_audio_progress(); if (prog < 0) prog = 0; if (prog > 100) prog = 100;
-    const int bx = PL_SX, bw = PL_SW, sy = PL_SY;
+    const int bx = PL_SX, bw = PL_SW, sy = PL_SY - 5;
     d.fillRect(0, sy - 12, W, 46, BG);
-    lg_slider(bx, sy, bw, prog, GRN, full);                               // the seek track: tap = jump there
+    lg::slider(bx, PL_SY, bw, prog, GRN, 8);                              // the seek track: tap = jump there
+    if (full) lg::field(bx - 14, PL_SY - 21, bw + 28, 42);
     const char *st = !playing ? TR5("Fine", "Ended", "Fin", "Fini", "Ende") : paused ? TR5("In pausa", "Paused", "En pausa", "Pause", "Pausiert") : TR5("In ascolto", "Playing", "Escucha", "Joue", "Spielt");
     lg::font(0); d.setTextColor(!playing ? MUTED : paused ? AMBER : GRN, BG); d.drawString(st, bx, sy + 18);
     const uint32_t rem = dur > el ? dur - el : 0;
@@ -2058,22 +2050,19 @@ static void lg_settings(void)
                                TR5("Titolo automatico", "Auto title", "Titulo auto", "Titre auto", "Auto Titel"), TR5("Lingua", "Language", "Idioma", "Langue", "Sprache") };
         const bool on[3] = { s_auto_transcribe, s_auto_summary, s_auto_title };
         for (int i = 0; i < 4; i++) {
-            const int ry = y0 + 2 + i * 42; const bool f = i == s_set_row;
-            const unsigned short fill = f ? ACC : lg::card();
-            d.fillRoundRect(8, ry, W - 16, 38, 9, fill);
-            lg::font(0); d.setTextDatum(middle_left); d.setTextColor(f ? INK : FG, fill); d.drawString(lbl[i], 22, ry + 19);
-            if (i < 3) { d.fillRoundRect(W - 62, ry + 9, 40, 20, 10, on[i] ? GRN : LINE); d.fillCircle(on[i] ? W - 32 : W - 52, ry + 19, 7, on[i] ? INK : MUTED); }
-            else { d.setTextDatum(middle_right); d.drawString(s_lang == 1 ? "IT" : s_lang == 2 ? "EN" : "Auto", W - 22, ry + 19); }
-            d.setTextDatum(top_left);
-            nucleo_touch_add(8, ry, W - 16, 38, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + i));
+            const int ry = y0 + 2 + i * 42;
+            const lg::Setting st = { lbl[i], nullptr, s_lang == 1 ? "IT" : s_lang == 2 ? "EN" : "Auto", (unsigned char)(i < 3 ? lg::ROW_TOGGLE : lg::ROW_CYCLE),
+                                     -1, -1, i < 3 && on[i], false, 0, 0, 0 };
+            lg::setting(SET_X, ry, W - 2 * SET_X, 42, st, i == s_set_row, ACC);
+            nucleo_touch_add(SET_X, ry, W - 2 * SET_X, 38, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + i));
         }
     } else if (s_set_tab == ST_AUDIO) {
         const int vol = nucleo_audio_volume();
-        lg::font(1); d.setTextColor(FG, BG); d.drawString("Volume", 16, y0 + 14);
         char vb[8]; snprintf(vb, sizeof vb, "%d%%", vol);
-        d.setTextDatum(top_right); d.drawString(vb, W - 16, y0 + 14); d.setTextDatum(top_left);
-        lg_slider(SET_VX, y0 + 50, SET_VW, vol, GRN);                     // tap the track = that level
-        lg::font(0); d.setTextColor(DIM, BG); d.drawString(TR5("Per riascoltare le note", "Playback level for takes", "Nivel de reproduccion", "Niveau de lecture", "Wiedergabepegel"), 16, y0 + 90);
+        const lg::Setting st = { "Volume", nullptr, vb, lg::ROW_SLIDER, -1, -1, false, false, vol, 0, 0 };
+        lg::setting(SET_X, y0 + 2, W - 2 * SET_X, 46, st, false, ACC);
+        lg::field(SET_X, y0 + 20, W - 2 * SET_X, 28);                     // tap the slider = that level
+        lg::font(0); d.setTextColor(DIM, BG); d.drawString(TR5("Per riascoltare le note", "Playback level for takes", "Nivel de reproduccion", "Niveau de lecture", "Wiedergabepegel"), 16, y0 + 58);
     } else {
         const bool on = nucleo_anima_online_available();
         char fr[24]; human_free(fr, sizeof fr);

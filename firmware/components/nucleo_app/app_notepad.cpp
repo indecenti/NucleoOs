@@ -801,20 +801,18 @@ static void draw_large(void)
         if (s_mode == M_SET) {                             // the view options, over the document's foot
             nucleo_touch_clear();                          // only the options (and the chevron) take a tap
             nucleo_touch_add(0, 0, 96, lg::HEAD, NK_BACK, 0);
-            const int ch = 116, cy = H - ch - 8, cx = LG_DX - 4, cw = W - cx - 8;
-            const unsigned short cb = lg::card();
-            lg::panel(cx, cy, cw, ch, cb); d.drawRoundRect(cx, cy, cw, ch, 8, ACC);
-            lg::font(1); d.setTextColor(GRN, cb); d.drawString(TR("Opzioni vista", "View options"), cx + 12, cy + 8);
+            const int ch = 116, cy = H - ch - 8, cx = 8, cw = W - 16;
+            lg::panel(cx, cy, cw, ch, BG); d.drawRoundRect(cx, cy, cw, ch, 8, ACC);
+            lg::font(1); d.setTextColor(GRN, BG); d.drawString(TR("Opzioni vista", "View options"), cx + 12, cy + 8);
             const char *szn[3] = { TR("Piccolo", "Small"), TR("Medio", "Medium"), TR("Grande", "Large") };
             const char *mdn[3] = { "Auto", "Markdown", TR("Testo", "Plain") };
             const char *lbl[2] = { TR("Dimensione", "Font size"), TR("Formato", "Format") };
             const char *val[2] = { szn[s_fontsz], mdn[s_mdmode] };
             for (int i = 0; i < 2; i++) {
-                const int ry = cy + 34 + i * 36; const bool on = i == s_setsel;
-                const unsigned short f = on ? ACC : LINE;
-                d.fillRoundRect(cx + 8, ry, cw - 16, 32, 8, f);
-                lg::row_text(cx + 8, ry, cw - 16, 32, on, f, lbl[i], val[i], MUTED);
-                nucleo_touch_add(cx, ry, cw, 32, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + i));
+                const int ry = cy + 32 + i * 40;
+                const lg::Setting st = { lbl[i], nullptr, val[i], lg::ROW_CYCLE, -1, -1, false, false, 0, 0, 0 };
+                lg::setting(cx + 6, ry, cw - 12, 40, st, i == s_setsel, ACC);
+                nucleo_touch_add(cx, ry, cw, 40, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + i));
             }
         }
         nucleo_touch_commit();
@@ -826,13 +824,11 @@ static void draw_large(void)
         d.fillRect(0, lg::HEAD, W, H - lg::HEAD, BG);
         if (s_mode == M_ACT) {
             const char *items[ACT_N] = { TR("Apri", "Open"), TR("Rinomina", "Rename"), TR("Duplica", "Duplicate"), TR("Dettagli", "Details"), TR("Elimina", "Delete") };
-            for (int i = 0; i < ACT_N; i++) {
-                const int ry = y + i * 40; const bool on = i == s_actsel;
-                const unsigned short ac = i == 4 ? C_RED : ACC, f = on ? ac : lg::card();
-                d.fillRoundRect(12, ry, W - 24, 34, 9, f);
-                lg::font(1); d.setTextDatum(middle_left); d.setTextColor(on ? INK : (i == 4 ? C_RED : FG), f);
-                d.drawString(items[i], 28, ry + 18); d.setTextDatum(top_left);
-                nucleo_touch_add(12, ry, W - 24, 34, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + i));
+            for (int i = 0; i < ACT_N; i++) {                // the kit's rows: chevrons, Delete as the danger row
+                const int ry = y + i * 40;
+                const lg::Setting st = { items[i], nullptr, nullptr, (unsigned char)(i == 4 ? lg::ROW_DANGER : lg::ROW_NAV), -1, -1, false, false, 0, 0, 0 };
+                lg::setting(12, ry, W - 24, 40, st, i == s_actsel, i == 4 ? C_RED : ACC);
+                nucleo_touch_add(12, ry, W - 24, 40, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + i));
             }
         } else if (s_mode == M_DETAILS) {
             lg::panel(12, y, W - 24, H - y - 10);

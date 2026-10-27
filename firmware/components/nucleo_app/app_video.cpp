@@ -20,6 +20,7 @@
 // is on, the next clip in the folder starts automatically. See docs/media.md and ANTI-FLICKER.md.
 #include "nucleo_app.h"
 #include "app_ui.h"
+#include "app_large.h"          // two screens: the clip list + card on the 320x240 panel
 #include "nucleo_i18n.h"        // TR(it,en): hints follow the system language
 #include <M5GFX.h>
 #include <string.h>
@@ -482,7 +483,6 @@ static void draw_video_help(int bri, int vol, bool muted)
 
 // Netflix-style resume sheet. Returns the chosen start in ms, 0 to start over, or -1 if backed
 // out. Blocking modal (owns the screen + keyboard) and pets the watchdog while it waits.
-static int lg_wrap(const char *s, int x, int y, int maxw, int lh, int maxl);   // two-screen helpers, below
 static int64_t resume_prompt(const char *vpath, const char *title, uint32_t resume_sec)
 {
     uint32_t total = nfv_duration_path(vpath);
@@ -506,7 +506,7 @@ static int64_t resume_prompt(const char *vpath, const char *title, uint32_t resu
             d.drawString(TR("Riprendere la visione?", "Resume playback?"), m, y);
             y += big ? 28 : 14;
             d.setFont(big ? (const lgfx::IFont *)&fonts::FreeSans9pt7b : (const lgfx::IFont *)&fonts::Font2); d.setTextColor(FG, BG);
-            y += (big ? 22 : 16) * lg_wrap(title, m, y, cw, big ? 22 : 16, 2) + 4;
+            y += (big ? 22 : 16) * lg::wrap(title, m, y, cw, big ? 22 : 16, 2) + 4;
             const int fw = total ? (int)((int64_t)cw * resume_sec / total) : 0;   // how far in they were
             d.fillRoundRect(m, y, cw, big ? 6 : 4, 2, CO_TRK);
             if (fw > 0) d.fillRoundRect(m, y, fw, big ? 6 : 4, 2, GRN);
@@ -1644,45 +1644,7 @@ static void draw_help(int ch)
 // back chevron leaves a folder and its menu button opens the settings.
 // The Cardputer becomes the companion: the picked title in large type, its details and the keys. Settings and
 // the manual stay on the Cardputer (keyboard work) while the panel keeps the list.
-static const int LG_HEAD = 30, LG_ROW = 25, LG_LISTW = 198;
-static const unsigned short CARD = 0x10A2;
-
-// Copy `s` into `out`, cut with ".." to fit `maxw` pixels in the current font.
-static void lg_fit(char *out, size_t n, const char *s, int maxw)
-{
-    snprintf(out, n, "%s", s);
-    if (d.textWidth(out) <= maxw) return;
-    char t[96];
-    for (size_t l = strlen(out); l > 1; l--) {
-        snprintf(t, sizeof t, "%.*s..", (int)(l - 1), out);
-        if (d.textWidth(t) <= maxw) { snprintf(out, n, "%s", t); return; }
-    }
-}
-
-// Word-wrap `s` into up to `maxl` lines of `maxw` px at (x, y), `lh` apart; the last line is cut with "..".
-static int lg_wrap(const char *s, int x, int y, int maxw, int lh, int maxl)
-{
-    char line[96];
-    int n = 0;
-    while (*s && n < maxl) {
-        while (*s == ' ') s++;
-        int take = 0, fit = 0;
-        for (int i = 1; s[i - 1]; i++) {                    // the longest prefix that fits, ending at a word break
-            if (s[i] != ' ' && s[i] != 0) continue;
-            snprintf(line, sizeof line, "%.*s", i, s);
-            if (d.textWidth(line) > maxw) break;
-            fit = i;
-            if (!s[i]) break;
-        }
-        take = fit ? fit : (int)strlen(s);                   // one word longer than the line: cut it below
-        if (n == maxl - 1 && s[take]) take = (int)strlen(s); // last line: the rest, cut to fit
-        char raw[96]; snprintf(raw, sizeof raw, "%.*s", take, s);
-        lg_fit(line, sizeof line, raw, maxw);
-        d.drawString(line, x, y + n * lh);
-        s += take; n++;
-    }
-    return n;
-}
+static const int LG_LISTW = 198;
 
 static void lg_title(int idx, char *buf, size_t n)            // display name: no .nfv, trailing '/' off folders
 {
@@ -1704,52 +1666,41 @@ static int lg_series_len(int i)
     return 0;
 }
 
-static void lg_row(int i, int y, bool focus)
+// One row of lg::list: icon, title, length / resume time. It also records which entry each touch slot is.
+static void lg_row(int i, int x, int y, int w, int h, bool focus, unsigned short bg, void *)
 {
+    const int slot = i - s_scroll;
+    if (slot >= 0 && slot < 12) { s_vtap[slot] = i; if (slot >= s_vtap_n) s_vtap_n = slot + 1; }
     const int strip = lg_series_len(i);
     const VEntry *r = &st->e[i];
     const bool is_resume = !r->dir && r->resume > 0;
-    const unsigned short acc = r->dir ? AMB : ACC, bg = focus ? acc : BG;
-    d.fillRect(0, y, LG_LISTW, LG_ROW, BG);
-    if (focus) d.fillRoundRect(4, y + 1, LG_LISTW - 8, LG_ROW - 2, 7, acc);
-    const int iy = y + (LG_ROW - 10) / 2;
-    if (r->dir) icon_folder(11, iy, focus ? INK : AMB); else icon_film(11, iy, focus ? INK : ACC);
+    const int iy = y + (h - 10) / 2;
+    if (r->dir) icon_folder(x + 7, iy, focus ? INK : AMB); else icon_film(x + 7, iy, focus ? INK : ACC);
     char mb[12] = "";
     if (r->dir)         snprintf(mb, sizeof mb, "%u", (unsigned)r->count);
     else if (is_resume) fmt_mmss(mb, sizeof mb, r->resume);
     else if (r->old)    snprintf(mb, sizeof mb, "%s", TR("vecchio", "old"));
     else if (r->dur)    fmt_mmss(mb, sizeof mb, r->dur);
-    d.setFont(&fonts::Font2); d.setTextDatum(middle_right);
-    d.setTextColor(focus ? INK : (is_resume ? GRN : MUTED), bg);
-    int mw = mb[0] ? d.textWidth(mb) : 0;
-    if (mb[0]) d.drawString(mb, LG_LISTW - 12, y + LG_ROW / 2);
-    if (is_resume) { mark_play(LG_LISTW - 20 - mw, y + LG_ROW / 2 - 3, focus ? INK : GRN); mw += 9; }
+    lg::font(0);
+    const int mw = mb[0] ? d.textWidth(mb) + 12 : 0;
+    if (is_resume) mark_play(x + w - 8 - mw - 4, y + h / 2 - 3, focus ? INK : GRN);
     char t[72], f[80]; lg_title(i, t, sizeof t);
     const char *shown = (!r->dir && strip && (int)strlen(t) > strip) ? t + strip : t;
-    lg_fit(f, sizeof f, shown, LG_LISTW - 12 - mw - 8 - 30);
-    d.setTextDatum(middle_left); d.setTextColor(focus ? INK : (r->dir ? AMB : FG), bg);
-    d.drawString(f, 30, y + LG_ROW / 2);
+    lg::fit(f, sizeof f, shown, w - 22 - 16 - mw - (is_resume ? 10 : 0));
+    lg::row_text(x + 22, y, w - 22, h, focus, bg, f, mb, r->dir ? AMB : FG);
 }
 
 static void lg_card(int x, int y, int w, int h)
 {
-    d.fillRoundRect(x, y, w, h, 8, CARD);
+    lg::panel(x, y, w, h);
     if (s_sel >= s_n) return;
+    const unsigned short cb = lg::card();
     const VEntry *r = &st->e[s_sel];
     // the action, at the card's foot: what a tap on the card does
     if (!r->old) {
-        const int bh = 30, by = y + h - bh - 8, bx = x + 8, bw = w - 16;
-        const unsigned short fill = r->dir ? AMB : (r->resume > 0 ? GRN : ACC);
-        d.fillRoundRect(bx, by, bw, bh, 8, fill);
-        char lab[24];
-        if (r->dir) snprintf(lab, sizeof lab, "%s", TR("Apri", "Open"));
-        else if (r->resume > 0) snprintf(lab, sizeof lab, "%s", TR("Riprendi", "Resume"));   // the time is on the line above
-        else snprintf(lab, sizeof lab, "%s", TR("Riproduci", "Play"));
-        d.setFont(&fonts::Font2); d.setTextDatum(middle_left);
-        const int tw = d.textWidth(lab), gx = bx + (bw - tw - 14) / 2, cy = by + bh / 2;
-        if (r->dir) icon_folder(gx - 2, cy - 5, INK); else d.fillTriangle(gx, cy - 6, gx, cy + 6, gx + 9, cy, INK);
-        d.setTextColor(INK, fill); d.drawString(lab, gx + 14, cy);
-        d.setTextDatum(top_left);
+        const int bh = 30;
+        lg::button(x + 8, y + h - bh - 8, w - 16, bh, r->dir ? TR("Apri", "Open") : r->resume > 0 ? TR("Riprendi", "Resume") : TR("Riproduci", "Play"),
+                   r->dir ? AMB : (r->resume > 0 ? GRN : ACC), INK, NK_ENTER, 0);
         h -= bh + 8;                                          // the details live above it
     }
     char t[72]; lg_title(s_sel, t, sizeof t);
@@ -1757,43 +1708,30 @@ static void lg_card(int x, int y, int w, int h)
     // the big line: the clip length (or the folder's clip count)
     char big[16];
     if (r->dir) snprintf(big, sizeof big, "%u", (unsigned)r->count); else if (r->dur) fmt_mmss(big, sizeof big, r->dur); else snprintf(big, sizeof big, "--");
-    d.setFont(&fonts::FreeSansBold12pt7b); d.setTextDatum(top_left); d.setTextColor(r->dir ? AMB : ACC, CARD);
+    lg::font(2); d.setTextDatum(top_left); d.setTextColor(r->dir ? AMB : ACC, cb);
     d.drawString(big, x + 10, cy);
-    d.setFont(&fonts::Font0); d.setTextColor(MUTED, CARD);
+    lg::font(4); d.setTextColor(MUTED, cb);
     d.drawString(r->dir ? "video" : TR("durata", "length"), x + 10, cy + 26);
     cy += 42;
     d.drawFastHLine(x + 10, cy, w - 20, LINE);
     cy += 7;
-    d.setFont(&fonts::Font2); d.setTextColor(FG, CARD);
-    cy += 17 * lg_wrap(t, x + 10, cy, w - 20, 17, 4) + 4;
-    d.setFont(&fonts::Font0);
+    lg::font(0); d.setTextColor(FG, cb);
+    cy += 17 * lg::wrap(t, x + 10, cy, w - 20, 17, 4) + 4;
+    lg::font(4);
     if (r->old) {
-        d.setTextColor(AMB, CARD);
+        d.setTextColor(AMB, cb);
         d.drawString(TR("Formato vecchio:", "Old format:"), x + 10, cy);
         d.drawString(TR("riconvertilo.", "convert it again."), x + 10, cy + 11);
     } else if (!r->dir) {
         char m[32];
-        if (r->vw) { snprintf(m, sizeof m, "%ux%u", (unsigned)r->vw, (unsigned)r->vh); d.setTextColor(MUTED, CARD); d.drawString(m, x + 10, cy); cy += 12; }
+        if (r->vw) { snprintf(m, sizeof m, "%ux%u", (unsigned)r->vw, (unsigned)r->vh); d.setTextColor(MUTED, cb); d.drawString(m, x + 10, cy); cy += 12; }
         if (r->resume > 0 && r->dur) {                        // where you stopped, as a bar
             char rs[8]; fmt_mmss(rs, sizeof rs, r->resume);
             snprintf(m, sizeof m, "%s %s", TR("riprendi da", "resume at"), rs);
-            d.setTextColor(GRN, CARD); d.drawString(m, x + 10, cy);
-            const int bw = w - 20, fill = (int)((int64_t)bw * r->resume / r->dur);
-            d.fillRoundRect(x + 10, cy + 12, bw, 4, 2, LINE);
-            d.fillRoundRect(x + 10, cy + 12, fill < 4 ? 4 : fill, 4, 2, GRN);
+            d.setTextColor(GRN, cb); d.drawString(m, x + 10, cy);
+            lg::bar(x + 10, cy + 12, w - 20, 4, (int)((int64_t)100 * r->resume / r->dur), GRN);
         }
     }
-}
-
-// Header touch controls: a back chevron (in a folder) at the left, a menu button (settings) at the right.
-static void lg_chevron(int x, int y, unsigned short c)
-{
-    d.drawLine(x + 6, y, x, y + 6, c); d.drawLine(x + 7, y, x + 1, y + 6, c);
-    d.drawLine(x, y + 6, x + 6, y + 12, c); d.drawLine(x + 1, y + 6, x + 7, y + 12, c);
-}
-static void lg_menu_icon(int x, int y, unsigned short c)
-{
-    for (int k = 0; k < 3; k++) d.fillRoundRect(x, y + k * 5, 16, 2, 1, c);
 }
 
 static void draw_large(void)
@@ -1801,65 +1739,33 @@ static void draw_large(void)
     if (!st) return;
     const int W = d.width(), H = d.height();
     nucleo_touch_clear();
-    // header: where we are + how many
-    d.fillRect(0, 0, W, LG_HEAD, BG);
+    // header: where we are + how many; the back chevron leaves a folder, the menu opens the settings
     const bool sub = strcmp(s_path, "/") != 0;
-    const int tx = sub ? 28 : 10;                             // the title moves right of the back chevron
-    if (sub) { lg_chevron(10, LG_HEAD / 2 - 6, ACC); nucleo_touch_add(0, 0, 120, LG_HEAD, NK_DEL, 0); }
-    lg_menu_icon(W - 26, LG_HEAD / 2 - 6, MUTED);
-    nucleo_touch_add(W - 44, 0, 44, LG_HEAD, NK_TAB, 0);
     char ctx[48];
-    if (strcmp(s_path, "/")) { snprintf(ctx, sizeof ctx, "%s", s_path + 1); size_t l = strlen(ctx); if (l && ctx[l - 1] == '/') ctx[l - 1] = 0; }
+    if (sub) { snprintf(ctx, sizeof ctx, "%s", s_path + 1); size_t l = strlen(ctx); if (l && ctx[l - 1] == '/') ctx[l - 1] = 0; }
     else snprintf(ctx, sizeof ctx, "Video");
-    d.setFont(&fonts::FreeSansBold9pt7b); d.setTextDatum(middle_left); d.setTextColor(ACC, BG);
-    char hf[52]; lg_fit(hf, sizeof hf, ctx, W - 140 - tx); d.drawString(hf, tx, LG_HEAD / 2);
     char cnt[24]; snprintf(cnt, sizeof cnt, "%d %s", s_n, s_n == 1 ? TR("elemento", "item") : TR("elementi", "items"));
-    d.setFont(&fonts::Font2); d.setTextDatum(middle_right); d.setTextColor(MUTED, BG); d.drawString(cnt, W - 36, LG_HEAD / 2);
-    d.drawFastHLine(10, LG_HEAD - 2, W - 20, LINE);
-    d.fillRect(tx, LG_HEAD - 2, 60, 2, ACC);
-
-    const int body = LG_HEAD + 2, bh = H - body;
+    const int body = lg::header(ctx, cnt, ACC, sub ? NK_DEL : NK_BACK, NK_TAB), bh = H - body;
+    s_vtap_n = 0;
     if (s_set_open || s_help_open) {                         // keyboard work happens on the Cardputer
-        d.fillRect(0, body, W, bh, BG);
-        d.setFont(&fonts::FreeSans9pt7b); d.setTextDatum(middle_center); d.setTextColor(MUTED, BG);
-        d.drawString(s_help_open ? TR("Guida aperta sul Cardputer", "Manual open on the Cardputer")
-                                 : TR("Impostazioni sul Cardputer", "Settings on the Cardputer"), W / 2, body + bh / 2);
+        lg::message(0, body, W, bh, s_help_open ? TR("Guida aperta sul Cardputer", "Manual open on the Cardputer")
+                                                : TR("Impostazioni sul Cardputer", "Settings on the Cardputer"), nullptr, MUTED);
         nucleo_touch_commit();
         return;
     }
     if (s_n == 0) {
-        d.fillRect(0, body, W, bh, BG);
-        d.setFont(&fonts::FreeSans9pt7b); d.setTextDatum(middle_center); d.setTextColor(FG, BG);
-        d.drawString(strcmp(s_path, "/") ? TR("Cartella vuota", "Empty folder") : TR("Nessun video in /data/Videos", "No videos in /data/Videos"), W / 2, body + bh / 2 - 12);
-        d.setFont(&fonts::Font2); d.setTextColor(MUTED, BG);
-        d.drawString(TR("Convertili con l'app web Video Studio", "Convert them with the Video Studio web app"), W / 2, body + bh / 2 + 12);
+        lg::message(0, body, W, bh, strcmp(s_path, "/") ? TR("Cartella vuota", "Empty folder") : TR("Nessun video in /data/Videos", "No videos in /data/Videos"),
+                    TR("Convertili con l'app web Video Studio", "Convert them with the Video Studio web app"), FG);
         nucleo_touch_commit();
         return;
     }
-    // the list (left): fixed rows, the picked one kept in view
-    const int rows = (bh - 4) / LG_ROW;
-    if (s_sel < s_scroll) s_scroll = s_sel;
-    if (s_sel >= s_scroll + rows) s_scroll = s_sel - rows + 1;
-    if (s_scroll > s_n - rows) s_scroll = s_n - rows > 0 ? s_n - rows : 0;
-    s_vtap_n = 0;
-    int y = body + 2;
-    for (int i = s_scroll; i < s_n && i < s_scroll + rows; i++, y += LG_ROW) {
-        lg_row(i, y, i == s_sel);
-        if (s_vtap_n < 12) { nucleo_touch_add(0, y, LG_LISTW, LG_ROW, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + s_vtap_n)); s_vtap[s_vtap_n++] = i; }
-    }
-    if (y < body + bh) d.fillRect(0, y, LG_LISTW, body + bh - y, BG);
-    if (s_n > rows) {                                         // scroll knob
-        const int track = bh - 8, kh = track * rows / s_n < 14 ? 14 : track * rows / s_n;
-        const int ky = body + 4 + (track - kh) * s_scroll / (s_n - rows);
-        d.fillRect(LG_LISTW - 3, body + 4, 2, track, LINE);
-        d.fillRect(LG_LISTW - 3, ky, 2, kh, ACC);
-    }
-    nucleo_touch_add_scroll(0, body, LG_LISTW, bh, LG_ROW, NK_UP, 0, NK_DOWN, 0);   // a drag walks the list
-    // the card (right)
+    // the list (left), the picked clip's card (right): tap the card = play / open
+    d.fillRect(0, body, LG_LISTW, 2, BG);
+    lg::list(0, body + 2, LG_LISTW, bh - 4, lg::ROW, s_n, s_sel, &s_scroll, lg_row, nullptr, ACC);
+    d.fillRect(0, H - 2, LG_LISTW, 2, BG);
     d.fillRect(LG_LISTW, body, W - LG_LISTW, bh, BG);
     lg_card(LG_LISTW + 4, body + 4, W - LG_LISTW - 10, bh - 8);
-    nucleo_touch_add(LG_LISTW, body, W - LG_LISTW, bh, NK_ENTER, 0);                // tap the card: play / open
-    d.setTextDatum(top_left); d.setFont(&fonts::Font0);
+    nucleo_touch_add(LG_LISTW, body, W - LG_LISTW, bh, NK_ENTER, 0);
     nucleo_touch_commit();
 }
 
@@ -1874,7 +1780,7 @@ static void draw_companion(int top, int ch)
         const VEntry *r = &st->e[s_sel];
         char t[72]; lg_title(s_sel, t, sizeof t);
         d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(r->dir ? AMB : FG, BG);
-        const int nl = lg_wrap(t, 8, top + 18, 224, 20, 3);
+        const int nl = lg::wrap(t, 8, top + 18, 224, 20, 3);
         d.setFont(&fonts::Font2);
         char m[40] = "";
         if (r->dir) snprintf(m, sizeof m, "%u video", (unsigned)r->count);

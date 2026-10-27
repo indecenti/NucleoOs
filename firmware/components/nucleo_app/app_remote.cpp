@@ -172,7 +172,7 @@ static void remote_draw(void)
 
 // ===== two screens =============================================================================================
 // The panel carries the "how to connect" cards, large: the live link state, the address to open as a hero line,
-// the pairing PIN, and the auto-handoff as its own card with a switch â€” the card IS the toggle (tap = Enter, the
+// the pairing PIN, and the auto-handoff as a settings row (lg::setting) - the row IS the toggle (tap = Enter, the
 // same key that flips it on the Cardputer). The Cardputer becomes a glance companion: the same facts in one column.
 static void remote_draw_large(void)
 {
@@ -208,25 +208,22 @@ static void remote_draw_large(void)
                          : ((ip && ip[0]) ? ip : L5("(nessuna rete)", "(no network)", "(sin red)", "(pas de reseau)", "(kein Netz)")), cw - 28);
     d.drawString(ab, cx + 14, cy + 28);
 
-    // pairing PIN | auto-handoff switch card (Wi-Fi Remote only; USB-web has no screen handoff)
+    // pairing PIN, then the auto-handoff as a settings row with the kit switch (Wi-Fi Remote only; USB-web has
+    // no screen handoff)
     cy += 72;
-    const int ch = H_ - cy - 8, pw = usb ? cw : (cw - 8) / 2;
-    lg::panel(cx, cy, pw, ch);
-    lg::font(0); d.setTextColor(MUTED, cb);
-    d.drawString(L5("PIN accoppiamento:", "Pair PIN:", "PIN de vinculacion:", "PIN d'appairage:", "Kopplungs-PIN:"), cx + 14, cy + 8);
-    lg::font(3); d.setTextColor(C_BLUE, cb);
-    d.drawString((pin && pin[0]) ? pin : "----", cx + 14, cy + 30);
+    const int ph = usb ? H_ - cy - 8 : 40;
+    lg::panel(cx, cy, cw, ph);
+    lg::font(0); d.setTextColor(MUTED, cb); d.setTextDatum(middle_left);
+    d.drawString(L5("PIN accoppiamento:", "Pair PIN:", "PIN de vinculacion:", "PIN d'appairage:", "Kopplungs-PIN:"), cx + 14, cy + ph / 2);
+    lg::font(3); d.setTextColor(C_BLUE, cb); d.setTextDatum(middle_right);
+    d.drawString((pin && pin[0]) ? pin : "----", cx + cw - 14, cy + ph / 2 + 1);
+    d.setTextDatum(top_left);
     if (!usb) {
-        const int hx = cx + pw + 8, on = s_remote_enabled;
-        lg::panel(hx, cy, pw, ch, on ? C_GREEN : 0);
-        const unsigned short hb = on ? C_GREEN : cb, ink = on ? INK : FG;
-        lg::font(0); d.setTextColor(on ? INK : MUTED, hb);
-        d.drawString(L5("Passaggio auto: ", "Auto handoff: ", "Traspaso auto: ", "Relais auto: ", "Auto-Uebergabe: "), hx + 14, cy + 8);
-        const int sx = hx + 14, sy = cy + 34;                 // the switch itself
-        d.fillRoundRect(sx, sy, 48, 26, 13, on ? INK : LINE);
-        d.fillCircle(on ? sx + 35 : sx + 13, sy + 13, 10, on ? C_GREEN : MUTED);
-        lg::font(2); d.setTextColor(ink, hb); d.drawString(on ? "ON" : "OFF", sx + 60, sy + 4);
-        nucleo_touch_add(hx, cy, pw, ch, NK_ENTER, 0);
+        cy += ph + 6;
+        const lg::Setting st = { L5("Passaggio auto", "Auto handoff", "Traspaso auto", "Relais auto", "Auto-Uebergabe"), nullptr, nullptr,
+                                 lg::ROW_TOGGLE, -1, -1, s_remote_enabled, false, 0, 0, 0 };
+        lg::setting(cx, cy, cw, H_ - cy - 4, st, false, C_BLUE);
+        nucleo_touch_add(cx, cy, cw, H_ - cy, NK_ENTER, 0);   // the row IS the switch: tap = ENTER, as on the Cardputer
     }
     nucleo_touch_commit();
 }

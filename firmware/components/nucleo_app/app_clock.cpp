@@ -25,9 +25,9 @@
 static const char *const S5[][5] = {
     { "attendo sincronizzazione NTP...", "waiting for NTP sync...", "espera sincroniz. NTP...", "attente synchro NTP...", "warte auf NTP-Sync..." },
     { "attendo NTP...", "waiting NTP...", "esperando NTP...", "attente NTP...", "warte auf NTP..." },
-    { "Quadrante:", "Face:", "Cuadr.:", "Cadran:", "Ziff.:" },
-    { "Formato:", "Format:", "Formato:", "Format:", "Format:" },
-    { "Secondi:", "Seconds:", "Segundos:", "Secondes:", "Sekunden:" },
+    { "Quadrante", "Face", "Cuadr.", "Cadran", "Ziff." },
+    { "Formato", "Format", "Formato", "Format", "Format" },
+    { "Secondi", "Seconds", "Segundos", "Secondes", "Sekunden" },
     { "Analog.", "Analog", "Analog.", "Analog.", "Analog." },
     { "Digit.", "Digital", "Digit.", "Digit.", "Digit." },
     { "Opzioni", "Options", "Opciones", "Options", "Optionen" },
@@ -219,7 +219,7 @@ static void draw_settings(int top, int h)
     G.setCursor(bx + 12, by + 6); G.print(s5(7 /* Options */));
 
     for (int i = 0; i < 3; i++) {
-        char row[32]; snprintf(row, sizeof row, "%s %s", opt_label(i, nullptr), opt_value(i, nullptr));
+        char row[32]; snprintf(row, sizeof row, "%s: %s", opt_label(i, nullptr), opt_value(i, nullptr));
         bool sel = (i == s_set_sel); int ry = by + 28 + i * 20;
         if (sel) G.fillRoundRect(bx + 6, ry - 2, bw - 12, 18, 5, C_BLUE);
         G.setTextSize(2); G.setTextColor(sel ? INK : FG, sel ? C_BLUE : INK);
@@ -250,16 +250,24 @@ static void lt(const char *s, int y, int f, unsigned short c)   // panel text ce
     lg::font(f); G.setTextDatum(top_center); G.setTextColor(c); G.drawString(s, LW / 2, y); G.setTextDatum(top_left);
 }
 
+// The options page, drawn straight to the panel (the kit's rows keep their card colour, which the 8-bit canvas of
+// lg::frame would lose); every box repaints itself, the page is cleared once when it opens.
+static void lg_options(void)
+{
+    int y = lg::header(s5(7 /* Options */), nullptr, ACC) + 8;
+    for (int i = 0; i < 3; i++, y += 40) {                       // the kit's settings rows: two cycles + a switch
+        const lg::Setting st = { opt_label(i, nullptr), nullptr, i < 2 ? opt_value(i, nullptr) : nullptr, (unsigned char)(i < 2 ? lg::ROW_CYCLE : lg::ROW_TOGGLE),
+                                 -1, -1, s_secs, false, 0, 0, 0 };
+        lg::setting(8, y, LW - 16, 40, st, i == s_set_sel, ACC);
+        nucleo_touch_add(0, y, LW, 40, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + i));
+    }
+    lt(s5(9 /* tap a row to change it */), LH - 26, 0, MUTED);
+}
+
 static void lg_paint(void *)
 {
     LovyanGFX &G = d;
     G.fillRect(0, 0, LW, LH, BG);
-    if (s_settings) {
-        int y = lg::header(s5(7 /* Options */), nullptr, ACC);
-        lg::text_list(0, y + 8, LW, 3 * 52, 3, s_set_sel, nullptr, opt_label, opt_value, nullptr, nullptr, ACC, 52);
-        lt(s5(9 /* tap a row to change it */), LH - 26, 0, MUTED);
-        return;
-    }
     time_t now = time(NULL); struct tm *tm = localtime(&now);
     bool synced = (now >= EPOCH_2023) && tm;
     int y;
@@ -292,10 +300,14 @@ static void lg_paint(void *)
     nucleo_touch_add(LW * 2 / 5, 34, LW / 5, LH - 34, NK_ENTER, 0);      // centre: options
 }
 
+static bool s_lg_full = true;                                       // the options page must clear the panel first
 static void draw_large(void)
 {
     nucleo_touch_clear();
-    lg::frame(lg_paint, nullptr);
+    if (s_settings) {
+        if (s_lg_full) { d.fillRect(0, 0, LW, LH, BG); s_lg_full = false; }
+        lg_options();
+    } else { s_lg_full = true; lg::frame(lg_paint, nullptr, 0, 0, true); }
     nucleo_touch_commit();
 }
 

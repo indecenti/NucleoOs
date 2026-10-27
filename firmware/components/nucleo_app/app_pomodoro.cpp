@@ -553,7 +553,7 @@ static const char *const *tab_names(void)
 //          break with the guide on, a disc inside it breathes 4 s in / 4 s out), the set's pomodoro dots and
 //          the Skip / Reset controls beside it; a finished phase fills the panel, a tap rolls on;
 //   STATS: today's ring against the goal + focus time, total, streak;
-//   SETUP: the rows (tap = pick, tap again = change), the picked number with its - / + steppers.
+//   SETUP: the kit's settings rows (tap = pick, tap again = change; the picked number's < > step it).
 // The Cardputer shows the phase, the time and the keys. Keyboard behaviour is unchanged.
 #define LW 320
 #define LH 240
@@ -618,28 +618,39 @@ static void lp_stats(void)
     }
 }
 
+// SETUP: the kit's settings rows inside lg::list (its scroll, knob and row taps); the numbers are < value >
+// cycles, the switches lg::toggle.
+enum { CF_RH = 34 };
+static void cf_row(int i, int x, int y, int w, int h, bool focus, unsigned short, void *)
+{
+    d.fillRect(x, y, w, h, BG);                                          // the card replaces list()'s pill
+    const bool tg = i >= CF_AUTO;
+    const bool on = i == CF_AUTO ? s_autostart : i == CF_SOUND ? s_sound : s_breath;
+    const lg::Setting st = { cf_label(i, nullptr), nullptr, tg ? nullptr : cf_value(i, nullptr),
+                             (unsigned char)(tg ? lg::ROW_TOGGLE : lg::ROW_CYCLE), -1, -1, on, false, 0, 0, 0 };
+    lg::setting(x, y + 2, w, h, st, focus, TOMATO);
+}
 static void lp_setup(void)
 {
-    const int rows = (LH - LTOP) / 30;
+    const int rows = (LH - LTOP) / CF_RH;
     int sc = s_lg_scroll;                                                // the list's own scroll rule, to place the steppers
     if (s_cf_sel < sc) sc = s_cf_sel;
     if (s_cf_sel >= sc + rows) sc = s_cf_sel - rows + 1;
     if (sc > CF_N - rows) sc = CF_N - rows;
     if (sc < 0) sc = 0;
-    const int ry = LTOP + (s_cf_sel - sc) * 30;
-    const bool num = s_cf_sel < CF_AUTO;
-    if (num) { nucleo_touch_add(158, ry, 44, 30, NK_LEFT, 0); nucleo_touch_add(204, ry, 44, 30, NK_RIGHT, 0); }   // before the rows: they win
-    lg::text_list(0, LTOP, LW, LH - LTOP, CF_N, s_cf_sel, &s_lg_scroll, cf_label, cf_value, nullptr, nullptr, TOMATO, 30);
-    if (num) for (int k = 0; k < 2; k++) {
-        const int x = 160 + k * 46;
-        d.fillRoundRect(x, ry + 3, 40, 24, 8, INK);
-        lt(k ? "+" : "-", x + 20, ry + 15, 1, TOMATO);
+    const int ry = LTOP + (s_cf_sel - sc) * CF_RH;
+    if (s_cf_sel < CF_AUTO) {                                            // the focused number: tap < = less, > = more
+        lg::font(1);                                                     // before the rows: they win
+        const int rx = LW - 6 - 4 - 12, tw = d.textWidth(cf_value(s_cf_sel, nullptr)), vc = rx - 12 - tw / 2;
+        nucleo_touch_add(vc - tw / 2 - 40, ry, tw / 2 + 40, CF_RH, NK_LEFT, 0);
+        nucleo_touch_add(vc, ry, LW - 6 - vc, CF_RH, NK_RIGHT, 0);
     }
+    lg::list(0, LTOP, LW, LH - LTOP, CF_RH, CF_N, s_cf_sel, &s_lg_scroll, cf_row, nullptr, TOMATO);
 }
 
-static void lg_paint(void *)
+static void lg_paint(void *direct)                                   // direct: on the panel, every box repaints itself
 {
-    d.fillRect(0, 0, LW, LH, BG);
+    if (!direct) d.fillRect(0, 0, LW, LH, BG);
     char od[16]; snprintf(od, sizeof od, "%s %d", s5(19 /* today */), s_today_pomos);
     int y = lg::header("Pomodoro", od, TOMATO);
     static const char keys[NTAB] = { 1, 2, 3 };
@@ -647,10 +658,16 @@ static void lg_paint(void *)
     if (s_tab == TAB_TIMER) lp_timer(); else if (s_tab == TAB_STATS) lp_stats(); else lp_setup();
     lg::field(0, 0, LW, LH);                                         // a stray tap is nothing (not Enter / an arrow)
 }
+// SETUP is drawn straight to the panel: the kit's rows keep their card colour (the 8-bit canvas of lg::frame
+// would lose it) and nothing on it animates; the panel is cleared once when the tab opens.
+static bool s_lg_full = true;
 static void draw_large(void)
 {
     nucleo_touch_clear();
-    lg::frame(lg_paint, nullptr);
+    if (s_tab == TAB_SETUP) {
+        if (s_lg_full) { d.fillRect(0, 0, LW, LH, BG); s_lg_full = false; }
+        lg_paint((void *)1);
+    } else { s_lg_full = true; lg::frame(lg_paint, nullptr, 0, 0, true); }
     nucleo_touch_commit();
 }
 

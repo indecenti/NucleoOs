@@ -507,18 +507,14 @@ static void lg_cmd(int y, int bot) {
 
 static void lg_opt(int y) {
     const int W = d.width();
-    Row it[8]; int n; build_opt(it, &n);
+    Row it[8] = {}; int n; build_opt(it, &n);
     const int H = d.height(), rh = n > 0 && (H - y - 6) / n < 32 ? (H - y - 6) / n : 32;
-    for (int i = 0; i < n; i++) {
-        const int ry = y + 2 + i * rh; const bool sel = (i == s_sel);
-        const unsigned short f = sel ? ACC : lg::card();
-        d.fillRoundRect(8, ry, W - 16, rh - 2, 8, f);
-        char rb[28];
-        if (it[i].kind == RV_TOGGLE) snprintf(rb, sizeof rb, "%s", it[i].on ? "On" : "Off");
-        else if (it[i].kind == RV_SEG) snprintf(rb, sizeof rb, "%s", s_seg2[it[i].seg & 1]);
-        else if (it[i].kind == RV_ACTION) snprintf(rb, sizeof rb, ">");
-        else snprintf(rb, sizeof rb, "%.18s", it[i].val);
-        lg::row_text(8, ry, W - 16, rh - 2, sel, f, it[i].label, rb, it[i].kind == RV_TOGGLE ? (it[i].on ? GRN : DIM) : MUTED);
+    for (int i = 0; i < n; i++) {                                     // the kit's settings rows
+        const int ry = y + 2 + i * rh, k = it[i].kind;
+        const lg::Setting st = { it[i].label, nullptr, k == RV_SEG ? s_seg2[it[i].seg & 1] : it[i].val,
+                                 (unsigned char)(k == RV_TOGGLE ? lg::ROW_TOGGLE : k == RV_SEG ? lg::ROW_CYCLE : k == RV_ACTION ? lg::ROW_NAV : lg::ROW_VALUE),
+                                 -1, -1, it[i].on, false, 0, 0, MUTED };
+        lg::setting(8, ry, W - 16, rh + 2, st, i == s_sel, ACC);
         nucleo_touch_add(8, ry, W - 16, rh, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + i));
     }
 }

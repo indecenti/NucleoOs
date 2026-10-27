@@ -154,7 +154,7 @@ static void paint_large(void *)
 static void draw_large(void)
 {
     if (!s_hn) sample();
-    lg::frame(paint_large, nullptr);
+    lg::frame(paint_large, nullptr, 0, 0, true);   // exact theme colours (RGB565 strips)
     nucleo_touch_commit();
 }
 

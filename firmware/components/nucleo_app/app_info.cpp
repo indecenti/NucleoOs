@@ -314,7 +314,6 @@ static void info_draw_large(void)
     char rt[12]; snprintf(rt, sizeof rt, "%d/%d", s_target + 1, s_nrow);
     lg::header("Connection", s_nrow > s_lg_vis ? rt : nullptr, C_BLUE);
     d.fillRect(0, HEAD, W, H - HEAD, BG);
-    d.setFont(&fonts::Font0);
 
     for (int r = 0; r < s_lg_vis; r++) {
         const int idx = s_target + r;
@@ -328,16 +327,7 @@ static void info_draw_large(void)
             d.drawFastHLine(10, ry + rowH - 4, W - 20, R.col);
             continue;
         }
-        lg::font(0); d.setTextColor(MUTED, BG); d.setTextDatum(middle_left);
-        d.drawString(R.label, 12, ry + rowH / 2);
-        const int lw = d.textWidth(R.label);
-        if (R.val[0]) {
-            lg::font(1); d.setTextDatum(middle_right);
-            d.setTextColor(R.col, BG);
-            char v[40]; lg::fit(v, sizeof v, R.val, W - 24 - lw - 12);
-            d.drawString(v, W - 12, ry + rowH / 2);
-        }
-        d.setTextDatum(top_left);
+        lg::kv(12, ry + (rowH - 16) / 2, W - 24, R.label, R.val, R.col);
     }
     // the whole body is a drag-to-scroll area; UP/DOWN walk the top row
     nucleo_touch_add_scroll(0, HEAD, W, H - HEAD, rowH, NK_UP, 0, NK_DOWN, 0);

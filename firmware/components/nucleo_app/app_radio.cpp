@@ -497,7 +497,7 @@ static void on_key(int key, char ch)
         if (t == 1) { clamp_scroll(); nucleo_app_request_draw(); return; }
         int tx;
         if (lg::tap(key, ch, &tx, nullptr)) {                      // the card's volume track: that level
-            int v = (tx - R_VX) * 100 / R_VW; nucleo_audio_set_volume(v < 0 ? 0 : v > 100 ? 100 : v);
+            nucleo_audio_set_volume(lg::slider_at(tx, R_VX, R_VW));
             nucleo_app_request_draw(); return;
         }
     }
@@ -561,9 +561,7 @@ static void lg_card(int x, int y, int w, int h)
     int vol = nucleo_audio_volume();                // the start volume (applied when the stream begins)
     char vl[24]; snprintf(vl, sizeof vl, "%s  %d%%", TR("Volume", "Volume"), vol);
     lg::font(0); d.setTextColor(MUTED, cb); d.drawString(vl, x + 12, y + 90);
-    lg::bar(R_VX, y + 116, R_VW, 10, vol, GRN);
-    const int kx = R_VX + R_VW * vol / 100;
-    d.fillCircle(kx, y + 121, 9, FG); d.fillCircle(kx, y + 121, 4, GRN);          // the knob
+    lg::slider(R_VX, y + 121, R_VW, vol, GRN, 8);
     lg::field(x, y + 100, w, 42);
 
     lg::button(x + 12, y + h - 46, w - 24, 36, TR("Ascolta", "Listen"), namec, INK, NK_ENTER, 0);

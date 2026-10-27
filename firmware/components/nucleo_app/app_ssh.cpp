@@ -565,13 +565,12 @@ static void draw_form_large() {
     int ry = y + 8;
     char val[96];
     for (int i = 0; i < nf; i++) {
-        const bool sel = (i == s_field);
-        const char *lab = form_field(i, val, sizeof val);
-        const unsigned short box = sel ? C_INBG : lg::card();
-        d.fillRoundRect(cx, ry, cw, rh, 7, box);
-        if (sel) d.drawRoundRect(cx, ry, cw, rh, 7, ACCENT);
-        lg::font(0); d.setTextColor(sel ? ACCENT : C_DIM, box); d.drawString(lab, cx + 12, ry + rh / 2 - 8);
-        char vf[72]; lg::font(1); lg::fit(vf, sizeof vf, val[0] ? val : "-", cw - 118); d.setTextColor(C_INK, box); d.drawString(vf, cx + 108, ry + rh / 2 - 7);
+        const char *lab = form_field(i, val, sizeof val);           // the kit's settings rows
+        const bool cyc = val[0] == '<';                                // "< x >": the row's own < > draw it
+        const char *v = val;
+        if (cyc) { v = val + 2; const int l = (int)strlen(val); if (l > 3) val[l - 2] = 0; }
+        const lg::Setting st = { lab, nullptr, v[0] ? v : "-", (unsigned char)(cyc ? lg::ROW_CYCLE : lg::ROW_VALUE), -1, -1, false, false, 0, 0, 0 };
+        lg::setting(cx, ry, cw, rh + gap, st, i == s_field, ACCENT);
         nucleo_touch_add(cx, ry, cw, rh, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + i));
         ry += rh + gap;
     }

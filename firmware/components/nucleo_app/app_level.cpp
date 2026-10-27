@@ -276,9 +276,15 @@ static const char *set_right(int i, void *)
     }
     return "";
 }
+// A settings row on the panel (lg::settings_list): the Settings look.
+static void lg_set_row(int i, lg::Setting *s, void *)
+{
+    static const unsigned char K[SET_ROWS] = { lg::ROW_CYCLE, lg::ROW_TOGGLE, lg::ROW_TOGGLE, lg::ROW_CYCLE, lg::ROW_NAV };
+    s->label = set_label(i, nullptr); s->value = set_right(i, nullptr); s->kind = K[i]; s->on = i == 1 ? s_cfg.flipx : s_cfg.flipy;
+}
 static void view_settings(int top, int h, int y0)
 {
-    if (s_k > 1) lg::text_list(0, y0 + 4, 320, 240 - y0 - 4, SET_ROWS, s_set_sel, &s_lsc, set_label, set_right, nullptr, nullptr, C_GREEN, 34);
+    if (s_k > 1) lg::settings_list(8, y0 + 4, 304, 240 - y0 - 4, 34, SET_ROWS, s_set_sel, &s_lsc, lg_set_row, nullptr, C_GREEN);
     else         app_ui_list(y0, top + h - y0, SET_ROWS, s_set_sel, set_label, set_right, nullptr, nullptr);
 }
 
@@ -330,7 +336,7 @@ static void lg_paint(void *)
 static void draw_large(void)
 {
     nucleo_touch_clear();
-    lg::frame(lg_paint, nullptr);
+    lg::frame(lg_paint, nullptr, 0, 0, true);   // exact theme colours (RGB565 strips)
     nucleo_touch_commit();
 }
 

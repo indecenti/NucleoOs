@@ -791,13 +791,11 @@ static void lg_actions(void)
     const char *items[ACT_COUNT] = {
         TR5("Apri", "Open", "Abre", "Ouvre", "Oeffnet"), TR5("Dettagli", "Details", "Detalles", "Details", "Details"), TR5("Rinomina", "Rename", "Renombra", "Renomme", "Umbenennen"),
         TR5("Nuova cartella", "New folder", "Nueva carpeta", "Nouv. dossier", "Neuer Ordner"), TR5("Elimina", "Delete", "Elimina", "Supprime", "Loeschen") };
-    for (int i = 0; i < ACT_COUNT; i++) {
-        const int ry = y + i * 40; const bool on = i == s_act_sel;
-        const unsigned short ac = i == ACT_DELETE ? C_RED : ACC, f = on ? ac : lg::card();
-        d.fillRoundRect(12, ry, W - 24, 34, 9, f);
-        lg::font(1); d.setTextDatum(middle_left); d.setTextColor(on ? INK : (i == ACT_DELETE ? C_RED : FG), f);
-        d.drawString(items[i], 28, ry + 18); d.setTextDatum(top_left);
-        nucleo_touch_add(12, ry, W - 24, 34, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + i));
+    for (int i = 0; i < ACT_COUNT; i++) {                                 // the kit's rows: chevrons, Delete as the danger row
+        const int ry = y + i * 40;
+        const lg::Setting st = { items[i], nullptr, nullptr, (unsigned char)(i == ACT_DELETE ? lg::ROW_DANGER : lg::ROW_NAV), -1, -1, false, false, 0, 0, 0 };
+        lg::setting(12, ry, W - 24, 40, st, i == s_act_sel, i == ACT_DELETE ? C_RED : ACC);
+        nucleo_touch_add(12, ry, W - 24, 40, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + i));
     }
 }
 

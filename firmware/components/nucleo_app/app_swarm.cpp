@@ -102,7 +102,7 @@ static void sw_paint(void *)
 static void draw_large(void)
 {
     nucleo_touch_clear();
-    lg::frame(sw_paint, nullptr);
+    lg::frame(sw_paint, nullptr, 0, 0, true);
     nucleo_touch_commit();
 }
 

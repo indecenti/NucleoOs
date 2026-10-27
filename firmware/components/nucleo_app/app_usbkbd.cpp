@@ -16,6 +16,7 @@
 #include "app_gfx.h"
 #include "app_ui.h"           // shared focused-list widget (macro list) + quick-select nav
 #include "app_large.h"        // two screens: the tabs + macro picker on the panel, Cardputer as companion
+#include "ui_glyph.h"
 #include "nucleo_touch.h"
 #include "nucleo_exclusive.h" // declarative exclusive mode (NX_NET_APP)
 #include <M5GFX.h>
@@ -439,9 +440,14 @@ static void kbd_draw_large(void)
     } else {   // T_SET
         const bool us = (s_layout == DUCKY_LAYOUT_US);
         lg::font(0); d.setTextColor(MUTED, BG); d.drawString(TR("Mappa i simboli sul layout del PC.", "Maps symbols to the PC layout."), 16, y + 10);
-        const int bw = W - 32, bh = 60;
-        lg::button(16, y + 34, bw, bh, "US  QWERTY", us ? ACC : cb, us ? INK : FG, NK_CHAR, 'u');
-        lg::button(16, y + 34 + bh + 12, bw, bh, TR("IT  italiana", "IT  Italian"), !us ? ACC : cb, !us ? INK : FG, NK_CHAR, 'i');
+        for (int i = 0; i < 2; i++) {                                 // the kit's rows: the layout in use is checked
+            const bool on = i == 0 ? us : !us;
+            const lg::Setting st = { i == 0 ? "US  QWERTY" : TR("IT  italiana", "IT  Italian"), nullptr, nullptr, lg::ROW_VALUE,
+                                     UG_KEYBOARD, (signed char)(on ? UG_CHECK : -1), false, false, 0, 0, GRN };
+            const int ry = y + 34 + i * 46;
+            lg::setting(10, ry, W - 20, 46, st, on, ACC);
+            nucleo_touch_add(0, ry, W, 46, NK_CHAR, i == 0 ? 'u' : 'i');
+        }
     }
     nucleo_touch_commit();
 }

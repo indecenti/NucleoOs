@@ -64,6 +64,38 @@ void bar(int x, int y, int w, int h, int pct, unsigned short col);
 // A centred message in a box (empty states, "settings open on the Cardputer"): a head line + a muted sub line.
 void message(int x, int y, int w, int h, const char *head, const char *sub, unsigned short col);
 
+// ---- shared controls: ONE look for every app — use these, never redraw a switch / slider / settings row ----
+// A switch whose right edge is rx, centred on cy (on = GOOD track). on_pill: drawn on an acc-coloured pill.
+void toggle(int rx, int cy, bool on, bool on_pill = false);
+// A slider in [x, x+w) centred on cy: a rounded track, the filled part in col and a round knob at pct (0..100).
+// h = track thickness (the knob is h + 6 tall). Tap it through a field and map the tap with slider_at().
+void slider(int x, int cy, int w, int pct, unsigned short col, int h = 6);
+int  slider_at(int tx, int x, int w);                          // the pct a tap at tx means on that slider
+// The same, upright (a volume column, a gain fader): in [y, y+h) centred on cx, 100 % at the top.
+void vslider(int cx, int y, int h, int pct, unsigned short col, int w = 6);
+int  vslider_at(int ty, int y, int h);
+// A settings / options row — the look of Settings, for every app's options list: a card at (x, y, w, h - 4),
+// focused = an acc pill; an optional ui_glyph at the left; the label; the control at the right:
+//   ROW_NAV    chevron (opens a page)          ROW_VALUE  a value text (vcol), or the glyph rglyph
+//   ROW_TOGGLE a switch (on)                   ROW_SLIDER the value text + a slider (pct) under the label
+//   ROW_CYCLE  < value > (left/right cycles)   ROW_DANGER label in BAD, chevron
+// A focused non-slider row with a sub line shows the label on top and sub below it. Register the row's
+// touch target yourself (row targets or a field).
+enum { ROW_NAV = 0, ROW_VALUE, ROW_TOGGLE, ROW_SLIDER, ROW_CYCLE, ROW_DANGER };
+struct Setting {
+    const char *label, *sub, *value;   // sub / value may be null
+    unsigned char kind;
+    signed char glyph, rglyph;         // ui_glyph ids, -1 = none
+    bool on, dis;                      // switch state · unavailable (dim)
+    int pct;                           // slider position 0..100
+    unsigned short lcol, vcol;         // label colour when not focused (0 = FG) · value colour (0 = FG)
+};
+void setting(int x, int y, int w, int h, const Setting &s, bool focus, unsigned short acc);
+// A scrolling list of settings rows (lg::list underneath: row targets + drag scroll + tap / tap again):
+// fn fills row i's Setting (pre-set: kind ROW_VALUE, glyphs -1, everything else 0).
+typedef void (*setting_fn)(int i, Setting *out, void *ud);
+int  settings_list(int x, int y, int w, int h, int rowh, int n, int sel, int *scroll, setting_fn fn, void *ud, unsigned short acc);
+
 // ---- the Cardputer companion (240x135, drawn in on_draw while nucleo_app_two_screens()) ----------------------
 // The top line: "<APP>  -  on the second screen" in acc. Returns the first y below it.
 int  comp_head(const char *app, unsigned short acc);
@@ -81,7 +113,10 @@ void comp_keys(const char *keys);
 // never drawWideLine / drawWedgeLine / drawGradientLine: they replace the clip with the whole sprite and would
 // write outside the canvas.
 // Without a canvas (fragmented heap) paint() runs once straight onto the panel. Returns true when composed.
-bool frame(void (*paint)(void *ud), void *ud, int y0 = 0, int h = 0 /* 0 = to the bottom */);
+// exact = true composes in RGB565 instead (≈50-row strips, ~5 per frame): theme colours exactly as drawn
+// straight to the panel — use it for tool apps with themed cards / rows (on the 8-bit canvas dark greys turn
+// olive); keep the 8-bit default for games (tile_blit / stipple need it, and it is faster).
+bool frame(void (*paint)(void *ud), void *ud, int y0 = 0, int h = 0 /* 0 = to the bottom */, bool exact = false);
 // A field: one target over [x, x+w) x [y, y+h) whose taps the app hit-tests itself (nucleo_touch.h).
 void field(int x, int y, int w, int h);
 // The tap that delivered (key, ch), if it was a field tap: its panel position. False for anything else.

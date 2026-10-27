@@ -210,6 +210,21 @@ static void slider_text(char *b, int n, int *pct)
     }
 }
 
+static const char *slider_label(void)
+{
+    return s_pat == PAT_BLINK ? TR5("Velocita", "Speed", "Velocidad", "Vitesse", "Tempo")
+                              : TR5("Luce", "Brightness", "Brillo", "Lumiere", "Helligkeit");
+}
+// The panel's slider row (lg::setting at SL_RX, SL_RW): its slider spans [x + 9, x + w - 12).
+enum { SL_RX = 8, SL_RW = 304 };
+// A tap on that slider: the level (10..100 in 10s) or the blink rate it points at.
+static void slider_set(int tx)
+{
+    const int p = lg::slider_at(tx, SL_RX + 9, SL_RW - 21);
+    if (s_pat == PAT_BLINK) s_hz = p * HZ_N / 101;                   // 0 .. HZ_N - 1
+    else s_level = p < 10 ? 10 : (p + 5) / 10 * 10;
+}
+
 // "White  Solid  80%": what the light is set to (the toast, the companion).
 static void state_text(char *t, int n)
 {
@@ -272,9 +287,7 @@ static void draw(void)
     int ty = app_ui_tabs(sy + sh + 6, pats, PAT_N, s_pat, C_YELLOW);
 
     char v[16]; int pct; slider_text(v, sizeof v, &pct);
-    const char *lbl = s_pat == PAT_BLINK ? TR5("Velocita", "Speed", "Velocidad", "Vitesse", "Tempo")
-                                         : TR5("Luce", "Brightness", "Brillo", "Lumiere", "Helligkeit");
-    app_ui_gauge(ty + 8, lbl, v, pct, lc == L_WHITE ? C_YELLOW : lc);
+    app_ui_gauge(ty + 8, slider_label(), v, pct, lc == L_WHITE ? C_YELLOW : lc);
 }
 
 // The panel. Lit: the whole 320x240 IS the light (dimmed to the level, dark in a blink's off half); a tap
@@ -297,13 +310,16 @@ static void draw_large(void)
     } else {
         d.fillScreen(BG);
         char v[16]; int pct; slider_text(v, sizeof v, &pct);
-        lg::header(title(), v, acc);                                // the level it will light at
+        lg::header(title(), nullptr, acc);
         for (int i = 0; i < COL_N; i++)                             // the swatches ARE the light: tap = light it
             lg::button(8 + i * 104, 40, 96, 84, col_name(i), i == s_col ? COLS[i] : DIM, i == s_col ? L_INK : FG,
                        NK_CHAR, (char)(NUCLEO_TOUCH_ROW + i));
         const char *pats[PAT_N] = { pat_name(PAT_SOLID), pat_name(PAT_BLINK), pat_name(PAT_SOS) };
         int y = lg::tabs(136, pats, PAT_N, s_pat, acc, "\x14\x15\x16"   /* ROW + 4..6 */);
-        lg::bar(16, y + 20, 288, 28, pct, acc);
+        // the level it will light at (speed for Blink): the Settings slider row; tap it = set it there
+        lg::Setting st = { slider_label(), nullptr, v, lg::ROW_SLIDER, -1, -1, false, false, pct, 0, 0 };
+        lg::setting(SL_RX, y + 12, SL_RW, 52, st, false, acc);
+        lg::field(SL_RX, y + 12, SL_RW, 48);
     }
     nucleo_touch_commit();
 }
@@ -317,7 +333,9 @@ static bool touch(int key, char ch)
         s_col = i; s_on = true; changed();                         // a swatch: light it
         return true;
     }
-    if (!nucleo_touch_is_field(key, ch)) return false;
+    int tx;
+    if (!lg::tap(key, ch, &tx, nullptr)) return false;
+    if (!s_on) { slider_set(tx); changed(); return true; }          // off: the slider row = set the level
     s_on = false; apply_state(); nucleo_app_request_draw();         // tap the light = off
     return true;
 }

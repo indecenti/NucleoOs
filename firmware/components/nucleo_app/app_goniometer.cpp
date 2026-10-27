@@ -55,6 +55,12 @@ static const char *gset_right(int i, void *)
     }
     return "";
 }
+// An option row on the panel (lg::settings_list): the Settings look.
+static void lg_gset_row(int i, lg::Setting *s, void *)
+{
+    static const unsigned char K[GSET_ROWS] = { lg::ROW_CYCLE, lg::ROW_TOGGLE, lg::ROW_NAV };
+    s->label = gset_label(i, nullptr); s->value = gset_right(i, nullptr); s->kind = K[i]; s->on = s_cfg.invert;
+}
 static void gset_change(void)
 {
     if (s_set_sel == 0)      s_cfg.units = (s_cfg.units + 1) % 2;
@@ -227,7 +233,7 @@ static void lg_paint(void *)
     int y0 = lg::header(g_title(), rgt, acc, NK_BACK, NK_TAB);
     d.setFont(&fonts::Font0);                          // the views size the classic font themselves
     if (s_settings)  // (no IMU: the header says so and the reading shows "--")
-        lg::text_list(0, y0 + 4, 320, 240 - y0 - 4, GSET_ROWS, s_set_sel, &s_lsc, gset_label, gset_right, nullptr, nullptr, acc, 34);
+        lg::settings_list(8, y0 + 4, 304, 240 - y0 - 4, 34, GSET_ROWS, s_set_sel, &s_lsc, lg_gset_row, nullptr, acc);
     else {
         dial(92, 136, 86);
         readout(196, 136, 320, 2);
@@ -238,7 +244,7 @@ static void draw_large(void)
 {
     gstate();
     nucleo_touch_clear();
-    lg::frame(lg_paint, nullptr);
+    lg::frame(lg_paint, nullptr, 0, 0, true);   // exact theme colours (RGB565 strips)
     nucleo_touch_commit();
 }
 

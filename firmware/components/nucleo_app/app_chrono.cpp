@@ -276,7 +276,7 @@ static bool flash_phase(void) { return ((esp_timer_get_time() / 250000) & 1) == 
 
 // ===== two screens ==============================================================================================
 // The 320x240 panel is the instrument itself, composed in strips (lg::frame: the digits tick without flicker):
-// a band with the back chevron and the two modes as pills (tap the other one to switch), then
+// the kit's header (chevron = back) and the two modes as lg::tabs pills (tap the other one to switch), then
 //   STOPWATCH: the time in 7-segment digits, a big start/stop disc, a lap / reset disc, the laps column;
 //   TIMER idle: MM:SS you tap (pick the field) and drag up/down (set it), preset chips, a Start pill;
 //   TIMER running / paused: a ring that empties with the time left (tap it = pause / resume) + a Reset chip;
@@ -284,7 +284,7 @@ static bool flash_phase(void) { return ((esp_timer_get_time() / 250000) & 1) == 
 // The Cardputer shows the time and the keys. Keyboard behaviour is unchanged.
 #define LW   320
 #define LH   240
-#define LTOP 44
+#define LTOP 62
 static const unsigned char PRESET_MIN[6] = { 1, 3, 5, 10, 15, 25 };
 
 static void lt(const char *s, int x, int y, int f, unsigned short c, uint8_t datum = top_center)
@@ -312,28 +312,22 @@ static void ldisc(int cx, int cy, int r, unsigned short col, int glyph, const ch
 
 static void lp_band(unsigned short acc)
 {
-    LovyanGFX &G = d;
-    for (int k = 0; k < 2; k++) { G.drawLine(18 + k, 13, 12 + k, 20, MUTED); G.drawLine(12 + k, 20, 18 + k, 27, MUTED); }
-    nucleo_touch_add(0, 0, 44, LTOP, NK_BACK, 0);
+    lg::header(s5(0 /* Stopwatch */), nullptr, acc);
     const char *nm[2] = { s5(0 /* Stopwatch */), "Timer" };
-    for (int i = 0; i < 2; i++) {
-        const int x = 44 + i * 138; const bool on = i == s_mode;
-        G.fillRoundRect(x, 6, 132, 30, 10, on ? acc : lg::card());
-        lt(nm[i], x + 66, 21, 1, on ? INK : MUTED, middle_center);
-        if (!on) nucleo_touch_add(x, 0, 136, LTOP, NK_TAB, 0);      // the other mode's pill switches to it
-    }
+    static const char keys[2] = { 1, 2 };                            // a pill taps as NK_CHAR 1 / 2 (on_key)
+    lg::tabs(lg::HEAD, nm, 2, s_mode, acc, keys);
 }
 
 static void lp_stopwatch(void)
 {
     const int ms = sw_elapsed_ms();
     char t[16]; fmt_swatch(ms, t, sizeof t);
-    l7(t, LW / 2, LTOP + 8, 1, s_sw_run ? FG : (ms ? C_BLUE : MUTED));
-    ldisc(70, 178, 54, s_sw_run ? C_RED : C_GREEN, s_sw_run ? 1 : 0, nullptr, NK_ENTER, 0);
+    l7(t, LW / 2, LTOP + 2, 1, s_sw_run ? FG : (ms ? C_BLUE : MUTED));
+    ldisc(70, 178, 50, s_sw_run ? C_RED : C_GREEN, s_sw_run ? 1 : 0, nullptr, NK_ENTER, 0);
     if (s_sw_run)  ldisc(160, 196, 32, C_BLUE, 2, s5(1 /* Lap */), NK_UP, 0);
     else if (ms)   ldisc(160, 196, 32, MUTED, 2, s5(12 /* Reset */), NK_CHAR, 'r');
     for (int i = 0; i < MAXLAP; i++) {                              // the laps column, newest on top
-        const int y = 116 + i * 40;
+        const int y = 120 + i * 38;
         char lb[16], v[16];
         snprintf(lb, sizeof lb, "%s %d", s5(1 /* Lap */), s_sw_nlap - i);
         if (i < s_sw_nlap) fmt_swatch(s_sw_lap[i], v, sizeof v); else snprintf(v, sizeof v, "--:--.--");
@@ -348,8 +342,8 @@ static void lp_timer(void)
     if (s_tm_done) {
         const bool on = flash_phase();
         G.fillRect(0, LTOP, LW, LH - LTOP, on ? C_RED : BG);
-        lt(s5(3 /* TIME'S UP! */), LW / 2, 108, 3, on ? INK : C_RED);
-        lt(s5(4 /* press any key */), LW / 2, 160, 0, on ? INK : MUTED);
+        lt(s5(3 /* TIME'S UP! */), LW / 2, 120, 3, on ? INK : C_RED);
+        lt(s5(4 /* press any key */), LW / 2, 170, 0, on ? INK : MUTED);
         nucleo_touch_add(0, LTOP, LW, LH - LTOP, NK_ENTER, 0);
         return;
     }
@@ -358,35 +352,35 @@ static void lp_timer(void)
     if (s_tm_run || s_tm_rem_ms > 0) {
         const bool low = s_tm_run && left <= 10000;
         const unsigned short col = low ? C_RED : (s_tm_run ? C_YELLOW : C_BLUE);
-        const int cx = 118, cy = 142, total = tm_set_ms() > 0 ? tm_set_ms() : 1;
-        G.fillArc(cx, cy, 72, 88, 0, 360, LINE);
+        const int cx = 118, cy = 152, total = tm_set_ms() > 0 ? tm_set_ms() : 1;
+        G.fillArc(cx, cy, 66, 80, 0, 360, LINE);
         const int deg = (int)((int64_t)360 * left / total);
-        if (deg > 0) G.fillArc(cx, cy, 72, 88, 270, 270 + deg, col);
+        if (deg > 0) G.fillArc(cx, cy, 66, 80, 270, 270 + deg, col);
         lt(t, cx, cy - 18, 3, low ? C_RED : FG);
         if (!s_tm_run) lt(s5(2 /* PAUSE */), cx, cy + 20, 1, C_BLUE);
-        nucleo_touch_add(cx - 88, cy - 88, 176, 176, NK_ENTER, 0);
+        nucleo_touch_add(cx - 80, cy - 80, 160, 160, NK_ENTER, 0);
         ldisc(266, 196, 34, MUTED, 2, s5(12 /* Reset */), NK_CHAR, 'r');
         return;
     }
     // idle editor: the digits are the control (tap = pick MM or SS, drag up / down = set it)
     char mm[4], ss[4]; snprintf(mm, sizeof mm, "%02d", s_tm_min); snprintf(ss, sizeof ss, "%02d", s_tm_sec);
-    l7(mm, 92, LTOP + 6, 1.5f, s_tm_field == 0 ? C_BLUE : FG);
-    l7(":", LW / 2, LTOP + 6, 1.5f, MUTED);
-    l7(ss, 228, LTOP + 6, 1.5f, s_tm_field == 1 ? C_BLUE : FG);
-    G.fillRoundRect(s_tm_field == 0 ? 50 : 186, LTOP + 84, 84, 4, 2, C_BLUE);
-    nucleo_touch_add(20, LTOP, 130, 92, NK_LEFT, 0);
-    nucleo_touch_add(170, LTOP, 130, 92, NK_RIGHT, 0);
-    nucleo_touch_add_pad(0, LTOP, LW, 92, 14);
+    l7(mm, 92, LTOP + 2, 1.5f, s_tm_field == 0 ? C_BLUE : FG);
+    l7(":", LW / 2, LTOP + 2, 1.5f, MUTED);
+    l7(ss, 228, LTOP + 2, 1.5f, s_tm_field == 1 ? C_BLUE : FG);
+    G.fillRoundRect(s_tm_field == 0 ? 50 : 186, LTOP + 76, 84, 4, 2, C_BLUE);
+    nucleo_touch_add(20, LTOP, 130, 82, NK_LEFT, 0);
+    nucleo_touch_add(170, LTOP, 130, 82, NK_RIGHT, 0);
+    nucleo_touch_add_pad(0, LTOP, LW, 82, 14);
     for (int i = 0; i < 6; i++) {                                   // preset chips: the minutes at one tap
         const int x = 8 + i * 51; char p[6]; snprintf(p, sizeof p, "%d'", PRESET_MIN[i]);
         const bool on = s_tm_min == PRESET_MIN[i] && !s_tm_sec;
-        G.fillRoundRect(x, 144, 47, 32, 9, on ? C_BLUE : LINE);
-        lt(p, x + 23, 160, 1, on ? INK : FG, middle_center);
-        nucleo_touch_add(x, 140, 51, 40, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + i));
+        G.fillRoundRect(x, 146, 47, 30, 9, on ? C_BLUE : LINE);
+        lt(p, x + 23, 161, 1, on ? INK : FG, middle_center);
+        nucleo_touch_add(x, 144, 51, 36, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + i));
     }
-    G.fillRoundRect(70, 188, 180, 44, 14, C_GREEN);
-    lt(s5(13 /* Start */), LW / 2, 210, 1, INK, middle_center);
-    nucleo_touch_add(60, 184, 200, 56, NK_ENTER, 0);
+    G.fillRoundRect(70, 186, 180, 44, 14, C_GREEN);
+    lt(s5(13 /* Start */), LW / 2, 208, 1, INK, middle_center);
+    nucleo_touch_add(60, 182, 200, 58, NK_ENTER, 0);
 }
 
 static void lg_paint(void *)
@@ -400,7 +394,7 @@ static void lg_paint(void *)
 static void draw_large(void)
 {
     nucleo_touch_clear();
-    lg::frame(lg_paint, nullptr);
+    lg::frame(lg_paint, nullptr, 0, 0, true);
     nucleo_touch_commit();
 }
 
@@ -426,6 +420,7 @@ static void draw(void)
 }
 
 // ── input ─────────────────────────────────────────────────────────────────────
+static void on_tab(void);
 static void on_key(int key, char ch)
 {
     if (nucleo_touch_is_row(key, ch)) {                              // a preset chip on the panel (idle timer)
@@ -433,6 +428,7 @@ static void on_key(int key, char ch)
         if (s_mode == MODE_TIMER && !s_tm_run && !s_tm_done && i < 6) { s_tm_min = PRESET_MIN[i]; s_tm_sec = 0; s_tm_rem_ms = 0; nucleo_app_request_draw(); }
         return;
     }
+    if (key == NK_CHAR && (ch == 1 || ch == 2)) { if (ch - 1 != s_mode) on_tab(); return; }   // a mode pill on the panel
     if (ch == 'r' || ch == 'R') { if (s_mode == MODE_STOP) sw_reset(); else tm_reset(); return; }
 
     if (s_mode == MODE_STOP) {

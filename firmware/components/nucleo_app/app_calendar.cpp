@@ -1056,38 +1056,19 @@ static void lg_event(void)
     lg::button(20 + bw, H - 44, bw, 38, TR5("Elimina", "Delete", "Eliminar", "Supprimer", "Loeschen"), LINE, C_RED, NK_CHAR, 'd');
 }
 
-// A small chevron (dir -1 = left, +1 = right) centred on cx, cy.
-static void lg_chev(int cx, int cy, int dir, unsigned short c)
-{
-    for (int o = 0; o < 2; o++) {
-        d.drawLine(cx - 3 * dir + o * dir, cy - 7, cx + 4 * dir + o * dir, cy, c);
-        d.drawLine(cx + 4 * dir + o * dir, cy, cx - 3 * dir + o * dir, cy + 7, c);
-    }
-}
-
-// One form row: [x, x+w) at y, h tall, ACC outline when focused; the row (left of `tap_w`) focuses the field.
-static void lg_form_row(int y, int h, int field, const char *label, const char *value, int tap_w)
+// One form row: the kit's settings row (focused = the acc pill) with its value as < value >; a tap on the label
+// focuses the field, on the value's left / right half steps it (kminus / kplus).
+static void lg_form_row(int y, int h, int field, const char *label, const char *value, char kminus, char kplus)
 {
     const int W = d.width();
-    const bool f = s_field == field;
-    d.fillRect(0, y, W, h + 4, BG);
-    lg::panel(8, y, W - 16, h);
-    const unsigned short cb = lg::card();
-    if (f) { d.drawRoundRect(8, y, W - 16, h, 8, ACC); d.drawRoundRect(9, y + 1, W - 18, h - 2, 7, ACC); }
-    lg::font(0); d.setTextDatum(middle_left); d.setTextColor(f ? ACC : MUTED, cb); d.drawString(label, 18, y + h / 2);
-    lg::font(1); d.setTextColor(FG, cb); d.drawString(value, 74, y + h / 2 + 1);
-    d.setTextDatum(top_left);
-    nucleo_touch_add(8, y, tap_w, h, NK_CHAR, (char)((int)LGK_FOCUS0 + field));
-}
-static void lg_step(int x, int y, int w, int h, const char *sym, char ch)   // a small stepper button on a form row
-{
-    d.fillRoundRect(x, y, w, h, 7, LINE);
-    if (sym[0] == '<' || sym[0] == '>') lg_chev(x + w / 2, y + h / 2, sym[0] == '<' ? -1 : 1, ACC);
-    else {
-        d.fillRect(x + w / 2 - 7, y + h / 2 - 1, 15, 3, ACC);
-        if (sym[0] == '+') d.fillRect(x + w / 2 - 1, y + h / 2 - 7, 3, 15, ACC);
-    }
-    nucleo_touch_add(x, y, w, h, NK_CHAR, ch);
+    d.fillRect(0, y, W, h, BG);
+    const lg::Setting st = { label, nullptr, value, lg::ROW_CYCLE, -1, -1, false, false, 0, 0, 0 };
+    lg::setting(8, y, W - 16, h, st, s_field == field, ACC);
+    lg::font(1);
+    const int tw = d.textWidth(value), rx = W - 20, lx = rx - 40 - tw, vc = rx - 12 - tw / 2;
+    nucleo_touch_add(8, y, lx - 8, h, NK_CHAR, (char)((int)LGK_FOCUS0 + field));
+    nucleo_touch_add(lx, y, vc - lx, h, NK_CHAR, kminus);
+    nucleo_touch_add(vc, y, W - 8 - vc, h, NK_CHAR, kplus);
 }
 
 static void lg_form(void)
@@ -1096,26 +1077,19 @@ static void lg_form(void)
     const char *title = s_msg ? s_msg : (s_editing ? TR5("Modifica", "Edit event", "Editar", "Modifier", "Bearbeiten")
                                                    : TR5("Nuovo evento", "New event", "Nuevo evento", "Nouvel evt", "Neuer Termin"));
     lg::header(title, nullptr, s_msg ? ERR : ACC, NK_BACK);
-    const int rh = 40, y0 = lg::HEAD + 6;
+    const int rh = 36, y0 = lg::HEAD + 4;
     char ds[24]; struct tm fd = day_tm(s_foff); fmt_day(fd, ds, sizeof ds);
-    lg_form_row(y0, rh, F_DAY, TR5("Giorno", "Day", "Dia", "Jour", "Tag"), ds, W - 16 - 92);
-    lg_step(W - 92, y0 + 4, 40, rh - 8, "<", LGK_FDAY_M);
-    lg_step(W - 48, y0 + 4, 40, rh - 8, ">", LGK_FDAY_P);
+    lg_form_row(y0, rh, F_DAY, TR5("Giorno", "Day", "Dia", "Jour", "Tag"), ds, LGK_FDAY_M, LGK_FDAY_P);
     char ts[16];
-    if (s_fmin < 0) snprintf(ts, sizeof ts, "--:--"); else snprintf(ts, sizeof ts, "%02d:%02d", s_fmin / 60, s_fmin % 60);   // all day: the toggle says it
-    const int ty = y0 + rh + 6;
-    lg_form_row(ty, rh, F_TIME, TR5("Ora", "Time", "Hora", "Heure", "Zeit"), ts, W - 16 - 174);
-    {   // all-day toggle
-        const int bx = W - 176, on = s_fmin < 0;
-        d.fillRoundRect(bx, ty + 4, 80, rh - 8, 7, on ? ACC : LINE);
-        lg::font(0); d.setTextDatum(middle_center); d.setTextColor(on ? INK : FG, on ? ACC : LINE);
-        d.drawString(TR5("tutto il g.", "all day", "todo el d.", "journee", "ganztags"), bx + 40, ty + rh / 2); d.setTextDatum(top_left);
-        nucleo_touch_add(bx, ty + 4, 80, rh - 8, NK_CHAR, LGK_FALLDAY);
-    }
-    lg_step(W - 92, ty + 4, 40, rh - 8, "-", LGK_FTIME_M);
-    lg_step(W - 48, ty + 4, 40, rh - 8, "+", LGK_FTIME_P);
+    if (s_fmin < 0) snprintf(ts, sizeof ts, "--:--"); else snprintf(ts, sizeof ts, "%02d:%02d", s_fmin / 60, s_fmin % 60);   // all day: the switch says it
+    lg_form_row(y0 + rh, rh, F_TIME, TR5("Ora", "Time", "Hora", "Heure", "Zeit"), ts, LGK_FTIME_M, LGK_FTIME_P);
+    const int ty = y0 + 2 * rh;                                    // all day: the kit's switch row
+    const lg::Setting ad = { all_day_label(), nullptr, nullptr, lg::ROW_TOGGLE, -1, -1, s_fmin < 0, false, 0, 0, 0 };
+    d.fillRect(0, ty, W, rh, BG);
+    lg::setting(8, ty, W - 16, rh, ad, false, ACC);
+    nucleo_touch_add(8, ty, W - 16, rh, NK_CHAR, LGK_FALLDAY);
     // the title box: what is typed in the bold face, the autocomplete tail dim after it
-    const int by = ty + rh + 6, bh = H - by - 50;
+    const int by = ty + rh + 2, bh = H - by - 48;
     const bool f = s_field == F_TEXT;
     d.fillRect(0, by, W, bh + 4, BG);
     lg::panel(8, by, W - 16, bh);

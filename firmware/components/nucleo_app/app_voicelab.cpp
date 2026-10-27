@@ -299,11 +299,6 @@ static void draw_diagnosi(int top_y)
 // confidence verdict + bar and what ANIMA would resolve it to, and the per-command reliability list + card
 // (DIAGNOSI). The Cardputer is the companion and the GO push-to-talk — it shows "hold GO and speak" while testing.
 // Touch is on the content: a tab picks it, a diagnosis row taps to select, tapping the result card clears it.
-static void lg_conf_bar(int x, int y, int w, int pct, unsigned short col)
-{
-    lg::bar(x, y, w, 12, pct, col);
-}
-
 static void lg_prova(int yb, int Wd, int Hd)
 {
     const int bx = 24, bw = Wd - 48, by = yb + 14, bh = Hd - yb - 24;
@@ -333,7 +328,7 @@ static void lg_prova(int yb, int Wd, int Hd)
     lg::font(1); const int vw = (int)d.textWidth(vl) + 18;
     d.fillRoundRect(bx + bw - vw - 14, by + 16, vw, 24, 8, c.col);
     d.setTextDatum(middle_center); d.setTextColor(BG, c.col); d.drawString(vl, bx + bw - vw - 14 + vw / 2, by + 28); d.setTextDatum(top_left);
-    lg_conf_bar(bx + 16, by + 58, bw - 32, c.pct, c.col);
+    lg::bar(bx + 16, by + 58, bw - 32, 12, c.pct, c.col);
     int ry = by + 76;
     if (s_have_r) {
         const char *verb = TR("Risposta", "Answer");
@@ -370,7 +365,7 @@ static void lg_diagnosi(int yb, int Wd, int Hd)
     lg::font(0); d.setTextColor(MUTED, cb); d.drawString(TR("Affidabilita", "Reliability"), px + 12, py + 46);
     lg::font(2); d.setTextColor(TIER_COL[tier], cb);
     char tn[24]; lg::fit(tn, sizeof tn, tier_name(tier), pw - 24); d.drawString(tn, px + 12, py + 64);
-    lg_conf_bar(px + 12, py + ph - 56, pw - 24, TIER_PCT[tier], TIER_COL[tier]);
+    lg::bar(px + 12, py + ph - 56, pw - 24, 12, TIER_PCT[tier], TIER_COL[tier]);
     lg::font(0); d.setTextColor(tier <= 1 ? C_DIS : MUTED, cb);
     lg::wrap(tier == 0 ? TR("Pronuncialo per provarlo.", "Say it to test it.")
                        : tier <= 1 ? TR("Debole: riaddestralo.", "Weak: re-train it.")

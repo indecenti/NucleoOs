@@ -151,7 +151,7 @@ static void lg_paint(void *)
     lg::field(0, 0, W, H);                                       // everything but the chevron: hit-tested in on_key
 }
 
-static void draw_large(void) { lg::frame(lg_paint, nullptr); }
+static void draw_large(void) { lg::frame(lg_paint, nullptr, 0, 0, true); }   // exact theme colours (RGB565 strips)
 
 // A tap on the panel: the key under it, through the keyboard's own path.
 static bool lg_tap_key(int key, char ch)

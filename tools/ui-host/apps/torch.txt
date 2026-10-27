@@ -7,3 +7,4 @@ lit_toast c:3
 pattern_tap SPACE row:5
 swatch_tap SPACE row:1
 tap_off tap:160,120
+slider_tap SPACE tap:90,205

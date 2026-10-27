@@ -475,6 +475,17 @@ static const char *aset_right(int i)
     }
     return "";
 }
+static int s_sl_x, s_sl_w, s_sl_y, s_sl_h;                         // the picked slider row's track (s_sl_w 0 = none)
+static unsigned char aset_kind(int i)
+{
+    if ((i == R_SENS_M && !nucleo_imu_present()) || (i == R_REC && s_mode != MODE_SILENT)) return lg::ROW_VALUE;   // n/a
+    switch (i) {
+        case R_SENS_A: case R_SENS_M: return lg::ROW_SLIDER;
+        case R_PIN: case R_TEST:      return lg::ROW_NAV;
+        case R_LOG:                   return lg::ROW_VALUE;
+    }
+    return lg::ROW_CYCLE;
+}
 static void siren_test(void)
 {
     siren_vol_grab();
@@ -771,6 +782,15 @@ static void on_key(int key, char ch)
             } else if (key == NK_ENTER) { s_pin_edit = false; nucleo_app_request_draw(); }
             return;
         }
+        int tx, ty;
+        if (lg::tap(key, ch, &tx, &ty)) {                            // panel: a tap on the picked level's slider
+            if (s_sl_w && ty >= s_sl_y && ty < s_sl_y + s_sl_h && aset_kind(s_set_sel) == lg::ROW_SLIDER) {
+                int &lv = s_set_sel == R_SENS_A ? s_sens_audio : s_sens_motion;
+                lv = 1 + (lg::slider_at(tx, s_sl_x, s_sl_w) * (SENS_MAX - 1) + 50) / 100;
+                s_dirty_cfg = true; nucleo_app_request_draw();
+            }
+            return;
+        }
         if (int t = lg::row_tap(key, ch, s_lg_scroll, ASET_ROWS, &s_set_sel)) {   // panel: tap = pick, again = act
             if (t == 1) { nucleo_app_request_draw(); return; }
             key = NK_ENTER;
@@ -939,7 +959,8 @@ static void draw(void)
 //   ARMING: the exit countdown as a ring that empties (tap = cancel);
 //   ARMED / TRIGGERED: state, live meters and the PIN dots on the left, a PIN keypad on the right (its keys ARE
 //             the PIN digits); the siren mode flashes the whole panel red;
-//   SETTINGS: the rows (tap = pick, tap again = act / change), - / + steppers on the picked value row; a PIN
+//   SETTINGS: the kit's settings rows (tap = pick, tap again = act / change), < > on the picked value, a slider
+//             for the sensitivities; a PIN
 //             challenge brings the keypad back.
 // The Cardputer shows the state and what to type. Keyboard behaviour is unchanged.
 #define LW 320
@@ -950,8 +971,17 @@ static void lt(const char *t, int x, int y, int f, unsigned short c)
     LovyanGFX &G = d;
     lg::font(f); G.setTextDatum(middle_center); G.setTextColor(c); G.drawString(t, x, y); G.setTextDatum(top_left);
 }
-static const char *set_label(int i, void *) { return aset_label(i); }
-static const char *set_right(int i, void *) { return aset_right(i); }
+// The settings rows are the kit's (lg::setting) inside lg::list: values cycle < >, the sensitivities are sliders
+// (aset_kind, with the picked slider's track in s_sl_*).
+static void set_row(int i, int x, int y, int w, int h, bool focus, unsigned short, void *)
+{
+    d.fillRect(x, y, w, h, BG);                                      // the card replaces list()'s pill
+    const unsigned char k = aset_kind(i);
+    const int lv = i == R_SENS_A ? s_sens_audio : s_sens_motion;
+    const lg::Setting st = { aset_label(i), nullptr, k == lg::ROW_NAV ? nullptr : aset_right(i), k, -1, -1, false,
+                             k == lg::ROW_VALUE && i != R_LOG, (lv - 1) * 100 / (SENS_MAX - 1), (unsigned short)(i == R_LOG ? C_RED : 0), 0 };
+    lg::setting(x, y + 2, w, h, st, focus, ACCENT);
+}
 
 // 1-9, <, 0 at x0,y0: three columns of 50x48 keys.
 static void lp_keypad(int x0, int y0, bool del)
@@ -979,19 +1009,24 @@ static void lp_settings(int y0)
         return;
     }
     const int rh = 34, rows = (LH - y0) / rh;
-    int sc = s_lg_scroll;                                            // the list's own scroll rule, to place the steppers
+    int sc = s_lg_scroll;                                            // the list's own scroll rule, to place the controls
     if (s_set_sel < sc) sc = s_set_sel;
     if (s_set_sel >= sc + rows) sc = s_set_sel - rows + 1;
     if (sc > ASET_ROWS - rows) sc = ASET_ROWS - rows;
     if (sc < 0) sc = 0;
     const int ry = y0 + (s_set_sel - sc) * rh;
-    const bool num = s_set_sel != R_PIN && s_set_sel != R_TEST && s_set_sel != R_LOG;
-    if (num) { nucleo_touch_add(140, ry, 44, rh, NK_LEFT, 0); nucleo_touch_add(186, ry, 44, rh, NK_RIGHT, 0); }   // before the rows: they win
-    lg::text_list(0, y0, LW, LH - y0, ASET_ROWS, s_set_sel, &s_lg_scroll, set_label, set_right, nullptr, nullptr, ACCENT, rh);
-    if (num) for (int k = 0; k < 2; k++) {
-        d.fillRoundRect(142 + k * 46, ry + 4, 40, rh - 8, 8, INK);
-        lt(k ? "+" : "-", 162 + k * 46, ry + rh / 2, 1, ACCENT);
+    const unsigned char k = aset_kind(s_set_sel);
+    s_sl_w = 0;
+    if (k == lg::ROW_SLIDER) {                                       // the picked level: tap its slider (before the rows: it wins)
+        s_sl_x = 4 + 9; s_sl_w = LW - 14 - 21; s_sl_y = ry + rh / 2 - 2; s_sl_h = rh / 2 + 2;
+        nucleo_touch_add(0, s_sl_y, LW, s_sl_h, NK_CHAR, NUCLEO_TOUCH_FIELD);
+    } else if (k == lg::ROW_CYCLE) {                                 // the picked value: tap < = back, > = on
+        lg::font(1);
+        const int rx = LW - 6 - 4 - 12, tw = d.textWidth(aset_right(s_set_sel)), vc = rx - 12 - tw / 2;
+        nucleo_touch_add(vc - tw / 2 - 40, ry, tw / 2 + 40, rh, NK_LEFT, 0);
+        nucleo_touch_add(vc, ry, LW - 6 - vc, rh, NK_RIGHT, 0);
     }
+    lg::list(0, y0, LW, LH - y0, rh, ASET_ROWS, s_set_sel, &s_lg_scroll, set_row, nullptr, ACCENT);
 }
 
 static void lp_watch(int y0, unsigned short bg)                   // ARMED / TRIGGERED: state + meters | keypad
@@ -1018,13 +1053,13 @@ static void lp_watch(int y0, unsigned short bg)                   // ARMED / TRI
     lp_keypad(162, y0 + 6, false);
 }
 
-static void lg_paint(void *)
+static void lg_paint(void *direct)                                  // direct: on the panel, every box repaints itself
 {
     LovyanGFX &G = d;
     if (s_scr_off) { G.fillRect(0, 0, LW, LH, 0); return; }           // stealth: the panel is dark too
     unsigned short bg = BG, acc;
     if (s_state == ST_TRIGGERED && s_mode != MODE_SILENT) bg = s_flash ? C_RED : 0x3800;
-    G.fillRect(0, 0, LW, LH, bg);
+    if (!direct) G.fillRect(0, 0, LW, LH, bg);
     const bool open = s_state == ST_DISARMED || s_settings;
     const char *rl = status_text(&acc);
     const int y0 = lg::header(s2(14 /* Alarm */), rl, acc, open || s_state == ST_ARMING ? NK_BACK : 0,
@@ -1051,10 +1086,16 @@ static void lg_paint(void *)
     } else lp_watch(y0, bg);
     lg::field(0, 0, LW, LH);                                         // a stray tap is nothing (not an arrow)
 }
+// The settings rows are drawn straight to the panel: the kit's rows keep their card colour (the 8-bit canvas of
+// lg::frame would lose it); the panel is cleared once when the list opens.
+static bool s_lg_full = true;
 static void draw_large(void)
 {
     nucleo_touch_clear();
-    lg::frame(lg_paint, nullptr);
+    if (s_settings && !s_pin_edit && !s_scr_off) {
+        if (s_lg_full) { d.fillRect(0, 0, LW, LH, BG); s_lg_full = false; }
+        lg_paint((void *)1);
+    } else { s_lg_full = true; lg::frame(lg_paint, nullptr, 0, 0, true); }
     nucleo_touch_commit();
 }
 

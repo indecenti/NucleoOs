@@ -44,6 +44,11 @@ static const char *pset_right(int i, void *)
     }
     return "";
 }
+// An option row on the panel (lg::settings_list): the Settings look.
+static void lg_pset_row(int i, lg::Setting *s, void *)
+{
+    s->label = pset_label(i, nullptr); s->value = pset_right(i, nullptr); s->kind = i == 2 ? lg::ROW_DANGER : lg::ROW_CYCLE;
+}
 static void pset_change(int dir)
 {
     switch (s_set_sel) {
@@ -169,7 +174,7 @@ static void lg_paint(void *)
     int y0 = lg::header(p_title(), rgt, acc, NK_BACK, NK_TAB);
     d.setFont(&fonts::Font0);                          // the views size the classic font themselves
     if (s_settings) {
-        lg::text_list(0, y0 + 4, 320, 240 - y0 - 4, PSET_ROWS, s_set_sel, &s_lsc, pset_label, pset_right, nullptr, nullptr, acc, 34);
+        lg::settings_list(8, y0 + 4, 304, 240 - y0 - 4, 34, PSET_ROWS, s_set_sel, &s_lsc, lg_pset_row, nullptr, acc);
         return;
     }
     body(96, 136, 84, 200, y0 + 6, 236, 320, 2);
@@ -178,7 +183,7 @@ static void lg_paint(void *)
 static void draw_large(void)
 {
     nucleo_touch_clear();
-    lg::frame(lg_paint, nullptr);
+    lg::frame(lg_paint, nullptr, 0, 0, true);   // exact theme colours (RGB565 strips)
     nucleo_touch_commit();
 }
 

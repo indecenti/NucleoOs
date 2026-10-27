@@ -13,6 +13,7 @@
 #include "launcher_theme.h"   // themed BG/FG/MUTED/DIM/LINE/INK + C_* accents (launcher-consistent)
 #include "app_gfx.h"
 #include "app_large.h"        // two screens: the monitor + peer status on the panel, Cardputer as companion
+#include "ui_glyph.h"
 #include "nucleo_touch.h"
 #include <M5GFX.h>
 #include <string.h>
@@ -740,6 +741,7 @@ static void lg_meter(int x, int y, int w, const char *label, const char *val, in
 static int lg_status_line(int x, int y, int w)
 {
     const bool on = (s_cs == CS_ONLINE);
+    d.fillRect(x - 2, y - 1, w + 4, 17, BG);                       // repaints itself (the Server tab is drawn direct)
     d.fillCircle(x + 6, y + 7, 5, on ? GRN : (s_cs == CS_IDLE ? WARN : ACC));
     lg::font(0); d.setTextDatum(middle_left); d.setTextColor(on ? GRN : MUTED, BG);
     char ln[56];
@@ -780,15 +782,15 @@ static void lg_pad(int x, int y, int w, int h)
     lg::field(x, y, w, h);
 }
 
-static void kd_paint(void *)                         // composed by lg::frame: the 5 Hz refresh never flickers
+static void kd_paint(void *direct)                   // composed by lg::frame: the 5 Hz refresh never flickers
 {
     const int W = 320, H = 240;
-    d.fillRect(0, 0, W, H, BG);
+    if (!direct) d.fillRect(0, 0, W, H, BG);
     char up[20] = "";
     if (s_cs == CS_ONLINE) { if (s_stat_at) snprintf(up, sizeof up, "up %uh %02um", s_uptime / 3600, (s_uptime % 3600) / 60); else snprintf(up, sizeof up, "online"); }
     int y = lg::header("KeyDeck", up, ACC, NK_BACK, 0);
     y = lg::tabs(y + 2, LG_TABS, 3, s_tab, ACC, "123");
-    d.fillRect(0, y, W, H - y, BG);
+    if (!direct) d.fillRect(0, y, W, H - y, BG);
     const int cx = 16, cw = W - 32;
     const int cy = lg_status_line(cx, y + 4, cw);
 
@@ -807,21 +809,28 @@ static void kd_paint(void *)                         // composed by lg::frame: t
         lg_pad(cx - 3, cy + 62, cw + 6, H - cy - 66);
     } else if (s_tab == T_SRV) {
         const int py = cy + 2, ph = H - py - 10;
-        lg::panel(cx, py, cw, ph, CARD);
-        const unsigned short cb = CARD;
-        lg::font(0); d.setTextColor(MUTED, cb); d.drawString("mDNS  _keydeck._tcp", cx + 12, py + 10);
-        lg::kv(cx + 12, py + 30, cw - 24, "Saved IP", s_saved_ip[0] ? s_saved_ip : "-", FG, cb);
-        lg::kv(cx + 12, py + 50, cw - 24, "PIN", s_pin[0] ? s_pin : "open", s_pin[0] ? FG : MUTED, cb);
         if (s_edit != E_NONE) {
-            lg::font(1); d.setTextColor(ACC, cb); d.drawString(s_edit == E_IP ? "New IP" : "P4 PIN (empty = none)", cx + 12, py + 74);
-            d.fillRoundRect(cx + 12, py + 92, cw - 24, 34, 8, INK); d.drawRoundRect(cx + 12, py + 92, cw - 24, 34, 8, ACC);
+            lg::panel(cx, py, cw, ph, CARD);
+            const unsigned short cb = CARD;
+            lg::kv(cx + 12, py + 10, cw - 24, "Saved IP", s_saved_ip[0] ? s_saved_ip : "-", FG, cb);
+            lg::kv(cx + 12, py + 30, cw - 24, "PIN", s_pin[0] ? s_pin : "open", s_pin[0] ? FG : MUTED, cb);
+            lg::font(1); d.setTextColor(ACC, cb); d.drawString(s_edit == E_IP ? "New IP" : "P4 PIN (empty = none)", cx + 12, py + 58);
+            d.fillRoundRect(cx + 12, py + 80, cw - 24, 34, 8, INK); d.drawRoundRect(cx + 12, py + 80, cw - 24, 34, 8, ACC);
             char f[24]; snprintf(f, sizeof f, "%s_", s_ebuf);
-            lg::font(2); d.setTextDatum(middle_left); d.setTextColor(FG, INK); d.drawString(f, cx + 22, py + 109); d.setTextDatum(top_left);
-        } else {
-            const int bw = cw - 24, bx = cx + 12; int ry = py + 64;
-            lg::button(bx, ry, bw, 22, "Search again (mDNS)", BG, FG, NK_ENTER, 0); ry += 26;
-            lg::button(bx, ry, bw, 22, "Enter IP", ACC, INK, NK_CHAR, 'm'); ry += 26;
-            lg::button(bx, ry, bw, 22, "Set PIN", s_need_pin ? WARN : BG, s_need_pin ? INK : FG, NK_CHAR, 'p');
+            lg::font(2); d.setTextDatum(middle_left); d.setTextColor(FG, INK); d.drawString(f, cx + 22, py + 97); d.setTextDatum(top_left);
+        } else {                                       // the kit's settings rows: each does what its key does
+            lg::font(0); d.setTextColor(MUTED, BG); d.drawString("mDNS  _keydeck._tcp", cx, py + 2);
+            const lg::Setting R[3] = {
+                { "Search again", nullptr, nullptr, lg::ROW_NAV, UG_SEARCH, -1, false, false, 0, 0, 0 },
+                { "Server IP", nullptr, s_saved_ip[0] ? s_saved_ip : "-", lg::ROW_VALUE, UG_GLOBE, -1, false, false, 0, 0, 0 },
+                { "P4 PIN", nullptr, s_pin[0] ? s_pin : "open", lg::ROW_VALUE, UG_LOCK, -1, false, false, 0,
+                  (unsigned short)(s_need_pin ? WARN : 0), (unsigned short)(s_pin[0] ? 0 : MUTED) } };
+            static const char K[3] = { 0, 'm', 'p' };
+            for (int i = 0; i < 3; i++) {
+                const int ry = py + 20 + i * 40;
+                lg::setting(cx - 6, ry, cw + 12, 40, R[i], false, ACC);
+                nucleo_touch_add(0, ry, W, 40, i ? NK_CHAR : NK_ENTER, K[i]);
+            }
         }
     } else {   // T_INFO
         const int py = cy + 2, ph = H - py - 10;
@@ -836,7 +845,18 @@ static void kd_paint(void *)                         // composed by lg::frame: t
         lg::wrap("Keys go to the focused field on the P4. Telemetry: PSRAM + CPU every 1 s.", cx + 12, py + 84, cw - 24, 17, 3);
     }
 }
-static void kd_draw_large(void) { lg::frame(kd_paint, nullptr); nucleo_touch_commit(); }
+// The Server tab's rows are drawn straight to the panel: the kit's rows keep their card colour (the 8-bit canvas of
+// lg::frame would lose it) and the tab only changes on a key or a new peer state; cleared once when it opens.
+static void kd_draw_large(void)
+{
+    static bool s_full = true;
+    nucleo_touch_clear();
+    if (s_tab == T_SRV && s_edit == E_NONE) {
+        if (s_full) { d.fillRect(0, 0, 320, 240, BG); s_full = false; }
+        kd_paint((void *)1);
+    } else { s_full = true; lg::frame(kd_paint, nullptr, 0, 0, true); }
+    nucleo_touch_commit();
+}
 
 static void draw_companion(void)
 {

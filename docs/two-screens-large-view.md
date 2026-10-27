@@ -23,7 +23,12 @@ draws its whole UI there natively (`on_draw_large`) and the Cardputer's own 240x
 | `nucleo_touch_add_pad(x, y, w, h, step)` | A drag pad: the drag delivers arrows in the FINGER's direction every `step` px (aim, steer, slide a paddle). |
 | `nucleo_touch_add(..., NK_BACK, 0)` | The header chevron = Back. |
 | `lg::header`, `lg::panel`, `lg::kv`, `lg::bar`, `lg::message`, `lg::font`, `lg::fit`, `lg::wrap` | Theme-coloured building blocks for tool apps; games usually draw their own palette (see `lt / ltf / lhead / lrow` in `app_constellations.cpp`). |
+| `lg::setting` / `lg::settings_list` | THE settings / options row (nav chevron, value, switch, slider, < cycle >, danger) and a scrolling list of them. Every app's options use it — never a local copy. |
+| `lg::toggle`, `lg::slider` + `lg::slider_at`, `lg::vslider` + `lg::vslider_at` | The only switch and the only adjustable level controls (map a tap with `*_at`). Read-only meters stay `lg::bar`. |
 | `lg::comp_head`, `lg::comp_keys` | The Cardputer companion's head line and key hints. |
+
+**Reuse rule:** switches, sliders, settings rows, headers, tabs and lists come from the kit, so they look the
+same in every app. If a control is missing, add it to the kit once.
 
 Fonts on the panel (`lg::font`): 0 = Font2 16 px (body, rows), 1 = FreeSansBold 9 pt (titles),
 2 = FreeSansBold 12 pt (big values), 3 = FreeSansBold 18 pt (hero numbers), 4 = Font0 8 px (captions only).
@@ -104,9 +109,10 @@ networks + detail, scrub bars and volume sliders in the media apps, swipe-to-arc
 The Security apps are out of scope and were not touched.
 
 Known limits / follow-ups:
-- `lg::frame` composes in the shared 8-bit (RGB332) canvas: dark theme greys such as `lg::card()` turn black
-  or olive there. Apps with themed cards draw direct (or use a colour that survives, e.g. 0x212A). A 16-bit
-  mode for `lg::frame` (5 strips of 48 rows) would fix it at some speed cost.
+- `lg::frame` composes in the shared 8-bit (RGB332) canvas by default, where dark theme greys turn olive.
+  Tool apps with themed cards / rows pass `exact = true` (RGB565 strips, ~5 per frame, same bytes, no RAM):
+  their colours then match what is drawn straight to the panel. Games stay 8-bit (tile_blit / stipple).
+  On the 8-bit canvas `lg::card()` and the switch/slider tracks still step to a colour that is not BG.
 - micspec recomposes the whole panel at its frame rate; on the device it may be bound by the SPI push
   (~30 ms per 320x240 frame) — check it there.
 - Notify's swipe-to-archive rewrites `notify.jsonl`: a notification arriving in those few ms is lost.

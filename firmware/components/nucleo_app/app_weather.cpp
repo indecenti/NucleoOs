@@ -475,6 +475,12 @@ static const char *set_right(int i, void *)
     if (i == 2) { snprintf(v, sizeof v, "%d", s_fav_n); return v; }
     return i == 0 ? s_w.updated : i == 3 ? (s_units_f ? "Fahrenheit" : "Celsius") : "";
 }
+// A settings row on the panel (lg::settings_list): the Settings look.
+static void lg_set_row(int i, lg::Setting *s, void *)
+{
+    static const unsigned char K[4] = { lg::ROW_VALUE, lg::ROW_NAV, lg::ROW_VALUE, lg::ROW_CYCLE };
+    s->label = set_label(i, nullptr); s->value = set_right(i, nullptr); s->kind = K[i];
+}
 static const char *fav_label(int i, void *) { return i == s_fav_n ? TR("+ Aggiungi citta", "+ Add city") : s_fav[i].place; }
 static unsigned short fav_color(int i, void *) { return i == s_fav_n ? GRN : FG; }
 
@@ -487,7 +493,7 @@ static void lg_paint(void *)
     const char *tabs[3] = { tab_name(T_NOW), tab_name(T_FCAST), tab_name(T_SET) };
     y = lg::tabs(y + 2, tabs, 3, s_tab, ACCENT, "123");
     if (s_tab == T_SET) {
-        lg::text_list(0, y + 2, 320, 4 * 36, 4, s_set_sel, &s_lg_scroll, set_label, set_right, nullptr, nullptr, ACCENT, 36);
+        lg::settings_list(8, y, 304, 4 * 34, 34, 4, s_set_sel, &s_lg_scroll, lg_set_row, nullptr, ACCENT);
         char ln[48]; snprintf(ln, sizeof ln, "%s  %.2f, %.2f", s_w.place[0] ? s_w.place : "-", s_w.lat, s_w.lon);
         lg::font(4); d.setTextColor(DIM, BG); d.drawString(ln, 10, 228);
     } else if (!s_ok || (s_tab == T_FCAST && !s_w.n_days)) {
@@ -498,7 +504,7 @@ static void lg_paint(void *)
 
 static void draw_large(void)
 {
-    lg::frame(lg_paint, nullptr);
+    lg::frame(lg_paint, nullptr, 0, 0, true);   // exact theme colours (RGB565 strips)
     nucleo_touch_commit();
     d.setFont(&fonts::Font0); d.setTextSize(1);
 }

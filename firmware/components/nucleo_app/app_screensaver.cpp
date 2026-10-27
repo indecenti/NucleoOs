@@ -20,6 +20,7 @@
 #include "launcher_theme.h"
 #include "app_gfx.h"
 #include "app_ui.h"
+#include "ui_glyph.h"       // UG_CHECK: the effect in use
 #include "app_large.h"      // two screens: the effect list + preview on the 320x240 panel, the effect itself when running
 #include "nucleo_touch.h"
 #include "nucleo_i18n.h"    // TR(it,en): hint bar follows the system language
@@ -540,7 +541,7 @@ static void on_key(int key, char ch)
         }
         changed = true;
     } else if (lg::tap(key, ch, &tx, &ty)) {             // the timer slider: the tap sets the time (5 s steps)
-        int sec = 5 + ((tx - SL_X) * 595 / SL_W + 2) / 5 * 5;
+        int sec = 5 + (lg::slider_at(tx, SL_X, SL_W) * 595 / 100 + 2) / 5 * 5;
         g_threshold_ms = (int32_t)(sec < 5 ? 5 : sec > 600 ? 600 : sec) * 1000;
         s_tab = 1; save_settings(); changed = true;
     }
@@ -621,12 +622,13 @@ static void preview_effect(int mode, int x, int y, int w, int h)
     }
 }
 
-static void lg_mode_row(int i, int x, int y, int w, int h, bool focus, unsigned short bg, void *)
+// A row of the panel's list (lg::settings_list): an effect (a check = in use), Test, Timer.
+static void lg_mode_row(int i, lg::Setting *s, void *)
 {
-    char sv[20];
-    if (i == 5) { fmt_timer(sv, sizeof sv); lg::row_text(x, y, w, h, focus, bg, "Timer", sv, FG); return; }
-    lg::row_text(x, y, w, h, focus, bg, i == 4 ? TR("Prova", "Test") : effect_name(i),   // Font2 has no "►"
-                 i == g_mode ? TR("in uso", "in use") : nullptr, mode_color(i, nullptr));
+    s->label = effect_name(i);
+    if (i == g_mode) { s->rglyph = UG_CHECK; s->vcol = C_GREEN; }
+    if (i == 4) { s->label = TR("Prova", "Test"); s->kind = lg::ROW_NAV; s->lcol = C_YELLOW; }   // Font2 has no "►"
+    if (i == 5) { s->label = "Timer"; s->kind = lg::ROW_NAV; }        // its value: the header and the pane
 }
 
 // The timer pane: the value big, its state, and a slider over 5 s .. 10 min (tap anywhere on it to set).
@@ -641,9 +643,7 @@ static void lg_timer(int x, int y, int w, int h)
     lg::font(0); d.setTextColor(g_threshold_ms > 0 ? C_GREEN : C_RED, cb);
     d.drawString(g_threshold_ms > 0 ? TR("Attivo", "On") : TR("Disabilitato", "Disabled"), x + w / 2, y + 74);
     const int sec = (int)(g_threshold_ms / 1000), ty = y + h - 52;
-    const int kx = SL_X + (sec < 5 ? 0 : (sec - 5) * SL_W / 595);
-    lg::bar(SL_X, ty, SL_W, 8, sec < 5 ? 0 : (sec - 5) * 100 / 595, C_YELLOW);
-    d.fillCircle(kx, ty + 4, 10, C_YELLOW); d.fillCircle(kx, ty + 4, 4, cb);
+    lg::slider(SL_X, ty + 4, SL_W, sec < 5 ? 0 : (sec - 5) * 100 / 595, C_YELLOW, 8);
     lg::font(4); d.setTextColor(MUTED, cb);
     d.setTextDatum(top_left);  d.drawString("5s", SL_X, ty + 18);
     d.setTextDatum(top_right); d.drawString("10 min", SL_X + SL_W, ty + 18);
@@ -662,7 +662,8 @@ static void draw_large(void)
     }
     char rt[20]; fmt_timer(rt, sizeof rt);
     const int y = lg::header(TR("Salvaschermo", "Screensaver"), rt, C_PURPLE);
-    lg::list(0, y + 4, PX - 4, 240 - y - 8, 32, 6, s_tab ? 5 : s_sel, &s_lg_scroll, lg_mode_row, nullptr, C_PURPLE);
+    lg::settings_list(8, y + 2, PX - 12, 240 - y - 2, 34, 6, s_tab ? 5 : s_sel, &s_lg_scroll, lg_mode_row, nullptr, C_PURPLE);
+    d.fillRect(0, y, 8, 240 - y, BG);                // the margin left of the list (drawn straight, no clear)
     d.fillRect(PX - 4, y, 324 - PX, 240 - y, BG);
     const int py = y + 6, ph = 240 - y - 12;
     if (s_tab) { lg_timer(PX, py, PW, ph); nucleo_touch_commit(); return; }

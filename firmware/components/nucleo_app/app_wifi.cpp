@@ -1057,13 +1057,7 @@ static uint32_t row_sig(const Row &r, bool foc, bool icon)
 }
 
 // Switch (on = green track, knob right). `onchip` = drawn inside the focused accent chip.
-static void draw_switch(int rx, int cy, bool on, bool onchip)
-{
-    const int sw = 26, sh = 13;
-    int x = rx - sw;
-    d.fillRoundRect(x, cy - sh / 2, sw, sh, sh / 2, on ? GOOD : (onchip ? BG : LINE));
-    d.fillCircle(on ? x + sw - sh / 2 - 1 : x + sh / 2 + 1, cy, sh / 2 - 2, on ? INK : (onchip ? FG : nucleo_theme_ink_on(LINE, MUTED)));   // themes may alias LINE==MUTED
-}
+static void draw_switch(int rx, int cy, bool on, bool onchip) { lg::toggle(rx, cy, on, onchip); }   // the kit's switch
 
 static int slider_pct(const Row &r) { int span = r.hi - r.lo; if (span <= 0) return 0; int p = (r.num - r.lo) * 100 / span; return p < 0 ? 0 : p > 100 ? 100 : p; }
 
@@ -1658,60 +1652,22 @@ static uint32_t scene_sig(void);     // defined below (shared with on_draw)
 static uint32_t live_sig(void);      // defined below (the 1 Hz live values)
 static void draw_companion(void);
 
-// One settings row on the panel: a themed card (focused = ACC pill), optional glyph, the control on the
-// right (switch / slider / < value > / chevron / value), and the sub line under a focused row.
+// One settings row on the panel: the kit's settings row (lg::setting, the same in every app) fed from a Row.
 static void lg_set_row(int y, int rowh, const Row &r, bool foc, bool icon)
 {
-    const int W2 = d.width(), x = 8, w = W2 - 16, rx = x + w - 12, cy = y + (rowh - 4) / 2;
-    const uint16_t bg = foc ? ACC : lg::card();
-    const uint16_t ink = foc ? INK : (r.dis ? DIM : FG);
-    d.fillRoundRect(x, y, w, rowh - 4, 9, bg);
-    int lx = x + 12;
-    if (icon) { ui_glyph(&d, r.glyph, x + 17, cy, 6, foc ? INK : (r.dis ? DIM : (r.id == R_SUGGEST ? WARN : ACC)), bg); lx = x + 34; }
-    int vx = rx;
+    char pc[8]; snprintf(pc, sizeof pc, "%d%%", r.num);
+    lg::Setting st = { r.label, r.sub, r.kind == K_SLIDER ? pc : r.val, lg::ROW_VALUE, (signed char)(icon ? r.glyph : -1), -1,
+                       r.on, r.dis, slider_pct(r), (uint16_t)(r.id == R_SUGGEST ? WARN : r.id == R_SAVED_NET ? r.col : 0), r.col };
     switch (r.kind) {
-    case K_TOGGLE:
-        draw_switch(rx, cy, r.on && !r.dis, foc); vx = rx - 32;
-        break;
-    case K_SLIDER: {
-        char b[8]; snprintf(b, sizeof b, "%d%%", r.num);
-        lg::font(1); d.setTextDatum(middle_right); d.setTextColor(ink, bg); d.drawString(b, rx, cy);
-        vx = rx - d.textWidth(b) - 12; d.setTextDatum(top_left);
-        lg::bar(lx, y + rowh - 11, vx - lx - 6, 4, slider_pct(r), foc ? INK : FG);   // under the label, never through it
-        break;
+    case K_TOGGLE: st.kind = lg::ROW_TOGGLE; break;
+    case K_SLIDER: st.kind = lg::ROW_SLIDER; break;
+    case K_CYCLE:  st.kind = lg::ROW_CYCLE; break;
+    case K_NAV:    st.kind = lg::ROW_NAV; break;
+    case K_DANGER: if (is_rst(r.id)) st.lcol = BAD; else st.kind = lg::ROW_DANGER; break;
+    default: break;
     }
-    case K_CYCLE: {
-        lg::font(1); d.setTextDatum(middle_right); d.setTextColor(ink, bg);
-        char v[24]; lg::fit(v, sizeof v, r.val, w / 2); d.drawString(v, rx - 12, cy);
-        int vw = d.textWidth(v); d.setTextDatum(top_left);
-        ui_glyph(&d, UG_NEXT, rx - 4, cy, 4, ink, bg);
-        ui_glyph(&d, UG_PREV, rx - 12 - vw - 12, cy, 4, ink, bg);
-        vx = rx - 12 - vw - 22;
-        break;
-    }
-    default:
-        if (r.id == R_SAVED_NET) { if (r.on) { ui_glyph(&d, UG_STAR, rx, cy, 5, foc ? INK : GOOD, bg); vx = rx - 16; } }   // saved: star only, never the ssid again
-        else if (r.kind == K_NAV || (r.kind == K_DANGER && !is_rst(r.id))) { ui_glyph(&d, UG_NEXT, rx, cy, 5, ink, bg); vx = rx - 14; }
-        else if (r.val[0]) {
-            lg::font(1); d.setTextDatum(middle_right); d.setTextColor(foc ? INK : (r.dis ? DIM : r.col), bg);
-            char v[24]; lg::fit(v, sizeof v, r.val, w * 2 / 3); d.drawString(v, rx, cy);
-            vx = rx - d.textWidth(v) - 12; d.setTextDatum(top_left);
-        }
-        break;
-    }
-    const uint16_t lc = foc ? INK : (r.dis ? DIM : (r.kind == K_DANGER ? BAD : r.id == R_SUGGEST ? WARN : r.id == R_SAVED_NET ? r.col : FG));
-    lg::font(1); d.setTextColor(lc, bg);
-    char lbl[48]; lg::fit(lbl, sizeof lbl, r.label, vx - lx - 4);
-    if (r.kind == K_SLIDER) {                                         // slider: label up top, the bar below it
-        d.setTextDatum(top_left); d.drawString(lbl, lx, y + 3);
-    } else if (foc && r.sub[0]) {                                     // focused: label up top, sub line below
-        d.setTextDatum(top_left); d.drawString(lbl, lx, y + 5);
-        lg::font(0); d.setTextColor(INK, bg);
-        char sub[52]; lg::fit(sub, sizeof sub, r.sub, w - (lx - x) - 10);
-        d.drawString(sub, lx, y + 23);
-    } else {
-        d.setTextDatum(middle_left); d.drawString(lbl, lx, cy); d.setTextDatum(top_left);
-    }
+    if (r.id == R_SAVED_NET) { st.value = nullptr; st.rglyph = r.on ? UG_STAR : -1; st.vcol = GOOD; }   // saved: star only, never the ssid again
+    lg::setting(8, y, d.width() - 16, rowh, st, foc, ACC);
 }
 
 // The Wi-Fi status card atop the Wi-Fi page: signal ring + network/hotspot + address.
