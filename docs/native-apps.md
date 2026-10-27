@@ -157,6 +157,10 @@ and every step is checked:
 | Pinball (`pinball`) | 51 KB (40 KB, 1.3 KB RAM, ABI 3) | ~27 KB | `CONFIG_NUCLEO_STORE_PINBALL` |
 | Cardler (`cardler`) | 49 KB (40 KB, 0.5 KB RAM, ABI 3) | ~27 KB | `CONFIG_NUCLEO_STORE_CARDLER` |
 | Orde (`orde`, C++ + C) | 49 KB (37 KB, 0.5 KB RAM, ABI 3) | ~26 KB | `CONFIG_NUCLEO_STORE_ORDE` |
+| Snake (`snake`) | 42 KB (33 KB, 0.5 KB RAM, ABI 3) | ~23 KB | `CONFIG_NUCLEO_STORE_SNAKE` |
+| Slots (`slots`) | 38 KB (30 KB, 0.7 KB RAM, ABI 3) | ~21 KB | `CONFIG_NUCLEO_STORE_SLOTS` |
+| Reactor (`reactor`) | 40 KB (32 KB, 0.5 KB RAM, ABI 3) | ~21 KB | `CONFIG_NUCLEO_STORE_REACTOR` |
+| Garden (`giardino`) | 39 KB (31 KB, 0.5 KB RAM, ABI 3) | ~21 KB | `CONFIG_NUCLEO_STORE_SANDGARDEN` |
 
 With all three from the store (the default) the image is **3,461,120 B instead of 3,603,792 B: 142,672 B (139 KB)
 recovered**
