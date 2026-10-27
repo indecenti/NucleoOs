@@ -54,6 +54,8 @@ The rules that keep an installed app working across OS updates:
    rebuilds every native app from its recipe and publishes them with the firmware.
    Level 2 (2026-10-27) = level 1 + the second-screen helpers the games use (`lg::tap`, `lg::field`,
    `lg::frame` with the touch flag, `nucleo_touch_add_pad`, `nucleo_touch_add_scroll`).
+   Level 3 = level 2 + the rest of the `lg::` two-screen kit (`list`, `text_list`, `row_text`, `row_tap`, `tabs`,
+   `header`, `panel`, `message`), first needed by Tank Duel.
 
 Not in v1, on purpose: the web server (`httpd_*`: a module's handlers would outlive it, and the web OS's
 catch-all route is registered last, so a late endpoint is never reached), task creation, raw radio, OTA,
