@@ -427,9 +427,8 @@ static void on_key(int key, char ch) {
     unsigned m = nucleo_kbd_mods();
     int rows = (nucleo_app_content_height() - 23) / (8 * s_zoom); if (rows < 1) rows = 1;
     if (key == NK_CHAR && (ch == SSH_TSCROLL_UP || ch == SSH_TSCROLL_DOWN)) {   // panel: drag the scrollback
-        int step = rows - 1 > 0 ? rows - 1 : 1;
-        if (ch == SSH_TSCROLL_UP) { s_scroll += step; if (s_scroll > s_count - 1) s_scroll = s_count > 0 ? s_count - 1 : 0; }
-        else                      { s_scroll -= step; if (s_scroll < 0) s_scroll = 0; }
+        if (ch == SSH_TSCROLL_UP) { s_scroll += 1; if (s_scroll > s_count - 1) s_scroll = s_count > 0 ? s_count - 1 : 0; }
+        else                      { s_scroll -= 1; if (s_scroll < 0) s_scroll = 0; }
         s_dirty = true; nucleo_app_request_draw(); return;
     }
     if (m & NK_MOD_FN) {
@@ -463,21 +462,39 @@ static bool back_handler(int key) {
 }
 
 // ── draw ──
+// s_big: the panel terminal's 8x16 cells (Font0 scaled 4/3 x 2: 39 columns = the PTY's width on 312 px).
+static bool s_big = false;
 static void draw_text(int x, int y, const char *s, unsigned short fg, unsigned short bg, int zoom) {
-    d.setFont(&fonts::Font0); d.setTextSize(zoom); d.setTextColor(fg, bg); d.setCursor(x, y); d.print(s);
+    d.setFont(&fonts::Font0);
+    if (s_big) d.setTextSize(zoom * 1.34f, zoom * 2.0f);   // 6 x 1.34 -> an 8 px advance (4/3 rounds to 7) else d.setTextSize(zoom);
+    d.setTextColor(fg, bg); d.setCursor(x, y); d.print(s);
 }
+// One connect-form field's label and shown value (passwords masked), for the compact form and the panel's.
+static const char *form_field(int i, char *val, int cap) {
+    const char *lab = "Passphrase", *pw = s_passph;
+    if (i == 0) { snprintf(val, cap, "%s", s_host); return "Host"; }
+    if (i == 1) { snprintf(val, cap, "%s", s_user); return s_en ? "User" : "Utente"; }
+    if (i == 2) { snprintf(val, cap, "< %s >", s_auth == AUTH_PW ? "Password" : (s_en ? "Key" : "Chiave")); return "Auth"; }
+    if (s_auth == AUTH_KEY && i == 3) { snprintf(val, cap, s_keysN ? "< %s >" : "%s", s_keysN ? s_keys[s_keyIdx] : (s_en ? "(none in keys/)" : "(nessuna in keys/)")); return s_en ? "Key" : "Chiave"; }
+    if (i == 3) { lab = "Password"; pw = s_pass; }
+    int n = strlen(pw), k = 0; for (; k < n && k < cap - 1; k++) val[k] = '*'; val[k] = 0;
+    return lab;
+}
+static const char *const HELP_IT[] = { "Invio  esegui comando", "Su/Giu  cronologia", "Tab  completa (cmd+storia)",
+    "Sin/Des  cursore", "Esc  cancella riga", "Fn+Su/Giu  scorri output", "Fn+Z  zoom font",
+    "Fn+H  guida", "Fn+Esc  esci", "Auth: Password o Chiave", "Chiavi in /sd/data/ssh/keys",
+    "host key fidata al 1o uso", "(no editor full-screen)", nullptr };
+static const char *const HELP_EN[] = { "Enter  run command", "Up/Down  history", "Tab  complete (cmd+hist)",
+    "Left/Right  cursor", "Esc  clear line", "Fn+Up/Down  scroll output", "Fn+Z  zoom font",
+    "Fn+H  help", "Fn+Esc  quit", "Auth: Password or Key", "Keys in /sd/data/ssh/keys",
+    "host key trusted on 1st use", "(no full-screen editors)", nullptr };
 static void draw_form() {
     int top = nucleo_app_content_top();
     d.fillRect(0, top, 240, nucleo_app_content_height(), C_BG);
-    int nf = form_nfields(); const char *lab; char val[96];
+    int nf = form_nfields(); char val[96];
     for (int i = 0; i < nf; i++) {
         int y = top + 4 + i * 21; bool sel = (i == s_field);
-        if (i == 0) { lab = "Host"; snprintf(val, sizeof val, "%s", s_host); }
-        else if (i == 1) { lab = s_en ? "User" : "Utente"; snprintf(val, sizeof val, "%s", s_user); }
-        else if (i == 2) { lab = "Auth"; snprintf(val, sizeof val, "< %s >", s_auth == AUTH_PW ? "Password" : (s_en ? "Key" : "Chiave")); }
-        else if (s_auth == AUTH_PW && i == 3) { lab = "Password"; int n = strlen(s_pass); for (int k = 0; k < n && k < 90; k++) val[k] = '*'; val[n < 90 ? n : 90] = 0; }
-        else if (s_auth == AUTH_KEY && i == 3) { lab = s_en ? "Key" : "Chiave"; snprintf(val, sizeof val, s_keysN ? "< %s >" : "%s", s_keysN ? s_keys[s_keyIdx] : (s_en ? "(none in keys/)" : "(nessuna in keys/)")); }
-        else { lab = "Passphrase"; int n = strlen(s_passph); for (int k = 0; k < n && k < 90; k++) val[k] = '*'; val[n < 90 ? n : 90] = 0; }
+        const char *lab = form_field(i, val, sizeof val);
         draw_text(8, y, lab, sel ? ACCENT : C_DIM, C_BG, 1);
         d.fillRect(64, y - 1, 168, 11, sel ? C_INBG : C_BG);
         draw_text(67, y, val, C_INK, sel ? C_INBG : C_BG, 1);
@@ -486,7 +503,7 @@ static void draw_form() {
 }
 // draw one text/colour segment, grouping equal-colour runs
 static void draw_run(int x, int y, const char *txt, const uint8_t *col, int len, int zoom) {
-    int charW = 6 * zoom;
+    int charW = (s_big ? 8 : 6) * zoom;
     if (!col) { draw_text(x, y, txt, PAL[DEF_FG], C_BG, zoom); return; }
     int i = 0; while (i < len) { int j = i + 1; while (j < len && col[j] == col[i]) j++;
         char piece[SB_W]; int pl = j - i; memcpy(piece, txt + i, pl); piece[pl] = 0;
@@ -531,15 +548,7 @@ static void draw_manual() {
     int top = nucleo_app_content_top(), H = nucleo_app_content_height();
     d.fillRect(0, top, 240, H, C_BG);
     draw_text(8, top + 3, s_en ? "SSH - quick help" : "SSH - guida rapida", ACCENT, C_BG, 1);
-    const char *it[] = { "Invio  esegui comando", "Su/Giu  cronologia", "Tab  completa (cmd+storia)",
-        "Sin/Des  cursore", "Esc  cancella riga", "Fn+Su/Giu  scorri output", "Fn+Z  zoom font",
-        "Fn+H  guida", "Fn+Esc  esci", "Auth: Password o Chiave", "Chiavi in /sd/data/ssh/keys",
-        "host key fidata al 1o uso", "(no editor full-screen)", nullptr };
-    const char *en[] = { "Enter  run command", "Up/Down  history", "Tab  complete (cmd+hist)",
-        "Left/Right  cursor", "Esc  clear line", "Fn+Up/Down  scroll output", "Fn+Z  zoom font",
-        "Fn+H  help", "Fn+Esc  quit", "Auth: Password or Key", "Keys in /sd/data/ssh/keys",
-        "host key trusted on 1st use", "(no full-screen editors)", nullptr };
-    const char **m = s_en ? en : it;
+    const char *const *m = s_en ? HELP_EN : HELP_IT;
     for (int i = 0; m[i]; i++) draw_text(8, top + 15 + i * 8, m[i], i >= 9 ? C_DIM : C_INK, C_BG, 1);
 }
 // ===== two screens =============================================================================================
@@ -552,22 +561,17 @@ static void draw_form_large() {
     nucleo_touch_clear();
     int y = lg::header("SSH", s_status[0] ? s_status : nullptr, ACCENT);
     d.fillRect(0, y, W, H - y, C_BG);
-    const int nf = form_nfields(), cx = 16, cw = W - 32, rh = 26, gap = 3;
+    const int nf = form_nfields(), cx = 16, cw = W - 32, rh = nf > 4 ? 24 : 30, gap = 4;
     int ry = y + 8;
-    const char *lab; char val[96];
+    char val[96];
     for (int i = 0; i < nf; i++) {
         const bool sel = (i == s_field);
-        if (i == 0) { lab = "Host"; snprintf(val, sizeof val, "%s", s_host); }
-        else if (i == 1) { lab = s_en ? "User" : "Utente"; snprintf(val, sizeof val, "%s", s_user); }
-        else if (i == 2) { lab = "Auth"; snprintf(val, sizeof val, "< %s >", s_auth == AUTH_PW ? "Password" : (s_en ? "Key" : "Chiave")); }
-        else if (s_auth == AUTH_PW && i == 3) { lab = "Password"; int n = strlen(s_pass); int k = 0; for (; k < n && k < 90; k++) val[k] = '*'; val[k] = 0; }
-        else if (s_auth == AUTH_KEY && i == 3) { lab = s_en ? "Key" : "Chiave"; snprintf(val, sizeof val, s_keysN ? "< %s >" : "%s", s_keysN ? s_keys[s_keyIdx] : (s_en ? "(none in keys/)" : "(nessuna in keys/)")); }
-        else { lab = "Passphrase"; int n = strlen(s_passph); int k = 0; for (; k < n && k < 90; k++) val[k] = '*'; val[k] = 0; }
+        const char *lab = form_field(i, val, sizeof val);
         const unsigned short box = sel ? C_INBG : lg::card();
         d.fillRoundRect(cx, ry, cw, rh, 7, box);
         if (sel) d.drawRoundRect(cx, ry, cw, rh, 7, ACCENT);
-        lg::font(0); d.setTextColor(sel ? ACCENT : C_DIM, box); d.drawString(lab, cx + 12, ry + 5);
-        char vf[72]; lg::fit(vf, sizeof vf, val[0] ? val : "-", cw - 118); d.setTextColor(C_INK, box); d.drawString(vf, cx + 108, ry + 5);
+        lg::font(0); d.setTextColor(sel ? ACCENT : C_DIM, box); d.drawString(lab, cx + 12, ry + rh / 2 - 8);
+        char vf[72]; lg::font(1); lg::fit(vf, sizeof vf, val[0] ? val : "-", cw - 118); d.setTextColor(C_INK, box); d.drawString(vf, cx + 108, ry + rh / 2 - 7);
         nucleo_touch_add(cx, ry, cw, rh, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + i));
         ry += rh + gap;
     }
@@ -576,33 +580,46 @@ static void draw_form_large() {
     nucleo_touch_commit();
 }
 
+// The terminal on the panel, big: 8x16 cells (s_big), 39 columns = the PTY's width, so remote lines wrap exactly
+// where the host wraps them. Drawn straight to the panel WITHOUT a whole-screen clear: every row paints its text
+// on its own background and clears only the rest of its line, so typing and output never flash the screen. A drag
+// on the scrollback scrolls it one line per row-height of finger travel (SSH_TSCROLL_*, with the fling).
 static void draw_shell_large() {
-    const int W = d.width(), H = d.height();
+    const int W = 320, H = 240;
     nucleo_touch_clear();
-    const int zoom = s_zoom, charW = 6 * zoom, rowH = 8 * zoom, cols = (W - 8) / charW;
-    const int hdrH = 12, inH = 16, sbTop = hdrH, sbH = H - hdrH - inH, rows = sbH / rowH;
-    d.fillRect(0, 0, W, H, C_BG);
-    char st[100]; snprintf(st, sizeof st, "%s %s@%s%s", s_scroll ? "^scroll" : "*", s_user, s_host, s_sbcol ? "" : " [mono]");
-    draw_text(4, 1, st, s_scroll ? C_WARN : ACCENT, C_BG, 1);
+    s_big = true;
+    const int charW = 8 * s_zoom, rowH = 16 * s_zoom, cols = (W - 8) / charW;
+    const int hdrH = 18, inH = 20, sbTop = hdrH, sbH = H - hdrH - inH, rows = sbH / rowH, sbBot = sbTop + rows * rowH;
+    char st[100]; snprintf(st, sizeof st, "%s %s@%s%s", s_scroll ? "^" : "*", s_user, s_host, s_sbcol ? "" : " [mono]");
+    st[(W - 8) / 6] = 0;
+    s_big = false;                                       // the status line in Font0 x2 height (6x16): more fits
+    d.setFont(&fonts::Font0); d.setTextSize(1, 2); d.setTextColor(s_scroll ? C_WARN : ACCENT, C_BG); d.setCursor(4, 1); d.print(st);
+    d.fillRect(4 + (int)strlen(st) * 6, 0, W, hdrH, C_BG); d.fillRect(0, 0, 4, H, C_BG);
+    s_big = true;
     if (s_lock) xSemaphoreTake(s_lock, portMAX_DELAY);
-    int li = s_count - 1 - s_scroll, yy = sbTop + (rows - 1) * rowH;
+    int li = s_count - 1 - s_scroll, yy = sbBot - rowH;
     while (li >= 0 && yy >= sbTop) {
         const char *ln = sb_line(li); const uint8_t *cl = sb_col(li);
         int len = strlen(ln), nseg = len <= 0 ? 1 : (len + cols - 1) / cols;
         for (int seg = nseg - 1; seg >= 0 && yy >= sbTop; seg--) {
             int off = seg * cols, pl = len - off; if (pl > cols) pl = cols; if (pl < 0) pl = 0;
             char piece[SB_W]; memcpy(piece, ln + off, pl); piece[pl] = 0;
-            draw_run(4, yy, piece, cl ? cl + off : nullptr, pl, zoom);
+            draw_run(4, yy, piece, cl ? cl + off : nullptr, pl, s_zoom);
+            d.fillRect(4 + pl * charW, yy, W - 4 - pl * charW, rowH, C_BG);
             yy -= rowH;
         }
         li--;
     }
     if (s_lock) xSemaphoreGive(s_lock);
-    const int iy = H - inH; d.fillRect(0, iy, W, inH, C_INBG);
-    const int icw = 6, icols = (W - 16) / icw, from = s_cur_x > icols ? s_cur_x - icols : 0;
+    if (yy >= sbTop) d.fillRect(4, sbTop, W - 4, yy + rowH - sbTop, C_BG);     // above the oldest line
+    if (sbBot < H - inH) d.fillRect(4, sbBot, W - 4, H - inH - sbBot, C_BG);
+    const int iy = H - inH, icols = (W - 24) / 8, from = s_cur_x > icols ? s_cur_x - icols : 0;
     char shown[SB_W]; int k = 0; for (int i = from; i < s_linelen && k < icols; i++, k++) shown[k] = s_mask ? '*' : s_line[i]; shown[k] = 0;
-    draw_text(4, iy + 4, ">", ACCENT, C_INBG, 1); draw_text(14, iy + 4, shown, C_INK, C_INBG, 1);
-    d.fillRect(14 + (s_cur_x - from) * icw, iy + 3, 2, 10, ACCENT);
+    d.fillRect(0, iy, 4, inH, C_INBG);
+    draw_text(4, iy + 2, ">", ACCENT, C_INBG, 1); draw_text(16, iy + 2, shown, C_INK, C_INBG, 1);
+    d.fillRect(16 + k * 8, iy, W - 16 - k * 8, inH, C_INBG);
+    d.fillRect(16 + (s_cur_x - from) * 8, iy + 2, 2, 16, ACCENT);
+    s_big = false;
     nucleo_touch_add_scroll(0, sbTop, W, sbH, rowH, NK_CHAR, SSH_TSCROLL_UP, NK_CHAR, SSH_TSCROLL_DOWN);
     nucleo_touch_commit();
 }
@@ -621,18 +638,10 @@ static void draw_manual_large() {
     nucleo_touch_clear();
     int y = lg::header(s_en ? "SSH - help" : "SSH - guida", nullptr, ACCENT);
     d.fillRect(0, y, W, H - y, C_BG);
-    const char *it[] = { "Invio  esegui comando", "Su/Giu  cronologia", "Tab  completa (cmd+storia)",
-        "Sin/Des  cursore", "Esc  cancella riga", "Fn+Su/Giu  scorri output", "Fn+Z  zoom font",
-        "Fn+H  guida", "Fn+Esc  esci", "Auth: Password o Chiave", "Chiavi in /sd/data/ssh/keys",
-        "host key fidata al 1o uso", nullptr };
-    const char *en[] = { "Enter  run command", "Up/Down  history", "Tab  complete (cmd+hist)",
-        "Left/Right  cursor", "Esc  clear line", "Fn+Up/Down  scroll output", "Fn+Z  zoom font",
-        "Fn+H  help", "Fn+Esc  quit", "Auth: Password or Key", "Keys in /sd/data/ssh/keys",
-        "host key trusted on 1st use", nullptr };
-    const char **m = s_en ? en : it;
+    const char *const *m = s_en ? HELP_EN : HELP_IT;
     lg::font(0);
     const int colw = (W - 32) / 2;
-    for (int i = 0; m[i]; i++) {
+    for (int i = 0; i < 12; i++) {                      // two columns of six (the "no editors" note is compact-only)
         const int col = i / 6, row = i % 6;
         d.setTextColor(i >= 9 ? C_DIM : C_INK, C_BG);
         d.drawString(m[i], 16 + col * colw, y + 12 + row * 24);

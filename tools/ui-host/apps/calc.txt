@@ -5,3 +5,7 @@ typing  t:12+7*3
 result  t:12+7*3 ENTER
 error   t:5*(2+ ENTER
 long    t:123456789*987654321+3.14159/2
+tapsum  tap:120,92 tap:40,124 tap:280,188 tap:120,156 tap:200,92 tap:280,124 tap:120,188
+tapeq   tap:120,92 tap:40,124 tap:280,188 tap:120,156 tap:200,92 tap:280,124 tap:120,188 tap:280,220
+taperase t:12+7 tap:200,220 tap:200,220
+tapclear t:12+7 ENTER tap:40,92

@@ -171,9 +171,9 @@ static void remote_draw(void)
 }
 
 // ===== two screens =============================================================================================
-// The panel carries the "how to connect" card, large: the live link state, the address to open and the pairing
-// PIN each in their own box, with the auto-handoff as a big toggle button (tap = Enter, the same key that flips it
-// on the Cardputer). The Cardputer becomes a glance companion: the same facts in one column. There is no mirror.
+// The panel carries the "how to connect" cards, large: the live link state, the address to open as a hero line,
+// the pairing PIN, and the auto-handoff as its own card with a switch â€” the card IS the toggle (tap = Enter, the
+// same key that flips it on the Cardputer). The Cardputer becomes a glance companion: the same facts in one column.
 static void remote_draw_large(void)
 {
     const int W_ = d.width(), H_ = d.height();
@@ -182,46 +182,51 @@ static void remote_draw_large(void)
     const char *ip  = nucleo_setup_ip();
     const char *pin = nucleo_auth_pin();
     nucleo_touch_clear();
-    char rc[12]; rc[0] = 0; if (sh > 0) snprintf(rc, sizeof rc, "%d", sh);
-    int y = lg::header("Remote Control", sh > 0 ? rc : nullptr, C_BLUE);
+    int y = lg::header("Remote Control", nullptr, C_BLUE);
     d.fillRect(0, y, W_, H_ - y, BG);
-    const int cx = 16, cw = W_ - 32;
-    unsigned short cb;
+    const int cx = 10, cw = W_ - 20;
+    const unsigned short cb = lg::card();
 
-    // link state
+    // link state: a lamp + the state in words
     int cy = y + 6;
-    lg::panel(cx, cy, cw, 34); cb = lg::card();
-    lg::font(1); d.setTextColor(sh > 0 ? C_GREEN : C_GREEN, cb);
-    d.drawString(sh > 0 ? L5("CONNESSO", "CONNECTED", "CONECTADO", "CONNECTE", "VERBUNDEN")
-                        : L5("IN ASCOLTO - PRONTO", "LISTENING - READY", "A LA ESCUCHA", "EN ECOUTE - PRET", "BEREIT - WARTET"),
-                 cx + 14, cy + 9);
+    lg::panel(cx, cy, cw, 40);
+    d.fillCircle(cx + 22, cy + 20, 8, sh > 0 ? C_GREEN : C_BLUE);
+    char st[40];
+    if (sh > 0) snprintf(st, sizeof st, "%s %d", L5("Connesso", "Connected", "Conectado", "Connecte", "Verbunden"), sh);
+    else snprintf(st, sizeof st, "%s", L5("In ascolto", "Listening", "A la escucha", "En ecoute", "Bereit"));
+    lg::font(2); d.setTextColor(sh > 0 ? C_GREEN : FG, cb); d.drawString(st, cx + 44, cy + 11);
 
-    // address to open
-    cy += 42;
-    lg::panel(cx, cy, cw, 50); cb = lg::card();
+    // address to open, as the hero line
+    cy += 46;
+    lg::panel(cx, cy, cw, 66);
     lg::font(0); d.setTextColor(MUTED, cb);
     d.drawString(usb ? L5("Nel browser del PC apri:", "In the PC browser open:", "En el navegador del PC:", "Dans le navigateur du PC:", "Im PC-Browser oeffnen:")
                      : L5("Apri nel browser:", "Open in a browser:", "Abre en el navegador:", "Ouvre dans le navigateur:", "Im Browser oeffnen:"),
                  cx + 14, cy + 8);
-    lg::font(2); d.setTextColor(usb ? C_GREEN : FG, cb);
+    lg::font(3); d.setTextColor(usb ? C_GREEN : FG, cb);
     char ab[40]; lg::fit(ab, sizeof ab, usb ? "http://192.168.7.1"
                          : ((ip && ip[0]) ? ip : L5("(nessuna rete)", "(no network)", "(sin red)", "(pas de reseau)", "(kein Netz)")), cw - 28);
-    d.drawString(ab, cx + 14, cy + 26);
+    d.drawString(ab, cx + 14, cy + 28);
 
-    // pairing PIN
-    cy += 56;
-    lg::panel(cx, cy, cw, 44); cb = lg::card();
+    // pairing PIN | auto-handoff switch card (Wi-Fi Remote only; USB-web has no screen handoff)
+    cy += 72;
+    const int ch = H_ - cy - 8, pw = usb ? cw : (cw - 8) / 2;
+    lg::panel(cx, cy, pw, ch);
     lg::font(0); d.setTextColor(MUTED, cb);
-    d.drawString(L5("PIN accoppiamento:", "Pair PIN:", "PIN de vinculacion:", "PIN d'appairage:", "Kopplungs-PIN:"), cx + 14, cy + 7);
-    lg::font(2); d.setTextColor(C_BLUE, cb);
-    d.drawString((pin && pin[0]) ? pin : "----", cx + 14, cy + 23);
-
-    // auto-handoff toggle (Wi-Fi Remote only; USB-web has no screen handoff)
+    d.drawString(L5("PIN accoppiamento:", "Pair PIN:", "PIN de vinculacion:", "PIN d'appairage:", "Kopplungs-PIN:"), cx + 14, cy + 8);
+    lg::font(3); d.setTextColor(C_BLUE, cb);
+    d.drawString((pin && pin[0]) ? pin : "----", cx + 14, cy + 30);
     if (!usb) {
-        const int bh = 40, by = H_ - bh - 12;
-        char lbl[48]; snprintf(lbl, sizeof lbl, "%s %s",
-            L5("Passaggio auto:", "Auto handoff:", "Traspaso auto:", "Relais auto:", "Auto-Uebergabe:"), s_remote_enabled ? "ON" : "OFF");
-        lg::button(cx, by, cw, bh, lbl, s_remote_enabled ? C_GREEN : LINE, s_remote_enabled ? INK : FG, NK_ENTER, 0);
+        const int hx = cx + pw + 8, on = s_remote_enabled;
+        lg::panel(hx, cy, pw, ch, on ? C_GREEN : 0);
+        const unsigned short hb = on ? C_GREEN : cb, ink = on ? INK : FG;
+        lg::font(0); d.setTextColor(on ? INK : MUTED, hb);
+        d.drawString(L5("Passaggio auto: ", "Auto handoff: ", "Traspaso auto: ", "Relais auto: ", "Auto-Uebergabe: "), hx + 14, cy + 8);
+        const int sx = hx + 14, sy = cy + 34;                 // the switch itself
+        d.fillRoundRect(sx, sy, 48, 26, 13, on ? INK : LINE);
+        d.fillCircle(on ? sx + 35 : sx + 13, sy + 13, 10, on ? C_GREEN : MUTED);
+        lg::font(2); d.setTextColor(ink, hb); d.drawString(on ? "ON" : "OFF", sx + 60, sy + 4);
+        nucleo_touch_add(hx, cy, pw, ch, NK_ENTER, 0);
     }
     nucleo_touch_commit();
 }

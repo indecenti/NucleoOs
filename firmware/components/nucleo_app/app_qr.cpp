@@ -19,6 +19,8 @@
 #include "nucleo_board.h"   // NUCLEO_SD_MOUNT
 #include "cJSON.h"          // read the web-created QR library off the SD
 #include "nucleo_i18n.h"    // TR(it,en): captions follow the system language
+#include "app_large.h"      // two screens: the code big on the panel, the Cardputer the companion
+#include "nucleo_touch.h"
 
 // Network/auth getters (resolved at final link; same extern hatch nucleo_app.cpp uses).
 extern "C" const char *nucleo_setup_ip(void);
@@ -33,6 +35,7 @@ static char s_text[160];          // free text (SRC_TEXT) / typed password (SRC_
 static int  s_len = 0;
 static char s_payload[256];       // what actually gets encoded
 static int  s_prev_bright = 100;
+static char s_cap[128];          // what the code is (the hint bar, the panel's caption, the companion)
 
 // SAVED: the library the web app writes to SD (read-only here; we re-encode each string on-device).
 #define QR_SAVED_MAX  24
@@ -74,34 +77,73 @@ static void load_saved(void)
 // Build the encoded string + the footer caption for the current source.
 static void rebuild(void)
 {
-    char cap[128];
+    char *cap = s_cap;
     const char *ip   = nucleo_setup_ip();
     bool sta = !strcmp(nucleo_setup_mode(), "sta") && ip[0];
 
     if (s_src == SRC_PAIR) {
         snprintf(s_payload, sizeof s_payload, "http://%s", sta ? ip : "192.168.4.1");
-        snprintf(cap, sizeof cap, TR("Apri %s  PIN %s", "Open %s  PIN %s"), sta ? ip : "192.168.4.1", nucleo_auth_pin());
+        snprintf(cap, sizeof s_cap, TR("Apri %s  PIN %s", "Open %s  PIN %s"), sta ? ip : "192.168.4.1", nucleo_auth_pin());
     } else if (s_src == SRC_WIFI) {
         const char *ssid = nucleo_setup_ssid();
         snprintf(s_payload, sizeof s_payload, "WIFI:T:WPA;S:%s;P:%s;;", ssid[0] ? ssid : "?", s_text);
-        snprintf(cap, sizeof cap, "Wi-Fi %s  pass: %s_", ssid[0] ? ssid : "?", s_text);
+        snprintf(cap, sizeof s_cap, "Wi-Fi %s  pass: %s_", ssid[0] ? ssid : "?", s_text);
     } else if (s_src == SRC_SAVED) {
-        if (s_sv_n == 0) { s_payload[0] = 0; snprintf(cap, sizeof cap, "%s", TR("Salvati: nessun QR dal web OS", "Saved: no QR from the web OS")); }
+        if (s_sv_n == 0) { s_payload[0] = 0; snprintf(cap, sizeof s_cap, "%s", TR("Salvati: nessun QR dal web OS", "Saved: no QR from the web OS")); }
         else {
             if (s_sv_sel >= s_sv_n) s_sv_sel = 0;
             snprintf(s_payload, sizeof s_payload, "%s", s_sv_data[s_sv_sel]);
-            snprintf(cap, sizeof cap, TR("Salvati %d/%d: %s", "Saved %d/%d: %s"), s_sv_sel + 1, s_sv_n, s_sv_label[s_sv_sel]);
+            snprintf(cap, sizeof s_cap, TR("Salvati %d/%d: %s", "Saved %d/%d: %s"), s_sv_sel + 1, s_sv_n, s_sv_label[s_sv_sel]);
         }
     } else {
         snprintf(s_payload, sizeof s_payload, "%s", s_text);
-        snprintf(cap, sizeof cap, TR("Testo: %s_", "Text: %s_"), s_text);
+        snprintf(cap, sizeof s_cap, TR("Testo: %s_", "Text: %s_"), s_text);
     }
     nucleo_app_set_hint(cap);
     nucleo_app_request_draw();
 }
 
+static const char *src_name(int i)
+{
+    switch (i) {
+        case SRC_PAIR: return TR("Abbina", "Pair");
+        case SRC_WIFI: return "Wi-Fi";
+        case SRC_TEXT: return TR("Testo", "Text");
+        default:       return TR("Salvati", "Saved");
+    }
+}
+
+// The panel: the code as big as the panel allows on white (a 212 px square + its caption), and beside it the
+// four sources as cards (tap = show that one). Tapping a saved code shows the next one; the top card leaves.
+static void draw_large(void)
+{
+    nucleo_touch_clear();
+    d.fillRect(0, 0, 240, 240, 0xFFFF);
+    if (s_payload[0]) d.qrcode(s_payload, 14, 0, 212, 1, true);
+    d.setTextColor(0x0000, 0xFFFF);
+    char t[64]; lg::font(0); lg::fit(t, sizeof t, s_cap, 228);
+    d.drawCentreString(t, 120, 218, &fonts::Font2);
+    if (s_src == SRC_SAVED) lg::field(0, 0, 240, 212);
+    d.fillRect(240, 0, 80, 240, BG);
+    lg::button(244, 4, 72, 34, "<", lg::card(), FG, NK_BACK, 0);
+    for (int i = 0; i < N_SRC; i++)
+        lg::button(244, 44 + i * 49, 72, 45, src_name(i), i == s_src ? C_GREEN : lg::card(), i == s_src ? INK : FG,
+                   NK_CHAR, (char)(NUCLEO_TOUCH_ROW + i));
+    nucleo_touch_commit();
+}
+
+// The Cardputer while the code is on the panel: which source, what the code says (and the text you type).
+static void draw_companion(void)
+{
+    d.fillRect(0, 0, W, nucleo_app_content_height(), BG);
+    int y = lg::comp_head(TR("CODICE QR", "QR CODE"), C_GREEN);
+    lg::message(0, y, W, 90, src_name(s_src), s_cap, C_GREEN);
+    lg::comp_keys(TR("</> fonte  scrivi = testo", "</> source  type = text"));
+}
+
 static void draw(void)
 {
+    if (nucleo_app_two_screens()) { draw_companion(); return; }
     int ch = nucleo_app_content_height();   // 121 — the QR square's height budget
     d.fillRect(0, 0, W, ch, 0xFFFF);        // full-white panel (extends the quiet zone)
 
@@ -130,6 +172,8 @@ static void set_src(int s)
 
 static void on_key(int key, char ch)
 {
+    if (nucleo_touch_is_row(key, ch)) { set_src(ch - NUCLEO_TOUCH_ROW); return; }   // a source card on the panel
+    if (nucleo_touch_is_field(key, ch)) key = NK_DOWN;                           // tap the saved code = the next one
     if (key == NK_RIGHT) { set_src(s_src + 1); return; }   // TAB never reaches on_key: it stays the Control Center
     if (s_src == SRC_SAVED) {
         if (key == NK_UP && s_sv_n)        { s_sv_sel = (s_sv_sel + s_sv_n - 1) % s_sv_n; rebuild(); }
@@ -174,7 +218,7 @@ extern "C" void nucleo_register_qr(void)
 {
     static const nucleo_app_def_t app = {
         "qr", "Codice QR", "Tools", "Genera un QR grande e inquadrabile",
-        'Q', C_GREEN, enter, on_key, nullptr, draw, on_exit,
+        'Q', C_GREEN, enter, on_key, nullptr, draw, on_exit, 0, nullptr, draw_large
     };
     nucleo_app_register(&app);
 }

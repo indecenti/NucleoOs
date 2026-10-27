@@ -15,3 +15,8 @@ password adv TAB ENTER D D ENTER
 search adv c:l c:u c:m
 datetime adv D D D D D D D D ENTER
 confirm adv TAB TAB ENTER
+nets-cur adv TAB ENTER D
+nets-new adv TAB ENTER D D D
+nets-tap adv TAB ENTER row:4
+dt-roll adv D D D D D D D D ENTER tap:176,90
+dt-pick adv D D D D D D D D ENTER tap:30,150

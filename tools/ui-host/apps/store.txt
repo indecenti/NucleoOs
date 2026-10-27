@@ -12,3 +12,5 @@ app-update  TAB TAB TAB ENTER
 app-mine    TAB TAB TAB D D ENTER
 remove      TAB TAB TAB D D ENTER DEL
 qr          TAB TAB TAB D D ENTER c:q
+card-install tick:1 tap:270,204
+card-update  TAB TAB TAB tick:1 tap:270,128

@@ -55,6 +55,10 @@ static nucleo_ducky_layout_t s_layout = DUCKY_LAYOUT_US;
 static int s_macro = 0;
 static bool s_usb_ok = false;
 static int s_lg_scroll = 0;   // the panel macro list's first visible row (two screens)
+static bool s_typing = false;          // the typing loop is running (the panel shows the live typing view)
+static unsigned char s_tmods = 0;      // ...and the Cardputer's held modifiers in it
+static char s_echo[28] = "";           // what the typing loop last sent (shared with the panel)
+extern "C" bool nucleo_extdisp_draw_internal(void (*fn)(void *gfx));   // the Cardputer's own panel (two screens)
 
 struct Macro { const char *name; const char *name_en; uint8_t mod; uint8_t key; };
 static const Macro MACROS[] = {
@@ -130,9 +134,12 @@ static void type_paint(unsigned char m, bool conn, unsigned char leds, const cha
     cv->pushSprite(0, 0);
 }
 
+static void type_show(unsigned char m, bool conn, unsigned char leds);   // compact or two screens (below)
+
 static void type_loop(void)
 {
-    char echo[28] = ""; unsigned char last_m = 0xFF; int last_conn = -1; unsigned char last_leds = 0xFF; bool first = true, back = false;
+    s_echo[0] = 0; s_typing = true;
+    unsigned char last_m = 0xFF; int last_conn = -1; unsigned char last_leds = 0xFF; bool first = true, back = false;
     while (!back) {
         esp_task_wdt_reset();
         nucleo_key_t k = nucleo_kbd_read();
@@ -157,7 +164,7 @@ static void type_loop(void)
                 else if (k.key == NK_DOWN)  { kc = NK_HID_DOWN; lbl = "Dn"; }
                 else if (k.key == NK_LEFT)  { kc = NK_HID_LEFT; lbl = "Lt"; }
                 else if (k.key == NK_RIGHT) { kc = NK_HID_RIGHT; lbl = "Rt"; }
-                else if (k.key == NK_ENTER) { kc = NK_HID_ENTER; lbl = "\n"; if (m & NK_MOD_SHIFT) kmod |= NK_HIDMOD_SHIFT; }
+                else if (k.key == NK_ENTER) { kc = NK_HID_ENTER; lbl = " Ent "; if (m & NK_MOD_SHIFT) kmod |= NK_HIDMOD_SHIFT; }
                 else if (k.key == NK_TAB)   { kc = 0x2B; lbl = "Tab"; if (m & NK_MOD_SHIFT) kmod |= NK_HIDMOD_SHIFT; }
                 else if (k.key == NK_DEL)   { kc = fn ? HID_DELfw : NK_HID_BKSP; lbl = fn ? "Del" : "<-"; }
                 else if (fn && k.ch >= '1' && k.ch <= '9') { kc = HID_F(k.ch - '0'); }
@@ -171,15 +178,16 @@ static void type_loop(void)
                 }
                 if (kc) { nucleo_usbhid_key(kmod, kc); sent = true; }
             }
-            if (sent && lbl) echo_push(echo, sizeof echo, lbl);
+            if (sent && lbl) echo_push(s_echo, sizeof s_echo, lbl);
         }
 
         if (first || sent || m != last_m || (int)conn != last_conn || leds != last_leds) {
-            type_paint(m, conn, leds, echo);
+            type_show(m, conn, leds);
             last_m = m; last_conn = conn; last_leds = leds; first = false;
         }
         vTaskDelay(pdMS_TO_TICKS(20));
     }
+    s_typing = false;
     nucleo_app_request_draw();
 }
 
@@ -202,6 +210,11 @@ static void on_enter(void)
 
 static void on_key(int key, char ch)
 {
+#ifdef __MINGW32__
+    // Host gallery ONLY (never on the device): the typing loop blocks on the keyboard, so the ui-host scene
+    // injects a sentinel (c:~) that shows the panel's live typing view with a canned state.
+    if (ch == '~') { s_typing = true; s_tmods = NK_MOD_CTRL | NK_MOD_SHIFT; snprintf(s_echo, sizeof s_echo, "ls -la Ent cd /tmp"); nucleo_app_request_draw(); return; }
+#endif
     if (ch >= '1' && ch <= '4') { s_tab = (Tab)(ch - '1'); nucleo_app_request_draw(); return; }
     if (key == NK_RIGHT) { s_tab = (Tab)((s_tab + 1) % (T_SET + 1)); nucleo_app_request_draw(); return; }
 
@@ -339,30 +352,67 @@ static void lg_chip(int x, int y, const char *label, bool on, unsigned short onc
     d.drawString(label, x + w / 2, y + 11); d.setTextDatum(top_left);
 }
 
+// The host card: the link lamp + state, and the PC's real lock LEDs as big chips. Shared by Type (live while you
+// type) and Info.
+static void lg_host(int cx, int cy, int cw, bool conn, unsigned char leds, unsigned short cb)
+{
+    lg::panel(cx, cy, cw, 76);
+    d.fillCircle(cx + 20, cy + 20, 7, conn ? GRN : WARN);
+    lg::font(1); d.setTextColor(conn ? GRN : FG, cb);
+    d.drawString(!s_usb_ok ? TR("USB HID non installata.", "USB HID not installed.") : conn ? TR("Host collegato.", "Host connected.")
+                           : TR("Collega il cavo USB-C al PC.", "Plug the USB-C cable into the PC."), cx + 36, cy + 12);
+    lg_chip(cx + 14, cy + 44, "CAPS", leds & NK_HIDLED_CAPS, GRN, LINE);
+    lg_chip(cx + 14 + 66, cy + 44, "NUM", leds & NK_HIDLED_NUM, GRN, LINE);
+    lg_chip(cx + 14 + 126, cy + 44, "SCROLL", leds & NK_HIDLED_SCROLL, GRN, LINE);
+    lg::font(0); d.setTextColor(s_layout == DUCKY_LAYOUT_IT ? ORG : ACC, cb); d.setTextDatum(top_right);
+    d.drawString(s_layout == DUCKY_LAYOUT_IT ? "Layout IT" : "Layout US", cx + cw - 14, cy + 46); d.setTextDatum(top_left);
+}
+
+// The panel, drawn straight to it (every box paints over itself). While the typing loop runs (s_typing) the tabs
+// give way to the live typing view: the host card, the Cardputer's held modifiers and what was sent, so the panel
+// shows the host's state while the keyboard types. Per keystroke only the boxes that change are repainted (no
+// whole-screen clear on the direct panel: no flicker); s_tfull asks for the whole view once.
+static bool s_tfull = true;
 static void kbd_draw_large(void)
 {
-    const int W = d.width(), H = d.height();
-    nucleo_touch_clear();
+    const int W = 320, H = 240;
     const bool conn = nucleo_usbhid_ready();
     const unsigned char leds = nucleo_usbhid_leds();
-    const char *right = conn ? "host ok" : TR("attendo PC", "waiting PC");
-    int y = lg::header("USB Keyboard", right, ACC, NK_BACK, 0);
+    const unsigned short cb = lg::card();
+    nucleo_touch_clear();
+    if (s_typing) {
+        static int s_hs = -1;
+        int y = lg::HEAD;
+        if (s_tfull) {
+            s_tfull = false; s_hs = -1;
+            d.fillRect(0, 0, W, H, BG);
+            lg::header(TR("Digita", "Type"), nullptr, ACC, NK_BACK, 0);
+            lg::font(0); d.setTextColor(DIM, BG);
+            d.drawString("Fn+1..0=F1..F10  Fn+-=F11 Fn+ ==F12", 12, y + 170);       // the compact view's own hints
+            d.drawString(TR("Fn+frecce nav  Fn+Canc=Del  Fn+`=Esc","Fn+arrows nav  Fn+Canc=Del  Fn+`=Esc"), 12, y + 188);
+        } else nucleo_touch_add(0, 0, 90, y, NK_BACK, 0);              // the header's chevron, not repainted
+        if ((conn | leds << 1) != s_hs) { s_hs = conn | leds << 1; lg_host(10, y + 6, W - 20, conn, leds, cb); }
+        d.fillRect(0, y + 88, W, 26, BG);
+        static const char *const MN[] = { "CTRL", "ALT", "SHIFT", "GUI", "FN" };
+        static const unsigned char MB[] = { NK_MOD_CTRL, NK_MOD_ALT, NK_MOD_SHIFT, NK_MOD_GUI, NK_MOD_FN };
+        for (int i = 0, x = 10; i < 5; i++) { lg_chip(x, y + 90, MN[i], s_tmods & MB[i], HL, cb); x += (int)strlen(MN[i]) * 6 + 22; }
+        lg::panel(10, y + 118, W - 20, 44, LINE);
+        lg::font(0); d.setTextColor(MUTED, LINE); d.drawString(TR("Inviato:", "Sent:"), 20, y + 132);
+        char e[40]; lg::font(2); lg::fit(e, sizeof e, s_echo[0] ? s_echo : "-", W - 110); d.setTextColor(FG, LINE); d.drawString(e, 86, y + 128);
+        nucleo_touch_commit();
+        return;
+    }
+    s_tfull = true;
+    int y = lg::header("USB Keyboard", conn ? "host ok" : TR("attendo PC", "waiting PC"), ACC, NK_BACK, 0);
     const char *const *N = nucleo_i18n_is_it() ? LG_TABS_IT : LG_TABS_EN;
     y = lg::tabs(y + 2, N, 4, s_tab, ACC, "1234");
     d.fillRect(0, y, W, H - y, BG);
-    const unsigned short cb = lg::card();
 
     if (s_tab == T_TYPE) {
-        const int cx = 16, cw = W - 32, cy = y + 10, chh = 96;
-        lg::panel(cx, cy, cw, chh);
-        lg::font(1); d.setTextColor(s_usb_ok ? FG : WARN, cb);
-        d.drawString(s_usb_ok ? TR("Tastiera USB pronta", "USB keyboard ready") : TR("USB HID non installata", "USB HID not installed"), cx + 14, cy + 12);
-        lg::font(0); d.setTextColor(conn ? GRN : MUTED, cb);
-        lg::wrap(conn ? TR("Host collegato.", "Host connected.") : TR("Collega il cavo USB-C al PC.", "Plug the USB-C cable into the PC."), cx + 14, cy + 40, cw - 28, 17, 2);
-        lg::font(0); d.setTextColor(DIM, cb);
-        d.drawString(TR("Combo, Fn, frecce, layout IT/US.", "Combos, Fn, arrows, IT/US layout."), cx + 14, cy + chh - 20);
-        const int bh = 56, by = H - bh - 16;
-        lg::button(cx, by, cw, bh, TR("Inizia a digitare", "Start typing"), ACC, INK, NK_ENTER, 0);
+        lg_host(10, y + 6, W - 20, conn, leds, cb);
+        lg::font(0); d.setTextColor(DIM, BG);
+        d.drawString(TR("Combo, Fn, frecce, layout IT/US.", "Combos, Fn, arrows, IT/US layout."), 16, y + 90);
+        lg::button(10, H - 62, W - 20, 54, TR("Inizia a digitare", "Start typing"), ACC, INK, NK_ENTER, 0);
     } else if (s_tab == T_MACRO) {
         const int lw = 168;
         lg::list(0, y + 2, lw, H - y - 4, lg::ROW, N_MACRO, s_macro, &s_lg_scroll, mac_row, nullptr, ACC);
@@ -372,7 +422,7 @@ static void kbd_draw_large(void)
         lg::wrap(TR(MACROS[s_macro].name, MACROS[s_macro].name_en), px + 12, py + 12, pw - 24, 20, 2);
         const uint8_t mod = MACROS[s_macro].mod;
         int cyp = py + 58;
-        lg_chip(px + 12, cyp, "CTRL", mod & NK_HIDMOD_CTRL, ACC, cb == BG ? LINE : cb);
+        lg_chip(px + 12, cyp, "CTRL", mod & NK_HIDMOD_CTRL, ACC, LINE);
         lg_chip(px + 12 + 58, cyp, "ALT", mod & NK_HIDMOD_ALT, ACC, LINE); cyp += 26;
         lg_chip(px + 12, cyp, "SHIFT", mod & NK_HIDMOD_SHIFT, ACC, LINE);
         lg_chip(px + 12 + 70, cyp, "GUI", mod & NK_HIDMOD_GUI, ACC, LINE); cyp += 28;
@@ -381,25 +431,36 @@ static void kbd_draw_large(void)
         const int bh = 46;
         lg::button(px + 10, py + ph - bh - 10, pw - 20, bh, TR("Invia al PC", "Send to PC"), GRN, INK, NK_ENTER, 0);
     } else if (s_tab == T_INFO) {
-        const int cx = 16, cw = W - 32, cy = y + 10, chh = H - y - 20;
-        lg::panel(cx, cy, cw, chh);
-        int ky = cy + 14;
-        lg::kv(cx + 14, ky, cw - 28, "USB HID", s_usb_ok ? TR("installata", "installed") : TR("errore", "error"), s_usb_ok ? GRN : WARN, cb); ky += 26;
-        lg::kv(cx + 14, ky, cw - 28, "Host", conn ? TR("collegato", "connected") : TR("non rilevato", "not detected"), conn ? GRN : WARN, cb); ky += 30;
-        lg::font(0); d.setTextColor(MUTED, cb); d.drawString(TR("LED del PC (stato reale):", "PC LEDs (real state):"), cx + 14, ky); ky += 20;
-        lg_chip(cx + 14, ky, "CAPS", leds & NK_HIDLED_CAPS, GRN, LINE);
-        lg_chip(cx + 14 + 66, ky, "NUM", leds & NK_HIDLED_NUM, GRN, LINE);
-        lg_chip(cx + 14 + 66 + 60, ky, "SCROLL", leds & NK_HIDLED_SCROLL, GRN, LINE); ky += 30;
-        lg::font(0); d.setTextColor(DIM, cb);
-        lg::wrap(TR("Console seriale sospesa: la USB e' presa dalla tastiera.", "Serial console suspended: the USB is taken by the keyboard."), cx + 14, ky, cw - 28, 17, 2);
+        lg_host(10, y + 6, W - 20, conn, leds, cb);
+        lg::font(0); d.setTextColor(DIM, BG);
+        d.drawString(TR("Si accendono premendo i lock","They light when you press the locks"), 16, y + 92);
+        d.drawString(TR("sul PC: e' il PC che ce lo dice.","on the PC: the PC tells us."), 16, y + 110);
+        d.setTextColor(MUTED, BG); d.drawString(TR("Console seriale sospesa (USB presa).","Serial console suspended (USB taken)."), 16, y + 136);
     } else {   // T_SET
         const bool us = (s_layout == DUCKY_LAYOUT_US);
         lg::font(0); d.setTextColor(MUTED, BG); d.drawString(TR("Mappa i simboli sul layout del PC.", "Maps symbols to the PC layout."), 16, y + 10);
         const int bw = W - 32, bh = 60;
-        lg::button(16, y + 34, bw, bh, "US  QWERTY", us ? ACC : lg::card(), us ? INK : FG, NK_CHAR, 'u');
-        lg::button(16, y + 34 + bh + 12, bw, bh, TR("IT  italiana", "IT  Italian"), !us ? ACC : lg::card(), !us ? INK : FG, NK_CHAR, 'i');
+        lg::button(16, y + 34, bw, bh, "US  QWERTY", us ? ACC : cb, us ? INK : FG, NK_CHAR, 'u');
+        lg::button(16, y + 34 + bh + 12, bw, bh, TR("IT  italiana", "IT  Italian"), !us ? ACC : cb, !us ? INK : FG, NK_CHAR, 'i');
     }
     nucleo_touch_commit();
+}
+
+// Two screens while typing: the Cardputer keeps the compact typing view (keys and chips, where you type), the
+// panel gets the live typing frame. Called from the typing loop instead of type_paint.
+static M5Canvas *s_tcv;
+static void tcv_push(void *g) { if (s_tcv) s_tcv->pushSprite((lgfx::LovyanGFX *)g, 0, 0); }
+static void type_show(unsigned char m, bool conn, unsigned char leds)
+{
+    s_tmods = m;
+    if (!nucleo_app_two_screens()) { type_paint(m, conn, leds, s_echo); return; }
+    if ((s_tcv = nucleo_screen()) != nullptr) {
+        nucleo_app_set_gfx(s_tcv);
+        type_screen(m, conn, leds, s_echo);
+        nucleo_app_set_gfx(nullptr);
+        nucleo_extdisp_draw_internal(tcv_push);
+    }
+    d.startWrite(); kbd_draw_large(); d.endWrite();
 }
 
 static void draw_companion(void)

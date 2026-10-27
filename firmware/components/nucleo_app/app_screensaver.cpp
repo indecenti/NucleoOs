@@ -56,6 +56,19 @@ static bool    s_dirty      = true;
 static int64_t s_frame_us   = 0;    // timestamp of the last frame (µs)
 static int     s_saved_bright = 80;
 static int     s_lg_scroll    = 0;   // two screens: the panel effect-list's first visible row
+#define PX   152                       // two screens: the right pane (preview / timer) and its slider track
+#define PW   162
+#define SL_X (PX + 18)
+#define SL_W (PW - 36)
+
+static void fmt_timer(char *sv, size_t n)            // "never", "45 sec", "1 min", "3 min", "2m 30s"
+{
+    const int sec = (int)(g_threshold_ms / 1000);
+    if (sec == 0)           snprintf(sv, n, "%s", TR5("mai", "never", "nunca", "jamais", "niemals"));   // set from Settings
+    else if (sec < 60)      snprintf(sv, n, "%d sec", sec);
+    else if (sec % 60 == 0) snprintf(sv, n, "%d min", sec / 60);
+    else                    snprintf(sv, n, "%dm %ds", sec / 60, sec % 60);
+}
 
 // ---- Target frequencies (µs/frame) -------------------------------------------
 #define CLOCK_US  100000   // 10 fps — seconds clock, smooth enough
@@ -67,8 +80,12 @@ static int     s_lg_scroll    = 0;   // two screens: the panel effect-list's fir
 // No delta tracking: the canvas is the intermediate state, the TFT sees a
 // complete frame on every blit.
 
-#define CL_TW 144   // "HH:MM:SS" @ size-3: 8 char × 18 px
-#define CL_TH  38   // 24 (hour) + 2 + 12 (date)
+// The view the effects step and draw in: the Cardputer (240x135) or, with the panel attached, the whole
+// 320x240 panel at its own resolution (never the compact frame scaled up). Set by saver_start.
+static int s_vw = W, s_vh = H;
+#define CL_BIG (s_vw > W)                                   // the panel: 7-segment Font7 hour + Font2 date
+#define CL_TW  (CL_BIG ? 256 : 144)                         // "HH:MM:SS": Font0 x3 (8 x 18 px) / Font7 (6 x 32 + 2 x 32)
+#define CL_TH  (CL_BIG ? 70 : 38)                           // hour + gap + date
 
 static int16_t cl_x, cl_y;
 static int8_t  cl_vx, cl_vy;
@@ -82,24 +99,27 @@ static const uint16_t CL_COLS[] = {
 static void clock_init(void)
 {
     srand((unsigned)((esp_timer_get_time() >> 8) & 0xFFFFFFFF));
-    cl_x  = 30 + (int)(rand() % 36u);   // 30..66
-    cl_y  = 20 + (int)(rand() % 57u);   // 20..77
+    cl_x  = (int16_t)((s_vw - CL_TW) / 3 + (int)(rand() % 36u));
+    cl_y  = (int16_t)((s_vh - CL_TH) / 4 + (int)(rand() % 57u));
     cl_vx = (rand() & 1) ? 2 : -2;
     cl_vy = (rand() & 1) ? 1 : -1;
     cl_ci = (uint8_t)(rand() % NCL);
 }
 
-static void clock_frame(void)
+static void clock_step(void)
 {
     // Update position with bounce and color change at the edges
     cl_x += cl_vx; cl_y += cl_vy;
-    if (cl_x <= 0)         { cl_x = 0;        cl_vx =  1; cl_ci = (cl_ci + 1) % NCL; }
-    if (cl_x + CL_TW >= W) { cl_x = W - CL_TW; cl_vx = -1; cl_ci = (cl_ci + 1) % NCL; }
-    if (cl_y <= 0)         { cl_y = 0;        cl_vy =  1; cl_ci = (cl_ci + 1) % NCL; }
-    if (cl_y + CL_TH >= H) { cl_y = H - CL_TH; cl_vy = -1; cl_ci = (cl_ci + 1) % NCL; }
+    if (cl_x <= 0)            { cl_x = 0;                     cl_vx =  1; cl_ci = (cl_ci + 1) % NCL; }
+    if (cl_x + CL_TW >= s_vw) { cl_x = (int16_t)(s_vw - CL_TW); cl_vx = -1; cl_ci = (cl_ci + 1) % NCL; }
+    if (cl_y <= 0)            { cl_y = 0;                     cl_vy =  1; cl_ci = (cl_ci + 1) % NCL; }
+    if (cl_y + CL_TH >= s_vh) { cl_y = (int16_t)(s_vh - CL_TH); cl_vy = -1; cl_ci = (cl_ci + 1) % NCL; }
+}
 
-    // Full frame on canvas: black background + clock
-    d.fillScreen(0x0000);
+static void clock_frame(void)                        // pure: draws the state, never moves it
+{
+    const bool big = CL_BIG;
+    d.fillRect(0, 0, s_vw, s_vh, 0x0000);
 
     uint16_t col = CL_COLS[cl_ci];
 
@@ -116,16 +136,16 @@ static void clock_frame(void)
     if (tm) strftime(dat, sizeof(dat), "%a %d %b", tm);
     else    snprintf(dat, sizeof(dat), "---");
 
+    d.setFont(big ? (const lgfx::IFont *)&fonts::Font7 : &fonts::Font0);
+    d.setTextSize(big ? 1 : 3);
+    d.setTextDatum(top_center);
     d.setTextColor(col, 0x0000);
-    d.setTextSize(3);
-    d.setCursor(cl_x, cl_y);
-    d.print(hms);
-
-    int dw = (int)strlen(dat) * 6;
+    d.drawString(hms, cl_x + CL_TW / 2, cl_y);
+    d.setFont(big ? (const lgfx::IFont *)&fonts::Font2 : &fonts::Font0);
     d.setTextSize(1);
     d.setTextColor(0x8C71, 0x0000);
-    d.setCursor(cl_x + (CL_TW - dw) / 2, cl_y + 26);
-    d.print(dat);
+    d.drawString(dat, cl_x + CL_TW / 2, cl_y + (big ? 52 : 26));
+    d.setTextDatum(top_left);
 }
 
 // ==================== STARFIELD WARP 3D =======================================
@@ -140,8 +160,16 @@ static struct { int16_t ox, oy; uint8_t z; } st[NSTARS];
 static void stars_reset(int i)
 {
     st[i].z  = ZMAX;
-    st[i].ox = (int16_t)((rand() % (W + 40)) - (W / 2 + 20));
-    st[i].oy = (int16_t)((rand() % (H + 40)) - (H / 2 + 20));
+    st[i].ox = (int16_t)((rand() % (s_vw + 40)) - (s_vw / 2 + 20));
+    st[i].oy = (int16_t)((rand() % (s_vh + 40)) - (s_vh / 2 + 20));
+}
+
+// A star's projection in the current view; false when it left it.
+static bool star_at(int i, int *sx, int *sy)
+{
+    *sx = s_vw / 2 + (int)st[i].ox * 20 / (int)st[i].z;
+    *sy = s_vh / 2 + (int)st[i].oy * 20 / (int)st[i].z;
+    return *sx >= 0 && *sx < s_vw && *sy >= 0 && *sy < s_vh;
 }
 
 static void stars_init(void)
@@ -153,30 +181,26 @@ static void stars_init(void)
     }
 }
 
-static void stars_frame(void)
+static void stars_step(void)
 {
-    // Full frame: black sky + projected stars
-    d.fillScreen(0x0000);
+    int sx, sy;
+    for (int i = 0; i < NSTARS; i++)
+        if (--st[i].z == 0 || !star_at(i, &sx, &sy)) stars_reset(i);
+}
 
-    int cx = W / 2, cy = H / 2;
+static void stars_frame(void)                        // pure: black sky + the projected stars
+{
+    d.fillRect(0, 0, s_vw, s_vh, 0x0000);
+    const int big = s_vw > W ? 1 : 0;                // the panel's stars are a pixel larger
+    int sx, sy;
     for (int i = 0; i < NSTARS; i++) {
-        if (--st[i].z == 0) { stars_reset(i); continue; }
-
-        int sx = cx + (int)st[i].ox * 20 / (int)st[i].z;
-        int sy = cy + (int)st[i].oy * 20 / (int)st[i].z;
-        if (sx < 0 || sx >= W || sy < 0 || sy >= H) { stars_reset(i); continue; }
-
+        if (st[i].z >= ZMAX || !star_at(i, &sx, &sy)) continue;   // just respawned: not shown yet
         int bright = ((ZMAX - (int)st[i].z) * 255) / ZMAX;
         uint16_t col = (st[i].z <= 6)
             ? d.color565(bright, bright, 255)
             : d.color565(bright, bright, bright);
-
-        d.drawPixel(sx, sy, col);
-        if (st[i].z <= 4 && sx + 1 < W && sy + 1 < H) {
-            d.drawPixel(sx + 1, sy,     col);
-            d.drawPixel(sx,     sy + 1, col);
-            d.drawPixel(sx + 1, sy + 1, col);
-        }
+        const int sz = 1 + big + (st[i].z <= 4);
+        d.fillRect(sx, sy, sz, sz, col);
     }
 }
 
@@ -195,8 +219,6 @@ static void stars_frame(void)
 #define FW   60          // cell width (60*4=240)
 #define FHV  27          // visible cells in height (27*5=135)
 #define FH   28          // +1 hidden source row
-#define FCS  4           // px per horizontal cell
-#define FCH  5           // px per vertical cell
 
 // Heap-on-demand (was .bss ~1.7 KB): only the FIRE mode needs it, and the saver is closed at boot.
 // Allocated in fire_init(), freed on_exit; the fire_* helpers skip cleanly if the alloc failed.
@@ -280,23 +302,44 @@ static void fire_init(void)
     fire_init_pal();
     memset(fire_buf, 0, (size_t)FH * FW);
     fire_breath = 0;  // reset breath
-    fire_seed();
+    for (int i = 0; i < FH; i++) { fire_seed(); fire_step(); }   // warm up: flames from the first frame
 }
 
-static void fire_frame(void)
+static void fire_frame(void)                         // pure: the grid stretched over the view (4x5 px cells here)
 {
-    if (!fire_buf) return;
-    fire_seed();   // source always full → continuous flame at the bottom edge
-    fire_step();
-    for (int y = 0; y < FHV; y++)
-        for (int x = 0; x < FW; x++)
-            d.fillRect(x * FCS, y * FCH, FCS, FCH, fire_pal[fire_buf[y][x]]);
+    if (!fire_buf) { d.fillRect(0, 0, s_vw, s_vh, 0x0000); return; }
+    for (int y = 0; y < FHV; y++) {
+        const int y0 = y * s_vh / FHV, y1 = (y + 1) * s_vh / FHV;
+        for (int x = 0; x < FW; x++) {
+            const int x0 = x * s_vw / FW;
+            d.fillRect(x0, y0, (x + 1) * s_vw / FW - x0, y1 - y0, fire_pal[fire_buf[y][x]]);
+        }
+    }
+}
+
+// One effect: advance it one frame (once per frame), then draw it (pure: lg::frame paints it per strip).
+static void effect_step(void)
+{
+    if (g_mode == MODE_CLOCK) clock_step();
+    else if (g_mode == MODE_STARS) stars_step();
+    else if (g_mode == MODE_FIRE && fire_buf) { fire_seed(); fire_step(); }   // source always full: flame at the bottom
+}
+static void effect_draw(void *)
+{
+    switch (g_mode) {
+        case MODE_CLOCK: clock_frame(); break;
+        case MODE_STARS: stars_frame(); break;
+        case MODE_FIRE:  fire_frame();  break;
+        default:         d.fillRect(0, 0, s_vw, s_vh, 0x0000);   // off: a black panel (the Cardputer's backlight is off)
+    }
 }
 
 // ==================== START / STOP SAVER ======================================
 static void saver_start(void)
 {
     s_running = true;
+    const bool big = nucleo_app_two_screens();       // the panel plays it at 320x240, natively
+    s_vw = big ? 320 : W; s_vh = big ? 240 : H;
     // fullscreen: the canvas covers the whole 240×135, hint bar excluded
     nucleo_app_set_fullscreen(true);
     // DO NOT use direct_draw: drawing happens on the canvas, the framework blits
@@ -386,13 +429,7 @@ static void draw_settings(void)
         int rem = ch - 24;
         d.fillRect(0, y0, W, rem, BG);
 
-        int sec = (int)(g_threshold_ms / 1000);
-        char sv[20];
-        if (sec == 0)           snprintf(sv, sizeof sv, "%s", TR5("mai", "never", "nunca", "jamais", "niemals"));   // set from Settings
-        else if (sec < 60)      snprintf(sv, sizeof sv, "%d sec", sec);
-        else if (sec == 60)     snprintf(sv, sizeof sv, "1 min");
-        else if (sec % 60 == 0) snprintf(sv, sizeof sv, "%d min", sec / 60);
-        else                    snprintf(sv, sizeof sv, "%dm %ds", sec / 60, sec % 60);
+        char sv[20]; fmt_timer(sv, sizeof sv);
 
         const char *sub = TR("Attivazione automatica dopo", "Starts automatically after");
         d.setTextSize(1); d.setTextColor(C_GREY, BG);
@@ -490,18 +527,23 @@ static void on_key(int key, char ch)
         else        { nucleo_app_set_hint(TR5("TAB cambia   invio seleziona   esc esci", "TAB switch   enter select   esc back", "TAB cambia   intro elige   esc atras", "TAB change   entrer selecte   esc ret", "TAB wechsel   enter waehle   esc zur")); nucleo_app_request_draw(); }
         return;
     }
-    if (nucleo_app_two_screens() && s_tab == 0) {        // panel: tap a row to select, tap again to use / test it
-        int t = lg::row_tap(key, ch, s_lg_scroll, 5, &s_sel);
-        if (t) {
-            if (s_sel < 4) g_mode = s_sel;
-            if (t == 2) {
-                if (s_sel < 4) save_settings();
-                else { s_auto = false; saver_start(); return; }
-            }
-            s_dirty = true; nucleo_app_request_draw(); return;
-        }
-    }
     bool changed = false;
+    int tx, ty;
+    if (nucleo_touch_is_row(key, ch)) {                  // panel rows: an effect (tap again = use / test) or Timer
+        const int i = s_lg_scroll + (ch - NUCLEO_TOUCH_ROW);
+        if (i >= 5) s_tab = 1;
+        else {
+            const bool again = s_tab == 0 && i == s_sel;
+            s_tab = 0; s_sel = i;
+            if (i < 4) g_mode = i;
+            if (again) { if (i < 4) save_settings(); else { s_auto = false; saver_start(); return; } }
+        }
+        changed = true;
+    } else if (lg::tap(key, ch, &tx, &ty)) {             // the timer slider: the tap sets the time (5 s steps)
+        int sec = 5 + ((tx - SL_X) * 595 / SL_W + 2) / 5 * 5;
+        g_threshold_ms = (int32_t)(sec < 5 ? 5 : sec > 600 ? 600 : sec) * 1000;
+        s_tab = 1; save_settings(); changed = true;
+    }
     if (s_tab == 0) {
         if (key == NK_DOWN && s_sel < 4) { s_sel++; if (s_sel < 4) g_mode = s_sel; changed = true; }
         if (key == NK_UP   && s_sel > 0) { s_sel--; if (s_sel < 4) g_mode = s_sel; changed = true; }
@@ -523,11 +565,11 @@ static void on_key(int key, char ch)
 static void on_tick(void) {}
 
 // ===== two screens ==============================================================================================
-// With the panel attached the saver plays THERE: while running, the effect fills the panel (the game-style scaled
-// push, with a name band below); while idle, the panel is the picker — the effect list + a preview of the selected
-// effect on the EFFETTO tab, the idle timer big on the TIMER tab. The Cardputer is the companion (what is picked,
-// the keys, or "running — press a key"). Touch: tap a row to select, again to apply / test; the TIMER buttons and
-// the header menu glyph (tab) do the rest; any tap stops the running saver.
+// With the panel attached the saver plays THERE: while running, the effect fills the panel natively at 320x240
+// (the same step/draw code with the view set to the panel, composed by lg::frame); while idle, the panel is the
+// settings sheet: the effects and the Timer as rows on the left, beside them a preview of the picked effect or the
+// timer slider. The Cardputer is the companion (what is picked, the keys, or "running - press a key"). Touch: tap
+// a row to pick, again (or the preview) to use / test it; tap the slider to set the time; any tap stops the saver.
 
 static const char *effect_name(int mode)
 {
@@ -538,17 +580,6 @@ static const char *effect_name(int mode)
         default:         return TR("Orologio", "Clock");
     }
 }
-
-static void draw_effect(void)                        // one effect frame into the shared canvas (for lg::game)
-{
-    switch (g_mode) {
-        case MODE_CLOCK: clock_frame(); break;
-        case MODE_STARS: stars_frame(); break;
-        case MODE_FIRE:  fire_frame();  break;
-        default:         d.fillScreen(0x0000);        // MODE_OFF: a black panel (the Cardputer's backlight is off)
-    }
-}
-
 // A still, representative preview of an effect inside a box (the gallery is static; on device it is a glance).
 static void preview_effect(int mode, int x, int y, int w, int h)
 {
@@ -562,7 +593,7 @@ static void preview_effect(int mode, int x, int y, int w, int h)
     if (mode == MODE_CLOCK) {
         const uint16_t col = CL_COLS[2];
         d.fillRoundRect(cx - 74, cy - 22, 148, 44, 4, (uint16_t)((col >> 3) & 0x1CE3));
-        d.setTextColor(col, 0x0000); d.setTextSize(3); d.setTextDatum(middle_center);
+        d.setFont(&fonts::Font0); d.setTextColor(col, 0x0000); d.setTextSize(3); d.setTextDatum(middle_center);
         d.drawString("12:34:56", cx, cy - 4);
         d.setTextSize(1); d.setTextColor(0x8C71, 0x0000); d.drawString("Mar 05 Mag", cx, cy + 18);
         d.setTextDatum(top_left); return;
@@ -592,66 +623,57 @@ static void preview_effect(int mode, int x, int y, int w, int h)
 
 static void lg_mode_row(int i, int x, int y, int w, int h, bool focus, unsigned short bg, void *)
 {
-    lg::row_text(x, y, w, h, focus, bg, mode_label(i, nullptr), mode_right(i, nullptr), mode_color(i, nullptr));
+    char sv[20];
+    if (i == 5) { fmt_timer(sv, sizeof sv); lg::row_text(x, y, w, h, focus, bg, "Timer", sv, FG); return; }
+    lg::row_text(x, y, w, h, focus, bg, i == 4 ? TR("Prova", "Test") : effect_name(i),   // Font2 has no "►"
+                 i == g_mode ? TR("in uso", "in use") : nullptr, mode_color(i, nullptr));
 }
 
+// The timer pane: the value big, its state, and a slider over 5 s .. 10 min (tap anywhere on it to set).
 static void lg_timer(int x, int y, int w, int h)
 {
-    const int sec = (int)(g_threshold_ms / 1000);
-    char sv[20];
-    if (sec == 0)           snprintf(sv, sizeof sv, "%s", TR("mai", "never"));
-    else if (sec < 60)      snprintf(sv, sizeof sv, "%d sec", sec);
-    else if (sec == 60)     snprintf(sv, sizeof sv, "1 min");
-    else if (sec % 60 == 0) snprintf(sv, sizeof sv, "%d min", sec / 60);
-    else                    snprintf(sv, sizeof sv, "%dm %ds", sec / 60, sec % 60);
+    char sv[20]; fmt_timer(sv, sizeof sv);
     lg::panel(x, y, w, h);
     const unsigned short cb = lg::card();
     lg::font(1); d.setTextColor(MUTED, cb); d.setTextDatum(top_center);
     d.drawString(TR("Si attiva dopo", "Starts after"), x + w / 2, y + 12);
     lg::font(3); d.setTextColor(C_YELLOW, cb); d.drawString(sv, x + w / 2, y + 36);
-    const char *sts = g_threshold_ms > 0 ? TR("Attivo", "On") : TR("Disabilitato", "Disabled");
     lg::font(0); d.setTextColor(g_threshold_ms > 0 ? C_GREEN : C_RED, cb);
-    d.drawString(sts, x + w / 2, y + 74); d.setTextDatum(top_left);
-    const int bw = (w - 40) / 2, bx = x + 12, by = y + 94;
-    lg::button(bx, by, bw, 30, "- 30s", LINE, FG, NK_UP, 0);
-    lg::button(bx + bw + 16, by, bw, 30, "+ 30s", LINE, FG, NK_DOWN, 0);
-    lg::button(bx, by + 36, bw, 30, "- 5s", LINE, FG, NK_LEFT, 0);
-    lg::button(bx + bw + 16, by + 36, bw, 30, "+ 5s", LINE, FG, NK_RIGHT, 0);
+    d.drawString(g_threshold_ms > 0 ? TR("Attivo", "On") : TR("Disabilitato", "Disabled"), x + w / 2, y + 74);
+    const int sec = (int)(g_threshold_ms / 1000), ty = y + h - 52;
+    const int kx = SL_X + (sec < 5 ? 0 : (sec - 5) * SL_W / 595);
+    lg::bar(SL_X, ty, SL_W, 8, sec < 5 ? 0 : (sec - 5) * 100 / 595, C_YELLOW);
+    d.fillCircle(kx, ty + 4, 10, C_YELLOW); d.fillCircle(kx, ty + 4, 4, cb);
+    lg::font(4); d.setTextColor(MUTED, cb);
+    d.setTextDatum(top_left);  d.drawString("5s", SL_X, ty + 18);
+    d.setTextDatum(top_right); d.drawString("10 min", SL_X + SL_W, ty + 18);
+    d.setTextDatum(top_left);
+    lg::field(x, ty - 20, w, 46);
 }
 
 static void draw_large(void)
 {
-    const int Wd = d.width(), Hd = d.height();
     nucleo_touch_clear();
-    if (s_running) {                                 // the saver itself, scaled onto the panel (game-style)
-        lg::game(draw_effect, nullptr, effect_name(g_mode), C_PURPLE);
+    if (s_running) {                                 // the saver itself, native on the panel; any tap ends it
+        effect_step();
+        lg::frame(effect_draw, nullptr);
         nucleo_touch_commit();
         return;
     }
-    const int sec = (int)(g_threshold_ms / 1000);
-    char rt[16];
-    if (sec == 0)           snprintf(rt, sizeof rt, "%s", TR("mai", "never"));
-    else if (sec % 60 == 0) snprintf(rt, sizeof rt, "%dm", sec / 60);
-    else                    snprintf(rt, sizeof rt, "%ds", sec);
-    const int y = lg::header(TR("Salvaschermo", "Screensaver"), rt, C_PURPLE, NK_BACK, NK_TAB);
-    const char *tabs[2] = { TR("Effetto", "Effect"), "Timer" };
-    const int yb = lg::tabs(y, tabs, 2, s_tab, C_PURPLE, nullptr);   // tap a tab = NK_TAB (toggles)
-    if (s_tab == 0) {
-        const int listw = 150;
-        lg::list(0, yb + 2, listw, Hd - yb - 4, lg::ROW, 5, s_sel, &s_lg_scroll, lg_mode_row, nullptr, C_PURPLE);
-        d.fillRect(listw, yb, Wd - listw, Hd - yb, BG);
-        const int px = listw + 4, py = yb + 6, pw = Wd - listw - 10, ph = Hd - yb - 12;
-        preview_effect(s_sel < 4 ? s_sel : g_mode, px, py, pw, ph - 28);
-        lg::font(0); d.setTextColor(MUTED, BG); d.setTextDatum(top_center);
-        d.drawString(s_sel == 4 ? TR("Tocca per provare", "Tap to test") : TR("Tocca di nuovo per usarlo", "Tap again to use it"),
-                     px + pw / 2, py + ph - 20);
-        d.setTextDatum(top_left);
-    } else {
-        lg_timer((Wd - 280) / 2, yb + 8, 280, Hd - yb - 18);
-    }
+    char rt[20]; fmt_timer(rt, sizeof rt);
+    const int y = lg::header(TR("Salvaschermo", "Screensaver"), rt, C_PURPLE);
+    lg::list(0, y + 4, PX - 4, 240 - y - 8, 32, 6, s_tab ? 5 : s_sel, &s_lg_scroll, lg_mode_row, nullptr, C_PURPLE);
+    d.fillRect(PX - 4, y, 324 - PX, 240 - y, BG);
+    const int py = y + 6, ph = 240 - y - 12;
+    if (s_tab) { lg_timer(PX, py, PW, ph); nucleo_touch_commit(); return; }
+    preview_effect(s_sel < 4 ? s_sel : g_mode, PX, py, PW, ph - 28);
+    nucleo_touch_add(PX, py, PW, ph - 28, NK_ENTER, 0);   // tap the preview = use it / test it
+    lg::font(0); d.setTextColor(MUTED, BG); d.setTextDatum(top_center);
+    d.drawString(s_sel == 4 ? TR("Tocca per provare", "Tap to test") : TR("Tocca di nuovo per usarlo", "Tap again to use it"),
+                 PX + PW / 2, py + ph - 20);
+    d.setTextDatum(top_left);
     nucleo_touch_commit();
 }
-
 static void draw_companion(void)
 {
     const int top = nucleo_app_content_top(), h = nucleo_app_content_height();
@@ -673,8 +695,7 @@ static void draw_companion(void)
         d.setTextColor(DIM, BG); d.drawString(p, 8, y + 50);
         lg::comp_keys(TR("su/giu  INVIO usa/prova  TAB timer", "up/dn  ENTER use/test  TAB timer"));
     } else {
-        const int sec = (int)(g_threshold_ms / 1000);
-        char sv[24]; if (sec == 0) snprintf(sv, sizeof sv, "%s", TR("mai", "never")); else snprintf(sv, sizeof sv, "%d s", sec);
+        char sv[20]; fmt_timer(sv, sizeof sv);
         d.setFont(&fonts::FreeSansBold12pt7b); d.setTextColor(C_YELLOW, BG); d.drawString(sv, 8, y + 14);
         d.setFont(&fonts::Font0); d.setTextColor(MUTED, BG); d.drawString(TR("attivazione automatica", "auto activation"), 8, y + 46);
         lg::comp_keys(TR("</> 5s  su/giu 30s  TAB effetto", "</> 5s  up/dn 30s  TAB effect"));
@@ -687,12 +708,7 @@ static void on_draw(void)
 {
     if (nucleo_app_two_screens()) { draw_companion(); return; }
     if (s_running) {
-        switch (g_mode) {
-            case MODE_CLOCK: clock_frame(); break;
-            case MODE_STARS: stars_frame(); break;
-            case MODE_FIRE:  fire_frame();  break;
-            // MODE_OFF: screen off, backlight 0, nothing to draw
-        }
+        if (g_mode != MODE_OFF) { effect_step(); effect_draw(nullptr); }   // off: backlight 0, nothing to draw
         return;
     }
     if (!s_dirty) return;

@@ -1677,7 +1677,7 @@ static void lg_set_row(int y, int rowh, const Row &r, bool foc, bool icon)
         char b[8]; snprintf(b, sizeof b, "%d%%", r.num);
         lg::font(1); d.setTextDatum(middle_right); d.setTextColor(ink, bg); d.drawString(b, rx, cy);
         vx = rx - d.textWidth(b) - 12; d.setTextDatum(top_left);
-        lg::bar(lx, y + rowh - 13, vx - lx - 6, 6, slider_pct(r), foc ? INK : FG);
+        lg::bar(lx, y + rowh - 11, vx - lx - 6, 4, slider_pct(r), foc ? INK : FG);   // under the label, never through it
         break;
     }
     case K_CYCLE: {
@@ -1702,7 +1702,9 @@ static void lg_set_row(int y, int rowh, const Row &r, bool foc, bool icon)
     const uint16_t lc = foc ? INK : (r.dis ? DIM : (r.kind == K_DANGER ? BAD : r.id == R_SUGGEST ? WARN : r.id == R_SAVED_NET ? r.col : FG));
     lg::font(1); d.setTextColor(lc, bg);
     char lbl[48]; lg::fit(lbl, sizeof lbl, r.label, vx - lx - 4);
-    if (foc && r.sub[0] && r.kind != K_SLIDER) {                      // focused: label up top, sub line below
+    if (r.kind == K_SLIDER) {                                         // slider: label up top, the bar below it
+        d.setTextDatum(top_left); d.drawString(lbl, lx, y + 3);
+    } else if (foc && r.sub[0]) {                                     // focused: label up top, sub line below
         d.setTextDatum(top_left); d.drawString(lbl, lx, y + 5);
         lg::font(0); d.setTextColor(INK, bg);
         char sub[52]; lg::fit(sub, sizeof sub, r.sub, w - (lx - x) - 10);
@@ -1814,49 +1816,86 @@ static void lg_list(int top, int H2)
     }
 }
 
-// Nearby networks on the panel: row 0 scans, then one row per network with signal bars, lock and a
-// saved/preferred mark; the focused row carries the detail line. Taps reuse s_tap_row.
+// Nearby networks on the panel: the list on the left (row 0 scans, then one row per network with its signal bars,
+// lock and saved / preferred mark; tap = pick, tap again = join, as before via s_tap_row), the picked network's
+// detail pane on the right: the signal big, the name, security / channel / dBm, and its actions â€” Connect (the
+// same ENTER), and for a saved network the star (prefer: the 'p' key) and Forget (the DEL key).
+enum { NET_LW = 184 };
+static void net_bars(int x, int base, int bw, int step, int lit, uint16_t on, int q)
+{
+    for (int b = 0; b < 4; b++) { int bh = step + b * step; d.fillRect(x + b * (bw + 2), base - bh, bw, bh, b < lit ? (on ? on : qcol(q)) : LINE); }
+}
+static int net_lit(int q) { return q >= 75 ? 4 : q >= 50 ? 3 : q >= 25 ? 2 : q > 0 ? 1 : 0; }
+
 static void lg_net_row(int y, int rowh, int i, bool foc)
 {
-    const int W2 = d.width(), x = 8, w = W2 - 16, cy = y + (rowh - 4) / 2;
+    const int x = 6, w = NET_LW - 8, cy = y + (rowh - 4) / 2;
     const uint16_t bg = foc ? ACC : lg::card(), ink = foc ? INK : FG;
     d.fillRoundRect(x, y, w, rowh - 4, 9, bg);
+    lg::font(1); d.setTextDatum(middle_left);
     if (i == 0) {
-        ui_glyph(&d, UG_RESET, x + 17, cy, 6, foc ? INK : ACC, bg);
-        lg::font(1); d.setTextDatum(middle_left); d.setTextColor(ink, bg);
+        ui_glyph(&d, UG_RESET, x + 15, cy, 6, foc ? INK : ACC, bg);
+        d.setTextColor(ink, bg);
         d.drawString(nucleo_setup_scan_count() ? TR5("Cerca di nuovo", "Scan again", "Buscar de nuevo", "Chercher encore", "Erneut suchen")
-                                               : TR5("Cerca reti", "Scan", "Buscar", "Chercher", "Suchen"), x + 34, cy);
+                                               : TR5("Cerca reti", "Scan", "Buscar", "Chercher", "Suchen"), x + 30, cy);
         d.setTextDatum(top_left);
         return;
     }
-    int k = i - 1;
+    const int k = i - 1, q = squality(nucleo_setup_scan_rssi(k));
     const char *ss = nucleo_setup_scan_ssid(k);
-    int rssi = nucleo_setup_scan_rssi(k), q = squality(rssi);
-    bool cur = connected() && !strcmp(ss, nucleo_setup_ssid());
-    bool known = nucleo_setup_net_is_known(ss), pref = known && prio_of(ss) > 0;
-    int lit = q >= 75 ? 4 : q >= 50 ? 3 : q >= 25 ? 2 : q > 0 ? 1 : 0;
-    for (int b = 0; b < 4; b++) { int bh = 4 + b * 4; d.fillRect(x + 6 + b * 5, cy + 8 - bh, 3, bh, b < lit ? (foc ? INK : qcol(q)) : LINE); }
-    int tx = x + 34;
-    if (nucleo_setup_scan_secure(k)) { ui_glyph(&d, UG_LOCK, x + 30, cy, 4, foc ? INK : MUTED, bg); tx = x + 40; }
+    const bool cur = connected() && !strcmp(ss, nucleo_setup_ssid()), known = nucleo_setup_net_is_known(ss);
+    net_bars(x + 6, cy + 8, 3, 4, net_lit(q), foc ? INK : 0, q);
     char name[34]; app_ui_ascii_fold(ss[0] ? ss : TR5("(nascosta)", "(hidden)", "(oculta)", "(masque)", "(versteckt)"), name, sizeof name);
-    lg::font(1); d.setTextColor(foc ? INK : (cur ? GOOD : FG), bg);
-    if (foc) {
-        d.setTextDatum(top_left); char nf[34]; lg::fit(nf, sizeof nf, name, w - (tx - x) - 24); d.drawString(nf, tx, y + 5);
-        char det[52]; snprintf(det, sizeof det, "%s  ch%d  %d dBm%s", nucleo_setup_scan_auth_label(k), nucleo_setup_scan_channel(k), rssi,
-                               cur ? TR5("  in uso", "  in use", "  en uso", "  utilise", "  aktiv") : known ? TR5("  salvata", "  saved", "  guardada", "  connu", "  bekannt") : "");
-        lg::font(0); d.setTextColor(INK, bg); char df[52]; lg::fit(df, sizeof df, det, w - (tx - x) - 10); d.drawString(df, tx, y + 24);
-    } else {
-        d.setTextDatum(middle_left); char nf[34]; lg::fit(nf, sizeof nf, name, w - (tx - x) - 24); d.drawString(nf, tx, cy);
-    }
-    if (pref)       ui_glyph(&d, UG_STAR, x + w - 14, cy, 5, foc ? INK : GOOD, bg);
-    else if (known) d.fillCircle(x + w - 14, cy, 3, foc ? INK : ACC);
+    char nf[34]; lg::fit(nf, sizeof nf, name, w - 46);
+    d.setTextColor(foc ? INK : (cur ? GOOD : FG), bg); d.drawString(nf, x + 30, cy);
+    if (known && prio_of(ss) > 0) ui_glyph(&d, UG_STAR, x + w - 10, cy, 4, foc ? INK : GOOD, bg);
+    else if (known) d.fillCircle(x + w - 10, cy, 3, foc ? INK : ACC);
     d.setTextDatum(top_left);
+}
+
+static void lg_net_pane(int top, int H2, int sel)
+{
+    const int px = NET_LW + 2, pw = 320 - px - 6, ph = H2 - top - 6, tx = px + 10, tw = pw - 20;
+    lg::panel(px, top, pw, ph);
+    const uint16_t cb = lg::card();
+    char b[48];
+    if (sel <= 0) {                                                  // the scan row: how many there are
+        ui_glyph(&d, UG_WIFI, px + pw / 2, top + 40, 12, ACC, cb);
+        snprintf(b, sizeof b, "%d", nucleo_setup_scan_count());
+        lg::font(3); d.setTextDatum(top_center); d.setTextColor(FG, cb); d.drawString(b, px + pw / 2, top + 66);
+        lg::font(0); d.setTextColor(MUTED, cb); d.drawString(TR5("Reti vicine", "Nearby networks", "Redes cercanas", "Reseaux proches", "Netze in Naehe"), px + pw / 2, top + 100);
+        d.setTextDatum(top_left);
+        return;
+    }
+    const int k = sel - 1, rssi = nucleo_setup_scan_rssi(k), q = squality(rssi);
+    const char *ss = nucleo_setup_scan_ssid(k);
+    const bool cur = connected() && !strcmp(ss, nucleo_setup_ssid()), known = nucleo_setup_net_is_known(ss);
+    net_bars(tx, top + 40, 7, 7, net_lit(q), 0, q);
+    snprintf(b, sizeof b, "%d", rssi);
+    lg::font(2); d.setTextColor(FG, cb); d.drawString(b, tx + 38, top + 12);
+    const int dx = tx + 42 + d.textWidth(b);
+    lg::font(0); d.setTextColor(MUTED, cb); d.drawString("dBm", dx, top + 18);
+    char name[34]; app_ui_ascii_fold(ss[0] ? ss : TR5("(nascosta)", "(hidden)", "(oculta)", "(masque)", "(versteckt)"), name, sizeof name);
+    lg::font(1); d.setTextColor(cur ? GOOD : FG, cb); lg::wrap(name, tx, top + 52, tw, 18, 2);
+    snprintf(b, sizeof b, "%s  ch%d", nucleo_setup_scan_auth_label(k), nucleo_setup_scan_channel(k));
+    lg::font(0); d.setTextColor(MUTED, cb); char f[48]; lg::fit(f, sizeof f, b, tw); d.drawString(f, tx, top + 92);
+    if (cur || known) {
+        d.setTextColor(cur ? GOOD : ACC, cb);
+        d.drawString(cur ? TR5("  in uso", "  in use", "  en uso", "  utilise", "  aktiv") + 2 : TR5("  salvata", "  saved", "  guardada", "  connu", "  bekannt") + 2, tx, top + 110);
+    }
+    if (known && !s_onboard) {                                       // prefer (the star) / forget: the saved net's own actions
+        const bool pref = prio_of(ss) > 0;
+        d.fillRoundRect(px + pw - 36, top + 104, 28, 26, 7, pref ? GOOD : LINE);
+        ui_glyph(&d, UG_STAR, px + pw - 22, top + 117, 5, pref ? INK : MUTED, pref ? GOOD : LINE);
+        nucleo_touch_add(px + pw - 40, top + 100, 36, 34, NK_CHAR, 'p');
+        lg::button(px + 8, top + ph - 84, pw - 16, 34, TR5("Dimentica", "Forget", "Olvidar", "Oublier", "Vergessen"), LINE, BAD, NK_DEL, 0);
+    }
+    if (!cur) lg::button(px + 8, top + ph - 44, pw - 16, 38, TR5("Collegati", "Join", "Conectar", "Rejoindre", "Verbinden"), ACC, INK, NK_ENTER, 0);
 }
 
 static void lg_nets(int top, int H2)
 {
     const int W2 = d.width();
-    int n = nucleo_setup_scan_count(), total_n = n + 1, sel = cur_sel();
     if (s_busy && s_op == OP_SCAN) {
         draw_spinner(W2 / 2, top + (H2 - top) / 2 - 14);
         lg::font(1); d.setTextDatum(top_center); d.setTextColor(FG, BG);
@@ -1864,19 +1903,16 @@ static void lg_nets(int top, int H2)
         d.setTextDatum(top_left);
         return;
     }
-    const int RF = 46, RH = 34, band = H2 - top;
+    const int total = nucleo_setup_scan_count() + 1, sel = cur_sel(), RH = 34, band = H2 - top, rows = band / RH;
     if (sel < s_lg_top) s_lg_top = sel;
-    for (;;) { int yy = 0, last = s_lg_top; for (int i = s_lg_top; i < total_n; i++) { int hh = (i == sel) ? RF : RH; if (yy + hh > band) break; yy += hh; last = i; } if (sel <= last || s_lg_top >= total_n - 1) break; s_lg_top++; }
-    if (s_lg_top < 0) s_lg_top = 0;
+    if (sel >= s_lg_top + rows) s_lg_top = sel - rows + 1;
     int y = top, k = 0;
-    for (int i = s_lg_top; i < total_n && k < 10; i++) {
-        int hh = (i == sel) ? RF : RH; if (y + hh > H2) break;
-        lg_net_row(y, hh, i, i == sel);
-        nucleo_touch_add(0, y, W2, hh, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + k)); s_tap_row[k] = i; k++;
-        y += hh;
+    for (int i = s_lg_top; i < total && k < rows && k < 10; i++, k++, y += RH) {
+        lg_net_row(y, RH, i, i == sel);
+        nucleo_touch_add(0, y, NET_LW, RH, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + k)); s_tap_row[k] = i;
     }
-    nucleo_touch_add_scroll(0, top, W2, band, RH, NK_UP, 0, NK_DOWN, 0);
-    if (!n) { lg::font(0); d.setTextColor(MUTED, BG); d.drawString(TR5("Nessuna rete trovata", "No networks found", "Sin redes", "Aucun reseau", "Keine Netze"), 14, y + 8); }
+    nucleo_touch_add_scroll(0, top, NET_LW, band, RH, NK_UP, 0, NK_DOWN, 0);
+    lg_net_pane(top, H2, sel);
 }
 
 // The password / name editor as a panel field. The typing happens on the Cardputer; the field shows
@@ -1899,47 +1935,57 @@ static void lg_input(int H2)
     if (nucleo_kbd_shift_latched()) { d.fillRoundRect(W2 - 36, iy + 24, 24, 16, 4, ACC); lg::font(0); d.setTextColor(INK, ACC); d.drawString("Aa", W2 - 31, iy + 28); }
 }
 
-// The confirm card (destructive actions) on the panel: same message text as the compact UI, via
-// app_ui_confirm which centres on whichever panel draws it and wires the Yes/No taps.
-static void lg_confirm(void)
+// The confirm card (destructive actions), on whichever screen draws it: app_ui_confirm centres on that panel and
+// wires the Yes/No taps. Shared by the compact UI and the panel.
+static void confirm_card(void)
 {
-    d.setFont(&fonts::Font0); d.setTextSize(1);     // app_ui_confirm draws in Font0 sizes; clear any lg:: face first
     char msg[36];
     switch (s_cf) {
     case R_RESTART:
         app_ui_confirm(TR5("Riavviare?", "Restart?", "Reiniciar?", "Redemarrer?", "Neustarten?"),
-                       TR5("Il dispositivo si riavvia ora.", "The device restarts now.", "El equipo se reinicia ahora.", "L'appareil redemarre.", "Das Geraet startet neu."), s_cf_yes); break;
+                       TR5("Il dispositivo si riavvia ora.", "The device restarts now.", "El equipo se reinicia ahora.",
+                           "L'appareil redemarre.", "Das Geraet startet jetzt neu."), s_cf_yes); break;
     case R_LAUNCHER:
+        // Launcher's splash auto-boots the selected app (us) after its timer: ENTER there opens its menu.
         app_ui_confirm(TR5("Tornare a M5Launcher?", "Back to M5Launcher?", "Volver a M5Launcher?", "Retour a M5Launcher?", "Zu M5Launcher?"),
-                       TR5("Premi INVIO sul suo avvio.", "Press ENTER on its splash.", "Pulsa ENTER en su inicio.", "ENTREE sur son demarrage.", "ENTER im Startbild."), s_cf_yes); break;
+                       TR5("Premi INVIO sul suo avvio.", "Press ENTER on its splash.", "Pulsa ENTER en su inicio.",
+                           "ENTREE sur son demarrage.", "ENTER im Startbild druecken."), s_cf_yes); break;
     case R_FORGET_ALL:
-        snprintf(msg, sizeof msg, TR5("%d reti e le loro password.", "%d networks and passwords.", "%d redes y sus claves.", "%d reseaux et mots de passe.", "%d Netze und Passwoerter."), nucleo_setup_net_count());
+        snprintf(msg, sizeof msg, TR5("%d reti e le loro password.", "%d networks and passwords.", "%d redes y sus claves.",
+                                      "%d reseaux et mots de passe.", "%d Netze und Passwoerter."), nucleo_setup_net_count());
         app_ui_confirm(TR5("Dimenticare tutte?", "Forget all?", "Olvidar todas?", "Tout oublier?", "Alle vergessen?"), msg, s_cf_yes); break;
     case R_AP_ON:
         if (ap_on()) app_ui_confirm(TR5("Spegnere hotspot?", "Hotspot off?", "Apagar hotspot?", "Couper hotspot?", "Hotspot aus?"),
-                                    TR5("Chi e collegato perde la rete.", "Connected devices will drop.", "Los conectados pierden la red.", "Les clients perdent le reseau.", "Verbundene verlieren das Netz."), s_cf_yes);
+                                    TR5("Chi e collegato perde la rete.", "Connected devices will drop.", "Los conectados pierden la red.",
+                                        "Les clients perdent le reseau.", "Verbundene verlieren das Netz."), s_cf_yes);
         else         app_ui_confirm(TR5("Accendere hotspot?", "Hotspot on?", "Activar hotspot?", "Activer hotspot?", "Hotspot an?"),
-                                    TR5("Il Wi-Fi attuale si disconnette.", "Your Wi-Fi link will drop.", "El Wi-Fi actual se desconecta.", "Le Wi-Fi actuel se deconnecte.", "Das aktuelle Wi-Fi trennt."), s_cf_yes);
+                                    TR5("Il Wi-Fi attuale si disconnette.", "Your Wi-Fi link will drop.", "El Wi-Fi actual se desconecta.",
+                                        "Le Wi-Fi actuel se deconnecte.", "Das aktuelle Wi-Fi trennt sich."), s_cf_yes);
         break;
     case R_OB_SKIP:
         app_ui_confirm(TR5("Saltare il Wi-Fi?", "Skip Wi-Fi?", "Omitir el Wi-Fi?", "Sans Wi-Fi ?", "Ohne WLAN?"),
-                       TR5("Userai il suo hotspot.", "You will use its hotspot.", "Usaras su hotspot.", "Tu utiliseras son hotspot.", "Du nutzt seinen Hotspot."), s_cf_yes); break;
+                       TR5("Userai il suo hotspot.", "You will use its hotspot.", "Usaras su hotspot.",
+                           "Tu utiliseras son hotspot.", "Du nutzt seinen Hotspot."), s_cf_yes); break;
     case R_SDC:
         switch (sdc_status()) {
         case NUCLEO_SDC_COMPLETE: case NUCLEO_SDC_MANUAL: case NUCLEO_SDC_UNKNOWN:
             app_ui_confirm(TR5("Verificare?", "Verify files?", "Verificar?", "Verifier ?", "Pruefen?"),
-                           TR5("Riavvia, ripara solo cio che serve.", "Restarts, repairs only what is off.", "Reinicia, repara lo necesario.", "Redemarre, repare le necessaire.", "Neustart, repariert nur Fehler."), s_cf_yes); break;
+                           TR5("Riavvia, ripara solo cio che serve.", "Restarts, repairs only what is off.", "Reinicia, repara lo necesario.",
+                               "Redemarre, repare le necessaire.", "Neustart, repariert nur Fehler."), s_cf_yes); break;
         case NUCLEO_SDC_OUTDATED:
             app_ui_confirm(TR5("Aggiornare?", "Update now?", "Actualizar?", "Mettre a jour ?", "Aktualisieren?"),
-                           TR5("Riavvia, scarica solo i cambiati.", "Restarts, gets only what changed.", "Reinicia, baja solo lo nuevo.", "Redemarre, prend les changements.", "Neustart, laedt nur Neues."), s_cf_yes); break;
+                           TR5("Riavvia, scarica solo i cambiati.", "Restarts, gets only what changed.", "Reinicia, baja solo lo nuevo.",
+                               "Redemarre, prend les changements.", "Neustart, laedt nur Neues."), s_cf_yes); break;
         default:
             app_ui_confirm(TR5("Scaricare ora?", "Download now?", "Descargar ya?", "Telecharger ?", "Jetzt laden?"),
-                           TR5("Riavvia e scarica ~50 MB.", "Restarts and downloads ~50 MB.", "Reinicia y descarga ~50 MB.", "Redemarre, telecharge ~50 Mo.", "Neustart, laedt ~50 MB."), s_cf_yes); break;
+                           TR5("Riavvia e scarica ~50 MB.", "Restarts and downloads ~50 MB.", "Reinicia y descarga ~50 MB.",
+                               "Redemarre, telecharge ~50 Mo.", "Neustart, laedt ~50 MB."), s_cf_yes); break;
         }
         break;
     case R_SESSIONS:
         app_ui_confirm(TR5("Disconnettere?", "Sign out all?", "Cerrar sesiones?", "Deconnecter?", "Alle abmelden?"),
-                       TR5("I browser rifaranno il pairing.", "Browsers must pair again.", "Hay que vincular de nuevo.", "Il faudra associer a nouveau.", "Browser muessen neu koppeln."), s_cf_yes); break;
+                       TR5("I browser rifaranno il pairing.", "Browsers must pair again.", "Hay que vincular de nuevo.",
+                           "Il faudra associer a nouveau.", "Browser muessen neu koppeln."), s_cf_yes); break;
     default:
         app_ui_ascii_fold(s_cf_ssid, msg, sizeof msg);
         app_ui_confirm(TR5("Dimenticare rete?", "Forget network?", "Olvidar red?", "Oublier reseau?", "Netz vergessen?"), msg, s_cf_yes);
@@ -1947,32 +1993,46 @@ static void lg_confirm(void)
     }
 }
 
-// The date/time editor on the panel: five big field boxes with the focused one highlighted, plus a touch
-// button row (< field, roll -, roll +, field >, OK). Keyboard flows are unchanged.
+static void lg_confirm(void)
+{
+    d.setFont(&fonts::Font0); d.setTextSize(1);     // app_ui_confirm draws in Font0 sizes; clear any lg:: face first
+    nucleo_touch_clear();                           // modal: the rows under the card must not take its Yes / No taps
+    confirm_card();
+}
+
+// The date/time editor on the panel: five big field boxes, touched directly â€” tap a box to pick it, then tap its
+// upper half to roll it up or its lower half to roll it down (the chevrons say where). One field covers the row
+// (dt_hit maps a tap to a box with the painter's own widths); "Set the clock" is the editor's own action.
+static const int DT_GW[5] = { 88, 46, 46, 46, 46 }, DT_GY = lg::HEAD + 22, DT_GH = 100;
+static int dt_hit(int x)
+{
+    for (int f = 0, gx = 6; f < 5; gx += DT_GW[f] + 9, f++) if (x < gx + DT_GW[f] + 4) return f;
+    return 4;
+}
 static void lg_datetime(void)
 {
     const int W2 = d.width(), H2 = d.height();
-    lg::font(1); d.setTextColor(ACC, BG); d.setTextDatum(top_left);
-    d.drawString(TR5("Data e ora", "Date and time", "Fecha y hora", "Date et heure", "Datum und Zeit"), 12, lg::HEAD + 10);
+    lg::header(TR5("Data e ora", "Date and time", "Fecha y hora", "Date et heure", "Datum und Zeit"), nullptr, ACC);
     const char *fmt[5] = { "%04d", "%02d", "%02d", "%02d", "%02d" };
-    int wds[5] = { 92, 56, 56, 56, 56 };
-    int gx = 12, gy = lg::HEAD + 40, gh = 56;
-    for (int f = 0; f < 5; f++) {
-        bool sel = f == s_dtf; char b[8]; snprintf(b, sizeof b, fmt[f], s_dtv[f]);
-        d.fillRoundRect(gx, gy, wds[f], gh, 8, sel ? ACC : lg::card());
-        lg::font(3); d.setTextDatum(middle_center); d.setTextColor(sel ? INK : FG, sel ? ACC : lg::card());
-        d.drawString(b, gx + wds[f] / 2, gy + gh / 2);
-        if (f < 4) { d.setTextColor(MUTED, BG); d.setTextDatum(middle_center); lg::font(2); d.drawString(f < 2 ? "/" : f == 2 ? " " : ":", gx + wds[f] + 5, gy + gh / 2); }
-        gx += wds[f] + 12;
+    for (int f = 0, gx = 6; f < 5; gx += DT_GW[f] + 9, f++) {
+        const bool sel = f == s_dtf; const uint16_t bg = sel ? ACC : lg::card(), ink = sel ? INK : FG;
+        char b[8]; snprintf(b, sizeof b, fmt[f], s_dtv[f]);
+        d.fillRoundRect(gx, DT_GY, DT_GW[f], DT_GH, 8, bg);
+        lg::font(3); d.setTextDatum(middle_center); d.setTextColor(ink, bg);
+        d.drawString(b, gx + DT_GW[f] / 2, DT_GY + DT_GH / 2);
+        if (sel) {
+            const int cx = gx + DT_GW[f] / 2;
+            d.fillTriangle(cx - 7, DT_GY + 17, cx + 7, DT_GY + 17, cx, DT_GY + 9, ink);
+            d.fillTriangle(cx - 7, DT_GY + DT_GH - 17, cx + 7, DT_GY + DT_GH - 17, cx, DT_GY + DT_GH - 9, ink);
+        }
+        if (f < 4) { d.setTextColor(MUTED, BG); lg::font(2); d.drawString(f < 2 ? "/" : f == 2 ? " " : ":", gx + DT_GW[f] + 4, DT_GY + DT_GH / 2); }
     }
     d.setTextDatum(top_left);
+    lg::field(0, DT_GY, W2, DT_GH);
     const char *names[5] = { TR5("anno", "year", "ano", "annee", "Jahr"), TR5("mese", "month", "mes", "mois", "Monat"),
                              TR5("giorno", "day", "dia", "jour", "Tag"), TR5("ora", "hour", "hora", "heure", "Std"), TR5("min", "min", "min", "min", "Min") };
-    lg::font(0); d.setTextColor(MUTED, BG); d.drawString(names[s_dtf], 14, gy + gh + 6);
-    const int by = H2 - 46, bw = (W2 - 24 - 4 * 8) / 5;
-    const struct { const char *l; int key; char ch; } btn[5] = {
-        { "<", NK_LEFT, 0 }, { "-", NK_DOWN, 0 }, { "+", NK_UP, 0 }, { ">", NK_RIGHT, 0 }, { "OK", NK_ENTER, 0 } };
-    for (int i = 0; i < 5; i++) lg::button(12 + i * (bw + 8), by, bw, 38, btn[i].l, i == 4 ? ACC : lg::card(), i == 4 ? INK : FG, btn[i].key, btn[i].ch);
+    lg::font(0); d.setTextColor(MUTED, BG); d.drawString(names[s_dtf], 14, DT_GY + DT_GH + 6);
+    lg::button(12, H2 - 48, W2 - 24, 40, TR5("Imposta l'ora", "Set the clock", "Poner la hora", "Regler l'heure", "Uhr stellen"), ACC, INK, NK_ENTER, 0);
 }
 
 // First-boot wizard + join progress on the panel (centred cards; buttons tap the same keys).
@@ -2000,31 +2060,53 @@ static void lg_wizard(int which)
         ui_glyph(&d, UG_UPDATE, 26, lg::HEAD + 14, 8, ACC, BG);
         lg::font(2); d.setTextColor(ACC, BG); d.setTextDatum(top_left);
         d.drawString(upd ? TR5("Aggiorna SD", "SD update", "Actualizar SD", "MAJ de la SD", "SD-Update") : TR5("Contenuti SD", "SD content", "Contenido SD", "Contenu SD", "SD-Inhalte"), 46, lg::HEAD + 6);
+        // the compact page's own lines (same strings), at the panel's size
+        const char *l1 = upd ? TR5("La SD ha file di un'altra versione.", "The SD has older files.", "La SD tiene otra version.", "La SD a une autre version.", "Die SD hat aeltere Dateien.")
+                       : res ? TR5("Il download si era interrotto.", "The download was cut short.", "La descarga quedo a medias.", "Le telechargement s'est coupe.", "Der Download brach ab.")
+                             : TR5("Web OS e ANIMA non sono", "The web OS and ANIMA are", "El web OS y ANIMA no estan", "Le web OS et ANIMA ne sont", "Web OS und ANIMA sind");
+        const char *l2 = upd ? TR5("Scarico solo i file cambiati.", "Only the changed files download.", "Solo bajo lo que cambio.", "Seuls les changements arrivent.", "Nur Geaendertes wird geladen.")
+                       : res ? TR5("Riprende da dove era rimasto.", "It resumes where it stopped.", "Sigue donde se quedo.", "Il reprend ou il s'est arrete.", "Er macht dort weiter.")
+                             : TR5("ancora sulla scheda SD.", "not on the SD card yet.", "aun en la tarjeta SD.", "pas encore sur la SD.", "noch nicht auf der SD.");
+        char t[48];
         lg::font(1); d.setTextColor(FG, BG);
-        lg::wrap(upd ? TR5("La SD ha file di un'altra versione. Scarico solo i cambiati.", "The SD has older files. Only the changed files download.", "La SD tiene otra version. Solo bajo lo que cambio.", "La SD a une autre version. Seuls les changements arrivent.", "Die SD hat aeltere Dateien. Nur Geaendertes wird geladen.")
-                     : res ? TR5("Il download si era interrotto. Riprende da dove era rimasto.", "The download was cut short. It resumes where it stopped.", "La descarga quedo a medias. Sigue donde se quedo.", "Le telechargement s'est coupe. Il reprend ou il s'est arrete.", "Der Download brach ab. Er macht dort weiter.")
-                           : TR5("Web OS e ANIMA non sono ancora sulla SD. Circa 50 MB: tienilo in carica.", "The web OS and ANIMA are not on the SD yet. About 50 MB: keep it charging.", "El web OS y ANIMA aun no estan en la SD. Unos 50 MB: dejalo cargando.", "Le web OS et ANIMA ne sont pas encore sur la SD. Env. 50 Mo.", "Web OS und ANIMA sind noch nicht auf der SD. Etwa 50 MB."),
-                16, lg::HEAD + 40, W2 - 32, 20, 4);
+        lg::fit(t, sizeof t, l1, W2 - 32); d.drawString(t, 16, lg::HEAD + 44);
+        lg::fit(t, sizeof t, l2, W2 - 32); d.drawString(t, 16, lg::HEAD + 68);
+        lg::font(0); d.setTextColor(MUTED, BG);
+        d.drawString(upd || res ? TR5("Tienilo in carica.", "Keep it charging.", "Dejalo cargando.", "Garde-le en charge.", "Am Ladekabel lassen.")
+                                : TR5("Circa 50 MB: tienilo in carica.", "About 50 MB: keep it charging.", "Unos 50 MB: dejalo cargando.", "Env. 50 Mo: garde-le en charge.", "Etwa 50 MB: am Ladekabel."), 16, lg::HEAD + 98);
         const char *go = upd ? TR5("Aggiorna ora", "Update now", "Actualizar", "Mettre a jour", "Jetzt updaten") : res ? TR5("Riprendi", "Resume", "Reanudar", "Reprendre", "Fortsetzen") : TR5("Scarica ora", "Download now", "Descargar", "Telecharger", "Jetzt laden");
         const int bw = (W2 - 36) / 2;
         lg::button(12, H2 - 48, bw, 40, go, s_sd_yes ? ACC : lg::card(), s_sd_yes ? INK : FG, NK_CHAR, '1');
         lg::button(24 + bw, H2 - 48, bw, 40, TR5("Piu tardi", "Later", "Mas tarde", "Plus tard", "Spaeter"), s_sd_yes ? lg::card() : ACC, s_sd_yes ? FG : INK, NK_CHAR, '2');
         return;
     }
-    if (which == 2) {                                                // OB_SD_LATER: "No problem"
+    if (which == 2) {                                                // OB_SD_LATER: the two ways, the guide as a QR
         ui_glyph(&d, UG_INFO, 22, lg::HEAD + 14, 8, ACC, BG);
         lg::font(2); d.setTextColor(ACC, BG); d.setTextDatum(top_left);
         d.drawString(TR5("Nessun problema", "No problem", "Sin problema", "Pas de souci", "Kein Problem"), 42, lg::HEAD + 6);
-        lg::font(1); d.setTextColor(FG, BG);
-        lg::wrap(TR5("Puoi scaricarli piu tardi da Impostazioni > Dispositivo, o copiarli da un PC.", "Get them later from Settings > Device, or copy them from a PC.", "Descargalos luego en Ajustes > Dispositivo, o copialos de un PC.", "Plus tard via Reglages > Appareil, ou copie depuis un PC.", "Spaeter via Einstellungen > Geraet, oder vom PC kopieren."),
-                16, lg::HEAD + 40, W2 - 32, 20, 4);
+        const int qs = 116, qx = W2 - qs - 12, qy = lg::HEAD + 34;
+        char url[64]; snprintf(url, sizeof url, NUCLEO_SDC_HELP_URL "%s", nucleo_sdcontent_fw_tag());
+        d.fillRect(qx, qy, qs, qs, 0xFFFF);                          // quiet zone always white, whatever the theme
+        d.qrcode(url, qx + 2, qy + 2, qs - 4, 3, false);
+        static const char *const LN[6][5] = {
+            { "Con il Wi-Fi:", "With Wi-Fi:", "Con Wi-Fi:", "Avec le Wi-Fi:", "Mit WLAN:" },
+            { "Impostazioni", "Settings", "Ajustes", "Reglages", "Einstellungen" },
+            { "> Dispositivo", "> Device", "> Dispositivo", "> Appareil", "> Geraet" },
+            { "Da un PC:", "From a PC:", "Desde un PC:", "Depuis un PC:", "Vom PC:" },
+            { "inquadra il QR", "scan the QR", "escanea el QR", "scanne le QR", "QR scannen" },
+            { "e segui i passi", "and follow it", "y sigue los pasos", "et suis les etapes", "und folgen" } };
+        const int li = TR5("0", "1", "2", "3", "4")[0] - '0';
+        for (int i = 0; i < 6; i++) {
+            lg::font(i == 0 || i == 3 ? 0 : 1); d.setTextColor(i == 0 || i == 3 ? MUTED : i < 3 ? ACC : FG, BG);
+            d.drawString(LN[i][li], 16, lg::HEAD + 36 + i * 22 + (i >= 3 ? 8 : 0));
+        }
         lg::button(12, H2 - 48, W2 - 24, 40, TR5("Continua", "Continue", "Continuar", "Continuer", "Weiter"), ACC, INK, NK_ENTER, 0);
         return;
     }
     // which == 3: joining / finishing spinner
     draw_spinner(W2 / 2, H2 / 2 - 10);
     lg::font(1); d.setTextDatum(top_center); d.setTextColor(FG, BG);
-    if (s_fin_wait) d.drawString(TR5("Attivo l'hotspot...", "Starting the hotspot...", "Activando hotspot...", "Demarrage hotspot...", "Hotspot startet..."), W2 / 2, H2 / 2 + 16);
+    if (s_fin_wait) d.drawString(TR5("Attivo l'hotspot...", "Starting the hotspot...", "Activando el hotspot...", "Demarrage du hotspot...", "Hotspot startet..."), W2 / 2, H2 / 2 + 16);
     else { char b[40], name[34]; app_ui_ascii_fold(s_join_ssid, name, sizeof name); snprintf(b, sizeof b, "%s %.18s", TR5("Connessione a", "Connecting to", "Conectando a", "Connexion a", "Verbinde mit"), name); d.drawString(b, W2 / 2, H2 / 2 + 16); }
     d.setTextDatum(top_left);
 }
@@ -2201,58 +2283,7 @@ static void on_draw(void)
     uint32_t ov = fnv(s_cf, s_cf_yes ? 1u : 2u);
     if (s_cf != R_NONE && (touched(15, 106) || ov != s_ovl_sig)) {     // confirm card (y 15..105)
         s_ovl_sig = ov; mark(15, 106);
-        char msg[36];
-        switch (s_cf) {
-        case R_RESTART:
-            app_ui_confirm(TR5("Riavviare?", "Restart?", "Reiniciar?", "Redemarrer?", "Neustarten?"),
-                           TR5("Il dispositivo si riavvia ora.", "The device restarts now.", "El equipo se reinicia ahora.",
-                               "L'appareil redemarre.", "Das Geraet startet jetzt neu."), s_cf_yes); break;
-        case R_LAUNCHER:
-            // Launcher's splash auto-boots the selected app (us) after its timer: ENTER there opens its menu.
-            app_ui_confirm(TR5("Tornare a M5Launcher?", "Back to M5Launcher?", "Volver a M5Launcher?", "Retour a M5Launcher?", "Zu M5Launcher?"),
-                           TR5("Premi INVIO sul suo avvio.", "Press ENTER on its splash.", "Pulsa ENTER en su inicio.",
-                               "ENTREE sur son demarrage.", "ENTER im Startbild druecken."), s_cf_yes); break;
-        case R_FORGET_ALL:
-            snprintf(msg, sizeof msg, TR5("%d reti e le loro password.", "%d networks and passwords.", "%d redes y sus claves.",
-                                          "%d reseaux et mots de passe.", "%d Netze und Passwoerter."), nucleo_setup_net_count());
-            app_ui_confirm(TR5("Dimenticare tutte?", "Forget all?", "Olvidar todas?", "Tout oublier?", "Alle vergessen?"), msg, s_cf_yes); break;
-        case R_AP_ON:
-            if (ap_on()) app_ui_confirm(TR5("Spegnere hotspot?", "Hotspot off?", "Apagar hotspot?", "Couper hotspot?", "Hotspot aus?"),
-                                        TR5("Chi e collegato perde la rete.", "Connected devices will drop.", "Los conectados pierden la red.",
-                                            "Les clients perdent le reseau.", "Verbundene verlieren das Netz."), s_cf_yes);
-            else         app_ui_confirm(TR5("Accendere hotspot?", "Hotspot on?", "Activar hotspot?", "Activer hotspot?", "Hotspot an?"),
-                                        TR5("Il Wi-Fi attuale si disconnette.", "Your Wi-Fi link will drop.", "El Wi-Fi actual se desconecta.",
-                                            "Le Wi-Fi actuel se deconnecte.", "Das aktuelle Wi-Fi trennt sich."), s_cf_yes);
-            break;
-        case R_OB_SKIP:
-            app_ui_confirm(TR5("Saltare il Wi-Fi?", "Skip Wi-Fi?", "Omitir el Wi-Fi?", "Sans Wi-Fi ?", "Ohne WLAN?"),
-                           TR5("Userai il suo hotspot.", "You will use its hotspot.", "Usaras su hotspot.",
-                               "Tu utiliseras son hotspot.", "Du nutzt seinen Hotspot."), s_cf_yes); break;
-        case R_SDC:
-            switch (sdc_status()) {
-            case NUCLEO_SDC_COMPLETE: case NUCLEO_SDC_MANUAL: case NUCLEO_SDC_UNKNOWN:
-                app_ui_confirm(TR5("Verificare?", "Verify files?", "Verificar?", "Verifier ?", "Pruefen?"),
-                               TR5("Riavvia, ripara solo cio che serve.", "Restarts, repairs only what is off.", "Reinicia, repara lo necesario.",
-                                   "Redemarre, repare le necessaire.", "Neustart, repariert nur Fehler."), s_cf_yes); break;
-            case NUCLEO_SDC_OUTDATED:
-                app_ui_confirm(TR5("Aggiornare?", "Update now?", "Actualizar?", "Mettre a jour ?", "Aktualisieren?"),
-                               TR5("Riavvia, scarica solo i cambiati.", "Restarts, gets only what changed.", "Reinicia, baja solo lo nuevo.",
-                                   "Redemarre, prend les changements.", "Neustart, laedt nur Neues."), s_cf_yes); break;
-            default:
-                app_ui_confirm(TR5("Scaricare ora?", "Download now?", "Descargar ya?", "Telecharger ?", "Jetzt laden?"),
-                               TR5("Riavvia e scarica ~50 MB.", "Restarts and downloads ~50 MB.", "Reinicia y descarga ~50 MB.",
-                                   "Redemarre, telecharge ~50 Mo.", "Neustart, laedt ~50 MB."), s_cf_yes); break;
-            }
-            break;
-        case R_SESSIONS:
-            app_ui_confirm(TR5("Disconnettere?", "Sign out all?", "Cerrar sesiones?", "Deconnecter?", "Alle abmelden?"),
-                           TR5("I browser rifaranno il pairing.", "Browsers must pair again.", "Hay que vincular de nuevo.",
-                               "Il faudra associer a nouveau.", "Browser muessen neu koppeln."), s_cf_yes); break;
-        default:
-            app_ui_ascii_fold(s_cf_ssid, msg, sizeof msg);
-            app_ui_confirm(TR5("Dimenticare rete?", "Forget network?", "Olvidar red?", "Oublier reseau?", "Netz vergessen?"), msg, s_cf_yes);
-            break;
-        }
+        confirm_card();
     }
     if (toast) draw_toast(ch);
     s_toast_on = toast;
@@ -2751,7 +2782,12 @@ static void on_key(int k, char ch)
     if (s_im != IM_NONE) { input_key(k, ch); }
     else if (s_cf != R_NONE) { int c = app_ui_confirm_key(k, ch, &s_cf_yes); if (c >= 0) confirm_done(c == 1); }
     else if (s_dt) {
-        if (k == NK_UP)          dt_adjust(+1);
+        int tx, ty;
+        if (lg::tap(k, ch, &tx, &ty)) {                              // panel: a box picked / rolled (lg_datetime)
+            const int f = dt_hit(tx);
+            if (f != s_dtf) s_dtf = f; else dt_adjust(ty < DT_GY + DT_GH / 2 ? +1 : -1);
+        }
+        else if (k == NK_UP)     dt_adjust(+1);
         else if (k == NK_DOWN)   dt_adjust(-1);
         else if (k == NK_RIGHT)  dt_step(+1);
         else if (k == NK_ENTER) {

@@ -483,6 +483,9 @@ static void leave(void)
     s_st = nullptr; s_cap = 0; s_count = 0; s_sel = 0; s_top = 0;
 }
 
+// The panel: the list's width, the card's volume track (x, width) — shared by the painter and the hit-test.
+enum { R_LISTW = 150, R_VX = R_LISTW + 16, R_VW = 320 - R_LISTW - 34 };
+
 static void on_key(int key, char ch)
 {
     if (s_count <= 0) return;
@@ -492,8 +495,13 @@ static void on_key(int key, char ch)
         int t = lg::row_tap(key, ch, s_lg_scroll, s_count, &s_sel);
         if (t == 2) { listen(&s_st[s_sel]); return; }
         if (t == 1) { clamp_scroll(); nucleo_app_request_draw(); return; }
+        int tx;
+        if (lg::tap(key, ch, &tx, nullptr)) {                      // the card's volume track: that level
+            int v = (tx - R_VX) * 100 / R_VW; nucleo_audio_set_volume(v < 0 ? 0 : v > 100 ? 100 : v);
+            nucleo_app_request_draw(); return;
+        }
     }
-    if (ch == '+' || ch == '-') {                                  // the card's volume buttons (and the +/- keys)
+    if (ch == '+' || ch == '-') {                                  // the +/- keys
         nucleo_audio_set_volume(nucleo_audio_volume() + (ch == '+' ? 10 : -10));
         nucleo_app_request_draw(); return;
     }
@@ -528,8 +536,7 @@ static void tick(void) { }                         // static screen: nothing ani
 // right (name, genre, stream, a volume control and a big "Ascolta" button). Tuning in is still the blocking ON AIR
 // modal (it owns the Cardputer, RAM-critical) â€” the panel keeps the card while it plays. The Cardputer is the
 // companion: the picked station, where it is in the list and the keys. Touch: tap a row to pick, again to listen;
-// the card's buttons set the start volume and start the stream.
-static const int R_LISTW = 150;
+// the card's volume track is a slider (tap = that level; the +/- keys step it), its big button starts the stream.
 
 static void lg_row(int i, int x, int y, int w, int h, bool focus, unsigned short bg, void *)
 {
@@ -553,10 +560,11 @@ static void lg_card(int x, int y, int w, int h)
 
     int vol = nucleo_audio_volume();                // the start volume (applied when the stream begins)
     char vl[24]; snprintf(vl, sizeof vl, "%s  %d%%", TR("Volume", "Volume"), vol);
-    lg::font(0); d.setTextColor(MUTED, cb); d.drawString(vl, x + 12, y + 92);
-    lg::button(x + w - 68, y + 86, 28, 24, "-", HLINE, FG, NK_CHAR, '-');
-    lg::button(x + w - 36, y + 86, 28, 24, "+", HLINE, FG, NK_CHAR, '+');
-    lg::bar(x + 12, y + 116, w - 24, 10, vol, GRN);
+    lg::font(0); d.setTextColor(MUTED, cb); d.drawString(vl, x + 12, y + 90);
+    lg::bar(R_VX, y + 116, R_VW, 10, vol, GRN);
+    const int kx = R_VX + R_VW * vol / 100;
+    d.fillCircle(kx, y + 121, 9, FG); d.fillCircle(kx, y + 121, 4, GRN);          // the knob
+    lg::field(x, y + 100, w, 42);
 
     lg::button(x + 12, y + h - 46, w - 24, 36, TR("Ascolta", "Listen"), namec, INK, NK_ENTER, 0);
 }

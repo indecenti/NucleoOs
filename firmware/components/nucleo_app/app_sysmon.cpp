@@ -14,6 +14,7 @@ extern "C" {
 #include <M5GFX.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include "esp_timer.h"
 #include "esp_heap_caps.h"
 
@@ -29,7 +30,8 @@ static uint32_t s_last_up = 0;
 static bool     s_first = true;   // full-clear only once; later ticks repaint just the changing regions (no flicker)
 static void enter(void) { nucleo_app_set_hint(TR5("esc esci", "esc back", "esc atras", "esc retour", "esc zurueck")); s_last_up = 0; s_first = true; nucleo_app_request_draw(); }
 // The finest-grained value shown is uptime in whole seconds — redraw at 1 Hz, not 5 Hz.
-static void tick(void) { uint32_t up = (uint32_t)(esp_timer_get_time() / 1000000); if (up != s_last_up) { s_last_up = up; nucleo_app_request_draw(); } }
+static void sample(void);
+static void tick(void) { uint32_t up = (uint32_t)(esp_timer_get_time() / 1000000); if (up != s_last_up) { s_last_up = up; sample(); nucleo_app_request_draw(); } }
 
 #include "app_gfx.h"
 
@@ -93,43 +95,67 @@ static void draw(void)
 }
 
 // ---- two screens ---------------------------------------------------------------------------------
-// Panel: three big metric cards (battery / largest block / SD) with a hero number and a gauge, then a
-// footer line with uptime + app count. Companion: the same four numbers, glanceable, on the Cardputer.
-static void metric_card(int x, int y, int w, int hh, const char *label, const char *val, int pct, unsigned short col)
+// Panel (lg::frame, no flicker on the 1 Hz refresh): three ring gauges across the top - battery, largest free
+// block, SD used - each with its hero number inside, then a live graph of the last minute of RAM (free heap as an
+// area, largest block as a line), sampled once a second from tick() so it keeps running with no draw at all.
+// Companion: the same numbers, glanceable, on the Cardputer. No touch content: the chevron is Back.
+// lg::frame composes in the shared 8-bit canvas (RGB332): a slate that survives it for the card and tracks.
+static const unsigned short CARD = 0x212A;
+#define NHIST 60
+static uint8_t s_blk_h[NHIST];                       // largest block, KB / 2, oldest first (s_hn samples)
+static int s_hn = 0;
+static void sample(void)
 {
-    lg::panel(x, y, w, hh);
-    const unsigned short cb = lg::card();
-    lg::font(1); d.setTextColor(MUTED, cb); d.setTextDatum(top_left);
-    d.drawString(label, x + 12, y + 8);
-    lg::font(2); d.setTextColor(col, cb); d.setTextDatum(top_right);
-    char v[20]; lg::fit(v, sizeof v, val, w - 24);
-    d.drawString(v, x + w - 12, y + 6);
-    d.setTextDatum(top_left);
-    lg::bar(x + 12, y + hh - 14, w - 24, 7, pct, col);
+    if (s_hn == NHIST) memmove(s_blk_h, s_blk_h + 1, --s_hn);
+    const unsigned bk = (unsigned)(heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL) / 2048);
+    s_blk_h[s_hn++] = (uint8_t)(bk > 255 ? 255 : bk);
 }
 
-static void draw_large(void)
+static void ring(int cx, int cy, int pct, unsigned short col, const char *val, const char *unit, const char *label)
 {
-    const int W = d.width(), H = d.height();
-    nucleo_touch_clear();
+    d.fillArc(cx, cy, 40, 32, 0, 360, CARD);
+    if (pct > 0) d.fillArc(cx, cy, 40, 32, 270, 270 + (pct > 100 ? 100 : pct) * 36 / 10, col);
+    d.setTextDatum(middle_center);
+    lg::font(2); d.setTextColor(col, BG); d.drawString(val, cx, cy - 4);
+    lg::font(4); d.setTextColor(MUTED, BG); d.drawString(unit, cx, cy + 14);
+    lg::font(0); d.setTextColor(FG, BG); d.drawString(label, cx, cy + 54);
+    d.setTextDatum(top_left);
+}
+
+static void paint_large(void *)
+{
     char up[20]; { unsigned u = (unsigned)(esp_timer_get_time() / 1000000);
                    if (u >= 3600) snprintf(up, sizeof up, "%uh %um", u / 3600, (u % 3600) / 60);
                    else if (u >= 60) snprintf(up, sizeof up, "%um %us", u / 60, u % 60);
                    else snprintf(up, sizeof up, "%us", u); }
-    int y = lg::header("System Status", up, ACCENT);
-    d.fillRect(0, y, W, H - y, BG);
-
+    d.fillRect(0, 0, 320, 240, BG);
+    lg::header("System Status", up, ACCENT);
     Metrics m; collect(m);
-    const int x = 10, w = W - 20, ch = 54, gap = 8;
-    int cy = y + 6;
-    metric_card(x, cy, w, ch, TR("Batteria", "Battery"), m.bat_s, m.bat < 0 ? 0 : m.bat, BAT_COL);   cy += ch + gap;
-    metric_card(x, cy, w, ch, TR("Blocco max", "Largest block"), m.blk_s, m.blk_pct, RAM_COL);       cy += ch + gap;
-    metric_card(x, cy, w, ch, TR("Spazio SD", "Storage free"), m.sto_s, 100 - m.sto_used, STO_COL);  cy += ch + gap;
+    char v[3][8];
+    if (m.bat < 0) snprintf(v[0], 8, "--"); else snprintf(v[0], 8, "%d%%", m.bat);
+    snprintf(v[1], 8, "%u", m.blk_kb);
+    snprintf(v[2], 8, "%d", atoi(m.sto_s));
+    ring(56,  80, m.bat, BAT_COL, v[0], m.bat >= 0 && m.mv > 0 ? m.bat_s + strlen(v[0]) + 1 : "", TR("Batteria", "Battery"));
+    ring(160, 80, m.blk_pct, RAM_COL, v[1], "KB", TR("Blocco max", "Largest block"));
+    ring(264, 80, 100 - m.sto_used, STO_COL, v[2], "GB", TR("SD libera", "SD free"));
 
-    char foot[40]; snprintf(foot, sizeof foot, TR("%d app registrate", "%d apps registered"), m.apps);
-    lg::font(0); d.setTextColor(DIM, BG); d.setTextDatum(top_left);
-    d.drawString(foot, x + 2, cy + 2);
-    nucleo_touch_commit();                                    // no targets: a tap up top = back (framework fallback)
+    // the last minute of the largest block (the number that limits every allocation here)
+    const int gx = 10, gy = 148, gw = 300, gh = 84, px = gx + 8, py = gy + 22, pw = gw - 16, ph = gh - 30;
+    lg::panel(gx, gy, gw, gh, CARD);
+    lg::font(0); d.setTextColor(MUTED, CARD); d.drawString(TR("Blocco max, ultimo minuto", "Largest block, last minute"), px, gy + 4);
+    int top = 1; for (int i = 0; i < s_hn; i++) if (s_blk_h[i] > top) top = s_blk_h[i];
+    d.drawFastHLine(px, py + ph, pw, LINE);
+    for (int i = 0; i < s_hn; i++) {
+        const int x0 = px + i * pw / NHIST, hh = s_blk_h[i] * ph / top;
+        d.fillRect(x0, py + ph - hh, px + (i + 1) * pw / NHIST - x0 - 1, hh, RAM_COL);
+    }
+}
+
+static void draw_large(void)
+{
+    if (!s_hn) sample();
+    lg::frame(paint_large, nullptr);
+    nucleo_touch_commit();
 }
 
 static void draw_companion(void)

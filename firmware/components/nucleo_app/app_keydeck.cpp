@@ -502,6 +502,14 @@ static void type_loop(void)
     nucleo_app_request_draw();
 }
 
+// The deck's keys: what a tap sends to the focused field on the P4 (KeyDeck v1 "KEY <name>"). Index 5 is the
+// deck's own key, "Type on P4" (online) / "Reconnect" (offline) - the same as ENTER on this tab.
+static const char *const PAD_KEY[10] = { "ESC", "TAB", "UP", "DELETE", "BACKSPACE", nullptr, "LEFT", "DOWN", "RIGHT", "ENTER" };
+static const char *const PAD_LBL[10] = { "Esc", "Tab", nullptr, "Del", "Bksp", nullptr, nullptr, nullptr, nullptr, "Enter" };
+static int     s_pad_y = 152, s_pad_h = 84;           // the pad on the panel (for the hit test; set by each draw)
+static int     s_pad_hit = -1;                       // the key just sent (lit briefly)
+static int64_t s_pad_at = 0;
+
 // ---- framework callbacks ------------------------------------------------------------------------
 static bool on_back(int key)
 {
@@ -540,6 +548,14 @@ static void on_exit(void)
 
 static void on_key(int key, char ch)
 {
+    int tx, ty;
+    if (lg::tap(key, ch, &tx, &ty)) {                    // a key of the panel's deck (Monitor tab)
+        const int i = (ty - s_pad_y >= s_pad_h / 2 ? 5 : 0) + (tx - 13) * 5 / 294;
+        if (i == 5) on_key(NK_ENTER, 0);
+        else if (i >= 0 && i < 10 && tx_line("KEY %s\n", PAD_KEY[i])) { s_pad_hit = i; s_pad_at = now_ms(); s_nofocus = false; }
+        nucleo_app_request_draw();
+        return;
+    }
     if (s_edit != E_NONE) {   // manual IP / PIN editor (Server tab)
         if ((ch >= '0' && ch <= '9') || (ch == '.' && s_edit == E_IP)) {
             size_t l = strlen(s_ebuf);
@@ -734,11 +750,43 @@ static int lg_status_line(int x, int y, int w)
     return y + 22;
 }
 
-static void kd_draw_large(void)
+// lg::frame composes in the shared 8-bit canvas (RGB332): a subtle grey card turns black / olive there, so
+// the deck's cards and keycaps use a slate that survives it.
+static const unsigned short CARD = 0x212A;
+
+static void pad_arrow(int cx, int cy, int dir, unsigned short c)   // dir: 0 up, 1 left, 2 down, 3 right
 {
-    const int W = d.width(), H = d.height();
-    nucleo_touch_clear();
-    int y = lg::header("KeyDeck", s_cs == CS_ONLINE ? "online" : nullptr, ACC, NK_BACK, 0);
+    static const int8_t T[4][6] = { { 0, -7, -8, 5, 8, 5 }, { -7, 0, 5, -8, 5, 8 }, { 0, 7, -8, -5, 8, -5 }, { 7, 0, -5, -8, -5, 8 } };
+    const int8_t *t = T[dir];
+    d.fillTriangle(cx + t[0], cy + t[1], cx + t[2], cy + t[3], cx + t[4], cy + t[5], c);
+}
+
+static void lg_pad(int x, int y, int w, int h)
+{
+    s_pad_y = y; s_pad_h = h;
+    const bool on = (s_cs == CS_ONLINE), lit = now_ms() - s_pad_at < 400;
+    const int kw = w / 5, kh = h / 2;
+    for (int i = 0; i < 10; i++) {
+        const int kx = x + (i % 5) * kw, ky = y + (i / 5) * kh;
+        const unsigned short fill = i == 5 ? (on ? ACC : WARN) : (lit && i == s_pad_hit ? GRN : CARD);
+        const unsigned short ink = (i == 5 || (lit && i == s_pad_hit)) ? INK : (on ? FG : DIM);
+        d.fillRoundRect(kx + 3, ky + 3, kw - 6, kh - 6, 9, fill);
+        const int cx = kx + kw / 2, cy = ky + kh / 2;
+        const char *l = i == 5 ? (on ? TR("Digita", "Type") : TR("Riconn.", "Reconn.")) : PAD_LBL[i];
+        if (l) { lg::font(0); d.setTextDatum(middle_center); d.setTextColor(ink, fill); d.drawString(l, cx, cy + 1); }
+        else pad_arrow(cx, cy, i == 2 ? 0 : i - 5, ink);
+    }
+    d.setTextDatum(top_left);
+    lg::field(x, y, w, h);
+}
+
+static void kd_paint(void *)                         // composed by lg::frame: the 5 Hz refresh never flickers
+{
+    const int W = 320, H = 240;
+    d.fillRect(0, 0, W, H, BG);
+    char up[20] = "";
+    if (s_cs == CS_ONLINE) { if (s_stat_at) snprintf(up, sizeof up, "up %uh %02um", s_uptime / 3600, (s_uptime % 3600) / 60); else snprintf(up, sizeof up, "online"); }
+    int y = lg::header("KeyDeck", up, ACC, NK_BACK, 0);
     y = lg::tabs(y + 2, LG_TABS, 3, s_tab, ACC, "123");
     d.fillRect(0, y, W, H - y, BG);
     const int cx = 16, cw = W - 32;
@@ -753,21 +801,14 @@ static void kd_draw_large(void)
         char c0[8], c1[8];
         if (s_cpu0 >= 0) snprintf(c0, sizeof c0, "%d%%", s_cpu0); else snprintf(c0, sizeof c0, "n/d");
         if (s_cpu1 >= 0) snprintf(c1, sizeof c1, "%d%%", s_cpu1); else snprintf(c1, sizeof c1, "n/d");
-        lg_meter(cx, cy + 2,  cw, "Free PSRAM", val, psp, fresh ? GRN : LINE);
-        lg_meter(cx, cy + 32, cw, "CPU0", c0, s_cpu0 < 0 ? 0 : s_cpu0, s_cpu0 >= 85 ? WARN : ACC);
-        lg_meter(cx, cy + 62, cw, "CPU1", c1, s_cpu1 < 0 ? 0 : s_cpu1, s_cpu1 >= 85 ? WARN : ACC);
-        lg::font(0); d.setTextColor(DIM, BG);
-        char ft[48];
-        if (s_stat_at) snprintf(ft, sizeof ft, "SRAM %u KB    up %uh %02um", s_sram_free / 1024, s_uptime / 3600, (s_uptime % 3600) / 60);
-        else snprintf(ft, sizeof ft, "%s", s_cs == CS_ONLINE ? "waiting for telemetry..." : "offline");
-        d.drawString(ft, cx, cy + 90);
-        const int bh = 36, by = H - bh - 8;
-        const bool on = (s_cs == CS_ONLINE);
-        lg::button(cx, by, cw, bh, on ? "Type on P4" : "Reconnect", on ? ACC : LINE, on ? INK : FG, NK_ENTER, 0);
+        lg_meter(cx, cy + 2, cw, "Free PSRAM", val, psp, fresh ? GRN : LINE);
+        lg_meter(cx, cy + 32, cw / 2 - 8, "CPU0", c0, s_cpu0 < 0 ? 0 : s_cpu0, s_cpu0 >= 85 ? WARN : ACC);
+        lg_meter(cx + cw / 2 + 8, cy + 32, cw / 2 - 8, "CPU1", c1, s_cpu1 < 0 ? 0 : s_cpu1, s_cpu1 >= 85 ? WARN : ACC);
+        lg_pad(cx - 3, cy + 62, cw + 6, H - cy - 66);
     } else if (s_tab == T_SRV) {
         const int py = cy + 2, ph = H - py - 10;
-        lg::panel(cx, py, cw, ph);
-        const unsigned short cb = lg::card();
+        lg::panel(cx, py, cw, ph, CARD);
+        const unsigned short cb = CARD;
         lg::font(0); d.setTextColor(MUTED, cb); d.drawString("mDNS  _keydeck._tcp", cx + 12, py + 10);
         lg::kv(cx + 12, py + 30, cw - 24, "Saved IP", s_saved_ip[0] ? s_saved_ip : "-", FG, cb);
         lg::kv(cx + 12, py + 50, cw - 24, "PIN", s_pin[0] ? s_pin : "open", s_pin[0] ? FG : MUTED, cb);
@@ -778,14 +819,14 @@ static void kd_draw_large(void)
             lg::font(2); d.setTextDatum(middle_left); d.setTextColor(FG, INK); d.drawString(f, cx + 22, py + 109); d.setTextDatum(top_left);
         } else {
             const int bw = cw - 24, bx = cx + 12; int ry = py + 64;
-            lg::button(bx, ry, bw, 22, "Search again (mDNS)", LINE, FG, NK_ENTER, 0); ry += 26;
+            lg::button(bx, ry, bw, 22, "Search again (mDNS)", BG, FG, NK_ENTER, 0); ry += 26;
             lg::button(bx, ry, bw, 22, "Enter IP", ACC, INK, NK_CHAR, 'm'); ry += 26;
-            lg::button(bx, ry, bw, 22, "Set PIN", s_need_pin ? WARN : lg::card(), s_need_pin ? INK : FG, NK_CHAR, 'p');
+            lg::button(bx, ry, bw, 22, "Set PIN", s_need_pin ? WARN : BG, s_need_pin ? INK : FG, NK_CHAR, 'p');
         }
     } else {   // T_INFO
         const int py = cy + 2, ph = H - py - 10;
-        lg::panel(cx, py, cw, ph);
-        const unsigned short cb = lg::card();
+        lg::panel(cx, py, cw, ph, CARD);
+        const unsigned short cb = CARD;
         char ln[40];
         snprintf(ln, sizeof ln, "%s:%d", s_ip[0] ? s_ip : "-", KD_PORT);
         lg::kv(cx + 12, py + 14, cw - 24, "Server", ln, FG, cb);
@@ -794,8 +835,8 @@ static void kd_draw_large(void)
         lg::font(0); d.setTextColor(MUTED, cb);
         lg::wrap("Keys go to the focused field on the P4. Telemetry: PSRAM + CPU every 1 s.", cx + 12, py + 84, cw - 24, 17, 3);
     }
-    nucleo_touch_commit();
 }
+static void kd_draw_large(void) { lg::frame(kd_paint, nullptr); nucleo_touch_commit(); }
 
 static void draw_companion(void)
 {

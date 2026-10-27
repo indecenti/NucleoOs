@@ -1,0 +1,12 @@
+table
+rolled ENTER tick:15
+rolling ENTER tick:2
+hold_tap tap:80,136 tick:1
+hold_roll tap:80,136 tap:160,60 tick:15
+count_chip tap:159,16
+type_chip tap:159,16 tap:159,16 tap:211,16
+six c:6 tick:1
+six_hold c:6 tap:53,84 tap:266,188
+type_key TAB D R ENTER tick:2
+settings TAB
+settings_type TAB D

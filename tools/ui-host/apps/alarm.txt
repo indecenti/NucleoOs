@@ -1,0 +1,10 @@
+# Anti-theft alarm: disarmed, exit countdown, armed (keypad), PIN typing, settings list + steppers, PIN challenge
+home
+arming     ENTER tick:3
+armed      ENTER tick:30
+armed_pin  ENTER tick:30 c:1 c:2
+wrong_pin  ENTER tick:30 t:1234
+settings   TAB
+set_pick   TAB row:2
+set_more   TAB D D D D D D D
+pin_edit   TAB D D D D D ENTER c:0

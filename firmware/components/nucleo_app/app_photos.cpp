@@ -29,6 +29,8 @@ static int s_n, s_sel;
 static bool s_view;          // false = list, true = full-screen viewer
 static char s_open_abs[256]; // full path when opened from Files ("open with"); empty = browsing PIC_DIR
 static void enter_view(void);
+static void on_key(int key, char ch);
+static bool ph_back(int key);
 
 static bool is_img(const char *n)
 {
@@ -104,6 +106,7 @@ static void enter(void)
     if (!s_names) s_names = (char (*)[56])malloc((size_t)PIC_MAX * 56);   // ~3.5 KB, only while open
     scan();
     s_open_abs[0] = 0;
+    nucleo_app_set_back_handler(ph_back);
     const char *of = nucleo_app_take_open_file();
     if (of && of[0]) {
         if (nucleo_app_image_oversize(of)) { nucleo_app_set_hint(TR5("Troppo grande: usa l'app web", "Too large: use the web app", "Muy grande: usa la app web", "Trop gros: utilisez l'app web", "zu gross: nutze die web-app")); return; }   // safety net: never decode a giant
@@ -149,8 +152,10 @@ static void view_to_list(const char *hint)
 // browsing never costs the decoder's RAM while the shared canvas is still held. Opening a picture takes the same
 // RAM posture as the compact viewer (canvas released, direct draw) and decodes it ONCE fitted to the whole panel,
 // straight into the panel (no buffer); a later redraw that shows the same picture skips the decode and repaints
-// only the caption. Touch: tap a name to pick it, again (or Open) to view; in the viewer the left / right thirds
-// step to the previous / next picture, a vertical drag does too, the middle (or the caption's chevron) goes back.
+// only the caption. Touch: tap a name to pick it, again (or Open) to view. The viewer's picture carries no targets,
+// so the panel's own gestures read it like a photo stack: a swipe left / up = next, right / down = previous (the
+// panel's natural-scroll arrows), a tap on the left / right third = previous / next, a tap in the middle (or the
+// caption's chevron) = back to the list. Left is the viewer's own there (ph_back), not "close the app".
 // The Cardputer, meanwhile, is the companion: what is picked or shown, its numbers, the keys.
 #include "nucleo_theme.h"
 #include "nucleo_touch.h"
@@ -251,12 +256,14 @@ static void lg_view(void)
     }
     d.setTextDatum(top_left);
     nucleo_touch_add(0, PH, W / 2, LG_CAP, NK_DEL, 8);                   // the caption's chevron: back to the list
-    if (!s_open_abs[0] && s_n > 1) {
-        nucleo_touch_add(0, 0, W * 3 / 10, PH, NK_UP, ';');               // left third: previous
-        nucleo_touch_add(W * 7 / 10, 0, W - W * 7 / 10, PH, NK_DOWN, '.'); // right third: next
-        nucleo_touch_add_scroll(0, 0, W, PH, 60, NK_UP, ';', NK_DOWN, '.');
-    }
-    nucleo_touch_add(W * 3 / 10, 0, W * 4 / 10, PH, NK_DEL, 8);          // the middle: back to the list
+}                                                                       // the picture: the panel's gestures (above)
+
+// Two screens, in the viewer: Left (a swipe right / a tap on the left third) = the previous picture, not "close".
+static bool ph_back(int key)
+{
+    if (key != NK_LEFT || !s_view || s_open_abs[0] || !nucleo_app_two_screens()) return false;
+    on_key(NK_UP, ';');
+    return true;
 }
 
 static void draw_large(void)
@@ -303,6 +310,10 @@ static void draw_companion(void)
 static void on_key(int key, char ch)
 {
     { bool done; lg_tap_list(key, ch, &done); if (done) return; }      // the panel's taps (two screens)
+    if (s_view && nucleo_app_two_screens() && !s_open_abs[0]) {        // the panel's picture gestures (ph_back)
+        if (key == NK_RIGHT) key = NK_DOWN;                            // swipe left / tap the right third: next
+        else if (key == NK_ENTER) key = NK_DEL;                        // tap the middle: back to the list
+    }
     if (s_view) {
         if (s_open_abs[0]) {                          // external "open with" image: single file, no prev/next
             if (key == NK_DEL) { s_open_abs[0] = 0; s_view = false; nucleo_app_set_direct_draw(false); d.releasePngMemory(); nucleo_app_set_hint(TR5(";/. muovi  invio apri  esc indietro", ";/. move  enter view  esc back", ";/. mueve  enter ver  esc volver", ";/. depl.  entree voir  esc ret.", ";/. bew.  enter zeigen  esc ret.")); }

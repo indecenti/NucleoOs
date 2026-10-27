@@ -32,6 +32,7 @@ static const unsigned short SURF = 0x10A2, ACC = C_BLUE, GRN = C_GREEN, AMB = C_
 static int s_sel = 0;
 static int s_lg_scroll = 0;              // first visible row on the panel list
 
+static const char *SW_EMPTY(void) { return TR("Apri Sciame sull'altro dispositivo, stesso canale.", "Open Swarm on the other device, same channel."); }
 static void txt(int x, int y, const char *s, uint16_t fg, uint16_t bg, int sz) {
     d.setTextSize(sz); d.setTextColor(fg, bg); d.setCursor(x, y); d.print(s);
 }
@@ -42,45 +43,66 @@ static const char *sw_right(int i, void *) { static char b[16]; snprintf(b, size
 static unsigned short sw_col(int i, void *) { return swarm_svc_peer_busy(i) ? AMB : GRN; }   // free=green, busy=amber
 
 // ===== two screens ==============================================================================================
-// The panel carries the swarm: identity + membership in the header, the peers as a touch list, and one big PING
-// button at the foot. The Cardputer (where the typing / keys live) becomes the companion: membership, how many
-// peers, the pick, the last activity, and the key map.
-static void draw_large(void)
+// The panel carries the swarm: identity + membership under the header, the nearby devices as a grid of cards
+// (name, free memory as a gauge, free / busy), and the last activity at the foot. Touch is the cards: tap one to
+// pick it, tap it again (or its Ping chip) to ping; a drag on the grid scrolls it. The Cardputer is the companion:
+// membership, how many peers, the pick, the last activity, and the key map. Composed with lg::frame (5 Hz refresh).
+enum { SW_CW = 148, SW_CH = 68, SW_GAP = 8, SW_GY = 66, SW_ROWS = 2 };
+static void sw_paint(void *)
 {
-    const int W = d.width(), H = d.height();
-    nucleo_touch_clear();
     char chs[16]; snprintf(chs, sizeof chs, "ch%d", swarm_svc_channel());
+    d.fillRect(0, 0, 320, 240, BG);
     const int y = lg::header(TR("Sciame", "Swarm"), chs, ACC);
-    // identity (left) + membership pill (right), on one line under the header
     const bool open = swarm_svc_is_open();
     const char *stx = open ? TR("APERTO", "OPEN") : TR("PROTETTO", "SECURE");
     const unsigned short sc = open ? AMB : GRN;
     lg::font(0);
     const int pw = d.textWidth(stx) + 16;
-    d.fillRoundRect(W - 8 - pw, y + 6, pw, 18, 9, sc);
-    d.setTextDatum(middle_center); d.setTextColor(INK, sc); d.drawString(stx, W - 8 - pw / 2, y + 6 + 9);
+    d.fillRoundRect(312 - pw, y + 6, pw, 20, 10, sc);
+    d.setTextDatum(middle_center); d.setTextColor(INK, sc); d.drawString(stx, 312 - pw / 2, y + 16);
     d.setTextDatum(top_left);
     lg::font(1); d.setTextColor(FG, BG);
-    char me[40]; lg::fit(me, sizeof me, swarm_svc_name(), W - 8 - pw - 20);
-    d.drawString(me, 12, y + 8);
+    char me[40]; lg::fit(me, sizeof me, swarm_svc_name(), 300 - pw - 20);
+    d.drawString(me, 12, y + 9);
 
-    const int bh = 48, foot = 18;
-    const int listy = y + 34;
-    const int listh = H - listy - bh - foot - 8;
     const int n = swarm_svc_peer_count();
     if (!n) {
-        lg::message(0, listy, W, listh + foot, TR("Nessun vicino", "No peers"),
-                    TR("Apri Sciame sull'altro dispositivo, stesso canale.",
-                       "Open Swarm on the other device, same channel."), MUTED);
+        lg::message(0, SW_GY, 320, 240 - SW_GY - 24, TR("Nessun vicino", "No peers"),
+                    SW_EMPTY(), MUTED);
     } else {
         if (s_sel >= n) s_sel = n - 1;
         if (s_sel < 0)  s_sel = 0;
-        lg::text_list(0, listy, W, listh, n, s_sel, &s_lg_scroll, sw_label, sw_right, sw_col, nullptr, ACC);
-        char last[48]; swarm_svc_last(last, sizeof last);
-        d.fillRect(0, listy + listh, W, foot, BG);
-        if (last[0]) { lg::font(0); d.setTextColor(AMB, BG); char f[52]; lg::fit(f, sizeof f, last, W - 20); d.drawString(f, 12, listy + listh + 3); }
+        int first = s_lg_scroll & ~1;                                  // first visible card (a whole grid row)
+        if (s_sel < first) first = s_sel & ~1;
+        if (s_sel >= first + 2 * SW_ROWS) first = (s_sel & ~1) - 2 * (SW_ROWS - 1);
+        s_lg_scroll = first;
+        for (int i = first; i < n && i < first + 2 * SW_ROWS; i++) {
+            const int x = 8 + (i & 1) * (SW_CW + SW_GAP), cy = SW_GY + ((i - first) >> 1) * (SW_CH + SW_GAP);
+            const bool f = i == s_sel, busy = swarm_svc_peer_busy(i);
+            const unsigned short cb = lg::card(), st = busy ? AMB : GRN;
+            lg::panel(x, cy, SW_CW, SW_CH, cb);
+            d.drawRoundRect(x, cy, SW_CW, SW_CH, 8, f ? ACC : LINE);
+            d.fillCircle(x + 14, cy + 15, 5, st);
+            lg::font(1); d.setTextColor(f ? ACC : FG, cb);
+            char nm[32]; lg::fit(nm, sizeof nm, swarm_svc_peer_id(i), SW_CW - 34); d.drawString(nm, x + 26, cy + 7);
+            const int kb = swarm_svc_peer_free(i);
+            lg::font(0); d.setTextColor(busy ? AMB : MUTED, cb);
+            d.drawString(busy ? TR("occupato", "busy") : sw_right(i, nullptr), x + 10, cy + 30);
+            lg::bar(x + 10, cy + 52, f ? SW_CW - 72 : SW_CW - 20, 6, kb > 256 ? 100 : kb * 100 / 256, st);
+            if (f) lg::button(x + SW_CW - 58, cy + 36, 52, 28, "Ping", ACC, INK, NK_CHAR, 'p');   // the card's own action
+            nucleo_touch_add(x, cy, SW_CW, SW_CH, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + (i - first)));
+        }
+        nucleo_touch_add_scroll(0, SW_GY, 320, 2 * SW_CH + SW_GAP, SW_CH, NK_UP, 0, NK_DOWN, 0);   // drag = the next card
     }
-    lg::button(12, H - bh - 4, W - 24, bh, TR("Ping", "Ping"), ACC, INK, NK_ENTER, 0);
+    char last[48]; swarm_svc_last(last, sizeof last);
+    lg::font(0); d.setTextColor(last[0] ? AMB : DIM, BG);
+    char f[52]; lg::fit(f, sizeof f, last[0] ? last : TR("Tocca un vicino, poi Ping", "Tap a peer, then Ping"), 300);
+    d.drawString(f, 12, 218);
+}
+static void draw_large(void)
+{
+    nucleo_touch_clear();
+    lg::frame(sw_paint, nullptr);
     nucleo_touch_commit();
 }
 
@@ -92,7 +114,7 @@ static void draw_companion(void)
     const int y = lg::comp_head("SWARM", ACC);
     const bool open = swarm_svc_is_open();
     d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(open ? AMB : GRN, BG);
-    d.drawString(open ? TR("Aperto", "Open") : TR("Protetto", "Secure"), 8, y + 4);
+    d.drawString(open ? TR("APERTO", "OPEN") : TR("PROTETTO", "SECURE"), 8, y + 4);
     const int n = swarm_svc_peer_count();
     d.setFont(&fonts::Font0); d.setTextColor(FG, BG);
     char l[40]; snprintf(l, sizeof l, TR("%d vicini  -  ch%d", "%d peers  -  ch%d"), n, swarm_svc_channel());
@@ -122,8 +144,7 @@ static void on_draw(void) {
     if (!n) {
         // big, readable empty state — say what to do (smartwatch idiom)
         txt(10, y0 + 14, TR("Nessun vicino", "No peers"), FG, BG, 2);
-        txt(10, y0 + 40, TR("Apri Sciame sull'altro", "Open Swarm on the other"), MUTED, BG, 1);
-        txt(10, y0 + 54, TR("Cardputer, stesso canale.", "Cardputer, same channel."), MUTED, BG, 1);
+        d.setTextColor(MUTED, BG); lg::wrap(SW_EMPTY(), 10, y0 + 40, 220, 14, 2);
     } else {
         if (s_sel >= n) s_sel = n - 1;
         if (s_sel < 0)  s_sel = 0;
@@ -140,7 +161,9 @@ static void on_draw(void) {
 
 static void on_key(int key, char chr) {
     int n = swarm_svc_peer_count();
-    if (lg::row_tap(key, chr, s_lg_scroll, n, &s_sel)) { nucleo_app_request_draw(); return; }   // a tapped peer row
+    const int t = lg::row_tap(key, chr, s_lg_scroll, n, &s_sel);      // a tapped peer card: pick, again = ping
+    if (t == 2) swarm_svc_ping();
+    if (t) { nucleo_app_request_draw(); return; }
     if (app_ui_list_key(key, chr, &s_sel, n, sw_label, nullptr)) { nucleo_app_request_draw(); return; }
     if (key == NK_ENTER || chr == 'p' || chr == 'P' || chr == ' ') swarm_svc_ping();
     nucleo_app_request_draw();

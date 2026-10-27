@@ -1,0 +1,9 @@
+# Weather: weather_stubs.cpp fakes a successful fetch (fictional place + 6-day forecast).
+@src nucleo_weather/weather_wmo.c
+@host stubs/weather_stubs.cpp
+now
+forecast  c:2
+settings  c:3
+setpick   c:3 row:2
+favs      c:3 D D ENTER
+units     c:3 row:3 row:3

@@ -14,3 +14,5 @@ peer-pick TAB TAB D ENTER
 cmd       TAB TAB TAB t:ls_/data
 opt       TAB TAB TAB TAB
 help      TAB TAB TAB TAB TAB
+peertap   TAB TAB row:1
+peer3     TAB TAB D D D

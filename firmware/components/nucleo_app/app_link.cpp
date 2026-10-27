@@ -174,23 +174,29 @@ static void draw_list(int top, int ch, Row *it, int n, int sel) {
     d.clearClipRect();
 }
 
-// ---- progress bar (shared, drawn near the bottom while a transfer runs) -----
-static void draw_progress(int ch) {
+// ---- progress (shared by the compact bar and the panel's band while a transfer runs) -----
+// The transfer's state as text: "<verb> <name>" in hd, the rate / size in rt, its colour in *vc, and the fill
+// over `bw` px in *onw. False when nothing runs or just finished (nothing to show).
+static bool progress_text(char *hd, char *rt, uint16_t *vc, int bw, int *onw) {
     nlink_status_t st; nlink_svc_status(&st);
-    if (!st.active && st.state != NL_ST_DONE && st.state != NL_ST_FAIL) return;
-    int y = ch - 30; d.fillRoundRect(6, y, W - 12, 26, 6, SURF);
+    if (!st.active && st.state != NL_ST_DONE && st.state != NL_ST_FAIL) return false;
     const char *verb = st.state == NL_ST_DONE ? (s_en ? "Done" : "Fatto")
                      : st.state == NL_ST_FAIL ? (s_en ? "Failed" : "Errore")
                      : st.sending ? (s_en ? "Sending" : "Invio") : (s_en ? "Receiving" : "Ricezione");
-    uint16_t vc = st.state == NL_ST_DONE ? GRN : st.state == NL_ST_FAIL ? REDC : ACC;
-    char hd[40]; snprintf(hd, sizeof hd, "%s %.18s", verb, st.name);
+    *vc = st.state == NL_ST_DONE ? GRN : st.state == NL_ST_FAIL ? REDC : ACC;
+    snprintf(hd, 40, "%s %.18s", verb, st.name);
+    if (st.active && st.rate_bps) snprintf(rt, 28, "%uKB/s  %u%%", (unsigned)(st.rate_bps / 1024), st.total ? (unsigned)(100ULL * st.done / st.total) : 0);
+    else snprintf(rt, 28, "%u/%u KB", (unsigned)(st.done / 1024), (unsigned)(st.total / 1024));
+    *onw = st.total ? (int)((uint64_t)st.done * bw / st.total) : 0; if (*onw > bw) *onw = bw;
+    return true;
+}
+static void draw_progress(int ch) {
+    char hd[40], rt[28]; uint16_t vc; int onw; const int bw = W - 24;
+    if (!progress_text(hd, rt, &vc, bw, &onw)) return;
+    int y = ch - 30; d.fillRoundRect(6, y, W - 12, 26, 6, SURF);
     txt(12, y + 3, hd, vc, SURF, 1);
-    int bx = 12, bw = W - 24, by = y + 15, bh = 7;
-    d.fillRoundRect(bx, by, bw, bh, bh / 2, BG);
-    if (st.total) { int onw = (int)((uint64_t)st.done * bw / st.total); if (onw > bw) onw = bw; if (onw > 0) d.fillRoundRect(bx, by, onw, bh, bh / 2, vc); }
-    char rt[28];
-    if (st.active && st.rate_bps) snprintf(rt, sizeof rt, "%uKB/s  %u%%", (unsigned)(st.rate_bps / 1024), st.total ? (unsigned)(100ULL * st.done / st.total) : 0);
-    else snprintf(rt, sizeof rt, "%u/%u KB", (unsigned)(st.done / 1024), (unsigned)(st.total / 1024));
+    d.fillRoundRect(12, y + 15, bw, 7, 3, BG);
+    if (onw > 0) d.fillRoundRect(12, y + 15, onw, 7, 3, vc);
     txt(W - 12 - (int)strlen(rt) * 6, y + 3, rt, MUTED, SURF, 1);
 }
 
@@ -346,23 +352,24 @@ static void build_opt(Row *it, int *n) {
     it[k].label = s_en ? "Language" : "Lingua"; it[k].kind = RV_TEXT; snprintf(it[k].val, sizeof it[k].val, "%s", s_en ? "EN" : "IT"); k++;
     *n = k;
 }
+// The guide, shared by the Cardputer and the panel (keys and touch in the same lines).
+static const char *const HELP_IT[] = {
+    "TAB / DESTRA / tocco: cambia scheda",
+    "1-9 salto rapido, lettere = cerca",
+    "PEER: cerca, poi scegli il dispositivo",
+    "INVIA: sfoglia, INVIO / tocco invia",
+    "RICEVI / CMD: Y accetta, N rifiuta",
+    "OPZ: Nucleo affidabile / Bruce compat.", 0 };
+static const char *const HELP_EN[] = {
+    "TAB / RIGHT / tap: switch tab",
+    "1-9 quick-jump, letters = search",
+    "PEER: scan, then pick the device",
+    "SEND: browse, ENTER / tap sends",
+    "RECV / CMD: Y accept, N reject",
+    "OPT: Nucleo reliable / Bruce compat.", 0 };
 static void draw_help(int ch) {
     int y0 = link_head(s_en ? "Guide" : "Guida", "Vicino");
-    const char *it[] = {
-        "TAB / DESTRA: cambia scheda",
-        "1-9 salto rapido, lettere = cerca",
-        "PEER: INVIO cerca, INVIO sceglie",
-        "INVIA: sfoglia, INVIO invia il file",
-        "RICEVI / CMD: Y accetta, N rifiuta",
-        "OPZ: Nucleo affidabile / Bruce compat.", 0 };
-    const char *en[] = {
-        "TAB / RIGHT: switch tab",
-        "1-9 quick-jump, letters = search",
-        "PEER: ENTER scan, ENTER pick target",
-        "SEND: browse, ENTER sends the file",
-        "RECV / CMD: Y accept, N reject",
-        "OPT: Nucleo reliable / Bruce compat.", 0 };
-    const char **m = s_en ? en : it;
+    const char *const *m = s_en ? HELP_EN : HELP_IT;
     for (int i = 0; m[i]; i++) txt(10, y0 + 2 + i * 12, m[i], i == 0 || i == 1 ? FG : MUTED, BG, 1);
     (void)ch;
 }
@@ -390,60 +397,92 @@ static void update_hint(void) {
 // the guide. Touch is the content: tap a row to pick it (again to send/open), the chips to answer, the tabs to
 // page. The Cardputer (where the command gets typed) becomes the companion: the section, its selection/status,
 // a live transfer, and the key map.
-static void lg_bottom_progress(int bot) {
-    nlink_status_t st; nlink_svc_status(&st);
-    if (!st.active && st.state != NL_ST_DONE && st.state != NL_ST_FAIL) return;
-    const int W = d.width(), y = bot + 2;
-    d.fillRoundRect(8, y, W - 16, 20, 6, SURF);
-    const char *verb = st.state == NL_ST_DONE ? (s_en ? "Done" : "Fatto")
-                     : st.state == NL_ST_FAIL ? (s_en ? "Failed" : "Errore")
-                     : st.sending ? (s_en ? "Sending" : "Invio") : (s_en ? "Receiving" : "Ricezione");
-    const unsigned short vc = st.state == NL_ST_DONE ? GRN : st.state == NL_ST_FAIL ? REDC : ACC;
-    lg::font(0); d.setTextColor(vc, SURF); char hd[48]; snprintf(hd, sizeof hd, "%s %.20s", verb, st.name); d.drawString(hd, 14, y + 6);
-    char rt[24];
-    if (st.active && st.rate_bps) snprintf(rt, sizeof rt, "%uKB/s  %u%%", (unsigned)(st.rate_bps / 1024), st.total ? (unsigned)(100ULL * st.done / st.total) : 0);
-    else snprintf(rt, sizeof rt, "%u/%u KB", (unsigned)(st.done / 1024), (unsigned)(st.total / 1024));
-    d.setTextDatum(top_right); d.setTextColor(MUTED, SURF); d.drawString(rt, W - 14, y + 6); d.setTextDatum(top_left);
+static void lg_bottom_progress(int bot) {                       // the transfer band: a gauge filling behind its text
+    char hd[40], rt[28]; uint16_t vc; int onw;
+    if (!progress_text(hd, rt, &vc, 304, &onw)) return;
+    const int y = bot + 2;
+    d.fillRoundRect(8, y, 304, 20, 6, SURF);
+    if (onw > 0) d.fillRoundRect(8, y + 17, onw, 3, 1, vc);
+    lg::font(0); d.setTextColor(vc, SURF); d.drawString(hd, 14, y + 2);
+    d.setTextDatum(top_right); d.setTextColor(MUTED, SURF); d.drawString(rt, 306, y + 2); d.setTextDatum(top_left);
+}
+
+// Panel-only actions: NK_CHAR control codes (never typing, never rows). 1 = scan; LK_TAB0 + t = go to tab t (the
+// tabs, a device card's "Send file" / "Command" chips, the target chip that leads to the devices).
+enum { LK_SCAN = 1, LK_TAB0 = 2 /* ..7 */ };
+static const char LK_TABS[NTABS] = { LK_TAB0, LK_TAB0 + 1, LK_TAB0 + 2, LK_TAB0 + 3, LK_TAB0 + 4, LK_TAB0 + 5 };
+
+// The send / command target as a chip at the right of y: tap = the devices, to pick another.
+static void lg_target(int y) {
+    char rt[28]; snprintf(rt, sizeof rt, "-> %.14s", peer_target_name());
+    lg::font(0); const int w = d.textWidth(rt) + 20;
+    d.fillRoundRect(312 - w, y, w, 22, 11, lg::card());
+    d.setTextColor(nlink_svc_peer_count() ? GRN : DIM, lg::card()); d.drawString(rt, 322 - w, y + 3);
+    nucleo_touch_add(312 - w, y - 2, w, 26, NK_CHAR, LK_TAB0 + T_PEER);
 }
 
 static void lg_send(int y, int bot) {
     const int W = d.width();
-    char rt[28]; snprintf(rt, sizeof rt, "-> %.14s", peer_target_name());
     const char *base = strrchr(s_dir, '/'); base = (base && base[1]) ? base + 1 : "SD";
-    lg::font(0); d.setTextColor(MUTED, BG); d.setTextDatum(top_right); d.drawString(rt, W - 10, y + 4); d.setTextDatum(top_left);
-    d.setTextColor(ACC, BG); lg::font(1); char bb[28]; lg::fit(bb, sizeof bb, base, W - 120); d.drawString(bb, 10, y + 2);
+    lg_target(y);
+    d.setTextColor(ACC, BG); lg::font(1); char bb[28]; lg::fit(bb, sizeof bb, base, W - 160); d.drawString(bb, 10, y + 2);
     const int ly = y + 24;
     const int tn = snd_count();
     if (!tn) { lg::message(0, ly, W, bot - ly, s_en ? "Empty folder" : "Cartella vuota", nullptr, DIM); return; }
     lg::text_list(0, ly, W, bot - ly, tn, s_fsel, &s_lg_scroll, snd_label, snd_right, snd_col, nullptr, ACC);
 }
 
+// A nearby device as a card: a dot (green = the target), its name and protocol; the picked card carries its actions.
+static void lg_peer_card(int i, int x, int y, int w, int h, bool focus, unsigned short bg, void *) {
+    const bool tgt = i == s_peer_sel;
+    if (!focus) d.drawRoundRect(x, y + 1, w, h - 2, 7, tgt ? GRN : LINE);
+    d.fillCircle(x + 14, y + 14, 5, tgt ? GRN : (focus ? INK : LINE));
+    lg::font(1); d.setTextColor(focus ? INK : FG, bg);
+    char nm[32]; lg::fit(nm, sizeof nm, pr_label(i, nullptr), focus ? w - 216 : w - 40); d.drawString(nm, x + 26, y + 5);
+    lg::font(0); d.setTextColor(focus ? INK : pr_col(i, nullptr), bg);
+    d.drawString(pr_right(i, nullptr), x + 26, y + 24);
+    if (!focus) return;
+    static const char *const it[2] = { "Invia file", "Comando" }, *const en[2] = { "Send file", "Command" };
+    for (int k = 0; k < 2; k++) {                    // the card's actions: send a file to it, send it a command
+        const int bx = x + w - 184 + k * 92;
+        d.fillRoundRect(bx, y + 7, 86, h - 14, 8, INK);
+        d.setTextDatum(middle_center); d.setTextColor(ACC, INK); d.drawString(s_en ? en[k] : it[k], bx + 43, y + h / 2);
+        nucleo_touch_add(bx - 2, y, 90, h, NK_CHAR, LK_TAB0 + (k ? T_CMD : T_SEND));
+    }
+    d.setTextDatum(top_left);
+}
+
 static void lg_peer(int y, int bot) {
     const int W = d.width();
     const int n = nlink_svc_peer_count();
-    char rt[16]; snprintf(rt, sizeof rt, "ch%d", nlink_svc_channel());
-    lg::font(0); d.setTextColor(MUTED, BG); d.setTextDatum(top_right); d.drawString(rt, W - 10, y + 4); d.setTextDatum(top_left);
-    lg::button(8, y + 2, W - 16, 30, s_en ? "Scan for peers" : "Cerca dispositivi", s_sel < 0 ? ACC : lg::card(), s_sel < 0 ? INK : FG, NK_CHAR, 1);
-    const int ly = y + 38;
-    if (!n) { lg::message(0, ly, W, bot - ly, s_en ? "No peers yet" : "Nessun peer", s_en ? "Tap Scan to look." : "Tocca Cerca.", DIM); return; }
-    lg::text_list(0, ly, W, bot - ly, n, s_sel, &s_lg_scroll, pr_label, pr_right, pr_col, nullptr, ACC);
+    lg::button(8, y + 2, W - 16, 28, s_en ? "Scan for peers" : "Cerca dispositivi", s_sel < 0 ? ACC : lg::card(), s_sel < 0 ? INK : FG, NK_CHAR, LK_SCAN);
+    const int ly = y + 34;
+    if (!n) { lg::message(0, ly, W, bot - ly, s_en ? "No peers yet." : "Nessun peer trovato.", s_en ? "Tap Scan to look." : "Tocca Cerca.", DIM); return; }
+    lg::list(0, ly, W, bot - ly, 44, n, s_sel, &s_lg_scroll, lg_peer_card, nullptr, ACC);
+}
+
+// A question from a peer as a card: who / what in `head`, the thing itself large, a muted line, and the answers
+// (yes = 'y', no = 'n'; no yes label = only No can be given).
+static void lg_ask(int y, unsigned short edge, const char *head, unsigned short hc, const char *val, const char *sub,
+                   const char *yes, const char *no) {
+    const int ch = 148, cy = y + 10, bw = 136;
+    lg::panel(16, cy, 288, ch, CAP); d.drawRoundRect(16, cy, 288, ch, 8, edge);
+    lg::font(0); d.setTextColor(hc, CAP); d.drawString(head, 30, cy + 14);
+    lg::font(2); d.setTextColor(AMB, CAP); char f[32]; lg::fit(f, sizeof f, val, 260); d.drawString(f, 30, cy + 40);
+    lg::font(0); d.setTextColor(DIM, CAP); d.drawString(sub, 30, cy + 74);
+    if (yes) lg::button(24, cy + ch - 48, bw, 38, yes, GRN, INK, NK_CHAR, 'y');
+    lg::button(160, cy + ch - 48, bw, 38, no, REDC, INK, NK_CHAR, 'n');
 }
 
 static void lg_recv(int y, int bot) {
-    const int W = d.width();
-    char name[64], from[40]; uint32_t sz;
+    char name[64], from[40], h[48], szs[20]; uint32_t sz;
     if (nlink_svc_offer_pending(name, sizeof name, from, sizeof from, &sz)) {
-        const int ch = 148, cy = y + 10;
-        lg::panel(16, cy, W - 32, ch, CAP); d.drawRoundRect(16, cy, W - 32, ch, 8, ACC);
-        lg::font(0); d.setTextColor(MUTED, CAP); char h[52]; snprintf(h, sizeof h, s_en ? "%.18s wants to send:" : "%.18s vuole inviarti:", from); d.drawString(h, 30, cy + 14);
-        lg::font(2); d.setTextColor(AMB, CAP); char f[32]; lg::fit(f, sizeof f, name, W - 80); d.drawString(f, 30, cy + 40);
-        lg::font(0); d.setTextColor(DIM, CAP); char szs[20]; snprintf(szs, sizeof szs, "%u KB", (unsigned)(sz / 1024)); d.drawString(szs, 30, cy + 76);
-        const int bw = (W - 32 - 16) / 2;
-        lg::button(24, cy + ch - 48, bw, 38, s_en ? "Accept" : "Accetta", GRN, INK, NK_CHAR, 'y');
-        lg::button(32 + bw, cy + ch - 48, bw, 38, s_en ? "Reject" : "Rifiuta", REDC, INK, NK_CHAR, 'n');
+        snprintf(h, sizeof h, s_en ? "%.14s wants to send:" : "%.14s vuole inviarti:", from);
+        snprintf(szs, sizeof szs, "%u KB", (unsigned)(sz / 1024));
+        lg_ask(y, ACC, h, MUTED, name, szs, s_en ? "Accept" : "Accetta", s_en ? "Reject" : "Rifiuta");
         return;
     }
-    lg::message(0, y, W, bot - y, s_en ? "Listening for offers..." : "In ascolto di offerte...",
+    lg::message(0, y, 320, bot - y, s_en ? "Listening for offers..." : "In ascolto di offerte...",
                 s_en ? "Received files land in the inbox." : "I file ricevuti vanno nell'inbox.", ACC);
 }
 
@@ -452,21 +491,16 @@ static void lg_cmd(int y, int bot) {
     char cmd[160], from[40];
     if (nlink_svc_cmd_pending(cmd, sizeof cmd, from, sizeof from)) {
         const bool lng = (int)strlen(cmd) > CMD_SHOW;
-        const int ch = 148, cy = y + 10;
-        lg::panel(16, cy, W - 32, ch, CAP); d.drawRoundRect(16, cy, W - 32, ch, 8, AMB);
-        lg::font(0); d.setTextColor(lng ? REDC : MUTED, CAP); d.drawString(lng ? cmd_too_long() : (s_en ? "Requested command:" : "Comando richiesto:"), 30, cy + 16);
-        lg::font(2); d.setTextColor(AMB, CAP); char c[24]; snprintf(c, sizeof c, "%.*s", CMD_SHOW, cmd); d.drawString(c, 30, cy + 44);
-        const int bw = (W - 32 - 16) / 2;
-        if (!lng) { lg::button(24, cy + ch - 48, bw, 38, s_en ? "Run" : "Esegui", GRN, INK, NK_CHAR, 'y'); lg::button(32 + bw, cy + ch - 48, bw, 38, s_en ? "Discard" : "Scarta", REDC, INK, NK_CHAR, 'n'); }
-        else lg::button((W - bw) / 2, cy + ch - 48, bw, 38, s_en ? "Reject" : "Rifiuta", REDC, INK, NK_CHAR, 'n');
+        char c[24]; snprintf(c, sizeof c, "%.*s", CMD_SHOW, cmd);
+        lg_ask(y, AMB, lng ? cmd_too_long() : (s_en ? "Requested command:" : "Comando richiesto:"), lng ? REDC : MUTED, c, from,
+               lng ? nullptr : (s_en ? "Run" : "Esegui"), lng ? (s_en ? "Reject" : "Rifiuta") : (s_en ? "Discard" : "Scarta"));
         return;
     }
     lg::font(1); d.setTextColor(MUTED, BG); d.drawString(s_en ? "Type on the Cardputer, ENTER sends:" : "Scrivi sul Cardputer, INVIO invia:", 16, y + 6);
     d.fillRoundRect(16, y + 32, W - 32, 42, 8, SURF);
     char sh[48]; snprintf(sh, sizeof sh, "%s_", s_cbuf); char f[48]; lg::font(2); lg::fit(f, sizeof f, sh, W - 56);
     d.setTextDatum(middle_left); d.setTextColor(FG, SURF); d.drawString(f, 28, y + 53); d.setTextDatum(top_left);
-    char rt[28]; snprintf(rt, sizeof rt, "-> %.16s", peer_target_name());
-    lg::font(0); d.setTextColor(DIM, BG); d.drawString(rt, 16, y + 84);
+    lg_target(y + 84);
     lg::font(0); d.setTextColor(DIM, BG); d.drawString(s_en ? "Receiver confirms before it runs." : "Il ricevente conferma prima di eseguire.", 16, bot - 16);
     (void)bot;
 }
@@ -490,17 +524,9 @@ static void lg_opt(int y) {
 }
 
 static void lg_help(int y) {
-    const char *it[] = {
-        "TAB / tocca: cambia scheda", "PEER: Cerca, poi tocca per sceglierlo",
-        "INVIA: sfoglia, tocca il file per inviarlo", "RICEVI / CMD: Accetta o Rifiuta",
-        "OPZ: Nucleo affidabile / Bruce compat.", 0 };
-    const char *en[] = {
-        "TAB / tap: switch tab", "PEER: Scan, then tap to pick a target",
-        "SEND: browse, tap a file to send it", "RECV / CMD: Accept or Reject",
-        "OPT: Nucleo reliable / Bruce compat.", 0 };
-    const char **m = s_en ? en : it;
+    const char *const *m = s_en ? HELP_EN : HELP_IT;
     lg::font(0);
-    for (int i = 0; m[i]; i++) { d.setTextColor(i < 2 ? FG : MUTED, BG); d.drawString(m[i], 16, y + 6 + i * 22); }
+    for (int i = 0; m[i]; i++) { d.setTextColor(i < 2 ? FG : MUTED, BG); d.drawString(m[i], 16, y + 6 + i * 24); }
 }
 
 static void draw_large(void) {
@@ -508,7 +534,7 @@ static void draw_large(void) {
     nucleo_touch_clear();
     const int y0 = lg::header("Vicino", nullptr, ACC);
     const char *names[NTABS]; for (int i = 0; i < NTABS; i++) names[i] = tab_label(i);
-    const int y = lg::tabs(y0, names, NTABS, s_tab, ACC, nullptr);
+    const int y = lg::tabs(y0, names, NTABS, s_tab, ACC, LK_TABS);
     nlink_status_t st; nlink_svc_status(&st);
     const bool xfer = st.active || st.state == NL_ST_DONE || st.state == NL_ST_FAIL;
     const int bot = xfer ? H - 26 : H - 4;
@@ -579,13 +605,14 @@ static void on_draw(void) {
 }
 
 // ---- input -----------------------------------------------------------------
-static void page_tab(void) {
-    s_tab = (s_tab + 1) % NTABS;
+static void set_tab(int t) {
+    s_tab = t;
     int rows = (s_tab == T_OPT) ? opt_rows() : 0;
     s_sel = (s_sel >= 0 && rows > 0) ? 0 : -1;
     if (s_tab == T_SEND) read_dir();
     update_hint(); nucleo_app_request_draw();
 }
+static void page_tab(void) { set_tab((s_tab + 1) % NTABS); }
 static void send_selected(void) {
     int tn = snd_count(); if (tn == 0) return;
     if (snd_is_up(s_fsel)) { dir_up(); return; }
@@ -613,11 +640,12 @@ static void on_key(int key, char ch) {
     // panel touch: tapped rows (SEND files / PEER list / OPT rows) and the PEER scan button (ch==1)
     if (nucleo_touch_is_row(key, ch)) {
         if (s_tab == T_SEND) { if (lg::row_tap(key, ch, s_lg_scroll, snd_count(), &s_fsel) == 2) send_selected(); nucleo_app_request_draw(); return; }
-        if (s_tab == T_PEER) { if (lg::row_tap(key, ch, s_lg_scroll, nlink_svc_peer_count(), &s_sel) == 2) { s_peer_sel = s_sel; toast("Peer scelto", "Peer set"); } update_hint(); nucleo_app_request_draw(); return; }
+        if (s_tab == T_PEER) { if (lg::row_tap(key, ch, s_lg_scroll, nlink_svc_peer_count(), &s_sel) && s_peer_sel != s_sel) { s_peer_sel = s_sel; toast("Peer scelto", "Peer set"); } update_hint(); nucleo_app_request_draw(); return; }
         if (s_tab == T_OPT)  { int i = ch - NUCLEO_TOUCH_ROW; if (i < opt_rows()) { s_sel = i; opt_activate(i); } update_hint(); nucleo_app_request_draw(); return; }
         return;
     }
-    if (key == NK_CHAR && ch == 1 && s_tab == T_PEER) { nlink_svc_discover((nlink_proto_t)s_proto); toast("Cerco...", "Scanning..."); nucleo_app_request_draw(); return; }
+    if (key == NK_CHAR && ch >= LK_TAB0 && ch < LK_TAB0 + NTABS) { set_tab(ch - LK_TAB0); return; }   // a panel tab / card chip
+    if (key == NK_CHAR && ch == LK_SCAN && s_tab == T_PEER) { nlink_svc_discover((nlink_proto_t)s_proto); toast("Cerco...", "Scanning..."); nucleo_app_request_draw(); return; }
 
     // Y/N answers (RECV offer, CMD pending) — only when something is actually pending.
     if ((s_tab == T_RECV || s_tab == T_CMD) && (ch == 'y' || ch == 'Y' || ch == 'n' || ch == 'N')) {

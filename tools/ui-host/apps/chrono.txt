@@ -1,0 +1,10 @@
+# Stopwatch + countdown timer: idle, running with laps, paused, timer editor, preset, running ring, paused, finished
+home
+sw_run       ENTER tick:20 U tick:12 U tick:9
+sw_paused    ENTER tick:20 U tick:12 ENTER
+timer        TAB
+timer_sec    TAB R U U
+timer_preset TAB row:3
+timer_run    TAB ENTER tick:40
+timer_pause  TAB c:1 ENTER tick:30 ENTER
+timer_done   TAB c:0 R U ENTER tick:10

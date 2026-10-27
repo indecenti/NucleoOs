@@ -1,0 +1,9 @@
+home
+off SPACE
+red_off SPACE c:2
+blink_off SPACE TAB
+sos_dim SPACE TAB TAB D D D
+lit_toast c:3
+pattern_tap SPACE row:5
+swatch_tap SPACE row:1
+tap_off tap:160,120

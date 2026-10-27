@@ -20,6 +20,27 @@
 #include <string.h>
 #include <sys/stat.h>
 #include "app_gfx.h"
+#include "app_large.h"        // two screens: the instrument on the 320x240 panel, the Cardputer as companion
+#include "nucleo_touch.h"
+
+// The UI strings, one row per string in its languages: a call site loads an index, not five literals.
+static const char *const S5[][5] = {
+    { "Cronometro", "Stopwatch", "Cronometro", "Chrono", "Stoppuhr" },
+    { "Giro", "Lap", "Vuelta", "Tour", "Runde" },
+    { "PAUSA", "PAUSE", "PAUSA", "PAUSE", "PAUSE" },
+    { "FINITO!", "TIME'S UP!", "TIEMPO!", "FINI!", "FERTIG!" },
+    { "premi un tasto", "press any key", "pulsa cualquier", "appuyer touche", "Taste druecken" },
+    { "1-9 = minuti", "1-9 = minutes", "1-9 = minutos", "1-9 = minutes", "1-9 = Minuten" },
+    { "INVIO pausa | su=giro | TAB timer", "ENTER pause | up=lap | TAB timer", "INTRO pausa | ar=vuelta | TAB timer", "ENTREE pause | haut=tour | TAB tmr", "ENTER pause | oben=Runde | TAB Chr" },
+    { "INVIO riprendi | R azzera | TAB timer", "ENTER resume | R reset | TAB timer", "INTRO reanuda | R reset | TAB timer", "ENTREE reprendre | R remet | TAB tmr", "ENTER weiter | R zurueck | TAB Chrono" },
+    { "INVIO avvia | TAB timer", "ENTER start | TAB timer", "INTRO inicia | TAB timer", "ENTREE debut | TAB timer", "ENTER start | TAB Chrono" },
+    { "INVIO pausa | R azzera | TAB crono", "ENTER pause | R reset | TAB chrono", "INTRO pausa | R reset | TAB crono", "ENTREE pause | R remet | TAB crono", "ENTER pause | R zurueck | TAB Chrono" },
+    { "INVIO riprendi | R azzera", "ENTER resume | R reset", "INTRO reanuda | R reset", "ENTREE repr | R remet", "ENTER weiter | R zurueck" },
+    { "frecce imposta | INVIO avvia | TAB crono", "arrows set | ENTER start | TAB chrono", "flechas cfg | INTRO inicia | TAB crn", "fleches fixer | ENTREE debut | TAB crn", "Pfeile stelle | ENTER start | TAB Cr" },
+    { "Azzera", "Reset", "Reiniciar", "Remise", "Reset" },
+    { "Avvia", "Start", "Iniciar", "Demarrer", "Start" },
+};
+static const char *s5(int i) { const char *const *v = S5[i]; return nucleo_tr5(v[0], v[1], v[2], v[3], v[4]); }
 
 // ── modes ───────────────────────────────────────────────────────────────────
 enum { MODE_STOP, MODE_TIMER };
@@ -81,11 +102,12 @@ static void fmt_mmss(int ms, char *out, int n)
 // A size-N string centred in the full width, drawn on the theme background (no smear).
 static void draw_centered(const char *str, int size, int y, unsigned short col)
 {
+    LovyanGFX &G = d;
     int wpx = (int)strlen(str) * 6 * size;
-    d.setTextSize(size);
-    d.setTextColor(col, BG);
-    d.setCursor((W - wpx) / 2, y);
-    d.print(str);
+    G.setTextSize(size);
+    G.setTextColor(col, BG);
+    G.setCursor((W - wpx) / 2, y);
+    G.print(str);
 }
 
 // ── persistence (remember the last timer + mode) ─────────────────────────────
@@ -164,9 +186,10 @@ static void tm_bump(int field, int delta)
 // ── drawing ───────────────────────────────────────────────────────────────────
 static void draw_stopwatch(int top, int h)
 {
+    LovyanGFX &G = d;
     int ms = sw_elapsed_ms();
     const char *right = s_sw_run ? "REC" : (ms ? "II" : "");
-    int y0 = app_ui_title(TR5("Cronometro", "Stopwatch", "Cronometro", "Chrono", "Stoppuhr"), s_sw_run ? C_GREEN : C_BLUE, right);
+    int y0 = app_ui_title(s5(0 /* Stopwatch */), s_sw_run ? C_GREEN : C_BLUE, right);
 
     char big[16]; fmt_swatch(ms, big, sizeof(big));
     int laps_h = s_sw_nlap ? (s_sw_nlap * 12 + 4) : 0;
@@ -177,32 +200,33 @@ static void draw_stopwatch(int top, int h)
     int ly = digit_y + 40;
     for (int i = 0; i < s_sw_nlap; i++) {
         char row[28], t[16]; fmt_swatch(s_sw_lap[i], t, sizeof(t));
-        snprintf(row, sizeof(row), "%s %d  %s", TR5("Giro", "Lap", "Vuelta", "Tour", "Runde"), s_sw_nlap - i, t);
-        d.setTextSize(1); d.setTextColor(i == 0 ? FG : MUTED, BG);
-        d.setCursor((W - (int)strlen(row) * 6) / 2, ly); d.print(row);
+        snprintf(row, sizeof(row), "%s %d  %s", s5(1 /* Lap */), s_sw_nlap - i, t);
+        G.setTextSize(1); G.setTextColor(i == 0 ? FG : MUTED, BG);
+        G.setCursor((W - (int)strlen(row) * 6) / 2, ly); G.print(row);
         ly += 12;
     }
 }
 
 static void draw_timer(int top, int h, bool flash_on)
 {
+    LovyanGFX &G = d;
     int left = tm_left_ms();
     bool low = s_tm_run && left <= 10000;
     unsigned short accent = s_tm_done ? C_RED : (s_tm_run ? (low ? C_RED : C_YELLOW) : C_BLUE);
-    const char *right = s_tm_done ? "!!!" : (s_tm_run ? "II" : (s_tm_rem_ms > 0 ? TR5("PAUSA", "PAUSE", "PAUSA", "PAUSE", "PAUSE") : ""));
+    const char *right = s_tm_done ? "!!!" : (s_tm_run ? "II" : (s_tm_rem_ms > 0 ? s5(2 /* PAUSE */) : ""));
     int y0 = app_ui_title("Timer", accent, right);
     int cy = y0 + (top + h - y0) / 2 - 18;
 
     if (s_tm_done) {
         // Blinking full-content alarm banner — the text background must track the flashing fill.
         unsigned short bg = flash_on ? C_RED : BG, fg = flash_on ? BG : C_RED;
-        if (flash_on) d.fillRect(0, y0 + 2, W, top + h - y0 - 2, C_RED);
-        const char *big = TR5("FINITO!", "TIME'S UP!", "TIEMPO!", "FINI!", "FERTIG!");
-        d.setTextSize(3); d.setTextColor(fg, bg);
-        d.setCursor((W - (int)strlen(big) * 18) / 2, cy - 8); d.print(big);
-        const char *m = TR5("premi un tasto", "press any key", "pulsa cualquier", "appuyer touche", "Taste druecken");
-        d.setTextSize(1); d.setTextColor(flash_on ? BG : MUTED, bg);
-        d.setCursor((W - (int)strlen(m) * 6) / 2, cy + 30); d.print(m);
+        if (flash_on) G.fillRect(0, y0 + 2, W, top + h - y0 - 2, C_RED);
+        const char *big = s5(3 /* TIME'S UP! */);
+        G.setTextSize(3); G.setTextColor(fg, bg);
+        G.setCursor((W - (int)strlen(big) * 18) / 2, cy - 8); G.print(big);
+        const char *m = s5(4 /* press any key */);
+        G.setTextSize(1); G.setTextColor(flash_on ? BG : MUTED, bg);
+        G.setCursor((W - (int)strlen(m) * 6) / 2, cy + 30); G.print(m);
         return;
     }
 
@@ -212,56 +236,203 @@ static void draw_timer(int top, int h, bool flash_on)
         draw_centered(big, 6, cy - 24, low ? C_RED : accent);
         int total = tm_set_ms(); if (total < 1) total = 1;
         int bw = W - 40, filled = (int)((int64_t)bw * left / total);
-        d.fillRoundRect(20, cy + 30, bw, 6, 3, INK);
-        d.fillRoundRect(20, cy + 30, filled, 6, 3, low ? C_RED : accent);
+        G.fillRoundRect(20, cy + 30, bw, 6, 3, INK);
+        G.fillRoundRect(20, cy + 30, filled, 6, 3, low ? C_RED : accent);
     } else {
         // Idle editor: MM and SS drawn apart so the active field can glow.
         char mm[4], ss[4]; snprintf(mm, sizeof(mm), "%02d", s_tm_min); snprintf(ss, sizeof(ss), "%02d", s_tm_sec);
         int size = 6, cw = 6 * size, total_w = 5 * cw, x = (W - total_w) / 2, ty = cy - 24;
-        d.setTextSize(size);
-        d.setTextColor(s_tm_field == 0 ? C_BLUE : FG, BG); d.setCursor(x, ty);          d.print(mm);
-        d.setTextColor(MUTED, BG);                          d.setCursor(x + 2 * cw, ty); d.print(":");
-        d.setTextColor(s_tm_field == 1 ? C_BLUE : FG, BG); d.setCursor(x + 3 * cw, ty); d.print(ss);
+        G.setTextSize(size);
+        G.setTextColor(s_tm_field == 0 ? C_BLUE : FG, BG); G.setCursor(x, ty);          G.print(mm);
+        G.setTextColor(MUTED, BG);                          G.setCursor(x + 2 * cw, ty); G.print(":");
+        G.setTextColor(s_tm_field == 1 ? C_BLUE : FG, BG); G.setCursor(x + 3 * cw, ty); G.print(ss);
         // underline the active field
         int ux = (s_tm_field == 0) ? x : x + 3 * cw;
-        d.fillRoundRect(ux, ty + 6 * size + 2, 2 * cw - 4, 3, 1, C_BLUE);
-        d.setTextSize(1); d.setTextColor(MUTED, BG);
-        const char *m = TR5("1-9 = minuti", "1-9 = minutes", "1-9 = minutos", "1-9 = minutes", "1-9 = Minuten");
-        d.setCursor((W - (int)strlen(m) * 6) / 2, ty + 6 * size + 10); d.print(m);
+        G.fillRoundRect(ux, ty + 6 * size + 2, 2 * cw - 4, 3, 1, C_BLUE);
+        G.setTextSize(1); G.setTextColor(MUTED, BG);
+        const char *m = s5(5 /* 1-9 = minutes */);
+        G.setCursor((W - (int)strlen(m) * 6) / 2, ty + 6 * size + 10); G.print(m);
     }
 }
 
-static void set_hint(void)
+static const char *hint_text(void)
 {
     const char *hint;
     if (s_mode == MODE_STOP) {
-        if (s_sw_run)               hint = TR5("INVIO pausa | su=giro | TAB timer", "ENTER pause | up=lap | TAB timer", "INTRO pausa | ar=vuelta | TAB timer", "ENTREE pause | haut=tour | TAB tmr", "ENTER pause | oben=Runde | TAB Chr");
-        else if (sw_elapsed_ms())   hint = TR5("INVIO riprendi | R azzera | TAB timer", "ENTER resume | R reset | TAB timer", "INTRO reanuda | R reset | TAB timer", "ENTREE reprendre | R remet | TAB tmr", "ENTER weiter | R zurueck | TAB Chrono");
-        else                        hint = TR5("INVIO avvia | TAB timer", "ENTER start | TAB timer", "INTRO inicia | TAB timer", "ENTREE debut | TAB timer", "ENTER start | TAB Chrono");
+        if (s_sw_run)               hint = s5(6 /* ENTER pause | up=lap | TAB timer */);
+        else if (sw_elapsed_ms())   hint = s5(7 /* ENTER resume | R reset | TAB timer */);
+        else                        hint = s5(8 /* ENTER start | TAB timer */);
     } else {
-        if (s_tm_done)              hint = TR5("premi un tasto", "press any key", "pulsa cualquier", "appuyer touche", "Taste druecken");
-        else if (s_tm_run)          hint = TR5("INVIO pausa | R azzera | TAB crono", "ENTER pause | R reset | TAB chrono", "INTRO pausa | R reset | TAB crono", "ENTREE pause | R remet | TAB crono", "ENTER pause | R zurueck | TAB Chrono");
-        else if (s_tm_rem_ms > 0)   hint = TR5("INVIO riprendi | R azzera", "ENTER resume | R reset", "INTRO reanuda | R reset", "ENTREE repr | R remet", "ENTER weiter | R zurueck");
-        else                        hint = TR5("frecce imposta | INVIO avvia | TAB crono", "arrows set | ENTER start | TAB chrono", "flechas cfg | INTRO inicia | TAB crn", "fleches fixer | ENTREE debut | TAB crn", "Pfeile stelle | ENTER start | TAB Cr");
+        if (s_tm_done)              hint = s5(4 /* press any key */);
+        else if (s_tm_run)          hint = s5(9 /* ENTER pause | R reset | TAB chrono */);
+        else if (s_tm_rem_ms > 0)   hint = s5(10 /* ENTER resume | R reset */);
+        else                        hint = s5(11 /* arrows set | ENTER start | TAB chrono */);
     }
-    nucleo_app_set_hint(hint);
+    return hint;
 }
 
 // blink phase for the finish alarm: on for 250 ms, off for 250 ms
 static bool flash_phase(void) { return ((esp_timer_get_time() / 250000) & 1) == 0; }
 
+// ===== two screens ==============================================================================================
+// The 320x240 panel is the instrument itself, composed in strips (lg::frame: the digits tick without flicker):
+// a band with the back chevron and the two modes as pills (tap the other one to switch), then
+//   STOPWATCH: the time in 7-segment digits, a big start/stop disc, a lap / reset disc, the laps column;
+//   TIMER idle: MM:SS you tap (pick the field) and drag up/down (set it), preset chips, a Start pill;
+//   TIMER running / paused: a ring that empties with the time left (tap it = pause / resume) + a Reset chip;
+//   TIMER finished: the whole panel flashes, a tap silences it.
+// The Cardputer shows the time and the keys. Keyboard behaviour is unchanged.
+#define LW   320
+#define LH   240
+#define LTOP 44
+static const unsigned char PRESET_MIN[6] = { 1, 3, 5, 10, 15, 25 };
+
+static void lt(const char *s, int x, int y, int f, unsigned short c, uint8_t datum = top_center)
+{
+    LovyanGFX &G = d;
+    lg::font(f); G.setTextDatum(datum); G.setTextColor(c); G.drawString(s, x, y); G.setTextDatum(top_left);
+}
+static void l7(const char *s, int x, int y, float sz, unsigned short c)   // 7-segment digits, 48 px at size 1
+{
+    LovyanGFX &G = d;
+    G.setFont(&fonts::Font7); G.setTextSize(sz); G.setTextDatum(top_center); G.setTextColor(c);
+    G.drawString(s, x, y); G.setTextSize(1); G.setTextDatum(top_left);
+}
+// A round control: fill, a play / pause / no glyph, an optional label under it; a tap = (key, ch).
+static void ldisc(int cx, int cy, int r, unsigned short col, int glyph, const char *label, int key, char ch)
+{
+    LovyanGFX &G = d;
+    G.fillCircle(cx, cy, r, col);
+    const int s = r / 3, gy = label ? cy - 8 : cy;
+    if (glyph == 0) G.fillTriangle(cx - s * 2 / 3, gy - s, cx - s * 2 / 3, gy + s, cx + s, gy, INK);
+    else if (glyph == 1) { G.fillRect(cx - s * 3 / 4, gy - s, s / 2 + 1, 2 * s, INK); G.fillRect(cx + s / 4, gy - s, s / 2 + 1, 2 * s, INK); }
+    if (label) lt(label, cx, glyph == 2 ? cy - 8 : cy + s - 2, 1, INK);
+    if (key) nucleo_touch_add(cx - r, cy - r, 2 * r, 2 * r, key, ch);
+}
+
+static void lp_band(unsigned short acc)
+{
+    LovyanGFX &G = d;
+    for (int k = 0; k < 2; k++) { G.drawLine(18 + k, 13, 12 + k, 20, MUTED); G.drawLine(12 + k, 20, 18 + k, 27, MUTED); }
+    nucleo_touch_add(0, 0, 44, LTOP, NK_BACK, 0);
+    const char *nm[2] = { s5(0 /* Stopwatch */), "Timer" };
+    for (int i = 0; i < 2; i++) {
+        const int x = 44 + i * 138; const bool on = i == s_mode;
+        G.fillRoundRect(x, 6, 132, 30, 10, on ? acc : lg::card());
+        lt(nm[i], x + 66, 21, 1, on ? INK : MUTED, middle_center);
+        if (!on) nucleo_touch_add(x, 0, 136, LTOP, NK_TAB, 0);      // the other mode's pill switches to it
+    }
+}
+
+static void lp_stopwatch(void)
+{
+    const int ms = sw_elapsed_ms();
+    char t[16]; fmt_swatch(ms, t, sizeof t);
+    l7(t, LW / 2, LTOP + 8, 1, s_sw_run ? FG : (ms ? C_BLUE : MUTED));
+    ldisc(70, 178, 54, s_sw_run ? C_RED : C_GREEN, s_sw_run ? 1 : 0, nullptr, NK_ENTER, 0);
+    if (s_sw_run)  ldisc(160, 196, 32, C_BLUE, 2, s5(1 /* Lap */), NK_UP, 0);
+    else if (ms)   ldisc(160, 196, 32, MUTED, 2, s5(12 /* Reset */), NK_CHAR, 'r');
+    for (int i = 0; i < MAXLAP; i++) {                              // the laps column, newest on top
+        const int y = 116 + i * 40;
+        char lb[16], v[16];
+        snprintf(lb, sizeof lb, "%s %d", s5(1 /* Lap */), s_sw_nlap - i);
+        if (i < s_sw_nlap) fmt_swatch(s_sw_lap[i], v, sizeof v); else snprintf(v, sizeof v, "--:--.--");
+        if (i < s_sw_nlap) lt(lb, 208, y, 0, MUTED, top_left);
+        lt(v, 208, y + 16, 1, i < s_sw_nlap ? (i ? FG : C_BLUE) : DIM, top_left);
+    }
+}
+
+static void lp_timer(void)
+{
+    LovyanGFX &G = d;
+    if (s_tm_done) {
+        const bool on = flash_phase();
+        G.fillRect(0, LTOP, LW, LH - LTOP, on ? C_RED : BG);
+        lt(s5(3 /* TIME'S UP! */), LW / 2, 108, 3, on ? INK : C_RED);
+        lt(s5(4 /* press any key */), LW / 2, 160, 0, on ? INK : MUTED);
+        nucleo_touch_add(0, LTOP, LW, LH - LTOP, NK_ENTER, 0);
+        return;
+    }
+    const int left = tm_left_ms();
+    char t[8]; fmt_mmss(left, t, sizeof t);
+    if (s_tm_run || s_tm_rem_ms > 0) {
+        const bool low = s_tm_run && left <= 10000;
+        const unsigned short col = low ? C_RED : (s_tm_run ? C_YELLOW : C_BLUE);
+        const int cx = 118, cy = 142, total = tm_set_ms() > 0 ? tm_set_ms() : 1;
+        G.fillArc(cx, cy, 72, 88, 0, 360, LINE);
+        const int deg = (int)((int64_t)360 * left / total);
+        if (deg > 0) G.fillArc(cx, cy, 72, 88, 270, 270 + deg, col);
+        lt(t, cx, cy - 18, 3, low ? C_RED : FG);
+        if (!s_tm_run) lt(s5(2 /* PAUSE */), cx, cy + 20, 1, C_BLUE);
+        nucleo_touch_add(cx - 88, cy - 88, 176, 176, NK_ENTER, 0);
+        ldisc(266, 196, 34, MUTED, 2, s5(12 /* Reset */), NK_CHAR, 'r');
+        return;
+    }
+    // idle editor: the digits are the control (tap = pick MM or SS, drag up / down = set it)
+    char mm[4], ss[4]; snprintf(mm, sizeof mm, "%02d", s_tm_min); snprintf(ss, sizeof ss, "%02d", s_tm_sec);
+    l7(mm, 92, LTOP + 6, 1.5f, s_tm_field == 0 ? C_BLUE : FG);
+    l7(":", LW / 2, LTOP + 6, 1.5f, MUTED);
+    l7(ss, 228, LTOP + 6, 1.5f, s_tm_field == 1 ? C_BLUE : FG);
+    G.fillRoundRect(s_tm_field == 0 ? 50 : 186, LTOP + 84, 84, 4, 2, C_BLUE);
+    nucleo_touch_add(20, LTOP, 130, 92, NK_LEFT, 0);
+    nucleo_touch_add(170, LTOP, 130, 92, NK_RIGHT, 0);
+    nucleo_touch_add_pad(0, LTOP, LW, 92, 14);
+    for (int i = 0; i < 6; i++) {                                   // preset chips: the minutes at one tap
+        const int x = 8 + i * 51; char p[6]; snprintf(p, sizeof p, "%d'", PRESET_MIN[i]);
+        const bool on = s_tm_min == PRESET_MIN[i] && !s_tm_sec;
+        G.fillRoundRect(x, 144, 47, 32, 9, on ? C_BLUE : LINE);
+        lt(p, x + 23, 160, 1, on ? INK : FG, middle_center);
+        nucleo_touch_add(x, 140, 51, 40, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + i));
+    }
+    G.fillRoundRect(70, 188, 180, 44, 14, C_GREEN);
+    lt(s5(13 /* Start */), LW / 2, 210, 1, INK, middle_center);
+    nucleo_touch_add(60, 184, 200, 56, NK_ENTER, 0);
+}
+
+static void lg_paint(void *)
+{
+    d.fillRect(0, 0, LW, LH, BG);
+    const unsigned short acc = s_mode == MODE_STOP ? (s_sw_run ? C_GREEN : C_BLUE) : (s_tm_done ? C_RED : C_YELLOW);
+    if (s_mode == MODE_STOP) lp_stopwatch(); else lp_timer();
+    lp_band(acc);
+    lg::field(0, 0, LW, LH);                                         // a stray tap is nothing (not Enter / an arrow)
+}
+static void draw_large(void)
+{
+    nucleo_touch_clear();
+    lg::frame(lg_paint, nullptr);
+    nucleo_touch_commit();
+}
+
+// The Cardputer meanwhile: the running time big, the keys underneath.
+static void draw_companion(void)
+{
+    int y = lg::comp_head(s_mode == MODE_STOP ? s5(0 /* Stopwatch */) : "Timer",
+                          s_mode == MODE_STOP ? C_BLUE : C_YELLOW);
+    char t[16];
+    if (s_mode == MODE_STOP) fmt_swatch(sw_elapsed_ms(), t, sizeof t); else fmt_mmss(tm_left_ms(), t, sizeof t);
+    draw_centered(t, 4, y + 22, s_tm_done && s_mode == MODE_TIMER ? C_RED : FG);
+    lg::comp_keys(hint_text());
+}
+
 static void draw(void)
 {
+    if (nucleo_app_two_screens()) { draw_companion(); return; }
     int top = nucleo_app_content_top(), h = nucleo_app_content_height();
     d.fillRect(0, top, W, h, BG);
     if (s_mode == MODE_STOP) draw_stopwatch(top, h);
     else                     draw_timer(top, h, flash_phase());
-    set_hint();
+    nucleo_app_set_hint(hint_text());
 }
 
 // ── input ─────────────────────────────────────────────────────────────────────
 static void on_key(int key, char ch)
 {
+    if (nucleo_touch_is_row(key, ch)) {                              // a preset chip on the panel (idle timer)
+        int i = ch - NUCLEO_TOUCH_ROW;
+        if (s_mode == MODE_TIMER && !s_tm_run && !s_tm_done && i < 6) { s_tm_min = PRESET_MIN[i]; s_tm_sec = 0; s_tm_rem_ms = 0; nucleo_app_request_draw(); }
+        return;
+    }
     if (ch == 'r' || ch == 'R') { if (s_mode == MODE_STOP) sw_reset(); else tm_reset(); return; }
 
     if (s_mode == MODE_STOP) {
@@ -310,7 +481,7 @@ static bool poll(void)
     }
     int interval_us;
     if (s_tm_done)                             interval_us = 250000;   // 4 Hz blink
-    else if (s_mode == MODE_STOP && s_sw_run)  interval_us = 50000;    // 20 fps centiseconds
+    else if (s_mode == MODE_STOP && s_sw_run)  interval_us = nucleo_app_two_screens() ? 100000 : 50000;   // centiseconds (10 fps on the panel)
     else if (s_mode == MODE_TIMER && s_tm_run) interval_us = 125000;   // 8 fps countdown
     else return false;                                                  // idle: no periodic redraw
 
@@ -347,7 +518,7 @@ extern "C" void nucleo_register_chrono(void)
 {
     static const nucleo_app_def_t app = {
         "chrono", "Cronometro", "Office", "Cronometro e timer da tasca",
-        'T', C_BLUE, enter, on_key, nullptr, draw, on_exit
+        'T', C_BLUE, enter, on_key, nullptr, draw, on_exit, 0, nullptr, draw_large
     };
     nucleo_app_register(&app);
 }

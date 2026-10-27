@@ -1,0 +1,10 @@
+# Pomodoro: idle focus, running, paused, a breathing break, the finished banner, stats, setup (+ steppers, rows)
+home
+running     ENTER tick:30
+paused      ENTER tick:30 ENTER
+done        c:s ENTER tick:1600
+break_run   c:s ENTER tick:20
+stats       TAB
+setup       TAB TAB
+setup_pick  TAB TAB row:3
+setup_more  TAB TAB D D D D D D

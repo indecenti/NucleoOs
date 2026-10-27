@@ -6,3 +6,4 @@ pick     D D D
 far      D D D D D D D D
 volup    c:+ c:+ c:+
 voldn    c:+ c:+ c:- c:-
+voltap   tap:290,157

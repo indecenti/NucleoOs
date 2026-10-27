@@ -10,3 +10,8 @@ details D D R D D D ENTER
 rename  D D R D ENTER
 delete  D c:d
 options D D ENTER TAB
+viewrow   D ENTER row:3
+editcur   D ENTER ENTER tap:140,60 t:XYZ
+editmid   D ENTER ENTER tap:300,100 DEL DEL t:__
+editdrag  D ENTER ENTER c: c: c:
+editnew   D ENTER ENTER row:0

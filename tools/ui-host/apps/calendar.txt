@@ -9,9 +9,17 @@ event     D ENTER
 eventlong D D ENTER
 empty     R R
 month     c:m
-monthnext c:m c:>
+monthnext c:m c:
 form      c:n t:Dent
 formedit  D c:e TAB
 formtime  c:n TAB TAB t:1415
 allday    c:n TAB TAB DEL
 confirm   D c:d
+tapday    tap:70,190
+tapagain  tap:70,190 tap:70,190
+tapnew    tap:14,190 tap:14,190
+swipenext c:
+swipeprev c: tap:154,94
+backtoday R R R c:
+monthtap  c:m tap:154,158
+monthopen c:m tap:154,158 tap:154,158

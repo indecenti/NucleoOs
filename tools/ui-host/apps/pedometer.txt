@@ -1,0 +1,6 @@
+@host stubs/imu_stubs.cpp
+home
+settings TAB
+settings_tap TAB row:0 row:0
+goal_wrap TAB row:0 R R R R R R R R R R R R R R R R R R R R R R R R R R R R row:0
+stride TAB D R R

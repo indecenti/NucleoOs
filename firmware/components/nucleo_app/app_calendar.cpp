@@ -837,66 +837,78 @@ static void draw_form(void)
 
 // ===== two screens ==============================================================================================
 // The panel carries the calendar, laid out for touch:
-//   agenda  the focused day's week as a strip of seven day cells (tap = go to that day) with a month button at
-//           its end, and below it the day's events as a list ending in "+ New event" (tap = pick, again = open);
-//   event   the event in large type on a card (drag = previous / next event) with Edit / Delete buttons;
-//   month   the month grid. The touch table holds 16 targets, so the grid uses two tiers: the cursor's week has a
-//           target per day (tap = move there, again = open the day), every other week one target for the whole
-//           row (tap = move the cursor into that week, same weekday) — a second tap then picks the exact day;
-//   form    day / time / title rows, each tappable to focus it, with steppers for the day and the time, and
-//           Cancel / Save. The typing itself stays on the Cardputer, whose companion shows the field large.
-// The panel-only actions arrive as NK_CHAR with private control codes (below 0x10, so they never collide with
-// typing or with the list rows), handled in lg_key() before the keyboard handler.
+//   agenda  the focused day's MONTH as a grid at the left (six weeks, the neighbour months' days dimmed) and the
+//           day beside it: its date and its events as a list ending in "+ New event". Tap a day = focus it, tap it
+//           again = open its events (or a new event on an empty day); drag the grid up / down = next / previous
+//           month; tap an event = pick, again = open. The header's right label goes back to today;
+//   month   the keyboard's month view ('m'): the same grid around its own cursor, the cursor day's events beside it;
+//           tap = move the cursor, again = open that day;
+//   event   the event in large type on a card (drag = previous / next event) with its Edit / Delete;
+//   form    day / time / title rows, each tappable to focus it, with steppers for the day and the time, and Save
+//           (the header chevron cancels). The typing itself stays on the Cardputer, whose companion shows it large.
+// The grid is one field the app hit-tests (any number of days, one target). Panel-only actions arrive as NK_CHAR
+// with private control codes (below 0x10, so they never collide with typing or with the list rows), handled in
+// lg_key() before the keyboard handler.
 enum {
-    LGK_DAY0 = 0x01,                 // ..0x07: the strip / the cursor week, Monday..Sunday
-    LGK_WEEK0 = 0x0A,                // ..0x0F: another week row of the month grid (its index in the grid)
+    LGK_MPREV = 0x01, LGK_MNEXT, LGK_TODAY,                                                // grid swipe, header
     LGK_FDAY_M = 0x01, LGK_FDAY_P, LGK_FTIME_M, LGK_FTIME_P, LGK_FALLDAY, LGK_FOCUS0,   // form: steppers, field focus (+0..2)
 };
+static const int LG_GY = lg::HEAD + 16, LG_CW = 28, LG_RH = (240 - LG_GY) / 6, LG_SX = 7 * LG_CW + 6;   // grid / side column
 static int s_lg_scroll;              // agenda list scroll
 
 static int lg_wd(int off) { struct tm t = day_tm(off); return (t.tm_wday + 6) % 7; }   // 0 = Monday
+static int lg_first(int cur) { const int f = cur - (day_tm(cur).tm_mday - 1); return f - lg_wd(f); }   // the grid's top-left day
 
-static void lg_new_or_open(void)                                 // the agenda's Enter for the panel's list
+// The same day a month earlier / later (clamped to that month's length), as an offset from today.
+static int lg_month_from(int off, int dir)
 {
-    if (s_sel >= s_evn) { if (time_ready() && !s_bad) form_open(false); return; }
-    set_view(V_EVENT); nucleo_app_request_draw();
-}
-
-// The month grid's steppers: the same day a month earlier / later (clamped to that month's length).
-static void lg_month_step(int dir)
-{
-    struct tm c = day_tm(s_moff);
+    struct tm c = day_tm(off);
     struct tm t = {}; t.tm_year = c.tm_year; t.tm_mon = c.tm_mon + dir + 1; t.tm_mday = 0; t.tm_hour = 12; t.tm_isdst = -1;
     mktime(&t);                                                   // the last day of the target month
     const int dd = c.tm_mday < t.tm_mday ? c.tm_mday : t.tm_mday;
     char k[12]; snprintf(k, sizeof k, "%04d-%02d-%02d", t.tm_year + 1900, t.tm_mon + 1, dd);
-    s_moff = key_offset(k);
+    return key_offset(k);
+}
+
+static void lg_open_day(void)                                     // the focused day, opened: its events, or a new one
+{
+    if (s_evn > 0) { if (s_sel >= s_evn) s_sel = default_sel(); set_view(V_EVENT); nucleo_app_request_draw(); }
+    else if (time_ready() && !s_bad) form_open(false);
 }
 
 // Panel-only keys. True when consumed.
 static bool lg_key(int key, char ch)
 {
     if (s_confirm) return false;
-    if (s_view == V_MONTH && key == NK_CHAR && (ch == '<' || ch == '>')) { lg_month_step(ch == '<' ? -1 : 1); nucleo_app_request_draw(); return true; }
+    const bool grid = s_view == V_DAY || s_view == V_MONTH;
+    int x, y;
+    if (grid && lg::tap(key, ch, &x, &y)) {                       // a day of the grid
+        int c = x / LG_CW, r = (y - LG_GY) / LG_RH;
+        if (c > 6) c = 6;
+        if (r < 0) r = 0;
+        if (r > 5) r = 5;
+        const int o = lg_first(s_view == V_DAY ? s_offset : s_moff) + r * 7 + c;
+        if (s_view == V_MONTH) {
+            if (o == s_moff) { set_view(V_DAY); goto_day(o); return true; }
+            s_moff = o; nucleo_app_request_draw();
+        } else if (o == s_offset) lg_open_day();
+        else goto_day(o);
+        return true;
+    }
     if (s_view == V_DAY && nucleo_touch_is_row(key, ch)) {
         const int r = lg::row_tap(key, ch, s_lg_scroll, s_evn + 1, &s_sel);
-        if (r == 2) lg_new_or_open(); else nucleo_app_request_draw();
+        if (r == 2) { if (s_sel >= s_evn) { if (time_ready() && !s_bad) form_open(false); } else { set_view(V_EVENT); nucleo_app_request_draw(); } }
+        else nucleo_app_request_draw();
         return true;
     }
     if (key != NK_CHAR || ch <= 0 || ch >= NUCLEO_TOUCH_ROW) return false;
-    if (s_view == V_DAY && ch >= LGK_DAY0 && ch < LGK_DAY0 + 7) { goto_day(s_offset - lg_wd(s_offset) + (ch - LGK_DAY0)); return true; }
-    if (s_view == V_MONTH) {
-        if (ch >= LGK_DAY0 && ch < LGK_DAY0 + 7) {
-            const int to = s_moff - lg_wd(s_moff) + (ch - LGK_DAY0);
-            if (to == s_moff) { set_view(V_DAY); goto_day(s_moff); return true; }   // the picked day again: open it
-            s_moff = to;
-        } else if (ch >= LGK_WEEK0 && ch < LGK_WEEK0 + 6) {
-            struct tm c = day_tm(s_moff);
-            struct tm f = {}; f.tm_year = c.tm_year; f.tm_mon = c.tm_mon; f.tm_mday = 1; f.tm_hour = 12; f.tm_isdst = -1; mktime(&f);
-            const int lead = (f.tm_wday + 6) % 7, cur_week = (lead + c.tm_mday - 1) / 7;
-            s_moff += (ch - LGK_WEEK0 - cur_week) * 7;
-        } else return false;
-        nucleo_app_request_draw(); return true;
+    if (grid) {
+        if (ch == LGK_TODAY) { if (s_view == V_DAY) goto_day(0); else { s_moff = 0; nucleo_app_request_draw(); } return true; }
+        if (ch != LGK_MPREV && ch != LGK_MNEXT) return false;
+        const int dir = ch == LGK_MNEXT ? 1 : -1;
+        if (s_view == V_DAY) goto_day(lg_month_from(s_offset, dir));
+        else { s_moff = lg_month_from(s_moff, dir); nucleo_app_request_draw(); }
+        return true;
     }
     if (s_view == V_FORM) {
         s_msg = nullptr;
@@ -907,7 +919,7 @@ static bool lg_key(int key, char ch)
         case LGK_FTIME_P: time_step(15); break;
         case LGK_FALLDAY: s_tdn = 0; s_fmin = s_fmin < 0 ? (default_time() < 0 ? 12 * 60 : default_time()) : -1; break;
         default:
-            if (ch >= LGK_FOCUS0 && ch < LGK_FOCUS0 + F_N) { s_field = ch - LGK_FOCUS0; s_tdn = 0; form_hint(); break; }
+            if (ch >= (int)LGK_FOCUS0 && ch < (int)LGK_FOCUS0 + F_N) { s_field = ch - LGK_FOCUS0; s_tdn = 0; form_hint(); break; }
             return false;
         }
         nucleo_app_request_draw(); return true;
@@ -925,100 +937,101 @@ static void lg_rel(int off, char *out, int cap)
     else                snprintf(out, cap, "%+d%s", off, TR5("g", "d", "d", "j", "T"));
 }
 
-// A small chevron (dir -1 = left, +1 = right) centred on cx, cy.
-static void lg_chev(int cx, int cy, int dir, unsigned short c)
-{
-    for (int o = 0; o < 2; o++) {
-        d.drawLine(cx - 3 * dir + o * dir, cy - 7, cx + 4 * dir + o * dir, cy, c);
-        d.drawLine(cx + 4 * dir + o * dir, cy, cx - 3 * dir + o * dir, cy + 7, c);
-    }
-}
-static void lg_icon_btn(int x, int y, int w, int h, int dir, unsigned short fill, int key, char ch)
-{
-    d.fillRoundRect(x, y, w, h, 8, fill);
-    lg_chev(x + w / 2, y + h / 2, dir, ACC);
-    nucleo_touch_add(x, y, w, h, key, ch);
-}
-
+// One agenda row in the side column: the time over the title.
 static void lg_ev_row(int i, int x, int y, int w, int h, bool focus, unsigned short bg, void *)
 {
-    if (i >= s_evn) { lg::row_text(x, y, w, h, focus, bg, TR5("+ Nuovo evento", "+ New event", "+ Nuevo evento", "+ Nouvel evt", "+ Neuer Termin"), nullptr, ACC); return; }
+    lg::font(0);
+    if (i >= s_evn) { d.setTextColor(focus ? INK : ACC, bg); d.drawString(TR5("+ Nuovo", "+ New", "+ Nuevo", "+ Nouvel", "+ Neu"), x + 6, y + 11); return; }
     const bool past = is_past(i), next = (i == next_index());
-    lg::font(0); d.setTextDatum(middle_left);
     d.setTextColor(focus ? INK : (past ? DIM : (next ? ACC : MUTED)), bg);
-    d.drawString(s_ev[i].t[0] ? s_ev[i].t : TR5("tutto", "all", "todo", "jour", "ganz"), x + 8, y + h / 2);
-    char t[96]; lg::fit(t, sizeof t, s_ev[i].x, w - 70);
+    d.drawString(s_ev[i].t[0] ? s_ev[i].t : all_day_label(), x + 6, y + 2);
+    char t[96]; lg::fit(t, sizeof t, s_ev[i].x, w - 10);
     d.setTextColor(focus ? INK : (past ? MUTED : FG), bg);
-    d.drawString(t, x + 58, y + h / 2);
-    d.setTextDatum(top_left);
+    d.drawString(t, x + 6, y + 19);
 }
 
-static void lg_day(void)
+// The month grid around `cur` (the focused day / the month cursor): six weeks, Monday first.
+static void lg_grid(int cur)
 {
-    const int W = d.width(), H = d.height();
-    char date[24], rel[16], right[40];
-    lg_date(s_offset, date, sizeof date); lg_rel(s_offset, rel, sizeof rel);
-    const int nx = next_index();
-    if (nx >= 0) { char cd[16]; fmt_countdown(s_ev[nx].t, cd, sizeof cd); snprintf(right, sizeof right, "%s  %s", rel, cd); }
-    else snprintf(right, sizeof right, "%s", rel);
-    lg::header(date, right, s_offset == 0 ? ACC : FG, NK_BACK);
-    // the week strip: seven day cells + the month button
-    const int sy = lg::HEAD + 2, sh = 46, cw = 38, mx = 6 + 7 * cw + 4;
-    d.fillRect(0, sy, W, sh + 4, BG);
-    const int mon = s_offset - lg_wd(s_offset);
-    for (int i = 0; i < 7; i++) {
-        const int off = mon + i, x = 6 + i * cw;
-        const bool sel = off == s_offset, today = off == 0;
-        char k[12]; day_key(off, k);
-        const bool has = time_ready() && day_count(k) > 0;
-        const unsigned short f = sel ? ACC : lg::card();
-        d.fillRoundRect(x + 1, sy, cw - 2, sh, 8, f);
-        if (today && !sel) d.drawRoundRect(x + 1, sy, cw - 2, sh, 8, ACC);
-        struct tm t = day_tm(off);
+    const struct tm c = day_tm(cur);
+    lg::font(4); d.setTextDatum(top_center);
+    for (int i = 0; i < 7; i++) { d.setTextColor(i >= 5 ? DIM : MUTED, BG); d.drawString(wday_short((i + 1) % 7), i * LG_CW + LG_CW / 2, lg::HEAD + 4); }
+    lg::font(0); d.setTextDatum(middle_center);
+    const int first = lg_first(cur);
+    for (int i = 0; i < 42; i++) {
+        const int o = first + i, cx = (i % 7) * LG_CW, cy = LG_GY + (i / 7) * LG_RH;
+        const struct tm t = day_tm(o);
+        char k[12]; strftime(k, sizeof k, "%Y-%m-%d", &t);
+        const bool in = t.tm_mon == c.tm_mon, sel = o == cur, has = day_count(k) > 0;
+        unsigned short fg = !in ? DIM : (i % 7) >= 5 ? MUTED : FG, bg = BG;
+        if (sel) { d.fillRoundRect(cx + 1, cy + 1, LG_CW - 2, LG_RH - 2, 6, ACC); fg = INK; bg = ACC; }
+        else if (o == 0) d.drawRoundRect(cx + 1, cy + 1, LG_CW - 2, LG_RH - 2, 6, ACC);
         char num[4]; snprintf(num, sizeof num, "%d", t.tm_mday);
-        lg::font(4); d.setTextDatum(top_center); d.setTextColor(sel ? INK : (i >= 5 ? DIM : MUTED), f);
-        d.drawString(wday_short(t.tm_wday), x + cw / 2, sy + 5);
-        lg::font(1); d.setTextColor(sel ? INK : FG, f);
-        d.drawString(num, x + cw / 2, sy + 17);
-        if (has) d.fillCircle(x + cw / 2, sy + sh - 6, 2, sel ? INK : ACC);
-        nucleo_touch_add(x, sy, cw, sh, NK_CHAR, (char)(LGK_DAY0 + i));
+        d.setTextColor(fg, bg); d.drawString(num, cx + LG_CW / 2, cy + LG_RH / 2 - (has ? 3 : 0));
+        if (has) d.fillCircle(cx + LG_CW / 2, cy + LG_RH - 7, 2, sel ? INK : in ? ACC : DIM);
     }
     d.setTextDatum(top_left);
-    {   // the month button: a little grid glyph over "Mese"
-        const int bw = W - mx - 6;
-        d.fillRoundRect(mx, sy, bw, sh, 8, LINE);
-        for (int r = 0; r < 3; r++) for (int c = 0; c < 3; c++) d.fillRect(mx + bw / 2 - 8 + c * 6, sy + 7 + r * 6, 4, 4, ACC);
-        lg::font(4); d.setTextDatum(top_center); d.setTextColor(FG, LINE);
-        d.drawString(TR5("Mese", "Month", "Mes", "Mois", "Monat"), mx + bw / 2, sy + 31);
-        d.setTextDatum(top_left);
-        nucleo_touch_add(mx, sy, bw, sh, NK_CHAR, 'm');
-    }
-    // the agenda
-    const int ly = sy + sh + 6, lh = H - ly;
-    if (!time_ready() || s_bad || s_ev_oom) {
-        d.fillRect(0, ly, W, lh, BG);
-        if (!time_ready())  lg::message(0, ly, W, lh, TR5("Ora non impostata", "Clock not set", "Hora no fijada", "Heure non reglee", "Uhr fehlt"), TR5("App WiFi > SYS", "WiFi app > SYS", "App WiFi > SYS", "App WiFi > SYS", "App WiFi > SYS"), ERR);
-        else if (s_bad)     lg::message(0, ly, W, lh, TR5("File illeggibile", "File unreadable", "Archivo ilegible", "Fichier illegal", "Datei ungueltig"), TR5("Correggi dal web", "Fix it from the web", "Corrige desde web", "Fixe depuis web", "Korrigiere online"), ERR);
-        else                lg::message(0, ly, W, lh, TR5("RAM insufficiente", "Not enough RAM", "RAM insuficiente", "RAM insuffisant", "RAM voll"), TR5("Esci e riprova", "Exit and retry", "Salida e reinento", "Sortie et reessai", "Beende u versuche"), ERR);
+    lg::field(0, LG_GY, 7 * LG_CW, 6 * LG_RH);
+    nucleo_touch_add_scroll(0, lg::HEAD, 7 * LG_CW, 240 - lg::HEAD, 60, NK_CHAR, LGK_MPREV, NK_CHAR, LGK_MNEXT);   // drag = month
+}
+
+// The agenda (V_DAY) and the keyboard's month view (V_MONTH): the grid, the day beside it.
+static void lg_cal(void)
+{
+    const int W = d.width(), H = d.height();
+    const bool month = s_view == V_MONTH;
+    const int cur = month ? s_moff : s_offset;
+    const struct tm c = day_tm(cur);
+    char title[28], right[40] = "";
+    snprintf(title, sizeof title, "%s %d", month_name(c.tm_mon, true), c.tm_year + 1900);
+    const int nx = month ? -1 : next_index();
+    if (cur != 0) snprintf(right, sizeof right, "%s", TR5("oggi", "today", "hoy", "auj.", "heute"));
+    else if (nx >= 0 && s_ev[nx].t[0]) fmt_countdown(s_ev[nx].t, right, sizeof right);
+    lg::header(time_ready() ? title : "--", right, ACC, NK_BACK);
+    if (cur != 0) nucleo_touch_add(W - 90, 0, 90, lg::HEAD, NK_CHAR, LGK_TODAY);
+    d.fillRect(0, lg::HEAD, W, H - lg::HEAD, BG);
+    if (!time_ready() || s_bad || (!month && s_ev_oom)) {
+        if (!time_ready())  lg::message(0, lg::HEAD, W, H - lg::HEAD, TR5("Ora non impostata", "Clock not set", "Hora no fijada", "Heure non reglee", "Uhr fehlt"), TR5("App WiFi > SYS", "WiFi app > SYS", "App WiFi > SYS", "App WiFi > SYS", "App WiFi > SYS"), ERR);
+        else if (s_bad)     lg::message(0, lg::HEAD, W, H - lg::HEAD, TR5("File illeggibile", "File unreadable", "Archivo ilegible", "Fichier illegal", "Datei ungueltig"), TR5("Correggi dal web", "Fix it from the web", "Corrige desde web", "Fixe depuis web", "Korrigiere online"), ERR);
+        else                lg::message(0, lg::HEAD, W, H - lg::HEAD, TR5("RAM insufficiente", "Not enough RAM", "RAM insuficiente", "RAM insuffisant", "RAM voll"), TR5("Esci e riprova", "Exit and retry", "Salida e reinento", "Sortie et reessai", "Beende u versuche"), ERR);
         return;
     }
-    if (s_sel > s_evn) s_sel = s_evn;
-    if (s_evn == 0) {                                             // only "+ New event", the empty state under it
-        lg::list(0, ly, W, lg::ROW, lg::ROW, 1, s_sel, &s_lg_scroll, lg_ev_row, nullptr, ACC);
-        char nb[12], sub[48] = "";
-        next_busy(s_ev_key, nb);
-        if (nb[0]) { struct tm t = day_tm(key_offset(nb)); char ds[20]; fmt_day(t, ds, sizeof ds);
-                     snprintf(sub, sizeof sub, "%s: %s", TR5("Prossimo", "Next", "Proximo", "Prochain", "Naechster"), ds); }
-        lg::message(0, ly + lg::ROW, W, lh - lg::ROW, TR5("Nessun evento", "No events", "Sin eventos", "Aucun evenement", "Keine Termine"), sub, FG);
+    lg_grid(cur);
+    // the day beside the grid
+    const int sx = LG_SX, sw = W - sx - 4;
+    d.drawFastVLine(sx - 3, lg::HEAD + 6, H - lg::HEAD - 12, LINE);
+    char ds[20], rel[16]; snprintf(ds, sizeof ds, "%s %d", wday_short(c.tm_wday), c.tm_mday); lg_rel(cur, rel, sizeof rel);
+    lg::font(1); d.setTextColor(cur == 0 ? ACC : FG, BG); d.drawString(ds, sx + 4, lg::HEAD + 6);
+    lg::font(4); d.setTextColor(MUTED, BG); d.drawString(rel, sx + 4, lg::HEAD + 28);
+    int y = lg::HEAD + 42;
+    if (!month) {                                                 // the focused day's agenda: tap = pick, again = open
+        if (s_sel > s_evn) s_sel = s_evn;
+        if (s_evn == 0) {
+            lg::list(sx, y, sw + 4, 38, 38, 1, s_sel, &s_lg_scroll, lg_ev_row, nullptr, ACC);
+            lg::font(0); d.setTextColor(MUTED, BG); d.drawString(TR5("nessun evento", "no events", "sin eventos", "aucun evt", "keine"), sx + 4, y + 48);
+        } else lg::list(sx, y, sw + 4, H - y, 38, s_evn + 1, s_sel, &s_lg_scroll, lg_ev_row, nullptr, ACC);
         return;
     }
-    lg::list(0, ly, W, lh, lg::ROW, s_evn + 1, s_sel, &s_lg_scroll, lg_ev_row, nullptr, ACC);
+    char key[12]; day_key(cur, key);                              // the month cursor's day: read straight from the tree
+    cJSON *arr = day_array(key);
+    lg::font(0);
+    if (!arr || !cJSON_GetArraySize(arr)) { d.setTextColor(MUTED, BG); d.drawString(TR5("nessun evento", "no events", "sin eventos", "aucun evt", "keine"), sx + 4, y); return; }
+    cJSON *e; int shown = 0, n = cJSON_GetArraySize(arr);
+    cJSON_ArrayForEach(e, arr) {
+        if (y > H - 40) break;
+        cJSON *t = cJSON_GetObjectItem(e, "time"), *x = cJSON_GetObjectItem(e, "text");
+        d.setTextColor(ACC, BG); d.drawString(cJSON_IsString(t) && valid_hhmm(t->valuestring) ? t->valuestring : all_day_label(), sx + 4, y);
+        char f[84], cl[40]; app_ui_ascii_fold(cJSON_IsString(x) ? x->valuestring : "", f, sizeof f);
+        lg::fit(cl, sizeof cl, f, sw - 4); d.setTextColor(FG, BG); d.drawString(cl, sx + 4, y + 17);
+        y += 40; shown++;
+    }
+    if (shown < n) { char more[16]; snprintf(more, sizeof more, "+%d", n - shown); d.setTextColor(MUTED, BG); d.drawString(more, sx + 4, y); }
 }
 
 static void lg_event(void)
 {
     const int W = d.width(), H = d.height();
-    if (s_sel < 0 || s_sel >= s_evn) { lg_day(); return; }
+    if (s_sel < 0 || s_sel >= s_evn) { lg_cal(); return; }
     const Ev *e = &s_ev[s_sel];
     const bool past = is_past(s_sel);
     char pos[12]; snprintf(pos, sizeof pos, "%d / %d", s_sel + 1, s_evn);
@@ -1038,79 +1051,17 @@ static void lg_event(void)
     d.setTextColor(past ? MUTED : FG, cb);
     lg::wrap(e->x, cx + 12, cy + 34, cw - 24, lh, (ch - 40) / lh);
     nucleo_touch_add_scroll(cx, cy, cw, ch, 40, NK_UP, ';', NK_DOWN, '.');   // drag = previous / next event
-    const int by = H - 44, bh = 38, sw = 44, bw = (W - 20 - 2 * sw - 24) / 2;
-    lg_icon_btn(10, by, sw, bh, -1, s_sel > 0 ? LINE : lg::card(), NK_UP, ';');
-    lg::button(10 + sw + 8, by, bw, bh, TR5("Modifica", "Edit", "Editar", "Modifier", "Bearbeiten"), ACC, INK, NK_CHAR, 'e');
-    lg::button(10 + sw + 16 + bw, by, bw, bh, TR5("Elimina", "Delete", "Eliminar", "Supprimer", "Loeschen"), LINE, C_RED, NK_CHAR, 'd');
-    lg_icon_btn(W - 10 - sw, by, sw, bh, 1, s_sel < s_evn - 1 ? LINE : lg::card(), NK_DOWN, '.');
+    const int bw = (W - 30) / 2;                                  // what to do with it
+    lg::button(10, H - 44, bw, 38, TR5("Modifica", "Edit", "Editar", "Modifier", "Bearbeiten"), ACC, INK, NK_CHAR, 'e');
+    lg::button(20 + bw, H - 44, bw, 38, TR5("Elimina", "Delete", "Eliminar", "Supprimer", "Loeschen"), LINE, C_RED, NK_CHAR, 'd');
 }
 
-static void lg_month(void)
+// A small chevron (dir -1 = left, +1 = right) centred on cx, cy.
+static void lg_chev(int cx, int cy, int dir, unsigned short c)
 {
-    const int W = d.width(), H = d.height();
-    struct tm cur = day_tm(s_moff);
-    const int yy = cur.tm_year + 1900, m = cur.tm_mon;
-    struct tm first = {}; first.tm_year = cur.tm_year; first.tm_mon = m; first.tm_mday = 1; first.tm_hour = 12; first.tm_isdst = -1; mktime(&first);
-    struct tm last = {}; last.tm_year = cur.tm_year; last.tm_mon = m + 1; last.tm_mday = 0; last.tm_hour = 12; last.tm_isdst = -1; mktime(&last);
-    const int ndays = last.tm_mday, lead = (first.tm_wday + 6) % 7, weeks = (lead + ndays + 6) / 7;
-    const struct tm today = day_tm(0);
-    const bool this_month = today.tm_year == cur.tm_year && today.tm_mon == m;
-    int total = 0; char key[12];
-    for (int dd = 1; dd <= ndays; dd++) { snprintf(key, sizeof key, "%04d-%02d-%02d", yy, m + 1, dd); total += day_count(key); }
-    char title[28], right[20];
-    snprintf(title, sizeof title, "%s %d", month_name(m, true), yy);
-    snprintf(right, sizeof right, "%d %s", total, total == 1 ? TR5("evento", "event", "evento", "evt", "Termin") : TR5("eventi", "events", "eventos", "evts", "Termine"));
-    lg::header(title, right, ACC, NK_BACK);
-    d.fillRect(0, lg::HEAD, W, H - lg::HEAD, BG);
-    // the grid at the left
-    const int GW = 224, CW = GW / 7, Y0 = lg::HEAD + 20, RH = (H - Y0 - 2) / weeks;
-    lg::font(4); d.setTextDatum(top_center);
-    for (int c = 0; c < 7; c++) { d.setTextColor(c >= 5 ? DIM : MUTED, BG); d.drawString(wday_short((c + 1) % 7), c * CW + CW / 2, lg::HEAD + 6); }
-    const int cur_week = (lead + cur.tm_mday - 1) / 7;
-    for (int w = 0; w < weeks; w++) {
-        const int ry = Y0 + w * RH;
-        if (w == cur_week) d.fillRoundRect(1, ry, GW - 2, RH, 6, lg::card());   // the week whose days take a tap each
-        else nucleo_touch_add(0, ry, GW, RH, NK_CHAR, (char)(LGK_WEEK0 + w));
-    }
-    for (int dd = 1; dd <= ndays; dd++) {
-        const int cell = lead + dd - 1, col = cell % 7, w = cell / 7, cx = col * CW, cy = Y0 + w * RH;
-        snprintf(key, sizeof key, "%04d-%02d-%02d", yy, m + 1, dd);
-        const bool has = day_count(key) > 0, sel = dd == cur.tm_mday, now = this_month && dd == today.tm_mday;
-        const unsigned short under = w == cur_week ? lg::card() : BG;
-        unsigned short fg = col >= 5 ? MUTED : FG, bg = under;
-        if (sel) { d.fillRoundRect(cx + 2, cy + 1, CW - 4, RH - 2, 6, ACC); fg = INK; bg = ACC; }
-        else if (now) d.drawRoundRect(cx + 2, cy + 1, CW - 4, RH - 2, 6, ACC);
-        char num[4]; snprintf(num, sizeof num, "%d", dd);
-        lg::font(0); d.setTextDatum(middle_center); d.setTextColor(fg, bg);
-        d.drawString(num, cx + CW / 2, cy + RH / 2 - (has ? 3 : 0));
-        if (has) d.fillCircle(cx + CW / 2, cy + RH - 6, 2, sel ? INK : ACC);
-        if (w == cur_week) nucleo_touch_add(cx, cy, CW, RH, NK_CHAR, (char)(LGK_DAY0 + col));
-    }
-    if (cur_week == 0) for (int c = 0; c < lead; c++) nucleo_touch_add(c * CW, Y0, CW, RH, NK_CHAR, (char)(LGK_DAY0 + c));   // blank lead cells
-    d.setTextDatum(top_left);
-    // the side column: month steppers, today, the cursor day's events
-    const int sx = GW + 6, sw = W - sx - 6, hb = (sw - 6) / 2;
-    lg_icon_btn(sx, lg::HEAD + 6, hb, 34, -1, LINE, NK_CHAR, '<');
-    lg_icon_btn(sx + hb + 6, lg::HEAD + 6, hb, 34, 1, LINE, NK_CHAR, '>');
-    lg::button(sx, lg::HEAD + 46, sw, 30, TR5("Oggi", "Today", "Hoy", "Auj.", "Heute"), s_moff == 0 ? lg::card() : ACC, s_moff == 0 ? MUTED : INK, NK_CHAR, 't');
-    int y = lg::HEAD + 86;
-    char ds[20]; snprintf(ds, sizeof ds, "%s %d", wday_short(cur.tm_wday), cur.tm_mday);
-    lg::font(1); d.setTextColor(FG, BG); d.drawString(ds, sx, y); y += 22;
-    snprintf(key, sizeof key, "%04d-%02d-%02d", yy, m + 1, cur.tm_mday);
-    cJSON *arr = day_array(key);
-    lg::font(0);
-    if (!arr || !cJSON_GetArraySize(arr)) { d.setTextColor(MUTED, BG); d.drawString(TR5("nessun evento", "no events", "sin eventos", "aucun evt", "keine"), sx, y); }
-    else {
-        cJSON *e; int shown = 0, n = cJSON_GetArraySize(arr);
-        cJSON_ArrayForEach(e, arr) {
-            if (y > H - 40) break;
-            cJSON *t = cJSON_GetObjectItem(e, "time"), *x = cJSON_GetObjectItem(e, "text");
-            d.setTextColor(ACC, BG); d.drawString(cJSON_IsString(t) && valid_hhmm(t->valuestring) ? t->valuestring : TR5("tutto", "all", "todo", "jour", "ganz"), sx, y);
-            char f[84], c[40]; app_ui_ascii_fold(cJSON_IsString(x) ? x->valuestring : "", f, sizeof f);
-            lg::fit(c, sizeof c, f, sw); d.setTextColor(FG, BG); d.drawString(c, sx, y + 16);
-            y += 36; shown++;
-        }
-        if (shown < n) { char more[16]; snprintf(more, sizeof more, "+%d", n - shown); d.setTextColor(MUTED, BG); d.drawString(more, sx, y); }
+    for (int o = 0; o < 2; o++) {
+        d.drawLine(cx - 3 * dir + o * dir, cy - 7, cx + 4 * dir + o * dir, cy, c);
+        d.drawLine(cx + 4 * dir + o * dir, cy, cx - 3 * dir + o * dir, cy + 7, c);
     }
 }
 
@@ -1126,7 +1077,7 @@ static void lg_form_row(int y, int h, int field, const char *label, const char *
     lg::font(0); d.setTextDatum(middle_left); d.setTextColor(f ? ACC : MUTED, cb); d.drawString(label, 18, y + h / 2);
     lg::font(1); d.setTextColor(FG, cb); d.drawString(value, 74, y + h / 2 + 1);
     d.setTextDatum(top_left);
-    nucleo_touch_add(8, y, tap_w, h, NK_CHAR, (char)(LGK_FOCUS0 + field));
+    nucleo_touch_add(8, y, tap_w, h, NK_CHAR, (char)((int)LGK_FOCUS0 + field));
 }
 static void lg_step(int x, int y, int w, int h, const char *sym, char ch)   // a small stepper button on a form row
 {
@@ -1184,10 +1135,8 @@ static void lg_form(void)
         if (f) d.fillRect(cx + 1, by + 26, 2, 18, ACC);
     }
     if (f && s_sugg[0]) lg::button(W - 118, by + bh - 30, 104, 24, TR5("TAB completa", "TAB complete", "TAB completa", "TAB complete", "TAB ergaenz."), LINE, FG, NK_TAB, 0);
-    nucleo_touch_add(8, by, W - 16 - (f && s_sugg[0] ? 112 : 0), bh, NK_CHAR, (char)(LGK_FOCUS0 + F_TEXT));
-    const int bw = (W - 30) / 2;
-    lg::button(10, H - 44, bw, 38, TR5("Annulla", "Cancel", "Cancelar", "Annuler", "Abbruch"), LINE, FG, NK_BACK, 0);
-    lg::button(20 + bw, H - 44, bw, 38, TR5("Salva", "Save", "Guardar", "Sauver", "Speichern"), ACC, INK, NK_ENTER, 0);
+    nucleo_touch_add(8, by, W - 16 - (f && s_sugg[0] ? 112 : 0), bh, NK_CHAR, (char)((int)LGK_FOCUS0 + F_TEXT));
+    lg::button(10, H - 44, W - 20, 38, TR5("Salva", "Save", "Guardar", "Sauver", "Speichern"), ACC, INK, NK_ENTER, 0);   // the chevron cancels
 }
 
 static void draw_large(void)
@@ -1195,9 +1144,8 @@ static void draw_large(void)
     const int W = d.width();
     nucleo_touch_clear();
     if (s_view == V_FORM)       lg_form();
-    else if (s_view == V_MONTH) lg_month();
     else if (s_view == V_EVENT) lg_event();
-    else                        lg_day();
+    else                        lg_cal();
     if (s_confirm && s_sel < s_evn) {                             // delete? only its two buttons take a tap
         nucleo_touch_clear();
         const int cy = 64, ch = 124;

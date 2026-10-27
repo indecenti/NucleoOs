@@ -36,7 +36,7 @@ static const char *TAB_NAME[TAB_COUNT]    = { "Tutte", "Cal", "Sis", "AI" };
 static const char *TAB_NAME_EN[TAB_COUNT] = { "All",   "Cal", "Sys", "AI" };   // picked at paint time
 
 // One stored notification (display fields only; body/id dropped to keep RAM tight).
-struct NItem { char src[12]; char lvl[10]; char ttl[60]; char act[28]; char tstr[8]; };
+struct NItem { char src[12]; char lvl[10]; char ttl[60]; char act[28]; char tstr[8]; long ts; };
 #define MAX_N 24
 static NItem *s_items = nullptr;     // malloc on enter, free on leave (chronological: oldest..newest)
 static int s_n = 0;
@@ -47,6 +47,7 @@ static int s_tab = TAB_ALL;
 static int s_sel = 0;
 static bool s_oom = false;           // true if the ~3 KB buffer couldn't be allocated on enter
 static bool s_confirm_clr, s_clr_yes;   // pending "clear history?" confirm card
+static bool s_drop;                     // ...for the selected notification only (dismiss one)
 
 // ---- helpers ---------------------------------------------------------------
 static int tab_of(const char *src)
@@ -90,7 +91,8 @@ static void ingest_line(const char *line)
     get_str(o, "ttl", it.ttl, sizeof it.ttl, "");   // untitled -> localised placeholder at paint time
     get_str(o, "act", it.act, sizeof it.act, "");
     cJSON *ts = cJSON_GetObjectItem(o, "ts");
-    fmt_when(cJSON_IsNumber(ts) ? (long)ts->valuedouble : 0, it.tstr, sizeof it.tstr);
+    it.ts = cJSON_IsNumber(ts) ? (long)ts->valuedouble : 0;
+    fmt_when(it.ts, it.tstr, sizeof it.tstr);
     cJSON_Delete(o);
 
     if (s_n < MAX_N) s_items[s_n++] = it;
@@ -114,6 +116,26 @@ static void load_journal(void)
     load_one_file(JRNL_PATH);
     for (int t = 0; t < TAB_COUNT; t++) s_cnt[t] = 0;
     for (int i = 0; i < s_n; i++) { s_cnt[TAB_ALL]++; s_cnt[tab_of(s_items[i].src)]++; }
+}
+
+// Dismiss one notification: rewrite both journal files without its line. The backbone writes every line as
+// {..."ttl":"<title>"...,"ts":<n>} (nucleo_notify.cpp), so "ts":<n>} plus the title identify it.
+static void drop_item(const NItem *it)
+{
+    char ts[24]; snprintf(ts, sizeof ts, "\"ts\":%ld}", it->ts);
+    static const char *const paths[2] = { JRNL_BAK, JRNL_PATH };
+    for (int p = 0; p < 2; p++) {
+        FILE *f = fopen(paths[p], "r");
+        if (!f) continue;
+        char tmp[64]; snprintf(tmp, sizeof tmp, "%s.t", paths[p]);
+        FILE *o = fopen(tmp, "w");
+        if (!o) { fclose(f); continue; }
+        char line[256];
+        while (fgets(line, sizeof line, f))
+            if (!strstr(line, ts) || (it->ttl[0] && !strstr(line, it->ttl))) fputs(line, o);
+        fclose(f); fclose(o);
+        remove(paths[p]); rename(tmp, paths[p]);
+    }
 }
 
 // Build the visible list for the current tab, newest-first.
@@ -175,29 +197,24 @@ static void draw(void)
     draw_tabs(yt);
     int yl = yt + 18;                                 // list band below the tabs
 
-    if (s_oom) {                                       // buffer alloc failed — honest, don't deref
+    if (s_oom || s_vn == 0) {                          // buffer alloc failed (honest, don't deref) / nothing here
         d.fillRect(0, yl, W, (H - HINT) - yl, BG);
-        const char *msg = TR("Memoria insufficiente", "Out of memory");
-        d.setTextSize(1); d.setTextColor(C_RED, BG);
-        d.setCursor((W - (int)strlen(msg) * 6) / 2, yl + 24); d.print(msg);
-        return;
-    }
-    if (s_vn == 0) {
-        d.fillRect(0, yl, W, (H - HINT) - yl, BG);
-        const char *msg = TR("Nessuna notifica", "No notifications");
-        d.setTextSize(1); d.setTextColor(DIM, BG);
+        const char *msg = s_oom ? TR("Memoria insufficiente", "Out of memory") : TR("Nessuna notifica", "No notifications");
+        d.setTextSize(1); d.setTextColor(s_oom ? C_RED : DIM, BG);
         d.setCursor((W - (int)strlen(msg) * 6) / 2, yl + 24); d.print(msg);
         return;
     }
     app_ui_list(yl, (H - HINT) - yl, s_vn, s_sel, row_label, row_right, row_color, nullptr);
-    if (s_confirm_clr) app_ui_confirm(TR("Cancella tutto?", "Clear all?"), TR("Elimina la cronologia notifiche", "Delete notification history"), s_clr_yes);
+    if (s_confirm_clr) app_ui_confirm(s_drop ? TR("Archiviare?", "Dismiss?") : TR("Cancella tutto?", "Clear all?"),
+                                      s_drop ? row_label(s_sel, nullptr) : TR("Elimina la cronologia notifiche", "Delete notification history"), s_clr_yes);
 }
 
 // ===== two screens ==============================================================================================
 // The external panel carries the Notification Center full-size: the filter tabs across the top, the list on the
-// left, and the selected notification's detail card on the right (title, source/level/time, the action it runs).
+// left, and the selected notification as a card on the right (title, source/level/time, the action it runs).
 // The Cardputer is the companion: the active tab, the picked notification and the keys. Touch: the tabs filter,
-// a row taps to pick and again to run its action, the card's button runs it; the clear-all card has Yes/No.
+// a row taps to pick and again to open; the card itself taps to open, a swipe right on it dismisses it (after a
+// confirm card) and a swipe up / down on it walks the list.
 static const int N_LISTW = 168;
 static int s_lg_scroll = 0;                           // the panel list's first visible row
 static const char NTABKEYS[TAB_COUNT + 1] = { 1, 2, 3, 4, 0 };   // a control char per tab (no collision with typing)
@@ -206,58 +223,54 @@ static void lg_detail(int x, int y, int w, int h)
 {
     lg::panel(x, y, w, h);
     const unsigned short cb = lg::card();
-    if (s_vn == 0) { lg::font(1); d.setTextColor(MUTED, cb); d.drawString(TR("Nessuna notifica", "No notifications"), x + 12, y + 14); return; }
     const NItem *it = &s_items[s_view[s_sel]];
     const unsigned short lc = lvl_color(it->lvl);
-    d.fillRoundRect(x + 12, y + 14, 10, 10, 2, lc);   // the level dot
+    d.fillRoundRect(x, y + 8, 4, h - 16, 2, lc);      // the level stripe
     lg::font(1); d.setTextColor(lc, cb);
-    const char *title = it->ttl[0] ? it->ttl : TR("(notifica)", "(notification)");
-    const int nl = lg::wrap(title, x + 28, y + 10, w - 40, 22, 3);
-    const int yy = y + 12 + (nl < 1 ? 1 : nl) * 22 + 8;
-    char meta[56]; snprintf(meta, sizeof meta, "%s   %s   %s", it->src, it->lvl, it->tstr);
+    const int nl = lg::wrap(row_label(s_sel, nullptr), x + 12, y + 10, w - 22, 22, 4);
+    const int yy = y + 12 + (nl < 1 ? 1 : nl) * 22 + 6;
+    char meta[56]; snprintf(meta, sizeof meta, "%s  %s", it->src, it->tstr);
     lg::font(0); d.setTextColor(MUTED, cb);
-    char mf[56]; lg::fit(mf, sizeof mf, meta, w - 24); d.drawString(mf, x + 12, yy);
-    const int by = y + h - 44;                        // the action footer, pinned to the card foot
-    if (it->act[0]) {
-        lg::font(0); d.setTextColor(DIM, cb);
-        char a[48]; snprintf(a, sizeof a, "%s %s", TR("Azione:", "Action:"), it->act);
-        char af[48]; lg::fit(af, sizeof af, a, w - 24); d.drawString(af, x + 12, by - 20);
-        lg::button(x + 12, by, w - 24, 34, TR("Esegui", "Run"), ACC, INK, NK_ENTER, 0);
-    } else {
-        lg::font(0); d.setTextColor(DIM, cb); d.drawString(TR("Nessuna azione", "No action"), x + 12, by + 8);
-    }
+    char mf[56]; lg::fit(mf, sizeof mf, meta, w - 22); d.drawString(mf, x + 12, yy);
+    d.setTextColor(it->act[0] ? ACC : DIM, cb);
+    lg::fit(mf, sizeof mf, it->act[0] ? it->act : TR("Nessuna azione", "No action"), w - 22); d.drawString(mf, x + 12, y + h - 42);
+    lg::font(4); d.setTextColor(DIM, cb);
+    d.drawString(TR("scorri >: archivia", "swipe >: dismiss"), x + 12, y + h - 18);
+    if (it->act[0]) nucleo_touch_add(x, y, w, h, NK_ENTER, 0);   // the card opens what it announces
+    nucleo_touch_add_pad(x, y, w, h, 72);              // swipe right = dismiss, up / down = the next card
 }
 
 static void lg_clear_card(void)
 {
-    const int Wd = d.width(), Hd = d.height();
-    const int cw = Wd - 72, cx = 36, chh = 130, cy = (Hd - chh) / 2;
-    lg::panel(cx, cy, cw, chh, INK); d.drawRoundRect(cx, cy, cw, chh, 8, C_RED);
-    lg::font(1); d.setTextColor(C_RED, INK); d.drawString(TR("Cancellare tutto?", "Clear all?"), cx + 16, cy + 14);
-    lg::font(0); d.setTextColor(FG, INK); d.drawString(TR("Elimina la cronologia notifiche.", "Delete the notification history."), cx + 16, cy + 44);
+    const int cw = 248, cx = 36, chh = 130, cy = 55;
+    const unsigned short cb = lg::card();
+    lg::panel(cx, cy, cw, chh); d.drawRoundRect(cx, cy, cw, chh, 8, C_RED);
+    lg::font(1); d.setTextColor(C_RED, cb); d.drawString(s_drop ? TR("Archiviare?", "Dismiss?") : TR("Cancella tutto?", "Clear all?"), cx + 16, cy + 14);
+    lg::font(0); d.setTextColor(FG, cb);
+    char t[64]; lg::fit(t, sizeof t, s_drop ? row_label(s_sel, nullptr) : TR("Elimina la cronologia notifiche", "Delete notification history"), cw - 32);
+    d.drawString(t, cx + 16, cy + 44);
     const int bw = (cw - 48) / 2;
     lg::button(cx + 16, cy + chh - 48, bw, 36, "No", s_clr_yes ? LINE : ACC, s_clr_yes ? FG : INK, NK_CHAR, 'n');
-    lg::button(cx + 32 + bw, cy + chh - 48, bw, 36, TR("Elimina", "Delete"), s_clr_yes ? C_RED : LINE, s_clr_yes ? INK : FG, NK_CHAR, 'y');
+    lg::button(cx + 32 + bw, cy + chh - 48, bw, 36, s_drop ? TR("Archivia", "Dismiss") : TR("Elimina", "Delete"), s_clr_yes ? C_RED : LINE, s_clr_yes ? INK : FG, NK_CHAR, 'y');
 }
 
 static void draw_large(void)
 {
-    const int Wd = d.width(), Hd = d.height();
     nucleo_touch_clear();
     char r[16]; snprintf(r, sizeof r, "%d", s_cnt[TAB_ALL]);
-    int y = lg::header(TR("Notifiche", "Notifications"), r, ACC, NK_BACK, NK_TAB);
+    int y = lg::header(TR("Notifiche", "Notifications"), r, ACC);
+    if (s_confirm_clr) { d.fillRect(0, y, 320, 240 - y, BG); lg_clear_card(); nucleo_touch_commit(); return; }   // the card owns the panel
     static char tn[TAB_COUNT][16]; const char *names[TAB_COUNT];
     for (int i = 0; i < TAB_COUNT; i++) { snprintf(tn[i], sizeof tn[i], "%s %d", TR(TAB_NAME[i], TAB_NAME_EN[i]), s_cnt[i]); names[i] = tn[i]; }
     y = lg::tabs(y, names, TAB_COUNT, s_tab, ACC, NTABKEYS);
-    if (s_oom) { lg::message(0, y, Wd, Hd - y, TR("Memoria insufficiente", "Out of memory"), nullptr, C_RED); nucleo_touch_commit(); return; }
-    if (s_vn == 0) {
-        lg::message(0, y, Wd, Hd - y, TR("Nessuna notifica", "No notifications"), TR("Niente in questa scheda.", "Nothing in this tab."), DIM);
+    if (s_oom || s_vn == 0) {
+        lg::message(0, y, 320, 240 - y, s_oom ? TR("Memoria insufficiente", "Out of memory") : TR("Nessuna notifica", "No notifications"),
+                    s_oom ? nullptr : TR("Niente in questa scheda.", "Nothing in this tab."), s_oom ? C_RED : DIM);
         nucleo_touch_commit(); return;
     }
-    lg::text_list(0, y + 2, N_LISTW, Hd - y - 4, s_vn, s_sel, &s_lg_scroll, row_label, row_right, row_color, nullptr, ACC);
-    d.fillRect(N_LISTW, y, Wd - N_LISTW, Hd - y, BG);
-    lg_detail(N_LISTW + 4, y + 6, Wd - N_LISTW - 10, Hd - y - 12);
-    if (s_confirm_clr) lg_clear_card();
+    lg::text_list(0, y + 2, N_LISTW, 240 - y - 4, s_vn, s_sel, &s_lg_scroll, row_label, row_right, row_color, nullptr, ACC);
+    d.fillRect(N_LISTW, y, 320 - N_LISTW, 240 - y, BG);
+    lg_detail(N_LISTW + 4, y + 4, 320 - N_LISTW - 10, 240 - y - 8);
     nucleo_touch_commit();
 }
 
@@ -282,7 +295,7 @@ static void draw_companion(void)
     char pos[24]; snprintf(pos, sizeof pos, "%d / %d", s_sel + 1, s_vn);
     d.setTextColor(DIM, BG); d.drawString(pos, 8, y + 20 + nl * 20 + 14);
     lg::comp_keys(s_confirm_clr ? TR("y conferma  n annulla", "y confirm  n cancel")
-                                : TR("su/giu  INVIO apri  TAB scheda  c pulisci", "up/dn  ENTER open  TAB tab  c clear"));
+                                : TR("INVIO apri  > archivia  TAB  c pulisci", "ENTER open  > dismiss  TAB  c clear"));
 }
 
 // ---- input / lifecycle -----------------------------------------------------
@@ -294,9 +307,9 @@ static void cycle_tab(void)                           // TAB handler
 
 static void on_key(int key, char ch)
 {
-    if (s_confirm_clr) {                              // clear-history card is up: it owns every key
+    if (s_confirm_clr) {                              // the confirm card is up: it owns every key
         int r = app_ui_confirm_key(key, ch, &s_clr_yes);
-        if (r == 1) { remove(JRNL_PATH); remove(JRNL_BAK); load_journal(); build_view(); }
+        if (r == 1) { if (s_drop) drop_item(&s_items[s_view[s_sel]]); else { remove(JRNL_PATH); remove(JRNL_BAK); } load_journal(); build_view(); }
         if (r >= 0) s_confirm_clr = false;
         nucleo_app_request_draw();
         return;
@@ -314,8 +327,8 @@ static void on_key(int key, char ch)
         if (s_vn > 0) run_action(s_items[s_view[s_sel]].act);
         return;
     }
-    if (ch == 'c' && s_vn > 0) {                      // clear history (device + the shared store)
-        s_confirm_clr = true; s_clr_yes = false;
+    if ((ch == 'c' || key == NK_RIGHT) && s_vn > 0) {  // c = clear history, RIGHT / a swipe on the card = dismiss one
+        s_confirm_clr = true; s_clr_yes = false; s_drop = key == NK_RIGHT;
         nucleo_app_request_draw();
         return;
     }

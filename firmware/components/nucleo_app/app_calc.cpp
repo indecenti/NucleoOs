@@ -37,10 +37,12 @@ static void evaluate(void)
     nucleo_app_request_draw();
 }
 
+static bool lg_tap_key(int key, char ch);   // the panel's keypad (two screens)
 static void on_key(int key, char ch)
 {
+    if (lg_tap_key(key, ch)) return;
     if (key == NK_ENTER || ch == '=') { evaluate(); return; }
-    // NK_LEFT (the ',' key, or a tap on the left of the panel's display) steps back one character like DEL
+    // NK_LEFT (the ',' key) steps back one character like DEL
     if (key == NK_DEL || key == NK_LEFT) { int l = strlen(s_expr); if (l) s_expr[l - 1] = 0; s_error = false; s_prev[0] = 0; }
     else if (ch == 'c' || ch == 'C') { s_expr[0] = 0; s_error = false; s_prev[0] = 0; }
     else if (is_calc_char(ch)) {
@@ -82,15 +84,15 @@ static void draw(void)
 
 
 // ===== two screens ==============================================================================================
-// The panel is the calculator: the display on top (the expression that gave the result above it), a touch keypad
-// below — digits on a 3x4 grid at the left, the operators and '=' in a column at the right. The touch table holds
-// 16 targets, exactly the 16 keys; the display itself is left to the panel's own zones, which fit it: its left
-// part is NK_LEFT (= erase one character here, drawn as the erase glyph), its centre is Enter (= result), and the
-// header band is Back. Every key target tiles its cell edge to edge, so no tap can fall into a gap — the right
-// zone's fallback would type '/'. The Cardputer shows what is being typed and the keys that have no touch key.
-static const int LG_DISP_Y = lg::HEAD + 4, LG_DISP_H = 60, LG_PAD_Y = LG_DISP_Y + LG_DISP_H + 4, LG_OPS_X = 224;
+// The panel is the calculator: a tall display on top (the expression that gave the result above the big value, the
+// back chevron at its left) and a 4x5 keypad filling the rest — C ( ) / , the digits with * - + beside them, and
+// 0 . erase = at the bottom — so every key of the Cardputer has its key here. The whole surface is one field the
+// app hit-tests (no 16-target limit, no gap that could fall into the panel's zones); the chevron alone is a
+// target of its own. Composed with lg::frame: a key press never flickers. The Cardputer shows what is typed.
+static const int LG_DISP_H = 76, LG_ROWS = 5, LG_COLS = 4;
+static const char LG_KEYS[LG_ROWS * LG_COLS + 1] = "C()/789*456-123+0.<=";   // '<' = erase one character
 
-static void lg_glyph(char k, int cx, int cy, unsigned short c)   // the operator signs, drawn (the GFX fonts are ASCII)
+static void lg_glyph(char k, int cx, int cy, unsigned short c)   // the signs, drawn (the GFX fonts are ASCII)
 {
     switch (k) {
     case '+': d.fillRect(cx - 9, cy - 1, 19, 3, c); d.fillRect(cx - 1, cy - 9, 3, 19, c); break;
@@ -98,85 +100,74 @@ static void lg_glyph(char k, int cx, int cy, unsigned short c)   // the operator
     case '*': for (int o = -1; o <= 1; o++) { d.drawLine(cx - 7 + o, cy - 7, cx + 7 + o, cy + 7, c); d.drawLine(cx - 7 + o, cy + 7, cx + 7 + o, cy - 7, c); } break;
     case '/': d.fillRect(cx - 9, cy - 1, 19, 3, c); d.fillCircle(cx, cy - 7, 2, c); d.fillCircle(cx, cy + 7, 2, c); break;
     case '=': d.fillRect(cx - 9, cy - 5, 19, 3, c); d.fillRect(cx - 9, cy + 3, 19, 3, c); break;
+    case '.': d.fillCircle(cx, cy + 6, 3, c); break;
+    case '<':                                                    // the erase key: a tag with an x
+        for (int o = 0; o < 2; o++) { d.drawLine(cx - 13, cy + o, cx - 6, cy - 7 + o, c); d.drawLine(cx - 13, cy - o, cx - 6, cy + 7 - o, c); }
+        d.drawRect(cx - 6, cy - 7, 19, 15, c);
+        d.drawLine(cx - 1, cy - 3, cx + 7, cy + 3, c); d.drawLine(cx - 1, cy + 3, cx + 7, cy - 3, c); break;
+    default: {                                                   // digits, C and the parentheses: the big face
+        char t[2] = { k, 0 };
+        lg::font(2); d.setTextDatum(middle_center); d.setTextColor(c); d.drawString(t, cx, cy + 1); d.setTextDatum(top_left);
+    }
     }
 }
 
-// One key: the cell [x, x+w) x [y, y+h) is its touch target, the button is drawn inset by 3 px.
-static void lg_key(int x, int y, int w, int h, char k, unsigned short fill, unsigned short ink, int ty = -1)
+static void lg_paint(void *)
 {
-    d.fillRect(x, y, w, h, THEME_BG);
-    d.fillRoundRect(x + 3, y + 3, w - 6, h - 6, 10, fill);
-    if (k >= '0' && k <= '9') {
-        char t[2] = { k, 0 };
-        lg::font(2); d.setTextDatum(middle_center); d.setTextColor(ink, fill);
-        d.drawString(t, x + w / 2, y + h / 2 + 1); d.setTextDatum(top_left);
-    } else if (k == '.') d.fillCircle(x + w / 2, y + h / 2 + 6, 3, ink);
-    else lg_glyph(k, x + w / 2, y + h / 2, ink);
-    const int yt = ty < 0 ? y : ty;                          // a target may reach above its cell (the header's foot)
-    nucleo_touch_add(x, yt, w, y + h - yt, k == '=' ? NK_ENTER : NK_CHAR, k == '=' ? 0 : k);
-}
-
-static void lg_display(void)
-{
-    const int x = 8, w = LG_OPS_X - 12, y = LG_DISP_Y, h = LG_DISP_H;
-    d.fillRect(0, y - 4, LG_OPS_X, h + 8, THEME_BG);
+    const int W = 320, H = 240;
+    d.fillRect(0, 0, W, H, THEME_BG);
+    // the display, with the back chevron at its left
+    const int x = 6, y = 4, w = W - 12, h = LG_DISP_H - 8;
     d.fillRoundRect(x, y, w, h, 10, THEME_INK);
     d.drawRoundRect(x, y, w, h, 10, s_error ? ERR : THEME_LINE);
-    // the erase glyph at the left: the panel's left zone delivers NK_LEFT there, which erases one character
-    const int ex = x + 10, ey = y + h - 22;
-    d.drawLine(ex, ey + 7, ex + 7, ey, THEME_MUTED); d.drawLine(ex, ey + 7, ex + 7, ey + 14, THEME_MUTED);
-    d.drawRect(ex + 7, ey, 18, 15, THEME_MUTED);
-    d.drawLine(ex + 12, ey + 4, ex + 19, ey + 10, THEME_MUTED); d.drawLine(ex + 12, ey + 10, ex + 19, ey + 4, THEME_MUTED);
-    char upper[72];                                          // the expression that gave the result, or a prompt
+    for (int o = 0; o < 2; o++) { d.drawLine(x + 18 + o, y + 12, x + 11 + o, y + 19, ACC); d.drawLine(x + 11 + o, y + 19, x + 18 + o, y + 26, ACC); }
+    nucleo_touch_add(0, 0, 48, 40, NK_BACK, 0);
+    char upper[72];                                              // the expression that gave the result, or a prompt
     if (s_error) snprintf(upper, sizeof upper, "%s", TR("espressione non valida", "invalid expression"));
     else if (s_prev[0]) snprintf(upper, sizeof upper, "%s =", s_prev);
     else if (!s_expr[0]) snprintf(upper, sizeof upper, "%s", TR("tocca i tasti o scrivi", "tap the keys or type"));
     else upper[0] = 0;
     lg::font(0); d.setTextDatum(top_right); d.setTextColor(s_error ? ERR : THEME_MUTED, THEME_INK);
-    char u[72]; lg::fit(u, sizeof u, upper, w - 20); d.drawString(u, x + w - 10, y + 6);
+    char u[72]; lg::fit(u, sizeof u, upper, w - 50); d.drawString(u, x + w - 12, y + 6);
     const char *shown = s_error ? TR("Errore", "Error") : (s_expr[0] ? s_expr : "0");
-    char big[72];                                            // the biggest face it fits in, else the tail of it
-    const int bw = w - 52;
+    const int bw = w - 44;                                       // the biggest face it fits in, else the tail of it
     int f = 3; lg::font(f);
     while (f > 0 && d.textWidth(shown) > bw) lg::font(f = f == 3 ? 2 : 0);
-    if (d.textWidth(shown) > bw) {                           // still too long: keep the end (the part being typed)
-        const char *t = shown; while (*t && d.textWidth(t) > bw - 12) t++;
-        snprintf(big, sizeof big, "..%s", t);
-    } else snprintf(big, sizeof big, "%s", shown);
+    char big[72];
+    if (d.textWidth(shown) > bw) { const char *t = shown; while (*t && d.textWidth(t) > bw - 12) t++; snprintf(big, sizeof big, "..%s", t); }
+    else snprintf(big, sizeof big, "%s", shown);
     d.setTextDatum(bottom_right); d.setTextColor(s_error ? ERR : THEME_FG, THEME_INK);
-    d.drawString(big, x + w - 10, y + h - (f == 0 ? 10 : 6));
+    d.drawString(big, x + w - 12, y + h - (f == 0 ? 10 : 6));
     d.setTextDatum(top_left);
-}
-
-static void draw_large(void)
-{
-    const int W = d.width(), H = d.height();
-    nucleo_touch_clear();
-    lg::header(TR("Calcolatrice", "Calculator"), TR("tocca qui: esci", "tap here: exit"), ACC, 0);
-    lg_display();
-    // the digits: a 3x4 grid filling [0, LG_OPS_X) x [LG_PAD_Y, H)
-    static const char grid[12] = { '7', '8', '9', '4', '5', '6', '1', '2', '3', '.', '0', '0' };
-    const int cw = LG_OPS_X / 3, rh = (H - LG_PAD_Y) / 4;
-    const unsigned short kf = lg::card();
-    for (int r = 0; r < 4; r++)
-        for (int c = 0; c < 3; c++) {
-            const char k = grid[r * 3 + c];
-            if (r == 3 && c == 2) continue;                  // '0' is two cells wide
-            const int y = LG_PAD_Y + r * rh, hh = r == 3 ? H - y : rh;
-            lg_key(c * cw, y, (r == 3 && c == 1) ? LG_OPS_X - cw : cw, hh, k, kf, THEME_FG);
-        }
-    // the operators and '=': one column at the right, from the header's foot to the bottom
-    static const char ops[5] = { '/', '*', '-', '+', '=' };
-    const int oh = (H - lg::HEAD) / 5;
-    for (int i = 0; i < 5; i++) {
-        const int y = lg::HEAD + i * oh, hh = i == 4 ? H - y : oh;
-        const bool eq = ops[i] == '=';
-        lg_key(LG_OPS_X, y, W - LG_OPS_X, hh, ops[i], eq ? ACC : THEME_LINE, eq ? THEME_INK : ACC, i == 0 ? 24 : -1);
+    // the keypad
+    const int cw = W / LG_COLS, rh = (H - LG_DISP_H) / LG_ROWS;
+    for (int i = 0; i < LG_ROWS * LG_COLS; i++) {
+        const char k = LG_KEYS[i];
+        const int kx = (i % LG_COLS) * cw, ky = LG_DISP_H + (i / LG_COLS) * rh;
+        const bool op = strchr("()/*-+", k) != nullptr, eq = k == '=';
+        d.fillRoundRect(kx + 3, ky + 3, cw - 6, rh - 6, 10, eq ? ACC : THEME_LINE);
+        lg_glyph(k, kx + cw / 2, ky + rh / 2, eq ? THEME_INK : k == 'C' ? ERR : op ? ACC : THEME_FG);
     }
-    nucleo_touch_commit();
+    lg::field(0, 0, W, H);                                       // everything but the chevron: hit-tested in on_key
 }
 
-// The Cardputer while the panel shows the keypad: what is being typed, large, and the keys only it has.
+static void draw_large(void) { lg::frame(lg_paint, nullptr); }
+
+// A tap on the panel: the key under it, through the keyboard's own path.
+static bool lg_tap_key(int key, char ch)
+{
+    int x, y;
+    if (!lg::tap(key, ch, &x, &y)) return false;
+    if (y < LG_DISP_H) return true;                              // the display: nothing to press
+    const int c = x * LG_COLS / 320, r = (y - LG_DISP_H) * LG_ROWS / (240 - LG_DISP_H);
+    const char k = LG_KEYS[(r < LG_ROWS ? r : LG_ROWS - 1) * LG_COLS + (c < LG_COLS ? c : LG_COLS - 1)];
+    if (k == '=') on_key(NK_ENTER, 0);
+    else if (k == '<') on_key(NK_DEL, 0);
+    else on_key(NK_CHAR, k == 'C' ? 'c' : k);
+    return true;
+}
+
+// The Cardputer while the panel shows the keypad: what is being typed, large, and its keys.
 static void draw_companion(void)
 {
     const int top = nucleo_app_content_top(), h = nucleo_app_content_height();
@@ -189,8 +180,6 @@ static void draw_companion(void)
     const char *tail = len * 6 * sz > 224 ? shown + len - 224 / (6 * sz) : shown;
     d.setTextSize(sz); d.setTextColor(s_error ? ERR : THEME_FG, THEME_BG);
     d.setCursor(8, y + 16); d.print(tail); d.setTextSize(1);
-    d.setTextColor(THEME_MUTED, THEME_BG);
-    d.drawString(TR("( ) e c (azzera) solo da qui", "( ) and c (clear) only here"), 8, y + 54);
     lg::comp_keys(TR("INVIO =  CANC o , cancella  c azzera", "ENTER =  DEL or , erase  c clear"));
 }
 

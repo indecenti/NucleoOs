@@ -557,7 +557,8 @@ static void vtrace(const char *tag, bool reset)
 // clip on the Cardputer alone is scaled 3/4 (every fourth row and column dropped). The external panel's controller is a 30 px bar
 // at its foot (in the letterbox band when there is one, else over the picture while it shows); the Cardputer
 // becomes the remote: title, a big clock, the usual controller bar. Touch: the picture's left / centre /
-// right third = -10 s / pause / +10 s, a vertical drag = volume, the bottom strip = jump to that point.
+// right third = -10 s / pause / +10 s (drawn on the still frame while paused), a vertical drag = volume, the bottom
+// strip is the scrub track: a tap jumps to that point of the film.
 struct VGeom { bool big, switched; float sc; int oy, oh; };
 static const int VBAR = 30;                                  // the external panel's controller bar
 static VGeom vgeom_begin(int vis_w, int vis_h)
@@ -579,7 +580,7 @@ static void vgeom_end(const VGeom &g)
     nucleo_touch_clear(); nucleo_touch_commit();
     if (g.switched) nucleo_surface_set_large(false);
 }
-#define VSEEK_N 12                                           // jump points along the bottom strip
+static int s_vseek_w = 240;                                  // the scrub strip's width (the tap's x over it = the point)
 static void vtouch(const VGeom &g)
 {
     nucleo_touch_clear();
@@ -589,8 +590,7 @@ static void vtouch(const VGeom &g)
     nucleo_touch_add(0, py, pw / 3, pb - py, NK_LEFT, ',');
     nucleo_touch_add(pw / 3, py, pw - 2 * (pw / 3), pb - py, NK_ENTER, 0);
     nucleo_touch_add(pw - pw / 3, py, pw / 3, pb - py, NK_RIGHT, '/');
-    for (int k = 0; k < VSEEK_N; k++)
-        nucleo_touch_add(k * pw / VSEEK_N, by, pw / VSEEK_N + 1, ph - by, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + k));
+    nucleo_touch_add(0, by, pw, ph - by, NK_CHAR, NUCLEO_TOUCH_FIELD); s_vseek_w = pw;
     if (g.big && g.oy >= 16) nucleo_touch_add(0, 0, pw / 4, g.oy, NK_BACK, 0);   // the top band's left: stop
     nucleo_touch_add_scroll(0, py, pw, pb - py, 24, NK_DOWN, 0, NK_UP, 0);         // drag up = louder
     nucleo_touch_commit();
@@ -985,20 +985,36 @@ static int play_nfv4(const char *vpath, const char *title, const char *reskey, i
             if (k.key == NK_BACK || k.key == NK_DEL || k.ch == 'q' || k.ch == '`') { result = PR_STOP; stop = true; }
             else if (k.ch == ']') { result = PR_NEXT; stop = true; }
             else if (k.ch == '[') { result = PR_PREV; stop = true; }
-            else if (nucleo_touch_is_row(k.key, k.ch)) {
-                if (dur_ms) { seek_ms((int64_t)dur_ms * (k.ch - NUCLEO_TOUCH_ROW) / (VSEEK_N - 1)); if (paused) paused_ms = pos_ms(); }
+            else if (nucleo_touch_is_field(k.key, k.ch)) {           // the scrub strip: jump to the tapped point
+                int tx, ty;
+                if (dur_ms && nucleo_touch_last(&tx, &ty)) { seek_ms((int64_t)dur_ms * tx / (s_vseek_w - 1)); if (paused) paused_ms = pos_ms(); }
                 overlay_until = now + 3000000; ui_sig = 0xffffffff;
             }
             else if (k.key == NK_ENTER || k.ch == ' ' || k.ch == 'p') {
                 paused = !paused;
                 if (paused) {
                     paused_ms = p;
-                    // A pause badge on the picture (the next frame paints over it when playback resumes).
+                    // A pause badge on the picture (the next frame paints over it when playback resumes). On the
+                    // panel the still frame carries the transport instead, on the thirds that are its touch
+                    // targets: -10 s, play, +10 s.
                     const int bx = (ox > 0 ? ox : 0) + 10, by = (oy > 0 ? oy : 0) + 10;
                     d.startWrite();
-                    d.fillRoundRect(bx, by, 34, 30, 8, CO_BG);
-                    d.drawRoundRect(bx, by, 34, 30, 8, CO_LINE);
-                    d.fillRect(bx + 11, by + 8, 4, 14, CO_TXT); d.fillRect(bx + 19, by + 8, 4, 14, CO_TXT);
+                    if (G.big) {
+                        const int cy = ((oy > 0 ? oy : 0) + ph - VBAR) / 2;
+                        for (int c = 0; c < 3; c++) {
+                            const int cx = pw * (2 * c + 1) / 6;
+                            d.fillCircle(cx, cy, c == 1 ? 30 : 22, c == 1 ? ACC : CO_BG); d.drawCircle(cx, cy, c == 1 ? 30 : 22, CO_LINE);
+                            if (c == 1) d.fillTriangle(cx - 9, cy - 14, cx - 9, cy + 14, cx + 15, cy, CO_INK);
+                            else for (int s = -6; s <= 6; s += 12) {                    // a double arrow: back / forward
+                                const int ax = cx + s, dir = c ? 1 : -1;
+                                d.fillTriangle(ax - 6 * dir, cy - 8, ax - 6 * dir, cy + 8, ax + 6 * dir, cy, CO_TXT);
+                            }
+                        }
+                    } else {
+                        d.fillRoundRect(bx, by, 34, 30, 8, CO_BG);
+                        d.drawRoundRect(bx, by, 34, 30, 8, CO_LINE);
+                        d.fillRect(bx + 11, by + 8, 4, 14, CO_TXT); d.fillRect(bx + 19, by + 8, 4, 14, CO_TXT);
+                    }
                     d.endWrite();
                 }
                 else seek_ms(paused_ms);                 // resume exactly where it stopped (clocks re-anchored)

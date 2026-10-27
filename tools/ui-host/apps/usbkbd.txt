@@ -3,3 +3,4 @@ type
 macro   c:2 D D
 info    c:3
 set     c:4
+typing  c:~

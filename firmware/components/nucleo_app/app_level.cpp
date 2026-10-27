@@ -16,6 +16,8 @@
 #include <string.h>
 #include <stdint.h>
 #include "app_gfx.h"
+#include "app_large.h"      // two screens: the views native on the panel, the Cardputer the companion
+#include "nucleo_touch.h"
 
 #define RAD2DEG 57.29578f
 
@@ -43,6 +45,9 @@ static float s_hx, s_hy;            // held snapshot (the held tilt is derived f
 // customizable settings (persist within a boot; reset on reboot)
 static struct { int units; bool flipx, flipy; float tol; } s_cfg = { 0, false, false, 0.4f };
 static int s_set_sel;               // selected settings row
+// The screen the views lay out for: the Cardputer (240 wide, k = 1) or the panel (320 wide, k = 2: bigger
+// vial, bigger type). s_nx/s_ny = the top-left of the readouts drawn on the panel (a tap there = hold).
+static int s_vw = W, s_k = 1, s_nx = 999, s_ny = 999, s_lsc;
 
 // ---- helpers ------------------------------------------------------------------------------------
 static unsigned short dim(unsigned short c, int pct)
@@ -64,7 +69,8 @@ static void fmt_val(float deg, char *buf, int n)
 static void big_num(int x, int y, float deg, unsigned short col, int maxw)
 {
     char b[16]; fmt_val(deg, b, sizeof(b));
-    int sz = 4; while (sz > 1 && (int)strlen(b) * 6 * sz + 8 * sz > maxw) sz--;
+    int sz = 2 + 2 * s_k; while (sz > 1 && (int)strlen(b) * 6 * sz + 8 * sz > maxw) sz--;
+    if (s_k > 1) { if (x < s_nx) s_nx = x; if (y < s_ny) s_ny = y; }
     d.setTextSize(sz); d.setTextColor(col, BG);
     d.setCursor(x, y); d.print(b);
     int tw = (int)strlen(b) * 6 * sz;
@@ -141,8 +147,9 @@ static void view_bullseye(int top, int h, int y0)
     // vial on the LEFT, big number on the RIGHT (use the landscape width)
     int vcx = 66, vcy = (y0 + bottom) / 2;
     int R = (bottom - y0) / 2 - 2;
-    if (R > 56) R = 56;
+    if (R > 56 + 30 * (s_k - 1)) R = 56 + 30 * (s_k - 1);
     if (R < 22) R = 22;
+    if (s_k > 1) vcx = 96;
 
     // graduated rings + crosshair
     d.drawCircle(vcx, vcy, R, MUTED);
@@ -158,19 +165,19 @@ static void view_bullseye(int top, int h, int y0)
     float dd = sqrtf(ox * ox + oy * oy), lim = (float)(R - 10);
     if (dd > lim && dd > 0.001f) { ox = ox * lim / dd; oy = oy * lim / dd; }
     int bx = vcx + (int)ox, by = vcy + (int)oy;
-    d.fillCircle(bx, by, 10, level ? C_GREEN : C_YELLOW);
-    d.drawCircle(bx, by, 10, INK);
+    d.fillCircle(bx, by, 10 * s_k, level ? C_GREEN : C_YELLOW);
+    d.drawCircle(bx, by, 10 * s_k, INK);
     d.fillCircle(bx - 3, by - 3, 2, GLINT);
 
     // big number beside it on the right
-    int nx = 138;
-    big_num(nx, vcy - 20, deg, level ? C_GREEN : FG, W - nx - 4);
-    d.setTextSize(1); d.setTextColor(MUTED, BG);
+    int nx = s_k > 1 ? 196 : 138;
+    big_num(nx, vcy - 20 * s_k, deg, level ? C_GREEN : FG, s_vw - nx - 4);
+    d.setTextSize(s_k); d.setTextColor(MUTED, BG);
     char bx2[24]; snprintf(bx2, sizeof(bx2), "X %+5.1f", (double)(asinf(fminf(fmaxf(ax, -1), 1)) * RAD2DEG));
-    d.setCursor(nx, vcy + 16); d.print(bx2);
+    d.setCursor(nx, vcy + 16 * s_k); d.print(bx2);
     snprintf(bx2, sizeof(bx2), "Y %+5.1f", (double)(asinf(fminf(fmaxf(ay, -1), 1)) * RAD2DEG));
-    d.setCursor(nx, vcy + 28); d.print(bx2);
-    if (level) { d.setTextColor(C_GREEN, BG); d.setCursor(nx, vcy + 42); d.print(TR5("IN BOLLA", "LEVEL", "NIVELADO", "A NIVEAU", "EBEN")); }
+    d.setCursor(nx, vcy + 28 * s_k); d.print(bx2);
+    if (level) { d.setTextColor(C_GREEN, BG); d.setCursor(nx, vcy + 42 * s_k); d.print(TR5("IN BOLLA", "LEVEL", "NIVELADO", "A NIVEAU", "EBEN")); }
 }
 
 // a horizontal/vertical capillary vial with a bubble driven by `t` in [-1..1] (0 = centred)
@@ -208,9 +215,9 @@ static void view_tube_h(int top, int h, int y0)
     float angle = asinf(fminf(fmaxf(ax, -1), 1)) * RAD2DEG;     // long-edge inclination
     bool level = fabsf(angle) < s_cfg.tol;
     int bottom = top + h, mid = (y0 + bottom) / 2;
-    int thick = 34, len = W - 16;
+    int thick = 20 + 14 * s_k, len = s_vw - 16;
     capillary(8, mid - 6 - thick / 2, len, thick, true, -ax * 3.0f, level);   // bubble to the HIGH side
-    big_num(8, mid + 18, fabsf(angle), level ? C_GREEN : FG, W - 16);
+    big_num(8, mid + 18 * s_k, fabsf(angle), level ? C_GREEN : FG, s_vw - 16);
 }
 
 static void view_tube_v(int top, int h, int y0)
@@ -219,9 +226,9 @@ static void view_tube_v(int top, int h, int y0)
     float angle = asinf(fminf(fmaxf(ay, -1), 1)) * RAD2DEG;     // short-edge inclination (plumb)
     bool level = fabsf(angle) < s_cfg.tol;
     int bottom = top + h;
-    int thick = 34, len = bottom - y0 - 6;
+    int thick = 20 + 14 * s_k, len = bottom - y0 - 6, nx = 36 + thick;
     capillary(20, y0 + 3, len, thick, false, -ay * 3.0f, level);              // bubble to the HIGH side
-    big_num(70, (y0 + bottom) / 2 - 16, fabsf(angle), level ? C_GREEN : FG, W - 74);
+    big_num(nx, (y0 + bottom) / 2 - 16 * s_k, fabsf(angle), level ? C_GREEN : FG, s_vw - nx - 4);
 }
 
 static void view_digital(int top, int h, int y0)
@@ -232,13 +239,14 @@ static void view_digital(int top, int h, int y0)
     float tot = disp_deg();
     bool level = tot < s_cfg.tol;
     int bottom = top + h, third = (bottom - y0) / 3;
-    d.setTextSize(1); d.setTextColor(MUTED, BG);
+    int nx = s_k > 1 ? 130 : 96;
+    d.setTextSize(s_k); d.setTextColor(MUTED, BG);
     d.setCursor(8, y0 + 4);  d.print(TR5("X (lungo)", "X (long)", "X (largo)", "X (long)", "X (lang)"));
     d.setCursor(8, y0 + third + 2); d.print(TR5("Y (corto)", "Y (short)", "Y (corto)", "Y (court)", "Y (kurz)"));
     d.setCursor(8, y0 + 2 * third); d.print(TR5("TOTALE", "TOTAL", "TOTAL", "TOTAL", "GESAMT"));
-    big_num(96, y0 + 2,            fabsf(aX), fabsf(aX) < s_cfg.tol ? C_GREEN : FG, W - 100);
-    big_num(96, y0 + third,        fabsf(aY), fabsf(aY) < s_cfg.tol ? C_GREEN : FG, W - 100);
-    big_num(96, y0 + 2 * third - 2, tot,      level ? C_GREEN : C_BLUE, W - 100);
+    big_num(nx, y0 + 2,            fabsf(aX), fabsf(aX) < s_cfg.tol ? C_GREEN : FG, s_vw - nx - 4);
+    big_num(nx, y0 + third,        fabsf(aY), fabsf(aY) < s_cfg.tol ? C_GREEN : FG, s_vw - nx - 4);
+    big_num(nx, y0 + 2 * third - 2, tot,      level ? C_GREEN : C_BLUE, s_vw - nx - 4);
 }
 
 // Settings rows rendered with the SHARED focused-list widget (app_ui_list) — same Wear-OS look as
@@ -270,33 +278,31 @@ static const char *set_right(int i, void *)
 }
 static void view_settings(int top, int h, int y0)
 {
-    app_ui_list(y0, top + h - y0, SET_ROWS, s_set_sel, set_label, set_right, nullptr, nullptr);
+    if (s_k > 1) lg::text_list(0, y0 + 4, 320, 240 - y0 - 4, SET_ROWS, s_set_sel, &s_lsc, set_label, set_right, nullptr, nullptr, C_GREEN, 34);
+    else         app_ui_list(y0, top + h - y0, SET_ROWS, s_set_sel, set_label, set_right, nullptr, nullptr);
 }
 
 // ---- main draw ----------------------------------------------------------------------------------
-static void draw(void)
+static const char *l_title(void) { return TR5("Livella", "Level", "Nivel", "Niveau", "Libelle"); }
+static const char *l_hint(void)
 {
-    int top = nucleo_app_content_top(), h = nucleo_app_content_height();
-    d.fillRect(0, top, W, h, BG);
-
+    // <= 39 chars: the hint bar shows no more (a longer one silently lost its last keys)
+    return TR5("tab vista  g azzera  f blocca  esc esci", "tab view   g zero   f hold   esc back", "tab vista  g cero  f fijar  esc salir",
+               "tab vue  g zero  f figer  esc quitter", "tab Ansicht  g Null  f Halt  esc zur.");
+}
+// The title's right text (view, " *" = held) and accent, on both screens.
+static unsigned short l_head(char *rt, int n)
+{
     bool present = nucleo_imu_present();
-    float pd = present ? disp_deg() : 0;
-    bool level = present && pd < s_cfg.tol;
+    bool level = present && disp_deg() < s_cfg.tol;
     // "!D" = the frame is going STRAIGHT to the panel (no 32 KB back-buffer): a clear-then-draw on a
     // no-vsync display flickers no matter how the repaint is gated — OS contiguous-RAM problem, not ours.
-    char rt[24]; snprintf(rt, sizeof(rt), "%s%s%s", view_name(s_view), s_hold ? " *" : "",
-                          nucleo_app_is_buffered() ? "" : " !D");
-    unsigned short acc = !present ? C_YELLOW : s_hold ? C_PURPLE : level ? C_GREEN : C_BLUE;
-    int y0 = app_ui_title(TR5("Livella", "Level", "Nivel", "Niveau", "Libelle"), acc, rt);
-
-    if (!present) {
-        d.setTextSize(2); d.setTextColor(C_YELLOW, BG);
-        d.setCursor(12, y0 + 14); d.print(TR5("Sensore IMU", "IMU sensor", "Sensor IMU", "Capteur IMU", "IMU-Sensor"));
-        d.setCursor(12, y0 + 36); d.print(TR5("non rilevato", "not detected", "no detectado", "non detectable", "nicht erkannt"));
-        d.setTextSize(1); d.setTextColor(DIM, BG);
-        d.setCursor(12, y0 + 60); d.print(nucleo_imu_debug());
-        return;
-    }
+    snprintf(rt, n, "%s%s%s", present ? view_name(s_view) : "NO IMU", s_hold ? " *" : "",
+             nucleo_app_is_buffered() || s_k > 1 ? "" : " !D");
+    return !present ? C_YELLOW : s_hold ? C_PURPLE : level ? C_GREEN : C_BLUE;
+}
+static void view(int top, int h, int y0)
+{
     switch (s_view) {
         case V_BULLSEYE: view_bullseye(top, h, y0); break;
         case V_TUBE_H:   view_tube_h(top, h, y0);   break;
@@ -304,6 +310,50 @@ static void draw(void)
         case V_DIGITAL:  view_digital(top, h, y0);  break;
         case V_SETTINGS: view_settings(top, h, y0); break;
     }
+}
+
+// The panel (lg::frame, 320x240): header (chevron = back, menu = next view), the view laid out big. Tap the
+// vial = zero here, tap a reading = hold; settings rows: tap, tap again = change.
+static void lg_paint(void *)
+{
+    s_vw = 320; s_k = 2; s_nx = s_ny = 999;
+    d.fillRect(0, 0, 320, 240, BG);
+    char rt[32]; unsigned short acc = l_head(rt, sizeof rt);
+    int y0 = lg::header(l_title(), rt, acc, NK_BACK, NK_TAB);
+    d.setFont(&fonts::Font0);                          // the views size the classic font themselves
+    if (nucleo_imu_present()) {
+        if (s_view != V_SETTINGS) lg::field(0, y0, 320, 240 - y0);
+        view(0, 240, y0);
+    }
+    s_vw = W; s_k = 1;
+}
+static void draw_large(void)
+{
+    nucleo_touch_clear();
+    lg::frame(lg_paint, nullptr);
+    nucleo_touch_commit();
+}
+
+static void draw(void)
+{
+    int top = nucleo_app_content_top(), h = nucleo_app_content_height();
+    d.fillRect(0, top, W, h, BG);
+
+    char rt[32]; unsigned short acc = l_head(rt, sizeof rt);
+    if (nucleo_app_two_screens()) {                       // the companion: the tilt, the view, the keys
+        int y = lg::comp_head(l_title(), acc);
+        big_num(16, y + 24, disp_deg(), acc, W - 32);
+        lg::comp_keys(l_hint());
+        return;
+    }
+    int y0 = app_ui_title(l_title(), acc, rt);
+
+    if (!nucleo_imu_present()) {
+        lg::message(0, y0, W, top + h - y0, TR5("Sensore IMU non rilevato", "IMU sensor not detected", "Sensor IMU no detectado",
+                    "Capteur IMU non detectable", "IMU-Sensor nicht erkannt"), nucleo_imu_debug(), C_YELLOW);
+        return;
+    }
+    view(top, h, y0);
 }
 
 static void calibrate(void)   // capture the current tilt as the new "level" zero
@@ -332,6 +382,15 @@ static void change_setting(int dir)
 
 static void on_key(int key, char ch)
 {
+    int tx, ty;
+    if (lg::tap(key, ch, &tx, &ty)) ch = tx >= s_nx && ty >= s_ny ? 'f' : 'g';   // the panel: a reading = hold, the vial = zero
+    if (s_view == V_SETTINGS) {
+        switch (lg::row_tap(key, ch, s_lsc, SET_ROWS, &s_set_sel)) {    // a settings row on the panel
+            case 1: nucleo_app_request_draw(); return;
+            case 2: if (s_set_sel == 3 && s_cfg.tol > 1.95f) s_cfg.tol = 0.f;   // tap again = up, wrapping
+                    change_setting(+1); return;
+        }
+    }
     if (ch == 'g' || ch == 'G') { calibrate(); return; }            // G = zero (central, press-safe)
     if (ch == 'f' || ch == 'F') {                                   // F = hold/freeze toggle
         s_hold = !s_hold;
@@ -369,12 +428,7 @@ static void enter(void)
     s_hold = false;
     s_qx = s_qy = s_qd = INT32_MIN; s_frame_us = 0;   // force the first live frame after a (re)open
     nucleo_imu_level(&s_lx, &s_ly, &s_deg);
-    // <= 39 chars: the hint bar shows no more (a longer one silently lost its last keys)
-    nucleo_app_set_hint(TR5("tab vista  g azzera  f blocca  esc esci",
-                           "tab view   g zero   f hold   esc back",
-                           "tab vista  g cero  f fijar  esc salir",
-                           "tab vue  g zero  f figer  esc quitter",
-                           "tab Ansicht  g Null  f Halt  esc zur."));
+    nucleo_app_set_hint(l_hint());
     nucleo_app_set_tab_handler(tab);
     nucleo_app_set_back_handler(back);
     nucleo_app_set_poll_handler(poll);
@@ -386,7 +440,8 @@ extern "C" void nucleo_register_level(void)
     static const nucleo_app_def_t app = {
         "level", "Livella", "Measure", "Livella pro multi-vista (BMI270)",
         'L', C_GREEN, enter, on_key, nullptr, draw, nullptr,
-        NX_NET_APP | NX_SOLO | NX_WIFI   // Solo boot: guaranteed buffered path — see app_goniometer.cpp
+        NX_NET_APP | NX_SOLO | NX_WIFI,  // Solo boot: guaranteed buffered path — see app_goniometer.cpp
+        nullptr, draw_large
     };
     nucleo_app_register(&app);
 }

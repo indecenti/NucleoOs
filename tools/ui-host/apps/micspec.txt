@@ -1,0 +1,10 @@
+# Mic Spectrum: the analyzer full-width on the panel (header + palette swatch, HUD, lens, gain slider, lens tabs).
+# The host has no microphone (the engine never starts), so every scene shows the "mic not started" splash: they
+# check the frame layout, the touch targets, the lens tabs, the palette, the gain slider and the freeze badge.
+home
+wave      c:3
+tuner     c:4
+palette   TAB
+gainup    U U U U U
+gaintap   tap:305,100
+freeze    tap:150,140

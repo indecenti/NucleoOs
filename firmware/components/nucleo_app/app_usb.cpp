@@ -168,57 +168,56 @@ static void draw_large_single(const char *title, const char *intro, const char *
     nucleo_touch_commit();
 }
 
+// The Cardputer's companion: the same intro as the panel's card (Font2, so the whole sentence fits), the address
+// for the web mode, and the key that arms it.
 static void draw_companion_single(const char *app, const char *intro, const char *detail, const char *keys,
                                   unsigned short acc)
 {
     const int top = nucleo_app_content_top(), h = nucleo_app_content_height();
     d.fillRect(0, top, 240, h, BG);
     const int y = lg::comp_head(app, acc);
-    d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(FG, BG);
-    const int nl = lg::wrap(intro, 8, y + 6, 224, 20, 3);
-    if (detail) { d.setFont(&fonts::Font0); d.setTextColor(acc, BG); d.drawString(detail, 8, y + 10 + nl * 20); }
+    lg::font(0); d.setTextColor(FG, BG);
+    const int nl = lg::wrap(intro, 8, y + 4, 224, 16, 4);
+    if (detail) { d.setTextColor(acc, BG); d.drawString(detail, 8, y + 8 + nl * 16); }
     lg::comp_keys(keys);
+}
+
+static const char *drive_intro(void)
+{
+    return L5("La microSD appare sul PC come un disco USB. Il sistema non tocca la FAT finche' il PC la usa.",
+              "The microSD appears on the PC as a USB disk. The system won't touch the FAT while the PC owns it.",
+              "La microSD aparece en el PC como disco USB. El sistema no toca la FAT mientras el PC la usa.",
+              "La microSD apparait sur le PC comme un disque USB. Le systeme ne touche pas la FAT.",
+              "Die microSD erscheint am PC als USB-Disk. Das System ruehrt die FAT nicht an.");
+}
+static const char *web_intro(void)
+{
+    return L5("La web OS servita al browser del PC via cavo, senza WiFi ne driver.",
+              "The web OS served to the PC browser over the cable, no Wi-Fi and no driver.",
+              "La web OS servida al navegador del PC por cable, sin WiFi ni driver.",
+              "La web OS servie au navigateur du PC par cable, sans WiFi ni pilote.",
+              "Die Web-OS per Kabel an den PC-Browser, ohne WLAN und Treiber.");
 }
 
 static void drive_draw_large(void)
 {
-    draw_large_single("USB Drive",
-        L5("La microSD appare sul PC come un disco USB. Il sistema non tocca la FAT finche' il PC la usa.",
-           "The microSD appears on the PC as a USB disk. The system won't touch the FAT while the PC owns it.",
-           "La microSD aparece en el PC como disco USB. El sistema no toca la FAT mientras el PC la usa.",
-           "La microSD apparait sur le PC comme un disque USB. Le systeme ne touche pas la FAT.",
-           "Die microSD erscheint am PC als USB-Disk. Das System ruehrt die FAT nicht an."),
-        L5("Collega", "Mount", "Montar", "Monter", "Einbinden"), nullptr, ACC);
+    draw_large_single("USB Drive", drive_intro(), L5("Collega", "Mount", "Montar", "Monter", "Einbinden"), nullptr, ACC);
 }
 
 static void web_draw_large(void)
 {
-    draw_large_single("Web via USB",
-        L5("La web OS servita al browser del PC via cavo, senza WiFi ne driver.",
-           "The web OS served to the PC browser over the cable, no Wi-Fi and no driver.",
-           "La web OS servida al navegador del PC por cable, sin WiFi ni driver.",
-           "La web OS servie au navigateur du PC par cable, sans WiFi ni pilote.",
-           "Die Web-OS per Kabel an den PC-Browser, ohne WLAN und Treiber."),
-        L5("Avvia", "Start", "Iniciar", "Lancer", "Starten"), "http://192.168.7.1", C_PURPLE);
+    draw_large_single("Web via USB", web_intro(), L5("Avvia", "Start", "Iniciar", "Lancer", "Starten"), "http://192.168.7.1", C_PURPLE);
 }
 
 static void drive_companion(void)
 {
-    draw_companion_single("USB DRIVE",
-        L5("La microSD diventa un disco del PC via cavo USB.", "The microSD becomes a PC disk over the USB cable.",
-           "La microSD se vuelve un disco del PC por USB.", "La microSD devient un disque PC par USB.",
-           "Die microSD wird per USB zur PC-Disk."),
-        nullptr,
+    draw_companion_single("USB DRIVE", drive_intro(), nullptr,
         L5("INVIO collega", "ENTER mount", "INTRO montar", "ENTREE monter", "ENTER einbinden"), ACC);
 }
 
 static void web_companion(void)
 {
-    draw_companion_single("WEB VIA USB",
-        L5("La web OS al browser del PC via cavo, senza WiFi.", "The web OS to the PC browser over cable, no Wi-Fi.",
-           "La web OS al navegador del PC por cable, sin WiFi.", "La web OS au navigateur du PC par cable, sans WiFi.",
-           "Die Web-OS per Kabel an den PC-Browser, ohne WLAN."),
-        "http://192.168.7.1",
+    draw_companion_single("WEB VIA USB", web_intro(), "http://192.168.7.1",
         L5("INVIO avvia", "ENTER start", "INTRO iniciar", "ENTREE lancer", "ENTER starten"), C_PURPLE);
 }
 

@@ -68,8 +68,7 @@ static void build_rows(void)
                 : TR5("unisci il Wi-Fi", "join Wi-Fi", "unir Wi-Fi", "rejoins le Wi-Fi", "WLAN beitreten"), C_YELLOW);
 
     // ---- Web links (open in a browser; /apps/<id>/ serves that app's index.html) ----
-    add_head(TR5("WEB - apri nel browser", "WEB - open in browser", "WEB - abrir en navegador",
-                 "WEB - ouvrir navigateur", "WEB - im Browser oeffnen"), C_GREEN);
+    add_head("WEB (browser)", C_GREEN);                // fits the 17-char row label in every language
     add_kv("Desktop", "/", FG);
     add_kv(TR5("Configura", "Setup", "Configurar", "Config", "Einrichten"), "/apps/settings", FG);
     add_kv(TR5("File", "Files", "Archivos", "Fichiers", "Dateien"), "/apps/file-commander", FG);

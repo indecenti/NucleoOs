@@ -1,1 +1,3 @@
+# System Status: three ring gauges + the last minute of RAM (sampled in tick).
 home
+minute    tick:12

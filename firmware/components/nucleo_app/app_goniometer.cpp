@@ -16,6 +16,8 @@
 #include <string.h>
 #include <stdint.h>
 #include "app_gfx.h"
+#include "app_large.h"      // two screens: the protractor native on the panel, the Cardputer the companion
+#include "nucleo_touch.h"
 
 #define RAD2DEG   57.29578f
 #define ROLL_SIGN (+1)
@@ -117,46 +119,34 @@ static void tick(int cx, int cy, int R, float a, int len, unsigned short col)
                cx + (int)(ca * (R - 1)),   cy + (int)(sa * (R - 1)), col);
 }
 
-static void draw(void)
+// The committed display state (see draw): reliable reading, the angle shown, on a round angle.
+static bool  s_ok, s_round;
+static float s_shown;
+static void gstate(void)
 {
-    int top = nucleo_app_content_top(), h = nucleo_app_content_height();
-    d.fillRect(0, top, W, h, BG);
-
-    bool present = nucleo_imu_present();
     // Render STRICTLY from the display state poll() committed (s_qa/s_qx/s_qy/s_qf). The old code
     // recomputed everything from the raw floats at draw time, so even a 0.1-deg commit repainted the
     // needle and re-evaluated every colour boundary (onRound, reliable) against UNquantized noise —
     // the green<->blue title and green<->yellow needle flipping per frame IS the strobe the user saw.
     // A pure function of committed state can only change when the committed state does.
-    bool reliable = (s_qf == 1) && present;
-    float shown = s_frozen ? s_frozen_val
-                           : (s_qa == INT32_MIN ? 0.f : (float)s_qa / 10.0f);   // qa already has zero+invert applied
-    bool onRound = reliable && (fabsf(shown) < 0.4f || fabsf(fabsf(shown) - 90.f) < 0.4f || fabsf(fabsf(shown) - 45.f) < 0.4f || fabsf(fabsf(shown) - 180.f) < 0.4f);
+    s_ok = (s_qf == 1) && nucleo_imu_present();
+    s_shown = s_frozen ? s_frozen_val
+                       : (s_qa == INT32_MIN ? 0.f : (float)s_qa / 10.0f);   // qa already has zero+invert applied
+    float a = fabsf(s_shown);
+    s_round = s_ok && (a < 0.4f || fabsf(a - 90.f) < 0.4f || fabsf(a - 45.f) < 0.4f || fabsf(a - 180.f) < 0.4f);
+}
+static const char *g_title(void) { return TR5("Goniometro", "Protractor", "Transportador", "Rapporteur", "Winkelmesser"); }
+// The title's right text and accent (header on both screens).
+static const char *g_right(unsigned short *acc)
+{
+    bool present = nucleo_imu_present();
+    *acc = !present ? C_YELLOW : s_frozen ? C_GREEN : (s_round ? C_GREEN : C_BLUE);
+    return !present ? "NO IMU" : s_frozen ? TR5("BLOCCATO", "LOCKED", "BLOQUEADO", "VERROU", "GESPERRT") : (s_rel ? "REL" : "LIVE");
+}
 
-    const char    *rgt = !present ? "NO IMU" : s_frozen ? TR5("BLOCCATO", "LOCKED", "BLOQUEADO", "VERROU", "GESPERRT") : (s_rel ? "REL" : "LIVE");
-    unsigned short acc = !present ? C_YELLOW : s_frozen ? C_GREEN : (onRound ? C_GREEN : C_BLUE);
-    // "!D" = frame going STRAIGHT to the panel (no 32 KB back-buffer) — see app_level.cpp.
-    char rb[16];
-    if (!nucleo_app_is_buffered()) { snprintf(rb, sizeof rb, "%s !D", rgt); rgt = rb; }
-    int y0 = app_ui_title(TR5("Goniometro", "Protractor", "Transportador", "Rapporteur", "Winkelmesser"), acc, rgt);
-
-    if (!present) {
-        d.setTextSize(2); d.setTextColor(C_YELLOW, BG);
-        d.setCursor(12, y0 + 18); d.print(TR5("Sensore IMU", "IMU sensor", "Sensor IMU", "Capteur IMU", "IMU-Sensor"));
-        d.setCursor(12, y0 + 40); d.print(TR5("non rilevato", "not detected", "no detectado", "non detecte", "nicht erkannt"));
-        return;
-    }
-    if (s_settings) {                                  // TAB options — shared list (no overlap, consistent)
-        app_ui_list(y0, top + h - y0, GSET_ROWS, s_set_sel, gset_label, gset_right, nullptr, nullptr);
-        return;
-    }
-
-    int bottom = top + h;
-    int cx = 74, cy = (y0 + bottom) / 2;                      // dial LEFT, big number RIGHT (use the landscape)
-    int R = (bottom - y0) / 2 - 3;
-    if (R > 60) R = 60;
-    if (R < 22) R = 22;
-
+// The protractor dial centred on (cx, cy), radius R: ticks, the zero pip, the plumb needle.
+static void dial(int cx, int cy, int R)
+{
     // dial: rim + graduated ticks (major at 0/90/180/270, medium every 30, minor every 10)
     d.drawCircle(cx, cy, R, MUTED);
     d.drawCircle(cx, cy, R * 2 / 3, scl_dim(MUTED));
@@ -172,7 +162,7 @@ static void draw(void)
 
     // plumb needle: points to gravity-down (lx,ly) in screen coords (+y = down). Tapered pointer + a
     // counter-tail + a bob at the tip, so it reads as a real plumb hanging to the low side.
-    unsigned short ncol = reliable ? (onRound ? C_GREEN : C_YELLOW) : C_GREY;
+    unsigned short ncol = s_ok ? (s_round ? C_GREEN : C_YELLOW) : C_GREY;
     float ux = 0.f, uy = 1.f;                                 // committed needle direction (~1 px on the rim)
     if (s_qx != INT32_MIN) {
         float qm = sqrtf((float)s_qx * (float)s_qx + (float)s_qy * (float)s_qy);
@@ -188,31 +178,106 @@ static void draw(void)
                    cx, cy, scl_dim(ncol));                    // counter-tail (dim)
     d.fillCircle(tipx, tipy, 4, ncol);                       // plumb bob
     d.fillCircle(cx, cy, 3, FG);                             // hub
+}
 
-    // BIG angle readout on the right, auto-fit to the landscape width. Unit: degrees or slope %.
-    // Absolute reads 0..180 (an angle finder). Relative keeps the SIGN: which way you turned from the
-    // reference edge is the point of zeroing (and what "Flip sign" acts on).
+// The BIG angle readout at nx, centred on cy, auto-fit to the screen width vw; k = caption text size.
+// Unit: degrees or slope %. Absolute reads 0..180 (an angle finder). Relative keeps the SIGN: which way you
+// turned from the reference edge is the point of zeroing (and what "Flip sign" acts on).
+static void readout(int nx, int cy, int vw, int k)
+{
     char ds[16];
-    float val = fabsf(shown);
+    float val = fabsf(s_shown);
     if (s_cfg.units == 1) {                                             // slope % — tan explodes toward 90 deg
         val = (val > 84.0f) ? 999.9f : tanf(val / RAD2DEG) * 100.0f;    // cap at an honest gauge ceiling
         if (val > 999.9f) val = 999.9f;                                 // (the old code printed "inf")
     }
-    if (s_rel && shown < 0.f) val = -val;
-    if (reliable) snprintf(ds, sizeof(ds), s_rel && val != 0.f ? "%+.1f" : "%.1f", (double)val);
-    else          snprintf(ds, sizeof(ds), "--");
-    int nx = 150, ts = 4, tw = (int)strlen(ds) * 6 * ts;
-    while (ts > 2 && nx + tw + 18 > W) { ts--; tw = (int)strlen(ds) * 6 * ts; }
+    if (s_rel && s_shown < 0.f) val = -val;
+    if (s_ok) snprintf(ds, sizeof(ds), s_rel && val != 0.f ? "%+.1f" : "%.1f", (double)val);
+    else      snprintf(ds, sizeof(ds), "--");
+    int ts = 4 + (k - 1), tw = (int)strlen(ds) * 6 * ts;
+    while (ts > 2 && nx + tw + (s_cfg.units == 1 ? 6 * ts + 3 : 18) > vw) { ts--; tw = (int)strlen(ds) * 6 * ts; }   // + the % sign / degree ring
     d.setTextSize(ts);
-    d.setTextColor(reliable ? (onRound ? C_GREEN : FG) : DIM, BG);
+    d.setTextColor(s_ok ? (s_round ? C_GREEN : FG) : DIM, BG);
     d.setCursor(nx, cy - 4 * ts); d.print(ds);
-    if (reliable && s_cfg.units == 1) { d.setCursor(nx + tw + 3, cy - 4 * ts); d.print("%"); }   // % sign
-    else if (reliable) d.drawCircle(nx + tw + 4 + ts, cy - 4 * ts + 3, ts, onRound ? C_GREEN : FG);   // degree mark
-    d.setTextSize(1); d.setTextColor(MUTED, BG);
-    d.setCursor(nx, cy + 4 * ts + 5);
-    d.print(!reliable ? TR5("inclina device", "tilt the device", "inclina equipo", "inclinez-le", "Geraet neigen")   // <= 15 chars: 90 px
-                      : s_frozen ? TR5("bloccato", "locked", "bloqueado", "verrouille", "gesperrt")
-                                 : (s_rel ? TR5("relativo", "relative", "relativo", "relatif", "relativ") : TR5("assoluto", "absolute", "absoluto", "absolu", "absolut")));
+    if (s_ok && s_cfg.units == 1) { d.setCursor(nx + tw + 3, cy - 4 * ts); d.print("%"); }   // % sign
+    else if (s_ok) d.drawCircle(nx + tw + 4 + ts, cy - 4 * ts + 3, ts, s_round ? C_GREEN : FG);   // degree mark
+    const char *cap = !s_ok ? TR5("inclina device", "tilt the device", "inclina equipo", "inclinez-le", "Geraet neigen")   // <= 15 chars: 90 px
+                  : s_frozen ? TR5("bloccato", "locked", "bloqueado", "verrouille", "gesperrt")
+                             : (s_rel ? TR5("relativo", "relative", "relativo", "relatif", "relativ") : TR5("assoluto", "absolute", "absoluto", "absolu", "absolut"));
+    if (nx + (int)strlen(cap) * 6 * k > vw) k = 1;                     // the caption fits the screen
+    d.setTextSize(k); d.setTextColor(MUTED, BG);
+    d.setCursor(nx, cy + 4 * ts + 5); d.print(cap);
+}
+
+static const char *g_hint(void)
+{
+    // <= 39 chars (the bar's width): the old 55-char hint cut "TAB options" off, so the menu looked missing
+    return TR5("g zero/ass  f blocca  tab menu  esc", "g zero/abs  f lock  tab menu  esc", "g cero/abs  f fijar  tab menu  esc",
+               "g zero/abs  f figer  tab menu  esc", "g Null/abs  f Halt  tab Menue  esc");
+}
+
+// The panel (lg::frame, 320x240): header (chevron = back, menu = options), the dial big on the left (tap it =
+// zero here / back to absolute), the reading on the right (tap it = lock). Options: rows, tap again = change.
+static int s_lsc;                                    // options list scroll on the panel
+static void lg_paint(void *)
+{
+    d.fillRect(0, 0, 320, 240, BG);
+    unsigned short acc;
+    const char *rgt = g_right(&acc);
+    int y0 = lg::header(g_title(), rgt, acc, NK_BACK, NK_TAB);
+    d.setFont(&fonts::Font0);                          // the views size the classic font themselves
+    if (s_settings)  // (no IMU: the header says so and the reading shows "--")
+        lg::text_list(0, y0 + 4, 320, 240 - y0 - 4, GSET_ROWS, s_set_sel, &s_lsc, gset_label, gset_right, nullptr, nullptr, acc, 34);
+    else {
+        dial(92, 136, 86);
+        readout(196, 136, 320, 2);
+        lg::field(0, y0, 320, 240 - y0);
+    }
+}
+static void draw_large(void)
+{
+    gstate();
+    nucleo_touch_clear();
+    lg::frame(lg_paint, nullptr);
+    nucleo_touch_commit();
+}
+
+static void draw(void)
+{
+    int top = nucleo_app_content_top(), h = nucleo_app_content_height();
+    d.fillRect(0, top, W, h, BG);
+    gstate();
+    unsigned short acc;
+    const char *rgt = g_right(&acc);
+    if (nucleo_app_two_screens()) {                   // the companion: the reading, the mode, the keys
+        int y = lg::comp_head(g_title(), acc);
+        readout(16, y + 44, W, 1);
+        lg::comp_keys(g_hint());
+        return;
+    }
+    bool present = nucleo_imu_present();
+    // "!D" = frame going STRAIGHT to the panel (no 32 KB back-buffer) — see app_level.cpp.
+    char rb[16];
+    if (!nucleo_app_is_buffered()) { snprintf(rb, sizeof rb, "%s !D", rgt); rgt = rb; }
+    int y0 = app_ui_title(g_title(), acc, rgt);
+
+    if (!present) {
+        lg::message(0, y0, W, top + h - y0, TR5("Sensore IMU", "IMU sensor", "Sensor IMU", "Capteur IMU", "IMU-Sensor"),
+                    TR5("non rilevato", "not detected", "no detectado", "non detecte", "nicht erkannt"), C_YELLOW);
+        return;
+    }
+    if (s_settings) {                                  // TAB options — shared list (no overlap, consistent)
+        app_ui_list(y0, top + h - y0, GSET_ROWS, s_set_sel, gset_label, gset_right, nullptr, nullptr);
+        return;
+    }
+
+    int bottom = top + h;
+    int cy = (y0 + bottom) / 2;                               // dial LEFT, big number RIGHT (use the landscape)
+    int R = (bottom - y0) / 2 - 3;
+    if (R > 60) R = 60;
+    if (R < 22) R = 22;
+    dial(74, cy, R);
+    readout(150, cy, W, 1);
 }
 
 // dim a colour ~45% for the needle's counter-tail (local helper; fx3d::scl is for the 3D path).
@@ -224,7 +289,12 @@ static unsigned short scl_dim(unsigned short c)
 
 static void on_key(int key, char ch)
 {
+    int tx;
     if (s_settings) {
+        switch (lg::row_tap(key, ch, s_lsc, GSET_ROWS, &s_set_sel)) {   // an option row on the panel
+            case 1: nucleo_app_request_draw(); return;
+            case 2: gset_change(); return;
+        }
         if (key == NK_UP)        { s_set_sel = (s_set_sel + GSET_ROWS - 1) % GSET_ROWS; nucleo_app_request_draw(); }
         else if (key == NK_DOWN) { s_set_sel = (s_set_sel + 1) % GSET_ROWS; nucleo_app_request_draw(); }
         else if (key == NK_RIGHT || key == NK_ENTER) gset_change();
@@ -232,6 +302,7 @@ static void on_key(int key, char ch)
     }
     // G (central, so the press doesn't nudge the edge you're measuring) toggles zero-here <-> absolute;
     // SPACE does the same (old muscle memory) and R still forces absolute.
+    if (lg::tap(key, ch, &tx, nullptr)) ch = tx >= 186 ? 'f' : 'g';    // the panel: tap the reading = lock, the dial = zero
     if (ch == 'g' || ch == 'G' || ch == ' ') {
         if (s_rel) { s_zero = 0.f; s_rel = false; } else { s_zero = s_roll; s_rel = true; }
         s_frozen = false; nucleo_app_request_draw();
@@ -250,9 +321,7 @@ static void enter(void)
     s_qa = s_qx = s_qy = INT32_MIN; s_qf = -1; s_frame_us = 0;   // force the first live frame after a (re)open
     nucleo_imu_level(&s_lx, &s_ly, &s_deg);
     s_reliable = nucleo_imu_present() && s_deg > FLAT_MIN;
-    // <= 39 chars (the bar's width): the old 55-char hint cut "TAB options" off, so the menu looked missing
-    nucleo_app_set_hint(TR5("g zero/ass  f blocca  tab menu  esc", "g zero/abs  f lock  tab menu  esc", "g cero/abs  f fijar  tab menu  esc",
-                            "g zero/abs  f figer  tab menu  esc", "g Null/abs  f Halt  tab Menue  esc"));
+    nucleo_app_set_hint(g_hint());
     nucleo_app_set_tab_handler(g_tab);
     nucleo_app_set_back_handler(g_back);
     nucleo_app_set_poll_handler(poll);
@@ -271,7 +340,7 @@ extern "C" void nucleo_register_goniometer(void)
         // flickers no matter how well its redraws are gated. A fresh boot with the radio down is the
         // only state on this PSRAM-less chip where the buffered path is GUARANTEED. Esc reboots back;
         // the launcher return-cursor makes it seamless.
-        NX_NET_APP | NX_SOLO | NX_WIFI
+        NX_NET_APP | NX_SOLO | NX_WIFI, nullptr, draw_large
     };
     nucleo_app_register(&app);
 }

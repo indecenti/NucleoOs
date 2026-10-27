@@ -1,0 +1,11 @@
+@host stubs/imu_stubs.cpp
+home
+tube R
+plumb R R
+digital R R R
+settings R R R R
+settings_tap R R R R row:3 row:3
+hold c:f
+zero_tap tap:80,140
+hold_tap tap:250,140
+percent R R R R ENTER L L L L

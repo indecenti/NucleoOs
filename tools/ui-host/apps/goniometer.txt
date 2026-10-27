@@ -1,0 +1,9 @@
+@host stubs/imu_stubs.cpp
+home
+rel c:g
+locked c:f
+settings TAB
+settings_tap TAB row:1 row:1
+dial_tap tap:90,130
+reading_tap tap:250,130
+percent TAB ENTER BACK

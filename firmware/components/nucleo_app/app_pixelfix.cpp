@@ -13,6 +13,8 @@
 #include "nucleo_i18n.h"     // TR(it,en): labels follow the system language
 #include "esp_random.h"
 #include "esp_timer.h"
+#include "app_large.h"       // two screens: the patterns run on the 320x240 panel, the Cardputer is the companion
+#include "nucleo_touch.h"
 #include <string.h>
 
 // ---- modes -----------------------------------------------------------------
@@ -90,14 +92,19 @@ static bool poll(void)
 }
 
 // ---- draw ------------------------------------------------------------------
-static void draw(void)
+// One step of the current pattern over a W x H screen: the Cardputer's 240x135, or the panel's 320x240 (the
+// parameters shadow the theme's W / H). In two-screens mode only the panel runs it, so its state is the panel's.
+static void pattern(const int W, const int H)
 {
     int64_t now = esp_timer_get_time();
+    // The label / pause card is drawn over the frame: when it goes away, start from black again (the walker
+    // paints incrementally and would leave the card on screen).
+    if (s_label_us && now >= s_label_us) { s_label_us = 0; s_first_frame = true; }
 
     // First frame after mode change: establish a clean black canvas.
     // Modes that fillScreen() every frame (BW/RGB/CHECK/NOISE/SWEEP) override
     // it immediately; WALKER needs it for the black background.
-    if (s_first_frame) { d.fillScreen(0x0000); s_first_frame = false; }
+    if (s_first_frame) { d.fillRect(0, 0, W, H, 0x0000); s_first_frame = false; }
 
     if (!s_paused) {
         switch (s_mode) {
@@ -137,7 +144,7 @@ static void draw(void)
         // Incremental: only erase the old cross + draw the new one (~10 pixel
         // ops per frame) so the screen is fully black between passes.
         case MODE_WALKER: {
-            uint16_t arm_c = WALK_ARM[(s_wx / 80) % 3];  // cycle arm colour by column-third
+            uint16_t arm_c = WALK_ARM[(s_wx * 3 / W) % 3]; // cycle arm colour by column-third
             // Erase previous 5-pixel cross
             if (s_wpx >= 0) {
                 d.drawPixel(s_wpx,   s_wpy,   0x0000);
@@ -207,24 +214,61 @@ static void draw(void)
         d.setTextSize(2); d.setTextColor(MUTED, INK);
         int tw = 5*12; d.setCursor(PX+(PW-tw)/2, PY+9); d.print(TR("PAUSA", "PAUSE"));
     }
+}
 
+// <= 40 chars (240 px of Font0): the old Italian line ran off the screen
+static const char *hint(void) { return TR("TAB/frecce modo  INVIO pausa  ESC esci", "TAB/arrows mode  ENTER pause  ESC exit"); }
+
+static const char *mname(int i, void * = nullptr) { return nucleo_tr(MNAME[i], MNAME_EN[i]); }
+static const char *mdesc(int i, void * = nullptr) { return nucleo_tr(MDESC[i], MDESC_EN[i]); }
+
+// The Cardputer while the patterns run on the panel: which mode, what it does, the keys.
+static void draw_companion(void)
+{
+    d.fillScreen(BG);                      // fullscreen app: the whole Cardputer screen
+    int y = lg::comp_head("PIXELFIX", C_YELLOW);
+    lg::message(0, y, W, 105, mname(s_mode), s_paused ? TR("PAUSA", "PAUSE") : mdesc(s_mode), s_paused ? MUTED : FG);
+    lg::comp_keys(hint());
+}
+
+static void draw(void)
+{
+    if (nucleo_app_two_screens()) { draw_companion(); return; }
+    pattern(W, H);
     // ---- Key-hint bar (first 5 s) ------------------------------------------
-    if (now < s_hint_us) {
+    if (esp_timer_get_time() < s_hint_us) {
         d.fillRect(0, H-11, W, 11, INK);
         d.setTextSize(1); d.setTextColor(MUTED, INK);
-        const char *h = TR("TAB/frecce: modo   INVIO: pausa   ESC: esci", "TAB/arrows mode  ENTER pause  ESC exit");
+        const char *h = hint();
         int hw = (int)strlen(h)*6; d.setCursor((W-hw)/2, H-9); d.print(h);
     }
+}
+
+// The panel: running, the whole 320x240 IS the pattern (a tap pauses); paused, the mode picker (tap a mode =
+// run it; the chevron leaves). Straight to the panel, no buffer: the walker paints incrementally.
+static void draw_large(void)
+{
+    nucleo_touch_clear();
+    if (s_paused) {
+        d.fillScreen(BG);
+        lg::header("PixelFix", TR("PAUSA", "PAUSE"), C_YELLOW);
+        lg::text_list(0, lg::HEAD + 2, 320, 6 * 34, N_MODES, s_mode, nullptr, mname, mdesc, nullptr, nullptr, C_YELLOW, 34);
+        s_first_frame = true;              // back to black when it resumes
+    } else {
+        pattern(320, 240);
+        lg::field(0, 0, 320, 240);
+    }
+    nucleo_touch_commit();
 }
 
 // ---- input -----------------------------------------------------------------
 static void on_key(int key, char ch)
 {
-    (void)ch;
     int64_t now = esp_timer_get_time();
-    if (key == NK_ENTER) {
+    if (nucleo_touch_is_row(key, ch)) { mode_set(ch - NUCLEO_TOUCH_ROW, now); nucleo_app_request_draw(); return; }
+    if (key == NK_ENTER || nucleo_touch_is_field(key, ch)) {    // a tap on the running pattern = pause
         s_paused = !s_paused;
-        if (!s_paused) s_last_us = now;
+        if (!s_paused) { s_last_us = now; s_first_frame = true; }
         nucleo_app_request_draw();
         return;
     }
@@ -253,7 +297,7 @@ extern "C" void nucleo_register_pixelfix(void)
 {
     static const nucleo_app_def_t app = {
         "pixel-fix", "PixelFix", "System", "Risana pixel bloccati e image retention LCD",
-        'F', C_YELLOW, enter, on_key, nullptr, draw, on_exit, NX_NET_APP
+        'F', C_YELLOW, enter, on_key, nullptr, draw, on_exit, NX_NET_APP, nullptr, draw_large
     };
     nucleo_app_register(&app);
 }

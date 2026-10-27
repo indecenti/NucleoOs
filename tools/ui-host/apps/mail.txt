@@ -15,3 +15,5 @@ provider  D D ENTER D
 wizemail  D D ENTER ENTER t:luca.ferri@example.com
 wizpass   D D ENTER ENTER t:luca.ferri@example.com ENTER t:abcdefgh
 wizdone   D D ENTER ENTER t:luca.ferri@example.com ENTER t:abcdefgh ENTER t:Luca ENTER
+sentpick  TAB TAB row:1
+sentread  TAB TAB row:2

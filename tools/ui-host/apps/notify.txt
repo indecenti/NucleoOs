@@ -9,3 +9,5 @@ cal       TAB
 sys       TAB TAB
 ai        TAB TAB TAB
 clear     c:c
+dismiss   D R
+dropped   D R c:y

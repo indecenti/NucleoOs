@@ -1,0 +1,9 @@
+home
+rgb R
+checker R R tick:12
+noise R R R tick:12
+walker R R R R tick:30
+sweep U tick:12
+paused ENTER
+paused_tap tap:160,120
+pick_row tap:160,120 row:2 tick:12

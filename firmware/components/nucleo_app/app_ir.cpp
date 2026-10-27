@@ -63,6 +63,10 @@ static int  s_dev;             // chosen device index (level 1)
 static int  s_region;          // 0=all 1=us 2=eu 3=asia
 static char s_status[40];
 static int  s_lg_scroll;       // the panel list's first visible row (two screens)
+#define G_COLS 3                // two screens: the remote's keypad, 3 keys a row
+#define G_RH   40               // key pitch (34 px key + 6 px gap)
+static int  s_grid_top;        // the keypad's first visible key row
+static int  s_grid_y = 90;     // the keypad's top on the panel (for the hit test; set by each draw)
 
 static bool     s_sweep;        // TV-B-Gone sweep running
 static uint32_t s_sweep_i;      // next tvpower index to consider
@@ -472,11 +476,17 @@ static void on_key(int k, char ch) {
     // Auto-Find wizard: Enter = "yes it turned off" (identify), RIGHT = "no, next candidate".
     if (s_view == V_FIND && s_find) { if (k == NK_ENTER) find_yes(); else if (k == NK_RIGHT) find_no(); return; }
 
-    // A tapped row/button on the panel: select it, or activate it when it already was the selection
-    // (the button grid at level 2 registers its cells as rows 0..nbtn-1 with scroll 0).
+    // The panel: a key of the keypad sends at once; a tab goes straight to it; a list row is picked, tapped
+    // again it is opened / sent.
+    int px, py;
+    if (lg::tap(k, ch, &px, &py)) {
+        const int i = (s_grid_top + (py - s_grid_y) / G_RH) * G_COLS + px * G_COLS / 320;
+        if (s_view == V_REM && s_level == 2 && py >= s_grid_y && i < (int)s_curdev.nbtn) { s_sel = i; activate(); }
+        return;
+    }
+    if (k == NK_CHAR && ch >= 1 && ch <= NTABS) { s_view = ch - 2; ir_tab(); return; }   // ir_tab steps to ch - 1
     if (nucleo_touch_is_row(k, ch)) {
-        const int scroll = (s_view == V_REM && s_level == 2) ? 0 : s_lg_scroll;
-        const int t = lg::row_tap(k, ch, scroll, cur_count(), &s_sel);
+        const int t = lg::row_tap(k, ch, s_lg_scroll, cur_count(), &s_sel);
         if (t == 2) activate();
         else if (t == 1) { s_status[0] = 0; nucleo_app_request_draw(); }
         return;
@@ -560,27 +570,35 @@ static const nucleo_app_ram_t APP_RAM[] = {
 // The panel is the catalog: category -> remote on the left, and once a remote is open its buttons as a touch grid
 // (tap a button to send it). TV-B-Gone and Auto-Find show their live card natively, with big action buttons. The
 // Cardputer is the companion: the active tab, what is selected, the live sweep readout and the keys.
-static void lg_grid_cell(int x, int y, int w, int h, const char *label, bool focus, bool power, int slot) {
-    const unsigned short fill = power ? PWR : (focus ? ACC : lg::card());
-    d.fillRoundRect(x, y, w, h, 8, fill);
-    if (focus && !power) d.drawRoundRect(x, y, w, h, 8, FG);
-    lg::font(1); d.setTextDatum(middle_center); d.setTextColor((power || focus) ? INK : FG, fill);
-    char t[16]; lg::fit(t, sizeof t, label, w - 8);
-    d.drawString(t, x + w / 2, y + h / 2 + 1); d.setTextDatum(top_left);
-    nucleo_touch_add(x, y, w, h, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + slot));
-}
+// The remote itself: its keys as a 3-column keypad (power in red), one field hit-tested by position, scrolled by a
+// drag (the scroll area walks the selection one key per third of a row, so a row-height drag = one row).
 static void lg_button_grid(int y0, int W, int H) {
     ir_pack_remote_t r; r.name[0] = 0; ir_pack_remote(&s_pack, (uint32_t)s_dev, &r);
     lg::font(1); d.setTextColor(ACC, BG); d.drawString(r.name, 12, y0 + 4);
     lg::font(0); d.setTextDatum(top_right); d.setTextColor(MUTED, BG);
     d.drawString(nir_proto_name((nir_proto_t)r.proto), W - 10, y0 + 6); d.setTextDatum(top_left);
-    const int n = (int)s_curdev.nbtn, cols = 2, rows = (n + cols - 1) / cols > 0 ? (n + cols - 1) / cols : 1;
-    const int gy = y0 + 24, gap = 8, cw = (W - 12 - gap) / cols, chh = (H - gy - 10 - (rows - 1) * gap) / rows;
-    for (int i = 0; i < n; i++) {
+    const int n = (int)s_curdev.nbtn, gy = s_grid_y = y0 + 26, vis = (H - gy) / G_RH, cw = (W - 16) / G_COLS;
+    const int row = s_sel / G_COLS;
+    if (row < s_grid_top) s_grid_top = row;
+    if (row >= s_grid_top + vis) s_grid_top = row - vis + 1;
+    for (int i = s_grid_top * G_COLS; i < n && i < (s_grid_top + vis) * G_COLS; i++) {
         ir_pack_btn_t b; if (!ir_pack_button(&s_pack, &s_curdev, (uint32_t)i, &b)) continue;
-        const int cx = 8 + (i % cols) * (cw + gap), cyy = gy + (i / cols) * (chh + gap);
-        lg_grid_cell(cx, cyy, cw, chh, b.key, i == s_sel, !strcmp(b.key, "power"), i);
+        const int x = 8 + (i % G_COLS) * cw, y = gy + (i / G_COLS - s_grid_top) * G_RH;
+        const bool power = !strcmp(b.key, "power"), focus = i == s_sel;
+        const unsigned short fill = power ? PWR : (focus ? ACC : lg::card());
+        d.fillRoundRect(x + 3, y, cw - 6, G_RH - 6, 10, fill);
+        if (focus) d.drawRoundRect(x + 1, y - 2, cw - 2, G_RH - 2, 12, FG);
+        lg::font(1); d.setTextDatum(middle_center); d.setTextColor((power || focus) ? INK : FG, fill);
+        char t[16]; lg::fit(t, sizeof t, b.key, cw - 14);
+        d.drawString(t, x + cw / 2, y + (G_RH - 6) / 2 + 1); d.setTextDatum(top_left);
     }
+    if (n > vis * G_COLS) {                           // a slim knob: there are more keys below / above
+        const int rows = (n + G_COLS - 1) / G_COLS, track = vis * G_RH - 6;
+        d.fillRect(W - 4, gy, 2, track, LINE);
+        d.fillRect(W - 4, gy + track * s_grid_top / rows, 2, track * vis / rows, ACC);
+    }
+    lg::field(0, gy, W, vis * G_RH);
+    nucleo_touch_add_scroll(0, gy, W, vis * G_RH, G_RH / G_COLS, NK_UP, 0, NK_DOWN, 0);
 }
 static void lg_remote_card(int x, int y, int w, int h) {
     lg::panel(x, y, w, h); const unsigned short cb = lg::card();
@@ -621,7 +639,7 @@ static void ir_draw_large(void) {
     const int W = d.width(), H = d.height();
     nucleo_touch_clear();
     int y = lg::header("IR Remote", s_status[0] ? s_status : nullptr, ACC, NK_BACK, 0);
-    y = lg::tabs(y + 2, TABS, NTABS, s_view, ACC, nullptr);
+    y = lg::tabs(y + 2, TABS, NTABS, s_view, ACC, "\x01\x02\x03\x04");
     d.fillRect(0, y, W, H - y, BG);
     if (!s_pack_ok && (s_view != V_FAV || s_nfav == 0)) {
         lg::message(0, y, W, H - y, "No catalog on SD", "build presets.bin (ir:pack)", MUTED);

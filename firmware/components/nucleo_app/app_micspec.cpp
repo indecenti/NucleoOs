@@ -23,6 +23,8 @@ extern "C" {
 
 #include "launcher_theme.h"
 #include "nucleo_i18n.h"        // TR(it,en): hint follows the system language
+#include "app_large.h"          // two screens: the analyzer full-width on the 320x240 panel, the Cardputer as companion
+#include "nucleo_touch.h"
 
 // ---- modes ----
 enum { M_BARS = 0, M_FALL, M_SCOPE, M_TUNE, N_MODES };
@@ -87,6 +89,15 @@ static const int MAIN_B = 110;
 static const int MAIN_H = MAIN_B - MAIN_T;   // 78
 static const int CONTENT_B = H - HINT;       // 121
 
+// The view the four lenses draw into: the compact screen's band, or the panel's (draw_large). One renderer, two
+// geometries: x, width, top, bottom of the lens area and a text scale. Hit-testing (on_key) uses the same numbers.
+static int   s_vx = 4, s_vw = W - 8, s_vt = MAIN_T, s_vb = MAIN_B, s_hy = 0;   // s_hy: the HUD band's top
+static int   s_k = 16;                       // text / stroke scale in 1/16: 16 compact, 26 (1.6x) on the panel
+static void view(int x, int w, int t, int b, int k) { s_vx = x; s_vw = w; s_vt = t; s_vb = b; s_k = k; }
+static inline int K(int v) { return v * s_k >> 4; }
+static void tsz(float n) { d.setTextSize(n * s_k / 16); }   // Font0 scaled by the view
+enum { LG_T = 82, LG_B = 204, LG_SX = 292 };   // panel: lens band [LG_T, LG_B], gain slider from LG_SX
+
 // ---- color helpers ----
 static inline int clamp8(int v) { return v < 0 ? 0 : v > 255 ? 255 : v; }
 static inline uint16_t rgb565(int r, int g, int b)
@@ -128,49 +139,50 @@ static inline int sens_apply(int v) { int r = v * s_sens / 100; return r > 255 ?
 // All readouts are the SMOOTHED values (s_lvl/s_db/s_hz) so the large digits never strobe.
 static void draw_hud(void)
 {
-    d.fillRect(0, 0, W, HUD_H, BG);
+    const int hw = s_k > 16 ? 320 : W, y0 = s_hy;      // the HUD spans the screen: compact or panel
+    d.fillRect(0, y0, hw, K(HUD_H), BG);
     char buf[16];
 
     int lvl = s_ok ? (int)(s_lvl + 0.5f) : 0;
     uint16_t lc = level_col(lvl);
 
     // row 1 — peak dB (left, colour-coded by loudness), big and readable
-    d.setTextSize(2);
+    tsz(2);
     if (s_ok && s_db > -85.0f) snprintf(buf, sizeof buf, "%ddB", (int)s_db);
     else                       snprintf(buf, sizeof buf, "--");
     d.setTextColor(lc, BG);
-    d.setCursor(4, 1); d.print(buf);
+    d.setCursor(4, y0 + 1); d.print(buf);
 
     // row 1 — dominant note (right) ties every mode to the tuner; pause glyph when frozen
     if (s_frozen) {
-        d.fillRect(W - 26, 2, 6, 15, C_YELLOW);
-        d.fillRect(W - 14, 2, 6, 15, C_YELLOW);
+        d.fillRect(hw - K(26), y0 + 2, K(6), K(15), C_YELLOW);
+        d.fillRect(hw - K(14), y0 + 2, K(6), K(15), C_YELLOW);
     } else {
         bool has = s_ok && s_snap->note_idx >= 0;
         if (has) snprintf(buf, sizeof buf, "%s%d", nucleo_micspec_note_name(s_snap->note_idx), s_snap->octave);
         else     snprintf(buf, sizeof buf, "--");
-        d.setTextSize(2);
         d.setTextColor(has ? THEME_ACC : DIM, BG);
-        d.setCursor(W - 4 - (int)strlen(buf) * 12, 1); d.print(buf);
+        d.setCursor(hw - 4 - d.textWidth(buf), y0 + 1); d.print(buf);
     }
 
     // row 2 — level meter (left)
-    int my = 19, mw = 150, mh = 7;
+    int my = y0 + K(19), mw = s_vw * 150 / 232, mh = K(7);
     d.drawRoundRect(4, my, mw, mh, 2, LINE);
     if (lvl > 0) d.fillRoundRect(4, my, mw * lvl / 100, mh, 2, lc);
 
     // row 2 — dominant Hz (right of the meter) + beat pulse at the far edge
-    d.setTextSize(1);
+    tsz(1);
     if (s_ok && s_hz > 1.0f) snprintf(buf, sizeof buf, "%dHz", (int)(s_hz + 0.5f));
     else                     snprintf(buf, sizeof buf, "--Hz");
     d.setTextColor(MUTED, BG);
-    d.setCursor(W - 16 - (int)strlen(buf) * 6, my); d.print(buf);
+    d.setCursor(hw - K(16) - d.textWidth(buf), my); d.print(buf);
 
     int on = s_ok ? s_snap->onset : 0;                // onset is already enveloped in the DSP -> smooth pulse
-    if (on > 24) d.fillCircle(W - 7, my + 3, 2 + on / 70, grad(0.9f));
-    d.fillCircle(W - 7, my + 3, 2, FG);
+    int bx = hw - K(7), by = my + K(3);
+    if (on > 24) d.fillCircle(bx, by, K(2 + on / 70), grad(0.9f));
+    d.fillCircle(bx, by, K(2), FG);
 
-    d.drawFastHLine(0, HUD_H - 1, W, LINE);
+    d.drawFastHLine(0, y0 + K(HUD_H) - 1, hw, LINE);
 }
 
 // bottom strip: mode name (left) · page dots (centre) · palette + sensitivity tag (right)
@@ -197,23 +209,23 @@ static void draw_pager(void)
 static const int BAR_LO = 72;                      // LUT index at the floor: already the palette's own hue
 static void draw_bars(void)
 {
-    int n = MS_BANDS, gap = 1;
-    int bw = (W - 8 - (n - 1) * gap) / n;            // ~6 px
-    int x = 4, base = MAIN_B;
-    d.drawFastHLine(4, base + 1, W - 8, LINE);       // baseline so silent bars still read as a floor
+    const int n = MS_BANDS, gap = 1, mh = s_vb - s_vt;
+    int bw = (s_vw - (n - 1) * gap) / n;             // 6 px compact, 8 on the panel
+    int x = s_vx, base = s_vb;
+    d.drawFastHLine(s_vx, base + 1, s_vw, LINE);     // baseline so silent bars still read as a floor
     for (int b = 0; b < n; b++) {
         int v = sens_apply((int)(s_disp[b] + 0.5f)); // smoothed, not raw -> fluid (no per-frame jitter)
-        int hgt = v * MAIN_H / 255;
+        int hgt = v * mh / 255;
         // fixed vertical gradient revealed by bar height (classic analyzer). It starts at BAR_LO, not 0:
         // every palette opens on near-black, and most bars are short, so a 0-based ramp showed the same
         // dark stubs in all three palettes and TAB looked like it did nothing in this mode.
         for (int yy = base; yy > base - hgt; yy -= 3) {
-            d.fillRect(x, yy - 2, bw, 3, grad8((uint8_t)(BAR_LO + (base - yy) * (255 - BAR_LO) / MAIN_H)));
+            d.fillRect(x, yy - 2, bw, 3, grad8((uint8_t)(BAR_LO + (base - yy) * (255 - BAR_LO) / mh)));
         }
         // peak-hold cap (bright, high-contrast against any palette)
         int capv = (int)s_cap[b];
-        int cy = base - capv * MAIN_H / 255;
-        if (capv > 4) d.fillRect(x, cy, bw, 2, FG);
+        int cy = base - capv * mh / 255;
+        if (capv > 4) d.fillRect(x, cy, bw, K(2), FG);
         x += bw + gap;
     }
 }
@@ -234,11 +246,13 @@ static void draw_fall(void)
     if (!s_hist) { draw_bars(); return; }              // OOM fallback
     int show = s_hist_n < HIST_W ? s_hist_n : HIST_W;
     if (show <= 0) return;
-    const int x0 = 4 + (W - 8 - show);                 // newest at the right edge
+    // newest at the right edge; a column is s_vw / HIST_W px wide (1 on the compact screen, ~1.2 on the panel)
+    const int xr = s_vx + s_vw, mh = s_vb - s_vt;
+#define FALL_X(c) (xr - (show - (c)) * s_vw / HIST_W)
     for (int b = 0; b < MS_BANDS; b++) {
-        // map the 32 bands proportionally over MAIN_H so the column fills the area exactly
-        int y0 = MAIN_B - (b + 1) * MAIN_H / MS_BANDS; // low freq at bottom
-        int hh = (MAIN_B - b * MAIN_H / MS_BANDS) - y0;
+        // map the 32 bands proportionally over the band height so the column fills the area exactly
+        int y0 = s_vb - (b + 1) * mh / MS_BANDS;       // low freq at bottom
+        int hh = (s_vb - b * mh / MS_BANDS) - y0;
         if (hh <= 0) continue;
         int     runc = 0;                              // first column of the run being accumulated
         uint8_t runv = s_hist[((s_hist_head - show + HIST_W * 2) % HIST_W) * MS_BANDS + b];
@@ -249,44 +263,48 @@ static void draw_fall(void)
                 v = s_hist[col * MS_BANDS + b];
             }
             if (c == show || v != runv) {              // run ended: emit it as ONE rectangle
-                d.fillRect(x0 + runc, y0, c - runc, hh, grad8(runv));
+                d.fillRect(FALL_X(runc), y0, FALL_X(c) - FALL_X(runc), hh, grad8(runv));
                 runc = c; runv = v;
             }
         }
     }
+#undef FALL_X
 }
 
 // ---- mode: SCOPE ----
 static void draw_scope(void)
 {
-    int cy = (MAIN_T + MAIN_B) / 2;
+    int cy = (s_vt + s_vb) / 2;
     // enveloped vertical gain (s_scope_gain, updated in fold_frame) so quiet signals stay visible
     // WITHOUT the whole trace rescaling every frame — that per-frame renormalize was the "breathing".
     long g = (long)s_scope_gain; if (g < 1) g = 1;
-    int amp = (MAIN_H / 2 - 2);
+    int amp = ((s_vb - s_vt) / 2 - 2);
     uint16_t wc = grad(0.78f);                        // bright trace; constant per frame (lerp hoisted out)
     uint16_t fc = grad(0.30f);                        // dim body fill under the trace
-    int px = 4, py = cy;
-    for (int i = 0; i < MS_WAVE && i < W - 8; i++) {
+    int px = s_vx, py = cy;
+    const int ns = HIST_W;                            // 232 samples: 1 px each compact, stretched on the panel
+    for (int i = 0; i < ns && i < MS_WAVE; i++) {
         int v = (int)((long)s_snap->wave[i] * amp * s_sens / 100 / g);
         int y = cy - v;
-        if (y < MAIN_T) y = MAIN_T;
-        else if (y > MAIN_B) y = MAIN_B;
-        int x = 4 + i;
-        if (y < cy)      d.drawFastVLine(x, y, cy - y, fc);   // fill centreline -> sample (both directions)
-        else if (y > cy) d.drawFastVLine(x, cy, y - cy, fc);
+        if (y < s_vt) y = s_vt;
+        else if (y > s_vb) y = s_vb;
+        int x = s_vx + i * s_vw / ns, xw = s_vx + (i + 1) * s_vw / ns - x;
+        if (y < cy)      d.fillRect(x, y, xw, cy - y, fc);    // fill centreline -> sample (both directions)
+        else if (y > cy) d.fillRect(x, cy, xw, y - cy, fc);
         if (i) d.drawLine(px, py, x, y, wc);
         px = x; py = y;
     }
 }
 
 // ---- mode: TUNER ----
+// Font0 scaled by the view (s_k): the same layout on the compact band and, 1.6x, on the panel's.
 static void draw_tuner(void)
 {
+    const int xr = s_vx + s_vw;
     if (s_tnote < 0) {                                          // nothing held: clear prompt, big enough to read
-        d.setTextSize(2); d.setTextColor(MUTED, BG);
+        tsz(2); d.setTextColor(MUTED, BG);
         const char *p = TR5("Suona una nota", "Play a note", "Toca una nota", "Jouer une note", "Spiel Note");
-        d.setCursor((W - (int)strlen(p) * 12) / 2, MAIN_T + 22); d.print(p);
+        d.setCursor(s_vx + (s_vw - d.textWidth(p)) / 2, s_vt + K(22)); d.print(p);
         return;
     }
     bool intune = s_tlock >= 4;                                 // persisted in-tune -> green lock, not a 1-frame flash
@@ -297,45 +315,46 @@ static void draw_tuner(void)
 
     // in-tune lock: a green frame + word so you KNOW the moment you've nailed it
     if (intune && !held) {
-        d.drawRect(2, MAIN_T - 2, W - 4, 50, C_GREEN);
-        d.setTextSize(1); d.setTextColor(C_GREEN, BG);
-        d.setCursor(W - 58, MAIN_T - 1); d.print(TR5("INTONATO", "IN TUNE", "AFINADO", "JUSTE", "REIN"));
+        d.drawRect(s_vx - 2, s_vt - 2, s_vw + 4, K(50), C_GREEN);
+        tsz(1); d.setTextColor(C_GREEN, BG);
+        const char *it = TR5("INTONATO", "IN TUNE", "AFINADO", "JUSTE", "REIN");
+        d.setCursor(xr - 2 - d.textWidth(it), s_vt - 1); d.print(it);
     }
 
     // big note letter (left) + octave; dimmed while it's only the held (no live sound) note
     const char *nm = nucleo_micspec_note_name(s_tnote);
-    d.setTextSize(6);
-    int lw = (int)strlen(nm) * 36, nx = 18;
+    tsz(6);
+    int lw = d.textWidth(nm), nx = s_vx + K(14);
     d.setTextColor(held ? DIM : col, BG);
-    d.setCursor(nx, MAIN_T + 1); d.print(nm);
+    d.setCursor(nx, s_vt + 1); d.print(nm);
     char oc[4]; snprintf(oc, sizeof oc, "%d", s_toct);
-    d.setTextSize(2); d.setTextColor(held ? DIM : FG, BG);
-    d.setCursor(nx + lw + 3, MAIN_T + 26); d.print(oc);
+    tsz(2); d.setTextColor(held ? DIM : FG, BG);
+    d.setCursor(nx + lw + 3, s_vt + K(26)); d.print(oc);
 
     // actionable verdict (right): flat or sharp? — large + colour-coded, with a dead-band around centre
     const char *dir = intune ? "OK" : (s_tcents > 4.0f) ? TR5("CALA", "DOWN", "BAJA", "BAISSE", "TIEFER") : (s_tcents < -4.0f) ? TR5("ALZA", "UP", "SUBE", "HAUSSE", "HOEHER") : "OK";
-    d.setTextSize(3); d.setTextColor(col, BG);
-    d.setCursor(W - 6 - (int)strlen(dir) * 18, MAIN_T + 12); d.print(dir);
+    tsz(3); d.setTextColor(col, BG);
+    d.setCursor(xr - 2 - d.textWidth(dir), s_vt + K(12)); d.print(dir);
 
     // cents needle gauge — ticks and needle sit ABOVE the baseline so the readout can use the row below.
     // The baseline is a palette ramp (flat = cold end, sharp = hot end): the verdict colours stay
     // semantic (green/yellow/red), but the gauge now follows TAB like the other three modes.
-    int gy = MAIN_B - 14, gx = 16, gw = W - 32;
+    int gy = s_vb - K(14), gx = s_vx + 12, gw = s_vw - 24;
     for (int i = 0; i < gw; i++) d.drawFastVLine(gx + i, gy, 2, grad8((uint8_t)(BAR_LO + i * (255 - BAR_LO) / gw)));
     for (int t = -50; t <= 50; t += 10) {
-        int tx = gx + gw * (t + 50) / 100, th = (t == 0) ? 6 : 3;
+        int tx = gx + gw * (t + 50) / 100, th = K(t == 0 ? 6 : 3);
         d.drawFastVLine(tx, gy - th, th, t == 0 ? C_GREEN : DIM);
     }
     float cc = s_tcents < -50.0f ? -50.0f : s_tcents > 50.0f ? 50.0f : s_tcents;
     int px = gx + (int)(gw * (cc + 50.0f) / 100.0f);
-    d.fillTriangle(px, gy, px - 6, gy - 12, px + 6, gy - 12, col);   // points down onto the line
+    d.fillTriangle(px, gy, px - K(6), gy - K(12), px + K(6), gy - K(12), col);   // points down onto the line
 
     // numeric readout (bottom row, clear of the pager dots)
     char ln[40];
     snprintf(ln, sizeof ln, TR5("%+d cent   %d.%02dHz   chiar. %d%%", "%+d cent   %d.%02dHz   clar. %d%%", "%+d cent   %d.%02dHz   clar. %d%%", "%+d cent   %d.%02dHz   clar. %d%%", "%+d cent   %d.%02dHz   klar. %d%%"),
              cents, s_snap->pitch_cHz / 100, s_snap->pitch_cHz % 100, s_snap->clarity);
-    d.setTextSize(1); d.setTextColor(MUTED, BG);
-    d.setCursor((W - (int)strlen(ln) * 6) / 2, gy + 4); d.print(ln);
+    tsz(s_k > 16 ? 0.77f : 1.0f); d.setTextColor(MUTED, BG);
+    d.setCursor(s_vx + (s_vw - d.textWidth(ln)) / 2, gy + K(4)); d.print(ln);
 }
 
 // ---- snapshot folding (caps + waterfall history advance on a new frame) ----
@@ -420,52 +439,116 @@ static bool poll(void)
 // ---- error / waiting splash ----
 static void draw_splash(const char *msg, uint16_t col)
 {
-    d.setTextSize(2); d.setTextColor(col, BG);
-    d.setCursor((W - (int)strlen(msg) * 12) / 2, MAIN_T + 30); d.print(msg);
+    tsz(2); d.setTextColor(col, BG);
+    d.setCursor(s_vx + (s_vw - d.textWidth(msg)) / 2, s_vt + K(30)); d.print(msg);
 }
 
 // ---- lifecycle ----
-static void draw(void)
+// The lens area of the current view: the live lens, or the starting / error splash. False = no live frame.
+static bool draw_lens(void)
 {
-    // The framework already wiped the shared back-buffer before calling us, so a self-clear there is
-    // ~29,000 redundant pixel writes per frame at the DSP rate. It is needed ONLY on the direct-draw
-    // fallback — where it is also exactly what flickers, because that clear lands on the panel itself.
-    if (!nucleo_app_is_buffered()) d.fillRect(0, 0, W, CONTENT_B, BG);
-
     if (!nucleo_micspec_running()) {
-        draw_hud();
         if (s_retry_until) {                          // still inside the retry window: not an error yet
             draw_splash(TR5("Avvio microfono...", "Starting mic...", "Iniciando mic...", "Demarrage mic...", "Starte Mic..."), MUTED);
-            return;
+            return false;
         }
         int e = nucleo_micspec_last_error();
         if (e == MS_ERR_BUSY) draw_splash(TR5("Mic occupato", "Mic busy", "Mic ocupado", "Mic occupe", "Mic besetzt"), C_YELLOW);
         else if (e == MS_ERR_OOM) draw_splash(TR5("Memoria insuff.", "Out of memory", "Memoria insuf.", "Mem insuff.", "Speicher voll"), C_RED);
         else draw_splash(TR5("Mic non avviato", "Mic not started", "Mic no iniciado", "Mic non demarre", "Mic nicht gestart"), C_RED);
-        return;
+        return false;
     }
-
-    // Frame copy + caps/waterfall fold happen in poll() (framework loop), so draw() is a pure render:
-    // it runs only when poll() saw a new frame, and the blit cadence tracks the DSP, not the loop.
-    draw_hud();
-    if (!s_ok) { draw_splash("...", MUTED); }
-    else switch (s_mode) {
+    if (!s_ok) { draw_splash("...", MUTED); return true; }
+    switch (s_mode) {
         case M_BARS:  draw_bars();  break;
         case M_FALL:  draw_fall();  break;
         case M_SCOPE: draw_scope(); break;
         case M_TUNE:  draw_tuner(); break;
     }
-    draw_pager();
+    return true;
 }
 
-static void set_hint(void)
+// ===== two screens ==============================================================================================
+// The panel is the analyzer: a header (back chevron, the lens name, the palette as a swatch you tap to change), a
+// HUD band (big peak dB, dominant Hz, dominant note, a full-width level meter + beat dot), the lens itself over the
+// whole width (bars 8 px, the waterfall and the scope stretched, the tuner at 1.6x), a gain slider at the right edge
+// (tap a height = that gain, drag it up / down) and the four lenses as tabs at the bottom. Tap the lens = freeze /
+// resume; a sideways swipe on it walks the lenses (the panel's generic arrows -> L / R). Composed with lg::frame
+// (the shared canvas, strip by strip): no flicker at the DSP rate, no extra RAM. The Cardputer is the companion.
+static int sens_y(int v) { return LG_B - (v - 40) * (LG_B - LG_T - 18) / 210; }   // slider: 40 % bottom .. 250 % top
+static void lg_paint(void *)
 {
-    nucleo_app_set_hint(TR5("L/R modo  TAB tema  U/D sens  GO ferma", "L/R mode  TAB theme  U/D sens  GO hold", "L/R modo  TAB tema  U/D sens  GO alto", "L/R mode  TAB theme  U/D sens  GO fige", "L/R Modus  TAB Tema  U/D Emf  GO halt"));
+    d.fillRect(0, 0, 320, 240, BG);
+    lg::header(mode_name(s_mode), nullptr, THEME_ACC, NK_BACK, 0);
+    for (int i = 0; i < 64; i += 2) d.fillRect(248 + i, 9, 2, 12, grad8((uint8_t)(i * 4 + 3)));   // palette swatch
+    nucleo_touch_add(232, 0, 88, 30, NK_TAB, 0);
+
+    lg::font(4);                                      // HUD + lenses: the compact renderers in Font0, scaled by s_k
+    draw_hud();
+    draw_lens();
+
+    // gain slider: the value on top, a palette track lit up to the knob, the knob at the current gain
+    char b[8]; snprintf(b, sizeof b, "x%d.%d", s_sens / 100, (s_sens % 100) / 10);
+    d.setTextSize(1); d.setTextColor(FG, BG); d.setCursor(LG_SX + 2, LG_T - 4); d.print(b);
+    const int ky = sens_y(s_sens);
+    for (int y = LG_T + 8; y <= LG_B; y += 4) d.fillRect(303, y, 6, 3, y >= ky ? grad8((uint8_t)(BAR_LO + (LG_B - y) * 3 / 2)) : LINE);
+    d.fillRoundRect(297, ky - 4, 18, 9, 4, FG);
+
+    lg::field(0, LG_T - 6, 320, LG_B - LG_T + 6);     // tap the lens = freeze; tap the slider = that gain
+    nucleo_touch_add_pad(LG_SX, LG_T - 6, 320 - LG_SX, LG_B - LG_T + 6, 7);   // drag the slider = gain up / down
+    const char *nm[N_MODES] = { mode_name(0), mode_name(1), mode_name(2), mode_name(3) };
+    lg::tabs(208, nm, N_MODES, s_mode, THEME_ACC, "1234");
 }
+
+static void draw_large(void)
+{
+    view(4, 287, LG_T, LG_B, 26); s_hy = 32;
+    nucleo_touch_clear();
+    lg::frame(lg_paint, nullptr);
+    nucleo_touch_commit();
+    view(4, W - 8, MAIN_T, MAIN_B, 16); s_hy = 0;
+}
+
+static const char *hint_text(void);
+// The Cardputer while the panel shows the analyzer: the lens, palette, gain and pause state (not the live meter:
+// that would re-send the small screen at the DSP rate for numbers the panel already shows big).
+static void draw_companion(void)
+{
+    const int y = lg::comp_head("Mic Spectrum", THEME_ACC);
+    lg::font(2); d.setTextColor(s_frozen ? C_YELLOW : FG, BG);
+    d.drawString(mode_name(s_mode), 8, y + 8);
+    lg::font(0); d.setTextColor(MUTED, BG); d.drawString(PALS[s_pal].name, 8, y + 40);
+    lg::comp_keys(hint_text());
+}
+
+static void draw(void)
+{
+    if (nucleo_app_two_screens()) { draw_companion(); return; }
+    // The framework already wiped the shared back-buffer before calling us, so a self-clear there is
+    // ~29,000 redundant pixel writes per frame at the DSP rate. It is needed ONLY on the direct-draw
+    // fallback — where it is also exactly what flickers, because that clear lands on the panel itself.
+    if (!nucleo_app_is_buffered()) d.fillRect(0, 0, W, CONTENT_B, BG);
+    d.setFont(&fonts::Font0);
+    // Frame copy + caps/waterfall fold happen in poll() (framework loop), so draw() is a pure render:
+    // it runs only when poll() saw a new frame, and the blit cadence tracks the DSP, not the loop.
+    draw_hud();
+    if (draw_lens()) draw_pager();
+}
+
+static const char *hint_text(void)
+{
+    return TR5("L/R modo  TAB tema  U/D sens  GO ferma", "L/R mode  TAB theme  U/D sens  GO hold", "L/R modo  TAB tema  U/D sens  GO alto", "L/R mode  TAB theme  U/D sens  GO fige", "L/R Modus  TAB Tema  U/D Emf  GO halt");
+}
+static void set_hint(void) { nucleo_app_set_hint(hint_text()); }
 
 static void on_key(int key, char ch)
 {
-    if (key == NK_RIGHT) s_mode = (s_mode + 1) % N_MODES;
+    int tx, ty;
+    if (lg::tap(key, ch, &tx, &ty)) {                 // panel: the slider column sets the gain, the lens freezes
+        if (tx >= LG_SX) { int v = 40 + (LG_B - ty) * 210 / (LG_B - LG_T - 18); v = (v + 5) / 10 * 10; s_sens = v < 40 ? 40 : v > 250 ? 250 : v; }
+        else s_frozen = !s_frozen;
+    }
+    else if (key == NK_RIGHT) s_mode = (s_mode + 1) % N_MODES;
     else if (key == NK_UP)   { s_sens += 10; if (s_sens > 250) s_sens = 250; }
     else if (key == NK_DOWN) { s_sens -= 10; if (s_sens < 40)  s_sens = 40; }
     else if (ch >= '1' && ch <= '0' + N_MODES) s_mode = ch - '1';
@@ -561,7 +644,7 @@ extern "C" void nucleo_register_micspec(void)
         NX_SOLO | NX_WIFI,  // radio down too: the analyzer uses zero network, and on the RAM-edge
                             // ADV the ~48 KB the Wi-Fi driver holds is exactly the headroom the DSP
                             // scratch + waterfall history + 32 KB canvas want. Same combo as gbemu.
-        APP_RAM
+        APP_RAM, draw_large
     };
     nucleo_app_register(&app);
 }

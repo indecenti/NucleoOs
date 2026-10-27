@@ -1,9 +1,13 @@
-# Screensaver: effect list + preview + timer on the panel; the running effect fills the panel (game-style).
-# Starts on the Clock effect (the default). Each scene shows a different effect preview / tab / the running saver.
+# Screensaver: effects + Timer as rows on the panel, a preview / the timer slider beside them; the running effect
+# drawn natively at 320x240. Starts on the Clock effect (the default).
 effetto
 off       U
 stars     D
 fire      D D
 prova     D D D
 timer     TAB
-running   D D D ENTER
+rowtimer  row:5
+slider    row:5 tap:250,185
+running   D D D ENTER tick:20
+runclock  row:4 row:4 tick:3
+runstars  row:2 row:4 row:4 tick:8

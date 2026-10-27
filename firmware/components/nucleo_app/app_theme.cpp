@@ -98,15 +98,23 @@ static void draw_theme_row(int y,int h,const nucleo_theme_t *t,bool focus,bool a
 // row to select (the preview follows), tap again — or tap the preview — to apply it.
 static const int T_LISTW = 150;
 
-static void lg_row(int i, int x, int y, int w, int h, bool focus, unsigned short bg, void *)
+// One theme as a swatch card painted in ITS OWN palette: its background, an accent band, the name in its text
+// colour, "in use" / swatches in its muted colour. The list's focus pill shows as a ring around the picked card.
+static void lg_row(int i, int x, int y, int w, int h, bool, unsigned short, void *)
 {
-    int c = 0; const nucleo_theme_t *all = nucleo_theme_get_all(&c);
+    int c = 0; const nucleo_theme_t *t = &nucleo_theme_get_all(&c)[i];
+    const int cx = x + 3, cy = y + 4, cw = w - 6, chh = h - 8;
+    d.fillRoundRect(cx, cy, cw, chh, 7, t->bg);
+    d.drawRoundRect(cx, cy, cw, chh, 7, t->line);
+    d.fillRoundRect(cx + 6, cy + 6, 5, chh - 12, 2, t->acc);
+    lg::font(0); d.setTextColor(t->fg, t->bg);
+    char nm[32]; lg::fit(nm, sizeof nm, t->name ? t->name : "?", cw - 22);
+    d.drawString(nm, cx + 16, cy + 3);
     const bool active = (i == active_index());
-    // swatch of the theme's accent at the row's right edge
-    d.fillRoundRect(x + w - 22, y + h / 2 - 7, 16, 14, 3, all[i].acc);
-    d.drawRoundRect(x + w - 22, y + h / 2 - 7, 16, 14, 3, focus ? INK : MUTED);
-    lg::row_text(x, y, w - 26, h, focus, bg, all[i].name ? all[i].name : "?",
-                 active ? TR("in uso", "in use") : nullptr, active ? C_GREEN : FG);
+    lg::font(4); d.setTextColor(active ? t->acc : t->muted, t->bg);
+    d.drawString(active ? TR("in uso", "in use") : "Aa 123", cx + 16, cy + chh - 11);
+    const uint16_t sw[3] = { t->sel, t->acc, t->fg };
+    for (int k = 0; k < 3; k++) d.fillCircle(cx + cw - 12 - k * 11, cy + chh - 8, 4, sw[k]);
 }
 
 static void lg_preview(int x, int y, int w, int h, const nucleo_theme_t *t)
@@ -141,7 +149,7 @@ static void draw_large(void)
     const int y = lg::header(TR("Tema", "Theme"), r, THEME_ACC, NK_BACK, 0);
     if (c <= 0) { lg::message(0, y, Wd, Hd - y, TR("Nessun tema", "No themes"), nullptr, MUTED); nucleo_touch_commit(); return; }
     if (s_sel >= c) s_sel = c - 1;
-    lg::list(0, y + 2, T_LISTW, Hd - y - 4, lg::ROW, c, s_sel, &s_lg_scroll, lg_row, nullptr, THEME_ACC);
+    lg::list(0, y + 2, T_LISTW, Hd - y - 4, 50, c, s_sel, &s_lg_scroll, lg_row, nullptr, THEME_ACC);
     d.fillRect(T_LISTW, y, Wd - T_LISTW, Hd - y, BG);
     const int px = T_LISTW + 4, py = y + 6, pw = Wd - T_LISTW - 10, ph = Hd - y - 12;
     lg_preview(px, py, pw, ph, &all[s_sel]);

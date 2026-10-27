@@ -26,3 +26,7 @@ find      TAB R R
 search    TAB R R D ENTER t:not
 genres    TAB R R D D ENTER
 findq     D D D ENTER BACK TAB R R R
+npseek    D D D ENTER tap:180,104
+npvol     D D D ENTER tap:290,70
+cardseek  D D D ENTER BACK tap:290,160
+setvol    TAB R tap:200,84

@@ -1,0 +1,9 @@
+@sd data/QR/qrcodes.json {"items":[{"label":"Sito","data":"https://example.com"},{"label":"Nota","data":"ciao mondo"}]}
+home
+wifi R t:secret123
+text R R t:https://nucleo.example/hello
+text_empty R R
+saved L
+saved_next L tap:120,100
+saved_row row:3
+pair_row row:3 row:0

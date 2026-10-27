@@ -51,6 +51,7 @@ static bool   s_del_isdir;      // the armed target is a directory (rmdir vs unl
 static char   s_del_abs[256];   // snapshotted target path (index-independent once the card is up)
 static char   s_del_name[56];   // snapshotted display name for the card message
 static char   s_path[192] = "/";
+static int    s_prev_of = -1;  // the panel's pane: the row its preview was read for (-1 = read again)
 
 // ── History ────────────────────────────────────────────────────────────────────
 #define HIST_FILES 10
@@ -92,7 +93,7 @@ static int cmp(const void *a, const void *b)
 
 static void scan(void)
 {
-    s_n = 0; s_sel = 0;
+    s_n = 0; s_sel = 0; s_prev_of = -1;
     if (!s_e) return;
     char abs[256]; snprintf(abs, sizeof abs, "%s%s", NUCLEO_SD_MOUNT, s_path);
     DIR *dir = opendir(abs); if (!dir) return;
@@ -322,7 +323,7 @@ static void search_walk(const char *abs_dir, const char *web_dir, int depth)
 
 static void do_search(void)
 {
-    s_n = 0; s_sel = 0; s_search_long = 0;
+    s_n = 0; s_sel = 0; s_search_long = 0; s_prev_of = -1;
     if (!s_e || !s_query[0]) return;
     char aroot[192]; snprintf(aroot, sizeof aroot, "%s/", NUCLEO_SD_MOUNT);
     search_walk(aroot, "/", 0);
@@ -560,14 +561,14 @@ static bool tab_key(int key, char ch)
 
 // ── Two screens ─────────────────────────────────────────────────────────────────
 // The panel carries the file manager: the folder (or the search results) as a list at the left with typed badges
-// and sizes, and the picked item's card at the right with its numbers and every action as a button — Open, then
-// Details / Rename / New folder / Delete — so touch never needs the Actions card (the keyboard's RIGHT still opens
-// it, and the panel shows it as big rows). The Recent / Search quick-panel gets tabs, the details a full card with
-// the SD usage, rename / new folder a field with Cancel / OK; the delete confirm takes only its two buttons.
+// (tap = pick, again = open, drag = scroll), and the picked item's pane at the right: its size and date, what it
+// holds (a text file's opening lines, a folder's first names), a tap on it opens it, and the "..." at its corner opens
+// its actions as big rows (the keyboard's RIGHT too). The Recent / Search quick-panel gets tabs, the details a full
+// card with the SD usage, rename / new folder a field (the chevron cancels); the delete confirm takes its two buttons.
 // The typing (names, the search query) stays on the Cardputer, whose companion shows it large; otherwise the
 // companion shows the picked item and the keys. Panel-only actions arrive as NK_CHAR with private control codes
 // (below 0x10: never typing, never list rows).
-enum { LGK_PAGE0 = 0x01 /* 0x01 Recent, 0x02 Search */, LGK_ACT0 = 0x03 /* + ACT_* (0x03..0x07) */ };
+enum { LGK_PAGE0 = 0x01 /* 0x01 Recent, 0x02 Search */, LGK_ACT0 = 0x03 /* + ACT_MKDIR: the empty folder's button */, LGK_MENU = 0x08 /* the pane's "..." */ };
 static const int LG_LISTW = 140;
 static int s_lg_scroll, s_lg_tscroll;
 
@@ -593,12 +594,9 @@ static bool lg_key(int key, char ch)
         if (lg::row_tap(key, ch, s_lg_scroll, tn, &s_sel) == 2) activate_selected();
         nucleo_app_request_draw(); return true;
     }
-    if (key != NK_CHAR || ch < LGK_ACT0 || ch >= LGK_ACT0 + ACT_COUNT) return false;
-    const int act = ch - LGK_ACT0;
-    if (act == ACT_MKDIR) { if (!s_search_mode) start_input(2); return true; }   // needs no picked item
-    if (s_search_mode || s_sel >= tn || is_parent(s_sel)) return true;
-    open_actions(); act_perform(act);
-    return true;
+    if (key == NK_CHAR && ch == (char)((int)LGK_ACT0 + ACT_MKDIR)) { if (!s_search_mode) start_input(2); return true; }   // the empty folder's
+    if (key == NK_CHAR && ch == LGK_MENU) { if (!s_search_mode && s_sel < tn && !is_parent(s_sel)) open_actions(); return true; }
+    return false;
 }
 
 // The badge: a rounded square in the type's colour with its letter.
@@ -630,58 +628,92 @@ static void lg_hist_row(int i, int x, int y, int w, int h, bool focus, unsigned 
     lg::row_text(x + 22, y, w - 22, h, focus, bg, lab, vc, r->is_dir ? DIRC : FG);
 }
 
-// The picked item's card: name, numbers, the actions as buttons.
+// What the picked item holds, read once per pick: a text file's opening bytes, a folder's first names (and count).
+static char s_prev[180];
+static int  s_prev_n;                                                     // folder: its items
+
+static void lg_peek(const char *abs, bool dir)
+{
+    s_prev[0] = 0; s_prev_n = 0;
+    if (dir) {
+        DIR *dp = opendir(abs); if (!dp) return;
+        struct dirent *de; size_t l = 0;
+        while ((de = readdir(dp)) != NULL) {
+            if (de->d_name[0] == '.') continue;
+            if (++s_prev_n <= 6 && l + strlen(de->d_name) + 2 < sizeof s_prev) l += snprintf(s_prev + l, sizeof s_prev - l, "%s\n", de->d_name);
+        }
+        closedir(dp);
+        return;
+    }
+    FILE *f = fopen(abs, "rb"); if (!f) return;
+    const size_t n = fread(s_prev, 1, sizeof s_prev - 1, f); s_prev[n] = 0; fclose(f);
+    for (char *c = s_prev; *c; c++) if ((unsigned char)*c < 32 && *c != '\n') *c = ' ';
+}
+
+// The picked item's pane: name, numbers, what it holds; a tap on it opens it (the folder, the file's app, the way
+// up). The "..." at its corner opens the item's actions (Details / Rename / New folder / Delete).
 static void lg_card(int x, int y, int w, int h)
 {
     lg::panel(x, y, w, h);
     const unsigned short cb = lg::card();
     const int tn = s_search_mode ? s_n : total_n();
-    const int bw = (w - 22) / 2, bh = 28, gy = y + h - 2 * bh - 14;
     if (tn == 0 || s_sel >= tn) {                                         // empty folder / no results
         lg::font(1); d.setTextColor(MUTED, cb);
         d.drawString(s_search_mode ? TR5("Nessun risultato", "No results", "Sin resultados", "Aucun resultat", "Keine Ergeb.")
                                    : TR5("Cartella vuota", "Empty folder", "Carpeta vacia", "Dossier vide", "Ordner leer"), x + 10, y + 10);
-        if (!s_search_mode) lg::button(x + 8, y + h - 40, w - 16, 32, TR5("+ Cartella", "+ Folder", "+ Carpeta", "+ Dossier", "+ Ordner"), LINE, FG, NK_CHAR, (char)(LGK_ACT0 + ACT_MKDIR));
+        if (!s_search_mode) lg::button(x + 8, y + h - 40, w - 16, 32, TR5("+ Cartella", "+ Folder", "+ Carpeta", "+ Dossier", "+ Ordner"), LINE, FG, NK_CHAR, (char)((int)LGK_ACT0 + ACT_MKDIR));
         return;
     }
-    if (!s_search_mode && is_parent(s_sel)) {                             // "..": the way up
-        lg::font(1); d.setTextColor(MUTED, cb); d.drawString(TR5("Cartella su", "Parent folder", "Carpeta arriba", "Dossier parent", "Ueberordner"), x + 10, y + 10);
-        lg::font(0); d.setTextColor(FG, cb); lg::wrap(s_path, x + 10, y + 36, w - 20, 17, 3);
-        lg::button(x + 8, gy - bh - 8, w - 16, 32, TR5("Su", "Up", "Arriba", "Haut", "Hoch"), DIRC, INK, NK_ENTER, 0);
-        lg::button(x + 8, gy + bh + 6, w - 16, bh, TR5("+ Cartella", "+ Folder", "+ Carpeta", "+ Dossier", "+ Ordner"), LINE, FG, NK_CHAR, (char)(LGK_ACT0 + ACT_MKDIR));
+    const bool par = !s_search_mode && is_parent(s_sel);
+    const Entry *e = par ? nullptr : (s_search_mode ? &s_e[s_sel] : entry_at(s_sel));
+    if (!par && !s_search_mode) {                                         // the item's actions: "..." at the corner
+        for (int i = 0; i < 3; i++) d.fillCircle(x + w - 28 + i * 8, y + 14, 2, MUTED);
+        nucleo_touch_add(x + w - 40, y, 40, 30, NK_CHAR, LGK_MENU);
+    }
+    nucleo_touch_add(x, y, w, h, NK_ENTER, 0);                            // the pane opens what it shows
+    if (par) {                                                            // "..": the way up
+        lg::font(1); d.setTextColor(DIRC, cb); d.drawString(TR5("Cartella su", "Parent folder", "Carpeta arriba", "Dossier parent", "Ueberordner"), x + 10, y + 10);
+        lg::font(0); d.setTextColor(FG, cb); lg::wrap(s_path, x + 10, y + 36, w - 20, 17, 5);
         return;
     }
-    const Entry *e = s_search_mode ? &s_e[s_sel] : entry_at(s_sel);
     const unsigned short col = entry_col(e);
-    const char *nm = s_search_mode ? search_label(e->name) : e->name;
     lg::font(1); d.setTextColor(e->dir ? DIRC : col == MUTED ? FG : col, cb);
-    const int nl = lg::wrap(nm, x + 10, y + 8, w - 20, 19, 2);
+    const int nl = lg::wrap(s_search_mode ? search_label(e->name) : e->name, x + 10, y + 8, w - (s_search_mode ? 20 : 46), 19, 2);
     int ly = y + 12 + nl * 19;
-    lg::font(0);
-    char sz[24];
-    if (e->dir) snprintf(sz, sizeof sz, "%s", TR5("cartella", "folder", "carpeta", "dossier", "Ordner"));
-    else fmt_kb(e->kb, sz, sizeof sz);
-    d.setTextColor(MUTED, cb); d.drawString(sz, x + 10, ly); ly += 18;
     char abs[256];
     if (s_search_mode) snprintf(abs, sizeof abs, "%s%s", NUCLEO_SD_MOUNT, e->name);
     else snprintf(abs, sizeof abs, "%s%s%s", NUCLEO_SD_MOUNT, s_path, e->name);
+    const char ic = entry_ic(e);
+    if (s_prev_of != s_sel) { s_prev_of = s_sel; lg_peek(abs, e->dir); if (!e->dir && ic != 'T') s_prev[0] = 0; }
+    char sz[24];
+    if (e->dir) snprintf(sz, sizeof sz, TR5("%d elementi", "%d items", "%d elem.", "%d elem.", "%d Elem."), s_prev_n);
+    else fmt_kb(e->kb, sz, sizeof sz);
+    lg::font(0); d.setTextColor(MUTED, cb); d.drawString(sz, x + 10, ly);
     struct stat st;
     if (stat(abs, &st) == 0) {
         time_t mt = st.st_mtime; struct tm *tm = localtime(&mt);
-        if (tm) { char db[24]; snprintf(db, sizeof db, "%02d/%02d/%04d %02d:%02d", tm->tm_mday, tm->tm_mon + 1, 1900 + tm->tm_year, tm->tm_hour, tm->tm_min);
-                  d.setTextColor(DIM, cb); d.drawString(db, x + 10, ly); }
+        if (tm) { char db[12]; snprintf(db, sizeof db, "%02d/%02d/%02d", tm->tm_mday, tm->tm_mon + 1, tm->tm_year % 100);
+                  d.setTextDatum(top_right); d.setTextColor(DIM, cb); d.drawString(db, x + w - 10, ly); d.setTextDatum(top_left); }
     }
-    if (s_search_mode) {                                                  // a result: where it is, and open it
-        char par[64]; lg::fit(par, sizeof par, search_parent(e->name), w - 20);
-        d.setTextColor(DIRC, cb); d.drawString(par, x + 10, ly + 18);
-        lg::button(x + 8, y + h - 40, w - 16, 32, TR5("Apri", "Open", "Abre", "Ouvre", "Oeffnen"), ACC, INK, NK_ENTER, 0);
-        return;
+    ly += 22;
+    d.drawFastHLine(x + 10, ly - 3, w - 20, LINE);
+    if (s_search_mode) {                                                  // a result: where it is
+        char pr[64]; lg::fit(pr, sizeof pr, search_parent(e->name), w - 20);
+        d.setTextColor(DIRC, cb); d.drawString(pr, x + 10, ly + 2); ly += 22;
     }
-    lg::button(x + 8, gy - 38, w - 16, 32, TR5("Apri", "Open", "Abre", "Ouvre", "Oeffnen"), e->dir ? DIRC : ACC, INK, NK_ENTER, 0);
-    lg::button(x + 8, gy, bw, bh, TR5("Dettagli", "Details", "Detalles", "Details", "Details"), LINE, FG, NK_CHAR, (char)(LGK_ACT0 + ACT_DETAILS));
-    lg::button(x + 14 + bw, gy, bw, bh, TR5("Rinomina", "Rename", "Renombra", "Renomme", "Umbenenn."), LINE, FG, NK_CHAR, (char)(LGK_ACT0 + ACT_RENAME));
-    lg::button(x + 8, gy + bh + 6, bw, bh, TR5("+ Cartella", "+ Folder", "+ Carpeta", "+ Dossier", "+ Ordner"), LINE, FG, NK_CHAR, (char)(LGK_ACT0 + ACT_MKDIR));
-    lg::button(x + 14 + bw, gy + bh + 6, bw, bh, TR5("Elimina", "Delete", "Elimina", "Supprime", "Loeschen"), LINE, C_RED, NK_CHAR, (char)(LGK_ACT0 + ACT_DELETE));
+    const int room = (y + h - 26 - ly) / 17;
+    if (s_prev[0]) { d.setTextColor(e->dir ? DIRC : FG, cb); lg::wrap(s_prev, x + 10, ly + 2, w - 20, 17, room); }
+    else if (!e->dir) {                                                   // nothing to show inside: what it is
+        static const char ics[] = "APVF";
+        const char *what[4] = { TR5("Audio", "Audio", "Audio", "Audio", "Audio"), TR5("Immagine", "Picture", "Imagen", "Image", "Bild"),
+                                TR5("Video", "Video", "Video", "Video", "Video"), TR5("File", "File", "Archivo", "Fichier", "Datei") };
+        const char *p = strchr(ics, ic);
+        lg::font(1); d.setTextColor(col == MUTED ? FG : col, cb); d.drawString(what[p ? p - ics : 3], x + 10, ly + 4);
+    }
+    lg::font(0); d.setTextDatum(bottom_left); d.setTextColor(DIM, cb);
+    d.drawString(e->dir ? TR5("tocca: apri la cartella", "tap: open the folder", "toca: abre", "touchez: ouvrir", "tippen: oeffnen")
+                        : TR5("tocca: apri", "tap: open", "toca: abre", "touchez: ouvrir", "tippen: oeffnen"), x + 10, y + h - 6);
+    d.setTextDatum(top_left);
 }
 
 static void lg_title(char *title, int n, char *cnt, int cn)
@@ -715,9 +747,7 @@ static void lg_input(void)
     d.setTextDatum(top_left);
     lg::font(0); d.setTextColor(MUTED, BG);
     lg::wrap(TR5("Scrivi il nome sulla tastiera del Cardputer.", "Type the name on the Cardputer's keyboard.", "Escribe el nombre en el Cardputer.", "Tapez le nom sur le Cardputer.", "Namen am Cardputer tippen."), 16, y + 84, W - 32, 17, 2);
-    const int bw = (W - 36) / 2;
-    lg::button(12, H - 50, bw, 40, TR5("Annulla", "Cancel", "Cancela", "Annuler", "Abbruch"), LINE, FG, NK_BACK, 0);
-    lg::button(24 + bw, H - 50, bw, 40, s_input_mode == 1 ? TR5("Rinomina", "Rename", "Renombra", "Renomme", "Umbenennen") : TR5("Crea", "Create", "Crea", "Creer", "Anlegen"), ACC, INK, NK_ENTER, 0);
+    lg::button(12, H - 50, W - 24, 40, s_input_mode == 1 ? TR5("Rinomina", "Rename", "Renombra", "Renomme", "Umbenennen") : TR5("Crea", "Create", "Crea", "Creer", "Anlegen"), ACC, INK, NK_ENTER, 0);
 }
 
 static void lg_details(void)

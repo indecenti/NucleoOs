@@ -9,3 +9,4 @@ tvb       TAB
 sweep     TAB ENTER tick:3
 find      TAB TAB ENTER tick:2
 favs      TAB TAB TAB
+keytap    ENTER ENTER tap:160,150

@@ -2,3 +2,5 @@ digital
 analog TAB
 options ENTER
 options_format ENTER D
+h12_nosecs ENTER row:1 row:2 BACK
+options_tap ENTER row:0

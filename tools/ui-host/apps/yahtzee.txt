@@ -1,0 +1,14 @@
+title
+title_tap row:1
+help row:2 row:2
+game row:0 row:0 tick:4
+rolled row:0 row:0 tick:4 tap:290,60 tick:6
+held row:0 row:0 tick:4 tap:290,60 tick:6 tap:28,60 tap:132,60
+reroll row:0 row:0 tick:4 tap:290,60 tick:6 tap:28,60 tap:132,60 tap:200,60 tick:6
+pick row:0 row:0 tick:4 tap:290,60 tick:6 tap:240,190
+scored row:0 row:0 tick:4 tap:290,60 tick:6 tap:240,190 tap:240,190 tick:1
+cpu_turn row:0 row:0 tick:4 tap:290,60 tick:6 tap:240,190 tap:240,190 tick:12
+paused row:0 row:0 tick:4 BACK
+resume row:0 row:0 tick:4 BACK row:0
+keys_score row:0 row:0 tick:4 ENTER tick:6 c:3 TAB D
+over D ENTER ENTER ENTER U ENTER tick:4 ENTER tick:6 TAB ENTER tick:8 ENTER tick:6 TAB ENTER tick:8 ENTER tick:6 TAB ENTER tick:8 ENTER tick:6 TAB ENTER tick:8 ENTER tick:6 TAB ENTER tick:8 ENTER tick:6 TAB ENTER tick:8 ENTER tick:6 TAB ENTER tick:8 ENTER tick:6 TAB ENTER tick:8 ENTER tick:6 TAB ENTER tick:8 ENTER tick:6 TAB ENTER tick:8 ENTER tick:6 TAB ENTER tick:8 ENTER tick:6 TAB ENTER tick:8 ENTER tick:6 TAB ENTER tick:8 tick:4

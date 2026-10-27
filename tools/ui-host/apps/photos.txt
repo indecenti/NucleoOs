@@ -7,3 +7,6 @@ view      ENTER
 viewpng   D D ENTER
 next      ENTER D
 backlist  ENTER DEL
+viewright ENTER R
+viewleft  ENTER D L
+viewmid   ENTER ENTER

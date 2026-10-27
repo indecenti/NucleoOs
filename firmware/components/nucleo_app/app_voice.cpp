@@ -151,6 +151,7 @@ static void tick(void)
 // ── Input ─────────────────────────────────────────────────────────────────────
 static void on_key(int key, char ch)
 {
+    if (key == NK_CHAR && ch >= 1 && ch <= 3) { s_tab = ch + 1; on_tab(); return; }   // panel tab ch -> tab ch-1
     // ─ TAB 0: TRIGGERS ──────────────────────────────────────────────────────
     if (s_tab == 0) {
         if (s_confirm_del) {                          // delete-template card is up: it owns every key
@@ -400,13 +401,12 @@ static void draw_status(int top_y)
 // ===== two screens ==============================================================================================
 // The external panel carries the trainer: the template list + a detail card (MODELLI), a big centred training
 // card (ADDESTRA) that mirrors the capture state, and the status rows (INFO). The Cardputer is the companion and,
-// crucially, where the typing + the GO push-to-talk happen: it shows "hold GO and speak" while training. Touch:
-// the tabs switch, a row taps to pick and again to re-train it, the card buttons train / delete / toggle.
-static int lg_tab_bar(int y, int Wd)
+// crucially, where the typing + the GO push-to-talk happen: it shows "hold GO and speak" while training. Touch is
+// on the content: a tab picks it, a row taps to pick and again to re-train it, the detail card's mic = re-train and
+// its bin = delete (then the confirm card), the training card = type the name / continue, the always-on switch.
+static void lg_mic(int x, int y, int r, unsigned short ring, unsigned short dot)   // the mic disc: ring + core
 {
-    const char *tabs[3] = { tab_label(0), tab_label(1), tab_label(2) };
-    (void)Wd;
-    return lg::tabs(y, tabs, 3, s_tab, ACC, nullptr);     // tap a tab = NK_TAB (cycles)
+    d.fillCircle(x, y, r, ring); d.fillCircle(x, y, r * 2 / 5, dot);
 }
 
 static void lg_tpl_row(int i, int x, int y, int w, int h, bool focus, unsigned short bg, void *)
@@ -428,11 +428,18 @@ static void lg_tab_triggers(int yb, int Wd, int Hd)
     lg::panel(px, py, pw, ph);
     const unsigned short cb = lg::card();
     lg::font(2); d.setTextColor(ACC, cb);
-    char t[40]; lg::fit(t, sizeof t, s_tpl_names[s_sel], pw - 20); d.drawString(t, px + 12, py + 14);
-    lg::font(0); d.setTextColor(MUTED, cb); d.drawString(TR("Modello vocale offline", "Offline voice template"), px + 12, py + 44);
-    lg::button(px + 12, py + ph - 86, pw - 24, 34, TR("Riaddestra", "Re-train"), ACC, BG, NK_CHAR, 'r');
-    lg::button(px + 12, py + ph - 44, pw - 24, 34, TR("Elimina", "Delete"), C_RED, 0xFFFF, NK_DEL, 0);
-    if (s_confirm_del) {
+    char t[40]; lg::fit(t, sizeof t, s_tpl_names[s_sel], pw - 20); d.drawString(t, px + 12, py + 12);
+    lg::font(0); d.setTextColor(MUTED, cb); d.drawString(TR("Modello offline", "Offline template"), px + 12, py + 40);
+    // the card's mic = re-train it; the bin in the corner = delete (registered first: it wins over the card)
+    const int bx = px + pw - 40, by = py + ph - 40;
+    d.fillRoundRect(bx, by, 32, 32, 8, C_RED);
+    d.fillRect(bx + 9, by + 12, 14, 13, 0xFFFF); d.fillRect(bx + 7, by + 8, 18, 3, 0xFFFF); d.fillRect(bx + 13, by + 5, 6, 3, 0xFFFF);
+    nucleo_touch_add(bx - 6, by - 6, 44, 44, NK_DEL, 0);
+    lg_mic(px + pw / 2, py + 90, 24, ACC, BG);
+    d.setTextColor(FG, cb); d.setTextDatum(top_center); d.drawString(TR("Riaddestra", "Re-train"), px + pw / 2, py + 122); d.setTextDatum(top_left);
+    nucleo_touch_add(px, py, pw, ph, NK_CHAR, 'r');
+    if (s_confirm_del) {                              // modal: only its own two buttons take taps (first target wins)
+        nucleo_touch_clear();
         const int cw = Wd - 80, cx = 40, chh = 120, cy = (Hd - chh) / 2;
         lg::panel(cx, cy, cw, chh, LINE); d.drawRoundRect(cx, cy, cw, chh, 8, C_RED);
         lg::font(1); d.setTextColor(C_RED, LINE); d.drawString(TR("Eliminare il modello?", "Delete template?"), cx + 16, cy + 12);
@@ -443,52 +450,40 @@ static void lg_tab_triggers(int yb, int Wd, int Hd)
     }
 }
 
+// One card for every training step: its colour, a big title, two lines and the mic disc. Tapping it is the step's
+// own action (type the name / continue); while waiting for GO it is not a target (the Cardputer holds GO).
 static void lg_tab_record(int yb, int Wd, int Hd)
 {
-    const int bx = 30, bw = Wd - 60, by = yb + 16, bh = Hd - yb - 28;
-    const int cx = bx + bw / 2, cy = by + bh / 2;
+    const int bx = 16, bw = Wd - 32, by = yb + 8, bh = Hd - yb - 16;
+    const bool listening = s_rec_step == RS_WAITING_FN && nucleo_voice_is_listening();
+    unsigned short box = LINE, tc = FG, ring = DIM;
+    const char *t1, *l1, *l2;
     switch (s_rec_step) {
     case RS_IDLE:
-        lg::panel(bx, by, bw, bh, LINE);
-        lg::font(2); d.setTextColor(FG, LINE); d.setTextDatum(top_center); d.drawString(TR("Nuova parola", "New word"), cx, by + 16); d.setTextDatum(top_left);
-        lg::font(0); d.setTextColor(ACC, LINE); d.drawString(TR("1. Scrivi il nome sul Cardputer", "1. Type the name on the Cardputer"), bx + 20, by + 54);
-        d.setTextColor(DIM, LINE); d.drawString(TR("2. Tieni premuto GO e parla", "2. Hold GO and speak"), bx + 20, by + 76);
-        d.setTextColor(DIM, LINE); d.drawString(TR("100% offline, nessun WAV salvato", "100% offline, no WAV stored"), bx + 20, by + 98);
-        lg::button(cx - 90, by + bh - 48, 180, 36, TR("Scrivi il nome", "Type the name"), ACC, BG, NK_ENTER, 0);
+        t1 = TR("Nuova parola", "New word");
+        l1 = TR("Tocca qui e scrivi il nome", "Tap here and type the name");
+        l2 = TR("Poi tieni premuto GO e parla", "Then hold GO and speak"); ring = ACC; break;
+    case RS_WAITING_FN:
+        if (listening) { box = REC_BG; tc = ACC2; }
+        t1 = listening ? TR("IN ASCOLTO...", "LISTENING...") : TR("TIENI GO e parla", "HOLD GO & speak");
+        l1 = TR("Parola:", "Word:"); l2 = s_rec_word;
+        if (listening) { int64_t t = esp_timer_get_time() / 200000; ring = (t & 1) ? C_RED : ACC2; }
         break;
-    case RS_WAITING_FN: {
-        const bool listening = nucleo_voice_is_listening();
-        const unsigned short box = listening ? REC_BG : LINE;
-        lg::panel(bx, by, bw, bh, box);
-        lg::font(2); d.setTextColor(listening ? ACC2 : ACC, box); d.setTextDatum(top_center);
-        d.drawString(listening ? TR("IN ASCOLTO...", "LISTENING...") : TR("TIENI GO e parla", "HOLD GO & speak"), cx, by + 16);
-        d.setTextDatum(top_left);
-        lg::font(0); d.setTextColor(FG, box); d.drawString(TR("Parola:", "Word:"), bx + 20, by + 54);
-        lg::font(2); d.setTextColor(ACC, box); char w[32]; lg::fit(w, sizeof w, s_rec_word, bw - 120); d.drawString(w, bx + 20, by + 74);
-        if (listening) {
-            int64_t t = esp_timer_get_time() / 200000; int r = 16 + (int)(t % 5);
-            d.fillCircle(bx + bw - 44, cy, r, (t & 1) ? C_RED : ACC2); d.fillCircle(bx + bw - 44, cy, 9, FG);
-        } else { d.drawCircle(bx + bw - 44, cy, 17, MUTED); d.fillCircle(bx + bw - 44, cy, 8, DIM); }
-        break;
-    }
     case RS_DONE:
-        lg::panel(bx, by, bw, bh, OK_BG);
-        lg::font(3); d.setTextColor(ACC, OK_BG); d.setTextDatum(top_center); d.drawString(TR("SALVATO!", "SAVED!"), cx, by + 24); d.setTextDatum(top_left);
-        lg::font(1); d.setTextColor(FG, OK_BG); char m[48]; snprintf(m, sizeof m, "%s.tpl", s_rec_word);
-        { char mf[48]; lg::fit(mf, sizeof mf, m, bw - 40); d.setTextDatum(top_center); d.drawString(mf, cx, by + bh / 2 + 6); }
-        lg::font(0); d.setTextColor(MUTED, OK_BG); d.drawString(TR("Tocca per continuare", "Tap to continue"), cx, by + bh - 28); d.setTextDatum(top_left);
-        nucleo_touch_add(bx, by, bw, bh, NK_ENTER, 0);
-        break;
-    case RS_TOO_SHORT:
-        lg::panel(bx, by, bw, bh, ERR_BG);
-        lg::font(2); d.setTextColor(C_RED, ERR_BG); d.setTextDatum(top_center); d.drawString(TR("ERRORE AUDIO", "AUDIO ERROR"), cx, by + 20); d.setTextDatum(top_left);
-        lg::font(0); d.setTextColor(FG, ERR_BG); d.setTextDatum(top_center);
-        d.drawString(TR("Troppo corto o silenzio.", "Too short or silent."), cx, by + bh / 2);
-        d.setTextColor(MUTED, ERR_BG); d.drawString(TR("Tocca e tieni GO piu a lungo.", "Tap and hold GO longer."), cx, by + bh - 28);
-        d.setTextDatum(top_left);
-        nucleo_touch_add(bx, by, bw, bh, NK_ENTER, 0);
-        break;
+        box = OK_BG; tc = ACC; t1 = TR("SALVATO!", "SAVED!"); l1 = s_rec_word;
+        l2 = TR("Tocca per continuare", "Tap to continue"); ring = ACC; break;
+    default:
+        box = ERR_BG; tc = C_RED; t1 = TR("ERRORE AUDIO", "AUDIO ERROR"); l1 = TR("Troppo corto o silenzio.", "Too short or silent.");
+        l2 = TR("Tocca e tieni GO piu a lungo.", "Tap and hold GO longer."); ring = C_RED; break;
     }
+    lg::panel(bx, by, bw, bh, box);
+    lg_mic(bx + bw - 50, by + 44, 26, ring, FG);
+    lg::font(2); d.setTextColor(tc, box);
+    char f[40]; lg::fit(f, sizeof f, t1, bw - 110); d.drawString(f, bx + 18, by + 22);
+    lg::font(0); d.setTextColor(FG, box); lg::fit(f, sizeof f, l1, bw - 36); d.drawString(f, bx + 18, by + 92);
+    lg::font(s_rec_step == RS_WAITING_FN ? 2 : 0); d.setTextColor(s_rec_step == RS_WAITING_FN ? ACC : MUTED, box);
+    lg::fit(f, sizeof f, l2, bw - 36); d.drawString(f, bx + 18, by + 116);
+    if (s_rec_step != RS_WAITING_FN) nucleo_touch_add(bx, by, bw, bh, NK_ENTER, 0);
 }
 
 static void lg_tab_status(int yb, int Wd, int Hd)
@@ -506,9 +501,14 @@ static void lg_tab_status(int yb, int Wd, int Hd)
     lg::kv(px + 16, ky, pw - 32, TR("Modelli", "Templates"), tpl, s_tpl_overflow ? ACC2 : ACC, cb); ky += 24;
     lg::kv(px + 16, ky, pw - 32, "WS client", wss, ws > 0 ? ACC : MUTED, cb); ky += 24;
     lg::kv(px + 16, ky, pw - 32, "Routing", ws > 0 ? "Web" : TR("Locale", "Local"), ws > 0 ? ACC2 : ACC, cb); ky += 24;
-    lg::kv(px + 16, ky, pw - 32, TR("Lingua", "Language"), "IT/EN (Anima)", MUTED, cb);
-    lg::button(px + 16, py + ph - 42, pw - 32, 34, aon ? TR("Disattiva sempre-attiva", "Turn always-on off") : TR("Attiva sempre-attiva", "Turn always-on on"),
-               aon ? LINE : ACC, aon ? FG : BG, NK_CHAR, 'a');
+    lg::kv(px + 16, ky, pw - 32, TR("Lingua", "Language"), "IT/EN (Anima)", MUTED, cb); ky += 34;
+    // the always-on switch: the row itself toggles it (PTT from the home screen, saved in settings)
+    d.drawFastHLine(px + 16, ky - 8, pw - 32, LINE);
+    lg::font(1); d.setTextColor(FG, cb); d.drawString(TR("Sempre attiva", "Always on"), px + 16, ky + 6);
+    const int sx = px + pw - 64;
+    d.fillRoundRect(sx, ky + 2, 48, 26, 13, aon ? ACC : LINE);
+    d.fillCircle(aon ? sx + 35 : sx + 13, ky + 15, 10, 0xFFFF);
+    nucleo_touch_add(px, ky - 6, pw, 42, NK_CHAR, 'a');
 }
 
 static void draw_large(void)
@@ -516,8 +516,9 @@ static void draw_large(void)
     const int Wd = d.width(), Hd = d.height();
     nucleo_touch_clear();
     char rt[16] = ""; if (s_tab == 0) snprintf(rt, sizeof rt, "%d", s_tpl_count);
-    const int y = lg::header("Voice", rt[0] ? rt : nullptr, ACC, NK_BACK, NK_TAB);
-    const int yb = lg_tab_bar(y, Wd);
+    const int y = lg::header("Voice", rt[0] ? rt : nullptr, ACC, NK_BACK, 0);
+    const char *tabs[3] = { tab_label(0), tab_label(1), tab_label(2) };
+    const int yb = lg::tabs(y, tabs, 3, s_tab, ACC, "\x01\x02\x03");   // tap a tab = that tab
     if (s_tab == 0)      lg_tab_triggers(yb, Wd, Hd);
     else if (s_tab == 1) lg_tab_record(yb, Wd, Hd);
     else                 lg_tab_status(yb, Wd, Hd);

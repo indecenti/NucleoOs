@@ -347,21 +347,28 @@ static int wrap(int x, int y, int w, const char *s, int maxl, uint16_t c, int sk
     return y + (lines - skip) * 16;
 }
 
-// The app's tile: its category colour with its initial.
-static void tile(int x, int y, int sz, const char *name, int cat)
+// The app's tile: its category colour with its initial (Font4 on the Cardputer, FreeSansBold18 on the panel).
+static void tile(int x, int y, int sz, const char *name, int cat, const lgfx::IFont *f = &fonts::Font4)
 {
     d.fillRoundRect(x, y, sz, sz, sz / 4, CATS[cat].col);
-    char l[2] = { name[0] ? name[0] : '?', 0 };
-    txt(&fonts::Font4, x + sz / 2, y + sz / 2 + 1, l, INK, textdatum_t::middle_center);
+    char l[2] = { name && name[0] ? name[0] : '?', 0 };
+    txt(f, x + sz / 2, y + sz / 2 + 1, l, INK, textdatum_t::middle_center);
+    d.setTextDatum(textdatum_t::top_left);
+}
+
+// What the store task is doing, in words (the compact card and the panel).
+static const char *progress_what(const st_state_t *st)
+{
+    return nucleo_store_op() == NST_OP_REFRESH ? TR5("Aggiorno il catalogo", "Updating the catalog", "Actualizando catalogo", "Mise a jour du catalogue", "Katalog wird geladen")
+         : nucleo_store_op() == NST_OP_REMOVE ? TR5("Rimuovo", "Removing", "Quitando", "Suppression", "Entferne")
+         : st->phase == ST_PH_INSTALL ? TR5("Installo", "Installing", "Instalando", "Installation", "Installiere")
+         : TR5("Scarico e verifico", "Downloading, verifying", "Descargando y verificando", "Telechargement, verification", "Lade und pruefe");
 }
 
 static void draw_progress(int top, int h)
 {
     const st_state_t *st = nucleo_store_state();
-    const char *what = nucleo_store_op() == NST_OP_REFRESH ? TR5("Aggiorno il catalogo", "Updating the catalog", "Actualizando catalogo", "Mise a jour du catalogue", "Katalog wird geladen")
-                     : nucleo_store_op() == NST_OP_REMOVE ? TR5("Rimuovo", "Removing", "Quitando", "Suppression", "Entferne")
-                     : st->phase == ST_PH_INSTALL ? TR5("Installo", "Installing", "Instalando", "Installation", "Installiere")
-                     : TR5("Scarico e verifico", "Downloading, verifying", "Descargando y verificando", "Telechargement, verification", "Lade und pruefe");
+    const char *what = progress_what(st);
     d.fillRoundRect(10, top + 20, 220, 78, 10, LINE);
     txt(&fonts::Font2, 120, top + 28, what, FG, textdatum_t::top_center);
     int pct = st->pct < 0 ? 0 : st->pct > 100 ? 100 : st->pct;
@@ -507,12 +514,39 @@ static const char *const LG_TABS[5][NTABS] = {
     { "Nuevas", "Juegos", "Categorias", "Mias" }, { "Neuf", "Jeux", "Categ.", "Mes apps" },
     { "Neu", "Spiele", "Kategorien", "Meine" } };
 
-static void lg_tile(int x, int y, int sz, const char *name, int cat)
+static void lg_tile(int x, int y, int sz, const char *name, int cat) { tile(x, y, sz, name, cat, &fonts::FreeSansBold18pt7b); }
+
+// An app as a card in the panel lists: its tile, name and facts, and its action ON the card â€” Install / Update /
+// Open. The action is a field registered before the row's own target (the first registered wins), so tapping it
+// acts at once (on_key, via card_top) while the rest of the card selects / opens the app page.
+enum { LG_CARD = 56 };
+// The panel card list's top, for drawing and for hit-testing the action taps: under the header (a category) or
+// under the header + the tabs (+ the "update all" bar in Mine). Must match draw_large's layout.
+static int card_top(void) { return s_view == V_CAT ? lg::HEAD + 2 : lg::HEAD + 34 + (s_tab == TAB_MINE && s_updates ? 36 : 0); }
+static void card_row(int i, int x, int y, int w, int h, bool focus, unsigned short bg, void *)
 {
-    d.fillRoundRect(x, y, sz, sz, sz / 4, CATS[cat].col);
-    char l[2] = { name && name[0] ? name[0] : '?', 0 };
-    lg::font(3); d.setTextDatum(middle_center); d.setTextColor(INK, CATS[cat].col);
-    d.drawString(l, x + sz / 2, y + sz / 2 + 1); d.setTextDatum(top_left);
+    const Row &r = M->rows[M->vis[i]];
+    if (!focus) { bg = lg::card(); d.fillRoundRect(x, y + 2, w, h - 4, 8, bg); }
+    lg_tile(x + 7, y + 8, 40, r.name, r.cat);
+    const bool act = r.state == S_NEW || r.state == S_UPDATE || r.state == S_OK;
+    const int aw = 90, ax = x + w - aw - 7, tx = x + 56, tw = (act ? ax : x + w - 8) - tx - 6;
+    char t[48]; lg::font(1); d.setTextColor(focus ? INK : FG, bg); lg::fit(t, sizeof t, r.name, tw); d.drawString(t, tx, y + 10);
+    char sz[16]; kb(sz, sizeof sz, r.size);
+    char f[48]; snprintf(f, sizeof f, "%s  %s", sz, act ? CATS[r.cat].n[lang_idx()] : list_word(r.state));
+    lg::font(0); d.setTextColor(focus ? INK : MUTED, bg); lg::fit(t, sizeof t, f, tw); d.drawString(t, tx, y + 32);
+    if (!act) return;
+    const unsigned short pc = r.state == S_OK ? C_GREEN : state_col(r.state);
+    d.fillRoundRect(ax, y + 12, aw, h - 24, 8, pc);
+    if (focus) d.drawRoundRect(ax, y + 12, aw, h - 24, 8, INK);
+    lg::fit(t, sizeof t, r.state == S_OK ? TR5("Apri", "Open", "Abrir", "Ouvrir", "Oeffnen") : state_word(r.state), aw - 8);
+    d.setTextDatum(middle_center); d.setTextColor(INK, pc);
+    d.drawString(t, ax + aw / 2, y + h / 2); d.setTextDatum(top_left);
+    lg::field(ax - 4, y + 2, aw + 8, h - 4);
+}
+static void card_list(void)
+{
+    const int y = card_top();
+    lg::list(0, y, d.width(), d.height() - y - 4, LG_CARD, s_nvis, s_sel, &s_lg_scroll, card_row, nullptr, ACC);
 }
 
 static void lg_progress(void)
@@ -520,10 +554,7 @@ static void lg_progress(void)
     const int W = d.width(), H = d.height();
     d.fillRect(0, 0, W, H, BG);
     const st_state_t *st = nucleo_store_state();
-    const char *what = nucleo_store_op() == NST_OP_REFRESH ? TR5("Aggiorno il catalogo", "Updating the catalog", "Actualizando catalogo", "Mise a jour du catalogue", "Katalog wird geladen")
-                     : nucleo_store_op() == NST_OP_REMOVE ? TR5("Rimuovo", "Removing", "Quitando", "Suppression", "Entferne")
-                     : st->phase == ST_PH_INSTALL ? TR5("Installo", "Installing", "Instalando", "Installation", "Installiere")
-                     : TR5("Scarico e verifico", "Downloading, verifying", "Descargando y verificando", "Telechargement, verification", "Lade und pruefe");
+    const char *what = progress_what(st);
     lg::font(2); d.setTextDatum(top_center); d.setTextColor(FG, BG); d.drawString(what, W / 2, H / 2 - 44); d.setTextDatum(top_left);
     const int pct = st->pct < 0 ? 0 : st->pct > 100 ? 100 : st->pct;
     lg::bar(30, H / 2, W - 60, 16, pct, ACC);
@@ -607,8 +638,8 @@ static void draw_large(void)
     if (s_view == V_CAT) {
         char cnt[12]; snprintf(cnt, sizeof cnt, "%d", s_nvis);
         const int y = lg::header(CATS[s_cat].n[lang_idx()], cnt, CATS[s_cat].col, NK_BACK);
-        if (s_nvis) lg::text_list(0, y + 2, W, H - y - 4, s_nvis, s_sel, &s_lg_scroll, row_label, row_right, row_color, nullptr, ACC);
-        else lg::message(0, y, W, H - y, TR5("Nessuna app", "No apps", "Sin apps", "Aucune app", "Keine Apps"), nullptr, MUTED);
+        if (s_nvis) card_list();
+        else lg::message(0, y, W, H - y, TR5("Nessuna app in questa categoria.", "No apps in this category.", "Sin apps en esta categoria.", "Aucune app ici.", "Keine Apps hier."), nullptr, MUTED);
         nucleo_touch_commit();
         return;
     }
@@ -630,11 +661,19 @@ static void draw_large(void)
         lg::button(8, y + 2, W - 16, 32, b, C_YELLOW, INK, NK_CHAR, 'u');
         listy = y + 38; listh = H - listy - 4;
     }
-    if (s_nvis) lg::text_list(0, listy, W, listh, s_nvis, s_sel, &s_lg_scroll, row_label, row_right, row_color, nullptr, ACC);
+    if (s_nvis) card_list();
     else {
         const char *msg = nucleo_store_status() == NST_FAILED ? nucleo_store_error()
-                        : !s_n ? TR5("Catalogo non ancora scaricato: serve il Wi-Fi.", "Catalog not downloaded yet: it needs Wi-Fi.", "Catalogo aun no descargado: necesita Wi-Fi.", "Catalogue pas encore telecharge : il faut le Wi-Fi.", "Katalog noch nicht geladen: WLAN noetig.")
-                        : s_tab == TAB_MINE ? TR5("Nessuna app dallo store. Guarda in Novita'.", "No store apps yet. Look in New.", "Sin apps de la tienda. Mira en Nuevas.", "Aucune app. Voyez Nouveau.", "Noch keine Store-Apps. Siehe Neu.")
+                        : !s_n ? TR5("Catalogo non ancora scaricato: serve il Wi-Fi (r per riprovare).",
+                             "Catalog not downloaded yet: it needs Wi-Fi (r to retry).",
+                             "Catalogo aun no descargado: necesita Wi-Fi (r para reintentar).",
+                             "Catalogue pas encore telecharge : il faut le Wi-Fi (r pour reessayer).",
+                             "Katalog noch nicht geladen: WLAN noetig (r fuer neu).")
+                        : s_tab == TAB_MINE ? TR5("Nessuna app installata dallo store. Le trovi in Novita' e Categorie.",
+                           "No apps installed from the store yet. Find them in New and Categories.",
+                           "Aun no hay apps de la tienda. Buscalas en Nuevas y Categorias.",
+                           "Aucune app de la boutique. Voyez Nouveau et Categories.",
+                           "Noch keine Store-Apps. Siehe Neu und Kategorien.")
                         : TR5("Niente qui, per ora.", "Nothing here yet.", "Nada aqui por ahora.", "Rien ici pour l'instant.", "Noch nichts hier.");
         lg::message(0, listy, W, listh, msg, nullptr, nucleo_store_status() == NST_FAILED ? C_RED : MUTED);
     }
@@ -801,6 +840,17 @@ static void on_key(int key, char ch)
         else if (key == NK_ENTER && stt == S_OK) open_installed();
         else if (key == NK_DEL && st_installed(NUCLEO_SD_MOUNT, M->app.id, nullptr)) { s_yes = false; s_view = V_CONFIRM_REMOVE; }
         nucleo_app_request_draw();
+        return;
+    }
+    int tx, ty;
+    if (lg::tap(key, ch, &tx, &ty)) {                     // a card's own action on the panel: open the app and act
+        const int i = s_lg_scroll + (ty - card_top()) / LG_CARD;
+        if (i < 0 || i >= s_nvis) return;
+        s_sel = i; open_app();
+        if (s_view != V_APP) return;
+        const uint8_t stt = state_of(M->app);
+        if (stt == S_NEW || stt == S_UPDATE) start(NST_OP_INSTALL, M->app.id);
+        else if (stt == S_OK) open_installed();
         return;
     }
     if (nucleo_touch_is_row(key, ch)) {                   // a tapped list / category row on the panel

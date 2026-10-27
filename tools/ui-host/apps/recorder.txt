@@ -14,3 +14,6 @@ audio     TAB R
 info      TAB R R
 rowtap    row:2
 aiwork    c:t
+playseek  ENTER tap:250,150
+playvol   ENTER tap:240,111
+setvol    TAB R tap:60,115

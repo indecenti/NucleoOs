@@ -31,6 +31,8 @@
 #include <stdio.h>
 #include <string.h>
 #include "nucleo_i18n.h"        // TR5: every string follows the system language
+#include "app_large.h"          // two screens: the panel IS the light, the Cardputer the companion
+#include "nucleo_touch.h"
 
 // Light colours: genuine content (the light itself), named per the UI-kit rule.
 static const unsigned short L_WHITE  = 0xFFFF;
@@ -87,6 +89,7 @@ static const int SOS_UNIT_MS = 200;
 
 static void tab(void);       // defined below (TAB cycles the pattern)
 static bool back(int key);   // defined below (LEFT = previous colour)
+static bool touch(int key, char ch);   // defined below (a tap on the panel)
 
 static void backlight(bool on) { nucleo_ui_set_brightness(on ? (unsigned char)(s_level * 255 / 100) : 0); }
 
@@ -125,16 +128,25 @@ static bool poll(void)
     if (s_toast_until && now >= s_toast_until) { s_toast_until = 0; redraw = true; }
     if (s_pat == PAT_BLINK) {
         int64_t half = 5000000LL / HZ10[s_hz];                      // 50% duty: half a period, in us
-        if (now - s_phase_t0 >= half) { s_phase_t0 = now; s_phase_on = !s_phase_on; backlight(s_phase_on); }
+        if (now - s_phase_t0 >= half) { s_phase_t0 = now; s_phase_on = !s_phase_on; backlight(s_phase_on); redraw |= nucleo_app_two_screens(); }
     } else if (s_pat == PAT_SOS) {
         int64_t len = (int64_t)SOS[s_sos_i] * SOS_UNIT_MS * 1000;
         if (now - s_phase_t0 >= len) {
             s_phase_t0 = now; s_sos_i = (s_sos_i + 1) % SOS_N;
             s_phase_on = (s_sos_i % 2) == 0;                        // even = a mark, odd = the gap after it
             backlight(s_phase_on);
+            redraw |= nucleo_app_two_screens();                     // the panel's light is painted, not a backlight
         }
     }
     return redraw;
+}
+
+// <= 39 chars: the hint bar shows no more (also the companion's key line)
+static const char *hint(void)
+{
+    return TR5("spazio on  1-3 col.  tab modo  U/D reg.", "spc on  1-3 color  tab mode  U/D adj.",
+               "esp. on  1-3 color  tab modo  U/D ajus.", "esp. on  1-3 coul.  tab mode  U/D regl.",
+               "Leer an  1-3 Farbe  tab Modus  U/D");
 }
 
 static void enter(void)
@@ -149,10 +161,7 @@ static void enter(void)
     nucleo_app_set_poll_handler(poll);
     nucleo_app_set_tab_handler(tab);
     nucleo_app_set_back_handler(back);
-    // <= 39 chars: the hint bar shows no more
-    nucleo_app_set_hint(TR5("spazio on  1-3 col.  tab modo  U/D reg.", "spc on  1-3 color  tab mode  U/D adj.",
-                            "esp. on  1-3 color  tab modo  U/D ajus.", "esp. on  1-3 coul.  tab mode  U/D regl.",
-                            "Leer an  1-3 Farbe  tab Modus  U/D"));
+    nucleo_app_set_hint(hint());
     nucleo_app_request_draw();
 }
 
@@ -160,6 +169,7 @@ static void set_col(int c) { s_col = (c + COL_N) % COL_N; changed(); }
 
 static void on_key(int key, char ch)
 {
+    if (touch(key, ch)) return;
     if (ch == ' ' || key == NK_ENTER) {        // ESC/back never reaches here: the framework closes the app
         s_on = !s_on; s_toast_until = 0;
         apply_state();
@@ -200,8 +210,28 @@ static void slider_text(char *b, int n, int *pct)
     }
 }
 
+// "White  Solid  80%": what the light is set to (the toast, the companion).
+static void state_text(char *t, int n)
+{
+    char v[16]; int pct; slider_text(v, sizeof v, &pct);
+    snprintf(t, n, "%s  %s  %s", col_name(s_col), pat_name(s_pat), v);
+}
+
+static const char *title(void) { return TR5("Torcia", "Torch", "Linterna", "Lampe", "Lampe"); }
+
+// The Cardputer while the panel is the light: what it is set to, on or off, the keys.
+static void draw_companion(void)
+{
+    d.fillRect(0, nucleo_app_content_top(), W, nucleo_app_content_height(), BG);
+    int y = lg::comp_head(title(), C_YELLOW);
+    char t[40]; state_text(t, sizeof t);
+    lg::message(0, y, W, 88, t, s_on ? "ON" : "OFF", COLS[s_col] == L_WHITE ? C_YELLOW : COLS[s_col]);
+    lg::comp_keys(hint());
+}
+
 static void draw(void)
 {
+    if (nucleo_app_two_screens()) { draw_companion(); return; }
     int top = nucleo_app_content_top(), h = nucleo_app_content_height();
     unsigned short lc = COLS[s_col];
     if (s_on) {
@@ -209,8 +239,7 @@ static void draw(void)
         // toast right after a change, so you can see what U/D, TAB or 1-3 just did without switching off.
         d.fillRect(0, top, W, h, lc);
         if (s_toast_until) {
-            char v[16]; int pct; slider_text(v, sizeof v, &pct);
-            char t[40]; snprintf(t, sizeof t, "%s  %s  %s", col_name(s_col), pat_name(s_pat), v);
+            char t[40]; state_text(t, sizeof t);
             int tw = (int)strlen(t) * 12, ts = 2;
             if (tw > W - 16) { ts = 1; tw = (int)strlen(t) * 6; }
             int bw = tw + 16, bh = ts * 8 + 12, bx = (W - bw) / 2, by = top + (h - bh) / 2;
@@ -222,10 +251,9 @@ static void draw(void)
     }
 
     // Off: the setup screen — colour swatches, pattern tabs, the pattern's slider.
-    const char *title = TR5("Torcia", "Torch", "Linterna", "Lampe", "Lampe");
     const char *rgt   = TR5("tap GO: ovunque", "tap GO: anywhere", "GO: en todo", "GO: partout", "GO: ueberall");
-    if (10 + (int)strlen(title) * 12 + 8 > 238 - (int)strlen(rgt) * 6) rgt = "";
-    int y = app_ui_title(title, lc == L_WHITE ? C_YELLOW : lc, rgt);
+    if (10 + (int)strlen(title()) * 12 + 8 > 238 - (int)strlen(rgt) * 6) rgt = "";
+    int y = app_ui_title(title(), lc == L_WHITE ? C_YELLOW : lc, rgt);
 
     // three big swatches, 1-3 quick-select: the light itself, with its number + name in ink on it
     const int sw = 70, sh = 30, gap = 8, x0 = (W - (3 * sw + 2 * gap)) / 2, sy = y + 4;
@@ -249,13 +277,58 @@ static void draw(void)
     app_ui_gauge(ty + 8, lbl, v, pct, lc == L_WHITE ? C_YELLOW : lc);
 }
 
+// The panel. Lit: the whole 320x240 IS the light (dimmed to the level, dark in a blink's off half); a tap
+// switches it off, a drag adjusts it (finger up/down = brightness or speed, left/right = colour). Off: the setup —
+// three swatches that ARE the light (tap one = light it in that colour), the pattern tabs, the level it will have.
+static void draw_large(void)
+{
+    nucleo_touch_clear();
+    unsigned short lc = COLS[s_col], acc = lc == L_WHITE ? C_YELLOW : lc;
+    if (s_on) {
+        unsigned short c = lc;
+        if (s_pat != PAT_SOLID && !s_phase_on) c = L_INK;
+        else {                                                    // the panel has no dimmable backlight here: scale the colour
+            int r = ((c >> 11) & 31) * s_level / 100, g = ((c >> 5) & 63) * s_level / 100, b = (c & 31) * s_level / 100;
+            c = (unsigned short)((r << 11) | (g << 5) | b);
+        }
+        d.fillScreen(c);
+        lg::field(0, 0, 320, 240);
+        nucleo_touch_add_pad(0, 0, 320, 240, 28);
+    } else {
+        d.fillScreen(BG);
+        char v[16]; int pct; slider_text(v, sizeof v, &pct);
+        lg::header(title(), v, acc);                                // the level it will light at
+        for (int i = 0; i < COL_N; i++)                             // the swatches ARE the light: tap = light it
+            lg::button(8 + i * 104, 40, 96, 84, col_name(i), i == s_col ? COLS[i] : DIM, i == s_col ? L_INK : FG,
+                       NK_CHAR, (char)(NUCLEO_TOUCH_ROW + i));
+        const char *pats[PAT_N] = { pat_name(PAT_SOLID), pat_name(PAT_BLINK), pat_name(PAT_SOS) };
+        int y = lg::tabs(136, pats, PAT_N, s_pat, acc, "\x14\x15\x16"   /* ROW + 4..6 */);
+        lg::bar(16, y + 20, 288, 28, pct, acc);
+    }
+    nucleo_touch_commit();
+}
+
+// A touch on the panel: true when handled.
+static bool touch(int key, char ch)
+{
+    if (nucleo_touch_is_row(key, ch)) {
+        int i = ch - NUCLEO_TOUCH_ROW;
+        if (i >= 4) { s_pat = i - 4; changed(); return true; }    // a pattern tab
+        s_col = i; s_on = true; changed();                         // a swatch: light it
+        return true;
+    }
+    if (!nucleo_touch_is_field(key, ch)) return false;
+    s_on = false; apply_state(); nucleo_app_request_draw();         // tap the light = off
+    return true;
+}
+
 static void on_exit(void) { nucleo_app_set_brightness(s_prev_bright); }
 
 extern "C" void nucleo_register_torch(void)
 {
     static const nucleo_app_def_t app = {
         "torch", "Torch", "Tools", "Screen flashlight: white, red, orange; solid, blink, SOS",
-        'T', C_YELLOW, enter, on_key, nullptr, draw, on_exit
+        'T', C_YELLOW, enter, on_key, nullptr, draw, on_exit, 0, nullptr, draw_large
     };
     nucleo_app_register(&app);
 }

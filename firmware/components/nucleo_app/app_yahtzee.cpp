@@ -24,6 +24,13 @@
 #include "esp_random.h"
 #include "esp_timer.h"
 #include "app_gfx.h"
+#include "app_large.h"
+#include "nucleo_touch.h"
+
+// Two screens: the painters draw the compact 240x135 frame or the native 320x240 panel (s_big, view()).
+static bool s_big;
+static int  s_vw = 240, s_vh = 135;   // W / H inside the shared painters (#define W s_vw around them)
+static void view(bool big) { s_big = big; s_vw = big ? 320 : 240; s_vh = big ? 240 : 135; }
 
 #define TWO_PI 6.2831853f
 #define DIRR "/sd/data/yahtzee"
@@ -108,10 +115,13 @@ static void ptag(int i, char *b) { snprintf(b, 8, s_pl[i].cpu ? "CPU%d" : "P%d",
 
 // Fill the particle pool. rain=false: a radial burst from the screen centre (YAHTZEE fireworks).
 // rain=true: confetti falling from the top (game over).
+#define W s_vw
+#define H s_vh
 static void spawn_burst(bool rain)
 {
     static const uint16_t COLS[6] = { RGB(255, 219, 0), RGB(255, 73, 85), RGB(73, 219, 85), RGB(109, 146, 255), 0xFFFF, RGB(219, 109, 255) };
     s_npart = 30;
+    view(nucleo_app_two_screens());                                   // the burst fills the screen it is seen on
     for (int i = 0; i < s_npart; i++) {
         uint32_t r = esp_random();
         Part &q = s_part[i];
@@ -126,7 +136,10 @@ static void spawn_burst(bool rain)
         q.col = COLS[(r >> 20) % 6];
         q.lmax = q.life = (uint8_t)(60 + (r >> 17) % 60);
     }
+    view(false);
 }
+#undef W
+#undef H
 
 // ---- sound: the deployed pack (tools/sfx-gen/games/yahtzee.py) — never synthesized on the device; a cue
 // whose WAV is missing plays a short tone instead ----
@@ -500,12 +513,17 @@ static void topbar(void)
     text(b, W - 4, 0, 2, gui::F_BODY, pc);
     d.drawFastHLine(0, TOPH - 1, W, fx3d::scl(pc, 170, 255));
 }
+#define W s_vw
+#define H s_vh
 static void draw_toast(void)
 {
-    gui::panel(13, 42, 214, 48, K_BLK, s_toast_col);
-    text(s_toast, W / 2, 47, 1, gui::F_BODY, s_toast_col);
-    text(s_toast2, W / 2, 69, 1, gui::F_SMALL, 0xFFFF);
+    int y = s_big ? 100 : 42;
+    gui::panel(W / 2 - 107, y, 214, 48, K_BLK, s_toast_col);
+    text(s_toast, W / 2, y + 5, 1, gui::F_BODY, s_toast_col);
+    text(s_toast2, W / 2, y + 27, 1, gui::F_SMALL, 0xFFFF);
 }
+#undef W
+#undef H
 
 // ---------------------------------------------------------------- ROLL view
 #define CELLH 64
@@ -651,20 +669,114 @@ static void draw_score(void)
     if (fw + gui::text_width(tb, gui::F_SMALL) < W - 16) text(tb, W - 4, bandY + 1, 2, gui::F_SMALL, MUTED);   // only when it fits
 }
 
+#define W s_vw                 // from here to draw_celebration: the painters shared by both screens
+#define H s_vh
+// ---------------------------------------------------------------- the panel (two screens, s_big)
+// One table for the whole turn: a header (back chevron, player, round, total), the dice tray with the roll cup,
+// and the whole score card below in two columns. One field: tap a die = hold it, the cup / the tray = roll (a
+// flick across the tray too), a box = pick it, tap it again = score it. Menus are rows: tap = pick, again = open.
+#define LH 30                  // header band
+#define LCARD 100              // score card top (the tray is [LH, LCARD))
+#define K_FLICK 0x0F           // a drag across the tray (scroll area key)
+static void lchev(void) { text("<", 8, 3, 0, gui::F_TITLE, FG); nucleo_touch_add(0, 0, 28, LH, NK_BACK, 0); }
+static int ltitle(const char *name, const char *sub, uint16_t acc)
+{
+    if (!s_big) return gui::title(name, sub, acc);
+    gui::vgradient(0, LH, W, H - LH, RGB(36, 36, 0), K_BLK);
+    d.fillRect(0, 0, W, LH, K_BLK);
+    d.drawFastHLine(0, LH - 1, W, acc);
+    lchev();
+    text(name, W / 2, 4, 1, gui::F_TITLE, acc);
+    if (sub) text(sub, W / 2, LH + 4, 1, gui::F_SMALL, MUTED);
+    return sub ? LH + 24 : LH + 8;
+}
+static void lrow(int i, int x, int y, int w, const char *s, bool sel)
+{
+    d.fillSmoothRoundRect(x, y, w, 44, 10, sel ? C_YELLOW : RGB(36, 36, 36));
+    text(s, x + w / 2, y + 13, 1, gui::F_BODY, sel ? K_BLK : 0xFFFF);
+    nucleo_touch_add(x, y, w, 44, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + i));
+}
+static void draw_table(void)
+{
+    const Player &p = s_pl[s_cur];
+    int64_t now = esp_timer_get_time();
+    bool idle = !p.cpu && !s_anim;
+    uint16_t pc = PCOL[s_cur];
+    char b[28];
+    d.fillRect(0, 0, W, LH, K_BLK);
+    lchev();
+    ptag(s_cur, b);
+    int cw = gui::text_width(b, gui::F_BODY) + 12;
+    d.fillSmoothRoundRect(28, 4, cw, 22, 6, pc);
+    text(b, 28 + cw / 2, 6, 1, gui::F_BODY, K_BLK);
+    snprintf(b, sizeof b, GT("Giro %d/13", "Round %d/13"), s_turn + 1);
+    text(b, 36 + cw, 7, 0, gui::F_SMALL, FG);
+    snprintf(b, sizeof b, "%d", total(&p));
+    text(b, W - 6, 2, 2, gui::F_BIG, pc);
+    d.drawFastHLine(0, LH - 1, W, pc);
+
+    // the tray: five cells and the roll cup
+    d.fillRect(0, LH, W, LCARD - LH, TRAY);
+    float t = 1.0f;
+    if (s_anim) { t = (float)(now - s_roll_us) / (float)s_dur_us; if (t > 1) t = 1; if (t < 0) t = 0; }
+    bool contrib[5] = {};
+    if (s_phase == PH_SCORE && allowed(&p, s_sel) && preview(&p, s_sel) > 0) compute_contribution(s_sel, contrib);
+    for (int i = 0; i < 5; i++) {
+        int cx = 28 + i * 52;
+        bool rolling = s_anim && s_d[i].rolling;
+        uint16_t edge = contrib[i] ? cat_color(s_sel) : s_phase == PH_ROLL && i == s_diecur && s_rolled && idle ? C_YELLOW : 0;
+        if (s_d[i].held) d.fillSmoothRoundRect(cx - 25, LH + 3, 50, 64, 8, RGB(0, 73, 36));
+        if (edge) d.drawRoundRect(cx - 25, LH + 3, 50, 64, 8, edge);
+        draw_die(i, cx, LH + 28, 18.0f, !rolling || t > 0.55f, rolling ? (int)(sinf(t * 3.14159f) * 5.0f) : 0);
+        if (s_d[i].held) text(GT("TIENI", "HOLD"), cx, LH + 51, 1, gui::F_SMALL, C_GREEN);
+    }
+    bool can = idle && s_rolls > 0;
+    d.fillSmoothRoundRect(264, LH + 4, 52, 62, 10, can ? pc : RGB(36, 73, 36));
+    for (int r = 0; r < 3; r++) d.fillSmoothRoundRect(272 + r * 13, LH + 14, 10, 42, 5, r < s_rolls ? (can ? 0xFFFF : MUTED) : RGB(0, 54, 18));   // rolls left
+
+    // the score card: upper boxes + the bonus line on the left, lower boxes on the right
+    int bm = s_rolled ? best_open_idx(&p) : -1;
+    d.fillRect(0, LCARD, W, H - LCARD, BG);
+    d.drawFastVLine(160, LCARD + 3, H - LCARD - 6, LINE);
+    for (int idx = 0; idx < N_CAT; idx++) {
+        int x = idx < 6 ? 0 : 160, y = LCARD + 1 + (idx < 6 ? idx : idx - 6) * 20;
+        bool used = p.used[idx], cur = s_phase == PH_SCORE && idx == s_sel;
+        uint16_t gc = cat_color(idx);
+        if (cur) d.fillSmoothRoundRect(x + 2, y, 156, 19, 5, fx3d::scl(gc, 70, 255));
+        d.fillRect(x + 5, y + 5, 3, 10, used ? fx3d::scl(gc, 80, 255) : gc);
+        text(cat_name(idx), x + 12, y + 1, 0, gui::F_SMALL, cur ? 0xFFFF : used ? MUTED : gc);
+        if (used || (s_rolled && allowed(&p, idx))) {
+            int v = used ? p.score[idx] : preview(&p, idx);
+            snprintf(b, sizeof b, used && !v ? "--" : "%d", v);
+            text(b, x + 154, y + 1, 2, gui::F_SMALL, used ? MUTED : idx == bm ? C_GREEN : 0xFFFF);
+        }
+    }
+    int sub = upper_sub(&p);
+    snprintf(b, sizeof b, GT("Superiori %d/63", "Upper %d/63"), sub);
+    text(b, 12, LCARD + 121, 0, gui::F_SMALL, sub >= 63 ? C_GREEN : MUTED);
+    text("+35", 154, LCARD + 121, 2, gui::F_SMALL, sub >= 63 ? C_GREEN : LINE);
+    if (!s_paused) {
+        lg::field(0, LH, W, H - LH);
+        nucleo_touch_add_scroll(0, LH, 260, LCARD - LH, 30, NK_CHAR, K_FLICK, NK_CHAR, K_FLICK);
+    }
+}
+
 // ---------------------------------------------------------------- title / help / results
 static void draw_setup(void)
 {
-    int y = gui::title("YAHTZEE", GT("5 dadi, 3 lanci, 13 caselle", "5 dice, 3 rolls, 13 boxes"), C_YELLOW);
-    draw_die(0, 26, 12, 8.5f); draw_die(1, W - 26, 12, 8.5f);              // a die on each side of the title
+    int y = ltitle("YAHTZEE", GT("5 dadi, 3 lanci, 13 caselle", "5 dice, 3 rolls, 13 boxes"), C_YELLOW);
+    int dx = s_big ? 70 : 26;
+    draw_die(0, dx, 12, 8.5f); draw_die(1, W - dx, 12, 8.5f);              // a die on each side of the title
     char pl[32];
     if (s_cpus) snprintf(pl, sizeof pl, "%s: %d + %d CPU", GT("Giocatori", "Players"), s_humans, s_cpus);
     else        snprintf(pl, sizeof pl, "%s: %d", GT("Giocatori", "Players"), s_humans);
     const char *items[3] = { GT("Gioca", "Play"), pl, GT("Come si gioca", "How to play") };
-    gui::menu(s_menu, items, 3, y, nucleo_app_content_height(), C_YELLOW);
+    if (!s_big) { gui::menu(s_menu, items, 3, y, nucleo_app_content_height(), C_YELLOW); return; }
+    for (int i = 0; i < 3; i++) lrow(i, 30, y + 6 + i * 52, W - 60, items[i], s_menu.sel == i);
 }
 static void draw_help(void)
 {
-    int y = gui::title(GT("Come si gioca", "How to play"), nullptr, C_YELLOW) + 2;
+    int y = ltitle(GT("Come si gioca", "How to play"), nullptr, C_YELLOW) + 2;
     const char *L[5] = {
         GT("Fino a 3 lanci per turno: tieni", "Up to 3 rolls a turn: hold the"),
         GT("i dadi (3-7, 0 tutti), poi segna", "dice (3-7, 0 all), then score one"),
@@ -672,7 +784,8 @@ static void draw_help(void)
         GT("Superiori 63 o piu': +35.", "Upper boxes 63 or more: +35."),
         GT("Altro Yahtzee: +100 e jolly.", "Extra Yahtzee: +100 and joker."),
     };
-    for (int i = 0; i < 5; i++) text(L[i], 6, y + i * 16, 0, gui::F_SMALL, i < 3 ? 0xFFFF : C_YELLOW);
+    for (int i = 0; i < 5; i++) text(L[i], s_big ? 14 : 6, y + i * (s_big ? 26 : 16), 0, s_big ? gui::F_BODY : gui::F_SMALL, i < 3 ? 0xFFFF : C_YELLOW);
+    if (s_big) lg::field(0, LH, W, H - LH);                                 // tap = back to the title
 }
 static void draw_over(void)
 {
@@ -684,11 +797,12 @@ static void draw_over(void)
     if (s_np > 1 && total(&s_pl[ord[0]]) == total(&s_pl[ord[1]])) snprintf(ttl, sizeof ttl, "%s", GT("Pareggio!", "It's a tie!"));
     else if (s_np > 1) snprintf(ttl, sizeof ttl, GT("Vince %s!", "%s wins!"), tg);
     else snprintf(ttl, sizeof ttl, "%s", GT("Partita finita", "Game over"));
-    int y = gui::title(ttl, nullptr, C_YELLOW);
+    int y = ltitle(ttl, nullptr, C_YELLOW), rs = s_big ? 30 : 20;
+    if (s_big) lg::field(0, LH, W, H - LH);                                 // tap = rematch
     for (int r = 0; r < s_np; r++) {
-        int pi = ord[r], ry = y + r * 20;
+        int pi = ord[r], ry = y + r * rs;
         uint16_t med = r == 0 ? RGB(255, 219, 0) : r == 1 ? RGB(182, 182, 170) : r == 2 ? RGB(219, 109, 0) : MUTED;
-        if (r == 0) gui::panel(4, ry, W - 10, 19, RGB(73, 73, 0), C_YELLOW);
+        if (r == 0) gui::panel(4, ry, W - 10, rs - 1, RGB(73, 73, 0), C_YELLOW);
         d.fillSmoothCircle(18, ry + 9, 7, med);
         char b[24]; snprintf(b, sizeof b, "%d", r + 1);
         text(b, 18, ry + 2, 1, gui::F_SMALL, K_BLK);
@@ -732,6 +846,8 @@ static void draw_celebration(int64_t now)
     gui::text("YAHTZEE!", cx, ty, 1, gui::F_BIG, ph == 0 ? C_YELLOW : ph == 1 ? 0xFFFF : RGB(255, 146, 0), K_BLK);
     text(GT("CINQUE UGUALI!", "FIVE OF A KIND!"), cx, ty + 26, 1, gui::F_SMALL, 0xFFFF);
 }
+#undef W
+#undef H
 
 static void draw(void)
 {
@@ -739,15 +855,19 @@ static void draw(void)
         case PH_SETUP: draw_setup(); return;
         case PH_HELP:  draw_help(); return;
         case PH_OVER:  draw_over(); return;
-        case PH_SCORE: draw_score(); break;
-        default:       draw_roll(); break;
+        default:       if (s_big) draw_table(); else if (s_phase == PH_SCORE) draw_score(); else draw_roll(); break;
     }
     int64_t now = esp_timer_get_time();
     if (s_phase == PH_ROLL && now < s_cele_us) draw_celebration(now);
     else if (now < s_toast_us) draw_toast();
     if (s_paused) {
         char l1[24]; snprintf(l1, sizeof l1, GT("Giro %d/13", "Round %d/13"), s_turn + 1);
-        gui::dialog(GT("PAUSA", "PAUSED"), l1, nullptr, GT("INVIO riprendi  Esc esci", "ENTER resume  Esc leave"), C_YELLOW);
+        if (s_big) {                                                 // the pause card: Resume / Leave rows
+            gui::panel(40, 46, 240, 156, K_BLK, C_YELLOW);
+            text(GT("PAUSA", "PAUSED"), 160, 54, 1, gui::F_TITLE, C_YELLOW);
+            lrow(0, 60, 88, 200, GT("Gioca", "Play"), true);
+            lrow(1, 60, 140, 200, "Menu", false);
+        } else gui::dialog(GT("PAUSA", "PAUSED"), l1, nullptr, GT("INVIO riprendi  Esc esci", "ENTER resume  Esc leave"), C_YELLOW);
         s_bgdirty = true;                                            // the card covers the felt: repaint it on resume
     }
 }
@@ -803,8 +923,43 @@ static void ptt(bool on)
     int64_t now = esp_timer_get_time();
     if (s_phase == PH_ROLL && !s_paused && !s_pl[s_cur].cpu && !s_anim && now > s_toast_us && now > s_cool_us && s_rolls > 0) { do_roll(now); nucleo_app_request_draw(); }
 }
+static bool back(int key);
+static void on_key(int key, char ch);
+// A panel tap: a menu / pause row (tap = pick, again = open), a field (the table, help, results) or a flick across
+// the tray. Hit-tested with the painter's geometry (draw_table).
+static bool lg_key(int key, char ch)
+{
+    int x = 0, y = 0;
+    bool fld = lg::tap(key, ch, &x, &y), flick = key == NK_CHAR && ch == K_FLICK;
+    int ri = nucleo_touch_is_row(key, ch) ? ch - NUCLEO_TOUCH_ROW : -1;
+    if (!fld && !flick && ri < 0) return false;
+    int64_t now = esp_timer_get_time();
+    s_bgdirty = true; nucleo_app_request_draw();
+    if (s_phase == PH_SETUP) {
+        if (ri >= 0 && s_menu.sel == ri) on_key(NK_ENTER, 0);
+        else if (ri >= 0) { s_menu.sel = (int8_t)ri; s_menu.pos = ri; sfx(SFX_NAV); }
+    } else if (s_paused) { if (ri == 0) on_key(NK_ENTER, 0); else if (ri == 1) back(NK_BACK); }
+    else if (s_phase != PH_ROLL && s_phase != PH_SCORE) on_key(NK_ENTER, 0);       // help / results: tap = go on
+    else if (now < s_toast_us) s_toast_us = 0;
+    else if (s_pl[s_cur].cpu || s_anim || ri >= 0) ;                                // (a stray row key: nothing)
+    else if (!flick && y >= LCARD) {                                                  // a score box
+        int r = (y - LCARD) / 20, idx = x < 160 ? (r < 6 ? r : -1) : 6 + r;
+        if (idx < 0 || idx >= N_CAT) return true;
+        if (!s_rolled) sfx(SFX_DENY);
+        else if (s_phase == PH_SCORE && s_sel == idx) lock_category(idx, now);
+        else { if (s_phase != PH_SCORE) goto_score(); s_sel = idx; s_contrib_flash_us = now + 350000; sfx(SFX_NAV); }
+    } else {
+        s_suggest_us = 0;
+        int i = x / 52;
+        if (!flick && x < 260 && s_rolled && s_rolls > 0) { s_phase = PH_ROLL; s_diecur = i; bool &hd = s_d[i].held; hd = !hd; sfx(hd ? SFX_HOLDON : SFX_HOLDOFF); }
+        else if (s_rolls > 0) { if (now > s_cool_us) { s_phase = PH_ROLL; do_roll(now); } }
+        else if (s_rolled) goto_score();
+    }
+    return true;
+}
 static void on_key(int key, char ch)
 {
+    if (lg_key(key, ch)) return;
     int64_t now = esp_timer_get_time();
     s_suggest_us = 0;                                                              // any key clears the auto-hold suggestion
     s_bgdirty = true;                                                              // any input repaints the ROLL static UI
@@ -897,6 +1052,27 @@ static void enter(void)
 
 static void on_exit(void) { nucleo_audio_stop(); game_text_close(); }
 
+// Two screens: the whole game native on the panel (composed in strips), the Cardputer a companion with the player,
+// the total, what to do now and the key hints.
+static void lg_paint(void *) { draw(); }
+static void draw_large(void) { view(true); nucleo_touch_clear(); lg::frame(lg_paint, nullptr); nucleo_touch_commit(); view(false); }
+static void on_draw(void)
+{
+    if (!nucleo_app_two_screens()) { draw(); return; }
+    d.fillRect(0, nucleo_app_content_top(), W, nucleo_app_content_height(), BG);
+    int y = lg::comp_head("YAHTZEE", C_YELLOW);
+    bool game = s_phase == PH_ROLL || s_phase == PH_SCORE;
+    char b[32], tg[8];
+    if (game) {
+        ptag(s_cur, tg); snprintf(b, sizeof b, "%s  %d", tg, total(&s_pl[s_cur]));
+        gui::text(b, 8, y + 6, 0, gui::F_BIG, PCOL[s_cur], 0);
+        snprintf(b, sizeof b, GT("Lanci: %d", "Rolls left: %d"), s_rolls);
+        gui::text(b, 8, y + 44, 0, gui::F_BODY, FG, 0);
+    }
+    lg::comp_keys(game ? GT("3-7 tieni  0 tutti  INVIO tira", "3-7 hold  0 all  ENTER roll")
+                       : s_phase == PH_SETUP ? GT("su/giu  sx/dx cambia  INVIO ok", "UP/DN  L/R change  ENTER ok") : GT("Esc indietro", "Esc back"));
+}
+
 // Working RAM: allocated (zeroed) by the framework before enter(), freed after on_exit(). Foreground-only;
 // every open starts at the title, so no game state needs to survive a close.
 static const nucleo_app_ram_t APP_RAM[] = {
@@ -910,9 +1086,9 @@ extern "C" void nucleo_register_yahtzee(void)
 {
     static const nucleo_app_def_t app = {
         "yahtzee", "Yahtzee", "Games", "Yahtzee a turni (1-4 + CPU), dadi 3D",
-        'Y', C_YELLOW, enter, on_key, nullptr, draw, on_exit,
+        'Y', C_YELLOW, enter, on_key, nullptr, on_draw, on_exit,
         NX_NET_APP,  // dedicate RAM + free the shared I2S/mic line so the SFX reliably play
-        APP_RAM
+        APP_RAM, draw_large
     };
     nucleo_app_register(&app);
 }

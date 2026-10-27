@@ -1,7 +1,11 @@
-# Sciame (ESP-NOW swarm): the peer list on the panel + a selected peer. (@sd is shared by every scene, so the
-# empty state and the OPEN-membership pill are exercised in code but not shown here — SD stays populated/secure.)
+# Sciame (ESP-NOW swarm): the nearby devices as a grid of cards on the panel (tap = pick, again / Ping chip = ping).
+# (@sd is shared by every scene, so the empty state and the OPEN-membership pill are exercised in code but not
+# shown here — SD stays populated/secure.) Six peers so the grid scrolls (cards 5-6 below the fold).
 @host swarm_stubs.cpp
-@sd swarm/peers.txt Kitchen-01 128 0\nStudio-Pad 64 1\nGarage-Node 220 0\nAttic-07 12 0
+@sd swarm/peers.txt Kitchen-01 128 0\nStudio-Pad 64 1\nGarage-Node 220 0\nAttic-07 12 0\nCellar-Box 180 0\nPorch-Cam 40 1
 @sd swarm/last.txt pong da Kitchen-01 (14 ms)
 peers
 pick    D D
+tapcard row:1
+tapping row:1 row:1
+below   D D D D D

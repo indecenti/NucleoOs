@@ -36,6 +36,52 @@
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "app_gfx.h"
+#include "app_large.h"       // two screens: the alarm on the 320x240 panel, the Cardputer as companion
+#include "nucleo_touch.h"
+
+// The UI strings, one row per string in its languages: a call site loads an index, not five literals.
+static const char *const S5[][5] = {
+    { "invio arma  tab modo/reg  tasto=schermo", "enter arm  tab mode/rec  key=screen", "intro arma  tab modo/grab  tecla=scr", "entree arme  tab mode/enr  touche=ecr", "eingabe arm  tab modus/aufn  taste=scr" },
+};
+static const char *s5(int i) { const char *const *v = S5[i]; return nucleo_tr5(v[0], v[1], v[2], v[3], v[4]); }
+static const char *const S2[][2] = {
+    { "solo Mic", "Mic only" },
+    { "Silenzioso", "Silent" },
+    { "Sirena", "Siren" },
+    { "n/d", "n/a" },
+    { "INVIO", "ENTER" },
+    { "vuoto", "empty" },
+    { "armo", "arming" },
+    { "MUTO", "MUTE" },
+    { "PIN attuale", "Current PIN" },
+    { "Nuovo PIN", "New PIN" },
+    { "PIN errato - riprova", "Wrong PIN - retry" },
+    { "4 cifre  -  ESC cancella", "4 digits  -  ESC cancel" },
+    { "PIN per cancellare i log", "PIN to clear the logs" },
+    { "conferma il PIN in uso", "confirm the current PIN" },
+    { "Allarme", "Alarm" },
+    { "DISARMATO", "DISARMED" },
+    { "INVIO per armare", "ENTER to arm" },
+    { "Microfono", "Microphone" },
+    { "silenzioso", "silent" },
+    { "sirena", "siren" },
+    { "%s  %d eventi  ultimo %s", "%s  %d events  last %s" },
+    { "%s  %s  ritardo %ds", "%s  %s  delay %ds" },
+    { "allontanati...", "walk away..." },
+    { "ARMATO", "ARMED" },
+    { "movimento", "motion" },
+    { "PIN errato", "Wrong PIN" },
+    { "digita il PIN", "type the PIN" },
+    { "! RILEVATO !", "! DETECTED !" },
+    { "! ALLARME !", "! ALARM !" },
+    { "%s %s  riarmo in %ds", "%s %s  re-arm in %ds" },
+    { "muto", "mute" },
+    { "%s %s  PIN per fermare", "%s %s  PIN to stop" },
+    { "ARMA", "ARM" },
+    { "eventi", "events" },
+    { "ALLARME", "ALARM" },
+};
+static const char *s2(int i) { return nucleo_tr(S2[i][0], S2[i][1]); }
 
 extern "C" void nucleo_voice_suspend(bool suspend);   // free the mic from the voice engine while armed
 // Event bus (link-time extern, like nucleo_app.cpp: a REQUIRES on nucleo_eventbus would cycle).
@@ -81,6 +127,7 @@ static int64_t  s_pin_ok_until;         // confirmation-toast deadline
 static const char *s_toast = "";        // what that toast says (Italian literal)
 static const char *s_toast_en = "";     // ...and its English twin, picked with TR() at paint time
 static bool     s_dirty_cfg;            // options changed -> persist on the way out
+static int      s_lg_scroll;            // the panel's settings-list scroll
 
 // trigger bookkeeping + stealth screen
 static int64_t  s_trig_t0;              // when the current trigger fired (auto-rearm deadline)
@@ -413,18 +460,18 @@ static const char *aset_right(int i)
 {
     static char b[16];
     switch (i) {
-        case R_SRC: if (s_src != SRC_MIC && !nucleo_imu_present()) return TR("solo Mic", "Mic only"); return TR(SRC_NAME[s_src], SRC_NAME_EN[s_src]);
-        case R_MODE: return s_mode == MODE_SILENT ? TR("Silenzioso", "Silent") : TR("Sirena", "Siren");
+        case R_SRC: if (s_src != SRC_MIC && !nucleo_imu_present()) return s2(0 /* Mic only */); return TR(SRC_NAME[s_src], SRC_NAME_EN[s_src]);
+        case R_MODE: return s_mode == MODE_SILENT ? s2(1 /* Silent */) : s2(2 /* Siren */);
         case R_SENS_A: snprintf(b, sizeof b, "%d/20", s_sens_audio); return b;
-        case R_SENS_M: if (!nucleo_imu_present()) return TR("n/d", "n/a"); snprintf(b, sizeof b, "%d/20", s_sens_motion); return b;
+        case R_SENS_M: if (!nucleo_imu_present()) return s2(3 /* n/a */); snprintf(b, sizeof b, "%d/20", s_sens_motion); return b;
         case R_DELAY: snprintf(b, sizeof b, "%ds", DELAYS[s_delay_idx]); return b;
-        case R_PIN: return TR("INVIO", "ENTER");
-        case R_TEST: return TR("INVIO", "ENTER");
+        case R_PIN: return s2(4 /* ENTER */);
+        case R_TEST: return s2(4 /* ENTER */);
         case R_REARM: if (!REARM[s_rearm_idx]) return "off"; snprintf(b, sizeof b, "%ds", REARM[s_rearm_idx]); return b;
-        case R_REC: if (s_mode != MODE_SILENT) return TR("n/d", "n/a");      // the siren owns the I2S: no capture
+        case R_REC: if (s_mode != MODE_SILENT) return s2(3 /* n/a */);      // the siren owns the I2S: no capture
                     if (!REC_MIN[s_rec_idx]) return "off";
                     snprintf(b, sizeof b, "%dmin", REC_MIN[s_rec_idx]); return b;
-        case R_LOG: { long n = log_size(); if (!n) return TR("vuoto", "empty"); snprintf(b, sizeof b, "%ldKB", (n + 1023) / 1024); return b; }
+        case R_LOG: { long n = log_size(); if (!n) return s2(5 /* empty */); snprintf(b, sizeof b, "%ldKB", (n + 1023) / 1024); return b; }
     }
     return "";
 }
@@ -453,16 +500,18 @@ static void set_change(int dir)
 // ---- helpers ----
 static void center(const char *t, int y, int size, unsigned short col, unsigned short bg)
 {
+    LovyanGFX &G = d;
     int tw = (int)strlen(t) * 6 * size;
-    d.setTextSize(size); d.setTextColor(col, bg);
-    d.setCursor((W - tw) / 2, y); d.print(t);
+    G.setTextSize(size); G.setTextColor(col, bg);
+    G.setCursor((W - tw) / 2, y); G.print(t);
 }
-static void draw_pin_dots(int cy, int len, unsigned short col, unsigned short bg)
+static void draw_pin_dots(int cx, int cy, int len, unsigned short col, unsigned short bg)
 {
+    LovyanGFX &G = d;
     for (int i = 0; i < 4; i++) {
-        int dx = W / 2 - 30 + i * 20;
-        if (i < len) d.fillCircle(dx, cy, 5, col);
-        else         d.drawCircle(dx, cy, 5, bg == col ? MUTED : col);
+        int dx = cx - 30 + i * 20;
+        if (i < len) G.fillCircle(dx, cy, 5, col);
+        else         G.drawCircle(dx, cy, 5, bg == col ? MUTED : col);
     }
 }
 
@@ -488,6 +537,7 @@ static void screen_blank(void)
     if (s_scr_off) return;
     s_scr_off = true;
     s_scr_hold_until = esp_timer_get_time() + 2000000;   // reused as the next re-assert deadline
+    nucleo_app_request_draw();                           // the external panel goes black too (two screens)
     s_entry_len = 0; s_bad = false;                      // the keypad session ends with the light
     if (s_pin_edit) { s_pin_edit = false; s_pin_buf_len = 0; }
     nucleo_ui_set_brightness(0);
@@ -721,6 +771,10 @@ static void on_key(int key, char ch)
             } else if (key == NK_ENTER) { s_pin_edit = false; nucleo_app_request_draw(); }
             return;
         }
+        if (int t = lg::row_tap(key, ch, s_lg_scroll, ASET_ROWS, &s_set_sel)) {   // panel: tap = pick, again = act
+            if (t == 1) { nucleo_app_request_draw(); return; }
+            key = NK_ENTER;
+        }
         if (ch >= '1' && ch <= '9' && ch - '1' < ASET_ROWS) { s_set_sel = ch - '1'; nucleo_app_request_draw(); }
         else if (key == NK_UP)   { s_set_sel = (s_set_sel + ASET_ROWS - 1) % ASET_ROWS; nucleo_app_request_draw(); }
         else if (key == NK_DOWN) { s_set_sel = (s_set_sel + 1) % ASET_ROWS; nucleo_app_request_draw(); }
@@ -754,18 +808,32 @@ static void on_key(int key, char ch)
     if (s_state == ST_ARMING)   { if (key == NK_ENTER) disarm_to_idle(); }
 }
 
+// The title's right-hand status ("off", "ON 2", "REC 1"...) and the state's accent.
+static const char *status_text(unsigned short *acc)
+{
+    static char rb[16];
+    const char *rl = "off"; *acc = MUTED;
+    if (s_state == ST_ARMING)         { rl = s2(6 /* arming */); *acc = C_YELLOW; }
+    else if (s_state == ST_ARMED)     { rl = s_mode == MODE_SILENT ? s2(7 /* MUTE */) : "ON"; *acc = C_GREEN; }
+    else if (s_state == ST_TRIGGERED) { rl = "!!!";  *acc = C_RED;    }
+    if (s_rec) rl = "REC";                                                                   // the tape is rolling
+    if (s_trig_count > 0) { snprintf(rb, sizeof rb, "%s %d", rl, s_trig_count); rl = rb; }   // hit counter, always in view
+    return rl;
+}
+
 // ---- big-font settings list (framework style, readable) ----
 static void draw_settings(int y0, int bottom)
 {
+    LovyanGFX &G = d;
     if (s_pin_edit) {
         bool old = (s_pin_stage == PIN_OLD);
         bool wipe = (s_pin_purpose == PP_WIPE);
-        center(old ? TR("PIN attuale", "Current PIN") : TR("Nuovo PIN", "New PIN"), y0 + 14, 2, old ? C_YELLOW : FG, BG);
-        draw_pin_dots((y0 + bottom) / 2, s_pin_buf_len, old ? C_YELLOW : C_BLUE, BG);
-        if (s_pin_bad)   center(TR("PIN errato - riprova", "Wrong PIN - retry"), bottom - 16, 1, C_RED, BG);
-        else if (!old)   center(TR("4 cifre  -  ESC cancella", "4 digits  -  ESC cancel"), bottom - 16, 1, MUTED, BG);
-        else if (wipe)   center(TR("PIN per cancellare i log", "PIN to clear the logs"), bottom - 16, 1, C_RED, BG);
-        else             center(TR("conferma il PIN in uso", "confirm the current PIN"), bottom - 16, 1, MUTED, BG);
+        center(old ? s2(8 /* Current PIN */) : s2(9 /* New PIN */), y0 + 14, 2, old ? C_YELLOW : FG, BG);
+        draw_pin_dots(W / 2, (y0 + bottom) / 2, s_pin_buf_len, old ? C_YELLOW : C_BLUE, BG);
+        if (s_pin_bad)   center(s2(10 /* Wrong PIN - retry */), bottom - 16, 1, C_RED, BG);
+        else if (!old)   center(s2(11 /* 4 digits  -  ESC cancel */), bottom - 16, 1, MUTED, BG);
+        else if (wipe)   center(s2(12 /* PIN to clear the logs */), bottom - 16, 1, C_RED, BG);
+        else             center(s2(13 /* confirm the current PIN */), bottom - 16, 1, MUTED, BG);
         return;
     }
     // No "Impostazioni" caption: the app title sits right above, and those 22 px are worth two more
@@ -776,10 +844,10 @@ static void draw_settings(int y0, int bottom)
     int start = 0; if (s_set_sel >= maxrows) start = s_set_sel - maxrows + 1;
     for (int i = start; i < ASET_ROWS && i < start + maxrows; i++) {
         bool on = (i == s_set_sel);
-        if (on) d.fillRoundRect(4, y, W - 12, rowh - 2, 3, ACCENT);
-        d.setTextSize(2); d.setTextColor(on ? FG : MUTED, on ? ACCENT : BG); d.setCursor(10, y + 2); d.print(aset_label(i));
+        if (on) G.fillRoundRect(4, y, W - 12, rowh - 2, 3, ACCENT);
+        G.setTextSize(2); G.setTextColor(on ? FG : MUTED, on ? ACCENT : BG); G.setCursor(10, y + 2); G.print(aset_label(i));
         const char *rv = aset_right(i);
-        int rw = (int)strlen(rv) * 12; d.setTextColor(on ? C_GREEN : DIM, on ? ACCENT : BG); d.setCursor(W - 14 - rw, y + 2); d.print(rv);
+        int rw = (int)strlen(rv) * 12; G.setTextColor(on ? C_GREEN : DIM, on ? ACCENT : BG); G.setCursor(W - 14 - rw, y + 2); G.print(rv);
         y += rowh;
     }
     // Scrollbar: 10 rows, 5 visible — without it you cannot tell where you are in the list.
@@ -787,82 +855,219 @@ static void draw_settings(int y0, int bottom)
     if (ASET_ROWS > maxrows && track_h > 8) {
         int kh = track_h * maxrows / ASET_ROWS; if (kh < 8) kh = 8;
         int ky = track_y + (track_h - kh) * start / (ASET_ROWS - maxrows);
-        d.fillRect(W - 4, track_y, 2, track_h, LINE);
-        d.fillRect(W - 4, ky, 2, kh, ACCENT);
+        G.fillRect(W - 4, track_y, 2, track_h, LINE);
+        G.fillRect(W - 4, ky, 2, kh, ACCENT);
     }
 }
 
+static void draw_companion(void);
 static void draw(void)
 {
+    LovyanGFX &G = d;
     if (s_scr_off) return;          // panel is dark (armed/stealth): don't burn CPU compositing it
+    if (nucleo_app_two_screens()) { draw_companion(); return; }
     int top = nucleo_app_content_top(), h = nucleo_app_content_height(), bottom = top + h;
     unsigned short bg = BG;
     if (s_state == ST_TRIGGERED && s_mode != MODE_SILENT) bg = s_flash ? C_RED : 0x3800;
-    d.fillRect(0, top, W, h, bg);
+    G.fillRect(0, top, W, h, bg);
 
-    static char rb[16];
-    const char *rl = "off"; unsigned short acc = MUTED;
-    if (s_state == ST_ARMING)         { rl = TR("armo", "arming"); acc = C_YELLOW; }
-    else if (s_state == ST_ARMED)     { rl = s_mode == MODE_SILENT ? TR("MUTO", "MUTE") : "ON"; acc = C_GREEN; }
-    else if (s_state == ST_TRIGGERED) { rl = "!!!";  acc = C_RED;    }
-    if (s_rec) rl = "REC";                                                                   // the tape is rolling
-    if (s_trig_count > 0) { snprintf(rb, sizeof rb, "%s %d", rl, s_trig_count); rl = rb; }   // hit counter, always in view
-    int y0 = app_ui_title(TR("Allarme", "Alarm"), acc, rl);
+    unsigned short acc;
+    const char *rl = status_text(&acc);
+    int y0 = app_ui_title(s2(14 /* Alarm */), acc, rl);
     int cy = (y0 + bottom) / 2;
 
     if (s_settings) { draw_settings(y0, bottom); return; }
 
     if (s_state == ST_DISARMED) {
-        center(TR("DISARMATO", "DISARMED"), cy - 22, 3, FG, BG);
-        center(TR("INVIO per armare", "ENTER to arm"), cy + 6, 2, MUTED, BG);
+        center(s2(15 /* DISARMED */), cy - 22, 3, FG, BG);
+        center(s2(16 /* ENTER to arm */), cy + 6, 2, MUTED, BG);
         char ln[44];
-        const char *src = (s_src != SRC_MIC && !nucleo_imu_present()) ? TR("Microfono", "Microphone") : TR(SRC_NAME[s_src], SRC_NAME_EN[s_src]);
-        const char *md  = (s_mode == MODE_SILENT) ? TR("silenzioso", "silent") : TR("sirena", "siren");
+        const char *src = (s_src != SRC_MIC && !nucleo_imu_present()) ? s2(17 /* Microphone */) : TR(SRC_NAME[s_src], SRC_NAME_EN[s_src]);
+        const char *md  = (s_mode == MODE_SILENT) ? s2(18 /* silent */) : s2(19 /* siren */);
         bool toast = esp_timer_get_time() < s_pin_ok_until;
         if (toast)                 snprintf(ln, sizeof ln, "%s", TR(s_toast, s_toast_en));
-        else if (s_trig_count > 0) snprintf(ln, sizeof ln, TR("%s  %d eventi  ultimo %s", "%s  %d events  last %s"), md, s_trig_count, s_trig_last);
-        else                       snprintf(ln, sizeof ln, TR("%s  %s  ritardo %ds", "%s  %s  delay %ds"), src, md, DELAYS[s_delay_idx]);
+        else if (s_trig_count > 0) snprintf(ln, sizeof ln, s2(20 /* %s  %d events  last %s */), md, s_trig_count, s_trig_last);
+        else                       snprintf(ln, sizeof ln, s2(21 /* %s  %s  delay %ds */), src, md, DELAYS[s_delay_idx]);
         center(ln, bottom - 14, 1, toast ? C_RED : DIM, BG);
     } else if (s_state == ST_ARMING) {
         char nb[8]; snprintf(nb, sizeof nb, "%d", s_arm_shown > 0 ? s_arm_shown : 1);
         center(nb, y0 + 12, 6, C_YELLOW, BG);
-        center(TR("allontanati...", "walk away..."), bottom - 16, 2, MUTED, BG);
+        center(s2(22 /* walk away... */), bottom - 16, 2, MUTED, BG);
     } else if (s_state == ST_ARMED) {
-        center(TR("ARMATO", "ARMED"), y0 + 4, 3, C_GREEN, BG);            // 28..52
+        center(s2(23 /* ARMED */), y0 + 4, 3, C_GREEN, BG);            // 28..52
         int by = y0 + 42, bw = W - 64, bx = 32;              // first bar 66..74, label at 56
         if (motion_on()) {
             float frac = nucleo_imu_energy() / motion_e_thr(); if (frac > 1) frac = 1;
-            d.setTextSize(1); d.setTextColor(MUTED, BG); d.setCursor(bx, by - 10); d.print(TR("movimento", "motion"));
-            d.drawRect(bx, by, bw, 8, MUTED); d.fillRect(bx + 1, by + 1, (int)((bw - 2) * frac), 6, frac > 0.8f ? C_RED : C_GREEN);
+            G.setTextSize(1); G.setTextColor(MUTED, BG); G.setCursor(bx, by - 10); G.print(s2(24 /* motion */));
+            G.drawRect(bx, by, bw, 8, MUTED); G.fillRect(bx + 1, by + 1, (int)((bw - 2) * frac), 6, frac > 0.8f ? C_RED : C_GREEN);
             by += 22;                                        // second bar 88..96
         }
         if (audio_on()) {
             bool dead = !s_mic;                              // open failed: the alarm would be armed but deaf
             float frac = dead ? 0 : s_audio_level / audio_thr(); if (frac > 1) frac = 1;
-            d.setTextSize(1); d.setTextColor(dead ? C_RED : MUTED, BG); d.setCursor(bx, by - 10);
-            d.print(dead ? "audio: mic KO" : "audio");
-            d.drawRect(bx, by, bw, 8, dead ? C_RED : MUTED);
-            d.fillRect(bx + 1, by + 1, (int)((bw - 2) * frac), 6, frac > 0.8f ? C_RED : C_BLUE);
+            G.setTextSize(1); G.setTextColor(dead ? C_RED : MUTED, BG); G.setCursor(bx, by - 10);
+            G.print(dead ? "audio: mic KO" : "audio");
+            G.drawRect(bx, by, bw, 8, dead ? C_RED : MUTED);
+            G.fillRect(bx + 1, by + 1, (int)((bw - 2) * frac), 6, frac > 0.8f ? C_RED : C_BLUE);
         }
-        if (s_bad) center(TR("PIN errato", "Wrong PIN"), bottom - 18, 2, C_RED, BG);
+        if (s_bad) center(s2(25 /* Wrong PIN */), bottom - 18, 2, C_RED, BG);
         else if (s_rec) {                                    // two size-1 lines fit where one size-2 did
             char rc[40];
             rec_clock(rc, sizeof rc);
             center(rc, bottom - 18, 1, C_RED, BG);
-            center(TR("digita il PIN", "type the PIN"), bottom - 9, 1, MUTED, BG);
-        } else center(TR("digita il PIN", "type the PIN"), bottom - 18, 2, MUTED, BG);
+            center(s2(26 /* type the PIN */), bottom - 9, 1, MUTED, BG);
+        } else center(s2(26 /* type the PIN */), bottom - 18, 2, MUTED, BG);
     } else {   // TRIGGERED
         bool silent = (s_mode == MODE_SILENT);
-        center(silent ? TR("! RILEVATO !", "! DETECTED !") : TR("! ALLARME !", "! ALARM !"), y0 + 10, 3, silent ? C_YELLOW : FG, bg);
-        draw_pin_dots(cy + 6, s_entry_len, FG, bg);
-        if (s_bad) { center(TR("PIN errato", "Wrong PIN"), bottom - 16, 2, FG, bg); return; }
+        center(silent ? s2(27 /* ! DETECTED ! */) : s2(28 /* ! ALARM ! */), y0 + 10, 3, silent ? C_YELLOW : FG, bg);
+        draw_pin_dots(W / 2, cy + 6, s_entry_len, FG, bg);
+        if (s_bad) { center(s2(25 /* Wrong PIN */), bottom - 16, 2, FG, bg); return; }
         char ln[40];
         int rem = rearm_us() ? (int)((rearm_us() - (esp_timer_get_time() - s_trig_t0)) / 1000000) + 1 : 0;
-        if (rem > 0) snprintf(ln, sizeof ln, TR("%s %s  riarmo in %ds", "%s %s  re-arm in %ds"), silent ? TR("muto", "mute") : TR("sirena", "siren"), s_trig_last, rem);
-        else         snprintf(ln, sizeof ln, TR("%s %s  PIN per fermare", "%s %s  PIN to stop"), silent ? TR("muto", "mute") : TR("sirena", "siren"), s_trig_last);
+        if (rem > 0) snprintf(ln, sizeof ln, s2(29 /* %s %s  re-arm in %ds */), silent ? s2(30 /* mute */) : s2(19 /* siren */), s_trig_last, rem);
+        else         snprintf(ln, sizeof ln, s2(31 /* %s %s  PIN to stop */), silent ? s2(30 /* mute */) : s2(19 /* siren */), s_trig_last);
         center(ln, bottom - 22, 1, FG, bg);
         if (s_rec) { char rc[40]; rec_clock(rc, sizeof rc); center(rc, bottom - 12, 1, C_RED, bg); }
     }
+}
+
+// ===== two screens ==============================================================================================
+// The 320x240 panel carries the whole alarm, composed in strips (lg::frame: the live meters and the siren flash
+// never flicker), and goes black with the Cardputer (stealth: a tap wakes both, like a key):
+//   DISARMED: a big ARM disc you tap + the setup at a glance (source, mode, delay, events); the header's menu
+//             glyph opens the settings;
+//   ARMING: the exit countdown as a ring that empties (tap = cancel);
+//   ARMED / TRIGGERED: state, live meters and the PIN dots on the left, a PIN keypad on the right (its keys ARE
+//             the PIN digits); the siren mode flashes the whole panel red;
+//   SETTINGS: the rows (tap = pick, tap again = act / change), - / + steppers on the picked value row; a PIN
+//             challenge brings the keypad back.
+// The Cardputer shows the state and what to type. Keyboard behaviour is unchanged.
+#define LW 320
+#define LH 240
+
+static void lt(const char *t, int x, int y, int f, unsigned short c)
+{
+    LovyanGFX &G = d;
+    lg::font(f); G.setTextDatum(middle_center); G.setTextColor(c); G.drawString(t, x, y); G.setTextDatum(top_left);
+}
+static const char *set_label(int i, void *) { return aset_label(i); }
+static const char *set_right(int i, void *) { return aset_right(i); }
+
+// 1-9, <, 0 at x0,y0: three columns of 50x48 keys.
+static void lp_keypad(int x0, int y0, bool del)
+{
+    LovyanGFX &G = d;
+    static const char K[] = "123456789<0";
+    for (int i = 0; i < 11; i++) {
+        if (i == 9 && !del) continue;
+        const int x = x0 + (i % 3) * 52, y = y0 + (i / 3) * 50;
+        G.fillRoundRect(x, y, 48, 46, 10, LINE);
+        char t[2] = { K[i], 0 };
+        lt(t, x + 24, y + 23, 2, FG);
+        nucleo_touch_add(x, y, 52, 50, i == 9 ? NK_BACK : NK_CHAR, i == 9 ? 0 : K[i]);
+    }
+}
+
+static void lp_settings(int y0)
+{
+    if (s_pin_edit) {
+        const bool old = s_pin_stage == PIN_OLD;
+        lt(old ? s2(8 /* Current PIN */) : s2(9 /* New PIN */), 80, y0 + 40, 2, old ? C_YELLOW : FG);
+        draw_pin_dots(80, y0 + 90, s_pin_buf_len, old ? C_YELLOW : C_BLUE, BG);
+        if (s_pin_bad) lt(s2(10 /* Wrong PIN - retry */), 80, y0 + 140, 0, C_RED);
+        lp_keypad(162, y0 + 6, true);
+        return;
+    }
+    const int rh = 34, rows = (LH - y0) / rh;
+    int sc = s_lg_scroll;                                            // the list's own scroll rule, to place the steppers
+    if (s_set_sel < sc) sc = s_set_sel;
+    if (s_set_sel >= sc + rows) sc = s_set_sel - rows + 1;
+    if (sc > ASET_ROWS - rows) sc = ASET_ROWS - rows;
+    if (sc < 0) sc = 0;
+    const int ry = y0 + (s_set_sel - sc) * rh;
+    const bool num = s_set_sel != R_PIN && s_set_sel != R_TEST && s_set_sel != R_LOG;
+    if (num) { nucleo_touch_add(140, ry, 44, rh, NK_LEFT, 0); nucleo_touch_add(186, ry, 44, rh, NK_RIGHT, 0); }   // before the rows: they win
+    lg::text_list(0, y0, LW, LH - y0, ASET_ROWS, s_set_sel, &s_lg_scroll, set_label, set_right, nullptr, nullptr, ACCENT, rh);
+    if (num) for (int k = 0; k < 2; k++) {
+        d.fillRoundRect(142 + k * 46, ry + 4, 40, rh - 8, 8, INK);
+        lt(k ? "+" : "-", 162 + k * 46, ry + rh / 2, 1, ACCENT);
+    }
+}
+
+static void lp_watch(int y0, unsigned short bg)                   // ARMED / TRIGGERED: state + meters | keypad
+{
+    const bool trig = s_state == ST_TRIGGERED;
+    lt(trig ? (s_mode == MODE_SILENT ? s2(27 /* ! DETECTED ! */) : s2(28 /* ! ALARM ! */)) : s2(23 /* ARMED */),
+       80, y0 + 22, 2, trig ? FG : C_GREEN);
+    int by = y0 + 52;
+    if (!trig && motion_on()) {
+        float f = nucleo_imu_energy() / motion_e_thr();
+        lt(s2(24 /* motion */), 80, by, 0, MUTED);
+        lg::bar(12, by + 12, 136, 10, (int)(f * 100), f > 0.8f ? C_RED : C_GREEN);
+        by += 36;
+    }
+    if (!trig && audio_on()) {
+        float f = s_mic ? s_audio_level / audio_thr() : 0;
+        lt(s_mic ? "audio" : "audio: mic KO", 80, by, 0, s_mic ? MUTED : C_RED);
+        lg::bar(12, by + 12, 136, 10, (int)(f * 100), f > 0.8f ? C_RED : C_BLUE);
+    }
+    draw_pin_dots(80, 170, s_entry_len, trig ? FG : C_GREEN, bg);
+    if (s_bad) lt(s2(25 /* Wrong PIN */), 80, 200, 1, trig ? FG : C_RED);
+    else if (s_rec) { char rc[40]; rec_clock(rc, sizeof rc); lt(rc, 80, 200, 0, C_RED); }
+    else lt(s2(26 /* type the PIN */), 80, 200, 0, trig ? FG : MUTED);
+    lp_keypad(162, y0 + 6, false);
+}
+
+static void lg_paint(void *)
+{
+    LovyanGFX &G = d;
+    if (s_scr_off) { G.fillRect(0, 0, LW, LH, 0); return; }           // stealth: the panel is dark too
+    unsigned short bg = BG, acc;
+    if (s_state == ST_TRIGGERED && s_mode != MODE_SILENT) bg = s_flash ? C_RED : 0x3800;
+    G.fillRect(0, 0, LW, LH, bg);
+    const bool open = s_state == ST_DISARMED || s_settings;
+    const char *rl = status_text(&acc);
+    const int y0 = lg::header(s2(14 /* Alarm */), rl, acc, open || s_state == ST_ARMING ? NK_BACK : 0,
+                              s_state == ST_DISARMED && !s_settings ? NK_TAB : 0);
+    if (s_settings) lp_settings(y0);
+    else if (s_state == ST_DISARMED) {
+        G.fillCircle(84, 136, 70, ACCENT);
+        lt(s2(32 /* ARM */), 84, 126, 3, INK);
+        lt(s2(15 /* DISARMED */), 84, 160, 0, INK);
+        nucleo_touch_add(14, 66, 140, 140, NK_ENTER, 0);
+        static const unsigned char R[3] = { R_SRC, R_MODE, R_DELAY };
+        for (int i = 0; i < 3; i++) lg::kv(170, 58 + i * 30, 140, aset_label(R[i]), aset_right(R[i]), FG);
+        char ln[24]; snprintf(ln, sizeof ln, "%d  %s", s_trig_count, s_trig_last);
+        lg::kv(170, 148, 140, s2(33 /* events */), ln, s_trig_count ? C_RED : MUTED);
+        if (esp_timer_get_time() < s_pin_ok_until) lt(TR(s_toast, s_toast_en), LW / 2, 222, 1, C_GREEN);
+    } else if (s_state == ST_ARMING) {
+        const int left = s_arm_shown > 0 ? s_arm_shown : 1;
+        G.fillArc(LW / 2, 128, 66, 80, 0, 360, LINE);
+        G.fillArc(LW / 2, 128, 66, 80, 270, 270 + 360 * left / DELAYS[s_delay_idx], C_YELLOW);
+        char nb[8]; snprintf(nb, sizeof nb, "%d", left);
+        lt(nb, LW / 2, 128, 3, C_YELLOW);
+        lt(s2(22 /* walk away... */), LW / 2, 224, 1, MUTED);
+        nucleo_touch_add(LW / 2 - 80, 48, 160, 160, NK_ENTER, 0);
+    } else lp_watch(y0, bg);
+    lg::field(0, 0, LW, LH);                                         // a stray tap is nothing (not an arrow)
+}
+static void draw_large(void)
+{
+    nucleo_touch_clear();
+    lg::frame(lg_paint, nullptr);
+    nucleo_touch_commit();
+}
+
+// The Cardputer meanwhile: the state in big letters and what to do.
+static void draw_companion(void)
+{
+    unsigned short acc;
+    status_text(&acc);
+    int y = lg::comp_head(s2(34 /* ALARM */), acc);
+    const bool watch = s_state == ST_ARMED || s_state == ST_TRIGGERED;
+    center(s_state == ST_DISARMED ? s2(15 /* DISARMED */) : s_state == ST_ARMING ? s2(6 /* arming */)
+           : s_state == ST_ARMED ? s2(23 /* ARMED */) : s2(28 /* ! ALARM ! */), y + 24, 3, acc, BG);
+    lg::comp_keys(watch ? s2(26 /* type the PIN */) : s2(16 /* ENTER to arm */));
 }
 
 static void enter(void)
@@ -878,9 +1083,7 @@ static void enter(void)
     bool had_cfg = cfg_load();                   // PIN + options survive a reboot
     // Exploit the IMU when it's there — but never override a saved, deliberate "Microfono" choice.
     if (!had_cfg && nucleo_imu_present() && s_src == SRC_MIC) s_src = SRC_BOTH;
-    nucleo_app_set_hint(TR5("invio arma  tab modo/reg  tasto=schermo",
-                            "enter arm  tab mode/rec  key=screen", "intro arma  tab modo/grab  tecla=scr",
-                            "entree arme  tab mode/enr  touche=ecr", "eingabe arm  tab modus/aufn  taste=scr"));
+    nucleo_app_set_hint(s5(0 /* enter arm  tab mode/rec  key=screen */));
     nucleo_app_set_poll_handler(poll);
     nucleo_app_set_tab_handler(tab);
     nucleo_app_set_back_handler(back);
@@ -904,7 +1107,7 @@ extern "C" void nucleo_register_alarm(void)
         // would fight for the mic. NOT NX_HTTPD/NX_DISCOVERY: the silent mode's ONLY output is the
         // alarm.trigger event reaching the browser, which needs the server up. NOT NX_VOICE either —
         // mic_start/stop already own the voice engine via nucleo_voice_suspend().
-        NX_ANIMA_L1 | NX_RECORDER
+        NX_ANIMA_L1 | NX_RECORDER, nullptr, draw_large
     };
     nucleo_app_register(&app);
 }

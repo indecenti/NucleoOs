@@ -1547,6 +1547,10 @@ static void np_legend(void)
 // progress (both screens): the panel has no buffer, so a full repaint each second would flicker.
 // Panel-only actions arrive as NK_CHAR with private control codes (below 0x10: never typing, never list rows).
 enum { LGK_SETTAB0 = 0x01 /* ..0x04: settings tab id 0..3 */, LGK_NP = 0x05 /* the playing card: Now Playing */ };
+// Panel geometry shared by the painters and the tap hit-tests: Now Playing's main column, its seek track, its
+// volume column; the library card's progress track; the settings volume slider.
+enum { NP_MAINW = 262, NP_SX = 14, NP_SW = NP_MAINW - 28, NP_SY = 104, NP_VY = 44, NP_VH = 152,
+       CARD_BX = 196, CARD_BW = 108, SET_SX = 188, SET_SW = 110 };
 static int s_lg_scroll, s_lg_sscroll;
 static unsigned s_lg_rev = 1, s_lg_drawn_rev, s_lg_drawn_gen, s_lg_comp_rev, s_lg_comp_gen;
 static int s_lg_drawn_play = -1, s_lg_comp_play = -1;
@@ -1581,20 +1585,32 @@ static void lg_np_open(void)
     nucleo_app_request_draw();
 }
 
+// A tap on a track [x, x+w): where it landed, 0..100.
+static int lg_pct_at(int t, int x, int w) { const int p = (t - x) * 100 / w; return p < 0 ? 0 : p > 100 ? 100 : p; }
+static void lg_set_vol(int v) { nucleo_audio_set_mute(false); nucleo_audio_set_volume(v); }
+
 static bool lg_key(int key, char ch)
 {
     if (!st || !nucleo_app_two_screens()) return false;
     lg_bump();
+    int tx, ty;
+    const bool tap = lg::tap(key, ch, &tx, &ty);                     // a field: a seek track or a volume slider
     if (s_np && !s_set_open && !s_typing && !s_sub_list) {           // the Now Playing loop's keys
-        if (key == NK_ENTER || ch == ' ' || ch == 'p') nucleo_audio_toggle_pause();
+        const uint32_t dur = nucleo_audio_duration_ms();
+        if (tap) {
+            if (tx >= NP_MAINW) lg_set_vol(lg_pct_at(NP_VY + NP_VH - ty, 0, NP_VH));   // the volume column
+            else if (dur) nucleo_audio_seek((uint32_t)((int64_t)lg_pct_at(tx, NP_SX, NP_SW) * dur / 100));
+        }
+        else if (key == NK_ENTER || ch == ' ' || ch == 'p') nucleo_audio_toggle_pause();
         else if (key == NK_RIGHT) seek_rel(+10);
+        else if (key == NK_LEFT) seek_rel(-10);                      // a drag along the seek track
         else if (key == NK_UP)    { nucleo_audio_set_mute(false); nucleo_audio_set_volume(nucleo_audio_volume() + 10); }
         else if (key == NK_DOWN)  { nucleo_audio_set_mute(false); nucleo_audio_set_volume(nucleo_audio_volume() - 10); }
         else if (ch == '[' && st->qn > 0) play_q(prev_pos());
         else if (ch == ']' && st->qn > 0) { int p = next_pos(); if (p >= 0) play_q(p); }
         else if (ch == 'f' && st->playpath[0]) { const char *bn = strrchr(st->playpath, '/'); bn = bn ? bn + 1 : st->playpath; music_db_set_fav(bn, !music_db_is_fav(bn)); }
         else if (ch == 'r') { s_repeat = (s_repeat + 1) % 3; save_settings(); }
-        else if (ch >= '0' && ch <= '9') { uint32_t dur = nucleo_audio_duration_ms(); if (dur) nucleo_audio_seek((uint32_t)((int64_t)(ch - '0') * dur / 10)); }
+        else if (ch >= '0' && ch <= '9') { if (dur) nucleo_audio_seek((uint32_t)((int64_t)(ch - '0') * dur / 10)); }
         else if (ch == 's') { nucleo_audio_stop(); st->playpath[0] = 0; s_np = false; }
         else if (key == NK_DEL) s_np = false;
         nucleo_app_request_draw();
@@ -1607,6 +1623,7 @@ static bool lg_key(int key, char ch)
         nucleo_app_request_draw(); return true;
     }
     if (s_set_open) {
+        if (tap) { s_set_row = 0; s_set_edit = false; lg_set_vol(lg_pct_at(tx, SET_SX, SET_SW)); nucleo_app_request_draw(); return true; }
         if (key == NK_CHAR && ch >= LGK_SETTAB0 && ch < LGK_SETTAB0 + 4) {
             s_set_tab = ch - LGK_SETTAB0; s_set_row = 0; s_set_edit = false;
             if (s_set_tab == 3) music_db_ensure();
@@ -1620,6 +1637,11 @@ static bool lg_key(int key, char ch)
         return false;
     }
     if (key == NK_CHAR && ch == LGK_NP) { if (st->qn > 0 && st->playpath[0]) now_playing(); return true; }
+    if (tap) {                                                       // the playing card's progress track
+        const uint32_t dur = nucleo_audio_duration_ms();
+        if (dur) nucleo_audio_seek((uint32_t)((int64_t)lg_pct_at(tx, CARD_BX, CARD_BW) * dur / 100));
+        nucleo_app_request_draw(); return true;
+    }
     if (nucleo_touch_is_row(key, ch)) {
         if (lg::row_tap(key, ch, s_lg_scroll, s_n, &s_sel) == 2) on_key(NK_ENTER, 0);
         nucleo_app_request_draw(); return true;
@@ -1686,6 +1708,7 @@ static void lg_card(int x, int y, int w, int h, bool full)
             lg::wrap(lg_playing_name(), x + 10, y + 26, w - 20, 19, 2);
             if (s_np_meta[0]) { lg::font(0); d.setTextColor(MUTED, cb); char m[48]; lg::fit(m, sizeof m, s_np_meta, w - 20); d.drawString(m, x + 10, y + 66); }
             nucleo_touch_add(x, y, w, py - y - 4, NK_CHAR, LGK_NP);  // the card itself: Now Playing
+            lg::field(x, py + 16, w, 30);                                 // its progress track: tap = seek there
             const int bs = (w - 32) / 3, by = y + h - 50;
             lg::button(x + 8, by, bs, 42, "", LINE, FG, NK_CHAR, '[');
             d.fillTriangle(x + 8 + bs / 2 + 6, by + 13, x + 8 + bs / 2 + 6, by + 29, x + 8 + bs / 2 - 4, by + 21, FG); d.fillRect(x + 8 + bs / 2 - 7, by + 13, 3, 17, FG);
@@ -1725,12 +1748,11 @@ static void lg_card(int x, int y, int w, int h, bool full)
 }
 
 // Now Playing: full=false repaints only the seek bar and the times.
-static const int NP_MAINW = 262;
 static void lg_np_seek(bool targets)
 {
     const bool paused = nucleo_audio_is_paused(), playing = nucleo_audio_is_playing();
     const unsigned short col = np_state_col(playing, paused);
-    const int x = 14, w = NP_MAINW - 28, y = 104;
+    const int x = NP_SX, w = NP_SW, y = NP_SY;
     d.fillRect(0, y - 10, NP_MAINW, 52, BG);
     int pct = nucleo_audio_progress(); if (pct < 0) pct = 0; if (pct > 100) pct = 100;
     d.fillRoundRect(x, y, w, 8, 4, LINE);
@@ -1742,12 +1764,14 @@ static void lg_np_seek(bool targets)
     char te[8], td[8]; fmt_time(te, sizeof te, el); fmt_time(td, sizeof td, du);
     lg::font(0); d.setTextColor(FG, BG); d.drawString(te, x, y + 18);
     if (du) { d.setTextDatum(top_right); d.setTextColor(MUTED, BG); d.drawString(td, x + w, y + 18); d.setTextDatum(top_left); }
-    if (targets && du)                                                 // ten slices: a tap jumps to that tenth
-        for (int i = 0; i < 10; i++) nucleo_touch_add(x + w * i / 10 - (i == 0 ? x : 0), y - 12, w / 10 + (i == 0 ? x : 0), 28, NK_CHAR, (char)('0' + i));
+    if (targets && du) {                                               // the track: tap = jump there, drag = +-10 s steps
+        lg::field(0, y - 14, NP_MAINW, 32);
+        nucleo_touch_add_pad(0, y - 14, NP_MAINW, 32, 18);
+    }
 }
 static void lg_np_volume(void)
 {
-    const int W = d.width(), H = d.height(), cx = NP_MAINW + (W - NP_MAINW) / 2, ty = lg::HEAD + 14, th = H - ty - 44;
+    const int W = d.width(), H = d.height(), cx = NP_MAINW + (W - NP_MAINW) / 2, ty = NP_VY, th = NP_VH;
     d.fillRect(NP_MAINW, lg::HEAD, W - NP_MAINW, H - lg::HEAD, BG);
     const bool muted = nucleo_audio_is_muted();
     const int vol = nucleo_audio_volume(), fh = muted ? 0 : th * vol / 100;
@@ -1756,6 +1780,7 @@ static void lg_np_volume(void)
     char v[8]; if (muted) snprintf(v, sizeof v, "MUTE"); else snprintf(v, sizeof v, "%d%%", vol);
     lg::font(0); d.setTextDatum(top_center); d.setTextColor(muted ? RED : FG, BG); d.drawString(v, cx, ty + th + 8);
     lg::font(4); d.setTextColor(DIM, BG); d.drawString("VOL", cx, ty + th + 26); d.setTextDatum(top_left);
+    lg::field(NP_MAINW, lg::HEAD, W - NP_MAINW, H - lg::HEAD);                                                  // tap = that level
     nucleo_touch_add_scroll(NP_MAINW, lg::HEAD, W - NP_MAINW, H - lg::HEAD, 12, NK_DOWN, '.', NK_UP, ';');   // drag up = louder
 }
 static void lg_now_playing(bool full)
@@ -1856,10 +1881,11 @@ static void lg_settings(void)
             d.fillRoundRect(rx - 40, cy - 10, 40, 20, 10, it[i].on ? GRN : LINE);
             d.fillCircle(it[i].on ? rx - 10 : rx - 30, cy, 7, it[i].on ? INK : MUTED);
         } else if (it[i].kind == SV_SLIDER) {
-            const int sw = 110, vol = nucleo_audio_volume();
+            const int sw = SET_SW, vol = nucleo_audio_volume(), kx = rx - sw + sw * vol / 100;
             d.fillRoundRect(rx - sw, cy - 5, sw, 10, 5, LINE);
             if (vol > 0) d.fillRoundRect(rx - sw, cy - 5, sw * vol / 100 < 10 ? 10 : sw * vol / 100, 10, 5, GRN);
-            if (on && s_set_edit) d.drawRoundRect(rx - sw - 3, cy - 8, sw + 6, 16, 8, INK);
+            d.fillCircle(kx, cy, 8, on && s_set_edit ? INK : FG); d.fillCircle(kx, cy, 4, GRN);   // the knob: tap the track = set
+            lg::field(rx - sw - 12, ry, sw + 22, rh);
         } else if (it[i].kind == SV_ACTION) {
             const unsigned short cc = on ? INK : MUTED;          // a chevron: this row opens something
             for (int o = 0; o < 2; o++) { d.drawLine(rx - 10 + o, cy - 6, rx - 4 + o, cy, cc); d.drawLine(rx - 4 + o, cy, rx - 10 + o, cy + 6, cc); }
@@ -1868,13 +1894,6 @@ static void lg_settings(void)
         }
         d.setTextDatum(top_left);
         nucleo_touch_add(8, ry, W - 16, rh, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + i));
-    }
-    if (s_set_edit) {                                                 // the volume being set: - / + / OK over the foot
-        const int by = H - 44, bw = (W - 40) / 3;
-        d.fillRect(0, by - 4, W, 48, BG);
-        lg::button(10, by, bw, 38, "-", LINE, FG, NK_DOWN, '.');
-        lg::button(20 + bw, by, bw, 38, "+", LINE, FG, NK_UP, ';');
-        lg::button(30 + 2 * bw, by, bw, 38, "OK", ACC, INK, NK_ENTER, 0);
     }
 }
 

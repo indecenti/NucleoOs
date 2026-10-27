@@ -4,3 +4,5 @@ monitor
 server    c:2
 editip    c:2 c:m t:192.168.1.50
 info      c:3
+padup     tap:160,172
+padenter  tap:290,215

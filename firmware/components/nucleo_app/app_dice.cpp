@@ -20,6 +20,14 @@
 #include "esp_random.h"
 #include "esp_timer.h"
 #include "app_gfx.h"
+#include "app_large.h"
+#include "nucleo_touch.h"
+
+// Two screens: the same painters draw the compact 240-wide frame or the native 320x240 panel (s_big).
+static bool s_big;
+static int  s_vw = 240;
+#define W s_vw
+static void view(bool big) { s_big = big; s_vw = big ? 320 : 240; }
 
 #ifndef M_PI
 #define M_PI 3.14159265358979f
@@ -81,7 +89,7 @@ static const float PIPS[7][6][2] = {
 #define MAXDICE 6
 #define HEAD 22                        // header band (title + total); the felt is below it
 enum { ST_IDLE, ST_CHARGE, ST_ROLL };
-struct Die { float yaw, pitch, bank;  float y0, p0, b0, ye, pe, be, wob;  int value; };
+struct Die { float yaw, pitch, bank;  float y0, p0, b0, ye, pe, be, wob;  int value; bool held; };   // held: kept out of the throw
 static Die  *s_d;                      // MAXDICE entries, APP_RAM (posed by enter())
 static int   s_state = ST_IDLE;
 static int   s_n = 2, s_type = 0;      // kept across opens (static), like a real dice cup
@@ -156,7 +164,7 @@ static void pose_all(void)
         Die &dd = s_d[i];
         dd.value = 1 + randn(TYPES[s_type].faces);
         settle_pose(dd.value, &dd.yaw, &dd.pitch, &dd.bank);
-        dd.ye = dd.yaw; dd.pe = dd.pitch; dd.be = dd.bank;
+        dd.ye = dd.yaw; dd.pe = dd.pitch; dd.be = dd.bank; dd.held = false;
     }
 }
 
@@ -172,6 +180,7 @@ static void throw_dice(float charge)
     for (int i = 0; i < MAXDICE; i++) {                         // all of them: a die added later is posed too
         Die &dd = s_d[i];
         dd.y0 = dd.yaw; dd.p0 = dd.pitch; dd.b0 = dd.bank;
+        if (dd.held) { dd.ye = dd.yaw; dd.pe = dd.pitch; dd.be = dd.bank; dd.wob = 0; continue; }   // stays put
         dd.value = 1 + randn(TYPES[s_type].faces);
         int spins = 2 + (int)(charge * 5.0f) + randn(2);         // more charge -> more turns
         settle_pose(dd.value, &dd.ye, &dd.pe, &dd.be);
@@ -218,6 +227,7 @@ static void sim(float dt)
         float spd = (2.5f + 14.0f * s_charge) * dt;               // whirl faster as it charges
         float bank = 0.15f * sinf((float)now * 9e-6f);
         for (int i = 0; i < MAXDICE; i++) {
+            if (s_d[i].held) continue;
             s_d[i].yaw += spd * (0.8f + 0.04f * i);
             s_d[i].pitch += spd * 0.7f;
             s_d[i].bank = bank;
@@ -320,7 +330,7 @@ static void layout(int idx, int top, int bottom, int *cx, int *cy, float *sc)
     *cx = (W - inrow * cellw) / 2 + c * cellw + cellw / 2;
     *cy = top + r * cellh + cellh / 2;
     float s = (cellw < cellh ? cellw : cellh) * 0.46f;               // the die's radius: ~92% of the cell
-    if (s > 46) s = 46;
+    if (s > (s_big ? 66 : 46)) s = s_big ? 66 : 46;
     *sc = s * TYPES[s_type].rscale;
 }
 
@@ -334,6 +344,15 @@ static void draw_settings(void)
     gui::menu(s_setm, rows, 2, y + 4, nucleo_app_content_height(), C_GREEN);
 }
 
+// ---- the panel (s_big): a 32 px header with the back chevron, the felt below it ----
+#define LHEAD 32
+#define CHIPX 136                      // panel header: the count chip, then the type chip, CHIPW wide every 52 px
+#define CHIPW 46
+static void chevron(void)
+{
+    gui::text("<", 6, 5, 0, gui::F_TITLE, C_GREEN, 0);
+    nucleo_touch_add(0, 0, 24, LHEAD, NK_BACK, 0);
+}
 static void set_hint(void)
 {
     const char *h = s_settings ? GT("su/giu  sx/dx cambia  INVIO ok", "UP/DN  L/R change  ENTER ok")
@@ -342,41 +361,55 @@ static void set_hint(void)
     if (h != s_hint) { s_hint = h; nucleo_app_set_hint(h); }
 }
 
+// The table, compact or on the panel. Panel: the chevron = Back, the "NdX" chip = settings, the felt is one
+// field (tap a die = hold it, tap the felt = roll) and a scroll area (a drag / flick mixes and throws).
 static void draw(void)
 {
-    int top = nucleo_app_content_top(), bottom = top + nucleo_app_content_height();
-    set_hint();
-    if (s_settings) { draw_settings(); return; }
+    if (s_settings && !s_big) { draw_settings(); return; }      // on the panel the header chips ARE the settings
+    int top = s_big ? 0 : nucleo_app_content_top(), bottom = s_big ? 240 : top + nucleo_app_content_height();
+    int hh = s_big ? LHEAD : HEAD, tx = s_big ? 26 : 6;
     // header: title + "NdX" on the left, the big total on the right
-    gui::vgradient(0, top, W, HEAD, gui::rgb(0, 72, 36), gui::rgb(0, 18, 0));
-    d.drawFastHLine(0, top + HEAD - 1, W, gui::rgb(72, 182, 85));
-    int tw = gui::text(GT("Dadi", "Dice"), 6, top + 3, 0, gui::F_BODY, C_GREEN, 0);
+    gui::vgradient(0, top, W, hh, gui::rgb(0, 72, 36), gui::rgb(0, 18, 0));
+    d.drawFastHLine(0, top + hh - 1, W, gui::rgb(72, 182, 85));
+    if (s_big) chevron();
+    int tw = gui::text(GT("Dadi", "Dice"), tx, top + 3 + s_big * 2, 0, s_big ? gui::F_TITLE : gui::F_BODY, C_GREEN, 0);
     char rt[16]; snprintf(rt, sizeof rt, "%d%s", s_n, TYPES[s_type].name);
-    gui::text(rt, 14 + tw, top + 4, 0, gui::F_SMALL, gui::rgb(182, 182, 170), 0);
+    if (s_big) {                                                  // two chips: the count and the type, tap = next
+        snprintf(rt, sizeof rt, "%dx", s_n);
+        for (int k = 0; k < 2; k++) {
+            d.drawRoundRect(CHIPX + k * 52, 5, CHIPW, 22, 6, s_settings && s_setm.sel == k ? C_YELLOW : gui::rgb(72, 182, 85));
+            gui::text(k ? TYPES[s_type].name : rt, CHIPX + k * 52 + CHIPW / 2, 7, 1, gui::F_BODY, 0xFFFF, 0);
+        }
+        lg::field(CHIPX, 0, 52 + CHIPW, LHEAD);
+    } else gui::text(rt, tx + 8 + tw, top + 4, 0, gui::F_SMALL, gui::rgb(182, 182, 170), 0);
     int total = 0; for (int i = 0; i < s_n; i++) total += s_d[i].value;
     if (s_state == ST_IDLE) snprintf(rt, sizeof rt, "%d", total);
     else if (s_state == ST_CHARGE) snprintf(rt, sizeof rt, "%d%%", (int)(s_charge * 100));
     else snprintf(rt, sizeof rt, "...");
-    gui::text(rt, W - 6, top + 3, 2, gui::F_BODY, s_state == ST_IDLE ? 0xFFFF : C_YELLOW, 0);
+    gui::text(rt, W - 6, top + 3, 2, s_big ? gui::F_BIG : gui::F_BODY, s_state == ST_IDLE ? 0xFFFF : C_YELLOW, 0);
 
     // felt: a dithered pool of light + a perspective grid, the dice clipped to it (a big tumbling die
-    // never paints the header or the footer)
-    int ft = top + HEAD;
+    // never paints the header or the footer; on the panel the layout keeps them inside and the strip owns the clip)
+    int ft = top + hh;
     gui::vgradient(0, ft, W, bottom - ft, gui::rgb(0, 36, 0), gui::rgb(0, 109, 36));
     fx3d::Grid g = { ft + 10, bottom - 1, (float)(W/2), 0.0f, (float)(W*0.8f), 7, 9, gui::rgb(36, 109, 36), gui::rgb(36, 146, 85), 150 };
     fx3d::grid(g);
-    d.setClipRect(0, ft, W, bottom - ft);
+    if (!s_big) d.setClipRect(0, ft, W, bottom - ft);
     const fx3d::Model &mdl = *TYPES[s_type].m;
     for (int i = 0; i < s_n; i++) {
         Die &dd = s_d[i];
         int cx, cy; float sc; layout(i, ft, bottom, &cx, &cy, &sc);
+        if (dd.held) d.fillSmoothCircle(cx, cy, sc / TYPES[s_type].rscale + 5, RGB(219, 182, 0));   // a held die sits on a gold disc
         fx3d::dither_disc(cx, cy + (int)(sc * 0.95f), (int)(sc * 0.85f), 0);                    // soft contact shadow
         Rot r = rot_of(dd.yaw, dd.pitch, dd.bank);
         draw_solid(mdl, r, (float)cx, (float)cy, sc);
         if (TYPES[s_type].faces == 6) draw_pips(r, (float)cx, (float)cy, sc);
         else draw_face_numbers(mdl, r, (float)cx, (float)cy, sc);
     }
-    d.clearClipRect();
+    if (s_big) {
+        lg::field(0, ft, W, bottom - ft);
+        nucleo_touch_add_scroll(0, ft, W, bottom - ft, 14, NK_DOWN, 0, NK_UP, 0);
+    } else d.clearClipRect();
     if (s_state == ST_CHARGE) {                                   // charge meter while mixing
         d.fillSmoothRoundRect(10, bottom - 8, W - 20, 6, 3, gui::rgb(0, 36, 0));
         d.fillSmoothRoundRect(10, bottom - 8, 6 + (int)((W - 26) * s_charge), 6, 3, gui::mix(C_YELLOW, C_GREEN, (int)(s_charge * 256)));
@@ -411,8 +444,34 @@ static void set_change(int dir)
     nucleo_app_request_draw();
 }
 
+// A panel tap (fields, lg::tap). A header chip: the next dice count / die type. The felt: a die = hold / release
+// it, anywhere else = a standard roll. Hit-tested with the painter's own layout.
+static bool lg_key(int key, char ch)
+{
+    int x, y;
+    if (!lg::tap(key, ch, &x, &y)) return false;
+    view(true);
+    if (y < LHEAD) {
+        int k = (x - CHIPX) / 52;
+        if (s_state != ST_ROLL) { s_setm.sel = (int8_t)k; set_change(!k && s_n == MAXDICE ? 1 - MAXDICE : 1); }
+    } else if (!s_settings && s_state != ST_ROLL) {
+        int hit = -1;
+        for (int i = 0; i < s_n; i++) {
+            int cx, cy; float sc; layout(i, LHEAD, 240, &cx, &cy, &sc);
+            int rr = (int)(sc / TYPES[s_type].rscale) + 4;
+            if ((x - cx) * (x - cx) + (y - cy) * (y - cy) <= rr * rr) hit = i;
+        }
+        if (hit < 0) throw_dice(0.5f);
+        else { bool &h = s_d[hit].held; h = !h; nucleo_audio_tone(h ? 1175 : 660, 25, 40); }
+    }
+    view(false);
+    nucleo_app_request_draw();
+    return true;
+}
+
 static void on_key(int key, char ch)
 {
+    if (lg_key(key, ch)) return;
     if (s_settings) {
         if (gui::menu_key(s_setm, key, 2)) nucleo_app_request_draw();
         else if (key == NK_RIGHT) set_change(+1);
@@ -457,6 +516,22 @@ static void enter(void)
 }
 static void on_exit(void) { game_text_close(); }
 
+// Two screens: the table / settings native on the panel (composed in strips), the Cardputer a companion with the
+// total, the dice, how many are held and the key hints.
+static void lg_paint(void *) { draw(); }
+static void draw_large(void) { view(true); nucleo_touch_clear(); lg::frame(lg_paint, nullptr); nucleo_touch_commit(); view(false); }
+static void on_draw(void)
+{
+    set_hint();
+    if (!nucleo_app_two_screens()) { draw(); return; }
+    d.fillRect(0, nucleo_app_content_top(), W, nucleo_app_content_height(), BG);
+    int y = lg::comp_head(GT("Dadi", "Dice"), C_GREEN), total = 0;
+    for (int i = 0; i < s_n; i++) total += s_d[i].value;
+    char b[24]; snprintf(b, sizeof b, s_state == ST_IDLE ? "%d%s  %d" : "%d%s  ...", s_n, TYPES[s_type].name, total);
+    gui::text(b, 8, y + 12, 0, gui::F_BIG, 0xFFFF, 0);
+    lg::comp_keys(s_hint);
+}
+
 // Working RAM: allocated (zeroed) by the framework before enter(), freed after on_exit(). Foreground-only.
 static const nucleo_app_ram_t APP_RAM[] = {
     { (void **)&s_d, sizeof(Die) * MAXDICE },
@@ -467,9 +542,9 @@ extern "C" void nucleo_register_dice(void)
 {
     static const nucleo_app_def_t app = {
         "dice", "Dadi", "Games", "Dadi 3D d4/d6/d8/d20 (scuoti o tieni GO)",
-        'D', C_RED, enter, on_key, nullptr, draw, on_exit,
+        'D', C_RED, enter, on_key, nullptr, on_draw, on_exit,
         NX_NET_APP,  // dedicate RAM + free the shared I2S line, consistent with the other games
-        APP_RAM
+        APP_RAM, draw_large
     };
     nucleo_app_register(&app);
 }

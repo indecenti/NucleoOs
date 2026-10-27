@@ -1,0 +1,9 @@
+# Video: clips on the card (fake .nfv bodies: no header, so no duration) and a folder; the list + card on the panel.
+# Playback (the NFV v4 loop with its scrub strip and paused transport) does not run on the PC.
+@sd data/Videos/Il_porto_di_notte.nfv NFV1
+@sd data/Videos/Gatti_sul_tetto.nfv NFV1
+@sd data/Videos/Serie/Episodio_01.nfv NFV1
+@sd data/Videos/Serie/Episodio_02.nfv NFV1
+home
+pick      D
+folder    ENTER
