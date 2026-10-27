@@ -1,6 +1,12 @@
 // store_apps.cpp — apps installed from the store are apps of the system: in the launcher under their
 // category (games in the Games gallery), with their own pixel icon, in search, Recent and pins.
 //
+// A NATIVE app (kind "native") is loaded from the SD card when it is opened (native_apps.cpp): the framework
+// calls nucleo_store_app_prepare() on its registry slot first, which swaps the placeholder callbacks for the
+// module's own. When the module is unloaded (another native app took the scratch region, or the store is
+// replacing it) the slot gets its placeholder back before the code goes away. A module that fails to load
+// leaves the placeholder, which says why.
+//
 // Each installed app (/sd/apps/<id>/.store-version, written by the store engine) becomes a registered app
 // in the tail of the registry (nucleo_app_set_dynamic): its name in the current language, the launcher
 // category its store category maps to, the category colour, and its 32x32 device-icon.txt. Opening one
@@ -20,6 +26,9 @@ extern "C" {
 #include "nucleo_i18n.h"
 #include "nucleo_board.h"
 extern const char *nucleo_setup_ip(void);
+const nucleo_app_def_t *nucleo_native_load(const char *id);
+const char *nucleo_native_error(void);
+void nucleo_native_on_unload(void (*cb)(const char *id));
 }
 
 struct StoreApp {
@@ -41,6 +50,8 @@ static const struct { const char *store, *launcher; unsigned short col; } MAP[] 
 };
 
 static StoreApp *s_apps, *s_old;
+static nucleo_app_def_t *s_patched;     // the registry slot currently running a native module (nullptr = none)
+static nucleo_app_def_t s_placeholder;  // what that slot held before
 static unsigned s_old_gen;              // launcher tree generation when s_old was retired
 static int s_n;
 
@@ -165,6 +176,53 @@ static void opener_draw(void)
 
 static void opener_key(int, char) {}
 
+// ── native apps ───────────────────────────────────────────────────────────────
+// The placeholder a native app's slot holds while its module is not loaded: only seen when loading failed.
+static void native_draw(void)
+{
+    const StoreApp *a = find(nucleo_app_active_id());
+    int top = nucleo_app_content_top(), h = nucleo_app_content_height();
+    d.fillRect(0, top, 240, h, BG);
+    if (!a) return;
+    icon_at(a, 6, top + 6, 1);
+    txt(&fonts::Font4, 52, top + 10, a->name, FG);
+    txt(&fonts::Font2, 8, top + 50, TR5("Non si avvia. Reinstallala dallo Store.", "It does not start. Reinstall it from the Store.",
+                                        "No arranca. Reinstalala desde la Tienda.", "Ne demarre pas. Reinstallez-la.",
+                                        "Startet nicht. Im Store neu installieren."), C_YELLOW);
+    char e[48];
+    snprintf(e, sizeof e, "%.46s", nucleo_native_error());
+    txt(&fonts::Font0, 8, top + 72, e, MUTED);
+}
+
+static void native_unloaded(const char *id)
+{
+    if (s_patched && s_patched->id && !strcmp(s_patched->id, id)) *s_patched = s_placeholder;
+    s_patched = nullptr;
+}
+
+extern "C" bool nucleo_store_app_is_native(const char *id)
+{
+    const StoreApp *a = find(id);
+    return a && !strcmp(a->kind, "native");
+}
+
+// Called by the framework right before it opens a store app (in the boot that will run it: a game's Solo boot).
+extern "C" void nucleo_store_app_prepare(nucleo_app_def_t *slot)
+{
+    if (!slot || !nucleo_store_app_is_native(slot->id)) return;
+    if (s_patched == slot) return;                      // already the module's
+    const nucleo_app_def_t *m = nucleo_native_load(slot->id);
+    if (!m) return;                                     // the placeholder explains it
+    s_placeholder = *slot;
+    // The store owns the identity (id, name, category, icon, colour); the module brings the behaviour.
+    slot->on_enter = m->on_enter; slot->on_key = m->on_key; slot->on_tick = m->on_tick; slot->on_draw = m->on_draw;
+    slot->on_exit = m->on_exit; slot->exclusive_flags = m->exclusive_flags; slot->ram = m->ram;
+    slot->on_draw_large = m->on_draw_large;
+    // Nothing that points into the module goes where the launcher keeps it (its tree copies name / desc):
+    // those stay the store's, so a later unload can never leave the launcher reading unmapped flash.
+    s_patched = slot;
+}
+
 // ── sync ──────────────────────────────────────────────────────────────────────
 extern "C" void nucleo_store_apps_sync(void)
 {
@@ -185,6 +243,7 @@ extern "C" void nucleo_store_apps_sync(void)
     nucleo_app_def_t *defs = n ? (nucleo_app_def_t *)calloc(n, sizeof *defs) : nullptr;
     for (int i = 0; i < n && defs; i++) {
         nucleo_app_def_t &d0 = defs[i];
+        bool native = !strcmp(apps[i].kind, "native");
         d0.id = apps[i].id;
         d0.name = apps[i].name;
         d0.category = apps[i].cat;
@@ -193,8 +252,12 @@ extern "C" void nucleo_store_apps_sync(void)
         d0.color = apps[i].color;
         d0.on_enter = opener_enter;
         d0.on_key = opener_key;
-        d0.on_draw = opener_draw;
+        d0.on_draw = native ? native_draw : opener_draw;
     }
+    // Every slot is rewritten below: none runs a module any more (a resident module is simply re-attached
+    // by the next nucleo_store_app_prepare, without reloading).
+    nucleo_native_on_unload(native_unloaded);
+    s_patched = nullptr;
     // The launcher tree holds pointers into the app-definition strings (= into s_apps). The old block is
     // safe to free only once the tree has been rebuilt since it was retired (its generation moved on);
     // otherwise keep it one more round. The newly replaced block (s_apps) becomes the next "old".

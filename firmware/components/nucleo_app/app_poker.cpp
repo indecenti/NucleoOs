@@ -14,6 +14,11 @@
 // Sound: the PC-rendered pack (tools/sfx-gen/games/poker.py), never synthesized here.
 // Never name a local `d` (it is the display macro).
 
+#if __has_include("sdkconfig.h")       // the host harnesses compile this file without one
+#include "sdkconfig.h"
+#endif
+// Built in, or (CONFIG_NUCLEO_STORE_POKER) only as the store's native module, built with NAP_MODULE.
+#if !CONFIG_NUCLEO_STORE_POKER || defined(NAP_MODULE)
 #include "nucleo_app.h"
 #include "nucleo_touch.h"       // tap a card to hold it
 #include "nucleo_kbd.h"
@@ -1118,3 +1123,4 @@ extern "C" void nucleo_register_poker(void)
     };
     nucleo_app_register(&app);
 }
+#endif  // !CONFIG_NUCLEO_STORE_POKER || NAP_MODULE

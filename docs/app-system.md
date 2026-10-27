@@ -38,23 +38,14 @@ Store improvements (**next**): a small RGB565 icon per app in the catalog folder
 real icons; screenshots for the web page; an optional "featured" list; an update badge on the launcher at
 boot; opt-in automatic updates; a beta channel (a second signed catalog).
 
-## Native apps from flash — **planned**
+## Native apps from the SD card — **working on both boards; not yet released**
 
-Why from flash: the Cardputer has no PSRAM and ~18 KB free heap; loading code into RAM (ELF loaders, WASM
-interpreters) does not fit a 20-75 KB game. The ESP32-S3 can execute code straight from flash through its
-MMU, so an app costs RAM only for its own variables.
-
-1. **Spike (1 day, on hardware):** map a 64 KB flash region executable with `esp_mmu_map` (IDF 5.4) and
-   jump into a hand-relocated function. Nobody has published this exact path on ESP32: prove it first.
-2. **Loader:** the app is a relocatable ELF built with `-mlongcalls` against a **versioned function table**
-   (gfx, keys, audio, files, time, libc) — never symbol names. At install it is relocated once for its slot
-   and written to an `apps` partition; at launch it is mapped and called; `.data/.bss` go to the heap.
-3. **Safety:** a crash or a watchdog reset during an app marks it, and the next boot skips it and returns to
-   the launcher ("safe boot"); the API version is checked before mapping.
-4. **Flash space:** the `apps` partition needs a new layout (e.g. 2 x 2.5 MB app slots + 2 MB apps). Under
-   the upgrade guarantees this ships only with a migration that leaves a bootable device at every step
-   without a cable — or as a fresh-install option — never silently.
-5. **First app: Poker** (18.8 KB today), then the other games (~480 KB of firmware in total).
+Spec: [native-apps.md](native-apps.md). Installed on the SD card only; at launch the signed `.nap` module is
+re-verified, relocated into the 256 KB `coredump` partition (core dumps are off) and executed from flash
+through the MMU, so an app costs RAM only for its own variables. ABI level 1 = what the built-in games use
+(195 functions); the layout fingerprint pins the shapes of the shared types; a native game gets the same Solo
+boot as a built-in one. Store games: Constellations, Tanks, Poker (all run from the SD card on both boards; out of the image by default,
+139 KB recovered). The Store is the second entry on Home, after ANIMA. Next: the release that ships it.
 
 ## Testing — **next**
 
@@ -80,5 +71,6 @@ a local preview server mirrors the device paths (`/nucleo-i18n.js`, `/apps/<id>/
 1. Device-verify the Store client (catalog download, install, update, remove) on both boards.
 2. Device smoke test (HTTP part), then the serial test channel and the Solo/exclusive apps.
 3. Web shell store page (WebCrypto verification).
-4. Native-from-flash spike; if it holds, the loader and the partition plan, then Poker.
+4. Native apps: **done** — loader verified on both boards; Constellations, Tanks and Poker ship from the store
+   and are out of the image (docs/native-apps.md "Leaving the firmware"). Next: more games, ABI v2 for the emulator.
 5. Recover flash for the M5Launcher slot (the image is over it today), helped by step 4.

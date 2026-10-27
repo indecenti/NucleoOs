@@ -754,7 +754,11 @@ void app_main(void)
         // full OS. (App .bss is linked-in regardless, so this is about isolation/clarity, not RAM.)
         if (solo_rec)                      { nucleo_register_recorder(); bootmark("app-recorder-solo"); }
         else if (solo_srv)                 { nucleo_register_remote();   bootmark("app-remote-solo"); }  // Web Client: only Remote Control (the server-listening watch)
-        else if (nucleo_app_solo_is_generic()) { nucleo_app_register_builtins(); bootmark("app-game-solo"); }  // heavy game (NX_SOLO): register all so launch_id finds it
+        else if (nucleo_app_solo_is_generic()) {   // heavy game (NX_SOLO): register all so launch_id finds it,
+            nucleo_app_register_builtins();          // including a native game installed from the store
+            nucleo_store_apps_sync();
+            bootmark("app-game-solo");
+        }
         else                               { nucleo_register_anima();    bootmark("app-anima-solo"); }
     } else {
         nucleo_app_register_builtins();      bootmark("app-builtins");

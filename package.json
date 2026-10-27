@@ -146,6 +146,8 @@
     "alarm:test": "node tools/alarm-host/run.mjs",
     "presence:test": "node tools/presence-host/run.mjs",
     "store:test": "node tools/store-host/run.mjs",
+    "native:test": "node tools/native/test.mjs",
+    "native:gen": "node tools/native/gen-exports.mjs",
     "gb:accuracy": "node tools/emu-host/gb-accuracy.mjs",
     "discord:test": "node --test tools/discord-bot/search.test.mjs tools/discord-bot/automod.test.mjs tools/discord-bot/bot.test.mjs"
   }

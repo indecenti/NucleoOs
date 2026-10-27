@@ -37,7 +37,7 @@ const senv = { ...process.env, NUCLEO_STORE_ROOT: store, NUCLEO_CARDPUTER_STORE_
 const tool = (...a) => execFileSync(PY, [STORE_TOOL, ...a], { env: senv, encoding: 'utf8' });
 const LANGS = ['it', 'en', 'es', 'fr', 'de'];
 function app(id, code, files, extra = {}) {
-  const d = join(store, 'apps', id);
+  const d = join(store, 'apps', 'web', id);
   rmSync(join(d, 'files'), { recursive: true, force: true });
   mkdirSync(join(d, 'files'), { recursive: true });
   const m = { id, kind: 'web', version: `1.0.${code}`, version_code: code, min_os: '0.7.0', category: 'games',
@@ -63,11 +63,31 @@ function app(id, code, files, extra = {}) {
     writeFileSync(p, data);
   }
 }
+// A native app: the store checks the module's header and info record (the firmware loader gate, npm run
+// native:test, checks real modules); the engine treats app.nap as one more signed file.
+function nativeApp(id, code, abi = 1, nap = null) {
+  const d = join(store, 'apps', 'native', id);
+  rmSync(join(d, 'files'), { recursive: true, force: true });
+  mkdirSync(join(d, 'files'), { recursive: true });
+  writeFileSync(join(d, 'manifest.json'), JSON.stringify({ id, kind: 'native', version: `1.0.${code}`, version_code: code,
+    min_os: '0.7.0', category: 'games', abi, name: Object.fromEntries(LANGS.map((l) => [l, `${id} ${l}`])),
+    description: Object.fromEntries(LANGS.map((l) => [l, `about ${id}`])), author: 'Test', license: 'MIT',
+    source: 'https://example.org', permissions: [],
+    build: { repo: 'indecenti/NucleoOs', commit: '0123456789abcdef0123456789abcdef01234567', register: 'r', sources: ['a.cpp'] } }));
+  const elf = Buffer.alloc(52 + 64); Buffer.from('\x7fELF\x01\x01\x01', 'latin1').copy(elf);
+  elf.writeUInt16LE(3, 16); elf.writeUInt16LE(94, 18); elf.writeUInt32LE(1, 20);
+  const info = Buffer.alloc(52); info.writeUInt32LE(0x3150414e, 0); info.writeUInt16LE(abi, 4); info.write(id, 16, 'ascii');
+  writeFileSync(join(d, 'files', 'app.nap'), nap || Buffer.concat([elf, info, Buffer.alloc(9000, code)]));
+  writeFileSync(join(d, 'files', 'device-icon.txt'), Array.from({ length: 32 }, (_, y) => Array.from({ length: 32 }, (_, x) =>
+    (x === 0 || x === 31 || y === 0 || y === 31 || (y === 4 + id.charCodeAt(0) % 20 && x > 2 && x < 9 + code)) ? '#' : '.').join('')).join('\n') + '\n');
+}
 tool('keygen'); tool('keygen', '--backup');
 const big = Buffer.alloc(6144 * 3, 7);                 // exactly three windows: the 416 end path
 const odd = Buffer.from(Array.from({ length: 20011 }, (_, i) => (i * 31) & 255));
 app('alpha', 1, { 'manifest.json': '{"id":"alpha","version":"1.0.1","permissions":["device.mic"]}', 'www/index.html': '<h1>alpha</h1>', 'www/big.bin': big, 'www/a/b/odd.bin': odd });
 app('beta', 1, { 'manifest.json': '{"id":"beta"}', 'www/index.html': 'beta' });
+nativeApp('gamma', 1);
+nativeApp('delta', 1, 2);                                // built for ABI 2: newer than the test firmware
 tool('publish');
 tool('firmware-keys', '--out', join(OUT, 'test_keys.c'));
 
@@ -94,9 +114,11 @@ if (cc.status !== 0) { console.error('store-host: COMPILE FAILED\n' + cc.stdout 
 
 // ---- scenarios -------------------------------------------------------------------------------------------
 let fails = 0;
-const pub = join(store, 'public');
-function cli(cmd, arg = '', fault = '') {
-  const r = spawnSync(exe, [pub, sd, cmd, ...(arg !== '' ? [String(arg)] : [])], { env: { ...env, FAULT: fault }, encoding: 'utf8' });
+const pubRoot = join(store, 'public');
+const pub = join(pubRoot, 'web');
+function cli(cmd, arg = '', fault = '', channel = 'web', abi = '1', arg2 = '') {
+  const r = spawnSync(exe, [pubRoot, sd, cmd, ...(arg !== '' ? [String(arg)] : []), ...(arg2 ? [arg2] : [])],
+    { env: { ...env, FAULT: fault, CHANNEL: channel, NATIVE_ABI: abi }, encoding: 'utf8' });
   const out = r.stdout || '';
   const rc = Number((out.match(/rc=(-?\d+)/) || [])[1]);
   return { out, rc };
@@ -105,7 +127,8 @@ function check(name, cond, info = '') {
   console.log(`${cond ? 'ok  ' : 'FAIL'} ${name}${cond ? '' : '  ' + info}`);
   if (!cond) fails++;
 }
-const ST = { OK: 0, NO_SD: 1, NET: 2, SIG: 3, ROLLBACK: 4, EXPIRED: 5, BAD: 6, VERIFY: 7, WRITE: 8, NOTFOUND: 10, CONFLICT: 11 };
+const ST = { OK: 0, NO_SD: 1, NET: 2, SIG: 3, ROLLBACK: 4, EXPIRED: 5, BAD: 6, VERIFY: 7, WRITE: 8, NOTFOUND: 10, CONFLICT: 11,
+  UNSUPPORTED: 12, ABI: 14 };
 const reg = join(sd, 'system', 'registry', 'apps.json');
 const regHas = (id) => readFileSync(reg, 'utf8').includes(`"id":"${id}"`) || readFileSync(reg, 'utf8').includes(`"id": "${id}"`);
 
@@ -203,6 +226,46 @@ execFileSync(PY, [STORE_TOOL, 'sign'], { env: fenv });
 r = cli('refresh');
 check('foreign key: refused (the firmware does not trust it)', r.rc === ST.SIG, r.out);
 rmSync(foreign, { recursive: true, force: true });
+
+rmSync(join(store, 'keys', 'foreign.pem'));               // back to the trusted keys for what follows
+tool('sign');
+// ---- the native channel: its own catalog, never mixed with the web one --------------------------------------
+const N = (cmd, arg = '', abi = '1', arg2 = '') => cli(cmd, arg, '', 'native', abi, arg2);
+r = N('refresh');
+check('native: own catalog verified (its own serial)', r.rc === ST.OK && /serial=[1-9]/.test(r.out), r.out);
+r = N('list');
+check('native: lists only native apps, with their ABI', /count=2/.test(r.out) && /app gamma native 1 gamma en abi 1/.test(r.out)
+  && !/alpha/.test(r.out), r.out);
+check('web catalog lists no native app', !/gamma|delta/.test(cli('list').out));
+r = N('install', 'gamma');
+check('native: install', r.rc === ST.OK && existsSync(join(sd, 'apps', 'gamma', 'app.nap')), r.out);
+check('native: the signed package stays with the app', existsSync(join(sd, 'apps', 'gamma', '.package.sig'))
+  && /channel native/.test(readFileSync(join(sd, 'apps', 'gamma', '.store-version'), 'utf8')));
+check('native: not registered in the web OS', !regHas('gamma'));
+check('native: installed file verifies against its signature', N('verify-installed', 'gamma', '1', 'app.nap').rc === ST.OK);
+const nap = join(sd, 'apps', 'gamma', 'app.nap'), napOrig = readFileSync(nap);
+const napBad = Buffer.from(napOrig); napBad[200] ^= 0xff; writeFileSync(nap, napBad);
+check('native: a module edited on the card is refused before it runs', N('verify-installed', 'gamma', '1', 'app.nap').rc === ST.VERIFY);
+writeFileSync(nap, napOrig);
+const keep = join(sd, 'apps', 'gamma', '.package.sig'), keepOrig = readFileSync(keep);
+writeFileSync(keep, keepOrig.toString().replace(/^sig .*$/m, 'sig ' + Buffer.alloc(70, 1).toString('base64')));
+check('native: a forged package.sig on the card is refused', N('verify-installed', 'gamma', '1', 'app.nap').rc === ST.SIG);
+writeFileSync(keep, keepOrig);
+check('native: a file the package does not list is refused', N('verify-installed', 'gamma', '1', 'device-icon.tx_').rc !== ST.OK);
+r = N('install', 'delta');
+check('native: an app for a newer ABI is refused', r.rc === ST.ABI && !existsSync(join(sd, 'apps', 'delta')), r.out);
+rmSync(join(sd, 'apps', 'gamma'), { recursive: true });
+r = N('install', 'gamma', '0');
+check('native: a firmware without native support installs none', r.rc === ST.UNSUPPORTED && !existsSync(join(sd, 'apps', 'gamma')), r.out);
+r = cli('install', 'gamma');
+check('a native app cannot be installed through the web channel', r.rc === ST.NOTFOUND || r.rc === ST.UNSUPPORTED, r.out);
+// The web catalog (validly signed) served at the native URL: the signed channel line refuses it.
+const nIdx = join(pubRoot, 'native', 'index.txt'), nSig = join(pubRoot, 'native', 'index.sig');
+const nIdxOrig = readFileSync(nIdx), nSigOrig = readFileSync(nSig);
+cpSync(join(pub, 'index.txt'), nIdx); cpSync(join(pub, 'index.sig'), nSig);
+r = N('refresh');
+check("native: another channel's signed catalog is refused", r.rc === ST.BAD, r.out);
+writeFileSync(nIdx, nIdxOrig); writeFileSync(nSig, nSigOrig);
 
 // Remove.
 r = cli('remove', 'alpha');
