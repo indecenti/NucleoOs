@@ -10,6 +10,11 @@
 //
 // Owns: BR_BELT (the depth plane every module uses to measure feet/scale) + scene_draw().
 
+#if __has_include("sdkconfig.h")       // the host harnesses compile this file without one
+#include "sdkconfig.h"
+#endif
+// Built in, or (CONFIG_NUCLEO_STORE_BRAWLER) only as the store's native module, built with NAP_MODULE.
+#if !CONFIG_NUCLEO_STORE_BRAWLER || defined(NAP_MODULE)
 #include "brawler.h"
 #include "game_ui.h"
 #include <math.h>
@@ -174,3 +179,4 @@ void scene_draw(void)
     int ly = (int)scene_floor_y(0.62f);
     for (int x = -(cam % 48); x < BR_SW; x += 48) R(x, ly, 22, 2, gui::mix(road, gui::rgb(255, 219, 85), 120));   // lane dashes
 }
+#endif  // !CONFIG_NUCLEO_STORE_BRAWLER || NAP_MODULE

@@ -8,6 +8,11 @@
 // Policy: no-op if g.audio is off; small cues (nav, whiff, jump...) are dropped while a clip is still playing
 // so they never stack, the important ones (hits, KO, fanfares) stop the current clip and replace it.
 
+#if __has_include("sdkconfig.h")       // the host harnesses compile this file without one
+#include "sdkconfig.h"
+#endif
+// Built in, or (CONFIG_NUCLEO_STORE_BRAWLER) only as the store's native module, built with NAP_MODULE.
+#if !CONFIG_NUCLEO_STORE_BRAWLER || defined(NAP_MODULE)
 #include "brawler.h"
 #include <stdio.h>
 #include <sys/stat.h>
@@ -52,3 +57,4 @@ void bsfx(int id) {
     if (imp) nucleo_audio_stop();
     nucleo_audio_play(p);
 }
+#endif  // !CONFIG_NUCLEO_STORE_BRAWLER || NAP_MODULE

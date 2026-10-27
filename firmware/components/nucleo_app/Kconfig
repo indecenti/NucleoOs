@@ -29,6 +29,12 @@ config NUCLEO_STORE_TANKDUEL
     help
         Leaves app_tankduel.cpp out of the firmware image (about 47 KB).
 
+config NUCLEO_STORE_BRAWLER
+    bool "Brawler (brawler): from the store, not in the firmware"
+    default y
+    help
+        Leaves app_brawler.cpp and brawler_*.cpp out of the firmware image.
+
 endmenu
 
 endmenu

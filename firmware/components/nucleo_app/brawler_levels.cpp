@@ -12,6 +12,11 @@
 //   brawler_level_count, brawler_level, levels_begin, levels_step, levels_is_clear
 // Calls the other modules ONLY via brawler.h (brawler_spawn_enemy / brawler_live_enemies / br_*).
 
+#if __has_include("sdkconfig.h")       // the host harnesses compile this file without one
+#include "sdkconfig.h"
+#endif
+// Built in, or (CONFIG_NUCLEO_STORE_BRAWLER) only as the store's native module, built with NAP_MODULE.
+#if !CONFIG_NUCLEO_STORE_BRAWLER || defined(NAP_MODULE)
 #include "brawler.h"
 #include "game_text.h"
 #include <math.h>
@@ -232,3 +237,4 @@ bool levels_is_clear(void) {
                    (h1 && h1->on && h1->x > exitx);
     return reached;
 }
+#endif  // !CONFIG_NUCLEO_STORE_BRAWLER || NAP_MODULE

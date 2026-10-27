@@ -8,6 +8,11 @@
 // Both fold camera scroll + shake into their x offset via -g.camx + g.shake.ox(), so positions stored
 // in WORLD-x stay camera-independent — same convention the rest of the fx toolkit uses.
 
+#if __has_include("sdkconfig.h")       // the host harnesses compile this file without one
+#include "sdkconfig.h"
+#endif
+// Built in, or (CONFIG_NUCLEO_STORE_BRAWLER) only as the store's native module, built with NAP_MODULE.
+#if !CONFIG_NUCLEO_STORE_BRAWLER || defined(NAP_MODULE)
 #include "brawler.h"
 #include <math.h>
 #include <stdlib.h>
@@ -109,3 +114,4 @@ void brfx_draw_drops(void)
             d.fillCircle(brX(q.x + xoff), brY(q.y), k > 0.55f ? 3 : 2, fx3d::scl(q.col, (int)(170 + 85 * k), 255));
         }
 }
+#endif  // !CONFIG_NUCLEO_STORE_BRAWLER || NAP_MODULE

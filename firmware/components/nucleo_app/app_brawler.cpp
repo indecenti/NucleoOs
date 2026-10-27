@@ -11,6 +11,11 @@
 // one heap block while open); buffered d.* drawing; controls FIXED (E/S/A/D move, J punch, K kick, L/Space
 // jump, Esc/TAB pause, repeated J = combo). Text in the OS language (GT).
 
+#if __has_include("sdkconfig.h")       // the host harnesses compile this file without one
+#include "sdkconfig.h"
+#endif
+// Built in, or (CONFIG_NUCLEO_STORE_BRAWLER) only as the store's native module, built with NAP_MODULE.
+#if !CONFIG_NUCLEO_STORE_BRAWLER || defined(NAP_MODULE)
 #include "brawler.h"
 #include "nucleo_app.h"
 #include "nucleo_kbd.h"
@@ -765,3 +770,4 @@ extern "C" void nucleo_register_brawler(void)
     };
     nucleo_app_register(&app);
 }
+#endif  // !CONFIG_NUCLEO_STORE_BRAWLER || NAP_MODULE
