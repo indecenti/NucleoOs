@@ -153,6 +153,7 @@ and every step is checked:
 | Tanks (`tanks`) | 96 KB (75 KB, 2.1 KB RAM) | ~70 KB | `CONFIG_NUCLEO_STORE_TANKS` |
 | Poker (`poker`) | 37 KB (29 KB, 0.7 KB RAM) | ~20 KB | `CONFIG_NUCLEO_STORE_POKER` |
 | Tank Duel (`tankd`) | 77 KB (58 KB, 0.8 KB RAM, ABI 3) | ~43 KB | `CONFIG_NUCLEO_STORE_TANKDUEL` |
+| Brawler (`brawler`, 10 sources) | 72 KB (56 KB, 1.5 KB RAM, ABI 3) | ~41 KB | `CONFIG_NUCLEO_STORE_BRAWLER` |
 
 With all three from the store (the default) the image is **3,461,120 B instead of 3,603,792 B: 142,672 B (139 KB)
 recovered**
