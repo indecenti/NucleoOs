@@ -18,7 +18,7 @@ image generation.
 ![Framework: ESP-IDF](https://img.shields.io/badge/firmware-ESP--IDF-red)
 [![Discord](https://img.shields.io/badge/Discord-join%20the%20community-5865F2?logo=discord&logoColor=white)](https://discord.gg/84tyTPtWus)
 
-**[⬇️ Install](#-install--three-ways)** · **[📋 What's new in v0.7.3](CHANGELOG.md)** · **[📖 User Guide](docs/user-guide.md)** · **[💬 Discord](https://discord.gg/84tyTPtWus)**
+**[⬇️ Install](#-install--three-ways)** · **[📋 What's new in v0.8.0](#-new-in-v080)** · **[📖 User Guide](docs/user-guide.md)** · **[💬 Discord](https://discord.gg/84tyTPtWus)**
 
 <sub>Free for noncommercial use · **commercial use requires a paid license** → niki070585@gmail.com</sub>
 
@@ -105,20 +105,98 @@ once and flash either.
 Product photos © M5Stack.</sub>
 </div>
 
-## ✨ New in v0.7.2
+## ✨ New in v0.8.0
 
-- **Safer firmware updates** — an update counts as done only once the new firmware has actually run; if it
-  crashes before that, the Cardputer goes back to the previous version by itself.
-- **Update the SD card from the browser** — Settings ▸ Updates brings the card's web OS, apps and ANIMA
-  knowledge up to date: only the changed files, each one verified, your data never touched.
-- **One AI decision for the whole OS** — games, Paint, the Recorder, Dictation, IR Remote and Nearby use the AI
-  you set up once (a model on your PC or your cloud key), and Private mode keeps everything local in every app.
-- **M5Launcher installs keep their paired browsers** across restarts.
+- **A second screen.** Plug a 2.8" 320×240 SPI touch display into the Cardputer ADV's EXT header and the launcher,
+  the games and the apps get their **own layout for it**, with direct touch: tap a tile, drag a list, press the
+  content itself. The Cardputer's screen becomes a companion (what you type, the score, the hints). The panel has
+  its own brightness, a 4-point touch calibration and switches off with the Cardputer in standby.
+  [Wiring and schematic ↓](#-second-screen--cardputer-adv)
+- **The Store has native apps.** Two channels, asked first: **Native C** apps that run on the Cardputer itself
+  (signed modules installed on the SD card, loaded when you open them) and **Web apps** served to your browser.
+  Every catalog and package is signed offline and checked on the device before anything installs.
+  [How it works ↓](#-store--native-c-apps-and-web-apps)
+- **Games ship from the Store**, not inside the firmware: about 480 KB of flash freed for the OS. After updating,
+  open **Store ▸ Native C** and install the ones you play; saves, pins and recents carry over.
+- **One web OS for every NucleoOS device.** The web desktop and its apps now come from the shared
+  `nucleo-webos` build (also used by the Handheld and the P4), with the same Store in the browser.
 
-Previous release (v0.7.1): **Costellazioni**, a full space game; the web OS loading about six times faster;
-models on your PC (Ollama, LM Studio, llama.cpp, Jan).
+Previous release (v0.7.5): opt-in auto-update with a cancellable countdown, the whole native UI in the OS
+language, a Torch with red/orange light and SOS.
 
 Full notes: [CHANGELOG.md](CHANGELOG.md). Installed devices are offered the update in **Settings ▸ Updates**.
+
+## 📺 Second screen — Cardputer ADV
+
+An optional 2.8" SPI TFT (the common red **"2.8\" TFT SPI 240x320" V1.1 / V1.2** board: ILI9341 or ST7789V
+controller, XPT2046 resistive touch) on the ADV's EXT 2×7 header. No settings are needed with the wiring below:
+the firmware finds the module at boot (it reads the touch chip), and with nothing plugged in nothing changes.
+The original Cardputer can't take it: G5/G6 scan its keyboard.
+
+<div align="center">
+<img src="docs/external-display-schematic.svg" width="900" alt="Electrical schematic: Cardputer ADV EXT header to the 2.8 inch TFT module — 3.3 V regulator, LCD controller, backlight switch and XPT2046 touch on one SPI bus shared with the microSD, standby behaviour" />
+<br><sub>The electrical schematic: power, the SPI bus shared with the microSD card, the LCD, the touch controller and
+what happens in standby.</sub>
+<br><br>
+<img src="docs/external-display-wiring.svg" width="900" alt="Wire-by-wire map from the 14-pin display header to the Cardputer ADV EXT 2x7 header, one colour per wire" />
+<br><sub>Wire by wire, one colour per wire, with the EXT header seen from the top.</sub>
+</div>
+
+| Module pin | ADV EXT pin | GPIO | |
+|---|---|---|---|
+| VCC | 6 (5VOUT) | — | the module's regulator makes 3.3 V |
+| GND | 4 | — | |
+| CS | 13 | G5 | LCD chip select |
+| RESET | 12 | G13 | |
+| DC | 14 | G15 | |
+| SDI (MOSI) | 9 | G14 | shared with the microSD |
+| SCK | 7 | G40 | shared with the microSD |
+| LED | 1 | G3 | backlight, switched and dimmed by the firmware |
+| SDO (MISO) | — | — | **leave free** |
+| T_CLK | 7 | G40 | same pin as SCK |
+| T_DIN | 9 | G14 | same pin as SDI |
+| T_DO | 11 | G39 | the only wire on MISO |
+| T_CS | 5 | G6 | **required**: it is how the module is detected |
+| T_IRQ | 3 | G4 | optional (polled when not wired) |
+| SD_* | — | — | leave unconnected: the Cardputer's own card stays the system card |
+
+**Before powering:** wire with the Cardputer **off**, leave the module's jumper **J1 open** (closed, 5 V goes
+straight into the panel and the touch chip drives 5 V into G39), and find EXT pin 1 (G3) first — a reversed
+header swaps 5 V and GND.
+
+**Touch.** Taps, drags and long presses act on what is under the finger: every screen has a finger-sized Back,
+lists scroll with a drag, games are played on the panel. Calibrate once from **Settings ▸ Second screen ▸
+Calibrate touch** (four targets).
+
+**Power saving.** When the Cardputer goes to standby (idle timeout, the Control Center, or `display off` from the
+web), G3 switches the panel's backlight off, both screens get the sleep command and the touch controller stays
+in power-down with its interrupt armed: a tap on the panel wakes everything. With the LED wire on 5VOUT instead
+of G3 the backlight can't switch off; the panel is only painted black.
+
+**Settings ▸ Second screen** (ADV only): mode (both screens / Cardputer only / panel only), big home, big apps,
+speed (10–40 MHz), orientation, brightness, touch, calibration. Full reference, including other pinouts and
+troubleshooting: [docs/external-display.md](docs/external-display.md).
+
+## 🛒 Store — native C apps and web apps
+
+The **Store** is the second entry on Home, right after ANIMA. It asks first which channel to open:
+
+| Channel | What you get | Runs on | Installs to |
+|---|---|---|---|
+| **Native C** | Games and tools written in C/C++, with the same look and keys as the built-in apps — and a native layout for the second screen | the Cardputer itself | the SD card (`/sd/apps/<id>/`), loaded into flash when you open it |
+| **Web apps** | Apps for **NucleoOS Web**, the browser desktop the Cardputer serves | the browser of whoever opens them (0 device RAM) | the SD card, served to the web OS |
+
+- **Safe by construction.** Only the maintainer publishes, with an offline key. The device installs only what
+  verifies against the keys compiled into the firmware, and a native module is checked again before every
+  launch, so an edited card never runs code the Store did not sign. Every native app is rebuilt byte for byte
+  from public NucleoOS source.
+- **Small firmware, more apps.** Native apps live on the card, not in the firmware: the games alone freed about
+  480 KB, and new apps ship without a firmware release.
+- **Updates in one tap**, from the Cardputer or from the web OS: the same store, the same signatures, checked by
+  the browser too.
+
+Store repository and catalog: [indecenti/nucleoos-cardputer-store](https://github.com/indecenti/nucleoos-cardputer-store)
+· format and rules: its `docs/` · how native apps work: [docs/native-apps.md](docs/native-apps.md).
 
 ---
 
@@ -372,7 +450,7 @@ Every demanding feature respects a tight set of RAM tricks, validated on hardwar
 | **Media** | Film player (`.nfv` v4 MJPEG+ADPCM, seek) · MP3 player · Radio (multi‑station) · Photos |
 | **Instruments & sensors** | Torch · Bubble Level · Protractor · Alarm (mic + accelerometer + IMU) · Pedometer · Weather · IR Remote · QR · PixelFix · Screensaver |
 | **System** | WiFi manager · Settings/Theme · Clock · Calendar · Notepad · Calculator · System Monitor · Notifications · Info · Mail (SMTP) · SSH terminal |
-| **Games** | Constellations (3D space) · Pong · Snake Duel · Tank Duel · Tanks (artillery) · Brawl · Pinball · Reactor · Hordes · Cardler · Poker · Slots · Dice · Yahtzee · Sand Garden (merge) — via the **GameFront** carousel |
+| **Games** (from the Store ▸ Native C) | Constellations (3D space) · Pong · Snake Duel · Tank Duel · Tanks (artillery) · Brawl · Pinball · Reactor · Hordes · Cardler · Poker · Slots · Dice · Yahtzee · Sand Garden (merge) — via the **GameFront** carousel |
 | **Emulation** | Game Boy (own core, battery-backed saves) · Game Gear (own VDP/PSG/mapper machine + a permissively-licensed Z80 core) — both native, cartridge-accurate, zero browser needed |
 
 ### Web apps (NucleoOS Web — served by the device, run in your browser)

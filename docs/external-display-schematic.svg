@@ -1,0 +1,167 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1100 770" font-family="Segoe UI, Arial, sans-serif" font-size="13">
+<rect width="1100" height="770" fill="#ffffff"/>
+<text x="24" y="34" font-size="19" font-weight="700" fill="#111">Second screen: electrical schematic (Cardputer ADV EXT header ↔ 2.8" SPI TFT with touch)</text>
+
+<!-- ============ Cardputer ADV ============ -->
+<rect x="30" y="64" width="270" height="606" rx="10" fill="#f1f3f5" stroke="#495057" stroke-width="2"/>
+<text x="46" y="88" font-weight="700" fill="#212529">CARDPUTER ADV (ESP32-S3)</text>
+<text x="46" y="106" font-size="12" fill="#495057">EXT 2×7 header · pin · GPIO</text>
+<g font-size="13" text-anchor="end" fill="#212529">
+  <text x="292" y="134">6 · 5VOUT</text>
+  <text x="292" y="164">4 · GND</text>
+  <text x="292" y="214">7 · G40  SCK</text>
+  <text x="292" y="244">9 · G14  MOSI</text>
+  <text x="292" y="274">11 · G39  MISO</text>
+  <text x="292" y="324">13 · G5  LCD CS</text>
+  <text x="292" y="354">14 · G15  DC</text>
+  <text x="292" y="384">12 · G13  RESET</text>
+  <text x="292" y="434">1 · G3  BACKLIGHT (PWM)</text>
+  <text x="292" y="484">5 · G6  TOUCH CS</text>
+  <text x="292" y="514">3 · G4  TOUCH IRQ</text>
+</g>
+<rect x="46" y="572" width="170" height="82" rx="6" fill="#ffffff" stroke="#868e96"/>
+<text x="58" y="594" font-weight="700" fill="#212529">microSD (system card)</text>
+<text x="58" y="612" font-size="12" fill="#495057">its own slot, CS = G12</text>
+<text x="58" y="630" font-size="12" fill="#495057">same SPI bus</text>
+<text x="58" y="646" font-size="12" fill="#495057">SCK · MOSI · MISO</text>
+
+<!-- ============ shared SPI bus ============ -->
+<g stroke-width="4" stroke-linecap="round">
+  <line x1="420" y1="210" x2="420" y2="640" stroke="#f08c00"/>
+  <line x1="450" y1="240" x2="450" y2="620" stroke="#1c5fd8"/>
+  <line x1="480" y1="270" x2="480" y2="600" stroke="#0c8599"/>
+</g>
+<text x="404" y="200" font-size="12" font-weight="700" fill="#f08c00">SCK</text>
+<text x="436" y="230" font-size="12" font-weight="700" fill="#1c5fd8">MOSI</text>
+<text x="470" y="260" font-size="12" font-weight="700" fill="#0c8599">MISO</text>
+<text x="330" y="694" font-size="12" fill="#495057">One SPI bus, three chip selects: microSD G12 · LCD G5 · touch G6. Dots = joined wires; crossings without a dot are not connected.</text>
+
+<!-- Cardputer pins onto the bus -->
+<g stroke-width="3" fill="none">
+  <path d="M300 210 H420" stroke="#f08c00"/>
+  <path d="M300 240 H450" stroke="#1c5fd8"/>
+  <path d="M300 270 H480" stroke="#0c8599"/>
+  <!-- the microSD hangs on the same three lines -->
+  <path d="M216 640 H420" stroke="#f08c00"/>
+  <path d="M216 620 H450" stroke="#1c5fd8"/>
+  <path d="M216 600 H480" stroke="#0c8599"/>
+</g>
+
+<!-- ============ the module ============ -->
+<rect x="560" y="64" width="290" height="606" rx="10" fill="#fff5f5" stroke="#c92a2a" stroke-width="2"/>
+<text x="576" y="88" font-weight="700" fill="#c92a2a">2.8" TFT MODULE (V1.1 / V1.2)</text>
+<text x="576" y="106" font-size="12" fill="#495057">320×240 · ILI9341 or ST7789V · XPT2046</text>
+
+<!-- regulator -->
+<rect x="600" y="118" width="170" height="56" rx="6" fill="#ffffff" stroke="#e03131" stroke-width="2"/>
+<text x="612" y="140" font-weight="700" fill="#212529">3.3 V regulator</text>
+<text x="612" y="160" font-size="12" fill="#c92a2a">jumper J1 OPEN</text>
+<!-- 3V3 rail -->
+<path d="M770 146 H820 V556" fill="none" stroke="#e03131" stroke-width="3"/>
+<text x="778" y="138" font-size="12" font-weight="700" fill="#e03131">3V3</text>
+
+<!-- LCD controller -->
+<rect x="600" y="196" width="190" height="206" rx="6" fill="#ffffff" stroke="#495057" stroke-width="2"/>
+<text x="612" y="218" font-weight="700" fill="#212529">LCD controller</text>
+<text x="612" y="236" font-size="12" fill="#495057">ILI9341 / ST7789V</text>
+<g font-size="12" fill="#212529">
+  <text x="612" y="258">SCK</text>
+  <text x="612" y="288">SDI (MOSI)</text>
+  <text x="612" y="306" fill="#adb5bd">SDO  not connected</text>
+  <text x="612" y="328">CS</text>
+  <text x="612" y="358">DC</text>
+  <text x="612" y="388">RESET</text>
+</g>
+<path d="M790 230 H820" stroke="#e03131" stroke-width="3"/>
+
+<!-- backlight -->
+<rect x="600" y="414" width="190" height="44" rx="6" fill="#ffffff" stroke="#e64980" stroke-width="2"/>
+<text x="612" y="434" font-weight="700" fill="#212529">Backlight switch</text>
+<text x="612" y="450" font-size="12" fill="#495057">LED pin → panel LEDs</text>
+<path d="M790 436 H820" stroke="#e03131" stroke-width="3"/>
+
+<!-- touch -->
+<rect x="600" y="470" width="190" height="186" rx="6" fill="#ffffff" stroke="#7048e8" stroke-width="2"/>
+<text x="612" y="492" font-weight="700" fill="#212529">Touch controller</text>
+<text x="612" y="508" font-size="12" fill="#495057">XPT2046 (resistive)</text>
+<g font-size="12" fill="#212529">
+  <text x="612" y="534">T_CS</text>
+  <text x="612" y="560">PENIRQ (T_IRQ)</text>
+  <text x="612" y="604">T_DO</text>
+  <text x="612" y="624">T_DIN</text>
+  <text x="612" y="644">T_CLK</text>
+</g>
+<path d="M790 556 H820" stroke="#e03131" stroke-width="3"/>
+
+<!-- ============ signal wires ============ -->
+<g stroke-width="3" fill="none" stroke-linecap="round">
+  <!-- power -->
+  <path d="M300 130 H600" stroke="#e03131"/>
+  <path d="M300 160 H578 V182" stroke="#111"/>
+  <!-- LCD -->
+  <path d="M420 254 H600" stroke="#f08c00"/>
+  <path d="M450 284 H600" stroke="#1c5fd8"/>
+  <path d="M300 320 H600" stroke="#2f9e44"/>
+  <path d="M300 350 H600" stroke="#5c940d"/>
+  <path d="M300 380 H600" stroke="#868e20"/>
+  <!-- backlight -->
+  <path d="M300 430 H600" stroke="#e64980"/>
+  <!-- touch -->
+  <path d="M300 480 H540 V530 H600" stroke="#7048e8"/>
+  <path d="M300 510 H520 V556 H600" stroke="#868e96"/>
+  <path d="M480 600 H600" stroke="#0c8599"/>
+  <path d="M450 620 H600" stroke="#1c5fd8"/>
+  <path d="M420 640 H600" stroke="#f08c00"/>
+</g>
+<!-- junctions on the bus -->
+<g fill="#212529">
+  <circle cx="420" cy="210" r="5"/><circle cx="450" cy="240" r="5"/><circle cx="480" cy="270" r="5"/>
+  <circle cx="420" cy="254" r="5"/><circle cx="450" cy="284" r="5"/>
+  <circle cx="480" cy="600" r="5"/><circle cx="450" cy="620" r="5"/><circle cx="420" cy="640" r="5"/>
+</g>
+<g stroke="#111" stroke-width="2.5"><line x1="566" y1="184" x2="590" y2="184"/><line x1="570" y1="190" x2="586" y2="190"/><line x1="574" y1="196" x2="582" y2="196"/></g>
+<text x="494" y="154" font-size="11" fill="#495057">GND, common to all</text>
+<!-- SDO: open end -->
+<circle cx="600" cy="302" r="5" fill="#ffffff" stroke="#adb5bd" stroke-width="2"/>
+
+<!-- ============ notes ============ -->
+<rect x="866" y="64" width="214" height="330" rx="8" fill="#f8f0fc" stroke="#e64980"/>
+<text x="880" y="88" font-weight="700" fill="#a61e4d">Power saving (standby)</text>
+<g font-size="12" fill="#212529">
+  <text x="880" y="110">Screen off (idle timeout,</text>
+  <text x="880" y="126">Control Center, web "display off"):</text>
+  <text x="880" y="150" font-weight="700">1 · G3 low</text>
+  <text x="880" y="166">the backlight switches off</text>
+  <text x="880" y="182">(PWM, 10-100 % while on)</text>
+  <text x="880" y="206" font-weight="700">2 · panels asleep</text>
+  <text x="880" y="222">both screens take the sleep</text>
+  <text x="880" y="238">command</text>
+  <text x="880" y="262" font-weight="700">3 · touch in power-down</text>
+  <text x="880" y="278">PENIRQ stays armed: a tap on</text>
+  <text x="880" y="294">the panel wakes the screen</text>
+  <text x="880" y="310">(G4; polled if not wired)</text>
+  <text x="880" y="338" fill="#c92a2a">LED on 5VOUT instead of G3:</text>
+  <text x="880" y="354" fill="#c92a2a">the backlight can never turn</text>
+  <text x="880" y="370" fill="#c92a2a">off, the panel is only black.</text>
+</g>
+
+<rect x="866" y="408" width="214" height="262" rx="8" fill="#f3f0ff" stroke="#7048e8"/>
+<text x="880" y="432" font-weight="700" fill="#5f3dc4">Touch</text>
+<g font-size="12" fill="#212529">
+  <text x="880" y="454">T_CS on G6 is required: it is</text>
+  <text x="880" y="470">how the module is detected.</text>
+  <text x="880" y="494">Only T_DO goes to MISO (G39);</text>
+  <text x="880" y="510">the LCD's SDO stays free (many</text>
+  <text x="880" y="526">modules never release MISO and</text>
+  <text x="880" y="542">the SD card stalls).</text>
+  <text x="880" y="566">Taps, drags and long presses;</text>
+  <text x="880" y="582">4-point calibration from</text>
+  <text x="880" y="598">Settings › Second screen.</text>
+  <text x="880" y="622">The module's SD_* pins stay</text>
+  <text x="880" y="638">unconnected: the Cardputer's</text>
+  <text x="880" y="654">own card is the system card.</text>
+</g>
+
+<text x="30" y="728" font-size="14" font-weight="700" fill="#c92a2a">Wire with the Cardputer switched OFF. Find EXT pin 1 (G3) first: a reversed header swaps 5 V and GND.</text>
+<text x="30" y="752" font-size="12" fill="#495057">Pins as in docs/external-display.md (settings: display.external_pins). Wire-by-wire colour map: docs/external-display-wiring.svg</text>
+</svg>
