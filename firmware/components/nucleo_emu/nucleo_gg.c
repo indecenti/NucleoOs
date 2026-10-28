@@ -1250,8 +1250,11 @@ static bool inflate_to(FILE *in, uint32_t csize, FILE *out, uint32_t usize)
 #include "miniz.h"                              // tinfl, in the chip's ROM
 static bool inflate_to(FILE *in, uint32_t csize, FILE *out, uint32_t usize)
 {
-    tinfl_decompressor *d = (tinfl_decompressor *)malloc(sizeof *d);
+    // The window FIRST: the heap's one 32 KB block is exactly the window's size, and the ~11 KB inflater
+    // state, asked for first, was carved out of it (measured on the device: "open -> 0x101" for every zip,
+    // largest block 32768 just before) - then no 32 KB block was left for the window.
     uint8_t *dict = (uint8_t *)malloc(TINFL_LZ_DICT_SIZE);
+    tinfl_decompressor *d = (tinfl_decompressor *)malloc(sizeof *d);
     uint8_t *ib = (uint8_t *)malloc(1024);
     bool ok = false;
     if (!(d && dict && ib))
