@@ -23,7 +23,11 @@ static const nucleo_app_def_t REG[] = {
 int nucleo_app_count(void) { return (int)(sizeof REG / sizeof REG[0]); }
 const nucleo_app_def_t *nucleo_app_at(int i) { return &REG[i]; }
 
-static void enter(void) { gamefront_open(); }
+static void enter(void)
+{
+    gamefront_open();
+    while (gamefront_scanning()) gamefront_step();   // the walk for cartridges, all at once on the PC
+}
 static void key(int k, char ch)
 {
     char id[40];

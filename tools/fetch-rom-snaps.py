@@ -4,9 +4,11 @@ r"""Game screenshots for the emulators' gallery, fetched on the PC and put on th
     python tools/fetch-rom-snaps.py --host <device ip> --pin-file <file holding the pairing PIN> [--sheet out.png] [--force]
     python tools/fetch-rom-snaps.py --card E:\                  (the card in the PC's reader instead)
 
-The device never downloads anything (the emulators run with the radio off). This lists the ROM folders on the
-card (/data/ROMs/gb, gbc, gg, sms) over the paired file API, finds a screenshot for every cartridge and writes it
-next to it as /data/ROMs/<folder>/.snaps/<rom file>.snp, which the gallery shows instead of the console's photo.
+The device never downloads anything (the emulators run with the radio off). This reads the cartridges the Games
+gallery found anywhere on the card (its index, /data/GameShots/.cache/roms.idx; without one, the folders
+/data/ROMs/gb, gbc, gg, sms) over the paired file API, finds a screenshot for every cartridge and writes it next to
+it, in <its folder>/.snaps/, as <rom file>.snp (the emulators' shelf) and <rom file>.pic (the gallery: ready to
+stream, nothing to unpack on the device). A cartridge that already has a .snp gets its .pic from it.
 
 Where a screenshot comes from, in order:
   1. the folder's LICENSES.txt (written with the free homebrew library) names each game's page:
@@ -17,6 +19,7 @@ Nothing is committed anywhere: the pictures stay on that card. A cartridge with 
 
 .snp: "SNP1", u16 w, u16 h, u32 deflated size, then raw-deflated RGB565 (native byte order) - fit into 112 x 101
 (a Game Boy / Game Gear screen at 0.7, a Master System screen at 112 x 84). app_gbemu.cpp reads it.
+.pic: "PIC1", u16 w, u16 h, u32 0, u32 0, then RGB565 in the panel's byte order (high byte first). gamefront.cpp.
 """
 import argparse
 import io
@@ -209,6 +212,46 @@ def to_snap(img, native):
     return img, b"SNP1" + struct.pack("<HHI", img.width, img.height, len(z)) + z
 
 
+SYS_KEYS = list(FOLDERS)                       # the index's system digits, in gamefront.cpp's order
+
+
+def rgb565(img):
+    out = []
+    for r, g, b in (img.get_flattened_data() if hasattr(img, "get_flattened_data") else img.getdata()):
+        out.append(((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3))
+    return out
+
+
+def pic_bytes(w, h, px):
+    return b"PIC1" + struct.pack("<HHII", w, h, 0, 0) + b"".join(struct.pack(">H", v) for v in px)
+
+
+def snp_to_pic(blob):
+    if blob[:4] != b"SNP1":
+        return None
+    w, h, n = struct.unpack("<HHI", blob[4:12])
+    raw = zlib.decompress(blob[12:12 + n], -15)
+    return pic_bytes(w, h, struct.unpack("<%dH" % (w * h), raw))
+
+
+def cartridges(dev):
+    """(system key, folder, file) for every cartridge: from the gallery's index, else the four ROM folders."""
+    idx = dev.read("/data/GameShots/.cache/roms.idx").decode("utf-8", "replace").splitlines()
+    out, folder = [], None
+    if idx and idx[0].startswith("GIX1"):
+        for line in idx[1:]:
+            if line.startswith("D "):
+                folder = line[2:]
+                folder = folder[3:] if folder.startswith("/sd/") else folder   # a device path -> a card path
+            elif len(line) > 2 and line[0].isdigit() and line[1] == " " and folder is not None:
+                out.append((SYS_KEYS[int(line[0])], folder, line[2:]))
+        return out
+    for key in FOLDERS:
+        root = f"/data/ROMs/{key}"
+        out += [(key, root, e["name"]) for e in dev.ls(root) if e.get("type") == "file" and e["name"].lower().endswith(ROM_EXT)]
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--host", help="the device, paired over Wi-Fi (with --pin-file)")
@@ -224,49 +267,52 @@ def main():
     else:
         ap.error("--host with --pin-file, or --card")
     done, shots = [], []
-    for folder, (_, native) in FOLDERS.items():
-        root = f"/data/ROMs/{folder}"
-        roms = [e["name"] for e in dev.ls(root) if e.get("type") == "file" and e["name"].lower().endswith(ROM_EXT)]
-        if not roms:
+    have, lic = {}, {}
+    for folder, root, rom in sorted(cartridges(dev), key=lambda c: (c[1], c[2].lower())):
+        native = FOLDERS[folder][1]
+        if root not in have:
+            have[root] = {e["name"] for e in dev.ls(root + "/.snaps")}
+            lic[root] = licenses(dev.read(root + "/LICENSES.txt").decode("utf-8", "replace"))
+            dev.mkdir(root + "/.snaps")
+        if rom + ".snp" in have[root] and not a.force:
+            if rom + ".pic" not in have[root]:          # an older card: the gallery's picture from the .snp
+                pic = snp_to_pic(dev.read(f"{root}/.snaps/{rom}.snp"))
+                ok = bool(pic) and dev.write(f"{root}/.snaps/{rom}.pic", pic)
+                print(f"  {'pic ' if ok else 'FAIL'}  {root}/{rom}")
+            else:
+                print(f"  have  {root}/{rom}")
             continue
-        have = {e["name"] for e in dev.ls(root + "/.snaps")}
-        lic = licenses(dev.read(root + "/LICENSES.txt").decode("utf-8", "replace"))
-        dev.mkdir(root + "/.snaps")
-        for rom in sorted(roms):
-            if rom + ".snp" in have and not a.force:
-                print(f"  have  {folder}/{rom}")
-                continue
-            url = lic.get(rom, "")
-            cands = []
+        url = lic[root].get(rom, "")
+        cands = []
+        try:
+            m = re.search(r"hh\.gbdev\.io/game/([\w.-]+)", url)
+            g = re.search(r"github\.com/([\w.-]+/[\w.-]+)", url)
+            if m:
+                cands = hh_candidates(m.group(1))
+            elif g:
+                cands = image_candidates(g.group(1))
+            cands += libretro_candidates(folder, rom)
+        except Exception as e:
+            print(f"  ?     {root}/{rom}: {e}")
+        picked = None
+        for u in cands[:8]:
             try:
-                m = re.search(r"hh\.gbdev\.io/game/([\w.-]+)", url)
-                g = re.search(r"github\.com/([\w.-]+/[\w.-]+)", url)
-                if m:
-                    cands = hh_candidates(m.group(1))
-                elif g:
-                    cands = image_candidates(g.group(1))
-                cands += libretro_candidates(folder, rom)
-            except Exception as e:
-                print(f"  ?     {folder}/{rom}: {e}")
-            picked = None
-            for u in cands[:8]:
-                try:
-                    img = Image.open(io.BytesIO(get(u)[0]))
-                    img.load()
-                except Exception:
-                    continue
-                if screen_like(img, native):
-                    picked = (u, img)
-                    break
-            if not picked:
-                print(f"  none  {folder}/{rom}  (the console's photo stays)")
+                img = Image.open(io.BytesIO(get(u)[0]))
+                img.load()
+            except Exception:
                 continue
-            img, blob = to_snap(picked[1], native)
-            ok = dev.write(f"{root}/.snaps/{rom}.snp", blob)
-            print(f"  {'put' if ok else 'FAIL'}   {folder}/{rom}  {img.width}x{img.height} {len(blob)} B  <- {picked[0]}")
-            if ok:
-                done.append(rom)
-                shots.append((rom, img))
+            if screen_like(img, native):
+                picked = (u, img)
+                break
+        if not picked:
+            print(f"  none  {root}/{rom}  (the console's photo stays)")
+            continue
+        img, blob = to_snap(picked[1], native)
+        ok = dev.write(f"{root}/.snaps/{rom}.snp", blob) and dev.write(f"{root}/.snaps/{rom}.pic", pic_bytes(img.width, img.height, rgb565(img)))
+        print(f"  {'put' if ok else 'FAIL'}   {root}/{rom}  {img.width}x{img.height} {len(blob)} B  <- {picked[0]}")
+        if ok:
+            done.append(rom)
+            shots.append((rom, img))
     if a.sheet and shots:
         cols = 5
         rows = (len(shots) + cols - 1) // cols

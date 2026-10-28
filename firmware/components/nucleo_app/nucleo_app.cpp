@@ -2431,6 +2431,7 @@ void nucleo_app_run(void)
         // (launcher_render_step_scroll composites into the back-buffer = re-acquires the freed canvas).
         if (s_active == -1 && !s_gamefront && !s_control_center && !s_torch && !s_voice_dark && launcher_render_step_scroll()) s_dirty = true;
         if (s_control_center && !s_torch && !s_voice_dark && launcher_render_control_center_animating()) s_dirty = true;   // CC scroll easing
+        if (s_gamefront && !s_control_center && !s_torch && !s_voice_dark && gamefront_step()) s_dirty = true;   // the walk for cartridges
 
         if (nucleo_extdisp_take_repaint()) nucleo_app_force_repaint();   // the calibration screen covered the panel
 

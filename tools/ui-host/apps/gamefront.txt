@@ -1,5 +1,6 @@
 # The Games gallery (gamefront.cpp, a launcher state): systems, then titles, on the HyperSpin wheel. Native games come
-# from gamefront_host.cpp's registry; cartridges from the scene's card; one native cover and one cartridge screenshot.
+# from gamefront_host.cpp's registry; cartridges found anywhere on the scene's card (also a zip, never /system); one
+# native cover and one cartridge screenshot.
 @main gamefront.cpp
 @direct
 @host gamefront_host.cpp stubs/tinfl_zlib.cpp
@@ -19,6 +20,11 @@
 @sd data/ROMs/sms/River%20Strike.sms x
 @sd data/ROMs/sms/Balloon%20Master.sms x
 @sd data/ROMs/sms/Sonic%20the%20Hedgehog%20(USA,%20Europe).zip x
+@sd Giochi/Sega/Columns%20(Japan).gg x
+@sd Lolo%20Mini.gb x
+@sdfile Download/racer.zip apps/fixtures/racer.zip
+@sd Download/notes.zip x
+@sd system/firmware-test.gb x
 @sdfile data/GameShots/stelle.png apps/fixtures/cover.png
 systems
 systems_gg D D D
@@ -30,5 +36,7 @@ gb_snap D ENTER c:d c:e c:a
 gb_search D ENTER c:l c:o
 gb_nomatch D ENTER c:z c:q
 sms D D D D ENTER
+gg_anywhere D D D ENTER
 back D ENTER BACK
 search c:g c:a
+last D ENTER D D ENTER

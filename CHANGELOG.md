@@ -15,6 +15,18 @@ All notable user-facing changes to NucleoOS. Format loosely follows
   the wheel) and the Cardputer shows the selection's details (system, maker, region, cartridge; players, source and
   blurb). Keyboard: up/down, left/right by 5, 1-7 (1-5) the wheel's slots, Enter, type to search, Esc = search,
   then back a level, then out.
+- **Plug and play.** The gallery finds the cartridges on its own, anywhere on the card (`.gb`, `.gbc`, `.gg`, `.sms`,
+  and zips holding a Game Gear / Master System cartridge), skipping the system's folders. The card is walked a few
+  milliseconds at a time while the gallery is open (once per boot, and again after ten minutes), so it is usable at
+  once and updates itself when the walk finds something new; the result is an index on the card.
+- **Faster, lighter.** A console's titles come from that index (one block of RAM sized to them, ~1.2 KB for 30
+  cartridges); a search filters it in RAM; each folder's screenshots are listed once; a picture is opened once per
+  selection and read four rows at a time. `tools/fetch-rom-snaps.py` follows the index and writes ready-to-show
+  `.pic` pictures next to the `.snp` ones (older cards get theirs from the `.snp`).
+- **Remembers.** The selection lands on the system and the game played last ("last played" mark on the wheel and on
+  the details card).
+- **Sounds.** Short, quiet interface sounds (Kenney "Interface Sounds", CC0) for turning the wheel, opening a system,
+  going back and starting a game, at a fraction of the system volume (muted = silent). New `nucleo_audio_sample()`.
 - **Cartridges launch from the gallery.** A Game Boy / Game Gear / Master System cartridge opens straight in its
   emulator; quitting the game comes back to the gallery on it, never to the emulator's shelf.
 - Native ABI level 5 (the emulators' modules need it); the gallery's texts are in the firmware in five languages

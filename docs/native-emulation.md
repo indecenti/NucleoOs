@@ -334,8 +334,9 @@ is off. The render gate requires most lines, not all.
   It would need the WRAM/VRAM split into 4–8 KB banks (the SRAM banking above is the pattern) and the
   flash/cache work first. GBC cartridges are covered today by the browser Arcade.
 - **The Games gallery lists the consoles, then their cartridges** (`gamefront.cpp`): Game Boy, Game Boy Color,
-  Game Gear and Master System are four systems (one per folder of `/data/ROMs`), shown when their emulator is
-  installed. A cartridge opens straight in its emulator: the gallery hands its path over with the "open with"
+  Game Gear and Master System are four systems, shown when their emulator is installed. Their cartridges are found
+  anywhere on the card by a background walk (index `/data/GameShots/.cache/roms.idx`, text: `GIX1 <n> <hash>`, then
+  `D <folder>` and `<system digit> <file>` lines); the emulators open a cartridge by its full path. A cartridge opens straight in its emulator: the gallery hands its path over with the "open with"
   handoff (`nucleo_app_take_open_file`, carried across the Solo reboot), the emulator plays it from `shelf_poll()`
   and quitting it — or a cartridge the core refuses — closes the app, so the full OS boots back into the gallery on
   that cartridge (an RTC snapshot, `gamefront_take_return()`). The emulators themselves are not entries of the

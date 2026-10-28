@@ -221,6 +221,25 @@ void nucleo_audio_tone(int freq, int ms, int strength)
     if (opened) i2s_close();
 }
 
+// A short recorded sound (an interface tick, a confirmation): 16 kHz mono PCM, usually from flash, played at
+// `strength` % of the software volume. Same contract as blip(): blocks for its length, no-op while a track plays,
+// opens the TX if idle and frees it after. Copied through the chunk buffer (the volume is applied in place).
+void nucleo_audio_sample(const int16_t *pcm, int samples, int strength)
+{
+    if (!pcm || samples <= 0 || atomic_load(&s_playing)) return;
+    if (strength < 5) strength = 5; else if (strength > 100) strength = 100;
+    bool opened = (s_tx == NULL);
+    if (nucleo_audio_i2s_rate(16000, 1) != ESP_OK) return;
+    int16_t *b = s_fx;
+    for (int off = 0; off < samples; ) {
+        int chunk = (samples - off) < 256 ? (samples - off) : 256;
+        for (int i = 0; i < chunk; i++) b[i] = (int16_t)(pcm[off + i] * strength / 100);
+        nucleo_audio_i2s_write(b, chunk * 2);
+        off += chunk;
+    }
+    if (opened) i2s_close();
+}
+
 // Continuous alarm SIREN — a harsh, max-amplitude square wave WAILED 1.8->4.2 kHz with no gaps. Unlike
 // tone(), it KEEPS the I2S TX open across calls (phase + sweep persist in statics), so calling it back-to-
 // back from the alarm loop is a TRULY continuous, piercing siren: no per-call open/close click or silence.

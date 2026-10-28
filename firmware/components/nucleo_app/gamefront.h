@@ -8,6 +8,8 @@
 // game comes back here on it. With the external panel the gallery lives there and the Cardputer is its companion.
 //
 // It is a launcher STATE (like the Control Center), not a registered app: the run loop owns it (nucleo_app.cpp).
+// Plug and play: the cartridges are found anywhere on the card (by extension; zips by the file inside) and kept in an
+// index, GameShots/.cache/roms.idx, walked again in the background once per boot and after a while.
 // Pictures: native games' covers /sd/data/GameShots/<id>.{png,jpg,bmp}; a cartridge's screenshot
 // <rom folder>/.snaps/<rom file>.snp (tools/fetch-rom-snaps.py); the consoles' photos (gbemu_art.h). Each is turned
 // once into a raw .pic beside it (or in GameShots/.cache) and streamed from the card while a frame is composed.
@@ -25,6 +27,10 @@ int  gamefront_key(int key, char ch, char *launch_id, int cap);  // GF_LAUNCH fi
 const char *gamefront_launch_file(void);                         // ...and the cartridge it must open, or NULL
 void gamefront_render(void);                                     // the whole screen (+ the companion on two screens)
 void gamefront_invalidate(void);                                 // the surface changed: repaint everything
+// Call every loop while the gallery is up: a slice (~15 ms) of the walk that finds the cartridges on the card. True =
+// the walk just ended (repaint: the lists may have changed).
+bool gamefront_step(void);
+bool gamefront_scanning(void);                                   // the card is being walked
 // In the full OS boot after a game launched from the gallery ran in its Solo boot: true = reopen the gallery (on
 // that game). One-shot, and only after our own restart.
 bool gamefront_take_return(void);

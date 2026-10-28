@@ -493,10 +493,12 @@ static void shelf_swap_in(void)
     }
 }
 
-// Resolve a bare filename to a full path, trying both system folders.
+// Resolve a bare filename to a full path, trying both system folders. A path (the Games gallery finds cartridges
+// anywhere on the card) is taken as it is.
 static bool rom_path(const char *name, char *out, size_t n)
 {
     struct stat sb;
+    if (strchr(name, '/')) { snprintf(out, n, "%s", name); return stat(out, &sb) == 0; }
     snprintf(out, n, "%s/%s", SYS->dir_a, name);
     if (stat(out, &sb) == 0) return true;
     if (!SYS->dir_b) return false;
@@ -2047,9 +2049,9 @@ static void enter(void)
     // straight away by shelf_poll(), and quitting it goes back to the gallery.
     if (const char *of = nucleo_app_take_open_file()) {
         const char *base = strrchr(of, '/');
-        snprintf(st->autoplay, sizeof st->autoplay, "%s", base ? base + 1 : of);
+        snprintf(st->autoplay, sizeof st->autoplay, "%s", of);   // the whole path: it may be in any folder
         for (int i = 0; i < st->n; i++)
-            if (!strcmp(ent_name(i), st->autoplay)) { st->sel = i; break; }
+            if (!strcmp(ent_name(i), base ? base + 1 : of)) { st->sel = i; break; }
         trace("  opened on '%s'", st->autoplay);
     }
     nucleo_app_set_back_handler(on_back);
