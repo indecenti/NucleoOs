@@ -120,6 +120,9 @@ struct EmuSys {
     bool zip;                                // .zip in the library folders opens too (the core unpacks it)
     EmuArt art_a, art_b;                     // the console's picture in the gallery; art_b for entries with the badge
     const char *sys_a, *sys_b;               // ...and its name there
+    // The console that plays `name` from this shelf (null = this one): the Game Boy's hands a Color cartridge
+    // to SYS_GBC. A field, not a check in play(), so the Game Gear module never links the Game Boy cores.
+    const EmuSys *(*pick)(const char *name);
 };
 static const EmuSys *SYS = nullptr;
 
@@ -1216,13 +1219,12 @@ static void play_session(const char *name);
 static void pic_free(void);
 // Every way out of a session — a refused cartridge, a failed open, a quit — lands back on the shelf,
 // so the shelf comes back from the card HERE, once, rather than on each of those paths.
-static const EmuSys *sys_for(const char *name);
 static void play(const char *name)
 {
     // A Color cartridge on the Game Boy shelf plays on the Color core, for this session only: the shelf,
     // its saves and its trace stay the Game Boy's (SYS_GBC shares them), only the console changes.
     const EmuSys *shelf = SYS;
-    SYS = sys_for(name);
+    if (SYS->pick) SYS = SYS->pick(name);
     play_session(name);
     SYS = shelf;
     if (st) shelf_swap_in();
@@ -2025,6 +2027,7 @@ static void gb_explain(esp_err_t e, const char *path, char *buf, size_t n)
     nucleo_gb_probe(path, &inf);
     start_error(e, nucleo_gb_cart_name(inf.cart_type), buf, n);
 }
+static const EmuSys *gb_pick(const char *name);
 static const EmuSys SYS_GB = {
     "gbemu", "Game Boy", "GB", DIR_GB, DIR_GBC, ".gb", ".gbc", "C",
     "Nessuna ROM in /data/ROMs/gb", "No ROMs in /data/ROMs/gb", "Ninguna ROM en /data/ROMs/gb", "Aucune ROM dans /data/ROMs/gb", "Keine ROMs in /data/ROMs/gb",
@@ -2037,7 +2040,7 @@ static const EmuSys SYS_GB = {
     nucleo_gb_state_load, nucleo_gb_state_exists, nucleo_gb_save, nucleo_gb_autosave,
     nucleo_gb_get_stats, nucleo_gb_reset_counters, gb_geometry, false,
     { ART_GB_Z, sizeof ART_GB_Z, ART_GB_W, ART_GB_H }, { ART_GB_Z, sizeof ART_GB_Z, ART_GB_W, ART_GB_H },
-    "Game Boy", "Game Boy Color",
+    "Game Boy", "Game Boy Color", gb_pick,
 };
 
 // The Game Boy Color: the same shelf, folders, saves and trace as the Game Boy (a .gbc file lives in either
@@ -2063,13 +2066,12 @@ static const EmuSys SYS_GBC = {
     nucleo_gbc_state_load, nucleo_gbc_state_exists, nucleo_gbc_save, nucleo_gbc_autosave,
     nucleo_gbc_get_stats, nucleo_gbc_reset_counters, gb_geometry, false,
     { ART_GB_Z, sizeof ART_GB_Z, ART_GB_W, ART_GB_H }, { ART_GB_Z, sizeof ART_GB_Z, ART_GB_W, ART_GB_H },
-    "Game Boy", "Game Boy Color",
+    "Game Boy", "Game Boy Color", nullptr,
 };
-// Which console plays `name` on the current shelf: a Game Boy cartridge whose header asks for the Color
+// Which console plays `name` on the Game Boy shelf: a Game Boy cartridge whose header asks for the Color
 // (byte 0x143 bit 7: Color-only, or Color-enhanced and played in colour) goes to the Color core.
-static const EmuSys *sys_for(const char *name)
+static const EmuSys *gb_pick(const char *name)
 {
-    if (SYS != &SYS_GB) return SYS;
     char path[PATHMAX + 40];
     nucleo_gb_info_t inf;
     if (rom_path(name, path, sizeof path) && nucleo_gbc_probe(path, &inf) == ESP_OK && nucleo_gbc_wants(inf.cgb_flag))
@@ -2098,7 +2100,7 @@ static const EmuSys SYS_GG = {
     nucleo_gg_state_load, nucleo_gg_state_exists, nucleo_gg_save, nucleo_gg_autosave,
     nucleo_gg_get_stats, nucleo_gg_reset_counters, nucleo_gg_geometry, true,
     { ART_GG_Z, sizeof ART_GG_Z, ART_GG_W, ART_GG_H }, { ART_SMS_Z, sizeof ART_SMS_Z, ART_SMS_W, ART_SMS_H },
-    "Game Gear", "Master System",
+    "Game Gear", "Master System", nullptr,
 };
 
 static void enter(void)
@@ -2134,7 +2136,6 @@ static void enter_gg(void) { SYS = &SYS_GG; enter(); }
 static void leave(void)
 {
     if (SYS) SYS->close();                       // a no-op when no cartridge is open
-    if (SYS == &SYS_GB) nucleo_gbc_close();      // ...and a Color one, if a session ended in it
     mq_free();
     pic_free();
     if (st) { free(st->band[0]); free(st->band[1]); free(st->sh); free(st); st = nullptr; }
