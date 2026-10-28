@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <time.h>
 #include "nucleo_gbc.h"
 
 #define GB_BAND 1600   /* what play() holds while a game runs: two DMA band buffers */
@@ -202,11 +203,13 @@ int main(int argc, char **argv)
         nucleo_gb_stats_t s0; nucleo_gbc_get_stats(&s0);
         enum { FRAMES = 1800 };
         int colourful = 0;
+        clock_t c0 = clock();
         for (int f = 0; f < FRAMES; f++) {
             nucleo_gbc_set_buttons(demo_buttons(f));
             nucleo_gbc_run_frame();
             if (f % 60 == 59 && frame_colours() >= 4) colourful++;
         }
+        double host_us = (double)(clock() - c0) * 1e6 / CLOCKS_PER_SEC / FRAMES;
         nucleo_gb_stats_t s1; nucleo_gbc_get_stats(&s1);
         char title[48]; snprintf(title, sizeof title, "%s", nucleo_gbc_title());
         char png[700]; snprintf(png, sizeof png, "%s/%s.png", argv[1], base_name(rom));
@@ -223,6 +226,7 @@ int main(int argc, char **argv)
                (unsigned)s0.heap_bytes, (unsigned)pre_free, (unsigned)pre_big, (unsigned)run_free);
         printf("    lines=%ld colourful=%d/%d s  misses=%u (%.2f/frame)  audio frames=%ld (%ld audible)\n",
                g_lines, colourful, FRAMES / 60, (unsigned)s1.bank_misses, per_frame, g_pcm_writes, g_pcm_loud);
+        printf("    host time %.0f us/frame (relative only: the PC, not the ESP32)\n", host_us);
         // A game switches the LCD off between screens (no lines while it is off): most frames, not all.
         if (g_lines < (long)FRAMES * 144 * 8 / 10) { printf("    FAIL: only %ld of %d lines\n", g_lines, FRAMES * 144); failures++; continue; }
         if (colourful < FRAMES / 60 / 3)   { printf("    FAIL: mostly blank pictures\n"); failures++; continue; }

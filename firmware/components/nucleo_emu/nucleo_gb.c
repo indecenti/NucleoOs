@@ -282,6 +282,12 @@ static IRAM_ATTR uint16_t rom_read16(struct gb_s *gb, const uint_fast32_t addr)
 {
     gb_session_t *s = (gb_session_t *)gb->direct.priv;
     if (s && s->rom_all && addr + 1 < s->rom_bytes) return (uint16_t)(s->rom_all[addr] | s->rom_all[addr + 1] << 8);
+    // The dual-fetch loop reads every opcode pair through here: inside the page the last read hit (the usual
+    // case by far) it is two loads, as rom_read's own fast path.
+    if (s && !s->rom_all && (uint32_t)(addr >> PG_BITS) == s->cur_tag && (addr & (PG_SIZE - 1)) != PG_SIZE - 1) {
+        const uint8_t *b = s->cur_buf + (addr & (PG_SIZE - 1));
+        return (uint16_t)(b[0] | b[1] << 8);
+    }
     return (uint16_t)(gb->gb_rom_read(gb, addr) | gb->gb_rom_read(gb, addr + 1) << 8);
 }
 static IRAM_ATTR uint32_t rom_read32(struct gb_s *gb, const uint_fast32_t addr)
@@ -910,7 +916,13 @@ void nucleo_gb_run_frame(void)
 {
     if (!S) return;
     int64_t t0 = esp_timer_get_time();
+#if NUCLEO_GB_CGB
+    // Walnut's own recommended loop: opcodes fetched two at a time through the 16-bit reader and chained,
+    // instead of one dispatch per byte (vendor/README.md). It is what made the Color affordable at all.
+    gb_run_frame_dualfetch(&S->gb);
+#else
     gb_run_frame(&S->gb);
+#endif
     int64_t t1 = esp_timer_get_time();
     S->us_cpu += (uint32_t)(t1 - t0);
     S->frames++;
