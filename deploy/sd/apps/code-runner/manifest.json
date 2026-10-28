@@ -1,8 +1,8 @@
 {
   "id": "code-runner",
   "name": "Code Runner",
-  "version": "0.1.0",
-  "version_code": 1,
+  "version": "0.1.1",
+  "version_code": 2,
   "min_os": "0.1.0",
   "platforms": ["esp32s3"],
   "description": "Run small JavaScript programs in a sandboxed Web Worker — edit, run and see the output, with capability-gated access to the SD, the network and ANIMA.",

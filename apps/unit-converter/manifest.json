@@ -1,8 +1,8 @@
 {
   "id": "unit-converter",
   "name": "Unit Converter",
-  "version": "0.1.0",
-  "version_code": 1,
+  "version": "0.1.1",
+  "version_code": 2,
   "min_os": "0.1.0",
   "platforms": ["esp32s3"],
   "description": "Convert length, mass, temperature, volume, data, speed and time — with a natural-language command bar in English and Italian.",

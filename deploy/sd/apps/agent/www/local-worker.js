@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // local-worker.js — the LOCAL transport of the model-agnostic action protocol (F0, docs/anima-code.md §5).
 //
 // The other two transports lean on provider-side tool-calling; a browser-local 0.5-1.5B model has

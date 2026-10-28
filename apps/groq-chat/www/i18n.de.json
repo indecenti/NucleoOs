@@ -37,5 +37,11 @@
   "web_on": "Web",
   "web_searching": "🌐 Suche im Web…",
   "sources_label": "Quellen",
-  "web_mode_hint": "Web-Modus an: aktuelle, mit Quellen belegte Antworten aus dem Web über Groq compound. Die Modellauswahl oben wird ignoriert."
+  "web_mode_hint": "Web-Modus an: aktuelle, mit Quellen belegte Antworten aus dem Web über Groq compound. Die Modellauswahl oben wird ignoriert.",
+  "api_key_hint_sealed": "Er wird auf dem Gerät gespeichert und bleibt nicht im Browser. Erstellen/verwalten auf <a href=\"https://console.groq.com/keys\" target=\"_blank\" rel=\"noreferrer noopener\">console.groq.com/keys</a>.",
+  "teacher_note_sealed": "Die Schlüssel liegen <b>auf dem Gerät</b>: Dieser Chat nutzt sie über das Gerät, ohne sie je zu sehen. Verwaltet (und entfernt) werden sie unter <b>Einstellungen ▸ KI</b>.",
+  "key_forgotten_sealed": "In diesem Browser bleibt kein Schlüssel. Den Schlüssel des Geräts entfernen: Einstellungen ▸ KI.",
+  "key_saved_device": "Schlüssel auf dem Gerät gespeichert.",
+  "err_unpaired": "Koppeln Sie diesen Browser zuerst mit dem Gerät.",
+  "err_save_key": "Der Schlüssel konnte nicht auf dem Gerät gespeichert werden."
 }

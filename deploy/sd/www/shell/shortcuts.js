@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // Pure keyboard-shortcut resolution shared by the shell (osKeydown) and its unit tests. No DOM and
 // no side effects: given the salient bits of a keydown event plus the focus context, decide what the
 // OS should do. Keeping this pure makes the routing exhaustively testable (tools/shortcuts.test.mjs).

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // fsclient.js — workspace-scoped file tools for ANIMA.
 // A DOM-free layer over /api/fs/{list,read,write,delete,mkdir,move} that confines every
 // operation to a chosen workspace root on the SD, the way Claude Code confines its tools to
@@ -151,14 +152,22 @@ export function makeFS(initialRoot) {
     return rootReady;
   }
 
-  // mkdir -p: create each segment below the root in order (idempotent; ignore "exists").
+  // mkdir -p: create each segment below the root in order (idempotent; "already exists" is ok).
+  // Every backend's /api/fs/mkdir is idempotent (200 on an existing dir: the Cardputer maps EEXIST to ok), so a
+  // non-ok status is a real failure — e.g. 401 pairing_required — and must be reported, not swallowed into {ok:true}.
   async function mkdirp(dirPath) {
     const full = typeof dirPath === 'string' && dirPath[0] === '/' && dirPath.startsWith(root) ? normPath(dirPath) : resolve(dirPath);
     await ensureRoot();
     if (full === root || full.length <= root.length) return { ok: true };
     const tail = full.slice(root.length + 1).split('/');
     let cur = root;
-    for (const seg of tail) { cur += '/' + seg; try { await api('mkdir', { method: 'POST', path: cur }); } catch {} }
+    for (const seg of tail) {
+      cur += '/' + seg;
+      try {
+        const r = await api('mkdir', { method: 'POST', path: cur });
+        if (!r.ok) return { ok: false, error: 'http-' + r.status, path: rel(cur) };
+      } catch (e) { return { ok: false, error: String(e.message || e), path: rel(cur) }; }
+    }
     return { ok: true };
   }
 
@@ -245,8 +254,10 @@ export function makeFS(initialRoot) {
   }
 
   async function mkdir(p) {
-    try { const full = resolve(p); await mkdirp(full); return { ok: true, path: rel(full), abs: full }; }
-    catch (e) { return { ok: false, error: e.message }; }
+    let full; try { full = resolve(p); } catch (e) { return { ok: false, error: e.message }; }
+    const r = await mkdirp(full);
+    if (!r.ok) return { ok: false, error: r.error, path: rel(full) };
+    return { ok: true, path: rel(full), abs: full };
   }
 
   // Breadth-first recursive listing to a depth, bounded by maxEntries.

@@ -15,7 +15,7 @@
   "hourly": "Próximas 24 horas",
   "daily": "Próximos días",
   "first_title": "¿Dónde estás?",
-  "first_sub": "Busca tu ciudad o usa la ubicación del navegador. El pronóstico llega de Open-Meteo, directo desde el navegador: el Cardputer nunca se toca.",
+  "first_sub": "Busca tu ciudad o usa la ubicación del navegador. El pronóstico llega de Open-Meteo, directo desde el navegador: el dispositivo nunca se toca.",
   "err_geo": "Ubicación no disponible",
   "err_net": "Red no disponible",
   "err_city": "Sin resultados",

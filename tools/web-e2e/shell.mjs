@@ -79,6 +79,9 @@ export function defects(events, origin) {
       const p = new URL(e.url).pathname;
       if (e.status === 404 && /^\/api\/fs\/(read|list)$/.test(p)) return false;
       if (p === '/favicon.ico') return false;          // the suite's own JSON prep page, not the shell (it declares icon.png)
+      // Capability probe (nucleo-webos shell/nucleo-caps.js): firmware that predates /api/system/caps answers 404 and
+      // the shell falls back to caps-fallback.json for the version /api/status reports. Designed, not a defect.
+      if (e.status === 404 && p === '/api/system/caps') return false;
       // Agent/Forge presence probe: a model whose manifest is not on the SD resolves from the embedded
       // registry (apps/agent/www/engine-picker.js getManifest → null). Intentional, not a defect.
       if (e.status === 404 && /^\/apps\/anima\/forge\/models\/[^/]+\/manifest\.json$/.test(p)) return false;

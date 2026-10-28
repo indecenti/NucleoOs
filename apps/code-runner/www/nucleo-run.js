@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // nucleo-run.js — NucleoOS shared in-browser JavaScript runtime (single source of truth).
 //
 // User code runs in a Web Worker (OFF the UI thread), with NO DOM and NO ambient authority:
@@ -19,9 +20,10 @@
 //   await os.fs.append(path, str)        await os.fs.list(dir) -> [{name,type,size}]
 //   await os.fs.exists(path) -> bool      await os.fs.mkdir(dir)   await os.fs.remove(path)
 //   await os.http.get(url) -> {status,ok,body}      await os.http.json(url) -> {status,ok,json}
-//   await os.anima(question) -> {reply,tier,intent} await os.notify(text)
+//   await os.anima(question) -> {reply,tier,intent,via,conf,none} await os.notify(text)
 //   await os.sleep(ms)                    os.env -> {cwd, lang, args}     args, env (also bound)
 //   await os.hw.ir.send({protocol,address,command}) await os.hw.wifi.scan() await os.hw.gpio.write({pin,value})
+//   await os.hw['display.brightness'].set({pct})  await os.hw.tts.speak({text})   (where the device has them)
 // Paths are resolved against caps.cwd when relative.
 
 import { callCapability, isCapability, resolveOffline } from './nucleo-hw.js';   // hardware capability manifest (single source)
@@ -251,7 +253,9 @@ export function createRunner(opts) {
     cwd: '/', lang: 'en', timeoutMs: 5000,
     maxLogBytes: 256 * 1024,                 // output cap: drop logs past this, with one notice
     onLog: null, onNotify: null,
+    hasDevice: null,                         // optional (name) => Promise<bool>: the device's capability list (nucleo-caps.js)
   }, opts || {});
+  const devOpts = { has: typeof caps.hasDevice === 'function' ? caps.hasDevice : null };
 
   let worker = null, blobUrl = null, current = null, logBytes = 0, logCapped = false;
 
@@ -287,13 +291,13 @@ export function createRunner(opts) {
       if (!can('hw')) throw new Error('hw capability denied');
       const m = resolveOffline(args[0] || '', { online: false });   // a script asks for deterministic offline NL
       if (!m) throw new Error('no hardware command recognised in: ' + (args[0] || ''));
-      return await callCapability(m.id, m.args, fetch);
+      return await callCapability(m.id, m.args, fetch, devOpts);
     }
     if (method.indexOf('hw.') === 0) {
       if (!can('hw')) throw new Error('hw capability denied');
       const id = method.slice(3);
       if (!isCapability(id)) throw new Error('unknown hardware capability: ' + id);
-      return await callCapability(id, args[0] || {}, fetch);
+      return await callCapability(id, args[0] || {}, fetch, devOpts);
     }
     if (method.indexOf('fs.') === 0 && !can('fs')) throw new Error('fs capability denied');
     switch (method) {
@@ -335,9 +339,13 @@ export function createRunner(opts) {
       }
       case 'anima': {
         if (!can('anima')) throw new Error('anima capability denied');
+        // a device whose ANIMA lives in the browser (no anima.device) abstains: same answer, no request
+        if (devOpts.has && !(await devOpts.has('anima.device'))) return { reply: '', none: true };
         const r = await fetch('/api/anima?q=' + encodeURIComponent(args[0] || '') + '&lang=' + (caps.lang || 'en') + '&mode=on');
         const j = await r.json();
-        return { reply: j.reply || '', tier: j.tier, intent: j.intent };
+        // tier/intent: an on-device ANIMA's answer; via/conf/none: a device that abstains (none = true)
+        // because ANIMA runs in the browser there.
+        return { reply: j.reply || '', tier: j.tier, intent: j.intent, via: j.via, conf: j.conf, none: !!j.none };
       }
       case 'notify': { if (!can('notify')) throw new Error('notify capability denied');
         if (caps.onNotify) caps.onNotify(String(args[0] == null ? '' : args[0])); return true; }

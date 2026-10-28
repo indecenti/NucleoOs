@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // micgate.js — OS-wide microphone gate for NucleoOS (the Cardputer's single PDM mic).
 //
 // The Cardputer has exactly ONE physical microphone (PDM on I2S). The firmware already makes a

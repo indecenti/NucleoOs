@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // app-ops.js — PURE orchestration of the agent's app lifecycle: scaffold → publish → manage.
 //
 // No DOM, no fetch: ALL I/O arrives via the injected `io` object, so the full publish flow (with its

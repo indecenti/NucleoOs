@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // NucleoOS SSH — compact VT100/ANSI terminal emulator (no external lib, so it ships on the SD as-is).
 //
 // Handles the common cases well: text, colors (16/256/truecolor), bold/dim/inverse/underline, cursor

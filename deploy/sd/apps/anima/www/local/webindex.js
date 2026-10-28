@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // ANIMA — client-side WEB INDEXER (hybrid, ZERO-LLM). Runs entirely in the browser.
 //
 // This is the "ibrida senza LLM lato client": when the in-browser WASM offline brain abstains on a

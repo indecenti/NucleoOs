@@ -1,8 +1,12 @@
 <!DOCTYPE html>
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <script>/* NucleoOS resource guard: a lost same-origin script/stylesheet makes the shell reload this window once (wm.js retryFrame) */addEventListener('error',function(e){var t=e.target,u;if(!t||t===window||parent===window||(t.tagName!=='SCRIPT'&&t.tagName!=='LINK'))return;try{u=new URL(t.src||t.href,location.href);if(u.origin===location.origin)parent.postMessage({type:'app-resource-failed',src:u.pathname},location.origin)}catch(_){}},true)</script>
+<!-- Without this the app starts at 980 virtual px on a phone: everything tiny and the brush
+     coordinates scaled. Every other app has it. -->
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title data-i18n="title">Paint</title>
 <style>
     /* Native controls (audio/video bars, date/time pickers, file inputs, selects) follow the app theme. */
@@ -534,7 +538,7 @@ const PAINT_L10N = {
     '✨ Improve the prompt with AI':'✨ Mejora el prompt con IA','(an LLM rewrites the idea into a professional prompt)':'(un LLM reescribe la idea en un prompt profesional)',
     'Seed (reproducible)':'Semilla (reproducible)','Random seed':'Semilla aleatoria','Variants:':'Variantes:',
     'Sketch adherence:':'Fidelidad al boceto:','Strength (img→img):':'Fuerza (img→img):','new layer':'nueva capa',
-    'save to Cardputer':'guardar en Cardputer','Generate':'Generar',
+    'save to the device':'guardar en el dispositivo','Generate':'Generar',
     'Use your drawing as a guide sketch (ControlNet).':'Usa tu dibujo como boceto guía (ControlNet).',
     'Reworks the current canvas content according to the prompt.':'Reelabora el contenido actual del lienzo según el prompt.',
     'Generates from text only (canvas ignored).':'Genera solo a partir del texto (se ignora el lienzo).','Loading ':'Cargando ',
@@ -552,13 +556,13 @@ const PAINT_L10N = {
     'ONNX&nbsp;Runtime unavailable (needs desktop Chrome/Edge). You can still use the procedural preview.':'ONNX&nbsp;Runtime no disponible (necesita Chrome/Edge de escritorio). Aún puedes usar la vista previa procedural.',
     'Re-download':'Volver a descargar','Download':'Descargar','Download from the Internet':'Descargar de Internet',
     'offline — no connection':'sin conexión — no hay red','GitHub · ~553 MB · requires a connection':'GitHub · ~553 MB · requiere conexión',
-    'Download from the Cardputer':'Descargar del Cardputer','SD over local WiFi · ~553 MB':'SD por WiFi local · ~553 MB',
+    'Download from the device':'Descargar del dispositivo','SD over local WiFi · ~553 MB':'SD por WiFi local · ~553 MB',
     'model not present on the SD':'modelo no presente en la SD','Use procedural preview (no download)':'Usar vista previa procedural (sin descarga)',
     'Remove from cache':'Quitar de la caché','ORT runtime (inference engine)':'Runtime ORT (motor de inferencia)',
     'Starting engine ':'Iniciando motor ','Fused model (ControlNet + UNet + VAE)':'Modelo fusionado (ControlNet + UNet + VAE)',
     ' · part ':' · parte ','MB done':'MB completados','compiling the model on the GPU…':'compilando el modelo en la GPU…',
     '⚠ Operation failed':'⚠ Operación fallida','⚙ Preparing the engine':'⚙ Preparando el motor','⬇ Downloading from ':'⬇ Descargando de ',
-    'Retry':'Reintentar','Try from the Cardputer':'Probar desde el Cardputer','Try from the Internet':'Probar desde Internet','Use preview':'Usar vista previa',
+    'Retry':'Reintentar','Try from the device':'Probar desde el dispositivo','Try from the Internet':'Probar desde Internet','Use preview':'Usar vista previa',
     'Almost ready — one moment. Do not close Atelier.':'Casi listo — un momento. No cierres Atelier.',
     'Download in progress — keep Atelier open and do not drag files until it finishes. You can keep using the rest of the PC.':'Descarga en curso — mantén Atelier abierto y no arrastres archivos hasta que termine. Puedes seguir usando el resto del PC.',
     'First time only: then startup is instant.':'Solo la primera vez: luego el arranque es inmediato.',
@@ -652,7 +656,7 @@ const PAINT_L10N = {
     '✨ Improve the prompt with AI':'✨ Améliorer le prompt avec l’IA','(an LLM rewrites the idea into a professional prompt)':'(un LLM réécrit l’idée en un prompt professionnel)',
     'Seed (reproducible)':'Graine (reproductible)','Random seed':'Graine aléatoire','Variants:':'Variantes :',
     'Sketch adherence:':'Fidélité au croquis :','Strength (img→img):':'Force (img→img) :','new layer':'nouveau calque',
-    'save to Cardputer':'enregistrer sur Cardputer','Generate':'Générer',
+    'save to the device':'enregistrer sur l’appareil','Generate':'Générer',
     'Use your drawing as a guide sketch (ControlNet).':'Utilisez votre dessin comme croquis guide (ControlNet).',
     'Reworks the current canvas content according to the prompt.':'Retravaille le contenu actuel de la toile selon le prompt.',
     'Generates from text only (canvas ignored).':'Génère à partir du texte seul (toile ignorée).','Loading ':'Chargement ',
@@ -670,13 +674,13 @@ const PAINT_L10N = {
     'ONNX&nbsp;Runtime unavailable (needs desktop Chrome/Edge). You can still use the procedural preview.':'ONNX&nbsp;Runtime indisponible (nécessite Chrome/Edge sur ordinateur). Vous pouvez tout de même utiliser l’aperçu procédural.',
     'Re-download':'Retélécharger','Download':'Télécharger','Download from the Internet':'Télécharger depuis Internet',
     'offline — no connection':'hors ligne — aucune connexion','GitHub · ~553 MB · requires a connection':'GitHub · ~553 Mo · nécessite une connexion',
-    'Download from the Cardputer':'Télécharger depuis le Cardputer','SD over local WiFi · ~553 MB':'SD via WiFi local · ~553 Mo',
+    'Download from the device':'Télécharger depuis l’appareil','SD over local WiFi · ~553 MB':'SD via WiFi local · ~553 Mo',
     'model not present on the SD':'modèle absent de la carte SD','Use procedural preview (no download)':'Utiliser l’aperçu procédural (sans téléchargement)',
     'Remove from cache':'Retirer du cache','ORT runtime (inference engine)':'Runtime ORT (moteur d’inférence)',
     'Starting engine ':'Démarrage du moteur ','Fused model (ControlNet + UNet + VAE)':'Modèle fusionné (ControlNet + UNet + VAE)',
     ' · part ':' · partie ','MB done':'Mo terminés','compiling the model on the GPU…':'compilation du modèle sur le GPU…',
     '⚠ Operation failed':'⚠ Échec de l’opération','⚙ Preparing the engine':'⚙ Préparation du moteur','⬇ Downloading from ':'⬇ Téléchargement depuis ',
-    'Retry':'Réessayer','Try from the Cardputer':'Essayer depuis le Cardputer','Try from the Internet':'Essayer depuis Internet','Use preview':'Utiliser l’aperçu',
+    'Retry':'Réessayer','Try from the device':'Essayer depuis l’appareil','Try from the Internet':'Essayer depuis Internet','Use preview':'Utiliser l’aperçu',
     'Almost ready — one moment. Do not close Atelier.':'Presque prêt — un instant. Ne fermez pas Atelier.',
     'Download in progress — keep Atelier open and do not drag files until it finishes. You can keep using the rest of the PC.':'Téléchargement en cours — gardez Atelier ouvert et ne glissez pas de fichiers jusqu’à la fin. Vous pouvez continuer à utiliser le reste du PC.',
     'First time only: then startup is instant.':'Seulement la première fois : ensuite le démarrage est immédiat.',
@@ -770,7 +774,7 @@ const PAINT_L10N = {
     '✨ Improve the prompt with AI':'✨ Prompt mit KI verbessern','(an LLM rewrites the idea into a professional prompt)':'(ein LLM formuliert die Idee zu einem professionellen Prompt um)',
     'Seed (reproducible)':'Seed (reproduzierbar)','Random seed':'Zufälliger Seed','Variants:':'Varianten:',
     'Sketch adherence:':'Skizzentreue:','Strength (img→img):':'Stärke (Bild→Bild):','new layer':'neue Ebene',
-    'save to Cardputer':'auf Cardputer speichern','Generate':'Erzeugen',
+    'save to the device':'auf dem Gerät speichern','Generate':'Erzeugen',
     'Use your drawing as a guide sketch (ControlNet).':'Nutze deine Zeichnung als Führungsskizze (ControlNet).',
     'Reworks the current canvas content according to the prompt.':'Überarbeitet den aktuellen Leinwandinhalt gemäß dem Prompt.',
     'Generates from text only (canvas ignored).':'Erzeugt nur aus Text (Leinwand ignoriert).','Loading ':'Lade ',
@@ -788,13 +792,13 @@ const PAINT_L10N = {
     'ONNX&nbsp;Runtime unavailable (needs desktop Chrome/Edge). You can still use the procedural preview.':'ONNX&nbsp;Runtime nicht verfügbar (benötigt Desktop-Chrome/Edge). Du kannst weiterhin die prozedurale Vorschau nutzen.',
     'Re-download':'Erneut herunterladen','Download':'Herunterladen','Download from the Internet':'Aus dem Internet herunterladen',
     'offline — no connection':'offline — keine Verbindung','GitHub · ~553 MB · requires a connection':'GitHub · ~553 MB · benötigt eine Verbindung',
-    'Download from the Cardputer':'Vom Cardputer herunterladen','SD over local WiFi · ~553 MB':'SD über lokales WLAN · ~553 MB',
+    'Download from the device':'Vom Gerät herunterladen','SD over local WiFi · ~553 MB':'SD über lokales WLAN · ~553 MB',
     'model not present on the SD':'Modell nicht auf der SD vorhanden','Use procedural preview (no download)':'Prozedurale Vorschau nutzen (ohne Download)',
     'Remove from cache':'Aus dem Cache entfernen','ORT runtime (inference engine)':'ORT-Runtime (Inferenz-Engine)',
     'Starting engine ':'Engine wird gestartet ','Fused model (ControlNet + UNet + VAE)':'Fusioniertes Modell (ControlNet + UNet + VAE)',
     ' · part ':' · Teil ','MB done':'MB fertig','compiling the model on the GPU…':'Modell wird auf der GPU kompiliert…',
     '⚠ Operation failed':'⚠ Vorgang fehlgeschlagen','⚙ Preparing the engine':'⚙ Engine wird vorbereitet','⬇ Downloading from ':'⬇ Download von ',
-    'Retry':'Erneut versuchen','Try from the Cardputer':'Vom Cardputer versuchen','Try from the Internet':'Aus dem Internet versuchen','Use preview':'Vorschau verwenden',
+    'Retry':'Erneut versuchen','Try from the device':'Vom Gerät versuchen','Try from the Internet':'Aus dem Internet versuchen','Use preview':'Vorschau verwenden',
     'Almost ready — one moment. Do not close Atelier.':'Fast fertig — einen Moment. Atelier nicht schließen.',
     'Download in progress — keep Atelier open and do not drag files until it finishes. You can keep using the rest of the PC.':'Download läuft — lass Atelier offen und ziehe keine Dateien, bis er fertig ist. Du kannst den Rest des PCs weiter nutzen.',
     'First time only: then startup is instant.':'Nur beim ersten Mal: danach ist der Start sofort.',
@@ -921,7 +925,15 @@ PALETTE.forEach(col=>{ const s=document.createElement('div'); s.className='sw'; 
 // ---- pointer geometry (canvas internal == displayed, 1:1) ----
 function pos(e){ const r=c.getBoundingClientRect(); return { x:Math.round((e.clientX-r.left)*c.width/r.width), y:Math.round((e.clientY-r.top)*c.height/r.height) }; }
 
-c.addEventListener('mousedown', e=>{
+// Pointer events, non mouse: su touch il browser non sintetizza mousemove durante
+// il tratto (solo la raffica di compatibilita' a fine tap), quindi col dito si
+// ottenevano puntini isolati invece di una linea. setPointerCapture tiene il tratto
+// legato al canvas anche quando il dito ne esce.
+c.style.touchAction='none';
+c.addEventListener('pointerdown', e=>{
+  if(e.button>0) return;
+  try{ c.setPointerCapture(e.pointerId); }catch{}
+  e.preventDefault();
   const p=pos(e);
   if(tool==='pick'){ const d=ctx.getImageData(p.x,p.y,1,1).data; color='#'+[d[0],d[1],d[2]].map(v=>v.toString(16).padStart(2,'0')).join(''); $('color').value=color; setMsg(LT('Colore prelevato ','Color picked ')+color); return; }
   if(tool==='fill'){ pushUndo(); floodFill(p.x,p.y,hexRgb(color)); markDirty(); return; }
@@ -932,14 +944,16 @@ c.addEventListener('mousedown', e=>{
   if(tool==='brush'||tool==='eraser'){ dot(p.x,p.y); }
   else { snapshot=ctx.getImageData(0,0,c.width,c.height); }   // shapes preview from this base
 });
-window.addEventListener('mousemove', e=>{
+window.addEventListener('pointermove', e=>{
   const p=pos(e); $('st-pos').textContent=p.x+', '+p.y;
   if(selecting){ drawMarquee(selStart.x,selStart.y,p.x,p.y); return; }
   if(!drawing) return;
   if(tool==='brush'||tool==='eraser'){ stroke(sx,sy,p.x,p.y); sx=p.x; sy=p.y; }
   else { ctx.putImageData(snapshot,0,0); shape(tool,sx,sy,p.x,p.y,e.shiftKey); }
 });
-window.addEventListener('mouseup', e=>{ if(selecting){ selecting=false; const p=pos(e); finalizeSelection(selStart.x,selStart.y,p.x,p.y); return; } if(!drawing)return; drawing=false; markDirty(); setMsg(LT('Pronto','Ready')); });
+const endStroke=e=>{ if(selecting){ selecting=false; const p=pos(e); finalizeSelection(selStart.x,selStart.y,p.x,p.y); return; } if(!drawing)return; drawing=false; markDirty(); setMsg(LT('Pronto','Ready')); };
+window.addEventListener('pointerup', endStroke);
+window.addEventListener('pointercancel', endStroke);
 
 // Eraser cuts to TRANSPARENT (destination-out), not white — so the alpha channel is real. Brush honours opacity.
 function dot(x,y){ const er=tool==='eraser'; ctx.save(); if(er) ctx.globalCompositeOperation='destination-out'; else ctx.globalAlpha=brushOpacity;
@@ -1294,7 +1308,16 @@ setTimeout(()=>{ try{ if(!localStorage.getItem('paint.tour.done')) startTour(fal
 // (see isTyping()), so typing never touches the drawing tools. Nothing here routes through ANIMA's engine.
 // =====================================================================================================
 (function(){
-  const MODEL_DIR='/apps/paint/www/models/sdxs-512-dreamshaper-sketch';  // raw SD path for /api/fs/read (www incluso)
+  // ⚠️ Gli asset dell'app si prendono dalla ROTTA STATICA, mai da /api/fs/read.
+  // sd_path() accetta solo i mount veri (system, data, roms, media) e `apps` NON
+  // e' un mount: ogni chiamata veniva rifiutata, in silenzio (i catch{} sono
+  // vuoti), e Paint scivolava fino al CDN. Cosi' 23,8 MB di runtime ONNX stanno
+  // su ogni scheda di ogni console senza che nessuno li legga MAI, e l'app pare
+  // funzionare finche' c'e' internet - cioe' esattamente il caso per cui quei
+  // megabyte erano stati messi sulla scheda. Percorsi RELATIVI alla pagina:
+  // valgono su qualunque IP, porta e board.
+  const assetUrl=(rel)=>new URL(rel,location.href).href;
+  const MODEL_DIR='models/sdxs-512-dreamshaper-sketch';
   const RES=512;
   const TEACHER='/data/anima/teacher.json';                              // the device key vault (paired /api/fs)
   const PREF_KEY='paint.atelier.provider';                               // remembers the user's model choice
@@ -1399,7 +1422,7 @@ setTimeout(()=>{ try{ if(!localStorage.getItem('paint.tour.done')) startTour(fal
         </div>
         <div class="atl-foot" id="atlFoot">
           <label class="atl-chk"><input type="checkbox" id="atlLayer"> ${UL('nuovo livello','new layer')}</label>
-          <label class="atl-chk"><input type="checkbox" id="atlSave" checked> ${UL('salva su Cardputer','save to Cardputer')}</label>
+          <label class="atl-chk"><input type="checkbox" id="atlSave" checked> ${UL('salva sul dispositivo','save to the device')}</label>
           <button class="atl-go" id="atlGo">${UL('Genera','Generate')}</button>
         </div>
         <div class="atl-dl" id="atlDl"></div>
@@ -1523,7 +1546,7 @@ setTimeout(()=>{ try{ if(!localStorage.getItem('paint.tour.done')) startTour(fal
   const FUSED_IO={fused:{image:'image',promptEmbeds:'prompt_embeds',conditioningScale:'conditioning_scale',latents:'latents',output:'output_image'},text:{input:'input_ids',output:'output_embeddings'}};
   // ORT runtime (22.5 MB) is too big for the Cardputer httpd (→503), so it's chunked on the SD like the
   // model and handed to ORT via wasm.wasmBinary. Delivery priority: cache → SD chunks → CDN (version-pinned).
-  const ORT_WASM_DIR='/apps/paint/www/vendor/onnxruntime-web/';                  // raw SD path for /api/fs/read
+  const ORT_WASM_DIR='vendor/onnxruntime-web/';                                  // servita statica (vedi assetUrl)
   const ORT_WASM_FILE='ort-wasm-simd-threaded.asyncify.wasm';
   const ORT_WASM_PARTS=4, ORT_WASM_BYTES=23678474;                              // from tools/sdxs/chunk-ort-wasm.mjs
   const ORT_CDN='https://cdn.jsdelivr.net/npm/onnxruntime-web@1.26.0/dist/';     // matches vendored version
@@ -1563,11 +1586,11 @@ setTimeout(()=>{ try{ if(!localStorage.getItem('paint.tour.done')) startTour(fal
     try{
       onStep&&onStep('runtime',{state:'active'});
       let parts=ORT_WASM_PARTS, bytes=ORT_WASM_BYTES;
-      const mf=await fetch('/api/fs/read?path='+encodeURIComponent(ORT_WASM_DIR+'ort-wasm.manifest.json')+'&t='+Date.now()).then(r=>r.ok?r.json():null).catch(()=>null);
+      const mf=await fetch(assetUrl(ORT_WASM_DIR+'ort-wasm.manifest.json')+'?t='+Date.now()).then(r=>r.ok?r.json():null).catch(()=>null);
       if(mf&&mf.parts){parts=mf.parts;bytes=mf.bytes;}
       const chunks=[];let soFar=0;
       for(let i=0;i<parts;i++){
-        const r=await fetch('/api/fs/read?path='+encodeURIComponent(ORT_WASM_DIR+ORT_WASM_FILE+'.'+pad3(i))+'&t='+Date.now());
+        const r=await fetch(assetUrl(ORT_WASM_DIR+ORT_WASM_FILE+'.'+pad3(i))+'?t='+Date.now());
         if(!r.ok) throw new Error('SD '+r.status);
         const b=new Uint8Array(await r.arrayBuffer());chunks.push(b);soFar+=b.byteLength;
         onStep&&onStep('runtime',{state:'active',bytes:soFar,totalBytes:bytes,part:i+1,parts});
@@ -1593,7 +1616,7 @@ setTimeout(()=>{ try{ if(!localStorage.getItem('paint.tour.done')) startTour(fal
     const [netF,netT,man]=await Promise.all([
       modelCache.get('net-fused'),
       modelCache.get('net-text-encoder'),
-      fetch('/api/fs/read?path='+encodeURIComponent(MODEL_DIR+'/manifest.json')+'&t='+Date.now()).then(r=>r.ok?r.json():null).catch(()=>null),
+      fetch(assetUrl(MODEL_DIR+'/manifest.json')+'?t='+Date.now()).then(r=>r.ok?r.json():null).catch(()=>null),
     ]);
     manState=man;
     const netCached=!!(netF&&netT);                                             // both internet components present
@@ -1608,7 +1631,7 @@ setTimeout(()=>{ try{ if(!localStorage.getItem('paint.tour.done')) startTour(fal
   async function getTokenizer(){
     const {makeClipTokenizer}=await import('./diffusion/clip-tokenizer.js');
     if(manState){
-      const tj=await fetch('/api/fs/read?path='+encodeURIComponent(MODEL_DIR+'/tokenizer.json')+'&t='+Date.now()).then(r=>r.ok?r.json():null).catch(()=>null);
+      const tj=await fetch(assetUrl(MODEL_DIR+'/tokenizer.json')+'?t='+Date.now()).then(r=>r.ok?r.json():null).catch(()=>null);
       if(tj){const v=(tj.model&&tj.model.vocab)||tj.vocab||{},m=(tj.model&&tj.model.merges)||tj.merges||[];return makeClipTokenizer({vocab:v,merges:m});}
     }
     const ntok=await modelCache.get('net-tokenizer');
@@ -1629,13 +1652,13 @@ setTimeout(()=>{ try{ if(!localStorage.getItem('paint.tour.done')) startTour(fal
     if(source==='sd'){
       if(!manState||!Array.isArray(manState.components)) throw new Error('manifest SD assente');
       const {loadComponent}=await import('./diffusion/sd-loader.js');
-      const rawRead=(path)=>fetch('/api/fs/read?path='+encodeURIComponent(path)+'&t='+Date.now())
+      const rawRead=(url)=>fetch(url+'?t='+Date.now())
         .then(async r=>r.ok?{ok:true,status:r.status,bytes:new Uint8Array(await r.arrayBuffer())}:{ok:false,status:r.status})
         .catch(()=>({ok:false,status:0}));
       for(const comp of manState.components){
         if(!comp.parts) continue;                                              // skip tokenizer.json (parts:0)
         onStep(comp.role,{state:'active'});
-        const res=await loadComponent({base:MODEL_DIR+'/'+comp.file,parts:comp.parts,totalBytes:comp.bytes,
+        const res=await loadComponent({base:assetUrl(MODEL_DIR+'/'+comp.file),parts:comp.parts,totalBytes:comp.bytes,
           readPart:modelCache.wrap(rawRead,comp.partSha),
           onProgress:p=>onStep(comp.role,{state:'active',bytes:p.bytes,totalBytes:p.totalBytes,part:p.index,parts:p.total})});
         if(!res.ok) throw new Error('lettura SD '+comp.role+' '+(res.status||''));
@@ -1751,7 +1774,7 @@ setTimeout(()=>{ try{ if(!localStorage.getItem('paint.tour.done')) startTour(fal
       </div>
       <div class="atl-src ${sdDis?'dim':''}">
         <span class="si">💾</span>
-        <div class="sl"><b>${UL('Scarica dal Cardputer','Download from the Cardputer')}</b><small>${st.onSD?UL('SD via WiFi locale · ~553 MB','SD over local WiFi · ~553 MB'):UL('modello non presente sull&#39;SD','model not present on the SD')}</small></div>
+        <div class="sl"><b>${UL('Scarica dal dispositivo','Download from the device')}</b><small>${st.onSD?UL('SD via WiFi locale · ~553 MB','SD over local WiFi · ~553 MB'):UL('modello non presente sull&#39;SD','model not present on the SD')}</small></div>
         <button data-src="sd" ${sdDis?'disabled':''}>${actLabel}</button>
       </div>
       <div class="atl-mm-alt">
@@ -1794,11 +1817,11 @@ setTimeout(()=>{ try{ if(!localStorage.getItem('paint.tour.done')) startTour(fal
     }).join('');
     const header = errMsg ? UL('⚠ Operazione non riuscita','⚠ Operation failed')
       : mode==='runtime' ? UL('⚙ Preparo il motore','⚙ Preparing the engine')
-      : UL('⬇ Scarico da ','⬇ Downloading from ')+(source==='internet'?'Internet (GitHub)':'Cardputer (SD)');
+      : UL('⬇ Scarico da ','⬇ Downloading from ')+(source==='internet'?'Internet (GitHub)':'Device (SD)');
     const footer = errMsg
       ? `<div class="atl-dl-err"><div class="em">✕ ${errMsg}</div><div class="atl-dl-actions">
            <button class="primary" data-dl="retry">${UL('Riprova','Retry')}</button>
-           ${mode!=='runtime'&&source==='internet'&&manState?`<button data-dl="sd">${UL('Prova dal Cardputer','Try from the Cardputer')}</button>`:''}
+           ${mode!=='runtime'&&source==='internet'&&manState?`<button data-dl="sd">${UL('Prova dal dispositivo','Try from the device')}</button>`:''}
            ${mode!=='runtime'&&source==='sd'?`<button data-dl="internet">${UL('Prova da Internet','Try from the Internet')}</button>`:''}
            <button data-dl="mock">${UL('Usa anteprima','Use preview')}</button></div></div>`
       : `<div class="atl-dl-warn">⚠ ${mode==='runtime'?UL('Quasi pronto — un attimo. Non chiudere Atelier.','Almost ready — one moment. Do not close Atelier.'):UL('Download in corso — tieni Atelier aperto e non trascinare file finché non è completo. Puoi continuare a usare il resto del PC.','Download in progress — keep Atelier open and do not drag files until it finishes. You can keep using the rest of the PC.')}</div>`;

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // nlfs.js — bilingual (IT/EN) natural-language -> file-operation parser for ANIMA's
 // workspace agent. Deterministic and HIGH-PRECISION by design: it returns an intent only
 // when the text clearly asks for a file operation; otherwise null, so the query falls

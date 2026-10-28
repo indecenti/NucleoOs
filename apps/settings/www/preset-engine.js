@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // preset-engine.js — intelligent, capability-aware AI profiles for NucleoOS.
 //
 // A "preset" is the ONE thing the owner picks ("make ANIMA fast / private / offline / best"); the engine
@@ -7,7 +8,7 @@
 // Design pillars, in order:
 //   1. PURE. Like scenes.js / cascade.js, this module does NO I/O: it takes a capability snapshot (built by
 //      the caller via probeSignals in index.html) + a registry (from web/shell/ai.js) and returns DATA —
-//      the writes/apiCalls to run. The caller runs them one at a time (the Cardputer is single-task). This
+//      the writes/apiCalls to run. The caller runs them one at a time (the device is single-task). This
 //      makes every decision unit-testable in Node with synthetic capability models.
 //   2. INTENT IS DURABLE, KNOBS ARE DERIVED. Only ai.preset is persisted to SD (settings-merge DEFAULTS).
 //      Everything else is RE-DERIVED from the preset + the current CapabilityModel on each load, so the
@@ -36,10 +37,12 @@ export const SCOPE = {
 // The snapshot the caller builds (probeSignals). Documented here as the engine's input contract.
 // { online, enabled, hasKey, provider, model, keys:{anthropic,openai,xai,google}, geminiTier,
 //   l1Mode, l1Serving, webgpu, vramMB, deviceMemory, packCached, packUsable, localModelReady, localModelId,
-//   tts, exec, pcModel, pcServer, pcFirst, pcState, pcLoopback }
+//   tts, exec, pcModel, pcServer, pcFirst, pcState, pcLoopback, deviceBrain, ir }
 // pc*: a model server on THIS computer (/ai-engines.js) — pcModel = the chat model it would answer with ('' = none),
 // pcFirst = the user put the PC before the cloud (ai.local.engines.prefer), pcState = 'ok' | 'refused' | 'none',
 // pcLoopback = that server is on localhost — the only kind Private mode (Local only, Privacy) may use.
+// deviceBrain = ANIMA's engine runs on the device (the ESP32 firmwares); false = the device answers only its
+// own data and commands (the Handheld's server). ir = the device has the IR remote (Cardputer).
 // A defensive default so the engine never throws on a partial snapshot (offline / pre-pairing).
 export function defaultSig() {
   return {
@@ -48,6 +51,7 @@ export function defaultSig() {
     l1Mode: 'auto', l1Serving: false, webgpu: false, vramMB: null, deviceMemory: null,
     packCached: false, packUsable: false, localModelReady: false, localModelId: null, tts: false, exec: 'browser',
     pcModel: '', pcServer: '', pcFirst: false, pcState: 'none', pcLoopback: false,
+    deviceBrain: true, ir: false,
   };
 }
 
@@ -90,6 +94,10 @@ const mk = (landedRung, mode, l1, browserLLM, extra = {}) => Object.assign(
 
 const GPU_LLM = () => ({ it: 'LLM nella GPU del browser', en: 'LLM on the browser GPU', es: 'LLM en la GPU del navegador', fr: 'LLM sur le GPU du navigateur', de: 'LLM auf der Browser-GPU' });
 const PC_LLM = (sig) => { const m = (sig.pcServer ? sig.pcServer + ' · ' : '') + sig.pcModel; return { it: 'Sul PC · ' + m, en: 'On the PC · ' + m, es: 'En el PC · ' + m, fr: 'Sur le PC · ' + m, de: 'Auf dem PC · ' + m }; };
+// The last rung: the device's own brain where it has one, else its own data and commands only.
+const DEVICE_RUNG = (sig) => sig.deviceBrain === false
+  ? { it: 'Solo comandi e dati del dispositivo', en: 'Device commands and data only', es: 'Solo órdenes y datos del dispositivo', fr: 'Seulement les commandes et données de l’appareil', de: 'Nur Befehle und Daten des Geräts' }
+  : { it: 'Cervello del dispositivo', en: 'The device brain', es: 'El cerebro del dispositivo', fr: 'Le cerveau de l’appareil', de: 'Das Gerätegehirn' };
 const WASM_BRAIN = () => ({ it: 'Cervello WASM del browser', en: 'Browser WASM brain', es: 'Cerebro WASM del navegador', fr: 'Cerveau WASM du navigateur', de: 'WASM-Gehirn im Browser' });
 
 // ── PRESETS ──────────────────────────────────────────────────────────────────────────────────────────
@@ -112,13 +120,13 @@ export const PRESETS = [
         return mk('gpu', 'local', 'auto', true, { localModel: sig.localModelId || 'auto', using: GPU_LLM() });
       if (sig.packUsable)
         return mk('wasm', 'edge', 'auto', false, { using: WASM_BRAIN() });
-      return mk('device', 'on', 'auto', false, { using: { it: 'Cervello del Cardputer', en: 'The Cardputer brain', es: 'El cerebro del Cardputer', fr: 'Le cerveau du Cardputer', de: 'Das Cardputer-Gehirn' } });
+      return mk('device', 'on', 'auto', false, { using: DEVICE_RUNG(sig) });
     },
     feasible() { return { state: 'recommended', reason: same('') }; },
   },
   {
     id: 'max', icon: '🚀', it: 'Massima qualità', en: 'Max quality', es: 'Máxima calidad', fr: 'Qualité maximale', de: 'Maximale Qualität',
-    intent: { it: 'Cloud al massimo, il Cardputer resta a riposo', en: 'Best cloud, the Cardputer stays idle', es: 'La mejor nube, el Cardputer en reposo', fr: 'Le meilleur cloud, le Cardputer reste au repos', de: 'Beste Cloud, der Cardputer bleibt im Leerlauf' },
+    intent: { it: 'Cloud al massimo, il dispositivo resta a riposo', en: 'Best cloud, the device stays idle', es: 'La mejor nube, el dispositivo en reposo', fr: 'Le meilleur cloud, l’appareil reste au repos', de: 'Beste Cloud, das Gerät bleibt im Leerlauf' },
     plan(sig, reg) {
       const model = resolveModel(sig.provider, 'max', reg, sig.geminiTier === 'paid');
       return mk('cloud', 'only', 'off', true, { teacherModel: model, using: same(labelOf(sig.provider, reg) + ' · ' + (model || '')) });
@@ -133,18 +141,22 @@ export const PRESETS = [
   },
   {
     id: 'balanced', icon: '⚖️', it: 'Bilanciato', en: 'Balanced', es: 'Equilibrado', fr: 'Équilibré', de: 'Ausgewogen',
-    intent: { it: 'Cloud quando c’è, cervello del device di riserva', en: 'Cloud when available, device brain as fallback', es: 'Nube cuando hay, el cerebro del dispositivo como reserva', fr: 'Le cloud quand il est là, le cerveau de l’appareil en secours', de: 'Cloud, wenn verfügbar, das Gerätegehirn als Reserve' },
+    intent: { it: 'Cloud quando c’è, il dispositivo di riserva', en: 'Cloud when available, the device as fallback', es: 'Nube cuando hay, el dispositivo como reserva', fr: 'Le cloud quand il est là, l’appareil en secours', de: 'Cloud, wenn verfügbar, das Gerät als Reserve' },
     plan(sig, reg) {
       const model = sig.hasKey ? resolveModel(sig.provider, 'mid', reg, sig.geminiTier === 'paid') : null;
       return mk('cloud', 'on', 'auto', false, { teacherModel: model, using: sig.hasKey
-        ? { it: labelOf(sig.provider, reg) + ' + L1 di riserva', en: labelOf(sig.provider, reg) + ' + L1 fallback', es: labelOf(sig.provider, reg) + ' + L1 de reserva', fr: labelOf(sig.provider, reg) + ' + L1 en secours', de: labelOf(sig.provider, reg) + ' + L1 als Reserve' }
-        : { it: 'Nessuna chiave: solo cervello del dispositivo', en: 'No key: device brain only', es: 'Sin clave: solo el cerebro del dispositivo', fr: 'Pas de clé : cerveau de l’appareil uniquement', de: 'Kein Schlüssel: nur das Gerätegehirn' } });
+        ? (sig.deviceBrain === false
+          ? { it: labelOf(sig.provider, reg) + ' + comandi del dispositivo', en: labelOf(sig.provider, reg) + ' + device commands', es: labelOf(sig.provider, reg) + ' + órdenes del dispositivo', fr: labelOf(sig.provider, reg) + ' + commandes de l’appareil', de: labelOf(sig.provider, reg) + ' + Gerätebefehle' }
+          : { it: labelOf(sig.provider, reg) + ' + L1 di riserva', en: labelOf(sig.provider, reg) + ' + L1 fallback', es: labelOf(sig.provider, reg) + ' + L1 de reserva', fr: labelOf(sig.provider, reg) + ' + L1 en secours', de: labelOf(sig.provider, reg) + ' + L1 als Reserve' })
+        : (sig.deviceBrain === false
+          ? { it: 'Nessuna chiave: solo comandi e dati del dispositivo', en: 'No key: device commands and data only', es: 'Sin clave: solo órdenes y datos del dispositivo', fr: 'Pas de clé : seulement les commandes et données de l’appareil', de: 'Kein Schlüssel: nur Befehle und Daten des Geräts' }
+          : { it: 'Nessuna chiave: solo cervello del dispositivo', en: 'No key: device brain only', es: 'Sin clave: solo el cerebro del dispositivo', fr: 'Pas de clé : cerveau de l’appareil uniquement', de: 'Kein Schlüssel: nur das Gerätegehirn' }) });
     },
     feasible() { return { state: 'available', reason: same('') }; },
   },
   {
     id: 'local', icon: '💻', it: 'Solo locale', en: 'Local only', es: 'Solo local', fr: 'Local uniquement', de: 'Nur lokal',
-    intent: { it: 'Tutto su questo computer, il Cardputer può dormire', en: 'Everything on this computer, the Cardputer can sleep', es: 'Todo en este equipo, el Cardputer puede dormir', fr: 'Tout sur cet ordinateur, le Cardputer peut dormir', de: 'Alles auf diesem Computer, der Cardputer kann schlafen' },
+    intent: { it: 'Tutto su questo computer, il dispositivo può dormire', en: 'Everything on this computer, the device can sleep', es: 'Todo en este equipo, el dispositivo puede dormir', fr: 'Tout sur cet ordinateur, l’appareil peut dormir', de: 'Alles auf diesem Computer, das Gerät kann schlafen' },
     plan(sig) {
       if (sig.pcModel && sig.pcLoopback) return mk('pc', 'pc', 'auto', false, { using: PC_LLM(sig) });
       if (sig.webgpu && (sig.vramMB || 0) >= 900 && sig.localModelReady)
@@ -186,7 +198,7 @@ export function gaps(sig, reg) {
   const cap = capOf(sig.provider, reg), out = [];
   if (!cap.image && !(sig.keys && sig.keys.xai)) out.push({ feature: 'image', app: 'Paint · Atelier', it: 'Le immagini IA richiedono una chiave Grok (xAI)', en: 'AI images need an xAI (Grok) key', es: 'Las imágenes IA necesitan una clave de xAI (Grok)', fr: 'Les images IA nécessitent une clé xAI (Grok)', de: 'KI-Bilder brauchen einen xAI-Schlüssel (Grok)', fixKey: 'xai' });
   if (!cap.whisper && !(sig.keys && sig.keys.openai)) out.push({ feature: 'whisper', app: 'Recorder · Dettatura', it: 'La trascrizione richiede una chiave Groq (Whisper)', en: 'Transcription needs a Groq (Whisper) key', es: 'La transcripción necesita una clave de Groq (Whisper)', fr: 'La transcription nécessite une clé Groq (Whisper)', de: 'Die Transkription braucht einen Groq-Schlüssel (Whisper)', fixKey: 'openai' });
-  if (!cap.ir) out.push({ feature: 'ir', app: 'Telecomando IR', it: 'La skill in linguaggio naturale funziona con Groq o Gemini', en: 'The natural-language skill works with Groq or Gemini', es: 'La habilidad en lenguaje natural funciona con Groq o Gemini', fr: 'La compétence en langage naturel fonctionne avec Groq ou Gemini', de: 'Der Skill in natürlicher Sprache funktioniert mit Groq oder Gemini', fixKey: null });
+  if (!cap.ir && sig.ir) out.push({ feature: 'ir', app: 'Telecomando IR', it: 'La skill in linguaggio naturale funziona con Groq o Gemini', en: 'The natural-language skill works with Groq or Gemini', es: 'La habilidad en lenguaje natural funciona con Groq o Gemini', fr: 'La compétence en langage naturel fonctionne avec Groq ou Gemini', de: 'Der Skill in natürlicher Sprache funktioniert mit Groq oder Gemini', fixKey: null });
   return out;
 }
 

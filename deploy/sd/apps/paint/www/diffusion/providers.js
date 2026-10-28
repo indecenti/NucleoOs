@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // providers.js — Atelier image-provider resolution + selection. Pure & DOM-free → host-tested.
 //
 // Paint's Atelier can produce an image three ways. This module decides which are AVAILABLE right now

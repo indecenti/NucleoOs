@@ -23,5 +23,7 @@
   "confirm_purge": "„{name}“ endgültig löschen? Dies kann nicht rückgängig gemacht werden.",
   "toast_delete_failed": "Löschen fehlgeschlagen — das Element ist noch im Papierkorb",
   "err_index_unreadable": "Der Papierkorb kann gerade nicht gelesen werden — es wurde nichts geändert. Bitte erneut versuchen.",
-  "load_failed": "Der Papierkorb kann gerade nicht gelesen werden. Bitte gleich erneut versuchen."
+  "load_failed": "Der Papierkorb kann gerade nicht gelesen werden. Bitte gleich erneut versuchen.",
+  "toast_pair_needed": "Kopplung auf dem Gerät erforderlich",
+  "toast_restore_partial": "{count} nicht wiederhergestellt (erneut versuchen)"
 }

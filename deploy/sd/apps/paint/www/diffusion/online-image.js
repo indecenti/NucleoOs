@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // online-image.js — the ONLINE (cloud) image engine + the LLM prompt enhancer for Paint's Atelier.
 // Pure & DOM-free: `fetchImpl`, `decode` and `ask` are INJECTED so the whole thing is host-testable and
 // the same code runs in the browser. ISOLATED inside Paint (no ANIMA dependency).

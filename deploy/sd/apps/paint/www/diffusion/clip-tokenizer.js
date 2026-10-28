@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // clip-tokenizer.js — CLIP ViT-L/14 BPE tokenizer (the text front-end SDXS shares with Stable Diffusion 1.5).
 // Pure, DOM-free, dependency-free: the vocab + merge table are INJECTED (loaded from the model's
 // tokenizer.json on SD), so the algorithm is host-testable on a tiny synthetic vocab and the real

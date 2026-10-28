@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // engine-loader.js — USER-CHOICE engine selection + construction. The user ALWAYS picks; the policy
 // only marks which options are available given the client's capabilities (and explains why, honestly).
 // The real runtimes are built behind the choice via INJECTED factories (the UI supplies factories that

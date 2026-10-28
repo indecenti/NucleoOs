@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // profile.js — NucleoOS player identity + stats ("gamercard"). The Xbox-gamertag analogue, but
 // local-first and device-owned: profile and per-game stats live in localStorage AND on the SD
 // (/data/play/*.json) so every surface (Cardputer, web, another browser) shares one identity.

@@ -66,7 +66,7 @@
   "verify": "Prüfen",
   "teach1": "Beibringen",
   "profSaved": "Profil gespeichert und beigebracht.",
-  "profNotTaught": "Profil auf dem Cardputer gespeichert, aber ANIMA hat es nicht gelernt.",
+  "profNotTaught": "Profil auf dem Gerät gespeichert, aber ANIMA hat es nicht gelernt.",
   "asking": "Frage ANIMA…",
   "noded": "Füge weitere Beziehungen hinzu (z. B. zwei Eltern oder zwei verbundene Orte) und hier erscheinen die Schlussfolgerungen.",
   "chip.new": "beizubringen",
@@ -74,6 +74,7 @@
   "chip.verified": "geprüft",
   "chip.volatile": "temporär",
   "chip.fail": "Fehler",
+  "chip.abstain": "ausstehend",
   "tagRel": "Beziehung",
   "tagDed": "abgeleitet",
   "because": "weil",
@@ -81,7 +82,7 @@
   "reteachDone": "Neu beigebracht {o}/{n}.",
   "verifyDone": "Geprüft {o}/{n}.",
   "dedDone": "{o}/{n} Schlussfolgerungen beigebracht.",
-  "readFailed": "Deine Fakten konnten nicht vom Cardputer gelesen werden: Bearbeiten ist pausiert, damit nichts überschrieben wird. Versuche es gleich erneut.",
-  "readCorrupt": "Die Faktendatei auf dem Cardputer ist nicht lesbar: sie bleibt unverändert, damit nichts verloren geht.",
-  "notPaired": "Dieser Browser ist nicht mit dem Cardputer gekoppelt – kopple ihn, um deine Fakten zu speichern."
+  "readFailed": "Deine Fakten konnten nicht vom Gerät gelesen werden: Bearbeiten ist pausiert, damit nichts überschrieben wird. Versuche es gleich erneut.",
+  "readCorrupt": "Die Faktendatei auf dem Gerät ist nicht lesbar: sie bleibt unverändert, damit nichts verloren geht.",
+  "notPaired": "Dieser Browser ist nicht mit dem Gerät gekoppelt – kopple ihn, um deine Fakten zu speichern."
 }

@@ -1,0 +1,17 @@
+{
+  "_lang": "fr",
+  "title": "Marqueur",
+  "undo": "Annuler",
+  "add": "+ Joueur",
+  "target": "Score gagnant",
+  "sort": "Trier par score",
+  "reset": "Nouvelle partie",
+  "foot": "Enregistre sur cet appareil. Fonctionne hors ligne.",
+  "player": "Joueur",
+  "name": "Nom",
+  "remove": "Retirer",
+  "winner": "Gagne !",
+  "empty": "Ajoutez des joueurs avec + Joueur.",
+  "confirm.remove": "Retirer {name} ?",
+  "confirm.reset": "Remettre tous les scores a zero ?"
+}

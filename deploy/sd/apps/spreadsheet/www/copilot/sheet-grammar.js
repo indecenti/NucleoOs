@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // sheet-grammar.js — compile the CLOSED SHEET_ACTION_SCHEMA into a GBNF grammar for
 // grammar-constrained decoding (XGrammar / WebLLM). Single source of truth: the SAME schema drives
 // the runtime firewall (parseSheetActions) AND the decode-time grammar, so the tiny in-browser

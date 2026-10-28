@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // constellations-web.js — the WEB-ONLY progress of Costellazioni, next to the shared run.
 //
 // The shared save (constellations-save.js: credits, cargo, beacon_lit, sector, ...) is the contract with the

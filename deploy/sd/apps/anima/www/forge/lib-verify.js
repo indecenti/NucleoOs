@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // lib-verify.js — opt-in DEEP integrity check for vendored runtime libs. The air-gap readiness probe is
 // size-level (fast, cheap: catches truncation). This is the "checksum-verified" upgrade: it reads the
 // WHOLE file from the device SD via BOUNDED, scheduler-gated Range windows (never a whole-file GET, which

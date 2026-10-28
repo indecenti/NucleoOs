@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // grammar.js — compile the CLOSED action registry (actions.js ACTION_SCHEMA) into a GBNF grammar
 // for grammar-constrained decoding (XGrammar / WebLLM). Single source of truth: the SAME schema
 // drives the runtime firewall (parseActions) AND the decode-time grammar, so the tiny orchestrator

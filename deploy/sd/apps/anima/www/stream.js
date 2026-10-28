@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // stream.js — browser-direct cloud chat with REAL streaming for the ANIMA app.
 //
 // Before this, the app waited for the whole completion and then faked a typewriter over it (a 3 KB

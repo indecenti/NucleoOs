@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // NucleoOS — shared online-AI client for the shell surfaces (onboarding + copilot).
 //
 // One device-held key vault (/data/anima/teacher.json, written via the paired /api/fs/*), and
@@ -7,13 +8,26 @@
 // EXCEPTION — Google Gemini speaks the OpenAI-compatible wire BUT its API sends no CORS headers, so a
 // browser fetch is blocked. Those (provider.proxy) are relayed through the device's same-origin
 // /api/llm proxy: the firmware dials Google server-side (no CORS), passes the key through, never
-// stores it, and streams the reply back heap-gated. See viaProxy().
+// stores it, and streams the reply back heap-gated. See viaProxy() / apiUrl().
+//
+// SEALED VAULT (a firmware that answers /api/anima/teacher — the ESP32-P4 today): the keys never leave
+// the device. That endpoint blanks every key, readTeacher() puts VAULT_KEY where a saved key is (so
+// "is a key set?" checks keep working), and EVERY model call then goes through the device relay
+// /api/llm, which adds the real key on the way out — only towards the host it was saved for. A key the
+// user is typing (test before save, a model list) is the one key a page sends itself. Writes go to
+// /api/anima/teacher too and are MERGED on the device: a blank key keeps the saved one, so a page can
+// never wipe a key it was not shown. A firmware without that endpoint (404) keeps the classic vault.
 //
 // The key is the user's own, on their own single-tenant device, served to their own browser — so
 // the Anthropic "dangerous-direct-browser-access" opt-in is appropriate here. The key is never
 // logged and never sent anywhere except the provider the user chose.
 
 export const AI_PATH = '/data/anima/teacher.json';
+const TEACHER_API = '/api/anima/teacher';
+// Where a saved key would be: never a secret, never sent (authHeaders), written back as "" (kept).
+export const VAULT_KEY = '\u2022device-key\u2022';
+export const isVaultKey = (k) => k === VAULT_KEY;
+const realKey = (k) => (k && k !== VAULT_KEY ? k : '');
 
 export const PROVIDERS = {
   anthropic: {
@@ -42,6 +56,18 @@ export const PROVIDERS = {
     models: [['gemini-2.5-flash', 'Gemini 2.5 Flash · consigliato', 'Gemini 2.5 Flash · recommended', 'Gemini 2.5 Flash · recomendado', 'Gemini 2.5 Flash · recommandé', 'Gemini 2.5 Flash · empfohlen'], ['gemini-flash-latest', 'Gemini Flash · ultimo', 'Gemini Flash · latest', 'Gemini Flash · último', 'Gemini Flash · dernier', 'Gemini Flash · neueste'], ['gemini-2.5-pro', 'Gemini 2.5 Pro · qualità (a pagamento)', 'Gemini 2.5 Pro · quality (paid)', 'Gemini 2.5 Pro · calidad (de pago)', 'Gemini 2.5 Pro · qualité (payant)', 'Gemini 2.5 Pro · Qualität (kostenpflichtig)'], ['gemini-2.5-flash-lite', 'Gemini 2.5 Flash-Lite · economico', 'Gemini 2.5 Flash-Lite · cheap', 'Gemini 2.5 Flash-Lite · económico', 'Gemini 2.5 Flash-Lite · économique', 'Gemini 2.5 Flash-Lite · günstig']],
   },
 };
+// A model server on the LAN: Ollama (:11434), LM Studio (:1234), llama.cpp / LocalAI (:8080), any
+// OpenAI-compatible endpoint. No CORS and plain HTTP, so the browser reaches it through the device
+// relay (/api/llm); the key is optional and the models are whatever the server lists (listModels).
+// Only a relay that admits plain-http LAN hosts can reach it (lanRelay(): the sealed-vault firmware); the
+// Cardputer relay is https-only and the Handheld one Google-only. So it is NON-ENUMERABLE: every lookup
+// (providerOf, readTeacher, routeFor) knows it on every edition, but code that LISTS the providers (pickers,
+// Settings' preset engine) does not see it — ai-keys.js adds its chip only where lanRelay() is true.
+Object.defineProperty(PROVIDERS, 'local', { enumerable: false, value: {
+  label: 'Local server', base: 'http://192.168.1.10:11434/v1', version: '', local: true, keyOptional: true,
+  prefix: /.*/, ph: '(optional)', def: '', proxy: true, models: [],
+  presets: [['Ollama', 11434], ['LM Studio', 1234], ['llama.cpp', 8080]],
+} });
 
 // Pick a model tuple's label for the active OS language. Tuples are [id, it, en, es, fr, de]; the live
 // Gemini calibration builds [id, id] pairs (no descriptor) — those fall back to the id. Reads anima.lang
@@ -69,6 +95,7 @@ export const CAPMATRIX = {
   openai:    { chat: true, image: false, whisper: true,  audioLLM: false, toolUse: true, ir: true },   // Groq
   xai:       { chat: true, image: true,  whisper: false, audioLLM: false, toolUse: true, ir: true },
   google:    { chat: true, image: false, whisper: false, audioLLM: true,  toolUse: true, ir: true },
+  local:     { chat: true, image: false, whisper: false, audioLLM: false, toolUse: true, ir: true },
 };
 // Per-provider quality tiers, mapped to REAL ids from PROVIDERS.models (validated against the registry
 // by the engine; google.max=Pro is offered only when geminiTier==='paid'). Single source so a preset
@@ -79,6 +106,7 @@ export const TIERS = {
   xai:       { max: 'grok-2-latest',            mid: 'grok-2-latest',        fast: 'grok-2-1212' },
   google:    { max: 'gemini-2.5-pro',           mid: 'gemini-2.5-flash',     fast: 'gemini-2.5-flash-lite' },
 };
+// (local: no tiers - the server runs the one model the user picked)
 
 // ── multi-model router ────────────────────────────────────────────────────────────────────────────
 // Leverage EVERY configured model: route a subtask to the best available across ALL keys in teacher.json's
@@ -93,6 +121,7 @@ export const ROUTE_RANK = {
   openai:    { cost: 1, strength: 7  },  // Groq Llama
   xai:       { cost: 3, strength: 7  },
   google:    { cost: 1, strength: 8  },
+  local:     { cost: 0, strength: 5  },   // free and private, usually a smaller model
 };
 const TIER_OF = { fast: 'fast', mid: 'mid', hard: 'max' };
 
@@ -117,7 +146,8 @@ export function routeFor(spec = {}, keys = {}, active = null) {
   const exclude = new Set(spec.exclude || []);
   const activeP = active && active.provider;
   keys = keys || {};
-  const configured = Object.keys(keys).filter((p) => keys[p] && keys[p].key && PROVIDERS[p] && !exclude.has(p));
+  const usable = (p) => keys[p] && (keys[p].key || (PROVIDERS[p] && PROVIDERS[p].keyOptional && keys[p].base && keys[p].model));
+  const configured = Object.keys(keys).filter((p) => usable(p) && PROVIDERS[p] && !exclude.has(p));
   // Rank a provider set: cheapest for 'fast', strongest for 'mid'/'hard'; tie → the user's active provider.
   const rank = (list) => list.map((p) => ({ p, ...(ROUTE_RANK[p] || ROUTE_RANK.anthropic) }))
     .sort((a, b) => { const d = difficulty === 'fast' ? (a.cost - b.cost) : (b.strength - a.strength); return d !== 0 ? d : (a.p === activeP ? -1 : b.p === activeP ? 1 : 0); });
@@ -159,9 +189,72 @@ export function whisperUrl(base) {
   try { if (!b || new URL(b).hostname === 'api.groq.com') b = PROVIDERS.openai.base; } catch { b = PROVIDERS.openai.base; }
   return b + '/audio/transcriptions';
 }
+// Set by readTeacher() when the device answered /api/anima/teacher (the SEALED vault — see the header): the page
+// then holds no key and every provider call must go through the device relay, which adds it. Elsewhere it stays
+// false and only the CORS-less proxy providers are relayed.
+let _sealed = false;
+export const sealedVault = () => _sealed;
+// Can the device relay reach a plain-http server on the LAN (the 'local' provider)? Only the sealed-vault
+// firmware's relay does (it mirrors its url_is_local); the Cardputer relay is https-only, the Handheld's Google-only.
+export const lanRelay = () => _sealed;
 // Gemini's endpoint has no CORS → a browser fetch is blocked. Relay it through the device same-origin
-// /api/llm proxy (firmware dials it server-side). Other providers go browser-direct (no extra hop).
-export const viaProxy = (provider, url) => (providerOf(provider).proxy ? '/api/llm?url=' + encodeURIComponent(url) : url);
+// /api/llm proxy (firmware dials it server-side). Other providers go browser-direct (no extra hop) — except
+// on a sealed vault, where the page has no key to send and everything rides the relay.
+export const viaProxy = (provider, url) => ((_sealed || providerOf(provider).proxy) ? '/api/llm?url=' + encodeURIComponent(url) : url);
+// A private / loopback / .local host — a server on the LAN (mirrors the firmware's url_is_local).
+export const isLanUrl = (u) => {
+  const m = /^https?:\/\/([^/:]+)/i.exec(String(u || '')); if (!m) return false;
+  const h = m[1].toLowerCase();
+  if (h === 'localhost' || h.endsWith('.local')) return true;
+  const o = h.split('.').map(Number);
+  return o.length === 4 && o.every((x) => x >= 0 && x <= 255) &&
+    (o[0] === 10 || o[0] === 127 || (o[0] === 192 && o[1] === 168) || (o[0] === 172 && o[1] >= 16 && o[1] <= 31) || (o[0] === 169 && o[1] === 254));
+};
+
+// ── the ONE cloud wire ──────────────────────────────────────────────────────────────────────────────
+// Every request to a provider is addressed by apiUrl() and authenticated by authHeaders() — in this file and
+// in the apps that import them — so "where may a key go" is decided in exactly one place:
+//   · to cfg.base, the endpoint the user configured for THAT key;
+//   · with no base, to the base of cfg.provider's OWN registry entry — never another provider's (the old
+//     fallback sent any non-Anthropic key without a base to Groq's host, Gemini keys included);
+//   · to the same-origin /api/llm relay for a proxy provider (Gemini: no CORS), an explicit cfg.proxy (a custom
+//     non-CORS endpoint), or a sealed vault (the relay adds the saved key).
+// Nothing here logs a key, and the key never rides in a URL (header only).
+const isAnth = (cfg) => !!cfg && cfg.provider === 'anthropic';
+const regOf = (cfg) => (isAnth(cfg) ? PROVIDERS.anthropic : (PROVIDERS[cfg && cfg.provider] || PROVIDERS.openai));
+
+// Endpoint for `path` ('/v1/messages', '/chat/completions', '/models'…) on this cfg, relayed when it must be.
+export function apiUrl(cfg, path) {
+  const url = String(cfg.base || regOf(cfg).base || '').replace(/\/+$/, '') + path;
+  return (_sealed || isVaultKey(cfg.key) || cfg.proxy || regOf(cfg).proxy) ? '/api/llm?url=' + encodeURIComponent(url) : url;
+}
+
+// Auth + content headers for this cfg's wire. Only a key the user is typing goes out from the page; a saved one
+// on a sealed vault (VAULT_KEY) is added by the relay, so no key header is sent for it (nor for a keyless LAN
+// server). Anthropic needs the dangerous-direct-browser-access opt-in for a browser-direct call (see the header).
+export function authHeaders(cfg) {
+  const k = realKey(cfg && cfg.key);
+  if (isAnth(cfg)) return Object.assign({ 'content-type': 'application/json', 'anthropic-version': cfg.version || PROVIDERS.anthropic.version },
+    k ? { 'x-api-key': k, 'anthropic-dangerous-direct-browser-access': 'true' } : {});
+  return Object.assign({ 'content-type': 'application/json' }, k ? { authorization: 'Bearer ' + k } : {});
+}
+
+// The real brand behind a cfg, from the provider + endpoint host, so a label never lies: the firmware
+// nicknames the cloud teacher "Grok" everywhere, but Grok (xAI) and Groq (Llama host) are different
+// companies. Shared by the apps that show which brain actually answered.
+export function brandOf(cfg) {
+  if (!cfg) return null;
+  if (cfg.provider === 'anthropic') return 'Claude';
+  if (cfg.provider === 'google') return 'Gemini';
+  const h = (cfg.base || '').toLowerCase();
+  if (h.includes('generativelanguage')) return 'Gemini';
+  if (h.includes('x.ai')) return 'Grok';
+  if (h.includes('groq.com')) return 'Groq';
+  if (h.includes('openai.com')) return 'OpenAI';
+  if (h.includes('mistral')) return 'Mistral';
+  if (h.includes('together')) return 'Together';
+  try { return new URL(cfg.base).host.replace(/^api\./, ''); } catch { return 'LLM'; }
+}
 
 // ── AUTOMATIC MODEL SELECTION ───────────────────────────────────────────────────────────────────────
 // Providers retire model ids on their own schedule — Groq shut down groq/compound on 2026-09-21 and
@@ -199,7 +292,8 @@ function modelTraits(id) {
 }
 // Ids NucleoOS itself shipped as defaults in the past (see resolveModel): a config still holding one follows
 // its family forward instead of staying on an old model forever.
-const FORMER_DEFAULTS = new Set(['claude-sonnet-4-6', 'claude-opus-4-8']);
+// ('claude-sonnet-5' was the ESP32-P4 shell's default before the editions shared one shell.)
+const FORMER_DEFAULTS = new Set(['claude-sonnet-4-6', 'claude-opus-4-8', 'claude-sonnet-5']);
 const familyOf = (id) => { const s = String(id).toLowerCase(); return FAMILIES.findIndex(([re]) => re.test(s)); };
 // Newer beats older inside a family: every number in the id, compared left to right ("4-6" > "4-5").
 const versionOf = (id) => (String(id).match(/\d+(?:\.\d+)?/g) || []).map(Number);
@@ -218,12 +312,14 @@ export function rankModels(ids, tier = 'mid') {
 const _modelMem = new Map();
 // A cache key per API key without storing the key: FNV-1a of it.
 function keyTag(key) { let h = 2166136261; for (const c of String(key || '')) { h ^= c.codePointAt(0); h = Math.imul(h, 16777619); } return (h >>> 0).toString(36); }
-const anthropicHeaders = (cfg) => ({ 'x-api-key': cfg.key, 'anthropic-version': cfg.version || '2023-06-01', 'anthropic-dangerous-direct-browser-access': 'true' });
+// What identifies "this key" for the cache: the key itself; a sealed-vault key by its device hint (the page never
+// sees the key); a keyless LAN server by its address.
+const modelCacheKey = (cfg) => 'ai.models.' + (cfg && cfg.provider) + '.' + keyTag(cfg && (isVaultKey(cfg.key) ? (cfg.keyHint || cfg.key) : (cfg.key || cfg.base)));
 
 // The model ids this key can use right now (cached 12 h), or null when the provider can't be asked.
 export async function listModels(cfg, { fresh = false } = {}) {
-  if (!cfg || !cfg.key) return null;
-  const ck = 'ai.models.' + cfg.provider + '.' + keyTag(cfg.key);
+  if (!cfg || (!cfg.key && !providerOf(cfg.provider).keyOptional)) return null;
+  const ck = modelCacheKey(cfg);
   if (!fresh) {
     const m = _modelMem.get(ck);
     if (m && Date.now() - m.at < MODEL_TTL) return m.ids;
@@ -231,15 +327,16 @@ export async function listModels(cfg, { fresh = false } = {}) {
   }
   let ids = null;
   try {
-    if (providerOf(cfg.provider).proxy) ids = await geminiListModels(cfg);
+    if (cfg.provider === 'google') ids = await geminiListModels(cfg);
     else if (cfg.provider === 'anthropic') {
-      const r = await fetch((cfg.base || PROVIDERS.anthropic.base).replace(/\/+$/, '') + '/v1/models?limit=100', { headers: anthropicHeaders(cfg), cache: 'no-store' });
+      const r = await fetch(apiUrl(cfg, '/v1/models?limit=100'), { headers: authHeaders(cfg), cache: 'no-store' });
       const j = r.ok ? await r.json().catch(() => null) : null;
       ids = j && Array.isArray(j.data) ? j.data.map((m) => m && m.id).filter(Boolean) : null;
     } else {
-      const r = await fetch((cfg.base || providerOf(cfg.provider).base).replace(/\/+$/, '') + '/models', { headers: { authorization: 'Bearer ' + cfg.key }, cache: 'no-store' });
+      const r = await fetch(apiUrl(cfg, '/models'), { headers: authHeaders(cfg), cache: 'no-store' });
       const j = r.ok ? await r.json().catch(() => null) : null;
-      ids = j && Array.isArray(j.data) ? j.data.filter((m) => m && m.id && m.active !== false).map((m) => m.id) : null;
+      const data = j && (j.data || j.models);                      // OpenAI-compatible {data:[{id}]} | Ollama {models:[{name}]}
+      ids = Array.isArray(data) ? data.filter((m) => m && (m.id || m.name || m.model) && m.active !== false).map((m) => m.id || m.name || m.model) : null;
     }
   } catch { ids = null; }
   if (!ids || !ids.length) return null;
@@ -248,7 +345,7 @@ export async function listModels(cfg, { fresh = false } = {}) {
   try { localStorage.setItem(ck, JSON.stringify(e)); } catch {}
   return ids;
 }
-export function forgetModels(cfg) { const ck = 'ai.models.' + (cfg && cfg.provider) + '.' + keyTag(cfg && cfg.key); _modelMem.delete(ck); try { localStorage.removeItem(ck); } catch {} }
+export function forgetModels(cfg) { const ck = modelCacheKey(cfg); _modelMem.delete(ck); try { localStorage.removeItem(ck); } catch {} }
 
 // The model to call for `cfg`: the saved one while the provider still serves it, else the best served one for
 // the tier; need:'web' = a model with built-in web search. null only when the provider serves nothing usable.
@@ -333,7 +430,7 @@ export function aiErrorKind(status, text) {
 export function redactSecrets(text, key) {
   let s = String(text == null ? '' : text);
   if (key && String(key).length >= 8) s = s.split(String(key)).join(maskKey(String(key)));
-  return s.replace(/(Bearers+)[A-Za-z0-9._~+/=-]{8,}/gi, '$1***')
+  return s.replace(/(Bearer\s+)[A-Za-z0-9._~+/=-]{8,}/gi, '$1***')
     .replace(/(sk-ant-|sk-|gsk_|xai-|AIza)[A-Za-z0-9_-]{6,}/g, '$1***');
 }
 // Build an AiError from a failed provider response (reads its JSON/text body once).
@@ -344,7 +441,8 @@ export async function aiErrorFromResponse(resp, cfg, bodyText) {
   try { const j = JSON.parse(text); const e = j && (j.error || j); msg = [e.code, e.type, e.message || (typeof e === 'string' ? e : '')].filter(Boolean).join(' · '); } catch { msg = String(text || '').slice(0, 300); }
   const kind = aiErrorKind(resp.status, msg || text);
   const ra = Number(resp.headers && resp.headers.get && resp.headers.get('retry-after')) || retryAfterFromText(msg || text);
-  return new AiError(kind, redactSecrets(msg, cfg && cfg.key) || ('HTTP ' + resp.status), { status: resp.status, provider: cfg && cfg.provider, model: cfg && cfg.model, retryAfter: ra });
+  // .body: the raw reply (first 300 chars, secrets masked) for callers that classify on it (AI Chat's 401/404 hints).
+  return new AiError(kind, redactSecrets(msg, cfg && cfg.key) || ('HTTP ' + resp.status), { status: resp.status, provider: cfg && cfg.provider, model: cfg && cfg.model, retryAfter: ra, body: redactSecrets(String(text || '').slice(0, 300), cfg && cfg.key) });
 }
 // Wrap anything thrown around a provider call (network TypeError, abort, an AiError already) as an AiError.
 export function toAiError(e, cfg) {
@@ -425,11 +523,11 @@ const AI_ERR_TEXT = {
     fr: '{P} a un problème temporaire{S}. Réessayez dans quelques minutes.',
     de: '{P} hat ein vorübergehendes Problem{S}. Versuche es in ein paar Minuten erneut.' },
   device_busy: {
-    it: 'Il Cardputer è occupato a fare da ponte verso {P}. Riprova tra qualche secondo.',
-    en: 'The Cardputer is busy relaying to {P}. Try again in a few seconds.',
-    es: 'El Cardputer está ocupado haciendo de puente hacia {P}. Inténtalo en unos segundos.',
-    fr: 'Le Cardputer est occupé à relayer vers {P}. Réessayez dans quelques secondes.',
-    de: 'Der Cardputer ist mit der Weiterleitung zu {P} beschäftigt. Versuche es in ein paar Sekunden.' },
+    it: 'Il dispositivo è occupato a fare da ponte verso {P}. Riprova tra qualche secondo.',
+    en: 'The device is busy relaying to {P}. Try again in a few seconds.',
+    es: 'El dispositivo está ocupado haciendo de puente hacia {P}. Inténtalo en unos segundos.',
+    fr: 'L’appareil est occupé à relayer vers {P}. Réessayez dans quelques secondes.',
+    de: 'Das Gerät ist mit der Weiterleitung zu {P} beschäftigt. Versuche es in ein paar Sekunden.' },
   network: {
     it: 'Non riesco a raggiungere {P}: controlla la connessione a Internet di questo computer (o un blocco di rete / estensione del browser).',
     en: 'I can’t reach {P}: check this computer’s Internet connection (or a network block / browser extension).',
@@ -501,7 +599,7 @@ const pickPro = (ids) => ids.find((m) => /gemini-2\.5-pro$/.test(m)) || ids.find
 export async function geminiListModels(cfg) {
   try {
     const url = '/api/llm?url=' + encodeURIComponent((cfg.base || GEMINI_BASE).replace(/\/+$/, '') + '/models');
-    const r = await fetch(url, { headers: { authorization: 'Bearer ' + (cfg.key || '') }, cache: 'no-store' });
+    const r = await fetch(url, { headers: authHeaders({ provider: 'google', key: cfg.key }), cache: 'no-store' });
     if (!r.ok) return null;
     const j = await r.json().catch(() => null);
     const data = (j && (j.data || j.models)) || null;        // OpenAI-compat {data:[{id}]} | native {models:[{name}]}
@@ -517,7 +615,7 @@ export async function geminiProbeTier(cfg, proModel = 'gemini-2.5-pro') {   // a
   try {
     const url = '/api/llm?url=' + encodeURIComponent((cfg.base || GEMINI_BASE).replace(/\/+$/, '') + '/chat/completions');
     const r = await fetch(url, { method: 'POST',
-      headers: { 'content-type': 'application/json', authorization: 'Bearer ' + (cfg.key || '') },
+      headers: { 'content-type': 'application/json', ...authHeaders({ provider: 'google', key: cfg.key }) },
       body: JSON.stringify({ model: proModel, max_tokens: 1, messages: [{ role: 'user', content: 'hi' }] }) });
     if (r.ok) return 'paid';
     if (r.status >= 400 && r.status < 500) return 'free';    // Pro refused → no billing → free tier
@@ -554,7 +652,8 @@ export function geminiTierLabel(tier, lang) {
   const row = tier === 'paid' ? T.paid : tier === 'free' ? T.free : T.unknown;
   return row[l] || row.it;
 }
-export const maskKey = (k) => (k && k.length > 10 ? k.slice(0, 6) + '…' + k.slice(-4) : (k ? '…' : ''));
+// A saved key shows as the device's hint ("gsk_…wxyz"); a key being typed as its own ends.
+export const maskKey = (k, hint) => (isVaultKey(k) ? (hint || '••••') : (k && k.length > 10 ? k.slice(0, 6) + '…' + k.slice(-4) : (k ? '…' : '')));
 
 // "martedì 29 settembre 2026 alle ore 22:40 (Europe/Rome)" in the OS language — appended to every system
 // prompt the shell sends, because a model has no clock (twin of apps/anima/www/contextkit.js nowText).
@@ -585,7 +684,23 @@ let _teacherCache = null, _teacherAt = 0, _teacherJob = null;
 const TEACHER_TTL = 30000;
 export function invalidateTeacher() { _teacherCache = null; _teacherAt = 0; _teacherJob = null; }
 
-// Read the active teacher config (paired). Returns a normalized cfg, {unpaired:true}, or null.
+// The device's public view -> what the page works with: a saved key becomes VAULT_KEY (+ keyHint).
+function fromPublic(j) {
+  const sec = (o, name) => (o && o[name + '_set'] ? VAULT_KEY : ((o && typeof o[name] === 'string') ? o[name] : ''));
+  const keys = {};
+  for (const [p, e] of Object.entries((j && j.keys) || {})) {
+    if (!e || typeof e !== 'object') continue;
+    const c = Object.assign({}, e, { key: sec(e, 'key') });
+    if (e.key_hint) c.keyHint = e.key_hint;
+    delete c.key_set; delete c.key_hint;
+    keys[p] = c;
+  }
+  return Object.assign({}, j, { key: sec(j, 'key'), keyHint: j.key_hint || '', vision_key: sec(j, 'vision_key'), keys });
+}
+
+// Read the active teacher config (paired). Returns a normalized cfg, {unpaired:true}, or null. Keys
+// come back as VAULT_KEY (the device keeps them); an older firmware without /api/anima/teacher still
+// answers through /api/fs/read.
 export async function readTeacher(opts = {}) {
   if (!opts.fresh && _teacherCache && (Date.now() - _teacherAt) < TEACHER_TTL) return _teacherCache;
   // Concurrent readers (Settings' tabs, the capability probe, a preset) share ONE device read.
@@ -594,15 +709,37 @@ export async function readTeacher(opts = {}) {
   _teacherJob = job; job.finally(() => { if (_teacherJob === job) _teacherJob = null; });
   return job;
 }
+// A firmware without the sealed-vault endpoint answers 404 there: remembered, so the Cardputer and the Handheld
+// pay that probe once per page, not on every vault read.
+let _noTeacherApi = false;
 async function _readTeacher() {
   try {
-    const r = await fetch('/api/fs/read?path=' + encodeURIComponent(AI_PATH), { cache: 'no-store' });
+    let r = null, pub = false;
+    // Only a device that keeps the keys sealed (vault.sealed) has the vault endpoint: elsewhere not even one probe.
+    if (!_noTeacherApi && !(await import('./nucleo-caps.js').then((m) => m.default.has('vault.sealed')).catch(() => true))) _noTeacherApi = true;
+    if (!_noTeacherApi) {
+      r = await fetch(TEACHER_API, { cache: 'no-store' });
+      if (r.status === 404) _noTeacherApi = true; else pub = true;
+    }
+    if (!pub) r = await fetch('/api/fs/read?path=' + encodeURIComponent(AI_PATH), { cache: 'no-store' });
     if (r.status === 401 || r.status === 403) return { unpaired: true };   // transient — not cached
+    // 404 = nessuna chiave mai salvata: e' la configurazione vuota, non un guasto.
+    // Prima tornava null e le Impostazioni dicevano "Non riesco a leggere la chiave"
+    // su ogni console nuova (prova a schermo del 13/10/2026); null resta per i guasti veri.
+    // Si memorizza come gli altri: senza, ogni apertura delle Impostazioni chiedeva
+    // il file tre volte alla console (tre 404 di fila, prova del 13/10/2026).
+    if (r.status === 404) {
+      const p = providerOf('anthropic');
+      _teacherCache = { provider: 'anthropic', base: p.base, model: p.def, key: '', version: p.version, exec: 'browser', keys: {}, geminiTier: '' };
+      _teacherAt = Date.now();
+      return _teacherCache;
+    }
     if (!r.ok) return null;
-    const j = JSON.parse(await r.text()) || {};
-    const provider = j.provider || (j.base && /anthropic/.test(j.base) ? 'anthropic' : (j.base && /generativelanguage/.test(j.base) ? 'google' : (j.base && /x\.ai/.test(j.base) ? 'xai' : (j.key ? 'openai' : 'anthropic'))));
+    let j = JSON.parse(await r.text()) || {};
+    if (pub) { j = fromPublic(j); _sealed = true; }
+    const provider = (j.provider && PROVIDERS[j.provider]) ? j.provider : (isLanUrl(j.base) ? 'local' : (j.base && /anthropic/.test(j.base) ? 'anthropic' : (j.base && /generativelanguage/.test(j.base) ? 'google' : (j.base && /x\.ai/.test(j.base) ? 'xai' : (j.key ? 'openai' : 'anthropic')))));
     const p = providerOf(provider);
-    const cfg = { provider, base: j.base || p.base, model: j.model || p.def, key: j.key || '', version: j.version || p.version, exec: j.exec || 'browser', keys: j.keys || {}, geminiTier: j.geminiTier || '' };
+    const cfg = { provider, base: j.base || p.base, model: j.model || p.def, key: j.key || '', keyHint: j.keyHint || '', version: j.version || p.version, exec: j.exec || 'browser', keys: j.keys || {}, geminiTier: j.geminiTier || '', stt_url: j.stt_url || '', stt_model: j.stt_model || '', vision_model: j.vision_model || '', vision_base: j.vision_base || '', vision_key: j.vision_key || '', vision: typeof j.vision === 'boolean' ? j.vision : null };
     _teacherCache = cfg; _teacherAt = Date.now();
     return cfg;
   } catch { return null; }
@@ -630,21 +767,95 @@ export function buildTeacherDoc(cfg) {
     cfg.provider === 'anthropic' ? { version: cfg.version || p.version } : {},
     (cfg.provider === 'google' && cfg.geminiTier) ? { geminiTier: cfg.geminiTier } : {});
   const keys = Object.assign({}, cfg.keys || {});
-  if (entry.key) keys[cfg.provider] = entry; else delete keys[cfg.provider];
+  const keyless = providerOf(cfg.provider).keyOptional && entry.base && entry.model;   // a LAN server needs no key
+  if (entry.key || keyless) keys[cfg.provider] = entry; else delete keys[cfg.provider];
   const extra = (cfg.provider === 'google' && cfg.geminiTier) ? { geminiTier: cfg.geminiTier } : {};   // top-level mirror for the firmware
-  return Object.assign({ provider: cfg.provider, exec: cfg.exec || 'browser' }, entry, extra, { keys });
+  // The home speech-to-text server (whisper.cpp / speaches) rides along so a key change never drops it.
+  const stt = cfg.stt_url ? Object.assign({ stt_url: cfg.stt_url }, cfg.stt_model ? { stt_model: cfg.stt_model } : {}) : {};
+  // The multimodal settings too: the vision helper (a model that sees images, for a text-only chat
+  // model) and the "vision" override of the detected capability.
+  const vis = {};
+  for (const k of ['vision_model', 'vision_base', 'vision_key']) if (cfg[k]) vis[k] = cfg[k];
+  if (typeof cfg.vision === 'boolean') vis.vision = cfg.vision;
+  const doc = Object.assign({ provider: cfg.provider, exec: cfg.exec || 'browser' }, entry, extra, stt, vis, { keys });
+  return toDevice(doc);
 }
 
-// Write the vault (paired). true | 'unpaired' | false.
+// What goes to the device: a saved key (VAULT_KEY) is sent as "" — the device keeps it — and the
+// page-side hints never leave the page.
+function toDevice(o) {
+  if (Array.isArray(o)) return o.map(toDevice);
+  if (!o || typeof o !== 'object') return o;
+  const out = {};
+  for (const [k, v] of Object.entries(o)) {
+    if (k === 'keyHint' || /_(set|hint)$/.test(k)) continue;
+    out[k] = isVaultKey(v) ? '' : toDevice(v);
+  }
+  return out;
+}
+
+// Write the vault (paired): merged on the device, keys left blank are kept. true | 'unpaired' | false.
 export async function writeTeacher(cfg) {
   try {
-    const r = await fetch('/api/fs/write?path=' + encodeURIComponent(AI_PATH), { method: 'POST', body: JSON.stringify(buildTeacherDoc(cfg)) });
+    const body = JSON.stringify(buildTeacherDoc(cfg));
+    let r = _noTeacherApi ? null : await fetch(TEACHER_API, { method: 'POST', body });
+    if (!r || r.status === 404) { _noTeacherApi = true; r = await fetch('/api/fs/write?path=' + encodeURIComponent(AI_PATH), { method: 'POST', body }); }   // classic vault
     if (r.ok) invalidateTeacher();   // our own write changed it — drop the memo so the next read is fresh
     return r.ok ? true : ((r.status === 401 || r.status === 403) ? 'unpaired' : false);
   } catch { return false; }
 }
 
-// Browser-direct completion. Returns the assistant text; throws an AiError (explainAiError() says what to do).
+// ── keys typed inside an app (AI Chat, Dictation, Recorder) ──────────────────────────────────────────
+const originOf = (u) => { try { return new URL(u).origin; } catch { return ''; } };
+const providerForBase = (base) => (/\bx\.ai\b/.test(base) ? 'xai' : /anthropic\.com/.test(base) ? 'anthropic'
+  : /generativelanguage/.test(base) ? 'google' : isLanUrl(base) ? 'local' : 'openai');
+
+// Does the vault hold a key for `base`'s host (on a sealed vault: the relay will add it)? false when unpaired / unknown.
+export async function hasKeyFor(base, opts = {}) {
+  const t = await readTeacher(opts).catch(() => null);
+  if (!t || t.unpaired) return false;
+  const o = originOf(base);
+  if (t.key && originOf(t.base) === o) return true;
+  return Object.values(t.keys || {}).some((e) => e && e.key && originOf(e.base) === o);
+}
+
+// Save a key the user typed in an app into the device vault, under the provider of `base`'s host; the
+// active provider stays unless there is none yet. true | 'unpaired' | false.
+export async function saveAppKey(base, key, model) {
+  const t = await readTeacher({ fresh: true }).catch(() => null);
+  if (!t) return false;
+  if (t.unpaired) return 'unpaired';
+  const id = providerForBase(base);
+  const b = String(base || providerOf(id).base).replace(/\/+$/, '');
+  const keys = Object.assign({}, t.keys || {});
+  keys[id] = Object.assign({}, keys[id] || {}, { base: b, model: model || (keys[id] && keys[id].model) || providerOf(id).def, key });
+  const cfg = Object.assign({}, t, { keys });
+  if (!t.key) Object.assign(cfg, { provider: id, base: b, model: keys[id].model, key, version: providerOf(id).version });
+  return writeTeacher(cfg);
+}
+
+// Older pages kept a Groq key in this browser (localStorage 'groq.key', shared by AI Chat, Dictation and
+// Recorder — Dictation even copied the device's key there). The device holds keys now: move it into the
+// vault when the vault has none for that host, then drop it from the browser.
+export async function adoptBrowserKey() {
+  let k = '', base = '';
+  try { k = localStorage.getItem('groq.key') || ''; base = localStorage.getItem('groq.base') || ''; } catch { return; }
+  if (!k) return;
+  base = (base || PROVIDERS.openai.base).replace(/\/+$/, '');
+  if (!(await hasKeyFor(base, { fresh: true }))) {
+    const r = await saveAppKey(base, k);
+    if (r !== true) return;   // unpaired / offline: keep it until the vault can take it
+  }
+  try { localStorage.removeItem('groq.key'); } catch {}
+}
+
+// Sonnet 5 runs ADAPTIVE thinking when `thinking` is omitted (the 4.x family ran thinking-off): for chat
+// surfaces that is slower + costlier, and a tiny max_tokens can be eaten by thinking before any text. The
+// rule as the ESP32-P4 apps (agent runtime, games coach) import it: disabled ONLY for sonnet-5* (fable-5
+// rejects "disabled" with a 400; 4.x is already off). This file's own wire does not apply it yet.
+export const anthThinking = (model) => (String(model || '').includes('sonnet-5') ? { thinking: { type: 'disabled' } } : {});
+
+// Completion. Returns the assistant text; throws an AiError (explainAiError() says what to do).
 // The model is auto-chosen and re-picked if the provider retired it (withAutoModel). opts.tier = 'max'|'mid'|'fast'.
 // opts.signal — an AbortSignal so a user-facing Stop can cancel a hung cloud call (copilot.js).
 // opts.meta — an object that receives { model } = the model that actually answered (labels that never lie).
@@ -655,10 +866,10 @@ export async function cloudComplete(cfg, system, user, maxTokens, opts = {}) {
   return out;
 }
 async function completeOnce(cfg, system, user, maxTokens, opts) {
-  if (cfg.provider === 'anthropic') {
-    const resp = await fetch((cfg.base || PROVIDERS.anthropic.base).replace(/\/+$/, '') + '/v1/messages', {
+  if (isAnth(cfg)) {
+    const resp = await fetch(apiUrl(cfg, '/v1/messages'), {
       method: 'POST', signal: opts.signal,
-      headers: { 'content-type': 'application/json', ...anthropicHeaders(cfg) },
+      headers: authHeaders(cfg),
       body: JSON.stringify({ model: cfg.model, max_tokens: maxTokens || 1024, ...(system ? { system } : {}), messages: [{ role: 'user', content: user }] }),
     });
     const text = await resp.text().catch(() => '');
@@ -666,10 +877,9 @@ async function completeOnce(cfg, system, user, maxTokens, opts) {
     if (!resp.ok || !j || j.type === 'error') throw await aiErrorFromResponse(resp, cfg, text);
     return Array.isArray(j.content) ? j.content.filter((b) => b && b.type === 'text').map((b) => b.text).join('') : '';
   }
-  const epurl = (cfg.base || PROVIDERS.openai.base).replace(/\/+$/, '') + '/chat/completions';
-  const resp = await fetch(viaProxy(cfg.provider, epurl), {
+  const resp = await fetch(apiUrl(cfg, '/chat/completions'), {
     method: 'POST', signal: opts.signal,
-    headers: { 'content-type': 'application/json', 'authorization': 'Bearer ' + cfg.key },
+    headers: authHeaders(cfg),
     body: JSON.stringify({ model: cfg.model, temperature: 0.4, messages: [...(system ? [{ role: 'system', content: system }] : []), { role: 'user', content: user }] }),
   });
   const text = await resp.text().catch(() => '');
@@ -678,12 +888,79 @@ async function completeOnce(cfg, system, user, maxTokens, opts) {
   return (j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '';
 }
 
+const anthText = (j) => (Array.isArray(j && j.content) ? j.content.filter((b) => b && b.type === 'text').map((b) => b.text).join('') : '');
+const oaText = (j) => (j && j.choices && j.choices[0] && j.choices[0].message && j.choices[0].message.content) || '';
+
+// Chat completion on ANY provider, multi-turn and optionally streamed — the call the apps share (AI Chat, Games,
+// Paint, the agent) instead of each carrying its own wire. Returns the assistant text; throws an AiError.
+//   messages  — a [{role,content}] transcript; or `user` for a single turn
+//   system    — top-level `system` on Anthropic, a leading system message on the OpenAI-compatible wire
+//   maxTokens — Anthropic always needs one (default 1024); on the OpenAI wire it is sent ONLY when given
+//   temperature — OpenAI-compatible wire only
+//   signal    — AbortSignal (Stop button, timeouts);  tier / meta — as cloudComplete
+//   onDelta(piece, full) — STREAM the reply (SSE) and call back per fragment; the full text is returned.
+//               OpenAI-compatible `choices[].delta.content` and Anthropic `content_block_delta` both parse.
+export async function cloudChat(cfg, opts = {}) {
+  const run = { tier: opts.tier };
+  const out = await withAutoModel(cfg, (c) => chatOnce(c, opts), run);
+  if (opts.meta) opts.meta.model = run.used;
+  return out;
+}
+// Groq retired its `compound` web-search model on 2026-09-21. Handheld apps (ANIMA, AI Chat) still call
+// AI.groqCompound for their Web mode: answer with a clear model error instead of a TypeError on undefined.
+export async function groqCompound(cfg) {
+  throw new AiError('model', 'groq/compound is no longer served', { provider: (cfg && cfg.provider) || 'openai', model: 'groq/compound' });
+}
+async function chatOnce(cfg, { system, messages, user, maxTokens, temperature, signal, onDelta } = {}) {
+  const msgs = Array.isArray(messages) ? messages : [{ role: 'user', content: String(user == null ? '' : user) }];
+  const anth = isAnth(cfg);
+  const body = anth
+    ? { model: cfg.model, max_tokens: maxTokens || 1024, ...(system ? { system } : {}), messages: msgs }
+    : { model: cfg.model, ...(maxTokens != null ? { max_tokens: maxTokens } : {}), ...(typeof temperature === 'number' ? { temperature } : {}),
+        messages: [...(system ? [{ role: 'system', content: system }] : []), ...msgs] };
+  const stream = typeof onDelta === 'function';
+  if (stream) body.stream = true;
+  const resp = await fetch(apiUrl(cfg, anth ? '/v1/messages' : '/chat/completions'), { method: 'POST', signal, headers: authHeaders(cfg), body: JSON.stringify(body) });
+  if (!stream) {
+    const text = await resp.text().catch(() => '');
+    let j = null; try { j = JSON.parse(text); } catch {}
+    if (!resp.ok || !j || j.type === 'error' || j.error) throw await aiErrorFromResponse(resp, cfg, text);
+    return anth ? anthText(j) : oaText(j);
+  }
+  if (!resp.ok || !resp.body) throw await aiErrorFromResponse(resp, cfg);
+  const reader = resp.body.getReader(), dec = new TextDecoder();
+  let buf = '', full = '';
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let nl;
+    while ((nl = buf.indexOf('\n')) >= 0) {
+      const line = buf.slice(0, nl).trim(); buf = buf.slice(nl + 1);
+      if (!line.startsWith('data:')) continue;           // `event:` lines, keep-alives, blank separators
+      const data = line.slice(5).trim();
+      if (data === '[DONE]') { buf = ''; break; }
+      let ev; try { ev = JSON.parse(data); } catch { continue; }   // partial / keep-alive frame
+      if (anth && ev && ev.type === 'error') {           // Anthropic in-stream error (e.g. overloaded)
+        const e = await aiErrorFromResponse(resp, cfg, data);
+        if (full) e.partial = full;                      // keep what already arrived
+        throw e;
+      }
+      const piece = anth
+        ? (ev && ev.type === 'content_block_delta' && ev.delta && ev.delta.type === 'text_delta' ? ev.delta.text : '')
+        : (ev && ev.choices && ev.choices[0] && ev.choices[0].delta && ev.choices[0].delta.content);
+      if (piece) { full += piece; onDelta(piece, full); }
+    }
+  }
+  return full;
+}
+
 // Provider-aware single-shot TOOL selection. `tools` is an OpenAI-style tool list (anima-skill's
 // actionsToOpenAITools); `messages` is an OpenAI-style [{role,content}] history+turn. Returns
 // {tool, args} | {text} | null; throws an AiError on a definite HTTP/network failure (callers try/catch → miss).
-// Anthropic uses native tool_use; Groq/xAI go browser-direct; Gemini relays via the device /api/llm
-// proxy. This is the ONE place a NucleoOS app needs to call to get tool-calling on EVERY provider —
-// it replaces each app re-implementing the per-provider wire (the fragmentation we're undoing).
+// Anthropic uses native tool_use; Groq/xAI go browser-direct; Gemini (and every provider on a sealed vault)
+// relays via the device /api/llm proxy. This is the ONE place a NucleoOS app needs to call to get tool-calling
+// on EVERY provider — it replaces each app re-implementing the per-provider wire (the fragmentation we're undoing).
 // The model is auto-chosen like cloudComplete (tier: cfg.tier, else 'mid').
 export async function cloudToolCall(cfg, opts = {}) {
   const run = { tier: opts.tier };
@@ -692,11 +969,11 @@ export async function cloudToolCall(cfg, opts = {}) {
   return out;
 }
 async function toolCallOnce(cfg, { system, messages = [], tools = [], signal, maxTokens = 512, temperature = 0.2, responseFormat = null } = {}) {
-  if (cfg.provider === 'anthropic') {
+  if (isAnth(cfg)) {
     const atools = (tools || []).map((t) => ({ name: t.function.name, description: t.function.description, input_schema: t.function.parameters || { type: 'object', properties: {} } }));
-    const resp = await fetch((cfg.base || PROVIDERS.anthropic.base).replace(/\/+$/, '') + '/v1/messages', {
+    const resp = await fetch(apiUrl(cfg, '/v1/messages'), {
       method: 'POST', signal,
-      headers: { 'content-type': 'application/json', ...anthropicHeaders(cfg) },
+      headers: authHeaders(cfg),
       body: JSON.stringify({ model: cfg.model, max_tokens: maxTokens, ...(system ? { system } : {}), ...(atools.length ? { tools: atools } : {}), messages }),
     });
     const text = await resp.text().catch(() => '');
@@ -705,13 +982,12 @@ async function toolCallOnce(cfg, { system, messages = [], tools = [], signal, ma
     const blocks = Array.isArray(j.content) ? j.content : [];
     const tu = blocks.find((b) => b && b.type === 'tool_use');
     if (tu) return { tool: tu.name, args: tu.input || {} };
-    const out = blocks.filter((b) => b && b.type === 'text').map((b) => b.text).join('');
+    const out = anthText(j);
     return out ? { text: out } : null;
   }
-  const epurl = (cfg.base || PROVIDERS.openai.base).replace(/\/+$/, '') + '/chat/completions';
-  const resp = await fetch(viaProxy(cfg.provider, epurl), {
+  const resp = await fetch(apiUrl(cfg, '/chat/completions'), {
     method: 'POST', signal,
-    headers: { 'content-type': 'application/json', authorization: 'Bearer ' + cfg.key },
+    headers: authHeaders(cfg),
     body: JSON.stringify({ model: cfg.model, max_tokens: maxTokens, temperature, messages: [...(system ? [{ role: 'system', content: system }] : []), ...messages], ...(tools.length ? { tools, tool_choice: 'auto' } : {}), ...(responseFormat ? { response_format: responseFormat } : {}) }),
   });
   const text = await resp.text().catch(() => '');
@@ -724,7 +1000,7 @@ async function toolCallOnce(cfg, { system, messages = [], tools = [], signal, ma
   return msg.content ? { text: msg.content } : null;
 }
 
-// Verify a key works (a tiny browser-direct call). true/false; throws on a definite rejection.
+// Verify a key works (a tiny call: browser-direct, or through the device relay). true/false; throws on a definite rejection.
 export async function cloudPing(cfg) {
   const t = await cloudComplete(cfg, null, 'Reply with exactly: ok', 16);
   return /\bok\b/i.test(t || '');

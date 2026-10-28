@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // NucleoOS — first-boot onboarding wizard.
 //
 // Shows ONCE (per browser) on the first paired boot when no AI provider is configured: a curated
@@ -10,7 +11,16 @@ import * as AI from './ai.js';
 
 const ONB_KEY = 'nucleo.onboarded';
 const CODES = ['it', 'en', 'es', 'fr', 'de'];
-const lang = () => { const l = String(localStorage.getItem('anima.lang') || 'en').slice(0, 2); return CODES.includes(l) ? l : 'en'; };
+// The language is the i18n engine's (window.NucleoI18N), which also knows the device's and the
+// browser's. Reading only localStorage was wrong twice: on a fresh browser the key is empty (the intro
+// came out in the wrong language), and picking the already-active language doesn't write it (setLang
+// is a no-op), so the choice changed nothing. Fallback: English, like Core and the web OS.
+const lang = () => {
+  let l = window.NucleoI18N && window.NucleoI18N.lang;
+  if (!l) { try { l = localStorage.getItem('anima.lang'); } catch {} }
+  l = String(l || 'en').slice(0, 2);
+  return CODES.includes(l) ? l : 'en';
+};
 // es/fr/de overlays, keyed by the ENGLISH UI string. it/en render inline via the TR ternaries below;
 // TR(it, en): it→it, en→en, otherwise L10N[lang][en] (falling back to the English text if a key is missing).
 const L10N = {
@@ -18,19 +28,19 @@ const L10N = {
     'Choose your language': 'Elige tu idioma',
     'You can change it anytime in Settings ▸ Appearance': 'Puedes cambiarlo cuando quieras en Ajustes ▸ Apariencia',
     'Welcome to NucleoOS': 'Bienvenido a NucleoOS',
-    'A web-native OS that lives on your Cardputer': 'Un SO web-nativo que vive en tu Cardputer',
-    'NucleoOS turns your M5Stack Cardputer into a tiny computer you drive from this browser. At its heart is <b>ANIMA</b> — an assistant whose brain runs <b>offline, on the device itself</b>.': 'NucleoOS convierte tu M5Stack Cardputer en un pequeño ordenador que controlas desde este navegador. En su núcleo está <b>ANIMA</b> — un asistente cuyo cerebro funciona <b>sin conexión, en el propio dispositivo</b>.',
+    'A web-native OS that lives on your device': 'Un SO web-nativo que vive en tu dispositivo',
+    'NucleoOS turns your device into a tiny computer you drive from this browser. At its heart is <b>ANIMA</b> — an assistant whose brain runs <b>offline, on the device itself</b>.': 'NucleoOS convierte tu dispositivo en un pequeño ordenador que controlas desde este navegador. En su núcleo está <b>ANIMA</b> — un asistente cuyo cerebro funciona <b>sin conexión, en el propio dispositivo</b>.',
     'Offline brain': 'Cerebro sin conexión',
     'Answers, reasoning and memory — no cloud needed.': 'Respuestas, razonamiento y memoria — sin necesidad de nube.',
     'Optional cloud': 'Nube opcional',
     'Add a Claude key for deeper understanding & verification.': 'Añade una clave Claude para mayor comprensión y verificación.',
     'Your keys, your device': 'Tus claves, tu dispositivo',
     'Keys stay on the SD; cloud calls go straight from your browser.': 'Las claves quedan en la SD; las llamadas a la nube salen directas desde tu navegador.',
-    'Light on the Cardputer': 'Ligero para el Cardputer',
+    'Light on the device': 'Ligero para el dispositivo',
     'The heavy AI work runs in your browser, not the chip.': 'El trabajo pesado de la IA se ejecuta en tu navegador, no en el chip.',
     '✨ Two minutes now and ANIMA is ready everywhere in the OS.': '✨ Dos minutos ahora y ANIMA estará lista en todo el OS.',
-    'NucleoOS is served by the Cardputer over your network — no app store. <b>Install it</b> to get a full-screen app icon and instant launch.': 'NucleoOS lo sirve el Cardputer a través de tu red — sin tienda de apps. <b>Instálalo</b> para tener un icono de app a pantalla completa e inicio instantáneo.',
-    'Keep this Cardputer on the same Wi-Fi as this device.': 'Mantén este Cardputer en la misma Wi-Fi que este dispositivo.',
+    'NucleoOS is served by the device over your network — no app store. <b>Install it</b> to get a full-screen app icon and instant launch.': 'NucleoOS lo sirve el dispositivo a través de tu red — sin tienda de apps. <b>Instálalo</b> para tener un icono de app a pantalla completa e inicio instantáneo.',
+    'Keep the device on the same Wi-Fi as this computer or phone.': 'Mantén el dispositivo en la misma Wi-Fi que este ordenador o teléfono.',
     'Desktop (Chrome/Edge): click the ⊕ / install icon in the address bar.': 'Escritorio (Chrome/Edge): haz clic en el icono ⊕ / instalar en la barra de direcciones.',
     'iPhone/iPad (Safari): Share → “Add to Home Screen”.': 'iPhone/iPad (Safari): Compartir → “Añadir a pantalla de inicio”.',
     'Android (Chrome): menu ⋮ → “Install app”.': 'Android (Chrome): menú ⋮ → “Instalar app”.',
@@ -41,7 +51,7 @@ const L10N = {
     'RECOMMENDED': 'RECOMENDADO',
     'Choose your AI': 'Elige tu IA',
     'You can change this anytime in Settings ▸ AI': 'Puedes cambiarlo cuando quieras en Ajustes ▸ IA',
-    'Best understanding. Runs in your browser — zero load on the Cardputer.': 'La mejor comprensión. Se ejecuta en tu navegador — cero carga en el Cardputer.',
+    'Best understanding. Runs in your browser — zero load on the device.': 'La mejor comprensión. Se ejecuta en tu navegador — cero carga en el dispositivo.',
     'Fast & free tier. OpenAI-compatible (Llama models).': 'Rápido y con nivel gratuito. Compatible con OpenAI (modelos Llama).',
     'Strong, generous free tier. Routed via the device proxy (no browser CORS).': 'Potente, con nivel gratuito generoso. Enrutado por el proxy del dispositivo (sin CORS de navegador).',
     'Offline only': 'Solo sin conexión',
@@ -64,12 +74,12 @@ const L10N = {
     'Open API Keys → Create Key.': 'Abre API Keys → Create Key.',
     'Copy the key (starts with sk-ant-) and paste it below.': 'Copia la clave (empieza por sk-ant-) y pégala abajo.',
     'Create an API key (starts with AIza) and paste it below.': 'Crea una clave API (empieza por AIza) y pégala abajo.',
-    'The Cardputer relays the call (Google has no browser access).': 'El Cardputer retransmite la llamada (Google no tiene acceso desde el navegador).',
+    'The device relays the call (Google has no browser access).': 'El dispositivo retransmite la llamada (Google no tiene acceso desde el navegador).',
     'Create an API key (starts with gsk_) and paste it below.': 'Crea una clave API (empieza por gsk_) y pégala abajo.',
     'Connect ': 'Conecta ',
     'Your key stays on the device': 'Tu clave permanece en el dispositivo',
     'Model': 'Modelo',
-    'Stored only on your device (SD), never logged. With Claude the key stays in <b>your browser</b> and talks directly to Anthropic — the Cardputer isn’t loaded.': 'Se guarda solo en tu dispositivo (SD), nunca en registros. Con Claude la clave permanece en <b>tu navegador</b> y habla directamente con Anthropic — el Cardputer no se carga.',
+    'Stored only on your device (SD), never logged. With Claude the key stays in <b>your browser</b> and talks directly to Anthropic — the device isn’t loaded.': 'Se guarda solo en tu dispositivo (SD), nunca en registros. Con Claude la clave permanece en <b>tu navegador</b> y habla directamente con Anthropic — el dispositivo no se carga.',
     'Skip AI setup? You can do it later in Settings ▸ AI.': '¿Omitir la configuración de la IA? Puedes hacerlo luego en Ajustes ▸ IA.',
     'Set up later': 'Más tarde',
     '← Back': '← Atrás',
@@ -80,19 +90,19 @@ const L10N = {
     'Choose your language': 'Choisissez votre langue',
     'You can change it anytime in Settings ▸ Appearance': 'Vous pouvez la changer à tout moment dans Réglages ▸ Apparence',
     'Welcome to NucleoOS': 'Bienvenue dans NucleoOS',
-    'A web-native OS that lives on your Cardputer': 'Un OS web-natif qui vit sur votre Cardputer',
-    'NucleoOS turns your M5Stack Cardputer into a tiny computer you drive from this browser. At its heart is <b>ANIMA</b> — an assistant whose brain runs <b>offline, on the device itself</b>.': 'NucleoOS transforme votre M5Stack Cardputer en un petit ordinateur que vous pilotez depuis ce navigateur. En son cœur se trouve <b>ANIMA</b> — un assistant dont le cerveau fonctionne <b>hors ligne, sur l’appareil lui-même</b>.',
+    'A web-native OS that lives on your device': 'Un OS web-natif qui vit sur votre appareil',
+    'NucleoOS turns your device into a tiny computer you drive from this browser. At its heart is <b>ANIMA</b> — an assistant whose brain runs <b>offline, on the device itself</b>.': 'NucleoOS transforme votre appareil en un petit ordinateur que vous pilotez depuis ce navigateur. En son cœur se trouve <b>ANIMA</b> — un assistant dont le cerveau fonctionne <b>hors ligne, sur l’appareil lui-même</b>.',
     'Offline brain': 'Cerveau hors ligne',
     'Answers, reasoning and memory — no cloud needed.': 'Réponses, raisonnement et mémoire — sans cloud.',
     'Optional cloud': 'Cloud optionnel',
     'Add a Claude key for deeper understanding & verification.': 'Ajoutez une clé Claude pour une compréhension et une vérification accrues.',
     'Your keys, your device': 'Vos clés, votre appareil',
     'Keys stay on the SD; cloud calls go straight from your browser.': 'Les clés restent sur la SD ; les appels cloud partent directement de votre navigateur.',
-    'Light on the Cardputer': 'Léger pour le Cardputer',
+    'Light on the device': 'Léger pour l’appareil',
     'The heavy AI work runs in your browser, not the chip.': 'Le gros du travail de l’IA s’exécute dans votre navigateur, pas sur la puce.',
     '✨ Two minutes now and ANIMA is ready everywhere in the OS.': '✨ Deux minutes maintenant et ANIMA est prête partout dans l’OS.',
-    'NucleoOS is served by the Cardputer over your network — no app store. <b>Install it</b> to get a full-screen app icon and instant launch.': 'NucleoOS est servi par le Cardputer sur votre réseau — sans magasin d’applications. <b>Installez-le</b> pour obtenir une icône plein écran et un lancement instantané.',
-    'Keep this Cardputer on the same Wi-Fi as this device.': 'Gardez ce Cardputer sur le même Wi-Fi que cet appareil.',
+    'NucleoOS is served by the device over your network — no app store. <b>Install it</b> to get a full-screen app icon and instant launch.': 'NucleoOS est servi par l’appareil sur votre réseau — sans magasin d’applications. <b>Installez-le</b> pour obtenir une icône plein écran et un lancement instantané.',
+    'Keep the device on the same Wi-Fi as this computer or phone.': 'Gardez l’appareil sur le même Wi-Fi que cet ordinateur ou ce téléphone.',
     'Desktop (Chrome/Edge): click the ⊕ / install icon in the address bar.': 'Ordinateur (Chrome/Edge) : cliquez sur l’icône ⊕ / installer dans la barre d’adresse.',
     'iPhone/iPad (Safari): Share → “Add to Home Screen”.': 'iPhone/iPad (Safari) : Partager → “Sur l’écran d’accueil”.',
     'Android (Chrome): menu ⋮ → “Install app”.': 'Android (Chrome) : menu ⋮ → “Installer l’application”.',
@@ -103,7 +113,7 @@ const L10N = {
     'RECOMMENDED': 'RECOMMANDÉ',
     'Choose your AI': 'Choisissez votre IA',
     'You can change this anytime in Settings ▸ AI': 'Vous pouvez le changer à tout moment dans Réglages ▸ IA',
-    'Best understanding. Runs in your browser — zero load on the Cardputer.': 'La meilleure compréhension. S’exécute dans votre navigateur — aucune charge sur le Cardputer.',
+    'Best understanding. Runs in your browser — zero load on the device.': 'La meilleure compréhension. S’exécute dans votre navigateur — aucune charge sur l’appareil.',
     'Fast & free tier. OpenAI-compatible (Llama models).': 'Rapide et avec offre gratuite. Compatible OpenAI (modèles Llama).',
     'Strong, generous free tier. Routed via the device proxy (no browser CORS).': 'Puissant, offre gratuite généreuse. Acheminé via le proxy de l’appareil (sans CORS navigateur).',
     'Offline only': 'Hors ligne uniquement',
@@ -126,12 +136,12 @@ const L10N = {
     'Open API Keys → Create Key.': 'Ouvrez API Keys → Create Key.',
     'Copy the key (starts with sk-ant-) and paste it below.': 'Copiez la clé (commence par sk-ant-) et collez-la ci-dessous.',
     'Create an API key (starts with AIza) and paste it below.': 'Créez une clé API (commence par AIza) et collez-la ci-dessous.',
-    'The Cardputer relays the call (Google has no browser access).': 'Le Cardputer relaie l’appel (Google n’a pas d’accès navigateur).',
+    'The device relays the call (Google has no browser access).': 'L’appareil relaie l’appel (Google n’a pas d’accès navigateur).',
     'Create an API key (starts with gsk_) and paste it below.': 'Créez une clé API (commence par gsk_) et collez-la ci-dessous.',
     'Connect ': 'Connecter ',
     'Your key stays on the device': 'Votre clé reste sur l’appareil',
     'Model': 'Modèle',
-    'Stored only on your device (SD), never logged. With Claude the key stays in <b>your browser</b> and talks directly to Anthropic — the Cardputer isn’t loaded.': 'Stockée uniquement sur votre appareil (SD), jamais journalisée. Avec Claude, la clé reste dans <b>votre navigateur</b> et communique directement avec Anthropic — le Cardputer n’est pas sollicité.',
+    'Stored only on your device (SD), never logged. With Claude the key stays in <b>your browser</b> and talks directly to Anthropic — the device isn’t loaded.': 'Stockée uniquement sur votre appareil (SD), jamais journalisée. Avec Claude, la clé reste dans <b>votre navigateur</b> et communique directement avec Anthropic — l’appareil n’est pas sollicité.',
     'Skip AI setup? You can do it later in Settings ▸ AI.': 'Passer la configuration de l’IA ? Vous pourrez le faire plus tard dans Réglages ▸ IA.',
     'Set up later': 'Plus tard',
     '← Back': '← Retour',
@@ -142,19 +152,19 @@ const L10N = {
     'Choose your language': 'Wähle deine Sprache',
     'You can change it anytime in Settings ▸ Appearance': 'Du kannst sie jederzeit unter Einstellungen ▸ Erscheinungsbild ändern',
     'Welcome to NucleoOS': 'Willkommen bei NucleoOS',
-    'A web-native OS that lives on your Cardputer': 'Ein web-natives OS, das auf deinem Cardputer lebt',
-    'NucleoOS turns your M5Stack Cardputer into a tiny computer you drive from this browser. At its heart is <b>ANIMA</b> — an assistant whose brain runs <b>offline, on the device itself</b>.': 'NucleoOS verwandelt deinen M5Stack Cardputer in einen winzigen Computer, den du von diesem Browser aus steuerst. Im Kern steckt <b>ANIMA</b> — ein Assistent, dessen Gehirn <b>offline, auf dem Gerät selbst</b> läuft.',
+    'A web-native OS that lives on your device': 'Ein web-natives OS, das auf deinem Gerät lebt',
+    'NucleoOS turns your device into a tiny computer you drive from this browser. At its heart is <b>ANIMA</b> — an assistant whose brain runs <b>offline, on the device itself</b>.': 'NucleoOS verwandelt dein Gerät in einen winzigen Computer, den du von diesem Browser aus steuerst. Im Kern steckt <b>ANIMA</b> — ein Assistent, dessen Gehirn <b>offline, auf dem Gerät selbst</b> läuft.',
     'Offline brain': 'Offline-Gehirn',
     'Answers, reasoning and memory — no cloud needed.': 'Antworten, Schlussfolgern und Gedächtnis — ohne Cloud.',
     'Optional cloud': 'Optionale Cloud',
     'Add a Claude key for deeper understanding & verification.': 'Füge einen Claude-Schlüssel für tieferes Verständnis und Verifizierung hinzu.',
     'Your keys, your device': 'Deine Schlüssel, dein Gerät',
     'Keys stay on the SD; cloud calls go straight from your browser.': 'Die Schlüssel bleiben auf der SD; Cloud-Aufrufe gehen direkt von deinem Browser aus.',
-    'Light on the Cardputer': 'Schonend für den Cardputer',
+    'Light on the device': 'Schonend für das Gerät',
     'The heavy AI work runs in your browser, not the chip.': 'Die schwere KI-Arbeit läuft in deinem Browser, nicht auf dem Chip.',
     '✨ Two minutes now and ANIMA is ready everywhere in the OS.': '✨ Zwei Minuten jetzt und ANIMA ist überall im OS bereit.',
-    'NucleoOS is served by the Cardputer over your network — no app store. <b>Install it</b> to get a full-screen app icon and instant launch.': 'NucleoOS wird vom Cardputer über dein Netzwerk bereitgestellt — kein App-Store. <b>Installiere es</b>, um ein Vollbild-App-Icon und sofortigen Start zu erhalten.',
-    'Keep this Cardputer on the same Wi-Fi as this device.': 'Halte diesen Cardputer im selben WLAN wie dieses Gerät.',
+    'NucleoOS is served by the device over your network — no app store. <b>Install it</b> to get a full-screen app icon and instant launch.': 'NucleoOS wird vom Gerät über dein Netzwerk bereitgestellt — kein App-Store. <b>Installiere es</b>, um ein Vollbild-App-Icon und sofortigen Start zu erhalten.',
+    'Keep the device on the same Wi-Fi as this computer or phone.': 'Halte das Gerät im selben WLAN wie diesen Computer oder dieses Telefon.',
     'Desktop (Chrome/Edge): click the ⊕ / install icon in the address bar.': 'Desktop (Chrome/Edge): Klicke auf das ⊕ / Installieren-Symbol in der Adressleiste.',
     'iPhone/iPad (Safari): Share → “Add to Home Screen”.': 'iPhone/iPad (Safari): Teilen → “Zum Home-Bildschirm”.',
     'Android (Chrome): menu ⋮ → “Install app”.': 'Android (Chrome): Menü ⋮ → “App installieren”.',
@@ -165,7 +175,7 @@ const L10N = {
     'RECOMMENDED': 'EMPFOHLEN',
     'Choose your AI': 'Wähle deine KI',
     'You can change this anytime in Settings ▸ AI': 'Du kannst dies jederzeit unter Einstellungen ▸ KI ändern',
-    'Best understanding. Runs in your browser — zero load on the Cardputer.': 'Bestes Verständnis. Läuft in deinem Browser — keine Last für den Cardputer.',
+    'Best understanding. Runs in your browser — zero load on the device.': 'Bestes Verständnis. Läuft in deinem Browser — keine Last für das Gerät.',
     'Fast & free tier. OpenAI-compatible (Llama models).': 'Schnell und mit Gratis-Kontingent. OpenAI-kompatibel (Llama-Modelle).',
     'Strong, generous free tier. Routed via the device proxy (no browser CORS).': 'Stark, großzügiges Gratis-Kontingent. Über den Geräte-Proxy geleitet (kein Browser-CORS).',
     'Offline only': 'Nur offline',
@@ -188,12 +198,12 @@ const L10N = {
     'Open API Keys → Create Key.': 'Öffne API Keys → Create Key.',
     'Copy the key (starts with sk-ant-) and paste it below.': 'Kopiere den Schlüssel (beginnt mit sk-ant-) und füge ihn unten ein.',
     'Create an API key (starts with AIza) and paste it below.': 'Erstelle einen API-Schlüssel (beginnt mit AIza) und füge ihn unten ein.',
-    'The Cardputer relays the call (Google has no browser access).': 'Der Cardputer leitet den Aufruf weiter (Google hat keinen Browser-Zugriff).',
+    'The device relays the call (Google has no browser access).': 'Das Gerät leitet den Aufruf weiter (Google hat keinen Browser-Zugriff).',
     'Create an API key (starts with gsk_) and paste it below.': 'Erstelle einen API-Schlüssel (beginnt mit gsk_) und füge ihn unten ein.',
     'Connect ': 'Verbinde ',
     'Your key stays on the device': 'Dein Schlüssel bleibt auf dem Gerät',
     'Model': 'Modell',
-    'Stored only on your device (SD), never logged. With Claude the key stays in <b>your browser</b> and talks directly to Anthropic — the Cardputer isn’t loaded.': 'Nur auf deinem Gerät (SD) gespeichert, nie protokolliert. Mit Claude bleibt der Schlüssel in <b>deinem Browser</b> und spricht direkt mit Anthropic — der Cardputer wird nicht belastet.',
+    'Stored only on your device (SD), never logged. With Claude the key stays in <b>your browser</b> and talks directly to Anthropic — the device isn’t loaded.': 'Nur auf deinem Gerät (SD) gespeichert, nie protokolliert. Mit Claude bleibt der Schlüssel in <b>deinem Browser</b> und spricht direkt mit Anthropic — das Gerät wird nicht belastet.',
     'Skip AI setup? You can do it later in Settings ▸ AI.': 'KI-Einrichtung überspringen? Du kannst sie später unter Einstellungen ▸ KI vornehmen.',
     'Set up later': 'Später',
     '← Back': '← Zurück',
@@ -219,6 +229,13 @@ function h(tag, props, ...kids) {
 export async function ensureOnboarding() {
   try {
     if (localStorage.getItem(ONB_KEY) === '1') return;
+    // A device that has its own first-run (the Handheld's setup, the browser edition's Configurazione) says
+    // so here: its answer wins, or this wizard would ask again — and ask for an AI key in the browser where
+    // that edition keeps keys on its server. Where the route does not exist (the Cardputer: 404) nothing changes.
+    try {
+      const r = await fetch('/api/onboard', { cache: 'no-store' });
+      if (r.ok && (await r.json()).onboarded === true) { localStorage.setItem(ONB_KEY, '1'); return; }
+    } catch {}
     const c = await AI.caps();
     if (c && c.hasKey) { localStorage.setItem(ONB_KEY, '1'); return; }   // already set up (e.g. another browser)
   } catch {}
@@ -263,8 +280,10 @@ function runWizard() {
         || [{ code: 'it', label: 'Italiano', flag: '🇮🇹' }, { code: 'en', label: 'English', flag: '🇬🇧' },
             { code: 'es', label: 'Español', flag: '🇪🇸' }, { code: 'fr', label: 'Français', flag: '🇫🇷' }, { code: 'de', label: 'Deutsch', flag: '🇩🇪' }];
       const cur = lang();
-      const pick = (code) => {
-        if (window.NucleoI18N) window.NucleoI18N.setLang(code);
+      // Re-render AFTER the switch: setLang loads the catalogs asynchronously, and an immediate
+      // render still read the previous language.
+      const pick = async (code) => {
+        if (window.NucleoI18N) { try { await window.NucleoI18N.setLang(code); } catch {} }
         else { try { localStorage.setItem('anima.lang', code); } catch {} }
         render();
       };
@@ -283,16 +302,16 @@ function runWizard() {
     function renderWelcome() {
       card.append(
         header(TR('Benvenuto in NucleoOS', 'Welcome to NucleoOS'),
-               TR('Un OS web-native che vive sul tuo Cardputer', 'A web-native OS that lives on your Cardputer')),
+               TR('Un OS web-native che vive sul tuo dispositivo', 'A web-native OS that lives on your device')),
         h('div', { class: 'nob-body' },
           h('p', { html: TR(
-            'NucleoOS trasforma il tuo M5Stack Cardputer in un piccolo computer che guidi da questo browser. Al centro c’è <b>ANIMA</b> — un assistente il cui cervello gira <b>offline, sul dispositivo stesso</b>.',
-            'NucleoOS turns your M5Stack Cardputer into a tiny computer you drive from this browser. At its heart is <b>ANIMA</b> — an assistant whose brain runs <b>offline, on the device itself</b>.') }),
+            'NucleoOS trasforma il tuo dispositivo in un piccolo computer che guidi da questo browser. Al centro c’è <b>ANIMA</b> — un assistente il cui cervello gira <b>offline, sul dispositivo stesso</b>.',
+            'NucleoOS turns your device into a tiny computer you drive from this browser. At its heart is <b>ANIMA</b> — an assistant whose brain runs <b>offline, on the device itself</b>.') }),
           h('div', { class: 'nob-feat' },
             feat('🧠', TR('Cervello offline', 'Offline brain'), TR('Risposte, ragionamento e memoria — senza cloud.', 'Answers, reasoning and memory — no cloud needed.')),
             feat('☁', TR('Cloud opzionale', 'Optional cloud'), TR('Aggiungi una chiave Claude per comprensione e verifica migliori.', 'Add a Claude key for deeper understanding & verification.')),
             feat('🔒', TR('Le tue chiavi, il tuo device', 'Your keys, your device'), TR('Le chiavi restano sulla SD; le chiamate cloud partono dal tuo browser.', 'Keys stay on the SD; cloud calls go straight from your browser.')),
-            feat('⚡', TR('Leggero sul Cardputer', 'Light on the Cardputer'), TR('Il lavoro pesante dell’IA gira nel browser, non sul chip.', 'The heavy AI work runs in your browser, not the chip.'))),
+            feat('⚡', TR('Leggero sul dispositivo', 'Light on the device'), TR('Il lavoro pesante dell’IA gira nel browser, non sul chip.', 'The heavy AI work runs in your browser, not the chip.'))),
           h('p', { class: 'nob-note', html: TR('✨ Due minuti adesso e ANIMA è pronta ovunque nell’OS.', '✨ Two minutes now and ANIMA is ready everywhere in the OS.') })),
         footer({ next: true, skip: true }));
     }
@@ -301,21 +320,27 @@ function runWizard() {
     }
 
     // ---- step 1: install NucleoOS -------------------------------------------
+    // PWA install exists ONLY in a secure context: on plain http://<ip> the
+    // browser never fires beforeinstallprompt and the ⊕ icon never appears, so
+    // the Install button is offered only in a secure context. (Pointing an http
+    // user at https://<device>:8443 works only where the server has a TLS port —
+    // the Handheld edition — so it is not wired here until that is a capability.)
     function renderInstall() {
       const prompt = window.__nucleoInstallPrompt;
+      const secure = !!window.isSecureContext;   // beforeinstallprompt only fires in a secure context
       const body = h('div', { class: 'nob-body' },
         h('p', { html: TR(
-          'NucleoOS è servito dal Cardputer sulla tua rete — niente app store. <b>Installalo</b> per avere un’icona a tutto schermo e avvio immediato.',
-          'NucleoOS is served by the Cardputer over your network — no app store. <b>Install it</b> to get a full-screen app icon and instant launch.') }),
+          'NucleoOS è servito dal dispositivo sulla tua rete — niente app store. <b>Installalo</b> per avere un’icona a tutto schermo e avvio immediato.',
+          'NucleoOS is served by the device over your network — no app store. <b>Install it</b> to get a full-screen app icon and instant launch.') }),
         h('ol', { class: 'nob-steps' },
-          li(TR('Tieni il Cardputer sulla stessa Wi-Fi di questo dispositivo.', 'Keep this Cardputer on the same Wi-Fi as this device.')),
+          li(TR('Tieni il dispositivo sulla stessa Wi-Fi di questo computer o telefono.', 'Keep the device on the same Wi-Fi as this computer or phone.')),
           li(TR('Desktop (Chrome/Edge): clicca l’icona ⊕ / installa nella barra indirizzi.', 'Desktop (Chrome/Edge): click the ⊕ / install icon in the address bar.')),
           li(TR('iPhone/iPad (Safari): Condividi → “Aggiungi a Home”.', 'iPhone/iPad (Safari): Share → “Add to Home Screen”.')),
           li(TR('Android (Chrome): menu ⋮ → “Installa app”.', 'Android (Chrome): menu ⋮ → “Install app”.'))),
         h('p', { class: 'nob-note', html: TR('💡 Suggerimento: salva l’IP del dispositivo per tornare sempre a NucleoOS.', '💡 Tip: bookmark the device IP so you can always get back to NucleoOS.') }));
       card.append(header(TR('Installa NucleoOS', 'Install NucleoOS'), TR('Aggiungilo come un’app nativa', 'Add it like a native app')), body);
       const extra = [];
-      if (prompt) extra.push(h('button', { class: 'nob-btn', on: { click: async () => { try { prompt.prompt(); await prompt.userChoice; } catch {} window.__nucleoInstallPrompt = null; } } }, TR('⤓ Installa app', '⤓ Install app')));
+      if (secure && prompt) extra.push(h('button', { class: 'nob-btn', on: { click: async () => { try { prompt.prompt(); await prompt.userChoice; } catch {} window.__nucleoInstallPrompt = null; } } }, TR('⤓ Installa app', '⤓ Install app')));
       card.append(footer({ back: true, next: true, skip: true, extra }));
     }
     function li(...kids) { return h('li', null, ...kids); }
@@ -329,7 +354,7 @@ function runWizard() {
       card.append(
         header(TR('Scegli la tua IA', 'Choose your AI'), TR('Puoi cambiarlo quando vuoi in Impostazioni ▸ IA', 'You can change this anytime in Settings ▸ AI')),
         h('div', { class: 'nob-body' }, h('div', { class: 'nob-choices' },
-          mk('anthropic', '🟣', 'Claude (Anthropic)', TR('Comprensione al top. Gira nel browser — zero carico sul Cardputer.', 'Best understanding. Runs in your browser — zero load on the Cardputer.'), true),
+          mk('anthropic', '🟣', 'Claude (Anthropic)', TR('Comprensione al top. Gira nel browser — zero carico sul dispositivo.', 'Best understanding. Runs in your browser — zero load on the device.'), true),
           mk('openai', '⚡', 'Groq', TR('Veloce e con piano gratuito. OpenAI-compatibile (modelli Llama).', 'Fast & free tier. OpenAI-compatible (Llama models).'), false),
           mk('google', '✨', 'Gemini (Google)', TR('Forte, free tier generoso. Instradato dal proxy del device (niente CORS browser).', 'Strong, generous free tier. Routed via the device proxy (no browser CORS).'), false),
           mk('offline', '🧠', TR('Solo offline', 'Offline only'), TR('Nessuna chiave. ANIMA risponde comunque dal cervello on-device, meteo e Wikipedia.', 'No key. ANIMA still answers from its on-device brain, weather & Wikipedia.'), false))),
@@ -362,7 +387,11 @@ function runWizard() {
         if (!k) { setStat(TR('Incolla la tua chiave.', 'Paste your key.'), 'err'); return; }
         if (!p.prefix.test(k) && !confirm(TR('Non sembra una chiave ', 'That doesn’t look like a ') + p.label + TR('. Salvo lo stesso?', ' key. Save anyway?'))) return;
         setStat(TR('salvo…', 'saving…')); saveBtn.disabled = true;
-        const res = await AI.writeTeacher(cfg());
+        // On top of what the device already holds: the other providers' keys, the speech and vision
+        // settings stay (a saved key comes back as a placeholder and is kept on the device).
+        const held = await AI.readTeacher({ fresh: true }).catch(() => null);
+        const full = () => Object.assign({}, (held && !held.unpaired) ? held : {}, cfg());
+        const res = await AI.writeTeacher(full());
         saveBtn.disabled = false;
         if (res === true && state.provider === 'google') {
           // Detect the Gemini plan (real models + paid/free tier) and re-save with the recommended model + tier.
@@ -370,7 +399,7 @@ function runWizard() {
           setStat(TR('rilevo il piano…', 'detecting plan…'));
           try {
             const c = await AI.calibrateGemini({ base: p.base, key: k });
-            const d = cfg(); if (!c.models.includes(d.model)) d.model = c.recommended; d.geminiTier = c.tier;
+            const d = full(); if (!c.models.includes(d.model)) d.model = c.recommended; d.geminiTier = c.tier;
             await AI.writeTeacher(d);
             setStat('✓ ' + AI.geminiTierLabel(c.tier, lang()), 'ok');
           } catch { setStat(TR('✓ Salvata — ANIMA è pronta.', '✓ Saved — ANIMA is ready.'), 'ok'); }
@@ -388,7 +417,7 @@ function runWizard() {
         : state.provider === 'google'
         ? [li(TR('Vai su ', 'Go to '), h('a', { href: 'https://aistudio.google.com/apikey', target: '_blank', rel: 'noopener' }, 'aistudio.google.com/apikey')),
            li(TR('Crea una API key (inizia con AIza) e incollala qui sotto.', 'Create an API key (starts with AIza) and paste it below.')),
-           li(TR('Il Cardputer inoltra la chiamata (Google non è accessibile dal browser).', 'The Cardputer relays the call (Google has no browser access).'))]
+           li(TR('Il dispositivo inoltra la chiamata (Google non è accessibile dal browser).', 'The device relays the call (Google has no browser access).'))]
         : [li(TR('Vai su ', 'Go to '), h('a', { href: 'https://console.groq.com/keys', target: '_blank', rel: 'noopener' }, 'console.groq.com')),
            li(TR('Crea una API key (inizia con gsk_) e incollala qui sotto.', 'Create an API key (starts with gsk_) and paste it below.'))];
 
@@ -403,8 +432,8 @@ function runWizard() {
             h('label', null, 'API key'), input,
             h('div', { class: 'nob-row' }, testBtn), stat),
           h('div', { class: 'nob-note', html: '🔒 ' + TR(
-            'Salvata solo sul tuo dispositivo (SD), mai nei log. Con Claude la chiave resta nel <b>tuo browser</b> e parla direttamente con Anthropic — il Cardputer non viene caricato.',
-            'Stored only on your device (SD), never logged. With Claude the key stays in <b>your browser</b> and talks directly to Anthropic — the Cardputer isn’t loaded.') })),
+            'Salvata solo sul tuo dispositivo (SD), mai nei log. Con Claude la chiave resta nel <b>tuo browser</b> e parla direttamente con Anthropic — il dispositivo non viene caricato.',
+            'Stored only on your device (SD), never logged. With Claude the key stays in <b>your browser</b> and talks directly to Anthropic — the device isn’t loaded.') })),
         footer({ back: true, saveSlot: saveBtn }));
     }
 

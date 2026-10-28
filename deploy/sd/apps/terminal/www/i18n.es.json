@@ -18,5 +18,18 @@
   "man_which": "¿Qué página de manual quieres?",
   "man_description": "Descripción:",
   "man_details": "Detalles:",
-  "man_none": "No hay entrada de manual para {cmd}"
+  "man_none": "No hay entrada de manual para {cmd}",
+  "subtitle_shell": "shell del dispositivo · {shell}",
+  "reconnect": "Reconectar",
+  "retry": "Reintentar",
+  "st_connecting": "conectando…",
+  "st_connected": "conectado",
+  "st_closed": "sesión cerrada",
+  "st_error": "error: {msg}",
+  "st_unpaired": "sin emparejar",
+  "gate_pair_title": "Navegador sin emparejar",
+  "gate_pair_body": "El terminal abre una shell real en el dispositivo: primero hay que emparejar este navegador una vez. La consola dice el PIN en voz alta.",
+  "gate_pair_btn": "Emparejar",
+  "gate_off_title": "Terminal no disponible",
+  "gate_off_body": "El dispositivo no respondió ({msg})."
 }

@@ -1,0 +1,50 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
+/* Same look as system.html (the Handheld's package page), plus tabs and the store's own bits. */
+  :root{ --bg:#0b0e16; --panel:#10131c; --panel2:#161b27; --line:#232d44; --ink:#e7ecf6; --dim:#8ea0c0;
+    --accent:#6aa8ff; --accent2:#9b7bff; --ok:#6aee9f; --warn:#ffcf6a; --err:#ff8a8a;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"DejaVu Sans Mono",monospace; }
+  html[data-theme="light"]{ --bg:#eef2fb; --panel:#fff; --panel2:#f3f6fd; --line:#cdd8ee; --ink:#10203a; --dim:#5a6a86;
+    --accent:#1f5bc4; --accent2:#5b3fc9; --ok:#14703f; --warn:#7a5200; --err:#b3261e; }
+  html[data-theme="light"] button.pri{color:#fff}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:1rem/1.45 system-ui,Segoe UI,Roboto,sans-serif}
+  html{font-size:14px}
+  body{display:flex;flex-direction:column;overflow:hidden}
+  header{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--line);background:var(--panel);flex:none;flex-wrap:wrap}
+  .logo{width:28px;height:28px;flex:none}
+  .ttl{font-weight:650}.ttl small{display:block;font-weight:400;font-size:.79rem;color:var(--dim);overflow-wrap:anywhere}
+  .grow{flex:1;min-width:0}
+  input[type=search]{background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:6px 10px;font:inherit;min-width:0;width:220px;max-width:100%}
+  button{border:1px solid var(--line);background:var(--panel2);color:var(--ink);border-radius:8px;padding:6px 12px;font:inherit;font-size:.93rem;cursor:pointer;white-space:nowrap}
+  button:hover{filter:brightness(1.15)}
+  button.pri{background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;color:#08101f;font-weight:600}
+  button.danger{border-color:#5a2b2b;color:var(--err)}
+  button:disabled{opacity:.45;cursor:default}
+  .bar{display:flex;gap:6px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line);flex:none;flex-wrap:wrap}
+  .seg{display:flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+  .seg button{border:none;border-radius:0;background:transparent}
+  .seg button.on{background:var(--panel2);color:var(--accent);font-weight:600}
+  .info{font-size:.86rem;color:var(--dim);overflow-wrap:anywhere}
+  .info.err{color:var(--err)}.info.ok{color:var(--ok)}.info.warn{color:var(--warn)}
+  main{flex:1;overflow:auto;padding:12px;display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px;align-content:start}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:6px;min-width:0}
+  .card .hd{display:flex;gap:10px;align-items:center;min-width:0}
+  .card img{width:40px;height:40px;border-radius:10px;flex:none;background:var(--panel2);object-fit:cover}
+  .card .nm{font-weight:650;overflow-wrap:anywhere}
+  .card .ds{font-size:.9rem;color:var(--dim);overflow-wrap:anywhere}
+  .card .mt{font:.79rem var(--mono);color:var(--dim);overflow-wrap:anywhere}
+  .card .act{display:flex;gap:6px;flex-wrap:wrap;margin-top:auto;padding-top:4px}
+  .kind{font:.75rem var(--mono);padding:1px 7px;border-radius:20px;border:1px solid var(--line);color:var(--accent2);white-space:nowrap}
+  .inst{color:var(--ok);font-size:.82rem}
+  .empty{grid-column:1/-1;color:var(--dim);text-align:center;padding:30px 10px;overflow-wrap:anywhere}
+  .empty code{font:.85rem var(--mono);background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:1px 6px}
+  .tabs{display:flex;gap:4px;padding:6px 12px 0;border-bottom:1px solid var(--line);flex:none;overflow-x:auto}
+  .tabs button{border:none;border-bottom:2px solid transparent;border-radius:0;background:transparent;color:var(--dim);padding:7px 12px}
+  .tabs button.on{color:var(--ink);border-bottom-color:var(--accent);font-weight:600}
+  .chip{font:.72rem var(--mono);padding:1px 7px;border-radius:20px;border:1px solid var(--line);color:var(--dim);white-space:nowrap}
+  .card canvas{width:40px;height:40px;border-radius:10px;flex:none;background:var(--panel2);image-rendering:pixelated}
+  .card .ph{width:40px;height:40px;border-radius:10px;flex:none;background:var(--panel2);display:grid;place-items:center;font-weight:700;color:var(--accent)}
+  .chips{display:flex;gap:4px;flex-wrap:wrap}
+  .where{font-size:.82rem;color:var(--warn)}
+  .prog{font-size:.82rem;color:var(--accent)}
+  #system{flex:1;border:0;width:100%;background:var(--bg)}

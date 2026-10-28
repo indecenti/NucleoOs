@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // sheet-learn.js — the OFFLINE RECIPE FLYWHEEL: the genuinely-new offline trick of this copilot.
 // When a generative substrate (browser GPU orchestrator / coder, or cloud Grok) produces a PLAN that
 // the deterministic engine VERIFIES (verdict 'pass') and the user APPLIES, we freeze the

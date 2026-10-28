@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // NucleoOS — Log Viewer diagnosis engine (pure, DOM-free, unit-tested by tools/log-viewer-diag.test.mjs).
 //
 // The device stays dumb and on-demand; THIS is where the intelligence lives. It takes the cheap
@@ -175,7 +176,7 @@ export function buildDigest({ diag, status, heap, cpu, logsText, events, nowSec 
   const L = [];
   const dt = has(nowSec) ? new Date(nowSec * 1000).toISOString().replace('T', ' ').slice(0, 19) : '?';
 
-  L.push('═══ NUCLEO-DIAG v1 ═══  (paste to AI → health diagnosis: Cardputer + ANIMA)');
+  L.push('═══ NUCLEO-DIAG v1 ═══  (paste to AI → health diagnosis: device + ANIMA)');
   L.push(`# ${dt}  src=${u.partial ? 'legacy(/api/status+heap+cpu — flash for full ANIMA/reset/OOM)' : '/api/diag'}`);
   L.push('# legend: KB=free/min/largest internal SRAM · frag=% non-contiguous · rssi dBm · ANIMA tier cmd/fact/stitch/remote, none=abstain · arb=heavy-work token');
   L.push(`FLAGS ${flags.length ? flags.join(' ') : 'ok (no alerts)'}`);
@@ -223,7 +224,7 @@ export function buildDigest({ diag, status, heap, cpu, logsText, events, nowSec 
     for (const e of errs) L.push('  ' + e);
   }
 
-  L.push('ASK   Diagnose Cardputer + ANIMA health from the above. Rank risks (RAM/frag/OOM/RSSI/abstain/crash),');
+  L.push('ASK   Diagnose device + ANIMA health from the above. Rank risks (RAM/frag/OOM/RSSI/abstain/crash),');
   L.push('      explain the likely root cause of each FLAG, and give targeted fixes. Be concise.');
   L.push('═══ end ═══');
   return L.join('\n');

@@ -1,14 +1,19 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // NucleoOS desktop shell controller. Loads apps + status from the device and
 // renders the desktop, taskbar and Start menu. Heavy lifting stays in the browser.
 import * as WM from './wm.js';
 import * as FsIndex from './fsindex.js';
 import { resolveShortcut, resolveEscape } from './shortcuts.js';
 import { createBusyController } from './busy.js';
+// All five OS languages — the fallback language gate when the i18n engine is not loaded yet
+// (with it, NucleoI18N.LANGS is the authority).
+const SHELL_LANGS = ['it', 'en', 'es', 'de', 'fr'];
 import { ensureOnboarding } from './onboarding.js';   // first-boot AI setup + install tutorial
 import I18N from './nucleo-i18n.js';                  // centralized OS-wide internationalization
 import { makeFetchJSON, makeLoadState } from './boot-fetch.js';   // resilient boot fetch + typed user-state load (shell-boot-fetch.test)
 import { rankApps, rankActions, looksLikeNL, clipAnswer } from './search-rank.js';   // pure search ranking (host-tested)
-import { createBroker, sanitizeApp } from './appbroker.js';        // capability broker for sandboxed (agent-written) apps
+import { createBroker, sanitizeApp, brokerEvent, themeInfo } from './appbroker.js';
+import Caps from './nucleo-caps.js';                               // what this device can do (contract/api.yaml)        // capability broker for sandboxed (agent-written) apps
 import { initSystemUI } from './system-ui.js';        // night light, lock screen, shortcuts sheet, widgets
 
 // Shell-namespaced translator: t(key, vars) → active-language string, falling back to core then key.
@@ -54,6 +59,18 @@ I18N.setSenderGuard((e) => trustedSender(e));   // set-language obeys the same t
 // A window opened while its app's provenance is still undecided: if the reads are waiting out a backoff
 // (they failed), try again now rather than leave the user on a placeholder for up to a minute.
 WM.setOnTrustHold(() => { if (trustRetryTimer) retryTrustNow(); });
+// A store app whose frame loads its files from the network (/api/apps gives `verify`: the cloud's store
+// proxy) opens only if those files are still the package signed at install, which the device keeps as
+// <paths.apps>/<id>/.package.sig. Checked before every load; the checker is fetched only when needed.
+WM.setVerifier(async (app) => {
+  const dir = ((await Caps.info()).paths || {}).apps;
+  if (!dir) return 'failed';
+  const r = await fetch('/api/fs/read?path=' + encodeURIComponent(dir + '/' + app.id + '/.package.sig'), { cache: 'no-store' });
+  if (!r.ok) return 'failed';
+  const { verifyServed } = await import('./store-client.js');
+  try { await verifyServed({ sigText: await r.text(), base: app.verify }); return true; }
+  catch (e) { return e && e.code === 'network' ? 'offline' : 'failed'; }
+});
 
 // The OS-wide AI copilot is loaded lazily in initOS(); held here so OS-level handlers
 // (Escape, the unified search row) can talk to it. null until copilot.js initialises.
@@ -107,7 +124,7 @@ const glyph = (a) => {
 // One-fetch icon bundle — the cure for the cold-paint icon trickle. ~32 per-icon GETs against the
 // single-task, 4-socket, PSRAM-less httpd each pay RTT + SD fopen + chunked stream, and the pool
 // below rightly caps them at 3 concurrent to protect the server — so a cold desktop took many
-// seconds to fill in. tools/gen-icon-bundle.mjs packs every repo app icon into /icons.json
+// seconds to fill in. tools/build.py packs the icons of every app it ships into /icons.json
 // (~4 KB gz): ONE request replaces the burst, and localStorage keeps the previous bundle so repeat
 // boots paint every icon instantly with ZERO network (stale-while-revalidate: the fresh bundle is
 // fetched in the background and wins from the next hydration on). Apps missing from the bundle
@@ -223,7 +240,12 @@ const UI_STATE_PATH = '/system/config/ui-state.json';
 // always paints a proper desktop with ZERO device I/O (no black flash, no /api/fs round-trip). It can
 // be { type:'gradient', gradient } | { type:'color', color } | { type:'image', path, fit } — or a bare
 // path string (legacy), which normalizeWallpaper() lifts into an image descriptor.
-const DEFAULT_WALLPAPER = { type: 'gradient', gradient: 'linear-gradient(135deg, #0b1533 0%, #0f2350 50%, #16346a 100%)' };
+// { type:'console' } = LO STESSO sfondo della console (Core, SISTEMA > Tema > Sfondo;
+// server.py /api/wallpaper). Il gradiente resta sotto, per offline e WASM.
+// PLATFORM-SPECIFIC: on the Handheld { type:'console' } is the default (console and browser are the
+// same system); the shared default stays the gradient until that becomes an edition overlay.
+const GRADIENT_WALLPAPER = { type: 'gradient', gradient: 'linear-gradient(135deg, #0b1533 0%, #0f2350 50%, #16346a 100%)' };
+const DEFAULT_WALLPAPER = GRADIENT_WALLPAPER;
 const UI_DEFAULTS = { pins: [], wallpaper: DEFAULT_WALLPAPER, desktop: null, startPins: null, recent: [], recoCollapsed: false, iconSize: 'md', autoArrange: false };
 const RECENT_CAP = 12;
 
@@ -241,6 +263,7 @@ const state = { apps: [], pins: [...UI_DEFAULTS.pins], wallpaper: UI_DEFAULTS.wa
       jpg: 'paint', jpeg: 'paint', png: 'paint', bmp: 'paint', gif: 'photo-viewer',
       wav: 'media-player', mp3: 'media-player',
       mp4: 'video-player', webm: 'video-player', mov: 'video-player', mkv: 'video-player',
+      m4v: 'video-player', ogv: 'video-player', avi: 'video-player', mpg: 'video-player', mpeg: 'video-player', m1v: 'video-player',
       todo: 'tasks', info: 'help'
     },
     fallback: 'file-commander'
@@ -432,7 +455,7 @@ function saveClipboard() {
     saveConfig(CLIP_PATH, JSON.stringify({ items: clip.items }));   // serialized + timed-out
   }, 400);
 }
-function clipboardWrite(kind, data) {
+function clipboardWrite(kind, data, fromDevice) {
   // Cap a single entry by size: text apps (Notepad/ANIMA) can copy an entire document, and the whole
   // history is rewritten to SD on every Ctrl+C — an unbounded entry made each copy a multi-KB write
   // (exclusive SW lock + a cascade of fs.changed). Truncate with a marker; clipping is display-only.
@@ -448,6 +471,44 @@ function clipboardWrite(kind, data) {
     if (total > CLIP_TOTAL_MAX && i > 0) { clip.items.length = i; break; }
   }
   saveClipboard();
+  if (!fromDevice) pushDeviceClip(kind, data);
+}
+
+// ---- one clipboard with the device (nv_clipboard via /api/clipboard) ----
+// A copy here goes to the device (paste it in a native app); a copy on the device (text, files, a
+// screenshot) comes here through a light poll of its change counter — only while this tab is visible.
+let devClipSeq = null;
+// Not every edition has a device clipboard: the first GET that answers 404/405/501 switches the sync
+// off for the session, so a device without /api/clipboard is never polled every 2 s for nothing.
+let devClipOff = false;
+function pushDeviceClip(kind, data) {
+  if (devClipOff) return;
+  if (kind !== 'text' && kind !== 'files') return;          // images live on the device already
+  const body = kind === 'text' ? { kind, data: String(data) } : { kind, paths: (data && data.paths) || [], op: (data && data.op) || 'copy' };
+  fetch('/api/clipboard', { method: 'POST', body: JSON.stringify(body) })
+    .then((r) => r.ok ? r.json() : null).then((j) => { if (j && j.seq != null) devClipSeq = j.seq; }).catch(() => {});
+}
+async function pullDeviceClip() {
+  if (devClipOff || document.hidden) return;
+  try {
+    const r = await fetch('/api/clipboard', { cache: 'no-store' });
+    if (r.status === 404 || r.status === 405 || r.status === 501) { devClipOff = true; return; }
+    if (!r.ok) return;
+    const j = await r.json();
+    if (j.seq === devClipSeq) return;
+    const first = devClipSeq === null;
+    devClipSeq = j.seq;
+    if (j.source === 'web' || j.kind === 'none') return;     // our own copy coming back, or empty
+    let item = null;
+    if (j.kind === 'text') item = ['text', j.text];
+    else if (j.kind === 'files') item = ['files', { op: j.op, paths: j.paths || [] }];
+    else if (j.kind === 'image') item = ['image', { url: `${j.url}?seq=${j.seq}`, path: j.path || '', w: j.w, h: j.h }];
+    if (!item) return;
+    // On load, take the device's clipboard only if it is not already our newest entry.
+    const latest = clipboardLatest();
+    if (first && latest && JSON.stringify({ kind: latest.kind, data: latest.data }) === JSON.stringify({ kind: item[0], data: item[1] })) return;
+    clipboardWrite(item[0], item[1], true);
+  } catch {}
 }
 const clipboardLatest = () => clip.items[0] || null;
 
@@ -621,9 +682,10 @@ function osKeydown(e) {
 function toggleClipHistory() {
   if (!document.getElementById('ctxmenu').classList.contains('hidden')) { hideCtx(); return; }
   if (!clip.items.length) { showCtx(window.innerWidth / 2, window.innerHeight / 2, [{ label: t('clipboard_empty'), disabled: true }]); return; }
-  const preview = (it) => it.kind === 'files' ? `${it.data.op || 'copy'}: ${(it.data.paths || []).length} item(s)` : String(it.data).slice(0, 40);
+  const preview = (it) => it.kind === 'files' ? `${it.data.op || 'copy'}: ${(it.data.paths || []).length} item(s)`
+    : it.kind === 'image' ? `${it.data.w || '?'}×${it.data.h || '?'}` : String(it.data).slice(0, 40);
   showCtx(window.innerWidth / 2 - 90, 80, clip.items.map((it) => ({
-    label: preview(it), glyph: it.kind === 'files' ? '🗂️' : '📋',
+    label: preview(it), glyph: it.kind === 'files' ? '🗂️' : it.kind === 'image' ? '🖼️' : '📋',
     fn: () => { clipboardWrite(it.kind, it.data); sendToActive('paste', { clip: clipboardLatest() }); },
   })));
 }
@@ -662,7 +724,13 @@ function wireFaults(win, where) {
 }
 
 function initOS() {
-  loadClipboard();
+  // The device clipboard exists only where the device says so (clipboard.device); the 404 switch-off in
+  // pullDeviceClip stays as the second line of defence.
+  Caps.has('clipboard.device').then((on) => { if (!on) devClipOff = true; }).catch(() => {});
+  loadClipboard().then(pullDeviceClip);
+  // Device clipboard sync (ESP32-P4 /api/clipboard). Self-disables where the endpoint is absent.
+  setInterval(pullDeviceClip, 2000);
+  window.addEventListener('focus', pullDeviceClip);
   wireFaults(window, 'NucleoOS');
   // The desktop is a fixed canvas. body{overflow:hidden} stops the USER scrolling it, but not the
   // browser: focusing or scrolling-into-view something below the fold (a window cascaded off-screen, an
@@ -742,7 +810,7 @@ let saveTimer = null, lastSaved = '';
 // then written over B).
 let uiSaveInFlight = 0;
 function saveUiState() {
-  const body = JSON.stringify({ pins: state.pins, wallpaper: state.wallpaper, desktop: state.desktop, startPins: state.startPins, recent: state.recent, recoCollapsed: state.recoCollapsed, iconSize: state.iconSize, autoArrange: state.autoArrange });
+  const body = JSON.stringify({ pins: state.pins, wallpaper: state.wallpaper, desktop: state.desktop, startPins: state.startPins, recent: state.recent, recoCollapsed: state.recoCollapsed, iconSize: state.iconSize, autoArrange: state.autoArrange, wpv: DEFAULT_WALLPAPER.type === 'console' ? 2 : undefined });   // wpv: versione del modello dello sfondo (vedi la migrazione al boot); only where that migration exists — undefined is dropped by JSON
   lastSaved = body;              // remember our own write so we can ignore its echo
   if (!saveTimer) uiSaveInFlight++;
   clearTimeout(saveTimer);
@@ -803,6 +871,10 @@ const fmtSize = (b) => (!b ? '—' : b >= 1e9 ? (b / 1e9).toFixed(1) + ' GB' : (
 
 const sleep = (ms) => new Promise((res) => setTimeout(res, ms));
 const _bootT0 = Date.now();
+// The OS language as this browser had it BEFORE any app window opened: the Settings app rewrites 'anima.lang'
+// when it opens, and the settings-language migration (migrations.js) needs what the user actually had.
+const bootLang = (() => { try { return localStorage.getItem('anima.lang') || ''; } catch { return ''; } })();
+let pairedOk = false;            // ensurePaired() really reached the device (paired, or pairing not required)
 function bootLog(...a) { try { console.info('[boot +' + (Date.now() - _bootT0) + 'ms]', ...a); } catch {} }
 
 // Resilient boot/data fetch — policy lives in ./boot-fetch.js (unit-tested in tools/shell-boot-fetch.test.mjs):
@@ -834,9 +906,14 @@ function markReadOnly(path) {
 // ===== pairing gate =====
 // The device requires pairing before it will serve user data (files, OTA, live events).
 // We ask /api/auth/status first; if this browser isn't paired yet, block the OS behind a
-// full-screen overlay until the user types the 6-digit code shown on the Cardputer screen.
-// On success the device sets an HttpOnly session cookie, so every later request — including
-// from app iframes and the WebSocket — is authenticated automatically.
+// full-screen overlay until the user types the 6-digit code shown on the device screen.
+// On success the device remembers this browser — an HttpOnly session cookie (Cardputer, P4) or this
+// client's IP for 90 days (Handheld) — so every later request, including from app iframes and the
+// WebSocket, is authenticated automatically.
+// Two status dialects: {required, paired} (Cardputer, P4) and {auth:"pin"|"open", paired} (Handheld).
+const pairingRequired = (st) => !!st && (!!st.required || st.auth === 'pin');
+// Only a device that can read the PIN aloud on its own speaker (pairing.speak) shows the button.
+let pairCanSpeak = false;
 async function ensurePaired() {
   let st;
   // The pairing probe must actually SUCCEED to gate the OS. A single 4 s timeout under boot-load used to
@@ -845,17 +922,22 @@ async function ensurePaired() {
   // overlay reliably appears; only fall through unpaired (degraded, no /ws) if the device is genuinely
   // unreachable after several attempts.
   try { st = await fetchJSON('/api/auth/status', { tries: 5, timeout: 4000 }); }
-  catch { bootLog('auth/status unreachable after retries — booting unpaired (degraded, no /ws)'); return; }
-  if (!st.required || st.paired) { bootLog('pairing: required=' + !!st.required + ' paired=' + !!st.paired); return; }
+  catch { bootLog('auth/status unreachable after retries — booting unpaired (degraded, no /ws)'); return false; }
+  pairCanSpeak = await Caps.has('pairing.speak').catch(() => false);
+  if (!pairingRequired(st) || st.paired) { bootLog('pairing: required=' + pairingRequired(st) + ' paired=' + !!st.paired); return true; }
   bootLog('pairing required → showing PIN overlay');
   await showPairing();
+  return true;
 }
-// showPairing is called from boot AND from onWsClosed on a 401/403. Bind the form ONCE and only swap
-// the pending resolver: re-binding submit on the second call fired two POST /api/pair per Enter —
-// double load on a 4-socket device and two attempts burned against the 429 lockout.
-let pairWired = false, pairResolve = null;
+// showPairing is called from boot AND from onWsClosed on a 401/403 (or recheckPairing). Bind the form
+// ONCE and only swap the pending resolver: re-binding submit on the second call fired two POST /api/pair
+// per Enter — double load on a 4-socket device and two attempts burned against the 429 lockout.
+// One overlay at a time: a second call while it is up shares the SAME promise, so an earlier caller's
+// resolver is never overwritten and left hanging.
+let pairWired = false, pairResolve = null, pairingShown = null;
 function showPairing() {
-  return new Promise((resolve) => {
+  if (pairingShown) return pairingShown;
+  pairingShown = new Promise((resolve) => {
     const ov = document.getElementById('pair-overlay');
     const form = document.getElementById('pair-form');
     const pin = document.getElementById('pair-pin');
@@ -866,9 +948,16 @@ function showPairing() {
     if (!ov || !form || !pin || !btn) { resolve(); return; }
     pairResolve = resolve;
     ov.classList.remove('hidden');
-    pin.value = ''; pin.focus();
+    hideBootScreen();   // the PIN gate must sit ABOVE the splash (z 999999), not wait out the 8s failsafe
+    pin.value = ''; msg.textContent = ''; btn.disabled = false; pin.focus();
+    const speakBtn = document.getElementById('pair-speak');
+    if (speakBtn) speakBtn.hidden = !pairCanSpeak;
     if (pairWired) return;
     pairWired = true;
+    // Handheld only (the button exists only in its markup): the device reads the PIN aloud through its
+    // own speaker — only someone physically holding it can hear the code.
+    const speak = document.getElementById('pair-speak');
+    if (speak) speak.addEventListener('click', () => { fetch('/api/pair/speak', { method: 'POST' }).catch(() => {}); });
     pin.addEventListener('input', () => { pin.value = pin.value.replace(/\D/g, '').slice(0, 6); msg.textContent = ''; });
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -877,7 +966,7 @@ function showPairing() {
       let r;
       try { r = await fetch('/api/pair', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ pin: pin.value }) }); }
       catch { msg.textContent = t('pair_net_error'); btn.disabled = false; return; }
-      if (r.ok) {   // cookie is set; proceed — settle whichever call is currently waiting
+      if (r.ok) {   // paired (cookie or IP allow-list); proceed — settle whichever call is currently waiting
         ov.classList.add('hidden'); btn.disabled = false;
         const res = pairResolve; pairResolve = null; if (res) res();
         return;
@@ -886,7 +975,33 @@ function showPairing() {
       msg.textContent = r.status === 429 || body.locked ? t('pair_locked') : t('pair_wrong');
       pin.value = ''; pin.focus(); btn.disabled = false;
     });
-  });
+  }).finally(() => { pairingShown = null; });
+  return pairingShown;
+}
+
+// Pairing lost WHILE the desktop is open, on an edition whose /api/diag cannot tell us (see
+// onWsClosed): the PIN was switched on at the console, the 90 days ran out, or the DHCP lease moved
+// this browser to another IP (Handheld pairing is per IP). Every read now answers 401 and the apps
+// would just look broken, so a socket drop is the moment to ask. Throttled: a plain network hiccup
+// costs one cheap status read per 20 s, never a storm.
+let pairCheckAt = 0;
+async function recheckPairing() {
+  const now = Date.now();
+  if (pairingShown || now - pairCheckAt < 20000) return;
+  pairCheckAt = now;
+  let st;
+  try { st = await (await fetch('/api/auth/status', { cache: 'no-store' })).json(); } catch { return; }
+  pairCanSpeak = await Caps.has('pairing.speak').catch(() => false);
+  if (!pairingRequired(st) || st.paired) return;
+  bootLog('pairing lost mid-session → showing PIN overlay');
+  await showPairing();
+  // Paired again: reattach the live socket now instead of after the backed-off timer, and reload
+  // the device-held desktop state that the refused reads could not fetch.
+  if (wsTimer) { clearTimeout(wsTimer); wsTimer = null; }
+  wsBackoff = 3000;
+  connectWS();
+  syncUiState();
+  doRefreshStatus();
 }
 
 function hideBootScreen() { const bs = document.getElementById('boot-screen'); if (bs) bs.classList.add('hidden'); }
@@ -972,7 +1087,12 @@ async function loadAppPermissions() {
   let n = 0, boxed = 0, waiting = 0;
   for (const a of state.apps) {
     const e = byIdReg.get(a.id);
-    if (e) {
+    if (a.store === true) {
+      // Installed from the Store: never an origin, whatever its id. The id alone used to decide, and a store
+      // app sharing an id with a built-in one (scoreboard, in the cloud build) got the built-in's trust.
+      if (!Array.isArray(a.permissions)) a.permissions = [];
+      a.trust = 'sandbox';
+    } else if (e) {
       a.permissions = Array.isArray(e.permissions) ? e.permissions : [];
       if (e.created_by) a.created_by = e.created_by;
       a.trust = e.created_by === 'agent' ? 'sandbox' : 'trusted';
@@ -1001,6 +1121,7 @@ async function startDesktopServices() {
   if (desktopStarted) return;
   desktopStarted = true;
   await beginLoadAppPermissions();         // MUST precede the first window: `allow` is fixed at navigation
+  if (!restartedOnce) startMigrations();   // not awaited: browser-only steps now, device requests after a pause
   if (!restartedOnce) {
     ensureOnboarding().catch(() => {});    // first paired boot with no AI key → curated welcome/setup
     await restoreSession();                // bring back the windows that were open last time
@@ -1009,7 +1130,12 @@ async function startDesktopServices() {
   // Passive release notifier: the BROWSER asks GitHub (the device never phones home), once a day,
   // and pings the Notification Center when a newer NucleoOS release exists. Loaded lazily on its
   // own delay so it never competes with the session restore or the SD crawl. See update-check.js.
-  setTimeout(() => {
+  setTimeout(async () => {
+    // Only the edition whose releases update-core.js reads, and only where firmware updates exist at all.
+    try {
+      const [core, ci] = await Promise.all([import('./update-core.js'), Caps.info()]);
+      if (ci.edition !== core.UPDATE_EDITION || !ci.caps.includes('ota.firmware')) return;
+    } catch { return; }
     import('./update-check.js').then((m) => { UpdateCtl = m.initUpdateCheck({
       getSnapVersion: () => (lastStatusSnap && lastStatusSnap.version) || '',
       getNotify: () => Notify,
@@ -1027,6 +1153,27 @@ async function startDesktopServices() {
   FsIndex.onUpdate(() => { if (searchActive()) refreshSearchView(); });
   FsIndex.init({ live: () => searchActive() });   // no crawl at boot: the first search warms it (fsindex.js)
   doRefreshStatus(); scheduleStatus();   // adaptive: pause-when-hidden + 15s→60s error backoff (see runStatus)
+}
+// Stored-state migrations (migrations.js, docs/migrations.md): once per page load, only after pairing really
+// succeeded, never on the boot's critical path. The module is imported lazily (no request in the boot burst);
+// localStorage-only steps run as soon as it arrives (the apps they serve only WRITE those keys on a user action,
+// so an app opened a moment earlier loses nothing; the broker's kvSeed covers the kv side); the first device request
+// (one read of migrations.json, then only what is pending) waits a few seconds, after the session restore.
+let migrationsStarted = false;
+const MIGRATIONS_DEVICE_DELAY_MS = 6000;
+function startMigrations() {
+  if (migrationsStarted || !pairedOk) return;
+  migrationsStarted = true;
+  import('./migrations.js').then((M) => M.runMigrations({
+    isPaired: () => pairedOk,
+    ctx: M.createContext({
+      bootLang,
+      kvSeed: appBroker && appBroker.kvSeed,
+      beforeDevice: () => sleep(MIGRATIONS_DEVICE_DELAY_MS),
+      onChange: (path) => { if (path.endsWith('/settings.json')) applySettingsFromDevice(); },
+    }),
+  })).then((r) => { if (r && (r.ran.length || r.failed.length)) bootLog('migrations:', JSON.stringify(r)); })
+    .catch((e) => console.warn('[migrations] not run:', (e && e.message) || e));
 }
 // ---- "update available" taskbar pill + Start badge + What's-new sheet (state from update-check.js) ----
 function renderUpdatePill(st) {
@@ -1142,11 +1289,12 @@ async function boot() {
   // taskbar, tray) whenever the OS language changes live (from Settings, any window).
   await I18N.init('shell');
   I18N.onChange(() => {
+    pushAppEvent(brokerEvent('lang', { lang: I18N.lang }));   // apps without an origin cannot hear the storage event
     try { WM.relabel(); renderDesktop(); renderStartMenu(); renderTaskbar(); setWsBadge(wsState); if (searchActive()) refreshSearchView(); } catch {}
     try { renderLinkBanner(); if (lastStatusSnap) refreshStatus(); } catch {}   // banner + tray texts follow the language live
   });
   bootLog('boot start — checking pairing…');
-  await ensurePaired();                          // block until this browser is paired with the device
+  pairedOk = await ensurePaired();               // block until this browser is paired with the device
   bootLog('pairing ok — loading /api/apps…');
   try {
     const d = await fetchJSON('/api/apps');
@@ -1166,6 +1314,15 @@ async function boot() {
   } catch {}
   const ui = await loadUiState();          // pins + wallpaper come from the device, not the browser
   state.pins = ui.pins; state.wallpaper = ui.wallpaper;
+  // Una volta sola (wpv 2): chi aveva ancora il VECCHIO predefinito - il gradiente
+  // blu, salvato come se fosse una scelta - passa allo sfondo della console. Chi ne
+  // aveva scelto un altro lo tiene. Only where the console wallpaper IS the default (Handheld overlay):
+  // with the shared gradient default this is inert and nothing is rewritten.
+  if (DEFAULT_WALLPAPER.type === 'console' && (ui.wpv | 0) < 2) {
+    const w = normalizeWallpaper(state.wallpaper);
+    if (w.type === 'gradient' && w.gradient === GRADIENT_WALLPAPER.gradient) state.wallpaper = { type: 'console' };
+    needSeed = true;                       // salva subito, con wpv: 2
+  }
   // Start-menu pins: saved arrangement, or seed one-per-app on a fresh device (like Windows 11).
   state.startPins = Array.isArray(ui.startPins) ? ui.startPins.filter((id) => byId(id)) : state.apps.map((a) => a.id);
   if (!Array.isArray(ui.startPins)) needSeed = true;
@@ -1198,6 +1355,7 @@ async function boot() {
   renderDesktop();
   renderStartMenu();
   renderTaskbar();
+  initGames();                             // "Continua" nella barra, pannello giochi, recenti in Start
   wireChrome();
   wireMessages();
   wireFileDrop();                          // Drag & Drop files from the PC → Cardputer SD
@@ -1245,10 +1403,15 @@ async function refreshApps() {
       const prev = prevPerms.get(a.id);
       if (prev && Array.isArray(prev.p)) app.permissions = prev.p;
       if (prev && prev.c) app.created_by = prev.c;
-      if (prev && prev.t) app.trust = prev.t;
+      if (prev && prev.t && !a.store) app.trust = prev.t;
+      if (a.store === true) app.trust = 'sandbox';               // a Store app is never trusted, not even for a moment
       return app;
     });
     permsReady = null; beginLoadAppPermissions();   // and re-read the registry: the new app has its own
+    // An app that was listed and no longer is has been removed (Store ▸ Remove): its window would only
+    // show a 404 on the next reload. Only ids that were in the old list, so windows that never came from
+    // /api/apps are left alone.
+    for (const w of WM.list()) if (prevPerms.has(w.app.id) && !byId(w.app.id)) WM.close(w.app.id);
     // Surface any newly installed app in the Start grid (Windows-11 pins new apps automatically).
     let added = false;
     for (const a of state.apps) if (!state.startPins.includes(a.id)) { state.startPins.push(a.id); added = true; }
@@ -1298,6 +1461,14 @@ async function onWsClosed(gen) {
   // Deliberately NOT "just retry and see": a retry WINS the seat back (the device is last-wins), which
   // restarts the very eviction war this mechanism exists to end.
   let status = 0, diag = null;
+  // Only a single-seat device (seat.single) can evict us. Elsewhere there is nothing to tell apart: reconnect
+  // with backoff and recheck pairing, without a /api/diag request the device would answer with a 404.
+  if (!(await Caps.has('seat.single').catch(() => false))) {
+    if (gen !== wsGen || wsSock) return;
+    setWsBadge('offline'); hideEvictedBar(); scheduleWS();
+    recheckPairing().catch(() => {});
+    return;
+  }
   try {
     const opts = { cache: 'no-store' };
     if (typeof AbortSignal !== 'undefined' && AbortSignal.timeout) opts.signal = AbortSignal.timeout(4000);
@@ -1309,6 +1480,14 @@ async function onWsClosed(gen) {
   if (gen !== wsGen || wsSock) return;
   setLink(status > 0);                                                  // the live link dropped: tell the user if the DEVICE did
   if (!status) { setWsBadge('offline'); scheduleWS(); return; }        // unreachable → normal backoff
+  // An edition with no single-seat model answers /api/diag with 404 (P4) or with a body that has no
+  // `net` section (Handheld, public and multi-client). Its status says nothing about pairing or the
+  // seat: reconnect with backoff and ask /api/auth/status instead (throttled inside).
+  if (status === 404 || (diag && !diag.net)) {
+    setWsBadge('offline'); hideEvictedBar(); scheduleWS();
+    recheckPairing().catch(() => {});
+    return;
+  }
   if (status === 401 || status === 403) {                              // not evicted: no longer paired
     setWsBadge('offline'); hideEvictedBar();
     showPairing().then(() => { wsBackoff = 3000; connectWS(); });
@@ -1410,7 +1589,9 @@ function connectWS() {
       // (up to ~32 /api/fs/list) for nothing. Skip those; an unknown change (no path) still rebuilds.
       if (ev.t === 'fs.changed') {
         const p = ev.d && typeof ev.d.path === 'string' ? ev.d.path : null;
-        if (!p || (p.startsWith('/data') && !p.startsWith('/data/play'))) FsIndex.invalidate();
+        // The path also goes THROUGH: an FsIndex that knows which subtrees it never crawls
+        // (the ROM library above all) drops those without a re-crawl.
+        if (!p || (p.startsWith('/data') && !p.startsWith('/data/play'))) FsIndex.invalidate(p);
       }
       // Shared UI state changed on the device (this or another client) → re-sync.
       if (ev.t === 'fs.changed' && ev.d && typeof ev.d.path === 'string' && ev.d.path.endsWith('ui-state.json')) syncUiState();
@@ -1537,11 +1718,12 @@ function closeInstallBlock() {
 // Safety net: if the installer window is gone (closed/crashed) and never sent 'close', unblock the OS.
 function checkInstallGone() { if (installWinId && !WM.list().some((x) => x.app.id === installWinId)) closeInstallBlock(); }
 
+let appBroker = null;            // the broker handler; migrations.js seeds an app's kv through it (kvSeed)
 // Apps (e.g. File Commander) ask the shell to open a file with its associated app.
 function wireMessages() {
   // The broker for sandboxed apps. Identity is resolved from the message SOURCE — an opaque-origin
   // frame reports origin "null", so only matching e.source against the frames we created is sound.
-  const brokerHandler = createBroker({
+  const brokerHandler = appBroker = createBroker({
     findApp: (src) => {
       for (const w of WM.list()) {
         const f = w.el.querySelector('iframe');
@@ -1551,6 +1733,8 @@ function wireMessages() {
     },
     notify: (text, from) => showToast(text, '🔔', 'info', 5000),
     getLang: () => I18N.lang,          // so a sandboxed app can localise itself without importing the engine
+    getTheme: () => currentThemeState,  // mode/accent/font size only (themeInfo), never the shell's styles
+    getCaps: () => Caps.info(),         // the device's capability list, for apps that cannot import nucleo-caps.js
     onFsChange: () => { try { FsIndex.invalidate(); } catch {} },
     // ai.complete for apps that declared ai.cloud: executed HERE, in the shell's origin, so the user's
     // key never enters the sandbox — only the completion text goes back over the broker. Lazy import:
@@ -1596,7 +1780,7 @@ function wireMessages() {
     // once, canonically, on the device. A change that ORIGINATED on the device (origin:'device', from
     // the system.language WS handler) is NOT echoed back — and even without that flag the loop is
     // self-limiting: the device only re-broadcasts on an ACTUAL change, so a same-value POST is a no-op.
-    if (d.type === 'set-language' && window.NucleoI18N && window.NucleoI18N.LANGS.some((l) => l.code === d.lang)) {
+    if (d.type === 'set-language' && (window.NucleoI18N ? window.NucleoI18N.LANGS.some((l) => l.code === d.lang) : SHELL_LANGS.includes(d.lang))) {
       localStorage.setItem('anima.lang', d.lang); document.documentElement.lang = d.lang;
       if (d.origin !== 'device') postLangToDevice(d.lang);
       return;
@@ -1628,6 +1812,13 @@ function wireMessages() {
     // An app window lost one of its own scripts/stylesheets while loading (the device reset the connection):
     // the window manager reloads it once. Trusted senders only — a sandboxed app never gets here.
     if (d.type === 'app-resource-failed') { WM.retryFrame(e.source); return; }
+    // The Store (or the agent) installed, updated or removed an app: the same refresh the device's own
+    // apps.changed event triggers. Trusted senders only, like the line above.
+    if (d.type === 'apps-changed') {
+      refreshApps();
+      try { navigator.serviceWorker?.controller?.postMessage({ type: 'flush-app-cache' }); } catch {}
+      return;
+    }
     // An app asking to close its own window (e.g. Paint "Esci") or update its title bar. Map the
     // posting iframe back to its window via contentWindow identity.
     if (d.type === 'close-window' || d.type === 'set-window-title') {
@@ -1679,6 +1870,8 @@ function curatedFrames() {
 }
 
 // --- Global Theme Engine ---
+// PLATFORM-SPECIFIC: the Handheld defaults the accent to its console turquoise (#2dd4bf, Core theme.h);
+// the shared default stays blue until that becomes an edition overlay. A saved choice always wins.
 let currentThemeState = { theme: 'dark', accent: '#4ea1ff', fontSize: '14px' };
 
 function applyGlobalUI() {
@@ -1696,7 +1889,18 @@ function applyGlobalUI() {
     const f = w.el.querySelector('iframe');
     if (f) injectGlobalTheme(f.contentDocument);
   }
+  // A frame without an origin has no contentDocument to inject into: tell it instead.
+  pushAppEvent(brokerEvent('theme', { theme: themeInfo(currentThemeState) }));
   cacheTheme();
+}
+
+// Language and theme changes for apps that listen through the broker (nucleo-app.js). Every app frame
+// gets them: a sandboxed app has no other way to know, a curated one may use the same runtime.
+function pushAppEvent(msg) {
+  for (const w of WM.list()) {
+    const f = w.el.querySelector('iframe');
+    try { if (f && f.contentWindow) f.contentWindow.postMessage(msg, '*'); } catch {}
+  }
 }
 
 // Persist the live theme locally so the NEXT boot can paint it instantly — before (or without) the
@@ -1805,7 +2009,7 @@ async function applySettingsFromDevice() {
       // OS settings drive the whole OS on every client.
       // Accept all 5 OS languages, not just it/en (settings.json stores the code verbatim: es/fr/de too).
       const _lang = s.ui.language;
-      const _validLang = window.NucleoI18N ? window.NucleoI18N.LANGS.some((l) => l.code === _lang) : (_lang === 'it' || _lang === 'en');
+      const _validLang = window.NucleoI18N ? window.NucleoI18N.LANGS.some((l) => l.code === _lang) : SHELL_LANGS.includes(_lang);
       if (_validLang) {
         if (window.NucleoI18N) window.NucleoI18N.setLang(_lang);
         else { localStorage.setItem('anima.lang', _lang); document.documentElement.lang = _lang; }
@@ -1842,6 +2046,229 @@ async function persistTheme(newTheme) {
 const escapeHtml = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
 // ===== Toast Notifications =====
+// ===== Giochi sul desktop: "Continua" nella barra, pannello, Start =====
+// Il desktop resta quello di sempre; i giochi entrano nei posti che c'erano gia':
+// un pulsante nella barra con la copertina dell'ultima partita (lo stesso file che
+// Core scrive a fine partita, /api/library/recent), un pannello alla Windows 11 con
+// "Gioca sulla console" / "Gioca qui" e i recenti, una riga di copertine in Start.
+// Con un gioco in corso sulla console (/api/gamemode) il pulsante dice "In gioco".
+let RECENT_GAMES = [], _gamesAt = 0, _gaming = false, _gm = {};
+const coverUrl = (g) => g && g.img ? '/api/fs/read?path=' + g.img.split('/').map(encodeURIComponent).join('/') + (g.imgv ? '&v=' + g.imgv : '') : '';
+// gioco senza copertina: la sua console dall'archivio di NucleoOS (/api/sysart),
+// mostrata intera (classe "con" = contain) invece di un riquadro vuoto
+const consoleUrl = (g) => g && g.system ? '/api/sysart?id=' + encodeURIComponent(g.system) : '';
+const artHtml = (g, lazy) => {
+  const u = coverUrl(g), c = u ? '' : consoleUrl(g);
+  return u ? `<img${lazy ? ' loading="lazy"' : ''} src="${u}" alt="">`
+       : c ? `<img class="con"${lazy ? ' loading="lazy"' : ''} src="${c}" alt="" onerror="this.remove()">` : '';
+};
+async function loadRecentGames(force) {
+  if (!force && Date.now() - _gamesAt < 30000) return RECENT_GAMES;
+  _gamesAt = Date.now();
+  try {
+    const [r, gm] = await Promise.all([fetchJSON('/api/library/recent?limit=12'), fetchJSON('/api/gamemode').catch(() => ({}))]);
+    RECENT_GAMES = (r && r.games) || [];
+    _gaming = !!(gm && gm.gaming); _gm = gm || {};
+  } catch {}
+  renderGameButton();
+  return RECENT_GAMES;
+}
+function renderGameButton() {
+  const b = document.getElementById('tb-game');
+  if (!b) return;
+  // in gioco: il gioco che gira ADESSO (/api/gamemode), non l'ultimo finito
+  const g = (_gaming && _gm.game) || RECENT_GAMES[0];
+  b.hidden = !g;
+  if (!g) return;
+  const u = coverUrl(g), c = u ? '' : consoleUrl(g);
+  const cv = b.querySelector('.tbg-cover');
+  cv.style.backgroundImage = (u || c) ? `url("${u || c}")` : '';
+  cv.classList.toggle('con', !u && !!c);
+  b.querySelector('.tbg-n').textContent = g.name;
+  b.querySelector('.tbg-k').textContent = t(_gaming ? 'tb_game_ingame' : 'tb_game_continue');
+  b.classList.toggle('ingame', _gaming);
+  b.title = g.name;
+}
+async function playOnConsole(g) {
+  try {
+    const r = await fetch('/api/library/launch', { method: 'POST', body: JSON.stringify({ sys: g.system, file: g.file }) });
+    const j = await r.json().catch(() => ({}));
+    if (r.ok && j.ok) { showToast(t('gf_started'), '🎮', 'success'); _gaming = true; renderGameButton(); }
+    else showToast(t(j.error === 'game_running' ? 'gf_running' : 'gf_failed'), '⚠️', 'error', 5000);
+  } catch { showToast(t('gf_failed'), '⚠️', 'error', 5000); }
+}
+function playHere(g) { const a = byId('console'); if (a) WM.open(a, 'game=' + encodeURIComponent(g.system + '/' + g.file)); }
+function openLibrary(q) { const a = byId('library'); if (a) WM.open(a, q || ''); }
+function gameMeta(g) {
+  const parts = [g.sysname || g.system];
+  if (g.secs) { const m = Math.round(g.secs / 60); parts.push(m >= 60 ? Math.floor(m / 60) + ' h ' + (m % 60) + ' min' : m + ' min'); }
+  return parts.join(' · ');
+}
+// --- Plancia della partita in corso ---------------------------------------------
+// Con un gioco aperto sulla console il pannello mostra il suo schermo DAL VIVO
+// (/api/nclink/stream: nucleod cattura solo mentre qualcuno guarda) e i comandi di
+// RetroArch mandati come tasti rapidi (/api/nclink/hotkey: salva/carica lo stato,
+// screenshot, avanti veloce, menu, esci). Dalla scrivania, senza toccare la console.
+let _tok = '';
+async function actionGet(url) {
+  const go = () => fetch(url, { headers: { 'X-Nucleos-Token': _tok }, cache: 'no-store' });
+  let r = await go();
+  if (r.status === 403) {                         // gettone mancante o scaduto: lo si chiede e si riprova
+    try { const ss = await (await fetch('/api/session', { cache: 'no-store' })).json(); _tok = (ss && ss.token) || ''; } catch {}
+    r = await go();
+  }
+  return r;
+}
+let _exitArmed = 0;
+async function gameHotkey(hk, okKey) {
+  if (hk === 'EXIT' && Date.now() - _exitArmed > 3000) {   // due tempi: un clic per sbaglio non chiude la partita
+    _exitArmed = Date.now();
+    showToast(t('gf_exit_ask'), '⏻', 'info', 3000);
+    return;
+  }
+  try {
+    const r = await actionGet('/api/nclink/hotkey?hk=' + hk);
+    const j = await r.json().catch(() => ({}));
+    if (r.ok && j.ok !== false) { if (okKey) showToast(t(okKey), '🎮', 'success', 2500); if (hk === 'EXIT') { closeGameFlyout(); setTimeout(() => loadRecentGames(true), 4000); } }
+    else showToast(t('gf_cmd_fail'), '⚠️', 'error', 4000);
+  } catch { showToast(t('gf_cmd_fail'), '⚠️', 'error', 4000); }
+}
+function renderLiveFlyout(g) {
+  const hero = document.getElementById('gf-hero');
+  const mins = _gm.since ? Math.max(0, Math.round((Date.now() / 1000 - _gm.since) / 60)) : 0;
+  const u = coverUrl(g);
+  hero.innerHTML = `<div class="gf-live">
+      ${u ? `<img class="gf-live-cover" src="${u}" alt="">` : ''}
+      <img class="gf-live-feed" alt="">
+      <span class="gf-live-badge">● ${escapeHtml(t('gf_live'))}</span></div>
+    <div class="gf-info"><div class="gf-k">${escapeHtml(t('tb_game_ingame'))}${mins ? ' · ' + mins + ' min' : ''}</div>
+      <div class="gf-t">${escapeHtml(g.name)}</div><div class="gf-m">${escapeHtml(g.sysname || g.system || '')}</div></div>
+    <div class="gf-ctl">
+      <button type="button" data-hk="SAVE" data-ok="gf_done_save"><b>💾</b>${escapeHtml(t('gf_save'))}</button>
+      <button type="button" data-hk="LOAD" data-ok="gf_done_load"><b>📂</b>${escapeHtml(t('gf_load'))}</button>
+      <button type="button" data-hk="SHOT" data-ok="gf_done_shot"><b>📸</b>${escapeHtml(t('gf_shot'))}</button>
+      <button type="button" data-hk="FF"><b>⏩</b>${escapeHtml(t('gf_ff'))}</button>
+      <button type="button" data-hk="MENU"><b>☰</b>${escapeHtml(t('gf_menu'))}</button>
+      <button type="button" data-hk="EXIT" class="danger"><b>⏻</b>${escapeHtml(t('gf_exit'))}</button>
+    </div>`;
+  hero.querySelectorAll('[data-hk]').forEach((b) => b.addEventListener('click', () => gameHotkey(b.dataset.hk, b.dataset.ok)));
+  // il flusso parte solo a pannello aperto; il primo fotogramma copre la copertina
+  const feed = hero.querySelector('.gf-live-feed');
+  feed.addEventListener('load', () => hero.querySelector('.gf-live').classList.add('on'), { once: true });
+  feed.src = '/api/nclink/stream?t=' + Date.now();
+}
+function renderGameFlyout() {
+  document.getElementById('game-flyout').classList.toggle('live', !!(_gaming && _gm.game));
+  if (_gaming && _gm.game) {
+    renderLiveFlyout(_gm.game);
+    renderRecentRow(0);                           // il gioco aperto non e' ancora fra le statistiche
+    return;
+  }
+  const g = RECENT_GAMES[0];
+  const hero = document.getElementById('gf-hero');
+  if (!g) { hero.innerHTML = `<div class="gf-none">${escapeHtml(t('gf_none'))}</div>`; document.getElementById('gf-row').innerHTML = ''; return; }
+  const u = coverUrl(g);
+  hero.innerHTML = `<div class="gf-cover">${artHtml(g)}</div>
+    <div class="gf-info"><div class="gf-k">${escapeHtml(t(_gaming ? 'tb_game_ingame' : 'tb_game_continue'))}</div>
+      <div class="gf-t">${escapeHtml(g.name)}</div><div class="gf-m">${escapeHtml(gameMeta(g))}</div>
+      <div class="gf-acts"><button class="gf-btn pri" type="button" data-a="console">${escapeHtml(t('gf_play_console'))}</button>
+        <button class="gf-btn" type="button" data-a="here">${escapeHtml(t('gf_play_here'))}</button></div></div>`;
+  hero.querySelector('[data-a="console"]').addEventListener('click', () => { playOnConsole(g); closeGameFlyout(); });
+  hero.querySelector('[data-a="here"]').addEventListener('click', () => { playHere(g); closeGameFlyout(); });
+  renderRecentRow();
+}
+function renderRecentRow(from = 1) {
+  const row = document.getElementById('gf-row');
+  row.innerHTML = '';
+  const cur = _gaming && _gm.game;                // il gioco aperto e' gia' in alto: non si ripete
+  const list = RECENT_GAMES.filter((r) => !(cur && r.system === cur.system && r.file === cur.file));
+  for (const r of list.slice(from, from + 6)) {
+    const el = document.createElement('button');
+    el.type = 'button'; el.className = 'gf-tile'; el.title = r.name;
+    el.innerHTML = `<span class="gf-tc">${artHtml(r, true)}</span><span class="gf-tn">${escapeHtml(r.name)}</span>`;
+    el.addEventListener('click', () => { openLibrary('open=' + encodeURIComponent(r.system + '/' + r.file)); closeGameFlyout(); });
+    row.appendChild(el);
+  }
+}
+function closeGameFlyout() {
+  const f = document.getElementById('game-flyout');
+  if (!f) return;
+  f.classList.add('hidden');
+  const feed = f.querySelector('.gf-live-feed');
+  if (feed) feed.removeAttribute('src');          // chiude il flusso: il device smette di catturare
+}
+async function toggleGameFlyout() {
+  const f = document.getElementById('game-flyout');
+  if (!f.classList.contains('hidden')) { closeGameFlyout(); return; }
+  await loadRecentGames(true);
+  renderGameFlyout();
+  f.classList.remove('hidden');
+}
+function renderStartGames() {
+  const head = document.getElementById('sm-games-head'), box = document.getElementById('sm-games');
+  if (!head || !box) return;
+  head.hidden = !RECENT_GAMES.length;
+  box.innerHTML = '';
+  for (const g of RECENT_GAMES.slice(0, 6)) {
+    const el = document.createElement('button');
+    el.type = 'button'; el.className = 'sm-game'; el.title = g.name + ' — ' + gameMeta(g);
+    el.innerHTML = `<span class="sm-gc">${artHtml(g, true)}</span><span class="sm-gn">${escapeHtml(g.name)}</span>`;
+    el.addEventListener('click', () => { openLibrary('open=' + encodeURIComponent(g.system + '/' + g.file)); closeStart(); });
+    box.appendChild(el);
+  }
+}
+async function initGames() {
+  // Only a device with the game library (games.library) has /api/library + /api/gamemode behind this, and
+  // only if one of the apps that show it is installed — elsewhere: no wiring, no 30 s poll.
+  if (!byId('library') && !byId('console')) return;
+  if (!(await Caps.has('games.library').catch(() => false))) return;
+  const b = document.getElementById('tb-game');
+  if (b) b.addEventListener('click', (e) => { e.stopPropagation(); toggleGameFlyout(); });
+  const lib = document.getElementById('gf-lib');
+  if (lib) lib.addEventListener('click', () => { openLibrary(); closeGameFlyout(); });
+  const slib = document.getElementById('sm-lib-btn');
+  if (slib) slib.addEventListener('click', () => { openLibrary(); closeStart(); });
+  document.addEventListener('pointerdown', (e) => {
+    const f = document.getElementById('game-flyout');
+    if (f && !f.classList.contains('hidden') && !f.contains(e.target) && !e.target.closest('#tb-game')) closeGameFlyout();
+  });
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeGameFlyout(); });
+  loadRecentGames(true).then(renderStartGames);
+  setInterval(() => { if (!document.hidden) loadRecentGames(true).then(renderStartGames); }, 30000);
+}
+
+// La console e' sul cavo di QUESTO PC, il PC non condivide internet e la console
+// non ha il WiFi: lo si propone, una volta per sessione, con il pulsante che porta
+// all'aiuto da doppio clic (server.py /internet). La console prende la rete da sola
+// appena il PC la offre (usbnet.sh): l'unico passo e' il consenso di Windows, una
+// volta per PC. Prima quell'aiuto stava solo nella schermata Disco USB di Core.
+let _usbOffered = false;
+async function offerUsbInternet(net) {
+  // gia' proposto, o online col WiFi; 'ap' = an ESP32 board in setup mode, which has no USB network
+  if (_usbOffered || (net && (net.mode === 'sta' || net.mode === 'ap'))) return;
+  try { if (sessionStorage.getItem('nucleo.usbnet.later')) return; } catch {}
+  let u;
+  // Only where the device has internet over USB (usbnet); if it then fails, stop asking for the session.
+  if (!(await Caps.has('usbnet').catch(() => false))) { _usbOffered = true; return; }
+  try { u = await fetchJSON('/api/usbnet/state'); } catch { _usbOffered = true; return; }
+  if (!u || u.state !== 'connected') return;                  // nessun PC sul cavo, o gia' condivisa
+  _usbOffered = true;
+  const container = document.getElementById('toast-container');
+  if (!container) return;
+  const el = document.createElement('div');
+  el.className = 'toast info toast-action';
+  el.innerHTML = `<div class="toast-icon">🌐</div><div class="toast-body"><div class="toast-title">${escapeHtml(t('usbnet_offer_title'))}</div>`
+    + `<div class="toast-text">${escapeHtml(t('usbnet_offer_text'))}</div>`
+    + `<div class="toast-actions"><a class="toast-btn pri" href="/internet" target="_blank" rel="noopener">${escapeHtml(t('usbnet_offer_go'))}</a>`
+    + `<button class="toast-btn" type="button">${escapeHtml(t('usbnet_offer_later'))}</button></div></div>`;
+  el.querySelector('button').addEventListener('click', () => {
+    try { sessionStorage.setItem('nucleo.usbnet.later', '1'); } catch {}
+    removeToast(el);
+  });
+  el.querySelector('a').addEventListener('click', () => removeToast(el));
+  container.appendChild(el);
+}
+
 function showToast(msg, icon = 'ℹ️', type = 'info', duration = 3500) {
   const container = document.getElementById('toast-container');
   if (!container) return;
@@ -1962,6 +2389,7 @@ function wireFileDrop() {
 function normalizeWallpaper(w) {
   if (typeof w === 'string' && w) return { type: 'image', path: w, fit: 'cover' };
   if (w && typeof w === 'object') {
+    if (w.type === 'console') return { type: 'console' };
     if (w.type === 'gradient' && w.gradient) return { type: 'gradient', gradient: String(w.gradient) };
     if (w.type === 'color' && w.color) return { type: 'color', color: String(w.color) };
     if (w.type === 'image' && w.path) {
@@ -1989,6 +2417,15 @@ function applyWallpaper(w) {
   d.style.backgroundRepeat = '';
   if (w.type === 'color') { d.style.backgroundColor = w.color; return; }
   if (w.type === 'gradient') { d.style.backgroundImage = w.gradient; return; }
+  if (w.type === 'console') {
+    // l'ultima immagine nota subito (cache locale), poi quella vera dal device;
+    // sotto, sempre il gradiente: offline o senza sfondo il desktop non e' mai nero
+    let url = '';
+    try { url = localStorage.getItem('nucleo.wallpaper.console') || ''; } catch {}
+    paintConsoleWallpaper(d, url);
+    syncConsoleWallpaper();
+    return;
+  }
   // image
   d.style.backgroundColor = '#0a1020';   // underlay so an uncached/offline image never flashes black
   d.style.backgroundImage = `url("/api/fs/read?path=${encodeURIComponent(w.path)}")`;
@@ -1996,6 +2433,34 @@ function applyWallpaper(w) {
   if (fit === 'tile') { d.style.backgroundSize = 'auto'; d.style.backgroundPosition = 'top left'; d.style.backgroundRepeat = 'repeat'; }
   else { d.style.backgroundSize = fit === 'center' ? 'auto' : fit; d.style.backgroundPosition = 'center'; d.style.backgroundRepeat = 'no-repeat'; }
 }
+
+// Lo sfondo della console sul desktop. url '' = la console non ne ha uno (o non
+// risponde): resta il gradiente. L'URL porta la versione (v=), quindi un cambio in
+// SISTEMA e' un URL nuovo e la cache del browser non mostra mai quello vecchio.
+function paintConsoleWallpaper(d, url) {
+  d.style.backgroundColor = '#0a1020';
+  d.style.backgroundImage = url ? `url("${url}"), ${GRADIENT_WALLPAPER.gradient}` : GRADIENT_WALLPAPER.gradient;
+  d.style.backgroundSize = 'cover'; d.style.backgroundPosition = 'center'; d.style.backgroundRepeat = 'no-repeat';
+}
+var consoleWpBusy = false;   // var: applyWallpaper gira gia' al boot, prima di questa riga (niente TDZ)
+async function syncConsoleWallpaper() {
+  if (consoleWpBusy || normalizeWallpaper(state.wallpaper).type !== 'console') return;
+  consoleWpBusy = true;
+  try {
+    const r = await fetch('/api/wallpaper', { cache: 'no-store' });
+    if (!r.ok) return;
+    const url = (await r.json()).url || '';
+    let old = ''; try { old = localStorage.getItem('nucleo.wallpaper.console') || ''; } catch {}
+    if (url !== old) {
+      try { localStorage.setItem('nucleo.wallpaper.console', url); } catch {}
+      const d = document.getElementById('desktop'); if (d) paintConsoleWallpaper(d, url);
+    }
+  } catch {} finally { consoleWpBusy = false; }
+}
+// Cambiato sulla console mentre il browser e' aperto: lo si ricontrolla quando la
+// scheda torna in primo piano e ogni minuto (una GET di poche decine di byte).
+document.addEventListener('visibilitychange', () => { if (!document.hidden) syncConsoleWallpaper(); });
+setInterval(() => { if (!document.hidden) syncConsoleWallpaper(); }, 60000);
 
 // ===== Display controls — real, persisted Action Center (were dead placeholders) =====
 // The Cardputer's TFT backlight is firmware-owned, so the brightness slider here dims the
@@ -2241,12 +2706,19 @@ async function performFcDrop(op, items, pos) {
       if (op === 'move') {
         const r = await fetch('/api/fs/move?from=' + encodeURIComponent(it.path) + '&to=' + encodeURIComponent(dst), { method: 'POST' });
         if (!r.ok) throw 0;
-      } else {                                                        // copy: read + write (no copy endpoint on the device)
-        // A failed read's body is an error page, not the file: never write it as the "copy".
-        const rd = await fetch('/api/fs/read?path=' + encodeURIComponent(it.path), { cache: 'no-store' });
-        if (!rd.ok) throw 0;
-        const buf = await rd.arrayBuffer();
-        const w = await fetch('/api/fs/write?path=' + encodeURIComponent(dst), { method: 'POST', body: buf });
+      } else {
+        // copy: on-device where the edition has /api/fs/copy (Handheld: no byte round-trip through the
+        // browser); elsewhere (404/405/501: no copy endpoint on the device) read + write.
+        let w = (await Caps.has('fs.copy').catch(() => false))
+          ? await fetch('/api/fs/copy?from=' + encodeURIComponent(it.path) + '&to=' + encodeURIComponent(dst), { method: 'POST' })
+          : { status: 501 };
+        if (w.status === 404 || w.status === 405 || w.status === 501) {
+          // A failed read's body is an error page, not the file: never write it as the "copy".
+          const rd = await fetch('/api/fs/read?path=' + encodeURIComponent(it.path), { cache: 'no-store' });
+          if (!rd.ok) throw 0;
+          const buf = await rd.arrayBuffer();
+          w = await fetch('/api/fs/write?path=' + encodeURIComponent(dst), { method: 'POST', body: buf });
+        }
         if (!w.ok) throw 0;
       }
       state.desktop.push({ uid: uniqueUid('desk-' + dst), type: 'file', target: dst, x: cell.x, y: cell.y });
@@ -2600,6 +3072,14 @@ function sortDesktop(by) {
   const arr = [...state.desktop];
   if (by === 'name') arr.sort((a, b) => coll.compare(itemLabel(a), itemLabel(b)));
   else if (by === 'type') arr.sort((a, b) => ((typeRank[a.type] ?? 9) - (typeRank[b.type] ?? 9)) || coll.compare(itemLabel(a), itemLabel(b)));
+  // Giochi per primi: le app da gioco in testa, nell'ordine in cui servono, poi
+  // tutto il resto per nome. Un gesto del menu, mai automatico: le icone le mette
+  // l'utente.
+  else if (by === 'games') {
+    const G = ['library', 'console', 'games', 'roms', 'store', 'dosbox', 'dos-importer', 'cast'];
+    const rank = (i) => { const k = i.type === 'app' ? G.indexOf(i.target) : -1; return k < 0 ? 99 : k; };
+    arr.sort((a, b) => (rank(a) - rank(b)) || coll.compare(itemLabel(a), itemLabel(b)));
+  }
   state.desktop = arr;
   layoutGrid(); saveUiState(); renderDesktop();
 }
@@ -2668,6 +3148,9 @@ function iconMenu(e, item) {
     { label: t('ctx_properties'), glyph: 'ℹ️', fn: () => itemProperties(item) },
     { sep: true },
     { label: t('ctx_remove_desktop'), glyph: '🗑️', danger: true, fn: () => removeItem(item.uid) },
+    // Solo le app venute dallo Store: quelle di sistema non hanno questa voce
+    isApp && byId(item.target) && byId(item.target).store
+      ? { label: t('ctx_uninstall'), glyph: '🧹', danger: true, fn: () => uninstallApp(byId(item.target)) } : null,
   ].filter(Boolean));
 }
 
@@ -2688,6 +3171,8 @@ function desktopMenu(e) {
       { label: t('ctx_sort_name'), fn: () => sortDesktop('name') },
       { label: t('ctx_sort_type'), fn: () => sortDesktop('type') },
       { label: t('ctx_sort_date'), fn: () => sortDesktop('date') },
+      // "Games first" only where the edition ships the game apps (Handheld: library / console).
+      ...((byId('library') || byId('console')) ? [{ label: t('ctx_sort_games'), fn: () => sortDesktop('games') }] : []),
     ] },
     { label: t('ctx_refresh'), glyph: '🔄', fn: () => renderDesktop() },
     { label: t('ac_keys_title'), glyph: '⌨', fn: () => { if (SysUI) SysUI.showShortcuts(); } },
@@ -2911,6 +3396,7 @@ function desktopNavKey(e) {
 
 // ===== Start menu (Windows-11 style: pinned grid, recommended, all-apps, in-menu search) =====
 function renderStartMenu() {
+  renderStartGames();
   renderStartPinned();
   renderRecommended();
   renderAllApps();
@@ -3007,7 +3493,42 @@ function startAppMenu(e, a) {
     { label: t('open'), glyph: '📂', fn: () => { WM.open(a); closeStart(); } },
     { label: inStart ? t('ctx_unpin') : t('ctx_pin'), glyph: '📌', fn: () => toggleStartPin(a.id) },
     { label: state.pins.includes(a.id) ? t('ctx_unpin_taskbar') : t('ctx_pin_taskbar'), glyph: '📎', fn: () => togglePin(a.id) },
-  ]);
+    a.store ? { sep: true } : null,
+    a.store ? { label: t('ctx_uninstall'), glyph: '🧹', danger: true, fn: () => { closeStart(); uninstallApp(a); } } : null,
+  ].filter(Boolean));
+}
+
+// Disinstallare un'app dello Store dal desktop o da Start, senza aprire lo Store.
+// Le app di sistema non hanno la voce, e il client comunque toglie SOLO i file del
+// suo registro (nucleos-store remove): un'app di NucleoOS non si puo' cancellare.
+async function uninstallApp(a) {
+  if (!a || !a.store) return;
+  const ok = await osConfirm({ title: t('uninstall_title', { n: a.name }), body: t('uninstall_body'),
+                               okText: t('uninstall_ok'), danger: true });
+  if (!ok) return;
+  const fail = () => showToast(t('uninstall_fail', { n: a.name }), '⚠️', 'error', 5000);
+  try {
+    const r = await fetch('/api/store', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+                                          body: JSON.stringify({ action: 'remove', ids: [a.id] }) });
+    const j = await r.json().catch(() => ({}));
+    if (!r.ok || !j.ok) return fail();
+    for (let i = 0; i < 90; i++) {                 // il lavoro gira sulla console: si aspetta l'esito
+      await new Promise((res) => setTimeout(res, 1000));
+      const st = await fetch('/api/store/job', { cache: 'no-store' }).then((x) => x.json()).catch(() => null);
+      if (st && st.state && st.state !== 'running') {
+        if (st.state !== 'done') return fail();
+        state.desktop = state.desktop.filter((x) => !(x.type === 'app' && x.target === a.id));
+        state.pins = state.pins.filter((x) => x !== a.id);
+        state.startPins = state.startPins.filter((x) => x !== a.id);
+        saveUiState();
+        await refreshApps();
+        renderDesktop();
+        showToast(t('uninstall_done', { n: a.name }), '🧹', 'success');
+        return;
+      }
+    }
+    fail();
+  } catch { fail(); }
 }
 function toggleStartPin(id) {
   state.startPins = state.startPins.includes(id) ? state.startPins.filter((x) => x !== id) : [...state.startPins, id];
@@ -3591,6 +4112,42 @@ function tickClock() {
   c.title = d.toLocaleDateString(loc, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
 }
 
+// La batteria della console nel vassoio. Il web OS pilota un handheld che sta
+// dall'altra parte della stanza: un cast, una partita in NucleoLink o un
+// trasferimento da 1,5 GB muoiono senza preavviso se nessuno puo' vedere quanto
+// resta, e finora l'unico modo di saperlo era alzarsi e guardare lo schermo.
+// L'avviso scatta UNA volta per discesa, non a ogni sondaggio.
+let _battWarned = false;
+function battTime(m) {
+  if (m < 58) { const r = m < 5 ? Math.max(1, m) : Math.round(m / 5) * 5; return t('batt_min', { m: r }); }
+  const r10 = Math.round(m / 10) * 10, h = Math.floor(r10 / 60), mm = r10 % 60;
+  return mm ? t('batt_hm', { h, m: String(mm).padStart(2, '0') }) : t('batt_h', { h });
+}
+function renderBattery(b) {
+  const el = document.getElementById('tray-batt');
+  if (!el) return;
+  if (!b || b.present === false || !(b.pct >= 0)) { el.hidden = true; return; }
+  el.hidden = false;
+  // Quanto resta, quando la console lo sa (la corrente vera: server.py
+  // api_battery, la stessa regola di Core). Arrotondato come sulla console: a 5
+  // minuti sotto l'ora, a 10 sopra - una stima al minuto prometterebbe troppo.
+  const left = (!b.charging && !b.plugged && b.minutes >= 0) ? battTime(b.minutes) : '';
+  el.querySelector('.v').textContent = b.pct + '%' + (b.charging ? ' ⚡' : '') + (left ? ' · ' + left : '');
+  el.title = left ? t('tray_batt_left', { time: left }) : t('tray_batt_title');
+  const fill = el.querySelector('.bfill');
+  if (fill) fill.setAttribute('width', String(Math.max(0.5, 8 * b.pct / 100)));
+  const onPower = b.charging || b.plugged;      // col cavo attaccato la batteria bassa non e' un allarme
+  el.classList.toggle('low', b.pct <= 15 && !onPower);
+  if (b.pct <= 10 && !onPower) {
+    if (!_battWarned) {
+      _battWarned = true;
+      showToast(t('batt_low', { pct: b.pct }), '🪫', 'warn', 8000);
+    }
+  } else if (b.pct > 20 || onPower) {
+    _battWarned = false;
+  }
+}
+
 let _statusTimer = null;
 function refreshStatus() {
   clearTimeout(_statusTimer);
@@ -3675,6 +4232,8 @@ async function doRefreshStatus() {
     const smStorage = document.getElementById('sm-storage');
     if (smStorage) smStorage.textContent = `${s.storage.fs} · ${txt}`;
     renderNetwork(s.network);
+    offerUsbInternet(s.network);             // Handheld USB-gadget internet offer; self-disables elsewhere
+    renderBattery(s.battery);                // hidden when the edition reports no battery reading
     // Push browser clock to device once if it hasn't synced with NTP yet. Runs from the post-pairing
     // status loop, so the same-origin pairing cookie rides along automatically (the route is paired-only);
     // costs zero device heap — just sets the RTC. Harmless if it 401s on a degraded/unpaired session.
@@ -3714,7 +4273,8 @@ async function runStatus() {
   scheduleStatus();
 }
 
-// Network indicator in the tray: connected SSID in STA mode, or the setup AP name.
+// Network indicator in the tray: connected SSID in STA mode, the setup AP name (ESP32 boards), the USB
+// cable (Handheld USB gadget, mode 'usb') or no network (Handheld, mode 'none').
 function renderNetwork(net) {
   const el = document.getElementById('tray-net');
   if (!el) return;
@@ -3722,6 +4282,10 @@ function renderNetwork(net) {
   if (!net) { icon = ICONS.offline; label = t('tray_offline'); title = t('net_unreachable'); }
   else if (net.mode === 'sta' && net.ssid) {
     icon = ICONS.wifi; label = net.ssid; title = t('net_wifi_title', { ssid: net.ssid }) + (net.ip ? ` · ${net.ip}` : '');
+  } else if (net.mode === 'usb') {
+    icon = ICONS.offline; label = 'USB'; title = 'USB' + (net.ip ? ` · ${net.ip}` : '');
+  } else if (net.mode === 'none' || net.mode === 'offline') {
+    icon = ICONS.offline; label = t('tray_offline'); title = t('tray_offline');
   } else {
     icon = ICONS.ap; label = net.ssid || 'AP'; title = t('net_ap_title', { ssid: net.ssid || '' });
   }
@@ -3788,7 +4352,7 @@ function warmAnimaLocal() {
     import('/apps/anima/local/engine.js').then(async (m) => {
       if (await m.packCached()) return;                                   // already provisioned
       const a = await fetch('/api/auth/status').then((r) => r.json()).catch(() => ({ paired: false }));
-      if (a && a.required && !a.paired) return;                           // not paired yet -> retry next boot
+      if (pairingRequired(a) && !a.paired) return;                        // not paired yet -> retry next boot
       await m.prefetchPack(null, null, { ifAvailable: true });            // gated; yields to user downloads
     }).catch(() => {});
   } catch {}
@@ -3936,7 +4500,7 @@ function renderOsDialogList(filterQuery = '') {
       ? '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>'
       : '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 2c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6H6zm7 7V3.5L18.5 9H13z"/></svg>';
     
-    // The fs/list API reports the byte size as `size` (see nucleo_fsapi.c / serve-shell.mjs).
+    // The fs/list API reports the byte size as `size` (see nucleo_fsapi.c / serve-shell.mjs / server.py /api/fs/list).
     const sizeStr = e.type === 'file' && e.size != null ? Math.round(e.size/1024) + ' KB' : '';
     li.innerHTML = `<div class="os-dialog-icon ${e.type}">${icon}</div><div class="os-dialog-name">${escapeHtml(e.name)}</div><div class="os-dialog-size">${sizeStr}</div>`;
     

@@ -10,7 +10,7 @@
   "saved_title": "Auf dem Gerät gespeichert",
   "saved_empty": "Kein QR gespeichert.",
   "save_to_device": "★ Auf Gerät speichern",
-  "save_hint": "„Auf Gerät speichern“ schreibt den QR in <b>/data/QR/qrcodes.json</b>: die native App <b>QR-Code</b> (Quelle „Gespeichert“) zeigt ihn groß auf dem Cardputer.",
+  "save_hint": "„Auf Gerät speichern“ schreibt den QR in <b>/data/QR/qrcodes.json</b>: die native App <b>QR-Code</b> (Quelle „Gespeichert“) zeigt ihn groß auf dem Gerät.",
 
   "ty_link": "Link",
   "ty_text": "Text",
@@ -48,7 +48,7 @@
   "save_failed": "Speichern fehlgeschlagen (Gerät offline?)",
   "saved_to_device": "Auf dem Gerät gespeichert",
   "load": "Laden",
-  "read_failed": "Die gespeicherten QR-Codes konnten nicht vom Cardputer gelesen werden: nichts wird gespeichert, damit sie nicht überschrieben werden. Versuche es gleich erneut.",
-  "read_corrupt": "Die QR-Datei auf dem Cardputer ist nicht lesbar: sie bleibt unverändert, damit nichts verloren geht.",
-  "not_paired": "Dieser Browser ist nicht mit dem Cardputer gekoppelt – kopple ihn, um QR-Codes zu speichern."
+  "read_failed": "Die gespeicherten QR-Codes konnten nicht vom Gerät gelesen werden: nichts wird gespeichert, damit sie nicht überschrieben werden. Versuche es gleich erneut.",
+  "read_corrupt": "Die QR-Datei auf dem Gerät ist nicht lesbar: sie bleibt unverändert, damit nichts verloren geht.",
+  "not_paired": "Dieser Browser ist nicht mit dem Gerät gekoppelt – kopple ihn, um QR-Codes zu speichern."
 }

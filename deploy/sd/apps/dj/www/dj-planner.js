@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // dj-planner.js — the mix brain, ported from Radio Index `plan_music_mix`.
 //
 // Decides HOW to mix two consecutive songs from family + BPM + bass + energy +

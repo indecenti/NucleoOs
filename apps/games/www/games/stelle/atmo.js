@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // stelle/atmo.js — the atmosphere of a world: single scattering (Rayleigh + Mie) through an exponential shell,
 // the sun's optical depth from Schüler's Chapman-function approximation (no inner loop), soft planet shadow.
 //

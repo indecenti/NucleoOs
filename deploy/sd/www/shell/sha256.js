@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // sha256.js — dependency-free SHA-256 (FIPS 180-4) over a Uint8Array, returning lowercase hex.
 // Exists because the shell is usually served over plain http on the LAN → NOT a secure context,
 // so crypto.subtle is unavailable (the same constraint that keeps the service worker inert there).

@@ -13,9 +13,9 @@
   "empty_all": "Aún no hay tareas.<br>Escribe arriba y pulsa Intro.",
   "toggle": "Alternar",
   "count": "{active} activas · {total} en total",
-  "read_failed": "No se pudieron leer las tareas del Cardputer. La edición está en pausa para no sobrescribirlas: inténtalo de nuevo en breve.",
-  "read_corrupt": "El archivo de tareas del Cardputer no se puede leer: no lo modifico para no perderlo.",
-  "not_paired": "Este navegador no está vinculado al Cardputer: vincúlalo para guardar las tareas.",
-  "save_failed": "No guardado — el Cardputer no responde, reintentando",
-  "not_loaded": "Tareas aún no cargadas desde el Cardputer."
+  "read_failed": "No se pudieron leer las tareas del dispositivo. La edición está en pausa para no sobrescribirlas: inténtalo de nuevo en breve.",
+  "read_corrupt": "El archivo de tareas del dispositivo no se puede leer: no lo modifico para no perderlo.",
+  "not_paired": "Este navegador no está vinculado al dispositivo: vincúlalo para guardar las tareas.",
+  "save_failed": "No guardado — el dispositivo no responde, reintentando",
+  "not_loaded": "Tareas aún no cargadas desde el dispositivo."
 }

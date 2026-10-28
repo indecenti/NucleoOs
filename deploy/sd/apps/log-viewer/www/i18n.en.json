@@ -10,7 +10,7 @@
   "btn_health": "Health",
   "follow": "Follow",
   "history_hint": "Read the event journal from the SD card (on demand — keeps the device idle otherwise)",
-  "diag_hint": "Build a compact health digest (Cardputer + ANIMA) to paste to an AI",
+  "diag_hint": "Build a compact health digest (device + ANIMA) to paste to an AI",
   "health_hint": "Adaptive probe: synthesizes live health events (only while visible, never during heavy work)",
   "diag_title": "Health diagnosis",
   "diag_sub": "Copy this block and paste it to an AI for a diagnosis.",

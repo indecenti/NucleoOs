@@ -10,7 +10,7 @@
   "btn_health": "Salute",
   "follow": "Segui",
   "history_hint": "Legge il giornale eventi dalla scheda SD (su richiesta — altrimenti tiene il dispositivo a riposo)",
-  "diag_hint": "Genera un digest compatto di salute (Cardputer + ANIMA) da incollare a un'AI",
+  "diag_hint": "Genera un digest compatto di salute (dispositivo + ANIMA) da incollare a un'AI",
   "health_hint": "Sonda adattiva: sintetizza eventi di salute dal vivo (solo a finestra visibile, mai durante un lavoro pesante)",
   "diag_title": "Diagnosi di salute",
   "diag_sub": "Copia questo blocco e incollalo a un'AI per la diagnosi.",

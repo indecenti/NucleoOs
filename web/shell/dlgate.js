@@ -1,9 +1,10 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // dlgate.js — OS-wide download gate for NucleoOS.
 //
 // The Cardputer serves the whole OS from a single-task, no-PSRAM HTTP server: two concurrent multi-MB
 // pulls collapse it (the 503 "low memory, retry" read-storm in nucleo_webfs). So EVERY large download
 // in the OS — the ANIMA brain pack, the voice models, the Forge weights — funnels through ONE exclusive
-// lock held for the whole transfer. Web Locks are coordinated across same-origin contexts, so this is
+// lock held for the whole transfer (on bigger servers it simply keeps the device and its SD responsive). Web Locks are coordinated across same-origin contexts, so this is
 // genuinely OS-wide: it spans every app, tab, and iframe the device serves. Requests QUEUE (they never
 // fail) and run strictly one at a time, in order.
 //

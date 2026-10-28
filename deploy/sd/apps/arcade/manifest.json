@@ -1,8 +1,8 @@
 {
   "id": "arcade",
   "name": "Arcade",
-  "version": "1.0.0",
-  "version_code": 1,
+  "version": "1.0.1",
+  "version_code": 2,
   "min_os": "0.1.0",
   "platforms": ["esp32s3"],
   "description": "Play the ROM library on the SD card in the browser — NES, SNES, Game Boy, GBA, Mega Drive and PC Engine, emulated client-side with self-hosted EmulatorJS. The device only serves the files; the emulation runs on the machine you open it from.",

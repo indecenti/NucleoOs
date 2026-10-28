@@ -1,4 +1,5 @@
 <!doctype html>
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -330,7 +331,13 @@
         await ensureDir();
         const path = DEST_DIR + '/' + name + '.jsdos';
         const r = await fetch('/api/fs/write?path=' + encodeURIComponent(path), { method: 'POST', body: bytes });
-        if (!r.ok) throw new Error((await r.text().catch(() => '')) || ('HTTP ' + r.status));
+        if (!r.ok) {
+          const body = await r.text().catch(() => '');
+          // With pairing ON the write route answers 401 with {"error":"pairing_required"} —
+          // show a translated message, not the raw JSON body.
+          if (r.status === 401 || /pairing_required/.test(body)) { setStatus('err', t('pairing_required')); return; }
+          throw new Error(body || ('HTTP ' + r.status));
+        }
         setStatus('ok', t('st_installed', { path, size: fmt(bytes.length) }));
         window.parent.postMessage({ type: 'open-app', id: 'dosbox', reload: true }, '*');   // best-effort; reload: an open DOS Box must list the new game
       } catch (e) { setStatus('err', t('err_install_failed', { msg: e.message })); }

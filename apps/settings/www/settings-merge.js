@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // settings-merge.js — the device settings model + a clobber-safe deep merge.
 //
 // Extracted from the old inline merge (which replaced whole sub-trees and could clobber keys the

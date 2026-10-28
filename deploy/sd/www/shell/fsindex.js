@@ -1,7 +1,8 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // NucleoOS file index — the brains behind taskbar/Start search.
 //
 // The device exposes only /api/fs/list (no native search). Hitting it per keystroke is slow
-// and hammers the ESP, so instead we crawl the SD ONCE (breadth-first, capped), keep a flat
+// and floods the device, so instead we crawl the SD ONCE (breadth-first, capped), keep a flat
 // in-memory index, and answer every search from RAM — instant, zero network. The index is:
 //   • persisted to localStorage so a returning browser searches immediately (any age), and
 //     re-crawled only when someone searches and it is missing, stale or older than 10 min — never at
@@ -15,10 +16,24 @@
 
 const ROOTS = ['/data'];
 const MAX_DEPTH = 6;            // how deep into /data we descend
-const MAX_DIRS = 600;          // hard cap on directory reads per full crawl (ESP-friendly)
+const MAX_DIRS = 600;          // hard cap on directory reads per full crawl (bounded work per boot)
 const PERSIST_KEY = 'nucleo.fsindex.v1';
 const PERSIST_TTL = 10 * 60 * 1000;   // a stored index is shown instantly if younger than this
 const REFRESH_DEBOUNCE = 1500;        // coalesce bursts of fs.changed into one re-crawl
+const PERSIST_MAX = 4000;             // entries actually written to localStorage (see persist)
+
+// The ROM tree is NOT crawled, and that is the single biggest thing this file does
+// for the device. /data/ROMs is a symlink to /roms and /api/fs/list resolves
+// symlinks, so the crawl walked the entire library — ~45 systems, each with
+// images/, manuals/, ports/ — as one SEQUENTIAL HTTP request per directory, one
+// stat per entry, on exFAT-over-FUSE, from the same card the emulator streams the
+// running game off. It also poisoned the feature it exists for: the 600-directory
+// budget burned itself inside artwork folders, so Notes and Documents fell out of
+// search behind thousands of boxart .png.
+// Games are not lost from search — they come from /api/library, which the DEVICE
+// owns and keeps in sync (and which counts them off the disk, not off gamelist.xml).
+const SKIP = new Set(['/data/ROMs', '/data/roms', '/data/play']);
+const skipped = (p) => SKIP.has(p) || [...SKIP].some((s) => p.startsWith(s + '/'));
 
 // Map an extension to a coarse category used for grouping + glyphs in the UI.
 const CAT = {
@@ -58,7 +73,17 @@ function loadPersisted() {
   } catch { return false; }
 }
 function persist() {
-  try { localStorage.setItem(PERSIST_KEY, JSON.stringify({ host, builtAt, items: index })); } catch {}
+  // Bounded on purpose: a scraped library used to serialise tens of thousands of
+  // entries, blow the localStorage quota, and fail inside a silent catch — which
+  // left the PREVIOUS (stale) index in place and meant the next load was never
+  // warm, so it re-crawled from scratch every single time. Cap what we store, and
+  // if it still doesn't fit, drop the key instead of keeping a lie.
+  try {
+    const items = index.length > PERSIST_MAX ? index.slice(0, PERSIST_MAX) : index;
+    localStorage.setItem(PERSIST_KEY, JSON.stringify({ host, builtAt, items }));
+  } catch {
+    try { localStorage.removeItem(PERSIST_KEY); } catch {}
+  }
 }
 
 // ---- crawl ----
@@ -90,7 +115,9 @@ async function crawl() {
         ext: isDir ? '' : (e.name.split('.').pop() || '').toLowerCase(),
         cat: categoryOf(e.name, isDir),
       });
-      if (isDir && depth + 1 < MAX_DEPTH) queue.push({ path: full, depth: depth + 1 });
+      // The folder itself stays in the index (it is a useful navigation target);
+      // what we refuse is to DESCEND into it.
+      if (isDir && depth + 1 < MAX_DEPTH && !skipped(full)) queue.push({ path: full, depth: depth + 1 });
     }
   }
   return out;
@@ -122,7 +149,10 @@ export function ensure(force = false) {
 // Cardputer. It is re-crawled when someone searches (warm), or right away only while a search is open.
 let stale = false;
 let isLive = () => false;      // set by init(): "is a search on screen right now?"
-export function invalidate() {
+// A change inside a subtree we never crawl (SKIP) cannot change the index, so it does not even mark it
+// stale: writing a save or a play-stat file must not cost a re-walk of /data.
+export function invalidate(path) {
+  if (path && skipped(path)) return;
   stale = true;
   clearTimeout(refreshTimer);
   if (isLive()) refreshTimer = setTimeout(() => ensure(true), REFRESH_DEBOUNCE);

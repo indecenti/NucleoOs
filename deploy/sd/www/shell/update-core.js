@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // update-core.js — pure decision logic for the OS update check. No DOM, no timers, no direct
 // network: everything effectful is injected, so tools/update-core.test.mjs can drive every branch.
 // Shared by the shell's passive notifier (update-check.js) and the Settings "Updates" tab.
@@ -6,6 +7,10 @@
 // (no TLS heap, no battery, no phone-home — the same browser-direct rule the LLM keys follow).
 
 export const UPDATE_REPO = 'indecenti/NucleoOs';
+// The edition whose releases UPDATE_REPO publishes. Every other edition updates through its own channel
+// (Handheld: system packages; P4: its OTA; the browser edition: its deployment): telling them about a
+// Cardputer release would offer an update that is not theirs.
+export const UPDATE_EDITION = 'cardputer';
 export const UPDATE_API_LATEST = `https://api.github.com/repos/${UPDATE_REPO}/releases/latest`;
 // GitHub Release assets send NO CORS headers (a browser fetch of one is blocked — see the note in
 // .github/workflows/pages.yml), so the updater downloads from the Pages site, which republishes the

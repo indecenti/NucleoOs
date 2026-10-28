@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // download.js — pure orchestration for fetching M4 model weights. NO I/O here: the reducer plans
 // requests and folds results; the caller performs fetch. Two hard lessons baked in:
 //   (1) every shard fetch is a BOUNDED Range request, never a whole-file GET — the single-task,

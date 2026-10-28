@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // tool-guard.js — the checks every tool call of the agent goes through before it runs.
 // Two failure modes of small local models, handled the way OpenCode does (session/llm.ts tool-call repair +
 // tool/invalid.ts, session/processor.ts DOOM_LOOP_THRESHOLD; github.com/anomalyco/opencode, MIT):

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // stelle/hud.js — the pilot's interface: a resolution-independent canvas HUD drawn every frame plus a
 // thin DOM layer (comms with portraits, mission card, banners, pause menu, touch controls), and all
 // flight input (mouse aim, keyboard, gamepad, touch) written into the sim's F.input / cmd().

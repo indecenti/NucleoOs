@@ -3,7 +3,7 @@
   "installed": [
     {
       "id": "file-commander",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "path": "/apps/file-commander",
       "enabled": true,
       "autostart": true,
@@ -17,7 +17,7 @@
     },
     {
       "id": "notepad",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "path": "/apps/notepad",
       "enabled": true,
       "autostart": false,
@@ -29,7 +29,7 @@
     },
     {
       "id": "photo-viewer",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "path": "/apps/photo-viewer",
       "enabled": true,
       "autostart": false,
@@ -40,7 +40,7 @@
     },
     {
       "id": "media-player",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "path": "/apps/media-player",
       "enabled": true,
       "autostart": false,
@@ -52,7 +52,7 @@
     },
     {
       "id": "radio",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "path": "/apps/radio",
       "enabled": true,
       "autostart": false,
@@ -63,7 +63,7 @@
     },
     {
       "id": "video-player",
-      "version": "3.0.0",
+      "version": "3.1.3",
       "path": "/apps/video-player",
       "enabled": true,
       "autostart": false,
@@ -73,7 +73,7 @@
     },
     {
       "id": "video-studio",
-      "version": "0.1.0",
+      "version": "0.2.1",
       "path": "/apps/video-studio",
       "enabled": true,
       "autostart": false,
@@ -98,7 +98,7 @@
     },
     {
       "id": "ir-remote",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "path": "/apps/ir-remote",
       "enabled": true,
       "autostart": false,
@@ -110,7 +110,7 @@
     },
     {
       "id": "swarm",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "path": "/apps/swarm",
       "enabled": false,
       "autostart": false,
@@ -123,7 +123,7 @@
     },
     {
       "id": "settings",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "path": "/apps/settings",
       "enabled": true,
       "autostart": false,
@@ -136,7 +136,7 @@
     },
     {
       "id": "log-viewer",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "path": "/apps/log-viewer",
       "enabled": true,
       "autostart": false,
@@ -147,7 +147,7 @@
     },
     {
       "id": "system-monitor",
-      "version": "0.1.0",
+      "version": "0.1.2",
       "path": "/apps/system-monitor",
       "enabled": true,
       "autostart": false,
@@ -157,7 +157,7 @@
     },
     {
       "id": "calculator",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "path": "/apps/calculator",
       "enabled": true,
       "autostart": false,
@@ -165,7 +165,7 @@
     },
     {
       "id": "clock",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "path": "/apps/clock",
       "enabled": true,
       "autostart": false,
@@ -173,7 +173,7 @@
     },
     {
       "id": "calendar",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "path": "/apps/calendar",
       "enabled": true,
       "autostart": false,
@@ -183,7 +183,7 @@
     },
     {
       "id": "dosbox",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "path": "/apps/dosbox",
       "enabled": true,
       "autostart": false,
@@ -193,7 +193,7 @@
     },
     {
       "id": "dos-importer",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "path": "/apps/dos-importer",
       "enabled": true,
       "autostart": false,
@@ -204,7 +204,7 @@
     },
     {
       "id": "recorder",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "path": "/apps/recorder",
       "enabled": true,
       "autostart": false,
@@ -216,7 +216,7 @@
     },
     {
       "id": "dictation",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "path": "/apps/dictation",
       "enabled": true,
       "autostart": false,
@@ -228,7 +228,7 @@
     },
     {
       "id": "voice-manager",
-      "version": "0.2.0",
+      "version": "0.2.1",
       "path": "/apps/voice-manager",
       "enabled": true,
       "autostart": false,
@@ -239,7 +239,7 @@
     },
     {
       "id": "recycle-bin",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "path": "/apps/recycle-bin",
       "enabled": true,
       "autostart": false,
@@ -250,7 +250,7 @@
     },
     {
       "id": "updates",
-      "version": "0.1.0",
+      "version": "1.0.1",
       "path": "/apps/updates",
       "enabled": true,
       "autostart": false,
@@ -261,7 +261,7 @@
     },
     {
       "id": "anima",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "path": "/apps/anima",
       "enabled": true,
       "autostart": false,
@@ -273,7 +273,7 @@
     },
     {
       "id": "agent",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "path": "/apps/agent",
       "enabled": true,
       "autostart": false,
@@ -286,7 +286,7 @@
     },
     {
       "id": "code-runner",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "path": "/apps/code-runner",
       "enabled": true,
       "autostart": false,
@@ -299,7 +299,7 @@
     },
     {
       "id": "terminal",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "path": "/apps/terminal",
       "enabled": true,
       "autostart": false,
@@ -311,7 +311,7 @@
     },
     {
       "id": "ssh",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "path": "/apps/ssh",
       "enabled": true,
       "autostart": false,
@@ -323,7 +323,7 @@
     },
     {
       "id": "tasks",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "path": "/apps/tasks",
       "enabled": true,
       "autostart": false,
@@ -335,7 +335,7 @@
     },
     {
       "id": "wifi-scanner",
-      "version": "0.1.0",
+      "version": "0.1.2",
       "path": "/apps/wifi-scanner",
       "enabled": true,
       "autostart": false,
@@ -347,7 +347,7 @@
     },
     {
       "id": "help",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "path": "/apps/help",
       "enabled": true,
       "autostart": false,
@@ -359,7 +359,7 @@
     },
     {
       "id": "community",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "path": "/apps/community",
       "enabled": true,
       "autostart": false,
@@ -369,7 +369,7 @@
     },
     {
       "id": "browser",
-      "version": "0.1.0",
+      "version": "0.2.1",
       "path": "/apps/browser",
       "enabled": true,
       "autostart": false,
@@ -379,7 +379,7 @@
     },
     {
       "id": "groq-chat",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "path": "/apps/groq-chat",
       "enabled": true,
       "autostart": false,
@@ -390,7 +390,7 @@
     },
     {
       "id": "paint",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "path": "/apps/paint",
       "enabled": true,
       "autostart": false,
@@ -401,7 +401,7 @@
     },
     {
       "id": "spreadsheet",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "path": "/apps/spreadsheet",
       "enabled": true,
       "autostart": false,
@@ -413,7 +413,7 @@
     },
     {
       "id": "archive-manager",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "path": "/apps/archive-manager",
       "enabled": true,
       "autostart": false,
@@ -423,7 +423,7 @@
     },
     {
       "id": "miei-fatti",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "path": "/apps/miei-fatti",
       "enabled": true,
       "autostart": false,
@@ -435,7 +435,7 @@
     },
     {
       "id": "games",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "path": "/apps/games",
       "enabled": true,
       "autostart": false,
@@ -447,7 +447,7 @@
     },
     {
       "id": "nearby",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "path": "/apps/nearby",
       "enabled": true,
       "autostart": false,
@@ -461,7 +461,7 @@
     },
     {
       "id": "qr",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "path": "/apps/qr",
       "enabled": true,
       "autostart": false,
@@ -472,7 +472,7 @@
     },
     {
       "id": "mail",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "path": "/apps/mail",
       "enabled": true,
       "autostart": false,
@@ -484,7 +484,7 @@
     },
     {
       "id": "unit-converter",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "path": "/apps/unit-converter",
       "enabled": true,
       "autostart": false,
@@ -494,7 +494,7 @@
     },
     {
       "id": "passkeys",
-      "version": "0.1.0",
+      "version": "0.1.1",
       "path": "/apps/passkeys",
       "enabled": true,
       "autostart": false,
@@ -504,7 +504,7 @@
     },
     {
       "id": "weather",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "path": "/apps/weather",
       "enabled": true,
       "autostart": false,
@@ -514,7 +514,7 @@
     },
     {
       "id": "authenticator",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "path": "/apps/authenticator",
       "enabled": true,
       "autostart": false,
@@ -525,7 +525,7 @@
     },
     {
       "id": "contacts",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "path": "/apps/contacts",
       "enabled": true,
       "autostart": false,
@@ -536,7 +536,7 @@
     },
     {
       "id": "arcade",
-      "version": "1.0.0",
+      "version": "1.0.1",
       "path": "/apps/arcade",
       "enabled": true,
       "autostart": false,
@@ -548,12 +548,23 @@
     },
     {
       "id": "metronome",
-      "version": "1.0.0",
+      "version": "1.0.2",
       "path": "/apps/metronome",
       "enabled": true,
       "autostart": false,
       "permissions": [
         "device.mic"
+      ]
+    },
+    {
+      "id": "store",
+      "version": "1.0.1",
+      "path": "/apps/store",
+      "enabled": true,
+      "autostart": false,
+      "permissions": [
+        "system.events",
+        "storage.shared"
       ]
     }
   ]

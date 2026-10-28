@@ -1,0 +1,213 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
+<html lang="it">
+<head>
+<meta charset="utf-8">
+  <script>/* NucleoOS resource guard: a lost same-origin script/stylesheet makes the shell reload this window once (wm.js retryFrame) */addEventListener('error',function(e){var t=e.target,u;if(!t||t===window||parent===window||(t.tagName!=='SCRIPT'&&t.tagName!=='LINK'))return;try{u=new URL(t.src||t.href,location.href);if(u.origin===location.origin)parent.postMessage({type:'app-resource-failed',src:u.pathname},location.origin)}catch(_){}},true)</script>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Store</title>
+<!--
+  Lo store di NucleoOS Handheld: il meccanismo di nucleoos-p4-store sulla
+  console. Questa pagina non verifica e non installa niente da se': chiede a
+  /api/store, che chiama /usr/local/bin/nucleos-store, l'unico a conoscere
+  firme, scadenze e cartelle ammesse. Qui si sceglie e si legge l'esito.
+  Il testo del catalogo e' firmato ma resta testo: sempre textContent.
+-->
+<style>
+  :root{ --bg:#0b0e16; --panel:#10131c; --panel2:#161b27; --line:#232d44; --ink:#e7ecf6; --dim:#8ea0c0;
+    --accent:#6aa8ff; --accent2:#9b7bff; --ok:#6aee9f; --warn:#ffcf6a; --err:#ff8a8a;
+    --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"DejaVu Sans Mono",monospace; }
+  html[data-theme="light"]{ --bg:#eef2fb; --panel:#fff; --panel2:#f3f6fd; --line:#cdd8ee; --ink:#10203a; --dim:#5a6a86;
+    --accent:#1f5bc4; --accent2:#5b3fc9; --ok:#14703f; --warn:#7a5200; --err:#b3261e; }
+  html[data-theme="light"] button.pri{color:#fff}
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--ink);font:1rem/1.45 system-ui,Segoe UI,Roboto,sans-serif}
+  html{font-size:14px}
+  body{display:flex;flex-direction:column;overflow:hidden}
+  header{display:flex;align-items:center;gap:10px;padding:8px 12px;border-bottom:1px solid var(--line);background:var(--panel);flex:none;flex-wrap:wrap}
+  .logo{width:28px;height:28px;flex:none}
+  .ttl{font-weight:650}.ttl small{display:block;font-weight:400;font-size:.79rem;color:var(--dim);overflow-wrap:anywhere}
+  .grow{flex:1;min-width:0}
+  input[type=search]{background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:6px 10px;font:inherit;min-width:0;width:220px;max-width:100%}
+  button{border:1px solid var(--line);background:var(--panel2);color:var(--ink);border-radius:8px;padding:6px 12px;font:inherit;font-size:.93rem;cursor:pointer;white-space:nowrap}
+  button:hover{filter:brightness(1.15)}
+  button.pri{background:linear-gradient(135deg,var(--accent),var(--accent2));border:none;color:#08101f;font-weight:600}
+  button.danger{border-color:#5a2b2b;color:var(--err)}
+  button:disabled{opacity:.45;cursor:default}
+  .bar{display:flex;gap:6px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--line);flex:none;flex-wrap:wrap}
+  .seg{display:flex;border:1px solid var(--line);border-radius:9px;overflow:hidden}
+  .seg button{border:none;border-radius:0;background:transparent}
+  .seg button.on{background:var(--panel2);color:var(--accent);font-weight:600}
+  .info{font-size:.86rem;color:var(--dim);overflow-wrap:anywhere}
+  .info.err{color:var(--err)}.info.ok{color:var(--ok)}.info.warn{color:var(--warn)}
+  main{flex:1;overflow:auto;padding:12px;display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:10px;align-content:start}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px;display:flex;flex-direction:column;gap:6px;min-width:0}
+  .card .hd{display:flex;gap:10px;align-items:center;min-width:0}
+  .card img{width:40px;height:40px;border-radius:10px;flex:none;background:var(--panel2);object-fit:cover}
+  .card .nm{font-weight:650;overflow-wrap:anywhere}
+  .card .ds{font-size:.9rem;color:var(--dim);overflow-wrap:anywhere}
+  .card .mt{font:.79rem var(--mono);color:var(--dim);overflow-wrap:anywhere}
+  .card .act{display:flex;gap:6px;flex-wrap:wrap;margin-top:auto;padding-top:4px}
+  .kind{font:.75rem var(--mono);padding:1px 7px;border-radius:20px;border:1px solid var(--line);color:var(--accent2);white-space:nowrap}
+  .inst{color:var(--ok);font-size:.82rem}
+  .empty{grid-column:1/-1;color:var(--dim);text-align:center;padding:30px 10px;overflow-wrap:anywhere}
+  .empty code{font:.85rem var(--mono);background:var(--panel2);border:1px solid var(--line);border-radius:5px;padding:1px 6px}
+</style>
+</head>
+<body>
+  <header>
+    <img class="logo" src="assets/icon.svg" alt="">
+    <div class="ttl grow">Store<small id="sub"></small></div>
+    <input type="search" id="q" data-i18n-attr="placeholder:search">
+    <button id="refresh" class="pri" data-i18n="refresh">Aggiorna catalogo</button>
+  </header>
+  <div class="bar">
+    <div class="seg" id="filter">
+      <button data-f="all" class="on" data-i18n="f_all">Tutto</button>
+      <button data-f="installed" data-i18n="f_installed">Installate</button>
+      <button data-f="updates" data-i18n="f_updates">Aggiornamenti</button>
+    </div>
+    <button id="upgrade-all" style="display:none" data-i18n="upgrade_all">Aggiorna tutto</button>
+    <div class="info grow" id="info"></div>
+  </div>
+  <main id="grid"></main>
+<script type="module">
+import I18N from '/nucleo-i18n.js';
+import { pairDialog } from '/nucleo-pair.js';
+import Caps from '/nucleo-caps.js';   // what this device can do (store.native)
+
+const t = await I18N.init('store');
+const $ = (id) => document.getElementById(id);
+const el = (tag, cls, text) => { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; };
+const size = (n) => (n >= 1073741824 ? (n / 1073741824).toFixed(1) + ' GB' : n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB');
+const day = (ts) => (ts ? new Date(ts * 1000).toLocaleDateString() : '—');
+
+let st = null, apps = [], filter = 'all', polling = null, lastJob = null;
+
+// Il client esce con un codice che dice PERCHE' (vedi nucleos-store): lo si
+// traduce in una frase, invece di mostrare "errore" e basta.
+function why(err, code) {
+  const k = { 3: 'e_trust', 4: 'e_net', 5: 'e_conflict' }[code];
+  return (k ? t(k) + ' — ' : '') + (err || t('failed'));
+}
+
+async function api(path, opts) {
+  let r = await fetch(path, Object.assign({ cache: 'no-store' }, opts || {}));
+  if (r.status === 401) {
+    if (!(await pairDialog())) return null;
+    r = await fetch(path, Object.assign({ cache: 'no-store' }, opts || {}));
+  }
+  return r.ok ? r.json().catch(() => null) : null;
+}
+
+async function load() {
+  st = await api('/api/store');
+  const q = $('q').value.trim();
+  const l = await api('/api/store/list' + (q ? '?q=' + encodeURIComponent(q) : ''));
+  apps = (l && l.apps) || [];
+  render(l && l.error ? l : null);
+}
+
+function info(text, cls) { const i = $('info'); i.textContent = text; i.className = 'info grow' + (cls ? ' ' + cls : ''); }
+
+function render(listErr) {
+  $('sub').textContent = st && st.store_url ? st.store_url.replace(/^https?:\/\//, '') : t('subtitle');
+  const grid = $('grid'); grid.textContent = '';
+  const job = lastJob || (st && st.job) || {};
+  if (!st) { info(t('unreachable'), 'err'); return; }
+  if (st.error) { grid.appendChild(el('div', 'empty', why(st.error, st.code))); info('', ''); return; }
+  const cat = st.catalog || {};
+  const upd = new Set((st.upgradable || []).map((u) => u.id));
+  $('upgrade-all').style.display = upd.size ? '' : 'none';
+  if (job.state === 'running') info(t('job_running', { what: t('act_' + job.action) + ' ' + (job.ids || []).join(', ') }), 'warn');
+  else if (job.state === 'failed') info(why(job.error, job.result && job.result.code), 'err');
+  else if (cat.error) info(t('no_catalog'), 'warn');
+  else info(t('catalog_info', { n: cat.count || 0, until: day(cat.valid_until) }), 'ok');
+
+  const rows = apps.filter((a) => filter === 'all' || (filter === 'installed' ? a.installed : upd.has(a.id)));
+  if (!rows.length) {
+    const e = el('div', 'empty', cat.error || listErr ? t('empty_no_catalog') : t('empty'));
+    grid.appendChild(e);
+    return;
+  }
+  const busy = job.state === 'running';
+  for (const a of rows) {
+    const c = el('div', 'card');
+    const hd = el('div', 'hd');
+    const img = el('img'); img.alt = ''; img.loading = 'lazy';
+    if (a.icon && st.store_url) img.src = st.store_url + '/' + a.icon; else img.src = 'assets/icon.svg';
+    const box = el('div', 'grow');
+    box.appendChild(el('div', 'nm', a.name || a.id));
+    const k = el('span', 'kind', t('kind_' + a.kind) + (a.system ? ' · ' + a.system : ''));
+    box.appendChild(k);
+    hd.append(img, box);
+    c.appendChild(hd);
+    if (a.description) c.appendChild(el('div', 'ds', a.description));
+    c.appendChild(el('div', 'mt', [a.version, size(a.size || 0), a.author, a.license].filter(Boolean).join(' · ')));
+    if (a.installed) c.appendChild(el('div', 'inst', t('installed_v', { v: a.installed })));
+    const act = el('div', 'act');
+    const btn = (label, cls, action) => { const b = el('button', cls, label); b.disabled = busy; b.onclick = () => run(action, [a.id], a); act.appendChild(b); };
+    if (!a.installed) btn(t('install'), 'pri', 'install');
+    else {
+      if (upd.has(a.id)) btn(t('update_to', { v: a.version }), 'pri', 'install');
+      btn(t('remove'), 'danger', 'remove');
+    }
+    c.appendChild(act);
+    grid.appendChild(c);
+  }
+}
+
+async function run(action, ids, a) {
+  if (action === 'remove' && !confirm(t('confirm_remove', { n: (a && a.name) || ids.join(', ') }))) return;
+  if (action === 'install' && a && a.size > 200 * 1048576 && !confirm(t('confirm_big', { n: a.name, s: size(a.size) }))) return;
+  const r = await api('/api/store', { method: 'POST', body: JSON.stringify({ action, ids }) });
+  if (!r) return;
+  if (!r.ok) { info(r.error || t('failed'), 'err'); return; }
+  lastJob = r.job; render();
+  poll();
+}
+
+function poll() {
+  if (polling) return;
+  polling = setInterval(async () => {
+    const j = await api('/api/store/job');
+    if (!j) return;
+    lastJob = j;
+    if (j.state !== 'running') {
+      clearInterval(polling); polling = null;
+      await load();
+      if (j.state === 'done') info(t('job_done'), 'ok');
+      lastJob = j.state === 'failed' ? j : null;
+      if (j.state === 'failed') render();
+    } else render();
+  }, 1000);
+}
+
+$('refresh').onclick = () => run('refresh', []);
+$('upgrade-all').onclick = () => run('upgrade', []);
+let qt = null;
+$('q').addEventListener('input', () => { clearTimeout(qt); qt = setTimeout(load, 250); });
+$('filter').addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-f]'); if (!b) return;
+  filter = b.dataset.f;
+  for (const x of $('filter').children) x.classList.toggle('on', x === b);
+  render();
+});
+// The native store belongs to the device (capability store.native): elsewhere say so, and ask nothing.
+const storeOk = await Caps.has('store.native');
+if (!storeOk) {
+  for (const id of ['q', 'refresh', 'filter', 'upgrade-all']) $(id).style.display = 'none';
+  $('sub').textContent = t('subtitle');
+  const n = el('div', 'empty', t('store_unavailable')); n.setAttribute('data-i18n', 'store_unavailable'); $('grid').appendChild(n);
+} else {
+  I18N.onChange(() => load());
+  await load();
+}
+if (storeOk && st && st.catalog && st.catalog.error && !(st.job && st.job.state === 'running')) {
+  // primo avvio: nessun catalogo ancora scaricato. Non lo si scarica da soli
+  // (rete e scrittura su disco sono una scelta di chi guarda): lo si dice.
+  info(t('no_catalog'), 'warn');
+}
+</script>
+</body>
+</html>

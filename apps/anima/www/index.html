@@ -1,4 +1,5 @@
 <!doctype html>
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -885,14 +886,14 @@
               </div>
               <div class="set-field">
                 <div class="f-tx"><label id="s-voicesrc">Microfono</label><span class="f-sub" data-i18n data-it="Sorgente per la dettatura vocale." data-en="Source for voice dictation.">Sorgente per la dettatura vocale.</span></div>
-                <div class="f-ctl"><div class="seg2" id="set-voicesrc"><button data-vs="browser">Browser</button><button data-vs="cardputer">Cardputer</button></div></div>
+                <div class="f-ctl"><div class="seg2" id="set-voicesrc"><button data-vs="browser">Browser</button><button data-vs="cardputer">Device</button></div></div>
               </div>
               <div class="set-field">
                 <div class="f-tx"><label id="s-speed">Velocità risposta</label><span class="f-sub" data-i18n data-it="Quanto velocemente compare il testo della risposta." data-en="How fast reply text streams in.">Quanto velocemente compare il testo della risposta.</span></div>
                 <div class="f-ctl"><div class="seg2" id="set-speed"><button data-s="0" data-i18n="speedInstant">Instant</button><button data-s="14" data-i18n="speedSmooth">Smooth</button><button data-s="6" data-i18n="speedFast">Fast</button></div></div>
               </div>
               <div class="set-field" id="set-ttsspeed-field" hidden>
-                <div class="f-tx"><label id="s-ttsspeed">Velocità voce Cardputer</label><span class="f-sub" data-i18n data-it="Quanto velocemente il Cardputer legge ad alta voce (voce on-device)." data-en="How fast the Cardputer reads aloud (on-device voice).">Quanto velocemente il Cardputer legge ad alta voce (voce on-device).</span></div>
+                <div class="f-tx"><label id="s-ttsspeed">Velocità voce del dispositivo</label><span class="f-sub" data-i18n data-it="Quanto velocemente il dispositivo legge ad alta voce (voce on-device)." data-en="How fast the device reads aloud (on-device voice).">Quanto velocemente il dispositivo legge ad alta voce (voce on-device).</span></div>
                 <div class="f-ctl"><input type="range" id="set-ttsspeed" min="70" max="160" step="5" value="110" style="width:160px;accent-color:var(--acc)"><span class="f-sub" id="set-ttsspeed-val" style="min-width:42px;text-align:right">110%</span></div>
               </div>
               <div class="set-field">
@@ -913,10 +914,10 @@
                 <div class="f-ctl"><div class="seg2 acc" id="set-mode" role="radiogroup" aria-labelledby="s-mode"><button data-m="auto" role="radio" data-i18n="modeAuto">Auto</button><button data-m="private" role="radio" data-i18n="modePrivate">Private</button></div></div>
               </div>
               <div class="set-field" style="border:none">
-                <div class="f-tx" style="flex:1"><span class="f-sub" data-i18n="modeChain">Auto walks one ladder until a brain answers: online AI (with a key) → the model on your browser GPU → the browser brain (WASM + web index) → the Cardputer. Private is the same ladder with every network step removed. Type /guide for the full map.</span></div>
+                <div class="f-tx" style="flex:1"><span class="f-sub" data-i18n="modeChain">Auto walks one ladder until a brain answers: online AI (with a key) → the model on your browser GPU → the browser brain (WASM + web index) → the device. Private is the same ladder with every network step removed. Type /guide for the full map.</span></div>
               </div>
               <div class="set-field" id="row-edge" hidden>
-                <div class="f-tx"><label id="s-edge" title="Il cervello offline di ANIMA scaricato in questo browser. In cache = funziona anche senza il Cardputer.">Cervello locale</label><span class="f-sub" data-i18n data-it="Il cervello offline scaricato in questo browser." data-en="The offline brain downloaded in this browser.">Il cervello offline scaricato in questo browser.</span></div>
+                <div class="f-tx"><label id="s-edge" title="Il cervello offline di ANIMA scaricato in questo browser. In cache = funziona anche senza il dispositivo.">Cervello locale</label><span class="f-sub" data-i18n data-it="Il cervello offline scaricato in questo browser." data-en="The offline brain downloaded in this browser.">Il cervello offline scaricato in questo browser.</span></div>
                 <div class="f-ctl edge-mgmt"><span class="edge-stat" id="edge-stat"></span><button class="ebtn" id="edge-reload" title="Riscarica il cervello dal dispositivo (se l'hai aggiornato) e ricostruisce la cache locale.">Ricarica</button></div>
               </div>
               <div class="set-field" id="row-localmodel">
@@ -927,8 +928,17 @@
                   <button class="ebtn" id="localmodel-get" title="Scarica/carica ora il modello nel browser (mostra il progresso). Non si scarica mai da solo: finché non è installato, la chat salta la GPU locale.">Scarica ora</button>
                 </div>
               </div>
+              <div class="set-field" id="row-pcllm" hidden>
+                <div class="f-tx"><label data-i18n data-it="Modelli del PC" data-en="PC models" data-es="Modelos del PC" data-fr="Modèles du PC" data-de="Modelle des PCs">Modelli del PC</label><span class="f-sub" data-i18n data-it="Ollama, LM Studio, llama.cpp, Jan o KoboldCpp sul PC da cui guardi la console: ANIMA li trova e li usa da sola, niente va in rete. Auto: quando non risponde un modello online (e subito in modalità Browser). Prima: sempre per primi." data-en="Ollama, LM Studio, llama.cpp, Jan or KoboldCpp on the PC you view the console from: ANIMA finds and uses them by itself, nothing goes online. Auto: when no online model answers (and right away in Browser mode). First: always first." data-es="Ollama, LM Studio, llama.cpp, Jan o KoboldCpp en el PC desde el que ves la consola: ANIMA los encuentra y los usa sola, nada sale a la red. Auto: cuando no responde un modelo en línea (y enseguida en modo Navegador). Primero: siempre primero." data-fr="Ollama, LM Studio, llama.cpp, Jan ou KoboldCpp sur le PC d’où tu regardes la console : ANIMA les trouve et les utilise toute seule, rien ne part en ligne. Auto : quand aucun modèle en ligne ne répond (et tout de suite en mode Navigateur). D’abord : toujours en premier." data-de="Ollama, LM Studio, llama.cpp, Jan oder KoboldCpp auf dem PC, von dem aus du die Konsole siehst: ANIMA findet und nutzt sie selbst, nichts geht ins Netz. Auto: wenn kein Online-Modell antwortet (und sofort im Browser-Modus). Zuerst: immer zuerst.">Ollama, LM Studio, llama.cpp, Jan o KoboldCpp sul PC: ANIMA li trova e li usa da sola.</span></div>
+                <div class="f-ctl" style="flex-direction:column;align-items:flex-end;gap:6px">
+                  <div class="seg2" id="set-pc"><button data-pc="auto">Auto</button><button data-pc="prefer" data-i18n data-it="Prima" data-en="First" data-es="Primero" data-fr="D’abord" data-de="Zuerst">Prima</button><button data-pc="off">Off</button></div>
+                  <select id="set-pcmodel" class="keyin" style="cursor:pointer;width:auto;min-width:170px" hidden></select>
+                  <span id="pc-stat" style="font:11px var(--mono);color:var(--muted);text-align:right;max-width:260px"></span>
+                  <button class="ebtn" id="pc-scan" data-i18n data-it="Cerca sul PC" data-en="Search the PC" data-es="Buscar en el PC" data-fr="Chercher sur le PC" data-de="Auf dem PC suchen">Cerca sul PC</button>
+                </div>
+              </div>
               <div class="set-field">
-                <div class="f-tx"><label id="s-l1">AI offline (L1)</label><span class="f-sub" data-i18n data-it="Il cervello programmatico offline del Cardputer. Auto: si mette a riposo quando rispondono l'online o un modello del browser (libera RAM). On: sempre attivo. Off: mai." data-en="The Cardputer's offline programmatic brain. Auto: stands down when online or a browser model answers (frees RAM). On: always. Off: never.">Il cervello programmatico offline del Cardputer.</span></div>
+                <div class="f-tx"><label id="s-l1">AI offline (L1)</label><span class="f-sub" data-i18n data-it="Il cervello programmatico offline del dispositivo. Auto: si mette a riposo quando rispondono l'online o un modello del browser (libera RAM). On: sempre attivo. Off: mai." data-en="The device's offline programmatic brain. Auto: stands down when online or a browser model answers (frees RAM). On: always. Off: never.">Il cervello programmatico offline del dispositivo.</span></div>
                 <div class="f-ctl"><div class="seg2" id="set-l1mode"><button data-l1="auto">Auto</button><button data-l1="on">On</button><button data-l1="off">Off</button></div></div>
               </div>
             </div>
@@ -983,7 +993,7 @@
                    carries its own provider table or teacher.json I/O (it kept drifting from the canon). -->
               <div class="set-field-col"><div id="ai-keys-mount"><div class="keystat">…</div></div></div>
             </div>
-            <div class="modehint" id="key-hint">Meteo e Wikipedia funzionano già senza chiave. La chiave serve all'IA online: comprensione migliore, verifica anti-errore e modalità "Online". <b>Claude</b> risponde direttamente dal browser (non carica il Cardputer). La chiave resta solo sul tuo dispositivo (SD), mai nei log.</div>
+            <div class="modehint" id="key-hint">Meteo e Wikipedia funzionano già senza chiave. La chiave serve all'IA online: comprensione migliore, verifica anti-errore e modalità "Online". <b>Claude</b> risponde direttamente dal browser (non carica il dispositivo). La chiave resta solo sul tuo dispositivo (SD), mai nei log.</div>
           </div>
         </div>
 
@@ -991,7 +1001,7 @@
         <div class="tabpane" data-pane="forge" role="tabpanel" hidden>
           <div class="set-section">
             <h4 id="h-models" data-i18n data-it="Modelli IA — Forge" data-en="AI Models — Forge">Modelli IA — Forge</h4>
-            <div class="card-note" id="s-models-hint" data-i18n data-it="Installa un modello IA una volta: poi gira nel TUO browser, offline, senza cloud. Sorgente: prima Internet (CDN); se manca la rete, la SD del Cardputer. Ogni parte è verificata (SHA-256) e conservata, quindi se la connessione cade riprende da sola. Un’installazione alla volta." data-en="Install an AI model once: it then runs in YOUR browser, offline, no cloud. Source: the internet (CDN) first; with no network, the Cardputer SD. Every part is checksum-verified (SHA-256) and kept, so a dropped connection resumes by itself. One install at a time.">Installa un modello IA una volta: poi gira nel TUO browser, offline, senza cloud. Sorgente: prima Internet (CDN); se manca la rete, la SD del Cardputer. Ogni parte è verificata (SHA-256) e conservata, quindi se la connessione cade riprende da sola. Un'installazione alla volta.</div>
+            <div class="card-note" id="s-models-hint" data-i18n data-it="Installa un modello IA una volta: poi gira nel TUO browser, offline, senza cloud. Sorgente: prima Internet (CDN); se manca la rete, la SD del dispositivo. Ogni parte è verificata (SHA-256) e conservata, quindi se la connessione cade riprende da sola. Un’installazione alla volta." data-en="Install an AI model once: it then runs in YOUR browser, offline, no cloud. Source: the internet (CDN) first; with no network, the device SD. Every part is checksum-verified (SHA-256) and kept, so a dropped connection resumes by itself. One install at a time.">Installa un modello IA una volta: poi gira nel TUO browser, offline, senza cloud. Sorgente: prima Internet (CDN); se manca la rete, la SD del dispositivo. Ogni parte è verificata (SHA-256) e conservata, quindi se la connessione cade riprende da sola. Un'installazione alla volta.</div>
             <ol class="card-note" id="s-models-steps" style="margin:8px 0 4px;padding-left:20px;line-height:1.6" data-i18n
               data-it="<li>Scegli un modello qui sotto — “GPU” richiede WebGPU (più veloce), “CPU” gira ovunque.</li><li>Premi <b>Installa</b>: durante il download il resto di NucleoOS attende — puoi solo guardare o <b>annullare</b>.</li><li>A fine installazione il modello è pronto offline: stacca pure la rete."
               data-en="<li>Pick a model below — “GPU” needs WebGPU (faster), “CPU” runs anywhere.</li><li>Press <b>Install</b>: while it downloads the rest of NucleoOS waits — you can only watch or <b>cancel</b>.</li><li>When it finishes the model is ready offline: you can unplug the network."><li>Scegli un modello qui sotto — “GPU” richiede WebGPU (più veloce), “CPU” gira ovunque.</li><li>Premi <b>Installa</b>: durante il download il resto di NucleoOS attende — puoi solo guardare o <b>annullare</b>.</li><li>A fine installazione il modello è pronto offline: stacca pure la rete.</li></ol>
@@ -1079,6 +1089,7 @@
 
   <script type="module">
     import I18N from '/nucleo-i18n.js';   // OS i18n engine — for live OS-wide language sync (ANIMA keeps its own STR)
+    import Caps from '/nucleo-caps.js';   // what this device can do (one list for every app, cached per session)
     // ===========================================================================
     // ANIMA web front-end — a Claude-Code-style agent terminal in one file.
     // Talks to the SAME engine endpoint (/api/anima) and shell protocol as before;
@@ -1368,10 +1379,10 @@
         "hybrid": "híbrida",
         "local GPU": "GPU local",
         "browser": "navegador",
-        "Offline: the Cardputer’s brain, no network. If the device doesn’t answer, the browser brain (if ready) is the backup. Type /guide for the full map.": "Offline: el cerebro del Cardputer, sin red. Si el dispositivo no responde, el cerebro del navegador (si está listo) hace de reserva. Escribe /guide para el mapa completo.",
+        "Offline: the device’s brain, no network. If the device doesn’t answer, the browser brain (if ready) is the backup. Type /guide for the full map.": "Offline: el cerebro del dispositivo, sin red. Si el dispositivo no responde, el cerebro del navegador (si está listo) hace de reserva. Escribe /guide para el mapa completo.",
         "Local GPU: the model runs on the browser GPU — offline and private. For full-sentence translation with no cloud (Grok only if there is no GPU).": "GPU local: el modelo corre en la GPU del navegador — offline y privado. Para traducir frases enteras sin nube (Grok solo si no hay GPU).",
-        "Browser: the whole offline cascade runs HERE in the browser (WebAssembly) — answers identical to the Cardputer. If it doesn’t know, it serves already-cached web cards (no network). The brain downloads once; then it works even with the Cardputer off. Nothing leaves the device.": "Navegador: toda la cascada offline corre AQUÍ en el navegador (WebAssembly) — respuestas idénticas al Cardputer. Si no lo sabe, sirve tarjetas web ya en caché (sin red). El cerebro se descarga una vez; luego funciona incluso con el Cardputer apagado. Nada sale del dispositivo.",
-        "Online: real LLMs (cloud Grok/Claude → browser LLM). As a last resort, BEFORE scaling onto the Cardputer, it uses the browser brain and indexes the web.": "Online: LLM reales (nube Grok/Claude → LLM del navegador). Como último recurso, ANTES de escalar al Cardputer, usa el cerebro del navegador e indexa la web.",
+        "Browser: the whole offline cascade runs HERE in the browser (WebAssembly) — answers identical to the device. If it doesn’t know, it serves already-cached web cards (no network). The brain downloads once; then it works even with the device off. Nothing leaves the device.": "Navegador: toda la cascada offline corre AQUÍ en el navegador (WebAssembly) — respuestas idénticas al dispositivo. Si no lo sabe, sirve tarjetas web ya en caché (sin red). El cerebro se descarga una vez; luego funciona incluso con el dispositivo apagado. Nada sale del dispositivo.",
+        "Online: real LLMs (cloud Grok/Claude → browser LLM). As a last resort, BEFORE scaling onto the device, it uses the browser brain and indexes the web.": "Online: LLM reales (nube Grok/Claude → LLM del navegador). Como último recurso, ANTES de escalar al dispositivo, usa el cerebro del navegador e indexa la web.",
         "Could not load ANIMA locally: brain download failed. Check the device connection.": "No se pudo cargar ANIMA en local: falló la descarga del cerebro. Comprueba la conexión con el dispositivo.",
         "Local brain": "Cerebro local",
         "Reload": "Recargar",
@@ -1497,15 +1508,15 @@
         "Assistant and interface language.": "Idioma del asistente y de la interfaz.",
         "Source for voice dictation.": "Fuente para el dictado por voz.",
         "How fast reply text streams in.": "Con qué rapidez aparece el texto de la respuesta.",
-        "How fast the Cardputer reads aloud (on-device voice).": "Con qué rapidez el Cardputer lee en voz alta (voz en el dispositivo).",
+        "How fast the device reads aloud (on-device voice).": "Con qué rapidez el dispositivo lee en voz alta (voz en el dispositivo).",
         "Read replies aloud with the browser voice (also online/long replies).": "Lee las respuestas en voz alta con la voz del navegador (también online y largas).",
         "Yes": "Sí",
         "Where the intelligence runs: device, browser or online.": "Dónde corre la inteligencia: dispositivo, navegador u online.",
         "Local GPU": "GPU local",
-        "Fallback chain: Online (cloud) → Local GPU → Browser (WASM + web index) → Cardputer. It scales onto the Cardputer only as the last net. Type /guide in chat for the full map.": "Cadena de reserva: Online (nube) → GPU local → Navegador (WASM + índice web) → Cardputer. Escala al Cardputer solo como última red. Escribe /guide en el chat para el mapa completo.",
+        "Fallback chain: Online (cloud) → Local GPU → Browser (WASM + web index) → Device. It scales onto the device only as the last net. Type /guide in chat for the full map.": "Cadena de reserva: Online (nube) → GPU local → Navegador (WASM + índice web) → Dispositivo. Escala al dispositivo solo como última red. Escribe /guide en el chat para el mapa completo.",
         "The offline brain downloaded in this browser.": "El cerebro offline descargado en este navegador.",
         "The LLM that runs in YOUR browser on the GPU. Downloaded once, only when you press “Download now”, then works offline. Bigger = better but needs more VRAM.": "El LLM que corre en TU navegador en la GPU. Se descarga una sola vez, solo cuando pulsas «Descargar ahora», y luego funciona offline. Más grande = mejor, pero necesita más VRAM.",
-        "The Cardputer's offline programmatic brain. Auto: stands down when online or a browser model answers (frees RAM). On: always. Off: never.": "El cerebro programático offline del Cardputer. Auto: se retira cuando responde el online o un modelo del navegador (libera RAM). On: siempre. Off: nunca.",
+        "The device's offline programmatic brain. Auto: stands down when online or a browser model answers (frees RAM). On: always. Off: never.": "El cerebro programático offline del dispositivo. Auto: se retira cuando responde el online o un modelo del navegador (libera RAM). On: siempre. Off: nunca.",
         "Replies": "Respuestas",
         "Show example prompts under replies.": "Muestra ejemplos de pregunta bajo las respuestas.",
         "Summarises old turns to stay light.": "Resume los turnos antiguos para mantenerse ligera.",
@@ -1519,7 +1530,7 @@
         "Web search (agent)": "Búsqueda web (agente)",
         "Let the agent search the web.": "Permite al agente buscar en la web.",
         "AI Models — Forge": "Modelos de IA — Forge",
-        "Install an AI model once: it then runs in YOUR browser, offline, no cloud. Source: the internet (CDN) first; with no network, the Cardputer SD. Every part is checksum-verified (SHA-256) and kept, so a dropped connection resumes by itself. One install at a time.": "Instala un modelo de IA una vez: luego corre en TU navegador, offline, sin nube. Fuente: primero Internet (CDN); sin red, la SD del Cardputer. Cada parte se verifica (SHA-256) y se conserva, así que si la conexión se cae, se reanuda sola. Una instalación a la vez.",
+        "Install an AI model once: it then runs in YOUR browser, offline, no cloud. Source: the internet (CDN) first; with no network, the device SD. Every part is checksum-verified (SHA-256) and kept, so a dropped connection resumes by itself. One install at a time.": "Instala un modelo de IA una vez: luego corre en TU navegador, offline, sin nube. Fuente: primero Internet (CDN); sin red, la SD del dispositivo. Cada parte se verifica (SHA-256) y se conserva, así que si la conexión se cae, se reanuda sola. Una instalación a la vez.",
         "<li>Pick a model below — “GPU” needs WebGPU (faster), “CPU” runs anywhere.</li><li>Press <b>Install</b>: while it downloads the rest of NucleoOS waits — you can only watch or <b>cancel</b>.</li><li>When it finishes the model is ready offline: you can unplug the network.": "<li>Elige un modelo abajo — «GPU» necesita WebGPU (más rápido), «CPU» corre en cualquier sitio.</li><li>Pulsa <b>Instalar</b>: durante la descarga el resto de NucleoOS espera — solo puedes mirar o <b>cancelar</b>.</li><li>Al terminar el modelo está listo offline: puedes desconectar la red.",
         "Which engines run with the cable pulled. ✈ air-gapped · ↓ one download · ◌ needs weights · ! SD incomplete (re-sync) · ☁ cloud · ⊘ not here.": "Qué motores corren con el cable desconectado. ✈ aislado · ↓ una descarga · ◌ faltan pesos · ! SD incompleta (re-sincroniza) · ☁ nube · ⊘ no aquí.",
         "Deep SHA-256 verification of the weights on the SD.": "Verificación SHA-256 profunda de los pesos en la SD.",
@@ -1595,7 +1606,7 @@
         "You": "Tú",
         "Local GPU · WebLLM": "GPU local · WebLLM",
         "Setting up ANIMA on this device": "Preparando ANIMA en este dispositivo",
-        "Copying ANIMA’s offline brain into this browser so it runs locally — fast, private, and it keeps working with the Cardputer off. One-time download.": "Copiando el cerebro offline de ANIMA en este navegador para que corra en local — rápido, privado y sigue funcionando con el Cardputer apagado. Descarga única.",
+        "Copying ANIMA’s offline brain into this browser so it runs locally — fast, private, and it keeps working with the device off. One-time download.": "Copiando el cerebro offline de ANIMA en este navegador para que corra en local — rápido, privado y sigue funcionando con el dispositivo apagado. Descarga única.",
         "Cancel download": "Cancelar descarga",
         "Cancelling…": "Cancelando…",
         "loading engine…": "cargando el motor…",
@@ -1606,7 +1617,7 @@
         "Retry": "Reintentar",
         "Use device": "Usar el dispositivo",
         "Download ANIMA’s offline brain?": "¿Descargar el cerebro offline de ANIMA?",
-        "To run ANIMA locally in this browser I need to download its brain (~88 MB) from the device, once. Then it works fast, private, and with the Cardputer off.": "Para correr ANIMA en local en este navegador necesito descargar su cerebro (~88 MB) del dispositivo, una vez. Luego funciona rápido, privado y con el Cardputer apagado.",
+        "To run ANIMA locally in this browser I need to download its brain (~88 MB) from the device, once. Then it works fast, private, and with the device off.": "Para correr ANIMA en local en este navegador necesito descargar su cerebro (~88 MB) del dispositivo, una vez. Luego funciona rápido, privado y con el dispositivo apagado.",
         "Download (~88 MB)": "Descargar (~88 MB)",
         "capital of France": "capital de Francia",
         "How ANIMA works": "Cómo funciona ANIMA",
@@ -1645,7 +1656,7 @@
         "Stop / close": "Detener / cerrar",
         "current": "actual",
         "Dictate": "Dictar",
-        "Cardputer mic": "mic del Cardputer",
+        "device mic": "mic del dispositivo",
         "online model": "modelo online",
         "browser mic": "mic del navegador",
         "Stop dictation": "Detener dictado",
@@ -1677,10 +1688,10 @@
         "Browser voice": "Voz del navegador",
         "Online AI key": "Clave de IA online",
         "Model": "Modelo",
-        "Weather and Wikipedia already work without a key. The key powers the online AI: better understanding, anti-error verification and \"Online\" mode. <b>Claude</b> answers straight from the browser (it doesn’t load the Cardputer). The key stays only on your device (SD), never in logs.": "El tiempo y Wikipedia ya funcionan sin clave. La clave impulsa la IA online: mejor comprensión, verificación anti-error y modo \"Online\". <b>Claude</b> responde directamente desde el navegador (no carga el Cardputer). La clave se queda solo en tu dispositivo (SD), nunca en los registros.",
+        "Weather and Wikipedia already work without a key. The key powers the online AI: better understanding, anti-error verification and \"Online\" mode. <b>Claude</b> answers straight from the browser (it doesn’t load the device). The key stays only on your device (SD), never in logs.": "El tiempo y Wikipedia ya funcionan sin clave. La clave impulsa la IA online: mejor comprensión, verificación anti-error y modo \"Online\". <b>Claude</b> responde directamente desde el navegador (no carga el dispositivo). La clave se queda solo en tu dispositivo (SD), nunca en los registros.",
         "<kbd>⏎</kbd> send · <kbd>/</kbd> commands · <kbd>⌘K</kbd> palette · <kbd>?</kbd> help": "<kbd>⏎</kbd> enviar · <kbd>/</kbd> comandos · <kbd>⌘K</kbd> paleta · <kbd>?</kbd> ayuda",
         "Choose workspace": "Elegir espacio de trabajo",
-        "ANIMA offline runs entirely in this browser (WebAssembly): it downloads the brain once from the device, then answers locally even without the Cardputer — the exact same answers.": "ANIMA offline corre enteramente en este navegador (WebAssembly): descarga el cerebro una vez del dispositivo y luego responde en local incluso sin el Cardputer — las mismas respuestas exactas.",
+        "ANIMA offline runs entirely in this browser (WebAssembly): it downloads the brain once from the device, then answers locally even without the device — the exact same answers.": "ANIMA offline corre enteramente en este navegador (WebAssembly): descarga el cerebro una vez del dispositivo y luego responde en local incluso sin el dispositivo — las mismas respuestas exactas.",
         "Download now": "Descargar ahora",
         "Workspace: ": "Espacio de trabajo: ",
         "Workspace closed": "Espacio de trabajo cerrado",
@@ -1777,7 +1788,7 @@
         "+ New folder": "+ Nueva carpeta",
         "Use this folder": "Usar esta carpeta",
         "Show, under every reply, which tool ANIMA used to reason (engine, model, steps). Line = a collapsible one-liner; Tree = expanded.": "Muestra, bajo cada respuesta, qué herramienta usó ANIMA para razonar (motor, modelo, pasos). Línea = una línea plegable; Árbol = expandido.",
-        "ANIMA’s offline brain downloaded in this browser. Cached = it works even without the Cardputer.": "El cerebro offline de ANIMA descargado en este navegador. En caché = funciona incluso sin el Cardputer.",
+        "ANIMA’s offline brain downloaded in this browser. Cached = it works even without the device.": "El cerebro offline de ANIMA descargado en este navegador. En caché = funciona incluso sin el dispositivo.",
         "Re-download the brain from the device (if you updated it) and rebuild the local cache.": "Vuelve a descargar el cerebro del dispositivo (si lo actualizaste) y reconstruye la caché local.",
         "Download/load the model in the browser now (shows progress). It never downloads by itself: until it is installed, chat skips the local GPU.": "Descarga/carga el modelo en el navegador ahora (muestra el progreso). Nunca se descarga solo: hasta que esté instalado, el chat omite la GPU local.",
         "Message": "Mensaje",
@@ -1787,12 +1798,33 @@
         "Context compacted in background (": "Contexto compactado en segundo plano (",
         " turns)": " turnos)",
         "in use by ": "en uso por ",
-        "The Cardputer mic is in use by ": "El mic del Cardputer está en uso por ",
+        "The device mic is in use by ": "El mic del dispositivo está en uso por ",
         "another app": "otra app",
         ". Stop it there, then try again.": ". Deténlo allí y vuelve a intentarlo.",
-        "The Cardputer mic is busy": "El mic del Cardputer está ocupado",
+        "The device mic is busy": "El mic del dispositivo está ocupado",
         " (in use by ": " (en uso por ",
-        " (a recording is in progress)": " (hay una grabación en curso)"
+        " (a recording is in progress)": " (hay una grabación en curso)",
+        "PC · Multi-agent": "PC · Multiagente",
+        "NucleoOS · console data": "NucleoOS · datos de la consola",
+        "device API": "API del dispositivo",
+        "your PC": "tu PC",
+        "Play on the console": "Jugar en la consola",
+        "Play here": "Jugar aquí",
+        "On the console": "En la consola",
+        "PIN needed": "hace falta el PIN",
+        "failed": "no se pudo",
+        "downloaded ✓": "descargado ✓",
+        "still running…": "aún en curso…",
+        "console unreachable": "consola no alcanzable",
+        "started ✓": "iniciado ✓",
+        "a game is already open": "ya hay un juego abierto",
+        "console not ready": "consola no lista",
+        "one moment…": "un momento…",
+        "Agents · PC · ": "Agentes · PC · ",
+        "I can't find an app with that name.": "No encuentro ninguna app con ese nombre.",
+        "Permanently delete ": "¿Eliminar definitivamente ",
+        "?\nWorkspace files are not moved to a trash.": "?\nLos archivos del espacio de trabajo no van a la papelera.",
+        "Could not create the folder": "No se pudo crear la carpeta"
       },
       fr: {
         "offline assistant": "assistant hors ligne",
@@ -1825,10 +1857,10 @@
         "local GPU": "GPU local",
         "browser": "navigateur",
         "online": "en ligne",
-        "Offline: the Cardputer’s brain, no network. If the device doesn’t answer, the browser brain (if ready) is the backup. Type /guide for the full map.": "Hors ligne : le cerveau du Cardputer, sans réseau. Si l’appareil ne répond pas, le cerveau du navigateur (s’il est prêt) prend le relais. Tapez /guide pour la carte complète.",
+        "Offline: the device’s brain, no network. If the device doesn’t answer, the browser brain (if ready) is the backup. Type /guide for the full map.": "Hors ligne : le cerveau de l’appareil, sans réseau. Si l’appareil ne répond pas, le cerveau du navigateur (s’il est prêt) prend le relais. Tapez /guide pour la carte complète.",
         "Local GPU: the model runs on the browser GPU — offline and private. For full-sentence translation with no cloud (Grok only if there is no GPU).": "GPU local : le modèle tourne sur le GPU du navigateur — hors ligne et privé. Pour traduire des phrases entières sans cloud (Grok seulement s’il n’y a pas de GPU).",
-        "Browser: the whole offline cascade runs HERE in the browser (WebAssembly) — answers identical to the Cardputer. If it doesn’t know, it serves already-cached web cards (no network). The brain downloads once; then it works even with the Cardputer off. Nothing leaves the device.": "Navigateur : toute la cascade hors ligne tourne ICI dans le navigateur (WebAssembly) — réponses identiques au Cardputer. S’il ne sait pas, il sert des fiches web déjà en cache (sans réseau). Le cerveau se télécharge une fois ; ensuite il fonctionne même Cardputer éteint. Rien ne quitte l’appareil.",
-        "Online: real LLMs (cloud Grok/Claude → browser LLM). As a last resort, BEFORE scaling onto the Cardputer, it uses the browser brain and indexes the web.": "En ligne : de vrais LLM (cloud Grok/Claude → LLM du navigateur). En dernier recours, AVANT de basculer sur le Cardputer, il utilise le cerveau du navigateur et indexe le web.",
+        "Browser: the whole offline cascade runs HERE in the browser (WebAssembly) — answers identical to the device. If it doesn’t know, it serves already-cached web cards (no network). The brain downloads once; then it works even with the device off. Nothing leaves the device.": "Navigateur : toute la cascade hors ligne tourne ICI dans le navigateur (WebAssembly) — réponses identiques à l’appareil. S’il ne sait pas, il sert des fiches web déjà en cache (sans réseau). Le cerveau se télécharge une fois ; ensuite il fonctionne même quand l’appareil est éteint. Rien ne quitte l’appareil.",
+        "Online: real LLMs (cloud Grok/Claude → browser LLM). As a last resort, BEFORE scaling onto the device, it uses the browser brain and indexes the web.": "En ligne : de vrais LLM (cloud Grok/Claude → LLM du navigateur). En dernier recours, AVANT de basculer sur l’appareil, il utilise le cerveau du navigateur et indexe le web.",
         "Could not load ANIMA locally: brain download failed. Check the device connection.": "Impossible de charger ANIMA en local : le téléchargement du cerveau a échoué. Vérifiez la connexion à l’appareil.",
         "Local brain": "Cerveau local",
         "Reload": "Recharger",
@@ -1951,15 +1983,15 @@
         "Assistant and interface language.": "Langue de l’assistant et de l’interface.",
         "Source for voice dictation.": "Source pour la dictée vocale.",
         "How fast reply text streams in.": "Vitesse d’affichage du texte de la réponse.",
-        "How fast the Cardputer reads aloud (on-device voice).": "Vitesse de lecture à voix haute du Cardputer (voix sur l’appareil).",
+        "How fast the device reads aloud (on-device voice).": "Vitesse de lecture à voix haute de l’appareil (voix sur l’appareil).",
         "Read replies aloud with the browser voice (also online/long replies).": "Lit les réponses à voix haute avec la voix du navigateur (aussi en ligne/longues).",
         "Yes": "Oui",
         "Where the intelligence runs: device, browser or online.": "Où tourne l’intelligence : appareil, navigateur ou en ligne.",
         "Local GPU": "GPU local",
-        "Fallback chain: Online (cloud) → Local GPU → Browser (WASM + web index) → Cardputer. It scales onto the Cardputer only as the last net. Type /guide in chat for the full map.": "Chaîne de secours : En ligne (cloud) → GPU local → Navigateur (WASM + index web) → Cardputer. Il bascule sur le Cardputer seulement en dernier recours. Tapez /guide dans le chat pour la carte complète.",
+        "Fallback chain: Online (cloud) → Local GPU → Browser (WASM + web index) → Device. It scales onto the device only as the last net. Type /guide in chat for the full map.": "Chaîne de secours : En ligne (cloud) → GPU local → Navigateur (WASM + index web) → Appareil. Il bascule sur l’appareil seulement en dernier recours. Tapez /guide dans le chat pour la carte complète.",
         "The offline brain downloaded in this browser.": "Le cerveau hors ligne téléchargé dans ce navigateur.",
         "The LLM that runs in YOUR browser on the GPU. Downloaded once, only when you press “Download now”, then works offline. Bigger = better but needs more VRAM.": "Le LLM qui tourne dans VOTRE navigateur sur le GPU. Téléchargé une seule fois, uniquement quand vous appuyez sur « Télécharger maintenant », puis fonctionne hors ligne. Plus grand = meilleur mais demande plus de VRAM.",
-        "The Cardputer's offline programmatic brain. Auto: stands down when online or a browser model answers (frees RAM). On: always. Off: never.": "Le cerveau programmatique hors ligne du Cardputer. Auto : se retire quand l’en ligne ou un modèle du navigateur répond (libère de la RAM). On : toujours. Off : jamais.",
+        "The device's offline programmatic brain. Auto: stands down when online or a browser model answers (frees RAM). On: always. Off: never.": "Le cerveau programmatique hors ligne de l’appareil. Auto : se retire quand l’en ligne ou un modèle du navigateur répond (libère de la RAM). On : toujours. Off : jamais.",
         "Replies": "Réponses",
         "Show example prompts under replies.": "Affiche des exemples de question sous les réponses.",
         "Summarises old turns to stay light.": "Résume les anciens tours pour rester léger.",
@@ -1973,7 +2005,7 @@
         "Web search (agent)": "Recherche web (agent)",
         "Let the agent search the web.": "Permet à l’agent de chercher sur le web.",
         "AI Models — Forge": "Modèles d’IA — Forge",
-        "Install an AI model once: it then runs in YOUR browser, offline, no cloud. Source: the internet (CDN) first; with no network, the Cardputer SD. Every part is checksum-verified (SHA-256) and kept, so a dropped connection resumes by itself. One install at a time.": "Installez un modèle d’IA une fois : il tourne ensuite dans VOTRE navigateur, hors ligne, sans cloud. Source : d’abord Internet (CDN) ; sans réseau, la SD du Cardputer. Chaque partie est vérifiée (SHA-256) et conservée, donc une connexion coupée reprend d’elle-même. Une installation à la fois.",
+        "Install an AI model once: it then runs in YOUR browser, offline, no cloud. Source: the internet (CDN) first; with no network, the device SD. Every part is checksum-verified (SHA-256) and kept, so a dropped connection resumes by itself. One install at a time.": "Installez un modèle d’IA une fois : il tourne ensuite dans VOTRE navigateur, hors ligne, sans cloud. Source : d’abord Internet (CDN) ; sans réseau, la SD de l’appareil. Chaque partie est vérifiée (SHA-256) et conservée, donc une connexion coupée reprend d’elle-même. Une installation à la fois.",
         "<li>Pick a model below — “GPU” needs WebGPU (faster), “CPU” runs anywhere.</li><li>Press <b>Install</b>: while it downloads the rest of NucleoOS waits — you can only watch or <b>cancel</b>.</li><li>When it finishes the model is ready offline: you can unplug the network.": "<li>Choisissez un modèle ci-dessous — « GPU » nécessite WebGPU (plus rapide), « CPU » tourne partout.</li><li>Appuyez sur <b>Installer</b> : pendant le téléchargement le reste de NucleoOS attend — vous pouvez seulement regarder ou <b>annuler</b>.</li><li>À la fin le modèle est prêt hors ligne : vous pouvez débrancher le réseau.",
         "Which engines run with the cable pulled. ✈ air-gapped · ↓ one download · ◌ needs weights · ! SD incomplete (re-sync) · ☁ cloud · ⊘ not here.": "Quels moteurs tournent câble débranché. ✈ isolé · ↓ un téléchargement · ◌ poids requis · ! SD incomplète (re-sync) · ☁ cloud · ⊘ pas ici.",
         "Deep SHA-256 verification of the weights on the SD.": "Vérification SHA-256 approfondie des poids sur la SD.",
@@ -2048,7 +2080,7 @@
         "You": "Vous",
         "Local GPU · WebLLM": "GPU local · WebLLM",
         "Setting up ANIMA on this device": "Préparation d’ANIMA sur cet appareil",
-        "Copying ANIMA’s offline brain into this browser so it runs locally — fast, private, and it keeps working with the Cardputer off. One-time download.": "Copie du cerveau hors ligne d’ANIMA dans ce navigateur pour qu’il tourne en local — rapide, privé, et continue de fonctionner Cardputer éteint. Téléchargement unique.",
+        "Copying ANIMA’s offline brain into this browser so it runs locally — fast, private, and it keeps working with the device off. One-time download.": "Copie du cerveau hors ligne d’ANIMA dans ce navigateur pour qu’il tourne en local — rapide, privé, et continue de fonctionner quand l’appareil est éteint. Téléchargement unique.",
         "Cancel download": "Annuler le téléchargement",
         "Cancelling…": "Annulation…",
         "loading engine…": "chargement du moteur…",
@@ -2059,7 +2091,7 @@
         "Retry": "Réessayer",
         "Use device": "Utiliser l’appareil",
         "Download ANIMA’s offline brain?": "Télécharger le cerveau hors ligne d’ANIMA ?",
-        "To run ANIMA locally in this browser I need to download its brain (~88 MB) from the device, once. Then it works fast, private, and with the Cardputer off.": "Pour exécuter ANIMA en local dans ce navigateur, je dois télécharger son cerveau (~88 Mo) depuis l’appareil, une fois. Ensuite elle fonctionne vite, en privé, et Cardputer éteint.",
+        "To run ANIMA locally in this browser I need to download its brain (~88 MB) from the device, once. Then it works fast, private, and with the device off.": "Pour exécuter ANIMA en local dans ce navigateur, je dois télécharger son cerveau (~88 Mo) depuis l’appareil, une fois. Ensuite elle fonctionne vite, en privé, et même quand l’appareil est éteint.",
         "Download (~88 MB)": "Télécharger (~88 Mo)",
         "capital of France": "capitale de la France",
         "How ANIMA works": "Comment fonctionne ANIMA",
@@ -2095,7 +2127,7 @@
         "Stop / close": "Arrêter / fermer",
         "current": "actuel",
         "Dictate": "Dicter",
-        "Cardputer mic": "micro du Cardputer",
+        "device mic": "micro de l’appareil",
         "online model": "modèle en ligne",
         "browser mic": "micro du navigateur",
         "Stop dictation": "Arrêter la dictée",
@@ -2127,10 +2159,10 @@
         "Browser voice": "Voix du navigateur",
         "Online AI key": "Clé d’IA en ligne",
         "Model": "Modèle",
-        "Weather and Wikipedia already work without a key. The key powers the online AI: better understanding, anti-error verification and \"Online\" mode. <b>Claude</b> answers straight from the browser (it doesn’t load the Cardputer). The key stays only on your device (SD), never in logs.": "La météo et Wikipedia fonctionnent déjà sans clé. La clé alimente l’IA en ligne : meilleure compréhension, vérification anti-erreur et mode « En ligne ». <b>Claude</b> répond directement depuis le navigateur (il ne charge pas le Cardputer). La clé reste uniquement sur votre appareil (SD), jamais dans les journaux.",
+        "Weather and Wikipedia already work without a key. The key powers the online AI: better understanding, anti-error verification and \"Online\" mode. <b>Claude</b> answers straight from the browser (it doesn’t load the device). The key stays only on your device (SD), never in logs.": "La météo et Wikipedia fonctionnent déjà sans clé. La clé alimente l’IA en ligne : meilleure compréhension, vérification anti-erreur et mode « En ligne ». <b>Claude</b> répond directement depuis le navigateur (il ne charge pas l’appareil). La clé reste uniquement sur votre appareil (SD), jamais dans les journaux.",
         "<kbd>⏎</kbd> send · <kbd>/</kbd> commands · <kbd>⌘K</kbd> palette · <kbd>?</kbd> help": "<kbd>⏎</kbd> envoyer · <kbd>/</kbd> commandes · <kbd>⌘K</kbd> palette · <kbd>?</kbd> aide",
         "Choose workspace": "Choisir l’espace de travail",
-        "ANIMA offline runs entirely in this browser (WebAssembly): it downloads the brain once from the device, then answers locally even without the Cardputer — the exact same answers.": "ANIMA hors ligne tourne entièrement dans ce navigateur (WebAssembly) : elle télécharge le cerveau une fois depuis l’appareil, puis répond en local même sans le Cardputer — exactement les mêmes réponses.",
+        "ANIMA offline runs entirely in this browser (WebAssembly): it downloads the brain once from the device, then answers locally even without the device — the exact same answers.": "ANIMA hors ligne tourne entièrement dans ce navigateur (WebAssembly) : elle télécharge le cerveau une fois depuis l’appareil, puis répond en local même sans l’appareil — exactement les mêmes réponses.",
         "Download now": "Télécharger maintenant",
         "Workspace: ": "Espace de travail : ",
         "Workspace closed": "Espace de travail fermé",
@@ -2227,7 +2259,7 @@
         "+ New folder": "+ Nouveau dossier",
         "Use this folder": "Utiliser ce dossier",
         "Show, under every reply, which tool ANIMA used to reason (engine, model, steps). Line = a collapsible one-liner; Tree = expanded.": "Affiche, sous chaque réponse, quel outil ANIMA a utilisé pour raisonner (moteur, modèle, étapes). Ligne = une ligne repliable ; Arbre = déplié.",
-        "ANIMA’s offline brain downloaded in this browser. Cached = it works even without the Cardputer.": "Le cerveau hors ligne d’ANIMA téléchargé dans ce navigateur. En cache = fonctionne même sans le Cardputer.",
+        "ANIMA’s offline brain downloaded in this browser. Cached = it works even without the device.": "Le cerveau hors ligne d’ANIMA téléchargé dans ce navigateur. En cache = fonctionne même sans l’appareil.",
         "Re-download the brain from the device (if you updated it) and rebuild the local cache.": "Re-télécharge le cerveau depuis l’appareil (si vous l’avez mis à jour) et reconstruit le cache local.",
         "Download/load the model in the browser now (shows progress). It never downloads by itself: until it is installed, chat skips the local GPU.": "Télécharge/charge le modèle dans le navigateur maintenant (affiche la progression). Il ne se télécharge jamais tout seul : tant qu’il n’est pas installé, le chat saute le GPU local.",
         ") — click to inspect": ") — cliquer pour inspecter",
@@ -2236,12 +2268,33 @@
         "Context compacted in background (": "Contexte compacté en arrière-plan (",
         " turns)": " tours)",
         "in use by ": "utilisé par ",
-        "The Cardputer mic is in use by ": "Le micro du Cardputer est utilisé par ",
+        "The device mic is in use by ": "Le micro de l’appareil est utilisé par ",
         "another app": "une autre app",
         ". Stop it there, then try again.": ". Arrêtez-la là, puis réessayez.",
-        "The Cardputer mic is busy": "Le micro du Cardputer est occupé",
+        "The device mic is busy": "Le micro de l’appareil est occupé",
         " (in use by ": " (utilisé par ",
-        " (a recording is in progress)": " (un enregistrement est en cours)"
+        " (a recording is in progress)": " (un enregistrement est en cours)",
+        "PC · Multi-agent": "PC · Multi-agent",
+        "NucleoOS · console data": "NucleoOS · données de la console",
+        "device API": "API de l'appareil",
+        "your PC": "ton PC",
+        "Play on the console": "Jouer sur la console",
+        "Play here": "Jouer ici",
+        "On the console": "Sur la console",
+        "PIN needed": "PIN nécessaire",
+        "failed": "échec",
+        "downloaded ✓": "téléchargé ✓",
+        "still running…": "toujours en cours…",
+        "console unreachable": "console injoignable",
+        "started ✓": "lancé ✓",
+        "a game is already open": "un jeu est déjà ouvert",
+        "console not ready": "console pas prête",
+        "one moment…": "un instant…",
+        "Agents · PC · ": "Agents · PC · ",
+        "I can't find an app with that name.": "Je ne trouve aucune app de ce nom.",
+        "Permanently delete ": "Supprimer définitivement ",
+        "?\nWorkspace files are not moved to a trash.": " ?\nLes fichiers de l'espace de travail ne vont pas à la corbeille.",
+        "Could not create the folder": "Impossible de créer le dossier"
       },
       de: {
         "offline assistant": "Offline-Assistent",
@@ -2274,10 +2327,10 @@
         "hybrid": "Hybrid",
         "local GPU": "lokale GPU",
         "browser": "Browser",
-        "Offline: the Cardputer’s brain, no network. If the device doesn’t answer, the browser brain (if ready) is the backup. Type /guide for the full map.": "Offline: das Gehirn des Cardputer, ohne Netz. Antwortet das Gerät nicht, springt das Browser-Gehirn (falls bereit) ein. Tippe /guide für die vollständige Übersicht.",
+        "Offline: the device’s brain, no network. If the device doesn’t answer, the browser brain (if ready) is the backup. Type /guide for the full map.": "Offline: das Gehirn des Geräts, ohne Netz. Antwortet das Gerät nicht, springt das Browser-Gehirn (falls bereit) ein. Tippe /guide für die vollständige Übersicht.",
         "Local GPU: the model runs on the browser GPU — offline and private. For full-sentence translation with no cloud (Grok only if there is no GPU).": "Lokale GPU: das Modell läuft auf der Browser-GPU — offline und privat. Für die Übersetzung ganzer Sätze ohne Cloud (Grok nur, wenn keine GPU vorhanden).",
-        "Browser: the whole offline cascade runs HERE in the browser (WebAssembly) — answers identical to the Cardputer. If it doesn’t know, it serves already-cached web cards (no network). The brain downloads once; then it works even with the Cardputer off. Nothing leaves the device.": "Browser: die gesamte Offline-Kaskade läuft HIER im Browser (WebAssembly) — Antworten identisch zum Cardputer. Weiß er es nicht, liefert er bereits zwischengespeicherte Web-Karten (ohne Netz). Das Gehirn wird einmal geladen; danach funktioniert es sogar bei ausgeschaltetem Cardputer. Nichts verlässt das Gerät.",
-        "Online: real LLMs (cloud Grok/Claude → browser LLM). As a last resort, BEFORE scaling onto the Cardputer, it uses the browser brain and indexes the web.": "Online: echte LLMs (Cloud Grok/Claude → Browser-LLM). Als letztes Mittel, BEVOR auf den Cardputer ausgewichen wird, nutzt es das Browser-Gehirn und indexiert das Web.",
+        "Browser: the whole offline cascade runs HERE in the browser (WebAssembly) — answers identical to the device. If it doesn’t know, it serves already-cached web cards (no network). The brain downloads once; then it works even with the device off. Nothing leaves the device.": "Browser: die gesamte Offline-Kaskade läuft HIER im Browser (WebAssembly) — Antworten identisch zum Gerät. Weiß er es nicht, liefert er bereits zwischengespeicherte Web-Karten (ohne Netz). Das Gehirn wird einmal geladen; danach funktioniert es sogar bei ausgeschaltetem Gerät. Nichts verlässt das Gerät.",
+        "Online: real LLMs (cloud Grok/Claude → browser LLM). As a last resort, BEFORE scaling onto the device, it uses the browser brain and indexes the web.": "Online: echte LLMs (Cloud Grok/Claude → Browser-LLM). Als letztes Mittel, BEVOR auf das Gerät ausgewichen wird, nutzt es das Browser-Gehirn und indexiert das Web.",
         "Could not load ANIMA locally: brain download failed. Check the device connection.": "ANIMA konnte nicht lokal geladen werden: Gehirn-Download fehlgeschlagen. Prüfe die Geräteverbindung.",
         "Local brain": "Lokales Gehirn",
         "Reload": "Neu laden",
@@ -2403,15 +2456,15 @@
         "Assistant and interface language.": "Sprache von Assistent und Oberfläche.",
         "Source for voice dictation.": "Quelle für die Sprachdiktierung.",
         "How fast reply text streams in.": "Wie schnell der Antworttext erscheint.",
-        "How fast the Cardputer reads aloud (on-device voice).": "Wie schnell der Cardputer vorliest (Stimme auf dem Gerät).",
+        "How fast the device reads aloud (on-device voice).": "Wie schnell das Gerät vorliest (Stimme auf dem Gerät).",
         "Read replies aloud with the browser voice (also online/long replies).": "Antworten mit der Browser-Stimme vorlesen (auch online/lange Antworten).",
         "Yes": "Ja",
         "Where the intelligence runs: device, browser or online.": "Wo die Intelligenz läuft: Gerät, Browser oder online.",
         "Local GPU": "Lokale GPU",
-        "Fallback chain: Online (cloud) → Local GPU → Browser (WASM + web index) → Cardputer. It scales onto the Cardputer only as the last net. Type /guide in chat for the full map.": "Fallback-Kette: Online (Cloud) → lokale GPU → Browser (WASM + Web-Index) → Cardputer. Auf den Cardputer wird nur als letztes Netz ausgewichen. Tippe /guide im Chat für die vollständige Übersicht.",
+        "Fallback chain: Online (cloud) → Local GPU → Browser (WASM + web index) → Device. It scales onto the device only as the last net. Type /guide in chat for the full map.": "Fallback-Kette: Online (Cloud) → lokale GPU → Browser (WASM + Web-Index) → Gerät. Auf das Gerät wird nur als letztes Netz ausgewichen. Tippe /guide im Chat für die vollständige Übersicht.",
         "The offline brain downloaded in this browser.": "Das in diesem Browser geladene Offline-Gehirn.",
         "The LLM that runs in YOUR browser on the GPU. Downloaded once, only when you press “Download now”, then works offline. Bigger = better but needs more VRAM.": "Das LLM, das in DEINEM Browser auf der GPU läuft. Wird nur einmal geladen, und nur wenn du „Jetzt herunterladen“ drückst, dann offline nutzbar. Größer = besser, braucht aber mehr VRAM.",
-        "The Cardputer's offline programmatic brain. Auto: stands down when online or a browser model answers (frees RAM). On: always. Off: never.": "Das programmatische Offline-Gehirn des Cardputer. Auto: tritt zurück, wenn online oder ein Browser-Modell antwortet (gibt RAM frei). On: immer. Off: nie.",
+        "The device's offline programmatic brain. Auto: stands down when online or a browser model answers (frees RAM). On: always. Off: never.": "Das programmatische Offline-Gehirn des Geräts. Auto: tritt zurück, wenn online oder ein Browser-Modell antwortet (gibt RAM frei). On: immer. Off: nie.",
         "Replies": "Antworten",
         "Show example prompts under replies.": "Beispielfragen unter den Antworten anzeigen.",
         "Summarises old turns to stay light.": "Fasst alte Runden zusammen, um leicht zu bleiben.",
@@ -2425,7 +2478,7 @@
         "Web search (agent)": "Websuche (Agent)",
         "Let the agent search the web.": "Erlaubt dem Agenten die Websuche.",
         "AI Models — Forge": "KI-Modelle — Forge",
-        "Install an AI model once: it then runs in YOUR browser, offline, no cloud. Source: the internet (CDN) first; with no network, the Cardputer SD. Every part is checksum-verified (SHA-256) and kept, so a dropped connection resumes by itself. One install at a time.": "Installiere ein KI-Modell einmal: es läuft dann in DEINEM Browser, offline, ohne Cloud. Quelle: zuerst das Internet (CDN); ohne Netz die Cardputer-SD. Jeder Teil wird per Prüfsumme (SHA-256) verifiziert und behalten, sodass eine unterbrochene Verbindung von selbst fortsetzt. Eine Installation zur Zeit.",
+        "Install an AI model once: it then runs in YOUR browser, offline, no cloud. Source: the internet (CDN) first; with no network, the device SD. Every part is checksum-verified (SHA-256) and kept, so a dropped connection resumes by itself. One install at a time.": "Installiere ein KI-Modell einmal: es läuft dann in DEINEM Browser, offline, ohne Cloud. Quelle: zuerst das Internet (CDN); ohne Netz die Geräte-SD. Jeder Teil wird per Prüfsumme (SHA-256) verifiziert und behalten, sodass eine unterbrochene Verbindung von selbst fortsetzt. Eine Installation zur Zeit.",
         "<li>Pick a model below — “GPU” needs WebGPU (faster), “CPU” runs anywhere.</li><li>Press <b>Install</b>: while it downloads the rest of NucleoOS waits — you can only watch or <b>cancel</b>.</li><li>When it finishes the model is ready offline: you can unplug the network.": "<li>Wähle unten ein Modell — „GPU“ braucht WebGPU (schneller), „CPU“ läuft überall.</li><li>Drücke <b>Installieren</b>: während des Downloads wartet der Rest von NucleoOS — du kannst nur zusehen oder <b>abbrechen</b>.</li><li>Am Ende ist das Modell offline bereit: du kannst das Netz trennen.",
         "Which engines run with the cable pulled. ✈ air-gapped · ↓ one download · ◌ needs weights · ! SD incomplete (re-sync) · ☁ cloud · ⊘ not here.": "Welche Engines mit gezogenem Kabel laufen. ✈ isoliert · ↓ ein Download · ◌ braucht Gewichte · ! SD unvollständig (neu sync.) · ☁ Cloud · ⊘ nicht hier.",
         "Deep SHA-256 verification of the weights on the SD.": "Tiefe SHA-256-Prüfung der Gewichte auf der SD.",
@@ -2497,7 +2550,7 @@
         "You": "Du",
         "Local GPU · WebLLM": "Lokale GPU · WebLLM",
         "Setting up ANIMA on this device": "ANIMA wird auf diesem Gerät eingerichtet",
-        "Copying ANIMA’s offline brain into this browser so it runs locally — fast, private, and it keeps working with the Cardputer off. One-time download.": "Kopiere ANIMAs Offline-Gehirn in diesen Browser, damit es lokal läuft — schnell, privat und auch bei ausgeschaltetem Cardputer. Einmaliger Download.",
+        "Copying ANIMA’s offline brain into this browser so it runs locally — fast, private, and it keeps working with the device off. One-time download.": "Kopiere ANIMAs Offline-Gehirn in diesen Browser, damit es lokal läuft — schnell, privat und auch bei ausgeschaltetem Gerät. Einmaliger Download.",
         "Cancel download": "Download abbrechen",
         "Cancelling…": "Breche ab…",
         "loading engine…": "lade Engine…",
@@ -2508,7 +2561,7 @@
         "Retry": "Erneut versuchen",
         "Use device": "Gerät verwenden",
         "Download ANIMA’s offline brain?": "ANIMAs Offline-Gehirn herunterladen?",
-        "To run ANIMA locally in this browser I need to download its brain (~88 MB) from the device, once. Then it works fast, private, and with the Cardputer off.": "Um ANIMA lokal in diesem Browser auszuführen, muss ich ihr Gehirn (~88 MB) einmal vom Gerät laden. Danach läuft es schnell, privat und bei ausgeschaltetem Cardputer.",
+        "To run ANIMA locally in this browser I need to download its brain (~88 MB) from the device, once. Then it works fast, private, and with the device off.": "Um ANIMA lokal in diesem Browser auszuführen, muss ich ihr Gehirn (~88 MB) einmal vom Gerät laden. Danach läuft es schnell, privat und bei ausgeschaltetem Gerät.",
         "Download (~88 MB)": "Herunterladen (~88 MB)",
         "capital of France": "Hauptstadt von Frankreich",
         "How ANIMA works": "Wie ANIMA funktioniert",
@@ -2547,7 +2600,7 @@
         "Stop / close": "Stopp / schließen",
         "current": "aktuell",
         "Dictate": "Diktieren",
-        "Cardputer mic": "Cardputer-Mikro",
+        "device mic": "Device-Mikro",
         "online model": "Online-Modell",
         "browser mic": "Browser-Mikro",
         "Stop dictation": "Diktat stoppen",
@@ -2581,10 +2634,10 @@
         "Browser voice": "Browser-Stimme",
         "Online AI key": "Online-KI-Schlüssel",
         "Model": "Modell",
-        "Weather and Wikipedia already work without a key. The key powers the online AI: better understanding, anti-error verification and \"Online\" mode. <b>Claude</b> answers straight from the browser (it doesn’t load the Cardputer). The key stays only on your device (SD), never in logs.": "Wetter und Wikipedia funktionieren bereits ohne Schlüssel. Der Schlüssel treibt die Online-KI an: besseres Verständnis, Anti-Fehler-Prüfung und „Online“-Modus. <b>Claude</b> antwortet direkt aus dem Browser (belastet den Cardputer nicht). Der Schlüssel bleibt nur auf deinem Gerät (SD), nie in Protokollen.",
+        "Weather and Wikipedia already work without a key. The key powers the online AI: better understanding, anti-error verification and \"Online\" mode. <b>Claude</b> answers straight from the browser (it doesn’t load the device). The key stays only on your device (SD), never in logs.": "Wetter und Wikipedia funktionieren bereits ohne Schlüssel. Der Schlüssel treibt die Online-KI an: besseres Verständnis, Anti-Fehler-Prüfung und „Online“-Modus. <b>Claude</b> antwortet direkt aus dem Browser (belastet das Gerät nicht). Der Schlüssel bleibt nur auf deinem Gerät (SD), nie in Protokollen.",
         "<kbd>⏎</kbd> send · <kbd>/</kbd> commands · <kbd>⌘K</kbd> palette · <kbd>?</kbd> help": "<kbd>⏎</kbd> senden · <kbd>/</kbd> Befehle · <kbd>⌘K</kbd> Palette · <kbd>?</kbd> Hilfe",
         "Choose workspace": "Arbeitsbereich wählen",
-        "ANIMA offline runs entirely in this browser (WebAssembly): it downloads the brain once from the device, then answers locally even without the Cardputer — the exact same answers.": "ANIMA offline läuft vollständig in diesem Browser (WebAssembly): es lädt das Gehirn einmal vom Gerät und antwortet dann lokal, auch ohne Cardputer — exakt dieselben Antworten.",
+        "ANIMA offline runs entirely in this browser (WebAssembly): it downloads the brain once from the device, then answers locally even without the device — the exact same answers.": "ANIMA offline läuft vollständig in diesem Browser (WebAssembly): es lädt das Gehirn einmal vom Gerät und antwortet dann lokal, auch ohne das Gerät — exakt dieselben Antworten.",
         "Download now": "Jetzt herunterladen",
         "Workspace: ": "Arbeitsbereich: ",
         "Workspace closed": "Arbeitsbereich geschlossen",
@@ -2680,7 +2733,7 @@
         "+ New folder": "+ Neuer Ordner",
         "Use this folder": "Diesen Ordner verwenden",
         "Show, under every reply, which tool ANIMA used to reason (engine, model, steps). Line = a collapsible one-liner; Tree = expanded.": "Zeigt unter jeder Antwort, welches Werkzeug ANIMA zum Schlussfolgern nutzte (Engine, Modell, Schritte). Zeile = einklappbare Einzeile; Baum = ausgeklappt.",
-        "ANIMA’s offline brain downloaded in this browser. Cached = it works even without the Cardputer.": "ANIMAs Offline-Gehirn, in diesem Browser geladen. Im Cache = funktioniert auch ohne Cardputer.",
+        "ANIMA’s offline brain downloaded in this browser. Cached = it works even without the device.": "ANIMAs Offline-Gehirn, in diesem Browser geladen. Im Cache = funktioniert auch ohne das Gerät.",
         "Re-download the brain from the device (if you updated it) and rebuild the local cache.": "Lädt das Gehirn erneut vom Gerät (falls aktualisiert) und baut den lokalen Cache neu auf.",
         "Download/load the model in the browser now (shows progress). It never downloads by itself: until it is installed, chat skips the local GPU.": "Lädt das Modell jetzt im Browser (zeigt Fortschritt). Es lädt sich nie von selbst: bis es installiert ist, überspringt der Chat die lokale GPU.",
         "Message": "Nachricht",
@@ -2692,17 +2745,38 @@
         "Context compacted in background (": "Kontext im Hintergrund verdichtet (",
         " turns)": " Runden)",
         "in use by ": "in Benutzung von ",
-        "The Cardputer mic is in use by ": "Das Cardputer-Mikro wird benutzt von ",
+        "The device mic is in use by ": "Das Geräte-Mikro wird benutzt von ",
         "another app": "einer anderen App",
         ". Stop it there, then try again.": ". Stoppe es dort und versuche es erneut.",
-        "The Cardputer mic is busy": "Das Cardputer-Mikro ist belegt",
+        "The device mic is busy": "Das Geräte-Mikro ist belegt",
         " (in use by ": " (in Benutzung von ",
-        " (a recording is in progress)": " (eine Aufnahme läuft)"
+        " (a recording is in progress)": " (eine Aufnahme läuft)",
+        "PC · Multi-agent": "PC · Multi-Agent",
+        "NucleoOS · console data": "NucleoOS · Konsolendaten",
+        "device API": "Geräte-API",
+        "your PC": "dein PC",
+        "Play on the console": "Auf der Konsole spielen",
+        "Play here": "Hier spielen",
+        "On the console": "Auf der Konsole",
+        "PIN needed": "PIN nötig",
+        "failed": "fehlgeschlagen",
+        "downloaded ✓": "geladen ✓",
+        "still running…": "läuft noch…",
+        "console unreachable": "Konsole nicht erreichbar",
+        "started ✓": "gestartet ✓",
+        "a game is already open": "ein Spiel ist schon offen",
+        "console not ready": "Konsole nicht bereit",
+        "one moment…": "einen Moment…",
+        "Agents · PC · ": "Agenten · PC · ",
+        "I can't find an app with that name.": "Ich finde keine App mit diesem Namen.",
+        "Permanently delete ": "Endgültig löschen: ",
+        "?\nWorkspace files are not moved to a trash.": "?\nDateien im Arbeitsbereich kommen nicht in den Papierkorb.",
+        "Could not create the folder": "Ordner konnte nicht erstellt werden"
       }
     };
-    Object.assign(ANIMA_L10N.es, { "Cardputer voice speed":"Velocidad de voz del Cardputer", "Local model (GPU)":"Modelo local (GPU)", "SD integrity":"Integridad de la SD", "Air-gap readiness":"Preparación air-gap", "Search conversations":"Buscar conversaciones", "Conversations (Ctrl/⌘⇧S)":"Conversaciones (Ctrl/⌘⇧S)", "Show/hide conversations":"Mostrar/ocultar conversaciones", "+ File":"+ Archivo" });
-    Object.assign(ANIMA_L10N.fr, { "Cardputer voice speed":"Vitesse de la voix du Cardputer", "Local model (GPU)":"Modèle local (GPU)", "SD integrity":"Intégrité SD", "Air-gap readiness":"Autonomie air-gap", "Search conversations":"Rechercher des conversations", "Conversations (Ctrl/⌘⇧S)":"Conversations (Ctrl/⌘⇧S)", "Show/hide conversations":"Afficher/masquer les conversations", "+ File":"+ Fichier" });
-    Object.assign(ANIMA_L10N.de, { "Cardputer voice speed":"Cardputer-Sprechtempo", "Local model (GPU)":"Lokales Modell (GPU)", "SD integrity":"SD-Integrität", "Air-gap readiness":"Air-Gap-Bereitschaft", "Search conversations":"Unterhaltungen suchen", "Conversations (Ctrl/⌘⇧S)":"Unterhaltungen (Ctrl/⌘⇧S)", "Show/hide conversations":"Unterhaltungen ein-/ausblenden", "+ File":"+ Datei" });
+    Object.assign(ANIMA_L10N.es, { "Device voice speed":"Velocidad de voz del dispositivo", "Local model (GPU)":"Modelo local (GPU)", "SD integrity":"Integridad de la SD", "Air-gap readiness":"Preparación air-gap", "Search conversations":"Buscar conversaciones", "Conversations (Ctrl/⌘⇧S)":"Conversaciones (Ctrl/⌘⇧S)", "Show/hide conversations":"Mostrar/ocultar conversaciones", "+ File":"+ Archivo" });
+    Object.assign(ANIMA_L10N.fr, { "Device voice speed":"Vitesse de la voix de l’appareil", "Local model (GPU)":"Modèle local (GPU)", "SD integrity":"Intégrité SD", "Air-gap readiness":"Autonomie air-gap", "Search conversations":"Rechercher des conversations", "Conversations (Ctrl/⌘⇧S)":"Conversations (Ctrl/⌘⇧S)", "Show/hide conversations":"Afficher/masquer les conversations", "+ File":"+ Fichier" });
+    Object.assign(ANIMA_L10N.de, { "Device voice speed":"Device-Sprechtempo", "Local model (GPU)":"Lokales Modell (GPU)", "SD integrity":"SD-Integrität", "Air-gap readiness":"Air-Gap-Bereitschaft", "Search conversations":"Unterhaltungen suchen", "Conversations (Ctrl/⌘⇧S)":"Unterhaltungen (Ctrl/⌘⇧S)", "Show/hide conversations":"Unterhaltungen ein-/ausblenden", "+ File":"+ Datei" });
     // Agent approval prompt · local GPU model consent · device actions (done / NOT done) · too-long question.
     Object.assign(ANIMA_L10N.es, {
       "The agent wants to run: ":"El agente quiere ejecutar: ", "Path: ":"Ruta: ", "Target: ":"Destino: ",
@@ -2714,15 +2788,15 @@
       "the event was not added":"el evento no se ha añadido", "the volume was not changed":"el volumen no se ha cambiado",
       "the brightness was not changed":"el brillo no se ha cambiado", "the file was not created":"el archivo no se ha creado",
       "the command was not carried out":"el comando no se ha ejecutado",
-      "This browser isn’t paired with the Cardputer (PIN needed)":"Este navegador no está emparejado con el Cardputer (hace falta el PIN)",
-      "The Cardputer is busy, try again in a moment":"El Cardputer está ocupado, inténtalo de nuevo en un momento",
-      "The request is too long for the Cardputer":"La petición es demasiado larga para el Cardputer",
-      "This Cardputer firmware can’t run it from the web (update it)":"El firmware de este Cardputer no puede ejecutarlo desde la web (actualízalo)",
-      "The Cardputer did not recognise it as a command":"El Cardputer no lo ha reconocido como comando",
-      "The Cardputer refused or could not do it":"El Cardputer lo ha rechazado o no ha podido hacerlo",
-      "I can’t reach the Cardputer":"No consigo conectar con el Cardputer",
-      "Volume":"Volumen", "Brightness":"Brillo", "Done on the Cardputer":"Hecho en el Cardputer",
-      "This question is too long for the Cardputer: shorten it and try again.":"La pregunta es demasiado larga para el Cardputer: acórtala e inténtalo de nuevo."
+      "This browser isn’t paired with the device (PIN needed)":"Este navegador no está emparejado con el dispositivo (hace falta el PIN)",
+      "The device is busy, try again in a moment":"El dispositivo está ocupado, inténtalo de nuevo en un momento",
+      "The request is too long for the device":"La petición es demasiado larga para el dispositivo",
+      "This device’s firmware can’t run it from the web (update it)":"El firmware de este dispositivo no puede ejecutarlo desde la web (actualízalo)",
+      "The device did not recognise it as a command":"El dispositivo no lo ha reconocido como comando",
+      "The device refused or could not do it":"El dispositivo lo ha rechazado o no ha podido hacerlo",
+      "I can’t reach the device":"No consigo conectar con el dispositivo",
+      "Volume":"Volumen", "Brightness":"Brillo", "Done on the device":"Hecho en el dispositivo",
+      "This question is too long for the device: shorten it and try again.":"La pregunta es demasiado larga para el dispositivo: acórtala e inténtalo de nuevo."
     });
     Object.assign(ANIMA_L10N.fr, {
       "The agent wants to run: ":"L’agent veut exécuter : ", "Path: ":"Chemin : ", "Target: ":"Cible : ",
@@ -2734,15 +2808,15 @@
       "the event was not added":"l’événement n’a pas été ajouté", "the volume was not changed":"le volume n’a pas été modifié",
       "the brightness was not changed":"la luminosité n’a pas été modifiée", "the file was not created":"le fichier n’a pas été créé",
       "the command was not carried out":"la commande n’a pas été exécutée",
-      "This browser isn’t paired with the Cardputer (PIN needed)":"Ce navigateur n’est pas associé au Cardputer (PIN requis)",
-      "The Cardputer is busy, try again in a moment":"Le Cardputer est occupé, réessayez dans un instant",
-      "The request is too long for the Cardputer":"La demande est trop longue pour le Cardputer",
-      "This Cardputer firmware can’t run it from the web (update it)":"Le firmware de ce Cardputer ne peut pas l’exécuter depuis le web (mettez-le à jour)",
-      "The Cardputer did not recognise it as a command":"Le Cardputer ne l’a pas reconnu comme une commande",
-      "The Cardputer refused or could not do it":"Le Cardputer l’a refusé ou n’a pas pu le faire",
-      "I can’t reach the Cardputer":"Je n’arrive pas à joindre le Cardputer",
-      "Volume":"Volume", "Brightness":"Luminosité", "Done on the Cardputer":"Fait sur le Cardputer",
-      "This question is too long for the Cardputer: shorten it and try again.":"La question est trop longue pour le Cardputer : raccourcissez-la et réessayez."
+      "This browser isn’t paired with the device (PIN needed)":"Ce navigateur n’est pas associé à l’appareil (PIN requis)",
+      "The device is busy, try again in a moment":"L’appareil est occupé, réessayez dans un instant",
+      "The request is too long for the device":"La demande est trop longue pour l’appareil",
+      "This device’s firmware can’t run it from the web (update it)":"Le firmware de cet appareil ne peut pas l’exécuter depuis le web (mettez-le à jour)",
+      "The device did not recognise it as a command":"L’appareil ne l’a pas reconnu comme une commande",
+      "The device refused or could not do it":"L’appareil l’a refusé ou n’a pas pu le faire",
+      "I can’t reach the device":"Je n’arrive pas à joindre l’appareil",
+      "Volume":"Volume", "Brightness":"Luminosité", "Done on the device":"Fait sur l’appareil",
+      "This question is too long for the device: shorten it and try again.":"La question est trop longue pour l’appareil : raccourcissez-la et réessayez."
     });
     Object.assign(ANIMA_L10N.de, {
       "The agent wants to run: ":"Der Agent möchte ausführen: ", "Path: ":"Pfad: ", "Target: ":"Ziel: ",
@@ -2754,15 +2828,15 @@
       "the event was not added":"der Termin wurde nicht hinzugefügt", "the volume was not changed":"die Lautstärke wurde nicht geändert",
       "the brightness was not changed":"die Helligkeit wurde nicht geändert", "the file was not created":"die Datei wurde nicht erstellt",
       "the command was not carried out":"der Befehl wurde nicht ausgeführt",
-      "This browser isn’t paired with the Cardputer (PIN needed)":"Dieser Browser ist nicht mit dem Cardputer gekoppelt (PIN nötig)",
-      "The Cardputer is busy, try again in a moment":"Der Cardputer ist beschäftigt, versuch es gleich noch einmal",
-      "The request is too long for the Cardputer":"Die Anfrage ist zu lang für den Cardputer",
-      "This Cardputer firmware can’t run it from the web (update it)":"Die Firmware dieses Cardputers kann das nicht aus dem Web ausführen (aktualisiere sie)",
-      "The Cardputer did not recognise it as a command":"Der Cardputer hat es nicht als Befehl erkannt",
-      "The Cardputer refused or could not do it":"Der Cardputer hat es abgelehnt oder konnte es nicht ausführen",
-      "I can’t reach the Cardputer":"Ich erreiche den Cardputer nicht",
-      "Volume":"Lautstärke", "Brightness":"Helligkeit", "Done on the Cardputer":"Auf dem Cardputer ausgeführt",
-      "This question is too long for the Cardputer: shorten it and try again.":"Die Frage ist zu lang für den Cardputer: kürze sie und versuch es noch einmal."
+      "This browser isn’t paired with the device (PIN needed)":"Dieser Browser ist nicht mit dem Gerät gekoppelt (PIN nötig)",
+      "The device is busy, try again in a moment":"Das Gerät ist beschäftigt, versuch es gleich noch einmal",
+      "The request is too long for the device":"Die Anfrage ist zu lang für das Gerät",
+      "This device’s firmware can’t run it from the web (update it)":"Die Firmware dieses Geräts kann das nicht aus dem Web ausführen (aktualisiere sie)",
+      "The device did not recognise it as a command":"Das Gerät hat es nicht als Befehl erkannt",
+      "The device refused or could not do it":"Das Gerät hat es abgelehnt oder konnte es nicht ausführen",
+      "I can’t reach the device":"Ich erreiche das Gerät nicht",
+      "Volume":"Lautstärke", "Brightness":"Helligkeit", "Done on the device":"Auf dem Gerät ausgeführt",
+      "This question is too long for the device: shorten it and try again.":"Die Frage ist zu lang für das Gerät: kürze sie und versuch es noch einmal."
     });
     function TR(it,en){ const l=lang; if(l==='it')return it; if(l==='en')return en; const o=ANIMA_L10N[l]; return (o&&o[en]!=null)?o[en]:en; }
     // Catalog strings — apps/anima/www/i18n.<lang>.json through the OS i18n engine, all five languages,
@@ -3031,7 +3105,7 @@
         out.innerHTML=''; running=true; rb.textContent='■ '+UI[lang].running;
         try{
           const mod=await loadRunEngine();
-          rt=mod.createRunner({ cwd: fs.hasRoot()?(fs.getRoot()||'/'):'/data', lang, timeoutMs:6000,
+          rt=mod.createRunner({ cwd: fs.hasRoot()?(fs.getRoot()||'/'):'/data', lang, timeoutMs:6000, hasDevice:(n)=>Caps.has(n),
             onLog:(lvl,t)=>{ if(lvl==='clear'){ out.innerHTML=''; return; } put(lvl==='error'?'err':lvl==='warn'?'warn':lvl==='info'?'info':'log', t); },
             onNotify:(t)=>put('sys','🔔 '+t) });
           const r=await rt.run(code);
@@ -3197,8 +3271,13 @@
     function engineMap(r){
       const en=lang==='en', I=r.intent||'', D=r.domain||'', T=r.tier||'';
       let kind, icon, eng, model='', host='';
+      // a model on the user's PC through local/pc-llm.js (Handheld: chat tier 'M4-pc', or the Agents on that model)
+      const onPc = T==='M4-pc' || (I==='agent' && D==='local' && T!=='server' && T!=='M4-local' && r.substrate!=='M4-local');
       if(T==='server' && r.engine){                                  // local AI server on this computer (Ollama / LM Studio …)
         kind='server'; icon='⌂'; eng=L('engLocalServer')+' · '+(r.engine.server||''); model=r.engine.model||''; host=hostOf(r.engine.base||'');
+      } else if(onPc){
+        kind='gpu'; icon='🖥'; model=r.model||''; host='localhost';
+        eng = I==='agent' ? (TR('PC · Multi-agente', 'PC · Multi-agent')) : ('PC · '+(String(r.trace||'').split(' · ')[1]||'LLM'));
       } else if(T==='M4-local' || r.substrate==='M4-local'){               // local-GPU tier (browser WebLLM)
         kind='gpu'; icon='✦'; eng=TR('GPU locale · WebLLM', 'Local GPU · WebLLM'); model=prettyModel(r.model||CODER_MODEL); host=TR('browser · WebGPU', 'browser · WebGPU');
       } else if(T==='remote' || D==='online' || ['grok','teacher','cloud','online','agent','wiki','wikidata','weather','fx'].includes(I)){   // online tier (incl. the firmware online-only 'cloud' intent, code answers, and the multi-agent path)
@@ -3218,6 +3297,8 @@
       } else if(r.web){                                             // in-browser WEB INDEX — live Wikipedia/Wikidata from the browser, or a cached recall (never the MCU)
         kind='wasm'; icon='🌐'; eng=TR('Browser · indice web', 'Browser · web index');
         model = r.recalled ? (TR('card in cache', 'cached card')) : (TR('Wikipedia (live)', 'Wikipedia (live)'));
+      } else if(r.skill){                                           // console skill (Handheld): the device's real data, no model
+        kind='device'; icon='▣'; eng=TR('NucleoOS · dati della console', 'NucleoOS · console data'); model=I; host=TR('API del dispositivo', 'device API');
       } else if(r.local){                          // offline cascade compiled to WASM, in-browser
         kind='wasm'; icon='◆'; eng=TR('Browser · cascata WASM', 'Browser · WASM cascade'); model=subTier(r,en);
       } else {                                                      // on-device offline cascade
@@ -3228,6 +3309,7 @@
       let provider='';
       if(kind==='cloud'){ const hh=(host||'').toLowerCase();
         provider = hh.includes('groq')?'Groq' : hh.includes('anthropic')?'Anthropic (Claude)' : hh.includes('openai')?'OpenAI' : ((keyCfg&&keyCfg.provider)||''); }
+      else if(onPc) provider = TR('il tuo PC', 'your PC');
       else if(kind==='gpu') provider = TR('la GPU del tuo browser', 'your browser GPU');
       else if(kind==='server') provider = L('engThisPc');
       return { kind, icon, eng, model, host, mode, ms, chars, provider,
@@ -3295,9 +3377,19 @@
       const cl=document.createElement('div'); cl.className='cl';
       const ct=document.createElement('div'); ct.className='ct'; ct.textContent=c.title; cl.appendChild(ct);
       if(c.sub){ const cs=document.createElement('div'); cs.className='cs'; cs.textContent=c.sub; cl.appendChild(cs); }
+      // un'immagine (lo screenshot di un gioco appena provato sulla console): si apre a grandezza piena col clic
+      if(c.img){ const im=document.createElement('img'); im.src=c.img; im.alt=c.title||''; im.loading='lazy';
+        im.style.cssText='display:block;margin-top:8px;max-width:min(260px,100%);border-radius:8px;border:1px solid var(--line,#2a3142);cursor:zoom-in';
+        im.addEventListener('click',()=>{ try{ window.open(c.img,'_blank','noopener'); }catch{} }); im.addEventListener('error',()=>im.remove()); cl.appendChild(im); }
       card.appendChild(cl);
       if(c.btn){ const go=document.createElement('button'); go.className='cgo'; go.textContent=c.btn;
         go.addEventListener('click',()=>{ c.onClick&&c.onClick(); go.textContent=UI[lang].sent+' ✓'; go.classList.add('done'); }); card.appendChild(go); }
+      // più azioni sulla stessa scheda (un gioco: qui o sulla console). onClick può tornare il testo
+      // dell'esito, che prende il posto dell'etichetta: "avviato ✓", "serve il PIN"...
+      (c.btns||[]).forEach(b=>{ const go=document.createElement('button'); go.className='cgo'; go.textContent=b.label;
+        go.addEventListener('click',async()=>{ go.disabled=true; let out; try{ out=await b.onClick(); }catch{}
+          go.textContent=out||(UI[lang].sent+' ✓'); go.classList.add('done'); setTimeout(()=>{ go.disabled=false; },4000); });
+        card.appendChild(go); });
       host.appendChild(card);
     }
     function buildBanner(host, kind, text){
@@ -3324,12 +3416,15 @@
         // tick-counted reveal crawled a two-sentence answer for minutes while the turn stayed "busy". Hidden tab →
         // show it all; never longer than 1.5 s whatever happens.
         let i=0; const t0=performance.now();
+        // the typewriter is for prose: from the first code block on everything shows at once (a game from the LÖVE
+        // forge is ~9,000 characters of Lua — typed out it was minutes of waiting)
+        const fence=text.indexOf('```'), stopAt=fence>=0 ? fence : text.length;
         const step=()=>{
           const el=performance.now()-t0;
           if(interrupt || document.hidden || el>1500){ cur.remove(); finish(); return; }
-          const want=Math.min(text.length, (Math.floor(el/Math.max(speed,1))+1)*n);
+          const want=Math.min(stopAt, (Math.floor(el/Math.max(speed,1))+1)*n);
           if(want>i){ cur.insertAdjacentText('beforebegin', text.slice(i,want)); i=want; scrollDown(); }
-          if(i>=text.length){ cur.remove(); finish(); return; }
+          if(i>=stopAt){ cur.remove(); finish(); return; }
           setTimeout(step, speed);
         };
         setTimeout(step, speed);
@@ -3403,6 +3498,7 @@
       if(!h.emap && h.trace&&h.trace.length) addTrace(body, h.trace);   // legacy turns: trace tree (new turns use the engine map)
       (h.lines||[]).forEach(l=>addLined(body, l.text, l.kind));
       if(h.card) buildCard(body, cardFromDescriptor(h.card));
+      (h.cards||[]).forEach(c=>buildCard(body, cardFromDescriptor(c)));
       if(h.banner) (h.banner.kind==='followup'?buildBanner(body,'followup',h.banner.text):buildBanner(body,'warn',h.banner.text));
       if(h.clarify&&h.clarify.length) buildClarify(body, h.clarify);
       if(h.emap) addEnginePanel(body, h.emap); else if(h.meta) addMeta(body, h.meta);
@@ -3633,7 +3729,7 @@
     // The launch/open-file hand-off ALSO fires automatically so the embedded shell
     // opens immediately; the card button lets the user re-trigger it.
     // ===========================================================================
-    function handoffApp(idArg){ try{ window.parent.postMessage({type:'open-app',id:idArg},'*'); }catch{} }
+    function handoffApp(idArg, query){ try{ window.parent.postMessage({type:'open-app',id:idArg,query:query||''},'*'); }catch{} }
     function handoffFile(path){ try{ window.parent.postMessage({type:'open-file',path},'*'); }catch{} }
     function cardFromDescriptor(c){
       const t=UI[lang];
@@ -3642,12 +3738,25 @@
       if(c.kind==='create_file') return { icon:'≣', status:c.status||'ok', title:c.arg, sub:c.status==='warn'?t.fileExists:t.fileCreated,
         btn:c.status==='warn'?null:t.openFile, onClick:()=>handoffFile(c.arg) };
       if(c.kind==='add_event') return { icon:'◷', status:'ok', title:c.arg||t.eventAdded, sub:t.eventAdded, btn:t.openCal, onClick:()=>handoffApp('calendar') };
-      if(c.kind==='device_done') return { icon:'✓', status:'ok', title:c.arg==='set_volume'?TR('Volume', 'Volume'):TR('Luminosità', 'Brightness'), sub:TR('Eseguito sul Cardputer', 'Done on the Cardputer') };
+      if(c.kind==='device_done') return { icon:'✓', status:'ok', title:c.arg==='set_volume'?TR('Volume', 'Volume'):TR('Luminosità', 'Brightness'), sub:TR('Eseguito sul dispositivo', 'Done on the device') };
       if(c.kind==='not_done'){ const w=notDoneWhat(c.arg); return { icon:'⚠', status:'warn', title:w.charAt(0).toUpperCase()+w.slice(1), sub:notDoneWhy(c.why) }; }
       // Image generation is ISOLATED in Paint's Atelier (browser GPU): ANIMA explains in the reply and OFFERS
       // to open Paint — it never generates inline (keeps the generative skill from colliding with the chat).
       if(c.kind==='open_paint') return { icon:'✎', status:'info', title:t.imageGen, sub:t.openPaintSub, btn:t.openPaint, onClick:()=>handoffApp('paint') };
       if(c.kind==='weather') return { icon:'☁', status:'info', title:c.arg||'meteo', sub:'' };
+      // un gioco creato da ANIMA (LÖVE): gira solo sulla console, niente "Gioca qui"
+      if(c.kind==='game' && c.consoleOnly) return { icon:'🕹', status:'ok', title:c.title||c.arg, sub:c.sub||'', img:c.img,
+        btns:[ { label:TR('Gioca sulla console', 'Play on the console'), onClick:()=>devicePlay(c.arg) } ] };
+      if(c.kind==='game') return { icon:'🎮', status:'ok', title:c.title||c.arg, sub:c.sub||'', img:c.img,
+        btns:[ { label:c.open||TR('Gioca qui', 'Play here'), onClick:()=>{ handoffApp('console', 'game='+encodeURIComponent(c.arg)); } },
+               { label:TR('Sulla console', 'On the console'), onClick:()=>devicePlay(c.arg) } ] };
+      if(c.kind==='app') return { icon:'▦', status:'info', title:c.title||c.arg, sub:c.sub||'', btn:t.openApp, onClick:()=>handoffApp(c.arg) };
+      if(c.kind==='action' && c.arg==='cheats-fetch') return { icon:'⬇', status:'info', title:c.title||'', sub:c.sub||'',
+        btns:[ { label:c.btn||TR('Scarica', 'Download'), onClick:()=>cheatsFetch() } ] };
+      if(c.kind==='action' && c.arg==='pc-helper') return { icon:'⇄', status:'info', title:c.title||'', sub:c.sub||'',
+        btns:[ { label:c.btn||TR('Scarica', 'Download'), onClick:async()=>{ await pcMod(); return pcHelperDownload(); } } ] };
+      if(c.kind==='action' && c.arg==='pc-open') return { icon:'↗', status:'info', title:c.title||'', sub:c.sub||'',
+        btns:[ { label:c.btn||TR('Apri', 'Open'), onClick:async()=>{ const m=await pcMod(); try{ window.open(m.localUrl('/apps/anima/'), '_blank', 'noopener'); }catch{} return '↗'; } } ] };
       return { icon:'•', status:'info', title:c.arg||'' };
     }
 
@@ -3727,7 +3836,7 @@
     function provShow(onCancel){ const e=provEl();
       e.querySelector('.pi').textContent='⚡';
       e.querySelector('.pt').textContent = TR('Preparo ANIMA su questo dispositivo', 'Setting up ANIMA on this device');
-      e.querySelector('.pd').textContent = TR('Copio il cervello offline di ANIMA in questo browser per farlo girare in locale — veloce, privato e funziona anche col Cardputer spento. Scaricamento una tantum.', 'Copying ANIMA’s offline brain into this browser so it runs locally — fast, private, and it keeps working with the Cardputer off. One-time download.');
+      e.querySelector('.pd').textContent = TR('Copio il cervello offline di ANIMA in questo browser per farlo girare in locale — veloce, privato e funziona anche col dispositivo spento. Scaricamento una tantum.', 'Copying ANIMA’s offline brain into this browser so it runs locally — fast, private, and it keeps working with the device off. One-time download.');
       e.querySelector('.prov-tip').textContent = L('provTip');
       e.querySelector('.prov-card').classList.remove('tut');     // reset from a prior tutorial view
       e.querySelector('.prov-act').classList.remove('on');
@@ -3784,9 +3893,9 @@
         e.querySelector('.pi').textContent='⚡';
         e.querySelector('.pt').textContent = TR('Scaricare il cervello offline di ANIMA?', 'Download ANIMA’s offline brain?');
         const pd = e.querySelector('.pd');
-        const mkDesc = (sz) => TR('Per far girare ANIMA in locale in questo browser devo scaricare il suo cervello ('+sz+') dal dispositivo, una sola volta. Poi funziona veloce, privato e anche col Cardputer spento.', 'To run ANIMA locally in this browser I need to download its brain ('+sz+') from the device, once. Then it works fast, private, and with the Cardputer off.');
+        const mkDesc = (sz) => TR('Per far girare ANIMA in locale in questo browser devo scaricare il suo cervello ('+sz+') dal dispositivo, una sola volta. Poi funziona veloce, privato e anche col dispositivo spento.', 'To run ANIMA locally in this browser I need to download its brain ('+sz+') from the device, once. Then it works fast, private, and with the device off.');
         pd.textContent = mkDesc(TR('calcolo...', 'measuring...'));
-        e.querySelector('.prov-tip').innerHTML = TR('Niente parte senza il tuo OK. Senza cervello locale, ANIMA usa comunque il Cardputer e le altre menti.', 'Nothing downloads without your OK. Without the local brain, ANIMA still uses the Cardputer and the other minds.');
+        e.querySelector('.prov-tip').innerHTML = TR('Niente parte senza il tuo OK. Senza cervello locale, ANIMA usa comunque il dispositivo e le altre menti.', 'Nothing downloads without your OK. Without the local brain, ANIMA still uses the device and the other minds.');
         const act=e.querySelector('.prov-act'); act.classList.add('on');
         const yes=e.querySelector('.pretry'), no=e.querySelector('.pdev');
         yes.textContent = TR('Scarica', 'Download');
@@ -4055,6 +4164,361 @@
     let _nlmath;
     const _nlmathLoad=lazy('./local/nlmath.js', (m)=>(_nlmath=m));
     function nlmathMod(){ return _nlmath ? Promise.resolve(_nlmath) : _nlmathLoad(); }
+    // Abilità di CONSOLE (local/console-skills.js, puro e testato in tools/tests/anima/test.mjs): batteria,
+    // spazio, rete, "gioca a…", BIOS, salvataggi, diagnosi, "apri…". Le risolvono i dati veri del device,
+    // prima di qualunque modello. L'API si inietta qui: ogni chiamata passa da dfetch (limite di ANIMA sul
+    // device) e un rifiuto diventa {status}, che il modulo trasforma in una risposta onesta.
+    // THE CONSOLE is a Handheld feature: its game library (/api/library, /api/gamemode, /api/saves, /api/cheats,
+    // /api/doctor) and the native shell that launches games. Asked on first need (never at load) through the
+    // device's capability list (games.library): absent → every console path below stays silent — no skill, no facts
+    // for the models, no forge, no PC-models helper, no polling. A device that cannot be reached yet is not
+    // remembered (nucleo-caps.js asks again on the next turn); a 404 from a console route still becomes an honest reply.
+    function hasConsole(){ return Caps.has('games.library'); }
+    let _skills, _skillsP, _aliases;
+    function skillsMod(){ return _skills ? Promise.resolve(_skills) : (_skillsP ||= import('./local/console-skills.js').then(m=>(_skills=m))); }
+    async function devJson(url){
+      const r = await dfetch(url, {cache:'no-store'});
+      if(!r.ok) throw { status: r.status };
+      return r.json();
+    }
+    async function appAliases(){ return _aliases || (_aliases = await devJson('/registry/app-aliases.json')); }
+    // /api/library/recent costa ~3,3 s sul R36S QUALUNQUE sia il limite (scorre ogni sistema): si chiede una
+    // volta il massimo e lo si tiene 60 s, cosi' "quanto ho giocato", "cosa gioco" e i fatti per i modelli
+    // non rileggono la scheda tre volte di fila. Una richiesta in volo si condivide.
+    let _recent = { at: 0, p: null };
+    function recentGames(n){
+      if(!_recent.p || Date.now() - _recent.at > 60000){
+        _recent = { at: Date.now(), p: devJson('/api/library/recent?limit=200') };
+        _recent.p.catch(()=>{ _recent = { at: 0, p: null }; });   // un errore non resta in cache
+      }
+      return _recent.p.then((j)=>Object.assign({}, j, { games: (j.games||[]).slice(0, n||3) }));
+    }
+    function skillApi(){
+      return {
+        status: () => devJson('/api/status'),
+        aliases: appAliases,
+        apps: () => devJson('/api/apps'),
+        search: (q, n) => devJson('/api/library/search?q='+encodeURIComponent(q)+'&limit='+(n||5)),
+        recent: recentGames,
+        bios: () => devJson('/api/library/bios'),
+        doctor: () => devJson('/api/doctor'),
+        gamemode: () => devJson('/api/gamemode'),
+        library: () => devJson('/api/library'),
+        games: (sys) => devJson('/api/library/games?sys='+encodeURIComponent(sys)),
+        saveHistory: (sys, file) => devJson('/api/saves/history?sys='+encodeURIComponent(sys)+'&file='+encodeURIComponent(file)),
+        cheatsStatus: () => devJson('/api/cheats/status'),
+        cheatsList: (sys, file, db) => devJson('/api/cheats/list?sys='+encodeURIComponent(sys)+'&file='+encodeURIComponent(file)+(db?'&db='+encodeURIComponent(db):'')),
+        cheatsSet: async (sys, file, on, db) => {
+          const r = await dfetch('/api/cheats/set', {method:'POST', body: JSON.stringify({sys, file, on, ...(db?{db}:{})})}, 1);
+          if(!r.ok) throw { status: r.status };
+          return r.json();
+        },
+        listDir: (p) => devJson('/api/fs/list?path='+encodeURIComponent(p)),
+      };
+    }
+    // ===========================================================================
+    // MODELLI DEL PC (local/pc-llm.js): Ollama, LM Studio, llama.cpp, Jan, KoboldCpp sul PC da cui si guarda
+    // la console. Il browser li chiama su localhost: niente passa dalla console, niente va in rete. Si cercano
+    // solo quando servono (non all'avvio: Chrome può chiedere il permesso per la rete locale, e deve farlo
+    // quando l'utente sta chiedendo qualcosa, non a pagina appena aperta).
+    // anima.pc: auto = quando non risponde un modello online (e subito in modalità Browser) · prefer = per
+    // primo · off = mai. anima.pcModel = il modello scelto a mano (altrimenti il migliore per parlare).
+    // ===========================================================================
+    let _pcm, _pcmP;
+    function pcMod(){ return _pcm ? Promise.resolve(_pcm) : (_pcmP ||= import('./local/pc-llm.js').then(m=>(_pcm=m))); }
+    let pcMode = get('anima.pc','auto');
+    let _pcScan = { at:0, res:null, p:null };
+    const L5 = (o) => (o && (o[lang] || o.en)) || '';
+    async function pcScan(force){
+      if(pcMode==='off' && !force) return null;
+      if(!(await hasConsole())) return null;            // the PC-models path belongs to the console (see hasConsole)
+      const fresh = _pcScan.res && (Date.now()-_pcScan.at < (_pcScan.res.best ? 300000 : 60000));
+      if(!force && fresh) return _pcScan.res;
+      if(_pcScan.p) return _pcScan.p;
+      _pcScan.p = (async()=>{
+        const m = await pcMod();
+        const res = await m.detect((u,o)=>fetch(u,o), { prefer: get('anima.pcModel','') || undefined, localOrigin: m.isLocalOrigin(location) });
+        _pcScan = { at:Date.now(), res, p:null };
+        // carica il modello ora, non alla prima domanda; e annota se Ollama lo tiene in memoria (res.cold)
+        if(res.best) res.warming = m.warm((u,o)=>fetch(u,o), res.best.srv, res.best.model.id).then((w)=>{ res.cold = w.resident === false; return w; });
+        return res;
+      })().catch(()=>{ _pcScan.p=null; return null; });
+      return _pcScan.p;
+    }
+    async function pcAsk(q){
+      const res = await pcScan(false); if(!res || !res.best) return null;
+      const m = await pcMod();
+      const wsx = await wsContext(q).catch(()=>({}));
+      const a = ctxkit.assemble({ history, user:q, kind:'pc', lang, now:new Date().toISOString().slice(0,10),
+        workspace:(fs.hasRoot&&fs.hasRoot())? fs.getRoot() : undefined, tree:wsx&&wsx.tree, files:wsx&&wsx.files,
+        consoleCtx: await consoleFactsFor(false) });
+      const ac = new AbortController(), tmo = setTimeout(()=>ac.abort(), 150000);   // un server bloccato non tiene ANIMA a pensare per sempre
+      let txt; try{ txt = await m.pcChat((u,o)=>fetch(u,o), res.best.srv, res.best.model.id, { system:a.system, messages:a.messages, maxTokens:a.maxTokens, temperature:a.temperature, signal:ac.signal }); }
+      finally{ clearTimeout(tmo); }
+      if(!txt) return null;
+      return { reply:txt, tier:'M4-pc', intent:/```/.test(txt)?'code':'local', confidence:70, domain:'local', model:res.best.model.id,
+               trace:'PC · '+res.best.srv.label+' · '+res.best.model.id };
+    }
+    // Il modello del PC al suo meglio: in modalità Online, con gli Agenti accesi, lavora con gli STRUMENTI veri
+    // (file, app, libreria giochi, avvio di un gioco) come farebbe un modello cloud; se il ciclo non riesce, o
+    // gli Agenti sono spenti, risponde in chat. Un solo modello per tutti i ruoli (agentCfg -> cfg.local).
+    async function pcBest(q, think){
+      if(!isPrivate() && useAgents){
+        const res = await pcScan(false);
+        if(res && res.best){
+          const m = await pcMod();
+          _agentDidMutate = false; _agentCancelled = false; _agentWsAsked = false;
+          let r = null; try{ r = await agentAsk(q, think, null, m.agentCfg(res.best.srv, res.best.model.id)); }catch{ r = null; }
+          if(r || _agentCancelled) return r;
+        }
+      }
+      return pcAsk(q);
+    }
+    // Ollama c'è ma non risponde a questa pagina (l'origine della console non è tra quelle che accetta, e
+    // la sua configurazione NON si tocca): la console si porta sul PC come http://localhost:18080, origine
+    // che Ollama accetta di serie. Una volta per PC, col file che fa l'inoltro (Windows) o con ssh.
+    function pcBlockedHere(res){ return !!(res && !res.best && res.blocked && res.blocked.length && _pcm && !_pcm.isLocalOrigin(location)); }
+    function pcFixCards(){
+      const win = /Windows/i.test(navigator.userAgent||'');
+      const cards = [];
+      if(win) cards.push({ kind:'action', arg:'pc-helper', title:L5({it:'Collega questo PC', en:'Link this PC', es:'Vincula este PC', fr:'Relier ce PC', de:'Diesen PC verbinden'}),
+        sub:L5({it:'una volta: un file, un avviso di Windows', en:'once: one file, one Windows prompt', es:'una vez: un archivo, un aviso de Windows', fr:'une fois : un fichier, un avertissement de Windows', de:'einmalig: eine Datei, eine Windows-Abfrage'}),
+        btn:L5({it:'Scarica', en:'Download', es:'Descargar', fr:'Télécharger', de:'Herunterladen'}) });
+      cards.push({ kind:'action', arg:'pc-open', title:'http://localhost:'+(_pcm?_pcm.PC_PORT:18080),
+        sub:L5({it:'ANIMA da qui usa i modelli del PC', en:'from here ANIMA uses the PC models', es:'desde aquí ANIMA usa los modelos del PC', fr:'d\'ici ANIMA utilise les modèles du PC', de:'von hier nutzt ANIMA die Modelle des PCs'}),
+        btn:L5({it:'Apri', en:'Open', es:'Abrir', fr:'Ouvrir', de:'Öffnen'}) });
+      return cards;
+    }
+    function pcFixText(res){
+      const names = (res.blocked||[]).map(s=>s.label).join(', ');
+      const win = /Windows/i.test(navigator.userAgent||'');
+      const head = !names ? L5({
+        it:'Da questo indirizzo il browser non mi lascia vedere i programmi del PC: è una sua regola di sicurezza, vale per tutte le pagine aperte a un indirizzo di rete. Se sul PC gira **Ollama** (o LM Studio, llama.cpp, Jan, KoboldCpp), apri ANIMA come **http://localhost:18080**: da lì il browser lo permette, e Ollama la accetta così com\'è, senza toccarne la configurazione.',
+        en:'From this address the browser won\'t let me see the PC\'s programs: it\'s a browser safety rule for every page opened at a network address. If **Ollama** (or LM Studio, llama.cpp, Jan, KoboldCpp) runs on the PC, open ANIMA as **http://localhost:18080**: from there the browser allows it, and Ollama accepts it as it is, without touching its settings.',
+        es:'Desde esta dirección el navegador no me deja ver los programas del PC: es una regla de seguridad suya para toda página abierta en una dirección de red. Si en el PC funciona **Ollama** (o LM Studio, llama.cpp, Jan, KoboldCpp), abre ANIMA como **http://localhost:18080**: desde ahí el navegador lo permite, y Ollama la acepta tal cual, sin tocar su configuración.',
+        fr:'Depuis cette adresse, le navigateur ne me laisse pas voir les programmes du PC : c\'est sa règle de sécurité pour toute page ouverte à une adresse réseau. Si **Ollama** (ou LM Studio, llama.cpp, Jan, KoboldCpp) tourne sur le PC, ouvre ANIMA en **http://localhost:18080** : de là le navigateur l\'autorise, et Ollama l\'accepte telle quelle, sans toucher à sa configuration.',
+        de:'Von dieser Adresse aus lässt mich der Browser die Programme des PCs nicht sehen: Das ist seine Sicherheitsregel für jede Seite unter einer Netzwerkadresse. Läuft auf dem PC **Ollama** (oder LM Studio, llama.cpp, Jan, KoboldCpp), öffne ANIMA als **http://localhost:18080**: Von dort erlaubt es der Browser, und Ollama akzeptiert es so, ohne Änderung seiner Einstellungen.' }) : L5({
+        it:'Sul PC c\'è **'+names+'**, ma non accetta richieste da una pagina aperta all\'indirizzo della console: lo fa di serie, per sicurezza. Senza toccarne la configurazione, la soluzione è aprire ANIMA come **http://localhost:18080**, un indirizzo che accetta così com\'è.',
+        en:'**'+names+'** is on this PC, but it won\'t take requests from a page opened at the console\'s address: that\'s its default, for safety. Without touching its settings, the fix is to open ANIMA as **http://localhost:18080**, an address it accepts as it is.',
+        es:'En el PC está **'+names+'**, pero no acepta peticiones de una página abierta en la dirección de la consola: lo hace por defecto, por seguridad. Sin tocar su configuración, la solución es abrir ANIMA como **http://localhost:18080**, una dirección que acepta tal cual.',
+        fr:'**'+names+'** est sur ce PC, mais il refuse les requêtes d\'une page ouverte à l\'adresse de la console : c\'est son réglage par défaut, par sécurité. Sans toucher à sa configuration, la solution est d\'ouvrir ANIMA en **http://localhost:18080**, une adresse qu\'il accepte telle quelle.',
+        de:'Auf dem PC läuft **'+names+'**, nimmt aber keine Anfragen von einer Seite unter der Adresse der Konsole an: Das ist seine Voreinstellung, aus Sicherheitsgründen. Ohne seine Einstellungen anzufassen, ist die Lösung, ANIMA als **http://localhost:18080** zu öffnen, eine Adresse, die er so akzeptiert.' });
+      const how = win ? L5({
+        it:'Una volta per PC: scarica **Collega questo PC**, aprilo e conferma l\'avviso di Windows. Fa solo un inoltro di porta (strumento di Windows, nessuna installazione) e apre ANIMA su localhost. Come vantaggio in più, da localhost il browser concede microfono e installazione come app.',
+        en:'Once per PC: download **Link this PC**, open it and confirm the Windows prompt. It only adds a port forward (a Windows tool, nothing installed) and opens ANIMA on localhost. As a bonus, on localhost the browser allows the microphone and installing as an app.',
+        es:'Una vez por PC: descarga **Vincula este PC**, ábrelo y confirma el aviso de Windows. Solo añade un reenvío de puerto (herramienta de Windows, nada que instalar) y abre ANIMA en localhost. De regalo, en localhost el navegador permite el micrófono e instalarla como app.',
+        fr:'Une fois par PC : télécharge **Relier ce PC**, ouvre-le et confirme l\'avertissement de Windows. Il ajoute seulement une redirection de port (outil de Windows, rien à installer) et ouvre ANIMA sur localhost. En prime, sur localhost le navigateur autorise le micro et l\'installation en app.',
+        de:'Einmal pro PC: Lade **Diesen PC verbinden** herunter, öffne die Datei und bestätige die Windows-Abfrage. Sie richtet nur eine Portweiterleitung ein (ein Windows-Werkzeug, nichts zu installieren) und öffnet ANIMA auf localhost. Als Bonus erlaubt der Browser auf localhost Mikrofon und Installation als App.' })
+        : L5({ it:'Su Mac o Linux, in un terminale (la password è quella della console):', en:'On Mac or Linux, in a terminal (the password is the console\'s):', es:'En Mac o Linux, en un terminal (la contraseña es la de la consola):', fr:'Sur Mac ou Linux, dans un terminal (le mot de passe est celui de la console) :', de:'Auf Mac oder Linux in einem Terminal (das Passwort ist das der Konsole):' })
+          + '\n```\n' + _pcm.sshHint(location.hostname) + '\n```';
+      return head + '\n\n' + how;
+    }
+    async function pcStatusReply(){
+      const res = await pcScan(true);
+      const m = await pcMod();
+      const x = { tier:'command', action:'answer', intent:'pc-models', domain:'local', confidence:90, local:true, skill:true, trace:'PC' };
+      if(!res) return Object.assign(x, { reply:L5({it:'Non sono riuscita a cercare i modelli sul PC.', en:'I couldn\'t look for models on the PC.', es:'No he podido buscar modelos en el PC.', fr:'Je n\'ai pas pu chercher les modèles sur le PC.', de:'Ich konnte nicht nach Modellen auf dem PC suchen.'}) });
+      if(res.best){
+        const ok = res.servers.filter(s=>s.state==='ok' && s.models.length);
+        const lines = ok.map(s=>'- **'+s.srv.label+'**: '+s.models.slice(0,6).map(mo=>'`'+mo.id+'`').join(', ')+(s.models.length>6?' …':''));
+        const modeTx = L5(pcMode==='prefer'
+          ? {it:'Lo uso per primo, prima dei modelli online.', en:'I use it first, before online models.', es:'Lo uso primero, antes que los modelos en línea.', fr:'Je l\'utilise en premier, avant les modèles en ligne.', de:'Ich nutze es zuerst, vor den Online-Modellen.'}
+          : {it:'Lo uso quando non risponde un modello online, e subito in modalità Browser. In Impostazioni → Motore puoi metterlo per primo o sceglierne un altro.', en:'I use it when no online model answers, and right away in Browser mode. In Settings → Engine you can put it first or pick another.', es:'Lo uso cuando no responde un modelo en línea, y enseguida en modo Navegador. En Ajustes → Motor puedes ponerlo primero o elegir otro.', fr:'Je l\'utilise quand aucun modèle en ligne ne répond, et tout de suite en mode Navigateur. Dans Réglages → Moteur tu peux le mettre en premier ou en choisir un autre.', de:'Ich nutze es, wenn kein Online-Modell antwortet, und sofort im Browser-Modus. Unter Einstellungen → Motor kannst du es zuerst setzen oder ein anderes wählen.'});
+        if(res.warming) await Promise.race([res.warming, new Promise((ok)=>setTimeout(ok, 45000))]);
+        const cold = res.cold ? '\n\n⚠ ' + L5({
+          it:'Ollama scarica questo modello dalla memoria dopo ogni risposta, così ognuna aspetta di ricaricarlo (decine di secondi). Succede con alcune combinazioni di modello e scheda video: in Impostazioni → Motore scegline uno più leggero.',
+          en:'Ollama drops this model from memory after every answer, so each one waits for it to reload (tens of seconds). It happens with some model/graphics card pairs: pick a lighter one in Settings → Engine.',
+          es:'Ollama saca este modelo de la memoria tras cada respuesta, así que cada una espera a que se recargue (decenas de segundos). Pasa con algunas combinaciones de modelo y tarjeta gráfica: elige uno más ligero en Ajustes → Motor.',
+          fr:'Ollama retire ce modèle de la mémoire après chaque réponse, donc chacune attend qu\'il se recharge (des dizaines de secondes). Cela arrive avec certaines combinaisons de modèle et de carte graphique : choisis-en un plus léger dans Réglages → Moteur.',
+          de:'Ollama entfernt dieses Modell nach jeder Antwort aus dem Speicher, also wartet jede Antwort aufs Neuladen (Dutzende Sekunden). Das passiert bei manchen Kombinationen aus Modell und Grafikkarte: Wähl unter Einstellungen → Motor ein leichteres.' }) : '';
+        return Object.assign(x, { reply: L5({it:'Sul PC uso **'+res.best.model.id+'** ('+res.best.srv.label+'): gira sulla tua macchina, niente va in rete.', en:'On the PC I use **'+res.best.model.id+'** ('+res.best.srv.label+'): it runs on your machine, nothing goes online.', es:'En el PC uso **'+res.best.model.id+'** ('+res.best.srv.label+'): corre en tu máquina, nada sale a la red.', fr:'Sur le PC j\'utilise **'+res.best.model.id+'** ('+res.best.srv.label+') : il tourne sur ta machine, rien ne part en ligne.', de:'Auf dem PC nutze ich **'+res.best.model.id+'** ('+res.best.srv.label+'): Es läuft auf deinem Rechner, nichts geht ins Netz.'})
+          + '\n\n' + lines.join('\n') + '\n\n' + modeTx + cold });
+      }
+      if(pcBlockedHere(res) || (res.hidden && !m.isLocalOrigin(location))) return Object.assign(x, { reply:pcFixText(res), cards:pcFixCards() });
+      return Object.assign(x, { reply:L5({
+        it:'Sul PC non trovo nessun server di modelli (Ollama, LM Studio, llama.cpp, Jan, KoboldCpp). Se ne apri uno, lo uso da sola: non serve configurare niente qui.',
+        en:'I can\'t find any model server on the PC (Ollama, LM Studio, llama.cpp, Jan, KoboldCpp). Open one and I\'ll use it by myself: nothing to set up here.',
+        es:'No encuentro ningún servidor de modelos en el PC (Ollama, LM Studio, llama.cpp, Jan, KoboldCpp). Si abres uno, lo uso sola: no hay que configurar nada aquí.',
+        fr:'Je ne trouve aucun serveur de modèles sur le PC (Ollama, LM Studio, llama.cpp, Jan, KoboldCpp). Ouvre-en un et je l\'utiliserai toute seule : rien à régler ici.',
+        de:'Ich finde auf dem PC keinen Modellserver (Ollama, LM Studio, llama.cpp, Jan, KoboldCpp). Öffne einen, dann nutze ich ihn von selbst: Hier ist nichts einzurichten.' }) });
+    }
+    // "che modelli ho sul pc?", "usa ollama", "local models", "modelos del PC", "modèles locaux", "lokale Modelle"
+    const PC_Q = /\b(ollama|lm ?studio|llama ?\.?cpp|koboldcpp)\b|\b(modell[oi]|models?|modelos?|mod[eè]les?|modelle)\b.{0,24}\b(pc|computer|ordinateur|rechner|locali|local|locales|locaux|lokal\w*)\b|\b(local|lokale) (models?|modelle)\b/i;
+    function pcHelperDownload(){
+      try{
+        const txt = _pcm.helperCmd(location.hostname, { open:'/apps/anima/' });
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([txt], { type:'application/octet-stream' }));
+        a.download = 'NucleoOS-Collega-PC.cmd'; document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(()=>URL.revokeObjectURL(a.href), 30000);
+        return L5({it:'scaricato: aprilo', en:'downloaded: open it', es:'descargado: ábrelo', fr:'téléchargé : ouvre-le', de:'geladen: öffnen'});
+      }catch{ return L5({it:'non riuscito', en:'failed', es:'no se pudo', fr:'échec', de:'fehlgeschlagen'}); }
+    }
+    // ===========================================================================
+    // LA FUCINA DEI GIOCHI (local/love-forge.js): "crea un gioco …" -> un gioco LÖVE per la console, scritto
+    // dal modello (Ollama sul PC; altrimenti una chiave cloud), installato, PROVATO sulla console (gira 6 s,
+    // screenshot, registro) e corretto finché parte. "nel gioco aggiungi …" lo modifica. Il kit (lovekit/:
+    // nucleo.lua + i suoni del catalogo) entra in ogni gioco; il sorgente resta in roms/love2d/src/<nome>/.
+    // ===========================================================================
+    let _lf, _lfP, _kit = null, _lastForgeTurn = -9;
+    function forgeMod(){ return _lf ? Promise.resolve(_lf) : (_lfP ||= import('./local/love-forge.js').then(m=>(_lf=m))); }
+    async function loveKit(){
+      if(_kit) return _kit;
+      const base = './lovekit/';
+      const [nucleo, catalog] = await Promise.all([ fetch(base+'nucleo.lua').then(r=>{ if(!r.ok) throw 0; return r.text(); }), fetch(base+'catalog.json').then(r=>r.json()) ]);
+      return (_kit = { nucleo, catalog, asset: async (p)=>{ const r = await fetch(base+p); return r.ok ? new Uint8Array(await r.arrayBuffer()) : null; } });
+    }
+    const forgeDev = {
+      write: async (p, bytes) => { const r = await dfetch('/api/fs/write?path='+encodeURIComponent(p), { method:'POST', body:bytes }, 1); if(!r.ok) throw Object.assign(new Error('write '+r.status), { status:r.status }); },
+      read: async (p) => { try{ const r = await dfetch('/api/fs/read?path='+encodeURIComponent(p)+'&t='+Date.now(), { cache:'no-store' }); return r.ok ? r.text() : null; }catch{ return null; } },
+      launch: async (sys, file) => { const r = await dfetch('/api/library/launch', { method:'POST', body:JSON.stringify({ sys, file }) }, 1); const j = await r.json().catch(()=>({})); return r.status===401 ? { ok:false, error:'pairing' } : j; },
+      gaming: async () => { try{ return !!(await devJson('/api/gamemode')).gaming; }catch{ return false; } },
+      sleep: (ms) => new Promise((ok)=>setTimeout(ok, ms)),
+    };
+    let _forgeModel = '';
+    async function forgeLLM(system, messages, onChars){
+      const onDelta = typeof onChars === 'function' ? (n)=>onChars(n) : undefined;
+      const res = await pcScan(false);
+      if(res && res.best){
+        const m = await pcMod(); _forgeModel = res.best.model.id;
+        // un gioco intero sono 2-4k token, e la correzione rimanda il codice: finestra larga, temperatura bassa
+        return m.pcChat((u,o)=>fetch(u,o), res.best.srv, res.best.model.id, { system, messages, maxTokens:4096, temperature:0.3, ctx:16384, onDelta });
+      }
+      await ensureKeyLoaded();
+      if(keyCfg && keyCfg.key && !curProv().proxy){ _forgeModel = keyCfg.model || keyCfg.provider; return AI.cloudChat(keyCfg, { system, messages, maxTokens:4096, temperature:0.3, ...(onDelta ? { onDelta:(p, full)=>onDelta(full.length) } : {}) }); }
+      throw Object.assign(new Error('no model'), { nollm:true });
+    }
+    // "crea un gioco snake al neon" -> "Snake Al Neon"
+    function forgeTitle(q){
+      const w = String(q).replace(/[«»"“”]/g,'').replace(/\s*[:;,.!?—–-]\s*/g,' ').replace(/\s+/g,' ').replace(/^.*?\b(gioco|giochino|videogioco|game|juego|videojuego|jeu|spiel|videospiel)\b\s*/i,'')
+        .replace(/^(di|del|dello|della|a|an?|of|the|de|del|du|des|le|la|un|une|ein|eine|einen|per|for|para|pour|fur|für)\s+/i,'').replace(/\b(per|for|para|pour|für|fur|sulla|on the|en la|sur la|auf der)\s+(la\s+)?(console|consola|konsole)\b.*$/i,'').trim().split(/\s+/).slice(0,5).join(' ');
+      return (w || 'Gioco').replace(/\b\p{L}/gu, (c)=>c.toUpperCase()).slice(0, 40);
+    }
+    const FORGE_Q = /\b(crea|creami|fai|fammi|sviluppa|sviluppami|programma|programmami|costruisci|inventa|realizza|make|create|build|develop|code|write|haz|hazme|crea|desarrolla|programa|construye|cree|fais|fais-moi|developpe|développe|programme|construis|erstelle|mach|entwickle|programmiere|baue)\b.{0,40}\b(gioco|giochino|videogioco|game|juego|videojuego|jeu|spiel|videospiel)\b/i;
+    const FORGE_NOT = /\b(javascript|js|html|browser|navigatore|web|python)\b/i;
+    const FORGE_EDIT = /^(aggiungi|aggiungici|togli|cambia|metti|rendi|correggi|migliora|riprova|fai che|add|remove|change|make it|fix|improve|retry|reintenta|réessaie|reessaie|versuch|añade|agrega|quita|cambia|haz que|corrige|mejora|ajoute|enlève|enleve|change|rends|corrige|améliore|ameliore|füge|fuge|entferne|ändere|andere|mach|korrigiere|verbessere)\b/i;
+    const GAME_W = /\b(gioco|game|juego|jeu|spiel)\b/i;
+    function forgeLast(){ try{ return JSON.parse(get('anima.forge.last','null')); }catch{ return null; } }
+    function forgeWanted(q){
+      if(FORGE_Q.test(q) && !FORGE_NOT.test(q)) return { edit:false };
+      const last = forgeLast();
+      if(last && FORGE_EDIT.test(q.trim()) && (GAME_W.test(q) || history.length <= _lastForgeTurn + 3)) return { edit:true, last };
+      return null;
+    }
+    function forgeStep(k, i){
+      if(k==='writing'){ const n=(i.chars||0).toLocaleString(); return L5({it:'Scrivo il codice… '+n+' caratteri', en:'Writing the code… '+n+' characters', es:'Escribo el código… '+n+' caracteres', fr:'J\'écris le code… '+n+' caractères', de:'Schreibe den Code… '+n+' Zeichen'}); }
+      if(k==='write') return L5({it:'Scrivo il gioco'+(_forgeModel?' con '+_forgeModel:'')+'…', en:'Writing the game'+(_forgeModel?' with '+_forgeModel:'')+'…', es:'Escribo el juego'+(_forgeModel?' con '+_forgeModel:'')+'…', fr:'J\'écris le jeu'+(_forgeModel?' avec '+_forgeModel:'')+'…', de:'Ich schreibe das Spiel'+(_forgeModel?' mit '+_forgeModel:'')+'…'});
+      if(k==='lint') return L5({it:'Sistemo '+i.problems.length+' cose prima di provarlo…', en:'Fixing '+i.problems.length+' things before testing…', es:'Arreglo '+i.problems.length+' cosas antes de probarlo…', fr:'Je corrige '+i.problems.length+' points avant de l\'essayer…', de:'Ich behebe '+i.problems.length+' Dinge vor dem Test…'});
+      if(k==='install') return L5({it:'Installo sulla console ('+Math.round(i.bytes/1024)+' KB)…', en:'Installing on the console ('+Math.round(i.bytes/1024)+' KB)…', es:'Instalo en la consola ('+Math.round(i.bytes/1024)+' KB)…', fr:'J\'installe sur la console ('+Math.round(i.bytes/1024)+' Ko)…', de:'Installiere auf der Konsole ('+Math.round(i.bytes/1024)+' KB)…'});
+      if(k==='launch') return L5({it:'Lo provo sulla console (tentativo '+i.attempt+')…', en:'Testing it on the console (attempt '+i.attempt+')…', es:'Lo pruebo en la consola (intento '+i.attempt+')…', fr:'Je l\'essaie sur la console (essai '+i.attempt+')…', de:'Teste auf der Konsole (Versuch '+i.attempt+')…'});
+      if(k==='result') return i.result.ok ? L5({it:'Gira: '+i.result.fps+' FPS a '+i.result.screen, en:'It runs: '+i.result.fps+' FPS at '+i.result.screen, es:'Funciona: '+i.result.fps+' FPS a '+i.result.screen, fr:'Ça tourne : '+i.result.fps+' FPS en '+i.result.screen, de:'Läuft: '+i.result.fps+' FPS bei '+i.result.screen})
+        : L5({it:'Errore: ', en:'Error: ', es:'Error: ', fr:'Erreur : ', de:'Fehler: '}) + String(i.result.error||'').slice(0,90);
+      if(k==='fix') return L5({it:'Correggo l\'errore e riprovo…', en:'Fixing the error and retrying…', es:'Corrijo el error y vuelvo a probar…', fr:'Je corrige l\'erreur et je réessaie…', de:'Ich behebe den Fehler und teste erneut…'});
+      return '';
+    }
+    async function forgeAsk(q, want, think){
+      const x = { tier:'command', action:'answer', intent:'forge', domain:'local', confidence:90, local:true, skill:true, trace:'ANIMA · fucina LÖVE' };
+      let F, kit;
+      try{ F = await forgeMod(); kit = await loveKit(); }catch{ return Object.assign(x, { reply:L5({it:'Il kit dei giochi non è installato con questa versione di ANIMA.', en:'The game kit is not installed with this ANIMA version.', es:'El kit de juegos no está instalado con esta versión de ANIMA.', fr:'Le kit de jeux n\'est pas installé avec cette version d\'ANIMA.', de:'Das Spiele-Kit ist mit dieser ANIMA-Version nicht installiert.'}) }); }
+      let prev = null, title = forgeTitle(q);
+      if(want.edit){
+        const code = await forgeDev.read('roms/love2d/src/'+want.last.name+'/game.lua');
+        if(code) { prev = { code, name:want.last.name }; title = want.last.title; }
+      }
+      const steps = [];
+      let res;
+      try{
+        res = await F.forge({ idea:q, title, prev, lang, llm:forgeLLM, dev:forgeDev, kit, tries:3, testSec:8,
+          onStep:(k,i)=>{ const s = forgeStep(k,i); if(!s) return; think && think.note(s); if(k!=='writing') steps.push(s); } });
+      }catch(e){
+        if(e && e.nollm) return Object.assign(x, { reply:L5({
+          it:'Per scrivere un gioco mi serve un modello: **Ollama** (o LM Studio…) sul PC, con ANIMA aperta da http://localhost:18080, oppure una chiave online in Impostazioni → Chiavi. Chiedimi «modelli del PC» per collegarlo.',
+          en:'To write a game I need a model: **Ollama** (or LM Studio…) on the PC, with ANIMA opened at http://localhost:18080, or an online key in Settings → Keys. Ask me “PC models” to link it.',
+          es:'Para escribir un juego necesito un modelo: **Ollama** (o LM Studio…) en el PC, con ANIMA abierta en http://localhost:18080, o una clave en línea en Ajustes → Claves. Pregúntame «modelos del PC» para vincularlo.',
+          fr:'Pour écrire un jeu il me faut un modèle : **Ollama** (ou LM Studio…) sur le PC, avec ANIMA ouverte sur http://localhost:18080, ou une clé en ligne dans Réglages → Clés. Demande-moi « modèles du PC » pour le relier.',
+          de:'Um ein Spiel zu schreiben, brauche ich ein Modell: **Ollama** (oder LM Studio…) auf dem PC, mit ANIMA unter http://localhost:18080 geöffnet, oder einen Online-Schlüssel unter Einstellungen → Schlüssel. Frag mich „Modelle des PCs“, um es zu verbinden.' }), cards: pcFixCards() });
+        return Object.assign(x, { reply:L5({it:'La fucina si è fermata: ', en:'The forge stopped: ', es:'La forja se detuvo: ', fr:'La forge s\'est arrêtée : ', de:'Die Schmiede hat angehalten: '}) + String(e && e.message || e) });
+      }
+      _lastForgeTurn = history.length;
+      if(res.name && res.code) set('anima.forge.last', JSON.stringify({ name:res.name, title }));   // anche se la prova è fallita: "riprova" e "cambia" ripartono da qui
+      const trail = steps.length ? '\n\n' + steps.map(s=>'- '+s).join('\n') : '';
+      const codeBlock = res.code ? '\n\n```lua\n' + res.code.replace(/\n$/,'') + '\n```' : '';
+      if(res.ok){
+        set('anima.forge.last', JSON.stringify({ name:res.name, title }));
+        const img = res.shot ? '/api/fs/read?path='+encodeURIComponent(res.shot)+'&v='+Date.now() : '';
+        const head = L5({
+          it:'**'+title+'** è pronto, ed è già stato provato sulla console: gira a '+res.fps+' FPS su '+res.screen+(res.attempts>1?' (al '+res.attempts+'° tentativo: gli errori li ho corretti io)':'')+'. Lo trovi anche in Giochi → Love2d.\n\nComandi: croce per muoverti, **A** azione, **START** pausa, **SELECT+START** per uscire. Vuoi cambiarlo? Dimmi per esempio «aggiungi i nemici» o «rendilo più difficile».',
+          en:'**'+title+'** is ready, and it has already been tested on the console: '+res.fps+' FPS at '+res.screen+(res.attempts>1?' (attempt '+res.attempts+': I fixed the errors myself)':'')+'. It is also in Games → Love2d.\n\nControls: d-pad to move, **A** action, **START** pause, **SELECT+START** to quit. Want changes? Say for example “add enemies” or “make it harder”.',
+          es:'**'+title+'** está listo y ya probado en la consola: '+res.fps+' FPS a '+res.screen+(res.attempts>1?' (intento '+res.attempts+': los errores los corregí yo)':'')+'. También está en Juegos → Love2d.\n\nControles: cruceta para moverte, **A** acción, **START** pausa, **SELECT+START** para salir. ¿Quieres cambiarlo? Dime por ejemplo «añade enemigos» o «hazlo más difícil».',
+          fr:'**'+title+'** est prêt, et déjà testé sur la console : '+res.fps+' FPS en '+res.screen+(res.attempts>1?' (essai '+res.attempts+' : j\'ai corrigé les erreurs moi-même)':'')+'. Il est aussi dans Jeux → Love2d.\n\nCommandes : croix pour bouger, **A** action, **START** pause, **SELECT+START** pour quitter. Envie de changements ? Dis par exemple « ajoute des ennemis » ou « rends-le plus difficile ».',
+          de:'**'+title+'** ist fertig und schon auf der Konsole getestet: '+res.fps+' FPS bei '+res.screen+(res.attempts>1?' (Versuch '+res.attempts+': die Fehler habe ich selbst behoben)':'')+'. Es steht auch unter Spiele → Love2d.\n\nSteuerung: Steuerkreuz zum Bewegen, **A** Aktion, **START** Pause, **SELECT+START** zum Beenden. Änderungen? Sag zum Beispiel „füge Gegner hinzu“ oder „mach es schwerer“.' });
+        // lento: o il gioco fa troppo per fotogramma, o la console era occupata durante la prova
+        const slow = res.fps > 0 && res.fps < 20 ? '\n\n⚠ ' + L5({
+          it:'Durante la prova andava a soli '+res.fps+' FPS: o il gioco fa troppo lavoro per fotogramma (chiedimi «rendilo più leggero»), o la console era occupata in quel momento.',
+          en:'During the test it ran at only '+res.fps+' FPS: either the game does too much per frame (ask me “make it lighter”), or the console was busy at that moment.',
+          es:'Durante la prueba iba a solo '+res.fps+' FPS: o el juego hace demasiado por fotograma (pídeme «hazlo más ligero»), o la consola estaba ocupada en ese momento.',
+          fr:'Pendant le test il tournait à seulement '+res.fps+' FPS : soit le jeu en fait trop par image (demande-moi « rends-le plus léger »), soit la console était occupée à ce moment-là.',
+          de:'Beim Test lief es nur mit '+res.fps+' FPS: Entweder macht das Spiel zu viel pro Bild (sag „mach es leichter“), oder die Konsole war gerade beschäftigt.' }) : '';
+        return Object.assign(x, { reply: head + slow + trail + codeBlock,
+          cards:[{ kind:'game', consoleOnly:true, arg:'love2d/'+res.file, title, sub:'LÖVE · '+res.screen+' · '+res.fps+' FPS', img }] });
+      }
+      const why = res.stage==='launch' ? (res.error==='game_running' ? L5({it:'sulla console c\'è un gioco aperto: chiudilo (SELECT+START) e riprova', en:'a game is open on the console: close it (SELECT+START) and retry', es:'hay un juego abierto en la consola: ciérralo (SELECT+START) y vuelve a intentarlo', fr:'un jeu est ouvert sur la console : ferme-le (SELECT+START) et réessaie', de:'auf der Konsole läuft ein Spiel: beende es (SELECT+START) und versuch es erneut'})
+                  : res.error==='pairing' ? L5({it:'serve l\'abbinamento: inserisci il PIN della console', en:'pairing needed: enter the console PIN', es:'hace falta vincular: introduce el PIN de la consola', fr:'appairage nécessaire : saisis le PIN de la console', de:'Kopplung nötig: Gib die PIN der Konsole ein'})
+                  : res.error==='core_not_listening' ? L5({it:'la console non è pronta (il menu di NucleoOS non risponde)', en:'the console is not ready (the NucleoOS menu does not answer)', es:'la consola no está lista', fr:'la console n\'est pas prête', de:'die Konsole ist nicht bereit'}) : res.error)
+                : '`' + String(res.error||'').slice(0,300) + '`';
+      return Object.assign(x, { confidence:60, reply: L5({it:'Non sono riuscita a far partire **'+title+'**: ', en:'I couldn\'t get **'+title+'** running: ', es:'No he conseguido arrancar **'+title+'**: ', fr:'Je n\'ai pas réussi à lancer **'+title+'** : ', de:'Ich konnte **'+title+'** nicht starten: '}) + why +
+        '.\n\n' + L5({it:'Il codice è qui sotto: posso riprovare se mi dici «riprova il gioco», o cambiarlo con una richiesta più semplice.', en:'The code is below: I can retry if you say “retry the game”, or change it with a simpler request.', es:'El código está abajo: puedo reintentarlo si dices «reintenta el juego», o cambiarlo con una petición más sencilla.', fr:'Le code est ci-dessous : je peux réessayer si tu dis « réessaie le jeu », ou le changer avec une demande plus simple.', de:'Der Code steht unten: Ich kann es erneut versuchen, wenn du „versuch das Spiel nochmal“ sagst, oder es mit einer einfacheren Bitte ändern.'}) + trail + codeBlock });
+    }
+    // "Scarica il database dei trucchi" (scheda azione delle abilità): lo scarica la console, in background
+    // (POST /api/cheats/fetch, solo i sistemi presenti sulla scheda), e si segue il lavoro su /api/cheats/job.
+    // Torna il testo del pulsante: com'è andata.
+    async function cheatsFetch(){
+      try{
+        const r = await dfetch('/api/cheats/fetch', {method:'POST', body:'{}'}, 1);
+        if(r.status === 401) return TR('serve il PIN', 'PIN needed');
+        const j = await r.json().catch(()=>({}));
+        if(!r.ok || (!j.ok && j.error !== 'busy')) return TR('non riuscito', 'failed');
+        for(let k=0; k<600; k++){                       // fino a 20 minuti: 37 MB su un WiFi lento
+          await new Promise((res)=>setTimeout(res, 2000));
+          const s = await devJson('/api/cheats/job').catch(()=>null);
+          if(s && s.state === 'done') return TR('scaricato ✓', 'downloaded ✓');
+          if(s && s.state === 'failed') return TR('non riuscito', 'failed');
+        }
+        return TR('ancora in corso…', 'still running…');
+      }catch{ return TR('console non raggiungibile', 'console unreachable'); }
+    }
+    // I modelli (cloud, WebLLM) ricevono pochi fatti VERI della console - gioco aperto, giocati di recente con
+    // tempo e data, batteria - così "come supero il boss di quello che sto giocando?" o "consigliami qualcosa
+    // di simile a ciò che gioco" hanno una base. Cache breve: una domanda di seguito all'altra non rilegge tutto.
+    let _cfacts = { at: 0, key: '', text: '' };
+    async function consoleFactsFor(small){
+      if(!(await hasConsole())) return '';             // no console: no console facts, no requests
+      const key = lang + (small ? ':s' : ':l');
+      if(_cfacts.key === key && Date.now() - _cfacts.at < 60000) return _cfacts.text;
+      let text = '';
+      try{ text = await Promise.race([ (await skillsMod()).consoleFacts(lang, skillApi(), { small }), new Promise((r)=>setTimeout(()=>r(''), 2500)) ]); }catch{ text = ''; }
+      // il manuale di gioco di NucleoOS (local/game-kb.js): tasti, trucchi, Ports, PSP/Dreamcast... cosi' il
+      // modello non inventa menu che non esistono. Non per il modello locale: la sua finestra e' minuscola.
+      if(!small){ try{ const kb = await import('./local/game-kb.js'); text = (text ? text + '\n\n' : '') + kb.handbook(); }catch{} }
+      _cfacts = { at: Date.now(), key, text: text || '' };
+      return _cfacts.text;
+    }
+    // "Gioca sulla console": lo lancia Core, come dalla ruota (POST /api/library/launch). Torna il testo
+    // da mostrare sul pulsante: com'è andata, in parole.
+    async function devicePlay(arg){
+      const i = String(arg||'').indexOf('/');
+      if(i < 1) return TR('errore', 'error');
+      try{
+        const r = await dfetch('/api/library/launch', {method:'POST', body: JSON.stringify({sys: arg.slice(0,i), file: arg.slice(i+1)})}, 1);
+        if(r.status === 401) return TR('serve il PIN', 'PIN needed');
+        const j = await r.json().catch(()=>({}));
+        if(r.ok && j.ok) return TR('avviato ✓', 'started ✓');
+        return j.error === 'game_running' ? TR('un gioco è già aperto', 'a game is already open')
+             : j.error === 'core_not_listening' ? TR('console non pronta', 'console not ready')
+             : j.error === 'busy' ? TR('un attimo…', 'one moment…')
+             : TR('non riuscito', 'failed');
+      }catch{ return TR('console non raggiungibile', 'console unreachable'); }
+    }
     // Can the browser WASM brain answer with NO network pull? (loaded, or pack already cached). Never downloads.
     async function browserProvisioned(){ if(_edgeReady) return true; try{ return await (await edgeEngine()).ready(); }catch{ return false; } }
     // Run the in-browser WASM cascade. silent=false → explicit Browser mode (blocking provisioning gate, may
@@ -4178,13 +4642,13 @@
       return TR('il comando non è stato eseguito', 'the command was not carried out');
     }
     function notDoneWhy(why){
-      if(why==='unpaired') return TR('Questo browser non è associato al Cardputer (serve il PIN)', 'This browser isn’t paired with the Cardputer (PIN needed)');
-      if(why==='busy') return _devProfile==='web' ? L('devWebMode') : TR('Il Cardputer è occupato, riprova tra poco', 'The Cardputer is busy, try again in a moment');
-      if(why==='too_long') return TR('La richiesta è troppo lunga per il Cardputer', 'The request is too long for the Cardputer');
-      if(why==='unsupported') return TR('Il firmware di questo Cardputer non può eseguirlo dal web (aggiornalo)', 'This Cardputer firmware can’t run it from the web (update it)');
-      if(why==='mismatch') return TR('Il Cardputer non l’ha riconosciuto come comando', 'The Cardputer did not recognise it as a command');
-      if(why==='failed') return TR('Il Cardputer l’ha rifiutato o non ci è riuscito', 'The Cardputer refused or could not do it');
-      return TR('Non riesco a raggiungere il Cardputer', 'I can’t reach the Cardputer');
+      if(why==='unpaired') return TR('Questo browser non è associato al dispositivo (serve il PIN)', 'This browser isn’t paired with the device (PIN needed)');
+      if(why==='busy') return _devProfile==='web' ? L('devWebMode') : TR('Il dispositivo è occupato, riprova tra poco', 'The device is busy, try again in a moment');
+      if(why==='too_long') return TR('La richiesta è troppo lunga per il dispositivo', 'The request is too long for the device');
+      if(why==='unsupported') return TR('Il firmware di questo dispositivo non può eseguirlo dal web (aggiornalo)', 'This device’s firmware can’t run it from the web (update it)');
+      if(why==='mismatch') return TR('Il dispositivo non l’ha riconosciuto come comando', 'The device did not recognise it as a command');
+      if(why==='failed') return TR('Il dispositivo l’ha rifiutato o non ci è riuscito', 'The device refused or could not do it');
+      return TR('Non riesco a raggiungere il dispositivo', 'I can’t reach the device');
     }
     // An honest "NOT done" result. 'failed' keeps the device's own reply (it says why: PIN, file exists…).
     function notPerformed(r, why, tool){
@@ -4546,7 +5010,7 @@
       const tree=_wsTree.str, treeObj=_wsTree.obj;
       const inTree=new Set(); if(treeObj&&treeObj.entries) for(const e of treeObj.entries){ inTree.add(e.path); inTree.add(e.name); }
       // candidate paths: @mentions that LOOK like a path (have a '.' or '/') OR any token present in the tree.
-      // A bare '@word' (e.g. @media, @nicola, a CSS at-rule / handle) is NOT auto-read unless it resolves.
+      // A bare '@word' (e.g. @media, @someone, a CSS at-rule / handle) is NOT auto-read unless it resolves.
       const files=[]; const seen=new Set(); let budget=2;   // the agent seed (primary online path) keeps 2 files; the worker read_file's the rest on demand
       const re=/@([\w./-]+)|\b([\w./-]+\.[A-Za-z0-9]{1,6})\b/g; let m;
       while((m=re.exec(String(q||''))) && budget>0){
@@ -4567,6 +5031,7 @@
       let streamed=false;
       const onDelta = opts.onDelta ? (d)=>{ streamed=true; opts.onDelta(d); } : null;
       const wsx=_wsx || await wsContext(q);   // reuse the caller's workspace context when provided (no redundant device reads)
+      const consoleCtx=await consoleFactsFor(false);   // la console viva (gioco aperto, recenti, batteria) come DATI per il modello
       const wsRoot=(fs.hasRoot&&fs.hasRoot())? fs.getRoot() : undefined;
       // MULTI-MODEL: hard turns (code / long-form) go to the STRONGEST configured model across all keys
       // (Opus / 70B / Gemini-Pro); simple chat stays on the user's active model — no surprise, no latency.
@@ -4577,7 +5042,7 @@
       const callWith=async(cfg)=>{
         const a=ctxkit.assemble({ history, user:q, mode:'only', provider:cfg.provider, model:cfg.model, lang, device:await deviceFacts(),   // now: contextkit's localised date + time + weekday
 
-          workspace:wsRoot, tree:wsx.tree, files:wsx.files });
+          workspace:wsRoot, tree:wsx.tree, files:wsx.files, consoleCtx });
         return cloudComplete(cfg.provider, cfg.base, cfg.model, cfg.key, cfg.version, a.system, a.messages, { maxTokens:a.maxTokens, temperature:a.temperature, signal:_turnSig, onDelta, tier: hard ? 'max' : 'mid' });
       };
       let txt;
@@ -4683,6 +5148,7 @@
       // scaffold_app said only "wants to run scaffold_app": show the app it is about to create, and where
       else if(op==='scaffold_app' && (a.id || a.name)){ target=(a.name?'«'+a.name+'» ':'')+root+String(a.id||'').replace(/^\/+/,'')+'/'+(a.kind?' ('+a.kind+')':''); isPath=false; }
       else if(a.hw){ target=a.abs||''; isPath=false; }
+      else if(op==='launch_game'){ target=String(a.sys||'')+'/'+String(a.file||''); isPath=false; }   // a game started on the console (Handheld)
       else if(op==='move_file' && a.from) target=(String(a.from).startsWith('/')?'':root)+String(a.from).replace(/^\.\//,'')+' → '+(a.abs||a.to||'?');
       else target=a.abs||(a.path?root+String(a.path).replace(/^\.?\/+/,''):'');
       const lines=[];
@@ -4718,8 +5184,8 @@
       const d=_agentStr;
       return (k,v)=>{ const s=d[k]; return typeof s==='string' ? s.replace(/\{(\w+)\}/g,(m,n)=> v && v[n]!=null ? String(v[n]) : m) : k; };
     }
-    async function agentRuntime(){
-      const sig=lang+'|'+(keyCfg.key||'')+'|'+(keyCfg.model||'')+'|'+keysSig()+'|'+((fs.hasRoot&&fs.hasRoot())?fs.getRoot():'');
+    async function agentRuntime(pcCfg){   // pcCfg: a model on the user's PC (local/pc-llm.js agentCfg) instead of a cloud key
+      const sig=lang+'|'+(pcCfg?('pc:'+pcCfg.base+'|'+pcCfg.model):((keyCfg.key||'')+'|'+(keyCfg.model||'')+'|'+keysSig()))+'|'+((fs.hasRoot&&fs.hasRoot())?fs.getRoot():'');
       if(_agentRt && _agentRtKey===sig) return _agentRt;
       // device webfs maps /apps/<id>/<rest> → /apps/<id>/www/<rest>: the URI must NOT contain /www/.
       // ONE FILE AT A TIME (/seq-import.js): no service worker gates requests on http://, and a plain import()
@@ -4731,7 +5197,7 @@
       // instance runtime.js already loaded, so no extra fetch; mirrored as a floor if it ever fails to load.
       let ALWAYS=null; try{ ALWAYS=(await import('/apps/agent/agent-tools.js')).ALWAYS_CONFIRM; }catch{}
       if(!ALWAYS || typeof ALWAYS.has!=='function') ALWAYS=new Set(['delete_file','publish_app','manage_app']);
-      const cfg={ provider:keyCfg.provider, key:keyCfg.key, base:keyCfg.base, model:keyCfg.model, version:keyCfg.version, geminiTier:keyCfg.geminiTier };
+      const cfg=pcCfg || { provider:keyCfg.provider, key:keyCfg.key, base:keyCfg.base, model:keyCfg.model, version:keyCfg.version, geminiTier:keyCfg.geminiTier };
       const root=(fs.hasRoot&&fs.hasRoot())? fs.getRoot() : '/data/agent';
       const ui={
         status:(m)=>{ try{ _agentThink && _agentThink.note('⚙ '+m); }catch{} },
@@ -4783,17 +5249,18 @@
       // so a 1.7B model can only emit valid tool calls. Built lazily; none installed → no rung.
       const local={ grammar:await import('/apps/anima/forge/grammar.js').catch(()=>null),
         engines:async()=>{ try{ const m=await loadLLM(); const e=await m.localAgentEngine(); return e ? [{ tier:'local-webgpu', engine:e }] : []; }catch{ return []; } } };
-      _agentRt=createRuntime({ cfg, root, lang, ui, keys:(keyCfg.keys||{}), active:cfg, maxSteps:steps, maxParallel:par, t:rtT, localServer, local:local.grammar?local:null }); _agentRtKey=sig; return _agentRt;
+      _agentRt=createRuntime({ cfg, root, lang, ui, keys:(pcCfg?undefined:(keyCfg.keys||{})), active:cfg, maxSteps:steps, maxParallel:(pcCfg?1:par), t:rtT, localServer, local:local.grammar?local:null }); _agentRtKey=sig; return _agentRt;
     }
     // Abort an in-flight agent run (Stop / Esc). The runtime's stop() aborts every fetch + the tool loop;
     // the flag tells ask() to end the turn cleanly instead of substituting a fresh single-shot cloud answer.
     function cancelAgent(){ _agentCancelled=true; try{ _agentRt && _agentRt.stop && _agentRt.stop(); }catch{} }
     let _agentThink=null;
-    async function agentAsk(q, think, wsx){
+    async function agentAsk(q, think, wsx, pcCfg){
       _agentThink=think; if(think) think.note(TR('⚙ Multi-agente…', '⚙ Multi-agent…'));
       try{
-        const rt=await agentRuntime();
-        const seed=wsx || await wsContext(q);   // Claude-Code <env>: seed the worker with the workspace tree + @-mentioned files
+        const rt=await agentRuntime(pcCfg);
+        // Claude-Code <env>: seed the worker with the workspace tree + @-mentioned files, plus the console's live state (Handheld)
+        const seed=Object.assign({}, wsx || await wsContext(q), { console: await consoleFactsFor(false) });
         const replyLang=ctxkit.userLanguage ? ctxkit.userLanguage(q) : null;   // the language the user wrote in, named to the agent
         // hostAnswers: a plain question the triage would answer itself (cheapest model, no grounding) comes back null and
         // is answered by ANIMA's own chat below (cloudAsk / the local server) — NucleoOS facts, device state, date, language.
@@ -4805,6 +5272,8 @@
           trace:L('agentLocal',{ server:eng.server||'', model:eng.model||'' }) };
         if(eng && eng.kind==='local') return { reply:txt, tier:'M4-local', substrate:'M4-local', intent:'agent', confidence:65, domain:'local', model:eng.model||'',
           trace:L('agentLocal',{ server:'WebGPU', model:eng.model||'' }) };
+        if(pcCfg) return { reply:txt, intent:'agent', confidence:80, domain:'local', substrate:'M2', model:pcCfg.model,
+                 trace:(TR('Agenti · PC · ', 'Agents · PC · '))+pcCfg.label+' · '+pcCfg.model };
         return { reply:txt, intent:'agent', confidence:80, domain:'online', substrate:'M2', trace:(TR('Agenti · orchestratore → worker', 'Agents · orchestrator → worker')) };
       } finally { _agentThink=null; }
     }
@@ -4904,10 +5373,20 @@
       let r; const _t0=Date.now();   // pipeline latency: measured across the whole brain resolution (incl. fallbacks)
       _turnLocal=null; _turnDevice=null; _turnDevErr=''; _turnAiErr=null; _lastCloudModel=''; _turnForceAgent=false;
       try{
-      // COMMANDS FIRST: a device action or live-state question ("alza il volume", "ricordami…", "che ore sono"),
+      // THE CONSOLE first (Handheld only — hasConsole()): "quanta batteria ho", "gioca a zelda", "manca il bios?" have a
+      // true answer on the device that no model knows (strict rules: null = not a console question); then the LÖVE forge
+      // ("crea un gioco …" / "nel gioco aggiungi …"), the PC-models status ("che modelli ho sul PC?") and, when the user
+      // put them first (Settings → Engine), the PC models.
+      if(await hasConsole()){
+        try{ r = await (await skillsMod()).consoleSkill(q, lang, skillApi()); }catch{ r = null; }
+        if(!r && !sig.aborted){ const fw = forgeWanted(q); if(fw){ try{ r = await forgeAsk(q, fw, think); }catch{ r = null; } } }
+        if(!r && !sig.aborted && PC_Q.test(q)){ try{ r = await pcStatusReply(); }catch{ r = null; } }
+        if(!r && !sig.aborted && pcMode==='prefer' && !webCompound){ try{ r = await pcBest(sendQ, think); }catch{ r = null; } }
+      }
+      // COMMANDS (first on every other device): a device action or live-state question ("alza il volume", "ricordami…", "che ore sono"),
       // and anything about the user's personal memory, is resolved by the Cardputer before any LLM rung — even
       // with 🌐 Web armed — see commandFirst().
-      try{ r = await commandFirst(sendQ); }catch{ r = null; }
+      if(!r){ try{ r = await commandFirst(sendQ); }catch{ r = null; } }
       // ARITHMETIC: a sentence that is pure arithmetic ("combien font 17 fois 23, divisé par 5", "y dividido entre 3") is
       // computed here, exactly — the paused device brain used to leave it to a model that put a wrong result in bold.
       if(!r && !sig.aborted){ try{ r = await browserMath(q, prevNum); }catch{ r = null; } }
@@ -5019,6 +5498,11 @@
           }catch{ /* no GPU model → the chat rung below */ }
         }
 
+        // 1c - A MODEL ON THE USER'S PC through local/pc-llm.js (Handheld only: pcScan answers null without a console).
+        //      Before the browser GPU model: no download, a real GPU. Online with the Agents on it works with the real
+        //      tools (pcBest); in Private it answers as chat (it never leaves the PC).
+        if(!r && !sig.aborted && !live && pcMode!=='off'){ try{ r = priv ? await pcAsk(sendQ) : await pcBest(sendQ, think); }catch{ r = null; } }
+
         // 2 - BROWSER GPU LLM (WebLLM). A real generative model on the user's own GPU - the rung the
         //     old 'Browser' mode could never reach. Works in private mode too: once installed it is local.
         //     INSTALLED ONLY: this rung never starts a multi-GB download (that is Settings ▸ Download now,
@@ -5027,7 +5511,8 @@
           try{
             const m = await loadLLM(); const caps = await m.probeLocal();
             if(caps.webgpu && await m.localAvailable()){
-              try{ r = await AM.withStep(sig, AM.STEP_MS.local, (signal)=>m.queryLocal(sendQ, lang, history, null, { signal, onDelta })); }catch{ r = null; }
+              const consoleCtx=await consoleFactsFor(true);   // the console's live facts, small (Handheld; '' elsewhere)
+              try{ r = await AM.withStep(sig, AM.STEP_MS.local, (signal)=>m.queryLocal(sendQ, lang, history, null, { signal, onDelta, consoleCtx })); }catch{ r = null; }
             }
           }catch{ /* module/probe failed -> next rung */ }
         }
@@ -5053,6 +5538,8 @@
         persist(); return;
       }
 
+      // Nothing answered, but a PC model is RIGHT THERE (Handheld, local/pc-llm.js): say how to reach it.
+      if(!r && pcBlockedHere(_pcScan.res)) r = { reply:pcFixText(_pcScan.res), cards:pcFixCards(), intent:'pc-models', confidence:60, domain:'local', trace:'PC' };
       // Nothing on any rung: say so honestly rather than inventing an answer.
       if(!r){
         think.remove(); const {body}=botShell(history.length, false);
@@ -5066,12 +5553,25 @@
         const aiWhy = _turnAiErr ? AI.explainAiError(_turnAiErr, lang) : '';
         const msg = aiWhy ? aiWhy + ' ' + (have ? UI[lang].dontknow : L('noEngine'))
           : why==='too_long'
-          ? TR('La domanda è troppo lunga per il Cardputer: accorciala e riprova.', 'This question is too long for the Cardputer: shorten it and try again.')
+          ? TR('La domanda è troppo lunga per il dispositivo: accorciala e riprova.', 'This question is too long for the device: shorten it and try again.')
           : (have || !why) ? UI[lang].dontknow
           : (why==='unreachable' ? UI[lang].offline : '⚠ '+notDoneWhy(why)+'.') + ' ' + L('noEngine');
         renderMd(body, msg); body.dataset.raw=msg; history.push({role:'bot',text:msg}); persist(); setDot('err');
         maybeLocalAiHint(body, null).catch(()=>{});   // nothing answered: exactly when "your Ollama refuses NucleoOS" matters most
         return;
+      }
+      // Corrections to the offline brain on the console (local/console-skills.js): an "open" counts only if the app
+      // registry confirms it, "{value}" becomes the real value, "in inglese" keeps one direction. Console only.
+      if(r && !r.skill && await hasConsole()){
+        try{
+          const SK = await skillsMod();
+          if(r.action==='launch' || r.intent==='close_app'){
+            const v = SK.vetLaunch(r, q, (await appAliases().catch(()=>null) || {}).aliases);
+            r = v || { reply: TR('Non trovo un\'app con quel nome.', 'I can\'t find an app with that name.'), action:'none', intent:'open_app', domain:'app', tier:'command', local:true };
+          }
+          r = SK.fixTranslate(r, q, lang);
+          r = await SK.fillSystemReply(r, lang, skillApi());
+        }catch{}
       }
       // A device action is done only if the Cardputer did it: run a browser-engine proposal on the device,
       // or turn it into an honest "not done" (device unreachable / unpaired / refused / old firmware).
@@ -5134,6 +5634,7 @@
       else if(r.tool==='set_volume' || r.tool==='set_brightness'){ entry.card={kind:'device_done',arg:r.tool}; buildCard(body, cardFromDescriptor(entry.card)); }
       // image-gen decline (firmware intent=image_gen): the reply explains it lives in Paint; offer to open it.
       else if(r.intent==='image_gen'){ entry.card={kind:'open_paint'}; buildCard(body, cardFromDescriptor(entry.card)); }
+      if(r.cards && r.cards.length){ entry.cards=r.cards; r.cards.forEach(c=>buildCard(body, cardFromDescriptor(c))); }
       // dialogue state surfacing
       if((r.state==='slot'||r.awaiting) && r.intent!=='clarify'){ entry.banner={kind:'warn',text:'⏳ '+UI[lang].awaiting+(r.arg?': '+r.arg:'')}; buildBanner(body,'warn',entry.banner.text); }
       else if(r.state==='followup'){ entry.banner={kind:'followup',text:'↳ '+UI[lang].followupPill}; buildBanner(body,'followup',entry.banner.text); }
@@ -5152,7 +5653,7 @@
         think.remove();
         const why = String((e && e.message) || e || '').slice(0, 140);
         const msg = TR('Questa risposta non è andata a buon fine', 'This answer didn’t go through') + (why ? ' ('+why+')' : '')
-          + TR('. Riprova tra un attimo: se il Cardputer si stava riavviando, ora è pronto.', '. Try again in a moment: if the Cardputer was restarting, it is ready now.');
+          + TR('. Riprova tra un attimo: se il dispositivo si stava riavviando, ora è pronto.', '. Try again in a moment: if the device was restarting, it is ready now.');
         const { body } = botShell(history.length, false);
         renderMd(body, msg); body.dataset.raw = msg;
         history.push({ role:'bot', text:msg }); persist(); setDot('err');
@@ -5625,7 +6126,7 @@
     function showVoiceInsecureHelp(){ sysMsg(L('voiceInsecure',{ origin:location.origin })); }
     const idleTitle=()=>{ const en=lang==='en'; const base=TR('Detta a voce', 'Dictate'); if(!voice) return base;
       const eff=effectiveSource();
-      const src = eff==='cardputer' ? (TR('mic Cardputer', 'Cardputer mic'))
+      const src = eff==='cardputer' ? (TR('mic del dispositivo', 'device mic'))
                 : voice.source==='online' ? (TR('modello online', 'online model'))
                 : voice.engine==='webspeech' ? 'cloud'
                 : (TR('mic browser', 'browser mic'));
@@ -5640,7 +6141,7 @@
         if(recording || micBtn.classList.contains('busy')){ voice.stop(); input.focus(); return; }
         // Mic Cardputer già preso da un'altra app: spiega CHI lo tiene invece di tentare e fallire.
         if(micBtn.classList.contains('held')){ const en=lang==='en';
-          sysMsg(TR('Il mic del Cardputer è in uso da ','The Cardputer mic is in use by ')+(micHolder||TR('un\'altra app','another app'))+TR('. Fermala lì e riprova.','. Stop it there, then try again.')); return; }
+          sysMsg(TR('Il mic del dispositivo è in uso da ','The device mic is in use by ')+(micHolder||TR('un\'altra app','another app'))+TR('. Fermala lì e riprova.','. Stop it there, then try again.')); return; }
         const src=effectiveSource();
         if(!src){ if(voice.reason==='insecure') showVoiceInsecureHelp();
           else sysMsg(TR('La dettatura non è disponibile ora.', 'Dictation is unavailable right now.')); return; }
@@ -5662,7 +6163,7 @@
           onerror(kind,who){ micBtn.classList.remove('busy'); delete micBtn.dataset.state; setRec(false); const en=lang==='en';
             sysMsg(kind==='denied'?(TR('Permesso microfono negato.', 'Microphone permission denied.'))
               :kind==='nomic'?(TR('Nessun microfono trovato.', 'No microphone found.'))
-              :kind==='busy'?(TR('Il mic del Cardputer è occupato','The Cardputer mic is busy')+(who?(TR(' (in uso da ',' (in use by ')+who+')'):TR(' (registrazione in corso)',' (a recording is in progress)'))+'.')
+              :kind==='busy'?(TR('Il mic del dispositivo è occupato','The device mic is busy')+(who?(TR(' (in uso da ',' (in use by ')+who+')'):TR(' (registrazione in corso)',' (a recording is in progress)'))+'.')
               :kind==='auth'?(TR('Dispositivo non accoppiato — inserisci il PIN in NucleoOS e riprova.', 'Device not paired — enter the PIN in NucleoOS, then retry.'))
               :kind==='model'?(TR('Modello vocale non disponibile: assente su SD e niente internet per il fallback.', 'Voice model unavailable: not on SD and no internet for the fallback.'))
               :(TR('Errore di dettatura.', 'Dictation error.'))); }
@@ -5796,6 +6297,8 @@
     function openSettings(open){ const o = open===undefined ? !panel.classList.contains('open') : open;
       panel.classList.toggle('open',o); scrim.classList.toggle('open',o); $('gear').classList.toggle('spin',o);
       if(o){ mountKeyPanel(); renderForgeModels();
+        // the PC-models row belongs to the console (hasConsole); a known state is shown without a new search
+        hasConsole().then((ok)=>{ const rw=$('row-pcllm'); if(rw) rw.hidden=!ok; if(ok && _pcScan.res && typeof renderPcRow==='function') renderPcRow(false); });
         // One readiness render — AFTER loadKey so caps.hasKey is fresh; the old synchronous renderForgeReadiness()
         // doubled the device Range-probe burst for nothing (computed on stale key state, then re-rendered).
         loadKey().then(()=>renderForgeReadiness()).catch(()=>{});
@@ -5931,7 +6434,8 @@
       const paint=v=>{ if(val) val.textContent=v+'%'; };
       sl.addEventListener('input',()=>paint(sl.value));
       sl.addEventListener('change',async()=>{ try{ const r=await fetch('/api/tts',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({speed:+sl.value})}); const d=await r.json(); if(d&&typeof d.speed==='number'){ sl.value=d.speed; paint(d.speed); } }catch(e){} });
-      fetch('/api/tts').then(r=>r.json()).then(d=>{ if(!d) return;
+      // device.tts says the device CAN speak; available:true (state) says its voice is installed
+      Caps.has('device.tts').then((ok)=>ok ? fetch('/api/tts').then(r=>r.json()) : null).then(d=>{ if(!d) return;
         if(typeof d.speed_min==='number')  sl.min=d.speed_min;
         if(typeof d.speed_max==='number')  sl.max=d.speed_max;
         if(typeof d.speed_step==='number') sl.step=d.speed_step;
@@ -5944,6 +6448,28 @@
     for(const b of $('set-sugg').children)    b.addEventListener('click',()=>{ suggOn=b.dataset.g==='1'; set('anima.sugg',suggOn?'1':'0'); applyAll(); renderAll(); });
     for(const b of $('set-compact').children) b.addEventListener('click',()=>{ autoCompact=b.dataset.c==='1'; set('anima.autocompact',autoCompact?'1':'0'); applyAll(); if(autoCompact) compactSession(false); });
     for(const b of $('set-agents').children)   b.addEventListener('click',()=>{ useAgents=b.dataset.a==='1'; set('anima.agents',useAgents?'1':'0'); applyAll(); });
+    // Impostazioni · Modelli del PC: modo, modello, stato. La ricerca parte solo da qui o quando serve davvero.
+    async function renderPcRow(force){
+      const st=$('pc-stat'), sel=$('set-pcmodel'); if(!st) return;
+      if(pcMode==='off' && !force){ st.textContent=''; sel.hidden=true; return; }
+      st.style.color='var(--muted)'; st.textContent=L5({it:'cerco…', en:'searching…', es:'buscando…', fr:'recherche…', de:'suche…'});
+      const res=await pcScan(!!force);
+      if(res && res.best){
+        const all=res.servers.filter(s=>s.state==='ok').flatMap(s=>s.models.map(mo=>({ id:mo.id, srv:s.srv.label })));
+        sel.innerHTML=''; for(const mo of all){ const o=document.createElement('option'); o.value=mo.id; o.textContent=mo.id+' · '+mo.srv; sel.appendChild(o); }
+        sel.value=res.best.model.id; sel.hidden=false;
+        st.style.color='#36d399'; st.textContent='✓ '+res.best.srv.label+' · '+res.best.model.id;
+      } else if(pcBlockedHere(res)){
+        sel.hidden=true; st.style.color='#fbbd23';
+        st.textContent=L5({it:'trovato, ma serve localhost: chiedimi «modelli del PC»', en:'found, but it needs localhost: ask me “PC models”', es:'encontrado, pero hace falta localhost: pregúntame «modelos del PC»', fr:'trouvé, mais il faut localhost : demande-moi « modèles du PC »', de:'gefunden, braucht aber localhost: frag mich „Modelle des PCs“'});
+      } else if(res && res.hidden){
+        sel.hidden=true; st.style.color='#fbbd23';
+        st.textContent=L5({it:'da qui il browser non vede il PC: apri da localhost:18080', en:'from here the browser can\'t see the PC: open from localhost:18080', es:'desde aquí el navegador no ve el PC: abre desde localhost:18080', fr:'d\'ici le navigateur ne voit pas le PC : ouvre depuis localhost:18080', de:'von hier sieht der Browser den PC nicht: öffne über localhost:18080'});
+      } else { sel.hidden=true; st.textContent=L5({it:'nessun server di modelli sul PC', en:'no model server on the PC', es:'ningún servidor de modelos en el PC', fr:'aucun serveur de modèles sur le PC', de:'kein Modellserver auf dem PC'}); }
+    }
+    for(const b of $('set-pc').children) b.addEventListener('click',()=>{ pcMode=b.dataset.pc; set('anima.pc',pcMode); applyAll(); renderPcRow(false); });
+    $('set-pcmodel').addEventListener('change',(e)=>{ set('anima.pcModel', e.target.value); _pcScan={at:0,res:null,p:null}; renderPcRow(true); });
+    $('pc-scan').addEventListener('click',()=>renderPcRow(true));
     for(const b of $('set-agentauto').children) b.addEventListener('click',()=>{ agentAuto=b.dataset.aa==='1'; set('anima.agentauto',agentAuto?'1':'0'); applyAll(); });
     for(const b of $('set-agentweb').children)  b.addEventListener('click',()=>{ agentWeb=b.dataset.aw==='1'; set('anima.agentweb',agentWeb?'1':'0'); applyAll(); });
     // 🌐 Web toggle: arm only if a Groq key is reachable (compound is Groq-only); otherwise point the user to Settings ▸ AI.
@@ -5986,7 +6512,7 @@
           + row('⌂', L('engPc'), !!(st.pc && !st.pc.cors),
               st.pc ? (st.pc.blocked ? L('engPcBlocked') : st.pc.cors ? L('engPcCors',{ server:st.pc.name }) : st.pc.name+' · '+(prettyModel(st.pc.model)||st.pc.model||'?')) : L('engPcNone'))
           + row('⬡', L('engBrowser'), st.browser, L(st.browser?'engBrowserOn':'engBrowserOff'))
-          + row('▣', 'Cardputer', st.device==='full' || st.device==='up', L(st.device==='web'?'engDevWeb':st.device==='full'?'engDevFull':st.device==='up'?'engDevUp':'engDevNone'))
+          + row('▣', 'Device', st.device==='full' || st.device==='up', L(st.device==='web'?'engDevWeb':st.device==='full'?'engDevFull':st.device==='up'?'engDevUp':'engDevNone'))
           + row('☁', 'Cloud', !!st.cloud && !priv, st.cloud ? (priv ? L('engCloudPriv',{ p:st.cloud }) : st.cloud) : L('engCloudNone'))
           +'</ul>'
           // Which PC model answers: Auto (the pipeline picks per task from what was MEASURED on this computer)
@@ -6087,24 +6613,25 @@
       onseg('set-lang','l',lang); onseg('set-mode','m',mode); onseg('set-theme','t',theme); onseg('set-size','z',fsize);
       onseg('set-speed','s',speed); onseg('set-details','d',detMode); onseg('set-sugg','g',suggOn?'1':'0'); onseg('set-compact','c',autoCompact?'1':'0');
       onseg('set-agents','a',useAgents?'1':'0'); onseg('set-agentauto','aa',agentAuto?'1':'0'); onseg('set-agentweb','aw',agentWeb?'1':'0');
+      onseg('set-pc','pc',pcMode);
       { const wb=$('webtog'); if(wb){ wb.setAttribute('aria-pressed', webCompound?'true':'false'); wb.title=UI[lang].webTog; } }
       onseg('set-voicesrc','vs',curVoiceSrc());
       onseg('set-webvoice','wv',webVoice?'1':'0');
       try{ updateMeter(); }catch{}   // refresh the token-budget meter for the active mode
       { const e=$('s-l1'); if(e) e.textContent=(TR('AI offline (L1)', 'Offline AI (L1)')); }
       { const e=$('s-webvoice'); if(e) e.textContent=(TR('Voce browser', 'Browser voice')); }
-      { const e=$('s-ttsspeed'); if(e) e.textContent=TR('Velocità voce Cardputer','Cardputer voice speed'); }
+      { const e=$('s-ttsspeed'); if(e) e.textContent=TR('Velocità voce del dispositivo','Device voice speed'); }
       { const e=$('s-localmodel'); if(e) e.textContent=TR('Modello locale (GPU)','Local model (GPU)'); }
       { const e=$('s-verify'); if(e) e.textContent=TR('Integrità SD','SD integrity'); }
       { const e=$('h-readiness'); if(e) e.textContent=TR('Air-gap readiness','Air-gap readiness'); }
       { const e=$('fd-newfile'); if(e) e.textContent=TR('+ File','+ File'); }
       { const seg=$('set-l1mode'); if(seg) for(const b of seg.children) b.classList.toggle('on', b.dataset.l1===l1mode); syncL1Row(); }
-      { const sb=$('set-voicesrc'); if(sb){ sb.children[0].disabled=!(voice&&voice.browserAvailable); sb.children[1].disabled=!(voice&&voice.deviceAvailable); } }
+      { const sb=$('set-voicesrc'); if(sb){ sb.children[0].disabled=!(voice&&voice.browserAvailable); sb.children[1].disabled=!(voice&&voice.deviceAvailable); sb.children[1].hidden=!(voice&&voice.deviceAvailable); } }
       // online-AI key panel labels (bilingual, mirrors the rest of settings)
       { const txt=(id,s)=>{ const e=$(id); if(e) e.textContent=s; };
         txt('h-key', TR('Chiave IA online', 'Online AI key'));
         txt('s-provider','Provider'); txt('s-model', TR('Modello', 'Model'));
-        const kh=$('key-hint'); if(kh) kh.innerHTML = TR('Meteo e Wikipedia funzionano già senza chiave. La chiave serve all\'IA online: comprensione migliore, verifica anti-errore e modalità "Online". <b>Claude</b> risponde direttamente dal browser (non carica il Cardputer). La chiave resta solo sul tuo dispositivo (SD), mai nei log.', 'Weather and Wikipedia already work without a key. The key powers the online AI: better understanding, anti-error verification and "Online" mode. <b>Claude</b> answers straight from the browser (it doesn’t load the Cardputer). The key stays only on your device (SD), never in logs.'); }
+        const kh=$('key-hint'); if(kh) kh.innerHTML = TR('Meteo e Wikipedia funzionano già senza chiave. La chiave serve all\'IA online: comprensione migliore, verifica anti-errore e modalità "Online". <b>Claude</b> risponde direttamente dal browser (non carica il dispositivo). La chiave resta solo sul tuo dispositivo (SD), mai nei log.', 'Weather and Wikipedia already work without a key. The key powers the online AI: better understanding, anti-error verification and "Online" mode. <b>Claude</b> answers straight from the browser (it doesn’t load the device). The key stays only on your device (SD), never in logs.'); }
       // ---- static chrome OUTSIDE the settings panel's data-i18n loop, + attribute-only tooltips the loop
       //      can't reach (it only sets innerHTML). Localised here so they follow the live language toggle. --
       try{ const E=lang==='en';
@@ -6129,8 +6656,8 @@
           'Mostra, sotto ogni risposta, quale strumento ANIMA ha usato per ragionare (motore, modello, passi). Riga = una riga richiudibile; Albero = già espanso.',
           'Show, under every reply, which tool ANIMA used to reason (engine, model, steps). Line = a collapsible one-liner; Tree = expanded.');
         P('s-edge','title',
-          'Il cervello offline di ANIMA scaricato in questo browser. In cache = funziona anche senza il Cardputer.',
-          'ANIMA’s offline brain downloaded in this browser. Cached = it works even without the Cardputer.');
+          'Il cervello offline di ANIMA scaricato in questo browser. In cache = funziona anche senza il dispositivo.',
+          'ANIMA’s offline brain downloaded in this browser. Cached = it works even without the device.');
         { const e=$('edge-reload'); if(e) e.title=L('edgeReloadTip'); }
         P('localmodel-get','title',
           'Scarica/carica ora il modello nel browser (mostra il progresso). Non si scarica mai da solo: finché non è installato, la chat salta la GPU locale.',
@@ -6270,6 +6797,9 @@
       return c;   // literal fallback (offline or no engine answer)
     }
     async function runFileIntent(q, intent){
+      // Un delete da linguaggio naturale è hard-delete (i file in /data NON vanno nel cestino) —
+      // come overwrite e chiudi-workspace, chiedi conferma prima di eseguire.
+      if(intent.op==='delete' && !confirm((TR('Eliminare definitivamente ', 'Permanently delete '))+'“'+(intent.path||'')+'”'+(TR('?\nI file nel workspace non finiscono nel cestino.', '?\nWorkspace files are not moved to a trash.')))) return;
       busy=true; interrupt=false; setStop(true); closeSlash(); stopSpeaking();   // un nuovo turno zittisce la risposta precedente
       addUser(q); history.push({role:'user',text:q}); persist();
       const think=startThinking();
@@ -6320,7 +6850,7 @@
       let rt=null; const runlog=[];
       try{
         const mod=await loadRunEngine();
-        rt=mod.createRunner({ cwd: fs.getRoot()||'/', lang, timeoutMs:6000,
+        rt=mod.createRunner({ cwd: fs.getRoot()||'/', lang, timeoutMs:6000, hasDevice:(n)=>Caps.has(n),
           onLog:(lvl,t)=>{ if(lvl!=='clear') runlog.push({lvl,t}); },
           onNotify:(t)=>runlog.push({lvl:'info',t:'🔔 '+t}) });
         const run=await rt.run(rd.content);
@@ -6450,7 +6980,7 @@
     $('fd-refresh').addEventListener('click',refreshTree);
     $('fd-open').addEventListener('click',()=>openPicker(ws.root||'/data'));
     $('fd-leave').addEventListener('click',async()=>{ if(await askDialog({ title:L('closeWsQ'), ok:L('close') })){ closeWorkspace(); closeFsDrawer(); } });
-    $('fd-newdir').addEventListener('click',async()=>{ if(!fs.hasRoot()) return; const name=prompt(TR('Nuova cartella:', 'New folder:')); if(!name) return; const r=await fs.mkdir(name.trim()); if(r.ok){ refreshTree(); toast(TR('Cartella creata', 'Folder created'),'ok'); } });
+    $('fd-newdir').addEventListener('click',async()=>{ if(!fs.hasRoot()) return; const name=prompt(TR('Nuova cartella:', 'New folder:')); if(!name) return; const r=await fs.mkdir(name.trim()); if(r.ok){ refreshTree(); toast(TR('Cartella creata', 'Folder created'),'ok'); } else { toast((r.error==='http-401'||r.error==='http-403')?TR('Accoppia il browser per gestire i file.','Pair this browser to manage files.'):TR('Creazione non riuscita','Could not create the folder'),'warn'); } });
     $('fd-newfile').addEventListener('click',async()=>{ if(!fs.hasRoot()) return; const name=prompt(TR('Nuovo file:', 'New file:')); if(!name) return; const r=await fs.write(name.trim(),'',{overwrite:false}); if(r.ok){ refreshTree(); handoffFile(r.abs); toast(TR('File creato', 'File created'),'ok'); } else toast(r.error==='exists'?(TR('Esiste già', 'Already exists')):(TR('Non riuscito', 'Failed')),'warn'); });
     function closeWorkspace(){ setWorkspace(''); }
     $('drawer-scrim').addEventListener('click',()=>{ if(fsdrawer.classList.contains('open')) closeFsDrawer(); });

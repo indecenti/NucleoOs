@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // dj-brain.js — the DJ's "consciousness", ported from Radio Index
 // radio_dj_brain.py, trimmed to SONGS ONLY (no carts/voice/jingles).
 //

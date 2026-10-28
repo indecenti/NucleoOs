@@ -40,6 +40,8 @@
   "hint_local": "Ctrl+C/X/V · Ctrl+A · F2 · Canc · Ctrl+Z",
   "hint_rw": "Lettura/scrittura · Ctrl+C/X/V · F2 · Canc · “Su SD” copia sulla scheda",
   "hint_ro": "Sola lettura · seleziona i file · “Su SD” li copia sulla scheda",
+  "hint_touch": "Tocca per selezionare · tieni premuto per il menu",
+  "sel_clear": "Annulla selezione",
 
   "ctx_open": "Apri",
   "ctx_run": "Esegui",

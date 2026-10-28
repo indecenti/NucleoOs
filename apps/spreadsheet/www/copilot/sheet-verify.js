@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // sheet-verify.js — cross-substrate grounded verification for the spreadsheet copilot. A generative
 // substrate (the browser orchestrator/coder, or cloud Grok) only ever PROPOSES; the deterministic
 // formula engine RE-DERIVES every number, and this module fuses the signals into one honest verdict

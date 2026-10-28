@@ -26,7 +26,7 @@
   "dlUseCurrentTitle": "Usar la página actual",
   "dlFilenameLabel": "Nombre de archivo (carpeta: /data/downloads/)",
   "dlFilenamePlaceholder": "file.zip",
-  "dlAuthBanner": "⚠️ <b>Dispositivo no vinculado.</b> Guardar en la SD requiere vinculación. Introduce el PIN que aparece en el Cardputer en la pantalla de inicio de NucleoOS.",
+  "dlAuthBanner": "⚠️ <b>Dispositivo no vinculado.</b> Guardar en la SD requiere vinculación. Introduce el PIN que aparece en el dispositivo en la pantalla de inicio de NucleoOS.",
   "dlDownloadToSd": "⬇ Descargar a la SD",
   "dlOpenFolder": "🗂 Abrir carpeta",
   "dlOpenFolderTitle": "Abrir la carpeta de descargas en File Commander",
@@ -47,12 +47,12 @@
   "handoffBody": "Los sitios externos se abren en tu navegador real — sin proxy, nada en ejecución en el dispositivo.",
   "handoffBlocked": "El navegador bloqueó la ventana emergente: usa el botón de abajo.",
   "openAgain": "Abrir de nuevo",
-  "saveToCardputer": "⬇ Guardar en el Cardputer",
+  "saveToCardputer": "⬇ Guardar en el dispositivo",
   "homeBtn": "Inicio",
   "openExternal": "↗ Abrir en pestaña externa",
 
   "dlCardTitle": "⬇ Archivo descargable",
-  "dlCardBody": "Guárdalo en el Cardputer (SD: <code>/data/downloads/</code>) o ábrelo en tu navegador real.",
+  "dlCardBody": "Guárdalo en el dispositivo (SD: <code>/data/downloads/</code>) o ábrelo en tu navegador real.",
 
   "loadFailedTitle": "Error de carga",
   "loadFailedBody": "No se pudo cargar el sitio",
@@ -74,6 +74,7 @@
   "errAccessDenied": "Acceso denegado — asegúrate de estar vinculado con el dispositivo",
   "errSdWrite": "Error de escritura en la SD ({status}): {detail}",
   "errMkdir": "Mkdir falló ({status}): {detail}",
+  "errDlBusy": "Ya hay otra descarga en curso — inténtalo de nuevo en breve",
 
   "toastBookmarkRemoved": "Favorito quitado",
   "toastBookmarkAdded": "Favorito añadido",
@@ -89,5 +90,6 @@
   "toastNoPageToDownload": "No hay ninguna página activa para descargar",
   "toastOpeningDownloads": "Abriendo la carpeta de descargas…",
   "toastOpenFcFailed": "No se pudo abrir File Commander",
-  "toastEnterValidUrl": "¡Introduce una URL válida!"
+  "toastEnterValidUrl": "¡Introduce una URL válida!",
+  "dlUnavailable": "Guardar en la tarjeta SD no está disponible en este dispositivo."
 }

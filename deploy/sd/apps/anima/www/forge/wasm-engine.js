@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // wasm-engine.js — the NO-GPU fallback engine: an Engine over wllama (llama.cpp compiled to
 // WebAssembly), so code generation still works on clients without WebGPU — slower (CPU) and a
 // smaller model, but local, offline and private. Structured so the PURE parts are host-tested and

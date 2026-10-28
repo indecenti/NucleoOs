@@ -1,4 +1,5 @@
 <!doctype html>
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <html>
 <head>
 <meta charset="utf-8">
@@ -105,6 +106,7 @@
 
   <script type="module">
     import I18N from '/nucleo-i18n.js';
+    import Caps from '/nucleo-caps.js';   // what this device can do (device.mic)
     import { Metronome, makeTapTempo, detectPitch, noteFromFreq, startBrowserMic, startDeviceMic } from './app.js';
     const t = await I18N.init('metronome');
     const lang = I18N.lang;   // the OS language (anima.lang); 'nucleo.lang' was never written
@@ -185,6 +187,9 @@
         if (window.isSecureContext && navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
           stopMic = await startBrowserMic(onAudio);
         } else {
+          // The device mic exists only where the capability list has device.mic (the Cardputer): elsewhere
+          // say "unavailable" now instead of letting the stream retry a missing endpoint.
+          if (!(await Caps.has('device.mic'))) throw new Error('no device mic');
           stopMic = await startDeviceMic(onAudio,
             (kind, who) => { setHint(kind === 'busy' ? t('tuner.busy') + (who ? ` (${who})` : '') : t('tuner.err'), true); stopTuner(); },
             t('title'));

@@ -7,6 +7,7 @@
       "/data/uploads/",
       "Action Center",
       "Desktop",
+      "Giochi",
       "Search results",
       "Start",
       "Start menu",
@@ -34,6 +35,7 @@
       "Conversazione",
       "DE",
       "Dati",
+      "Device",
       "Dimensione testo",
       "EN",
       "ES",
@@ -41,7 +43,7 @@
       "Forge",
       "Generale",
       "IT",
-      "Il cervello offline di ANIMA scaricato in questo browser. In cache = funziona anche senza il Cardputer.",
+      "Il cervello offline di ANIMA scaricato in questo browser. In cache = funziona anche senza il dispositivo.",
       "Integrità SD",
       "Lingua",
       "Meteo e Wikipedia funzionano già senza chiave. La chiave serve all'IA online: comprensione migliore, verifica anti-errore e modalità \"Online\".",
@@ -66,12 +68,12 @@
       "Tema",
       "Usa questa cartella",
       "Velocità risposta",
-      "Velocità voce Cardputer",
+      "Velocità voce del dispositivo",
       "Verify SD (deep SHA)",
       "Voce browser",
       "Web",
       "Workspace",
-      "risponde direttamente dal browser (non carica il Cardputer). La chiave resta solo sul tuo dispositivo (SD), mai nei log.",
+      "risponde direttamente dal browser (non carica il dispositivo). La chiave resta solo sul tuo dispositivo (SD), mai nei log.",
       "↻ Aggiorna",
       "⌨ Scorciatoie"
     ],
@@ -99,6 +101,7 @@
       "https://api.groq.com/openai/v1"
     ],
     "dj": [
+      "/data/Music",
       "· /data/Music"
     ],
     "dos-importer": [
@@ -163,6 +166,7 @@
       "📻 Radio Index"
     ],
     "recorder": [
+      "Device · 16 kHz",
       "Ready — press to record. Output is always MP3 on the device.",
       "Record",
       "Voice Recorder",

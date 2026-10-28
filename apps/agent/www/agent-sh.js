@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // agent-sh.js — a small POSIX-like shell for the agent, over the Cardputer's files.
 //
 // Models already know `ls`, `cat`, `grep -rn`, `find -name`, `head`, `sed -n '10,40p'`, `wc -l`… from their

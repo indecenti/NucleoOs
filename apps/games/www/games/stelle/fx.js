@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // stelle/fx.js — combat effects, all pooled and drawn in a handful of instanced draw calls:
 //   · billboard particles (additive fire/glow/sparks + an alpha-blended smoke layer) with velocity
 //     stretch, from a procedural 2x2 texture atlas (no image files);

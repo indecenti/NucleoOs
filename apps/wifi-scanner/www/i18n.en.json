@@ -32,5 +32,7 @@
   "hidden_ssid": "(hidden)",
   "src_failed": "scan failed — device unreachable or busy",
   "src_need_pair": "not paired — pair this browser to scan",
-  "src_live": "live scan"
+  "src_live": "live scan",
+  "forget_failed": "Could not forget the network",
+  "wifi_unavailable": "Wi-Fi management is not available on this device."
 }

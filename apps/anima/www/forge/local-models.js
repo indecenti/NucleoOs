@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // local-models.js — catalog of in-browser chat models (WebLLM/MLC on WebGPU), ordered best → smallest.
 // Every id EXISTS in the vendored web-llm.js prebuiltAppConfig (v0_2_84 libs), so WebLLM already knows each
 // model's library and weight URLs. Sizes are the REAL download (sum of the weight shards in each model's

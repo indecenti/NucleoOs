@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // stelle/world.js — the WEB-ONLY visual layer of a Costellazioni star system, as pure data.
 //
 // Everything here is derived from (seed, sector, system) through DEDICATED hash domains (VD below),

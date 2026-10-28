@@ -1,0 +1,32 @@
+{
+  "id": "scoreboard",
+  "name": "Scoreboard",
+  "version": "1.1.0",
+  "version_code": 5,
+  "min_os": "0.7.5",
+  "platforms": [
+    "esp32s3"
+  ],
+  "description": "Keep score for card and board games: players, +1/-1/+5/+10, undo, winning score, saved offline.",
+  "category": "games",
+  "runtime": "web",
+  "entry_service": "none",
+  "web_route": "/apps/scoreboard/",
+  "icon": "icon.svg",
+  "permissions": [],
+  "mounts": {},
+  "handles": {
+    "role": "none",
+    "extensions": []
+  },
+  "subscribes": [],
+  "publishes": [],
+  "power": {
+    "budget_class": "low",
+    "wants_wakeup": []
+  },
+  "mesh": {
+    "exposes": [],
+    "consumes": []
+  }
+}

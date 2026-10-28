@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // fwupdate.js — the Settings "Updates" tab: check → download → verify → flash → verify reboot.
 //
 // Trust chain, in order:

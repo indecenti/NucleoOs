@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // verify.js — the verdict combiner for cross-substrate grounded verification. It fuses three
 // signals into ONE honest verdict that rides in the envelope:
 //   1. a hermetic client dry-run (did the generated code even run with I/O denied?)

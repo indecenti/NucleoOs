@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // gamepad.js — NucleoOS shared gamepad/joystick layer (single source of truth).
 //
 // Browsers expose the W3C Gamepad API, so ANY USB/Bluetooth controller paired to the device viewing
@@ -85,9 +86,13 @@ export class GamepadManager {
   _sample(gp, now) {
     const b = gp.buttons || [], a = gp.axes || [];
     const pressed = (i) => !!(b[i] && (b[i].pressed || b[i].value > 0.5));
-    // axes with D-pad folded in
+    // axes with D-pad folded in; the right stick (2/3) mirrors the left, so
+    // whichever thumb rests on a stick drives - full-pad, not left-stick-only.
     let ax = a[0] || 0, ay = a[1] || 0;
     if (Math.abs(ax) < DEAD) ax = 0; if (Math.abs(ay) < DEAD) ay = 0;
+    const rx = a[2] || 0, ry = a[3] || 0;
+    if (!ax && Math.abs(rx) >= DEAD) ax = rx;
+    if (!ay && Math.abs(ry) >= DEAD) ay = ry;
     const dpx = (pressed(15) ? 1 : 0) - (pressed(14) ? 1 : 0);
     const dpy = (pressed(13) ? 1 : 0) - (pressed(12) ? 1 : 0);
     const fx = dpx || ax, fy = dpy || ay;

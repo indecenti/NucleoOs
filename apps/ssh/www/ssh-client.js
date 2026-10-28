@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // NucleoOS SSH — browser transport to nucleo-ssh-bridge (WebSocket ↔ real SSH).
 //
 // The Cardputer only serves these files; the live SSH traffic goes browser → bridge → host and never

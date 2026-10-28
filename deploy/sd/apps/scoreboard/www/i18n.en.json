@@ -1,0 +1,17 @@
+{
+  "_lang": "en",
+  "title": "Scoreboard",
+  "undo": "Undo",
+  "add": "+ Player",
+  "target": "Winning score",
+  "sort": "Sort by score",
+  "reset": "New game",
+  "foot": "Saved on this device. Works without a connection.",
+  "player": "Player",
+  "name": "Name",
+  "remove": "Remove",
+  "winner": "Wins!",
+  "empty": "Add players with + Player.",
+  "confirm.remove": "Remove {name}?",
+  "confirm.reset": "Reset every score to zero?"
+}

@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -16,6 +17,16 @@
       --accent: #4ea1ff;
       --line: #2a3a5e;
       --danger: #ff8093;
+    }
+    html[data-theme="light"] {
+      --bg: #eef2fb;
+      --panel: #ffffff;
+      --text: #10203a;
+      --muted: #5a6a86;
+      --accent: #2b6fd6;
+      --line: #cdd8ee;
+      --danger: #c0392b;
+      --field: #f4f7fe;
     }
     * { box-sizing: border-box; }
     html, body { height: 100%; margin: 0; padding: 0; }
@@ -129,7 +140,7 @@
       generating_zip: "Generating .zip file...", saving_archive: "Saving archive...",
       compress_complete: "Compression Complete!", saved_x: "Saved {name}",
       compress_error: "Compression Error", no_files: "No files to compress",
-      err_read_file: "Couldn't read the archive from the Cardputer (error {status}).",
+      err_read_file: "Couldn't read the archive from the device (error {status}).",
       err_write_file: "Couldn't write {name} (error {status}).",
       err_mkdir: "Couldn't create the folder {name} (error {status}).",
       err_list_dir: "Couldn't list the folder {name} (error {status}).",
@@ -195,9 +206,22 @@
       loadZip(pathParam);
     }
 
+    // OS theme: apply the persisted choice at boot (the shell live-injects CSS vars, but only on
+    // switch and never standalone). A missing settings.json keeps the default dark palette.
+    async function loadTheme() {
+      try {
+        const r = await fetch('/api/fs/read?path=' + encodeURIComponent('/system/config/settings.json'), { cache: 'no-store' });
+        if (!r.ok) return;
+        const s = JSON.parse(await r.text());
+        if (s && s.ui && s.ui.theme) document.documentElement.dataset.theme = s.ui.theme;
+      } catch {}
+    }
+    loadTheme();
+
     // Handle open-file event from the OS (modalità estrazione)
     window.addEventListener('message', async (e) => {
       const d = e.data;
+      if (d && d.type === 'set-theme' && d.theme) { document.documentElement.dataset.theme = d.theme; return; }
       if (d && d.type === 'open-file' && d.path) {
         if (d.path.toLowerCase().endsWith('.zip')) {
           mode = 'extract';
@@ -438,23 +462,24 @@
         let filesToZip = []; // { path: string, relative: string }
         for (const sp of sourcePaths) {
           const sName = sp.split('/').pop();
-          // To know if it's a dir, try to read it. If it fails or is a dir, use list
+          // /api/fs/list on a FILE returns 200 with entries:[] (the server swallows
+          // NotADirectoryError), so "list ok" cannot tell a file from a dir — a
+          // file would fall into the dir branch, walkDir yields [], and it silently
+          // vanishes from the zip. Decide from the PARENT's listing instead.
+          let isDir = false;
           try {
-            const listRes = await api('list', sp);
-            if (listRes.ok) {
-              // It's a directory
-              const subFiles = [];
-              await walkDir(sp, subFiles);
-              subFiles.forEach(sf => {
-                const relative = sName + sf.path.slice(sp.length);
-                filesToZip.push({ path: sf.path, relative });
-              });
-            } else {
-              // It's a file
-              filesToZip.push({ path: sp, relative: sName });
-            }
-          } catch(e) {
-            // Assume file if list fails
+            const parent = sp.slice(0, sp.lastIndexOf('/')) || '/';
+            const pl = await (await api('list', parent)).json();
+            isDir = (pl.entries || []).some(e => e.name === sName && e.type === 'dir');
+          } catch (e) { isDir = false; }
+          if (isDir) {
+            const subFiles = [];
+            await walkDir(sp, subFiles);
+            subFiles.forEach(sf => {
+              const relative = sName + sf.path.slice(sp.length);
+              filesToZip.push({ path: sf.path, relative });
+            });
+          } else {
             filesToZip.push({ path: sp, relative: sName });
           }
         }

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // nlcommand.js — Paint's natural-language command parser. Type a phrase, Paint does it. DETERMINISTIC and
 // OFFLINE (no LLM, zero hallucination — matches the project's grounded ethos): it maps your words onto the
 // editing operations that already exist (the CMD map + imaging.js) and onto the Atelier for generation.

@@ -1,4 +1,5 @@
 <!doctype html>
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -19,7 +20,8 @@
       --line:#cdd8ee; --field:#f4f7fe; --glass:rgba(255,255,255,0.82);
     }
     *{box-sizing:border-box}
-    html,body{height:100%;margin:0;font-size:14px}
+    [hidden]{display:none!important}
+    html,body{height:100%;margin:0} html{font-size:14px} body{font-size:1rem}
     body{display:flex;flex-direction:column;background:linear-gradient(160deg,#0a0f1e,var(--bg) 42%,#0a1224);
       color:var(--ink);font-family:system-ui,"Segoe UI",sans-serif;overflow:hidden;-webkit-tap-highlight-color:transparent}
     html[data-theme="light"] body{background:linear-gradient(160deg,#f4f7ff,var(--bg) 42%,#e9eefb)}
@@ -28,16 +30,16 @@
     header{display:flex;align-items:center;gap:12px;padding:10px 14px;background:var(--glass);
       backdrop-filter:blur(16px);border-bottom:1px solid var(--line);flex:none;z-index:30}
     header .logo{width:30px;height:30px;border-radius:9px;background:linear-gradient(135deg,var(--accent),var(--accent2));
-      display:grid;place-items:center;color:#06121f;font-weight:800;font-size:15px;flex:none}
+      display:grid;place-items:center;color:#06121f;font-weight:800;font-size:1.0714rem;flex:none}
     header .brand{font-weight:600;font-size:1.02rem;letter-spacing:.3px;flex:none}
     .cmd-trigger{flex:1;max-width:420px;display:flex;align-items:center;gap:8px;background:var(--field);
-      border:1px solid var(--line);border-radius:10px;padding:7px 12px;cursor:text;color:var(--dim);font-size:12.5px;
+      border:1px solid var(--line);border-radius:10px;padding:7px 12px;cursor:text;color:var(--dim);font-size:0.8929rem;
       transition:.15s;min-width:0}
     .cmd-trigger:hover{border-color:var(--accent2)}
     .cmd-trigger .t{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     .cmd-trigger kbd{background:rgba(128,128,128,.14);border:1px solid var(--line);border-radius:5px;
-      padding:1px 6px;font:11px ui-monospace,monospace;flex:none}
-    .live-pill{display:flex;align-items:center;gap:7px;font-size:11.5px;color:var(--dim);flex:none;cursor:pointer;
+      padding:1px 6px;font:0.7857rem ui-monospace,monospace;flex:none}
+    .live-pill{display:flex;align-items:center;gap:7px;font-size:0.8214rem;color:var(--dim);flex:none;cursor:pointer;
       border:1px solid var(--line);border-radius:999px;padding:5px 10px;background:var(--field);user-select:none}
     .live-pill:hover{border-color:var(--accent2)}
     .live-pill .ld{width:8px;height:8px;border-radius:50%;background:var(--ok);box-shadow:0 0 7px rgba(94,224,160,.6);transition:.3s}
@@ -50,11 +52,11 @@
     .sidebar{width:208px;background:var(--panel2);border-right:1px solid var(--line);padding:12px 8px;
       display:flex;flex-direction:column;gap:3px;flex:none;overflow-y:auto}
     .nav-item{padding:10px 13px;border-radius:10px;cursor:pointer;color:var(--dim);transition:.18s;
-      display:flex;align-items:center;gap:11px;font-weight:500;font-size:13px;user-select:none}
+      display:flex;align-items:center;gap:11px;font-weight:500;font-size:0.9286rem;user-select:none}
     .nav-item:hover{background:rgba(128,128,128,0.1);color:var(--ink)}
     .nav-item.active{background:linear-gradient(135deg,rgba(94,224,160,0.16),rgba(106,168,255,0.1));
       color:var(--ink);border:1px solid rgba(94,224,160,0.25)}
-    .nav-item .ni{font-size:16px;width:22px;text-align:center}
+    .nav-item .ni{font-size:1.1429rem;width:22px;text-align:center}
 
     main.content{flex:1;overflow:auto;padding:18px 22px;scroll-behavior:smooth}
     .tab-content{display:none;animation:fade-in .22s ease}
@@ -64,32 +66,32 @@
     /* ---- cards ---- */
     .sect{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);
       padding:16px 18px;margin-bottom:14px;box-shadow:0 4px 24px rgba(0,0,0,0.08)}
-    .sect h2{margin:0 0 13px;font-size:12px;color:var(--accent2);text-transform:uppercase;
+    .sect h2{margin:0 0 13px;font-size:0.8571rem;color:var(--accent2);text-transform:uppercase;
       letter-spacing:1.1px;font-weight:600;display:flex;align-items:center;gap:8px}
-    .badge{font-size:9px;padding:2px 8px;border-radius:10px;border:1px solid var(--accent);
+    .badge{font-size:0.6429rem;padding:2px 8px;border-radius:10px;border:1px solid var(--accent);
       color:var(--accent);font-weight:700;text-transform:uppercase;letter-spacing:.5px}
     .badge.fw{border-color:var(--accent2);color:var(--accent2)}
-    .keychip{font-size:11px;border:1px solid var(--line);background:var(--field);color:var(--dim);border-radius:999px;padding:3px 10px;cursor:pointer;margin:0 6px 6px 0;font-weight:600}
+    .keychip{font-size:0.7857rem;border:1px solid var(--line);background:var(--field);color:var(--dim);border-radius:999px;padding:3px 10px;cursor:pointer;margin:0 6px 6px 0;font-weight:600}
     .keychip.set{color:var(--ok);border-color:var(--ok)}
     .keychip.cur{outline:2px solid var(--accent2);outline-offset:1px;color:var(--ink)}
-    .cap-card{display:flex;gap:9px;align-items:flex-start;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:9px 11px;font-size:12px;line-height:1.5;flex:1}
-    .cap-card .ic{font-size:16px;flex:none;line-height:1.3}
-    .cap-card code,.hint code{background:rgba(128,128,128,.16);border-radius:4px;padding:1px 5px;font-size:11px}
+    .cap-card{display:flex;gap:9px;align-items:flex-start;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:9px 11px;font-size:0.8571rem;line-height:1.5;flex:1}
+    .cap-card .ic{font-size:1.1429rem;flex:none;line-height:1.3}
+    .cap-card code,.hint code{background:rgba(128,128,128,.16);border-radius:4px;padding:1px 5px;font-size:0.7857rem}
     .badge.ro{border-color:var(--dim);color:var(--dim)}
     .badge.live{border-color:var(--ok);color:var(--ok)}
 
     /* ---- rows / inputs ---- */
     .row{display:flex;align-items:center;gap:14px;padding:9px 0;border-bottom:1px solid rgba(128,128,128,0.07)}
     .row:last-child{border-bottom:none}
-    .row label{flex:0 0 158px;color:var(--ink);font-size:13.5px;font-weight:500}
+    .row label{flex:0 0 158px;color:var(--ink);font-size:0.9643rem;font-weight:500}
     .row .ctl{flex:1;display:flex;align-items:center;gap:12px;min-width:0}
-    .hint{font-size:12px;color:var(--dim);line-height:1.5}
+    .hint{font-size:0.8571rem;color:var(--dim);line-height:1.5}
     input[type=text],input[type=password],input[type=number],select{
       background:var(--field);color:var(--ink);border:1px solid var(--line);
       border-radius:8px;padding:8px 12px;font:inherit;width:100%;max-width:280px;transition:.18s}
     input:focus,select:focus{border-color:var(--accent2);outline:none;box-shadow:0 0 0 2px rgba(106,168,255,0.2)}
     input[type=range]{flex:1;max-width:220px;accent-color:var(--accent);height:6px}
-    .range-val{min-width:46px;text-align:right;font-size:13px;color:var(--accent);font-weight:600}
+    .range-val{min-width:46px;text-align:right;font-size:0.9286rem;color:var(--accent);font-weight:600}
 
     .sw{position:relative;width:44px;height:24px;flex:none}
     .sw input{opacity:0;width:100%;height:100%;margin:0;cursor:pointer;position:absolute;z-index:2}
@@ -100,11 +102,11 @@
     .sw input:checked+span::after{transform:translateX(20px)}
     /* AI ▸ Models on your PC (pc-models.js) */
     .pc-srv label{display:flex;align-items:center;gap:8px}
-    .pc-base{font-size:11.5px;color:var(--dim);background:var(--field);border:1px solid var(--line);border-radius:6px;padding:1px 6px;overflow-wrap:anywhere}
-    .pc-st{font-size:12px} .pc-st.ok{color:var(--ok)} .pc-st.warn{color:var(--warn)} .pc-st.bad{color:var(--bad)} .pc-st.dim{color:var(--dim)}
+    .pc-base{font-size:0.8214rem;color:var(--dim);background:var(--field);border:1px solid var(--line);border-radius:6px;padding:1px 6px;overflow-wrap:anywhere}
+    .pc-st{font-size:0.8571rem} .pc-st.ok{color:var(--ok)} .pc-st.warn{color:var(--warn)} .pc-st.bad{color:var(--bad)} .pc-st.dim{color:var(--dim)}
     .pc-off{opacity:.5;pointer-events:none}
     .row .pc-tasks{flex-wrap:wrap;gap:10px}
-    .row .pc-task{display:flex;flex-direction:column;gap:3px;flex:1 1 170px;min-width:0;font-size:11.5px;font-weight:500;color:var(--dim)}
+    .row .pc-task{display:flex;flex-direction:column;gap:3px;flex:1 1 170px;min-width:0;font-size:0.8214rem;font-weight:500;color:var(--dim)}
     .row .pc-task select{width:100%}
     .pc-help{margin:2px 0 10px}
     .pc-note{margin:-2px 0 8px} .pc-msg.ok{color:var(--ok)} .pc-msg.bad{color:var(--bad)}
@@ -116,7 +118,7 @@
     @keyframes up-pulse{0%,100%{opacity:.45}50%{opacity:1}}
 
     button{border:1px solid var(--line);background:rgba(128,128,128,0.06);color:var(--ink);
-      border-radius:8px;padding:7px 16px;cursor:pointer;transition:.15s;font:inherit;font-size:13px}
+      border-radius:8px;padding:7px 16px;cursor:pointer;transition:.15s;font:inherit;font-size:0.9286rem}
     button:hover{background:rgba(128,128,128,0.14)}
     button:active{transform:scale(.97)}
     button.primary{background:linear-gradient(135deg,rgba(94,224,160,0.2),rgba(106,168,255,0.12));
@@ -130,12 +132,12 @@
     .hero{display:flex;align-items:center;gap:16px;background:linear-gradient(135deg,var(--panel),var(--panel2));
       border:1px solid var(--line);border-radius:16px;padding:16px 20px;margin-bottom:14px;position:relative;overflow:hidden}
     .hero::before{content:"";position:absolute;inset:0;background:radial-gradient(120% 120% at 100% 0,rgba(94,224,160,.10),transparent 55%);pointer-events:none}
-    .hero .verdict-dot{width:46px;height:46px;border-radius:13px;display:grid;place-items:center;font-size:24px;flex:none;
+    .hero .verdict-dot{width:46px;height:46px;border-radius:13px;display:grid;place-items:center;font-size:1.7143rem;flex:none;
       background:rgba(94,224,160,.12)}
     .hero .verdict-dot.bad{background:rgba(255,107,107,.13)} .hero .verdict-dot.warn{background:rgba(255,209,102,.14)}
     .hero .h-main{flex:1;min-width:0}
-    .hero .h-title{font-weight:700;font-size:16px}
-    .hero .h-sub{font-size:12px;color:var(--dim);margin-top:3px;display:flex;flex-wrap:wrap;gap:4px 14px}
+    .hero .h-title{font-weight:700;font-size:1.1429rem}
+    .hero .h-sub{font-size:0.8571rem;color:var(--dim);margin-top:3px;display:flex;flex-wrap:wrap;gap:4px 14px}
     .hero .h-sub b{color:var(--ink);font-weight:600}
 
     .pulse-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:14px}
@@ -143,11 +145,11 @@
     /* Sparkline tiles reserve a bottom band for the canvas: text and chart never overlap
        (the absolutely-positioned canvas used to cover ".tsub" and graze the value). */
     .tile.wide{grid-column:span 2;padding-bottom:44px;min-height:112px}
-    .tile .tk{font-size:10.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;display:flex;align-items:center;gap:6px}
+    .tile .tk{font-size:0.75rem;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;display:flex;align-items:center;gap:6px}
     .tile .tk,.tile .tv,.tile .tsub,.tile .cores{position:relative;z-index:1}
-    .tile .tv{font-size:23px;font-weight:700;margin-top:4px;font-variant-numeric:tabular-nums;line-height:1.1}
-    .tile .tv small{font-size:12px;color:var(--dim);font-weight:500}
-    .tile .tsub{font-size:11px;color:var(--dim);margin-top:2px}
+    .tile .tv{font-size:1.6429rem;font-weight:700;margin-top:4px;font-variant-numeric:tabular-nums;line-height:1.1}
+    .tile .tv small{font-size:0.8571rem;color:var(--dim);font-weight:500}
+    .tile .tsub{font-size:0.7857rem;color:var(--dim);margin-top:2px}
     .tile canvas{position:absolute;left:0;right:0;bottom:0;width:100%;height:32px;opacity:.6;z-index:0;pointer-events:none}
     .tile .dotcol{width:9px;height:9px;border-radius:50%;background:var(--ok)}
     .tile.ok .dotcol{background:var(--ok)} .tile.warn .dotcol{background:var(--warn)} .tile.bad .dotcol{background:var(--bad)}
@@ -155,14 +157,16 @@
     .cores{display:flex;gap:4px;margin-top:6px}
     .cores .cbar{flex:1;height:6px;border-radius:3px;background:rgba(128,128,128,.18);overflow:hidden}
     .cores .cbar>i{display:block;height:100%;width:0;background:var(--accent);transition:width .3s ease}
+    .membar{height:6px;border-radius:3px;background:rgba(128,128,128,.18);overflow:hidden;margin-top:8px}
+    .membar>i{display:block;height:100%;width:0;background:var(--accent);transition:width .3s ease}
 
-    .chips{display:flex;gap:8px;flex-wrap:wrap}
+    .chips{display:grid;gap:8px;grid-template-columns:repeat(auto-fill,minmax(230px,1fr))}   /* grid: with long descriptions the flex row left one scene per line */
     .chip{display:flex;align-items:center;gap:8px;background:var(--field);border:1px solid var(--line);border-radius:12px;
       padding:9px 13px;cursor:pointer;transition:.16s;user-select:none}
     .chip:hover{transform:translateY(-1px);border-color:var(--accent2)}
     .chip.active{border-color:var(--accent);background:linear-gradient(135deg,rgba(94,224,160,.14),rgba(106,168,255,.08))}
-    .chip .ci{font-size:18px} .chip .cl{font-weight:600;font-size:12.5px}
-    .chip .cd{font-size:11px;color:var(--dim)}
+    .chip .ci{font-size:1.2857rem} .chip .cl{font-weight:600;font-size:0.8929rem}
+    .chip .cd{font-size:0.7857rem;color:var(--dim)}
 
     /* ---- AI presets (intelligent profiles) ---- */
     .ps{display:grid;grid-template-columns:repeat(auto-fit,minmax(152px,1fr));gap:8px}
@@ -171,57 +175,57 @@
     .pcard.active{border-color:var(--accent);background:linear-gradient(135deg,rgba(94,224,160,.14),rgba(106,168,255,.08))}
     .pcard.rec{border-color:var(--accent2)}
     .pcard.blocked{opacity:.5;cursor:default} .pcard.blocked:hover{transform:none;border-color:var(--line)}
-    .pcard .ph{display:flex;align-items:center;gap:7px;font-weight:600;font-size:13px}
-    .pcard .pin{font-size:11px;color:var(--dim);margin:3px 0 8px;line-height:1.35;min-height:30px}
-    .ppill{font-size:10.5px;padding:3px 8px;border-radius:8px;display:inline-flex;align-items:center;gap:4px;font-weight:600}
+    .pcard .ph{display:flex;align-items:center;gap:7px;font-weight:600;font-size:0.9286rem}
+    .pcard .pin{font-size:0.7857rem;color:var(--dim);margin:3px 0 8px;line-height:1.35;min-height:30px}
+    .ppill{font-size:0.75rem;padding:3px 8px;border-radius:8px;display:inline-flex;align-items:center;gap:4px;font-weight:600}
     .ppill.ok{background:rgba(94,224,160,.16);color:var(--ok)}
     .ppill.prep{background:rgba(255,209,102,.16);color:var(--warn)}
     .ppill.blk{background:rgba(255,107,107,.13);color:var(--bad)}
     .ppill.rec{background:rgba(106,168,255,.16);color:var(--accent2)}
     .tier-band{display:flex;gap:7px;flex-wrap:wrap;align-items:stretch}
     .rung{flex:1;min-width:116px;background:var(--field);border:1px solid var(--line);border-radius:9px;padding:7px 9px}
-    .rung .rh{display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:600}
-    .rung .rs{font-size:10.5px;color:var(--dim);margin-top:2px}
+    .rung .rh{display:flex;align-items:center;gap:6px;font-size:0.8214rem;font-weight:600}
+    .rung .rs{font-size:0.75rem;color:var(--dim);margin-top:2px}
     .led{width:8px;height:8px;border-radius:50%;flex:none;background:var(--dim);opacity:.5}
     .led.on{background:var(--ok);opacity:1} .led.warn{background:var(--warn);opacity:1}
     .caps-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:7px}
-    .capchip{display:flex;align-items:center;gap:7px;font-size:11.5px;border:1px solid var(--line);border-radius:9px;padding:7px 9px;background:var(--field)}
+    .capchip{display:flex;align-items:center;gap:7px;font-size:0.8214rem;border:1px solid var(--line);border-radius:9px;padding:7px 9px;background:var(--field)}
     .capchip .cg{margin-left:auto;font-weight:600}.capchip .cg.ok{color:var(--ok)}
-    .capchip button{font-size:10.5px;padding:3px 8px;margin-left:auto}
-    .apps-list .arow{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 2px;border-bottom:1px solid rgba(128,128,128,.07);font-size:12px}
+    .capchip button{font-size:0.75rem;padding:3px 8px;margin-left:auto}
+    .apps-list .arow{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:7px 2px;border-bottom:1px solid rgba(128,128,128,.07);font-size:0.8571rem}
     .apps-list .arow:last-child{border-bottom:none}
-    .apps-list .ast{font-size:11px;font-weight:600;flex:none}.apps-list .ast.ok{color:var(--ok)}.apps-list .ast.warn{color:var(--warn)}
+    .apps-list .ast{font-size:0.7857rem;font-weight:600;flex:none}.apps-list .ast.ok{color:var(--ok)}.apps-list .ast.warn{color:var(--warn)}
     .scope-legend{display:flex;gap:7px;flex-wrap:wrap}
-    .scope-legend span{font-size:10.5px;color:var(--dim);background:var(--field);border:1px solid var(--line);border-radius:8px;padding:3px 9px}
+    .scope-legend span{font-size:0.75rem;color:var(--dim);background:var(--field);border:1px solid var(--line);border-radius:8px;padding:3px 9px}
     details.adv,details.apps-det{border:1px solid var(--line);border-radius:10px;background:var(--panel2)}
     details.adv{margin-bottom:14px}
-    details.adv>summary,details.apps-det>summary{cursor:pointer;padding:11px 14px;font-size:12.5px;font-weight:600;color:var(--accent2);user-select:none;list-style:none}
+    details.adv>summary,details.apps-det>summary{cursor:pointer;padding:11px 14px;font-size:0.8929rem;font-weight:600;color:var(--accent2);user-select:none;list-style:none}
     details.adv>summary::-webkit-details-marker,details.apps-det>summary::-webkit-details-marker{display:none}
     details.adv>summary::before,details.apps-det>summary::before{content:"▸ ";color:var(--dim)}
     details.adv[open]>summary::before,details.apps-det[open]>summary::before{content:"▾ "}
     details.adv>.adv-inner{padding:0 12px}
     details.apps-det>.apps-list{padding:2px 14px 10px}
 
-    .toggle-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+    .toggle-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px}
     .qtoggle{display:flex;align-items:center;gap:10px;background:var(--field);border:1px solid var(--line);
       border-radius:13px;padding:11px 13px;cursor:pointer;transition:.16s;user-select:none;text-align:left}
     .qtoggle:hover{border-color:var(--accent2)}
     .qtoggle.on{border-color:var(--accent);background:linear-gradient(135deg,rgba(94,224,160,.16),rgba(106,168,255,.07))}
-    .qtoggle .qi{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font-size:17px;flex:none;
+    .qtoggle .qi{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;font-size:1.2143rem;flex:none;
       background:rgba(128,128,128,.12);transition:.16s}
     .qtoggle.on .qi{background:rgba(94,224,160,.18)}
     .qtoggle .qt{flex:1;min-width:0;display:flex;flex-direction:column;gap:1px;line-height:1.25}
-    .qtoggle .ql{display:block;font-weight:600;font-size:12.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .qtoggle .qs{display:block;font-size:11px;color:var(--dim);text-transform:capitalize;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .qtoggle .ql{display:block;font-weight:600;font-size:0.8929rem;overflow-wrap:anywhere}
+    .qtoggle .qs{display:block;font-size:0.7857rem;color:var(--dim);overflow-wrap:anywhere}
     .qtoggle.busy{opacity:.6;pointer-events:none}
 
     /* ---- self-test ---- */
     .st-list{display:flex;flex-direction:column;gap:6px;margin-top:6px}
     .st-item{display:flex;align-items:center;gap:10px;background:var(--field);border:1px solid var(--line);
-      border-radius:9px;padding:8px 12px;font-size:13px}
+      border-radius:9px;padding:8px 12px;font-size:0.9286rem}
     .st-item .sm{width:20px;text-align:center;font-weight:700}
     .st-item .sm.ok{color:var(--ok)} .st-item .sm.warn{color:var(--warn)} .st-item .sm.bad{color:var(--bad)} .st-item .sm.run{color:var(--dim)}
-    .st-item .sl{flex:1} .st-item .sp{font:11px ui-monospace,monospace;color:var(--dim)} .st-item .ss{font-size:11px;color:var(--dim)}
+    .st-item .sl{flex:1} .st-item .sp{font:0.7857rem ui-monospace,monospace;color:var(--dim)} .st-item .ss{font-size:0.7857rem;color:var(--dim)}
 
     /* ---- network scan ---- */
     .ap{display:flex;align-items:center;gap:10px;padding:9px 12px;border:1px solid var(--line);border-radius:9px;
@@ -229,11 +233,11 @@
     .ap .bars{display:flex;align-items:flex-end;gap:2px;height:16px;flex:none}
     .ap .bars i{width:3px;background:var(--dim);border-radius:1px}
     .ap.connected{border-color:var(--accent)}
-    .ap .as{font-size:11px;color:var(--dim);flex:none}
+    .ap .as{font-size:0.7857rem;color:var(--dim);flex:none}
 
     /* ---- logs ---- */
     .logbox{background:#05080f;border:1px solid var(--line);border-radius:9px;padding:10px 12px;
-      font:11.5px/1.55 ui-monospace,Consolas,monospace;color:#add6c0;white-space:pre-wrap;max-height:280px;overflow:auto}
+      font:0.8214rem/1.55 ui-monospace,Consolas,monospace;color:#add6c0;white-space:pre-wrap;max-height:280px;overflow:auto}
     html[data-theme="light"] .logbox{background:#0b1322;color:#bfe8d0}
 
     /* ---- theme/accent/font (appearance) ---- */
@@ -243,29 +247,29 @@
     .theme-card:hover{transform:translateY(-2px);border-color:var(--line)}
     .theme-card.active{border-color:var(--accent);background:var(--panel2)}
     .theme-card.active::before{content:"✓";position:absolute;top:8px;right:10px;color:var(--accent);font-weight:bold}
-    .theme-card .icon{font-size:23px;margin-bottom:7px} .theme-card .name{font-weight:600;font-size:13px}
+    .theme-card .icon{font-size:1.6429rem;margin-bottom:7px} .theme-card .name{font-weight:600;font-size:0.9286rem}
     .accent-row{display:flex;gap:10px;flex-wrap:wrap}
     .color-swatch{width:32px;height:32px;border-radius:50%;cursor:pointer;border:2px solid transparent;transition:.18s;box-shadow:0 2px 6px rgba(0,0,0,0.2)}
     .color-swatch:hover{transform:scale(1.14)} .color-swatch.active{border-color:var(--ink);outline:2px solid var(--ink);outline-offset:2px}
     .seg-row{display:flex;gap:2px;background:var(--field);border-radius:8px;padding:3px;width:fit-content;border:1px solid var(--line);flex-wrap:wrap}
-    .seg-item{padding:7px 15px;border-radius:6px;cursor:pointer;color:var(--dim);transition:.16s;font-weight:500;font-size:13px;user-select:none}
+    .seg-item{padding:7px 15px;border-radius:6px;cursor:pointer;color:var(--dim);transition:.16s;font-weight:500;font-size:0.9286rem;user-select:none}
     .seg-item:hover{color:var(--ink)} .seg-item.active{background:var(--panel);color:var(--accent);box-shadow:0 2px 6px rgba(0,0,0,0.1)}
     /* ---- Language & Region ---- */
-    .lr-label{font-size:12px;color:var(--dim);margin-bottom:6px;font-weight:600}
+    .lr-label{font-size:0.8571rem;color:var(--dim);margin-bottom:6px;font-weight:600}
     .lang-row .seg-item{display:flex;align-items:center;gap:7px}
-    .lang-row .seg-item .fl{font-size:15px;line-height:1}
-    .lr-select{background:var(--field);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:8px 12px;font-size:13px;min-width:240px;cursor:pointer}
+    .lang-row .seg-item .fl{font-size:1.0714rem;line-height:1}
+    .lr-select{background:var(--field);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:8px 12px;font-size:0.9286rem;min-width:240px;cursor:pointer}
     .lr-preview{margin-top:11px;display:grid;grid-template-columns:1fr 1fr;gap:8px}
     .lr-preview .pv{background:var(--panel2);border:1px solid var(--line);border-radius:9px;padding:8px 11px}
-    .lr-preview .pl{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px}
-    .lr-preview .pvv{font-size:13.5px;font-weight:600;color:var(--ink);margin-top:2px}
-    .lr-status{margin-top:13px;font-size:11.5px;color:var(--dim);line-height:1.5}
+    .lr-preview .pl{font-size:0.7143rem;color:var(--dim);text-transform:uppercase;letter-spacing:.5px}
+    .lr-preview .pvv{font-size:0.9643rem;font-weight:600;color:var(--ink);margin-top:2px}
+    .lr-status{margin-top:13px;font-size:0.8214rem;color:var(--dim);line-height:1.5}
     .lr-status b{color:var(--ok);font-weight:600}
     .wp-gallery{display:flex;gap:10px;overflow-x:auto;padding-bottom:8px}
     .wp-item{flex:0 0 128px;height:78px;border-radius:10px;border:2px solid transparent;background-size:cover;
       background-position:center;cursor:pointer;transition:.18s;position:relative;box-shadow:0 3px 10px rgba(0,0,0,0.1)}
     .wp-item:hover{transform:scale(1.04)} .wp-item.active{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent)}
-    .wp-item .wp-name{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.6);color:#fff;font-size:10px;
+    .wp-item .wp-name{position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.6);color:#fff;font-size:0.7143rem;
       padding:3px 6px;text-align:center;border-radius:0 0 8px 8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .wp-type{margin-bottom:12px}
     .wp-pane{margin-top:4px}
@@ -276,14 +280,14 @@
       transition:.15s;box-shadow:0 3px 10px rgba(0,0,0,0.1);background-size:cover;background-position:center}
     .wp-tile:hover{transform:scale(1.04)} .wp-tile.active{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent)}
     .wp-actions{margin-top:14px}
-    .wp-reset{font:600 12.5px system-ui;color:var(--ink);background:var(--panel2);border:1px solid var(--line);
+    .wp-reset{font:600 0.8929rem system-ui;color:var(--ink);background:var(--panel2);border:1px solid var(--line);
       border-radius:9px;padding:8px 14px;cursor:pointer;transition:.12s}
     .wp-reset:hover{border-color:var(--accent);color:var(--accent)}
 
     .info-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
     .info-cell{background:var(--panel2);border:1px solid var(--line);border-radius:10px;padding:11px 13px}
-    .info-cell .il{font-size:10.5px;color:var(--dim);text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px}
-    .info-cell .iv{font-size:15px;font-weight:600;color:var(--ink);word-break:break-all}
+    .info-cell .il{font-size:0.75rem;color:var(--dim);text-transform:uppercase;letter-spacing:.6px;margin-bottom:4px}
+    .info-cell .iv{font-size:1.0714rem;font-weight:600;color:var(--ink);overflow-wrap:anywhere}  /* anywhere, not break-all: breaks only what does not fit (SSID, IPv6) */
     .info-cell .iv.ok{color:var(--ok)}
 
     /* ---- command palette ---- */
@@ -293,16 +297,16 @@
     .cmd-box{background:var(--panel);border:1px solid var(--line);border-radius:14px;width:100%;max-width:520px;
       box-shadow:0 24px 60px rgba(0,0,0,0.5);overflow:hidden}
     .cmd-box input{width:100%;max-width:none;border:none;border-bottom:1px solid var(--line);border-radius:0;
-      background:transparent;padding:15px 18px;font-size:15px}
+      background:transparent;padding:15px 18px;font-size:1.0714rem}
     .cmd-box input:focus{box-shadow:none}
     .cmd-results{max-height:340px;overflow:auto;padding:6px}
     .cmd-row{display:flex;align-items:center;gap:11px;padding:9px 12px;border-radius:9px;cursor:pointer}
     .cmd-row.sel{background:linear-gradient(135deg,rgba(94,224,160,0.16),rgba(106,168,255,0.08))}
-    .cmd-row .cr-i{width:26px;text-align:center;font-size:15px}
-    .cmd-row .cr-t{flex:1;font-size:13.5px}
-    .cmd-row .cr-s{font-size:10px;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;border:1px solid var(--line);border-radius:6px;padding:1px 6px}
+    .cmd-row .cr-i{width:26px;text-align:center;font-size:1.0714rem}
+    .cmd-row .cr-t{flex:1;font-size:0.9643rem}
+    .cmd-row .cr-s{font-size:0.7143rem;color:var(--dim);text-transform:uppercase;letter-spacing:.5px;border:1px solid var(--line);border-radius:6px;padding:1px 6px}
     .cmd-row.danger .cr-s{color:var(--bad);border-color:rgba(255,107,107,.4)}
-    .cmd-empty{padding:22px;text-align:center;color:var(--dim);font-size:13px}
+    .cmd-empty{padding:22px;text-align:center;color:var(--dim);font-size:0.9286rem}
 
     /* ---- modal ---- */
     .modal-scrim{position:fixed;inset:0;background:rgba(6,10,22,0.8);backdrop-filter:blur(6px);z-index:320;
@@ -310,17 +314,34 @@
     .modal-scrim.show{display:flex}
     .modal-box{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:24px;max-width:380px;width:100%;
       box-shadow:0 20px 50px rgba(0,0,0,0.4);text-align:center}
-    .modal-box .mi{font-size:34px;margin-bottom:10px} .modal-box .mt{font-size:16px;font-weight:600;margin-bottom:6px}
-    .modal-box .md{font-size:13px;color:var(--dim);margin-bottom:18px;line-height:1.5}
+    .modal-box .mi{font-size:2.4286rem;margin-bottom:10px} .modal-box .mt{font-size:1.1429rem;font-weight:600;margin-bottom:6px}
+    .modal-box .md{font-size:0.9286rem;color:var(--dim);margin-bottom:18px;line-height:1.5}
     .modal-box .mbtns{display:flex;gap:10px;justify-content:center} .modal-box .mbtns button{flex:1;padding:10px}
 
-    footer{padding:7px 14px;font-size:11.5px;color:var(--dim);background:var(--panel2);border-top:1px solid var(--line);
+    footer{padding:7px 14px;font-size:0.8214rem;color:var(--dim);background:var(--panel2);border-top:1px solid var(--line);
       flex:none;display:flex;align-items:center;gap:12px}
     footer .dot{width:7px;height:7px;border-radius:50%;transition:.3s}
     footer .dot.ok{background:var(--ok);box-shadow:0 0 6px rgba(94,224,160,0.5)} footer .dot.err{background:var(--bad)}
     footer .sp{flex:1}
 
     @media(max-width:720px){ .sidebar{width:62px} .nav-item .lbl{display:none} .pulse-grid{grid-template-columns:repeat(2,1fr)} .info-grid{grid-template-columns:1fr} }
+    /* Phone: label above, control below at full width. With the label fixed at 158 px the control
+       kept 60 px: sliders and "Turn on" overflowed the card (checked at 375 px). */
+    @media(max-width:560px){
+      main.content{padding:12px 10px}
+      .sect{padding-left:14px;padding-right:14px}
+      .row{flex-wrap:wrap;gap:8px}
+      .row label{flex:1 1 100%}
+      .row label:empty{display:none}
+      .row .ctl{flex:1 1 100%;flex-wrap:wrap}
+      .row .ctl .hint{flex:1 1 100%}
+      input[type=range]{max-width:none;min-width:0}
+      .sect h2{flex-wrap:wrap;row-gap:6px}
+      details.adv>summary,details.apps-det>summary{white-space:normal}
+      .apps-list .arow{flex-wrap:wrap}
+      .cmd-trigger .t,.cmd-trigger kbd{display:none}
+      .cmd-trigger{flex:0 0 auto}
+    }
   </style>
 </head>
 <body>
@@ -328,7 +349,7 @@
     <div class="logo">⚙</div>
     <div class="brand" id="brand">Impostazioni</div>
     <div class="cmd-trigger" id="cmd-trigger" title="Comando rapido" data-i18n-attr="title:cmdBar">
-      <span>⌘</span><span class="t" id="cmd-trigger-t">Comanda il Cardputer…</span><kbd>Ctrl K</kbd>
+      <span>⌘</span><span class="t" id="cmd-trigger-t">Comanda il dispositivo…</span><kbd>Ctrl K</kbd>
     </div>
     <div class="live-pill" id="live-pill"><span class="ld"></span><span id="live-txt">Live</span></div>
   </header>
@@ -350,8 +371,8 @@
         <div class="sect" style="padding-bottom:14px">
           <h2 id="t-pulse">Battito del dispositivo <span class="badge live">Live</span></h2>
           <div class="pulse-grid" id="pulse-grid">
-            <div class="tile wide ok" id="tile-heap"><div class="tk"><span class="dotcol"></span><span data-i18n="heap">Memoria libera</span></div><div class="tv ok">—</div><div class="tsub">internal SRAM</div><canvas></canvas></div>
-            <div class="tile wide ok" id="tile-cpu"><div class="tk"><span class="dotcol"></span><span data-i18n="cpu">CPU</span></div><div class="tv ok">—</div><div class="cores" id="cpu-cores"></div><canvas></canvas></div>
+            <div class="tile wide ok" id="tile-heap"><div class="tk"><span class="dotcol"></span><span data-i18n="heap">Memoria libera</span></div><div class="tv ok">—</div><div class="tsub" id="tile-heap-sub">internal SRAM</div><div class="membar" hidden><i id="tile-mem-bar"></i></div><div class="tsub" id="tile-mem-sub" hidden></div><div class="tsub" id="tile-mem-swap" hidden></div><canvas></canvas></div>
+            <div class="tile wide ok" id="tile-cpu"><div class="tk"><span class="dotcol"></span><span data-i18n="cpu">CPU</span></div><div class="tv ok">—</div><div class="cores" id="cpu-cores"></div><div class="tsub" id="tile-cpu-sub" hidden></div><canvas></canvas></div>
             <div class="tile ok" id="tile-frag"><div class="tk"><span class="dotcol"></span><span data-i18n="fragShort">Framm.</span></div><div class="tv ok">—</div><div class="tsub">heap</div></div>
             <div class="tile ok" id="tile-min"><div class="tk"><span class="dotcol"></span><span data-i18n="minHist">Min storico</span></div><div class="tv ok">—</div><div class="tsub">watermark</div></div>
             <div class="tile ok" id="tile-up"><div class="tk"><span class="dotcol"></span><span data-i18n="uptime">Acceso da</span></div><div class="tv">—</div></div>
@@ -384,22 +405,23 @@
 
       <!-- ═══════════ DISPLAY ═══════════ -->
       <section id="tab-display" class="tab-content">
-        <div class="sect">
+        <div class="sect" id="sect-screen" hidden>
           <h2><span data-i18n="screen">Schermo</span> <span class="badge fw">Firmware</span></h2>
           <div class="row">
             <label data-i18n="dispState">Stato schermo</label>
             <div class="ctl"><span class="hint" id="disp-state">Tocca per comandare il pannello.</span>
-              <button id="disp-toggle" class="primary" style="margin-left:auto">⏻ Spegni</button></div>
+              <button id="disp-toggle" class="primary" style="margin-left:auto;white-space:nowrap;flex-shrink:0">⏻ Spegni</button></div>
           </div>
-          <div class="row" style="border-bottom:none"><div class="hint" style="flex:1" data-i18n-html="dispHint">Lo spegnimento porta la retroilluminazione a 0 (nero) senza cambiare la luminosità impostata. È l'<b>unica leva live</b> dello schermo via web; non interroga il pannello all'apertura per non risvegliarlo.</div></div>
+          <div class="row" style="border-bottom:none"><div class="hint" style="flex:1" id="disp-hint" data-i18n-html="dispHint">Lo spegnimento porta la retroilluminazione a 0 (nero) senza cambiare la luminosità impostata. È l'<b>unica leva live</b> dello schermo via web; non interroga il pannello all'apertura per non risvegliarlo.</div></div>
         </div>
-        <div class="sect">
+        <div class="sect" id="sect-levels" hidden>
           <h2 data-i18n="briAudio">Luminosità & Audio</h2>
-          <div class="row"><label data-i18n="briDisplay">Luminosità display</label>
+          <div class="row" id="row-bri"><label for="pw-bri" data-i18n="briDisplay">Luminosità display</label>
             <div class="ctl"><span style="color:var(--dim)">🔅</span><input type="range" id="pw-bri" min="10" max="100" step="5" value="100"><span style="color:var(--dim)">🔆</span><span class="range-val" id="pw-bri-v">100%</span></div></div>
-          <div class="row"><label data-i18n="volAudio">Volume audio</label>
+          <div class="row" id="row-vol"><label for="pw-vol" data-i18n="volAudio">Volume audio</label>
             <div class="ctl"><span style="color:var(--dim)">🔈</span><input type="range" id="pw-vol" min="0" max="100" step="10" value="70"><span style="color:var(--dim)">🔊</span><span class="range-val" id="pw-vol-v">70%</span></div></div>
-          <div class="row" style="border-bottom:none"><div class="hint" style="flex:1" data-i18n-html="briVolHint">Luminosità e volume si <b>salvano</b> nelle impostazioni e si applicano al <b>prossimo avvio</b> (il firmware non espone un setter a caldo per questi).</div></div>
+          <div class="row" style="border-bottom:none;padding-bottom:0"><span class="hint" id="lv-stat" role="status" aria-live="polite"></span></div>
+          <div class="row" style="border-bottom:none"><div class="hint" style="flex:1" id="bri-vol-hint" data-i18n-html="briVolHint">Luminosità e volume si <b>salvano</b> nelle impostazioni e si applicano al <b>prossimo avvio</b> (il firmware non espone un setter a caldo per questi).</div></div>
         </div>
       </section>
 
@@ -436,9 +458,14 @@
           <div class="lr-status" id="lang-status"></div></div>
         <div class="sect"><h2><span data-i18n="wallpaper">Sfondo</span> <span class="badge live">Live</span></h2>
           <div class="seg-row wp-type" id="wp-type">
+            <div class="seg-item" data-wptype="console" data-i18n="wpTypeConsole" hidden>Come la console</div>
             <div class="seg-item" data-wptype="gradient" data-i18n="wpTypeGradient">Gradiente</div>
             <div class="seg-item" data-wptype="color" data-i18n="wpTypeColor">Tinta unita</div>
             <div class="seg-item" data-wptype="image" data-i18n="wpTypeImage">Immagine</div>
+          </div>
+          <div id="wp-pane-console" class="wp-pane" hidden>
+            <div id="wp-console" class="wp-gallery"></div>
+            <div class="hint" data-i18n="wpConsoleHint">Lo stesso sfondo sulla console e qui. Si cambia anche dalla console: SISTEMA › Tema › Sfondo.</div>
           </div>
           <div id="wp-pane-gradient" class="wp-pane"><div id="wp-gradients" class="wp-tiles"></div></div>
           <div id="wp-pane-color" class="wp-pane" hidden><div id="wp-colors" class="wp-tiles"></div></div>
@@ -458,25 +485,29 @@
 
       <!-- ═══════════ NETWORK ═══════════ -->
       <section id="tab-network" class="tab-content">
-        <div class="sect"><h2><span data-i18n="wifiStatus">Stato Wi-Fi</span> <span class="badge ro" data-i18n="badgeReadOnly">Sola lettura</span></h2>
+        <div class="sect"><h2><span data-i18n="wifiStatus">Connessione</span> <span class="badge ro" data-i18n="badgeReadOnly">Sola lettura</span></h2>
           <div class="info-grid">
             <div class="info-cell"><div class="il" data-i18n="netMode">Modalità</div><div class="iv" id="net-mode">—</div></div>
             <div class="info-cell"><div class="il">SSID</div><div class="iv" id="net-ssid">—</div></div>
             <div class="info-cell"><div class="il" data-i18n="ipAddr">Indirizzo IP</div><div class="iv" id="net-ip">—</div></div>
             <div class="info-cell"><div class="il" data-i18n="clock">Orologio</div><div class="iv" id="net-time">—</div></div>
           </div></div>
-        <div class="sect"><h2 data-i18n="nearbyNets">Reti vicine</h2>
-          <div class="row" style="border-bottom:none;padding-top:0"><div class="ctl"><button id="wifi-scan">📡 <span data-i18n="scan">Scansiona</span></button><span class="hint" id="wifi-scan-stat"></span></div></div>
+        <div class="sect" id="sect-wifi-scan"><h2 data-i18n="nearbyNets">Reti vicine</h2>
+          <div class="row" style="border-bottom:none;padding-top:0"><div class="ctl" style="flex-wrap:wrap"><button id="wifi-scan">📡 <span data-i18n="scan">Scansiona</span></button><button id="wifi-open">📶 <span data-i18n="openWifiApp">Apri Wi-Fi</span></button><span class="hint" id="wifi-scan-stat"></span></div></div>
           <div id="wifi-list"></div>
           <div class="hint" style="margin-top:6px" data-i18n-html="wifiScanHint">La scansione è <b>su richiesta</b> e a sola lettura. Per <b>connettersi</b> o cambiare rete usa l'app <b>Wi-Fi</b> nativa: il firmware non espone un endpoint di join via web.</div></div>
-        <div class="sect"><h2><span data-i18n="connectivity">Connettività</span> <span class="badge fw">Firmware</span></h2>
+        <div class="sect" id="sect-net-fw" hidden><h2><span data-i18n="connectivity">Connettività</span> <span class="badge fw">Firmware</span></h2>
           <div class="row"><label>Wi-Fi</label><div class="ctl"><span class="sw"><input type="checkbox" id="net-wifi"><span></span></span></div></div>
           <div class="row"><label>Bluetooth LE</label><div class="ctl"><span class="sw"><input type="checkbox" id="net-ble"><span></span></span></div></div>
           <div class="row"><label>Swarm (ESP-NOW)</label><div class="ctl"><span class="sw"><input type="checkbox" id="net-swarm"><span></span></span></div></div>
           <div class="hint" style="margin-top:6px" data-i18n="changesNextBoot">Le modifiche si salvano e si applicano al prossimo avvio.</div></div>
-        <div class="sect"><h2>IPv6 <span class="badge fw">Firmware</span></h2>
+        <div class="sect" id="sect-ipv6" hidden><h2>IPv6 <span class="badge fw">Firmware</span></h2>
           <div class="row"><label data-i18n="enableIpv6">Abilita IPv6</label><div class="ctl"><span class="sw"><input type="checkbox" id="net-ipv6"><span></span></span></div></div>
           <div class="hint" style="margin-top:6px" data-i18n-html="ipv6Hint">IPv6 è <b>disabilitato</b> nel firmware per liberare SRAM: tutta la rete viaggia su IPv4. Le tabelle IPv6 di lwIP si allocano a compilazione — questo controllo registra solo la preferenza; per riattivarlo davvero ricompila con <code>CONFIG_LWIP_IPV6=y</code>.</div></div>
+        <div class="sect" id="sect-peers" hidden><h2 data-i18n="peersTitle">Le altre console NucleoOS</h2>
+          <div class="row" style="border-bottom:none;padding-top:0"><div class="ctl" style="flex-wrap:wrap"><button id="peers-scan">🔎 <span data-i18n="peersScan">Cerca sulla rete</span></button><span class="hint" id="peers-stat" role="status" aria-live="polite"></span></div></div>
+          <div id="peers-list"></div>
+          <div class="hint" style="margin-top:6px" data-i18n="peersHint">Le console NucleoOS sulla stessa rete (WiFi, hotspot o cavo). Si cercano solo quando premi il pulsante: da ferme non si scambiano niente e il WiFi può dormire.</div></div>
       </section>
 
       <!-- ═══════════ AI / MODELS ═══════════ -->
@@ -485,7 +516,7 @@
           <div class="hint" style="margin-bottom:10px" data-i18n-html="aiProfileHint">Scegli <b>come deve ragionare ANIMA</b>. Il sistema rileva cosa è davvero disponibile — chiavi online, GPU del browser, cervello offline — e <b>attiva solo i profili possibili</b>, spiegando cosa manca.</div>
           <div class="ps" id="preset-strip"><span class="hint" data-i18n="detectingOptions">rilevo le possibilità…</span></div>
           <div class="tier-band" id="tier-band" style="margin-top:13px"></div>
-          <div style="margin-top:13px"><div style="font-size:12.5px;font-weight:600;margin-bottom:6px" data-i18n="whatCurrentCanDo">Cosa può fare la configurazione attuale</div>
+          <div style="margin-top:13px"><div style="font-size:0.8929rem;font-weight:600;margin-bottom:6px" data-i18n="whatCurrentCanDo">Cosa può fare la configurazione attuale</div>
             <div class="caps-row" id="caps-row"></div></div>
           <details class="apps-det" id="apps-det" style="margin-top:11px"><summary data-i18n="whichApps">Su quali app agisce</summary><div class="apps-list" id="apps-list"></div></details>
           <div class="scope-legend" id="scope-legend" style="margin-top:11px"></div>
@@ -498,20 +529,22 @@
 
         <details class="adv" id="ai-adv"><summary data-i18n="advSettings">Impostazioni avanzate · provider, chiave, cervello offline, voce</summary><div class="adv-inner">
         <div class="sect"><h2><span data-i18n="brainsChain">Cervelli & catena di fallback</span> <span class="badge" data-i18n="badgeHowItWorks">Come funziona</span></h2>
-          <div class="hint" style="margin-bottom:10px" data-i18n-html="brainsChainHint">ANIMA ha <b>cinque menti</b> e le prova <b>in ordine</b>, dalla più capace a quella sempre-disponibile. Sfrutta prima la potenza del browser/PC e <b>scala sul Cardputer solo come ultima rete di sicurezza</b>.</div>
+          <div class="hint" style="margin-bottom:10px" id="brains-chain-hint" data-i18n-html="brainsChainHint">ANIMA ha <b>cinque menti</b> e le prova <b>in ordine</b>, dalla più capace a quella sempre-disponibile. Sfrutta prima la potenza del browser/PC e <b>scala sul dispositivo solo come ultima rete di sicurezza</b>.</div>
           <div style="display:flex;flex-direction:column;gap:6px">
-            <div style="display:flex;gap:10px;align-items:flex-start;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px 12px"><span style="font-size:17px;width:22px;text-align:center">☁</span><div style="flex:1"><div style="font-weight:600;font-size:13px" data-i18n="brain1Title">1 · IA online (cloud)</div><div class="hint" data-i18n="brain1Desc">Claude / Groq / Grok — serve chiave + Internet. La più capace.</div></div></div>
+            <div id="brain-cmds-card" hidden style="display:flex;gap:10px;align-items:flex-start;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px 12px"><span style="font-size:1.2143rem;width:22px;text-align:center">🎮</span><div style="flex:1"><div style="font-weight:600;font-size:0.9286rem" data-i18n="brainCmdsTitle">Dispositivo · dati veri</div><div class="hint" data-i18n-html="brainCmdsDesc">Batteria, spazio, giochi recenti: risposte lette dal dispositivo, senza IA e senza rete.</div></div></div>
+            <div id="brain-cmds-arrow" hidden style="text-align:center;color:var(--dim)">↓</div>
+            <div style="display:flex;gap:10px;align-items:flex-start;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px 12px"><span style="font-size:1.2143rem;width:22px;text-align:center">☁</span><div style="flex:1"><div style="font-weight:600;font-size:0.9286rem" data-i18n="brain1Title">1 · IA online (cloud)</div><div class="hint" data-i18n="brain1Desc">Claude / Groq / Grok — serve chiave + Internet. La più capace.</div></div></div>
             <div style="text-align:center;color:var(--dim)">↓</div>
-            <div style="display:flex;gap:10px;align-items:flex-start;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px 12px"><span style="font-size:17px;width:22px;text-align:center">⌂</span><div style="flex:1"><div style="font-weight:600;font-size:13px" data-i18n="brainPcTitle">2 · Modello sul tuo PC</div><div class="hint" data-i18n="brainPcDesc">Ollama / LM Studio su questo computer: gratis, offline, privato.</div></div></div>
+            <div style="display:flex;gap:10px;align-items:flex-start;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px 12px"><span style="font-size:1.2143rem;width:22px;text-align:center">⌂</span><div style="flex:1"><div style="font-weight:600;font-size:0.9286rem" data-i18n="brainPcTitle">2 · Modello sul tuo PC</div><div class="hint" data-i18n="brainPcDesc">Ollama / LM Studio su questo computer: gratis, offline, privato.</div></div></div>
             <div style="text-align:center;color:var(--dim)">↓</div>
-            <div style="display:flex;gap:10px;align-items:flex-start;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px 12px"><span style="font-size:17px;width:22px;text-align:center">✦</span><div style="flex:1"><div style="font-weight:600;font-size:13px" data-i18n="brain2Title">3 · LLM locale (GPU del browser)</div><div class="hint" data-i18n="brain2Desc">Un LLM completo sulla GPU del browser (WebLLM). Offline dopo il primo download.</div></div></div>
+            <div style="display:flex;gap:10px;align-items:flex-start;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px 12px"><span style="font-size:1.2143rem;width:22px;text-align:center">✦</span><div style="flex:1"><div style="font-weight:600;font-size:0.9286rem" data-i18n="brain2Title">3 · LLM locale (GPU del browser)</div><div class="hint" data-i18n="brain2Desc">Un LLM completo sulla GPU del browser (WebLLM). Offline dopo il primo download.</div></div></div>
             <div style="text-align:center;color:var(--dim)">↓</div>
-            <div style="display:flex;gap:10px;align-items:flex-start;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px 12px"><span style="font-size:17px;width:22px;text-align:center">◆</span><div style="flex:1"><div style="font-weight:600;font-size:13px" data-i18n="brain3Title">4 · Browser — cervello locale (WASM) + indice web</div><div class="hint" data-i18n-html="brain3Desc">La cascata del Cardputer compilata a WebAssembly, sulla CPU del browser. <b>Ultimo passo prima del Cardputer.</b></div></div></div>
-            <div style="text-align:center;color:var(--dim)">↓</div>
-            <div style="display:flex;gap:10px;align-items:flex-start;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px 12px"><span style="font-size:17px;width:22px;text-align:center">▣</span><div style="flex:1"><div style="font-weight:600;font-size:13px" data-i18n="brain4Title">5 · Cardputer (on-device)</div><div class="hint" data-i18n-html="brain4Desc">Il cervello nel dispositivo. <b>Sempre disponibile e offline</b>: la rete di sicurezza finale.</div></div></div>
+            <div style="display:flex;gap:10px;align-items:flex-start;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px 12px"><span style="font-size:1.2143rem;width:22px;text-align:center">◆</span><div style="flex:1"><div style="font-weight:600;font-size:0.9286rem" data-i18n="brain3Title">4 · Browser — cervello locale (WASM) + indice web</div><div class="hint" data-i18n-html="brain3Desc">Un motore compatto compilato a WebAssembly, sulla CPU del browser. <b>Funziona anche senza rete.</b></div></div></div>
+            <div id="brain-dev-arrow" style="text-align:center;color:var(--dim)">↓</div>
+            <div id="brain-dev-card" style="display:flex;gap:10px;align-items:flex-start;background:var(--field);border:1px solid var(--line);border-radius:10px;padding:10px 12px"><span style="font-size:1.2143rem;width:22px;text-align:center">▣</span><div style="flex:1"><div style="font-weight:600;font-size:0.9286rem" data-i18n="brain4Title">5 · Dispositivo (on-device)</div><div class="hint" data-i18n-html="brain4Desc">Il cervello nel dispositivo. <b>Sempre disponibile e offline</b>: la rete di sicurezza finale.</div></div></div>
           </div></div>
 
-        <div class="sect"><h2><span data-i18n="offlineBrainL1">Cervello offline (L1)</span> <span class="badge fw">Live · RAM</span></h2>
+        <div class="sect" id="sect-l1" hidden><h2><span data-i18n="offlineBrainL1">Cervello offline (L1)</span> <span class="badge fw">Live · RAM</span></h2>
           <div class="row"><label data-i18n="policy">Politica</label>
             <div class="ctl"><div class="seg-row" id="l1-policy">
               <div class="seg-item" data-m="auto" data-i18n="auto">Auto</div><div class="seg-item" data-m="on" data-i18n="always">Sempre</div><div class="seg-item" data-m="off" data-i18n="never">Mai</div></div></div></div>
@@ -526,34 +559,70 @@
           <div class="row" style="border-bottom:none;margin-top:8px"><div class="hint" style="flex:1" data-i18n-html="aiKeysHint">🎨 <b>Generare immagini con l'IA</b> in Paint (Atelier) richiede una chiave <b>Grok (xAI)</b> — modello <code>grok-2-image</code>. Claude e Groq non disegnano, ma possono <b>migliorare il prompt</b>. 🎙️ La <b>trascrizione vocale</b> (Recorder, Dettatura) usa sempre Groq/OpenAI (Whisper), anche con Claude, Gemini o Grok come chat.</div></div></div>
 
         <div class="sect"><h2><span data-i18n="browserWasm">Browser · cervello locale (WASM)</span> <span class="badge">Offline</span></h2>
-          <div class="row"><label data-i18n="state">Stato</label><div class="ctl" style="flex-wrap:wrap"><span class="hint" id="edge-brain-stat" style="flex:1" data-i18n="checking">controllo…</span></div></div>
+          <div class="row"><label data-i18n="state">Stato</label><div class="ctl" style="flex-wrap:wrap"><span class="hint" id="edge-brain-stat" style="flex:1">controllo…</span></div></div>
           <div class="row" style="border-bottom:none"><label></label><div class="ctl" style="gap:8px;flex-wrap:wrap"><button id="edge-brain-prep">⬇ <span data-i18n="prepareUpdate">Prepara / Aggiorna</span></button><span class="hint" id="edge-brain-prog"></span></div></div>
-          <div class="row"><label data-i18n="webSearchOnDemand">Ricerca web on-demand</label><div class="ctl"><span class="sw"><input type="checkbox" id="edge-web-on"><span></span></span><span class="hint" style="flex:1" data-i18n-html="edgeWebHint">In modalità <b>Browser</b>, quando i cervelli locali non sanno, recupera la risposta <b>certa</b> da Wikipedia (dal browser, mai dal Cardputer) e la <b>mette in cache</b>: da lì resta offline. Spento = solo conoscenza già in cache (nulla esce dal dispositivo).</span></div></div>
+          <div class="row"><label data-i18n="webSearchOnDemand">Ricerca web on-demand</label><div class="ctl"><span class="sw"><input type="checkbox" id="edge-web-on"><span></span></span><span class="hint" style="flex:1" data-i18n-html="edgeWebHint">In modalità <b>Browser</b>, quando i cervelli locali non sanno, recupera la risposta <b>certa</b> da Wikipedia (dal browser, mai dal dispositivo) e la <b>mette in cache</b>: da lì resta offline. Spento = solo conoscenza già in cache (nulla esce dal dispositivo).</span></div></div>
           <div class="row"><label data-i18n="cachedKnowledge">Conoscenza in cache</label><div class="ctl" style="gap:8px;flex-wrap:wrap"><span class="hint" id="edge-kb-count" style="flex:1">…</span><button id="edge-kb-clear">🗑 <span data-i18n="clear">Svuota</span></button></div></div>
-          <div class="row" style="border-bottom:none"><div class="hint" style="flex:1" data-i18n-html="edgeBrainHint">Lo <b>stesso motore del Cardputer</b> compilato a WebAssembly: apre app, calcola, risponde e impara <b>senza che nulla lasci il dispositivo</b>. Si scarica una volta (~14&nbsp;MB), poi funziona anche col Cardputer <b>spento</b>. Con la ricerca web on-demand diventa un <b>centralizzatore di conoscenza certa</b> che cresce con l'uso.</div></div></div>
+          <div class="row" style="border-bottom:none"><div class="hint" style="flex:1" data-i18n-html="edgeBrainHint">Lo <b>stesso motore del dispositivo</b> compilato a WebAssembly: apre app, calcola, risponde e impara <b>senza che nulla lasci il dispositivo</b>. Si scarica una volta (~14&nbsp;MB), poi funziona anche col dispositivo <b>spento</b>. Con la ricerca web on-demand diventa un <b>centralizzatore di conoscenza certa</b> che cresce con l'uso.</div></div></div>
 
-        <div class="sect"><h2><span data-i18n="tts">Voce on-device</span> <span class="badge fw">Firmware</span></h2>
+        <div class="sect" id="sect-tts" hidden><h2><span data-i18n="tts">Voce on-device</span> <span class="badge fw">Firmware</span></h2>
           <div class="row"><label data-i18n="speakWhenAsked">Parla quando interrogato</label><div class="ctl"><span class="sw"><input type="checkbox" id="tts-enabled"><span></span></span><span class="hint" id="tts-stat">…</span></div></div>
-          <div class="row"><label data-i18n="readingSpeed">Velocità di lettura</label><div class="ctl"><input type="range" id="tts-speed" min="70" max="160" step="5" value="110" style="width:150px;accent-color:var(--accent)"><span class="hint" id="tts-speed-val" style="min-width:42px;text-align:right">110%</span></div></div>
+          <div class="row" id="row-tts-speed" hidden><label data-i18n="readingSpeed">Velocità di lettura</label><div class="ctl"><input type="range" id="tts-speed" min="70" max="160" step="5" value="110" style="width:150px;accent-color:var(--accent)"><span class="hint" id="tts-speed-val" style="min-width:42px;text-align:right">110%</span></div></div>
           <div class="row" style="border-bottom:none"><label></label><div class="ctl"><button id="tts-test">🔊 <span data-i18n="testVoice">Prova voce</span></button></div></div>
-          <div class="row"><label data-i18n="voiceAlways">Voce sempre attiva</label><div class="ctl"><span class="sw"><input type="checkbox" id="voice-always-on"><span></span></span><span class="hint" id="vao-stat"></span></div></div>
-          <div class="row" style="border-bottom:none"><div class="hint" style="flex:1" data-i18n-html="voiceAlwaysHint">Tiene i <b>comandi vocali</b> (PTT col tasto FN) sempre pronti dalla home. Costa ~16&nbsp;KB: lascialo spento finché non hai registrato i comandi.</div></div></div>
+          <div class="row" id="row-voice-always" hidden><label data-i18n="voiceAlways">Voce sempre attiva</label><div class="ctl"><span class="sw"><input type="checkbox" id="voice-always-on"><span></span></span><span class="hint" id="vao-stat"></span></div></div>
+          <div class="row" id="row-voice-always-hint" hidden style="border-bottom:none"><div class="hint" style="flex:1" data-i18n-html="voiceAlwaysHint">Tiene i <b>comandi vocali</b> (PTT col tasto FN) sempre pronti dalla home. Costa ~16&nbsp;KB: lascialo spento finché non hai registrato i comandi.</div></div></div>
         </div></details>
       </section>
 
       <!-- ═══════════ DEVICE ═══════════ -->
       <section id="tab-device" class="tab-content">
-        <div class="sect"><h2 data-i18n="deviceIdentity">Identità dispositivo</h2>
+        <div class="sect" id="sect-dev-fw" hidden><h2 data-i18n="deviceIdentity">Identità dispositivo</h2>
           <div class="row"><label data-i18n="deviceName">Nome dispositivo</label><div class="ctl"><input type="text" id="dev-name" maxlength="32" placeholder="nucleo-01"></div></div>
           <div class="row"><label>Locale</label><div class="ctl"><input type="text" id="dev-locale" maxlength="12" placeholder="it-IT"></div></div>
           <div class="row"><label data-i18n="timezone">Fuso orario</label><div class="ctl"><input type="text" id="dev-tz" maxlength="40" placeholder="Europe/Rome"></div></div>
           <div class="hint" style="margin-top:6px" data-i18n="deviceNameHint">Il nome è usato da mDNS/Swarm e si applica al prossimo avvio.</div></div>
+        <div class="sect" id="sect-dev-live" hidden><h2><span data-i18n="deviceIdentity">Identità dispositivo</span> <span class="badge live">Live</span></h2>
+          <div class="row"><label for="dev-live-name" data-i18n="deviceName">Nome dispositivo</label><div class="ctl"><input type="text" id="dev-live-name" maxlength="32" autocomplete="off" spellcheck="false" disabled></div></div>
+          <div class="row"><label for="dev-live-tz" data-i18n="timezone">Fuso orario</label><div class="ctl"><select id="dev-live-tz" disabled></select></div></div>
+          <div class="row" style="border-bottom:none"><label></label><div class="ctl" style="gap:10px;flex-wrap:wrap"><button class="primary" id="dev-apply" disabled>✓ <span data-i18n="applyConsole">Applica al dispositivo</span></button><span class="hint" id="dev-stat" role="status" aria-live="polite"></span></div></div>
+          <div class="hint" style="margin-top:6px" data-i18n-html="deviceNameHintLive">Nome e fuso sono quelli veri della console.</div></div>
+        <div class="sect" id="sect-pair" hidden><h2><span data-i18n="pairing">Accoppiamento</span> <span class="badge fw">Live</span></h2>
+          <div class="row"><label data-i18n="pairRequire">Richiedi accoppiamento ai nuovi browser</label>
+            <div class="ctl"><span class="sw"><input type="checkbox" id="pair-enabled"><span></span></span><span class="hint" id="pair-stat">…</span></div></div>
+          <div class="row" id="pair-pin-row" hidden style="border-bottom:none">
+            <div class="ctl" style="flex-direction:column;align-items:flex-start;gap:6px">
+              <div style="font-weight:700;font-size:1.5714rem;letter-spacing:5px;font-variant-numeric:tabular-nums" id="pair-pin-value">——————</div>
+              <div class="hint" style="color:var(--warn)" data-i18n="pairPinSave">Salva questo PIN ora: non verrà mostrato di nuovo. Puoi sempre farlo rileggere dalla console.</div>
+            </div></div>
+          <div class="row" id="pair-speak-row" hidden style="border-bottom:none"><label></label>
+            <div class="ctl"><button id="pair-speak">🔊 <span data-i18n="pairSpeak">Leggi il PIN sulla console</span></button><span class="hint" id="pair-speak-stat"></span></div></div>
+          <div class="row" style="border-bottom:none"><div class="hint" style="flex:1" data-i18n-html="pairHint">Con la protezione attiva, un browser nuovo deve inserire un PIN di 6 cifre.</div></div></div>
         <div class="sect"><h2><span data-i18n="maintenance">Manutenzione</span> <span class="badge fw">Firmware</span></h2>
           <div class="ctl" style="gap:10px;flex-wrap:wrap">
             <button id="dev-selftest">🩺 <span data-i18n="selfTest">Self-Test</span></button>
             <button class="danger" id="btn-reboot">🔄 <span data-i18n="rebootDevice">Riavvia dispositivo</span></button></div>
-          <div class="hint" style="margin-top:10px" data-i18n-html="maintenanceHint">Il riavvio ricarica firmware e indice ANIMA dalla SD. Per gli aggiornamenti firmware usa l'app <b>Aggiornamenti</b> (l'OTA è inaffidabile su questo dispositivo: preferisci il flash seriale).</div></div>
-        <div class="sect"><h2><span data-i18n="security">Sicurezza & sessioni</span> <span class="badge">PIN</span></h2>
+          <div class="hint" style="margin-top:10px" id="maint-hint" data-i18n-html="maintenanceHint">Il riavvio ricarica firmware e indice ANIMA dalla SD. Per gli aggiornamenti firmware usa l'app <b>Aggiornamenti</b> (l'OTA è inaffidabile su questo dispositivo: preferisci il flash seriale).</div></div>
+        <div class="sect" id="sect-backup" hidden><h2><span data-i18n="backupTitle">Backup</span> <span class="badge fw">Live</span></h2>
+          <div class="ctl" style="gap:10px;flex-wrap:wrap">
+            <button class="primary" id="bk-download">💾 <span data-i18n="backupDownload">Scarica backup</span></button>
+            <button id="bk-restore">📥 <span data-i18n="backupRestore">Ripristina da file</span></button>
+            <input type="file" id="bk-file" accept=".zip,application/zip" hidden></div>
+          <div class="hint" style="margin-top:10px" data-i18n-html="backupHint">Salva sul PC i salvataggi, preferiti, statistiche e impostazioni.</div>
+          <div class="hint" id="bk-stat" style="margin-top:6px" role="status" aria-live="polite"></div>
+          <div id="pc-sync" hidden>
+          <h3 style="margin:16px 0 6px;font-size:0.9286rem" data-i18n="pcTitle">Copia continua sul PC</h3>
+          <div class="ctl" style="gap:10px;flex-wrap:wrap">
+            <button class="primary" id="pc-pick">📁 <span data-i18n="pcPick">Scegli la cartella</span></button>
+            <button id="pc-resume" hidden>▶ <span data-i18n="pcResume">Riprendi la copia</span></button>
+            <button id="pc-stop" hidden>⏹ <span data-i18n="pcStop">Ferma</span></button></div>
+          <div class="hint" style="margin-top:8px" data-i18n-html="pcHint">Scegli una cartella del PC: finché questa pagina è aperta, ogni salvataggio nuovo o cambiato vi viene copiato da solo.</div>
+          <div class="hint" id="pc-unsupported" hidden style="margin-top:6px;color:var(--warn)"></div>
+          <div class="hint" id="pc-stat" style="margin-top:6px" role="status" aria-live="polite"></div>
+          </div>
+          <div class="ctl" style="gap:10px;flex-wrap:wrap;margin-top:14px">
+            <button id="bk-support">🧾 <span data-i18n="backupSupport">Scarica pacchetto di supporto (per segnalare un problema)</span></button></div>
+          <div class="hint" style="margin-top:10px" data-i18n="backupSupportHint">Log, rapporti di crash e configurazione rilevata, senza password né chiavi. Allegalo alla segnalazione.</div></div>
+        <div class="sect" id="sect-sessions" hidden><h2><span data-i18n="security">Sicurezza & sessioni</span> <span class="badge">PIN</span></h2>
           <div class="row"><label data-i18n="activeSessions">Sessioni associate attive</label><div class="ctl"><span class="iv" id="sec-sessions">—</span></div></div>
           <div class="ctl" style="gap:10px;flex-wrap:wrap;margin-top:8px">
             <button id="sec-revoke-others">🚪 <span data-i18n="revokeOthers">Revoca le altre sessioni</span></button>
@@ -567,13 +636,13 @@
           <div class="row" style="border-bottom:none;padding-top:0"><div class="ctl" style="gap:8px;flex-wrap:wrap">
             <button class="primary" id="dg-selftest">🩺 <span data-i18n="run">Esegui</span></button><button id="dg-selftest-copy" disabled data-i18n="copyReport">Copia esito</button><span class="hint" id="dg-selftest-stat"></span></div></div>
           <div class="st-list" id="dg-st-list"></div></div>
-        <div class="sect"><h2><span data-i18n="heapRegions">Heap (regioni)</span> <span class="badge live">Live</span></h2>
+        <div class="sect" id="sect-heap"><h2><span id="heap-title" data-i18n="heapRegions">Heap (regioni)</span> <span class="badge live">Live</span></h2>
           <div class="info-grid" id="heap-grid"><div class="hint" style="padding:6px" data-i18n="heapOpenHint">Apri questa scheda per leggere l'heap…</div></div></div>
-        <div class="sect"><h2><span data-i18n="systemLogs">Log di sistema</span> <span class="badge live">Live</span></h2>
-          <div class="row" style="border-bottom:none;padding-top:0"><div class="ctl"><button id="logs-refresh">⟳ <span data-i18n="refresh">Aggiorna</span></button><span class="hint" data-i18n-html="logsHint">Ring RAM ~2&nbsp;KB · funziona anche senza SD/seriale.</span></div></div>
+        <div class="sect" id="sect-logs"><h2><span data-i18n="systemLogs">Log di sistema</span> <span class="badge live">Live</span></h2>
+          <div class="row" style="border-bottom:none;padding-top:0"><div class="ctl"><button id="logs-refresh">⟳ <span data-i18n="refresh">Aggiorna</span></button><span class="hint" id="logs-hint" data-i18n-html="logsHint">Ring RAM ~2&nbsp;KB · funziona anche senza SD/seriale.</span></div></div>
           <div class="logbox" id="logbox">—</div></div>
         <div class="sect"><h2><span data-i18n="privacy">Privacy</span> <span class="badge ro" data-i18n="badgeNote">Nota</span></h2>
-          <div class="hint" data-i18n-html="privacyHint">Solo <code>/api/status</code> (discovery) resta <b>pubblico</b> sulla rete locale e mostra SSID/IP. Log e diagnostica (<code>/api/logs</code>, <code>/api/diag</code>, <code>/api/heap</code>, <code>/api/cpu</code>) ora <b>richiedono l'associazione</b>. Su reti non fidate usa l'hotspot WPA2 del dispositivo.</div></div>
+          <div class="hint" id="privacy-hint" data-i18n-html="privacyHint">Solo <code>/api/status</code> (discovery) resta <b>pubblico</b> sulla rete locale e mostra SSID/IP. Log e diagnostica (<code>/api/logs</code>, <code>/api/diag</code>, <code>/api/heap</code>, <code>/api/cpu</code>) ora <b>richiedono l'associazione</b>. Su reti non fidate usa l'hotspot WPA2 del dispositivo.</div></div>
       </section>
 
       <!-- ═══════════ UPDATES ═══════════ -->
@@ -596,7 +665,7 @@
             <div class="up-bar"><i id="up-prog-bar"></i></div>
             <div class="hint" id="up-prog-lbl" style="margin-top:6px">—</div>
           </div>
-          <div class="hint" style="margin-top:10px" data-i18n="upFlashHint">Scarica l'immagine OTA dal sito ufficiale, ne verifica l'integrità (SHA-256) e la invia al dispositivo. Al termine il Cardputer si riavvia da solo; se l'immagine non parte, torna da sola alla versione precedente (rollback).</div></div>
+          <div class="hint" style="margin-top:10px" data-i18n="upFlashHint">Scarica l'immagine OTA dal sito ufficiale, ne verifica l'integrità (SHA-256) e la invia al dispositivo. Al termine il dispositivo si riavvia da solo; se l'immagine non parte, torna da sola alla versione precedente (rollback).</div></div>
         <div class="sect" id="sdc-sect"><h2><span data-i18n="sdcTitle">Contenuti della scheda SD</span> <span class="badge fw">SD</span></h2>
           <div class="info-grid">
             <div class="info-cell"><div class="il" data-i18n="sdcOnCard">Sulla scheda</div><div class="iv" id="sdc-card">—</div></div>
@@ -625,17 +694,17 @@
       <section id="tab-about" class="tab-content">
         <div class="sect"><h2 data-i18n="systemInfo">Informazioni sistema</h2>
           <div class="info-grid">
-            <div class="info-cell"><div class="il" data-i18n="platform">Piattaforma</div><div class="iv">M5Stack Cardputer</div></div>
-            <div class="info-cell"><div class="il">Chip</div><div class="iv">ESP32-S3</div></div>
+            <div class="info-cell"><div class="il" data-i18n="platform">Piattaforma</div><div class="iv" id="info-board">—</div></div>
+            <div class="info-cell"><div class="il">Chip</div><div class="iv" id="info-chip">—</div></div>
             <div class="info-cell"><div class="il" data-i18n="ipAddr">Indirizzo IP</div><div class="iv" id="info-ip">—</div></div>
             <div class="info-cell"><div class="il" data-i18n="uptime">Acceso da</div><div class="iv" id="info-uptime">—</div></div>
             <div class="info-cell"><div class="il" data-i18n="sdStorage">Storage SD</div><div class="iv" id="info-sd">—</div></div>
-            <div class="info-cell"><div class="il">NucleoOS</div><div class="iv" id="info-ver">v0.1.0</div></div>
-            <div class="info-cell"><div class="il">Slot OTA</div><div class="iv" id="info-ota">—</div></div>
+            <div class="info-cell"><div class="il">NucleoOS</div><div class="iv" id="info-ver">—</div></div>
+            <div class="info-cell" id="info-ota-cell" hidden><div class="il">Slot OTA</div><div class="iv" id="info-ota">—</div></div>
             <div class="info-cell"><div class="il" data-i18n="installedApps">App installate</div><div class="iv" id="info-apps">—</div></div>
           </div></div>
         <div class="sect"><h2 data-i18n="controlPanel">Pannello di Controllo</h2>
-          <div class="hint" data-i18n-html="aboutHint">Versione app <b>1.0</b> · Centro di Controllo con Battito live, scene, comando rapido e self-test. Pensato per dare <b>controllo completo da web</b> senza mai sovraccaricare il Cardputer.</div></div>
+          <div class="hint" data-i18n-html="aboutHint">Versione app <b>1.0</b> · Centro di Controllo con Battito live, scene, comando rapido e self-test. Pensato per dare <b>controllo completo da web</b> senza mai sovraccaricare il dispositivo.</div></div>
       </section>
     </main>
   </div>
@@ -643,7 +712,7 @@
   <!-- command palette -->
   <div class="cmd-scrim" id="cmd-scrim">
     <div class="cmd-box">
-      <input type="text" id="cmd-input" placeholder="Comanda il Cardputer…" autocomplete="off" spellcheck="false">
+      <input type="text" id="cmd-input" placeholder="Comanda il dispositivo…" autocomplete="off" spellcheck="false">
       <div class="cmd-results" id="cmd-results"></div>
     </div>
   </div>
@@ -670,7 +739,7 @@
     <div class="dot ok" id="conn-dot"></div><span id="status-text" data-i18n="ready">Pronto</span>
     <div class="sp"></div>
     <button id="btn-save" class="primary" disabled>💾 <span data-i18n="save">Salva</span></button>
-    <button id="btn-reload" style="font-size:12px">⟳</button>
+    <button id="btn-reload" style="font-size:0.8571rem">⟳</button>
   </footer>
 
 <script type="module">
@@ -694,6 +763,7 @@ import { PRESETS, applyPreset, planPreset, feasibility, buildRegistry, gaps, APP
 import { buildActionRegistry, filterActions } from './actions.js';
 import { ENDPOINTS, runSelfTest, formatReport } from './selftest.js';
 import { initUpdatesTab } from './fwupdate.js';
+import Caps from '/nucleo-caps.js';   // what this device has: one shared answer (/api/system/caps, or the fallback table)
 
 // ═══════════ serial device gate ═══════════
 // ONE request to the Cardputer at a time, always. The device is a single-task PSRAM-less httpd
@@ -725,6 +795,76 @@ let dirty = false;
 let caps = { l1Mode: 'auto', l1Serving: false, hasKey: false };
 let screenOn = true;            // optimistic; we never POST on load (would wake a headless device)
 let pcModels = null, pcModelsMounting = false;   // AI ▸ Models on your PC (mounted when the AI tab opens)
+let screenDimmed = false;       // Handheld: on, but dimmed for inactivity (its /api/display reports it)
+let onLangChanged = null;       // the AI profiles redraw in the new language (set by the presets block)
+
+// ═══════════ device features (declared in caps.json) ═══════════
+// A device-specific control shows up only where the device has it; a missing one stays hidden, with no
+// error and no polling. What the device HAS comes from the shared capability list (/nucleo-caps.js), read
+// once at boot into CAP. What it is doing NOW (screen on, PIN mode, voice enabled, the wallpapers it ships)
+// is still read from the feature's own GET, and a 404/405/501 there still counts as absent.
+//   fw       the /api/display dialect: a /api/status with ota.running is the firmware whose /api/display is
+//            POST-only (?on=, no state to read). Data parsing only — every feature decision is a capability.
+//   esp      /api/heap speaks the ESP32 dialect (.internal SRAM) = true, Linux (RAM/swap) = false: tile
+//            layout and wording only.
+//   display  device.display, and GET /api/display reports the screen state (`on`).
+//   bri/vol  live levels: device.display without settings.boot (there brightness is a boot setting) / device.volume.
+//   saves    games.library, and GET /api/saves/manifest answers (not every library has the PC copy).
+//   wpConsole / tts: wallpaper.device with built-ins / device.tts, and that GET answers.
+const CAP = new Set();
+const has = (c) => CAP.has(c);
+const DEV = { fw: false, esp: null, display: false, bri: false, vol: false, saves: false, wpConsole: false, tts: false };
+const answered = (r) => !!r && r.status !== 404 && r.status !== 405 && r.status !== 501;
+const hasL1 = () => has('anima.l1');   // the offline L1 policy switch (/api/anima/l1)
+// Is an endpoint a scene / palette action / profile drives present on this device?
+function epOk(p) {
+  if (p === '/api/display') return has('device.display');
+  if (p === '/api/voice/always') return has('device.voice');
+  if (p === '/api/anima/l1') return hasL1();
+  if (p === '/api/unpair') return has('pairing.sessions');
+  if (p === '/api/tts') return DEV.tts;
+  if (p === '/api/brightness') return DEV.bri;
+  if (p === '/api/volume') return DEV.vol;
+  if (p === '/api/reboot') return has('power');
+  if (p === '/api/wifi/scan') return has('wifi.manage');
+  return true;
+}
+let gatesKey = '';
+const updatesTab = () => has('ota.firmware');   // /api/ota + the SD-content install (fwupdate.js)
+function applyGates() {
+  const show = (id, on) => { const el = $(id); if (el) el.hidden = !on; };
+  const brain = has('anima.device'), linux = DEV.esp === false, boot = has('settings.boot'), live = !boot && (DEV.bri || DEV.vol), diag = has('diag');
+  show('sect-screen', has('device.display'));
+  show('sect-levels', boot || DEV.bri || DEV.vol); show('row-bri', boot || DEV.bri); show('row-vol', boot || DEV.vol);
+  show('sect-net-fw', boot); show('sect-ipv6', boot); show('sect-dev-fw', boot); show('sect-l1', hasL1());
+  show('row-voice-always', has('device.voice')); show('row-voice-always-hint', has('device.voice')); show('info-ota-cell', has('ota.firmware'));
+  show('sect-tts', DEV.tts); show('sect-sessions', has('pairing.sessions'));
+  show('sect-peers', has('peers')); show('sect-backup', has('backup')); show('pc-sync', DEV.saves);
+  show('sect-pair', has('pairing.pin')); show('sect-dev-live', has('device.identity'));
+  show('sect-wifi-scan', has('wifi.manage')); show('btn-reboot', has('power'));
+  show('sect-heap', diag); show('sect-logs', diag);
+  show('tile-heap', diag); show('tile-cpu', diag);          // nothing to poll without diag
+  if (!diag) { show('tile-frag', false); show('tile-min', false); }   // with diag, setEsp picks them by dialect
+  const wpc = document.querySelector('#wp-type [data-wptype="console"]'); if (wpc) wpc.hidden = !DEV.wpConsole;
+  show('brain-cmds-card', !brain); show('brain-cmds-arrow', !brain); show('brain-dev-card', brain); show('brain-dev-arrow', brain);
+  // the wording that differs: boot-applied vs live levers, an on-device brain or not, ESP32 vs Linux
+  const html = (id, k) => { const el = $(id); if (el && el.getAttribute('data-i18n-html') !== k) { el.setAttribute('data-i18n-html', k); el.innerHTML = T(k); } };
+  html('bri-vol-hint', live ? 'briVolHintLive' : 'briVolHint');
+  html('disp-hint', DEV.display && !DEV.fw ? 'dispHintLive' : 'dispHint');
+  html('brains-chain-hint', brain ? 'brainsChainHint' : 'brainsChainHintCmds');
+  html('logs-hint', linux ? 'logsHintLinux' : 'logsHint');
+  html('privacy-hint', linux ? 'privacyHintLinux' : 'privacyHint');
+  html('maint-hint', linux ? 'maintenanceHintLinux' : 'maintenanceHint');
+  const ht = $('heap-title'), hk = linux ? 'memRam' : 'heapRegions';
+  if (ht && ht.getAttribute('data-i18n') !== hk) { ht.setAttribute('data-i18n', hk); ht.textContent = T(hk); }
+  // the Updates tab drives the firmware OTA + SD-content install (/api/ota, status.ota/.sdc): ota.firmware only
+  const nav = $$('.nav-item')[TABS.findIndex(([id]) => id === 'updates')]; if (nav) nav.hidden = !updatesTab();
+  const key = JSON.stringify(DEV) + [...CAP].join();       // scenes / toggles / palette follow the feature set
+  if (key !== gatesKey) {
+    gatesKey = key; buildScenes(); buildQuick(); buildActions();
+    if (typeof onLangChanged === 'function') { try { onLangChanged(); } catch {} }
+  }
+}
 
 const T = (k) => I18N.t(k, undefined, 'settings');
 function status(txt, ok = true) { $('status-text').textContent = txt; $('conn-dot').className = 'dot ' + (ok ? 'ok' : 'err'); }
@@ -738,7 +878,17 @@ function api(path, { method = 'GET', query, body } = {}) {
   if (body !== undefined) opt.body = JSON.stringify(body);
   return fetch(url, opt);
 }
-async function apiJson(path, opt) { try { const r = await api(path, opt); return r.ok ? await r.json() : null; } catch { return null; } }
+async function apiJson(path, opt) {
+  try {
+    const r = await api(path, opt);
+    if (r.status === 401) {           // honest 401: the device wants pairing, not "unreachable"
+      try { const d = await r.json(); if (d && (d.error === 'pairing_required' || d.error === 'unpaired')) status(T('pairRequiredMsg'), false); } catch {}
+      return null;
+    }
+    return r.ok ? await r.json() : null;
+  } catch { return null; }
+}
+async function probe(path) { try { const r = await api(path); return answered(r) ? r : null; } catch { return null; } }
 
 // ═══════════ tabs / sidebar ═══════════
 const TABS = [
@@ -751,6 +901,7 @@ function buildSidebar() {
   for (const [id, icon] of TABS) {
     const el = document.createElement('div');
     el.className = 'nav-item' + (id === activeTab ? ' active' : '');
+    if (id === 'updates' && !updatesTab()) el.hidden = true;     // see applyGates
     el.innerHTML = `<span class="ni">${icon}</span><span class="lbl">${T('tab_' + id)}</span>`;
     el.addEventListener('click', () => selectTab(id));
     sb.appendChild(el);
@@ -758,16 +909,20 @@ function buildSidebar() {
 }
 const tabOpened = {};
 function selectTab(id) {
-  activeTab = id;
+  const prevTab = activeTab; activeTab = id;
   $$('.nav-item').forEach((n, i) => n.classList.toggle('active', TABS[i][0] === id));
   $$('.tab-content').forEach((c) => c.classList.toggle('active', c.id === 'tab-' + id));
+  // The sections share one scrolling container: without this, a tab opened already scrolled like the previous one.
+  const main = document.querySelector('main.content');
+  if (main && id !== prevTab) main.scrollTo({ top: 0, behavior: 'instant' });
   if (!tabOpened[id]) { tabOpened[id] = true; onTabFirstOpen(id); }
   if (id === 'diagnostics') refreshLogs();
 }
 function onTabFirstOpen(id) {
   if (id === 'personalization') loadWallpapers();
   if (id === 'diagnostics') refreshHeapDetail();   // selectTab already refreshes the logs on every open
-  if (id === 'device') refreshSessions();
+  if (id === 'device') { refreshSessions(); loadPairing(); loadDevice(); }
+  if (id === 'display') loadLevels();
   if (id === 'updates' && Updates) Updates.check(false);   // respects the 24h TTL; "Check now" forces
   if (id === 'ai') mountPcModelsUI();                      // probes this PC's localhost ports: only once AI is opened
 }
@@ -796,43 +951,71 @@ const fmtB = (b) => b >= 1e9 ? (b / 1e9).toFixed(2) + ' GB' : b >= 1e6 ? (b / 1e
 const fmtUp = (s) => { s |= 0; const d = s / 86400 | 0, h = s % 86400 / 3600 | 0, m = s % 3600 / 60 | 0; return d ? `${d}g ${h}h` : h ? `${h}h ${m}m` : m ? `${m}m ${s % 60}s` : `${s}s`; };
 
 let lastStatus = null, lastUpdateAt = 0, everReached = false;
+const netModeLabel = (m) => m === 'sta' ? T('netModeSta') : m === 'usb' ? T('netModeUsb') : m ? String(m).toUpperCase() : T('netModeNone');
 function renderStatus(s) {
   lastStatus = s; everReached = true; lastUpdateAt = Date.now();
+  const fw = !!(s.ota && typeof s.ota.running === 'string');
+  if (fw !== DEV.fw) { DEV.fw = fw; applyGates(); }
   // Updates tab: the installed-version cell rides every status sample (the tab may have rendered
   // before the first snapshot landed).
   { const uc = $('up-cur'); if (uc && s.version) uc.textContent = s.version; }
   try { if (Updates) Updates.renderSdc(); } catch {}   // the SD-content section follows every sample too
-  const net = s.network || {}, st = s.storage || {};
-  // hero verdict
+  const net = s.network || {}, st = s.storage || {}, mem = s.mem || {};
+  // hero verdict: the ESP32's heap watermark / arbiter, or the Linux memory pressure
   const minFree = s.min_free_heap ?? 0, busy = s.arbiter && s.arbiter.busy;
   let level = 'ok', icon = '🟢', title = T('online');
   if (busy) { level = 'warn'; icon = '🟡'; title = T('busy'); }
   if (minFree && minFree < 8000) { level = 'warn'; icon = '🟡'; title = T('heapTight'); }
+  if ((mem.used_pct || 0) >= 90) { level = 'warn'; icon = '🟡'; title = T('memTight'); }
   $('hero-dot').className = 'verdict-dot ' + (level === 'ok' ? '' : level); $('hero-dot').textContent = icon;
-  $('hero-title').textContent = (net.ssid ? net.ssid : 'NucleoOS');
-  $('hero-net').innerHTML = `<b>${(net.mode || '').toUpperCase()}</b> · ${net.ip || '—'} · ${T('uptime')} <b>${fmtUp(s.uptime_s)}</b> · ${title}`;
+  // The title is the device's own name where it reports one (Handheld), else the network as before. The
+  // network line is built from nodes: an SSID is chosen by whoever set the network up, never markup.
+  const dev = s.device || {};
+  $('hero-title').textContent = dev.name || net.ssid || 'NucleoOS';
+  const hn = $('hero-net'), bold = (t) => { const b = document.createElement('b'); b.textContent = t; return b; };
+  hn.textContent = '';
+  hn.append(bold(netModeLabel(net.mode) + (dev.name && net.ssid ? ' ' + net.ssid : '')), ` · ${net.ip || '—'} · ${T('uptime')} `,
+            bold(fmtUp(s.uptime_s)), ` · ${title}`);
   // network tab
-  $('net-mode') && ($('net-mode').textContent = (net.mode || '—').toUpperCase());
+  $('net-mode') && ($('net-mode').textContent = net.mode ? netModeLabel(net.mode) : '—');
   $('net-ssid') && ($('net-ssid').textContent = net.ssid || '—');
   $('net-ip') && ($('net-ip').textContent = net.ip || '—');
-  $('net-time') && ($('net-time').textContent = net.time ? new Date(net.time * 1000).toLocaleString() : (net.time_synced ? 'sync' : '—'));
+  $('net-time') && ($('net-time').textContent = net.time ? new Date(net.time * 1000).toLocaleString() : (net.time_synced ? T('timeSynced') : T('timeNotSynced')));
   // about / tiles
   $('info-ip').textContent = net.ip || location.hostname || '—'; $('info-ip').className = 'iv ok';
-  $('info-uptime').textContent = fmtUp(s.uptime_s); $('info-ver').textContent = (s.os || 'NucleoOS') + ' v' + (s.version || '0.1.0');
-  $('info-ota').textContent = s.ota ? `${s.ota.running} · ${s.ota.state}` : '—';
+  $('info-uptime').textContent = fmtUp(s.uptime_s); $('info-ver').textContent = s.version ? (s.os || 'NucleoOS') + ' v' + s.version : '—';
+  $('info-ota').textContent = fw ? `${s.ota.running} · ${s.ota.state}` : '—';
   $('info-apps').textContent = s.apps ? String(s.apps.installed) : '—';
+  $('info-board').textContent = [dev.board, dev.panel].filter(Boolean).join(' · ') || (fw ? 'Device' : '—');
+  $('info-chip').textContent = [(dev.soc || '').toUpperCase(), dev.arch, dev.kernel && 'Linux ' + String(dev.kernel).split('-')[0]].filter(Boolean).join(' · ') || (fw ? 'ESP32-S3' : '—');
   const used = (st.total_bytes || 0) - (st.free_bytes || 0);
-  $('info-sd').textContent = st.mounted ? `${fmtB(st.free_bytes)} ${T('free')} / ${fmtB(st.total_bytes)}` : T('notMounted');
+  // Every mounted card where the device lists them (Handheld: the second SD with films and music was missing).
+  const cd = s.cards || {}, seen = new Set();
+  const parts = (cd.entries || []).filter((e) => e.id !== 'system' && e.total_bytes > 0 && !seen.has(e.total_bytes + ':' + e.free_bytes) && seen.add(e.total_bytes + ':' + e.free_bytes))
+    .map((e) => `${e.id === 'roms' ? 'ROM' : (cd.sd2_label || 'SD2')}: ${fmtB(e.free_bytes)} ${T('free')} / ${fmtB(e.total_bytes)}`);
+  $('info-sd').textContent = parts.length ? parts.join(' · ') : st.mounted ? `${fmtB(st.free_bytes)} ${T('free')} / ${fmtB(st.total_bytes)}` : T('notMounted');
   $('tile-up').querySelector('.tv').textContent = fmtUp(s.uptime_s);
   $('tile-sd').querySelector('.tv').textContent = st.mounted ? fmtB(st.free_bytes) : T('na');
   $('tile-sd-sub').textContent = st.mounted ? `${st.fs} · ${fmtB(used)} ${T('used')}` : '';
   const sdPct = st.total_bytes ? 100 * used / st.total_bytes : 0;
   setTileBand('tile-sd', sdPct > 90 ? 'bad' : sdPct > 75 ? 'warn' : 'ok');
-  // min-free watermark tile
+  // min-free watermark tile (ESP32 only — hidden on Linux, see setEsp)
   $('tile-min').querySelector('.tv').textContent = minFree ? fmtB(minFree) : T('na');
   setTileBand('tile-min', minFree && minFree < 6000 ? 'bad' : minFree && minFree < 12000 ? 'warn' : 'ok');
 }
+// /api/heap has two dialects: ESP32 {internal:{free_bytes,frag_pct,...}} and Linux {total,free,available,
+// swap_total,swap_free,used_pct} (bytes). The tiles follow the one the device speaks.
+function setEsp(esp) {
+  if (DEV.esp === esp) return;
+  DEV.esp = esp;
+  $('tile-frag').hidden = !esp; $('tile-min').hidden = !esp; $('tile-heap-sub').hidden = !esp;
+  $('tile-heap').querySelector('canvas').hidden = !esp;
+  $('tile-heap').querySelector('.membar').hidden = esp; $('tile-mem-sub').hidden = esp; $('tile-mem-swap').hidden = esp;
+  applyGates();
+}
 function renderHeap(h) {
+  if (!h.internal && typeof h.available === 'number') return renderMem(h);
+  setEsp(true);
   const r = h.internal || {}; const free = r.free_bytes || 0, frag = r.frag_pct ?? 0;
   pushHist('heap', free / 1024); pushHist('frag', frag);
   const tv = $('tile-heap').querySelector('.tv'); tv.innerHTML = (free / 1024).toFixed(0) + ' <small>KB</small>';
@@ -841,7 +1024,34 @@ function renderHeap(h) {
   $('tile-frag').querySelector('.tv').textContent = frag + '%';
   setTileBand('tile-frag', frag > 70 ? 'bad' : frag > 45 ? 'warn' : 'ok');
 }
+function renderMem(h) {
+  setEsp(false);
+  const total = h.total || 0, avail = h.available || 0, used = Math.max(0, total - avail);
+  const pct = h.used_pct ?? (total ? Math.round(used * 100 / total) : 0);
+  const tv = $('tile-heap').querySelector('.tv');
+  tv.innerHTML = fmtB(used) + ' <small>/ ' + fmtB(total) + '</small>';
+  setTileBand('tile-heap', pct >= 90 ? 'bad' : pct >= 75 ? 'warn' : 'ok');
+  const bar = $('tile-mem-bar');
+  if (bar) { bar.style.width = Math.min(100, Math.max(0, pct)) + '%'; bar.style.background = pct >= 90 ? band.bad() : pct >= 75 ? band.warn() : band.ok(); }
+  $('tile-mem-sub').textContent = `${T('memUsed')} ${pct}% · ${T('memAvailable')} ${fmtB(avail)}`;
+  const swapT = h.swap_total || 0, swapUsed = Math.max(0, swapT - (h.swap_free || 0));
+  $('tile-mem-swap').textContent = swapT ? `${T('swapZram')} ${fmtB(swapUsed)} / ${fmtB(swapT)}` : `${T('swapZram')} ${T('na')}`;
+}
+// /api/cpu: ESP32 {load:[core %…], load_avg} or Linux {mhz,governor,load,temp} (load = the 1-min loadavg, a
+// number; the band then follows the SoC temperature: a loadavg has no fixed "100%").
 function renderCpu(c) {
+  const linux = typeof c.load === 'number';
+  $('cpu-cores').hidden = linux; $('tile-cpu-sub').hidden = !linux;
+  if (linux) {
+    const load = c.load;
+    pushHist('cpu', load);
+    const tv = $('tile-cpu').querySelector('.tv'); tv.innerHTML = load.toFixed(2) + ' <small>load</small>';
+    const temp = c.temp || 0;
+    setTileBand('tile-cpu', temp >= 75 ? 'bad' : temp >= 65 ? 'warn' : 'ok');
+    $('tile-cpu-sub').textContent = [(c.mhz ? c.mhz + ' MHz' : ''), c.governor || '', (temp ? temp + '°C' : '')].filter(Boolean).join(' · ');
+    drawSpark($('tile-cpu').querySelector('canvas'), HISTORY.cpu, Math.max(2, ...HISTORY.cpu), temp >= 65 ? band.warn() : band.ok());
+    return;
+  }
   const loads = c.load || []; const n = loads.length || c.cores || 1;
   const avg = c.load_avg ?? (loads.reduce((a, b) => a + b, 0) / (n || 1));
   pushHist('cpu', avg);
@@ -858,14 +1068,20 @@ function renderCpu(c) {
 // minute and watch the fields a re-render actually cares about.
 const statusSig = (d) => !d ? '' : [d.network && d.network.ssid, d.network && d.network.mode, d.network && d.network.ip,
   d.storage && d.storage.free_bytes, d.min_free_heap, Math.floor((d.uptime_s || 0) / 60)].join('|');
-const metricOf = { status: statusSig, heap: (d) => d && d.internal && Math.round((d.internal.free_bytes || 0) / 512), cpu: (d) => d && Math.round(d.load_avg || 0) };
+const metricOf = {
+  status: statusSig,
+  heap: (d) => d && (d.internal ? Math.round((d.internal.free_bytes || 0) / 512) : Math.round((d.available || 0) / 1048576)),
+  cpu: (d) => d && (typeof d.load === 'number' ? Math.round(d.load * 100) : Math.round(d.load_avg || 0)),
+};
 // Embedded in the shell, /api/status is NOT polled here at all: the shell already polls it every
 // 15 s and rebroadcasts the snapshot (status.snapshot, consumed below) — one poller for the whole
 // OS instead of two hammering the same endpoint. Standalone keeps the full rotation.
 const EMBEDDED = window.top !== window.self;
+const POLL = EMBEDDED ? ['heap', 'cpu'] : ['status', 'heap', 'cpu'];   // heap/cpu dropped at boot without diag
 const poller = createPoller({
-  sources: EMBEDDED ? ['heap', 'cpu'] : ['status', 'heap', 'cpu'],
+  sources: POLL,
   fetchJson: async (src) => {
+    if (!src) return null;                                          // nothing left to poll (no diag, embedded)
     const path = src === 'status' ? '/api/status' : src === 'heap' ? '/api/heap' : '/api/cpu';
     const r = await fetch(path, { cache: 'no-store' });            // throws on network error → poller.onError
     if (r.status === 503) return { __status: 503 };
@@ -875,8 +1091,8 @@ const poller = createPoller({
   hidden: () => document.hidden,
   changed: (src, prev, next) => { if (!prev || !next) return true; return metricOf[src](prev) !== metricOf[src](next); },
   crossedThreshold: (src, prev, next) => {
-    if (src !== 'heap' || !next || !next.internal) return false;
-    return (next.internal.free_bytes || 0) < 25000;            // entered warn band → watch closely
+    if (src !== 'heap' || !next) return false;                 // entered warn band → watch closely
+    return next.internal ? (next.internal.free_bytes || 0) < 25000 : (next.used_pct || 0) >= 75;
   },
   onSample: (src, data) => {
     if (data && data.__status === 503) { setLive('busy'); return; }
@@ -910,6 +1126,7 @@ let activeScene = null;
 function buildScenes() {
   const box = $('scene-chips'); box.innerHTML = '';
   for (const s of SCENES) {
+    if (!(s.apiCalls || []).every((c) => epOk(c.path))) continue;   // only the scenes this device can carry out
     const el = document.createElement('div'); el.className = 'chip'; el.dataset.id = s.id;
     el.innerHTML = `<span class="ci">${s.icon}</span><div><div class="cl">${LBL(s)}</div><div class="cd">${LBL(s.desc)}</div></div>`;
     el.addEventListener('click', () => runScene(s.id));
@@ -923,27 +1140,30 @@ async function runScene(id) {
   activeScene = id;
   if (res.selfTest) { selectTab('diagnostics'); runSelfTestUI('dg'); return; }
   status(T('applyingScene') + LBL(res.scene) + '…');
-  model = res.model; toForm();
-  await persistModel();                                   // patch persisted (drift-aware)
+  if (Object.keys(res.patch).length) { model = res.model; toForm(); await persistModel(); }   // patch persisted (drift-aware)
+  let failed = 0;
   for (const c of res.apiCalls) {                         // SEQUENTIAL — never parallel
-    try { await api(c.path, { method: c.method, query: c.query, body: c.body }); } catch {}
+    try { const r = await api(c.path, { method: c.method, query: c.query, body: c.body }); if (!r.ok) failed++; } catch { failed++; }
   }
   await refreshCaps();
+  if (DEV.display || DEV.bri || DEV.vol) await loadLevels();   // the sliders show what the device really has
   syncQuickToggles();
-  status(T('sceneApplied') + LBL(res.scene));
+  if (failed) status(T('consoleRefused'), false);
+  else status(T('sceneApplied') + LBL(res.scene));
 }
 
 // ═══════════ quick toggles ═══════════
 const QUICK = [
-  { id: 'screen', icon: '📺', label: () => T('screen'), get: () => screenOn, set: toggleScreen },
-  { id: 'voice', icon: '🎙️', label: () => T('voiceAlways'), get: () => !!(model.voice && model.voice.alwaysOn), set: toggleVoiceAlways },
-  { id: 'l1', icon: '🧠', label: () => T('offlineBrain'), get: () => caps.l1Serving, sub: () => caps.l1Mode, set: cycleL1 },
-  { id: 'tts', icon: '🔊', label: () => T('tts'), get: () => ttsState.enabled, set: toggleTts },
-  { id: 'theme', icon: '🌙', label: () => T('theme'), get: () => model.ui.theme === 'dark', sub: () => model.ui.theme, set: toggleTheme },
+  { id: 'screen', icon: '📺', ep: '/api/display', label: () => T('screen'), get: () => screenOn, set: toggleScreen },
+  { id: 'voice', icon: '🎙️', ep: '/api/voice/always', label: () => T('voiceAlways'), get: () => !!(model.voice && model.voice.alwaysOn), set: toggleVoiceAlways },
+  { id: 'l1', icon: '🧠', ep: '/api/anima/l1', label: () => T('offlineBrain'), get: () => caps.l1Serving, sub: () => caps.l1Mode, set: cycleL1 },
+  { id: 'tts', icon: '🔊', ep: '/api/tts', label: () => T('tts'), get: () => ttsState.enabled, set: toggleTts },
+  { id: 'theme', icon: '🌙', label: () => T('theme'), get: () => model.ui.theme === 'dark', sub: () => model.ui.theme === 'dark' ? T('themeDark') : T('themeLight'), set: toggleTheme },
 ];
 function buildQuick() {
   const box = $('quick-grid'); box.innerHTML = '';
   for (const q of QUICK) {
+    if (q.ep && !epOk(q.ep)) continue;                    // a lever this device does not have
     const el = document.createElement('button'); el.className = 'qtoggle'; el.dataset.id = q.id;
     el.innerHTML = `<span class="qi">${q.icon}</span><span class="qt"><span class="ql">${q.label()}</span><span class="qs"></span></span>`;
     el.addEventListener('click', async () => { el.classList.add('busy'); try { await q.set(); } finally { el.classList.remove('busy'); syncQuickToggles(); } });
@@ -958,8 +1178,17 @@ function syncQuickToggles() {
     el.querySelector('.qs').textContent = q.sub ? q.sub() : (on ? T('on') : T('off'));
   }
 }
-async function toggleScreen() { const want = !screenOn; const r = await apiJson('/api/display', { method: 'POST', query: { on: want ? 1 : 0 } }); if (r) { screenOn = r.on; status(screenOn ? T('screenOnMsg') : T('screenOffMsg')); } updateScreenUI(); }
-function updateScreenUI() { const b = $('disp-toggle'), s = $('disp-state'); if (b) b.textContent = screenOn ? '⏻ ' + T('turnOff') : '⏻ ' + T('turnOn'); if (s) s.textContent = screenOn ? T('screenOnState') : T('screenOffState'); }
+// One request for both: the Cardputer reads ?on=0|1 (and never reports the panel, so the label is the last
+// action); the Handheld reads the body, and turning on restores the slider's brightness (read from the device).
+async function toggleScreen() {
+  const want = !screenOn;
+  const body = DEV.display ? (want ? { on: true, brightness: +$('pw-bri').value || 60 } : { on: false }) : undefined;
+  const r = await apiJson('/api/display', { method: 'POST', query: { on: want ? 1 : 0 }, body });
+  if (r && r.ok !== false) { screenOn = typeof r.on === 'boolean' ? r.on : want; screenDimmed = false; status(screenOn ? T('screenOnMsg') : T('screenOffMsg')); }
+  else status(T('consoleRefused'), false);
+  updateScreenUI();
+}
+function updateScreenUI() { const b = $('disp-toggle'), s = $('disp-state'); if (b) b.textContent = screenOn ? '⏻ ' + T('turnOff') : '⏻ ' + T('turnOn'); if (s) s.textContent = !screenOn ? T(DEV.display ? 'screenOffStateLive' : 'screenOffState') : screenDimmed ? T('screenDimState') : T(DEV.display ? 'screenOnStateLive' : 'screenOnState'); }   // Live: read from the device, not the last action
 async function toggleVoiceAlways() {
   const on = !(model.voice && model.voice.alwaysOn);
   if (!model.voice) model.voice = {}; model.voice.alwaysOn = on;
@@ -971,7 +1200,7 @@ async function toggleVoiceAlways() {
 async function cycleL1() { const next = caps.l1Mode === 'auto' ? 'on' : caps.l1Mode === 'on' ? 'off' : 'auto'; await setL1(next); }
 async function setL1(mode) { const r = await apiJson('/api/anima/l1', { method: 'POST', body: { mode } }); if (r) { caps.l1Mode = r.l1Mode; caps.l1Serving = r.l1Serving; paintL1(); status(T('offlineBrainMsg') + r.l1Mode); } }
 const ttsState = { enabled: false, available: false, speed: 110, smin: 70, smax: 160, sstep: 5 };
-async function toggleTts() { const r = await apiJson('/api/tts', { method: 'POST', body: { enabled: !ttsState.enabled } }); if (r) { ttsState.enabled = r.enabled; ttsState.available = r.available; paintTts(); } }
+async function toggleTts() { const r = await apiJson('/api/tts', { method: 'POST', body: { enabled: !ttsState.enabled } }); if (r) { ttsState.enabled = !!r.enabled; if ('available' in r) ttsState.available = !!r.available; paintTts(); } }
 function toggleTheme() { model.ui.theme = model.ui.theme === 'dark' ? 'light' : 'dark'; applyLiveUI(); persistUiSoon(); }
 
 // ═══════════ self-test UI ═══════════
@@ -980,6 +1209,7 @@ async function runSelfTestUI(prefix) {
   list.innerHTML = ''; stat.textContent = T('testing'); copy.disabled = true;
   const rows = {};
   for (const ep of ENDPOINTS) {
+    if (ep.cap && !has(ep.cap)) continue;                 // not on this device: not asked (runSelfTest skips it too)
     const el = document.createElement('div'); el.className = 'st-item';
     el.innerHTML = `<span class="sm run">…</span><span class="sl">${ep[lang] || ep.en}</span><span class="sp">${ep.path}</span><span class="ss"></span>`;
     list.appendChild(el); rows[ep.key] = el;
@@ -989,7 +1219,7 @@ async function runSelfTestUI(prefix) {
   const wasFrozen = poller.frozen;
   if (!wasFrozen) poller.setFrozen(true);
   let results;
-  try { results = await runSelfTest((p, o) => fetch(p, o), { now: () => performance.now(), lang }); }
+  try { results = await runSelfTest((p, o) => fetch(p, o), { now: () => performance.now(), lang, has }); }
   finally { if (!wasFrozen) poller.setFrozen(false); }
   for (const r of results) {
     const el = rows[r.key]; if (!el) continue;
@@ -1012,13 +1242,14 @@ let cmdActions = [], cmdSel = 0, cmdFiltered = [];
 function buildActions() {
   cmdActions = buildActionRegistry({
     nav: selectTab,
-    api: (p, o) => api(p, o).then(() => status('✓ ' + p)).catch(() => status(T('unreachable'), false)),
+    // fetch resolves on a 502 too: r.ok decides, or a refused command said "✓"
+    api: (p, o) => api(p, o).then((r) => { status(r.ok ? '✓ ' + p : T('consoleRefused'), r.ok); if (DEV.display || DEV.bri || DEV.vol) return loadLevels(); }).catch(() => status(T('unreachable'), false)),
     reboot: () => $('reboot-modal') && openReboot(),
     selfTest: () => { selectTab('control'); runSelfTestUI('cc'); },
     applyScene: runScene,
     scanWifi: scanWifi,
     toast: status,
-  });
+  }).filter((a) => [].concat(a.ep || []).every(epOk));     // only what this device can carry out
 }
 function openCmd() { $('cmd-scrim').classList.add('show'); $('cmd-input').value = ''; renderCmd(''); $('cmd-input').focus(); }
 function closeCmd() { $('cmd-scrim').classList.remove('show'); }
@@ -1058,30 +1289,49 @@ async function scanWifi() {
   const stat = $('wifi-scan-stat'), list = $('wifi-list'); stat.textContent = T('scanning'); list.innerHTML = '';
   const d = await apiJson('/api/wifi/scan'); stat.textContent = '';
   if (!d || !Array.isArray(d.networks)) { stat.textContent = T('unreachable'); return; }
+  // An empty list needs a status line, or the button looks dead; and "no radio" (radio:false, a Wi-Fi
+  // dongle that is unplugged) is not "no network around here".
+  if (!d.networks.length) { stat.textContent = d.radio === false ? T('netNoRadio') : T('netNone'); return; }
   const cur = lastStatus && lastStatus.network ? lastStatus.network.ssid : '';
-  d.networks.sort((a, b) => (b.rssi || -999) - (a.rssi || -999));
+  const pct = (ap) => typeof ap.signal === 'number' ? Math.max(0, Math.min(100, ap.signal)) : null;
+  d.networks.sort((a, b) => (!!b.active - !!a.active) || ((pct(b) ?? b.rssi ?? -999) - (pct(a) ?? a.rssi ?? -999)));
   for (const ap of d.networks) {
-    const conn = ap.ssid && ap.ssid === cur;
-    const strength = ap.rssi >= -55 ? 4 : ap.rssi >= -67 ? 3 : ap.rssi >= -78 ? 2 : 1;
+    const conn = ap.active || (ap.ssid && ap.ssid === cur);
+    const sig = pct(ap);
+    const strength = sig !== null ? (sig >= 75 ? 4 : sig >= 50 ? 3 : sig >= 30 ? 2 : 1)
+      : (ap.rssi >= -55 ? 4 : ap.rssi >= -67 ? 3 : ap.rssi >= -78 ? 2 : 1);
     const bars = [6, 9, 12, 16].map((h, i) => `<i style="height:${h}px;${i < strength ? 'background:var(--accent)' : ''}"></i>`).join('');
+    const sub = sig !== null ? (ap.secured ? '🔒 ' + T('netSecured') : T('netOpen')) : `${ap.auth || ''} · ch ${ap.channel || '?'}`;
+    const right = sig !== null ? T('netSignal') + ' ' + sig + '%' : `${ap.rssi} dBm`;
     const el = document.createElement('div'); el.className = 'ap' + (conn ? ' connected' : '');
-    el.innerHTML = `<span class="bars">${bars}</span><div style="flex:1;min-width:0"><div style="font-weight:600;overflow:hidden;text-overflow:ellipsis">${ap.ssid ? esc(ap.ssid) : T('hiddenNet')} ${conn ? '· <span style="color:var(--accent)">' + T('connectedF') + '</span>' : ''}</div><div class="as">${esc(ap.auth || '')} · ch ${esc(ap.channel || '?')}</div></div><span class="as">${esc(ap.rssi)} dBm</span>`;
+    el.innerHTML = `<span class="bars">${bars}</span><div style="flex:1;min-width:0"><div style="font-weight:600;overflow:hidden;text-overflow:ellipsis">${ap.ssid ? esc(ap.ssid) : T('hiddenNet')} ${conn ? '· <span style="color:var(--accent)">' + T('connectedF') + '</span>' : ''}</div><div class="as">${esc(sub)}</div></div><span class="as">${esc(right)}</span>`;
     list.appendChild(el);
   }
 }
 $('wifi-scan').addEventListener('click', scanWifi);
+$('wifi-open').addEventListener('click', () => { try { window.parent.postMessage({ type: 'open-app', id: 'wifi-scanner' }, '*'); } catch {} });
 
 // ═══════════ diagnostics: heap detail + logs ═══════════
 async function refreshHeapDetail() {
+  if (!has('diag')) return;
   const grid = $('heap-grid'); const h = await apiJson('/api/heap');
   if (!h) { grid.innerHTML = `<div class="hint" style="padding:6px">${T('unreachable')}</div>`; return; }
   const cell = (l, v) => `<div class="info-cell"><div class="il">${l}</div><div class="iv">${v}</div></div>`;
+  if (!h.internal && typeof h.available === 'number') {   // Linux memory
+    const total = h.total || 0, avail = h.available || 0, used = Math.max(0, total - avail);
+    const pct = h.used_pct ?? (total ? Math.round(used * 100 / total) : 0);
+    grid.innerHTML = cell(T('memTotal'), fmtB(total)) + cell(T('memUsed'), `${fmtB(used)} (${pct}%)`)
+      + cell(T('memAvailable'), fmtB(avail)) + cell(T('memFree'), fmtB(h.free || 0))
+      + cell(T('swapZram'), fmtB(Math.max(0, (h.swap_total || 0) - (h.swap_free || 0))) + ' / ' + fmtB(h.swap_total || 0));
+    return;
+  }
   const r = h.internal || {};
   grid.innerHTML = cell(T('heapInternalFree'), fmtB(r.free_bytes || 0)) + cell(T('heapMaxBlock'), fmtB(r.largest_free_block || 0))
     + cell(T('fragmentation'), (r.frag_pct ?? 0) + '%') + cell(T('minHist'), fmtB(r.min_free_bytes || 0))
     + cell(T('heapDmaFree'), fmtB((h.dma || {}).free_bytes || 0)) + cell(T('heapHttpdStack'), fmtB(h.httpd_stack_free_min || 0));
 }
 async function refreshLogs() {
+  if (!has('diag')) return;
   const box = $('logbox'); try { const r = await fetch('/api/logs', { cache: 'no-store' }); box.textContent = r.ok ? (await r.text()) || T('emptyParen') : T('unreachable'); } catch { box.textContent = T('unreachable'); }
 }
 $('logs-refresh').addEventListener('click', refreshLogs);
@@ -1125,7 +1375,8 @@ function retitle() {
   $('brand').textContent = T('appTitle'); buildSidebar();
   $('cmd-trigger-t').textContent = T('cmdPlaceholder'); $('cmd-input').placeholder = T('cmdPlaceholder');
   // re-render dynamic labels
-  buildScenes(); buildQuick();
+  buildScenes(); buildQuick(); updateScreenUI();
+  if (typeof onLangChanged === 'function') { try { onLangChanged(); } catch {} }   // AI profiles were drawn once
   $('t-pulse') && ($('t-pulse').firstChild.textContent = T('pulse') + ' ');
   $('t-scenes') && ($('t-scenes').firstChild.textContent = T('scenes') + ' ');
   $('t-quick') && ($('t-quick').firstChild.textContent = T('quickToggles') + ' ');
@@ -1259,16 +1510,18 @@ function wpNormalize(w) {
   if (w && typeof w === 'object') {
     if (w.type === 'gradient' && w.gradient) return { type: 'gradient', gradient: String(w.gradient) };
     if (w.type === 'color' && w.color) return { type: 'color', color: String(w.color) };
+    if (w.type === 'console') return { type: 'console' };
     if (w.type === 'image' && w.path) return { type: 'image', path: String(w.path), fit: ['cover', 'contain', 'center', 'tile'].includes(w.fit) ? w.fit : 'cover' };
   }
   return { ...WP_DEFAULT };
 }
 function wpApply() { try { window.parent.postMessage({ type: 'set-wallpaper', wallpaper: wpModel }, '*'); } catch {} }
 function wpShowPane() {
-  for (const t of ['gradient', 'color', 'image']) { const pane = $('wp-pane-' + t); if (pane) pane.hidden = (t !== wpView); }
+  for (const t of ['console', 'gradient', 'color', 'image']) { const pane = $('wp-pane-' + t); if (pane) pane.hidden = (t !== wpView); }
   $$('#wp-type .seg-item').forEach((el) => el.classList.toggle('active', el.dataset.wptype === wpView));
 }
 function wpMarkActive() {
+  $$('#wp-console .wp-item').forEach((el) => el.classList.toggle('active', wpModel.type === 'console' && el.dataset.v === wpConsoleVal));
   $$('#wp-gradients .wp-tile').forEach((el) => el.classList.toggle('active', wpModel.type === 'gradient' && el.dataset.grad === wpModel.gradient));
   $$('#wp-colors .wp-tile').forEach((el) => el.classList.toggle('active', wpModel.type === 'color' && el.dataset.color === wpModel.color));
   $$('#wp-container .wp-item').forEach((el) => el.classList.toggle('active', wpModel.type === 'image' && el.dataset.path === wpModel.path));
@@ -1308,6 +1561,38 @@ async function wpLoadGallery() {
     wpMarkActive();
   } catch { container.innerHTML = `<div class="hint" style="padding:10px">${T('unreachable')}</div>`; }
 }
+// The device's own wallpapers (Handheld: the built-ins of /api/wallpaper/builtin and "None"). The choice
+// goes to the device, which owns that wallpaper: that is how the console and the browser stay the same.
+// Asked only where the device has its own wallpapers (wallpaper.device).
+let wpConsoleVal = '';
+async function wpLoadConsole() {
+  const box = $('wp-console'); if (!box || !has('wallpaper.device')) return;
+  const r = await probe('/api/wallpaper');
+  let info = null; try { info = r && r.ok ? await r.json() : null; } catch {}
+  DEV.wpConsole = !!(info && Array.isArray(info.builtin) && info.builtin.length);
+  applyGates();
+  if (!DEV.wpConsole) { if (wpView === 'console') { wpView = 'gradient'; wpShowPane(); } return; }
+  wpConsoleVal = info.value || '';
+  box.innerHTML = '';
+  const items = info.builtin.map((n) => ({ v: 'builtin:' + n, name: T('wp_' + n), img: `/api/wallpaper/builtin?name=${encodeURIComponent(n)}` }));
+  items.push({ v: 'none', name: T('wpNone'), img: '' });
+  // a photo chosen on the device itself: shown, and chosen from there
+  if (wpConsoleVal && wpConsoleVal !== 'none' && !wpConsoleVal.startsWith('builtin:') && info.url)
+    items.push({ v: wpConsoleVal, name: wpConsoleVal.split('/').pop(), img: info.url });
+  for (const it of items) {
+    const el = document.createElement('div'); el.className = 'wp-item'; el.dataset.v = it.v;
+    if (it.img) el.style.backgroundImage = `url("${it.img}")`; else el.style.background = 'var(--panel2)';
+    const nm = document.createElement('div'); nm.className = 'wp-name'; nm.textContent = it.name; el.appendChild(nm);
+    el.addEventListener('click', async () => {
+      const r = await apiJson('/api/wallpaper', { method: 'POST', body: { value: it.v } });
+      if (!r || !r.ok) { status(T('consoleRefused'), false); return; }
+      wpConsoleVal = r.value || it.v;
+      wpModel = { type: 'console' }; wpApply(); wpMarkActive();
+    });
+    box.appendChild(el);
+  }
+  wpMarkActive();
+}
 function wpWire() {
   if (wpWired) return; wpWired = true;
   $$('#wp-type .seg-item').forEach((el) => el.addEventListener('click', () => { wpView = el.dataset.wptype; wpShowPane(); wpMarkActive(); }));
@@ -1324,19 +1609,102 @@ async function loadWallpapers() {          // lazy: called when the Personalizat
   catch {}
   wpView = wpModel.type;
   wpShowPane(); wpMarkActive();
+  await wpLoadConsole();                    // may turn a "console" view back into the gradient one
   wpLoadGallery();
 }
 
 // ═══════════ display / device forms ═══════════
 $('disp-toggle').addEventListener('click', toggleScreen);
-$('pw-bri').addEventListener('input', (e) => { $('pw-bri-v').textContent = e.target.value + '%'; model.power.display_brightness = +e.target.value; setDirty(true); });
-$('pw-vol').addEventListener('input', (e) => { $('pw-vol-v').textContent = e.target.value + '%'; model.power.volume = +e.target.value; setDirty(true); });
-$$('#tab-device input, #tab-network input[type=checkbox]').forEach((el) => el.addEventListener('input', () => { fromForm(); setDirty(true); }));
+// Brightness / volume: where the device answers /api/brightness and /api/volume (Handheld) they go to it
+// while the slider moves, like its own keys (after a short pause: one drag is ONE request, not forty) and it
+// keeps them ("kept"). On the Cardputer they are settings.json values its firmware applies at the next boot.
+$('pw-bri').addEventListener('input', (e) => { $('pw-bri-v').textContent = e.target.value + '%'; if (DEV.bri) sendLevel('bri'); else { model.power.display_brightness = +e.target.value; setDirty(true); } });
+$('pw-vol').addEventListener('input', (e) => { $('pw-vol-v').textContent = e.target.value + '%'; if (DEV.vol) sendLevel('vol'); else { model.power.volume = +e.target.value; setDirty(true); } });
+$$('#sect-dev-fw input, #sect-net-fw input, #sect-ipv6 input').forEach((el) => el.addEventListener('input', () => { fromForm(); setDirty(true); }));
+const LEVELS = { bri: { path: '/api/brightness', el: 'pw-bri', out: 'pw-bri-v' }, vol: { path: '/api/volume', el: 'pw-vol', out: 'pw-vol-v' } };
+const levelTimer = {};
+function paintLevel(k, v) {
+  const L = LEVELS[k]; $(L.el).disabled = false;
+  if (typeof v !== 'number' || v < 0) { $(L.out).textContent = '—'; return; }
+  $(L.el).value = v; $(L.out).textContent = v + '%';
+}
+async function loadLevels() {
+  if (!DEV.display && !DEV.bri && !DEV.vol) return;
+  if (DEV.display) {
+    const d = await apiJson('/api/display');
+    if (d) {
+      // The slider shows the CHOSEN brightness (the one the device keeps and restores), not the current one:
+      // dimmed for inactivity the panel is at 10%.
+      const chosen = d.level > 0 ? d.level : d.brightness > 0 ? d.brightness : -1;
+      screenOn = !!d.on; screenDimmed = screenOn && d.level > 0 && d.brightness < d.level;
+      if (DEV.bri) paintLevel('bri', chosen);
+    }
+  } else if (DEV.bri) { const b = await apiJson('/api/brightness'); if (b) paintLevel('bri', b.level > 0 ? b.level : b.value); }
+  if (DEV.vol) { const v = await apiJson('/api/volume'); if (v) paintLevel('vol', v.value); }
+  updateScreenUI();
+}
+function sendLevel(k) {
+  clearTimeout(levelTimer[k]);
+  levelTimer[k] = setTimeout(async () => {
+    const L = LEVELS[k], st = $('lv-stat');
+    const r = await apiJson(L.path, { method: 'POST', body: { value: +$(L.el).value } });
+    if (!r || !r.ok) { st.textContent = T('consoleRefused'); return; }
+    if (k === 'bri') { screenOn = true; screenDimmed = false; updateScreenUI(); syncQuickToggles(); }
+    st.textContent = r.kept ? T('appliedConsole') : T('levelUntilReboot');
+  }, 200);
+}
+
+// Live identity (Handheld /api/device): the system's real host name and time zone, applied at once.
+const DEV_NAME_RE = /^[A-Za-z0-9][A-Za-z0-9-]{0,31}$/;
+let devInfo = null;
+function devChanged() { return !!devInfo && ($('dev-live-name').value.trim() !== devInfo.name || $('dev-live-tz').value !== devInfo.timezone); }
+function paintDevice(d) {
+  devInfo = { name: d.name || '', timezone: d.timezone || '' };
+  $('dev-live-name').value = devInfo.name; $('dev-live-name').disabled = false;
+  const sel = $('dev-live-tz');
+  if (Array.isArray(d.zones)) {
+    const zones = d.zones.slice();
+    if (devInfo.timezone && !zones.includes(devInfo.timezone)) zones.unshift(devInfo.timezone);
+    if (!zones.includes('Etc/UTC')) zones.push('Etc/UTC');
+    const groups = {};
+    for (const z of zones) { const a = z.split('/')[0]; (groups[a] = groups[a] || []).push(z); }
+    sel.innerHTML = '';
+    for (const a of Object.keys(groups).sort()) {
+      const og = document.createElement('optgroup'); og.label = a;
+      for (const z of groups[a]) { const o = document.createElement('option'); o.value = z; o.textContent = z.slice(a.length + 1).replace(/_/g, ' ').replace(/\//g, ' › '); og.appendChild(o); }
+      sel.appendChild(og);
+    }
+  }
+  sel.value = devInfo.timezone; sel.disabled = !sel.options.length;
+  $('dev-apply').disabled = true;
+}
+async function loadDevice() {
+  if (!has('device.identity')) return;
+  const d = await apiJson('/api/device', { query: { zones: 1 } });
+  if (d) paintDevice(d); else $('dev-stat').textContent = T('unreachable');
+}
+async function applyDevice() {
+  const st = $('dev-stat'), name = $('dev-live-name').value.trim(), tz = $('dev-live-tz').value, body = {};
+  if (!devInfo) return;
+  if (name !== devInfo.name) { if (!DEV_NAME_RE.test(name)) { st.textContent = T('deviceNameBad'); return; } body.name = name; }
+  if (tz !== devInfo.timezone) body.timezone = tz;
+  if (!Object.keys(body).length) return;
+  $('dev-apply').disabled = true; st.textContent = '…';
+  let r = null;
+  try { const res = await api('/api/device', { method: 'POST', body }); r = await res.json(); } catch {}
+  if (!r) { st.textContent = T('unreachable'); devCheck(); return; }
+  paintDevice(Object.assign({}, r, { zones: null }));
+  st.textContent = r.ok ? T('appliedConsole') : T('consoleRefused');
+}
+function devCheck() { $('dev-apply').disabled = !devChanged(); $('dev-stat').textContent = ''; }
+$('dev-live-name').addEventListener('input', devCheck);
+$('dev-live-tz').addEventListener('change', devCheck);
+$('dev-apply').addEventListener('click', applyDevice);
 
 function toForm() {
   $('dev-name').value = model.device.name; $('dev-locale').value = model.device.locale; $('dev-tz').value = model.device.timezone;
-  $('pw-bri').value = model.power.display_brightness; $('pw-bri-v').textContent = model.power.display_brightness + '%';
-  $('pw-vol').value = model.power.volume ?? 70; $('pw-vol-v').textContent = (model.power.volume ?? 70) + '%';
+  if (!DEV.bri) { $('pw-bri').value = model.power.display_brightness; $('pw-bri-v').textContent = model.power.display_brightness + '%'; }   // live: the device's own value
+  if (!DEV.vol) { $('pw-vol').value = model.power.volume ?? 70; $('pw-vol-v').textContent = (model.power.volume ?? 70) + '%'; }
   $('net-wifi').checked = !!model.network.wifi.enabled; $('net-ble').checked = !!model.network.ble.enabled;
   $('net-swarm').checked = !!model.network.swarm.enabled; $('net-ipv6').checked = !!(model.network.ipv6 && model.network.ipv6.enabled);
   $('voice-always-on').checked = !!(model.voice && model.voice.alwaysOn);
@@ -1344,7 +1712,8 @@ function toForm() {
 }
 function fromForm() {
   model.device.name = $('dev-name').value.trim() || 'nucleo-01'; model.device.locale = $('dev-locale').value.trim(); model.device.timezone = $('dev-tz').value.trim();
-  model.power.display_brightness = +$('pw-bri').value; model.power.volume = +$('pw-vol').value;
+  if (!DEV.bri) model.power.display_brightness = +$('pw-bri').value;
+  if (!DEV.vol) model.power.volume = +$('pw-vol').value;
   model.network.wifi.enabled = $('net-wifi').checked; model.network.ble.enabled = $('net-ble').checked; model.network.swarm.enabled = $('net-swarm').checked;
   if (!model.network.ipv6) model.network.ipv6 = {}; model.network.ipv6.enabled = $('net-ipv6').checked;
   if (!model.voice) model.voice = {}; model.voice.alwaysOn = $('voice-always-on').checked;
@@ -1403,6 +1772,7 @@ $('reboot-confirm').addEventListener('click', async () => {
 // ═══════════ security / sessions (revoke) ═══════════
 // /api/auth/status reports the live paired-session count; /api/unpair revokes others/all.
 async function refreshSessions() {
+  if (!has('pairing.sessions')) return;
   const a = await apiJson('/api/auth/status');
   const el = $('sec-sessions'); if (el) el.textContent = (a && typeof a.sessions === 'number') ? String(a.sessions) : '—';
 }
@@ -1424,6 +1794,266 @@ $('sec-revoke-all') && $('sec-revoke-all').addEventListener('click', async () =>
   else status(T('revokeFail'), true);
   refreshSessions();
 });
+
+
+// ═══════════ pairing PIN switch (Handheld server: who on the LAN may drive the device) ═══════════
+// GET /api/auth/status → {paired,auth:"open"|"pin",physical}; POST /api/pair/mode {enabled}.
+// Turning it on OR off is allowed only from the console itself (loopback), the USB cable, or a browser
+// already paired with the PIN — anyone else gets 401 {"error":"pairing_required"}. The PIN comes back in
+// the response only to the console itself; everyone else reads it on the console screen or hears it via
+// POST /api/pair/speak.
+let pairBusy = false;
+function paintPair(st) {
+  const en = !!st && st.auth === 'pin';
+  $('pair-enabled').checked = en;
+  $('pair-stat').textContent = !st ? T('unreachable') : en ? (st.paired ? T('pairStatusPaired') : T('pairStatusUnpaired')) : T('pairStatusOpen');
+  $('pair-speak-row').hidden = !en || !has('pairing.speak');
+  if (!en) $('pair-pin-row').hidden = true;
+}
+async function loadPairing() { if (has('pairing.pin')) paintPair(await apiJson('/api/auth/status')); }
+$('pair-enabled').addEventListener('change', async () => {
+  if (pairBusy) return; pairBusy = true;
+  const want = $('pair-enabled').checked;
+  try {
+    const r = await api('/api/pair/mode', { method: 'POST', body: { enabled: want } });
+    const d = await r.json().catch(() => null);
+    if (r.status === 401 && d && d.error === 'pairing_required') status(T(want ? 'pairLocalOnly' : 'pairDenied'), false);
+    else if (r.ok && d && d.ok) {
+      if (want && d.pin) { $('pair-pin-value').textContent = d.pin; $('pair-pin-row').hidden = false; }
+      else $('pair-pin-row').hidden = true;
+      status(want ? T('pairEnabledMsg') : T('pairDisabledMsg'));
+    } else status(T('unreachable'), false);
+  } catch { status(T('unreachable'), false); }
+  finally { pairBusy = false; await loadPairing(); }
+});
+// 429 = read just now (once every 4 s), ok:false = the device could not speak: both used to become
+// "device unreachable", a fault invented in the middle of pairing.
+$('pair-speak').addEventListener('click', async () => {
+  const st = $('pair-speak-stat'); st.textContent = '…';
+  let r = null, code = 0;
+  try { const res = await api('/api/pair/speak', { method: 'POST' }); code = res.status; r = await res.json(); } catch {}
+  st.textContent = r && r.ok ? T('pairSpoken') : code === 429 ? T('pairSpeakWait') : r ? T('pairSpeakNoVoice') : T('unreachable');
+});
+
+// ═══════════ backup / restore / support pack (Handheld server) ═══════════
+// A backup can weigh hundreds of MB: no blob in memory. First a HEAD (same checks as the GET: pairing, a
+// game running) to say why not, then the browser downloads it straight to disk.
+function bkStat(txt, ok = true) { const s = $('bk-stat'); s.textContent = txt; s.style.color = ok ? '' : 'var(--warn)'; }
+function bkError(code, d) {
+  const e = d && d.error;
+  if (code === 401) return T(e === 'pairing_required' && d.hint === 'strict' ? 'backupNeedPair' : 'pairRequiredMsg');
+  if (e === 'game_running') return T('backupGaming');
+  if (e === 'busy') return T('backupBusy');
+  if (code === 413) return T('backupTooBig');
+  if (e === 'not_a_zip' || e === 'not_a_backup' || e === 'invalid_entries' || e === 'corrupt_entry' || e === 'empty_backup') return T('backupInvalid');
+  return T('backupFailed') + (code ? ' (' + code + ')' : '');
+}
+async function bkDownload(path, fallbackName) {
+  let r;
+  try { r = await fetch(path, { method: 'HEAD', cache: 'no-store' }); } catch { bkStat(T('unreachable'), false); return; }
+  if (!r.ok) {
+    // HEAD has no body: the reason comes from the same route as a GET, only when it is a refusal
+    let d = null; try { const g = await fetch(path, { cache: 'no-store' }); if (!g.ok) d = await g.json(); } catch {}
+    bkStat(bkError(r.status, d), false); return;
+  }
+  const cd = r.headers.get('Content-Disposition') || '';
+  const m = /filename="([^"]+)"/.exec(cd);
+  const a = document.createElement('a');
+  a.href = path; a.download = m ? m[1] : fallbackName; a.rel = 'noopener';
+  document.body.appendChild(a); a.click(); a.remove();
+  bkStat(T('backupStarted'));
+}
+$('bk-download').addEventListener('click', () => bkDownload('/api/backup.zip', 'nucleos-backup.zip'));
+$('bk-support').addEventListener('click', () => bkDownload('/api/support.zip', 'nucleos-support.zip'));
+$('bk-restore').addEventListener('click', () => { $('bk-file').value = ''; $('bk-file').click(); });
+$('bk-file').addEventListener('change', async () => {
+  const f = $('bk-file').files && $('bk-file').files[0];
+  if (!f) return;
+  if (f.size > 256 * 1024 * 1024) { bkStat(T('backupTooBig'), false); return; }
+  // Probe BEFORE uploading: a refusal (PIN, game running, busy) arrives as a reason, not as an upload cut
+  // halfway ("unreachable"). 404 = an older server without the probe: try as before.
+  try {
+    const pr = await fetch('/api/backup/restore?probe=1', { cache: 'no-store' });
+    if (!pr.ok && pr.status !== 404) { bkStat(bkError(pr.status, await pr.json().catch(() => null)), false); return; }
+  } catch { bkStat(T('unreachable'), false); return; }
+  if (!confirm(T('backupRestoreConfirm').replace('{name}', f.name))) return;
+  bkStat(T('backupRestoring'));
+  $('bk-restore').disabled = true;
+  try {
+    const r = await fetch('/api/backup/restore', { method: 'POST', body: f, cache: 'no-store', headers: { 'Content-Type': 'application/zip' } });
+    const d = await r.json().catch(() => null);
+    if (!r.ok || !d || !d.ok) { bkStat(bkError(r.status, d), false); return; }
+    let msg = T('backupDone').replace('{n}', d.count);
+    if (d.undo) msg += ' ' + T('backupUndo').replace('{path}', d.undo);
+    if (d.core_restart) msg += ' ' + T('backupCoreRestart');
+    else if (d.restart) msg += ' ' + T('backupRestart');
+    bkStat(msg);
+  } catch { bkStat(T('unreachable'), false); }
+  finally { $('bk-restore').disabled = false; }
+});
+
+// ═══════════ the other NucleoOS consoles on the network (Handheld server) ═══════════
+// /api/peers: a UDP broadcast question and answer, only when Search is pressed. Each row opens that
+// console's web OS.
+async function peersScan() {
+  const st = $('peers-stat'), list = $('peers-list');
+  st.textContent = T('peersSearching'); list.innerHTML = '';
+  let d;
+  try {
+    const r = await fetch('/api/peers', { cache: 'no-store' });
+    if (!r.ok) { st.textContent = r.status === 401 ? T('pairRequiredMsg') : T('peersFail'); return; }
+    d = await r.json();
+  } catch { st.textContent = T('unreachable'); return; }
+  const peers = d.peers || [];
+  st.textContent = peers.length ? T('peersFound').replace('{n}', peers.length) : T('peersNone');
+  for (const p of peers) {
+    const row = document.createElement('div'); row.className = 'row';
+    const lab = document.createElement('label');
+    const b = document.createElement('b'); b.textContent = p.name || p.ip; lab.append(b);
+    const sub = document.createElement('div'); sub.className = 'hint';
+    sub.textContent = [p.model, p.ver ? 'NucleoOS ' + p.ver : '', p.ip].filter(Boolean).join(' · ');
+    lab.append(sub);
+    const ctl = document.createElement('div'); ctl.className = 'ctl';
+    const a = document.createElement('a'); a.href = p.url; a.target = '_blank'; a.rel = 'noopener';
+    const btn = document.createElement('button'); btn.textContent = '↗ ' + T('peersOpen'); a.append(btn);
+    ctl.append(a);
+    row.append(lab, ctl); list.append(row);
+  }
+}
+$('peers-scan').addEventListener('click', peersScan);
+
+// ═══════════ continuous copy of the saves to the PC (Handheld server: /api/saves/manifest + /raw) ═══════════
+// No install: the browser (File System Access, Chrome/Edge) writes into a folder the user picks once, and
+// while this page is open it copies what changed every minute. It needs a secure context: on the LAN's
+// plain http the browser refuses, so the user is pointed to the :8443 address.
+const PC = { dir: null, timer: 0, busy: false };
+function pcStat(txt, ok = true) { const el = $('pc-stat'); el.textContent = txt; el.style.color = ok ? '' : 'var(--warn)'; }
+function pcDb() {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open('nucleos-pcsync', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('kv');
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  });
+}
+async function pcGet(k) {
+  try { const db = await pcDb(); return await new Promise(res => { const q = db.transaction('kv').objectStore('kv').get(k); q.onsuccess = () => res(q.result); q.onerror = () => res(undefined); }); }
+  catch { return undefined; }
+}
+async function pcSet(k, v) {
+  try { const db = await pcDb(); await new Promise(res => { const tx = db.transaction('kv', 'readwrite'); tx.objectStore('kv').put(v, k); tx.oncomplete = res; tx.onerror = res; }); }
+  catch {}
+}
+function pcButtons(state) {     // 'none' | 'on' | 'paused'
+  // data-i18n too: the translation pass (language change, boot) rewrites the text from the attribute
+  const sp = $('pc-pick').querySelector('span'), k = state === 'none' ? 'pcPick' : 'pcChange';
+  sp.dataset.i18n = k; sp.textContent = T(k);
+  $('pc-resume').hidden = state !== 'paused';
+  $('pc-stop').hidden = state !== 'on';
+}
+async function pcSubdir(root, parts) {
+  let d = root;
+  for (const p of parts) d = await d.getDirectoryHandle(p, { create: true });
+  return d;
+}
+async function pcSync() {
+  if (PC.busy || !PC.dir) return;
+  PC.busy = true;
+  try {
+    const r = await fetch('/api/saves/manifest', { cache: 'no-store' });
+    if (!r.ok) { pcStat(r.status === 401 ? T('pairRequiredMsg') : T('pcError').replace('{msg}', r.status), false); return; }
+    const files = (await r.json()).files || [];
+    const idx = (await pcGet('index')) || {};
+    // only what changed since the last copy (the device's date and size)
+    const todo = files.filter(f => { const o = idx[f.sys + '/' + f.path]; return !o || o.m !== f.mtime || o.s !== f.size; });
+    let i = 0, failed = 0;
+    for (const f of todo) {
+      i++;
+      pcStat(T('pcCopying').replace('{i}', i).replace('{n}', todo.length));
+      const g = await fetch('/api/saves/raw?sys=' + encodeURIComponent(f.sys) + '&path=' + encodeURIComponent(f.path), { cache: 'no-store' });
+      if (!g.ok) { failed++; continue; }
+      const blob = await g.blob();
+      const parts = [f.sys].concat(f.path.split('/'));
+      const name = parts.pop();
+      const fh = await (await pcSubdir(PC.dir, parts)).getFileHandle(name, { create: true });
+      const w = await fh.createWritable();
+      await w.write(blob); await w.close();
+      idx[f.sys + '/' + f.path] = { m: f.mtime, s: f.size };
+    }
+    await pcSet('index', idx);
+    const when = new Date().toLocaleTimeString(lang, { hour: '2-digit', minute: '2-digit' });
+    if (!files.length) pcStat(T('pcSyncNone'));
+    else pcStat(T(failed ? 'pcPartial' : 'pcUpToDate').replace('{dir}', PC.dir.name || '…').replace('{n}', files.length)
+                .replace('{f}', failed).replace('{when}', when), !failed);
+  } catch (e) {
+    // the permission may have been withdrawn (folder moved, tab closed)
+    if (e && e.name === 'NotAllowedError') { pcStop(); pcButtons('paused'); }
+    pcStat(T('pcError').replace('{msg}', (e && e.message) || e), false);
+  } finally { PC.busy = false; }
+}
+function pcStart() {
+  clearInterval(PC.timer);
+  PC.timer = setInterval(pcSync, 60000);
+  pcButtons('on');
+  pcSync();
+}
+function pcStop() { clearInterval(PC.timer); PC.timer = 0; }
+async function pcInit() {          // only where the device serves /api/saves/manifest (see probeDevice)
+  if (!('showDirectoryPicker' in window) || !window.isSecureContext) {
+    const u = 'https://' + location.hostname + ':8443' + location.pathname;
+    const el = $('pc-unsupported');
+    el.hidden = false;
+    el.innerHTML = '';
+    el.append(T('pcUnsupported') + ' ');
+    const a = document.createElement('a'); a.href = u; a.textContent = u; a.target = '_blank'; a.rel = 'noopener';
+    el.append(a);
+    $('pc-pick').disabled = true;
+    return;
+  }
+  const h = await pcGet('dir');
+  if (!h) { pcButtons('none'); return; }
+  PC.dir = h;
+  let perm = 'prompt';
+  try { perm = await h.queryPermission({ mode: 'readwrite' }); } catch {}
+  if (perm === 'granted') pcStart();
+  else { pcButtons('paused'); pcStat(T('pcPaused').replace('{dir}', h.name || '…')); }
+}
+$('pc-pick').addEventListener('click', async () => {
+  let h;
+  try { h = await window.showDirectoryPicker({ id: 'nucleos-saves', mode: 'readwrite' }); }
+  catch { return; }                                   // the user closed the picker
+  PC.dir = h;
+  await pcSet('dir', h);
+  await pcSet('index', {});                            // a new folder: copy everything
+  pcStart();
+});
+$('pc-resume').addEventListener('click', async () => {
+  if (!PC.dir) return;
+  let perm = 'denied';
+  try { perm = await PC.dir.requestPermission({ mode: 'readwrite' }); } catch {}
+  if (perm === 'granted') pcStart();
+});
+$('pc-stop').addEventListener('click', () => { pcStop(); pcButtons('paused'); pcStat(T('pcStopped')); });
+
+// ═══════════ one-shot reads for the device features whose state no regular read reveals ═══════════
+// Sequential, through the serial gate. Which features exist comes from CAP; only live state is asked here,
+// and only where the capability is there (the ESP32 firmwares get no request at all from this block).
+let probed = false;
+async function probeDevice() {
+  if (probed) return; probed = true;
+  // the /api/display dialect is known from /api/status (the poller may not have run yet: a hidden page skips its ticks)
+  if (!lastStatus) { const st = await apiJson('/api/status'); if (st && !lastStatus) renderStatus(st); }
+  if (has('device.display') && !DEV.fw) {                 // the firmware's /api/display is POST-only: no state to read
+    const d = await probe('/api/display');
+    if (d && d.ok) { try { DEV.display = typeof (await d.json()).on === 'boolean'; } catch {} }
+  }
+  DEV.bri = has('device.display') && !has('settings.boot');   // live /api/brightness; with settings.boot it is a boot setting
+  DEV.vol = has('device.volume');
+  if (has('games.library')) DEV.saves = !!(await probe('/api/saves/manifest'));
+  applyGates();
+  if (DEV.display || DEV.bri || DEV.vol) await loadLevels();
+  if (DEV.saves) pcInit();
+  if (tabOpened.device) { refreshSessions(); loadPairing(); loadDevice(); }
+}
 
 // ═══════════ ANIMA caps (L1) ═══════════
 function paintL1() { $$('#l1-policy .seg-item').forEach((el) => el.classList.toggle('active', el.dataset.m === caps.l1Mode));
@@ -1449,8 +2079,14 @@ function paintTts() {
   const sl = $('tts-speed'); if (sl) { sl.min = ttsState.smin; sl.max = ttsState.smax; sl.step = ttsState.sstep; sl.value = ttsState.speed; }
   const sv = $('tts-speed-val'); if (sv) sv.textContent = ttsState.speed + '%';
 }
-async function loadTts() { const d = await apiJson('/api/tts'); if (d) { ttsState.enabled = d.enabled; ttsState.available = d.available; if (typeof d.speed === 'number') ttsState.speed = d.speed; if (typeof d.speed_min === 'number') ttsState.smin = d.speed_min; if (typeof d.speed_max === 'number') ttsState.smax = d.speed_max; if (typeof d.speed_step === 'number') ttsState.sstep = d.speed_step; } paintTts(); }
-$('tts-enabled').addEventListener('change', async () => { const d = await apiJson('/api/tts', { method: 'POST', body: { enabled: $('tts-enabled').checked } }); if (d) { ttsState.enabled = d.enabled; ttsState.available = d.available; } paintTts(); syncQuickToggles(); });
+async function loadTts() {
+  let d = null;
+  if (has('device.tts')) { try { const r = await api('/api/tts'); DEV.tts = answered(r); d = r.ok ? await r.json() : null; } catch { DEV.tts = false; } }
+  else DEV.tts = false;
+  applyGates();
+  $('row-tts-speed').hidden = !(d && typeof d.speed === 'number');    // a reading speed only where the device has one
+  if (d) { ttsState.enabled = !!d.enabled; ttsState.available = 'available' in d ? !!d.available : !!d.engine; if (typeof d.speed === 'number') ttsState.speed = d.speed; if (typeof d.speed_min === 'number') ttsState.smin = d.speed_min; if (typeof d.speed_max === 'number') ttsState.smax = d.speed_max; if (typeof d.speed_step === 'number') ttsState.sstep = d.speed_step; } paintTts(); }
+$('tts-enabled').addEventListener('change', async () => { const d = await apiJson('/api/tts', { method: 'POST', body: { enabled: $('tts-enabled').checked } }); if (d) { ttsState.enabled = !!d.enabled; if ('available' in d) ttsState.available = !!d.available; } paintTts(); syncQuickToggles(); });
 // Velocità: aggiornamento etichetta live (input), salvataggio + anteprima udibile al rilascio (change).
 if ($('tts-speed')) {
   $('tts-speed').addEventListener('input', () => { const sv = $('tts-speed-val'); if (sv) sv.textContent = $('tts-speed').value + '%'; });
@@ -1463,7 +2099,15 @@ if ($('tts-speed')) {
     paintTts();
   });
 }
-$('tts-test').addEventListener('click', async () => { const phrase = lang === 'it' ? 'Ciao, sono il tuo Cardputer. Ventitré gradi.' : 'Hello, I am your Cardputer. Twenty-three degrees.'; $('tts-stat').textContent = T('playing'); const d = await apiJson('/api/tts', { method: 'POST', body: { enabled: true, say: phrase, lang } }); if (d) { ttsState.enabled = d.enabled; ttsState.available = d.available; } paintTts(); });
+// One body for both: the Cardputer reads {enabled, say}, the Handheld speaks {text}. ok:false = the device
+// answered but could not speak (no voice engine): not "unreachable", which sent people looking for a network fault.
+$('tts-test').addEventListener('click', async () => {
+  const phrase = T('ttsTestPhrase'); $('tts-stat').textContent = T('playing');
+  const d = await apiJson('/api/tts', { method: 'POST', body: { enabled: true, say: phrase, text: phrase, lang } });
+  if (d) { if ('enabled' in d) ttsState.enabled = !!d.enabled; if ('available' in d) ttsState.available = !!d.available; }
+  paintTts();
+  if (!d) status(T('unreachable'), false); else if (d.ok === false) status(T('ttsUnavailable'), false);
+});
 $('voice-always-on').addEventListener('change', toggleVoiceAlways);
 
 // ═══════════ AI provider panel — shared key manager (shell/ai-keys.js) ═══════════
@@ -1500,7 +2144,7 @@ async function mountPcModelsUI() {
 (function () {
   const stat = $('edge-brain-stat'), btn = $('edge-brain-prep'), prog = $('edge-brain-prog'); if (!stat || !btn) return;
   const ENG = '/apps/anima/local/engine.js';
-  async function refresh() { try { const m = await import(ENG); const cached = await m.packCached(); stat.textContent = cached ? T('edgeCached') : T('edgeNotCached'); stat.style.color = cached ? '#36d399' : 'var(--dim)'; } catch { stat.textContent = T('edgeUnreachable'); } }
+  async function refresh() { stat.textContent = T('checking'); stat.style.color = ''; try { const m = await import(ENG); const cached = await m.packCached(); stat.textContent = cached ? T('edgeCached') : T('edgeNotCached'); stat.style.color = cached ? '#36d399' : 'var(--dim)'; } catch { stat.textContent = T('edgeUnreachable'); } }
   btn.addEventListener('click', async () => { btn.disabled = true; prog.textContent = T('preparing'); try { const m = await import(ENG); await m.prefetchPack((p) => { const mb = p && p.bytes ? (p.bytes / 1048576).toFixed(1) + ' MB' : ''; prog.textContent = (mb + (p && p.count ? ' · ' + p.idx + '/' + p.count : '')) || T('downloading'); }); prog.textContent = T('readyCheck'); prog.style.color = '#36d399'; } catch (e) { prog.textContent = '✗ ' + (e && e.message || e); prog.style.color = '#f87272'; } finally { btn.disabled = false; refresh(); } });
   // On-demand web search in Browser mode (opt-in; default off = recall-only, nothing leaves the device).
   const web = $('edge-web-on');
@@ -1510,6 +2154,7 @@ async function mountPcModelsUI() {
   const WS = '/apps/anima/local/webstore.js', kb = $('edge-kb-count'), kbClr = $('edge-kb-clear');
   async function kbRefresh() { if (!kb) return; try { const s = (await import(WS)).webStore; const n = await s.count(); kb.textContent = n > 0 ? (n + ' ' + T('kbEntries')) : T('kbEmpty'); } catch { kb.textContent = '—'; } }
   if (kbClr) kbClr.addEventListener('click', async () => { if (!confirm(T('kbClearConfirm'))) return; try { const s = (await import(WS)).webStore; if (s.clear) await s.clear(); } catch {} kbRefresh(); });
+  try { I18N.onChange(() => refresh()); } catch {}
   refresh(); kbRefresh();
 })();
 
@@ -1519,6 +2164,24 @@ async function mountPcModelsUI() {
 // preset-engine.js; this block only probes (browser-side, zero device cost) and applies one call at a time.
 (function () {
   const TPATH = '/data/anima/teacher.json';
+  // The sealed vault (P4 firmware): /api/anima/teacher returns the vault without its keys ("key_set" /
+  // "key_hint" instead) and merges writes on the device, so a key left blank is kept. A device without it
+  // (no vault.sealed, or a 404, remembered once per page) keeps the raw file.
+  const TAPI = '/api/anima/teacher';
+  let noTeacherApi = false;
+  async function teacherGet() {
+    if (!noTeacherApi && !(await Caps.has('vault.sealed'))) noTeacherApi = true;   // no vault: straight to the file
+    let r = noTeacherApi ? null : await fetch(TAPI, { cache: 'no-store' });
+    if (!r || r.status === 404) { noTeacherApi = true; r = await fetch('/api/fs/read?path=' + encodeURIComponent(TPATH), { cache: 'no-store' }); }
+    return r;
+  }
+  async function teacherPut(j) {
+    if (!noTeacherApi && !(await Caps.has('vault.sealed'))) noTeacherApi = true;
+    let w = noTeacherApi ? null : await fetch(TAPI, { method: 'POST', body: JSON.stringify(j) });
+    if (!w || w.status === 404) { noTeacherApi = true; w = await fetch('/api/fs/write?path=' + encodeURIComponent(TPATH), { method: 'POST', body: JSON.stringify(j) }); }
+    return w;
+  }
+  const hasKey = (o) => !!(o && (o.key_set || o.key));
   let REG = { providers: {} }, lastSig = null, evaluating = false, pendingApply = null;
   // Every string here is 5-language: T() keys in the settings catalog, and preset-engine.js label objects
   // ({ it, en, es, fr, de }) read through L(); English stays the fallback floor.
@@ -1536,13 +2199,14 @@ async function mountPcModelsUI() {
       const fresh = await apiJson('/api/anima/caps');
       if (fresh) { c = caps = Object.assign(caps, fresh); capsAt = Date.now(); }
     }
-    const keys = { anthropic: false, openai: false, xai: false, google: false };
+    const keys = { anthropic: false, openai: false, xai: false, google: false, local: false };
     let exec = 'browser', geminiTier = '';
     try {
       // Through the shared, cached reader: Settings used to read teacher.json twice within 3 ms at open.
       const j = await (await import('/ai.js')).readTeacher();
       if (j && !j.unpaired) { const kk = j.keys || {};
-        for (const p of Object.keys(keys)) keys[p] = !!(kk[p] && kk[p].key) || (j.provider === p && !!j.key);
+        // a model server on the LAN ('local') needs no key: its address + model are the configuration
+        for (const p of Object.keys(keys)) keys[p] = !!(kk[p] && (kk[p].key || (p === 'local' && kk[p].base && kk[p].model))) || (j.provider === p && (!!j.key || (p === 'local' && !!j.base)));
         exec = j.exec || 'browser'; geminiTier = j.geminiTier || ''; }
     } catch {}
     // GPU rung: the OS-wide diagnosis (/capabilities.js) + whether ANIMA's chosen model is REALLY installed
@@ -1580,6 +2244,8 @@ async function mountPcModelsUI() {
       packCached, packUsable: packCached, localModelReady, localModelId, gpuCause,
       tts: !!ttsState.available, exec,
       pcModel, pcServer, pcFirst, pcState, pcLoopback,
+      deviceBrain: has('anima.device'),   // ANIMA's engine on the device — else its own data only
+      ir: has('device.ir'),               // the device's IR remote
     };
   }
 
@@ -1618,11 +2284,11 @@ async function mountPcModelsUI() {
       { k: 'pc', t: T('apRungPc'), led: sig.pcModel ? 'on' : (sig.pcState === 'refused' ? 'warn' : 'off'), s: sig.pcModel ? ('✓ ' + sig.pcServer + ' · ' + sig.pcModel) : (sig.pcState === 'refused' ? T('pcStCors') : T('apPcNone')) },
       { k: 'gpu', t: T('apRungGpu'), led: gpuOk ? 'on' : (sig.webgpu ? 'warn' : 'off'), s: gpuS, how: !sig.webgpu },
       { k: 'wasm', t: T('apRungWasm'), led: wasmOk ? 'on' : 'warn', s: wasmOk ? T('apCached') : T('apPackMissing') },
-      { k: 'device', t: T('apRungDevice'), led: 'on', s: T('apAlwaysReady') },
+      { k: 'device', t: T('apRungDevice'), led: 'on', s: sig.deviceBrain === false ? T('apDeviceCmds') : T('apAlwaysReady') },
     ];
     const escT = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-    box.innerHTML = rungs.map((r) => `<div class="rung" style="${r.k === landed ? 'border-color:var(--accent)' : ''}"><div class="rh"><span class="led ${r.led}"></span>${r.t}${r.k === landed ? ' ◀' : ''}</div><div class="rs">${escT(r.s)}${r.how ? ` <button type="button" class="cap-how" style="font-size:11px">${escT(CT('cap_how'))}</button>` : ''}</div></div>`).join('')
-      + `<div style="flex-basis:100%;margin-top:5px"><button id="preset-verify" style="font-size:12px">▶ ${T('apTestNow')}</button> <span class="hint" id="preset-verify-out"></span></div>`
+    box.innerHTML = rungs.map((r) => `<div class="rung" style="${r.k === landed ? 'border-color:var(--accent)' : ''}"><div class="rh"><span class="led ${r.led}"></span>${r.t}${r.k === landed ? ' ◀' : ''}</div><div class="rs">${escT(r.s)}${r.how ? ` <button type="button" class="cap-how" style="font-size:0.7857rem">${escT(CT('cap_how'))}</button>` : ''}</div></div>`).join('')
+      + `<div style="flex-basis:100%;margin-top:5px"><button id="preset-verify" style="font-size:0.8571rem">▶ ${T('apTestNow')}</button> <span class="hint" id="preset-verify-out"></span></div>`
       + `<div id="cap-panel" style="flex-basis:100%" hidden></div>`;
     const vb = $('preset-verify'); if (vb) vb.addEventListener('click', () => verifyNow());
     // The same checklist + exact fix ANIMA shows, inline here (no second explanation to drift).
@@ -1657,6 +2323,7 @@ async function mountPcModelsUI() {
   function renderApps(sig) {
     const box = $('apps-list'); if (!box) return; box.innerHTML = '';
     for (const a of APP_MAP) {
+      if (a.need === 'ir' && !sig.ir) continue;          // the IR remote exists only on the Cardputer
       const st = appStatus(a, sig, REG), el = document.createElement('div'); el.className = 'arow';
       el.innerHTML = `<span>${L(a)}</span><span class="ast ${st.ok ? 'ok' : 'warn'}">${st.ok ? T('apUseThis') : L(st)}</span>`;
       box.appendChild(el);
@@ -1665,7 +2332,7 @@ async function mountPcModelsUI() {
 
   function renderScope() {
     const box = $('scope-legend'); if (!box) return;
-    box.innerHTML = ['apScopeSd', 'apScopeLive', 'apScopeBrowser'].map((k) => `<span>${T(k)}</span>`).join('');
+    box.innerHTML = ['apScopeSd', ...(hasL1() ? ['apScopeLive'] : []), 'apScopeBrowser'].map((k) => `<span>${T(k)}</span>`).join('');   // "live" = the device's L1 (anima.l1)
   }
 
   async function reEval() {
@@ -1681,7 +2348,8 @@ async function mountPcModelsUI() {
     if (id === 'auto') return doApply(id, sig);            // Auto re-evaluates and applies instantly
     const res = applyPreset(model, id, sig, REG); if (!res) return;
     $('pm-ic').textContent = res.preset.icon; $('pm-title').textContent = L(res.preset);
-    const bul = [T('apWillUse') + L(res.using), l1Human(res.apiCalls[0].body.mode)];
+    const bul = [T('apWillUse') + L(res.using)];
+    if (hasL1()) bul.push(l1Human(res.apiCalls[0].body.mode));   // the offline L1 brain policy (see hasL1)
     if (res.teacherModel) bul.push(T('apModel') + res.teacherModel);
     if (res.local['anima.edgeWeb'] === '0') bul.push(T('apNoEgress'));
     $('pm-bullets').innerHTML = bul.map((x) => '• ' + x).join('<br>');
@@ -1693,12 +2361,12 @@ async function mountPcModelsUI() {
 
   async function writeTeacherModel(m) {
     try {
-      const r = await fetch('/api/fs/read?path=' + encodeURIComponent(TPATH), { cache: 'no-store' });
+      const r = await teacherGet();
       if (!r.ok) return;                                   // no teacher / unpaired → model nudge only applies with a key
       let j; try { j = JSON.parse(await r.text()) || {}; } catch { return; }
-      if (!j.key && !(j.keys && Object.keys(j.keys).length)) return;
+      if (!hasKey(j) && !(j.keys && Object.keys(j.keys).length)) return;
       j.model = m; if (j.provider && j.keys && j.keys[j.provider]) j.keys[j.provider].model = m;
-      const w = await fetch('/api/fs/write?path=' + encodeURIComponent(TPATH), { method: 'POST', body: JSON.stringify(j) });
+      const w = await teacherPut(j);                       // sealed vault: blank keys are kept by the device
       if (w.ok) await forgetVault();
     } catch {}
   }
@@ -1710,7 +2378,7 @@ async function mountPcModelsUI() {
     try { for (const k of Object.keys(res.local)) localStorage.setItem(k, res.local[k]); } catch {}  // 2. shared-origin localStorage
     if (res.teacherModel) await writeTeacherModel(res.teacherModel);          // 3. teacher.json model nudge
     let failed = false;
-    for (const c of res.apiCalls) { try { const r = await api(c.path, { method: c.method, body: c.body }); if (!r || !r.ok) failed = true; } catch { failed = true; } }  // 4. live, sequential
+    for (const c of res.apiCalls) { if (!epOk(c.path)) continue; try { const r = await api(c.path, { method: c.method, body: c.body }); if (!r || !r.ok) failed = true; } catch { failed = true; } }  // 4. live, sequential (only levers this device has)
     await refreshCaps(); syncQuickToggles();                                  // refreshCaps → reEval via hook
     status(failed ? T('apSavedRetry')
       : (T('apApplied') + L(res.preset) + ' · ' + L(res.using)), !failed);
@@ -1726,7 +2394,7 @@ async function mountPcModelsUI() {
   async function addSecondaryKey(provider, key) {
     let j = {};
     try {
-      const r = await fetch('/api/fs/read?path=' + encodeURIComponent(TPATH), { cache: 'no-store' });
+      const r = await teacherGet();
       if (r.status === 401 || r.status === 403) return T('settingsNotPaired');
       if (r.status !== 404) {
         if (!r.ok) return T('teacherReadFailed');
@@ -1743,7 +2411,7 @@ async function mountPcModelsUI() {
     let P = null; try { P = (await import('/ai.js')).PROVIDERS[provider]; } catch {}
     j.keys[provider] = { base: P ? P.base : '', model: P ? P.def : '', key };
     try {
-      const w = await fetch('/api/fs/write?path=' + encodeURIComponent(TPATH), { method: 'POST', body: JSON.stringify(j) });
+      const w = await teacherPut(j);                       // sealed vault: the other keys come back blank and are kept
       if (w.ok) await forgetVault();
       return w.ok ? true : (w.status === 401 || w.status === 403 ? T('settingsNotPaired') : T('saveFailed'));
     } catch { return T('saveFailed'); }
@@ -1778,8 +2446,18 @@ async function mountPcModelsUI() {
         if (cfg && cfg.key) { const ok = await ai.cloudPing(cfg); const ms = Math.round(performance.now() - t0);
           if (out) out.textContent = ok ? `✓ ${cfg.provider} ${T('apResponds')} · ${ms} ms` : T('apKeyRejected'); return; }
       }
+      if (pl.landedRung === 'wasm') {                      // the browser's own brain: there, or still to download
+        const m = await import('/apps/anima/local/engine.js'); const okp = await m.packCached(); const ms = Math.round(performance.now() - t0);
+        if (out) out.textContent = okp ? `✓ ${T('apWasmReady')} · ${ms} ms` : '✗ ' + T('apPackMissing');
+        return;
+      }
+      if (!sig.deviceBrain) {                              // no brain on the device (its /api/anima abstains): does it answer?
+        const r = await fetch('/api/status', { cache: 'no-store' }); const ms = Math.round(performance.now() - t0);
+        if (out) out.textContent = r.ok ? `✓ ${T('apDeviceAnswers')} · ${ms} ms` : T('apNoAnswer');
+        return;
+      }
       const r = await fetch('/api/anima?q=ping&lang=' + lang + '&mode=' + (pl.mode === 'on' ? 'on' : 'off'), { cache: 'no-store' });
-      const j = await r.json().catch(() => null); const ms = Math.round(performance.now() - t0);
+      const j = r.ok ? await r.json().catch(() => null) : null; const ms = Math.round(performance.now() - t0);   // a 503 body is not an answer
       if (out) out.textContent = j ? `✓ ${T('apAnsweredBy')} ${j.intent || j.tier || 'device'} · ${ms} ms` : T('apNoAnswer');
     } catch (e) { if (out) out.textContent = '✗ ' + (e && e.message || e); }
   }
@@ -1788,7 +2466,9 @@ async function mountPcModelsUI() {
   if (pmCancel) pmCancel.addEventListener('click', () => $('preset-modal').classList.remove('show'));
   if (pmApply) pmApply.addEventListener('click', async () => { $('preset-modal').classList.remove('show'); if (pendingApply) { const { id, sig } = pendingApply; pendingApply = null; await doApply(id, sig); } });
 
-  onCapsRefreshed = reEval;                                  // re-evaluate whenever caps refresh
+  onCapsRefreshed = reEval;
+  // also called when the device's feature set changes (applyGates): the device rung and the IR row follow it
+  onLangChanged = () => { if (lastSig) { lastSig.deviceBrain = has('anima.device'); lastSig.ir = has('device.ir'); renderStrip(lastSig); renderTier(lastSig); renderCaps(lastSig); renderApps(lastSig); } renderScope(); };                                  // re-evaluate whenever caps refresh
   window.addEventListener('online', reEval); window.addEventListener('offline', reEval);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) reEval(); });
   (async () => { await buildReg(); await reEval(); })();
@@ -1831,7 +2511,9 @@ async function load() {
 
 // ═══════════ boot ═══════════
 await coreReady;   // the Settings catalog must be in the engine before the first paint (no raw-key flash)
-buildSidebar(); buildScenes(); buildQuick(); buildActions(); selectTab('control');
+try { for (const c of (await Caps.info()).caps) CAP.add(c); } catch {}   // none known = every device lever stays hidden
+if (!has('diag')) POLL.splice(POLL.indexOf('heap'), 2);   // no /api/heap, /api/cpu here: not polled
+buildSidebar(); buildScenes(); buildQuick(); buildActions(); applyGates(); selectTab('control');
 // Updates tab: check/download/verify/flash driver (see fwupdate.js). The poller freezes during a
 // flash so the serial fetch chain belongs to the OTA stream alone.
 const Updates = initUpdatesTab({
@@ -1854,12 +2536,12 @@ window.addEventListener('storage', (e) => {
 // per ~3 s tick), then the adaptive loop takes over and the settings model loads. All device
 // traffic already rides the serial gate, so nothing here can overlap on the Cardputer.
 (async () => {
-  await poller.prime();
-  poller.start();
+  if (POLL.length) { await poller.prime(); poller.start(); }
   await load();
   // Embedded, and the shell's status.snapshot hasn't arrived yet (it also pushes one on frame
   // load) → a single one-shot read fills the hero now instead of waiting the 15 s broadcast.
   if (EMBEDDED && !lastStatus) { const s = await apiJson('/api/status'); if (s && !lastStatus) renderStatus(s); }
+  await probeDevice();
 })();
 </script>
 </body>

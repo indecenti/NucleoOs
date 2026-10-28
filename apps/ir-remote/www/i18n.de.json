@@ -8,7 +8,7 @@
   "tab_tvb": "TV-B-Gone",
   "tab_find": "Auto-Find",
   "find_title": "TV finden",
-  "find_desc": "Richte den Cardputer auf den TV und drücke Start: Ich sende nacheinander Ausschaltcodes — bestätige, sobald er ausgeht.",
+  "find_desc": "Richte das Gerät auf den TV und drücke Start: Ich sende nacheinander Ausschaltcodes — bestätige, sobald er ausgeht.",
   "find_start": "Start",
   "find_q": "Ist der TV ausgegangen?",
   "find_yes": "Ja, aus!",
@@ -93,5 +93,6 @@
   "b_vol_up": "Lauter", "b_vol_down": "Leiser", "b_mute": "Stumm",
   "b_ch_up": "Kanal +", "b_ch_down": "Kanal -",
   "b_up": "Oben", "b_down": "Unten", "b_left": "Links", "b_right": "Rechts", "b_ok": "OK",
-  "sd_read_failed": "Deine gespeicherten Favoriten und Tasten konnten nicht von der SD gelesen werden: Änderungen bleiben in diesem Browser, bis sie wieder lesbar ist."
+  "sd_read_failed": "Deine gespeicherten Favoriten und Tasten konnten nicht von der SD gelesen werden: Änderungen bleiben in diesem Browser, bis sie wieder lesbar ist.",
+  "st_no_ir": "Demo — Infrarot ist auf diesem Gerät nicht verfügbar"
 }

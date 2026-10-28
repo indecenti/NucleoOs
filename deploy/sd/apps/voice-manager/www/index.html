@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -185,12 +186,12 @@
       <div class="stepper" id="stepper"></div>
 
       <div class="tut-step active" data-step="0">
-        <h2 data-i18n="t0_title">Insegna al Cardputer la tua voce</h2>
-        <p data-i18n-html="t0_intro">Questo strumento addestra il riconoscitore vocale <b>nativo</b> del Cardputer: gira
+        <h2 data-i18n="t0_title">Insegna al dispositivo la tua voce</h2>
+        <p data-i18n-html="t0_intro">Questo strumento addestra il riconoscitore vocale <b>nativo</b> del dispositivo: gira
            interamente <b>offline</b>, sul dispositivo, e impara <b>la tua</b> voce. Più lo usi, più
            diventa preciso — ogni comando riconosciuto affina da solo il proprio modello.</p>
         <ul class="tiplist">
-          <li><span class="em">🎙️</span><div data-i18n-html="t0_tip1">Funziona a <b>premi-e-parla</b>: tieni premuto <span class="keycap">FN</span> (o <span class="keycap">G0</span>) sul Cardputer, pronuncia il comando, rilascia.</div></li>
+          <li><span class="em">🎙️</span><div data-i18n-html="t0_tip1">Funziona a <b>premi-e-parla</b>: tieni premuto <span class="keycap">FN</span> (o <span class="keycap">G0</span>) sul dispositivo, pronuncia il comando, rilascia.</div></li>
           <li><span class="em">🧠</span><div data-i18n-html="t0_tip2">Il dispositivo riconosce la <b>parola</b>; ANIMA la trasforma nell'azione (aprire un'app, dire l'ora…).</div></li>
           <li><span class="em">🔒</span><div data-i18n-html="t0_tip3">Nessun cloud, nessuna chiave: l'audio non lascia mai il dispositivo.</div></li>
         </ul>
@@ -252,7 +253,7 @@
     <!-- ===== TEST ===== -->
     <div id="panel-test" class="panel">
       <h2 class="sec" data-i18n="test_title">Prova dal vivo</h2>
-      <p class="sub" data-i18n-html="test_sub">Tieni <span class="keycap">FN</span> sul Cardputer e pronuncia un comando addestrato.</p>
+      <p class="sub" data-i18n-html="test_sub">Tieni <span class="keycap">FN</span> sul dispositivo e pronuncia un comando addestrato.</p>
       <div class="test-hint" data-i18n-html="test_hint">
         Ogni riconoscimento mostra <b>distanza</b> (più bassa = più simile), <b>margine</b> sul 2° candidato
         e il <b>raggio</b> auto-tarante della parola. Verde = ottimo, giallo = accettabile.
@@ -277,18 +278,18 @@
     <div id="panel-record" class="panel">
       <div id="rec-step" style="text-align:center; padding: 14px 0;">
         <div class="mic-ring" id="rec-ring"><div class="mic-icon">🎙️</div></div>
-        <h2 id="rec-title" style="color:#fd20; margin:0;" data-i18n="rec_title">Sul Cardputer: tieni FN e parla</h2>
+        <h2 id="rec-title" style="color:#fd20; margin:0;" data-i18n="rec_title">Sul dispositivo: tieni FN e parla</h2>
         <p style="font-size:16px; color:var(--text-muted); margin:14px 0;">
           <span data-i18n-html="rec_hold_say">Tieni premuto <span class="keycap">FN</span> (o <span class="keycap">G0</span>) e pronuncia:</span><br>
           <span id="display-word" class="display-word"></span><br>
           <span data-i18n-html="rec_then_release">poi <b>rilascia</b>.</span>
         </p>
-        <p id="rec-status" style="font-size:13px; opacity:0.75; min-height:18px;" data-i18n="rec_waiting">In attesa del Cardputer…</p>
+        <p id="rec-status" style="font-size:13px; opacity:0.75; min-height:18px;" data-i18n="rec_waiting">In attesa del dispositivo…</p>
         <div id="rec-timeout-hint" style="display:none; background:var(--danger-dim);
              border:1px solid rgba(255,77,77,0.3); border-radius:10px; padding:12px 14px;
              font-size:13px; line-height:1.5; margin:0 auto 16px; max-width:440px; text-align:left;"
              data-i18n-html="rec_timeout">
-          ⚠️ Nessuna risposta dal Cardputer. Verifica di tener premuto <b>FN</b> mentre parli
+          ⚠️ Nessuna risposta dal dispositivo. Verifica di tener premuto <b>FN</b> mentre parli
           (la registrazione avviene sul dispositivo, non nel browser) e che il firmware vocale
           sia aggiornato.
         </div>

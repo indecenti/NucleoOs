@@ -64,5 +64,6 @@
   "op_cmd_send_failed": "échec de l'envoi de la commande",
   "op_offer_accepted": "offre acceptée",
   "op_offer_rejected": "offre refusée",
-  "cloud_unavailable": "cloud indisponible"
+  "cloud_unavailable": "cloud indisponible",
+  "link_unavailable": "L’échange avec les appareils proches n’est pas disponible sur cet appareil."
 }

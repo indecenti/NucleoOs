@@ -1,0 +1,614 @@
+{
+ "app_layout": "www",
+ "apps": [
+  {
+   "id": "agent",
+   "version": "0.1.1",
+   "version_code": 2
+  },
+  {
+   "id": "anima",
+   "version": "0.1.1",
+   "version_code": 2
+  },
+  {
+   "id": "arcade",
+   "version": "1.0.1",
+   "version_code": 2
+  },
+  {
+   "id": "archive-manager",
+   "version": "1.0.1",
+   "version_code": 2
+  },
+  {
+   "id": "authenticator",
+   "version": "1.0.1",
+   "version_code": 1
+  },
+  {
+   "id": "automation-studio",
+   "version": "0.1.0",
+   "version_code": 0
+  },
+  {
+   "id": "browser",
+   "version": "0.2.1",
+   "version_code": 3
+  },
+  {
+   "id": "calculator",
+   "version": "0.1.1",
+   "version_code": 2
+  },
+  {
+   "id": "calendar",
+   "version": "0.1.1",
+   "version_code": 2
+  },
+  {
+   "id": "clock",
+   "version": "0.2.1",
+   "version_code": 3
+  },
+  {
+   "id": "code-runner",
+   "version": "0.1.1",
+   "version_code": 2
+  },
+  {
+   "id": "community",
+   "version": "0.1.1",
+   "version_code": 2
+  },
+  {
+   "id": "contacts",
+   "version": "1.0.1",
+   "version_code": 1
+  },
+  {
+   "id": "dictation",
+   "version": "0.1.1",
+   "version_code": 1
+  },
+  {
+   "id": "dj",
+   "version": "0.1.2",
+   "version_code": 1
+  },
+  {
+   "id": "dos-importer",
+   "version": "0.1.1",
+   "version_code": 2
+  },
+  {
+   "id": "dosbox",
+   "version": "0.1.1",
+   "version_code": 2
+  },
+  {
+   "id": "file-commander",
+   "version": "0.1.1",
+   "version_code": 1
+  },
+  {
+   "id": "games",
+   "version": "0.1.1",
+   "version_code": 1
+  },
+  {
+   "id": "groq-chat",
+   "version": "0.1.1",
+   "version_code": 2
+  },
+  {
+   "id": "help",
+   "version": "0.1.1",
+   "version_code": 2
+  },
+  {
+   "id": "ir-remote",
+   "version": "0.1.1",
+   "version_code": 2
+  },
+  {
+   "id": "log-viewer",
+   "version": "0.1.1",
+   "version_code": 1
+  },
+  {
+   "id": "mail",
+   "version": "1.0.1",
+   "version_code": 2
+  },
+  {
+   "id": "media-player",
+   "version": "0.1.1",
+   "version_code": 1
+  },
+  {
+   "id": "metronome",
+   "version": "1.0.2",
+   "version_code": 3
+  },
+  {
+   "id": "miei-fatti",
+   "version": "0.1.1",
+   "version_code": 2
+  },
+  {
+   "id": "nearby",
+   "version": "0.1.1",
+   "version_code": 2
+  },
+  {
+   "id": "notepad",
+   "version": "0.1.1",
+   "version_code": 2
+  },
+  {
+   "id": "paint",
+   "version": "1.0.1",
+   "version_code": 2
+  },
+  {
+   "id": "passkeys",
+   "version": "0.1.1",
+   "version_code": 2
+  },
+  {
+   "id": "photo-viewer",
+   "version": "0.1.1",
+   "version_code": 2
+  },
+  {
+   "id": "qr",
+   "version": "0.1.1",
+   "version_code": 2
+  },
+  {
+   "id": "radio",
+   "version": "1.0.1",
+   "version_code": 1
+  },
+  {
+   "id": "recorder",
+   "version": "0.1.1",
+   "version_code": 1
+  },
+  {
+   "id": "recycle-bin",
+   "version": "0.1.1",
+   "version_code": 2
+  },
+  {
+   "id": "scoreboard",
+   "version": "1.1.0",
+   "version_code": 5
+  },
+  {
+   "id": "settings",
+   "version": "0.2.1",
+   "version_code": 1
+  },
+  {
+   "id": "spreadsheet",
+   "version": "0.1.1",
+   "version_code": 2
+  },
+  {
+   "id": "ssh",
+   "version": "0.1.1",
+   "version_code": 2
+  },
+  {
+   "id": "store",
+   "version": "1.0.1",
+   "version_code": 1
+  },
+  {
+   "id": "swarm",
+   "version": "0.1.1",
+   "version_code": 1
+  },
+  {
+   "id": "system-monitor",
+   "version": "0.1.2",
+   "version_code": 2
+  },
+  {
+   "id": "tasks",
+   "version": "0.1.1",
+   "version_code": 2
+  },
+  {
+   "id": "terminal",
+   "version": "0.1.1",
+   "version_code": 2
+  },
+  {
+   "id": "unit-converter",
+   "version": "0.1.1",
+   "version_code": 2
+  },
+  {
+   "id": "updates",
+   "version": "1.0.1",
+   "version_code": 1
+  },
+  {
+   "id": "video-player",
+   "version": "3.1.3",
+   "version_code": 5
+  },
+  {
+   "id": "video-studio",
+   "version": "0.2.1",
+   "version_code": 3
+  },
+  {
+   "id": "voice-manager",
+   "version": "0.2.1",
+   "version_code": 1
+  },
+  {
+   "id": "weather",
+   "version": "1.0.1",
+   "version_code": 1
+  },
+  {
+   "id": "wifi-scanner",
+   "version": "0.1.2",
+   "version_code": 2
+  }
+ ],
+ "apps_dir": "apps",
+ "base": "/",
+ "budget": {
+  "bytes": 75497472,
+  "ok": true,
+  "used": 36497441
+ },
+ "bytes": 57384558,
+ "caps_row": {
+  "after": "0.7.5"
+ },
+ "commit": "1320d6415b6121f400df02235480a9d4474e0f78",
+ "edition": "cardputer",
+ "externals": [
+  {
+   "path": "apps/anima/www/forge/vendor/Qwen2-0.5B-Instruct-q4f16_1_cs1k-webgpu.wasm",
+   "size": 4850160,
+   "status": "excluded",
+   "why": "cardputer profile: heavy optional asset, installable in-app (RELEASE_HEAVY)"
+  },
+  {
+   "path": "apps/anima/www/forge/vendor/web-llm.js",
+   "size": 6086300,
+   "status": "excluded",
+   "why": "cardputer profile: heavy optional asset, installable in-app (RELEASE_HEAVY)"
+  },
+  {
+   "path": "apps/anima/www/forge/vendor/wllama/multi-thread/wllama.wasm",
+   "size": 1625381,
+   "status": "excluded",
+   "why": "cardputer profile: heavy optional asset, installable in-app (RELEASE_HEAVY)"
+  },
+  {
+   "path": "apps/anima/www/forge/vendor/wllama/single-thread/wllama.wasm",
+   "size": 1608830,
+   "status": "excluded",
+   "why": "cardputer profile: heavy optional asset, installable in-app (RELEASE_HEAVY)"
+  },
+  {
+   "path": "apps/anima/www/vosk/models/vosk-model-small-en-us-0.15.tar.gz.000",
+   "size": 7340032,
+   "status": "excluded",
+   "why": "cardputer profile: heavy optional assets, installable in-app (NucleoOs sd_deploy.py RELEASE_HEAVY)"
+  },
+  {
+   "path": "apps/anima/www/vosk/models/vosk-model-small-en-us-0.15.tar.gz.001",
+   "size": 7340032,
+   "status": "excluded",
+   "why": "cardputer profile: heavy optional assets, installable in-app (NucleoOs sd_deploy.py RELEASE_HEAVY)"
+  },
+  {
+   "path": "apps/anima/www/vosk/models/vosk-model-small-en-us-0.15.tar.gz.002",
+   "size": 7340032,
+   "status": "excluded",
+   "why": "cardputer profile: heavy optional assets, installable in-app (NucleoOs sd_deploy.py RELEASE_HEAVY)"
+  },
+  {
+   "path": "apps/anima/www/vosk/models/vosk-model-small-en-us-0.15.tar.gz.003",
+   "size": 7340032,
+   "status": "excluded",
+   "why": "cardputer profile: heavy optional assets, installable in-app (NucleoOs sd_deploy.py RELEASE_HEAVY)"
+  },
+  {
+   "path": "apps/anima/www/vosk/models/vosk-model-small-en-us-0.15.tar.gz.004",
+   "size": 7340032,
+   "status": "excluded",
+   "why": "cardputer profile: heavy optional assets, installable in-app (NucleoOs sd_deploy.py RELEASE_HEAVY)"
+  },
+  {
+   "path": "apps/anima/www/vosk/models/vosk-model-small-en-us-0.15.tar.gz.005",
+   "size": 4484702,
+   "status": "excluded",
+   "why": "cardputer profile: heavy optional assets, installable in-app (NucleoOs sd_deploy.py RELEASE_HEAVY)"
+  },
+  {
+   "path": "apps/anima/www/vosk/models/vosk-model-small-it-0.4.tar.gz.000",
+   "size": 7340032,
+   "status": "excluded",
+   "why": "cardputer profile: heavy optional assets, installable in-app (NucleoOs sd_deploy.py RELEASE_HEAVY)"
+  },
+  {
+   "path": "apps/anima/www/vosk/models/vosk-model-small-it-0.4.tar.gz.001",
+   "size": 7340032,
+   "status": "excluded",
+   "why": "cardputer profile: heavy optional assets, installable in-app (NucleoOs sd_deploy.py RELEASE_HEAVY)"
+  },
+  {
+   "path": "apps/anima/www/vosk/models/vosk-model-small-it-0.4.tar.gz.002",
+   "size": 7340032,
+   "status": "excluded",
+   "why": "cardputer profile: heavy optional assets, installable in-app (NucleoOs sd_deploy.py RELEASE_HEAVY)"
+  },
+  {
+   "path": "apps/anima/www/vosk/models/vosk-model-small-it-0.4.tar.gz.003",
+   "size": 7340032,
+   "status": "excluded",
+   "why": "cardputer profile: heavy optional assets, installable in-app (NucleoOs sd_deploy.py RELEASE_HEAVY)"
+  },
+  {
+   "path": "apps/anima/www/vosk/models/vosk-model-small-it-0.4.tar.gz.004",
+   "size": 4896728,
+   "status": "excluded",
+   "why": "cardputer profile: heavy optional assets, installable in-app (NucleoOs sd_deploy.py RELEASE_HEAVY)"
+  },
+  {
+   "path": "apps/anima/www/vosk/vosk.js",
+   "size": 5804485,
+   "status": "fetched"
+  },
+  {
+   "path": "apps/arcade/www/emulatorjs/cores/.npmignore",
+   "size": 27,
+   "status": "excluded",
+   "why": "git/npm metadata (.gitattributes, .npmignore...)"
+  },
+  {
+   "path": "apps/arcade/www/emulatorjs/cores/README.md",
+   "size": 426,
+   "status": "fetched"
+  },
+  {
+   "path": "apps/arcade/www/emulatorjs/cores/core-README.md",
+   "size": 506,
+   "status": "fetched"
+  },
+  {
+   "path": "apps/arcade/www/emulatorjs/cores/fbalpha2012_cps1-wasm.data",
+   "size": 1031240,
+   "status": "fetched"
+  },
+  {
+   "path": "apps/arcade/www/emulatorjs/cores/fbalpha2012_cps2-wasm.data",
+   "size": 992866,
+   "status": "fetched"
+  },
+  {
+   "path": "apps/arcade/www/emulatorjs/cores/fbneo-wasm.data",
+   "size": 8273551,
+   "status": "fetched"
+  },
+  {
+   "path": "apps/arcade/www/emulatorjs/cores/fceumm-wasm.data",
+   "size": 1054015,
+   "status": "fetched"
+  },
+  {
+   "path": "apps/arcade/www/emulatorjs/cores/gambatte-wasm.data",
+   "size": 967156,
+   "status": "fetched"
+  },
+  {
+   "path": "apps/arcade/www/emulatorjs/cores/genesis_plus_gx-wasm.data",
+   "size": 1203661,
+   "status": "fetched"
+  },
+  {
+   "path": "apps/arcade/www/emulatorjs/cores/handy-wasm.data",
+   "size": 862304,
+   "status": "fetched"
+  },
+  {
+   "path": "apps/arcade/www/emulatorjs/cores/mednafen_ngp-wasm.data",
+   "size": 871904,
+   "status": "fetched"
+  },
+  {
+   "path": "apps/arcade/www/emulatorjs/cores/mednafen_pce-wasm.data",
+   "size": 994844,
+   "status": "fetched"
+  },
+  {
+   "path": "apps/arcade/www/emulatorjs/cores/mgba-wasm.data",
+   "size": 1055616,
+   "status": "fetched"
+  },
+  {
+   "path": "apps/arcade/www/emulatorjs/cores/package.json",
+   "size": 2693,
+   "status": "fetched"
+  },
+  {
+   "path": "apps/arcade/www/emulatorjs/cores/reports/fbalpha2012_cps1.json",
+   "size": 186,
+   "status": "fetched"
+  },
+  {
+   "path": "apps/arcade/www/emulatorjs/cores/reports/fbalpha2012_cps2.json",
+   "size": 186,
+   "status": "fetched"
+  },
+  {
+   "path": "apps/arcade/www/emulatorjs/cores/reports/fbneo.json",
+   "size": 175,
+   "status": "fetched"
+  },
+  {
+   "path": "apps/arcade/www/emulatorjs/cores/reports/fceumm.json",
+   "size": 177,
+   "status": "fetched"
+  },
+  {
+   "path": "apps/arcade/www/emulatorjs/cores/reports/gambatte.json",
+   "size": 179,
+   "status": "fetched"
+  },
+  {
+   "path": "apps/arcade/www/emulatorjs/cores/reports/genesis_plus_gx.json",
+   "size": 185,
+   "status": "fetched"
+  },
+  {
+   "path": "apps/arcade/www/emulatorjs/cores/reports/handy.json",
+   "size": 176,
+   "status": "fetched"
+  },
+  {
+   "path": "apps/arcade/www/emulatorjs/cores/reports/mednafen_ngp.json",
+   "size": 183,
+   "status": "fetched"
+  },
+  {
+   "path": "apps/arcade/www/emulatorjs/cores/reports/mednafen_pce.json",
+   "size": 182,
+   "status": "fetched"
+  },
+  {
+   "path": "apps/arcade/www/emulatorjs/cores/reports/mgba.json",
+   "size": 173,
+   "status": "fetched"
+  },
+  {
+   "path": "apps/arcade/www/emulatorjs/cores/reports/smsplus.json",
+   "size": 177,
+   "status": "fetched"
+  },
+  {
+   "path": "apps/arcade/www/emulatorjs/cores/reports/snes9x.json",
+   "size": 177,
+   "status": "fetched"
+  },
+  {
+   "path": "apps/arcade/www/emulatorjs/cores/smsplus-wasm.data",
+   "size": 855876,
+   "status": "fetched"
+  },
+  {
+   "path": "apps/arcade/www/emulatorjs/cores/snes9x-wasm.data",
+   "size": 1093765,
+   "status": "fetched"
+  },
+  {
+   "path": "apps/paint/www/vendor/onnxruntime-web/ort-wasm-simd-threaded.asyncify.wasm",
+   "size": 23678474,
+   "status": "excluded",
+   "why": "cardputer profile: heavy optional asset, installable in-app (RELEASE_HEAVY)"
+  },
+  {
+   "path": "apps/paint/www/vendor/onnxruntime-web/ort-wasm-simd-threaded.asyncify.wasm.000",
+   "size": 7340032,
+   "status": "excluded",
+   "why": "cardputer profile: heavy optional asset, installable in-app (RELEASE_HEAVY)"
+  },
+  {
+   "path": "apps/paint/www/vendor/onnxruntime-web/ort-wasm-simd-threaded.asyncify.wasm.001",
+   "size": 7340032,
+   "status": "excluded",
+   "why": "cardputer profile: heavy optional asset, installable in-app (RELEASE_HEAVY)"
+  },
+  {
+   "path": "apps/paint/www/vendor/onnxruntime-web/ort-wasm-simd-threaded.asyncify.wasm.002",
+   "size": 7340032,
+   "status": "excluded",
+   "why": "cardputer profile: heavy optional asset, installable in-app (RELEASE_HEAVY)"
+  },
+  {
+   "path": "apps/paint/www/vendor/onnxruntime-web/ort-wasm-simd-threaded.asyncify.wasm.003",
+   "size": 1658378,
+   "status": "excluded",
+   "why": "cardputer profile: heavy optional asset, installable in-app (RELEASE_HEAVY)"
+  },
+  {
+   "path": "apps/video-studio/www/vendor/ffmpeg/ffmpeg-core.wasm",
+   "size": 32129114,
+   "status": "excluded",
+   "why": "cardputer profile: heavy optional asset, installable in-app (RELEASE_HEAVY)"
+  },
+  {
+   "path": "apps/arcade/www/emulatorjs/compression/libunrar.js",
+   "size": 66684,
+   "status": "excluded",
+   "why": "unRAR license is not free software: out until verified (external-resources.json)"
+  },
+  {
+   "path": "apps/arcade/www/emulatorjs/compression/libunrar.wasm",
+   "size": 173799,
+   "status": "excluded",
+   "why": "unRAR license is not free software: out until verified (external-resources.json)"
+  }
+ ],
+ "files": 1469,
+ "format": 1,
+ "generator": "nucleo-webos tools/build.py",
+ "gz_twins": 662,
+ "hash": "d034779d6351f0e720c86490346fddff5aeaf49d935cc47ede73eab85ebb6b68",
+ "left_out": [
+  {
+   "id": "cast",
+   "missing": [
+    "cast"
+   ]
+  },
+  {
+   "id": "console",
+   "missing": [
+    "games.library"
+   ]
+  },
+  {
+   "id": "library",
+   "missing": [
+    "games.library"
+   ]
+  },
+  {
+   "id": "roms",
+   "missing": [
+    "games.roms"
+   ]
+  }
+ ],
+ "left_out_by_profile": [],
+ "never_shipped": {
+  "app sources, tests and docs outside www/ (only manifest.json and www/ ship)": 12,
+  "build metadata: decides which apps enter a build, never read at runtime": 52,
+  "build scripts": 1,
+  "cardputer profile: heavy optional asset, installable in-app (RELEASE_HEAVY)": 10,
+  "cardputer profile: heavy optional assets, installable in-app (NucleoOs sd_deploy.py RELEASE_HEAVY)": 3,
+  "channel metadata: read by nucleoos-webapps-store's publishing tool": 1,
+  "decoder sources and their build scripts (the built .wasm sits in www/)": 4,
+  "git/npm metadata (.gitattributes, .npmignore...)": 2,
+  "tests": 6
+ },
+ "profile_sha256": "d62cbdd51b51c972b3c7554c21d6c99b4c7c8280ebc64ba3affe9445d73161a4",
+ "shell": {
+  "cache": "nucleo-shell-v161-589f80043e60",
+  "hash": "589f80043e60"
+ },
+ "shell_dir": "www/shell",
+ "uncommitted_files": 0
+}

@@ -7,7 +7,7 @@
   "copied": "Code kopiert",
   "empty_title": "Keine 2FA-Konten",
   "empty_body": "Füge ein Konto hinzu, um 6-stellige Bestätigungscodes zu erzeugen. Füge einen otpauth://-Link (aus dem QR der Website) oder den geheimen Schlüssel ein.",
-  "privacy_note": "🔒 <b>Alles lokal.</b> Codes werden im Browser berechnet (kein Geheimnis verlässt das Gerät). Schlüssel liegen auf der SD des Cardputers, geschützt durch die Kopplung: widerrufe Sitzungen in den Einstellungen, wenn du ein Gerät verlierst.",
+  "privacy_note": "🔒 <b>Alles lokal.</b> Codes werden im Browser berechnet (kein Geheimnis verlässt das Gerät). Schlüssel liegen auf der SD des Geräts, geschützt durch die Kopplung: widerrufe Sitzungen in den Einstellungen, wenn du ein Gerät verlierst.",
   "add_title": "Konto hinzufügen",
   "add_sub": "Füge den otpauth://-Link (aus dem QR) ein — er füllt alles aus. Oder gib die Felder von Hand ein.",
   "uri_ph": "otpauth://totp/...",
@@ -27,9 +27,9 @@
   "err_secret": "Ungültiger geheimer Schlüssel (Base32 erwartet)",
   "err_clip": "Zwischenablage kann nicht gelesen werden",
   "confirm_del": "Konto „{name}\" löschen? Sein 2FA-Schlüssel wird von diesem Gerät entfernt.",
-  "err_device": "Cardputer nicht erreichbar – nichts wurde gespeichert. Versuche es gleich erneut.",
-  "err_unpaired": "Dieser Browser ist nicht mit dem Cardputer gekoppelt – kopple ihn, um Konten zu speichern.",
-  "offline_banner": "Codes aus der letzten Kopie dieses Browsers: Der Cardputer antwortet nicht, Änderungen sind pausiert.",
+  "err_device": "Gerät nicht erreichbar – nichts wurde gespeichert. Versuche es gleich erneut.",
+  "err_unpaired": "Dieser Browser ist nicht mit dem Gerät gekoppelt – kopple ihn, um Konten zu speichern.",
+  "offline_banner": "Codes aus der letzten Kopie dieses Browsers: Das Gerät antwortet nicht, Änderungen sind pausiert.",
   "err_hotp": "HOTP-Konten (zählerbasiert) werden nicht unterstützt – verwende ein TOTP-Konto (zeitbasiert).",
   "err_algo": "SHA-512 wird nicht unterstützt – dieses Konto würde falsche Codes erzeugen."
 }

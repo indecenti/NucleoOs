@@ -18,5 +18,18 @@
   "man_which": "What manual page do you want?",
   "man_description": "Description:",
   "man_details": "Details:",
-  "man_none": "No manual entry for {cmd}"
+  "man_none": "No manual entry for {cmd}",
+  "subtitle_shell": "device shell · {shell}",
+  "reconnect": "Reconnect",
+  "retry": "Retry",
+  "st_connecting": "connecting…",
+  "st_connected": "connected",
+  "st_closed": "session closed",
+  "st_error": "error: {msg}",
+  "st_unpaired": "not paired",
+  "gate_pair_title": "Browser not paired",
+  "gate_pair_body": "The terminal opens a real shell on the device, so this browser has to be paired once. The console reads the PIN out loud.",
+  "gate_pair_btn": "Pair",
+  "gate_off_title": "Terminal unavailable",
+  "gate_off_body": "The device did not answer ({msg})."
 }

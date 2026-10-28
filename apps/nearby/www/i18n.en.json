@@ -64,5 +64,6 @@
   "op_cmd_send_failed": "command send failed",
   "op_offer_accepted": "offer accepted",
   "op_offer_rejected": "offer rejected",
-  "cloud_unavailable": "cloud unavailable"
+  "cloud_unavailable": "cloud unavailable",
+  "link_unavailable": "Exchanging with nearby devices is not available on this device."
 }

@@ -40,6 +40,8 @@
   "hint_local": "Ctrl+C/X/V · Ctrl+A · F2 · Entf · Ctrl+Z",
   "hint_rw": "Lesen/Schreiben · Ctrl+C/X/V · F2 · Entf · „Auf SD“ kopiert auf die Karte",
   "hint_ro": "Schreibgeschützt · Dateien auswählen · „Auf SD“ kopiert sie auf die Karte",
+  "hint_touch": "Tippen zum Auswählen · lange drücken für das Menü",
+  "sel_clear": "Auswahl aufheben",
 
   "ctx_open": "Öffnen",
   "ctx_run": "Ausführen",

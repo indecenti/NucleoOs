@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // diffusion-engine.js — image generation for Paint's Atelier, ISOLATED from the rest of ANIMA (Paint owns
 // this; it is NOT a forge tier and never routes through engine-loader/router/client). Two implementations
 // behind ONE interface so the feature works the instant it ships and the real model is a drop-in:

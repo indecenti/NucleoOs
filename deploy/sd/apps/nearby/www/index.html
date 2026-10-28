@@ -1,4 +1,5 @@
 <!doctype html>
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <html lang="en">
 <head>
 <meta charset="utf-8" />
@@ -78,6 +79,7 @@
 
 <script type="module">
 import I18N from '/nucleo-i18n.js';
+import Caps from '/nucleo-caps.js';   // what this device can do (device.link)
 import { makeSkill } from '/apps/anima/anima-skill.js';
 import { buildNearbySpec } from './nearby-skill.js';
 
@@ -291,14 +293,21 @@ const fmtSize = (n) => n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : n >= 10
 for (const b of $('#tabs').children) b.onclick = () => { tab = b.dataset.t; for (const x of $('#tabs').children) x.classList.toggle('on', x === b); render(); if (tab === 'send') loadDir(); };
 for (const b of $('#proto').children) b.onclick = () => setProto(b.dataset.p);
 
-await post('/api/link/listen', { proto });
-await loadPeers();
-render();
-I18N.onChange(() => render());   // repaint the imperative view when the OS language flips
-setInterval(() => { if (!visible()) return; refreshStatus(); if (tab === 'recv') refreshOffer(); if (tab === 'cmd') refreshCmd(); }, 2500);
-setInterval(() => { if (!visible()) return; loadPeers(); }, 5000);
-window.addEventListener('message', (e) => { const ev = e.data; if (ev && ev.t === 'os-visibility') { osVisible = !!(ev.d && ev.d.visible); if (osVisible) { refreshStatus(); loadPeers(); } } });
-document.addEventListener('visibilitychange', () => { if (visible()) { refreshStatus(); loadPeers(); } });
+// Only a device with the ESP-NOW link (capability device.link) has anything here: elsewhere say so, and
+// start no listen, no polling, no request against /api/link.
+if (!(await Caps.has('device.link'))) {
+  $('#tabs').style.display = 'none'; $('#proto').style.display = 'none';
+  view.innerHTML = '<div class="card"><div class="empty" data-i18n="link_unavailable">' + esc(t('link_unavailable')) + '</div></div>';
+} else {
+  await post('/api/link/listen', { proto });
+  await loadPeers();
+  render();
+  I18N.onChange(() => render());   // repaint the imperative view when the OS language flips
+  setInterval(() => { if (!visible()) return; refreshStatus(); if (tab === 'recv') refreshOffer(); if (tab === 'cmd') refreshCmd(); }, 2500);
+  setInterval(() => { if (!visible()) return; loadPeers(); }, 5000);
+  window.addEventListener('message', (e) => { const ev = e.data; if (ev && ev.t === 'os-visibility') { osVisible = !!(ev.d && ev.d.visible); if (osVisible) { refreshStatus(); loadPeers(); } } });
+  document.addEventListener('visibilitychange', () => { if (visible()) { refreshStatus(); loadPeers(); } });
+}
 </script>
 </body>
 </html>

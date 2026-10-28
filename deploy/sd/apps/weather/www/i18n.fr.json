@@ -15,7 +15,7 @@
   "hourly": "Prochaines 24 heures",
   "daily": "Prochains jours",
   "first_title": "Où êtes-vous ?",
-  "first_sub": "Recherchez votre ville ou utilisez la position du navigateur. Les prévisions viennent d’Open-Meteo, directement depuis le navigateur : le Cardputer n’est jamais sollicité.",
+  "first_sub": "Recherchez votre ville ou utilisez la position du navigateur. Les prévisions viennent d’Open-Meteo, directement depuis le navigateur : l’appareil n’est jamais sollicité.",
   "err_geo": "Position indisponible",
   "err_net": "Réseau injoignable",
   "err_city": "Aucun résultat",

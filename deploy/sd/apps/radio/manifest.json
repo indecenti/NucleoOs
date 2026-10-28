@@ -1,7 +1,8 @@
 {
   "id": "radio",
   "name": "Radio Index",
-  "version": "1.0.0",
+  "version": "1.0.1",
+  "version_code": 1,
   "description": "Tune into free live radio. The station list is shared with the on-device Radio app.",
   "category": "media",
   "runtime": "web",

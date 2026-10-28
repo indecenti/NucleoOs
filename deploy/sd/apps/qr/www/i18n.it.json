@@ -10,7 +10,7 @@
   "saved_title": "Salvati sul dispositivo",
   "saved_empty": "Nessun QR salvato.",
   "save_to_device": "★ Salva sul dispositivo",
-  "save_hint": "«Salva sul dispositivo» scrive il QR in <b>/data/QR/qrcodes.json</b>: l'app nativa <b>Codice QR</b> (sorgente «Salvati») lo mostra grande sul Cardputer.",
+  "save_hint": "«Salva sul dispositivo» scrive il QR in <b>/data/QR/qrcodes.json</b>: l'app nativa <b>Codice QR</b> (sorgente «Salvati») lo mostra grande sul dispositivo.",
 
   "ty_link": "Link",
   "ty_text": "Testo",
@@ -48,7 +48,7 @@
   "save_failed": "Salvataggio non riuscito (dispositivo offline?)",
   "saved_to_device": "Salvato sul dispositivo",
   "load": "Carica",
-  "read_failed": "Impossibile leggere i QR salvati dal Cardputer: non salvo nulla per non sovrascriverli. Riprova tra poco.",
-  "read_corrupt": "Il file dei QR sul Cardputer non è leggibile: non lo modifico per non perderlo.",
-  "not_paired": "Questo browser non è abbinato al Cardputer: abbinalo per salvare i QR."
+  "read_failed": "Impossibile leggere i QR salvati dal dispositivo: non salvo nulla per non sovrascriverli. Riprova tra poco.",
+  "read_corrupt": "Il file dei QR sul dispositivo non è leggibile: non lo modifico per non perderlo.",
+  "not_paired": "Questo browser non è abbinato al dispositivo: abbinalo per salvare i QR."
 }

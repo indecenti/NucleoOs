@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 'use strict';
 function $(id) { return document.getElementById(id); }
 
@@ -157,7 +158,7 @@ function startRecord(word, doneCb) {
   $('rec-step').style.display = 'block';
   $('ok-step').style.display = 'none';
   $('display-word').textContent = word;
-  $('rec-status').textContent = t('rec_waiting', null, 'In attesa del Cardputer…');
+  $('rec-status').textContent = t('rec_waiting', null, 'In attesa del dispositivo…');
   $('rec-timeout-hint').style.display = 'none';
   document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
   $('panel-record').classList.add('active');
@@ -187,7 +188,7 @@ async function armEngine(word) {
     });
     const data = await res.json();
     if (!data.ok) { alert(t('err_arm', null, "Impossibile armare il motore (dispositivo occupato?)")); cancelRecord(); }
-  } catch (e) { alert(t('err_connect', null, 'Errore di connessione al Cardputer')); cancelRecord(); }
+  } catch (e) { alert(t('err_connect', null, 'Errore di connessione al dispositivo')); cancelRecord(); }
 }
 
 function cancelRecord() {
@@ -332,8 +333,22 @@ window.redrawI18n = function () {
   setWs(!!(ws && ws.readyState === 1));
 };
 
+// On-device voice commands exist only where the capability list (nucleo-caps.js) has device.voice: elsewhere
+// the page says so and makes no request (no template list, no socket, nothing to arm). If the capability module
+// cannot be loaded, the page works as before and the device's own answer decides.
+function showUnavailable() {
+  const c = document.querySelector('.container');
+  for (const el of c.querySelectorAll('.status-chips, .progress-wrap, .tabs, .panel')) el.style.display = 'none';
+  const n = document.createElement('div');
+  n.className = 'empty'; n.setAttribute('data-i18n', 'voice_unavailable');
+  n.textContent = t('voice_unavailable', null, 'I comandi vocali non sono disponibili su questo dispositivo.');
+  c.appendChild(n);
+}
+
 // ───────────────────────── Init ─────────────────────────
-window.addEventListener('DOMContentLoaded', () => {
+window.addEventListener('DOMContentLoaded', async () => {
+  const voiceOk = await import('/nucleo-caps.js').then((m) => m.default.has('device.voice'), () => true);
+  if (!voiceOk) { showUnavailable(); return; }
   // track the last real tab so the overlay can return to it
   document.querySelectorAll('.tab-btn').forEach(b =>
     b.addEventListener('click', () => { lastBaseTab = b.dataset.tab; }));

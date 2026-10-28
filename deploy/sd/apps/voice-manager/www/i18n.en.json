@@ -16,9 +16,9 @@
   "prog_label": { "one": "1 command trained", "other": "{count} commands trained" },
   "prog_cap": "max {count}",
 
-  "t0_title": "Teach the Cardputer your voice",
-  "t0_intro": "This tool trains the Cardputer's <b>native</b> voice recognizer: it runs entirely <b>offline</b>, on the device, and learns <b>your</b> voice. The more you use it, the more accurate it gets — every recognized command fine-tunes its own model automatically.",
-  "t0_tip1": "It's <b>push-to-talk</b>: hold <span class=\"keycap\">FN</span> (or <span class=\"keycap\">G0</span>) on the Cardputer, say the command, release.",
+  "t0_title": "Teach the device your voice",
+  "t0_intro": "This tool trains the device's <b>native</b> voice recognizer: it runs entirely <b>offline</b>, on the device, and learns <b>your</b> voice. The more you use it, the more accurate it gets — every recognized command fine-tunes its own model automatically.",
+  "t0_tip1": "It's <b>push-to-talk</b>: hold <span class=\"keycap\">FN</span> (or <span class=\"keycap\">G0</span>) on the device, say the command, release.",
   "t0_tip2": "The device recognizes the <b>word</b>; ANIMA turns it into the action (open an app, tell the time…).",
   "t0_tip3": "No cloud, no key: the audio never leaves the device.",
   "t0_next": "Let's start →",
@@ -52,7 +52,7 @@
   "cmd_sub": "Native commands ready to use. 🟢 = already trained with your voice. The device handles up to <b>20</b>: pick your favorites.",
 
   "test_title": "Live test",
-  "test_sub": "Hold <span class=\"keycap\">FN</span> on the Cardputer and say a trained command.",
+  "test_sub": "Hold <span class=\"keycap\">FN</span> on the device and say a trained command.",
   "test_hint": "Each recognition shows <b>distance</b> (lower = more similar), <b>margin</b> over the 2nd candidate, and the word's <b>self-calibrating radius</b>. Green = excellent, yellow = acceptable.",
   "test_waiting": "Waiting… press FN and speak.",
 
@@ -63,14 +63,14 @@
   "custom_yours": "Your custom commands",
   "custom_empty": "No custom commands saved.",
 
-  "rec_title": "On the Cardputer: hold FN and speak",
+  "rec_title": "On the device: hold FN and speak",
   "rec_hold_say": "Hold <span class=\"keycap\">FN</span> (or <span class=\"keycap\">G0</span>) and say:",
   "rec_then_release": "then <b>release</b>.",
-  "rec_waiting": "Waiting for the Cardputer…",
+  "rec_waiting": "Waiting for the device…",
   "rec_recording": "🔴 Recording… release FN to save.",
   "rec_processing": "Processing…",
   "rec_too_short": "⚠️ Too short or silent — try again: hold FN and speak clearly.",
-  "rec_timeout": "⚠️ No response from the Cardputer. Make sure you're holding <b>FN</b> while you speak (recording happens on the device, not in the browser) and that the voice firmware is up to date.",
+  "rec_timeout": "⚠️ No response from the device. Make sure you're holding <b>FN</b> while you speak (recording happens on the device, not in the browser) and that the voice firmware is up to date.",
   "rec_stop": "Stop",
 
   "ok_trained": "Trained!",
@@ -86,7 +86,7 @@
   "err_network": "Network error",
   "alert_cap": "You've reached the limit of {max} commands. Remove one first.",
   "err_arm": "Couldn't arm the engine (device busy?)",
-  "err_connect": "Connection error to the Cardputer",
+  "err_connect": "Connection error to the device",
 
   "conf_excellent": "Excellent",
   "conf_good": "Good",
@@ -95,5 +95,6 @@
 
   "meta_dist": "dist",
   "meta_second": "2nd",
-  "meta_radius": "radius"
+  "meta_radius": "radius",
+  "voice_unavailable": "Voice commands are not available on this device."
 }

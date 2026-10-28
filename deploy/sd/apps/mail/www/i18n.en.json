@@ -45,6 +45,7 @@
   "gmail_hint": "Gmail/Yahoo/iCloud need an App Password (with 2FA), not your login password.",
   "body_label": "Message",
   "err_password_required": "Enter the account password.",
-  "confirm_delete_account": "Delete the account \"{name}\"? Its password stored on the Cardputer is erased too.",
-  "device_failed": "The Cardputer did not accept the change ({err}) — nothing was changed."
+  "confirm_delete_account": "Delete the account \"{name}\"? Its password stored on the device is erased too.",
+  "device_failed": "The device did not accept the change ({err}) — nothing was changed.",
+  "mail_unavailable": "Sending e-mail is not available on this device."
 }

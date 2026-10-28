@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // envelope.js — ANIMA Envelope v1: the single canonical shape EVERY substrate (M1/M2/M3/M4)
 // emits, so the chat renderer, context compaction, message actions and export never branch on
 // who answered. It is a strict SUPERSET of the device /api/anima JSON (nucleo_httpd.c:566-601)

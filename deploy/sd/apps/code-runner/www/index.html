@@ -1,4 +1,5 @@
 <!doctype html>
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -109,6 +110,7 @@
 <script type="module">
 import { createRunner } from './nucleo-run.js';
 import I18N from '/nucleo-i18n.js';
+import Caps from '/nucleo-caps.js';   // what this device can do: os.hw / os.anima skip what it lacks
 const t = await I18N.init('code-runner');
 
 const $ = (id) => document.getElementById(id);
@@ -125,6 +127,7 @@ const cwd = () => path ? dirname(path) : '/data';
 // ---- runtime (the shared engine) ----
 const rt = createRunner({
   cwd: cwd(), lang: (navigator.language || 'en').slice(0, 2) === 'it' ? 'it' : 'en', timeoutMs: 6000,
+  hasDevice: (name) => Caps.has(name),
   onLog: (level, text) => { if (level === 'clear') clearConsole(); else line(level === 'info' ? 'info' : level === 'warn' ? 'warn' : level === 'error' ? 'err' : level === 'debug' ? 'debug' : 'log', text); },
   onNotify: (text) => { line('sys', '🔔 ' + text); try { window.parent.postMessage({ type: 'notify', text }, '*'); } catch {} },
 });
@@ -207,7 +210,7 @@ const EXAMPLES = {
   fib: "function fib(n){ return n < 2 ? n : fib(n-1) + fib(n-2); }\nfor (let i = 0; i < 12; i++) console.log('fib', i, '=', fib(i));\nreturn fib(20);",
   fs: "// Scrive e rilegge un file sulla SD (cwd = cartella corrente)\nawait os.fs.write('runner-demo.txt', 'ciao dal Code Runner\\n' + Date.now());\nconst t = await os.fs.read('runner-demo.txt');\nconsole.log('riletto:', t);\nreturn (await os.fs.exists('runner-demo.txt'));",
   list: "const entries = await os.fs.list('/data');\nfor (const e of entries) console.log((e.type === 'dir' ? '📁' : '📄'), e.name, e.size + ' B');\nreturn entries.length + ' voci';",
-  anima: "const a = await os.anima('quanto fa la radice di 144?');\nconsole.log('ANIMA:', a.reply);\nreturn a.tier;",
+  anima: "const a = await os.anima('quanto fa la radice di 144?');\n// a.none = true: il device si astiene (lì il cervello ANIMA vive nel browser)\nconsole.log('ANIMA:', a.reply);\nreturn a.none ? 'ANIMA si è astenuta' : a.tier;",
   http: "const r = await os.http.json('/api/status');\nconsole.log('stato OS:', r.json);\nreturn r.ok;",
   hardware: "// UNA superficie scriptabile per orchestrare l'hardware dal Web Worker (zero interprete sul MCU).\n// Le stesse capability sono anche tool dell'agente LLM e intent di ANIMA.\nconst nets = await os.hw.wifi.scan();\nconsole.log('reti Wi-Fi trovate:', nets.length);\n\nawait os.hw.gpio.write({ pin: 2, value: 1 });   // accendi un relè/LED sul Grove (pin sicuri: 1,2)\nconsole.log('GPIO2 = 1');\nawait os.sleep(300);\n\nawait os.hw.ir.send({ protocol: 'samsung', address: 7, command: 2 });  // spegni una TV Samsung\nconsole.log('IR Samsung power inviato');\n\nawait os.hw.gpio.write({ pin: 2, value: 0 });\nconst lvl = await os.hw.gpio.read({ pin: 2 });\nconsole.log('GPIO2 riletto =', lvl.value);\nreturn 'automazione hardware completata';",
 };

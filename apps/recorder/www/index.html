@@ -1,4 +1,5 @@
 <!doctype html>
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -149,7 +150,7 @@
     <span class="brand"><span class="ic"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.1" stroke-linecap="round"><rect x="9" y="2.5" width="6" height="11" rx="3" fill="#fff" stroke="none"/><path d="M6 11a6 6 0 0 0 12 0"/><line x1="12" y1="17" x2="12" y2="21"/><line x1="8.5" y1="21" x2="15.5" y2="21"/></svg></span>Voice Recorder</span>
     <span class="spacer"></span>
     <div class="srcseg" id="srcSeg" title="Microphone source" data-i18n-attr="title:micSource">
-      <button data-src="device" id="srcDevice">🎙 Cardputer</button>
+      <button data-src="device" id="srcDevice">🎙 <span data-i18n="srcDeviceName">Device</span></button>
       <button data-src="browser" id="srcBrowser">💻 Browser</button>
     </div>
     <button id="animaToggle" title="Open/close ANIMA" data-i18n-attr="title:toggleAnima">🧠 <span>ANIMA</span></button>
@@ -159,7 +160,7 @@
     <section class="left">
       <div class="stage">
         <canvas class="viz" id="viz" width="560" height="96"></canvas>
-        <div class="timer"><span id="time">00:00</span><span class="sub" id="srcLbl">Cardputer · 16 kHz</span></div>
+        <div class="timer"><span id="time">00:00</span><span class="sub" id="srcLbl">Device · 16 kHz</span></div>
         <div class="recwrap" id="recWrap">
           <span class="ring"></span>
           <button id="recBtn" aria-label="Record"><span class="glyph"></span></button>
@@ -244,8 +245,10 @@
     dock:$('dock'), chat:$('chat'), ask:$('ask'), ctxName:$('ctxName'), toast:$('toast'),
   };
   import { recordToSd, onMicStatus } from '/micgate.js';  // OS-wide single-owner gate for the Cardputer mic
+  import Caps from '/nucleo-caps.js';                       // what this device can do (device.mic, anima.device)
   import { transcribeLong, summarizeLong, isLongWav, hasWhisperKey, isPrivate } from './longtranscribe.js';  // browser-side chunked path for long takes
   let src = 'device';                        // 'device' | 'browser'
+  let devMic = null;                         // the firmware's mic + transcriber (/api/rec*, /api/transcribe): null = not probed yet
   let recording = false, t0 = 0, timerInt = null, statusPoll = null, devRec = null;
   let selected = null;                       // selected recording {name,path}
   let files = [];                            // library entries
@@ -387,7 +390,8 @@
   // Routed through the OS-wide mic gate: it holds the single-owner lock for the whole take, so no
   // dictation/ANIMA stream can grab the mic mid-recording (and vice-versa). The gate owns start +
   // status polling; we resolve when the user/device button is pressed and finalize the WAV after.
-  function deviceStart(){
+  async function deviceStart(){
+    if(!(await Caps.has('device.mic'))) throw new Error(t('micUnavailable'));   // a click before the boot check landed
     return new Promise((resolve, reject) => {
       let acked = false;
       devRec = recordToSd({
@@ -521,7 +525,7 @@
     if(recording) return;
     src=s;
     document.querySelectorAll('.srcseg button').forEach(b=>b.classList.toggle('sel', b.dataset.src===s));
-    el.srcLbl.textContent = s==='device' ? 'Cardputer · 16 kHz' : 'Browser · 16 kHz';   // proper nouns + unit
+    el.srcLbl.textContent = (s==='device' ? t('srcDeviceName') : 'Browser') + ' · 16 kHz';
     el.liveWrap.style.display = s==='browser' ? '' : 'none';   // live transcript only for browser mic
     refreshMicHeld();   // the conflict is only the Cardputer mic: re-evaluate on source change
   }
@@ -616,12 +620,13 @@
     const o=btn.textContent; btn.disabled=true; btn.textContent=t('transcribingBtn');
     const path=DIR+'/'+f.name;
     const isWav=/\.wav$/i.test(f.name);
-    const hasKey=await hasWhisperKey();   // this browser's Groq key, or the one saved in Settings ▸ AI
+    let hasKey=false;
     try{
-      // CLIENT-SIDE chunked path for WAV when the browser holds a Groq key: the only way long takes
+      hasKey=await hasWhisperKey();   // this browser's Groq key, or the vault's (on a sealed vault the relay adds it)
+      // CLIENT-SIDE chunked path for WAV when a Groq key is at hand: the only way long takes
       // (>13 min hit Whisper's 25 MB cap, and the device's single-shot TLS upload is fragile). The device
       // never touches the file — we pull it in byte ranges and transcribe segment by segment.
-      if(isWav && hasKey){
+      if(hasKey && (isWav || devMic===false)){   // MP3 too where there is no device transcriber
         const prog=(p)=>{ const pct=p.total?Math.round(100*p.done/p.total):0;
           const lbl=p.phase==='transcribe'?t('transcribing'):t('summarizing');
           btn.textContent=`✨ ${lbl} ${p.done}/${p.total}`; setStatus(`${lbl}… ${pct}%`); };
@@ -636,7 +641,12 @@
       }
       // DEVICE path (MP3, or no browser key): the firmware streams the file to Whisper. Works for short
       // takes; for long ones the client path above is the answer (configure the Groq key in AI Chat).
-      const call=(lang)=> fetch('/api/transcribe?path='+enc(path)+'&lang='+lang+'&summarize=1').then(r=>r.json());
+      // No device transcriber on this board (no /api/rec, or 404/405/501 here): transcription needs a Groq key.
+      const noDev=()=>{ devMic=false; throw new Error(t('longHintKey')); };
+      if(devMic===false || !(await Caps.has('device.mic'))) noDev();
+      const call=(lang)=> fetch('/api/transcribe?path='+enc(path)+'&lang='+lang+'&summarize=1').then(r=>{
+        if(r.status===404||r.status===405||r.status===501) noDev();
+        return r.json(); });
       let r=await call('auto');
       if(!r||!r.ok){ btn.textContent=t('systemLangBtn'); r=await call(sysLang()); }   // fallback to system language
       if(!r||!r.ok) throw new Error((r&&r.error)||t('failed'));
@@ -739,7 +749,8 @@
   async function animaAsk(q, needsOnline=false){
     const m=addMsg('a','<span class="spin"></span>');
     try{
-      const r=await (await fetch('/api/anima?q='+enc(q)+'&lang='+sysLang()+'&mode=on')).json();
+      // a device whose ANIMA lives in the browser (no anima.device) abstains: same as its none:true, no request
+      const r=(await Caps.has('anima.device')) ? await (await fetch('/api/anima?q='+enc(q)+'&lang='+sysLang()+'&mode=on')).json() : { none:true };
       const reply=r.reply||r.answer||'';
       if(needsOnline && !isOnlineTier(r)){
         // Generative tasks (summary/title/actions) need the online teacher — offline ANIMA
@@ -794,7 +805,16 @@
   repaintDynamic(); showReady();             // engine already filled data-i18n; paint dynamic bits
   if(window.innerWidth<=820) el.dock.classList.remove('open');
   // resume if a device recording is already running
-  (async()=>{ try{ const s=await (await fetch('/api/rec/status')).json(); if(s.recording){ src='device'; setRecUI(true); startTimer(); setStatus(t('recordingInProgress')); statusPoll=setInterval(async()=>{ const x=await (await fetch('/api/rec/status')).json(); if(x.level!=null)pushLevel(x.level/100); if(recording&&!x.recording) deviceFinalize(x.path); },600);} }catch{} loadList(); })();
+  // The device mic exists only where the capability list has device.mic (the Cardputer); only there is
+  // /api/rec/status read, for its STATE (a recording already running). Without the capability — or if the endpoint
+  // still answers 404/405/501, a 200 that is not JSON, a network error — its button goes away and the browser mic
+  // is the source, or, without getUserMedia, none. 401/403 (not paired yet) is NOT absence: the device path stays.
+  function noDeviceMic(){
+    $('srcDevice').hidden=true;
+    if(!recording) pickSource('browser');
+    if($('srcBrowser').disabled){ el.recBtn.disabled=true; el.recBtn.title=t('getUserMediaUnavailable'); }
+  }
+  (async()=>{ let found=false; try{ if(await Caps.has('device.mic')){ const rs=await fetch('/api/rec/status'); if(rs.status===401||rs.status===403) found=true; else if(rs.ok){ const s=await rs.json(); found=true; if(s.recording){ src='device'; setRecUI(true); startTimer(); setStatus(t('recordingInProgress')); statusPoll=setInterval(async()=>{ const x=await (await fetch('/api/rec/status')).json(); if(x.level!=null)pushLevel(x.level/100); if(recording&&!x.recording) deviceFinalize(x.path); },600);} } } }catch{} devMic=found; if(!found) noDeviceMic(); loadList(); })();
 
   // ---- live OS-wide language sync -------------------------------------------
   // The engine (imported + initialised at the top) repaints every data-i18n element when the OS

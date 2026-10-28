@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // ===========================================================================
 // ANIMA voice dictation — runs entirely in the browser, no key, no cloud server.
 //
@@ -21,6 +22,7 @@
 // ===========================================================================
 
 import { streamMic } from '/micgate.js';   // OS-wide single-owner gate for the Cardputer mic
+import Caps from '/nucleo-caps.js';        // what this device can do (device.mic)
 
 // Local-first (served from SD next to the app), with an online CDN fallback so
 // dictation still works if the model/lib weren't deployed to SD.
@@ -143,9 +145,12 @@ export function createVoice() {
     try { local = (await fetch(VOSK_LIB, { method: 'GET', headers: { Range: 'bytes=0-0' }, cache: 'force-cache' })).ok; } catch {}
     const voskLoadable = local || navigator.onLine;   // SD copy first, CDN otherwise
 
-    // The Cardputer path needs Vosk (Web Speech can't accept arbitrary PCM). The app is served BY
-    // the device, so /api/rec/stream is same-origin and present — availability hinges on the model.
-    v.deviceAvailable = voskLoadable;
+    // The Cardputer path needs Vosk (Web Speech can't accept arbitrary PCM) AND a device with a microphone:
+    // only the Cardputer firmware serves /api/rec/* (the Handheld, the P4 and the Web edition do not). The device's
+    // capability list says so (device.mic); a stream that still fails is reported by micgate at start.
+    let devMic = false;
+    try { devMic = await Caps.has('device.mic'); } catch {}
+    v.deviceAvailable = voskLoadable && devMic;
 
     if (secure && media && voskLoadable) { v.engine = 'vosk'; v.browserAvailable = true; v.reason = ''; }
     else if (secure && media && SR)      { v.engine = 'webspeech'; v.browserAvailable = true; v.reason = ''; }

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // app-recipe.js — F5: live install-and-smoke on the paired device, and NucleoOS app-recipe learning.
 //
 // Two halves of the roadmap's final phase (docs/anima-code.md §8, §10 F5), both PURE and injected so

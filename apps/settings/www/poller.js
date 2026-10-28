@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // poller.js — the ONE adaptive live-data poller for the Settings app.
 //
 // The Cardputer is a single-task, no-PSRAM HTTP server: concurrency is the enemy. So every live
@@ -7,7 +8,7 @@
 //   • backs off geometrically when readings are calm and tightens when a value crosses a threshold,
 //   • pauses entirely when the page is hidden,
 //   • can be frozen by the user,
-//   • backs off N ticks on a 503 / arbiter-busy instead of retry-storming.
+//   • backs off N ticks on a 503 / busy answer instead of retry-storming.
 //
 // It is pure timing logic: `fetchJson`, `hidden`, `now` and the change/threshold predicates are all
 // injected, so the whole control loop is unit-testable with a fake clock and fake fetch. `start()`

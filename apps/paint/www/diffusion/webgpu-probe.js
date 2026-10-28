@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // webgpu-probe.js — decide whether (and how) the diffusion engine can run on this client, honestly. Mirrors
 // the WebLLM VRAM probe (router.js) but with diffusion-appropriate thresholds: SDXS is one-step and ~430 MB,
 // so it runs on modest GPUs and even falls back to the WASM execution provider — far below WebLLM's needs.
