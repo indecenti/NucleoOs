@@ -42,6 +42,7 @@
 #include "app_gfx.h"
 #include "nucleo_gb.h"
 #include "nucleo_gg.h"
+#include "nucleo_gbc.h"       // the Game Boy Color: the Game Boy's host around a CGB core
 #include "nucleo_kbd.h"
 #include "nucleo_board.h"
 #include "nucleo_exclusive.h"
@@ -900,7 +901,7 @@ static void card_draw(bool full)
         g->setTextSize(1);
         g->setTextColor(MUTED, BG);
         g->setCursor(6, 62);  g->print(TR5("E S A D   muovi", "E S A D   move", "E S A D   mover", "E S A D   bouger", "E S A D   bewegen"));
-        if (SYS->palettes) {                       // Game Boy: A / B / START / SELECT
+        if (!strcmp(SYS->id, "gbemu")) {           // Game Boy and Color: A / B / START / SELECT
             g->setCursor(6, 74);  g->print("K = A     J = B");
             g->setCursor(6, 86);  g->print(TR5("Invio START   Spazio SELECT", "Enter START   Space SELECT", "Intro START   Espacio SELECT", "Entree START  Espace SELECT", "Enter START   Leer SELECT"));
         } else {                                   // Game Gear: buttons 1 / 2 and START; Master System: PAUSE
@@ -1215,9 +1216,15 @@ static void play_session(const char *name);
 static void pic_free(void);
 // Every way out of a session — a refused cartridge, a failed open, a quit — lands back on the shelf,
 // so the shelf comes back from the card HERE, once, rather than on each of those paths.
+static const EmuSys *sys_for(const char *name);
 static void play(const char *name)
 {
+    // A Color cartridge on the Game Boy shelf plays on the Color core, for this session only: the shelf,
+    // its saves and its trace stay the Game Boy's (SYS_GBC shares them), only the console changes.
+    const EmuSys *shelf = SYS;
+    SYS = sys_for(name);
     play_session(name);
+    SYS = shelf;
     if (st) shelf_swap_in();
 }
 
@@ -2033,6 +2040,43 @@ static const EmuSys SYS_GB = {
     "Game Boy", "Game Boy Color",
 };
 
+// The Game Boy Color: the same shelf, folders, saves and trace as the Game Boy (a .gbc file lives in either
+// folder), the Color core and its colour scanline, and the narrow bands of the colour path (the Color's
+// 48 KB of console RAM leave less for the cartridge cache, so every KB of band buffer is a ROM page).
+static esp_err_t gbc_open(const char *p)  { return nucleo_gbc_open(p, on_line16, nullptr); }
+static esp_err_t gbc_probe(const char *p) { nucleo_gb_info_t i; return nucleo_gbc_probe(p, &i); }
+static void gbc_explain(esp_err_t e, const char *path, char *buf, size_t n)
+{
+    nucleo_gb_info_t inf;
+    nucleo_gbc_probe(path, &inf);
+    start_error(e, nucleo_gbc_cart_name(inf.cart_type), buf, n);
+}
+static const EmuSys SYS_GBC = {
+    "gbemu", "Game Boy Color", "GC", DIR_GB, DIR_GBC, ".gb", ".gbc", "C",
+    "Nessuna ROM in /data/ROMs/gb", "No ROMs in /data/ROMs/gb", "Ninguna ROM en /data/ROMs/gb", "Aucune ROM dans /data/ROMs/gb", "Keine ROMs in /data/ROMs/gb",
+    NUCLEO_SD_MOUNT "/system/config/gbemu.json", NUCLEO_SD_MOUNT "/system/config/gbemu.shelf",
+    NUCLEO_SD_MOUNT "/gbemu_trace.txt", "/gbemu_trace.txt",
+    16743,                                   // the Color keeps the Game Boy's 59.727 Hz (double speed or not)
+    false, 5, 3,
+    gbc_open, gbc_probe, gbc_explain, nucleo_gbc_close, nucleo_gbc_reset, nucleo_gbc_run_frame,
+    nucleo_gbc_set_buttons, nucleo_gbc_title, nucleo_gbc_set_frameskip, nucleo_gbc_state_save,
+    nucleo_gbc_state_load, nucleo_gbc_state_exists, nucleo_gbc_save, nucleo_gbc_autosave,
+    nucleo_gbc_get_stats, nucleo_gbc_reset_counters, gb_geometry, false,
+    { ART_GB_Z, sizeof ART_GB_Z, ART_GB_W, ART_GB_H }, { ART_GB_Z, sizeof ART_GB_Z, ART_GB_W, ART_GB_H },
+    "Game Boy", "Game Boy Color",
+};
+// Which console plays `name` on the current shelf: a Game Boy cartridge whose header asks for the Color
+// (byte 0x143 bit 7: Color-only, or Color-enhanced and played in colour) goes to the Color core.
+static const EmuSys *sys_for(const char *name)
+{
+    if (SYS != &SYS_GB) return SYS;
+    char path[PATHMAX + 40];
+    nucleo_gb_info_t inf;
+    if (rom_path(name, path, sizeof path) && nucleo_gbc_probe(path, &inf) == ESP_OK && nucleo_gbc_wants(inf.cgb_flag))
+        return &SYS_GBC;
+    return SYS;
+}
+
 static esp_err_t gg_open(const char *p)  { return nucleo_gg_open(p, on_line16, nullptr); }
 static esp_err_t gg_probe(const char *p) { nucleo_gg_info_t i; return nucleo_gg_probe(p, &i); }
 static void gg_explain(esp_err_t e, const char *path, char *buf, size_t n)
@@ -2090,6 +2134,7 @@ static void enter_gg(void) { SYS = &SYS_GG; enter(); }
 static void leave(void)
 {
     if (SYS) SYS->close();                       // a no-op when no cartridge is open
+    if (SYS == &SYS_GB) nucleo_gbc_close();      // ...and a Color one, if a session ended in it
     mq_free();
     pic_free();
     if (st) { free(st->band[0]); free(st->band[1]); free(st->sh); free(st); st = nullptr; }
