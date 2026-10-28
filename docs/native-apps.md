@@ -173,8 +173,8 @@ and every step is checked:
 | Slots (`slots`) | 38 KB (30 KB, 0.7 KB RAM, ABI 3) | ~21 KB | `CONFIG_NUCLEO_STORE_SLOTS` |
 | Reactor (`reactor`) | 40 KB (32 KB, 0.5 KB RAM, ABI 3) | ~21 KB | `CONFIG_NUCLEO_STORE_REACTOR` |
 | Garden (`giardino`) | 39 KB (31 KB, 0.5 KB RAM, ABI 3) | ~21 KB | `CONFIG_NUCLEO_STORE_SANDGARDEN` |
-| Game Boy (`gbemu`, front-end + Peanut-GB + APU) | 104 KB (72 KB, 0.6 KB RAM, ABI 4) | ~86 KB with the other (shared front-end) | `CONFIG_NUCLEO_STORE_GBEMU` |
-| Game Gear (`ggemu`, front-end + Z80 machine) | 108 KB (77 KB, 0.6 KB RAM, ABI 4) | ~86 KB with the other (shared front-end) | `CONFIG_NUCLEO_STORE_GGEMU` |
+| Game Boy (`gbemu`, front-end + Peanut-GB + APU) | 114 KB (83 KB, 0.7 KB RAM, ABI 4) | ~86 KB with the other (shared front-end) | `CONFIG_NUCLEO_STORE_GBEMU` |
+| Game Gear / Master System (`ggemu`, front-end + Z80 machine) | 127 KB (96 KB, 0.7 KB RAM, ABI 4) | ~86 KB with the other (shared front-end) | `CONFIG_NUCLEO_STORE_GGEMU` |
 
 With all three from the store (the default) the image is **3,461,120 B instead of 3,603,792 B: 142,672 B (139 KB)
 recovered**
@@ -185,6 +185,8 @@ The emulators share one front-end (`app_gbemu.cpp`) and are two modules: each re
 (`nucleo_register_gbemu` / `nucleo_register_ggemu`), so the linker leaves the other core out. The front-end is
 out of the image only when both options are on (the default: 87,840 B recovered, image 3,105,984 B). In a module the Game Boy core's
 `IRAM_ATTR` callbacks run from the flash mapping like the rest of its code (a module has no IRAM).
+On the second screen their shelf is a small HyperSpin-style gallery (a circular wheel of titles, the console's
+picture, live search); the pictures are public-domain photos deflated into the module (`gbemu_art/`).
 
 Moving one more: add `CONFIG_NUCLEO_STORE_<GAME>` to the menu in `nucleo_app/Kconfig`, the same three-line guard
 at the top of its source and around its registration in `nucleo_app.cpp`, then in the store a manifest with its

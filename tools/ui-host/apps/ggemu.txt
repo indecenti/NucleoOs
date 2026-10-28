@@ -1,0 +1,12 @@
+# Game Gear / Master System: the same gallery with the two consoles' pictures.
+@file gbemu
+@reg nucleo_register_ggemu
+@host stubs/tinfl_zlib.cpp
+@lib z
+@sd data/ROMs/gg/Waternet.gg x
+@sd data/ROMs/gg/Tunnel.gg x
+@sd data/ROMs/sms/River-Strike.sms x
+@sd data/ROMs/sms/Balloon-Master.sms x
+shelf
+sms D D
+search c:r c:i

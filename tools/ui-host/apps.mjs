@@ -13,6 +13,8 @@
 //   @host x_stubs.cpp ...                      hand-written host stubs from tools/ui-host/ (data a stub of 0 cannot give)
 //   @reg nucleo_register_x                     the register function (default nucleo_register_<key>)
 //   @app <id>                                  which registered app (a file may register two)
+//   @file <key>                                the source is app_<key>.cpp (two scene files for one source)
+//   @lib <name>                                a host library to link (-l<name>), e.g. z for a stub's inflate
 //   @sd <path under sd/> <content>             a file the scenes find on the card (\n = newline)
 // No scene file: one scene, "home".
 //
@@ -57,7 +59,7 @@ for (const d of [OUT, COMMON_OBJ, SHOTS, SHEETS, LGFX_OBJ]) mkdirSync(d, { recur
 // ---- scene files -------------------------------------------------------------------------------------------
 function readScenes(key) {
   const f = join(sceneDir, key + '.txt');
-  const spec = { key, src: [], host: [], reg: `nucleo_register_${key}`, app: null, sd: [], scenes: [] };
+  const spec = { key, file: key, src: [], host: [], libs: [], reg: `nucleo_register_${key}`, app: null, sd: [], scenes: [] };
   const text = existsSync(f) ? readFileSync(f, 'utf8') : 'home\n';
   for (const raw of text.split(/\r?\n/)) {
     const line = raw.trim();
@@ -67,6 +69,8 @@ function readScenes(key) {
     else if (w === '@host') spec.host.push(...rest);
     else if (w === '@reg') spec.reg = rest[0];
     else if (w === '@app') spec.app = rest[0];
+    else if (w === '@file') spec.file = rest[0];
+    else if (w === '@lib') spec.libs.push(...rest);
     else if (w === '@sd') spec.sd.push([rest[0], line.slice(line.indexOf(rest[0]) + rest[0].length + 1).replace(/\\n/g, '\n')]);
     else spec.scenes.push({ name: w, keys: rest });
   }
@@ -154,7 +158,7 @@ function stubAsm(syms) {
 async function buildApp(spec) {
   const dir = join(OUT, 'obj', spec.key);
   mkdirSync(dir, { recursive: true });
-  const srcs = [join(APPS, `app_${spec.key}.cpp`), ...spec.src.map((s) => (s.includes('/') ? join(FW, s) : join(APPS, s))), ...spec.host.map((s) => join(here, s))];
+  const srcs = [join(APPS, `app_${spec.file}.cpp`), ...spec.src.map((s) => (s.includes('/') ? join(FW, s) : join(APPS, s))), ...spec.host.map((s) => join(here, s))];
   const objs = await pool(srcs.map((src, i) => () => {
     const obj = join(dir, basename(src) + '.o');
     return stale([src, join(APPS, 'app_large.h')], obj) ? compile(src, obj, [], i === 0) : obj;
@@ -168,7 +172,7 @@ async function buildApp(spec) {
     writeFileSync(stubS, stubAsm(syms));
     await run(AS, [stubS, '-o', stubO]);
     try {
-      await run(GPP, [gal, ...objs, ...commonObjs, ...lgfxObjs, stubO, '-Wl,--allow-multiple-definition', '-Wl,--no-demangle', '-o', exe]);
+      await run(GPP, [gal, ...objs, ...commonObjs, ...lgfxObjs, stubO, ...spec.libs.map((l) => `-l${l}`), '-Wl,--allow-multiple-definition', '-Wl,--no-demangle', '-o', exe]);
       return { exe, stubbed: syms.size };
     } catch (e) {
       const found = [...e.message.matchAll(/undefined reference to `([^']+)'/g)].map((m) => m[1]);

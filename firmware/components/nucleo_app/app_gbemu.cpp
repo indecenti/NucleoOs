@@ -47,6 +47,10 @@
 #include "nucleo_exclusive.h"
 #include "nucleo_extdisp.h"     // two screens: the card and the menu on the Cardputer
 #include "nucleo_surface.h"     // ...while the picture fills the external 320x240 panel
+#include "nucleo_touch.h"       // the gallery on the panel: wheel rows, drag to turn it
+#include "app_large.h"          // ...drawn with the shared two-screen kit
+#include "gbemu_art.h"          // the consoles' pictures (public-domain photos, deflated)
+#include "miniz.h"              // tinfl, in the chip's ROM: inflates a picture for one paint
 #include "nucleo_power.h"
 #include "nucleo_setup.h"
 #include "nucleo_ble.h"
@@ -83,6 +87,7 @@ static const char *TAG = "gbemu";
 // ── the console this session drives ─────────────────────────────────────────────────────────────
 // Everything that differs between the Game Boy and the Game Gear, in one place. The instances (SYS_GB,
 // SYS_GG) sit below the scanline paths they point at; enter_gb()/enter_gg() pick one.
+struct EmuArt { const uint8_t *z; uint16_t n; uint8_t w, h; };   // a deflated RGB565 picture (gbemu_art.h)
 struct EmuSys {
     const char *id, *name, *short_name;      // app id, shelf header, 2-letter pillar tag
     const char *dir_a, *dir_b;               // ROM folders; entries found in dir_b carry the badge
@@ -112,6 +117,8 @@ struct EmuSys {
     void (*reset_counters)(void);
     void (*geometry)(int *w, int *h);        // what the open cartridge emits: 160x144 or 256x192
     bool zip;                                // .zip in the library folders opens too (the core unpacks it)
+    EmuArt art_a, art_b;                     // the console's picture in the gallery; art_b for entries with the badge
+    const char *sys_a, *sys_b;               // ...and its name there
 };
 static const EmuSys *SYS = nullptr;
 
@@ -1578,10 +1585,12 @@ static void pretty(const char *file, char *out, size_t n)
     snprintf(out, n, "%s", tmp);
 }
 
+static void draw_companion(void);
 static void draw(void)
 {
     if (!st) return;
     if (!st->sh) shelf_swap_in();                // a failed swap-in retries on the next repaint
+    if (nucleo_app_two_screens()) { draw_companion(); return; }
     int ch = nucleo_app_content_height(), top = nucleo_app_content_top();
     d.fillRect(0, top, 240, ch, BG);
 
@@ -1676,14 +1685,205 @@ static void hint(void)
         : TR5("Scrivi cerca · 1-9 · Invio gioca",     "Type to search · 1-9 · Enter plays", "Escribe buscar/1-9/Intro juega", "Tapez chercher/1-9/Entree joue", "Tippen Suchen/1-9/Enter spielt"));
 }
 
+// ── two screens: the gallery ────────────────────────────────────────────────────────────────────
+// With the external panel attached the shelf becomes a small HyperSpin-style gallery there: a wheel of titles
+// on the right (the selection in the middle, its neighbours smaller and fading), the console's picture and the
+// whole title on the left, the live search on top. Typing filters exactly as on the Cardputer; a drag turns the
+// wheel, a tap brings a title to the middle, a tap on the middle one (or on the picture) plays it. The Cardputer
+// keeps the search and the keys (the companion). Composed with lg::frame: the panel never shows a half wheel.
+#define WHEEL_SLOTS 7                        // visible titles; the middle one is the selection
+#define WHEEL_X     156                      // the wheel's left edge; the picture column is [0, WHEEL_X)
+static const uint8_t WHEEL_H[WHEEL_SLOTS] = { 18, 21, 25, 34, 25, 21, 18 };
+static int s_gal_h;                          // the surface height (240 built in; 210 under a store app's system bar)
+static uint16_t *s_art;                      // the selection's picture, inflated for one paint only
+static const EmuArt *s_art_of;
+
+static const EmuArt *art_for(int i) { return st->sh->list[i].alt ? &SYS->art_b : &SYS->art_a; }
+
+// The title in wheel slot k (-1 = none). With more titles than slots the wheel is circular, as in HyperSpin:
+// past the last title comes the first again, so the wheel is always full.
+static int wheel_at(int k)
+{
+    const int i = st->sel + k - WHEEL_SLOTS / 2;
+    if (st->n > WHEEL_SLOTS) return ((i % st->n) + st->n) % st->n;
+    return i >= 0 && i < st->n ? i : -1;
+}
+
+// Inflate one picture into a fresh block (the tinfl state is ~11 KB): both are freed right after the paint, so
+// a running game never pays for them. A failure just leaves the tile empty.
+static void art_load(const EmuArt *a)
+{
+    s_art_of = a;
+    s_art = (uint16_t *)malloc((size_t)a->w * a->h * 2);
+    tinfl_decompressor *z = (tinfl_decompressor *)malloc(sizeof *z);
+    size_t in = a->n, out = (size_t)a->w * a->h * 2;
+    if (s_art && z) {
+        tinfl_init(z);
+        if (tinfl_decompress(z, a->z, &in, (mz_uint8 *)s_art, (mz_uint8 *)s_art, &out,
+                             TINFL_FLAG_USING_NON_WRAPPING_OUTPUT_BUF) != TINFL_STATUS_DONE) { free(s_art); s_art = nullptr; }
+    } else { free(s_art); s_art = nullptr; }
+    free(z);
+}
+static void art_free(void) { free(s_art); s_art = nullptr; s_art_of = nullptr; }
+
+// The search line: what was typed, with a cursor, or how to start; the counts at the right.
+static void gal_search(int y, int w)
+{
+    const unsigned short cb = lg::card(), ic = st->flen ? ACC : MUTED;
+    d.fillRect(0, y, w, 36, BG);
+    d.fillRoundRect(8, y + 4, w - 16, 28, 14, cb);
+    d.drawCircle(24, y + 16, 6, ic); d.drawLine(28, y + 20, 32, y + 24, ic);
+    char cnt[24];
+    if (st->total > st->n) snprintf(cnt, sizeof cnt, "%d/%d", st->n, st->total);
+    else                   snprintf(cnt, sizeof cnt, "%d", st->total);
+    lg::font(0); d.setTextDatum(middle_right); d.setTextColor(st->total > st->n ? AMB : MUTED, cb);
+    d.drawString(cnt, w - 20, y + 18);
+    const int cw = d.textWidth(cnt);
+    d.setTextDatum(middle_left);
+    if (st->flen) {
+        const char *t = st->filter;
+        while (*t && d.textWidth(t) > w - 84 - cw) t++;
+        d.setTextColor(FG, cb); d.drawString(t, 40, y + 18);
+        d.fillRect(41 + d.textWidth(t), y + 10, 2, 16, ACC);
+    } else {
+        d.setTextColor(DIM, cb);
+        d.drawString(TR5("Scrivi per cercare", "Type to search", "Escribe para buscar", "Tapez pour chercher", "Tippen zum Suchen"), 40, y + 18);
+    }
+    d.setTextDatum(top_left);
+}
+
+static void gal_paint(void *)
+{
+    const int W = d.width(), H = s_gal_h;
+    int y = 0;
+    if (H >= 240) y = lg::header(SYS->name, nullptr, ACC, NK_BACK);   // built in: the app draws its own Back
+    gal_search(y, W);
+    y += 36;
+    const int top = y, bh = H - top;
+    d.fillRect(0, top, W, bh, BG);
+    if (st->n == 0) {
+        lg::message(0, top, W, bh, st->flen ? TR5("Nessun risultato", "No match", "Nada", "Rien", "Nichts")
+                                            : TR5(SYS->empty_it, SYS->empty_en, SYS->empty_es, SYS->empty_fr, SYS->empty_de),
+                    st->flen ? TR5("Canc per correggere", "Backspace to edit", "Retroceso editar", "Retour pour modifier", "Zurueck bearbeiten") : "",
+                    MUTED);
+        return;
+    }
+    // ── left: the console's picture on its tile, the system, the whole title, the resume mark ──
+    const int sel = st->sel, tx = 8, tw = WHEEL_X - 16, th = 88;
+    const EmuArt *a = art_for(sel);
+    d.fillRoundRect(tx, top + 2, tw, th, 10, ART_TILE);
+    if (s_art && s_art_of == a)
+        d.pushImage(tx + (tw - a->w) / 2, top + 2 + (th - a->h) / 2, a->w, a->h, (const lgfx::rgb565_t *)s_art);
+    int ly = top + th + 8;
+    lg::font(4); d.setTextColor(ACC, BG);
+    d.drawString(st->sh->list[sel].alt ? SYS->sys_b : SYS->sys_a, tx + 2, ly);
+    ly += 12;
+    char title[NAMEMAX];
+    pretty(ent_name(sel), title, sizeof title);
+    lg::font(1); d.setTextColor(FG, BG);
+    ly += 20 * lg::wrap(title, tx + 2, ly, tw - 4, 20, H - ly > 84 ? 3 : 2);
+    if (st->have_resume && !strcmp(ent_name(sel), st->resume)) {
+        lg::font(4); d.fillCircle(tx + 5, ly + 6, 3, GRN); d.setTextColor(GRN, BG);
+        d.drawString(TR5("Ultima partita", "Last played", "Ultima partida", "Derniere partie", "Zuletzt gespielt"), tx + 13, ly + 2);
+    }
+    // ── right: the wheel. Slot k shows index sel + k - 3; the middle one is the selection, on its pill ──
+    const int ww = W - WHEEL_X - 6;
+    int sum = 0; for (int k = 0; k < WHEEL_SLOTS; k++) sum += WHEEL_H[k];
+    int wy = top + (bh - sum) / 2;
+    for (int k = 0; k < WHEEL_SLOTS; k++) {
+        const int i = wheel_at(k), h = WHEEL_H[k], dist = abs(k - WHEEL_SLOTS / 2);
+        if (i >= 0) {
+            char t[NAMEMAX], fitted[NAMEMAX];
+            pretty(ent_name(i), t, sizeof t);
+            const bool mid = dist == 0;
+            const int ix = WHEEL_X + 10 + dist * 6;                        // the wheel's curve: far rows step in
+            if (mid) d.fillRoundRect(WHEEL_X, wy + 1, ww, h - 2, (h - 2) / 2, ACC);
+            lg::font(mid ? 1 : dist == 1 ? 0 : 4);
+            lg::fit(fitted, sizeof fitted, t, WHEEL_X + ww - 8 - ix);
+            d.setTextDatum(middle_left);
+            d.setTextColor(mid ? INK : dist == 1 ? FG : dist == 2 ? MUTED : DIM, mid ? ACC : BG);
+            d.drawString(fitted, ix, wy + h / 2);
+            d.setTextDatum(top_left);
+            if (st->have_resume && !strcmp(ent_name(i), st->resume))
+                d.fillCircle(ix - 6, wy + h / 2, 2, mid ? INK : GRN);
+            nucleo_touch_add(WHEEL_X, wy, ww, h, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + k));
+        }
+        wy += h;
+    }
+    // A drag on the wheel turns it, one title per 22 px of finger travel (finger up = later titles).
+    nucleo_touch_add_scroll(WHEEL_X, top, W - WHEEL_X, bh, 22, NK_UP, 0, NK_DOWN, 0);
+    nucleo_touch_add(tx, top + 2, tw, th, NK_ENTER, 0);                 // the picture plays the selection too
+    if (st->n > 1) {                                                    // where am I in a long shelf: a thin rail
+        int kh = bh * WHEEL_SLOTS / st->n; if (kh < 10) kh = 10; if (kh > bh) kh = bh;
+        const int ky = top + (bh - kh) * sel / (st->n - 1);
+        d.fillRect(W - 3, top, 2, bh, LINE);
+        d.fillRect(W - 3, ky, 2, kh, ACC);
+    }
+}
+
+static void draw_large(void)
+{
+    if (!st) return;
+    if (!st->sh) shelf_swap_in();
+    if (!st->sh) return;
+    s_gal_h = d.height();
+    if (st->n) art_load(art_for(st->sel));
+    nucleo_touch_clear();
+    lg::frame(gal_paint, nullptr, 0, 0, true);    // exact: the picture and the theme's cards in true colour
+    if (st->fail[0])                               // a refused cartridge says why, over the gallery
+        lg::message(40, s_gal_h / 2 - 34, d.width() - 80, 68,
+                    TR5("Avvio non riuscito", "Could not start", "No se pudo iniciar", "Pas possible", "Nicht starten"), st->fail, AMB);
+    nucleo_touch_commit();
+    art_free();
+}
+
+// The Cardputer while the gallery is on the panel: the search, big, and the selection's title.
+static void draw_companion(void)
+{
+    int top = nucleo_app_content_top(), ch = nucleo_app_content_height();
+    st->sel_title[0] = '\0';                      // no marquee down here: the title is wrapped instead
+    d.fillRect(0, top, 240, ch, BG);
+    int y = lg::comp_head(SYS->name, ACC);
+    d.setFont(&fonts::Font0); d.setTextSize(2);
+    if (st->flen) {
+        const char *q = st->filter; const int n = (int)strlen(q);
+        const char *tail = n > 17 ? q + n - 17 : q;
+        d.setTextColor(FG, BG); d.setCursor(8, y + 4); d.print(tail);
+        d.fillRect(8 + (int)strlen(tail) * 12, y + 2, 3, 18, ACC);
+    } else {
+        d.setTextColor(DIM, BG); d.setCursor(8, y + 4);
+        d.print(TR5("Scrivi e cerca", "Type to search", "Escribe y busca", "Tapez, cherchez", "Tippen = Suche"));
+    }
+    d.setTextSize(1);
+    if (st->sh && st->n) {
+        char title[NAMEMAX]; pretty(ent_name(st->sel), title, sizeof title);
+        d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(ACC, BG);
+        lg::wrap(title, 8, y + 30, 224, 20, 2);
+        d.setFont(&fonts::Font0);
+    }
+    lg::comp_keys(st->flen ? TR5("INVIO gioca  CANC modif.  ESC pulisce", "ENTER play  DEL edit  ESC clear", "INTRO juega  ESC limpia", "ENTREE joue  ESC efface", "ENTER spielt  ESC leert")
+                           : TR5("su/giu  INVIO gioca  scrivi = cerca", "up/dn  ENTER play  type = search", "arr/ab  INTRO juega", "haut/bas  ENTREE joue", "auf/ab  ENTER spielt"));
+}
+
 static void on_key(int key, char ch)
 {
     if (!st) return;
     if (!st->sh) { shelf_swap_in(); nucleo_app_request_draw(); if (!st->sh) return; }
     if (st->fail[0]) { st->fail[0] = '\0'; nucleo_app_request_draw(); }   // any key dismisses the failure box
 
-    if (key == NK_UP)    { if (st->sel > 0) st->sel--; nucleo_app_request_draw(); return; }
-    if (key == NK_DOWN)  { if (st->sel < st->n - 1) st->sel++; nucleo_app_request_draw(); return; }
+    // The gallery's wheel: slot k is the title k - 3 away from the selection; tapping the middle one plays it.
+    if (nucleo_touch_is_row(key, ch)) {
+        const int k = ch - NUCLEO_TOUCH_ROW, i = k < WHEEL_SLOTS ? wheel_at(k) : -1;
+        if (k == WHEEL_SLOTS / 2) { if (st->n) { play(ent_name(st->sel)); hint(); } }
+        else if (i >= 0) st->sel = i;
+        nucleo_app_request_draw();
+        return;
+    }
+
+    // On the gallery's circular wheel the ends meet; the compact list stops at them.
+    const bool ring = nucleo_app_two_screens() && st->n > WHEEL_SLOTS;
+    if (key == NK_UP)    { if (st->sel > 0) st->sel--; else if (ring) st->sel = st->n - 1; nucleo_app_request_draw(); return; }
+    if (key == NK_DOWN)  { if (st->sel < st->n - 1) st->sel++; else if (ring) st->sel = 0; nucleo_app_request_draw(); return; }
     // NB: NK_LEFT and NK_BACK never arrive here — the framework routes both to the back handler
     // (see on_back). Only NK_RIGHT pages forward from on_key.
     if (key == NK_RIGHT) { st->sel += 5; if (st->sel > st->n - 1) st->sel = st->n - 1; nucleo_app_request_draw(); return; }
@@ -1703,7 +1903,9 @@ static void on_key(int key, char ch)
     // Digits are quick-pick, not filter input: on a keyboard device the fastest path to a visible
     // row is its number. Titles starting with a digit are still reachable by typing more letters.
     if (ch >= '1' && ch <= '9') {
-        int want = st->scroll + (ch - '1');
+        // On two screens the digits count the wheel's slots from its top, the selection being the 4th.
+        int want = nucleo_app_two_screens() ? (ch - '1' < WHEEL_SLOTS ? wheel_at(ch - '1') : -1) : st->scroll + (ch - '1');
+        if (want < 0) return;
         if (want < st->n) { st->sel = want; play(ent_name(want)); hint(); nucleo_app_request_draw(); }
         return;
     }
@@ -1757,6 +1959,8 @@ static const EmuSys SYS_GB = {
     nucleo_gb_set_buttons, nucleo_gb_title, nucleo_gb_set_frameskip, nucleo_gb_state_save,
     nucleo_gb_state_load, nucleo_gb_state_exists, nucleo_gb_save, nucleo_gb_autosave,
     nucleo_gb_get_stats, nucleo_gb_reset_counters, gb_geometry, false,
+    { ART_GB_Z, sizeof ART_GB_Z, ART_GB_W, ART_GB_H }, { ART_GB_Z, sizeof ART_GB_Z, ART_GB_W, ART_GB_H },
+    "Game Boy", "Game Boy Color",
 };
 
 static esp_err_t gg_open(const char *p)  { return nucleo_gg_open(p, on_line16, nullptr); }
@@ -1769,7 +1973,7 @@ static void gg_explain(esp_err_t e, const char *path, char *buf, size_t n)
     else start_error(e, nullptr, buf, n);
 }
 static const EmuSys SYS_GG = {
-    "ggemu", "Game Gear", "GG", DIR_GG, DIR_SMS, ".gg", ".sms", "SMS",
+    "ggemu", "Game Gear/Master System", "GG", DIR_GG, DIR_SMS, ".gg", ".sms", "SMS",
     "Nessuna ROM in /data/ROMs/gg o /sms", "No ROMs in /data/ROMs/gg or /sms", "Ninguna ROM en /data/ROMs/gg o /sms", "Aucune ROM dans /data/ROMs/gg ou /sms", "Keine ROMs in /data/ROMs/gg oder /sms",
     NUCLEO_SD_MOUNT "/system/config/ggemu.json", NUCLEO_SD_MOUNT "/system/config/ggemu.shelf",
     NUCLEO_SD_MOUNT "/ggemu_trace.txt", "/ggemu_trace.txt",
@@ -1779,6 +1983,8 @@ static const EmuSys SYS_GG = {
     nucleo_gg_set_buttons, nucleo_gg_title, nucleo_gg_set_frameskip, nucleo_gg_state_save,
     nucleo_gg_state_load, nucleo_gg_state_exists, nucleo_gg_save, nucleo_gg_autosave,
     nucleo_gg_get_stats, nucleo_gg_reset_counters, nucleo_gg_geometry, true,
+    { ART_GG_Z, sizeof ART_GG_Z, ART_GG_W, ART_GG_H }, { ART_SMS_Z, sizeof ART_SMS_Z, ART_SMS_W, ART_SMS_H },
+    "Game Gear", "Master System",
 };
 
 static void enter(void)
@@ -1815,6 +2021,7 @@ static void leave(void)
 {
     if (SYS) SYS->close();                       // a no-op when no cartridge is open
     mq_free();
+    art_free();
     if (st) { free(st->band[0]); free(st->band[1]); free(st->sh); free(st); st = nullptr; }
     if (SYS) remove(SYS->shelf_swp);             // never leave a stale shelf image for the next visit
     if (nucleo_exclusive_active()) nucleo_exclusive_exit();
@@ -1829,12 +2036,13 @@ extern "C" void nucleo_register_gbemu(void)
         "gbemu", "Game Boy", "Games",
         "Play Game Boy cartridges natively — the emulator runs on the Cardputer itself.",
         'G', 0x8FF3, enter_gb, on_key, nullptr, draw, leave,
-        NX_NET_APP | NX_SOLO | NX_WIFI
+        NX_NET_APP | NX_SOLO | NX_WIFI,
             // SOLO: only a fresh boot yields a contiguous block big enough for the core + ROM cache;
             // the runtime reclaim frees RAM but cannot defragment (see nucleo_exclusive.h).
             // WIFI: the radio costs ~48 KB and halves the largest free block, and an emulator has no
             // use for a network. Leaving reboots into the full OS, so the radio returns on its own
             // without the fragile in-place restore.
+        nullptr, draw_large,                     // two screens: the gallery on the panel
     };
     nucleo_app_register(&app);
 }
@@ -1845,10 +2053,10 @@ extern "C" void nucleo_register_gbemu(void)
 extern "C" void nucleo_register_ggemu(void)
 {
     static const nucleo_app_def_t gg = {
-        "ggemu", "Game Gear", "Games",
-        "Play Game Gear cartridges natively — the emulator runs on the Cardputer itself.",
+        "ggemu", "Game Gear/Master System", "Games",
+        "Play Game Gear and Master System cartridges natively — the emulator runs on the Cardputer itself.",
         'G', 0x5D7F, enter_gg, on_key, nullptr, draw, leave,
-        NX_NET_APP | NX_SOLO | NX_WIFI
+        NX_NET_APP | NX_SOLO | NX_WIFI, nullptr, draw_large
     };
     nucleo_app_register(&gg);
 }

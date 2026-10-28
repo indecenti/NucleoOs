@@ -1,0 +1,18 @@
+# Game Boy: the shelf, compact and as the two-screen gallery (wheel, picture, live search). Core calls are stubs.
+@host stubs/tinfl_zlib.cpp
+@lib z
+@sd data/ROMs/gb/Tobu-Tobu-Girl-Deluxe.gb x
+@sd data/ROMs/gb/Tetris-(World).gb x
+@sd data/ROMs/gb/Super-Mario-Land-(World).gb x
+@sd data/ROMs/gb/GB-Wordyl.gb x
+@sd data/ROMs/gb/Deadeus.gb x
+@sd data/ROMs/gb/Adventures-of-Lolo-Very-Long-Title-(Europe).gb x
+@sd data/ROMs/gbc/Pokemon-Crystal-(USA).gbc x
+@sd data/ROMs/gb/Kirby's-Dream-Land.gb x
+shelf
+down D D
+search c:t c:o
+nomatch c:z c:z c:q
+wheel_tap row:5
+wheel_drag D D D D
+ring_top U
