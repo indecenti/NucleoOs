@@ -61,6 +61,21 @@
     "Sensitivity": { "es": "Sensibilidad", "fr": "Sensibilite", "de": "Empfindlich" },
     "Invert X": { "es": "Invertir X", "fr": "Inverser X", "de": "X umkehren" },
     "Invert Y": { "es": "Invertir Y", "fr": "Inverser Y", "de": "Y umkehren" },
-    "Space or C recenters the tilt": { "es": "Espacio o C recentra", "fr": "Espace ou C recentre", "de": "Leertaste oder C: neu zentrieren" }
+    "Space or C recenters the tilt": { "es": "Espacio o C recentra", "fr": "Espace ou C recentre", "de": "Leertaste oder C: neu zentrieren" },
+    "LEVEL UP! Tap a card": { "es": "SUBES NIVEL! Toca carta", "fr": "NIVEAU SUP! Touche une carte", "de": "LEVEL UP! Tippe eine Karte" },
+    "Tap the hero again to play": { "es": "Toca otra vez el heroe para jugar", "fr": "Touche encore le heros pour jouer", "de": "Held nochmal tippen zum Spielen" },
+    "Play again": { "es": "Otra vez", "fr": "Rejouer", "de": "Nochmal" },
+    "Resume": { "es": "Seguir", "fr": "Reprendre", "de": "Weiter" },
+    "Menu": { "es": "Menu", "fr": "Menu", "de": "Menue" },
+    "Tap: walk there   Drag: steer": { "es": "Toca: ve ahi   Arrastra: dirige", "fr": "Touche: va ici   Glisse: diriger", "de": "Tippen: hingehen   Ziehen: lenken" },
+    "HP %d / %d": { "es": "PV %d / %d", "fr": "PV %d / %d", "de": "LP %d / %d" },
+    "Level up! pick": { "es": "Sube nivel! elige", "fr": "Niveau sup! choisis", "de": "Level up! waehle" },
+    "New record!": { "es": "Nuevo record!", "fr": "Nouveau record !", "de": "Neuer Rekord!" },
+    "1-3 pick a card": { "es": "1-3 elige carta", "fr": "1-3 choisis carte", "de": "1-3 Karte waehlen" },
+    "Arrows/WASIO move  Esc pause": { "es": "Flechas/WASIO mueve  Esc pausa", "fr": "Fleches/WASIO bouge  Esc pause", "de": "Pfeile/WASIO gehen  Esc Pause" },
+    "ENTER ok  Esc back": { "es": "INTRO ok  Esc atras", "fr": "ENTREE ok  Esc retour", "de": "ENTER ok  Esc zurueck" },
+    "L/R hero  ENTER play": { "es": "IZ/DE heroe  INTRO juega", "fr": "G/D heros  ENTREE joue", "de": "L/R Held  ENTER spielen" },
+    "Best %d:%02d  %d kills": { "es": "Mejor %d:%02d  %d bajas", "fr": "Record %d:%02d  %d tues", "de": "Rekord %d:%02d  %d Kills" },
+    "UP/DN  ENTER  or tap the panel": { "es": "AR/AB  INTRO  o toca el panel", "fr": "HT/BAS  ENTREE  ou touche l'ecran", "de": "AUF/AB  ENTER  oder Panel tippen" }
   }
 }

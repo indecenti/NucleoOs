@@ -64,6 +64,23 @@
     "hold: charge the launch": { "es": "pulsa: carga el tiro", "fr": "tiens: charge le tir", "de": "halten: Schuss laden" },
     "left flipper": { "es": "flipper izquierdo", "fr": "flipper gauche", "de": "Flipper links" },
     "nudge (too many: TILT)": { "es": "empujon (muchos: TILT)", "fr": "secousse (trop: TILT)", "de": "Schubs (zu oft: TILT)" },
-    "right flipper": { "es": "flipper derecho", "fr": "flipper droit", "de": "Flipper rechts" }
+    "right flipper": { "es": "flipper derecho", "fr": "flipper droit", "de": "Flipper rechts" },
+    "PULL THE PLUNGER": { "es": "TIRA DEL LANZADOR", "fr": "TIRE LE LANCEUR", "de": "ZIEH DEN STOESSEL" },
+    "Score": { "es": "Puntos", "fr": "Score", "de": "Punkte" },
+    "Replay": { "es": "Otra", "fr": "Rejouer", "de": "Nochmal" },
+    "Level %d": { "es": "Nivel %d", "fr": "Niveau %d", "de": "Level %d" },
+    "Resume": { "es": "Seguir", "fr": "Reprendre", "de": "Weiter" },
+    "Quit": { "es": "Salir", "fr": "Sortir", "de": "Ende" },
+    "Tap a side: flipper": { "es": "Toca un lado: flipper", "fr": "Touche un cote: flipper", "de": "Seite tippen: Flipper" },
+    "Pull plunger: launch": { "es": "Tira del lanzador: saca", "fr": "Tire le lanceur: lance", "de": "Stoessel ziehen: Start" },
+    "Pinball": { "es": "Pinball", "fr": "Flipper", "de": "Flipper" },
+    "Lvl %d   Balls %d   Mult x%d": { "es": "Niv %d   Bolas %d   Mult x%d", "fr": "Niv %d   Billes %d   Mult x%d", "de": "Lvl %d   Kugeln %d   Mult x%d" },
+    "ENTER / Esc": { "es": "INTRO / Esc", "fr": "ENTREE / Esc", "de": "ENTER / Esc" },
+    "SPACE launch   TAB pause": { "es": "ESP saca   TAB pausa", "fr": "ESP lance   TAB pause", "de": "LEER Start   TAB Pause" },
+    "1/0 flippers   N nudge   TAB pause": { "es": "1/0 flippers   N empuja   TAB pausa", "fr": "1/0 flippers   N secoue   TAB pause", "de": "1/0 Flipper   N Stoss   TAB Pause" },
+    "Help": { "es": "Ayuda", "fr": "Aide", "de": "Hilfe" },
+    "Best: %lu": { "es": "Mejor: %lu", "fr": "Record: %lu", "de": "Rekord: %lu" },
+    "page %d / 3": { "es": "pagina %d / 3", "fr": "page %d / 3", "de": "Seite %d / 3" },
+    "ENTER select   Esc back": { "es": "INTRO elige   Esc atras", "fr": "ENTREE choisit   Esc retour", "de": "ENTER waehlt   Esc zurueck" }
   }
 }

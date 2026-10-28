@@ -25,6 +25,7 @@
     "ESC quit": { "es": "ESC salir", "fr": "ESC quitter", "de": "ESC Ende" },
     "DEL clear   < > pick   ENTER   ESC": { "es": "DEL borrar   < > elegir   ENTER   ESC", "fr": "DEL effacer   < > choisir   ENTREE   ESC", "de": "DEL loeschen   < > waehlen   ENTER   ESC" },
     "TAB info   < > game   ENTER   ESC": { "es": "TAB info   < > juego   ENTER   ESC", "fr": "TAB info   < > jeu   ENTREE   ESC", "de": "TAB Info   < > Spiel   ENTER   ESC" },
-    "TAB/ESC close   < > game   ENTER play": { "es": "TAB/ESC cerrar   < > juego   ENTER jugar", "fr": "TAB/ESC fermer   < > jeu   ENTREE jouer", "de": "TAB/ESC zu   < > Spiel   ENTER spielen" }
+    "TAB/ESC close   < > game   ENTER play": { "es": "TAB/ESC cerrar   < > juego   ENTER jugar", "fr": "TAB/ESC fermer   < > jeu   ENTREE jouer", "de": "TAB/ESC zu   < > Spiel   ENTER spielen" },
+    "Games": { "es": "Juegos", "fr": "Jeux", "de": "Spiele" }
   }
 }

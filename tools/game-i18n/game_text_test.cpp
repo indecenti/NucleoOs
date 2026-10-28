@@ -28,6 +28,12 @@ int main(void) {
     set_lang("pt"); eq(GT("Gioca", "Play"), "Play", "an unshipped language reads English");
     game_text_close();
     set_lang("es"); eq(GT("Gioca", "Play"), "Play", "after close: no pack, English");
+    // a Store-installed game: its own pack (/sd/apps/<id>/i18n.<lang>) first, the system one for the rest
+    game_text_open("store");
+    set_lang("es"); eq(GT("Gioca", "Play"), "Jugar tienda", "the app's own pack wins over the system copy");
+    set_lang("fr"); eq(GT("Gioca", "Play"), "Jouer", "no app pack for fr: the system copy");
+    game_text_close();
+    set_lang("es");
     // damaged packs (written by the .mjs runner): each must be refused -> English, never a crash
     static const char *bad[] = { "truncated", "badmagic", "offsetout", "nonul", "huge" };
     for (const char *b : bad) {

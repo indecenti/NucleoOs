@@ -1,0 +1,11 @@
+# Converter: first run (km), typing, moving the unit, the other quantities, the panel's keypad and rows
+@sd system/config/settings.json {"ui":{"language":"it"}}
+home
+typing   t:5 L c:2
+moved    t:5 D
+temp     R R t:37 L c:5
+data     R R R R R R t:1 U U U
+neg      R R c:- t:40
+taps     tap:224,105 tap:272,147 tap:224,147 tap:240,20
+rows     tap:236,63 tap:100,120
+next     tap:180,15 tap:180,15

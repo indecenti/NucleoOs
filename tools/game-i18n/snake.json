@@ -220,6 +220,96 @@
       "es": "salva de 1 choque",
       "fr": "survit a 1 choc",
       "de": "ueberlebt 1 Crash"
+    },
+    "Panel: drag or tap to turn": {
+      "es": "Panel: arrastra o toca para girar",
+      "fr": "Ecran: glisse ou touche pour tourner",
+      "de": "Panel: ziehen oder tippen zum Drehen"
+    },
+    "REMATCH": {
+      "es": "REVANCHA",
+      "fr": "REVANCHE",
+      "de": "REVANCHE"
+    },
+    "RESUME": {
+      "es": "SEGUIR",
+      "fr": "REPRENDRE",
+      "de": "WEITER"
+    },
+    "QUIT": {
+      "es": "SALIR",
+      "fr": "SORTIR",
+      "de": "ENDE"
+    },
+    "Drag or tap to turn": {
+      "es": "Arrastra o toca para girar",
+      "fr": "Glisse ou touche pour tourner",
+      "de": "Ziehen oder tippen: drehen"
+    },
+    "ENTER / Esc: menu": {
+      "es": "INTRO / Esc: menu",
+      "fr": "ENTREE / Esc: menu",
+      "de": "ENTER / Esc: Menue"
+    },
+    "arrows or WASD: turn   Esc: pause": {
+      "es": "flechas o WASD: gira   Esc: pausa",
+      "fr": "fleches/WASD: tourne   Esc: pause",
+      "de": "Pfeile/WASD: drehen   Esc: Pause"
+    },
+    "Menu": {
+      "es": "Menu",
+      "fr": "Menu",
+      "de": "Menue"
+    },
+    "Hosting": {
+      "es": "Esperando",
+      "fr": "En attente",
+      "de": "Wartet"
+    },
+    "waiting...": {
+      "es": "esperando...",
+      "fr": "attente...",
+      "de": "warte..."
+    },
+    "Join": {
+      "es": "Unirse",
+      "fr": "Entrer",
+      "de": "Rein"
+    },
+    "searching...": {
+      "es": "buscando...",
+      "fr": "recherche...",
+      "de": "suche..."
+    },
+    "Help": {
+      "es": "Ayuda",
+      "fr": "Aide",
+      "de": "Hilfe"
+    },
+    "rules": {
+      "es": "reglas",
+      "fr": "regles",
+      "de": "Regeln"
+    },
+    "power-ups": {
+      "es": "mejoras",
+      "fr": "bonus",
+      "de": "Power-ups"
+    },
+    "Wins %d - %d": {
+      "es": "Ganadas %d - %d",
+      "fr": "Gagnees %d - %d",
+      "de": "Siege %d - %d"
+    },
+    "Food best: %d": {
+      "es": "Mejor comida: %d",
+      "fr": "Record repas: %d",
+      "de": "Bestes Futter: %d"
+    },
+    "ENTER select   Esc back": {
+      "es": "INTRO elige   Esc atras",
+      "fr": "ENTREE choisit   Esc retour",
+      "de": "ENTER waehlt   Esc zurueck"
     }
   }
 }
