@@ -16,6 +16,7 @@
 import * as AI from './ai.js';        // browser-direct cloud client (shared with onboarding)
 import * as Mode from './anima-mode.js';   // the one engine-mode definition + the turn abort/timeout helper
 import * as GPU from './webllm.js';        // the browser-GPU model (Settings ▸ AI), fallback when nothing else answered
+import Caps from './nucleo-caps.js';      // what this device can do: the conversation store, memory, network mode…
 
 let api = null;                       // { byId, WM, openFile, showToast, refreshStatus, FsIndex }
 let _aiCfg = null, _aiAt = 0;         // cached teacher config (15s) so we don't re-read the SD per message
@@ -61,7 +62,106 @@ function copilotSid() {
   if (!Mode.validSid(_sid)) { _sid = Mode.newSid('c'); try { sessionStorage.setItem('anima.copilot.sid', _sid); } catch {} }
   return _sid;
 }
-let scrim, root, logEl, inputEl, sendBtn, dotEl, subEl, modeBtn, langBtn, tbBtn, actBtn, micBtn, statusEl;
+function resetSid() { _sid = ''; try { sessionStorage.removeItem('anima.copilot.sid'); } catch {} }
+
+// ---- what the device offers the copilot ----
+// Capabilities (contract/capabilities.json), never the edition's name. Each one switches on ONE piece and
+// nothing else: without them the copilot is exactly the single-turn bar it always was (no drawer, no store
+// calls, no extra requests). Exported, pure, for tests/copilot-features.test.mjs.
+export function featuresFrom(caps) {
+  const has = (n) => Array.isArray(caps) && caps.includes(n);
+  return {
+    conv: has('anima.conv'),         // durable conversations on the device (/api/anima/conv, /api/anima/chat's conv)
+    memory: has('anima.memory'),     // the user's memory facts (/api/anima/memory)
+    net: has('anima.net'),           // the device's own network mode (/api/anima/net)
+    models: has('anima.models'),     // the models the configured AI server offers (/api/anima/models)
+    device: has('anima.device'),     // ANIMA's brain runs on the device (its tiers show in /status)
+  };
+}
+async function feats() {
+  try { return featuresFrom((await Caps.info()).caps); } catch { return featuresFrom([]); }
+}
+// The slash commands this device can run, in /help order. /help, /clear, /model and /status need nothing
+// beyond what every backend serves (the teacher config, /api/anima/caps); the rest need their capability.
+export function slashCommands(f) {
+  return ['help', 'clear', ...(f && f.net ? ['mode'] : []), 'model', ...(f && f.models ? ['models'] : []), 'status'];
+}
+
+// ---- device conversation store (anima.conv) ----
+// One durable conversation, persisted DEVICE-side: every surface — browser-direct cloud, the device's
+// conversation turn, the device's own screen — mirrors its turns there, so history survives reloads and is
+// shared. The id lives in localStorage under the key the device's earlier web OS used, so a user who had a
+// conversation pinned finds it again after the update.
+const CONV_KEY = 'anima.conv';
+let convId = (() => { try { return localStorage.getItem(CONV_KEY) || ''; } catch { return ''; } })();
+let hydrated = false;                 // stored tail already rendered into this session's log?
+let _ctx = null;                      // {id, at, sys} — 30s cache of the device context block
+// The device's store speaks Italian or English (its context block and memory replies).
+const devLang = () => (lang() === 'it' ? 'it' : 'en');
+const postJSON = (url, body, signal) => fetch(url, { method: 'POST', body: JSON.stringify(body), signal });
+
+function setConv(id) {
+  convId = id || '';
+  try { if (convId) localStorage.setItem(CONV_KEY, convId); else localStorage.removeItem(CONV_KEY); } catch {}
+}
+async function convEnsure(signal) {
+  if (convId) return convId;
+  try {
+    const r = await (await postJSON('/api/anima/conv', { op: 'new' }, signal)).json();
+    if (r && r.ok && r.id) setConv(r.id);
+  } catch {}
+  return convId;
+}
+// Transcript mirror for turns the device did NOT store itself (its conversation turn appends server-side).
+// SEQUENCED: both appends share one async chain, or the assistant line could land before the user line and
+// permanently invert the stored pair (the device pairs u→a when it builds every later context).
+function convMirrorPair(q, a) {
+  if (!convId) return;
+  const id = convId;
+  const post = (role, text) => postJSON('/api/anima/conv', { op: 'append', id, r: role, t: String(text).slice(0, 3000) });
+  (async () => { try { if (q) await post('u', q); if (a) await post('a', a); } catch {} })();
+}
+// The persistent-context block (user memory + rolling summary) for BROWSER-direct cloud turns.
+async function convCtx(id, signal) {
+  if (!id) return '';
+  if (_ctx && _ctx.id === id && Date.now() - _ctx.at < 30000) return _ctx.sys;
+  try {
+    const r = await (await fetch('/api/anima/conv?op=ctx&id=' + encodeURIComponent(id) + '&lang=' + devLang(), { signal })).json();
+    _ctx = { id, at: Date.now(), sys: (r && r.sys) || '' };
+    return _ctx.sys;
+  } catch { return ''; }              // a failed fetch is NOT cached: retry next turn
+}
+// Local history → provider messages (browser-direct multi-turn), last `n` turns, clipped. Excludes the LAST
+// entry: askCopilot pushes the current question before calling this and the caller appends it itself.
+function histMessages(n) {
+  const out = [];
+  for (const h of history.slice(-(n * 2) - 1, -1)) {
+    if (!h.text) continue;
+    out.push({ role: h.role === 'user' ? 'user' : 'assistant', content: String(h.text).slice(0, 1500) });
+  }
+  while (out.length && out[0].role !== 'user') out.shift();   // Anthropic: the first message must be the user's
+  return out;
+}
+// "ricordati che …" (anima.memory) — the DEVICE's detector decides (op:capture runs the same code every other
+// surface uses), so the browser keeps no trigger-phrase list to drift. The reply when the turn was a memory
+// turn, else null (not one / device unreachable).
+async function memCapture(q, signal) {
+  try {
+    const r = await (await postJSON('/api/anima/memory', { op: 'capture', q, lang: devLang() }, signal)).json();
+    if (r && r.handled) { _ctx = null; return r.reply || 'ok'; }
+  } catch (e) { if (signal && signal.aborted) throw e; }
+  return null;
+}
+// The device's network mode (anima.net): offline | local | hybrid | llm, one setting for every surface.
+const NETS = ['offline', 'local', 'hybrid', 'llm'];
+async function getNet() {
+  try { const r = await fetch('/api/anima/net', { cache: 'no-store' }); return r.ok ? ((await r.json()).mode || '') : ''; } catch { return ''; }
+}
+async function setNet(m) {
+  try { const r = await postJSON('/api/anima/net', { mode: m }); return r.ok ? ((await r.json()).mode || '') : ''; } catch { return ''; }
+}
+
+let scrim, root, logEl, inputEl, sendBtn, dotEl, subEl, modeBtn, langBtn, tbBtn, actBtn, micBtn, statusEl, convBtn, convPanel;
 let isOpen = false, busy = false, aborter = null, seq = 0, elapsedTimer = null;
 let history = [];                     // in-memory transcript for this session: [{role,text,r?}]
 let asr = null, voiceOn = false;      // live voice session (device mic → Vosk in the browser)
@@ -81,11 +181,22 @@ export const STR = {
     opened: 'aperto', thinking: ['Sto pensando', 'Rifletto', 'Elaboro', 'Consulto la memoria', 'Sto cercando'],
     reveal: 'Mostra nella cartella', openCal: 'Apri Calendario', openMon: 'Apri System Monitor', openSet: 'Apri Impostazioni',
     nomatch: 'Nessuna corrispondenza.', memory: 'memoria',
-    footHint: ['<kbd>⏎</kbd> invia', '<kbd>⇧⏎</kbd> a capo', '<kbd>↑↓</kbd> cronologia', '<kbd>esc</kbd> chiudi'], notDone: 'non eseguito', why: 'perché', gpuAns: 'GPU del browser',
+    footHint: ['<kbd>⏎</kbd> invia', '<kbd>⇧⏎</kbd> a capo', '<kbd>↑↓</kbd> cronologia', '<kbd>/</kbd> comandi', '<kbd>esc</kbd> chiudi'], notDone: 'non eseguito', why: 'perché', gpuAns: 'GPU del browser',
     mic: 'Parla con ANIMA', micListening: 'Ti ascolto…', micBusy: 'Microfono in uso da', micErr: 'Voce non disponibile (modello non caricato).', verOk: 'verificato dal dispositivo', verNo: 'contraddetto dal dispositivo',
     modeAuto: 'auto', modePrivate: 'privato', modeTip: 'Modalità: Auto usa la rete quando serve, Privato mai — clic per cambiare',
     langTip: 'Lingua', agentTip: 'Agente: fai, non solo rispondere', engineTip: 'Motore ANIMA', close: 'Chiudi', send: 'Invia', stop: 'Stop',
     working: 'ANIMA sta preparando la risposta…', agentPrivate: 'La modalità agente usa l’IA online: in modalità Privato è spenta. Passa ad Auto per usarla.',
+    // device conversations + memory (anima.conv / anima.memory) and the slash commands
+    convsTip: 'Conversazioni e memoria', convs: 'Conversazioni', convNew: 'Nuova', convNone: 'Nessuna conversazione salvata.', untitled: '(senza titolo)', del: 'elimina',
+    memTitle: 'Memoria', memAdd: 'Aggiungi un fatto che ANIMA deve ricordare…', memEmpty: 'Vuota — di\' "ricordati che …" o aggiungi qui sotto.', forget: 'dimentica',
+    cmds: { help: ['/help', 'questi comandi'], clear: ['/clear', 'nuova conversazione'], mode: ['/mode [offline|local|hybrid|llm]', 'modalità di rete del dispositivo'],
+            model: ['/model [nome]', 'il modello in uso, o cambialo'], models: ['/models', 'i modelli che il server offre'], status: ['/status', 'motore, rete, modello'] },
+    unknownCmd: 'Comando sconosciuto — /help per l’elenco.', badNet: 'Modalità sconosciuta: offline, local, hybrid o llm.',
+    nets: { offline: 'offline', local: 'locale', hybrid: 'ibrida', llm: 'llm' },
+    netDesc: { offline: 'solo il dispositivo, niente rete', local: 'dispositivo + server LLM nella tua rete, niente internet',
+               hybrid: 'dispositivo, poi Wikipedia, poi il modello', llm: 'prima il modello, il dispositivo come riserva' },
+    nomodels: 'Il server non ha restituito modelli.', modelSet: 'Modello impostato:', noTeacher: 'Nessun modello configurato (Impostazioni ▸ IA).', writeFail: 'Salvataggio non riuscito.',
+    stMode: 'modalità', stDevNet: 'rete del dispositivo', stNet: 'rete', stModel: 'modello', stOnline: 'online', stOffline: 'offline',
   },
   en: {
     sub: 'copilot', placeholder: 'Ask anything or give a command…',
@@ -96,11 +207,22 @@ export const STR = {
     opened: 'opened', thinking: ['Thinking', 'Pondering', 'Reasoning', 'Recalling', 'Searching'],
     reveal: 'Reveal in folder', openCal: 'Open Calendar', openMon: 'Open System Monitor', openSet: 'Open Settings',
     nomatch: 'No match.', memory: 'memory',
-    footHint: ['<kbd>⏎</kbd> send', '<kbd>⇧⏎</kbd> newline', '<kbd>↑↓</kbd> history', '<kbd>esc</kbd> close'], notDone: 'not done', why: 'why', gpuAns: 'browser GPU',
+    footHint: ['<kbd>⏎</kbd> send', '<kbd>⇧⏎</kbd> newline', '<kbd>↑↓</kbd> history', '<kbd>/</kbd> commands', '<kbd>esc</kbd> close'], notDone: 'not done', why: 'why', gpuAns: 'browser GPU',
     mic: 'Speak to ANIMA', micListening: 'Listening…', micBusy: 'Mic in use by', micErr: 'Voice unavailable (model not loaded).', verOk: 'verified on-device', verNo: 'contradicted on-device',
     modeAuto: 'auto', modePrivate: 'private', modeTip: 'Mode: Auto uses the network when it helps, Private never does — click to switch',
     langTip: 'Language', agentTip: 'Agent: do, not just answer', engineTip: 'ANIMA engine', close: 'Close', send: 'Send', stop: 'Stop',
     working: 'ANIMA is working on the answer…', agentPrivate: 'Agent mode uses the online AI, so it is off in Private mode. Switch to Auto to use it.',
+    // device conversations + memory (anima.conv / anima.memory) and the slash commands
+    convsTip: 'Conversations and memory', convs: 'Conversations', convNew: 'New', convNone: 'No saved conversations yet.', untitled: '(untitled)', del: 'delete',
+    memTitle: 'Memory', memAdd: 'Add a fact ANIMA should remember…', memEmpty: 'Empty — say "remember that …" or add one below.', forget: 'forget',
+    cmds: { help: ['/help', 'these commands'], clear: ['/clear', 'new conversation'], mode: ['/mode [offline|local|hybrid|llm]', 'the device’s network mode'],
+            model: ['/model [name]', 'the model in use, or switch it'], models: ['/models', 'the models the server offers'], status: ['/status', 'engine, network, model'] },
+    unknownCmd: 'Unknown command — /help for the list.', badNet: 'Unknown mode: offline, local, hybrid or llm.',
+    nets: { offline: 'offline', local: 'local', hybrid: 'hybrid', llm: 'llm' },
+    netDesc: { offline: 'the device only, no network', local: 'device + an LLM server on your network, no internet',
+               hybrid: 'device, then Wikipedia, then the model', llm: 'the model first, the device as fallback' },
+    nomodels: 'The server returned no models.', modelSet: 'Model set:', noTeacher: 'No model configured (Settings ▸ AI).', writeFail: 'Could not save.',
+    stMode: 'mode', stDevNet: 'device network', stNet: 'network', stModel: 'model', stOnline: 'online', stOffline: 'offline',
   },
   es: {
     sub: 'copilot', placeholder: 'Pregunta algo o da una orden…',
@@ -111,11 +233,22 @@ export const STR = {
     opened: 'abierto', thinking: ['Pensando', 'Reflexionando', 'Razonando', 'Recordando', 'Buscando'],
     reveal: 'Mostrar en la carpeta', openCal: 'Abrir Calendario', openMon: 'Abrir System Monitor', openSet: 'Abrir Ajustes',
     nomatch: 'Sin coincidencias.', memory: 'memoria',
-    footHint: ['<kbd>⏎</kbd> enviar', '<kbd>⇧⏎</kbd> nueva línea', '<kbd>↑↓</kbd> historial', '<kbd>esc</kbd> cerrar'], notDone: 'no realizado', why: 'por qué', gpuAns: 'GPU del navegador',
+    footHint: ['<kbd>⏎</kbd> enviar', '<kbd>⇧⏎</kbd> nueva línea', '<kbd>↑↓</kbd> historial', '<kbd>/</kbd> comandos', '<kbd>esc</kbd> cerrar'], notDone: 'no realizado', why: 'por qué', gpuAns: 'GPU del navegador',
     mic: 'Habla con ANIMA', micListening: 'Te escucho…', micBusy: 'Micrófono en uso por', micErr: 'Voz no disponible (modelo no cargado).', verOk: 'verificado en el dispositivo', verNo: 'contradicho por el dispositivo',
     modeAuto: 'auto', modePrivate: 'privado', modeTip: 'Modo: Auto usa la red cuando ayuda, Privado nunca — clic para cambiar',
     langTip: 'Idioma', agentTip: 'Agente: hacer, no solo responder', engineTip: 'Motor ANIMA', close: 'Cerrar', send: 'Enviar', stop: 'Detener',
     working: 'ANIMA está preparando la respuesta…', agentPrivate: 'El modo agente usa la IA online, así que está desactivado en modo Privado. Cambia a Auto para usarlo.',
+    // device conversations + memory (anima.conv / anima.memory) and the slash commands
+    convsTip: 'Conversaciones y memoria', convs: 'Conversaciones', convNew: 'Nueva', convNone: 'Aún no hay conversaciones guardadas.', untitled: '(sin título)', del: 'eliminar',
+    memTitle: 'Memoria', memAdd: 'Añade un dato que ANIMA deba recordar…', memEmpty: 'Vacía — añade abajo un dato que ANIMA deba recordar.', forget: 'olvidar',
+    cmds: { help: ['/help', 'estos comandos'], clear: ['/clear', 'nueva conversación'], mode: ['/mode [offline|local|hybrid|llm]', 'modo de red del dispositivo'],
+            model: ['/model [nombre]', 'el modelo en uso, o cámbialo'], models: ['/models', 'los modelos que ofrece el servidor'], status: ['/status', 'motor, red, modelo'] },
+    unknownCmd: 'Comando desconocido — /help para la lista.', badNet: 'Modo desconocido: offline, local, hybrid o llm.',
+    nets: { offline: 'sin red', local: 'local', hybrid: 'híbrido', llm: 'llm' },
+    netDesc: { offline: 'solo el dispositivo, sin red', local: 'dispositivo + un servidor LLM en tu red, sin internet',
+               hybrid: 'dispositivo, luego Wikipedia, luego el modelo', llm: 'primero el modelo, el dispositivo como reserva' },
+    nomodels: 'El servidor no devolvió modelos.', modelSet: 'Modelo establecido:', noTeacher: 'Ningún modelo configurado (Ajustes ▸ IA).', writeFail: 'No se pudo guardar.',
+    stMode: 'modo', stDevNet: 'red del dispositivo', stNet: 'red', stModel: 'modelo', stOnline: 'en línea', stOffline: 'sin conexión',
   },
   fr: {
     sub: 'copilot', placeholder: 'Demandez quelque chose ou donnez une commande…',
@@ -126,11 +259,22 @@ export const STR = {
     opened: 'ouvert', thinking: ['Je réfléchis', 'Je considère', 'Je raisonne', 'Je me souviens', 'Je cherche'],
     reveal: 'Afficher dans le dossier', openCal: 'Ouvrir le Calendrier', openMon: 'Ouvrir System Monitor', openSet: 'Ouvrir les Réglages',
     nomatch: 'Aucune correspondance.', memory: 'mémoire',
-    footHint: ['<kbd>⏎</kbd> envoyer', '<kbd>⇧⏎</kbd> nouvelle ligne', '<kbd>↑↓</kbd> historique', '<kbd>esc</kbd> fermer'], notDone: 'non effectué', why: 'pourquoi', gpuAns: 'GPU du navigateur',
+    footHint: ['<kbd>⏎</kbd> envoyer', '<kbd>⇧⏎</kbd> nouvelle ligne', '<kbd>↑↓</kbd> historique', '<kbd>/</kbd> commandes', '<kbd>esc</kbd> fermer'], notDone: 'non effectué', why: 'pourquoi', gpuAns: 'GPU du navigateur',
     mic: 'Parlez à ANIMA', micListening: 'Je vous écoute…', micBusy: 'Micro utilisé par', micErr: 'Voix indisponible (modèle non chargé).', verOk: "vérifié sur l'appareil", verNo: "contredit par l'appareil",
     modeAuto: 'auto', modePrivate: 'privé', modeTip: 'Mode : Auto utilise le réseau quand c’est utile, Privé jamais — cliquez pour changer',
     langTip: 'Langue', agentTip: 'Agent : agir, pas seulement répondre', engineTip: 'Moteur ANIMA', close: 'Fermer', send: 'Envoyer', stop: 'Arrêter',
     working: 'ANIMA prépare la réponse…', agentPrivate: 'Le mode agent utilise l’IA en ligne, il est donc désactivé en mode Privé. Passez en Auto pour l’utiliser.',
+    // device conversations + memory (anima.conv / anima.memory) and the slash commands
+    convsTip: 'Conversations et mémoire', convs: 'Conversations', convNew: 'Nouvelle', convNone: 'Aucune conversation enregistrée.', untitled: '(sans titre)', del: 'supprimer',
+    memTitle: 'Mémoire', memAdd: 'Ajoutez un fait qu’ANIMA doit retenir…', memEmpty: 'Vide — ajoutez ci-dessous un fait qu’ANIMA doit retenir.', forget: 'oublier',
+    cmds: { help: ['/help', 'ces commandes'], clear: ['/clear', 'nouvelle conversation'], mode: ['/mode [offline|local|hybrid|llm]', 'mode réseau de l’appareil'],
+            model: ['/model [nom]', 'le modèle utilisé, ou changez-le'], models: ['/models', 'les modèles proposés par le serveur'], status: ['/status', 'moteur, réseau, modèle'] },
+    unknownCmd: 'Commande inconnue — /help pour la liste.', badNet: 'Mode inconnu : offline, local, hybrid ou llm.',
+    nets: { offline: 'hors ligne', local: 'local', hybrid: 'hybride', llm: 'llm' },
+    netDesc: { offline: 'l’appareil seul, pas de réseau', local: 'appareil + un serveur LLM sur votre réseau, pas d’internet',
+               hybrid: 'l’appareil, puis Wikipédia, puis le modèle', llm: 'd’abord le modèle, l’appareil en secours' },
+    nomodels: 'Le serveur n’a renvoyé aucun modèle.', modelSet: 'Modèle défini :', noTeacher: 'Aucun modèle configuré (Réglages ▸ IA).', writeFail: 'Enregistrement impossible.',
+    stMode: 'mode', stDevNet: 'réseau de l’appareil', stNet: 'réseau', stModel: 'modèle', stOnline: 'en ligne', stOffline: 'hors ligne',
   },
   de: {
     sub: 'copilot', placeholder: 'Frag etwas oder gib einen Befehl…',
@@ -141,11 +285,22 @@ export const STR = {
     opened: 'geöffnet', thinking: ['Denke nach', 'Überlege', 'Argumentiere', 'Erinnere mich', 'Suche'],
     reveal: 'Im Ordner anzeigen', openCal: 'Kalender öffnen', openMon: 'System Monitor öffnen', openSet: 'Einstellungen öffnen',
     nomatch: 'Keine Übereinstimmung.', memory: 'Gedächtnis',
-    footHint: ['<kbd>⏎</kbd> senden', '<kbd>⇧⏎</kbd> neue Zeile', '<kbd>↑↓</kbd> Verlauf', '<kbd>esc</kbd> schließen'], notDone: 'nicht ausgeführt', why: 'warum', gpuAns: 'Browser-GPU',
+    footHint: ['<kbd>⏎</kbd> senden', '<kbd>⇧⏎</kbd> neue Zeile', '<kbd>↑↓</kbd> Verlauf', '<kbd>/</kbd> Befehle', '<kbd>esc</kbd> schließen'], notDone: 'nicht ausgeführt', why: 'warum', gpuAns: 'Browser-GPU',
     mic: 'Sprich mit ANIMA', micListening: 'Ich höre zu…', micBusy: 'Mikrofon in Benutzung von', micErr: 'Sprache nicht verfügbar (Modell nicht geladen).', verOk: 'auf dem Gerät bestätigt', verNo: 'vom Gerät widerlegt',
     modeAuto: 'auto', modePrivate: 'privat', modeTip: 'Modus: Auto nutzt das Netz, wenn es hilft, Privat nie — klicken zum Wechseln',
     langTip: 'Sprache', agentTip: 'Agent: handeln, nicht nur antworten', engineTip: 'ANIMA-Engine', close: 'Schließen', send: 'Senden', stop: 'Stopp',
     working: 'ANIMA arbeitet an der Antwort…', agentPrivate: 'Der Agent-Modus nutzt die Online-KI und ist deshalb im Privat-Modus aus. Wechsle zu Auto, um ihn zu nutzen.',
+    // device conversations + memory (anima.conv / anima.memory) and the slash commands
+    convsTip: 'Unterhaltungen und Gedächtnis', convs: 'Unterhaltungen', convNew: 'Neu', convNone: 'Noch keine gespeicherten Unterhaltungen.', untitled: '(ohne Titel)', del: 'löschen',
+    memTitle: 'Gedächtnis', memAdd: 'Eine Tatsache hinzufügen, die ANIMA sich merken soll…', memEmpty: 'Leer — füge unten eine Tatsache hinzu, die ANIMA sich merken soll.', forget: 'vergessen',
+    cmds: { help: ['/help', 'diese Befehle'], clear: ['/clear', 'neue Unterhaltung'], mode: ['/mode [offline|local|hybrid|llm]', 'Netzmodus des Geräts'],
+            model: ['/model [Name]', 'das verwendete Modell, oder wechseln'], models: ['/models', 'die Modelle, die der Server anbietet'], status: ['/status', 'Engine, Netz, Modell'] },
+    unknownCmd: 'Unbekannter Befehl — /help für die Liste.', badNet: 'Unbekannter Modus: offline, local, hybrid oder llm.',
+    nets: { offline: 'offline', local: 'lokal', hybrid: 'hybrid', llm: 'llm' },
+    netDesc: { offline: 'nur das Gerät, kein Netz', local: 'Gerät + ein LLM-Server in deinem Netz, kein Internet',
+               hybrid: 'das Gerät, dann Wikipedia, dann das Modell', llm: 'zuerst das Modell, das Gerät als Reserve' },
+    nomodels: 'Der Server hat keine Modelle geliefert.', modelSet: 'Modell gesetzt:', noTeacher: 'Kein Modell konfiguriert (Einstellungen ▸ KI).', writeFail: 'Speichern fehlgeschlagen.',
+    stMode: 'Modus', stDevNet: 'Netz des Geräts', stNet: 'Netz', stModel: 'Modell', stOnline: 'online', stOffline: 'offline',
   },
 };
 const CODES = ['it', 'en', 'es', 'fr', 'de'];
@@ -202,6 +357,7 @@ function buildDom() {
        <span class="cp-spark">✻</span>
        <span class="cp-title">ANIMA</span><span class="cp-sub" id="cp-sub">copilot</span>
        <span class="cp-sp"></span>
+       <button class="cp-chip" id="cp-convs" aria-expanded="false" hidden>🗂</button>
        <button class="cp-chip" id="cp-act" aria-pressed="false">⚡</button>
        <button class="cp-chip" id="cp-mode"></button>
        <button class="cp-chip" id="cp-lang"></button>
@@ -217,6 +373,10 @@ function buildDom() {
      <div class="cp-log" id="cp-log" role="log" aria-live="polite" aria-relevant="additions"></div>
      <div id="cp-status" role="status" aria-live="polite" style="position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap;border:0"></div>
      <div class="cp-foot" id="cp-foot"></div>`;
+  // conversations + memory drawer (the 🗂 chip, shown only when the device has either store)
+  convPanel = document.createElement('div');
+  convPanel.id = 'cp-convpanel'; convPanel.className = 'hidden';
+  root.insertBefore(convPanel, root.querySelector('.cp-log'));
   document.body.appendChild(scrim);
   document.body.appendChild(root);
   logEl = root.querySelector('#cp-log');
@@ -229,6 +389,7 @@ function buildDom() {
   langBtn = root.querySelector('#cp-lang');
   micBtn = root.querySelector('#cp-mic');
   statusEl = root.querySelector('#cp-status');
+  convBtn = root.querySelector('#cp-convs');
   tbBtn = document.getElementById('copilot-btn');
 }
 
@@ -250,7 +411,7 @@ function wire() {
     syncChips(); renderFoot(); if (!history.length) renderWelcome(); inputEl.focus();
   });
   // Re-render when the language changes anywhere else in the OS (Settings, another window).
-  if (window.NucleoI18N) window.NucleoI18N.onChange(() => { syncChips(); renderFoot(); if (isOpen && !history.length) renderWelcome(); });
+  if (window.NucleoI18N) window.NucleoI18N.onChange(() => { syncChips(); renderFoot(); if (isOpen && !history.length) renderWelcome(); if (!convPanel.classList.contains('hidden')) renderConvPanel(); });
   inputEl.addEventListener('input', autogrow);
   inputEl.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
@@ -260,6 +421,112 @@ function wire() {
   });
   // welcome / clarify chips delegate to ask()
   logEl.addEventListener('click', (e) => { const c = e.target.closest('.cp-chip-q'); if (c) askCopilot(c.dataset.q); });
+  convBtn.addEventListener('click', () => {
+    const off = convPanel.classList.toggle('hidden');
+    convBtn.setAttribute('aria-expanded', String(!off));
+    if (!off) renderConvPanel();
+  });
+}
+
+// ---- conversations + memory drawer ----
+// Each half only where the device has its store; both lists are fetched in PARALLEL (each is a storage
+// scan on the device — overlapping them halves the wait).
+function closeConvPanel() { convPanel.classList.add('hidden'); convBtn.setAttribute('aria-expanded', 'false'); }
+async function renderConvPanel() {
+  const f = await feats(), t = T();
+  let html = '';
+  if (f.conv) html += `<div class="cph">${esc(t.convs)}<span class="sp"></span><button class="mini" id="cpc-new" type="button">＋ ${esc(t.convNew)}</button></div><div id="cpc-list" class="empty">…</div>`;
+  if (f.memory) html += `<div class="cph">${esc(t.memTitle)}</div><div id="cpc-mem" class="empty">…</div>`
+    + `<div class="memadd"><input id="cpc-memtxt" maxlength="240" placeholder="${esc(t.memAdd)}" aria-label="${esc(t.memAdd)}"><button class="mini" id="cpc-memadd" type="button" aria-label="${esc(t.memAdd)}">＋</button></div>`;
+  convPanel.innerHTML = html;
+  if (f.conv) convPanel.querySelector('#cpc-new').addEventListener('click', () => { newConversation(); closeConvPanel(); });
+  if (f.memory) {
+    const addFact = async () => {
+      const inp = convPanel.querySelector('#cpc-memtxt');
+      const txt = inp.value.trim();
+      if (!txt) return;
+      try { await postJSON('/api/anima/memory', { op: 'add', t: txt }); } catch {}
+      inp.value = ''; _ctx = null; renderConvPanel();
+    };
+    convPanel.querySelector('#cpc-memadd').addEventListener('click', addFact);
+    convPanel.querySelector('#cpc-memtxt').addEventListener('keydown', (e) => { if (e.key === 'Enter') addFact(); });
+  }
+  const [convR, memR] = await Promise.all([
+    f.conv ? fetch('/api/anima/conv?op=list', { cache: 'no-store' }).then((r) => r.json()).catch(() => null) : null,
+    f.memory ? fetch('/api/anima/memory', { cache: 'no-store' }).then((r) => r.json()).catch(() => null) : null,
+  ]);
+  const list = convPanel.querySelector('#cpc-list');
+  if (list) {
+    const convs = (convR && convR.convs) || [];
+    if (!convR) list.textContent = t.offline;
+    else if (!convs.length) list.textContent = t.convNone;
+    else {
+      list.className = '';
+      list.innerHTML = convs.map((c) => `<div class="row${c.id === convId ? ' cur' : ''}" data-id="${esc(c.id)}" role="button" tabindex="0"><span class="t">${esc(c.title || t.untitled)}</span><span class="n">${esc(c.n)}</span><button class="x" type="button" data-del="${esc(c.id)}" title="${esc(t.del)}" aria-label="${esc(t.del)}">✕</button></div>`).join('');
+      list.querySelectorAll('.row').forEach((row) => {
+        const open = () => { switchConversation(row.dataset.id); closeConvPanel(); };
+        row.addEventListener('click', (e) => { if (!e.target.closest('.x')) open(); });
+        row.addEventListener('keydown', (e) => { if ((e.key === 'Enter' || e.key === ' ') && e.target === row) { e.preventDefault(); open(); } });
+      });
+      list.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', async () => {
+        try { await postJSON('/api/anima/conv', { op: 'del', id: b.dataset.del }); } catch {}
+        if (b.dataset.del === convId) newConversation();
+        renderConvPanel();
+      }));
+    }
+  }
+  const memEl = convPanel.querySelector('#cpc-mem');
+  if (memEl) {
+    const facts = (memR && memR.facts) || [];
+    if (!memR) memEl.textContent = t.offline;
+    else if (!facts.length) memEl.textContent = t.memEmpty;
+    else {
+      memEl.className = '';
+      memEl.innerHTML = facts.map((m) => `<div class="fact"><span class="t">${esc(m.t)}</span><button class="x" type="button" data-ts="${esc(m.ts)}" title="${esc(t.forget)}" aria-label="${esc(t.forget)}">✕</button></div>`).join('');
+      memEl.querySelectorAll('[data-ts]').forEach((b) => b.addEventListener('click', async () => {
+        try { await postJSON('/api/anima/memory', { op: 'del', ts: Number(b.dataset.ts) }); } catch {}
+        _ctx = null; renderConvPanel();
+      }));
+    }
+  }
+}
+
+// A fresh conversation: an empty log, no pinned device conversation (the next turn creates one) and a new
+// device dialogue id, so the device's follow-up context restarts too.
+function newConversation() {
+  setConv('');
+  history = []; hydrated = true; _ctx = null;
+  resetSid();
+  renderWelcome();
+}
+async function switchConversation(id) {
+  setConv(id);
+  history = []; hydrated = false; _ctx = null;
+  resetSid();
+  renderWelcome();                    // clean slate; hydrating replaces it when the conversation has messages
+  await convHydrate(true);
+}
+// Render the stored tail of the pinned conversation into the log (once per session, or on a switch).
+async function convHydrate(force) {
+  if ((hydrated && !force) || !convId) { hydrated = true; return; }
+  hydrated = true;
+  try {
+    const res = await fetch('/api/anima/conv?op=msgs&id=' + encodeURIComponent(convId) + '&tail=30', { cache: 'no-store' });
+    if (!res.ok) {
+      if (res.status === 404) setConv('');   // GENUINELY stale id (deleted/pruned): a fresh one next turn
+      return;                                // any other status: keep the pin, try again later
+    }
+    const r = await res.json();
+    const msgs = (r && r.msgs) || [];
+    if (!msgs.length) return;
+    if (busy || history.length) return;      // a turn started while we fetched: don't clobber the log
+    logEl.innerHTML = '';
+    for (const m of msgs) {
+      if (m.r === 'u') { addUser(m.t); history.push({ role: 'user', text: m.t }); }
+      else { addBot(m.t); history.push({ role: 'bot', text: m.t }); }
+    }
+    scrollDown();
+  } catch { /* transient network error (device rebooting / off Wi-Fi): KEEP the pinned conversation */ }
 }
 
 function autogrow() { inputEl.style.height = 'auto'; inputEl.style.height = Math.min(inputEl.scrollHeight, 120) + 'px'; }
@@ -269,13 +536,62 @@ function submit() {
   const q = inputEl.value; inputEl.value = ''; autogrow();
   if (q.trim() && qHist[qHist.length - 1] !== q.trim()) qHist.push(q.trim());
   qPos = qHist.length;
-  askCopilot(q);
+  if (q.trim().startsWith('/')) slash(q.trim()); else askCopilot(q);
 }
 function histNav(dir) {
   if (!qHist.length) return;
   qPos = Math.max(0, Math.min(qHist.length, qPos + dir));
   inputEl.value = qPos === qHist.length ? '' : qHist[qPos]; autogrow();
   inputEl.setSelectionRange(inputEl.value.length, inputEl.value.length);
+}
+
+// ---- slash commands ----
+// Only the ones this device can run (slashCommands): /help lists exactly those, any other is "unknown".
+async function slash(line) {
+  if (busy) return;
+  if (!history.length) logEl.innerHTML = '';
+  const [word, ...rest] = line.split(/\s+/); const arg = rest.join(' ').trim();
+  const f = await feats(), t = T();
+  const cmds = slashCommands(f), cmd = word.slice(1).toLowerCase();
+  const turn = addBot(line);  // the command line heads the turn; its output lines follow below
+  turn.querySelector('.cp-body').classList.add('cp-cmd');
+  const out = (txt, kind) => addLined(turn, txt, kind);
+  try {
+    if (!cmds.includes(cmd)) out(t.unknownCmd, 'warn');
+    else if (cmd === 'help') for (const c of cmds) out('`' + t.cmds[c][0] + '` — ' + t.cmds[c][1]);
+    else if (cmd === 'clear') newConversation();
+    else if (cmd === 'mode') {
+      if (arg) {
+        if (!NETS.includes(arg.toLowerCase())) { out(t.badNet, 'warn'); return; }
+        const m = await setNet(arg.toLowerCase());
+        if (m) out('**' + (t.nets[m] || m) + '** — ' + (t.netDesc[m] || ''), 'ok'); else out(t.offline, 'warn');
+      } else {
+        const cur = await getNet();
+        for (const m of NETS) out((m === cur ? '→ ' : '') + '**' + t.nets[m] + '** — ' + t.netDesc[m], m === cur ? 'ok' : 'dim');
+      }
+    } else if (cmd === 'models') {
+      const r = await (await fetch('/api/anima/models?lang=' + devLang(), { cache: 'no-store' })).json();
+      if (r && r.ok && Array.isArray(r.models) && r.models.length) out(r.models.map((m) => '`' + m + '`').join(' '));
+      else out((r && r.why) || t.nomodels, 'warn');
+    } else if (cmd === 'model') {
+      const c = await AI.readTeacher({ fresh: true });
+      if (!c || c.unpaired || (!c.key && !(c.provider === 'local' && c.base))) { out(t.noTeacher, 'warn'); return; }
+      if (arg) {
+        c.model = arg; const ok = await AI.writeTeacher(c);
+        _aiCfg = null; _aiAt = 0;                 // the copilot's own 15 s cache must see the new model
+        out(ok === true ? t.modelSet + ' `' + arg + '`' : t.writeFail, ok === true ? 'ok' : 'warn');
+      } else out((AI.providerOf(c.provider).label || c.provider) + ' · `' + c.model + '`' + (c.base && AI.isLanUrl(c.base) ? ' · ' + c.base : ''));
+    } else if (cmd === 'status') {
+      out(t.stMode + ' **' + modeLabel() + '**');
+      if (f.net) { const n = await getNet(); if (n) out(t.stDevNet + ' **' + (t.nets[n] || n) + '** — ' + (t.netDesc[n] || '')); }
+      const c = await AI.caps();
+      if (c) {
+        out(t.stNet + ': ' + (c.online ? t.stOnline : t.stOffline) + ' · ' + t.stModel + ': ' + (c.hasKey ? [c.provider, c.model].filter(Boolean).join(' / ') || '?' : '—'));
+        if (f.device && c.l1Mode) out('L1: ' + c.l1Mode + (c.l1Serving ? ' (serving)' : ''));
+      }
+      if (GPU.loaded()) out('GPU: ' + GPU.loaded(), 'ok');
+    }
+  } catch (e) { out(String((e && e.message) || e), 'warn'); }
 }
 
 // ---- voice: the device is the mic, the browser is the ears ----
@@ -374,6 +690,11 @@ function openBar() {
   if (tbBtn) tbBtn.classList.add('on');
   syncChips(); renderFoot();
   if (!history.length) renderWelcome();
+  // The drawer chip and the stored tail exist only where the device has the stores.
+  feats().then((f) => {
+    convBtn.hidden = !(f.conv || f.memory);
+    if (f.conv) convHydrate();        // async: replaces the welcome with the stored tail, if any
+  });
   inputEl.placeholder = T().placeholder;
   setTimeout(() => inputEl.focus(), 30);
   ping();
@@ -403,6 +724,7 @@ function syncChips() {
   inputEl.placeholder = voiceOn ? t.micListening : t.placeholder;
   inputEl.setAttribute('aria-label', t.placeholder);
   if (micBtn) { micBtn.title = t.mic; micBtn.setAttribute('aria-label', t.mic); }
+  if (convBtn) { convBtn.title = t.convsTip; convBtn.setAttribute('aria-label', t.convsTip); }
   sendBtn.textContent = busy ? t.stop : t.send;
 }
 function renderFoot() { root.querySelector('#cp-foot').innerHTML = T().footHint.join(' · '); }
@@ -598,6 +920,10 @@ async function askAgent(q, turn) {
 //       (Auto: hybrid; Private: offline-only)
 //   3 · Auto + a browser-direct key: the cloud answers what the grounded brains could not. Never for a
 //       device command or a personal fact (the device owns those), never in Private.
+// Where the device keeps conversations (anima.conv) every turn is pinned to one and mirrored there, cloud turns
+// are multi-turn and carry the device's context block, and a key the user set to run ON the device answers
+// through the device's conversation turn. Where it keeps the user's memory (anima.memory), "ricordati che …"
+// is the device's business first, in both modes (nothing leaves the device).
 const bareMiss = (r) => !r || !r.reply || /^(non lo so|i don'?t know)\b/i.test(String(r.reply).trim());
 // A device may answer {"pending":true,"job":N} when a turn outlasts its wait (the device keeps working): follow the
 // job until it is done. A device without jobs never sends that shape, so this is a no-op there.
@@ -634,8 +960,16 @@ async function askCopilot(q) {
     return;
   }
   const think = addThinking();
-  let r = null, devR = null;
+  let r = null, devR = null, stored = false, cid = '', f = featuresFrom([]);
   try {
+    f = await feats();
+    if (f.conv) cid = await convEnsure(sig);      // pin the durable conversation (device store)
+    if (f.memory) {
+      try {
+        const mr = await Mode.withStep(sig, Mode.STEP_MS.device, (signal) => memCapture(q, signal));
+        if (mr) r = { reply: mr, intent: 'memory', action: 'answer' };
+      } catch (e) { if (sig.aborted) throw e; }   // a slow store is not a memory turn: the ladder goes on
+    }
     const P = await cascade();
     const personal = !!(P && P.memoryHint && P.memoryHint(q));
     const command = personal || !!(P && P.commandHint && P.commandHint(q));
@@ -643,7 +977,7 @@ async function askCopilot(q) {
     // touching the Cardputer (it stays in its lean server posture: no 30 KB cascade worker for these). The
     // indexer ABSTAINS on commands, chit-chat and calc, which fall through to the device. Private: recall
     // only (cards already learned in this browser), no network.
-    if (!command) {
+    if (!r && !command) {
       try {
         const wi = await webIndexer();
         if (wi) {
@@ -688,8 +1022,27 @@ async function askCopilot(q) {
       if (localFirst) r = await tryLocal();
       if (!r && cloudOk) {
         try {
-          const txt = await Mode.withStep(sig, Mode.STEP_MS.cloud, (signal) => AI.cloudComplete(cfg, sys, q, 1024, { signal }));
+          const txt = await Mode.withStep(sig, Mode.STEP_MS.cloud, async (signal) => {
+            if (!f.conv) return AI.cloudComplete(cfg, sys, q, 1024, { signal });
+            // multi-turn: the recent transcript as real messages + the device's memory/summary block
+            const ctxSys = await convCtx(cid, signal);
+            const msgs = histMessages(8); msgs.push({ role: 'user', content: q });
+            const res = await AI.cloudToolCall(cfg, { system: ctxSys ? sys + '\n\n' + ctxSys : sys, messages: msgs, signal, maxTokens: 1024 });
+            return res && res.text;
+          });
           if (txt) r = { reply: txt, intent: 'cloud' };
+        } catch (e) { if (sig.aborted) throw e; }
+      }
+      // The key runs ON the device (exec: device): its conversation turn answers (memory + summary + tail, both
+      // sides stored server-side). It may walk the provider cascade or run an agent on the device, following
+      // a job meanwhile, so it gets the long leash (Mode.STEP_MS.chat); Stop ends it sooner. Only a turn the
+      // device answered counts: a miss falls through, and the device stores nothing for it.
+      if (!r && f.conv && cfg && cfg.key && cfg.exec === 'device') {
+        try {
+          const resp = await Mode.withStep(sig, Mode.STEP_MS.chat, async (signal) =>
+            awaitJob(await (await postJSON('/api/anima/chat', { q, conv: cid || '', lang: devLang() }, signal)).json(), signal));
+          if (resp && resp.conv) setConv(resp.conv);
+          if (resp && resp.ok && resp.reply) { r = resp; stored = true; }
         } catch (e) { if (sig.aborted) throw e; }
       }
       if (!r && !localFirst) r = await tryLocal();
@@ -723,6 +1076,7 @@ async function askCopilot(q) {
       const text = await GPU.chat(msgs, { signal: sig, onToken: (_, all) => { body.innerHTML = mdInline(all); scrollDown(); } });
       addLined(turn, T().gpuAns + ' · ' + (GPU.loaded() || '').replace(/-MLC$/, ''), 'dim');
       history.push({ role: 'bot', text });
+      if (f.conv) convMirrorPair(q, text);
     } catch (e) { body.innerHTML = mdInline(r.reply || T().dontknow); addLined(turn, 'GPU: ' + String((e && e.message) || e), 'warn'); history.push({ role: 'bot', text: r.reply || T().dontknow }); }
     aborter = null; setDot('ok'); setBusy(false); inputEl.focus(); return;
   }
@@ -745,6 +1099,7 @@ async function askCopilot(q) {
     }).catch(() => {});
   }
   history.push({ role: 'bot', text: reply, r });
+  if (f.conv && !stored) convMirrorPair(q, reply);   // the device's conversation turn already stored itself
   setBusy(false); inputEl.focus();
 }
 

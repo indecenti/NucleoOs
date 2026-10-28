@@ -85,6 +85,7 @@ export const STEP_MS = Object.freeze({
   stream: 180000,  // whole streamed completion (tokens keep arriving)
   idle: 30000,     // a stream that sends nothing for this long is dead
   local: 120000,   // browser GPU generation
+  chat: 600000,    // the device's conversation turn + its job (anima.conv): it may walk the provider cascade or run an agent
 });
 
 const mkErr = (msg, name) => {

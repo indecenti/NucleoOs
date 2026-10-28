@@ -192,7 +192,9 @@
    {
     "since": "1.1.119",
     "caps": [
+     "anima.conv",
      "anima.device",
+     "anima.memory",
      "diag",
      "power",
      "time.set",
@@ -202,7 +204,9 @@
    {
     "since": "1.1.131",
     "caps": [
+     "anima.conv",
      "anima.device",
+     "anima.memory",
      "apps.p4",
      "diag",
      "power",
@@ -214,8 +218,11 @@
     "since": "1.2.4",
     "caps": [
      "ai.relay",
+     "anima.conv",
      "anima.device",
      "anima.heartbeat",
+     "anima.memory",
+     "anima.models",
      "anima.net",
      "anima.telegram",
      "anima.wake",
@@ -230,8 +237,11 @@
     "since": "1.2.11",
     "caps": [
      "ai.relay",
+     "anima.conv",
      "anima.device",
      "anima.heartbeat",
+     "anima.memory",
+     "anima.models",
      "anima.net",
      "anima.telegram",
      "anima.wake",
@@ -247,8 +257,11 @@
     "since": "1.2.118",
     "caps": [
      "ai.relay",
+     "anima.conv",
      "anima.device",
      "anima.heartbeat",
+     "anima.memory",
+     "anima.models",
      "anima.net",
      "anima.telegram",
      "anima.wake",
