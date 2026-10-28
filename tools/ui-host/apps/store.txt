@@ -1,16 +1,22 @@
-# Store: the sections (New/Games/Categories/Mine), a category, an app page (install / update / installed),
-# the uninstall confirm and the open-on-phone QR. store_seed.cpp seeds the catalog + a device IP (apps.mjs only).
+# Store: the choice of store, a store's sections (New/Games/Categories/Mine), a category, an app page (install /
+# update / installed), the uninstall confirm and the open-on-phone QR, in the Native C (1) and Web app (2) stores.
+# store_seed.cpp seeds both catalogs, their art packs (tools/ui-host/store_art/) and a device IP (apps.mjs only).
 @src store_apps.cpp nucleo_store/store_engine.c nucleo_sdcontent/sdc_sha256.c nucleo_sdcontent/sdc_registry.c
 @host store_stubs.cpp store_seed.cpp
-new
-games       TAB
-cats        TAB TAB
-cat-tools   TAB TAB D ENTER
-mine        TAB TAB TAB
-app-new     ENTER
-app-update  TAB TAB TAB ENTER
-app-mine    TAB TAB TAB D D ENTER
-remove      TAB TAB TAB D D ENTER DEL
-qr          TAB TAB TAB D D ENTER c:q
-card-install tick:1 tap:270,204
-card-update  TAB TAB TAB tick:1 tap:270,128
+@sdfile apps/.store/native/art.bin store_art/native.bin
+@sdfile apps/.store/web/art.bin store_art/web.bin
+choose
+choose-web  D
+native      c:1
+native-2nd  c:1 D
+web         c:2
+web-games   c:2 TAB
+cats        c:2 TAB TAB
+cat-tools   c:2 TAB TAB D ENTER
+mine        c:2 TAB TAB TAB
+app-new     c:2 ENTER
+app-update  c:2 TAB TAB TAB ENTER
+app-mine    c:2 TAB TAB TAB D D ENTER
+remove      c:2 TAB TAB TAB D D ENTER DEL
+qr          c:2 TAB TAB TAB D D ENTER c:q
+native-app  c:1 ENTER

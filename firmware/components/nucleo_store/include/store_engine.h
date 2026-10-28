@@ -105,6 +105,14 @@ typedef struct {
 // <root>/apps/.store/index.txt and its serial is remembered. On failure the previous catalog stays.
 st_code_t st_refresh(const st_cfg_t *cfg, const st_io_t *io, st_state_t *st);
 
+// The store art of a channel (st_refresh fetches it when published): art.bin = header "NART", version 1, icon size
+// (px), count (u16 LE), channel (8 B); then count entries of ST_ART_ENTRY bytes (the id, NUL-padded, then the
+// pixels' file offset, u32 LE); then each icon, size x size RGB565 little-endian, row by row. Ids are app ids, plus
+// "@native" / "@web" for the channels themselves. NULL / false = no art (draw the fallback).
+#define ST_ART_ENTRY 40
+FILE *st_art_open(const char *root, const char *channel);
+bool  st_art_find(FILE *f, const char *id, uint32_t *off, int *size);
+
 // The local catalog of a channel, one app at a time. st_catalog_next skips the header and malformed lines,
 // and lines whose kind belongs to another channel.
 FILE *st_catalog_open(const char *root, const char *channel);

@@ -49,6 +49,18 @@ every file against the signed `package.sig`, then swaps the folder in and keeps 
 `.package.sig` (a native app is re-verified against it before every load). RAM: a few KB of buffers, no
 JSON tree.
 
+**Store art.** Each channel also publishes `art.bin` + `art.sig` (format in the store's `docs/format.md`): the
+apps' colour icons, painted for the store, 48 x 48 RGB565. After a good catalog the engine fetches them only when
+`art.sig` changed and keeps them only when the signature verifies; a missing pack, a failed download or a bad
+signature leave the previous art (or none) and never fail the refresh. The UI draws an icon a row at a time
+straight from the SD card, box-filtered to the size it needs (no decoder, no image in RAM: ~0.5 KB of stack), and
+falls back to the category tile with the app's initial. Older firmware and the web shells never ask for the pack.
+
+**The Store's two looks.** On the Cardputer alone: two-line rows (icon, name, size and category, a state chip) under
+the section tabs, the app page with its icon. With the external panel the panel is the store: the apps as a touch
+list beside the selected app's card (icon, facts, description, the Install / Update / Open button), Categories as a
+grid of coloured tiles, and the Cardputer shows the selected app in full (name, state, facts, description).
+
 **Status (2026-10-27):** client, two channels and native loader written and host-tested; the loader runs
 Constellations from the SD card on both boards (docs/native-apps.md, "Verification"). Not yet in a release. Native apps need the `coredump` partition as their flash scratch region:
 unavailable under M5Launcher, where the Store shows the native store as such.
