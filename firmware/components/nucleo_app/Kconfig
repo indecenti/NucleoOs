@@ -77,6 +77,24 @@ config NUCLEO_STORE_SANDGARDEN
     help
         Leaves app_sandgarden.cpp out of the firmware image.
 
+config NUCLEO_STORE_PONG
+    bool "Pong (pong): from the store, not in the firmware"
+    default y
+    help
+        Leaves app_pong.cpp out of the firmware image.
+
+config NUCLEO_STORE_DICE
+    bool "Dice (dice): from the store, not in the firmware"
+    default y
+    help
+        Leaves app_dice.cpp out of the firmware image.
+
+config NUCLEO_STORE_YAHTZEE
+    bool "Yahtzee (yahtzee): from the store, not in the firmware"
+    default y
+    help
+        Leaves app_yahtzee.cpp out of the firmware image.
+
 endmenu
 
 endmenu

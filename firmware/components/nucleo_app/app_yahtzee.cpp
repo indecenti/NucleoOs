@@ -9,6 +9,11 @@
 // Esc in a game pauses it (a second Esc leaves to the title). Rules: upper bonus 35 at 63+, Yahtzee
 // bonus +100 for every extra Yahtzee while the Yahtzee box holds 50, and the official forced Joker
 // (a Yahtzee with its box filled must take its upper box if open, else any lower box at full value).
+#if __has_include("sdkconfig.h")       // the host harnesses compile this file without one
+#include "sdkconfig.h"
+#endif
+// Built in, or (CONFIG_NUCLEO_STORE_YAHTZEE) only as the store's native module, built with NAP_MODULE.
+#if !CONFIG_NUCLEO_STORE_YAHTZEE || defined(NAP_MODULE)
 #include "nucleo_app.h"
 #include "launcher_theme.h"
 #include "nucleo_imu.h"
@@ -1092,3 +1097,4 @@ extern "C" void nucleo_register_yahtzee(void)
     };
     nucleo_app_register(&app);
 }
+#endif  // !CONFIG_NUCLEO_STORE_YAHTZEE || NAP_MODULE

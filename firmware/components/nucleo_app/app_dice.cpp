@@ -7,6 +7,11 @@
 // hardware TRNG. Works without the IMU too (GO / keys). Engine: fx3d::rot3, one rotation per die per frame.
 // Every die always shows its value: the settle pose turns the value's face to the camera in a 3/4 view,
 // and the header total is the sum of exactly those faces.
+#if __has_include("sdkconfig.h")       // the host harnesses compile this file without one
+#include "sdkconfig.h"
+#endif
+// Built in, or (CONFIG_NUCLEO_STORE_DICE) only as the store's native module, built with NAP_MODULE.
+#if !CONFIG_NUCLEO_STORE_DICE || defined(NAP_MODULE)
 #include "nucleo_app.h"
 #include "launcher_theme.h"
 #include "nucleo_imu.h"
@@ -548,3 +553,4 @@ extern "C" void nucleo_register_dice(void)
     };
     nucleo_app_register(&app);
 }
+#endif  // !CONFIG_NUCLEO_STORE_DICE || NAP_MODULE

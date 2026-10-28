@@ -24,6 +24,11 @@
 // paddle follows the physically-held key (nucleo_kbd_char_down) with a short speed ramp (a tap nudges, a hold
 // glides, release stops). Text goes through game_text (5 languages). ASCII only. Never name a local `d`. LEFT/Back route to the
 // back handler (framework rule).
+#if __has_include("sdkconfig.h")       // the host harnesses compile this file without one
+#include "sdkconfig.h"
+#endif
+// Built in, or (CONFIG_NUCLEO_STORE_PONG) only as the store's native module, built with NAP_MODULE.
+#if !CONFIG_NUCLEO_STORE_PONG || defined(NAP_MODULE)
 
 #include "nucleo_app.h"
 #include "nucleo_kbd.h"
@@ -1323,3 +1328,4 @@ extern "C" void nucleo_register_pong(void) {
     };
     nucleo_app_register(&app);
 }
+#endif  // !CONFIG_NUCLEO_STORE_PONG || NAP_MODULE

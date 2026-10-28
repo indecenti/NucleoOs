@@ -530,7 +530,9 @@ void nucleo_app_register_builtins(void)
 #if !CONFIG_NUCLEO_STORE_PINBALL
     nucleo_register_pinball();
 #endif
+#if !CONFIG_NUCLEO_STORE_PONG
     nucleo_register_pong();
+#endif
 #if !CONFIG_NUCLEO_STORE_TANKS
     nucleo_register_tanks();
 #endif
@@ -540,7 +542,12 @@ void nucleo_app_register_builtins(void)
 #if !CONFIG_NUCLEO_STORE_BRAWLER
     nucleo_register_brawler();
 #endif
-    nucleo_register_dice(); nucleo_register_yahtzee();
+#if !CONFIG_NUCLEO_STORE_DICE
+    nucleo_register_dice();
+#endif
+#if !CONFIG_NUCLEO_STORE_YAHTZEE
+    nucleo_register_yahtzee();
+#endif
 #if !CONFIG_NUCLEO_STORE_SNAKE
     nucleo_register_snake();
 #endif
