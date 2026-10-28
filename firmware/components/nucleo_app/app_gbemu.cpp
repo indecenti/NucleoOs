@@ -123,7 +123,30 @@ struct EmuSys {
     // The console that plays `name` from this shelf (null = this one): the Game Boy's hands a Color cartridge
     // to SYS_GBC. A field, not a check in play(), so the Game Gear module never links the Game Boy cores.
     const EmuSys *(*pick)(const char *name);
+    // The console's small mark (gbemu_art.h ART_*_S), drawn wherever its name would be written: icon_b for the
+    // entries with the badge (a Color cartridge, a Master System one). A new emulator brings its own.
+    EmuArt icon_a, icon_b;
 };
+
+static uint16_t *inflate565(const uint8_t *zb, size_t n, int w, int h);
+// A console's mark on a light chip, at (x, y), 20 px tall. Inflated once per mark (two kept, ~1 KB each).
+// Returns the chip's width.
+static int icon_draw(LovyanGFX *g, int x, int y, const EmuArt *a)
+{
+    static uint16_t *buf[2];
+    static const EmuArt *of[2];
+    int k = of[0] == a ? 0 : of[1] == a ? 1 : -1;
+    if (k < 0) {
+        k = of[0] ? 1 : 0;
+        if (of[0] && of[1]) { free(buf[1]); buf[1] = buf[0]; of[1] = of[0]; k = 0; }
+        buf[k] = inflate565(a->z, a->n, a->w, a->h);
+        of[k] = buf[k] ? a : nullptr;
+    }
+    const int cw = a->w + 8;
+    g->fillRoundRect(x, y, cw, 20, 5, ART_TILE);
+    if (buf[k]) g->pushImage(x + 4, y + (20 - a->h) / 2, a->w, a->h, (const lgfx::rgb565_t *)buf[k]);
+    return cw;
+}
 static const EmuSys *SYS = nullptr;
 
 // ── on-card trace ───────────────────────────────────────────────────────────────────────────────
@@ -355,6 +378,9 @@ struct EState {
     uint8_t  stash[SRC_W];   // the line being blended into the next one (see on_line)
     uint16_t stash16[256];   // ...the same for a colour line (on_line16), up to a Master System line
     uint8_t  hsrc[240];      // Master System lines: output column -> first source column (hscale_build)
+    uint8_t  fps_hist[32];   // two screens: the last 32 seconds of fps, the companion's sparkline
+    uint8_t  fps_hn;         // ...how many are filled (a ring once full)
+    int64_t  play_t0;        // when this session's game started (the companion's clock)
     uint8_t  hmix[240];      // ...and whether it is the midpoint of that column and the next
     bool     have_stash;
     // Two screens: the external panel keeps what it was sent, so a source line identical to the one it
@@ -932,6 +958,25 @@ static void chrome_draw(void)
 
 // TWO SCREENS: the card on the Cardputer's own screen. `full` repaints it whole; otherwise only the live line
 // (fps, battery, volume, a toast) — once a second, never per frame.
+// The console now playing, as its mark: the Color core has its own, a Master System cartridge on the Game Gear
+// shelf the Master System's.
+static const EmuArt *sys_icon(void) { return s_src_w == SRC_W ? &SYS->icon_a : &SYS->icon_b; }
+
+// A key cap: the key on a raised cap, what it does beside it. Returns the x after it.
+static int keycap(LovyanGFX *g, int x, int y, const char *key, const char *what)
+{
+    g->setFont(&fonts::Font0); g->setTextSize(1);
+    const int kw = (int)g->textWidth(key) + 8;
+    g->fillRoundRect(x, y, kw, 13, 3, LINE);
+    g->drawFastHLine(x + 2, y + 12, kw - 4, DIM);            // the cap's lower lip
+    g->setTextColor(FG, LINE); g->setCursor(x + 4, y + 3); g->print(key);
+    g->setTextColor(MUTED, BG); g->setCursor(x + kw + 3, y + 3); g->print(what);
+    return x + kw + 3 + (int)g->textWidth(what) + 7;
+}
+
+// TWO SCREENS — the Cardputer while the game plays on the panel: never a copy of the picture, a companion. A
+// header (the console, the session's clock, the battery), the title, the frame rate with its last 32 seconds as
+// a sparkline, the volume, and the controls as key caps. full = everything; else only what changes each second.
 static void card_draw(bool full)
 {
     LovyanGFX *g = igfx();
@@ -939,37 +984,77 @@ static void card_draw(bool full)
     g->startWrite();
     if (full) {
         g->fillScreen(BG);
-        g->setTextSize(1); g->setTextColor(DIM, BG); g->setCursor(6, 4); g->print(SYS->short_name);
-        char t[22]; snprintf(t, sizeof t, "%s", SYS->title());
-        g->setTextSize(2); g->setTextColor(FG, BG); g->setCursor(6, 16); g->print(t);
-        g->drawFastHLine(6, 56, 228, LINE);
-        g->setTextSize(1);
-        g->setTextColor(MUTED, BG);
-        g->setCursor(6, 62);  g->print(TR5("E S A D   muovi", "E S A D   move", "E S A D   mover", "E S A D   bouger", "E S A D   bewegen"));
-        if (!strcmp(SYS->id, "gbemu")) {           // Game Boy and Color: A / B / START / SELECT
-            g->setCursor(6, 74);  g->print("K = A     J = B");
-            g->setCursor(6, 86);  g->print(TR5("Invio START   Spazio SELECT", "Enter START   Space SELECT", "Intro START   Espacio SELECT", "Entree START  Espace SELECT", "Enter START   Leer SELECT"));
-        } else {                                   // Game Gear: buttons 1 / 2 and START; Master System: PAUSE
-            g->setCursor(6, 74);  g->print("J = 1     K = 2");
-            g->setCursor(6, 86);
-            if (s_src_w == SRC_W) g->print(TR5("Invio START", "Enter START", "Intro START", "Entree START", "Enter START"));
-            else                  g->print(TR5("Invio PAUSA", "Enter PAUSE", "Intro PAUSA", "Entree PAUSE", "Enter PAUSE"));
+        const int iw = icon_draw(g, 4, 1, sys_icon());
+        char t[40]; snprintf(t, sizeof t, "%s", SYS->title());
+        g->setFont(&fonts::FreeSansBold9pt7b);
+        while (t[0] && (int)g->textWidth(t) > 228 - iw) t[strlen(t) - 1] = '\0';
+        g->setTextColor(FG, BG); g->setCursor(iw + 10, 5); g->print(t);
+        g->setFont(&fonts::Font0);
+        g->drawFastHLine(6, 88, 228, LINE);
+        // The controls, as the keys they are on this keyboard.
+        int x = keycap(g, 4, 94, "E S A D", TR5("muovi", "move", "mover", "bouger", "bewegen"));
+        if (!strcmp(SYS->id, "gbemu")) {
+            x = keycap(g, x, 94, "K", "A");
+            keycap(g, x, 94, "J", "B");
+            x = keycap(g, 4, 109, TR5("Invio", "Enter", "Intro", "Entree", "Enter"), "START");
+            keycap(g, x, 109, TR5("Spazio", "Space", "Espacio", "Espace", "Leer"), "SELECT");
+        } else {
+            x = keycap(g, x, 94, "J", "1");
+            keycap(g, x, 94, "K", "2");
+            keycap(g, 4, 109, TR5("Invio", "Enter", "Intro", "Entree", "Enter"), s_src_w == SRC_W ? "START" : TR5("PAUSA", "PAUSE", "PAUSA", "PAUSE", "PAUSE"));
         }
-        g->setCursor(6, 98);  g->print(TR5("M menu   TAB veloce   -/= volume", "M menu   TAB fast   -/= volume", "M menu   TAB rapido   -/= vol", "M menu   TAB vite   -/= vol", "M Menue  TAB schnell  -/= Laut"));
-        if (SYS->palettes) { g->setCursor(6, 110); g->print(TR5("P colori", "P palette", "P paleta", "P palette", "P Palette")); }
+        x = keycap(g, 4, 123, "M", "menu");
+        x = keycap(g, x, 123, "TAB", TR5("veloce", "fast", "rapido", "vite", "schnell"));
+        keycap(g, x, 123, "- =", "volume");
     }
-    // The live line: fps (green at speed), battery, volume, or the last toast.
-    g->fillRect(0, 36, 240, 18, BG);
-    g->setTextSize(2);
-    g->setTextColor(st->fps >= 55 ? GRN : AMB, BG); g->setCursor(6, 38); g->printf("%2d fps", st->fps);
-    g->setTextSize(1);
+    // ── what changes: the clock and battery, the frame rate and its sparkline, the volume (or the toast) ──
+    g->setFont(&fonts::Font0); g->setTextSize(1);
+    g->fillRect(0, 26, 240, 14, BG);
+    const int secs = (int)((esp_timer_get_time() - st->play_t0) / 1000000);
+    char hb[24];
     int bp = nucleo_power_battery_pct();
-    g->setTextColor(bp >= 0 && bp < 20 ? AMB : MUTED, BG);
-    g->setCursor(110, 43);
-    if (st->toast[0]) { g->setTextColor(GRN, BG); g->print(st->toast); }
-    else if (bp >= 0) g->printf("%d%%   vol %d%%", bp, nucleo_audio_volume());
-    else g->printf("vol %d%%", nucleo_audio_volume());
+    if (bp >= 0) snprintf(hb, sizeof hb, "%d:%02d   %d%%", secs / 60, secs % 60, bp);
+    else         snprintf(hb, sizeof hb, "%d:%02d", secs / 60, secs % 60);
+    g->setTextDatum(top_left); g->setTextColor(bp >= 0 && bp < 20 ? AMB : MUTED, BG);
+    g->drawString(hb, 6, 29);
+
+    const uint16_t fc = st->fps >= 55 ? GRN : AMB;
+    g->fillRect(0, 44, 240, 42, BG);
+    g->setTextSize(3); g->setTextColor(fc, BG); g->setCursor(6, 46); g->printf("%2d", st->fps);
+    g->setTextSize(1); g->setTextColor(MUTED, BG); g->setCursor(46, 60); g->print("fps");
+    // The sparkline: one bar per second, 60 fps at the top of its 26 px, the dips in amber.
+    const int sx = 74, sy = 46, sh = 26, n = st->fps_hn < 32 ? st->fps_hn : 32;
+    g->drawFastHLine(sx, sy + sh, 32 * 5, LINE);
+    for (int i = 0; i < n; i++) {
+        int v = st->fps_hist[(st->fps_hn - n + i) & 31]; if (v > 60) v = 60;
+        int h = v * sh / 60; if (h < 1) h = 1;
+        g->fillRect(sx + i * 5, sy + sh - h, 4, h, v >= 55 ? GRN : AMB);
+    }
+    // Volume (or the last toast: "saved", "loaded", "vol 70%").
+    if (st->toast[0]) { g->setTextColor(GRN, BG); g->setCursor(6, 77); g->print(st->toast); }
+    else {
+        const int v = nucleo_audio_is_muted() ? 0 : nucleo_audio_volume();
+        g->setTextColor(MUTED, BG); g->setCursor(6, 77); g->print("vol");
+        g->fillRoundRect(28, 77, 100, 7, 3, LINE);
+        if (v) g->fillRoundRect(28, 77, v, 7, 3, ACC);
+        g->setCursor(134, 77); g->printf("%d%%", v);
+    }
     g->endWrite();
+}
+
+// TWO SCREENS — the panel around a 3/2 picture: a console's bezel, not a black void. A dark frame, a rounded
+// rim around the picture, the console's name in the bottom margin. Filled (or a Master System picture) covers
+// the whole panel, so there is nothing to frame. The next frame repaints the picture itself.
+#define BEZEL 0x10A2
+static void bezel_draw(void)
+{
+    if (!s_big) return;
+    d.fillScreen(BEZEL);
+    if (s_out_w >= 320) return;
+    d.drawRoundRect(s_out_x - 4, s_out_y0 - 4, s_out_w + 8, s_out_h + 8, 6, LINE);
+    d.drawRoundRect(s_out_x - 3, s_out_y0 - 3, s_out_w + 6, s_out_h + 6, 5, DIM);
+    const EmuArt *ic = sys_icon();
+    if (s_out_x >= ic->w + 12) icon_draw(&d, (s_out_x - 4 - (ic->w + 8)) / 2, 240 - 30, ic);   // the console's mark
 }
 
 // Everything outside the picture, blanked in one go. Called when the info is switched off (the
@@ -990,7 +1075,7 @@ static void view_apply(void)
     if (s_big) {                       // two screens: 3/2 or filled on the panel; the next frame repaints it all
         geom_apply();
         st->diff_ok = false;
-        d.fillScreen(BG);
+        bezel_draw();
         return;
     }
     geom_apply();
@@ -1176,7 +1261,7 @@ static void menu_close(void)
     st->diff_ok = false;                          // a state load / reset changed the picture under the menu
     if (s_big) {                                  // the menu card was on the panel: clear it, the next frame repaints
         nucleo_touch_clear(); nucleo_touch_commit();
-        d.fillScreen(BG);
+        bezel_draw();
         card_draw(true);
     }
     // Enter, Space and K both drive this menu AND are Start, Select and A. Whatever is still held
@@ -1462,6 +1547,8 @@ static void play_session(const char *name)
     set_relief(0);                       // every cartridge starts at the full picture and earns relief
     SYS->reset_counters();
     st->fps_frames = 0; st->fps = 0; st->fps_t0 = esp_timer_get_time();
+    st->play_t0 = st->fps_t0; st->fps_hn = 0;
+    bezel_draw();
     hud_draw();
     chrome_draw();
     card_draw(true);
@@ -1547,8 +1634,8 @@ static void play_session(const char *name)
         st->out_y = 0; st->band_line = 0; st->have_stash = false;
         if (s_big) {                             // the on-demand system bar (a tap shows it, 3 s later it goes)
             const int ov = nucleo_extdisp_hud_overlay();
-            if (s_ov && !ov) {                   // it went: repaint what it covered, border and picture
-                d.fillRect(0, 0, d.width(), s_ov, BG);
+            if (s_ov && !ov) {                   // it went: repaint what it covered, bezel and picture
+                bezel_draw();
                 st->diff_ok = false;
             }
             s_ov = ov;
@@ -1566,6 +1653,7 @@ static void play_session(const char *name)
         int64_t now = esp_timer_get_time();
         if (now - st->fps_t0 >= 1000000) {
             st->fps = (int)st->fps_frames;
+            st->fps_hist[st->fps_hn++ & 31] = (uint8_t)(st->fps > 255 ? 255 : st->fps);
             // Divide the window's accumulated microseconds by the frames in it, in TENTHS of a ms —
             // a breakdown rounded to whole milliseconds hides exactly the differences worth seeing.
             nucleo_gb_stats_t w; SYS->get_stats(&w);
@@ -1597,7 +1685,7 @@ static void play_session(const char *name)
                 st->crash_told = true;
                 st->menu = true; st->msel = MI_RESUME;  // paused; Reset is a deliberate choice, never a mashed key
                 st->state_ok = SYS->state_exists(0);
-                if (s_big && igfx()) nucleo_app_set_gfx(igfx());
+                s_bm_scroll = 0;
                 menu_draw();
             }
             // Battery RAM reaches the card within ~2 s of an in-game save, not only on quit.
@@ -1669,29 +1757,6 @@ static void play_session(const char *name)
 // ── the shelf ───────────────────────────────────────────────────────────────────────────────────
 #define ROW_H 22
 
-// A small Game Boy glyph, the same silhouette as the launcher icon, drawn at the header.
-static void glyph_gb(int x, int y, int h, uint16_t col)
-{
-    int w = h * 62 / 100;
-    d.fillRoundRect(x, y, w, h, h / 8, col);
-    d.fillRect(x + w / 5, y + h / 8, w * 3 / 5, h * 3 / 10, BG);
-    d.fillRect(x + w / 4, y + h * 6 / 10, w / 10, h / 5, BG);
-    d.fillRect(x + w / 8, y + h * 7 / 10, w * 3 / 10, h / 12, BG);
-    d.fillCircle(x + w * 3 / 4, y + h * 7 / 10, h / 14, BG);
-}
-
-// The Game Gear, landscape: screen in the middle, d-pad left, two buttons right (launcher icon too).
-static void glyph_gg(int x, int y, int h, uint16_t col)
-{
-    int w = h * 16 / 10;
-    d.fillRoundRect(x, y, w, h, h / 3, col);
-    d.fillRect(x + w * 3 / 10, y + h / 6, w * 4 / 10, h * 2 / 3, BG);          // screen
-    d.fillRect(x + w / 8, y + h * 4 / 10, w / 7, h / 7, BG);                   // d-pad
-    d.fillRect(x + w / 8 + w / 21, y + h * 3 / 10, w / 21 + 1, h * 3 / 8, BG);
-    d.fillCircle(x + w * 8 / 10, y + h * 4 / 10, h / 10 + 1, BG);              // 2
-    d.fillCircle(x + w * 9 / 10 - 1, y + h * 6 / 10, h / 10 + 1, BG);          // 1
-}
-
 // Titles read better without the extension or the region/dump tags every set carries.
 static void pretty(const char *file, char *out, size_t n)
 {
@@ -1713,13 +1778,12 @@ static void draw(void)
     d.fillRect(0, top, 240, ch, BG);
 
     // ── header: glyph + system, and either the live filter or the counts ──
-    if (SYS->palettes) glyph_gb(6, top + 2, 18, ACC); else glyph_gg(4, top + 4, 14, ACC);
+    int hx = 4 + icon_draw(&d, 4, top, &SYS->icon_a);
+    hx += 3 + icon_draw(&d, hx + 3, top, &SYS->icon_b);
     if (st->flen) {
-        d.setTextSize(2); d.setTextColor(FG, BG); d.setCursor(28, top + 3);
+        d.setTextSize(2); d.setTextColor(FG, BG); d.setCursor(hx + 8, top + 3);
         char q[FILTMAX + 2]; snprintf(q, sizeof q, "%s_", st->filter);
         d.print(q);
-    } else {
-        d.setTextSize(2); d.setTextColor(ACC, BG); d.setCursor(28, top + 3); d.print(SYS->name);
     }
     char cnt[24];
     if (st->total > st->n) snprintf(cnt, sizeof cnt, "%d/%d", st->n, st->total);
@@ -1759,10 +1823,9 @@ static void draw(void)
         pretty(ent_name(idx), title, sizeof title);
         // The badges are drawn first so the title can be clipped to whatever is left, never overlap.
         int right = 232;
-        if (st->sh->list[idx].alt && SYS->badge) {
-            d.setTextSize(1); d.setTextColor(foc ? INK : AMB, foc ? ACC : BG);
-            int bw = (int)strlen(SYS->badge) * 6;
-            d.setCursor(right - bw - 6, y + (ROW_H - 8) / 2); d.print(SYS->badge); right -= bw + 8;
+        if (st->sh->list[idx].alt) {           // a Color / Master System cartridge: its console's mark, not a letter
+            const int iw = SYS->icon_b.w + 8;
+            icon_draw(&d, right - iw - 2, y, &SYS->icon_b); right -= iw + 6;
         }
         if (st->have_resume && !strcmp(ent_name(idx), st->resume)) {
             d.fillCircle(right - 6, y + ROW_H / 2 - 1, 3, foc ? INK : GRN); right -= 14;
@@ -1800,7 +1863,7 @@ static void hint(void)
 {
     nucleo_app_set_hint(st && st->flen
         ? TR5("Invio gioca  Canc modif  Esc pulisce",  "Enter plays  Bksp edits  Esc clears", "Intro juega/Bksp edita/Esc limpia", "Entree joue/Ret. edite/Esc efface", "Enter spielt/Bearb./Esc loescht")
-        : TR5("Scrivi cerca · 1-9 · Invio gioca",     "Type to search · 1-9 · Enter plays", "Escribe buscar/1-9/Intro juega", "Tapez chercher/1-9/Entree joue", "Tippen Suchen/1-9/Enter spielt"));
+        : TR5("Scrivi cerca  1-9  Invio gioca",       "Type to search  1-9  Enter plays", "Escribe buscar/1-9/Intro juega", "Tapez chercher/1-9/Entree joue", "Tippen Suchen/1-9/Enter spielt"));
 }
 
 // ── two screens: the gallery ────────────────────────────────────────────────────────────────────
@@ -1950,9 +2013,12 @@ static void gal_paint(void *)
         d.pushImage(px, py, s_pic_w, s_pic_h, (const lgfx::rgb565_t *)s_pic);
         if (s_pic_snap) d.drawRect(px - 1, py - 1, s_pic_w + 2, s_pic_h + 2, LINE);
     }
+    if (s_pic_snap) {                                   // a screenshot: which console, as its mark in the corner
+        const EmuArt *ic = st->sh->list[sel].alt ? &SYS->icon_b : &SYS->icon_a;
+        icon_draw(&d, tx + tw - ic->w - 12, top + PIC_H - 20, ic);
+    }
     int ly = top + PIC_H + 8;
-    lg::font(0); d.setTextColor(ACC, BG);
-    d.drawString(st->sh->list[sel].alt ? SYS->sys_b : SYS->sys_a, tx + 2, ly);
+    lg::font(0);
     if (st->have_resume && !strcmp(ent_name(sel), st->resume)) {
         const char *lp = TR5("ultima", "last", "ultima", "derniere", "zuletzt");
         d.setTextDatum(top_right); d.setTextColor(GRN, BG);
@@ -2015,40 +2081,89 @@ static void draw_large(void)
     nucleo_touch_commit();
 }
 
-// The Cardputer while the gallery is on the panel: the search, big; the selection's title and where it is in the
-// list; the console's buttons on this keyboard. What the panel already shows (the wheel, the picture) is not
-// repeated here.
+// What the card knows about a cartridge — its size, whether it has battery RAM saved and a save state — looked
+// up once per selection (a few stat()s on the card), never per repaint.
+struct GameFacts { char key[PATHMAX]; uint32_t kb; bool sav, state; };
+static GameFacts s_facts;
+static const GameFacts *facts_for(const char *name)
+{
+    if (!strcmp(s_facts.key, name)) return &s_facts;
+    snprintf(s_facts.key, sizeof s_facts.key, "%s", name);
+    s_facts.kb = 0; s_facts.sav = s_facts.state = false;
+    char path[PATHMAX + 40];
+    struct stat sb;
+    if (!rom_path(name, path, sizeof path)) return &s_facts;
+    if (stat(path, &sb) == 0) s_facts.kb = (uint32_t)(sb.st_size / 1024);
+    // The cores keep saves at "<root>/Saves/<sys>/<name>" for "<root>/ROMs/<sys>/<name>.<ext>" (save_base_init).
+    const char *roms = strstr(path, "/ROMs/"), *file = strrchr(path, '/'), *dot = strrchr(path, '.');
+    if (!roms || !file || roms >= file) return &s_facts;
+    char base[PATHMAX + 60];
+    snprintf(base, sizeof base, "%.*s/Saves/%.*s/%.*s", (int)(roms - path), path, (int)(file - roms - 6), roms + 6,
+             (int)((dot && dot > file ? dot : path + strlen(path)) - file - 1), file + 1);
+    char p2[sizeof base + 8];
+    snprintf(p2, sizeof p2, "%s.sav", base); s_facts.sav = stat(p2, &sb) == 0 && sb.st_size > 0;
+    snprintf(p2, sizeof p2, "%s.st0", base); s_facts.state = stat(p2, &sb) == 0 && sb.st_size > 0;
+    return &s_facts;
+}
+
+// The Cardputer while the gallery is on the panel: the search, big; the selection's title, where it is in the
+// list and what it has (size, battery save, save state); the console's buttons on this keyboard. What the panel
+// already shows (the wheel, the picture) is not repeated here.
 static void draw_companion(void)
 {
     int top = nucleo_app_content_top(), ch = nucleo_app_content_height();
     st->sel_title[0] = '\0';                      // no marquee down here: the title is wrapped instead
     d.fillRect(0, top, 240, ch, BG);
-    int y = lg::comp_head(SYS->name, ACC);
-    d.setFont(&fonts::Font0); d.setTextSize(2);
+    // The header: the shelf's consoles as their marks, the position at the right (no names written).
+    int hx = 4 + icon_draw(&d, 4, top + 1, &SYS->icon_a);
+    icon_draw(&d, hx + 3, top + 1, &SYS->icon_b);
+    int y = top + 24;
+    // The search field: a rounded well with a lens, the query in the kit's 16 px face and a cursor (or the hint).
+    const unsigned short cb = lg::card();
+    d.fillRoundRect(4, y, 196, 22, 11, cb);
+    d.drawCircle(15, y + 10, 4, st->flen ? ACC : MUTED); d.drawLine(18, y + 13, 21, y + 16, st->flen ? ACC : MUTED);
+    lg::font(0); d.setTextDatum(middle_left);
     if (st->flen) {
-        const char *q = st->filter; const int n = (int)strlen(q);
-        const char *tail = n > 17 ? q + n - 17 : q;
-        d.setTextColor(FG, BG); d.setCursor(8, y + 4); d.print(tail);
-        d.fillRect(8 + (int)strlen(tail) * 12, y + 2, 3, 18, ACC);
+        const char *q = st->filter;
+        while (*q && d.textWidth(q) > 160) q++;
+        d.setTextColor(FG, cb); d.drawString(q, 27, y + 11);
+        d.fillRect(28 + (int)d.textWidth(q), y + 4, 2, 14, ACC);
     } else {
-        d.setTextColor(MUTED, BG); d.setCursor(8, y + 4);
-        d.print(TR5("Scrivi e cerca", "Type to search", "Escribe y busca", "Tapez, cherchez", "Tippen = Suche"));
+        d.setTextColor(MUTED, cb);
+        d.drawString(TR5("Scrivi e cerca", "Type to search", "Escribe y busca", "Tapez, cherchez", "Tippen = Suche"), 27, y + 11);
     }
-    d.setTextSize(1);
+    d.setTextDatum(top_left);
+    d.setFont(&fonts::Font0); d.setTextSize(1);
     if (st->sh && st->n) {
         char pos[16]; snprintf(pos, sizeof pos, "%d/%d", st->sel + 1, st->n);
-        d.setTextDatum(top_right); d.setTextColor(MUTED, BG); d.drawString(pos, 232, y + 8); d.setTextDatum(top_left);
+        d.setTextDatum(top_right); d.setTextColor(MUTED, BG); d.drawString(pos, 234, top + 7); d.setTextDatum(top_left);
         char title[NAMEMAX]; pretty(ent_name(st->sel), title, sizeof title);
         d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(ACC, BG);
-        lg::wrap(title, 8, y + 28, 224, 19, 2);
+        const int lines = lg::wrap(title, 8, y + 28, 224, 19, 2);
         d.setFont(&fonts::Font0);
+        // The facts line: the console, the size, and two dots — green when there is a save / a state.
+        const GameFacts *f = facts_for(ent_name(st->sel));
+        const int fy = y + 30 + lines * 19;
+        char sz[24];
+        if (f->kb >= 1024) snprintf(sz, sizeof sz, "%u.%u MB", (unsigned)(f->kb / 1024), (unsigned)(f->kb % 1024 * 10 / 1024));
+        else               snprintf(sz, sizeof sz, "%u KB", (unsigned)f->kb);
+        const int iw = icon_draw(&d, 6, fy - 6, st->sh->list[st->sel].alt ? &SYS->icon_b : &SYS->icon_a);
+        d.setTextColor(MUTED, BG); d.setCursor(iw + 12, fy); d.print(sz);
+        int fx = iw + 12 + (int)d.textWidth(sz) + 10;
+        d.fillCircle(fx + 3, fy + 3, 3, f->sav ? GRN : LINE);
+        d.setTextColor(f->sav ? FG : DIM, BG); d.setCursor(fx + 9, fy);
+        d.print(TR5("salvataggio", "save", "partida", "sauvegarde", "Spielstand"));
+        fx += 9 + (int)d.textWidth(TR5("salvataggio", "save", "partida", "sauvegarde", "Spielstand")) + 8;
+        d.fillCircle(fx + 3, fy + 3, 3, f->state ? GRN : LINE);
+        d.setTextColor(f->state ? FG : DIM, BG); d.setCursor(fx + 9, fy);
+        d.print(TR5("stato", "state", "estado", "etat", "Zustand"));
     }
-    // The console's buttons on this keyboard, for the game about to start (at most 39 Font0 columns).
-    d.setTextWrap(false); d.setTextColor(MUTED, BG); d.setCursor(8, top + ch - 26);
-    d.print(SYS->palettes ? TR5("K=A  J=B  Invio=Start  Spazio=Select", "K=A  J=B  Enter=Start  Space=Select",
-                                "K=A  J=B  Intro=Start  Esp.=Select", "K=A  J=B  Entree=Start  Esp.=Select", "K=A  J=B  Enter=Start  Leer=Select")
-                          : TR5("J=1  K=2  Invio=Start / Pausa", "J=1  K=2  Enter=Start / Pause",
-                                "J=1  K=2  Intro=Start / Pausa", "J=1  K=2  Entree=Start / Pause", "J=1  K=2  Enter=Start / Pause"));
+    // The console's buttons on this keyboard, for the game about to start: the same key caps as in the game.
+    d.fillRect(0, top + ch - 30, 240, 16, BG);
+    int kx = keycap(&d, 4, top + ch - 29, "K", !strcmp(SYS->id, "gbemu") ? "A" : "2");
+    kx = keycap(&d, kx, top + ch - 29, "J", !strcmp(SYS->id, "gbemu") ? "B" : "1");
+    kx = keycap(&d, kx, top + ch - 29, TR5("Invio", "Enter", "Intro", "Entree", "Enter"), "START");
+    if (!strcmp(SYS->id, "gbemu")) keycap(&d, kx, top + ch - 29, TR5("Spazio", "Space", "Esp.", "Esp.", "Leer"), "SEL");
     lg::comp_keys(st->flen ? TR5("INVIO gioca  CANC modif.  ESC pulisce", "ENTER play  DEL edit  ESC clear", "INTRO juega  ESC limpia", "ENTREE joue  ESC efface", "ENTER spielt  ESC leert")
                            : TR5("su/giu  INVIO gioca  scrivi = cerca", "up/dn  ENTER play  type = search", "arr/ab  INTRO juega", "haut/bas  ENTREE joue", "auf/ab  ENTER spielt"));
 }
@@ -2148,8 +2263,9 @@ static const EmuSys SYS_GB = {
     nucleo_gb_set_buttons, nucleo_gb_title, nucleo_gb_set_frameskip, nucleo_gb_state_save,
     nucleo_gb_state_load, nucleo_gb_state_exists, nucleo_gb_save, nucleo_gb_autosave,
     nucleo_gb_get_stats, nucleo_gb_reset_counters, gb_geometry, false,
-    { ART_GB_Z, sizeof ART_GB_Z, ART_GB_W, ART_GB_H }, { ART_GB_Z, sizeof ART_GB_Z, ART_GB_W, ART_GB_H },
+    { ART_GB_Z, sizeof ART_GB_Z, ART_GB_W, ART_GB_H }, { ART_GBC_Z, sizeof ART_GBC_Z, ART_GBC_W, ART_GBC_H },
     "Game Boy", "Game Boy Color", gb_pick,
+    { ART_GB_S_Z, sizeof ART_GB_S_Z, ART_GB_S_W, ART_GB_S_H }, { ART_GBC_S_Z, sizeof ART_GBC_S_Z, ART_GBC_S_W, ART_GBC_S_H },
 };
 
 // The Game Boy Color: the same shelf, folders, saves and trace as the Game Boy (a .gbc file lives in either
@@ -2174,8 +2290,9 @@ static const EmuSys SYS_GBC = {
     nucleo_gbc_set_buttons, nucleo_gbc_title, nucleo_gbc_set_frameskip, nucleo_gbc_state_save,
     nucleo_gbc_state_load, nucleo_gbc_state_exists, nucleo_gbc_save, nucleo_gbc_autosave,
     nucleo_gbc_get_stats, nucleo_gbc_reset_counters, gb_geometry, false,
-    { ART_GB_Z, sizeof ART_GB_Z, ART_GB_W, ART_GB_H }, { ART_GB_Z, sizeof ART_GB_Z, ART_GB_W, ART_GB_H },
-    "Game Boy", "Game Boy Color", nullptr,
+    { ART_GBC_Z, sizeof ART_GBC_Z, ART_GBC_W, ART_GBC_H }, { ART_GBC_Z, sizeof ART_GBC_Z, ART_GBC_W, ART_GBC_H },
+    "Game Boy Color", "Game Boy Color", nullptr,
+    { ART_GBC_S_Z, sizeof ART_GBC_S_Z, ART_GBC_S_W, ART_GBC_S_H }, { ART_GBC_S_Z, sizeof ART_GBC_S_Z, ART_GBC_S_W, ART_GBC_S_H },
 };
 // Which console plays `name` on the Game Boy shelf: a Game Boy cartridge whose header asks for the Color
 // (byte 0x143 bit 7: Color-only, or Color-enhanced and played in colour) goes to the Color core.
@@ -2210,6 +2327,7 @@ static const EmuSys SYS_GG = {
     nucleo_gg_get_stats, nucleo_gg_reset_counters, nucleo_gg_geometry, true,
     { ART_GG_Z, sizeof ART_GG_Z, ART_GG_W, ART_GG_H }, { ART_SMS_Z, sizeof ART_SMS_Z, ART_SMS_W, ART_SMS_H },
     "Game Gear", "Master System", nullptr,
+    { ART_GG_S_Z, sizeof ART_GG_S_Z, ART_GG_S_W, ART_GG_S_H }, { ART_SMS_S_Z, sizeof ART_SMS_S_Z, ART_SMS_S_W, ART_SMS_S_H },
 };
 
 static void enter(void)
