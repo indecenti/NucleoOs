@@ -14,6 +14,7 @@
 // RAM: one heap block for the installed apps (~200 B each), zero when none; rebuilt at boot and after the
 // Store installs or removes something.
 #include "nucleo_app.h"
+#include "nucleo_exclusive.h"   // NX_SOLO | NX_WIFI for a native app that never uses the network
 #include "launcher_menu.h"
 #include "launcher_theme.h"
 #include "app_gfx.h"
@@ -38,6 +39,7 @@ struct StoreApp {
     const char *cat;            // launcher category ("Games", "Tools", ...)
     unsigned short color;
     bool has_icon;
+    bool offline;               // its record lists its permissions, and none is the network
     uint8_t icon[128];          // 32 x 32, 1 bit per pixel, MSB first
 };
 
@@ -69,7 +71,7 @@ extern "C" const uint8_t *nucleo_store_app_icon(const char *id)
     return a && a->has_icon ? a->icon : nullptr;
 }
 
-// .store-version: "code N", "version x", "kind web", "category games", "name it|en|es|fr|de".
+// .store-version: "code N", "version x", "kind web", "category games", "name it|en|es|fr|de", "perm audio,wifi".
 static bool read_record(const char *id, StoreApp *a)
 {
     char p[96], line[160];
@@ -85,6 +87,9 @@ static bool read_record(const char *id, StoreApp *a)
         if (!strncmp(line, "kind ", 5)) snprintf(a->kind, sizeof a->kind, "%s", line + 5);
         else if (!strncmp(line, "category ", 9)) {
             for (auto &m : MAP) if (!strcmp(m.store, line + 9)) { a->cat = m.launcher; a->color = m.col; }
+        } else if (!strncmp(line, "perm", 4) && (line[4] == ' ' || !line[4])) {
+            // Only a record that lists its permissions can say "no network"; an older one (no line) keeps it.
+            a->offline = !strstr(line, "wifi") && !strstr(line, "net");
         } else if (!strncmp(line, "name ", 5)) {
             const char *s = line + 5;
             for (int i = 0; i < lang_idx() && s; i++) { s = strchr(s, '|'); if (s) s++; }
@@ -253,6 +258,10 @@ extern "C" void nucleo_store_apps_sync(void)
         d0.on_enter = opener_enter;
         d0.on_key = opener_key;
         d0.on_draw = native ? native_draw : opener_draw;
+        // A native app that never uses the network gets its Solo boot without Wi-Fi, decided HERE because the
+        // launch happens before the module is loaded (its own NX_WIFI arrives only with it): the radio costs
+        // ~48 KB and halves the largest free block, which is what an emulator's cartridge cache lives on.
+        if (native && apps[i].offline) d0.exclusive_flags = NX_SOLO | NX_WIFI;
     }
     // Every slot is rewritten below: none runs a module any more (a resident module is simply re-attached
     // by the next nucleo_store_app_prepare, without reloading).
