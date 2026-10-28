@@ -850,6 +850,14 @@ const server = createServer(async (req, res) => {
     console.log(`[display] screen ${on ? 'ON' : 'OFF'}`); simLog(`I (${Date.now() % 100000}) display: ${on ? 'ON' : 'OFF'}`);
     return sendJSON(res, { ok: true, on, brightness: 70 });
   }
+  if (path === '/api/input' && req.method === 'POST') {   // mirrors nucleo_app.cpp input_post: queue one key (no native UI on the sim)
+    if (!isAuthed(req)) return reject401(res);
+    const key = url.searchParams.get('key') || '', ch = url.searchParams.get('ch') || '';
+    if (!['enter', 'back', 'left', 'right', 'up', 'down', 'tab', 'del', 'char'].includes(key) || (key === 'char' && !ch))
+      return send(res, 400, 'application/json; charset=utf-8', JSON.stringify({ ok: false, err: 'key=enter|back|left|right|up|down|tab|del|char (+ch)' }));
+    simLog(`W (${Date.now() % 100000}) input: api key ${key}${ch ? ' ' + ch[0] : ''} -> queued`);
+    return sendJSON(res, { ok: true });
+  }
 
   // ── live diagnostics (mirror nucleo_httpd.c shapes; public, cheap, no auth) ──
   if (path === '/api/heap') {                       // per-region heap (fragmentation investigation)

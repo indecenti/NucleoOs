@@ -559,7 +559,7 @@
           <div class="row" style="border-bottom:none;margin-top:8px"><div class="hint" style="flex:1" data-i18n-html="aiKeysHint">🎨 <b>Generare immagini con l'IA</b> in Paint (Atelier) richiede una chiave <b>Grok (xAI)</b> — modello <code>grok-2-image</code>. Claude e Groq non disegnano, ma possono <b>migliorare il prompt</b>. 🎙️ La <b>trascrizione vocale</b> (Recorder, Dettatura) usa sempre Groq/OpenAI (Whisper), anche con Claude, Gemini o Grok come chat.</div></div></div>
 
         <div class="sect"><h2><span data-i18n="browserWasm">Browser · cervello locale (WASM)</span> <span class="badge">Offline</span></h2>
-          <div class="row"><label data-i18n="state">Stato</label><div class="ctl" style="flex-wrap:wrap"><span class="hint" id="edge-brain-stat" style="flex:1">controllo…</span></div></div>
+          <div class="row"><label data-i18n="state">Stato</label><div class="ctl" style="flex-wrap:wrap"><span class="hint" id="edge-brain-stat" style="flex:1" data-i18n="checking">controllo…</span></div></div>
           <div class="row" style="border-bottom:none"><label></label><div class="ctl" style="gap:8px;flex-wrap:wrap"><button id="edge-brain-prep">⬇ <span data-i18n="prepareUpdate">Prepara / Aggiorna</span></button><span class="hint" id="edge-brain-prog"></span></div></div>
           <div class="row"><label data-i18n="webSearchOnDemand">Ricerca web on-demand</label><div class="ctl"><span class="sw"><input type="checkbox" id="edge-web-on"><span></span></span><span class="hint" style="flex:1" data-i18n-html="edgeWebHint">In modalità <b>Browser</b>, quando i cervelli locali non sanno, recupera la risposta <b>certa</b> da Wikipedia (dal browser, mai dal dispositivo) e la <b>mette in cache</b>: da lì resta offline. Spento = solo conoscenza già in cache (nulla esce dal dispositivo).</span></div></div>
           <div class="row"><label data-i18n="cachedKnowledge">Conoscenza in cache</label><div class="ctl" style="gap:8px;flex-wrap:wrap"><span class="hint" id="edge-kb-count" style="flex:1">…</span><button id="edge-kb-clear">🗑 <span data-i18n="clear">Svuota</span></button></div></div>
@@ -712,7 +712,7 @@
   <!-- command palette -->
   <div class="cmd-scrim" id="cmd-scrim">
     <div class="cmd-box">
-      <input type="text" id="cmd-input" placeholder="Comanda il dispositivo…" autocomplete="off" spellcheck="false">
+      <input type="text" id="cmd-input" data-i18n-attr="placeholder:cmdPlaceholder" placeholder="Comanda il dispositivo…" autocomplete="off" spellcheck="false">
       <div class="cmd-results" id="cmd-results"></div>
     </div>
   </div>

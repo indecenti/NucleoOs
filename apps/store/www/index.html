@@ -18,7 +18,7 @@
 <body>
   <header>
     <img class="logo" src="assets/icon.svg" alt="">
-    <div class="ttl grow">Store<small id="sub"></small></div>
+    <div class="ttl grow"><span data-i18n="title">Store</span><small id="sub"></small></div>
     <input type="search" id="q" data-i18n-attr="placeholder:search">
     <button id="refresh" class="pri" data-i18n="refresh">Aggiorna catalogo</button>
   </header>
@@ -32,7 +32,7 @@
     <div class="info grow" id="info" role="status" aria-live="polite"></div>
   </div>
   <main id="grid"></main>
-  <iframe id="system" title="Sistema" hidden></iframe>
+  <iframe id="system" data-i18n-attr="title:tab_system" title="Sistema" hidden></iframe>
 <script type="module" src="store.js"></script>
 </body>
 </html>
