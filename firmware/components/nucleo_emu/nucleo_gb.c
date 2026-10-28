@@ -17,6 +17,10 @@
 #include <sys/stat.h>   // save-state presence check
 #include <time.h>       // MBC3 real-time clock seeded from the system clock
 #include "esp_task_wdt.h" // SD work on the app task feeds its watchdog (8 s) between steps
+#ifdef NAP_MODULE           // a store module runs from its flash mapping: it has no IRAM to place code in
+#undef IRAM_ATTR
+#define IRAM_ATTR
+#endif
 
 // Peanut-GB build switches — set BEFORE the include, they are compile-time for the whole core.
 #define ENABLE_LCD   1

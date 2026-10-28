@@ -33,6 +33,11 @@
 // the directory against a live filter and keeps at most MAXR matches. Type-to-filter is therefore
 // not a convenience here, it is the navigation model — which is also the right answer on a device
 // with a real keyboard and a 135 px screen (docs/device-ui.md: use the keyboard, exploit every pixel).
+#if __has_include("sdkconfig.h")       // the host harnesses compile this file without one
+#include "sdkconfig.h"
+#endif
+// Built in, or (CONFIG_NUCLEO_STORE_GBEMU and _GGEMU) only as the store's native modules, built with NAP_MODULE.
+#if !(CONFIG_NUCLEO_STORE_GBEMU && CONFIG_NUCLEO_STORE_GGEMU) || defined(NAP_MODULE)
 #include "nucleo_app.h"
 #include "app_gfx.h"
 #include "nucleo_gb.h"
@@ -1184,12 +1189,14 @@ static void fail_box(const char *what)
 
 // One wording for every way a cartridge can fail to start, whether the header probe or the full open
 // said so — the same cause must never read two different ways.
-static void start_error(esp_err_t e, uint8_t cart_type, char *buf, size_t n)
+// `cart` names an unsupported controller (the Game Boy core's words for it); the caller passes it so this
+// shared front-end never reaches into one core from the other's module.
+static void start_error(esp_err_t e, const char *cart, char *buf, size_t n)
 {
     switch (e) {
         case ESP_ERR_INVALID_VERSION: snprintf(buf, n, "%s", TR5("Solo Game Boy Color", "Game Boy Color only", "Solo Game Boy Color", "Game Boy Color seul", "Nur Game Boy Color")); break;
         case ESP_ERR_NOT_SUPPORTED:   snprintf(buf, n, "%s %s", TR5("Cartuccia non supportata:", "Unsupported cartridge:", "Cartucho no soportado:", "Cartouche non supportee:", "Patrone nicht unterstutzt"),
-                                               nucleo_gb_cart_name(cart_type)); break;
+                                               cart ? cart : "?"); break;
         case ESP_ERR_NOT_FOUND:       snprintf(buf, n, "%s", TR5("ROM non trovata", "ROM not found", "ROM no hallada", "ROM non trouvee", "ROM nicht da")); break;
         case ESP_ERR_NO_MEM:          snprintf(buf, n, "%s", TR5("RAM insufficiente", "Not enough RAM", "RAM insuficiente", "RAM insuffisante", "Zu wenig RAM")); break;
         case ESP_ERR_INVALID_SIZE:    snprintf(buf, n, "%s", TR5("File troppo corto", "File too short", "Archivo muy corto", "Fichier court", "Datei zu kurz")); break;
@@ -1737,7 +1744,7 @@ static void gb_explain(esp_err_t e, const char *path, char *buf, size_t n)
 {
     nucleo_gb_info_t inf;
     nucleo_gb_probe(path, &inf);
-    start_error(e, inf.cart_type, buf, n);
+    start_error(e, nucleo_gb_cart_name(inf.cart_type), buf, n);
 }
 static const EmuSys SYS_GB = {
     "gbemu", "Game Boy", "GB", DIR_GB, DIR_GBC, ".gb", ".gbc", "C",
@@ -1759,7 +1766,7 @@ static void gg_explain(esp_err_t e, const char *path, char *buf, size_t n)
     // No controller the core refuses: "not supported" can only be a zip without a cartridge in it.
     if (e == ESP_ERR_NOT_SUPPORTED && strcasestr(path, ".zip"))
         snprintf(buf, n, "%s", TR5("Nessun gioco nello zip", "No game in the zip", "Sin juego en zip", "Aucun jeu dans zip", "Kein Spiel in zip"));
-    else start_error(e, 0, buf, n);
+    else start_error(e, nullptr, buf, n);
 }
 static const EmuSys SYS_GG = {
     "ggemu", "Game Gear", "GG", DIR_GG, DIR_SMS, ".gg", ".sms", "SMS",
@@ -1806,14 +1813,16 @@ static void enter_gg(void) { SYS = &SYS_GG; enter(); }
 
 static void leave(void)
 {
-    nucleo_gb_close();                           // both are no-ops when closed
-    nucleo_gg_close();
+    if (SYS) SYS->close();                       // a no-op when no cartridge is open
     mq_free();
     if (st) { free(st->band[0]); free(st->band[1]); free(st->sh); free(st); st = nullptr; }
     if (SYS) remove(SYS->shelf_swp);             // never leave a stale shelf image for the next visit
     if (nucleo_exclusive_active()) nucleo_exclusive_exit();
 }
 
+// Two registrations, one per console: built in, both are called; from the store each is its own module
+// (gbemu, ggemu) and only reaches its own core, so the linker leaves the other one out.
+#if !CONFIG_NUCLEO_STORE_GBEMU || defined(NAP_MODULE)
 extern "C" void nucleo_register_gbemu(void)
 {
     static const nucleo_app_def_t app = {
@@ -1828,7 +1837,13 @@ extern "C" void nucleo_register_gbemu(void)
             // without the fragile in-place restore.
     };
     nucleo_app_register(&app);
-    // The Game Gear: same shelf, same menu, same RAM posture — only the descriptor differs.
+}
+#endif
+
+#if !CONFIG_NUCLEO_STORE_GGEMU || defined(NAP_MODULE)
+// The Game Gear: same shelf, same menu, same RAM posture — only the descriptor differs.
+extern "C" void nucleo_register_ggemu(void)
+{
     static const nucleo_app_def_t gg = {
         "ggemu", "Game Gear", "Games",
         "Play Game Gear cartridges natively — the emulator runs on the Cardputer itself.",
@@ -1837,3 +1852,5 @@ extern "C" void nucleo_register_gbemu(void)
     };
     nucleo_app_register(&gg);
 }
+#endif
+#endif  // !(CONFIG_NUCLEO_STORE_GBEMU && CONFIG_NUCLEO_STORE_GGEMU) || NAP_MODULE

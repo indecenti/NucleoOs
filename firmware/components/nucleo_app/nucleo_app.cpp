@@ -427,6 +427,7 @@ extern "C" void nucleo_register_files(void);
 extern "C" void nucleo_register_photos(void);
 extern "C" void nucleo_register_player(void);
 extern "C" void nucleo_register_gbemu(void);
+extern "C" void nucleo_register_ggemu(void);
 extern "C" void nucleo_register_video(void);
 extern "C" void nucleo_register_remote(void);
 extern "C" void nucleo_register_notepad(void);
@@ -508,7 +509,14 @@ void nucleo_app_register_builtins(void)
     // Tools (everyday gadgets)
     nucleo_register_weather(); nucleo_register_torch(); nucleo_register_qr(); nucleo_register_ir(); nucleo_register_pixelfix(); nucleo_register_screensaver();
     // Media
-    nucleo_register_radio(); nucleo_register_player(); nucleo_register_gbemu(); nucleo_register_video(); nucleo_register_photos(); nucleo_register_recorder(); nucleo_register_micspec();
+    nucleo_register_radio(); nucleo_register_player();
+#if !CONFIG_NUCLEO_STORE_GBEMU
+    nucleo_register_gbemu();            // the two emulators can ship from the store too (Kconfig, below)
+#endif
+#if !CONFIG_NUCLEO_STORE_GGEMU
+    nucleo_register_ggemu();
+#endif
+    nucleo_register_video(); nucleo_register_photos(); nucleo_register_recorder(); nucleo_register_micspec();
     // Web OS: the two transports to the browser web OS — cable (usbweb) and LAN (remote)
     nucleo_register_usbweb(); nucleo_register_remote();
     // Games

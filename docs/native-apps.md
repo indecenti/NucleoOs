@@ -56,6 +56,9 @@ The rules that keep an installed app working across OS updates:
    `lg::frame` with the touch flag, `nucleo_touch_add_pad`, `nucleo_touch_add_scroll`).
    Level 3 = level 2 + the rest of the `lg::` two-screen kit (`list`, `text_list`, `row_text`, `row_tap`, `tabs`,
    `header`, `panel`, `message`), first needed by Tank Duel.
+   Level 4 = level 3 + what the two emulators need (51 names): the sprite panel behind their scaler, the PCM sink,
+   the second-screen surface and exclusive-mode calls, the heap probes, a few libc/libgcc helpers and the ROM
+   inflater for zipped cartridges.
 
 Not in v1, on purpose: the web server (`httpd_*`: a module's handlers would outlive it, and the web OS's
 catch-all route is registered last, so a late endpoint is never reached), task creation, raw radio, OTA,
@@ -170,11 +173,18 @@ and every step is checked:
 | Slots (`slots`) | 38 KB (30 KB, 0.7 KB RAM, ABI 3) | ~21 KB | `CONFIG_NUCLEO_STORE_SLOTS` |
 | Reactor (`reactor`) | 40 KB (32 KB, 0.5 KB RAM, ABI 3) | ~21 KB | `CONFIG_NUCLEO_STORE_REACTOR` |
 | Garden (`giardino`) | 39 KB (31 KB, 0.5 KB RAM, ABI 3) | ~21 KB | `CONFIG_NUCLEO_STORE_SANDGARDEN` |
+| Game Boy (`gbemu`, front-end + Peanut-GB + APU) | 104 KB (72 KB, 0.6 KB RAM, ABI 4) | ~86 KB with the other (shared front-end) | `CONFIG_NUCLEO_STORE_GBEMU` |
+| Game Gear (`ggemu`, front-end + Z80 machine) | 108 KB (77 KB, 0.6 KB RAM, ABI 4) | ~86 KB with the other (shared front-end) | `CONFIG_NUCLEO_STORE_GGEMU` |
 
 With all three from the store (the default) the image is **3,461,120 B instead of 3,603,792 B: 142,672 B (139 KB)
 recovered**
 (208 KB free in the OTA slot instead of 66 KB). Every game except the Game Boy emulator already fits ABI v1
-(measured: all their imports are in `abi/v1.txt`); the emulator needs 77 more functions, a v2 candidate.
+(measured: all their imports are in `abi/v1.txt`); the two emulators needed level 4.
+
+The emulators share one front-end (`app_gbemu.cpp`) and are two modules: each registers only its own console
+(`nucleo_register_gbemu` / `nucleo_register_ggemu`), so the linker leaves the other core out. The front-end is
+out of the image only when both options are on (the default: 87,840 B recovered, image 3,105,984 B). In a module the Game Boy core's
+`IRAM_ATTR` callbacks run from the flash mapping like the rest of its code (a module has no IRAM).
 
 Moving one more: add `CONFIG_NUCLEO_STORE_<GAME>` to the menu in `nucleo_app/Kconfig`, the same three-line guard
 at the top of its source and around its registration in `nucleo_app.cpp`, then in the store a manifest with its

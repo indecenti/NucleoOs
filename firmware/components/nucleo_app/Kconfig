@@ -95,6 +95,19 @@ config NUCLEO_STORE_YAHTZEE
     help
         Leaves app_yahtzee.cpp out of the firmware image.
 
+config NUCLEO_STORE_GBEMU
+    bool "Game Boy (gbemu): from the store, not in the firmware"
+    default y
+    help
+        Leaves the Game Boy entry, and with it the Peanut-GB core (nucleo_gb.c), out of the firmware image.
+        app_gbemu.cpp is left out only when the Game Gear ships from the store too.
+
+config NUCLEO_STORE_GGEMU
+    bool "Game Gear (ggemu): from the store, not in the firmware"
+    default y
+    help
+        Leaves the Game Gear entry, and with it the Z80 machine (nucleo_gg.c), out of the firmware image.
+
 endmenu
 
 endmenu
