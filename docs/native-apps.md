@@ -186,7 +186,9 @@ The emulators share one front-end (`app_gbemu.cpp`) and are two modules: each re
 out of the image only when both options are on (the default: 87,840 B recovered, image 3,105,984 B). In a module the Game Boy core's
 `IRAM_ATTR` callbacks run from the flash mapping like the rest of its code (a module has no IRAM).
 On the second screen their shelf is a small HyperSpin-style gallery (a circular wheel of titles, the console's
-picture, live search); the pictures are public-domain photos deflated into the module (`gbemu_art/`).
+picture, live search); the pictures are public-domain console photos deflated into the module (`gbemu_art/`), or the
+game's own screenshot when the card has one (`<rom folder>/.snaps/<rom>.snp`, put there from the PC by
+`tools/fetch-rom-snaps.py`: the device never downloads, and the screenshots never enter a repository).
 
 Moving one more: add `CONFIG_NUCLEO_STORE_<GAME>` to the menu in `nucleo_app/Kconfig`, the same three-line guard
 at the top of its source and around its registration in `nucleo_app.cpp`, then in the store a manifest with its

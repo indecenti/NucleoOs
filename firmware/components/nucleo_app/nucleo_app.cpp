@@ -27,6 +27,9 @@
 #include "freertos/task.h"
 #include "freertos/queue.h"
 #include "esp_timer.h"
+#include "app_large.h"       // lg::capture: Fn+P also saves the second screen
+#include <sys/stat.h>        // ...into /data/Screenshots
+#include "nucleo_board.h"    // NUCLEO_SD_MOUNT
 #include "esp_task_wdt.h"
 #include "esp_heap_caps.h"     // remote smartwatch monitor: live internal-SRAM free/used
 #include <time.h>              // header clock on the watch faces
@@ -2250,6 +2253,15 @@ void nucleo_app_run(void)
             bool cap_cover   = cap_in_game && (cap_ctrlp || nk.ch == 'c' || nk.ch == 'C');
             if (nk.key == NK_CHAR && (cap_cover || cap_fnp)) {
                 if (cap_cover) s_cover_req = true; else s_shot_req = true;   // in-game cover (Ctrl+P/'C') vs Fn+P screenshot
+                // Two screens: the external panel too, as <shot>_2.bmp. It cannot be read back, so the app's next
+                // whole frame is written while it is composed (lg::capture): repaint everything now.
+                if (cap_fnp && nucleo_app_two_screens()) {
+                    char nm[32], p[96]; gamefront_shot_name(nm, sizeof nm);
+                    mkdir(NUCLEO_SD_MOUNT "/data", 0775); mkdir(NUCLEO_SD_MOUNT "/data/Screenshots", 0775);
+                    snprintf(p, sizeof p, NUCLEO_SD_MOUNT "/data/Screenshots/%s_2.bmp", nm);
+                    lg::capture(p);
+                    nucleo_app_force_repaint();
+                }
                 s_dirty = true;
             } else if (s_torch) {                // flashlight overlay is up — any key turns it off
                 ESP_LOGW("torch", "key %d ch %d dismisses", nk.key, (int)nk.ch);
@@ -2630,6 +2642,11 @@ void nucleo_app_run(void)
             }
         }
         s_fg_was_fg = fg_taken;   // remember for next iteration's idle-reblit force decision
+        {   // the second screen's screenshot (Fn+P on two screens) finished, or never got a frame to ride on
+            const int cs = lg::capture_state();
+            if (cs >= 2) nucleo_notify_post("Screenshot", cs == 2 ? TR("Secondo schermo salvato", "Second screen saved")
+                                                                    : TR("Secondo schermo non catturabile", "Second screen not captured"));
+        }
         vTaskDelay(pdMS_TO_TICKS(20));
     }
 }

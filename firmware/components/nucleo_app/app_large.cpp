@@ -1,6 +1,7 @@
 // Two-screen kit (app_large.h): the shared look of on_draw_large on the 320x240 touch panel and of the Cardputer
 // companion. Draws straight to `d`; every helper repaints its own box.
 #include "app_large.h"
+#include "esp_timer.h"     // capture(): a request that never meets a whole frame times out
 #include "nucleo_app.h"
 #include "nucleo_kbd.h"
 #include "nucleo_touch.h"
@@ -417,6 +418,62 @@ void comp_keys(const char *keys)
     d.drawString(t, 8, y);
 }
 
+// ---- panel screenshots (capture) ----------------------------------------------------------------------------
+static char    s_cap_path[96];
+static int     s_cap;                                         // capture_state()
+static int64_t s_cap_t0;                                      // when it was asked (a frame() never came: fail)
+static FILE   *s_cap_f;
+
+void capture(const char *path)
+{
+    snprintf(s_cap_path, sizeof s_cap_path, "%s", path);
+    s_cap = 1; s_cap_t0 = esp_timer_get_time();
+}
+
+int capture_state(void)
+{
+    if (s_cap == 1 && esp_timer_get_time() - s_cap_t0 > 4000000) s_cap = 3;   // this app never composed a frame
+    const int st = s_cap;
+    if (st >= 2) s_cap = 0;
+    return st;
+}
+
+static void put_le(uint8_t *p, uint32_t v, int n) { for (int i = 0; i < n; i++) p[i] = (uint8_t)(v >> (8 * i)); }
+
+static bool cap_open(int w, int h)
+{
+    s_cap_f = fopen(s_cap_path, "wb");
+    if (!s_cap_f) return false;
+    const uint32_t row = (uint32_t)w * 3, img = row * h;          // w * 3 is a multiple of 4 for every panel width
+    uint8_t hd[54] = { 'B', 'M' };
+    put_le(hd + 2, 54 + img, 4); put_le(hd + 10, 54, 4); put_le(hd + 14, 40, 4);
+    put_le(hd + 18, (uint32_t)w, 4); put_le(hd + 22, (uint32_t)-h, 4);   // negative height: rows top-down
+    put_le(hd + 26, 1, 2); put_le(hd + 28, 24, 2); put_le(hd + 34, img, 4);
+    return fwrite(hd, 1, sizeof hd, s_cap_f) == sizeof hd;
+}
+
+// One composed strip -> BGR rows. The canvas holds RGB565 byte-swapped (as the panel wants it) or RGB332.
+static bool cap_rows(const uint8_t *buf, int w, int rows, bool exact)
+{
+    static uint8_t line[320 * 3];
+    for (int y = 0; y < rows; y++) {
+        for (int x = 0; x < w; x++) {
+            uint8_t r, g, b;
+            if (exact) {
+                const uint8_t *q = buf + ((size_t)y * w + x) * 2;
+                const uint16_t v = (uint16_t)(q[0] << 8 | q[1]);
+                r = (uint8_t)((v >> 11) * 255 / 31); g = (uint8_t)(((v >> 5) & 63) * 255 / 63); b = (uint8_t)((v & 31) * 255 / 31);
+            } else {
+                const uint8_t v = buf[(size_t)y * w + x];
+                r = (uint8_t)((v >> 5) * 255 / 7); g = (uint8_t)(((v >> 2) & 7) * 255 / 7); b = (uint8_t)((v & 3) * 255 / 3);
+            }
+            line[x * 3] = b; line[x * 3 + 1] = g; line[x * 3 + 2] = r;
+        }
+        if (fwrite(line, 1, (size_t)w * 3, s_cap_f) != (size_t)w * 3) return false;
+    }
+    return true;
+}
+
 bool frame(void (*paint)(void *ud), void *ud, int y0, int h, bool exact)
 {
     const int W = d.width();
@@ -432,6 +489,9 @@ bool frame(void (*paint)(void *ud), void *ud, int y0, int h, bool exact)
     static M5Canvas s_out;                                   // the canvas bytes seen at the window's depth (push)
     if (exact) { s_out.setColorDepth(16); s_out.setBuffer(buf, W, rows); }
     M5Canvas *out = exact ? &s_out : c;
+    // A pending screenshot rides along on a whole frame (never on a partial repaint of a band).
+    bool cap = s_cap == 1 && y0 == 0 && h == d.height() && W <= 320;
+    if (cap && !cap_open(W, h)) { cap = false; s_cap = 3; if (s_cap_f) { fclose(s_cap_f); s_cap_f = nullptr; } }
     for (int oy = y0; oy < y0 + h; oy += rows) {
         const int sh = y0 + h - oy < rows ? y0 + h - oy : rows;
         // The window's row oy is the canvas's row 0: a sprite (oy + sh) rows tall whose buffer starts oy rows
@@ -446,7 +506,12 @@ bool frame(void (*paint)(void *ud), void *ud, int y0, int h, bool exact)
         panel->setClipRect(0, oy, W, sh);
         out->pushSprite(panel, 0, oy);
         panel->clearClipRect();
+        if (cap) {                                            // the SD shares the panel's bus: let the push finish
+            panel->waitDMA();
+            if (!cap_rows(buf, W, sh, exact)) cap = false, s_cap = 3;
+        }
     }
+    if (s_cap_f) { const bool ok = fclose(s_cap_f) == 0 && cap; s_cap_f = nullptr; s_cap = ok ? 2 : 3; if (!ok) remove(s_cap_path); }
     return true;
 }
 

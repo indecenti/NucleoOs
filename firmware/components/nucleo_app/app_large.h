@@ -120,6 +120,12 @@ void comp_keys(const char *keys);
 // straight to the panel — use it for tool apps with themed cards / rows (on the 8-bit canvas dark greys turn
 // olive); keep the 8-bit default for games (tile_blit / stipple need it, and it is faster).
 bool frame(void (*paint)(void *ud), void *ud, int y0 = 0, int h = 0 /* 0 = to the bottom */, bool exact = false);
+// Screenshots of the panel. It cannot be read back (its driver has no MISO), so the next WHOLE frame that frame()
+// composes is also written to `path` as it goes, strip by strip (24-bit BMP, no extra RAM). Apps that draw the
+// panel straight (not through frame()) cannot be captured: the request then fails after a few seconds.
+void capture(const char *path);
+// 0 = nothing pending, 1 = waiting for a whole frame, 2 = saved, 3 = failed. Reading 2 or 3 clears it.
+int  capture_state(void);
 // A field: one target over [x, x+w) x [y, y+h) whose taps the app hit-tests itself (nucleo_touch.h).
 void field(int x, int y, int w, int h);
 // The tap that delivered (key, ch), if it was a field tap: its panel position. False for anything else.

@@ -48,6 +48,13 @@ fills its background first, and registers its touch targets inside (the set is c
 2. Inside `paint()` never use `d.height()` or `nucleo_app_content_height()`: they report the strip or the
    compact screen. Use 320x240 constants.
 
+**Screenshots of the panel (Fn+P).** The panel cannot be read back (its driver has no MISO), so Fn+P on two
+screens asks `lg::capture(path)` and forces a repaint: the next whole frame `lg::frame` composes is also written
+to `/data/Screenshots/<shot>_2.bmp`, strip by strip as it is pushed (24-bit BMP, no extra RAM; the push's DMA is
+waited for first, since the SD shares the panel's bus). The Cardputer's own screen is saved as `<shot>.bmp` as
+before, and a notification says whether the panel was captured. An app that draws the panel straight, not
+through `lg::frame`, cannot be captured: the request fails after 4 s.
+
 ### Touch on the large surface (what the hardware delivers)
 
 `nucleo_extdisp.cpp` turns XPT2046 samples into keys. A tap is delivered on release; there is no

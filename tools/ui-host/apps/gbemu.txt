@@ -9,6 +9,7 @@
 @sd data/ROMs/gb/Adventures-of-Lolo-Very-Long-Title-(Europe).gb x
 @sd data/ROMs/gbc/Pokemon-Crystal-(USA).gbc x
 @sd data/ROMs/gb/Kirby's-Dream-Land.gb x
+@sdfile data/ROMs/gb/.snaps/Deadeus.gb.snp apps/fixtures/test.snp
 shelf
 down D D
 search c:t c:o
@@ -16,3 +17,5 @@ nomatch c:z c:z c:q
 wheel_tap row:5
 wheel_drag D D D D
 ring_top U
+snap D
+delete c:t c:o DEL

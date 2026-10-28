@@ -16,6 +16,7 @@
 //   @file <key>                                the source is app_<key>.cpp (two scene files for one source)
 //   @lib <name>                                a host library to link (-l<name>), e.g. z for a stub's inflate
 //   @sd <path under sd/> <content>             a file the scenes find on the card (\n = newline)
+//   @sdfile <path under sd/> <file>            the same, copied byte for byte from tools/ui-host/<file> (binary)
 // No scene file: one scene, "home".
 //
 // Output: build/ui-host/gallery/shots/<key>.<scene>.<variant>.png (x2), sheets/<key>.png (all scenes, 1:1).
@@ -71,6 +72,7 @@ function readScenes(key) {
     else if (w === '@app') spec.app = rest[0];
     else if (w === '@file') spec.file = rest[0];
     else if (w === '@lib') spec.libs.push(...rest);
+    else if (w === '@sdfile') spec.sd.push([rest[0], readFileSync(join(here, rest[1]))]);
     else if (w === '@sd') spec.sd.push([rest[0], line.slice(line.indexOf(rest[0]) + rest[0].length + 1).replace(/\\n/g, '\n')]);
     else spec.scenes.push({ name: w, keys: rest });
   }

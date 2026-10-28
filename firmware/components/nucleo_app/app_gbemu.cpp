@@ -82,7 +82,7 @@
 #define GRN   0x8FF3      // content colour: "has a save"
 #define AMB   0xFE8C      // content colour: Game Boy Color cart on a DMG core
 
-static const char *TAG = "gbemu";
+static const char *TAG __attribute__((unused)) = "gbemu";   // unused where ESP_LOG compiles away (host gallery)
 
 // ── the console this session drives ─────────────────────────────────────────────────────────────
 // Everything that differs between the Game Boy and the Game Gear, in one place. The instances (SYS_GB,
@@ -1212,6 +1212,7 @@ static void start_error(esp_err_t e, const char *cart, char *buf, size_t n)
 }
 
 static void play_session(const char *name);
+static void pic_free(void);
 // Every way out of a session — a refused cartridge, a failed open, a quit — lands back on the shelf,
 // so the shelf comes back from the card HERE, once, rather than on each of those paths.
 static void play(const char *name)
@@ -1257,6 +1258,7 @@ static void play_session(const char *name)
     // allocated underneath the whole session, six ROM-cache pages' worth. shelf_poll() re-creates it
     // on demand when the shelf comes back.
     mq_free();
+    pic_free();                                  // the gallery's picture too: re-read when the shelf is back
     // The name bytes in `name` point INTO the shelf pool, which is about to leave RAM: keep a copy.
     char rom_name[PATHMAX];
     snprintf(rom_name, sizeof rom_name, "%s", name);
@@ -1686,17 +1688,28 @@ static void hint(void)
 }
 
 // ── two screens: the gallery ────────────────────────────────────────────────────────────────────
-// With the external panel attached the shelf becomes a small HyperSpin-style gallery there: a wheel of titles
-// on the right (the selection in the middle, its neighbours smaller and fading), the console's picture and the
-// whole title on the left, the live search on top. Typing filters exactly as on the Cardputer; a drag turns the
-// wheel, a tap brings a title to the middle, a tap on the middle one (or on the picture) plays it. The Cardputer
-// keeps the search and the keys (the companion). Composed with lg::frame: the panel never shows a half wheel.
+// With the external panel attached the shelf becomes a small HyperSpin-style gallery there: a circular wheel of
+// titles on the right (the selection in the middle, its neighbours fading), the game's own picture and its whole
+// title on the left, the live search on top. Typing filters exactly as on the Cardputer; a drag turns the wheel,
+// a tap brings a title to the middle, a tap on the middle one (or on the picture) plays it. The Cardputer keeps
+// the search, the position and the console's controls (the companion). Composed with lg::frame: the panel never
+// shows a half-painted wheel, and a Fn+P screenshot can capture it.
 #define WHEEL_SLOTS 7                        // visible titles; the middle one is the selection
-#define WHEEL_X     156                      // the wheel's left edge; the picture column is [0, WHEEL_X)
-static const uint8_t WHEEL_H[WHEEL_SLOTS] = { 18, 21, 25, 34, 25, 21, 18 };
+#define WHEEL_X     168                      // the wheel's left edge; the picture column is [0, WHEEL_X)
+static const uint8_t WHEEL_H[WHEEL_SLOTS] = { 21, 23, 25, 32, 25, 23, 21 };
+#define PIC_H       108                      // the picture's tile on the left
+// A game's own picture: <rom folder>/.snaps/<rom file>.snp, put there by tools/fetch-rom-snaps.py (the device never
+// downloads anything). "SNP1", u16 w, u16 h, u32 deflated size, then raw-deflated RGB565 in native byte order.
+#define SNAP_MAXW   128
+#define SNAP_MAXH   112
+#define SNAP_MAXZ   40000
 static int s_gal_h;                          // the surface height (240 built in; 210 under a store app's system bar)
-static uint16_t *s_art;                      // the selection's picture, inflated for one paint only
-static const EmuArt *s_art_of;
+// The selection's picture, kept while the selection stays (a repaint, a typed letter that keeps it) and freed
+// before a game starts: the card is read and the picture inflated once per selection, not once per paint.
+static uint16_t *s_pic;
+static int  s_pic_w, s_pic_h;
+static bool s_pic_snap;                      // the game's screenshot (else the console's photo)
+static char s_pic_key[PATHMAX];              // whose picture it is ("" = none tried yet)
 
 static const EmuArt *art_for(int i) { return st->sh->list[i].alt ? &SYS->art_b : &SYS->art_a; }
 
@@ -1709,45 +1722,87 @@ static int wheel_at(int k)
     return i >= 0 && i < st->n ? i : -1;
 }
 
-// Inflate one picture into a fresh block (the tinfl state is ~11 KB): both are freed right after the paint, so
-// a running game never pays for them. A failure just leaves the tile empty.
-static void art_load(const EmuArt *a)
+// Raw deflate -> w x h RGB565 in a fresh block (the ~11 KB tinfl state lives only for the call). Null on failure.
+static uint16_t *inflate565(const uint8_t *zb, size_t n, int w, int h)
 {
-    s_art_of = a;
-    s_art = (uint16_t *)malloc((size_t)a->w * a->h * 2);
+    uint16_t *px = (uint16_t *)malloc((size_t)w * h * 2);
     tinfl_decompressor *z = (tinfl_decompressor *)malloc(sizeof *z);
-    size_t in = a->n, out = (size_t)a->w * a->h * 2;
-    if (s_art && z) {
+    size_t in = n, out = (size_t)w * h * 2;
+    bool ok = px && z;
+    if (ok) {
         tinfl_init(z);
-        if (tinfl_decompress(z, a->z, &in, (mz_uint8 *)s_art, (mz_uint8 *)s_art, &out,
-                             TINFL_FLAG_USING_NON_WRAPPING_OUTPUT_BUF) != TINFL_STATUS_DONE) { free(s_art); s_art = nullptr; }
-    } else { free(s_art); s_art = nullptr; }
+        ok = tinfl_decompress(z, zb, &in, (mz_uint8 *)px, (mz_uint8 *)px, &out, TINFL_FLAG_USING_NON_WRAPPING_OUTPUT_BUF) == TINFL_STATUS_DONE
+             && out == (size_t)w * h * 2;
+    }
     free(z);
+    if (!ok) { free(px); px = nullptr; }
+    return px;
 }
-static void art_free(void) { free(s_art); s_art = nullptr; s_art_of = nullptr; }
 
-// The search line: what was typed, with a cursor, or how to start; the counts at the right.
+static void pic_free(void) { free(s_pic); s_pic = nullptr; s_pic_key[0] = '\0'; }
+
+static uint16_t *snap_load(const char *name, int *w, int *h)
+{
+    char path[PATHMAX + 40];
+    if (!rom_path(name, path, sizeof path - 20)) return nullptr;
+    char *slash = strrchr(path, '/');
+    if (!slash) return nullptr;
+    char snap[sizeof path + 32];
+    snprintf(snap, sizeof snap, "%.*s/.snaps/%s.snp", (int)(slash - path), path, name);
+    FILE *f = fopen(snap, "rb");
+    if (!f) return nullptr;
+    uint8_t hd[12];
+    uint16_t *px = nullptr;
+    if (fread(hd, 1, sizeof hd, f) == sizeof hd && !memcmp(hd, "SNP1", 4)) {
+        const int sw = hd[4] | hd[5] << 8, sh = hd[6] | hd[7] << 8;
+        const uint32_t zn = hd[8] | hd[9] << 8 | (uint32_t)hd[10] << 16 | (uint32_t)hd[11] << 24;
+        uint8_t *zb = (sw > 0 && sh > 0 && sw <= SNAP_MAXW && sh <= SNAP_MAXH && zn && zn <= SNAP_MAXZ) ? (uint8_t *)malloc(zn) : nullptr;
+        if (zb && fread(zb, 1, zn, f) == zn) { px = inflate565(zb, zn, sw, sh); *w = sw; *h = sh; }
+        free(zb);
+    }
+    fclose(f);
+    return px;
+}
+
+static void pic_for(int i)
+{
+    const char *name = ent_name(i);
+    if (s_pic_key[0] && !strcmp(s_pic_key, name)) return;
+    pic_free();
+    snprintf(s_pic_key, sizeof s_pic_key, "%s", name);
+    s_pic = snap_load(name, &s_pic_w, &s_pic_h);
+    s_pic_snap = s_pic != nullptr;
+    if (!s_pic) {
+        const EmuArt *a = art_for(i);
+        s_pic = inflate565(a->z, a->n, a->w, a->h);
+        s_pic_w = a->w; s_pic_h = a->h;
+    }
+}
+
+// The search line: what was typed, with a cursor, or how to start; the position at the right.
 static void gal_search(int y, int w)
 {
     const unsigned short cb = lg::card(), ic = st->flen ? ACC : MUTED;
     d.fillRect(0, y, w, 36, BG);
     d.fillRoundRect(8, y + 4, w - 16, 28, 14, cb);
-    d.drawCircle(24, y + 16, 6, ic); d.drawLine(28, y + 20, 32, y + 24, ic);
+    d.drawCircle(24, y + 16, 6, ic); d.drawCircle(24, y + 16, 5, ic);
+    d.drawLine(28, y + 20, 32, y + 24, ic); d.drawLine(29, y + 20, 33, y + 24, ic);
     char cnt[24];
-    if (st->total > st->n) snprintf(cnt, sizeof cnt, "%d/%d", st->n, st->total);
-    else                   snprintf(cnt, sizeof cnt, "%d", st->total);
+    if (!st->n)                    snprintf(cnt, sizeof cnt, "0");
+    else if (st->total > st->n)    snprintf(cnt, sizeof cnt, "%d/%d+", st->sel + 1, st->n);
+    else                           snprintf(cnt, sizeof cnt, "%d/%d", st->sel + 1, st->n);
     lg::font(0); d.setTextDatum(middle_right); d.setTextColor(st->total > st->n ? AMB : MUTED, cb);
-    d.drawString(cnt, w - 20, y + 18);
+    d.drawString(cnt, w - 22, y + 18);
     const int cw = d.textWidth(cnt);
     d.setTextDatum(middle_left);
     if (st->flen) {
         const char *t = st->filter;
-        while (*t && d.textWidth(t) > w - 84 - cw) t++;
-        d.setTextColor(FG, cb); d.drawString(t, 40, y + 18);
-        d.fillRect(41 + d.textWidth(t), y + 10, 2, 16, ACC);
+        while (*t && d.textWidth(t) > w - 86 - cw) t++;
+        d.setTextColor(FG, cb); d.drawString(t, 42, y + 18);
+        d.fillRect(43 + d.textWidth(t), y + 10, 2, 17, ACC);
     } else {
-        d.setTextColor(DIM, cb);
-        d.drawString(TR5("Scrivi per cercare", "Type to search", "Escribe para buscar", "Tapez pour chercher", "Tippen zum Suchen"), 40, y + 18);
+        d.setTextColor(MUTED, cb);
+        d.drawString(TR5("Scrivi per cercare", "Type to search", "Escribe para buscar", "Tapez pour chercher", "Tippen zum Suchen"), 42, y + 18);
     }
     d.setTextDatum(top_left);
 }
@@ -1768,25 +1823,31 @@ static void gal_paint(void *)
                     MUTED);
         return;
     }
-    // ── left: the console's picture on its tile, the system, the whole title, the resume mark ──
-    const int sel = st->sel, tx = 8, tw = WHEEL_X - 16, th = 88;
-    const EmuArt *a = art_for(sel);
-    d.fillRoundRect(tx, top + 2, tw, th, 10, ART_TILE);
-    if (s_art && s_art_of == a)
-        d.pushImage(tx + (tw - a->w) / 2, top + 2 + (th - a->h) / 2, a->w, a->h, (const lgfx::rgb565_t *)s_art);
-    int ly = top + th + 8;
-    lg::font(4); d.setTextColor(ACC, BG);
+    // ── left: the picture on its tile (a screenshot sits on a dark screen, a console photo on a light card),
+    //    then the system with the resume mark, then the whole title ──
+    const int sel = st->sel, tx = 8, tw = WHEEL_X - 16;
+    d.fillRoundRect(tx, top + 2, tw, PIC_H, 10, s_pic_snap ? (unsigned short)0x0841 : (unsigned short)ART_TILE);
+    if (s_pic) {
+        const int px = tx + (tw - s_pic_w) / 2, py = top + 2 + (PIC_H - s_pic_h) / 2;
+        d.pushImage(px, py, s_pic_w, s_pic_h, (const lgfx::rgb565_t *)s_pic);
+        if (s_pic_snap) d.drawRect(px - 1, py - 1, s_pic_w + 2, s_pic_h + 2, LINE);
+    }
+    int ly = top + PIC_H + 8;
+    lg::font(0); d.setTextColor(ACC, BG);
     d.drawString(st->sh->list[sel].alt ? SYS->sys_b : SYS->sys_a, tx + 2, ly);
-    ly += 12;
+    if (st->have_resume && !strcmp(ent_name(sel), st->resume)) {
+        const char *lp = TR5("ultima", "last", "ultima", "derniere", "zuletzt");
+        d.setTextDatum(top_right); d.setTextColor(GRN, BG);
+        d.drawString(lp, tx + tw, ly);
+        d.fillCircle(tx + tw - d.textWidth(lp) - 7, ly + 8, 3, GRN);
+        d.setTextDatum(top_left);
+    }
+    ly += 20;
     char title[NAMEMAX];
     pretty(ent_name(sel), title, sizeof title);
     lg::font(1); d.setTextColor(FG, BG);
-    ly += 20 * lg::wrap(title, tx + 2, ly, tw - 4, 20, H - ly > 84 ? 3 : 2);
-    if (st->have_resume && !strcmp(ent_name(sel), st->resume)) {
-        lg::font(4); d.fillCircle(tx + 5, ly + 6, 3, GRN); d.setTextColor(GRN, BG);
-        d.drawString(TR5("Ultima partita", "Last played", "Ultima partida", "Derniere partie", "Zuletzt gespielt"), tx + 13, ly + 2);
-    }
-    // ── right: the wheel. Slot k shows index sel + k - 3; the middle one is the selection, on its pill ──
+    lg::wrap(title, tx + 2, ly, tw - 4, 20, H - ly >= 60 ? 3 : 2);
+    // ── right: the wheel. Slot k shows the title k - 3 away; the middle one is the selection, on its pill ──
     const int ww = W - WHEEL_X - 6;
     int sum = 0; for (int k = 0; k < WHEEL_SLOTS; k++) sum += WHEEL_H[k];
     int wy = top + (bh - sum) / 2;
@@ -1796,13 +1857,13 @@ static void gal_paint(void *)
             char t[NAMEMAX], fitted[NAMEMAX];
             pretty(ent_name(i), t, sizeof t);
             const bool mid = dist == 0;
-            const int ix = WHEEL_X + 10 + dist * 6;                        // the wheel's curve: far rows step in
+            const int ix = WHEEL_X + 12 + dist * 5;                        // the wheel's curve: far rows step in
             if (mid) d.fillRoundRect(WHEEL_X, wy + 1, ww, h - 2, (h - 2) / 2, ACC);
-            lg::font(mid ? 1 : dist == 1 ? 0 : 4);
+            lg::font(mid ? 1 : 0);                                         // 16 px everywhere: readable at arm's length
             lg::fit(fitted, sizeof fitted, t, WHEEL_X + ww - 8 - ix);
             d.setTextDatum(middle_left);
-            d.setTextColor(mid ? INK : dist == 1 ? FG : dist == 2 ? MUTED : DIM, mid ? ACC : BG);
-            d.drawString(fitted, ix, wy + h / 2);
+            d.setTextColor(mid ? INK : dist == 1 ? FG : MUTED, mid ? ACC : BG);
+            d.drawString(fitted, ix, wy + h / 2 + (mid ? 0 : 1));
             d.setTextDatum(top_left);
             if (st->have_resume && !strcmp(ent_name(i), st->resume))
                 d.fillCircle(ix - 6, wy + h / 2, 2, mid ? INK : GRN);
@@ -1812,7 +1873,7 @@ static void gal_paint(void *)
     }
     // A drag on the wheel turns it, one title per 22 px of finger travel (finger up = later titles).
     nucleo_touch_add_scroll(WHEEL_X, top, W - WHEEL_X, bh, 22, NK_UP, 0, NK_DOWN, 0);
-    nucleo_touch_add(tx, top + 2, tw, th, NK_ENTER, 0);                 // the picture plays the selection too
+    nucleo_touch_add(tx, top + 2, tw, PIC_H, NK_ENTER, 0);              // the picture plays the selection too
     if (st->n > 1) {                                                    // where am I in a long shelf: a thin rail
         int kh = bh * WHEEL_SLOTS / st->n; if (kh < 10) kh = 10; if (kh > bh) kh = bh;
         const int ky = top + (bh - kh) * sel / (st->n - 1);
@@ -1827,17 +1888,18 @@ static void draw_large(void)
     if (!st->sh) shelf_swap_in();
     if (!st->sh) return;
     s_gal_h = d.height();
-    if (st->n) art_load(art_for(st->sel));
+    if (st->n) pic_for(st->sel);
     nucleo_touch_clear();
     lg::frame(gal_paint, nullptr, 0, 0, true);    // exact: the picture and the theme's cards in true colour
     if (st->fail[0])                               // a refused cartridge says why, over the gallery
         lg::message(40, s_gal_h / 2 - 34, d.width() - 80, 68,
                     TR5("Avvio non riuscito", "Could not start", "No se pudo iniciar", "Pas possible", "Nicht starten"), st->fail, AMB);
     nucleo_touch_commit();
-    art_free();
 }
 
-// The Cardputer while the gallery is on the panel: the search, big, and the selection's title.
+// The Cardputer while the gallery is on the panel: the search, big; the selection's title and where it is in the
+// list; the console's buttons on this keyboard. What the panel already shows (the wheel, the picture) is not
+// repeated here.
 static void draw_companion(void)
 {
     int top = nucleo_app_content_top(), ch = nucleo_app_content_height();
@@ -1851,16 +1913,24 @@ static void draw_companion(void)
         d.setTextColor(FG, BG); d.setCursor(8, y + 4); d.print(tail);
         d.fillRect(8 + (int)strlen(tail) * 12, y + 2, 3, 18, ACC);
     } else {
-        d.setTextColor(DIM, BG); d.setCursor(8, y + 4);
+        d.setTextColor(MUTED, BG); d.setCursor(8, y + 4);
         d.print(TR5("Scrivi e cerca", "Type to search", "Escribe y busca", "Tapez, cherchez", "Tippen = Suche"));
     }
     d.setTextSize(1);
     if (st->sh && st->n) {
+        char pos[16]; snprintf(pos, sizeof pos, "%d/%d", st->sel + 1, st->n);
+        d.setTextDatum(top_right); d.setTextColor(MUTED, BG); d.drawString(pos, 232, y + 8); d.setTextDatum(top_left);
         char title[NAMEMAX]; pretty(ent_name(st->sel), title, sizeof title);
         d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(ACC, BG);
-        lg::wrap(title, 8, y + 30, 224, 20, 2);
+        lg::wrap(title, 8, y + 28, 224, 19, 2);
         d.setFont(&fonts::Font0);
     }
+    // The console's buttons on this keyboard, for the game about to start (at most 39 Font0 columns).
+    d.setTextWrap(false); d.setTextColor(MUTED, BG); d.setCursor(8, top + ch - 26);
+    d.print(SYS->palettes ? TR5("K=A  J=B  Invio=Start  Spazio=Select", "K=A  J=B  Enter=Start  Space=Select",
+                                "K=A  J=B  Intro=Start  Esp.=Select", "K=A  J=B  Entree=Start  Esp.=Select", "K=A  J=B  Enter=Start  Leer=Select")
+                          : TR5("J=1  K=2  Invio=Start / Pausa", "J=1  K=2  Enter=Start / Pause",
+                                "J=1  K=2  Intro=Start / Pausa", "J=1  K=2  Entree=Start / Pause", "J=1  K=2  Enter=Start / Pause"));
     lg::comp_keys(st->flen ? TR5("INVIO gioca  CANC modif.  ESC pulisce", "ENTER play  DEL edit  ESC clear", "INTRO juega  ESC limpia", "ENTREE joue  ESC efface", "ENTER spielt  ESC leert")
                            : TR5("su/giu  INVIO gioca  scrivi = cerca", "up/dn  ENTER play  type = search", "arr/ab  INTRO juega", "haut/bas  ENTREE joue", "auf/ab  ENTER spielt"));
 }
@@ -1895,7 +1965,7 @@ static void on_key(int key, char ch)
 
     // Backspace edits the filter one character at a time. (NK_BACK itself never reaches on_key —
     // the framework routes it to the back handler, which clears the whole search; see on_back.)
-    if (ch == 8 || ch == 127) {
+    if (key == NK_DEL || ch == 8 || ch == 127) {
         if (st->flen) { st->filter[--st->flen] = '\0'; rescan(); hint(); nucleo_app_request_draw(); }
         return;
     }
@@ -2021,7 +2091,7 @@ static void leave(void)
 {
     if (SYS) SYS->close();                       // a no-op when no cartridge is open
     mq_free();
-    art_free();
+    pic_free();
     if (st) { free(st->band[0]); free(st->band[1]); free(st->sh); free(st); st = nullptr; }
     if (SYS) remove(SYS->shelf_swp);             // never leave a stale shelf image for the next visit
     if (nucleo_exclusive_active()) nucleo_exclusive_exit();
