@@ -260,3 +260,5 @@ time
 tinfl_decompress
 vTaskDelay
 vfprintf
+nucleo_extdisp_hud_overlay
+nucleo_audio_pcm_open_ex

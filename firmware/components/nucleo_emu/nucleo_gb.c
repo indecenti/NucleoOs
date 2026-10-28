@@ -12,6 +12,7 @@
 #include "nucleo_gb.h"
 #include "nucleo_board.h"
 #include "nucleo_audio.h"   // raw PCM sink: the APU produces its own samples, we hand them to I2S
+#include "emu_audio.h"      // ...through the speaker stage (DC block, low-pass, soft knee)
 #include "esp_log.h"
 #include "esp_attr.h"       // IRAM_ATTR: keep the innermost callbacks out of the flash cache
 #include "esp_heap_caps.h"
@@ -141,6 +142,7 @@ typedef struct {
     struct gb_s   gb;                   // ~17.2 KB — the whole console
     struct minigb_apu_ctx apu;          // Game Boy sound chip state (context-based, no globals)
     audio_sample_t audio[AUDIO_SAMPLES_TOTAL];   // one frame of stereo samples (~2.2 KB)
+    emu_afilt_t   afilt[2];             // the speaker stage, one per channel (emu_audio.h)
     bool          sound;                // false when the speaker could not be claimed
 
     FILE         *fp;                   // open ROM on the SD card
@@ -810,7 +812,7 @@ esp_err_t nucleo_gb_open(const char *rom_path, gb_line_fn_t on_line, void *user)
     // mic pin) the game still runs, silently. Refusing to start a cartridge because audio was taken
     // would be the wrong trade on a games machine. It opens HERE, before the page cache, so its DMA
     // channel is already paid for when the greedy cache below decides how much of the heap to take.
-    s->sound = (nucleo_audio_pcm_open(AUDIO_SAMPLE_RATE, AUDIO_CHANNELS) == ESP_OK);
+    s->sound = (nucleo_audio_pcm_open_ex(AUDIO_SAMPLE_RATE, AUDIO_CHANNELS, EMU_AUDIO_QUEUE_FRAMES * AUDIO_SAMPLES) == ESP_OK);
     if (!s->sound) ESP_LOGW(TAG, "speaker unavailable — playing silently");
 
     // Prefer holding the WHOLE ROM: it removes SD traffic from the hot path entirely, and the small
@@ -932,6 +934,7 @@ void nucleo_gb_run_frame(void)
     // shows up as a click rather than as drift.
     if (S->sound) {
         minigb_apu_audio_callback(&S->apu, S->audio);
+        emu_afilt_run(S->afilt, S->audio, AUDIO_SAMPLES_TOTAL, AUDIO_CHANNELS, 1);   // the APU's DAC has a DC offset
         nucleo_audio_pcm_write(S->audio, sizeof(S->audio));
         S->us_audio += (uint32_t)(esp_timer_get_time() - t1);
     }

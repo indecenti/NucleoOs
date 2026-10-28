@@ -73,6 +73,11 @@ long g_pcm_writes, g_pcm_loud;
  * descriptors x 240 frames x 2 bytes, mono. Charged to the model so the page count is the device's. */
 static void *g_dma;
 esp_err_t nucleo_audio_pcm_open(int rate, int channels) { (void)rate; g_dma = nucleo_hm_malloc(6 * 240 * 2 * channels + 256); return ESP_OK; }
+esp_err_t nucleo_audio_pcm_open_ex(int rate, int channels, int queue_frames)
+{   /* the driver: 8 descriptors of at least 240 frames each */
+    (void)rate; int fr = (queue_frames + 7) / 8; if (fr < 240) fr = 240; if (fr > 480) fr = 480;
+    g_dma = nucleo_hm_malloc((size_t)8 * fr * 2 * channels + 256); return ESP_OK;
+}
 esp_err_t nucleo_audio_pcm_write(const int16_t *pcm, size_t bytes)
 {
     g_pcm_writes++;

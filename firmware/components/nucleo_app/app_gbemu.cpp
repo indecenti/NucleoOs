@@ -704,8 +704,21 @@ static bool line_same(const void *px, int bytes, int line)
     st->lhash[line] = h;
     return same;
 }
+// Rows at the top of the panel that the on-demand system bar covers this frame (0 = none): read once per frame.
+static int s_ov;
 static void band_push(void)
 {
+    if (s_big && s_ov) {                       // the bar is up: never paint under it (it would flicker)
+        const int top = s_out_y0 + st->band_y;
+        if (top + st->band_line <= s_ov) { st->band_line = 0; return; }   // wholly under the bar
+        if (top < s_ov) {                      // partly: only the rows below it
+            const int skip = s_ov - top;
+            d.pushImageDMA(s_out_x, s_ov, s_out_w, st->band_line - skip, st->band[st->band_idx] + (size_t)skip * s_out_w);
+            st->band_idx ^= 1;
+            st->band_line = 0;
+            return;
+        }
+    }
     {
         // No startWrite here: play() holds ONE transaction open across the whole frame, so every band
         // streams to the panel with no bus re-arbitration between them — a tighter, more continuous
@@ -1446,6 +1459,14 @@ static void play_session(const char *name)
         SYS->set_buttons(held);
 
         st->out_y = 0; st->band_line = 0; st->have_stash = false;
+        if (s_big) {                             // the on-demand system bar (a tap shows it, 3 s later it goes)
+            const int ov = nucleo_extdisp_hud_overlay();
+            if (s_ov && !ov) {                   // it went: repaint what it covered, border and picture
+                d.fillRect(0, 0, d.width(), s_ov, BG);
+                st->diff_ok = false;
+            }
+            s_ov = ov;
+        }
         // One SPI transaction for the ENTIRE frame. run_frame calls on_line 135 times and each pushes
         // its band inside this single startWrite/endWrite, so the panel sees one uninterrupted sweep
         // top to bottom instead of nine separately-arbitrated writes.
@@ -1820,7 +1841,9 @@ static void gal_paint(void *)
 {
     const int W = d.width(), H = s_gal_h;
     int y = 0;
+#ifndef NAP_MODULE
     if (H >= 240) y = lg::header(SYS->name, nullptr, ACC, NK_BACK);   // built in: the app draws its own Back
+#endif                                                                 // (a store module: the OS bar, on a tap)
     gal_search(y, W);
     y += 36;
     const int top = y, bh = H - top;
