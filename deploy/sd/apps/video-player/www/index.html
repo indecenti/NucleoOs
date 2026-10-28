@@ -506,6 +506,7 @@
 
   <script type="module">
     import I18N from '/nucleo-i18n.js';
+    import Caps from '/nucleo-caps.js';   // fs.mounts: whether /api/fs/mounts exists here
     const t = await I18N.init('video-player');   // loads core + this app's catalog, paints [data-i18n], live-switches
     // Re-render imperatively-built text after a live language change. The engine's apply() already
     // repaints every [data-i18n] node — but #title-sub carries a (live) file name while playing and
@@ -580,6 +581,8 @@
     let playlistLoaded = false;
     let subTracks = [];          // [{label, lang, cues:[{start, end, html}]}]
     let activeSub = -1;          // index into subTracks, -1 = off
+    // Read-only view for the browser tests (like File Commander's window._fc): the parsed subtitle tracks.
+    window._vp = { get subTracks() { return subTracks.map((tr) => ({ label: tr.label, lang: tr.lang, cues: tr.cues.map((c) => [c.start, c.end, c.html]) })); } };
     let subScale = 1.0;          // intelligent-sizing multiplier
     const SUB_RE = /\.(srt|vtt|webvtt)$/i;
 
@@ -644,6 +647,7 @@
       // (existing mounts only). If the endpoint is missing (older server) fall back
       // to the fs convention roots.
       try {
+        if (!await Caps.has('fs.mounts')) throw new Error();   // a device without the route: the convention roots
         const res = await fetch('/api/fs/mounts');
         if (!res.ok) throw new Error();
         const data = await res.json();

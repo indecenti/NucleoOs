@@ -28,7 +28,20 @@ export function buildCatalog() {
   return JSON.stringify({ generated: 'tools/gen-app-catalog.mjs', apps }, null, 1) + '\n';
 }
 
-if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+// Since the switch to nucleo-webos (webos.lock) the catalog is the core build's (tools/build.py): never
+// rewritten here. The check then asks only that every app installed in the registry is described in it.
+function checkPinned() {
+  const installed = JSON.parse(readFileSync(join(repo, 'registry', 'apps.json'), 'utf8')).installed || [];
+  const cat = existsSync(OUT) ? JSON.parse(readFileSync(OUT, 'utf8')).apps || {} : {};
+  const missing = installed.map((a) => a.id).filter((id) => existsSync(join(repo, 'apps', id, 'manifest.json')) && !cat[id]);
+  if (missing.length) { console.log(`catalog:check: installed apps missing from web/shell/app-catalog.json (nucleo-webos build): ${missing.join(', ')}`); process.exit(1); }
+  console.log(`catalog:check: app-catalog.json (from nucleo-webos) describes all ${installed.length} installed apps`);
+}
+
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1] && existsSync(join(repo, 'webos.lock'))) {
+  if (!process.argv.includes('--check')) { console.log('app-catalog.json comes from nucleo-webos: run python tools/webos-sync.py update'); process.exit(1); }
+  checkPinned();
+} else if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const text = buildCatalog();
   // line endings do not count: a Windows checkout (autocrlf) holds the file as CRLF
   const same = existsSync(OUT) && readFileSync(OUT, 'utf8').replace(/\r\n/g, '\n') === text;

@@ -285,7 +285,12 @@ export function makeStore({ fetch = globalThis.fetch, dev, caps = [], appsDir = 
     // Rollback: never accept a lower serial than the highest this device has seen (kept ON the device).
     const st = await dev.readText(statePath(src.id)).then((t) => (t ? JSON.parse(t) : {})).catch(() => ({}));
     if (Number(st.serial || 0) > idx.serial) throw new StoreError('rollback', st.serial + ' > ' + idx.serial);
-    if (Number(st.serial || 0) < idx.serial) await dev.writeBytes(statePath(src.id), enc.encode(JSON.stringify({ serial: idx.serial }))).catch(() => {});
+    if (Number(st.serial || 0) < idx.serial) {
+      // The folder may not exist yet, and a file API that does not create parents (the Cardputer's) would
+      // refuse the write: the rollback floor would then never be kept.
+      await dev.mkdir('/system/store').catch(() => {});
+      await dev.writeBytes(statePath(src.id), enc.encode(JSON.stringify({ serial: idx.serial }))).catch(() => {});
+    }
     const kinds = src.channel === 'web' ? ['web'] : ['native'];
     const apps = [];
     for (const a of idx.apps) {

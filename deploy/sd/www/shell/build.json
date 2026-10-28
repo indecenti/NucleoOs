@@ -73,7 +73,7 @@
   },
   {
    "id": "dj",
-   "version": "0.1.1",
+   "version": "0.1.2",
    "version_code": 1
   },
   {
@@ -213,7 +213,7 @@
   },
   {
    "id": "system-monitor",
-   "version": "0.1.1",
+   "version": "0.1.2",
    "version_code": 2
   },
   {
@@ -238,7 +238,7 @@
   },
   {
    "id": "video-player",
-   "version": "3.1.1",
+   "version": "3.1.3",
    "version_code": 5
   },
   {
@@ -258,7 +258,7 @@
   },
   {
    "id": "wifi-scanner",
-   "version": "0.1.1",
+   "version": "0.1.2",
    "version_code": 2
   }
  ],
@@ -267,13 +267,13 @@
  "budget": {
   "bytes": 75497472,
   "ok": true,
-  "used": 36495102
+  "used": 36497145
  },
- "bytes": 57382219,
+ "bytes": 57384262,
  "caps_row": {
   "after": "0.7.5"
  },
- "commit": "3d84c114e298ce04d81dd1c83387772e47243635",
+ "commit": "6e2f1e338aaf3d0ff05bf2cd5869602ebe1d18a8",
  "edition": "cardputer",
  "externals": [
   {
@@ -565,7 +565,7 @@
  "format": 1,
  "generator": "nucleo-webos tools/build.py",
  "gz_twins": 662,
- "hash": "4effb3104403ceabf2b27bf2972304ddbb8e482a1ed7aae785555ef093b7d823",
+ "hash": "3155ee8e0ca0a6572cc291e83788acda56122434c404b0db0b356313969d54cb",
  "left_out": [
   {
    "id": "cast",
@@ -606,8 +606,8 @@
  },
  "profile_sha256": "d62cbdd51b51c972b3c7554c21d6c99b4c7c8280ebc64ba3affe9445d73161a4",
  "shell": {
-  "cache": "nucleo-shell-v161-d7234a46fefa",
-  "hash": "d7234a46fefa"
+  "cache": "nucleo-shell-v161-312d87d6c4a5",
+  "hash": "312d87d6c4a5"
  },
  "shell_dir": "www/shell",
  "uncommitted_files": 0

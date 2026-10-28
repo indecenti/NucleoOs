@@ -53,7 +53,9 @@ const FAULTS = `(() => {
   const real = window.fetch.bind(window);
   window.fetch = (u, o) => {
     const s = String(u);
-    const i = window.__ff.findIndex((r) => s === '/api/fs/' + r.op + '?path=' + encodeURIComponent(r.path));
+    // move has no ?path=: a 'move' fault matches its source (?from=).
+    const i = window.__ff.findIndex((r) => s === '/api/fs/' + r.op + '?path=' + encodeURIComponent(r.path)
+      || (r.op === 'move' && s.startsWith('/api/fs/move?from=' + encodeURIComponent(r.path) + '&')));
     if (i >= 0) {
       const r = window.__ff[i];
       if (r.times && --r.times === 0) window.__ff.splice(i, 1);
@@ -121,7 +123,8 @@ test('file-commander: a failed step never costs the user a file', { skip }, asyn
     await settle(page);
     const entry = (await trashDb()).items.find((i) => i.orig === '/data/t3/c.txt');
     assert.ok(entry && onSd(entry.trash), 'the trash copy exists');
-    await fault(page, 'write', '/data/t3/c.txt', 500);
+    await fault(page, 'move', entry.trash, 500);       // the shell restores with a rename first (nucleo-webos)...
+    await fault(page, 'write', '/data/t3/c.txt', 500); // ...and falls back to read + write
     await shortcut(page, 'undo');
     await settle(page);
     assert.ok(onSd(entry.trash), 'the trash copy was deleted although the restore write failed — the file is gone');

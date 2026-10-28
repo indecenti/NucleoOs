@@ -354,8 +354,11 @@
     async function init() {
       await loadTheme();
       // Scanning and joining are the device's (capability wifi.manage): elsewhere say so, and never scan.
-      wifiOk = await Caps.has('wifi.manage');
-      if (!wifiOk) { $('auto').style.display = 'none'; $('scan').style.display = 'none'; renderFailed('wifi_unavailable'); return; }
+      // Unknown caps (the device did not answer at all) are not "no Wi-Fi": scan anyway, so the user is told
+      // the real reason (unreachable, not paired) by the scan's own failure path.
+      const ci = await Caps.info().catch(() => ({ source: 'none', caps: [] }));
+      wifiOk = ci.source === 'none' ? null : ci.caps.includes('wifi.manage');
+      if (wifiOk === false) { $('auto').style.display = 'none'; $('scan').style.display = 'none'; renderFailed('wifi_unavailable'); return; }
       scan();
     }
     init();

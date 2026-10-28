@@ -311,12 +311,15 @@
   const json = async (u)=>{ try{ const r=await fetch(u,{cache:'no-store'}); return r.ok? await r.json() : null; }catch{ return null; } };
   let ovCount=0, inFlight=false;
   // RAM/CPU come from the diagnostics endpoints: asked only where the capability list has 'diag'.
-  const diagOk = await Caps.has('diag');
+  // A promise, not an awaited const: tab clicks and shell messages registered above can call tick()
+  // while the caps lookup is still pending, and a const read there throws (temporal dead zone).
+  const diagP = Caps.has('diag').catch(()=>false);
   async function tick(force){
     if(document.hidden || !osVisible) return;
     if(inFlight) return;   // a slow device can outlast the 2 s interval: never stack requests
     inFlight=true;
     try{
+      const diagOk = await diagP;
       if(active==='overview' && (force || (ovCount++%5)===0)){
         // Embedded: use the shell's broadcast snapshot (saves the FAT-scan fetch). Standalone: fetch.
         const s = EMBEDDED ? lastSnap : await json('/api/status');

@@ -160,6 +160,7 @@
      "device.volume",
      "diag",
      "fs.copy",
+     "fs.mounts",
      "fs.stat",
      "games.library",
      "games.roms",
@@ -280,6 +281,7 @@
     "since": "0.0.0",
     "caps": [
      "fs.copy",
+     "fs.mounts",
      "fs.stat",
      "games.library",
      "games.roms"

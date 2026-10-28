@@ -83,6 +83,7 @@
 
 <script type="module">
 import I18N from '/nucleo-i18n.js';
+import Caps from '/nucleo-caps.js';   // fs.mounts: whether /api/fs/mounts exists here
 import { DjEngine } from './dj-engine.js';
 import { planMusicMix, genreFamily, genreEnergy } from './dj-planner.js';
 import { DjBrain } from './dj-brain.js';
@@ -158,6 +159,7 @@ function showDeck(which, tr) {
 async function libraryDirs() {
   const dirs = [DIR];
   try {
+    if (!await Caps.has('fs.mounts')) return dirs;
     const m = await (await fetch('/api/fs/mounts')).json();
     if (m && typeof m.media_alt === 'string' && m.media_alt) dirs.push(m.media_alt + '/Music');
   } catch {}
