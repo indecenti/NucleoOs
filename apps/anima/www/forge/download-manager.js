@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // download-manager.js — the runnable controller that ties download.js (manifest + bounded-Range
 // FSM, idempotent SHA resume) to scheduler.js (MCU-aware coexistence) with INJECTED I/O. It owns
 // the loop the pure reducers describe: for each pending shard it asks the scheduler whether it may

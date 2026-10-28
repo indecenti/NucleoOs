@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // scheduler.js — MCU-aware coexistence scheduler (the principled form of must-fix #3). The client
 // pulls model weights through a single-task, no-PSRAM httpd that also serves /api/anima (the
 // verifier) and /api/status. This pure controller reads the device telemetry (free heap, largest

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // forza4-3d.js — the Three.js/WebGL renderer for Forza 4, built on the SAME engine as Pong (pong3d.js):
 // a neon 3D board, emissive discs that drop and bounce, particle bursts, a glowing winning-line tube,
 // camera shake and the procedural Web-Audio SFX. Driven purely from the host-authoritative state in

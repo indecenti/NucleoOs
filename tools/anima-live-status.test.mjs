@@ -91,11 +91,11 @@ test('the SD answer is the real value, in decimal GB like the desktop', () => {
 
 test('battery, network, RAM, uptime and version come straight from the status', () => {
   assert.equal(liveFromStatus('battery', ST, 'it'), 'Batteria al 100% (4,15 V).');
-  assert.equal(liveFromStatus('battery', { ...ST, battery: undefined }, 'en'), 'This Cardputer does not report its battery level.');
+  assert.equal(liveFromStatus('battery', { ...ST, battery: undefined }, 'en'), 'This device does not report its battery level.');
   assert.equal(liveFromStatus('network', ST, 'en'), 'Connected to the Wi-Fi network “nonnoBob”, address 192.168.0.104.');
-  assert.equal(liveFromStatus('network', { ...ST, network: { mode: 'off' } }, 'it'), 'Il Cardputer non è connesso a nessuna rete.');
+  assert.equal(liveFromStatus('network', { ...ST, network: { mode: 'off' } }, 'it'), 'Il dispositivo non è connesso a nessuna rete.');
   assert.equal(liveFromStatus('ram', ST, 'it'), 'RAM libera: 26 KB (il blocco più grande è 8 KB).');
-  assert.equal(liveFromStatus('uptime', ST, 'it'), 'Il Cardputer è acceso da 1 h 23 min.');
+  assert.equal(liveFromStatus('uptime', ST, 'it'), 'Il dispositivo è acceso da 1 h 23 min.');
   assert.equal(liveFromStatus('version', ST, 'de'), 'NucleoOS 0.4.0+0.g6c81727*.');
 });
 

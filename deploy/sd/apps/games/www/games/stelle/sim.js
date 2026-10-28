@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // stelle/sim.js — Costellazioni space combat: a fixed-step (60 Hz) 6DOF arcade-sim.
 //
 // Pure logic, no Three.js, no DOM: the renderer reads the pools below and interpolates between the

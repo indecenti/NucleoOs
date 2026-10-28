@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // model-url-map.js — map a model-weight request URL → the ANIMA Forge install-cache key '/fc/<id>/<file>'.
 //
 // The Forge installer (model-store.js) downloads each verified shard/aux into caches['anima-forge-models']

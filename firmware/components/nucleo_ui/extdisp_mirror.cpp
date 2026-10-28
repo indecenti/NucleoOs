@@ -19,10 +19,10 @@ void Panel_Mirror::sync_dims(void)
     _invert = _pri->getInvert();
     _write_depth = _pri->getWriteDepth();
     _read_depth = _pri->getReadDepth();
-    if (_solo) {                                   // the external glass, whole and unshifted
+    if (_solo) {                                   // the external glass, unshifted but for the system band
         _width = _ext->width();
-        _height = _ext->height();
-        _ox = _oy = 0;
+        _height = _ext->height() - _inset;
+        _ox = 0; _oy = _inset;
         return;
     }
     _width = _pri->width();
@@ -87,6 +87,16 @@ bool Panel_Mirror::set_solo(bool on)
     sync_dims();
     _wx0 = _wy0 = 0; _wx1 = _wy1 = -1; _cx = _cy = 0;   // no pixel stream survives a switch
     _pri->setBrightness(pri_level(_bri));
+    return true;
+}
+
+bool Panel_Mirror::set_inset(int top)
+{
+    if (top < 0 || top >= _ext->height() / 2) return false;
+    if (top == _inset) return true;
+    _inset = top;
+    sync_dims();
+    _wx0 = _wy0 = 0; _wx1 = _wy1 = -1; _cx = _cy = 0;
     return true;
 }
 
@@ -282,7 +292,7 @@ void Panel_Mirror::writeImageARGB(uint_fast16_t x, uint_fast16_t y, uint_fast16_
                     if (on && run < 0) run = (int)i;
                     if (!on && run >= 0) {
                         pixelcopy_t pc(_out + run, _ext->getWriteDepth(), _ext->getWriteDepth(), false);
-                        _ext->writeImage(x + run, y + r, i - run, 1, &pc, false);
+                        _ext->writeImage(x + run + _ox, y + r + _oy, i - run, 1, &pc, false);
                         run = -1;
                     }
                 }
@@ -291,7 +301,7 @@ void Panel_Mirror::writeImageARGB(uint_fast16_t x, uint_fast16_t y, uint_fast16_
             return;
         }
         ext_begin();
-        _ext->writeImageARGB(x, y, w, h, param);
+        _ext->writeImageARGB(x + _ox, y + _oy, w, h, param);
         ext_end();
         return;
     }

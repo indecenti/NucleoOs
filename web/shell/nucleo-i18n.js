@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // nucleo-i18n.js — NucleoOS centralized internationalization runtime.
 //
 // One engine, served once from the shell root (`/nucleo-i18n.js`), imported by the shell AND every

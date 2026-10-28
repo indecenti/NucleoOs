@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // lib-resolver.js — "offline-first, online-fallback" for M4 RUNTIME libs (same policy the model
 // weights use). Given a LOCAL (device SD) URL and a CDN URL, prefer the local one when it's actually
 // present (a HEAD probe), else fall back to the CDN. So a fully-provisioned SD runs with no network;
@@ -21,13 +22,19 @@ export function makeHeadProbe(fetchFn) {
 // can't. A partially-synced SD (interrupted robocopy / out-of-space) leaves a SHORT file that would
 // crash the runtime mid-load; this catches it and lets resolution fall back to CDN (online) or warn loudly.
 //
-// CRITICAL — it uses a RANGED GET (Range: bytes=0-0), NEVER {method:'HEAD'}. Verified against the
-// firmware (nucleo_webfs.c):
-//   1. webfs registers ONLY HTTP_GET — esp_http_server does not synthesize HEAD, so a HEAD 404s and
-//      would mark EVERY SD lib absent (a fully-provisioned air-gapped box would falsely read network-once
-//      and silently drop to CDN). A 1-byte Range gives a real 206.
-//   2. A ranged request BYPASSES the ".gz" sibling (gz is served only when !want_range), so the probe
-//      always measures the RAW vendored file. A plain GET could be size-poisoned by web-llm.js.gz.
+// CRITICAL — it uses a RANGED GET (Range: bytes=0-0), NEVER {method:'HEAD'}:
+//   1. HEAD is not a reliable presence test across the servers this has run on; a 1-byte Range gives a
+//      real 206 with an authoritative total. (On the original firmware webfs registered ONLY HTTP_GET,
+//      so a HEAD 404'd and marked EVERY SD lib absent — a fully-provisioned air-gapped box would have
+//      falsely read network-once and dropped to the CDN.)
+//   2. A ranged request must BYPASS the ".gz" sibling, so the probe measures the RAW vendored file; a
+//      plain GET would be size-poisoned by web-llm.js.gz.
+//      ⚠️ Point 2 is a CONTRACT WITH THE SERVER, not a property of HTTP. It held on the original
+//      firmware and was FALSE on the Python server for months: _static checked Accept-Encoding first
+//      and served the twin, so this probe read 2,159,095 bytes where the lib is 6,086,300, declared
+//      BOTH local engines 'truncated', and sent an air-gapped device to esm.run with the real files
+//      sitting on its SD. Fixed in server.py:_static (no .gz when the request carries a Range).
+//      If this ever moves to another server, re-verify it there — the failure is silent.
 //   3. webfs answers 206 with "Content-Range: bytes 0-0/<total>", <total>=true file size — authoritative.
 //      A 0-byte placeholder → 416 (empty). The low-heap breaker can still 503 a big file → TRANSIENT.
 //   Do NOT "simplify" this back to HEAD. (Preview python http.server ignores Range → 200 + full

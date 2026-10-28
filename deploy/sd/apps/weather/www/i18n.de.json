@@ -15,7 +15,7 @@
   "hourly": "Nächste 24 Stunden",
   "daily": "Nächste Tage",
   "first_title": "Wo bist du?",
-  "first_sub": "Suche deine Stadt oder verwende den Browser-Standort. Die Vorhersage kommt von Open-Meteo, direkt aus dem Browser: der Cardputer wird nie belastet.",
+  "first_sub": "Suche deine Stadt oder verwende den Browser-Standort. Die Vorhersage kommt von Open-Meteo, direkt aus dem Browser: das Gerät wird nie belastet.",
   "err_geo": "Standort nicht verfügbar",
   "err_net": "Netzwerk nicht erreichbar",
   "err_city": "Keine Treffer",

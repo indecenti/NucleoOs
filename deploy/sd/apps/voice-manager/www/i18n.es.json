@@ -16,9 +16,9 @@
   "prog_label": { "one": "1 comando entrenado", "other": "{count} comandos entrenados" },
   "prog_cap": "máx. {count}",
 
-  "t0_title": "Enseña tu voz al Cardputer",
-  "t0_intro": "Esta herramienta entrena el reconocedor de voz <b>nativo</b> del Cardputer: funciona totalmente <b>offline</b>, en el dispositivo, y aprende <b>tu</b> voz. Cuanto más lo usas, más preciso se vuelve: cada comando reconocido ajusta automáticamente su propio modelo.",
-  "t0_tip1": "Funciona por <b>pulsar y hablar</b>: mantén pulsado <span class=\"keycap\">FN</span> (o <span class=\"keycap\">G0</span>) en el Cardputer, di el comando y suelta.",
+  "t0_title": "Enseña tu voz al dispositivo",
+  "t0_intro": "Esta herramienta entrena el reconocedor de voz <b>nativo</b> del dispositivo: funciona totalmente <b>offline</b>, en el dispositivo, y aprende <b>tu</b> voz. Cuanto más lo usas, más preciso se vuelve: cada comando reconocido ajusta automáticamente su propio modelo.",
+  "t0_tip1": "Funciona por <b>pulsar y hablar</b>: mantén pulsado <span class=\"keycap\">FN</span> (o <span class=\"keycap\">G0</span>) en el dispositivo, di el comando y suelta.",
   "t0_tip2": "El dispositivo reconoce la <b>palabra</b>; ANIMA la convierte en la acción (abrir una app, decir la hora…).",
   "t0_tip3": "Sin nube, sin clave: el audio nunca sale del dispositivo.",
   "t0_next": "Empecemos →",
@@ -52,7 +52,7 @@
   "cmd_sub": "Comandos nativos listos para usar. 🟢 = ya entrenado con tu voz. El dispositivo gestiona hasta <b>20</b>: elige tus favoritos.",
 
   "test_title": "Prueba en vivo",
-  "test_sub": "Mantén <span class=\"keycap\">FN</span> en el Cardputer y di un comando entrenado.",
+  "test_sub": "Mantén <span class=\"keycap\">FN</span> en el dispositivo y di un comando entrenado.",
   "test_hint": "Cada reconocimiento muestra la <b>distancia</b> (menor = más parecido), el <b>margen</b> sobre el 2.º candidato y el <b>radio autocalibrante</b> de la palabra. Verde = excelente, amarillo = aceptable.",
   "test_waiting": "Esperando… pulsa FN y habla.",
 
@@ -63,14 +63,14 @@
   "custom_yours": "Tus comandos personalizados",
   "custom_empty": "No hay comandos personalizados guardados.",
 
-  "rec_title": "En el Cardputer: mantén FN y habla",
+  "rec_title": "En el dispositivo: mantén FN y habla",
   "rec_hold_say": "Mantén <span class=\"keycap\">FN</span> (o <span class=\"keycap\">G0</span>) y di:",
   "rec_then_release": "luego <b>suelta</b>.",
-  "rec_waiting": "Esperando al Cardputer…",
+  "rec_waiting": "Esperando al dispositivo…",
   "rec_recording": "🔴 Grabando… suelta FN para guardar.",
   "rec_processing": "Procesando…",
   "rec_too_short": "⚠️ Demasiado corto o en silencio — inténtalo de nuevo: mantén FN y habla claro.",
-  "rec_timeout": "⚠️ Sin respuesta del Cardputer. Asegúrate de mantener pulsado <b>FN</b> mientras hablas (la grabación ocurre en el dispositivo, no en el navegador) y de que el firmware de voz esté actualizado.",
+  "rec_timeout": "⚠️ Sin respuesta del dispositivo. Asegúrate de mantener pulsado <b>FN</b> mientras hablas (la grabación ocurre en el dispositivo, no en el navegador) y de que el firmware de voz esté actualizado.",
   "rec_stop": "Detener",
 
   "ok_trained": "¡Entrenado!",
@@ -86,7 +86,7 @@
   "err_network": "Error de red",
   "alert_cap": "Has alcanzado el límite de {max} comandos. Elimina uno primero.",
   "err_arm": "No se pudo activar el motor (¿dispositivo ocupado?)",
-  "err_connect": "Error de conexión con el Cardputer",
+  "err_connect": "Error de conexión con el dispositivo",
 
   "conf_excellent": "Excelente",
   "conf_good": "Bueno",
@@ -95,5 +95,6 @@
 
   "meta_dist": "dist",
   "meta_second": "2.º",
-  "meta_radius": "radio"
+  "meta_radius": "radio",
+  "voice_unavailable": "Los comandos de voz no están disponibles en este dispositivo."
 }

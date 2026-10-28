@@ -1,4 +1,5 @@
 <!doctype html>
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -101,6 +102,7 @@
 
   <script type="module">
     import I18N from '/nucleo-i18n.js';
+    import Caps from '/nucleo-caps.js';   // what this device can do (wifi.manage)
     const t = await I18N.init('wifi-scanner');
     const $ = (id) => document.getElementById(id);
     const SETTINGS = '/system/config/settings.json';
@@ -167,8 +169,10 @@
         const r = await fetch('/api/wifi/forget', { method: 'POST', headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ ssid }) });
         if (r.status === 401) { toast(t('need_pair')); return; }
-        toast(t('forgotten'));
-      } catch {}
+        // A refused forget must not read as done: the network would still be there on the next scan.
+        const j = await r.json().catch(() => ({}));
+        toast(!r.ok || j.ok === false ? t('forget_failed') : t('forgotten'));
+      } catch { toast(t('forget_failed')); }
       await fetchKnown(); if (lastNets) render(lastNets);
     }
 
@@ -292,8 +296,9 @@
     const EMBEDDED = window.top !== window.self;
     let osVisible = true;
     let scanning = false;
+    let wifiOk = null;                         // capability wifi.manage, set by init()
     async function scan() {
-      if (scanning || !osVisible) return;
+      if (wifiOk === false || scanning || !osVisible) return;
       scanning = true; $('hd').classList.add('scanning');
       if (!EMBEDDED) await fetchStatus();        // standalone: refresh "connected" highlight (embedded: from snapshot)
       await fetchKnown();                        // refresh the saved-network set (cheap, no scan block)
@@ -348,6 +353,12 @@
     // ---- boot ------------------------------------------------------------------
     async function init() {
       await loadTheme();
+      // Scanning and joining are the device's (capability wifi.manage): elsewhere say so, and never scan.
+      // Unknown caps (the device did not answer at all) are not "no Wi-Fi": scan anyway, so the user is told
+      // the real reason (unreachable, not paired) by the scan's own failure path.
+      const ci = await Caps.info().catch(() => ({ source: 'none', caps: [] }));
+      wifiOk = ci.source === 'none' ? null : ci.caps.includes('wifi.manage');
+      if (wifiOk === false) { $('auto').style.display = 'none'; $('scan').style.display = 'none'; renderFailed('wifi_unavailable'); return; }
       scan();
     }
     init();

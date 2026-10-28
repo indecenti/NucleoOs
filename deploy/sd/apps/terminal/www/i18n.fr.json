@@ -18,5 +18,18 @@
   "man_which": "Quelle page de manuel voulez-vous ?",
   "man_description": "Description :",
   "man_details": "Détails :",
-  "man_none": "Aucune entrée de manuel pour {cmd}"
+  "man_none": "Aucune entrée de manuel pour {cmd}",
+  "subtitle_shell": "shell de l'appareil · {shell}",
+  "reconnect": "Reconnecter",
+  "retry": "Réessayer",
+  "st_connecting": "connexion…",
+  "st_connected": "connecté",
+  "st_closed": "session fermée",
+  "st_error": "erreur : {msg}",
+  "st_unpaired": "non appairé",
+  "gate_pair_title": "Navigateur non appairé",
+  "gate_pair_body": "Le terminal ouvre un vrai shell sur l'appareil : ce navigateur doit d'abord être appairé une fois. La console énonce le PIN à voix haute.",
+  "gate_pair_btn": "Appairer",
+  "gate_off_title": "Terminal indisponible",
+  "gate_off_body": "L'appareil n'a pas répondu ({msg})."
 }

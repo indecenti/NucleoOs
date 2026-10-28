@@ -437,10 +437,8 @@ static void test_mirror(const char *outdir)
     for (int y = 190; y < 237; y++) for (int x = 131; x < 189; x++) if (outer.readPixel(x, y) != 0) lit++;
     CHECK(lit > 1500, "pressed OK key is drawn (%d px)", lit);
     snprintf(path, sizeof path, "%s/external.rgb", outdir); dump(path, outer);
-    extdisp_chrome_calib(&outer, fr, 1, "Calibration 2/4", "tap the target centre");
-    touched = 0;
-    for (int y = 0; y < 135; y++) for (int x = 0; x < 240; x++) if (outer.readPixel(x + 40, y + 52) != before[y * 240 + x]) touched++;
-    CHECK(touched == 0, "calibration screen wrote %d px inside the frame", touched);
+    extdisp_chrome_calib(&outer, 1, false, "Calibrate touch", "Step 2 of 4", "Tap the centre of the red target");
+    CHECK(outer.readPixel(160, 2) == 0xFFFF, "calibration screen is white edge to edge");
     snprintf(path, sizeof path, "%s/external_calib.rgb", outdir); dump(path, outer);
     printf("extdisp: %d mirrored calls, %d external transactions\n", s_ops, mirror.opened);
 }

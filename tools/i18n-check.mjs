@@ -12,8 +12,7 @@
 //
 // Zero dependencies, BOM-safe. Usage: node tools/i18n-check.mjs   (exit 1 on any failure).
 
-import { readdirSync, readFileSync, writeFileSync, existsSync, statSync } from 'node:fs';
-import { gzipSync, gunzipSync } from 'node:zlib';
+import { readdirSync, readFileSync, existsSync, statSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -185,41 +184,12 @@ if (errors.length) {
   for (const e of errors) console.error('  • ' + e);
   process.exit(1);
 }
-// Emit a tiny coverage manifest the Settings "Language & Region" panel reads (one small fetch — no
-// runtime scanning of every catalog on the device). Counts base-language keys per namespace.
-const nsKeyCount = {};
-for (const [ns, byLang] of catalogs) nsKeyCount[ns] = Object.keys(byLang[BASE] || {}).length;
+// Numbers for the report (the Settings "Language & Region" coverage file comes from nucleo-webos tools/build.py).
 // Per tier-2 language: completion percentage (translated base keys / total), for the Settings panel.
 const pct = {};
 for (const l of EXTRA_LANGS) pct[l] = coverage[l].total ? Math.round((100 * coverage[l].have) / coverage[l].total) : 0;
-const manifest = {
-  generated: new Date().toISOString(),
-  base: BASE,
-  langs: ALL_LANGS,          // full picker list (required + tier-2)
-  required: LANGS,           // the complete, parity-enforced languages
-  extra: EXTRA_LANGS,        // in-progress languages (partial catalogs, base fallback)
-  extraCoverage: pct,        // { es: 42, fr: 42, de: 42 } — % of base keys translated
-  surfaces: nsCount,
-  totalKeys: keyCount,
-  namespaces: nsKeyCount,
-};
-try {
-  const covPath = join(ROOT, 'web', 'shell', 'i18n', 'coverage.json');
-  // Write only on a real change: a fresh timestamp on every run made each green gate dirty the tree
-  // and the committed deploy/sd staging (staging:check). Unchanged content keeps its old `generated`.
-  let prev = null;
-  try { prev = JSON.parse(readFileSync(covPath, 'utf8')); } catch {}
-  if (prev && typeof prev.generated === 'string'
-      && JSON.stringify({ ...prev, generated: '' }) === JSON.stringify({ ...manifest, generated: '' })) manifest.generated = prev.generated;
-  const json = JSON.stringify(manifest, null, 2) + '\n';
-  const same = (p, text) => { try { return readFileSync(p, 'utf8').replace(/\r\n/g, '\n') === text; } catch { return false; } };
-  const gzSame = () => { try { return gunzipSync(readFileSync(covPath + '.gz')).toString('utf8') === json; } catch { return false; } };
-  if (!same(covPath, json)) writeFileSync(covPath, json);
-  // Refresh the .gz IN THE SAME BREATH. The device serves the .gz first, and this file is a build
-  // OUTPUT of this very gate — writing only the source left `gz:check`/`validate` permanently red
-  // right after a green i18n gate, and shipped a stale coverage file to the device.
-  if (!gzSame()) writeFileSync(covPath + '.gz', gzipSync(Buffer.from(json), { level: 9 }));
-} catch (e) { console.log('  (coverage.json not written: ' + e.message + ')'); }
+// Since the switch to nucleo-webos the shell's coverage.json is written by its tools/build.py from the catalogs
+// each edition ships (pinned in webos.lock): this gate computes the numbers for its report, never the file.
 
 const cov = EXTRA_LANGS.map((l) => `${l} ${pct[l]}%`).join(' · ');
 console.log(`✓ i18n gate OK — ${nsCount} namespaces, ${keyCount} base keys, ${LANGS.length} required + ${EXTRA_LANGS.length} tier-2 (${cov}), ${warnings.length} warning(s)`);

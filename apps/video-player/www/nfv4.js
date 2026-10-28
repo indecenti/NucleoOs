@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // NFV v4 in the browser: the Cardputer's own video format (tools/nfv/nfv4.py holds the spec and the reference
 // reader). Frames are whole baseline JPEGs, audio is 16 kHz mono IMA ADPCM, both interleaved in one file with a
 // one-per-second seek index at the end. The browser cannot hand such a file to <video>, so NfvMedia plays it

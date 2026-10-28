@@ -54,5 +54,6 @@
   "st_installing": "Installation de {size}…",
   "st_installed": "✓ Installé dans {path} ({size}). Ouvrez DOS Box pour jouer.",
   "err_install_failed": "Échec de l'installation : {msg}",
+  "pairing_required": "Associe ce navigateur sur l'appareil pour installer des jeux.",
   "st_reading": "Lecture…"
 }

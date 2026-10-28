@@ -31,7 +31,7 @@
   "saved_x": "Saved {name}",
   "compress_error": "Compression Error",
   "no_files": "No files to compress",
-  "err_read_file": "Couldn't read the archive from the Cardputer (error {status}).",
+  "err_read_file": "Couldn't read the archive from the device (error {status}).",
   "err_write_file": "Couldn't write {name} (error {status}).",
   "err_mkdir": "Couldn't create the folder {name} (error {status}).",
   "err_list_dir": "Couldn't list the folder {name} (error {status}).",

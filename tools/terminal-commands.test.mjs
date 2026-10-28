@@ -426,7 +426,7 @@ test('reboot: esegue il riavvio del dispositivo', async () => {
   resetTest();
   await COMMANDS.reboot();
   assert.equal(emitted.length, 2);
-  assert.ok(emitted[0].text.includes('rebooting Cardputer'));
+  assert.ok(emitted[0].text.includes('rebooting device'));
   assert.ok(emitted[1].text.includes('Reboot command sent'));
 });
 

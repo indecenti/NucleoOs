@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // constellations-codex.js — the Codex of Costellazioni (web): lore fragments, factions, places, worlds, ship dossiers
 // and the contacts, each with its illustration (stelle/assets) or, for ships without a painting, the live 3D model
 // on the hub's hangar backdrop. Entries unlock through play (constellations.js decides when, the web save keeps them);

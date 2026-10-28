@@ -13,6 +13,7 @@
 #include "esp_timer.h"       // esp_timer_get_time() for the frame-rate-independent carousel ease
 #include "nucleo_i18n.h"     // system language (TR/it-en) for the Control Center labels
 #include "nucleo_touch.h"    // the large Control Center: tap a tile / shortcut
+#include "nucleo_extdisp.h"  // the second screen's own backlight slider
 
 // The real display (defined in nucleo_ui.cpp). The launcher always draws to it directly;
 // only the animated list band is composited off-screen first. We do NOT include app_gfx.h
@@ -40,7 +41,7 @@ static inline bool lr_large(void) { return ::d.width() >= 300; }
 // centres the status bar's contents in whatever height it has.
 #undef BAR
 #undef HINT
-#define BAR  (lr_large() ? 22 : 16)
+#define BAR  (lr_large() ? 30 : 16)                  // large: a finger-sized bar (Back button, tap = Control Center)
 #define HINT (lr_large() ? 0 : 14)
 #define BY   ((BAR - 16) / 2)
 
@@ -728,11 +729,11 @@ void launcher_render_status_bar(void)
         // (legible), with the Wi-Fi gauge and the item count packed from the right edge inward.
         // On the touch panel a back chevron leads it, so the breadcrumb reads as "tap here to go back".
         int cx = 2;
-        if (lr_large()) {
-            int ay = BAR / 2;
-            d.drawLine(cx + 5, ay - 5, cx, ay, FG); d.drawLine(cx + 6, ay - 5, cx + 1, ay, FG);
-            d.drawLine(cx, ay, cx + 5, ay + 5, FG); d.drawLine(cx + 1, ay, cx + 6, ay + 5, FG);
-            cx += 12;
+        if (lr_large()) {                                    // a Back button the finger finds: pill + bold chevron
+            const int bh = BAR - 6, ay = BAR / 2;
+            d.fillRoundRect(3, 3, 44, bh, bh / 2, LINE);
+            for (int k = 0; k < 3; k++) { d.drawLine(29 + k, ay - 7, 22 + k, ay, FG); d.drawLine(22 + k, ay, 29 + k, ay + 7, FG); }
+            cx = 54;
         }
         d.fillRoundRect(cx, 1 + BY, 14, 14, 3, node->color);
         ui_icon(&d, cx + 7, 8 + BY, 6, strcmp(node->id, LAUNCHER_RECENT_ID) ? node->id : "clock", node->icon, INK, node->color);
@@ -998,38 +999,83 @@ template <typename T> static void draw_eq(T *c, int ex, int ey, int w, unsigned 
 // ---- the launcher grid (external 320x240 panel) -----------------------------
 // A tiny screen scrolls a one-at-a-time carousel; a 320x240 panel with touch shows a real home screen:
 // a grid of app tiles (icon + name), many readable at once, each one a tap target. Replaces the scaled
-// carousel on the large surface only — the Cardputer keeps the carousel. Keyboard focus is the accent
-// ring; touch just taps a tile. Rows scroll under the status bar with a knob when they overflow.
+// carousel on the large surface only — the Cardputer keeps the carousel. Keyboard focus is a lit card
+// under the tile; touch just taps a tile. The grid scrolls in pixels: a key keeps the focused tile in view
+// with the smallest move, a drag moves the content itself (NUCLEO_TOUCH_VIEW_*) and leaves the focus alone,
+// rows cut by the band's edges are clipped. Inside a category the first cell is a Back tile.
 #define GRID_COLS   4
 #define GRID_CELLW  (W / GRID_COLS)               // 80 px on the 320-wide panel
-#define GRID_RH     70                            // cell height: badge (46) + label + gaps
-#define GRID_TOP    6                             // first tile row, below the status bar band
-static int s_grid_scroll = 0;                     // first visible grid ROW (kept so touch maps back to items)
+#define GRID_RH     68                            // cell height: badge (46) + label + gaps
+#define GRID_TOP    3                             // first tile row, below the status bar band
+#define GRID_STEP   6                             // px the content moves per drag key
+static int s_grid_off = 0;                        // scroll offset of the grid band, in px
+static int s_grid_max = 0;                        // its largest value (content taller than the band)
+static const void *s_grid_node = nullptr;         // the menu the offset belongs to (a new one starts at the top)
+static int s_grid_sel = -1;                       // the focus the offset was last fitted to
 
-static int grid_rows_vis(void) { int r = (LIST_BAND_H - GRID_TOP) / GRID_RH; return r < 1 ? 1 : r; }
+static int grid_lead(void) { return launcher_depth() > 0 ? 1 : 0; }   // cell 0 = Back inside a category
 
-// Keep the focused tile's row in view; return the first visible item index (row * cols). Pure (no draw),
-// so launcher_render_list can call it to lay the touch targets exactly where the tiles land.
+// Fit the offset: a new menu starts at the top, a focus that moved is brought fully into view with the
+// smallest move, a drag's offset is kept. Pure layout (no draw), so the touch targets land where the tiles do.
+static void grid_fit(void)
+{
+    int cells = launcher_visible_count() + grid_lead(), rows = (cells + GRID_COLS - 1) / GRID_COLS;
+    int content = GRID_TOP + rows * GRID_RH;
+    s_grid_max = content > LIST_BAND_H ? content - LIST_BAND_H : 0;
+    const void *node = (const void *)launcher_node();
+    if (node != s_grid_node) { s_grid_node = node; s_grid_off = 0; s_grid_sel = -1; }
+    int sel = launcher_sel();
+    if (sel != s_grid_sel) {
+        int ry = GRID_TOP + (sel + grid_lead()) / GRID_COLS * GRID_RH;
+        if (ry - GRID_TOP < s_grid_off) s_grid_off = ry - GRID_TOP;
+        if (ry + GRID_RH > s_grid_off + LIST_BAND_H) s_grid_off = ry + GRID_RH - LIST_BAND_H;
+        s_grid_sel = sel;
+    }
+    if (s_grid_off > s_grid_max) s_grid_off = s_grid_max;
+    if (s_grid_off < 0) s_grid_off = 0;
+}
+
+// The first item index whose tile is (at least partly) on screen: touch slot k is that item + k.
 static int grid_first(void)
 {
-    int n = launcher_visible_count();
-    int rows_vis = grid_rows_vis(), total = (n + GRID_COLS - 1) / GRID_COLS;
-    int selrow = launcher_sel() / GRID_COLS;
-    if (selrow < s_grid_scroll) s_grid_scroll = selrow;
-    if (selrow >= s_grid_scroll + rows_vis) s_grid_scroll = selrow - rows_vis + 1;
-    if (s_grid_scroll > total - rows_vis) s_grid_scroll = total - rows_vis;
-    if (s_grid_scroll < 0) s_grid_scroll = 0;
-    return s_grid_scroll * GRID_COLS;
+    grid_fit();
+    int cell = (s_grid_off > GRID_TOP ? (s_grid_off - GRID_TOP) / GRID_RH : 0) * GRID_COLS - grid_lead();
+    return cell < 0 ? 0 : cell;
 }
 
 int launcher_render_large_cols(void) { return lr_large() ? GRID_COLS : 0; }
 int launcher_render_grid_first(void) { return grid_first(); }
 
+// A drag on the grid: move the content by one step. True when it moved (repaint).
+bool launcher_render_grid_view(int dir)
+{
+    int o = s_grid_off + dir * GRID_STEP;
+    o = o < 0 ? 0 : o > s_grid_max ? s_grid_max : o;
+    if (o == s_grid_off) return false;
+    s_grid_off = o;
+    return true;
+}
+
+// The Back tile (cell 0 inside a category): a chevron on a quiet badge, labelled like the tiles.
+template <typename T> static void grid_back_tile(T *c, int cx, int top)
+{
+    const int cy = top + 25, r = 23;
+    c->fillRoundRect(cx - r, cy - r, 2 * r, 2 * r, 8, LINE);
+    c->drawRoundRect(cx - r, cy - r, 2 * r, 2 * r, 8, mix565(LINE, FG, 0.35f));
+    for (int k = 0; k < 4; k++) {                                   // a 4 px-thick chevron
+        c->drawLine(cx + 5 + k - 2, cy - 11, cx - 7 + k - 2, cy, FG);
+        c->drawLine(cx - 7 + k - 2, cy, cx + 5 + k - 2, cy + 11, FG);
+    }
+    const char *lab = TR5("Indietro", "Back", "Atras", "Retour", "Zurueck");
+    c->setFont(&fonts::Font2); c->setTextSize(1); c->setTextColor(mix565(BG, FG, 0.80f), BG);
+    c->setCursor(cx - (int)c->textWidth(lab) / 2, top + 50); c->print(lab);
+}
+
 template <typename T> static void draw_grid(T *c, int base)
 {
     c->fillRect(0, base, W, LIST_BAND_H, BG);
-    int n = launcher_visible_count();
-    if (n == 0) {
+    int n = launcher_visible_count(), lead = grid_lead();
+    if (n == 0 && !lead) {
         const char *none = launcher_filter()[0] ? TR5("Nessun risultato", "No matches", "Sin resultados", "Aucun resultat", "Keine Treffer")
                                                  : TR5("Nessuna app", "No apps", "Ninguna app", "Aucune app", "Keine Apps");
         c->setFont(&fonts::FreeSans9pt7b); c->setTextColor(DIM, BG);
@@ -1037,30 +1083,35 @@ template <typename T> static void draw_grid(T *c, int base)
         c->setTextDatum(top_left); c->setFont(&fonts::Font0); c->setTextSize(1);
         return;
     }
-    int sel = launcher_sel(), first = grid_first(), rows_vis = grid_rows_vis();
+    grid_fit();
+    int sel = launcher_sel(), cells = n + lead, rows = (cells + GRID_COLS - 1) / GRID_COLS;
     static unsigned s_eq_frame = 0; s_eq_frame++;
     bool audio_on = nucleo_audio_is_playing() && !nucleo_audio_is_paused();
     const char *ap = audio_on ? nucleo_audio_path() : "";
     bool is_stream = ap && strstr(ap, "://");
 
-    for (int k = 0; k < rows_vis; k++) {
+    c->setClipRect(0, base, W, LIST_BAND_H);                        // rows cut by the band's edges stay inside it
+    for (int row = 0; row < rows; row++) {
+        const int top = base + GRID_TOP + row * GRID_RH - s_grid_off;
+        if (top + GRID_RH <= base || top >= base + LIST_BAND_H) continue;
         for (int j = 0; j < GRID_COLS; j++) {
-            int i = first + k * GRID_COLS + j;
-            if (i >= n) break;
+            const int cell = row * GRID_COLS + j, i = cell - lead;
+            if (cell >= cells) break;
+            const int cx = j * GRID_CELLW + GRID_CELLW / 2;
+            if (i < 0) { grid_back_tile(c, cx, top); continue; }
             const MenuNode *it = launcher_nth_visible(i);
             if (!it) continue;
-            bool focus = (i == sel);
-            int cx = j * GRID_CELLW + GRID_CELLW / 2;
-            int cy = base + GRID_TOP + k * GRID_RH + 25;        // icon-row centre within the cell
-            int r = 23, cr = (int)(r * 0.34f + 0.5f);
-            uint16_t badge = mix565(LINE, it->color, focus ? 1.0f : 0.85f);   // full colours: the home is touched, not scanned
-            if (focus) c->fillRoundRect(cx - r - 4, cy - r - 4, 2 * r + 8, 2 * r + 8, cr + 3, mix565(BG, it->color, 0.50f));
-            c->fillRoundRect(cx - r, cy - r, 2 * r, 2 * r, cr, badge);
-            if (focus) {                                        // accent ring = keyboard focus
-                uint16_t rc = mix565(it->color, FG, 0.40f);
-                c->drawRoundRect(cx - r - 2, cy - r - 2, 2 * r + 4, 2 * r + 4, cr + 2, rc);
-                c->drawRoundRect(cx - r - 3, cy - r - 3, 2 * r + 6, 2 * r + 6, cr + 2, rc);
+            const bool focus = (i == sel);
+            const int cy = top + 25, r = 23, cr = (int)(r * 0.34f + 0.5f);
+            if (focus) {                                            // keyboard focus: a lit card under the whole tile
+                c->fillRoundRect(j * GRID_CELLW + 3, top - 3, GRID_CELLW - 6, GRID_RH, 10, mix565(BG, it->color, 0.30f));
+                c->drawRoundRect(j * GRID_CELLW + 3, top - 3, GRID_CELLW - 6, GRID_RH, 10, it->color);
+                c->drawRoundRect(j * GRID_CELLW + 4, top - 2, GRID_CELLW - 8, GRID_RH - 2, 9, it->color);
             }
+            const uint16_t under = focus ? mix565(BG, it->color, 0.30f) : BG;
+            uint16_t badge = mix565(LINE, it->color, focus ? 1.0f : 0.80f);
+            c->fillRoundRect(cx - r, cy - r, 2 * r, 2 * r, cr, badge);
+            if (focus) c->drawRoundRect(cx - r - 2, cy - r - 2, 2 * r + 4, 2 * r + 4, cr + 2, FG);
             int gr = (int)(r * 0.68f + 0.5f);
             uint16_t gcol = focus ? INK : mix565(BG, FG, 0.92f);
             const char *gid = !strcmp(it->id, LAUNCHER_RECENT_ID) ? "clock"
@@ -1084,15 +1135,15 @@ template <typename T> static void draw_grid(T *c, int base)
                 for (; l > 0; l--) { char t[26]; snprintf(t, sizeof t, "%.*s..", l, lab); if ((int)c->textWidth(t) <= maxw) break; }
                 snprintf(buf, sizeof buf, "%.*s..", l, lab);
             }
-            c->setTextColor(focus ? FG : mix565(BG, FG, 0.80f), BG);
-            c->setCursor(cx - (int)c->textWidth(buf) / 2, base + GRID_TOP + k * GRID_RH + 50); c->print(buf);
+            c->setTextColor(focus ? FG : mix565(BG, FG, 0.72f), under);
+            c->setCursor(cx - (int)c->textWidth(buf) / 2, top + 50); c->print(buf);
         }
     }
+    c->clearClipRect();
     // scroll knob on the right edge when the grid overflows
-    int total = (n + GRID_COLS - 1) / GRID_COLS;
-    if (total > rows_vis) {
-        int track = LIST_BAND_H - 8, kh = track * rows_vis / total; if (kh < 16) kh = 16;
-        int ky = base + 4 + (track - kh) * s_grid_scroll / (total - rows_vis);
+    if (s_grid_max > 0) {
+        int track = LIST_BAND_H - 8, content = LIST_BAND_H + s_grid_max, kh = track * LIST_BAND_H / content; if (kh < 16) kh = 16;
+        int ky = base + 4 + (track - kh) * s_grid_off / s_grid_max;
         c->fillRect(W - 3, base + 4, 2, track, LINE);
         c->fillRect(W - 3, ky, 2, kh, mix565(FG, BG, 0.3f));
     }
@@ -1203,16 +1254,24 @@ template <typename T> static void draw_list(T *c, int base)
 static void grid_register_touch(void)
 {
     nucleo_touch_clear();
-    int n = launcher_visible_count(), first = grid_first(), rows_vis = grid_rows_vis();
-    for (int k = 0; k < rows_vis; k++)
+    const int n = launcher_visible_count(), lead = grid_lead(), first = grid_first(), cells = n + lead;
+    const int rows = (cells + GRID_COLS - 1) / GRID_COLS, y0 = LIST_TOP, y1 = LIST_TOP + LIST_BAND_H;
+    if (lead) nucleo_touch_add(0, 0, 64, BAR + 4, NK_BACK, 0);                             // the Back button
+    nucleo_touch_add(lead ? 64 : 0, 0, lead ? W - 64 : W, BAR, NK_TAB, 0);                  // the bar: Control Center
+    for (int row = 0; row < rows; row++) {
+        const int top = LIST_TOP + GRID_TOP + row * GRID_RH - s_grid_off;
+        const int ty = top - 3 > y0 ? top - 3 : y0, by = top + GRID_RH - 3 < y1 ? top + GRID_RH - 3 : y1;
+        if (by - ty < 20) continue;                                  // a sliver at the edge is not a target
         for (int j = 0; j < GRID_COLS; j++) {
-            int slot = k * GRID_COLS + j;
-            if (first + slot >= n) break;
-            nucleo_touch_add(j * GRID_CELLW, LIST_TOP + GRID_TOP + k * GRID_RH, GRID_CELLW, GRID_RH,
-                             NK_CHAR, (char)(NUCLEO_TOUCH_ROW + slot));
+            const int cell = row * GRID_COLS + j, i = cell - lead;
+            if (cell >= cells) break;
+            if (i < 0) { nucleo_touch_add(j * GRID_CELLW, ty, GRID_CELLW, by - ty, NK_BACK, 0); continue; }
+            const int slot = i - first;
+            if (slot < 0 || slot >= 16) continue;                    // NUCLEO_TOUCH_ROW has 16 slots
+            nucleo_touch_add(j * GRID_CELLW, ty, GRID_CELLW, by - ty, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + slot));
         }
-    nucleo_touch_add_scroll(0, LIST_TOP, W, LIST_BAND_H, GRID_RH, NK_UP, 0, NK_DOWN, 0);   // drag = scroll rows
-    if (launcher_depth() > 0) nucleo_touch_add(0, 0, 120, BAR, NK_BACK, 0);                // breadcrumb = back
+    }
+    nucleo_touch_add_scroll(0, LIST_TOP, W, LIST_BAND_H, GRID_STEP, NK_CHAR, NUCLEO_TOUCH_VIEW_BACK, NK_CHAR, NUCLEO_TOUCH_VIEW_FWD);
     nucleo_touch_commit();
 }
 
@@ -1259,6 +1318,7 @@ void launcher_render_list(void)
 //   [1 mute] [2 torch] [3 moon] [4 hotspot]        icon tiles — keys 1-4 fire them directly
 //   Audio attivo               invio silenzia      caption (Font2): the focused tile + what ENTER does
 //   (sun) Luminosita                     70%       brightness card: caption + track (LEFT/RIGHT adjust)
+//   (mon) Secondo schermo                80%       ADV with a second screen: its own backlight + [Calibra] touch
 //   (spk) Volume  invio muto             40%       volume card (ENTER toggles mute)
 //   [5 gear] [6 web] [7 kbd] [8 usb] [9 power]     shortcuts — keys 5-9 fire them directly
 //   6 Web 192.168.1.42          PIN 314159         caption: on the Web shortcut, the IP and pairing PIN
@@ -1290,7 +1350,7 @@ extern "C" bool        nucleo_setup_config_loaded(void); // false in Wi-Fi-skipp
 
 // launcher_render_control_center_key return codes (see launcher_render.h).
 enum { CC_NONE = 0, CC_REDRAW = 1, CC_CLOSE = 2, CC_SCREEN_OFF = 3, CC_LAUNCH = 4, CC_TORCH = 5 };
-enum { CL_TILES = 0, CL_BRIGHT, CL_VOLUME, CL_SHORT, CC_NLINES };          // the four focusable lines
+enum { CL_TILES = 0, CL_BRIGHT, CL_XBRIGHT, CL_VOLUME, CL_SHORT, CC_NLINES };   // the focusable lines (CL_XBRIGHT: ADV + panel)
 enum { TL_MUTE = 0, TL_TORCH, TL_SCREEN, TL_HOTSPOT, CC_NTILES };          // toggle tiles
 enum { SC_SETTINGS = 0, SC_WEB, SC_USBKBD, SC_USBDRIVE, SC_RESTART, CC_NSHORT };   // shortcuts
 #define CC_ARM_HOTSPOT  TL_HOTSPOT
@@ -1302,16 +1362,26 @@ enum { SC_SETTINGS = 0, SC_WEB, SC_USBKBD, SC_USBDRIVE, SC_RESTART, CC_NSHORT };
 // where the whole column fits at once with bigger tiles and full-width sliders). Read at draw time.
 static const int CC_STRIP_H = 18;
 static const int CC_BODY_Y  = CC_STRIP_H + 1;                  // first body row (below the strip rule)
-static const int CC_CARD_Y_S[CC_NLINES] = { 0, 58, 96, 134 };  // card tops in the column
-static const int CC_CARD_H_S[CC_NLINES] = { 58, 34, 34, 52 };  // ...and heights: tiles, bright, volume, shortcuts
-static const int CC_CARD_Y_L[CC_NLINES] = { 2, 70, 114, 158 };
-static const int CC_CARD_H_L[CC_NLINES] = { 64, 40, 40, 58 };
+static const int CC_CARD_H_S[CC_NLINES] = { 58, 34, 34, 34, 52 };   // card heights: tiles, bright, 2nd-screen bright, volume, shortcuts
+static const int CC_CARD_H_L[CC_NLINES] = { 64, 40, 40, 40, 58 };
 #define CC_X0       (lr_large() ? 6 : 4)                        // card column; the scroll knob sits right of it
 #define CC_XW       (lr_large() ? 308 : 228)
 #define CC_KNOB_X   (W - 4)                                     // 2 px scroll knob
-#define CC_CARD_Y   (lr_large() ? CC_CARD_Y_L : CC_CARD_Y_S)
-#define CC_CARD_H   (lr_large() ? CC_CARD_H_L : CC_CARD_H_S)
-#define CC_COL_H    (lr_large() ? 216 : 186)                    // the whole column
+// The second screen's card exists only with a panel attached that has something to set: its backlight (the
+// module's LED on a GPIO) and/or its touch (calibration). Otherwise it has no height and the column is the
+// four cards it always was.
+static bool cc_xbri_ok(void) { return nucleo_extdisp_brightness_ok(); }
+static bool cc_cal_ok(void)  { return nucleo_extdisp_active() && nucleo_extdisp_touch(); }
+static bool cc_line_on(int line) { return line != CL_XBRIGHT || (nucleo_extdisp_active() && (cc_xbri_ok() || cc_cal_ok())); }
+static int  cc_card_h(int line)  { return cc_line_on(line) ? (lr_large() ? CC_CARD_H_L : CC_CARD_H_S)[line] : 0; }
+// Card tops in the column: stacked with a 4 px gap (none under the compact tiles, whose caption fills it).
+static int  cc_card_y(int line)
+{
+    int y = lr_large() ? 2 : 0;
+    for (int i = 0; i < line; i++) if (cc_card_h(i)) y += cc_card_h(i) + ((i == CL_TILES && !lr_large()) ? 0 : 4);
+    return y;
+}
+#define CC_COL_H    (cc_card_y(CL_SHORT) + cc_card_h(CL_SHORT)) // the whole column (186 compact / 216 large without CL_XBRIGHT)
 #define CC_TILE_W   (lr_large() ? 72 : 54)
 #define CC_TILE_P   (lr_large() ? 78 : 58)
 #define CC_TILE_H   (lr_large() ? 40 : 34)
@@ -1329,6 +1399,9 @@ static const int CC_CAP_H = 16;                                // one caption li
 #define CC_TRK_W    (lr_large() ? 288 : 212)
 #define CC_TRK_H    (lr_large() ? 8 : 6)
 #define CC_TRK_DY   (lr_large() ? 26 : 24)
+#define CC_CAL_W    76                                          // large: the [Calibra] pill right of the panel's track
+// A slider's track width: on the large panel the second screen's track leaves room for its Calibrate pill.
+static int cc_trk_w(int line) { return (line == CL_XBRIGHT && lr_large() && cc_cal_ok()) ? CC_TRK_W - CC_CAL_W - 10 : CC_TRK_W; }
 
 static int  s_cc_scroll = 0;           // body scroll in rows — kept across opens with the focus (resume)
 static bool s_cc_anim   = false;       // buffered scroll still easing toward the focused card
@@ -1379,7 +1452,10 @@ void launcher_render_control_center_close(void)
 {
     nucleo_touch_clear(); nucleo_touch_commit();               // its tile/shortcut targets end with it
     s_cc_arm = -1;
-    if (s_cc_prefs) { s_cc_prefs = false; nucleo_app_persist_prefs(); }   // one settings.json write per visit
+    if (s_cc_prefs) {                                          // one settings.json write per visit
+        s_cc_prefs = false; nucleo_app_persist_prefs();
+        if (nucleo_extdisp_brightness_ok()) nucleo_extdisp_set_brightness(nucleo_extdisp_brightness(), true);
+    }
 }
 
 const char *launcher_render_control_center_launch_id(void) { return s_cc_launch_id; }
@@ -1432,8 +1508,31 @@ int launcher_render_control_center_key(int key, char ch)
         if (armed != 100 + s_cc_short) { armed = -1; s_cc_arm = -1; }
         return cc_short_act(s_cc_short, armed);
     }
+    if (nucleo_touch_is_field(key, ch)) {                  // large: a tap on a slider card sets it where the finger is
+        int tx = 0, ty = 0;
+        if (!nucleo_touch_last(&tx, &ty)) return CC_NONE;
+        for (int line = CL_BRIGHT; line <= CL_VOLUME; line++) {
+            int oy = CC_BODY_Y + cc_card_y(line) - s_cc_scroll;
+            if (!cc_line_on(line) || ty < oy || ty >= oy + cc_card_h(line)) continue;
+            if (line == CL_XBRIGHT && !cc_xbri_ok()) return CC_NONE;
+            int v = (tx - CC_TRK_X) * 100 / cc_trk_w(line); v = v < 0 ? 0 : v > 100 ? 100 : v;
+            s_cc_line = line;
+            if (line == CL_BRIGHT)       nucleo_app_set_brightness(v < 10 ? 10 : v);
+            else if (line == CL_XBRIGHT) nucleo_extdisp_set_brightness(v, false);
+            else                         nucleo_audio_set_volume(v);
+            s_cc_prefs = true;
+            return CC_REDRAW;
+        }
+        return CC_NONE;
+    }
+    if ((key == NK_CHAR && ch == '0') || (key == NK_ENTER && s_cc_line == CL_XBRIGHT)) {   // [Calibra] / ENTER on the card
+        if (!cc_cal_ok() || !nucleo_extdisp_recalibrate()) return CC_NONE;
+        s_cc_line = CL_XBRIGHT;
+        return CC_CLOSE;                                   // the calibration screen takes the panel
+    }
     if (key == NK_UP || key == NK_DOWN) {
-        s_cc_line = (s_cc_line + (key == NK_DOWN ? 1 : CC_NLINES - 1)) % CC_NLINES;
+        do s_cc_line = (s_cc_line + (key == NK_DOWN ? 1 : CC_NLINES - 1)) % CC_NLINES;
+        while (!cc_line_on(s_cc_line));
         return CC_REDRAW;
     }
     if (key == NK_LEFT || key == NK_RIGHT) {
@@ -1442,6 +1541,8 @@ int launcher_render_control_center_key(int key, char ch)
             case CL_TILES:  s_cc_tile  = (s_cc_tile  + dir + CC_NTILES) % CC_NTILES; break;
             case CL_SHORT:  s_cc_short = (s_cc_short + dir + CC_NSHORT) % CC_NSHORT; break;
             case CL_BRIGHT: nucleo_app_set_brightness(nucleo_app_brightness() + dir * 5); s_cc_prefs = true; break;
+            case CL_XBRIGHT: if (!cc_xbri_ok()) return CC_NONE;
+                             nucleo_extdisp_set_brightness(nucleo_extdisp_brightness() + dir * 5, false); s_cc_prefs = true; break;
             default:        nucleo_audio_set_volume(nucleo_audio_volume() + dir * 5);     s_cc_prefs = true; break;
         }
         return CC_REDRAW;
@@ -1466,6 +1567,7 @@ static uint32_t cc_sig(void)
     MIX(cc_online()); MIX(wifi_bars(nucleo_setup_rssi()));
     MIX(nucleo_setup_ap_active()); MIX(nucleo_setup_ap_intended());
     MIX(nucleo_audio_is_muted()); MIX(nucleo_audio_volume()); MIX(nucleo_app_brightness());
+    MIX(nucleo_extdisp_brightness_ok() ? nucleo_extdisp_brightness() : -1); MIX(cc_cal_ok());
     #undef MIX
     return sig;
 }
@@ -1496,9 +1598,9 @@ struct CcShown {
     uint32_t strip, cap[CC_NLINES];    // strip + one caption hash per card
     uint8_t  tile_fill[CC_NTILES];
     uint16_t tile_ink[CC_NTILES], tile_ring[CC_NTILES];
-    uint8_t  sl_glyph[2], sl_kr[2];
-    uint16_t sl_ink[2], sl_ring[2], sl_col[2];
-    int16_t  sl_val[2], sl_kx[2];
+    uint8_t  sl_glyph[3], sl_kr[3];    // sliders: 0 brightness, 1 volume, 2 second-screen brightness
+    uint16_t sl_ink[3], sl_ring[3], sl_col[3];
+    int16_t  sl_val[3], sl_kx[3];
     uint16_t sh_ring[CC_NSHORT], sh_ink[CC_NSHORT];
     int16_t  clock_r;
 };
@@ -1541,6 +1643,12 @@ template <typename T> static void cc_strip(T *g, bool full)
     s_ccs.clock_r = (int16_t)cr;
 
     int rx = W - 4;                                                   // right cluster, fixed cells
+    if (lr_large()) {                                                 // the close button (the whole strip closes)
+        const int xc = W - 12, yc = CC_STRIP_H / 2;
+        g->fillRect(W - 24, 0, 24, CC_STRIP_H, BG);
+        for (int k = 0; k < 2; k++) { g->drawLine(xc - 5 + k, yc - 5, xc + 4 + k, yc + 4, FG); g->drawLine(xc + 4 + k, yc - 5, xc - 5 + k, yc + 4, FG); }
+        rx = W - 28;
+    }
     char b[8]; if (bpct >= 0) snprintf(b, sizeof b, "%3d%%", bpct); else snprintf(b, sizeof b, "  --");
     g->setTextColor(FG, BG); g->setCursor(rx - 24, 5); g->print(b); rx -= 24 + 4;
     unsigned short bc = (bpct < 20) ? C_RED : (bpct < 50) ? C_YELLOW : C_GREEN;
@@ -1651,6 +1759,14 @@ static void cc_caption_text(int line, char *l, int lc, char *r, int rc, unsigned
         snprintf(l, lc, "%s", TR5("Luminosita", "Brightness", "Brillo", "Luminosite", "Helligkeit"));
         snprintf(r, rc, "%d%%", nucleo_app_brightness()); *rcol = *col; return;
     }
+    if (line == CL_XBRIGHT) {                              // compact: ENTER calibrates (no pill there), said when focused
+        if (foc && cc_cal_ok() && !lr_large())
+            snprintf(l, lc, "%s", TR5("2o schermo  invio calibra", "Screen 2  enter calibrate", "Pant. 2  enter calibrar",
+                                      "Ecran 2  enter calibrer", "Bild 2  enter kalibrieren"));
+        else snprintf(l, lc, "%s", TR5("Secondo schermo", "Second screen", "Segunda pantalla", "Second ecran", "2. Bildschirm"));
+        if (cc_xbri_ok()) snprintf(r, rc, "%d%%", nucleo_extdisp_brightness());
+        *rcol = *col; return;
+    }
     if (line == CL_VOLUME) {
         bool m = nucleo_audio_is_muted();
         if (!foc)   snprintf(l, lc, "%s", TR5("Volume", "Volume", "Volumen", "Volume", "Lautstaerke"));
@@ -1716,27 +1832,37 @@ template <typename T> static void cc_tile(T *g, int i, int oy, bool full)
 
 template <typename T> static void cc_slider(T *g, int k, int oy, bool full)
 {
-    int  line = k ? CL_VOLUME : CL_BRIGHT, y = oy, cy = y + CC_TRK_DY + CC_TRK_H / 2;
-    bool foc = (s_cc_line == line), muted = k && nucleo_audio_is_muted();
-    int  val = k ? nucleo_audio_volume() : nucleo_app_brightness();
-    unsigned short sem  = k ? (muted ? DIM : C_GREEN) : C_YELLOW;
+    int  line = k == 2 ? CL_XBRIGHT : k ? CL_VOLUME : CL_BRIGHT, y = oy, cy = y + CC_TRK_DY + CC_TRK_H / 2;
+    bool foc = (s_cc_line == line), muted = k == 1 && nucleo_audio_is_muted();
+    int  val = k == 2 ? nucleo_extdisp_brightness() : k ? nucleo_audio_volume() : nucleo_app_brightness();
+    unsigned short sem  = k == 1 ? (muted ? DIM : C_GREEN) : C_YELLOW;
     unsigned short ink  = foc ? FG : MUTED;
     unsigned short ring = cc_focus_col(foc, false);
-    uint8_t glyph = (uint8_t)(k ? (muted ? UG_MUTE : UG_SPEAKER) : UG_SUN);
-    if (full || ring != s_ccs.sl_ring[k]) { cc_ring(g, CC_X0, y, CC_XW, CC_CARD_H[line], 7, ring); s_ccs.sl_ring[k] = ring; }
+    uint8_t glyph = (uint8_t)(k == 2 ? UG_MONITOR : k ? (muted ? UG_MUTE : UG_SPEAKER) : UG_SUN);
+    if (full || ring != s_ccs.sl_ring[k]) { cc_ring(g, CC_X0, y, CC_XW, cc_card_h(line), 7, ring); s_ccs.sl_ring[k] = ring; }
     if ((full || glyph != s_ccs.sl_glyph[k] || ink != s_ccs.sl_ink[k]) && cc_band_visible(y + 2, CC_CAP_H)) {
         if (!full && glyph != s_ccs.sl_glyph[k]) g->fillRect(CC_X0 + 2, y + 2, 17, CC_CAP_H, BG);   // a different icon SHAPE
         ui_glyph(g, glyph, CC_X0 + 10, y + 2 + CC_CAP_H / 2, 6, ink, BG);
     }
     cc_card_caption(g, line, CC_X0 + 22, y + 2, full);
-    int fw = val * CC_TRK_W / 100; if (fw < 0) fw = 0; if (fw > CC_TRK_W) fw = CC_TRK_W;
+    if (k == 2 && lr_large() && cc_cal_ok() && full && cc_band_visible(cy - 11, 22)) {   // [Calibra]: the panel's touch
+        const int px = CC_X0 + CC_XW - 6 - CC_CAL_W;
+        g->fillRoundRect(px, cy - 13, CC_CAL_W, 21, 10, LINE);
+        g->setFont(&fonts::Font2); g->setTextSize(1); g->setTextColor(FG, LINE);
+        const char *cl = TR5("Calibra", "Calibrate", "Calibrar", "Calibrer", "Kalibr.");
+        g->setCursor(px + (CC_CAL_W - (int)g->textWidth(cl)) / 2, cy - 11); g->print(cl);
+        g->setFont(&fonts::Font0);
+    }
+    if (k == 2 && !cc_xbri_ok()) { s_ccs.sl_glyph[k] = glyph; s_ccs.sl_ink[k] = ink; return; }   // LED on 5 V: no slider
+    const int TW = cc_trk_w(line);
+    int fw = val * TW / 100; if (fw < 0) fw = 0; if (fw > TW) fw = TW;
     int kr = foc ? 6 : 4;
-    int kx = CC_TRK_X + fw; if (kx < CC_TRK_X + 6) kx = CC_TRK_X + 6; if (kx > CC_TRK_X + CC_TRK_W - 6) kx = CC_TRK_X + CC_TRK_W - 6;
+    int kx = CC_TRK_X + fw; if (kx < CC_TRK_X + 6) kx = CC_TRK_X + 6; if (kx > CC_TRK_X + TW - 6) kx = CC_TRK_X + TW - 6;
     if (full || val != s_ccs.sl_val[k] || kr != s_ccs.sl_kr[k] || kx != s_ccs.sl_kx[k] || sem != s_ccs.sl_col[k] || ink != s_ccs.sl_ink[k]) {
         if (!full) g->fillCircle(s_ccs.sl_kx[k], cy, s_ccs.sl_kr[k], BG);            // lift the old knob
         int ty = cy - CC_TRK_H / 2;
-        if (fw < CC_TRK_W) { cc_clip_piece(g, CC_TRK_X + fw, ty, CC_TRK_W - fw, CC_TRK_H); g->fillRoundRect(CC_TRK_X, ty, CC_TRK_W, CC_TRK_H, 3, LINE); }
-        if (fw > 0)        { cc_clip_piece(g, CC_TRK_X, ty, fw, CC_TRK_H);                g->fillRoundRect(CC_TRK_X, ty, CC_TRK_W, CC_TRK_H, 3, sem); }
+        if (fw < TW) { cc_clip_piece(g, CC_TRK_X + fw, ty, TW - fw, CC_TRK_H); g->fillRoundRect(CC_TRK_X, ty, TW, CC_TRK_H, 3, LINE); }
+        if (fw > 0)  { cc_clip_piece(g, CC_TRK_X, ty, fw, CC_TRK_H);           g->fillRoundRect(CC_TRK_X, ty, TW, CC_TRK_H, 3, sem); }
         cc_clip_body(g);
         g->fillCircle(kx, cy, kr, foc ? FG : sem);
     }
@@ -1775,7 +1901,8 @@ template <typename T> static void cc_knob(T *g)
 // in the middle), clamped to the column ends so the first and last cards still sit at the edges.
 static int cc_scroll_target(int vph)
 {
-    int t = CC_CARD_Y[s_cc_line] + CC_CARD_H[s_cc_line] / 2 - vph / 2;
+    if (!cc_line_on(s_cc_line)) s_cc_line = CL_BRIGHT;         // the panel's card went away (no module this boot)
+    int t = cc_card_y(s_cc_line) + cc_card_h(s_cc_line) / 2 - vph / 2;
     int mx = CC_COL_H - vph; if (mx < 0) mx = 0;
     if (t > mx) t = mx;
     if (t < 0) t = 0;
@@ -1789,8 +1916,9 @@ template <typename T> static void cc_paint(T *g, bool full, int vh)
     s_cc_vp0 = CC_BODY_Y; s_cc_vp1 = vh;
     cc_clip_body(g);
     for (int line = 0; line < CC_NLINES; line++) {
-        int oy = CC_BODY_Y + CC_CARD_Y[line] - s_cc_scroll;
-        if (oy + CC_CARD_H[line] <= s_cc_vp0 || oy >= s_cc_vp1) continue;   // fully out of view
+        if (!cc_line_on(line)) continue;
+        int oy = CC_BODY_Y + cc_card_y(line) - s_cc_scroll;
+        if (oy + cc_card_h(line) <= s_cc_vp0 || oy >= s_cc_vp1) continue;   // fully out of view
         switch (line) {
             case CL_TILES:
                 for (int i = 0; i < CC_NTILES; i++) cc_tile(g, i, oy, full);
@@ -1798,6 +1926,7 @@ template <typename T> static void cc_paint(T *g, bool full, int vh)
                 break;
             case CL_BRIGHT: cc_slider(g, 0, oy, full); break;
             case CL_VOLUME: cc_slider(g, 1, oy, full); break;
+            case CL_XBRIGHT: cc_slider(g, 2, oy, full); break;
             default:
                 for (int i = 0; i < CC_NSHORT; i++) cc_short(g, i, oy, full);
                 cc_card_caption(g, CL_SHORT, CC_X0 + 2, oy + CC_SHORT_CAP, full);
@@ -1808,12 +1937,18 @@ template <typename T> static void cc_paint(T *g, bool full, int vh)
     g->clearClipRect();
     if (full && lr_large()) {                                 // touch: a tile or a shortcut is its quick key 1..9
         nucleo_touch_clear();
-        int oy = CC_BODY_Y + CC_CARD_Y[CL_TILES] - s_cc_scroll;
+        nucleo_touch_add(0, 0, W, CC_BODY_Y + 3, NK_BACK, 0);              // the strip (and its X): close
+        int oy = CC_BODY_Y + cc_card_y(CL_TILES) - s_cc_scroll;
         for (int i = 0; i < CC_NTILES; i++)
-            nucleo_touch_add(CC_X0 + i * CC_TILE_P, oy, CC_TILE_P, CC_CARD_H[CL_TILES], NK_CHAR, (char)('1' + i));
-        oy = CC_BODY_Y + CC_CARD_Y[CL_SHORT] - s_cc_scroll;
+            nucleo_touch_add(CC_X0 + i * CC_TILE_P, oy, CC_TILE_P, cc_card_h(CL_TILES), NK_CHAR, (char)('1' + i));
+        if (cc_line_on(CL_XBRIGHT) && cc_cal_ok())                             // [Calibra] (before the card's field)
+            nucleo_touch_add(CC_X0 + CC_XW - 10 - CC_CAL_W, CC_BODY_Y + cc_card_y(CL_XBRIGHT) - s_cc_scroll, CC_CAL_W + 10,
+                             cc_card_h(CL_XBRIGHT), NK_CHAR, '0');
+        for (int line = CL_BRIGHT; line <= CL_VOLUME; line++)                  // sliders: tap where the value goes
+            if (cc_line_on(line)) nucleo_touch_add(CC_X0, CC_BODY_Y + cc_card_y(line) - s_cc_scroll, CC_XW, cc_card_h(line), NK_CHAR, NUCLEO_TOUCH_FIELD);
+        oy = CC_BODY_Y + cc_card_y(CL_SHORT) - s_cc_scroll;
         for (int i = 0; i < CC_NSHORT; i++)
-            nucleo_touch_add(CC_X0 + i * CC_SHORT_P, oy, CC_SHORT_P, CC_CARD_H[CL_SHORT], NK_CHAR, (char)('1' + CC_NTILES + i));
+            nucleo_touch_add(CC_X0 + i * CC_SHORT_P, oy, CC_SHORT_P, cc_card_h(CL_SHORT), NK_CHAR, (char)('1' + CC_NTILES + i));
         nucleo_touch_commit();
     }
 }

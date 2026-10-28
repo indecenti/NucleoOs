@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // model-io.js — the concrete I/O adapters that make model-fetch.js / sd-model-loader.js run for real against
 // the network (CDN) and the Cardputer device (/api/fs, /api/status). Everything heavy is parameterised
 // (fetchImpl, crypto) so these same factories run under Node for the host gate. The pure controllers never

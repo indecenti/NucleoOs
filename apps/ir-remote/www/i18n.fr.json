@@ -8,7 +8,7 @@
   "tab_tvb": "TV-B-Gone",
   "tab_find": "Auto-Find",
   "find_title": "Trouver votre TV",
-  "find_desc": "Pointez le Cardputer vers la TV et appuyez sur Démarrer : j'envoie les codes d'extinction un par un — confirmez quand elle s'éteint.",
+  "find_desc": "Pointez l'appareil vers la TV et appuyez sur Démarrer : j'envoie les codes d'extinction un par un — confirmez quand elle s'éteint.",
   "find_start": "Démarrer",
   "find_q": "La TV s'est-elle éteinte ?",
   "find_yes": "Oui, éteinte !",
@@ -93,5 +93,6 @@
   "b_vol_up": "Volume +", "b_vol_down": "Volume -", "b_mute": "Muet",
   "b_ch_up": "Chaîne +", "b_ch_down": "Chaîne -",
   "b_up": "Haut", "b_down": "Bas", "b_left": "Gauche", "b_right": "Droite", "b_ok": "OK",
-  "sd_read_failed": "Impossible de lire vos favoris et boutons enregistrés sur la SD : les modifications restent dans ce navigateur jusqu'à ce qu'elle soit de nouveau lisible."
+  "sd_read_failed": "Impossible de lire vos favoris et boutons enregistrés sur la SD : les modifications restent dans ce navigateur jusqu'à ce qu'elle soit de nouveau lisible.",
+  "st_no_ir": "démo — infrarouge non disponible sur cet appareil"
 }

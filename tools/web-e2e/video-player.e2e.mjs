@@ -99,10 +99,11 @@ test('video-player: a subtitle file name is text, and SRT timing is converted ex
     inp.dispatchEvent(new Event('change', { bubbles: true })); return true;
   })()`);
   await t.test('SRT timing and text survive the conversion', async () => {
-    const cues = await page.waitFor(`(() => { const tt = document.getElementById('v').textTracks[0]; return tt && tt.cues && tt.cues.length && [...tt.cues].map((c) => [c.startTime, c.endTime, c.text]); })()`, { timeout: 15000 });
+    // The player draws its own cues (nucleo-webos: the same overlay for every engine); window._vp reads them.
+    const cues = await page.waitFor(`(() => { const tt = window._vp && window._vp.subTracks[0]; return tt && tt.cues.length && tt.cues; })()`, { timeout: 15000 });
     assert.deepEqual(cues, [[1.5, 3, 'Ciao <i>mondo</i>'], [4, 5.25, '1984'], [60, 62, 'Last line']],
       'every cue keeps its timing (comma → dot) and its text — a line that is only a number is dialogue, not a cue index');
-    assert.equal(await page.eval(`document.getElementById('v').textTracks[0].language`), 'it', 'the .it. in the name is the track language');
+    assert.equal(await page.eval(`window._vp.subTracks[0].lang`), 'it', 'the .it. in the name is the track language');
   });
 
   await t.test('the subtitle menu lists the track by its name, as text', async () => {
@@ -122,7 +123,11 @@ test('video-player: the SD browser shows folder names as text and opens the pick
   const page = await open(browser, sim);
   assert.ok(await page.waitFor(`document.getElementById('sd-status-text').textContent !== ${JSON.stringify(EN.sdDash)}`, { timeout: 45000 }), 'the app started');
   await page.eval(key('o', { ctrlKey: true, shiftKey: true }));     // Ctrl+Shift+O = open from SD
-  const dir = `[...document.querySelectorAll('#explorer-list .explorer-item')].find((li) => li.querySelector('.explorer-name').textContent === 'R&amp;D')`;
+  const item = (n) => `[...document.querySelectorAll('#explorer-list .explorer-item')].find((li) => li.querySelector('.explorer-name').textContent === ${JSON.stringify(n)})`;
+  const dir = item('R&amp;D');
+  // The browser opens at the card root (nucleo-webos: every edition's layout); the user's files are under data/.
+  assert.ok(await page.waitFor(`!!${item('data')}`, { timeout: 15000 }), 'the card root lists data/');
+  await page.eval(`${item('data')}.click(), true`);
   assert.ok(await page.waitFor(`!!${dir}`, { timeout: 15000 }), 'the folder is listed under its literal name');
   await page.eval(`${dir}.click(), true`);
   const crumbs = await page.waitFor(`(() => { const s = [...document.querySelectorAll('#modal-crumbs .crumbs-seg')]; return s.length === 3 && s.map((e) => e.textContent); })()`, { timeout: 15000 });
@@ -133,9 +138,8 @@ test('video-player: the SD browser shows folder names as text and opens the pick
   assert.equal(await page.waitFor(PLAYING, { timeout: 15000 }), '/data/R&amp;D/demo.mp4', 'the picked file plays from the right path');
   assert.equal(await page.eval(`document.querySelectorAll('#playlist-items .playlist-chip').length`), 2, 'its folder became the playlist');
   // The breadcrumb's data-path must round-trip too: clicking "R&amp;D" lists that folder again (not "R&D").
+  // Reopened while a file from it plays, the browser starts in that folder.
   await page.eval(key('o', { ctrlKey: true, shiftKey: true }));
-  await page.waitFor(`!!${dir}`, { timeout: 15000 });
-  await page.eval(`${dir}.click(), true`);
   await page.waitFor(`document.querySelectorAll('#modal-crumbs .crumbs-seg').length === 3`, { timeout: 15000 });
   await page.eval(`[...document.querySelectorAll('#modal-crumbs .crumbs-seg')][2].click(), true`);
   assert.ok(await page.waitFor(`[...document.querySelectorAll('#explorer-list .explorer-name')].some((e) => e.textContent === 'demo.mp4')`, { timeout: 15000 }),

@@ -1,4 +1,5 @@
 <!doctype html>
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -10,6 +11,10 @@
     :root { color-scheme: dark; } html[data-theme="light"] { color-scheme: light; }
   :root { --bg:#0b1220; --panel:#18233a; --panel2:#1f2d4a; --accent:#4ea1ff;
           --text:#e8eefc; --muted:#8aa0c8; --line:#2a3a5e; --danger:#ff8093; }
+  html[data-theme="light"] {
+    --bg:#eef2fb; --panel:#ffffff; --panel2:#e6ecf8; --accent:#2b6fd6;
+    --text:#10203a; --muted:#5a6a86; --line:#cdd8ee; --danger:#c0392b;
+  }
   * { box-sizing: border-box; }
   html, body { height: 100%; margin: 0; }
   body { font: 14px/1.4 system-ui, "Segoe UI", Roboto, sans-serif; color: var(--text);
@@ -58,6 +63,23 @@
   const TRASH_DB = '/system/config/trash.json';
   const api = (op, path, opts = {}) =>
     fetch('/api/fs/' + op + '?path=' + encodeURIComponent(path), opts);
+  // An atomic rename restores files AND folders and never pulls the bytes through the tab (a folder
+  // cannot be read back with /api/fs/read at all). `overwrite=1` so a re-created original yields.
+  const move = (from, to) =>
+    fetch('/api/fs/move?from=' + encodeURIComponent(from) + '&to=' + encodeURIComponent(to) + '&overwrite=1', { method: 'POST' });
+  const isPairErr = (r) => r && r.status === 401;
+
+  // OS theme: apply the persisted choice at boot; the shell also live-injects CSS vars, but only on
+  // switch and never standalone. A missing settings.json leaves the default dark palette in place.
+  async function loadTheme() {
+    try {
+      const r = await api('read', '/system/config/settings.json');
+      if (!r.ok) return;
+      const s = JSON.parse(await r.text());
+      if (s?.ui?.theme) document.documentElement.dataset.theme = s.ui.theme;
+    } catch {}
+  }
+  loadTheme();
   const GLYPH = { txt:'📄', md:'📄', json:'📄', log:'📜', png:'🖼️', jpg:'🖼️', jpeg:'🖼️', gif:'🖼️',
                   mp3:'🎵', wav:'🎵', mp4:'🎬', webm:'🎬', pdf:'📕', zip:'🗜️', jsdos:'🕹️' };
   const glyph = (n) => GLYPH[(n.split('.').pop() || '').toLowerCase()] || '📄';
@@ -103,15 +125,29 @@
     return db;
   }
 
+  // Put one trashed entry back: the atomic move first; if the backend refuses it for any reason but
+  // pairing, the byte copy (a FILE only: a failed read is never written over the original).
+  // Returns the failing response's status ('pair' for 401), or '' on success.
+  async function putBack(item) {
+    const m = await move(item.trash, item.orig).catch(() => null);
+    if (m && m.ok) return '';
+    if (isPairErr(m)) return 'pair';
+    const r = await api('read', item.trash);
+    if (isPairErr(r)) return 'pair';
+    if (!r.ok) return 'fail';
+    const buf = await r.arrayBuffer();
+    const w = await api('write', item.orig, { method: 'POST', body: buf });
+    if (isPairErr(w)) return 'pair';
+    if (!w.ok) return 'fail';
+    await api('delete', item.trash, { method: 'POST' });
+    return '';
+  }
+
   async function restore(item) {
     try {
       if (!await loadDbForChange()) return;
-      const r = await api('read', item.trash);
-      if (!r.ok) { toast(t('toast_restore_failed')); render(); return; }
-      const buf = await r.arrayBuffer();
-      const w = await api('write', item.orig, { method: 'POST', body: buf });
-      if (!w.ok) { toast(t('toast_restore_failed')); render(); return; }
-      await api('delete', item.trash, { method: 'POST' });
+      const why = await putBack(item);
+      if (why) { toast(t(why === 'pair' ? 'toast_pair_needed' : 'toast_restore_failed')); render(); return; }
       const db = await loadDbForChange();
       if (db) { db.items = db.items.filter((i) => i.trash !== item.trash); await saveDb(db); }
       toast(t('toast_restored_to', { path: item.orig }));
@@ -125,6 +161,7 @@
     if (!db) { render(); return; }
     try {
       const r = await api('delete', item.trash, { method: 'POST' });
+      if (isPairErr(r)) { toast(t('toast_pair_needed')); render(); return; }
       // 404 = the file is already gone: dropping its stale entry is right. Anything else: keep it listed.
       if (!r.ok && r.status !== 404) { toast(t('toast_delete_failed')); render(); return; }
     } catch { toast(t('toast_delete_failed')); render(); return; }
@@ -136,24 +173,23 @@
     if (!db) { render(); return; }
     const failed = [];
     for (const item of [...db.items]) {
-      try {
-        const r = await api('read', item.trash);
-        if (!r.ok) { failed.push(item); continue; }
-        const buf = await r.arrayBuffer();
-        const w = await api('write', item.orig, { method: 'POST', body: buf });
-        if (!w.ok) { failed.push(item); continue; }
-        await api('delete', item.trash, { method: 'POST' });
-      } catch { failed.push(item); }
+      try { if (await putBack(item)) failed.push(item); } catch { failed.push(item); }
     }
     await saveDb({ items: failed });
-    toast(failed.length ? t('toast_restore_failed') : t('toast_restored_all')); render();
+    toast(failed.length ? t('toast_restore_partial', { count: failed.length }) : t('toast_restored_all')); render();
   }
   async function empty() {
     const db = await loadDbForChange();
     if (!db) { render(); return; }
     if (db.items.length && !confirm(t('confirm_empty', { count: db.items.length }))) return;
-    for (const item of db.items) { try { await api('delete', item.trash, { method: 'POST' }); } catch {} }
-    await saveDb({ items: [] }); toast(t('toast_bin_emptied')); render();
+    // A file whose delete failed stays listed: dropping its entry would orphan it in the trash folder.
+    const kept = [];
+    for (const item of db.items) {
+      const r = await api('delete', item.trash, { method: 'POST' }).catch(() => null);
+      if (isPairErr(r)) { toast(t('toast_pair_needed')); render(); return; }
+      if (!r || (!r.ok && r.status !== 404)) kept.push(item);
+    }
+    await saveDb({ items: kept }); toast(t(kept.length ? 'toast_delete_failed' : 'toast_bin_emptied')); render();
   }
 
   function row(item) {
@@ -202,7 +238,11 @@
   window.addEventListener('message', (e) => {
     const d = e.data;
     if (!d) return;
-    if (d.t === 'fs.changed' && d.d && typeof d.d.path === 'string' && d.d.path.endsWith('trash.json')) render();
+    if (d.type === 'set-theme' && d.theme) { document.documentElement.dataset.theme = d.theme; return; }
+    if (d.t === 'fs.changed' && d.d && typeof d.d.path === 'string') {
+      if (d.d.path.endsWith('trash.json')) render();
+      if (d.d.path.endsWith('settings.json')) loadTheme();
+    }
     if (d.type === 'os-shortcut' && d.action === 'refresh') render();
   });
   // Re-render so imperatively-built strings (count, row buttons) follow a live language switch.

@@ -23,7 +23,7 @@
 
   "badge_default": "predeterminada",
   "badge_browser_only": "solo navegador",
-  "badge_browser_only_title": "https se escucha en el navegador pero no en el Cardputer",
+  "badge_browser_only_title": "https se escucha en el navegador pero no en el dispositivo",
   "act_set_default": "Marcar como predeterminada del dispositivo",
   "act_move_up": "Subir",
   "act_move_down": "Bajar",
@@ -35,8 +35,8 @@
   "f_genre": "Género / lema",
   "f_genre_ph": "Ambient / Downtempo",
   "f_stream": "URL del stream",
-  "note_stream": "El MP3 http:// simple se escucha también en el Cardputer. https:// funciona aquí pero no en el dispositivo.",
-  "note_stream_warn": "⚠ https se escucha en el navegador pero NO en el Cardputer (sin TLS). Usa http:// para el soporte en el dispositivo.",
+  "note_stream": "El MP3 http:// simple se escucha también en el dispositivo. https:// funciona aquí pero no en el dispositivo.",
+  "note_stream_warn": "⚠ https se escucha en el navegador pero NO en el dispositivo (sin TLS). Usa http:// para el soporte en el dispositivo.",
   "note_stream_invalid": "⚠ Escribe la dirección completa del stream, p. ej. http://host:8000/stream",
   "f_np": "URL de now-playing",
   "optional": "(opcional)",
@@ -45,12 +45,12 @@
   "err_https": "⚠ stream https bloqueado aquí — pero se reproducirá en el dispositivo si es accesible.",
   "err_unreachable": "⚠ stream inaccesible desde el navegador (puede que aún funcione en el dispositivo).",
 
-  "info_lead": "Radio por internet en vivo y gratuita para NucleoOS. Una única lista de emisoras, compartida entre esta app y la app Radio de tu Cardputer.",
+  "info_lead": "Radio por internet en vivo y gratuita para NucleoOS. Una única lista de emisoras, compartida entre esta app y la app Radio de tu dispositivo.",
   "info_add": "<b>Añade una emisora.</b> Toca <b>Añadir emisora</b>, dale un nombre y pega un URL de stream directo (un stream MP3). Se une a la lista en todas partes al instante.",
-  "info_star": "<b>Marca la predeterminada del dispositivo.</b> La emisora con la estrella es la que tu Cardputer sintoniza en el momento en que abres su app Radio.",
+  "info_star": "<b>Marca la predeterminada del dispositivo.</b> La emisora con la estrella es la que tu dispositivo sintoniza en el momento en que abres su app Radio.",
   "info_listen": "<b>Escucha aquí.</b> Reproduce cualquier emisora en el navegador. Si ofrece información del tema, verás el artista, el título y una barra de progreso.",
   "info_reorder": "<b>Reordena y edita.</b> Usa ⌃⌄ para reordenar, ✎ para editar, 🗑 para eliminar. Cada cambio se guarda en el dispositivo en el instante en que lo haces.",
-  "info_device_note": "<b>Nota sobre el dispositivo:</b> el Cardputer solo reproduce streams MP3 <b>http://</b> simples — no tiene espacio para HTTPS junto al decodificador de audio. Las emisoras <b>https://</b> se marcan como <b>“solo navegador”</b>: se escuchan aquí pero no funcionan en el dispositivo. Las emisoras gratuitas seleccionadas provienen de <b>SomaFM</b>.",
+  "info_device_note": "<b>Nota sobre el dispositivo:</b> el dispositivo solo reproduce streams MP3 <b>http://</b> simples — no tiene espacio para HTTPS junto al decodificador de audio. Las emisoras <b>https://</b> se marcan como <b>“solo navegador”</b>: se escuchan aquí pero no funcionan en el dispositivo. Las emisoras gratuitas seleccionadas provienen de <b>SomaFM</b>.",
   "keyboard": "Teclado",
   "keys_help": "<kbd>↑</kbd><kbd>↓</kbd> seleccionar · <kbd>Intro</kbd> reproducir · <kbd>Espacio</kbd> reproducir/pausa · <kbd>n</kbd>/<kbd>p</kbd> sig./ant.",
   "got_it": "Entendido",
@@ -65,6 +65,6 @@
   "toast_saved_changes": "Cambios guardados",
   "toast_added": "Añadida “{name}”",
   "confirm_remove": "¿Eliminar “{name}” de la lista de emisoras?",
-  "read_failed": "No se pudieron leer tus emisoras del Cardputer: la edición está en pausa para no sobrescribirlas. Inténtalo de nuevo en breve.",
-  "read_corrupt": "El archivo de emisoras del Cardputer no se puede leer: no lo modifico para no perderlo."
+  "read_failed": "No se pudieron leer tus emisoras del dispositivo: la edición está en pausa para no sobrescribirlas. Inténtalo de nuevo en breve.",
+  "read_corrupt": "El archivo de emisoras del dispositivo no se puede leer: no lo modifico para no perderlo."
 }

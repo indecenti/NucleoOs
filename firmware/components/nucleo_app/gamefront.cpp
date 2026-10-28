@@ -803,15 +803,15 @@ bool gamefront_step(void) { return false; }   // instant snap (no per-frame deco
 // ---- two screens: the gallery on the external 320x240 panel, the game's card on the Cardputer -------------
 // Drawn straight to the panel with NO buffer: the dark backdrop is painted once on entry and only the parts
 // that change per game are repainted (counter, cover, title, mode pills), each over its own box — no
-// full-screen clear, so no flicker and few bytes on the shared SPI bus. Touch is the large surface's own:
-// the top bar goes back, the sides step, the centre plays.
+// full-screen clear, so no flicker and few bytes on the shared SPI bus. Touch: the Back button in the bar
+// (the bar's left part) goes back, the side gutters step, the cover plays.
 #define LG_W     320
 #define LG_H     240
-#define LG_BAR    24
+#define LG_BAR    30
 #define LG_BOX_W  (2 * HERO_W)        // the cached cover doubled pixel for pixel: 256x144 (16:9)
 #define LG_BOX_H  (2 * HERO_H)
 #define LG_BOX_X  ((LG_W - LG_BOX_W) / 2)
-#define LG_BOX_Y  (LG_BAR + 6)
+#define LG_BOX_Y  (LG_BAR + 2)
 #define LG_TITLE_Y (LG_BOX_Y + LG_BOX_H + 6)
 #define LG_PILL_Y  (LG_TITLE_Y + 28)
 
@@ -837,8 +837,11 @@ static void render_large(void)
         d.fillScreen(BG);
         d.fillRect(0, 0, LG_W, LG_BAR, INK);
         d.drawFastHLine(0, LG_BAR - 1, LG_W, LINE);
+        const int bh = LG_BAR - 6, ay = LG_BAR / 2;                 // the Back button, as on the launcher
+        d.fillRoundRect(3, 3, 44, bh, bh / 2, LINE);
+        for (int k = 0; k < 3; k++) { d.drawLine(29 + k, ay - 7, 22 + k, ay, FG); d.drawLine(22 + k, ay, 29 + k, ay + 7, FG); }
         d.setFont(&fonts::Font2); d.setTextColor(MUTED, INK);
-        d.setCursor(8, (LG_BAR - 16) / 2); d.print(GT("GIOCHI", "GAMES"));
+        d.setCursor(56, (LG_BAR - 16) / 2); d.print(GT("Giochi", "Games"));
     }
     // Counter (or the filter being typed), right-aligned in the bar.
     d.fillRect(LG_W / 2, 0, LG_W / 2, LG_BAR - 1, INK);
@@ -857,6 +860,7 @@ static void render_large(void)
         d.setFont(&fonts::Font4); d.setTextColor(DIM, BG);
         d.setCursor((LG_W - (int)d.textWidth(m)) / 2, LG_H / 2 - 13); d.print(m);
         d.setFont(&fonts::Font0); d.endWrite();
+        nucleo_touch_clear(); nucleo_touch_add(0, 0, 110, LG_BAR + 4, NK_BACK, 0); nucleo_touch_commit();
         nucleo_extdisp_draw_internal(gf_info_cb);
         return;
     }
@@ -929,7 +933,12 @@ static void render_large(void)
     }
     d.setFont(&fonts::Font0); d.setTextSize(1);
     d.endWrite();
-    nucleo_touch_clear(); nucleo_touch_commit();   // the large surface's own zones (top / sides / centre)
+    nucleo_touch_clear();                          // Back button, the gutters step, the cover plays
+    nucleo_touch_add(0, 0, 110, LG_BAR + 4, NK_BACK, 0);
+    nucleo_touch_add(0, LG_BAR + 4, cbox.x, LG_H - LG_BAR - 4, NK_LEFT, 0);
+    nucleo_touch_add(cbox.x + cbox.w, LG_BAR + 4, LG_W - cbox.x - cbox.w, LG_H - LG_BAR - 4, NK_RIGHT, 0);
+    nucleo_touch_add(cbox.x, LG_BAR + 4, cbox.w, LG_H - LG_BAR - 4, NK_ENTER, 0);
+    nucleo_touch_commit();
     nucleo_extdisp_draw_internal(gf_info_cb);     // the Cardputer: tagline + modes of this game
 }
 

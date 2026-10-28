@@ -468,6 +468,8 @@ extern "C" void nucleo_register_theme(void);   // app_theme.cpp — replaces the
 extern "C" void nucleo_register_reactor(void); // app_reactor.cpp — Games: reactor-management game
 extern "C" void nucleo_register_constellations(void); // app_constellations.cpp — Games: space-trader
 extern "C" bool nucleo_store_app_is_native(const char *id);          // store_apps.cpp
+extern "C" const char *nucleo_native_loaded(void);                  // native_apps.cpp: the resident module's id
+extern "C" unsigned nucleo_native_flags(void);                      // ...and its NAP_FLAG_*
 extern "C" void nucleo_store_app_prepare(nucleo_app_def_t *slot);    // store_apps.cpp: load a native app's module
 extern "C" void nucleo_register_sandgarden(void);     // app_sandgarden.cpp — Games: falling-sand garden
 extern "C" void nucleo_register_slots(void);          // app_slots.cpp — Games: slot machine
@@ -1142,6 +1144,10 @@ static void handle_launcher(int k, char ch)
 {
     int s = launcher_sel();
     int cols = launcher_render_large_cols();     // >0 on the external panel: a 2-D grid, not the 1-D rail
+    if (k == NK_CHAR && (ch == NUCLEO_TOUCH_VIEW_BACK || ch == NUCLEO_TOUCH_VIEW_FWD)) {   // a drag on the grid
+        if (launcher_render_grid_view(ch == NUCLEO_TOUCH_VIEW_FWD ? 1 : -1)) s_dirty = true;
+        return;
+    }
     if (nucleo_touch_is_row(k, ch)) {            // the panel: a tapped tile opens straight away
         int i = launcher_render_grid_first() + (ch - NUCLEO_TOUCH_ROW);
         if (i >= 0 && i < launcher_visible_count()) { launcher_set_sel(i); launcher_open_focused(); }
@@ -2207,7 +2213,10 @@ void nucleo_app_run(void)
             continue;
         }
 
-        nucleo_key_t nk = nucleo_kbd_read();
+        // A key read ahead while coalescing a drag (below) and not part of it: it is the next key, in order.
+        static nucleo_key_t s_held = { NK_NONE, 0 };
+        nucleo_key_t nk = s_held.key != NK_NONE ? s_held : nucleo_kbd_read();
+        s_held = nucleo_key_t{ NK_NONE, 0 };
         if (nk.key != NK_NONE) {
             last_act = now;                      // any key counts as activity (resets the idle screen-off timer)
             // Capture: Fn+P is an OS-wide screenshot -> a real full-frame image in /data/Screenshots
@@ -2290,6 +2299,13 @@ void nucleo_app_run(void)
                 // its content really changed (category/filter/Wi-Fi/hint) — not on every scroll key, which
                 // re-wiped the static bars and flickered. ANTI-FLICKER.md rule 69.
                 handle_launcher(nk.key, nk.ch);
+                // A drag queues a key per few px: apply every queued step, paint once (as for apps below).
+                for (int q = 0; q < 24 && nk.key == NK_CHAR && (nk.ch == NUCLEO_TOUCH_VIEW_BACK || nk.ch == NUCLEO_TOUCH_VIEW_FWD); q++) {
+                    nucleo_key_t more = nucleo_kbd_read();
+                    if (more.key == NK_NONE) break;
+                    if (more.key != NK_CHAR || (more.ch != NUCLEO_TOUCH_VIEW_BACK && more.ch != NUCLEO_TOUCH_VIEW_FWD)) { s_held = more; break; }
+                    handle_launcher(more.key, more.ch);
+                }
                 if (launcher_render_chrome_changed()) s_chrome_dirty = true;
             } else if (nk.key == NK_BACK || nk.key == NK_LEFT) {
                 // The app may intercept Back/Left (e.g. ANIMA's sheet returns to its chat); only
@@ -2297,6 +2313,16 @@ void nucleo_app_run(void)
                 if (!(s_app_back && s_app_back(nk.key))) close_app();
             } else {
                 const nucleo_app_def_t *def = active_def(); if (def && def->on_key) def->on_key(nk.key, nk.ch);
+                // A drag on a view-scroll list queues one key per few px, faster than a frame is painted: apply
+                // every queued step now and paint once, so the list keeps up with the finger. A different key
+                // read here waits in s_held and is handled next, exactly as if it had not been read.
+                const bool view = nk.key == NK_CHAR && (nk.ch == NUCLEO_TOUCH_VIEW_BACK || nk.ch == NUCLEO_TOUCH_VIEW_FWD);
+                for (int q = 0; view && def && def->on_key && q < 24; q++) {
+                    nucleo_key_t more = nucleo_kbd_read();
+                    if (more.key == NK_NONE) break;
+                    if (more.key != NK_CHAR || (more.ch != NUCLEO_TOUCH_VIEW_BACK && more.ch != NUCLEO_TOUCH_VIEW_FWD)) { s_held = more; break; }
+                    def->on_key(more.key, more.ch);
+                }
             }
         }
         
@@ -2370,6 +2396,27 @@ void nucleo_app_run(void)
         if (s_active == -1 && !s_gamefront && !s_control_center && !s_torch && !s_voice_dark && launcher_render_step_scroll()) s_dirty = true;
         if (s_control_center && !s_torch && !s_voice_dark && launcher_render_control_center_animating()) s_dirty = true;   // CC scroll easing
         if (s_gamefront && !s_control_center && !s_torch && !s_voice_dark && gamefront_step()) s_dirty = true;
+
+        if (nucleo_extdisp_take_repaint()) nucleo_app_force_repaint();   // the calibration screen covered the panel
+
+        // The system bar (Back + the app's name) over a store app on the panel: built-ins draw their own Back
+        // (lg::header / lg::back); a native module from the store gets the bar unless it declares NAP_FLAG_NO_HUD.
+        {
+            static const char *s_hud_for = nullptr;
+            const nucleo_app_def_t *fg = s_active >= 0 ? &s_apps[s_active] : nullptr;
+            const bool hud = fg && fg->on_draw_large && nucleo_surface_large() && nucleo_store_app_is_native(fg->id) &&
+                             nucleo_native_loaded()[0] && !strcmp(nucleo_native_loaded(), fg->id) &&
+                             !(nucleo_native_flags() & 0x0002u /* NAP_FLAG_NO_HUD */);
+            const char *want = hud ? fg->id : nullptr;
+            if (!nucleo_surface_large()) s_hud_for = nullptr;      // leaving the large surface took the bar away
+            if (want != s_hud_for) {
+                if (nucleo_extdisp_set_hud(hud ? fg->name : nullptr, fg ? fg->color : 0)) {   // the surface changed size
+                    d.fillScreen(BG);
+                    nucleo_app_force_repaint();
+                }
+                s_hud_for = want;
+            }
+        }
 
         // Primary surface. Only the launcher home lays itself out at 320x240 so far: it takes the large surface
         // whenever an external panel can host it, and every other screen (apps, Control Center, GameFront,

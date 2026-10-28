@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // readiness.js — "Air-Gap Readiness" auditor for ANIMA Forge engines. THE unifying lens over the
 // offline story: given an engine, an injected presence/integrity PROBE over its SD runtime-lib closure,
 // the WEIGHTS cache status (model-store), and the client CAPS, it classifies whether that engine can

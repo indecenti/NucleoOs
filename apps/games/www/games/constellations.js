@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // constellations.js — "Costellazioni 3D": the web Game Center continuation of the Cardputer space
 // game. It CONTINUES THE SAME RUN: loads /sd/data/costellazioni/save.bin via the firmware endpoint
 // (constellations-save.js), regenerates the current sector from (seed, sector) with the SHARED
@@ -25,6 +26,10 @@ import { ENTRIES, BY_ID, entriesOf, CATS } from '/apps/games/games/constellation
 const G_RELIQ = 6, F_CUSTODI = 1;   // relic good index / Keepers faction (beacon relight bookkeeping)
 let conflictPending = null;          // set by persist() when the device advanced the run (-> conflict screen)
 let BOOTED = false;                  // true once the initial loadSave settles (continue vs new-run)
+// games.native-save: only the Cardputer firmware shares this run. Asked from the device's capability list; without
+// it no request is made (a new run each time, as a 404 would give). If the list itself cannot be loaded, the
+// endpoint decides as before (GET 404 = new run, a failed POST is only logged).
+const NATIVE = import('/nucleo-caps.js').then((m) => m.default.has('games.native-save'), () => true);
 
 // ---- shared module state (one active run at a time) --------------------------------------------
 let RUN = null;            // the campaign save (credits, hull, seed, sector, ...)
@@ -48,7 +53,7 @@ function rebuildSector() {
   if (WEB) { if (markVisited(WEB, RUN.sector, RUN.sys)) saveWeb(WEB); codexOnSystem(); }
 }
 async function bootRun() {
-  RUN = await loadSave();                 // continue the Cardputer run, or null -> offer a New Run
+  RUN = (await NATIVE) ? await loadSave() : null;   // continue the Cardputer run, or null -> offer a New Run
   SYNCED = RUN ? JSON.parse(JSON.stringify(RUN)) : null;
   if (RUN) { WEB = await loadWeb(RUN.seed); codexStart(); }
   BOOTED = true;
@@ -117,6 +122,7 @@ function onLoot(v) {
   saveWeb(WEB); persist();
 }
 async function persist() {
+  if (!(await NATIVE)) return;           // no shared run on this device: nothing to write
   DIRTY = true;                          // mark the latest RUN as needing a write
   if (SAVING) return;                    // a POST is already running; it will flush the new delta below
   SAVING = true;

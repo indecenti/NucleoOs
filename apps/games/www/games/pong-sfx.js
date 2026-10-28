@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // pong-sfx.js — procedural sound for Pong. 100% synthesized via the Web Audio API: no asset files on
 // SD, nothing to download. Each event (paddle hit, wall, score, power-up, shield, win) is a tiny burst
 // of oscillators/noise through a shared master bus with a soft limiter. There's also an optional ambient

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // ANIMA Local — the device's offline cascade, compiled to WebAssembly, running in THIS browser.
 //
 // This is a DROP-IN substitute for the Cardputer's offline tier: the knowledge pack is downloaded

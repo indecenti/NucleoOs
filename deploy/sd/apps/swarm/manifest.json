@@ -1,8 +1,9 @@
 {
   "id": "swarm",
   "name": "Swarm",
-  "version": "0.1.0",
-  "description": "Federate nearby Cardputers over ESP-NOW: shared clipboard, peers and events.",
+  "version": "0.1.1",
+  "version_code": 1,
+  "description": "Federate nearby devices over ESP-NOW: shared clipboard, peers and events.",
   "category": "connectivity",
   "runtime": "service",
   "entry_service": "swarm_main",

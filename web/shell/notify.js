@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // System Notification Center — the web backbone of NucleoOS notifications.
 // One contract, N producers, 2 surfaces (the web here; the device is the native twin).
 // See docs/notify-protocol.md. Lazily loaded by shell.js like copilot.js.
@@ -76,6 +77,7 @@ export function initNotify(OS_API) {
   const tray = document.getElementById('tray');
   const bell = document.createElement('span');
   bell.id = 'notif-bell'; bell.title = t('nc_title'); bell.setAttribute('role', 'button');
+  bell.tabIndex = 0; bell.setAttribute('aria-label', t('nc_title'));   // keyboard-reachable
   bell.innerHTML =
     '<svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true">' +
     '<path d="M4 6.5a4 4 0 0 1 8 0c0 3 1 4 1.4 4.5H2.6C3 10.5 4 9.5 4 6.5z" stroke-linejoin="round"/>' +
@@ -100,7 +102,8 @@ export function initNotify(OS_API) {
   document.body.appendChild(center);
   // Live language switch: retranslate the static chrome and re-render the open list.
   I18N.onChange(() => {
-    bell.title = t('nc_title');
+    bell.title = t('nc_title'); bell.setAttribute('aria-label', t('nc_title'));
+    center.setAttribute('aria-label', t('nc_title'));
     center.querySelector('.nc-title').textContent = t('nc_title');
     dndBtn.title = t('nc_dnd_title');
     ambBtn.title = t('amb_toggle_title');
@@ -141,6 +144,7 @@ export function initNotify(OS_API) {
   function toggle() { isOpen() ? close() : open(); }
 
   bell.addEventListener('click', (e) => { e.stopPropagation(); toggle(); });
+  bell.addEventListener('keydown', (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggle(); } });
   document.addEventListener('click', (e) => {
     if (isOpen() && !center.contains(e.target) && !bell.contains(e.target)) close();
   });

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // provenance.js — tamper-evident provenance ledger for APPLIED artifacts, in the spirit of the
 // project's Verifiable Knowledge Ledger. Every agentic write appends an immutable, hash-chained
 // record: who/what generated it (substrate + model + pinned revision), the verdict it passed, the

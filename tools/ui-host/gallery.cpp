@@ -4,7 +4,7 @@
 // links that the host does not provide is an auto-generated "return 0" stub, so any app renders without
 // hand-written stubs; an app that needs real data gets it from its scene file (tools/ui-host/apps/<id>.txt).
 //   gallery_<id>.exe <outdir> <shot> <variant: compact|companion|large> <lang> [key tokens...]
-// Key tokens: U D L R ENTER BACK TAB DEL SPACE | c:<ch> | t:<text> | row:<n> (a tapped list row) | tap:<x>,<y> (a field tap) |
+// Key tokens: U D L R ENTER BACK TAB DEL SPACE | c:<ch> | t:<text> | row:<n> (a tapped list row) | tap:<x>,<y> (a field tap) | touch:<x>,<y> (the target under it) | view:<n> (n drag steps on a view-scroll list) |
 //             tick:<n> (n on_tick calls, 200 ms each) | adv
 #include <M5GFX.h>
 #include "host_state.h"
@@ -109,6 +109,24 @@ static void token(const char *t)
     if (!strncmp(t, "tap:", 4)) {                       // a tap on a field at x,y (panel pixels): NUCLEO_TOUCH_FIELD
         if (sscanf(t + 4, "%d,%d", &s_tap_x, &s_tap_y) != 2) { fprintf(stderr, "bad tap token '%s'\n", t); exit(3); }
         key(NK_CHAR, NUCLEO_TOUCH_FIELD); return;
+    }
+    if (!strncmp(t, "touch:", 6)) {                     // a finger at x,y: whichever committed target is under it
+        int x, y;
+        if (sscanf(t + 6, "%d,%d", &x, &y) != 2) { fprintf(stderr, "bad touch token '%s'\n", t); exit(3); }
+        if (!g_host.large || !s_app || !s_app->on_draw_large) return;   // no panel in this look: nothing to touch
+        d.startWrite(); s_app->on_draw_large(); d.endWrite();   // the panel as the finger sees it: its targets
+        for (int i = 0; i < s_tcn; i++) {
+            const TRect &r = s_tc[i];
+            if (r.scroll || x < r.x || y < r.y || x >= r.x + r.w || y >= r.y + r.h) continue;
+            s_tap_x = x; s_tap_y = y; key(r.key, r.ch); return;
+        }
+        fprintf(stderr, "touch %d,%d: no target there\n", x, y); exit(3);
+    }
+    if (!strncmp(t, "view:", 5)) {                      // a drag on a view-scroll list: n steps (+ = content up)
+        int n = atoi(t + 5);
+        if (g_host.large && s_app && s_app->on_draw_large) { d.startWrite(); s_app->on_draw_large(); d.endWrite(); }   // what is dragged
+        for (int i = 0; i < (n < 0 ? -n : n); i++) key(NK_CHAR, n < 0 ? NUCLEO_TOUCH_VIEW_BACK : NUCLEO_TOUCH_VIEW_FWD);
+        return;
     }
     if (!strncmp(t, "tick:", 5)) { tick(atoi(t + 5)); return; }
     fprintf(stderr, "unknown key token '%s'\n", t);

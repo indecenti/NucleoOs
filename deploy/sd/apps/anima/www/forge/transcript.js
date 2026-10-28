@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // transcript.js — the pure VIEW-MODEL for the ANIMA chat: it turns a canonical Envelope v1 into the
 // exact, deterministic shapes the renderer paints (substrate chip, verdict chip, reasoning trace,
 // grounding list, reply, awaiting) and computes the mode-dial segments. No DOM, no styling, no

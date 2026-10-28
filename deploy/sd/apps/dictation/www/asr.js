@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // ===========================================================================
 // On-device-mic speech-to-text for the Dictation app — runs entirely in the
 // browser. The Cardputer's PDM mic is streamed as raw PCM over /api/rec/stream
@@ -14,7 +15,7 @@
 // ===========================================================================
 
 import { streamMic } from '/micgate.js';   // OS-wide single-owner gate for the Cardputer mic
-import { whisperUrl } from '/ai.js';        // the ONE Whisper endpoint builder (Groq only serves it under /openai/v1)
+import { whisperUrl, isVaultKey } from '/ai.js';   // the ONE Whisper endpoint builder (Groq only serves it under /openai/v1)
 import { readMode } from '/anima-mode.js';  // the OS-wide mode: Private = no audio leaves this computer
 
 // Shared Vosk assets live next to the ANIMA app (same origin, absolute paths so they
@@ -222,11 +223,12 @@ async function transcribeAudioSegment(wavBlob, lang, key, base) {
 
   const url = whisperUrl(base);   // the old rewrite dropped /openai from Groq's base — a 404: Groq Whisper never worked here
   
-  const response = await fetch(url, {
+  // A sealed vault's placeholder (VAULT_KEY) is never sent: the device relay adds the saved key for this host
+  // and passes the multipart body as it is. A key held by this browser goes direct, as before.
+  const vault = isVaultKey(key);
+  const response = await fetch(vault ? '/api/llm?url=' + encodeURIComponent(url) : url, {
     method: 'POST',
-    headers: {
-      'Authorization': 'Bearer ' + key
-    },
+    headers: vault ? {} : { 'Authorization': 'Bearer ' + key },
     body: formData
   });
 

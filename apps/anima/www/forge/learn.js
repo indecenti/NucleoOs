@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // learn.js — the SILENT LEARNING FLYWHEEL: distil a COMPLETED Forge interaction into a STAGED
 // knowledge candidate for the existing offline corpus, but ONLY when it is CERTAIN and USEFUL.
 // This is how the local generative substrate (M4) silently teaches the deterministic grounded

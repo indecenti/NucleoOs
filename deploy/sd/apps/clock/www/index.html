@@ -1,4 +1,5 @@
 <!doctype html>
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -146,7 +147,7 @@
   <button class="tab active" data-tab="clock"  data-i18n="tab_clock">Clock</button>
   <button class="tab"        data-tab="sw"      data-i18n="stopwatch">Stopwatch</button>
   <button class="tab"        data-tab="timer"   data-i18n="tab_timer">Timer</button>
-  <button id="gear" title="Settings">⚙</button>
+  <button id="gear" title="Settings" data-i18n-attr="title:settings;aria-label:settings">⚙</button>
 </div>
 
 <!-- ── Clock ── -->
@@ -222,6 +223,7 @@
 
 <script type="module">
 import I18N from '/nucleo-i18n.js';
+import Caps from '/nucleo-caps.js';   // what this device can do (time.set)
 const t = await I18N.init('clock');
 
 const $ = id => document.getElementById(id);
@@ -355,10 +357,10 @@ async function pollDevice(snap) {
         ? t('dev_synced_drift', { secs: Math.round(drift), hh, mm })
         : t('dev_synced', { hh, mm });
     } else {
-      // Push browser clock once as best-effort fallback (no auth needed, low risk)
+      // Push browser clock once as best-effort fallback (no auth needed, low risk), where the device can set it
       if (!timePushed) {
         timePushed = true;
-        try {
+        if (await Caps.has('time.set')) try {
           const ok = (await fetch('/api/time/set', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -506,8 +508,12 @@ $('t-pm1').onclick  = () => adjustTimer( 60000);
 showTimer(timerTotal);
 
 // ── Settings ──────────────────────────────────────────────────────────────────
-$('gear').onclick     = () => $('cfg').classList.add('open');
-$('cfgclose').onclick = () => $('cfg').classList.remove('open');
+const openCfg  = () => $('cfg').classList.add('open');
+const closeCfg = () => $('cfg').classList.remove('open');
+$('gear').onclick     = openCfg;
+$('cfgclose').onclick = closeCfg;
+$('cfg').addEventListener('click', (e) => { if (e.target === $('cfg')) closeCfg(); });   // click sul backdrop
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && $('cfg').classList.contains('open')) closeCfg(); });
 
 const PREF_OF = { o24: 'format24', osec: 'showSeconds', oanal: 'analog' };
 async function onPrefChange(e) {

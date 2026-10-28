@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // stelle/chunk.js — one terrain chunk as typed arrays (pure; the terrain worker runs it, the tests too).
 //
 // A chunk is one quadtree node of the cube-sphere (face f, level L, x, y): 33 x 33 vertices plus a skirt

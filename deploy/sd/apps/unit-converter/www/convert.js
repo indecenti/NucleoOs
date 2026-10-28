@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // convert.js — the PURE conversion engine + bilingual (EN/IT) natural-language parser for the
 // NucleoOS Unit Converter app. DOM-free and dependency-free, so it runs in the browser AND under
 // Node — the whole thing is host-testable (tools/anima-host/unit-converter.test.mjs). The app UI

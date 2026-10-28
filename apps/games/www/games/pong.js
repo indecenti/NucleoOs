@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // pong.js — full real-time Pong in 3D. 1v1 humans over the shared P2P transport, or 1-vs-ANIMA.
 //
 // TWO LAYERS, cleanly split:
@@ -132,7 +133,11 @@ export default defineGame({
     if (st.bonus) {
       if (st.clock >= st.nextOrbAt && st.orbs.length < 2 && st.scores[0] + st.scores[1] >= 0) {
         const kind = KINDS[(rnd(st) * KINDS.length) | 0];
-        st.orbs.push({ id: (st.rng & 0xffff), x: FW * (0.32 + rnd(st) * 0.36), y: R * 4 + rnd(st) * (FH - R * 8), kind, born: st.clock });
+        const o = { id: (st.rng & 0xffff), x: FW * (0.32 + rnd(st) * 0.36), y: R * 4 + rnd(st) * (FH - R * 8), kind, born: st.clock };
+        st.orbs.push(o);
+        // Announced, not just materialised: a glowing blob that appears out of
+        // nowhere mid-rally reads as a rendering glitch, not as a power-up.
+        st.ev.push({ t: 'orbspawn', kind, x: o.x, y: o.y });
         st.nextOrbAt = st.clock + ORB_MIN + rnd(st) * (ORB_MAX - ORB_MIN);
       }
       for (let i = st.orbs.length - 1; i >= 0; i--) {

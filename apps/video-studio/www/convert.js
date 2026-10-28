@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // In-browser video → .nfv v4 converter. The heavy lifting (ffmpeg) runs as WebAssembly right here
 // in the browser — NO PC companion, NO install. The finished .nfv (picture AND sound in one file) is written
 // to the device in resumable parts (/api/fs/write?append=1&at=N), so a Wi-Fi drop costs one part, not the film.
@@ -7,6 +8,7 @@
 // (same format, byte-identical container — tools/nfv/nfv.test.mjs checks it).
 import { buildNfv4, splitMjpeg, wavAdpcmBlocks, stripMask, REFRESH_S } from './nfv.js';
 import I18N from '/nucleo-i18n.js';
+import Caps from '/nucleo-caps.js';
 const t = await I18N.init('video-studio');
 
 // q = ffmpeg's MJPEG quantiser (2 = best). The device shows ~15 fps at most (SD + SPI bus), so more fps only
@@ -169,7 +171,14 @@ export async function deliverToDevice(result, onStage = () => {}) {
   const q = (p) => encodeURIComponent(p);
   const blob = result.nfv, size = blob.size;
   await fetch('/api/fs/delete?path=' + q(part), { method: 'POST' }).catch(() => {});
-  let at = 0, fails = 0;
+  // Resumable parts need ?append=1&at=N (fs.append). A backend without it ignores the parameters and every part
+  // would REPLACE the file: there the film goes in one write, which those backends (Linux, the browser) take.
+  if (!(await Caps.has('fs.append').catch(() => false))) {
+    onStage(t('stage_writing'), 0);
+    const w = await fetch('/api/fs/write?path=' + q(part), { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: blob });
+    if (!w.ok) throw new Error(t('err_write_failed', { status: w.status, path: dst }));
+  }
+  let at = (await Caps.has('fs.append').catch(() => false)) ? 0 : size, fails = 0;
   while (at < size) {
     onStage(t('stage_writing'), Math.floor(at / size * 100));
     try {

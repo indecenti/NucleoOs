@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // context.js — history/context management for ANIMA, à la Claude Code's auto-compaction.
 // When a conversation outgrows its byte budget, older turns are folded into a compact,
 // structured DIGEST that keeps the useful signal (file operations performed, what was asked,

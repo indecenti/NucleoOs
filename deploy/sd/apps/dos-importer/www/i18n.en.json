@@ -54,5 +54,6 @@
   "st_installing": "Installing {size}…",
   "st_installed": "✓ Installed to {path} ({size}). Open DOS Box to play.",
   "err_install_failed": "Install failed: {msg}",
+  "pairing_required": "Pair this browser on the device to install games.",
   "st_reading": "Reading…"
 }

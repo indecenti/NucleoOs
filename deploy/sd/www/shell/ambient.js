@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // ambient.js — Proactive ANIMA: the OS speaks first, sparingly.
 //
 // The notification backbone has carried a src:'anima' tag, a sparkle icon and an 'anima:<query>'

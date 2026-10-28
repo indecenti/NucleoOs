@@ -27,13 +27,17 @@ function readAllC(dir) {
 const fw = readAllC(join(REPO, 'firmware', 'components'));
 
 // Every read-only health endpoint + the live mutators the app/scenes drive.
+// The Settings app is shared by every edition (nucleo-webos). These levers belong to another edition's backend
+// (the Handheld's server.py: live brightness, volume): Settings shows a scene or an action only when the device
+// answers every call it makes (index.html epOk), so on the Cardputer they stay hidden, not broken.
+const OTHER_EDITIONS = new Set(['/api/brightness', '/api/volume']);
 const APP_ENDPOINTS = [
   ...new Set([
     ...ENDPOINTS.map((e) => e.path),
     ...SCENE_ENDPOINTS,
     '/api/reboot', '/api/fs/read', '/api/fs/write', '/api/fs/list',
   ]),
-];
+].filter((p) => !OTHER_EDITIONS.has(p));
 
 // The simulator matches routes with `path === '/x'` or `path.startsWith('/x')`. A path is considered
 // mocked if either form (or the family prefix for /api/fs/*) appears in the source.

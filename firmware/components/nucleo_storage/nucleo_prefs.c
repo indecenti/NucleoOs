@@ -200,3 +200,15 @@ bool nucleo_prefs_save_extdisp_cal(const int cal[7]) { return save_display_item(
 bool nucleo_prefs_save_display_bool(const char *key, bool v) { return save_display_item(key, cJSON_CreateBool(v)); }
 bool nucleo_prefs_save_display_int(const char *key, int v)   { return save_display_item(key, cJSON_CreateNumber(v)); }
 bool nucleo_prefs_save_display_str(const char *key, const char *v) { return save_display_item(key, cJSON_CreateString(v ? v : "")); }
+
+bool nucleo_prefs_load_display_int(const char *key, int *v)
+{
+    cJSON *root = settings_load();
+    if (!root) return false;
+    cJSON *disp = cJSON_GetObjectItem(root, "display");
+    cJSON *it = cJSON_IsObject(disp) ? cJSON_GetObjectItem(disp, key) : NULL;
+    bool ok = cJSON_IsNumber(it);
+    if (ok && v) *v = (int)it->valuedouble;
+    cJSON_Delete(root);
+    return ok;
+}

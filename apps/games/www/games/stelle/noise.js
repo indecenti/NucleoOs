@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // stelle/noise.js — the one gradient noise of the web worlds, in JavaScript AND in GLSL, made to agree.
 //
 // The surface of a world is computed twice: in a Web Worker (JS, for the terrain chunks, the flight sim's

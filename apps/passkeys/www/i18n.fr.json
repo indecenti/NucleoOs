@@ -19,7 +19,7 @@
   "notset": "non défini",
   "conn": "connecté",
   "wait": "non connecté",
-  "hint": "Le PIN est stocké uniquement sur l’appareil et ne transite jamais par USB. Les clés privées des passkeys ne quittent jamais le Cardputer.",
+  "hint": "Le PIN est stocké uniquement sur l’appareil et ne transite jamais par USB. Les clés privées des passkeys ne quittent jamais l’appareil.",
   "askpin": "Nouveau PIN (4-63 caractères) :",
   "pinok": "PIN mis à jour.",
   "pinbad": "PIN refusé (longueur 4-63).",
@@ -33,5 +33,6 @@
   "err": "Échec de la requête.",
   "tries": "essais restants",
   "askdel": "Effacer la passkey de {rp} ({user}) ? Vous ne pourrez plus vous connecter à {rp} avec elle. Irréversible.",
-  "stale": "La liste des passkeys a changé sur l'appareil — rien n'a été effacé. Vérifiez la liste et réessayez."
+  "stale": "La liste des passkeys a changé sur l'appareil — rien n'a été effacé. Vérifiez la liste et réessayez.",
+  "fido_unavailable": "La clé de sécurité FIDO n’est pas disponible sur cet appareil."
 }

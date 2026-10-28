@@ -32,5 +32,7 @@
   "hidden_ssid": "(versteckt)",
   "src_failed": "Scan fehlgeschlagen — Gerät nicht erreichbar oder beschäftigt",
   "src_need_pair": "nicht gekoppelt — koppel diesen Browser zum Scannen",
-  "src_live": "Live-Scan"
+  "src_live": "Live-Scan",
+  "forget_failed": "Netzwerk konnte nicht vergessen werden",
+  "wifi_unavailable": "Die WLAN-Verwaltung ist auf diesem Gerät nicht verfügbar."
 }

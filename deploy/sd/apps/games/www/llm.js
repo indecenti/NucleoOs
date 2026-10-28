@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // llm.js — the Game Center's LLM brain, on the OS-wide AI decision (/ai-ask.js). The game asks whatever engine every
 // NucleoOS surface would use right now: in Private mode only a model on THIS computer plays; a model on the PC
 // (Ollama, LM Studio, llama.cpp, Jan) plays with no key at all; otherwise the cloud key from Settings ▸ AI, chosen
@@ -41,13 +42,17 @@ export function endpointHost(cfg) { return cfg ? cfg.host : null; }
 
 // One short completion on the pinned engine. Returns text, or '' on failure (never throws into the game loop);
 // a failure is logged in plain words (what went wrong, how to fix it) and left in lastAiError.
+// Always time-bounded (opts.timeoutMs, default 20 s) unless the caller brings its own signal: a hung fetch (proxy,
+// sleeping wifi) used to keep the caller's busy-flag up forever, which froze the coach's retry loop — and the match.
 export async function ask(cfg, system, user, opts = {}) {
   if (!cfg) return '';
   lastAiError = '';
   const A = await askMod();
   if (!A) return '';
+  const ac = opts.signal ? null : new AbortController();
+  const tm = ac ? setTimeout(() => ac.abort(), opts.timeoutMs || 20000) : 0;
   try {
-    const r = await A.askAI({ system, user, tier: 'fast', maxTokens: opts.maxTokens || 300, signal: opts.signal, pin: cfg.kind });
+    const r = await A.askAI({ system, user, tier: 'fast', maxTokens: opts.maxTokens || 300, signal: opts.signal || ac.signal, pin: cfg.kind });
     if (r.engine && r.engine.model) cfg.model = r.engine.model;   // the label follows the model that really answered
     return r.text || '';
   } catch (e) {
@@ -55,7 +60,7 @@ export async function ask(cfg, system, user, opts = {}) {
     lastAiError = (AI && AI.explainAiError(e)) || String((e && e.message) || e);
     if (lastAiError) console.warn('[coach]', lastAiError);
     return '';
-  }
+  } finally { if (tm) clearTimeout(tm); }
 }
 
 export function extractJson(text) {

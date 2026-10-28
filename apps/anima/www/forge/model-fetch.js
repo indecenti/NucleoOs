@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // model-fetch.js — the REAL resumable model downloader for the ANIMA Model Manager. It is the runnable
 // sibling of download-manager.js: same hard invariants, but it carries ACTUAL bytes, persists them to the
 // Cardputer SD, and resumes across page reloads. All I/O is INJECTED, so the whole controller runs

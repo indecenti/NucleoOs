@@ -142,7 +142,6 @@
     "dj:test": "node apps/dj/test/all.mjs",
     "gb:test": "node tools/anima-host/gb-check.mjs",
     "gg:test": "node tools/anima-host/gg-check.mjs",
-    "gen:icons": "node tools/gen-icon-bundle.mjs",
     "alarm:test": "node tools/alarm-host/run.mjs",
     "presence:test": "node tools/presence-host/run.mjs",
     "store:test": "node tools/store-host/run.mjs",

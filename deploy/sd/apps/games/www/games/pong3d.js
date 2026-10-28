@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // pong3d.js — the Three.js WebGL renderer for Pong. Driven purely from the host-authoritative state in
 // pong.js: it maps the 200×120 logic field onto a neon 3D arena, interpolates the ball/paddles for
 // 60fps smoothness over 30Hz snapshots, and turns per-tick events (st.ev) into particle bursts, camera
@@ -133,6 +134,7 @@ function build3D(THREE, canvas, gl, api, geom) {
       if (e.t === 'hit') { burst(at, col, 14, 7 + (e.speed || 130) / 30); sfx.hit(e.speed, e.combo); shake = Math.min(1, shake + 0.25); if (e.combo >= 4) hud.flashCombo(e.combo); }
       else if (e.t === 'wall') { burst(new THREE.Vector3(wx(e.x ?? FW / 2), R * S + 0.4, wz(e.y)), 0x22d3ee, 6, 5); sfx.wall(); shake = Math.min(1, shake + 0.08); }
       else if (e.t === 'orb') { const cfg = KIND[e.kind] || KIND.grow; burst(at, cfg.color, 28, 9); sfx.orb(e.kind); hud.banner(`${cfg.icon} ${cfg.label}`, '#' + cfg.color.toString(16).padStart(6, '0')); shake = Math.min(1, shake + 0.18); }
+      else if (e.t === 'orbspawn') { const cfg = KIND[e.kind] || KIND.grow; burst(new THREE.Vector3(wx(e.x), 1.1, wz(e.y)), cfg.color, 8, 3.5); hud.banner(`${cfg.icon} ${cfg.label} — IN CAMPO`, '#' + cfg.color.toString(16).padStart(6, '0')); }
       else if (e.t === 'shield') { burst(at, 0x60a5fa, 24, 8); sfx.shield(); hud.banner('🛡 SCUDO!', '#60a5fa'); shake = Math.min(1, shake + 0.2); }
       else if (e.t === 'score') { const c = e.who === 1 ? COL1 : COL0; burst(new THREE.Vector3(wx(e.x), 1.2, wz(e.y)), c, 46, 12); sfx.score(true); shake = Math.min(1.4, shake + 0.7); hud.flashScore(e.who); }
     }

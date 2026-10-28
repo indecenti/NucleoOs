@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // ANIMA weather NLU — shared, pure, testable.
 //
 // The native firmware mirrors this exact logic (nucleo_anima_online.c). The hard part of a

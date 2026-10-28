@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // model-cache.js — IndexedDB cache for SDXS model chunks.
 // Uses IndexedDB (not Cache API) so it works on plain HTTP origins like http://192.168.x.x
 // (Cache API requires a secure context — HTTPS or localhost — and would silently do nothing here).

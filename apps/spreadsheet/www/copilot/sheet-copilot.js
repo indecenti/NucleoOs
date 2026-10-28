@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // sheet-copilot.js — the ONE orchestrator the spreadsheet UI calls for an escalated turn. It unifies
 // "one ANIMA, four substrates" behind a single handle(): the deterministic parser is the FLOOR (the
 // caller runs it first and only calls here on a miss / forced dial), then an offline learned recipe

@@ -23,7 +23,7 @@
 
   "badge_default": "par défaut",
   "badge_browser_only": "navigateur uniquement",
-  "badge_browser_only_title": "https se lit dans le navigateur mais pas sur le Cardputer",
+  "badge_browser_only_title": "https se lit dans le navigateur mais pas sur l’appareil",
   "act_set_default": "Définir par défaut sur l'appareil",
   "act_move_up": "Monter",
   "act_move_down": "Descendre",
@@ -35,8 +35,8 @@
   "f_genre": "Genre / slogan",
   "f_genre_ph": "Ambient / Downtempo",
   "f_stream": "URL du flux",
-  "note_stream": "Le MP3 http:// simple se lit aussi sur le Cardputer. https:// se lit ici mais pas sur l'appareil.",
-  "note_stream_warn": "⚠ https se lit dans le navigateur mais PAS sur le Cardputer (pas de TLS). Utilise http:// pour la prise en charge sur l'appareil.",
+  "note_stream": "Le MP3 http:// simple se lit aussi sur l'appareil. https:// se lit ici mais pas sur l'appareil.",
+  "note_stream_warn": "⚠ https se lit dans le navigateur mais PAS sur l'appareil (pas de TLS). Utilise http:// pour la prise en charge sur l'appareil.",
   "note_stream_invalid": "⚠ Saisis l'adresse complète du flux, p. ex. http://host:8000/stream",
   "f_np": "URL now-playing",
   "optional": "(facultatif)",
@@ -45,12 +45,12 @@
   "err_https": "⚠ flux https bloqué ici — mais il se lira sur l'appareil s'il est accessible.",
   "err_unreachable": "⚠ flux inaccessible depuis le navigateur (il peut quand même fonctionner sur l'appareil).",
 
-  "info_lead": "Radio internet live et gratuite pour NucleoOS. Une seule liste de stations, partagée entre cette app et l'app Radio de ton Cardputer.",
+  "info_lead": "Radio internet live et gratuite pour NucleoOS. Une seule liste de stations, partagée entre cette app et l'app Radio de ton appareil.",
   "info_add": "<b>Ajoute une station.</b> Touche <b>Ajouter une station</b>, donne-lui un nom et colle une URL de flux direct (un flux MP3). Elle rejoint la liste partout instantanément.",
-  "info_star": "<b>Définis la station par défaut de l'appareil.</b> La station avec l'étoile est celle que ton Cardputer syntonise dès que tu ouvres son app Radio.",
+  "info_star": "<b>Définis la station par défaut de l'appareil.</b> La station avec l'étoile est celle que ton appareil syntonise dès que tu ouvres son app Radio.",
   "info_listen": "<b>Écoute ici.</b> Lis n'importe quelle station dans le navigateur. Si elle fournit les infos du morceau, tu verras l'artiste, le titre et une barre de progression.",
   "info_reorder": "<b>Réordonne et modifie.</b> Utilise ⌃⌄ pour réordonner, ✎ pour modifier, 🗑 pour supprimer. Chaque modification est enregistrée sur l'appareil à l'instant où tu la fais.",
-  "info_device_note": "<b>Note sur l'appareil :</b> le Cardputer ne lit que les flux MP3 <b>http://</b> simples — il n'a pas de place pour HTTPS à côté du décodeur audio. Les stations <b>https://</b> sont marquées <b>“navigateur uniquement”</b> : elles se lisent ici mais ne fonctionnent pas sur l'appareil. Les stations gratuites sélectionnées proviennent de <b>SomaFM</b>.",
+  "info_device_note": "<b>Note sur l'appareil :</b> l'appareil ne lit que les flux MP3 <b>http://</b> simples — il n'a pas de place pour HTTPS à côté du décodeur audio. Les stations <b>https://</b> sont marquées <b>“navigateur uniquement”</b> : elles se lisent ici mais ne fonctionnent pas sur l'appareil. Les stations gratuites sélectionnées proviennent de <b>SomaFM</b>.",
   "keyboard": "Clavier",
   "keys_help": "<kbd>↑</kbd><kbd>↓</kbd> sélectionner · <kbd>Entrée</kbd> lecture · <kbd>Espace</kbd> lecture/pause · <kbd>n</kbd>/<kbd>p</kbd> suiv./préc.",
   "got_it": "Compris",
@@ -65,6 +65,6 @@
   "toast_saved_changes": "Modifications enregistrées",
   "toast_added": "“{name}” ajoutée",
   "confirm_remove": "Retirer “{name}” de la liste des stations ?",
-  "read_failed": "Impossible de lire vos stations du Cardputer : la modification est suspendue pour ne rien écraser. Réessayez dans un instant.",
-  "read_corrupt": "Le fichier des stations du Cardputer est illisible : il n'est pas modifié pour ne rien perdre."
+  "read_failed": "Impossible de lire vos stations de l’appareil : la modification est suspendue pour ne rien écraser. Réessayez dans un instant.",
+  "read_corrupt": "Le fichier des stations de l'appareil est illisible : il n'est pas modifié pour ne rien perdre."
 }

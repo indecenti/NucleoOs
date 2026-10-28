@@ -37,5 +37,11 @@
   "web_on": "Web",
   "web_searching": "🌐 Recherche sur le web…",
   "sources_label": "Sources",
-  "web_mode_hint": "Mode Web activé : réponses actualisées et sourcées depuis le web, via Groq compound. Le sélecteur de modèle ci-dessus est ignoré."
+  "web_mode_hint": "Mode Web activé : réponses actualisées et sourcées depuis le web, via Groq compound. Le sélecteur de modèle ci-dessus est ignoré.",
+  "api_key_hint_sealed": "Elle est enregistrée sur l'appareil et ne reste pas dans le navigateur. Créez/gérez-la sur <a href=\"https://console.groq.com/keys\" target=\"_blank\" rel=\"noreferrer noopener\">console.groq.com/keys</a>.",
+  "teacher_note_sealed": "Les clés sont <b>sur l'appareil</b> : ce chat les utilise via l'appareil, sans jamais les voir. Elles se gèrent (et se suppriment) dans <b>Réglages ▸ IA</b>.",
+  "key_forgotten_sealed": "Aucune clé ne reste dans ce navigateur. Pour supprimer celle de l'appareil : Réglages ▸ IA.",
+  "key_saved_device": "Clé enregistrée sur l'appareil.",
+  "err_unpaired": "Associez d'abord ce navigateur à l'appareil.",
+  "err_save_key": "Impossible d'enregistrer la clé sur l'appareil."
 }

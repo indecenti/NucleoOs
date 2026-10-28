@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -689,9 +690,12 @@
           <input type="text" id="sd-down-filename" placeholder="file.zip" data-i18n-attr="placeholder:dlFilenamePlaceholder">
         </div>
 
+        <!-- Shown where the device cannot fetch through itself (no net.proxy capability) -->
+        <div id="dl-unavailable" hidden style="font-size: 12px; color: var(--text-secondary); line-height: 1.4;" data-i18n="dlUnavailable">Il salvataggio su SD non è disponibile su questo dispositivo.</div>
+
         <!-- Auth status banner -->
         <div id="dl-auth-banner" style="display: none; background: rgba(239,68,68,0.1); border: 1px solid rgba(239,68,68,0.25); border-radius: 6px; padding: 8px 10px; font-size: 12px; color: #fca5a5; line-height: 1.4;" data-i18n-html="dlAuthBanner">
-          ⚠️ <b>Dispositivo non associato.</b> Il salvataggio su SD richiede il pairing. Inserisci il PIN mostrato sul Cardputer nella schermata iniziale di NucleoOS.
+          ⚠️ <b>Dispositivo non associato.</b> Il salvataggio su SD richiede il pairing. Inserisci il PIN mostrato sul dispositivo nella schermata iniziale di NucleoOS.
         </div>
 
         <div style="display: flex; gap: 8px; margin-top: 6px;">
@@ -886,6 +890,15 @@
     function getProxyUrl() {
       return '/api/proxy?url=';
     }
+    // Only a device with the net.proxy capability (nucleo-caps.js) can fetch for us: elsewhere the SD save is
+    // not offered and no request is made. If the capability module cannot be loaded, the proxy answers as before.
+    let sdProxy = null;
+    const sdProxyP = import('/nucleo-caps.js').then((m) => m.default.has('net.proxy'), () => true).then((v) => (sdProxy = v));
+    sdProxyP.then((ok) => {
+      if (ok) return;
+      const n = document.getElementById('dl-unavailable'); if (n) n.hidden = false;
+      const b = document.getElementById('btn-start-sd-download'); if (b) b.disabled = true;
+    });
 
     function saveSettings() {
       try {
@@ -1256,7 +1269,7 @@
           ${cardDownloadProgressHtml()}
           <div style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;">
             <button class="btn-open-ext" data-i18n="openAgain">Apri di nuovo</button>
-            <button class="btn-save-sd" style="background: var(--success-color);" data-i18n="saveToCardputer">⬇ Salva su Cardputer</button>
+            <button class="btn-save-sd" style="background: var(--success-color);" data-i18n="saveToCardputer">⬇ Salva sul dispositivo</button>
             <button class="btn-secondary btn-home-load" data-i18n="homeBtn">Home</button>
           </div>
         </div>
@@ -1271,10 +1284,10 @@
           <h2 data-i18n="dlCardTitle">⬇ File scaricabile</h2>
           <p><b>${escapeHtml(filename)}</b><br>
           <span style="font-size:12px;opacity:.75;word-break:break-all;">${escapeHtml(url)}</span><br>
-          <span data-i18n-html="dlCardBody">Salvalo sul Cardputer (SD: <code>/data/downloads/</code>) oppure aprilo nel tuo browser reale.</span></p>
+          <span data-i18n-html="dlCardBody">Salvalo sul dispositivo (SD: <code>/data/downloads/</code>) oppure aprilo nel tuo browser reale.</span></p>
           ${cardDownloadProgressHtml()}
           <div style="display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;">
-            <button class="btn-save-sd" style="background: var(--success-color);" data-i18n="saveToCardputer">⬇ Salva su Cardputer</button>
+            <button class="btn-save-sd" style="background: var(--success-color);" data-i18n="saveToCardputer">⬇ Salva su device</button>
             <button class="btn-open-ext" data-i18n="openExternal">↗ Apri in scheda esterna</button>
             <button class="btn-secondary btn-home-load" data-i18n="homeBtn">Home</button>
           </div>
@@ -1300,7 +1313,8 @@
       const homeBtn = wrapper.querySelector('.btn-home-load');
       if (homeBtn) homeBtn.onclick = () => loadTabUrl(tabId, 'home');
       const saveBtn = wrapper.querySelector('.btn-save-sd');
-      if (saveBtn) saveBtn.onclick = () => runCardDownload(wrapper, url, filenameFromUrl(url), saveBtn);
+      if (saveBtn && sdProxy === false) saveBtn.style.display = 'none';
+      else if (saveBtn) saveBtn.onclick = () => runCardDownload(wrapper, url, filenameFromUrl(url), saveBtn);
     }
 
     // Save a URL to the Cardputer SD from inside a tab card, showing inline progress in the card.
@@ -1629,6 +1643,7 @@
     // human message (auth failures carry .authRequired so the pairing banner can be shown).
     async function downloadUrlToSd(url, filename, onStep = () => {}) {
       if (!filename) filename = filenameFromUrl(url);
+      if (!(await sdProxyP)) throw new Error(t('dlUnavailable', null, 'Il salvataggio su SD non è disponibile su questo dispositivo.'));
 
       let withDownloadLock = null;
       try { withDownloadLock = (await import('/dlgate.js')).withDownloadLock; } catch (_e) {}

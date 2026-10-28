@@ -18,5 +18,18 @@
   "man_which": "Quale pagina di manuale desideri?",
   "man_description": "Descrizione:",
   "man_details": "Dettagli:",
-  "man_none": "Nessuna voce di manuale per {cmd}"
+  "man_none": "Nessuna voce di manuale per {cmd}",
+  "subtitle_shell": "shell del dispositivo · {shell}",
+  "reconnect": "Riconnetti",
+  "retry": "Riprova",
+  "st_connecting": "connessione…",
+  "st_connected": "connesso",
+  "st_closed": "sessione chiusa",
+  "st_error": "errore: {msg}",
+  "st_unpaired": "non accoppiato",
+  "gate_pair_title": "Browser non accoppiato",
+  "gate_pair_body": "Il terminale apre una shell vera sul dispositivo: prima questo browser deve essere accoppiato una volta. Il PIN viene letto ad alta voce dalla console.",
+  "gate_pair_btn": "Accoppia",
+  "gate_off_title": "Terminale non disponibile",
+  "gate_off_body": "Il dispositivo non ha risposto ({msg})."
 }

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // webllm-engine.js — the real M4 inference adapter (WebLLM in the browser, on WebGPU). The PURE
 // parts — GPU probe shape, VRAM-aware model choice, the orchestrator/coder chat-message + grammar
 // option payloads — are host-testable; the only browser-only dependency (WebLLM's CreateMLCEngine)

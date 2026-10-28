@@ -164,12 +164,13 @@ enum {
     R_RST_SOFT, R_RST_HARD, R_RST_FMT, R_RST_SD,                                            // Reset
     R_SAVED_NET, R_FORGET_ALL,                                                              // Saved networks
     R_OB_SKIP,                                                                              // first boot: skip Wi-Fi (confirm only)
+    R_X_BRIGHT,                                                                             // Second screen: its own backlight
 };
 
 static const uint8_t ROWS_ROOT[]    = { R_S_WIFI, R_S_AP, R_S_BT, R_S_DISPLAY, R_S_SOUND, R_ANIMA, R_LANG, R_DATETIME, R_S_DEVICE, R_S_RESET };
 // The ADV has the EXT header: its root gains "Second screen" right under Display.
 static const uint8_t ROWS_ROOT_ADV[] = { R_S_WIFI, R_S_AP, R_S_BT, R_S_DISPLAY, R_S_EXT, R_S_SOUND, R_ANIMA, R_LANG, R_DATETIME, R_S_DEVICE, R_S_RESET };
-static const uint8_t ROWS_EXT[]     = { R_X_STATE, R_X_LAYOUT, R_X_PRIMARY, R_X_FIT, R_X_MHZ, R_X_MODE, R_X_ROT, R_X_TOUCH, R_X_CAL, R_RESTART };
+static const uint8_t ROWS_EXT[]     = { R_X_STATE, R_X_BRIGHT, R_X_LAYOUT, R_X_PRIMARY, R_X_FIT, R_X_MHZ, R_X_MODE, R_X_ROT, R_X_TOUCH, R_X_CAL, R_RESTART };
 static const uint8_t ROWS_WIFI[]    = { R_NETS, R_SAVED, R_HANDOFF };
 static const uint8_t ROWS_AP[]      = { R_AP_ON, R_AP_STATE, R_AP_SSID, R_AP_PASS, R_AP_ADDR };
 static const uint8_t ROWS_BT[]      = { R_BT_BOOT, R_BT_STATE, R_RESTART };
@@ -199,6 +200,7 @@ static uint8_t s_page = PG_ROOT;
 static int8_t  s_sel[PG_N];                    // focus per page — kept across visits (resume)
 static int     s_scroll = 0;                   // pixel scroll of the current (variable-height) list
 static bool    s_prefs_dirty = false;          // brightness/volume moved: persist when the focus leaves
+static bool    s_xbri_dirty = false;           // second-screen brightness moved: saved by flush_prefs too
 static bool    s_theme_pend = false;           // theme previewed while cycling; saved once on flush
 static int     s_saver_t_pend = -1, s_saver_m_pend = -1;   // screensaver timeout/style being picked (-1 = none)
 static int     s_tts_pend = -1;                // voice speed being dialled (RAM only); -1 = none. Committed on
@@ -505,6 +507,13 @@ static void make_row_id(uint8_t id, int num, Row &r)
         else                         { vset(r, TR5("Non trovato", "Not found", "No encontrada", "Introuvable", "Nicht gefunden")); r.col = MUTED; }
         sset(r, nucleo_extdisp_reason());
         break;
+    case R_X_BRIGHT:
+        r.label = TR5("Luminosita", "Brightness", "Brillo", "Luminosite", "Helligkeit"); r.kind = K_SLIDER;
+        r.num = (int16_t)nucleo_extdisp_brightness(); r.lo = 10; r.hi = 100; r.col = WARN;
+        r.dis = !nucleo_extdisp_brightness_ok();
+        if (r.dis) sset(r, TR5("LED sui 5 V: solo acceso", "LED on 5 V: always on", "LED a 5 V: siempre encendido",
+                               "LED sur 5 V: toujours allume", "LED an 5 V: immer an"));
+        break;
     case R_X_LAYOUT: {
         nucleo_extdisp_conf_t sv; nucleo_extdisp_conf(nullptr, &sv);
         r.label = TR5("Modalita", "Mode", "Modo", "Mode", "Modus"); r.kind = K_CYCLE;
@@ -539,8 +548,6 @@ static void make_row_id(uint8_t id, int num, Row &r)
             r.label = TR5("Velocita", "Speed", "Velocidad", "Vitesse", "Tempo"); r.kind = K_CYCLE;
             snprintf(r.val, sizeof r.val, "%d MHz", sv.mhz);
             sset(r, sv.mhz != lv.mhz ? later
-                 : sv.mhz >= 80 ? TR5("Sperimentale: cavi corti", "Experimental: short wires", "Experimental: cables cortos",
-                                      "Experimental: fils courts", "Experimentell: kurze Kabel")
                  : TR5("Piu alta = piu fluido", "Higher = smoother", "Mas alta = mas fluido", "Plus haut = plus fluide", "Hoeher = fluessiger"));
         } else if (id == R_X_MODE) {
             r.label = TR5("Rilevamento", "Detection", "Deteccion", "Detection", "Erkennung"); r.kind = K_CYCLE;
@@ -1645,8 +1652,15 @@ static void draw_finishing(void)
 // kit and the theme macros, so it recolours live with the active theme. The Cardputer, where the keyboard
 // is, becomes a companion: the page, the focused row and its value, and the key hints. All colours come
 // from the theme — there are no literals here.
-static int s_lg_top = 0;             // panel list scroll: first visible row
+// Panel list scroll, in pixels: every row is the same height (the focused one never grows and pushes the rest),
+// rows cut by the band's edges are clipped, a key keeps the focused row in view with the smallest move, and a
+// drag scrolls the content itself (NUCLEO_TOUCH_VIEW_*) without touching the selection.
+enum { LG_RH = 44, LG_NET_RH = 34, LG_STEP = 6 };   // row heights (settings / nearby networks), px per drag key
+static int s_lg_off = 0;             // scroll offset of the list band
+static int s_lg_max = 0;             // its largest value at the last paint (the drag keys clamp to it)
+static int s_lg_pg = -1, s_lg_sel = -1;   // page / focus the offset was last fitted to
 static uint32_t s_lg_sig = 0;        // last-drawn panel signature (skip the full repaint when unchanged)
+static int s_lg_h = 240;             // the panel's height: inside lg::frame d.height() is the strip window's, not it
 
 static uint32_t scene_sig(void);     // defined below (shared with on_draw)
 static uint32_t live_sig(void);      // defined below (the 1 Hz live values)
@@ -1710,7 +1724,7 @@ static int lg_ext_card(int top)
     char b[48];
     bool touch = nucleo_extdisp_touch();
     // We ARE the external panel here (on_draw_large draws straight to it): its own size is the resolution.
-    snprintf(b, sizeof b, "%dx%d   %s", (int)d.width(), (int)d.height(),
+    snprintf(b, sizeof b, "%dx%d   %s", (int)d.width(), s_lg_h,
              touch ? TR5("touch si", "touch yes", "touch si", "touch oui", "Touch ja") : TR5("no touch", "no touch", "sin touch", "sans touch", "kein Touch"));
     d.drawString(b, 16, top + 26);
     return top + h + 4;
@@ -1729,13 +1743,52 @@ static void lg_theme_preview(int top)
     d.setTextDatum(top_left);
 }
 
-// The page's rows as a scrolling touch list; keeps the focused row visible, registers s_tap_row so taps
-// reuse on_key. `extra` is a status/preview card drawn above the list (Wi-Fi / Second screen / Theme).
+// Fit the scroll offset of a list of n rows of height rh in a band of `band` px: a new page starts at the top,
+// a focus that moved is brought into view with the smallest move (never re-centred), a drag's offset is kept.
+// Returns the clamped offset.
+static int lg_fit_scroll(int n, int rh, int band, int sel)
+{
+    s_lg_max = n * rh - band > 0 ? n * rh - band : 0;
+    if (s_page != s_lg_pg) { s_lg_off = 0; s_lg_sel = -1; s_lg_pg = s_page; }
+    if (sel != s_lg_sel && sel >= 0) {
+        if (sel * rh < s_lg_off) s_lg_off = sel * rh;
+        if (sel * rh + rh > s_lg_off + band) s_lg_off = sel * rh + rh - band;
+        s_lg_sel = sel;
+    }
+    if (s_lg_off > s_lg_max) s_lg_off = s_lg_max;
+    if (s_lg_off < 0) s_lg_off = 0;
+    return s_lg_off;
+}
+
+// Clip drawing to the list band, inside whatever clip is already set (lg::frame's strip): rows cut by the band's
+// edges never paint over the header or below the panel. lg_unclip restores the saved clip.
+static int32_t s_clip[4];
+static void lg_clip(int top, int bot)
+{
+    d.getClipRect(&s_clip[0], &s_clip[1], &s_clip[2], &s_clip[3]);
+    int y0 = top > s_clip[1] ? top : s_clip[1], y1 = bot < s_clip[1] + s_clip[3] ? bot : s_clip[1] + s_clip[3];
+    d.setClipRect(s_clip[0], y0, s_clip[2], y1 > y0 ? y1 - y0 : 0);
+}
+static void lg_unclip(void) { d.setClipRect(s_clip[0], s_clip[1], s_clip[2], s_clip[3]); }
+
+// The slim scroll knob at the panel's right edge: where the band sits in the content.
+static void lg_knob(int x, int top, int band, int content)
+{
+    if (content <= band) return;
+    int track = band - 8, kh = track * band / content; if (kh < 16) kh = 16;
+    int ky = top + 4 + (track - kh) * s_lg_off / (s_lg_max > 0 ? s_lg_max : 1);
+    d.fillRect(x, top + 4, 2, track, LINE);
+    d.fillRect(x, ky, 2, kh, ACC);
+}
+
+// The page's rows as a scrolling touch list: same-height rows, pixel scroll, partial rows clipped at the edges,
+// s_tap_row so taps reuse on_key. A status card (Wi-Fi / Second screen) sits above it; on Display the theme
+// preview is always there, so moving the focus never pushes the list down.
 static void lg_list(int top, int H2)
 {
     const int W2 = d.width();
     int n = page_count(s_page), sel = cur_sel();
-    if (s_page == PG_DISPLAY && cur_sel() >= 0) { Row fr; make_row(PG_DISPLAY, sel, fr); if (fr.id == R_THEME) { lg_theme_preview(top); top += 34; } }
+    if (s_page == PG_DISPLAY) { lg_theme_preview(top); top += 34; }
     if (n <= 0) {
         lg::message(0, top, W2, H2 - top, s_page == PG_SAVED ? TR5("Nessuna rete salvata", "No saved networks", "Sin redes guardadas", "Aucun reseau connu", "Keine Netze")
                                                              : TR5("Nessun risultato", "No matches", "Sin resultados", "Aucun resultat", "Keine Treffer"),
@@ -1743,33 +1796,22 @@ static void lg_list(int top, int H2)
                                        : nullptr, MUTED);
         return;
     }
-    const int RF = 46, RH = 34, band = H2 - top;
-    if (sel < s_lg_top) s_lg_top = sel;
-    for (;;) {                                                       // scroll down until the focused row fits
-        int yy = 0, last = s_lg_top;
-        for (int i = s_lg_top; i < n; i++) { int hh = (i == sel) ? RF : RH; if (yy + hh > band) break; yy += hh; last = i; }
-        if (sel <= last || s_lg_top >= n - 1) break;
-        s_lg_top++;
-    }
-    if (s_lg_top < 0) s_lg_top = 0;
-    int y = top, k = 0;
-    bool icon = (s_page == PG_ROOT || s_page == PG_SEARCH);
-    for (int i = s_lg_top; i < n && k < 10; i++) {
-        int hh = (i == sel) ? RF : RH;
-        if (y + hh > H2) break;
+    const int band = H2 - top, off = lg_fit_scroll(n, LG_RH, band, sel);
+    const bool icon = (s_page == PG_ROOT || s_page == PG_SEARCH);
+    int k = 0;
+    lg_clip(top, H2);
+    for (int i = off / LG_RH, y = top - off % LG_RH; i < n && y < H2 && k < 10; i++, y += LG_RH) {
         Row r; make_row(s_page, i, r);
-        lg_set_row(y, hh, r, i == sel, icon);
-        nucleo_touch_add(0, y, W2, hh, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + k));
-        s_tap_row[k] = i; k++;
-        y += hh;
+        lg_set_row(y, LG_RH, r, i == sel, icon);
+        const int ty = y > top ? y : top, by = y + LG_RH - 4 < H2 ? y + LG_RH - 4 : H2;
+        if (by - ty >= 10) {                                         // a sliver at the edge is not a target
+            nucleo_touch_add(0, ty, W2, by - ty, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + k));
+            s_tap_row[k++] = i;
+        }
     }
-    nucleo_touch_add_scroll(0, top, W2, band, RH, NK_UP, 0, NK_DOWN, 0);
-    if (s_lg_top > 0 || k < n) {                                     // slim scroll knob
-        int track = band - 8, kh = track * k / n < 16 ? 16 : track * k / n;
-        int denom = n - k > 0 ? n - k : 1, ky = top + 4 + (track - kh) * s_lg_top / denom;
-        d.fillRect(W2 - 4, top + 4, 2, track, LINE);
-        d.fillRect(W2 - 4, ky, 2, kh, ACC);
-    }
+    lg_unclip();
+    nucleo_touch_add_scroll(0, top, W2, band, LG_STEP, NK_CHAR, NUCLEO_TOUCH_VIEW_BACK, NK_CHAR, NUCLEO_TOUCH_VIEW_FWD);
+    lg_knob(W2 - 4, top, band, n * LG_RH);
 }
 
 // Nearby networks on the panel: the list on the left (row 0 scans, then one row per network with its signal bars,
@@ -1859,15 +1901,18 @@ static void lg_nets(int top, int H2)
         d.setTextDatum(top_left);
         return;
     }
-    const int total = nucleo_setup_scan_count() + 1, sel = cur_sel(), RH = 34, band = H2 - top, rows = band / RH;
-    if (sel < s_lg_top) s_lg_top = sel;
-    if (sel >= s_lg_top + rows) s_lg_top = sel - rows + 1;
-    int y = top, k = 0;
-    for (int i = s_lg_top; i < total && k < rows && k < 10; i++, k++, y += RH) {
-        lg_net_row(y, RH, i, i == sel);
-        nucleo_touch_add(0, y, NET_LW, RH, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + k)); s_tap_row[k] = i;
+    const int total = nucleo_setup_scan_count() + 1, sel = cur_sel(), band = H2 - top;
+    const int off = lg_fit_scroll(total, LG_NET_RH, band, sel);
+    int k = 0;
+    lg_clip(top, H2);
+    for (int i = off / LG_NET_RH, y = top - off % LG_NET_RH; i < total && y < H2 && k < 10; i++, y += LG_NET_RH) {
+        lg_net_row(y, LG_NET_RH, i, i == sel);
+        const int ty = y > top ? y : top, by = y + LG_NET_RH - 4 < H2 ? y + LG_NET_RH - 4 : H2;
+        if (by - ty >= 10) { nucleo_touch_add(0, ty, NET_LW, by - ty, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + k)); s_tap_row[k++] = i; }
     }
-    nucleo_touch_add_scroll(0, top, NET_LW, band, RH, NK_UP, 0, NK_DOWN, 0);
+    lg_unclip();
+    nucleo_touch_add_scroll(0, top, NET_LW, band, LG_STEP, NK_CHAR, NUCLEO_TOUCH_VIEW_BACK, NK_CHAR, NUCLEO_TOUCH_VIEW_FWD);
+    lg_knob(NET_LW - 1, top, band, total * LG_NET_RH);
     lg_net_pane(top, H2, sel);
 }
 
@@ -1967,7 +2012,7 @@ static int dt_hit(int x)
 }
 static void lg_datetime(void)
 {
-    const int W2 = d.width(), H2 = d.height();
+    const int W2 = d.width(), H2 = s_lg_h;
     lg::header(TR5("Data e ora", "Date and time", "Fecha y hora", "Date et heure", "Datum und Zeit"), nullptr, ACC);
     const char *fmt[5] = { "%04d", "%02d", "%02d", "%02d", "%02d" };
     for (int f = 0, gx = 6; f < 5; gx += DT_GW[f] + 9, f++) {
@@ -1994,7 +2039,7 @@ static void lg_datetime(void)
 // First-boot wizard + join progress on the panel (centred cards; buttons tap the same keys).
 static void lg_wizard(int which)
 {
-    const int W2 = d.width(), H2 = d.height();
+    const int W2 = d.width(), H2 = s_lg_h;
     if (which == 0) {                                                // OB_DONE: "All set!"
         ui_glyph(&d, UG_CHECK, 26, lg::HEAD + 16, 9, GOOD, BG);
         lg::font(2); d.setTextColor(GOOD, BG); d.setTextDatum(top_left);
@@ -2073,7 +2118,7 @@ static uint32_t lg_sig(void)
 {
     uint32_t h = scene_sig();
     h = fnv(h, (uint32_t)(cur_sel() + 1));
-    h = fnv(h, (uint32_t)(s_lg_top + 1));
+    h = fnv(h, (uint32_t)(s_lg_off + 1));
     h = fnv(h, (uint32_t)s_cf_yes);
     h = fnv(h, (uint32_t)s_sd_yes);
     h = fnv(h, (uint32_t)s_dtf);
@@ -2084,24 +2129,30 @@ static uint32_t lg_sig(void)
     if ((s_busy && s_op == OP_JOIN) || s_fin_wait || (s_busy && s_op == OP_SCAN)) h = fnv(h, (uint32_t)s_anim);
     h = fnv(fnv_s(h, s_msg), s_msg_t > 0 ? (s_msg_ok ? 2u : 1u) : 0u);
     h = fnv(h, live_sig());
+    if (s_page != PG_NETS) {                                         // the rows' own values: a slider / switch moved
+        const int n = page_count(s_page);
+        for (int i = s_lg_off / LG_RH; i < n && i <= s_lg_off / LG_RH + 6; i++) {
+            Row r; make_row(s_page, i, r);
+            h = fnv(fnv_s(fnv_s(h, r.val), r.sub), (uint32_t)(uint16_t)r.num);
+            h = fnv(h, (uint32_t)(r.on | (r.dis << 1)) ^ ((uint32_t)r.col << 2));
+        }
+    }
     return h ? h : 1;
 }
 
-static void draw_large(void)
+// The frame's painter: runs once per strip inside lg::frame (composed off-screen, one blit per strip), so the
+// panel never shows the cleared background — the old direct clear + redraw blinked on every change.
+static void lg_paint(void *)
 {
-    uint32_t sig = lg_sig();
-    if (sig == s_lg_sig && s_cf == R_NONE) return;                   // nothing changed: leave the panel as it is
-    s_lg_sig = sig;
-    const int W2 = d.width(), H2 = d.height();
-    nucleo_touch_clear();
+    const int W2 = d.width(), H2 = s_lg_h;
     d.fillRect(0, 0, W2, H2, BG);
     d.setFont(&fonts::Font0); d.setTextSize(1);
 
-    if (s_onboard == OB_DONE)            { lg_wizard(0); nucleo_touch_commit(); return; }
-    if (s_onboard == OB_SD)              { lg_wizard(1); nucleo_touch_commit(); return; }
-    if (s_onboard == OB_SD_LATER)        { lg_wizard(2); nucleo_touch_commit(); return; }
-    if (s_dt)                            { lg_datetime(); nucleo_touch_commit(); return; }
-    if ((s_busy && s_op == OP_JOIN) || s_fin_wait) { lg_wizard(3); nucleo_touch_commit(); return; }
+    if (s_onboard == OB_DONE)            { lg_wizard(0); return; }
+    if (s_onboard == OB_SD)              { lg_wizard(1); return; }
+    if (s_onboard == OB_SD_LATER)        { lg_wizard(2); return; }
+    if (s_dt)                            { lg_datetime(); return; }
+    if ((s_busy && s_op == OP_JOIN) || s_fin_wait) { lg_wizard(3); return; }
 
     // header: chevron back off the root; title; position / clock; menu glyph = TAB (section cycle)
     bool root = (s_page == PG_ROOT);
@@ -2121,7 +2172,6 @@ static void draw_large(void)
         lg_list(top, H2);
     }
     if (s_im != IM_NONE) lg_input(H2);
-    if (s_cf != R_NONE)  lg_confirm();
     if (s_msg_t > 0) {                                               // a toast, as a themed banner at the foot
         const int iy = (s_im != IM_NONE) ? H2 - 72 : H2 - 24;
         lg::panel(8, iy, W2 - 16, 20, LINE);
@@ -2129,6 +2179,18 @@ static void draw_large(void)
         lg::font(0); d.setTextDatum(middle_left); d.setTextColor(FG, LINE);
         char t[44]; lg::fit(t, sizeof t, s_msg, W2 - 46); d.drawString(t, 32, iy + 10); d.setTextDatum(top_left);
     }
+    d.setFont(&fonts::Font0); d.setTextSize(1);
+}
+
+static void draw_large(void)
+{
+    uint32_t sig = lg_sig();
+    if (sig == s_lg_sig) return;                                     // nothing changed: leave the panel as it is
+    s_lg_sig = sig;
+    s_lg_h = d.height();
+    nucleo_touch_clear();
+    lg::frame(lg_paint, nullptr, 0, 0, true);                       // exact theme colours (RGB565 strips)
+    if (s_cf != R_NONE) lg_confirm();         // over the frame, on the panel itself: app_ui_confirm centres on d's height
     nucleo_touch_commit();
     d.setFont(&fonts::Font0); d.setTextSize(1);
 }
@@ -2358,6 +2420,7 @@ static void flush_prefs(void)
     if (!s_prefs_dirty) return;
     s_prefs_dirty = false;
     nucleo_app_persist_prefs();
+    if (s_xbri_dirty) { s_xbri_dirty = false; nucleo_extdisp_set_brightness(nucleo_extdisp_brightness(), true); }
     if (s_tts_pend >= 0) { nucleo_tts_set_speed(s_tts_pend); s_tts_pend = -1; }   // one SD write + one cache purge per edit
     if (s_theme_pend) {                                            // one LittleFS + one SD write per theme pick
         s_theme_pend = false;
@@ -2432,6 +2495,8 @@ static bool adjust(const Row &r, int dir)
     switch (r.id) {
         case R_BRIGHT:    s_adj_us = now; nucleo_app_set_brightness(nucleo_app_brightness() + dir * step); s_prefs_dirty = true; return true;
         case R_VOLUME:    s_adj_us = now; nucleo_audio_set_volume(nucleo_audio_volume() + dir * step);     s_prefs_dirty = true; return true;
+        case R_X_BRIGHT:  s_adj_us = now; nucleo_extdisp_set_brightness(nucleo_extdisp_brightness() + dir * step, false);
+                          s_xbri_dirty = s_prefs_dirty = true; return true;
         case R_TTS_SPEED: s_adj_us = now; s_tts_pend = nucleo_tts_speed_clamp((s_tts_pend >= 0 ? s_tts_pend : nucleo_tts_speed()) + dir * step);
                           s_prefs_dirty = true; return true;
         case R_LANG:      lang_cycle(dir);  return true;
@@ -2449,9 +2514,9 @@ static bool adjust(const Row &r, int dir)
         case R_X_MHZ: case R_X_MODE: case R_X_ROT: {
             nucleo_extdisp_conf_t sv; nucleo_extdisp_conf(nullptr, &sv);
             if (r.id == R_X_MHZ) {
-                static const int MHZ[] = { 10, 20, 27, 40, 80 };   // the panel clock divides 80 MHz: these are exact
-                int i = 0; while (i < 4 && MHZ[i] < sv.mhz) i++;
-                i += dir; if (i < 0) i = 0; if (i > 4) i = 4;
+                static const int MHZ[] = { 10, 20, 27, 40 };   // the panel clock divides 80 MHz: these are exact (80 dropped: flicker)
+                int i = 0; while (i < 3 && MHZ[i] < sv.mhz) i++;
+                i += dir; if (i < 0) i = 0; if (i > 3) i = 3;
                 nucleo_extdisp_set_mhz(MHZ[i]);
             } else if (r.id == R_X_MODE) nucleo_extdisp_set_mode((sv.mode + dir + 3) % 3);
             else nucleo_extdisp_set_rotation(sv.rotation == 3 ? 1 : 3);
@@ -2706,14 +2771,46 @@ static void search_set(const char *q)
     search_run(); s_sel[PG_SEARCH] = 0; s_scroll = 0;
 }
 
+// A tap on a slider row of the panel lands the value where the finger is (lg_set_row's track: the row card at
+// x 8, width W - 16; the label starts 12 px in, 34 with an icon (root / search), the track 3 px before it and
+// ending 12 px from the card's right edge). False = not on the track.
+static bool slider_tap(const Row &r)
+{
+    int tx = 0, ty = 0;
+    if (r.kind != K_SLIDER || r.dis || !nucleo_app_two_screens() || !nucleo_touch_last(&tx, &ty)) return false;
+    const bool icon = (s_page == PG_ROOT || s_page == PG_SEARCH);
+    const int lx = 8 + (icon ? 34 : 12), rx = 8 + (320 - 16) - 12, x0 = lx - 3, w = rx - lx + 3;
+    if (tx < x0 - 12 || tx > x0 + w + 12) return false;
+    const int v = r.lo + lg::slider_at(tx, x0, w) * (r.hi - r.lo) / 100;
+    switch (r.id) {
+        case R_BRIGHT:    nucleo_app_set_brightness(v); break;
+        case R_VOLUME:    nucleo_audio_set_volume(v); break;
+        case R_TTS_SPEED: s_tts_pend = nucleo_tts_speed_clamp(v); break;
+        case R_X_BRIGHT:  nucleo_extdisp_set_brightness(v, false); s_xbri_dirty = true; break;
+        default: return false;
+    }
+    s_prefs_dirty = true;
+    return true;
+}
+
 // ---- on_key -----------------------------------------------------------------------------
 // LEFT and Esc never arrive here: the framework routes both to on_back().
 static void on_key(int k, char ch)
 {
-    // A tapped row (external panel): select it, or open it when it already is the selection.
+    if (k == NK_CHAR && (ch == NUCLEO_TOUCH_VIEW_BACK || ch == NUCLEO_TOUCH_VIEW_FWD)) {   // a drag on the panel list
+        if (s_im != IM_NONE || s_dt || s_cf != R_NONE) return;
+        int o = s_lg_off + (ch == NUCLEO_TOUCH_VIEW_FWD ? LG_STEP : -LG_STEP);
+        o = o < 0 ? 0 : o > s_lg_max ? s_lg_max : o;
+        if (o != s_lg_off) { s_lg_off = o; nucleo_app_request_draw(); }
+        return;
+    }
+    // A tapped row (external panel): select it, or open it when it already is the selection; a slider row
+    // takes the value under the finger at once.
     if (nucleo_touch_is_row(k, ch) && s_im == IM_NONE && !s_dt && s_cf == R_NONE) {
         int slot = ch - NUCLEO_TOUCH_ROW, n = page_count(s_page);
         if (slot >= 10 || s_tap_row[slot] >= n) return;
+        { Row tr; make_row(s_page, s_tap_row[slot], tr);
+          if (slider_tap(tr)) { s_sel[s_page] = (int8_t)s_tap_row[slot]; update_hint(); nucleo_app_request_draw(); return; } }
         if (s_tap_row[slot] != cur_sel()) { s_sel[s_page] = (int8_t)s_tap_row[slot]; update_hint(); nucleo_app_request_draw(); return; }
         k = NK_ENTER; ch = 0;
     }
@@ -2922,7 +3019,7 @@ static void on_tick(void)
 static void enter(void)
 {
     s_page = PG_ROOT; s_scroll = 0;                           // s_sel[] is kept: resume the last focus
-    s_im = IM_NONE; s_cf = R_NONE; s_dt = false; s_rst_id = R_NONE; s_prefs_dirty = false; s_tts_pend = -1;
+    s_im = IM_NONE; s_cf = R_NONE; s_dt = false; s_rst_id = R_NONE; s_prefs_dirty = false; s_xbri_dirty = false; s_tts_pend = -1;
     s_theme_pend = false; s_saver_t_pend = -1; s_saver_m_pend = -1;
     s_qn = 0; s_q[0] = 0; s_hits = 0; s_tts_ok = -1; s_bt_pref = -1;
     s_msg_t = 0; s_live = 0; s_sdc_cache = -1;

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // system-ui.js — OS-chrome extras that make the shell feel like a real desktop OS:
 //   • Night light  — a warm veil over the whole console (per-browser, like brightness/eco)
 //   • Lock screen  — a privacy veil with clock + date (Ctrl+Alt+L / Action Center). It is a

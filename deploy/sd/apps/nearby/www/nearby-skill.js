@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // nearby-skill.js — the scoped ANIMA skill spec for "Vicino" (device-to-device transfer).
 //
 // PURE + dependency-injected: it exports buildNearbySpec(ops) returning a spec for anima-skill.js's

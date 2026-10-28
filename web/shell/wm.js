@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // Minimal window manager: open/focus/drag/minimize/close app windows.
 // No dependencies. Apps are hosted in an <iframe> pointed at their web route.
 // Real-OS extras: per-app geometry memory (via a provider the shell wires up) and
@@ -12,11 +13,14 @@ const windows = new Map(); // id -> { el, app, min, max, snap, prev, ro }
 let onChange = () => {};
 let onFrameLoad = () => {};
 let onTrustHold = () => {};   // shell-supplied: a window was built frameless because its app's provenance is still pending
+let verifier = null;          // shell-supplied: (app) => Promise<true | 'failed' | 'offline'> for apps whose files are served from elsewhere
 let geomFor = () => null;  // shell-supplied: last-known geometry for an app id (survives close)
 let labelFor = (app) => (app && app.name) || '';   // shell-supplied: the app's name in the active UI language
 // Shell-supplied translator for the window chrome (tooltips, the no-route placeholder): this module has no
 // i18n of its own. The English fallbacks only show if the shell never wires one.
-const CHROME_EN = { win_minimize: 'Minimize', win_maximize: 'Maximize', win_restore: 'Restore', win_close: 'Close', win_no_route: 'No web route declared.' };
+const CHROME_EN = { win_minimize: 'Minimize', win_maximize: 'Maximize', win_restore: 'Restore', win_close: 'Close', win_no_route: 'No web route declared.',
+  win_check_failed: 'This app does not match the signed package it was installed from, so it was not opened.',
+  win_check_offline: 'This app cannot be checked right now: the store is not answering. Try again shortly.' };
 let tr = (k) => CHROME_EN[k] || k;
 
 export function setOnChange(fn) { onChange = fn; }
@@ -31,6 +35,10 @@ export function setOnFrameLoad(fn) { onFrameLoad = fn; }
 // Called with (app) when a window opens HELD (its app's trust still 'pending'): the shell can retry the
 // provenance read right away instead of leaving the user on a placeholder until its next backoff tick.
 export function setOnTrustHold(fn) { if (typeof fn === 'function') onTrustHold = fn; }
+// Apps that carry `verify` (a store app whose files the frame loads from the network, e.g. the cloud's store
+// proxy) get their frame only after the shell re-checked those files against the signed package, each load.
+export function setVerifier(fn) { verifier = typeof fn === 'function' ? fn : null; }
+const needsCheck = (app) => !!(app && app.verify && verifier);
 // The shell remembers each app's window geometry across closes/reboots and hands it back here.
 export function setGeomProvider(fn) { geomFor = fn; }
 export function list() { return [...windows.values()]; }
@@ -177,6 +185,7 @@ export function retryFrame(source) {
 // simply a window whose app has not loaded yet.
 function materialise(w) {
   if (!w || !w.pending || w.holdDeferred || trustPending(w.app)) return;   // provenance unknown: no frame yet
+  if (needsCheck(w.app) && w.checked !== w.pending) { check(w); return; }   // served files: checked first
   const src = w.pending;
   w.pending = null;
   frameLoading(w);                                                         // a new frame gets its own one retry, while it loads
@@ -188,6 +197,22 @@ function materialise(w) {
     flagLoaded(w);
     try { onFrameLoad(frame, w.app); } catch {}
     try { const d = frame.contentDocument; if (d) d.addEventListener('pointerdown', () => focus(w.app.id), true); } catch {}
+  });
+}
+
+// The check of a served app, once per pending load. Passed: the frame loads (unless the window was minimised
+// meanwhile: then on focus, like any deferred window). Failed: the window says why and never gets a frame.
+function check(w) {
+  if (w.checking) return;
+  w.checking = true;
+  const src = w.pending;
+  Promise.resolve().then(() => verifier(w.app)).catch(() => 'offline').then((res) => {
+    w.checking = false;
+    if (windows.get(w.app.id) !== w || w.pending !== src) return;          // closed or retargeted meanwhile
+    if (res === true) { w.checked = src; if (!w.min) materialise(w); return; }
+    w.pending = null;
+    const host = w.el.querySelector('.body');
+    if (host) host.innerHTML = `<div class="placeholder">${glyph(w.app)}<br><br>${attr(labelFor(w.app))}<br><small>${attr(tr(res === 'failed' ? 'win_check_failed' : 'win_check_offline'))}</small></div>`;
   });
 }
 
@@ -314,7 +339,8 @@ export function open(app, query, opts = {}) {
   // window whose app's provenance is still pending: it is built and shown, but gets its frame only once
   // the shell knows whether to sandbox it (settleTrust) — never a guessed-trusted frame first.
   const hold = !opts.deferred && trustPending(app) && !!app.route;
-  const body = (opts.deferred || hold) ? `<div class="placeholder pending" aria-busy="true">${glyph(app)}</div>` : frameHtml(app, src);
+  const served = !opts.deferred && needsCheck(app) && !!app.route;        // its frame waits for check()
+  const body = (opts.deferred || hold || served) ? `<div class="placeholder pending" aria-busy="true">${glyph(app)}</div>` : frameHtml(app, src);
   el.innerHTML =
     `<div class="bar"><span class="glyph">${glyph(app)}</span>` +
     `<span class="t">${attr(labelFor(app))}</span>` +
@@ -328,7 +354,7 @@ export function open(app, query, opts = {}) {
     `<div class="win-resizer sw" data-dir="sw"></div><div class="win-resizer se" data-dir="se"></div>`;
 
   layer.appendChild(el);
-  const rec = { el, app, min: false, max: false, snap: null, prev: null, pending: (opts.deferred || hold) ? src : null, trustHold: hold, frameLoaded: false };
+  const rec = { el, app, min: false, max: false, snap: null, prev: null, pending: (opts.deferred || hold || served) ? src : null, trustHold: hold, frameLoaded: false };
   windows.set(app.id, rec);
   if (hold) { try { onTrustHold(app); } catch {} }
 
@@ -735,9 +761,19 @@ function showFly(id, btn) {
 }
 function hideFly() { if (fly) fly.style.display = 'none'; flyId = null; }
 function attachSnapFlyout(btn, id) {
-  let openT = null;
+  let openT = null, pressT = null;
   btn.addEventListener('mouseenter', () => { openT = setTimeout(() => showFly(id, btn), 350); });
   btn.addEventListener('mouseleave', () => { clearTimeout(openT); flyHideT = setTimeout(hideFly, 250); });
+  // Touch has no hover, so the Snap layouts were simply unreachable with a finger.
+  // Long-press the maximize button is the same gesture Windows uses for it.
+  btn.addEventListener('pointerdown', (e) => {
+    if (e.pointerType !== 'touch') return;
+    pressT = setTimeout(() => { showFly(id, btn); pressT = null; }, 500);
+  });
+  const cancelPress = () => { clearTimeout(pressT); pressT = null; };
+  btn.addEventListener('pointerup', cancelPress);
+  btn.addEventListener('pointercancel', cancelPress);
+  btn.addEventListener('pointermove', cancelPress);
 }
 
 // Window resizing from all edges and corners

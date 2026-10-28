@@ -31,7 +31,7 @@
   "saved_x": "Gespeichert {name}",
   "compress_error": "Komprimierungsfehler",
   "no_files": "Keine Dateien zum Komprimieren",
-  "err_read_file": "Das Archiv konnte nicht vom Cardputer gelesen werden (Fehler {status}).",
+  "err_read_file": "Das Archiv konnte nicht vom Gerät gelesen werden (Fehler {status}).",
   "err_write_file": "{name} konnte nicht geschrieben werden (Fehler {status}).",
   "err_mkdir": "Der Ordner {name} konnte nicht erstellt werden (Fehler {status}).",
   "err_list_dir": "Der Ordner {name} konnte nicht aufgelistet werden (Fehler {status}).",

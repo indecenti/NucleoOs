@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 /* NucleoOS AI Copilot — the OS-wide ANIMA command/AI bar. Themed via the shell's CSS
    variables so it follows dark/light automatically. Everything is scoped under #copilot /
    #copilot-* so it never leaks into apps or the rest of the shell. */
@@ -121,3 +122,38 @@ html[data-theme="light"] #copilot .cp-me .cp-body { color: #1c3a6e; }
   box-shadow: 0 0 0 1px #f5c84233, 0 2px 10px #f5c8422e;
 }
 #copilot .cp-chip#cp-act:focus-visible { outline: 2px solid var(--accent, #4ea1ff); outline-offset: 2px; }
+
+/* a turn's extra lines (⎿ outcome / trace, action buttons, clarify chips, tags) go UNDER the text,
+   aligned with it (gutter 14px + gap 9px), one per row — not beside it on the turn's flex row */
+#copilot .cp-turn { flex-wrap: wrap; row-gap: 2px; }
+#copilot .cp-turn > .cp-lined, #copilot .cp-turn > .cp-actions,
+#copilot .cp-turn > .cp-chips, #copilot .cp-turn > .cp-meta { flex-basis: 100%; margin-left: 23px; }
+#copilot .cp-turn > .cp-lined { margin-top: 1px; }
+
+/* slash-command turns: the command line itself, dimmed; its output follows as ⎿ lines */
+#copilot .cp-body.cp-cmd { color: var(--muted, #8aa0c8); font-size: 12px; }
+#copilot .cp-chip[hidden] { display: none; }
+
+/* conversations + memory drawer (the 🗂 chip; only where the device keeps them) */
+#cp-convpanel { max-height: 46vh; overflow: auto; border-bottom: 1px solid var(--line, #2a3a5e); padding: 8px 14px; font-size: 13px; scrollbar-width: thin; }
+#cp-convpanel.hidden { display: none; }
+#cp-convpanel .cph { display: flex; align-items: center; gap: 8px; color: var(--muted, #8aa0c8); margin: 6px 0 4px; font-size: 11px;
+  text-transform: uppercase; letter-spacing: .5px; }
+#cp-convpanel .cph .sp { flex: 1; }
+#cp-convpanel .row { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 8px; cursor: pointer; }
+#cp-convpanel .row:hover { background: #ffffff0d; }
+#cp-convpanel .row.cur { background: #ffffff0d; outline: 1px solid var(--accent, #4ea1ff); }
+#cp-convpanel .row .t { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#cp-convpanel .row .n { color: var(--muted, #8aa0c8); font-size: 11px; }
+#cp-convpanel .x { cursor: pointer; color: var(--muted, #8aa0c8); border: 0; background: none; font: inherit; font-size: 13px; }
+#cp-convpanel .x:hover { color: #ff8a9c; }
+#cp-convpanel .fact { display: flex; align-items: flex-start; gap: 8px; padding: 3px 8px; }
+#cp-convpanel .fact .t { flex: 1; min-width: 0; color: var(--text, #e8eefc); word-break: break-word; }
+#cp-convpanel .memadd { display: flex; gap: 6px; padding: 6px 8px 2px; }
+#cp-convpanel .memadd input { flex: 1; min-width: 0; background: #ffffff0a; color: var(--text, #e8eefc); border: 1px solid var(--line, #2a3a5e);
+  border-radius: 8px; padding: 5px 8px; font: inherit; font-size: 13px; }
+#cp-convpanel .mini { cursor: pointer; border: 1px solid var(--line, #2a3a5e); background: #ffffff0d; color: var(--text, #e8eefc);
+  border-radius: 8px; padding: 3px 10px; font: inherit; font-size: 12px; }
+#cp-convpanel .mini:hover { border-color: var(--accent, #4ea1ff); }
+#cp-convpanel .empty { color: var(--muted, #8aa0c8); padding: 2px 8px; }
+#cp-convpanel .x:focus-visible, #cp-convpanel .mini:focus-visible, #cp-convpanel .memadd input:focus-visible { outline: 2px solid var(--accent, #4ea1ff); outline-offset: 1px; }

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // constellations-shop.js — EXACT port of the Cardputer shipyard upgrade curves (app_constellations.cpp
 // up_level/up_cost/buy_upgrade), so web upgrades cost and apply identically to the device. Integer math.
 // jump_range base is 64 (the soft-lock fix), matching the firmware's `(g.jump_range - 64) / 12`.

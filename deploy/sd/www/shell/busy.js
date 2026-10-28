@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // Device-busy indicator controller — PURE logic (the DOM glue lives in shell.js::renderBusy).
 //
 // The firmware's heavy-work arbiter publishes a `system.busy` {busy, job} event every time it takes

@@ -13,9 +13,9 @@
   "empty_all": "Aucune tâche pour le moment.<br>Écrivez ci-dessus et appuyez sur Entrée.",
   "toggle": "Basculer",
   "count": "{active} actives · {total} au total",
-  "read_failed": "Impossible de lire les tâches du Cardputer. La modification est suspendue pour ne rien écraser — réessayez dans un instant.",
-  "read_corrupt": "Le fichier des tâches du Cardputer est illisible : il n'est pas modifié pour ne rien perdre.",
-  "not_paired": "Ce navigateur n'est pas associé au Cardputer — associez-le pour enregistrer les tâches.",
-  "save_failed": "Non enregistré — le Cardputer ne répond pas, nouvelle tentative",
-  "not_loaded": "Tâches pas encore chargées depuis le Cardputer."
+  "read_failed": "Impossible de lire les tâches de l’appareil. La modification est suspendue pour ne rien écraser — réessayez dans un instant.",
+  "read_corrupt": "Le fichier des tâches de l'appareil est illisible : il n'est pas modifié pour ne rien perdre.",
+  "not_paired": "Ce navigateur n'est pas associé à l'appareil — associez-le pour enregistrer les tâches.",
+  "save_failed": "Non enregistré — l’appareil ne répond pas, nouvelle tentative",
+  "not_loaded": "Tâches pas encore chargées depuis l’appareil."
 }

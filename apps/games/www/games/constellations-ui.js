@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // constellations-ui.js — the DOM/CSS hub of Costellazioni over the live 3D backdrop: status strip,
 // tabs, the five hub screens (Bridge / Map / Market / Shipyard / Missions), toasts, the load / new-run
 // / conflict modals and the after-action report. Every string comes from the games catalog (cz_*

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // constellations-save.js — cross-play campaign bridge for "Costellazioni 3D".
 //
 // The Cardputer native game and this web game share ONE run: the canonical /sd/data/costellazioni/

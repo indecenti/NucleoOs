@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // local-llm.js — the "GPU locale" tier for the ANIMA web CHAT (distinct from the forge editor). Reuses
 // the same browser model as the programming skill (Qwen2.5-Coder on WebGPU via WebLLM): it runs OFFLINE
 // on the user's own GPU — no cloud. The chat uses it as the tier BETWEEN the grounded device dictionary
@@ -206,16 +207,20 @@ export async function translateLocal(q, lang, onProgress, opts = {}) {
 // like the chat expects, or null on empty output. Throws on load/inference error (caller -> honest error),
 // including NOT_INSTALLED: this never downloads the model.
 // opts.signal: Stop/timeout interrupts generation. opts.onDelta(text): stream tokens as they decode.
+// opts.consoleCtx: the console's live facts (Handheld, local/console-skills.js) for the prompt — a plain string
+// in that position is accepted as consoleCtx (the Handheld's older call shape).
 export async function queryLocal(q, lang, history, onProgress, opts = {}) {
+  if (typeof opts === 'string') opts = { consoleCtx: opts };
+  const { consoleCtx = '', ...genOpts } = opts || {};
   const eng = await loadLocal(onProgress);
   // Build the SAME budgeted, injection-safe transcript as the cloud path, but with the small WebLLM
   // profile (short window, few verbatim turns, brief replies) — these models are reduced, so we keep
   // the context lean on purpose. system goes as the OpenAI 'system' message; messages are user/assistant.
-  const { system, messages, maxTokens, temperature } = ctxkit.assemble({ history: history || [], user: q, mode: 'webllm', lang });
+  const { system, messages, maxTokens, temperature } = ctxkit.assemble({ history: history || [], user: q, mode: 'webllm', lang, consoleCtx });
   const txt = await generate(eng, {
     messages: [{ role: 'system', content: system }, ...messages],
     temperature, max_tokens: maxTokens,
-  }, opts);
+  }, genOpts);
   const reply = (txt || '').trim();
   if (!reply) return null;
   return { reply, tier: 'M4-local', intent: /```/.test(reply) ? 'code' : 'local', confidence: 60, domain: 'local', model: _loadedModel || '', trace: 'Browser LLM · WebLLM' };

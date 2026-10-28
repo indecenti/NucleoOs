@@ -44,7 +44,7 @@ function gameErrors(page) {
   return page.log.filter((e) => {
     if (e.kind === 'exception') return true;
     if (e.kind === 'console') return !/favicon/.test(e.text || '');
-    if (e.kind === 'response') { const p = new URL(e.url).pathname; return !(p === '/favicon.ico' || p === '/api/game/costellazioni/save' || (p === '/api/fs/read' && e.status === 404)); }
+    if (e.kind === 'response') { const p = new URL(e.url).pathname; return !(p === '/favicon.ico' || p === '/api/game/costellazioni/save' || (p === '/api/system/caps' && e.status === 404) || (p === '/api/fs/read' && e.status === 404)); }
     if (e.kind === 'failed') return true;
     return false;
   }).map((e) => `${e.kind}: ${e.text || ''} ${e.status || ''} ${e.url || ''}`.trim());

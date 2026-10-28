@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // stelle/surface.js — M3 in the flight sim: the worlds move, the air, the ground, landing, the sites, the threats.
 //
 // Pure logic like sim.js (no Three.js, no DOM), hooked into its fixed 60 Hz step:

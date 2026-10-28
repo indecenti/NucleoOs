@@ -1,13 +1,14 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // Offline shell cache. Keeps the desktop usable when the device is unreachable;
 // API calls always go to the network (never cached) so live data stays fresh.
 // Bump this on every shell change that must reach already-installed clients. The reason for each
 // roll goes in docs/shell-cache-log.md — NOT here: it used to be one 10.5 KB comment on this line,
 // half the whole service worker, re-shipped to every browser on every update check.
-const CACHE = 'nucleo-shell-v161';   // v161 — opt-in auto-update (cancellable countdown + Settings hand-off, see docs/shell-cache-log.md)
+const CACHE = 'nucleo-shell-v161-312d87d6c4a5';   // v161 — opt-in auto-update (cancellable countdown + Settings hand-off, see docs/shell-cache-log.md)
 // Per-version cache for app assets (/apps/<id>/...). Tied to the shell version so a deploy (which
 // bumps CACHE) drops it; the shell also flushes it on apps.changed (OTA app update) via postMessage.
 const APP_CACHE = CACHE + '-apps';
-const ASSETS = ['./', 'index.html', 'style.css', 'copilot.css', 'notify.css', 'onboarding.css', 'shell.js', 'boot-fetch.js', 'copilot.js', 'anima-mode.js', 'notify.js', 'onboarding.js', 'ambient.js', 'ai.js', 'ai-keys.js', 'shortcuts.js', 'search-rank.js', 'appbroker.js', 'wm.js', 'fsindex.js', 'busy.js', 'dlgate.js', 'micgate.js', 'system-ui.js', 'nucleo-i18n.js', 'update-check.js', 'update-core.js', 'sha256.js', 'ai-engines.js', 'ai-ask.js', 'capabilities.js', 'local-ai-help.js', 'seq-import.js', 'i18n/core.it.json', 'i18n/core.en.json', 'i18n/core.es.json', 'i18n/core.fr.json', 'i18n/core.de.json', 'i18n/shell.it.json', 'i18n/shell.en.json', 'i18n/shell.es.json', 'i18n/shell.fr.json', 'i18n/shell.de.json', 'manifest.webmanifest', 'icon.png', 'icons.json', 'app-catalog.json'];   // NB: wallpaper.png removed — it's a 535KB JPEG-misnamed-.png never displayed (live wallpaper = /data/Pictures/wallpaper.png) that only tripped the webfs low-heap defer
+const ASSETS = ['./', 'index.html', 'style.css', 'copilot.css', 'notify.css', 'onboarding.css', 'shell.js', 'boot-fetch.js', 'copilot.js', 'anima-mode.js', 'notify.js', 'onboarding.js', 'ambient.js', 'ai.js', 'ai-keys.js', 'webllm.js', 'shortcuts.js', 'search-rank.js', 'appbroker.js', 'migrations.js', 'wm.js', 'fsindex.js', 'busy.js', 'dlgate.js', 'micgate.js', 'system-ui.js', 'nucleo-i18n.js', 'nucleo-app.js', 'nucleo-caps.js', 'caps-fallback.json', 'update-check.js', 'update-core.js', 'sha256.js', 'store-client.js', 'ai-engines.js', 'ai-ask.js', 'capabilities.js', 'local-ai-help.js', 'seq-import.js', 'i18n/core.it.json', 'i18n/core.en.json', 'i18n/core.es.json', 'i18n/core.fr.json', 'i18n/core.de.json', 'i18n/shell.it.json', 'i18n/shell.en.json', 'i18n/shell.es.json', 'i18n/shell.fr.json', 'i18n/shell.de.json', 'manifest.webmanifest', 'icon.png', 'icons.json', 'app-catalog.json'];   // NB: wallpaper.png removed — it's a 535KB JPEG-misnamed-.png never displayed (live wallpaper = /data/Pictures/wallpaper.png) that only tripped the webfs low-heap defer
 
 // --- Device request gate (shared reads, exclusive writes) ----------------------
 // The firmware httpd has max_open_sockets=4 + lru_purge_enable (it deliberately RESETS
@@ -15,6 +16,9 @@ const ASSETS = ['./', 'index.html', 'style.css', 'copilot.css', 'notify.css', 'o
 // ~80% fragmented — the largest contiguous block is only ~7.5KB and has historically
 // grazed 16 bytes free. A burst of parallel requests starves the heap; a write that lands
 // mid-burst can't even malloc its 2KB floor and returns "500 oom".
+// On editions with a bigger server (Linux handheld) the same gate is just a politeness throttle:
+// an uncontrolled burst of parallel requests (cold boot, crawls) degrades the whole OS plus media
+// streaming at once, and serializing writes keeps fs mutations ordered from this client's view.
 //
 // Counting semaphore with permits = MAX_INFLIGHT. A normal request (asset / fs read) takes
 // ONE permit (so up to MAX_INFLIGHT run together). A WRITE takes ALL permits: it can only
@@ -143,9 +147,12 @@ self.addEventListener('activate', (e) => {
   // Drop only STALE versions. Preserve the live shell cache, the live app cache, AND the Forge model
   // cache — the latter is content-addressed (/fc/<id>/<file>), NOT version-scoped, so wiping it on a
   // shell bump used to throw away GBs of SHA-verified model weights and force a full re-download.
+  // Only the shell's OWN old versions go ('nucleo-shell-v…' and their '-apps', the only names any release
+  // ever used): caches other code owns stay — WebLLM keeps a downloaded browser model (often > 1 GB) in
+  // 'webllm/model', and an OS update used to throw it away.
   const keep = new Set([CACHE, APP_CACHE, MODEL_CACHE, WALLPAPER_CACHE]);
   e.waitUntil(caches.keys().then((ks) =>
-    Promise.all(ks.filter((k) => !keep.has(k)).map((k) => caches.delete(k)))).then(() => self.clients.claim()));
+    Promise.all(ks.filter((k) => k.startsWith('nucleo-shell-') && !keep.has(k)).map((k) => caches.delete(k)))).then(() => self.clients.claim()));
 });
 
 // Let the shell force-refresh the app cache without a full SW version bump — wired to the

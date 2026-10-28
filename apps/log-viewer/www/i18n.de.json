@@ -10,7 +10,7 @@
   "btn_health": "Zustand",
   "follow": "Folgen",
   "history_hint": "Liest das Ereignisjournal von der SD-Karte (auf Anfrage — hält das Gerät sonst im Ruhezustand)",
-  "diag_hint": "Erstellt eine kompakte Zustandsübersicht (Cardputer + ANIMA) zum Einfügen in eine KI",
+  "diag_hint": "Erstellt eine kompakte Zustandsübersicht (Gerät + ANIMA) zum Einfügen in eine KI",
   "health_hint": "Adaptive Sonde: erzeugt Live-Zustandsereignisse (nur bei sichtbarem Fenster, nie während schwerer Arbeit)",
   "diag_title": "Zustandsdiagnose",
   "diag_sub": "Kopiere diesen Block und füge ihn zur Diagnose in eine KI ein.",

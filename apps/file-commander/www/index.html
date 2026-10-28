@@ -1,4 +1,5 @@
 <!doctype html>
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -223,6 +224,7 @@
 
   <script type="module">
     import I18N from '/nucleo-i18n.js';
+    import Caps from '/nucleo-caps.js';   // what this device can do (fs.stat)
     const t = await I18N.init('file-commander');   // loads core + this app's catalog, paints [data-i18n], live-switches
     let cwd = new URLSearchParams(location.search).get('path') || '/data';
     let entries = [];
@@ -317,7 +319,7 @@
     const winName = (p) => p.replace(/\\+$/, '').split('\\').pop() || p;
 
     // Glyph by extension — readable file typing like a real explorer.
-    const EXT = { mp3:'🎵', wav:'🎵', mp4:'🎬', webm:'🎬', mov:'🎬', png:'🖼️', jpg:'🖼️', jpeg:'🖼️', gif:'🖼️',
+    const EXT = { mp3:'🎵', wav:'🎵', mp4:'🎬', webm:'🎬', mov:'🎬', mkv:'🎬', m4v:'🎬', avi:'🎬', mpg:'🎬', mpeg:'🎬', m1v:'🎬', png:'🖼️', jpg:'🖼️', jpeg:'🖼️', gif:'🖼️',
       svg:'🖼️', txt:'📄', md:'📄', json:'🧾', log:'📜', jsdos:'🕹️', zip:'🗜️', img:'💽', ima:'💽',
       exe:'🕹️', com:'🕹️', bat:'⚙️', wad:'🕹️', gb:'🎮', gbc:'🎮', gg:'🎮', js:'🟨', mjs:'🟨', cjs:'🟨', lnk:'🔗' };
     const fileGlyph = (name) => EXT[(name.split('.').pop() || '').toLowerCase()] || '📄';
@@ -1032,6 +1034,21 @@
       return null;
     }
     const saveTrashDb = (db) => api('write', TRASH_DB, { method: 'POST', body: JSON.stringify(db) });
+    // Does a delete of this path go to the SERVER's bin? Only the device can say, on the RESOLVED path
+    // (/api/fs/stat → trash:true; on the Handheld data/ROMs, data/Music… are links to the same files as
+    // roms/ and media/). A device without the fs.stat capability is not asked at all; one with it still
+    // answers per file (the `trash` flag is state). Without either (Cardputer, P4, older servers) the app keeps
+    // its own checked trash — never guess from the path: on a backend that hard-deletes, a wrong guess would
+    // destroy the file.
+    async function serverTrashes(path) {
+      if (!(await Caps.has('fs.stat'))) return false;
+      try {
+        const r = await fetch('/api/fs/stat?path=' + encodeURIComponent(path), { cache: 'no-store' });
+        if (!r.ok) return false;
+        const j = await r.json().catch(() => null);
+        return !!(j && j.trash === true);
+      } catch { return false; }
+    }
     // A failed step with a message already meant for the user (callers toast err.message).
     const userError = (msg) => Object.assign(new Error(msg), { user: true });
     const failMsg = (err, fallback) => (err && err.user ? err.message : fallback);
@@ -1041,6 +1058,21 @@
     async function trashFile(path, record = true) {
       const name = path.split('/').pop();
       const notTrashed = () => userError(t('err_trash_failed', { name }));
+      if (await serverTrashes(path)) {
+        // On the Handheld's SD cards the SERVER trashes (instant same-fs rename into
+        // <mount>/.nucleos-trash + it registers the trash.json entry itself).
+        // Copying the bytes through the tab into /system/.trash would (a) double
+        // the entry and (b) try to fit a multi-GB video onto the ~800MB rootfs.
+        // So just delete and read back the entry the server wrote, for undo.
+        let d; try { d = await api('delete', path, { method: 'POST' }); } catch {}
+        if (!d || !d.ok) throw notTrashed();
+        if (record) {
+          const db = await loadTrashDb();
+          const it = ((db && db.items) || []).find((i) => i.orig === path);
+          if (it) pushUndo({ type: 'delete', orig: path, trash: it.trash });
+        }
+        return;
+      }
       const db = await loadTrashDb();
       if (!db) throw userError(t('err_trash_index'));
       await api('mkdir', TRASH, { method: 'POST' }).catch(() => {});
@@ -1074,11 +1106,18 @@
       try {
         const db = await loadTrashDb();
         if (!db) { toast(t('err_trash_index')); return false; }
-        const r = await api('read', trash);
-        if (!r.ok) throw new Error('read ' + r.status);
-        const w = await api('write', orig, { method: 'POST', body: await r.arrayBuffer() });
-        if (!w.ok) throw new Error('write ' + w.status);
-        await api('delete', trash, { method: 'POST' }).catch(() => {});
+        // move = rename first: works on files AND folders, on either trash location (the Handheld's server
+        // bins into <mount>/.nucleos-trash), and never pulls bytes through the tab. A backend whose move
+        // cannot do it (e.g. across filesystems) falls back to the checked copy below.
+        let mv = null;
+        try { mv = await fetch('/api/fs/move?from=' + encodeURIComponent(trash) + '&to=' + encodeURIComponent(orig) + '&overwrite=1', { method: 'POST' }); } catch {}
+        if (!mv || !mv.ok) {
+          const r = await api('read', trash);
+          if (!r.ok) throw new Error('read ' + r.status);
+          const w = await api('write', orig, { method: 'POST', body: await r.arrayBuffer() });
+          if (!w.ok) throw new Error('write ' + w.status);
+          await api('delete', trash, { method: 'POST' }).catch(() => {});
+        }
         db.items = db.items.filter((i) => i.trash !== trash); await saveTrashDb(db).catch(() => {});
         return true;
       } catch (err) { console.warn('restore failed', err); toast(t('err_restore_failed', { name })); return false; }

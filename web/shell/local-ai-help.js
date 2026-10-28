@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // local-ai-help.js — "let NucleoOS use the AI server on THIS computer": the exact fix when a local server
 // (Ollama, LM Studio, …) is running but refuses the page's origin (CORS). NucleoOS is served by the
 // Cardputer from http://<device-ip>; Ollama only admits localhost-ish origins by default, so it answers

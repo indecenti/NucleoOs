@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // anima-skill.js — reusable per-app SCOPED ANIMA skill copilot, hardened against prompt injection.
 //
 // The pattern (distilled from apps/spreadsheet/www/copilot): instead of ONE global ANIMA that has to

@@ -1,0 +1,17 @@
+{
+  "_lang": "es",
+  "title": "Marcador",
+  "undo": "Deshacer",
+  "add": "+ Jugador",
+  "target": "Puntos para ganar",
+  "sort": "Ordenar por puntos",
+  "reset": "Nueva partida",
+  "foot": "Guardado en este dispositivo. Funciona sin conexion.",
+  "player": "Jugador",
+  "name": "Nombre",
+  "remove": "Quitar",
+  "winner": "Gana!",
+  "empty": "Anade jugadores con + Jugador.",
+  "confirm.remove": "Quitar a {name}?",
+  "confirm.reset": "Poner todos los puntos a cero?"
+}

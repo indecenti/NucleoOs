@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // device-queue.js — ONE intelligent queue for everything that touches the PSRAM-less Cardputer.
 //
 // The board has ~18 KB heap and 4 httpd sockets: a burst of concurrent requests starves it. So every

@@ -19,7 +19,7 @@
   "notset": "nicht gesetzt",
   "conn": "verbunden",
   "wait": "nicht verbunden",
-  "hint": "Die PIN wird nur auf dem Gerät gespeichert und geht nie über USB. Private Passkey-Schlüssel verlassen den Cardputer nie.",
+  "hint": "Die PIN wird nur auf dem Gerät gespeichert und geht nie über USB. Private Passkey-Schlüssel verlassen das Gerät nie.",
   "askpin": "Neue PIN (4-63 Zeichen):",
   "pinok": "PIN aktualisiert.",
   "pinbad": "PIN abgelehnt (Länge 4-63).",
@@ -33,5 +33,6 @@
   "err": "Anfrage fehlgeschlagen.",
   "tries": "Versuche übrig",
   "askdel": "Passkey für {rp} ({user}) löschen? Die Anmeldung bei {rp} damit ist dann nicht mehr möglich. Nicht rückgängig zu machen.",
-  "stale": "Die Passkey-Liste hat sich auf dem Gerät geändert — nichts wurde gelöscht. Liste prüfen und erneut versuchen."
+  "stale": "Die Passkey-Liste hat sich auf dem Gerät geändert — nichts wurde gelöscht. Liste prüfen und erneut versuchen.",
+  "fido_unavailable": "Der FIDO-Sicherheitsschlüssel ist auf diesem Gerät nicht verfügbar."
 }

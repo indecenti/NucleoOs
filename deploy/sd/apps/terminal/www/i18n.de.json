@@ -18,5 +18,18 @@
   "man_which": "Welche Handbuchseite möchtest du?",
   "man_description": "Beschreibung:",
   "man_details": "Details:",
-  "man_none": "Kein Handbucheintrag für {cmd}"
+  "man_none": "Kein Handbucheintrag für {cmd}",
+  "subtitle_shell": "Geräte-Shell · {shell}",
+  "reconnect": "Neu verbinden",
+  "retry": "Erneut versuchen",
+  "st_connecting": "verbinde…",
+  "st_connected": "verbunden",
+  "st_closed": "Sitzung beendet",
+  "st_error": "Fehler: {msg}",
+  "st_unpaired": "nicht gekoppelt",
+  "gate_pair_title": "Browser nicht gekoppelt",
+  "gate_pair_body": "Das Terminal öffnet eine echte Shell auf dem Gerät – dieser Browser muss einmal gekoppelt werden. Die Konsole liest die PIN laut vor.",
+  "gate_pair_btn": "Koppeln",
+  "gate_off_title": "Terminal nicht verfügbar",
+  "gate_off_body": "Das Gerät hat nicht geantwortet ({msg})."
 }

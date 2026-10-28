@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // actions.js — the CLOSED typed-action vocabulary the M4 orchestrator may emit, plus the schema
 // FIREWALL that turns any model output (incl. adversarial / garbled JSON) into a validated,
 // path-confined action list. This is what makes a tiny grammar-constrained model trustworthy as a

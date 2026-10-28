@@ -49,6 +49,9 @@ public:
     // Solo on/off. False (and nothing changes) while a transaction is open on the internal panel.
     bool set_solo(bool on);
     bool solo(void) const { return _solo; }
+    // Solo only: the top `top` rows of the external panel are the system's (the store-app bar). The surface
+    // becomes ext width x (ext height - top) and everything drawn lands below the band. 0 = the whole glass.
+    bool set_inset(int top);
     // Display modes. ext_off: the external panel gets nothing (Cardputer only; solo is refused meanwhile).
     // pri_off: the internal backlight stays at 0 (second screen only) — the internal panel is still drawn,
     // it remains the source of truth for readbacks and screenshots. Between frames only, like solo.
@@ -145,6 +148,7 @@ private:
     brightness_cb_t _bl_cb = nullptr;
     lock_cb_t _lock = nullptr, _unlock = nullptr;
     int _ox = 0, _oy = 0;
+    int _inset = 0;                                // solo: rows reserved at the top (set_inset)
     uint32_t _ext_tx = 0;
     bool _solo = false;
     bool _fit = false;

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // Build a NucleoOS .nfv v4 in the browser: the format the Cardputer's native Video app plays (spec and the
 // reference encoder: tools/nfv/nfv4.py — this file writes byte-for-byte the same layout).
 //   64-byte header · chunks [u8 type][u8 0][u16 mask][u32 len][u32 stamp][payload] · index {u32 frame, u32 off}/s

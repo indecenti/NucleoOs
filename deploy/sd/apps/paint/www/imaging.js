@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // imaging.js — Paint's pixel-processing core. PURE & DOM-free (operates on {data:Uint8ClampedArray, width,
 // height} RGBA images), so every operation is deterministic and host-testable (tools/anima-host/
 // paint-imaging.test.mjs). The canvas/UI layer in index.html wraps these with getImageData/putImageData.

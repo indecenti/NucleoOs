@@ -15,7 +15,7 @@
   "hourly": "Next 24 hours",
   "daily": "Coming days",
   "first_title": "Where are you?",
-  "first_sub": "Search your city or use the browser location. The forecast comes from Open-Meteo, straight from the browser: the Cardputer is never touched.",
+  "first_sub": "Search your city or use the browser location. The forecast comes from Open-Meteo, straight from the browser: the device is never touched.",
   "err_geo": "Location unavailable",
   "err_net": "Network unreachable",
   "err_city": "No results",

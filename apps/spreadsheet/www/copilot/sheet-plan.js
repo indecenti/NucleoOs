@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // sheet-plan.js — the DETERMINISTIC offline multi-step planner. The honest "works offline NOW, no
 // model" core: it turns a COMPOUND natural-language request ("fai i totali, poi ordina per colonna B
 // decrescente ed evidenzia il massimo") into an ordered PLAN of closed, firewalled sheet actions —

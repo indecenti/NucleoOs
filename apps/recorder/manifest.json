@@ -1,8 +1,9 @@
 {
   "id": "recorder",
   "name": "Voice Recorder",
-  "version": "0.1.0",
-  "description": "Record from the Cardputer or browser microphone; always saved as MP3 on the SD card. Live transcription + ANIMA summaries, action items and smart titles.",
+  "version": "0.1.1",
+  "version_code": 1,
+  "description": "Record from the device or browser microphone; always saved as MP3 on the SD card. Live transcription + ANIMA summaries, action items and smart titles.",
   "category": "media",
   "runtime": "web",
   "entry_service": "recorder",

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // nlmath.js — exact arithmetic from a sentence, in the browser, in the five OS languages.
 //
 // Why: in the web profile the Cardputer's offline brain (and its calculator) is paused, so "Combien font 17 fois 23,

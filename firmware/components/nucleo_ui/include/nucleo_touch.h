@@ -20,7 +20,7 @@
 extern "C" {
 #endif
 
-#define NUCLEO_TOUCH_MAX 16
+#define NUCLEO_TOUCH_MAX 20
 
 // Lists: a visible row registers itself with ch = NUCLEO_TOUCH_ROW + its slot on screen (0..15). The list's
 // key handler turns it into "select this row", or "open it" when it already is the selection — tap to pick,
@@ -33,6 +33,11 @@ static inline bool nucleo_touch_is_row(int key, char ch) { return key == 9 /* NK
 // nucleo_touch_last() and hit-tests its own content — any number of things on the field, one target.
 #define NUCLEO_TOUCH_FIELD 0x0E
 static inline bool nucleo_touch_is_field(int key, char ch) { return key == 9 /* NK_CHAR */ && ch == NUCLEO_TOUCH_FIELD; }
+// View scroll: a scroll area (nucleo_touch_add_scroll) that moves the CONTENT, not the selection, delivers these as
+// NK_CHAR — one per `step` px of finger travel (BACK = finger down, the content toward its top). The list shifts by
+// step px and the focus stays where it was, as on a phone. Never printable.
+#define NUCLEO_TOUCH_VIEW_BACK 0x0B
+#define NUCLEO_TOUCH_VIEW_FWD  0x0C
 // Where the tap that delivered the last target key landed (the screen's own coordinates). False = none yet.
 bool nucleo_touch_last(int *x, int *y);
 

@@ -32,5 +32,14 @@
   "core_n": "Kern {n}",
   "cpu_meta": "{n} Kerne · Betriebszeit {uptime}",
   "na_short": "k. A.",
-  "cpu_unavailable": "/api/cpu-Endpunkt nicht verfügbar (Firmware)"
+  "cpu_unavailable": "/api/cpu-Endpunkt nicht verfügbar (Firmware)",
+  "no_battery": "nicht vorhanden",
+  "ram_title": "Speicher (RAM)",
+  "mem_available": "Verfügbar",
+  "swap": "Swap (zram)",
+  "ram_avail": "RAM frei",
+  "governor": "Governor",
+  "soc_temp": "SoC-Temp",
+  "load_unit": "Last",
+  "uptime_is": "Laufzeit {uptime}"
 }

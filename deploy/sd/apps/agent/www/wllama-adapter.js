@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // wllama-adapter.js — F3: make the WASM rung actually RUNNABLE for the agent loop.
 //
 // F0 built the local transport (runWorkerLocal) and F4 installed the WASM model but kept its rung OUT

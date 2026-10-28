@@ -1,0 +1,17 @@
+{
+  "_lang": "de",
+  "title": "Punktezaehler",
+  "undo": "Rueckgaengig",
+  "add": "+ Spieler",
+  "target": "Siegpunkte",
+  "sort": "Nach Punkten",
+  "reset": "Neues Spiel",
+  "foot": "Auf diesem Geraet gespeichert. Funktioniert offline.",
+  "player": "Spieler",
+  "name": "Name",
+  "remove": "Entfernen",
+  "winner": "Gewinnt!",
+  "empty": "Spieler mit + Spieler hinzufuegen.",
+  "confirm.remove": "{name} entfernen?",
+  "confirm.reset": "Alle Punkte auf null setzen?"
+}

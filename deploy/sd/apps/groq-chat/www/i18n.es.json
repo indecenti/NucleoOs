@@ -37,5 +37,11 @@
   "web_on": "Web",
   "web_searching": "🌐 Buscando en la web…",
   "sources_label": "Fuentes",
-  "web_mode_hint": "Modo Web activo: respuestas actualizadas y con fuentes desde la web, vía Groq compound. El modelo seleccionado arriba se ignora."
+  "web_mode_hint": "Modo Web activo: respuestas actualizadas y con fuentes desde la web, vía Groq compound. El modelo seleccionado arriba se ignora.",
+  "api_key_hint_sealed": "Se guarda en el dispositivo y no queda en el navegador. Créala/gestiónala en <a href=\"https://console.groq.com/keys\" target=\"_blank\" rel=\"noreferrer noopener\">console.groq.com/keys</a>.",
+  "teacher_note_sealed": "Las claves están <b>en el dispositivo</b>: este chat las usa a través del dispositivo, sin verlas nunca. Se gestionan (y se eliminan) en <b>Ajustes ▸ IA</b>.",
+  "key_forgotten_sealed": "No queda ninguna clave en este navegador. Para eliminar la del dispositivo: Ajustes ▸ IA.",
+  "key_saved_device": "Clave guardada en el dispositivo.",
+  "err_unpaired": "Primero empareja este navegador con el dispositivo.",
+  "err_save_key": "No se pudo guardar la clave en el dispositivo."
 }

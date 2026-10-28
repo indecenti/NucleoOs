@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // extract.js — claim EXTRACTION with COVERAGE, the must-build-first core of cross-substrate
 // verification. Turning free generative output into discrete checkable assertions is the genuinely
 // hard part; a missed claim would yield a false PASS. So coverage is an explicit, gated property:

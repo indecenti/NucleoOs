@@ -1,4 +1,5 @@
 <!doctype html>
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -174,6 +175,46 @@
     background:rgba(12,16,24,.85); border:1px solid var(--line); border-radius:12px; padding:11px 18px;
     font-size:14px; backdrop-filter:blur(6px); display:none; pointer-events:none; }
   .lock-hint.on { display:block; animation:toastIn .2s ease-out; }
+/* NucleoPad: the consent ask + the live badge (same deal as the Console app) */
+.nucask{position:fixed;inset:0;background:rgba(4,6,10,.62);display:none;align-items:center;justify-content:center;z-index:300;padding:20px}
+.nucask.on{display:flex}
+.nucask .nc{background:#161a22;border:1px solid #2a2f3b;border-radius:14px;padding:20px;max-width:400px}
+.nucask h2{font-size:16px;margin:0 0 8px}
+.nucask p{font-size:13px;color:#aeb3bd;line-height:1.5;margin:0 0 16px}
+.nucask .row{display:flex;gap:10px;justify-content:flex-end}
+#nucPad{cursor:pointer}
+#nucPad.pending{opacity:.6;animation:npblink 1s infinite}
+@keyframes npblink{50%{opacity:.25}}
+/* pad focus ring: which control A will press. Thick double ring + breathing
+   glow + a slight lift — visible on cards, ghost buttons and swatches alike,
+   from across the room. */
+.padsel{outline:3px solid var(--good,#34d399);outline-offset:3px;border-radius:10px;
+ box-shadow:0 0 0 7px rgba(52,211,153,.25),0 0 22px rgba(52,211,153,.55);
+ transform:scale(1.05);transition:transform .1s ease;position:relative;z-index:6;
+ animation:padpulse 1.6s ease-in-out infinite}
+@keyframes padpulse{50%{box-shadow:0 0 0 9px rgba(52,211,153,.15),0 0 28px rgba(52,211,153,.7)}}
+
+/* ── polish pass: depth, motion, brand ──────────────────────────────────── */
+body{background:radial-gradient(140% 110% at 75% -25%,#121b28 0%,var(--bg) 55%)}
+header{background:linear-gradient(180deg,#18202c,var(--panel))}
+header h1{background:linear-gradient(90deg,var(--accent),var(--accent2));
+ -webkit-background-clip:text;background-clip:text;color:transparent;font-weight:800}
+.section-title:before{content:'';width:18px;height:2px;border-radius:2px;
+ background:linear-gradient(90deg,var(--accent),transparent);flex:none}
+.room{transition:transform .12s ease,border-color .12s ease,box-shadow .12s ease}
+.room:hover{transform:translateX(3px);border-color:var(--accent);box-shadow:0 6px 18px rgba(0,0,0,.35)}
+button{transition:border-color .12s ease,filter .12s ease,transform .06s ease}
+button:active{transform:scale(.96)}
+button.primary:hover,button.good:hover{filter:brightness(1.18)}
+.seatcard{transition:border-color .15s ease}
+.seatcard .ready{text-shadow:0 0 12px rgba(52,211,153,.6)}
+.chip{background:rgba(20,26,34,.5)}
+::-webkit-scrollbar{width:9px;height:9px}
+::-webkit-scrollbar-thumb{background:#28313f;border-radius:8px;border:2px solid var(--bg)}
+::-webkit-scrollbar-thumb:hover{background:#35404f}
+::-webkit-scrollbar-track{background:transparent}
+@media (prefers-reduced-motion:reduce){.padsel{animation:none;transform:none}
+ .card,.room,button{transition:none}}
 </style>
 </head>
 <body>
@@ -182,6 +223,7 @@
     <h1 data-i18n="header_title">🎮 Giochi</h1>
     <span class="grow"></span>
     <span class="chip hidden" id="padChip" data-i18n-attr="title:pad_title" title="Controller collegato" style="border-color:var(--good);color:var(--good)">🎮</span>
+    <span class="chip hidden" id="nucPad" data-i18n-attr="title:nucpad_title" title="Usa il joypad del palmare">🕹️</span>
     <div class="gamercard" id="cardBtn" data-i18n-attr="title:card_edit_title" title="Modifica gamercard">
       <div class="av" id="cardAv"></div>
       <div><div class="nm" id="cardName"></div><div class="sub" id="cardStat"></div></div>
@@ -290,6 +332,23 @@
   </div>
 </div>
 
+<!-- coach stalled: the LLM stopped answering mid-match. Visible OVER immersive
+     play (the chat that used to carry this news is hidden there), pad-navigable,
+     with the one decision that is the player's to make. -->
+<div class="nucask" id="brainStall"><div class="nc">
+  <h2 data-i18n="brain_stall_t">L'allenatore LLM non risponde</h2>
+  <p data-i18n="brain_stall_b">La partita è in pausa e riprovo da solo. Oppure prosegui subito con la mente classica, senza LLM.</p>
+  <div class="row"><button id="bsLocal" class="primary" data-i18n="brain_stall_btn">Continua con la mente classica</button></div>
+</div></div>
+
+<div class="nucask" id="nucAsk"><div class="nc">
+  <h2 data-i18n="nucpad_ask_t">Usare il dispositivo come joypad?</h2>
+  <p data-i18n="nucpad_ask_b">Il tuo NucleoOS chiederà conferma sul suo schermo. Dopo che accetti, il pad fisico gioca qui nel browser.</p>
+  <div class="row"><button id="nucAskNo" data-i18n="nucpad_no">No, grazie</button>
+    <button id="nucAskYes" class="primary" data-i18n="nucpad_yes">Sì, usa il pad</button></div>
+</div></div>
+
+<script src="/nucleopad.js"></script>
 <script type="module">
 import { NucleoPlay, _fs as FS } from '/apps/games/nucleo-play.js';
 import { GameHarness, getGame } from '/apps/games/nucleo-game.js';
@@ -298,6 +357,7 @@ import * as LLM from '/apps/games/llm.js';
 import { Brain, preflightBrain, brainMode, llmSelected } from '/apps/games/llm-brain.js';
 import { GamepadManager } from '/apps/games/gamepad.js';
 import I18N from '/nucleo-i18n.js';   // OS-wide language signal: lets the app repaint live on a language change
+import Caps from '/nucleo-caps.js';   // what this device can do (device.pad, anima.device)
 
 const $ = s => document.querySelector(s);
 const el = (t, c, txt) => { const e = document.createElement(t); if (c) e.className = c; if (txt != null) e.textContent = txt; return e; };
@@ -323,7 +383,7 @@ const gameName = (id) => gameText(id, 'name');
 let CATALOG = [], STATS = {};
 let play = null, harness = null, def = null, profile = P.getProfile();
 let phase = 'lobby', typingTimer = 0, animaBusy = false, animaLast = 0, wiredRoom = false;
-let coach = null, lastOpts = {}, ptrThrottle = 0, gamepad = null, lastAxisKey = '', boardRO = null;
+let coach = null, lastOpts = {}, ptrThrottle = 0, gamepad = null, padCB = null, lastAxisKey = '', boardRO = null;
 // immersive play (fullscreen + Xbox-style game bar + mouse capture)
 let immersive = false, barOpen = false, wantFs = false, fsUserOff = false, pausedByBar = false, isOver = false, lockX = 0, lockY = 0, shownIntro = false;
 const clamp = (v, lo, hi) => v < lo ? lo : v > hi ? hi : v;
@@ -334,7 +394,8 @@ let brainCfg = null, grokFailRematch = false;   // verified LLM config + which s
 // ---- ANIMA bridge (offline-first; best-effort, never blocks the game) -----------------------
 async function animaSay(q, mode = 'off') {
   if (animaBusy) return null; animaBusy = true;
-  try { const r = await fetch('/api/anima?q=' + encodeURIComponent(q) + '&lang=' + lang() + '&mode=' + mode, { cache: 'no-store' }); const d = await r.json(); return (d && d.reply && d.tier !== 'none') ? String(d.reply).slice(0, 180) : null; }
+  try { if (!(await Caps.has('anima.device'))) return null;   // ANIMA lives in the browser here: the device would abstain anyway
+    const r = await fetch('/api/anima?q=' + encodeURIComponent(q) + '&lang=' + lang() + '&mode=' + mode, { cache: 'no-store' }); const d = await r.json(); return (d && d.reply && d.tier !== 'none' && !d.none) ? String(d.reply).slice(0, 180) : null; }   // CP/P4 mark a miss with tier:'none', Handheld/Web with none:true
   catch { return null; } finally { animaBusy = false; }
 }
 
@@ -469,6 +530,13 @@ async function setupSession(gameId) {
 // stale `display:none !important` can never strand the lobby after you leave a game (the old bug).
 function gotoPhase(p) {
   phase = p;
+  PadNav.hide();
+  // With a pad driving (device or USB), re-seed the ring once the new phase has
+  // painted: the waiting room starts on its primary action, the lobby on the
+  // first card. In playing the navigator's root is null, so this is a no-op.
+  if ((NP && NP.state === 'active') || (gamepad && gamepad.connected()))
+    setTimeout(() => PadNav.seed(p === 'waiting' ? ['#startBtn', '#readyBtn', '#offlineBtn'] : []), 60);
+  gsCard();                      // the handheld's screen follows the phase
   const inLobby = (p === 'lobby');
   show('#lobby', inLobby);
   $('#room').classList.toggle('on', !inLobby);
@@ -541,7 +609,19 @@ function maybeLock() {
 function releaseLock() { if (document.pointerLockElement && document.exitPointerLock) document.exitPointerLock(); }
 // touch-only devices have no mouse to capture: never offer it there
 const NO_MOUSE = !!(window.matchMedia && matchMedia('(hover:none) and (pointer:coarse)').matches);
-function showLockHint(on) { $('#lockHint').classList.toggle('on', !!on && barOpen === false && !NO_MOUSE); }
+// With a pad driving, mouse capture is irrelevant - and a match started BY the
+// pad can never satisfy the hint anyway (a synthetic click is not the user
+// gesture requestPointerLock needs), so it sat on screen forever saying
+// "click to capture" over a game that needed no mouse at all.
+const padDriving = () => (typeof NP !== 'undefined' && NP && NP.state === 'active') || (gamepad && gamepad.connected());
+// ...and it is a MOUSE hint: someone who hasn't touched the mouse in a while
+// (keyboard or pad player) must not be nagged to click.
+let mouseLast = 0;
+addEventListener('pointermove', e => { if (e.isTrusted && e.pointerType !== 'touch') mouseLast = performance.now(); }, { passive: true });
+function showLockHint(on) {
+  const mouseish = mouseLast === 0 || performance.now() - mouseLast < 20000;
+  $('#lockHint').classList.toggle('on', !!on && barOpen === false && !NO_MOUSE && !padDriving() && mouseish);
+}
 // A gesture anywhere lets a guest (who entered playing via the network) claim real fullscreen + lock.
 function onUserGesture() {
   if (!immersive || barOpen) return;
@@ -561,10 +641,15 @@ function openBar() {
   }
   $('#gbPaused').classList.toggle('hidden', !pausedByBar);
   renderBar();
+  // Pad driving: ring straight onto the bar's primary (rematch when the match
+  // just ended, resume otherwise) - this menu was mouse-only until now.
+  if ((NP && NP.state === 'active') || (gamepad && gamepad.connected()))
+    setTimeout(() => PadNav.seed(['#gbRematch', '#gbResume']), 30);
 }
 function closeBar() {
   if (!barOpen) return;
   barOpen = false; $('#gbar').classList.remove('on');
+  PadNav.hide();
   if (pausedByBar && harness) { try { harness.resume(); } catch {} pausedByBar = false; }
   $('#gbPaused').classList.add('hidden');
   maybeLock();
@@ -602,6 +687,7 @@ function syncBarButtons() {
 }
 function ctrlHintText() {
   if (!def) return '';
+  if (padDriving()) return '🎮 ' + t('ctrl_pad');   // a pad is driving: say so, not "mouse or W/S"
   if (def.capturesPointer) return '🖱 ' + t('ctrl_mouse');
   if (def.padMode === 'cursor') return '⌨ ' + t('ctrl_arrows');
   return '👆 ' + t('ctrl_tap');
@@ -682,15 +768,18 @@ function collectOptions() {
 // ---- room wiring (once per session) --------------------------------------------------------
 function wireRoomOnce() {
   if (wiredRoom) return; wiredRoom = true;
-  play.on('roster', () => { renderRoster(); renderWaiting(); if (barOpen) renderBar(); });
+  play.on('roster', () => { renderRoster(); renderWaiting(); if (barOpen) renderBar(); gsCard(); });
   play.on('peer', ({ name, spectator }) => { renderRoster(); renderWaiting(); sys(`${name} ${spectator ? t('peer_watching') : t('peer_joined')}`); if (play.isHost) { play.setPhase(phase === 'lobby' ? 'waiting' : phase); if (phase === 'playing') harness.resync(); } });
   play.on('left', () => { renderRoster(); renderWaiting(); if (barOpen) renderBar(); sys(t('player_left')); });
   play.on('phase', ({ phase: p }) => { if (p && p !== phase) gotoPhase(p); });
-  play.on('message', ({ data }) => { if (data && data.k === 'state' && phase !== 'playing') gotoPhase('playing'); if (barOpen) renderBarScore(); });
+  play.on('message', ({ data }) => { if (data && data.k === 'state' && phase !== 'playing') gotoPhase('playing'); if (barOpen) renderBarScore(); gsCard(); });
   play.on('chat', ({ name, avatar, text }) => addMsg(avatar, name, text));
   play.on('react', ({ emoji }) => floatReact(emoji));
   play.on('typing', ({ name, on }) => { $('#typing').textContent = on ? t('typing', { name }) : ''; });
   play.on('error', () => sys(t('p2p_failed')));
+  // P2P couldn't open (cross-browser mDNS, AP isolation): the fs mailbox took
+  // over. The match works — just say why it might feel less snappy.
+  play.on('relay', () => sys(t('net_relay')));
 }
 
 // ---- buttons -------------------------------------------------------------------------------
@@ -716,6 +805,20 @@ const brainUI = {
     $('#status').textContent = `🧠 ${LLM.providerLabel(cfg)} @ ${LLM.endpointHost(cfg)}`;
   },
   fail: failGrok,
+  // Coach stalled mid-match / recovered: drive the on-screen overlay (the chat
+  // is hidden in immersive play, so a chat line alone announced it to nobody).
+  blocked()   { $('#brainStall').classList.add('on');    PadNav.seed(['#bsLocal']); },
+  unblocked() { $('#brainStall').classList.remove('on'); if (phase === 'playing') PadNav.hide(); },
+};
+// The player's explicit way out of a stalled LLM: hand the seat to the classic
+// local mind and resume. Explicit consent, so it does not violate the brain's
+// no-SILENT-fallback rule - the choice is on screen, made by a human.
+$('#bsLocal').onclick = () => {
+  if (coach) { coach.stop(); coach = null; }           // stop() also clears the overlay
+  else $('#brainStall').classList.remove('on');
+  try { if (harness && harness.isPaused()) harness.resume(); } catch {}
+  sys(t('coach_local'));
+  toast('🤖 ' + t('coach_local'));
 };
 
 // In LLM mode, require a confirmed connection before the opponent exists. Returns false (blocked).
@@ -765,34 +868,271 @@ document.addEventListener('pointerlockchange', () => {
   else if (immersive && !barOpen && phase === 'playing' && wantsLock() && !(play && play.spectator)) showLockHint(true);
 });
 
+// ---- pad navigation for the lobby and modals -------------------------------
+// The pad routing below only speaks to the game phases; the lobby was designed
+// for mouse and touch, so a connected pad could browse nothing and launch
+// nothing. This gives every visible button a spatially-navigated focus ring:
+// a direction picks the nearest control in that direction, A presses it, B
+// closes an open modal. Both sources flow through it (device pad and USB pad).
+const PadNav = (() => {
+  let cur = null;
+  const topModal = () =>
+    document.querySelector('.nucask.on') || ($('#modal').classList.contains('on') ? $('#modal') : null);
+  // #brainStall is a .nucask too, so the ring is trapped on its button while a
+  // stalled coach has the match paused - exactly when the pad must still work.
+  // Where the ring may roam: a modal traps it; the lobby owns the whole page;
+  // the waiting room owns the session shell (game bar, options, emotes, chat
+  // buttons). While PLAYING the game owns the pad and the ring stays off.
+  function root() {
+    const m = topModal(); if (m) return m;
+    if (barOpen) return $('#gbar');            // the Xbox-style overlay: rematch/leave/emotes live here
+    if (phase === 'lobby') return document;
+    if (phase === 'waiting') return $('#room');
+    return null;
+  }
+  function items() {
+    const r0 = root(); if (!r0) return [];
+    return [...r0.querySelectorAll('button, select, .gamercard, #nucPad')].filter(e => {
+      if (e.disabled || e.classList.contains('hidden')) return false;
+      const r = e.getBoundingClientRect();
+      return r.width > 0 && r.height > 0;
+    });
+  }
+  function paint(el) {
+    if (cur && cur !== el) cur.classList.remove('padsel');
+    cur = el || null;
+    if (cur) { cur.classList.add('padsel'); try { cur.scrollIntoView({ block: 'nearest' }); } catch {} }
+  }
+  function move(dx, dy) {
+    const it = items(); if (!it.length) return;
+    if (!cur || !document.contains(cur) || !it.includes(cur)) { paint(it[0]); return; }
+    const cr = cur.getBoundingClientRect();
+    const cx = cr.left + cr.width / 2, cy = cr.top + cr.height / 2;
+    let best = null, bs = Infinity;
+    for (const e of it) {
+      if (e === cur) continue;
+      const r = e.getBoundingClientRect();
+      const vx = r.left + r.width / 2 - cx, vy = r.top + r.height / 2 - cy;
+      const fwd = dx * vx + dy * vy;             // progress along the pressed direction
+      if (fwd <= 4) continue;                    // must actually move that way
+      const drift = Math.abs(dx ? vy : vx);      // off-axis drift is penalised hard
+      const score = fwd + drift * 2.5;
+      if (score < bs) { bs = score; best = e; }
+    }
+    if (best) paint(best);
+  }
+  function press() {
+    if (!cur || !document.contains(cur)) return false;
+    // A <select> (game options) can't be opened by a synthetic click in every
+    // browser: A cycles its values instead, which is also the console idiom.
+    if (cur.tagName === 'SELECT') {
+      if (cur.options.length) {
+        cur.selectedIndex = (cur.selectedIndex + 1) % cur.options.length;
+        cur.dispatchEvent(new Event('change', { bubbles: true }));
+      }
+      return true;
+    }
+    cur.click();
+    return true;
+  }
+  function back() {
+    const m = topModal(); if (!m) return false;
+    if (m.id === 'brainStall') return true;   // no dismiss: closing it would strand a paused match
+    if (m.id === 'nucAsk') $('#nucAskNo').click(); else m.classList.remove('on');
+    paint(null);
+    return true;
+  }
+  // Put the ring where the eye starts: the phase's primary action when it is
+  // actually on screen, the first control otherwise.
+  function seed(preferred) {
+    const it = items(); if (!it.length) return;
+    let el = null;
+    for (const s of (preferred || [])) {
+      const c = document.querySelector(s);
+      if (c && it.includes(c)) { el = c; break; }
+    }
+    paint(el || it[0]);
+  }
+  return { move, press, back, seed,
+           modalOpen: () => !!topModal(),
+           hide() { paint(null); } };
+})();
+
 // ---- gamepad/joystick (transversal: routed by phase + the game's padMode) ------------------
 function setupGamepad() {
   const vis = sel => !$(sel).classList.contains('hidden');
-  gamepad = new GamepadManager({
-    onConnect: (g) => { $('#padChip').classList.remove('hidden'); if (phase !== 'lobby') sys(t('pad_connected') + (g.id ? ' (' + g.id.slice(0, 28) + ')' : '')); },
+  // The routing callbacks are shared state, not a GamepadManager private: the
+  // device's borrowed pad (NucleoPad, below) feeds the SAME streams, so every
+  // game gets both input sources through one set of rules.
+  padCB = {
+    onConnect: (g) => { $('#padChip').classList.remove('hidden'); showLockHint(false); if (phase !== 'lobby') sys(t('pad_connected') + (g.id ? ' (' + g.id.slice(0, 28) + ')' : '')); },
     onDisconnect: () => { if (!gamepad.connected()) { $('#padChip').classList.add('hidden'); if (phase !== 'lobby') sys(t('pad_disconnected')); } },
     onAxis: (x, y) => {
       if (phase !== 'playing' || barOpen || !harness || play.spectator || !def || def.padMode !== 'analog') return;
       const key = Math.sign(x) + ',' + Math.sign(y); if (key === lastAxisKey) return; lastAxisKey = key;   // forward only on change
       harness.feedAxis(x, y);
     },
-    onDir: (dx, dy) => { if (phase === 'playing' && !barOpen && harness && !play.spectator && def && (def.padMode === 'cursor' || def.padMode === 'analog')) harness.feedPadDir(dx, dy); },
+    onDir: (dx, dy) => {
+      if (PadNav.modalOpen() || barOpen || phase === 'lobby' || phase === 'waiting') { PadNav.move(dx, dy); return; }
+      if (phase === 'playing' && harness && !play.spectator && def && (def.padMode === 'cursor' || def.padMode === 'analog')) harness.feedPadDir(dx, dy);
+    },
     onButton: (name, down) => {
       if (!down) return;
+      if (PadNav.modalOpen()) {
+        if (name === 'A') PadNav.press();
+        else if (name === 'B' || name === 'Back') PadNav.back();
+        return;
+      }
+      if (phase === 'lobby') {
+        if (name === 'A') PadNav.press();
+        else if (name === 'Y') $('#refresh').click();
+        return;
+      }
       if (phase === 'playing') {
         // Start/Select = the guide button: open/close the game bar (native console feel).
         if (name === 'Start' || name === 'Select') { toggleBar(); return; }
-        if (barOpen) { if (name === 'B') closeBar(); return; }   // while the menu is up, don't drive the game
+        // While the menu is up it IS the screen: the ring navigates it, A presses,
+        // B closes. Without this, "Rematch" at match end was mouse-only.
+        if (barOpen) { if (name === 'A') PadNav.press(); else if (name === 'B') closeBar(); return; }
         if (name === 'A' && def && def.padMode === 'cursor' && !play.spectator) harness.feedPadButton('A');
         // analog games (e.g. Costellazioni) drive their own menus with the face buttons + d-pad.
         if (def && def.padMode === 'analog' && !play.spectator && (name === 'A' || name === 'B' || name === 'X' || name === 'Y')) harness.feedPadButton(name);
       } else if (phase === 'waiting') {
+        // A presses whatever the ring is on; with no ring yet it falls back to
+        // the obvious primary (ready). Start stays the host's "go" shortcut.
+        if (name === 'A') { if (!PadNav.press() && vis('#readyBtn')) $('#readyBtn').click(); }
         if (name === 'Start' && play.isHost && vis('#startBtn') && !$('#startBtn').disabled) $('#startBtn').click();
-        if (name === 'A' && vis('#readyBtn')) $('#readyBtn').click();
       }
     },
-  });
+  };
+  gamepad = new GamepadManager(padCB);
   gamepad.start();
+}
+
+// ---- NucleoPad: borrow the handheld's PHYSICAL joypad over the LAN ----------
+// Same deal as the Console app: we only ASK, the consent gate is the device's
+// own screen. Raw device events are translated into the very padCB streams the
+// local Gamepad API already feeds, so every game supports it for free.
+const NP = window.NucleoPad, NP_PREF = 'games.pad';
+// device SDL buttons (main.c btn_action): a=0 b=1 x=2 y=3 L=4 R=5 L2=6 R2=7 sel=8 start=9
+const NP_BTN = { 0:'A', 1:'B', 2:'X', 3:'Y', 4:'LB', 5:'RB', 6:'LT', 7:'RT', 8:'Back', 9:'Start' };
+let npD = { 14:0, 15:0, 16:0, 17:0 }, npHat = 0, npAxis = { x:0, y:0 };
+let npDir = { dx:0, dy:0 }, npRepT = null, npRep = null;
+
+function npStopRepeat() { clearTimeout(npRepT); clearInterval(npRep); npRepT = npRep = null; }
+// The local manager does typematic in its rAF loop; device events are edges, so
+// the press-then-repeat cadence (same 240/130ms) is rebuilt here.
+function npRecalc() {
+  // Direction = d-pad OR hat OR a stick pushed past half travel: the analog
+  // stick then navigates every menu and drives the cursor games (tris/forza4)
+  // exactly like the d-pad, typematic included - full-pad, not dpad-only.
+  const sx = npAxis.x > 0.5 ? 1 : npAxis.x < -0.5 ? -1 : 0;
+  const sy = npAxis.y > 0.5 ? 1 : npAxis.y < -0.5 ? -1 : 0;
+  const r = (npD[17] || (npHat & 2)) ? 1 : 0, l = (npD[16] || (npHat & 8)) ? 1 : 0;
+  const d = (npD[15] || (npHat & 4)) ? 1 : 0, u = (npD[14] || (npHat & 1)) ? 1 : 0;
+  const dx = (r - l) || sx, dy = (d - u) || sy;
+  if (padCB) padCB.onAxis(dx || npAxis.x, dy || npAxis.y);
+  if (dx === npDir.dx && dy === npDir.dy) return;
+  npDir = { dx, dy };
+  npStopRepeat();
+  if (!dx && !dy) return;
+  if (padCB) padCB.onDir(dx, dy);
+  npRepT = setTimeout(() => { npRep = setInterval(() => padCB && padCB.onDir(npDir.dx, npDir.dy), 130); }, 240);
+}
+function npBadge(st) {
+  const b = $('#nucPad');
+  b.classList.remove('hidden');
+  b.classList.toggle('pending', st === 'pending');
+  const on = st === 'active';
+  b.style.borderColor = on ? 'var(--good)' : '';
+  b.style.color = on ? 'var(--good)' : '';
+  b.style.opacity = st === 'busy' ? .4 : '';        // another page owns the pad
+  b.title = t(on ? 'nucpad_active' : st === 'pending' ? 'nucpad_pending'
+              : st === 'busy' ? 'nucpad_busy' : 'nucpad_title');
+}
+async function npAsk() { const r = await NP.request('Giochi'); if (!r || !r.ok) npBadge('idle'); }
+
+// ---- second screen: the handheld shows what you're playing ------------------
+// While its joypad is on loan the device is not a dumb controller: its panel
+// carries the running game's card (same /api/pad/show the Console app uses).
+// Debounced + deduped: a 30Hz state flood becomes one small POST per real change.
+let gsT = 0, gsKey = '';
+function gsCard() {
+  if (!NP || NP.state !== 'active') return;
+  let body;
+  if (phase !== 'lobby' && def) {
+    const st = harness && harness.state;
+    const sc = st && Array.isArray(st.scores) ? st.scores.join(' – ') : '';
+    const who = (play && play.roster || []).filter(r => !r.spectator).map(r => r.name).join(' vs ');
+    body = { title: def.name, img: '', mode: phase === 'playing' ? 1 : 0,
+             desc: t(phase === 'playing' ? 'gs_playing' : 'gs_waiting'),
+             meta: [sc, who].filter(Boolean).join('  ·  ') };
+  } else {
+    body = { title: '🎮 ' + t('header_title'), img: '', mode: 0,
+             desc: t('gs_lobby'), meta: CATALOG.length ? CATALOG.length + ' ' + t('gs_games') : '' };
+  }
+  const key = JSON.stringify(body);
+  if (key === gsKey) return;
+  gsKey = key;
+  clearTimeout(gsT);
+  gsT = setTimeout(() => fetch('/api/pad/show', { method: 'POST',
+    headers: { 'Content-Type': 'application/json' }, body: key }).catch(() => {}), 150);
+}
+function npInit() {
+  if (!NP) return;
+  // Device feature (capability device.pad): only the Handheld has it, and only there is /api/pad/state read.
+  // Until that STATE says a Core is listening, nothing of it shows and no socket is opened — without the
+  // capability, or on a 404 / error / no `core`, the whole idea stays hidden.
+  let npOn = false;
+  NP.onButton(e => {
+    if (e.b >= 14 && e.b <= 17) { npD[e.b] = e.v ? 1 : 0; npRecalc(); return; }
+    const name = NP_BTN[e.b]; if (!name || !padCB) return;
+    padCB.onButton(name, !!e.v);
+  });
+  NP.onHat(e => { npHat = e.m; npRecalc(); });
+  NP.onAxis(e => {
+    // Right stick mirrors the left (axes 2/3): whichever thumb is on a stick,
+    // it works. Events are per-axis on-change, so the newest source wins.
+    const v = Math.abs(e.v) < 3200 ? 0 : e.v / 32768;
+    if (e.a === 0 || e.a === 2) npAxis.x = v;
+    else if (e.a === 1 || e.a === 3) npAxis.y = v;
+    else return;
+    npRecalc();      // sticks feed BOTH streams: continuous (analog games) and discrete (menus/cursor)
+  });
+  const npOnState = s => {
+    npBadge(s.state);
+    if (s.state === 'active') {
+      $('#padChip').classList.remove('hidden');
+      showLockHint(false);       // mouse capture is moot from here on
+      if (phase !== 'lobby') sys(t('nucpad_active'));
+      else PadNav.move(0, 0);    // seed the ring at once: the pad visibly owns the lobby
+      gsKey = ''; gsCard();      // fresh session: paint the device's screen now
+    }
+    else {
+      npStopRepeat(); npDir = { dx:0, dy:0 }; npD = { 14:0, 15:0, 16:0, 17:0 }; npHat = 0;
+      if (!gamepad || !gamepad.connected()) $('#padChip').classList.add('hidden');
+    }
+  };
+  NP.onState(s => { if (npOn) npOnState(s); });
+  $('#nucPad').onclick = () => {
+    if (NP.state === 'active') { NP.release(); sys(t('nucpad_released')); return; }
+    if (NP.state === 'pending' || NP.state === 'busy') return;   // busy: not ours to take
+    localStorage.setItem(NP_PREF, 'yes');
+    npAsk();
+  };
+  $('#nucAskYes').onclick = () => { localStorage.setItem(NP_PREF, 'yes'); $('#nucAsk').classList.remove('on'); npAsk(); };
+  $('#nucAskNo').onclick  = () => { localStorage.setItem(NP_PREF, 'no');  $('#nucAsk').classList.remove('on'); };
+  window.addEventListener('pagehide', () => { if (NP.state === 'active' || NP.state === 'pending') NP.release(); });
+  Caps.has('device.pad').then(ok => ok ? NP.refresh() : null).then(st => {
+    if (!st || !st.core) return;                   // no NucleoPad here, or Core isn't listening: hide the whole idea
+    npOn = true;
+    NP.listen();
+    npOnState(st);                                 // refresh's own state event fired before detection: replay it
+    const pref = localStorage.getItem(NP_PREF);
+    if (pref === 'yes' && NP.state === 'idle') npAsk();   // never grab it from another page
+    // First visit: let the lobby show itself before asking for anything.
+    else if (!pref) setTimeout(() => { if (!localStorage.getItem(NP_PREF)) $('#nucAsk').classList.add('on'); }, 1800);
+  });
 }
 
 function onGameOver(r) {
@@ -989,7 +1329,7 @@ function relabel() {
 (async function boot() {
   await I18N.init('games');   // load core+games catalogs, paint [data-i18n], install observer + live-switch
   STATS = await P.loadStats(); paintCard();
-  setupGamepad(); setupResize();
+  setupGamepad(); npInit(); setupResize();
   await loadCatalog();
   loadRooms();   // self-defers ~3 s on first launch (see loadRooms) so we don't pile onto the boot storm
   $('#codeJoin').onclick = () => { const c = $('#codeIn').value.trim(); if (c) joinGame(c.startsWith('r_') ? c : 'r_' + c, false); };

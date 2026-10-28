@@ -581,10 +581,11 @@ static void on_draw_large(void)
         pv_draw_large(d, 0, m);
     }
     nucleo_touch_clear();
+    if (!pa_locked(&s_alarm)) nucleo_touch_add(0, 0, 50, 42, NK_BACK, 0);   // the Back button (an armed alarm keeps you here)
     if (m.view == PV_MENU && !pa_locked(&s_alarm)) {
         for (int r = 0; r < PV_NROWS; r++)                 // a tile = its quick-select digit: select + run
             nucleo_touch_add(PV_TILE_X(r), PV_TILE_Y(r), PV_TILE_W, PV_TILE_H, NK_CHAR, (char)('1' + r));
-        nucleo_touch_add(0, 0, 320, 42, NK_TAB, 0);         // the status bar closes it again
+        nucleo_touch_add(50, 0, 270, 42, NK_TAB, 0);        // the rest of the status bar closes it again
     } else if (!pa_locked(&s_alarm) && !s_beacon && s_status == PV_OK) {
         nucleo_touch_add(PV_MENU_X, PV_MENU_Y, PV_MENU_W, PV_MENU_H, NK_TAB, 0);
     }

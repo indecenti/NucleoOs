@@ -1,4 +1,5 @@
 <!doctype html>
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -237,6 +238,7 @@
 
   <script type="module">
     import I18N from '/nucleo-i18n.js';
+    import Caps from '/nucleo-caps.js';   // what this device can do (device.ir)
     import { makeSkill, actionsToOpenAITools, fenceUntrusted } from '/apps/anima/anima-skill.js';   // reusable per-app scoped ANIMA skill (hardened vs prompt injection)
     const t = await I18N.init('ir-remote');
     const $ = (id) => document.getElementById(id);
@@ -248,7 +250,7 @@
       vol_up:'＋', vol_down:'－', ch_up:'⌃', ch_down:'⌄', up:'▲', down:'▼', left:'◀', right:'▶', ok:'OK' };
     const PROTOS = ['nec', 'necext', 'samsung', 'sony12', 'sony15', 'sony20', 'rc5', 'jvc', 'panasonic'];
 
-    let demo = false, gpio = 44, catalog = { remotes: [], tvpower: [], categories: [] };
+    let demo = false, noIr = false, gpio = 44, catalog = { remotes: [], tvpower: [], categories: [] };
     let favs = [], recents = [], custom = [], macros = [];
 
     // User data (favourites / custom buttons / scenes) is persisted to the SD card at
@@ -376,7 +378,7 @@
     }
     const isFav = (code) => favs.some((f) => codeKey(f.code) === codeKey(code));
     function toggleFav(code, label) { if (isFav(code)) favs = favs.filter((f) => codeKey(f.code) !== codeKey(code)); else favs.unshift({ code, label }); persist(); }
-    function setStatus(ready) { demo = !ready; $('dot').className = 'd ' + (ready ? 'live' : 'demo'); $('status').textContent = ready ? t('st_ready', { gpio }) : t('st_demo'); }
+    function setStatus(ready) { demo = !ready; $('dot').className = 'd ' + (ready ? 'live' : 'demo'); $('status').textContent = ready ? t('st_ready', { gpio }) : t(noIr ? 'st_no_ir' : 'st_demo'); }
 
     // ---- FAVORITES + RECENTS tab -------------------------------------------------------------
     function favButton(item, onStar) {
@@ -529,7 +531,7 @@
       $('progtxt').textContent = label || (running ? t('tvb_running', { sent, total }) : (sent > 0 ? t('tvb_done', { total: sent }) : t('tvb_idle')));
     }
     async function tvbQuick() {
-      if (sweeping) { sweeping = false; clearInterval(pollTimer); await postJSON('/api/ir/tvbgone', { action: 'stop' }); setProgress(0, 0, false); return; }
+      if (sweeping) { sweeping = false; clearInterval(pollTimer); if (!demo) await postJSON('/api/ir/tvbgone', { action: 'stop' }); setProgress(0, 0, false); return; }
       if (demo) { const total = ({ all: 16, us: 5, eu: 4, asia: 7 })[region] || 16; let s = 0; sweeping = true;
         pollTimer = setInterval(() => { s++; setProgress(s, total, true); if (s >= total) { clearInterval(pollTimer); sweeping = false; setProgress(s, total, false); } }, 160); return; }
       const r = await postJSON('/api/ir/tvbgone', { action: 'start', region }); if (!r) { toast(t('err_send')); return; }
@@ -784,7 +786,10 @@
     async function init() {
       await loadTheme();
       catalog = await (await fetch('./presets.json', { cache: 'no-store' })).json().catch(() => ({ remotes: [], tvpower: [], categories: [] }));
-      const db = await irDb();
+      // The transmitter exists only where the capability list has device.ir: elsewhere the app runs as a demo,
+      // says so, and sends nothing. Where it exists, /api/ir/db gives its state (ready, pin, protocols, regions).
+      noIr = !(await Caps.has('device.ir'));
+      const db = noIr ? null : await irDb();
       if (db) { gpio = db.gpio || 44; if (db.tvbgone?.regions?.length) REGIONS = db.tvbgone.regions; }
       setStatus(!!db && db.ready !== false);
       await loadUserData();          // SD-backed favourites/custom/scenes (localStorage fallback)

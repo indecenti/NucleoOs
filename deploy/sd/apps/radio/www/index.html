@@ -1,4 +1,5 @@
 <!doctype html>
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -180,7 +181,7 @@
       <div class="field">
         <label for="fStream" data-i18n="f_stream">Stream URL</label>
         <input id="fStream" placeholder="http://host/stream.mp3">
-        <div class="note" id="streamNote" data-i18n="note_stream">Plain http:// MP3 plays on the Cardputer too. https:// plays here but not on the device.</div>
+        <div class="note" id="streamNote" data-i18n="note_stream">Plain http:// MP3 plays on the device too. https:// plays here but not on the device.</div>
       </div>
       <div class="field">
         <label for="fNp"><span data-i18n="f_np">Now-playing URL</span> <span style="opacity:.6" data-i18n="optional">(optional)</span></label>
@@ -198,14 +199,14 @@
   <div class="scrim" id="infoScrim">
     <div class="dialog info" role="dialog" aria-modal="true" aria-label="About Radio Index">
       <h2>📻 Radio Index</h2>
-      <p class="info-lead" data-i18n="info_lead">Free live internet radio for NucleoOS. One station list, shared between this app and the Radio app on your Cardputer.</p>
+      <p class="info-lead" data-i18n="info_lead">Free live internet radio for NucleoOS. One station list, shared between this app and the Radio app on your device.</p>
       <div class="info-body">
         <div class="info-row"><span class="k">＋</span><span class="t" data-i18n-html="info_add"><b>Add a station.</b> Tap <b>Add station</b>, give it a name and paste a direct stream URL (an MP3 stream). It joins the list everywhere instantly.</span></div>
-        <div class="info-row"><span class="k">★</span><span class="t" data-i18n-html="info_star"><b>Set the device default.</b> The starred station is the one your Cardputer tunes the moment you open its Radio app.</span></div>
+        <div class="info-row"><span class="k">★</span><span class="t" data-i18n-html="info_star"><b>Set the device default.</b> The starred station is the one your device tunes the moment you open its Radio app.</span></div>
         <div class="info-row"><span class="k">▶</span><span class="t" data-i18n-html="info_listen"><b>Listen here.</b> Play any station in the browser. If it serves track info, you'll see the artist, title and a progress bar.</span></div>
         <div class="info-row"><span class="k">⇅</span><span class="t" data-i18n-html="info_reorder"><b>Reorder &amp; edit.</b> Use ⌃⌄ to reorder, ✎ to edit, 🗑 to remove. Every change saves to the device the instant you make it.</span></div>
       </div>
-      <div class="info-note" data-i18n-html="info_device_note"><b>Device note:</b> the Cardputer plays plain <b>http://</b> MP3 streams only — it has no room for HTTPS next to the audio decoder. <b>https://</b> stations are tagged <b>“browser only”</b>: they play here but won't run on the device. Curated free stations come from <b>SomaFM</b>.</div>
+      <div class="info-note" data-i18n-html="info_device_note"><b>Device note:</b> the device plays plain <b>http://</b> MP3 streams only — it has no room for HTTPS next to the audio decoder. <b>https://</b> stations are tagged <b>“browser only”</b>: they play here but won't run on the device. Curated free stations come from <b>SomaFM</b>.</div>
       <div style="margin:14px 0 18px">
         <div style="font-size:11.5px;color:var(--muted);margin-bottom:6px" data-i18n="keyboard">Keyboard</div>
         <div class="keys" data-i18n-html="keys_help">

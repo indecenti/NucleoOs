@@ -19,7 +19,7 @@
   "notset": "not set",
   "conn": "connected",
   "wait": "not connected",
-  "hint": "The PIN is stored only on the device and never crosses USB. Passkey private keys never leave the Cardputer.",
+  "hint": "The PIN is stored only on the device and never crosses USB. Passkey private keys never leave the device.",
   "askpin": "New PIN (4-63 characters):",
   "pinok": "PIN updated.",
   "pinbad": "PIN not accepted (length 4-63).",
@@ -33,5 +33,6 @@
   "err": "Request failed.",
   "tries": "tries left",
   "askdel": "Delete the passkey for {rp} ({user})? You will no longer be able to sign in to {rp} with it. This cannot be undone.",
-  "stale": "The passkey list changed on the device — nothing was deleted. Check the list and try again."
+  "stale": "The passkey list changed on the device — nothing was deleted. Check the list and try again.",
+  "fido_unavailable": "The FIDO security key is not available on this device."
 }

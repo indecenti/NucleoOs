@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // pipeline.js — the Atelier image pipeline orchestrator. Pure & DOM-free (engines + enhancer INJECTED) →
 // host-tested with real prompts. This is the single place that makes the whole flow LLM-driven:
 //

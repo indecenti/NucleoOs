@@ -24,6 +24,7 @@
 #include "nucleo_storage.h"
 #include <M5GFX.h>
 #include "lgfx/v1/panel/Panel_ST7789.hpp"
+#include "lgfx/v1/platforms/esp32/Light_PWM.hpp"
 #include <new>
 #include <stdio.h>
 #include <string.h>
@@ -97,6 +98,11 @@ int                s_t0 = -1, s_t1 = -1;
 Panel_Mirror      *s_mirror = nullptr;
 lgfx::LGFX_Device *s_dev = nullptr;             // the external panel (touch layer draws the letterbox with it)
 int                s_bl_pin = -1;
+volatile int       s_hud_h = 0;                  // the system bar over a store app on the large surface (0 = none)
+char               s_hud_title[28];              // ...what it says (nucleo_extdisp_set_hud)
+uint16_t           s_hud_col = 0xFFFF;
+lgfx::Light_PWM   *s_bl_pwm = nullptr;           // the backlight dimmed on its own LEDC channel (bl on a GPIO)
+int                s_bl_pct = 100;               // settings "external_brightness": the panel's own level, 10..100
 spi_device_handle_t s_touch = nullptr;           // the XPT2046, kept for the touch task
 volatile int       s_presses = 0, s_last_x = -1, s_last_y = -1;
 volatile int       s_tap_x = -1, s_tap_y = -1;       // where the last target tap landed (nucleo_touch_last)
@@ -107,7 +113,7 @@ nucleo_extdisp_conf_t s_saved;                   // what settings.json holds now
 volatile int       s_layout_gen = 0;             // bumped when the frame geometry changes (touch re-lays its keys)
 volatile bool      s_cal_req = false;            // Settings asked for a recalibration
 volatile bool      s_solo = false;               // the panel is `d`, natively (the launcher on 320x240)
-volatile bool      s_calibrating = false;        // the touch task is collecting calibration targets (mirror only)
+volatile bool      s_calibrating = false;        // the calibration screen owns the panel (the mirror is dark)
 
 // A pin another module actively drives LOW defeats our weak pull-up (e.g. a LoRa cap's BUSY on G6).
 bool driven_low_against_pullup(int pin)
@@ -235,6 +241,8 @@ void read_lcd_ids(void)
 
 volatile bool s_screen_on = true;
 void draw_chrome(void);
+void dark_sync(void);
+void draw_hud(void);
 void lock_opt(void);
 void unlock_opt(void);
 // Screen off (idle auto-off, the Control Center, the web): the backlight goes with the internal one when it is
@@ -244,11 +252,13 @@ void bl_follow(uint8_t brightness)
 {
     const bool on = brightness != 0, was = s_screen_on;
     s_screen_on = on;
-    if (s_bl_pin >= 0) gpio_set_level((gpio_num_t)s_bl_pin, on ? 1 : 0);
-    if (s_mirror) s_mirror->set_dark(!on && s_bl_pin < 0 && s_layout != 1);   // dark: nothing reaches it until on
+    if (s_bl_pwm) s_bl_pwm->setBrightness(on ? (uint8_t)(s_bl_pct * 255 / 100) : 0);
+    else if (s_bl_pin >= 0) gpio_set_level((gpio_num_t)s_bl_pin, on ? 1 : 0);
+    dark_sync();                                    // dark: nothing reaches it until on (or calibration ends)
     if (on == was || !s_dev || s_layout == 1) return;   // Cardputer only: the panel is black already
     if (!on && s_bl_pin < 0) { lock_opt(); s_dev->fillScreen(TFT_BLACK); unlock_opt(); }
     if (on) draw_chrome();
+    if (on && s_solo && s_hud_h) { lock_opt(); draw_hud(); unlock_opt(); }   // the OS repaints the rest
 }
 
 // The letterbox around the mirrored frame is never written by the mirror, so it carries a permanent test
@@ -364,6 +374,14 @@ bool attach(void)
         gpio_reset_pin((gpio_num_t)s_bl_pin);
         gpio_set_level((gpio_num_t)s_bl_pin, 1);
         gpio_set_direction((gpio_num_t)s_bl_pin, GPIO_MODE_OUTPUT);
+        // Dimmable: LEDC channel 5 (timer 2) — the Cardputer's own backlight holds channel 7 (timer 3).
+        // No PWM (out of RAM) leaves the plain on/off GPIO above.
+        if (auto *pwm = new (std::nothrow) lgfx::Light_PWM()) {
+            auto bc = pwm->config();
+            bc.pin_bl = (int16_t)s_bl_pin; bc.pwm_channel = 5; bc.freq = 12000; bc.offset = 0; bc.invert = false;
+            pwm->config(bc);
+            if (pwm->init((uint8_t)(s_bl_pct * 255 / 100))) s_bl_pwm = pwm; else delete pwm;
+        }
     }
     mirror->set_brightness_cb(bl_follow);           // also tells the touch diagnostics when the screen is off
 
@@ -425,6 +443,31 @@ void ext_lock(void)   { xSemaphoreTakeRecursive(s_tc->mux, portMAX_DELAY); }
 void ext_unlock(void) { xSemaphoreGiveRecursive(s_tc->mux); }
 
 bool chrome_on(void) { return s_touch_input && s_tc && s_tc->mux && !s_solo && s_layout != 1; }
+// Calibration can run on any surface (the mirrored frame or the large one): it needs only touch input and a
+// panel that is shown.
+bool cal_on(void) { return s_touch_input && s_tc && s_tc->mux && s_layout != 1; }
+volatile bool s_repaint_req = false;
+void draw_hud(void)
+{
+    if (!s_hud_h || !s_dev) return;
+    const int W = s_dev->width(), h = s_hud_h, bh = h - 8, cy = h / 2;
+    s_dev->startWrite();
+    s_dev->fillRect(0, 0, W, h, THEME_BG);
+    s_dev->fillRoundRect(4, 4, 40, bh, bh / 2, THEME_LINE);              // the Back button (lg::back's look)
+    for (int k = 0; k < 3; k++) { s_dev->drawLine(28 + k, cy - 6, 22 + k, cy, THEME_FG); s_dev->drawLine(22 + k, cy, 28 + k, cy + 6, THEME_FG); }
+    s_dev->setFont(&fonts::Font2); s_dev->setTextSize(1);
+    s_dev->setTextColor(s_hud_col, THEME_BG);
+    s_dev->setTextDatum(textdatum_t::middle_left);
+    s_dev->drawString(s_hud_title, 54, cy + 1);
+    s_dev->setTextDatum(textdatum_t::top_left);
+    s_dev->drawFastHLine(0, h - 1, W, THEME_LINE);
+    s_dev->endWrite();
+}           // the panel was painted over (calibration): the OS repaints it all
+// The mirror stays dark while the screen is off with an unswitchable LED, and while calibration owns the panel.
+void dark_sync(void)
+{
+    if (s_mirror) s_mirror->set_dark(s_calibrating || (!s_screen_on && s_bl_pin < 0 && s_layout != 1));
+}
 // Before this task drives the external panel itself (s_dev), it gives back any frame hold of its own — the
 // same bus device must not be acquired twice.
 void lock_opt(void)   { if (s_mirror) s_mirror->release_hold(); if (s_tc && s_tc->mux) ext_lock(); }
@@ -448,16 +491,42 @@ void draw_key(int key, bool pressed)
     ext_unlock();
 }
 
+// The calibration screen over the whole panel (step 4 = done). The mirror goes dark first, then the lock is
+// taken: a frame already writing finishes before the paint, and nothing of the OS reaches the panel after it.
 void draw_calib(int step, bool retry)
 {
-    if (!chrome_on()) return;
-    char l1[40];
-    snprintf(l1, sizeof l1, "%s %d/4", TR5("Calibrazione", "Calibration", "Calibracion", "Calibration", "Kalibrierung"), step + 1);
-    const char *l2 = retry ? TR5("impreciso: di nuovo", "not precise: again", "impreciso: otra vez", "imprecis: encore", "ungenau: nochmal")
-                           : TR5("tocca il centro del mirino", "tap the target centre", "toca el centro", "touchez le centre", "Zielmitte antippen");
-    ext_lock();
-    extdisp_chrome_calib(s_tc->dev, s_tc->frame, step, l1, l2);
-    ext_unlock();
+    const bool entering = !s_calibrating;
+    s_calibrating = true;
+    dark_sync();
+    char l2[32];
+    snprintf(l2, sizeof l2, TR5("Passo %d di 4", "Step %d of 4", "Paso %d de 4", "Etape %d sur 4", "Schritt %d von 4"), step + 1);
+    const char *title = step >= 4 ? TR5("Touch calibrato", "Touch calibrated", "Tactil calibrado", "Tactile calibre", "Touch kalibriert")
+                                  : TR5("Calibra il touch", "Calibrate touch", "Calibrar tactil", "Calibrer le tactile", "Touch kalibrieren");
+    const char *instr = step >= 4 ? TR5("Pronto", "Ready", "Listo", "Pret", "Fertig")
+                      : retry ? TR5("Non preciso: ricominciamo dal primo", "Not precise: again from the first",
+                                    "Impreciso: otra vez desde el primero", "Imprecis : on recommence", "Ungenau: nochmal von vorn")
+                              : TR5("Tocca il centro del bersaglio rosso", "Tap the centre of the red target",
+                                    "Toca el centro del objetivo rojo", "Touchez le centre de la cible rouge", "Mitte des roten Ziels antippen");
+    for (int pass = 0; pass < (entering ? 2 : 1); pass++) {
+        // Entering: a write that tested "not dark" just before may still land after the first paint; the
+        // second one, a frame later, covers it.
+        if (pass) vTaskDelay(pdMS_TO_TICKS(80));
+        lock_opt();
+        extdisp_chrome_calib(s_tc->dev, step, retry, title, l2, instr);
+        unlock_opt();
+    }
+}
+
+// Calibration over: the mirror reaches the panel again, the letterbox keys come back, the OS repaints its frame.
+void end_calib(void)
+{
+    s_calibrating = false;
+    dark_sync();
+    lock_opt();
+    s_tc->dev->fillScreen(TFT_BLACK);
+    unlock_opt();
+    draw_chrome();
+    s_repaint_req = true;
 }
 
 int med3(int a, int b, int c) { return a > b ? (b > c ? b : (a > c ? c : a)) : (a > c ? a : (b > c ? c : b)); }
@@ -510,7 +579,7 @@ bool t_irq_idle(void) { return s_cfg.t_irq >= 0 && gpio_get_level((gpio_num_t)s_
 // 240x135 inside the mirrored frame. False outside the frame.
 bool to_screen(bool solo, int px, int py, int *x, int *y)
 {
-    if (solo) { *x = px; *y = py; return true; }
+    if (solo) { *x = px; *y = py - s_hud_h; return *y >= 0; }
     const extdisp_frame_t &f = s_tc->frame;
     if (f.fw <= 0 || f.fh <= 0) return false;
     const int fx = px - f.ox, fy = py - f.oy;
@@ -553,7 +622,7 @@ void touch_task(void *)
     extdisp_gesture_t g;
     extdisp_gesture_init(&g, s_tc->keys);
     extdisp_calib_t cal;
-    bool calibrating = chrome_on() && !s_tc->cal_stored;   // first use: calibrate before trusting the keys
+    bool calibrating = cal_on() && !s_tc->cal_stored;      // first use: calibrate before trusting the keys
     if (calibrating) { extdisp_calib_start(&cal); draw_calib(0, false); }
     int shown = SK_NONE, x0 = 0, y0 = 0;
     bool was_down = false, wake_hold = false, solo_seen = false;
@@ -561,10 +630,9 @@ void touch_task(void *)
     bool was_scroll = false;
     int64_t t_down = 0;
     for (;;) {
-        s_calibrating = calibrating;
-        if (s_cal_req) {                           // Settings: "Calibrate touch"
+        if (s_cal_req) {                           // Settings / Control Center: "Calibrate touch"
             s_cal_req = false;
-            if (chrome_on() && !calibrating) {
+            if (cal_on() && !calibrating) {
                 calibrating = true;
                 extdisp_calib_start(&cal);
                 draw_calib(0, false);
@@ -627,7 +695,9 @@ void touch_task(void *)
                     ESP_LOGW(TAG, "touch calibrated: check target off by %d px%s", err, saved ? "" : " (NOT saved)");
                     extdisp_gesture_init(&g, solo_seen ? s_tc->keys_solo : s_tc->keys);
                     shown = SK_NONE;
-                    draw_chrome();
+                    draw_calib(4, false);                // "done", for a moment
+                    vTaskDelay(pdMS_TO_TICKS(900));
+                    end_calib();
                 } else {
                     ESP_LOGW(TAG, "touch calibration rejected (check target off by %d px): again", err);
                     extdisp_calib_start(&cal);
@@ -665,7 +735,7 @@ void touch_task(void *)
         // EMPTY samples (sx, sy = 0 there), and a tap's meaning is read from this position after it lifts.
         if (g.down && on) { s_last_x = sx; s_last_y = sy; }
         if (sc.on && g.down && on) {                 // the finger moves the content, 1:1 (past the tap slop)
-            const int ay = solo_seen ? sy : (s_tc->frame.fh > 0 ? (sy - s_tc->frame.oy) * 135 / s_tc->frame.fh : sy);
+            const int ay = solo_seen ? sy - s_hud_h : (s_tc->frame.fh > 0 ? (sy - s_tc->frame.oy) * 135 / s_tc->frame.fh : sy);
             const int ax = solo_seen ? sx : (s_tc->frame.fw > 0 ? (sx - s_tc->frame.ox) * 240 / s_tc->frame.fw : sx);
             if (sc.a.pad) { if (g.moved) pad_emit(sc, ax - sc.lastx, ay - sc.last); }
             else if (g.moved) scroll_emit(sc, ay - sc.last);
@@ -695,7 +765,7 @@ void touch_task(void *)
             if (scroll_touch && ev[i] != EXT_EV_ENTER) continue;    // a scroll's drag / hold is not an arrow or Back
             if (scroll_touch && ev[i] == EXT_EV_ENTER && g.moved) continue;
             if (ev[i] == EXT_EV_CALIBRATE) {
-                if (!chrome_on()) continue;
+                if (!cal_on()) continue;
                 calibrating = true;
                 extdisp_calib_start(&cal);        // waits for this finger to lift before target 1
                 draw_calib(0, false);
@@ -707,16 +777,21 @@ void touch_task(void *)
             // Large surface (the launcher home, 320x240): a tap means what is under the finger — the status bar
             // goes back up, the side icons step the carousel toward them, the centre opens. Drags/holds as usual.
             if (solo_seen && ev[i] == EXT_EV_ENTER && !g.moved) {
-                nucleo_key_t hit = { NK_NONE, 0 };            // a large screen's own targets, in panel pixels
+                const int hh = s_hud_h, ty = s_last_y - hh;   // the screen's own y: below the system bar
+                if (hh && ty < 0) {                           // the system bar: Back
+                    if (s_touch_input) nucleo_kbd_inject(nucleo_key_t{ NK_BACK, 0 });
+                    continue;
+                }
+                nucleo_key_t hit = { NK_NONE, 0 };            // a large screen's own targets, in its pixels
                 ext_lock();
                 for (int t = 0; t < s_tc->ntgt; t++) {
                     const TouchCtx::Target &r = s_tc->tgt[t];
-                    if (s_last_x >= r.x && s_last_x < r.x + r.w && s_last_y >= r.y && s_last_y < r.y + r.h) { hit = { (int)r.key, r.ch }; break; }
+                    if (s_last_x >= r.x && s_last_x < r.x + r.w && ty >= r.y && ty < r.y + r.h) { hit = { (int)r.key, r.ch }; break; }
                 }
                 ext_unlock();
                 if (hit.key != NK_NONE) {
-                    if (s_cfg.diag) ESP_LOGW(TAG, "touch -> target key %d at %d,%d", hit.key, s_last_x, s_last_y);
-                    s_tap_x = s_last_x; s_tap_y = s_last_y;
+                    if (s_cfg.diag) ESP_LOGW(TAG, "touch -> target key %d at %d,%d", hit.key, s_last_x, ty);
+                    s_tap_x = s_last_x; s_tap_y = ty;
                     if (s_touch_input) nucleo_kbd_inject(hit);
                     continue;
                 }
@@ -869,6 +944,9 @@ extern "C" void nucleo_extdisp_boot(void)
                               &s_cfg.mirror, &s_cfg.invert, &s_cfg.rgb, &s_cfg.diag, pins,
                               &s_touch_input, s_cal_raw, &s_has_cal_raw, &s_primary, &s_fit, layout, sizeof layout);
     s_layout = !strcmp(layout, "cardputer") ? 1 : !strcmp(layout, "external") ? 2 : 0;
+    if (s_cfg.mhz > 40) s_cfg.mhz = 40;            // 80 MHz is gone (flicker / lost frames on real wiring): 40 tops
+    nucleo_prefs_load_display_int("external_brightness", &s_bl_pct);
+    s_bl_pct = s_bl_pct < 10 ? 10 : s_bl_pct > 100 ? 100 : s_bl_pct;
     s_cfg.mode = extdisp_mode_parse(mode);
     s_cfg.controller = extdisp_ctrl_parse(ctrl);
     s_saved = nucleo_extdisp_conf_t{ s_cfg.mode == EXTDISP_ON ? 1 : s_cfg.mode == EXTDISP_OFF ? 2 : 0, s_cfg.mhz,
@@ -932,6 +1010,7 @@ extern "C" bool nucleo_surface_set_large(bool on)
     if (on && !nucleo_surface_large_ok()) on = false;
     if (!s_mirror || on == s_solo) return false;
     lock_opt();                                   // the touch task never draws mid-switch
+    if (!on && s_hud_h) { s_mirror->set_inset(0); s_hud_h = 0; }   // the system bar belongs to the large surface
     bool ok = s_mirror->set_solo(on);
     if (ok && !on) s_dev->fillScreen(TFT_BLACK);  // wipe the large screen; the caller repaints the centred frame
     unlock_opt();
@@ -1007,13 +1086,49 @@ extern "C" bool nucleo_extdisp_set_mode(int mode)
     return nucleo_prefs_save_display_str("external", mode == 1 ? "on" : mode == 2 ? "off" : "auto");
 }
 extern "C" bool nucleo_extdisp_set_mhz(int mhz)     { s_saved.mhz = mhz; return nucleo_prefs_save_display_int("external_mhz", mhz); }
+// The panel's own backlight level (10..100 %), separate from the Cardputer's: live, saved when persist.
+extern "C" bool nucleo_extdisp_brightness_ok(void) { return s_bl_pwm != nullptr; }
+extern "C" int  nucleo_extdisp_brightness(void)    { return s_bl_pct; }
+extern "C" bool nucleo_extdisp_set_brightness(int pct, bool persist)
+{
+    if (!s_bl_pwm) return false;
+    pct = pct < 10 ? 10 : pct > 100 ? 100 : pct;
+    s_bl_pct = pct;
+    if (s_screen_on) s_bl_pwm->setBrightness((uint8_t)(pct * 255 / 100));
+    return persist ? nucleo_prefs_save_display_int("external_brightness", pct) : true;
+}
 extern "C" bool nucleo_extdisp_set_rotation(int r)  { s_saved.rotation = r; return nucleo_prefs_save_display_int("external_rotation", r); }
 extern "C" bool nucleo_extdisp_set_touch(bool on)   { s_saved.touch = on; return nucleo_prefs_save_display_bool("external_touch", on); }
 
 extern "C" bool nucleo_extdisp_recalibrate(void)
 {
-    if (!s_tc || !s_tc->mux || !s_touch_input || s_solo) return false;
+    if (!s_tc || !s_tc->mux || !s_touch_input || s_layout == 1) return false;
     s_cal_req = true;
+    return true;
+}
+
+extern "C" bool nucleo_extdisp_set_hud(const char *title, unsigned short color)
+{
+    if (!s_mirror || !s_solo) return false;
+    const int h = title ? 30 : 0;
+    if (h == s_hud_h && (!title || !strcmp(title, s_hud_title))) return false;
+    lock_opt();
+    bool ok = s_mirror->set_inset(h);
+    if (ok) {
+        s_hud_h = h;
+        if (title) { snprintf(s_hud_title, sizeof s_hud_title, "%s", title); s_hud_col = color ? color : THEME_FG; draw_hud(); }
+    }
+    unlock_opt();
+    if (!ok) return false;
+    d.clearClipRect();                            // LGFXBase caches the clip box of the old size
+    d.clearScrollRect();
+    return true;
+}
+
+extern "C" bool nucleo_extdisp_take_repaint(void)
+{
+    if (!s_repaint_req) return false;
+    s_repaint_req = false;
     return true;
 }
 

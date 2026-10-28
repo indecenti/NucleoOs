@@ -26,7 +26,7 @@
   "dlUseCurrentTitle": "Usa la pagina corrente",
   "dlFilenameLabel": "Nome file (cartella: /data/downloads/)",
   "dlFilenamePlaceholder": "file.zip",
-  "dlAuthBanner": "⚠️ <b>Dispositivo non associato.</b> Il salvataggio su SD richiede il pairing. Inserisci il PIN mostrato sul Cardputer nella schermata iniziale di NucleoOS.",
+  "dlAuthBanner": "⚠️ <b>Dispositivo non associato.</b> Il salvataggio su SD richiede il pairing. Inserisci il PIN mostrato sul dispositivo nella schermata iniziale di NucleoOS.",
   "dlDownloadToSd": "⬇ Scarica su SD",
   "dlOpenFolder": "🗂 Apri cartella",
   "dlOpenFolderTitle": "Apri la cartella downloads in File Commander",
@@ -47,12 +47,12 @@
   "handoffBody": "I siti esterni si aprono nel tuo browser reale — nessun proxy, nessun consumo sul dispositivo.",
   "handoffBlocked": "Il browser ha bloccato il pop-up: usa il pulsante qui sotto.",
   "openAgain": "Apri di nuovo",
-  "saveToCardputer": "⬇ Salva su Cardputer",
+  "saveToCardputer": "⬇ Salva sul dispositivo",
   "homeBtn": "Home",
   "openExternal": "↗ Apri in scheda esterna",
 
   "dlCardTitle": "⬇ File scaricabile",
-  "dlCardBody": "Salvalo sul Cardputer (SD: <code>/data/downloads/</code>) oppure aprilo nel tuo browser reale.",
+  "dlCardBody": "Salvalo sul dispositivo (SD: <code>/data/downloads/</code>) oppure aprilo nel tuo browser reale.",
 
   "loadFailedTitle": "Caricamento fallito",
   "loadFailedBody": "Non è stato possibile caricare il sito",
@@ -74,6 +74,7 @@
   "errAccessDenied": "Accesso negato — assicurati di essere associato al dispositivo",
   "errSdWrite": "Scrittura SD fallita ({status}): {detail}",
   "errMkdir": "Mkdir fallita ({status}): {detail}",
+  "errDlBusy": "Un altro download è già in corso — riprova tra poco",
 
   "toastBookmarkRemoved": "Preferito rimosso",
   "toastBookmarkAdded": "Preferito aggiunto",
@@ -89,5 +90,6 @@
   "toastNoPageToDownload": "Nessuna pagina attiva da scaricare",
   "toastOpeningDownloads": "Apertura cartella download…",
   "toastOpenFcFailed": "Impossibile aprire File Commander",
-  "toastEnterValidUrl": "Inserisci un URL valido!"
+  "toastEnterValidUrl": "Inserisci un URL valido!",
+  "dlUnavailable": "Il salvataggio su SD non è disponibile su questo dispositivo."
 }

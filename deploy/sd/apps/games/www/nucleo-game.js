@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // nucleo-game.js — NucleoOS game SDK + host-authoritative netcode harness.
 //
 // A game is a small module that calls defineGame({...}) and never touches WebRTC. The harness

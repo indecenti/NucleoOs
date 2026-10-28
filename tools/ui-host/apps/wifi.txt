@@ -20,3 +20,7 @@ nets-new adv TAB ENTER D D D
 nets-tap adv TAB ENTER row:4
 dt-roll adv D D D D D D D D ENTER tap:176,90
 dt-pick adv D D D D D D D D ENTER tap:30,150
+ext-bri-tap adv TAB TAB TAB TAB TAB touch:100,140
+root-down adv D D D D D D
+root-drag adv view:+9
+display-theme adv TAB TAB TAB TAB D

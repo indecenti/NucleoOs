@@ -8,7 +8,7 @@
   "tab_tvb": "TV-B-Gone",
   "tab_find": "Auto-Find",
   "find_title": "Encuentra tu TV",
-  "find_desc": "Apunta el Cardputer hacia la TV y pulsa Iniciar: pruebo los códigos de apagado uno a uno; confirma cuando se apague.",
+  "find_desc": "Apunta el dispositivo hacia la TV y pulsa Iniciar: pruebo los códigos de apagado uno a uno; confirma cuando se apague.",
   "find_start": "Iniciar",
   "find_q": "¿Se ha apagado la TV?",
   "find_yes": "¡Sí, apagada!",
@@ -93,5 +93,6 @@
   "b_vol_up": "Subir volumen", "b_vol_down": "Bajar volumen", "b_mute": "Silencio",
   "b_ch_up": "Canal arriba", "b_ch_down": "Canal abajo",
   "b_up": "Arriba", "b_down": "Abajo", "b_left": "Izquierda", "b_right": "Derecha", "b_ok": "OK",
-  "sd_read_failed": "No se pudieron leer tus favoritos y botones guardados en la SD: los cambios se quedan en este navegador hasta que vuelva a poder leerse."
+  "sd_read_failed": "No se pudieron leer tus favoritos y botones guardados en la SD: los cambios se quedan en este navegador hasta que vuelva a poder leerse.",
+  "st_no_ir": "demo — infrarrojos no disponibles en este dispositivo"
 }

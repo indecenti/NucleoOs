@@ -10,7 +10,7 @@
   "saved_title": "Enregistrés sur l'appareil",
   "saved_empty": "Aucun QR enregistré.",
   "save_to_device": "★ Enregistrer sur l'appareil",
-  "save_hint": "« Enregistrer sur l'appareil » écrit le QR dans <b>/data/QR/qrcodes.json</b> : l'appli native <b>Code QR</b> (source « Enregistrés ») l'affiche en grand sur le Cardputer.",
+  "save_hint": "« Enregistrer sur l'appareil » écrit le QR dans <b>/data/QR/qrcodes.json</b> : l'appli native <b>Code QR</b> (source « Enregistrés ») l'affiche en grand sur l'appareil.",
 
   "ty_link": "Lien",
   "ty_text": "Texte",
@@ -48,7 +48,7 @@
   "save_failed": "Échec de l'enregistrement (appareil hors ligne ?)",
   "saved_to_device": "Enregistré sur l'appareil",
   "load": "Charger",
-  "read_failed": "Impossible de lire les QR enregistrés sur le Cardputer : rien n'est enregistré pour ne pas les écraser. Réessayez dans un instant.",
-  "read_corrupt": "Le fichier des QR du Cardputer est illisible : il n'est pas modifié pour ne rien perdre.",
-  "not_paired": "Ce navigateur n'est pas associé au Cardputer — associez-le pour enregistrer les QR."
+  "read_failed": "Impossible de lire les QR enregistrés sur l'appareil : rien n'est enregistré pour ne pas les écraser. Réessayez dans un instant.",
+  "read_corrupt": "Le fichier des QR de l'appareil est illisible : il n'est pas modifié pour ne rien perdre.",
+  "not_paired": "Ce navigateur n'est pas associé à l'appareil — associez-le pour enregistrer les QR."
 }

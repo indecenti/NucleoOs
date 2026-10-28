@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // sheet-engine.js — the LLM engine boundary for the spreadsheet copilot's browser-local substrate
 // (M4: WebLLM on WebGPU, the weights served by the MCU or a CDN). Everything is INJECTED so the
 // whole orchestration runs deterministically in CI behind a MockEngine (no GPU). The real engine is

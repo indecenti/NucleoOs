@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // nucleo-play.js — NucleoOS shared multiplayer transport (single source of truth).
 //
 // PRINCIPLE: the Cardputer never carries gameplay traffic. Browsers talk peer-to-peer over a
@@ -86,6 +87,16 @@ function ensureRoomsDir() {
 }
 
 const SIG_POLL_MS = 700;     // signaling/lobby poll cadence — low, because handshake is rare
+// ---- mailbox relay (the WebRTC fallback the header always promised) ---------
+// When the DataChannel cannot open (mDNS .local candidates a cross-browser pair
+// can't resolve, AP client isolation, exotic browsers), the SAME sig mailbox
+// carries the wire protocol as {k:'wire'} items. Slower than P2P but it always
+// works wherever the lobby works - including two browsers on one machine.
+const RELAY_AFTER_MS = 5000;   // no channel this long after the offer → relay (a healthy LAN handshake closes in <1s)
+const RELAY_POLL_MS  = 350;    // relay drains faster than the handshake poll
+const RELAY_FLUSH_MS = 250;    // outbox write coalescing window
+const RELAY_KEEP     = 60;     // outbox ring size: {base,items} keeps readers in step
+const RELAY_DEAD_MS  = 12000;  // relay peer silent this long → gone
 const HEARTBEAT_MS = 4000;   // room liveness; stale rooms are hidden after STALE_MS
 const STALE_MS = 15000;
 const GC_STALE_MS = 60000;   // dead this long → reclaim the room's files from the SD. 4× STALE_MS so
@@ -227,20 +238,35 @@ export class NucleoPlay {
   // ---- WebRTC peer setup ---------------------------------------------------------------------
   _mkPeer(remoteId, remoteName, createOffer) {
     const pc = new RTCPeerConnection({ iceServers: this.iceServers });
-    const rec = { pc, ch: null, seat: -1, name: remoteName, sigOut: [], seenIn: 0, connected: false, iceQ: [], haveRemote: false };
+    const rec = { pc, ch: null, seat: -1, name: remoteName, sigOut: [], sigBase: 0, seenIn: 0,
+                  connected: false, iceQ: [], haveRemote: false,
+                  relay: false, relayT: 0, flushT: 0, lastSeen: this._now() };
     this._peers.set(remoteId, rec);
 
     pc.onicecandidate = (e) => {
       if (e.candidate) { rec.sigOut.push({ k: 'ice', c: e.candidate.toJSON() }); this._flushSig(remoteId); }
     };
     pc.onconnectionstatechange = () => {
-      if (pc.connectionState === 'failed') this._emit('error', { kind: 'rtc', peer: remoteId });
+      // A failed pair doesn't kill the room anymore: it downgrades to the mailbox.
+      if (pc.connectionState === 'failed') { this._emit('error', { kind: 'rtc', peer: remoteId }); this._enableRelay(remoteId); }
     };
+    // The channel either opens in time or the mailbox takes over.
+    rec.relayT = setTimeout(() => { if (!rec.connected) this._enableRelay(remoteId); }, RELAY_AFTER_MS);
+    this._timers.push(rec.relayT);
 
     const wireChannel = (ch) => {
       rec.ch = ch;
-      ch.onopen = () => { rec.connected = true; this._onChannelOpen(remoteId); };
-      ch.onclose = () => { this._onPeerGone(remoteId); };
+      ch.onopen = () => { clearTimeout(rec.relayT); rec.relay = false; rec.connected = true; this._onChannelOpen(remoteId); };
+      ch.onclose = () => {
+        if (rec.relay || this._closed) return;
+        // A channel that DROPS mid-match (wifi flap, browser hiccup) fails over
+        // to the mailbox instead of ejecting the peer: both sides see their own
+        // onclose, both switch, and they meet again on the files. A peer that
+        // really left said 'bye' first (already gone), and one that truly died
+        // is reaped by the relay liveness timeout.
+        if (rec.connected) { rec.connected = false; rec.ch = null; this._enableRelay(remoteId); }
+        else this._onPeerGone(remoteId);
+      };
       ch.onmessage = (e) => { this._onWire(remoteId, e.data); };
     };
 
@@ -258,18 +284,79 @@ export class NucleoPlay {
   }
 
   // Signaling files are single-writer: each peer writes ONLY its own outbox, so no races.
-  //   sig/<from>__<to>.json  = JSON array of {k,...} messages, append-only (we rewrite the array).
+  //   sig/<from>__<to>.json  = {base, items:[{k,...}]}. `base` is the absolute index of items[0]:
+  //   the writer trims old entries the reader has certainly consumed, the reader indexes absolutely,
+  //   so a relayed match can run forever without the mailbox file growing without bound.
   _sigPath(from, to) { return `${ROOMS_DIR}/${this.roomId}/sig/${from}__${to}.json`; }
 
   async _flushSig(remoteId) {
     const rec = this._peers.get(remoteId);
     if (!rec) return;
-    await FS.writeJSON(this._sigPath(this.peerId, remoteId), rec.sigOut);
+    if (rec.sigOut.length > RELAY_KEEP) {
+      rec.sigBase += rec.sigOut.length - RELAY_KEEP;
+      rec.sigOut = rec.sigOut.slice(-RELAY_KEEP);
+    }
+    // Everything up to here is now visible: the coalescer must never touch it again.
+    rec.flushedAbs = rec.sigBase + rec.sigOut.length;
+    await FS.writeJSON(this._sigPath(this.peerId, remoteId), { base: rec.sigBase, items: rec.sigOut });
   }
 
-  _startSignalPoll() {
-    if (this._sigTimer) return;
-    this._sigTimer = setInterval(() => this._pollSignals().catch(() => {}), SIG_POLL_MS);
+  // ---- mailbox relay ------------------------------------------------------------------------
+  _enableRelay(remoteId) {
+    const rec = this._peers.get(remoteId);
+    if (!rec || rec.relay || rec.connected || this._closed) return;
+    rec.relay = true; rec.connected = true; rec.lastSeen = this._now();
+    try { rec.pc.close(); } catch {}
+    this._emit('relay', { peer: remoteId });
+    this._startSignalPoll(true);              // relay cadence: the mailbox IS the wire now
+    if (!this._hbRelayT) {
+      this._hbRelayT = setInterval(() => {
+        for (const [pid, r] of this._peers) {
+          if (!r.relay) continue;
+          this._wire(pid, { t: '__hb' });     // liveness marker; unknown types are ignored on receive
+          if (this._now() - r.lastSeen > RELAY_DEAD_MS) this._onPeerGone(pid);
+        }
+      }, 4000);
+      this._timers.push(this._hbRelayT);
+    }
+    this._onChannelOpen(remoteId);            // guest: say hello through the mailbox
+  }
+
+  _relayQueue(rec, remoteId, obj) {
+    // Realtime state floods coalesce: within one flush window only the LATEST
+    // snapshot matters, so a 30Hz host tick becomes ~4 small writes a second.
+    // ⚠️ Only entries NOT YET WRITTEN may be replaced: an already-flushed index
+    // is already behind the reader's seenIn cursor, so overwriting it in place
+    // published a state nobody would ever read again — the guest saw the first
+    // snapshot and then nothing, its own moves included.
+    if (obj.t === 'm' && obj.d && obj.d.k === 'state') {
+      const floor = Math.max(0, (rec.flushedAbs || 0) - rec.sigBase);
+      for (let i = rec.sigOut.length - 1; i >= floor; i--) {
+        const it = rec.sigOut[i];
+        if (it.k === 'wire' && it.m && it.m.t === 'm' && it.m.d && it.m.d.k === 'state') {
+          rec.sigOut[i] = { k: 'wire', m: obj };
+          return this._relayFlushSoon(remoteId, rec);
+        }
+      }
+    }
+    rec.sigOut.push({ k: 'wire', m: obj });
+    this._relayFlushSoon(remoteId, rec);
+  }
+
+  _relayFlushSoon(remoteId, rec) {
+    if (rec.flushT) return;
+    rec.flushT = setTimeout(() => { rec.flushT = 0; this._flushSig(remoteId).catch(() => {}); }, RELAY_FLUSH_MS);
+    this._timers.push(rec.flushT);
+  }
+
+  _startSignalPoll(fast) {
+    const ms = fast ? RELAY_POLL_MS : SIG_POLL_MS;
+    // Fast is sticky: once the mailbox is the wire, never degrade back to the
+    // handshake cadence just because another peer starts a plain poll.
+    if (this._sigTimer && (this._sigMs === ms || this._sigMs === RELAY_POLL_MS)) return;
+    if (this._sigTimer) { clearInterval(this._sigTimer); this._timers = this._timers.filter(t => t !== this._sigTimer); }
+    this._sigMs = ms;
+    this._sigTimer = setInterval(() => this._pollSignals().catch(() => {}), ms);
     this._timers.push(this._sigTimer);
     this._pollSignals().catch(() => {});
   }
@@ -313,17 +400,31 @@ export class NucleoPlay {
   async _drainInbox(remoteId) {
     const rec = this._peers.get(remoteId);
     if (!rec) return;
-    const arr = await FS.readJSON(this._sigPath(remoteId, this.peerId));
-    if (!Array.isArray(arr)) return;
-    for (let i = rec.seenIn; i < arr.length; i++) {
-      await this._handleSig(remoteId, arr[i]);
+    const raw = await FS.readJSON(this._sigPath(remoteId, this.peerId));
+    if (!raw) return;
+    // Both shapes: the current {base,items} ring and the legacy bare array.
+    const base = Array.isArray(raw) ? 0 : (raw.base || 0);
+    const items = Array.isArray(raw) ? raw : (raw.items || []);
+    const total = base + items.length;
+    if (total > rec.seenIn) rec.lastSeen = this._now();   // anything new = the peer is alive
+    for (let i = Math.max(rec.seenIn, base); i < total; i++) {
+      await this._handleSig(remoteId, items[i - base]);
     }
-    rec.seenIn = arr.length;
+    rec.seenIn = Math.max(rec.seenIn, total);
   }
 
   async _handleSig(remoteId, msg) {
     const rec = this._peers.get(remoteId);
     if (!rec) return;
+    if (msg.k === 'wire') {
+      // The peer speaks through the mailbox: mirror it on our side too, or our
+      // replies (welcome, roster, state) would be sent into a channel that
+      // never opened and silently vanish.
+      if (!rec.connected && !rec.relay) this._enableRelay(remoteId);
+      if (msg.m) this._onWire(remoteId, JSON.stringify(msg.m));
+      return;
+    }
+    if (rec.relay) return;              // relayed pair: its RTCPeerConnection is closed, sdp/ice are history
     const pc = rec.pc;
     if (msg.k === 'sdp') {
       const desc = msg.d;
@@ -355,8 +456,10 @@ export class NucleoPlay {
     });
     // Handshake complete: the guest now talks to the host over the DataChannel, so it stops polling
     // the fs signaling mailbox — no more /api/fs/read every SIG_POLL_MS for the rest of the match.
-    // (The host keeps polling: it must still see new guests/spectators knocking.)
-    this._stopSignalPoll();
+    // (The host keeps polling: it must still see new guests/spectators knocking. And a RELAYED
+    // guest keeps polling too - for it the mailbox IS the wire.)
+    const rec = this._peers.get(remoteId);
+    if (!rec || !rec.relay) this._stopSignalPoll();
   }
 
   _onHello(remoteId, msg) {
@@ -365,12 +468,25 @@ export class NucleoPlay {
     rec.name = (msg.name || 'Guest').slice(0, 16);
     rec.avatar = msg.avatar || '👾';
     rec.color = msg.color || '#94a3b8';
+    // A re-hello (channel died, the pair failed over to the mailbox) keeps the
+    // seat it already had: pushing again would duplicate the player in the roster.
+    const known = this.roster.find(r => r.peerId === remoteId);
+    if (known) {
+      rec.seat = known.seat; rec.spectator = !!known.spectator;
+      this._wire(remoteId, {
+        t: 'welcome', seat: known.seat, spectator: !!known.spectator, gameId: this.gameId,
+        maxSeats: this.maxSeats, phase: this._phase || 'waiting',
+        host: { name: this.profile.name, avatar: this.profile.avatar }, roster: this._rosterWire(),
+      });
+      return;
+    }
     let seat = -1, spectator = !!msg.spectator;
     if (!spectator) { seat = this._nextFreeSeat(); if (seat < 0) spectator = true; }   // full → watch
     rec.seat = seat; rec.spectator = spectator;
     this.roster.push({ seat, peerId: remoteId, name: rec.name, avatar: rec.avatar, color: rec.color, ai: false, spectator, ready: false });
     this._wire(remoteId, {
       t: 'welcome', seat, spectator, gameId: this.gameId, maxSeats: this.maxSeats,
+      phase: this._phase || 'waiting',   // late joiner of a live match: land in the right screen at once
       host: { name: this.profile.name, avatar: this.profile.avatar }, roster: this._rosterWire(),
     });
     this._broadcastRoster();
@@ -391,7 +507,9 @@ export class NucleoPlay {
   // ---- wire protocol -------------------------------------------------------------------------
   _wire(remoteId, obj) {
     const rec = this._peers.get(remoteId);
-    if (rec && rec.ch && rec.ch.readyState === 'open') { try { rec.ch.send(JSON.stringify(obj)); } catch {} }
+    if (!rec) return;
+    if (rec.ch && rec.ch.readyState === 'open') { try { rec.ch.send(JSON.stringify(obj)); } catch {} return; }
+    if (rec.relay) this._relayQueue(rec, remoteId, obj);
   }
 
   _onWire(remoteId, raw) {
@@ -405,6 +523,7 @@ export class NucleoPlay {
         if (obj.maxSeats) this.maxSeats = obj.maxSeats;
         if (obj.roster) { this.roster = obj.roster; this._emit('roster', this.roster); }
         this._emit('ready', { isHost: false, roomId: this.roomId, seat: this.seat, spectator: this.spectator });
+        if (obj.phase) { this._phase = obj.phase; this._emit('phase', { phase: obj.phase }); }
         break;
       case 'roster':
         this.roster = obj.roster; this._emit('roster', this.roster);
@@ -439,10 +558,13 @@ export class NucleoPlay {
   }
 
   // Host fan-out: re-send an incoming message to every other connected peer.
+  // THROUGH _wire, never the channel directly: a relayed guest has no channel,
+  // and going straight to ch meant phase/state/chat never reached it - the
+  // guest saw the waiting room (welcome uses _wire) but the match never started.
   _relay(fromPeerId, obj) {
-    for (const [pid, rec] of this._peers) {
+    for (const pid of this._peers.keys()) {
       if (pid === fromPeerId) continue;
-      if (rec.ch && rec.ch.readyState === 'open') { try { rec.ch.send(JSON.stringify(obj)); } catch {} }
+      this._wire(pid, obj);
     }
   }
 
@@ -544,7 +666,14 @@ export class NucleoPlay {
       // The host owns the room and reclaims it fully; a guest only removes its own signaling outbox
       // (the host's inbox file to us is the host's to clean — it goes when the room is destroyed).
       if (wasHost) await this._destroyRoom(roomId);
-      else if (hostId) await FS.remove(this._sigPath(this.peerId, hostId));
+      else if (hostId) {
+        const rec = this._peers.get(hostId);
+        // Relayed guest: the queued 'bye' lives in that outbox - write it out so the
+        // host drops us NOW instead of after the liveness timeout; the room GC
+        // reclaims the file later. Direct guests just remove theirs.
+        if (rec && rec.relay) { try { await this._flushSig(hostId); } catch {} }
+        else await FS.remove(this._sigPath(this.peerId, hostId));
+      }
     }
     this._peers.clear();
     this._emit('closed', {});

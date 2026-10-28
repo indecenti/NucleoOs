@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // ai-ask.js — "ask the best AI this OS may use right now". ONE decision of WHO answers a plain text request
 // (a game coach line, a prompt rewrite, a summary, a copilot answer), shared by every surface that does not need
 // a specialised pipeline. ANIMA's own ladder (device commands, WebGPU, WASM, streaming) and the agent's tool loop
