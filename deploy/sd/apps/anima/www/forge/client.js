@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // client.js — STAGED, not wired into the chat UI yet (pending hardware phase). No runtime consumer:
 // the only exerciser is the host gate tools/anima-host/forge-client.test.mjs. Keep until wired.
 // client.js — the ONE client adapter the chat UI calls. It hides "one ANIMA, four substrates"

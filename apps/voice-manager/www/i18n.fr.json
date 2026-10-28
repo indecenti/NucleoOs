@@ -16,9 +16,9 @@
   "prog_label": { "one": "1 commande entraînée", "other": "{count} commandes entraînées" },
   "prog_cap": "max {count}",
 
-  "t0_title": "Apprenez votre voix au Cardputer",
-  "t0_intro": "Cet outil entraîne le moteur de reconnaissance vocale <b>natif</b> du Cardputer : il fonctionne entièrement <b>hors ligne</b>, sur l'appareil, et apprend <b>votre</b> voix. Plus vous l'utilisez, plus il devient précis — chaque commande reconnue affine automatiquement son propre modèle.",
-  "t0_tip1": "C'est du <b>appuyer-pour-parler</b> : maintenez <span class=\"keycap\">FN</span> (ou <span class=\"keycap\">G0</span>) sur le Cardputer, dites la commande, relâchez.",
+  "t0_title": "Apprenez votre voix à l’appareil",
+  "t0_intro": "Cet outil entraîne le moteur de reconnaissance vocale <b>natif</b> de l'appareil : il fonctionne entièrement <b>hors ligne</b>, sur l'appareil, et apprend <b>votre</b> voix. Plus vous l'utilisez, plus il devient précis — chaque commande reconnue affine automatiquement son propre modèle.",
+  "t0_tip1": "C'est du <b>appuyer-pour-parler</b> : maintenez <span class=\"keycap\">FN</span> (ou <span class=\"keycap\">G0</span>) sur l'appareil, dites la commande, relâchez.",
   "t0_tip2": "L'appareil reconnaît le <b>mot</b> ; ANIMA le transforme en action (ouvrir une app, donner l'heure…).",
   "t0_tip3": "Pas de cloud, pas de clé : l'audio ne quitte jamais l'appareil.",
   "t0_next": "C'est parti →",
@@ -52,7 +52,7 @@
   "cmd_sub": "Commandes natives prêtes à l'emploi. 🟢 = déjà entraînée avec votre voix. L'appareil en gère jusqu'à <b>20</b> : choisissez vos préférées.",
 
   "test_title": "Test en direct",
-  "test_sub": "Maintenez <span class=\"keycap\">FN</span> sur le Cardputer et dites une commande entraînée.",
+  "test_sub": "Maintenez <span class=\"keycap\">FN</span> sur l’appareil et dites une commande entraînée.",
   "test_hint": "Chaque reconnaissance affiche la <b>distance</b> (plus basse = plus proche), la <b>marge</b> sur le 2ᵉ candidat et le <b>rayon auto-calibrant</b> du mot. Vert = excellent, jaune = acceptable.",
   "test_waiting": "En attente… appuyez sur FN et parlez.",
 
@@ -63,14 +63,14 @@
   "custom_yours": "Vos commandes personnalisées",
   "custom_empty": "Aucune commande personnalisée enregistrée.",
 
-  "rec_title": "Sur le Cardputer : maintenez FN et parlez",
+  "rec_title": "Sur l’appareil : maintenez FN et parlez",
   "rec_hold_say": "Maintenez <span class=\"keycap\">FN</span> (ou <span class=\"keycap\">G0</span>) et dites :",
   "rec_then_release": "puis <b>relâchez</b>.",
-  "rec_waiting": "En attente du Cardputer…",
+  "rec_waiting": "En attente de l’appareil…",
   "rec_recording": "🔴 Enregistrement… relâchez FN pour sauvegarder.",
   "rec_processing": "Traitement…",
   "rec_too_short": "⚠️ Trop court ou silencieux — réessayez : maintenez FN et parlez clairement.",
-  "rec_timeout": "⚠️ Aucune réponse du Cardputer. Assurez-vous de maintenir <b>FN</b> pendant que vous parlez (l'enregistrement se fait sur l'appareil, pas dans le navigateur) et que le firmware vocal est à jour.",
+  "rec_timeout": "⚠️ Aucune réponse de l'appareil. Assurez-vous de maintenir <b>FN</b> pendant que vous parlez (l'enregistrement se fait sur l'appareil, pas dans le navigateur) et que le firmware vocal est à jour.",
   "rec_stop": "Arrêter",
 
   "ok_trained": "Entraîné !",
@@ -86,7 +86,7 @@
   "err_network": "Erreur réseau",
   "alert_cap": "Vous avez atteint la limite de {max} commandes. Supprimez-en une d'abord.",
   "err_arm": "Impossible d'armer le moteur (appareil occupé ?)",
-  "err_connect": "Erreur de connexion au Cardputer",
+  "err_connect": "Erreur de connexion à l’appareil",
 
   "conf_excellent": "Excellent",
   "conf_good": "Bon",
@@ -95,5 +95,6 @@
 
   "meta_dist": "dist",
   "meta_second": "2ᵉ",
-  "meta_radius": "rayon"
+  "meta_radius": "rayon",
+  "voice_unavailable": "Les commandes vocales ne sont pas disponibles sur cet appareil."
 }

@@ -1,4 +1,5 @@
 <!doctype html>
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -85,7 +86,7 @@
     <div class="logo">✶</div>
     <div>
       <h1 data-i18n="title">Trascrizione</h1>
-      <div class="sub" data-i18n="subtitle">mic Cardputer · on-device</div>
+      <div class="sub" data-i18n="subtitle">mic del dispositivo · on-device</div>
     </div>
     <div class="spacer"></div>
     <span class="pill" id="status"><span class="dot"></span><span id="statusTxt" data-i18n="st_starting">avvio…</span></span>
@@ -105,7 +106,7 @@
     <div class="fld">
       <label for="key" data-i18n="set_key_label">API Key (Groq)</label>
       <input id="key" type="password" placeholder="gsk_…" autocomplete="off" spellcheck="false">
-      <div class="hintline" data-i18n="set_key_hint">Condivisa con AI Chat e memorizzata in localStorage o letta da /data/anima/teacher.json.</div>
+      <div class="hintline" id="keyHint" data-i18n="set_key_hint">Condivisa con AI Chat e memorizzata in localStorage o letta da /data/anima/teacher.json.</div>
     </div>
     <div class="fld">
       <label for="base" data-i18n="set_base_label">Endpoint URL (Groq)</label>
@@ -147,7 +148,7 @@
 
   <main id="scroll">
     <div class="notice" id="notice"></div>
-    <div id="transcript"><span class="empty" id="placeholder" data-i18n="placeholder">Parla nel microfono del Cardputer — il testo apparirà qui.</span></div>
+    <div id="transcript"><span class="empty" id="placeholder" data-i18n="placeholder">Parla nel microfono del dispositivo — il testo apparirà qui.</span></div>
   </main>
 
   <footer>
@@ -168,14 +169,15 @@
       <button class="tgl" id="btnSummary" data-i18n-attr="title:summary_title"><span class="ic">✨</span><span data-i18n="sum_btn">Riassumi</span></button>
       <button class="tgl" id="btnExit" data-i18n-attr="title:exit_title"><span class="ic">⏏</span><span data-i18n="exit_btn">Esci</span></button>
     </div>
-    <div class="hint" data-i18n="foot_hint">All'avvio il display del Cardputer si spegne; si riaccende quando esci (anche se chiudi la scheda).</div>
+    <div class="hint" data-i18n="foot_hint">All'avvio il display del dispositivo si spegne; si riaccende quando esci (anche se chiudi la scheda).</div>
   </footer>
 
 <script type="module">
 import { createASR } from './asr.js';
 import { onMicStatus } from '/micgate.js';   // riflette CHI tiene il mic Cardputer (cross-app)
 import I18N from '/nucleo-i18n.js';
-import * as AI from '/ai.js';   // automatic model choice + fallback + plain-words errors (shared with the whole OS)
+import Caps from '/nucleo-caps.js';   // what this device can do (device.mic, device.display)
+import * as AI from '/ai.js';   // automatic model choice + fallback + plain-words errors; on a sealed vault the keys stay on the device
 
 // Centralized OS i18n: paints [data-i18n] now, auto-translates DOM added later, and live-switches
 // with the OS language. NOTE: this is the OS *UI* language (anima.lang), distinct from the IT/EN
@@ -204,11 +206,15 @@ const sessionTime = `${String(sDate.getHours()).padStart(2,'0')}:${String(sDate.
 
 // ---- state ----------------------------------------------------------------
 let screenOff = false;            // intended Cardputer display state
+let noDisplay = false;            // no device.display (or /api/display answered 404/405/501): no screen toggle, no heartbeat
 let savedText = null;             // last text successfully written to SD
 let saveTimer = 0, saving = false, paused = false, errored = false;
 
 // ---- ASR Groq connection and Engine preference state ---------------------
+// On a sealed vault groqKey is ai.js VAULT_KEY when the device holds a Whisper-capable key (loadSystemTeacherKey),
+// else ''; the real key never reaches this page there (the device relay adds it). Elsewhere it is the browser's key.
 let groqKey = localStorage.getItem('groq.key') || '';
+let sealed = false;               // ai.js sealedVault(), known after loadSystemTeacherKey
 let groqBase = localStorage.getItem('groq.base') || 'https://api.groq.com/openai/v1';
 let selectedEngine = localStorage.getItem('dictation.engine') || 'auto';
 
@@ -265,9 +271,11 @@ async function ensureDir(){ try{ await fetch('/api/fs/mkdir?path='+enc(TDIR), { 
 
 // ---- Cardputer display control --------------------------------------------
 async function setScreen(off, silent){
+  if(noDisplay) return;
   try{
     const r = await fetch('/api/display?on='+(off?0:1), { method:'POST' });
     if(r.status===401||r.status===403){ showAuth(); return; }
+    if(r.status===404||r.status===405||r.status===501){ noDisplay=true; screenOff=false; $('btnScreen').hidden=true; return; }
     screenOff = off;
   }catch{ /* network blip; heartbeat will retry while off */ }
   if(!silent) reflectScreen();
@@ -279,7 +287,7 @@ function reflectScreen(){
 }
 // Heartbeat: keep feeding the firmware deadman while we want the screen dark, so if this tab
 // dies the device re-lights the screen on its own. ~45s < the firmware's 90s deadman.
-setInterval(()=>{ if(screenOff) setScreen(true, true); }, 45000);
+setInterval(()=>{ if(screenOff && !noDisplay) setScreen(true, true); }, 45000);
 
 // ---- status / notices -----------------------------------------------------
 function setStatus(kind, txt){ const p=$('status'); p.classList.remove('live','paused','err');
@@ -376,15 +384,23 @@ document.addEventListener('click', (e) => {
   }
 });
 
-$('saveSettingsBtn').addEventListener('click', () => {
-  groqKey = keyInput.value.trim();
+$('saveSettingsBtn').addEventListener('click', async () => {
+  const typed = keyInput.value.trim();
+  keyInput.value = '';
   groqBase = baseInput.value.trim() || 'https://api.groq.com/openai/v1';
   selectedEngine = engineSelect.value;
-  
-  localStorage.setItem('groq.key', groqKey);
+
   localStorage.setItem('groq.base', groqBase);
   localStorage.setItem('dictation.engine', selectedEngine);
-  
+  if (sealed) {
+    // A typed key goes to the device vault and leaves the page at once.
+    if (typed) { const r = await AI.saveAppKey(groqBase, typed); if (r !== true) alert(t(r === 'unpaired' ? 'set_unpaired' : 'set_save_failed')); }
+    await loadSystemTeacherKey();
+  } else {
+    groqKey = typed; keyInput.value = groqKey;   // shared with AI Chat in this browser
+    localStorage.setItem('groq.key', groqKey);
+  }
+
   asr.setGroq(groqKey, groqBase);
   asr.setEngine(selectedEngine);
   
@@ -402,11 +418,12 @@ $('closeSettingsBtn').addEventListener('click', () => {
   gearBtn.classList.remove('open');
 });
 
+// The vault's keys serve ANIMA and every app: removing one is Settings ▸ AI's job. This clears the copy
+// kept in this browser (on a sealed vault: what older versions left here).
 $('forgetBtn').addEventListener('click', () => {
-  groqKey = '';
   localStorage.removeItem('groq.key');
   keyInput.value = '';
-  asr.setGroq('', groqBase);
+  if (!sealed) { groqKey = ''; asr.setGroq('', groqBase); }   // a sealed vault's placeholder stays: the device key is Settings' to remove
   settingsPanel.classList.remove('open');
   gearBtn.classList.remove('open');
   alert(t('set_forgotten'));
@@ -481,8 +498,19 @@ File sorgente: ${file}
 // let a stale local copy shadow a newer/changed central key — the divergence bug).
 async function loadSystemTeacherKey() {
   try {
-    const w = await AI.whisperKey({ fresh: true });
-    if (w && w.key && (w.key !== groqKey || w.base !== groqBase)) {
+    // Sealed vault (the device keeps the keys, its relay adds them): an older copy in this browser moves there
+    // first, and the page only ever holds the VAULT_KEY placeholder — never shown, never stored here.
+    await AI.readTeacher({ fresh: true }).catch(() => null);
+    sealed = AI.sealedVault();
+    if (sealed) await AI.adoptBrowserKey().catch(() => {});
+    const w = await AI.whisperKey();   // just read fresh above (an adopted key invalidates the memo)
+    if (sealed) {
+      groqKey = (w && w.key) ? AI.VAULT_KEY : '';
+      if (w && w.base) { groqBase = w.base; localStorage.setItem('groq.base', groqBase); if (baseInput) baseInput.value = groqBase; }
+      asr.setGroq(groqKey, groqBase);
+      if (keyInput) keyInput.value = '';
+      $('keyHint').textContent = t('set_key_hint_sealed'); $('keyHint').setAttribute('data-i18n', 'set_key_hint_sealed');
+    } else if (w && w.key && (w.key !== groqKey || w.base !== groqBase)) {
       groqKey = w.key; groqBase = w.base;
       localStorage.setItem('groq.key', groqKey);
       localStorage.setItem('groq.base', groqBase);
@@ -512,7 +540,7 @@ ${t('hdr_engine')}: ${asr.source === 'sd' ? 'Vosk (Offline)' : 'Groq (Online)'}
 `;
     navigator.sendBeacon('/api/fs/write?path='+enc(path()), new Blob([header + finalText],{type:'text/plain'}));
   }}catch{}
-  try{ navigator.sendBeacon('/api/display?on=1'); }catch{}
+  try{ if(!noDisplay) navigator.sendBeacon('/api/display?on=1'); }catch{}
   screenOff = false;
 }
 window.addEventListener('pagehide', cleanup);
@@ -534,6 +562,18 @@ I18N.onChange(()=>{
   reflectScreen(); render(); markSaved();
   await ensureDir();
   await loadSystemTeacherKey();
+  // Screen control only where the device has it (device.display); elsewhere no toggle, no heartbeat, no beacon.
+  if(!(await Caps.has('device.display'))){ noDisplay = true; screenOff = false; $('btnScreen').hidden = true; }
+  // The device mic exists only where the capability list has device.mic (the Cardputer); anywhere else the app
+  // says so instead of retrying a missing stream. 401/403 on the stream is a pairing problem (showAuth).
+  let mic = false;
+  try{ mic = await Caps.has('device.mic'); }catch{}
+  if(!mic){
+    errored = true; setStatus('err', t('st_audio_error'));
+    const n=$('notice'); n.classList.add('show'); n.innerHTML=t('notice_no_mic');
+    $('btnRec').disabled = true;
+    return;
+  }
   await setScreen(true);          // requirement: blank the Cardputer screen as soon as the app opens
   startASR();                     // and start transcribing immediately
 })();

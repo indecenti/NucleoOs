@@ -1,0 +1,38 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
+<html lang="it">
+<head>
+<meta charset="utf-8">
+  <script>/* NucleoOS resource guard: a lost same-origin script/stylesheet makes the shell reload this window once (wm.js retryFrame) */addEventListener('error',function(e){var t=e.target,u;if(!t||t===window||parent===window||(t.tagName!=='SCRIPT'&&t.tagName!=='LINK'))return;try{u=new URL(t.src||t.href,location.href);if(u.origin===location.origin)parent.postMessage({type:'app-resource-failed',src:u.pathname},location.origin)}catch(_){}},true)</script>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Store</title>
+<!--
+  The NucleoOS store, the same on every edition (shell/store-client.js does the checking). Each tab is a signed
+  source this device can see; each card an app this device can run, decided by capabilities. Web apps install
+  from here; native apps (Cardputer, P4) are installed by the device's own store. The Handheld's system
+  packages keep their own page (system.html), shown as a tab where the device has them (store.native).
+  Catalog text is signed but stays text: always textContent.
+-->
+<link rel="stylesheet" href="store.css">
+</head>
+<body>
+  <header>
+    <img class="logo" src="assets/icon.svg" alt="">
+    <div class="ttl grow">Store<small id="sub"></small></div>
+    <input type="search" id="q" data-i18n-attr="placeholder:search">
+    <button id="refresh" class="pri" data-i18n="refresh">Aggiorna catalogo</button>
+  </header>
+  <nav class="tabs" id="tabs" role="tablist"></nav>
+  <div class="bar" id="bar">
+    <div class="seg" id="filter">
+      <button data-f="all" class="on" data-i18n="f_all">Tutto</button>
+      <button data-f="installed" data-i18n="f_installed">Installate</button>
+      <button data-f="updates" data-i18n="f_updates">Aggiornamenti</button>
+    </div>
+    <div class="info grow" id="info" role="status" aria-live="polite"></div>
+  </div>
+  <main id="grid"></main>
+  <iframe id="system" title="Sistema" hidden></iframe>
+<script type="module" src="store.js"></script>
+</body>
+</html>

@@ -32,5 +32,14 @@
   "core_n": "Núcleo {n}",
   "cpu_meta": "{n} núcleos · activo {uptime}",
   "na_short": "n/d",
-  "cpu_unavailable": "endpoint /api/cpu no disponible (firmware)"
+  "cpu_unavailable": "endpoint /api/cpu no disponible (firmware)",
+  "no_battery": "ausente",
+  "ram_title": "Memoria (RAM)",
+  "mem_available": "Disponible",
+  "swap": "Swap (zram)",
+  "ram_avail": "RAM disp.",
+  "governor": "Governador",
+  "soc_temp": "Temp. SoC",
+  "load_unit": "carga",
+  "uptime_is": "tiempo {uptime}"
 }

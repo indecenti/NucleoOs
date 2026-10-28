@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // NucleoOS AI Copilot — ANIMA as a system service, not just an app.
 //
 // A floating command/AI bar summonable from anywhere (Ctrl+Space or the taskbar button).
@@ -14,6 +15,7 @@
 
 import * as AI from './ai.js';        // browser-direct cloud client (shared with onboarding)
 import * as Mode from './anima-mode.js';   // the one engine-mode definition + the turn abort/timeout helper
+import * as GPU from './webllm.js';        // the browser-GPU model (Settings ▸ AI), fallback when nothing else answered
 
 let api = null;                       // { byId, WM, openFile, showToast, refreshStatus, FsIndex }
 let _aiCfg = null, _aiAt = 0;         // cached teacher config (15s) so we don't re-read the SD per message
@@ -79,7 +81,7 @@ export const STR = {
     opened: 'aperto', thinking: ['Sto pensando', 'Rifletto', 'Elaboro', 'Consulto la memoria', 'Sto cercando'],
     reveal: 'Mostra nella cartella', openCal: 'Apri Calendario', openMon: 'Apri System Monitor', openSet: 'Apri Impostazioni',
     nomatch: 'Nessuna corrispondenza.', memory: 'memoria',
-    footHint: ['<kbd>⏎</kbd> invia', '<kbd>⇧⏎</kbd> a capo', '<kbd>esc</kbd> chiudi'],
+    footHint: ['<kbd>⏎</kbd> invia', '<kbd>⇧⏎</kbd> a capo', '<kbd>↑↓</kbd> cronologia', '<kbd>esc</kbd> chiudi'], notDone: 'non eseguito', why: 'perché', gpuAns: 'GPU del browser',
     mic: 'Parla con ANIMA', micListening: 'Ti ascolto…', micBusy: 'Microfono in uso da', micErr: 'Voce non disponibile (modello non caricato).', verOk: 'verificato dal dispositivo', verNo: 'contraddetto dal dispositivo',
     modeAuto: 'auto', modePrivate: 'privato', modeTip: 'Modalità: Auto usa la rete quando serve, Privato mai — clic per cambiare',
     langTip: 'Lingua', agentTip: 'Agente: fai, non solo rispondere', engineTip: 'Motore ANIMA', close: 'Chiudi', send: 'Invia', stop: 'Stop',
@@ -94,7 +96,7 @@ export const STR = {
     opened: 'opened', thinking: ['Thinking', 'Pondering', 'Reasoning', 'Recalling', 'Searching'],
     reveal: 'Reveal in folder', openCal: 'Open Calendar', openMon: 'Open System Monitor', openSet: 'Open Settings',
     nomatch: 'No match.', memory: 'memory',
-    footHint: ['<kbd>⏎</kbd> send', '<kbd>⇧⏎</kbd> newline', '<kbd>esc</kbd> close'],
+    footHint: ['<kbd>⏎</kbd> send', '<kbd>⇧⏎</kbd> newline', '<kbd>↑↓</kbd> history', '<kbd>esc</kbd> close'], notDone: 'not done', why: 'why', gpuAns: 'browser GPU',
     mic: 'Speak to ANIMA', micListening: 'Listening…', micBusy: 'Mic in use by', micErr: 'Voice unavailable (model not loaded).', verOk: 'verified on-device', verNo: 'contradicted on-device',
     modeAuto: 'auto', modePrivate: 'private', modeTip: 'Mode: Auto uses the network when it helps, Private never does — click to switch',
     langTip: 'Language', agentTip: 'Agent: do, not just answer', engineTip: 'ANIMA engine', close: 'Close', send: 'Send', stop: 'Stop',
@@ -109,7 +111,7 @@ export const STR = {
     opened: 'abierto', thinking: ['Pensando', 'Reflexionando', 'Razonando', 'Recordando', 'Buscando'],
     reveal: 'Mostrar en la carpeta', openCal: 'Abrir Calendario', openMon: 'Abrir System Monitor', openSet: 'Abrir Ajustes',
     nomatch: 'Sin coincidencias.', memory: 'memoria',
-    footHint: ['<kbd>⏎</kbd> enviar', '<kbd>⇧⏎</kbd> nueva línea', '<kbd>esc</kbd> cerrar'],
+    footHint: ['<kbd>⏎</kbd> enviar', '<kbd>⇧⏎</kbd> nueva línea', '<kbd>↑↓</kbd> historial', '<kbd>esc</kbd> cerrar'], notDone: 'no realizado', why: 'por qué', gpuAns: 'GPU del navegador',
     mic: 'Habla con ANIMA', micListening: 'Te escucho…', micBusy: 'Micrófono en uso por', micErr: 'Voz no disponible (modelo no cargado).', verOk: 'verificado en el dispositivo', verNo: 'contradicho por el dispositivo',
     modeAuto: 'auto', modePrivate: 'privado', modeTip: 'Modo: Auto usa la red cuando ayuda, Privado nunca — clic para cambiar',
     langTip: 'Idioma', agentTip: 'Agente: hacer, no solo responder', engineTip: 'Motor ANIMA', close: 'Cerrar', send: 'Enviar', stop: 'Detener',
@@ -124,7 +126,7 @@ export const STR = {
     opened: 'ouvert', thinking: ['Je réfléchis', 'Je considère', 'Je raisonne', 'Je me souviens', 'Je cherche'],
     reveal: 'Afficher dans le dossier', openCal: 'Ouvrir le Calendrier', openMon: 'Ouvrir System Monitor', openSet: 'Ouvrir les Réglages',
     nomatch: 'Aucune correspondance.', memory: 'mémoire',
-    footHint: ['<kbd>⏎</kbd> envoyer', '<kbd>⇧⏎</kbd> nouvelle ligne', '<kbd>esc</kbd> fermer'],
+    footHint: ['<kbd>⏎</kbd> envoyer', '<kbd>⇧⏎</kbd> nouvelle ligne', '<kbd>↑↓</kbd> historique', '<kbd>esc</kbd> fermer'], notDone: 'non effectué', why: 'pourquoi', gpuAns: 'GPU du navigateur',
     mic: 'Parlez à ANIMA', micListening: 'Je vous écoute…', micBusy: 'Micro utilisé par', micErr: 'Voix indisponible (modèle non chargé).', verOk: "vérifié sur l'appareil", verNo: "contredit par l'appareil",
     modeAuto: 'auto', modePrivate: 'privé', modeTip: 'Mode : Auto utilise le réseau quand c’est utile, Privé jamais — cliquez pour changer',
     langTip: 'Langue', agentTip: 'Agent : agir, pas seulement répondre', engineTip: 'Moteur ANIMA', close: 'Fermer', send: 'Envoyer', stop: 'Arrêter',
@@ -139,7 +141,7 @@ export const STR = {
     opened: 'geöffnet', thinking: ['Denke nach', 'Überlege', 'Argumentiere', 'Erinnere mich', 'Suche'],
     reveal: 'Im Ordner anzeigen', openCal: 'Kalender öffnen', openMon: 'System Monitor öffnen', openSet: 'Einstellungen öffnen',
     nomatch: 'Keine Übereinstimmung.', memory: 'Gedächtnis',
-    footHint: ['<kbd>⏎</kbd> senden', '<kbd>⇧⏎</kbd> neue Zeile', '<kbd>esc</kbd> schließen'],
+    footHint: ['<kbd>⏎</kbd> senden', '<kbd>⇧⏎</kbd> neue Zeile', '<kbd>↑↓</kbd> Verlauf', '<kbd>esc</kbd> schließen'], notDone: 'nicht ausgeführt', why: 'warum', gpuAns: 'Browser-GPU',
     mic: 'Sprich mit ANIMA', micListening: 'Ich höre zu…', micBusy: 'Mikrofon in Benutzung von', micErr: 'Sprache nicht verfügbar (Modell nicht geladen).', verOk: 'auf dem Gerät bestätigt', verNo: 'vom Gerät widerlegt',
     modeAuto: 'auto', modePrivate: 'privat', modeTip: 'Modus: Auto nutzt das Netz, wenn es hilft, Privat nie — klicken zum Wechseln',
     langTip: 'Sprache', agentTip: 'Agent: handeln, nicht nur antworten', engineTip: 'ANIMA-Engine', close: 'Schließen', send: 'Senden', stop: 'Stopp',
@@ -252,6 +254,8 @@ function wire() {
   inputEl.addEventListener('input', autogrow);
   inputEl.addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
+    else if (e.key === 'ArrowUp' && !inputEl.value.slice(0, inputEl.selectionStart).includes('\n')) { e.preventDefault(); histNav(-1); }
+    else if (e.key === 'ArrowDown' && !inputEl.value.slice(inputEl.selectionEnd).includes('\n')) { e.preventDefault(); histNav(+1); }
     else if (e.key === 'Escape') { e.preventDefault(); if (busy) stop(); else closeBar(); }
   });
   // welcome / clarify chips delegate to ask()
@@ -259,7 +263,20 @@ function wire() {
 }
 
 function autogrow() { inputEl.style.height = 'auto'; inputEl.style.height = Math.min(inputEl.scrollHeight, 120) + 'px'; }
-function submit() { const q = inputEl.value; inputEl.value = ''; autogrow(); askCopilot(q); }
+// Prompt history (↑↓ when the caret is on the first / last line), like a shell.
+const qHist = []; let qPos = 0;
+function submit() {
+  const q = inputEl.value; inputEl.value = ''; autogrow();
+  if (q.trim() && qHist[qHist.length - 1] !== q.trim()) qHist.push(q.trim());
+  qPos = qHist.length;
+  askCopilot(q);
+}
+function histNav(dir) {
+  if (!qHist.length) return;
+  qPos = Math.max(0, Math.min(qHist.length, qPos + dir));
+  inputEl.value = qPos === qHist.length ? '' : qHist[qPos]; autogrow();
+  inputEl.setSelectionRange(inputEl.value.length, inputEl.value.length);
+}
 
 // ---- voice: the device is the mic, the browser is the ears ----
 // micgate streams raw PCM from the Cardputer's PDM mic (no getUserMedia — the device's plain-http
@@ -582,6 +599,16 @@ async function askAgent(q, turn) {
 //   3 · Auto + a browser-direct key: the cloud answers what the grounded brains could not. Never for a
 //       device command or a personal fact (the device owns those), never in Private.
 const bareMiss = (r) => !r || !r.reply || /^(non lo so|i don'?t know)\b/i.test(String(r.reply).trim());
+// A device may answer {"pending":true,"job":N} when a turn outlasts its wait (the device keeps working): follow the
+// job until it is done. A device without jobs never sends that shape, so this is a no-op there.
+async function awaitJob(r, signal) {
+  while (r && r.pending && r.job) {
+    const res = await fetch('/api/anima/job?id=' + encodeURIComponent(r.job) + '&wait_ms=1500', { signal, cache: 'no-store' });
+    if (res.status === 404) return null;
+    r = await res.json();
+  }
+  return r;
+}
 async function askCopilot(q) {
   q = (q || '').trim();
   const speakBack = voicePending;              // consume the voice flag whatever happens next
@@ -633,7 +660,7 @@ async function askCopilot(q) {
           const resp = await fetch('/api/anima?q=' + encodeURIComponent(q) + '&lang=' + lang() + '&mode=' + Mode.deviceMode(m)
             + '&sid=' + encodeURIComponent(copilotSid()), { signal });
           if (!resp.ok) throw new Error('HTTP ' + resp.status);
-          return resp.json();
+          return awaitJob(await resp.json(), signal);
         });
       } catch (e) { if (sig.aborted) throw e; devR = null; }
       const good = devR && (P && P.answered ? P.answered(devR) : !bareMiss(devR)) && !bareMiss(devR);
@@ -679,6 +706,26 @@ async function askCopilot(q) {
     aborter = null; setBusy(false); inputEl.focus(); return;
   }
   if (my !== seq) { think.remove(); setBusy(false); return; }   // stale response — ignore
+  // Nothing grounded answered: the browser-GPU model (Settings ▸ AI) answers, streamed, when the user enabled it and
+  // this browser has WebGPU. It runs on this computer, so Private allows it — but only once loaded (a first load
+  // downloads the weights from the network).
+  const miss = (bareMiss(r) || r.action === 'none' || r.ok === false) && r.action !== 'tool' && r.action !== 'launch';
+  let gpuOn = false;
+  try { gpuOn = typeof navigator !== 'undefined' && 'gpu' in navigator && localStorage.getItem('anima.useWebGPU') === '1' && !!GPU.chosen() && (!priv || GPU.ready()); } catch {}
+  if (miss && gpuOn) {
+    think.remove();
+    const turn = addBot('…'); const body = turn.querySelector('.cp-body');
+    try {
+      const msgs = history.slice(-13, -1).filter((h) => h.text).map((h) => ({ role: h.role === 'user' ? 'user' : 'assistant', content: String(h.text).slice(0, 1500) }));
+      while (msgs.length && msgs[0].role !== 'user') msgs.shift();
+      msgs.unshift({ role: 'system', content: await sysPrompt() });
+      msgs.push({ role: 'user', content: q });
+      const text = await GPU.chat(msgs, { signal: sig, onToken: (_, all) => { body.innerHTML = mdInline(all); scrollDown(); } });
+      addLined(turn, T().gpuAns + ' · ' + (GPU.loaded() || '').replace(/-MLC$/, ''), 'dim');
+      history.push({ role: 'bot', text });
+    } catch (e) { body.innerHTML = mdInline(r.reply || T().dontknow); addLined(turn, 'GPU: ' + String((e && e.message) || e), 'warn'); history.push({ role: 'bot', text: r.reply || T().dontknow }); }
+    aborter = null; setDot('ok'); setBusy(false); inputEl.focus(); return;
+  }
   aborter = null; think.remove(); setDot('ok');
   const reply = r.reply || T().dontknow;
   const turn = addBot(reply);
@@ -736,6 +783,10 @@ function dispatch(r, turn) {
   } else if (r.action === 'none') {
     // honest miss — leave the dontknow reply, no action
   }
+  // What a tool REALLY did, when the device reports it: ⎿ calendario: 2026-10-02 09:00 / ⎿ non eseguito: …
+  if (r.action === 'tool' && typeof r.done === 'boolean')
+    addLined(turn, (r.done ? '' : T().notDone + ': ') + (r.note || ''), r.done ? 'ok' : 'warn');
+  if (r.why) addLined(turn, T().why + ': ' + r.why, 'warn');
   addMeta(turn, r);
 }
 const reply_ = (r) => r.reply || '';

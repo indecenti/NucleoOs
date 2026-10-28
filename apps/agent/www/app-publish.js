@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // app-publish.js — the PURE core for the agent's "create a NucleoOS app" skill.
 //
 // No DOM, no fetch: runs in the browser AND under Node, so the manifest schema, id rules, registry
@@ -122,7 +123,7 @@ function brokerClient(id, catJson) {
     // This app runs with an OPAQUE ORIGIN: no pairing cookie, no shared localStorage, /api/* out of
     // reach. Everything it may do arrives through the shell's broker, which grants exactly what this
     // app's manifest declared (web/shell/appbroker.js). Calls are serialised there, so several
-    // generated apps cannot burst the Cardputer's 4-6 sockets.
+    // generated apps cannot burst the device's 4-6 sockets.
     const os = (() => {
       let n = 0; const waiting = new Map();
       addEventListener('message', (e) => {
@@ -228,7 +229,7 @@ const KIND_SCRIPT = {
     }
     [val, from, to].forEach((el) => el.addEventListener('input', conv));
     conv();`,
-  device: `    // The Cardputer's live state through the broker: a sandboxed app has no /api/* — os.sys.status
+  device: `    // The device's live state through the broker: a sandboxed app has no /api/* — os.sys.status
     // is the DECLARED window on it (permission system.events), serialised so N apps cannot burst.
     const fmt = (b) => b >= 1e9 ? (b / 1e9).toFixed(1) + ' GB' : Math.round(b / 1e6) + ' MB';
     async function refresh() {

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // constellations-econ.js — EXACT port of the firmware economy math so prices/credits match the
 // Cardputer to the credit. Mirrors app_constellations.cpp: unit_buy / unit_sell / refuel_price /
 // jump_cost / sys_dist. Uses CONTENT from constellations-content.js (generated from the .h).

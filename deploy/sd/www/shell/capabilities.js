@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // capabilities.js — ONE honest answer to "what can this browser do for NucleoOS, and if not, why and
 // how do I fix it?". Shared by ANIMA, Settings, the Agent, Paint and the model installer (lazy import:
 // `import('/capabilities.js')` — the shell never loads it at boot, so it costs the device nothing).

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later AND MIT */
 // edit-replace.js — tolerant old→new replacement for the agent's edit_file tool.
 //
 // Ported from OpenCode (packages/opencode/src/tool/edit.ts, github.com/anomalyco/opencode, MIT License,

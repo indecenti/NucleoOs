@@ -1,4 +1,5 @@
 <!doctype html>
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -80,6 +81,7 @@
 
   <script type="module">
     import I18N from '/nucleo-i18n.js';
+    import Caps from '/nucleo-caps.js';   // what this device can do (mail.smtp)
     const t = await I18N.init('mail');
     const $ = (id) => document.getElementById(id);
     const SETTINGS = '/system/config/settings.json';
@@ -202,8 +204,11 @@
       else {
         html += '<ul class="sent">';
         for (const ln of lines) {
-          const p = ln.split(' | ');
-          const when = p[0] || '', ok = (p[1] || '').toUpperCase() === 'OK', to = p[2] || '', subj = p[3] || '';
+          // Two log shapes: the Cardputer firmware writes `WHEN | OK|FAIL | TO | SUBJECT`; a server that logs
+          // only SUCCESSFUL sends writes them tab-separated, `WHEN\tFROM\tTO\tSUBJECT` (no status field).
+          const tab = ln.includes('\t');
+          const p = tab ? ln.split('\t') : ln.split(' | ');
+          const when = p[0] || '', ok = tab || (p[1] || '').toUpperCase() === 'OK', to = p[2] || '', subj = p[3] || '';
           html += `<li><span class="dot ${ok ? 'ok' : 'err'}" title="${ok ? 'OK' : esc(t('failed'))}"></span>
             <span class="who"><div class="to">${esc(to)}</div><div class="subj">${esc(subj)}</div></span>
             <span class="when">${esc(when)}</span></li>`;
@@ -366,9 +371,20 @@
       if (e.data?.type === 'set-theme' && e.data.theme) document.documentElement.dataset.theme = e.data.theme;
       if (e.data?.t === 'fs.changed' && e.data.d?.path?.endsWith('settings.json')) loadTheme();
     });
-    I18N.onChange(render);
+    let smtpOk = null;                      // capability mail.smtp, set by init()
+    I18N.onChange(() => { if (smtpOk !== false) render(); });
 
-    async function init() { await loadTheme(); await loadData(); render(); }
+    async function init() {
+      await loadTheme();
+      // Sending mail is the device's (capability mail.smtp): elsewhere say so, and ask nothing of /api/mail.
+      smtpOk = await Caps.has('mail.smtp');
+      if (!smtpOk) {
+        document.querySelector('header .tabs').style.display = 'none';
+        $('view').innerHTML = `<div class="empty"><span class="big">✉️</span><span data-i18n="mail_unavailable">${esc(t('mail_unavailable'))}</span></div>`;
+        return;
+      }
+      await loadData(); render();
+    }
     init();
   </script>
 </body>

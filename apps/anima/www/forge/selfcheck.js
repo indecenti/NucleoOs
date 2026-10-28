@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // selfcheck.js — grounded best-of-N selection (test-time compute for code). The coder emits N
 // candidates; the loop runs each through the hermetic check + (optionally) model-written assertions
 // in the sandbox; this module RANKS them by GROUNDED signal, not by model self-report:

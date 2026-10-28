@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // search-rank.js — the pure ranking rules behind the OS search box (taskbar + Start menu).
 //
 // Split out of shell.js on purpose: like shortcuts.js and boot-fetch.js, this is decision logic with

@@ -1,4 +1,5 @@
 <!doctype html>
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -41,6 +42,17 @@
   .status-msg { font-size: 13px; margin-top: 8px; min-height: 18px; }
   .status-msg.ok { color: var(--ok); } .status-msg.warn { color: var(--warn); } .status-msg.err { color: var(--err); }
   code { background:#ffffff10; padding:1px 5px; border-radius:4px; font-size:12px; }
+  /* Sections that only exist where the device has the feature (OTA slots, the package installer). */
+  [hidden] { display: none !important; }
+  .card h2 .badge { margin-left: 8px; text-transform: none; letter-spacing: 0; }
+  .pkg { display: flex; gap: 10px; align-items: center; padding: 10px; border: 1px solid var(--line); border-radius: 10px; margin-bottom: 8px; background: var(--panel2); }
+  .pkg .grow { flex: 1; min-width: 0; }
+  .pkg .nm { font-weight: 600; font-size: 13px; }
+  .pkg .meta { font: 11px ui-monospace, Consolas, monospace; color: var(--muted); word-break: break-all; }
+  .pkg.bad { opacity: .7; border-style: dashed; }
+  button.danger { border-color: #5a2b2b; color: var(--err); }
+  pre.log { margin: 0; max-height: 280px; overflow: auto; background: #080b12; color: #cfd8e6; border: 1px solid var(--line);
+    border-radius: 9px; padding: 10px; font: 11.5px/1.45 ui-monospace, Consolas, monospace; white-space: pre-wrap; word-break: break-word; }
 </style>
 </head>
 <body>
@@ -49,15 +61,21 @@
   <div class="card">
     <h2 data-i18n="system">System</h2>
     <div class="row"><span class="k" data-i18n="version">Version</span><span class="v" id="version">…</span></div>
-    <div class="row"><span class="k" data-i18n="fw_slot">Firmware slot</span><span class="v" id="slot">…</span></div>
-    <div class="row"><span class="k" data-i18n="image_state">Image state</span><span class="v" id="state">…</span></div>
-    <div class="row"><span class="k" data-i18n="free_memory">Free memory</span><span class="v" id="heap">…</span></div>
+    <div class="row" id="row-slot"><span class="k" data-i18n="fw_slot">Firmware slot</span><span class="v" id="slot">…</span></div>
+    <div class="row" id="row-state"><span class="k" data-i18n="image_state">Image state</span><span class="v" id="state">…</span></div>
+    <div class="row" id="row-heap"><span class="k" data-i18n="free_memory">Free memory</span><span class="v" id="heap">…</span></div>
+    <div class="row" id="row-webos" hidden><span class="k" data-i18n="webos_version">Web OS</span><span class="v" id="webos">…</span></div>
+    <div class="row" id="row-last" hidden><span class="k" data-i18n="last_install">Last install</span><span class="v" id="last">…</span></div>
+    <div class="row" id="row-installer" hidden><span class="k" data-i18n="installer">Installer</span><span class="v" id="installer">…</span></div>
     <div class="row"><span class="k" data-i18n="storage">Storage</span><span class="v" id="storage">…</span></div>
     <div class="row"><span class="k" data-i18n="network">Network</span><span class="v" id="net">…</span></div>
     <div style="margin-top:10px"><button id="refresh" data-i18n="refresh">Refresh</button></div>
   </div>
 
-  <div class="card">
+  <!-- Shown where the device's capability list has no 'ota': nothing below can be installed from here. -->
+  <div class="card" id="no-ota" hidden><p class="note" data-i18n="ota_unavailable">Updates are not available on this device.</p></div>
+
+  <div class="card" id="ota-card">
     <h2 data-i18n="fw_update_title">Firmware update over Wi-Fi (OTA)</h2>
     <p class="note" data-i18n-html="fw_update_desc">Pick a <code>nucleoos.bin</code> and install it wirelessly — no USB cable. The image is written to the
       <b>spare flash slot</b> and only booted if it is valid; if the new firmware fails to start, the device
@@ -71,13 +89,29 @@
     <p class="note" data-i18n="keep_powered">⚠ Keep the device powered during the update. It reboots automatically when done.</p>
   </div>
 
-  <div class="card">
+  <div class="card" id="app-card">
     <h2 data-i18n="app_shell_title">App &amp; shell updates</h2>
     <p class="note" data-i18n-html="app_shell_desc">The shell and apps live on the SD card, so they update independently of the firmware — either by
       syncing the card from a PC (<code>deploy.ps1 -To &lt;sd&gt;</code>) or over the network with
       <code>npm run push-ota -- --host http://&lt;ip&gt;</code>. After a web update, just reload the shell.</p>
   </div>
 
+  <!-- The device's package installer (/api/update, e.g. the Handheld's nucleos-install.sh). Shown only
+       where GET /api/update answers; it installs nothing itself, it asks that installer and shows what it said. -->
+  <div class="card" id="pkg-card" hidden>
+    <h2><span data-i18n="sec_packages">Available packages</span><span class="badge" id="job"></span></h2>
+    <div id="pkgs"></div>
+    <div class="note" id="pkgs-empty" hidden></div>
+  </div>
+  <div class="card" id="log-card" hidden>
+    <h2 data-i18n="sec_log">Log</h2>
+    <pre class="log" id="log"></pre>
+  </div>
+  <div class="card" id="bk-card" hidden>
+    <h2 data-i18n="sec_rollback">Rollback</h2>
+    <div id="backups"></div>
+    <div class="note" id="bk-empty" hidden data-i18n="no_backups"></div>
+  </div>
 <script>
   const $ = (id) => document.getElementById(id);
   // i18n: defer to the OS engine once it boots; passthrough fallback before then.
@@ -99,6 +133,12 @@
 
   function renderStatus(s) {
     $('version').textContent = 'v' + (s.version || '?');
+    // The OTA slot block exists only on a device with the 'ota' capability (set by the module script below,
+    // from nucleo-caps.js) that flashes over /api/ota (the Cardputer firmware always sends the ota block);
+    // elsewhere the rows and the firmware card would describe hardware that is not there.
+    const hasOta = window.__updatesOta === true && !!(s.ota && typeof s.ota === 'object');
+    $('row-slot').hidden = !hasOta; $('row-state').hidden = !hasOta; $('ota-card').hidden = !hasOta;
+    $('row-heap').hidden = typeof s.free_heap !== 'number';
     const ota = s.ota || {};
     $('slot').textContent = ota.running || '?';
     const cls = stateClass[ota.state] || 'muted';
@@ -230,12 +270,137 @@
 </script>
 <script type="module">
   import I18N from '/nucleo-i18n.js';
+  import Caps from '/nucleo-caps.js';   // what this device can do ('ota')
   const t = await I18N.init('updates');
   window.__nucleoT = t;                          // hand the live translator to the inline script
   // The inline script may have already painted imperative bits with the passthrough fallback; repaint now.
   if (window.__updatesRepaint) window.__updatesRepaint();
   // And repaint again after every live language switch.
   I18N.onChange(() => { if (window.__updatesRepaint) window.__updatesRepaint(); });
+
+  // ---- the device's package installer (/api/update) ---------------------------------------------
+  // Asked only where the device has 'ota'; there, off unless GET /api/update answers JSON (state: the firmware
+  // OTA shares the capability and has no installer): a 404 (or any failure) leaves this page exactly as above.
+  const $ = (id) => document.getElementById(id);
+  const esc = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+  const size = (n) => (n >= 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.round(n / 1024) + ' KB');
+  const when = (ts) => (ts ? new Date(ts * 1000).toLocaleString() : '—');
+  let st = null, polling = null, installer = false;
+
+  async function loadUpd() {
+    let r = null;
+    try { r = await fetch('/api/update', { cache: 'no-store' }); } catch {}
+    let j = null;
+    if (r && r.ok) { try { j = await r.json(); } catch {} }
+    if (!installer) {
+      if (!j || typeof j !== 'object') return;          // no installer on this device: nothing to show
+      installer = true;
+      for (const id of ['row-webos', 'row-last', 'row-installer', 'pkg-card', 'bk-card']) $(id).hidden = false;
+      $('app-card').hidden = true;                      // SD/PC sync instructions belong to the other path
+      I18N.onChange(renderUpd);
+    }
+    st = j;
+    renderUpd();
+  }
+
+  function renderUpd() {
+    if (!installer) return;
+    if (!st) { $('webos').textContent = t('unreachable'); return; }
+    if (st.version) $('version').textContent = st.version;
+    $('webos').textContent = st.webosVersion || '?';
+    // The outcome of the last install (also one run outside this app): a half-done one stays
+    // written until a complete install covers it.
+    const lr = st.lastResult || {};
+    const lrNote = lr.rc === 4 ? ' · ' + t('last_partial') : (lr.rc && lr.rc !== 0 ? ' · ' + t('last_failed') : '');
+    $('last').textContent = (st.lastInstall || '—') + lrNote;
+    $('installer').textContent = st.installer || t('installer_missing');
+
+    const j = st.job || {};
+    const badge = $('job');
+    if (j.state === 'running') { badge.className = 'pill warn'; badge.textContent = t('job_running', { what: j.pkg || '' }); }
+    else if (j.state === 'done') { badge.className = 'pill ok'; badge.textContent = t('job_done'); }
+    else if (j.state === 'failed') { badge.className = 'pill err'; badge.textContent = t('job_failed', { rc: j.rc }); }
+    // Installer exit codes 4 and 5: half-done is retried or undone from the backup below;
+    // refused means nothing changed.
+    else if (j.state === 'partial') { badge.className = 'pill warn'; badge.textContent = t('job_partial', { what: (j.failed || []).map((f) => f.replace(/^tree /, '')).join(', ') || '?', s: j.rollback || '?' }); }
+    else if (j.state === 'refused') { badge.className = 'pill warn'; badge.textContent = t('job_refused', { why: (j.reasons || []).join('; ') || '?' }); }
+    else { badge.className = ''; badge.textContent = ''; }
+
+    const busy = j.state === 'running' || !st.installer;
+
+    const box = $('pkgs'); box.textContent = '';
+    const pkgs = st.packages || [];
+    $('pkgs-empty').hidden = !!pkgs.length;
+    if (!pkgs.length) {
+      // An empty list is a fact about this device, not a failure: say where it looked and how a package gets there.
+      $('pkgs-empty').innerHTML = t('no_packages', { dirs: (st.dirs || []).map((d) => '<code>' + esc(d) + '</code>').join(' ') || '—' });
+    }
+    for (const p of pkgs) {
+      const d = document.createElement('div');
+      d.className = 'pkg' + (p.valid ? '' : ' bad');
+      d.innerHTML =
+        '<div class="grow"><div class="nm">' + esc(p.version || p.name) + '</div>' +
+        '<div class="meta">' + esc(p.name) + ' · ' + size(p.size) + ' · ' + esc(when(p.mtime)) + '</div>' +
+        (p.valid ? '' : '<div class="meta" style="color:var(--warn)">' + esc(t('not_a_package')) + '</div>') +
+        '</div>';
+      if (p.valid) {
+        const dry = document.createElement('button'); dry.textContent = t('dry_run'); dry.disabled = busy;
+        const ins = document.createElement('button'); ins.className = 'primary'; ins.textContent = t('install'); ins.disabled = busy;
+        dry.addEventListener('click', () => run('dry-run', { path: p.path }));
+        ins.addEventListener('click', () => { if (confirm(t('confirm_install', { v: p.version || p.name }))) run('install', { path: p.path }); });
+        d.appendChild(dry); d.appendChild(ins);
+      }
+      box.appendChild(d);
+    }
+
+    const bb = $('backups'); bb.textContent = '';
+    const bks = st.backups || [];
+    $('bk-empty').hidden = !!bks.length;
+    for (const b of bks.slice(0, 8)) {
+      const d = document.createElement('div');
+      d.className = 'pkg';
+      d.innerHTML = '<div class="grow"><div class="nm">' + esc(b.stamp) + '</div><div class="meta">' + esc(t('backup_meta')) + '</div></div>';
+      const rb = document.createElement('button'); rb.className = 'danger'; rb.textContent = t('rollback'); rb.disabled = busy;
+      rb.addEventListener('click', () => { if (confirm(t('confirm_rollback', { s: b.stamp }))) run('rollback', { stamp: b.stamp }); });
+      d.appendChild(rb);
+      bb.appendChild(d);
+    }
+
+    if (j.state && j.state !== 'idle') { $('log-card').hidden = false; loadLog(); }
+    if (j.state === 'running' && !polling) polling = setInterval(loadUpd, 2000);
+    if (j.state !== 'running' && polling) { clearInterval(polling); polling = null; }
+  }
+
+  async function loadLog() {
+    try { const r = await fetch('/api/update/log', { cache: 'no-store' }); if (r.ok) $('log').textContent = await r.text(); } catch {}
+    $('log').scrollTop = $('log').scrollHeight;
+  }
+
+  // The installer replaces system files, so this route stays gated even on an otherwise open
+  // device. A refusal is answered by asking for the PIN, not by a silent no-op.
+  async function run(action, extra) {
+    const body = JSON.stringify({ action, ...extra });
+    let r;
+    try { r = await fetch('/api/update', { method: 'POST', body }); } catch { alert(t('unreachable')); return; }
+    if (r.status === 401) {
+      const { pairDialog } = await import('/nucleo-pair.js');
+      if (!(await pairDialog())) return;
+      try { r = await fetch('/api/update', { method: 'POST', body }); } catch { return; }
+    }
+    const j = await r.json().catch(() => ({}));
+    if (!j.ok) { alert(j.error || t('failed')); return; }
+    $('log-card').hidden = false;
+    await loadUpd();
+  }
+
+  // Two different things share this app: a firmware image over the air (ota.firmware, Cardputer) and the
+  // system's signed-package installer (ota.package, Handheld). Each part asks only where it exists.
+  const [fwCap, pkgCap] = await Promise.all([Caps.has('ota.firmware'), Caps.has('ota.package')]);
+  window.__updatesOta = fwCap;                    // the inline script's OTA rows follow it
+  if (window.__updatesRepaint) window.__updatesRepaint();
+  $('no-ota').hidden = fwCap || pkgCap;
+  $('refresh').addEventListener('click', () => { if (installer) loadUpd(); });
+  if (pkgCap) loadUpd();
 </script>
 </body>
 </html>

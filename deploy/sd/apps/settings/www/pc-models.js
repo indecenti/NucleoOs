@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // pc-models.js — Settings ▸ AI ▸ "Models on your PC": the full view of the AI servers on THIS computer (Ollama,
 // LM Studio, llama.cpp, Jan …) that ANIMA, the copilot and Agenti use through /ai-engines.js — no key, no Internet.
 //

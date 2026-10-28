@@ -11,6 +11,6 @@
     "one": "+{count} altro",
     "other": "+{count} altri"
   },
-  "read_failed": "Impossibile leggere il calendario dal Cardputer. Le modifiche sono sospese per non sovrascriverlo: riprova tra poco.",
-  "not_paired": "Questo browser non è abbinato al Cardputer: abbinalo per salvare il calendario."
+  "read_failed": "Impossibile leggere il calendario dal dispositivo. Le modifiche sono sospese per non sovrascriverlo: riprova tra poco.",
+  "not_paired": "Questo browser non è abbinato al dispositivo: abbinalo per salvare il calendario."
 }

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // install-modal.js — the BLOCKING install UI for an offline model, plus the OS-wide scrim bridge.
 //
 // While a model downloads the user may do exactly two things: WATCH it or CANCEL it. This modal enforces
@@ -19,10 +20,10 @@ const TXT = {"title":["Installazione modello offline","Installing offline model"
   "cancel":["Annulla","Cancel","Cancelar","Annuler","Abbrechen"],
   "retry":["Riprova","Retry","Reintentar","Réessayer","Erneut versuchen"],
   "close":["Chiudi","Close","Cerrar","Fermer","Schließen"],
-  "fromSd":["dalla SD del Cardputer","from the Cardputer SD","desde la SD del Cardputer","depuis la SD du Cardputer","von der Cardputer-SD"],
+  "fromSd":["dalla SD del dispositivo","from the device SD","desde la SD del dispositivo","depuis la SD de l’appareil","von der Geräte-SD"],
   "fromCdn":["da Internet (CDN)","from the internet (CDN)","desde internet (CDN)","depuis internet (CDN)","aus dem Internet (CDN)"],
   "resuming":["Ripresa…","Resuming…","Reanudando…","Reprise…","Fortsetzen…"],
-  "trySd":["Sorgente non raggiungibile → provo la SD del Cardputer…","Source unreachable → trying the Cardputer SD…","Origen inaccesible → pruebo la SD del Cardputer…","Source injoignable → essai de la SD du Cardputer…","Quelle nicht erreichbar → versuche die Cardputer-SD…"],
+  "trySd":["Sorgente non raggiungibile → provo la SD del dispositivo…","Source unreachable → trying the device SD…","Origen inaccesible → pruebo la SD del dispositivo…","Source injoignable → essai de la SD de l’appareil…","Quelle nicht erreichbar → versuche die Geräte-SD…"],
   "verifying":["Verifica integrità (SHA-256)…","Verifying integrity (SHA-256)…","Verificando integridad (SHA-256)…","Vérification de l’intégrité (SHA-256)…","Integrität wird geprüft (SHA-256)…"],
   "downloading":["Scaricamento…","Downloading…","Descargando…","Téléchargement…","Wird geladen…"],
   "source":["Sorgente: ","Source: ","Origen: ","Source : ","Quelle: "],

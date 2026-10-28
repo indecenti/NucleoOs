@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // dj-engine.js — Web Audio executor for the mix plans (the "two bodies, one
 // brain" browser corpus). The browser, unlike the Cardputer's single I2S TX,
 // can mix 2+ streams live, so here we do REAL-TIME crossfades. Web Audio nodes

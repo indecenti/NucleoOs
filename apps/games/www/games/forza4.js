@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // forza4.js — Connect Four / Forza 4, evolved. PROOF of transversality: this file is ONLY game logic +
 // a thin bridge to its renderer. No chat, no lobby, no networking — the shared layer provides all that.
 //

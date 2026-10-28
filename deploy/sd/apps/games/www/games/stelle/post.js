@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // stelle/post.js — the post chain of the medium / high tiers, built for integrated GPUs.
 //
 //   scene (far pass, then near pass, into ONE multisampled half-float target, resolved once)

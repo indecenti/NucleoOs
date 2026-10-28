@@ -10,7 +10,7 @@
   "saved_title": "Saved on device",
   "saved_empty": "No QR saved.",
   "save_to_device": "★ Save to device",
-  "save_hint": "“Save to device” writes the QR to <b>/data/QR/qrcodes.json</b>: the native <b>QR Code</b> app (“Saved” source) shows it large on the Cardputer.",
+  "save_hint": "“Save to device” writes the QR to <b>/data/QR/qrcodes.json</b>: the native <b>QR Code</b> app (“Saved” source) shows it large on the device.",
 
   "ty_link": "Link",
   "ty_text": "Text",
@@ -48,7 +48,7 @@
   "save_failed": "Save failed (device offline?)",
   "saved_to_device": "Saved to device",
   "load": "Load",
-  "read_failed": "Couldn't read the saved QR codes from the Cardputer: nothing is saved so they aren't overwritten. Try again shortly.",
-  "read_corrupt": "The QR file on the Cardputer can't be read: it is left untouched so nothing is lost.",
-  "not_paired": "This browser isn't paired with the Cardputer — pair it to save QR codes."
+  "read_failed": "Couldn't read the saved QR codes from the device: nothing is saved so they aren't overwritten. Try again shortly.",
+  "read_corrupt": "The QR file on the device can't be read: it is left untouched so nothing is lost.",
+  "not_paired": "This browser isn't paired with the device — pair it to save QR codes."
 }

@@ -31,7 +31,7 @@
   "saved_x": "Enregistré {name}",
   "compress_error": "Erreur de compression",
   "no_files": "Aucun fichier à compresser",
-  "err_read_file": "Impossible de lire l'archive depuis le Cardputer (erreur {status}).",
+  "err_read_file": "Impossible de lire l'archive depuis l'appareil (erreur {status}).",
   "err_write_file": "Impossible d'écrire {name} (erreur {status}).",
   "err_mkdir": "Impossible de créer le dossier {name} (erreur {status}).",
   "err_list_dir": "Impossible de lister le dossier {name} (erreur {status}).",

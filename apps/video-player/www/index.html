@@ -1,4 +1,5 @@
 <!doctype html>
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -59,11 +60,8 @@
 
     /* ---------- Player stage ---------- */
     .player-container { flex: 1; position: relative; background: #000; display: flex; justify-content: center; align-items: center; min-height: 0; overflow: hidden; }
-    video, #nfv { width: 100%; height: 100%; object-fit: contain; background: #000; }
-    .player-container.idle video, .player-container.idle #nfv { display: none; }
-    #nfv { display: none; }
-    .player-container.nfv video { display: none; }
-    .player-container.nfv:not(.idle) #nfv { display: block; }
+    video { width: 100%; height: 100%; object-fit: contain; background: #000; }
+    .player-container.idle video { display: none; }
     .player-container.playing-hidden { cursor: none; }
 
     /* Welcome / empty state */
@@ -164,6 +162,12 @@
     @keyframes bounce { from { transform: translateY(0); } to { transform: translateY(-10px); } }
 
     /* Center action flash (play/pause feedback) */
+    /* Audio-only playback badge (the same <video> element decodes audio files;
+       this overlay is the visual stage while no video frames exist) */
+    .audio-badge { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 110px; height: 110px; border-radius: 28px; background: var(--accent-alpha); color: var(--accent); display: none; place-items: center; z-index: 3; pointer-events: none; }
+    .audio-badge svg { width: 54px; height: 54px; }
+    .player-container.audio-mode:not(.idle) .audio-badge { display: grid; }
+
     .center-flash { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%) scale(0.6); width: 76px; height: 76px; border-radius: 50%; background: rgba(0,0,0,0.55); display: grid; place-items: center; opacity: 0; pointer-events: none; z-index: 6; }
     .center-flash svg { width: 36px; height: 36px; color: #fff; }
     .center-flash.flash { animation: flashAnim 0.5s ease-out; }
@@ -195,6 +199,7 @@
     .explorer-icon svg { width: 15px; height: 15px; }
     .explorer-icon.dir { color: #f59e0b; }
     .explorer-icon.video { color: var(--accent); }
+    .explorer-icon.audio { color: #34d399; }
     .explorer-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .explorer-size { font-size: 10px; color: var(--text-muted); font-family: monospace; }
     .explorer-msg { padding: 16px; text-align: center; color: var(--text-muted); font-size: 12px; }
@@ -212,12 +217,48 @@
     .about-btn { width: 100%; background: var(--accent); border: none; color: #04101f; padding: 9px 0; border-radius: 7px; cursor: pointer; font-size: 12px; font-weight: 600; transition: var(--transition); }
     .about-btn:hover { background: var(--accent-hover); }
 
+    /* ---------- Motori software (AVI/MJPEG, MPEG-1): canvas al posto del <video> ---------- */
+    .soft-stage { position: absolute; inset: 0; display: none; background: #000; }
+    .soft-stage.active { display: block; }
+    .player-container.idle .soft-stage { display: none; }
+    .soft-canvas { display: block; width: 100%; height: 100%; object-fit: contain; background: #000; }
+    video.engine-off { display: none; }
+
+    /* Sottotitoli (overlay unico per tutti i motori) */
+    .sub-overlay { position: absolute; left: 6%; right: 6%; bottom: 7%; z-index: 3; text-align: center; pointer-events: none; font-size: 3.2vh; line-height: 1.25; transition: bottom 0.25s ease; }
+    .player-container:not(.playing-hidden) .sub-overlay.lift { bottom: calc(7% + 64px); }
+    .sub-overlay .cue { display: inline; color: #fff; background: rgba(0,0,0,0.55); padding: 0.08em 0.35em; border-radius: 3px; text-shadow: 0 1px 3px rgba(0,0,0,0.9); font-family: 'Outfit', system-ui, sans-serif; box-decoration-break: clone; -webkit-box-decoration-break: clone; white-space: pre-line; }
+    .player-container.idle .sub-overlay { display: none; }
+
+    /* Attesa dati (buffering) */
+    .spinner { position: absolute; top: 50%; left: 50%; width: 46px; height: 46px; margin: -23px 0 0 -23px; border-radius: 50%; border: 3px solid rgba(255,255,255,0.18); border-top-color: var(--accent); animation: spin 0.8s linear infinite; z-index: 6; display: none; pointer-events: none; }
+    .spinner.show { display: block; }
+    .player-container.idle .spinner { display: none; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Errore di riproduzione */
+    .error-box { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); max-width: min(440px, 88%); background: var(--glass); border: 1px solid var(--border); border-radius: 12px; padding: 18px 20px; text-align: center; z-index: 7; display: none; box-shadow: var(--shadow); }
+    .error-box.show { display: block; }
+    .player-container.idle .error-box { display: none; }
+    .error-box .err-icon { width: 38px; height: 38px; margin: 0 auto 10px; border-radius: 50%; background: rgba(248,113,113,0.15); color: #f87171; display: grid; place-items: center; font-weight: 700; font-size: 18px; }
+    .error-box .err-title { font-weight: 600; font-size: 14px; margin-bottom: 6px; }
+    .error-box .err-msg { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+    .error-box .err-file { font-size: 10px; color: var(--text-muted); opacity: 0.7; margin-top: 8px; font-family: monospace; word-break: break-all; }
+
+    /* Avvisi brevi (audio bloccato / codec audio non supportato) */
+    .hint-pill { position: absolute; top: 12px; left: 50%; transform: translateX(-50%); background: rgba(0,0,0,0.72); border: 1px solid var(--border); color: #e8eef9; font-size: 12px; padding: 6px 12px; border-radius: 999px; z-index: 8; display: none; white-space: nowrap; max-width: 92%; overflow: hidden; text-overflow: ellipsis; cursor: pointer; }
+    .hint-pill.show { display: block; }
+    .player-container.idle .hint-pill { display: none; }
+
+    /* Statistiche video (Visualizza → Statistiche) */
+    .stats-box { position: absolute; top: 10px; left: 10px; z-index: 7; background: rgba(0,0,0,0.72); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font: 11px/1.45 ui-monospace, 'Cascadia Mono', Consolas, monospace; color: #d7e1f2; display: none; pointer-events: none; min-width: 230px; max-width: 70%; }
+    .stats-box.show { display: block; }
+    .stats-box div { display: flex; gap: 10px; justify-content: space-between; }
+    .stats-box .k { color: var(--text-muted); white-space: nowrap; }
+    .stats-box .v { text-align: right; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
     video::-webkit-media-controls { display: none !important; }
     video::-webkit-media-controls-enclosure { display: none !important; }
-  </style>
-  <!-- Dynamic subtitle cue styling (intelligent sizing scales with the video height) -->
-  <style id="cue-style">
-    #v::cue { font-size: 3.2vh; line-height: 1.25; color: #fff; background: rgba(0,0,0,0.55); text-shadow: 0 1px 3px rgba(0,0,0,0.9); font-family: 'Outfit', system-ui, sans-serif; }
   </style>
 </head>
 <body>
@@ -243,6 +284,10 @@
           <div class="dropdown-item" id="mi-open-local"><span data-i18n="openLocal">Apri file locale…</span><span class="shortcut">Ctrl+O</span></div>
           <div class="dropdown-item" id="mi-open-sd"><span data-i18n="openSd">Apri da MicroSD…</span><span class="shortcut">Ctrl+Shift+O</span></div>
           <div class="dropdown-divider"></div>
+          <!-- Sources: shown only when there is a real choice (more than one detected source) -->
+          <div class="dropdown-label" id="mi-sources-label" data-i18n="sourcesLabel" hidden>Sorgenti</div>
+          <div id="mi-sources" hidden></div>
+          <div class="dropdown-divider" id="mi-sources-divider" hidden></div>
           <div class="dropdown-item" id="mi-clear"><span data-i18n="closeMedia">Chiudi media</span><span class="shortcut">Esc</span></div>
         </div>
       </div>
@@ -273,6 +318,7 @@
           <div class="dropdown-divider"></div>
           <div class="dropdown-item check" id="mi-loop"><span data-i18n="loopPlaylist">Ripeti playlist</span><span class="shortcut">L</span></div>
           <div class="dropdown-item check" id="mi-playlist"><span data-i18n="showPlaylist">Mostra playlist</span><span class="shortcut">P</span></div>
+          <div class="dropdown-item check" id="mi-stats"><span data-i18n="showStats">Statistiche video</span><span class="shortcut">D</span></div>
         </div>
       </div>
       <div class="menu-item" id="menu-subs">
@@ -296,12 +342,22 @@
     </nav>
   </header>
 
-  <input type="file" id="input-file" accept="video/*,.nfv" style="display:none;">
+  <input type="file" id="input-file" accept="video/*,audio/*,.avi,.mpg,.mpeg,.m1v,.nfv" style="display:none;">
   <input type="file" id="input-sub" accept=".srt,.vtt,.webvtt" style="display:none;">
 
   <main class="player-container idle" id="player-container">
     <video id="v" playsinline></video>
-    <canvas id="nfv"></canvas>
+    <div class="soft-stage" id="soft-stage"></div>
+    <div class="sub-overlay" id="sub-overlay"></div>
+    <div class="spinner" id="spinner"></div>
+    <div class="stats-box" id="stats-box"></div>
+    <div class="hint-pill" id="hint-pill"></div>
+    <div class="error-box" id="error-box">
+      <div class="err-icon">!</div>
+      <div class="err-title" data-i18n="errTitle">Impossibile riprodurre il video</div>
+      <div class="err-msg" id="err-msg"></div>
+      <div class="err-file" id="err-file"></div>
+    </div>
 
     <!-- Welcome / empty state -->
     <div class="welcome" id="welcome">
@@ -321,6 +377,11 @@
         </button>
       </div>
       <div class="welcome-hint" data-i18n="dragHint">…oppure trascina un file video in questa finestra</div>
+    </div>
+
+    <!-- Audio-only badge (visible while an audio file plays in the shared <video> element) -->
+    <div class="audio-badge">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v9.28a4.39 4.39 0 0 0-1.5-.28C8.01 12 6 13.79 6 16s2.01 4 4.5 4S15 18.21 15 16V7h4V3h-7z"/></svg>
     </div>
 
     <!-- Center play/pause flash -->
@@ -384,7 +445,7 @@
   <!-- Playlist panel -->
   <div class="playlist-bar hidden" id="playlist-bar">
     <div class="playlist-title">
-      <span id="playlist-title-label" data-i18n="playlistTitle" data-i18n-args='{"dir":"/data/Videos"}'>PLAYLIST — /data/Videos</span>
+      <span id="playlist-title-label" data-i18n="playlistTitle" data-i18n-args='{"dir":"/Video"}'>PLAYLIST — /Video</span>
       <div class="pl-actions">
         <span class="pl-link" id="playlist-refresh" data-i18n="refresh">Aggiorna</span>
         <span class="pl-link" id="playlist-close" data-i18n="hide">Nascondi</span>
@@ -409,7 +470,7 @@
           <input type="text" class="search-input" id="sd-search" data-i18n-attr="placeholder:searchFolder" placeholder="Cerca nella cartella corrente…">
         </div>
       </div>
-      <div class="modal-crumbs" id="modal-crumbs">SD /data</div>
+      <div class="modal-crumbs" id="modal-crumbs">SD</div>
       <ul class="explorer-list" id="explorer-list"></ul>
     </div>
   </div>
@@ -436,6 +497,7 @@
           <tr><td data-i18n="subSize">Dimensione sottotitoli</td><td><kbd>+</kbd> / <kbd>−</kbd></td></tr>
           <tr><td data-i18n="loopPlaylist">Ripeti playlist</td><td><kbd>L</kbd></td></tr>
           <tr><td data-i18n="showPlaylistShort">Mostra Playlist</td><td><kbd>P</kbd></td></tr>
+          <tr><td data-i18n="showStats">Statistiche video</td><td><kbd>D</kbd></td></tr>
         </tbody>
       </table>
       <button class="about-btn" id="about-btn-close" data-i18n="close">Chiudi</button>
@@ -444,7 +506,6 @@
 
   <script type="module">
     import I18N from '/nucleo-i18n.js';
-    import { NfvMedia } from './nfv4.js';
     const t = await I18N.init('video-player');   // loads core + this app's catalog, paints [data-i18n], live-switches
     // Re-render imperatively-built text after a live language change. The engine's apply() already
     // repaints every [data-i18n] node — but #title-sub carries a (live) file name while playing and
@@ -452,26 +513,37 @@
     I18N.onChange(() => {
       refreshTitleSub();
       renderSdStatus();
+      renderSourcesMenu();
       playlistTitleLabel.textContent = t('playlistTitle', { dir: playlistDir });
       if (subPop.classList.contains('open')) renderSubPop();
       if (audioPop.classList.contains('open')) renderAudioPop();
+      if (lastError) showError(lastError);
+      if (hintKey) showHint(hintKey, hintVars, hintSticky);
+      if (statsOn) renderStats();
     });
 
+    // Dove stanno i video: la convenzione data/ (Cardputer, Handheld) oppure, sulla MicroSD piatta
+    // del P4, i film convertiti (/Video) e le registrazioni della fotocamera (/DCIM).
     const DEFAULT_VIDS_DIR = '/data/Videos';
-    const VIDEO_RE = /\.(mp4|webm|mov|mkv|m4v|ogv|nfv)$/i;
+    const FLAT_VIDS_DIRS = [['/Video', 'srcVideoteca'], ['/DCIM', 'srcLocalVideos']];
+    const DEFAULT_DIRS = [DEFAULT_VIDS_DIR, ...FLAT_VIDS_DIRS.map(([d]) => d)];
+    const VIDEO_RE = /\.(mp4|webm|mov|mkv|m4v|ogv|avi|mpg|mpeg|m1v|nfv)$/i;
+    const AUDIO_RE = /\.(mp3|flac|ogg|m4a|wav)$/i;
+    const MEDIA_RE = /\.(mp4|webm|mov|mkv|m4v|ogv|avi|mpg|mpeg|m1v|nfv|mp3|flac|ogg|m4a|wav)$/i;
+    // Formati che il browser non decodifica da solo: li riproducono i motori software (canvas).
+    const SOFT_RE = /\.(avi|mpg|mpeg|m1v)$/i;
+    // The Cardputer's own format (.nfv v4: JPEG frames + IMA ADPCM sound in one file), played by nfv4.js on a canvas.
     const NFV_RE = /\.nfv$/i;
 
     const $ = (id) => document.getElementById(id);
-    // `v` is whichever engine plays the current file: the <video> element, or NfvMedia (the Cardputer's own .nfv
-    // format, drawn on a canvas) — it answers the same properties, methods and on<event> handlers.
-    const videoEl = $('v');
-    let v = videoEl, nfv = null;
-    const localFiles = new Map();   // blob: URL -> File (an .nfv is read by slicing the File, not via the URL)
+    const v = $('v');
     const playerContainer = $('player-container');
     const titleSub = $('title-sub');
     const inputFile = $('input-file');
     const welcome = $('welcome');
     const centerFlash = $('center-flash');
+    const softStage = $('soft-stage'), subOverlay = $('sub-overlay'), spinner = $('spinner');
+    const statsBox = $('stats-box'), hintPill = $('hint-pill'), errorBox = $('error-box');
 
     const controls = $('video-controls');
     const btnPlay = $('ctrl-play'), btnStop = $('ctrl-stop'), btnMute = $('ctrl-mute');
@@ -479,7 +551,7 @@
     const btnForward = $('ctrl-forward'), btnBackward = $('ctrl-backward');
     const btnPip = $('ctrl-pip'), btnRate = $('ctrl-rate'), ratePop = $('rate-pop');
     const btnSub = $('ctrl-sub'), subPop = $('sub-pop'), btnAudio = $('ctrl-audio'), audioPop = $('audio-pop');
-    const inputSub = $('input-sub'), cueStyle = $('cue-style');
+    const inputSub = $('input-sub');
     const volumeSlider = $('volume-slider'), timeDisplay = $('time-display');
 
     const progressArea = $('progress-area'), progressCurrent = $('progress-current');
@@ -497,28 +569,41 @@
     const dragOverlay = $('drag-overlay');
 
     // State
-    let currentPath = '';        // SD path or 'local'
-    let sdCwd = '/data';
+    let currentPath = '';        // SD path or blob: URL of a local file
+    let sdCwd = '/';
     let cachedFiles = [];
     let isDraggingProgress = false;
     let controlsTimer;
     let lastVolume = 1;
     let loopPlaylist = false;
-    let playlist = [];           // [{name, path}]
+    let playlist = [];           // [{name, path, size}]
     let playlistLoaded = false;
-    let subTracks = [];          // [{label, lang, el}] active <track> elements
+    let subTracks = [];          // [{label, lang, cues:[{start, end, html}]}]
     let activeSub = -1;          // index into subTracks, -1 = off
     let subScale = 1.0;          // intelligent-sizing multiplier
     const SUB_RE = /\.(srt|vtt|webvtt)$/i;
 
+    // Motore di riproduzione corrente: il <video> nativo (mp4/webm/…) oppure un motore software
+    // (AVI/MJPEG, MPEG-1) che espone la stessa API. Tutti i controlli passano da `media`.
+    let media = v;
+    let engine = null;           // SoftEngine attivo (null = <video> nativo)
+    let appVolume = 1, appMuted = false, appRate = 1;
+    let localName = '';          // nome del file locale aperto (blob:)
+    let localFile = null;        // File del file locale (serve ai motori software)
+    let playToken = 0;
+    let autoAdvance = false;     // il file corrente è partito da solo (fine del precedente)
+    let nativeAutoMuted = false; // autoplay con audio negato → <video> partito muto
+    let lastError = null, hintKey = '', hintVars = null, hintSticky = false, hintTimer = 0;
+
     const getSdUrl = (p) => '/api/fs/read?path=' + encodeURIComponent(p);
+    const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
     // Keep the header subtitle correct across a live language change: a playing file shows its
     // (untranslatable) name; idle shows the translated "no file" label.
     function refreshTitleSub() {
       if (currentPath) {
         const isLocal = currentPath.startsWith('blob:') || currentPath.startsWith('data:');
-        const name = isLocal ? (v.dataset.name || t('localFile')) : currentPath.split('/').pop();
+        const name = isLocal ? (localName || t('localFile')) : currentPath.split('/').pop();
         titleSub.textContent = '— ' + name;
       } else {
         titleSub.textContent = t('noFilePlaying');
@@ -530,15 +615,138 @@
       setupControls();
       setupDragAndDrop();
       setupKeybindings();
-      probeSd();
+      // Sources are DETECTED, never assumed: the mount list comes from the server
+      // (multi-console: K36 has no second SD, so 'media' may simply not exist).
+      discoverSources().then(() => {
+        if (!playlistLoaded) playlistDir = primaryDir();   // a launched file already set its own folder
+        probeSd();
+        renderSourcesMenu();
+      });
 
       const q = new URLSearchParams(location.search).get('path');
       if (q) {
-        // Preload the folder of the launched file into the playlist for prev/next.
-        const dir = q.substring(0, q.lastIndexOf('/')) || DEFAULT_VIDS_DIR;
-        loadPlaylist(dir, false).then(() => playVideo(q));
+        // Preload the folder of the launched file into the playlist for prev/next (and its size,
+        // which the no-Range streaming fallback needs).
+        const dir = q.substring(0, q.lastIndexOf('/')) || '/';
+        loadPlaylist(dir, false).finally(() => playVideo(q));
       }
       // No autoplay otherwise: the welcome screen is shown until the user picks a file.
+    }
+
+    /* ---------- Media sources (asked to the server, never hardcoded) ---------- */
+    let sources = [];   // [{key, dir, kind:'video'|'audio'}] — only dirs that really exist
+
+    // Where the media USED to live ("/roms/media"): set by fetchMountNames from the
+    // server's media_alt, '' when there is no such place (or an older server).
+    let mediaAlt = '';
+    async function fetchMountNames() {
+      // GET /api/fs/mounts -> {"mounts":[{"name":...,"writable":...}], "media_alt": "..."}
+      // (existing mounts only). If the endpoint is missing (older server) fall back
+      // to the fs convention roots.
+      try {
+        const res = await fetch('/api/fs/mounts');
+        if (!res.ok) throw new Error();
+        const data = await res.json();
+        mediaAlt = typeof data.media_alt === 'string' ? data.media_alt : '';
+        return (data.mounts || []).map(m => m.name);
+      } catch { mediaAlt = ''; return ['system', 'data']; }
+    }
+
+    // NOTE: /api/fs/list answers 200 with entries:[] for a MISSING dir, so "the
+    // fetch was ok" can never mean "the folder exists" — a source is real only
+    // if its listing has entries. And the card usually mounts one level below
+    // /media with a per-unit label (/media/MEDIA here, anything elsewhere):
+    // never hardcode the label — scan depth-1.
+    async function listEntries(path) {
+      try {
+        const r = await fetch('/api/fs/list?path=' + encodeURIComponent(path));
+        if (!r.ok) return null;
+        return ((await r.json()).entries) || [];
+      } catch { return null; }
+    }
+
+    async function cardRoots() {
+      // '/media' itself + its first-level directories (the mounted card(s)).
+      const roots = ['/media'];
+      for (const e of (await listEntries('/media')) || [])
+        if (e.type === 'dir') roots.push('/media/' + e.name);
+      return roots;
+    }
+
+    async function firstNonEmpty(roots, names) {
+      for (const root of roots)
+        for (const d of names)
+          if ((((await listEntries(root + '/' + d)) || []).length)) return root + '/' + d;
+      return null;
+    }
+
+    async function discoverSources() {
+      const mounts = await fetchMountNames();
+      const found = [];
+      // The data/ convention already symlinks the card's library when present
+      // (data/Videos -> the real Video dir), so it is the primary source on
+      // every board. Scan the card directly ONLY when the convention comes up
+      // empty (a unit without the symlink) — avoids listing the same folder
+      // twice under two names.
+      const dataVids = (await listEntries(DEFAULT_VIDS_DIR)) || [];
+      // Flat card layout (P4: camera recordings in /DCIM, converted films in /Video at the card root).
+      // Looked at only when the data/ convention comes up empty, so a filled library costs nothing more.
+      const flat = [];
+      if (!dataVids.length)
+        for (const [d, key] of FLAT_VIDS_DIRS)
+          if (((await listEntries(d)) || []).length) flat.push({ key, dir: d, kind: 'video' });
+      if (flat.length) found.push(...flat);
+      else found.push({ key: dataVids.length ? 'srcVideoteca' : 'srcLocalVideos', dir: DEFAULT_VIDS_DIR, kind: 'video' });
+      let roots = null;
+      if (!dataVids.length && mounts.includes('media')) {
+        roots = await cardRoots();
+        const d = await firstNonEmpty(roots, ['Video', 'Videos', 'video']);
+        if (d) found.push({ key: 'srcVideoteca', dir: d, kind: 'video' });
+      }
+      // Audio (la vecchia app musicale è stata assorbita: quest'app è il player unico).
+      const dataMusic = (await listEntries('/data/Music')) || [];
+      if (dataMusic.length) found.push({ key: 'srcMusic', dir: '/data/Music', kind: 'audio' });
+      else if (mounts.includes('media')) {
+        if (!roots) roots = await cardRoots();
+        const d = await firstNonEmpty(roots, ['Music', 'Musica', 'music']);
+        if (d) found.push({ key: 'srcMusicSd', dir: d, kind: 'audio' });
+      }
+      // Films and music put on the console while it had ONE card stay on the ROM
+      // card (<roms>/media) when the second SD takes over as the media dir: the
+      // links above point at the new card only, so they vanished from here the
+      // moment a second card went in. The server says where they are.
+      if (mediaAlt) {
+        const altVids = mediaAlt + '/Video', altMusic = mediaAlt + '/Music';
+        if (((await listEntries(altVids)) || []).length) found.push({ key: 'srcVideoRoms', dir: altVids, kind: 'video' });
+        if (((await listEntries(altMusic)) || []).length) found.push({ key: 'srcMusicRoms', dir: altMusic, kind: 'audio' });
+      }
+      // The first source is what opens at start: an empty library must not win
+      // over the old card that has the films on it.
+      if (found[0] && found[0].key === 'srcLocalVideos') {
+        const i = found.findIndex(f => f.key === 'srcVideoRoms');
+        if (i > 0) found.unshift(found.splice(i, 1)[0]);
+      }
+      sources = found;
+    }
+
+    function primaryDir() { return (sources[0] && sources[0].dir) || DEFAULT_VIDS_DIR; }
+
+    // The Sources menu appears only when there is a real choice to make (e.g. the Handheld's old ROM card next to
+    // the library); with a single source it stays hidden and that source is used directly (primaryDir()).
+    function renderSourcesMenu() {
+      const box = $('mi-sources');
+      if (!box) return;
+      const choice = sources.length > 1;
+      box.hidden = $('mi-sources-label').hidden = $('mi-sources-divider').hidden = !choice;
+      box.innerHTML = '';
+      if (!choice) return;
+      sources.forEach(src => {
+        const item = document.createElement('div');
+        item.className = 'dropdown-item';
+        item.innerHTML = '<span>' + esc(t(src.key)) + '</span><span class="shortcut">' + esc(src.dir) + '</span>';
+        item.onclick = () => { loadPlaylist(src.dir, false); togglePlaylist(true); };
+        box.appendChild(item);
+      });
     }
 
     /* ---------- Menus ---------- */
@@ -568,6 +776,7 @@
       $('mi-pip').onclick = () => togglePip();
       $('mi-loop').onclick = () => toggleLoop();
       $('mi-playlist').onclick = () => togglePlaylist();
+      $('mi-stats').onclick = () => toggleStats();
       $('mi-shortcuts').onclick = () => openAbout();
       $('mi-about').onclick = () => openAbout();
       document.querySelectorAll('.rate-menu').forEach(el => el.onclick = () => setRate(parseFloat(el.dataset.rate)));
@@ -582,98 +791,229 @@
       $('welcome-open-sd').onclick = () => openSdExplorer();
     }
 
-    /* ---------- Playback ---------- */
-    const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-    let lastBlobUrl = '';   // object URL of the currently open local file — revoke it or the whole file stays pinned in RAM
-    // Point `v` at the engine this file needs; the other one is stopped and released.
-    function useEngine(isNfv) {
-      if (isNfv && !nfv) {
-        nfv = new NfvMedia($('nfv'));
-        for (const k of ['ontimeupdate', 'onprogress', 'onloadedmetadata', 'onplay', 'onpause', 'onended']) nfv[k] = videoEl[k];
-        nfv.onerror = () => {
-          const e = nfv.error;
-          titleSub.textContent = '— ' + (e && e.code === 'NFV_OLD' ? t('nfvOld', { v: e.version }) : t('nfvError'));
-          updatePlayIcon(false);
-        };
-        nfv.dataset = videoEl.dataset;
+    /* ---------- Engines ---------- */
+    // Eventi del media corrente → interfaccia. Ogni target (il <video> o un motore) riceve i propri
+    // listener; quelli di un motore non più corrente vengono ignorati.
+    const mediaHandlers = {
+      timeupdate: onTimeUpdate,
+      progress: updateBufferBar,
+      loadedmetadata: () => { updateTimeDisplay(); refreshAudioBtn(); updateBufferBar(); },
+      durationchange: () => { updateTimeDisplay(); updateBufferBar(); },
+      play: () => updatePlayIcon(true),
+      pause: () => { updatePlayIcon(false); showSpinner(false); showControls(); },
+      playing: () => showSpinner(false),
+      waiting: () => showSpinner(true),
+      seeking: () => { if (media !== v) showSpinner(true); },
+      seeked: () => { showSpinner(false); onTimeUpdate(); },
+      canplay: () => showSpinner(false),
+      ended: () => { updatePlayIcon(false); playNext(true); },
+      error: onMediaError,
+      audioblocked: () => showHint('audioBlocked', null, true),
+      audiounlocked: () => { if (hintKey === 'audioBlocked') hideHint(); },
+      audionotice: (e) => showHint('audioUnsupported', { codec: (e.detail && e.detail.codec) || '?' }, false),
+    };
+    function bindMedia(target) {
+      const bound = {};
+      for (const [ev, fn] of Object.entries(mediaHandlers)) {
+        bound[ev] = (e) => { if (media === target) fn(e); };
+        target.addEventListener(ev, bound[ev]);
       }
-      const next = isNfv ? nfv : videoEl;
-      if (next !== v) {
-        if (v === videoEl) { videoEl.pause(); videoEl.removeAttribute('src'); videoEl.load(); } else nfv.close();
-        v = next;
-        v.volume = parseFloat(volumeSlider.value); v.muted = videoEl.muted;
-      }
-      playerContainer.classList.toggle('nfv', isNfv);
+      return bound;
+    }
+    function unbindMedia(target, bound) { if (bound) for (const ev in bound) target.removeEventListener(ev, bound[ev]); }
+    let engineBound = null;
+
+    function teardownMedia() {
+      exitSoftPip();
+      if (engine) { unbindMedia(engine, engineBound); engineBound = null; engine.destroy(); engine = null; }
+      softStage.classList.remove('active');
+      v.classList.remove('engine-off');
+      media = v;
+      if (v.getAttribute('src')) { v.pause(); v.removeAttribute('src'); v.load(); }
+      nativeAutoMuted = false;
+      showSpinner(false);
     }
 
-    function playVideo(path) {
+    function applyMediaState(m) {
+      m.volume = appVolume;
+      m.muted = appMuted;
+      if (m === v) v.defaultPlaybackRate = appRate;
+      m.playbackRate = appRate;
+    }
+
+    /* ---------- Playback ---------- */
+    async function playVideo(path, opts = {}) {
+      const token = ++playToken;
+      autoAdvance = !!opts.auto;
+      teardownMedia();
+      hideError(); hideHint();
       currentPath = path;
       clearSubs();
       const isLocal = path.startsWith('blob:') || path.startsWith('data:');
-      if (lastBlobUrl && lastBlobUrl !== path) { URL.revokeObjectURL(lastBlobUrl); localFiles.delete(lastBlobUrl); lastBlobUrl = ''; }
-      if (path.startsWith('blob:')) lastBlobUrl = path;
-      const local = localFiles.get(path);
-      const isNfv = local ? NFV_RE.test(local.name) : NFV_RE.test(path);
-      useEngine(isNfv);
-      if (isNfv) nfv.open(local || getSdUrl(path)).then(() => { if (currentPath === path) v.play().catch(() => {}); });
-      else v.src = isLocal ? path : getSdUrl(path);
+      // a different file replaces the open local one: revoke its object URL or the whole file stays pinned in RAM
+      if (localUrl && path !== localUrl) { URL.revokeObjectURL(localUrl); localUrl = ''; localFile = null; }
+      const name = isLocal ? (localName || t('localFile')) : path.split('/').pop();
+      const fileName = isLocal ? (localFile ? localFile.name : '') : name;
+      // Audio files ride the same <video> element (it decodes them fine); the app
+      // just switches the stage to the audio badge instead of black frames.
+      const isAudio = opts.audio != null ? !!opts.audio : AUDIO_RE.test(fileName);
+      playerContainer.classList.toggle('audio-mode', isAudio);
       playerContainer.classList.remove('idle');
-      if (!isNfv) v.play().catch(() => {});
-      const name = isLocal ? (v.dataset.name || t('localFile')) : path.split('/').pop();
       titleSub.removeAttribute('data-i18n');   // file name is live data — keep the engine from repainting it
       titleSub.textContent = '— ' + name;
+      progressCurrent.style.width = '0%'; progressHandle.style.left = '0%'; progressBuffer.style.width = '0%';
+      timeDisplay.textContent = '00:00 / 00:00';
       highlightActiveChip();
       updatePlayIcon(true);
       resetControlsTimeout();
-      // Sidecar-sub detection costs an extra /api/fs/list — let the video stream win the race for the
-      // device's few sockets and only look for subs once playback has actually started.
-      if (!isLocal && !isNfv) v.addEventListener('canplay', () => { if (currentPath === path) detectSidecarSubs(path); }, { once: true });
+      // Sidecar-sub detection costs an extra /api/fs/list — let the stream win the race for the
+      // device's few sockets and only look for subs once playback can start (never for audio).
+      const wantSubs = !isLocal && !isAudio && !NFV_RE.test(fileName);
+      const findSubs = () => { if (token === playToken) detectSidecarSubs(path); };
+
+      if (NFV_RE.test(fileName)) {
+        // NfvMedia speaks the <video> API (events included) on its own canvas: it plugs into the same
+        // engine slot as the AVI and MPEG-1 decoders, loaded only when an .nfv is opened.
+        showSpinner(true);
+        let NfvMedia;
+        try { ({ NfvMedia } = await import('./nfv4.js')); }
+        catch (e) {
+          if (token !== playToken) return;
+          showSpinner(false);
+          showError({ key: 'errDecoderLoad', detail: e && e.message });
+          return;
+        }
+        if (token !== playToken) return;
+        const canvas = document.createElement('canvas');
+        canvas.className = 'soft-canvas';
+        softStage.appendChild(canvas);
+        const m = new NfvMedia(canvas);
+        m.dataset.name = name;
+        m.destroy = () => { m.close(); canvas.remove(); };
+        // Its errors are plain Errors: give them this app's keys before onMediaError reads them.
+        m.addEventListener('error', () => {
+          const e = m.error;
+          if (e && !e.key) m.error = e.code === 'NFV_OLD' ? { key: 'nfvOld', vars: { v: e.version } } : { key: 'nfvError' };
+        });
+        m.getStats = () => {
+          const h = m.h || {};
+          return { engine: 'NFV v4', container: 'NFV v4', extra: {}, vcodec: 'JPEG', width: m.videoWidth, height: m.videoHeight,
+                   fpsReal: 0, fpsNominal: h.fps || 0, shown: 0, dropped: 0, corrupt: 0, decoded: 0,
+                   acodec: h.rate ? 'IMA ADPCM' : '', audioState: h.rate ? 'on' : 'none', clock: m._clock === 'audio' ? 'audio' : 'wall',
+                   ahead: 0, cached: 0, transport: isLocal ? 'file' : 'range', bytes: 0, requests: 0, retries: 0, size: 0 };
+        };
+        engine = m; media = m;
+        engineBound = bindMedia(m);
+        applyMediaState(m);
+        v.classList.add('engine-off');
+        softStage.classList.add('active');
+        m.open(isLocal && localFile ? localFile : getSdUrl(path))
+          .then(() => { if (token === playToken) m.play().catch(() => {}); }, () => {});
+      } else if (SOFT_RE.test(fileName)) {
+        showSpinner(true);
+        let Engine;
+        try {
+          Engine = /\.avi$/i.test(fileName)
+            ? (await import('./avi-player.js')).AviEngine
+            : (await import('./mpeg1-player.js')).Mpeg1Engine;
+        } catch (e) {
+          if (token !== playToken) return;
+          showSpinner(false);
+          showError({ key: 'errDecoderLoad', detail: e && e.message });
+          return;
+        }
+        if (token !== playToken) return;
+        const { HttpSource, FileSource } = await import('./byte-source.js');
+        if (token !== playToken) return;
+        const source = isLocal && localFile ? new FileSource(localFile) : new HttpSource(getSdUrl(path), sizeHintFor(path));
+        engine = new Engine({ source, container: softStage, volume: appVolume, muted: appMuted, playbackRate: appRate });
+        engine.dataset.name = name;
+        media = engine;
+        engineBound = bindMedia(engine);
+        if (wantSubs) engine.addEventListener('canplay', findSubs, { once: true });
+        v.classList.add('engine-off');
+        softStage.classList.add('active');
+        engine.play().catch(() => {});
+      } else {
+        media = v;
+        v.src = isLocal ? path : getSdUrl(path);
+        applyMediaState(v);
+        if (wantSubs) v.addEventListener('canplay', findSubs, { once: true });
+        startNative();
+      }
     }
 
+    // <video> nativo: se la policy di autoplay nega l'audio si parte muti e si riattiva al primo gesto.
+    function startNative() {
+      v.play().catch((err) => {
+        if (err && err.name === 'NotAllowedError' && !v.muted) {
+          v.muted = true; nativeAutoMuted = true;
+          v.play().then(() => showHint('audioBlocked', null, true)).catch(() => updatePlayIcon(false));
+        } else if (err && err.name !== 'AbortError') updatePlayIcon(false);
+      });
+    }
+    function unlockNativeAudio() {
+      if (!nativeAutoMuted) return;
+      nativeAutoMuted = false;
+      if (media === v) v.muted = appMuted;
+      if (hintKey === 'audioBlocked') hideHint();
+    }
+    ['pointerdown', 'keydown', 'touchend'].forEach((ev) => window.addEventListener(ev, unlockNativeAudio, { capture: true, passive: true }));
+
     function togglePlay() {
-      if (!currentPath) return;
-      if (v.paused) { v.play().catch(() => {}); updatePlayIcon(true); flashCenter(true); }
-      else { v.pause(); updatePlayIcon(false); flashCenter(false); }
+      if (!currentPath || (engine && engine.error)) return;
+      if (media.paused) { media.play().catch(() => {}); updatePlayIcon(true); flashCenter(true); }
+      else { media.pause(); updatePlayIcon(false); flashCenter(false); }
       resetControlsTimeout();
     }
 
     function stopVideo() {
-      v.pause(); clearSubs(); v.removeAttribute('src'); v.load();
-      useEngine(false);
-      if (lastBlobUrl) { URL.revokeObjectURL(lastBlobUrl); localFiles.delete(lastBlobUrl); lastBlobUrl = ''; }
+      ++playToken;
+      teardownMedia(); clearSubs(); hideError(); hideHint();
+      if (localUrl) { URL.revokeObjectURL(localUrl); localUrl = ''; localFile = null; }
+      playerContainer.classList.remove('audio-mode');
       currentPath = '';
       playerContainer.classList.add('idle');
       updatePlayIcon(false);
       titleSub.setAttribute('data-i18n', 'noFilePlaying');   // back to a static, translatable label
       titleSub.textContent = t('noFilePlaying');
-      progressCurrent.style.width = '0%'; progressHandle.style.left = '0%';
+      progressCurrent.style.width = '0%'; progressHandle.style.left = '0%'; progressBuffer.style.width = '0%';
       highlightActiveChip();
+      if (statsOn) renderStats();
     }
 
     function seekRelative(secs) {
-      if (!v.duration) return;
-      v.currentTime = Math.max(0, Math.min(v.duration, v.currentTime + secs));
+      const d = media.duration;
+      if (!d || !isFinite(d)) return;
+      media.currentTime = Math.max(0, Math.min(d, media.currentTime + secs));
       resetControlsTimeout();
     }
 
     function toggleMute() {
-      if (v.muted || v.volume === 0) {
-        v.muted = false; const restore = lastVolume || 1;
-        v.volume = restore; volumeSlider.value = restore; updateVolumeIcon(restore);
+      if (appMuted || appVolume === 0) {
+        appMuted = false; appVolume = lastVolume || 1;
       } else {
-        lastVolume = v.volume; v.muted = true; v.volume = 0; volumeSlider.value = 0; updateVolumeIcon(0);
+        lastVolume = appVolume; appMuted = true; appVolume = 0;
       }
+      nativeAutoMuted = false;
+      applyMediaState(media);
+      volumeSlider.value = appVolume; updateVolumeIcon(appVolume);
       resetControlsTimeout();
     }
 
     function setVolume(val) {
       val = Math.max(0, Math.min(1, val));
-      v.volume = val; v.muted = val === 0; volumeSlider.value = val; updateVolumeIcon(val);
+      appVolume = val; appMuted = val === 0;
+      nativeAutoMuted = false;
+      applyMediaState(media);
+      volumeSlider.value = val; updateVolumeIcon(val);
       if (val > 0) lastVolume = val;
     }
 
     function setRate(rate) {
-      v.playbackRate = rate;
+      appRate = rate;
+      if (media === v) v.defaultPlaybackRate = rate;
+      media.playbackRate = rate;
       btnRate.textContent = (rate === 1 ? '1' : rate) + '×';
       document.querySelectorAll('.rate-opt').forEach(o => o.classList.toggle('active', parseFloat(o.dataset.rate) === rate));
       ratePop.classList.remove('open');
@@ -695,57 +1035,59 @@
       btnAudio.onclick = (e) => { e.stopPropagation(); const willOpen = !audioPop.classList.contains('open'); closePops(audioPop); if (willOpen) { renderAudioPop(); audioPop.classList.add('open'); } else audioPop.classList.remove('open'); };
       inputSub.onclick = (e) => e.stopPropagation();
       inputSub.onchange = (e) => { const f = e.target.files[0]; if (f) loadLocalSub(f); inputSub.value = ''; };
+      hintPill.onclick = (e) => { e.stopPropagation(); if (hintKey !== 'audioBlocked') hideHint(); };
 
       $('playlist-close').onclick = () => togglePlaylist(false);
       $('playlist-refresh').onclick = () => loadPlaylist(playlistDir, false);
 
       volumeSlider.oninput = (e) => setVolume(parseFloat(e.target.value));
 
-      v.ontimeupdate = () => {
-        if (!isDraggingProgress && v.duration) {
-          const pct = (v.currentTime / v.duration) * 100;
-          progressCurrent.style.width = pct + '%'; progressHandle.style.left = pct + '%';
-          updateTimeDisplay();
-        }
-      };
-      v.onprogress = () => {
-        if (v.buffered.length && v.duration) {
-          const pct = (v.buffered.end(v.buffered.length - 1) / v.duration) * 100;
-          progressBuffer.style.width = pct + '%';
-        }
-      };
-      v.onloadedmetadata = () => { updateTimeDisplay(); refreshAudioBtn(); };
-      v.onplay = () => updatePlayIcon(true);
-      v.onpause = () => updatePlayIcon(false);
-      v.onended = () => { updatePlayIcon(false); playNext(true); };
+      bindMedia(v);   // the native element keeps its listeners for the whole session
 
-      progressArea.onmousedown = (e) => { isDraggingProgress = true; seekFromEvent(e); };
-      progressArea.onmousemove = (e) => {
-        if (!v.duration) return;
+      // Pointer events: cercare dentro un film e' il gesto piu' frequente quando
+      // si guarda un video del dispositivo dal telefono, ed era l'unico che col
+      // dito non funzionava (su touch il browser non manda mousemove durante il
+      // trascinamento). touch-action: none, o il browser scorre la pagina invece.
+      progressArea.style.touchAction = 'none';
+      progressArea.addEventListener('pointerdown', (e) => {
+        if (e.button > 0) return;
+        isDraggingProgress = true;
+        try { progressArea.setPointerCapture(e.pointerId); } catch {}
+        seekFromEvent(e);
+      });
+      progressArea.addEventListener('pointermove', (e) => {
+        if (isDraggingProgress) seekFromEvent(e);
+        const d = media.duration;
+        if (!d || !isFinite(d)) return;
         const rect = progressArea.getBoundingClientRect();
         const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
         seekTooltip.style.left = (pct * 100) + '%';
-        seekTooltip.textContent = formatTime(pct * v.duration);
-      };
-      document.addEventListener('mousemove', (e) => { if (isDraggingProgress) seekFromEvent(e); });
-      document.addEventListener('mouseup', () => { isDraggingProgress = false; });
+        seekTooltip.textContent = formatTime(pct * d);
+      });
+      const endSeek = () => { isDraggingProgress = false; };
+      progressArea.addEventListener('pointerup', endSeek);
+      progressArea.addEventListener('pointercancel', endSeek);
+      document.addEventListener('pointerup', endSeek);
 
       function seekFromEvent(e) {
-        if (!v.duration) return;
+        const d = media.duration;
+        if (!d || !isFinite(d)) return;
         const rect = progressArea.getBoundingClientRect();
         const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
         progressCurrent.style.width = (pct * 100) + '%'; progressHandle.style.left = (pct * 100) + '%';
-        v.currentTime = pct * v.duration; updateTimeDisplay();
+        media.currentTime = pct * d; updateTimeDisplay();
       }
 
       playerContainer.addEventListener('mousemove', () => { showControls(); resetControlsTimeout(); });
-      playerContainer.addEventListener('mouseleave', () => { if (!v.paused && currentPath) hideControls(); });
+      playerContainer.addEventListener('mouseleave', () => { if (!media.paused && currentPath) hideControls(); });
       // Click the video area (not the controls) toggles play.
-      playerContainer.onclick = (e) => { if (currentPath && !controls.contains(e.target) && !welcome.contains(e.target)) togglePlay(); };
+      playerContainer.onclick = (e) => {
+        if (!currentPath || controls.contains(e.target) || welcome.contains(e.target) || errorBox.contains(e.target) || hintPill.contains(e.target)) return;
+        if (lastError) return;
+        togglePlay();
+      };
       controls.onclick = (e) => e.stopPropagation();
       document.addEventListener('click', () => closePops());
-      v.textTracks.addEventListener && v.textTracks.addEventListener('change', () => {});
-      if (v.audioTracks) { v.audioTracks.onaddtrack = refreshAudioBtn; v.audioTracks.onremovetrack = refreshAudioBtn; }
     }
 
     function closePops(except) {
@@ -753,10 +1095,29 @@
     }
 
     function showControls() { controls.classList.remove('hidden'); playerContainer.classList.remove('playing-hidden'); }
-    function hideControls() { if (!v.paused) { controls.classList.add('hidden'); playerContainer.classList.add('playing-hidden'); } }
-    function resetControlsTimeout() { clearTimeout(controlsTimer); showControls(); if (!v.paused && currentPath) controlsTimer = setTimeout(hideControls, 2600); }
+    function hideControls() { if (!media.paused) { controls.classList.add('hidden'); playerContainer.classList.add('playing-hidden'); } }
+    function resetControlsTimeout() { clearTimeout(controlsTimer); showControls(); if (!media.paused && currentPath) controlsTimer = setTimeout(hideControls, 2600); }
 
-    function updateTimeDisplay() { timeDisplay.textContent = formatTime(v.currentTime) + ' / ' + formatTime(v.duration || 0); }
+    function onTimeUpdate() {
+      const d = media.duration;
+      if (!isDraggingProgress && d && isFinite(d)) {
+        const pct = Math.min(100, (media.currentTime / d) * 100);
+        progressCurrent.style.width = pct + '%'; progressHandle.style.left = pct + '%';
+        updateTimeDisplay();
+      }
+      renderCues();
+    }
+    // Barra di buffer: fine dell'intervallo scaricato che contiene la posizione corrente.
+    function updateBufferBar() {
+      const d = media.duration, b = media.buffered;
+      if (!b || !d || !isFinite(d)) return;
+      const ct = media.currentTime;
+      let end = 0;
+      for (let i = 0; i < b.length; i++) if (b.start(i) <= ct + 0.5 && b.end(i) >= ct) { end = b.end(i); break; }
+      progressBuffer.style.width = Math.min(100, (end / d) * 100) + '%';
+    }
+
+    function updateTimeDisplay() { timeDisplay.textContent = formatTime(media.currentTime) + ' / ' + formatTime(media.duration || 0); }
     function formatTime(secs) {
       if (!isFinite(secs)) secs = 0;
       const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60), s = Math.floor(secs % 60);
@@ -770,7 +1131,7 @@
         : '<path d="M8 5v14l11-7z" fill="currentColor"/>';
     }
     function updateVolumeIcon(val) {
-      if (val === 0 || v.muted) iconVolumeState.innerHTML = '<path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.21.05-.42.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z" fill="currentColor"/>';
+      if (val === 0 || appMuted) iconVolumeState.innerHTML = '<path d="M16.5 12c0-1.77-1.02-3.29-2.5-4.03v2.21l2.45 2.45c.03-.21.05-.42.05-.63zm2.5 0c0 .94-.2 1.82-.54 2.64l1.51 1.51C20.63 14.91 21 13.5 21 12c0-4.28-2.99-7.86-7-8.77v2.06c2.89.86 5 3.54 5 6.71zM4.27 3L3 4.27 7.73 9H3v6h4l5 5v-6.73l4.25 4.25c-.67.52-1.42.93-2.25 1.18v2.06c1.38-.31 2.63-.95 3.69-1.81L19.73 21 21 19.73l-9-9L4.27 3zM12 4L9.91 6.09 12 8.18V4z" fill="currentColor"/>';
       else if (val < 0.5) iconVolumeState.innerHTML = '<path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02z" fill="currentColor"/>';
       else iconVolumeState.innerHTML = '<path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z" fill="currentColor"/>';
     }
@@ -782,6 +1143,48 @@
       centerFlash.classList.remove('flash'); void centerFlash.offsetWidth; centerFlash.classList.add('flash');
     }
 
+    function showSpinner(on) { spinner.classList.toggle('show', !!on && !!currentPath && !lastError); }
+
+    /* ---------- Errors & hints ---------- */
+    function errorText(err) {
+      const key = err && err.key ? err.key : 'errDecode';
+      let msg = t(key, err && err.vars ? err.vars : undefined);
+      if (msg === key) msg = t('errDecode');
+      return msg;
+    }
+    function showError(err) {
+      lastError = err;
+      $('err-msg').textContent = errorText(err);
+      $('err-file').textContent = currentPath && !currentPath.startsWith('blob:') ? currentPath : (localName || '');
+      errorBox.classList.add('show');
+      showSpinner(false);
+      showControls();
+    }
+    function hideError() { lastError = null; errorBox.classList.remove('show'); }
+    function nativeError() {
+      const c = v.error ? v.error.code : 0;
+      if (c === 2) return { key: 'errNetwork' };
+      if (c === 3) return { key: 'errDecode' };
+      return { key: 'errNative' };
+    }
+    function onMediaError() {
+      if (media === v && !v.getAttribute('src')) return;   // teardown, not a real error
+      const err = media === v ? nativeError() : (engine && engine.error) || { key: 'errDecode' };
+      showError(err);
+      updatePlayIcon(false);
+      // una registrazione vuota/danneggiata non deve fermare la riproduzione automatica della cartella
+      if (autoAdvance) { const failed = currentPath; setTimeout(() => { if (currentPath === failed && lastError) playNext(true); }, 2500); }
+    }
+    function showHint(key, vars, sticky) {
+      hintKey = key; hintVars = vars || null; hintSticky = !!sticky;
+      hintPill.textContent = t(key, vars || undefined);
+      hintPill.classList.add('show');
+      clearTimeout(hintTimer);
+      if (!sticky) hintTimer = setTimeout(hideHint, 6000);
+    }
+    function hideHint() { hintKey = ''; hintVars = null; hintPill.classList.remove('show'); clearTimeout(hintTimer); }
+
+    /* ---------- Fullscreen / PiP ---------- */
     function toggleFullscreen() {
       if (!document.fullscreenElement) playerContainer.requestFullscreen().catch(() => {});
       else document.exitFullscreen();
@@ -792,11 +1195,32 @@
         : '<path d="M7 14H5v5h5v-2H7v-3zm-2-4h2V7h3V5H5v5zm12 7h-3v2h5v-5h-2v3zM14 5v2h3v3h2V5h-5z" fill="currentColor"/>';
     });
 
+    // Motori software: il canvas diventa un MediaStream mostrato da un <video> fuori pagina in PiP.
+    let pipVideo = null;
     async function togglePip() {
       try {
-        if (document.pictureInPictureElement) await document.exitPictureInPicture();
-        else if (currentPath) await v.requestPictureInPicture();
+        if (document.pictureInPictureElement) { await document.exitPictureInPicture(); return; }
+        if (!currentPath) return;
+        if (media === v) { await v.requestPictureInPicture(); return; }
+        if (!engine || !engine.canvas.captureStream || !document.pictureInPictureEnabled) return;
+        if (!pipVideo) {
+          pipVideo = document.createElement('video');
+          pipVideo.muted = true; pipVideo.playsInline = true;
+          pipVideo.style.cssText = 'position:fixed;width:1px;height:1px;opacity:0;pointer-events:none;';
+          document.body.appendChild(pipVideo);
+          pipVideo.addEventListener('leavepictureinpicture', () => { pipVideo.srcObject = null; });
+          // i pulsanti play/pausa della finestra PiP comandano il motore
+          pipVideo.addEventListener('pause', () => { if (document.pictureInPictureElement === pipVideo && engine && !engine.paused) { engine.pause(); } });
+          pipVideo.addEventListener('play', () => { if (engine && engine.paused && document.pictureInPictureElement === pipVideo) engine.play(); });
+        }
+        pipVideo.srcObject = engine.canvas.captureStream();
+        await pipVideo.play();
+        await pipVideo.requestPictureInPicture();
       } catch {}
+    }
+    function exitSoftPip() {
+      if (pipVideo && document.pictureInPictureElement === pipVideo) document.exitPictureInPicture().catch(() => {});
+      if (pipVideo) pipVideo.srcObject = null;
     }
 
     function toggleLoop() {
@@ -804,17 +1228,73 @@
       $('mi-loop').classList.toggle('on', loopPlaylist);
     }
 
+    /* ---------- Statistics overlay ---------- */
+    let statsOn = false, statsTimer = 0, nativePrev = null;
+    function toggleStats() {
+      statsOn = !statsOn;
+      $('mi-stats').classList.toggle('on', statsOn);
+      statsBox.classList.toggle('show', statsOn);
+      clearInterval(statsTimer);
+      if (statsOn) { renderStats(); statsTimer = setInterval(renderStats, 500); }
+    }
+    function renderStats() {
+      if (!statsOn) return;
+      const rows = [];
+      const mb = (b) => (b / 1048576).toFixed(1) + ' MB';
+      if (!currentPath) rows.push([t('stEngine'), '—']);
+      else if (engine) {
+        const s = engine.getStats();
+        const ex = s.extra || {};
+        rows.push([t('stEngine'), s.engine]);
+        rows.push([t('stContainer'), s.container + (ex.index ? ' · ' + ex.index : '')]);
+        rows.push([t('stVideo'), (s.vcodec || '—') + ' · ' + s.width + '×' + s.height + (ex.renderer ? ' · ' + ex.renderer : '')]);
+        rows.push([t('stFps'), s.fpsReal.toFixed(2) + ' / ' + (s.fpsNominal ? s.fpsNominal.toFixed(3).replace(/\.?0+$/, '') : '—')]);
+        rows.push([t('stFrames'), t('stFramesVal', { shown: s.shown, dropped: s.dropped, corrupt: s.corrupt, decoded: s.decoded })]);
+        rows.push([t('stAudio'), s.acodec ? s.acodec + (s.audioState !== 'none' ? ' · ' + s.audioState : '') : '—']);
+        rows.push([t('stClock'), s.clock === 'audio' ? t('stClockAudio') : t('stClockWall')]);
+        rows.push([t('stBuffer'), s.ahead.toFixed(1) + ' s · ' + mb(s.cached)]);
+        rows.push([t('stNet'), (s.transport === 'range' ? 'HTTP Range' : s.transport === 'stream' ? t('stNoRange') : s.transport) + ' · ' + mb(s.bytes) + ' · ' + s.requests + ' req' + (s.retries ? ' · ' + s.retries + ' retry' : '')]);
+        if (s.size) rows.push([t('stSize'), mb(s.size)]);
+      } else {
+        const q = v.getVideoPlaybackQuality ? v.getVideoPlaybackQuality() : null;
+        let fps = 0;
+        if (q) {
+          const now = performance.now();
+          if (nativePrev && now > nativePrev.t) fps = (q.totalVideoFrames - nativePrev.n) / ((now - nativePrev.t) / 1000);
+          nativePrev = { t: now, n: q.totalVideoFrames };
+        }
+        rows.push([t('stEngine'), 'HTML5 <video>']);
+        rows.push([t('stVideo'), v.videoWidth + '×' + v.videoHeight]);
+        rows.push([t('stFps'), v.paused ? '0.00' : Math.max(0, fps).toFixed(2)]);
+        if (q) rows.push([t('stFrames'), t('stFramesVal', { shown: q.totalVideoFrames - q.droppedVideoFrames, dropped: q.droppedVideoFrames, corrupt: q.corruptedVideoFrames || 0, decoded: q.totalVideoFrames })]);
+        let ahead = 0;
+        for (let i = 0; i < v.buffered.length; i++) if (v.buffered.start(i) <= v.currentTime && v.buffered.end(i) >= v.currentTime) ahead = v.buffered.end(i) - v.currentTime;
+        rows.push([t('stBuffer'), ahead.toFixed(1) + ' s']);
+      }
+      statsBox.innerHTML = rows.map(([k, val]) => `<div><span class="k">${esc(k)}</span><span class="v">${esc(val)}</span></div>`).join('');
+    }
+
     /* ---------- Playlist ---------- */
-    let playlistDir = DEFAULT_VIDS_DIR;
+    let playlistDir = DEFAULT_DIRS[0];
+    const byName = (a, b) => a.name.localeCompare(b.name, undefined, { numeric: true, sensitivity: 'base' });
 
     function togglePlaylist(force = null) {
       const show = force !== null ? force : playlistBar.classList.contains('hidden');
       playlistBar.classList.toggle('hidden', !show);
       $('mi-playlist').classList.toggle('on', show);
-      if (show && !playlistLoaded) loadPlaylist(playlistDir, false);
+      if (show && !playlistLoaded) loadDefaultPlaylist();
     }
 
-    async function loadPlaylist(dir = DEFAULT_VIDS_DIR, autoplay = false) {
+    // Senza un file aperto: la prima cartella predefinita che contiene video.
+    async function loadDefaultPlaylist() {
+      const dirs = [...new Set([playlistDir, ...sources.map(s => s.dir)])];
+      for (const dir of dirs) {
+        await loadPlaylist(dir, false);
+        if (playlist.length) return;
+      }
+    }
+
+    async function loadPlaylist(dir = DEFAULT_DIRS[0], autoplay = false) {
       playlistDir = dir;
       playlistTitleLabel.textContent = t('playlistTitle', { dir });
       try {
@@ -822,26 +1302,31 @@
         // No such folder answers 404: the card is reachable, the playlist is just empty (like probeSd()).
         if (!res.ok && res.status !== 404) throw new Error();
         const data = res.status === 404 ? { entries: [] } : await res.json();
+        const base = dir.endsWith('/') ? dir : dir + '/';
         playlist = (data.entries || [])
-          .filter(e => e.type === 'file' && VIDEO_RE.test(e.name))
-          .map(e => ({ name: e.name, path: dir + '/' + e.name }));
+          .filter(e => e.type === 'file' && MEDIA_RE.test(e.name))
+          .sort(byName)
+          .map(e => ({ name: e.name, path: base + e.name, size: e.size }));
         playlistLoaded = true;
         renderPlaylist();
         if (autoplay && playlist.length && !currentPath) playVideo(playlist[0].path);
       } catch {
         playlist = [];
-        playlistItems.innerHTML = '<span class="playlist-empty" data-i18n="plSdError">MicroSD non montata o cartella non leggibile.</span>';
+        playlistItems.innerHTML = '<span class="playlist-empty" data-i18n="plSdError">' + esc(t('plSdError')) + '</span>';
       }
     }
 
     function renderPlaylist() {
-      if (!playlist.length) { playlistItems.innerHTML = '<span class="playlist-empty" data-i18n="plEmpty">Nessun video in questa cartella.</span>'; return; }
+      if (!playlist.length) { playlistItems.innerHTML = '<span class="playlist-empty" data-i18n="plEmpty">' + esc(t('plEmpty')) + '</span>'; return; }
       playlistItems.innerHTML = '';
       playlist.forEach(item => {
         const chip = document.createElement('div');
         chip.className = 'playlist-chip';
         chip.dataset.path = item.path;
-        chip.innerHTML = '<svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg><span>' + esc(item.name) + '</span>';
+        chip.innerHTML = (AUDIO_RE.test(item.name)
+          ? '<svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M12 3v9.28a4.39 4.39 0 0 0-1.5-.28C8.01 12 6 13.79 6 16s2.01 4 4.5 4S15 18.21 15 16V7h4V3h-7z"/></svg>'
+          : '<svg viewBox="0 0 24 24" width="12" height="12" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/></svg>')
+          + '<span>' + esc(item.name) + '</span>';
         chip.onclick = () => playVideo(item.path);
         playlistItems.appendChild(chip);
       });
@@ -852,14 +1337,24 @@
       playlistItems.querySelectorAll('.playlist-chip').forEach(c => c.classList.toggle('active', c.dataset.path === currentPath));
     }
 
+    // Dimensione nota dall'elenco della cartella (serve allo streaming senza Range).
+    function sizeHintFor(path) {
+      const hit = playlist.find(i => i.path === path);
+      if (hit && hit.size) return hit.size;
+      const name = path.split('/').pop();
+      const dir = path.substring(0, path.lastIndexOf('/')) || '/';
+      const e = dir === sdCwd && cachedFiles.find(x => x.name === name);
+      return e && e.size ? e.size : null;
+    }
+
     function currentIndex() { return playlist.findIndex(i => i.path === currentPath); }
     function playNext(auto = false) {
       const idx = currentIndex();
       if (!playlist.length) return;
       // a local (blob:) file is never in the playlist: manual Next jumps into it, auto-advance only loops
-      if (idx === -1) { if (!auto || loopPlaylist) playVideo(playlist[0].path); return; }
-      if (idx + 1 < playlist.length) playVideo(playlist[idx + 1].path);
-      else if (loopPlaylist) playVideo(playlist[0].path);
+      if (idx === -1) { if (!auto || loopPlaylist) playVideo(playlist[0].path, { auto }); return; }
+      if (idx + 1 < playlist.length) playVideo(playlist[idx + 1].path, { auto });
+      else if (loopPlaylist) playVideo(playlist[0].path, { auto });
       else if (auto) { updatePlayIcon(false); }
     }
     function playPrev() {
@@ -868,29 +1363,67 @@
       else if (idx === 0 && loopPlaylist) playVideo(playlist[playlist.length - 1].path);
     }
 
-    /* ---------- Subtitles ---------- */
+    /* ---------- Subtitles (rendered in our own overlay, same for every engine) ---------- */
     function clearSubs() {
-      v.querySelectorAll('track').forEach(tr => { if (tr.src.startsWith('blob:')) URL.revokeObjectURL(tr.src); tr.remove(); });
-      subTracks = []; activeSub = -1; updateSubBtn();
+      subTracks = []; activeSub = -1; subOverlay.innerHTML = ''; lastCueHtml = ''; updateSubBtn();
     }
 
-    // Add a WebVTT track from already-converted VTT text. Returns its index.
-    function addSubTrack(label, lang, vttText) {
-      const blob = new Blob([vttText], { type: 'text/vtt' });
-      const url = URL.createObjectURL(blob);
-      const tr = document.createElement('track');
-      tr.kind = 'subtitles'; tr.label = label; tr.srclang = lang || ''; tr.src = url; tr.default = false;
-      v.appendChild(tr);
-      const idx = subTracks.push({ label, lang: lang || '', el: tr }) - 1;
-      // textTracks mode must be set after the element is parsed
-      setTimeout(() => { if (v.textTracks[idx]) v.textTracks[idx].mode = 'disabled'; }, 0);
-      return idx;
+    // Parser WebVTT/SRT: blocchi separati da righe vuote, la riga con "-->" dà i tempi.
+    function parseTime(s) {
+      const m = /(?:(\d+):)?(\d{1,2}):(\d{2})[.,](\d{1,3})/.exec(s);
+      if (!m) return NaN;
+      return (parseInt(m[1] || '0', 10) * 3600) + parseInt(m[2], 10) * 60 + parseInt(m[3], 10) + parseInt(m[4].padEnd(3, '0'), 10) / 1000;
+    }
+    function cueHtml(text) {
+      const safe = esc(text.replace(/\{\\[^}]*\}/g, ''))
+        .replace(/&lt;(\/?)(i|b|u)&gt;/gi, '<$1$2>')
+        .replace(/&lt;\/?(c|v|font|span|ruby|rt|lang)[^&]*?&gt;/gi, '')
+        .replace(/&lt;\d{2}:[\d:.]+&gt;/g, '');
+      return safe;
+    }
+    function parseCues(raw) {
+      const lines = raw.replace(/^﻿/, '').replace(/\r\n?/g, '\n').split('\n');
+      const cues = [];
+      for (let i = 0; i < lines.length; i++) {
+        const ln = lines[i];
+        if (!ln.includes('-->')) continue;
+        const [a, b] = ln.split('-->');
+        const start = parseTime(a), end = parseTime(b);
+        const text = [];
+        for (i++; i < lines.length && lines[i].trim() !== ''; i++) text.push(lines[i]);
+        if (isFinite(start) && isFinite(end) && text.length) cues.push({ start, end, html: cueHtml(text.join('\n')) });
+      }
+      cues.sort((x, y) => x.start - y.start);
+      return cues;
+    }
+
+    function addSubTrack(label, lang, rawText) {
+      const cues = parseCues(rawText);
+      return subTracks.push({ label, lang: lang || '', cues }) - 1;
+    }
+
+    let lastCueHtml = '', cueRaf = 0;
+    function renderCues() {
+      if (activeSub < 0 || !subTracks[activeSub] || !currentPath) { if (lastCueHtml) { subOverlay.innerHTML = ''; lastCueHtml = ''; } return; }
+      const tt = media.currentTime;
+      const cues = subTracks[activeSub].cues;
+      const on = [];
+      for (const c of cues) { if (c.start > tt) break; if (tt < c.end) on.push(c.html); }
+      const html = on.length ? '<span class="cue">' + on.join('<br>') + '</span>' : '';
+      if (html !== lastCueHtml) { subOverlay.innerHTML = html; lastCueHtml = html; }
+      subOverlay.classList.toggle('lift', !controls.classList.contains('hidden'));
+    }
+    function cueLoop() {
+      cueRaf = 0;
+      if (activeSub < 0) return;
+      renderCues();
+      cueRaf = requestAnimationFrame(cueLoop);
     }
 
     function setActiveSub(idx) {
-      for (let i = 0; i < v.textTracks.length; i++) v.textTracks[i].mode = (i === idx) ? 'showing' : 'disabled';
-      activeSub = idx;
-      updateSubBtn(); renderSubPop();
+      activeSub = (idx >= 0 && idx < subTracks.length) ? idx : -1;
+      updateSubBtn(); renderSubPop(); renderCues();
+      if (activeSub >= 0 && !cueRaf) cueRaf = requestAnimationFrame(cueLoop);
     }
     function toggleSub() {
       if (!subTracks.length) { inputSub.click(); return; }
@@ -900,26 +1433,15 @@
 
     function setSubScale(s) {
       subScale = Math.max(0.5, Math.min(2.5, Math.round(s * 10) / 10));
-      cueStyle.textContent = `#v::cue { font-size: ${(3.2 * subScale).toFixed(2)}vh; line-height: 1.25; color: #fff; background: rgba(0,0,0,0.55); text-shadow: 0 1px 3px rgba(0,0,0,0.9); font-family: 'Outfit', system-ui, sans-serif; }`;
+      subOverlay.style.fontSize = (3.2 * subScale).toFixed(2) + 'vh';
       renderSubPop();
     }
     function bumpSubScale(d) { setSubScale(subScale + d); }
 
-    // SRT -> WebVTT conversion (timestamps comma->dot, strip indices, add header).
-    function srtToVtt(srt) {
-      const body = srt.replace(/\r+/g, '')
-        .replace(/^﻿/, '')
-        .replace(/^\d+[ \t]*\n(?=[ \t]*\d{1,2}:\d{2}:\d{2}[,.]\d{3}[ \t]*-->)/gm, '')   // cue index lines (only before a timing line: "1984" can be dialogue)
-        .replace(/(\d{2}:\d{2}:\d{2}),(\d{3})/g, '$1.$2');           // , -> . in timestamps
-      return 'WEBVTT\n\n' + body.trim() + '\n';
-    }
-
     async function addSubFromText(name, rawText) {
-      const isVtt = /vtt|webvtt/i.test(name) || /^\s*WEBVTT/.test(rawText);
-      const vtt = isVtt ? (/^\s*WEBVTT/.test(rawText) ? rawText : 'WEBVTT\n\n' + rawText) : srtToVtt(rawText);
       const lang = (name.match(/\.([a-z]{2,3})\.(srt|vtt)$/i) || [])[1] || '';
-      const idx = addSubTrack(name.replace(/\.[^.]+$/, ''), lang, vtt);
-      setTimeout(() => setActiveSub(idx), 30);   // auto-enable freshly loaded subtitle
+      const idx = addSubTrack(name.replace(/\.[^.]+$/, ''), lang, rawText);
+      setActiveSub(idx);   // auto-enable freshly loaded subtitle
     }
 
     function loadLocalSub(file) {
@@ -930,33 +1452,35 @@
 
     // Look for sidecar subtitle files (same basename) next to an SD video.
     async function detectSidecarSubs(sdPath) {
+      const token = playToken;
       const dir = sdPath.substring(0, sdPath.lastIndexOf('/')) || '/';
       const base = sdPath.substring(sdPath.lastIndexOf('/') + 1).replace(/\.[^.]+$/, '').toLowerCase();
       try {
         const res = await fetch('/api/fs/list?path=' + encodeURIComponent(dir));
-        if (!res.ok) return;
+        if (!res.ok || token !== playToken) return;
         const data = await res.json();
         const subs = (data.entries || []).filter(e => e.type === 'file' && SUB_RE.test(e.name) &&
           e.name.toLowerCase().replace(/\.([a-z]{2,3})?\.?(srt|vtt|webvtt)$/i, '') === base);
         for (const s of subs) {
           try {
-            const txt = await (await fetch(getSdUrl(dir + '/' + s.name))).text();
+            const txt = await (await fetch(getSdUrl((dir === '/' ? '' : dir) + '/' + s.name))).text();
+            if (token !== playToken) return;
             await addSubFromText(s.name, txt);
           } catch {}
         }
-        if (subs.length) { setTimeout(() => setActiveSub(0), 40); }   // show first match by default
+        if (subs.length && token === playToken) setActiveSub(0);   // show first match by default
       } catch {}
     }
 
     function renderSubPop() {
-      let html = '<div class="pop-label" data-i18n="menuSubs">Sottotitoli</div>';
-      html += `<div class="pop-opt ${activeSub === -1 ? 'active' : ''}" data-sub="-1"><span class="tick">✓</span><span class="opt-name" data-i18n="subOff">Disattivati</span></div>`;
+      let html = '<div class="pop-label" data-i18n="menuSubs">' + esc(t('menuSubs')) + '</div>';
+      html += `<div class="pop-opt ${activeSub === -1 ? 'active' : ''}" data-sub="-1"><span class="tick">✓</span><span class="opt-name" data-i18n="subOff">${esc(t('subOff'))}</span></div>`;
       subTracks.forEach((tr, i) => {
         html += `<div class="pop-opt ${activeSub === i ? 'active' : ''}" data-sub="${i}"><span class="tick">✓</span><span class="opt-name">${esc(tr.label)}</span>${tr.lang ? `<span class="opt-tag">${esc(tr.lang)}</span>` : ''}</div>`;
       });
       html += '<div class="pop-divider"></div>';
-      html += '<div class="pop-opt" id="sub-load-opt"><span class="tick"></span><span class="opt-name" data-i18n="loadFile">Carica file…</span></div>';
-      html += `<div class="pop-divider"></div><div class="pop-label" data-i18n="sizeLabel">Dimensione</div>
+      html += '<div class="pop-opt" id="sub-load-opt"><span class="tick"></span><span class="opt-name" data-i18n="loadFile">' + esc(t('loadFile')) + '</span></div>';
+      html += `<div class="pop-divider"></div><div class="pop-label" data-i18n="sizeLabel">${esc(t('sizeLabel'))}</div>
         <div class="pop-size-row"><span class="sz-val">${Math.round(subScale * 100)}%</span>
         <div class="sz-btns"><button class="sz-btn" data-sz="-1">A−</button><button class="sz-btn" data-sz="0">↺</button><button class="sz-btn" data-sz="1">A+</button></div></div>`;
       subPop.innerHTML = html;
@@ -966,12 +1490,12 @@
     }
 
     /* ---------- Audio tracks (when the browser exposes them) ---------- */
-    function refreshAudioBtn() { btnAudio.style.display = (v.audioTracks && v.audioTracks.length > 1) ? 'flex' : 'none'; }
+    function refreshAudioBtn() { btnAudio.style.display = (media.audioTracks && media.audioTracks.length > 1) ? 'flex' : 'none'; }
     function renderAudioPop() {
-      const tracks = v.audioTracks;
-      let html = '<div class="pop-label" data-i18n="audioTrack">Traccia audio</div>';
+      const tracks = media.audioTracks;
+      let html = '<div class="pop-label" data-i18n="audioTrack">' + esc(t('audioTrack')) + '</div>';
       if (!tracks || tracks.length <= 1) {
-        html += '<div class="pop-opt"><span class="opt-name" style="color:var(--text-muted)" data-i18n="singleTrack">Traccia unica</span></div>';
+        html += '<div class="pop-opt"><span class="opt-name" style="color:var(--text-muted)" data-i18n="singleTrack">' + esc(t('singleTrack')) + '</span></div>';
       } else {
         for (let i = 0; i < tracks.length; i++) {
           const tk = tracks[i];
@@ -985,6 +1509,7 @@
         renderAudioPop();
       });
     }
+    if (v.audioTracks) { v.audioTracks.onaddtrack = refreshAudioBtn; v.audioTracks.onremovetrack = refreshAudioBtn; }
 
     /* ---------- Drag & drop / local ---------- */
     function setupDragAndDrop() {
@@ -996,16 +1521,18 @@
         e.preventDefault(); dragDepth = 0; dragOverlay.style.display = 'none';
         const file = e.dataTransfer.files[0];
         if (!file) return;
-        if (file.type.startsWith('video/') || NFV_RE.test(file.name)) openLocalFile(file);
+        if (file.type.startsWith('video/') || file.type.startsWith('audio/') || MEDIA_RE.test(file.name)) openLocalFile(file);
         else if (SUB_RE.test(file.name)) { if (currentPath) loadLocalSub(file); }
       });
       inputFile.onchange = (e) => { const f = e.target.files[0]; if (f) openLocalFile(f); inputFile.value = ''; };
     }
+    let localUrl = '';
     function openLocalFile(file) {
-      const url = URL.createObjectURL(file);
-      if (NFV_RE.test(file.name)) localFiles.set(url, file);
-      v.dataset.name = file.name + ' (' + t('localTag') + ')';
-      playVideo(url);
+      if (localUrl) URL.revokeObjectURL(localUrl);
+      localUrl = URL.createObjectURL(file);
+      localFile = file;
+      localName = file.name + ' (' + t('localTag') + ')';
+      playVideo(localUrl, { audio: file.type.startsWith('audio/') || AUDIO_RE.test(file.name) });
     }
 
     /* ---------- Keybindings ---------- */
@@ -1018,8 +1545,8 @@
         else if (e.key === 'ArrowLeft' && e.ctrlKey) { e.preventDefault(); playPrev(); }
         else if (e.key === 'ArrowRight') { e.preventDefault(); seekRelative(10); }
         else if (e.key === 'ArrowLeft') { e.preventDefault(); seekRelative(-10); }
-        else if (e.key === 'ArrowUp') { e.preventDefault(); setVolume(v.volume + 0.1); }
-        else if (e.key === 'ArrowDown') { e.preventDefault(); setVolume(v.volume - 0.1); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); setVolume((appMuted ? 0 : appVolume) + 0.1); }
+        else if (e.key === 'ArrowDown') { e.preventDefault(); setVolume((appMuted ? 0 : appVolume) - 0.1); }
         else if (e.ctrlKey && k === 'o' && e.shiftKey) { e.preventDefault(); openSdExplorer(); }
         else if (e.ctrlKey && k === 'o') { e.preventDefault(); inputFile.click(); }
         else if (k === 'f') { e.preventDefault(); toggleFullscreen(); }
@@ -1028,6 +1555,7 @@
         else if (k === 'p') { e.preventDefault(); togglePlaylist(); }
         else if (k === 'l') { e.preventDefault(); toggleLoop(); }
         else if (k === 'c') { e.preventDefault(); toggleSub(); }
+        else if (k === 'd' && !e.ctrlKey && !e.metaKey) { e.preventDefault(); toggleStats(); }
         else if (e.key === '+' || e.key === '=') { e.preventDefault(); bumpSubScale(0.1); }
         else if (e.key === '-' || e.key === '_') { e.preventDefault(); bumpSubScale(-0.1); }
         else if (k === 's') { e.preventDefault(); stopVideo(); }
@@ -1042,7 +1570,12 @@
     }
 
     /* ---------- SD explorer ---------- */
-    function openSdExplorer() { sdCwd = '/data'; sdSearch.value = ''; sdModal.classList.add('visible'); loadSdDir(); }
+    // Parte dalla cartella del file in riproduzione, altrimenti dalla radice della MicroSD.
+    function openSdExplorer() {
+      const playingSd = currentPath && !currentPath.startsWith('blob:') && !currentPath.startsWith('data:');
+      sdCwd = playingSd ? (currentPath.substring(0, currentPath.lastIndexOf('/')) || '/') : '/';
+      sdSearch.value = ''; sdModal.classList.add('visible'); loadSdDir();
+    }
     $('sd-modal-close').onclick = () => sdModal.classList.remove('visible');
     sdModal.onclick = (e) => { if (e.target === sdModal) sdModal.classList.remove('visible'); };
 
@@ -1053,15 +1586,15 @@
       modalCrumbs.innerHTML = crumbs;
       modalCrumbs.querySelectorAll('.crumbs-seg').forEach(el => el.onclick = () => { sdCwd = el.dataset.path; loadSdDir(); });
 
-      explorerList.innerHTML = '<li class="explorer-msg" data-i18n="loading">Caricamento…</li>';
+      explorerList.innerHTML = '<li class="explorer-msg" data-i18n="loading">' + esc(t('loading')) + '</li>';
       try {
         const res = await fetch('/api/fs/list?path=' + encodeURIComponent(sdCwd));
         if (!res.ok) throw new Error();
         const data = await res.json();
-        cachedFiles = (data.entries || []).sort((a, b) => a.type === b.type ? a.name.localeCompare(b.name) : (a.type === 'dir' ? -1 : 1));
+        cachedFiles = (data.entries || []).sort((a, b) => a.type === b.type ? a.name.localeCompare(b.name, undefined, { numeric: true }) : (a.type === 'dir' ? -1 : 1));
         renderSdFiles();
       } catch {
-        explorerList.innerHTML = '<li class="explorer-msg error" data-i18n="sdReadError">Impossibile leggere la MicroSD.</li>';
+        explorerList.innerHTML = '<li class="explorer-msg error" data-i18n="sdReadError">' + esc(t('sdReadError')) + '</li>';
       }
     }
 
@@ -1070,38 +1603,40 @@
       explorerList.innerHTML = '';
       if (sdCwd !== '/') {
         const li = document.createElement('li'); li.className = 'explorer-item';
-        li.innerHTML = '<div class="explorer-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg></div><span class="explorer-name" data-i18n="parentDir">.. (Cartella superiore)</span>';
+        li.innerHTML = '<div class="explorer-icon"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg></div><span class="explorer-name" data-i18n="parentDir">' + esc(t('parentDir')) + '</span>';
         li.onclick = () => { sdCwd = sdCwd.substring(0, sdCwd.lastIndexOf('/')) || '/'; loadSdDir(); };
         explorerList.appendChild(li);
       }
       let count = 0;
       cachedFiles.forEach(e => {
         const isDir = e.type === 'dir';
-        const isVideo = !isDir && VIDEO_RE.test(e.name);
-        if (!isDir && !isVideo) return;
+        const isAudio = !isDir && AUDIO_RE.test(e.name);
+        const isMedia = !isDir && MEDIA_RE.test(e.name);
+        if (!isDir && !isMedia) return;
         if (query && !e.name.toLowerCase().includes(query)) return;
         const fullPath = sdCwd.endsWith('/') ? sdCwd + e.name : sdCwd + '/' + e.name;
         const li = document.createElement('li'); li.className = 'explorer-item';
         if (fullPath === currentPath) li.classList.add('active');
-        li.innerHTML = '<div class="explorer-icon ' + (isDir ? 'dir' : 'video') + '">' +
+        li.innerHTML = '<div class="explorer-icon ' + (isDir ? 'dir' : (isAudio ? 'audio' : 'video')) + '">' +
           (isDir ? '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>'
+                  : isAudio ? '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 3v9.28a4.39 4.39 0 0 0-1.5-.28C8.01 12 6 13.79 6 16s2.01 4 4.5 4S15 18.21 15 16V7h4V3h-7z"/></svg>'
                   : '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M18 4l2 4h-3l-2-4h-2l2 4h-3l-2-4H8l2 4H7L5 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V4h-4z"/></svg>') +
           '</div><span class="explorer-name">' + esc(e.name) + '</span>' +
           (isDir ? '' : '<span class="explorer-size">' + formatBytes(e.size) + '</span>');
         li.onclick = async () => {
           if (isDir) { sdCwd = fullPath; loadSdDir(); }
-          else { await loadPlaylist(sdCwd, false); playVideo(fullPath); sdModal.classList.remove('visible'); }
+          else { sdModal.classList.remove('visible'); await loadPlaylist(sdCwd, false); playVideo(fullPath); }
         };
         explorerList.appendChild(li); count++;
       });
-      if (count === 0) explorerList.innerHTML += '<li class="explorer-msg" data-i18n="noVideoOrFolder">Nessun video o cartella.</li>';
+      if (count === 0) explorerList.insertAdjacentHTML('beforeend', '<li class="explorer-msg" data-i18n="noVideoOrFolder">' + esc(t('noVideoOrFolder')) + '</li>');
     }
     sdSearch.oninput = renderSdFiles;
 
     function formatBytes(bytes) {
       if (!bytes) return '0 B';
       const k = 1024, sizes = ['B', 'KB', 'MB', 'GB'];
-      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      const i = Math.min(sizes.length - 1, Math.floor(Math.log(bytes) / Math.log(k)));
       return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
     }
 
@@ -1111,22 +1646,26 @@
       const el = $('sd-status-text');
       el.removeAttribute('data-i18n');   // value is computed; keep the engine from repainting "SD —"
       if (!sdStatus) { el.textContent = t('sdDash'); el.setAttribute('data-i18n', 'sdDash'); return; }
-      if (sdStatus.online) el.textContent = sdStatus.count ? t('sdVideoCount', { count: sdStatus.count }) : t('sdReady');
+      if (sdStatus.online) el.textContent = sdStatus.count ? t('sdMediaCount', { count: sdStatus.count }) : t('sdReady');
       else el.textContent = t('sdOffline');
     }
     async function probeSd() {
-      try {
-        const res = await fetch('/api/fs/list?path=' + encodeURIComponent(DEFAULT_VIDS_DIR));
-        // No videos folder yet answers 404: the card IS reachable, it just holds no videos ("SD offline" was wrong).
-        if (!res.ok && res.status !== 404) throw new Error();
-        const data = res.status === 404 ? { entries: [] } : await res.json();
-        const n = (data.entries || []).filter(e => e.type === 'file' && VIDEO_RE.test(e.name)).length;
-        $('sd-status-dot').classList.add('online');
-        sdStatus = { online: true, count: n };
-      } catch {
-        $('sd-status-dot').classList.remove('online');
-        sdStatus = { online: false, count: null };
+      // Every detected video source (P4 can have two), the convention folder before detection.
+      // A missing folder answers 404 on some boards: the card IS reachable, it just holds no videos.
+      const dirs = sources.length ? sources.filter(s => s.kind === 'video').map(s => s.dir) : [DEFAULT_VIDS_DIR];
+      let online = false, n = 0;
+      for (const dir of dirs) {
+        try {
+          const res = await fetch('/api/fs/list?path=' + encodeURIComponent(dir));
+          if (!res.ok && res.status !== 404) continue;
+          online = true;
+          if (res.status === 404) continue;
+          const data = await res.json();
+          n += (data.entries || []).filter(e => e.type === 'file' && MEDIA_RE.test(e.name)).length;
+        } catch {}
       }
+      $('sd-status-dot').classList.toggle('online', online);
+      sdStatus = online ? { online: true, count: n } : { online: false, count: null };
       renderSdStatus();
     }
 
@@ -1134,6 +1673,9 @@
     function openAbout() { aboutModal.classList.add('visible'); }
     $('about-btn-close').onclick = () => aboutModal.classList.remove('visible');
     aboutModal.onclick = (e) => { if (e.target === aboutModal) aboutModal.classList.remove('visible'); };
+
+    // Aggancio per automazione/diagnostica (test end-to-end, overlay remoti): sola lettura.
+    window.videoPlayer = { get media() { return media; }, get engine() { return engine; }, get path() { return currentPath; }, get error() { return lastError; }, playVideo, stopVideo };
 
     init();
   </script>

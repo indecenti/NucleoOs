@@ -26,7 +26,7 @@
   "dlUseCurrentTitle": "Aktuelle Seite verwenden",
   "dlFilenameLabel": "Dateiname (Ordner: /data/downloads/)",
   "dlFilenamePlaceholder": "file.zip",
-  "dlAuthBanner": "⚠️ <b>Gerät nicht gekoppelt.</b> Zum Speichern auf SD ist eine Kopplung nötig. Gib die auf dem Cardputer angezeigte PIN im NucleoOS-Startbildschirm ein.",
+  "dlAuthBanner": "⚠️ <b>Gerät nicht gekoppelt.</b> Zum Speichern auf SD ist eine Kopplung nötig. Gib die auf dem Gerät angezeigte PIN im NucleoOS-Startbildschirm ein.",
   "dlDownloadToSd": "⬇ Auf SD herunterladen",
   "dlOpenFolder": "🗂 Ordner öffnen",
   "dlOpenFolderTitle": "Downloads-Ordner in File Commander öffnen",
@@ -47,12 +47,12 @@
   "handoffBody": "Externe Websites öffnen sich in deinem echten Browser — kein Proxy, nichts läuft auf dem Gerät.",
   "handoffBlocked": "Der Browser hat das Pop-up blockiert: Nutze die Schaltfläche unten.",
   "openAgain": "Erneut öffnen",
-  "saveToCardputer": "⬇ Auf Cardputer speichern",
+  "saveToCardputer": "⬇ Auf dem Gerät speichern",
   "homeBtn": "Startseite",
   "openExternal": "↗ In externem Tab öffnen",
 
   "dlCardTitle": "⬇ Herunterladbare Datei",
-  "dlCardBody": "Speichere sie auf dem Cardputer (SD: <code>/data/downloads/</code>) oder öffne sie in deinem echten Browser.",
+  "dlCardBody": "Speichere sie auf dem Gerät (SD: <code>/data/downloads/</code>) oder öffne sie in deinem echten Browser.",
 
   "loadFailedTitle": "Laden fehlgeschlagen",
   "loadFailedBody": "Website konnte nicht geladen werden",
@@ -90,5 +90,6 @@
   "toastNoPageToDownload": "Keine aktive Seite zum Herunterladen",
   "toastOpeningDownloads": "Downloads-Ordner wird geöffnet…",
   "toastOpenFcFailed": "File Commander konnte nicht geöffnet werden",
-  "toastEnterValidUrl": "Gib eine gültige URL ein!"
+  "toastEnterValidUrl": "Gib eine gültige URL ein!",
+  "dlUnavailable": "Speichern auf der SD-Karte ist auf diesem Gerät nicht verfügbar."
 }

@@ -16,9 +16,9 @@
   "prog_label": { "one": "1 Befehl trainiert", "other": "{count} Befehle trainiert" },
   "prog_cap": "max. {count}",
 
-  "t0_title": "Bring dem Cardputer deine Stimme bei",
-  "t0_intro": "Dieses Tool trainiert die <b>native</b> Spracherkennung des Cardputer: Sie läuft vollständig <b>offline</b> auf dem Gerät und lernt <b>deine</b> Stimme. Je öfter du sie nutzt, desto genauer wird sie — jeder erkannte Befehl verbessert automatisch sein eigenes Modell.",
-  "t0_tip1": "Es funktioniert per <b>Push-to-Talk</b>: Halte <span class=\"keycap\">FN</span> (oder <span class=\"keycap\">G0</span>) auf dem Cardputer gedrückt, sprich den Befehl, lass los.",
+  "t0_title": "Bring dem Gerät deine Stimme bei",
+  "t0_intro": "Dieses Tool trainiert die <b>native</b> Spracherkennung des Geräts: Sie läuft vollständig <b>offline</b> auf dem Gerät und lernt <b>deine</b> Stimme. Je öfter du sie nutzt, desto genauer wird sie — jeder erkannte Befehl verbessert automatisch sein eigenes Modell.",
+  "t0_tip1": "Es funktioniert per <b>Push-to-Talk</b>: Halte <span class=\"keycap\">FN</span> (oder <span class=\"keycap\">G0</span>) auf dem Gerät gedrückt, sprich den Befehl, lass los.",
   "t0_tip2": "Das Gerät erkennt das <b>Wort</b>; ANIMA wandelt es in die Aktion um (eine App öffnen, die Uhrzeit ansagen…).",
   "t0_tip3": "Keine Cloud, kein Schlüssel: Das Audio verlässt das Gerät nie.",
   "t0_next": "Los geht's →",
@@ -52,7 +52,7 @@
   "cmd_sub": "Native Befehle, sofort einsatzbereit. 🟢 = bereits mit deiner Stimme trainiert. Das Gerät verwaltet bis zu <b>20</b>: Wähle deine Favoriten.",
 
   "test_title": "Live-Test",
-  "test_sub": "Halte <span class=\"keycap\">FN</span> auf dem Cardputer und sprich einen trainierten Befehl.",
+  "test_sub": "Halte <span class=\"keycap\">FN</span> auf dem Gerät und sprich einen trainierten Befehl.",
   "test_hint": "Jede Erkennung zeigt die <b>Distanz</b> (niedriger = ähnlicher), den <b>Abstand</b> zum 2. Kandidaten und den <b>selbstkalibrierenden Radius</b> des Worts. Grün = ausgezeichnet, gelb = akzeptabel.",
   "test_waiting": "Warte… drücke FN und sprich.",
 
@@ -63,14 +63,14 @@
   "custom_yours": "Deine eigenen Befehle",
   "custom_empty": "Keine eigenen Befehle gespeichert.",
 
-  "rec_title": "Auf dem Cardputer: FN halten und sprechen",
+  "rec_title": "Auf dem Gerät: FN halten und sprechen",
   "rec_hold_say": "Halte <span class=\"keycap\">FN</span> (oder <span class=\"keycap\">G0</span>) und sprich:",
   "rec_then_release": "dann <b>loslassen</b>.",
-  "rec_waiting": "Warte auf den Cardputer…",
+  "rec_waiting": "Warte auf das Gerät…",
   "rec_recording": "🔴 Aufnahme… lass FN los, um zu speichern.",
   "rec_processing": "Verarbeitung…",
   "rec_too_short": "⚠️ Zu kurz oder still — versuch es erneut: FN halten und deutlich sprechen.",
-  "rec_timeout": "⚠️ Keine Antwort vom Cardputer. Stelle sicher, dass du <b>FN</b> beim Sprechen gedrückt hältst (die Aufnahme erfolgt auf dem Gerät, nicht im Browser) und dass die Sprach-Firmware aktuell ist.",
+  "rec_timeout": "⚠️ Keine Antwort vom Gerät. Stelle sicher, dass du <b>FN</b> beim Sprechen gedrückt hältst (die Aufnahme erfolgt auf dem Gerät, nicht im Browser) und dass die Sprach-Firmware aktuell ist.",
   "rec_stop": "Stopp",
 
   "ok_trained": "Trainiert!",
@@ -86,7 +86,7 @@
   "err_network": "Netzwerkfehler",
   "alert_cap": "Du hast das Limit von {max} Befehlen erreicht. Entferne zuerst einen.",
   "err_arm": "Engine konnte nicht scharfgeschaltet werden (Gerät ausgelastet?)",
-  "err_connect": "Verbindungsfehler zum Cardputer",
+  "err_connect": "Verbindungsfehler zum Gerät",
 
   "conf_excellent": "Ausgezeichnet",
   "conf_good": "Gut",
@@ -95,5 +95,6 @@
 
   "meta_dist": "Dist",
   "meta_second": "2.",
-  "meta_radius": "Radius"
+  "meta_radius": "Radius",
+  "voice_unavailable": "Sprachbefehle sind auf diesem Gerät nicht verfügbar."
 }

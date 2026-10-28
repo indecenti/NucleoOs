@@ -1,7 +1,8 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // Resilient boot/data fetch for the desktop shell — EXTRACTED so it is unit-testable in node with a
 // mock fetch (tools/shell-boot-fetch.test.mjs). The Cardputer serves the WHOLE OS from a SINGLE-TASK,
 // 6-socket, PSRAM-less web server: when several requests land at once it answers 503 (busy / low-heap)
-// or stalls. So each attempt gets a hard timeout (it must never hang the boot splash) and we RETRY
+// or stalls (bigger servers — the Linux handheld — can still answer 503 to a cold-boot burst). So each attempt gets a hard timeout (it must never hang the boot splash) and we RETRY
 // 503/502/504 + timeouts + network errors with growing backoff — SPACING the load so the device
 // reclaims heap between calls instead of being flooded. This is what lets the web OS attach + load
 // reliably; a slower first boot is the accepted trade. A 4xx is deterministic (a retry can't fix it),
@@ -35,7 +36,7 @@ export function makeFetchJSON({ fetch, sleep, log = () => {}, AbortSignal: AS } 
         if (!last) await sleep(wait);
         continue;
       }
-      if (!r.ok) throw new Error('HTTP ' + r.status);     // 4xx → deterministic, fail fast (no retry)
+      if (!r.ok) { const e = new Error('HTTP ' + r.status); e.status = r.status; throw e; }   // 4xx → deterministic, fail fast (no retry)
       if (i > 0) log('ok', path, 'after', i, 'retr' + (i === 1 ? 'y' : 'ies'));
       // A body we cannot parse is NOT a transport problem, and the difference matters upstream: the
       // device answers a 0-byte file with 200 and an EMPTY body, and Response.json() always rejects
@@ -74,6 +75,11 @@ export function makeLoadState(fetchJSON) {
       // (it caught JSON.parse and re-seeded). Calling it unreachable froze the store FOREVER: writes
       // were blocked, so the unreadable file could never be replaced, on every boot.
       if (e && e.parseFailure) return { state: 'absent', corrupt: true };
+      // 404 is the device ANSWERING that the file is not there (the Handheld's server and the browser
+      // edition's service worker say it this way; the Cardputer firmware answers 200 "{}"). Treating it as
+      // unreachable locked a fresh device read-only for good: nothing was ever seeded, nothing ever saved.
+      // 401/403 (not paired) and every transport failure stay unreachable: those say nothing about the file.
+      if (e && e.status === 404) return { state: 'absent' };
       return { state: 'unreachable', error: String((e && e.message) || e) };
     }
     // A non-object (or a null) is not state we can merge — treat it as nothing saved rather than

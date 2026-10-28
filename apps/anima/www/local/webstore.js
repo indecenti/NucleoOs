@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // ANIMA — learned WEB store. The browser-resident index of everything webIndexAnswer() has pulled
 // from the web, so an entity fetched once is recalled INSTANTLY and offline thereafter. This is where
 // the client-side hybrid brain "evolves": separate from the read-only WASM knowledge pack, separate

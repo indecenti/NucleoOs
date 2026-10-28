@@ -1,4 +1,5 @@
 <!doctype html>
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -91,13 +92,45 @@
     @media (pointer: coarse) { .prompt button { min-width: 44px; min-height: 44px; } }
     /* thin scrollbar so the tiny screen keeps its width */
     #out::-webkit-scrollbar { width: 6px; } #out::-webkit-scrollbar-thumb { background: var(--line); border-radius: 3px; }
+    /* Device shell (pty) mode: only where the device answers /api/pty/caps with available:true
+       (a real pty bridge, e.g. the Handheld). The screen itself stays dark: a terminal is not a document. */
+    :root { --mono: ui-monospace, "Cascadia Code", Consolas, "DejaVu Sans Mono", monospace;
+      --nt-bg:#0a0d14; --nt-fg:#d6deea; --nt-cur:#6aee9f; }
+    html[data-theme="light"] { --nt-bg:#0d1220; --nt-fg:#dbe3f0; }
+    #ptymain, #ptykeys { display: none; }
+    body.pty #out, body.pty #pill, body.pty #strip, body.pty #keys, body.pty .prompt { display: none !important; }
+    body.pty #ptymain { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+    .nt-host { flex: 1; min-height: 0; background: var(--nt-bg); overflow: hidden; position: relative; }
+    .nt-screen { font: 13px/1.2 var(--mono); color: var(--nt-fg); white-space: pre; padding: 3px 5px;
+      height: 100%; outline: none; overflow: hidden; cursor: text; }
+    header .pty-st { color: var(--muted); font-size: 11px; max-width: 38vw; overflow: hidden;
+      text-overflow: ellipsis; white-space: nowrap; }
+    header .pty-dot { width: 9px; height: 9px; border-radius: 50%; background: #445; flex: none; }
+    header .pty-dot.ok { background: var(--ok); } header .pty-dot.err { background: var(--err); }
+    header .pty-dot.busy { background: var(--warn); animation: ptypulse 1s infinite; }
+    @keyframes ptypulse { 50% { opacity: .35; } }
+    /* A phone keyboard has no Ctrl, Esc, Tab or arrows, and a real shell is unusable without them. */
+    #ptykeys { flex: none; gap: 5px; padding: 3px 6px; overflow-x: auto;
+      background: var(--panel); border-top: 1px solid var(--line); }
+    @media (pointer: coarse) { body.pty #ptykeys { display: flex; } }
+    #ptykeys button { flex: none; min-width: 44px; min-height: 32px; border: 1px solid var(--line);
+      background: #80808018; color: var(--text); border-radius: 6px; font: inherit; cursor: pointer; }
+    #ptykeys button.on { background: var(--accent); color: var(--bg); border-color: transparent; }
+    .pty-gate { flex: 1; display: flex; align-items: center; justify-content: center; text-align: center; padding: 28px; }
+    .pty-gate .gi { font-size: 42px; } .pty-gate h2 { margin: 10px 0 6px; font-size: 17px; }
+    .pty-gate p { color: var(--muted); max-width: 430px; margin: 0 auto 14px; font-size: 13px; }
+    .pty-gate button { border: 0; background: var(--accent); color: var(--bg); border-radius: 8px;
+      padding: 6px 14px; font: inherit; font-weight: 600; cursor: pointer; }
   </style>
 </head>
 <body>
   <header>
     <span class="t">&gt;_ Terminal</span>
     <span class="cwd" id="cwd">/</span>
+    <span class="pty-st" id="ptystat" hidden></span>
+    <span class="pty-dot" id="ptydot" hidden></span>
     <button id="clr" data-i18n="clear" data-i18n-attr="title:clr_tip">clear</button>
+    <button id="ptyagain" hidden data-i18n="reconnect">Reconnect</button>
   </header>
   <div id="out"></div>
   <button id="pill" hidden data-i18n-attr="title:pill_tip">&#9660; <span id="pilln">0</span></button>
@@ -121,6 +154,8 @@
     </span>
     <button type="submit" id="run" data-i18n-attr="title:run_tip;aria-label:run_tip" title="Run">&#9654;</button>
   </form>
+  <main id="ptymain"></main>
+  <div id="ptykeys"></div>
 
   <script type="module">
     import I18N from '/nucleo-i18n.js';
@@ -294,7 +329,23 @@
       else if (r.status === 404) emit(`${name}: no such file or directory: ${path}`, 'err');
       else emit(`${name}: failed on ${path} (status ${r.status})`, 'err');
     }
+    // What this device can do (nucleo-caps.js): a command whose endpoint belongs to a capability the device
+    // lacks says so without a request. Loaded on demand; if the module itself cannot be loaded the endpoint
+    // decides, as before (404 = "not available on this build").
+    const capsP = import('/nucleo-caps.js').then((m) => m.default, () => null);
+    const hasCap = async (name) => { const C = await capsP; return !C || C.has(name); };
+    const CAP_OF = [['/api/wifi/', 'wifi.manage'], ['/api/ir/', 'device.ir'], ['/api/gpio', 'device.gpio'],
+      ['/api/link/', 'device.link'], ['/api/display', 'device.display'], ['/api/tts', 'device.tts'],
+      ['/api/time/set', 'time.set'], ['/api/reboot', 'power'], ['/api/diag', 'diag'], ['/api/heap', 'diag'],
+      ['/api/cpu', 'diag'], ['/api/logs', 'diag'], ['/api/anima', 'anima.device']];
+    async function capMissing(name, url) {
+      const hit = CAP_OF.find(([p]) => String(url).startsWith(p));
+      if (!hit || await hasCap(hit[1])) return false;
+      emit(`${name}: not available on this device`, 'warn');
+      return true;
+    }
     async function devJSON(name, url) {
+      if (await capMissing(name, url)) return null;
       let r;
       try { r = await fetch(url, { cache: 'no-store' }); }
       catch { emit(`${name}: cannot reach the device`, 'err'); return null; }
@@ -304,6 +355,7 @@
       try { return await r.json(); } catch { emit(`${name}: invalid response`, 'err'); return null; }
     }
     async function devPOST(name, url, body) {
+      if (await capMissing(name, url)) return null;
       let r;
       try {
         r = await fetch(url, body === undefined ? { method: 'POST' }
@@ -494,7 +546,7 @@
             ['kill <app-id>', 'close a foreground app (see `ps`)'],
             ['assoc [ext]', 'which app `open` will pick'],
             ['which <name>', 'builtin, app, or not found'],
-            ['reboot', 'reboot the Cardputer'],
+            ['reboot', 'reboot the device'],
             ['watch [-n S] [-c N] <cmd>', 're-run a command in place'],
           ],
           anima: [
@@ -515,7 +567,7 @@
             ['clip [-o]', 'write stdin to, or read, the OS clipboard'],
           ],
           shell: [
-            ['ping [host]', 'ping Cardputer or external host'],
+            ['ping [host]', 'ping device or external host'],
             ['curl <url>', 'fetch and display URL content'],
             ['wget <url> [-O f]', 'download URL content to a file'],
             ['sleep <sec>', 'delay execution for N seconds'],
@@ -854,7 +906,7 @@
           if (!/^https?:\/\//i.test(target)) target = 'https://' + target;
           isDevice = false;
         }
-        emit(`PING ${isDevice ? 'Cardputer' : target} ...`, 'dim');
+        emit(`PING ${isDevice ? 'Device' : target} ...`, 'dim');
         const count = 4;
         let sent = 0, received = 0;
         const times = [];
@@ -867,7 +919,7 @@
             const end = performance.now();
             const rtt = Math.round(end - start);
             times.push(rtt);
-            emit(`  Reply from ${isDevice ? 'Cardputer' : target}: time=${rtt}ms`);
+            emit(`  Reply from ${isDevice ? 'Device' : target}: time=${rtt}ms`);
             received++;
           } catch (err) {
             emit(`  Request timeout or CORS blocked for ${target}`, 'warn');
@@ -942,6 +994,7 @@
         // filtering here would cost the same request and more of the browser's work for nothing.
         const m = arg && arg.match(/-l\s*([EWIDVewidv])/);
         const url = m ? '/api/logs?level=' + m[1].toUpperCase() : '/api/logs';
+        if (await capMissing('dmesg', url)) return;
         try {
           const r = await fetch(url, { cache: 'no-store' });
           if (r.status === 401) { emit('dmesg: not paired (401)', 'err'); return; }
@@ -953,7 +1006,8 @@
         }
       },
       async reboot() {
-        emit('rebooting Cardputer ...', 'warn');
+        if (await capMissing('reboot', '/api/reboot')) return;
+        emit('rebooting device ...', 'warn');
         try {
           const r = await fetch('/api/reboot', { method: 'POST' });
           if (r.ok) emit('Reboot command sent.', 'ok');
@@ -1514,6 +1568,7 @@
         if (!q) { emit('usage: anima [-o off|on|only] [-l it|en] [-v] <question>', 'err'); return; }
         // Notes bypass the sink on purpose: down a pipe `anima` yields the reply and nothing else.
         if (ctx?.stdin != null) addLine('asked: ' + q, 'dim');
+        if (await capMissing('anima', '/api/anima')) return;
         let url = '/api/anima?q=' + encodeURIComponent(q);
         if (lang) url += '&lang=' + encodeURIComponent(lang);
         if (mode) url += '&mode=' + encodeURIComponent(mode);
@@ -2767,7 +2822,132 @@
       document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'hidden') flush(); });
       window.addEventListener('pagehide', flush);
     }
-    init();
+
+    // ---- device shell (pty) ----------------------------------------------------
+    // A device with a real terminal bridge (/api/pty — the Handheld's server.py forks a pty) gets a
+    // terminal emulator on its own login shell instead of the built-in command set above. The capability
+    // list says whether the bridge exists (pty); only then one GET reads its state: `available: false` or a
+    // 404 there, and the built-in shell starts exactly as before. The emulator modules are fetched only when used.
+    async function ptyMode() {
+      if (!(await hasCap('pty'))) return false;
+      let caps = null;
+      try { const r = await fetch('/api/pty/caps', { cache: 'no-store' }); if (r.ok) caps = await r.json(); } catch {}
+      if (!caps || caps.available !== true) return false;
+      let mods;
+      try { mods = await Promise.all([import('/nucleo-term.js'), import('/nucleo-pty.js'), import('/nucleo-pair.js')]); }
+      catch { return false; }
+      const [{ createTerminal }, { createPtyClient, PTY_UNPAIRED }, { pairDialog }] = mods;
+      await loadTheme();
+      document.body.classList.add('pty');
+      const main = document.getElementById('ptymain'), bar = document.getElementById('ptykeys');
+      const stEl = document.getElementById('ptystat'), dotEl = document.getElementById('ptydot');
+      const again = document.getElementById('ptyagain');
+      stEl.hidden = false; dotEl.hidden = false;
+      cwdEl.textContent = t('subtitle_shell', { shell: caps.shell || 'sh' });
+      let term = null, client = null, ro = null, ctrl = false, session = null;
+      const stat = (s, cls) => { stEl.textContent = s; dotEl.className = 'pty-dot ' + (cls || ''); };
+
+      function gate(icon, title, body, action) {
+        main.textContent = '';
+        const g = document.createElement('div'); g.className = 'pty-gate';
+        const box = document.createElement('div');
+        const gi = document.createElement('div'); gi.className = 'gi'; gi.textContent = icon;
+        const h = document.createElement('h2'); h.textContent = title;
+        const p = document.createElement('p'); p.textContent = body;
+        box.append(gi, h, p);
+        if (action) {
+          const b = document.createElement('button');
+          b.textContent = action.label;
+          b.addEventListener('click', action.run);
+          box.appendChild(b);
+        }
+        g.appendChild(box); main.appendChild(g);
+        bar.textContent = '';
+      }
+
+      // Only the keys a touch keyboard cannot produce.
+      const KEYS = [
+        { l: 'Ctrl', mod: true },
+        { l: 'Esc', b: '\x1b' }, { l: 'Tab', b: '\t' },
+        { l: '↑', b: '\x1b[A' }, { l: '↓', b: '\x1b[B' }, { l: '←', b: '\x1b[D' }, { l: '→', b: '\x1b[C' },
+        { l: '^C', b: '\x03' }, { l: '^D', b: '\x04' }, { l: '^Z', b: '\x1a' }, { l: '^L', b: '\x0c' },
+        { l: '|', b: '|' }, { l: '~', b: '~' }, { l: '/', b: '/' },
+      ];
+      function buildKeys() {
+        bar.textContent = '';
+        for (const k of KEYS) {
+          const b = document.createElement('button');
+          b.textContent = k.l;
+          b.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (k.mod) { ctrl = !ctrl; b.classList.toggle('on', ctrl); return; }
+            let bytes = k.b;
+            if (ctrl && k.b.length === 1) {
+              const u = k.b.toUpperCase().charCodeAt(0);
+              if (u >= 64 && u <= 95) bytes = String.fromCharCode(u - 64);
+              ctrl = false; bar.querySelector('button').classList.remove('on');
+            }
+            if (client) client.send(bytes);
+            if (term) term.focus();
+          });
+          bar.appendChild(b);
+        }
+      }
+
+      async function start() {
+        main.textContent = '';
+        const host = document.createElement('div'); host.className = 'nt-host';
+        main.appendChild(host);
+        again.hidden = true;
+        stat(t('st_connecting'), 'busy');
+        term = createTerminal(host, {
+          onInput: (b) => client && client.send(b),
+          onResize: (c, r) => client && client.resize(c, r),
+        });
+        term.fit(); term.focus();
+        buildKeys();
+
+        client = createPtyClient({ kind: 'shell' });
+        client.on('data', (u8) => term.write(u8));
+        client.on('error', (m) => stat(t('st_error', { msg: m }), 'err'));
+        client.on('status', (state) => {
+          if (state === 'connected') { stat(t('st_connected'), 'ok'); term.focus(); }
+          else if (state === 'closed') { stat(t('st_closed')); again.hidden = false; }
+        });
+        try {
+          await client.connect({ cols: term.cols, rows: term.rows });
+        } catch (e) {
+          const msg = (e && e.message) || '';
+          if (msg === PTY_UNPAIRED) {
+            gate('🔒', t('gate_pair_title'), t('gate_pair_body'),
+              { label: t('gate_pair_btn'), run: async () => { if (await pairDialog()) { stop(); start(); } } });
+          } else {
+            gate('⚠', t('gate_off_title'), t('gate_off_body', { msg }), { label: t('retry'), run: () => { stop(); start(); } });
+          }
+          stat(msg === PTY_UNPAIRED ? t('st_unpaired') : t('st_error', { msg }), 'err');
+          return;
+        }
+        ro = new ResizeObserver(() => term && term.fit());
+        ro.observe(host);
+        // Agent seam: a live device shell any in-shell agent can run commands in.
+        session = { id: 'device', kind: 'shell', exec: (cmd) => client.exec(cmd), get connected() { return client && client.connected; } };
+        if (window.NucleoPty) window.NucleoPty.sessions.push(session);
+      }
+      function stop() {
+        try { client && client.disconnect(); } catch {}
+        try { ro && ro.disconnect(); } catch {}
+        if (window.NucleoPty && session) window.NucleoPty.sessions = window.NucleoPty.sessions.filter((s) => s !== session);
+        if (term) { try { term.dispose(); } catch {} term = null; }
+        client = null; ro = null; session = null;
+      }
+
+      document.getElementById('clr').onclick = () => { if (term) { term.clear(); term.focus(); } };
+      again.addEventListener('click', () => { stop(); start(); });
+      addEventListener('beforeunload', stop);
+      start();
+      return true;
+    }
+    ptyMode().then((on) => { if (!on) init(); }, () => init());
   </script>
 </body>
 </html>

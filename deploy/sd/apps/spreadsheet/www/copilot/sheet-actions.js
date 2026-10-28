@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // sheet-actions.js — the CLOSED, typed-action vocabulary the ANIMA spreadsheet copilot may execute,
 // plus the schema FIREWALL that turns any model output (incl. adversarial / garbled JSON) into a
 // validated, IN-BOUNDS action list. This is the spreadsheet analogue of forge/actions.js: it is what

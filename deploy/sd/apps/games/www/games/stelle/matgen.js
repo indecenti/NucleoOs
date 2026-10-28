@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // stelle/matgen.js — the ground materials of the worlds, generated once on the GPU into a texture array.
 //
 // Ten tileable layers (512² on medium / high, 256² on low), each texel = (normal x, normal y, height, tone):

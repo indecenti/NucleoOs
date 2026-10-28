@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // anima-mode.js — the ONE definition of ANIMA's engine mode, plus the turn abort/timeout helper,
 // shared by the ANIMA app (apps/anima/www/index.html) and the OS copilot (web/shell/copilot.js).
 //

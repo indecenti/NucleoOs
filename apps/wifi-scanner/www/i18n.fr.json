@@ -32,5 +32,7 @@
   "hidden_ssid": "(caché)",
   "src_failed": "échec du scan — appareil injoignable ou occupé",
   "src_need_pair": "non appairé — appairez ce navigateur pour scanner",
-  "src_live": "scan en direct"
+  "src_live": "scan en direct",
+  "forget_failed": "Impossible d'oublier le réseau",
+  "wifi_unavailable": "La gestion du Wi-Fi n’est pas disponible sur cet appareil."
 }

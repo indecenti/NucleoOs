@@ -32,5 +32,14 @@
   "core_n": "Cœur {n}",
   "cpu_meta": "{n} cœurs · actif {uptime}",
   "na_short": "n/d",
-  "cpu_unavailable": "point d'accès /api/cpu indisponible (firmware)"
+  "cpu_unavailable": "point d'accès /api/cpu indisponible (firmware)",
+  "no_battery": "absente",
+  "ram_title": "Mémoire (RAM)",
+  "mem_available": "Disponible",
+  "swap": "Swap (zram)",
+  "ram_avail": "RAM dispo",
+  "governor": "Gouverneur",
+  "soc_temp": "Temp. SoC",
+  "load_unit": "charge",
+  "uptime_is": "uptime {uptime}"
 }

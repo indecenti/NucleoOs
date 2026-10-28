@@ -26,7 +26,7 @@
   "dlUseCurrentTitle": "Use the current page",
   "dlFilenameLabel": "File name (folder: /data/downloads/)",
   "dlFilenamePlaceholder": "file.zip",
-  "dlAuthBanner": "⚠️ <b>Device not paired.</b> Saving to SD requires pairing. Enter the PIN shown on the Cardputer on the NucleoOS home screen.",
+  "dlAuthBanner": "⚠️ <b>Device not paired.</b> Saving to SD requires pairing. Enter the PIN shown on the device on the NucleoOS home screen.",
   "dlDownloadToSd": "⬇ Download to SD",
   "dlOpenFolder": "🗂 Open folder",
   "dlOpenFolderTitle": "Open the downloads folder in File Commander",
@@ -47,12 +47,12 @@
   "handoffBody": "External sites open in your real browser — no proxy, nothing running on the device.",
   "handoffBlocked": "The browser blocked the pop-up: use the button below.",
   "openAgain": "Open again",
-  "saveToCardputer": "⬇ Save to Cardputer",
+  "saveToCardputer": "⬇ Save to the device",
   "homeBtn": "Home",
   "openExternal": "↗ Open in external tab",
 
   "dlCardTitle": "⬇ Downloadable file",
-  "dlCardBody": "Save it to the Cardputer (SD: <code>/data/downloads/</code>) or open it in your real browser.",
+  "dlCardBody": "Save it to the device (SD: <code>/data/downloads/</code>) or open it in your real browser.",
 
   "loadFailedTitle": "Load failed",
   "loadFailedBody": "Could not load the site",
@@ -90,5 +90,6 @@
   "toastNoPageToDownload": "No active page to download",
   "toastOpeningDownloads": "Opening downloads folder…",
   "toastOpenFcFailed": "Could not open File Commander",
-  "toastEnterValidUrl": "Enter a valid URL!"
+  "toastEnterValidUrl": "Enter a valid URL!",
+  "dlUnavailable": "Saving to the SD card is not available on this device."
 }

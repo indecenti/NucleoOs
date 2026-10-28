@@ -8,7 +8,7 @@
   "tab_tvb": "TV-B-Gone",
   "tab_find": "Auto-Find",
   "find_title": "Trova la tua TV",
-  "find_desc": "Punta il Cardputer verso la TV e premi Avvia: provo i codici di spegnimento uno a uno, tu confermi quando si spegne.",
+  "find_desc": "Punta il dispositivo verso la TV e premi Avvia: provo i codici di spegnimento uno a uno, tu confermi quando si spegne.",
   "find_start": "Avvia",
   "find_q": "La TV si è spenta?",
   "find_yes": "Sì, spenta!",
@@ -93,5 +93,6 @@
   "b_vol_up": "Volume su", "b_vol_down": "Volume giù", "b_mute": "Muto",
   "b_ch_up": "Canale su", "b_ch_down": "Canale giù",
   "b_up": "Su", "b_down": "Giù", "b_left": "Sinistra", "b_right": "Destra", "b_ok": "OK",
-  "sd_read_failed": "Impossibile leggere preferiti e pulsanti salvati sulla SD: le modifiche restano in questo browser finché non torna leggibile."
+  "sd_read_failed": "Impossibile leggere preferiti e pulsanti salvati sulla SD: le modifiche restano in questo browser finché non torna leggibile.",
+  "st_no_ir": "demo — infrarossi non disponibili su questo dispositivo"
 }

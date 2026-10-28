@@ -64,5 +64,6 @@
   "op_cmd_send_failed": "envío del comando fallido",
   "op_offer_accepted": "oferta aceptada",
   "op_offer_rejected": "oferta rechazada",
-  "cloud_unavailable": "nube no disponible"
+  "cloud_unavailable": "nube no disponible",
+  "link_unavailable": "El intercambio con dispositivos cercanos no está disponible en este dispositivo."
 }

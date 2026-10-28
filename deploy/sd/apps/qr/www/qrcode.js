@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 /**
  * NucleoQR — QR encoder, a faithful JS port of the MIT C encoder shipped in M5GFX
  * (lgfx/utility/lgfx_qrcode.c, original by Richard Moore, https://github.com/ricmoo/QRCode/,

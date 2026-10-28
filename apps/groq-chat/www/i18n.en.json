@@ -37,5 +37,11 @@
   "web_on": "Web",
   "web_searching": "🌐 Searching the web…",
   "sources_label": "Sources",
-  "web_mode_hint": "Web mode on: current, sourced answers from the web via Groq compound. The model picker above is ignored."
+  "web_mode_hint": "Web mode on: current, sourced answers from the web via Groq compound. The model picker above is ignored.",
+  "api_key_hint_sealed": "It is saved on the device and does not stay in the browser. Create/manage it on <a href=\"https://console.groq.com/keys\" target=\"_blank\" rel=\"noreferrer noopener\">console.groq.com/keys</a>.",
+  "teacher_note_sealed": "Keys live <b>on the device</b>: this chat uses them through the device without ever seeing them. Manage (and remove) them in <b>Settings ▸ AI</b>.",
+  "key_forgotten_sealed": "No key stays in this browser. To remove the device key: Settings ▸ AI.",
+  "key_saved_device": "Key saved on the device.",
+  "err_unpaired": "Pair this browser with the device first.",
+  "err_save_key": "Could not save the key on the device."
 }

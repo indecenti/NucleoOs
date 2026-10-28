@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // stelle/kit.js — the procedural model kit: every ship, station, beacon and rock is assembled in
 // code from a few hard-surface primitives into ONE merged BufferGeometry per model (one draw call),
 // with per-vertex faction colour and a glow channel (aGlow) that the hull material turns into light:

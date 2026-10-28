@@ -10,7 +10,7 @@
   "send_hint": "Ctrl+Invio per inviare",
   "failed": "Fallita",
   "to": "A",
-  "to_ph": "destinatario@esempio.com",
+  "to_ph": "destinatario@example.com",
   "subject": "Oggetto",
   "subject_ph": "Oggetto",
   "body_ph": "Scrivi il messaggio…",
@@ -45,6 +45,7 @@
   "gmail_hint": "Gmail/Yahoo/iCloud richiedono una Password per app (con 2FA), non la password di accesso.",
   "body_label": "Messaggio",
   "err_password_required": "Inserisci la password dell’account.",
-  "confirm_delete_account": "Eliminare l'account \"{name}\"? Anche la password salvata sul Cardputer verrà cancellata.",
-  "device_failed": "Il Cardputer non ha accettato la modifica ({err}) — non è cambiato nulla."
+  "confirm_delete_account": "Eliminare l'account \"{name}\"? Anche la password salvata sul dispositivo verrà cancellata.",
+  "device_failed": "Il dispositivo non ha accettato la modifica ({err}) — non è cambiato nulla.",
+  "mail_unavailable": "L’invio di e-mail non è disponibile su questo dispositivo."
 }

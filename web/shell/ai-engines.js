@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // ai-engines.js — LOCAL AI servers on the user's own PC (Ollama, LM Studio, llama.cpp, Jan, LocalAI,
 // NucleoMind, any OpenAI-compatible endpoint): detect them, read what each installed model can really do,
 // and talk to them — straight from the browser. The Cardputer is never involved: not a single request of

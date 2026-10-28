@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // constellations-gen.js — DETERMINISTIC, SEEDED procedural generator for the infinite universe.
 //
 // This is the canonical reference for the cross-play world: the firmware (app_constellations.cpp)

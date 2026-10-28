@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // update-check.js — passive "new NucleoOS release is out" notifier (shell side).
 // The BROWSER asks GitHub for the latest release — at most one conditional request per day per
 // browser (ETag → a 304 is free against the unauthenticated rate limit) — and compares it with the

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // install-flow.js — the resilient "install an offline model" experience for NucleoOS, sitting on top of
 // model-store.js. This is THE core of the offline feature: it pulls a model's weights (online CDN first,
 // else the Cardputer SD) into the browser Cache API so the model then runs with the network unplugged.
@@ -95,17 +96,17 @@ const MSG = {
     fr: ['WebAssembly indisponible', 'Ce navigateur ne peut pas exécuter WebAssembly, nécessaire au modèle CPU.'],
     de: ['WebAssembly nicht verfügbar', 'Dieser Browser kann kein WebAssembly ausführen, das das CPU-Modell braucht.'] },
   integrity: {
-    it: ['I dati scaricati sono corrotti', 'Un checksum (SHA-256) non corrisponde: i byte danneggiati sono stati scartati. Se hai scaricato dalla SD del Cardputer, ri-sincronizza la SD; se da internet, riprova.'],
-    en: ['Downloaded data was corrupt', 'A checksum (SHA-256) didn’t match, so the damaged bytes were discarded. If you pulled from the Cardputer SD, re-sync the SD card; if from the internet, just retry.'],
-    es: ['Los datos descargados están dañados', 'Un checksum (SHA-256) no coincide: los bytes dañados se descartaron. Si descargaste de la SD del Cardputer, vuelve a sincronizarla; si fue de internet, reintenta.'],
-    fr: ['Les données téléchargées sont corrompues', 'Une somme de contrôle (SHA-256) ne correspond pas : les octets abîmés ont été écartés. Depuis la SD du Cardputer, resynchronisez la SD ; depuis internet, réessayez.'],
-    de: ['Die heruntergeladenen Daten sind beschädigt', 'Eine Prüfsumme (SHA-256) stimmte nicht, die beschädigten Bytes wurden verworfen. Von der Cardputer-SD: SD neu synchronisieren; aus dem Internet: erneut versuchen.'] },
+    it: ['I dati scaricati sono corrotti', 'Un checksum (SHA-256) non corrisponde: i byte danneggiati sono stati scartati. Se hai scaricato dalla SD del dispositivo, ri-sincronizza la SD; se da internet, riprova.'],
+    en: ['Downloaded data was corrupt', 'A checksum (SHA-256) didn’t match, so the damaged bytes were discarded. If you pulled from the device SD, re-sync the SD card; if from the internet, just retry.'],
+    es: ['Los datos descargados están dañados', 'Un checksum (SHA-256) no coincide: los bytes dañados se descartaron. Si descargaste de la SD del dispositivo, vuelve a sincronizarla; si fue de internet, reintenta.'],
+    fr: ['Les données téléchargées sont corrompues', 'Une somme de contrôle (SHA-256) ne correspond pas : les octets abîmés ont été écartés. Depuis la SD de l’appareil, resynchronisez la SD ; depuis internet, réessayez.'],
+    de: ['Die heruntergeladenen Daten sind beschädigt', 'Eine Prüfsumme (SHA-256) stimmte nicht, die beschädigten Bytes wurden verworfen. Von der Geräte-SD: SD neu synchronisieren; aus dem Internet: erneut versuchen.'] },
   notfound: {
-    it: ['Modello non disponibile alla sorgente', 'I pesi non sono stati trovati. Online: riprova più tardi. Offline: il modello non è sulla SD del Cardputer — collegati a internet una volta per scaricarlo.'],
-    en: ['Model not available at the source', 'The weights weren’t found. Online: try again later. Offline: this model isn’t on the Cardputer SD — connect to the internet once to fetch it.'],
-    es: ['Modelo no disponible en el origen', 'No se encontraron los pesos. Con conexión: reintenta más tarde. Sin conexión: el modelo no está en la SD del Cardputer; conéctate a internet una vez para descargarlo.'],
-    fr: ['Modèle indisponible à la source', 'Les poids sont introuvables. En ligne : réessayez plus tard. Hors ligne : ce modèle n’est pas sur la SD du Cardputer — connectez-vous une fois à internet pour le récupérer.'],
-    de: ['Modell an der Quelle nicht verfügbar', 'Die Gewichte wurden nicht gefunden. Online: später erneut versuchen. Offline: Das Modell ist nicht auf der Cardputer-SD – verbinde dich einmal mit dem Internet, um es zu laden.'] },
+    it: ['Modello non disponibile alla sorgente', 'I pesi non sono stati trovati. Online: riprova più tardi. Offline: il modello non è sulla SD del dispositivo — collegati a internet una volta per scaricarlo.'],
+    en: ['Model not available at the source', 'The weights weren’t found. Online: try again later. Offline: this model isn’t on the device SD — connect to the internet once to fetch it.'],
+    es: ['Modelo no disponible en el origen', 'No se encontraron los pesos. Con conexión: reintenta más tarde. Sin conexión: el modelo no está en la SD del dispositivo; conéctate a internet una vez para descargarlo.'],
+    fr: ['Modèle indisponible à la source', 'Les poids sont introuvables. En ligne : réessayez plus tard. Hors ligne : ce modèle n’est pas sur la SD de l’appareil — connectez-vous une fois à internet pour le récupérer.'],
+    de: ['Modell an der Quelle nicht verfügbar', 'Die Gewichte wurden nicht gefunden. Online: später erneut versuchen. Offline: Das Modell ist nicht auf der Geräte-SD – verbinde dich einmal mit dem Internet, um es zu laden.'] },
   cache: {
     it: ['Spazio del browser esaurito', 'Il browser non è riuscito a salvare il modello{size}. Libera spazio (rimuovi altri modelli o i dati del sito) e riprova.'],
     en: ['Out of browser storage', 'The browser couldn’t store the model{size}. Free space (remove other cached models or site data) and retry.'],
@@ -113,11 +114,11 @@ const MSG = {
     fr: ['Stockage du navigateur plein', 'Le navigateur n’a pas pu enregistrer le modèle{size}. Libérez de l’espace (autres modèles ou données du site) et réessayez.'],
     de: ['Browserspeicher voll', 'Der Browser konnte das Modell{size} nicht speichern. Gib Speicher frei (andere Modelle oder Websitedaten entfernen) und versuche es erneut.'] },
   busy: {
-    it: ['Un altro download è in corso', 'Si scarica una cosa alla volta per non caricare il Cardputer. Attendi che finisca, poi riprova.'],
-    en: ['Another download is running', 'One download runs at a time so the Cardputer is never overloaded. Wait for it to finish, then retry.'],
-    es: ['Hay otra descarga en curso', 'Se descarga una cosa a la vez para no sobrecargar el Cardputer. Espera a que termine y reintenta.'],
-    fr: ['Un autre téléchargement est en cours', 'Un seul téléchargement à la fois pour ne pas surcharger le Cardputer. Attendez la fin, puis réessayez.'],
-    de: ['Ein anderer Download läuft', 'Es wird immer nur eine Sache geladen, damit der Cardputer nie überlastet wird. Warte, bis er fertig ist, und versuche es erneut.'] },
+    it: ['Un altro download è in corso', 'Si scarica una cosa alla volta per non caricare il dispositivo. Attendi che finisca, poi riprova.'],
+    en: ['Another download is running', 'One download runs at a time so the device is never overloaded. Wait for it to finish, then retry.'],
+    es: ['Hay otra descarga en curso', 'Se descarga una cosa a la vez para no sobrecargar el dispositivo. Espera a que termine y reintenta.'],
+    fr: ['Un autre téléchargement est en cours', 'Un seul téléchargement à la fois pour ne pas surcharger l’appareil. Attendez la fin, puis réessayez.'],
+    de: ['Ein anderer Download läuft', 'Es wird immer nur eine Sache geladen, damit das Gerät nie überlastet wird. Warte, bis er fertig ist, und versuche es erneut.'] },
   unknown: {
     it: ['Installazione non riuscita', 'Errore inatteso: {error}. Nessun dato è stato perso; puoi riprovare.'],
     en: ['Install failed', 'Unexpected error: {error}. Nothing was lost; you can retry.'],
@@ -125,11 +126,11 @@ const MSG = {
     fr: ['Échec de l’installation', 'Erreur inattendue : {error}. Rien n’a été perdu ; vous pouvez réessayer.'],
     de: ['Installation fehlgeschlagen', 'Unerwarteter Fehler: {error}. Es ging nichts verloren; du kannst es erneut versuchen.'] },
   transient: {
-    it: ['Connessione persa — riprendo', 'La sorgente (internet o il Cardputer) non è raggiungibile. Tengo le parti già verificate e riprovo da solo; non si perde nulla. Puoi annullare quando vuoi.'],
-    en: ['Connection lost — resuming', 'The source (internet or the Cardputer) became unreachable. Keeping the verified parts and retrying automatically; nothing is lost. Cancel anytime.'],
-    es: ['Conexión perdida — reanudando', 'El origen (internet o el Cardputer) no responde. Conservo las partes verificadas y reintento solo; no se pierde nada. Puedes cancelar cuando quieras.'],
-    fr: ['Connexion perdue — reprise', 'La source (internet ou le Cardputer) est injoignable. Je garde les parties vérifiées et je réessaie seul ; rien n’est perdu. Annulez quand vous voulez.'],
-    de: ['Verbindung verloren – setze fort', 'Die Quelle (Internet oder Cardputer) ist nicht erreichbar. Ich behalte die geprüften Teile und versuche es automatisch erneut; nichts geht verloren. Jederzeit abbrechen.'] },
+    it: ['Connessione persa — riprendo', 'La sorgente (internet o il dispositivo) non è raggiungibile. Tengo le parti già verificate e riprovo da solo; non si perde nulla. Puoi annullare quando vuoi.'],
+    en: ['Connection lost — resuming', 'The source (internet or the device) became unreachable. Keeping the verified parts and retrying automatically; nothing is lost. Cancel anytime.'],
+    es: ['Conexión perdida — reanudando', 'El origen (internet o el dispositivo) no responde. Conservo las partes verificadas y reintento solo; no se pierde nada. Puedes cancelar cuando quieras.'],
+    fr: ['Connexion perdue — reprise', 'La source (internet ou l’appareil) est injoignable. Je garde les parties vérifiées et je réessaie seul ; rien n’est perdu. Annulez quand vous voulez.'],
+    de: ['Verbindung verloren – setze fort', 'Die Quelle (Internet oder Gerät) ist nicht erreichbar. Ich behalte die geprüften Teile und versuche es automatisch erneut; nichts geht verloren. Jederzeit abbrechen.'] },
 };
 const FLAGS = { insecure: [true, false], 'no-webgpu': [true, false], 'no-wasm': [true, false], integrity: [true, true], notfound: [true, true], cache: [true, true], busy: [true, true], unknown: [true, true], transient: [false, true] };
 const SIZE = { it: ' (circa {s})', en: ' (about {s})', es: ' (unos {s})', fr: ' (environ {s})', de: ' (etwa {s})' };

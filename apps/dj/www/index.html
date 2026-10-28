@@ -1,4 +1,5 @@
 <!doctype html>
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -76,7 +77,7 @@
 </div>
 
 <div class="lib">
-  <h3><span data-i18n="library">Libreria</span> · /data/Music</h3>
+  <h3><span data-i18n="library">Libreria</span> · <span id="libDirs">/data/Music</span></h3>
   <ul id="list"><li class="meta" data-i18n="loading">Carico…</li></ul>
 </div>
 
@@ -151,18 +152,37 @@ function showDeck(which, tr) {
   drawWave($(which + 'Wave'), x, which === 'a' ? '#ff7eb6' : '#7cfc9a');
 }
 
+// Music copied while the console had ONE card stays on the ROM card (<roms>/media/Music) once the second SD
+// becomes the media folder: /data/Music points at the new card only. The server says where it is (media_alt,
+// Handheld only — every other backend has none, so the library is just DIR).
+async function libraryDirs() {
+  const dirs = [DIR];
+  try {
+    const m = await (await fetch('/api/fs/mounts')).json();
+    if (m && typeof m.media_alt === 'string' && m.media_alt) dirs.push(m.media_alt + '/Music');
+  } catch {}
+  return dirs;
+}
+
 async function listLibrary() {
   libErr = false;
-  try {
-    const r = await fetch('/api/fs/list?path=' + encodeURIComponent(DIR));
-    if (r.status === 404) lib = [];                     // no /data/Music yet: an empty library
-    else {
-      if (!r.ok) throw new Error('HTTP ' + r.status);  // busy / unreachable: say so, it is not "no tracks"
-      const d = await r.json();
-      const files = (d.entries || []).filter((e) => e.type === 'file' && /\.(mp3|wav)$/i.test(e.name));
-      lib = files.map((e) => ({ path: DIR + '/' + e.name, name: e.name }));
-    }
-  } catch { lib = []; libErr = true; }
+  lib = [];
+  const dirs = await libraryDirs();
+  const shown = [];
+  for (const dir of dirs) {
+    try {
+      const r = await fetch('/api/fs/list?path=' + encodeURIComponent(dir));
+      let files = [];
+      if (r.status !== 404) {                             // 404: no such folder yet — an empty library
+        if (!r.ok) throw new Error('HTTP ' + r.status);  // busy / unreachable: say so, it is not "no tracks"
+        const d = await r.json();
+        files = (d.entries || []).filter((e) => e.type === 'file' && /\.(mp3|wav)$/i.test(e.name));
+      }
+      if (files.length || dir === DIR) shown.push(dir);
+      lib.push(...files.map((e) => ({ path: dir + '/' + e.name, name: e.name })));
+    } catch { if (dir === DIR) libErr = true; }
+  }
+  $('libDirs').textContent = shown.join(' + ');
   renderList();
 }
 

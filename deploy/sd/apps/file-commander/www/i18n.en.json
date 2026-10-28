@@ -40,6 +40,8 @@
   "hint_local": "Ctrl+C/X/V · Ctrl+A · F2 · Del · Ctrl+Z",
   "hint_rw": "Read/write · Ctrl+C/X/V · F2 · Del · “To SD” copies to the card",
   "hint_ro": "Read-only · select files · “To SD” copies them to the card",
+  "hint_touch": "Tap to select · long-press for the menu",
+  "sel_clear": "Clear selection",
 
   "ctx_open": "Open",
   "ctx_run": "Run",

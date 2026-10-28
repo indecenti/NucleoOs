@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // stelle/terrain-worker.js — builds terrain chunks and flora cells off the main thread (module worker).
 // The main thread lends its typed arrays with every request (transferred, not copied) and gets them back filled:
 // in the steady state nothing is allocated on either side. The maths lives in chunk.js / planet.js (pure, tested).

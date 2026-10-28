@@ -7,7 +7,7 @@
   "copied": "Código copiado",
   "empty_title": "Sin cuentas 2FA",
   "empty_body": "Añade una cuenta para generar códigos de verificación de 6 dígitos. Pega un enlace otpauth:// (del QR del sitio) o la clave secreta.",
-  "privacy_note": "🔒 <b>Todo local.</b> Los códigos se calculan en el navegador (ningún secreto sale del dispositivo). Las claves se guardan en la SD del Cardputer, protegidas por el emparejamiento: revoca las sesiones en Ajustes si pierdes un dispositivo.",
+  "privacy_note": "🔒 <b>Todo local.</b> Los códigos se calculan en el navegador (ningún secreto sale del dispositivo). Las claves se guardan en la SD del dispositivo, protegidas por el emparejamiento: revoca las sesiones en Ajustes si pierdes un dispositivo.",
   "add_title": "Añadir cuenta",
   "add_sub": "Pega el enlace otpauth:// (del QR) — lo rellena todo. O introduce los campos a mano.",
   "uri_ph": "otpauth://totp/...",
@@ -27,9 +27,9 @@
   "err_secret": "Clave secreta no válida (se espera Base32)",
   "err_clip": "No se puede leer el portapapeles",
   "confirm_del": "¿Eliminar la cuenta \"{name}\"? Su clave 2FA se quitará de este dispositivo.",
-  "err_device": "Cardputer inaccesible: no se guardó ningún cambio. Inténtalo de nuevo en breve.",
-  "err_unpaired": "Este navegador no está vinculado al Cardputer: vincúlalo para guardar las cuentas.",
-  "offline_banner": "Códigos de la última copia de este navegador: el Cardputer no responde, los cambios están en pausa.",
+  "err_device": "Dispositivo inaccesible: no se guardó ningún cambio. Inténtalo de nuevo en breve.",
+  "err_unpaired": "Este navegador no está vinculado al dispositivo: vincúlalo para guardar las cuentas.",
+  "offline_banner": "Códigos de la última copia de este navegador: el dispositivo no responde, los cambios están en pausa.",
   "err_hotp": "Las cuentas HOTP (por contador) no son compatibles: usa una cuenta TOTP (por tiempo).",
   "err_algo": "SHA-512 no es compatible: esta cuenta generaría códigos incorrectos."
 }

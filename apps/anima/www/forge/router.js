@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // router.js — the two-stage substrate router for "one ANIMA, four substrates". Stage A is a free,
 // deterministic pre-router (a pure function of the text + client capabilities) mirroring the
 // device's own nucleo_anima_query dispatch order: slash → file-op → code → knowledge. Stage B (the

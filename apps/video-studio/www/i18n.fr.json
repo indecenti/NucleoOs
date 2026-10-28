@@ -1,7 +1,7 @@
 {
   "_lang": "fr",
   "app_title": "Studio vidéo NucleoOS",
-  "sub": "Convertit les vidéos en <b>.nfv</b> (v4 : image et son dans un seul fichier) <b>dans le navigateur</b>, sans logiciel sur le PC, et les écrit directement sur la SD du Cardputer.",
+  "sub": "Convertit les vidéos en <b>.nfv</b> (v4 : image et son dans un seul fichier) <b>dans le navigateur</b>, sans logiciel sur le PC, et les écrit directement sur la SD de l’appareil.",
   "drop": "<b>Glissez vos vidéos ici</b> — ou cliquez pour les choisir<br><small>mp4 · mov · webm · mkv · avi … la conversion s'exécute localement dans le navigateur (ffmpeg.wasm)</small>",
   "lbl_profile": "Profil",
   "prof_compat": "Compact (12 i/s, petit fichier)",
@@ -35,5 +35,5 @@
   "stage_loudness": "Mesure du volume…",
   "stage_masks": "Analyse du mouvement…",
   "err_audio": "échec de l'encodage audio",
-  "err_frame_big": "image trop lourde pour le Cardputer : utilisez le profil Compact"
+  "err_frame_big": "image trop lourde pour l’appareil : utilisez le profil Compact"
 }

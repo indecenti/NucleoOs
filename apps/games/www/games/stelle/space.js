@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // stelle/space.js — the environment of a star system, generated on the GPU from a world.js blueprint:
 //   · a nebula skybox baked once into a cube map (domain-warped fbm, galactic band, dust lanes, faint
 //     stars) that is also the image-based lighting of every ship (PMREM);

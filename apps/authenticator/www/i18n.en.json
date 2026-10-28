@@ -7,7 +7,7 @@
   "copied": "Code copied",
   "empty_title": "No 2FA accounts",
   "empty_body": "Add an account to generate 6-digit verification codes. Paste an otpauth:// link (from the site’s QR) or the secret key.",
-  "privacy_note": "🔒 <b>All local.</b> Codes are computed in the browser (no secret leaves the device). Keys are stored on the Cardputer’s SD, protected by pairing: revoke sessions in Settings if you lose a device.",
+  "privacy_note": "🔒 <b>All local.</b> Codes are computed in the browser (no secret leaves the device). Keys are stored on the device’s SD, protected by pairing: revoke sessions in Settings if you lose a device.",
   "add_title": "Add account",
   "add_sub": "Paste the otpauth:// link (from the QR) — it fills everything. Or enter the fields by hand.",
   "uri_ph": "otpauth://totp/...",
@@ -27,9 +27,9 @@
   "err_secret": "Invalid secret key (Base32 expected)",
   "err_clip": "Cannot read the clipboard",
   "confirm_del": "Delete the \"{name}\" account? Its 2FA key will be removed from this device.",
-  "err_device": "Cardputer unreachable — nothing was saved. Try again shortly.",
-  "err_unpaired": "This browser isn't paired with the Cardputer — pair it to save accounts.",
-  "offline_banner": "Codes from this browser's last copy: the Cardputer isn't answering, so changes are paused.",
+  "err_device": "Device unreachable — nothing was saved. Try again shortly.",
+  "err_unpaired": "This browser isn't paired with the device — pair it to save accounts.",
+  "offline_banner": "Codes from this browser's last copy: the device isn't answering, so changes are paused.",
   "err_hotp": "HOTP (counter-based) accounts aren't supported — use a TOTP (time-based) account.",
   "err_algo": "SHA-512 isn't supported — this account would produce wrong codes."
 }

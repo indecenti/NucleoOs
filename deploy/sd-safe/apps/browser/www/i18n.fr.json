@@ -26,7 +26,7 @@
   "dlUseCurrentTitle": "Utiliser la page actuelle",
   "dlFilenameLabel": "Nom du fichier (dossier : /data/downloads/)",
   "dlFilenamePlaceholder": "file.zip",
-  "dlAuthBanner": "⚠️ <b>Appareil non associé.</b> L'enregistrement sur la SD nécessite l'association. Saisissez le PIN affiché sur le Cardputer dans l'écran d'accueil de NucleoOS.",
+  "dlAuthBanner": "⚠️ <b>Appareil non associé.</b> L'enregistrement sur la SD nécessite l'association. Saisissez le PIN affiché sur l'appareil dans l'écran d'accueil de NucleoOS.",
   "dlDownloadToSd": "⬇ Télécharger sur la SD",
   "dlOpenFolder": "🗂 Ouvrir le dossier",
   "dlOpenFolderTitle": "Ouvrir le dossier des téléchargements dans File Commander",
@@ -47,12 +47,12 @@
   "handoffBody": "Les sites externes s'ouvrent dans votre vrai navigateur — sans proxy, rien qui tourne sur l'appareil.",
   "handoffBlocked": "Le navigateur a bloqué la fenêtre pop-up : utilisez le bouton ci-dessous.",
   "openAgain": "Rouvrir",
-  "saveToCardputer": "⬇ Enregistrer sur le Cardputer",
+  "saveToCardputer": "⬇ Enregistrer sur l’appareil",
   "homeBtn": "Accueil",
   "openExternal": "↗ Ouvrir dans un onglet externe",
 
   "dlCardTitle": "⬇ Fichier téléchargeable",
-  "dlCardBody": "Enregistrez-le sur le Cardputer (SD : <code>/data/downloads/</code>) ou ouvrez-le dans votre vrai navigateur.",
+  "dlCardBody": "Enregistrez-le sur l’appareil (SD : <code>/data/downloads/</code>) ou ouvrez-le dans votre vrai navigateur.",
 
   "loadFailedTitle": "Échec du chargement",
   "loadFailedBody": "Impossible de charger le site",
@@ -74,6 +74,7 @@
   "errAccessDenied": "Accès refusé — assurez-vous d'être associé à l'appareil",
   "errSdWrite": "Échec de l'écriture sur la SD ({status}) : {detail}",
   "errMkdir": "Échec de Mkdir ({status}) : {detail}",
+  "errDlBusy": "Un autre téléchargement est déjà en cours — réessayez dans un instant",
 
   "toastBookmarkRemoved": "Favori retiré",
   "toastBookmarkAdded": "Favori ajouté",
@@ -89,5 +90,6 @@
   "toastNoPageToDownload": "Aucune page active à télécharger",
   "toastOpeningDownloads": "Ouverture du dossier des téléchargements…",
   "toastOpenFcFailed": "Impossible d'ouvrir File Commander",
-  "toastEnterValidUrl": "Saisissez une URL valide !"
+  "toastEnterValidUrl": "Saisissez une URL valide !",
+  "dlUnavailable": "L’enregistrement sur la carte SD n’est pas disponible sur cet appareil."
 }

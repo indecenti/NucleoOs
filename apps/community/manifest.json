@@ -1,8 +1,8 @@
 {
   "id": "community",
   "name": "Community",
-  "version": "0.1.0",
-  "version_code": 1,
+  "version": "0.1.1",
+  "version_code": 2,
   "min_os": "0.1.0",
   "platforms": ["esp32s3"],
   "description": "Join the NucleoOS community on Discord: open the server, copy the invite or scan it with your phone, and learn the helper bot's /ask and /guide commands.",

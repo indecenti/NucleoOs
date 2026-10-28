@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // stelle/galaxy.js — the galaxy map of Costellazioni (web), drawn in 3D and turned with the mouse / a finger.
 //   · the galaxy: a spiral of ~40k stars (warm core, blue arms, pink star-forming knots) the sectors hang on;
 //   · the current sector in detail: its ten systems from the SHARED generator (positions, factions, beacons) as

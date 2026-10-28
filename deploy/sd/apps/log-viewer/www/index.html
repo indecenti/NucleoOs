@@ -1,4 +1,5 @@
 <!doctype html>
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -233,6 +234,9 @@
   // ── Adaptive health probe: prefers /api/diag (rich), falls back to /api/status. Visibility-gated,
   //    skips while a heavy job holds the arbiter, backs off when nothing changes. Never on the hot path.
   const probe = { on: true, mode: null, prev: null, timer: null };
+  // Diagnostics (/api/diag, /api/heap, /api/cpu, /api/logs) are asked only where the capability list has 'diag';
+  // elsewhere /api/status alone. If the capability module cannot be loaded, the endpoints decide as before.
+  const diagCapP = import('/nucleo-caps.js').then((m) => m.default.has('diag'), () => true);
   function setLive(on) { liveDot.classList.toggle('live', on); }
 
   function bandsDelta(prev, u) {
@@ -273,6 +277,7 @@
     if (!probe.on || document.visibilityState !== 'visible') { setLive(false); schedule(20000); return; }
     await diagReady;
     let raw = null, partial = false;
+    if (probe.mode === null && !(await diagCapP)) probe.mode = 'status';
     try {
       if (probe.mode !== 'status') {
         const r = await fetch('/api/diag', { cache: 'no-store' });
@@ -311,15 +316,15 @@
 
   async function gather() {
     const out = { events: events.slice(), nowSec: Math.floor(Date.now() / 1000) };
-    try { const r = await fetch('/api/diag', { cache: 'no-store' }); if (r.ok) out.diag = await r.json(); } catch {}
+    const hasDiag = await diagCapP;
+    if (hasDiag) try { const r = await fetch('/api/diag', { cache: 'no-store' }); if (r.ok) out.diag = await r.json(); } catch {}
     if (!out.diag) {     // legacy device → assemble from the three classic read-only endpoints
       // One at a time: three parallel reads would flood the single-task PSRAM-less httpd.
       const grab = (p) => fetch(p, { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).catch(() => null);
       out.status = await grab('/api/status');
-      out.heap = await grab('/api/heap');
-      out.cpu = await grab('/api/cpu');
+      if (hasDiag) { out.heap = await grab('/api/heap'); out.cpu = await grab('/api/cpu'); }
     }
-    try { const r = await fetch('/api/logs', { cache: 'no-store' }); if (r.ok) out.logsText = await r.text(); } catch {}
+    if (hasDiag) try { const r = await fetch('/api/logs', { cache: 'no-store' }); if (r.ok) out.logsText = await r.text(); } catch {}
     return out;
   }
 

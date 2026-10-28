@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // app.js — Metronome + Tuner engine for NucleoOS.
 //
 // Everything here runs in the BROWSER (operator console): Web Audio clicks and pitch detection are

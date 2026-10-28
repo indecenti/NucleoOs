@@ -1,8 +1,8 @@
 {
   "id": "paint",
   "name": "Paint",
-  "version": "1.0.0",
-  "version_code": 1,
+  "version": "1.0.1",
+  "version_code": 2,
   "min_os": "0.1.0",
   "platforms": ["esp32s3"],
   "description": "Editor di immagini e disegno",

@@ -23,5 +23,7 @@
   "confirm_purge": "¿Eliminar definitivamente “{name}”? No se puede deshacer.",
   "toast_delete_failed": "No se pudo eliminar — el elemento sigue en la papelera",
   "err_index_unreadable": "No se puede leer la Papelera ahora — no se ha cambiado nada. Inténtalo de nuevo.",
-  "load_failed": "No se puede leer la Papelera ahora. Inténtalo de nuevo en un momento."
+  "load_failed": "No se puede leer la Papelera ahora. Inténtalo de nuevo en un momento.",
+  "toast_pair_needed": "Se requiere emparejamiento en el dispositivo",
+  "toast_restore_partial": "{count} no restaurados (reinténtalo)"
 }

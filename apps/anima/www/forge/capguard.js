@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // capguard.js — least-privilege capability inference + static danger scan for MODEL-GENERATED code,
 // run BEFORE the sandbox even spins up. Generated code that runs in the user's browser is the
 // highest-severity surface: this infers which `os.*` capabilities the code actually exercises (so

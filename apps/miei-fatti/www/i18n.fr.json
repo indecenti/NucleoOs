@@ -66,7 +66,7 @@
   "verify": "Vérifier",
   "teach1": "Apprendre",
   "profSaved": "Profil enregistré et appris.",
-  "profNotTaught": "Profil enregistré sur le Cardputer, mais ANIMA ne l’a pas appris.",
+  "profNotTaught": "Profil enregistré sur l’appareil, mais ANIMA ne l’a pas appris.",
   "asking": "Question à ANIMA…",
   "noded": "Ajoute d’autres relations (p. ex. deux parents, ou deux lieux liés) et les déductions apparaîtront ici.",
   "chip.new": "à apprendre",
@@ -74,6 +74,7 @@
   "chip.verified": "vérifié",
   "chip.volatile": "temporaire",
   "chip.fail": "erreur",
+  "chip.abstain": "en attente",
   "tagRel": "relation",
   "tagDed": "déduit",
   "because": "parce que",
@@ -81,7 +82,7 @@
   "reteachDone": "Réappris {o}/{n}.",
   "verifyDone": "Vérifiés {o}/{n}.",
   "dedDone": "Apprises {o}/{n} déductions.",
-  "readFailed": "Impossible de lire vos faits du Cardputer : la modification est suspendue pour ne rien écraser. Réessayez dans un instant.",
-  "readCorrupt": "Le fichier des faits du Cardputer est illisible : il n'est pas modifié pour ne rien perdre.",
-  "notPaired": "Ce navigateur n'est pas associé au Cardputer — associez-le pour enregistrer vos faits."
+  "readFailed": "Impossible de lire vos faits de l’appareil : la modification est suspendue pour ne rien écraser. Réessayez dans un instant.",
+  "readCorrupt": "Le fichier des faits de l'appareil est illisible : il n'est pas modifié pour ne rien perdre.",
+  "notPaired": "Ce navigateur n'est pas associé à l'appareil — associez-le pour enregistrer vos faits."
 }

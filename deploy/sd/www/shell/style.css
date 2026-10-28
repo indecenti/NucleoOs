@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 /* NucleoOS desktop shell — lightweight, no framework. */
 /* Native controls and scrollbars follow the OS theme. */
 :root { color-scheme: dark; }
@@ -130,10 +131,12 @@ body {
 .icon:hover, .icon:focus { background: #ffffff14; outline: none; }
 .icon:active { transform: scale(.93); }
 .icon.dragging { opacity: .8; z-index: 5; background: #ffffff1f; }
-.icon.sel { background: #2b6fd64d; outline: 1px solid #4ea1ff66; }
-.icon.sel:hover { background: #2b6fd666; }
+/* Flat fallback first (browsers without color-mix()), then a tint that follows the theme accent. */
+.icon.sel { background: #2b6fd64d; outline: 1px solid #4ea1ff66;
+  background: color-mix(in srgb, var(--accent) 28%, transparent); outline: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); }
+.icon.sel:hover { background: #2b6fd666; background: color-mix(in srgb, var(--accent) 36%, transparent); }
 .marquee { position: fixed; z-index: 4; border: 1px solid var(--accent);
-  background: #4ea1ff22; pointer-events: none; }
+  background: #4ea1ff22; background: color-mix(in srgb, var(--accent) 14%, transparent); pointer-events: none; }
 
 /* Alt+Tab Task Switcher */
 #task-switcher {
@@ -282,6 +285,9 @@ html[data-theme="light"] .icon:focus-visible .label { background: rgba(20,40,80,
   background: #0a1020aa; border-top: 1px solid #ffffff14; backdrop-filter: blur(30px) saturate(2);
 }
 .tb-center { display: flex; align-items: center; gap: 5px; justify-self: center; min-width: 0; }
+/* The left corner holds more than one pill at times (the running game + widgets; a host's own button):
+   as a block they stacked, the corner grew taller than the taskbar and pushed the bar under the screen edge */
+.tb-left { display: flex; align-items: center; min-width: 0; }
 .tb-divider { width: 1px; height: 22px; background: var(--line); margin: 0 3px; flex: none; }
 .tb-divider.hidden { display: none; }
 
@@ -383,13 +389,17 @@ html[data-theme="light"] .task-btn .label { background: #ffffff; }
 .us-skip { display: inline-block; background: none; border: 0; color: var(--muted); text-decoration: underline;
   cursor: pointer; font-size: 12px; padding: 2px 0; margin-bottom: 4px; }
 .us-skip:hover { color: var(--text); }
+#tray #tray-batt[hidden] { display: none; }
+#tray > span[hidden] { display: none; }   /* `#tray > span` sets display: a hidden tray item (the update pill) stayed visible */
+#tray #tray-batt.low { color: #ff9a4d; }
+#tray #tray-batt.low svg .bfill { fill: #ff6b4d; }
 #tray .v { white-space: nowrap; }
 #clock { color: var(--text); font-variant-numeric: tabular-nums; flex-direction: column; align-items: flex-end;
   gap: 0; line-height: 1.18; cursor: default; }
 #clock .ck-time { font-size: 12px; }
 #clock .ck-date { font-size: 10px; color: var(--muted); }
 /* Far-right "show desktop" sliver (click to minimize/restore everything) */
-#show-desktop { width: 9px; height: var(--taskbar-h); margin-left: 2px; padding: 0; border: 0;
+#show-desktop { width: 9px; height: calc(var(--taskbar-h) - 1px); margin-left: 2px; padding: 0; border: 0;   /* the bar's 1px top border */
   border-left: 1px solid var(--line); background: transparent; cursor: pointer; flex: none; }
 #show-desktop:hover { background: var(--glass-2); }
 
@@ -596,11 +606,13 @@ html[data-theme="light"] .ctx-item.focus { background: #0000000d; }
   .win, #start-menu, .search-panel, .ctx, .icon, .task-btn { animation: none !important; transition: none !important; }
 }
 
-/* Mobile Placeholder */
+/* Mobile Placeholder — a suggestion, not a wall. "Continua comunque" adds
+   body.mobile-ok, which lifts the hide rules so the desktop shows on the phone. */
 .hidden-desktop { display: none; }
 @media (max-width: 768px) {
-  #desktop, #windows, #taskbar, #start-menu, #ctxmenu, #search-panel { display: none !important; }
-  .hidden-desktop { display: flex !important; }
+  body:not(.mobile-ok) #desktop, body:not(.mobile-ok) #windows, body:not(.mobile-ok) #taskbar,
+  body:not(.mobile-ok) #start-menu, body:not(.mobile-ok) #ctxmenu, body:not(.mobile-ok) #search-panel { display: none !important; }
+  body:not(.mobile-ok) .hidden-desktop { display: flex !important; }
   #mobile-placeholder {
     position: fixed; inset: 0; z-index: 9999; flex-direction: column; align-items: center; justify-content: center; text-align: center;
     background: radial-gradient(circle at center, #16233f 0%, #0b1220 100%); color: #fff; padding: 40px;
@@ -608,6 +620,19 @@ html[data-theme="light"] .ctx-item.focus { background: #0000000d; }
   #mobile-placeholder svg { color: #4ea1ff; margin-bottom: 20px; }
   #mobile-placeholder h2 { margin: 0 0 10px 0; font-size: 24px; }
   #mobile-placeholder p { color: #8aa0c8; font-size: 16px; line-height: 1.5; }
+  #mobile-placeholder button { margin-top: 22px; padding: 11px 22px; border: 0; border-radius: 10px;
+    background: #4ea1ff; color: #fff; font: 600 15px system-ui, sans-serif; cursor: pointer; }
+  #mobile-placeholder button:active { background: #3a8ae0; }
+
+  /* Chi sceglie "continua comunque" (body.mobile-ok) deve poter ARRIVARE al
+     vassoio. La taskbar e' una griglia 1fr auto 1fr: su uno schermo stretto la
+     colonna centrale delle finestre aperte spingeva orologio e notifiche fuori
+     bordo, e il body ha overflow:hidden, quindi non erano nemmeno raggiungibili
+     scorrendo. Il centro si comprime e scorre da solo; le estremita' restano. */
+  body.mobile-ok #taskbar { grid-template-columns: auto minmax(0, 1fr) auto; gap: 2px; padding: 0 4px; }
+  body.mobile-ok .tb-center { overflow-x: auto; justify-content: flex-start; scrollbar-width: none; }
+  body.mobile-ok .tb-center::-webkit-scrollbar { display: none; }
+  body.mobile-ok #tray > span { padding: 5px 5px; }
 }
 
 /* Action Center */
@@ -652,8 +677,18 @@ html[data-theme='light'] .toast { background: #ffffffee; }
 .toast-msg { font-size: 12px; color: var(--muted); }
 .toast.success .toast-title { color: #5cdb95; }
 .toast.error .toast-title { color: #ff8093; }
+.toast.warn .toast-title { color: #ffc46b; }
 .toast.info .toast-title { color: var(--accent); }
 @keyframes toastIn { from { opacity: 0; transform: translateX(30px) scale(.96); } to { opacity: 1; transform: none; } }
+/* Avviso con azioni (es. internet dal PC): resta finche' non si sceglie */
+.toast-action { cursor: default; }
+.toast-text { font-size: 12px; color: var(--muted); line-height: 1.45; margin-top: 2px; }
+.toast-actions { display: flex; gap: 8px; margin-top: 10px; }
+.toast-btn { font: 600 12px system-ui; padding: 6px 12px; border-radius: 8px; cursor: pointer; text-decoration: none;
+  color: var(--text); background: #ffffff12; border: 1px solid #ffffff22; transition: background .15s, border-color .15s; }
+.toast-btn:hover { background: #ffffff20; }
+.toast-btn.pri { background: var(--accent); border-color: var(--accent); color: #06121f; }
+.toast-btn.pri:hover { filter: brightness(1.08); }
 
 /* ====== Drag & Drop Overlay ====== */
 #drop-overlay {
@@ -837,6 +872,7 @@ html[data-theme="light"] .ctx-item.danger:hover { background: #e0556b1a; }
 html[data-theme="light"] .drop-inner { background: #ffffffe6; border-color: #2b6fd644; }
 html[data-theme="light"] .toast.error .toast-title,
 html[data-theme="light"] .pair-msg { color: #cf3a50; }
+html[data-theme="light"] .toast.warn .toast-title { color: #a86400; }
 
 /* ── System-UI extras (system-ui.js): night light, lock screen, shortcuts, widgets ── */
 
@@ -927,3 +963,73 @@ html[data-theme="light"] #widgets-panel { background: #ffffffdd; }
 .wg-file:hover { background: var(--glass-2); }
 .wg-file span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .wg-empty { font-size: 12px; color: var(--muted); padding: 3px 0; }
+
+/* ====== Giochi: "Continua" nella barra, pannello giochi, recenti in Start ====== */
+#tb-game { display: flex; align-items: center; gap: 9px; height: 34px; margin-left: 8px; padding: 0 12px 0 4px;
+  border-radius: 9px; border: 1px solid transparent; background: transparent; color: var(--text); cursor: pointer;
+  max-width: 250px; transition: background .15s ease, border-color .15s ease; }
+#tb-game:hover { background: #ffffff12; border-color: #ffffff18; }
+#tb-game .tbg-cover { width: 26px; height: 26px; border-radius: 6px; flex: none; background: #ffffff14 center/cover no-repeat; }
+#tb-game .tbg-txt { display: flex; flex-direction: column; align-items: flex-start; min-width: 0; line-height: 1.1; }
+#tb-game .tbg-k { font: 700 10px system-ui; letter-spacing: .6px; text-transform: uppercase; color: var(--accent); }
+#tb-game .tbg-n { font: 600 12px system-ui; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 190px; }
+#tb-game.ingame .tbg-k { color: #7cd96a; }
+#tb-game.ingame .tbg-k::before { content: ''; display: inline-block; width: 6px; height: 6px; border-radius: 50%;
+  background: #7cd96a; margin-right: 5px; vertical-align: 1px; animation: gfPulse 1.6s ease-in-out infinite; }
+@keyframes gfPulse { 50% { opacity: .35; } }
+
+#game-flyout { position: fixed; left: 12px; bottom: calc(var(--taskbar-h) + 10px); width: 460px; z-index: 9000;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 16px;
+  box-shadow: 0 24px 60px #000b; animation: gfIn .16s cubic-bezier(.2,.8,.2,1); }
+#game-flyout.hidden { display: none; }
+@keyframes gfIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+.gf-hero { display: grid; grid-template-columns: 150px 1fr; gap: 14px; align-items: center; }
+.gf-cover { width: 150px; height: 112px; border-radius: 12px; overflow: hidden; background: var(--panel2); }
+.gf-cover img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.gf-k { font: 700 11px system-ui; letter-spacing: .8px; text-transform: uppercase; color: var(--accent); }
+.gf-t { font: 700 18px/1.2 system-ui; margin: 3px 0; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.gf-m { font-size: 12px; color: var(--muted); }
+.gf-acts { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.gf-btn { font: 600 12px system-ui; padding: 7px 12px; border-radius: 9px; cursor: pointer; color: var(--text);
+  background: #ffffff10; border: 1px solid #ffffff22; transition: background .15s ease; }
+.gf-btn:hover { background: #ffffff1c; }
+.gf-btn.pri { background: var(--accent); border-color: var(--accent); color: #06231f; }
+.gf-btn.pri:hover { filter: brightness(1.07); }
+.gf-none { grid-column: 1 / -1; color: var(--muted); font-size: 13px; padding: 8px 2px; }
+.gf-head { display: flex; align-items: center; justify-content: space-between; margin: 16px 0 8px; }
+.gf-row { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+.gf-tile, .sm-game { display: flex; flex-direction: column; gap: 5px; min-width: 0; padding: 0; border: 0; background: none;
+  color: var(--text); cursor: pointer; text-align: left; }
+.gf-tc, .sm-gc { display: block; aspect-ratio: 3 / 4; border-radius: 8px; overflow: hidden; background: var(--panel2);
+  border: 2px solid transparent; transition: border-color .15s ease, transform .15s ease; }
+.gf-tc img, .sm-gc img { width: 100%; height: 100%; object-fit: cover; display: block; }
+/* nessuna copertina: la console, intera (la tela dell'archivio ha gia' il margine) */
+.gf-cover img.con, .gf-tc img.con, .sm-gc img.con { object-fit: contain; filter: drop-shadow(0 4px 8px #0008); }
+#tb-game .tbg-cover.con { background-size: contain; background-color: transparent; }
+.gf-tile:hover .gf-tc, .sm-game:hover .sm-gc { border-color: var(--accent); transform: translateY(-2px); }
+.gf-tn, .sm-gn { font-size: 11px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sm-games { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; margin: 0 0 14px; }
+html[data-theme='light'] #game-flyout { box-shadow: 0 24px 60px #0003; }
+/* Plancia della partita in corso: schermo della console dal vivo + comandi */
+#game-flyout.live { width: 540px; }
+#game-flyout.live .gf-hero { grid-template-columns: 230px 1fr; row-gap: 12px; }
+.gf-live { position: relative; width: 230px; aspect-ratio: 4 / 3; border-radius: 12px; overflow: hidden; background: #000; }
+.gf-live img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.gf-live-cover { object-fit: cover !important; filter: blur(3px) brightness(.55); }
+.gf-live-feed { opacity: 0; transition: opacity .3s ease; }
+.gf-live.on .gf-live-feed { opacity: 1; }
+.gf-live-badge { position: absolute; left: 8px; top: 8px; font: 800 10px system-ui; letter-spacing: .6px; color: #fff;
+  background: #ef4444; border-radius: 6px; padding: 3px 7px; text-transform: uppercase; }
+.gf-ctl { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+.gf-ctl button { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 9px 4px; border-radius: 10px;
+  background: #ffffff0d; border: 1px solid #ffffff1a; color: var(--text); font: 600 11px system-ui; cursor: pointer;
+  transition: border-color .15s ease, background .15s ease, transform .1s ease; }
+.gf-ctl button b { font-size: 18px; line-height: 1; }
+.gf-ctl button:hover { border-color: var(--accent); background: #ffffff16; }
+.gf-ctl button:active { transform: scale(.95); }
+.gf-ctl button.danger:hover { border-color: #ef4444; color: #ff9d9d; }
+
+/* Pairing: the device reads the PIN aloud (shown only when the device can, see pairCanSpeak). */
+.pair-card .pair-speak { background: transparent; color: var(--accent); border: 1px solid var(--line); margin-bottom: 10px; }
+.pair-card .pair-speak:active { background: var(--bg2); }
+.pair-card .pair-speak[hidden] { display: none; }

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 /* NucleoOS AI Copilot — the OS-wide ANIMA command/AI bar. Themed via the shell's CSS
    variables so it follows dark/light automatically. Everything is scoped under #copilot /
    #copilot-* so it never leaks into apps or the rest of the shell. */
@@ -121,3 +122,10 @@ html[data-theme="light"] #copilot .cp-me .cp-body { color: #1c3a6e; }
   box-shadow: 0 0 0 1px #f5c84233, 0 2px 10px #f5c8422e;
 }
 #copilot .cp-chip#cp-act:focus-visible { outline: 2px solid var(--accent, #4ea1ff); outline-offset: 2px; }
+
+/* a turn's extra lines (⎿ outcome / trace, action buttons, clarify chips, tags) go UNDER the text,
+   aligned with it (gutter 14px + gap 9px), one per row — not beside it on the turn's flex row */
+#copilot .cp-turn { flex-wrap: wrap; row-gap: 2px; }
+#copilot .cp-turn > .cp-lined, #copilot .cp-turn > .cp-actions,
+#copilot .cp-turn > .cp-chips, #copilot .cp-turn > .cp-meta { flex-basis: 100%; margin-left: 23px; }
+#copilot .cp-turn > .cp-lined { margin-top: 1px; }

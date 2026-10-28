@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // seq-import.js — load an app's ES-module graph ONE FILE AT A TIME, then link it in the browser.
 //
 // The shell's service worker gates device requests (2 in flight, writes exclusive) — but a service worker

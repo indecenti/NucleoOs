@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -988,23 +989,35 @@ function escHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt
 
 // ===== CELL INTERACTION =====
 function wireCellClicks() {
-  gridBody.querySelectorAll('td.rh').forEach(td => td.addEventListener('mousedown', e => selectRow((+td.textContent || 1) - 1, e.shiftKey)));
+  gridBody.querySelectorAll('td.rh').forEach(td => td.addEventListener('pointerdown', e => selectRow((+td.textContent || 1) - 1, e.shiftKey)));
+  // Pointer events: one path for mouse, pen and touch (and pointercancel
+  // cleans up the listeners when the system takes over the gesture, which
+  // mouseup never did).
+  // ⚠️ KNOWN LIMIT: with a FINGER the drag stays a scroll of the sheet, not a
+  // range selection. Inverting it would need `touch-action: none` on the
+  // cells, i.e. giving up native scrolling and rewriting it — scrolling matters
+  // more than dragging. Setting it inside the handler does NOT work: the
+  // browser decides at touchstart, not later.
   gridBody.querySelectorAll('td.c').forEach(td => {
-    td.addEventListener('mousedown', e => {
+    td.addEventListener('pointerdown', e => {
+      if (e.button > 0) return;
       const r = +td.dataset.r, c = +td.dataset.c;
       commitEdit();
       if (e.shiftKey) { selR2 = r; selC2 = c; }
       else { curR = r; curC = c; selR2 = -1; selC2 = -1; }
       renderVirtual();
       const onMove = ev => {
+        // elementFromPoint, not ev.target: with setPointerCapture the target
+        // would stay the starting cell for the whole drag.
         const el = document.elementFromPoint(ev.clientX, ev.clientY);
         if (el && el.dataset && el.dataset.r != null) {
           selR2 = +el.dataset.r; selC2 = +el.dataset.c; renderVirtual();
         }
       };
-      const onUp = () => { window.removeEventListener('mousemove', onMove); window.removeEventListener('mouseup', onUp); };
-      window.addEventListener('mousemove', onMove);
-      window.addEventListener('mouseup', onUp);
+      const onUp = () => { window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp); window.removeEventListener('pointercancel', onUp); };
+      window.addEventListener('pointermove', onMove);
+      window.addEventListener('pointerup', onUp);
+      window.addEventListener('pointercancel', onUp);
     });
     td.addEventListener('dblclick', () => { curR = +td.dataset.r; curC = +td.dataset.c; startEdit(); });
   });
@@ -1446,6 +1459,10 @@ function animaCellValue(query) {
   return '⏳';
 }
 let animaTimer = null;
+// ANIMA on the device (capability anima.device, nucleo-caps.js): where ANIMA lives in the browser the device would
+// only abstain, so it is not asked (an empty answer, as its none:true gives). If the capability module cannot be
+// loaded, the device answers as before.
+const animaDevP = import('/nucleo-caps.js').then((m) => m.default.has('anima.device'), () => true);
 function scheduleAnima() { if (animaTimer || animaResolving) return; animaTimer = setTimeout(resolveAnima, 50); }
 async function resolveAnima() {
   animaTimer = null; if (animaResolving || !animaPending.length) return;
@@ -1456,12 +1473,13 @@ async function resolveAnima() {
     ++animaDone;
     setMsg(spT('msg_animaOffline', { done: animaDone, total: animaTotal }, `🧠 ANIMA offline… ${animaDone}/${animaTotal}`));
     try {
-      const data = await (await fetch('/api/anima?lang=it&mode=off&q=' + encodeURIComponent(q), { cache: 'no-store' })).json();
+      const dev = await animaDevP;
+      const data = dev ? await (await fetch('/api/anima?lang=it&mode=off&q=' + encodeURIComponent(q), { cache: 'no-store' })).json() : { reply: '' };
       let ans = (data.reply || '').trim();
       if (!ans || /non lo so|don't know|not sure/i.test(ans)) ans = '#N/D';
       // offline miss + a key present -> escalate to the online teacher, which also LEARNS it
       // on the device (so the same =ANIMA() resolves offline next time). Self-distilling.
-      if (ans === '#N/D' && grokKey && !(await osMode()).priv) {
+      if (ans === '#N/D' && dev && grokKey && !(await osMode()).priv) {
         try { const d2 = await (await fetch('/api/anima?lang=it&mode=on&q=' + encodeURIComponent(q), { cache: 'no-store' })).json();
           const a2 = (d2.reply || '').trim(); if (a2 && !/non lo so|don't know|not sure/i.test(a2)) ans = a2; } catch {}
       }
@@ -2061,7 +2079,7 @@ async function cloudLLMChat(messages, opts = {}) {
 function teachDevice(q, lang) {
   if (!isQuestion(q) || looksLikeData(q)) return;   // never learn from a non-question / bare data
   // mode=on = the device's online teacher: never in Private mode
-  try { osMode().then((m) => m.priv ? null : fetch('/api/anima?lang=' + (lang === 'en' ? 'en' : 'it') + '&mode=on&q=' + encodeURIComponent(q)).then(r => r.json())).then(d => { if (d && d.learned) setMsg(spT('msg_animaLearned', null, lang === 'en' ? '🧠 ANIMA learned this — offline next time.' : '🧠 ANIMA l\'ha imparato — offline la prossima volta.')); }).catch(() => {}); } catch {}
+  try { Promise.all([osMode(), animaDevP]).then(([m, dev]) => (m.priv || !dev) ? null : fetch('/api/anima?lang=' + (lang === 'en' ? 'en' : 'it') + '&mode=on&q=' + encodeURIComponent(q)).then(r => r.json())).then(d => { if (d && d.learned) setMsg(spT('msg_animaLearned', null, lang === 'en' ? '🧠 ANIMA learned this — offline next time.' : '🧠 ANIMA l\'ha imparato — offline la prossima volta.')); }).catch(() => {}); } catch {}
 }
 
 // ===== language + extra executors (bilingual IT/EN) =====
@@ -2167,7 +2185,7 @@ async function remoteAnima(q, lang) {
   // question to the device's own assistant — a heavy context wrapper just confuses it.
   const loading = botHTML('<span class="think"><span class="spin"></span> ' + spT('remote_thinking', null, (en ? 'Asking ANIMA on the device…' : 'Consulto ANIMA sul dispositivo…')) + '</span>');
   try {
-    const data = await (await fetch('/api/anima?lang=' + (en ? 'en' : 'it') + '&mode=' + (await osMode()).dev + '&q=' + encodeURIComponent(q))).json();
+    const data = (await animaDevP) ? await (await fetch('/api/anima?lang=' + (en ? 'en' : 'it') + '&mode=' + (await osMode()).dev + '&q=' + encodeURIComponent(q))).json() : { reply: '' };
     loading.remove();
     const reply = (data.reply || '').trim();
     if (!reply || /non lo so|non ho capito|don'?t know|not sure|#n\/d/i.test(reply)) {            // graceful: say it a tono + show what I can do

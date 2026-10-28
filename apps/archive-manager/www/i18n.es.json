@@ -31,7 +31,7 @@
   "saved_x": "Guardado {name}",
   "compress_error": "Error de compresión",
   "no_files": "Ningún archivo que comprimir",
-  "err_read_file": "No se pudo leer el archivo comprimido del Cardputer (error {status}).",
+  "err_read_file": "No se pudo leer el archivo comprimido del dispositivo (error {status}).",
   "err_write_file": "No se pudo escribir {name} (error {status}).",
   "err_mkdir": "No se pudo crear la carpeta {name} (error {status}).",
   "err_list_dir": "No se pudo listar la carpeta {name} (error {status}).",

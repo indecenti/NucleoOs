@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // stelle/planet.js — the SURFACE of a Costellazioni world (web-only), as pure deterministic math.
 //
 // One description per world, derived from the system blueprint (stelle/world.js) on dedicated hash domains

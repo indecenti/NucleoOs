@@ -10,7 +10,7 @@
   "btn_health": "Estado",
   "follow": "Seguir",
   "history_hint": "Lee el diario de eventos desde la tarjeta SD (bajo demanda — de lo contrario mantiene el dispositivo en reposo)",
-  "diag_hint": "Genera un resumen compacto de estado (Cardputer + ANIMA) para pegar en una IA",
+  "diag_hint": "Genera un resumen compacto de estado (dispositivo + ANIMA) para pegar en una IA",
   "health_hint": "Sonda adaptativa: sintetiza eventos de estado en vivo (solo con la ventana visible, nunca durante trabajo pesado)",
   "diag_title": "Diagnóstico de estado",
   "diag_sub": "Copia este bloque y pégalo en una IA para el diagnóstico.",

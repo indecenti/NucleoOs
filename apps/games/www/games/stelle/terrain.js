@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // stelle/terrain.js — the ground of the world you are descending onto, drawn in the near pass with the ships.
 //
 //   · a cube-sphere quadtree of chunks (stelle/chunk.js, built by stelle/terrain-worker.js off the main thread):

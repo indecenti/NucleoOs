@@ -1,7 +1,8 @@
 {
   "id": "games",
   "name": "Giochi",
-  "version": "0.1.0",
+  "version": "0.1.1",
+  "version_code": 1,
   "description": "Centro giochi multiplayer: lobby di rete, chat e partite fino a 4 giocatori peer-to-peer (WebRTC). Il dispositivo fa solo da incontro; il gioco viaggia tra i browser.",
   "category": "games",
   "runtime": "web",

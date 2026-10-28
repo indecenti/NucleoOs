@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // stelle/props.js — procedural geometry for the surfaces: the flora kit of every biome and the sites you discover.
 //
 // Flora meshes carry  color (vertex albedo), aMat = (tint weight, glow, sway): tint 1 takes the planet's per-kind

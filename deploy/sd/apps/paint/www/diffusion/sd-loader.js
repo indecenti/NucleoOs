@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // sd-loader.js — reassembles chunked ONNX model files served from the Cardputer SD.
 // Isolated from ANIMA; Paint owns this (no /apps/anima/ dependency).
 //

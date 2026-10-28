@@ -32,5 +32,7 @@
   "hidden_ssid": "(oculta)",
   "src_failed": "escaneo fallido — dispositivo inaccesible u ocupado",
   "src_need_pair": "no emparejado — empareja este navegador para escanear",
-  "src_live": "escaneo en vivo"
+  "src_live": "escaneo en vivo",
+  "forget_failed": "No se pudo olvidar la red",
+  "wifi_unavailable": "La gestión del Wi-Fi no está disponible en este dispositivo."
 }

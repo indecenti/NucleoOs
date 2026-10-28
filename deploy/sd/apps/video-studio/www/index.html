@@ -1,4 +1,5 @@
 <!doctype html>
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -41,7 +42,7 @@
 <body>
 <div class="wrap">
   <header><div class="logo">▶</div><h1 data-i18n="app_title">NucleoOS Video Studio</h1></header>
-  <p class="sub" data-i18n-html="sub">Converte i video in <b>.nfv</b> <b>nel browser</b> (nessun programma sul PC) e li scrive direttamente sulla SD del Cardputer.</p>
+  <p class="sub" data-i18n-html="sub">Converte i video in <b>.nfv</b> (v4: immagine e audio in un solo file) <b>nel browser</b>, senza programmi sul PC, e li scrive direttamente sulla SD del dispositivo.</p>
 
   <div class="drop" id="drop" data-i18n-html="drop">
     <b>Trascina qui i video</b> — oppure clicca per sceglierli<br>
@@ -50,20 +51,23 @@
 
   <div class="opts">
     <label><span data-i18n="lbl_profile">Profilo</span> <select id="profile">
-      <option value="compat" data-i18n="prof_compat">Compat (12fps, più piccolo)</option>
-      <option value="balanced" selected data-i18n="prof_balanced">Balanced (20fps)</option>
-      <option value="quality" data-i18n="prof_quality">Quality (24fps)</option>
+      <option value="compat" data-i18n="prof_compat">Compatto (12 fps, file piccolo)</option>
+      <option value="balanced" selected data-i18n="prof_balanced">Bilanciato (15 fps)</option>
+      <option value="quality" data-i18n="prof_quality">Qualità (15 fps, scene calme)</option>
     </select></label>
-    <label><span data-i18n="lbl_fps">FPS</span> <select id="fps"><option value="" data-i18n="auto">auto</option><option>12</option><option>15</option><option>18</option><option>20</option><option>24</option></select></label>
+    <label><span data-i18n="lbl_target">Schermo</span> <select id="target">
+      <option value="universal" selected data-i18n="target_universal">Universale 320×240 (esterno + Cardputer)</option>
+      <option value="cardputer" data-i18n="target_cardputer">Solo Cardputer 240×135</option>
+    </select></label>
+    <label><span data-i18n="lbl_fps">FPS</span> <select id="fps"><option value="" data-i18n="auto">auto</option><option>10</option><option>12</option><option>15</option></select></label>
     <label><span data-i18n="lbl_fit">Adatta</span> <select id="fit"><option value="crop" selected data-i18n="fit_crop">Crop (riempi)</option><option value="pad" data-i18n="fit_pad">Pad (bande nere)</option></select></label>
   </div>
 
   <div class="jobs" id="jobs"><div class="empty" data-i18n="empty_list">Nessuna conversione.</div></div>
 
   <div class="turbo" data-i18n-html="turbo">
-    <b>Film grande o tanti video?</b> Per la conversione nativa con GPU (più veloce, regge i file enormi),
-    avvia il companion sul PC: <code>node tools/nfv/studio.mjs</code> e aprilo a <code>http://&lt;IP-del-PC&gt;:5577</code>.
-    Qui nel browser è sempre disponibile, senza installare nulla.
+    <b>Un film intero?</b> Sul PC è molto più veloce: <code>python tools/nfv/nfv4.py film.mkv</code>, poi
+    <code>node tools/nfv/push-resume.mjs</code> per copiarlo sulla SD. Stesso formato (.nfv v4), audio normalizzato uguale.
   </div>
 </div>
 
@@ -80,7 +84,7 @@ const queue = [];
 let running = false;
 
 function opts() {
-  return { profile: $('#profile').value, fps: $('#fps').value, fit: $('#fit').value };
+  return { profile: $('#profile').value, target: $('#target').value, fps: $('#fps').value, fit: $('#fit').value };
 }
 
 // Refuse what cannot be a video BEFORE queueing: the old drop handler took any file (a .txt, a photo, an

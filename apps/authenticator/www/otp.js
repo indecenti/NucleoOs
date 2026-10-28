@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // otp.js — RFC 4226 (HOTP) + RFC 6238 (TOTP) in PURE JavaScript, no Web Crypto.
 //
 // Why pure JS and not crypto.subtle: the Cardputer serves the whole OS over a plain http:// LAN IP,

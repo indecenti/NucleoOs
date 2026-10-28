@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // loop.js — the Antigravity-style agentic loop, as an explicit state machine with every dependency
 // INJECTED (engine, fs, sandbox, deviceVerify, approve) so it is fully deterministic in CI.
 // Security invariants enforced HERE (must-fix #4), not by trust in the model:

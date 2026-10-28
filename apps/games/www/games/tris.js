@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // tris.js — reference game proving the NucleoOS game contract end-to-end.
 // Turn-based, 1-2 players, AI-capable. Adding pong/chess/strategy later follows this exact shape.
 import { defineGame } from '/apps/games/nucleo-game.js';

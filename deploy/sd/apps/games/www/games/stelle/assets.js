@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // Costellazioni asset store: every image and track is downloaded once and kept in IndexedDB.
 // The device serves the web OS over plain http://, where service workers and the Cache API are not
 // available; IndexedDB is. File names carry a content hash (tools/costellazioni-assets/build-assets.py),

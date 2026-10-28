@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // constellations-sfx.js — sound for Costellazioni. Effects are 100% Web Audio synthesis (no files):
 // short bursts of oscillators / cached noise through a shared limiter bus with a cheap feedback-delay
 // "reverb", stereo-panned and distance-scaled for the 6DOF flight, plus a continuous engine voice that

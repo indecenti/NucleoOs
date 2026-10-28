@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // app-review.js — PURE core for the ADVISORY cross-provider app review.
 //
 // After the lint gate passes, a provider DIFFERENT from the one that built the app re-reads it and flags
@@ -23,7 +24,7 @@ export function buildReviewPrompt(manifest, html) {
   if (truncated) body = body.slice(0, MAX_HTML);
 
   const system = [
-    'Sei un REVISORE di codice per una piccola app web di NucleoOS (gira su un M5Stack Cardputer, poca RAM).',
+    'Sei un REVISORE di codice per una piccola app web di NucleoOS (gira su un dispositivo, poca RAM).',
     'Ti viene data una app GIA\' in staging (manifest + index.html). Cerca SOLO bug BLOCCANTI e REALI:',
     '- riferimenti rotti (getElementById/querySelector di un id/classe che NON esiste nel markup);',
     '- elementi DOM che lo script usa ma che non sono nel documento;',

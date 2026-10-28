@@ -40,6 +40,8 @@
   "hint_local": "Ctrl+C/X/V · Ctrl+A · F2 · Suppr · Ctrl+Z",
   "hint_rw": "Lecture/écriture · Ctrl+C/X/V · F2 · Suppr · “Vers SD” copie sur la carte",
   "hint_ro": "Lecture seule · sélectionnez des fichiers · “Vers SD” les copie sur la carte",
+  "hint_touch": "Touchez pour sélectionner · appui long pour le menu",
+  "sel_clear": "Effacer la sélection",
 
   "ctx_open": "Ouvrir",
   "ctx_run": "Exécuter",

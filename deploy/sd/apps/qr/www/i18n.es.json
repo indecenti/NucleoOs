@@ -10,7 +10,7 @@
   "saved_title": "Guardados en el dispositivo",
   "saved_empty": "Ningún QR guardado.",
   "save_to_device": "★ Guardar en el dispositivo",
-  "save_hint": "«Guardar en el dispositivo» escribe el QR en <b>/data/QR/qrcodes.json</b>: la app nativa <b>Código QR</b> (fuente «Guardados») lo muestra grande en el Cardputer.",
+  "save_hint": "«Guardar en el dispositivo» escribe el QR en <b>/data/QR/qrcodes.json</b>: la app nativa <b>Código QR</b> (fuente «Guardados») lo muestra grande en el dispositivo.",
 
   "ty_link": "Enlace",
   "ty_text": "Texto",
@@ -48,7 +48,7 @@
   "save_failed": "Guardado fallido (¿dispositivo sin conexión?)",
   "saved_to_device": "Guardado en el dispositivo",
   "load": "Cargar",
-  "read_failed": "No se pudieron leer los QR guardados del Cardputer: no guardo nada para no sobrescribirlos. Inténtalo de nuevo en breve.",
-  "read_corrupt": "El archivo de QR del Cardputer no se puede leer: no lo modifico para no perderlo.",
-  "not_paired": "Este navegador no está vinculado al Cardputer: vincúlalo para guardar los QR."
+  "read_failed": "No se pudieron leer los QR guardados del dispositivo: no guardo nada para no sobrescribirlos. Inténtalo de nuevo en breve.",
+  "read_corrupt": "El archivo de QR del dispositivo no se puede leer: no lo modifico para no perderlo.",
+  "not_paired": "Este navegador no está vinculado al dispositivo: vincúlalo para guardar los QR."
 }

@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // engine-policy.js — the INTELLIGENT FALLBACK for picking how to answer a code request, degrading
 // gracefully by client capability so the user is NEVER left with nothing. Offline-first and
 // privacy-first: prefer local generation; bottom out at the device's own grounded recipes (always

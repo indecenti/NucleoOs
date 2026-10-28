@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // sd-model-loader.js — reassemble a large model component cached on the Cardputer SD from its 7 MB parts
 // (basename.000, .001, …) back into a single ArrayBuffer the inference runtime can consume. This is the
 // generalised form of voice.js:assembleParts() (the Vosk rig): the device httpd resets on sustained

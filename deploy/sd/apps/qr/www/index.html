@@ -1,4 +1,5 @@
 <!doctype html>
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -98,7 +99,7 @@
         <button class="btn" id="svg">SVG</button>
       </div>
       <div class="hint" data-i18n-html="save_hint">«Salva sul dispositivo» scrive il QR in <b>/data/QR/qrcodes.json</b>:
-        l'app nativa <b>Codice QR</b> (sorgente «Salvati») lo mostra grande sul Cardputer.</div>
+        l'app nativa <b>Codice QR</b> (sorgente «Salvati») lo mostra grande sul dispositivo.</div>
     </div>
   </main>
   <div class="toast" id="toast"></div>
@@ -149,12 +150,12 @@
                 build: function () { return location.origin || 'http://192.168.4.1'; }, label: function () { return TR('ty_pair') + ' ' + location.host; } }
     };
     var ORDER = ['link', 'text', 'wifi', 'email', 'tel', 'geo', 'vcard', 'pair'];
-    var cur = 'link', form = {}, lastQR = null, lastData = '', pairPin = '';
+    var cur = 'link', form = {}, lastQR = null, lastData = '';
 
     function initForm() {
       var t = TYPES[cur]; form = {};
       var html = '';
-      if (t.note) html += '<div class="hint">' + TR('pair_note', { host: location.host }) + (pairPin ? TR('pair_pin', { pin: pairPin }) : '') + '</div>';
+      if (t.note) html += '<div class="hint">' + TR('pair_note', { host: location.host }) + '</div>';
       t.fields.forEach(function (fl) {
         form[fl.k] = fl.val != null ? fl.val : '';
         var ph = fl.phKey ? TR(fl.phKey) : (fl.ph || '');
@@ -274,11 +275,11 @@
       $('#types').querySelectorAll('[data-t]').forEach(function (b) { b.onclick = function () { cur = b.dataset.t; setChips(); initForm(); }; });
     }
 
-    // ---- live device detection (pairing PIN if exposed) ----
+    // ---- live device detection (just liveness; /api/status never carries a pairing PIN) ----
     async function probe() {
       try {
         var r = await fetch('/api/status', { cache: 'no-store' });
-        if (r.ok) { var j = await r.json(); pairPin = j.pin || j.pairPin || ''; $('#liveDot').classList.add('live'); $('#liveTxt').textContent = TR('device'); }
+        if (r.ok) { $('#liveDot').classList.add('live'); $('#liveTxt').textContent = TR('device'); }
       } catch (e) {}
     }
 

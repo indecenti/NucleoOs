@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // NucleoOS "Agenti" — UI controller. Reads the Anthropic key from the device vault, drives the
 // online multi-agent runtime, renders the conversation + a live activity log, and gates destructive
 // tool calls behind explicit approval. Online-only: if there's no key or no network it does NOT fall
@@ -76,7 +77,7 @@ function addMsg(role, text, asMd) {
 function setStatus(s, kind) { $('status').textContent = s; const dot = $('dot'); dot.className = 'dot' + (kind ? ' ' + kind : ''); }
 
 // ---- activity log: one card per tool call ----
-const TOOL_ICON = { update_plan: '🗒️', list_files: '📁', read_file: '📄', search_files: '🔎', make_dir: '📁', write_file: '✍️', edit_file: '✏️', append_file: '➕', delete_file: '🗑️', move_file: '🔀', run_js: '⚙️', open_in_os: '🪟', device_status: '📊', list_apps: '🧩', weather: '🌤️', web_search: '🌐', scaffold_app: '🧱', publish_app: '🚀', manage_app: '🎛️', generate_image: '🎨', transcribe: '🎙️' };
+const TOOL_ICON = { update_plan: '🗒️', list_files: '📁', read_file: '📄', search_files: '🔎', make_dir: '📁', write_file: '✍️', edit_file: '✏️', append_file: '➕', delete_file: '🗑️', move_file: '🔀', run_js: '⚙️', open_in_os: '🪟', device_status: '📊', game_library: '🎮', launch_game: '🕹️', list_apps: '🧩', weather: '🌤️', web_search: '🌐', scaffold_app: '🧱', publish_app: '🚀', manage_app: '🎛️', generate_image: '🎨', transcribe: '🎙️' };
 function toolStart(ev) {
   const d = document.createElement('div'); d.className = 'tool run';
   const p = ev.input.path || ev.input.from || ev.input.app || ev.input.id || ev.input.name || '';

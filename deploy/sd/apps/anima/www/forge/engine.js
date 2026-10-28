@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // engine.js — the LLM engine boundary. Every M4 module takes `engine` by INJECTION so the whole
 // agent loop runs deterministically in CI behind a MockEngine (no GPU). The real engine wraps
 // WebLLM; the mock replays a scripted queue. A hard gate must assert that only a MockEngine ever

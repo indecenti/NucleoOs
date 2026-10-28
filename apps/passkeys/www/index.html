@@ -1,4 +1,5 @@
 <!doctype html>
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
@@ -74,7 +75,7 @@
       </div>
     </div>
     <div class="msg" id="msg"></div>
-    <div class="hint" data-i18n="hint">The PIN is stored only on the device and never crosses USB. Passkey private keys never leave the Cardputer.</div>
+    <div class="hint" data-i18n="hint">The PIN is stored only on the device and never crosses USB. Passkey private keys never leave the device.</div>
   </div>
 </div>
 
@@ -83,6 +84,7 @@
 // via /nucleo-i18n.js — data-i18n handles the static labels (live language switch included), t()
 // covers the dynamic strings below.
 import I18N from '/nucleo-i18n.js';
+import Caps from '/nucleo-caps.js';   // what this device can do (device.fido)
 const t = await I18N.init('passkeys');
 
 const $ = id => document.getElementById(id);
@@ -159,8 +161,16 @@ $('b-reset').onclick = async () => {
   refresh();
 };
 
-I18N.onChange(() => refresh());   // dynamic strings repaint on a live language switch (data-i18n is engine-handled)
-refresh();
+// The security key exists only where the capability list has device.fido: elsewhere say so and ask nothing.
+if (!(await Caps.has('device.fido'))) {
+  for (const c of document.querySelectorAll('.wrap .card')) c.style.display = 'none';
+  const n = document.createElement('div');
+  n.className = 'card empty'; n.setAttribute('data-i18n', 'fido_unavailable'); n.textContent = t('fido_unavailable');
+  document.querySelector('.wrap').appendChild(n);
+} else {
+  I18N.onChange(() => refresh());   // dynamic strings repaint on a live language switch (data-i18n is engine-handled)
+  refresh();
+}
 </script>
 </body>
 </html>

@@ -66,6 +66,7 @@
   "verify": "Verificar",
   "teach1": "Enseñar",
   "profSaved": "Perfil guardado y enseñado.",
+  "profNotTaught": "Perfil guardado en el dispositivo, pero ANIMA no lo aprendió.",
   "asking": "Preguntando a ANIMA…",
   "noded": "Añade más relaciones (p. ej. dos progenitores, o dos lugares vinculados) y aquí aparecerán las deducciones.",
   "chip.new": "por enseñar",
@@ -73,6 +74,7 @@
   "chip.verified": "verificado",
   "chip.volatile": "temporal",
   "chip.fail": "error",
+  "chip.abstain": "en espera",
   "tagRel": "relación",
   "tagDed": "deducido",
   "because": "porque",
@@ -80,7 +82,7 @@
   "reteachDone": "Reenseñados {o}/{n}.",
   "verifyDone": "Verificados {o}/{n}.",
   "dedDone": "Enseñadas {o}/{n} deducciones.",
-  "readFailed": "No se pudieron leer tus datos del Cardputer: la edición está en pausa para no sobrescribirlos. Inténtalo de nuevo en breve.",
-  "readCorrupt": "El archivo de datos del Cardputer no se puede leer: no lo modifico para no perderlo.",
-  "notPaired": "Este navegador no está vinculado al Cardputer: vincúlalo para guardar tus datos."
+  "readFailed": "No se pudieron leer tus datos del dispositivo: la edición está en pausa para no sobrescribirlos. Inténtalo de nuevo en breve.",
+  "readCorrupt": "El archivo de datos del dispositivo no se puede leer: no lo modifico para no perderlo.",
+  "notPaired": "Este navegador no está vinculado al dispositivo: vincúlalo para guardar tus datos."
 }

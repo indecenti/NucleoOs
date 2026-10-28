@@ -1,0 +1,17 @@
+{
+  "_lang": "it",
+  "title": "Segnapunti",
+  "undo": "Annulla",
+  "add": "+ Giocatore",
+  "target": "Punti per vincere",
+  "sort": "Ordina per punti",
+  "reset": "Nuova partita",
+  "foot": "Salvato su questo dispositivo. Funziona anche senza rete.",
+  "player": "Giocatore",
+  "name": "Nome",
+  "remove": "Rimuovi",
+  "winner": "Vince!",
+  "empty": "Aggiungi i giocatori con + Giocatore.",
+  "confirm.remove": "Rimuovere {name}?",
+  "confirm.reset": "Azzerare tutti i punteggi?"
+}

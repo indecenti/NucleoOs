@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // engine-picker.js — the F4 surface: ONE place where the user sees every substrate ANIMA Code can
 // run on, installs a local model, and picks. The design constraints, in order:
 //

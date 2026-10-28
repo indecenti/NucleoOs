@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // sheet-router.js — the offline-FIRST substrate router for "one ANIMA, four substrates" inside the
 // spreadsheet. It answers a single question per turn: given the dial, the device/browser
 // capabilities, and whether the deterministic parser already understood the request, WHICH substrate

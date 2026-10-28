@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // npx.js — NucleoOS .npx sidecar loader + feature derivation (browser/Node).
 //
 // Reads the binary .npx (same format the firmware + tools/npx_gen produce) and

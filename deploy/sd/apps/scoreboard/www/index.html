@@ -1,0 +1,175 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
+<html>
+<head>
+<meta charset="utf-8">
+<script>/* NucleoOS resource guard: a lost same-origin script/stylesheet makes the shell reload this window once (wm.js retryFrame) */addEventListener('error',function(e){var t=e.target,u;if(!t||t===window||parent===window||(t.tagName!=='SCRIPT'&&t.tagName!=='LINK'))return;try{u=new URL(t.src||t.href,location.href);if(u.origin===location.origin)parent.postMessage({type:'app-resource-failed',src:u.pathname},location.origin)}catch(_){}},true)</script>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title data-i18n="title">Scoreboard</title>
+<style>
+  :root { color-scheme: dark; --bg: #0e1830; --card: #16223f; --line: #243352; --fg: #e8eefc; --mut: #8fa0c8;
+          --acc: #4fb3ff; --win: #ffd166; --neg: #ff6b5e; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 14px; background: var(--bg); color: var(--fg);
+         font: 16px/1.4 system-ui, -apple-system, "Segoe UI", sans-serif; max-width: 720px; margin-inline: auto; }
+  header { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+  h1 { margin: 0; font-size: 22px; flex: 1; }
+  button { font: inherit; background: #23345c; border: 1px solid #33477a; color: var(--fg); border-radius: 10px;
+           padding: 8px 12px; cursor: pointer; touch-action: manipulation; }
+  button:active { transform: translateY(1px); }
+  button:disabled { opacity: .4; cursor: default; }
+  button.primary { background: var(--acc); border-color: var(--acc); color: #06121f; font-weight: 700; }
+  .bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+  .bar label { color: var(--mut); font-size: 14px; display: flex; align-items: center; gap: 6px; }
+  input { font: inherit; background: var(--bg); color: var(--fg); border: 1px solid #2c3d63; border-radius: 9px; padding: 7px 9px; }
+  input:focus { outline: none; border-color: var(--acc); }
+  input.target { width: 90px; }
+  .players { display: grid; gap: 10px; }
+  .p { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 12px; display: grid;
+       grid-template-columns: 1fr auto; gap: 8px 12px; align-items: center; transition: border-color .2s; }
+  .p.lead { border-color: var(--acc); }
+  .p.won { border-color: var(--win); box-shadow: 0 0 0 2px #ffd16655 inset; }
+  .p input.name { width: 100%; background: transparent; border-color: transparent; font-size: 18px; font-weight: 600; padding: 4px 6px; }
+  .p input.name:focus { border-color: var(--acc); background: var(--bg); }
+  .score { font-size: 44px; font-weight: 800; font-variant-numeric: tabular-nums; text-align: right; min-width: 3ch; line-height: 1; }
+  .score.neg { color: var(--neg); }
+  .btns { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+  .btns button { padding: 10px 0; font-weight: 700; }
+  .btns .m { color: #ffb3ab; }
+  .badge { font-size: 13px; color: var(--win); font-weight: 700; margin-left: 6px; }
+  .rank { color: var(--mut); font-size: 13px; padding-left: 6px; }
+  .empty { color: var(--mut); text-align: center; padding: 30px 10px; }
+  .foot { color: var(--mut); font-size: 13px; margin-top: 14px; text-align: center; }
+  .x { background: transparent; border: none; color: var(--mut); padding: 4px 8px; font-size: 18px; }
+</style>
+</head>
+<body>
+  <header>
+    <h1 data-i18n="title">Scoreboard</h1>
+    <button id="undo" data-i18n="undo" title="Ctrl+Z">Undo</button>
+    <button id="add" class="primary" data-i18n="add">+ Player</button>
+  </header>
+  <div class="bar">
+    <label><span data-i18n="target">Winning score</span> <input id="target" class="target" type="number" inputmode="numeric" min="0" placeholder="-"></label>
+    <label><input id="sort" type="checkbox"> <span data-i18n="sort">Sort by score</span></label>
+    <button id="reset" data-i18n="reset">New game</button>
+  </div>
+  <div class="players" id="players"></div>
+  <div class="foot" data-i18n="foot">Saved on this device. Works without a connection.</div>
+
+  <script src="/nucleo-app.js"></script>
+  <script type="module">
+    // nucleo-app.js, not /nucleo-i18n.js: this app runs without an origin (web apps channel), where module
+    // imports from the device and browser storage do not exist. The runtime reaches both through the shell.
+    await NucleoApp.ready;                            // strings loaded, every [data-i18n] in the page painted
+    const t = NucleoApp.t;
+    const $ = (id) => document.getElementById(id);
+
+    // ── state: players + an undo history, kept on the device (the app's own kv, 64 KB) ──
+    const KEY = 'scoreboard.v1';
+    let st = { players: [], target: null, sort: false };
+    try { st = { ...st, ...((await NucleoApp.kv.get(KEY, {})) || {}) }; } catch {}
+    if (!Array.isArray(st.players)) st.players = [];
+    let history = [];
+    const save = () => { NucleoApp.kv.set(KEY, st).catch(() => {}); };
+    const snapshot = () => { history.push(JSON.stringify(st.players)); if (history.length > 100) history.shift(); $('undo').disabled = false; };
+    const uid = () => Math.random().toString(36).slice(2, 9);
+
+    function addPlayer() {
+      snapshot();
+      st.players.push({ id: uid(), name: t('player') + ' ' + (st.players.length + 1), score: 0 });
+      save(); render(true);
+    }
+    function change(id, delta) {
+      const p = st.players.find((x) => x.id === id);
+      if (!p) return;
+      snapshot();
+      p.score += delta;
+      save(); render();
+      if (navigator.vibrate) navigator.vibrate(10);
+    }
+    function remove(id) {
+      const p = st.players.find((x) => x.id === id);
+      if (!p || !confirm(t('confirm.remove').replace('{name}', p.name))) return;
+      snapshot();
+      st.players = st.players.filter((x) => x.id !== id);
+      save(); render();
+    }
+    function newGame() {
+      if (!st.players.length || !confirm(t('confirm.reset'))) return;
+      snapshot();
+      st.players.forEach((p) => { p.score = 0; });
+      save(); render();
+    }
+    function undo() {
+      const prev = history.pop();
+      if (prev) { st.players = JSON.parse(prev); save(); render(); }
+      $('undo').disabled = !history.length;
+    }
+
+    // ── view ──
+    function render(focusLast = false) {
+      const box = $('players');
+      box.textContent = '';
+      if (!st.players.length) {
+        const e = document.createElement('div');
+        e.className = 'empty'; e.textContent = t('empty');
+        box.append(e);
+        return;
+      }
+      const best = Math.max(...st.players.map((p) => p.score));
+      const leaders = st.players.filter((p) => p.score === best).length;
+      const ranked = [...st.players].sort((a, b) => b.score - a.score);
+      const list = st.sort ? ranked : st.players;
+      for (const p of list) {
+        const won = st.target != null && st.target > 0 && p.score >= st.target;
+        const card = document.createElement('div');
+        card.className = 'p' + (won ? ' won' : p.score === best && leaders === 1 && best !== 0 ? ' lead' : '');
+        const name = document.createElement('input');
+        name.className = 'name'; name.value = p.name; name.maxLength = 24; name.setAttribute('aria-label', t('name'));
+        name.addEventListener('change', () => { p.name = name.value.trim() || p.name; save(); });
+        const left = document.createElement('div');
+        left.append(name);
+        const rank = document.createElement('span');
+        rank.className = 'rank';
+        rank.textContent = '#' + (ranked.indexOf(p) + 1);
+        left.append(rank);
+        if (won) { const b = document.createElement('span'); b.className = 'badge'; b.textContent = t('winner'); left.append(b); }
+        const score = document.createElement('div');
+        score.className = 'score' + (p.score < 0 ? ' neg' : '');
+        score.textContent = p.score;
+        const btns = document.createElement('div');
+        btns.className = 'btns';
+        for (const d of [-5, -1, 1, 5, 10]) {
+          const b = document.createElement('button');
+          b.textContent = (d > 0 ? '+' : '') + d;
+          if (d < 0) b.className = 'm';
+          b.addEventListener('click', () => change(p.id, d));
+          btns.append(b);
+        }
+        const x = document.createElement('button');
+        x.className = 'x'; x.textContent = '✕'; x.title = t('remove'); x.setAttribute('aria-label', t('remove'));
+        x.addEventListener('click', () => remove(p.id));
+        btns.append(x);
+        card.append(left, score, btns);
+        box.append(card);
+        if (focusLast && p === st.players[st.players.length - 1]) { name.focus(); name.select(); }
+      }
+    }
+
+    $('add').addEventListener('click', addPlayer);
+    $('undo').addEventListener('click', undo);
+    $('reset').addEventListener('click', newGame);
+    $('sort').checked = !!st.sort;
+    $('sort').addEventListener('change', () => { st.sort = $('sort').checked; save(); render(); });
+    $('target').value = st.target ?? '';
+    $('target').addEventListener('input', () => { const v = parseInt($('target').value, 10); st.target = Number.isFinite(v) ? v : null; save(); render(); });
+    document.addEventListener('keydown', (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'z') { e.preventDefault(); undo(); }
+    });
+    $('undo').disabled = true;
+    NucleoApp.onLang(() => render());               // the runtime has repainted [data-i18n] already
+    render();
+  </script>
+</body>
+</html>

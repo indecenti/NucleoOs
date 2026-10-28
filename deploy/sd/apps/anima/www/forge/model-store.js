@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // model-store.js — EXPLICIT, user-initiated model downloads for ANIMA Forge. Encodes the product
 // rules so they're enforced (and host-tested), not just intended:
 //   • NEVER auto-download — nothing fetches on its own; download(id) runs ONLY from a Settings action.

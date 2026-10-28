@@ -1,3 +1,4 @@
+/* SPDX-License-Identifier: AGPL-3.0-or-later */
 // constellations-3d.js — the renderer of Costellazioni (web). It owns WebGL and draws, from one
 // system blueprint (stelle/world.js) and one flight (stelle/sim.js):
 //   · the hub backdrop — a slow cinematic orbit of the system's station, star, planets and nebula,
