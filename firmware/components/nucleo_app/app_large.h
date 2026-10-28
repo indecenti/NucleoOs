@@ -56,6 +56,34 @@ int  text_list(int x, int y, int w, int h, int n, int sel, int *scroll, app_ui_t
 // A tapped list row (from list()): 1 = it is now the selection, 2 = it already was (open it), 0 = not a row key.
 int  row_tap(int key, char ch, int scroll, int n, int *sel);
 
+// A search line in [x, x+w) x [y, y+h) (36 tall on the panel, ~22 on the Cardputer): a rounded card with a
+// magnifier, the typed text with a cursor (or `hint` when nothing is typed) and `count` at its right in ccol.
+// Returns y + h.
+int  search(int x, int y, int w, int h, const char *text, const char *hint, const char *count, unsigned short ccol, unsigned short acc);
+
+// A HyperSpin-style wheel in [x, x+w) x [y, y+h): `slots` titles (odd), the selection in the middle on an acc pill,
+// its neighbours fading and stepping in with their distance; past the last title the first comes again when there
+// are more titles than slots. Slot k registers a row target NUCLEO_TOUCH_ROW + k (tap = bring it to the middle,
+// tap the middle one = open: the app's job), and the band is a scroll area (a drag turns it: NK_UP / NK_DOWN). A
+// thin rail at the right edge says where the selection is in a long list. Fonts: Font2, the middle FreeSansBold9pt.
+struct Wheel {
+    int slots;                          // visible titles (odd)
+    const unsigned char *heights;       // each slot's height (slots entries)
+    int n, sel;                         // titles, selection
+    const char *(*label)(int i, void *ud);   // title i
+    bool (*mark)(int i, void *ud);      // a dot before title i (last played, has a save); null = none
+    void *ud;
+    unsigned short acc, mark_col;
+};
+// The title in wheel slot k (-1 = none).
+inline int wheel_at(int sel, int n, int slots, int k)
+{
+    const int i = sel + k - slots / 2;
+    if (n > slots) return ((i % n) + n) % n;
+    return i >= 0 && i < n ? i : -1;
+}
+void wheel(int x, int y, int w, int h, const Wheel &wl);
+
 // A rounded button with a centred label; tapping it delivers (key, ch).
 void button(int x, int y, int w, int h, const char *label, unsigned short fill, unsigned short ink, int key, char ch);
 // A rounded card fill (lg::card() colour by default).

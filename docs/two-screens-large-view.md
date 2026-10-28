@@ -25,6 +25,8 @@ draws its whole UI there natively (`on_draw_large`) and the Cardputer's own 240x
 | `lg::header`, `lg::panel`, `lg::kv`, `lg::bar`, `lg::message`, `lg::font`, `lg::fit`, `lg::wrap` | Theme-coloured building blocks for tool apps; games usually draw their own palette (see `lt / ltf / lhead / lrow` in `app_constellations.cpp`). |
 | `lg::setting` / `lg::settings_list` | THE settings / options row (nav chevron, value, switch, slider, < cycle >, danger) and a scrolling list of them. Every app's options use it — never a local copy. |
 | `lg::toggle`, `lg::slider` + `lg::slider_at`, `lg::vslider` + `lg::vslider_at` | The only switch and the only adjustable level controls (map a tap with `*_at`). Read-only meters stay `lg::bar`. |
+| `lg::search` | The search line: magnifier, typed text with a cursor (or a hint), a count at the right. Any height (36 on the panel, 22 on the Cardputer). |
+| `lg::wheel` + `lg::wheel_at` | The HyperSpin title wheel: odd number of slots, the selection on an accent pill in the middle, neighbours fading; circular past the ends; row targets per slot + drag to turn + a position rail. The Games gallery and the emulators' shelf. |
 | `lg::comp_head`, `lg::comp_keys` | The Cardputer companion's head line and key hints. |
 
 **Reuse rule:** switches, sliders, settings rows, headers, tabs and lists come from the kit, so they look the

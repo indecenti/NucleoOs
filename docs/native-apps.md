@@ -56,6 +56,9 @@ The rules that keep an installed app working across OS updates:
    `lg::frame` with the touch flag, `nucleo_touch_add_pad`, `nucleo_touch_add_scroll`).
    Level 3 = level 2 + the rest of the `lg::` two-screen kit (`list`, `text_list`, `row_text`, `row_tap`, `tabs`,
    `header`, `panel`, `message`), first needed by Tank Duel.
+   Level 5 = level 4 + `nucleo_app_take_open_file` (the Games gallery opens an emulator on one cartridge) and the
+   kit's `lg::search` / `lg::wheel` (the search line and the HyperSpin title wheel, shared by the gallery and the
+   emulators' shelf). The emulators' recipes move to level 5; the other modules keep the level of their recipe.
    Level 4 = level 3 + what the two emulators need (51 names): the sprite panel behind their scaler, the PCM sink,
    the second-screen surface and exclusive-mode calls, the heap probes, a few libc/libgcc helpers and the ROM
    inflater for zipped cartridges.

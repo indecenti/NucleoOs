@@ -1,0 +1,34 @@
+# The Games gallery (gamefront.cpp, a launcher state): systems, then titles, on the HyperSpin wheel. Native games come
+# from gamefront_host.cpp's registry; cartridges from the scene's card; one native cover and one cartridge screenshot.
+@main gamefront.cpp
+@direct
+@host gamefront_host.cpp stubs/tinfl_zlib.cpp
+@lib z
+@sd data/ROMs/gb/Tetris%20(World).gb x
+@sd data/ROMs/gb/Super%20Mario%20Land%20(World).gb x
+@sd data/ROMs/gb/Deadeus.gb x
+@sd data/ROMs/gb/Tobu%20Tobu%20Girl%20Deluxe.gb x
+@sd data/ROMs/gb/Kirby's%20Dream%20Land%20(USA,%20Europe).gb x
+@sd data/ROMs/gb/Adventures%20of%20Lolo%20(Europe).gb x
+@sd data/ROMs/gb/GB%20Wordyl.gb x
+@sd data/ROMs/gb/Links%20Awakening%20(USA,%20Europe)%20(Rev%202).gb x
+@sdfile data/ROMs/gb/.snaps/Deadeus.gb.snp apps/fixtures/test.snp
+@sd data/ROMs/gbc/Pokemon%20-%20Crystal%20Version%20(USA).gbc x
+@sd data/ROMs/gg/Waternet.gg x
+@sd data/ROMs/gg/Tunnel.gg x
+@sd data/ROMs/sms/River%20Strike.sms x
+@sd data/ROMs/sms/Balloon%20Master.sms x
+@sd data/ROMs/sms/Sonic%20the%20Hedgehog%20(USA,%20Europe).zip x
+@sdfile data/GameShots/stelle.png apps/fixtures/cover.png
+systems
+systems_gg D D D
+native ENTER
+native_cover ENTER D
+native_pick ENTER row:5
+gb D ENTER
+gb_snap D ENTER c:d c:e c:a
+gb_search D ENTER c:l c:o
+gb_nomatch D ENTER c:z c:q
+sms D D D D ENTER
+back D ENTER BACK
+search c:g c:a

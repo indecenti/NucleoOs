@@ -6,6 +6,20 @@ All notable user-facing changes to NucleoOS. Format loosely follows
 
 ## [Unreleased]
 
+### Changed
+- **Games gallery, HyperSpin style.** The Games tile opens a two-level gallery: first the systems (native games,
+  then Game Boy, Game Boy Color, Game Gear and Master System, each shown when its emulator is installed and its
+  folder in `/data/ROMs` has cartridges), then their titles, sorted, on a title wheel with live search, the game's
+  picture (cover, cartridge screenshot or console photo) and its whole title. With the second screen the gallery
+  is on the panel (tap a title to bring it to the middle, tap the middle one or the picture to play, drag to turn
+  the wheel) and the Cardputer shows the selection's details (system, maker, region, cartridge; players, source and
+  blurb). Keyboard: up/down, left/right by 5, 1-7 (1-5) the wheel's slots, Enter, type to search, Esc = search,
+  then back a level, then out.
+- **Cartridges launch from the gallery.** A Game Boy / Game Gear / Master System cartridge opens straight in its
+  emulator; quitting the game comes back to the gallery on it, never to the emulator's shelf.
+- Native ABI level 5 (the emulators' modules need it); the gallery's texts are in the firmware in five languages
+  (the `gamefront` SD text pack is gone).
+
 ## [0.8.1] — 2026-10-28
 
 ### Added

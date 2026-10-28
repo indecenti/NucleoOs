@@ -8759,21 +8759,6 @@
                                       "mtime":  "639287460815928218",
                                       "hash":  "f120956283a50aa71fccc282550135bd0f820ced83f698d332d6eb248ebfbe4c"
                                   },
-    "system/i18n/games/gamefront.de":  {
-                                           "size":  "1091",
-                                           "mtime":  "639287460815928218",
-                                           "hash":  "1166d9a082cfab2f85dd0c211357809fe6f371584c4d6c5e79d36918d3dc6b47"
-                                       },
-    "system/i18n/games/gamefront.es":  {
-                                           "size":  "1074",
-                                           "mtime":  "639287460815938217",
-                                           "hash":  "19c4b96f1432ff20e7b659159c1df17e20e9d5bc925c97a23d528998c23665c1"
-                                       },
-    "system/i18n/games/gamefront.fr":  {
-                                           "size":  "1099",
-                                           "mtime":  "639287460815938217",
-                                           "hash":  "92699223bdcc5202198e201b1f54a3a530d1862084311db3f7fd54d8ef0ca5af"
-                                       },
     "system/i18n/games/giardino.de":  {
                                           "size":  "1089",
                                           "mtime":  "639287460815953344",

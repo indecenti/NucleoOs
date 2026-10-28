@@ -19,6 +19,7 @@
 #include "launcher_menu.h"
 #include "launcher_render.h"
 #include "gamefront.h"
+#include "gameshots.h"
 #include <M5GFX.h>
 #include "nucleo_kbd.h"
 #include <string.h>
@@ -1000,7 +1001,7 @@ static void close_app(void)
         // frame off the panel here into /data/Screenshots. Games are NOT captured on exit — that would
         // grab the exit/menu screen; their carousel cover is refreshed from live play in the run loop.
         if (def && def->id && def->id[0] && !(def->category && !strcmp(def->category, "Games")))
-            gamefront_save_panel_screenshot(def->id);
+            gameshots_save_panel(def->id);
         if (def && def->on_exit) def->on_exit();
         esp_restart();   // NEVER returns
     }
@@ -1140,8 +1141,8 @@ void nucleo_app_release_buffers(void) { nucleo_screen_release(); }
 // Keyboard-first carousel: the apps are a single horizontal rail, so all four arrows step the focus
 // by one — Left/Up = previous, Right/Down = next (both wrap). Enter opens; backtick (Esc) goes back /
 // clears the filter; any printable character type-to-filters (digits included — no numeric quick-select).
-// Open the GameFront overlay (HyperSpin-style game launcher) instead of descending into the plain
-// Games category carousel. It's a launcher state, so s_active stays -1 the whole time.
+// Open the Games gallery (gamefront.cpp: systems, then titles) instead of descending into the plain Games
+// category. It's a launcher state, so s_active stays -1 the whole time.
 static void open_gamefront(void)
 {
     gamefront_open();
@@ -1898,7 +1899,10 @@ void nucleo_app_run(void)
     // category, their type-to-search filter, and the focused row — instead of dumping them on Home/ANIMA.
     // Skipped in the Solo boot itself (that boot opens the target app, not the launcher). One-shot: the
     // snapshot self-consumes and the gate is a warm reset, so a cold power-on always starts clean at Home.
-    if (!s_solo_active) launcher_apply_return();
+    if (!s_solo_active) {
+        launcher_apply_return();
+        if (gamefront_take_return()) open_gamefront();   // a game from the Games gallery: back on it, in the gallery
+    }
     int64_t last_tick = 0, last_clock = 0, remote_gone_ms = 0, last_remote = 0, last_remote_input = 0;
     int64_t last_act = esp_timer_get_time() / 1000, focus_chk = 0;   // idle screen-off + web-focus recheck timers
     s_pm_act = last_act;
@@ -2256,7 +2260,7 @@ void nucleo_app_run(void)
                 // Two screens: the external panel too, as <shot>_2.bmp. It cannot be read back, so the app's next
                 // whole frame is written while it is composed (lg::capture): repaint everything now.
                 if (cap_fnp && nucleo_app_two_screens()) {
-                    char nm[32], p[96]; gamefront_shot_name(nm, sizeof nm);
+                    char nm[32], p[96]; gameshots_name(nm, sizeof nm);
                     mkdir(NUCLEO_SD_MOUNT "/data", 0775); mkdir(NUCLEO_SD_MOUNT "/data/Screenshots", 0775);
                     snprintf(p, sizeof p, NUCLEO_SD_MOUNT "/data/Screenshots/%s_2.bmp", nm);
                     lg::capture(p);
@@ -2306,7 +2310,7 @@ void nucleo_app_run(void)
                 else if (r == 1) s_dirty = true;
             } else if (s_gamefront) {
                 // GameFront owns input while up (s_active is still -1). It returns an id to launch.
-                char gid[24];
+                char gid[40];                        // a store id is up to 32 characters
                 int r = gamefront_key(nk.key, nk.ch, gid, sizeof gid);
                 // A held arrow queues keys faster than a cover decodes: apply every queued step, render once.
                 for (int q = 0; q < 8 && r == GF_REDRAW; q++) {
@@ -2318,7 +2322,12 @@ void nucleo_app_run(void)
                 if (r == GF_CLOSE)       { s_gamefront = false; d.fillScreen(BG); s_dirty = true; s_chrome_dirty = true; s_hint_dirty = true;
                                            launcher_render_companion_invalidate();   // two screens: the launcher's companion returns
                                            if (nucleo_surface_large() && launcher_render_companion_changed()) nucleo_extdisp_draw_internal(companion_cb); }
-                else if (r == GF_LAUNCH) { s_gamefront = false; s_gf_return = true; launch_by_id(gid); }
+                else if (r == GF_LAUNCH) {
+                    // A cartridge rides the "open with" handoff to its emulator (across the Solo reboot too).
+                    const char *rom = gamefront_launch_file();
+                    snprintf(s_open_file, sizeof s_open_file, "%s", rom ? rom : "");
+                    s_gamefront = false; s_gf_return = true; launch_by_id(gid);
+                }
                 else if (r == GF_REDRAW) s_dirty = true;
             } else if (s_active == -1) {
                 // The LIST always animates on a key (s_dirty inside handle_launcher) — it's buffered, one
@@ -2422,7 +2431,6 @@ void nucleo_app_run(void)
         // (launcher_render_step_scroll composites into the back-buffer = re-acquires the freed canvas).
         if (s_active == -1 && !s_gamefront && !s_control_center && !s_torch && !s_voice_dark && launcher_render_step_scroll()) s_dirty = true;
         if (s_control_center && !s_torch && !s_voice_dark && launcher_render_control_center_animating()) s_dirty = true;   // CC scroll easing
-        if (s_gamefront && !s_control_center && !s_torch && !s_voice_dark && gamefront_step()) s_dirty = true;
 
         if (nucleo_extdisp_take_repaint()) nucleo_app_force_repaint();   // the calibration screen covered the panel
 
@@ -2485,8 +2493,8 @@ void nucleo_app_run(void)
         } else if (s_control_center) {
             if (s_dirty) { s_dirty = false; launcher_render_control_center(); }
         } else if (s_gamefront) {
-            // GameFront composites its whole screen into the shared canvas and blits once, like the
-            // Control Center. Drawn only on s_dirty (a key), so image decode happens ~once per press.
+            // The Games gallery composes its whole screen with lg::frame (strips of the shared canvas), on a key
+            // only; a picture is unpacked once per selection and then streamed from the card.
             if (s_dirty) { s_dirty = false; gamefront_render(); }
         } else if (s_active == -1) {
             // Chrome is static during a scroll -> draw it directly, only when it changes. The
@@ -2550,13 +2558,13 @@ void nucleo_app_run(void)
                     // saved image, then arm a non-blocking confirm toast (no frozen preview).
                     if (s_shot_req) {                              // Fn+P -> real full-frame screenshot, always
                         s_shot_req = false;
-                        char nm[32]; gamefront_shot_name(nm, sizeof nm);
-                        s_shot_toast_ok = gamefront_save_screenshot(nm);
+                        char nm[32]; gameshots_name(nm, sizeof nm);
+                        s_shot_toast_ok = gameshots_save_canvas(nm);
                         s_shot_toast_until = now + 1200;
                     }
                     if (s_cover_req) {                             // 'C' in a game -> refresh its carousel cover
                         s_cover_req = false;
-                        s_shot_toast_ok = (def && def->id && def->id[0]) ? gamefront_save_canvas_cover(def->id) : false;
+                        s_shot_toast_ok = (def && def->id && def->id[0]) ? gameshots_canvas_cover(def->id) : false;
                         s_shot_toast_until = now + 1200;
                     }
                     // Keep each game's carousel cover fresh from LIVE gameplay — but capture ONCE per session
@@ -2567,7 +2575,7 @@ void nucleo_app_run(void)
                         static int64_t s_cover_at = 0; static bool s_cover_done = false;
                         if (!s_cover_done) {
                             if (s_cover_at == 0)          s_cover_at = now + 8000;   // arm once, let the menu pass
-                            else if (now >= s_cover_at) { s_cover_done = true; gamefront_save_canvas_cover(def->id); }
+                            else if (now >= s_cover_at) { s_cover_done = true; gameshots_canvas_cover(def->id); }
                         }
                     }
 
@@ -2624,13 +2632,13 @@ void nucleo_app_run(void)
                     // local SD write. Read it later over Wi-Fi via /api/fs once back at the launcher.
                     if (s_shot_req) {                              // Fn+P -> real full-frame screenshot from the panel
                         s_shot_req = false;
-                        char nm[32]; gamefront_shot_name(nm, sizeof nm);
-                        bool ok = gamefront_save_panel_screenshot(nm);
+                        char nm[32]; gameshots_name(nm, sizeof nm);
+                        bool ok = gameshots_save_panel(nm);
                         nucleo_notify_post("Screenshot", ok ? "Saved" : "Capture failed");
                     }
                     if (s_cover_req) {                             // Ctrl+P/'C' cover — canvas is freed here, so read the PANEL
                         s_cover_req = false;                       // (panel_cover un-swaps the readback bytes -> correct colours)
-                        bool ok = (def && def->id && def->id[0]) ? gamefront_save_panel_cover(def->id) : false;
+                        bool ok = (def && def->id && def->id[0]) ? gameshots_panel_cover(def->id) : false;
                         nucleo_notify_post("Screenshot", ok ? TR("Cover salvata", "Cover saved") : TR("Cover non disponibile", "Cover unavailable"));
                     }
                 }

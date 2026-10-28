@@ -333,9 +333,13 @@ is off. The render gate requires most lines, not all.
   block is 32 KB, and with double-speed CGB titles needing twice the CPU the DMG core already spends.
   It would need the WRAM/VRAM split into 4–8 KB banks (the SRAM banking above is the pattern) and the
   flash/cache work first. GBC cartridges are covered today by the browser Arcade.
-- **The carousel entry shows the console, never a screenshot** — `gf_never_shot()` in `gamefront.cpp`.
-  Its procedural poster is the console glyph alone: the title is printed once, under the cover, like
-  every other game (it used to be printed a second time inside the poster).
+- **The Games gallery lists the consoles, then their cartridges** (`gamefront.cpp`): Game Boy, Game Boy Color,
+  Game Gear and Master System are four systems (one per folder of `/data/ROMs`), shown when their emulator is
+  installed. A cartridge opens straight in its emulator: the gallery hands its path over with the "open with"
+  handoff (`nucleo_app_take_open_file`, carried across the Solo reboot), the emulator plays it from `shelf_poll()`
+  and quitting it — or a cartridge the core refuses — closes the app, so the full OS boots back into the gallery on
+  that cartridge (an RTC snapshot, `gamefront_take_return()`). The emulators themselves are not entries of the
+  native games; their own shelf is still reached from launcher search.
 - **Chip-8** is the obvious next core: ~5 KB, no licence question, same app scaffolding.
 
 ## 7. The Game Gear (and the Master System it contains)

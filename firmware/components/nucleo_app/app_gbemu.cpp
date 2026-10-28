@@ -361,6 +361,8 @@ struct EState {
     char     fail[48];       // why the last start failed; drawn over the shelf until the next key
     M5Canvas *mq;            // dedicated sprite for the scrolling shelf title (ANTI-FLICKER technique 3)
     int      mq_w;           // its current width, 0 = none
+    char     autoplay[PATHMAX];   // the cartridge the Games gallery opened us on ("" = none / already started):
+                                  // quitting it goes back to the gallery, not to this shelf
 };
 static EState *st = nullptr;
 static inline const char *ent_name(int i) { return st->sh->pool + st->sh->list[i].off; }
@@ -750,8 +752,21 @@ static void mq_free(void)
 // ~50 Hz. Scrolls the selected title if it overflows its row; a title that fits was already drawn
 // static by draw(), so this does nothing. Returns false: it must NEVER request a list repaint (that
 // is the flicker). It draws straight to the panel over just the one row.
+static void play(const char *name);
 static bool shelf_poll(void)
 {
+    // Opened from the Games gallery on one cartridge: start it here, once the run loop has set the surface up
+    // (on_enter is too early for the second screen). However the game ends — quit from its menu, or a cartridge
+    // the core refuses (the reason goes to the trace) — the player goes back to the gallery, never to this shelf.
+    if (st && st->autoplay[0] && !st->running) {
+        char name[PATHMAX];
+        snprintf(name, sizeof name, "%s", st->autoplay);
+        st->autoplay[0] = '\0';
+        play(name);
+        if (st && st->fail[0]) trace("  back to the gallery after: %s", st->fail);
+        nucleo_app_exit();
+        return false;
+    }
     if (!st || st->running || !st->sel_title[0] || st->fail[0]) return false;   // never draw over the failure box
     const int avail = st->sel_avail;
     int tw = (int)strlen(st->sel_title) * 12;          // size-2 glyphs are ~12 px wide
@@ -1713,14 +1728,8 @@ static char s_pic_key[PATHMAX];              // whose picture it is ("" = none t
 
 static const EmuArt *art_for(int i) { return st->sh->list[i].alt ? &SYS->art_b : &SYS->art_a; }
 
-// The title in wheel slot k (-1 = none). With more titles than slots the wheel is circular, as in HyperSpin:
-// past the last title comes the first again, so the wheel is always full.
-static int wheel_at(int k)
-{
-    const int i = st->sel + k - WHEEL_SLOTS / 2;
-    if (st->n > WHEEL_SLOTS) return ((i % st->n) + st->n) % st->n;
-    return i >= 0 && i < st->n ? i : -1;
-}
+// The title in wheel slot k (-1 = none): circular with more titles than slots, as in HyperSpin.
+static int wheel_at(int k) { return lg::wheel_at(st->sel, st->n, WHEEL_SLOTS, k); }
 
 // Raw deflate -> w x h RGB565 in a fresh block (the ~11 KB tinfl state lives only for the call). Null on failure.
 static uint16_t *inflate565(const uint8_t *zb, size_t n, int w, int h)
@@ -1779,41 +1788,25 @@ static void pic_for(int i)
     }
 }
 
-// The search line: what was typed, with a cursor, or how to start; the position at the right.
-static void gal_search(int y, int w)
+static const char *wheel_label(int i, void *)
 {
-    const unsigned short cb = lg::card(), ic = st->flen ? ACC : MUTED;
-    d.fillRect(0, y, w, 36, BG);
-    d.fillRoundRect(8, y + 4, w - 16, 28, 14, cb);
-    d.drawCircle(24, y + 16, 6, ic); d.drawCircle(24, y + 16, 5, ic);
-    d.drawLine(28, y + 20, 32, y + 24, ic); d.drawLine(29, y + 20, 33, y + 24, ic);
-    char cnt[24];
-    if (!st->n)                    snprintf(cnt, sizeof cnt, "0");
-    else if (st->total > st->n)    snprintf(cnt, sizeof cnt, "%d/%d+", st->sel + 1, st->n);
-    else                           snprintf(cnt, sizeof cnt, "%d/%d", st->sel + 1, st->n);
-    lg::font(0); d.setTextDatum(middle_right); d.setTextColor(st->total > st->n ? AMB : MUTED, cb);
-    d.drawString(cnt, w - 22, y + 18);
-    const int cw = d.textWidth(cnt);
-    d.setTextDatum(middle_left);
-    if (st->flen) {
-        const char *t = st->filter;
-        while (*t && d.textWidth(t) > w - 86 - cw) t++;
-        d.setTextColor(FG, cb); d.drawString(t, 42, y + 18);
-        d.fillRect(43 + d.textWidth(t), y + 10, 2, 17, ACC);
-    } else {
-        d.setTextColor(MUTED, cb);
-        d.drawString(TR5("Scrivi per cercare", "Type to search", "Escribe para buscar", "Tapez pour chercher", "Tippen zum Suchen"), 42, y + 18);
-    }
-    d.setTextDatum(top_left);
+    static char t[NAMEMAX];
+    pretty(ent_name(i), t, sizeof t);
+    return t;
 }
+static bool wheel_mark(int i, void *) { return st->have_resume && !strcmp(ent_name(i), st->resume); }
 
 static void gal_paint(void *)
 {
     const int W = d.width(), H = s_gal_h;
     int y = 0;
     if (H >= 240) y = lg::header(SYS->name, nullptr, ACC, NK_BACK);   // built in: the app draws its own Back
-    gal_search(y, W);
-    y += 36;
+    char cnt[24];
+    if (!st->n)                    snprintf(cnt, sizeof cnt, "0");
+    else if (st->total > st->n)    snprintf(cnt, sizeof cnt, "%d/%d+", st->sel + 1, st->n);
+    else                           snprintf(cnt, sizeof cnt, "%d/%d", st->sel + 1, st->n);
+    y = lg::search(0, y, W, 36, st->filter, TR5("Scrivi per cercare", "Type to search", "Escribe para buscar", "Tapez pour chercher", "Tippen zum Suchen"),
+                   cnt, st->total > st->n ? AMB : MUTED, ACC);
     const int top = y, bh = H - top;
     d.fillRect(0, top, W, bh, BG);
     if (st->n == 0) {
@@ -1847,39 +1840,10 @@ static void gal_paint(void *)
     pretty(ent_name(sel), title, sizeof title);
     lg::font(1); d.setTextColor(FG, BG);
     lg::wrap(title, tx + 2, ly, tw - 4, 20, H - ly >= 60 ? 3 : 2);
-    // ── right: the wheel. Slot k shows the title k - 3 away; the middle one is the selection, on its pill ──
-    const int ww = W - WHEEL_X - 6;
-    int sum = 0; for (int k = 0; k < WHEEL_SLOTS; k++) sum += WHEEL_H[k];
-    int wy = top + (bh - sum) / 2;
-    for (int k = 0; k < WHEEL_SLOTS; k++) {
-        const int i = wheel_at(k), h = WHEEL_H[k], dist = abs(k - WHEEL_SLOTS / 2);
-        if (i >= 0) {
-            char t[NAMEMAX], fitted[NAMEMAX];
-            pretty(ent_name(i), t, sizeof t);
-            const bool mid = dist == 0;
-            const int ix = WHEEL_X + 12 + dist * 5;                        // the wheel's curve: far rows step in
-            if (mid) d.fillRoundRect(WHEEL_X, wy + 1, ww, h - 2, (h - 2) / 2, ACC);
-            lg::font(mid ? 1 : 0);                                         // 16 px everywhere: readable at arm's length
-            lg::fit(fitted, sizeof fitted, t, WHEEL_X + ww - 8 - ix);
-            d.setTextDatum(middle_left);
-            d.setTextColor(mid ? INK : dist == 1 ? FG : MUTED, mid ? ACC : BG);
-            d.drawString(fitted, ix, wy + h / 2 + (mid ? 0 : 1));
-            d.setTextDatum(top_left);
-            if (st->have_resume && !strcmp(ent_name(i), st->resume))
-                d.fillCircle(ix - 6, wy + h / 2, 2, mid ? INK : GRN);
-            nucleo_touch_add(WHEEL_X, wy, ww, h, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + k));
-        }
-        wy += h;
-    }
-    // A drag on the wheel turns it, one title per 22 px of finger travel (finger up = later titles).
-    nucleo_touch_add_scroll(WHEEL_X, top, W - WHEEL_X, bh, 22, NK_UP, 0, NK_DOWN, 0);
+    // ── right: the wheel (the kit's): slot k shows the title k - 3 away, the middle one is the selection ──
+    lg::Wheel wl = { WHEEL_SLOTS, WHEEL_H, st->n, sel, wheel_label, wheel_mark, nullptr, ACC, GRN };
+    lg::wheel(WHEEL_X, top, W - WHEEL_X, bh, wl);
     nucleo_touch_add(tx, top + 2, tw, PIC_H, NK_ENTER, 0);              // the picture plays the selection too
-    if (st->n > 1) {                                                    // where am I in a long shelf: a thin rail
-        int kh = bh * WHEEL_SLOTS / st->n; if (kh < 10) kh = 10; if (kh > bh) kh = bh;
-        const int ky = top + (bh - kh) * sel / (st->n - 1);
-        d.fillRect(W - 3, top, 2, bh, LINE);
-        d.fillRect(W - 3, ky, 2, kh, ACC);
-    }
 }
 
 static void draw_large(void)
@@ -2078,6 +2042,15 @@ static void enter(void)
     if (st->have_resume) {
         for (int i = 0; i < st->n; i++)
             if (!strcmp(ent_name(i), st->resume)) { st->sel = i; break; }
+    }
+    // The Games gallery opened us on one cartridge ("open with", carried across the Solo reboot): it is played
+    // straight away by shelf_poll(), and quitting it goes back to the gallery.
+    if (const char *of = nucleo_app_take_open_file()) {
+        const char *base = strrchr(of, '/');
+        snprintf(st->autoplay, sizeof st->autoplay, "%s", base ? base + 1 : of);
+        for (int i = 0; i < st->n; i++)
+            if (!strcmp(ent_name(i), st->autoplay)) { st->sel = i; break; }
+        trace("  opened on '%s'", st->autoplay);
     }
     nucleo_app_set_back_handler(on_back);
     nucleo_app_set_poll_handler(shelf_poll);   // 50 Hz title scroll, sprite-blitted (no list repaint)
