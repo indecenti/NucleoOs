@@ -38,6 +38,13 @@ test('game_text.cpp: languages, live change, fallback, damaged packs', () => {
   const o = Buffer.from(good); o.writeUInt16LE(60000, 6 + 4); writeFileSync(join(dir, 'offsetout.es'), o);
   const n = Buffer.from(good); n[n.length - 1] = 0x41; writeFileSync(join(dir, 'nonul.es'), n);
   writeFileSync(join(dir, 'huge.es'), Buffer.concat([good, Buffer.alloc(20000)]));
+  // a game installed from the Store carries its own pack: it wins over the system copy
+  const store = { game: 'store', strings: { 'Play': { es: 'Jugar tienda', fr: 'Jouer', de: 'Spielen' } } };
+  const sys = { game: 'store', strings: { 'Play': { es: 'Jugar sistema', fr: 'Jouer', de: 'Spielen' } } };
+  mkdirSync(join(box, 'sd', 'apps', 'store'), { recursive: true });
+  writeFileSync(join(box, 'sd', 'apps', 'store', 'i18n.es'), pack(store, 'es'));
+  writeFileSync(join(dir, 'store.es'), pack(sys, 'es'));
+  writeFileSync(join(dir, 'store.fr'), pack(sys, 'fr'));
   const exe = join(box, 'gt.exe');
   execFileSync(GPP, ['-std=gnu++17', '-O1', '-Wall', '-fsanitize=bounds', '-fsanitize-undefined-trap-on-error',
     '-I', join(root, 'firmware', 'components', 'nucleo_app'), '-I', join(root, 'firmware', 'components', 'nucleo_storage', 'include'),

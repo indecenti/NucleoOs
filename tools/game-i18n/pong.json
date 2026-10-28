@@ -235,6 +235,41 @@
       "es": "senal debil...",
       "fr": "signal faible...",
       "de": "schwaches Signal..."
+    },
+    "Drag or tap the court: paddle": {
+      "es": "Arrastra o toca la pista: pala",
+      "fr": "Glisse ou touche le terrain: raquette",
+      "de": "Feld ziehen oder tippen: Schlaeger"
+    },
+    "Rematch": {
+      "es": "Revancha",
+      "fr": "Revanche",
+      "de": "Revanche"
+    },
+    "RESUME": {
+      "es": "SEGUIR",
+      "fr": "REPRENDRE",
+      "de": "WEITER"
+    },
+    "QUIT": {
+      "es": "SALIR",
+      "fr": "SORTIR",
+      "de": "ENDE"
+    },
+    "Drag or tap: paddle": {
+      "es": "Arrastra o toca: pala",
+      "fr": "Glisse ou touche: raquette",
+      "de": "Ziehen oder tippen: Schlaeger"
+    },
+    "Tap again to change": {
+      "es": "Toca otra vez para cambiar",
+      "fr": "Touche encore pour changer",
+      "de": "Nochmal tippen zum Aendern"
+    },
+    ";/. or Z/N move  Esc pause": {
+      "es": ";/. o Z/N mueve  Esc pausa",
+      "fr": ";/. ou Z/N bouge  Esc pause",
+      "de": ";/. oder Z/N gehen  Esc Pause"
     }
   }
 }

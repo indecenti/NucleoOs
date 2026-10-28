@@ -29,7 +29,7 @@
     "Host a game": { "es": "Crear partida", "fr": "Heberger", "de": "Spiel hosten" },
     "Hosting...": { "es": "Hospedando...", "fr": "Heberge...", "de": "Hoste..." },
     "JOIN: pick yours": { "es": "UNIRSE: elige", "fr": "REJOINS: choisis", "de": "BEITRITT: waehle" },
-    "Join": { "es": "Unirse", "fr": "Rejoindre", "de": "Beitreten" },
+    "Join": { "es": "Unirse", "fr": "Entrer", "de": "Rein" },
     "L / Space": { "es": "L / Espacio", "fr": "L / Espace", "de": "L / Leer" },
     "LEFT/RIGHT pick  ENTER go  Esc menu": { "es": "IZ/DE elige  INTRO ya  Esc menu", "fr": "G/D choisit  ENTREE go  Esc menu", "de": "L/R waehlt  ENTER los  Esc Menue" },
     "Level": { "es": "Nivel", "fr": "Niveau", "de": "Level" },
@@ -65,6 +65,21 @@
     "kick, knocks down": { "es": "patada, derriba", "fr": "pied, renverse", "de": "Tritt, wirft um" },
     "move": { "es": "mover", "fr": "bouger", "de": "laufen" },
     "pause": { "es": "pausa", "fr": "pause", "de": "Pause" },
-    "punch, repeat: combo": { "es": "punetazo, repite: combo", "fr": "poing, repete: combo", "de": "Schlag, mehrfach: Kombo" }
+    "punch, repeat: combo": { "es": "punetazo, repite: combo", "fr": "poing, repete: combo", "de": "Schlag, mehrfach: Kombo" },
+    "Resume": { "es": "Seguir", "fr": "Reprendre", "de": "Weiter" },
+    "Quit": { "es": "Salir", "fr": "Sortir", "de": "Ende" },
+    "Retry": { "es": "Repetir", "fr": "Rejouer", "de": "Nochmal" },
+    "Continue": { "es": "Seguir", "fr": "Continuer", "de": "Weiter" },
+    "Lives x%d": { "es": "Vidas x%d", "fr": "Vies x%d", "de": "Leben x%d" },
+    "Score %ld   Combo %d": { "es": "Puntos %ld   Combo %d", "fr": "Score %ld   Combo %d", "de": "Punkte %ld   Combo %d" },
+    "ESAD move  J punch  K kick  L jump": { "es": "ESAD mueve  J punio  K patada  L salta", "fr": "ESAD bouge  J poing  K pied  L saut", "de": "ESAD gehen  J Schlag  K Tritt  L Sprung" },
+    "ENTER / Esc": { "es": "INTRO / Esc", "fr": "ENTREE / Esc", "de": "ENTER / Esc" },
+    "Pick hero": { "es": "Elige heroe", "fr": "Choisis heros", "de": "Held waehlen" },
+    "Settings": { "es": "Ajustes", "fr": "Reglages", "de": "Optionen" },
+    "Co-op": { "es": "Coop", "fr": "Coop", "de": "Koop" },
+    "Lobby": { "es": "Sala", "fr": "Salon", "de": "Lobby" },
+    "Help": { "es": "Ayuda", "fr": "Aide", "de": "Hilfe" },
+    "other Cardputer...": { "es": "otra Cardputer...", "fr": "autre Cardputer...", "de": "anderer Cardputer..." },
+    "ENTER select   Esc back": { "es": "INTRO elige   Esc atras", "fr": "ENTREE choisit   Esc retour", "de": "ENTER waehlt   Esc zurueck" }
   }
 }

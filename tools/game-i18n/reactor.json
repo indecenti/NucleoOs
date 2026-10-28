@@ -51,6 +51,18 @@
     "equal to the grid DEMAND": { "es": "igual a la DEMANDA de la red", "fr": "egale a la DEMANDE du reseau", "de": "gleich dem BEDARF des Netzes" },
     "survive as long as you can!": { "es": "aguanta todo lo que puedas!", "fr": "tiens le plus longtemps!", "de": "halte so lange durch wie moeglich!" },
     "the GRID fails = BLACKOUT.": { "es": "la RED cae = APAGON.", "fr": "le RESEAU lache = BLACKOUT.", "de": "das NETZ faellt = BLACKOUT." },
-    "without melting the core.": { "es": "sin fundir el nucleo.", "fr": "sans fondre le coeur.", "de": "ohne den Kern zu schmelzen." }
+    "without melting the core.": { "es": "sin fundir el nucleo.", "fr": "sans fondre le coeur.", "de": "ohne den Kern zu schmelzen." },
+    "Type the name on the keyboard": { "es": "Escribe el nombre en el teclado", "fr": "Ecris le nom au clavier", "de": "Namen auf der Tastatur tippen" },
+    "Resume": { "es": "Seguir", "fr": "Reprendre", "de": "Weiter" },
+    "Menu": { "es": "Menu", "fr": "Menu", "de": "Menue" },
+    "Save score": { "es": "Guarda record", "fr": "Sauver record", "de": "Punkte sichern" },
+    "Replay": { "es": "Otra", "fr": "Rejouer", "de": "Nochmal" },
+    "Power %d  Demand %d": { "es": "Potencia %d  Demanda %d", "fr": "Puissance %d  Demande %d", "de": "Leistung %d  Bedarf %d" },
+    "Heat %d%%  Grid %d%%": { "es": "Calor %d%%  Red %d%%", "fr": "Chaleur %d%%  Res. %d%%", "de": "Hitze %d%%  Netz %d%%" },
+    "Rod %d of %d": { "es": "Barra %d de %d", "fr": "Barre %d sur %d", "de": "Stab %d von %d" },
+    "New record": { "es": "Nuevo record", "fr": "Nouveau record", "de": "Neuer Rekord" },
+    "Meltdown": { "es": "Fusion", "fr": "Fusion", "de": "Schmelze" },
+    "Type the name  ENTER ok": { "es": "Escribe nombre  INTRO ok", "fr": "Ecris le nom  ENTREE ok", "de": "Namen tippen  ENTER ok" },
+    "Tap the rows on the panel": { "es": "Toca las filas en el panel", "fr": "Touche les lignes sur l'ecran", "de": "Zeilen am Panel tippen" }
   }
 }

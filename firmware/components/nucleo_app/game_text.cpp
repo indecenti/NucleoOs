@@ -35,9 +35,15 @@ static void load(void)
     s_gen = nucleo_i18n_gen();
     const char *l = nucleo_i18n_lang();
     if (!s_game[0] || !strcmp(l, "it") || !strcmp(l, "en")) return;   // the two flash languages need no pack
+    // A game installed from the Store brings its own packs (signed with it, /sd/apps/<id>/i18n.<lang>), so a
+    // card whose system content is older still gets them; the system copy is the fallback (built-in games).
     char path[72];
-    snprintf(path, sizeof path, NUCLEO_SD_MOUNT "/system/i18n/games/%s.%.3s", s_game, l);
+    snprintf(path, sizeof path, NUCLEO_SD_MOUNT "/apps/%s/i18n.%.3s", s_game, l);
     FILE *f = fopen(path, "rb");
+    if (!f) {
+        snprintf(path, sizeof path, NUCLEO_SD_MOUNT "/system/i18n/games/%s.%.3s", s_game, l);
+        f = fopen(path, "rb");
+    }
     if (!f) return;
     long sz = (fseek(f, 0, SEEK_END) == 0) ? ftell(f) : -1;
     if (sz < 6 || sz > GT_MAX_PACK || fseek(f, 0, SEEK_SET) != 0) { fclose(f); return; }

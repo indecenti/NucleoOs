@@ -50,6 +50,19 @@
     "Sensitivity": { "es": "Sensibilidad", "fr": "Sensibilite", "de": "Empfindlich" },
     "Invert X": { "es": "Invertir X", "fr": "Inverser X", "de": "X umkehren" },
     "Invert Y": { "es": "Invertir Y", "fr": "Inverser Y", "de": "Y umkehren" },
-    "Space or C recenters the tilt": { "es": "Espacio o C recentra", "fr": "Espace ou C recentre", "de": "Leertaste oder C: neu zentrieren" }
+    "Space or C recenters the tilt": { "es": "Espacio o C recentra", "fr": "Espace ou C recentre", "de": "Leertaste oder C: neu zentrieren" },
+    "Tap: walk, talk, open": { "es": "Toca: anda, habla, abre", "fr": "Touche: marche, parle, ouvre", "de": "Tippen: gehen, reden, oeffnen" },
+    "Drag: steer   < pause": { "es": "Arrastra: dirige   < pausa", "fr": "Glisse: diriger   < pause", "de": "Ziehen: lenken   < Pause" },
+    "Resume": { "es": "Seguir", "fr": "Reprendre", "de": "Weiter" },
+    "Explore": { "es": "Explorar", "fr": "Explorer", "de": "Erkunden" },
+    "Menu": { "es": "Menu", "fr": "Menu", "de": "Menue" },
+    "Gold %d": { "es": "Oro %d", "fr": "Or %d", "de": "Gold %d" },
+    "Chests %d / %d": { "es": "Cofres %d / %d", "fr": "Coffres %d / %d", "de": "Truhen %d / %d" },
+    "Talking": { "es": "Hablando", "fr": "Dialogue", "de": "Dialog" },
+    "Exploring": { "es": "Explorando", "fr": "Exploration", "de": "Erkundung" },
+    "Arrows/WASIO move  ENTER talk  Esc pause": { "es": "Flechas/WASIO mueve  INTRO habla  Esc pausa", "fr": "Fleches/WASIO bouge ENTREE parle Esc pause", "de": "Pfeile/WASIO gehen  ENTER reden  Esc Pause" },
+    "ENTER ok  Esc back": { "es": "INTRO ok  Esc atras", "fr": "ENTREE ok  Esc retour", "de": "ENTER ok  Esc zurueck" },
+    "Controls on the panel": { "es": "Controles en el panel", "fr": "Commandes sur l'ecran", "de": "Steuerung am Panel" },
+    "Tap the rows on the panel": { "es": "Toca las filas en el panel", "fr": "Touche les lignes sur l'ecran", "de": "Zeilen am Panel tippen" }
   }
 }

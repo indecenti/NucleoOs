@@ -52,6 +52,13 @@
     "Reset records": { "es": "Borrar records", "fr": "Effacer records", "de": "Rekorde loeschen" },
     "UP/DN  ENTER ok  Esc quit": { "es": "ARR/ABJ  ENTER ok  Esc salir", "fr": "HAUT/BAS  ENTREE ok  Esc quitter", "de": "AUF/AB  ENTER ok  Esc Ende" },
     "L/R pages  Esc back": { "es": "IZQ/DER paginas  Esc atras", "fr": "G/D pages  Esc retour", "de": "L/R Seiten  Esc zurueck" },
-    "Esc back": { "es": "Esc atras", "fr": "Esc retour", "de": "Esc zurueck" }
+    "Esc back": { "es": "Esc atras", "fr": "Esc retour", "de": "Esc zurueck" },
+    "Undo": { "es": "Deshacer", "fr": "Annuler", "de": "Zurueck" },
+    "Resume": { "es": "Seguir", "fr": "Reprendre", "de": "Weiter" },
+    "Menu": { "es": "Menu", "fr": "Menu", "de": "Menue" },
+    "Best %lu": { "es": "Mejor %lu", "fr": "Record %lu", "de": "Rekord %lu" },
+    "Plant: %s": { "es": "Planta: %s", "fr": "Plante: %s", "de": "Pflanze: %s" },
+    "Arrows move  Z undo  Esc pause": { "es": "Flechas mueve  Z deshacer  Esc pausa", "fr": "Fleches bouge  Z annule  Esc pause", "de": "Pfeile gehen  Z zurueck  Esc Pause" },
+    "Tap the rows on the panel": { "es": "Toca las filas en el panel", "fr": "Touche les lignes sur l'ecran", "de": "Zeilen am Panel tippen" }
   }
 }

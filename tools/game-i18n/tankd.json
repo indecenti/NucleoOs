@@ -370,6 +370,116 @@
       "es": "aturde enemigos cercanos",
       "fr": "etourdit les ennemis proches",
       "de": "betaeubt nahe Gegner"
+    },
+    "Panel: drag the field = drive": {
+      "es": "Panel: arrastra el campo = conduce",
+      "fr": "Ecran: glisse le terrain = conduire",
+      "de": "Panel: Feld ziehen = fahren"
+    },
+    "tap = fire there  chip = power-up": {
+      "es": "toca = tira ahi  ficha = mejora",
+      "fr": "touche = tir ici  puce = bonus",
+      "de": "tippen = dort feuern  Chip = Power-up"
+    },
+    "Drag: drive   Tap: fire there": {
+      "es": "Arrastra: conduce   Toca: tira ahi",
+      "fr": "Glisse: conduire   Touche: tir ici",
+      "de": "Ziehen: fahren   Tippen: feuern"
+    },
+    "Leave": {
+      "es": "Salir",
+      "fr": "Sortir",
+      "de": "Gehen"
+    },
+    "Resume": {
+      "es": "Seguir",
+      "fr": "Reprendre",
+      "de": "Weiter"
+    },
+    "Rematch": {
+      "es": "Revancha",
+      "fr": "Revanche",
+      "de": "Revanche"
+    },
+    "Shop": {
+      "es": "Tienda",
+      "fr": "Boutique",
+      "de": "Shop"
+    },
+    "Buy": {
+      "es": "Comprar",
+      "fr": "Acheter",
+      "de": "Kaufen"
+    },
+    "Sell": {
+      "es": "Vender",
+      "fr": "Vendre",
+      "de": "Verkauf"
+    },
+    "Weapon": {
+      "es": "Arma",
+      "fr": "Arme",
+      "de": "Waffe"
+    },
+    "Kills: %d   Wave %d": {
+      "es": "Bajas: %d   Ola %d",
+      "fr": "Tues: %d   Vague %d",
+      "de": "Kills: %d   Welle %d"
+    },
+    "Time %d:%02d": {
+      "es": "Tiempo %d:%02d",
+      "fr": "Temps %d:%02d",
+      "de": "Zeit %d:%02d"
+    },
+    "Rival HP %d": {
+      "es": "PV rival %d",
+      "fr": "PV rival %d",
+      "de": "Gegner LP %d"
+    },
+    "A/D tab  arrows  ENTER  Esc": {
+      "es": "A/D pest.  flechas  INTRO  Esc",
+      "fr": "A/D ongl.  fleches  ENTREE  Esc",
+      "de": "A/D Reiter  Pfeile  ENTER  Esc"
+    },
+    "WASD move  K fire  L power  Esc": {
+      "es": "WASD mueve  K dispara  L poder  Esc",
+      "fr": "WASD bouge  K tir  L bonus  Esc",
+      "de": "WASD gehen  K Feuer  L Bonus  Esc"
+    },
+    "ENTER / Esc": {
+      "es": "INTRO / Esc",
+      "fr": "ENTREE / Esc",
+      "de": "ENTER / Esc"
+    },
+    "Pick tank": {
+      "es": "Elige tanque",
+      "fr": "Choisis char",
+      "de": "Wahl Panzer"
+    },
+    "Host": {
+      "es": "Crear",
+      "fr": "Heberger",
+      "de": "Hosten"
+    },
+    "Join": {
+      "es": "Unirse",
+      "fr": "Entrer",
+      "de": "Rein"
+    },
+    "Help": {
+      "es": "Ayuda",
+      "fr": "Aide",
+      "de": "Hilfe"
+    },
+    "searching...": {
+      "es": "buscando...",
+      "fr": "recherche...",
+      "de": "suche..."
+    },
+    "ENTER select   Esc back": {
+      "es": "INTRO elige   Esc atras",
+      "fr": "ENTREE choisit   Esc retour",
+      "de": "ENTER waehlt   Esc zurueck"
     }
   }
 }
