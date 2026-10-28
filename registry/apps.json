@@ -123,7 +123,7 @@
     },
     {
       "id": "settings",
-      "version": "0.2.1",
+      "version": "0.2.2",
       "path": "/apps/settings",
       "enabled": true,
       "autostart": false,
@@ -261,7 +261,7 @@
     },
     {
       "id": "anima",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "path": "/apps/anima",
       "enabled": true,
       "autostart": false,
@@ -390,7 +390,7 @@
     },
     {
       "id": "paint",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "path": "/apps/paint",
       "enabled": true,
       "autostart": false,
@@ -435,7 +435,7 @@
     },
     {
       "id": "games",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "path": "/apps/games",
       "enabled": true,
       "autostart": false,

@@ -8,8 +8,8 @@
   },
   {
    "id": "anima",
-   "version": "0.1.1",
-   "version_code": 2
+   "version": "0.1.2",
+   "version_code": 3
   },
   {
    "id": "arcade",
@@ -93,8 +93,8 @@
   },
   {
    "id": "games",
-   "version": "0.1.1",
-   "version_code": 1
+   "version": "0.1.2",
+   "version_code": 2
   },
   {
    "id": "groq-chat",
@@ -148,8 +148,8 @@
   },
   {
    "id": "paint",
-   "version": "1.0.1",
-   "version_code": 2
+   "version": "1.0.2",
+   "version_code": 3
   },
   {
    "id": "passkeys",
@@ -188,8 +188,8 @@
   },
   {
    "id": "settings",
-   "version": "0.2.1",
-   "version_code": 1
+   "version": "0.2.2",
+   "version_code": 2
   },
   {
    "id": "spreadsheet",
@@ -273,7 +273,7 @@
  "caps_row": {
   "after": "0.7.5"
  },
- "commit": "1320d6415b6121f400df02235480a9d4474e0f78",
+ "commit": "aacc080e105e4c519326dc915bcf74ea69fef80b",
  "edition": "cardputer",
  "externals": [
   {
@@ -565,7 +565,7 @@
  "format": 1,
  "generator": "nucleo-webos tools/build.py",
  "gz_twins": 662,
- "hash": "d034779d6351f0e720c86490346fddff5aeaf49d935cc47ede73eab85ebb6b68",
+ "hash": "e5091665379350817e44e214b002481852cd0464e84e7fc6a22a69ba07cf8375",
  "left_out": [
   {
    "id": "cast",

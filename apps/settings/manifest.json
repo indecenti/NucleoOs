@@ -1,8 +1,8 @@
 {
   "id": "settings",
   "name": "Settings",
-  "version": "0.2.1",
-  "version_code": 1,
+  "version": "0.2.2",
+  "version_code": 2,
   "description": "Configure device, network, power, UI and security; edit file associations.",
   "category": "system",
   "entry_service": "settings_main",
