@@ -171,6 +171,16 @@ and every step is checked:
 | Reactor (`reactor`) | 40 KB (32 KB, 0.5 KB RAM, ABI 3) | ~21 KB | `CONFIG_NUCLEO_STORE_REACTOR` |
 | Garden (`giardino`) | 39 KB (31 KB, 0.5 KB RAM, ABI 3) | ~21 KB | `CONFIG_NUCLEO_STORE_SANDGARDEN` |
 
+## Apps that exist only in the store
+
+Written as native modules from the start: the source is in the firmware tree (so it is compiled with the
+firmware's own flags and its recipe names a NucleoOS commit) but guarded with `NAP_MODULE || !ESP_PLATFORM`,
+so the firmware image gets an empty file and the host gallery (`tools/ui-host/apps/<key>.txt`) still renders it.
+
+| App (id) | Module | Notes |
+|---|---|---|
+| Converter (`units`) | 23 KB (17 KB code + constants, 2.3 KB RAM, ABI 3) | 9 quantities; 5 languages in the source (the language comes from `settings.json`: `nucleo_tr5` is not in the ABI); numbers formatted with integers (no double helpers in the ABI) |
+
 With all three from the store (the default) the image is **3,461,120 B instead of 3,603,792 B: 142,672 B (139 KB)
 recovered**
 (208 KB free in the OTA slot instead of 66 KB). Every game except the Game Boy emulator already fits ABI v1
