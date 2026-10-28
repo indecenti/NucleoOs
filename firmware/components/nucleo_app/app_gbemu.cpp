@@ -245,8 +245,10 @@ static int s_out_w = SRC_W, s_out_x = SRC_X, s_band_h = BAND_1TO1;
 static bool s_big = false;
 static int  s_out_y0 = 0, s_out_h = OUT_H;
 // A 256x192 Master System picture fills it whole at exactly 5/4: 320x240, every fourth pixel and line twice.
-#define BIG_W (s_src_w == SRC_W ? 240 : 320)
-#define BIG_H (s_src_w == SRC_W ? 216 : 240)
+// "Filled" (s_stretch) takes a 160x144 picture to the whole panel too: every pixel twice across, lines 1-2-2
+// down (5/3), 320x240 — wider than its own aspect, as the Cardputer's filled view is.
+#define BIG_W (s_src_w == SRC_W ? (s_stretch ? 320 : 240) : 320)
+#define BIG_H (s_src_w == SRC_W ? (s_stretch ? 240 : 216) : 240)
 #define BIG_X ((320 - BIG_W) / 2)
 #define BIG_Y ((240 - BIG_H) / 2)
 static LovyanGFX *igfx(void) { return s_big ? (LovyanGFX *)nucleo_extdisp_internal_gfx() : nullptr; }
@@ -523,6 +525,20 @@ static void on_line(const uint8_t *px, int line, void *user)
     if (!st || !st->band[0]) return;
     if (s_big) {                                 // 3/2: a pair of pixels -> 3, every odd line drawn twice
         if (st->out_y >= s_out_h) return;
+        if (s_stretch) {                         // filled: 2x across, rows 1-2-2 down (5/3)
+            const int reps = (line + 1) * 5 / 3 - line * 5 / 3;
+            if (line_same(px, SRC_W, line)) { rows_skip(reps); return; }
+            uint16_t *row = st->band[st->band_idx] + (size_t)st->band_line * s_out_w;
+            const uint16_t *sh = SHADE_TX;
+            for (int x = 0; x < SRC_W; x++) { uint16_t a = sh[px[x] & 3]; row[2 * x] = a; row[2 * x + 1] = a; }
+            row_done();
+            for (int r = 1; r < reps && st->out_y < s_out_h; r++) {
+                uint16_t *dup = st->band[st->band_idx] + (size_t)st->band_line * s_out_w;
+                memcpy(dup, row, (size_t)s_out_w * sizeof *dup);
+                row_done();
+            }
+            return;
+        }
         if (line_same(px, SRC_W, line)) { rows_skip((line & 1) ? 2 : 1); return; }
         uint16_t *row = st->band[st->band_idx] + (size_t)st->band_line * s_out_w;
         const uint16_t *sh = SHADE_TX;
@@ -615,6 +631,19 @@ static void on_line16(const uint16_t *px, int line, void *user)
     if (!st || !st->band[0]) return;
     if (s_big) {                                 // Game Gear 160x144: the same exact 3/2; Master System 256x192: 5/4
         if (st->out_y >= s_out_h) return;
+        if (s_stretch && s_src_w == SRC_W) {     // filled: 2x across, rows 1-2-2 down (5/3)
+            const int reps = (line + 1) * 5 / 3 - line * 5 / 3;
+            if (line_same(px, SRC_W * 2, line)) { rows_skip(reps); return; }
+            uint16_t *row = st->band[st->band_idx] + (size_t)st->band_line * s_out_w;
+            for (int x = 0; x < SRC_W; x++) { uint16_t a = px[x]; row[2 * x] = a; row[2 * x + 1] = a; }
+            row_done();
+            for (int r = 1; r < reps && st->out_y < s_out_h; r++) {
+                uint16_t *dup = st->band[st->band_idx] + (size_t)st->band_line * s_out_w;
+                memcpy(dup, row, (size_t)s_out_w * sizeof *dup);
+                row_done();
+            }
+            return;
+        }
         if (line_same(px, s_src_w * 2, line)) { rows_skip(s_src_w == SRC_W ? ((line & 1) ? 2 : 1) : ((line & 3) == 1 ? 2 : 1)); return; }
         uint16_t *row = st->band[st->band_idx] + (size_t)st->band_line * s_out_w;
         bool twice;
@@ -958,7 +987,12 @@ static void frame_clear(void)
 // stop covering the pillars.
 static void view_apply(void)
 {
-    if (s_big) return;                 // two screens: the picture's geometry is fixed (3/2 on the panel)
+    if (s_big) {                       // two screens: 3/2 or filled on the panel; the next frame repaints it all
+        geom_apply();
+        st->diff_ok = false;
+        d.fillScreen(BG);
+        return;
+    }
     geom_apply();
     d.fillScreen(BG);
     hud_draw();
@@ -1047,8 +1081,52 @@ static void menu_row(int i)
     }
 }
 
+// TWO SCREENS: the pause menu is a card on the panel, over the paused picture, with the kit's rows (label left,
+// value right) and direct touch — tap a row to pick it, tap it again to do it, drag to scroll, tap outside the
+// card to resume. The Cardputer keeps the game's card. Rows are drawn straight to the panel, each over itself.
+#define BMENU_W   288
+#define BMENU_H   224
+#define BMENU_ROW 28
+static int s_bm_scroll;
+static bool menu_danger(int i) { return i == MI_RESET || i == MI_QUIT; }
+static void menu_row_big(int i, int x, int y, int w, int h, bool focus, unsigned short bg, void *)
+{
+    char buf[48];
+    const char *t = menu_label(i, buf, sizeof buf);
+    // "Label: value" becomes the row's label and its right-hand value.
+    char label[48]; const char *val = nullptr;
+    snprintf(label, sizeof label, "%s", t);
+    char *colon = strstr(label, ": ");
+    if (colon) { *colon = '\0'; val = colon + 2; }
+    lg::row_text(x, y, w, h, focus, bg, label, val, menu_danger(i) ? AMB : FG);
+}
+static void menu_draw_big(void)
+{
+    const int W = d.width(), H = d.height(), cx = (W - BMENU_W) / 2, cy = (H - BMENU_H) / 2;
+    nucleo_touch_clear();
+    lg::panel(cx, cy, BMENU_W, BMENU_H, BG);
+    d.drawRoundRect(cx, cy, BMENU_W, BMENU_H, 10, LINE);
+    nucleo_gb_stats_t w; SYS->get_stats(&w);
+    lg::font(1); d.setTextDatum(middle_left);
+    d.setTextColor(w.core_errors ? AMB : ACC, BG);
+    d.drawString(w.core_errors ? TR5("CPU bloccata", "CPU crashed", "CPU bloqueada", "CPU bloquee", "CPU blockiert")
+                               : TR5("Pausa", "Paused", "Pausa", "Pause", "Pause"), cx + 14, cy + 17);
+    char title[24]; lg::font(0); lg::fit(title, sizeof title, SYS->title(), BMENU_W / 2);
+    d.setTextDatum(middle_right); d.setTextColor(MUTED, BG);
+    d.drawString(title, cx + BMENU_W - 14, cy + 17);
+    d.setTextDatum(top_left);
+    lg::list(cx + 6, cy + 34, BMENU_W - 12, BMENU_H - 40, BMENU_ROW, MI_N, st->msel, &s_bm_scroll, menu_row_big, nullptr, ACC);
+    // Outside the card: resume (the panel's whole top band, sides and bottom).
+    nucleo_touch_add(0, 0, W, cy, NK_BACK, 0);
+    nucleo_touch_add(0, cy + BMENU_H, W, H - cy - BMENU_H, NK_BACK, 0);
+    nucleo_touch_add(0, cy, cx, BMENU_H, NK_BACK, 0);
+    nucleo_touch_add(cx + BMENU_W, cy, W - cx - BMENU_W, BMENU_H, NK_BACK, 0);
+    nucleo_touch_commit();
+}
+
 static void menu_draw(void)
 {
+    if (s_big) { menu_draw_big(); return; }
     if (st->msel < st->mscroll)                st->mscroll = st->msel;
     if (st->msel >= st->mscroll + MENU_VIS)    st->mscroll = st->msel - MENU_VIS + 1;
     if (st->mscroll > MI_N - MENU_VIS)         st->mscroll = MI_N - MENU_VIS;
@@ -1081,7 +1159,7 @@ static void menu_draw(void)
 // A label that fits was drawn once by menu_draw and is left untouched (static, so nothing to animate).
 static void menu_anim(void)
 {
-    if (!st->menu) return;
+    if (!st->menu || s_big) return;                      // on the panel the rows fit: nothing scrolls
     char buf[40];
     const char *t = menu_label(st->msel, buf, sizeof buf);
     d.setTextSize(2);
@@ -1096,7 +1174,11 @@ static void menu_close(void)
 {
     st->menu = false;
     st->diff_ok = false;                          // a state load / reset changed the picture under the menu
-    if (s_big) { nucleo_app_set_gfx(nullptr); card_draw(true); }   // the menu was on the Cardputer: its card returns
+    if (s_big) {                                  // the menu card was on the panel: clear it, the next frame repaints
+        nucleo_touch_clear(); nucleo_touch_commit();
+        d.fillScreen(BG);
+        card_draw(true);
+    }
     // Enter, Space and K both drive this menu AND are Start, Select and A. Whatever is still held
     // at the moment the menu closes stays out of the game until it is released — otherwise picking
     // "Resume" with Enter pressed Start and paused the game again.
@@ -1178,6 +1260,11 @@ static void menu_activate(void)
 
 static void menu_key(nucleo_key_t k)
 {
+    if (s_big && nucleo_touch_is_row(k.key, k.ch)) {   // a row of the panel's menu: pick it, or do it
+        int r = lg::row_tap(k.key, k.ch, s_bm_scroll, MI_N, &st->msel);
+        if (r == 2) menu_activate(); else if (r == 1) menu_draw();
+        return;
+    }
     if (k.key == NK_BACK || k.ch == '`' || k.ch == 'm' || k.ch == 'M') { menu_close(); return; }
     if (k.ch >= '1' && k.ch <= '0' + (MI_N < 9 ? MI_N : 9)) { st->msel = k.ch - '1'; menu_activate(); return; }
     if (k.key == NK_UP   || k.ch == 'e' || k.ch == 'E' || k.ch == ';') { st->msel = (st->msel + MI_N - 1) % MI_N; menu_draw(); return; }
@@ -1426,8 +1513,7 @@ static void play_session(const char *name)
                 // write costs the player nothing — flush battery RAM before they can pick Quit or pull
                 // the power, and look up whether a state exists. The time is traced: an SD step that
                 // outgrew its budget once rebooted the console from exactly this key.
-                st->menu = true; st->msel = 0;
-                if (s_big && igfx()) nucleo_app_set_gfx(igfx());   // the pause menu on the Cardputer, picture untouched
+                st->menu = true; st->msel = 0; s_bm_scroll = 0;   // two screens: the menu is a card on the panel
                 menu_draw();
                 int64_t t0 = esp_timer_get_time();
                 SYS->save();
