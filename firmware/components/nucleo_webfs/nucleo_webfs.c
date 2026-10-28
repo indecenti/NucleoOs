@@ -16,14 +16,21 @@ static const char *TAG = "webfs";
 // otherwise make http://<device>/ a dead 404 with no web way to recover. The page is fully
 // self-contained (inline CSS+JS, no side assets) and drives the existing paired /api/fs and /api/ota
 // endpoints; the API auth gate is what actually protects uploads/flash, so the page itself is public
-// exactly like the normal shell HTML. TXTFILES appends a NUL, so the byte length drops the last byte.
-extern const char rescue_html_start[] asm("_binary_rescue_html_start");
-extern const char rescue_html_end[]   asm("_binary_rescue_html_end");
+// exactly like the normal shell HTML. Embedded gzipped (CMakeLists.txt), sent with Content-Encoding: gzip.
+extern const char rescue_html_start[] asm("_binary_rescue_html_gz_start");
+extern const char rescue_html_end[]   asm("_binary_rescue_html_gz_end");
+
+// The embedded pages are gzip: every browser takes Content-Encoding: gzip.
+static esp_err_t send_gz_page(httpd_req_t *req, const char *start, const char *end)
+{
+    httpd_resp_set_type(req, "text/html; charset=utf-8");
+    httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    return httpd_resp_send(req, start, (size_t)(end - start));
+}
 
 static esp_err_t serve_rescue(httpd_req_t *req)
 {
-    size_t len = (size_t)(rescue_html_end - rescue_html_start);
-    if (len > 0) len--;   // drop the trailing NUL that EMBED_TXTFILES appends
     // Why the shell is missing, for the page to explain: "no-sd" = card absent or unreadable (e.g.
     // exFAT, which this FATFS build doesn't mount), "no-www" = card fine but the SD content was never
     // installed, "no-shell" = /www exists but the shell entry page doesn't (partial/corrupt copy).
@@ -34,14 +41,12 @@ static esp_err_t serve_rescue(httpd_req_t *req)
         if (d) { closedir(d); why = "no-www"; } else why = "no-sd";
     }
     httpd_resp_set_hdr(req, "X-Nucleo-Rescue", why);
-    httpd_resp_set_type(req, "text/html; charset=utf-8");
-    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
-    return httpd_resp_send(req, rescue_html_start, len);
+    return send_gz_page(req, rescue_html_start, rescue_html_end);
 }
 
-// Web-OS handoff page (EMBED_TXTFILES "handoff.html"): see nucleo_webfs_set_handoff_cb in the header.
-extern const char handoff_html_start[] asm("_binary_handoff_html_start");
-extern const char handoff_html_end[]   asm("_binary_handoff_html_end");
+// Web-OS handoff page (handoff.html, embedded gzipped): see nucleo_webfs_set_handoff_cb in the header.
+extern const char handoff_html_start[] asm("_binary_handoff_html_gz_start");
+extern const char handoff_html_end[]   asm("_binary_handoff_html_gz_end");
 static bool (*s_handoff_wanted)(void);
 // Tick the handoff page was queued (0 = none). httpd_resp_send returns once the bytes are in the TCP send
 // buffer, NOT once the browser has them: rebooting on the very next app tick cut the page short (verified on
@@ -74,11 +79,7 @@ static bool is_browser_navigation(httpd_req_t *req)
 
 static esp_err_t serve_handoff(httpd_req_t *req)
 {
-    size_t len = (size_t)(handoff_html_end - handoff_html_start);
-    if (len > 0) len--;   // drop the trailing NUL that EMBED_TXTFILES appends
-    httpd_resp_set_type(req, "text/html; charset=utf-8");
-    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
-    esp_err_t e = httpd_resp_send(req, handoff_html_start, len);
+    esp_err_t e = send_gz_page(req, handoff_html_start, handoff_html_end);
     if (!s_handoff_at) s_handoff_at = xTaskGetTickCount() | 1;   // the app task reboots HANDOFF_FLUSH_MS later (|1: never 0)
     return e;
 }
