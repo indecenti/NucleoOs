@@ -153,6 +153,14 @@ def norm(s):
     return " ".join(re.sub(r"[^a-z0-9]+", " ", s).split())
 
 
+ROMAN = {"1": "i", "2": "ii", "3": "iii", "4": "iv", "5": "v", "6": "vi"}
+
+
+def squash(s):
+    """norm() without spaces and with 2 = II: 'Megaman 2' and 'Mega Man II' meet, so do 'Duck Tales' / 'DuckTales'."""
+    return "".join(ROMAN.get(w, w) for w in norm(s).split())
+
+
 _libretro = {}
 
 
@@ -167,7 +175,14 @@ def libretro_candidates(folder, rom):
     want, stem = norm(rom), os.path.splitext(rom)[0].replace("&", "_")
     hits = [p for p in _libretro[repo] if os.path.basename(p)[:-4] == stem]          # the very same No-Intro name
     hits += [p for p in _libretro[repo] if p not in hits and norm(os.path.basename(p)) == want]
+    hits += [p for p in _libretro[repo] if p not in hits and squash(os.path.basename(p)) == squash(rom)]
+    head = squash(rom.split(" - ")[0]) if " - " in rom else None                  # the title without its subtitle
+    hits += [p for p in _libretro[repo] if p not in hits and head and squash(os.path.basename(p)) == head]
     hits += [p for p in _libretro[repo] if p not in hits and norm(os.path.basename(p)).startswith(want + " ")]
+    # Among equals, the international release first, then anything but betas and hacks.
+    rank = lambda p: (0 if re.search(r"\((USA|World|USA, Europe)\)", p) else 1, 1 if re.search(r"Beta|Hack|Unl|Proto", p) else 0)
+    exact = [p for p in hits if os.path.basename(p)[:-4] == stem]
+    hits = exact + sorted((p for p in hits if p not in exact), key=rank)
     return [f"https://raw.githubusercontent.com/libretro-thumbnails/{repo}/master/{urllib.parse.quote(p)}" for p in hits[:3]]
 
 
