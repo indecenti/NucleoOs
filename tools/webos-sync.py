@@ -35,7 +35,6 @@ LOCK = os.path.join(ROOT, "webos.lock")
 PROFILE = "cardputer"
 # build path prefix -> repository path prefix
 MAP = (("www/shell/", "web/shell/"), ("apps/", "apps/"))
-TEXT = (".html", ".css", ".js", ".mjs", ".json", ".svg", ".webmanifest", ".txt", ".map", ".xml", ".md")
 MANAGED_APP = re.compile(r"^apps/[^/]+/(manifest\.json|www/.+)$")
 
 
@@ -50,7 +49,8 @@ def digest(path):
     with open(path, "rb") as f:
         data = f.read()
     # a Windows working copy has CRLF: git (eol=lf) and the device have LF
-    if path.lower().endswith(TEXT) and b"\0" not in data[:8000]:
+    # text as git's text=auto decides it (no NUL), not by extension: .lua, LICENSE, SHA256SUMS check out CRLF too
+    if b"\0" not in data[:8000]:
         data = data.replace(b"\r\n", b"\n")
     return hashlib.sha256(data).hexdigest()
 
