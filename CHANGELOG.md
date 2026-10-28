@@ -6,6 +6,25 @@ All notable user-facing changes to NucleoOS. Format loosely follows
 
 ## [Unreleased]
 
+## [0.8.1] — 2026-10-28
+
+### Added
+- **Game Boy and Game Gear / Master System from the Store.** The two emulators now install from Store › Native C
+  (they need this firmware: native app level 4). On the second screen their library is a gallery: a wheel of
+  titles you turn with a finger, the game's own screenshot, live search as you type; the Cardputer shows the
+  search, the position and the console's buttons. The Game Gear emulator is now called *Game Gear/Master System*.
+- **Screenshots of the second screen.** Fn+P with the external panel attached also saves the panel, as
+  `/data/Screenshots/<shot>_2.bmp`, next to the Cardputer's own screen.
+- **Converter**, a new native app (units of measure), from the Store.
+
+### Changed
+- The emulators left the firmware (about 86 KB of flash back). After updating, install Game Boy and
+  Game Gear/Master System from Store › Native C: your ROMs, saves and states stay where they were.
+- Store games speak Spanish, French and German everywhere.
+
+### Fixed
+- Backspace edits the emulators' search again.
+
 ## [0.8.0] — 2026-10-28
 
 ### Added
