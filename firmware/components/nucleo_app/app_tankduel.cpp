@@ -12,6 +12,11 @@
 // (5 languages). SFX come from the deployed pack; a missing cue is synthesized one per menu frame, never at
 // launch (bulk synthesis on the app task is what rebooted Tanks).
 
+#if __has_include("sdkconfig.h")       // the host harnesses compile this file without one
+#include "sdkconfig.h"
+#endif
+// Built in, or (CONFIG_NUCLEO_STORE_TANKDUEL) only as the store's native module, built with NAP_MODULE.
+#if !CONFIG_NUCLEO_STORE_TANKDUEL || defined(NAP_MODULE)
 #include "nucleo_app.h"
 #include "nucleo_kbd.h"
 #include "nucleo_exclusive.h"
@@ -2802,3 +2807,4 @@ extern "C" void nucleo_register_tankduel(void){
     };
     nucleo_app_register(&app);
 }
+#endif  // !CONFIG_NUCLEO_STORE_TANKDUEL || NAP_MODULE

@@ -54,6 +54,8 @@ The rules that keep an installed app working across OS updates:
    rebuilds every native app from its recipe and publishes them with the firmware.
    Level 2 (2026-10-27) = level 1 + the second-screen helpers the games use (`lg::tap`, `lg::field`,
    `lg::frame` with the touch flag, `nucleo_touch_add_pad`, `nucleo_touch_add_scroll`).
+   Level 3 = level 2 + the rest of the `lg::` two-screen kit (`list`, `text_list`, `row_text`, `row_tap`, `tabs`,
+   `header`, `panel`, `message`), first needed by Tank Duel.
 
 Not in v1, on purpose: the web server (`httpd_*`: a module's handlers would outlive it, and the web OS's
 catch-all route is registered last, so a late endpoint is never reached), task creation, raw radio, OTA,
@@ -159,6 +161,15 @@ and every step is checked:
 | Constellations (`stelle`) | 104 KB (82 KB code + constants, 2.9 KB RAM) | ~68 KB | `CONFIG_NUCLEO_STORE_CONSTELLATIONS` |
 | Tanks (`tanks`) | 96 KB (75 KB, 2.1 KB RAM) | ~70 KB | `CONFIG_NUCLEO_STORE_TANKS` |
 | Poker (`poker`) | 37 KB (29 KB, 0.7 KB RAM) | ~20 KB | `CONFIG_NUCLEO_STORE_POKER` |
+| Tank Duel (`tankd`) | 77 KB (58 KB, 0.8 KB RAM, ABI 3) | ~43 KB | `CONFIG_NUCLEO_STORE_TANKDUEL` |
+| Brawler (`brawler`, 10 sources) | 72 KB (56 KB, 1.5 KB RAM, ABI 3) | ~41 KB | `CONFIG_NUCLEO_STORE_BRAWLER` |
+| Pinball (`pinball`) | 51 KB (40 KB, 1.3 KB RAM, ABI 3) | ~27 KB | `CONFIG_NUCLEO_STORE_PINBALL` |
+| Cardler (`cardler`) | 49 KB (40 KB, 0.5 KB RAM, ABI 3) | ~27 KB | `CONFIG_NUCLEO_STORE_CARDLER` |
+| Orde (`orde`, C++ + C) | 49 KB (37 KB, 0.5 KB RAM, ABI 3) | ~26 KB | `CONFIG_NUCLEO_STORE_ORDE` |
+| Snake (`snake`) | 42 KB (33 KB, 0.5 KB RAM, ABI 3) | ~23 KB | `CONFIG_NUCLEO_STORE_SNAKE` |
+| Slots (`slots`) | 38 KB (30 KB, 0.7 KB RAM, ABI 3) | ~21 KB | `CONFIG_NUCLEO_STORE_SLOTS` |
+| Reactor (`reactor`) | 40 KB (32 KB, 0.5 KB RAM, ABI 3) | ~21 KB | `CONFIG_NUCLEO_STORE_REACTOR` |
+| Garden (`giardino`) | 39 KB (31 KB, 0.5 KB RAM, ABI 3) | ~21 KB | `CONFIG_NUCLEO_STORE_SANDGARDEN` |
 
 With all three from the store (the default) the image is **3,461,120 B instead of 3,603,792 B: 142,672 B (139 KB)
 recovered**

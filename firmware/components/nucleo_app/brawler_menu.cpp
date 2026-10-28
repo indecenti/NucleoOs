@@ -10,6 +10,11 @@
 // Layout law: the non-play screens keep the OS footer (hints, set by the shell), so everything they draw
 // fits the 121 px above it (CH).
 
+#if __has_include("sdkconfig.h")       // the host harnesses compile this file without one
+#include "sdkconfig.h"
+#endif
+// Built in, or (CONFIG_NUCLEO_STORE_BRAWLER) only as the store's native module, built with NAP_MODULE.
+#if !CONFIG_NUCLEO_STORE_BRAWLER || defined(NAP_MODULE)
 #include "brawler.h"
 #include "app_gfx.h"
 #include "game_text.h"
@@ -477,3 +482,4 @@ bool menu_key(int key, char ch) {
             return false;   // help / lobby: Esc is the shell's back handler
     }
 }
+#endif  // !CONFIG_NUCLEO_STORE_BRAWLER || NAP_MODULE

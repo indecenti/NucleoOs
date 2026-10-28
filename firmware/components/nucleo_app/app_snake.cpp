@@ -6,6 +6,11 @@
 // Play is fullscreen (HUD 23 px + 14 rows of cells = 135 px); menus keep the footer hint. Frames land in the
 // shared 8bpp RGB332 canvas, so the colours sit on that grid. Text goes through game_text (5 languages).
 // Esc in a match pauses (vs CPU the match freezes), Esc again leaves; ENTER resumes.
+#if __has_include("sdkconfig.h")       // the host harnesses compile this file without one
+#include "sdkconfig.h"
+#endif
+// Built in, or (CONFIG_NUCLEO_STORE_SNAKE) only as the store's native module, built with NAP_MODULE.
+#if !CONFIG_NUCLEO_STORE_SNAKE || defined(NAP_MODULE)
 #include "app_gfx.h"
 #include "game_sfx.h"
 #include "game_text.h"
@@ -1393,3 +1398,4 @@ extern "C" void nucleo_register_snake(void) {
     };
     nucleo_app_register(&app);
 }
+#endif  // !CONFIG_NUCLEO_STORE_SNAKE || NAP_MODULE

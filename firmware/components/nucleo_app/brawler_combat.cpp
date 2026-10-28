@@ -4,6 +4,11 @@
 // action animation + state recovery, hit-flash decay), opens attacks (punch/kick/jump-kick, hero combo
 // chaining), and resolves active-frame hitboxes into damage + red blood. Calls other modules only
 // through brawler.h. HEAP-FREE: nothing but the shared `g` and fixed arrays.
+#if __has_include("sdkconfig.h")       // the host harnesses compile this file without one
+#include "sdkconfig.h"
+#endif
+// Built in, or (CONFIG_NUCLEO_STORE_BRAWLER) only as the store's native module, built with NAP_MODULE.
+#if !CONFIG_NUCLEO_STORE_BRAWLER || defined(NAP_MODULE)
 #include "brawler.h"
 #include <math.h>
 
@@ -295,3 +300,4 @@ void combat_resolve(float dt)
         }
     }
 }
+#endif  // !CONFIG_NUCLEO_STORE_BRAWLER || NAP_MODULE

@@ -4,6 +4,11 @@
 // 11-joint pose the renderer inks. Poses are authored facing dir=+1; the draw loop mirrors by dir.
 // HEAP-FREE: a single const table + stack-only pose math. Draws nothing (no `d` access) — it only
 // composes fxanim primitives and hands the joints back.
+#if __has_include("sdkconfig.h")       // the host harnesses compile this file without one
+#include "sdkconfig.h"
+#endif
+// Built in, or (CONFIG_NUCLEO_STORE_BRAWLER) only as the store's native module, built with NAP_MODULE.
+#if !CONFIG_NUCLEO_STORE_BRAWLER || defined(NAP_MODULE)
 #include "brawler.h"
 #include "game_text.h"
 #include "game_ui.h"
@@ -426,3 +431,4 @@ void br_figure(const Fighter *fr, float sx, float feetY, float sc, int shade, ui
     }
     ball(p, Hd.x, Hd.y, 0.075f * gth, col[S_FIST]);
 }
+#endif  // !CONFIG_NUCLEO_STORE_BRAWLER || NAP_MODULE

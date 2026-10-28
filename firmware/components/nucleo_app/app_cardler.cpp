@@ -17,6 +17,11 @@
 // Controls mirror Orde: W/E up, A/S down, I left, O right (or the arrows), diagonals with two keys; on the
 // ADV a tilt controller is COMPLEMENTARY to the keyboard. Text follows the OS language (game_text.h).
 // RAM: NX_SOLO; the atlas (4 KB chunks) is heap-on-enter, the run state is APP_RAM — nothing big in .bss.
+#if __has_include("sdkconfig.h")       // the host harnesses compile this file without one
+#include "sdkconfig.h"
+#endif
+// Built in, or (CONFIG_NUCLEO_STORE_CARDLER) only as the store's native module, built with NAP_MODULE.
+#if !CONFIG_NUCLEO_STORE_CARDLER || defined(NAP_MODULE)
 #include "nucleo_app.h"
 #include "nucleo_kbd.h"
 #include "launcher_theme.h"      // W H HINT
@@ -928,3 +933,4 @@ extern "C" void nucleo_register_cardler(void)
     };
     nucleo_app_register(&app);
 }
+#endif  // !CONFIG_NUCLEO_STORE_CARDLER || NAP_MODULE

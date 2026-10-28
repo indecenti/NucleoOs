@@ -16,6 +16,11 @@
 // alpha so glows are integer channel-mixes. ~50 Hz poll runs the physics. Flippers HOLD up while '1'/'0'
 // (or FN/OPT) are down, via nucleo_kbd_char_down (live pressed-key state). ASCII only. Never name a local `d`.
 
+#if __has_include("sdkconfig.h")       // the host harnesses compile this file without one
+#include "sdkconfig.h"
+#endif
+// Built in, or (CONFIG_NUCLEO_STORE_PINBALL) only as the store's native module, built with NAP_MODULE.
+#if !CONFIG_NUCLEO_STORE_PINBALL || defined(NAP_MODULE)
 #include "nucleo_app.h"
 #include "nucleo_kbd.h"
 #include "launcher_theme.h"
@@ -1624,3 +1629,4 @@ extern "C" void nucleo_register_pinball(void)
     };
     nucleo_app_register(&app);
 }
+#endif  // !CONFIG_NUCLEO_STORE_PINBALL || NAP_MODULE

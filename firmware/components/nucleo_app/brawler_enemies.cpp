@@ -17,6 +17,11 @@
 // combat owns every hit/down/recovery transition. A global swing budget keeps pressure without dogpiling.
 // HEAP-FREE: fixed/static arrays, no allocation.
 
+#if __has_include("sdkconfig.h")       // the host harnesses compile this file without one
+#include "sdkconfig.h"
+#endif
+// Built in, or (CONFIG_NUCLEO_STORE_BRAWLER) only as the store's native module, built with NAP_MODULE.
+#if !CONFIG_NUCLEO_STORE_BRAWLER || defined(NAP_MODULE)
 #include "brawler.h"
 #include <math.h>
 
@@ -446,3 +451,4 @@ void enemies_ai(float dt)
         if (moving) e->walkphase += dt * (spd / 26.0f);
     }
 }
+#endif  // !CONFIG_NUCLEO_STORE_BRAWLER || NAP_MODULE

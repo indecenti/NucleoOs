@@ -12,6 +12,11 @@
 //
 // Solo play never calls bnet_poll(). Under NX_NET_APP the Wi-Fi STA (which ESP-NOW rides on) stays up.
 
+#if __has_include("sdkconfig.h")       // the host harnesses compile this file without one
+#include "sdkconfig.h"
+#endif
+// Built in, or (CONFIG_NUCLEO_STORE_BRAWLER) only as the store's native module, built with NAP_MODULE.
+#if !CONFIG_NUCLEO_STORE_BRAWLER || defined(NAP_MODULE)
 #include "brawler.h"
 #include "nucleo_kbd.h"
 #include <string.h>
@@ -409,3 +414,4 @@ void bnet_poll(void) {
         else           send_input();
     }
 }
+#endif  // !CONFIG_NUCLEO_STORE_BRAWLER || NAP_MODULE

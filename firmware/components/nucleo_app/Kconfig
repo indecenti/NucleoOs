@@ -23,6 +23,60 @@ config NUCLEO_STORE_TANKS
     help
         Leaves app_tanks.cpp out of the firmware image (about 70 KB).
 
+config NUCLEO_STORE_TANKDUEL
+    bool "Tank Duel (tankd): from the store, not in the firmware"
+    default y
+    help
+        Leaves app_tankduel.cpp out of the firmware image (about 47 KB).
+
+config NUCLEO_STORE_BRAWLER
+    bool "Brawler (brawler): from the store, not in the firmware"
+    default y
+    help
+        Leaves app_brawler.cpp and brawler_*.cpp out of the firmware image.
+
+config NUCLEO_STORE_PINBALL
+    bool "Pinball (pinball): from the store, not in the firmware"
+    default y
+    help
+        Leaves app_pinball.cpp out of the firmware image.
+
+config NUCLEO_STORE_CARDLER
+    bool "Cardler (cardler): from the store, not in the firmware"
+    default y
+    help
+        Leaves app_cardler.cpp out of the firmware image.
+
+config NUCLEO_STORE_ORDE
+    bool "Orde (orde): from the store, not in the firmware"
+    default y
+    help
+        Leaves app_vs.cpp and vs_sim.c out of the firmware image.
+
+config NUCLEO_STORE_SNAKE
+    bool "Snake (snake): from the store, not in the firmware"
+    default y
+    help
+        Leaves app_snake.cpp out of the firmware image.
+
+config NUCLEO_STORE_SLOTS
+    bool "Slots (slots): from the store, not in the firmware"
+    default y
+    help
+        Leaves app_slots.cpp out of the firmware image.
+
+config NUCLEO_STORE_REACTOR
+    bool "Reactor (reactor): from the store, not in the firmware"
+    default y
+    help
+        Leaves app_reactor.cpp out of the firmware image.
+
+config NUCLEO_STORE_SANDGARDEN
+    bool "Garden (giardino): from the store, not in the firmware"
+    default y
+    help
+        Leaves app_sandgarden.cpp out of the firmware image.
+
 endmenu
 
 endmenu
