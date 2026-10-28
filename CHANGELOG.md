@@ -6,6 +6,29 @@ All notable user-facing changes to NucleoOS. Format loosely follows
 
 ## [Unreleased]
 
+## [0.8.0] — 2026-10-28
+
+### Added
+- **Native apps from the Store.** The Store now has two channels, asked first: *Native C* apps that run on
+  the Cardputer (signed `.nap` modules installed on the SD card) and *Web apps* served to your browser. Every
+  catalog and package is signed offline (ECDSA P-256) and checked on the device before anything installs.
+- **Second screen.** With the external 320x240 panel attached, apps and the launcher have their own layout
+  for it with direct touch (tap, drag), and the Cardputer's screen becomes a companion. Touch calibration,
+  its own brightness, finger-sized Back everywhere.
+- **One web OS for every NucleoOS device.** The web desktop and its apps now come from the shared nucleo-webos
+  build (also used by the Handheld and the P4), with the same Store in the browser.
+
+### Changed
+- **Games now ship from the Store**, not inside the firmware: Constellations, Tanks, Poker, Tank Duel, Brawler,
+  Pinball, Cardler, Orde, Snake, Slots, Reactor and Garden. After updating, open Store › Native C to install
+  the ones you play (saves, pins and recents carry over: same ids). This frees about 480 KB of flash.
+- The Store is second on Home, after ANIMA.
+- Video: NFV v4 everywhere; files in the older formats must be converted again with Video Studio.
+
+### Fixed
+- The Store no longer overflows its stack while installing; buttons on an app's page are focusable.
+- ANIMA's personal memory works while the web desktop is open.
+
 ## [0.7.5] — 2026-10-24
 
 ### Added
