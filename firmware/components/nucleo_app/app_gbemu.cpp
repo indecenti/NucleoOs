@@ -1517,7 +1517,7 @@ static void fail_draw(void)
 static void copy_progress(uint32_t done, uint32_t total, void *user)
 {
     (void)user;
-    const int pct = total ? (int)((uint64_t)done * 100 / total) : 0;
+    const int pct = total ? (int)((done >> 10) * 100u / ((total >> 10) + 1)) : 0;   // no 64-bit division in a module
     int top = nucleo_app_content_top(), ch = nucleo_app_content_height();
     int y = top + ch / 2 - 24;
     d.startWrite();
