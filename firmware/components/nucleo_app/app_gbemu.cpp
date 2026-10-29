@@ -404,6 +404,8 @@ struct EState {
     // had last frame is not sent again (a hash per line; a static HUD or a still background costs no bus).
     uint32_t lhash[240];
     bool     diff_ok;        // lhash describes what the panel shows; false after anything else drew there
+    uint32_t (*seghash)[8];  // 256-px lines on the external panel: a hash per 32-px segment (span_line), or NULL
+    uint8_t  span_lo, span_hi;   // the band's changed segments so far (lo > hi: none)
     bool     crash_told;     // the crash menu opens once per crash, not every second
     bool     mute_keys;      // buttons held when the menu closed stay OUT of the game until released
     bool     state_ok;       // a save state exists — looked up once per menu open, not per repaint
@@ -567,6 +569,11 @@ static bool rom_path(const char *name, char *out, size_t n)
 static void row_done(void);
 static void rows_skip(int rows);
 static bool line_same(const void *px, int bytes, int line);
+static bool seg_same(const void *px, int line);
+static void span_line(const void *px, int line);
+static void span_reset(void);
+// Rows at the top of the panel that the on-demand system bar covers this frame (0 = none): read once per frame.
+static int s_ov;
 __attribute__((optimize("-O2")))
 static void shot_line(const uint16_t *px16, const uint8_t *px8, int line);
 static void on_line(const uint8_t *px, int line, void *user)
@@ -699,7 +706,7 @@ static void on_line16(const uint16_t *px, int line, void *user)
         // Rows per source line on the panel: 3/2 (160x144: every odd line twice), 5/4 down (256x192: every fourth
         // line twice), 1 (256x240: the NES is already the panel's height).
         const int twice_here = s_src_w == SRC_W ? (line & 1) : s_src_h == 192 ? (line & 3) == 1 : 0;
-        if (line_same(px, s_src_w * 2, line)) { rows_skip(1 + twice_here); return; }
+        if (st->seghash && s_out_w == 256 ? seg_same(px, line) : line_same(px, s_src_w * 2, line)) { rows_skip(1 + twice_here); return; }
         uint16_t *row = st->band[st->band_idx] + (size_t)st->band_line * s_out_w;
         bool twice;
         if (s_src_w == SRC_W) {
@@ -708,9 +715,10 @@ static void on_line16(const uint16_t *px, int line, void *user)
                 row[o] = a; row[o + 1] = a; row[o + 2] = b;
             }
             twice = line & 1;
-        } else if (s_out_w == 256) {             // the NES at 1:1: a straight copy
+        } else if (s_out_w == 256) {             // the NES and the PC Engine at 1:1: a straight copy
             memcpy(row, px, 256 * sizeof *row);
             twice = false;
+            if (st->seghash) span_line(px, line);
         } else {
             for (int x = 0, o = 0; x < 256; x += 4, o += 5) {
                 uint16_t a = px[x], b = px[x + 1], c = px[x + 2], e = px[x + 3];
@@ -830,7 +838,43 @@ static void band_grow(void)
     free(st->band[0]); free(st->band[1]);
     st->band[0] = a; st->band[1] = b; st->band_idx = 0;
     st->band_cap = want;
-    trace("  bands grown to 2 x %u B", (unsigned)want);
+    // The 256-px picture on the external panel: the segments' hashes too (7.5 KB), if the heap still has them.
+    if (s_big && BIG_W == 256 && heap_caps_get_free_size(MALLOC_CAP_DEFAULT) > 240 * 32 + BAND_RESERVE)
+        st->seghash = (uint32_t (*)[8])calloc(240, sizeof *st->seghash);
+    if (st->seghash) span_reset();
+    trace("  bands grown to 2 x %u B%s", (unsigned)want, st->seghash ? ", changed spans only" : "");
+}
+// SPANS. The external panel's bus runs at 40 MHz (80 flickered on real wiring): 5 MB/s, so a whole 256x240 frame
+// is 24.6 ms on the wire, more than a frame. Skipping unchanged LINES (line_same) does little in a fight: every line
+// a fighter crosses changes, though only where the fighter is. So a 256-px line is hashed in eight 32-px segments;
+// the band remembers which segments changed in any of its rows and pushes only that span (the rows compacted in
+// place to the span's width): the still background stays on the panel, off the bus.
+static void span_reset(void) { st->span_lo = 8; st->span_hi = 0; }
+static uint8_t s_segmask;                      // seg_same's result for the line span_line records
+__attribute__((optimize("-O2")))
+static bool seg_same(const void *px, int line)
+{
+    if (line < 0 || line >= 240 || ((uintptr_t)px & 3)) { s_segmask = 0xFF; return false; }
+    const uint32_t *w = (const uint32_t *)px;
+    uint8_t m = 0;
+    for (int k = 0; k < 8; k++, w += 16) {   // 16 words = 32 pixels
+        uint32_t h = 2166136261u;
+        for (int i = 0; i < 16; i++) h = (h ^ w[i]) * 16777619u;
+        if (!st->diff_ok || st->seghash[line][k] != h) m |= (uint8_t)(1u << k);
+        st->seghash[line][k] = h;
+    }
+    if (s_ov && s_out_y0 + st->out_y < s_ov + 2) m = 0xFF;   // under / at the system bar: whole lines
+    s_segmask = m;
+    return m == 0;
+}
+static void span_line(const void *px, int line)
+{
+    (void)px; (void)line;
+    const uint8_t m = s_segmask;
+    if (!m) return;
+    const int lo = __builtin_ctz(m), hi = 31 - __builtin_clz((uint32_t)m);
+    if (lo < st->span_lo) st->span_lo = (uint8_t)lo;
+    if (hi > st->span_hi) st->span_hi = (uint8_t)hi;
 }
 // One output row is in the band buffer: count it, and push the band once it is full.
 static void row_done(void)
@@ -860,8 +904,6 @@ static bool line_same(const void *px, int bytes, int line)
     st->lhash[line] = h;
     return same;
 }
-// Rows at the top of the panel that the on-demand system bar covers this frame (0 = none): read once per frame.
-static int s_ov;
 static void band_push(void)
 {
     if (s_big && s_ov) {                       // the bar is up: never paint under it (it would flicker)
@@ -887,10 +929,19 @@ static void band_push(void)
         // reading it. Only possible because the data is already panel-order — a converting push
         // builds its own temporary copy and cannot DMA from ours at all.
         int64_t b0 = esp_timer_get_time();
-        d.pushImageDMA(s_out_x, s_out_y0 + st->band_y, s_out_w, st->band_line, st->band[st->band_idx]);
+        uint16_t *band = st->band[st->band_idx];
+        if (st->seghash && s_out_w == 256 && st->span_lo <= st->span_hi && (st->span_lo > 0 || st->span_hi < 7)) {
+            // Only the changed span: each row moved down to the span's width (forwards, so in place).
+            const int x0 = st->span_lo * 32, sw = (st->span_hi - st->span_lo + 1) * 32;
+            for (int r = 0; r < st->band_line; r++) memmove(band + (size_t)r * sw, band + (size_t)r * 256 + x0, (size_t)sw * sizeof *band);
+            d.pushImageDMA(s_out_x + x0, s_out_y0 + st->band_y, sw, st->band_line, band);
+        } else {
+            d.pushImageDMA(s_out_x, s_out_y0 + st->band_y, s_out_w, st->band_line, band);
+        }
         st->us_blit += (uint32_t)(esp_timer_get_time() - b0);
         st->band_idx ^= 1;
         st->band_line = 0;
+        if (st->seghash) span_reset();
     }
 }
 
@@ -1994,6 +2045,7 @@ static void play_session(const char *name)
     if (st->shot) { fclose(st->shot); st->shot = nullptr; }   // a capture cut short by quitting: what was written
     SYS->close();
     free(st->band[0]); free(st->band[1]); st->band[0] = st->band[1] = nullptr; st->band_cap = 0;
+    free(st->seghash); st->seghash = nullptr;
     d.setSwapBytes(false);                 // leave the shared display as every other app expects it
     if (s_big) { nucleo_app_set_gfx(nullptr); s_big = false; nucleo_surface_set_large(false); geom_apply(); }
     nucleo_app_set_direct_draw(false);
@@ -2729,7 +2781,7 @@ static void leave(void)
     if (SYS) SYS->close();                       // a no-op when no cartridge is open
     mq_free();
     pic_free();
-    if (st) { free(st->band[0]); free(st->band[1]); free(st->sh); free(st); st = nullptr; }
+    if (st) { free(st->band[0]); free(st->band[1]); free(st->seghash); free(st->sh); free(st); st = nullptr; }
     if (SYS) remove(SYS->shelf_swp);             // never leave a stale shelf image for the next visit
     if (nucleo_exclusive_active()) nucleo_exclusive_exit();
 }
