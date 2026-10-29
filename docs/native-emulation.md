@@ -640,6 +640,16 @@ builds run the same frames. Street Fighter II, 60 s of the console, nothing draw
 frame (3.40 M cycles, fetch stalls 0.24 M), event loop 14.2 (3.33 M, 0.28 M). With the picture, 80 s: 19.8 ms,
 4,788 frames of which 2,658 shown; fights ~30 frames a second (half speed), the menus and the round ends 41-45.
 
+**The panel's bus (1.3.10-11).** The external panel runs at 40 MHz (80 flickered): 5 MB/s, a whole 256x240 frame is
+24.6 ms on the wire. Two front-end changes, every console (same bench, same 4,788 frames):
+- **Bands that grow.** Sized for the smallest heap (3 rows of 256 px: 80 DMA pushes a frame, each set up by
+  LovyanGFX's code in the firmware's flash). With the cartridge mapped from flash the heap has room: two 24-row bands
+  (2 x 12 KB, 24 KB kept free), 10 pushes. CPU 19.8 -> 18.8 ms, panel lines 6.6 -> 5.8.
+- **Changed spans, not changed lines.** Skipping unchanged lines (what retro-go does too) barely helps a fight: every
+  line a fighter crosses changes, only where the fighter is. A 256-px line is hashed in eight 32-px segments (7.5 KB
+  of hashes); a band pushes only the span its rows changed in, rows compacted in place. Panel lines 5.8 -> 4.8 ms,
+  fights 31-35 -> 33-36 frames a second.
+
 **What is left, measured.** Drawing costs the CPU's core 5.6 ms a frame it never runs itself (19.8 against 14.2):
 the other core's line drawer and this core's panel pushes (LovyanGFX, in the firmware's flash) share the 16 KB
 instruction cache with the interpreter. Next: the drawer and the band push made small and contiguous (the drawer in
