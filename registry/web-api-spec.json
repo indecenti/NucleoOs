@@ -1,5 +1,24 @@
 [
   {
+    "id": "api-evilportal-templates-delete",
+    "path": "/api/evilportal/templates",
+    "method": "DELETE",
+    "category": "api",
+    "it": {
+      "title": "DELETE /api/evilportal/templates - Elimina Template",
+      "description": "Rimuove un template dalla SD (/evilportal/portals/<name>.html). Richiede l'accoppiamento.",
+      "synopsis": "DELETE /api/evilportal/templates?name=<name>",
+      "details": "Parametri: name (richiesto, l'estensione .html viene aggiunta se manca).\nRisposta: { ok: true } con 200, oppure 404 { ok: false } se il file non esiste.\n400 { error: 'name' } su nome non valido."
+    },
+    "en": {
+      "title": "DELETE /api/evilportal/templates - Remove Template",
+      "description": "Removes a template from the SD (/evilportal/portals/<name>.html). Requires pairing.",
+      "synopsis": "DELETE /api/evilportal/templates?name=<name>",
+      "details": "Parameters: name (required, .html is appended if missing).\nResponse: { ok: true } on 200, or 404 { ok: false } if the file is not present.\n400 { error: 'name' } on invalid name."
+    },
+    "params": []
+  },
+  {
     "id": "api-anima",
     "path": "/api/anima",
     "method": "GET",
@@ -258,6 +277,25 @@
       "description": "One-call, on-demand health snapshot: last reset cause, firmware build, heap and fragmentation watermarks, Wi-Fi link quality, the heavy-work arbiter, CPU load, the OOM counter, and ANIMA's tier telemetry. Powers the Log Viewer's \"Diagnose\" digest — everything a remote AI (or a human) needs to judge Cardputer health in a single fetch.",
       "synopsis": "GET /api/diag",
       "details": "Public, read-only, pull-based endpoint (no task, no SD write, no TLS: it only costs when asked). JSON response sections:\n- v, ts: payload version and current epoch\n- sys: firmware version/build, IDF version, uptime, last reset cause (POWERON/SW/PANIC/BROWNOUT/WDT...), OTA slot and its state, SD mount flag and space\n- mem: free internal heap, all-time minimum, largest contiguous block, fragmentation %, free DMA, httpd task stack watermark\n- net: mode, SSID, IP, RSSI, time sync, connected WebSocket clients\n- anima: online switches, configured teacher (provider/model), L1 policy and state, per-tier counters (none/cmd/fact/stitch/remote), last confidence and last intent\n- arb: heavy-work token (busy, job, grants/denials/yields, recorded heap floor)\n- cpu: cores, frequency, tasks, per-core load\n- oom: rejected allocations since boot, with the last one's size and caps"
+    },
+    "params": []
+  },
+  {
+    "id": "api-evilportal-templates-get",
+    "path": "/api/evilportal/templates",
+    "method": "GET",
+    "category": "api",
+    "it": {
+      "title": "GET /api/evilportal/templates - Elenco Template",
+      "description": "Elenca i template della pagina di login presenti sulla SD in /evilportal/portals/*.html, che il motore Evil Portal può servire quando viene armato. Riservato ai test autorizzati; richiede l'accoppiamento perché i nomi stessi rivelano gli obiettivi.",
+      "synopsis": "GET /api/evilportal/templates",
+      "details": "Risposta JSON: { items: [ { name, bytes }, ... ] } con un elemento per ogni file *.html in /sd/evilportal/portals/."
+    },
+    "en": {
+      "title": "GET /api/evilportal/templates - List Templates",
+      "description": "Lists the login-page templates on the SD under /evilportal/portals/*.html that the Evil Portal engine can serve when armed. Authorized testing only; requires pairing because the names themselves reveal targeting intent.",
+      "synopsis": "GET /api/evilportal/templates",
+      "details": "JSON response: { items: [ { name, bytes }, ... ] } with one entry per *.html file under /sd/evilportal/portals/."
     },
     "params": []
   },
@@ -1015,6 +1053,25 @@
         }
       }
     ]
+  },
+  {
+    "id": "api-evilportal-templates-post",
+    "path": "/api/evilportal/templates",
+    "method": "POST",
+    "category": "api",
+    "it": {
+      "title": "POST /api/evilportal/templates - Carica Template",
+      "description": "Carica un template HTML del portale su SD (/evilportal/portals/<name>.html). Pensato per ricevere pagine generate da un LLM in LAN (Ollama, LM Studio, llama.cpp) tramite tools/evilportal/generate.mjs. Lo stream va diretto a SD con un buffer di 1 KB, cap 32 KB, rename atomico via .part. Il nome accetta solo [A-Za-z0-9._-]; il primo byte del corpo deve essere '<' (altrimenti 415). Richiede l'accoppiamento.",
+      "synopsis": "POST /api/evilportal/templates?name=<name>   body: text/html",
+      "details": "Parametri: name (richiesto, max 48 caratteri, l'estensione .html viene aggiunta se manca).\nRisposta: { ok, name, bytes }.\n400 { error: 'name' | 'short' | 'name_too_long' } su input non valido.\n413 { error: 'size', min, max } se il corpo supera 32 KB o è sotto 32 B.\n415 { error: 'not_html' } se il corpo non inizia con '<'.\n500 { error: 'fs' | 'write' | 'rename' } su errori su SD."
+    },
+    "en": {
+      "title": "POST /api/evilportal/templates - Upload Template",
+      "description": "Uploads a portal HTML template to SD (/evilportal/portals/<name>.html). Designed to receive pages generated by a LAN LLM (Ollama, LM Studio, llama.cpp) via tools/evilportal/generate.mjs. The stream goes straight to SD through a 1 KB buffer, 32 KB cap, atomic rename via .part. The name only accepts [A-Za-z0-9._-]; the first body byte must be '<' (otherwise 415). Requires pairing.",
+      "synopsis": "POST /api/evilportal/templates?name=<name>   body: text/html",
+      "details": "Parameters: name (required, max 48 chars, .html is appended if missing).\nResponse: { ok, name, bytes }.\n400 { error: 'name' | 'short' | 'name_too_long' } on invalid input.\n413 { error: 'size', min, max } when the body is over 32 KB or under 32 B.\n415 { error: 'not_html' } when the body does not start with '<'.\n500 { error: 'fs' | 'write' | 'rename' } on SD errors."
+    },
+    "params": []
   },
   {
     "id": "api-fido-cred-delete",
