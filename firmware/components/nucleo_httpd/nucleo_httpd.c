@@ -40,6 +40,7 @@
 #include "esp_timer.h"
 #include "esp_heap_caps.h"
 #include "esp_ota_ops.h"
+#include "fwsig.h"           // release signatures: /api/ota only accepts signed images
 #include "esp_app_desc.h"      // esp_app_get_description(): real firmware version/build for /api/diag
 #include "esp_system.h"
 #include "esp_chip_info.h"     // esp_chip_info(): silicon model/revision/cores for /proc/uname
@@ -883,8 +884,7 @@ static esp_err_t diag_get(httpd_req_t *req)
 // Enables Wi-Fi firmware updates (no USB):  curl --data-binary @nucleoos.bin http://IP/api/ota
 static esp_err_t ota_post(httpd_req_t *req)
 {
-    NUCLEO_AUTH_GUARD(req);   // firmware flashing requires a paired session
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
+    NUCLEO_AUTH_GUARD(req);   // firmware flashing requires a paired session (same-origin: no CORS wildcard)
     // Installed by M5Launcher: the "next" OTA slot belongs to another installed app. Refuse BEFORE reading
     // the body; the update path there is Launcher's own OTA list (docs/m5launcher.md).
     if (!nucleo_guest_self_ota_allowed()) {
@@ -952,6 +952,10 @@ static esp_err_t ota_post(httpd_req_t *req)
     // so a vanished client can't hold the OTA slot forever (~30 s * 10).
     const int MAX_IDLE = 10;
     char buf[1024]; int r, total = 0, idle = 0;
+    // Release signature (docs/release-signing.md): the image must end in a block signed with a release key.
+    // Hashed as it streams; the trailing block is held back and checked once the slot holds a valid image.
+    static fwsig_stream_t sig;           // static: ~250 B kept off this handler's stack (httpd is one task)
+    fwsig_stream_init(&sig);
     while ((r = httpd_req_recv(req, buf, sizeof(buf))) != 0) {
         if (r < 0) {
             if (r == HTTPD_SOCK_ERR_TIMEOUT && ++idle <= MAX_IDLE) continue;
@@ -963,9 +967,13 @@ static esp_err_t ota_post(httpd_req_t *req)
             httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "not an ESP firmware image");
             return ESP_FAIL;
         }
-        if (esp_ota_write(h, buf, r) != ESP_OK) { esp_ota_abort(h); OTA_BAIL(); httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "ota_write"); return ESP_FAIL; }
+        if (esp_ota_write(h, buf, r) != ESP_OK) { esp_ota_abort(h); fwsig_stream_free(&sig); OTA_BAIL(); httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "ota_write"); return ESP_FAIL; }
+        fwsig_stream_update(&sig, (const uint8_t *)buf, (size_t)r);
         total += r;
     }
+    char sig_sha[65]; uint32_t sig_size = 0;
+    bool sig_whole = fwsig_stream_final(&sig, sig_sha, &sig_size);
+    fwsig_stream_free(&sig);
     if (r < 0) { esp_ota_abort(h); OTA_BAIL(); httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "upload interrupted"); return ESP_FAIL; }   // abort frees the OTA handle
     if (esp_ota_end(h) != ESP_OK) { OTA_BAIL(); httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "incomplete/invalid image"); return ESP_FAIL; }   // end frees it even on failure
     // Identity gate: esp_ota_end only proved it's a valid ESP app image — a foreign firmware or the merged
@@ -978,6 +986,19 @@ static esp_err_t ota_post(httpd_req_t *req)
           ESP_LOGE(TAG, "OTA rejected: not a NucleoOS image (project_name=%.32s)",
                    esp_ota_get_partition_description(part, &desc) == ESP_OK ? desc.project_name : "?");
           OTA_BAIL(); httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, "not a NucleoOS firmware image"); return ESP_FAIL;
+      }
+      // Authenticity gate: a paired session alone can no longer replace the OS with arbitrary code (a stolen
+      // cookie, a hostile web app in a shell iframe). The signed version must be the one in the image.
+      fwsig_rc_t sr = sig_whole ? fwsig_verify(sig.tail, FWSIG_DOMAIN_OTA, desc.version, sig_sha, sig_size) : FWSIG_E_MISSING;
+      if (sr != FWSIG_OK) {
+          ESP_LOGE(TAG, "OTA rejected: %s (version %.32s)", fwsig_rc_name(sr), desc.version);
+          OTA_BAIL();
+          httpd_resp_set_status(req, "403 Forbidden");
+          httpd_resp_set_type(req, "application/json");
+          char eb[120];
+          snprintf(eb, sizeof eb, "{\"error\":\"signature\",\"detail\":\"%s\",\"message\":\"Firmware not signed by NucleoOS\"}", fwsig_rc_name(sr));
+          httpd_resp_sendstr(req, eb);
+          return ESP_FAIL;
       } }
     if (esp_ota_set_boot_partition(part) != ESP_OK) { OTA_BAIL(); httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "set_boot"); return ESP_FAIL; }
     #undef OTA_BAIL
@@ -1041,7 +1062,6 @@ static esp_err_t sdcontent_arm_post(httpd_req_t *req)
 static esp_err_t reboot_post(httpd_req_t *req)
 {
     NUCLEO_AUTH_GUARD(req);
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
     httpd_resp_set_type(req, "application/json");
     // A reboot this early after an update would roll the new firmware back — but never refuse forever: a boot
     // wedged after httpd (its app loop never runs) must stay restartable from the web, and rolling back is then

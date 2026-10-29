@@ -37,6 +37,7 @@ typedef enum {
     SDC_E_VERIFY,       // a file never matched its size + SHA-256
     SDC_E_WRITE,        // writing / renaming on the SD failed (full card, bad path on the card)
     SDC_E_NOMEM,        // the download buffer could not be allocated
+    SDC_E_SIGNATURE,    // the manifest has no valid release signature (sd-manifest.sig, docs/release-signing.md)
 } sdc_code_t;
 
 typedef struct {
@@ -75,6 +76,9 @@ typedef struct {
     const char *packs;     // comma list of packs to install, e.g. "core"
     uint32_t    window;    // bytes per request (6144 on the device)
     int         retries;   // extra attempts per window on a transport failure (3)
+    // The manifest's release signature: `block` is the 128-byte sd-manifest.sig, the rest describes the manifest
+    // as downloaded. Required — a NULL check fails every run, so unsigned content can never be installed.
+    bool (*verify_manifest)(const char *tag, const char sha_hex[65], uint32_t size, const uint8_t block[128]);
 } sdc_cfg_t;
 
 // Run the whole install. true = complete (content.json written). On false, st->code/http/detail say why;

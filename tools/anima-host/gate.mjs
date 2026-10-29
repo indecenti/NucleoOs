@@ -518,6 +518,12 @@ const gates = [
     // state untouched, no .part left, reruns download nothing, resume fetches only what is missing, Skip is
     // remembered. Plus FIPS SHA-256 vectors and hashlib agreement on the real release in dist/.
     ok: (code) => code === 0, summary: (o) => (o.match(/sdcontent-e2e: [^\n]*/) || [lastLine(o)])[0].trim() },
+  { name: 'fwsig (release signatures)', cmd: 'node', args: ['tools/anima-host/fwsig-check.mjs'],
+    // The REAL nucleo_fwsig/fwsig.c (what /api/ota, the native updater and the SD-content installer trust)
+    // against mbedTLS: genuine image passes at every stream chunking, a flipped bit / appended byte / other
+    // version / SD-vs-OTA domain / stranger key / forged key id / missing block are refused, and the key table
+    // compiled into the firmware matches keys/*.pub.pem. docs/release-signing.md.
+    ok: (code) => code === 0, summary: (o) => (o.match(/fwsig: [^\n]*/) || [lastLine(o)])[0].trim() },
   { name: 'setup-store (reset + SD secrets)', cmd: 'node', args: ['tools/anima-host/setup-store-check.mjs'],
     // nucleo_setup's three-tier config store (firmware/components/nucleo_setup/setup_store.c) + the hotspot
     // credential core (ap_creds.c), host-compiled with MinGW against ESP-IDF's real cJSON and an in-memory

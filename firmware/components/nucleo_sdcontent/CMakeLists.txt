@@ -3,5 +3,5 @@ idf_component_register(
     INCLUDE_DIRS "include"
     # nucleo_board: the SD mount path (header only). nucleo_setup_ip / nucleo_i18n_lang resolve at final
     # link (the app pulls them in) to avoid a REQUIRES cycle, exactly like nucleo_app's weak externs.
-    REQUIRES nucleo_board esp_http_client mbedtls nvs_flash esp_app_format esp_system
+    REQUIRES nucleo_board nucleo_fwsig esp_http_client mbedtls nvs_flash esp_app_format esp_system
 )

@@ -174,6 +174,10 @@ git push origin main            # CI (ci.yml) runs the gate on main
 git tag v0.3.1 && git push origin v0.3.1
 ```
 
+**3. Sign it** (on the PC that holds the release key, once CI has published): `python tools/fw_sign.py release
+v0.3.1`. CI never sees the key; until this runs, firmware with the signature check reports "release not signed
+yet" and keeps running, older firmware installs as before. See [release-signing.md](release-signing.md).
+
 The tag triggers `.github/workflows/release.yml`, a **three-stage, each-gates-the-next** pipeline:
 
 1. **gate** — the reusable `gate.yml` (the *same* checks `ci.yml` runs on every push/PR: validate,
@@ -222,6 +226,8 @@ prepares the verified image, the cover and the form text — see [m5launcher.md]
 ### Security properties
 - **No unreviewed ship:** the gate blocks the build; `main` is always green (CI), so tags build green.
 - **Tag ↔ version coherence:** the pipeline refuses `tag != v<VERSION>` — no "v0.3.1 that is really 0.2.x".
+- **Authenticity:** the OTA image and the SD manifest carry an offline ECDSA release signature the device
+  checks before anything becomes bootable or is written ([release-signing.md](release-signing.md)).
 - **Integrity:** `SHA256SUMS` for every asset; the updater verifies SHA-256 + the ESP image magic
   before flashing, and the device rolls back an image that fails to boot (see `main.c` boot-health gate).
 - **Provenance:** signed attestations prove a binary came from this workflow + commit (supply chain).

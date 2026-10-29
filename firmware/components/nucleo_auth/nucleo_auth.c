@@ -354,16 +354,26 @@ static uint32_t client_ip(httpd_req_t *req)
     return 0;
 }
 
-// Find (or LRU-allocate) the throttle bucket for this IP.
-static fail_ent_t *fail_slot(uint32_t ip)
+// Find (or LRU-allocate) the throttle bucket for this IP. NULL = every bucket still holds a guesser's
+// history: the caller refuses with 429. Evicting such a bucket used to hand a FRESH budget to whoever
+// rotated through FAILTAB_N+1 source addresses (trivial on a LAN), which turned the per-IP lockout into
+// no limit at all for a 6-digit PIN. Only a clean bucket (no misses, no backoff) or one idle longer than
+// the longest lockout may be reused; under a many-address attack, pairing pauses for everyone (already
+// paired browsers keep working — they never call /api/pair).
+#define FAIL_STALE_US (3600LL * 1000000)
+static fail_ent_t *fail_slot(uint32_t ip, int64_t now)
 {
-    fail_ent_t *lru = &s_fail[0];
+    fail_ent_t *victim = NULL;
     for (int i = 0; i < FAILTAB_N; i++) {
-        if (s_fail[i].last != 0 && s_fail[i].ip == ip) return &s_fail[i];
-        if (s_fail[i].last < lru->last) lru = &s_fail[i];
+        fail_ent_t *e = &s_fail[i];
+        if (e->last != 0 && e->ip == ip) return e;
+        bool reusable = e->last == 0 || (e->fails == 0 && e->level == 0 && now >= e->lock_until) ||
+                        now - e->last > FAIL_STALE_US;
+        if (reusable && (!victim || e->last < victim->last)) victim = e;
     }
-    lru->ip = ip; lru->fails = 0; lru->level = 0; lru->lock_until = 0;
-    return lru;
+    if (!victim) return NULL;
+    victim->ip = ip; victim->fails = 0; victim->level = 0; victim->lock_until = 0;
+    return victim;
 }
 
 // ---- token check ----
@@ -511,13 +521,14 @@ static void mint_token(char *out)
 
 static esp_err_t pair_post(httpd_req_t *req)
 {
+    // No Access-Control-Allow-Origin: the shell pairs same-origin and CLI tools ignore CORS, while a wildcard
+    // let any web page the operator visits run the PIN guessing from their browser and read each verdict.
     httpd_resp_set_type(req, "application/json");
-    httpd_resp_set_hdr(req, "Access-Control-Allow-Origin", "*");
 
     int64_t now = esp_timer_get_time();
-    fail_ent_t *fe = fail_slot(client_ip(req));
-    fe->last = now;
-    if (now < fe->lock_until) {
+    fail_ent_t *fe = fail_slot(client_ip(req), now);
+    if (fe) fe->last = now;
+    if (!fe || now < fe->lock_until) {
         httpd_resp_set_status(req, "429 Too Many Requests");
         httpd_resp_sendstr(req, "{\"error\":\"locked\"}");
         return ESP_OK;
