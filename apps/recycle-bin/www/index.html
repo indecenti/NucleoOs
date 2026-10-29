@@ -58,28 +58,14 @@
 
 <script type="module">
   import I18N from '/nucleo-i18n.js';
+  import fs from '/nucleo-fs.js';
+  import os from '/nucleo-shell.js';   // the OS dialogs (keys, joypad, touch); the shell also themes this page
   const t = await I18N.init('recycle-bin');
   // The trash is written by File Commander; we read/operate on the same canonical files.
   const TRASH_DB = '/system/config/trash.json';
-  const api = (op, path, opts = {}) =>
-    fetch('/api/fs/' + op + '?path=' + encodeURIComponent(path), opts);
-  // An atomic rename restores files AND folders and never pulls the bytes through the tab (a folder
-  // cannot be read back with /api/fs/read at all). `overwrite=1` so a re-created original yields.
-  const move = (from, to) =>
-    fetch('/api/fs/move?from=' + encodeURIComponent(from) + '&to=' + encodeURIComponent(to) + '&overwrite=1', { method: 'POST' });
-  const isPairErr = (r) => r && r.status === 401;
+  // A refused request (FsError 'denied') means this browser is not paired with the device.
+  const isPairErr = (err) => !!err && err.code === 'denied';
 
-  // OS theme: apply the persisted choice at boot; the shell also live-injects CSS vars, but only on
-  // switch and never standalone. A missing settings.json leaves the default dark palette in place.
-  async function loadTheme() {
-    try {
-      const r = await api('read', '/system/config/settings.json');
-      if (!r.ok) return;
-      const s = JSON.parse(await r.text());
-      if (s?.ui?.theme) document.documentElement.dataset.theme = s.ui.theme;
-    } catch {}
-  }
-  loadTheme();
   const GLYPH = { txt:'📄', md:'📄', json:'📄', log:'📜', png:'🖼️', jpg:'🖼️', jpeg:'🖼️', gif:'🖼️',
                   mp3:'🎵', wav:'🎵', mp4:'🎬', webm:'🎬', pdf:'📕', zip:'🗜️', jsdos:'🕹️' };
   const glyph = (n) => GLYPH[(n.split('.').pop() || '').toLowerCase()] || '📄';
@@ -96,10 +82,8 @@
   // the next purge/restore would save that and wipe the record of every other trashed file. A 404, or
   // the firmware's "{}" for a missing /system/config/*.json, is a genuinely empty bin.
   async function loadDb() {
-    let r; try { r = await api('read', TRASH_DB); } catch { return null; }
-    if (r.status === 404) return { items: [] };
-    if (!r.ok) return null;
-    let txt; try { txt = await r.text(); } catch { return null; }   // a read that broke off is not an index
+    let txt; try { txt = await fs.readText(TRASH_DB); } catch { return null; }   // a read that broke off is not an index
+    if (txt == null) return { items: [] };
     if (!txt.trim()) return { items: [] };                            // a 0-byte index = an empty bin
     try {
       const d = JSON.parse(txt);
@@ -112,12 +96,13 @@
     // trashed files stay in /system/.trash, and the old list stays recoverable) and start a fresh index; if
     // even that copy cannot be written, change nothing.
     try {
-      const k = await api('write', TRASH_DB.replace(/.json$/, '.corrupt.json'), { method: 'POST', body: txt });
-      if (k && k.ok) return { items: [] };
+      await fs.writeText(TRASH_DB.replace(/.json$/, '.corrupt.json'), txt);
+      return { items: [] };
     } catch {}
     return null;
   }
-  const saveDb = (db) => api('write', TRASH_DB, { method: 'POST', body: JSON.stringify(db) });
+  // As before, only a lost connection fails the caller; a refused save leaves the old index in place.
+  const saveDb = (db) => fs.writeJSON(TRASH_DB, db).catch((err) => { if (err && err.code === 'offline') throw err; });
   // Load the index for a change; on failure tell the user and return null so the caller changes nothing.
   async function loadDbForChange() {
     const db = await loadDb();
@@ -125,21 +110,16 @@
     return db;
   }
 
-  // Put one trashed entry back: the atomic move first; if the backend refuses it for any reason but
-  // pairing, the byte copy (a FILE only: a failed read is never written over the original).
-  // Returns the failing response's status ('pair' for 401), or '' on success.
+  // Put one trashed entry back: the atomic move first (files AND folders, never the bytes through the
+  // tab; a re-created original yields); if the backend refuses it for any reason but pairing, the byte
+  // copy (a FILE only: a failed read is never written over the original).
+  // Returns 'pair' (not paired), 'fail', or '' on success.
   async function putBack(item) {
-    const m = await move(item.trash, item.orig).catch(() => null);
-    if (m && m.ok) return '';
-    if (isPairErr(m)) return 'pair';
-    const r = await api('read', item.trash);
-    if (isPairErr(r)) return 'pair';
-    if (!r.ok) return 'fail';
-    const buf = await r.arrayBuffer();
-    const w = await api('write', item.orig, { method: 'POST', body: buf });
-    if (isPairErr(w)) return 'pair';
-    if (!w.ok) return 'fail';
-    await api('delete', item.trash, { method: 'POST' });
+    try { await fs.move(item.trash, item.orig, { overwrite: true }); return ''; }
+    catch (err) { if (isPairErr(err)) return 'pair'; }
+    try { await fs.copy(item.trash, item.orig, { overwrite: true }); }
+    catch (err) { return isPairErr(err) ? 'pair' : 'fail'; }
+    await fs.remove(item.trash).catch(() => {});
     return '';
   }
 
@@ -156,15 +136,13 @@
   }
   // Permanent, so it asks first — like "Empty bin" always did.
   async function purge(item) {
-    if (!confirm(t('confirm_purge', { name: item.name }))) return;
+    if (!(await os.confirm(t('confirm_purge', { name: item.name }), { danger: true }))) return;
     const db = await loadDbForChange();
     if (!db) { render(); return; }
     try {
-      const r = await api('delete', item.trash, { method: 'POST' });
-      if (isPairErr(r)) { toast(t('toast_pair_needed')); render(); return; }
-      // 404 = the file is already gone: dropping its stale entry is right. Anything else: keep it listed.
-      if (!r.ok && r.status !== 404) { toast(t('toast_delete_failed')); render(); return; }
-    } catch { toast(t('toast_delete_failed')); render(); return; }
+      // false = the file is already gone: dropping its stale entry is right. Anything else: keep it listed.
+      await fs.remove(item.trash);
+    } catch (err) { toast(t(isPairErr(err) ? 'toast_pair_needed' : 'toast_delete_failed')); render(); return; }
     db.items = db.items.filter((i) => i.trash !== item.trash); await saveDb(db);
     toast(t('toast_deleted_perm')); render();
   }
@@ -181,13 +159,13 @@
   async function empty() {
     const db = await loadDbForChange();
     if (!db) { render(); return; }
-    if (db.items.length && !confirm(t('confirm_empty', { count: db.items.length }))) return;
+    if (db.items.length && !(await os.confirm(t('confirm_empty', { count: db.items.length }), { danger: true }))) return;
     // A file whose delete failed stays listed: dropping its entry would orphan it in the trash folder.
     const kept = [];
     for (const item of db.items) {
-      const r = await api('delete', item.trash, { method: 'POST' }).catch(() => null);
-      if (isPairErr(r)) { toast(t('toast_pair_needed')); render(); return; }
-      if (!r || (!r.ok && r.status !== 404)) kept.push(item);
+      let err = null; try { await fs.remove(item.trash); } catch (e) { err = e; }   // gone already = fine
+      if (isPairErr(err)) { toast(t('toast_pair_needed')); render(); return; }
+      if (err) kept.push(item);
     }
     await saveDb({ items: kept }); toast(t(kept.length ? 'toast_delete_failed' : 'toast_bin_emptied')); render();
   }
@@ -238,10 +216,8 @@
   window.addEventListener('message', (e) => {
     const d = e.data;
     if (!d) return;
-    if (d.type === 'set-theme' && d.theme) { document.documentElement.dataset.theme = d.theme; return; }
     if (d.t === 'fs.changed' && d.d && typeof d.d.path === 'string') {
       if (d.d.path.endsWith('trash.json')) render();
-      if (d.d.path.endsWith('settings.json')) loadTheme();
     }
     if (d.type === 'os-shortcut' && d.action === 'refresh') render();
   });

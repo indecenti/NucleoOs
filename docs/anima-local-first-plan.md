@@ -91,14 +91,14 @@ actions), no duplicate device calls, CDN-first heavy libraries with SD fallback.
    auto-detection, `OLLAMA_ORIGINS` wizard per OS, model picker from `/api/tags` + `/api/show`.
    *Test:* E2E against the real Ollama (skipped when not running) + a mock server in CI.
    *Status (2026-09-30):* engine layer done and in ANIMA's ladder (local-first without a key / in Private,
-   cloud fallback otherwise); unit-tested with mocks (`tools/shell-ai-engines.test.mjs`) and E2E on the real
+   cloud fallback otherwise); unit-tested with mocks (`nucleo-webos tests/suite/shell-ai-engines.test.mjs`) and E2E on the real
    Ollama (`tools/web-e2e/ollama.e2e.mjs`). Copilot on the same layer; model choice learns tokens/s + VRAM
    share on this computer; the per-OS `OLLAMA_ORIGINS` wizard (`/local-ai-help.js`) is live in ANIMA. Still
    open: the Agent app on the layer, the Settings UI for `prefer`/models + the wizard there (phase 3).
 3. **Settings ▸ AI & Models + migration** — the center, wizards, apps moved to `resolve()`, duplicate
    clients/keys removed, presets fixed.
    *Status (2026-10-11):* the center is done. Settings ▸ AI / Models ▸ **Models on your PC**
-   (`apps/settings/www/pc-models.js`, host-tested in `tools/settings-pc-models.test.mjs`) edits all of
+   (`apps/settings/www/pc-models.js`, host-tested in `nucleo-webos tests/suite/settings-pc-models.test.mjs`) edits all of
    `ai.local.engines`: on/off, the server list (defaults on/off, add by address, remove), `prefer`, a model per task
    (chat / code / agent) and the `OLLAMA_ORIGINS` wizard for a refusing server. ANIMA's engines panel links there.
    The presets write only `auto | private` to `anima.mode` (Auto with just the WASM pack had written `edge` = Private)

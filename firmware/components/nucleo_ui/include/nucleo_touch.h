@@ -38,6 +38,11 @@ static inline bool nucleo_touch_is_field(int key, char ch) { return key == 9 /* 
 // step px and the focus stays where it was, as on a phone. Never printable.
 #define NUCLEO_TOUCH_VIEW_BACK 0x0B
 #define NUCLEO_TOUCH_VIEW_FWD  0x0C
+// Hold: on a large screen (on_draw_large / the launcher grid) a finger held still on a list row or a tile
+// (a NUCLEO_TOUCH_ROW target) for the long-press time delivers NK_CHAR NUCLEO_TOUCH_HOLD instead of nothing; the
+// screen reads where with nucleo_touch_last() and opens its menu for what is there. Lifting after it is not a tap.
+#define NUCLEO_TOUCH_HOLD 0x0F
+static inline bool nucleo_touch_is_hold(int key, char ch) { return key == 9 /* NK_CHAR */ && ch == NUCLEO_TOUCH_HOLD; }
 // Where the tap that delivered the last target key landed (the screen's own coordinates). False = none yet.
 bool nucleo_touch_last(int *x, int *y);
 

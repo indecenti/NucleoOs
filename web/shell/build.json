@@ -3,28 +3,28 @@
  "apps": [
   {
    "id": "agent",
-   "version": "0.1.1",
-   "version_code": 2
-  },
-  {
-   "id": "anima",
    "version": "0.1.2",
    "version_code": 3
   },
   {
+   "id": "anima",
+   "version": "0.1.3",
+   "version_code": 4
+  },
+  {
    "id": "arcade",
-   "version": "1.0.1",
-   "version_code": 2
+   "version": "1.0.2",
+   "version_code": 3
   },
   {
    "id": "archive-manager",
-   "version": "1.0.1",
-   "version_code": 2
+   "version": "1.0.2",
+   "version_code": 3
   },
   {
    "id": "authenticator",
-   "version": "1.0.1",
-   "version_code": 1
+   "version": "1.0.2",
+   "version_code": 2
   },
   {
    "id": "automation-studio",
@@ -33,68 +33,68 @@
   },
   {
    "id": "browser",
-   "version": "0.2.1",
-   "version_code": 3
+   "version": "0.2.2",
+   "version_code": 4
   },
   {
    "id": "calculator",
-   "version": "0.1.1",
-   "version_code": 2
-  },
-  {
-   "id": "calendar",
-   "version": "0.1.1",
-   "version_code": 2
-  },
-  {
-   "id": "clock",
-   "version": "0.2.1",
+   "version": "0.1.2",
    "version_code": 3
   },
   {
+   "id": "calendar",
+   "version": "0.1.2",
+   "version_code": 3
+  },
+  {
+   "id": "clock",
+   "version": "0.2.2",
+   "version_code": 4
+  },
+  {
    "id": "code-runner",
-   "version": "0.1.1",
-   "version_code": 2
+   "version": "0.1.2",
+   "version_code": 3
   },
   {
    "id": "community",
-   "version": "0.1.1",
-   "version_code": 2
+   "version": "0.1.2",
+   "version_code": 3
   },
   {
    "id": "contacts",
-   "version": "1.0.1",
-   "version_code": 1
+   "version": "1.0.2",
+   "version_code": 2
   },
   {
    "id": "dictation",
-   "version": "0.1.1",
-   "version_code": 1
+   "version": "0.1.2",
+   "version_code": 2
   },
   {
    "id": "dj",
-   "version": "0.1.2",
-   "version_code": 1
+   "version": "0.1.3",
+   "version_code": 2
   },
   {
    "id": "dos-importer",
-   "version": "0.1.1",
-   "version_code": 2
+   "version": "0.1.2",
+   "version_code": 3
   },
   {
    "id": "dosbox",
-   "version": "0.1.1",
-   "version_code": 2
+   "version": "0.1.2",
+   "version_code": 3
   },
   {
    "id": "file-commander",
-   "version": "0.1.1",
-   "version_code": 1
+   "version": "0.1.2",
+   "version_code": 2
   },
   {
    "id": "games",
-   "version": "0.1.2",
-   "version_code": 2
+   "version": "0.1.3",
+   "version_code": 3
   },
   {
    "id": "groq-chat",
@@ -103,28 +103,28 @@
   },
   {
    "id": "help",
-   "version": "0.1.1",
-   "version_code": 2
+   "version": "0.1.2",
+   "version_code": 3
   },
   {
    "id": "ir-remote",
-   "version": "0.1.1",
-   "version_code": 2
+   "version": "0.1.2",
+   "version_code": 3
   },
   {
    "id": "log-viewer",
-   "version": "0.1.1",
-   "version_code": 1
-  },
-  {
-   "id": "mail",
-   "version": "1.0.1",
+   "version": "0.1.2",
    "version_code": 2
   },
   {
+   "id": "mail",
+   "version": "1.0.2",
+   "version_code": 3
+  },
+  {
    "id": "media-player",
-   "version": "0.1.1",
-   "version_code": 1
+   "version": "0.1.2",
+   "version_code": 2
   },
   {
    "id": "metronome",
@@ -133,53 +133,53 @@
   },
   {
    "id": "miei-fatti",
-   "version": "0.1.1",
-   "version_code": 2
-  },
-  {
-   "id": "nearby",
-   "version": "0.1.1",
-   "version_code": 2
-  },
-  {
-   "id": "notepad",
-   "version": "0.1.1",
-   "version_code": 2
-  },
-  {
-   "id": "paint",
-   "version": "1.0.2",
+   "version": "0.1.2",
    "version_code": 3
   },
   {
+   "id": "nearby",
+   "version": "0.1.2",
+   "version_code": 3
+  },
+  {
+   "id": "notepad",
+   "version": "0.1.2",
+   "version_code": 3
+  },
+  {
+   "id": "paint",
+   "version": "1.0.3",
+   "version_code": 4
+  },
+  {
    "id": "passkeys",
-   "version": "0.1.1",
-   "version_code": 2
+   "version": "0.1.2",
+   "version_code": 3
   },
   {
    "id": "photo-viewer",
-   "version": "0.1.1",
-   "version_code": 2
+   "version": "0.1.2",
+   "version_code": 3
   },
   {
    "id": "qr",
-   "version": "0.1.1",
-   "version_code": 2
+   "version": "0.1.2",
+   "version_code": 3
   },
   {
    "id": "radio",
-   "version": "1.0.1",
-   "version_code": 1
+   "version": "1.0.2",
+   "version_code": 2
   },
   {
    "id": "recorder",
-   "version": "0.1.1",
-   "version_code": 1
+   "version": "0.1.2",
+   "version_code": 2
   },
   {
    "id": "recycle-bin",
-   "version": "0.1.1",
-   "version_code": 2
+   "version": "0.1.2",
+   "version_code": 3
   },
   {
    "id": "scoreboard",
@@ -188,23 +188,23 @@
   },
   {
    "id": "settings",
-   "version": "0.2.2",
-   "version_code": 2
+   "version": "0.2.3",
+   "version_code": 3
   },
   {
    "id": "spreadsheet",
-   "version": "0.1.1",
-   "version_code": 2
+   "version": "0.1.2",
+   "version_code": 3
   },
   {
    "id": "ssh",
-   "version": "0.1.1",
-   "version_code": 2
+   "version": "0.1.2",
+   "version_code": 3
   },
   {
    "id": "store",
-   "version": "1.0.1",
-   "version_code": 1
+   "version": "1.0.2",
+   "version_code": 2
   },
   {
    "id": "swarm",
@@ -213,43 +213,43 @@
   },
   {
    "id": "system-monitor",
-   "version": "0.1.2",
-   "version_code": 2
-  },
-  {
-   "id": "tasks",
-   "version": "0.1.1",
-   "version_code": 2
-  },
-  {
-   "id": "terminal",
-   "version": "0.1.1",
-   "version_code": 2
-  },
-  {
-   "id": "unit-converter",
-   "version": "0.1.1",
-   "version_code": 2
-  },
-  {
-   "id": "updates",
-   "version": "1.0.1",
-   "version_code": 1
-  },
-  {
-   "id": "video-player",
-   "version": "3.1.3",
-   "version_code": 5
-  },
-  {
-   "id": "video-studio",
-   "version": "0.2.1",
+   "version": "0.1.3",
    "version_code": 3
   },
   {
+   "id": "tasks",
+   "version": "0.1.2",
+   "version_code": 3
+  },
+  {
+   "id": "terminal",
+   "version": "0.1.2",
+   "version_code": 3
+  },
+  {
+   "id": "unit-converter",
+   "version": "0.1.2",
+   "version_code": 3
+  },
+  {
+   "id": "updates",
+   "version": "1.0.2",
+   "version_code": 2
+  },
+  {
+   "id": "video-player",
+   "version": "3.1.4",
+   "version_code": 6
+  },
+  {
+   "id": "video-studio",
+   "version": "0.2.2",
+   "version_code": 4
+  },
+  {
    "id": "voice-manager",
-   "version": "0.2.1",
-   "version_code": 1
+   "version": "0.2.2",
+   "version_code": 2
   },
   {
    "id": "weather",
@@ -258,8 +258,8 @@
   },
   {
    "id": "wifi-scanner",
-   "version": "0.1.2",
-   "version_code": 2
+   "version": "0.1.3",
+   "version_code": 3
   }
  ],
  "apps_dir": "apps",
@@ -267,13 +267,13 @@
  "budget": {
   "bytes": 75497472,
   "ok": true,
-  "used": 36497441
+  "used": 36572333
  },
- "bytes": 57384558,
+ "bytes": 57459450,
  "caps_row": {
   "after": "0.7.5"
  },
- "commit": "aacc080e105e4c519326dc915bcf74ea69fef80b",
+ "commit": "ca773ac7d5d99fc4ca217735d7a076cc4f562928",
  "edition": "cardputer",
  "externals": [
   {
@@ -561,11 +561,11 @@
    "why": "unRAR license is not free software: out until verified (external-resources.json)"
   }
  ],
- "files": 1469,
+ "files": 1475,
  "format": 1,
  "generator": "nucleo-webos tools/build.py",
- "gz_twins": 662,
- "hash": "e5091665379350817e44e214b002481852cd0464e84e7fc6a22a69ba07cf8375",
+ "gz_twins": 665,
+ "hash": "cb80fc15e54a5505731a652c14f58c974200408bd3b3f862afd3156fcfe38b32",
  "left_out": [
   {
    "id": "cast",
@@ -592,22 +592,25 @@
    ]
   }
  ],
- "left_out_by_profile": [],
+ "left_out_by_profile": [
+  "pdf-editor"
+ ],
  "never_shipped": {
-  "app sources, tests and docs outside www/ (only manifest.json and www/ ship)": 12,
-  "build metadata: decides which apps enter a build, never read at runtime": 52,
+  "app sources, tests and docs outside www/ (only manifest.json and www/ ship)": 13,
+  "build metadata: decides which apps enter a build, never read at runtime": 53,
   "build scripts": 1,
+  "cardputer profile: a Store app (web channel, about 2 MB with pdf.js): installed from the Store, never built in": 17,
   "cardputer profile: heavy optional asset, installable in-app (RELEASE_HEAVY)": 10,
   "cardputer profile: heavy optional assets, installable in-app (NucleoOs sd_deploy.py RELEASE_HEAVY)": 3,
-  "channel metadata: read by nucleoos-webapps-store's publishing tool": 1,
+  "channel metadata: read by nucleoos-webapps-store's publishing tool": 2,
   "decoder sources and their build scripts (the built .wasm sits in www/)": 4,
   "git/npm metadata (.gitattributes, .npmignore...)": 2,
   "tests": 6
  },
- "profile_sha256": "d62cbdd51b51c972b3c7554c21d6c99b4c7c8280ebc64ba3affe9445d73161a4",
+ "profile_sha256": "f84fc128e9d0121dd7a732107ea112fac273696d36da3aa9fb35ff5d3c8948d8",
  "shell": {
-  "cache": "nucleo-shell-v161-589f80043e60",
-  "hash": "589f80043e60"
+  "cache": "nucleo-shell-v161-3fe8a8c20e36",
+  "hash": "3fe8a8c20e36"
  },
  "shell_dir": "www/shell",
  "uncommitted_files": 0

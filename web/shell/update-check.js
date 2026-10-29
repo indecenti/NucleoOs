@@ -72,9 +72,9 @@ export function initUpdateCheck({ getSnapVersion, getNotify, onState }) {
         // re-check: the card is shared with the web OS and an unchanged file is pure flash wear.
         if (d.newer && readJSON(LS_BRIDGED) !== cache.tag) {
           try {
-            fetch('/api/fs/write?path=' + encodeURIComponent('/system/config/update.json'),
-              { method: 'POST', body: JSON.stringify({ tag: cache.tag, type, notes: String(cache.notes || '').slice(0, 200) }) })
-              .then((r) => { if (r.ok) writeJSON(LS_BRIDGED, cache.tag); })
+            import('./nucleo-fs.js').then(({ default: fs }) => fs.writeJSON('/system/config/update.json',
+              { tag: cache.tag, type, notes: String(cache.notes || '').slice(0, 200) }))
+              .then(() => writeJSON(LS_BRIDGED, cache.tag))
               .catch(() => {});
           } catch {}
         }

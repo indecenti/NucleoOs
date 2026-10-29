@@ -39,6 +39,7 @@
 <div id="toast"></div>
 <script type="module">
 import I18N from '/nucleo-i18n.js';
+import fs from '/nucleo-fs.js';
 const t = await I18N.init('arcade');
 
 const q = new URLSearchParams(location.search);
@@ -295,31 +296,26 @@ const RAW_BASE = FILE.replace(/\.[^.]+$/, '');
 const GAME_BASE = SAVE_BASE && encodeURIComponent(SAVE_BASE + RAW_BASE + '.state.png').length > 190
   ? shortBase(RAW_BASE) : RAW_BASE;
 const sdPath = (ext) => SAVE_BASE + GAME_BASE + ext;
-let saveDirReady = false;
+// The core file layer wants absolute paths; the firmware reads 'data/…' and '/data/…' as the same file.
+const abs = (path) => '/' + path;
 
+// Parent folders first (the core makes each level once per page, and only a level the device really
+// made is remembered: a dropped request retries next time, or every save of the session dies on the
+// missing parent dir).
 async function ensureSaveDir() {
-  if (saveDirReady) return;
-  // mkdir-first, idempotent (an already-existing dir answers an error the firmware sends and we
-  // ignore) — but only a server that actually ANSWERED latches the flag: a dropped request must
-  // retry next time, or every save of the session dies on the missing parent dir.
-  try {
-    await fetch('/api/fs/mkdir?path=' + encodeURIComponent(SAVE_BASE.replace(/\/$/, '')), { method: 'POST' });
-    saveDirReady = true;
-  } catch (e) {}
+  try { await fs.mkdirp(abs(SAVE_BASE)); } catch (e) {}
 }
+// Saves are written ATOMICALLY (the core's hidden temporary file, then a rename): a dropped connection
+// mid-save leaves the previous save, never half of one.
 async function sdWrite(path, bytes) {
-  await ensureSaveDir();
-  const r = await fetch('/api/fs/write?path=' + encodeURIComponent(path), { method: 'POST', body: bytes });
-  if (!r.ok) throw new Error('HTTP ' + r.status);
+  try { await fs.write(abs(path), bytes); }                             // folders made as needed
+  catch (e) { throw new Error(e.code || e.message); }
 }
-// Like sdRead, but tells "no save yet" (404 / empty) apart from "could not read it" (busy / offline).
+// Like sdRead, but tells "no save yet" (absent / empty) apart from "could not read it" (busy / offline).
 async function sdReadSave(path) {
   try {
-    const r = await fetch('/api/fs/read?path=' + encodeURIComponent(path), { cache: 'no-store' });
-    if (r.status === 404) return { state: 'none' };
-    if (!r.ok) return { state: 'error' };
-    const b = new Uint8Array(await r.arrayBuffer());
-    return b.length ? { state: 'ok', bytes: b } : { state: 'none' };
+    const b = await fs.read(abs(path));
+    return b && b.length ? { state: 'ok', bytes: b } : { state: 'none' };
   } catch (e) { return { state: 'error' }; }
 }
 // The battery-save auto-sync (periodic flush, the core's save event, Esc / exit, the pagehide beacon) may
@@ -329,12 +325,8 @@ async function sdReadSave(path) {
 // device answered 503 to the save read right after streaming the ROM and core (sdRead said "no save").
 let sramGuard = true, sramStartDone = false;
 async function sdRead(path) {
-  try {
-    const r = await fetch('/api/fs/read?path=' + encodeURIComponent(path), { cache: 'no-store' });
-    if (!r.ok) return null;
-    const b = new Uint8Array(await r.arrayBuffer());
-    return b.length ? b : null;
-  } catch (e) { return null; }
+  try { const b = await fs.read(abs(path)); return b && b.length ? b : null; }
+  catch (e) { return null; }
 }
 
 // Write bytes into the emulator's virtual FS at the save-file path and make the core reload them —
@@ -606,8 +598,9 @@ window.addEventListener('pagehide', () => {
     // No time to await the async dump here — read whatever the last dump left. The periodic flush
     // and EmulatorJS's own save interval keep that file fresh, so this only papers a small window.
     const bytes = gm.getSaveFile(false);
+    // The page is going: the core's keepalive write, the one request that outlives it (plain, not atomic).
     if (bytes && bytes.length && sramSig(bytes) !== lastSramSig)
-      navigator.sendBeacon('/api/fs/write?path=' + encodeURIComponent(sdPath('.srm')), new Blob([bytes]));
+      fs.write(sdPath('.srm'), bytes, { keepalive: true });
   } catch (e) {}
 });
 </script>

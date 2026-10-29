@@ -84,6 +84,7 @@
 <script type="module">
 import I18N from '/nucleo-i18n.js';
 import Caps from '/nucleo-caps.js';   // fs.mounts: whether /api/fs/mounts exists here
+import fs from '/nucleo-fs.js';
 import { DjEngine } from './dj-engine.js';
 import { planMusicMix, genreFamily, genreEnergy } from './dj-planner.js';
 import { DjBrain } from './dj-brain.js';
@@ -160,7 +161,7 @@ async function libraryDirs() {
   const dirs = [DIR];
   try {
     if (!await Caps.has('fs.mounts')) return dirs;
-    const m = await (await fetch('/api/fs/mounts')).json();
+    const m = await fs.mounts();
     if (m && typeof m.media_alt === 'string' && m.media_alt) dirs.push(m.media_alt + '/Music');
   } catch {}
   return dirs;
@@ -173,13 +174,8 @@ async function listLibrary() {
   const shown = [];
   for (const dir of dirs) {
     try {
-      const r = await fetch('/api/fs/list?path=' + encodeURIComponent(dir));
-      let files = [];
-      if (r.status !== 404) {                             // 404: no such folder yet — an empty library
-        if (!r.ok) throw new Error('HTTP ' + r.status);  // busy / unreachable: say so, it is not "no tracks"
-        const d = await r.json();
-        files = (d.entries || []).filter((e) => e.type === 'file' && /\.(mp3|wav)$/i.test(e.name));
-      }
+      // No such folder yet lists as [] (an empty library); busy / unreachable throws: it is not "no tracks".
+      const files = (await fs.list(dir)).filter((e) => e.type === 'file' && /\.(mp3|wav)$/i.test(e.name));
       if (files.length || dir === DIR) shown.push(dir);
       lib.push(...files.map((e) => ({ path: dir + '/' + e.name, name: e.name })));
     } catch { if (dir === DIR) libErr = true; }

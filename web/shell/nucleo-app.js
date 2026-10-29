@@ -20,6 +20,11 @@
 //     NucleoApp.onLang(() => render());           // after the strings of the new language are painted
 //     NucleoApp.onTheme((th) => …);               // { mode: 'dark'|'light', accent, fontSize }
 //     if (await NucleoApp.caps.has('device.mic')) …  // device features: docs/capabilities.md
+//     const [f] = await NucleoApp.files.open({ types: ['pdf'] }) || [];   // the OS Open sheet: { name, data, where }
+//     const s = await NucleoApp.files.save('report.pdf', bytes);            // the OS Save sheet: device or download
+//     await NucleoApp.files.save('report.pdf', bytes, { handle: s.handle }); // Save again: same file, no sheet
+//     await NucleoApp.files.app.write('cover.png', bytes);                  // the app's own folder (docs/files.md)
+//     const f0 = await NucleoApp.files.launched();                          // the file the app was opened with, or null
 //   </script>
 (function () {
   'use strict';
@@ -191,6 +196,117 @@
     list: function () { return loadCaps().then(function (l) { return l.slice(); }); },
   };
 
+  // ── files: the OS Open / Save sheets (appbroker.js file.*, shell/filedialog.js) ──
+  // The user chooses the device's storage or the computer/phone in front of them; the app gets bytes, never a
+  // path, and is the same on every edition. null = the user cancelled. On its own (no shell) a file input and a
+  // download stand in, so an app needs no second code path.
+  var SHEET_MS = 30 * 60 * 1000;          // a person is choosing: no short timeout
+  function fileErr(r) {
+    var e = new Error((r && r.error) || 'broker error');
+    e.code = /^denied|unknown caller/.test(e.message) ? 'unsupported' : e.message === 'busy' ? 'busy' : 'failed';
+    return e;
+  }
+  function pickHere(opts) {
+    return new Promise(function (resolve) {
+      var input = document.createElement('input');
+      input.type = 'file';
+      if (opts.multiple) input.multiple = true;
+      if (opts.types && opts.types.length) input.accept = opts.types.map(function (x) { return '.' + x; }).join(',');
+      input.style.display = 'none';
+      input.addEventListener('change', function () {
+        var fl = Array.prototype.slice.call(input.files || []);
+        input.remove();
+        if (!fl.length) { resolve(null); return; }
+        Promise.all(fl.map(function (f) { return f.arrayBuffer().then(function (b) { return { name: f.name, data: b, where: 'local' }; }); })).then(resolve, function () { resolve(null); });
+      });
+      input.addEventListener('cancel', function () { input.remove(); resolve(null); });
+      document.body.appendChild(input);
+      input.click();
+    });
+  }
+  var files = {
+    open: function (opts) {
+      var o = opts || {};
+      var types = Array.isArray(o.types) ? o.types : [];
+      if (!inShell) return pickHere({ types: types, multiple: !!o.multiple });
+      return call('file.open', { types: types, multiple: !!o.multiple }, SHEET_MS).then(function (r) {
+        if (r && r.ok) return r.files || [];
+        if (r && r.error === 'cancelled') return null;
+        throw fileErr(r);
+      });
+    },
+    // save(name, data) is "Save as" (the sheet); save(name, data, { handle }) writes the file the user already
+    // chose, without asking again. A handle the shell no longer knows falls back to the sheet.
+    save: function (name, data, opts) {
+      var handle = opts && opts.handle;
+      if (inShell && handle) {
+        return call('file.write', { handle: handle, data: data }, SHEET_MS).then(function (r) {
+          if (r && r.ok) return { name: r.name || name, where: 'device', handle: handle };
+          if (r && r.error === 'bad handle') return files.save(name, data);
+          throw fileErr(r);
+        });
+      }
+      if (!inShell) {
+        var url = URL.createObjectURL(data instanceof Blob ? data : new Blob([data]));
+        var a = document.createElement('a');
+        a.href = url; a.download = name; a.style.display = 'none';
+        document.body.appendChild(a); a.click(); a.remove();
+        setTimeout(function () { URL.revokeObjectURL(url); }, 60000);
+        return Promise.resolve({ name: name, where: 'download' });
+      }
+      return call('file.save', { name: name, data: data }, SHEET_MS).then(function (r) {
+        if (r && r.ok) return { name: r.name || name, where: r.where || 'download', handle: r.handle || null };
+        if (r && r.error === 'cancelled') return null;
+        throw fileErr(r);
+      });
+    },
+    launched: function () {
+      if (!inShell) return Promise.resolve(null);
+      return call('file.launch', {}, 120000).then(function (r) {
+        return r && r.ok && r.file ? r.file : null;
+      });
+    },
+    // The app's own files (binary), kept on the device: /data/apps/<id>/files/<name>. On its own, this browser.
+    app: {
+      read: function (name) {
+        if (!inShell) return idb('readonly', function (st) { return st.get(name); }).then(function (v) { return v == null ? null : v; });
+        return call('appfs.read', { name: name }, 120000).then(function (r) { if (r && r.ok) return r.data; throw fileErr(r); });
+      },
+      write: function (name, data) {
+        if (!inShell) return toBuffer(data).then(function (b) { return idb('readwrite', function (st) { return st.put(b, name); }); }).then(function () {});
+        return call('appfs.write', { name: name, data: data }, 120000).then(function (r) { if (!(r && r.ok)) throw fileErr(r); });
+      },
+      list: function () {
+        if (!inShell) return idb('readonly', function (st) { return st.getAllKeys(); }).then(function (ks) { return (ks || []).map(function (k) { return { name: String(k), size: 0 }; }); });
+        return call('appfs.list', {}).then(function (r) { if (r && r.ok) return r.entries; throw fileErr(r); });
+      },
+      remove: function (name) {
+        if (!inShell) return idb('readwrite', function (st) { return st.delete(name); }).then(function () { return true; });
+        return call('appfs.remove', { name: name }).then(function (r) { if (r && r.ok) return r.removed; throw fileErr(r); });
+      },
+    },
+  };
+  function toBuffer(d) {
+    if (d instanceof ArrayBuffer) return Promise.resolve(d);
+    if (ArrayBuffer.isView(d)) return Promise.resolve(d.buffer.slice(d.byteOffset, d.byteOffset + d.byteLength));
+    if (typeof Blob !== 'undefined' && d instanceof Blob) return d.arrayBuffer();
+    return Promise.resolve(new TextEncoder().encode(String(d)).buffer);
+  }
+  // On its own (development), the app's files live in this browser: one IndexedDB store per app.
+  function idb(mode, fn) {
+    return new Promise(function (resolve, reject) {
+      var open = indexedDB.open('nucleo.app.' + appId + '.files', 1);
+      open.onupgradeneeded = function () { open.result.createObjectStore('f'); };
+      open.onerror = function () { reject(open.error); };
+      open.onsuccess = function () {
+        var tx = open.result.transaction('f', mode);
+        var rq = fn(tx.objectStore('f'));
+        tx.oncomplete = function () { resolve(rq.result); };
+        tx.onerror = function () { reject(tx.error); };
+      };
+    });
+  }
+
   // ── start ──
   var ready = (inShell ? call('sys.info') : Promise.resolve({ ok: true, lang: standaloneLang() })).then(function (info) {
     if (info && info.theme) setTheme(info.theme);
@@ -208,6 +324,7 @@
     apply: apply,
     kv: kv,
     caps: caps,
+    files: files,
     get lang() { return api.lang; },
     get theme() { return api.theme; },
     get sandboxed() { return window.origin === 'null'; },

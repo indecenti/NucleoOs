@@ -192,7 +192,7 @@ flasher") — `pages.yml` tolerates their absence.
 
 ## Tests
 
-**Web:** `node --test tools/update-core.test.mjs` (in `npm run test:unit`): version parsing/compare
+**Web:** `node --test nucleo-webos tests/suite/update-core.test.mjs` (in `npm run test:unit`): version parsing/compare
 edge cases (dirty `*`, `+build.g<hash>`, `nogit`, 4-part tags), cadence, notify decision, conditional
 fetch with fake responses (ETag, 304, 403/500/offline), SHA256SUMS parsing, and SHA-256 against the
 FIPS vectors plus `node:crypto` across all padding regimes.

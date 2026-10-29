@@ -1,8 +1,8 @@
 {
   "id": "voice-manager",
   "name": "Comandi Vocali",
-  "version": "0.2.1",
-  "version_code": 1,
+  "version": "0.2.2",
+  "version_code": 2,
   "description": "Addestra il riconoscitore vocale offline del dispositivo con la tua voce: tutorial guidato, libreria di comandi nativi ancorati alle azioni reali, e prova dal vivo con telemetria. Premi-e-parla (FN), tutto on-device, nessun cloud.",
   "category": "system",
   "runtime": "web",

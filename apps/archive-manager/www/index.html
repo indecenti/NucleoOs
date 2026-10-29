@@ -160,7 +160,15 @@
     window.__amRedraw = null;
     window.__amOnI18n = (cb) => { window.__amRedraw = cb; };
 
-    const api = (op, path, opts) => fetch(`/api/fs/${op}?path=` + encodeURIComponent(path), opts);
+    // The device's disk, through the core file layer (loaded once; this is a classic script).
+    let fsMod = null;
+    const getFs = async () => fsMod || (fsMod = (await import('/nucleo-fs.js')).default);
+    // The OS around this window (dialogs drawn by the shell), loaded once like the file layer.
+    let osMod = null;
+    const getOs = async () => osMod || (osMod = (await import('/nucleo-shell.js')).default);
+    // Run one disk step; a refused request becomes the given catalog error with the device's HTTP answer as
+    // {status}; a lost connection keeps its own message, as before.
+    const step = (p, key, args) => p.catch((err) => { if (err && err.status) throw i18nErr(key, { ...args, status: err.status }); throw err; });
     const parent = (p) => p.replace(/\/[^/]+\/?$/, '') || '/';
     const fmt = (b) => b >= 1048576 ? (b / 1048576).toFixed(1) + ' MB' : b >= 1024 ? (b / 1024).toFixed(0) + ' KB' : b + ' B';
     const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -206,22 +214,9 @@
       loadZip(pathParam);
     }
 
-    // OS theme: apply the persisted choice at boot (the shell live-injects CSS vars, but only on
-    // switch and never standalone). A missing settings.json keeps the default dark palette.
-    async function loadTheme() {
-      try {
-        const r = await fetch('/api/fs/read?path=' + encodeURIComponent('/system/config/settings.json'), { cache: 'no-store' });
-        if (!r.ok) return;
-        const s = JSON.parse(await r.text());
-        if (s && s.ui && s.ui.theme) document.documentElement.dataset.theme = s.ui.theme;
-      } catch {}
-    }
-    loadTheme();
-
     // Handle open-file event from the OS (modalità estrazione)
     window.addEventListener('message', async (e) => {
       const d = e.data;
-      if (d && d.type === 'set-theme' && d.theme) { document.documentElement.dataset.theme = d.theme; return; }
       if (d && d.type === 'open-file' && d.path) {
         if (d.path.toLowerCase().endsWith('.zip')) {
           mode = 'extract';
@@ -251,10 +246,11 @@
       btnLabel.textContent = t('extract_here');
 
       try {
-        const res = await api('read', path);
-        if (!res.ok) throw i18nErr('err_read_file', { status: res.status });
-        const blob = await res.blob();
-        
+        const fs = await getFs();
+        const bytes = await step(fs.read(path), 'err_read_file', {});
+        if (!bytes) throw i18nErr('err_read_file', { status: 404 });
+        const blob = new Blob([bytes]);
+
         currentZipObj = new JSZip();
         await currentZipObj.loadAsync(blob);
         currentZipPath = path;
@@ -305,14 +301,11 @@
     }
 
     const joinPath = (dir, rel) => (dir === '/' ? '' : dir) + '/' + rel.replace(/\/+$/, '');
-    // Names already present in a folder (null = the folder does not exist yet). Anything but a 404 is an
-    // error: we cannot promise "nothing gets overwritten" about a folder we could not list.
+    // Names already present in a folder (empty = the folder does not exist yet). Anything but an absent
+    // folder is an error: we cannot promise "nothing gets overwritten" about a folder we could not list.
     async function listNames(dir) {
-      const r = await api('list', dir);
-      if (r.status === 404) return null;
-      if (!r.ok) throw i18nErr('err_list_dir', { name: dir, status: r.status });
-      const j = await r.json();
-      return new Set((j.entries || []).map((e) => e.name));
+      const fs = await getFs();
+      return new Set((await step(fs.list(dir), 'err_list_dir', { name: dir })).map((e) => e.name));
     }
     // Archive files whose target already exists. Only the folders the archive writes into are listed.
     async function findClashes(targetDir) {
@@ -327,20 +320,10 @@
       const out = [];
       for (const [d, files] of byDir) {
         const names = await listNames(d);
-        if (names) for (const f of files) if (names.has(f.base)) out.push(f.rel);
+        for (const f of files) if (names.has(f.base)) out.push(f.rel);
       }
       return out;
     }
-    // /api/fs/mkdir creates ONE level (firmware mkdir(2)) and /api/fs/write never creates parents, so every
-    // missing ancestor of an entry is created top-down first. An existing folder answers ok.
-    async function ensureDir(dir, made) {
-      if (!dir || dir === '/' || made.has(dir)) return;
-      await ensureDir(parent(dir), made);
-      const r = await api('mkdir', dir, { method: 'POST' });
-      if (!r.ok) throw i18nErr('err_mkdir', { name: dir, status: r.status });
-      made.add(dir);
-    }
-
     async function executeExtract() {
       if (!currentZipObj || !currentZipPath) return;
       const targetDir = parent(currentZipPath);
@@ -350,7 +333,7 @@
       catch (err) { statusEl.removeAttribute('data-i18n'); statusEl.textContent = t('error_x', { msg: errText(err) }); return; }
       if (clashes.length) {
         const names = clashes.slice(0, 8).join('\n') + (clashes.length > 8 ? '\n…' : '');
-        if (!confirm(t('confirm_overwrite', { count: clashes.length, names }))) return;
+        if (!(await (await getOs()).confirm(t('confirm_overwrite', { count: clashes.length, names }), { danger: true }))) return;
       }
       overlay.classList.remove('hidden');
       progTitle.removeAttribute('data-i18n');
@@ -359,22 +342,20 @@
 
       let totalFiles = zipEntries.filter(e => !e.dir).length;
       let doneFiles = 0;
-      const made = new Set([targetDir]);
 
       try {
+        const fs = await getFs();
         for (let i = 0; i < zipEntries.length; i++) {
           const entry = zipEntries[i];
           const fullPath = joinPath(targetDir, entry.name);
 
           if (entry.dir) {
-            await ensureDir(fullPath, made);
+            await step(fs.mkdirp(fullPath), 'err_mkdir', { name: fullPath });
           } else {
-            await ensureDir(parent(fullPath), made);
             progText.textContent = t('extracting_file', { name: entry.name, done: doneFiles, total: totalFiles });
             const arrayBuffer = await entry.async("arraybuffer");
-            const res = await api('write', fullPath, { method: 'POST', body: arrayBuffer });
-            if (!res.ok) throw i18nErr('err_write_file', { name: entry.name, status: res.status });
-            
+            await step(fs.write(fullPath, arrayBuffer), 'err_write_file', { name: entry.name });   // parents made as needed
+
             doneFiles++;
             progFill.style.width = Math.floor((doneFiles / totalFiles) * 100) + '%';
           }
@@ -432,10 +413,8 @@
     }
 
     async function walkDir(dirPath, filesOut) {
-      const res = await api('list', dirPath);
-      if (!res.ok) throw i18nErr('err_list_dir', { name: dirPath, status: res.status });
-      const data = await res.json();
-      for (const e of (data.entries || [])) {
+      const fs = await getFs();
+      for (const e of await step(fs.list(dirPath), 'err_list_dir', { name: dirPath })) {
         const full = dirPath === '/' ? `/${e.name}` : `${dirPath}/${e.name}`;
         if (e.type === 'dir') {
           await walkDir(full, filesOut);
@@ -458,6 +437,7 @@
       progFill.style.width = '0%';
       
       try {
+        const fs = await getFs();
         // 1. Gather all files
         let filesToZip = []; // { path: string, relative: string }
         for (const sp of sourcePaths) {
@@ -465,13 +445,9 @@
           // /api/fs/list on a FILE returns 200 with entries:[] (the server swallows
           // NotADirectoryError), so "list ok" cannot tell a file from a dir — a
           // file would fall into the dir branch, walkDir yields [], and it silently
-          // vanishes from the zip. Decide from the PARENT's listing instead.
+          // vanishes from the zip. Decide from the PARENT's listing instead (that is what fs.stat reads).
           let isDir = false;
-          try {
-            const parent = sp.slice(0, sp.lastIndexOf('/')) || '/';
-            const pl = await (await api('list', parent)).json();
-            isDir = (pl.entries || []).some(e => e.name === sName && e.type === 'dir');
-          } catch (e) { isDir = false; }
+          try { const st = await fs.stat(sp); isDir = !!st && st.type === 'dir'; } catch (e) { isDir = false; }
           if (isDir) {
             const subFiles = [];
             await walkDir(sp, subFiles);
@@ -495,9 +471,8 @@
           progText.textContent = t('reading_file', { name: f.relative, i: i, total: total });
           progFill.style.width = Math.floor((i / total) * 50) + '%'; // First 50% is reading
           
-          const r = await api('read', f.path);
-          if (!r.ok) throw i18nErr('err_read_src', { name: f.path, status: r.status });
-          const buf = await r.arrayBuffer();
+          const buf = await step(fs.read(f.path), 'err_read_src', { name: f.path });
+          if (!buf) throw i18nErr('err_read_src', { name: f.path, status: 404 });
           zip.file(f.relative, buf);
         }
 
@@ -512,14 +487,11 @@
           progFill.style.width = Math.floor(60 + (meta.percent * 0.3)) + '%';
         });
 
-        // 4. Upload ZIP to Cardputer
+        // 4. Save the ZIP on the device
         progText.textContent = t('saving_archive');
         progFill.style.width = '95%';
         const outPath = destDir === '/' ? `/${zipName}` : `${destDir}/${zipName}`;
-        const wRes = await fetch(`/api/fs/write?path=` + encodeURIComponent(outPath), {
-          method: 'POST', body: zipBlob
-        });
-        if (!wRes.ok) throw i18nErr('err_save_archive', { name: zipName, status: wRes.status });
+        await step(fs.write(outPath, zipBlob), 'err_save_archive', { name: zipName });
 
         progFill.style.width = '100%';
         progTitle.textContent = t('compress_complete');

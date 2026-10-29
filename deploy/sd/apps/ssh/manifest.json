@@ -1,8 +1,8 @@
 {
   "id": "ssh",
   "name": "SSH",
-  "version": "0.1.1",
-  "version_code": 2,
+  "version": "0.1.2",
+  "version_code": 3,
   "min_os": "0.1.0",
   "platforms": ["esp32s3"],
   "description": "Terminale SSH reale verso host remoti, via un piccolo bridge self-hosted (nessun servizio terzo): il lavoro SSH gira fuori dal dispositivo. Dove il dispositivo ha un client OpenSSH in un pty (/api/pty), lo esegue lui stesso, senza bridge.",

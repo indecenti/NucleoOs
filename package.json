@@ -20,7 +20,6 @@
     "test:unit": "node --test \"tools/**/*.test.mjs\"",
     "browser:check": "node --test tools/browser-check.test.mjs",
     "web:e2e": "node tools/web-e2e/run.mjs",
-    "logviewer:test": "node --test tools/log-viewer-diag.test.mjs",
     "radio:test": "node tools/radio-check.mjs",
     "ir:test": "node tools/anima-host/ir-check.mjs",
     "ir:pack": "node tools/ir-pack.mjs",

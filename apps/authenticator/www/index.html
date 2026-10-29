@@ -140,6 +140,8 @@
 
 <script type="module">
 import I18N from '/nucleo-i18n.js';
+import fs from '/nucleo-fs.js';
+import os from '/nucleo-shell.js';
 import { totp, secondsRemaining, parseOtpauth, isValidBase32 } from './otp.js';
 const t = await I18N.init('authenticator');
 const $ = (id) => document.getElementById(id);
@@ -155,15 +157,12 @@ let tokens = [];   // [{ id, type, issuer, account, secret, digits, period, algo
 //   • read OK      → the device list wins (so an account deleted elsewhere stays deleted);
 //   • read failed  → codes still work from this browser's last copy, but changes are paused;
 //   • every change is read-modify-write against a FRESH read, so two browsers never erase each other.
-const signal9 = () => { try { return AbortSignal.timeout(9000); } catch { return undefined; } };
+const statusOf = (e) => (e && e.code === 'denied' ? 403 : 0);
 async function readDevice() {
   try {
-    const r = await fetch('/api/fs/read?path=' + encodeURIComponent(PATH), { cache: 'no-store', signal: signal9() });
-    if (r.status === 404) return { ok: true, tokens: [] };
-    if (!r.ok) return { ok: false, status: r.status };
-    const txt = await r.text(); const j = txt ? JSON.parse(txt) : {};
+    const txt = await fs.readText(PATH); const j = txt ? JSON.parse(txt) : {};   // absent → no accounts yet
     return { ok: true, tokens: Array.isArray(j.tokens) ? j.tokens : [] };
-  } catch { return { ok: false, status: 0 }; }
+  } catch (e) { return { ok: false, status: statusOf(e) }; }
 }
 const cacheTokens = () => { try { localStorage.setItem('authenticator.cache', JSON.stringify({ tokens })); } catch {} };
 function flash(m) { $('msg').textContent = m; const h = $('copied'); h.textContent = m; h.classList.add('show'); clearTimeout(copyTimer); copyTimer = setTimeout(() => h.classList.remove('show'), 3500); }
@@ -182,9 +181,9 @@ function mutateTokens(fn) {
     if (!r.ok) { flash(failMsg(r.status)); return false; }
     const next = r.tokens;
     fn(next);
-    let w = null;
-    try { w = await fetch('/api/fs/write?path=' + encodeURIComponent(PATH), { method: 'POST', body: JSON.stringify({ schema: 1, tokens: next }), signal: signal9() }); } catch {}
-    if (!w || !w.ok) { flash(failMsg(w ? w.status : 0)); return false; }
+    // Atomic: a failed save keeps the previous file, never half a list of secrets.
+    const w = await fs.writeJSON(PATH, { schema: 1, tokens: next }).then(() => true, statusOf);
+    if (w !== true) { flash(failMsg(w)); return false; }
     tokens = next; offline = false; cacheTokens();
     return true;
   });
@@ -255,8 +254,7 @@ setInterval(tick, 1000);
 let copyTimer = null;
 function copyCode(tk, el) {
   const code = codeFor(tk);
-  try { navigator.clipboard && navigator.clipboard.writeText(code); } catch {}
-  try { window.parent.postMessage({ type: 'clipboard-write', kind: 'text', data: code }, '*'); } catch {}
+  os.copy(code);
   el.classList.add('copied');
   const hint = $('copied'); hint.textContent = t('copied'); hint.classList.add('show');
   clearTimeout(copyTimer); copyTimer = setTimeout(() => { hint.classList.remove('show'); el.classList.remove('copied'); }, 1300);
@@ -307,7 +305,7 @@ async function saveToken() {
 async function removeToken(id) {
   const tk = tokens.find((x) => x.id === id);
   const label = tk ? (tk.issuer || tk.account || '') : '';
-  if (!confirm(t('confirm_del', { name: label }))) return;
+  if (!(await os.confirm(t('confirm_del', { name: label }), { danger: true }))) return;
   await mutateTokens((list) => { const i = list.findIndex((x) => x.id === id); if (i >= 0) list.splice(i, 1); });
   render();
 }
@@ -315,8 +313,18 @@ async function removeToken(id) {
 $('add').addEventListener('click', openSheet);
 $('cancel').addEventListener('click', closeSheet);
 $('save').addEventListener('click', saveToken);
+// The system clipboard where the page may read it (a URI copied on the PC), else the OS clipboard history
+// (works on a device served over plain http too).
+async function readClip() {
+  if (window.isSecureContext && navigator.clipboard && navigator.clipboard.readText) {
+    try { return await navigator.clipboard.readText(); } catch {}
+  }
+  const c = await os.paste();
+  if (c && c.kind === 'text') return String(c.data || '');
+  throw new Error('no clipboard');
+}
 $('paste').addEventListener('click', async () => {
-  try { const txt = await navigator.clipboard.readText(); if (txt) { $('uri').value = txt.trim(); applyUri(); } }
+  try { const txt = await readClip(); if (txt) { $('uri').value = txt.trim(); applyUri(); } }
   catch { $('msg').textContent = t('err_clip'); }
 });
 $('uri').addEventListener('input', () => { if ($('uri').value.includes('otpauth://')) applyUri(); });

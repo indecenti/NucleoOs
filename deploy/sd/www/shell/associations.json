@@ -27,6 +27,7 @@
     "png":  "paint",
     "bmp":  "paint",
     "gif":  "photo-viewer",
+    "pdf":  "pdf-editor",
     "wav":  "media-player",
     "mp3":  "media-player",
     "mp4":  "video-player",

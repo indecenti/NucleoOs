@@ -159,6 +159,8 @@
 
   <script type="module">
     import I18N from '/nucleo-i18n.js';
+    import fs from '/nucleo-fs.js';
+    import os from '/nucleo-shell.js';   // the OS around this window: open app/file, clipboard (it also themes the page)
     const t = await I18N.init('terminal');
     // The active OS language as a 2-letter code (one of the five), for the places that speak to a
     // language-tagged resource — man pages on the SD, the TTS engine. `envVars.LANG` still wins when
@@ -179,13 +181,23 @@
     const APPDIR = '/apps/terminal/data';
 
     // ---- device file API (degrades gracefully outside the OS) -----------------
-    const api = (op, path, opts) => fetch(`/api/fs/${op}?path=` + encodeURIComponent(path), opts);
-    // /proc is a firmware-served virtual filesystem (live system state as plain text), NOT real
-    // SD files — so cat/ls/cd route to it directly instead of the /api/fs layer.
+    // Everything goes through the core file layer (/nucleo-fs.js). /proc is a firmware-served virtual
+    // filesystem (live system state as plain text), NOT real SD files — so cat/ls/cd route to it directly.
     const isProc = (p) => p === '/proc' || p.startsWith('/proc/');
-    async function readJSON(path) {
-      try { const r = await fetch('/api/fs/read?path=' + encodeURIComponent(path), { cache: 'no-store' });
-        return r.ok ? JSON.parse(await r.text()) : null; } catch { return null; }
+    const readJSON = (path) => fs.readJSON(path, null).catch(() => null);
+    // The root '/' too: the core lists and stats it like any folder.
+    const listDir = (p) => fs.list(p);
+    const statPath = (p) => fs.stat(p);
+    // Text of a device file, or null once the reason was printed (`offline` = this command's own words).
+    async function readFile(name, path, offline) {
+      try {
+        const txt = await fs.readText(path);
+        if (txt == null) fsFail(name, path, { code: 'not-found' });
+        return txt;
+      } catch (e) {
+        if (offline && e && e.code === 'offline') emit(offline, 'err'); else fsFail(name, path, e);
+        return null;
+      }
     }
 
     // ---- working directory (normalised, absolute) -----------------------------
@@ -323,11 +335,13 @@
       const rest = (m ? (m[3] || '') : String(arg || '')).trim();
       return { n, file: rest ? norm(rest.replace(/^"|"$/g, '')) : '' };
     }
-    function fsFail(name, path, r) {
-      if (!r) emit(`${name}: cannot reach the file API (running outside the OS?)`, 'err');
-      else if (r.status === 401) emit(`${name}: not paired (401)`, 'err');
-      else if (r.status === 404) emit(`${name}: no such file or directory: ${path}`, 'err');
-      else emit(`${name}: failed on ${path} (status ${r.status})`, 'err');
+    // e: an FsError from the core file layer (null = it could not be reached at all).
+    function fsFail(name, path, e) {
+      const code = e && e.code;
+      if (!e || code === 'offline') emit(`${name}: cannot reach the file API (running outside the OS?)`, 'err');
+      else if (code === 'denied') emit(`${name}: not paired (401)`, 'err');
+      else if (code === 'not-found') emit(`${name}: no such file or directory: ${path}`, 'err');
+      else emit(`${name}: failed on ${path} (${code || 'failed'})`, 'err');
     }
     // What this device can do (nucleo-caps.js): a command whose endpoint belongs to a capability the device
     // lacks says so without a request. Loaded on demand; if the module itself cannot be loaded the endpoint
@@ -396,12 +410,11 @@
         if (aborted || st.capped) return;
         if (depth > maxDepth || st.calls >= LIMITS.maxListCalls) { st.capped = true; return; }
         st.calls++;
-        let r;
-        try { r = await api('list', dir); } catch { return; }
-        if (!r.ok) return;
-        let j;
-        try { j = await r.json(); } catch { return; }
-        const entries = (j.entries || []).slice().sort((a, b) =>
+        let list;
+        try { list = await listDir(dir); } catch { return; }
+        // An absent root lists as nothing: it is not a walk.
+        if (!list.length && depth === 1 && !(await statPath(dir).catch(() => null))) return;
+        const entries = list.slice().sort((a, b) =>
           a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'dir' ? -1 : 1);
         if (onDir) onDir(dir, depth, entries);
         for (const e of entries) {
@@ -605,18 +618,18 @@
           return;
         }
         if (path.startsWith('/proc/')) { emit('ls: not a directory: ' + path + ' (try: cat ' + path + ')', 'err'); return; }
-        let r;
-        try { r = await api('list', path); }
-        catch { emit('ls: cannot reach the file API (running outside the OS?)', 'err'); return; }
-        if (!r.ok) {
-          if (r.status === 404) emit('ls: no such directory: ' + path, 'err');
-          else emit('ls: failed to list directory (status ' + r.status + ')', 'err');
+        let entries;
+        try {
+          entries = await listDir(path);
+          // An absent folder lists as nothing too: tell the two apart.
+          if (!entries.length && !(await statPath(path))) { emit('ls: no such directory: ' + path, 'err'); return; }
+        } catch (e) {
+          if (!e || e.code === 'offline') emit('ls: cannot reach the file API (running outside the OS?)', 'err');
+          else if (e.code === 'denied') emit('ls: not paired (' + (e.status || 401) + ')', 'err');
+          else emit('ls: failed to list directory (' + e.code + ')', 'err');
           return;
         }
-        let j;
-        try { j = await r.json(); }
-        catch { emit('ls: invalid response from server', 'err'); return; }
-        const entries = (j.entries || []).sort((a, b) =>
+        entries.sort((a, b) =>
           a.type === b.type ? a.name.localeCompare(b.name) : a.type === 'dir' ? -1 : 1);
         if (!entries.length) { emit('(empty)', 'dim'); return; }
         for (const e of entries.slice(0, LIMITS.maxRows)) {
@@ -631,7 +644,7 @@
         if (!arg) { setCwd('/'); return; }
         const path = norm(arg);
         if (path === '/proc') { setCwd('/proc'); return; }       // virtual FS root is always "there"
-        try { const r = await api('list', path); if (!r.ok) throw 0; await r.json(); setCwd(path); }
+        try { const st = await statPath(path); if (!st || st.type !== 'dir') throw 0; setCwd(path); }
         catch { emit('cd: no such directory: ' + path, 'err'); }
       },
       pwd() { emit(cwd); },
@@ -649,10 +662,8 @@
           emit((await r.text()).replace(/\n$/, ''));
           return;
         }
-        let r;
-        try { r = await api('read', path); } catch { fsFail('cat', path, null); return; }
-        if (!r.ok) { fsFail('cat', path, r); return; }
-        const txt = await r.text();
+        const txt = await readFile('cat', path);
+        if (txt == null) return;
         emit(txt.length ? txt.replace(/\n$/, '') : '(empty file)', txt.length ? '' : 'dim');
       },
       async cp(arg) {
@@ -660,77 +671,64 @@
         if (!m) { emit('usage: cp <source> <dest>', 'err'); return; }
         const src = norm(m[1].replace(/^"|"$/g, ''));
         const dest = norm(m[2].replace(/^"|"$/g, ''));
-        try {
-          emit(`copying ${src} to ${dest} ...`, 'dim');
-          const rRead = await api('read', src);
-          if (!rRead.ok) { fsFail('cp', src, rRead); return; }
-          const buf = await rRead.arrayBuffer();
-          const rWrite = await api('write', dest, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/octet-stream' },
-            body: buf
-          });
-          if (rWrite.ok) emit('copied successfully', 'ok');
-          else fsFail('cp', dest, rWrite);
-        } catch { emit('cp: file API unavailable', 'err'); }
+        emit(`copying ${src} to ${dest} ...`, 'dim');
+        try { await fs.copy(src, dest, { overwrite: true }); emit('copied successfully', 'ok'); }
+        catch (e) {
+          if (!e || e.code === 'offline') emit('cp: file API unavailable', 'err');
+          else fsFail('cp', e.code === 'not-found' ? src : dest, e);
+        }
       },
       async mv(arg) {
         const m = arg && arg.match(/^(".*?"|\S+)\s+(".*?"|\S+)$/);
         if (!m) { emit('usage: mv <source> <dest>', 'err'); return; }
         const src = norm(m[1].replace(/^"|"$/g, ''));
         const dest = norm(m[2].replace(/^"|"$/g, ''));
-        // The firmware's atomic rename (POST /api/fs/move): the bytes never cross the wire, a folder
-        // moves as well as a file, and a dropped connection cannot leave a half-copied pair behind.
+        // The device's own rename (fs.move): the bytes never cross the wire, a folder moves as well as a
+        // file, and a dropped connection cannot leave a half-copied pair behind.
         // Unix semantics: `mv file dir` moves it INTO the folder, and an existing destination FILE is
-        // replaced. The firmware refuses an existing destination (400 "destination exists") unless
-        // overwrite=1, so overwrite is only asked for once a listing has proven the target is a file.
-        const move = (to, ow) => fetch('/api/fs/move?from=' + encodeURIComponent(src) + '&to=' + encodeURIComponent(to) + (ow ? '&overwrite=1' : ''), { method: 'POST' });
-        const exists = async (r) => r.status === 400 && /exist/i.test(await r.text().catch(() => ''));
+        // replaced; an existing destination FOLDER never is.
+        emit(`moving ${src} to ${dest} ...`, 'dim');
+        let to = dest, there;
+        try { there = await statPath(dest); }
+        catch (e) {
+          if (!e || e.code === 'offline') emit('mv: file API unavailable', 'err');
+          else emit(`mv: cannot tell what ${dest} is (${e.code}) — nothing moved`, 'err');
+          return;
+        }
         try {
-          emit(`moving ${src} to ${dest} ...`, 'dim');
-          let to = dest;
-          let r = await move(to);
-          if (await exists(r)) {
-            const l = await api('list', dest);
-            if (l.ok) {                      // a folder: move INTO it (replacing a same-name file there)
-              to = norm(dest + '/' + src.split('/').pop());
-              r = await move(to);
-              if (await exists(r)) r = await move(to, true);
-            } else if (l.status === 404) {   // not a folder: an existing file, replaced as Unix mv does
-              r = await move(to, true);
-            } else { emit(`mv: cannot tell what ${dest} is (status ${l.status}) — nothing moved`, 'err'); return; }
+          if (there && there.type === 'dir') {   // a folder: move INTO it (replacing a same-name file there)
+            to = norm(dest + '/' + src.split('/').pop());
+            there = await statPath(to);
           }
-          if (r.ok) emit(to === dest ? 'moved successfully' : `moved to ${to}`, 'ok');
-          else fsFail('mv', src, r);
-        } catch { emit('mv: file API unavailable', 'err'); }
+          await fs.move(src, to, { overwrite: !!there && there.type !== 'dir' });
+          emit(to === dest ? 'moved successfully' : `moved to ${to}`, 'ok');
+        } catch (e) {
+          if (!e || e.code === 'offline') emit('mv: file API unavailable', 'err');
+          else fsFail('mv', src, e);
+        }
       },
       async mkdir(arg) {
         if (!arg) { emit('mkdir: missing name', 'err'); return; }
-        try { const r = await api('mkdir', norm(arg), { method: 'POST' });
-          if (r.ok) emit('created ' + norm(arg), 'ok'); else fsFail('mkdir', norm(arg), r); }
-        catch { fsFail('mkdir', norm(arg), null); }
+        try { await fs.mkdirp(norm(arg)); emit('created ' + norm(arg), 'ok'); }
+        catch (e) { fsFail('mkdir', norm(arg), e); }
       },
       async touch(arg) {
         if (!arg) { emit('touch: missing name', 'err'); return; }
         const p = norm(arg);
-        // touch never truncates: probe one byte (a Range read, cheap on any size) and create the file
-        // only on a definite 404. An existing file is left alone; an unreadable one (503, offline) is
-        // reported, never overwritten with an empty body.
-        let r;
-        try { r = await fetch('/api/fs/read?path=' + encodeURIComponent(p), { cache: 'no-store', headers: { Range: 'bytes=0-0' } }); }
-        catch { fsFail('touch', p, null); return; }
-        // 416 = the file exists but is empty (no byte 0 to range over) on some servers.
-        if (r.ok || r.status === 416) { emit(`${p} exists — left unchanged`, 'dim'); return; }
-        if (r.status !== 404) { fsFail('touch', p, r); return; }
-        try { const w = await api('write', p, { method: 'POST', body: '' });
-          if (w.ok) emit('created ' + p, 'ok'); else fsFail('touch', p, w); }
-        catch { fsFail('touch', p, null); }
+        // touch never truncates: the file is created only when the listing says it is not there. An
+        // existing file is left alone; an unreadable folder (503, offline) is reported, never written.
+        let st;
+        try { st = await statPath(p); } catch (e) { fsFail('touch', p, e); return; }
+        if (st) { emit(`${p} exists — left unchanged`, 'dim'); return; }
+        try { await fs.write(p, '', { overwrite: false }); emit('created ' + p, 'ok'); }
+        catch (e) { fsFail('touch', p, e); }
       },
       async rm(arg) {
         if (!arg) { emit('rm: missing path', 'err'); return; }
-        try { const r = await api('delete', norm(arg), { method: 'POST' });
-          if (r.ok) emit('removed ' + norm(arg), 'ok'); else fsFail('rm', norm(arg), r); }
-        catch { fsFail('rm', norm(arg), null); }
+        try {
+          if (await fs.remove(norm(arg))) emit('removed ' + norm(arg), 'ok');
+          else fsFail('rm', norm(arg), { code: 'not-found' });
+        } catch (e) { fsFail('rm', norm(arg), e); }
       },
       async echo(arg, ctx) {
         // Through the shell the parser already took the redirection, so every remaining word is
@@ -739,14 +737,13 @@
         const m = arg && arg.match(/^(.*?)\s*>\s*(.+?)\s*$/);
         if (!m) { emit(arg || ''); return; }                       // plain echo
         const body = m[1].replace(/^"|"$/g, ''), path = norm(m[2].replace(/^"|"$/g, ''));
-        try { const r = await api('write', path, { method: 'POST', body });
-          if (r.ok) emit('wrote ' + path, 'ok'); else fsFail('echo', path, r); }
-        catch { fsFail('echo', path, null); }
+        try { await fs.write(path, body); emit('wrote ' + path, 'ok'); }
+        catch (e) { fsFail('echo', path, e); }
       },
       open(arg) {
         if (!arg) { emit('open: missing file', 'err'); return; }
         const p = norm(arg);
-        try { parent.postMessage({ type: 'open-file', path: p }, '*'); emit('opening ' + p + ' …', 'dim'); }
+        try { os.openFile(p); emit('opening ' + p + ' …', 'dim'); }
         catch { emit('open: shell not reachable', 'err'); }
       },
       async grep(arg, ctx) {
@@ -767,21 +764,18 @@
         if (!m) { emit('usage: grep <pattern> <file>', 'err'); return; }
         const pattern = m[1].replace(/^"|"$/g, '');
         const file = norm(m[2].replace(/^"|"$/g, ''));
-        try {
-          const r = await api('read', file);
-          if (!r.ok) { fsFail('grep', file, r); return; }
-          const txt = await r.text();
-          const lines = txt.split(/\r?\n/);
-          let found = 0;
-          for (let i = 0; i < lines.length; i++) {
-            if (lines[i].includes(pattern)) {
-              if (found >= LIMITS.maxMatches) { emit(`grep: stopped at ${found} matches`, 'warn'); break; }
-              emit(`${i + 1}: ${lines[i]}`);
-              found++;
-            }
+        const txt = await readFile('grep', file, 'grep: file API unavailable');
+        if (txt == null) return;
+        const lines = txt.split(/\r?\n/);
+        let found = 0;
+        for (let i = 0; i < lines.length; i++) {
+          if (lines[i].includes(pattern)) {
+            if (found >= LIMITS.maxMatches) { emit(`grep: stopped at ${found} matches`, 'warn'); break; }
+            emit(`${i + 1}: ${lines[i]}`);
+            found++;
           }
-          if (found === 0) emit('(no matches)', 'dim');
-        } catch { emit('grep: file API unavailable', 'err'); }
+        }
+        if (found === 0) emit('(no matches)', 'dim');
       },
       async find(arg) {
         let path = cwd;
@@ -803,11 +797,8 @@
           if (aborted || capped) return;
           if (depth > LIMITS.maxDepth || calls >= LIMITS.maxListCalls) { capped = true; return; }
           calls++;
-          let r;
-          try { r = await api('list', dirPath); } catch { return; }
-          if (!r.ok) return;
-          let j; try { j = await r.json(); } catch { return; }
-          const entries = j.entries || [];
+          let entries;
+          try { entries = await listDir(dirPath); } catch { return; }
           for (const e of entries) {
             if (aborted || capped) return;
             const full = dirPath === '/' ? '/' + e.name : dirPath + '/' + e.name;
@@ -841,21 +832,15 @@
           emit('usage: wc [-l|-w|-c] <file>', 'err'); return;
         }
         const file = norm(rest.replace(/^"|"$/g, ''));
-        try {
-          const r = await api('read', file);
-          if (!r.ok) { fsFail('wc', file, r); return; }
-          count(await r.text(), file);
-        } catch { emit('wc: file API unavailable', 'err'); }
+        const txt = await readFile('wc', file, 'wc: file API unavailable');
+        if (txt != null) count(txt, file);
       },
       async head(arg, ctx) {
         const { n, file } = lineCountArgs(arg);
         if (!file && ctx?.stdin != null) { emit(textLines(ctx.stdin).slice(0, n).join('\n')); return; }
         if (!file) { emit('usage: head [-n <lines>] <file>', 'err'); return; }
-        try {
-          const r = await api('read', file);
-          if (!r.ok) { fsFail('head', file, r); return; }
-          emit(textLines(await r.text()).slice(0, n).join('\n'));
-        } catch { emit('head: file API unavailable', 'err'); }
+        const txt = await readFile('head', file, 'head: file API unavailable');
+        if (txt != null) emit(textLines(txt).slice(0, n).join('\n'));
       },
       async tail(arg, ctx) {
         const { n, file } = lineCountArgs(arg);
@@ -864,12 +849,10 @@
           emit(all.slice(Math.max(0, all.length - n)).join('\n')); return;
         }
         if (!file) { emit('usage: tail [-n <lines>] <file>', 'err'); return; }
-        try {
-          const r = await api('read', file);
-          if (!r.ok) { fsFail('tail', file, r); return; }
-          const all = textLines(await r.text());
-          emit(all.slice(Math.max(0, all.length - n)).join('\n'));
-        } catch { emit('tail: file API unavailable', 'err'); }
+        const txt = await readFile('tail', file, 'tail: file API unavailable');
+        if (txt == null) return;
+        const all = textLines(txt);
+        emit(all.slice(Math.max(0, all.length - n)).join('\n'));
       },
       async df() {
         let s;
@@ -971,15 +954,10 @@
         try {
           const r = await fetch(url);
           if (!r.ok) { emit(`wget: failed (status ${r.status})`, 'err'); return; }
-          const buf = await r.arrayBuffer();
+          const blob = await r.blob();
           emit(`writing to ${outPath} ...`, 'dim');
-          const rWrite = await api('write', outPath, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/octet-stream' },
-            body: buf
-          });
-          if (rWrite.ok) emit(`saved successfully to ${outPath}`, 'ok');
-          else emit(`wget: failed to write destination ${outPath}`, 'err');
+          try { await fs.write(outPath, blob); emit(`saved successfully to ${outPath}`, 'ok'); }
+          catch { emit(`wget: failed to write destination ${outPath}`, 'err'); }
         } catch (err) {
           emit('wget: failed (network error or CORS blocked)', 'err');
         }
@@ -1139,8 +1117,7 @@
         }
         document.documentElement.dataset.theme = want;
         const s = await readJSON(SETTINGS) || {}; s.ui = s.ui || {}; s.ui.theme = want;
-        try { await fetch('/api/fs/write?path=' + encodeURIComponent(SETTINGS),
-          { method: 'POST', body: JSON.stringify(s, null, 2) }); emit('theme set to ' + want, 'ok'); }
+        try { await fs.writeJSON(SETTINGS, s, { pretty: true }); emit('theme set to ' + want, 'ok'); }
         catch { emit('theme: applied locally (device unreachable)', 'warn'); }
       },
 
@@ -1148,11 +1125,8 @@
       async stat(arg) {
         if (!arg) { emit('usage: stat <path>', 'err'); return; }
         const p = norm(arg.replace(/^"|"$/g, ''));
-        const parent = p.replace(/\/[^/]*$/, '') || '/';
-        const name = p.slice(parent === '/' ? 1 : parent.length + 1);
-        const j = await devJSON('stat', '/api/fs/list?path=' + encodeURIComponent(parent));
-        if (!j) return;
-        const e = (j.entries || []).find((x) => x.name === name);
+        let e;
+        try { e = await fs.stat(p); } catch (err) { fsFail('stat', p, err); return; }   // the device's own fields (protected) included
         if (!e) { emit('stat: no such file or directory: ' + p, 'err'); return; }
         emit('path       ' + p);
         emit('type       ' + e.type);
@@ -1214,18 +1188,15 @@
         if (!rest) { emit('usage: hexdump [-n bytes] [-s offset] <file>', 'err'); return; }
         const p = norm(rest.replace(/^"|"$/g, ''));
         // A Range request is why this is safe on a 640 MB video: the device streams 256 bytes,
-        // not the file. /api/fs/read answers 206 for a range it can satisfy.
-        let r;
-        try {
-          r = await fetch('/api/fs/read?path=' + encodeURIComponent(p),
-            { cache: 'no-store', headers: { Range: `bytes=${off}-${off + n - 1}` } });
-        } catch { emit('hexdump: cannot reach the file API', 'err'); return; }
-        if (r.status === 401) { emit('hexdump: not paired (401)', 'err'); return; }
-        if (!r.ok) { fsFail('hexdump', p, r); return; }
-        let bytes = [];
-        try { bytes = Array.from(new Uint8Array(await r.arrayBuffer())); }
-        catch { bytes = utf8Bytes(await r.text()); }
-        bytes = bytes.slice(0, n);
+        // not the file (fs.readRange: the device answers 206 for a range it can satisfy).
+        let got;
+        try { got = await fs.readRange(p, off, off + n - 1); }
+        catch (e) {
+          if (!e || e.code === 'offline') emit('hexdump: cannot reach the file API', 'err'); else fsFail('hexdump', p, e);
+          return;
+        }
+        if (got == null) { fsFail('hexdump', p, { code: 'not-found' }); return; }
+        const bytes = Array.from(got).slice(0, n);
         if (!bytes.length) { emit('(empty)', 'dim'); return; }
         const rows = [];
         for (let i = 0; i < bytes.length; i += 16) {
@@ -1242,11 +1213,12 @@
         let bytes = null, text = null;
         if (rest) {
           const p = norm(rest.replace(/^"|"$/g, ''));
-          let r;
-          try { r = await api('read', p); } catch { emit('base64: cannot reach the file API', 'err'); return; }
-          if (!r.ok) { fsFail('base64', p, r); return; }
-          if (dec) text = await r.text();
-          else { try { bytes = Array.from(new Uint8Array(await r.arrayBuffer())); } catch { bytes = utf8Bytes(await r.text()); } }
+          let got;
+          try { got = await fs.read(p); }
+          catch (e) { if (!e || e.code === 'offline') emit('base64: cannot reach the file API', 'err'); else fsFail('base64', p, e); return; }
+          if (got == null) { fsFail('base64', p, { code: 'not-found' }); return; }
+          if (dec) text = utf8Text(Array.from(got));
+          else bytes = Array.from(got);
         } else if (ctx?.stdin != null) {
           if (dec) text = ctx.stdin; else bytes = utf8Bytes(ctx.stdin);
         } else { emit('usage: base64 [-d] [file]', 'err'); return; }
@@ -1257,10 +1229,8 @@
         if (!arg) { emit('usage: tee <file>', 'err'); return; }
         const p = norm(arg.replace(/^"|"$/g, ''));
         const body = ctx?.stdin != null ? ctx.stdin : '';
-        try {
-          const r = await api('write', p, { method: 'POST', body });
-          if (!r.ok) { fsFail('tee', p, r); return; }
-        } catch { emit('tee: file API unavailable', 'err'); return; }
+        try { await fs.write(p, body); }
+        catch (e) { if (!e || e.code === 'offline') emit('tee: file API unavailable', 'err'); else fsFail('tee', p, e); return; }
         emit(body);                       // transparent, or it is not tee
       },
 
@@ -1445,7 +1415,7 @@
         const m = a.match(/^open\s+(\S+)$/);
         if (m) {
           const id = m[1].replace(/^"|"$/g, '');
-          try { parent.postMessage({ type: 'open-app', id }, '*'); emit('opening ' + id + ' …', 'dim'); }
+          try { os.openApp(id); emit('opening ' + id + ' …', 'dim'); }
           catch { emit('apps: shell not reachable', 'err'); }
           return;
         }
@@ -1602,7 +1572,7 @@
           // make `dmesg | anima "…" | tee log` open windows while it wrote a file.
           if (!ctx?.isPipe && j.action === 'launch' && j.arg) {
             addLine('→ launch ' + j.arg, 'ok');
-            try { parent.postMessage({ type: 'open-app', id: j.arg }, '*'); } catch {}
+            try { os.openApp(j.arg); } catch {}
           } else addLine(('→ ' + j.action + ' ' + (j.arg || '')).trim(), 'dim');
         }
         if (verbose) addLine(`tier=${j.tier} domain=${j.domain} conf=${j.confidence} trace="${j.trace || ''}"`, 'dim');
@@ -1736,10 +1706,12 @@
         if (r.status === 503) { emit('screen: panel size unavailable — try again once the panel is on', 'warn'); return; }
         if (!r.ok) { emit('screen: failed (status ' + r.status + ')', 'err'); return; }
         const buf = await r.arrayBuffer();
-        try {
-          const w = await api('write', outPath, { method: 'POST', headers: { 'Content-Type': 'application/octet-stream' }, body: buf });
-          if (!w.ok) { emit('screen: failed to write ' + outPath + ' (status ' + w.status + ')', 'err'); return; }
-        } catch { emit('screen: file API unavailable', 'err'); return; }
+        try { await fs.write(outPath, buf); }
+        catch (e) {
+          if (!e || e.code === 'offline') emit('screen: file API unavailable', 'err');
+          else emit('screen: failed to write ' + outPath + ' (' + e.code + ')', 'err');
+          return;
+        }
         emit(`saved ${outPath} ${buf.byteLength} bytes`, 'ok');
       },
       async say(arg, ctx) {
@@ -1760,28 +1732,19 @@
         catch { emit('notify: shell not reachable', 'err'); return; }
         emit('notified', 'ok');
       },
-      clip(arg, ctx) {
+      async clip(arg, ctx) {
         // The pipeline's exit to the rest of the OS, and its entrance: the clipboard is a shell
         // service here, not a browser one, so it survives a window change.
         if (/(^|\s)-o(\s|$)/.test(arg || '')) {
-          return new Promise((resolve) => {
-            let done = false;
-            const onMsg = (e) => {
-              if (!e.data || e.data.type !== 'clipboard-data' || done) return;
-              done = true;
-              try { window.removeEventListener('message', onMsg); } catch {}
-              const it = e.data.item;
-              if (it && it.data != null) emit(String(it.data)); else emit('(clipboard empty)', 'dim');
-              resolve();
-            };
-            try { window.addEventListener('message', onMsg); parent.postMessage({ type: 'clipboard-read' }, '*'); }
-            catch { emit('clip: shell not reachable', 'err'); resolve(); return; }
-            setTimeout(() => { if (!done) { done = true; emit('clip: no answer from the shell', 'err'); resolve(); } }, 1500);
-          });
+          const it = await os.paste();      // the shell's latest entry (null: empty, or no answer in time)
+          if (it && it.data != null) emit(String(it.data));
+          else if (os.inShell) emit('(clipboard empty)', 'dim');
+          else emit('clip: no answer from the shell', 'err');
+          return;
         }
         const text = (arg ? String(arg).replace(/^"([\s\S]*)"$/, '$1') : (ctx?.stdin || ''));
         if (!text) { emit('usage: clip   (pipe text into it)  |  clip -o', 'err'); return; }
-        try { parent.postMessage({ type: 'clipboard-write', kind: 'text', data: text }, '*'); }
+        try { os.copy(text); }
         catch { emit('clip: shell not reachable', 'err'); return; }
         if (ctx?.isPipe) emit(text); else emit(`copied ${text.length} chars`, 'ok');
       },
@@ -1936,11 +1899,15 @@
       let feed = stdin;
       if (inFrom) {
         const p = norm(inFrom.path);
-        let r;
-        try { r = await api('read', p); }
-        catch { emit(`${name}: cannot reach the file API`, 'err'); return { out: '', code: 1 }; }
-        if (!r.ok) { emit(`${name}: cannot read ${p} (status ${r.status})`, 'err'); return { out: '', code: 1 }; }
-        feed = (await r.text()).slice(0, LIMITS.maxBytes);
+        let txt;
+        try { txt = await fs.readText(p); }
+        catch (e) {
+          if (!e || e.code === 'offline') emit(`${name}: cannot reach the file API`, 'err');
+          else emit(`${name}: cannot read ${p} (${e.code})`, 'err');
+          return { out: '', code: 1 };
+        }
+        if (txt == null) { emit(`${name}: cannot read ${p} (not-found)`, 'err'); return { out: '', code: 1 }; }
+        feed = txt.slice(0, LIMITS.maxBytes);
       }
       const capture = !!outTo || !last;
       const buf = []; let bufLen = 0, cut = false;
@@ -1968,15 +1935,16 @@
         // the new output alone.
         const keep = `${name}: cannot append to ${p} — file left unchanged`;
         try {
-          const r = await api('read', p);
-          if (r.ok) { const old = await r.text(); if (old) body = old.replace(/\n$/, '') + '\n' + body; }
-          else if (r.status !== 404) { emit(`${keep} (status ${r.status})`, 'err'); return { out: '', code: 1 }; }
-        } catch { emit(`${keep} (file API unavailable)`, 'err'); return { out: '', code: 1 }; }
+          const old = await fs.readText(p);                 // null: a new file
+          if (old) body = old.replace(/\n$/, '') + '\n' + body;
+        } catch (e) {
+          emit(`${keep} (${!e || e.code === 'offline' ? 'file API unavailable' : e.code})`, 'err'); return { out: '', code: 1 };
+        }
       }
-      try {
-        const w = await api('write', p, { method: 'POST', body });
-        if (!w.ok) { emit(`${name}: failed to write ${p} (status ${w.status})`, 'err'); code = 1; }
-      } catch { emit(`${name}: failed to write ${p} (file API unavailable)`, 'err'); code = 1; }
+      try { await fs.write(p, body); }
+      catch (e) {
+        emit(`${name}: failed to write ${p} (${!e || e.code === 'offline' ? 'file API unavailable' : e.code})`, 'err'); code = 1;
+      }
       return { out: '', code };
     }
 
@@ -2056,15 +2024,16 @@
       const job = (async () => {
         await null;                       // suspend before any work, so the inflight entry lands first
         try {
-          const r = await api('list', dir);
+          const list = await listDir(dir);
+          cachePut(dir, list.map((e) => ({ name: e.name, type: e.type })), false);
+          return null;
+        } catch (e) {
           // A 401 is never cached: pairing can happen at any moment, and a remembered 401 would
           // leave the terminal looking broken for twenty seconds after the user fixed it.
-          if (r.status === 401) return '401';
-          if (!r.ok) { cachePut(dir, [], true); return null; }
-          const j = await r.json();
-          cachePut(dir, (j.entries || []).map((e) => ({ name: e.name, type: e.type })), false);
-          return null;
-        } catch { return 'net'; }
+          if (e && e.code === 'denied') return '401';
+          if (!e || e.code === 'offline') return 'net';
+          cachePut(dir, [], true); return null;
+        }
         finally { CDIR.inflight.delete(dir); listBusy = false; }
       })();
       CDIR.inflight.set(dir, job);
@@ -2426,7 +2395,7 @@
     }
 
     // ---- persistence: history, aliases, resume ------------------------------------
-    // /api/fs/write has no append mode, so the file is rewritten from a bounded in-memory list.
+    // The file is rewritten from a bounded in-memory list (not every device can append to a file).
     // Flushing is batched (10 commands or 30 s) and always happens when the window goes away —
     // worst case one 8 KB write per 30 s while actively typing, and nothing at all while idle.
     const hist = []; let hi = -1;
@@ -2444,26 +2413,21 @@
       else { clearT(histTimer); histTimer = setTimeout(() => saveHistory(false), HIST_IDLE); }
     }
     async function writeApp(path, body, keepalive) {
-      const opts = { method: 'POST', body };
-      if (keepalive) opts.keepalive = true;
-      let r;
-      try { r = await api('write', path, opts); } catch { return false; }
-      if (r.ok) return true;
-      // The app's own mount is created on first use: nothing ships it on the SD image. A write into a missing
-      // folder fails with 500 "open" on the device (nucleo_fsapi never creates parents) — this used to wait
-      // for a 404 that never came, so the history was never saved on a real Cardputer.
-      if (r.status === 404 || r.status === 500) {
-        try {
-          await fetch('/api/fs/mkdir?path=' + encodeURIComponent(APPDIR), { method: 'POST' });
-          const again = await api('write', path, opts);
-          return !!(again && again.ok);
-        } catch { return false; }
+      if (keepalive) {
+        // The page is going away and only ONE request outlives it: the core's keepalive write (plain, not atomic).
+        fs.write(path, body, { keepalive: true });
+        return true;
       }
-      if (r.status === 401 && !histNoted) {
-        histNoted = true;
-        addLine(t('hist_unpaired'), 'dim');
+      // The app's own mount is made on first use (nothing ships it on the SD image): the core layer creates
+      // missing folders. History is rewritten often and a lost one costs a few commands: no atomic swap.
+      try { await fs.write(path, body, { atomic: !path.endsWith('.jsonl') }); return true; }
+      catch (e) {
+        if (e && e.code === 'denied' && !histNoted) {
+          histNoted = true;
+          addLine(t('hist_unpaired'), 'dim');
+        }
+        return false;
       }
-      return false;
     }
     // One history write at a time. Closing the window fires both visibilitychange and pagehide while a
     // batch save may still be running, and the device's single-task httpd reset one of two concurrent
@@ -2511,15 +2475,15 @@
     }
     async function loadPersisted() {
       // One JSON line per entry, so a truncated tail costs one command and not the file.
-      let r = null;
-      try { r = await api('read', APPDIR + '/history.jsonl'); } catch {}
-      if (r && r.ok) {
-        for (const ln of (await r.text()).split(/\r?\n/)) {
+      let txt = null, denied = false;
+      try { txt = await fs.readText(APPDIR + '/history.jsonl'); } catch (e) { denied = !!(e && e.code === 'denied'); }
+      if (txt != null) {
+        for (const ln of txt.split(/\r?\n/)) {
           if (!ln.trim()) continue;
           try { const v = JSON.parse(ln); if (typeof v === 'string') hist.push(v); } catch {}
         }
         while (hist.length > HIST_MAX) hist.shift();
-      } else if (r && r.status === 401 && !histNoted) {
+      } else if (denied && !histNoted) {
         histNoted = true;
         addLine(t('hist_unpaired'), 'dim');
       }
@@ -2710,17 +2674,17 @@
       let text = selectionText();
       if (!text) text = out.innerText || out.textContent || '';
       if (!text) return;
-      try {
-        if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(text); addLine(t('copy_ok'), 'dim'); return; }
-      } catch {}
-      // Some device browsers still have no async clipboard, and a copy that silently does nothing
-      // is worse than none: the textarea route is the one that works everywhere.
+      // The OS clipboard history, and the system clipboard where the page may use it (a secure context).
+      os.copy(text);
+      if (navigator.clipboard && window.isSecureContext) { addLine(t('copy_ok'), 'dim'); return; }
+      // Some device browsers still have no async clipboard (plain http), and a copy that silently does
+      // nothing is worse than none: the textarea route still reaches the system clipboard there.
       try {
         const ta = document.createElement('textarea');
         ta.value = text; document.body.appendChild(ta); ta.select();
         document.execCommand('copy'); document.body.removeChild(ta);
         addLine(t('copy_ok'), 'dim');
-      } catch { addLine(t('copy_fail'), 'warn'); }
+      } catch { addLine(t(os.inShell ? 'copy_ok' : 'copy_fail'), os.inShell ? 'dim' : 'warn'); }
     }
     let pressTimer = 0;
     function lineOf(node) {
@@ -2787,30 +2751,23 @@
       if (typeof input.focus === 'function') input.focus();
     });
 
-    // ---- live: OS theme changes ------------------------------------------------
+    // ---- live: SD changes (the shell themes the page itself, on load and on change) ----
     window.addEventListener('message', (e) => {
-      if (e.data?.type === 'set-theme' && e.data.theme) document.documentElement.dataset.theme = e.data.theme;
       if (e.data?.t === 'fs.changed') {
         // The OS says the SD moved under us; the completion cache is the only thing here that
         // remembers it, so drop exactly what changed rather than everything.
         cacheDrop(e.data.d && e.data.d.path);
-        if (e.data.d?.path?.endsWith('settings.json')) loadTheme();
       }
     });
-    async function loadTheme() {
-      const s = await readJSON(SETTINGS);
-      if (s?.ui?.theme) document.documentElement.dataset.theme = s.ui.theme;
-    }
 
     // The vm harness and the CDP driver reach the engine through this instead of rewriting the
     // source, which used to break silently the moment a binding was renamed.
-    globalThis.__T = { COMMANDS, run, exec, norm, api, fmtBytes, setCwd, hist, envVars, aliases,
+    globalThis.__T = { COMMANDS, run, exec, norm, fs, fmtBytes, setCwd, hist, envVars, aliases,
       tokenize, parse, expandWord, submit, LIMITS, completions, applyCompletion, ctokens, lcp,
       cacheGet, cachePut, cacheDrop, animaDigest, encTrim, b64encode, b64decode, remember, saveHistory, loadPersisted };
 
     // ---- boot ------------------------------------------------------------------
     async function init() {
-      await loadTheme();
       emit(t('boot_hint'), 'dim');
       setCwd('/');
       setFont(1);
@@ -2837,7 +2794,6 @@
       try { mods = await Promise.all([import('/nucleo-term.js'), import('/nucleo-pty.js'), import('/nucleo-pair.js')]); }
       catch { return false; }
       const [{ createTerminal }, { createPtyClient, PTY_UNPAIRED }, { pairDialog }] = mods;
-      await loadTheme();
       document.body.classList.add('pty');
       const main = document.getElementById('ptymain'), bar = document.getElementById('ptykeys');
       const stEl = document.getElementById('ptystat'), dotEl = document.getElementById('ptydot');

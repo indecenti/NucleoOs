@@ -253,7 +253,7 @@ These are wording fixes only; no behaviour change.
 
 **Item 3 — release `type`: implemented (2026-09-30).**
 - Pure cores (host-tested): `update_policy.c/.h` `upd_extract_type()` (gate `npm run update:test`,
-  58/58) and `update-core.js` `parseReleaseType()` + `updateLevel()` (`tools/update-core.test.mjs`,
+  58/58) and `update-core.js` `parseReleaseType()` + `updateLevel()` (`nucleo-webos tests/suite/update-core.test.mjs`,
   green). A `security` release → `warn`/`NOTIFY_WARN`; else `info`/`NOTIFY_INFO`.
 - Wiring: `update-check.js` (web notification level + icon + `type` in the SD bridge write) and
   `nucleo_update.c` (native notify level + security title). New i18n key `up_title_sec` in all five

@@ -61,6 +61,8 @@
 
   <script type="module">
     import I18N from '/nucleo-i18n.js';
+    import fs from '/nucleo-fs.js';
+    import os from '/nucleo-shell.js';
     const t = await I18N.init('dosbox');
     // ── NucleoOS "Commodore trick" ─────────────────────────────────────────────
     // The ESP32 only STORES and STREAMS the disk image from SD. The x86/DOS emulation
@@ -101,8 +103,9 @@
     // Cache-buster: js-dos (and the browser) would otherwise reuse a stale copy of a bundle
     // by its URL, so a freshly re-installed/fixed game would still load the old bytes. A unique
     // query each launch forces a fresh fetch. The device ignores extra query keys (reads ?path).
-    const src = (p) => '/api/fs/read?path=' + encodeURIComponent(p) + '&_=' + Date.now();
-    const fsBytes = async (p) => new Uint8Array(await (await fetch(src(p))).arrayBuffer());
+    const src = (p) => fs.url(p) + '&_=' + Date.now();
+    // Bytes read here go through the core file layer, which never answers from a cache.
+    const fsBytes = async (p) => { const b = await fs.read(p); if (!b) throw new fs.FsError('not-found', p); return b; };
     const base = (p) => p.split('/').pop();
     const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
@@ -250,18 +253,14 @@
     const CAT_ORDER = ['Systems', 'Games', 'Programs', 'Disks'];
 
     async function loadMeta() {
-      try {
-        const r = await fetch(src(DIR + '/library.json'));
-        return r.ok ? await r.json() : {};
-      } catch { return {}; }
+      try { return (await fs.readJSON(DIR + '/library.json')) || {}; }
+      catch { return {}; }
     }
 
     async function loadLibrary() {
       let data;
-      try {
-        const r = await fetch('/api/fs/list?path=' + encodeURIComponent(DIR));
-        data = r.status === 404 ? { entries: [] } : (r.ok ? await r.json() : null);   // no folder yet = empty library
-      } catch { data = null; }
+      try { data = { entries: await fs.list(DIR) }; }      // no folder yet = [] = empty library
+      catch { data = null; }
       if (!data) { bar.innerHTML = '<span class="muted">' + esc(t('fs_unavailable')) + '</span>'; return []; }
       const meta = await loadMeta();
       const items = (data.entries || []).filter((e) => e.type === 'file' && RUNNABLE.test(e.name)).map((e) => {
@@ -306,7 +305,7 @@
     // library and let the user pick — no surprise download/CPU spike when the app opens.
     (async () => {
       const items = await loadLibrary();
-      const qPath = new URLSearchParams(location.search).get('path');
+      const qPath = os.args().path;
       if (qPath) { boot(qPath); return; }
       showOverlay('<div class="big">🕹️</div>' + esc(items.length ? t('pick_to_boot') : t('none_yet')));
     })();

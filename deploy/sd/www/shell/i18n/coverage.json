@@ -23,7 +23,7 @@
     "de": 100
   },
   "surfaces": 52,
-  "totalKeys": 4536,
+  "totalKeys": 4562,
   "namespaces": {
     "agent": 161,
     "anima": 174,
@@ -63,10 +63,10 @@
     "recycle-bin": 20,
     "scoreboard": 14,
     "settings": 503,
-    "shell": 374,
+    "shell": 399,
     "spreadsheet": 303,
     "ssh": 70,
-    "store": 56,
+    "store": 57,
     "system-monitor": 42,
     "tasks": 18,
     "terminal": 32,

@@ -11,7 +11,7 @@
 //
 // Scope + honesty:
 //   • Only the STATIC index.html is scanned (what ships pre-rendered). Text a JS module builds at
-//     runtime is the job of tools/app-i18n-keys.test.mjs (every t('key') must exist in 5 languages).
+//     runtime is the job of nucleo-webos tests/suite/app-i18n-keys.test.mjs (every t('key') must exist in 5 languages).
 //   • Content inside <script>/<style>/<svg>/<template>/<code>/<pre>, HTML comments, and any element (or
 //     ancestor) carrying data-i18n / data-i18n-html / data-i18n-ignore is skipped — those are handled
 //     or opted out on purpose.

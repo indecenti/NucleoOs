@@ -107,6 +107,8 @@
   <script src="qrcode.js"></script>
   <script type="module">
   import I18N from '/nucleo-i18n.js';
+  import fs from '/nucleo-fs.js';
+  import os from '/nucleo-shell.js';
   // Bilingual (IT primary + EN) via the OS engine. Static markup carries data-i18n; the JS-built form,
   // chips and messages resolve through TR() at render time so they follow a live language switch.
   const TR = await I18N.init('qr');
@@ -114,11 +116,6 @@
     'use strict';
     var $ = function (s) { return document.querySelector(s); };
     var SHARED = '/data/QR/qrcodes.json';
-
-    // ---- device fs helpers (same surface as the other web apps) ----
-    async function readJSON(path) { try { var r = await fetch('/api/fs/read?path=' + encodeURIComponent(path), { cache: 'no-store' }); return r.ok ? JSON.parse(await r.text()) : null; } catch (e) { return null; } }
-    async function mkdirp(path) { try { await fetch('/api/fs/mkdir?path=' + encodeURIComponent(path), { method: 'POST' }); } catch (e) {} }
-    async function writeText(path, body, type) { try { var r = await fetch('/api/fs/write?path=' + encodeURIComponent(path), { method: 'POST', headers: { 'Content-Type': type || 'application/json' }, body: body }); return r.ok; } catch (e) { return false; } }
 
     function toast(msg) { var t = $('#toast'); t.textContent = msg; t.classList.add('on'); clearTimeout(t._h); t._h = setTimeout(function () { t.classList.remove('on'); }, 1900); }
 
@@ -208,19 +205,16 @@
     // ---- saved library (shared with the native app via SD) ----
     var lib = { schema: 1, items: [] };
     // Typed read. A FAILED read (offline, 401, 503) is NOT an empty library: the next save used to write
-    // [one QR] over everything the user (or the native app) had saved. 404 / "{}" = nothing yet.
+    // [one QR] over everything the user (or the native app) had saved. Absent / "{}" = nothing yet.
     async function readLib() {
       try {
-        var r = await fetch('/api/fs/read?path=' + encodeURIComponent(SHARED), { cache: 'no-store' });
-        if (r.status === 404) return { ok: true, lib: { schema: 1, items: [] } };
-        if (!r.ok) return { ok: false, status: r.status };
-        var txt = (await r.text()).trim();
+        var txt = ((await fs.readText(SHARED)) || '').trim();
         if (!txt) return { ok: true, lib: { schema: 1, items: [] } };
         var j = JSON.parse(txt);
         if (j && Array.isArray(j.items)) return { ok: true, lib: j };
         if (j && typeof j === 'object' && !Object.keys(j).length) return { ok: true, lib: { schema: 1, items: [] } };
         return { ok: false, status: 'corrupt' };
-      } catch (e) { return { ok: false, status: e instanceof SyntaxError ? 'corrupt' : 0 }; }
+      } catch (e) { return { ok: false, status: e instanceof SyntaxError ? 'corrupt' : e && e.code === 'denied' ? 403 : 0 }; }
     }
     function failText(st) { return st === 401 || st === 403 ? TR('not_paired') : st === 'corrupt' ? TR('read_corrupt') : TR('read_failed'); }
     var libErr = null;          // non-null while the device's library could not be read (nothing may be written)
@@ -232,8 +226,8 @@
       var r = await readLib();
       if (!r.ok) { libErr = r.status; renderLib(); toast(failText(r.status)); return false; }
       if (fn(r.lib) === false) { lib = r.lib; libErr = null; renderLib(); return false; }
-      await mkdirp('/data/QR');
-      var ok = await writeText(SHARED, JSON.stringify(r.lib, null, 0));
+      // Atomic, and /data/QR is made as needed: a failed save keeps the previous library.
+      var ok = await fs.writeJSON(SHARED, r.lib).then(function () { return true; }, function () { return false; });
       if (ok) { lib = r.lib; libErr = null; }
       renderLib(); toast(ok ? (msg || TR('saved')) : TR('save_failed'));
       return ok;
@@ -275,11 +269,12 @@
       $('#types').querySelectorAll('[data-t]').forEach(function (b) { b.onclick = function () { cur = b.dataset.t; setChips(); initForm(); }; });
     }
 
-    // ---- live device detection (just liveness; /api/status never carries a pairing PIN) ----
+    // ---- live device detection (just liveness; the status snapshot never carries a pairing PIN) ----
+    // The shell's own snapshot (os.status): no request of ours; opened on its own it reads /api/status once.
     async function probe() {
       try {
-        var r = await fetch('/api/status', { cache: 'no-store' });
-        if (r.ok) { $('#liveDot').classList.add('live'); $('#liveTxt').textContent = TR('device'); }
+        var st = await os.status();
+        if (st) { $('#liveDot').classList.add('live'); $('#liveTxt').textContent = TR('device'); }
       } catch (e) {}
     }
 

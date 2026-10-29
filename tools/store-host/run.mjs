@@ -267,6 +267,27 @@ r = N('refresh');
 check("native: another channel's signed catalog is refused", r.rc === ST.BAD, r.out);
 writeFileSync(nIdx, nIdxOrig); writeFileSync(nSig, nSigOrig);
 
+// Store art: the colour icons, a signed pack beside the catalog, fetched with it; never fails a refresh.
+check('art: a store without icons for this app has none', /art=none/.test(cli('art', 'alpha').out));
+execFileSync(PY, ['-c', "import sys;from PIL import Image;Image.new('RGB',(128,128),(255,0,0)).save(sys.argv[1])",
+  join(store, 'apps', 'web', 'alpha', 'store-icon.png')]);
+execFileSync(PY, [join(STORE_REPO, 'tools', 'art_pack.py')], { env: senv, encoding: 'utf8' });
+r = cli('refresh');
+let a = cli('art', 'alpha').out;
+check('art: fetched with the catalog, verified, 48 px red', r.rc === ST.OK && /art=48 px0=f800/.test(a), r.out + a);
+const artBin = join(pub, 'art.bin'), artSig = join(pub, 'art.sig');
+const artOrig = readFileSync(artBin), sigOrig = readFileSync(artSig, 'utf8');
+const forged = Buffer.from(artOrig); forged[forged.length - 1] ^= 0xff;
+writeFileSync(artBin, forged);
+writeFileSync(artSig, sigOrig.replace(/sig (.)/, (m, c) => 'sig ' + (c === 'A' ? 'B' : 'A')));
+r = cli('refresh');
+a = cli('art', 'alpha').out;
+check('art: a forged pack is refused, the old art stays, the refresh still succeeds', r.rc === ST.OK && /art=48 px0=f800/.test(a), r.out + a);
+rmSync(artBin); rmSync(artSig);
+r = cli('refresh');
+check('art: a store that stops publishing art (404) leaves the refresh ok', r.rc === ST.OK && /art=48/.test(cli('art', 'alpha').out), r.out);
+writeFileSync(artBin, artOrig); writeFileSync(artSig, sigOrig);
+
 // Remove.
 r = cli('remove', 'alpha');
 check('remove: folder and registry entry gone, others kept', r.rc === ST.OK && !existsSync(join(sd, 'apps', 'alpha'))

@@ -250,6 +250,86 @@ static bool read_header(FILE *f, const char *channel, uint32_t *serial, uint32_t
     return true;
 }
 
+// ── store art ─────────────────────────────────────────────────────────────────
+// Optional and cosmetic: public/<channel>/art.bin (the apps' colour icons, raw RGB565: the device draws them a row at
+// a time, no decoder) signed by art.sig exactly like the catalog. Fetched after a good catalog, only when art.sig
+// changed; a store without art (404), a failed download or a bad signature leave the previous art (or none) and
+// NEVER fail the refresh. Older firmware and the web shells never ask for it.
+#define MAX_ART (512u * 1024)
+
+static bool same_file(const char *a, const char *b)
+{
+    FILE *x = fopen(a, "rb"), *y = x ? fopen(b, "rb") : NULL;
+    bool same = x && y;
+    while (same) {
+        int c = fgetc(x), d = fgetc(y);
+        if (c != d) same = false;
+        if (c == EOF || d == EOF) break;
+    }
+    if (x) fclose(x);
+    if (y) fclose(y);
+    return same;
+}
+
+// The five paths are st_refresh's own buffers (each 200 B), done with by then: no RAM of its own.
+static void refresh_art(const st_cfg_t *cfg, const st_io_t *io, st_state_t *st, const char *dir,
+                        char *sig, char *sig_new, char *art, char *art_new, char *url)
+{
+    const st_state_t keep = *st;                     // the art's own failures are not the refresh's
+    snprintf(sig, 200, "%s/art.sig", dir);
+    snprintf(sig_new, 200, "%s/art.sig.new", dir);
+    snprintf(art, 200, "%s/art.bin", dir);
+    snprintf(art_new, 200, "%s/art.new", dir);
+    snprintf(url, 200, "%s%s/art.sig", cfg->base_url, cfg->channel);
+    if (fetch(cfg, io, st, url, sig_new, MAX_SIGFILE, -1, NULL) == ST_OK && !same_file(sig_new, sig)) {
+        uint8_t hash[32];
+        snprintf(url, 200, "%s%s/art.bin", cfg->base_url, cfg->channel);
+        if (fetch(cfg, io, st, url, art_new, MAX_ART, -1, hash) == ST_OK) {
+            FILE *f = fopen(sig_new, "rb");
+            char l[40], key[17];
+            uint8_t der[80];
+            int dl = 0;
+            bool ok = f && fgets(l, sizeof l, f) && !strcmp(l, SIG_MAGIC "\n") && read_sig_block(f, key, der, &dl);
+            if (f) fclose(f);
+            if (ok && io->verify(io->ctx, key, hash, der, (size_t)dl)) {
+                unlink(art); unlink(sig);
+                if (rename(art_new, art) != 0 || rename(sig_new, sig) != 0) { unlink(art); unlink(sig); }
+            }
+        }
+    }
+    unlink(sig_new);
+    unlink(art_new);
+    *st = keep;
+}
+
+FILE *st_art_open(const char *root, const char *channel)
+{
+    char p[200];
+    store_dir(root, channel, p, sizeof p);
+    strncat(p, "/art.bin", sizeof p - strlen(p) - 1);
+    FILE *f = fopen(p, "rb");
+    uint8_t h[16];
+    if (f && (fread(h, 1, sizeof h, f) != sizeof h || memcmp(h, "NART", 4) || h[4] != 1)) { fclose(f); f = NULL; }
+    return f;
+}
+
+bool st_art_find(FILE *f, const char *id, uint32_t *off, int *size)
+{
+    uint8_t h[16], e[ST_ART_ENTRY];
+    if (!f || fseek(f, 0, SEEK_SET) || fread(h, 1, sizeof h, f) != sizeof h) return false;
+    const int n = h[6] | h[7] << 8, sz = h[5];
+    for (int i = 0; i < n && fread(e, 1, sizeof e, f) == sizeof e; i++) {
+        if (strncmp((const char *)e, id, ST_ART_ENTRY - 4) || e[strlen(id)] != 0) continue;
+        uint32_t o = (uint32_t)e[ST_ART_ENTRY - 4] | (uint32_t)e[ST_ART_ENTRY - 3] << 8 |
+                     (uint32_t)e[ST_ART_ENTRY - 2] << 16 | (uint32_t)e[ST_ART_ENTRY - 1] << 24;
+        if (o < 16u + (uint32_t)n * ST_ART_ENTRY) return false;
+        *off = o; *size = sz;
+        return sz > 0;
+    }
+    return false;
+}
+
+
 st_code_t st_refresh(const st_cfg_t *cfg, const st_io_t *io, st_state_t *st)
 {
     memset(st, 0, sizeof *st);
@@ -299,6 +379,8 @@ st_code_t st_refresh(const st_cfg_t *cfg, const st_io_t *io, st_state_t *st)
         if (!s || fprintf(s, "%lu\n", (unsigned long)serial) < 0) { if (s) fclose(s); rc = ST_E_WRITE; fail_detail(st, rc, "serial"); goto out; }
         fclose(s);
     }
+    // The catalog is in place, its buffers free. sig_new / idx_new become the art's temporaries (unlinked at out:).
+    refresh_art(cfg, io, st, dir, ser, sig_new, idx, idx_new, url);
     st->phase = ST_PH_DONE;
 out:
     unlink(idx_new);
