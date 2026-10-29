@@ -106,7 +106,7 @@ typedef struct ppu {
     uint8_t nametables[4 * 1024];
     uint8_t palette[32];
 
-    uint8_t line[AGNES_SCREEN_WIDTH];   /* NUCLEO PATCH (A2): one scanline, handed to agnes->on_line when full */
+    uint16_t line[AGNES_SCREEN_WIDTH];  /* NUCLEO PATCH (A2): one scanline in the host's colours (agnes->rgb), to on_line */
 
     int scanline;
     int dot;
@@ -262,7 +262,8 @@ typedef struct agnes {
      * to on_line (256 palette indices) instead of a 61 KB frame buffer; the APU registers ($4000-$4013, $4015,
      * $4017) go to apu_write / apu_read — agnes has no sound of its own. Kept across agnes_restore_state. */
     uint8_t (*rom_read)(void *user, uint32_t offset);
-    void (*on_line)(void *user, const uint8_t *line, int y);
+    void (*on_line)(void *user, const uint16_t *line, int y);
+    const uint16_t *rgb;                /* the host's 64 NES colours, already in its pixel format */
     void (*apu_write)(void *user, uint16_t addr, uint8_t val);
     uint8_t (*apu_read)(void *user);
     void *host;
@@ -616,15 +617,17 @@ void agnes_dump_state(const agnes_t *agnes, agnes_state_t *out_res) {
 bool agnes_restore_state(agnes_t *agnes, const agnes_state_t *state) {
     const uint8_t *gamepack_data = agnes->gamepack.data;
     uint8_t (*rr)(void *, uint32_t) = agnes->rom_read;                     /* NUCLEO PATCH (A1-A3) */
-    void (*ol)(void *, const uint8_t *, int) = agnes->on_line;
+    void (*ol)(void *, const uint16_t *, int) = agnes->on_line;
     void (*aw)(void *, uint16_t, uint8_t) = agnes->apu_write;
     uint8_t (*ar)(void *) = agnes->apu_read;
     void *host = agnes->host;
+    const uint16_t *rgb = agnes->rgb;
     const uint8_t *(*rp)(void *, uint32_t) = agnes->rom_page;
     memmove(agnes, state, sizeof(agnes_t));
     agnes->gamepack.data = gamepack_data;
     agnes->rom_read = rr; agnes->on_line = ol; agnes->apu_write = aw; agnes->apu_read = ar; agnes->host = host;
     agnes->rom_page = rp;
+    agnes->rgb = rgb;
     agnes_drop_windows(agnes);
     agnes->cpu.agnes = agnes;
     agnes->ppu.agnes = agnes;
@@ -659,6 +662,7 @@ bool agnes_tick(agnes_t *agnes, bool *out_new_frame) {
  * boundaries; the sprite-0 hit is known as the line is drawn. The frame ends after the pre-render line. */
 static void inc_vert_v(ppu_t *ppu);
 static void ppu_render_line(ppu_t *ppu, int y, bool rendering);
+static int cpu_step(cpu_t *cpu);   /* NUCLEO PATCH (A6) */
 
 static bool run_cpu_to(agnes_t *agnes, int dot) {
     cpu_t *cpu = &agnes->cpu;
@@ -670,7 +674,7 @@ static bool run_cpu_to(agnes_t *agnes, int dot) {
             agnes->ln_dot += (int)take * 3;
             continue;
         }
-        int c = cpu_tick(cpu);
+        int c = cpu_step(cpu);
         if (c == 0) {
             return false;
         }
@@ -1604,11 +1608,12 @@ static inline uint8_t chr_read(agnes_t *agnes, uint16_t addr) {
  * first eight in OAM order that cover the line (the line after their y, as on the console), lower index in front.
  * Then the priority rule and the sprite-0 hit (an opaque sprite-0 pixel over an opaque background pixel, not at
  * x 255), and the palette. With rendering off the line is the backdrop (or the colour v points at). */
-static bool ppu_sprites_line(ppu_t *ppu, int y, uint8_t *sp) {
+static bool ppu_sprites_line(ppu_t *ppu, int y, uint8_t *sp, int *x0, int *x1) {
     agnes_t *agnes = ppu->agnes;
     const int h = ppu->ctrl.use_8x16_sprites ? 16 : 8;
     int n = 0;
     bool any = false;
+    int lo_x = 256, hi_x = -1;                       // the columns any sprite pixel landed in
     memset(sp, 0, AGNES_SCREEN_WIDTH);
     for (int i = 0; i < 64; i++) {
         const uint8_t *o = &ppu->oam_data[i * 4];
@@ -1657,12 +1662,16 @@ static bool ppu_sprites_line(ppu_t *ppu, int y, uint8_t *sp) {
             }
             sp[x] = (uint8_t)(base | ix);
             any = true;
+            if (x < lo_x) lo_x = x;
+            if (x > hi_x) hi_x = x;
         }
     }
     if (!ppu->masks.show_leftmost_sprites) {
         memset(sp, 0, 8);
+        if (lo_x < 8) lo_x = 8;
     }
-    return any;
+    *x0 = lo_x; *x1 = hi_x;
+    return any && lo_x <= hi_x;
 }
 
 /* The four logical name tables as pointers, for the mirroring in force. */
@@ -1726,16 +1735,18 @@ static void ppu_hit_line(ppu_t *ppu, int y) {
 
 static void ppu_render_line(ppu_t *ppu, int y, bool rendering) {
     agnes_t *agnes = ppu->agnes;
-    uint8_t *out = ppu->line;
+    uint16_t *out = ppu->line;
     if (agnes->skip_draw) {
         if (rendering) ppu_hit_line(ppu, y);
         return;
     }
-    const uint8_t *pal = ppu->palette;
+    // The 32 palette entries in the host's colours, for this line (the game may rewrite them between lines).
+    uint16_t pal[32];
+    for (int i = 0; i < 32; i++) pal[i] = agnes->rgb[ppu->palette[i] & 0x3f];
     if (!rendering) {
         const uint16_t v = ppu->regs.v & 0x3fff;
-        const uint8_t c = v >= 0x3f00 ? pal[g_palette_addr_map[v & 0x1f]] : pal[0];
-        memset(out, c & 0x3f, AGNES_SCREEN_WIDTH);
+        const uint16_t c = v >= 0x3f00 ? pal[g_palette_addr_map[v & 0x1f]] : pal[0];
+        for (int x = 0; x < AGNES_SCREEN_WIDTH; x++) out[x] = c;
     } else {
         uint8_t bgbuf[33 * 8];
         const uint8_t *bg = bgbuf;
@@ -1774,21 +1785,18 @@ static void ppu_render_line(ppu_t *ppu, int y, bool rendering) {
         } else {
             memset(bgbuf, 0, AGNES_SCREEN_WIDTH);
         }
+        for (int x = 0; x < AGNES_SCREEN_WIDTH; x++) out[x] = pal[bg[x]];
         uint8_t sp[AGNES_SCREEN_WIDTH];
-        if (ppu->masks.show_sprites && ppu_sprites_line(ppu, y, sp)) {
+        int x0, x1;
+        if (ppu->masks.show_sprites && ppu_sprites_line(ppu, y, sp, &x0, &x1)) {
             bool hit = false;
-            for (int x = 0; x < AGNES_SCREEN_WIDTH; x++) {
+            for (int x = x0; x <= x1; x++) {                // only where a sprite pixel is: the rest is background
                 const uint8_t s = sp[x], b = bg[x];
-                uint8_t c = b;
-                if (s & 3) {
-                    if ((s & 0x40) && b && x != 255) hit = true;
-                    c = (b && (s & 0x20)) ? b : (uint8_t)(s & 0x1f);
-                }
-                out[x] = pal[c] & 0x3f;
+                if (!(s & 3)) continue;
+                if ((s & 0x40) && b && x != 255) hit = true;
+                if (!(b && (s & 0x20))) out[x] = pal[s & 0x1f];
             }
             if (hit) ppu->status.sprite_zero_hit = true;
-        } else {
-            for (int x = 0; x < AGNES_SCREEN_WIDTH; x++) out[x] = pal[bg[x]] & 0x3f;
         }
     }
     if (agnes->on_line) agnes->on_line(agnes->host, out, y);
@@ -2141,6 +2149,174 @@ static instruction_t instructions[256] = {
 instruction_t* instruction_get(uint8_t opc) {
     return &instructions[opc];
 }
+
+/* NUCLEO PATCH (A6): cpu_tick as one switch. agnes dispatched every instruction through a table of function
+ * pointers with the addressing mode as a run-time argument; here each case names its mode and operation as
+ * constants, so the compiler inlines the operand fetch and the operation for that opcode (generated from the
+ * table above, same cycles, same page-cross rule). Unknown opcodes stop the CPU as before. */
+static int cpu_step(cpu_t *cpu) {
+    int cycles = 0;
+    if (cpu->interrupt != INTERRPUT_NONE) {
+        cycles += handle_interrupt(cpu);
+    }
+    switch (cpu_read8(cpu, cpu->pc)) {
+        case 0x00: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMPLIED_BRK, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMPLIED_BRK); cycles += 7 + op_brk(cpu, a, ADDR_MODE_IMPLIED_BRK); break; }  /* BRK */
+        case 0x01: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_INDIRECT_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_INDIRECT_X); cycles += 6 + op_ora(cpu, a, ADDR_MODE_INDIRECT_X); break; }  /* ORA */
+        case 0x05: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE); cycles += 3 + op_ora(cpu, a, ADDR_MODE_ZERO_PAGE); break; }  /* ORA */
+        case 0x06: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE); cycles += 5 + op_asl(cpu, a, ADDR_MODE_ZERO_PAGE); break; }  /* ASL */
+        case 0x08: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMPLIED, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMPLIED); cycles += 3 + op_php(cpu, a, ADDR_MODE_IMPLIED); break; }  /* PHP */
+        case 0x09: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMMEDIATE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMMEDIATE); cycles += 2 + op_ora(cpu, a, ADDR_MODE_IMMEDIATE); break; }  /* ORA */
+        case 0x0a: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ACCUMULATOR, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ACCUMULATOR); cycles += 2 + op_asl(cpu, a, ADDR_MODE_ACCUMULATOR); break; }  /* ASL */
+        case 0x0d: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE); cycles += 4 + op_ora(cpu, a, ADDR_MODE_ABSOLUTE); break; }  /* ORA */
+        case 0x0e: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE); cycles += 6 + op_asl(cpu, a, ADDR_MODE_ABSOLUTE); break; }  /* ASL */
+        case 0x10: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_RELATIVE, &pd); cpu->pc += instruction_get_size(ADDR_MODE_RELATIVE); cycles += 2 + op_bpl(cpu, a, ADDR_MODE_RELATIVE) + pd; break; }  /* BPL */
+        case 0x11: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_INDIRECT_Y, &pd); cpu->pc += instruction_get_size(ADDR_MODE_INDIRECT_Y); cycles += 5 + op_ora(cpu, a, ADDR_MODE_INDIRECT_Y) + pd; break; }  /* ORA */
+        case 0x15: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE_X); cycles += 4 + op_ora(cpu, a, ADDR_MODE_ZERO_PAGE_X); break; }  /* ORA */
+        case 0x16: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE_X); cycles += 6 + op_asl(cpu, a, ADDR_MODE_ZERO_PAGE_X); break; }  /* ASL */
+        case 0x18: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMPLIED, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMPLIED); cycles += 2 + op_clc(cpu, a, ADDR_MODE_IMPLIED); break; }  /* CLC */
+        case 0x19: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE_Y, &pd); cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE_Y); cycles += 4 + op_ora(cpu, a, ADDR_MODE_ABSOLUTE_Y) + pd; break; }  /* ORA */
+        case 0x1d: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE_X, &pd); cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE_X); cycles += 4 + op_ora(cpu, a, ADDR_MODE_ABSOLUTE_X) + pd; break; }  /* ORA */
+        case 0x1e: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE_X); cycles += 7 + op_asl(cpu, a, ADDR_MODE_ABSOLUTE_X); break; }  /* ASL */
+        case 0x20: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE); cycles += 6 + op_jsr(cpu, a, ADDR_MODE_ABSOLUTE); break; }  /* JSR */
+        case 0x21: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_INDIRECT_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_INDIRECT_X); cycles += 6 + op_and(cpu, a, ADDR_MODE_INDIRECT_X); break; }  /* AND */
+        case 0x24: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE); cycles += 3 + op_bit(cpu, a, ADDR_MODE_ZERO_PAGE); break; }  /* BIT */
+        case 0x25: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE); cycles += 3 + op_and(cpu, a, ADDR_MODE_ZERO_PAGE); break; }  /* AND */
+        case 0x26: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE); cycles += 5 + op_rol(cpu, a, ADDR_MODE_ZERO_PAGE); break; }  /* ROL */
+        case 0x28: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMPLIED, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMPLIED); cycles += 4 + op_plp(cpu, a, ADDR_MODE_IMPLIED); break; }  /* PLP */
+        case 0x29: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMMEDIATE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMMEDIATE); cycles += 2 + op_and(cpu, a, ADDR_MODE_IMMEDIATE); break; }  /* AND */
+        case 0x2a: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ACCUMULATOR, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ACCUMULATOR); cycles += 2 + op_rol(cpu, a, ADDR_MODE_ACCUMULATOR); break; }  /* ROL */
+        case 0x2c: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE); cycles += 4 + op_bit(cpu, a, ADDR_MODE_ABSOLUTE); break; }  /* BIT */
+        case 0x2d: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE); cycles += 4 + op_and(cpu, a, ADDR_MODE_ABSOLUTE); break; }  /* AND */
+        case 0x2e: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE); cycles += 6 + op_rol(cpu, a, ADDR_MODE_ABSOLUTE); break; }  /* ROL */
+        case 0x30: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_RELATIVE, &pd); cpu->pc += instruction_get_size(ADDR_MODE_RELATIVE); cycles += 2 + op_bmi(cpu, a, ADDR_MODE_RELATIVE) + pd; break; }  /* BMI */
+        case 0x31: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_INDIRECT_Y, &pd); cpu->pc += instruction_get_size(ADDR_MODE_INDIRECT_Y); cycles += 5 + op_and(cpu, a, ADDR_MODE_INDIRECT_Y) + pd; break; }  /* AND */
+        case 0x35: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE_X); cycles += 4 + op_and(cpu, a, ADDR_MODE_ZERO_PAGE_X); break; }  /* AND */
+        case 0x36: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE_X); cycles += 6 + op_rol(cpu, a, ADDR_MODE_ZERO_PAGE_X); break; }  /* ROL */
+        case 0x38: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMPLIED, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMPLIED); cycles += 2 + op_sec(cpu, a, ADDR_MODE_IMPLIED); break; }  /* SEC */
+        case 0x39: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE_Y, &pd); cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE_Y); cycles += 4 + op_and(cpu, a, ADDR_MODE_ABSOLUTE_Y) + pd; break; }  /* AND */
+        case 0x3d: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE_X, &pd); cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE_X); cycles += 4 + op_and(cpu, a, ADDR_MODE_ABSOLUTE_X) + pd; break; }  /* AND */
+        case 0x3e: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE_X); cycles += 7 + op_rol(cpu, a, ADDR_MODE_ABSOLUTE_X); break; }  /* ROL */
+        case 0x40: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMPLIED, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMPLIED); cycles += 6 + op_rti(cpu, a, ADDR_MODE_IMPLIED); break; }  /* RTI */
+        case 0x41: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_INDIRECT_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_INDIRECT_X); cycles += 6 + op_eor(cpu, a, ADDR_MODE_INDIRECT_X); break; }  /* EOR */
+        case 0x45: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE); cycles += 3 + op_eor(cpu, a, ADDR_MODE_ZERO_PAGE); break; }  /* EOR */
+        case 0x46: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE); cycles += 5 + op_lsr(cpu, a, ADDR_MODE_ZERO_PAGE); break; }  /* LSR */
+        case 0x48: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMPLIED, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMPLIED); cycles += 3 + op_pha(cpu, a, ADDR_MODE_IMPLIED); break; }  /* PHA */
+        case 0x49: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMMEDIATE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMMEDIATE); cycles += 2 + op_eor(cpu, a, ADDR_MODE_IMMEDIATE); break; }  /* EOR */
+        case 0x4a: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ACCUMULATOR, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ACCUMULATOR); cycles += 2 + op_lsr(cpu, a, ADDR_MODE_ACCUMULATOR); break; }  /* LSR */
+        case 0x4c: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE); cycles += 3 + op_jmp(cpu, a, ADDR_MODE_ABSOLUTE); break; }  /* JMP */
+        case 0x4d: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE); cycles += 4 + op_eor(cpu, a, ADDR_MODE_ABSOLUTE); break; }  /* EOR */
+        case 0x4e: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE); cycles += 6 + op_lsr(cpu, a, ADDR_MODE_ABSOLUTE); break; }  /* LSR */
+        case 0x50: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_RELATIVE, &pd); cpu->pc += instruction_get_size(ADDR_MODE_RELATIVE); cycles += 2 + op_bvc(cpu, a, ADDR_MODE_RELATIVE) + pd; break; }  /* BVC */
+        case 0x51: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_INDIRECT_Y, &pd); cpu->pc += instruction_get_size(ADDR_MODE_INDIRECT_Y); cycles += 5 + op_eor(cpu, a, ADDR_MODE_INDIRECT_Y) + pd; break; }  /* EOR */
+        case 0x55: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE_X); cycles += 4 + op_eor(cpu, a, ADDR_MODE_ZERO_PAGE_X); break; }  /* EOR */
+        case 0x56: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE_X); cycles += 6 + op_lsr(cpu, a, ADDR_MODE_ZERO_PAGE_X); break; }  /* LSR */
+        case 0x58: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMPLIED, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMPLIED); cycles += 2 + op_cli(cpu, a, ADDR_MODE_IMPLIED); break; }  /* CLI */
+        case 0x59: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE_Y, &pd); cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE_Y); cycles += 4 + op_eor(cpu, a, ADDR_MODE_ABSOLUTE_Y) + pd; break; }  /* EOR */
+        case 0x5d: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE_X, &pd); cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE_X); cycles += 4 + op_eor(cpu, a, ADDR_MODE_ABSOLUTE_X) + pd; break; }  /* EOR */
+        case 0x5e: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE_X); cycles += 7 + op_lsr(cpu, a, ADDR_MODE_ABSOLUTE_X); break; }  /* LSR */
+        case 0x60: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMPLIED, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMPLIED); cycles += 6 + op_rts(cpu, a, ADDR_MODE_IMPLIED); break; }  /* RTS */
+        case 0x61: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_INDIRECT_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_INDIRECT_X); cycles += 6 + op_adc(cpu, a, ADDR_MODE_INDIRECT_X); break; }  /* ADC */
+        case 0x65: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE); cycles += 3 + op_adc(cpu, a, ADDR_MODE_ZERO_PAGE); break; }  /* ADC */
+        case 0x66: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE); cycles += 5 + op_ror(cpu, a, ADDR_MODE_ZERO_PAGE); break; }  /* ROR */
+        case 0x68: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMPLIED, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMPLIED); cycles += 4 + op_pla(cpu, a, ADDR_MODE_IMPLIED); break; }  /* PLA */
+        case 0x69: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMMEDIATE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMMEDIATE); cycles += 2 + op_adc(cpu, a, ADDR_MODE_IMMEDIATE); break; }  /* ADC */
+        case 0x6a: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ACCUMULATOR, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ACCUMULATOR); cycles += 2 + op_ror(cpu, a, ADDR_MODE_ACCUMULATOR); break; }  /* ROR */
+        case 0x6c: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_INDIRECT, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_INDIRECT); cycles += 5 + op_jmp(cpu, a, ADDR_MODE_INDIRECT); break; }  /* JMP */
+        case 0x6d: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE); cycles += 4 + op_adc(cpu, a, ADDR_MODE_ABSOLUTE); break; }  /* ADC */
+        case 0x6e: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE); cycles += 6 + op_ror(cpu, a, ADDR_MODE_ABSOLUTE); break; }  /* ROR */
+        case 0x70: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_RELATIVE, &pd); cpu->pc += instruction_get_size(ADDR_MODE_RELATIVE); cycles += 2 + op_bvs(cpu, a, ADDR_MODE_RELATIVE) + pd; break; }  /* BVS */
+        case 0x71: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_INDIRECT_Y, &pd); cpu->pc += instruction_get_size(ADDR_MODE_INDIRECT_Y); cycles += 5 + op_adc(cpu, a, ADDR_MODE_INDIRECT_Y) + pd; break; }  /* ADC */
+        case 0x75: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE_X); cycles += 4 + op_adc(cpu, a, ADDR_MODE_ZERO_PAGE_X); break; }  /* ADC */
+        case 0x76: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE_X); cycles += 6 + op_ror(cpu, a, ADDR_MODE_ZERO_PAGE_X); break; }  /* ROR */
+        case 0x78: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMPLIED, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMPLIED); cycles += 2 + op_sei(cpu, a, ADDR_MODE_IMPLIED); break; }  /* SEI */
+        case 0x79: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE_Y, &pd); cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE_Y); cycles += 4 + op_adc(cpu, a, ADDR_MODE_ABSOLUTE_Y) + pd; break; }  /* ADC */
+        case 0x7d: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE_X, &pd); cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE_X); cycles += 4 + op_adc(cpu, a, ADDR_MODE_ABSOLUTE_X) + pd; break; }  /* ADC */
+        case 0x7e: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE_X); cycles += 7 + op_ror(cpu, a, ADDR_MODE_ABSOLUTE_X); break; }  /* ROR */
+        case 0x81: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_INDIRECT_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_INDIRECT_X); cycles += 6 + op_sta(cpu, a, ADDR_MODE_INDIRECT_X); break; }  /* STA */
+        case 0x84: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE); cycles += 3 + op_sty(cpu, a, ADDR_MODE_ZERO_PAGE); break; }  /* STY */
+        case 0x85: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE); cycles += 3 + op_sta(cpu, a, ADDR_MODE_ZERO_PAGE); break; }  /* STA */
+        case 0x86: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE); cycles += 3 + op_stx(cpu, a, ADDR_MODE_ZERO_PAGE); break; }  /* STX */
+        case 0x88: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMPLIED, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMPLIED); cycles += 2 + op_dey(cpu, a, ADDR_MODE_IMPLIED); break; }  /* DEY */
+        case 0x8a: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMPLIED, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMPLIED); cycles += 2 + op_txa(cpu, a, ADDR_MODE_IMPLIED); break; }  /* TXA */
+        case 0x8c: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE); cycles += 4 + op_sty(cpu, a, ADDR_MODE_ABSOLUTE); break; }  /* STY */
+        case 0x8d: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE); cycles += 4 + op_sta(cpu, a, ADDR_MODE_ABSOLUTE); break; }  /* STA */
+        case 0x8e: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE); cycles += 4 + op_stx(cpu, a, ADDR_MODE_ABSOLUTE); break; }  /* STX */
+        case 0x90: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_RELATIVE, &pd); cpu->pc += instruction_get_size(ADDR_MODE_RELATIVE); cycles += 2 + op_bcc(cpu, a, ADDR_MODE_RELATIVE) + pd; break; }  /* BCC */
+        case 0x91: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_INDIRECT_Y, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_INDIRECT_Y); cycles += 6 + op_sta(cpu, a, ADDR_MODE_INDIRECT_Y); break; }  /* STA */
+        case 0x94: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE_X); cycles += 4 + op_sty(cpu, a, ADDR_MODE_ZERO_PAGE_X); break; }  /* STY */
+        case 0x95: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE_X); cycles += 4 + op_sta(cpu, a, ADDR_MODE_ZERO_PAGE_X); break; }  /* STA */
+        case 0x96: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE_Y, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE_Y); cycles += 4 + op_stx(cpu, a, ADDR_MODE_ZERO_PAGE_Y); break; }  /* STX */
+        case 0x98: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMPLIED, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMPLIED); cycles += 2 + op_tya(cpu, a, ADDR_MODE_IMPLIED); break; }  /* TYA */
+        case 0x99: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE_Y, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE_Y); cycles += 5 + op_sta(cpu, a, ADDR_MODE_ABSOLUTE_Y); break; }  /* STA */
+        case 0x9a: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMPLIED, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMPLIED); cycles += 2 + op_txs(cpu, a, ADDR_MODE_IMPLIED); break; }  /* TXS */
+        case 0x9d: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE_X); cycles += 5 + op_sta(cpu, a, ADDR_MODE_ABSOLUTE_X); break; }  /* STA */
+        case 0xa0: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMMEDIATE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMMEDIATE); cycles += 2 + op_ldy(cpu, a, ADDR_MODE_IMMEDIATE); break; }  /* LDY */
+        case 0xa1: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_INDIRECT_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_INDIRECT_X); cycles += 6 + op_lda(cpu, a, ADDR_MODE_INDIRECT_X); break; }  /* LDA */
+        case 0xa2: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMMEDIATE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMMEDIATE); cycles += 2 + op_ldx(cpu, a, ADDR_MODE_IMMEDIATE); break; }  /* LDX */
+        case 0xa4: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE); cycles += 3 + op_ldy(cpu, a, ADDR_MODE_ZERO_PAGE); break; }  /* LDY */
+        case 0xa5: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE); cycles += 3 + op_lda(cpu, a, ADDR_MODE_ZERO_PAGE); break; }  /* LDA */
+        case 0xa6: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE); cycles += 3 + op_ldx(cpu, a, ADDR_MODE_ZERO_PAGE); break; }  /* LDX */
+        case 0xa8: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMPLIED, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMPLIED); cycles += 2 + op_tay(cpu, a, ADDR_MODE_IMPLIED); break; }  /* TAY */
+        case 0xa9: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMMEDIATE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMMEDIATE); cycles += 2 + op_lda(cpu, a, ADDR_MODE_IMMEDIATE); break; }  /* LDA */
+        case 0xaa: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMPLIED, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMPLIED); cycles += 2 + op_tax(cpu, a, ADDR_MODE_IMPLIED); break; }  /* TAX */
+        case 0xac: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE); cycles += 4 + op_ldy(cpu, a, ADDR_MODE_ABSOLUTE); break; }  /* LDY */
+        case 0xad: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE); cycles += 4 + op_lda(cpu, a, ADDR_MODE_ABSOLUTE); break; }  /* LDA */
+        case 0xae: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE); cycles += 4 + op_ldx(cpu, a, ADDR_MODE_ABSOLUTE); break; }  /* LDX */
+        case 0xb0: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_RELATIVE, &pd); cpu->pc += instruction_get_size(ADDR_MODE_RELATIVE); cycles += 2 + op_bcs(cpu, a, ADDR_MODE_RELATIVE) + pd; break; }  /* BCS */
+        case 0xb1: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_INDIRECT_Y, &pd); cpu->pc += instruction_get_size(ADDR_MODE_INDIRECT_Y); cycles += 5 + op_lda(cpu, a, ADDR_MODE_INDIRECT_Y) + pd; break; }  /* LDA */
+        case 0xb4: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE_X); cycles += 4 + op_ldy(cpu, a, ADDR_MODE_ZERO_PAGE_X); break; }  /* LDY */
+        case 0xb5: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE_X); cycles += 4 + op_lda(cpu, a, ADDR_MODE_ZERO_PAGE_X); break; }  /* LDA */
+        case 0xb6: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE_Y, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE_Y); cycles += 4 + op_ldx(cpu, a, ADDR_MODE_ZERO_PAGE_Y); break; }  /* LDX */
+        case 0xb8: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMPLIED, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMPLIED); cycles += 2 + op_clv(cpu, a, ADDR_MODE_IMPLIED); break; }  /* CLV */
+        case 0xb9: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE_Y, &pd); cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE_Y); cycles += 4 + op_lda(cpu, a, ADDR_MODE_ABSOLUTE_Y) + pd; break; }  /* LDA */
+        case 0xba: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMPLIED, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMPLIED); cycles += 2 + op_tsx(cpu, a, ADDR_MODE_IMPLIED); break; }  /* TSX */
+        case 0xbc: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE_X, &pd); cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE_X); cycles += 4 + op_ldy(cpu, a, ADDR_MODE_ABSOLUTE_X) + pd; break; }  /* LDY */
+        case 0xbd: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE_X, &pd); cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE_X); cycles += 4 + op_lda(cpu, a, ADDR_MODE_ABSOLUTE_X) + pd; break; }  /* LDA */
+        case 0xbe: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE_Y, &pd); cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE_Y); cycles += 4 + op_ldx(cpu, a, ADDR_MODE_ABSOLUTE_Y) + pd; break; }  /* LDX */
+        case 0xc0: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMMEDIATE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMMEDIATE); cycles += 2 + op_cpy(cpu, a, ADDR_MODE_IMMEDIATE); break; }  /* CPY */
+        case 0xc1: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_INDIRECT_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_INDIRECT_X); cycles += 6 + op_cmp(cpu, a, ADDR_MODE_INDIRECT_X); break; }  /* CMP */
+        case 0xc4: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE); cycles += 3 + op_cpy(cpu, a, ADDR_MODE_ZERO_PAGE); break; }  /* CPY */
+        case 0xc5: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE); cycles += 3 + op_cmp(cpu, a, ADDR_MODE_ZERO_PAGE); break; }  /* CMP */
+        case 0xc6: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE); cycles += 5 + op_dec(cpu, a, ADDR_MODE_ZERO_PAGE); break; }  /* DEC */
+        case 0xc8: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMPLIED, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMPLIED); cycles += 2 + op_iny(cpu, a, ADDR_MODE_IMPLIED); break; }  /* INY */
+        case 0xc9: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMMEDIATE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMMEDIATE); cycles += 2 + op_cmp(cpu, a, ADDR_MODE_IMMEDIATE); break; }  /* CMP */
+        case 0xca: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMPLIED, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMPLIED); cycles += 2 + op_dex(cpu, a, ADDR_MODE_IMPLIED); break; }  /* DEX */
+        case 0xcc: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE); cycles += 4 + op_cpy(cpu, a, ADDR_MODE_ABSOLUTE); break; }  /* CPY */
+        case 0xcd: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE); cycles += 4 + op_cmp(cpu, a, ADDR_MODE_ABSOLUTE); break; }  /* CMP */
+        case 0xce: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE); cycles += 6 + op_dec(cpu, a, ADDR_MODE_ABSOLUTE); break; }  /* DEC */
+        case 0xd0: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_RELATIVE, &pd); cpu->pc += instruction_get_size(ADDR_MODE_RELATIVE); cycles += 2 + op_bne(cpu, a, ADDR_MODE_RELATIVE) + pd; break; }  /* BNE */
+        case 0xd1: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_INDIRECT_Y, &pd); cpu->pc += instruction_get_size(ADDR_MODE_INDIRECT_Y); cycles += 5 + op_cmp(cpu, a, ADDR_MODE_INDIRECT_Y) + pd; break; }  /* CMP */
+        case 0xd5: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE_X); cycles += 4 + op_cmp(cpu, a, ADDR_MODE_ZERO_PAGE_X); break; }  /* CMP */
+        case 0xd6: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE_X); cycles += 6 + op_dec(cpu, a, ADDR_MODE_ZERO_PAGE_X); break; }  /* DEC */
+        case 0xd8: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMPLIED, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMPLIED); cycles += 2 + op_cld(cpu, a, ADDR_MODE_IMPLIED); break; }  /* CLD */
+        case 0xd9: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE_Y, &pd); cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE_Y); cycles += 4 + op_cmp(cpu, a, ADDR_MODE_ABSOLUTE_Y) + pd; break; }  /* CMP */
+        case 0xdd: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE_X, &pd); cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE_X); cycles += 4 + op_cmp(cpu, a, ADDR_MODE_ABSOLUTE_X) + pd; break; }  /* CMP */
+        case 0xde: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE_X); cycles += 7 + op_dec(cpu, a, ADDR_MODE_ABSOLUTE_X); break; }  /* DEC */
+        case 0xe0: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMMEDIATE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMMEDIATE); cycles += 2 + op_cpx(cpu, a, ADDR_MODE_IMMEDIATE); break; }  /* CPX */
+        case 0xe1: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_INDIRECT_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_INDIRECT_X); cycles += 6 + op_sbc(cpu, a, ADDR_MODE_INDIRECT_X); break; }  /* SBC */
+        case 0xe4: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE); cycles += 3 + op_cpx(cpu, a, ADDR_MODE_ZERO_PAGE); break; }  /* CPX */
+        case 0xe5: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE); cycles += 3 + op_sbc(cpu, a, ADDR_MODE_ZERO_PAGE); break; }  /* SBC */
+        case 0xe6: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE); cycles += 5 + op_inc(cpu, a, ADDR_MODE_ZERO_PAGE); break; }  /* INC */
+        case 0xe8: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMPLIED, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMPLIED); cycles += 2 + op_inx(cpu, a, ADDR_MODE_IMPLIED); break; }  /* INX */
+        case 0xe9: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMMEDIATE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMMEDIATE); cycles += 2 + op_sbc(cpu, a, ADDR_MODE_IMMEDIATE); break; }  /* SBC */
+        case 0xea: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMPLIED, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMPLIED); cycles += 2 + op_nop(cpu, a, ADDR_MODE_IMPLIED); break; }  /* NOP */
+        case 0xec: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE); cycles += 4 + op_cpx(cpu, a, ADDR_MODE_ABSOLUTE); break; }  /* CPX */
+        case 0xed: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE); cycles += 4 + op_sbc(cpu, a, ADDR_MODE_ABSOLUTE); break; }  /* SBC */
+        case 0xee: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE); cycles += 6 + op_inc(cpu, a, ADDR_MODE_ABSOLUTE); break; }  /* INC */
+        case 0xf0: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_RELATIVE, &pd); cpu->pc += instruction_get_size(ADDR_MODE_RELATIVE); cycles += 2 + op_beq(cpu, a, ADDR_MODE_RELATIVE) + pd; break; }  /* BEQ */
+        case 0xf1: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_INDIRECT_Y, &pd); cpu->pc += instruction_get_size(ADDR_MODE_INDIRECT_Y); cycles += 5 + op_sbc(cpu, a, ADDR_MODE_INDIRECT_Y) + pd; break; }  /* SBC */
+        case 0xf5: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE_X); cycles += 4 + op_sbc(cpu, a, ADDR_MODE_ZERO_PAGE_X); break; }  /* SBC */
+        case 0xf6: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ZERO_PAGE_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ZERO_PAGE_X); cycles += 6 + op_inc(cpu, a, ADDR_MODE_ZERO_PAGE_X); break; }  /* INC */
+        case 0xf8: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_IMPLIED, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_IMPLIED); cycles += 2 + op_sed(cpu, a, ADDR_MODE_IMPLIED); break; }  /* SED */
+        case 0xf9: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE_Y, &pd); cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE_Y); cycles += 4 + op_sbc(cpu, a, ADDR_MODE_ABSOLUTE_Y) + pd; break; }  /* SBC */
+        case 0xfd: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE_X, &pd); cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE_X); cycles += 4 + op_sbc(cpu, a, ADDR_MODE_ABSOLUTE_X) + pd; break; }  /* SBC */
+        case 0xfe: { bool pd; uint16_t a = get_instruction_operand(cpu, ADDR_MODE_ABSOLUTE_X, &pd); (void)pd; cpu->pc += instruction_get_size(ADDR_MODE_ABSOLUTE_X); cycles += 7 + op_inc(cpu, a, ADDR_MODE_ABSOLUTE_X); break; }  /* INC */
+        default: return 0;
+    }
+    cpu->cycles += cycles;
+    return cycles;
+}
+
 
 uint8_t instruction_get_size(addr_mode_t mode) {
     switch (mode) {

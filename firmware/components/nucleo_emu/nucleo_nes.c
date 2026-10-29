@@ -91,7 +91,6 @@ typedef struct {
     nucleo_nes_line_fn on_line;
     void         *user;
     uint16_t      pal[64];                      // the NES palette, RGB565 in the panel's byte order
-    uint16_t      line16[NUCLEO_NES_W];
 
     nes_apu_t     apu;
     int16_t       pcm[APU_SPF];
@@ -288,12 +287,11 @@ static uint8_t rom_read(void *host, uint32_t off)
     return rom_page(host, off)[(off - s->rom_base) & (PG_SIZE - 1)];
 }
 
-static void on_line(void *host, const uint8_t *line, int y)
+// agnes already colours the line with s->pal (patch A2): straight to the front-end.
+static void on_line(void *host, const uint16_t *line, int y)
 {
     nes_session_t *s = (nes_session_t *)host;
-    if (!s->on_line) return;
-    for (int x = 0; x < NUCLEO_NES_W; x++) s->line16[x] = s->pal[line[x] & 63];
-    s->on_line(s->line16, y, s->user);
+    if (s->on_line) s->on_line(line, y, s->user);
 }
 
 // ── files: "<root>/Saves/nes/<rom name>.*" ─────────────────────────────────────────────────────────
@@ -462,6 +460,7 @@ esp_err_t nucleo_nes_open(const char *rom_path, nucleo_nes_line_fn line_cb, void
         uint16_t c = (uint16_t)(((pc[i].r & 0xF8) << 8) | ((pc[i].g & 0xFC) << 3) | (pc[i].b >> 3));
         s->pal[i] = (uint16_t)((c >> 8) | (c << 8));
     }
+    a->rgb = s->pal;
     mixer_init(s);
     s->apu.n.lfsr = 1;
     S = s;
@@ -561,7 +560,7 @@ esp_err_t nucleo_nes_state_load(int slot)
     if (!f) return ESP_ERR_NOT_FOUND;
     agnes_t *a = S->a;
     uint8_t (*rr)(void *, uint32_t) = a->rom_read;
-    void (*ol)(void *, const uint8_t *, int) = a->on_line;
+    void (*ol)(void *, const uint16_t *, int) = a->on_line;
     void (*aw)(void *, uint16_t, uint8_t) = a->apu_write;
     uint8_t (*ar)(void *) = a->apu_read;
     uint32_t magic = 0;
@@ -571,6 +570,7 @@ esp_err_t nucleo_nes_state_load(int slot)
     fclose(f);
     a->rom_read = rr; a->on_line = ol; a->apu_write = aw; a->apu_read = ar; a->host = S;
     a->rom_page = rom_page;
+    a->rgb = S->pal;
     agnes_drop_windows(a);
     a->gamepack.data = NULL;
     a->cpu.agnes = a; a->ppu.agnes = a;
