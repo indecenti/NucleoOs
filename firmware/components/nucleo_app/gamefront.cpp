@@ -739,8 +739,11 @@ static void relist(void)
 
 static void pic_forget(void);
 static void marks_free(void);
+static bool s_settle_frame;                        // the next render: what changes when the wheel stops (left column)
 void gamefront_open(void)
 {
+    // Back from anything (a game, the screensaver): the whole gallery and the companion, never a leftover turn frame.
+    s_full = true; s_turn_t0 = 0; s_settle_at = 0; s_settle_frame = false;
     s_cover_ready = 0;
     last_load();
     systems_build();
@@ -774,7 +777,6 @@ void gamefront_open(void)
     if (!s_scan.done) scan_start();               // once per boot: the card may have changed while it was off
 }
 
-static bool s_settle_frame;                        // the next render: what changes when the wheel stops (left column)
 static bool prefetch_one(void);
 bool gamefront_step(void)
 {
@@ -1061,13 +1063,12 @@ static bool prefetch_one(void)
         return false;
     }
     if (s_level == 1 && s_group == NATIVE) {         // the covers of the games around the selection
-        const bool big = d.width() >= 300;
         for (int dist = 0; dist <= 4 && dist < s_n; dist++)
             for (int side = 0; side < 2; side++) {
                 const int k = s_ix[((s_sel + (side ? -dist : dist)) % s_n + s_n) % s_n];
                 if (!s_nat_cover[k] || (s_cover_ready & (1u << k))) continue;
                 s_cover_ready |= 1u << k;          // made, or not makeable: either way not again this visit
-                cover_pic(k, big ? 128 : 112, big ? 72 : 63, false);
+                cover_pic(k, 112, 63, false);
                 return true;
             }
         return false;
@@ -1160,7 +1161,7 @@ static void pic_prepare(bool big)
     } else if (s_group == NATIVE) {
         const int k = s_ix[s_sel];
         snprintf(s_pic.poster, sizeof s_pic.poster, "%s", nucleo_app_at(s_nat[k])->id);
-        file = cover_pic(k, big ? 128 : 112, big ? 72 : 63);
+        file = cover_pic(k, 112, 63);
     } else {
         snprintf(s_pic.poster, sizeof s_pic.poster, "%s", SYS[s_group].app);
         uint8_t &have = s_sh->snap[s_sh->view[s_sel]];
@@ -1241,7 +1242,7 @@ static void caption(char *out, size_t n)
 static const char *subtitle(void)
 {
     if (!s_n || s_level != 0 || s_grp[s_ix[s_sel]] != NATIVE) return nullptr;
-    return TR5("Integrati e dallo Store", "Built in and from the Store", "Integrados y de la Store", "Integres et du Store", "Eingebaut und aus dem Store");
+    return TR5("Integrati + Store", "Built in + Store", "Integrados + Store", "Integres + Store", "Eingebaut + Store");
 }
 static const char *blurb(void)
 {
@@ -1275,6 +1276,7 @@ static const char *level_title(void)
     if (s_level == 0) return TR5("Giochi", "Games", "Juegos", "Jeux", "Spiele");
     return group_title(s_group);
 }
+static const char *search_word(void) { return TR5("Cerca", "Search", "Buscar", "Chercher", "Suchen"); }
 static const char *search_hint(void) { return TR5("Scrivi per cercare", "Type to search", "Escribe para buscar", "Tapez pour chercher", "Tippen zum Suchen"); }
 static void count_text(char *out, size_t n)
 {
@@ -1340,7 +1342,7 @@ static const char *header_right(void)
 }
 
 // The panel, 320x240: header with Back, search, then the picture and the title on the left and the wheel on the right.
-#define WX 168                                     // the wheel's left edge
+#define WX 128                                     // the wheel's left edge
 static void paint_left(void *);
 static void paint_big(void *)
 {
@@ -1368,7 +1370,7 @@ static void paint_left(void *)
     const int H = s_H, top = lg::HEAD + 36;
     const unsigned short acc = acc_now();
     d.fillRect(0, top, WX, H - top, BG);
-    const int tw = 136, tx = (WX - tw) / 2, ph = 102;   // the picture's place
+    const int tw = 118, tx = (WX - tw) / 2, ph = 102;   // the picture's place
     draw_pic(tx, top + 2, tw, ph, acc);
     nucleo_touch_add(tx, top + 2, tw, ph, NK_ENTER, 0);   // the picture opens the selection too
     char cap[64]; caption(cap, sizeof cap);
@@ -1406,14 +1408,14 @@ static void paint_wheel_big(void *)
 
 // The Cardputer alone, 240x135: the picture with its caption and the whole title on the left; the search and a
 // five-title wheel on the right.
-#define CX 122
+#define CX 118
 static void paint_small(void *)
 {
     const int W = d.width(), H = s_H;
     const unsigned short acc = acc_now();
     d.fillRect(0, 0, W, H, BG);
     char cnt[24]; count_text(cnt, sizeof cnt);
-    lg::search(CX, 0, W - CX, 22, s_filter, s_scan.on ? header_right() : TR5("Cerca", "Search", "Buscar", "Chercher", "Suchen"), nullptr, MUTED, acc);
+    lg::search(CX, 0, W - CX, 22, s_filter, s_scan.on ? header_right() : search_word(), nullptr, MUTED, acc);
     if (!s_n) {
         lg::message(0, 22, W, H - 22, empty_line(), empty_sub(), MUTED);
         return;
@@ -1498,8 +1500,8 @@ static void paint_companion(void *)
     d.fillRect(0, 0, 240, 135, BG);                    // the whole screen: every row of the frame is pushed
     int y = lg::comp_head(level_title(), acc_of(s_level ? s_group : NATIVE));
     if (s_flen) {                                      // the search, while there is one
-        d.setFont(&fonts::Font2); d.setTextColor(MUTED, BG); d.drawString(TR5("Cerca", "Search", "Buscar", "Cherche", "Suche"), 8, y);
-        const int lx = 14 + d.textWidth(TR5("Cerca", "Search", "Buscar", "Cherche", "Suche"));
+        d.setFont(&fonts::Font2); d.setTextColor(MUTED, BG); d.drawString(search_word(), 8, y);
+        const int lx = 14 + d.textWidth(search_word());
         const char *q = s_filter;
         while (*q && d.textWidth(q) > 220 - lx) q++;
         d.setTextColor(FG, BG); d.drawString(q, lx, y);
@@ -1563,7 +1565,7 @@ void gamefront_render(void)
     s_H = d.height();
     s_full = false;
     s_off = turn_offset(big ? WHEEL_BIG[SLOTS_BIG / 2] : WHEEL_SMALL[SLOTS_SMALL / 2]);
-    if (!full && s_n) {                            // the wheel turning: its rectangle only (the committed touch targets stay)
+    if (!full && s_n && !s_settle_frame) {         // the wheel turning: its rectangle only (the committed touch targets stay)
         nucleo_touch_clear();                      // ...the wheel's own registrations go nowhere
         const bool ok = big ? lg::frame_rect(paint_wheel_big, nullptr, WX, lg::HEAD + 36, 320 - WX, s_H - lg::HEAD - 36, true)
                             : lg::frame_rect(paint_wheel_small, nullptr, CX, 22, 240 - CX, s_H - 22, true);

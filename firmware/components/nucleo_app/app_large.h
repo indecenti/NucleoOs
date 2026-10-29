@@ -80,12 +80,14 @@ struct Wheel {
     int (*icon)(int i, int x, int cy, bool mid, void *ud);
     int offset;
 };
-// The title in wheel slot k (-1 = none). Any k: a turning wheel shows one slot more on each side.
+// The title in wheel slot k (-1 = none). Any k: a turning wheel shows one slot more on each side. It turns forever;
+// a list shorter than the wheel shows each title once (the slots past it stay empty), never the same title twice.
 inline int wheel_at(int sel, int n, int slots, int k)
 {
-    const int i = sel + k - slots / 2;
-    if (n > 1) return ((i % n) + n) % n;
-    return i == 0 && n == 1 ? 0 : -1;
+    const int dk = k - slots / 2, i = sel + dk;
+    if (n <= 0) return -1;
+    if (n < slots + 2 && (dk < -((n - 1) / 2) || dk > n / 2)) return -1;
+    return ((i % n) + n) % n;
 }
 void wheel(int x, int y, int w, int h, const Wheel &wl);
 

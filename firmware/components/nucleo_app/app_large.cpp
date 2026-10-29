@@ -343,12 +343,13 @@ void wheel(int x, int y, int w, int h, const Wheel &wl)
         const int dist = (abs(ry + sh / 2 - (pill + ph / 2)) * 2 + (ph + sh) / 2) / (ph + sh);   // slots from the pill
         if (i >= 0 && sh0 > 0 && ry + sh > sy && ry < sy + sh0) {
             const bool m = dist == 0;
-            const int ix = x + 12 + (dist < 4 ? dist : 4) * 5;             // the wheel's curve: far rows step in
+            const int ix = x + 10 + (dist < 4 ? dist : 4) * 3;             // the wheel's curve: far rows step in
             const char *t = wl.label(i, wl.ud);
             const int iw = wl.icon ? wl.icon(i, ix, ry + sh / 2, m, wl.ud) : 0;
             const int lx = iw ? ix + iw + 6 : ix;
             char fitted[64];
             font(m ? 1 : 0);
+            if (m && t && d.textWidth(t) > x + ww - 8 - lx) font(0);       // the whole title smaller beats a cut one
             fit(fitted, sizeof fitted, t ? t : "", x + ww - 8 - lx);
             d.setTextDatum(middle_left);
             d.setTextColor(m ? INK : dist == 1 ? FG : MUTED);
@@ -490,7 +491,7 @@ int comp_head(const char *app, unsigned short acc)
     const int top = nucleo_app_content_top();
     d.fillRect(0, top, 240, 14, BG);
     d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextDatum(top_left); d.setTextColor(acc, BG);
-    char t[64]; snprintf(t, sizeof t, "%s  -  %s", app, TR("sul secondo schermo", "on the second screen"));
+    char t[64]; snprintf(t, sizeof t, "%s  -  %s", app, TR5("sul secondo schermo", "on the second screen", "en la segunda pantalla", "sur le second ecran", "auf dem zweiten Schirm"));
     d.drawString(t, 8, top + 4);
     return top + 16;
 }

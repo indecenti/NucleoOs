@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """The consoles' pictures for the Games gallery (gamefront.cpp): cut out of their studio photos with soft edges.
 
-    python tools/gen-gallery-art.py <folder with the photos and cardputer-generated.png>
+    python tools/gen-gallery-art.py <folder with the photos and cardputer-front.webp>
 
 The photos are Evan-Amos's public-domain shots on Wikimedia Commons (the 1280 px renditions are plenty):
 Game-Boy-FL.jpg, Nintendo-Game-Boy-Color-FL.jpg, Game-Gear-Handheld.jpg, Sega-Master-System-Console-FL.jpg,
-Nintendo-Entertainment-System-NES-Console-FL.jpg. For each console:
+Nintendo-Entertainment-System-NES-Console-FL.jpg; the native games' entry is the Cardputer itself, M5Stack's official
+product photo (cardputer-front.webp, the one the NucleoOS site uses: nucleos_sites/photos). For each console:
 
   1. the white studio background is found by a flood from the photo's edges (a light part of the console is not
      reached: it is not connected to the edge through background);
@@ -27,7 +28,8 @@ import numpy as np
 from PIL import Image, ImageFilter
 
 PHOTO = (118, 80)                     # the picture box inside the gallery's left column
-MARK = (26, 18)                       # a console's mark in the wheel, beside its name
+NATIVE_PHOTO = (104, 70)              # the Cardputer: flat and wide, a little smaller beside the consoles
+MARK = (20, 15)                       # a console's mark in the wheel, beside its name
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "firmware", "components", "nucleo_app")
 SRC = {
@@ -36,9 +38,8 @@ SRC = {
     "gg": "Game-Gear-Handheld.jpg",
     "sms": "Sega-Master-System-Console-FL.jpg",
     "nes": "Nintendo-Entertainment-System-NES-Console-FL.jpg",
-    # The native games' entry: a pocket computer painted locally with Qwen-Image 2.1 (ComfyUI, tools/qwen_assets.py grid,
-    # seed 4242, the top-right panel of the prompt in gamefront_art/README.md) - no photo, no licence.
-    "native": "cardputer-generated.png",
+    # The native games' entry: the Cardputer, M5Stack's product photo (c) M5Stack, as on the NucleoOS site.
+    "native": "cardputer-front.webp",
 }
 
 
@@ -124,11 +125,9 @@ def main():
     total = 0
     for key, name in SRC.items():
         img = Image.open(os.path.join(folder, name))
-        if key == "native":                        # a panel of a 2x2 grid: its edge carries the grid's grey lines
-            img = img.crop((10, 10, img.width - 10, img.height - 10))
-        # The painted one has a soft grey shadow under it: it is part of the background here (a halo on a dark screen).
-        cut = cut_out(img, 60, 45) if key == "native" else cut_out(img)
-        for suffix, box, margin in (("", PHOTO, 0.02), ("_S", MARK, 0.0)):
+        cut = cut_out(img)
+        photo = NATIVE_PHOTO if key == "native" else PHOTO
+        for suffix, box, margin in (("", photo, 0.02), ("_S", MARK, 0.0)):
             img = fit(cut, box, margin)
             preview(img, os.path.join(OUT, "gamefront_art", f"{key}{suffix.lower()}.png"))
             z = encode(img)

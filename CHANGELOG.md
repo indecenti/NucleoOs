@@ -41,9 +41,16 @@ All notable user-facing changes to NucleoOS. Format loosely follows
 - Consoles are shown by their mark and their name (no makers). Their photos are cut out on the PC from the public-domain
   originals (soft edges, the studio white unmixed from them; `tools/gen-gallery-art.py`, 25 KB for five consoles) and
   stand straight on the theme's background, no tile; the left picture is a little smaller.
-- The native games have pictures too: their entry is a pocket computer painted locally (Qwen-Image) and cut out like the
-  consoles, and 13 native games ship a default cover on the SD pack (`data/GameShots/<id>.png`: each game's own screen
+- The native games have pictures too: their entry is the Cardputer itself (M5Stack's product photo, the one the
+  NucleoOS site shows) cut out like the consoles, and 13 native games ship a default cover on the SD pack (`data/GameShots/<id>.png`: each game's own screen
   rendered on the PC from its source; a cover captured on the device still wins).
+- The left picture is narrower and the wheel wider (narrower console marks, a flatter curve): whole titles read; the
+  selected one drops to the smaller font rather than being cut; a list shorter than the wheel shows each title once.
+- The screensaver speaks the five languages (its date too: it was always English), and so does the Cardputer's
+  "on the second screen" line of every app.
+- Fixed: the picture on the left sometimes kept the previous title's (the stop frame was taken by the turn path).
+- Fixed: after the screensaver the gallery is redrawn whole; with two screens the Cardputer plays the screensaver
+  chosen in Settings too (it showed a "running" note).
 - When the wheel stops only the left column and the position are redrawn; the pictures of the titles around the
   selection (and the consoles' photos) are made ahead while the player is still; a slow frame logs where it went.
 - Pictures and marks are unpacked with the inflater's state in the shared canvas (no 11 KB block to find on the
