@@ -149,6 +149,11 @@ CONFIG_SPI_FLASH_SUPPORT_MXIC_OPI_CHIP=n
 # instead of walking the FAT from the file's start. The emulators' cartridge caches seek all over a 2.5 MB HuCard
 # (Street Fighter II): a page miss cost ~5.6 ms on the ADV, most of it in that walk.
 CONFIG_FATFS_USE_FASTSEEK=y
+# 32 KB instruction cache (16 KB of SRAM): store modules run from flash, and on this board the flash is read 2 bits at a
+# time (DIO, the bootloader's mode: not OTA-changeable), so every cache miss costs ~2 us. The emulators' CPU loops
+# missed constantly in 16 KB (the HuC6280 at ~390 cycles an instruction); 32 KB took 30% off the PC Engine's CPU
+# time on the ADV. The RAM comes back to games through nucleo_romstore (cartridges mapped from flash, no page cache).
+CONFIG_ESP32S3_INSTRUCTION_CACHE_32KB=y
 
 # Default log level INFO -> WARN. ESP_LOGI/D format strings of stripped levels are removed at
 # compile time (they live in the same .str1.4 pool). WARN keeps warnings + errors on the serial
