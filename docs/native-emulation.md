@@ -627,6 +627,23 @@ bits at a time (DIO, the bootloader's mode, not OTA-changeable), so every instru
   skipping frames only trades smoothness: three unseen in a row (as the NES) showed 30% of the frames, ~13 a second.
   One at most: 53%, ~21 a second, for the same speed. VRAM in 8 KB blocks, the session first.
 
-Next, the instruction count (~107 S3 instructions an emulated one): MAME's lazy N/Z flags (H6280_LAZY_FLAGS, its
-P composed on reads), the cycle counter and the timer kept in one register-friendly countdown, the zero page as a
-direct pointer while MPR1 is work RAM.
+**Exact events instead of per-instruction checks (1.3.6).** PCE-Go checks interrupts and the timer once a scanline
+(cheap, inexact); Mednafen and Temper fold the timer into the inner loop's limit. Ours: the inner loop's one test
+is `icount > stop` (the leg's end, the cycle the timer reaches zero, or now when an interrupt is pending); the timer is
+derived from the cycle counter instead of decremented with every instruction; N/Z come from a 256-byte table. Same
+frames and same sound as MAME's loop on Street Fighter II, Bonk III and Aero Blasters (the sound compared with a
+deterministic clock on the host: the wall clock makes the host's sample counts vary).
+
+**A bench in the console's time.** The first benches timed their buttons on the wall clock, so a slower build played
+a different game and runs were not comparable (±1-2 ms). The buttons and the length now count emulated frames: two
+builds run the same frames. Street Fighter II, 60 s of the console, nothing drawn: previous loop 14.5 ms of CPU a
+frame (3.40 M cycles, fetch stalls 0.24 M), event loop 14.2 (3.33 M, 0.28 M). With the picture, 80 s: 19.8 ms,
+4,788 frames of which 2,658 shown; fights ~30 frames a second (half speed), the menus and the round ends 41-45.
+
+**What is left, measured.** Drawing costs the CPU's core 5.6 ms a frame it never runs itself (19.8 against 14.2):
+the other core's line drawer and this core's panel pushes (LovyanGFX, in the firmware's flash) share the 16 KB
+instruction cache with the interpreter. Next: the drawer and the band push made small and contiguous (the drawer in
+the hot section, its tiles through the plane table only), fewer pushes per frame; then the PC as a pointer into its
+page (Mednafen, Temper: the opcode fetch without a window lookup), block transfers split at page bounds (Temper),
+lazy N/Z (Mednafen). These come from reading six emulators (retro-go's PCE-Go, Mednafen pce_fast, Geargrafx,
+HuExpress, Temper, picopce): all GPL or unlicensed, so ideas only, no code.
