@@ -149,10 +149,11 @@ typedef struct {
     uint8_t   *wr[64];
     uint16_t   rgb[512];                             // the palette in the panel's RGB565 order
     uint16_t   out[NUCLEO_PCE_W];                    // a line drawn on this core
-    pce_batch_t batch[2];                            // lines for the other core: one filling, one being drawn
+    pce_batch_t *batch[2];                           // lines for the other core: one filling, one being drawn
     int        bi, pending;                          // the batch being filled; the one handed over (-1: none)
     bool       busy;                                 // lines described and not yet on the screen
-    pce_scratch_t km, kw;                            // this core's drawer, the other core's
+    pce_scratch_t *km, *kw;                          // this core's drawer, the other core's
+    // (each its own allocation, a few KB: after the VRAM the heap has no block for one big session)
     nucleo_pce_line_fn on_line;
     void      *user;
     uint8_t    buttons;
@@ -703,12 +704,12 @@ static int line_draw(const pce_line_t *L, uint16_t *o, pce_scratch_t *k)
 static void line_job(void *arg)
 {
     pce_t *s = PCE;
-    pce_batch_t *b = &s->batch[(int)(intptr_t)arg];
-    for (int i = 0; i < b->n; i++) line_draw(&b->line[i], b->px[i], &s->kw);
+    pce_batch_t *b = s->batch[(int)(intptr_t)arg];
+    for (int i = 0; i < b->n; i++) line_draw(&b->line[i], b->px[i], s->kw);
 }
 static void lines_emit(pce_t *s, int bi)
 {
-    pce_batch_t *b = &s->batch[bi];
+    pce_batch_t *b = s->batch[bi];
     const uint32_t c0 = pce_ccount();
     for (int i = 0; i < b->n; i++) if (s->on_line) s->on_line(b->px[i], b->line[i].y, s->user);
     s->prof_line += pce_ccount() - c0;
@@ -717,7 +718,7 @@ static void lines_emit(pce_t *s, int bi)
 static void lines_flush(pce_t *s)
 {
     const int bi = s->bi;
-    if (!s->batch[bi].n) return;
+    if (!s->batch[bi]->n) return;
     const uint32_t c0 = pce_ccount();
     const bool other = nucleo_cowork_run(line_job, (void *)(intptr_t)bi);   // waits for the previous batch first
     s->prof_wait += pce_ccount() - c0;
@@ -736,7 +737,7 @@ static void lines_flush(pce_t *s)
 // frame goes back to the front-end.
 static void lines_settle(pce_t *s)
 {
-    if (!s->batch[s->bi].n && s->pending < 0) return;
+    if (!s->batch[s->bi]->n && s->pending < 0) return;
     lines_flush(s);
     const uint32_t c0 = pce_ccount();
     nucleo_cowork_wait();
@@ -758,9 +759,9 @@ static void vdc_line(int y)
         // Not shown: only what the CPU can see. The background never raises anything; the sprites do (sprite 0's
         // collision, the 16-cell overflow) and only when their interrupt is on.
         if (spr_irq) {
-            const bool ov = line_sprites(&L, s->km.spr);
+            const bool ov = line_sprites(&L, s->km->spr);
             if (ov && (m->cr & 0x02)) vdc_irq(ST_OR);
-            if (m->cr & 0x01) for (int x = 0; x < width; x++) if (s->km.spr[x] & 0x8000) { vdc_irq(ST_CR); break; }
+            if (m->cr & 0x01) for (int x = 0; x < width; x++) if (s->km->spr[x] & 0x8000) { vdc_irq(ST_CR); break; }
         }
         return;
     }
@@ -768,7 +769,7 @@ static void vdc_line(int y)
         // The CPU reads this line's sprite interrupts as it starts: drawn here, now, after the queued ones.
         lines_settle(s);
         const uint32_t c0 = pce_ccount();
-        const int f = line_draw(&L, s->out, &s->km);
+        const int f = line_draw(&L, s->out, s->km);
         s->prof_vdc += pce_ccount() - c0;
         if ((f & 2) && (m->cr & 0x02)) vdc_irq(ST_OR);
         if ((f & 1) && (m->cr & 0x01)) vdc_irq(ST_CR);
@@ -777,7 +778,7 @@ static void vdc_line(int y)
         s->prof_line += pce_ccount() - c1;
         return;
     }
-    pce_batch_t *b = &s->batch[s->bi];
+    pce_batch_t *b = s->batch[s->bi];
     b->line[b->n++] = L;
     s->busy = true;
     if (b->n == PCE_BATCH) lines_flush(s);
@@ -787,7 +788,7 @@ static void blank_line(int y)
     pce_t *s = PCE;
     if (y < 0 || s->skip || !s->on_line) return;
     const pce_line_t L = { (int16_t)y, 0, 0, 0, 0, 0, 0 };
-    pce_batch_t *b = &s->batch[s->bi];
+    pce_batch_t *b = s->batch[s->bi];
     b->line[b->n++] = L;
     s->busy = true;
     if (b->n == PCE_BATCH) lines_flush(s);
@@ -988,6 +989,7 @@ static void save_base_init(pce_t *s, const char *path)
 }
 
 // ── open / close ─────────────────────────────────────────────────────────────────────────────────────────
+static void noop_job(void *arg) { (void)arg; }
 static void session_free(pce_t *s)
 {
     if (!s) return;
@@ -996,6 +998,7 @@ static void session_free(pce_t *s)
     for (int i = 0; i < s->pg_n; i++) free(s->pg[i]);
     free(s->rom_all);
     free(s->vram[0]); free(s->vram[1]);
+    free(s->batch[0]); free(s->batch[1]); free(s->km); free(s->kw);
     free(s);
 }
 
@@ -1054,6 +1057,12 @@ esp_err_t nucleo_pce_open(const char *rom_path, nucleo_pce_line_fn line_cb, void
     if (!s) { free(v0); free(v1); return ESP_ERR_NO_MEM; }
     s->vram[0] = v0; s->vram[1] = v1;
     s->heap_bytes = sizeof *s + 0x10000;
+    s->batch[0] = (pce_batch_t *)calloc(1, sizeof(pce_batch_t));
+    s->batch[1] = (pce_batch_t *)calloc(1, sizeof(pce_batch_t));
+    s->km = (pce_scratch_t *)malloc(sizeof(pce_scratch_t));
+    s->kw = (pce_scratch_t *)malloc(sizeof(pce_scratch_t));
+    if (!s->batch[0] || !s->batch[1] || !s->km || !s->kw) { session_free(s); return ESP_ERR_NO_MEM; }
+    s->heap_bytes += 2 * sizeof(pce_batch_t) + 2 * sizeof(pce_scratch_t);
     s->on_line = line_cb; s->user = user;
     s->pending = -1;
     s->cur_tag = PG_EMPTY;
@@ -1083,6 +1092,9 @@ esp_err_t nucleo_pce_open(const char *rom_path, nucleo_pce_line_fn line_cb, void
         if (s->rom_all && fread(s->rom_all, 1, (size_t)sz, s->fp) != (size_t)sz) { free(s->rom_all); s->rom_all = NULL; }
         if (s->rom_all) { s->heap_bytes += (size_t)sz; fclose(s->fp); s->fp = NULL; }
     }
+    // The other core's worker (its 4 KB stack) before the cartridge pages take the heap down to KEEP.
+    nucleo_cowork_run(noop_job, NULL);
+    nucleo_cowork_wait();
     if (!s->rom_all) {
         const uint32_t pages = (s->data_bytes + PG_SIZE - 1) / PG_SIZE;
         for (int i = 0; i < PG_SLOTS && (uint32_t)i < pages; i++) {
