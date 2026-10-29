@@ -2803,6 +2803,9 @@
       setFont(1);
       input.focus();
       await loadPersisted();
+      // Opened on a folder ("Open terminal here" in File Commander: ?cwd=/data/…): start there, if it is a folder.
+      const start = os.args().cwd;
+      if (start) { const at = norm(start); const st = await statPath(at).catch(() => null); if (st && st.type === 'dir') setCwd(at); }
       // The window can go away without a beforeunload on mobile; these two are the only events
       // that actually fire there, and keepalive is what lets the write survive the teardown.
       const flush = () => { if (histNew) saveHistory(true); };

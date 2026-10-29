@@ -18,6 +18,10 @@
 // Capabilities say what EXISTS, not its live state: "the console has a joypad" is a capability, "the native
 // shell is running right now so the pad is free" is state, which an app still reads from its own endpoint.
 // Sandboxed apps cannot import this module; they get the same answer through the broker (sys.caps).
+//
+// has('core.<n>') answers for the web OS itself (nucleo-version.js): true up to its core API level. These are not the
+// device's capabilities and never appear in its list; a device that claims one is ignored.
+import { CORE } from './nucleo-version.js';
 
 const CACHE_KEY = 'nucleo.caps.v1';
 const EDITIONS = ['cardputer', 'handheld', 'p4', 'web'];
@@ -61,8 +65,12 @@ export function capsForVersion(rows, version) {
   return pick && Array.isArray(pick.caps) ? pick.caps : common;
 }
 
+// core.1 … core.<CORE>: what a store app may list in `requires` to need this core (store-client.js, the broker).
+export const coreCaps = () => Array.from({ length: CORE }, (_, i) => 'core.' + (i + 1));
+export const isCoreCap = (c) => /^core\.\d+$/.test(String(c));
+
 function normalise(d, source) {
-  const caps = Array.isArray(d && d.caps) ? d.caps.filter((c) => typeof c === 'string' && /^[a-z][a-z0-9.-]{0,63}$/.test(c)) : [];
+  const caps = Array.isArray(d && d.caps) ? d.caps.filter((c) => typeof c === 'string' && /^[a-z][a-z0-9.-]{0,63}$/.test(c) && !isCoreCap(c)) : [];
   const edition = EDITIONS.includes(d && d.edition) ? d.edition : null;
   const limits = {};
   if (d && d.limits && typeof d.limits === 'object') {
@@ -128,7 +136,10 @@ const Caps = {
     }
     return pending;
   },
-  async has(name) { return (await Caps.info()).caps.includes(name); },
+  async has(name) {
+    if (isCoreCap(name)) return Number(String(name).slice(5)) <= CORE;
+    return (await Caps.info()).caps.includes(name);
+  },
   async limit(name, fallback) { const v = (await Caps.info()).limits[name]; return Number.isInteger(v) ? v : fallback; },
   // After an OS update the answer may change: the shell calls this when /api/status reports another version.
   reset() { pending = null; try { sessionStorage.removeItem(CACHE_KEY); } catch {} },

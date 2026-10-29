@@ -18,6 +18,10 @@
 // The shell side of every message is in shell.js (search for the type names).
 
 // createOs(env): the same module against any window — the page's own (the default export), or a test's fakes.
+// What a browser may show on its own without running anything: images (not SVG), sound, video, plain text, PDF.
+const INERT = new Set(['txt', 'md', 'log', 'csv', 'tsv', 'json', 'jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'avif', 'mp3', 'wav',
+  'ogg', 'oga', 'flac', 'm4a', 'aac', 'opus', 'mp4', 'm4v', 'webm', 'mov', 'pdf']);
+
 export function createOs(env = globalThis) {
   const window = env.window, location = env.location, document = env.document;
   const getComputedStyle = (el) => (env.getComputedStyle || window.getComputedStyle)(el);
@@ -48,6 +52,7 @@ export function createOs(env = globalThis) {
     const d = e.data;
     if (!d || typeof d !== 'object') return;
     if (d.type === 'os-ask-result' && pending.has(d.id)) { const r = pending.get(d.id); pending.delete(d.id); r(d.value); return; }
+    if (d.type === 'os-handlers-result' && pending.has(d.id)) { const r = pending.get(d.id); pending.delete(d.id); r(Array.isArray(d.list) ? d.list : []); return; }
     if (d.type === 'clipboard-data' && pending.has('clip')) { const r = pending.get('clip'); pending.delete('clip'); r(d.item || null); return; }
     if (d.type === 'nucleo.broker.event' && d.event === 'theme' && d.theme) { emitTheme(); return; }
     if (d.type === 'set-theme') { emitTheme(); return; }
@@ -141,7 +146,32 @@ export function createOs(env = globalThis) {
       if (!inShell) { location.href = '/apps/' + encodeURIComponent(id) + '/' + (a ? '?' + query(a) : ''); return; }
       toParent({ type: 'open-app', id, query: query(a), ...(opts.reload ? { reload: true } : {}) });
     },
-    openFile(path) { if (inShell) toParent({ type: 'open-file', path }); },
+    // openFile(path, { with: appId }): with its default app, or with that one (an app the type allows).
+    // Outside the shell (a window opened on its own) a file is shown by the browser only if it cannot run anything:
+    // an .html or .svg from the card would run with the device's origin and reach its whole /api. The rest downloads.
+    openFile(path, opts = {}) {
+      if (inShell) { toParent({ type: 'open-file', path, ...(opts.with ? { with: String(opts.with) } : {}) }); return; }
+      import('./nucleo-fs.js').then(({ default: fs }) => {
+        const url = fs.url(path);
+        const ext = (String(path).match(/\.([a-z0-9]+)$/i) || [])[1] || '';
+        if (INERT.has(ext.toLowerCase())) { window.open(url, '_blank', 'noopener'); return; }
+        const a = document.createElement('a');
+        a.href = url; a.download = String(path).split('/').pop() || 'file';
+        document.body.appendChild(a); a.click(); a.remove();
+      }, () => {});
+    },
+    // The OS "Open with" sheet for this file: the user picks, and may make it the default for the type.
+    openWith(path) { if (inShell) toParent({ type: 'open-file', path, choose: true }); },
+    // The apps that open this file, default first: [{ id, name, icon, store, isDefault }] (an app's own "Open with" ▸).
+    handlers(path) {
+      if (!inShell) return Promise.resolve([]);
+      const id = 'oh' + (++seq) + '.' + Date.now().toString(36);
+      return new Promise((resolve) => {
+        pending.set(id, resolve);
+        toParent({ type: 'os-handlers', id, path: String(path) });
+        setTimeout(() => { if (pending.get(id) === resolve) { pending.delete(id); resolve([]); } }, 4000);
+      });
+    },
     setTitle(title) { if (inShell) toParent({ type: 'set-window-title', title: String(title || '') }); else document.title = String(title || ''); },
     close() { if (inShell) toParent({ type: 'close-window' }); else window.close(); },
     toast(text, opts = {}) {

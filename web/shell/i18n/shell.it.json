@@ -421,5 +421,12 @@
   "fd_save_fail": "Salvataggio non riuscito: controlla lo spazio libero.",
   "fd_mkdir_fail": "Impossibile creare la cartella.",
   "fd_saving_pct": "Salvataggio… {pct}%",
-  "fd_no_space": "Spazio esaurito sul dispositivo: libera spazio e riprova."
+  "fd_no_space": "Spazio esaurito sul dispositivo: libera spazio e riprova.",
+  "ow_title": "Apri con",
+  "ow_default": "Predefinita",
+  "ow_store": "Dallo Store",
+  "ow_always": "Usa sempre questa app per i file .{ext}",
+  "ow_none": "Nessuna app installata apre i file .{ext}. Nello Store potresti trovarne una.",
+  "ow_show_folder": "Mostra nella cartella",
+  "ow_open": "Apri"
 }

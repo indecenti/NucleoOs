@@ -90,7 +90,6 @@
     .progress-bar > div { height: 100%; width: 0%; background: var(--accent); transition: width 0.1s; }
     .progress-text { font-size: 12px; color: var(--muted); }
   </style>
-  <script src="jszip.min.js"></script>
 </head>
 <body>
 
@@ -135,7 +134,7 @@
       extracting_to: "Extracting to {dir}", extracting_file: "Extracting {name}... ({done}/{total})",
       extract_complete: "Extraction Complete!", files_extracted: "{count} files extracted.",
       extract_error: "Extraction Error", create_in: "Create archive in {dir}",
-      name_label: "Name:", preparing: "Preparing files...", scanning: "Scanning directories...",
+      name_label: "Name:", format_label: "Format:", preparing: "Preparing files...", scanning: "Scanning directories...",
       compressing: "Compressing...", reading_file: "Reading {name}... ({i}/{total})",
       generating_zip: "Generating .zip file...", saving_archive: "Saving archive...",
       compress_complete: "Compression Complete!", saved_x: "Saved {name}",
@@ -166,6 +165,13 @@
     // The OS around this window (dialogs drawn by the shell), loaded once like the file layer.
     let osMod = null;
     const getOs = async () => osMod || (osMod = (await import('/nucleo-shell.js')).default);
+    // Archives in every format (ZIP, 7z, RAR, tar…): the OS's own layer (shell/nucleo-pack.js), the same in every app
+    // and on every device.
+    let packMod = null;
+    const getPack = async () => packMod || (packMod = await import('/nucleo-pack.js'));
+    // The archive's own name decides only whether to try; its content decides the format.
+    const ARCHIVE_EXT = /\.(zip|7z|rar|tar|gz|tgz|bz2|tbz2?|xz|txz|zst|tzst|lz4|lzma|tlz|z|iso|cab|cpio|ar|deb|rpm|xar|lha|lzh|warc)$/i;
+    let currentPassword = '';
     // Run one disk step; a refused request becomes the given catalog error with the device's HTTP answer as
     // {status}; a lost connection keeps its own message, as before.
     const step = (p, key, args) => p.catch((err) => { if (err && err.status) throw i18nErr(key, { ...args, status: err.status }); throw err; });
@@ -174,8 +180,9 @@
     const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 
     let mode = 'extract'; // 'extract' or 'compress'
+    const FORMATS = ['zip', '7z', 'tar.gz', 'tar.xz', 'tar.bz2', 'tar.zst', 'tar'];   // what shell/nucleo-pack.js writes
     let currentZipPath = null;
-    let currentZipObj = null;
+    let currentZipBytes = null;
     let zipEntries = []; // Per extract
     let sourcePaths = []; // Per compress (absolute paths)
     let destDir = ''; // Per compress
@@ -209,7 +216,7 @@
 
     // Opened by the shell on a .zip (double-click / Open with): WM.open passes ?path=...
     const pathParam = urlParams.get('path');
-    if (!compressParam && pathParam && pathParam.toLowerCase().endsWith('.zip')) {
+    if (!compressParam && pathParam && ARCHIVE_EXT.test(pathParam)) {
       mode = 'extract';
       loadZip(pathParam);
     }
@@ -218,7 +225,7 @@
     window.addEventListener('message', async (e) => {
       const d = e.data;
       if (d && d.type === 'open-file' && d.path) {
-        if (d.path.toLowerCase().endsWith('.zip')) {
+        if (ARCHIVE_EXT.test(d.path)) {
           mode = 'extract';
           await loadZip(d.path);
         }
@@ -230,7 +237,11 @@
     // ==========================================
     // An error whose text is a catalog key: it is re-translated when the OS language switches.
     const i18nErr = (key, args) => Object.assign(new Error(t(key, args)), { i18n: { key, args } });
-    const errText = (err) => err && err.i18n ? t(err.i18n.key, err.i18n.args) : String((err && err.message) || err);
+    const errText = (err) => {
+      if (err && err.i18n) return t(err.i18n.key, err.i18n.args);
+      const k = packMod && packMod.messageKey(err);                       // the archive's fault: the OS's own words
+      return k ? t(k) : String((err && err.message) || err);
+    };
 
     async function loadZip(path) {
       // Every extract-mode view repaints itself on a language switch (and once the i18n engine is up: a
@@ -249,16 +260,12 @@
         const fs = await getFs();
         const bytes = await step(fs.read(path), 'err_read_file', {});
         if (!bytes) throw i18nErr('err_read_file', { status: 404 });
-        const blob = new Blob([bytes]);
-
-        currentZipObj = new JSZip();
-        await currentZipObj.loadAsync(blob);
+        const pack = (await getPack()).default;
+        currentPassword = '';
+        const listed = await pack.list(bytes, { name: path.split('/').pop() });
+        zipEntries = listed.entries;
+        currentZipBytes = bytes;
         currentZipPath = path;
-
-        zipEntries = [];
-        currentZipObj.forEach((relativePath, zipEntry) => {
-          zipEntries.push(zipEntry);
-        });
 
         zipEntries.sort((a, b) => {
           if (a.dir === b.dir) return a.name.localeCompare(b.name);
@@ -293,7 +300,7 @@
         const li = document.createElement('li');
         const isDir = entry.dir;
         const glyph = isDir ? '📁' : '📄';
-        const sizeStr = isDir ? '' : fmt(entry._data ? entry._data.uncompressedSize : 0);
+        const sizeStr = isDir ? '' : fmt(entry.size);
         
         li.innerHTML = `<span class="glyph">${glyph}</span><span class="name">${esc(entry.name)}</span><span class="size">${sizeStr}</span>`;
         listEl.appendChild(li);
@@ -301,25 +308,24 @@
     }
 
     const joinPath = (dir, rel) => (dir === '/' ? '' : dir) + '/' + rel.replace(/\/+$/, '');
-    // An entry may only land inside the chosen folder: no '..' segment, no absolute name, no backslash or drive colon
-    // (a FAT card takes '\' as a separator, so '..\..\system' would climb out).
-    const safeEntry = (name) => typeof name === 'string' && name !== '' && !/[\\:\0]/.test(name) &&
-      !name.startsWith('/') && !name.split('/').some((seg) => seg === '..');
+    // Unsafe names ("..", absolute, drive letters, backslash tricks) are refused by shell/nucleo-zip.js itself.
     // Names already present in a folder (empty = the folder does not exist yet). Anything but an absent
     // folder is an error: we cannot promise "nothing gets overwritten" about a folder we could not list.
+    // Compared without case: a FAT card holds one "readme.txt" whatever the archive spells it.
     async function listNames(dir) {
       const fs = await getFs();
-      return new Set((await step(fs.list(dir), 'err_list_dir', { name: dir })).map((e) => e.name));
+      return new Set((await step(fs.list(dir), 'err_list_dir', { name: dir })).map((e) => e.name.toLowerCase()));
     }
     // Archive files whose target already exists. Only the folders the archive writes into are listed.
     async function findClashes(targetDir) {
       const byDir = new Map();
       for (const e of zipEntries) {
-        if (e.dir) continue;
-        const full = joinPath(targetDir, e.name);
+        if (e.dir || e.unsafe || !e.path) continue;                   // unsafe names are never written
+        // the name as it will be WRITTEN (e.path: normalised by the core), not as the archive spells it
+        const full = joinPath(targetDir, e.path);
         const d = parent(full);
         if (!byDir.has(d)) byDir.set(d, []);
-        byDir.get(d).push({ base: full.split('/').pop(), rel: e.name });
+        byDir.get(d).push({ base: full.split('/').pop().toLowerCase(), rel: e.path });
       }
       const out = [];
       for (const [d, files] of byDir) {
@@ -329,8 +335,13 @@
       return out;
     }
     async function executeExtract() {
-      if (!currentZipObj || !currentZipPath) return;
+      if (!currentZipBytes || !currentZipPath) return;
       const targetDir = parent(currentZipPath);
+      // A protected archive: the password first, asked by the OS (never shown, never kept after this window).
+      if (zipEntries.some((e) => e.encrypted) && !currentPassword) {
+        currentPassword = (await (await getOs()).prompt(t('zip_password_ask', { name: currentZipPath.split('/').pop() }), { password: true })) || '';
+        if (!currentPassword) return;
+      }
       // Never overwrite a file silently: list what already exists and ask once.
       let clashes;
       try { clashes = await findClashes(targetDir); }
@@ -344,30 +355,27 @@
       progText.removeAttribute('data-i18n'); progText.removeAttribute('data-i18n-args');
       progTitle.textContent = t('extracting_to', { dir: targetDir });
 
-      let totalFiles = zipEntries.filter(e => !e.dir).length;
-      let doneFiles = 0;
-
       try {
         const fs = await getFs();
-        for (let i = 0; i < zipEntries.length; i++) {
-          const entry = zipEntries[i];
-          if (!safeEntry(entry.name)) continue;
-          const fullPath = joinPath(targetDir, entry.name);
-
-          if (entry.dir) {
-            await step(fs.mkdirp(fullPath), 'err_mkdir', { name: fullPath });
-          } else {
-            progText.textContent = t('extracting_file', { name: entry.name, done: doneFiles, total: totalFiles });
-            const arrayBuffer = await entry.async("arraybuffer");
-            await step(fs.write(fullPath, arrayBuffer), 'err_write_file', { name: entry.name });   // parents made as needed
-
+        const pack = (await getPack()).default;
+        let doneFiles = 0;
+        const totalFiles = zipEntries.filter((e) => !e.dir).length;
+        // Confirmed above: what clashes is replaced; everything else lands next to the archive.
+        // Only what the user confirmed above is replaced; anything else that turns out to exist gets "name (2)".
+        const confirmed = new Set(clashes.map((n) => n.toLowerCase()));
+        const password = currentPassword;
+        currentPassword = '';                                         // used once, not kept
+        const r = await pack.extractTo(fs, currentZipBytes, targetDir, {
+          overwrite: confirmed, password, name: currentZipPath.split('/').pop(),
+          onProgress: (done, total, name) => {
             doneFiles++;
-            progFill.style.width = Math.floor((doneFiles / totalFiles) * 100) + '%';
-          }
-        }
-        
+            progText.textContent = t('extracting_file', { name, done: doneFiles, total: totalFiles });
+            progFill.style.width = Math.floor((total ? done / total : 1) * 100) + '%';
+          },
+        });
+        doneFiles = r.files;
         progTitle.textContent = t('extract_complete');
-        progText.textContent = t('files_extracted', { count: doneFiles });
+        progText.textContent = t('files_extracted', { count: doneFiles }) + (r.skipped.length ? ' ' + t('zip_skipped', { count: r.skipped.length }) : '');
         window.parent.postMessage({ type: 'fs.changed' }, '*');
 
         setTimeout(() => { overlay.classList.add('hidden'); }, 1500);
@@ -397,13 +405,15 @@
         defaultName = sourcePaths.length === 1 ? sourcePaths[0].split('/').pop() : 'archive';
         const lastDot = defaultName.lastIndexOf('.');
         if (lastDot > 0) defaultName = defaultName.slice(0, lastDot);
-        defaultName += '.zip';
       }
+      const fmtEl = document.getElementById('zip-format');
+      const format = fmtEl ? fmtEl.value : 'zip';
 
       statusEl.removeAttribute('data-i18n');
       statusEl.innerHTML = `
         <span class="sp">${t('create_in', { dir: esc(destDir) })}</span>
-        <label>${t('name_label')} <input type="text" id="zip-name" value="${esc(defaultName)}"></label>
+        <label>${t('name_label')} <input type="text" id="zip-name" value="${esc(defaultName.replace(/\.(tar\.[a-z0-9]+|zip|7z|tgz)$/i, ''))}"></label>
+        <label>${t('format_label')} <select id="zip-format">${FORMATS.map((f) => `<option value="${f}"${f === format ? ' selected' : ''}>.${f}</option>`).join('')}</select></label>
       `;
       // Re-render this view when the OS language switches (imperative DOM).
       window.__amOnI18n(initCompressMode);
@@ -431,8 +441,9 @@
 
     async function executeCompress() {
       const inputEl = document.getElementById('zip-name');
-      let zipName = inputEl ? inputEl.value.trim() : 'archive.zip';
-      if (!zipName.toLowerCase().endsWith('.zip')) zipName += '.zip';
+      const format = (document.getElementById('zip-format') || {}).value || 'zip';
+      let zipName = (inputEl ? inputEl.value.trim() : '') || 'archive';
+      if (!zipName.toLowerCase().endsWith('.' + format)) zipName += '.' + format;
       
       overlay.classList.remove('hidden');
       progTitle.removeAttribute('data-i18n');
@@ -467,36 +478,29 @@
 
         if (filesToZip.length === 0) throw i18nErr('no_files');
 
-        // 2. Read and add to JSZip
-        const zip = new JSZip();
-        let total = filesToZip.length;
+        // 2. Read every file, then pack them in the chosen format (shell/nucleo-pack.js)
+        const pack = (await getPack()).default;
+        const items = [];
+        const total = filesToZip.length;
         for (let i = 0; i < total; i++) {
           const f = filesToZip[i];
           progTitle.textContent = t('compressing');
           progText.textContent = t('reading_file', { name: f.relative, i: i, total: total });
-          progFill.style.width = Math.floor((i / total) * 50) + '%'; // First 50% is reading
-          
+          progFill.style.width = Math.floor((i / total) * 60) + '%';
           const buf = await step(fs.read(f.path), 'err_read_src', { name: f.path });
           if (!buf) throw i18nErr('err_read_src', { name: f.path, status: 404 });
-          zip.file(f.relative, buf);
+          items.push({ name: f.relative, data: buf });
         }
-
-        // 3. Generate ZIP buffer
         progText.textContent = t('generating_zip');
-        progFill.style.width = '60%';
-        const zipBlob = await zip.generateAsync({
-          type: "blob", 
-          compression: "DEFLATE", 
-          compressionOptions: { level: 6 }
-        }, (meta) => {
-          progFill.style.width = Math.floor(60 + (meta.percent * 0.3)) + '%';
-        });
+        progFill.style.width = '70%';
+        const bytes = await pack.create(items, { format });
 
-        // 4. Save the ZIP on the device
+        // 3. Save the ZIP on the device, next to the sources, never over an existing file
         progText.textContent = t('saving_archive');
-        progFill.style.width = '95%';
-        const outPath = destDir === '/' ? `/${zipName}` : `${destDir}/${zipName}`;
-        await step(fs.write(outPath, zipBlob), 'err_save_archive', { name: zipName });
+        progFill.style.width = '90%';
+        const outPath = await fs.uniquePath(destDir, zipName);
+        zipName = outPath.split('/').pop();
+        await step(fs.write(outPath, bytes, { overwrite: false }), 'err_save_archive', { name: zipName });
 
         progFill.style.width = '100%';
         progTitle.textContent = t('compress_complete');

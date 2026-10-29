@@ -1,8 +1,8 @@
 {
   "id": "store",
   "name": "Store",
-  "version": "1.0.2",
-  "version_code": 2,
+  "version": "1.0.3",
+  "version_code": 3,
   "description": "Lo store di NucleoOS, uguale su ogni dispositivo: app firmate (ECDSA P-256, SHA-256 di ogni file, catalogo con scadenza e anti-ritorno), solo quelle che questo dispositivo può usare. Le app web si installano da qui; le native dallo store del dispositivo.",
   "category": "system",
   "runtime": "web",

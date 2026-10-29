@@ -708,6 +708,7 @@
             <div class="info-cell"><div class="il" data-i18n="uptime">Acceso da</div><div class="iv" id="info-uptime">—</div></div>
             <div class="info-cell"><div class="il" data-i18n="sdStorage">Storage SD</div><div class="iv" id="info-sd">—</div></div>
             <div class="info-cell"><div class="il">NucleoOS</div><div class="iv" id="info-ver">—</div></div>
+            <div class="info-cell"><div class="il">Web OS</div><div class="iv" id="info-webos">—</div></div>
             <div class="info-cell" id="info-ota-cell" hidden><div class="il">Slot OTA</div><div class="iv" id="info-ota">—</div></div>
             <div class="info-cell"><div class="il" data-i18n="installedApps">App installate</div><div class="iv" id="info-apps">—</div></div>
           </div></div>
@@ -776,6 +777,8 @@ import User from '/nucleo-user.js';
 import fs from '/nucleo-fs.js';
 import Caps from '/nucleo-caps.js';   // what this device has: one shared answer (/api/system/caps, or the fallback table)
 import os from '/nucleo-shell.js';    // the OS around this window: status snapshot, dialogs, open app, clipboard
+import { WEBOS, CORE } from '/nucleo-version.js';   // this web OS's release and core level (docs/versions.md)
+{ const v = document.getElementById('info-webos'); if (v) v.textContent = WEBOS + ' · core ' + CORE; }
 
 // ═══════════ serial device gate ═══════════
 // ONE request to the Cardputer at a time, always. The device is a single-task PSRAM-less httpd

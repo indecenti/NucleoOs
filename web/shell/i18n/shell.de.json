@@ -421,5 +421,12 @@
   "fd_save_fail": "Speichern fehlgeschlagen: freien Speicher prüfen.",
   "fd_mkdir_fail": "Der Ordner konnte nicht erstellt werden.",
   "fd_saving_pct": "Wird gespeichert… {pct} %",
-  "fd_no_space": "Das Gerät ist voll: Speicher freigeben und erneut versuchen."
+  "fd_no_space": "Das Gerät ist voll: Speicher freigeben und erneut versuchen.",
+  "ow_title": "Öffnen mit",
+  "ow_default": "Standard",
+  "ow_store": "Aus dem Store",
+  "ow_always": "Diese App immer für .{ext}-Dateien verwenden",
+  "ow_none": "Keine installierte App öffnet .{ext}-Dateien. Im Store gibt es vielleicht eine.",
+  "ow_show_folder": "Im Ordner anzeigen",
+  "ow_open": "Öffnen"
 }

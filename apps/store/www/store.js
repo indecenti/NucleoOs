@@ -133,7 +133,7 @@ function card(src, a) {
   c.appendChild(el('div', 'ds', a.descriptions[lang()] || ''));
   if (a.requires && a.requires.length) {
     const chips = el('div', 'chips');
-    for (const r of a.requires) if (r !== 'apps.nap') chips.appendChild(el('span', 'chip', r));
+    for (const r of a.requires) if (r !== 'apps.nap' && !/^core\./.test(r)) chips.appendChild(el('span', 'chip', r));
     if (chips.children.length) c.appendChild(chips);
   }
   const act = el('div', 'act');

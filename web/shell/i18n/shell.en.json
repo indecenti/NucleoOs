@@ -421,5 +421,12 @@
   "fd_save_fail": "Saving failed: check the free space.",
   "fd_mkdir_fail": "The folder could not be created.",
   "fd_saving_pct": "Saving… {pct}%",
-  "fd_no_space": "The device is full: free some space and try again."
+  "fd_no_space": "The device is full: free some space and try again.",
+  "ow_title": "Open with",
+  "ow_default": "Default",
+  "ow_store": "From the Store",
+  "ow_always": "Always use this app for .{ext} files",
+  "ow_none": "No installed app opens .{ext} files. The Store may have one.",
+  "ow_show_folder": "Show in folder",
+  "ow_open": "Open"
 }

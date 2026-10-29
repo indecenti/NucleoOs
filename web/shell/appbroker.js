@@ -25,6 +25,7 @@
 // because the broker is the only door and the door admits one at a time. This makes the device work
 // LESS than the status quo, where each app fetched on its own schedule.
 
+import { CORE } from './nucleo-version.js';
 import { createFs } from './nucleo-fs.js';
 
 // ── app record policy (pure) ──────────────────────────────────────────────────────────────────
@@ -92,6 +93,18 @@ export function normPath(p) {
     out.push(seg);
   }
   return '/' + out.join('/');
+}
+
+// A file the OS may hand to a sandboxed app because the user opened it WITH that app (file.launch, ?path=): anywhere
+// in the shared area, never in the OS's private folders, never a path that climbs. The same reach as the Open sheet,
+// so a shortcut or a crafted "open with" cannot give an app what the user could not have picked.
+export function launchable(path) {
+  const p = String(path == null ? '' : path);
+  if (!p.startsWith('/') || p.split('/').some((s) => s === '..' || s === '.') || p.includes('\0')) return null;
+  const abs = normPath(p);
+  if (!abs.startsWith(SHARED_ROOT + '/')) return null;
+  for (const d of OS_PRIVATE) if (abs === d || abs.startsWith(d + '/')) return null;
+  return abs;
 }
 
 // Resolve an app-supplied path to the absolute SD path it is allowed to touch, or null if it is not.
@@ -414,7 +427,9 @@ export function createBroker({ fetchFn, fs: fsIn, findApp, notify, onFsChange, g
 
     if (method === 'sys.caps') {
       const c = getCaps ? await getCaps().catch(() => null) : null;
-      return { ok: true, caps: c && Array.isArray(c.caps) ? c.caps.slice() : [] };
+      // the device's capabilities, plus this web OS's core levels (core.1 … core.N) for NucleoApp.caps.has
+      const dev = c && Array.isArray(c.caps) ? c.caps.filter((x) => !/^core\.\d+$/.test(x)) : [];
+      return { ok: true, caps: [...dev, ...Array.from({ length: CORE }, (_, i) => 'core.' + (i + 1))] };
     }
 
     if (method === 'file.save') {

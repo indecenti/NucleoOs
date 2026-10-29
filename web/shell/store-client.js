@@ -17,6 +17,7 @@
 // Pages served over plain http on the LAN are not a secure context: crypto.subtle does not exist there. The
 // signature check then runs in plain JavaScript (p256Verify below), the SHA-256 in ./sha256.js.
 
+import { CORE } from './nucleo-version.js';
 import { sha256Hex } from './sha256.js';
 
 // Public keys of the store (DER SubjectPublicKeyInfo, base64), by key id = first 16 hex of SHA-256(DER).
@@ -240,7 +241,9 @@ export function viaStore(list, storeBase) {
 // mkdir(path), move(from, to), remove(path)), caps (array), appsDir (paths.apps), storeBase (paths.store), now (ms).
 export function makeStore({ fetch = globalThis.fetch, dev, caps = [], appsDir = '', storeBase = '', now = () => Date.now(), keys = STORE_KEYS, sourceList = SOURCES } = {}) {
   sourceList = viaStore(sourceList, storeBase);
-  const have = new Set(caps);
+  // the device's capabilities, and the web OS's own core level (core.1 … core.N): a store app that needs a newer
+  // core than this one is not offered. A device cannot claim a core level.
+  const have = new Set([...caps.filter((c) => !/^core\.\d+$/.test(c)), ...Array.from({ length: CORE }, (_, i) => 'core.' + (i + 1))]);
   const canInstall = have.has('apps.install') && !!appsDir;
   const statePath = (src) => '/system/store/' + src + '.json';
 

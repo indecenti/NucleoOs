@@ -12,9 +12,10 @@ import { ensureOnboarding } from './onboarding.js';   // first-boot AI setup + i
 import I18N from './nucleo-i18n.js';                  // centralized OS-wide internationalization
 import { makeFetchJSON, makeLoadState } from './boot-fetch.js';   // resilient boot fetch + typed user-state load (shell-boot-fetch.test)
 import { rankApps, rankActions, looksLikeNL, clipAnswer } from './search-rank.js';   // pure search ranking (host-tested)
-import { createBroker, sanitizeApp, brokerEvent, themeInfo } from './appbroker.js';
+import { createBroker, sanitizeApp, brokerEvent, themeInfo, launchable } from './appbroker.js';
 import { createFileDialog, OPEN_MAX_BYTES } from './filedialog.js';
-import fs from './nucleo-fs.js';                     // the one way to the device's disk (docs/files.md)   // the OS Open/Save sheet behind file.open / file.save
+import fs from './nucleo-fs.js';                     // the one way to the device's disk (docs/files.md)
+import { createOpenWith } from './open-with.js';     // which app opens a file, and the "Open with" sheet
 import Caps from './nucleo-caps.js';                               // what this device can do (contract/api.yaml)        // capability broker for sandboxed (agent-written) apps
 import { initSystemUI } from './system-ui.js';        // night light, lock screen, shortcuts sheet, widgets
 
@@ -1457,6 +1458,7 @@ async function boot() {
 // launcher surfaces that list apps. Desktop shortcuts are user-arranged, so we leave them be;
 // the new app shows up in the Start menu and search right away.
 async function refreshApps() {
+  if (OpenWith) OpenWith.invalidate();   // a Store app installed or removed: its file types come and go with it
   try {
     const d = await fetchJSON('/api/apps');
     if (!d || !Array.isArray(d.apps)) return;
@@ -1818,7 +1820,9 @@ function wireMessages() {
       const w = WM.list().find((x) => x.app.id === app.id);
       const f = w && w.el.querySelector('iframe');
       const src = (f && f.getAttribute('src')) || (w && w.pending) || '';
-      if (new URLSearchParams(src.split('?')[1] || '').get('path') !== path) return null;
+      // the frame's address carries the broker token after '#': the query is what sits between '?' and '#'
+      if (new URLSearchParams(src.split('#')[0].split('?')[1] || '').get('path') !== path) return null;
+      if (!launchable(path)) return null;
       const b = await fs.read(path);
       if (b == null) throw new Error('not-found');
       if (b.byteLength > OPEN_MAX_BYTES) throw new Error('too large');
@@ -1958,8 +1962,16 @@ function wireMessages() {
     if (d.type === 'fc-drag-start') { fcDrag = Array.isArray(d.items) ? { items: d.items, ts: Date.now() } : null; return; }
     if (d.type === 'fc-drag-end') { fcDrag = null; return; }
 
+    // nucleo-shell.js os.handlers(path): the apps that open a file, default first (for an app's own "Open with")
+    if (d.type === 'os-handlers' && typeof d.id === 'string' && typeof d.path === 'string') {
+      const src = e.source;
+      OpenWith.handlers(d.path).then((list) => list, () => []).then((list) => {
+        try { src.postMessage({ type: 'os-handlers-result', id: d.id, list: list.map((h) => ({ ...h, icon: iconUrlOf(byId(h.id)) })) }, '*'); } catch {}
+      });
+      return;
+    }
     if (d.type !== 'open-file' || !d.path) return;
-    openFile(d.path);
+    openFile(d.path, { with: typeof d.with === 'string' ? d.with : undefined, choose: d.choose === true });
   });
 }
 
@@ -2724,29 +2736,54 @@ function fileSheet() {
   return fileSheetInst;
 }
 
-// Open an SD file with its associated app (shared by File Commander and file shortcuts).
-function openFile(path) {
-  if (/\.lnk$/i.test(path)) { openLnk(path); return; }   // a shortcut → resolve + open its target
+// Launch `app` on `path`: the window opens with ?path=, and a sandboxed app may then read that one file
+// (file.launch). opts.folder: `path` is a folder to show (File Commander), not a file to open.
+function launchWith(app, path, opts = {}) {
+  // A sandboxed app gets a file only where the Open sheet could have given it one (appbroker.js launchable): a
+  // shortcut or an "open with" pointing into the OS's private folders opens nothing.
+  if (!opts.folder && WM.isSandboxed(app) && !launchable(path)) { warnToast('lnk_protected'); return; }
+  if (!opts.folder) {
+    launchGrants.set(app.id, path);
+    try { localStorage.setItem('nucleo.files.open.' + app.id, path.replace(/\/[^/]*$/, '') || '/data'); } catch {}   // Save as starts next to it
+  }
+  WM.open(app, 'path=' + encodeURIComponent(path));
+}
+// Which app opens which file (docs/files.md, "Opening files"): the apps' own declarations, the OS table, the user's
+// choices, the "Open with" sheet — open-with.js and nucleo-assoc.js. One door for the desktop, File Commander,
+// Recent, shortcuts and every app's os.openFile.
+let openWithInst = null;
+const OpenWithDeps = () => ({
+  apps: () => state.apps,
+  table: () => state.assoc.default_open,
+  byId,
+  appName,
+  glyph,
+  t,
+  caps: () => Caps.info(),
+  fallback: () => byId(state.assoc.fallback),
+  launch: launchWith,
+});
+// Made on first use: refreshApps() may run before this part of the module has been evaluated.
+var OpenWith = {   // var: hoisted, so an early refreshApps() finds it undefined instead of throwing
+  get i() { if (!openWithInst) openWithInst = createOpenWith(OpenWithDeps()); return openWithInst; },
+  openFile: (p, o) => OpenWith.i.openFile(p, o),
+  handlers: (p) => OpenWith.i.handlers(p),
+  invalidate: () => { if (openWithInst) openWithInst.invalidate(); },
+};
+
+// An app's icon as a URL an app window can show (same origin), or '' — for os.handlers.
+function iconUrlOf(app) {
+  if (!app || typeof app.icon !== 'string' || !app.icon) return '';
+  if (app.icon.startsWith('data:image/') || app.icon.startsWith('/')) return app.icon;
+  const base = (app.web_route || app.path || app.route || '/apps/' + app.id + '/').replace(/\/?$/, '/');
+  return base + app.icon;
+}
+// Open a file with its app (opts.with: that app; opts.choose: the "Open with" sheet).
+function openFile(path, opts = {}) {
+  if (/\.lnk$/i.test(path) && !opts.choose) { openLnk(path); return; }   // a shortcut → resolve + open its target
   pushRecent(path);
-  const ext = (path.split('.').pop() || '').toLowerCase();
-  const appId = state.assoc.default_open[ext];
-  if (appId) {
-    const app = byId(appId);
-    if (app) {
-      launchGrants.set(app.id, path);
-      try { localStorage.setItem('nucleo.files.open.' + app.id, path.replace(/\/[^/]*$/, '') || '/data'); } catch {}   // Save as starts next to it
-      WM.open(app, 'path=' + encodeURIComponent(path));
-      return;
-    } else {
-      console.warn(`App associata "${appId}" per estensione .${ext} non trovata. Uso il fallback.`);
-    }
-  }
-  const fallbackApp = byId(state.assoc.fallback);
-  if (fallbackApp) {
-    WM.open(fallbackApp, 'path=' + encodeURIComponent(path));
-  } else {
-    showToast(t('toast_no_app'), '⚠️', 'error');
-  }
+  OpenWith.openFile(path, opts).catch((err) => { console.warn('[shell] open failed', err); return false; })
+    .then((ok) => { if (!ok && !opts.choose) showToast(t('toast_no_app'), '⚠️', 'error'); });
 }
 
 // ===== Shortcut (.lnk) files — real Windows-style links that live on the SD =======================
@@ -2772,12 +2809,15 @@ async function readLnk(path) {
   return null;
 }
 // Resolve + open a .lnk. `depth` guards against a shortcut-to-shortcut chain or self-reference loop.
+const warnToast = (key) => showToast(t(key), '⚠️', 'error');
 async function openLnk(path, depth = 0) {
-  if (depth > 4) { showToast(t('lnk_broken'), '⚠️', 'error'); return; }
+  if (depth > 4) { warnToast('lnk_broken'); return; }
   const l = await readLnk(path);
-  if (!l) { showToast(t('lnk_broken'), '⚠️', 'error'); return; }
-  if (l.type === 'app') { const a = byId(l.target); a ? WM.open(a) : showToast(t('lnk_broken'), '⚠️', 'error'); return; }
+  if (!l) { warnToast('lnk_broken'); return; }
+  if (l.type === 'app') { const a = byId(l.target); a ? WM.open(a) : warnToast('lnk_broken'); return; }
   if (l.type === 'url') { openUrlTarget(l.target, l.label || l.target); return; }
+  // the same rule as making a shortcut: nothing that points into the system, an app's code or ANIMA's memory
+  if (PROTECTED_TARGET.test(String(l.target || ''))) { warnToast('lnk_protected'); return; }
   if (/\.lnk$/i.test(l.target)) return openLnk(l.target, depth + 1);   // shortcut chain
   openFile(l.target);
 }
@@ -3278,8 +3318,10 @@ function iconMenu(e, item) {
   }
   const isApp = item.type === 'app';
   const isWebUrl = item.type === 'url' && /^https?:\/\//i.test(item.target);
+  const isDoc = item.type === 'file' && !/\.lnk$/i.test(item.target);
   showCtx(e.clientX, e.clientY, [
     { label: t('open'), glyph: '↗', fn: () => openItem(item) },
+    isDoc ? { label: t('ow_title') + '…', glyph: '', fn: () => openFile(item.target, { choose: true }) } : null,
     isWebUrl ? { label: t('ctx_open_new'), glyph: '🔗', fn: () => window.open(item.target, '_blank', 'noopener') } : null,
     isApp ? { label: state.pins.includes(item.target) ? t('ctx_unpin_taskbar') : t('ctx_pin_taskbar'), glyph: '📌', fn: () => togglePin(item.target) } : null,
     { label: t('ctx_rename'), glyph: '✏️', fn: () => beginRename(item.uid) },

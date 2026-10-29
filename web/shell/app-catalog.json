@@ -14,12 +14,57 @@
   "arcade": {
    "name": "Arcade",
    "category": "games",
-   "description": "Play the ROM library on the SD card in the browser — NES, SNES, Game Boy, GBA, Mega Drive and PC Engine, emulated client-side with…"
+   "description": "Play the ROM library on the SD card in the browser — NES, SNES, Game Boy, GBA, Mega Drive and PC Engine, emulated client-side with…",
+   "opens": [
+    "nes",
+    "sfc",
+    "smc",
+    "gb",
+    "gbc",
+    "gba",
+    "md",
+    "gen",
+    "smd",
+    "pce",
+    "sms",
+    "gg"
+   ],
+   "role": "viewer"
   },
   "archive-manager": {
    "name": "Archive Manager",
    "category": "tools",
-   "description": "Browse, extract and create ZIP archives stored on the device."
+   "description": "Browse, extract and create archives on the device: ZIP, 7z, RAR, tar and its compressed forms, ISO and more.",
+   "opens": [
+    "zip",
+    "7z",
+    "rar",
+    "tar",
+    "gz",
+    "tgz",
+    "bz2",
+    "tbz",
+    "tbz2",
+    "xz",
+    "txz",
+    "zst",
+    "tzst",
+    "lz4",
+    "lzma",
+    "tlz",
+    "z",
+    "iso",
+    "cab",
+    "cpio",
+    "ar",
+    "deb",
+    "rpm",
+    "xar",
+    "lha",
+    "lzh",
+    "warc"
+   ],
+   "role": "viewer"
   },
   "authenticator": {
    "name": "Authenticator",
@@ -49,7 +94,13 @@
   "code-runner": {
    "name": "Code Runner",
    "category": "tools",
-   "description": "Run small JavaScript programs in a sandboxed Web Worker — edit, run and see the output, with capability-gated access to the SD, the…"
+   "description": "Run small JavaScript programs in a sandboxed Web Worker — edit, run and see the output, with capability-gated access to the SD, the…",
+   "opens": [
+    "js",
+    "mjs",
+    "cjs"
+   ],
+   "role": "editor"
   },
   "community": {
    "name": "Community",
@@ -59,7 +110,11 @@
   "contacts": {
    "name": "Contatti",
    "category": "productivity",
-   "description": "The OS address book: people with email/phone/org/notes, favorites, search, vCard export to the SD. Integrates with Mail (one click opens…"
+   "description": "The OS address book: people with email/phone/org/notes, favorites, search, vCard export to the SD. Integrates with Mail (one click opens…",
+   "opens": [
+    "vcf"
+   ],
+   "role": "viewer"
   },
   "dictation": {
    "name": "Trascrizione",
@@ -69,7 +124,12 @@
   "dj": {
    "name": "DJ Mix",
    "category": "media",
-   "description": "Auto-DJ with beatmatch, harmonic mixing and live crossfades (Web Audio). [WIP: not in registry/apps.json installed yet — register when the…"
+   "description": "Auto-DJ with beatmatch, harmonic mixing and live crossfades (Web Audio). [WIP: not in registry/apps.json installed yet — register when the…",
+   "opens": [
+    "mp3",
+    "wav"
+   ],
+   "role": "player"
   },
   "dos-importer": {
    "name": "DOS Importer",
@@ -79,7 +139,17 @@
   "dosbox": {
    "name": "DOS Box",
    "category": "tools",
-   "description": "Run classic DOS programs and games. Emulation runs in the client browser (js-dos / DOSBox WASM); the device only stores and streams the…"
+   "description": "Run classic DOS programs and games. Emulation runs in the client browser (js-dos / DOSBox WASM); the device only stores and streams the…",
+   "opens": [
+    "jsdos",
+    "zip",
+    "img",
+    "ima",
+    "exe",
+    "com",
+    "bat"
+   ],
+   "role": "player"
   },
   "file-commander": {
    "name": "File Commander",
@@ -99,17 +169,29 @@
   "help": {
    "name": "Help",
    "category": "system",
-   "description": "Sistema di aiuto e documentazione di NucleoOS."
+   "description": "Sistema di aiuto e documentazione di NucleoOS.",
+   "opens": [
+    "info"
+   ],
+   "role": "viewer"
   },
   "ir-remote": {
    "name": "IR Remote",
    "category": "tools",
-   "description": "Universal infrared remote: TV-B-Gone, brand remotes, macros and .ir import — drives the device IR LED."
+   "description": "Universal infrared remote: TV-B-Gone, brand remotes, macros and .ir import — drives the device IR LED.",
+   "opens": [
+    "ir"
+   ],
+   "role": "editor"
   },
   "log-viewer": {
    "name": "Log Viewer",
    "category": "tools",
-   "description": "Tail live logs and replay the event journal for time-travel debugging."
+   "description": "Tail live logs and replay the event journal for time-travel debugging.",
+   "opens": [
+    "evt"
+   ],
+   "role": "viewer"
   },
   "mail": {
    "name": "Mail",
@@ -119,7 +201,12 @@
   "media-player": {
    "name": "Media Player",
    "category": "media",
-   "description": "Play audio files through the I2S speaker."
+   "description": "Play audio files through the I2S speaker.",
+   "opens": [
+    "mp3",
+    "wav"
+   ],
+   "role": "player"
   },
   "metronome": {
    "name": "Metronome",
@@ -139,12 +226,39 @@
   "notepad": {
    "name": "Notepad",
    "category": "productivity",
-   "description": "Lightweight text editor and viewer for plain-text and code files."
+   "description": "Lightweight text editor and viewer for plain-text and code files.",
+   "opens": [
+    "txt",
+    "md",
+    "log",
+    "json",
+    "csv",
+    "ini",
+    "cfg",
+    "yaml",
+    "yml",
+    "toml",
+    "xml",
+    "html",
+    "c",
+    "h",
+    "cpp",
+    "py",
+    "sh"
+   ],
+   "role": "editor"
   },
   "paint": {
    "name": "Paint",
    "category": "tools",
-   "description": "Editor di immagini e disegno"
+   "description": "Editor di immagini e disegno",
+   "opens": [
+    "jpg",
+    "jpeg",
+    "png",
+    "bmp"
+   ],
+   "role": "editor"
   },
   "passkeys": {
    "name": "Passkeys",
@@ -154,7 +268,15 @@
   "photo-viewer": {
    "name": "Photo Viewer",
    "category": "media",
-   "description": "View image files on the display and in the web shell."
+   "description": "View image files on the display and in the web shell.",
+   "opens": [
+    "jpg",
+    "jpeg",
+    "png",
+    "bmp",
+    "gif"
+   ],
+   "role": "viewer"
   },
   "qr": {
    "name": "Codice QR",
@@ -169,7 +291,12 @@
   "recorder": {
    "name": "Voice Recorder",
    "category": "media",
-   "description": "Record from the device or browser microphone; always saved as MP3 on the SD card. Live transcription + ANIMA summaries, action items and…"
+   "description": "Record from the device or browser microphone; always saved as MP3 on the SD card. Live transcription + ANIMA summaries, action items and…",
+   "opens": [
+    "mp3",
+    "wav"
+   ],
+   "role": "player"
   },
   "recycle-bin": {
    "name": "Recycle Bin",
@@ -189,7 +316,12 @@
   "spreadsheet": {
    "name": "Spreadsheet",
    "category": "productivity",
-   "description": "Foglio di calcolo con formule, formattazione e salvataggio CSV"
+   "description": "Foglio di calcolo con formule, formattazione e salvataggio CSV",
+   "opens": [
+    "csv",
+    "tsv"
+   ],
+   "role": "editor"
   },
   "ssh": {
    "name": "SSH",
@@ -209,7 +341,11 @@
   "tasks": {
    "name": "Tasks",
    "category": "productivity",
-   "description": "A keyboard-first to-do list with priorities, saved on the device."
+   "description": "A keyboard-first to-do list with priorities, saved on the device.",
+   "opens": [
+    "todo"
+   ],
+   "role": "editor"
   },
   "terminal": {
    "name": "Terminal",
@@ -229,12 +365,39 @@
   "video-player": {
    "name": "Video Player",
    "category": "media",
-   "description": "Play video and audio files. Decoding runs in the client browser (native <video>, plus Motion-JPEG AVI and MPEG-1 via canvas/WebAssembly)…"
+   "description": "Play video and audio files. Decoding runs in the client browser (native <video>, plus Motion-JPEG AVI and MPEG-1 via canvas/WebAssembly)…",
+   "opens": [
+    "mp4",
+    "webm",
+    "mov",
+    "mkv",
+    "m4v",
+    "ogv",
+    "avi",
+    "mpg",
+    "mpeg",
+    "m1v",
+    "nfv",
+    "mp3",
+    "flac",
+    "ogg",
+    "m4a",
+    "wav"
+   ],
+   "role": "player"
   },
   "video-studio": {
    "name": "Video Studio",
    "category": "media",
-   "description": "Convert videos to the device .nfv v4 format (picture + loudness-normalised sound in one file) in the browser and deliver them to the SD."
+   "description": "Convert videos to the device .nfv v4 format (picture + loudness-normalised sound in one file) in the browser and deliver them to the SD.",
+   "opens": [
+    "mp4",
+    "mkv",
+    "mov",
+    "avi",
+    "webm"
+   ],
+   "role": "editor"
   },
   "voice-manager": {
    "name": "Comandi Vocali",

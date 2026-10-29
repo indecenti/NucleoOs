@@ -421,5 +421,12 @@
   "fd_save_fail": "No se pudo guardar: comprueba el espacio libre.",
   "fd_mkdir_fail": "No se pudo crear la carpeta.",
   "fd_saving_pct": "Guardando… {pct}%",
-  "fd_no_space": "El dispositivo está lleno: libera espacio y vuelve a intentarlo."
+  "fd_no_space": "El dispositivo está lleno: libera espacio y vuelve a intentarlo.",
+  "ow_title": "Abrir con",
+  "ow_default": "Predeterminada",
+  "ow_store": "De la Store",
+  "ow_always": "Usar siempre esta app para los archivos .{ext}",
+  "ow_none": "Ninguna app instalada abre los archivos .{ext}. Puede que la Store tenga una.",
+  "ow_show_folder": "Mostrar en la carpeta",
+  "ow_open": "Abrir"
 }

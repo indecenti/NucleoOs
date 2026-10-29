@@ -3,7 +3,7 @@
   "installed": [
     {
       "id": "file-commander",
-      "version": "0.1.2",
+      "version": "0.1.3",
       "path": "/apps/file-commander",
       "enabled": true,
       "autostart": true,
@@ -17,7 +17,7 @@
     },
     {
       "id": "notepad",
-      "version": "0.1.2",
+      "version": "0.1.3",
       "path": "/apps/notepad",
       "enabled": true,
       "autostart": false,
@@ -29,7 +29,7 @@
     },
     {
       "id": "photo-viewer",
-      "version": "0.1.2",
+      "version": "0.1.3",
       "path": "/apps/photo-viewer",
       "enabled": true,
       "autostart": false,
@@ -40,7 +40,7 @@
     },
     {
       "id": "media-player",
-      "version": "0.1.2",
+      "version": "0.1.3",
       "path": "/apps/media-player",
       "enabled": true,
       "autostart": false,
@@ -63,7 +63,7 @@
     },
     {
       "id": "video-player",
-      "version": "3.1.4",
+      "version": "3.1.5",
       "path": "/apps/video-player",
       "enabled": true,
       "autostart": false,
@@ -95,7 +95,7 @@
     },
     {
       "id": "settings",
-      "version": "0.2.3",
+      "version": "0.2.4",
       "path": "/apps/settings",
       "enabled": true,
       "autostart": false,
@@ -119,7 +119,7 @@
     },
     {
       "id": "system-monitor",
-      "version": "0.1.3",
+      "version": "0.1.4",
       "path": "/apps/system-monitor",
       "enabled": true,
       "autostart": false,
@@ -129,7 +129,7 @@
     },
     {
       "id": "calculator",
-      "version": "0.1.2",
+      "version": "0.1.3",
       "path": "/apps/calculator",
       "enabled": true,
       "autostart": false,
@@ -137,7 +137,7 @@
     },
     {
       "id": "clock",
-      "version": "0.2.2",
+      "version": "0.2.3",
       "path": "/apps/clock",
       "enabled": true,
       "autostart": false,
@@ -155,7 +155,7 @@
     },
     {
       "id": "dosbox",
-      "version": "0.1.2",
+      "version": "0.1.3",
       "path": "/apps/dosbox",
       "enabled": true,
       "autostart": false,
@@ -165,7 +165,7 @@
     },
     {
       "id": "dos-importer",
-      "version": "0.1.2",
+      "version": "0.1.3",
       "path": "/apps/dos-importer",
       "enabled": true,
       "autostart": false,
@@ -233,7 +233,7 @@
     },
     {
       "id": "anima",
-      "version": "0.1.3",
+      "version": "0.1.4",
       "path": "/apps/anima",
       "enabled": true,
       "autostart": false,
@@ -245,7 +245,7 @@
     },
     {
       "id": "agent",
-      "version": "0.1.2",
+      "version": "0.1.3",
       "path": "/apps/agent",
       "enabled": true,
       "autostart": false,
@@ -258,7 +258,7 @@
     },
     {
       "id": "code-runner",
-      "version": "0.1.2",
+      "version": "0.1.3",
       "path": "/apps/code-runner",
       "enabled": true,
       "autostart": false,
@@ -271,7 +271,7 @@
     },
     {
       "id": "terminal",
-      "version": "0.1.2",
+      "version": "0.1.3",
       "path": "/apps/terminal",
       "enabled": true,
       "autostart": false,
@@ -319,7 +319,7 @@
     },
     {
       "id": "help",
-      "version": "0.1.2",
+      "version": "0.1.3",
       "path": "/apps/help",
       "enabled": true,
       "autostart": false,
@@ -341,7 +341,7 @@
     },
     {
       "id": "browser",
-      "version": "0.2.2",
+      "version": "0.2.3",
       "path": "/apps/browser",
       "enabled": true,
       "autostart": false,
@@ -362,7 +362,7 @@
     },
     {
       "id": "paint",
-      "version": "1.0.3",
+      "version": "1.0.4",
       "path": "/apps/paint",
       "enabled": true,
       "autostart": false,
@@ -373,7 +373,7 @@
     },
     {
       "id": "spreadsheet",
-      "version": "0.1.2",
+      "version": "0.1.3",
       "path": "/apps/spreadsheet",
       "enabled": true,
       "autostart": false,
@@ -385,7 +385,7 @@
     },
     {
       "id": "archive-manager",
-      "version": "1.0.2",
+      "version": "1.0.3",
       "path": "/apps/archive-manager",
       "enabled": true,
       "autostart": false,
@@ -407,7 +407,7 @@
     },
     {
       "id": "games",
-      "version": "0.1.3",
+      "version": "0.1.4",
       "path": "/apps/games",
       "enabled": true,
       "autostart": false,
@@ -433,7 +433,7 @@
     },
     {
       "id": "qr",
-      "version": "0.1.2",
+      "version": "0.1.3",
       "path": "/apps/qr",
       "enabled": true,
       "autostart": false,
@@ -476,7 +476,7 @@
     },
     {
       "id": "weather",
-      "version": "1.0.1",
+      "version": "1.0.2",
       "path": "/apps/weather",
       "enabled": true,
       "autostart": false,
@@ -508,7 +508,7 @@
     },
     {
       "id": "arcade",
-      "version": "1.0.2",
+      "version": "1.0.3",
       "path": "/apps/arcade",
       "enabled": true,
       "autostart": false,
@@ -530,7 +530,7 @@
     },
     {
       "id": "store",
-      "version": "1.0.2",
+      "version": "1.0.3",
       "path": "/apps/store",
       "enabled": true,
       "autostart": false,

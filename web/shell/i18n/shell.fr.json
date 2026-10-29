@@ -421,5 +421,12 @@
   "fd_save_fail": "L'enregistrement a échoué : vérifiez l'espace libre.",
   "fd_mkdir_fail": "Impossible de créer le dossier.",
   "fd_saving_pct": "Enregistrement… {pct} %",
-  "fd_no_space": "L'appareil est plein : libérez de l'espace et réessayez."
+  "fd_no_space": "L'appareil est plein : libérez de l'espace et réessayez.",
+  "ow_title": "Ouvrir avec",
+  "ow_default": "Par défaut",
+  "ow_store": "Depuis le Store",
+  "ow_always": "Toujours utiliser cette app pour les fichiers .{ext}",
+  "ow_none": "Aucune app installée n’ouvre les fichiers .{ext}. Le Store en propose peut-être une.",
+  "ow_show_folder": "Afficher dans le dossier",
+  "ow_open": "Ouvrir"
 }

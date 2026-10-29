@@ -121,8 +121,10 @@ export function createFs({ fetchFn, caps = () => Caps.info(), onChange = null,
     try {
       const t = (await (r.clone ? r.clone() : r).text()).trim();
       if (!t || t.length > 300) return '';
-      try { const j = JSON.parse(t); if (j && typeof j.error === 'string') return j.error.slice(0, 80); } catch {}
-      return /^[^<{\n]{1,120}$/.test(t) ? t : '';
+      // a short word or phrase the device chose ("r2_locked", "destination exists"), nothing an app could render
+      const ok = (x) => (/^[\w .:/-]{1,80}$/.test(x) ? x : '');
+      try { const j = JSON.parse(t); if (j && typeof j.error === 'string') return ok(j.error); } catch {}
+      return ok(t);
     } catch { return ''; }
   }
   async function fail(r, what) {
@@ -427,6 +429,9 @@ export function createFs({ fetchFn, caps = () => Caps.info(), onChange = null,
     if (dv) { await dv.move(a, b, opts); onChanged(a); onChanged(b); return { path: b }; }
     const there = await stat(b);
     if (there && !opts.overwrite) throw new FsError('exists', b);
+    // overwrite replaces a FILE with a file: never a folder (it would be set aside as a hidden temporary, its
+    // contents unreachable) and never a file with a folder
+    if (there && (there.type === 'dir' || ((await stat(a)) || {}).type === 'dir')) throw new FsError('exists', b);
     await mkdirp(dirOf(b));
     let old = null;
     if (there) {
@@ -458,13 +463,15 @@ export function createFs({ fetchFn, caps = () => Caps.info(), onChange = null,
     if (bytes == null) throw new FsError('not-found', a);
     return write(b, bytes, { onProgress: opts.onProgress });
   }
-  // A free name in `dir` for `name`: "file.txt" → "file (2).txt".
+  // A free name in `dir` for `name`: "file.txt" → "file (2).txt". Compared without case: the cards of the small
+  // devices are FAT, where "Archive.zip" and "archive.zip" are the same file.
   async function uniquePath(dir, name) {
     const d = checkPath(dir);
-    const have = new Set((await list(d)).map((e) => e.name));
-    if (!have.has(name)) return joinPath(d, name);
+    const have = new Set((await list(d)).map((e) => e.name.toLowerCase()));
+    const free = (n) => !have.has(n.toLowerCase());
+    if (free(name)) return joinPath(d, name);
     const dot = name.lastIndexOf('.'), base = dot > 0 ? name.slice(0, dot) : name, ext = dot > 0 ? name.slice(dot) : '';
-    for (let i = 2; ; i++) { const c = `${base} (${i})${ext}`; if (!have.has(c)) return joinPath(d, c); }
+    for (let i = 2; ; i++) { const c = `${base} (${i})${ext}`; if (free(c)) return joinPath(d, c); }
   }
 
   // ── the Recycle Bin: one for every app (the format File Commander and the Recycle Bin app have always used) ──
@@ -520,7 +527,11 @@ export function createFs({ fetchFn, caps = () => Caps.info(), onChange = null,
       if (!gone) { await remove(entry.trash).catch(() => {}); await unlist(); throw new FsError('failed', p, 0, 'trash_failed'); }
     }
     if (db.items.length > TRASH_CAP) {              // the oldest go only once this one is safely in
-      while (db.items.length > TRASH_CAP) { const old = db.items.pop(); if (old.trash) await remove(old.trash).catch(() => {}); }
+      // only what lies inside the bin: an edited index cannot make this delete anything else
+      while (db.items.length > TRASH_CAP) {
+        const old = db.items.pop();
+        if (old && typeof old.trash === 'string' && normPath(old.trash).startsWith(bin + '/')) await remove(old.trash).catch(() => {});
+      }
       await write(TRASH_DB, JSON.stringify(db)).catch(() => {});
     }
     return entry;
