@@ -991,7 +991,7 @@ static PCE_HOT_FN void idle_after(void)
 #define ROM_ICACHE_UNLOCK       ((void (*)(uint32_t, uint32_t))0x40001818)
 #define ICACHE_LINE   32u
 #define LOCK_MAX      (12u * 1024u)                    // three quarters of the cache at most: the rest needs a quarter
-static uint32_t s_lock_at, s_lock_lines;
+static uint32_t s_lock_at, s_lock_lines, s_hot_a, s_hot_end;   // s_hot_*: the range asked for (the trace says it)
 static void hot_unlock(void)
 {
     if (s_lock_lines) ROM_ICACHE_UNLOCK(s_lock_at, s_lock_lines);
@@ -1006,6 +1006,7 @@ static void hot_lock(uint32_t bytes)
     hot_unlock();
     const uint32_t a = (uint32_t)(uintptr_t)_nap_hot_start & ~(ICACHE_LINE - 1);
     const uint32_t end = bytes ? a + bytes : ((uint32_t)(uintptr_t)_nap_hot_end + ICACHE_LINE - 1) & ~(ICACHE_LINE - 1);
+    s_hot_a = a; s_hot_end = end;
     // Only code on the instruction bus from flash (0x42000000..), and never most of the cache.
     if (a < 0x42000000u || a >= 0x44000000u || end <= a || end - a > LOCK_MAX) {
         ESP_LOGW(TAG, "run loop not locked: %08x..%08x", (unsigned)a, (unsigned)end);
@@ -1280,8 +1281,12 @@ esp_err_t nucleo_pce_open(const char *rom_path, nucleo_pce_line_fn line_cb, void
 
 #ifdef NAP_MODULE
 static uint32_t lock_bytes(void) { return s_lock_lines * ICACHE_LINE; }
+static uint32_t hot_a(void) { return s_hot_a; }
+static uint32_t hot_end(void) { return s_hot_end; }
 #else
 static uint32_t lock_bytes(void) { return 0; }
+static uint32_t hot_a(void) { return 0; }
+static uint32_t hot_end(void) { return 0; }
 #endif
 
 // The VRAM in a save state: its blocks in order (the file is the same as when it was two halves).
@@ -1303,12 +1308,12 @@ static void profile_write(pce_t *s)
                    w = (unsigned)((uint32_t)(s->prof_wait >> 10) / n * 16 / 375);
     FILE *f = fopen(s->trace_path, "a");
     if (!f) return;
-    fprintf(f, "  pce profile: %u frames (%u drawn), ms/frame: huc6280 %u.%u  vdc %u.%u  panel lines %u.%u  wait 2nd core %u.%u  psg+speaker %u.%u, idle skipped %u%%, lines with sprite irq evaluated here %u%%, cartridge %s, misses %u, run loop locked %u B, bench knobs %d %d\n",
+    fprintf(f, "  pce profile: %u frames (%u drawn), ms/frame: huc6280 %u.%u  vdc %u.%u  panel lines %u.%u  wait 2nd core %u.%u  psg+speaker %u.%u, idle skipped %u%%, lines with sprite irq evaluated here %u%%, cartridge %s, misses %u, run loop locked %u B (hot %08x..%08x), bench knobs %d %d\n",
             (unsigned)n, (unsigned)s->prof_drawn, c / 10, c % 10, v / 10, v % 10, l / 10, l % 10, w / 10, w % 10, a / 10, a % 10,
             (unsigned)((uint32_t)(s->prof_idle >> 10) / n * 1024u / (LINES * LINE_CYC / 100)),   // no 64-bit division
             (unsigned)(s->prof_lines_here * 100u / (s->prof_lines_other + s->prof_lines_here + 1)),
             s->rom_mapped ? "mapped from flash" : s->rom_all ? "in RAM" : "paged from the card", (unsigned)s->prof_misses,
-            (unsigned)(lock_bytes()), emu_bench_knob[0], emu_bench_knob[1]);
+            (unsigned)(lock_bytes()), (unsigned)hot_a(), (unsigned)hot_end(), emu_bench_knob[0], emu_bench_knob[1]);
     fclose(f);
 }
 
@@ -1317,8 +1322,8 @@ void nucleo_pce_close(void)
     if (!PCE) return;
     lines_settle(PCE);
     nucleo_cowork_stop();
+    profile_write(PCE);                                // (it reports the lock)
     hot_unlock();
-    profile_write(PCE);
     pce_t *s = PCE;
     PCE = NULL;
     session_free(s);
