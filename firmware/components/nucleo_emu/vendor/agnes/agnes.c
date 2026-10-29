@@ -266,7 +266,22 @@ typedef struct agnes {
     void (*apu_write)(void *user, uint16_t addr, uint8_t val);
     uint8_t (*apu_read)(void *user);
     void *host;
+
+    /* NUCLEO PATCH (A5): direct windows onto the cartridge. rom_page returns the host's copy of the 1 KB page
+     * holding a file offset (page boundaries counted from the PRG data, so a CPU or PPU 1 KB window is one page);
+     * prg_win / chr_win cache those pointers per 1 KB of the CPU's $8000-$FFFF and the PPU's $0000-$1FFF. Any
+     * mapper register write, any page the host evicts and every new frame drop them (agnes_drop_windows). */
+    const uint8_t *(*rom_page)(void *user, uint32_t offset);
+    const uint8_t *prg_win[32];
+    const uint8_t *chr_win[8];
+    /* NUCLEO PATCH (A4): the PPU dot the CPU has reached on the current scanline (the frame runs a line at a time);
+     * skip_draw: this frame is not shown (the host's frame-skip), so lines only resolve the sprite-0 hit */
+    int ln_dot;
+    bool skip_draw;
 } agnes_t;
+
+#define agnes_drop_windows(agn) do { memset((agn)->prg_win, 0, sizeof (agn)->prg_win); \
+                                     memset((agn)->chr_win, 0, sizeof (agn)->chr_win); } while (0)
 
 #define AGNES_ROM(agn, off) ((agn)->rom_read((agn)->host, (uint32_t)(off)))
 
@@ -605,9 +620,12 @@ bool agnes_restore_state(agnes_t *agnes, const agnes_state_t *state) {
     void (*aw)(void *, uint16_t, uint8_t) = agnes->apu_write;
     uint8_t (*ar)(void *) = agnes->apu_read;
     void *host = agnes->host;
+    const uint8_t *(*rp)(void *, uint32_t) = agnes->rom_page;
     memmove(agnes, state, sizeof(agnes_t));
     agnes->gamepack.data = gamepack_data;
     agnes->rom_read = rr; agnes->on_line = ol; agnes->apu_write = aw; agnes->apu_read = ar; agnes->host = host;
+    agnes->rom_page = rp;
+    agnes_drop_windows(agnes);
     agnes->cpu.agnes = agnes;
     agnes->ppu.agnes = agnes;
     switch (agnes->gamepack.mapper) {
@@ -633,17 +651,78 @@ bool agnes_tick(agnes_t *agnes, bool *out_new_frame) {
     return true;
 }
 
-bool agnes_next_frame(agnes_t *agnes) {
-    while (true) {
-        bool new_frame = false;
-        bool ok = agnes_tick(agnes, &new_frame);
-        if (!ok) {
+/* NUCLEO PATCH (A4): the frame runs a scanline at a time instead of a PPU dot at a time (89,342 calls a frame
+ * were most of agnes's cost on the ESP32). Each visible line is drawn whole at its start from the registers the
+ * CPU left (ppu_render_line), then the CPU runs the line's 341 dots in three legs, with the PPU's line events
+ * between them: dot 257 (the next line's vertical step and horizontal scroll from t), the MMC3 counter's dot
+ * (270 or 324, as agnes had it), and the pre-render line's vertical copy. Raster effects land on line
+ * boundaries; the sprite-0 hit is known as the line is drawn. The frame ends after the pre-render line. */
+static void inc_vert_v(ppu_t *ppu);
+static void ppu_render_line(ppu_t *ppu, int y, bool rendering);
+
+static bool run_cpu_to(agnes_t *agnes, int dot) {
+    cpu_t *cpu = &agnes->cpu;
+    while (agnes->ln_dot < dot) {
+        if (cpu->stall > 0) {                         // OAM DMA: the CPU only waits, a whole leg at once
+            uint32_t need = (uint32_t)(dot - agnes->ln_dot + 2) / 3;
+            uint32_t take = cpu->stall < need ? cpu->stall : need;
+            cpu->stall -= take;
+            agnes->ln_dot += (int)take * 3;
+            continue;
+        }
+        int c = cpu_tick(cpu);
+        if (c == 0) {
             return false;
         }
-        if (new_frame) {
-            break;
-        }
+        agnes->ln_dot += c * 3;
     }
+    return true;
+}
+
+bool agnes_next_frame(agnes_t *agnes) {
+    ppu_t *ppu = &agnes->ppu;
+    agnes_drop_windows(agnes);                        // the page cache's ages see what is in use, every frame
+    for (int sl = 0; sl < 262; sl++) {
+        ppu->scanline = sl;
+        bool rendering = ppu->masks.show_background || ppu->masks.show_sprites;
+        if (sl < 240) {
+            ppu_render_line(ppu, sl, rendering);
+        } else if (sl == 241) {
+            ppu->status.in_vblank = true;
+            if (ppu->ctrl.nmi_enabled) {
+                cpu_trigger_nmi(&agnes->cpu);
+            }
+        } else if (sl == 261) {
+            ppu->status.sprite_overflow = false;
+            ppu->status.sprite_zero_hit = false;
+            ppu->status.in_vblank = false;
+        }
+        const bool fetch_line = sl < 240 || sl == 261;
+        if (!run_cpu_to(agnes, 257)) {
+            return false;
+        }
+        rendering = ppu->masks.show_background || ppu->masks.show_sprites;
+        if (rendering && fetch_line) {
+            inc_vert_v(ppu);                                                      // dot 256
+            ppu->regs.v = (ppu->regs.v & 0xfbe0) | (ppu->regs.t & ~(0xfbe0));      // dot 257
+        }
+        if (!run_cpu_to(agnes, ppu->ctrl.bg_table_addr == 0x0000 ? 270 : 324)) {
+            return false;
+        }
+        if (fetch_line && ppu->masks.show_background && ppu->masks.show_sprites) {
+            mapper_pa12_rising_edge(agnes);
+        }
+        rendering = ppu->masks.show_background || ppu->masks.show_sprites;
+        if (sl == 261 && rendering) {
+            ppu->regs.v = (ppu->regs.v & 0x841f) | (ppu->regs.t & ~(0x841f));      // dots 280-304
+        }
+        const int end = (sl == 261 && rendering && ppu->is_odd_frame) ? 340 : 341;   // the odd frame's short line
+        if (!run_cpu_to(agnes, end)) {
+            return false;
+        }
+        agnes->ln_dot -= end;
+    }
+    ppu->is_odd_frame = !ppu->is_odd_frame;
     return true;
 }
 
@@ -814,12 +893,35 @@ void cpu_write8(cpu_t *cpu, uint16_t addr, uint8_t val) {
 
     } else {
         mapper_write(agnes, addr, val);
+        if (addr >= 0x8000) agnes_drop_windows(agnes);   /* NUCLEO PATCH (A5): the banks may have moved */
     }
 }
 
-uint8_t cpu_read8(cpu_t *cpu, uint16_t addr) {
-    agnes_t *agnes = cpu->agnes;
+static const uint8_t *agnes_prg_window(agnes_t *agnes, uint16_t addr);
+static uint8_t cpu_read8_io(cpu_t *cpu, uint16_t addr);
 
+/* NUCLEO PATCH (A5): the cartridge through its 1 KB window and the work RAM inline (every later caller in this
+ * file, the instructions included, gets this body through the macro below); registers and the rest out of line. */
+static inline __attribute__((always_inline)) uint8_t cpu_read8_fast(cpu_t *cpu, uint16_t addr) {
+    agnes_t *agnes = cpu->agnes;
+    if (addr >= 0x8000) {
+        const uint8_t *w = agnes->prg_win[(addr >> 10) & 31];
+        if (!w) w = agnes_prg_window(agnes, addr);
+        return w[addr & 0x3ff];
+    }
+    if (addr < 0x2000) {
+        return agnes->ram[addr & 0x7ff];
+    }
+    return cpu_read8_io(cpu, addr);
+}
+
+uint8_t cpu_read8(cpu_t *cpu, uint16_t addr) {
+    return cpu_read8_fast(cpu, addr);
+}
+#define cpu_read8(cpu, addr) cpu_read8_fast((cpu), (addr))
+
+static uint8_t cpu_read8_io(cpu_t *cpu, uint16_t addr) {
+    agnes_t *agnes = cpu->agnes;
     uint8_t res = 0;
     if (addr >= 0x4020) { // moved to top because it's the most common case
         res = mapper_read(agnes, addr);
@@ -957,6 +1059,7 @@ static void set_pixel_color_ix(ppu_t *ppu, int x, int y, uint8_t color_ix);
 static uint8_t ppu_read8(ppu_t *ppu, uint16_t addr);
 static void ppu_write8(ppu_t *ppu, uint16_t addr, uint8_t val);
 static uint16_t mirror_address(ppu_t *ppu, uint16_t addr);
+static inline uint8_t chr_read(agnes_t *agnes, uint16_t addr);   /* NUCLEO PATCH (A5) */
 
 static unsigned g_palette_addr_map[32] = {
     0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
@@ -1419,7 +1522,7 @@ static uint8_t ppu_read8(ppu_t *ppu, uint16_t addr) {
         unsigned palette_ix = g_palette_addr_map[addr & 0x1f];
         res = ppu->palette[palette_ix];
     } else if (addr < 0x2000) { // $0000 - $1FFF
-        res = mapper_read(ppu->agnes, addr);
+        res = chr_read(ppu->agnes, addr);   /* NUCLEO PATCH (A5) */
     } else { // $2000 - $3EFF
         uint16_t mirrored_addr = mirror_address(ppu, addr);
         res = ppu->nametables[mirrored_addr];
@@ -1438,6 +1541,257 @@ static void ppu_write8(ppu_t *ppu, uint16_t addr, uint8_t val) {
         uint16_t mirrored_addr = mirror_address(ppu, addr);
         ppu->nametables[mirrored_addr] = val;
     }
+}
+
+/* NUCLEO PATCH (A5): where a CPU or PPU address lands in the file, per mapper (the same arithmetic as
+ * mapperN_read), and the host's page for it. */
+static const uint8_t g_open_bus[1024] = { 0 };
+static const uint8_t *agnes_page(agnes_t *agnes, uint32_t off) {
+    const uint8_t *p = agnes->rom_page ? agnes->rom_page(agnes->host, off) : NULL;
+    return p ? p : g_open_bus;
+}
+static const uint8_t *agnes_prg_window(agnes_t *agnes, uint16_t addr) {
+    unsigned off = 0;
+    switch (agnes->gamepack.mapper) {
+        case 0: off = agnes->mapper.m0.prg_bank_offsets[(addr >> 14) & 1] + (addr & 0x3fff); break;
+        case 1: off = agnes->mapper.m1.prg_bank_offsets[(addr >> 14) & 1] + (addr & 0x3fff); break;
+        case 2: off = agnes->mapper.m2.prg_bank_offsets[(addr >> 14) & 1] + (addr & 0x3fff); break;
+        case 4: off = agnes->mapper.m4.prg_bank_offsets[(addr >> 13) & 3] + (addr & 0x1fff); break;
+    }
+    const uint8_t *p = agnes_page(agnes, agnes->gamepack.prg_rom_offset + off);
+    agnes->prg_win[(addr >> 10) & 31] = p;            // after the page call: a miss there drops every window
+    return p;
+}
+static const uint8_t *agnes_chr_window(agnes_t *agnes, uint16_t addr) {
+    const uint8_t *p = g_open_bus;
+    const unsigned chr = agnes->gamepack.chr_rom_offset;
+    switch (agnes->gamepack.mapper) {
+        case 0:
+            p = agnes->mapper.m0.use_chr_ram ? agnes->mapper.m0.chr_ram + (addr & 0x1c00) : agnes_page(agnes, chr + (addr & 0x1fff));
+            break;
+        case 1:
+            if (agnes->mapper.m1.use_chr_ram) {
+                p = agnes->mapper.m1.chr_ram + (addr & 0x1c00);
+            } else {
+                p = agnes_page(agnes, chr + agnes->mapper.m1.chr_bank_offsets[(addr >> 12) & 1] + (addr & 0xfff));
+            }
+            break;
+        case 2:
+            p = agnes->mapper.m2.chr_ram + (addr & 0x1c00);
+            break;
+        case 4: {
+            unsigned off = agnes->mapper.m4.chr_bank_offsets[(addr >> 10) & 7];
+            if (agnes->mapper.m4.use_chr_ram) {
+                p = agnes->mapper.m4.chr_ram + (off & 0x1c00);
+            } else {
+                unsigned size = (unsigned)agnes->gamepack.chr_rom_banks_count * 8 * 1024;
+                p = agnes_page(agnes, chr + (size ? off % size : 0));
+            }
+            break;
+        }
+    }
+    agnes->chr_win[(addr >> 10) & 7] = p;
+    return p;
+}
+static inline uint8_t chr_read(agnes_t *agnes, uint16_t addr) {
+    const uint8_t *w = agnes->chr_win[(addr >> 10) & 7];
+    if (!w) w = agnes_chr_window(agnes, addr);
+    return w[addr & 0x3ff];
+}
+
+/* NUCLEO PATCH (A4): one visible scanline, whole. The background: 33 tiles from v (the fine x scroll picks the
+ * 256 pixels), each a name-table byte, its attribute's two bits and the pattern's two planes. The sprites: the
+ * first eight in OAM order that cover the line (the line after their y, as on the console), lower index in front.
+ * Then the priority rule and the sprite-0 hit (an opaque sprite-0 pixel over an opaque background pixel, not at
+ * x 255), and the palette. With rendering off the line is the backdrop (or the colour v points at). */
+static bool ppu_sprites_line(ppu_t *ppu, int y, uint8_t *sp) {
+    agnes_t *agnes = ppu->agnes;
+    const int h = ppu->ctrl.use_8x16_sprites ? 16 : 8;
+    int n = 0;
+    bool any = false;
+    memset(sp, 0, AGNES_SCREEN_WIDTH);
+    for (int i = 0; i < 64; i++) {
+        const uint8_t *o = &ppu->oam_data[i * 4];
+        if (o[0] > 0xef) {
+            continue;
+        }
+        int row = y - 1 - o[0];
+        if (row < 0 || row >= h) {
+            continue;
+        }
+        if (n == 8) {
+            ppu->status.sprite_overflow = true;
+            break;
+        }
+        n++;
+        uint8_t tile = o[1];
+        const uint8_t attr = o[2];
+        const int sx = o[3];
+        if (attr & 0x80) {
+            row = h - 1 - row;
+        }
+        uint16_t table = ppu->ctrl.sprite_table_addr;
+        if (h == 16) {
+            table = (tile & 1) ? 0x1000 : 0x0000;
+            tile &= 0xfe;
+            if (row >= 8) {
+                tile++;
+                row -= 8;
+            }
+        }
+        const uint16_t pa = (uint16_t)(table + (tile << 4) + row);
+        const uint8_t lo = chr_read(agnes, pa), hi = chr_read(agnes, (uint16_t)(pa + 8));
+        if (!(lo | hi)) {
+            continue;
+        }
+        const uint8_t base = (uint8_t)(0x10 | ((attr & 3) << 2) | ((attr & 0x20) ? 0x20 : 0) | (i == 0 ? 0x40 : 0));
+        for (int px = 0; px < 8; px++) {
+            const int x = sx + px;
+            if (x > 255) {
+                break;
+            }
+            const int bit = (attr & 0x40) ? px : 7 - px;
+            const int ix = ((lo >> bit) & 1) | (((hi >> bit) & 1) << 1);
+            if (!ix || (sp[x] & 3)) {
+                continue;
+            }
+            sp[x] = (uint8_t)(base | ix);
+            any = true;
+        }
+    }
+    if (!ppu->masks.show_leftmost_sprites) {
+        memset(sp, 0, 8);
+    }
+    return any;
+}
+
+/* The four logical name tables as pointers, for the mirroring in force. */
+static void nt_pointers(ppu_t *ppu, const uint8_t *ntp[4]) {
+    for (int i = 0; i < 4; i++) ntp[i] = ppu->nametables + mirror_address(ppu, (uint16_t)(0x2000 | (i << 10)));
+}
+/* A pattern byte's eight bits as eight bytes, the leftmost pixel first in memory (both hosts are little-endian):
+ * one multiply spreads bit 7-j to the top of byte j, without carries (the copies are 9 bits apart). */
+static inline uint64_t spread8(uint8_t b) {
+    return ((uint64_t)b * 0x8040201008040201ULL >> 7) & 0x0101010101010101ULL;
+}
+/* A frame the host skips: no pixels, only the sprite-0 hit (games wait on it to split the screen), from sprite
+ * 0's row and the background under it. */
+static void ppu_hit_line(ppu_t *ppu, int y) {
+    if (!ppu->masks.show_background || !ppu->masks.show_sprites || ppu->status.sprite_zero_hit) {
+        return;
+    }
+    agnes_t *agnes = ppu->agnes;
+    const uint8_t *o = ppu->oam_data;
+    const int h = ppu->ctrl.use_8x16_sprites ? 16 : 8;
+    int row = y - 1 - o[0];
+    if (o[0] > 0xef || row < 0 || row >= h) {
+        return;
+    }
+    uint8_t tile = o[1];
+    const uint8_t attr = o[2];
+    if (attr & 0x80) row = h - 1 - row;
+    uint16_t table = ppu->ctrl.sprite_table_addr;
+    if (h == 16) {
+        table = (tile & 1) ? 0x1000 : 0x0000;
+        tile &= 0xfe;
+        if (row >= 8) { tile++; row -= 8; }
+    }
+    const uint16_t pa = (uint16_t)(table + (tile << 4) + row);
+    const uint8_t slo = chr_read(agnes, pa), shi = chr_read(agnes, (uint16_t)(pa + 8));
+    if (!(slo | shi)) {
+        return;
+    }
+    const uint8_t *ntp[4];
+    nt_pointers(ppu, ntp);
+    const unsigned fine_y = (ppu->regs.v >> 12) & 7;
+    for (int px = 0; px < 8; px++) {
+        const int x = o[3] + px;
+        if (x > 254) break;
+        if (x < 8 && (!ppu->masks.show_leftmost_bg || !ppu->masks.show_leftmost_sprites)) continue;
+        const int sb = (attr & 0x40) ? px : 7 - px;
+        if (!(((slo | shi) >> sb) & 1)) continue;
+        const unsigned at_x = ppu->regs.x + (unsigned)x;
+        uint16_t v = ppu->regs.v;
+        unsigned cx = (v & 0x1f) + (at_x >> 3);
+        if (cx >= 32) { v ^= 0x0400; cx -= 32; }
+        const uint8_t nt = ntp[(v >> 10) & 3][(v & 0x3e0) | cx];
+        const uint16_t bpa = (uint16_t)(ppu->ctrl.bg_table_addr + (nt << 4) + fine_y);
+        const int bb = 7 - (int)(at_x & 7);
+        if (((chr_read(agnes, bpa) | chr_read(agnes, (uint16_t)(bpa + 8))) >> bb) & 1) {
+            ppu->status.sprite_zero_hit = true;
+            return;
+        }
+    }
+}
+
+static void ppu_render_line(ppu_t *ppu, int y, bool rendering) {
+    agnes_t *agnes = ppu->agnes;
+    uint8_t *out = ppu->line;
+    if (agnes->skip_draw) {
+        if (rendering) ppu_hit_line(ppu, y);
+        return;
+    }
+    const uint8_t *pal = ppu->palette;
+    if (!rendering) {
+        const uint16_t v = ppu->regs.v & 0x3fff;
+        const uint8_t c = v >= 0x3f00 ? pal[g_palette_addr_map[v & 0x1f]] : pal[0];
+        memset(out, c & 0x3f, AGNES_SCREEN_WIDTH);
+    } else {
+        uint8_t bgbuf[33 * 8];
+        const uint8_t *bg = bgbuf;
+        if (ppu->masks.show_background) {
+            uint16_t v = ppu->regs.v;
+            const uint16_t table = ppu->ctrl.bg_table_addr;
+            const unsigned fine_y = (v >> 12) & 7;
+            const uint8_t *ntp[4];
+            nt_pointers(ppu, ntp);
+            uint8_t *dst = bgbuf;
+            for (int t = 0; t < 33; t++) {
+                const uint8_t *nt_tab = ntp[(v >> 10) & 3];
+                const uint8_t nt = nt_tab[v & 0x3ff];
+                uint8_t at = nt_tab[0x3C0 | ((v >> 4) & 0x38) | ((v >> 2) & 0x07)];
+                if (v & 0x40) at >>= 4;
+                if (v & 0x02) at >>= 2;
+                const uint16_t pa = (uint16_t)(table + (nt << 4) + fine_y);
+                const uint8_t lo = chr_read(agnes, pa), hi = chr_read(agnes, (uint16_t)(pa + 8));
+                uint64_t px = 0;
+                if (lo | hi) {
+                    px = spread8(lo) | spread8(hi) << 1;                 // eight 2-bit pixels, one per byte
+                    px |= ((px | px >> 1) & 0x0101010101010101ULL) * (uint64_t)((at & 3) << 2);   // + palette, opaque only
+                }
+                memcpy(dst, &px, 8);
+                dst += 8;
+                if ((v & 0x1f) == 31) {                   // coarse x wraps into the next name table
+                    v = (uint16_t)((v & ~0x1f) ^ 0x0400);
+                } else {
+                    v++;
+                }
+            }
+            bg = bgbuf + ppu->regs.x;
+            if (!ppu->masks.show_leftmost_bg) {
+                memset(bgbuf + ppu->regs.x, 0, 8);
+            }
+        } else {
+            memset(bgbuf, 0, AGNES_SCREEN_WIDTH);
+        }
+        uint8_t sp[AGNES_SCREEN_WIDTH];
+        if (ppu->masks.show_sprites && ppu_sprites_line(ppu, y, sp)) {
+            bool hit = false;
+            for (int x = 0; x < AGNES_SCREEN_WIDTH; x++) {
+                const uint8_t s = sp[x], b = bg[x];
+                uint8_t c = b;
+                if (s & 3) {
+                    if ((s & 0x40) && b && x != 255) hit = true;
+                    c = (b && (s & 0x20)) ? b : (uint8_t)(s & 0x1f);
+                }
+                out[x] = pal[c] & 0x3f;
+            }
+            if (hit) ppu->status.sprite_zero_hit = true;
+        } else {
+            for (int x = 0; x < AGNES_SCREEN_WIDTH; x++) out[x] = pal[bg[x]] & 0x3f;
+        }
+    }
+    if (agnes->on_line) agnes->on_line(agnes->host, out, y);
 }
 
 static uint16_t mirror_address(ppu_t *ppu, uint16_t addr) {

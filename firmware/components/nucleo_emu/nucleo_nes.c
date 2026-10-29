@@ -5,7 +5,10 @@
 //                CHR RAM); with the radio off the Solo boot's heap has a 45 KB block for it
 //   picture      one 256-pixel scanline at a time (patch A2): no 61 KB frame buffer
 //   cartridge    1 KB pages from the SD card, LRU with a direct-mapped hint (as nucleo_gb.c), or the whole file
-//                when it fits with room to spare (most NROM games are 24-40 KB)
+//                when it fits with room to spare (most NROM games are 24-40 KB). Pages are counted from the PRG
+//                data (after the header and any trainer), so each 1 KB the CPU or PPU sees is exactly one page:
+//                agnes keeps direct pointers to them (patch A5) and reads the cartridge without calling us
+//   speed        agnes draws a scanline at a time (patch A4), not a dot at a time
 //   battery RAM  the MMC1 / MMC3 8 KB PRG RAM, "<root>/Saves/nes/<rom name>.sav", byte-compatible with other
 //                emulators' saves
 //   sound        our APU: agnes has none. Two pulses, triangle, noise and the DMC's direct output level, with
@@ -75,6 +78,7 @@ typedef struct {
     agnes_t      *a;
     FILE         *fp;
     uint32_t      rom_bytes;
+    uint32_t      rom_base;                     // where the PRG data starts in the file: page 0
     uint8_t      *rom_all;
     uint8_t      *pg[PG_SLOTS];
     uint32_t      pg_tag[PG_SLOTS], pg_age[PG_SLOTS], pg_clock;
@@ -94,6 +98,7 @@ typedef struct {
     emu_afilt_t   afilt;
     uint16_t      mix_pulse[31], mix_tnd[203];  // the NES mixer's two curves, as 16-bit levels
     bool          sound;
+    bool          frameskip;
 
     bool          battery;                      // the header says the PRG RAM keeps a save
     uint32_t      sav_sum;                      // checksum of what is on the card (autosave on change)
@@ -241,13 +246,20 @@ static void mixer_init(nes_session_t *s)
 }
 
 // ── the cartridge, paged ─────────────────────────────────────────────────────────────────────────────
-static uint8_t rom_read(void *host, uint32_t off)
+static const uint8_t PG_OPEN[PG_SIZE] = { [0 ... PG_SIZE - 1] = 0xFF };   // past the end of the file
+
+// The page holding file offset `off` (pages counted from rom_base), from the cache or the card. A miss evicts the
+// least recently used page, so agnes's direct pointers (patch A5) are dropped with it.
+static const uint8_t *rom_page(void *host, uint32_t off)
 {
     nes_session_t *s = (nes_session_t *)host;
-    if (off >= s->rom_bytes) return 0xFF;
-    if (s->rom_all) return s->rom_all[off];
-    uint32_t tag = off >> PG_BITS;
-    if (tag == s->cur_tag) return s->cur_buf[off & (PG_SIZE - 1)];
+    if (off < s->rom_base || off >= s->rom_bytes) return PG_OPEN;
+    const uint32_t tag = (off - s->rom_base) >> PG_BITS;
+    if (s->rom_all) {
+        const uint32_t at = s->rom_base + (tag << PG_BITS);
+        return at + PG_SIZE <= s->rom_bytes ? s->rom_all + at : PG_OPEN;   // a truncated file's last page: open bus
+    }
+    if (tag == s->cur_tag) return s->cur_buf;
     int h = (int)(tag & (PG_HINT - 1)), g = s->hint[h];
     if (g < 0 || g >= s->pg_n || s->pg_tag[g] != tag) {
         g = -1;
@@ -256,17 +268,24 @@ static uint8_t rom_read(void *host, uint32_t off)
             int v = 0;
             for (int i = 1; i < s->pg_n; i++) if (s->pg_age[i] < s->pg_age[v]) v = i;
             size_t got = 0;
-            if (fseek(s->fp, (long)(tag << PG_BITS), SEEK_SET) == 0) got = fread(s->pg[v], 1, PG_SIZE, s->fp);
+            if (fseek(s->fp, (long)(s->rom_base + (tag << PG_BITS)), SEEK_SET) == 0) got = fread(s->pg[v], 1, PG_SIZE, s->fp);
             if (got < PG_SIZE) memset(s->pg[v] + got, 0xFF, PG_SIZE - got);
             s->pg_tag[v] = tag;
             s->misses++;
             g = v;
+            agnes_drop_windows(s->a);                // one of them may have pointed at the page just replaced
         }
         s->hint[h] = (int8_t)g;
     }
     s->pg_age[g] = ++s->pg_clock;
     s->cur_tag = tag; s->cur_buf = s->pg[g];
-    return s->cur_buf[off & (PG_SIZE - 1)];
+    return s->cur_buf;
+}
+static uint8_t rom_read(void *host, uint32_t off)
+{
+    nes_session_t *s = (nes_session_t *)host;
+    if (off < s->rom_base) return s->rom_all ? s->rom_all[off] : 0xFF;   // the header: agnes never reads it here
+    return rom_page(host, off)[(off - s->rom_base) & (PG_SIZE - 1)];
 }
 
 static void on_line(void *host, const uint8_t *line, int y)
@@ -431,9 +450,12 @@ esp_err_t nucleo_nes_open(const char *rom_path, nucleo_nes_line_fn line_cb, void
         if (s->pg_n < PG_MIN) { ESP_LOGE(TAG, "only %d cartridge pages fit", s->pg_n); session_free(s); return ESP_ERR_NO_MEM; }
     }
 
-    a->rom_read = rom_read; a->on_line = on_line; a->apu_write = apu_write; a->apu_read = apu_read; a->host = s;
+    a->rom_read = rom_read; a->rom_page = rom_page; a->on_line = on_line; a->apu_write = apu_write; a->apu_read = apu_read;
+    a->host = s;
+    s->rom_base = (hdr[6] & 4) ? 16 + 512 : 16;      // the PRG data: after the header and any trainer
     // agnes reads only the header through `data` (patch A1); the size it checks against is the file's.
     if (!agnes_load_ines_data(a, hdr, (size_t)sz)) { session_free(s); return ESP_ERR_NOT_SUPPORTED; }
+    if (a->gamepack.prg_rom_offset != s->rom_base) { session_free(s); return ESP_ERR_NOT_SUPPORTED; }
 
     const agnes_color_t *pc = agnes_palette();
     for (int i = 0; i < 64; i++) {
@@ -474,6 +496,7 @@ void nucleo_nes_run_frame(void)
     nes_session_t *s = S;
     if (!s) return;
     int64_t t0 = esp_timer_get_time();
+    s->a->skip_draw = s->frameskip && (s->clock & 1);
     agnes_next_frame(s->a);
     int64_t t1 = esp_timer_get_time();
     s->us_cpu += (uint32_t)(t1 - t0);
@@ -496,7 +519,9 @@ void nucleo_nes_set_buttons(uint8_t m)
 }
 
 const char *nucleo_nes_title(void) { return S ? S->title : ""; }
-void nucleo_nes_set_frameskip(bool on) { (void)on; }   // agnes always draws; the front-end paces itself
+// Every other frame unseen (the front-end's relief lever): agnes then resolves only the sprite-0 hit per line,
+// and the host gets no lines for it.
+void nucleo_nes_set_frameskip(bool on) { if (S) S->frameskip = on; }
 void nucleo_nes_geometry(int *w, int *h) { *w = NUCLEO_NES_W; *h = NUCLEO_NES_H; }
 
 // ── save states: "NNS1", the console (agnes_t), the APU ────────────────────────────────────────────────
@@ -545,6 +570,8 @@ esp_err_t nucleo_nes_state_load(int slot)
            && fread(&S->apu, 1, sizeof S->apu, f) == sizeof S->apu;
     fclose(f);
     a->rom_read = rr; a->on_line = ol; a->apu_write = aw; a->apu_read = ar; a->host = S;
+    a->rom_page = rom_page;
+    agnes_drop_windows(a);
     a->gamepack.data = NULL;
     a->cpu.agnes = a; a->ppu.agnes = a;
     switch (a->gamepack.mapper) {
