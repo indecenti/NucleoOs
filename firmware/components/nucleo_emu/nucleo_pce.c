@@ -297,7 +297,7 @@ static void psg_render(pce_t *s)
     const uint32_t frame_cyc = LINES * LINE_CYC;
     int li = 0;
     for (int i = 0; i < APU_SPF; i++) {
-        const uint32_t at = (uint32_t)((uint64_t)i * frame_cyc / APU_SPF);
+        const uint32_t at = (uint32_t)i * frame_cyc / APU_SPF;   // 535 x 119,665 fits 32 bits (no 64-bit division in a module)
         while (li < s->log_n && s->log[li].cyc <= at) { psg_reg(s->log[li].reg, s->log[li].val); li++; }
         const uint8_t lmal = SCALE[(m->psg_balance >> 4) & 15], rmal = SCALE[m->psg_balance & 15];
         int32_t out = 0;
