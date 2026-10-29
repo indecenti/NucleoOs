@@ -247,3 +247,12 @@ Home, right after ANIMA, so the way back is one step away. Turning an option off
   of play on either board. Not yet exercised there: the install path over HTTPS (the published store is not
   pushed yet; the engine is host-tested), Poker (built in on this firmware), the store-side unload when
   switching between two native apps.
+
+**ABI level 7 (2026-10-29): the cartridge from internal flash.** `nucleo_rom_map(path, &size, progress, user)` /
+`nucleo_rom_unmap()` (`firmware/components/nucleo_app/nucleo_romstore.c`). A file too big for RAM is copied once
+into the OTA slot the device is not running and mapped through the MMU: the module reads it like RAM, through the
+CPU's data cache, instead of a page cache filled from the SD card. Only on our own partition layout (never under
+M5Launcher, whose slots are other apps) and only once the running firmware is confirmed (until then the other slot
+is the way back). The slot's first 64 KB block holds a header (magic, path, size, date, FNV of the first 4 KB),
+erased first and written last; the cartridge starts at the second block. The next OTA overwrites the copy; the next
+game copies again. Modules built for level 7 need firmware 7.

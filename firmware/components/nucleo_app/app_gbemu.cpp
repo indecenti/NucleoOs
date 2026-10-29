@@ -1512,6 +1512,26 @@ static void fail_draw(void)
     d.setTextColor(FG, BG);    d.setCursor(16, y + 22); d.print(st->fail);
     d.setTextColor(DIM, BG);   d.setCursor(16, y + 34); d.print(SYS->trace_name);
 }
+// A big cartridge's first start: it is copied into the internal flash (nucleo_romstore), seconds per megabyte.
+// Said on the screen, with how far it is, instead of a black screen that looks hung.
+static void copy_progress(uint32_t done, uint32_t total, void *user)
+{
+    (void)user;
+    const int pct = total ? (int)((uint64_t)done * 100 / total) : 0;
+    int top = nucleo_app_content_top(), ch = nucleo_app_content_height();
+    int y = top + ch / 2 - 24;
+    d.startWrite();
+    d.fillRect(8, y, 224, 48, BG);
+    d.drawRoundRect(8, y, 224, 48, 8, ACC);
+    d.setTextSize(1);
+    d.setTextColor(FG, BG);  d.setCursor(16, y + 8);
+    d.print(TR5("Copio la cartuccia in memoria", "Copying the cartridge in", "Copiando el cartucho", "Copie de la cartouche", "Kopiere das Modul"));
+    d.setTextColor(DIM, BG); d.setCursor(16, y + 20);
+    d.print(TR5("solo la prima volta", "only the first time", "solo la primera vez", "seulement la 1re fois", "nur beim ersten Mal"));
+    d.fillRoundRect(16, y + 34, 192, 6, 3, LINE);
+    d.fillRoundRect(16, y + 34, 192 * pct / 100, 6, 3, ACC);
+    d.endWrite();
+}
 static void fail_box(const char *what)
 {
     snprintf(st->fail, sizeof st->fail, "%s", what);
@@ -1619,6 +1639,7 @@ static void play_session(const char *name)
     }
 
     esp_task_wdt_reset();
+    if (!strcmp(SYS->id, "pceemu")) nucleo_pce_set_progress(copy_progress, nullptr);
     esp_err_t err = SYS->open(path);
     esp_task_wdt_reset();
     if (err != ESP_OK) {

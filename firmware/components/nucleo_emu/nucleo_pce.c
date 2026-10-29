@@ -27,6 +27,10 @@
 bool nucleo_cowork_run(void (*fn)(void *arg), void *arg);
 void nucleo_cowork_wait(void);
 void nucleo_cowork_stop(void);
+// The cartridge from internal flash (firmware nucleo_app/nucleo_romstore.h, ABI level 7).
+const uint8_t *nucleo_rom_map(const char *path, uint32_t *size, void (*progress)(uint32_t done, uint32_t total, void *user),
+                              void *user);
+void nucleo_rom_unmap(void);
 #include <stdint.h>
 #include "emu_audio.h"
 #include "esp_log.h"
@@ -144,6 +148,7 @@ typedef struct {
     FILE      *fp;
     uint32_t   rom_base, rom_bytes, data_bytes;      // the HuCard data starts at rom_base (a 512-byte copier header)
     uint8_t   *rom_all;
+    bool       rom_mapped;                           // rom_all is the cartridge mapped from flash (nucleo_romstore)
     uint8_t   *chunk[PG_SLOTS / PPC];                // the pages' 1 KB blocks
     uint16_t   pg_tag[PG_SLOTS], pg_age[PG_SLOTS], pg_clock;   // 16 bits: the tables stay small next to the pages
     int        pg_n;
@@ -191,6 +196,9 @@ typedef struct {
 } pce_t;
 
 static pce_t *PCE;
+static void (*s_progress)(uint32_t done, uint32_t total, void *user);
+static void *s_progress_user;
+void nucleo_pce_set_progress(void (*fn)(uint32_t done, uint32_t total, void *user), void *user) { s_progress = fn; s_progress_user = user; }
 static inline void lines_touch(void);           // described lines drawn first: VRAM, sprite table or palette changes
 
 static inline uint32_t pce_ccount(void)
@@ -1071,7 +1079,7 @@ static void session_free(pce_t *s)
     if (s->sound) { s->sound = false; nucleo_audio_pcm_close(); }
     if (s->fp) fclose(s->fp);
     for (int i = 0; i < s->pg_n; i += PPC) free(s->chunk[i / PPC]);
-    free(s->rom_all);
+    if (s->rom_mapped) nucleo_rom_unmap(); else free(s->rom_all);
     free(s->vram[0]); free(s->vram[1]);
     free(s->batch[0]); free(s->batch[1]); free(s->spr_here); free(s->kw);
     free(s);
@@ -1173,6 +1181,19 @@ esp_err_t nucleo_pce_open(const char *rom_path, nucleo_pce_line_fn line_cb, void
         if (s->rom_all && fread(s->rom_all, 1, (size_t)sz, s->fp) != (size_t)sz) { free(s->rom_all); s->rom_all = NULL; }
         if (s->rom_all) { s->heap_bytes += (size_t)sz; fclose(s->fp); s->fp = NULL; }
     }
+    // Too big for RAM: the cartridge mapped from the internal flash, read like RAM (copied there the first time).
+    // No page cache, no card reads while playing, and the RAM the cache took stays with the game.
+    if (!s->rom_all && !test_pages) {
+        uint32_t msz = 0;
+        const uint8_t *m = nucleo_rom_map(rom_path, &msz, s_progress, s_progress_user);
+        if (m && msz == (uint32_t)sz) {
+            s->rom_all = (uint8_t *)m;                   // never written: the windows only read it
+            s->rom_mapped = true;
+            fclose(s->fp); s->fp = NULL;
+        } else if (m) {
+            nucleo_rom_unmap();
+        }
+    }
     // The other core's worker (its 4 KB stack) before the cartridge pages take the heap down to KEEP.
     nucleo_cowork_run(noop_job, NULL);
     nucleo_cowork_wait();
@@ -1196,7 +1217,7 @@ esp_err_t nucleo_pce_open(const char *rom_path, nucleo_pce_line_fn line_cb, void
     map_banks();
     machine_reset();
     ESP_LOGI(TAG, "'%s' %u KB%s, %s, heap %u B, sound %s", s->title, (unsigned)(s->data_bytes / 1024), s->sf2 ? " (SF2 mapper)" : "",
-             s->rom_all ? "resident" : "paged", (unsigned)s->heap_bytes, s->sound ? "on" : "off");
+             s->rom_mapped ? "mapped from flash" : s->rom_all ? "resident" : "paged", (unsigned)s->heap_bytes, s->sound ? "on" : "off");
     return ESP_OK;
 }
 
@@ -1211,10 +1232,11 @@ static void profile_write(pce_t *s)
                    w = (unsigned)((uint32_t)(s->prof_wait >> 10) / n * 16 / 375);
     FILE *f = fopen(s->trace_path, "a");
     if (!f) return;
-    fprintf(f, "  pce profile: %u frames (%u drawn), ms/frame: huc6280 %u.%u  vdc %u.%u  panel lines %u.%u  wait 2nd core %u.%u  psg+speaker %u.%u, idle skipped %u%%, lines with sprite irq evaluated here %u%%, cartridge misses %u\n",
+    fprintf(f, "  pce profile: %u frames (%u drawn), ms/frame: huc6280 %u.%u  vdc %u.%u  panel lines %u.%u  wait 2nd core %u.%u  psg+speaker %u.%u, idle skipped %u%%, lines with sprite irq evaluated here %u%%, cartridge %s, misses %u\n",
             (unsigned)n, (unsigned)s->prof_drawn, c / 10, c % 10, v / 10, v % 10, l / 10, l % 10, w / 10, w % 10, a / 10, a % 10,
             (unsigned)((uint32_t)(s->prof_idle >> 10) / n * 1024u / (LINES * LINE_CYC / 100)),   // no 64-bit division
-            (unsigned)(s->prof_lines_here * 100u / (s->prof_lines_other + s->prof_lines_here + 1)), (unsigned)s->prof_misses);
+            (unsigned)(s->prof_lines_here * 100u / (s->prof_lines_other + s->prof_lines_here + 1)),
+            s->rom_mapped ? "mapped from flash" : s->rom_all ? "in RAM" : "paged from the card", (unsigned)s->prof_misses);
     fclose(f);
 }
 
