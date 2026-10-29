@@ -529,3 +529,42 @@ wait for the other core first. Pictures are identical to drawing in place (Contr
 Frame-skip and the sound's make-up samples follow the work, not the clock: the time since the last frame minus its
 wait on the speaker. Measured on the clock, the speaker's pacing wait read as lateness: three frames in four went
 unseen and the console sat at 56-58 fps.
+
+## 9. PC Engine (`pceemu`, store only)
+
+`nucleo_pce.c` is our machine around MAME's HuC6280 (BSD-3, made plain C by `tools/emu-host/gen_h6280.py` into
+`vendor/h6280/h6280_core.h`, regenerated, never edited); the VDC, VCE, PSG, pad and HuCard mapping are ours, written
+against MAME's huc6270 / huc6260 / c6280 at scanline resolution (263 lines of 455 CPU cycles). 64 KB of VRAM as two
+32 KB blocks, 8 KB work RAM, HuCards from the SD page cache (384 / 512 / 768 KB mirroring, Street Fighter II's bank
+register). The region comes from the file name ("(USA" = TurboGrafx-16). The store package brings its console to
+the Games gallery: `console.txt` + `console-pcengine.gfa` (`tools/gen-console-art.py`), no PC Engine in the firmware.
+
+**Speed (1.1).** First on the ADV: Aero Blasters 35 fps, 27.5 ms of work a frame. What changed, each checked on the
+40 cartridges of the test set (2,400 frames each: every dumped frame and the whole sound's hash identical to the
+previous build):
+- **Exact idle skip** (`idle_after`, a hook after every instruction emitted by the generator): at a backward jump
+  the registers, flags, stack pointer, speed and counters of writes / I/O reads are compared with a snapshot taken
+  Brent-style; the same state with no write and no I/O read in between is a loop only an interrupt ends, so the
+  whole iterations before the leg's end (or the timer's expiry) are skipped. 37-78% of the CPU's cycles.
+- **Pixels on the other core**: each visible line is described as it starts (CR, MWR, BXR, latched BYR, raster
+  counter, width); four lines a hand-over are drawn by `nucleo_cowork`; a VRAM write, a sprite-table DMA or a
+  palette write waits for the queued lines. Lines whose sprite interrupts are on (collision, overflow: Aero Blasters,
+  Blazing Lazers, Air Zonk...) have their sprites evaluated on the CPU's core as they start; the pixels still go over.
+- **Tile rows through a plane table** (four lookups instead of 32 bit extractions), composed straight into the
+  output line in the 256-pixel mode; frames run unseen skip the background entirely.
+- **Pacing as the NES**: work-based debt, three unseen frames at most, a late frame's sound made long enough.
+- **Sound without a log**: the PSG's samples are made as the CPU reaches them (`psg_upto`), so a register write lands
+  between exactly the samples it fell between. Identical to the old 8 KB write log, minus its 1,024-write limit
+  (Blazing Lazers exceeded it: the old build lost those writes' timing).
+
+**RAM is the cartridge cache.** The first two-core build left 38 pages and fell to 7 fps in Aero Blasters' later
+stages (1,700 misses / 10 s). The cache now never evicts a page a CPU window shows (plain LRU did: a window is a
+pointer, its page never looked "used"), and the session gave back 14 KB (the log, four-line batches, a sprite row
+instead of a second drawer): 52 pages, Aero Blasters 50-55 fps with 442 misses in 100 s. On the host, misses in 60 s
+by cache size: 32 of 40 games are under 1,000 at 52 pages; Bonk III and Street Fighter II need well over 64
+(their banks change every frame), Legendary Axe and Bomberman '94 ~64. That RAM can only come from the firmware
+(static buffers of services a Solo boot never starts).
+
+Profile on the ADV (Aero Blasters, 100 s): HuC6280 10.3 ms, VDC on this core 1.4, panel lines 2.2, waiting for the
+other core 2.2, PSG + speaker 2.2 ms a frame; idle skipped 60%. Next: the HuC6280's dispatch (MAME's function
+table) as one switch like the NES's A6.
