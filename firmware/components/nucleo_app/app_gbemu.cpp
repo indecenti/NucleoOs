@@ -395,6 +395,7 @@ struct EState {
     // hitch) and a wake of the card on a 120 mAh battery. Averages keep the picture; min keeps the dips.
     int      tw_n, tw_fps_sum, tw_fps_min, tw_cpu_sum, tw_blit_sum, tw_aud_sum, tw_sd_sum;
     uint32_t tw_miss;
+    uint32_t tw_gaps;        // the speaker's queue ran dry this window (clicks)
     uint8_t  stash[SRC_W];   // the line being blended into the next one (see on_line)
     uint16_t stash16[256];   // ...the same for a colour line (on_line16), up to a Master System line
     uint8_t  hsrc[240];      // Master System lines: output column -> first source column (hscale_build)
@@ -1962,17 +1963,18 @@ static void play_session(const char *name)
             st->tw_cpu_sum += st->ms_cpu; st->tw_blit_sum += st->ms_blit; st->tw_aud_sum += st->ms_aud;
             st->tw_sd_sum += (int)(w.us_miss / nf / 100);   // the card's page reads, in tenths of a ms per frame
             st->tw_miss += w.bank_misses;
+            st->tw_gaps += w.audio_gaps;
             if (st->tw_n >= TRACE_WIN || w.core_errors) {
                 int n = st->tw_n;
-                trace("  %ds fps avg=%d min=%d cpu=%d.%dms blit=%d.%dms audio=%d.%dms misses=%u sd=%d.%dms relief=%d err=%u@%04X",
+                trace("  %ds fps avg=%d min=%d cpu=%d.%dms blit=%d.%dms audio=%d.%dms gaps=%u misses=%u sd=%d.%dms relief=%d err=%u@%04X",
                       n, st->tw_fps_sum / n, st->tw_fps_min,
                       st->tw_cpu_sum / n / 10, st->tw_cpu_sum / n % 10,
                       st->tw_blit_sum / n / 10, st->tw_blit_sum / n % 10,
-                      st->tw_aud_sum / n / 10, st->tw_aud_sum / n % 10,
+                      st->tw_aud_sum / n / 10, st->tw_aud_sum / n % 10, (unsigned)st->tw_gaps,
                       (unsigned)st->tw_miss, st->tw_sd_sum / n / 10, st->tw_sd_sum / n % 10, st->relief,
                       (unsigned)w.core_errors, (unsigned)w.core_err_addr);
                 st->tw_n = 0; st->tw_fps_sum = st->tw_cpu_sum = st->tw_blit_sum = st->tw_aud_sum = st->tw_sd_sum = 0;
-                st->tw_miss = 0;
+                st->tw_miss = 0; st->tw_gaps = 0;
             }
             // A core error is an invalid opcode: the game has run off into data and will not come
             // back on its own. Say so once, and point at the way out, instead of leaving a frozen

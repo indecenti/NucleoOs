@@ -116,6 +116,7 @@ typedef struct {
     int64_t       last_t0, last_block;          // the last frame's start and its wait on the speaker
     int32_t       debt;                         // work beyond the 60.1 Hz budget, us (frame-skip pays it back)
     emu_afilt_t   afilt;
+    emu_aclock_t  aclk;                         // the speaker's queue, for the trace (emu_audio.h)
     uint16_t      mix_pulse[31], mix_tnd[203];  // the NES mixer's two curves, as 16-bit levels
     bool          sound;
     bool          frameskip;
@@ -523,6 +524,7 @@ esp_err_t nucleo_nes_open(const char *rom_path, nucleo_nes_line_fn line_cb, void
 
     // Sound before the cache, so its DMA buffers are paid for first.
     s->sound = nucleo_audio_pcm_open_ex(APU_RATE, 1, EMU_AUDIO_QUEUE_FRAMES * APU_SPF) == ESP_OK;
+    s->aclk.rate = APU_RATE;
     if (!s->sound) ESP_LOGW(TAG, "speaker unavailable — playing silently");
 
     // The whole cartridge when it fits with room to spare; else the page cache.
@@ -657,6 +659,7 @@ void nucleo_nes_run_frame(void)
     if (s->sound) {
         emu_afilt_run(&s->afilt, s->pcm, n, 1, 1);
         const int64_t w0 = esp_timer_get_time();
+        emu_aclock_write(&s->aclk, esp_timer_get_time(), n);
         nucleo_audio_pcm_write(s->pcm, (size_t)n * sizeof s->pcm[0]);
         const int64_t w1 = esp_timer_get_time();
         s->last_block = w1 - w0;                      // waiting for room in the queue: the pace
@@ -787,6 +790,7 @@ void nucleo_nes_get_stats(nucleo_gb_stats_t *out)
     out->us_audio = s->us_audio;
     out->cart_type = s->mapper;
     out->save_dirty = s->battery && prg_ram(s) && sum8k(prg_ram(s)) != s->sav_sum;
+    out->audio_gaps = s->aclk.gaps;
 }
 
 void nucleo_nes_reset_counters(void)
@@ -795,4 +799,5 @@ void nucleo_nes_reset_counters(void)
     S->us_cpu = S->us_audio = 0;
     S->misses = 0;
     S->frames = 0;
+    S->aclk.gaps = 0;
 }

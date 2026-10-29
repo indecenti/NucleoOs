@@ -45,6 +45,29 @@ static inline void emu_afilt_run(emu_afilt_t *f, int16_t *s, size_t n, int ch, i
     for (size_t i = 0; i < n; i++) s[i] = emu_afilt_one(&f[i % (size_t)ch], s[i], dc);
 }
 
+// The speaker's clock, as the emulator sees it: samples written against samples the DMA has played since the first
+// write (elapsed time x rate). Written below played means the queue ran dry and the DMA played silence there (a
+// click): a gap, counted, and the account restarts from what was played. The I2S clock and the timer agree within
+// ~1e-4 (a few hundred samples over minutes, against a queue of ~1,600), so a count is a real gap.
+typedef struct {
+    int64_t  t0;        // the first write (0 = none yet)
+    int64_t  last;      // the last write
+    int64_t  written;   // samples written since t0
+    int32_t  rate;
+    uint32_t gaps;
+} emu_aclock_t;
+
+// Before writing n samples (per channel). A write 100 ms after the last one follows a pause (the menu, a card
+// step): the queue drained on purpose, so the account starts again instead of counting it.
+static inline void emu_aclock_write(emu_aclock_t *c, int64_t now_us, int n)
+{
+    if (!c->t0 || now_us - c->last > 100000) { c->t0 = now_us; c->written = 0; }
+    c->last = now_us;
+    const int64_t played = (now_us - c->t0) * c->rate / 1000000;
+    if (c->written < played) { c->gaps++; c->written = played; }
+    c->written += n;
+}
+
 // How much sound the speaker queues ahead of the game: three frames (~50 ms). One frame late — a busy scene, an
 // SD read — then plays on instead of dropping to silence (a click), at the cost of 50 ms of latency.
 #define EMU_AUDIO_QUEUE_FRAMES 3

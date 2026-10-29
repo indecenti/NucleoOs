@@ -191,6 +191,7 @@ typedef struct {
     int16_t    pcm[2 * APU_SPF];                     // a late frame makes up to twice a frame's samples
     uint16_t   vol[32];
     emu_afilt_t afilt;
+    emu_aclock_t aclk;                               // the speaker's queue, for the trace (emu_audio.h)
     bool       sound, frameskip, skip;
     // Pacing (as nucleo_nes.c): how far behind the console is, from work only; frames run unseen while it is.
     int64_t    last_t0, last_block;
@@ -1118,6 +1119,7 @@ void nucleo_pce_run_frame(void)
     if (s->sound) {
         emu_afilt_run(&s->afilt, s->pcm, n, 1, 1);
         const int64_t w0 = esp_timer_get_time();
+        emu_aclock_write(&s->aclk, w0, n);
         nucleo_audio_pcm_write(s->pcm, (size_t)n * sizeof s->pcm[0]);
         const int64_t w1 = esp_timer_get_time();
         s->last_block = w1 - w0;
@@ -1258,6 +1260,7 @@ esp_err_t nucleo_pce_open(const char *rom_path, nucleo_pce_line_fn line_cb, void
     s->tg16 = strstr(rom_path, "(USA") != NULL || strstr(rom_path, "(U)") != NULL;
 
     s->sound = nucleo_audio_pcm_open_ex(APU_RATE, 1, EMU_AUDIO_QUEUE_FRAMES * APU_SPF) == ESP_OK;
+    s->aclk.rate = APU_RATE;
     if (!s->sound) ESP_LOGW(TAG, "speaker unavailable — playing silently");
 
 #ifdef NUCLEO_HOST_TEST
@@ -1470,6 +1473,7 @@ void nucleo_pce_get_stats(nucleo_gb_stats_t *out)
     out->us_cpu = s->us_cpu;
     out->us_audio = s->us_audio;
     out->us_miss = s->us_miss;
+    out->audio_gaps = s->aclk.gaps;
 }
 void nucleo_pce_reset_counters(void)
 {
@@ -1477,4 +1481,5 @@ void nucleo_pce_reset_counters(void)
     PCE->us_cpu = PCE->us_audio = PCE->us_miss = 0;
     PCE->misses = 0;
     PCE->frames = 0;
+    PCE->aclk.gaps = 0;
 }

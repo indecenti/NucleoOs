@@ -144,6 +144,7 @@ typedef struct {
     struct minigb_apu_ctx apu;          // Game Boy sound chip state (context-based, no globals)
     audio_sample_t audio[AUDIO_SAMPLES_TOTAL];   // one frame of stereo samples (~2.2 KB)
     emu_afilt_t   afilt[2];             // the speaker stage, one per channel (emu_audio.h)
+    emu_aclock_t  aclk;                 // the speaker's queue, for the trace (emu_audio.h)
     bool          sound;                // false when the speaker could not be claimed
 
     FILE         *fp;                   // open ROM on the SD card
@@ -825,6 +826,7 @@ esp_err_t nucleo_gb_open(const char *rom_path, gb_line_fn_t on_line, void *user)
     // would be the wrong trade on a games machine. It opens HERE, before the page cache, so its DMA
     // channel is already paid for when the greedy cache below decides how much of the heap to take.
     s->sound = (nucleo_audio_pcm_open_ex(AUDIO_SAMPLE_RATE, AUDIO_CHANNELS, EMU_AUDIO_QUEUE_FRAMES * AUDIO_SAMPLES) == ESP_OK);
+    s->aclk.rate = AUDIO_SAMPLE_RATE;
     if (!s->sound) ESP_LOGW(TAG, "speaker unavailable — playing silently");
 
     // Prefer holding the WHOLE ROM: it removes SD traffic from the hot path entirely, and the small
@@ -971,6 +973,7 @@ void nucleo_gb_run_frame(void)
         minigb_apu_audio_callback(&S->apu, S->audio);
         emu_afilt_run(S->afilt, S->audio, AUDIO_SAMPLES_TOTAL, AUDIO_CHANNELS, 1);   // the APU's DAC has a DC offset
         const int64_t w0 = esp_timer_get_time();
+        emu_aclock_write(&S->aclk, w0, AUDIO_SAMPLES);
         nucleo_audio_pcm_write(S->audio, sizeof(S->audio));
         S->last_block = esp_timer_get_time() - w0;
         S->us_audio += (uint32_t)(esp_timer_get_time() - t1);
@@ -1011,6 +1014,7 @@ void nucleo_gb_reset_counters(void)
     S->bank_misses = 0;
     S->us_miss = 0;
     S->frames = 0;
+    S->aclk.gaps = 0;
 }
 
 // ── save states ─────────────────────────────────────────────────────────────────────────────────
@@ -1202,6 +1206,7 @@ void nucleo_gb_get_stats(nucleo_gb_stats_t *out)
     out->save_dirty   = S->cart_ram_dirty;
     out->ram_swaps    = S->ram_swaps;
     out->ram_banked   = S->cart_ram_bytes && ram_swapped(S);
+    out->audio_gaps   = S->aclk.gaps;
 }
 
 void nucleo_gb_get_regs(nucleo_gb_regs_t *out)

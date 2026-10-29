@@ -136,6 +136,7 @@ typedef struct {
 
     int16_t       pcm[PSG_SPF];
     emu_afilt_t   afilt;                        // the speaker stage (emu_audio.h)
+    emu_aclock_t  aclk;                         // the speaker's queue, for the trace (emu_audio.h)
     int           psg_pos;
     bool          sound;
 
@@ -1411,6 +1412,7 @@ esp_err_t nucleo_gg_open(const char *rom_path, nucleo_gg_line_fn on_line, void *
 
     // The speaker before the pool, so its DMA channel is paid for before the pool takes what is left.
     s->sound = nucleo_audio_pcm_open_ex(PSG_RATE, 1, EMU_AUDIO_QUEUE_FRAMES * PSG_SPF) == ESP_OK;
+    s->aclk.rate = PSG_RATE;
     if (!s->sound) ESP_LOGW(TAG, "speaker unavailable — playing silently");
 
     for (int i = 0; i < PG_SLOTS; i++) s->pg_tag[i] = PG_EMPTY;
@@ -1498,6 +1500,7 @@ void nucleo_gg_run_frame(void)
     psg_run(s, PSG_SPF);
     if (s->sound) {
         emu_afilt_run(&s->afilt, s->pcm, PSG_SPF, 1, 0);
+        emu_aclock_write(&s->aclk, esp_timer_get_time(), PSG_SPF);
         nucleo_audio_pcm_write(s->pcm, sizeof s->pcm);
         s->us_audio += (uint32_t)(esp_timer_get_time() - t1);
     }
@@ -1542,6 +1545,7 @@ void nucleo_gg_reset_counters(void)
     S->us_cpu = S->us_audio = 0;
     S->misses = 0;
     S->frames = 0;
+    S->aclk.gaps = 0;
 }
 
 void nucleo_gg_get_stats(nucleo_gb_stats_t *out)
@@ -1558,6 +1562,7 @@ void nucleo_gg_get_stats(nucleo_gb_stats_t *out)
     out->rom_paged    = !out->rom_resident;
     out->bank_misses  = s->misses;
     out->frames       = s->frames;
+    out->audio_gaps   = s->aclk.gaps;
     out->us_cpu       = s->us_cpu;
     out->us_audio     = s->us_audio;
     out->cart_type    = s->codies ? 1 : 0;
