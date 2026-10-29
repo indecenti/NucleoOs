@@ -31,7 +31,9 @@ source of truth for how the system works.
 | Doc | What you get |
 |---|---|
 | [device-ui.md](device-ui.md) | The on-device UI: launcher carousel, key map, Spotlight search, pins, Recent, and the Control Center (TAB). |
-| [external-display.md](external-display.md) | Optional second screen on the Cardputer ADV EXT header (ILI9341 / ST7789V + XPT2046, module V1.1/V1.2): wiring, runtime detection, the 1:1 mirror, settings, tester diagnostics. |
+| [external-display.md](external-display.md) | Optional second screen on the Cardputer ADV EXT header (ILI9341 / ST7789V + XPT2046, module V1.1/V1.2): wiring, runtime detection, touch, settings, tester diagnostics. |
+| [two-screens-large-view.md](two-screens-large-view.md) | The two-screen rule in practice: every app draws a native 320x240 touch UI on the panel (`on_draw_large`), the Cardputer becomes the companion — never a mirror. |
+| [display-power.md](display-power.md) | One manager for dim / off / wake on both screens (`pm_hook()`), on the phone/watch model. |
 | [app-categories.md](app-categories.md) | How the native launcher groups apps by *use*, its capacity limits, and the category reorganization. *(inventory tables are a snapshot — `npm run launcher:test` has the live tree)* |
 | [media.md](media.md) | Media playback model — the device serves bytes, the browser decodes; plus the optional on-device audio/video paths. |
 | [voice.md](voice.md) | The on-device push-to-talk keyword recognizer (AVCEB: MFCC · CMN · DTW), trained by the Voice Manager app. |
@@ -70,6 +72,10 @@ ANIMA is NucleoOS's offline natural-language assistant (retrieval + reasoning in
 
 | Doc | What you get |
 |---|---|
+| [app-system.md](app-system.md) | Where the app system is going: from apps compiled into the firmware to a signed, scalable platform (done / next / planned). |
+| [app-store.md](app-store.md) | The Cardputer app store — signed packages on the SD, the two channels (native C, web app), the client in the firmware. |
+| [native-apps.md](native-apps.md) | Native C/C++ apps installed from the store and loaded from the SD, with the same API and look as built-in apps. |
+| [store-usage-data.md](store-usage-data.md) | How the store could give the maintainer private usage data without breaking its guarantees. *(design, not built)* |
 | [app-manifest.md](app-manifest.md) | The `manifest.json` schema every app bundle declares. |
 | [app-runtimes.md](app-runtimes.md) | The four runtime tiers — `web` · `vm` · `service` · `elf` — and why `web` dominates on a no-PSRAM board. |
 | [registry.md](registry.md) | The OS registry: installed apps, file associations, settings, and how file-open resolves. |
@@ -77,6 +83,7 @@ ANIMA is NucleoOS's offline natural-language assistant (retrieval + reasoning in
 | [notify-protocol.md](notify-protocol.md) | The single notification backbone (bus topic `notify.post`) feeding the web center + device. |
 | [native-ui-kit.md](native-ui-kit.md) | The style contract every native app must follow (theme roles, primitives) so the OS looks like one product. |
 | [native-emulation.md](native-emulation.md) | What the device can emulate itself in firmware C — Game Boy and Game Gear ship; the rest is analysis. |
+| [costellazioni.md](costellazioni.md) | Costellazioni — one shared campaign: a compact native space game on the Cardputer, an immersive 3D one in the web OS. *(design; parts built)* |
 | [game-mini-vs.md](game-mini-vs.md) | A worked native-game build plan (a horde survivor) and its hard RAM/perf contract. *(build plan)* |
 
 ## System internals
@@ -84,7 +91,7 @@ ANIMA is NucleoOS's offline natural-language assistant (retrieval + reasoning in
 | Doc | What you get |
 |---|---|
 | [architecture.md](architecture.md) | The system principles and layer model (boot, core services, app runtime, transport, UIs). |
-| [memory-budget.md](memory-budget.md) | The riskiest bet: fitting Wi-Fi/BLE/HTTP/display/bus into ~512 KB via mutually-exclusive transport profiles. |
+| [memory-budget.md](memory-budget.md) | The riskiest bet: fitting Wi-Fi/BLE/HTTP/display/bus into ~512 KB — and the two RAM regimes: ~18 KB free in the full OS, ~65–90 KB (≈32 KB contiguous) in an app's Solo boot. |
 | [partition-table.md](partition-table.md) | The 8 MB flash layout — dual OTA banks (`ota_0`/`ota_1`), no factory, coredump + config partitions. |
 | [m5launcher.md](m5launcher.md) | Running as a guest of M5Launcher — the Launcher boot model, what guest mode changes (no self-OTA, Back to M5Launcher), and how to publish on M5Burner so it appears in the Launcher's OTA list. |
 | [sd-content-install.md](sd-content-install.md) | The release SD payload (built from sources, per-file manifest, hosted on Pages) and the design of the device downloading its SD content by itself — ownership rules, failure handling, test plan. |
@@ -100,6 +107,7 @@ ANIMA is NucleoOS's offline natural-language assistant (retrieval + reasoning in
 | [debugging.md](debugging.md) | The default host-first dev loop — compile the real firmware C and run it on the PC; flash only to confirm. |
 | [testing.md](testing.md) | The verification system — one test registry feeding the gate, CLI and GUI; ANIMA's NL suites. |
 | [releasing.md](releasing.md) | The two independent release layers (firmware vs web/SD) and the OTA / SD-sync channels for each. |
+| [release-signing.md](release-signing.md) | Offline signing of firmware and SD content with the release key; the device refuses what does not verify. |
 | [versioning.md](versioning.md) | The single-source-of-truth firmware version string, auto-incremented and reported identically everywhere. |
 
 ## History & maintenance notes
@@ -111,7 +119,7 @@ Point-in-time records — useful for context and decisions already made, not cur
 | [original-plan.md](archive/original-plan.md) | The original execution plan NucleoOS started from — v1 core vs. phased innovation roadmap. *(historical)* |
 | [maintenance-2026-06.md](archive/maintenance-2026-06.md) | June 2026 hardening pass — dead-code removal, RAM/fragmentation and concurrency fixes. *(historical)* |
 | [maintenance-2026-08.md](archive/maintenance-2026-08.md) | August 2026 pass — making the test harness portable off-Windows and hunting real correctness bugs. *(historical)* |
-| [maintenance-2026-09.md](maintenance-2026-09.md) | September 2026 web-OS consolidation — the browser E2E suite and the fixes it found. *(historical)* |
+| [maintenance-2026-09.md](archive/maintenance-2026-09.md) | September 2026 web-OS consolidation — the browser E2E suite and the fixes it found. *(historical)* |
 | [shell-cache-log.md](shell-cache-log.md) | The service-worker cache-version changelog for `web/shell/sw.js` (why each roll happened). |
 | [roadmap.md](roadmap.md) | The honest overall state — what a real OS needs, what exists vs is still designed. *(roadmap)* |
 | [repo-history-purge.md](repo-history-purge.md) | A one-time, deliberately-manual runbook to strip non-distributable blobs from git history. *(runbook)* |
