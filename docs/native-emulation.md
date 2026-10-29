@@ -573,3 +573,28 @@ stays ~2.5 KB. Paged and resident runs give the same pictures and the same sound
 Profile on the ADV (Aero Blasters, 100 s): HuC6280 10.3 ms, VDC on this core 1.4, panel lines 2.2, waiting for the
 other core 2.2, PSG + speaker 2.2 ms a frame; idle skipped 60%. Next: the HuC6280's dispatch (MAME's function
 table) as one switch like the NES's A6.
+
+**The cartridge from internal flash (ABI 7, 1.2).** Street Fighter II stayed at 13-20 fps however the cache was
+tuned: the card costs ~3-5 ms a read on the ADV (its panel shares the SPI bus) and a 2.5 MB HuCard read through
+48 KB of RAM cannot avoid it. PCE-Go and the other ESP32 emulators answer that with PSRAM, which the Cardputer has
+not. What it has is 8 MB of flash, read through the MMU and the 32 KB data cache, and an OTA slot that nothing needs
+while a game runs: it keeps the previous firmware only until the running one is confirmed. `nucleo_romstore` (firmware)
+copies a cartridge too big for RAM into that slot once (header erased first, written last; keyed by path, size,
+date and the first 4 KB) and maps it; the core reads it like RAM. Never under M5Launcher (its slots are other apps),
+never before the running firmware is confirmed; the next OTA overwrites the copy. Measured on the ADV, Street Fighter
+II: 48-50 fps steady (was 13-20), 0 card reads, HuC6280 15.3 ms a frame, and 44 KB of heap free while playing (8
+before: the page cache is gone). Game Boy / Color and the NES use it too (Zelda DX, the other cartridge the card
+held back). The first start of such a cartridge shows a progress box: seconds per megabyte, once.
+
+**What the CPU costs, and where.** Street Fighter II executes ~17,500 HuC6280 instructions a frame (40% of its cycles
+are idle and skipped). On the ADV that was ~390 ESP32 cycles an instruction: a store module runs from flash, read 2
+bits at a time (DIO, the bootloader's mode, not OTA-changeable), so every instruction-cache miss costs ~2 us.
+- The dispatch: 64 opcodes (91% of what the 40 cartridges execute, `tools/emu-host/h6280_hot.txt`) inlined in the
+  switch, the rest cold functions: the hot loop 24.8 KB -> 8.3 KB.
+- The CPU's state and the memory windows each in one struct: a module is position-independent and every global
+  cost a literal (an address fetched through the instruction cache) and a load; one base register instead. 7.4 KB.
+- A 32 KB instruction cache took another 30% off, but costs the whole system 16 KB of SRAM: the largest free block
+  at rest fell from ~21.5 KB to 10.7 KB, under the 22 KB TLS needs (Store, updates, online ANIMA). Not kept.
+- Tried and measured without gain (reverted): VDC-status and joypad reads as idle-safe, re-arming the idle detector
+  at the loop's head after an interrupt. Street Fighter II's waits are already skipped; the rest is real work (the
+  game and its sample interrupt every ~1,000 cycles).
