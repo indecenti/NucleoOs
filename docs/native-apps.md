@@ -58,6 +58,10 @@ The rules that keep an installed app working across OS updates:
    `header`, `panel`, `message`), first needed by Tank Duel.
    Level 5 = level 4 + `nucleo_app_take_open_file` (the Games gallery opens an emulator on one cartridge, by its
    full path). The emulators' recipes move to level 5; the other modules keep the level of their recipe.
+   Level 6 = level 5 + `nucleo_cowork_run` / `_wait` / `_stop`: a job on the core the app does not run on
+   (`nucleo_app/nucleo_cowork.c`, a worker created on first use, removed by stop). The job must only compute: the
+   external panel shares the SD card's SPI bus, and a first NES build that pushed the panel from the worker
+   tripped the task watchdog on the ADV. The NES computes its pixels there (see `native-emulation.md` §8).
    Level 4 = level 3 + what the two emulators need (51 names): the sprite panel behind their scaler, the PCM sink,
    the second-screen surface and exclusive-mode calls, the heap probes, a few libc/libgcc helpers and the ROM
    inflater for zipped cartridges.
@@ -187,7 +191,7 @@ so the firmware image gets an empty file and the host gallery (`tools/ui-host/ap
 | App (id) | Module | Notes |
 |---|---|---|
 | Converter (`units`) | 23 KB (17 KB code + constants, 2.3 KB RAM, ABI 3) | 9 quantities; 5 languages in the source (the language comes from `settings.json`: `nucleo_tr5` is not in the ABI); numbers formatted with integers (no double helpers in the ABI) |
-| NES (`nesemu`, the emulators' front-end + agnes + our APU) | 111 KB (69 KB code, 11 KB constants, 5.3 KB RAM, ABI 4) | `nucleo_register_nesemu`; ROMs in `/data/ROMs/nes`; see `native-emulation.md` §8 |
+| NES (`nesemu`, the emulators' front-end + agnes + our APU) | 129 KB (81 KB code, 13 KB constants, 1.4 KB RAM, ABI 6) | `nucleo_register_nesemu`; ROMs in `/data/ROMs/nes`; see `native-emulation.md` §8 |
 
 With all three from the store (the default) the image is **3,461,120 B instead of 3,603,792 B: 142,672 B (139 KB)
 recovered**

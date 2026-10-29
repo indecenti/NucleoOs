@@ -504,3 +504,17 @@ picture gives way. Anemoia-ESP32 (GPL-3, studied only) reaches 60 fps without PS
 RAM: the mapper's 8 KB CHR RAM and 8 KB PRG RAM (A8) are allocated apart and only when the cartridge has them:
 a CHR-ROM game carries 8 KB less and the console is no longer one 24 KB block (SMB3, Kirby, Contra: 72 cache pages
 instead of 64 on the same heap). States are `NNS2` (the console, the APU, then those RAM blocks).
+
+**Exact idle skip and two cores (1.1).** A9, the idle-loop skip, is exact: at a loop's head the machine's state is
+the registers, the flags and the few RAM bytes the loop writes; Brent's cycle search finds when that state recurs
+and whole periods are skipped (a random byte stirred by Konami's wait loops included). An io event (a write
+outside work RAM, a read with a side effect, a change of the PPU's status flags between legs) or an interrupt resets
+the search. Checked by running ten games with and without the skip: every frame identical. Skipped: Zelda 72%,
+Mega Man 2 66%, Tetris 66%, SMB 59%, SMB3 59%, Ninja Gaiden 58%, Metroid 33%, Castlevania 24% of the 6502's
+cycles. A10 splits a visible line into a description, made on the CPU's core (the sprite-0 hit and the overflow,
+what the CPU can read, resolved there), and the pixels, computed on the other core (ABI 6, `nucleo_cowork`) eight
+lines per hand-over; the lines go to the screen from the CPU's core. A VRAM write, a page miss and a state save
+wait for the other core first. Pictures are identical to drawing in place (Contra, SMB3, Kirby).
+Frame-skip and the sound's make-up samples follow the work, not the clock: the time since the last frame minus its
+wait on the speaker. Measured on the clock, the speaker's pacing wait read as lateness: three frames in four went
+unseen and the console sat at 56-58 fps.
