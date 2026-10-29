@@ -524,7 +524,7 @@ esp_err_t nucleo_nes_open(const char *rom_path, nucleo_nes_line_fn line_cb, void
 
     // Sound before the cache, so its DMA buffers are paid for first.
     s->sound = nucleo_audio_pcm_open_ex(APU_RATE, 1, EMU_AUDIO_QUEUE_FRAMES * APU_SPF) == ESP_OK;
-    emu_aclock_open(&s->aclk, APU_RATE, EMU_AUDIO_QUEUE_FRAMES * APU_SPF);
+    emu_aclock_open(&s->aclk, APU_RATE, EMU_AUDIO_QUEUE_FRAMES * APU_SPF);   // (8 x 240: 3.6 frames)
     if (!s->sound) ESP_LOGW(TAG, "speaker unavailable — playing silently");
 
     // The whole cartridge when it fits with room to spare; else the page cache.
@@ -651,9 +651,9 @@ void nucleo_nes_run_frame(void)
     int64_t t1 = esp_timer_get_time();
     s->us_cpu += (uint32_t)(t1 - t0);
     const uint32_t c0 = agnes_ccount();
-    int n = APU_SPF;                                  // a cycle that overran by real work: its samples too
-    if (over > 1000) n += (int)((uint32_t)over * 4u / 125u);
-    if (n > 2 * APU_SPF) n = 2 * APU_SPF;
+    // The frame's samples by the speaker's queue (emu_aclock_size: its real level, held at 2.5 frames), no longer by
+    // a guess at how late the frame was.
+    const int n = s->sound ? emu_aclock_size(&s->aclk, esp_timer_get_time(), APU_SPF, 5 * APU_SPF / 2, 2 * APU_SPF) : APU_SPF;
     apu_render(s, n);
     s->last_block = 0;
     if (s->sound) {

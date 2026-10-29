@@ -393,9 +393,10 @@ struct EState {
     // The on-card trace, aggregated: one line per TRACE_WIN seconds instead of an fopen/append/fclose
     // every second — each of those is a FAT update on the SD bus in the middle of a frame (a visible
     // hitch) and a wake of the card on a 120 mAh battery. Averages keep the picture; min keeps the dips.
-    int      tw_n, tw_fps_sum, tw_fps_min, tw_cpu_sum, tw_blit_sum, tw_aud_sum, tw_sd_sum;
+    int      tw_n, tw_fps_sum, tw_fps_min, tw_cpu_sum, tw_blit_sum, tw_aud_sum, tw_sd_sum, tw_fe_sum;
     uint32_t tw_miss;
     uint32_t tw_gaps;        // the speaker's queue ran dry this window (clicks)
+    uint32_t us_fe;          // this second's time in the front-end before the core (input, the system bar), us
     uint8_t  stash[SRC_W];   // the line being blended into the next one (see on_line)
     uint16_t stash16[256];   // ...the same for a colour line (on_line16), up to a Master System line
     uint8_t  hsrc[240];      // Master System lines: output column -> first source column (hscale_build)
@@ -1844,6 +1845,7 @@ static void play_session(const char *name)
     bool bench_shot = false;                            // buttons on the same frames, whatever the speed (comparable)
 
     while (st->running) {
+        const int64_t fe0 = esp_timer_get_time();
         esp_task_wdt_reset();
         if (st->toast[0] && esp_timer_get_time() > st->toast_until) { st->toast[0] = '\0'; chrome_draw(); card_draw(false); }
 
@@ -1940,6 +1942,7 @@ static void play_session(const char *name)
         // One SPI transaction for the ENTIRE frame. run_frame calls on_line 135 times and each pushes
         // its band inside this single startWrite/endWrite, so the panel sees one uninterrupted sweep
         // top to bottom instead of nine separately-arbitrated writes.
+        st->us_fe += (uint32_t)(esp_timer_get_time() - fe0);
         d.startWrite();
         SYS->run_frame();
         if (st->band_line) band_push();          // a frame that ended on a partly filled band
@@ -1964,17 +1967,20 @@ static void play_session(const char *name)
             st->tw_sd_sum += (int)(w.us_miss / nf / 100);   // the card's page reads, in tenths of a ms per frame
             st->tw_miss += w.bank_misses;
             st->tw_gaps += w.audio_gaps;
+            st->tw_fe_sum += (int)(st->us_fe / nf / 100);
+            st->us_fe = 0;
             if (st->tw_n >= TRACE_WIN || w.core_errors) {
                 int n = st->tw_n;
-                trace("  %ds fps avg=%d min=%d cpu=%d.%dms blit=%d.%dms audio=%d.%dms gaps=%u misses=%u sd=%d.%dms relief=%d err=%u@%04X",
+                trace("  %ds fps avg=%d min=%d cpu=%d.%dms blit=%d.%dms audio=%d.%dms fe=%d.%dms gaps=%u misses=%u sd=%d.%dms relief=%d err=%u@%04X",
                       n, st->tw_fps_sum / n, st->tw_fps_min,
                       st->tw_cpu_sum / n / 10, st->tw_cpu_sum / n % 10,
                       st->tw_blit_sum / n / 10, st->tw_blit_sum / n % 10,
-                      st->tw_aud_sum / n / 10, st->tw_aud_sum / n % 10, (unsigned)st->tw_gaps,
+                      st->tw_aud_sum / n / 10, st->tw_aud_sum / n % 10, st->tw_fe_sum / n / 10, st->tw_fe_sum / n % 10,
+                      (unsigned)st->tw_gaps,
                       (unsigned)st->tw_miss, st->tw_sd_sum / n / 10, st->tw_sd_sum / n % 10, st->relief,
                       (unsigned)w.core_errors, (unsigned)w.core_err_addr);
                 st->tw_n = 0; st->tw_fps_sum = st->tw_cpu_sum = st->tw_blit_sum = st->tw_aud_sum = st->tw_sd_sum = 0;
-                st->tw_miss = 0; st->tw_gaps = 0;
+                st->tw_miss = 0; st->tw_gaps = 0; st->tw_fe_sum = 0;
             }
             // A core error is an invalid opcode: the game has run off into data and will not come
             // back on its own. Say so once, and point at the way out, instead of leaving a frozen

@@ -1093,8 +1093,9 @@ void nucleo_pce_run_frame(void)
         s->skip = s->debt > 0 && s->skipped < 1;
         s->skipped = s->skip ? (uint8_t)(s->skipped + 1) : 0;
     }
-    int n = APU_SPF;                                   // a frame that overran by real work: its samples too, so the
-    if (over > 1000) n += (int)((uint32_t)over * 4u / 125u);   // speaker never runs dry (32 kHz = 4/125 a us)
+    // The frame's samples by the speaker's queue (emu_aclock_size: its real level, held at 2.5 frames), decided as
+    // the frame starts (the PSG places its samples across it), no longer by a guess at how late the last one was.
+    int n = s->sound ? emu_aclock_size(&s->aclk, t0, APU_SPF, 5 * APU_SPF / 2, 2 * APU_SPF) : APU_SPF;
     if (n > 2 * APU_SPF) n = 2 * APU_SPF;
     s->psg_n = n; s->psg_i = 0;
     s->leg_base = 0;
