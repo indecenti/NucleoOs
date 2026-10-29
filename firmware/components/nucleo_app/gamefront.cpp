@@ -664,20 +664,29 @@ bool gamefront_take_return(void)
 }
 
 // ── sounds ──────────────────────────────────────────────────────────────────────────────────────────
-// Short and quiet, at a fraction of the system volume (muted = silent).
+// Short and quiet, at a fraction of the system volume (muted = silent): into a system, back, a game starting.
 #define SFX(n, v) nucleo_audio_sample(SFX_##n, (int)(sizeof SFX_##n / sizeof SFX_##n[0]), v)
 
 // ── the turn ────────────────────────────────────────────────────────────────────────────────────────
-// One step of the wheel slides the titles through the fixed pill (TURN_US, ease-out). Its first frame is a whole one
-// (the picture and the caption change); the next ones recompose only the band below the search. The wheel clicks
-// once when it lands, after the frames: a held key turns it as fast as frames come and never waits on a sound.
-#define TURN_US 140000
+// While the wheel turns, ONLY the wheel is redrawn: its rectangle (lg::frame_rect), a third of the panel, no card
+// read, no Cardputer. Each step slides the titles through the fixed pill (TURN_US, ease-out) with the emulators' tick.
+// When it has stopped for SETTLE_US the rest follows in one whole frame: the picture, the caption, the position and
+// the Cardputer's details - read and drawn once per stop, not once per step (as in HyperSpin).
+#define TURN_US   140000
+#define SETTLE_US 160000
 static int64_t s_turn_t0;
 static int     s_turn_dir;
-static bool    s_land;                             // a click is due when the wheel stops
+static int64_t s_settle_at;                        // a whole frame is due then (0 = none)
 static bool    s_full = true;                      // the next render recomposes everything
 static int     s_off;                              // the titles' offset in this render
-static void turn(int dir) { s_turn_t0 = dir ? esp_timer_get_time() : 0; s_turn_dir = dir; s_land = true; }
+static void turn(int dir)
+{
+    const int64_t now = esp_timer_get_time();
+    s_turn_t0 = dir ? now : 0; s_turn_dir = dir;
+    s_settle_at = now + SETTLE_US;
+    s_full = false;                                // this key moves the wheel only
+    nucleo_audio_tone(2600, 4, 12);                // the wheel's click (the emulators' own)
+}
 static int turn_offset(int pill_h)
 {
     if (!s_turn_t0) return 0;
@@ -767,8 +776,8 @@ bool gamefront_step(void)
     const int r = scan_step(s_turn_t0 ? 4000 : 15000);   // a turning wheel gets the CPU first
     if (r == 2) { relist(); pic_forget(); }
     if (r != 0) { s_full = true; return true; }    // the walk ended: its indicator goes, the lists may have changed
-    if (s_turn_t0) return true;                    // the turn's next frame
-    if (s_land) { s_land = false; SFX(TICK, 30); }
+    if (s_turn_t0) return true;                    // the turn's next frame (the wheel only)
+    if (s_settle_at && esp_timer_get_time() >= s_settle_at) { s_settle_at = 0; s_full = true; return true; }   // stopped
     return false;
 }
 bool gamefront_scanning(void) { return s_scan.on; }
@@ -777,7 +786,7 @@ static void step(int by)                           // the wheel turns forever: p
 {
     if (s_n <= 1) return;
     s_sel = ((s_sel + by) % s_n + s_n) % s_n;
-    turn(by == 1 || by == -1 ? by : 0);           // one step slides; a jump lands at once
+    turn(by == 1 || by == -1 ? by : 0);           // one step slides; a jump lands at once (the wheel only, either way)
 }
 
 static int open_sel(char *launch_id, int cap)
@@ -811,11 +820,11 @@ static int slots(void) { return d.width() >= 300 ? SLOTS_BIG : SLOTS_SMALL; }
 
 int gamefront_key(int key, char ch, char *launch_id, int cap)
 {
-    s_full = true;                                 // whatever the key does, the next frame is a whole one
+    s_full = true;                                 // a whole frame next, unless the key only turns the wheel (turn())
     if (nucleo_touch_is_row(key, ch)) {            // the wheel: a tap brings a title to the middle, the middle one opens
         const int k = ch - NUCLEO_TOUCH_ROW, i = lg::wheel_at(s_sel, s_n, slots(), k);
         if (k == slots() / 2) return open_sel(launch_id, cap);
-        if (i >= 0 && i != s_sel) { s_sel = i; turn(k - slots() / 2 == 1 ? 1 : k - slots() / 2 == -1 ? -1 : 0); }
+        if (i >= 0 && i != s_sel) { s_sel = i; const int dk = k - slots() / 2; turn(dk == 1 || dk == -1 ? dk : 0); }
         return GF_REDRAW;
     }
     switch (key) {
@@ -1264,6 +1273,14 @@ static void paint_big(void *)
     lg::wheel(WX, top, W - WX, bh, wl);
 }
 
+// The wheel alone, in its own rectangle (lg::frame_rect: x is relative to WX), while it turns.
+static void paint_wheel_big(void *)
+{
+    const int top = lg::HEAD + 36;
+    const lg::Wheel wl = { SLOTS_BIG, WHEEL_BIG, s_n, s_sel, wheel_label, wheel_mark, nullptr, acc_now(), C_LAST, wheel_icon, s_off };
+    lg::wheel(0, top, 320 - WX, s_H - top, wl);
+}
+
 // The Cardputer alone, 240x135: the picture with its caption and the whole title on the left; the search and a
 // five-title wheel on the right.
 #define CX 122
@@ -1309,6 +1326,12 @@ static void paint_small(void *)
     }
     const lg::Wheel wl = { SLOTS_SMALL, WHEEL_SMALL, s_n, s_sel, wheel_label, wheel_mark, nullptr, acc, C_LAST, wheel_icon, s_off };
     lg::wheel(CX, 22, W - CX, H - 22, wl);
+}
+
+static void paint_wheel_small(void *)
+{
+    const lg::Wheel wl = { SLOTS_SMALL, WHEEL_SMALL, s_n, s_sel, wheel_label, wheel_mark, nullptr, acc_now(), C_LAST, wheel_icon, s_off };
+    lg::wheel(0, 22, 240 - CX, s_H - 22, wl);
 }
 
 // The details of the selection, for the Cardputer's card: label / value pairs.
@@ -1433,9 +1456,12 @@ void gamefront_render(void)
     s_H = d.height();
     s_full = false;
     s_off = turn_offset(big ? WHEEL_BIG[SLOTS_BIG / 2] : WHEEL_SMALL[SLOTS_SMALL / 2]);
-    if (!full) {                                   // a turn's next frame: only the band under the search changes; the
-        lg::frame(big ? paint_big : paint_small, nullptr, big ? lg::HEAD + 36 : 22, 0, true);   // touch targets stay
-        return;
+    if (!full && s_n) {                            // the wheel turning: its rectangle only (the committed touch targets stay)
+        nucleo_touch_clear();                      // ...the wheel's own registrations go nowhere
+        const bool ok = big ? lg::frame_rect(paint_wheel_big, nullptr, WX, lg::HEAD + 36, 320 - WX, s_H - lg::HEAD - 36, true)
+                            : lg::frame_rect(paint_wheel_small, nullptr, CX, 22, 240 - CX, s_H - 22, true);
+        if (ok) return;
+        s_settle_at = 0;                           // no canvas: the whole frame instead
     }
     if (on_roms() && !s_sh) refilter();            // the shelf left RAM (a failed allocation): read it again
     pic_prepare(big);

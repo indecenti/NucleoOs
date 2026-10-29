@@ -15,9 +15,9 @@ ROOT = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)),
 SRC = os.path.join(ROOT, "assets", "audio", "interface-sounds", "Audio")
 OUT = os.path.join(ROOT, "firmware", "components", "nucleo_app", "gamefront_sfx.h")
 RATE = 16000
-# name in the firmware, Kenney file, longest it may last (ms): short, so a held key never waits on a sound
+# name in the firmware, Kenney file, longest it may last (ms). The wheel's own tick is a 4 ms tone, as in the
+# emulators' shelf (nucleo_audio_tone): a sample would hold every step longer.
 SOUNDS = [
-    ("TICK",   "select_001.ogg",       30),    # the wheel turns one title
     ("OPEN",   "pluck_001.ogg",        70),    # into a system
     ("BACK",   "back_001.ogg",         60),    # back a level / out
     ("LAUNCH", "confirmation_001.ogg", 220),   # a game starts

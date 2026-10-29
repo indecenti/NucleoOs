@@ -560,6 +560,9 @@ static bool cap_rows(const uint8_t *buf, int w, int rows, bool exact)
     return true;
 }
 
+static M5Canvas s_win;                                       // a window onto the canvas: panel rows [oy, oy+rows)
+static M5Canvas s_out;                                       // the canvas bytes seen at the window's depth (push)
+
 bool frame(void (*paint)(void *ud), void *ud, int y0, int h, bool exact)
 {
     const int W = d.width();
@@ -571,8 +574,6 @@ bool frame(void (*paint)(void *ud), void *ud, int y0, int h, bool exact)
     // 8-bit: the canvas as it is (~100 rows of 320). exact: the same bytes as RGB565 (~50 rows), so theme
     // colours land exactly as when drawn straight to the panel — twice the strips, no extra RAM.
     const int bpp = exact ? 2 : 1, rows = c->height() / bpp;
-    static M5Canvas s_win;                                   // a window onto the canvas: panel rows [oy, oy+rows)
-    static M5Canvas s_out;                                   // the canvas bytes seen at the window's depth (push)
     if (exact) { s_out.setColorDepth(16); s_out.setBuffer(buf, W, rows); }
     M5Canvas *out = exact ? &s_out : c;
     // A pending screenshot rides along on a whole frame (never on a partial repaint of a band).
@@ -599,6 +600,31 @@ bool frame(void (*paint)(void *ud), void *ud, int y0, int h, bool exact)
         }
     }
     if (s_cap_f) { const bool ok = fclose(s_cap_f) == 0 && cap; s_cap_f = nullptr; s_cap = ok ? 2 : 3; if (!ok) remove(s_cap_path); }
+    return true;
+}
+
+bool frame_rect(void (*paint)(void *ud), void *ud, int x0, int y0, int w, int h, bool exact)
+{
+    M5Canvas *c = nucleo_screen_wide(w);
+    if (!c || c->height() < 8 || w <= 0 || h <= 0) return false;
+    LovyanGFX *panel = &d;
+    uint8_t *buf = (uint8_t *)c->getBuffer();
+    const int bpp = exact ? 2 : 1, rows = c->height() / bpp;
+    if (exact) { s_out.setColorDepth(16); s_out.setBuffer(buf, w, rows); }
+    M5Canvas *out = exact ? &s_out : c;
+    for (int oy = y0; oy < y0 + h; oy += rows) {
+        const int sh = y0 + h - oy < rows ? y0 + h - oy : rows;
+        s_win.setColorDepth(exact ? 16 : c->getColorDepth());
+        s_win.setBuffer(buf - (ptrdiff_t)oy * w * bpp, w, oy + sh);
+        s_win.setClipRect(0, oy, w, sh);
+        panel->waitDMA();
+        nucleo_app_set_gfx(&s_win);
+        paint(ud);
+        nucleo_app_set_gfx(nullptr);
+        panel->setClipRect(x0, oy, w, sh);
+        out->pushSprite(panel, x0, oy);
+        panel->clearClipRect();
+    }
     return true;
 }
 

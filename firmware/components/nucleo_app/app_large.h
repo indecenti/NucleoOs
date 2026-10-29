@@ -153,6 +153,10 @@ void comp_keys(const char *keys);
 // straight to the panel — use it for tool apps with themed cards / rows (on the 8-bit canvas dark greys turn
 // olive); keep the 8-bit default for games (tile_blit / stipple need it, and it is faster).
 bool frame(void (*paint)(void *ud), void *ud, int y0 = 0, int h = 0 /* 0 = to the bottom */, bool exact = false);
+// The same for one rectangle [x0, x0+w) x [y0, y0+h) of the screen, the rest left as it is: paint() draws with x
+// relative to x0 (0 = its left edge) and y in screen rows. For a part that changes alone and often (a wheel turning):
+// the bytes on the bus are that rectangle's only. Touch targets are not touched. False = no canvas (repaint whole).
+bool frame_rect(void (*paint)(void *ud), void *ud, int x0, int y0, int w, int h, bool exact = false);
 // Screenshots of the panel. It cannot be read back (its driver has no MISO), so the next WHOLE frame that frame()
 // composes is also written to `path` as it goes, strip by strip (24-bit BMP, no extra RAM). Apps that draw the
 // panel straight (not through frame()) cannot be captured: the request then fails after a few seconds.

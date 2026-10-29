@@ -23,10 +23,11 @@ All notable user-facing changes to NucleoOS. Format loosely follows
   cartridges); a search filters it in RAM; each folder's screenshots are listed once; a picture is opened once per
   selection and read four rows at a time. `tools/fetch-rom-snaps.py` follows the index and writes ready-to-show
   `.pic` pictures next to the `.snp` ones (older cards get theirs from the `.snp`).
-- **A wheel that turns forever, smoothly.** Past the last title comes the first (with few titles they repeat); one
-  step slides the titles through the fixed pill (140 ms ease-out) and clicks when it lands. Each step is cheaper: the
-  frames of a turn recompose only the band under the search, a frame draws only what falls in the strip being
-  composed, and the Cardputer's details card is composed off screen and pushed in three strips.
+- **A wheel that turns forever, as fast as the emulators' one.** Past the last title comes the first (with few titles
+  they repeat). While it turns only the wheel's rectangle is redrawn (new kit call `lg::frame_rect`: a third of the
+  panel, no card read, no Cardputer), each step sliding the titles through the fixed pill with the emulators' 4 ms
+  tick; when it stops (160 ms) the picture, caption, position and the Cardputer's details follow in one frame. Frames
+  draw only what falls in the strip being composed; the details card is composed off screen.
 - **Remembers.** The selection lands on the system and the game played last ("last played" mark on the wheel and on
   the details card).
 - **Sounds.** Short, quiet interface sounds (Kenney "Interface Sounds", CC0) for turning the wheel, opening a system,
