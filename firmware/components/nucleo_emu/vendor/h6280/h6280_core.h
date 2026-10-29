@@ -117,6 +117,9 @@
 #include <stdint.h>
 #include <stdbool.h>
 #pragma GCC diagnostic ignored "-Wunused-function"
+#ifndef PCE_AFTER_OP
+#define PCE_AFTER_OP() ((void)0)                   /* the including file's hook after every instruction */
+#endif
 
 typedef union { struct { uint8_t l, h, h2, h3; } b; struct { uint16_t l, h; } w; uint32_t d; } PAIR;
 #define CLEAR_LINE  0
@@ -2522,7 +2525,7 @@ static void execute_run(void)
 		/* Execute 1 instruction */
 		in = read_opcode();
 		PCW++;
-		s_opcodetable[in]();
+		s_opcodetable[in]();PCE_AFTER_OP();
 
 		if (m_irq_pending)
 		{

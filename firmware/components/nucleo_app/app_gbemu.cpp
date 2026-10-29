@@ -982,7 +982,7 @@ static void marquee(int x, int y, int w, int h, const char *t,
 // a skipped frame calls the scanline callback zero times, so nothing half-draws. It is the only lever.
 // The NES's and the Game Boy's frame-skip draw whenever the console keeps up and skip only to catch up
 // (nucleo_nes.c, nucleo_gb.c); the Game Gear skips every other frame.
-static bool skip_adaptive(void) { return SYS && (!strcmp(SYS->id, "nesemu") || !strcmp(SYS->id, "gbemu")); }
+static bool skip_adaptive(void) { return SYS && (!strcmp(SYS->id, "nesemu") || !strcmp(SYS->id, "gbemu") || !strcmp(SYS->id, "pceemu")); }
 static void set_relief(int level)
 {
     if (level < 0) level = 0;

@@ -14,8 +14,20 @@
 //   cartridge    1 KB pages from the SD card (as nucleo_nes.c), or the whole file when it fits with room to spare;
 //                384 / 512 / 768 KB HuCards mirrored as on the console, Street Fighter II's bank register
 //   timing       263 lines of 455 CPU cycles (7.16 MHz), 59.83 Hz
+//   speed        waiting loops are skipped exactly (idle_after: a loop that comes back to the same state without a
+//                write or an I/O read only ends at an interrupt; 40-80% of a frame's CPU cycles in most games); the
+//                pixels are drawn on the S3's other core, eight lines a hand-over, from each line's registers captured
+//                as it starts (nucleo_cowork; the lines go to the screen from this core, in order); behind the
+//                60 Hz budget, frames run unseen (three at most in a row) and the late frame's sound is made long enough
+//                that the speaker never runs dry (as nucleo_nes.c). The profile goes to the trace on close.
 #include "nucleo_pce.h"
 #include "nucleo_audio.h"
+// The second core (firmware nucleo_app/nucleo_cowork.h, ABI level 6), declared here: nucleo_emu sits below
+// nucleo_app in the component graph.
+bool nucleo_cowork_run(void (*fn)(void *arg), void *arg);
+void nucleo_cowork_wait(void);
+void nucleo_cowork_stop(void);
+#include <stdint.h>
 #include "emu_audio.h"
 #include "esp_log.h"
 #include "esp_heap_caps.h"
@@ -25,6 +37,11 @@
 #include <string.h>
 #include <sys/stat.h>
 
+// Every write and every I/O read the CPU makes is counted: an instruction loop that does neither and comes back to
+// the same state is waiting (see idle_after). The core calls the hook after each instruction.
+static uint32_t g_writes, g_io_reads;
+static void idle_after(void);
+#define PCE_AFTER_OP() idle_after()
 #include "../vendor/h6280/h6280_core.h"
 
 static const char *TAG = "pce";
@@ -93,6 +110,25 @@ typedef struct {
     uint8_t  reg, val;
 } psg_log_t;
 
+// A display line as described when it starts (see vdc_line), and the batches the other core draws them in.
+typedef struct pce_line_s {
+    int16_t  y;                                      // the output row
+    uint16_t width;                                  // 0: a blank line (outside the display window)
+    uint16_t cr, mwr, bxr, byr, raster;
+} pce_line_t;
+#define PCE_BATCH 8
+typedef struct {
+    int        n;
+    pce_line_t line[PCE_BATCH];
+    uint16_t   px[PCE_BATCH][NUCLEO_PCE_W];
+} pce_batch_t;
+// A line drawer's working rows: one for each core.
+typedef struct {
+    uint8_t  bg[528];
+    uint16_t spr[512];
+    uint16_t line[512];
+} pce_scratch_t;
+
 typedef struct {
     pce_core_t m;
     uint16_t  *vram[2];                              // 2 x 16 K words
@@ -112,20 +148,29 @@ typedef struct {
     const uint8_t *rd[64];                           // CPU 1 KB windows (NULL: the slow path)
     uint8_t   *wr[64];
     uint16_t   rgb[512];                             // the palette in the panel's RGB565 order
-    uint16_t   line[512];                            // a drawn line, up to the VDC's widest
-    uint16_t   out[NUCLEO_PCE_W];
-    uint8_t    bg[528];
-    uint16_t   spr[512];
+    uint16_t   out[NUCLEO_PCE_W];                    // a line drawn on this core
+    pce_batch_t batch[2];                            // lines for the other core: one filling, one being drawn
+    int        bi, pending;                          // the batch being filled; the one handed over (-1: none)
+    bool       busy;                                 // lines described and not yet on the screen
+    pce_scratch_t km, kw;                            // this core's drawer, the other core's
     nucleo_pce_line_fn on_line;
     void      *user;
     uint8_t    buttons;
     psg_log_t  log[LOG_MAX];
     int        log_n;
     uint32_t   frame_cyc, leg_base, leg_len;         // where the CPU is in the frame (for the PSG log)
-    int16_t    pcm[APU_SPF];
+    int16_t    pcm[2 * APU_SPF];                     // a late frame makes up to twice a frame's samples
     uint16_t   vol[32];
     emu_afilt_t afilt;
     bool       sound, frameskip, skip;
+    // Pacing (as nucleo_nes.c): how far behind the console is, from work only; frames run unseen while it is.
+    int64_t    last_t0, last_block;
+    int32_t    debt;
+    uint8_t    skipped;
+    // Where the time goes, in CPU cycles (the S3's counter), written to the trace when the game closes.
+    uint64_t   prof_cpu, prof_vdc, prof_line, prof_psg, prof_idle, prof_wait;
+    uint32_t   prof_frames, prof_drawn;
+    char       trace_path[160];
     char       save_base[300];
     char       title[48];
     size_t     heap_bytes;
@@ -133,6 +178,20 @@ typedef struct {
 } pce_t;
 
 static pce_t *PCE;
+static inline void lines_touch(void);           // described lines drawn first: VRAM, sprite table or palette changes
+
+static inline uint32_t pce_ccount(void)
+{
+#if defined(__XTENSA__)
+    uint32_t c;
+    __asm__ volatile("rsr %0, ccount" : "=r"(c));
+    return c;
+#elif defined(__x86_64__) || defined(__i386__)
+    return (uint32_t)__builtin_ia32_rdtsc();
+#else
+    return 0;
+#endif
+}
 
 // ── the cartridge, paged (as nucleo_nes.c) ────────────────────────────────────────────────────────────────
 static const uint8_t PG_OPEN[PG_SIZE] = { [0 ... PG_SIZE - 1] = 0xFF };
@@ -209,6 +268,7 @@ static const uint8_t *window(int slot)
 
 static void pce_mpr_changed(int page)
 {
+    g_writes++;
     for (int k = 0; k < 8; k++) { PCE->rd[page * 8 + k] = NULL; PCE->wr[page * 8 + k] = NULL; }
 }
 
@@ -220,6 +280,7 @@ static inline uint8_t mem_read(uint16_t addr)
 }
 static inline void mem_write(uint16_t addr, uint8_t v)
 {
+    g_writes++;
     uint8_t *w = PCE->wr[addr >> 10];
     if (w) { w[addr & 0x3ff] = v; return; }
     const uint8_t bank = m_mmr[addr >> 13];
@@ -289,15 +350,15 @@ static void pce_psg_write(int reg, uint8_t v)
 }
 
 // One frame of sound: the logged writes applied at their moment, the channels stepped in PSG clocks.
-static void psg_render(pce_t *s)
+static void psg_render(pce_t *s, int n)
 {
     pce_core_t *m = &s->m;
     static const uint8_t SCALE[16] = { 0x00, 0x03, 0x05, 0x07, 0x09, 0x0b, 0x0d, 0x0f, 0x10, 0x13, 0x15, 0x17, 0x19, 0x1b, 0x1d, 0x1f };
     const uint32_t cps = (uint32_t)(((uint64_t)PSG_HZ << 16) / APU_RATE);   // PSG clocks per sample, 16.16
     const uint32_t frame_cyc = LINES * LINE_CYC;
     int li = 0;
-    for (int i = 0; i < APU_SPF; i++) {
-        const uint32_t at = (uint32_t)i * frame_cyc / APU_SPF;   // 535 x 119,665 fits 32 bits (no 64-bit division in a module)
+    for (int i = 0; i < n; i++) {
+        const uint32_t at = (uint32_t)i * frame_cyc / (uint32_t)n;   // 1070 x 119,665 fits 32 bits (no 64-bit division in a module)
         while (li < s->log_n && s->log[li].cyc <= at) { psg_reg(s->log[li].reg, s->log[li].val); li++; }
         const uint8_t lmal = SCALE[(m->psg_balance >> 4) & 15], rmal = SCALE[m->psg_balance & 15];
         int32_t out = 0;
@@ -351,6 +412,7 @@ static uint16_t rgb_of(uint16_t c)                     // 9-bit GGGRRRBBB -> RGB
 static void vce_write(uint16_t off, uint8_t v)
 {
     pce_core_t *m = &PCE->m;
+    if ((off & 6) == 4) lines_touch();                 // a colour changes: the queued lines are drawn with the old one
     switch (off & 7) {
         case 0: m->vce_ctrl = v; break;
         case 2: m->vce_addr = (uint16_t)((m->vce_addr & 0x100) | v); break;
@@ -374,7 +436,7 @@ static uint8_t vce_read(uint16_t off)
 
 // ── the VDC ──────────────────────────────────────────────────────────────────────────────────────────────
 static inline uint16_t vram_rd(uint32_t a) { a &= 0xffff; return a <= 0x7fff ? PCE->vram[a >> 14][a & 0x3fff] : 0; }
-static inline void vram_wr(uint32_t a, uint16_t v) { a &= 0xffff; if (a <= 0x7fff) PCE->vram[a >> 14][a & 0x3fff] = v; }
+static inline void vram_wr(uint32_t a, uint16_t v) { lines_touch(); a &= 0xffff; if (a <= 0x7fff) PCE->vram[a >> 14][a & 0x3fff] = v; }
 static void vdc_irq(uint8_t bit) { PCE->m.status |= bit; set_irq_line(0, ASSERT_LINE); }
 
 static void vdc_regs_w(int r, uint16_t data, uint16_t mask)
@@ -433,7 +495,7 @@ static uint8_t vdc_read(uint16_t off)
     }
     return 0;
 }
-static void pce_vdc_st(int port, uint8_t v) { vdc_write((uint16_t)port, v); }
+static void pce_vdc_st(int port, uint8_t v) { g_writes++; vdc_write((uint16_t)port, v); }
 
 static void vdc_vblank(void)
 {
@@ -441,6 +503,7 @@ static void vdc_vblank(void)
     if (m->vd_triggered) return;
     if (m->cr & 0x08) vdc_irq(ST_VD);
     if (m->dvssr_written || (m->dcr & 0x10)) {        // VRAM -> SAT DMA
+        lines_touch();
         for (int i = 0; i < 256; i += 4) {
             m->sat[i + 0] = vram_rd(m->dvssr + i + 0) & 0x03ff;
             m->sat[i + 1] = vram_rd(m->dvssr + i + 1) & 0x03ff;
@@ -498,33 +561,39 @@ static void vdc_vsync(int state)                       // the VCE's VSYNC: low r
     }
 }
 
-// The sprites on this line into PCE->spr (index 0 = screen x 0): MAME's select_sprites / add_sprite.
-static void vdc_sprites(int width)
+// ── a line: described on the CPU's core, drawn on the other one ─────────────────────────────────────────────
+// What a display line is made of, captured when it starts: the registers it is drawn with. The VRAM, the sprite
+// table and the palette it also reads are the live ones: nothing changes them while a described line is still to be
+// drawn (vram_wr, the DMAs and the VCE settle the lines first).
+
+// The sprites of a line into `row` (index 0 = screen x 0): MAME's select_sprites / add_sprite. Returns the 16-cell
+// overflow; a collision with sprite 0 is marked 0x8000 in the row.
+static bool line_sprites(const pce_line_t *L, uint16_t *row)
 {
-    pce_core_t *m = &PCE->m;
+    const uint16_t *sat = PCE->m.sat;
     static const int CGY[4] = { 16, 32, 64, 64 };
-    uint16_t *row = PCE->spr;
+    const int width = L->width;
     memset(row, 0, (size_t)width * sizeof *row);
     int cells = 0;
     for (int i = 0; i < 256 && cells < 16; i += 4) {
-        const int cgy = (m->sat[i + 3] >> 12) & 3, height = CGY[cgy];
-        int line = m->raster_count - 1 - m->sat[i];
+        const int cgy = (sat[i + 3] >> 12) & 3, height = CGY[cgy];
+        int line = L->raster - 1 - sat[i];
         if (line < 0 || line >= height) continue;
-        const int xpos = m->sat[i + 1];
-        int pattern = m->sat[i + 2] >> 1;
-        const bool lsb = m->sat[i + 2] & 1, prio = (m->sat[i + 3] >> 7) & 1, cgx = (m->sat[i + 3] >> 8) & 1;
-        const int pal = m->sat[i + 3] & 0x0f;
+        const int xpos = sat[i + 1];
+        int pattern = sat[i + 2] >> 1;
+        const bool lsb = sat[i + 2] & 1, prio = (sat[i + 3] >> 7) & 1, cgx = (sat[i + 3] >> 8) & 1;
+        const int pal = sat[i + 3] & 0x0f;
         if (cgy & 1) pattern &= ~0x0002;
         if (cgy & 2) pattern &= ~0x0006;
-        if (m->sat[i + 3] & 0x8000) line = (height - 1) - line;
-        const bool fx = (m->sat[i + 3] >> 11) & 1;
+        if (sat[i + 3] & 0x8000) line = (height - 1) - line;
+        const bool fx = (sat[i + 3] >> 11) & 1;
         const int n = cgx ? 2 : 1;
         if (cgx) pattern &= ~0x0001;
         for (int part = 0; part < n && cells < 16; part++) {
             const int pat = pattern + (cgx ? (fx ? 1 - part : part) : 0) + ((line >> 4) << 1);
             const uint32_t pa = ((uint32_t)pat << 6) + (line & 0x0f);
             uint32_t b0, b1, b2 = 0, b3 = 0;
-            if ((m->mwr & 0x0c) == 0x04) {
+            if ((L->mwr & 0x0c) == 0x04) {
                 b0 = vram_rd(pa + (lsb ? 0x20 : 0x00)); b1 = vram_rd(pa + (lsb ? 0x30 : 0x10)) << 1;
             } else {
                 b0 = vram_rd(pa); b1 = vram_rd(pa + 0x10) << 1; b2 = vram_rd(pa + 0x20) << 2; b3 = vram_rd(pa + 0x30) << 3;
@@ -542,81 +611,186 @@ static void vdc_sprites(int width)
             cells++;
         }
     }
-    if (cells >= 16 && (m->cr & 0x02)) vdc_irq(ST_OR);
+    return cells >= 16;
 }
 
-// One display line, drawn whole from the registers as they are now; y is the output row (or -1: not shown).
-static void vdc_line(int y)
+// A byte of one bit plane spread to 8 nibbles, pixel 0 (the plane's bit 7) in the low nibble: four lookups and
+// three shifts give a tile row's 8 colour indices at once, instead of 32 bit extractions.
+static uint32_t PLANE[256];
+static void plane_init(void)
 {
-    pce_t *s = PCE;
-    pce_core_t *m = &s->m;
-    int width = ((m->hdr & 0x7f) + 1) * 8;
-    if (width > 512) width = 512;
-    uint16_t *out = s->line;
-    const uint16_t over = s->rgb[0x100];
-    const bool bg_on = (m->cr & 0x80) != 0, spr_on = (m->cr & 0x40) != 0;
+    if (PLANE[0x80]) return;
+    for (int b = 0; b < 256; b++) {
+        uint32_t v = 0;
+        for (int j = 0; j < 8; j++) if (b & (0x80 >> j)) v |= 1u << (j * 4);
+        PLANE[b] = v;
+    }
+}
+
+// The pixels of a described line, 256 of them into `o` (narrower modes centred on the overscan colour, wider ones
+// resampled). Reads VRAM, the sprite table and the palette; writes only `o` and the drawer's scratch. Returns the
+// sprite collision (bit 0) and overflow (bit 1), for a line drawn on the CPU's core.
+static int line_draw(const pce_line_t *L, uint16_t *o, pce_scratch_t *k)
+{
+    const uint16_t *rgb = PCE->rgb;
+    const uint16_t over = rgb[0x100];
+    const int width = L->width;
+    if (!width) {
+        for (int x = 0; x < NUCLEO_PCE_W; x++) o[x] = over;
+        return 0;
+    }
+    const bool bg_on = (L->cr & 0x80) != 0, spr_on = (L->cr & 0x40) != 0;
+    uint16_t *out = width == NUCLEO_PCE_W ? o : k->line;    // the common 256-pixel mode: composed in place
     if (bg_on) {
         static const int WS[4] = { 5, 6, 7, 7 };
-        const int ws = WS[(m->mwr >> 4) & 3];
+        const int ws = WS[(L->mwr >> 4) & 3];
         const uint32_t amask = (1u << ws) - 1;
-        const uint16_t v = m->byr_latched & ((m->mwr & 0x40) ? 0x1ff : 0xff);
+        const uint16_t v = L->byr & ((L->mwr & 0x40) ? 0x1ff : 0xff);
         const uint32_t base = (uint32_t)(v >> 3) << ws, row = v & 7;
-        uint32_t col = (m->bxr >> 3) & amask;
-        uint8_t *dst = s->bg;
+        uint32_t col = (L->bxr >> 3) & amask;
+        uint8_t *dst = k->bg;
         for (int t = 0; t <= width / 8; t++, dst += 8, col = (col + 1) & amask) {
             const uint16_t bat = vram_rd(base | col);
             const uint8_t pal = (uint8_t)((bat >> 8) & 0xf0);
             const uint32_t ta = ((uint32_t)(bat & 0x0fff) << 4) + row;
             const uint16_t d1 = vram_rd(ta), d3 = vram_rd(ta + 8);
             if (!(d1 | d3)) { memset(dst, 0, 8); continue; }
-            for (int j = 0; j < 8; j++) {
-                const int b = 7 - j;
-                const uint8_t c = (uint8_t)(((d1 >> b) & 1) | (((d1 >> (b + 8)) & 1) << 1) | (((d3 >> b) & 1) << 2) | (((d3 >> (b + 8)) & 1) << 3));
-                dst[j] = c ? (uint8_t)(c | pal) : 0;
+            uint32_t px = PLANE[d1 & 0xff] | PLANE[d1 >> 8] << 1 | PLANE[d3 & 0xff] << 2 | PLANE[d3 >> 8] << 3;
+            for (int j = 0; j < 8; j++, px >>= 4) { const uint8_t c = (uint8_t)(px & 15); dst[j] = c ? (uint8_t)(c | pal) : 0; }
+        }
+    }
+    int flags = 0;
+    if (spr_on && line_sprites(L, k->spr)) flags |= 2;
+    const uint8_t *bg = k->bg + (L->bxr & 7);
+    const uint16_t *spr = k->spr;
+    if (bg_on && !spr_on) {
+        for (int x = 0; x < width; x++) out[x] = rgb[bg[x]];
+    } else if (bg_on) {
+        for (int x = 0; x < width; x++) {
+            const uint16_t sp = spr[x];
+            uint16_t data = bg[x];
+            if (sp) {
+                const uint8_t sd = (uint8_t)sp;
+                if (sd && ((sp & 0x4000) || !(data & 0x0f))) data = (uint16_t)(0x100 | sd);
+                if (sp & 0x8000) flags |= 1;
             }
+            out[x] = rgb[data];
         }
-    }
-    if (spr_on) vdc_sprites(width);
-    if (y < 0 || s->skip) {                             // not shown: only what the CPU can see (collision)
-        if (spr_on && bg_on && (m->cr & 0x01)) {
-            for (int x = 0; x < width; x++) if (s->spr[x] & 0x8000) { vdc_irq(ST_CR); break; }
+    } else if (spr_on) {
+        for (int x = 0; x < width; x++) {
+            const uint16_t sp = spr[x];
+            if (sp & 0x8000) flags |= 1;
+            out[x] = rgb[0x100 | (sp & 0xff)];
         }
-        return;
+    } else {
+        for (int x = 0; x < width; x++) out[x] = over;   // nothing drawn: the sprite palette's colour 0
     }
-    const uint8_t *bg = s->bg + (m->bxr & 7);
-    bool coll = false;
-    for (int x = 0; x < width; x++) {
-        uint16_t data = 0x100;                         // nothing drawn: the sprite palette's colour 0
-        const uint16_t sp = spr_on ? s->spr[x] : 0;
-        const uint8_t sd = (uint8_t)(sp & 0xff);
-        if (bg_on) {
-            data = bg[x];
-            if (sd && ((sp & 0x4000) || !(data & 0x0f))) data = (uint16_t)(0x100 | sd);
-        } else if (spr_on) {
-            data = (uint16_t)(0x100 | sd);
-        }
-        if (sp & 0x8000) coll = true;
-        out[x] = s->rgb[data & 0x1ff];
-    }
-    if (coll && (m->cr & 0x01)) vdc_irq(ST_CR);
-    // To the 256 columns the front-end takes: narrower lines centred on the overscan colour, wider ones resampled.
-    uint16_t *o = s->out;
-    if (width <= NUCLEO_PCE_W) {
+    if (width < NUCLEO_PCE_W) {
         const int pad = (NUCLEO_PCE_W - width) / 2;
         for (int x = 0; x < pad; x++) o[x] = over;
         memcpy(o + pad, out, (size_t)width * sizeof *o);
         for (int x = pad + width; x < NUCLEO_PCE_W; x++) o[x] = over;
-    } else {
+    } else if (width > NUCLEO_PCE_W) {
         for (int x = 0; x < NUCLEO_PCE_W; x++) o[x] = out[x * width / NUCLEO_PCE_W];
     }
-    if (s->on_line) s->on_line(o, y, s->user);
+    return flags;
+}
+
+// ── the other core ───────────────────────────────────────────────────────────────────────────────────────────
+// Eight lines a hand-over, two batches: the other core draws one while this core runs the CPU and fills the other.
+// The other core only computes (no bus, no driver, no file: the panel shares the SD card's bus); the lines go to the
+// screen from this core, in order.
+static void line_job(void *arg)
+{
+    pce_t *s = PCE;
+    pce_batch_t *b = &s->batch[(int)(intptr_t)arg];
+    for (int i = 0; i < b->n; i++) line_draw(&b->line[i], b->px[i], &s->kw);
+}
+static void lines_emit(pce_t *s, int bi)
+{
+    pce_batch_t *b = &s->batch[bi];
+    const uint32_t c0 = pce_ccount();
+    for (int i = 0; i < b->n; i++) if (s->on_line) s->on_line(b->px[i], b->line[i].y, s->user);
+    s->prof_line += pce_ccount() - c0;
+    b->n = 0;
+}
+static void lines_flush(pce_t *s)
+{
+    const int bi = s->bi;
+    if (!s->batch[bi].n) return;
+    const uint32_t c0 = pce_ccount();
+    const bool other = nucleo_cowork_run(line_job, (void *)(intptr_t)bi);   // waits for the previous batch first
+    s->prof_wait += pce_ccount() - c0;
+    if (!other) {                                      // no second core: drawn and sent here
+        const uint32_t c1 = pce_ccount();
+        line_job((void *)(intptr_t)bi);
+        s->prof_vdc += pce_ccount() - c1;
+        lines_emit(s, bi);
+        return;
+    }
+    if (s->pending >= 0) lines_emit(s, s->pending);
+    s->pending = bi;
+    s->bi = bi ^ 1;
+}
+// Every described line drawn and on the screen: before VRAM, the sprite table or the palette change, and before the
+// frame goes back to the front-end.
+static void lines_settle(pce_t *s)
+{
+    if (!s->batch[s->bi].n && s->pending < 0) return;
+    lines_flush(s);
+    const uint32_t c0 = pce_ccount();
+    nucleo_cowork_wait();
+    s->prof_wait += pce_ccount() - c0;
+    if (s->pending >= 0) { lines_emit(s, s->pending); s->pending = -1; }
+}
+static inline void lines_touch(void) { pce_t *s = PCE; if (s->busy) { lines_settle(s); s->busy = false; } }
+
+// A display line at its start; y is the output row (or -1: not shown).
+static void vdc_line(int y)
+{
+    pce_t *s = PCE;
+    pce_core_t *m = &s->m;
+    int width = ((m->hdr & 0x7f) + 1) * 8;
+    if (width > 512) width = 512;
+    const pce_line_t L = { (int16_t)y, (uint16_t)width, m->cr, m->mwr, m->bxr, m->byr_latched, (uint16_t)m->raster_count };
+    const bool spr_irq = (m->cr & 0x40) && (m->cr & 0x03);
+    if (y < 0 || s->skip) {
+        // Not shown: only what the CPU can see. The background never raises anything; the sprites do (sprite 0's
+        // collision, the 16-cell overflow) and only when their interrupt is on.
+        if (spr_irq) {
+            const bool ov = line_sprites(&L, s->km.spr);
+            if (ov && (m->cr & 0x02)) vdc_irq(ST_OR);
+            if (m->cr & 0x01) for (int x = 0; x < width; x++) if (s->km.spr[x] & 0x8000) { vdc_irq(ST_CR); break; }
+        }
+        return;
+    }
+    if (spr_irq) {
+        // The CPU reads this line's sprite interrupts as it starts: drawn here, now, after the queued ones.
+        lines_settle(s);
+        const uint32_t c0 = pce_ccount();
+        const int f = line_draw(&L, s->out, &s->km);
+        s->prof_vdc += pce_ccount() - c0;
+        if ((f & 2) && (m->cr & 0x02)) vdc_irq(ST_OR);
+        if ((f & 1) && (m->cr & 0x01)) vdc_irq(ST_CR);
+        const uint32_t c1 = pce_ccount();
+        if (s->on_line) s->on_line(s->out, y, s->user);
+        s->prof_line += pce_ccount() - c1;
+        return;
+    }
+    pce_batch_t *b = &s->batch[s->bi];
+    b->line[b->n++] = L;
+    s->busy = true;
+    if (b->n == PCE_BATCH) lines_flush(s);
 }
 static void blank_line(int y)
 {
     pce_t *s = PCE;
     if (y < 0 || s->skip || !s->on_line) return;
-    for (int x = 0; x < NUCLEO_PCE_W; x++) s->out[x] = s->rgb[0x100];
-    s->on_line(s->out, y, s->user);
+    const pce_line_t L = { (int16_t)y, 0, 0, 0, 0, 0, 0 };
+    pce_batch_t *b = &s->batch[s->bi];
+    b->line[b->n++] = L;
+    s->busy = true;
+    if (b->n == PCE_BATCH) lines_flush(s);
 }
 
 // ── the I/O page ─────────────────────────────────────────────────────────────────────────────────────────
@@ -637,6 +811,7 @@ static void pce_port_write(uint8_t v) { PCE->m.pad_sel = v & 1; PCE->m.pad_clr =
 
 static uint8_t io_read(uint16_t off)
 {
+    g_io_reads++;
     switch (off >> 10) {
         case 0: return vdc_read(off);
         case 1: return vce_read(off);
@@ -659,13 +834,68 @@ static void io_write(uint16_t off, uint8_t v)
     }
 }
 
+// ── waiting loops, skipped exactly ─────────────────────────────────────────────────────────────────────────
+// Most games spend much of a frame in a loop waiting for an interrupt (`lda flag / beq loop`, a `bbr` on a RAM bit).
+// When the CPU jumps back to an address it was at before with every register, flag, stack pointer and speed the
+// same, and in between wrote nothing and read no I/O port, the memory it reads is unchanged too: until something from
+// outside the CPU happens it will go round the same instructions forever. Inside a leg of run_cpu nothing outside
+// happens but the CPU's own timer, so the whole iterations left before the leg ends (or before the timer would reach
+// zero) are skipped: their cycles are taken off the count and the timer, and the last partial iteration and the
+// interrupt itself run as always. The result is the same machine state, cycle for cycle. The candidate is checked at
+// backward jumps, Brent-style (the snapshot moves at powers of two), so a loop with a delay loop inside is found too.
+static struct {
+    uint16_t pc;
+    uint8_t  a, x, y, p, sp, cpc;
+    uint32_t writes, io;
+    int      icount;
+    uint16_t power, lam;
+    bool     armed;
+} g_idle;
+
+static void idle_after(void)
+{
+    const uint16_t pc = m_pc.w.l;
+    if (pc >= m_ppc.w.l) return;                       // only a backward jump closes a loop
+    if (g_idle.armed && g_idle.pc == pc && g_idle.a == m_a && g_idle.x == m_x && g_idle.y == m_y && g_idle.p == m_p
+        && g_idle.sp == m_sp.b.l && g_idle.cpc == m_clocks_per_cycle && g_idle.writes == g_writes && g_idle.io == g_io_reads
+        && !m_irq_pending) {
+        const int period = g_idle.icount - m_icount;
+        if (period > 0) {
+            int k = (m_icount - 1) / period;          // whole iterations that end before the leg does
+            if (m_timer_status) {
+                const int t = (m_timer_value - 1) / period;   // ...and before the timer reaches zero
+                if (t < k) k = t;
+            }
+            if (k > 0) {
+                const int c = k * period;
+                m_icount -= c;
+                m_timer_value -= c;
+                PCE->prof_idle += (uint32_t)c;
+            }
+        }
+        g_idle.icount = m_icount;
+        return;
+    }
+    if (++g_idle.lam >= g_idle.power || !g_idle.armed) {
+        g_idle.pc = pc; g_idle.a = m_a; g_idle.x = m_x; g_idle.y = m_y; g_idle.p = m_p; g_idle.sp = m_sp.b.l;
+        g_idle.cpc = m_clocks_per_cycle; g_idle.writes = g_writes; g_idle.io = g_io_reads; g_idle.icount = m_icount;
+        g_idle.armed = true;
+        g_idle.lam = 0;
+        g_idle.power = g_idle.power >= 128 ? 1 : (uint16_t)(g_idle.power * 2);
+    }
+}
+
 // ── the frame ────────────────────────────────────────────────────────────────────────────────────────────
 static void run_cpu(uint32_t cycles)
 {
     pce_t *s = PCE;
     s->leg_len = cycles;
     m_icount += (int)cycles;
+    g_idle.armed = false;                              // a new leg: the cycle count restarts
+    g_idle.power = 1; g_idle.lam = 0;
+    const uint32_t c0 = pce_ccount();
     if (m_icount > 0) execute_run();
+    s->prof_cpu += pce_ccount() - c0;
     s->leg_base += cycles;
 }
 
@@ -674,7 +904,22 @@ void nucleo_pce_run_frame(void)
     pce_t *s = PCE;
     if (!s) return;
     const int64_t t0 = esp_timer_get_time();
-    s->skip = s->frameskip && (s->clock & 1);
+    // How far behind the console is, from WORK only (as nucleo_nes.c): the time since the last frame began minus
+    // what that frame spent waiting for room in the speaker's queue (a full queue is the pace, not a cost).
+    int over = 0;
+    if (s->last_t0) {
+        const int64_t cycle = t0 - s->last_t0 - s->last_block;
+        if (cycle > 0 && cycle < 250000) over = (int)cycle - 16715;
+    }
+    s->last_t0 = t0;
+    s->debt += over;
+    if (s->debt < -4000) s->debt = -4000;              // a little credit, not a bank
+    if (s->debt > 100000) s->debt = 0;                 // a pause (menu, card): start over
+    s->skip = false;
+    if (s->frameskip) {
+        s->skip = s->debt > 0 && s->skipped < 3;       // behind: catch up unseen, three at most in a row
+        s->skipped = s->skip ? (uint8_t)(s->skipped + 1) : 0;
+    }
     s->leg_base = 0;
     for (int v = 0; v < LINES; v++) {
         vdc_hsync();
@@ -688,14 +933,26 @@ void nucleo_pce_run_frame(void)
         else if (v == LINES - 1) vdc_vsync(1);
         run_cpu(LINE_CYC - HSYNC_CYC);
     }
+    lines_settle(s);                                   // the front-end gets the frame whole
     const int64_t t1 = esp_timer_get_time();
     s->us_cpu += (uint32_t)(t1 - t0);
-    psg_render(s);
+    const uint32_t c0 = pce_ccount();
+    int n = APU_SPF;                                   // a frame that overran by real work: its samples too, so the
+    if (over > 1000) n += (int)((uint32_t)over * 4u / 125u);   // speaker never runs dry (32 kHz = 4/125 a us)
+    if (n > 2 * APU_SPF) n = 2 * APU_SPF;
+    psg_render(s, n);
+    s->last_block = 0;
     if (s->sound) {
-        emu_afilt_run(&s->afilt, s->pcm, APU_SPF, 1, 1);
-        nucleo_audio_pcm_write(s->pcm, sizeof s->pcm);
-        s->us_audio += (uint32_t)(esp_timer_get_time() - t1);
+        emu_afilt_run(&s->afilt, s->pcm, n, 1, 1);
+        const int64_t w0 = esp_timer_get_time();
+        nucleo_audio_pcm_write(s->pcm, (size_t)n * sizeof s->pcm[0]);
+        const int64_t w1 = esp_timer_get_time();
+        s->last_block = w1 - w0;
+        s->us_audio += (uint32_t)(w0 - t1);
     }
+    s->prof_psg += pce_ccount() - c0;
+    s->prof_frames++;
+    if (!s->skip) s->prof_drawn++;
     s->frames++;
     s->clock++;
 }
@@ -798,10 +1055,14 @@ esp_err_t nucleo_pce_open(const char *rom_path, nucleo_pce_line_fn line_cb, void
     s->vram[0] = v0; s->vram[1] = v1;
     s->heap_bytes = sizeof *s + 0x10000;
     s->on_line = line_cb; s->user = user;
+    s->pending = -1;
     s->cur_tag = PG_EMPTY;
     for (int i = 0; i < PG_SLOTS; i++) s->pg_tag[i] = PG_EMPTY;
     memset(s->hint, -1, sizeof s->hint);
     save_base_init(s, rom_path);
+    const char *roms = strstr(rom_path, "/data/ROMs/");
+    if (roms) snprintf(s->trace_path, sizeof s->trace_path, "%.*s/pceemu_trace.txt", (int)(roms - rom_path), rom_path);
+    plane_init();
     s->fp = fopen(rom_path, "rb");
     if (!s->fp) { session_free(s); return ESP_ERR_NOT_FOUND; }
     fseek(s->fp, 0, SEEK_END);
@@ -845,9 +1106,29 @@ esp_err_t nucleo_pce_open(const char *rom_path, nucleo_pce_line_fn line_cb, void
     return ESP_OK;
 }
 
+// Where the frames' time went, once per game, appended to the emulator's trace: tenths of a millisecond per frame at
+// 240 MHz (1024-cycle units by a shift: no 64-bit division in a module; k * 1024 / 24000 = k * 16 / 375).
+static void profile_write(pce_t *s)
+{
+    if (!s->prof_frames || !s->trace_path[0] || !s->prof_cpu) return;
+    const uint32_t n = s->prof_frames;
+    const unsigned c = (unsigned)((uint32_t)(s->prof_cpu >> 10) / n * 16 / 375), v = (unsigned)((uint32_t)(s->prof_vdc >> 10) / n * 16 / 375),
+                   l = (unsigned)((uint32_t)(s->prof_line >> 10) / n * 16 / 375), a = (unsigned)((uint32_t)(s->prof_psg >> 10) / n * 16 / 375),
+                   w = (unsigned)((uint32_t)(s->prof_wait >> 10) / n * 16 / 375);
+    FILE *f = fopen(s->trace_path, "a");
+    if (!f) return;
+    fprintf(f, "  pce profile: %u frames (%u drawn), ms/frame: huc6280 %u.%u  vdc %u.%u  panel lines %u.%u  wait 2nd core %u.%u  psg+speaker %u.%u, idle skipped %u%%\n",
+            (unsigned)n, (unsigned)s->prof_drawn, c / 10, c % 10, v / 10, v % 10, l / 10, l % 10, w / 10, w % 10, a / 10, a % 10,
+            (unsigned)((uint32_t)(s->prof_idle / n) * 100 / (LINES * LINE_CYC)));
+    fclose(f);
+}
+
 void nucleo_pce_close(void)
 {
     if (!PCE) return;
+    lines_settle(PCE);
+    nucleo_cowork_stop();
+    profile_write(PCE);
     pce_t *s = PCE;
     PCE = NULL;
     session_free(s);
@@ -856,7 +1137,9 @@ void nucleo_pce_close(void)
 void nucleo_pce_reset(void) { if (PCE) machine_reset(); }
 void nucleo_pce_set_buttons(uint8_t m) { if (PCE) PCE->buttons = m; }
 const char *nucleo_pce_title(void) { return PCE ? PCE->title : ""; }
-void nucleo_pce_set_frameskip(bool on) { if (PCE) PCE->frameskip = on; }
+// The front-end's relief lever (as the NES): on, a frame is drawn only while the console is not behind; never more
+// than three unseen in a row. Off, every frame is drawn.
+void nucleo_pce_set_frameskip(bool on) { if (PCE) { PCE->frameskip = on; PCE->debt = 0; PCE->skipped = 0; } }
 void nucleo_pce_geometry(int *w, int *h) { *w = NUCLEO_PCE_W; *h = NUCLEO_PCE_H; }
 void nucleo_pce_save(void) {}
 bool nucleo_pce_autosave(void) { return false; }
