@@ -144,9 +144,25 @@ static struct {
     PAIR ppc, pc, sp, zp, ea;
     int icount;
     int32_t timer_value, timer_load;
+    int32_t tsync, stop;                          /* the timer as of icount == tsync; where the fast loop stops */
     uint8_t a, x, y, p, mmr[8], irq_mask, timer_status, timer_ack, clocks_per_cycle;
     uint8_t nmi_state, irq_state[3], irq_pending, io_buffer, timer_scale;
 } H6280 = { .timer_scale = 1 };
+#define m_tsync H6280.tsync
+#define m_stop H6280.stop
+/* The timer counts down with the cycles: it is not decremented with every instruction but derived from the cycle
+ * counter (timer_value as of icount == tsync). timer_sync() makes timer_value current; the including file calls it
+ * before reading or writing the timer, and moves tsync with icount when it gives the CPU more cycles. */
+static inline void timer_sync(void) { H6280.timer_value -= H6280.tsync - H6280.icount; H6280.tsync = H6280.icount; }
+static inline int32_t timer_now(void) { return H6280.timer_value - (H6280.tsync - H6280.icount); }
+/* Where the run loop's fast path stops: at the end of the leg (0), at the cycle the timer reaches zero, or after this
+ * instruction when an interrupt is pending (INT32_MAX). Anything that may make an interrupt pending sets it so. */
+static inline void run_stop(void)
+{
+    if (H6280.irq_pending) { H6280.stop = INT32_MAX; return; }
+    const int32_t t = H6280.timer_status ? H6280.icount - timer_now() : 0;
+    H6280.stop = t > 0 ? t : 0;
+}
 #define m_ppc H6280.ppc
 #define m_pc H6280.pc
 #define m_sp H6280.sp
@@ -842,6 +858,25 @@ static const uint8_t s_fdec[256][4] = {
 	/* fe */ { 7, 6, 99, 0x00 },
 	/* ff */ { 4, 2, 69, 0x07 },
 };
+/* N and Z of a result (set_nz) */
+static const uint8_t s_nz[256] = {
+	0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80,
+	0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80,
+	0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80,
+	0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80,
+	0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80,
+	0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80,
+	0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80,
+	0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80, 0x80
+};
 
 /* 6280 flags */
 enum
@@ -886,8 +921,7 @@ static inline uint32_t translated(uint16_t addr)
 
 static inline void h6280_cycles(int cyc)
 {
-	m_icount -= ((cyc) * m_clocks_per_cycle);
-	m_timer_value -= ((cyc) * m_clocks_per_cycle);
+	m_icount -= ((cyc) * m_clocks_per_cycle);   /* (the timer follows: timer_now) */
 }
 
 #if H6280_LAZY_FLAGS
@@ -903,9 +937,7 @@ static inline void set_nz(uint8_t n)
 
 static inline void set_nz(uint8_t n)
 {
-	P = (P & ~(_fN|_fT|_fZ)) |
-		(n & _fN) |
-		((n == 0) ? _fZ : 0);
+	P = (P & ~(_fN|_fT|_fZ)) | s_nz[n];          /* (n & _fN) | (n == 0 ? _fZ : 0), from a table */
 }
 
 #endif
@@ -959,6 +991,7 @@ static inline void check_irq_lines(void)
 {
 	if (!m_irq_pending)
 		m_irq_pending = 2;
+	m_stop = INT32_MAX;                            /* the run loop looks at it after this instruction */
 }
 
 /***************************************************************
@@ -2768,8 +2801,10 @@ static PCE_HOT void execute_run(void)
 	}
 
 	/* Execute instructions */
+	run_stop();
 	do
 	{
+		do {
 		m_ppc = m_pc;
 
 		
@@ -2927,6 +2962,8 @@ static PCE_HOT void execute_run(void)
 			} break;
 		}
 		PCE_AFTER_OP();
+		} while (m_icount > m_stop);   /* the fast path: nothing to check until stop */
+		timer_sync();
 
 		if (m_irq_pending)
 		{
@@ -2945,6 +2982,7 @@ static PCE_HOT void execute_run(void)
 		}
 
 		/* Check internal timer */
+		timer_sync();                  /* (an interrupt taken just above spent cycles) */
 		if (m_timer_status)
 		{
 			if (m_timer_value<=0)
@@ -2960,6 +2998,7 @@ static PCE_HOT void execute_run(void)
 				set_irq_line(2, ASSERT_LINE);
 			}
 		}
+		run_stop();
 	} while (m_icount > 0);
 }
 
@@ -3041,11 +3080,14 @@ static void irq_status_w(offs_t offset, uint8_t data)
 static uint8_t timer_r(void)
 {
 	/* only returns countdown */
+	timer_sync();
 	return ((m_timer_value >> 10) & 0x7F) | (m_io_buffer & 0x80);
 }
 
 static void timer_w(offs_t offset, uint8_t data)
 {
+	timer_sync();
+	m_stop = INT32_MAX;                            /* a start, a stop: the loop recomputes where to stop */
 	m_io_buffer = data;
 	switch (offset & 1)
 	{

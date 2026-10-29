@@ -139,7 +139,10 @@ s = s.replace('/*FACTORED*/', FACTORED)
 FDEC = ('/* the factored interpreter\'s entries (see the generator): {cycles, read mode, operation, write mode | bit | TST} */\n'
         'static const uint8_t s_fdec[256][4] = {\n' +
         ''.join(f'\t/* {o:02x} */ {{ {d[0]}, {d[1]}, {d[2]}, 0x{d[3]:02x} }},\n' if (d := dec.get(o)) else f'\t/* {o:02x} */ {{ 0 }},\n'
-                for o in range(256)) + '};\n')
+                for o in range(256)) + '};\n'
+        '/* N and Z of a result (set_nz) */\n'
+        'static const uint8_t s_nz[256] = {' +
+        ','.join(('\n\t' if v % 16 == 0 else ' ') + f'0x{(v & 0x80) | (0x02 if v == 0 else 0):02x}' for v in range(256)) + '\n};\n')
 # The T flag (the ALU working on zero page (X) instead of A) and decimal mode are rare: out of line and cold, so the
 # common ADC / SBC / AND / EOR / ORA stay a few instructions the hot handlers inline (adc was 718 bytes, called).
 for f in ('tadc', 'tand', 'teor', 'tora', 'tsbc'):
@@ -169,6 +172,33 @@ s = re.sub(r'static (inline )?(\w[\w ]*) (\w+)\(\)', r'static \1\2 \3(void)', s)
 # The run loop's placement is the including file's (PCE_HOT: a store module puts it in the section it locks in the
 # instruction cache).
 s = s.replace('static void execute_run(void)', 'static PCE_HOT void execute_run(void)')
+
+# ── the run loop driven by events, exactly ───────────────────────────────────────────────────────────────────
+# MAME checks, after every instruction, a pending interrupt and the timer (decremented with every instruction's
+# cycles). PCE-Go checks them once a scanline, which is cheaper and inexact. Here an inner loop runs instructions with
+# ONE test, `icount > stop`, where stop is the end of the leg, the cycle the timer reaches zero, or "now" when an
+# interrupt is pending (run_stop); the timer is derived from the cycle counter. MAME's checks then run after exactly
+# the instructions where they could do something, so the machine is the same, cycle for cycle.
+def sub(a, b, n=1):
+    global s
+    assert s.count(a) == n, (a[:50], s.count(a))
+    s = s.replace(a, b)
+
+
+sub('\t/* Execute instructions */\n\tdo\n\t{\n', '\t/* Execute instructions */\n\trun_stop();\n\tdo\n\t{\n\t\tdo {\n')
+sub('PCE_AFTER_OP();\n', 'PCE_AFTER_OP();\n\t\t} while (m_icount > m_stop);   /* the fast path: nothing to check until stop */\n'
+    '\t\ttimer_sync();\n')
+sub('\t} while (m_icount > 0);\n}', '\t\trun_stop();\n\t} while (m_icount > 0);\n}')
+sub('\t\t/* Check internal timer */\n', '\t\t/* Check internal timer */\n\t\ttimer_sync();                  /* (an interrupt taken just above spent cycles) */\n')
+sub('\tm_timer_value -= ((cyc) * m_clocks_per_cycle);\n', '')                      # derived from icount now
+sub('\tm_icount -= ((cyc) * m_clocks_per_cycle);\n', '\tm_icount -= ((cyc) * m_clocks_per_cycle);   /* (the timer follows: timer_now) */\n')
+sub('\tif (!m_irq_pending)\n\t\tm_irq_pending = 2;\n}', '\tif (!m_irq_pending)\n\t\tm_irq_pending = 2;\n\tm_stop = INT32_MAX;                            /* the run loop looks at it after this instruction */\n}')
+sub('\t/* only returns countdown */\n', '\t/* only returns countdown */\n\ttimer_sync();\n')
+sub('static void timer_w(offs_t offset, uint8_t data)\n{\n', 'static void timer_w(offs_t offset, uint8_t data)\n{\n\ttimer_sync();\n\tm_stop = INT32_MAX;                            /* a start, a stop: the loop recomputes where to stop */\n')
+# N and Z from a table: one load instead of a compare and the bit games (the same flags)
+sub('''	P = (P & ~(_fN|_fT|_fZ)) |
+		(n & _fN) |
+		((n == 0) ? _fZ : 0);''', '''	P = (P & ~(_fN|_fT|_fZ)) | s_nz[n];          /* (n & _fN) | (n == 0 ? _fZ : 0), from a table */''')
 
 # the io pages' callbacks -> the host; MAME's address-space translation goes
 s = s.replace('''	if (!m_port_in_cb.isunset())
@@ -220,9 +250,25 @@ static struct {
     PAIR ppc, pc, sp, zp, ea;
     int icount;
     int32_t timer_value, timer_load;
+    int32_t tsync, stop;                          /* the timer as of icount == tsync; where the fast loop stops */
     uint8_t a, x, y, p, mmr[8], irq_mask, timer_status, timer_ack, clocks_per_cycle;
     uint8_t nmi_state, irq_state[3], irq_pending, io_buffer, timer_scale;
 } H6280 = { .timer_scale = 1 };
+#define m_tsync H6280.tsync
+#define m_stop H6280.stop
+/* The timer counts down with the cycles: it is not decremented with every instruction but derived from the cycle
+ * counter (timer_value as of icount == tsync). timer_sync() makes timer_value current; the including file calls it
+ * before reading or writing the timer, and moves tsync with icount when it gives the CPU more cycles. */
+static inline void timer_sync(void) { H6280.timer_value -= H6280.tsync - H6280.icount; H6280.tsync = H6280.icount; }
+static inline int32_t timer_now(void) { return H6280.timer_value - (H6280.tsync - H6280.icount); }
+/* Where the run loop's fast path stops: at the end of the leg (0), at the cycle the timer reaches zero, or after this
+ * instruction when an interrupt is pending (INT32_MAX). Anything that may make an interrupt pending sets it so. */
+static inline void run_stop(void)
+{
+    if (H6280.irq_pending) { H6280.stop = INT32_MAX; return; }
+    const int32_t t = H6280.timer_status ? H6280.icount - timer_now() : 0;
+    H6280.stop = t > 0 ? t : 0;
+}
 #define m_ppc H6280.ppc
 #define m_pc H6280.pc
 #define m_sp H6280.sp

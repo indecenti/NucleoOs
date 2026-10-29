@@ -955,13 +955,12 @@ static PCE_HOT_FN void idle_after(void)
         if (period > 0) {
             int k = (m_icount - 1) / period;          // whole iterations that end before the leg does
             if (m_timer_status) {
-                const int t = (m_timer_value - 1) / period;   // ...and before the timer reaches zero
+                const int t = (timer_now() - 1) / period;     // ...and before the timer reaches zero
                 if (t < k) k = t;
             }
             if (k > 0) {
                 const int c = k * period;
-                m_icount -= c;
-                m_timer_value -= c;
+                m_icount -= c;                                // (the timer follows the cycle counter)
                 PCE->prof_idle += (uint32_t)c;
             }
         }
@@ -1058,6 +1057,7 @@ static PCE_HOT_FN void run_cpu(uint32_t cycles)
     pce_t *s = PCE;
     s->leg_len = cycles;
     m_icount += (int)cycles;
+    m_tsync += (int)cycles;                            // more cycles to run are not time gone: the timer stays
     g_idle.armed = false;                              // a new leg: the cycle count restarts
     g_idle.power = 1; g_idle.lam = 0;
     const uint32_t c0 = pce_ccount();
@@ -1196,7 +1196,7 @@ static void cpu_reset(void)
     m_nmi_state = 0; m_irq_state[0] = m_irq_state[1] = m_irq_state[2] = 0;
     m_irq_pending = 0; m_io_buffer = 0;
     m_clocks_per_cycle = 4;
-    m_icount = 0;
+    m_icount = 0; m_tsync = 0; m_stop = 0;
     windows_drop();
     m_pc.b.l = program_read8(H6280_RESET_VEC);
     m_pc.b.h = program_read8(H6280_RESET_VEC + 1);
@@ -1395,6 +1395,7 @@ static void cpu_get(cpu_state_t *c)
     c->ppc = m_ppc; c->pc = m_pc; c->sp = m_sp; c->zp = m_zp; c->ea = m_ea;
     c->a = m_a; c->x = m_x; c->y = m_y; c->p = m_p; memcpy(c->mmr, m_mmr, 8);
     c->irq_mask = m_irq_mask; c->timer_status = m_timer_status; c->timer_ack = m_timer_ack; c->clocks_per_cycle = m_clocks_per_cycle;
+    timer_sync();
     c->timer_value = m_timer_value; c->timer_load = m_timer_load;
     c->nmi_state = m_nmi_state; memcpy(c->irq_state, m_irq_state, 3); c->irq_pending = m_irq_pending; c->io_buffer = m_io_buffer;
     c->icount = m_icount;
@@ -1406,7 +1407,7 @@ static void cpu_set(const cpu_state_t *c)
     m_irq_mask = c->irq_mask; m_timer_status = c->timer_status; m_timer_ack = c->timer_ack; m_clocks_per_cycle = c->clocks_per_cycle;
     m_timer_value = c->timer_value; m_timer_load = c->timer_load;
     m_nmi_state = c->nmi_state; memcpy(m_irq_state, c->irq_state, 3); m_irq_pending = c->irq_pending; m_io_buffer = c->io_buffer;
-    m_icount = c->icount;
+    m_icount = c->icount; m_tsync = m_icount; m_stop = 0;
 }
 static void state_path(char *out, size_t n, int slot) { snprintf(out, n, "%s.st%d", PCE->save_base, slot < 0 ? 0 : slot > 9 ? 9 : slot); }
 static long state_bytes(void) { return (long)(4 + sizeof(cpu_state_t) + sizeof(pce_core_t) + 0x10000); }
