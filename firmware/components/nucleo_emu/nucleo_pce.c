@@ -41,7 +41,7 @@ void nucleo_cowork_stop(void);
 // the same state is waiting (see idle_after). The core calls the hook after each instruction.
 static uint32_t g_writes, g_io_reads;
 static void idle_after(void);
-#define PCE_AFTER_OP() idle_after()
+#define PCE_AFTER_OP() do { if (m_pc.w.l < m_ppc.w.l) idle_after(); } while (0)   // only a backward jump can close a loop
 #include "../vendor/h6280/h6280_core.h"
 
 static const char *TAG = "pce";
@@ -58,6 +58,9 @@ static const char *TAG = "pce";
 #define PPC       (PG_CHUNK / PG_SIZE)
 #define PG_SLOTS  (128 * 1024 / PG_SIZE)
 #define PG_MIN    (16 * 1024 / PG_SIZE)
+#ifndef PG_AHEAD
+#define PG_AHEAD  3                                    // pages read after a missed one (see rom_page)
+#endif
 #define NWIN      (0x10000 >> PG_BITS)                 // windows over the CPU's 64 KB
 #define WPB       (0x2000 >> PG_BITS)                  // ...and in one 8 KB bank
 #define PG_HINT   512
@@ -179,7 +182,7 @@ typedef struct {
     uint8_t    skipped;
     // Where the time goes, in CPU cycles (the S3's counter), written to the trace when the game closes.
     uint64_t   prof_cpu, prof_vdc, prof_line, prof_psg, prof_idle, prof_wait;
-    uint32_t   prof_misses, prof_frames, prof_drawn, prof_lines_here, prof_lines_other;
+    uint32_t   prof_ahead, prof_misses, prof_frames, prof_drawn, prof_lines_here, prof_lines_other;
     char       trace_path[160];
     char       save_base[300];
     char       title[48];
@@ -213,6 +216,26 @@ static void windows_drop(void)
 
 static inline uint8_t *pg_buf(const pce_t *s, int i) { return s->chunk[i / PPC] + (uint32_t)(i % PPC) * PG_SIZE; }
 
+// The page holding cartridge page `tag`, or -1 (the hint table first, then a scan).
+static int find_page(pce_t *s, uint32_t tag)
+{
+    const int g = s->hint[tag & (PG_HINT - 1)];
+    if (g >= 0 && g < s->pg_n && s->pg_tag[g] == tag) return g;
+    for (int i = 0; i < s->pg_n; i++) if (s->pg_tag[i] == tag) { s->hint[tag & (PG_HINT - 1)] = (int16_t)i; return i; }
+    return -1;
+}
+// The least recently used page that no window shows and is not already taken (`taken`), else the oldest of all.
+static int pick_victim(pce_t *s, uint8_t *taken)
+{
+    int v = -1;
+    for (int i = 0; i < s->pg_n; i++) if (!taken[i] && (v < 0 || s->pg_age[i] < s->pg_age[v])) v = i;
+    if (v < 0) { v = 0; for (int i = 1; i < s->pg_n; i++) if (s->pg_age[i] < s->pg_age[v]) v = i; }
+    taken[v] = 1;
+    for (int k = 0; k < NWIN; k++)                     // only the windows on the page being replaced (none, usually)
+        if (s->win_pg[k] == v) { s->rd[k] = NULL; s->wr[k] = NULL; s->win_pg[k] = -1; }
+    return v;
+}
+
 static const uint8_t *rom_page(uint32_t data_off)
 {
     pce_t *s = PCE;
@@ -221,33 +244,39 @@ static const uint8_t *rom_page(uint32_t data_off)
     const uint32_t tag = data_off >> PG_BITS;
     if (s->rom_all) return s->rom_all + s->rom_base + (tag << PG_BITS);
     if (tag == s->cur_tag) { s->last_pg = s->cur_pg; return s->cur_buf; }
-    int h = (int)(tag & (PG_HINT - 1)), g = s->hint[h];
-    if (g < 0 || g >= s->pg_n || s->pg_tag[g] != tag) {
-        g = -1;
-        for (int i = 0; i < s->pg_n; i++) if (s->pg_tag[i] == tag) { g = i; break; }
-        if (g < 0) {
-            // The victim: the least recently used page that no window shows. A page the CPU reads through a window
-            // is never "used" again as far as the ages know (a window is a pointer: no call, no clock), so plain LRU
-            // threw out exactly the hottest pages, then every window with them, and read them back at once.
-            uint8_t shown[PG_SLOTS];
-            memset(shown, 0, sizeof shown);
-            for (int k = 0; k < NWIN; k++) if (s->win_pg[k] >= 0) shown[s->win_pg[k]] = 1;
-            int v = -1;
-            for (int i = 0; i < s->pg_n; i++) if (!shown[i] && (v < 0 || s->pg_age[i] < s->pg_age[v])) v = i;
-            if (v < 0) { v = 0; for (int i = 1; i < s->pg_n; i++) if (s->pg_age[i] < s->pg_age[v]) v = i; }
-            size_t got = 0;
-            const int64_t m0 = esp_timer_get_time();
-            if (fseek(s->fp, (long)(s->rom_base + (tag << PG_BITS)), SEEK_SET) == 0) got = fread(pg_buf(s, v), 1, PG_SIZE, s->fp);
-            s->us_miss += (uint32_t)(esp_timer_get_time() - m0);
-            if (got < PG_SIZE) memset(pg_buf(s, v) + got, 0xFF, PG_SIZE - got);
-            s->pg_tag[v] = (uint16_t)tag;
-            s->misses++;
-            s->prof_misses++;
-            g = v;
-            for (int k = 0; k < NWIN; k++)           // only the windows on the page just replaced (none, usually)
-                if (s->win_pg[k] == v) { s->rd[k] = NULL; s->wr[k] = NULL; s->win_pg[k] = -1; }
+    int g = find_page(s, tag);
+    if (g < 0) {
+        // The victim: the least recently used page that no window shows. A page the CPU reads through a window is
+        // never "used" again as far as the ages know (a window is a pointer: no call, no clock), so plain LRU threw out
+        // exactly the hottest pages, then every window with them, and read them back at once.
+        uint8_t taken[PG_SLOTS];
+        memset(taken, 0, sizeof taken);
+        for (int k = 0; k < NWIN; k++) if (s->win_pg[k] >= 0) taken[s->win_pg[k]] = 1;
+        g = pick_victim(s, taken);
+        const int64_t m0 = esp_timer_get_time();
+        size_t got = 0;
+        if (fseek(s->fp, (long)(s->rom_base + (tag << PG_BITS)), SEEK_SET) == 0) got = fread(pg_buf(s, g), 1, PG_SIZE, s->fp);
+        if (got < PG_SIZE) memset(pg_buf(s, g) + got, 0xFF, PG_SIZE - got);
+        s->pg_tag[g] = (uint16_t)tag;
+        s->hint[tag & (PG_HINT - 1)] = (int16_t)g;
+        // Read-ahead: what a seek costs on the card is the seek, not the bytes, and the big HuCards read on (the
+        // next page is wanted soon after in 60% of Street Fighter II's misses). The pages after this one, as long
+        // as they are not cached already, come in the same read, as the oldest pages: unused, they are the first
+        // to go; used, they are aged like any other.
+        for (uint32_t t2 = tag + 1; t2 <= tag + PG_AHEAD && got == PG_SIZE; t2++) {
+            if ((t2 << PG_BITS) >= s->data_bytes || find_page(s, t2) >= 0) break;
+            const int v2 = pick_victim(s, taken);
+            if (v2 == g) break;
+            got = fread(pg_buf(s, v2), 1, PG_SIZE, s->fp);
+            if (got < PG_SIZE) memset(pg_buf(s, v2) + got, 0xFF, PG_SIZE - got);
+            s->pg_tag[v2] = (uint16_t)t2;
+            s->pg_age[v2] = 1;
+            s->hint[t2 & (PG_HINT - 1)] = (int16_t)v2;
+            s->prof_ahead++;
         }
-        s->hint[h] = (int16_t)g;
+        s->us_miss += (uint32_t)(esp_timer_get_time() - m0);
+        s->misses++;
+        s->prof_misses++;
     }
     if (++s->pg_clock == 0xFFFF) {                    // the 16-bit clock wraps: halve every age, the order stays
         for (int i = 0; i < s->pg_n; i++) s->pg_age[i] >>= 1;
@@ -332,8 +361,22 @@ static inline void mem_write(uint16_t addr, uint8_t v)
 // The core's memory interface (vendor/h6280/h6280_core.h). The VDC/VCE penalty cycle is the core's own.
 static inline uint32_t translated(uint16_t addr);
 static inline void check_vdc_vce_penalty(uint16_t addr);
-static uint8_t  program_read8(uint16_t addr)            { check_vdc_vce_penalty(addr); return mem_read(addr); }
-static void     program_write8(uint16_t addr, uint8_t v) { check_vdc_vce_penalty(addr); mem_write(addr, v); }
+// A window is never the I/O page (bank 0xFF has none), and the VDC / VCE penalty cycle is only for I/O: an access
+// through a window skips the check, every other one takes it as before.
+static uint8_t program_read8(uint16_t addr)
+{
+    const uint8_t *w = PCE->rd[addr >> PG_BITS];
+    if (w) return w[addr & (PG_SIZE - 1)];
+    check_vdc_vce_penalty(addr);
+    return mem_read(addr);
+}
+static void program_write8(uint16_t addr, uint8_t v)
+{
+    uint8_t *w = PCE->wr[addr >> PG_BITS];
+    if (w) { g_writes++; w[addr & (PG_SIZE - 1)] = v; return; }
+    check_vdc_vce_penalty(addr);
+    mem_write(addr, v);
+}
 static uint8_t  program_read8z(uint16_t addr)           { return mem_read((uint16_t)(0x2000 | (addr & 0x1fff))); }
 static void     program_write8z(uint16_t addr, uint8_t v) { mem_write((uint16_t)(0x2000 | (addr & 0x1fff)), v); }
 static uint16_t program_read16(uint16_t addr)           { return (uint16_t)(mem_read(addr) | mem_read((uint16_t)(addr + 1)) << 8); }

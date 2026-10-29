@@ -145,6 +145,10 @@ CONFIG_BT_NIMBLE_ENABLED=y
 CONFIG_BT_CTRL_RUN_IN_FLASH_ONLY=y
 # The octal (OPI) MXIC flash driver is in IRAM (~1.4 KB) and this board's flash is quad (DIO): never used.
 CONFIG_SPI_FLASH_SUPPORT_MXIC_OPI_CHIP=n
+# FatFs fast seek: a file opened for reading keeps its cluster map (256 B) and fseek jumps straight to the cluster
+# instead of walking the FAT from the file's start. The emulators' cartridge caches seek all over a 2.5 MB HuCard
+# (Street Fighter II): a page miss cost ~5.6 ms on the ADV, most of it in that walk.
+CONFIG_FATFS_USE_FASTSEEK=y
 
 # Default log level INFO -> WARN. ESP_LOGI/D format strings of stripped levels are removed at
 # compile time (they live in the same .str1.4 pool). WARN keeps warnings + errors on the serial
