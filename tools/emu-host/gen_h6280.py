@@ -18,6 +18,7 @@ what the core calls instead (all `pce_*`, defined before the include):
     uint8_t  pce_port_read(void) / pce_port_write(uint8_t v)                         the joypad port
     PCE_AFTER_OP()                       optional macro, after every instruction (the host's idle-loop detector)
 """
+import os
 import re
 import sys
 
@@ -43,9 +44,13 @@ s = flags + '\n' + helpers + '\n' + run
 s = s.replace('debugger_instruction_hook(PCW);', '')
 s = re.sub(r'standard_irq_callback\([^;]*\);', '', s)
 s = s.replace('logerror("BRK %04x\\n",PCW);', '')
-# The dispatch: one switch over the opcode with every handler inlined into it (a jump table, no call per
-# instruction), instead of MAME's table of member-function pointers. The table is still emitted (unused).
-DISPATCH = 'switch (in) {\n' + ''.join(f'\t\tcase 0x{i:02x}: op_{i:02x}(); break;\n' for i in range(256)) + '\t\t}\n\t\t'
+# The dispatch: a switch over the hot opcodes (h6280_hot.txt, measured) with their handlers inlined into it, and the
+# table of cold handlers for the rest. All 256 inlined made a 24.8 KB loop that never fitted the S3's 16 KB
+# instruction cache (the module runs from flash): the hot loop now does, and a cold opcode costs one call.
+HOT = [int(x, 16) for x in open(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'h6280_hot.txt'))
+       .read().split('\n')[-2].split()]
+DISPATCH = ('switch (in) {\n' + ''.join(f'\t\tcase 0x{i:02x}: op_{i:02x}(); break;\n' for i in HOT)
+            + '\t\tdefault: s_opcodetable[in](); break;\n\t\t}\n\t\t')
 s = s.replace('(this->*m_opcode[in])();', DISPATCH + 'PCE_AFTER_OP();')
 # ST0/ST1/ST2: the VDC through the io space -> the host
 s = s.replace('m_io.write_byte(0x0000,tmp);', 'pce_vdc_st(0, tmp);')
@@ -60,7 +65,10 @@ s = s.replace('void h6280_device::pull(uint8_t &value)', 'static uint8_t pull_(v
 s = re.sub(r'inline\s+([\w ]+?)\s+h6280_device::(\w+)\(', r'static inline \1 \2(', s)
 s = re.sub(r'\n(\w[\w ]*?)\s+h6280_device::(\w+)\(', r'\nstatic \1 \2(', s)
 s = s.replace('#define OP(prefix,opcode)  void h6280_device::prefix##_##opcode()',
-              '#define OP(prefix,opcode)  static inline __attribute__((always_inline)) void prefix##_##opcode(void)')
+              '#define OP(prefix,opcode)  static __attribute__((noinline, cold)) void prefix##_##opcode(void)\n'
+              '#define OPH(prefix,opcode) static inline __attribute__((always_inline)) void prefix##_##opcode(void)')
+for i in HOT:                                      # the hot handlers: inlined into the switch
+    s = s.replace(f'OP(op,{i:02x}) {{', f'OPH(op,{i:02x}) {{')
 s = re.sub(r'static (inline )?(\w[\w ]*) (\w+)\(\)', r'static \1\2 \3(void)', s)
 s = s.replace('static inline void execute_run(void)', 'static void execute_run(void)')
 
@@ -130,7 +138,7 @@ typedef uint32_t offs_t;
 
 # forward declarations of every op (the table names them before their bodies) and of every helper (C needs a
 # declaration before a use; MAME's class had them all in its header)
-ops = sorted(set(re.findall(r'OP\(op,([0-9a-f]{2})\)', s)))
+ops = sorted(set(re.findall(r'OPH?\(op,([0-9a-f]{2})\)', s)))
 fwd = '\n'.join(f'static void op_{o}(void);' for o in ops)
 protos = []
 for m in re.finditer(r'^static (inline )?([\w ]+?)\s+(\w+)\(([^)]*)\)\s*\n\{', s, re.M):

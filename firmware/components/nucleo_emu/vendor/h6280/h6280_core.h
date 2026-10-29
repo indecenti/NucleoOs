@@ -2204,7 +2204,8 @@ static inline void csl(void)
 }
 
 
-#define OP(prefix,opcode)  static inline __attribute__((always_inline)) void prefix##_##opcode(void)
+#define OP(prefix,opcode)  static __attribute__((noinline, cold)) void prefix##_##opcode(void)
+#define OPH(prefix,opcode) static inline __attribute__((always_inline)) void prefix##_##opcode(void)
 
 /*****************************************************************************
  *****************************************************************************
@@ -2214,22 +2215,22 @@ static inline void csl(void)
  *****************************************************************************
  *    op    cycles           opc                       ***********************/
 OP(op,00) { h6280_cycles(8); brk();                    } // 8 BRK
-OP(op,20) { h6280_cycles(7); ea_abs(); jsr();          } // 7 JSR  ABS
+OPH(op,20) { h6280_cycles(7); ea_abs(); jsr();          } // 7 JSR  ABS
 OP(op,40) { h6280_cycles(7); rti();                    } // 7 RTI
-OP(op,60) { h6280_cycles(7); rts();                    } // 7 RTS
-OP(op,80) {                  bra(1);                   } // 4 BRA  REL
+OPH(op,60) { h6280_cycles(7); rts();                    } // 7 RTS
+OPH(op,80) {                  bra(1);                   } // 4 BRA  REL
 OP(op,a0) { h6280_cycles(2); ldy(rd_imm());            } // 2 LDY  IMM
-OP(op,c0) { h6280_cycles(2); cpy(rd_imm());            } // 2 CPY  IMM
-OP(op,e0) { h6280_cycles(2); cpx(rd_imm());            } // 2 CPX  IMM
+OPH(op,c0) { h6280_cycles(2); cpy(rd_imm());            } // 2 CPY  IMM
+OPH(op,e0) { h6280_cycles(2); cpx(rd_imm());            } // 2 CPX  IMM
 
-OP(op,10) {                  bpl();                    } // 2/4 BPL  REL
-OP(op,30) {                  bmi();                    } // 2/4 BMI  REL
+OPH(op,10) {                  bpl();                    } // 2/4 BPL  REL
+OPH(op,30) {                  bmi();                    } // 2/4 BMI  REL
 OP(op,50) {                  bvc();                    } // 2/4 BVC  REL
 OP(op,70) {                  bvs();                    } // 2/4 BVS  REL
-OP(op,90) {                  bcc();                    } // 2/4 BCC  REL
-OP(op,b0) {                  bcs();                    } // 2/4 BCS  REL
-OP(op,d0) {                  bne();                    } // 2/4 BNE  REL
-OP(op,f0) {                  beq();                    } // 2/4 BEQ  REL
+OPH(op,90) {                  bcc();                    } // 2/4 BCC  REL
+OPH(op,b0) {                  bcs();                    } // 2/4 BCS  REL
+OPH(op,d0) {                  bne();                    } // 2/4 BNE  REL
+OPH(op,f0) {                  beq();                    } // 2/4 BEQ  REL
 
 OP(op,01) { h6280_cycles(7); ora(rd_idx());            } // 7 ORA  IDX
 OP(op,21) { h6280_cycles(7); and_a(rd_idx());          } // 7 AND  IDX
@@ -2245,14 +2246,14 @@ OP(op,31) { h6280_cycles(7); and_a(rd_idy());          } // 7 AND  IDY
 OP(op,51) { h6280_cycles(7); eor(rd_idy());            } // 7 EOR  IDY
 OP(op,71) { h6280_cycles(7); adc(rd_idy());            } // 7 ADC  AZP
 OP(op,91) { h6280_cycles(7); wr_idy(sta());            } // 7 STA  IDY
-OP(op,b1) { h6280_cycles(7); lda(rd_idy());            } // 7 LDA  IDY
+OPH(op,b1) { h6280_cycles(7); lda(rd_idy());            } // 7 LDA  IDY
 OP(op,d1) { h6280_cycles(7); cmp(rd_idy());            } // 7 CMP  IDY
 OP(op,f1) { h6280_cycles(7); sbc(rd_idy());            } // 7 SBC  IDY
 
 OP(op,02) { h6280_cycles(3); sxy();                    } // 3 SXY
 OP(op,22) { h6280_cycles(3); sax();                    } // 3 SAX
 OP(op,42) { h6280_cycles(3); say();                    } // 3 SAY
-OP(op,62) { h6280_cycles(2); cla();                    } // 2 CLA
+OPH(op,62) { h6280_cycles(2); cla();                    } // 2 CLA
 OP(op,82) { h6280_cycles(2); clx();                    } // 2 CLX
 OP(op,a2) { h6280_cycles(2); ldx(rd_imm());            } // 2 LDX  IMM
 OP(op,c2) { h6280_cycles(2); cly();                    } // 2 CLY
@@ -2269,7 +2270,7 @@ OP(op,f2) { h6280_cycles(7); sbc(rd_zpi());            } // 7 SBC  ZPI
 
 OP(op,03) { h6280_cycles(5); st0(rd_imm());            } // 4 + 1 penalty cycle ST0  IMM
 OP(op,23) { h6280_cycles(5); st2(rd_imm());            } // 4 + 1 penalty cycle ST2  IMM
-OP(op,43) { h6280_cycles(4); tma(rd_imm());            } // 4 TMA
+OPH(op,43) { h6280_cycles(4); tma(rd_imm());            } // 4 TMA
 OP(op,63) { h6280_cycles(4); nop();                    } // 2 NOP
 OP(op,83) { h6280_cycles(7); int imm = rd_imm(); tst(imm, rd_zpg()); } // 7 TST  IMM,ZPG
 OP(op,a3) { h6280_cycles(7); int imm = rd_imm(); tst(imm, rd_zpx()); } // 7 TST  IMM,ZPX
@@ -2278,7 +2279,7 @@ OP(op,e3) {                  tia();                    } // 6*l+17 TIA  XFER
 
 OP(op,13) { h6280_cycles(5); st1(rd_imm());            } // 4 + 1 penalty cycle ST1
 OP(op,33) { h6280_cycles(2); nop();                    } // 2 NOP
-OP(op,53) { h6280_cycles(5); tam(rd_imm());            } // 5 TAM  IMM
+OPH(op,53) { h6280_cycles(5); tam(rd_imm());            } // 5 TAM  IMM
 OP(op,73) {                  tii();                    } // 6*l+17 TII  XFER
 OP(op,93) { h6280_cycles(8); int imm = rd_imm(); tst(imm, rd_abs()); } // 8 TST  IMM,ABS
 OP(op,b3) { h6280_cycles(8); int imm = rd_imm(); tst(imm, rd_abx()); } // 8 TST  IMM,ABX
@@ -2288,9 +2289,9 @@ OP(op,f3) {                  tai();                    } // 6*l+17 TAI  XFER
 OP(op,04) { h6280_cycles(6); wb_eaz(tsb(rd_zpg()));    } // 6 TSB  ZPG
 OP(op,24) { h6280_cycles(4); bit(rd_zpg());            } // 4 BIT  ZPG
 OP(op,44) {                  bsr();                    } // 8 BSR  REL
-OP(op,64) { h6280_cycles(4); wr_zpg(stz());            } // 4 STZ  ZPG
+OPH(op,64) { h6280_cycles(4); wr_zpg(stz());            } // 4 STZ  ZPG
 OP(op,84) { h6280_cycles(4); wr_zpg(sty());            } // 4 STY  ZPG
-OP(op,a4) { h6280_cycles(4); ldy(rd_zpg());            } // 4 LDY  ZPG
+OPH(op,a4) { h6280_cycles(4); ldy(rd_zpg());            } // 4 LDY  ZPG
 OP(op,c4) { h6280_cycles(4); cpy(rd_zpg());            } // 4 CPY  ZPG
 OP(op,e4) { h6280_cycles(4); cpx(rd_zpg());            } // 4 CPX  ZPG
 
@@ -2306,29 +2307,29 @@ OP(op,f4) { h6280_cycles(2); set();                    } // 2 SET
 OP(op,05) { h6280_cycles(4); ora(rd_zpg());            } // 4 ORA  ZPG
 OP(op,25) { h6280_cycles(4); and_a(rd_zpg());          } // 4 AND  ZPG
 OP(op,45) { h6280_cycles(4); eor(rd_zpg());            } // 4 EOR  ZPG
-OP(op,65) { h6280_cycles(4); adc(rd_zpg());            } // 4 ADC  ZPG
-OP(op,85) { h6280_cycles(4); wr_zpg(sta());            } // 4 STA  ZPG
-OP(op,a5) { h6280_cycles(4); lda(rd_zpg());            } // 4 LDA  ZPG
-OP(op,c5) { h6280_cycles(4); cmp(rd_zpg());            } // 4 CMP  ZPG
-OP(op,e5) { h6280_cycles(4); sbc(rd_zpg());            } // 4 SBC  ZPG
+OPH(op,65) { h6280_cycles(4); adc(rd_zpg());            } // 4 ADC  ZPG
+OPH(op,85) { h6280_cycles(4); wr_zpg(sta());            } // 4 STA  ZPG
+OPH(op,a5) { h6280_cycles(4); lda(rd_zpg());            } // 4 LDA  ZPG
+OPH(op,c5) { h6280_cycles(4); cmp(rd_zpg());            } // 4 CMP  ZPG
+OPH(op,e5) { h6280_cycles(4); sbc(rd_zpg());            } // 4 SBC  ZPG
 
 OP(op,15) { h6280_cycles(4); ora(rd_zpx());            } // 4 ORA  ZPX
 OP(op,35) { h6280_cycles(4); and_a(rd_zpx());          } // 4 AND  ZPX
 OP(op,55) { h6280_cycles(4); eor(rd_zpx());            } // 4 EOR  ZPX
 OP(op,75) { h6280_cycles(4); adc(rd_zpx());            } // 4 ADC  ZPX
 OP(op,95) { h6280_cycles(4); wr_zpx(sta());            } // 4 STA  ZPX
-OP(op,b5) { h6280_cycles(4); lda(rd_zpx());            } // 4 LDA  ZPX
+OPH(op,b5) { h6280_cycles(4); lda(rd_zpx());            } // 4 LDA  ZPX
 OP(op,d5) { h6280_cycles(4); cmp(rd_zpx());            } // 4 CMP  ZPX
 OP(op,f5) { h6280_cycles(4); sbc(rd_zpx());            } // 4 SBC  ZPX
 
-OP(op,06) { h6280_cycles(6); wb_eaz(asl(rd_zpg()));    } // 6 ASL  ZPG
-OP(op,26) { h6280_cycles(6); wb_eaz(rol(rd_zpg()));    } // 6 ROL  ZPG
+OPH(op,06) { h6280_cycles(6); wb_eaz(asl(rd_zpg()));    } // 6 ASL  ZPG
+OPH(op,26) { h6280_cycles(6); wb_eaz(rol(rd_zpg()));    } // 6 ROL  ZPG
 OP(op,46) { h6280_cycles(6); wb_eaz(lsr(rd_zpg()));    } // 6 LSR  ZPG
 OP(op,66) { h6280_cycles(6); wb_eaz(ror(rd_zpg()));    } // 6 ROR  ZPG
 OP(op,86) { h6280_cycles(4); wr_zpg(stx());            } // 4 STX  ZPG
-OP(op,a6) { h6280_cycles(4); ldx(rd_zpg());            } // 4 LDX  ZPG
-OP(op,c6) { h6280_cycles(6); wb_eaz(dec(rd_zpg()));    } // 6 DEC  ZPG
-OP(op,e6) { h6280_cycles(6); wb_eaz(inc(rd_zpg()));    } // 6 INC  ZPG
+OPH(op,a6) { h6280_cycles(4); ldx(rd_zpg());            } // 4 LDX  ZPG
+OPH(op,c6) { h6280_cycles(6); wb_eaz(dec(rd_zpg()));    } // 6 DEC  ZPG
+OPH(op,e6) { h6280_cycles(6); wb_eaz(inc(rd_zpg()));    } // 6 INC  ZPG
 
 OP(op,16) { h6280_cycles(6); wb_eaz(asl(rd_zpx()));    } // 6 ASL  ZPX
 OP(op,36) { h6280_cycles(6); wb_eaz(rol(rd_zpx()));    } // 6 ROL  ZPX
@@ -2359,15 +2360,15 @@ OP(op,f7) { h6280_cycles(7); wb_eaz(smb(7, rd_zpg())); } // 7 SMB7 ZPG
 
 OP(op,08) { h6280_cycles(3); php();                    } // 3 PHP
 OP(op,28) { h6280_cycles(4); plp();                    } // 4 PLP
-OP(op,48) { h6280_cycles(3); pha();                    } // 3 PHA
-OP(op,68) { h6280_cycles(4); pla();                    } // 4 PLA
-OP(op,88) { h6280_cycles(2); dey();                    } // 2 DEY
-OP(op,a8) { h6280_cycles(2); tay();                    } // 2 TAY
-OP(op,c8) { h6280_cycles(2); iny();                    } // 2 INY
-OP(op,e8) { h6280_cycles(2); inx();                    } // 2 INX
+OPH(op,48) { h6280_cycles(3); pha();                    } // 3 PHA
+OPH(op,68) { h6280_cycles(4); pla();                    } // 4 PLA
+OPH(op,88) { h6280_cycles(2); dey();                    } // 2 DEY
+OPH(op,a8) { h6280_cycles(2); tay();                    } // 2 TAY
+OPH(op,c8) { h6280_cycles(2); iny();                    } // 2 INY
+OPH(op,e8) { h6280_cycles(2); inx();                    } // 2 INX
 
-OP(op,18) { h6280_cycles(2); clc();                    } // 2 CLC
-OP(op,38) { h6280_cycles(2); sec();                    } // 2 SEC
+OPH(op,18) { h6280_cycles(2); clc();                    } // 2 CLC
+OPH(op,38) { h6280_cycles(2); sec();                    } // 2 SEC
 OP(op,58) { h6280_cycles(2); cli();                    } // 2 CLI
 OP(op,78) { h6280_cycles(2); sei();                    } // 2 SEI
 OP(op,98) { h6280_cycles(2); tya();                    } // 2 TYA
@@ -2376,40 +2377,40 @@ OP(op,d8) { h6280_cycles(2); cld();                    } // 2 CLD
 OP(op,f8) { h6280_cycles(2); sed();                    } // 2 SED
 
 OP(op,09) { h6280_cycles(2); ora(rd_imm());            } // 2 ORA  IMM
-OP(op,29) { h6280_cycles(2); and_a(rd_imm());          } // 2 AND  IMM
+OPH(op,29) { h6280_cycles(2); and_a(rd_imm());          } // 2 AND  IMM
 OP(op,49) { h6280_cycles(2); eor(rd_imm());            } // 2 EOR  IMM
-OP(op,69) { h6280_cycles(2); adc(rd_imm());            } // 2 ADC  IMM
-OP(op,89) { h6280_cycles(2); bit(rd_imm());            } // 2 BIT  IMM
-OP(op,a9) { h6280_cycles(2); lda(rd_imm());            } // 2 LDA  IMM
-OP(op,c9) { h6280_cycles(2); cmp(rd_imm());            } // 2 CMP  IMM
+OPH(op,69) { h6280_cycles(2); adc(rd_imm());            } // 2 ADC  IMM
+OPH(op,89) { h6280_cycles(2); bit(rd_imm());            } // 2 BIT  IMM
+OPH(op,a9) { h6280_cycles(2); lda(rd_imm());            } // 2 LDA  IMM
+OPH(op,c9) { h6280_cycles(2); cmp(rd_imm());            } // 2 CMP  IMM
 OP(op,e9) { h6280_cycles(2); sbc(rd_imm());            } // 2 SBC  IMM
 
 OP(op,19) { h6280_cycles(5); ora(rd_aby());            } // 5 ORA  ABY
 OP(op,39) { h6280_cycles(5); and_a(rd_aby());          } // 5 AND  ABY
 OP(op,59) { h6280_cycles(5); eor(rd_aby());            } // 5 EOR  ABY
 OP(op,79) { h6280_cycles(5); adc(rd_aby());            } // 5 ADC  ABY
-OP(op,99) { h6280_cycles(5); wr_aby(sta());            } // 5 STA  ABY
-OP(op,b9) { h6280_cycles(5); lda(rd_aby());            } // 5 LDA  ABY
+OPH(op,99) { h6280_cycles(5); wr_aby(sta());            } // 5 STA  ABY
+OPH(op,b9) { h6280_cycles(5); lda(rd_aby());            } // 5 LDA  ABY
 OP(op,d9) { h6280_cycles(5); cmp(rd_aby());            } // 5 CMP  ABY
 OP(op,f9) { h6280_cycles(5); sbc(rd_aby());            } // 5 SBC  ABY
 
-OP(op,0a) { h6280_cycles(2); A = asl(A);               } // 2 ASL  A
-OP(op,2a) { h6280_cycles(2); A = rol(A);               } // 2 ROL  A
-OP(op,4a) { h6280_cycles(2); A = lsr(A);               } // 2 LSR  A
+OPH(op,0a) { h6280_cycles(2); A = asl(A);               } // 2 ASL  A
+OPH(op,2a) { h6280_cycles(2); A = rol(A);               } // 2 ROL  A
+OPH(op,4a) { h6280_cycles(2); A = lsr(A);               } // 2 LSR  A
 OP(op,6a) { h6280_cycles(2); A = ror(A);               } // 2 ROR  A
 OP(op,8a) { h6280_cycles(2); txa();                    } // 2 TXA
-OP(op,aa) { h6280_cycles(2); tax();                    } // 2 TAX
-OP(op,ca) { h6280_cycles(2); dex();                    } // 2 DEX
+OPH(op,aa) { h6280_cycles(2); tax();                    } // 2 TAX
+OPH(op,ca) { h6280_cycles(2); dex();                    } // 2 DEX
 OP(op,ea) { h6280_cycles(2); nop();                    } // 2 NOP
 
-OP(op,1a) { h6280_cycles(2); A = inc(A);               } // 2 INC  A
+OPH(op,1a) { h6280_cycles(2); A = inc(A);               } // 2 INC  A
 OP(op,3a) { h6280_cycles(2); A = dec(A);               } // 2 DEC  A
 OP(op,5a) { h6280_cycles(3); phy();                    } // 3 PHY
-OP(op,7a) { h6280_cycles(4); ply();                    } // 4 PLY
+OPH(op,7a) { h6280_cycles(4); ply();                    } // 4 PLY
 OP(op,9a) { h6280_cycles(2); txs();                    } // 2 TXS
 OP(op,ba) { h6280_cycles(2); tsx();                    } // 2 TSX
-OP(op,da) { h6280_cycles(3); phx();                    } // 3 PHX
-OP(op,fa) { h6280_cycles(4); plx();                    } // 4 PLX
+OPH(op,da) { h6280_cycles(3); phx();                    } // 3 PHX
+OPH(op,fa) { h6280_cycles(4); plx();                    } // 4 PLX
 
 OP(op,0b) { h6280_cycles(2); nop();                    } // 2 NOP
 OP(op,2b) { h6280_cycles(2); nop();                    } // 2 NOP
@@ -2431,7 +2432,7 @@ OP(op,fb) { h6280_cycles(2); nop();                    } // 2 NOP
 
 OP(op,0c) { h6280_cycles(7); wb_ea(tsb(rd_abs()));     } // 7 TSB  ABS
 OP(op,2c) { h6280_cycles(5); bit(rd_abs());            } // 5 BIT  ABS
-OP(op,4c) { h6280_cycles(4); ea_abs(); jmp();          } // 4 JMP  ABS
+OPH(op,4c) { h6280_cycles(4); ea_abs(); jmp();          } // 4 JMP  ABS
 OP(op,6c) { h6280_cycles(7); ea_ind(); jmp();          } // 7 JMP  IND
 OP(op,8c) { h6280_cycles(5); wr_abs(sty());            } // 5 STY  ABS
 OP(op,ac) { h6280_cycles(5); ldy(rd_abs());            } // 5 LDY  ABS
@@ -2442,7 +2443,7 @@ OP(op,1c) { h6280_cycles(7); wb_ea(trb(rd_abs()));     } // 7 TRB  ABS
 OP(op,3c) { h6280_cycles(5); bit(rd_abx());            } // 5 BIT  ABX
 OP(op,5c) { h6280_cycles(2); nop();                    } // 2 NOP
 OP(op,7c) { h6280_cycles(7); ea_iax(); jmp();          } // 7 JMP  IAX
-OP(op,9c) { h6280_cycles(5); wr_abs(stz());            } // 5 STZ  ABS
+OPH(op,9c) { h6280_cycles(5); wr_abs(stz());            } // 5 STZ  ABS
 OP(op,bc) { h6280_cycles(5); ldy(rd_abx());            } // 5 LDY  ABX
 OP(op,dc) { h6280_cycles(2); nop();                    } // 2 NOP
 OP(op,fc) { h6280_cycles(2); nop();                    } // 2 NOP
@@ -2451,17 +2452,17 @@ OP(op,0d) { h6280_cycles(5); ora(rd_abs());            } // 5 ORA  ABS
 OP(op,2d) { h6280_cycles(5); and_a(rd_abs());          } // 5 AND  ABS
 OP(op,4d) { h6280_cycles(5); eor(rd_abs());            } // 5 EOR  ABS
 OP(op,6d) { h6280_cycles(5); adc(rd_abs());            } // 5 ADC  ABS
-OP(op,8d) { h6280_cycles(5); wr_abs(sta());            } // 5 STA  ABS
-OP(op,ad) { h6280_cycles(5); lda(rd_abs());            } // 5 LDA  ABS
-OP(op,cd) { h6280_cycles(5); cmp(rd_abs());            } // 5 CMP  ABS
+OPH(op,8d) { h6280_cycles(5); wr_abs(sta());            } // 5 STA  ABS
+OPH(op,ad) { h6280_cycles(5); lda(rd_abs());            } // 5 LDA  ABS
+OPH(op,cd) { h6280_cycles(5); cmp(rd_abs());            } // 5 CMP  ABS
 OP(op,ed) { h6280_cycles(5); sbc(rd_abs());            } // 5 SBC  ABS
 
 OP(op,1d) { h6280_cycles(5); ora(rd_abx());            } // 5 ORA  ABX
 OP(op,3d) { h6280_cycles(5); and_a(rd_abx());          } // 5 AND  ABX
 OP(op,5d) { h6280_cycles(5); eor(rd_abx());            } // 5 EOR  ABX
 OP(op,7d) { h6280_cycles(5); adc(rd_abx());            } // 5 ADC  ABX
-OP(op,9d) { h6280_cycles(5); wr_abx(sta());            } // 5 STA  ABX
-OP(op,bd) { h6280_cycles(5); lda(rd_abx());            } // 5 LDA  ABX
+OPH(op,9d) { h6280_cycles(5); wr_abx(sta());            } // 5 STA  ABX
+OPH(op,bd) { h6280_cycles(5); lda(rd_abx());            } // 5 LDA  ABX
 OP(op,dd) { h6280_cycles(5); cmp(rd_abx());            } // 5 CMP  ABX
 OP(op,fd) { h6280_cycles(5); sbc(rd_abx());            } // 5 SBC  ABX
 
@@ -2472,7 +2473,7 @@ OP(op,6e) { h6280_cycles(7); wb_ea(ror(rd_abs()));     } // 7 ROR  ABS
 OP(op,8e) { h6280_cycles(5); wr_abs(stx());            } // 5 STX  ABS
 OP(op,ae) { h6280_cycles(5); ldx(rd_abs());            } // 5 LDX  ABS
 OP(op,ce) { h6280_cycles(7); wb_ea(dec(rd_abs()));     } // 7 DEC  ABS
-OP(op,ee) { h6280_cycles(7); wb_ea(inc(rd_abs()));     } // 7 INC  ABS
+OPH(op,ee) { h6280_cycles(7); wb_ea(inc(rd_abs()));     } // 7 INC  ABS
 
 OP(op,1e) { h6280_cycles(7); wb_ea(asl(rd_abx()));     } // 7 ASL  ABX
 OP(op,3e) { h6280_cycles(7); wb_ea(rol(rd_abx()));     } // 7 ROL  ABX
@@ -2483,10 +2484,10 @@ OP(op,be) { h6280_cycles(5); ldx(rd_aby());            } // 5 LDX  ABY
 OP(op,de) { h6280_cycles(7); wb_ea(dec(rd_abx()));     } // 7 DEC  ABX
 OP(op,fe) { h6280_cycles(7); wb_ea(inc(rd_abx()));     } // 7 INC  ABX
 
-OP(op,0f) { h6280_cycles(4); bbr(0, rd_zpg());         } // 6/8 BBR0 ZPG,REL
+OPH(op,0f) { h6280_cycles(4); bbr(0, rd_zpg());         } // 6/8 BBR0 ZPG,REL
 OP(op,2f) { h6280_cycles(4); bbr(2, rd_zpg());         } // 6/8 BBR2 ZPG,REL
 OP(op,4f) { h6280_cycles(4); bbr(4, rd_zpg());         } // 6/8 BBR4 ZPG,REL
-OP(op,6f) { h6280_cycles(4); bbr(6, rd_zpg());         } // 6/8 BBR6 ZPG,REL
+OPH(op,6f) { h6280_cycles(4); bbr(6, rd_zpg());         } // 6/8 BBR6 ZPG,REL
 OP(op,8f) { h6280_cycles(4); bbs(0, rd_zpg());         } // 6/8 BBS0 ZPG,REL
 OP(op,af) { h6280_cycles(4); bbs(2, rd_zpg());         } // 6/8 BBS2 ZPG,REL
 OP(op,cf) { h6280_cycles(4); bbs(4, rd_zpg());         } // 6/8 BBS4 ZPG,REL
@@ -2495,11 +2496,11 @@ OP(op,ef) { h6280_cycles(4); bbs(6, rd_zpg());         } // 6/8 BBS6 ZPG,REL
 OP(op,1f) { h6280_cycles(4); bbr(1, rd_zpg());         } // 6/8 BBR1 ZPG,REL
 OP(op,3f) { h6280_cycles(4); bbr(3, rd_zpg());         } // 6/8 BBR3 ZPG,REL
 OP(op,5f) { h6280_cycles(4); bbr(5, rd_zpg());         } // 6/8 BBR5 ZPG,REL
-OP(op,7f) { h6280_cycles(4); bbr(7, rd_zpg());         } // 6/8 BBR7 ZPG,REL
+OPH(op,7f) { h6280_cycles(4); bbr(7, rd_zpg());         } // 6/8 BBR7 ZPG,REL
 OP(op,9f) { h6280_cycles(4); bbs(1, rd_zpg());         } // 6/8 BBS1 ZPG,REL
 OP(op,bf) { h6280_cycles(4); bbs(3, rd_zpg());         } // 6/8 BBS3 ZPG,REL
 OP(op,df) { h6280_cycles(4); bbs(5, rd_zpg());         } // 6/8 BBS5 ZPG,REL
-OP(op,ff) { h6280_cycles(4); bbs(7, rd_zpg());         } // 6/8 BBS7 ZPG,REL
+OPH(op,ff) { h6280_cycles(4); bbs(7, rd_zpg());         } // 6/8 BBS7 ZPG,REL
 
 //-------------------------------------------------
 //  state_string_export - export state as a string
@@ -2527,262 +2528,71 @@ static void execute_run(void)
 		in = read_opcode();
 		PCW++;
 		switch (in) {
-		case 0x00: op_00(); break;
-		case 0x01: op_01(); break;
-		case 0x02: op_02(); break;
-		case 0x03: op_03(); break;
-		case 0x04: op_04(); break;
-		case 0x05: op_05(); break;
-		case 0x06: op_06(); break;
-		case 0x07: op_07(); break;
-		case 0x08: op_08(); break;
-		case 0x09: op_09(); break;
-		case 0x0a: op_0a(); break;
-		case 0x0b: op_0b(); break;
-		case 0x0c: op_0c(); break;
-		case 0x0d: op_0d(); break;
-		case 0x0e: op_0e(); break;
-		case 0x0f: op_0f(); break;
-		case 0x10: op_10(); break;
-		case 0x11: op_11(); break;
-		case 0x12: op_12(); break;
-		case 0x13: op_13(); break;
-		case 0x14: op_14(); break;
-		case 0x15: op_15(); break;
-		case 0x16: op_16(); break;
-		case 0x17: op_17(); break;
-		case 0x18: op_18(); break;
-		case 0x19: op_19(); break;
-		case 0x1a: op_1a(); break;
-		case 0x1b: op_1b(); break;
-		case 0x1c: op_1c(); break;
-		case 0x1d: op_1d(); break;
-		case 0x1e: op_1e(); break;
-		case 0x1f: op_1f(); break;
-		case 0x20: op_20(); break;
-		case 0x21: op_21(); break;
-		case 0x22: op_22(); break;
-		case 0x23: op_23(); break;
-		case 0x24: op_24(); break;
-		case 0x25: op_25(); break;
-		case 0x26: op_26(); break;
-		case 0x27: op_27(); break;
-		case 0x28: op_28(); break;
-		case 0x29: op_29(); break;
-		case 0x2a: op_2a(); break;
-		case 0x2b: op_2b(); break;
-		case 0x2c: op_2c(); break;
-		case 0x2d: op_2d(); break;
-		case 0x2e: op_2e(); break;
-		case 0x2f: op_2f(); break;
-		case 0x30: op_30(); break;
-		case 0x31: op_31(); break;
-		case 0x32: op_32(); break;
-		case 0x33: op_33(); break;
-		case 0x34: op_34(); break;
-		case 0x35: op_35(); break;
-		case 0x36: op_36(); break;
-		case 0x37: op_37(); break;
-		case 0x38: op_38(); break;
-		case 0x39: op_39(); break;
-		case 0x3a: op_3a(); break;
-		case 0x3b: op_3b(); break;
-		case 0x3c: op_3c(); break;
-		case 0x3d: op_3d(); break;
-		case 0x3e: op_3e(); break;
-		case 0x3f: op_3f(); break;
-		case 0x40: op_40(); break;
-		case 0x41: op_41(); break;
-		case 0x42: op_42(); break;
-		case 0x43: op_43(); break;
-		case 0x44: op_44(); break;
-		case 0x45: op_45(); break;
-		case 0x46: op_46(); break;
-		case 0x47: op_47(); break;
-		case 0x48: op_48(); break;
-		case 0x49: op_49(); break;
-		case 0x4a: op_4a(); break;
-		case 0x4b: op_4b(); break;
-		case 0x4c: op_4c(); break;
-		case 0x4d: op_4d(); break;
-		case 0x4e: op_4e(); break;
-		case 0x4f: op_4f(); break;
-		case 0x50: op_50(); break;
-		case 0x51: op_51(); break;
-		case 0x52: op_52(); break;
-		case 0x53: op_53(); break;
-		case 0x54: op_54(); break;
-		case 0x55: op_55(); break;
-		case 0x56: op_56(); break;
-		case 0x57: op_57(); break;
-		case 0x58: op_58(); break;
-		case 0x59: op_59(); break;
-		case 0x5a: op_5a(); break;
-		case 0x5b: op_5b(); break;
-		case 0x5c: op_5c(); break;
-		case 0x5d: op_5d(); break;
-		case 0x5e: op_5e(); break;
-		case 0x5f: op_5f(); break;
-		case 0x60: op_60(); break;
-		case 0x61: op_61(); break;
-		case 0x62: op_62(); break;
-		case 0x63: op_63(); break;
-		case 0x64: op_64(); break;
-		case 0x65: op_65(); break;
-		case 0x66: op_66(); break;
-		case 0x67: op_67(); break;
-		case 0x68: op_68(); break;
-		case 0x69: op_69(); break;
-		case 0x6a: op_6a(); break;
-		case 0x6b: op_6b(); break;
-		case 0x6c: op_6c(); break;
-		case 0x6d: op_6d(); break;
-		case 0x6e: op_6e(); break;
-		case 0x6f: op_6f(); break;
-		case 0x70: op_70(); break;
-		case 0x71: op_71(); break;
-		case 0x72: op_72(); break;
-		case 0x73: op_73(); break;
-		case 0x74: op_74(); break;
-		case 0x75: op_75(); break;
-		case 0x76: op_76(); break;
-		case 0x77: op_77(); break;
-		case 0x78: op_78(); break;
-		case 0x79: op_79(); break;
-		case 0x7a: op_7a(); break;
-		case 0x7b: op_7b(); break;
-		case 0x7c: op_7c(); break;
-		case 0x7d: op_7d(); break;
-		case 0x7e: op_7e(); break;
-		case 0x7f: op_7f(); break;
 		case 0x80: op_80(); break;
-		case 0x81: op_81(); break;
-		case 0x82: op_82(); break;
-		case 0x83: op_83(); break;
-		case 0x84: op_84(); break;
-		case 0x85: op_85(); break;
-		case 0x86: op_86(); break;
-		case 0x87: op_87(); break;
-		case 0x88: op_88(); break;
-		case 0x89: op_89(); break;
-		case 0x8a: op_8a(); break;
-		case 0x8b: op_8b(); break;
-		case 0x8c: op_8c(); break;
-		case 0x8d: op_8d(); break;
-		case 0x8e: op_8e(); break;
-		case 0x8f: op_8f(); break;
-		case 0x90: op_90(); break;
-		case 0x91: op_91(); break;
-		case 0x92: op_92(); break;
-		case 0x93: op_93(); break;
-		case 0x94: op_94(); break;
-		case 0x95: op_95(); break;
-		case 0x96: op_96(); break;
-		case 0x97: op_97(); break;
-		case 0x98: op_98(); break;
-		case 0x99: op_99(); break;
-		case 0x9a: op_9a(); break;
-		case 0x9b: op_9b(); break;
-		case 0x9c: op_9c(); break;
-		case 0x9d: op_9d(); break;
-		case 0x9e: op_9e(); break;
-		case 0x9f: op_9f(); break;
-		case 0xa0: op_a0(); break;
-		case 0xa1: op_a1(); break;
-		case 0xa2: op_a2(); break;
-		case 0xa3: op_a3(); break;
-		case 0xa4: op_a4(); break;
+		case 0x4c: op_4c(); break;
+		case 0xf0: op_f0(); break;
 		case 0xa5: op_a5(); break;
-		case 0xa6: op_a6(); break;
-		case 0xa7: op_a7(); break;
-		case 0xa8: op_a8(); break;
-		case 0xa9: op_a9(); break;
-		case 0xaa: op_aa(); break;
-		case 0xab: op_ab(); break;
-		case 0xac: op_ac(); break;
-		case 0xad: op_ad(); break;
-		case 0xae: op_ae(); break;
-		case 0xaf: op_af(); break;
-		case 0xb0: op_b0(); break;
-		case 0xb1: op_b1(); break;
-		case 0xb2: op_b2(); break;
-		case 0xb3: op_b3(); break;
-		case 0xb4: op_b4(); break;
-		case 0xb5: op_b5(); break;
-		case 0xb6: op_b6(); break;
-		case 0xb7: op_b7(); break;
-		case 0xb8: op_b8(); break;
-		case 0xb9: op_b9(); break;
-		case 0xba: op_ba(); break;
-		case 0xbb: op_bb(); break;
-		case 0xbc: op_bc(); break;
-		case 0xbd: op_bd(); break;
-		case 0xbe: op_be(); break;
-		case 0xbf: op_bf(); break;
-		case 0xc0: op_c0(); break;
-		case 0xc1: op_c1(); break;
-		case 0xc2: op_c2(); break;
-		case 0xc3: op_c3(); break;
-		case 0xc4: op_c4(); break;
+		case 0xd0: op_d0(); break;
 		case 0xc5: op_c5(); break;
-		case 0xc6: op_c6(); break;
-		case 0xc7: op_c7(); break;
+		case 0x8d: op_8d(); break;
+		case 0x85: op_85(); break;
+		case 0xbd: op_bd(); break;
+		case 0xee: op_ee(); break;
+		case 0xff: op_ff(); break;
 		case 0xc8: op_c8(); break;
+		case 0x7f: op_7f(); break;
+		case 0xc6: op_c6(); break;
+		case 0x6f: op_6f(); break;
+		case 0xb1: op_b1(); break;
+		case 0x60: op_60(); break;
+		case 0xb9: op_b9(); break;
+		case 0x53: op_53(); break;
+		case 0x20: op_20(); break;
+		case 0x48: op_48(); break;
+		case 0x68: op_68(); break;
+		case 0x0f: op_0f(); break;
+		case 0x29: op_29(); break;
+		case 0xad: op_ad(); break;
+		case 0x90: op_90(); break;
+		case 0xe8: op_e8(); break;
+		case 0x18: op_18(); break;
+		case 0xe6: op_e6(); break;
+		case 0xa9: op_a9(); break;
+		case 0x0a: op_0a(); break;
 		case 0xc9: op_c9(); break;
 		case 0xca: op_ca(); break;
-		case 0xcb: op_cb(); break;
-		case 0xcc: op_cc(); break;
+		case 0x9c: op_9c(); break;
+		case 0x9d: op_9d(); break;
+		case 0x26: op_26(); break;
 		case 0xcd: op_cd(); break;
-		case 0xce: op_ce(); break;
-		case 0xcf: op_cf(); break;
-		case 0xd0: op_d0(); break;
-		case 0xd1: op_d1(); break;
-		case 0xd2: op_d2(); break;
-		case 0xd3: op_d3(); break;
-		case 0xd4: op_d4(); break;
-		case 0xd5: op_d5(); break;
-		case 0xd6: op_d6(); break;
-		case 0xd7: op_d7(); break;
-		case 0xd8: op_d8(); break;
-		case 0xd9: op_d9(); break;
-		case 0xda: op_da(); break;
-		case 0xdb: op_db(); break;
-		case 0xdc: op_dc(); break;
-		case 0xdd: op_dd(); break;
-		case 0xde: op_de(); break;
-		case 0xdf: op_df(); break;
+		case 0x4a: op_4a(); break;
+		case 0x10: op_10(); break;
+		case 0x69: op_69(); break;
+		case 0x99: op_99(); break;
+		case 0x65: op_65(); break;
+		case 0xb0: op_b0(); break;
+		case 0x43: op_43(); break;
+		case 0xc0: op_c0(); break;
 		case 0xe0: op_e0(); break;
-		case 0xe1: op_e1(); break;
-		case 0xe2: op_e2(); break;
-		case 0xe3: op_e3(); break;
-		case 0xe4: op_e4(); break;
-		case 0xe5: op_e5(); break;
-		case 0xe6: op_e6(); break;
-		case 0xe7: op_e7(); break;
-		case 0xe8: op_e8(); break;
-		case 0xe9: op_e9(); break;
-		case 0xea: op_ea(); break;
-		case 0xeb: op_eb(); break;
-		case 0xec: op_ec(); break;
-		case 0xed: op_ed(); break;
-		case 0xee: op_ee(); break;
-		case 0xef: op_ef(); break;
-		case 0xf0: op_f0(); break;
-		case 0xf1: op_f1(); break;
-		case 0xf2: op_f2(); break;
-		case 0xf3: op_f3(); break;
-		case 0xf4: op_f4(); break;
-		case 0xf5: op_f5(); break;
-		case 0xf6: op_f6(); break;
-		case 0xf7: op_f7(); break;
-		case 0xf8: op_f8(); break;
-		case 0xf9: op_f9(); break;
+		case 0x1a: op_1a(); break;
+		case 0x2a: op_2a(); break;
+		case 0x38: op_38(); break;
+		case 0x88: op_88(); break;
+		case 0xa8: op_a8(); break;
+		case 0x06: op_06(); break;
+		case 0xda: op_da(); break;
+		case 0xaa: op_aa(); break;
+		case 0x62: op_62(); break;
 		case 0xfa: op_fa(); break;
-		case 0xfb: op_fb(); break;
-		case 0xfc: op_fc(); break;
-		case 0xfd: op_fd(); break;
-		case 0xfe: op_fe(); break;
-		case 0xff: op_ff(); break;
+		case 0xe5: op_e5(); break;
+		case 0xb5: op_b5(); break;
+		case 0x64: op_64(); break;
+		case 0xa4: op_a4(); break;
+		case 0x30: op_30(); break;
+		case 0x7a: op_7a(); break;
+		case 0x89: op_89(); break;
+		case 0xa6: op_a6(); break;
+		default: s_opcodetable[in](); break;
 		}
 		PCE_AFTER_OP();
 
