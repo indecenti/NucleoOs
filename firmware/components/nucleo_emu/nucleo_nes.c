@@ -10,10 +10,11 @@
 //                agnes keeps direct pointers to them (patch A5) and reads the cartridge without calling us
 //   speed        agnes draws a scanline at a time (patch A4), not a dot at a time
 //   two cores    the 6502 runs on the app's core; each visible line is described there (what the CPU can read of it
-//                - the sprite-0 hit, the overflow - resolved at once) and drawn, with the panel's work, on the other
-//                core (nucleo_cowork), eight lines per hand-over. Before anything a queued line still reads can
-//                change - a VRAM write, a cartridge page replaced - or the SD card is used (the panel shares its
-//                bus), the CPU waits for the other core.
+//                - the sprite-0 hit, the overflow - resolved at once) and its pixels are computed on the other core
+//                (nucleo_cowork), eight lines per hand-over, then sent to the screen from the app's core. The other
+//                core only computes: no bus, no driver, no file (the panel shares the SD card's bus, and the first
+//                version that pushed the panel from there tripped the task watchdog on the device). Before anything
+//                a queued line still reads can change - a VRAM write, a cartridge page replaced - the CPU waits.
 //   battery RAM  the MMC1 / MMC3 8 KB PRG RAM, "<root>/Saves/nes/<rom name>.sav", byte-compatible with other
 //                emulators' saves
 //   sound        our APU: agnes has none. Two pulses, triangle, noise and the DMC's direct output level, with
@@ -103,10 +104,10 @@ typedef struct {
     uint16_t      pal[64];                      // the NES palette, RGB565 in the panel's byte order
 
     // Lines for the other core: two batches, one being filled while the other is drawn (patch A10).
-    struct { agnes_line_t line[8]; int n; } batch[2];
+    struct { agnes_line_t line[8]; uint16_t px[8][NUCLEO_NES_W]; int n; } batch[2];
     int           bi;                           // the batch being filled
+    int           pending;                      // the batch whose pixels the other core computes (-1 = none)
     agnes_line_t  stage;                        // the line being described (a page miss meanwhile may flush)
-    uint16_t      wline[NUCLEO_NES_W];          // the other core's drawn line
 
     nes_apu_t     apu;
     int16_t       pcm[2 * APU_SPF];             // up to two frames' worth: the sound follows the clock (apu_render)
@@ -274,31 +275,43 @@ static void mixer_init(nes_session_t *s)
 }
 
 // ── lines on the other core ─────────────────────────────────────────────────────────────────────────
+// The other core's job: pixels only (agnes_line_draw reads the descriptions and writes the batch's buffer).
 static void line_job(void *arg)
 {
     nes_session_t *s = S;
     const int b = (int)(intptr_t)arg;
-    for (int i = 0; i < s->batch[b].n; i++) {
-        agnes_line_draw(&s->batch[b].line[i], s->wline);
-        if (s->on_line) s->on_line(s->wline, s->batch[b].line[i].y, s->user);
-    }
+    for (int i = 0; i < s->batch[b].n; i++) agnes_line_draw(&s->batch[b].line[i], s->batch[b].px[i]);
 }
-// Hand the filled batch over (or draw it here when there is no second core) and start the other one: run() first
-// waits for the previous job, which was the other batch, so it is free to fill again.
+// A computed batch to the screen, from this core, in order; then it is free to fill again.
+static void lines_emit(nes_session_t *s, int b)
+{
+    for (int i = 0; i < s->batch[b].n; i++)
+        if (s->on_line) s->on_line(s->batch[b].px[i], s->batch[b].line[i].y, s->user);
+    s->batch[b].n = 0;
+}
+// Hand the filled batch over and switch to the other one. run() first waits for the previous job — the other
+// batch — so that one is computed: it goes to the screen now, and is free to fill. Without a second core the batch
+// is computed and sent here.
 static void lines_flush(nes_session_t *s)
 {
     const int b = s->bi;
     if (!s->batch[b].n) return;
-    if (!nucleo_cowork_run(line_job, (void *)(intptr_t)b)) line_job((void *)(intptr_t)b);
+    if (!nucleo_cowork_run(line_job, (void *)(intptr_t)b)) {
+        line_job((void *)(intptr_t)b);
+        lines_emit(s, b);
+        return;
+    }
+    if (s->pending >= 0) lines_emit(s, s->pending);
+    s->pending = b;
     s->bi = b ^ 1;
-    s->batch[s->bi].n = 0;
 }
-// Everything handed over is drawn: before VRAM changes, a cartridge page is replaced, the SD card is used, or the
-// frame is handed back to the front-end.
+// Everything handed over is computed and on the screen: before VRAM changes, a cartridge page is replaced, a state
+// is saved or loaded, or the frame goes back to the front-end.
 static void lines_settle(nes_session_t *s)
 {
     lines_flush(s);
     nucleo_cowork_wait();
+    if (s->pending >= 0) { lines_emit(s, s->pending); s->pending = -1; }
 }
 // A line is described into a stage of its own and joins the batch only once complete: describing it may read a
 // cartridge page, and a miss there flushes the batch.
@@ -478,6 +491,7 @@ esp_err_t nucleo_nes_open(const char *rom_path, nucleo_nes_line_fn line_cb, void
     s->a = a; s->heap_bytes = sizeof *s + sizeof *a;
     s->on_line = line_cb; s->user = user; s->mapper = (uint8_t)mapper;
     s->cur_tag = PG_EMPTY;
+    s->pending = -1;
     for (int i = 0; i < PG_SLOTS; i++) s->pg_tag[i] = PG_EMPTY;
     memset(s->hint, -1, sizeof s->hint);
     save_base_init(s, rom_path);
