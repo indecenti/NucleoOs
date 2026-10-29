@@ -272,7 +272,9 @@ static int  s_out_y0 = 0, s_out_h = OUT_H;
 // A 256x192 Master System picture fills it whole at exactly 5/4: 320x240, every fourth pixel and line twice.
 // "Filled" (s_stretch) takes a 160x144 picture to the whole panel too: every pixel twice across, lines 1-2-2
 // down (5/3), 320x240 — wider than its own aspect, as the Cardputer's filled view is.
-#define BIG_W (s_src_w == SRC_W ? (s_stretch ? 320 : 240) : 320)
+// A 256x240 NES picture is already the panel's height: 1:1, its own 256 columns centred (the panel shares the SD
+// card's SPI bus without DMA, so every pixel costs CPU time — 320 columns are a quarter more), 5/4 across if filled.
+#define BIG_W (s_src_w == SRC_W ? (s_stretch ? 320 : 240) : (s_src_h == 240 && !s_stretch) ? 256 : 320)
 #define BIG_H (s_src_w == SRC_W ? (s_stretch ? 240 : 216) : 240)
 #define BIG_X ((320 - BIG_W) / 2)
 #define BIG_Y ((240 - BIG_H) / 2)
@@ -392,12 +394,14 @@ struct EState {
     bool     have_stash;
     // Two screens: the external panel keeps what it was sent, so a source line identical to the one it
     // had last frame is not sent again (a hash per line; a static HUD or a still background costs no bus).
-    uint32_t lhash[192];
+    uint32_t lhash[240];
     bool     diff_ok;        // lhash describes what the panel shows; false after anything else drew there
     bool     crash_told;     // the crash menu opens once per crash, not every second
     bool     mute_keys;      // buttons held when the menu closed stay OUT of the game until released
     bool     state_ok;       // a save state exists — looked up once per menu open, not per repaint
     char     fail[48];       // why the last start failed; drawn over the shelf until the next key
+    FILE    *shot;           // Fn+P: the BMP the next frame is being written into (nullptr = none)
+    int      shot_next;      // ...the source line it expects next (-1 = waiting for line 0)
     M5Canvas *mq;            // dedicated sprite for the scrolling shelf title (ANTI-FLICKER technique 3)
     int      mq_w;           // its current width, 0 = none
 };
@@ -552,10 +556,12 @@ static void row_done(void);
 static void rows_skip(int rows);
 static bool line_same(const void *px, int bytes, int line);
 __attribute__((optimize("-O2")))
+static void shot_line(const uint16_t *px16, const uint8_t *px8, int line);
 static void on_line(const uint8_t *px, int line, void *user)
 {
     (void)user;
     if (!st || !st->band[0]) return;
+    if (st->shot) shot_line(nullptr, px, line);
     if (s_big) {                                 // 3/2: a pair of pixels -> 3, every odd line drawn twice
         if (st->out_y >= s_out_h) return;
         if (s_stretch) {                         // filled: 2x across, rows 1-2-2 down (5/3)
@@ -662,6 +668,7 @@ static void on_line16(const uint16_t *px, int line, void *user)
 {
     (void)user;
     if (!st || !st->band[0]) return;
+    if (st->shot) shot_line(px, nullptr, line);
     if (s_big) {                                 // Game Gear 160x144: the same exact 3/2; Master System 256x192: 5/4
         if (st->out_y >= s_out_h) return;
         if (s_stretch && s_src_w == SRC_W) {     // filled: 2x across, rows 1-2-2 down (5/3)
@@ -689,6 +696,9 @@ static void on_line16(const uint16_t *px, int line, void *user)
                 row[o] = a; row[o + 1] = a; row[o + 2] = b;
             }
             twice = line & 1;
+        } else if (s_out_w == 256) {             // the NES at 1:1: a straight copy
+            memcpy(row, px, 256 * sizeof *row);
+            twice = false;
         } else {
             for (int x = 0, o = 0; x < 256; x += 4, o += 5) {
                 uint16_t a = px[x], b = px[x + 1], c = px[x + 2], e = px[x + 3];
@@ -742,6 +752,51 @@ static void on_line16(const uint16_t *px, int line, void *user)
     row_done();
 }
 
+static void toast(const char *msg);
+// ── Fn+P: the game's own picture, at its own size, top-down 16-bit BMP (RGB565 bit fields) ──────────────
+static void shot_start(void)
+{
+    if (st->shot) return;
+    mkdir(NUCLEO_SD_MOUNT "/data", 0775); mkdir(NUCLEO_SD_MOUNT "/data/Screenshots", 0775);
+    char p[96];
+    FILE *f = nullptr;
+    for (int n = 1; n < 1000 && !f; n++) {           // <console>_<n>.bmp, the first number not taken
+        snprintf(p, sizeof p, NUCLEO_SD_MOUNT "/data/Screenshots/%s_%03d.bmp", SYS->id, n);
+        struct stat sb;
+        if (stat(p, &sb) != 0) f = fopen(p, "wb");
+    }
+    if (!f) { toast("screenshot: SD?"); return; }
+    const uint32_t w = (uint32_t)s_src_w, h = (uint32_t)s_src_h, img = w * h * 2, off = 14 + 40 + 12;
+    uint8_t hd[66] = { 'B', 'M' };
+    auto le32 = [&](int at, uint32_t v) { hd[at] = (uint8_t)v; hd[at + 1] = (uint8_t)(v >> 8); hd[at + 2] = (uint8_t)(v >> 16); hd[at + 3] = (uint8_t)(v >> 24); };
+    le32(2, off + img); le32(10, off); le32(14, 40); le32(18, w); le32(22, (uint32_t)-(int32_t)h);   // negative: top-down
+    hd[26] = 1; hd[28] = 16; le32(30, 3); le32(34, img);                                              // BI_BITFIELDS
+    le32(54, 0xF800); le32(58, 0x07E0); le32(62, 0x001F);
+    if (fwrite(hd, 1, sizeof hd, f) != sizeof hd) { fclose(f); toast("screenshot: SD?"); return; }
+    st->shot = f;
+    st->shot_next = -1;
+}
+// One source line of the picture: RGB565 in the panel's byte order (colour cores), or the four shades (Game Boy).
+static void shot_line(const uint16_t *px16, const uint8_t *px8, int line)
+{
+    if (!st->shot) return;
+    if (st->shot_next < 0) { if (line != 0) return; st->shot_next = 0; }   // from the top of a frame
+    if (line != st->shot_next) return;
+    uint16_t row[256];
+    for (int x = 0; x < s_src_w; x++) {
+        const uint16_t c = px16 ? px16[x] : SHADE_TX[px8[x] & 3];
+        row[x] = (uint16_t)((c >> 8) | (c << 8));                           // the panel's order -> the file's
+    }
+    bool ok = fwrite(row, 2, (size_t)s_src_w, st->shot) == (size_t)s_src_w;
+    st->shot_next++;
+    if (!ok || st->shot_next >= s_src_h) {
+        ok = fclose(st->shot) == 0 && ok;
+        st->shot = nullptr;
+        toast(ok ? TR5("screenshot salvato", "screenshot saved", "captura guardada", "capture enregistree", "Screenshot gespeichert")
+                 : "screenshot: SD?");
+    }
+}
+
 static void band_push(void);
 // One output row is in the band buffer: count it, and push the band once it is full.
 static void row_done(void)
@@ -763,7 +818,7 @@ static void rows_skip(int rows)
 __attribute__((optimize("-O2")))
 static bool line_same(const void *px, int bytes, int line)
 {
-    if (line < 0 || line >= 192 || ((uintptr_t)px & 3)) return false;
+    if (line < 0 || line >= 240 || ((uintptr_t)px & 3)) return false;
     const uint32_t *w = (const uint32_t *)px;
     uint32_t h = 2166136261u;
     for (int i = 0, n = bytes >> 2; i < n; i++) h = (h ^ w[i]) * 16777619u;
@@ -1662,6 +1717,7 @@ static void play_session(const char *name)
                 if (ms > 200) trace("  menu: save+lookup took %d ms", ms);
                 menu_draw();
             }
+            else if ((k.ch == 'p' || k.ch == 'P' || k.ch == 0x10) && (nucleo_kbd_mods() & NK_MOD_FN)) shot_start();
             else if (k.ch == 'p' || k.ch == 'P') pal_cycle();
             // Two things a player changes mid-game without wanting to pause: how loud it is, and
             // whether the pillars are there at all. Both are one key, both echo in the toast.
@@ -1798,6 +1854,7 @@ static void play_session(const char *name)
     state_save(st->resume);
     nucleo_prefs_save(nucleo_app_brightness(), nucleo_audio_volume(), nucleo_audio_is_muted());
     trace("  END fps=%d palette=%s", st->fps, PAL_NAME[s_pal]);
+    if (st->shot) { fclose(st->shot); st->shot = nullptr; }   // a capture cut short by quitting: what was written
     SYS->close();
     free(st->band[0]); free(st->band[1]); st->band[0] = st->band[1] = nullptr;
     d.setSwapBytes(false);                 // leave the shared display as every other app expects it
