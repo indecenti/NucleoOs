@@ -114,6 +114,7 @@ volatile int       s_layout_gen = 0;             // bumped when the frame geomet
 volatile bool      s_cal_req = false;            // Settings asked for a recalibration
 volatile bool      s_solo = false;               // the panel is `d`, natively (the launcher on 320x240)
 volatile bool      s_calibrating = false;        // the calibration screen owns the panel (the mirror is dark)
+volatile bool      s_cal_redraw = false;         // something painted over the calibration screen: the touch task repaints it
 
 // A pin another module actively drives LOW defeats our weak pull-up (e.g. a LoRa cap's BUSY on G6).
 bool driven_low_against_pullup(int pin)
@@ -257,6 +258,7 @@ void bl_follow(uint8_t brightness)
     dark_sync();                                    // dark: nothing reaches it until on (or calibration ends)
     if (on == was || !s_dev || s_layout == 1) return;   // Cardputer only: the panel is black already
     if (!on && s_bl_pin < 0) { lock_opt(); s_dev->fillScreen(TFT_BLACK); unlock_opt(); }
+    if (on && s_calibrating) { s_cal_redraw = true; return; }   // the touch task repaints the target
     if (on) draw_chrome();
     if (on && s_solo && s_hud_h) { lock_opt(); draw_hud(); unlock_opt(); }   // the OS repaints the rest
 }
@@ -442,14 +444,14 @@ bool      s_has_cal_raw = false;
 void ext_lock(void)   { xSemaphoreTakeRecursive(s_tc->mux, portMAX_DELAY); }
 void ext_unlock(void) { xSemaphoreGiveRecursive(s_tc->mux); }
 
-bool chrome_on(void) { return s_touch_input && s_tc && s_tc->mux && !s_solo && s_layout != 1; }
+bool chrome_on(void) { return s_touch_input && s_tc && s_tc->mux && !s_solo && s_layout != 1 && !s_calibrating; }
 // Calibration can run on any surface (the mirrored frame or the large one): it needs only touch input and a
 // panel that is shown.
 bool cal_on(void) { return s_touch_input && s_tc && s_tc->mux && s_layout != 1; }
 volatile bool s_repaint_req = false;
 void draw_hud(void)
 {
-    if (!s_hud_h || !s_dev) return;
+    if (!s_hud_h || !s_dev || s_calibrating) return;
     const int W = s_dev->width(), h = s_hud_h, bh = h - 8, cy = h / 2;
     s_dev->startWrite();
     s_dev->fillRect(0, 0, W, h, THEME_BG);
@@ -524,6 +526,7 @@ void end_calib(void)
     dark_sync();
     lock_opt();
     s_tc->dev->fillScreen(TFT_BLACK);
+    if (s_solo && s_hud_h) draw_hud();
     unlock_opt();
     draw_chrome();
     s_repaint_req = true;
@@ -640,6 +643,14 @@ void touch_task(void *)
                 continue;
             }
         }
+        if (calibrating && !cal_on()) {            // Cardputer only / touch off mid-calibration: give it up
+            calibrating = false;
+            s_calibrating = false;
+            dark_sync();
+            lock_opt(); s_tc->dev->fillScreen(TFT_BLACK); unlock_opt();   // no target left behind
+            s_repaint_req = true;
+        }
+        if (calibrating && s_cal_redraw) { s_cal_redraw = false; draw_calib(cal.step, false); }
         static int layout_seen = 0;
         if (s_solo != solo_seen || s_layout_gen != layout_seen) {   // surface or frame changed: re-lay the keys
             solo_seen = s_solo;
@@ -1019,7 +1030,8 @@ namespace {
 
 extern "C" bool nucleo_surface_large_ok(void)
 {
-    return s_mirror && s_primary && s_layout != 1 && (!s_tc || (s_tc->cal_stored && !s_calibrating));
+    // A recalibration keeps the surface as it is: switching it would wipe the target and draw the soft keys.
+    return s_mirror && s_primary && s_layout != 1 && (!s_tc || s_tc->cal_stored);
 }
 
 extern "C" bool nucleo_surface_large(void) { return s_solo; }
@@ -1031,7 +1043,7 @@ extern "C" bool nucleo_surface_set_large(bool on)
     lock_opt();                                   // the touch task never draws mid-switch
     if (!on && s_hud_h) { s_mirror->set_inset(0); s_hud_h = 0; }   // the system bar belongs to the large surface
     bool ok = s_mirror->set_solo(on);
-    if (ok && !on) s_dev->fillScreen(TFT_BLACK);  // wipe the large screen; the caller repaints the centred frame
+    if (ok && !on && !s_calibrating) s_dev->fillScreen(TFT_BLACK);  // wipe the large screen; the caller repaints the centred frame
     unlock_opt();
     if (!ok) return false;
     s_solo = on;
@@ -1064,7 +1076,7 @@ extern "C" bool nucleo_extdisp_set_layout(int layout)
     s_mirror->set_ext_off(layout == 1);
     s_mirror->set_pri_off(layout == 2);
     s_layout = layout;
-    s_dev->fillScreen(TFT_BLACK);                 // Cardputer only: stays black; otherwise the caller repaints
+    if (!s_calibrating) s_dev->fillScreen(TFT_BLACK);   // Cardputer only: stays black; otherwise the caller repaints
     unlock_opt();
     d.clearClipRect();
     draw_chrome();
@@ -1084,7 +1096,7 @@ extern "C" bool nucleo_extdisp_set_fit(bool on)
     if (s_mirror && !s_solo && s_mirror->fit() != on) {
         lock_opt();
         if (s_mirror->set_fit(on)) {
-            s_dev->fillScreen(TFT_BLACK);                            // the frame moves: wipe, the caller repaints it
+            if (!s_calibrating) s_dev->fillScreen(TFT_BLACK);        // the frame moves: wipe, the caller repaints it
             if (s_tc) {
                 s_tc->frame = { s_mirror->origin_x(), s_mirror->origin_y(), s_mirror->frame_w(), s_mirror->frame_h() };
                 extdisp_sk_layout(s_dev->width(), s_dev->height(), s_tc->frame.ox, s_tc->frame.oy, s_tc->frame.fw,
