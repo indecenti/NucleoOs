@@ -43,6 +43,7 @@
 #include "nucleo_gb.h"
 #include "nucleo_gg.h"
 #include "nucleo_gbc.h"
+#include "nucleo_pce.h"       // the PC Engine: MAME's HuC6280 (BSD-3) and our scanline VDC, the same front-end
 #include "nucleo_nes.h"       // the NES: agnes (patched) and our APU, the same front-end       // the Game Boy Color: the Game Boy's host around a CGB core
 #include "nucleo_kbd.h"
 #include "nucleo_board.h"
@@ -180,6 +181,7 @@ static void trace_heap(const char *label)
 #define DIR_GG   NUCLEO_SD_MOUNT "/data/ROMs/gg"
 #define DIR_SMS  NUCLEO_SD_MOUNT "/data/ROMs/sms"
 #define DIR_NES  NUCLEO_SD_MOUNT "/data/ROMs/nes"
+#define DIR_PCE  NUCLEO_SD_MOUNT "/data/ROMs/pcengine"
 
 // ── screen mapping ──────────────────────────────────────────────────────────────────────────────
 // NO SCALING HORIZONTALLY. The panel is 240 px wide and the Game Boy is 160, so every column goes to
@@ -2553,6 +2555,26 @@ static const EmuSys SYS_NES = {
     { ART_NES_S_Z, sizeof ART_NES_S_Z, ART_NES_S_W, ART_NES_S_H }, { ART_NES_S_Z, sizeof ART_NES_S_Z, ART_NES_S_W, ART_NES_S_H },
 };
 
+// The PC Engine: one folder, .pce files (HuCards, a copier header or not), 256x240 like the NES.
+static esp_err_t pce_open(const char *p) { return nucleo_pce_open(p, on_line16, nullptr); }
+static void pce_explain(esp_err_t e, const char *path, char *buf, size_t n) { (void)path; start_error(e, nullptr, buf, n); }
+static const EmuSys SYS_PCE = {
+    "pceemu", "PC Engine", "PCE", DIR_PCE, nullptr, ".pce", nullptr, nullptr,
+    "Nessuna ROM in /data/ROMs/pcengine", "No ROMs in /data/ROMs/pcengine", "Ninguna ROM en /data/ROMs/pcengine",
+    "Aucune ROM dans /data/ROMs/pcengine", "Keine ROMs in /data/ROMs/pcengine",
+    NUCLEO_SD_MOUNT "/system/config/pceemu.json", NUCLEO_SD_MOUNT "/system/config/pceemu.shelf",
+    NUCLEO_SD_MOUNT "/pceemu_trace.txt", "/pceemu_trace.txt",
+    16715,                                   // 59.826 Hz
+    false, 5, 3,
+    pce_open, nucleo_pce_probe, pce_explain, nucleo_pce_close, nucleo_pce_reset, nucleo_pce_run_frame,
+    nucleo_pce_set_buttons, nucleo_pce_title, nucleo_pce_set_frameskip, nucleo_pce_state_save,
+    nucleo_pce_state_load, nucleo_pce_state_exists, nucleo_pce_save, nucleo_pce_autosave,
+    nucleo_pce_get_stats, nucleo_pce_reset_counters, nucleo_pce_geometry, false,
+    { ART_PCE_Z, sizeof ART_PCE_Z, ART_PCE_W, ART_PCE_H }, { ART_PCE_Z, sizeof ART_PCE_Z, ART_PCE_W, ART_PCE_H },
+    "PCE", "PCE", nullptr,
+    { ART_PCE_S_Z, sizeof ART_PCE_S_Z, ART_PCE_S_W, ART_PCE_S_H }, { ART_PCE_S_Z, sizeof ART_PCE_S_Z, ART_PCE_S_W, ART_PCE_S_H },
+};
+
 static void enter(void)
 {
     // The RAM window is declarative (see the app_def): by the time this runs we are already on a
@@ -2592,6 +2614,7 @@ static void enter(void)
 static void enter_gb(void) { SYS = &SYS_GB; enter(); }
 static void enter_gg(void) { SYS = &SYS_GG; enter(); }
 static void enter_nes(void) { SYS = &SYS_NES; enter(); }
+static void enter_pce(void) { SYS = &SYS_PCE; enter(); }
 
 static void leave(void)
 {
@@ -2648,6 +2671,17 @@ extern "C" void nucleo_register_nesemu(void)
         NX_NET_APP | NX_SOLO | NX_WIFI, nullptr, draw_large
     };
     nucleo_app_register(&nes);
+}
+// The PC Engine ships only from the store too.
+extern "C" void nucleo_register_pceemu(void)
+{
+    static const nucleo_app_def_t pce = {
+        "pceemu", "PC Engine", "Games",
+        "Play PC Engine HuCards natively — the emulator runs on the Cardputer itself.",
+        'P', 0xF206, enter_pce, on_key, nullptr, draw, leave,
+        NX_NET_APP | NX_SOLO | NX_WIFI, nullptr, draw_large
+    };
+    nucleo_app_register(&pce);
 }
 #endif
 #endif  // !(CONFIG_NUCLEO_STORE_GBEMU && CONFIG_NUCLEO_STORE_GGEMU) || NAP_MODULE
