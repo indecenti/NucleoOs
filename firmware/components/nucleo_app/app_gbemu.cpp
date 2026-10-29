@@ -1536,7 +1536,8 @@ extern "C" void (*emu_rom_progress)(uint32_t, uint32_t, void *);
 void (*emu_rom_progress)(uint32_t, uint32_t, void *) = nullptr;
 
 // ── a bench run ──────────────────────────────────────────────────────────────────────────────────────────
-// <card>/emu_bench.txt turns the next game into a measurement nobody has to sit through: it plays for `secs`, pressing
+// <card>/emu_bench.txt turns the next game into a measurement nobody has to sit through: it plays `secs` of the
+// console's time (frames, so two builds run the same game whatever their speed), pressing
 // what the script says, takes a screenshot at `shot` s, and ends (from /api/play, or a gallery's "open with", the app
 // then quits: a Solo boot reboots into the network, where the trace is read). The file is removed as the game starts,
 // so a crash never repeats. Lines: "secs <s>", "shot <s>", "knob <i> <v>" (emu_bench_knob, see emu_romstore.h),
@@ -1756,8 +1757,8 @@ static void play_session(const char *name)
     uint8_t held = 0;
     int64_t next = esp_timer_get_time();
     const int64_t FRAME_US = SYS->frame_us;             // the console's real frame time (DMG 59.73 Hz, GG 59.92 Hz)
-    const int64_t bench_t0 = next;
-    bool bench_shot = false;
+    int32_t bench_frames = 0;                           // a bench counts the console's time, not ours: the same
+    bool bench_shot = false;                            // buttons on the same frames, whatever the speed (comparable)
 
     while (st->running) {
         esp_task_wdt_reset();
@@ -1792,7 +1793,7 @@ static void play_session(const char *name)
         if (st->mute_keys) { if (b) b = 0; else st->mute_keys = false; }
         held = b;
         if (s_bench.on) {
-            const int32_t ms = (int32_t)((esp_timer_get_time() - bench_t0) / 1000);
+            const int32_t ms = (int32_t)(bench_frames++ * FRAME_US / 1000);
             held |= bench_buttons(ms);
             if (s_bench.shot && !bench_shot && ms >= s_bench.shot * 1000) { bench_shot = true; shot_start(); }
             if (ms >= s_bench.secs * 1000) { trace("  bench: done"); st->running = false; }
