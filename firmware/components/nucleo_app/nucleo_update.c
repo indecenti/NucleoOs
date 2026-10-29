@@ -342,7 +342,7 @@ static void check_task(void *arg)
             nvs_set_u32(s_nvs, "lastck", (uint32_t)time(NULL));
             nvs_commit(s_nvs);
         }
-        ESP_LOGI(TAG, "latest release: %s (%s)", tag, ltype);
+        ESP_LOGW(TAG, "latest release: %s (%s)", tag, ltype);
 
         char dismiss[24];
         nvs_get_string("dismiss", dismiss, sizeof dismiss);
@@ -440,6 +440,7 @@ int nucleo_update_bg_tick(bool quiet)
         if (nvs_ready()) nvs_get_u32(s_nvs, "lastck", &last);
         if (!upd_check_due((uint32_t)time(NULL), last, UPD_CHECK_INTERVAL_S)) return UPD_BG_NONE;
         s_bg = 1;
+        ESP_LOGW(TAG, "daily check: canvas lent");
         return UPD_BG_LEND;                  // the check starts on the next tick, with the canvas freed
     }
     case 1:
@@ -452,6 +453,7 @@ int nucleo_update_bg_tick(bool quiet)
     case 3:
         if (nucleo_store_status() == NST_BUSY) return UPD_BG_NONE;
         s_bg = 0;
+        ESP_LOGW(TAG, "daily check: store refresh %s", nucleo_store_status() == NST_DONE ? "ok" : "failed");
         if (nucleo_store_status() == NST_DONE) bg_store_notify();
         return UPD_BG_RETURN;
     default:

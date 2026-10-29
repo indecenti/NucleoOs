@@ -145,8 +145,9 @@ handshake (`UPD_TLS_MIN_BLOCK`) — decided *before* spawning its task, so no RA
 
 **Daily background check** (`nucleo_update_bg_tick`, driven by the run loop). A Cardputer used on its own,
 never opened in a browser, must still hear of a new firmware and of newer Store apps. Once a day (the NVS
-`lastck` throttle; a failed attempt looks again after an hour), when the launcher has sat untouched for a
-minute with Wi-Fi up and no remote session, the run loop lends the canvas (`nucleo_screen_hold(true)`: no
+`lastck` throttle; a failed attempt looks again after an hour), a minute into the launcher's screensaver
+with Wi-Fi up and no remote session (only there: nothing allocates into the hole the canvas leaves — the
+games gallery's pictures did, and the canvas could not come back), the run loop lends the canvas (`nucleo_screen_hold(true)`: no
 lazy getter, app open/close or wake can take it back meanwhile, everything draws direct), the release check
 runs, then the Store's native catalog is refreshed, and the canvas comes back. A newer release is the `ota`
 notification above (and the boot dialog next boot); installed apps with a newer version in the catalog are

@@ -1992,9 +1992,13 @@ void nucleo_app_run(void)
             if (!s_sdc_remind_at) s_sdc_remind_at = now + 10000;
             else if (now >= s_sdc_remind_at) s_sdc_remind_at = sdc_boot_reminder() ? -1 : now + 10000;
         }
-        // Once a day, launcher idle for a minute: the release check and the Store's catalog, on the screen canvas
-        // lent for the TLS handshake (nucleo_update.c). Meanwhile everything draws direct.
-        switch (nucleo_update_bg_tick(s_active == -1 && !s_remote && !s_solo_active && !s_app_direct && now - s_pm_act > 60000)) {
+        // Once a day, a minute into the launcher's screensaver: the release check and the Store's catalog, on the
+        // screen canvas lent for the TLS handshake (nucleo_update.c). Only there: nobody is looking, and nothing
+        // allocates into the hole the canvas leaves (the games gallery's pictures did, and the canvas could not
+        // come back). Meanwhile everything draws direct.
+        const nucleo_app_def_t *bg_a = active_def();
+        const bool bg_saver = bg_a && bg_a->id && !strcmp(bg_a->id, "screensaver");
+        switch (nucleo_update_bg_tick(bg_saver && !s_remote && !s_solo_active && now - last_act > 60000)) {
         case UPD_BG_LEND: nucleo_screen_hold(true); break;
         case UPD_BG_RETURN:
             nucleo_screen_hold(false);
