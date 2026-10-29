@@ -198,7 +198,7 @@ typedef struct {
     uint8_t    skipped;
     // Where the time goes, in CPU cycles (the S3's counter), written to the trace when the game closes.
     uint64_t   prof_cpu, prof_vdc, prof_line, prof_psg, prof_idle, prof_wait;
-    uint64_t   perf[4];                              // a bench's hardware counters in the CPU loop (perf_*)
+    uint64_t   perf[2];                              // a bench's hardware counters in the CPU loop (perf_*)
     uint32_t   prof_ahead, prof_misses, prof_frames, prof_drawn, prof_lines_here, prof_lines_other;
     char       trace_path[160];
     char       save_base[300];
@@ -1025,31 +1025,32 @@ static void hot_unlock(void) { }
 static void hot_lock(uint32_t bytes) { (void)bytes; }
 #endif
 
-// ── the Xtensa LX7's own performance counters (a bench with knob 2 = 1) ──────────────────────────────────────
-// Counted inside the CPU loop only, on this core: S3 cycles, instructions retired, instruction-fetch stall cycles
-// (the flash behind the instruction cache) and data stall cycles (the cartridge mapped from flash, behind the data
-// cache). They say where the loop's time goes: executing, or waiting for flash. Counters 2..5 (1 is apptrace's).
+// ── the Xtensa LX7's own performance counters (a bench with knob 2 = 1 or 2) ─────────────────────────────────
+// Counted inside the CPU loop only, on this core. The S3 has two counters: knob 2 = 1 counts S3 cycles and
+// instruction-fetch stall cycles (the flash behind the instruction cache), 2 instructions retired and data stall
+// cycles (the cartridge mapped from flash, behind the data cache). Where the loop's time goes: executing, or waiting.
 #ifdef NAP_MODULE
 #define ERI_PGM        0x101000u
 #define ERI_PM(n)      (0x101080u + 4u * (n))
 #define ERI_PMCTRL(n)  (0x101100u + 4u * (n))
 static inline uint32_t eri_rd(uint32_t a) { uint32_t v; __asm__ volatile("rer %0, %1" : "=a"(v) : "a"(a)); return v; }
 static inline void eri_wr(uint32_t a, uint32_t v) { __asm__ volatile("wer %0, %1" :: "a"(v), "a"(a)); __asm__ volatile("isync"); }
-static bool s_perf;
-static void perf_start(void)
+static int s_perf;                                     // 0 = off, else the pair counted (knob 2)
+static void perf_start(int pair)
 {
-    // select << 8 | mask << 16 | tracelevel 15 << 4: cycles, instructions, I stalls (all), D stalls (all)
-    static const uint32_t ctl[4] = { (0u << 8) | (0x0001u << 16) | (15u << 4), (2u << 8) | (0x8DFFu << 16) | (15u << 4),
-                                     (4u << 8) | (0x01FFu << 16) | (15u << 4), (3u << 8) | (0x01FEu << 16) | (15u << 4) };
-    for (int i = 0; i < 4; i++) { eri_wr(ERI_PM(2 + i), 0); eri_wr(ERI_PMCTRL(2 + i), ctl[i]); }
+    // select << 8 | mask << 16 | tracelevel 15 << 4: cycles + I stalls (all), or instructions + D stalls (all)
+    const uint32_t c0 = pair == 1 ? (0u << 8) | (0x0001u << 16) : (2u << 8) | (0x8DFFu << 16);
+    const uint32_t c1 = pair == 1 ? (4u << 8) | (0x01FFu << 16) : (3u << 8) | (0x01FEu << 16);
+    eri_wr(ERI_PM(0), 0); eri_wr(ERI_PMCTRL(0), c0 | (15u << 4));
+    eri_wr(ERI_PM(1), 0); eri_wr(ERI_PMCTRL(1), c1 | (15u << 4));
     eri_wr(ERI_PGM, eri_rd(ERI_PGM) | 1u);
-    s_perf = true;
+    s_perf = pair;
 }
-static inline void perf_read(uint32_t v[4]) { for (int i = 0; i < 4; i++) v[i] = eri_rd(ERI_PM(2 + i)); }
+static inline void perf_read(uint32_t v[2]) { v[0] = eri_rd(ERI_PM(0)); v[1] = eri_rd(ERI_PM(1)); }
 #else
-static bool s_perf;
-static void perf_start(void) { }
-static inline void perf_read(uint32_t v[4]) { v[0] = v[1] = v[2] = v[3] = 0; }
+static int s_perf;
+static void perf_start(int pair) { (void)pair; }
+static inline void perf_read(uint32_t v[2]) { v[0] = v[1] = 0; }
 #endif
 
 // ── the frame ────────────────────────────────────────────────────────────────────────────────────────────
@@ -1061,10 +1062,10 @@ static PCE_HOT_FN void run_cpu(uint32_t cycles)
     g_idle.armed = false;                              // a new leg: the cycle count restarts
     g_idle.power = 1; g_idle.lam = 0;
     const uint32_t c0 = pce_ccount();
-    uint32_t p0[4];
+    uint32_t p0[2];
     if (s_perf) perf_read(p0);
     if (m_icount > 0) execute_run();
-    if (s_perf) { uint32_t p1[4]; perf_read(p1); for (int i = 0; i < 4; i++) s->perf[i] += p1[i] - p0[i]; }
+    if (s_perf) { uint32_t p1[2]; perf_read(p1); s->perf[0] += p1[0] - p0[0]; s->perf[1] += p1[1] - p0[1]; }
     s->prof_cpu += pce_ccount() - c0;
     s->leg_base += cycles;
 }
@@ -1307,8 +1308,8 @@ esp_err_t nucleo_pce_open(const char *rom_path, nucleo_pce_line_fn line_cb, void
     // Measured on the ADV (Street Fighter II): locking the 10.7 KB hot section cost 14% (the rest of the code thrashed
     // in the cache left), so it is a bench's lever, off when playing.
     if (emu_bench_knob[0] > 0) hot_lock(emu_bench_knob[0] == 1 ? 0 : (uint32_t)emu_bench_knob[0]);
-    s_perf = false;
-    if (emu_bench_knob[2] == 1) perf_start();
+    s_perf = 0;
+    if (emu_bench_knob[2] == 1 || emu_bench_knob[2] == 2) perf_start(emu_bench_knob[2]);
     ESP_LOGI(TAG, "'%s' %u KB%s, %s, heap %u B, sound %s", s->title, (unsigned)(s->data_bytes / 1024), s->sf2 ? " (SF2 mapper)" : "",
              s->rom_mapped ? "mapped from flash" : s->rom_all ? "resident" : "paged", (unsigned)s->heap_bytes, s->sound ? "on" : "off");
     return ESP_OK;
@@ -1349,11 +1350,10 @@ static void profile_write(pce_t *s)
             (unsigned)(s->prof_lines_here * 100u / (s->prof_lines_other + s->prof_lines_here + 1)),
             s->rom_mapped ? "mapped from flash" : s->rom_all ? "in RAM" : "paged from the card", (unsigned)s->prof_misses,
             (unsigned)(lock_bytes()), (unsigned)hot_a(), (unsigned)hot_end(), emu_bench_knob[0], emu_bench_knob[1]);
-    if (s_perf && s->perf[0]) {
-        const uint32_t k = (uint32_t)(s->perf[0] >> 10);      // per mille of the loop's cycles, without 64-bit division
-        fprintf(f, "  pce counters in the CPU loop: %u S3 cycles/frame, %u instructions/frame, fetch stalls %u/1000, data stalls %u/1000\n",
-                (unsigned)((uint32_t)(s->perf[0] >> 10) / n * 1024u), (unsigned)((uint32_t)(s->perf[1] >> 10) / n * 1024u),
-                (unsigned)((uint32_t)(s->perf[2] >> 10) * 1000u / (k ? k : 1)), (unsigned)((uint32_t)(s->perf[3] >> 10) * 1000u / (k ? k : 1)));
+    if (s_perf) {                                       // per frame, in units of 1024 (no 64-bit division in a module)
+        fprintf(f, "  pce counters in the CPU loop: %s %u K/frame, %s %u K/frame (S3 cycles at 240 MHz: 4000 K = 16.7 ms)\n",
+                s_perf == 1 ? "S3 cycles" : "instructions", (unsigned)((uint32_t)(s->perf[0] >> 10) / n),
+                s_perf == 1 ? "fetch stall cycles" : "data stall cycles", (unsigned)((uint32_t)(s->perf[1] >> 10) / n));
     }
     fclose(f);
 }
