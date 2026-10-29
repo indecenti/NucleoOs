@@ -493,3 +493,14 @@ panel shares the SD card's SPI bus at 40 MHz **without DMA** (the SD driver owns
 picture is ~30 ms of CPU time — more than the emulation itself. Hence the NES at its own 256 columns on the panel
 (a quarter fewer pixels), the line diff over all 240 lines, and the next step: a firmware service that pushes the
 bands from the other core (retro-go's display task), which needs an ABI level and a firmware update.
+
+**Sound and RAM (1.0.6).** The device profile (cycle counter, written to the trace on quit) for Castlevania, per
+frame: 6502 6.6 ms, PPU 4.8 ms, panel lines 2.1 ms, APU 2.3 ms; dips to ~40 fps where the picture scrolls (the
+panel's 8.9 ms). The front-end does not chase a late frame, so below 60 emulated frames a second the speaker runs
+dry: that was the stuttering sound. Now the NES's frame-skip is adaptive and on from the start: a frame that starts
+more than 2 ms late is run unseen (three at most in a row), so the console — and the sound — stay at 60 while the
+picture gives way. Anemoia-ESP32 (GPL-3, studied only) reaches 60 fps without PSRAM the same way on 40 MHz panels
+(one skipped frame), with its hot code in IRAM (not open to a store module) and its APU on the other core.
+RAM: the mapper's 8 KB CHR RAM and 8 KB PRG RAM (A8) are allocated apart and only when the cartridge has them:
+a CHR-ROM game carries 8 KB less and the console is no longer one 24 KB block (SMB3, Kirby, Contra: 72 cache pages
+instead of 64 on the same heap). States are `NNS2` (the console, the APU, then those RAM blocks).
