@@ -213,13 +213,7 @@ static void pretty(const char *file, char *out, size_t n)
 static const char *title_of(int i)
 {
     static char t[NAMEMAX];
-    if (s_level == 0) {                            // a console: its mark, then its maker - never its name
-        const int g = s_grp[s_ix[i]];
-        if (g == NATIVE) return group_title(NATIVE);
-        const char *c = strchr(SYS[g].maker, ',');   // "Sega, 1990" -> "Sega": the mark tells the consoles apart
-        snprintf(t, sizeof t, "%.*s", c ? (int)(c - SYS[g].maker) : (int)strlen(SYS[g].maker), SYS[g].maker);
-        return t;
-    }
+    if (s_level == 0) return group_title(s_grp[s_ix[i]]);   // a console: its mark and its name
     if (s_group == NATIVE) return native_title(s_nat[s_ix[i]]);
     pretty(rom_name(i), t, sizeof t);
     return t;
@@ -673,7 +667,7 @@ bool gamefront_take_return(void)
 // When it has stopped for SETTLE_US the rest follows in one whole frame: the picture, the caption, the position and
 // the Cardputer's details - read and drawn once per stop, not once per step (as in HyperSpin).
 #define TURN_US   140000
-#define SETTLE_US 160000
+#define SETTLE_US 120000
 static int64_t s_turn_t0;
 static int     s_turn_dir;
 static int64_t s_settle_at;                        // a whole frame is due then (0 = none)
@@ -909,10 +903,11 @@ static bool pic_write(const char *path, const uint16_t *px, int w, int h, uint32
 }
 
 // Raw deflate, from memory (zf null) or from a file (zn bytes), into out (non-wrapping): exactly `need` bytes.
-// The ~11 KB inflater state lives only for the call; a file is read 512 bytes at a time.
-static bool inflate_to(const uint8_t *mem, FILE *zf, size_t zn, uint8_t *out, size_t need)
+// The ~11 KB inflater state goes in `state` when the caller has room for it (the canvas behind the picture): on the
+// launcher's fragmented heap a fresh 11 KB block is often not there. Else it is allocated for the call.
+static bool inflate_to(const uint8_t *mem, FILE *zf, size_t zn, uint8_t *out, size_t need, void *state = nullptr)
 {
-    tinfl_decompressor *z = (tinfl_decompressor *)malloc(sizeof *z);
+    tinfl_decompressor *z = state ? (tinfl_decompressor *)state : (tinfl_decompressor *)malloc(sizeof *z);
     if (!z) return false;
     tinfl_init(z);
     uint8_t buf[512];
@@ -932,30 +927,107 @@ static bool inflate_to(const uint8_t *mem, FILE *zf, size_t zn, uint8_t *out, si
         if (r == TINFL_STATUS_DONE) { ok = done == need; break; }
         if (r < 0 || done >= need || (r == TINFL_STATUS_NEEDS_MORE_INPUT && !avail && !left)) break;
     }
-    free(z);
+    if (!state) free(z);
     return ok;
 }
 
-// The shared 32 KB canvas is the scratch a picture is unpacked into (nothing is composed at this point).
-static uint16_t *scratch(size_t need)
+// The shared 32 KB canvas is the scratch a picture is unpacked into (nothing is composed at this point): the
+// picture at its start, and the inflater's state right behind it when both fit (*state, else null).
+static uint16_t *scratch(size_t need, void **state = nullptr)
 {
     M5Canvas *cv = nucleo_screen();
-    return cv && cv->bufferLength() >= need ? (uint16_t *)cv->getBuffer() : nullptr;
+    if (!cv || cv->bufferLength() < need) return nullptr;
+    uint8_t *b = (uint8_t *)cv->getBuffer();
+    if (state) {
+        const size_t at = (need + 7) & ~(size_t)7;
+        *state = at + sizeof(tinfl_decompressor) <= cv->bufferLength() ? b + at : nullptr;
+    }
+    return (uint16_t *)b;
 }
 static void swap_all(uint16_t *px, size_t n) { for (size_t i = 0; i < n; i++) px[i] = (uint16_t)(px[i] >> 8 | px[i] << 8); }
 
-// A console's photo, from the firmware, as GameShots/.cache/sys_<key>.pic.
+// A console's photo has its light studio background baked in: it is keyed out once, when the picture is made, so
+// the console stands on the dark tile. Flood from the edges over pixels close to the corner's colour (a light part of
+// the console itself is not reached: it is not connected to the edge through background). Keyed pixels become KEY,
+// drawn transparent. `seen` is w*h bytes of scratch.
+#define KEY 0xF81F                                 // never a photo's colour: pure magenta
+static void key_background(uint16_t *px, int w, int h, uint8_t *seen, bool fringe)
+{
+    const uint16_t ref = px[0];
+    auto near = [ref](uint16_t c) {
+        const int dr = ((c >> 11) & 31) - ((ref >> 11) & 31), dg = ((c >> 5) & 63) - ((ref >> 5) & 63), db = (c & 31) - (ref & 31);
+        return abs(dr) * 2 + abs(dg) + abs(db) * 2 <= 12;
+    };
+    memset(seen, 0, (size_t)w * h);
+    for (int x = 0; x < w; x++) { if (near(px[x])) seen[x] = 1; if (near(px[(h - 1) * w + x])) seen[(h - 1) * w + x] = 1; }
+    for (int y = 0; y < h; y++) { if (near(px[y * w])) seen[y * w] = 1; if (near(px[y * w + w - 1])) seen[y * w + w - 1] = 1; }
+    for (int pass = 0; pass < 16; pass++) {       // forward then backward sweeps until nothing new is reached
+        bool more = false;
+        for (int i = 0; i < w * h; i++) {
+            const int x = i % w;
+            if (seen[i] || !near(px[i])) continue;
+            if ((x > 0 && seen[i - 1]) || (i >= w && seen[i - w])) { seen[i] = 1; more = true; }
+        }
+        for (int i = w * h - 1; i >= 0; i--) {
+            const int x = i % w;
+            if (seen[i] || !near(px[i])) continue;
+            if ((x < w - 1 && seen[i + 1]) || (i + w < w * h && seen[i + w])) { seen[i] = 1; more = true; }
+        }
+        if (!more) break;
+    }
+    // The photo's edge was blended with the light background: a fringe of light pixels would ring the console on the
+    // dark tile. Two passes take the light ones that touch the background (a photo: a 15-px mark has no pixels to spare).
+    auto light = [ref](uint16_t c) {
+        const int dr = ((c >> 11) & 31) - ((ref >> 11) & 31), dg = ((c >> 5) & 63) - ((ref >> 5) & 63), db = (c & 31) - (ref & 31);
+        return abs(dr) * 2 + abs(dg) + abs(db) * 2 <= 40;
+    };
+    for (int pass = 0; pass < (fringe ? 2 : 0); pass++) {
+        for (int i = 0; i < w * h; i++) {
+            if (seen[i] & 1 || !light(px[i])) continue;
+            const int x = i % w;
+            if ((x > 0 && seen[i - 1] & 1) || (x < w - 1 && seen[i + 1] & 1) || (i >= w && seen[i - w] & 1) || (i + w < w * h && seen[i + w] & 1))
+                seen[i] |= 2;
+        }
+        for (int i = 0; i < w * h; i++) if (seen[i] & 2) seen[i] = 1;
+    }
+    for (int i = 0; i < w * h; i++) if (seen[i]) px[i] = KEY;
+}
+// Shrink a keyed picture to dw x dh in place (rows are written behind the ones still to be read): each pixel is the
+// average of the 2x2 it comes from, keyed when most of them are.
+static void shrink(uint16_t *px, int sw, int sh, int dw, int dh)
+{
+    uint16_t row[160];
+    for (int y = 0; y < dh; y++) {
+        const int sy = y * sh / dh, sy1 = sy + 1 < sh ? sy + 1 : sy;
+        for (int x = 0; x < dw; x++) {
+            const int sx = x * sw / dw, sx1 = sx + 1 < sw ? sx + 1 : sx;
+            const uint16_t q[4] = { px[sy * sw + sx], px[sy * sw + sx1], px[sy1 * sw + sx], px[sy1 * sw + sx1] };
+            int r = 0, g = 0, b = 0, n = 0;
+            for (uint16_t c : q) if (c != KEY) { r += (c >> 11) & 31; g += (c >> 5) & 63; b += c & 31; n++; }
+            row[x] = n < 2 ? (uint16_t)KEY : (uint16_t)(((r / n) << 11) | ((g / n) << 5) | (b / n));
+        }
+        memcpy(px + (size_t)y * dw, row, (size_t)dw * 2);
+    }
+}
+
+// A console's photo, from the firmware, as GameShots/.cache/sys_<key>.pic: its background keyed out and shrunk to
+// ART_SCALE/8 (the tile is a little smaller than the photo box). Made once per card.
+#define ART_SCALE 7
 static bool art_pic(const System &s)
 {
     char path[PATHMAX];
-    snprintf(path, sizeof path, "%s/sys_%s.pic", CACHE, s.key);
-    if (pic_open(path, true, s.art.n, 0)) return true;
+    snprintf(path, sizeof path, "%s/sys3_%s.pic", CACHE, s.key);
+    if (pic_open(path, true, s.art.n, ART_SCALE)) return true;
     const size_t need = (size_t)s.art.w * s.art.h * 2;
-    uint16_t *px = scratch(need);
-    if (!px || !inflate_to(s.art.z, nullptr, s.art.n, (uint8_t *)px, need)) return false;
-    swap_all(px, need / 2);
+    void *state = nullptr;
+    uint16_t *px = scratch(need, &state);
+    if (!px || !inflate_to(s.art.z, nullptr, s.art.n, (uint8_t *)px, need, state)) return false;
+    key_background(px, s.art.w, s.art.h, (uint8_t *)px + need, true);   // the state's room, now free (w*h <= 10 KB)
+    const int dw = s.art.w * ART_SCALE / 8, dh = s.art.h * ART_SCALE / 8;
+    shrink(px, s.art.w, s.art.h, dw, dh);
+    swap_all(px, (size_t)dw * dh);
     mkdir(GF_DIR, 0775); mkdir(CACHE, 0775);
-    return pic_write(path, px, s.art.w, s.art.h, s.art.n, 0) && pic_open(path, true, s.art.n, 0);
+    return pic_write(path, px, dw, dh, s.art.n, ART_SCALE) && pic_open(path, true, s.art.n, ART_SCALE);
 }
 
 // A cartridge's screenshot: <folder>/.snaps/<file>.pic, or its .snp ("SNP1", u16 w, u16 h, u32 deflated size,
@@ -975,8 +1047,9 @@ static bool snap_pic(const char *dir, const char *rom, uint8_t have)
     if (fread(hd, 1, sizeof hd, f) == sizeof hd && !memcmp(hd, "SNP1", 4)) {
         const int sw = hd[4] | hd[5] << 8, sh = hd[6] | hd[7] << 8;
         const uint32_t zn = hd[8] | hd[9] << 8 | (uint32_t)hd[10] << 16 | (uint32_t)hd[11] << 24;
-        uint16_t *px = sw > 0 && sh > 0 && sw <= 160 && sh <= 160 ? scratch((size_t)sw * sh * 2) : nullptr;
-        if (px && zn && inflate_to(nullptr, f, zn, (uint8_t *)px, (size_t)sw * sh * 2)) {
+        void *state = nullptr;
+        uint16_t *px = sw > 0 && sh > 0 && sw <= 160 && sh <= 160 ? scratch((size_t)sw * sh * 2, &state) : nullptr;
+        if (px && zn && inflate_to(nullptr, f, zn, (uint8_t *)px, (size_t)sw * sh * 2, state)) {
             swap_all(px, (size_t)sw * sh);
             fclose(f); f = nullptr;
             ok = pic_write(path, px, sw, sh, 0, 0) && pic_open(path, false, 0, 0);
@@ -1063,10 +1136,13 @@ static void pic_prepare(bool big)
     } else if (s_group == NATIVE) {
         const int k = s_ix[s_sel];
         snprintf(s_pic.poster, sizeof s_pic.poster, "%s", nucleo_app_at(s_nat[k])->id);
-        file = cover_pic(k, big ? 144 : 112, big ? 81 : 63);
+        file = cover_pic(k, big ? 128 : 112, big ? 72 : 63);
     } else {
         snprintf(s_pic.poster, sizeof s_pic.poster, "%s", SYS[s_group].app);
-        file = snap_pic(rom_dir(s_sel), rom_name(s_sel), s_sh->snap[s_sh->view[s_sel]]);
+        uint8_t &have = s_sh->snap[s_sh->view[s_sel]];
+        file = snap_pic(rom_dir(s_sel), rom_name(s_sel), have);
+        if (file) have |= SN_PIC;                  // made now: no conversion next time
+        else have = 0;                             // none, or it could not be made: not tried again this visit
         if (!file && art_pic(SYS[s_group])) { file = true; s_pic.dark = false; }
     }
     if (file) s_pic.kind = PIC_FILE;
@@ -1085,7 +1161,9 @@ static uint16_t mix565(uint16_t a, uint16_t b, int t)   // t = 0 (a) .. 256 (b)
 static void draw_pic(int x, int y, int w, int h, unsigned short acc)
 {
     if (s_pic.kind == PIC_FILE && s_pic.f) {
-        d.fillRoundRect(x, y, w, h, 8, s_pic.dark ? (unsigned short)0x0841 : (unsigned short)ART_TILE);
+        const unsigned short tile = s_pic.dark ? (unsigned short)0x0841 : lg::card();
+        d.fillRoundRect(x, y, w, h, 8, tile);
+        const uint16_t key_sw = (uint16_t)(KEY >> 8 | KEY << 8), tile_sw = (uint16_t)(tile >> 8 | tile << 8);
         const int px = x + (w - s_pic.w) / 2, py = y + (h - s_pic.h) / 2;
         int32_t cx, cy, cw, ch;
         d.getClipRect(&cx, &cy, &cw, &ch);
@@ -1095,6 +1173,8 @@ static void draw_pic(int x, int y, int w, int h, unsigned short acc)
             for (int ry = y0; ry < y1; ) {
                 const int k = y1 - ry < 4 ? y1 - ry : 4;
                 if (fread(rows, 2, (size_t)s_pic.w * k, s_pic.f) != (size_t)s_pic.w * k) break;
+                if (!s_pic.dark)                   // a console photo: its keyed background is the tile's colour
+                    for (int i = 0; i < s_pic.w * k; i++) if (rows[i] == key_sw) rows[i] = tile_sw;
                 d.pushImage(px, ry, s_pic.w, k, (const lgfx::swap565_t *)rows);
                 ry += k;
             }
@@ -1138,13 +1218,11 @@ static void caption(char *out, size_t n)
     for (int b = 0; b < 5; b++)
         if (modes & (1 << b)) { if (out[0]) strncat(out, " - ", n - strlen(out) - 1); strncat(out, lab[b], n - strlen(out) - 1); }
 }
-// A muted line under the title: a system's maker.
+// A muted line under the title: what the native games are.
 static const char *subtitle(void)
 {
-    if (!s_n || s_level != 0) return nullptr;
-    const int g = s_grp[s_ix[s_sel]];
-    return g == NATIVE ? TR5("Integrati e dallo Store", "Built in and from the Store", "Integrados y de la Store", "Integres et du Store", "Eingebaut und aus dem Store")
-                       : SYS[g].maker;
+    if (!s_n || s_level != 0 || s_grp[s_ix[s_sel]] != NATIVE) return nullptr;
+    return TR5("Integrati e dallo Store", "Built in and from the Store", "Integrados y de la Store", "Integres et du Store", "Eingebaut und aus dem Store");
 }
 static const char *blurb(void)
 {
@@ -1176,7 +1254,7 @@ static const char *empty_sub(void)
 static const char *level_title(void)
 {
     if (s_level == 0) return TR5("Giochi", "Games", "Juegos", "Jeux", "Spiele");
-    return s_group == NATIVE ? group_title(NATIVE) : "";                    // a console: its mark beside it
+    return group_title(s_group);
 }
 static const char *search_hint(void) { return TR5("Scrivi per cercare", "Type to search", "Escribe para buscar", "Tapez pour chercher", "Tippen zum Suchen"); }
 static void count_text(char *out, size_t n)
@@ -1192,19 +1270,42 @@ static const char *last_label(void) { return TR5("ultimo giocato", "last played"
 // A mark is ~0.5-0.9 KB once inflated: they are kept while the gallery is open (the systems' wheel shows them all) and
 // freed when it closes or a game starts.
 static uint16_t *s_mark[NSYS];
-static void marks_free(void) { for (uint16_t *&m : s_mark) { free(m); m = nullptr; } }
-// The console's mark on a light chip, 20 px tall, at (x, y); returns the chip's width.
+static bool s_mark_failed[NSYS];                  // a mark that could not be made is not retried while the gallery is open
+static void marks_free(void) { for (uint16_t *&m : s_mark) { free(m); m = nullptr; } memset(s_mark_failed, 0, sizeof s_mark_failed); }
+// The marks the screen shows, made before a frame is composed (the canvas is free then: the inflater's state goes
+// there, and a frame never waits on a failed allocation). Their light background is keyed out like the photos'.
+static void marks_prepare(void)
+{
+    for (int k = 0; k < s_ngrp; k++) {
+        const int g = s_grp[k];
+        if (g == NATIVE || s_mark[g] || s_mark_failed[g]) continue;
+        const Art &a = SYS[g].mark;
+        const size_t need = (size_t)a.w * a.h * 2;
+        void *state = nullptr;
+        uint16_t *sc = scratch(need, &state);
+        uint16_t *px = (uint16_t *)malloc(need);
+        if (px && sc && inflate_to(a.z, nullptr, a.n, (uint8_t *)sc, need, state)) {
+            key_background(sc, a.w, a.h, (uint8_t *)sc + need, false);
+            memcpy(px, sc, need);
+            s_mark[g] = px;
+        } else { free(px); s_mark_failed[g] = true; }
+    }
+}
+// The console's mark on a dark chip, 20 px tall, at (x, y); returns the chip's width.
 static int chip(int g, int x, int y)
 {
     const Art &a = SYS[g].mark;
-    if (!s_mark[g]) {
-        uint16_t *px = (uint16_t *)malloc((size_t)a.w * a.h * 2);
-        if (px && !inflate_to(a.z, nullptr, a.n, (uint8_t *)px, (size_t)a.w * a.h * 2)) { free(px); px = nullptr; }
-        s_mark[g] = px;
-    }
     const int cw = a.w + 10;
-    d.fillRoundRect(x, y, cw, 20, 5, ART_TILE);
-    if (s_mark[g]) d.pushImage(x + 5, y + (20 - a.h) / 2, a.w, a.h, (const lgfx::rgb565_t *)s_mark[g]);
+    const uint16_t bg = mix565(BG, FG, 70);
+    d.fillRoundRect(x, y, cw, 20, 5, bg);
+    if (s_mark[g]) {                               // its keyed background is the chip's colour (a mark is ~0.5 KB)
+        uint16_t row[32];
+        for (int r = 0; r < a.h; r++) {
+            const uint16_t *src = s_mark[g] + r * a.w;
+            for (int i = 0; i < a.w; i++) row[i] = src[i] == KEY ? bg : src[i];
+            d.pushImage(x + 5, y + (20 - a.h) / 2 + r, a.w, 1, (const lgfx::rgb565_t *)row);
+        }
+    }
     return cw;
 }
 static int wheel_icon(int i, int x, int cy, bool, void *)
@@ -1236,12 +1337,11 @@ static void paint_big(void *)
     const int top = lg::HEAD + 36, bh = H - top;
     if (cy0 < top) {                               // only the strips that hold the header and the search draw them
         lg::header(level_title(), header_right(), acc_of(s_level ? s_group : NATIVE), NK_BACK);
-        if (on_roms()) chip(s_group, 52, 5);
         lg::search(0, lg::HEAD, W, 36, s_filter, search_hint(), cnt, s_total > s_n ? (unsigned short)C_YELLOW : (unsigned short)MUTED, acc);
     } else nucleo_touch_add(0, 0, 96, lg::HEAD + 2, NK_BACK, 0);   // the header's Back, as lg::header registers it
     d.fillRect(0, top, W, bh, BG);
     if (!s_n) { lg::message(0, top, W, bh, empty_line(), empty_sub(), MUTED); return; }
-    const int tx = 8, tw = WX - 16, ph = 108;
+    const int tw = 136, tx = (WX - tw) / 2, ph = 102;   // the picture's tile
     draw_pic(tx, top + 2, tw, ph, acc);
     nucleo_touch_add(tx, top + 2, tw, ph, NK_ENTER, 0);   // the picture opens the selection too
     char cap[64]; caption(cap, sizeof cap);
@@ -1259,16 +1359,9 @@ static void paint_big(void *)
     }
     ly += 21;
     const char *sub = subtitle();
-    const int g0 = s_level == 0 ? s_grp[s_ix[s_sel]] : NATIVE;
-    if (g0 != NATIVE) {                            // a console: its mark and its maker, no name
-        const int mw = chip(g0, tx + 2, ly);
-        lg::font(0); d.setTextColor(MUTED, BG); lg::fit(fitted, sizeof fitted, sub, tw - mw - 8);
-        d.drawString(fitted, tx + mw + 8, ly + 2);
-    } else {
-        lg::font(1); d.setTextColor(FG, BG);
-        const int lines = lg::wrap(title_of(s_sel), tx + 2, ly, tw - 4, 19, sub ? 1 : (H - ly >= 58 ? 3 : 2));
-        if (sub) { lg::font(0); d.setTextColor(MUTED, BG); lg::fit(fitted, sizeof fitted, sub, tw - 4); d.drawString(fitted, tx + 2, ly + lines * 19 + 1); }
-    }
+    lg::font(1); d.setTextColor(FG, BG);
+    const int lines = lg::wrap(title_of(s_sel), tx + 2, ly, WX - tx - 6, 19, sub ? 1 : (H - ly >= 58 ? 3 : 2));
+    if (sub) { lg::font(0); d.setTextColor(MUTED, BG); lg::fit(fitted, sizeof fitted, sub, WX - tx - 6); d.drawString(fitted, tx + 2, ly + lines * 19 + 1); }
     const lg::Wheel wl = { SLOTS_BIG, WHEEL_BIG, s_n, s_sel, wheel_label, wheel_mark, nullptr, acc, C_LAST, wheel_icon, s_off };
     lg::wheel(WX, top, W - WX, bh, wl);
 }
@@ -1314,16 +1407,12 @@ static void paint_small(void *)
         lg::fit(fitted, sizeof fitted, cap, CX - 6 - cw - cx);
         d.setTextColor(acc, BG); d.drawString(fitted, cx, ry);
     }
-    // Then the whole title (a console's maker in its place).
+    // Then the whole title.
     const char *sub = subtitle();
     const int ty = mg != NATIVE ? ph + 23 : ph + 14;
-    if (g0 != NATIVE) {
-        d.setTextColor(MUTED, BG); lg::fit(fitted, sizeof fitted, sub, CX - 6); d.drawString(fitted, 3, ty);
-    } else {
-        d.setTextColor(FG, BG);
-        const int nl = lg::wrap(title_of(s_sel), 3, ty, CX - 6, 9, mg != NATIVE || sub ? 1 : 2);
-        if (sub) { d.setTextColor(MUTED, BG); lg::fit(fitted, sizeof fitted, sub, CX - 6); d.drawString(fitted, 3, ty + nl * 9); }
-    }
+    d.setTextColor(FG, BG);
+    const int nl = lg::wrap(title_of(s_sel), 3, ty, CX - 6, 9, mg != NATIVE || sub ? 1 : 2);
+    if (sub) { d.setTextColor(MUTED, BG); lg::fit(fitted, sizeof fitted, sub, CX - 6); d.drawString(fitted, 3, ty + nl * 9); }
     const lg::Wheel wl = { SLOTS_SMALL, WHEEL_SMALL, s_n, s_sel, wheel_label, wheel_mark, nullptr, acc, C_LAST, wheel_icon, s_off };
     lg::wheel(CX, 22, W - CX, H - 22, wl);
 }
@@ -1346,7 +1435,6 @@ static int details(Detail *out, int max)
         const int k = s_ix[s_sel], g = s_grp[k];
         count_games(t, sizeof t, s_grp_n[k]);
         add(TR5("Giochi", "Games", "Juegos", "Jeux", "Spiele"), t);
-        if (g != NATIVE) add(TR5("Produttore", "Maker", "Fabricante", "Fabricant", "Hersteller"), SYS[g].maker);
         if (s_last.group == g && s_last.key[g + 1]) add(TR5("Ultimo", "Last", "Ultimo", "Dernier", "Zuletzt"), TR5("giocato qui", "played here", "jugado aqui", "joue ici", "hier gespielt"));
         return n;
     }
@@ -1378,14 +1466,7 @@ static void paint_companion(void *)
     const int top = s_ctop, ch = s_cch, bottom = top + ch - 13;
     const unsigned short acc = acc_now();
     d.fillRect(0, 0, 240, 135, BG);                    // the whole screen: every row of the frame is pushed
-    int y;
-    if (on_roms()) {                                   // a console's titles: its mark heads the card, no name
-        d.fillRect(0, top, 240, 22, BG);
-        const int mw = chip(s_group, 6, top + 1);
-        d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextDatum(top_left); d.setTextColor(acc_of(s_group), BG);
-        d.drawString(TR("sul secondo schermo", "on the second screen"), 12 + mw, top + 7);
-        y = top + 24;
-    } else y = lg::comp_head(level_title(), acc_of(s_level ? s_group : NATIVE));
+    int y = lg::comp_head(level_title(), acc_of(s_level ? s_group : NATIVE));
     if (s_flen) {                                      // the search, while there is one
         d.setFont(&fonts::Font2); d.setTextColor(MUTED, BG); d.drawString(TR5("Cerca", "Search", "Buscar", "Cherche", "Suche"), 8, y);
         const int lx = 14 + d.textWidth(TR5("Cerca", "Search", "Buscar", "Cherche", "Suche"));
@@ -1399,12 +1480,8 @@ static void paint_companion(void *)
         d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(MUTED, BG);
         lg::wrap(empty_line(), 8, y + 6, 224, 19, 2);
     } else {
-        const int g0 = s_level == 0 ? s_grp[s_ix[s_sel]] : NATIVE;
-        if (g0 != NATIVE) { chip(g0, 8, y + 2); y += 26; }   // a console: its mark for a title
-        else {
-            d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(acc, BG);
-            y += 2 + lg::wrap(title_of(s_sel), 8, y + 2, 224, 19, 2) * 19;
-        }
+        d.setFont(&fonts::FreeSansBold9pt7b); d.setTextColor(acc, BG);
+        y += 2 + lg::wrap(title_of(s_sel), 8, y + 2, 224, 19, 2) * 19;
         Detail dt[5];
         const int n = details(dt, 5);
         d.setFont(&fonts::Font2);
@@ -1464,6 +1541,7 @@ void gamefront_render(void)
         s_settle_at = 0;                           // no canvas: the whole frame instead
     }
     if (on_roms() && !s_sh) refilter();            // the shelf left RAM (a failed allocation): read it again
+    marks_prepare();
     pic_prepare(big);
     nucleo_touch_clear();
     lg::frame(big ? paint_big : paint_small, nullptr, 0, 0, true);   // exact: the pictures and the cards in true colour
