@@ -19,7 +19,9 @@ export const DEFAULTS = {
     ipv6:  { enabled: false },
   },
   power: { profile: 'performance', sleep_timeout_s: 0, display_brightness: 100, volume: 70 },
-  ui:    { theme: 'dark', accent: '#4ea1ff', fontSize: '14px', language: 'en', regionLocale: '' },
+  // language: none by default. A device that keeps the language elsewhere (its /api/lang) has none in this file, and
+  // Settings then keeps the OS's current one; an 'en' here switched the whole OS to English on every open.
+  ui:    { theme: 'dark', accent: '#4ea1ff', fontSize: '14px', language: '', regionLocale: '' },
   voice: { alwaysOn: false },
   // AI profile: only the chosen preset INTENT is durable on SD. The concrete brain knobs
   // (anima.mode, L1 policy, exec, local model) are RE-DERIVED at load by preset-engine.js from

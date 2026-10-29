@@ -27,6 +27,7 @@
 // Apps without an origin cannot import this module: they get the same behaviour through NucleoApp.files.
 
 import Caps from './nucleo-caps.js';
+import { createCloudDrive } from './cloud-drive.js';
 
 // code: what happened, in the vocabulary below; status: the device's HTTP answer when there was one (0 when the
 // request never got an answer), for apps that already show "failed (507)" to the user.
@@ -544,14 +545,16 @@ export function createFs({ fetchFn, caps = () => Caps.info(), onChange = null,
 // The instance every page of this origin shares. Shell and apps that want the file index refreshed after their
 // writes listen with fs.onChange(fn).
 const listeners = new Set();
-// The encrypted cloud archive's drive (/r2), where the device declares cloud.archive: loaded on first use only.
-let r2 = null;
-async function cloudDrive(p) {
-  if (p !== '/r2' && !p.startsWith('/r2/')) return null;
-  try { if (!(await Caps.has('cloud.archive'))) return null; } catch { return null; }
-  if (!r2) r2 = import('./nucleo-archive.js').then((m) => m.createDrive(m.archive, fs));
-  return r2;
-}
+// The encrypted cloud archive's drive (/r2), where the device declares cloud.archive: loaded on first use only. A device
+// whose archive status says mode "device" serves /r2 itself through /api/fs (the Web edition's service worker keeps
+// the archive): no second archive here, two writers of one index would lose each other's changes.
+const cloudDrive = createCloudDrive({
+  has: (name) => Caps.has(name),
+  // 409 = no bucket yet: the core's drive says so in its own words
+  status: () => fetch('/api/archive/status', { cache: 'no-store' })
+    .then((r) => (r.ok ? r.json() : r.status === 409 ? {} : Promise.reject(new Error('status ' + r.status)))),
+  load: () => import('./nucleo-archive.js').then((m) => m.createDrive(m.archive, fs)),
+});
 const fs = createFs({ onChange: (p) => { for (const fn of listeners) { try { fn(p); } catch {} } }, drives: cloudDrive });
 fs.onChange = (fn) => { if (typeof fn === 'function') listeners.add(fn); return () => listeners.delete(fn); };
 export default fs;

@@ -2515,8 +2515,11 @@ async function load() {
   model = merge(DEFAULTS, onDisk);
   // Sanitize garbage only — every OS language is valid here. This used to clamp to it/en, wiping a
   // stored es/fr/de back to Italian on every open (and persisting the damage on the next save).
-  // English is the floor: an invalid/absent value resolves to English unless the locale is explicitly it-*.
-  if (!LANGS.some((l) => l.code === model.ui.language)) model.ui.language = /^it/i.test(model.device.locale || '') ? 'it' : 'en';
+  // No language in the file (a device that keeps it elsewhere: /api/lang, the wizard's choice): the OS's current one,
+  // which Settings would otherwise overwrite for the whole OS. English is the floor only when even that is unknown.
+  if (!LANGS.some((l) => l.code === model.ui.language)) {
+    model.ui.language = LANGS.some((l) => l.code === I18N.lang) ? I18N.lang : /^it/i.test(model.device.locale || '') ? 'it' : 'en';
+  }
   lang = detectLang(model);
   applyLiveUI(); toForm(); updateScreenUI(); setDirty(false);
   status(rd.ok ? T('ready') : readFailText(rd.status), rd.ok);
