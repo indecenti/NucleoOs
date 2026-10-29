@@ -1119,7 +1119,7 @@ static void profile_write(pce_t *s)
     if (!f) return;
     fprintf(f, "  pce profile: %u frames (%u drawn), ms/frame: huc6280 %u.%u  vdc %u.%u  panel lines %u.%u  wait 2nd core %u.%u  psg+speaker %u.%u, idle skipped %u%%\n",
             (unsigned)n, (unsigned)s->prof_drawn, c / 10, c % 10, v / 10, v % 10, l / 10, l % 10, w / 10, w % 10, a / 10, a % 10,
-            (unsigned)((uint32_t)(s->prof_idle / n) * 100 / (LINES * LINE_CYC)));
+            (unsigned)((uint32_t)(s->prof_idle >> 10) / n * 1024u / (LINES * LINE_CYC / 100)));   // no 64-bit division
     fclose(f);
 }
 
