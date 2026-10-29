@@ -9,6 +9,11 @@
 //                data (after the header and any trainer), so each 1 KB the CPU or PPU sees is exactly one page:
 //                agnes keeps direct pointers to them (patch A5) and reads the cartridge without calling us
 //   speed        agnes draws a scanline at a time (patch A4), not a dot at a time
+//   two cores    the 6502 runs on the app's core; each visible line is described there (what the CPU can read of it
+//                - the sprite-0 hit, the overflow - resolved at once) and drawn, with the panel's work, on the other
+//                core (nucleo_cowork), eight lines per hand-over. Before anything a queued line still reads can
+//                change - a VRAM write, a cartridge page replaced - or the SD card is used (the panel shares its
+//                bus), the CPU waits for the other core.
 //   battery RAM  the MMC1 / MMC3 8 KB PRG RAM, "<root>/Saves/nes/<rom name>.sav", byte-compatible with other
 //                emulators' saves
 //   sound        our APU: agnes has none. Two pulses, triangle, noise and the DMC's direct output level, with
@@ -16,6 +21,11 @@
 //                32 kHz and mixed through the NES's own non-linear mixer curves
 #include "nucleo_nes.h"
 #include "nucleo_audio.h"
+// The second core (firmware nucleo_app/nucleo_cowork.h, ABI level 6), declared here: nucleo_emu sits below
+// nucleo_app in the component graph.
+bool nucleo_cowork_run(void (*fn)(void *arg), void *arg);
+void nucleo_cowork_wait(void);
+void nucleo_cowork_stop(void);
 #include "emu_audio.h"
 #include "esp_log.h"
 #include "esp_heap_caps.h"
@@ -91,6 +101,12 @@ typedef struct {
     nucleo_nes_line_fn on_line;
     void         *user;
     uint16_t      pal[64];                      // the NES palette, RGB565 in the panel's byte order
+
+    // Lines for the other core: two batches, one being filled while the other is drawn (patch A10).
+    struct { agnes_line_t line[8]; int n; } batch[2];
+    int           bi;                           // the batch being filled
+    agnes_line_t  stage;                        // the line being described (a page miss meanwhile may flush)
+    uint16_t      wline[NUCLEO_NES_W];          // the other core's drawn line
 
     nes_apu_t     apu;
     int16_t       pcm[2 * APU_SPF];             // up to two frames' worth: the sound follows the clock (apu_render)
@@ -257,6 +273,44 @@ static void mixer_init(nes_session_t *s)
     for (int n = 0; n < 203; n++) s->mix_tnd[n] = n ? (uint16_t)(163.67f / (24329.0f / n + 100) * 26000) : 0;
 }
 
+// ── lines on the other core ─────────────────────────────────────────────────────────────────────────
+static void line_job(void *arg)
+{
+    nes_session_t *s = S;
+    const int b = (int)(intptr_t)arg;
+    for (int i = 0; i < s->batch[b].n; i++) {
+        agnes_line_draw(&s->batch[b].line[i], s->wline);
+        if (s->on_line) s->on_line(s->wline, s->batch[b].line[i].y, s->user);
+    }
+}
+// Hand the filled batch over (or draw it here when there is no second core) and start the other one: run() first
+// waits for the previous job, which was the other batch, so it is free to fill again.
+static void lines_flush(nes_session_t *s)
+{
+    const int b = s->bi;
+    if (!s->batch[b].n) return;
+    if (!nucleo_cowork_run(line_job, (void *)(intptr_t)b)) line_job((void *)(intptr_t)b);
+    s->bi = b ^ 1;
+    s->batch[s->bi].n = 0;
+}
+// Everything handed over is drawn: before VRAM changes, a cartridge page is replaced, the SD card is used, or the
+// frame is handed back to the front-end.
+static void lines_settle(nes_session_t *s)
+{
+    lines_flush(s);
+    nucleo_cowork_wait();
+}
+// A line is described into a stage of its own and joins the batch only once complete: describing it may read a
+// cartridge page, and a miss there flushes the batch.
+static void *line_slot(void *host) { return &((nes_session_t *)host)->stage; }
+static void line_submit(void *host)
+{
+    nes_session_t *s = (nes_session_t *)host;
+    s->batch[s->bi].line[s->batch[s->bi].n] = s->stage;
+    if (++s->batch[s->bi].n == 8) lines_flush(s);
+}
+static void vram_touch(void *host) { lines_settle((nes_session_t *)host); }
+
 // ── the cartridge, paged ─────────────────────────────────────────────────────────────────────────────
 static const uint8_t PG_OPEN[PG_SIZE] = { [0 ... PG_SIZE - 1] = 0xFF };   // past the end of the file
 
@@ -277,6 +331,7 @@ static const uint8_t *rom_page(void *host, uint32_t off)
         g = -1;
         for (int i = 0; i < s->pg_n; i++) if (s->pg_tag[i] == tag) { g = i; break; }
         if (g < 0) {                                 // a miss: the least recently used page takes it
+            lines_settle(s);                         // ...once no queued line reads it and the bus is free
             int v = 0;
             for (int i = 1; i < s->pg_n; i++) if (s->pg_age[i] < s->pg_age[v]) v = i;
             size_t got = 0;
@@ -475,6 +530,7 @@ esp_err_t nucleo_nes_open(const char *rom_path, nucleo_nes_line_fn line_cb, void
     }
 
     a->rom_read = rom_read; a->rom_page = rom_page; a->on_line = on_line; a->apu_write = apu_write; a->apu_read = apu_read;
+    a->line_slot_raw = line_slot; a->line_submit = line_submit; a->vram_touch = vram_touch;
     a->host = s;
     s->rom_base = (hdr[6] & 4) ? 16 + 512 : 16;      // the PRG data: after the header and any trainer
     // agnes reads only the header through `data` (patch A1); the size it checks against is the file's.
@@ -521,6 +577,8 @@ static void profile_write(nes_session_t *s)
 void nucleo_nes_close(void)
 {
     if (!S) return;
+    lines_settle(S);
+    nucleo_cowork_stop();
     profile_write(S);
     nucleo_nes_save();
     nes_session_t *s = S;
@@ -554,6 +612,7 @@ void nucleo_nes_run_frame(void)
     }
     s->a->skip_draw = skip;
     agnes_next_frame(s->a);
+    lines_settle(s);                                  // the front-end gets the frame whole
     int64_t t1 = esp_timer_get_time();
     s->us_cpu += (uint32_t)(t1 - t0);
     const uint32_t c0 = agnes_ccount();
@@ -618,6 +677,7 @@ bool nucleo_nes_state_exists(int slot)
 esp_err_t nucleo_nes_state_save(int slot)
 {
     if (!S) return ESP_ERR_INVALID_STATE;
+    lines_settle(S);
     char p[320]; state_path(p, sizeof p, slot);
     FILE *f = fopen(p, "wb");
     if (!f) return ESP_FAIL;
@@ -638,6 +698,7 @@ esp_err_t nucleo_nes_state_save(int slot)
 esp_err_t nucleo_nes_state_load(int slot)
 {
     if (!S) return ESP_ERR_INVALID_STATE;
+    lines_settle(S);
     if (!nucleo_nes_state_exists(slot)) return ESP_ERR_NOT_FOUND;
     char p[320]; state_path(p, sizeof p, slot);
     FILE *f = fopen(p, "rb");
@@ -664,6 +725,7 @@ esp_err_t nucleo_nes_state_load(int slot)
     a->rom_read = rr; a->on_line = ol; a->apu_write = aw; a->apu_read = ar; a->host = S;
     a->rom_page = rom_page;
     a->rgb = S->pal;
+    a->line_slot_raw = line_slot; a->line_submit = line_submit; a->vram_touch = vram_touch;
     agnes_drop_windows(a);
     a->gamepack.data = NULL;
     a->cpu.agnes = a; a->ppu.agnes = a;
