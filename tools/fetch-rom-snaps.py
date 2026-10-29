@@ -6,7 +6,7 @@ r"""Game screenshots for the emulators' gallery, fetched on the PC and put on th
 
 The device never downloads anything (the emulators run with the radio off). This reads the cartridges the Games
 gallery found anywhere on the card (its index, /data/GameShots/.cache/roms.idx; without one, the folders
-/data/ROMs/gb, gbc, gg, sms) over the paired file API, finds a screenshot for every cartridge and writes it next to
+/data/ROMs/gb, gbc, gg, sms, nes, pcengine) over the paired file API, finds a screenshot for every cartridge and writes it next to
 it, in <its folder>/.snaps/, as <rom file>.snp (the emulators' shelf) and <rom file>.pic (the gallery: ready to
 stream, nothing to unpack on the device). A cartridge that already has a .snp gets its .pic from it.
 
@@ -38,8 +38,9 @@ UA = {"User-Agent": "NucleoOS-rom-snaps/1.0 (+https://github.com/indecenti/Nucle
 BOX = (112, 101)
 FOLDERS = {"gb": ("Nintendo_-_Game_Boy", (160, 144)), "gbc": ("Nintendo_-_Game_Boy_Color", (160, 144)),
            "gg": ("Sega_-_Game_Gear", (160, 144)), "sms": ("Sega_-_Master_System_-_Mark_III", (256, 192)),
-           "nes": ("Nintendo_-_Nintendo_Entertainment_System", (256, 240))}
-ROM_EXT = (".gb", ".gbc", ".gg", ".sms", ".zip", ".nes")
+           "nes": ("Nintendo_-_Nintendo_Entertainment_System", (256, 240)),
+           "pcengine": ("NEC_-_PC_Engine_-_TurboGrafx_16", (256, 240))}
+ROM_EXT = (".gb", ".gbc", ".gg", ".sms", ".zip", ".nes", ".pce")
 GOOD = ("screenshot", "screen", "shot", "gameplay", "title")
 BAD = ("logo", "icon", "font", "tile", "sprite", "palette", "map", "button", "banner", "cover", "box", "label")
 
@@ -236,9 +237,10 @@ def snp_to_pic(blob):
 
 
 def cartridges(dev):
-    """(system key, folder, file) for every cartridge: from the gallery's index, else the four ROM folders."""
+    """(system key, folder, file) for every cartridge: from the gallery's index, else the ROM folders. A system the
+    index does not hold (an emulator newer than the gallery: the PC Engine) comes from its folder either way."""
     idx = dev.read("/data/GameShots/.cache/roms.idx").decode("utf-8", "replace").splitlines()
-    out, folder = [], None
+    out, folder, keys = [], None, list(FOLDERS)
     if idx and idx[0].startswith("GIX1"):
         for line in idx[1:]:
             if line.startswith("D "):
@@ -246,8 +248,8 @@ def cartridges(dev):
                 folder = folder[3:] if folder.startswith("/sd/") else folder   # a device path -> a card path
             elif len(line) > 2 and line[0].isdigit() and line[1] == " " and folder is not None:
                 out.append((SYS_KEYS[int(line[0])], folder, line[2:]))
-        return out
-    for key in FOLDERS:
+        keys = [k for k in FOLDERS if k not in {c[0] for c in out}]
+    for key in keys:
         root = f"/data/ROMs/{key}"
         out += [(key, root, e["name"]) for e in dev.ls(root) if e.get("type") == "file" and e["name"].lower().endswith(ROM_EXT)]
     return out
