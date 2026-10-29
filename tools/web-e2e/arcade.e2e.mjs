@@ -169,7 +169,10 @@ test('arcade: favorites and "continue playing" persist; launching hands the play
   const src = await page.eval(`document.getElementById('pframe').getAttribute('src')`);
   const q = new URL(src, 'http://x/').searchParams;
   assert.equal(q.get('core'), 'nes'); assert.equal(q.get('corefile'), 'fceumm');
-  assert.equal(q.get('rom'), '/api/fs/read?path=' + encodeURIComponent('data/ROMs/nes/Zelda.nes'));
+  // the ROM is the file the core's fs.url() names (/api/fs/read?path=/data/...), whatever the URL's spelling
+  const rom = new URL(q.get('rom'), 'http://x/');
+  assert.equal(rom.pathname, '/api/fs/read');
+  assert.equal(rom.searchParams.get('path').replace(/^\//, ''), 'data/ROMs/nes/Zelda.nes');
   assert.equal(q.get('sys'), 'nes'); assert.equal(q.get('file'), 'Zelda.nes'); assert.equal(q.get('name'), 'Zelda');
   assert.equal(await page.eval(`document.getElementById('play').style.display`), 'block');
   await page.eval(`window.postMessage({ type: 'arcade-exit' }, '*'), true`);

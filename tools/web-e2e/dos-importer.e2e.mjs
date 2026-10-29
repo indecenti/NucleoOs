@@ -15,6 +15,7 @@ import { bootShell } from './shell.mjs';
 const HOST_RULES = '--host-resolver-rules=MAP nucleo.test 127.0.0.1';
 const skip = !findChrome() && 'no Chrome/Edge installed';
 const EN = JSON.parse((await import('node:fs')).readFileSync(new URL('../../apps/dos-importer/www/i18n.en.json', import.meta.url), 'utf8'));
+const CORE = JSON.parse((await import('node:fs')).readFileSync(new URL('../../web/shell/i18n/core.en.json', import.meta.url), 'utf8'));
 
 // ---- ZIP helpers (test side, independent of the app) ----
 function makeZip(entries, { deflate = true } = {}) {            // entries: [[name, Buffer]]
@@ -63,12 +64,35 @@ const conf = (zip) => zip.get('.jsdos/dosbox.conf').toString('utf8');
 const autoexec = (c) => c.split('[autoexec]\n')[1].trim().split('\n');
 
 // ---- page helpers ----
+// The app runs as on the device, in a window of the shell: a same-origin frame of a page that stands in for the shell,
+// so what it asks of the OS (open DOS Box) is a message the test can read. Every expression runs in the app's window.
 async function open(browser, sim) {
-  const page = await browser.newPage();
-  await bootShell(page, sim, { lang: 'en', wait: false });
-  await page.goto(`${sim.origin}/apps/dos-importer/`);
+  const host = await browser.newPage();
+  await bootShell(host, sim, { lang: 'en', wait: false });
+  await host.goto(`${sim.origin}/apps/dos-importer/`);
+  await host.eval(`(async () => {
+    document.body.replaceChildren();
+    const f = document.createElement('iframe'); f.id = 'app'; f.src = '/apps/dos-importer/'; document.body.append(f);
+    await new Promise((r) => { f.onload = r; });
+    addEventListener('message', (e) => { if (e.source === f.contentWindow) (f.contentWindow.__msgs ||= []).push(e.data); });
+    return true;
+  })()`);
+  const inApp = (expr) => `document.getElementById('app').contentWindow.eval(${JSON.stringify(expr)})`;
+  const page = {
+    ...host,
+    eval: (expr, timeout) => host.eval(inApp(expr), timeout),
+    async waitFor(expr, { timeout = 15000, interval = 100 } = {}) {
+      const end = Date.now() + timeout;
+      for (;;) {
+        let v = null; try { v = await page.eval(expr); } catch {}
+        if (v) return v;
+        if (Date.now() > end) return null;
+        await new Promise((r) => setTimeout(r, interval));
+      }
+    },
+  };
   assert.ok(await page.waitFor(`document.querySelector('[data-i18n="btn_install"]').textContent === ${JSON.stringify(EN.btn_install)}`, { timeout: 45000 }), 'app started');
-  await page.eval(`window.__msgs = []; addEventListener('message', (e) => window.__msgs.push(e.data)); true`);
+  await page.eval(`window.__msgs = []; true`);
   return page;
 }
 const fileList = (files) => JSON.stringify(files.map(([n, b]) => [n, Buffer.from(b).toString('base64')]));
@@ -97,7 +121,8 @@ test('dos-importer: picked files become a valid js-dos bundle on the SD, with th
   t.after(async () => { await browser.close(); await sim.stop(); });
   const page = await open(browser, sim);
   const EXE = Buffer.from([0x4d, 0x5a, 0x90, 0x00, 0x03, 0xff, 0x00, 0x10]), DAT = Buffer.from(Array.from({ length: 3000 }, (_, i) => (i * 7) & 0xff));
-  const ODD = '<img src=x onerror="window.__xss=1">.txt';
+  // Markup once parsed as HTML, yet a name the SD can hold (FAT forbids < > " : | ? *, and the OS's ZIP writer with it).
+  const ODD = '&lt;img src=x onerror=window.__xss=1&gt;.txt';
   await page.eval(pick([['PRINCE.EXE', EXE], ['LEVELS.DAT', DAT], [ODD, Buffer.from('hi')]]));
   await settled(page);
   assert.equal(await page.eval(`document.getElementById('config').classList.contains('hidden')`), false, 'the options card opened');
@@ -123,7 +148,7 @@ test('dos-importer: picked files become a valid js-dos bundle on the SD, with th
   assert.doesNotMatch(c, /\[sblaster\]/, 'sound off = no Sound Blaster section');
   assert.match(c, /^xms=true$/m);
   assert.deepEqual(autoexec(c), ['@echo off', 'mount c .', 'c:', 'PRINCE.EXE'], 'the bundle starts the chosen program');
-  assert.deepEqual(await page.eval(`window.__msgs.filter((m) => m && m.type === 'open-app')`), [{ type: 'open-app', id: 'dosbox', reload: true }], 'DOS Box is surfaced once');
+  assert.deepEqual(await page.eval(`window.__msgs.filter((m) => m && m.type === 'open-app')`), [{ type: 'open-app', id: 'dosbox', query: '', reload: true }], 'DOS Box is surfaced once');
   assert.equal(await page.eval(`window.__xss`), undefined);
 });
 
@@ -183,7 +208,7 @@ test('dos-importer: refusals are shown on screen and never write a file — pick
       await sim.control('/api/_sim/stats', { reset: true });
       await page.eval(put(NOT_ZIP));
       const st = await settled(page);
-      assert.deepEqual(st, { cls: 'err', text: EN.err_not_zip }, 'the user is told the archive is not valid');
+      assert.deepEqual(st, { cls: 'err', text: CORE.zip_err_not_zip }, 'the user is told the archive is not valid (the message of the OS ZIP reader)');
       assert.equal(await page.eval(`document.getElementById('config').classList.contains('hidden')`), true, 'no options for a broken archive');
       assert.equal(await writes(sim), 0);
     });

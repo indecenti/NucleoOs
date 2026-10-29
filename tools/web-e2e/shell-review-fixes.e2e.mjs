@@ -221,32 +221,37 @@ test('shell review fixes (v149)', { skip }, async (t) => {
     assert.ok(ok.some((x) => x.includes(L('drop_copied'))));
   });
 
-  await t.test('bug 14 + 15: the file dialog shows the folder last navigated to, with a fresh filter', async () => {
+  // The OS file sheet (shell/filedialog.js, one for the whole OS) replaced the shell's older dialog: same defects, its DOM.
+  await t.test('bug 14 + 15: the file dialog shows the folder last navigated to, with nothing picked from another folder', async () => {
     const dlg = (js) => page.eval(`(() => { ${js} })()`);
+    const SHEET = `document.querySelector('.os-files')`;
+    const state = `(() => { const b = ${SHEET}; return b && { crumbs: [...b.querySelectorAll('.fd-crumbs button')].map((x) => x.textContent),
+      names: [...b.querySelectorAll('.fd-list .fd-n')].map((n) => n.textContent), picked: b.querySelectorAll('.fd-item.sel').length,
+      ok: !b.querySelector('[data-act="ok"]').disabled, busy: b.querySelector('.fd-list').hasAttribute('aria-busy') }; })()`;
+    // A folder that is not there says so in the user's language (the device lists it as empty).
     await dlg(`window.postMessage({ type: 'os-file-dialog', id: 't1', mode: 'open', defaultPath: '/data/nope-missing' }, location.origin);`);
-    assert.ok(await page.waitFor(`!!document.querySelector('#os-dialog-list .os-dialog-msg') && !document.querySelector('#os-dialog-list .os-dialog-msg').textContent.includes('…')`, { timeout: 8000 }));
-    assert.equal(await page.eval(`document.querySelector('#os-dialog-list .os-dialog-msg').textContent`), L('osdlg_read_error'), 'the read error is not localised');
-    await dlg(`document.getElementById('os-dialog-btn-cancel').click();`);
+    const empty = await page.waitFor(`(() => { const e = document.querySelector('.os-files .fd-empty'); return e && e.textContent; })()`, { timeout: 8000 });
+    assert.equal(empty, L('fd_empty'), 'the sheet speaks German');
+    assert.deepEqual((await page.eval(state)).crumbs, [L('fd_device'), 'nope-missing']);
+    await dlg(`${SHEET}.querySelector('[data-act="cancel"]').click();`);
+    assert.ok(await page.waitFor(`!document.querySelector('.os-files')`, { timeout: 3000 }));
+
     await dlg(`window.postMessage({ type: 'os-file-dialog', id: 't2', mode: 'open', defaultPath: '/data/Documents' }, location.origin);`);
-    assert.ok(await page.waitFor(`[...document.querySelectorAll('#os-dialog-list .os-dialog-name')].some((n) => n.textContent === 'keep.txt')`, { timeout: 8000 }));
-    await dlg(`const li = [...document.querySelectorAll('#os-dialog-list .os-dialog-item')].find((l) => l.textContent.includes('keep.txt')); li.click();
-      const s = document.getElementById('os-dialog-search'); s.value = 'kee'; s.dispatchEvent(new Event('input'));`);
-    assert.equal(await page.eval(`document.getElementById('os-dialog-filename').value`), 'keep.txt');
-    // An older, SLOW listing (Desktop) must not land over the newer one (the SD root).
+    assert.ok(await page.waitFor(`(() => { const s = ${state}; return s && s.names.includes('keep.txt'); })()`, { timeout: 8000 }));
+    await dlg(`[...${SHEET}.querySelectorAll('.fd-item')].find((l) => l.textContent.includes('keep.txt')).click();`);
+    assert.deepEqual(await page.eval(`(() => { const s = ${state}; return [s.picked, s.ok]; })()`), [1, true], 'keep.txt is picked');
+    // An older, SLOW listing (the device root) must not land over the newer one (Documents again).
     await sim.control('/api/_sim/fault', { route: '/api/fs/list', delay_ms: 2500, times: 1 });
-    await dlg(`const up = [...document.querySelectorAll('#os-dialog-list .os-dialog-item')].find((l) => l.querySelector('.os-dialog-name').textContent === '..'); up.dispatchEvent(new MouseEvent('dblclick'));`);
+    await dlg(`${SHEET}.querySelector('.fd-up').click();`);
     await sleep(200);
-    await dlg(`document.querySelector('#os-dialog-crumbs .os-crumbs-seg').click();`);
+    await dlg(`[...${SHEET}.querySelectorAll('.fd-crumbs button')].pop().click();`);
     await sleep(3800);
     await sim.control('/api/_sim/fault', { clear: true });
-    const st = await page.eval(`({ crumbs: document.getElementById('os-dialog-crumbs').textContent.trim(),
-      names: [...document.querySelectorAll('#os-dialog-list .os-dialog-name')].map((n) => n.textContent),
-      search: document.getElementById('os-dialog-search').value, file: document.getElementById('os-dialog-filename').value })`);
-    assert.equal(st.crumbs, 'SD');
-    assert.ok(st.names.includes('system') && !st.names.includes('Documents'), 'a slow older listing overwrote the newer folder: ' + st.names.join(','));
-    assert.equal(st.search, '', 'the search filter survived navigation');
-    assert.equal(st.file, '', 'a file picked in another folder survived navigation (Open would pick the wrong path)');
-    await dlg(`document.getElementById('os-dialog-btn-cancel').click();`);
+    const st = await page.eval(state);
+    assert.deepEqual(st.crumbs, [L('fd_device'), 'Documents'], 'a slow older listing overwrote the newer folder: ' + st.crumbs.join(' › '));
+    assert.ok(st.names.includes('keep.txt') && !st.names.includes('Documents'), 'the list is the folder shown: ' + st.names.join(','));
+    assert.deepEqual([st.picked, st.ok], [0, false], 'a file picked before navigating survived it (Open would pick it blindly)');
+    await dlg(`${SHEET}.querySelector('[data-act="cancel"]').click();`);
   });
 
   await t.test('bug 16: a sandboxed frame cannot switch the shell language', async () => {

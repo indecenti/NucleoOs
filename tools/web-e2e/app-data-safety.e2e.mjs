@@ -169,6 +169,8 @@ test('miei-fatti: a failed read never overwrites the facts file', { skip }, asyn
 
   await sim.control('/api/_sim/fault', FAULT_READ);
   const page = await openApp(browser, sim, 'miei-fatti', 'en');
+  // ready = its labels are painted (the buttons are wired right after): a person sees them before clicking
+  assert.ok(await page.waitFor(`!!document.getElementById('t-teach').textContent`, { timeout: 15000 }), 'the app painted its labels');
 
   await t.test('read fails: teaching a fact does not overwrite the file, and says why', async () => {
     await page.eval(teach);
