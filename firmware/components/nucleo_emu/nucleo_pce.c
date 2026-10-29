@@ -46,12 +46,22 @@ static void idle_after(void);
 
 static const char *TAG = "pce";
 
-#define PG_BITS   10
+// The cartridge cache's page, which is also the CPU's window: 256 bytes. The big HuCards read a little of many places
+// a frame (Street Fighter II, Bonk III: the code and the graphics of a whole stage); with 1 KB pages the same 52 KB of
+// RAM held a quarter of what they use, and the card was read 34 times a frame. With 256-byte pages: under 2. The small
+// games pay a few more reads while the cache fills, then nothing (40 cartridges measured, docs/native-emulation.md).
+#ifndef PG_BITS
+#define PG_BITS   8
+#endif
 #define PG_SIZE   (1u << PG_BITS)
-#define PG_SLOTS  160
-#define PG_MIN    16
-#define PG_HINT   256
-#define PG_EMPTY  0xFFFFFFFFu
+#define PG_CHUNK  1024u                                // pages come from the heap in 1 KB blocks (one header per 4)
+#define PPC       (PG_CHUNK / PG_SIZE)
+#define PG_SLOTS  (128 * 1024 / PG_SIZE)
+#define PG_MIN    (16 * 1024 / PG_SIZE)
+#define NWIN      (0x10000 >> PG_BITS)                 // windows over the CPU's 64 KB
+#define WPB       (0x2000 >> PG_BITS)                  // ...and in one 8 KB bank
+#define PG_HINT   512
+#define PG_EMPTY  0xFFFFu
 #define KEEP      (8 * 1024)
 
 #define LINES     263
@@ -131,10 +141,10 @@ typedef struct {
     FILE      *fp;
     uint32_t   rom_base, rom_bytes, data_bytes;      // the HuCard data starts at rom_base (a 512-byte copier header)
     uint8_t   *rom_all;
-    uint8_t   *pg[PG_SLOTS];
-    uint32_t   pg_tag[PG_SLOTS], pg_age[PG_SLOTS], pg_clock;
+    uint8_t   *chunk[PG_SLOTS / PPC];                // the pages' 1 KB blocks
+    uint16_t   pg_tag[PG_SLOTS], pg_age[PG_SLOTS], pg_clock;   // 16 bits: the tables stay small next to the pages
     int        pg_n;
-    int8_t     hint[PG_HINT];
+    int16_t    hint[PG_HINT];
     uint32_t   cur_tag;
     uint8_t   *cur_buf;
     int16_t    cur_pg;
@@ -142,9 +152,9 @@ typedef struct {
     uint32_t   bank_off[128];                        // HuCard bank -> offset in the data (the console's mirroring)
     bool       sf2;
     bool       tg16;                                 // a TurboGrafx-16 card (its pad port reads "not Japanese")
-    const uint8_t *rd[64];                           // CPU 1 KB windows (NULL: the slow path)
-    uint8_t   *wr[64];
-    int16_t    win_pg[64];                           // the cache page each window shows (-1: RAM, open bus, I/O)
+    const uint8_t *rd[NWIN];                         // CPU windows, a page each (NULL: the slow path)
+    uint8_t   *wr[NWIN];
+    int16_t    win_pg[NWIN];                           // the cache page each window shows (-1: RAM, open bus, I/O)
     int16_t    last_pg;                              // the page rom_page returned last (-1: not a cache page)
     uint16_t   rgb[512];                             // the palette in the panel's RGB565 order
     uint16_t   out[NUCLEO_PCE_W];                    // a line drawn on this core
@@ -201,6 +211,8 @@ static void windows_drop(void)
     memset(PCE->win_pg, 0xff, sizeof PCE->win_pg);
 }
 
+static inline uint8_t *pg_buf(const pce_t *s, int i) { return s->chunk[i / PPC] + (uint32_t)(i % PPC) * PG_SIZE; }
+
 static const uint8_t *rom_page(uint32_t data_off)
 {
     pce_t *s = PCE;
@@ -219,26 +231,30 @@ static const uint8_t *rom_page(uint32_t data_off)
             // threw out exactly the hottest pages, then every window with them, and read them back at once.
             uint8_t shown[PG_SLOTS];
             memset(shown, 0, sizeof shown);
-            for (int k = 0; k < 64; k++) if (s->win_pg[k] >= 0) shown[s->win_pg[k]] = 1;
+            for (int k = 0; k < NWIN; k++) if (s->win_pg[k] >= 0) shown[s->win_pg[k]] = 1;
             int v = -1;
             for (int i = 0; i < s->pg_n; i++) if (!shown[i] && (v < 0 || s->pg_age[i] < s->pg_age[v])) v = i;
             if (v < 0) { v = 0; for (int i = 1; i < s->pg_n; i++) if (s->pg_age[i] < s->pg_age[v]) v = i; }
             size_t got = 0;
             const int64_t m0 = esp_timer_get_time();
-            if (fseek(s->fp, (long)(s->rom_base + (tag << PG_BITS)), SEEK_SET) == 0) got = fread(s->pg[v], 1, PG_SIZE, s->fp);
+            if (fseek(s->fp, (long)(s->rom_base + (tag << PG_BITS)), SEEK_SET) == 0) got = fread(pg_buf(s, v), 1, PG_SIZE, s->fp);
             s->us_miss += (uint32_t)(esp_timer_get_time() - m0);
-            if (got < PG_SIZE) memset(s->pg[v] + got, 0xFF, PG_SIZE - got);
-            s->pg_tag[v] = tag;
+            if (got < PG_SIZE) memset(pg_buf(s, v) + got, 0xFF, PG_SIZE - got);
+            s->pg_tag[v] = (uint16_t)tag;
             s->misses++;
             s->prof_misses++;
             g = v;
-            for (int k = 0; k < 64; k++)             // only the windows on the page just replaced (none, usually)
+            for (int k = 0; k < NWIN; k++)           // only the windows on the page just replaced (none, usually)
                 if (s->win_pg[k] == v) { s->rd[k] = NULL; s->wr[k] = NULL; s->win_pg[k] = -1; }
         }
-        s->hint[h] = (int8_t)g;
+        s->hint[h] = (int16_t)g;
     }
-    s->pg_age[g] = ++s->pg_clock;
-    s->cur_tag = tag; s->cur_buf = s->pg[g]; s->cur_pg = (int16_t)g;
+    if (++s->pg_clock == 0xFFFF) {                    // the 16-bit clock wraps: halve every age, the order stays
+        for (int i = 0; i < s->pg_n; i++) s->pg_age[i] >>= 1;
+        s->pg_clock = 0x8000;
+    }
+    s->pg_age[g] = s->pg_clock;
+    s->cur_tag = tag; s->cur_buf = pg_buf(s, g); s->cur_pg = (int16_t)g;
     s->last_pg = (int16_t)g;
     return s->cur_buf;
 }
@@ -266,8 +282,8 @@ static void io_write(uint16_t off, uint8_t v);
 static const uint8_t *window(int slot)
 {
     pce_t *s = PCE;
-    const uint8_t bank = m_mmr[slot >> 3];
-    const uint32_t k = (uint32_t)(slot & 7) << 10;
+    const uint8_t bank = m_mmr[slot / WPB];
+    const uint32_t k = (uint32_t)(slot % WPB) << PG_BITS;
     const uint8_t *r = NULL;
     uint8_t *w = NULL;
     int16_t pg = -1;
@@ -289,22 +305,22 @@ static const uint8_t *window(int slot)
 static void pce_mpr_changed(int page)
 {
     g_writes++;
-    for (int k = 0; k < 8; k++) { PCE->rd[page * 8 + k] = NULL; PCE->wr[page * 8 + k] = NULL; PCE->win_pg[page * 8 + k] = -1; }
+    for (int k = 0; k < WPB; k++) { PCE->rd[page * WPB + k] = NULL; PCE->wr[page * WPB + k] = NULL; PCE->win_pg[page * WPB + k] = -1; }
 }
 
 static inline uint8_t mem_read(uint16_t addr)
 {
-    const uint8_t *w = PCE->rd[addr >> 10];
-    if (!w && !(w = window(addr >> 10))) return io_read(addr & 0x1fff);
-    return w[addr & 0x3ff];
+    const uint8_t *w = PCE->rd[addr >> PG_BITS];
+    if (!w && !(w = window(addr >> PG_BITS))) return io_read(addr & 0x1fff);
+    return w[addr & (PG_SIZE - 1)];
 }
 static inline void mem_write(uint16_t addr, uint8_t v)
 {
     g_writes++;
-    uint8_t *w = PCE->wr[addr >> 10];
-    if (w) { w[addr & 0x3ff] = v; return; }
+    uint8_t *w = PCE->wr[addr >> PG_BITS];
+    if (w) { w[addr & (PG_SIZE - 1)] = v; return; }
     const uint8_t bank = m_mmr[addr >> 13];
-    if (bank >= 0xF8 && bank <= 0xFB) { window(addr >> 10); PCE->wr[addr >> 10][addr & 0x3ff] = v; return; }
+    if (bank >= 0xF8 && bank <= 0xFB) { window(addr >> PG_BITS); PCE->wr[addr >> PG_BITS][addr & (PG_SIZE - 1)] = v; return; }
     if (bank == 0xFF) { io_write(addr & 0x1fff, v); return; }
     if (bank < 0x80 && PCE->sf2 && (addr & 0x1FF0) == 0x1FF0) {           // Street Fighter II's bank register
         const uint32_t blocks = PCE->data_bytes > 0x80000 ? (PCE->data_bytes - 0x80000) / 0x80000 : 1;
@@ -1011,7 +1027,7 @@ static void session_free(pce_t *s)
     if (!s) return;
     if (s->sound) { s->sound = false; nucleo_audio_pcm_close(); }
     if (s->fp) fclose(s->fp);
-    for (int i = 0; i < s->pg_n; i++) free(s->pg[i]);
+    for (int i = 0; i < s->pg_n; i += PPC) free(s->chunk[i / PPC]);
     free(s->rom_all);
     free(s->vram[0]); free(s->vram[1]);
     free(s->batch[0]); free(s->batch[1]); free(s->spr_here); free(s->kw);
@@ -1080,7 +1096,7 @@ esp_err_t nucleo_pce_open(const char *rom_path, nucleo_pce_line_fn line_cb, void
     s->heap_bytes += 2 * sizeof(pce_batch_t) + 512 * sizeof(uint16_t) + sizeof(pce_scratch_t);
     s->on_line = line_cb; s->user = user;
     s->pending = -1;
-    s->cur_tag = PG_EMPTY;
+    s->cur_tag = 0xFFFFFFFFu;
     memset(s->win_pg, 0xff, sizeof s->win_pg);
     for (int i = 0; i < PG_SLOTS; i++) s->pg_tag[i] = PG_EMPTY;
     memset(s->hint, -1, sizeof s->hint);
@@ -1119,12 +1135,13 @@ esp_err_t nucleo_pce_open(const char *rom_path, nucleo_pce_line_fn line_cb, void
     nucleo_cowork_wait();
     if (!s->rom_all) {
         const uint32_t pages = (s->data_bytes + PG_SIZE - 1) / PG_SIZE;
-        for (int i = 0; i < PG_SLOTS && (uint32_t)i < pages && (!test_pages || i < test_pages); i++) {
-            if (heap_caps_get_free_size(MALLOC_CAP_DEFAULT) < PG_SIZE + KEEP) break;
-            uint8_t *b = (uint8_t *)malloc(PG_SIZE);
+        while (s->pg_n + (int)PPC <= PG_SLOTS && (uint32_t)s->pg_n < pages && (!test_pages || s->pg_n < test_pages)) {
+            if (heap_caps_get_free_size(MALLOC_CAP_DEFAULT) < PG_CHUNK + KEEP) break;
+            uint8_t *b = (uint8_t *)malloc(PG_CHUNK);
             if (!b) break;
-            s->pg[s->pg_n++] = b;
-            s->heap_bytes += PG_SIZE;
+            s->chunk[s->pg_n / PPC] = b;
+            s->pg_n += PPC;
+            s->heap_bytes += PG_CHUNK;
         }
         if (s->pg_n < PG_MIN) { ESP_LOGE(TAG, "only %d cartridge pages fit", s->pg_n); session_free(s); return ESP_ERR_NO_MEM; }
     }

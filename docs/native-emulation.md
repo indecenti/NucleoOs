@@ -562,8 +562,13 @@ stages (1,700 misses / 10 s). The cache now never evicts a page a CPU window sho
 pointer, its page never looked "used"), and the session gave back 14 KB (the log, four-line batches, a sprite row
 instead of a second drawer): 52 pages, Aero Blasters 50-55 fps with 442 misses in 100 s. On the host, misses in 60 s
 by cache size: 32 of 40 games are under 1,000 at 52 pages; Bonk III and Street Fighter II need well over 64
-(their banks change every frame), Legendary Axe and Bomberman '94 ~64. That RAM can only come from the firmware
-(static buffers of services a Solo boot never starts).
+(their banks change every frame), Legendary Axe and Bomberman '94 ~64. **256-byte pages (1.1.4).** Those big HuCards do not need more RAM: they read a little of many places every frame
+(the code and the graphics of a whole stage), so a 1 KB page held a quarter of what was used. Same 52 KB, misses per
+frame on the host (1 KB / 512 B / 256 B pages): Street Fighter II 33.7 / 3.3 / 1.9, Bonk III 35.1 / 14.5 / 1.6,
+Legendary Axe 15.3 / 0.3 / 0.3. The small games read a few more pages while the cache fills (under 0.6 a frame over
+the first 30 s), then nothing. The CPU windows follow the page (256 of them); the pages come from the heap in 1 KB
+blocks (one malloc header per four) and the tables are 16-bit (tag, LRU age with a halving wrap), so the bookkeeping
+stays ~2.5 KB. Paged and resident runs give the same pictures and the same sound, bit for bit.
 
 Profile on the ADV (Aero Blasters, 100 s): HuC6280 10.3 ms, VDC on this core 1.4, panel lines 2.2, waiting for the
 other core 2.2, PSG + speaker 2.2 ms a frame; idle skipped 60%. Next: the HuC6280's dispatch (MAME's function
