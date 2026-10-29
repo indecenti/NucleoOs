@@ -178,6 +178,11 @@ test('arcade: favorites and "continue playing" persist; launching hands the play
   await page.eval(`window.postMessage({ type: 'arcade-exit' }, '*'), true`);
   assert.ok(await page.waitFor(`document.getElementById('play').style.display === 'none'`, { timeout: 5000 }), 'Esc in the player returns to the shelf');
 
+  // The star and the play are written to the shared library file in the background: a reload before they land
+  // (a busy runner) would measure the timing, not the persistence. Both are on the card first, then reload.
+  const lib = async () => { try { return await sim.readSd('/data/GameShots/library.txt'); } catch { return ''; } };
+  for (let i = 0; i < 100 && !(/^F /m.test(await lib()) && /^R /m.test(await lib())); i++) await sleep(100);
+  assert.ok(/^F /m.test(await lib()) && /^R /m.test(await lib()), 'the star and the play reach the library file: ' + JSON.stringify(await lib()));
   const p2 = page;                                             // same browser profile: reload the shelf
   await p2.goto(`${sim.origin}/apps/arcade/`);
   await p2.waitFor(`document.querySelector('#main .grid .sys')`, { timeout: 45000 });
