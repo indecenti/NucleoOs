@@ -456,9 +456,20 @@ licence compatible with the firmware's (no GPL code), and no single block larger
 |---|---|---|---|---|
 | NES | [agnes](https://github.com/kgabis/agnes) (single header) | MIT | 2 KB work + 2 KB name tables + palette, cartridge CHR-RAM up to 8 KB | the lightest of the three; mappers 0-4 cover most of the library; the 256x240 picture fills the panel at 5/4 like the Master System |
 | Commodore 64 | [chips](https://github.com/floooh/chips) (`c64.h`: m6502, m6569 VIC-II, m6581 SID, m6526 CIA) | zlib | **64 KB** RAM + 1 KB colour RAM | the 64 KB must be split (chips addresses memory through 1 KB pages, so the RAM can be 2-4 host blocks, a patch like Walnut's W1); the KERNAL / BASIC / character ROMs are Commodore's and cannot ship: the user supplies them, or open replacement ROMs are needed; keyboard: the Cardputer's own maps naturally |
-| PC Engine | none found under a compatible licence (HuExpress, Mednafen, Geargrafx, PCE-Go are GPL) | — | 8 KB work RAM + **64 KB** VRAM + 512-colour VCE | our own machine around a permissive 65C02 core (chips `m6502` is zlib; HuC6280 adds a bank MMU, block transfers, timer, PSG), as nucleo_gg.c is around z80emu; VRAM in banks; HuCards up to 2.5 MB (Street Fighter II) from the SD page cache |
+| PC Engine | MAME's PC Engine devices (BSD-3-Clause): `h6280` CPU, `huc6270` VDC, `huc6260` VCE, `huc6202` VPC, `c6280` PSG, `nec/pce` machine | BSD-3 | 8 KB work RAM + **64 KB** VRAM + 512-colour VCE | our own machine around a permissive 65C02 core (chips `m6502` is zlib; HuC6280 adds a bank MMU, block transfers, timer, PSG), as nucleo_gg.c is around z80emu; VRAM in banks; HuCards up to 2.5 MB (Street Fighter II) from the SD page cache |
 
 Order of work, cheapest first: NES, then C64 (with the ROM question settled), then the PC Engine machine.
+
+**PC Engine references (2026-10-29, downloaded to study, none vendored yet).** Geargrafx (GPL-3, C++, the most
+accurate today, SuperGrafx and CD), Mednafen PCE-Fast as the libretro core beetle-pce-fast (GPL-2), PCE-Go from
+retro-go (GPL-2: HuExpress lineage, the one already tuned for the ESP32: scanline renderer, 8 KB banks mapped by
+pointer, full speed claimed on an S3). GPL code cannot enter the firmware or its modules, so those three are read for
+behaviour and tricks only. MAME's PC Engine is BSD-3-Clause end to end: `src/devices/cpu/h6280` (2,612 lines),
+`video/huc6270` (VDC, 971), `video/huc6260` (VCE, 321), `video/huc6202` (SuperGrafx VPC), `sound/c6280` (PSG, 372)
+and the machine `mame/nec/pce.cpp` (335). That is the permissive base: ported out of MAME's device framework into
+plain C, with our own scanline renderer (as agnes A4/A10: lines described on the CPU's core, pixels on the other)
+and the SD page cache. The hard limit is RAM: the VDC's 64 KB of VRAM must live in two 32 KB blocks (no PSRAM; the
+Solo boot's largest block is ~45 KB), work RAM 8 KB, HuCards up to 2.5 MB paged from the card.
 
 **NES, done (`nesemu`, store only).** `nucleo_nes.c` around agnes with three marked patches (`vendor/agnes/agnes.nucleo.patch`):
 A1 the cartridge is read through a callback (the same SD page cache as the other consoles; the whole file is
