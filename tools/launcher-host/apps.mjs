@@ -46,8 +46,11 @@ export function readRegistry() {
   for (const f of sources()) {
     const raw = readFileSync(f, 'utf8');
     const src = stripComments(raw);
-    callSites += (src.match(/\bnucleo_app_register\s*\(/g) || []).length;
-    callSites -= (src.match(/\bvoid\s+nucleo_app_register\s*\(/g) || []).length;
+    // A registration only a store module compiles (`#ifdef NAP_MODULE ... #endif`, no nested #if) never runs in
+    // the firmware: it does not take a built-in slot.
+    const fw = src.replace(/#ifdef\s+NAP_MODULE\b(?:(?!#if)[\s\S])*?#endif/g, '');
+    callSites += (fw.match(/\bnucleo_app_register\s*\(/g) || []).length;
+    callSites -= (fw.match(/\bvoid\s+nucleo_app_register\s*\(/g) || []).length;
     const funcs = [...src.matchAll(/void\s+(nucleo_(?:register_\w+|setup_register_apps))\s*\(\s*void\s*\)\s*\{/g)]
       .map((m) => ({ name: m[1], start: m.index }));
     for (const m of src.matchAll(DEF_RE)) {
