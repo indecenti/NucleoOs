@@ -1176,7 +1176,11 @@ static void handle_launcher(int k, char ch)
         if      (k == NK_LEFT)  launcher_set_sel(s - 1);
         else if (k == NK_RIGHT) launcher_set_sel(s + 1);
         else if (k == NK_UP)    { if (s - cols >= 0) launcher_set_sel(s - cols); }
-        else if (k == NK_DOWN)  { if (s + cols < n) launcher_set_sel(s + cols); }
+        else if (k == NK_DOWN) {                 // a shorter last row: from a column with nothing below, its last tile
+            const int lead = launcher_depth() > 0 ? 1 : 0;   // inside a category cell 0 is the Back tile
+            if (s + cols < n) launcher_set_sel(s + cols);
+            else if ((s + lead) / cols < (n - 1 + lead) / cols) launcher_set_sel(n - 1);
+        }
         else if (k == NK_ENTER) { launcher_open_focused(); s_dirty = true; return; }   // a category: repaint its tiles now
         else if (k == NK_BACK)  launcher_back();
         else if (k == NK_DEL)   launcher_filter_backspace();
