@@ -18,8 +18,10 @@ const ROOT = process.cwd();
 const TOOL = 'tools/nucleo-sd-deploy/sd_deploy.py';
 const PY = ['python', 'python3'].find((b) => spawnSync(b, ['--version']).status === 0);
 // A regression alarm, not a target: core was ~54 MB, then ~64 MB with the Costellazioni art and score
-// (9.1 MB of AVIF + Opus, apps/games/www/games/stelle/assets) and the 3D web game.
-const CORE_BUDGET = 72 * 1048576;
+// (9.1 MB of AVIF + Opus, apps/games/www/games/stelle/assets) and the 3D web game; ~73 MB with web OS 1.0:
+// libarchive for 7z/RAR/tar in every app (www/shell/vendor/libarchive, 1.5 MB with its twin) and the Help
+// manual with the Terminal pages in five languages (www/shell/help, 0.5 MB).
+const CORE_BUDGET = 76 * 1048576;
 const TOTAL_BUDGET = 150 * 1048576;
 
 function py(code) {

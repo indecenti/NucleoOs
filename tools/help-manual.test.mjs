@@ -59,16 +59,16 @@ test('help manuals: every "see also" reference points at a manual or a Terminal 
   assert.deepEqual([...new Set(dead)], []);
 });
 
-test('help app: the offline fallback list and the guide list name only manuals that exist', () => {
-  const fb = help.match(/const fallbackIds = \[([\s\S]*?)\]/);
-  assert.ok(fb, 'fallback list found');
-  const fallback = JSON.parse('[' + fb[1] + ']');
-  assert.deepEqual(fallback.filter((id) => !ids.has(id)), [], 'fallback ids without a manual');
-  const gl = help.match(/category: (\[[^\]]*\])\.includes\(id\) \? 'guide'/);
-  assert.ok(gl, 'offline guide list found');
-  const guides = JSON.parse(gl[1].replace(/'/g, '"'));
-  const real = new Set(manuals.filter((m) => m.j.category === 'guide').map((m) => m.j.id));
-  assert.deepEqual(guides.filter((id) => !real.has(id)), [], 'offline "guides" that are not guide manuals');
+// Since web OS 1.0 Help shows the manual that ships with the web OS (nucleo-webos docs/user -> /help/<lang>.json,
+// topics and Terminal pages filtered by what the device can do). The made-up offline list of commands it used to
+// show when the device had no pages is gone, and must not come back.
+test('help app: reads the manual that ships with the web OS, no hard-coded list of commands', () => {
+  assert.ok(!/const fallbackIds = \[/.test(help), 'a hard-coded offline list of commands is back');
+  assert.match(help, /'\/help\/' \+ l \+ '\.json'/, 'Help loads /help/<lang>.json');
+  for (const l of LANGS) {
+    const man = JSON.parse(read(`web/shell/help/${l}.json`));
+    assert.ok(man.topics.length >= 5 && man.commands.length >= 40, `the ${l} manual is complete`);
+  }
 });
 
 test('help API spec: every endpoint card has a method, an /api path and en text (it/en, en is the fallback)', () => {

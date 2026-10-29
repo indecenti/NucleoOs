@@ -73,6 +73,7 @@ const spec = JSON.parse(readFileSync(join(REPO, 'registry', 'web-api-spec.json')
 // Routes the simulator deliberately does NOT reproduce — each with the reason. Keep this list short.
 const DEVICE_ONLY = {
   '/api/game/costellazioni/gentest': 'debug dump of the native C procedural generator; no JS twin to answer with',
+  '/api/evilportal/templates': 'the Evil Portal (Security package) is not emulated by the simulator; it runs on the device only',
 };
 function simHas(path) {
   if (sim.includes(`'${path}'`)) return true;
