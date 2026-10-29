@@ -15,6 +15,9 @@ const uint8_t *nucleo_rom_map(const char *path, uint32_t *size, void (*progress)
                               void *user);
 void nucleo_rom_unmap(void);
 extern void (*emu_rom_progress)(uint32_t done, uint32_t total, void *user);
+// A bench run's levers (the front-end's /emu_bench.txt, "knob <i> <v>"); all 0 when playing. The PC Engine's:
+// [0] the run loop's lock in the instruction cache (0 = the loop, -1 = off, n = n bytes), [1] 1 = draw nothing.
+extern int emu_bench_knob[4];
 
 #ifdef __cplusplus
 }

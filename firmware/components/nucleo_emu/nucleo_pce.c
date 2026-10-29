@@ -42,6 +42,12 @@ void nucleo_cowork_stop(void);
 // the same state is waiting (see idle_after). The core calls the hook after each instruction.
 static void idle_after(void);
 #define PCE_AFTER_OP() do { if (m_pc.w.l < m_ppc.w.l) idle_after(); } while (0)   // only a backward jump can close a loop
+#ifdef NAP_MODULE
+#define PCE_HOT    __attribute__((section(".text.nap_hot"), noinline))   // the run loop, locked in the cache (hot_lock)
+#define PCE_HOT_FN __attribute__((section(".text.nap_hot")))             // ...and what it calls every few instructions
+#else
+#define PCE_HOT_FN
+#endif
 #include "../vendor/h6280/h6280_core.h"
 
 static const char *TAG = "pce";
@@ -148,9 +154,10 @@ typedef struct {
     uint16_t line[512];
 } pce_scratch_t;
 
+#define VRAM_BLK  8                                  // 4 K words each
 typedef struct {
     pce_core_t m;
-    uint16_t  *vram[2];                              // 2 x 16 K words
+    uint16_t  *vram[VRAM_BLK];                       // 64 KB in 8 KB blocks (any fragmented heap has those)
     FILE      *fp;
     uint32_t   rom_base, rom_bytes, data_bytes;      // the HuCard data starts at rom_base (a 512-byte copier header)
     uint8_t   *rom_all;
@@ -317,7 +324,7 @@ static uint8_t io_read(uint16_t off);
 static void io_write(uint16_t off, uint8_t v);
 
 // Where 1 KB window `slot` of the CPU's space lands now (NULL for the I/O page).
-static const uint8_t *window(int slot)
+static PCE_HOT_FN const uint8_t *window(int slot)
 {
     pce_t *s = PCE;
     const uint8_t bank = m_mmr[slot / WPB];
@@ -379,7 +386,7 @@ static uint8_t program_read8(uint16_t addr)
     check_vdc_vce_penalty(addr);
     return mem_read(addr);
 }
-static void program_write8(uint16_t addr, uint8_t v)
+static PCE_HOT_FN void program_write8(uint16_t addr, uint8_t v)
 {
     uint8_t *w = MEM.wr[addr >> PG_BITS];
     if (w) { g_writes++; w[addr & (PG_SIZE - 1)] = v; return; }
@@ -394,7 +401,7 @@ static uint16_t program_read16z(uint16_t addr)
     const uint16_t hi = (addr & 0xff) == 0xff ? (uint16_t)(addr - 0xff) : (uint16_t)(addr + 1);
     return (uint16_t)(program_read8z(addr) | program_read8z(hi) << 8);
 }
-static void     push(uint8_t v)                         { program_write8z((uint16_t)m_sp.d, v); m_sp.b.l--; }
+static PCE_HOT_FN void push(uint8_t v)                  { program_write8z((uint16_t)m_sp.d, v); m_sp.b.l--; }
 static uint8_t  pull_(void)                             { m_sp.b.l++; return program_read8z((uint16_t)m_sp.d); }
 static uint8_t  read_opcode(void)                       { return mem_read(m_pc.w.l); }
 static uint8_t  read_opcode_arg(void)                   { return mem_read(m_pc.w.l); }
@@ -521,8 +528,8 @@ static uint8_t vce_read(uint16_t off)
 }
 
 // ── the VDC ──────────────────────────────────────────────────────────────────────────────────────────────
-static inline uint16_t vram_rd(uint32_t a) { a &= 0xffff; return a <= 0x7fff ? PCE->vram[a >> 14][a & 0x3fff] : 0; }
-static inline void vram_wr(uint32_t a, uint16_t v) { lines_touch(); a &= 0xffff; if (a <= 0x7fff) PCE->vram[a >> 14][a & 0x3fff] = v; }
+static inline uint16_t vram_rd(uint32_t a) { a &= 0xffff; return a <= 0x7fff ? PCE->vram[a >> 12][a & 0xfff] : 0; }
+static inline void vram_wr(uint32_t a, uint16_t v) { lines_touch(); a &= 0xffff; if (a <= 0x7fff) PCE->vram[a >> 12][a & 0xfff] = v; }
 static void vdc_irq(uint8_t bit) { PCE->m.status |= bit; set_irq_line(0, ASSERT_LINE); }
 
 static void vdc_regs_w(int r, uint16_t data, uint16_t mask)
@@ -936,7 +943,7 @@ static struct {
     bool     armed;
 } g_idle;
 
-static void idle_after(void)
+static PCE_HOT_FN void idle_after(void)
 {
     const uint16_t pc = m_pc.w.l;
     if (pc >= m_ppc.w.l) return;                       // only a backward jump closes a loop
@@ -969,8 +976,55 @@ static void idle_after(void)
     }
 }
 
+// ── the run loop locked in the instruction cache ─────────────────────────────────────────────────────────
+// A store module runs from flash through the S3's 16 KB instruction cache, shared by both cores, and a line missed
+// costs ~2 us (DIO flash at 80 MHz): the CPU loop (~7.4 KB), the line drawer on the other core and the firmware's
+// panel and audio code evict each other all frame long. The ESP32-S3's cache can LOCK lines: once loaded, a locked
+// line is never replaced. The loop is preloaded and locked for as long as a game runs, so it executes as if it were
+// in IRAM, and costs no RAM (IRAM would take it from the heap; MEMPROT forbids code in RAM anyway). The rest of the
+// code shares what is left of the cache. ROM functions (esp32s3.rom.ld), the same on every S3.
+#ifdef NAP_MODULE
+#define ROM_ICACHE_PRELOAD      ((uint32_t (*)(uint32_t, uint32_t, uint32_t))0x4000174c)
+#define ROM_ICACHE_PRELOAD_DONE ((uint32_t (*)(void))0x40001758)
+#define ROM_ICACHE_PRELOAD_END  ((void (*)(uint32_t))0x40001764)
+#define ROM_ICACHE_LOCK         ((void (*)(uint32_t, uint32_t))0x4000180c)
+#define ROM_ICACHE_UNLOCK       ((void (*)(uint32_t, uint32_t))0x40001818)
+#define ICACHE_LINE   32u
+#define LOCK_MAX      (12u * 1024u)                    // three quarters of the cache at most: the rest needs a quarter
+static uint32_t s_lock_at, s_lock_lines;
+static void hot_unlock(void)
+{
+    if (s_lock_lines) ROM_ICACHE_UNLOCK(s_lock_at, s_lock_lines);
+    s_lock_lines = 0;
+}
+// The loop and its literal pool, as the module's linker script places them (sdk/native/nap.ld: .text.nap_hot).
+extern const char _nap_hot_start[] __attribute__((visibility("hidden")));
+extern const char _nap_hot_end[] __attribute__((visibility("hidden")));
+// bytes: 0 = the whole hot section, else that many bytes from its start.
+static void hot_lock(uint32_t bytes)
+{
+    hot_unlock();
+    const uint32_t a = (uint32_t)(uintptr_t)_nap_hot_start & ~(ICACHE_LINE - 1);
+    const uint32_t end = bytes ? a + bytes : ((uint32_t)(uintptr_t)_nap_hot_end + ICACHE_LINE - 1) & ~(ICACHE_LINE - 1);
+    // Only code on the instruction bus from flash (0x42000000..), and never most of the cache.
+    if (a < 0x42000000u || a >= 0x44000000u || end <= a || end - a > LOCK_MAX) {
+        ESP_LOGW(TAG, "run loop not locked: %08x..%08x", (unsigned)a, (unsigned)end);
+        return;
+    }
+    const uint32_t autoload = ROM_ICACHE_PRELOAD(a, end - a, 0);
+    for (int i = 0; i < 100000 && !ROM_ICACHE_PRELOAD_DONE(); i++) { }
+    ROM_ICACHE_PRELOAD_END(autoload);
+    s_lock_at = a; s_lock_lines = (end - a) / ICACHE_LINE;
+    ROM_ICACHE_LOCK(s_lock_at, s_lock_lines);
+    ESP_LOGI(TAG, "run loop locked in the cache: %u B at %08x", (unsigned)(end - a), (unsigned)a);
+}
+#else
+static void hot_unlock(void) { }
+static void hot_lock(uint32_t bytes) { (void)bytes; }
+#endif
+
 // ── the frame ────────────────────────────────────────────────────────────────────────────────────────────
-static void run_cpu(uint32_t cycles)
+static PCE_HOT_FN void run_cpu(uint32_t cycles)
 {
     pce_t *s = PCE;
     s->leg_len = cycles;
@@ -999,8 +1053,8 @@ void nucleo_pce_run_frame(void)
     s->debt += over;
     if (s->debt < -4000) s->debt = -4000;              // a little credit, not a bank
     if (s->debt > 100000) s->debt = 0;                 // a pause (menu, card): start over
-    s->skip = false;
-    if (s->frameskip) {
+    s->skip = emu_bench_knob[1] == 1;                  // a bench: every frame unseen (the CPU's cost alone)
+    if (s->frameskip && !s->skip) {
         s->skip = s->debt > 0 && s->skipped < 3;       // behind: catch up unseen, three at most in a row
         s->skipped = s->skip ? (uint8_t)(s->skipped + 1) : 0;
     }
@@ -1081,7 +1135,7 @@ static void session_free(pce_t *s)
     if (s->fp) fclose(s->fp);
     for (int i = 0; i < s->pg_n; i += PPC) free(s->chunk[i / PPC]);
     if (s->rom_mapped) nucleo_rom_unmap(); else free(s->rom_all);
-    free(s->vram[0]); free(s->vram[1]);
+    for (int i = 0; i < VRAM_BLK; i++) free(s->vram[i]);
     free(s->batch[0]); free(s->batch[1]); free(s->spr_here); free(s->kw);
     free(s);
 }
@@ -1124,7 +1178,7 @@ static void machine_reset(void)
     m->pad_sel = 1; m->pad_clr = 1;
     m->ch[4].noise_seed = m->ch[5].noise_seed = 1;
     for (int i = 0; i < 512; i++) PCE->rgb[i] = rgb_of(0);
-    memset(PCE->vram[0], 0, 0x8000); memset(PCE->vram[1], 0, 0x8000);
+    for (int i = 0; i < VRAM_BLK; i++) memset(PCE->vram[i], 0, 0x2000);
     cpu_reset();
 }
 
@@ -1133,12 +1187,13 @@ esp_err_t nucleo_pce_open(const char *rom_path, nucleo_pce_line_fn line_cb, void
     nucleo_pce_close();
     esp_err_t pe = nucleo_pce_probe(rom_path);
     if (pe != ESP_OK) return pe;
-    // VRAM first, while the heap still has two 32 KB blocks; then the session (work RAM inside it).
-    uint16_t *v0 = (uint16_t *)malloc(0x8000), *v1 = v0 ? (uint16_t *)malloc(0x8000) : NULL;
-    if (!v0 || !v1) { free(v0); return ESP_ERR_NO_MEM; }
+    // The session first (work RAM inside it: the one block of ~18 KB), then the VRAM in 8 KB blocks. Two 32 KB blocks
+    // were asked for once: a heap with 148 KB free but its biggest block at 47 KB (the Games gallery's firmware)
+    // refused Street Fighter II with "not enough RAM".
     pce_t *s = (pce_t *)calloc(1, sizeof *s);
-    if (!s) { free(v0); free(v1); return ESP_ERR_NO_MEM; }
-    s->vram[0] = v0; s->vram[1] = v1;
+    if (!s) return ESP_ERR_NO_MEM;
+    for (int i = 0; i < VRAM_BLK; i++)
+        if (!(s->vram[i] = (uint16_t *)malloc(0x2000))) { session_free(s); return ESP_ERR_NO_MEM; }
     s->heap_bytes = sizeof *s + 0x10000;
     s->batch[0] = (pce_batch_t *)calloc(1, sizeof(pce_batch_t));
     s->batch[1] = (pce_batch_t *)calloc(1, sizeof(pce_batch_t));
@@ -1217,9 +1272,24 @@ esp_err_t nucleo_pce_open(const char *rom_path, nucleo_pce_line_fn line_cb, void
     PCE = s;
     map_banks();
     machine_reset();
+    if (emu_bench_knob[0] >= 0) hot_lock((uint32_t)emu_bench_knob[0]);   // a bench may turn it off (-1) or size it
     ESP_LOGI(TAG, "'%s' %u KB%s, %s, heap %u B, sound %s", s->title, (unsigned)(s->data_bytes / 1024), s->sf2 ? " (SF2 mapper)" : "",
              s->rom_mapped ? "mapped from flash" : s->rom_all ? "resident" : "paged", (unsigned)s->heap_bytes, s->sound ? "on" : "off");
     return ESP_OK;
+}
+
+#ifdef NAP_MODULE
+static uint32_t lock_bytes(void) { return s_lock_lines * ICACHE_LINE; }
+#else
+static uint32_t lock_bytes(void) { return 0; }
+#endif
+
+// The VRAM in a save state: its blocks in order (the file is the same as when it was two halves).
+static bool vram_io(FILE *f, bool out)
+{
+    for (int i = 0; i < VRAM_BLK; i++)
+        if ((out ? fwrite(PCE->vram[i], 1, 0x2000, f) : fread(PCE->vram[i], 1, 0x2000, f)) != 0x2000) return false;
+    return true;
 }
 
 // Where the frames' time went, once per game, appended to the emulator's trace: tenths of a millisecond per frame at
@@ -1233,11 +1303,12 @@ static void profile_write(pce_t *s)
                    w = (unsigned)((uint32_t)(s->prof_wait >> 10) / n * 16 / 375);
     FILE *f = fopen(s->trace_path, "a");
     if (!f) return;
-    fprintf(f, "  pce profile: %u frames (%u drawn), ms/frame: huc6280 %u.%u  vdc %u.%u  panel lines %u.%u  wait 2nd core %u.%u  psg+speaker %u.%u, idle skipped %u%%, lines with sprite irq evaluated here %u%%, cartridge %s, misses %u\n",
+    fprintf(f, "  pce profile: %u frames (%u drawn), ms/frame: huc6280 %u.%u  vdc %u.%u  panel lines %u.%u  wait 2nd core %u.%u  psg+speaker %u.%u, idle skipped %u%%, lines with sprite irq evaluated here %u%%, cartridge %s, misses %u, run loop locked %u B, bench knobs %d %d\n",
             (unsigned)n, (unsigned)s->prof_drawn, c / 10, c % 10, v / 10, v % 10, l / 10, l % 10, w / 10, w % 10, a / 10, a % 10,
             (unsigned)((uint32_t)(s->prof_idle >> 10) / n * 1024u / (LINES * LINE_CYC / 100)),   // no 64-bit division
             (unsigned)(s->prof_lines_here * 100u / (s->prof_lines_other + s->prof_lines_here + 1)),
-            s->rom_mapped ? "mapped from flash" : s->rom_all ? "in RAM" : "paged from the card", (unsigned)s->prof_misses);
+            s->rom_mapped ? "mapped from flash" : s->rom_all ? "in RAM" : "paged from the card", (unsigned)s->prof_misses,
+            (unsigned)(lock_bytes()), emu_bench_knob[0], emu_bench_knob[1]);
     fclose(f);
 }
 
@@ -1246,6 +1317,7 @@ void nucleo_pce_close(void)
     if (!PCE) return;
     lines_settle(PCE);
     nucleo_cowork_stop();
+    hot_unlock();
     profile_write(PCE);
     pce_t *s = PCE;
     PCE = NULL;
@@ -1309,7 +1381,7 @@ esp_err_t nucleo_pce_state_save(int slot)
     const uint32_t magic = STATE_MAGIC;
     bool ok = fwrite(&magic, 1, 4, f) == 4 && fwrite(&c, 1, sizeof c, f) == sizeof c
            && fwrite(&PCE->m, 1, sizeof PCE->m, f) == sizeof PCE->m
-           && fwrite(PCE->vram[0], 1, 0x8000, f) == 0x8000 && fwrite(PCE->vram[1], 1, 0x8000, f) == 0x8000;
+           && vram_io(f, true);
     ok = fclose(f) == 0 && ok;
     if (!ok) { remove(p); return ESP_FAIL; }
     return ESP_OK;
@@ -1325,7 +1397,7 @@ esp_err_t nucleo_pce_state_load(int slot)
     uint32_t magic = 0;
     bool ok = fread(&magic, 1, 4, f) == 4 && magic == STATE_MAGIC && fread(&c, 1, sizeof c, f) == sizeof c
            && fread(&PCE->m, 1, sizeof PCE->m, f) == sizeof PCE->m
-           && fread(PCE->vram[0], 1, 0x8000, f) == 0x8000 && fread(PCE->vram[1], 1, 0x8000, f) == 0x8000;
+           && vram_io(f, false);
     fclose(f);
     if (!ok) { machine_reset(); return ESP_ERR_INVALID_CRC; }
     cpu_set(&c);

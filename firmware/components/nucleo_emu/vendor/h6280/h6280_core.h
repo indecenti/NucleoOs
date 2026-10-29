@@ -121,6 +121,12 @@
 #ifndef PCE_AFTER_OP
 #define PCE_AFTER_OP() ((void)0)                   /* the including file's hook after every instruction */
 #endif
+#ifndef PCE_HOT
+#define PCE_HOT                                    /* the including file's placement of the run loop */
+#endif
+#ifndef PCE_HOT_FN
+#define PCE_HOT_FN                                 /* ...and of the helpers the hot handlers call */
+#endif
 
 typedef union { struct { uint8_t l, h, h2, h3; } b; struct { uint16_t l, h; } w; uint32_t d; } PAIR;
 #define CLEAR_LINE  0
@@ -193,7 +199,7 @@ static inline void do_interrupt(uint16_t vector);
 static inline void check_and_take_irq_lines(void);
 static inline void check_irq_lines(void);
 static inline void check_vdc_vce_penalty(uint16_t addr);
-static inline void bra(bool cond);
+static inline PCE_HOT_FN void bra(bool cond);
 static inline void ea_zpg(void);
 static inline void ea_tflg(void);
 static inline void ea_zpx(void);
@@ -207,7 +213,7 @@ static inline void ea_idy(void);
 static inline void ea_ind(void);
 static inline void ea_iax(void);
 static inline uint8_t rd_imm(void);
-static inline uint8_t rd_zpg(void);
+static inline PCE_HOT_FN uint8_t rd_zpg(void);
 static inline uint8_t rd_zpx(void);
 static inline uint8_t rd_zpy(void);
 static inline uint8_t rd_abs(void);
@@ -215,7 +221,7 @@ static inline uint8_t rd_abx(void);
 static inline uint8_t rd_aby(void);
 static inline uint8_t rd_zpi(void);
 static inline uint8_t rd_idx(void);
-static inline uint8_t rd_idy(void);
+static inline PCE_HOT_FN uint8_t rd_idy(void);
 static inline uint8_t rd_tfl(void);
 static inline void wr_zpg(uint8_t tmp);
 static inline void wr_zpx(uint8_t tmp);
@@ -230,10 +236,8 @@ static inline void wb_ea(uint8_t tmp);
 static inline void wb_eaz(uint8_t tmp);
 static inline void compose_p(uint8_t SET, uint8_t CLR);
 static inline void compose_p(uint8_t SET, uint8_t CLR);
-static inline void tadc(uint8_t tmp);
-static inline void adc(uint8_t tmp);
-static inline void tand(uint8_t tmp);
-static inline void and_a(uint8_t tmp);
+static inline PCE_HOT_FN void adc(uint8_t tmp);
+static inline PCE_HOT_FN void and_a(uint8_t tmp);
 static inline uint8_t asl(uint8_t tmp);
 static inline void bbr(int bit, uint8_t tmp);
 static inline void bbs(int bit, uint8_t tmp);
@@ -261,8 +265,7 @@ static inline void cpy(uint8_t tmp);
 static inline uint8_t dec(uint8_t tmp);
 static inline void dex(void);
 static inline void dey(void);
-static inline void teor(uint8_t tmp);
-static inline void eor(uint8_t tmp);
+static inline PCE_HOT_FN void eor(uint8_t tmp);
 static inline uint8_t inc(uint8_t tmp);
 static inline void inx(void);
 static inline void iny(void);
@@ -273,8 +276,7 @@ static inline void ldx(uint8_t tmp);
 static inline void ldy(uint8_t tmp);
 static inline uint8_t lsr(uint8_t tmp);
 static inline void nop(void);
-static inline void tora(uint8_t tmp);
-static inline void ora(uint8_t tmp);
+static inline PCE_HOT_FN void ora(uint8_t tmp);
 static inline void pha(void);
 static inline void php(void);
 static inline void phx(void);
@@ -290,8 +292,7 @@ static inline void rti(void);
 static inline void rts(void);
 static inline void sax(void);
 static inline void say(void);
-static inline void tsbc(uint8_t tmp);
-static inline void sbc(uint8_t tmp);
+static inline PCE_HOT_FN void sbc(uint8_t tmp);
 static inline void sec(void);
 static inline void sed(void);
 static inline void sei(void);
@@ -759,7 +760,7 @@ static inline void check_vdc_vce_penalty(uint16_t addr)
 /***************************************************************
  *  BRA  branch relative
  ***************************************************************/
-static inline void bra(bool cond)
+static inline PCE_HOT_FN void bra(bool cond)
 {
 	clear_t();
 	if (cond)
@@ -914,7 +915,7 @@ static inline uint8_t rd_imm(void)
 	return tmp;
 }
 
-static inline uint8_t rd_zpg(void)
+static inline PCE_HOT_FN uint8_t rd_zpg(void)
 {
 	ea_zpg();
 	return program_read8z(EAD);
@@ -962,7 +963,7 @@ static inline uint8_t rd_idx(void)
 	return program_read8(EAD);
 }
 
-static inline uint8_t rd_idy(void)
+static inline PCE_HOT_FN uint8_t rd_idy(void)
 {
 	ea_idy();
 	return program_read8(EAD);
@@ -1071,7 +1072,7 @@ static inline void compose_p(uint8_t SET, uint8_t CLR)
 /* 6280 ********************************************************
  *  ADC Add with carry
  ***************************************************************/
-static inline void tadc(uint8_t tmp)
+static __attribute__((noinline, cold)) void tadc(uint8_t tmp)
 {
 	clear_t();
 	int tflagtemp = rd_tfl();
@@ -1110,29 +1111,32 @@ static inline void tadc(uint8_t tmp)
 }
 
 
-static inline void adc(uint8_t tmp)
+static __attribute__((noinline, cold)) void adc_bcd(uint8_t tmp)
+{
+	int c = (P & _fC);
+	int lo = (A & 0x0f) + (tmp & 0x0f) + c;
+	int hi = (A & 0xf0) + (tmp & 0xf0);
+	P &= ~_fC;
+	if (lo > 0x09)
+	{
+		hi += 0x10;
+		lo += 0x06;
+	}
+	if (hi > 0x90)
+		hi += 0x60;
+	if (hi & 0xff00)
+		P |= _fC;
+	A = (lo & 0x0f) + (hi & 0xf0);
+	h6280_cycles(1);
+}
+
+static inline PCE_HOT_FN void adc(uint8_t tmp)
 {
 	if(P & _fT)
 		tadc(tmp);
 	else {
 		if (P & _fD)
-		{
-			int c = (P & _fC);
-			int lo = (A & 0x0f) + (tmp & 0x0f) + c;
-			int hi = (A & 0xf0) + (tmp & 0xf0);
-			P &= ~_fC;
-			if (lo > 0x09)
-			{
-				hi += 0x10;
-				lo += 0x06;
-			}
-			if (hi > 0x90)
-				hi += 0x60;
-			if (hi & 0xff00)
-				P |= _fC;
-			A = (lo & 0x0f) + (hi & 0xf0);
-			h6280_cycles(1);
-		}
+			adc_bcd(tmp);
 		else
 		{
 			int c = (P & _fC);
@@ -1151,7 +1155,7 @@ static inline void adc(uint8_t tmp)
 /* 6280 ********************************************************
  *  AND Logical and
  ***************************************************************/
-static inline void tand(uint8_t tmp)
+static __attribute__((noinline, cold)) void tand(uint8_t tmp)
 {
 	clear_t();
 	int tflagtemp = rd_tfl();
@@ -1161,7 +1165,7 @@ static inline void tand(uint8_t tmp)
 	h6280_cycles(3);
 }
 
-static inline void and_a(uint8_t tmp)
+static inline PCE_HOT_FN void and_a(uint8_t tmp)
 {
 	if(P & _fT)
 		tand(tmp);
@@ -1457,7 +1461,7 @@ static inline void dey(void)
 /* 6280 ********************************************************
  *  EOR Logical exclusive or
  ***************************************************************/
-static inline void teor(uint8_t tmp)
+static __attribute__((noinline, cold)) void teor(uint8_t tmp)
 {
 	clear_t();
 	int tflagtemp = rd_tfl();
@@ -1467,7 +1471,7 @@ static inline void teor(uint8_t tmp)
 	h6280_cycles(3);
 }
 
-static inline void eor(uint8_t tmp)
+static inline PCE_HOT_FN void eor(uint8_t tmp)
 {
 	if(P & _fT)
 		teor(tmp);
@@ -1587,7 +1591,7 @@ static inline void nop(void)
  *  ORA Logical inclusive or
  ***************************************************************/
 
-static inline void tora(uint8_t tmp)
+static __attribute__((noinline, cold)) void tora(uint8_t tmp)
 {
 	clear_t();
 	int tflagtemp = rd_tfl();
@@ -1597,7 +1601,7 @@ static inline void tora(uint8_t tmp)
 	h6280_cycles(3);
 }
 
-static inline void ora(uint8_t tmp)
+static inline PCE_HOT_FN void ora(uint8_t tmp)
 {
 	if(P & _fT)
 		tora(tmp);
@@ -1790,7 +1794,7 @@ static inline void say(void)
 /* 6280 ********************************************************
  *  SBC Subtract with carry
  ***************************************************************/
-static inline void tsbc(uint8_t tmp)
+static __attribute__((noinline, cold)) void tsbc(uint8_t tmp)
 {
 	clear_t();
 	int tflagtemp = rd_tfl();
@@ -1828,29 +1832,32 @@ static inline void tsbc(uint8_t tmp)
 	h6280_cycles(3);
 }
 
-static inline void sbc(uint8_t tmp)
+static __attribute__((noinline, cold)) void sbc_bcd(uint8_t tmp)
+{
+	int c = (P & _fC) ^ _fC;
+	int sum = A - tmp - c;
+	int lo = (A & 0x0f) - (tmp & 0x0f) - c;
+	int hi = (A & 0xf0) - (tmp & 0xf0);
+	P &= ~_fC;
+	if (lo & 0xf0)
+		lo -= 6;
+	if (lo & 0x80)
+		hi -= 0x10;
+	if (hi & 0x0f00)
+		hi -= 0x60;
+	if ((sum & 0xff00) == 0)
+		P |= _fC;
+	A = (lo & 0x0f) + (hi & 0xf0);
+	h6280_cycles(1);
+}
+
+static inline PCE_HOT_FN void sbc(uint8_t tmp)
 {
 	if(P & _fT)
 		tsbc(tmp);
 	else {
 		if (P & _fD)
-		{
-			int c = (P & _fC) ^ _fC;
-			int sum = A - tmp - c;
-			int lo = (A & 0x0f) - (tmp & 0x0f) - c;
-			int hi = (A & 0xf0) - (tmp & 0xf0);
-			P &= ~_fC;
-			if (lo & 0xf0)
-				lo -= 6;
-			if (lo & 0x80)
-				hi -= 0x10;
-			if (hi & 0x0f00)
-				hi -= 0x60;
-			if ((sum & 0xff00) == 0)
-				P |= _fC;
-			A = (lo & 0x0f) + (hi & 0xf0);
-			h6280_cycles(1);
-		}
+			sbc_bcd(tmp);
 		else
 		{
 			int c = (P & _fC) ^ _fC;
@@ -2535,7 +2542,7 @@ OPH(op,ff) { h6280_cycles(4); bbs(7, rd_zpg());         } // 6/8 BBS7 ZPG,REL
 //-------------------------------------------------
 
 
-static void execute_run(void)
+static PCE_HOT void execute_run(void)
 {
 	int in;
 

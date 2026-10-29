@@ -1534,6 +1534,43 @@ static void copy_progress(uint32_t done, uint32_t total, void *user)
 }
 extern "C" void (*emu_rom_progress)(uint32_t, uint32_t, void *);
 void (*emu_rom_progress)(uint32_t, uint32_t, void *) = nullptr;
+
+// ── a bench run ──────────────────────────────────────────────────────────────────────────────────────────
+// <card>/emu_bench.txt turns the next game into a measurement nobody has to sit through: it plays for `secs`, pressing
+// what the script says, takes a screenshot at `shot` s, and ends (from /api/play, or a gallery's "open with", the app
+// then quits: a Solo boot reboots into the network, where the trace is read). The file is removed as the game starts,
+// so a crash never repeats. Lines: "secs <s>", "shot <s>", "knob <i> <v>" (emu_bench_knob, see emu_romstore.h),
+// "press <from ms> <to ms> <buttons, hex: NUCLEO_GB_*>".
+extern "C" int emu_bench_knob[4];
+int emu_bench_knob[4];
+struct BenchPress { int32_t from, to; uint8_t mask; };
+static struct { bool on; int secs, shot; int n; BenchPress p[48]; } s_bench;
+static void bench_take(void)
+{
+    memset(&s_bench, 0, sizeof s_bench);
+    memset(emu_bench_knob, 0, sizeof emu_bench_knob);
+    FILE *f = fopen(NUCLEO_SD_MOUNT "/emu_bench.txt", "r");
+    if (!f) return;
+    char ln[64];
+    while (fgets(ln, sizeof ln, f)) {
+        int a = 0, b = 0; unsigned m = 0;
+        if (sscanf(ln, "secs %d", &a) == 1) s_bench.secs = a;
+        else if (sscanf(ln, "shot %d", &a) == 1) s_bench.shot = a;
+        else if (sscanf(ln, "knob %d %d", &a, &b) == 2 && a >= 0 && a < 4) emu_bench_knob[a] = b;
+        else if (sscanf(ln, "press %d %d %x", &a, &b, &m) == 3 && s_bench.n < 48) s_bench.p[s_bench.n++] = { a, b, (uint8_t)m };
+    }
+    fclose(f);
+    remove(NUCLEO_SD_MOUNT "/emu_bench.txt");
+    s_bench.on = s_bench.secs > 0;
+    if (s_bench.on) trace("  bench: %d s, shot at %d s, knobs %d %d %d %d, %d presses", s_bench.secs, s_bench.shot,
+                          emu_bench_knob[0], emu_bench_knob[1], emu_bench_knob[2], emu_bench_knob[3], s_bench.n);
+}
+static uint8_t bench_buttons(int32_t ms)
+{
+    uint8_t b = 0;
+    for (int i = 0; i < s_bench.n; i++) if (ms >= s_bench.p[i].from && ms < s_bench.p[i].to) b |= s_bench.p[i].mask;
+    return b;
+}
 static void fail_box(const char *what)
 {
     snprintf(st->fail, sizeof st->fail, "%s", what);
@@ -1641,6 +1678,7 @@ static void play_session(const char *name)
     }
 
     esp_task_wdt_reset();
+    bench_take();                                  // before the open: the core reads its levers there
     emu_rom_progress = copy_progress;              // a big cartridge's first copy into the flash, on screen
     esp_err_t err = SYS->open(path);
     esp_task_wdt_reset();
@@ -1718,6 +1756,8 @@ static void play_session(const char *name)
     uint8_t held = 0;
     int64_t next = esp_timer_get_time();
     const int64_t FRAME_US = SYS->frame_us;             // the console's real frame time (DMG 59.73 Hz, GG 59.92 Hz)
+    const int64_t bench_t0 = next;
+    bool bench_shot = false;
 
     while (st->running) {
         esp_task_wdt_reset();
@@ -1751,6 +1791,12 @@ static void play_session(const char *name)
         if (dn(' '))             b |= NUCLEO_GB_SELECT;   // Space
         if (st->mute_keys) { if (b) b = 0; else st->mute_keys = false; }
         held = b;
+        if (s_bench.on) {
+            const int32_t ms = (int32_t)((esp_timer_get_time() - bench_t0) / 1000);
+            held |= bench_buttons(ms);
+            if (s_bench.shot && !bench_shot && ms >= s_bench.shot * 1000) { bench_shot = true; shot_start(); }
+            if (ms >= s_bench.secs * 1000) { trace("  bench: done"); st->running = false; }
+        }
 
         // TAB held = unpaced. Menus, grinding and long text are what a real player fast-forwards
         // through, and holding a key is the right gesture: release and the game is back at speed.

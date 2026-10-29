@@ -37,6 +37,12 @@ SECTIONS
   .text           :
   {
     *(.got.plt* .plt*)
+    /* A module's hottest code, its literal pool right before it (l32r reaches back), between two symbols it may lock
+       in the instruction cache (__attribute__((section(".text.nap_hot")))). */
+    . = ALIGN(32);
+    _nap_hot_start = .;
+    *(.literal.nap_hot .text.nap_hot)
+    _nap_hot_end = .;
     *(.literal .text .stub .literal.* .text.*)
   }                                                                      :text =0
   .got.loc        : { *(.got.loc) }                                      :text
