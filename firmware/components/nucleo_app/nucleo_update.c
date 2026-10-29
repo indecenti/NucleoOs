@@ -10,6 +10,7 @@
 #include "nucleo_i18n.h"
 #include "nucleo_arb.h"
 #include "nucleo_guest.h"   // hosted by M5Launcher: the next OTA slot is another app's -> no self-OTA
+#include "nucleo_store.h"   // the daily check also refreshes the Store's native catalog
 
 #include <stdio.h>
 #include <string.h>
@@ -124,7 +125,10 @@ static void nvs_get_string(const char *key, char *out, size_t cap)
 // ── tiny HTTPS GET (weather-get pattern: heap gate + arbiter outside, cleanup always) ─────────
 // Fills buf (NUL-terminated), returns body length, -1 (network / HTTP failure) or -2 (the heap can't fit
 // a TLS handshake right now). Caller holds the arbiter token.
-#define UPD_TLS_MIN_BLOCK (42 * 1024)
+// The same figure the Store and the SD-content installer download with, measured on the device. The
+// running OS has ~21 KB at best: it fits only with the 32 KB screen canvas lent (nucleo_update_bg_tick,
+// the Updates app) or in the fresh-heap Solo boot of an install.
+#define UPD_TLS_MIN_BLOCK 22000u
 // One screen line (Font0, ASCII): the honest reason a check can't run — and where it does work.
 #define LOWRAM_IT "Poca RAM: controlla dal browser"
 #define LOWRAM_EN "Low RAM: check from the browser"
@@ -134,10 +138,8 @@ static void nvs_get_string(const char *key, char *out, size_t cap)
 static int small_get(const char *url, char *buf, size_t cap)
 {
     // HARD heap gate. An outbound TLS handshake to GitHub Pages needs a large contiguous block; below
-    // this it does NOT fail cleanly — mbedTLS can OOM mid-handshake and STALL, holding the heap. On
-    // this no-PSRAM chip the largest block is ~30 KB even at its best (fresh boot, canvas freed), so
-    // in practice this gate refuses the fetch rather than risk a stall. The reliable release check is
-    // the browser/web path; the device never gambles its stability on a handshake that may not fit.
+    // this it does NOT fail cleanly — mbedTLS can OOM mid-handshake and STALL, holding the heap. The
+    // callers lend the screen canvas first, so the block is there; without it the fetch is refused.
     size_t largest = heap_caps_get_largest_free_block(MALLOC_CAP_INTERNAL);
     if (largest < UPD_TLS_MIN_BLOCK) {
         ESP_LOGW(TAG, "heap too low for TLS (largest=%u, need >=%u) — skipping fetch", (unsigned)largest, (unsigned)UPD_TLS_MIN_BLOCK);
@@ -397,6 +399,65 @@ bool nucleo_update_kick_check(bool from_boot)
         return false;
     }
     return true;
+}
+
+// ── daily background check ───────────────────────────────────────────────────────────────────────
+// A Cardputer used on its own must still hear of a new firmware and of newer Store apps. Once a day,
+// while the launcher sits idle with Wi-Fi up, the UI task lends the screen canvas (UPD_BG_LEND), the
+// release check runs, then the Store's native catalog is refreshed, the canvas comes back
+// (UPD_BG_RETURN) and a notification says how many installed apps have an update.
+#define UPD_BG_RETRY_MS (3600 * 1000)        // a failed or not-yet-due attempt looks again in an hour
+static int s_bg;                             // 0 idle, 1 kick the check, 2 checking, 3 Store refresh
+static int64_t s_bg_next = 90 * 1000;        // not before the boot burst has settled
+
+static void bg_store_notify(void)
+{
+    uint32_t sig = 0, old = 0;
+    int n = nucleo_store_updates(ST_CH_NATIVE, &sig);
+    if (!nvs_ready()) return;
+    nvs_get_u32(s_nvs, "stsig", &old);
+    if (sig == old) return;                  // the same apps, the same versions: said already
+    nvs_set_u32(s_nvs, "stsig", sig);
+    nvs_commit(s_nvs);
+    if (n <= 0) return;
+    char body[72];
+    snprintf(body, sizeof body, "%d %s", n,
+             UT("app da aggiornare - apri lo Store", "app updates - open the Store", "apps por actualizar - abre la Tienda",
+                "apps a mettre a jour - ouvrez le Store", "App-Updates - oeffne den Store"));
+    nucleo_notify_emit("store", NOTIFY_INFO, "store-updates",
+                       UT("Aggiornamenti app", "App updates", "Actualizaciones de apps", "Mises a jour d'apps", "App-Updates"),
+                       body, "app:store");
+}
+
+int nucleo_update_bg_tick(bool quiet)
+{
+    const int64_t now = esp_timer_get_time() / 1000;
+    switch (s_bg) {
+    case 0: {
+        if (!quiet || now < s_bg_next || s_task_alive || !wifi_sta_connected()) return UPD_BG_NONE;
+        s_bg_next = now + UPD_BG_RETRY_MS;
+        uint32_t last = 0;
+        if (nvs_ready()) nvs_get_u32(s_nvs, "lastck", &last);
+        if (!upd_check_due((uint32_t)time(NULL), last, UPD_CHECK_INTERVAL_S)) return UPD_BG_NONE;
+        s_bg = 1;
+        return UPD_BG_LEND;                  // the check starts on the next tick, with the canvas freed
+    }
+    case 1:
+        s_bg = nucleo_update_kick_check(true) ? 2 : 4;
+        return UPD_BG_NONE;
+    case 2:
+        if (s_task_alive) return UPD_BG_NONE;
+        s_bg = (nucleo_store_native_abi() && nucleo_store_start(NST_OP_REFRESH, ST_CH_NATIVE, NULL)) ? 3 : 4;
+        return UPD_BG_NONE;
+    case 3:
+        if (nucleo_store_status() == NST_BUSY) return UPD_BG_NONE;
+        s_bg = 0;
+        if (nucleo_store_status() == NST_DONE) bg_store_notify();
+        return UPD_BG_RETURN;
+    default:
+        s_bg = 0;
+        return UPD_BG_RETURN;
+    }
 }
 
 // ── install worker ─────────────────────────────────────────────────────────────────────────────

@@ -31,6 +31,7 @@ bool nucleo_screen_acquire(void)
     return s_screen_alive;
 }
 void nucleo_screen_release(void) { if (s_screen_alive) { s_screen.deleteSprite(); s_screen_alive = false; } }
+void nucleo_screen_hold(bool on) { if (on) nucleo_screen_release(); }
 M5Canvas *nucleo_screen(void)
 {
     if (!g_host.canvas_ok) nucleo_screen_release();

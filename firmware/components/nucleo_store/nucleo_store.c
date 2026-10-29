@@ -182,3 +182,25 @@ bool nucleo_store_check_installed(const char *id, const char *rel, uint8_t sha[3
     if (rc != ST_OK) ESP_LOGE(TAG, "%s/%s does not match its signed package (rc=%d)", id, rel, rc);
     return rc == ST_OK;
 }
+
+int nucleo_store_updates(const char *channel, uint32_t *sig)
+{
+    int n = 0;
+    uint32_t h = 2166136261u;
+    st_app_t *a = malloc(sizeof *a);
+    FILE *f = a ? st_catalog_open(NUCLEO_SD_MOUNT, channel) : NULL;
+    while (f && st_catalog_next(f, a)) {
+        bool system = false;
+        uint32_t have = st_installed(NUCLEO_SD_MOUNT, a->id, &system);
+        if (!have || system || have >= a->code) continue;
+        if (st_ver_cmp(nucleo_store_os_version(), a->min_os) < 0) continue;            // needs a newer firmware
+        if (!strcmp(a->kind, "native") && a->abi > nucleo_store_native_abi()) continue;
+        n++;
+        for (const char *p = a->id; *p; p++) h = (h ^ (uint8_t)*p) * 16777619u;
+        h = (h ^ a->code) * 16777619u;
+    }
+    if (f) fclose(f);
+    free(a);
+    if (sig) *sig = n ? h : 0;
+    return n;
+}

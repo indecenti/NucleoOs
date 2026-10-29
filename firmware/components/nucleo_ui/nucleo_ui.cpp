@@ -69,12 +69,14 @@ static M5Canvas s_screen(&d);
 static bool     s_screen_alive = false;
 static bool     s_screen_failed = false;   // last acquire failed -> don't thrash createSprite every frame
 static int64_t  s_last_try_us = 0;         // when we last attempted a (re)acquire
+static int      s_screen_held = 0;         // lent to network jobs (a count): nothing takes it back until they end
 
 // Explicit (re)allocation — ALWAYS attempts, e.g. from close_app() right after a decoder freed its
 // RAM. On success clears the "failed" latch so the lazy getter buffers again.
 bool nucleo_screen_acquire(void)
 {
     if (s_screen_alive) return true;
+    if (s_screen_held) return false;
     // M5Canvas(&d) defaults to _psram=true, so createSprite probes the SPIRAM pool FIRST. This board has
     // NO PSRAM, so that probe ALWAYS fails (caps 0x404 = SPIRAM|8BIT) → it fires the global OOM hook
     // (noisy boot "oom: alloc fail 32404 B" + a polluted /api/diag watermark) before silently falling
@@ -114,6 +116,9 @@ bool nucleo_screen_acquire(void)
 // PSRAM-less chip. The launcher re-acquires it (close_app / lazily) once the decoder frees its RAM.
 // Clearing the latch here lets the next lazy access try once (RAM was just freed).
 void nucleo_screen_release(void) { if (s_screen_alive) { s_screen.deleteSprite(); s_screen_alive = false; } s_screen_failed = false; }
+// Lend the canvas to a TLS handshake (the one 32 KB block this heap has): while held, no lazy getter, app
+// open/close or wake re-allocates it under the handshake, and the UI draws direct. Unhold, then acquire.
+void nucleo_screen_hold(bool on) { if (on) { s_screen_held++; nucleo_screen_release(); } else if (s_screen_held) s_screen_held--; }
 // Lazy getter for the buffered render path. Tries once; if it can't fit (a decoder holds the RAM)
 // it RE-tries at most ~every 400 ms — not every frame. That spacing matters both ways: a per-frame
 // failed createSprite(32 KB) is the lag in the track list while a song plays; but NEVER retrying

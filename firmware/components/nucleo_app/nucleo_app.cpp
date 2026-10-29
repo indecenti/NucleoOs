@@ -1992,6 +1992,16 @@ void nucleo_app_run(void)
             if (!s_sdc_remind_at) s_sdc_remind_at = now + 10000;
             else if (now >= s_sdc_remind_at) s_sdc_remind_at = sdc_boot_reminder() ? -1 : now + 10000;
         }
+        // Once a day, launcher idle for a minute: the release check and the Store's catalog, on the screen canvas
+        // lent for the TLS handshake (nucleo_update.c). Meanwhile everything draws direct.
+        switch (nucleo_update_bg_tick(s_active == -1 && !s_remote && !s_solo_active && !s_app_direct && now - s_pm_act > 60000)) {
+        case UPD_BG_LEND: nucleo_screen_hold(true); break;
+        case UPD_BG_RETURN:
+            nucleo_screen_hold(false);
+            if (!s_app_direct && !s_remote) for (int i = 0; i < 6 && !nucleo_screen_acquire(); i++) vTaskDelay(pdMS_TO_TICKS(20));
+            nucleo_app_force_repaint();
+            break;
+        }
         // A blocking modal (video playback, file dialogs) owns the keyboard without passing through here:
         // a long gap since the last iteration means the user was busy in it, so count it as activity —
         // else the idle screen-off/saver would fire the instant the modal returns.

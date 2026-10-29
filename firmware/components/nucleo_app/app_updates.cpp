@@ -1,9 +1,9 @@
 // app_updates — native release-update surface: the boot dialog (how to update / next boot / ignore).
 // Engine in nucleo_update.c, decisions in update_policy.c (host-gated).
 //
-// The on-device download can't run on this chip today: the TLS fetch needs a ~42 KB contiguous block the
-// heap never has (even the lean Solo boot tops out near 32 KB), and the release site sends 16 KB TLS records
-// to an 8 KB receive buffer. So the dialog no longer offers a button that ends in "site unreachable": on a
+// "Check now" lends the screen canvas to the TLS handshake (the one block of the ~22 KB it needs), as the
+// daily background check does. The on-device download still can't run on this chip today: the release site
+// sends 16 KB TLS records to an 8 KB receive buffer. So the dialog no longer offers a button that ends in "site unreachable": on a
 // stand-alone unit it shows exactly where the update works — the web console's Settings > Updates, which
 // verifies the image (SHA-256) and is covered by the automatic rollback; under M5Launcher, the Launcher's
 // own OTA list. (The Solo install engine below stays for a future SD-staged installer.)
@@ -27,6 +27,8 @@
 #include <string.h>
 #include <stdio.h>
 #include "esp_app_desc.h"
+#include "freertos/FreeRTOS.h"
+#include "freertos/task.h"
 
 // Reboot-into-Solo (fresh, unfragmented heap) for the install — the outbound TLS + flash need a big
 // contiguous block that only a fresh boot has. Provided by nucleo_app.cpp (link-time, no header dep).
@@ -56,6 +58,7 @@ static bool s_dismissed_now = false;   // "ignore this version" chosen in this s
 static bool s_busy_retry = false;      // install couldn't start (check running) — show a retry hint
 static bool s_flash_dd = false;        // flash screen runs canvas-free + direct-draw (max heap for TLS)
 static bool s_flash_bg = false;        // the static flash background has been painted once
+static bool s_lent = false;            // "Check now": the canvas is lent to the TLS handshake until it ends
 static upd_phase_t s_last_phase = UPD_IDLE;
 static int  s_last_pct = -2;
 static int  s_last_kb  = -1;            // also redraw on bytes-received change (live counter / barber-pole)
@@ -124,6 +127,7 @@ static void act_row(int row)
         else if (row == 1) { nucleo_app_exit(); }                       // next boot: persist nothing
         else if (row == 2) { nucleo_update_dismiss_latest(); s_dismissed_now = true; s_sel = 0; set_hint_for_ui(); mark(); }
     } else {
+        if (!s_lent) { nucleo_screen_hold(true); s_lent = true; }       // the handshake's block: the screen canvas
         if (!nucleo_update_kick_check(false)) s_busy_retry = true;      // a check is already running
         mark();
     }
@@ -431,8 +435,18 @@ static void draw_companion(void)
                 : PT("INVIO controlla  ESC esci", "ENTER check  ESC exit", "INTRO comprobar  ESC salir", "ENTREE verifier  ESC quitter", "ENTER pruefen  ESC beenden"));
 }
 
+static void canvas_back(void)
+{
+    if (!s_lent) return;
+    s_lent = false;
+    nucleo_screen_hold(false);
+    for (int i = 0; i < 6 && !nucleo_screen_acquire(); i++) vTaskDelay(pdMS_TO_TICKS(20));
+    nucleo_app_force_repaint();
+}
+
 static void on_draw(void)
 {
+    if (s_lent && !nucleo_update_busy()) canvas_back();
     if (!s_dirty) return;
     s_dirty = false;
     if (nucleo_app_two_screens()) { draw_companion(); return; }
@@ -461,6 +475,7 @@ static void on_enter(void)
 
 static void on_exit(void)
 {
+    canvas_back();
     // Leave direct-draw mode so the framework re-acquires the canvas for the next app.
     if (s_flash_dd) { nucleo_app_set_direct_draw(false); s_flash_dd = false; s_flash_bg = false; }
     // Restore the reclaimed subsystems if an install bailed out (success path never returns —

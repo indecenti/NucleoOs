@@ -133,15 +133,25 @@ The web OS, the apps and ANIMA's knowledge live on the SD card, and each release
 ## Native OS path
 
 For users who live in the native launcher. **The device does not install firmware by itself**, and the
-dialog says so plainly. Two hard limits stand in the way on this chip: the TLS fetch needs a ~42 KB
-contiguous block the heap never has once the OS is up (even the lean Solo boot tops out near 32 KB), and the
-release site sends 16 KB TLS records to an 8 KB receive buffer (the SD-content installer gets around that
-with 6 KB Range windows; an SD-staged firmware installer is the way forward).
+dialog says so plainly: the release site sends 16 KB TLS records to an 8 KB receive buffer (the SD-content
+installer gets around that with 6 KB Range windows; an SD-staged firmware installer is the way forward).
+The check itself is small and works: its handshake needs ~22 KB contiguous (`UPD_TLS_MIN_BLOCK`, the same
+figure the Store downloads with), which the running OS has only with the 32 KB screen canvas lent.
 
 **What the device knows.** The newest release it has learned comes from two sources and **the newer one
 wins** (`best_known_latest`): the card's `/system/config/update.json`, bridged by any browser that ran the
 check, and the device's own `version.json` check. That check is attempted only when the heap can fit the
 handshake (`UPD_TLS_MIN_BLOCK`) — decided *before* spawning its task, so no RAM is held just to be refused.
+
+**Daily background check** (`nucleo_update_bg_tick`, driven by the run loop). A Cardputer used on its own,
+never opened in a browser, must still hear of a new firmware and of newer Store apps. Once a day (the NVS
+`lastck` throttle; a failed attempt looks again after an hour), when the launcher has sat untouched for a
+minute with Wi-Fi up and no remote session, the run loop lends the canvas (`nucleo_screen_hold(true)`: no
+lazy getter, app open/close or wake can take it back meanwhile, everything draws direct), the release check
+runs, then the Store's native catalog is refreshed, and the canvas comes back. A newer release is the `ota`
+notification above (and the boot dialog next boot); installed apps with a newer version in the catalog are
+one `store` notification ("N app updates - open the Store", action `app:store`), said once per set of
+apps and versions (NVS `stsig`), not every day.
 A newer, non-dismissed release becomes a notification (`src:"ota"`, WARN for a security release); the
 **boot dialog needs no network** — `nucleo_update_dialog_pending()` (pure NVS + `upd_should_show_at`).
 
@@ -154,8 +164,9 @@ A newer, non-dismissed release becomes a notification (`src:"ota"`, WARN for a s
   prompts again — unless it is a **security** release, which comes back after 7 days
   (`UPD_SECURITY_REMIND_S`): reminded, never nagged every boot. A newer tag always prompts.
 
-**Manual entry.** The Updates app lives in the System category: "Check now" runs the device's check, and a
-heap too tight for it says so ("Low RAM: check from the browser") instead of blaming the network.
+**Manual entry.** The Updates app lives in the System category: "Check now" lends the canvas the same way
+and runs the device's check; a heap still too tight for it says so ("Low RAM: check from the browser")
+instead of blaming the network.
 
 **Files:** `firmware/components/nucleo_app/nucleo_update.c` (engine: check worker + the Solo install
 engine kept for a future SD-staged installer), `update_policy.c` / `update_policy.h` (pure decisions — the
