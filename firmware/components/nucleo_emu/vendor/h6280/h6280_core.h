@@ -153,11 +153,11 @@ static struct {
 /* The timer counts down with the cycles: it is not decremented with every instruction but derived from the cycle
  * counter (timer_value as of icount == tsync). timer_sync() makes timer_value current; the including file calls it
  * before reading or writing the timer, and moves tsync with icount when it gives the CPU more cycles. */
-static inline void timer_sync(void) { H6280.timer_value -= H6280.tsync - H6280.icount; H6280.tsync = H6280.icount; }
-static inline int32_t timer_now(void) { return H6280.timer_value - (H6280.tsync - H6280.icount); }
+static inline PCE_HOT_FN void timer_sync(void) { H6280.timer_value -= H6280.tsync - H6280.icount; H6280.tsync = H6280.icount; }
+static inline PCE_HOT_FN int32_t timer_now(void) { return H6280.timer_value - (H6280.tsync - H6280.icount); }
 /* Where the run loop's fast path stops: at the end of the leg (0), at the cycle the timer reaches zero, or after this
  * instruction when an interrupt is pending (INT32_MAX). Anything that may make an interrupt pending sets it so. */
-static inline void run_stop(void)
+static inline PCE_HOT_FN void run_stop(void)
 {
     if (H6280.irq_pending) { H6280.stop = INT32_MAX; return; }
     const int32_t t = H6280.timer_status ? H6280.icount - timer_now() : 0;
@@ -206,132 +206,132 @@ static void pce_port_write(uint8_t v);
 static void pce_psg_write(int reg, uint8_t v);
 typedef uint32_t offs_t;
 
-static inline uint32_t translated(uint16_t addr);
-static inline void h6280_cycles(int cyc);
-static inline void set_nz(uint8_t n);
-static inline void set_nz(uint8_t n);
-static inline void clear_t(void);
-static inline void do_interrupt(uint16_t vector);
-static inline void check_and_take_irq_lines(void);
-static inline void check_irq_lines(void);
-static inline void check_vdc_vce_penalty(uint16_t addr);
+static inline PCE_HOT_FN uint32_t translated(uint16_t addr);
+static inline PCE_HOT_FN void h6280_cycles(int cyc);
+static inline PCE_HOT_FN void set_nz(uint8_t n);
+static inline PCE_HOT_FN void set_nz(uint8_t n);
+static inline PCE_HOT_FN void clear_t(void);
+static inline PCE_HOT_FN void do_interrupt(uint16_t vector);
+static inline PCE_HOT_FN void check_and_take_irq_lines(void);
+static inline PCE_HOT_FN void check_irq_lines(void);
+static inline PCE_HOT_FN void check_vdc_vce_penalty(uint16_t addr);
 static inline PCE_HOT_FN void bra(bool cond);
-static inline void ea_zpg(void);
-static inline void ea_tflg(void);
-static inline void ea_zpx(void);
-static inline void ea_zpy(void);
-static inline void ea_abs(void);
-static inline void ea_abx(void);
-static inline void ea_aby(void);
-static inline void ea_zpi(void);
-static inline void ea_idx(void);
-static inline void ea_idy(void);
-static inline void ea_ind(void);
-static inline void ea_iax(void);
-static inline uint8_t rd_imm(void);
+static inline PCE_HOT_FN void ea_zpg(void);
+static inline PCE_HOT_FN void ea_tflg(void);
+static inline PCE_HOT_FN void ea_zpx(void);
+static inline PCE_HOT_FN void ea_zpy(void);
+static inline PCE_HOT_FN void ea_abs(void);
+static inline PCE_HOT_FN void ea_abx(void);
+static inline PCE_HOT_FN void ea_aby(void);
+static inline PCE_HOT_FN void ea_zpi(void);
+static inline PCE_HOT_FN void ea_idx(void);
+static inline PCE_HOT_FN void ea_idy(void);
+static inline PCE_HOT_FN void ea_ind(void);
+static inline PCE_HOT_FN void ea_iax(void);
+static inline PCE_HOT_FN uint8_t rd_imm(void);
 static inline PCE_HOT_FN uint8_t rd_zpg(void);
-static inline uint8_t rd_zpx(void);
-static inline uint8_t rd_zpy(void);
-static inline uint8_t rd_abs(void);
-static inline uint8_t rd_abx(void);
-static inline uint8_t rd_aby(void);
-static inline uint8_t rd_zpi(void);
-static inline uint8_t rd_idx(void);
+static inline PCE_HOT_FN uint8_t rd_zpx(void);
+static inline PCE_HOT_FN uint8_t rd_zpy(void);
+static inline PCE_HOT_FN uint8_t rd_abs(void);
+static inline PCE_HOT_FN uint8_t rd_abx(void);
+static inline PCE_HOT_FN uint8_t rd_aby(void);
+static inline PCE_HOT_FN uint8_t rd_zpi(void);
+static inline PCE_HOT_FN uint8_t rd_idx(void);
 static inline PCE_HOT_FN uint8_t rd_idy(void);
-static inline uint8_t rd_tfl(void);
-static inline void wr_zpg(uint8_t tmp);
-static inline void wr_zpx(uint8_t tmp);
-static inline void wr_zpy(uint8_t tmp);
-static inline void wr_abs(uint8_t tmp);
-static inline void wr_abx(uint8_t tmp);
-static inline void wr_aby(uint8_t tmp);
-static inline void wr_zpi(uint8_t tmp);
-static inline void wr_idx(uint8_t tmp);
-static inline void wr_idy(uint8_t tmp);
-static inline void wb_ea(uint8_t tmp);
-static inline void wb_eaz(uint8_t tmp);
-static inline void compose_p(uint8_t SET, uint8_t CLR);
-static inline void compose_p(uint8_t SET, uint8_t CLR);
+static inline PCE_HOT_FN uint8_t rd_tfl(void);
+static inline PCE_HOT_FN void wr_zpg(uint8_t tmp);
+static inline PCE_HOT_FN void wr_zpx(uint8_t tmp);
+static inline PCE_HOT_FN void wr_zpy(uint8_t tmp);
+static inline PCE_HOT_FN void wr_abs(uint8_t tmp);
+static inline PCE_HOT_FN void wr_abx(uint8_t tmp);
+static inline PCE_HOT_FN void wr_aby(uint8_t tmp);
+static inline PCE_HOT_FN void wr_zpi(uint8_t tmp);
+static inline PCE_HOT_FN void wr_idx(uint8_t tmp);
+static inline PCE_HOT_FN void wr_idy(uint8_t tmp);
+static inline PCE_HOT_FN void wb_ea(uint8_t tmp);
+static inline PCE_HOT_FN void wb_eaz(uint8_t tmp);
+static inline PCE_HOT_FN void compose_p(uint8_t SET, uint8_t CLR);
+static inline PCE_HOT_FN void compose_p(uint8_t SET, uint8_t CLR);
 static inline PCE_HOT_FN void adc(uint8_t tmp);
 static inline PCE_HOT_FN void and_a(uint8_t tmp);
-static inline uint8_t asl(uint8_t tmp);
-static inline void bbr(int bit, uint8_t tmp);
-static inline void bbs(int bit, uint8_t tmp);
-static inline void bcc(void);
-static inline void bcs(void);
-static inline void beq(void);
-static inline void bit(uint8_t tmp);
-static inline void bmi(void);
-static inline void bne(void);
-static inline void bpl(void);
-static inline void bsr(void);
-static inline void bvc(void);
-static inline void bvs(void);
-static inline void cla(void);
-static inline void clc(void);
-static inline void cld(void);
-static inline void cli(void);
-static inline void clv(void);
-static inline void clx(void);
-static inline void cly(void);
-static inline void cmp(uint8_t tmp);
-static inline void cpx(uint8_t tmp);
-static inline void cpy(uint8_t tmp);
-static inline uint8_t dec(uint8_t tmp);
-static inline void dex(void);
-static inline void dey(void);
+static inline PCE_HOT_FN uint8_t asl(uint8_t tmp);
+static inline PCE_HOT_FN void bbr(int bit, uint8_t tmp);
+static inline PCE_HOT_FN void bbs(int bit, uint8_t tmp);
+static inline PCE_HOT_FN void bcc(void);
+static inline PCE_HOT_FN void bcs(void);
+static inline PCE_HOT_FN void beq(void);
+static inline PCE_HOT_FN void bit(uint8_t tmp);
+static inline PCE_HOT_FN void bmi(void);
+static inline PCE_HOT_FN void bne(void);
+static inline PCE_HOT_FN void bpl(void);
+static inline PCE_HOT_FN void bsr(void);
+static inline PCE_HOT_FN void bvc(void);
+static inline PCE_HOT_FN void bvs(void);
+static inline PCE_HOT_FN void cla(void);
+static inline PCE_HOT_FN void clc(void);
+static inline PCE_HOT_FN void cld(void);
+static inline PCE_HOT_FN void cli(void);
+static inline PCE_HOT_FN void clv(void);
+static inline PCE_HOT_FN void clx(void);
+static inline PCE_HOT_FN void cly(void);
+static inline PCE_HOT_FN void cmp(uint8_t tmp);
+static inline PCE_HOT_FN void cpx(uint8_t tmp);
+static inline PCE_HOT_FN void cpy(uint8_t tmp);
+static inline PCE_HOT_FN uint8_t dec(uint8_t tmp);
+static inline PCE_HOT_FN void dex(void);
+static inline PCE_HOT_FN void dey(void);
 static inline PCE_HOT_FN void eor(uint8_t tmp);
-static inline uint8_t inc(uint8_t tmp);
-static inline void inx(void);
-static inline void iny(void);
-static inline void jmp(void);
-static inline void jsr(void);
-static inline void lda(uint8_t tmp);
-static inline void ldx(uint8_t tmp);
-static inline void ldy(uint8_t tmp);
-static inline uint8_t lsr(uint8_t tmp);
-static inline void nop(void);
+static inline PCE_HOT_FN uint8_t inc(uint8_t tmp);
+static inline PCE_HOT_FN void inx(void);
+static inline PCE_HOT_FN void iny(void);
+static inline PCE_HOT_FN void jmp(void);
+static inline PCE_HOT_FN void jsr(void);
+static inline PCE_HOT_FN void lda(uint8_t tmp);
+static inline PCE_HOT_FN void ldx(uint8_t tmp);
+static inline PCE_HOT_FN void ldy(uint8_t tmp);
+static inline PCE_HOT_FN uint8_t lsr(uint8_t tmp);
+static inline PCE_HOT_FN void nop(void);
 static inline PCE_HOT_FN void ora(uint8_t tmp);
-static inline void pha(void);
-static inline void php(void);
-static inline void phx(void);
-static inline void phy(void);
-static inline void pla(void);
-static inline void plp(void);
-static inline void plx(void);
-static inline void ply(void);
-static inline uint8_t rmb(int bit, uint8_t tmp);
-static inline uint8_t rol(uint8_t tmp);
-static inline uint8_t ror(uint8_t tmp);
-static inline void rti(void);
-static inline void rts(void);
-static inline void sax(void);
-static inline void say(void);
+static inline PCE_HOT_FN void pha(void);
+static inline PCE_HOT_FN void php(void);
+static inline PCE_HOT_FN void phx(void);
+static inline PCE_HOT_FN void phy(void);
+static inline PCE_HOT_FN void pla(void);
+static inline PCE_HOT_FN void plp(void);
+static inline PCE_HOT_FN void plx(void);
+static inline PCE_HOT_FN void ply(void);
+static inline PCE_HOT_FN uint8_t rmb(int bit, uint8_t tmp);
+static inline PCE_HOT_FN uint8_t rol(uint8_t tmp);
+static inline PCE_HOT_FN uint8_t ror(uint8_t tmp);
+static inline PCE_HOT_FN void rti(void);
+static inline PCE_HOT_FN void rts(void);
+static inline PCE_HOT_FN void sax(void);
+static inline PCE_HOT_FN void say(void);
 static inline PCE_HOT_FN void sbc(uint8_t tmp);
-static inline void sec(void);
-static inline void sed(void);
-static inline void sei(void);
-static inline void set(void);
-static inline uint8_t smb(int bit, uint8_t tmp);
-static inline void st0(uint8_t tmp);
-static inline void st1(uint8_t tmp);
-static inline void st2(uint8_t tmp);
-static inline uint8_t sta(void);
-static inline uint8_t stx(void);
-static inline uint8_t sty(void);
-static inline uint8_t stz(void);
-static inline void sxy(void);
-static inline void tam(uint8_t tmp);
-static inline void tax(void);
-static inline void tay(void);
-static inline void tma(uint8_t tmp);
-static inline uint8_t trb(uint8_t tmp);
-static inline uint8_t tsb(uint8_t tmp);
-static inline void tsx(void);
-static inline void tst(uint8_t imm, uint8_t tmp);
-static inline void txa(void);
-static inline void txs(void);
-static inline void tya(void);
+static inline PCE_HOT_FN void sec(void);
+static inline PCE_HOT_FN void sed(void);
+static inline PCE_HOT_FN void sei(void);
+static inline PCE_HOT_FN void set(void);
+static inline PCE_HOT_FN uint8_t smb(int bit, uint8_t tmp);
+static inline PCE_HOT_FN void st0(uint8_t tmp);
+static inline PCE_HOT_FN void st1(uint8_t tmp);
+static inline PCE_HOT_FN void st2(uint8_t tmp);
+static inline PCE_HOT_FN uint8_t sta(void);
+static inline PCE_HOT_FN uint8_t stx(void);
+static inline PCE_HOT_FN uint8_t sty(void);
+static inline PCE_HOT_FN uint8_t stz(void);
+static inline PCE_HOT_FN void sxy(void);
+static inline PCE_HOT_FN void tam(uint8_t tmp);
+static inline PCE_HOT_FN void tax(void);
+static inline PCE_HOT_FN void tay(void);
+static inline PCE_HOT_FN void tma(uint8_t tmp);
+static inline PCE_HOT_FN uint8_t trb(uint8_t tmp);
+static inline PCE_HOT_FN uint8_t tsb(uint8_t tmp);
+static inline PCE_HOT_FN void tsx(void);
+static inline PCE_HOT_FN void tst(uint8_t imm, uint8_t tmp);
+static inline PCE_HOT_FN void txa(void);
+static inline PCE_HOT_FN void txs(void);
+static inline PCE_HOT_FN void tya(void);
 static void set_irq_line(int irqline, int state);
 static uint8_t irq_status_r(offs_t offset);
 static void irq_status_w(offs_t offset, uint8_t data);
@@ -914,12 +914,12 @@ enum
 #define PCD m_pc.d
 
 
-static inline uint32_t translated(uint16_t addr)
+static inline PCE_HOT_FN uint32_t translated(uint16_t addr)
 {
 	return ((m_mmr[((addr) >> 13) & 7] << 13) | ((addr) & 0x1fff));
 }
 
-static inline void h6280_cycles(int cyc)
+static inline PCE_HOT_FN void h6280_cycles(int cyc)
 {
 	m_icount -= ((cyc) * m_clocks_per_cycle);   /* (the timer follows: timer_now) */
 }
@@ -927,7 +927,7 @@ static inline void h6280_cycles(int cyc)
 #if H6280_LAZY_FLAGS
 
 #define NZ  m_NZ
-static inline void set_nz(uint8_t n)
+static inline PCE_HOT_FN void set_nz(uint8_t n)
 {
 	P &= ~_fT;
 	NZ = ((n & _fN) << 8) | n;
@@ -935,19 +935,19 @@ static inline void set_nz(uint8_t n)
 
 #else
 
-static inline void set_nz(uint8_t n)
+static inline PCE_HOT_FN void set_nz(uint8_t n)
 {
 	P = (P & ~(_fN|_fT|_fZ)) | s_nz[n];          /* (n & _fN) | (n == 0 ? _fZ : 0), from a table */
 }
 
 #endif
 
-static inline void clear_t(void)
+static inline PCE_HOT_FN void clear_t(void)
 {
 	P &= ~_fT;
 }
 
-static inline void do_interrupt(uint16_t vector)
+static inline PCE_HOT_FN void do_interrupt(uint16_t vector)
 {
 	h6280_cycles(7);    /* 7 cycles for an int */
 	push(PCH);
@@ -959,7 +959,7 @@ static inline void do_interrupt(uint16_t vector)
 	PCH = program_read8(vector + 1);
 }
 
-static inline void check_and_take_irq_lines(void)
+static inline PCE_HOT_FN void check_and_take_irq_lines(void)
 {
 	if ( m_nmi_state != CLEAR_LINE ) {
 		m_nmi_state = CLEAR_LINE;
@@ -987,7 +987,7 @@ static inline void check_and_take_irq_lines(void)
 	}
 }
 
-static inline void check_irq_lines(void)
+static inline PCE_HOT_FN void check_irq_lines(void)
 {
 	if (!m_irq_pending)
 		m_irq_pending = 2;
@@ -999,7 +999,7 @@ static inline void check_irq_lines(void)
  * The CPU inserts 1 clock delay when accessing the VDC or VCE
  * area.
  ***************************************************************/
-static inline void check_vdc_vce_penalty(uint16_t addr)
+static inline PCE_HOT_FN void check_vdc_vce_penalty(uint16_t addr)
 {
 	if ( ( translated(addr) & 0x1FF800 ) == 0x1FE000 ) {
 		h6280_cycles(1);
@@ -1036,7 +1036,7 @@ static inline PCE_HOT_FN void bra(bool cond)
 /***************************************************************
  *  EA = zero page address
  ***************************************************************/
-static inline void ea_zpg(void)
+static inline PCE_HOT_FN void ea_zpg(void)
 {
 	ZPL = read_opcode_arg();
 	PCW++;
@@ -1046,7 +1046,7 @@ static inline void ea_zpg(void)
 /***************************************************************
  *  EA = zero page address - T flag
  ***************************************************************/
-static inline void ea_tflg(void)
+static inline PCE_HOT_FN void ea_tflg(void)
 {
 	ZPL = X;
 	EAD = ZPD;
@@ -1055,7 +1055,7 @@ static inline void ea_tflg(void)
 /***************************************************************
  *  EA = zero page address + X
  ***************************************************************/
-static inline void ea_zpx(void)
+static inline PCE_HOT_FN void ea_zpx(void)
 {
 	ZPL = read_opcode_arg() + X;
 	PCW++;
@@ -1065,7 +1065,7 @@ static inline void ea_zpx(void)
 /***************************************************************
  *  EA = zero page address + Y
  ***************************************************************/
-static inline void ea_zpy(void)
+static inline PCE_HOT_FN void ea_zpy(void)
 {
 	ZPL = read_opcode_arg() + Y;
 	PCW++;
@@ -1075,7 +1075,7 @@ static inline void ea_zpy(void)
 /***************************************************************
  *  EA = absolute address
  ***************************************************************/
-static inline void ea_abs(void)
+static inline PCE_HOT_FN void ea_abs(void)
 {
 	EAL = read_opcode_arg();
 	PCW++;
@@ -1086,7 +1086,7 @@ static inline void ea_abs(void)
 /***************************************************************
  *  EA = absolute address + X
  ***************************************************************/
-static inline void ea_abx(void)
+static inline PCE_HOT_FN void ea_abx(void)
 {
 	ea_abs();
 	EAW += X;
@@ -1095,7 +1095,7 @@ static inline void ea_abx(void)
 /***************************************************************
  *  EA = absolute address + Y
  ***************************************************************/
-static inline void ea_aby(void)
+static inline PCE_HOT_FN void ea_aby(void)
 {
 	ea_abs();
 	EAW += Y;
@@ -1104,7 +1104,7 @@ static inline void ea_aby(void)
 /***************************************************************
  *  EA = zero page indirect (65c02 pre indexed w/o X)
  ***************************************************************/
-static inline void ea_zpi(void)
+static inline PCE_HOT_FN void ea_zpi(void)
 {
 	ZPL = read_opcode_arg();
 	PCW++;
@@ -1114,7 +1114,7 @@ static inline void ea_zpi(void)
 /***************************************************************
  *  EA = zero page + X indirect (pre indexed)
  ***************************************************************/
-static inline void ea_idx(void)
+static inline PCE_HOT_FN void ea_idx(void)
 {
 	ZPL = read_opcode_arg() + X;
 	PCW++;
@@ -1124,7 +1124,7 @@ static inline void ea_idx(void)
 /***************************************************************
  *  EA = zero page indirect + Y (post indexed)
  ***************************************************************/
-static inline void ea_idy(void)
+static inline PCE_HOT_FN void ea_idy(void)
 {
 	ZPL = read_opcode_arg();
 	PCW++;
@@ -1135,7 +1135,7 @@ static inline void ea_idy(void)
 /***************************************************************
  *  EA = indirect (only used by JMP)
  ***************************************************************/
-static inline void ea_ind(void)
+static inline PCE_HOT_FN void ea_ind(void)
 {
 	ea_abs();
 	uint8_t tmp = program_read8(EAD);
@@ -1147,7 +1147,7 @@ static inline void ea_ind(void)
 /***************************************************************
  *  EA = indirect plus x (only used by JMP)
  ***************************************************************/
-static inline void ea_iax(void)
+static inline PCE_HOT_FN void ea_iax(void)
 {
 	ea_abs();
 	EAD+=X;
@@ -1157,7 +1157,7 @@ static inline void ea_iax(void)
 	EAL = tmp;
 }
 
-static inline uint8_t rd_imm(void)
+static inline PCE_HOT_FN uint8_t rd_imm(void)
 {
 	uint8_t tmp = read_opcode_arg();
 	PCW++;
@@ -1170,43 +1170,43 @@ static inline PCE_HOT_FN uint8_t rd_zpg(void)
 	return program_read8z(EAD);
 }
 
-static inline uint8_t rd_zpx(void)
+static inline PCE_HOT_FN uint8_t rd_zpx(void)
 {
 	ea_zpx();
 	return program_read8z(EAD);
 }
 
-static inline uint8_t rd_zpy(void)
+static inline PCE_HOT_FN uint8_t rd_zpy(void)
 {
 	ea_zpy();
 	return program_read8z(EAD);
 }
 
-static inline uint8_t rd_abs(void)
+static inline PCE_HOT_FN uint8_t rd_abs(void)
 {
 	ea_abs();
 	return program_read8(EAD);
 }
 
-static inline uint8_t rd_abx(void)
+static inline PCE_HOT_FN uint8_t rd_abx(void)
 {
 	ea_abx();
 	return program_read8(EAD);
 }
 
-static inline uint8_t rd_aby(void)
+static inline PCE_HOT_FN uint8_t rd_aby(void)
 {
 	ea_aby();
 	return program_read8(EAD);
 }
 
-static inline uint8_t rd_zpi(void)
+static inline PCE_HOT_FN uint8_t rd_zpi(void)
 {
 	ea_zpi();
 	return program_read8(EAD);
 }
 
-static inline uint8_t rd_idx(void)
+static inline PCE_HOT_FN uint8_t rd_idx(void)
 {
 	ea_idx();
 	return program_read8(EAD);
@@ -1218,72 +1218,72 @@ static inline PCE_HOT_FN uint8_t rd_idy(void)
 	return program_read8(EAD);
 }
 
-static inline uint8_t rd_tfl(void)
+static inline PCE_HOT_FN uint8_t rd_tfl(void)
 {
 	ea_tflg();
 	return program_read8z(EAD);
 }
 
-static inline void wr_zpg(uint8_t tmp)
+static inline PCE_HOT_FN void wr_zpg(uint8_t tmp)
 {
 	ea_zpg();
 	wb_eaz(tmp);
 }
 
-static inline void wr_zpx(uint8_t tmp)
+static inline PCE_HOT_FN void wr_zpx(uint8_t tmp)
 {
 	ea_zpx();
 	wb_eaz(tmp);
 }
 
-static inline void wr_zpy(uint8_t tmp)
+static inline PCE_HOT_FN void wr_zpy(uint8_t tmp)
 {
 	ea_zpy();
 	wb_eaz(tmp);
 }
 
-static inline void wr_abs(uint8_t tmp)
+static inline PCE_HOT_FN void wr_abs(uint8_t tmp)
 {
 	ea_abs();
 	wb_ea(tmp);
 }
 
-static inline void wr_abx(uint8_t tmp)
+static inline PCE_HOT_FN void wr_abx(uint8_t tmp)
 {
 	ea_abx();
 	wb_ea(tmp);
 }
 
-static inline void wr_aby(uint8_t tmp)
+static inline PCE_HOT_FN void wr_aby(uint8_t tmp)
 {
 	ea_aby();
 	wb_ea(tmp);
 }
 
-static inline void wr_zpi(uint8_t tmp)
+static inline PCE_HOT_FN void wr_zpi(uint8_t tmp)
 {
 	ea_zpi();
 	wb_ea(tmp);
 }
 
-static inline void wr_idx(uint8_t tmp)
+static inline PCE_HOT_FN void wr_idx(uint8_t tmp)
 {
 	ea_idx();
 	wb_ea(tmp);
 }
 
-static inline void wr_idy(uint8_t tmp)
+static inline PCE_HOT_FN void wr_idy(uint8_t tmp)
 {
 	ea_idy();
 	wb_ea(tmp);
 }
 
-static inline void wb_ea(uint8_t tmp)
+static inline PCE_HOT_FN void wb_ea(uint8_t tmp)
 {
 	program_write8(EAD, tmp);
 }
 
-static inline void wb_eaz(uint8_t tmp)
+static inline PCE_HOT_FN void wb_eaz(uint8_t tmp)
 {
 	program_write8z(EAD, tmp);
 }
@@ -1301,7 +1301,7 @@ static inline void wb_eaz(uint8_t tmp)
  ***************************************************************/
 #if H6280_LAZY_FLAGS
 
-static inline void compose_p(uint8_t SET, uint8_t CLR)
+static inline PCE_HOT_FN void compose_p(uint8_t SET, uint8_t CLR)
 {
 	P = (P & ~(_fN | _fZ | CLR)) |
 		(NZ >> 8) |
@@ -1311,7 +1311,7 @@ static inline void compose_p(uint8_t SET, uint8_t CLR)
 
 #else
 
-static inline void compose_p(uint8_t SET, uint8_t CLR)
+static inline PCE_HOT_FN void compose_p(uint8_t SET, uint8_t CLR)
 {
 	P = (P & ~CLR) | SET;
 }
@@ -1427,7 +1427,7 @@ static inline PCE_HOT_FN void and_a(uint8_t tmp)
 /* 6280 ********************************************************
  *  ASL Arithmetic shift left
  ***************************************************************/
-static inline uint8_t asl(uint8_t tmp)
+static inline PCE_HOT_FN uint8_t asl(uint8_t tmp)
 {
 	clear_t();
 	P = (P & ~_fC) | ((tmp >> 7) & _fC);
@@ -1439,7 +1439,7 @@ static inline uint8_t asl(uint8_t tmp)
 /* 6280 ********************************************************
  *  BBR Branch if bit is reset
  ***************************************************************/
-static inline void bbr(int bit, uint8_t tmp)
+static inline PCE_HOT_FN void bbr(int bit, uint8_t tmp)
 {
 	bra(!(tmp & (1<<bit)));
 }
@@ -1447,7 +1447,7 @@ static inline void bbr(int bit, uint8_t tmp)
 /* 6280 ********************************************************
  *  BBS Branch if bit is set
  ***************************************************************/
-static inline void bbs(int bit, uint8_t tmp)
+static inline PCE_HOT_FN void bbs(int bit, uint8_t tmp)
 {
 	bra(tmp & (1<<bit));
 }
@@ -1455,7 +1455,7 @@ static inline void bbs(int bit, uint8_t tmp)
 /* 6280 ********************************************************
  *  BCC Branch if carry clear
  ***************************************************************/
-static inline void bcc(void)
+static inline PCE_HOT_FN void bcc(void)
 {
 	bra(!(P & _fC));
 }
@@ -1463,7 +1463,7 @@ static inline void bcc(void)
 /* 6280 ********************************************************
  *  BCS Branch if carry set
  ***************************************************************/
-static inline void bcs(void)
+static inline PCE_HOT_FN void bcs(void)
 {
 	bra(P & _fC);
 }
@@ -1471,7 +1471,7 @@ static inline void bcs(void)
 /* 6280 ********************************************************
  *  BEQ Branch if equal
  ***************************************************************/
-static inline void beq(void)
+static inline PCE_HOT_FN void beq(void)
 {
 #if H6280_LAZY_FLAGS
 	bra(!(NZ & 0xff));
@@ -1483,7 +1483,7 @@ static inline void beq(void)
 /* 6280 ********************************************************
  *  BIT Bit test
  ***************************************************************/
-static inline void bit(uint8_t tmp)
+static inline PCE_HOT_FN void bit(uint8_t tmp)
 {
 	P = (P & ~(_fN|_fV|_fT|_fZ))
 		| ((tmp&0x80) ? _fN:0)
@@ -1494,7 +1494,7 @@ static inline void bit(uint8_t tmp)
 /* 6280 ********************************************************
  *  BMI Branch if minus
  ***************************************************************/
-static inline void bmi(void)
+static inline PCE_HOT_FN void bmi(void)
 {
 #if H6280_LAZY_FLAGS
 	bra(NZ & 0x8000);
@@ -1506,7 +1506,7 @@ static inline void bmi(void)
 /* 6280 ********************************************************
  *  BNE Branch if not equal
  ***************************************************************/
-static inline void bne(void)
+static inline PCE_HOT_FN void bne(void)
 {
 #if H6280_LAZY_FLAGS
 	bra(NZ & 0xff);
@@ -1518,7 +1518,7 @@ static inline void bne(void)
 /* 6280 ********************************************************
  *  BPL Branch if plus
  ***************************************************************/
-static inline void bpl(void)
+static inline PCE_HOT_FN void bpl(void)
 {
 #if H6280_LAZY_FLAGS
 	bra(!(NZ & 0x8000));
@@ -1548,7 +1548,7 @@ static __attribute__((noinline)) void brk()
 /* 6280 ********************************************************
  *  BSR Branch to subroutine
  ***************************************************************/
-static inline void bsr(void)
+static inline PCE_HOT_FN void bsr(void)
 {
 	push(PCH);
 	push(PCL);
@@ -1559,7 +1559,7 @@ static inline void bsr(void)
 /* 6280 ********************************************************
  *  BVC Branch if overflow clear
  ***************************************************************/
-static inline void bvc(void)
+static inline PCE_HOT_FN void bvc(void)
 {
 	bra(!(P & _fV));
 }
@@ -1567,7 +1567,7 @@ static inline void bvc(void)
 /* 6280 ********************************************************
  *  BVS Branch if overflow set
  ***************************************************************/
-static inline void bvs(void)
+static inline PCE_HOT_FN void bvs(void)
 {
 	bra(P & _fV);
 }
@@ -1575,7 +1575,7 @@ static inline void bvs(void)
 /* 6280 ********************************************************
  *  CLA Clear accumulator
  ***************************************************************/
-static inline void cla(void)
+static inline PCE_HOT_FN void cla(void)
 {
 	clear_t();
 	A = 0;
@@ -1584,7 +1584,7 @@ static inline void cla(void)
 /* 6280 ********************************************************
  *  CLC Clear carry flag
  ***************************************************************/
-static inline void clc(void)
+static inline PCE_HOT_FN void clc(void)
 {
 	clear_t();
 	P &= ~_fC;
@@ -1593,7 +1593,7 @@ static inline void clc(void)
 /* 6280 ********************************************************
  *  CLD Clear decimal flag
  ***************************************************************/
-static inline void cld(void)
+static inline PCE_HOT_FN void cld(void)
 {
 	clear_t();
 	P &= ~_fD;
@@ -1602,7 +1602,7 @@ static inline void cld(void)
 /* 6280 ********************************************************
  *  CLI Clear interrupt flag
  ***************************************************************/
-static inline void cli(void)
+static inline PCE_HOT_FN void cli(void)
 {
 	clear_t();
 	if( P & _fI )
@@ -1616,7 +1616,7 @@ static inline void cli(void)
 /* 6280 ********************************************************
  *  CLV Clear overflow flag
  ***************************************************************/
-static inline void clv(void)
+static inline PCE_HOT_FN void clv(void)
 {
 	clear_t();
 	P &= ~_fV;
@@ -1625,7 +1625,7 @@ static inline void clv(void)
 /* 6280 ********************************************************
  *  CLX Clear index X
  ***************************************************************/
-static inline void clx(void)
+static inline PCE_HOT_FN void clx(void)
 {
 	clear_t();
 	X = 0;
@@ -1634,7 +1634,7 @@ static inline void clx(void)
 /* 6280 ********************************************************
  *  CLY Clear index Y
  ***************************************************************/
-static inline void cly(void)
+static inline PCE_HOT_FN void cly(void)
 {
 	clear_t();
 	Y = 0;
@@ -1643,7 +1643,7 @@ static inline void cly(void)
 /* 6280 ********************************************************
  *  CMP Compare accumulator
  ***************************************************************/
-static inline void cmp(uint8_t tmp)
+static inline PCE_HOT_FN void cmp(uint8_t tmp)
 {
 	clear_t();
 	P &= ~_fC;
@@ -1655,7 +1655,7 @@ static inline void cmp(uint8_t tmp)
 /* 6280 ********************************************************
  *  CPX Compare index X
  ***************************************************************/
-static inline void cpx(uint8_t tmp)
+static inline PCE_HOT_FN void cpx(uint8_t tmp)
 {
 	clear_t();
 	P &= ~_fC;
@@ -1667,7 +1667,7 @@ static inline void cpx(uint8_t tmp)
 /* 6280 ********************************************************
  *  CPY Compare index Y
  ***************************************************************/
-static inline void cpy(uint8_t tmp)
+static inline PCE_HOT_FN void cpy(uint8_t tmp)
 {
 	clear_t();
 	P &= ~_fC;
@@ -1679,7 +1679,7 @@ static inline void cpy(uint8_t tmp)
 /* 6280 ********************************************************
  *  DEC Decrement memory
  ***************************************************************/
-static inline uint8_t dec(uint8_t tmp)
+static inline PCE_HOT_FN uint8_t dec(uint8_t tmp)
 {
 	clear_t();
 	tmp = (uint8_t)(tmp-1);
@@ -1690,7 +1690,7 @@ static inline uint8_t dec(uint8_t tmp)
 /* 6280 ********************************************************
  *  DEX Decrement index X
  ***************************************************************/
-static inline void dex(void)
+static inline PCE_HOT_FN void dex(void)
 {
 	clear_t();
 	X = (uint8_t)(X - 1);
@@ -1700,7 +1700,7 @@ static inline void dex(void)
 /* 6280 ********************************************************
  *  DEY Decrement index Y
  ***************************************************************/
-static inline void dey(void)
+static inline PCE_HOT_FN void dey(void)
 {
 	clear_t();
 	Y = (uint8_t)(Y - 1);
@@ -1733,7 +1733,7 @@ static inline PCE_HOT_FN void eor(uint8_t tmp)
 /* 6280 ********************************************************
  *  INC Increment memory
  ***************************************************************/
-static inline uint8_t inc(uint8_t tmp)
+static inline PCE_HOT_FN uint8_t inc(uint8_t tmp)
 {
 	clear_t();
 	tmp = (uint8_t)(tmp+1);
@@ -1744,7 +1744,7 @@ static inline uint8_t inc(uint8_t tmp)
 /* 6280 ********************************************************
  *  INX Increment index X
  ***************************************************************/
-static inline void inx(void)
+static inline PCE_HOT_FN void inx(void)
 {
 	clear_t();
 	X = (uint8_t)(X + 1);
@@ -1754,7 +1754,7 @@ static inline void inx(void)
 /* 6280 ********************************************************
  *  INY Increment index Y
  ***************************************************************/
-static inline void iny(void)
+static inline PCE_HOT_FN void iny(void)
 {
 	clear_t();
 	Y = (uint8_t)(Y + 1);
@@ -1765,7 +1765,7 @@ static inline void iny(void)
  *  JMP Jump to address
  *  set PC to the effective address
  ***************************************************************/
-static inline void jmp(void)
+static inline PCE_HOT_FN void jmp(void)
 {
 	clear_t();
 	PCD = EAD;
@@ -1776,7 +1776,7 @@ static inline void jmp(void)
  *  decrement PC (sic!) push PC hi, push PC lo and set
  *  PC to the effective address
  ***************************************************************/
-static inline void jsr(void)
+static inline PCE_HOT_FN void jsr(void)
 {
 	clear_t();
 	PCW--;
@@ -1788,7 +1788,7 @@ static inline void jsr(void)
 /* 6280 ********************************************************
  *  LDA Load accumulator
  ***************************************************************/
-static inline void lda(uint8_t tmp)
+static inline PCE_HOT_FN void lda(uint8_t tmp)
 {
 	clear_t();
 	A = (uint8_t)tmp;
@@ -1798,7 +1798,7 @@ static inline void lda(uint8_t tmp)
 /* 6280 ********************************************************
  *  LDX Load index X
  ***************************************************************/
-static inline void ldx(uint8_t tmp)
+static inline PCE_HOT_FN void ldx(uint8_t tmp)
 {
 	clear_t();
 	X = (uint8_t)tmp;
@@ -1808,7 +1808,7 @@ static inline void ldx(uint8_t tmp)
 /* 6280 ********************************************************
  *  LDY Load index Y
  ***************************************************************/
-static inline void ldy(uint8_t tmp)
+static inline PCE_HOT_FN void ldy(uint8_t tmp)
 {
 	clear_t();
 	Y = (uint8_t)tmp;
@@ -1819,7 +1819,7 @@ static inline void ldy(uint8_t tmp)
  *  LSR Logic shift right
  *  0 -> [7][6][5][4][3][2][1][0] -> C
  ***************************************************************/
-static inline uint8_t lsr(uint8_t tmp)
+static inline PCE_HOT_FN uint8_t lsr(uint8_t tmp)
 {
 	clear_t();
 	P = (P & ~_fC) | (tmp & _fC);
@@ -1831,7 +1831,7 @@ static inline uint8_t lsr(uint8_t tmp)
 /* 6280 ********************************************************
  *  NOP No operation
  ***************************************************************/
-static inline void nop(void)
+static inline PCE_HOT_FN void nop(void)
 {
 	clear_t();
 }
@@ -1863,7 +1863,7 @@ static inline PCE_HOT_FN void ora(uint8_t tmp)
 /* 6280 ********************************************************
  *  PHA Push accumulator
  ***************************************************************/
-static inline void pha(void)
+static inline PCE_HOT_FN void pha(void)
 {
 	clear_t();
 	push(A);
@@ -1872,7 +1872,7 @@ static inline void pha(void)
 /* 6280 ********************************************************
  *  PHP Push processor status (flags)
  ***************************************************************/
-static inline void php(void)
+static inline PCE_HOT_FN void php(void)
 {
 	clear_t();
 	compose_p(0,0);
@@ -1882,7 +1882,7 @@ static inline void php(void)
 /* 6280 ********************************************************
  *  PHX Push index X
  ***************************************************************/
-static inline void phx(void)
+static inline PCE_HOT_FN void phx(void)
 {
 	clear_t();
 	push(X);
@@ -1891,7 +1891,7 @@ static inline void phx(void)
 /* 6280 ********************************************************
  *  PHY Push index Y
  ***************************************************************/
-static inline void phy(void)
+static inline PCE_HOT_FN void phy(void)
 {
 	clear_t();
 	push(Y);
@@ -1900,7 +1900,7 @@ static inline void phy(void)
 /* 6280 ********************************************************
  *  PLA Pull accumulator
  ***************************************************************/
-static inline void pla(void)
+static inline PCE_HOT_FN void pla(void)
 {
 	clear_t();
 	pull(A);
@@ -1910,7 +1910,7 @@ static inline void pla(void)
 /* 6280 ********************************************************
  *  PLP Pull processor status (flags)
  ***************************************************************/
-static inline void plp(void)
+static inline PCE_HOT_FN void plp(void)
 {
 #if H6280_LAZY_FLAGS
 	pull(P);
@@ -1928,7 +1928,7 @@ static inline void plp(void)
 /* 6280 ********************************************************
  *  PLX Pull index X
  ***************************************************************/
-static inline void plx(void)
+static inline PCE_HOT_FN void plx(void)
 {
 	clear_t();
 	pull(X);
@@ -1938,7 +1938,7 @@ static inline void plx(void)
 /* 6280 ********************************************************
  *  PLY Pull index Y
  ***************************************************************/
-static inline void ply(void)
+static inline PCE_HOT_FN void ply(void)
 {
 	clear_t();
 	pull(Y);
@@ -1948,7 +1948,7 @@ static inline void ply(void)
 /* 6280 ********************************************************
  *  RMB Reset memory bit
  ***************************************************************/
-static inline uint8_t rmb(int bit, uint8_t tmp)
+static inline PCE_HOT_FN uint8_t rmb(int bit, uint8_t tmp)
 {
 	clear_t();
 	tmp &= ~(1<<bit);
@@ -1959,7 +1959,7 @@ static inline uint8_t rmb(int bit, uint8_t tmp)
  *  ROL Rotate left
  *  new C <- [7][6][5][4][3][2][1][0] <- C
  ***************************************************************/
-static inline uint8_t rol(uint8_t tmp)
+static inline PCE_HOT_FN uint8_t rol(uint8_t tmp)
 {
 	clear_t();
 	int tmp9 = (tmp << 1) | (P & _fC);
@@ -1973,7 +1973,7 @@ static inline uint8_t rol(uint8_t tmp)
  *  ROR Rotate right
  *  C -> [7][6][5][4][3][2][1][0] -> new C
  ***************************************************************/
-static inline uint8_t ror(uint8_t tmp)
+static inline PCE_HOT_FN uint8_t ror(uint8_t tmp)
 {
 	clear_t();
 	int tmp9 = tmp | (P & _fC) << 8;
@@ -1987,7 +1987,7 @@ static inline uint8_t ror(uint8_t tmp)
  *  RTI Return from interrupt
  *  pull flags, pull PC lo, pull PC hi and increment PC
  ***************************************************************/
-static inline void rti(void)
+static inline PCE_HOT_FN void rti(void)
 {
 #if H6280_LAZY_FLAGS
 	pull(P);
@@ -2010,7 +2010,7 @@ static inline void rti(void)
  *  RTS Return from subroutine
  *  pull PC lo, PC hi and increment PC
  ***************************************************************/
-static inline void rts(void)
+static inline PCE_HOT_FN void rts(void)
 {
 	clear_t();
 	pull(PCL);
@@ -2021,7 +2021,7 @@ static inline void rts(void)
 /* 6280 ********************************************************
  *  SAX Swap accumulator and index X
  ***************************************************************/
-static inline void sax(void)
+static inline PCE_HOT_FN void sax(void)
 {
 	clear_t();
 	uint8_t tmp = X;
@@ -2032,7 +2032,7 @@ static inline void sax(void)
 /* 6280 ********************************************************
  *  SAY Swap accumulator and index Y
  ***************************************************************/
-static inline void say(void)
+static inline PCE_HOT_FN void say(void)
 {
 	clear_t();
 	uint8_t tmp = Y;
@@ -2125,7 +2125,7 @@ static inline PCE_HOT_FN void sbc(uint8_t tmp)
 /* 6280 ********************************************************
  *  SEC Set carry flag
  ***************************************************************/
-static inline void sec(void)
+static inline PCE_HOT_FN void sec(void)
 {
 	clear_t();
 	P |= _fC;
@@ -2134,7 +2134,7 @@ static inline void sec(void)
 /* 6280 ********************************************************
  *  SED Set decimal flag
  ***************************************************************/
-static inline void sed(void)
+static inline PCE_HOT_FN void sed(void)
 {
 	clear_t();
 	P |= _fD;
@@ -2143,7 +2143,7 @@ static inline void sed(void)
 /* 6280 ********************************************************
  *  SEI Set interrupt flag
  ***************************************************************/
-static inline void sei(void)
+static inline PCE_HOT_FN void sei(void)
 {
 	clear_t();
 	P |= _fI;
@@ -2152,7 +2152,7 @@ static inline void sei(void)
 /* 6280 ********************************************************
  *  SET Set t flag
  ***************************************************************/
-static inline void set(void)
+static inline PCE_HOT_FN void set(void)
 {
 	P |= _fT;
 }
@@ -2160,7 +2160,7 @@ static inline void set(void)
 /* 6280 ********************************************************
  *  SMB Set memory bit
  ***************************************************************/
-static inline uint8_t smb(int bit, uint8_t tmp)
+static inline PCE_HOT_FN uint8_t smb(int bit, uint8_t tmp)
 {
 	clear_t();
 	tmp |= (1<<bit);
@@ -2170,7 +2170,7 @@ static inline uint8_t smb(int bit, uint8_t tmp)
 /* 6280 ********************************************************
  *  ST0 Store at hardware address 0
  ***************************************************************/
-static inline void st0(uint8_t tmp)
+static inline PCE_HOT_FN void st0(uint8_t tmp)
 {
 	clear_t();
 	pce_vdc_st(0, tmp);
@@ -2179,7 +2179,7 @@ static inline void st0(uint8_t tmp)
 /* 6280 ********************************************************
  *  ST1 Store at hardware address 2
  ***************************************************************/
-static inline void st1(uint8_t tmp)
+static inline PCE_HOT_FN void st1(uint8_t tmp)
 {
 	clear_t();
 	pce_vdc_st(2, tmp);
@@ -2188,7 +2188,7 @@ static inline void st1(uint8_t tmp)
 /* 6280 ********************************************************
  *  ST2 Store at hardware address 3
  ***************************************************************/
-static inline void st2(uint8_t tmp)
+static inline PCE_HOT_FN void st2(uint8_t tmp)
 {
 	clear_t();
 	pce_vdc_st(3, tmp);
@@ -2197,7 +2197,7 @@ static inline void st2(uint8_t tmp)
 /* 6280 ********************************************************
  *  STA Store accumulator
  ***************************************************************/
-static inline uint8_t sta(void)
+static inline PCE_HOT_FN uint8_t sta(void)
 {
 	clear_t();
 	return A;
@@ -2206,7 +2206,7 @@ static inline uint8_t sta(void)
 /* 6280 ********************************************************
  *  STX Store index X
  ***************************************************************/
-static inline uint8_t stx(void)
+static inline PCE_HOT_FN uint8_t stx(void)
 {
 	clear_t();
 	return X;
@@ -2215,7 +2215,7 @@ static inline uint8_t stx(void)
 /* 6280 ********************************************************
  *  STY Store index Y
  ***************************************************************/
-static inline uint8_t sty(void)
+static inline PCE_HOT_FN uint8_t sty(void)
 {
 	clear_t();
 	return Y;
@@ -2224,7 +2224,7 @@ static inline uint8_t sty(void)
 /* 6280 ********************************************************
  * STZ  Store zero
  ***************************************************************/
-static inline uint8_t stz(void)
+static inline PCE_HOT_FN uint8_t stz(void)
 {
 	clear_t();
 	return 0;
@@ -2233,7 +2233,7 @@ static inline uint8_t stz(void)
 /* H6280 *******************************************************
  *  SXY Swap index X and index Y
  ***************************************************************/
-static inline void sxy(void)
+static inline PCE_HOT_FN void sxy(void)
 {
 	clear_t();
 	uint8_t tmp = X;
@@ -2265,7 +2265,7 @@ static __attribute__((noinline)) void tai()
 /* H6280 *******************************************************
  *  TAM Transfer accumulator to memory mapper register(s)
  ***************************************************************/
-static inline void tam(uint8_t tmp)
+static inline PCE_HOT_FN void tam(uint8_t tmp)
 {
 	clear_t();
 	if (tmp&0x01) { m_mmr[0] = A; pce_mpr_changed(0); }
@@ -2281,7 +2281,7 @@ static inline void tam(uint8_t tmp)
 /* 6280 ********************************************************
  *  TAX Transfer accumulator to index X
  ***************************************************************/
-static inline void tax(void)
+static inline PCE_HOT_FN void tax(void)
 {
 	clear_t();
 	X = A;
@@ -2291,7 +2291,7 @@ static inline void tax(void)
 /* 6280 ********************************************************
  *  TAY Transfer accumulator to index Y
  ***************************************************************/
-static inline void tay(void)
+static inline PCE_HOT_FN void tay(void)
 {
 	clear_t();
 	Y = A;
@@ -2378,7 +2378,7 @@ static __attribute__((noinline)) void tin()
  *  TMA Transfer memory mapper register(s) to accumulator
  *  the highest bit set in tmp is the one that counts
  ***************************************************************/
-static inline void tma(uint8_t tmp)
+static inline PCE_HOT_FN void tma(uint8_t tmp)
 {
 	clear_t();
 	if (tmp&0x01) A = m_mmr[0];
@@ -2394,7 +2394,7 @@ static inline void tma(uint8_t tmp)
 /* 6280 ********************************************************
  * TRB  Test and reset bits
  ***************************************************************/
-static inline uint8_t trb(uint8_t tmp)
+static inline PCE_HOT_FN uint8_t trb(uint8_t tmp)
 {
 	clear_t();
 	P = (P & ~(_fN|_fV|_fT|_fZ))
@@ -2408,7 +2408,7 @@ static inline uint8_t trb(uint8_t tmp)
 /* 6280 ********************************************************
  * TSB  Test and set bits
  ***************************************************************/
-static inline uint8_t tsb(uint8_t tmp)
+static inline PCE_HOT_FN uint8_t tsb(uint8_t tmp)
 {
 	clear_t();
 	P = (P & ~(_fN|_fV|_fT|_fZ))
@@ -2422,7 +2422,7 @@ static inline uint8_t tsb(uint8_t tmp)
 /* 6280 ********************************************************
  *  TSX Transfer stack LSB to index X
  ***************************************************************/
-static inline void tsx(void)
+static inline PCE_HOT_FN void tsx(void)
 {
 	clear_t();
 	X = S;
@@ -2432,7 +2432,7 @@ static inline void tsx(void)
 /* 6280 ********************************************************
  *  TST
  ***************************************************************/
-static inline void tst(uint8_t imm, uint8_t tmp)
+static inline PCE_HOT_FN void tst(uint8_t imm, uint8_t tmp)
 {
 	P = (P & ~(_fN|_fV|_fT|_fZ))
 		| ((tmp&0x80) ? _fN:0)
@@ -2443,7 +2443,7 @@ static inline void tst(uint8_t imm, uint8_t tmp)
 /* 6280 ********************************************************
  *  TXA Transfer index X to accumulator
  ***************************************************************/
-static inline void txa(void)
+static inline PCE_HOT_FN void txa(void)
 {
 	clear_t();
 	A = X;
@@ -2454,7 +2454,7 @@ static inline void txa(void)
  *  TXS Transfer index X to stack LSB
  *  no flags changed (sic!)
  ***************************************************************/
-static inline void txs(void)
+static inline PCE_HOT_FN void txs(void)
 {
 	clear_t();
 	S = X;
@@ -2463,7 +2463,7 @@ static inline void txs(void)
 /* 6280 ********************************************************
  *  TYA Transfer index Y to accumulator
  ***************************************************************/
-static inline void tya(void)
+static inline PCE_HOT_FN void tya(void)
 {
 	clear_t();
 	A = Y;
@@ -2488,7 +2488,7 @@ static __attribute__((noinline)) void csl()
 
 
 #define OP(prefix,opcode)  static __attribute__((noinline, cold)) void prefix##_##opcode(void)
-#define OPH(prefix,opcode) static inline __attribute__((always_inline)) void prefix##_##opcode(void)
+#define OPH(prefix,opcode) static inline PCE_HOT_FN __attribute__((always_inline)) void prefix##_##opcode(void)
 
 /*****************************************************************************
  *****************************************************************************

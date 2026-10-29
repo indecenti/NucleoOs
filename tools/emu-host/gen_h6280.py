@@ -169,6 +169,9 @@ for proto in ('static inline void bra(bool cond)', 'static inline uint8_t rd_zpg
     assert s.count(proto) == 1, proto
     s = s.replace(proto, proto.replace('static inline ', 'static inline PCE_HOT_FN '))
 s = re.sub(r'static (inline )?(\w[\w ]*) (\w+)\(\)', r'static \1\2 \3(void)', s)
+# Every other inline helper too: inlined it changes nothing; called (a compiler that keeps it out of line) its body
+# sits beside the run loop, not somewhere in the module's flash.
+s = re.sub(r'\bstatic inline (?!PCE_HOT_FN)', 'static inline PCE_HOT_FN ', s)
 # The run loop's placement is the including file's (PCE_HOT: a store module puts it in the section it locks in the
 # instruction cache).
 s = s.replace('static void execute_run(void)', 'static PCE_HOT void execute_run(void)')
@@ -259,11 +262,11 @@ static struct {
 /* The timer counts down with the cycles: it is not decremented with every instruction but derived from the cycle
  * counter (timer_value as of icount == tsync). timer_sync() makes timer_value current; the including file calls it
  * before reading or writing the timer, and moves tsync with icount when it gives the CPU more cycles. */
-static inline void timer_sync(void) { H6280.timer_value -= H6280.tsync - H6280.icount; H6280.tsync = H6280.icount; }
-static inline int32_t timer_now(void) { return H6280.timer_value - (H6280.tsync - H6280.icount); }
+static inline PCE_HOT_FN void timer_sync(void) { H6280.timer_value -= H6280.tsync - H6280.icount; H6280.tsync = H6280.icount; }
+static inline PCE_HOT_FN int32_t timer_now(void) { return H6280.timer_value - (H6280.tsync - H6280.icount); }
 /* Where the run loop's fast path stops: at the end of the leg (0), at the cycle the timer reaches zero, or after this
  * instruction when an interrupt is pending (INT32_MAX). Anything that may make an interrupt pending sets it so. */
-static inline void run_stop(void)
+static inline PCE_HOT_FN void run_stop(void)
 {
     if (H6280.irq_pending) { H6280.stop = INT32_MAX; return; }
     const int32_t t = H6280.timer_status ? H6280.icount - timer_now() : 0;

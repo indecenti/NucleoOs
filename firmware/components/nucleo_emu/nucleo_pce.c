@@ -355,13 +355,13 @@ static __attribute__((noinline)) void pce_mpr_changed(int page)   // (TAM calls 
     for (int k = 0; k < WPB; k++) { MEM.rd[page * WPB + k] = NULL; MEM.wr[page * WPB + k] = NULL; PCE->win_pg[page * WPB + k] = -1; }
 }
 
-static inline uint8_t mem_read(uint16_t addr)
+static inline PCE_HOT_FN uint8_t mem_read(uint16_t addr)
 {
     const uint8_t *w = MEM.rd[addr >> PG_BITS];
     if (!w && !(w = window(addr >> PG_BITS))) return io_read(addr & 0x1fff);
     return w[addr & (PG_SIZE - 1)];
 }
-static inline void mem_write(uint16_t addr, uint8_t v)
+static inline PCE_HOT_FN void mem_write(uint16_t addr, uint8_t v)
 {
     g_writes++;
     uint8_t *w = MEM.wr[addr >> PG_BITS];
@@ -381,7 +381,7 @@ static inline uint32_t translated(uint16_t addr);
 static inline void check_vdc_vce_penalty(uint16_t addr);
 // A window is never the I/O page (bank 0xFF has none), and the VDC / VCE penalty cycle is only for I/O: an access
 // through a window skips the check, every other one takes it as before.
-static uint8_t program_read8(uint16_t addr)
+static PCE_HOT_FN uint8_t program_read8(uint16_t addr)
 {
     const uint8_t *w = MEM.rd[addr >> PG_BITS];
     if (w) return w[addr & (PG_SIZE - 1)];
@@ -395,18 +395,18 @@ static PCE_HOT_FN void program_write8(uint16_t addr, uint8_t v)
     check_vdc_vce_penalty(addr);
     mem_write(addr, v);
 }
-static uint8_t  program_read8z(uint16_t addr)           { return mem_read((uint16_t)(0x2000 | (addr & 0x1fff))); }
-static void     program_write8z(uint16_t addr, uint8_t v) { mem_write((uint16_t)(0x2000 | (addr & 0x1fff)), v); }
-static uint16_t program_read16(uint16_t addr)           { return (uint16_t)(mem_read(addr) | mem_read((uint16_t)(addr + 1)) << 8); }
-static uint16_t program_read16z(uint16_t addr)
+static PCE_HOT_FN uint8_t program_read8z(uint16_t addr) { return mem_read((uint16_t)(0x2000 | (addr & 0x1fff))); }
+static PCE_HOT_FN void program_write8z(uint16_t addr, uint8_t v) { mem_write((uint16_t)(0x2000 | (addr & 0x1fff)), v); }
+static PCE_HOT_FN uint16_t program_read16(uint16_t addr) { return (uint16_t)(mem_read(addr) | mem_read((uint16_t)(addr + 1)) << 8); }
+static PCE_HOT_FN uint16_t program_read16z(uint16_t addr)
 {
     const uint16_t hi = (addr & 0xff) == 0xff ? (uint16_t)(addr - 0xff) : (uint16_t)(addr + 1);
     return (uint16_t)(program_read8z(addr) | program_read8z(hi) << 8);
 }
 static PCE_HOT_FN void push(uint8_t v)                  { program_write8z((uint16_t)m_sp.d, v); m_sp.b.l--; }
-static uint8_t  pull_(void)                             { m_sp.b.l++; return program_read8z((uint16_t)m_sp.d); }
-static uint8_t  read_opcode(void)                       { return mem_read(m_pc.w.l); }
-static uint8_t  read_opcode_arg(void)                   { return mem_read(m_pc.w.l); }
+static PCE_HOT_FN uint8_t pull_(void)                 { m_sp.b.l++; return program_read8z((uint16_t)m_sp.d); }
+static PCE_HOT_FN uint8_t read_opcode(void)           { return mem_read(m_pc.w.l); }
+static PCE_HOT_FN uint8_t read_opcode_arg(void)       { return mem_read(m_pc.w.l); }
 
 // ── the PSG: registers now, sound later (from the log) ────────────────────────────────────────────────────
 static void psg_reg(uint8_t reg, uint8_t data)
