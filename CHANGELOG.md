@@ -34,8 +34,14 @@ All notable user-facing changes to NucleoOS. Format loosely follows
   going back and starting a game, at a fraction of the system volume (muted = silent). New `nucleo_audio_sample()`.
 - **Cartridges launch from the gallery.** A Game Boy / Game Gear / Master System cartridge opens straight in its
   emulator; quitting the game comes back to the gallery on it, never to the emulator's shelf.
-- Consoles are shown by their mark and their name (no makers). Their photos stand on the dark tile: the light studio
-  background is keyed out (and its fringe) once, when the picture is made; the left tile is a little smaller.
+- Consoles are shown by their mark and their name (no makers). Their photos are cut out on the PC from the public-domain
+  originals (soft edges, the studio white unmixed from them; `tools/gen-gallery-art.py`, 25 KB for five consoles) and
+  stand straight on the theme's background, no tile; the left picture is a little smaller.
+- The native games have pictures too: their entry is a pocket computer painted locally (Qwen-Image) and cut out like the
+  consoles, and 13 native games ship a default cover on the SD pack (`data/GameShots/<id>.png`: each game's own screen
+  rendered on the PC from its source; a cover captured on the device still wins).
+- When the wheel stops only the left column and the position are redrawn; the pictures of the titles around the
+  selection (and the consoles' photos) are made ahead while the player is still; a slow frame logs where it went.
 - Pictures and marks are unpacked with the inflater's state in the shared canvas (no 11 KB block to find on the
   launcher's heap); a picture that cannot be made is not retried while the gallery is open.
 - Native ABI level 5 = level 4 + `nucleo_app_take_open_file` (the emulators' modules need it); the gallery's texts are in the firmware in five languages
