@@ -138,6 +138,13 @@ CONFIG_COMPILER_OPTIMIZATION_ASSERTIONS_SILENT=y
 # it and gives the RAM back. See memory cardputer-adv-exploitation / nucleo-exclusive-mode.
 CONFIG_BT_ENABLED=y
 CONFIG_BT_NIMBLE_ENABLED=y
+# The controller's code in flash, not IRAM: on the S3 IRAM and the heap are the same SRAM, so the ~16 KB of
+# BLE link-layer code that sat in IRAM was heap lost to every app — on a boot where the radio is never up
+# (the normal one, the emulators' Solo boot) for nothing. BLE is only up inside the BLE app's exclusive mode;
+# there it runs a little slower and may stall while the flash is erased, which that app does not do.
+CONFIG_BT_CTRL_RUN_IN_FLASH_ONLY=y
+# The octal (OPI) MXIC flash driver is in IRAM (~1.4 KB) and this board's flash is quad (DIO): never used.
+CONFIG_SPI_FLASH_SUPPORT_MXIC_OPI_CHIP=n
 
 # Default log level INFO -> WARN. ESP_LOGI/D format strings of stripped levels are removed at
 # compile time (they live in the same .str1.4 pool). WARN keeps warnings + errors on the serial

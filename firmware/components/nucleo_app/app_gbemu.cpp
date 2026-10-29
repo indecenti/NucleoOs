@@ -389,9 +389,6 @@ struct EState {
     uint8_t  stash[SRC_W];   // the line being blended into the next one (see on_line)
     uint16_t stash16[256];   // ...the same for a colour line (on_line16), up to a Master System line
     uint8_t  hsrc[240];      // Master System lines: output column -> first source column (hscale_build)
-    uint8_t  fps_hist[32];   // two screens: the last 32 seconds of fps, the companion's sparkline
-    uint8_t  fps_hn;         // ...how many are filled (a ring once full)
-    int64_t  play_t0;        // when this session's game started (the companion's clock)
     uint8_t  hmix[240];      // ...and whether it is the midpoint of that column and the next
     bool     have_stash;
     // Two screens: the external panel keeps what it was sent, so a source line identical to the one it
@@ -1079,12 +1076,22 @@ static int keycap(LovyanGFX *g, int x, int y, const char *key, const char *what)
 }
 
 // TWO SCREENS — the Cardputer while the game plays on the panel: never a copy of the picture, a companion. A
-// header (the console, the session's clock, the battery), the title, the frame rate with its last 32 seconds as
-// a sparkline, the volume, and the controls as key caps. full = everything; else only what changes each second.
+// header (the console, the title), the battery, the frame rate as a number, the volume, and the controls as key
+// caps. full = everything; else only a value that changed since it was last drawn — the card's screen is not
+// written at all while nothing changes (a steady 60 fps costs no bus, no wake of the panel).
 static void card_draw(bool full)
 {
     LovyanGFX *g = igfx();
     if (!g || st->menu) return;
+    static int s_fps = -1, s_bp = -2, s_vol = -1;
+    static bool s_toast;
+    const int bp = nucleo_power_battery_pct();
+    const int vol = nucleo_audio_is_muted() ? 0 : nucleo_audio_volume();
+    const bool toast = st->toast[0] != '\0';
+    if (full) s_fps = -1, s_bp = -2, s_vol = -1, s_toast = !toast;
+    const bool d_fps = st->fps != s_fps, d_bp = bp != s_bp, d_vol = vol != s_vol || toast != s_toast || toast;
+    if (!d_fps && !d_bp && !d_vol) return;
+    s_fps = st->fps; s_bp = bp; s_vol = vol; s_toast = toast;
     g->startWrite();
     if (full) {
         g->fillScreen(BG);
@@ -1112,37 +1119,30 @@ static void card_draw(bool full)
         x = keycap(g, x, 119, "TAB", TR5("veloce", "fast", "rapido", "vite", "schnell"));
         keycap(g, x, 119, "- =", "volume");
     }
-    // ── what changes: the clock and battery, the frame rate and its sparkline, the volume (or the toast) ──
-    g->setFont(&fonts::Font0); g->setTextSize(1);
-    g->fillRect(0, 26, 240, 14, BG);
-    const int secs = (int)((esp_timer_get_time() - st->play_t0) / 1000000);
-    char hb[24];
-    int bp = nucleo_power_battery_pct();
-    if (bp >= 0) snprintf(hb, sizeof hb, "%d:%02d   %d%%", secs / 60, secs % 60, bp);
-    else         snprintf(hb, sizeof hb, "%d:%02d", secs / 60, secs % 60);
-    g->setTextDatum(top_left); g->setTextColor(bp >= 0 && bp < 20 ? AMB : MUTED, BG);
-    g->drawString(hb, 6, 29);
-
-    const uint16_t fc = st->fps >= 55 ? GRN : AMB;
-    g->fillRect(0, 44, 240, 42, BG);
-    g->setTextSize(3); g->setTextColor(fc, BG); g->setCursor(6, 46); g->printf("%2d", st->fps);
-    g->setTextSize(1); g->setTextColor(MUTED, BG); g->setCursor(46, 60); g->print("fps");
-    // The sparkline: one bar per second, 60 fps at the top of its 26 px, the dips in amber.
-    const int sx = 74, sy = 46, sh = 26, n = st->fps_hn < 32 ? st->fps_hn : 32;
-    g->drawFastHLine(sx, sy + sh, 32 * 5, LINE);
-    for (int i = 0; i < n; i++) {
-        int v = st->fps_hist[(st->fps_hn - n + i) & 31]; if (v > 60) v = 60;
-        int h = v * sh / 60; if (h < 1) h = 1;
-        g->fillRect(sx + i * 5, sy + sh - h, 4, h, v >= 55 ? GRN : AMB);
+    // ── what changes: the battery, the frame rate, the volume (or the toast) — each only when it did ──
+    g->setFont(&fonts::Font0); g->setTextSize(1); g->setTextDatum(top_left);
+    if (d_bp) {
+        g->fillRect(0, 26, 240, 14, BG);
+        if (bp >= 0) {
+            char hb[8]; snprintf(hb, sizeof hb, "%d%%", bp);
+            g->setTextColor(bp < 20 ? AMB : MUTED, BG); g->drawString(hb, 6, 29);
+        }
+    }
+    if (d_fps) {
+        g->fillRect(0, 44, 240, 30, BG);
+        g->setTextSize(3); g->setTextColor(st->fps >= 55 ? GRN : AMB, BG); g->setCursor(6, 46); g->printf("%2d", st->fps);
+        g->setTextSize(1); g->setTextColor(MUTED, BG); g->setCursor(46, 60); g->print("fps");
     }
     // Volume (or the last toast: "saved", "loaded", "vol 70%").
-    if (st->toast[0]) { g->setTextColor(GRN, BG); g->setCursor(6, 77); g->print(st->toast); }
-    else {
-        const int v = nucleo_audio_is_muted() ? 0 : nucleo_audio_volume();
-        g->setTextColor(MUTED, BG); g->setCursor(6, 77); g->print("vol");
-        g->fillRoundRect(28, 77, 100, 7, 3, LINE);
-        if (v) g->fillRoundRect(28, 77, v, 7, 3, ACC);
-        g->setCursor(134, 77); g->printf("%d%%", v);
+    if (d_vol) {
+        g->setTextSize(1); g->fillRect(0, 74, 240, 12, BG);
+        if (toast) { g->setTextColor(GRN, BG); g->setCursor(6, 77); g->print(st->toast); }
+        else {
+            g->setTextColor(MUTED, BG); g->setCursor(6, 77); g->print("vol");
+            g->fillRoundRect(28, 77, 100, 7, 3, LINE);
+            if (vol) g->fillRoundRect(28, 77, vol, 7, 3, ACC);
+            g->setCursor(134, 77); g->printf("%d%%", vol);
+        }
     }
     g->endWrite();
 }
@@ -1681,7 +1681,7 @@ static void play_session(const char *name)
     set_relief(skip_adaptive() ? 1 : 0);
     SYS->reset_counters();
     st->fps_frames = 0; st->fps = 0; st->fps_t0 = esp_timer_get_time();
-    st->play_t0 = st->fps_t0; st->fps_hn = 0;
+
     bezel_draw();
     hud_draw();
     chrome_draw();
@@ -1788,7 +1788,6 @@ static void play_session(const char *name)
         int64_t now = esp_timer_get_time();
         if (now - st->fps_t0 >= 1000000) {
             st->fps = (int)st->fps_frames;
-            st->fps_hist[st->fps_hn++ & 31] = (uint8_t)(st->fps > 255 ? 255 : st->fps);
             // Divide the window's accumulated microseconds by the frames in it, in TENTHS of a ms —
             // a breakdown rounded to whole milliseconds hides exactly the differences worth seeing.
             nucleo_gb_stats_t w; SYS->get_stats(&w);
@@ -1909,16 +1908,14 @@ static void draw_companion(void);
 #ifdef NUCLEO_UI_HOST
 // ui-host gallery scenes for what only a running game shows: 1 = playing at 3/2 (the companion, the bezel),
 // 2 = the pause menu on the panel, 3 = playing filled. A fake session: the selected cartridge's name, 58 fps
-// with a dip in the sparkline, 12:34 played, the picture a pattern where the game would be.
+// on the companion, the picture a pattern where the game would be.
 extern "C" void ui_host_scene(int n)
 {
     s_host_view = n;
     s_big = true; s_src_w = SRC_W; s_src_h = 144; s_stretch = n == 3;
     geom_apply();
     snprintf(st->resume, sizeof st->resume, "%s", st->n ? ent_name(st->sel) : "Game");
-    st->fps = 58; st->fps_hn = 32;
-    for (int i = 0; i < 32; i++) st->fps_hist[i] = (uint8_t)(i > 20 && i < 24 ? 44 : 59);
-    st->play_t0 = esp_timer_get_time() - 754LL * 1000000;
+    st->fps = 58;
     st->menu = n == 2; st->msel = 3;
 }
 static void host_view_large(void)
