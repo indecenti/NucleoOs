@@ -141,6 +141,10 @@ void nucleo_audio_blip(int kind, int strength);
 // per frame. Alternate two freqs across calls for a two-tone siren.
 void nucleo_audio_tone(int freq, int ms, int strength);
 
+// A short recorded sound (interface feedback): 16 kHz mono PCM (usually const, in flash), `samples` long, at
+// `strength` % (5..100) of the software volume. Blocks for its length like blip(); no-op while a track plays.
+void nucleo_audio_sample(const int16_t *pcm, int samples, int strength);
+
 // Continuous alarm SIREN: a harsh square wave WAILED 1.8->4.2 kHz at near-full amplitude. KEEPS the I2S
 // TX open across calls (phase persists) so calling it back-to-back from an alarm loop is a TRULY gapless,
 // piercing siren — far louder/nastier than repeated tone() beeps. Honours the software volume; no-op while

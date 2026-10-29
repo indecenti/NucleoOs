@@ -13,12 +13,14 @@
 #pragma once
 #include <stdint.h>
 
-#define NUCLEO_NATIVE_ABI    4u            // the level this SDK builds against (abi/v4.txt)
+#define NUCLEO_NATIVE_ABI    6u            // the level this SDK builds against (abi/v6.txt)
 #define NAP_MAGIC            0x3150414eu   // "NAP1" little-endian
 #define NAP_ID_MAX           32
 
 #define NAP_FLAG_NET         0x0001u       // uses the radio (pnet multiplayer)
 #define NAP_FLAG_NO_HUD      0x0002u       // draws its own Back on the second screen: no system bar over it
+#define NAP_FLAG_AUTO_HUD    0x0004u       // the system bar only on demand: a tap shows it over the app, 3 s later it
+                                           // goes (a game that wants the whole panel; nucleo_extdisp_hud_overlay)
 
 #ifdef __cplusplus
 extern "C" {

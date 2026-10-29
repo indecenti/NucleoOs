@@ -19,6 +19,7 @@
 #include "launcher_menu.h"
 #include "launcher_render.h"
 #include "gamefront.h"
+#include "gameshots.h"
 #include <M5GFX.h>
 #include "nucleo_kbd.h"
 #include <string.h>
@@ -497,6 +498,7 @@ extern "C" void nucleo_register_screensaver(void);    // app_screensaver.cpp —
 extern "C" bool nucleo_screensaver_should_activate(int64_t idle_ms);  // app_screensaver.cpp hook per main loop
 extern "C" void nucleo_screensaver_set_trigger(void);
 extern "C" int  nucleo_screensaver_timeout_s(void);                  // the display power manager's timeout (0 = never)                 // app_screensaver.cpp hook per main loop
+extern "C" int  nucleo_screensaver_mode(void);                       // its style: 0 screen off, 1 clock, 2 stars, 3 fire
 extern "C" bool nucleo_ui_is_adv(void);               // Cardputer ADV? (M5GFX board detect — robust, independent of IMU init)
 
 // Registration order defines BOTH the category order in the root menu (first app of a category seen
@@ -1000,7 +1002,7 @@ static void close_app(void)
         // frame off the panel here into /data/Screenshots. Games are NOT captured on exit — that would
         // grab the exit/menu screen; their carousel cover is refreshed from live play in the run loop.
         if (def && def->id && def->id[0] && !(def->category && !strcmp(def->category, "Games")))
-            gamefront_save_panel_screenshot(def->id);
+            gameshots_save_panel(def->id);
         if (def && def->on_exit) def->on_exit();
         esp_restart();   // NEVER returns
     }
@@ -1140,8 +1142,8 @@ void nucleo_app_release_buffers(void) { nucleo_screen_release(); }
 // Keyboard-first carousel: the apps are a single horizontal rail, so all four arrows step the focus
 // by one — Left/Up = previous, Right/Down = next (both wrap). Enter opens; backtick (Esc) goes back /
 // clears the filter; any printable character type-to-filters (digits included — no numeric quick-select).
-// Open the GameFront overlay (HyperSpin-style game launcher) instead of descending into the plain
-// Games category carousel. It's a launcher state, so s_active stays -1 the whole time.
+// Open the Games gallery (gamefront.cpp: systems, then titles) instead of descending into the plain Games
+// category. It's a launcher state, so s_active stays -1 the whole time.
 static void open_gamefront(void)
 {
     gamefront_open();
@@ -1274,10 +1276,6 @@ static bool s_mdns_off  = false;            // mDNS stopped while the OS shell i
 // s_disp_sleep is declared up with s_disp_off (top of file) so the httpd/esp_timer display paths can read it.
 static bool s_voice_dark = false;           // PTT low-power capture: backlight 0 + canvas freed for the voice session
 #define SCREEN_OFF_MS  4000                  // idle (no on-device key) before the panel sleeps ("a few seconds")
-#define IDLE_SERVE_MS  30000                 // NO web client: idle at the launcher this long -> free the 32 KB canvas
-                                             // anyway so httpd ALWAYS has heap to serve (web OS / OTA / API). On this
-                                             // PSRAM-less chip the held canvas was starving httpd (OTA /api/pair timed
-                                             // out). Longer than SCREEN_OFF_MS so a glance isn't cut short; any key wakes.
 #define G0_HOLD_MS     350                   // GO held past this = Push-to-Talk; below = a torch tap
 
 // While the OS web shell is connected the device's offline L1 brain stands down — ALWAYS, regardless of
@@ -1658,10 +1656,10 @@ static void exit_remote(void)
 }
 
 // ---- idle screen-off --------------------------------------------------------------------------
-// ONLY while a web client is driving the device (s_remote): after SCREEN_OFF_MS with no on-device key,
-// blank the backlight AND free the 32 KB framebuffer (the single biggest RAM win on this PSRAM-less
-// chip) — handing that block to the web OS that actually needs it while nobody looks at the panel.
-// With NO client connected the panel never sleeps. Any key wakes it; so does the client going away
+// Blank the backlight AND free the 32 KB framebuffer (the single biggest RAM win on this PSRAM-less chip): while a
+// web client is driving the device (s_remote) after SCREEN_OFF_MS with no on-device key, handing that block to the
+// web OS; without one, at the launcher or in the Games gallery, when the screensaver set in Settings is "off" and
+// its time has passed. Any key wakes it; so does the client going away
 // (handled in the run loop). Independent of the web /api/display path (s_disp_off): we never fight a
 // client that is deliberately holding the screen dark.
 static void display_sleep(void)
@@ -1688,6 +1686,7 @@ static void display_wake(void)
     if (!s_app_direct && !s_remote) for (int i = 0; i < 6 && !nucleo_screen_acquire(); i++) vTaskDelay(pdMS_TO_TICKS(20));
     nucleo_app_set_brightness(s_brightness);     // restore the user's stored brightness
     d.fillScreen(BG);
+    if (s_gamefront) gamefront_invalidate();       // the gallery: the whole of it, on both screens
     s_dirty = true; s_chrome_dirty = true; s_hint_dirty = true; s_remote_force = true;  // force a full repaint
     nucleo_event_publish("system.display", "{\"on\":true}");
 }
@@ -1911,7 +1910,10 @@ void nucleo_app_run(void)
     // category, their type-to-search filter, and the focused row — instead of dumping them on Home/ANIMA.
     // Skipped in the Solo boot itself (that boot opens the target app, not the launcher). One-shot: the
     // snapshot self-consumes and the gate is a warm reset, so a cold power-on always starts clean at Home.
-    if (!s_solo_active) launcher_apply_return();
+    if (!s_solo_active) {
+        launcher_apply_return();
+        if (gamefront_take_return()) open_gamefront();   // a game from the Games gallery: back on it, in the gallery
+    }
     int64_t last_tick = 0, last_clock = 0, remote_gone_ms = 0, last_remote = 0, last_remote_input = 0;
     int64_t last_act = esp_timer_get_time() / 1000, focus_chk = 0;   // idle screen-off + web-focus recheck timers
     s_pm_act = last_act;
@@ -2037,7 +2039,7 @@ void nucleo_app_run(void)
         // and INDEPENDENT of the auto-handoff UX toggle. A web-OS shell connecting to this no-PSRAM device MUST
         // hand serving to the lean server-Solo, or httpd serves the shell's asset+API storm on the fragmented
         // full-OS heap and OOM-reboots (the exact bug this feature closes). Two reasons it can't live lower down:
-        //   • the device is most often IDLE-ASLEEP (IDLE_SERVE_MS) exactly when the user first opens the web UI,
+        //   • the device is most often IDLE-ASLEEP (the screensaver "off") exactly when the user first opens the web UI,
         //     and the s_disp_sleep branch below `continue`s before any lower check would run;
         //   • the reboot is a hard requirement, not a preference, so it must ignore nucleo_remote_enabled()
         //     (the "Auto handoff" toggle) — which only governs the watch-face UX below. The manual Web Client
@@ -2077,15 +2079,10 @@ void nucleo_app_run(void)
         // ...also blank immediately (not after the SCREEN_OFF_MS idle) when the webfs raises a heap request: a
         // heavy asset (Vosk lib/model) is being pulled and needs the 32 KB canvas back NOW. take_*()
         // consumes the one-shot flag; all the same guards apply (only while remote, no torch/PTT/etc.).
-        // Free the 32 KB canvas at idle so httpd ALWAYS has the contiguous heap to serve. Two triggers:
-        //   • a web client is connected (s_remote): blank after SCREEN_OFF_MS — the canvas goes to the web OS;
-        //   • NO client, sitting idle at the launcher (no app open): blank after the longer IDLE_SERVE_MS so a
-        //     headless/server device keeps serving heap free. This is the fix for "OTA /api/pair times out": with
-        //     the canvas held the heap-starved ADV had no block to serve the pairing handshake, so the flash never
-        //     started. Freeing it gives httpd ~+32 KB. Any key/G0 wakes (display_wake re-acquires the canvas).
+        // Free the 32 KB canvas while a web client is connected (s_remote): blank after SCREEN_OFF_MS, the canvas goes
+        // to the web OS. Without a client the screen follows Settings > Display > Screensaver, below.
         bool blank_for_client = s_remote && (nucleo_webfs_take_heap_request() || now - last_act >= SCREEN_OFF_MS);
-        bool blank_for_serve  = !s_remote && s_active == -1 && !s_gamefront && (now - last_act >= IDLE_SERVE_MS);
-        if ((blank_for_client || blank_for_serve) &&
+        if (blank_for_client &&
             !s_disp_off && !s_torch && !s_voice_dark && !nucleo_voice_is_listening()) {
             display_sleep();
             continue;
@@ -2096,16 +2093,21 @@ void nucleo_app_run(void)
         if (s_active == -1 && !s_gamefront && nucleo_setup_onboarding() && now - s_ob_try >= 2000) {
             s_ob_try = now; nucleo_settings_onboard(); nucleo_app_launch_id("wifi"); last_act = now;
         }
-        // Local screensaver: triggers from the launcher (no app open), without a remote client.
-        // Also works from GameFront: s_gamefront is cleared before launching it (otherwise the
-        // gamefront>foreground-app render branch stops on_draw from running) and s_gf_return=true
-        // ensures we return to the carousel once the saver closes.
-        // Any key inside the screensaver app resets last_act (via on_key) and closes the saver.
-        if (s_active == -1 && !s_remote && !s_torch && !s_voice_dark && !s_disp_sleep &&
+        // The screensaver, one rule for the launcher and the Games gallery (no app open, no web client): after the
+        // time set in Settings > Display > Screensaver (0 = never), its style: "off" puts the screen to sleep (backlight
+        // 0 and the 32 KB canvas freed, so httpd always has heap to serve: OTA, pairing, the web OS); any other style
+        // opens the screensaver app on it. Leaving it returns to where the player was (s_gf_return for the gallery;
+        // s_gamefront is cleared first, else the gallery's render branch would keep the saver from drawing). Inside an
+        // app the display power manager (pm_hook) turns the screen off after the same time: a running app is not covered.
+        if (s_active == -1 && !s_remote && !s_torch && !s_voice_dark && !s_disp_sleep && !s_disp_off &&
             nucleo_screensaver_should_activate(now - last_act)) {
-            nucleo_screensaver_set_trigger();
-            if (s_gamefront) { s_gamefront = false; s_gf_return = true; }
-            nucleo_app_launch_id("screensaver");
+            if (nucleo_screensaver_mode() == 0) {
+                if (!nucleo_voice_is_listening()) { display_sleep(); continue; }
+            } else {
+                nucleo_screensaver_set_trigger();
+                if (s_gamefront) { s_gamefront = false; s_gf_return = true; }
+                nucleo_app_launch_id("screensaver");
+            }
             last_act = now;  // reset so it doesn't re-trigger immediately after
         }
         // PTT low-power capture finished: the voice engine has captured, recognized, and played the
@@ -2269,7 +2271,7 @@ void nucleo_app_run(void)
                 // Two screens: the external panel too, as <shot>_2.bmp. It cannot be read back, so the app's next
                 // whole frame is written while it is composed (lg::capture): repaint everything now.
                 if (cap_fnp && nucleo_app_two_screens()) {
-                    char nm[32], p[96]; gamefront_shot_name(nm, sizeof nm);
+                    char nm[32], p[96]; gameshots_name(nm, sizeof nm);
                     mkdir(NUCLEO_SD_MOUNT "/data", 0775); mkdir(NUCLEO_SD_MOUNT "/data/Screenshots", 0775);
                     snprintf(p, sizeof p, NUCLEO_SD_MOUNT "/data/Screenshots/%s_2.bmp", nm);
                     lg::capture(p);
@@ -2319,7 +2321,7 @@ void nucleo_app_run(void)
                 else if (r == 1) s_dirty = true;
             } else if (s_gamefront) {
                 // GameFront owns input while up (s_active is still -1). It returns an id to launch.
-                char gid[24];
+                char gid[40];                        // a store id is up to 32 characters
                 int r = gamefront_key(nk.key, nk.ch, gid, sizeof gid);
                 // A held arrow queues keys faster than a cover decodes: apply every queued step, render once.
                 for (int q = 0; q < 8 && r == GF_REDRAW; q++) {
@@ -2331,7 +2333,12 @@ void nucleo_app_run(void)
                 if (r == GF_CLOSE)       { s_gamefront = false; d.fillScreen(BG); s_dirty = true; s_chrome_dirty = true; s_hint_dirty = true;
                                            launcher_render_companion_invalidate();   // two screens: the launcher's companion returns
                                            if (nucleo_surface_large() && launcher_render_companion_changed()) nucleo_extdisp_draw_internal(companion_cb); }
-                else if (r == GF_LAUNCH) { s_gamefront = false; s_gf_return = true; launch_by_id(gid); }
+                else if (r == GF_LAUNCH) {
+                    // A cartridge rides the "open with" handoff to its emulator (across the Solo reboot too).
+                    const char *rom = gamefront_launch_file();
+                    snprintf(s_open_file, sizeof s_open_file, "%s", rom ? rom : "");
+                    s_gamefront = false; s_gf_return = true; launch_by_id(gid);
+                }
                 else if (r == GF_REDRAW) s_dirty = true;
             } else if (s_active == -1) {
                 // The LIST always animates on a key (s_dirty inside handle_launcher) — it's buffered, one
@@ -2435,7 +2442,7 @@ void nucleo_app_run(void)
         // (launcher_render_step_scroll composites into the back-buffer = re-acquires the freed canvas).
         if (s_active == -1 && !s_gamefront && !s_control_center && !s_torch && !s_voice_dark && launcher_render_step_scroll()) s_dirty = true;
         if (s_control_center && !s_torch && !s_voice_dark && launcher_render_control_center_animating()) s_dirty = true;   // CC scroll easing
-        if (s_gamefront && !s_control_center && !s_torch && !s_voice_dark && gamefront_step()) s_dirty = true;
+        if (s_gamefront && !s_control_center && !s_torch && !s_voice_dark && gamefront_step()) s_dirty = true;   // the walk for cartridges
 
         if (nucleo_extdisp_take_repaint()) nucleo_app_force_repaint();   // the calibration screen covered the panel
 
@@ -2447,10 +2454,15 @@ void nucleo_app_run(void)
             const bool hud = fg && fg->on_draw_large && nucleo_surface_large() && nucleo_store_app_is_native(fg->id) &&
                              nucleo_native_loaded()[0] && !strcmp(nucleo_native_loaded(), fg->id) &&
                              !(nucleo_native_flags() & 0x0002u /* NAP_FLAG_NO_HUD */);
+            // NAP_FLAG_AUTO_HUD: the same bar, shown only on a tap and gone 3 s later (a game wants the panel whole).
+            const bool autohud = hud && (nucleo_native_flags() & 0x0004u /* NAP_FLAG_AUTO_HUD */);
             const char *want = hud ? fg->id : nullptr;
             if (!nucleo_surface_large()) s_hud_for = nullptr;      // leaving the large surface took the bar away
             if (want != s_hud_for) {
-                if (nucleo_extdisp_set_hud(hud ? fg->name : nullptr, fg ? fg->color : 0)) {   // the surface changed size
+                bool resized = autohud ? nucleo_extdisp_set_hud_auto(fg->name, fg->color)
+                                       : (nucleo_extdisp_set_hud_auto(nullptr, 0),
+                                          nucleo_extdisp_set_hud(hud ? fg->name : nullptr, fg ? fg->color : 0));
+                if (resized) {                                      // the surface changed size
                     d.fillScreen(BG);
                     nucleo_app_force_repaint();
                 }
@@ -2498,8 +2510,8 @@ void nucleo_app_run(void)
         } else if (s_control_center) {
             if (s_dirty) { s_dirty = false; launcher_render_control_center(); }
         } else if (s_gamefront) {
-            // GameFront composites its whole screen into the shared canvas and blits once, like the
-            // Control Center. Drawn only on s_dirty (a key), so image decode happens ~once per press.
+            // The Games gallery composes its whole screen with lg::frame (strips of the shared canvas), on a key
+            // only; a picture is unpacked once per selection and then streamed from the card.
             if (s_dirty) { s_dirty = false; gamefront_render(); }
         } else if (s_active == -1) {
             // Chrome is static during a scroll -> draw it directly, only when it changes. The
@@ -2545,6 +2557,7 @@ void nucleo_app_run(void)
                 d.startWrite();
                 def->on_draw_large();
                 d.endWrite();
+                nucleo_extdisp_hud_redraw();       // the on-demand bar, if showing, stays on top of what was drawn
             } else if (s_dirty) {
                 s_dirty = false;
                 // Apps that freed the canvas (ANIMA) pin direct draw: don't lazily re-acquire the
@@ -2563,13 +2576,13 @@ void nucleo_app_run(void)
                     // saved image, then arm a non-blocking confirm toast (no frozen preview).
                     if (s_shot_req) {                              // Fn+P -> real full-frame screenshot, always
                         s_shot_req = false;
-                        char nm[32]; gamefront_shot_name(nm, sizeof nm);
-                        s_shot_toast_ok = gamefront_save_screenshot(nm);
+                        char nm[32]; gameshots_name(nm, sizeof nm);
+                        s_shot_toast_ok = gameshots_save_canvas(nm);
                         s_shot_toast_until = now + 1200;
                     }
                     if (s_cover_req) {                             // 'C' in a game -> refresh its carousel cover
                         s_cover_req = false;
-                        s_shot_toast_ok = (def && def->id && def->id[0]) ? gamefront_save_canvas_cover(def->id) : false;
+                        s_shot_toast_ok = (def && def->id && def->id[0]) ? gameshots_canvas_cover(def->id) : false;
                         s_shot_toast_until = now + 1200;
                     }
                     // Keep each game's carousel cover fresh from LIVE gameplay — but capture ONCE per session
@@ -2580,7 +2593,7 @@ void nucleo_app_run(void)
                         static int64_t s_cover_at = 0; static bool s_cover_done = false;
                         if (!s_cover_done) {
                             if (s_cover_at == 0)          s_cover_at = now + 8000;   // arm once, let the menu pass
-                            else if (now >= s_cover_at) { s_cover_done = true; gamefront_save_canvas_cover(def->id); }
+                            else if (now >= s_cover_at) { s_cover_done = true; gameshots_canvas_cover(def->id); }
                         }
                     }
 
@@ -2637,13 +2650,13 @@ void nucleo_app_run(void)
                     // local SD write. Read it later over Wi-Fi via /api/fs once back at the launcher.
                     if (s_shot_req) {                              // Fn+P -> real full-frame screenshot from the panel
                         s_shot_req = false;
-                        char nm[32]; gamefront_shot_name(nm, sizeof nm);
-                        bool ok = gamefront_save_panel_screenshot(nm);
+                        char nm[32]; gameshots_name(nm, sizeof nm);
+                        bool ok = gameshots_save_panel(nm);
                         nucleo_notify_post("Screenshot", ok ? "Saved" : "Capture failed");
                     }
                     if (s_cover_req) {                             // Ctrl+P/'C' cover — canvas is freed here, so read the PANEL
                         s_cover_req = false;                       // (panel_cover un-swaps the readback bytes -> correct colours)
-                        bool ok = (def && def->id && def->id[0]) ? gamefront_save_panel_cover(def->id) : false;
+                        bool ok = (def && def->id && def->id[0]) ? gameshots_panel_cover(def->id) : false;
                         nucleo_notify_post("Screenshot", ok ? TR("Cover salvata", "Cover saved") : TR("Cover non disponibile", "Cover unavailable"));
                     }
                 }

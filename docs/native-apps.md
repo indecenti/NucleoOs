@@ -56,6 +56,8 @@ The rules that keep an installed app working across OS updates:
    `lg::frame` with the touch flag, `nucleo_touch_add_pad`, `nucleo_touch_add_scroll`).
    Level 3 = level 2 + the rest of the `lg::` two-screen kit (`list`, `text_list`, `row_text`, `row_tap`, `tabs`,
    `header`, `panel`, `message`), first needed by Tank Duel.
+   Level 5 = level 4 + `nucleo_app_take_open_file` (the Games gallery opens an emulator on one cartridge, by its
+   full path). The emulators' recipes move to level 5; the other modules keep the level of their recipe.
    Level 4 = level 3 + what the two emulators need (51 names): the sprite panel behind their scaler, the PCM sink,
    the second-screen surface and exclusive-mode calls, the heap probes, a few libc/libgcc helpers and the ROM
    inflater for zipped cartridges.
@@ -185,6 +187,7 @@ so the firmware image gets an empty file and the host gallery (`tools/ui-host/ap
 | App (id) | Module | Notes |
 |---|---|---|
 | Converter (`units`) | 23 KB (17 KB code + constants, 2.3 KB RAM, ABI 3) | 9 quantities; 5 languages in the source (the language comes from `settings.json`: `nucleo_tr5` is not in the ABI); numbers formatted with integers (no double helpers in the ABI) |
+| NES (`nesemu`, the emulators' front-end + agnes + our APU) | 111 KB (69 KB code, 11 KB constants, 5.3 KB RAM, ABI 4) | `nucleo_register_nesemu`; ROMs in `/data/ROMs/nes`; see `native-emulation.md` §8 |
 
 With all three from the store (the default) the image is **3,461,120 B instead of 3,603,792 B: 142,672 B (139 KB)
 recovered**

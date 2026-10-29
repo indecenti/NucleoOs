@@ -63,6 +63,10 @@ void launcher_draw_icon(M5Canvas *c, int cx, int cy, int r, const char *id, char
                         unsigned short col, unsigned short bg);
 void launcher_draw_icon(M5GFX *c, int cx, int cy, int r, const char *id, char letter,
                         unsigned short col, unsigned short bg);
+// ...or to whatever `d` is at the moment (a strip of lg::frame).
+namespace lgfx { inline namespace v1 { class LovyanGFX; } }
+void launcher_draw_icon(lgfx::LovyanGFX *c, int cx, int cy, int r, const char *id, char letter,
+                        unsigned short col, unsigned short bg);
 
 // The one buffered, animated region.
 void launcher_render_list(void);          // composite + blit the scrolling list band

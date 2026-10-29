@@ -333,9 +333,14 @@ is off. The render gate requires most lines, not all.
   block is 32 KB, and with double-speed CGB titles needing twice the CPU the DMG core already spends.
   It would need the WRAM/VRAM split into 4–8 KB banks (the SRAM banking above is the pattern) and the
   flash/cache work first. GBC cartridges are covered today by the browser Arcade.
-- **The carousel entry shows the console, never a screenshot** — `gf_never_shot()` in `gamefront.cpp`.
-  Its procedural poster is the console glyph alone: the title is printed once, under the cover, like
-  every other game (it used to be printed a second time inside the poster).
+- **The Games gallery lists the consoles, then their cartridges** (`gamefront.cpp`): Game Boy, Game Boy Color,
+  Game Gear and Master System are four systems, shown when their emulator is installed. Their cartridges are found
+  anywhere on the card by a background walk (index `/data/GameShots/.cache/roms.idx`, text: `GIX1 <n> <hash>`, then
+  `D <folder>` and `<system digit> <file>` lines); the emulators open a cartridge by its full path. A cartridge opens straight in its emulator: the gallery hands its path over with the "open with"
+  handoff (`nucleo_app_take_open_file`, carried across the Solo reboot), the emulator plays it from `shelf_poll()`
+  and quitting it — or a cartridge the core refuses — closes the app, so the full OS boots back into the gallery on
+  that cartridge (an RTC snapshot, `gamefront_take_return()`). The emulators themselves are not entries of the
+  native games; their own shelf is still reached from launcher search.
 - **Chip-8** is the obvious next core: ~5 KB, no licence question, same app scaffolding.
 
 ## 7. The Game Gear (and the Master System it contains)
@@ -440,3 +445,62 @@ number that decides what to optimise next; the QIO flash question in §6 applies
 **Not done, needs a decision:** caching the ROM in the *inactive OTA partition* and
 `esp_partition_mmap`-ing it would remove every SD miss and hand the page cache's ~55 KB back — at the
 price of overwriting the rollback image in that partition (§2 rules out a dedicated one).
+
+## 8. NES (built), Commodore 64 and PC Engine (prepared)
+
+Prepared so far: their console pictures and marks (`gbemu_art.h`, public-domain photos), and the ROM folders on the
+card (`/data/ROMs/pcengine`, `nes`, `c64`). What each needs, against the two rules every core here follows — a
+licence compatible with the firmware's (no GPL code), and no single block larger than the heap's 32 KB:
+
+| Console | Core | Licence | RAM the console needs | Notes |
+|---|---|---|---|---|
+| NES | [agnes](https://github.com/kgabis/agnes) (single header) | MIT | 2 KB work + 2 KB name tables + palette, cartridge CHR-RAM up to 8 KB | the lightest of the three; mappers 0-4 cover most of the library; the 256x240 picture fills the panel at 5/4 like the Master System |
+| Commodore 64 | [chips](https://github.com/floooh/chips) (`c64.h`: m6502, m6569 VIC-II, m6581 SID, m6526 CIA) | zlib | **64 KB** RAM + 1 KB colour RAM | the 64 KB must be split (chips addresses memory through 1 KB pages, so the RAM can be 2-4 host blocks, a patch like Walnut's W1); the KERNAL / BASIC / character ROMs are Commodore's and cannot ship: the user supplies them, or open replacement ROMs are needed; keyboard: the Cardputer's own maps naturally |
+| PC Engine | none found under a compatible licence (HuExpress, Mednafen, Geargrafx, PCE-Go are GPL) | — | 8 KB work RAM + **64 KB** VRAM + 512-colour VCE | our own machine around a permissive 65C02 core (chips `m6502` is zlib; HuC6280 adds a bank MMU, block transfers, timer, PSG), as nucleo_gg.c is around z80emu; VRAM in banks; HuCards up to 2.5 MB (Street Fighter II) from the SD page cache |
+
+Order of work, cheapest first: NES, then C64 (with the ROM question settled), then the PC Engine machine.
+
+**NES, done (`nesemu`, store only).** `nucleo_nes.c` around agnes with three marked patches (`vendor/agnes/agnes.nucleo.patch`):
+A1 the cartridge is read through a callback (the same SD page cache as the other consoles; the whole file is
+loaded only when it fits with 24 KB to spare), A2 each finished scanline goes to the host (256 palette indices)
+instead of a 61 KB frame buffer, A3 the APU registers reach the host. agnes has no sound: the APU is ours (two
+pulses, triangle, noise, DMC level; nesdev's non-linear mixer as tables in single precision, 32 kHz, through
+`emu_audio.h`). Battery PRG RAM (MMC1, MMC3) goes to `Saves/nes/<rom>.sav`, autosaved when it changes; states are
+`NNS1` (the live agnes struct, its host pointers restored on load). Mappers 0, 1, 2, 4; any other is refused with
+its number. Host test: `tools/emu-host/nes_test.c` (SMB, Zelda, Mega Man 2, SMB3, Tetris, Contra, state
+round-trip). agnes's PPU works per dot (~2-3 ms a frame on the PC against Walnut's 0.4 ms): the next step is a
+scanline renderer, measured on the device first.
+
+**NES, measured and rebuilt for speed.** On the ADV (Castlevania, panel on): agnes as shipped ran at **10 fps, 105 ms
+of CPU a frame**. Four patches later (`agnes.nucleo.patch`): **57 fps, 15.6 ms**.
+- A4, a scanline PPU: the frame runs a line at a time (the CPU runs each line's 341 dots in three legs with the
+  PPU's events between them: dot 257 scroll copy, the MMC3 counter, the pre-render copy), each visible line drawn
+  whole from the registers (33 background tiles, eight sprites, priority, sprite-0 hit). 89,342 per-dot calls a
+  frame were the whole cost. Raster effects land on line boundaries (SMB, SMB3, Kirby splits verified).
+- A5, 1 KB windows: the CPU and PPU read the cartridge through cached pointers to the host's pages (pages counted
+  from the PRG data so a bank is whole pages); a mapper write, an evicted page or a new frame drops them.
+- A6, the 6502 as one switch: each opcode's addressing mode and operation inlined (generated from agnes's table).
+- A2, lines leave agnes in RGB565 through a 32-entry per-line palette: no second pass on the host.
+- Frame-skip keeps only the sprite-0 hit on the skipped frame (games wait on it).
+
+Every step is checked the same way: the six reference cartridges pass `nes_test` (exact save-state replay), and a
+frame-by-frame dump of Contra (900 frames, running and firing) is byte-identical to the previous build.
+
+**References studied** (none of their code is used): retro-go (GPL-2, ESP32: nofrendo with a display task pinned
+to the other core, per-line checksums to send only changed lines, automatic frame-skip); LaiNES (BSD-2) and
+smolnes (MIT): accurate per-dot PPUs, the slower class agnes was in. What the device taught on top: the external
+panel shares the SD card's SPI bus at 40 MHz **without DMA** (the SD driver owns the channel), so a full 320x240
+picture is ~30 ms of CPU time — more than the emulation itself. Hence the NES at its own 256 columns on the panel
+(a quarter fewer pixels), the line diff over all 240 lines, and the next step: a firmware service that pushes the
+bands from the other core (retro-go's display task), which needs an ABI level and a firmware update.
+
+**Sound and RAM (1.0.6).** The device profile (cycle counter, written to the trace on quit) for Castlevania, per
+frame: 6502 6.6 ms, PPU 4.8 ms, panel lines 2.1 ms, APU 2.3 ms; dips to ~40 fps where the picture scrolls (the
+panel's 8.9 ms). The front-end does not chase a late frame, so below 60 emulated frames a second the speaker runs
+dry: that was the stuttering sound. Now the NES's frame-skip is adaptive and on from the start: a frame that starts
+more than 2 ms late is run unseen (three at most in a row), so the console — and the sound — stay at 60 while the
+picture gives way. Anemoia-ESP32 (GPL-3, studied only) reaches 60 fps without PSRAM the same way on 40 MHz panels
+(one skipped frame), with its hot code in IRAM (not open to a store module) and its APU on the other core.
+RAM: the mapper's 8 KB CHR RAM and 8 KB PRG RAM (A8) are allocated apart and only when the cartridge has them:
+a CHR-ROM game carries 8 KB less and the console is no longer one 24 KB block (SMB3, Kirby, Contra: 72 cache pages
+instead of 64 on the same heap). States are `NNS2` (the console, the APU, then those RAM blocks).

@@ -285,6 +285,93 @@ void message(int x, int y, int w, int h, const char *head, const char *sub, unsi
     d.setTextDatum(top_left);
 }
 
+int search(int x, int y, int w, int h, const char *text, const char *hint, const char *count, unsigned short ccol, unsigned short acc)
+{
+    const unsigned short cb = card(), ic = text && text[0] ? acc : MUTED;
+    const int ph = h - 8, cy = y + h / 2, r = ph >= 24 ? 6 : 4, mx = x + 8 + ph / 2 + 2;
+    d.fillRect(x, y, w, h, BG);
+    d.fillRoundRect(x + 4, y + 4, w - 8, ph, ph / 2, cb);
+    d.drawCircle(mx, cy - 1, r, ic); d.drawCircle(mx, cy - 1, r - 1, ic);
+    d.drawLine(mx + r - 2, cy + r - 3, mx + r + 2, cy + r + 1, ic); d.drawLine(mx + r - 1, cy + r - 3, mx + r + 3, cy + r + 1, ic);
+    const int tx = mx + r + 8;
+    font(0);
+    int cw = 0;
+    if (count && count[0]) {
+        d.setTextDatum(middle_right); d.setTextColor(ccol, cb);
+        d.drawString(count, x + w - 14, cy + 1);
+        cw = d.textWidth(count) + 8;
+    }
+    const int room = x + w - 14 - cw - tx;
+    d.setTextDatum(middle_left);
+    if (text && text[0]) {
+        const char *t = text;
+        while (*t && d.textWidth(t) > room - 4) t++;          // the tail of a long query: what was typed last
+        d.setTextColor(FG, cb); d.drawString(t, tx, cy + 1);
+        d.fillRect(tx + 1 + d.textWidth(t), cy - ph / 2 + 5, 2, ph - 10, acc);
+    } else if (hint) {
+        char t[48]; fit(t, sizeof t, hint, room);
+        d.setTextColor(MUTED, cb); d.drawString(t, tx, cy + 1);
+    }
+    d.setTextDatum(top_left);
+    return y + h;
+}
+
+void wheel(int x, int y, int w, int h, const Wheel &wl)
+{
+    d.fillRect(x, y, w, h, BG);
+    if (wl.n <= 0 || wl.slots <= 0) return;
+    const int mid = wl.slots / 2, ww = w - 6;
+    int sum = 0;
+    for (int k = 0; k < wl.slots; k++) sum += wl.heights[k];
+    const int top = y + (h - sum) / 2;
+    int pill = top;
+    for (int k = 0; k < mid; k++) pill += wl.heights[k];
+    const int ph = wl.heights[mid];
+    d.fillRoundRect(x, pill + 1, ww, ph - 2, (ph - 2) / 2, wl.acc);      // the pill stays; the titles turn through it
+    // Only what falls in the strip being composed is drawn (lg::frame paints a frame a strip at a time); every slot's
+    // touch target is registered all the same.
+    int32_t cx, cy, cw, ch;
+    d.getClipRect(&cx, &cy, &cw, &ch);
+    int32_t sx, sy, sw, sh0;                       // the titles' own clip: the slots' span, inside the strip's
+    sx = x; sw = w; sy = top > cy ? top : cy; sh0 = (top + sum < cy + ch ? top + sum : cy + ch) - sy;
+    if (sh0 > 0) d.setClipRect(sx, sy, sw, sh0);
+    int wy = top;
+    for (int k = -1; k <= wl.slots; k++) {         // one slot more on each side: what slides in while it turns
+        const int sh = wl.heights[k < 0 ? 0 : k >= wl.slots ? wl.slots - 1 : k];
+        const int i = wheel_at(wl.sel, wl.n, wl.slots, k);
+        const int ry = (k < 0 ? top - sh : wy) + wl.offset;                // where this title is drawn
+        const int dist = (abs(ry + sh / 2 - (pill + ph / 2)) * 2 + (ph + sh) / 2) / (ph + sh);   // slots from the pill
+        if (i >= 0 && sh0 > 0 && ry + sh > sy && ry < sy + sh0) {
+            const bool m = dist == 0;
+            const int ix = x + 10 + (dist < 4 ? dist : 4) * 3;             // the wheel's curve: far rows step in
+            const char *t = wl.label(i, wl.ud);
+            const int iw = wl.icon ? wl.icon(i, ix, ry + sh / 2, m, wl.ud) : 0;
+            const int lx = iw ? ix + iw + 6 : ix;
+            char fitted[64];
+            font(m ? 1 : 0);
+            if (m && t && d.textWidth(t) > x + ww - 8 - lx) font(0);       // the whole title smaller beats a cut one
+            fit(fitted, sizeof fitted, t ? t : "", x + ww - 8 - lx);
+            d.setTextDatum(middle_left);
+            d.setTextColor(m ? INK : dist == 1 ? FG : MUTED);
+            d.drawString(fitted, lx, ry + sh / 2 + (m ? 0 : 1));
+            d.setTextDatum(top_left);
+            if (wl.mark && wl.mark(i, wl.ud)) d.fillCircle(ix - 6, ry + sh / 2, 2, m ? INK : wl.mark_col);
+        }
+        if (k >= 0 && k < wl.slots) {
+            if (i >= 0) nucleo_touch_add(x, wy, ww, sh, NK_CHAR, (char)(NUCLEO_TOUCH_ROW + k));
+            wy += sh;
+        }
+    }
+    if (sh0 > 0) d.setClipRect(cx, cy, cw, ch);    // the strip's clip back
+    nucleo_touch_add_scroll(x, y, w, h, 22, NK_UP, 0, NK_DOWN, 0);      // a drag turns it, one title per 22 px
+    if (wl.n > 1 && wl.n > wl.slots) {                               // where am I in a long list: a thin rail
+        int kh = h * wl.slots / wl.n; if (kh < 10) kh = 10; if (kh > h) kh = h;
+        const int ky = y + (h - kh) * wl.sel / (wl.n - 1);
+        d.fillRect(x + w - 3, y, 2, h, LINE);
+        d.fillRect(x + w - 3, ky, 2, kh, wl.acc);
+    }
+}
+
 void toggle(int rx, int cy, bool on, bool on_pill)
 {
     const int sw = 26, sh = 13, x = rx - sw;
@@ -404,7 +491,7 @@ int comp_head(const char *app, unsigned short acc)
     const int top = nucleo_app_content_top();
     d.fillRect(0, top, 240, 14, BG);
     d.setFont(&fonts::Font0); d.setTextSize(1); d.setTextDatum(top_left); d.setTextColor(acc, BG);
-    char t[64]; snprintf(t, sizeof t, "%s  -  %s", app, TR("sul secondo schermo", "on the second screen"));
+    char t[64]; snprintf(t, sizeof t, "%s  -  %s", app, TR5("sul secondo schermo", "on the second screen", "en la segunda pantalla", "sur le second ecran", "auf dem zweiten Schirm"));
     d.drawString(t, 8, top + 4);
     return top + 16;
 }
@@ -474,6 +561,9 @@ static bool cap_rows(const uint8_t *buf, int w, int rows, bool exact)
     return true;
 }
 
+static M5Canvas s_win;                                       // a window onto the canvas: panel rows [oy, oy+rows)
+static M5Canvas s_out;                                       // the canvas bytes seen at the window's depth (push)
+
 bool frame(void (*paint)(void *ud), void *ud, int y0, int h, bool exact)
 {
     const int W = d.width();
@@ -485,8 +575,6 @@ bool frame(void (*paint)(void *ud), void *ud, int y0, int h, bool exact)
     // 8-bit: the canvas as it is (~100 rows of 320). exact: the same bytes as RGB565 (~50 rows), so theme
     // colours land exactly as when drawn straight to the panel — twice the strips, no extra RAM.
     const int bpp = exact ? 2 : 1, rows = c->height() / bpp;
-    static M5Canvas s_win;                                   // a window onto the canvas: panel rows [oy, oy+rows)
-    static M5Canvas s_out;                                   // the canvas bytes seen at the window's depth (push)
     if (exact) { s_out.setColorDepth(16); s_out.setBuffer(buf, W, rows); }
     M5Canvas *out = exact ? &s_out : c;
     // A pending screenshot rides along on a whole frame (never on a partial repaint of a band).
@@ -499,6 +587,7 @@ bool frame(void (*paint)(void *ud), void *ud, int y0, int h, bool exact)
         s_win.setColorDepth(exact ? 16 : c->getColorDepth());
         s_win.setBuffer(buf - (ptrdiff_t)oy * W * bpp, W, oy + sh);
         s_win.setClipRect(0, oy, W, sh);
+        panel->waitDMA();                                     // the last strip's push is off the bus: paint() may read the SD
         nucleo_touch_clear();
         nucleo_app_set_gfx(&s_win);
         paint(ud);
@@ -512,6 +601,31 @@ bool frame(void (*paint)(void *ud), void *ud, int y0, int h, bool exact)
         }
     }
     if (s_cap_f) { const bool ok = fclose(s_cap_f) == 0 && cap; s_cap_f = nullptr; s_cap = ok ? 2 : 3; if (!ok) remove(s_cap_path); }
+    return true;
+}
+
+bool frame_rect(void (*paint)(void *ud), void *ud, int x0, int y0, int w, int h, bool exact)
+{
+    M5Canvas *c = nucleo_screen_wide(w);
+    if (!c || c->height() < 8 || w <= 0 || h <= 0) return false;
+    LovyanGFX *panel = &d;
+    uint8_t *buf = (uint8_t *)c->getBuffer();
+    const int bpp = exact ? 2 : 1, rows = c->height() / bpp;
+    if (exact) { s_out.setColorDepth(16); s_out.setBuffer(buf, w, rows); }
+    M5Canvas *out = exact ? &s_out : c;
+    for (int oy = y0; oy < y0 + h; oy += rows) {
+        const int sh = y0 + h - oy < rows ? y0 + h - oy : rows;
+        s_win.setColorDepth(exact ? 16 : c->getColorDepth());
+        s_win.setBuffer(buf - (ptrdiff_t)oy * w * bpp, w, oy + sh);
+        s_win.setClipRect(0, oy, w, sh);
+        panel->waitDMA();
+        nucleo_app_set_gfx(&s_win);
+        paint(ud);
+        nucleo_app_set_gfx(nullptr);
+        panel->setClipRect(x0, oy, w, sh);
+        out->pushSprite(panel, x0, oy);
+        panel->clearClipRect();
+    }
     return true;
 }
 

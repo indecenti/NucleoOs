@@ -19,3 +19,6 @@ wheel_drag D D D D
 ring_top U
 snap D
 delete c:t c:o DEL
+play_gb host:1
+menu_gb host:2
+fill_gb host:3

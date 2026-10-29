@@ -99,6 +99,10 @@ Panel_Mirror      *s_mirror = nullptr;
 lgfx::LGFX_Device *s_dev = nullptr;             // the external panel (touch layer draws the letterbox with it)
 int                s_bl_pin = -1;
 volatile int       s_hud_h = 0;                  // the system bar over a store app on the large surface (0 = none)
+volatile bool      s_hud_auto = false;           // ...or on demand: hidden until a tap (nucleo_extdisp_set_hud_auto)
+volatile uint32_t  s_hud_until = 0;              // ms when the on-demand bar hides (0 = hidden)
+#define HUD_AUTO_H   30                          // its height, the fixed bar's
+#define HUD_AUTO_MS  3000                        // how long it stays after the last touch
 char               s_hud_title[28];              // ...what it says (nucleo_extdisp_set_hud)
 uint16_t           s_hud_col = 0xFFFF;
 lgfx::Light_PWM   *s_bl_pwm = nullptr;           // the backlight dimmed on its own LEDC channel (bl on a GPIO)
@@ -449,10 +453,10 @@ bool chrome_on(void) { return s_touch_input && s_tc && s_tc->mux && !s_solo && s
 // panel that is shown.
 bool cal_on(void) { return s_touch_input && s_tc && s_tc->mux && s_layout != 1; }
 volatile bool s_repaint_req = false;
-void draw_hud(void)
+void draw_bar(int h)
 {
-    if (!s_hud_h || !s_dev || s_calibrating) return;
-    const int W = s_dev->width(), h = s_hud_h, bh = h - 8, cy = h / 2;
+    if (!h || !s_dev || s_calibrating) return;
+    const int W = s_dev->width(), bh = h - 8, cy = h / 2;
     s_dev->startWrite();
     s_dev->fillRect(0, 0, W, h, THEME_BG);
     s_dev->fillRoundRect(4, 4, 40, bh, bh / 2, THEME_LINE);              // the Back button (lg::back's look)
@@ -464,7 +468,8 @@ void draw_hud(void)
     s_dev->setTextDatum(textdatum_t::top_left);
     s_dev->drawFastHLine(0, h - 1, W, THEME_LINE);
     s_dev->endWrite();
-}           // the panel was painted over (calibration): the OS repaints it all
+}
+void draw_hud(void) { draw_bar(s_hud_h); }           // the panel was painted over (calibration): the OS repaints it all
 // The mirror stays dark while the screen is off with an unswitchable LED, and while calibration owns the panel.
 void dark_sync(void)
 {
@@ -662,6 +667,10 @@ void touch_task(void *)
         if (s_layout == 1 && !calibrating) { vTaskDelay(pdMS_TO_TICKS(200)); continue; }   // Cardputer only
         const bool busy = g.down || wake_hold || sc.vel != 0 || (calibrating && (cal.down || cal.wait_release));
         vTaskDelay(pdMS_TO_TICKS(busy ? 20 : 40));
+        if (s_hud_until && !g.down && (int32_t)((uint32_t)(esp_timer_get_time() / 1000) - s_hud_until) >= 0) {
+            s_hud_until = 0;                       // the on-demand bar times out: the app repaints under it
+            s_repaint_req = true;
+        }
         int rx = 0, ry = 0;
         if (!s_screen_on || wake_hold) {
             // Screen off: a tap only wakes it (an injected Back, which the wake path consumes), and the same
@@ -811,6 +820,19 @@ void touch_task(void *)
                 if (hh && ty < 0) {                           // the system bar: Back
                     if (s_touch_input) nucleo_kbd_inject(nucleo_key_t{ NK_BACK, 0 });
                     continue;
+                }
+                if (s_hud_auto) {                             // the bar on demand
+                    if (!s_hud_until) {                       // hidden: this tap only brings it up (never START)
+                        s_hud_until = now + HUD_AUTO_MS;
+                        lock_opt(); draw_bar(HUD_AUTO_H); unlock_opt();
+                        continue;
+                    }
+                    if (s_last_y < HUD_AUTO_H) {              // on it: Back, and it goes
+                        if (s_touch_input) nucleo_kbd_inject(nucleo_key_t{ NK_BACK, 0 });
+                        s_hud_until = now;
+                        continue;
+                    }
+                    s_hud_until = now + HUD_AUTO_MS;          // elsewhere: as usual, and it stays a while longer
                 }
                 nucleo_key_t hit = { NK_NONE, 0 };            // a large screen's own targets, in its pixels
                 ext_lock();
@@ -1154,6 +1176,31 @@ extern "C" bool nucleo_extdisp_set_hud(const char *title, unsigned short color)
     d.clearClipRect();                            // LGFXBase caches the clip box of the old size
     d.clearScrollRect();
     return true;
+}
+
+extern "C" bool nucleo_extdisp_set_hud_auto(const char *title, unsigned short color)
+{
+    if (!s_mirror || !s_solo) return false;
+    bool resized = false;
+    if (title && s_hud_h) {                       // the fixed bar gives its rows back to the app
+        lock_opt();
+        if (s_mirror->set_inset(0)) { s_hud_h = 0; resized = true; }
+        unlock_opt();
+        d.clearClipRect();
+        d.clearScrollRect();
+    }
+    if (title) { snprintf(s_hud_title, sizeof s_hud_title, "%s", title); s_hud_col = color ? color : THEME_FG; }
+    else s_hud_until = 0;
+    s_hud_auto = title != nullptr;
+    return resized;
+}
+
+extern "C" int nucleo_extdisp_hud_overlay(void) { return s_hud_auto && s_hud_until ? HUD_AUTO_H : 0; }
+
+extern "C" void nucleo_extdisp_hud_redraw(void)
+{
+    if (!s_hud_auto || !s_hud_until) return;
+    lock_opt(); draw_bar(HUD_AUTO_H); unlock_opt();
 }
 
 extern "C" bool nucleo_extdisp_take_repaint(void)

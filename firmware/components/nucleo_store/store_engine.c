@@ -673,9 +673,11 @@ st_code_t st_install(const st_cfg_t *cfg, const st_io_t *io, st_state_t *st, con
     {
         FILE *v = fopen(path, "wb");
         // What the launcher needs to list it without the catalog: category and its name in every language.
-        if (!v || fprintf(v, "code %lu\nversion %s\nkind %s\nchannel %s\nabi %lu\ncategory %s\nname %s|%s|%s|%s|%s\n",
+        // "perm" lets the launcher decide a native game's Solo boot before the module is loaded: no network
+        // permission = the radio stays off for it (~48 KB and twice the largest block, store_apps.cpp).
+        if (!v || fprintf(v, "code %lu\nversion %s\nkind %s\nchannel %s\nabi %lu\ncategory %s\nname %s|%s|%s|%s|%s\nperm %s\n",
                           (unsigned long)a->code, a->version, a->kind, cfg->channel, (unsigned long)a->abi, a->category,
-                          a->name[0], a->name[1], a->name[2], a->name[3], a->name[4]) < 0) {
+                          a->name[0], a->name[1], a->name[2], a->name[3], a->name[4], a->perms) < 0) {
             if (v) fclose(v);
             rc = ST_E_WRITE; fail_detail(st, rc, ".store-version"); goto out;
         }

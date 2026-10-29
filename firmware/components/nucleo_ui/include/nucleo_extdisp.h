@@ -42,6 +42,16 @@ bool nucleo_extdisp_recalibrate(void);        // live: false when there is no to
 // app's name; the app's surface becomes 320x210 below it and a tap on the band is Back. NULL removes it. True when
 // the surface changed (the caller repaints everything). Leaving the large surface removes it by itself.
 bool nucleo_extdisp_set_hud(const char *title, unsigned short color);
+// The same bar, on demand (a store app with NAP_FLAG_AUTO_HUD: a game wants the whole panel): the surface stays
+// 320x240 and the bar is hidden; the first tap anywhere only shows it, over the app, a tap on it is Back, and it
+// goes away by itself 3 s after the last touch (the run loop then repaints the app under it). NULL turns it off.
+// True when the surface changed size (it had the fixed bar before).
+bool nucleo_extdisp_set_hud_auto(const char *title, unsigned short color);
+// Rows the on-demand bar covers at the top of the panel right now (0 = hidden): an app that pushes its own
+// picture (an emulator) leaves them alone, and repaints them all when this goes back to 0.
+int  nucleo_extdisp_hud_overlay(void);
+// After the app painted the panel: puts the on-demand bar back on top if it is showing.
+void nucleo_extdisp_hud_redraw(void);
 // True once after something painted over the external panel (the calibration screen): the run loop repaints all.
 bool nucleo_extdisp_take_repaint(void);
 // The panel's own backlight level, separate from the Cardputer's (settings "external_brightness", 10..100 %).

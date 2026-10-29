@@ -6,6 +6,63 @@ All notable user-facing changes to NucleoOS. Format loosely follows
 
 ## [Unreleased]
 
+### Changed
+- **Games gallery, HyperSpin style.** The Games tile opens a two-level gallery: first the systems (native games,
+  then NES, Game Boy, Game Boy Color, Master System and Game Gear, each shown when its emulator is installed and its
+  folder in `/data/ROMs` has cartridges), then their titles, sorted, on a title wheel with live search, the game's
+  picture (cover, cartridge screenshot or console photo) and its whole title. With the second screen the gallery
+  is on the panel (tap a title to bring it to the middle, tap the middle one or the picture to play, drag to turn
+  the wheel) and the Cardputer shows the selection's details (system, maker, region, cartridge; players, source and
+  blurb). Keyboard: up/down, left/right by 5, 1-7 (1-5) the wheel's slots, Enter, type to search, Esc = search,
+  then back a level, then out.
+- **Plug and play.** The gallery finds the cartridges on its own, anywhere on the card (`.gb`, `.gbc`, `.gg`, `.sms`, `.nes`,
+  and zips holding a Game Gear / Master System cartridge), skipping the system's folders. The card is walked a few
+  milliseconds at a time while the gallery is open (once per boot, and again after ten minutes), so it is usable at
+  once and updates itself when the walk finds something new; the result is an index on the card.
+- **Faster, lighter.** A console's titles come from that index (one block of RAM sized to them, ~1.2 KB for 30
+  cartridges); a search filters it in RAM; each folder's screenshots are listed once; a picture is opened once per
+  selection and read four rows at a time. `tools/fetch-rom-snaps.py` follows the index and writes ready-to-show
+  `.pic` pictures next to the `.snp` ones (older cards get theirs from the `.snp`).
+- **A wheel that turns forever, as fast as the emulators' one.** Past the last title comes the first (with few titles
+  they repeat). While it turns only the wheel's rectangle is redrawn (new kit call `lg::frame_rect`: a third of the
+  panel, no card read, no Cardputer), each step sliding the titles through the fixed pill with the emulators' 4 ms
+  tick; when it stops (160 ms) the picture, caption, position and the Cardputer's details follow in one frame. Frames
+  draw only what falls in the strip being composed; the details card is composed off screen.
+- **Quicker to open and to answer.** The card walk runs once per boot and, once an index exists, only in 5 ms slices
+  after 0.8 s without a key; the index also lists each folder's screenshots, so opening a console reads one file and
+  no folder; screenshots are no longer converted ahead (a conversion could hold the next key ~0.2 s), console photos and
+  native covers only 1.5 s after the last key; one wheel tick per frame.
+- **Remembers.** The selection lands on the system and the game played last ("last played" mark on the wheel and on
+  the details card).
+- **Sounds.** Short, quiet interface sounds (Kenney "Interface Sounds", CC0) for turning the wheel, opening a system,
+  going back and starting a game, at a fraction of the system volume (muted = silent). New `nucleo_audio_sample()`.
+- **Cartridges launch from the gallery.** A Game Boy / Game Gear / Master System cartridge opens straight in its
+  emulator; quitting the game comes back to the gallery on it, never to the emulator's shelf.
+- Consoles are shown by their mark and their name (no makers). Their photos are cut out on the PC from the public-domain
+  originals (soft edges, the studio white unmixed from them; `tools/gen-gallery-art.py`, 25 KB for five consoles) and
+  stand straight on the theme's background, no tile; the left picture is a little smaller.
+- The native games have pictures too: their entry is the Cardputer itself (M5Stack's product photo, the one the
+  NucleoOS site shows) cut out like the consoles, and 13 native games ship a default cover on the SD pack (`data/GameShots/<id>.png`: each game's own screen
+  rendered on the PC from its source; a cover captured on the device still wins).
+- The selection's whole title has a line of its own across the panel, above the picture and the wheel; one too long
+  for it scrolls (a pause, then round), redrawn alone; under the picture, its caption and what it is.
+- One screensaver rule for the launcher and the Games gallery: after the time set in Settings > Display >
+  Screensaver, its style ("off" = the screen sleeps and frees its 32 KB, the others open the screensaver). The launcher
+  used to go dark after a fixed 30 s instead, before the chosen screensaver could start.
+- The left picture is narrower and the wheel wider (narrower console marks, a flatter curve): whole titles read; the
+  selected one drops to the smaller font rather than being cut; a list shorter than the wheel shows each title once.
+- The screensaver speaks the five languages (its date too: it was always English), and so does the Cardputer's
+  "on the second screen" line of every app.
+- Fixed: the picture on the left sometimes kept the previous title's (the stop frame was taken by the turn path).
+- Fixed: after the screensaver the gallery is redrawn whole; with two screens the Cardputer plays the screensaver
+  chosen in Settings too (it showed a "running" note).
+- When the wheel stops only the left column and the position are redrawn; the pictures of the titles around the
+  selection (and the consoles' photos) are made ahead while the player is still; a slow frame logs where it went.
+- Pictures and marks are unpacked with the inflater's state in the shared canvas (no 11 KB block to find on the
+  launcher's heap); a picture that cannot be made is not retried while the gallery is open.
+- Native ABI level 5 = level 4 + `nucleo_app_take_open_file` (the emulators' modules need it); the gallery's texts are in the firmware in five languages
+  (the `gamefront` SD text pack is gone).
+
 ## [0.8.1] — 2026-10-28
 
 ### Added
