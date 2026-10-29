@@ -305,13 +305,17 @@ static void pal_apply(void)
 // its own aspect — or at 60/64 across and 45/64 down when filled (240x135).
 static int s_src_w = SRC_W, s_src_h = 144;
 static void hscale_build(void);
+static size_t band_room(void);
+#define BAND_MAX 24          // rows a grown band holds at most (band_grow)
 static void geom_apply(void)
 {
     if (s_big) {
         s_out_w = BIG_W; s_out_x = BIG_X; s_out_y0 = BIG_Y; s_out_h = BIG_H;
         s_band_h = SYS ? SYS->band_wide : BAND_WIDE;
-        if (SYS && s_band_h * BIG_W * sizeof(uint16_t) > band_bytes())   // 320-px rows: as many as the band holds
-            s_band_h = (int)(band_bytes() / (BIG_W * sizeof(uint16_t)));
+        if (SYS) {                               // 256 / 320-px rows: as many as the band holds
+            const int rows = (int)(band_room() / (BIG_W * sizeof(uint16_t)));
+            s_band_h = rows > BAND_MAX ? BAND_MAX : rows < 1 ? 1 : rows;
+        }
         return;
     }
     s_out_y0 = 0; s_out_h = OUT_H;
@@ -319,6 +323,10 @@ static void geom_apply(void)
     if (s_stretch) { s_out_w = 240; s_out_x = 0;              s_band_h = SYS ? SYS->band_wide : BAND_WIDE; }
     else           { s_out_w = w1;  s_out_x = (240 - w1) / 2;
                      s_band_h = !SYS ? BAND_1TO1 : w1 == SRC_W ? SYS->band_1to1 : SYS->band_wide; }
+    if (SYS && band_room() > band_bytes()) {     // grown bands: fewer, longer pushes on this panel too
+        const int rows = (int)(band_room() / ((size_t)s_out_w * sizeof(uint16_t)));
+        if (rows > s_band_h) s_band_h = rows > BAND_MAX ? BAND_MAX : rows;
+    }
     if (s_src_w != SRC_W) hscale_build();
 }
 // The HUD needs the picture to be 160 px wide — stretched, or a 180 px Master System picture, leaves
@@ -361,6 +369,7 @@ struct EState {
     bool     have_resume;
 
     uint16_t *band[2];       // two band buffers: one streams over DMA while the next is filled
+    size_t    band_cap;      // their size (band_bytes(), or more once the cartridge left RAM to spare: band_grow)
     int      band_idx;       // which one the scanline path is writing into
     int      band_line, band_y, out_y;
     bool     running;
@@ -803,6 +812,26 @@ static void shot_line(const uint16_t *px16, const uint8_t *px8, int line)
 }
 
 static void band_push(void);
+// The bands are sized for the smallest heap (band_bytes: 3 rows of the 256-px PC Engine picture on the external
+// panel, 80 pushes a frame). Each push is a DMA set up by LovyanGFX's code in the firmware's flash: its fixed cost,
+// and the instruction cache it takes from the emulator, scale with the pushes, not the pixels. A cartridge read from
+// flash (or a small one in RAM) leaves the heap room: then the bands grow to BAND_MAX rows, ~10 pushes a frame,
+// while the heap keeps BAND_RESERVE for the rest of the game (saves, the speaker, the menu).
+#define BAND_RESERVE (24 * 1024)
+static size_t band_room(void) { return st && st->band_cap ? st->band_cap : band_bytes(); }
+static void band_grow(void)
+{
+    const size_t w = s_big ? BIG_W : 240, want = (size_t)BAND_MAX * w * sizeof(uint16_t);
+    if (want <= st->band_cap) return;
+    if (heap_caps_get_free_size(MALLOC_CAP_DMA) < 2 * want + BAND_RESERVE) return;
+    uint16_t *a = (uint16_t *)heap_caps_malloc(want, MALLOC_CAP_DMA);
+    uint16_t *b = a ? (uint16_t *)heap_caps_malloc(want, MALLOC_CAP_DMA) : nullptr;
+    if (!a || !b) { free(a); return; }
+    free(st->band[0]); free(st->band[1]);
+    st->band[0] = a; st->band[1] = b; st->band_idx = 0;
+    st->band_cap = want;
+    trace("  bands grown to 2 x %u B", (unsigned)want);
+}
 // One output row is in the band buffer: count it, and push the band once it is full.
 static void row_done(void)
 {
@@ -1670,9 +1699,10 @@ static void play_session(const char *name)
     st->band_idx = 0;
     st->band[0] = (uint16_t *)heap_caps_malloc(band_bytes(), MALLOC_CAP_DMA);
     st->band[1] = (uint16_t *)heap_caps_malloc(band_bytes(), MALLOC_CAP_DMA);
+    st->band_cap = band_bytes();
     if (!st->band[0] || !st->band[1]) {
         trace("  FAIL: band buffers (2 x %u B) alloc failed", (unsigned)band_bytes());
-        free(st->band[0]); free(st->band[1]); st->band[0] = st->band[1] = nullptr;
+        free(st->band[0]); free(st->band[1]); st->band[0] = st->band[1] = nullptr; st->band_cap = 0;
         nucleo_app_set_direct_draw(false);
         fail_box(TR5("RAM insufficiente (video)", "Not enough RAM (video)", "RAM insuf. (video)", "RAM insuf. (video)", "Zu wenig RAM (video)"));
         return;
@@ -1688,7 +1718,7 @@ static void play_session(const char *name)
         // so every error used to reach the trace as "UNKNOWN ERROR".
         trace("  FAIL: open -> 0x%x", (unsigned)err);
         trace_heap("after open fail");
-        free(st->band[0]); free(st->band[1]); st->band[0] = st->band[1] = nullptr;
+        free(st->band[0]); free(st->band[1]); st->band[0] = st->band[1] = nullptr; st->band_cap = 0;
         nucleo_app_set_direct_draw(false);
         char why[48];
         SYS->explain(err, path, why, sizeof why);
@@ -1704,6 +1734,7 @@ static void play_session(const char *name)
     st->diff_ok = false;
     if (s_big && !nucleo_surface_large() && !nucleo_surface_set_large(true)) s_big = false;
     ESP_LOGW("gbemu", "two screens: src %dx%d ok=%d large=%d big=%d", s_src_w, s_src_h, (int)nucleo_surface_large_ok(), (int)nucleo_surface_large(), (int)s_big);
+    band_grow();
     geom_apply();
 
     snprintf(st->resume, sizeof st->resume, "%s", name);
@@ -1962,7 +1993,7 @@ static void play_session(const char *name)
     trace("  END fps=%d palette=%s", st->fps, PAL_NAME[s_pal]);
     if (st->shot) { fclose(st->shot); st->shot = nullptr; }   // a capture cut short by quitting: what was written
     SYS->close();
-    free(st->band[0]); free(st->band[1]); st->band[0] = st->band[1] = nullptr;
+    free(st->band[0]); free(st->band[1]); st->band[0] = st->band[1] = nullptr; st->band_cap = 0;
     d.setSwapBytes(false);                 // leave the shared display as every other app expects it
     if (s_big) { nucleo_app_set_gfx(nullptr); s_big = false; nucleo_surface_set_large(false); geom_apply(); }
     nucleo_app_set_direct_draw(false);
